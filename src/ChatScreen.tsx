@@ -12,6 +12,7 @@ import {
 } from 'react-native';
 import { fetchTasks, sendTask, HubConfig, HubTask } from './api';
 import { colors, spacing } from './theme';
+import { formatTime } from './time';
 
 // Chat with one agent. Mirrors dashboard M4: open with the newest PAGE
 // messages, grow the window when the user scrolls toward older history.
@@ -133,6 +134,9 @@ export default function ChatScreen({ cfg, alias, onBack }: Props) {
                   <Text style={styles.bubbleText}>{item.reply}</Text>
                 </View>
               ) : null}
+              {item.created_at ? (
+                <Text style={styles.time}>{formatTime(item.created_at)}</Text>
+              ) : null}
             </View>
           )}
         />
@@ -180,6 +184,7 @@ const styles = StyleSheet.create({
     marginVertical: spacing.md,
   },
   bubbleWrap: { marginBottom: spacing.md, gap: spacing.xs },
+  time: { color: colors.textMuted, fontSize: 10, alignSelf: 'flex-end' },
   bubble: {
     alignSelf: 'flex-end',
     maxWidth: '85%',

@@ -8,6 +8,7 @@ import {
 } from 'react-native';
 import { fetchMessages, HubConfig, HubMessage } from './api';
 import { colors, spacing } from './theme';
+import { formatTime } from './time';
 
 // Network-wide message feed. Same lazy-window discipline as the chat
 // screen (and dashboard M5): open with the newest PAGE, grow the limit
@@ -94,6 +95,7 @@ export default function MessagesScreen({ cfg }: { cfg: HubConfig }) {
               {item.from_alias ?? '?'} → {item.to_alias ?? '?'}
             </Text>
             {item.priority === 'high' ? <Text style={styles.high}>HIGH</Text> : null}
+            <Text style={styles.time}>{formatTime(item.created_at)}</Text>
           </View>
           <Text style={styles.content} numberOfLines={4}>
             {item.content || '—'}
@@ -129,5 +131,6 @@ const styles = StyleSheet.create({
   typeDot: { width: 6, height: 6, borderRadius: 3 },
   route: { color: colors.textSecondary, fontSize: 12, fontWeight: '600', flex: 1 },
   high: { color: colors.failed, fontSize: 10, fontWeight: '700' },
+  time: { color: colors.textMuted, fontSize: 10 },
   content: { color: colors.text, fontSize: 13, lineHeight: 19 },
 });
