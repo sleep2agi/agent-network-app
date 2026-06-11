@@ -1,6 +1,6 @@
 {
   "name": "agent-network-app",
-  "version": "0.1.18",
+  "version": "0.1.19",
   "main": "index.ts",
   "dependencies": {
     "expo": "~56.0.9",
@@ -9,6 +9,7 @@
     "expo-file-system": "~56.0.8",
     "expo-image-picker": "~56.0.17",
     "expo-secure-store": "~56.0.4",
+    "expo-sharing": "~56.0.17",
     "expo-status-bar": "~56.0.4",
     "react": "19.2.3",
     "react-dom": "19.2.3",

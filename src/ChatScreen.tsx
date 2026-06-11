@@ -15,7 +15,7 @@ import {
   View,
 } from 'react-native';
 import AliasAvatar from './AliasAvatar';
-import AuthedThumb from './AuthedThumb';
+import AuthedThumb, { AttachmentFile } from './AuthedThumb';
 import { fetchStatus, fetchTasks, sendTask, HubConfig, HubTask, TaskAttachment } from './api';
 import {
   ATTACH_ENABLED,
@@ -57,6 +57,7 @@ interface AttachmentView {
   uri?: string;
   /** authed API uris need RN Image headers — unavailable on web <img> */
   needsAuth?: boolean;
+  mime?: string;
 }
 
 const isImageLike = (name?: string, mime?: string) =>
@@ -85,6 +86,7 @@ const attachmentViews = (item: ChatItem, serverUrl: string): AttachmentView[] =>
         isImage: isImageLike(a.name, a.mime),
         uri: `${serverUrl}/api/files/${a.file_id}`,
         needsAuth: true,
+        mime: a.mime ? String(a.mime) : undefined,
       }));
   } catch {
     return [];
@@ -313,6 +315,15 @@ export default function ChatScreen({ cfg, alias, onBack }: Props) {
                       serverUrl={cfg.serverUrl}
                       token={cfg.token}
                       onPress={localUri => setViewerUri(localUri)}
+                    />
+                  ) : a.needsAuth && Platform.OS !== 'web' ? (
+                    <AttachmentFile
+                      key={a.key}
+                      fileId={a.key}
+                      name={a.name}
+                      mime={a.mime}
+                      serverUrl={cfg.serverUrl}
+                      token={cfg.token}
                     />
                   ) : (
                     <Text key={a.key} style={styles.attachmentLine}>
