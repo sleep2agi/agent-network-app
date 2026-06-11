@@ -13,17 +13,34 @@ import {
 } from 'react-native';
 import { fetchStatus, login, HubConfig, Session } from './src/api';
 import ChatScreen from './src/ChatScreen';
+import { clearConfig, loadConfig, saveConfig } from './src/storage';
 import { colors, spacing, statusColor } from './src/theme';
-
-// Round 1 skeleton: token login → agents list. Chat / messages / settings
-// land in later rounds (#220). Config is in-memory for now; persistent
-// storage (expo-secure-store) comes with the settings round.
 
 type Screen = { name: 'login' } | { name: 'agents' } | { name: 'chat'; alias: string };
 
 export default function App() {
   const [cfg, setCfg] = useState<HubConfig | null>(null);
   const [screen, setScreen] = useState<Screen>({ name: 'login' });
+  const [booting, setBooting] = useState(true);
+
+  // Restore the saved session on cold start — login survives app kills.
+  useEffect(() => {
+    loadConfig().then(saved => {
+      if (saved) {
+        setCfg(saved);
+        setScreen({ name: 'agents' });
+      }
+      setBooting(false);
+    });
+  }, []);
+
+  if (booting) {
+    return (
+      <SafeAreaView style={[styles.root, styles.center]}>
+        <ActivityIndicator color={colors.accent} />
+      </SafeAreaView>
+    );
+  }
 
   return (
     <SafeAreaView style={styles.root}>
@@ -32,6 +49,7 @@ export default function App() {
         <LoginScreen
           onLogin={c => {
             setCfg(c);
+            saveConfig(c);
             setScreen({ name: 'agents' });
           }}
         />
@@ -42,7 +60,15 @@ export default function App() {
           onBack={() => setScreen({ name: 'agents' })}
         />
       ) : (
-        <AgentsScreen cfg={cfg} onOpenChat={alias => setScreen({ name: 'chat', alias })} />
+        <AgentsScreen
+          cfg={cfg}
+          onOpenChat={alias => setScreen({ name: 'chat', alias })}
+          onLogout={() => {
+            clearConfig();
+            setCfg(null);
+            setScreen({ name: 'login' });
+          }}
+        />
       )}
     </SafeAreaView>
   );
@@ -114,9 +140,11 @@ function LoginScreen({ onLogin }: { onLogin: (cfg: HubConfig) => void }) {
 function AgentsScreen({
   cfg,
   onOpenChat,
+  onLogout,
 }: {
   cfg: HubConfig;
   onOpenChat: (alias: string) => void;
+  onLogout: () => void;
 }) {
   const [sessions, setSessions] = useState<Session[]>([]);
   const [loading, setLoading] = useState(true);
@@ -164,7 +192,12 @@ function AgentsScreen({
         />
       }
       ListHeaderComponent={
-        <Text style={styles.listHeader}>{sessions.length} agents</Text>
+        <View style={styles.listHeaderRow}>
+          <Text style={styles.listHeader}>{sessions.length} agents</Text>
+          <Pressable onPress={onLogout} hitSlop={8}>
+            <Text style={styles.logout}>退出登录</Text>
+          </Pressable>
+        </View>
       }
       renderItem={({ item }) => (
         <Pressable
@@ -219,7 +252,14 @@ const styles = StyleSheet.create({
   },
   buttonText: { color: colors.bg, fontSize: 16, fontWeight: '700' },
   error: { color: colors.failed, fontSize: 13 },
-  listHeader: { color: colors.textMuted, fontSize: 12, marginBottom: spacing.md },
+  listHeader: { color: colors.textMuted, fontSize: 12 },
+  listHeaderRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: spacing.md,
+  },
+  logout: { color: colors.textMuted, fontSize: 12 },
   card: {
     flexDirection: 'row',
     alignItems: 'center',
