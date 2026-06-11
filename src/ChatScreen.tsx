@@ -22,6 +22,11 @@ import { formatTime } from './time';
 
 const PAGE = 20;
 
+// Local echo: sent messages appear instantly with a pending mark and
+// either get replaced by the server copy on the next reload (delivered)
+// or flip to a tappable "未送达 · 点击重试" state (#220 roadmap ②).
+type ChatItem = HubTask & { _localId?: string; _pending?: boolean; _failed?: boolean };
+
 interface Props {
   cfg: HubConfig;
   alias: string;
@@ -29,13 +34,12 @@ interface Props {
 }
 
 export default function ChatScreen({ cfg, alias, onBack }: Props) {
-  const [messages, setMessages] = useState<HubTask[]>([]);
+  const [messages, setMessages] = useState<ChatItem[]>([]);
   const [loaded, setLoaded] = useState(false);
   const [hasOlder, setHasOlder] = useState(true);
   const [loadingOlder, setLoadingOlder] = useState(false);
   const [draft, setDraft] = useState('');
-  const [sending, setSending] = useState(false);
-  const [sendError, setSendError] = useState('');
+  const sending = false; // optimistic echo frees the input immediately
   const limitRef = useRef(PAGE);
 
   const load = useCallback(
@@ -45,11 +49,9 @@ export default function ChatScreen({ cfg, alias, onBack }: Props) {
         const fetched = data.tasks ?? [];
         if (fetched.length < limit) setHasOlder(false);
         // Hub returns newest-first, which matches inverted-list order.
-        setMessages(prev => {
-          const ids = new Set(fetched.map(t => t.task_id));
-          const extras = prev.filter(t => t.task_id && !ids.has(t.task_id));
-          return [...extras, ...fetched];
-        });
+        // Local echoes stay in front; the send path removes them once
+        // the server confirms, so no content-matching is needed here.
+        setMessages(prev => [...prev.filter(t => t._localId), ...fetched]);
       } catch {
         /* poll retries */
       } finally {
@@ -77,21 +79,39 @@ export default function ChatScreen({ cfg, alias, onBack }: Props) {
     setLoadingOlder(false);
   };
 
-  const submit = async () => {
-    const content = draft.trim();
-    if (!content || sending) return;
-    setSending(true);
-    setDraft('');
-    setSendError('');
+  const localSeq = useRef(0);
+
+  const doSend = async (content: string, localId: string) => {
     try {
       await sendTask(cfg, alias, content);
+      // delivered: drop the echo, the server copy arrives with reload
+      setMessages(prev => prev.filter(t => t._localId !== localId));
       await load(limitRef.current);
-    } catch (e) {
-      setDraft(content); // restore so the user can retry
-      setSendError(`发送失败：${e instanceof Error ? e.message : '网络错误'}`);
-    } finally {
-      setSending(false);
+    } catch {
+      setMessages(prev =>
+        prev.map(t => (t._localId === localId ? { ...t, _pending: false, _failed: true } : t)),
+      );
     }
+  };
+
+  const submit = () => {
+    const content = draft.trim();
+    if (!content || sending) return;
+    setDraft('');
+    const localId = `local-${++localSeq.current}`;
+    setMessages(prev => [
+      { content, created_at: new Date().toISOString(), _localId: localId, _pending: true },
+      ...prev,
+    ]);
+    doSend(content, localId);
+  };
+
+  const retry = (item: ChatItem) => {
+    if (!item._localId || !item.content) return;
+    setMessages(prev =>
+      prev.map(t => (t._localId === item._localId ? { ...t, _pending: true, _failed: false } : t)),
+    );
+    doSend(item.content, item._localId);
   };
 
   return (
@@ -116,7 +136,7 @@ export default function ChatScreen({ cfg, alias, onBack }: Props) {
         <FlatList
           inverted
           data={messages}
-          keyExtractor={(m, i) => m.task_id ?? String(i)}
+          keyExtractor={(m, i) => m._localId ?? m.task_id ?? String(i)}
           contentContainerStyle={{ padding: spacing.lg }}
           onEndReached={loadOlder}
           onEndReachedThreshold={0.2}
@@ -137,7 +157,13 @@ export default function ChatScreen({ cfg, alias, onBack }: Props) {
                   <Text style={styles.bubbleText}>{item.reply}</Text>
                 </View>
               ) : null}
-              {item.created_at ? (
+              {item._pending ? (
+                <Text style={styles.pendingMark}>发送中…</Text>
+              ) : item._failed ? (
+                <Pressable onPress={() => retry(item)} hitSlop={8}>
+                  <Text style={styles.failedMark}>未送达 · 点击重试</Text>
+                </Pressable>
+              ) : item.created_at ? (
                 <Text style={styles.time}>{formatTime(item.created_at)}</Text>
               ) : null}
             </View>
@@ -145,7 +171,6 @@ export default function ChatScreen({ cfg, alias, onBack }: Props) {
         />
       )}
 
-      {sendError ? <Text style={styles.sendError}>{sendError}</Text> : null}
       <View style={styles.inputRow}>
         <TextInput
           style={styles.input}
@@ -201,12 +226,8 @@ const styles = StyleSheet.create({
   },
   replyBubble: { alignSelf: 'flex-start', backgroundColor: colors.inputBg },
   bubbleText: { color: colors.text, fontSize: 14, lineHeight: 20 },
-  sendError: {
-    color: colors.failed,
-    fontSize: 12,
-    paddingHorizontal: spacing.lg,
-    paddingTop: spacing.sm,
-  },
+  pendingMark: { color: colors.textMuted, fontSize: 10, alignSelf: 'flex-end' },
+  failedMark: { color: colors.failed, fontSize: 11, alignSelf: 'flex-end', fontWeight: '600' },
   inputRow: {
     flexDirection: 'row',
     alignItems: 'flex-end',
