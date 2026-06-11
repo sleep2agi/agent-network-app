@@ -14,6 +14,7 @@ import {
 import { fetchStatus, login, HubConfig, Session } from './src/api';
 import ChatScreen from './src/ChatScreen';
 import MessagesScreen from './src/MessagesScreen';
+import SettingsScreen from './src/SettingsScreen';
 import { clearConfig, loadConfig, saveConfig } from './src/storage';
 import { colors, spacing, statusColor } from './src/theme';
 import { APP_VERSION } from './src/version';
@@ -22,11 +23,13 @@ type Screen =
   | { name: 'login' }
   | { name: 'agents' }
   | { name: 'messages' }
+  | { name: 'settings' }
   | { name: 'chat'; alias: string };
 
 const TABS = [
   { key: 'agents', label: 'Agents' },
   { key: 'messages', label: 'Messages' },
+  { key: 'settings', label: '设置' },
 ] as const;
 
 export default function App() {
@@ -75,15 +78,19 @@ export default function App() {
           <View style={{ flex: 1 }}>
             {screen.name === 'messages' ? (
               <MessagesScreen cfg={cfg} />
-            ) : (
-              <AgentsScreen
+            ) : screen.name === 'settings' ? (
+              <SettingsScreen
                 cfg={cfg}
-                onOpenChat={alias => setScreen({ name: 'chat', alias })}
                 onLogout={() => {
                   clearConfig();
                   setCfg(null);
                   setScreen({ name: 'login' });
                 }}
+              />
+            ) : (
+              <AgentsScreen
+                cfg={cfg}
+                onOpenChat={alias => setScreen({ name: 'chat', alias })}
               />
             )}
           </View>
@@ -93,7 +100,13 @@ export default function App() {
                 key={tab.key}
                 style={styles.tab}
                 onPress={() =>
-                  setScreen(tab.key === 'agents' ? { name: 'agents' } : { name: 'messages' })
+                  setScreen(
+                    tab.key === 'agents'
+                      ? { name: 'agents' }
+                      : tab.key === 'messages'
+                        ? { name: 'messages' }
+                        : { name: 'settings' },
+                  )
                 }
               >
                 <Text style={[styles.tabLabel, screen.name === tab.key && styles.tabActive]}>
@@ -177,11 +190,9 @@ function LoginScreen({ onLogin }: { onLogin: (cfg: HubConfig) => void }) {
 function AgentsScreen({
   cfg,
   onOpenChat,
-  onLogout,
 }: {
   cfg: HubConfig;
   onOpenChat: (alias: string) => void;
-  onLogout: () => void;
 }) {
   const [sessions, setSessions] = useState<Session[]>([]);
   const [loading, setLoading] = useState(true);
@@ -246,9 +257,6 @@ function AgentsScreen({
             <Text style={styles.listHeader}>
               {q ? `${shown.length} / ${sessions.length} agents` : `${sessions.length} agents`}
             </Text>
-            <Pressable onPress={onLogout} hitSlop={8}>
-              <Text style={styles.logout}>退出登录</Text>
-            </Pressable>
           </View>
           {sessions.length > 10 ? (
             <TextInput
