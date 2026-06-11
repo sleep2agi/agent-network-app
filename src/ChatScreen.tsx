@@ -15,6 +15,7 @@ import {
   View,
 } from 'react-native';
 import AliasAvatar from './AliasAvatar';
+import AuthedThumb from './AuthedThumb';
 import { fetchStatus, fetchTasks, sendTask, HubConfig, HubTask, TaskAttachment } from './api';
 import {
   ATTACH_ENABLED,
@@ -145,7 +146,6 @@ export default function ChatScreen({ cfg, alias, onBack }: Props) {
   const localSeq = useRef(0);
   const [attached, setAttached] = useState<PickedImage | null>(null);
   const [viewerUri, setViewerUri] = useState<string | null>(null);
-  const authHeaders = { Authorization: `Bearer ${cfg.token}` };
 
   const doSend = async (content: string, localId: string, img?: PickedImage) => {
     try {
@@ -301,14 +301,19 @@ export default function ChatScreen({ cfg, alias, onBack }: Props) {
               <View style={styles.bubble}>
                 <Text style={styles.bubbleText}>{item.content || '—'}</Text>
                 {attachmentViews(item, cfg.serverUrl).map(a =>
-                  a.isImage && a.uri && (!a.needsAuth || Platform.OS !== 'web') ? (
+                  a.isImage && a.uri && !a.needsAuth ? (
                     <Pressable key={a.key} onPress={() => setViewerUri(a.uri!)}>
-                      <Image
-                        source={{ uri: a.uri, headers: authHeaders }}
-                        style={styles.thumb}
-                        resizeMode="cover"
-                      />
+                      <Image source={{ uri: a.uri }} style={styles.thumb} resizeMode="cover" />
                     </Pressable>
+                  ) : a.isImage && a.needsAuth && Platform.OS !== 'web' ? (
+                    <AuthedThumb
+                      key={a.key}
+                      fileId={a.key}
+                      name={a.name}
+                      serverUrl={cfg.serverUrl}
+                      token={cfg.token}
+                      onPress={localUri => setViewerUri(localUri)}
+                    />
                   ) : (
                     <Text key={a.key} style={styles.attachmentLine}>
                       📎 {a.name}
@@ -348,11 +353,7 @@ export default function ChatScreen({ cfg, alias, onBack }: Props) {
       <Modal visible={!!viewerUri} transparent animationType="fade">
         <Pressable style={styles.viewerBackdrop} onPress={() => setViewerUri(null)}>
           {viewerUri ? (
-            <Image
-              source={{ uri: viewerUri, headers: authHeaders }}
-              style={styles.viewerImage}
-              resizeMode="contain"
-            />
+            <Image source={{ uri: viewerUri }} style={styles.viewerImage} resizeMode="contain" />
           ) : null}
         </Pressable>
       </Modal>
