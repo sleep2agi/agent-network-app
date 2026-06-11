@@ -2,14 +2,30 @@
 
 📱 Minimal native mobile client for [Agent Network / CommHub](https://github.com/sleep2agi/agent-network) — Android first, iOS from the same codebase.
 
-Built with **Expo (React Native, TypeScript)**. Design language follows the dashboard's less-is-more overhaul (near-black surfaces, restrained color, green/red/amber/gray status colors).
+Built with **Expo (React Native, TypeScript)**. Design language follows the dashboard's less-is-more overhaul: near-black surfaces, restrained color, green/red/amber/gray status triad, cyan accent.
 
-## Features (MVP)
+| Login | Agents | Chat | Messages |
+|---|---|---|---|
+| ![login](docs/screens/app-web-login.png) | ![agents](docs/screens/app-web-agents.png) | ![chat](docs/screens/app-web-chat.png) | ![messages](docs/screens/app-web-messages.png) |
 
-- **Login** — server URL + token, with a connection probe before entering
-- **Agents** — live fleet list: status dot, current task one-liner, pull-to-refresh, 10s polling
-- **Chat** — tap an agent card to chat; opens with the newest 20 messages and lazy-loads older history as you scroll up; send via `/api/send_task`
-- Settings (token persistence, theme, logout) — in progress
+## Features (v0.1.7)
+
+- **Login** — server URL + username/password (`POST /api/auth/login` → user token); friendly errors for empty/non-JSON responses; session persists in the platform keystore (expo-secure-store)
+- **Agents** — live fleet list: status dot, current-task one-liner, pull-to-refresh, 10s polling; working sessions sort to the top; search box appears beyond 10 agents
+- **Chat** — tap an agent card to chat; inverted list opens at the newest 20 and lazy-loads older history at the visual top; timestamps; send via `POST /api/send_task` with draft restore on failure
+- **Messages** — network-wide feed: from → to routes, type dots (task/reply/broadcast), HIGH priority chips, timestamps, same lazy window
+- **Branding** — cyan hub-and-spokes launcher icon (adaptive + monochrome for Material You)
+
+## Server
+
+The app talks directly to a CommHub instance. Use an HTTPS endpoint (release builds block cleartext HTTP by default; the current build carries a temporary cleartext exemption via `expo-build-properties` that will be removed once HTTPS is everywhere).
+
+```
+服务器地址  https://your-hub.example.com   (no port needed behind a reverse proxy)
+用户名/密码  your hub credentials
+```
+
+API surface used: `POST /api/auth/login`, `GET /api/status`, `GET /api/tasks?to_name&limit`, `GET /api/messages?limit`, `POST /api/send_task` — all Bearer-token authed.
 
 ## Development
 
@@ -19,18 +35,36 @@ npx expo start        # Expo Go / dev client
 npx tsc --noEmit      # typecheck
 ```
 
-## Android build (local, no EAS)
+### Visual verification without a device
 
-Requires JDK 17 and the Android SDK (API 35). Userspace install works:
+`react-native-web` export + playwright renders the same components at a phone viewport, proxying API calls to a live hub (sidesteps CORS, swaps auth):
+
+```bash
+npx expo export --platform web
+# serve dist/ and screenshot at 390×844 — see docs/screens/
+```
+
+## Android release build (local, no EAS)
+
+Requires JDK 17 and the Android SDK (API 35); a userspace install works:
 
 ```bash
 export JAVA_HOME=~/android-tools/jdk-17.0.19+10
 export ANDROID_HOME=~/android-tools/sdk
 npx expo prebuild --platform android --no-install
-cd android && ./gradlew assembleDebug
-# → android/app/build/outputs/apk/debug/app-debug.apk
+cd android && ./gradlew assembleRelease -PreactNativeArchitectures=arm64-v8a
+# → android/app/build/outputs/apk/release/app-release.apk  (~26MB arm64)
 ```
+
+Expo signs release builds with the debug keystore by default — fine for direct-install test distribution, replace before store submission.
+
+## Roadmap
+
+- [ ] iOS build (needs macOS/EAS)
+- [ ] Proper application id (currently `com.anonymous.agentnetworkapp`; migrating means a fresh install — held until distribution widens)
+- [ ] Tighten the cleartext exemption once all endpoints are HTTPS
+- [ ] "Join network" onboarding for non-admin users (hub scopes data by network membership)
 
 ## Tracking
 
-Progress is reported on [sleep2agi/agent-network#220](https://github.com/sleep2agi/agent-network/issues/220).
+Progress is reported round-by-round on [sleep2agi/agent-network#220](https://github.com/sleep2agi/agent-network/issues/220).
