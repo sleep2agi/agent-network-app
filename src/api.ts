@@ -51,6 +51,19 @@ export const fetchTasks = (
   return get<{ tasks: HubTask[] }>(cfg, `/api/tasks?${q}`);
 };
 
+export interface HubMessage {
+  id: string;
+  from_alias?: string;
+  to_alias?: string;
+  type?: string;
+  priority?: string;
+  content?: string;
+  created_at?: string;
+}
+
+export const fetchMessages = (cfg: HubConfig, limit: number) =>
+  get<{ messages: HubMessage[] }>(cfg, `/api/messages?limit=${limit}`);
+
 export const sendTask = async (cfg: HubConfig, to: string, content: string) => {
   const res = await fetch(`${cfg.serverUrl}/api/send_task`, {
     method: 'POST',

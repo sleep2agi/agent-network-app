@@ -13,10 +13,20 @@ import {
 } from 'react-native';
 import { fetchStatus, login, HubConfig, Session } from './src/api';
 import ChatScreen from './src/ChatScreen';
+import MessagesScreen from './src/MessagesScreen';
 import { clearConfig, loadConfig, saveConfig } from './src/storage';
 import { colors, spacing, statusColor } from './src/theme';
 
-type Screen = { name: 'login' } | { name: 'agents' } | { name: 'chat'; alias: string };
+type Screen =
+  | { name: 'login' }
+  | { name: 'agents' }
+  | { name: 'messages' }
+  | { name: 'chat'; alias: string };
+
+const TABS = [
+  { key: 'agents', label: 'Agents' },
+  { key: 'messages', label: 'Messages' },
+] as const;
 
 export default function App() {
   const [cfg, setCfg] = useState<HubConfig | null>(null);
@@ -60,15 +70,38 @@ export default function App() {
           onBack={() => setScreen({ name: 'agents' })}
         />
       ) : (
-        <AgentsScreen
-          cfg={cfg}
-          onOpenChat={alias => setScreen({ name: 'chat', alias })}
-          onLogout={() => {
-            clearConfig();
-            setCfg(null);
-            setScreen({ name: 'login' });
-          }}
-        />
+        <>
+          <View style={{ flex: 1 }}>
+            {screen.name === 'messages' ? (
+              <MessagesScreen cfg={cfg} />
+            ) : (
+              <AgentsScreen
+                cfg={cfg}
+                onOpenChat={alias => setScreen({ name: 'chat', alias })}
+                onLogout={() => {
+                  clearConfig();
+                  setCfg(null);
+                  setScreen({ name: 'login' });
+                }}
+              />
+            )}
+          </View>
+          <View style={styles.tabBar}>
+            {TABS.map(tab => (
+              <Pressable
+                key={tab.key}
+                style={styles.tab}
+                onPress={() =>
+                  setScreen(tab.key === 'agents' ? { name: 'agents' } : { name: 'messages' })
+                }
+              >
+                <Text style={[styles.tabLabel, screen.name === tab.key && styles.tabActive]}>
+                  {tab.label}
+                </Text>
+              </Pressable>
+            ))}
+          </View>
+        </>
       )}
     </SafeAreaView>
   );
@@ -260,6 +293,15 @@ const styles = StyleSheet.create({
     marginBottom: spacing.md,
   },
   logout: { color: colors.textMuted, fontSize: 12 },
+  tabBar: {
+    flexDirection: 'row',
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+    backgroundColor: colors.bg,
+  },
+  tab: { flex: 1, alignItems: 'center', paddingVertical: spacing.md },
+  tabLabel: { color: colors.textMuted, fontSize: 13, fontWeight: '600' },
+  tabActive: { color: colors.text },
   card: {
     flexDirection: 'row',
     alignItems: 'center',

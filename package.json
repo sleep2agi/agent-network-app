@@ -4,6 +4,7 @@
   "main": "index.ts",
   "dependencies": {
     "expo": "~56.0.9",
+    "expo-build-properties": "~56.0.18",
     "expo-secure-store": "~56.0.4",
     "expo-status-bar": "~56.0.4",
     "react": "19.2.3",
