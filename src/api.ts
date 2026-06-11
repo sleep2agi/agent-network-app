@@ -81,12 +81,30 @@ export const fetchNetworkId = async (cfg: HubConfig): Promise<string | undefined
   }
 };
 
-export const sendTask = async (cfg: HubConfig, to: string, content: string) => {
+export interface TaskAttachment {
+  type: 'file';
+  file_id: string;
+  name?: string;
+  mime?: string;
+  size?: number;
+}
+
+export const sendTask = async (
+  cfg: HubConfig,
+  to: string,
+  content: string,
+  attachments?: TaskAttachment[],
+) => {
   const networkId = cfg.networkId ?? (await fetchNetworkId(cfg));
   const res = await fetch(`${cfg.serverUrl}/api/task`, {
     method: 'POST',
     headers: headers(cfg),
-    body: JSON.stringify({ alias: to, task: content, network_id: networkId }),
+    body: JSON.stringify({
+      alias: to,
+      task: content,
+      network_id: networkId,
+      ...(attachments?.length ? { attachments } : {}),
+    }),
   });
   if (!res.ok) throw new Error(`HTTP ${res.status} on /api/task`);
   const data = await res.json();
