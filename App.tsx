@@ -186,6 +186,7 @@ function AgentsScreen({
   const [sessions, setSessions] = useState<Session[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [query, setQuery] = useState('');
 
   const load = useCallback(async () => {
     try {
@@ -213,9 +214,20 @@ function AgentsScreen({
     );
   }
 
+  // 153 agents on the real hub made the flat list unusable: working
+  // sessions float to the top, and a search box narrows by alias.
+  const working = (s: Session) => s.status === 'working' || s.status === 'running';
+  const q = query.trim().toLowerCase();
+  const shown = sessions
+    .filter(s => !q || s.alias.toLowerCase().includes(q))
+    .sort((a, b) => {
+      if (working(a) !== working(b)) return working(a) ? -1 : 1;
+      return a.alias.localeCompare(b.alias);
+    });
+
   return (
     <FlatList
-      data={sessions}
+      data={shown}
       keyExtractor={s => s.alias}
       contentContainerStyle={{ padding: spacing.lg }}
       refreshControl={
@@ -229,11 +241,26 @@ function AgentsScreen({
         />
       }
       ListHeaderComponent={
-        <View style={styles.listHeaderRow}>
-          <Text style={styles.listHeader}>{sessions.length} agents</Text>
-          <Pressable onPress={onLogout} hitSlop={8}>
-            <Text style={styles.logout}>退出登录</Text>
-          </Pressable>
+        <View>
+          <View style={styles.listHeaderRow}>
+            <Text style={styles.listHeader}>
+              {q ? `${shown.length} / ${sessions.length} agents` : `${sessions.length} agents`}
+            </Text>
+            <Pressable onPress={onLogout} hitSlop={8}>
+              <Text style={styles.logout}>退出登录</Text>
+            </Pressable>
+          </View>
+          {sessions.length > 10 ? (
+            <TextInput
+              style={styles.search}
+              placeholder="搜索 agent…"
+              placeholderTextColor={colors.textMuted}
+              autoCapitalize="none"
+              autoCorrect={false}
+              value={query}
+              onChangeText={setQuery}
+            />
+          ) : null}
         </View>
       }
       renderItem={({ item }) => (
@@ -298,6 +325,17 @@ const styles = StyleSheet.create({
     marginBottom: spacing.md,
   },
   logout: { color: colors.textMuted, fontSize: 12 },
+  search: {
+    backgroundColor: colors.inputBg,
+    borderColor: colors.border,
+    borderWidth: 1,
+    borderRadius: 10,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    color: colors.text,
+    fontSize: 14,
+    marginBottom: spacing.md,
+  },
   tabBar: {
     flexDirection: 'row',
     borderTopWidth: 1,
