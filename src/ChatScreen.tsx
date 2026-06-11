@@ -74,23 +74,46 @@ const attachmentViews = (item: ChatItem, serverUrl: string): AttachmentView[] =>
       },
     ];
   }
+  const out: AttachmentView[] = [];
+  const seen = new Set<string>();
+  const push = (fileId: string, name: string, mime?: string) => {
+    if (seen.has(fileId)) return;
+    seen.add(fileId);
+    out.push({
+      key: fileId,
+      name,
+      isImage: isImageLike(name, mime),
+      uri: `${serverUrl}/api/files/${fileId}`,
+      needsAuth: true,
+      mime,
+    });
+  };
+
   const raw = (item as any).meta_json;
-  if (!raw) return [];
-  try {
-    const meta = typeof raw === 'string' ? JSON.parse(raw) : raw;
-    return (meta?.attachments ?? [])
-      .filter((a: any) => a?.type === 'file' && a.file_id)
-      .map((a: any) => ({
-        key: String(a.file_id),
-        name: String(a.name ?? a.file_id),
-        isImage: isImageLike(a.name, a.mime),
-        uri: `${serverUrl}/api/files/${a.file_id}`,
-        needsAuth: true,
-        mime: a.mime ? String(a.mime) : undefined,
-      }));
-  } catch {
-    return [];
+  if (raw) {
+    try {
+      const meta = typeof raw === 'string' ? JSON.parse(raw) : raw;
+      for (const a of meta?.attachments ?? []) {
+        if (a?.type === 'file' && a.file_id) {
+          push(String(a.file_id), String(a.name ?? a.file_id), a.mime ? String(a.mime) : undefined);
+        }
+      }
+    } catch {
+      /* fall through to text refs */
+    }
   }
+
+  // Agents reference uploads in plain text, not meta (Vincent tg 765):
+  // render any /api/files/<id> mention as an openable attachment —
+  // markdown [name](…/api/files/id) keeps its name, bare refs get a stub.
+  const text = `${item.content ?? ''}\n${item.result ?? ''}`;
+  for (const m of text.matchAll(/\[([^\]]+)\]\([^()\s]*\/api\/files\/([A-Za-z0-9_-]{8,64})\)/g)) {
+    push(m[2], m[1]);
+  }
+  for (const m of text.matchAll(/\/api\/files\/([A-Za-z0-9_-]{8,64})/g)) {
+    push(m[1], `文件 ${m[1].slice(0, 8)}…`);
+  }
+  return out;
 };
 
 interface Props {
