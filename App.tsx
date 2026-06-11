@@ -16,6 +16,7 @@ import ChatScreen from './src/ChatScreen';
 import MessagesScreen from './src/MessagesScreen';
 import { clearConfig, loadConfig, saveConfig } from './src/storage';
 import { colors, spacing, statusColor } from './src/theme';
+import { APP_VERSION } from './src/version';
 
 type Screen =
   | { name: 'login' }
@@ -128,7 +129,7 @@ function LoginScreen({ onLogin }: { onLogin: (cfg: HubConfig) => void }) {
       <Text style={styles.brand}>Agent Network</Text>
       <TextInput
         style={styles.input}
-        placeholder="服务器地址 (https://…)"
+        placeholder="服务器地址 (http://host:9999)"
         placeholderTextColor={colors.textMuted}
         autoCapitalize="none"
         autoCorrect={false}
@@ -166,6 +167,9 @@ function LoginScreen({ onLogin }: { onLogin: (cfg: HubConfig) => void }) {
           <Text style={styles.buttonText}>登录</Text>
         )}
       </Pressable>
+      {/* Version on the login page so device screenshots are
+          unambiguous about which build is installed (tg 692). */}
+      <Text style={styles.version}>v{APP_VERSION}</Text>
     </View>
   );
 }
@@ -285,6 +289,7 @@ const styles = StyleSheet.create({
   },
   buttonText: { color: colors.bg, fontSize: 16, fontWeight: '700' },
   error: { color: colors.failed, fontSize: 13 },
+  version: { color: colors.textMuted, fontSize: 11, textAlign: 'center', marginTop: spacing.md },
   listHeader: { color: colors.textMuted, fontSize: 12 },
   listHeaderRow: {
     flexDirection: 'row',

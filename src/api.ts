@@ -97,7 +97,19 @@ export const login = async (
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ username, password }),
     });
-    const data = await res.json();
+    // Vincent hit this against a half-open port: connection succeeds but
+    // the body is empty, and res.json() throws a cryptic JSON parse
+    // error. Read text first so we can say what actually went wrong.
+    const text = await res.text();
+    if (!text.trim()) {
+      return { ok: false, error: '服务器无响应内容 — 检查地址和端口（hub 默认 9999）' };
+    }
+    let data: any;
+    try {
+      data = JSON.parse(text);
+    } catch {
+      return { ok: false, error: `服务器返回了非 JSON 内容（HTTP ${res.status}）— 确认地址指向 hub` };
+    }
     if (!data?.ok) return { ok: false, error: String(data?.error ?? `HTTP ${res.status}`) };
     const token = data.token ?? data.user_token ?? data.access_token;
     if (!token) return { ok: false, error: 'login ok but no token in response' };
