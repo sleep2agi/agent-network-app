@@ -35,6 +35,7 @@ export default function ChatScreen({ cfg, alias, onBack }: Props) {
   const [loadingOlder, setLoadingOlder] = useState(false);
   const [draft, setDraft] = useState('');
   const [sending, setSending] = useState(false);
+  const [sendError, setSendError] = useState('');
   const limitRef = useRef(PAGE);
 
   const load = useCallback(
@@ -81,11 +82,13 @@ export default function ChatScreen({ cfg, alias, onBack }: Props) {
     if (!content || sending) return;
     setSending(true);
     setDraft('');
+    setSendError('');
     try {
       await sendTask(cfg, alias, content);
       await load(limitRef.current);
-    } catch {
+    } catch (e) {
       setDraft(content); // restore so the user can retry
+      setSendError(`发送失败：${e instanceof Error ? e.message : '网络错误'}`);
     } finally {
       setSending(false);
     }
@@ -142,6 +145,7 @@ export default function ChatScreen({ cfg, alias, onBack }: Props) {
         />
       )}
 
+      {sendError ? <Text style={styles.sendError}>{sendError}</Text> : null}
       <View style={styles.inputRow}>
         <TextInput
           style={styles.input}
@@ -197,6 +201,12 @@ const styles = StyleSheet.create({
   },
   replyBubble: { alignSelf: 'flex-start', backgroundColor: colors.inputBg },
   bubbleText: { color: colors.text, fontSize: 14, lineHeight: 20 },
+  sendError: {
+    color: colors.failed,
+    fontSize: 12,
+    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.sm,
+  },
   inputRow: {
     flexDirection: 'row',
     alignItems: 'flex-end',

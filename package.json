@@ -1,6 +1,6 @@
 {
   "name": "agent-network-app",
-  "version": "0.1.7",
+  "version": "0.1.8",
   "main": "index.ts",
   "dependencies": {
     "expo": "~56.0.9",

@@ -24,6 +24,7 @@ export interface HubTask {
 export interface HubConfig {
   serverUrl: string; // e.g. https://hub.example.com
   token: string;
+  networkId?: string; // hub scopes sends by network (#220 round 18)
 }
 
 const headers = (cfg: HubConfig) => ({
@@ -64,14 +65,33 @@ export interface HubMessage {
 export const fetchMessages = (cfg: HubConfig, limit: number) =>
   get<{ messages: HubMessage[] }>(cfg, `/api/messages?limit=${limit}`);
 
+/** The hub's REST send endpoint is POST /api/task with {alias, task} —
+ *  /api/send_task does not exist (it 404s into the server help text).
+ *  Sends are network-scoped: utok users must pass an explicit network_id. */
+export const fetchNetworkId = async (cfg: HubConfig): Promise<string | undefined> => {
+  try {
+    const res = await fetch(`${cfg.serverUrl}/api/auth/me`, { headers: headers(cfg) });
+    const d = await res.json();
+    const cur = d?.current_network;
+    return (
+      (typeof cur === 'string' ? cur : cur?.network_id) ?? d?.networks?.[0]?.network_id
+    );
+  } catch {
+    return undefined;
+  }
+};
+
 export const sendTask = async (cfg: HubConfig, to: string, content: string) => {
-  const res = await fetch(`${cfg.serverUrl}/api/send_task`, {
+  const networkId = cfg.networkId ?? (await fetchNetworkId(cfg));
+  const res = await fetch(`${cfg.serverUrl}/api/task`, {
     method: 'POST',
     headers: headers(cfg),
-    body: JSON.stringify({ to_name: to, content }),
+    body: JSON.stringify({ alias: to, task: content, network_id: networkId }),
   });
-  if (!res.ok) throw new Error(`HTTP ${res.status} on /api/send_task`);
-  return res.json();
+  if (!res.ok) throw new Error(`HTTP ${res.status} on /api/task`);
+  const data = await res.json();
+  if (!data?.ok) throw new Error(String(data?.error ?? 'send failed'));
+  return data;
 };
 
 /** Probe used by the login screen: token valid ⇔ /api/status readable. */
@@ -113,7 +133,8 @@ export const login = async (
     if (!data?.ok) return { ok: false, error: String(data?.error ?? `HTTP ${res.status}`) };
     const token = data.token ?? data.user_token ?? data.access_token;
     if (!token) return { ok: false, error: 'login ok but no token in response' };
-    return { ok: true, cfg: { serverUrl, token } };
+    const networkId = await fetchNetworkId({ serverUrl, token });
+    return { ok: true, cfg: { serverUrl, token, networkId } };
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : 'network error' };
   }
