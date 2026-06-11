@@ -63,20 +63,9 @@ interface AttachmentView {
 const isImageLike = (name?: string, mime?: string) =>
   (mime ?? '').startsWith('image/') || /\.(png|jpe?g|gif|webp|heic)$/i.test(name ?? '');
 
-const attachmentViews = (item: ChatItem, serverUrl: string): AttachmentView[] => {
-  if (item._img) {
-    return [
-      {
-        key: item._img.uri,
-        name: item._img.fileName,
-        isImage: isImageLike(item._img.fileName, item._img.mimeType),
-        uri: item._img.uri,
-      },
-    ];
-  }
-  const out: AttachmentView[] = [];
+const makePusher = (serverUrl: string, out: AttachmentView[]) => {
   const seen = new Set<string>();
-  const push = (fileId: string, name: string, mime?: string) => {
+  return (fileId: string, name: string, mime?: string) => {
     if (seen.has(fileId)) return;
     seen.add(fileId);
     out.push({
@@ -88,6 +77,34 @@ const attachmentViews = (item: ChatItem, serverUrl: string): AttachmentView[] =>
       mime,
     });
   };
+};
+
+// Agents reference uploads in plain text, not meta (Vincent tg 765):
+// render any /api/files/<id> mention as an openable attachment —
+// markdown [name](…/api/files/id) keeps its name, bare refs get a stub.
+const pushTextRefs = (text: string, push: (id: string, name: string, mime?: string) => void) => {
+  for (const m of text.matchAll(/\[([^\]]+)\]\([^()\s]*\/api\/files\/([A-Za-z0-9_-]{8,64})\)/g)) {
+    push(m[2], m[1]);
+  }
+  for (const m of text.matchAll(/\/api\/files\/([A-Za-z0-9_-]{8,64})/g)) {
+    push(m[1], `文件 ${m[1].slice(0, 8)}…`);
+  }
+};
+
+/** Attachments belonging to the SENT bubble: local echo, meta, content refs. */
+const sentAttachmentViews = (item: ChatItem, serverUrl: string): AttachmentView[] => {
+  if (item._img) {
+    return [
+      {
+        key: item._img.uri,
+        name: item._img.fileName,
+        isImage: isImageLike(item._img.fileName, item._img.mimeType),
+        uri: item._img.uri,
+      },
+    ];
+  }
+  const out: AttachmentView[] = [];
+  const push = makePusher(serverUrl, out);
 
   const raw = (item as any).meta_json;
   if (raw) {
@@ -102,19 +119,23 @@ const attachmentViews = (item: ChatItem, serverUrl: string): AttachmentView[] =>
       /* fall through to text refs */
     }
   }
-
-  // Agents reference uploads in plain text, not meta (Vincent tg 765):
-  // render any /api/files/<id> mention as an openable attachment —
-  // markdown [name](…/api/files/id) keeps its name, bare refs get a stub.
-  const text = `${item.content ?? ''}\n${item.result ?? ''}`;
-  for (const m of text.matchAll(/\[([^\]]+)\]\([^()\s]*\/api\/files\/([A-Za-z0-9_-]{8,64})\)/g)) {
-    push(m[2], m[1]);
-  }
-  for (const m of text.matchAll(/\/api\/files\/([A-Za-z0-9_-]{8,64})/g)) {
-    push(m[1], `文件 ${m[1].slice(0, 8)}…`);
-  }
+  pushTextRefs(item.content ?? '', push);
   return out;
 };
+
+/** Attachments the AGENT sent back — rendered inside the reply bubble
+ *  (Vincent tg 771: thumbnail was stranded under the sent bubble while the
+ *  reply showed raw markdown). */
+const replyAttachmentViews = (item: ChatItem, serverUrl: string): AttachmentView[] => {
+  const out: AttachmentView[] = [];
+  pushTextRefs(item.result ?? (item as any).reply ?? '', makePusher(serverUrl, out));
+  return out;
+};
+
+/** Replace markdown file links with just the file name — the attachment
+ *  itself renders as a thumbnail/📎 row below the text. */
+const stripFileLinks = (text: string) =>
+  text.replace(/\[([^\]]+)\]\([^()\s]*\/api\/files\/[A-Za-z0-9_-]{8,64}\)/g, '$1');
 
 interface Props {
   cfg: HubConfig;
@@ -171,6 +192,36 @@ export default function ChatScreen({ cfg, alias, onBack }: Props) {
   const localSeq = useRef(0);
   const [attached, setAttached] = useState<PickedImage | null>(null);
   const [viewerUri, setViewerUri] = useState<string | null>(null);
+
+  // shared by the sent bubble and the reply bubble (tg 771)
+  const renderAttachment = (a: AttachmentView) =>
+    a.isImage && a.uri && !a.needsAuth ? (
+      <Pressable key={a.key} onPress={() => setViewerUri(a.uri!)}>
+        <Image source={{ uri: a.uri }} style={styles.thumb} resizeMode="cover" />
+      </Pressable>
+    ) : a.isImage && a.needsAuth && Platform.OS !== 'web' ? (
+      <AuthedThumb
+        key={a.key}
+        fileId={a.key}
+        name={a.name}
+        serverUrl={cfg.serverUrl}
+        token={cfg.token}
+        onPress={localUri => setViewerUri(localUri)}
+      />
+    ) : a.needsAuth && Platform.OS !== 'web' ? (
+      <AttachmentFile
+        key={a.key}
+        fileId={a.key}
+        name={a.name}
+        mime={a.mime}
+        serverUrl={cfg.serverUrl}
+        token={cfg.token}
+      />
+    ) : (
+      <Text key={a.key} style={styles.attachmentLine}>
+        📎 {a.name}
+      </Text>
+    );
 
   const doSend = async (content: string, localId: string, img?: PickedImage) => {
     try {
@@ -324,40 +375,15 @@ export default function ChatScreen({ cfg, alias, onBack }: Props) {
           renderItem={({ item }) => (
             <View style={styles.bubbleWrap}>
               <View style={styles.bubble}>
-                <Text style={styles.bubbleText}>{item.content || '—'}</Text>
-                {attachmentViews(item, cfg.serverUrl).map(a =>
-                  a.isImage && a.uri && !a.needsAuth ? (
-                    <Pressable key={a.key} onPress={() => setViewerUri(a.uri!)}>
-                      <Image source={{ uri: a.uri }} style={styles.thumb} resizeMode="cover" />
-                    </Pressable>
-                  ) : a.isImage && a.needsAuth && Platform.OS !== 'web' ? (
-                    <AuthedThumb
-                      key={a.key}
-                      fileId={a.key}
-                      name={a.name}
-                      serverUrl={cfg.serverUrl}
-                      token={cfg.token}
-                      onPress={localUri => setViewerUri(localUri)}
-                    />
-                  ) : a.needsAuth && Platform.OS !== 'web' ? (
-                    <AttachmentFile
-                      key={a.key}
-                      fileId={a.key}
-                      name={a.name}
-                      mime={a.mime}
-                      serverUrl={cfg.serverUrl}
-                      token={cfg.token}
-                    />
-                  ) : (
-                    <Text key={a.key} style={styles.attachmentLine}>
-                      📎 {a.name}
-                    </Text>
-                  ),
-                )}
+                <Text style={styles.bubbleText}>{stripFileLinks(item.content || '—')}</Text>
+                {sentAttachmentViews(item, cfg.serverUrl).map(renderAttachment)}
               </View>
               {item.result || item.reply ? (
                 <View style={[styles.bubble, styles.replyBubble]}>
-                  <Text style={styles.bubbleText}>{item.result ?? item.reply}</Text>
+                  <Text style={styles.bubbleText}>
+                    {stripFileLinks(item.result ?? item.reply ?? '')}
+                  </Text>
+                  {replyAttachmentViews(item, cfg.serverUrl).map(renderAttachment)}
                 </View>
               ) : null}
               {item._pending ? (
