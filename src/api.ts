@@ -16,6 +16,8 @@ export interface HubTask {
   from_name?: string;
   to_name?: string;
   content?: string;
+  /** Agent replies live in `result` on the hub's task rows. */
+  result?: string;
   reply?: string;
   status?: string;
   created_at?: string;

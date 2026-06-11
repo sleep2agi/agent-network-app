@@ -208,9 +208,9 @@ export default function ChatScreen({ cfg, alias, onBack }: Props) {
                   </Text>
                 ))}
               </View>
-              {item.reply ? (
+              {item.result || item.reply ? (
                 <View style={[styles.bubble, styles.replyBubble]}>
-                  <Text style={styles.bubbleText}>{item.reply}</Text>
+                  <Text style={styles.bubbleText}>{item.result ?? item.reply}</Text>
                 </View>
               ) : null}
               {item._pending ? (

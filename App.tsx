@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useState } from 'react';
 import {
   ActivityIndicator,
+  BackHandler,
   FlatList,
+  Platform,
   Pressable,
   RefreshControl,
   SafeAreaView,
@@ -47,6 +49,20 @@ export default function App() {
       setBooting(false);
     });
   }, []);
+
+  // System back (button or fullscreen gesture) navigates within the app
+  // instead of exiting (Vincent tg 730). Agents/login fall through to
+  // the default exit behavior.
+  useEffect(() => {
+    const sub = BackHandler.addEventListener('hardwareBackPress', () => {
+      if (screen.name === 'chat' || screen.name === 'messages' || screen.name === 'settings') {
+        setScreen({ name: 'agents' });
+        return true;
+      }
+      return false;
+    });
+    return () => sub.remove();
+  }, [screen]);
 
   if (booting) {
     return (
@@ -295,7 +311,14 @@ function AgentsScreen({
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: colors.bg },
+  root: {
+    flex: 1,
+    backgroundColor: colors.bg,
+    // RN's SafeAreaView is iOS-only; Android edge-to-edge draws content
+    // under the status bar (Vincent tg 729: clock overlapped the chat
+    // header). Pad the root by the real status-bar height instead.
+    paddingTop: Platform.OS === 'android' ? StatusBar.currentHeight ?? 0 : 0,
+  },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   loginWrap: { flex: 1, justifyContent: 'center', padding: spacing.xl, gap: spacing.md },
   brand: { color: colors.text, fontSize: 28, fontWeight: '700', textAlign: 'center' },
