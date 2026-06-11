@@ -3,7 +3,9 @@ import {
   ActivityIndicator,
   Alert,
   FlatList,
+  Image,
   KeyboardAvoidingView,
+  Modal,
   Platform,
   Pressable,
   StatusBar,
@@ -44,16 +46,45 @@ type ChatItem = HubTask & {
   _img?: PickedImage;
 };
 
-// Received tasks carry attachments inside meta_json (#221).
-const attachmentNames = (item: ChatItem): string[] => {
-  if (item._img) return [item._img.fileName];
+// Received tasks carry attachments inside meta_json (#221). Images get
+// tappable thumbnails (Vincent tg 748), other files a 📎 line.
+interface AttachmentView {
+  key: string;
+  name: string;
+  isImage: boolean;
+  /** local file uri for fresh echoes, authed API uri otherwise */
+  uri?: string;
+  /** authed API uris need RN Image headers — unavailable on web <img> */
+  needsAuth?: boolean;
+}
+
+const isImageLike = (name?: string, mime?: string) =>
+  (mime ?? '').startsWith('image/') || /\.(png|jpe?g|gif|webp|heic)$/i.test(name ?? '');
+
+const attachmentViews = (item: ChatItem, serverUrl: string): AttachmentView[] => {
+  if (item._img) {
+    return [
+      {
+        key: item._img.uri,
+        name: item._img.fileName,
+        isImage: isImageLike(item._img.fileName, item._img.mimeType),
+        uri: item._img.uri,
+      },
+    ];
+  }
   const raw = (item as any).meta_json;
   if (!raw) return [];
   try {
     const meta = typeof raw === 'string' ? JSON.parse(raw) : raw;
     return (meta?.attachments ?? [])
-      .filter((a: any) => a?.type === 'file')
-      .map((a: any) => String(a.name ?? a.file_id));
+      .filter((a: any) => a?.type === 'file' && a.file_id)
+      .map((a: any) => ({
+        key: String(a.file_id),
+        name: String(a.name ?? a.file_id),
+        isImage: isImageLike(a.name, a.mime),
+        uri: `${serverUrl}/api/files/${a.file_id}`,
+        needsAuth: true,
+      }));
   } catch {
     return [];
   }
@@ -113,6 +144,8 @@ export default function ChatScreen({ cfg, alias, onBack }: Props) {
 
   const localSeq = useRef(0);
   const [attached, setAttached] = useState<PickedImage | null>(null);
+  const [viewerUri, setViewerUri] = useState<string | null>(null);
+  const authHeaders = { Authorization: `Bearer ${cfg.token}` };
 
   const doSend = async (content: string, localId: string, img?: PickedImage) => {
     try {
@@ -267,11 +300,21 @@ export default function ChatScreen({ cfg, alias, onBack }: Props) {
             <View style={styles.bubbleWrap}>
               <View style={styles.bubble}>
                 <Text style={styles.bubbleText}>{item.content || '—'}</Text>
-                {attachmentNames(item).map(n => (
-                  <Text key={n} style={styles.attachmentLine}>
-                    📎 {n}
-                  </Text>
-                ))}
+                {attachmentViews(item, cfg.serverUrl).map(a =>
+                  a.isImage && a.uri && (!a.needsAuth || Platform.OS !== 'web') ? (
+                    <Pressable key={a.key} onPress={() => setViewerUri(a.uri!)}>
+                      <Image
+                        source={{ uri: a.uri, headers: authHeaders }}
+                        style={styles.thumb}
+                        resizeMode="cover"
+                      />
+                    </Pressable>
+                  ) : (
+                    <Text key={a.key} style={styles.attachmentLine}>
+                      📎 {a.name}
+                    </Text>
+                  ),
+                )}
               </View>
               {item.result || item.reply ? (
                 <View style={[styles.bubble, styles.replyBubble]}>
@@ -302,6 +345,18 @@ export default function ChatScreen({ cfg, alias, onBack }: Props) {
           </Pressable>
         </View>
       ) : null}
+      <Modal visible={!!viewerUri} transparent animationType="fade">
+        <Pressable style={styles.viewerBackdrop} onPress={() => setViewerUri(null)}>
+          {viewerUri ? (
+            <Image
+              source={{ uri: viewerUri, headers: authHeaders }}
+              style={styles.viewerImage}
+              resizeMode="contain"
+            />
+          ) : null}
+        </Pressable>
+      </Modal>
+
       <View style={styles.inputRow}>
         {ATTACH_ENABLED ? (
           <Pressable
@@ -376,6 +431,20 @@ const styles = StyleSheet.create({
   },
   typingText: { color: colors.textMuted, fontSize: 12 },
   attachmentLine: { color: colors.accent, fontSize: 12, marginTop: spacing.xs },
+  thumb: {
+    width: 180,
+    height: 180,
+    borderRadius: 10,
+    marginTop: spacing.sm,
+    backgroundColor: colors.inputBg,
+  },
+  viewerBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.92)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  viewerImage: { width: '100%', height: '80%' },
   attachPreview: {
     flexDirection: 'row',
     alignItems: 'center',
