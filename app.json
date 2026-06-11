@@ -22,6 +22,12 @@
             "usesCleartextTraffic": true
           }
         }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "允许访问相册以发送图片给 agent"
+        }
       ]
     ],
     "android": {
