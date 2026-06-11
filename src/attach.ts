@@ -5,7 +5,7 @@ import * as ImagePicker from 'expo-image-picker';
 // POST /api/upload (sleep2agi/agent-network#221) and SDK马 posts the
 // final response contract there. ATTACH_ENABLED stays false so no
 // half-wired UI ever reaches Vincent (quality bar, tg 721).
-export const ATTACH_ENABLED = false;
+export const ATTACH_ENABLED = true; // hub /api/upload live since 2026-06-11 (#221)
 
 export interface PickedImage {
   uri: string;

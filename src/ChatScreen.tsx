@@ -10,7 +10,8 @@ import {
   TextInput,
   View,
 } from 'react-native';
-import { fetchTasks, sendTask, HubConfig, HubTask } from './api';
+import { fetchTasks, sendTask, HubConfig, HubTask, TaskAttachment } from './api';
+import { ATTACH_ENABLED, pickImage, uploadImage, toTaskAttachment, PickedImage } from './attach';
 import { colors, spacing } from './theme';
 import { formatTime } from './time';
 
@@ -25,7 +26,27 @@ const PAGE = 20;
 // Local echo: sent messages appear instantly with a pending mark and
 // either get replaced by the server copy on the next reload (delivered)
 // or flip to a tappable "未送达 · 点击重试" state (#220 roadmap ②).
-type ChatItem = HubTask & { _localId?: string; _pending?: boolean; _failed?: boolean };
+type ChatItem = HubTask & {
+  _localId?: string;
+  _pending?: boolean;
+  _failed?: boolean;
+  _img?: PickedImage;
+};
+
+// Received tasks carry attachments inside meta_json (#221).
+const attachmentNames = (item: ChatItem): string[] => {
+  if (item._img) return [item._img.fileName];
+  const raw = (item as any).meta_json;
+  if (!raw) return [];
+  try {
+    const meta = typeof raw === 'string' ? JSON.parse(raw) : raw;
+    return (meta?.attachments ?? [])
+      .filter((a: any) => a?.type === 'file')
+      .map((a: any) => String(a.name ?? a.file_id));
+  } catch {
+    return [];
+  }
+};
 
 interface Props {
   cfg: HubConfig;
@@ -80,10 +101,16 @@ export default function ChatScreen({ cfg, alias, onBack }: Props) {
   };
 
   const localSeq = useRef(0);
+  const [attached, setAttached] = useState<PickedImage | null>(null);
 
-  const doSend = async (content: string, localId: string) => {
+  const doSend = async (content: string, localId: string, img?: PickedImage) => {
     try {
-      await sendTask(cfg, alias, content);
+      let attachments: TaskAttachment[] | undefined;
+      if (img) {
+        const up = await uploadImage(cfg, img);
+        attachments = [toTaskAttachment(img, up)];
+      }
+      await sendTask(cfg, alias, content, attachments);
       // delivered: drop the echo, the server copy arrives with reload
       setMessages(prev => prev.filter(t => t._localId !== localId));
       await load(limitRef.current);
@@ -95,15 +122,17 @@ export default function ChatScreen({ cfg, alias, onBack }: Props) {
   };
 
   const submit = () => {
-    const content = draft.trim();
-    if (!content || sending) return;
+    const content = draft.trim() || (attached ? `[图片] ${attached.fileName}` : '');
+    if ((!content && !attached) || sending) return;
+    const img = attached ?? undefined;
     setDraft('');
+    setAttached(null);
     const localId = `local-${++localSeq.current}`;
     setMessages(prev => [
-      { content, created_at: new Date().toISOString(), _localId: localId, _pending: true },
+      { content, created_at: new Date().toISOString(), _localId: localId, _pending: true, _img: img },
       ...prev,
     ]);
-    doSend(content, localId);
+    doSend(content, localId, img);
   };
 
   const retry = (item: ChatItem) => {
@@ -111,7 +140,12 @@ export default function ChatScreen({ cfg, alias, onBack }: Props) {
     setMessages(prev =>
       prev.map(t => (t._localId === item._localId ? { ...t, _pending: true, _failed: false } : t)),
     );
-    doSend(item.content, item._localId);
+    doSend(item.content, item._localId, item._img);
+  };
+
+  const attach = async () => {
+    const img = await pickImage();
+    if (img) setAttached(img);
   };
 
   return (
@@ -151,6 +185,11 @@ export default function ChatScreen({ cfg, alias, onBack }: Props) {
             <View style={styles.bubbleWrap}>
               <View style={styles.bubble}>
                 <Text style={styles.bubbleText}>{item.content || '—'}</Text>
+                {attachmentNames(item).map(n => (
+                  <Text key={n} style={styles.attachmentLine}>
+                    📎 {n}
+                  </Text>
+                ))}
               </View>
               {item.reply ? (
                 <View style={[styles.bubble, styles.replyBubble]}>
@@ -171,7 +210,26 @@ export default function ChatScreen({ cfg, alias, onBack }: Props) {
         />
       )}
 
+      {attached ? (
+        <View style={styles.attachPreview}>
+          <Text style={styles.attachName} numberOfLines={1}>
+            📎 {attached.fileName}
+          </Text>
+          <Pressable onPress={() => setAttached(null)} hitSlop={10}>
+            <Text style={styles.attachRemove}>✕</Text>
+          </Pressable>
+        </View>
+      ) : null}
       <View style={styles.inputRow}>
+        {ATTACH_ENABLED ? (
+          <Pressable
+            style={({ pressed }) => [styles.attachBtn, pressed && { opacity: 0.6 }]}
+            onPress={attach}
+            hitSlop={6}
+          >
+            <Text style={styles.attachBtnText}>＋</Text>
+          </Pressable>
+        ) : null}
         <TextInput
           style={styles.input}
           placeholder={`Message ${alias}…`}
@@ -183,7 +241,7 @@ export default function ChatScreen({ cfg, alias, onBack }: Props) {
         <Pressable
           style={({ pressed }) => [styles.send, (pressed || sending) && { opacity: 0.6 }]}
           onPress={submit}
-          disabled={sending || !draft.trim()}
+          disabled={sending || (!draft.trim() && !attached)}
         >
           <Text style={styles.sendText}>↑</Text>
         </Pressable>
@@ -227,6 +285,26 @@ const styles = StyleSheet.create({
   replyBubble: { alignSelf: 'flex-start', backgroundColor: colors.inputBg },
   bubbleText: { color: colors.text, fontSize: 14, lineHeight: 20 },
   pendingMark: { color: colors.textMuted, fontSize: 10, alignSelf: 'flex-end' },
+  attachmentLine: { color: colors.accent, fontSize: 12, marginTop: spacing.xs },
+  attachPreview: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.sm,
+  },
+  attachName: { color: colors.textSecondary, fontSize: 12, flexShrink: 1 },
+  attachRemove: { color: colors.textMuted, fontSize: 14 },
+  attachBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    borderColor: colors.border,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  attachBtnText: { color: colors.textSecondary, fontSize: 20, lineHeight: 22 },
   failedMark: { color: colors.failed, fontSize: 11, alignSelf: 'flex-end', fontWeight: '600' },
   inputRow: {
     flexDirection: 'row',
