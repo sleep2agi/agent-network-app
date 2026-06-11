@@ -70,3 +70,26 @@ export const verifyConfig = async (cfg: HubConfig): Promise<boolean> => {
     return false;
   }
 };
+
+/** Username/password login → token (Vincent tg 679: 不需要填 TOKEN).
+ *  POST /api/auth/login {username,password} → {ok, token, error?}. */
+export const login = async (
+  serverUrl: string,
+  username: string,
+  password: string,
+): Promise<{ ok: true; cfg: HubConfig } | { ok: false; error: string }> => {
+  try {
+    const res = await fetch(`${serverUrl}/api/auth/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username, password }),
+    });
+    const data = await res.json();
+    if (!data?.ok) return { ok: false, error: String(data?.error ?? `HTTP ${res.status}`) };
+    const token = data.token ?? data.user_token ?? data.access_token;
+    if (!token) return { ok: false, error: 'login ok but no token in response' };
+    return { ok: true, cfg: { serverUrl, token } };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : 'network error' };
+  }
+};

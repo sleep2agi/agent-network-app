@@ -11,7 +11,7 @@ import {
   TextInput,
   View,
 } from 'react-native';
-import { fetchStatus, verifyConfig, HubConfig, Session } from './src/api';
+import { fetchStatus, login, HubConfig, Session } from './src/api';
 import ChatScreen from './src/ChatScreen';
 import { colors, spacing, statusColor } from './src/theme';
 
@@ -50,27 +50,26 @@ export default function App() {
 
 function LoginScreen({ onLogin }: { onLogin: (cfg: HubConfig) => void }) {
   const [serverUrl, setServerUrl] = useState('');
-  const [token, setToken] = useState('');
+  const [username, setUsername] = useState('');
+  const [password, setPassword] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
 
   const submit = async () => {
-    const cfg = { serverUrl: serverUrl.replace(/\/$/, ''), token };
     setBusy(true);
     setError('');
-    const ok = await verifyConfig(cfg);
+    const result = await login(serverUrl.replace(/\/$/, ''), username.trim(), password);
     setBusy(false);
-    if (ok) onLogin(cfg);
-    else setError('无法连接：检查 Server 地址与 Token');
+    if (result.ok) onLogin(result.cfg);
+    else setError(`登录失败：${result.error}`);
   };
 
   return (
     <View style={styles.loginWrap}>
       <Text style={styles.brand}>Agent Network</Text>
-      <Text style={styles.brandSub}>connect to your CommHub</Text>
       <TextInput
         style={styles.input}
-        placeholder="Server URL (https://…)"
+        placeholder="服务器地址 (https://…)"
         placeholderTextColor={colors.textMuted}
         autoCapitalize="none"
         autoCorrect={false}
@@ -80,23 +79,32 @@ function LoginScreen({ onLogin }: { onLogin: (cfg: HubConfig) => void }) {
       />
       <TextInput
         style={styles.input}
-        placeholder="Token"
+        placeholder="用户名"
+        placeholderTextColor={colors.textMuted}
+        autoCapitalize="none"
+        autoCorrect={false}
+        value={username}
+        onChangeText={setUsername}
+      />
+      <TextInput
+        style={styles.input}
+        placeholder="密码"
         placeholderTextColor={colors.textMuted}
         autoCapitalize="none"
         secureTextEntry
-        value={token}
-        onChangeText={setToken}
+        value={password}
+        onChangeText={setPassword}
       />
       {error ? <Text style={styles.error}>{error}</Text> : null}
       <Pressable
         style={({ pressed }) => [styles.button, pressed && { opacity: 0.7 }]}
         onPress={submit}
-        disabled={busy || !serverUrl || !token}
+        disabled={busy || !serverUrl || !username || !password}
       >
         {busy ? (
           <ActivityIndicator color={colors.bg} />
         ) : (
-          <Text style={styles.buttonText}>连接</Text>
+          <Text style={styles.buttonText}>登录</Text>
         )}
       </Pressable>
     </View>

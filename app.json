@@ -1,11 +1,11 @@
 {
   "expo": {
-    "name": "agent-network-app",
+    "name": "Agent Network",
     "slug": "agent-network-app",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
-    "userInterfaceStyle": "light",
+    "userInterfaceStyle": "dark",
     "ios": {
       "supportsTablet": true
     },
@@ -16,7 +16,8 @@
         "backgroundImage": "./assets/android-icon-background.png",
         "monochromeImage": "./assets/android-icon-monochrome.png"
       },
-      "predictiveBackGestureEnabled": false
+      "predictiveBackGestureEnabled": false,
+      "package": "com.anonymous.agentnetworkapp"
     },
     "web": {
       "favicon": "./assets/favicon.png"
