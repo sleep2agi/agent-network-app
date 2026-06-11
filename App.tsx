@@ -13,6 +13,7 @@ import {
   TextInput,
   View,
 } from 'react-native';
+import AliasAvatar from './src/AliasAvatar';
 import { fetchStatus, login, HubConfig, Session } from './src/api';
 import ChatScreen from './src/ChatScreen';
 import MessagesScreen from './src/MessagesScreen';
@@ -292,7 +293,7 @@ function AgentsScreen({
           style={({ pressed }) => [styles.card, pressed && { opacity: 0.7 }]}
           onPress={() => onOpenChat(item.alias)}
         >
-          <View style={[styles.dot, { backgroundColor: statusColor(item.status, true) }]} />
+          <AliasAvatar alias={item.alias} size={34} />
           <View style={{ flex: 1, minWidth: 0 }}>
             <Text style={styles.alias} numberOfLines={1}>
               {item.alias}
@@ -303,7 +304,9 @@ function AgentsScreen({
               </Text>
             ) : null}
           </View>
-          <Text style={styles.status}>{item.status}</Text>
+          <Text style={[styles.status, { color: statusColor(item.status ?? '', true) }]}>
+            {item.status}
+          </Text>
         </Pressable>
       )}
     />

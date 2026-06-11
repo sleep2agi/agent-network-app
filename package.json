@@ -1,11 +1,12 @@
 {
   "name": "agent-network-app",
-  "version": "0.1.13",
+  "version": "0.1.14",
   "main": "index.ts",
   "dependencies": {
     "expo": "~56.0.9",
     "expo-build-properties": "~56.0.18",
     "expo-document-picker": "~56.0.4",
+    "expo-file-system": "~56.0.8",
     "expo-image-picker": "~56.0.17",
     "expo-secure-store": "~56.0.4",
     "expo-status-bar": "~56.0.4",

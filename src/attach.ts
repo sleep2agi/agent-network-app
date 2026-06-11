@@ -1,5 +1,7 @@
 import * as DocumentPicker from 'expo-document-picker';
+import * as FileSystem from 'expo-file-system/legacy';
 import * as ImagePicker from 'expo-image-picker';
+import { Platform } from 'react-native';
 
 // Image attachment groundwork (#220 roadmap ③). The picker/permission
 // chain is complete; upload stays stubbed until the hub ships
@@ -68,18 +70,40 @@ const UPLOAD_ERROR_HINTS: Record<string, string> = {
 };
 
 export const uploadImage = async (cfg: HubConfig, img: PickedImage): Promise<UploadedFile> => {
-  const form = new FormData();
-  // RN FormData file part: {uri, name, type}; web Fetch accepts Blob —
-  // RN's native fetch handles the uri form on device.
-  form.append('file', { uri: img.uri, name: img.fileName, type: img.mimeType } as any);
-  const res = await fetch(`${cfg.serverUrl}/api/upload`, {
-    method: 'POST',
-    headers: { Authorization: `Bearer ${cfg.token}` },
-    body: form,
-  });
-  const data = await res.json().catch(() => null);
+  // The hub REQUIRES a Content-Length header (411 otherwise, per #221).
+  // RN's fetch streams FormData chunked on Android — Vincent's first
+  // image send died on exactly that (tg 737) — so native goes through
+  // FileSystem.uploadAsync, which does a proper native multipart upload.
+  let data: any;
+  let status: number;
+  if (Platform.OS === 'web') {
+    const form = new FormData();
+    form.append('file', { uri: img.uri, name: img.fileName, type: img.mimeType } as any);
+    const res = await fetch(`${cfg.serverUrl}/api/upload`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${cfg.token}` },
+      body: form,
+    });
+    status = res.status;
+    data = await res.json().catch(() => null);
+  } else {
+    const res = await FileSystem.uploadAsync(`${cfg.serverUrl}/api/upload`, img.uri, {
+      httpMethod: 'POST',
+      uploadType: FileSystem.FileSystemUploadType.MULTIPART,
+      fieldName: 'file',
+      mimeType: img.mimeType,
+      parameters: {},
+      headers: { Authorization: `Bearer ${cfg.token}` },
+    });
+    status = res.status;
+    try {
+      data = JSON.parse(res.body);
+    } catch {
+      data = null;
+    }
+  }
   if (!data?.ok) {
-    const code = String(data?.error ?? `HTTP ${res.status}`);
+    const code = String(data?.error ?? `HTTP ${status}`);
     throw new Error(UPLOAD_ERROR_HINTS[code] ?? code);
   }
   return { file_id: data.file_id, url: data.url, size: data.size, mime: data.mime };

@@ -6,12 +6,14 @@ import {
   KeyboardAvoidingView,
   Platform,
   Pressable,
+  StatusBar,
   StyleSheet,
   Text,
   TextInput,
   View,
 } from 'react-native';
-import { fetchTasks, sendTask, HubConfig, HubTask, TaskAttachment } from './api';
+import AliasAvatar from './AliasAvatar';
+import { fetchStatus, fetchTasks, sendTask, HubConfig, HubTask, TaskAttachment } from './api';
 import {
   ATTACH_ENABLED,
   pickDocument,
@@ -151,6 +153,47 @@ export default function ChatScreen({ cfg, alias, onBack }: Props) {
     doSend(item.content, item._localId, item._img);
   };
 
+  // Header subtitle, Telegram-style (Vincent tg 739-741): show 正在处理…
+  // while a recent task has no result yet, otherwise the session status
+  // so he can tell whether the agent is even online.
+  const [sessionStatus, setSessionStatus] = useState('');
+  useEffect(() => {
+    let live = true;
+    const poll = async () => {
+      try {
+        const data = await fetchStatus(cfg);
+        const s = (data.sessions ?? []).find(x => x.alias === alias);
+        if (live) setSessionStatus(s?.status ?? 'offline');
+      } catch {
+        /* keep last */
+      }
+    };
+    poll();
+    const t = setInterval(poll, 30000);
+    return () => {
+      live = false;
+      clearInterval(t);
+    };
+  }, [cfg, alias]);
+
+  const processing = messages.some(
+    m =>
+      !m._localId &&
+      !m.result &&
+      ['created', 'delivered', 'started'].includes(m.status ?? '') &&
+      m.created_at &&
+      Date.now() - new Date(`${m.created_at.replace(' ', 'T')}Z`).getTime() < 10 * 60 * 1000,
+  );
+  const subtitle = processing
+    ? '••• 正在处理…'
+    : sessionStatus === 'working' || sessionStatus === 'running'
+      ? '工作中'
+      : sessionStatus === 'offline'
+        ? '离线'
+        : sessionStatus
+          ? '在线'
+          : '';
+
   const attach = () => {
     // Native gets a 图片/文件 choice; web (test harness) goes straight
     // to the image picker — Alert multi-button is unsupported there.
@@ -168,15 +211,34 @@ export default function ChatScreen({ cfg, alias, onBack }: Props) {
   return (
     <KeyboardAvoidingView
       style={styles.root}
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      // Edge-to-edge Android ignores adjustResize, so behavior=undefined
+      // left the keyboard covering the input (Vincent tg 738). 'padding'
+      // works on both platforms under edge-to-edge.
+      behavior={Platform.OS === 'ios' ? 'padding' : 'padding'}
+      keyboardVerticalOffset={Platform.OS === 'android' ? (StatusBar.currentHeight ?? 0) : 0}
     >
       <View style={styles.header}>
         <Pressable onPress={onBack} hitSlop={12}>
           <Text style={styles.back}>‹</Text>
         </Pressable>
-        <Text style={styles.title} numberOfLines={1}>
-          {alias}
-        </Text>
+        <AliasAvatar alias={alias} size={32} />
+        <View style={{ flex: 1, minWidth: 0 }}>
+          <Text style={styles.title} numberOfLines={1}>
+            {alias}
+          </Text>
+          {subtitle ? (
+            <Text
+              style={[
+                styles.subtitle,
+                processing && { color: colors.accent },
+                sessionStatus === 'offline' && !processing && { color: colors.textMuted },
+              ]}
+              numberOfLines={1}
+            >
+              {subtitle}
+            </Text>
+          ) : null}
+        </View>
       </View>
 
       {!loaded ? (
@@ -280,7 +342,8 @@ const styles = StyleSheet.create({
     borderBottomColor: colors.border,
   },
   back: { color: colors.accent, fontSize: 28, lineHeight: 30, paddingRight: spacing.sm },
-  title: { color: colors.text, fontSize: 16, fontWeight: '600', flex: 1 },
+  title: { color: colors.text, fontSize: 16, fontWeight: '600' },
+  subtitle: { color: colors.running, fontSize: 11, marginTop: 1 },
   beginning: {
     color: colors.textMuted,
     fontSize: 11,
@@ -302,6 +365,13 @@ const styles = StyleSheet.create({
   replyBubble: { alignSelf: 'flex-start', backgroundColor: colors.inputBg },
   bubbleText: { color: colors.text, fontSize: 14, lineHeight: 20 },
   pendingMark: { color: colors.textMuted, fontSize: 10, alignSelf: 'flex-end' },
+  typingRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    paddingVertical: spacing.sm,
+  },
+  typingText: { color: colors.textMuted, fontSize: 12 },
   attachmentLine: { color: colors.accent, fontSize: 12, marginTop: spacing.xs },
   attachPreview: {
     flexDirection: 'row',
