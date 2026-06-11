@@ -1,3 +1,4 @@
+import * as DocumentPicker from 'expo-document-picker';
 import * as ImagePicker from 'expo-image-picker';
 
 // Image attachment groundwork (#220 roadmap ③). The picker/permission
@@ -13,6 +14,20 @@ export interface PickedImage {
   mimeType: string;
   fileSize?: number;
 }
+
+/** Any file (≤12MB server cap). Same shape as images — the upload and
+ *  attachment paths are format-agnostic. */
+export const pickDocument = async (): Promise<PickedImage | null> => {
+  const result = await DocumentPicker.getDocumentAsync({ copyToCacheDirectory: true });
+  if (result.canceled || !result.assets?.length) return null;
+  const a = result.assets[0];
+  return {
+    uri: a.uri,
+    fileName: a.name ?? 'file.bin',
+    mimeType: a.mimeType ?? 'application/octet-stream',
+    fileSize: a.size ?? undefined,
+  };
+};
 
 /** Ask for media-library permission and let the user pick one image. */
 export const pickImage = async (): Promise<PickedImage | null> => {

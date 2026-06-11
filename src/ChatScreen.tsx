@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
+  Alert,
   FlatList,
   KeyboardAvoidingView,
   Platform,
@@ -11,7 +12,14 @@ import {
   View,
 } from 'react-native';
 import { fetchTasks, sendTask, HubConfig, HubTask, TaskAttachment } from './api';
-import { ATTACH_ENABLED, pickImage, uploadImage, toTaskAttachment, PickedImage } from './attach';
+import {
+  ATTACH_ENABLED,
+  pickDocument,
+  pickImage,
+  uploadImage,
+  toTaskAttachment,
+  PickedImage,
+} from './attach';
 import { colors, spacing } from './theme';
 import { formatTime } from './time';
 
@@ -143,9 +151,18 @@ export default function ChatScreen({ cfg, alias, onBack }: Props) {
     doSend(item.content, item._localId, item._img);
   };
 
-  const attach = async () => {
-    const img = await pickImage();
-    if (img) setAttached(img);
+  const attach = () => {
+    // Native gets a 图片/文件 choice; web (test harness) goes straight
+    // to the image picker — Alert multi-button is unsupported there.
+    if (Platform.OS === 'web') {
+      pickImage().then(img => img && setAttached(img));
+      return;
+    }
+    Alert.alert('发送附件', undefined, [
+      { text: '图片', onPress: () => pickImage().then(img => img && setAttached(img)) },
+      { text: '文件', onPress: () => pickDocument().then(f => f && setAttached(f)) },
+      { text: '取消', style: 'cancel' },
+    ]);
   };
 
   return (
