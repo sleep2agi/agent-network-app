@@ -4,9 +4,9 @@
 
 Built with **Expo (React Native, TypeScript)**. Design language follows the dashboard's less-is-more overhaul: near-black surfaces, restrained color, green/red/amber/gray status triad, cyan accent.
 
-| Login | Agents | Chat | Messages |
-|---|---|---|---|
-| ![login](docs/screens/app-web-login.png) | ![agents](docs/screens/app-web-agents.png) | ![chat](docs/screens/app-web-chat.png) | ![messages](docs/screens/app-web-messages.png) |
+| Agents | Chat | Messages |
+|---|---|---|
+| ![agents](docs/screens/app-web-agents.png) | ![chat](docs/screens/app-web-chat.png) | ![messages](docs/screens/app-web-messages.png) |
 
 ## Features (v0.1.7)
 

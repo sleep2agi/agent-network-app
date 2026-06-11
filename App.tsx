@@ -159,7 +159,7 @@ function LoginScreen({ onLogin }: { onLogin: (cfg: HubConfig) => void }) {
       <Text style={styles.brand}>Agent Network</Text>
       <TextInput
         style={styles.input}
-        placeholder="服务器地址 (https://dm.vansin.top)"
+        placeholder="服务器地址 (https://your-hub.example.com)"
         placeholderTextColor={colors.textMuted}
         autoCapitalize="none"
         autoCorrect={false}
@@ -290,7 +290,11 @@ function AgentsScreen({
       }
       renderItem={({ item }) => (
         <Pressable
-          style={({ pressed }) => [styles.card, pressed && { opacity: 0.7 }]}
+          style={({ pressed }) => [
+            styles.card,
+            item.status === 'offline' && styles.cardOffline,
+            pressed && { opacity: 0.7 },
+          ]}
           onPress={() => onOpenChat(item.alias)}
         >
           <AliasAvatar alias={item.alias} size={34} />
@@ -391,6 +395,8 @@ const styles = StyleSheet.create({
     marginBottom: spacing.sm,
   },
   dot: { width: 8, height: 8, borderRadius: 4 },
+  // 下线的灰色调，别都亮着 (Vincent tg 753)
+  cardOffline: { opacity: 0.45 },
   alias: { color: colors.text, fontSize: 15, fontWeight: '600' },
   task: { color: colors.textSecondary, fontSize: 12, marginTop: 2 },
   status: { color: colors.textMuted, fontSize: 11 },
