@@ -129,7 +129,7 @@ function LoginScreen({ onLogin }: { onLogin: (cfg: HubConfig) => void }) {
       <Text style={styles.brand}>Agent Network</Text>
       <TextInput
         style={styles.input}
-        placeholder="服务器地址 (http://host:9999)"
+        placeholder="服务器地址 (https://dm.vansin.top)"
         placeholderTextColor={colors.textMuted}
         autoCapitalize="none"
         autoCorrect={false}
