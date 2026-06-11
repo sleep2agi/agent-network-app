@@ -12,13 +12,14 @@ import {
   View,
 } from 'react-native';
 import { fetchStatus, verifyConfig, HubConfig, Session } from './src/api';
+import ChatScreen from './src/ChatScreen';
 import { colors, spacing, statusColor } from './src/theme';
 
 // Round 1 skeleton: token login → agents list. Chat / messages / settings
 // land in later rounds (#220). Config is in-memory for now; persistent
 // storage (expo-secure-store) comes with the settings round.
 
-type Screen = { name: 'login' } | { name: 'agents' };
+type Screen = { name: 'login' } | { name: 'agents' } | { name: 'chat'; alias: string };
 
 export default function App() {
   const [cfg, setCfg] = useState<HubConfig | null>(null);
@@ -34,8 +35,14 @@ export default function App() {
             setScreen({ name: 'agents' });
           }}
         />
+      ) : screen.name === 'chat' ? (
+        <ChatScreen
+          cfg={cfg}
+          alias={screen.alias}
+          onBack={() => setScreen({ name: 'agents' })}
+        />
       ) : (
-        <AgentsScreen cfg={cfg} />
+        <AgentsScreen cfg={cfg} onOpenChat={alias => setScreen({ name: 'chat', alias })} />
       )}
     </SafeAreaView>
   );
@@ -96,7 +103,13 @@ function LoginScreen({ onLogin }: { onLogin: (cfg: HubConfig) => void }) {
   );
 }
 
-function AgentsScreen({ cfg }: { cfg: HubConfig }) {
+function AgentsScreen({
+  cfg,
+  onOpenChat,
+}: {
+  cfg: HubConfig;
+  onOpenChat: (alias: string) => void;
+}) {
   const [sessions, setSessions] = useState<Session[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -146,7 +159,10 @@ function AgentsScreen({ cfg }: { cfg: HubConfig }) {
         <Text style={styles.listHeader}>{sessions.length} agents</Text>
       }
       renderItem={({ item }) => (
-        <Pressable style={({ pressed }) => [styles.card, pressed && { opacity: 0.7 }]}>
+        <Pressable
+          style={({ pressed }) => [styles.card, pressed && { opacity: 0.7 }]}
+          onPress={() => onOpenChat(item.alias)}
+        >
           <View style={[styles.dot, { backgroundColor: statusColor(item.status, true) }]} />
           <View style={{ flex: 1, minWidth: 0 }}>
             <Text style={styles.alias} numberOfLines={1}>
