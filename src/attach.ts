@@ -58,6 +58,8 @@ import { HubConfig } from './api';
 // error, message } with 400/401/411/413/415/429/500 statuses.
 export interface UploadedFile {
   file_id: string;
+  /** Absolute path on the hub host — agents on that machine can Read it. */
+  path: string;
   url: string;
   size: number;
   mime: string;
@@ -106,8 +108,15 @@ export const uploadImage = async (cfg: HubConfig, img: PickedImage): Promise<Upl
     const code = String(data?.error ?? `HTTP ${status}`);
     throw new Error(UPLOAD_ERROR_HINTS[code] ?? code);
   }
-  return { file_id: data.file_id, url: data.url, size: data.size, mime: data.mime };
+  return { file_id: data.file_id, path: data.path, url: data.url, size: data.size, mime: data.mime };
 };
+
+/** Agent runtimes don't surface meta.attachments to the agent yet
+ *  (Vincent tg 744: 副指挥 couldn't see the image), so spell the file
+ *  location out in the message text — hub-host agents can Read the
+ *  absolute path directly, remote ones can GET the API URL. */
+export const attachmentTextHint = (img: PickedImage, up: UploadedFile): string =>
+  `\n\n📎 附件 ${img.fileName}（${up.mime}）\n服务器路径: ${up.path}\nAPI: GET ${up.url}`;
 
 /** Attachment entry for POST /api/task (validateAttachments schema). */
 export const toTaskAttachment = (img: PickedImage, up: UploadedFile) => ({

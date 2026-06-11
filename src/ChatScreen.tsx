@@ -16,6 +16,7 @@ import AliasAvatar from './AliasAvatar';
 import { fetchStatus, fetchTasks, sendTask, HubConfig, HubTask, TaskAttachment } from './api';
 import {
   ATTACH_ENABLED,
+  attachmentTextHint,
   pickDocument,
   pickImage,
   uploadImage,
@@ -116,11 +117,13 @@ export default function ChatScreen({ cfg, alias, onBack }: Props) {
   const doSend = async (content: string, localId: string, img?: PickedImage) => {
     try {
       let attachments: TaskAttachment[] | undefined;
+      let outgoing = content;
       if (img) {
         const up = await uploadImage(cfg, img);
         attachments = [toTaskAttachment(img, up)];
+        outgoing = `${content}${attachmentTextHint(img, up)}`;
       }
-      await sendTask(cfg, alias, content, attachments);
+      await sendTask(cfg, alias, outgoing, attachments);
       // delivered: drop the echo, the server copy arrives with reload
       setMessages(prev => prev.filter(t => t._localId !== localId));
       await load(limitRef.current);
