@@ -13,6 +13,7 @@ import {
   TextInput,
   View,
 } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
 import AliasAvatar from './src/AliasAvatar';
 import { fetchStatus, login, HubConfig, Session } from './src/api';
@@ -30,10 +31,11 @@ type Screen =
   | { name: 'settings' }
   | { name: 'chat'; alias: string };
 
+// 跟微信的学一学 (Vincent tg 807): icon over small label, active tint
 const TABS = [
-  { key: 'agents', label: 'Agents' },
-  { key: 'messages', label: 'Messages' },
-  { key: 'settings', label: '设置' },
+  { key: 'agents', label: 'Agents', icon: 'people-outline', iconActive: 'people' },
+  { key: 'messages', label: 'Messages', icon: 'chatbubble-ellipses-outline', iconActive: 'chatbubble-ellipses' },
+  { key: 'settings', label: '设置', icon: 'settings-outline', iconActive: 'settings' },
 ] as const;
 
 export default function App() {
@@ -139,6 +141,11 @@ function AppRoot() {
                   )
                 }
               >
+                <Ionicons
+                  name={screen.name === tab.key ? tab.iconActive : tab.icon}
+                  size={26}
+                  color={screen.name === tab.key ? colors.accent : colors.textSecondary}
+                />
                 <Text style={[styles.tabLabel, screen.name === tab.key && styles.tabActive]}>
                   {tab.label}
                 </Text>
@@ -393,10 +400,9 @@ const styles = StyleSheet.create({
     borderTopColor: colors.border,
     backgroundColor: colors.bg,
   },
-  // 太偏小了 (Vincent tg 802/803) — bigger labels + taller touch target
-  tab: { flex: 1, alignItems: 'center', paddingVertical: spacing.md + 4 },
-  tabLabel: { color: colors.textMuted, fontSize: 16, fontWeight: '600' },
-  tabActive: { color: colors.text },
+  tab: { flex: 1, alignItems: 'center', paddingVertical: spacing.sm, gap: 2 },
+  tabLabel: { color: colors.textSecondary, fontSize: 11, fontWeight: '500' },
+  tabActive: { color: colors.accent, fontWeight: '600' },
   card: {
     flexDirection: 'row',
     alignItems: 'center',
