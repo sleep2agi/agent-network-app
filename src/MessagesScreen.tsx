@@ -7,7 +7,7 @@ import {
   View,
 } from 'react-native';
 import { fetchMessages, HubConfig, HubMessage } from './api';
-import { colors, spacing } from './theme';
+import { colors, onThemeChange, spacing } from './theme';
 import { formatTime } from './time';
 
 // Network-wide message feed. Same lazy-window discipline as the chat
@@ -106,7 +106,8 @@ export default function MessagesScreen({ cfg }: { cfg: HubConfig }) {
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = () =>
+  StyleSheet.create({
   center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   beginning: {
     color: colors.textMuted,
@@ -133,4 +134,9 @@ const styles = StyleSheet.create({
   high: { color: colors.failed, fontSize: 10, fontWeight: '700' },
   time: { color: colors.textMuted, fontSize: 10 },
   content: { color: colors.text, fontSize: 13, lineHeight: 19 },
+});
+
+let styles = makeStyles();
+onThemeChange(() => {
+  styles = makeStyles();
 });

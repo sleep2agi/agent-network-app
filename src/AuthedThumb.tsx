@@ -2,7 +2,7 @@ import * as FileSystem from 'expo-file-system/legacy';
 import * as Sharing from 'expo-sharing';
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, Image, Pressable, StyleSheet, Text, View } from 'react-native';
-import { colors, spacing } from './theme';
+import { colors, onThemeChange, spacing } from './theme';
 
 // Server-side attachment thumbnails were black boxes on device (Vincent
 // tg 756): the hub serves /api/files with nosniff + octet-stream +
@@ -166,7 +166,8 @@ export default function AuthedThumb({
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = () =>
+  StyleSheet.create({
   thumb: {
     width: 180,
     height: 180,
@@ -176,4 +177,9 @@ const styles = StyleSheet.create({
   },
   loading: { alignItems: 'center', justifyContent: 'center' },
   fallback: { color: colors.accent, fontSize: 12, marginTop: spacing.xs },
+});
+
+let styles = makeStyles();
+onThemeChange(() => {
+  styles = makeStyles();
 });

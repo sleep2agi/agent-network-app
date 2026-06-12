@@ -1,6 +1,6 @@
 // Design tokens lifted from the dashboard's #217 design language:
 // neutral near-black surfaces, restrained color, semantic status triad.
-export const colors = {
+const DARK = {
   bg: '#0b0b0d',
   card: '#161618',
   border: '#26262b',
@@ -13,6 +13,50 @@ export const colors = {
   failed: '#ef4444',
   blocked: '#f59e0b',
   rest: '#71717a',
+};
+
+// 白色主题 (Vincent tg 811/812) — same restraint on white surfaces;
+// accent/status drop to the 600-weight shades for contrast on white.
+const LIGHT: typeof DARK = {
+  bg: '#ffffff',
+  card: '#f7f7f8',
+  border: '#e4e4e7',
+  inputBg: '#fafafa',
+  text: '#18181b',
+  textSecondary: '#52525b',
+  textMuted: '#a1a1aa',
+  accent: '#0891b2',
+  running: '#16a34a',
+  failed: '#dc2626',
+  blocked: '#d97706',
+  rest: '#71717a',
+};
+
+export type ThemeMode = 'dark' | 'light';
+const PALETTES: Record<ThemeMode, typeof DARK> = { dark: DARK, light: LIGHT };
+
+// Mutable singleton: module-level StyleSheets are rebuilt through
+// onThemeChange, inline JSX reads pick the new values up on the keyed
+// remount in App. Avoids threading a theme context through every file.
+export const colors = { ...DARK };
+
+let mode: ThemeMode = 'dark';
+const listeners: Array<(m: ThemeMode) => void> = [];
+
+export const themeMode = (): ThemeMode => mode;
+
+export const setThemeMode = (m: ThemeMode): void => {
+  mode = m;
+  Object.assign(colors, PALETTES[m]);
+  listeners.forEach(l => l(m));
+};
+
+export const onThemeChange = (l: (m: ThemeMode) => void): (() => void) => {
+  listeners.push(l);
+  return () => {
+    const i = listeners.indexOf(l);
+    if (i >= 0) listeners.splice(i, 1);
+  };
 };
 
 export const statusColor = (status: string, online: boolean): string => {

@@ -27,7 +27,7 @@ import {
   toTaskAttachment,
   PickedImage,
 } from './attach';
-import { colors, spacing } from './theme';
+import { colors, onThemeChange, spacing } from './theme';
 import { formatTime } from './time';
 
 // Chat with one agent. Mirrors dashboard M4: open with the newest PAGE
@@ -456,7 +456,8 @@ export default function ChatScreen({ cfg, alias, onBack }: Props) {
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = () =>
+  StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.bg },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   header: {
@@ -563,4 +564,9 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   sendText: { color: colors.bg, fontSize: 18, fontWeight: '700' },
+});
+
+let styles = makeStyles();
+onThemeChange(() => {
+  styles = makeStyles();
 });

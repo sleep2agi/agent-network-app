@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { HubConfig } from './api';
-import { colors, spacing } from './theme';
+import { saveThemeMode } from './storage';
+import { colors, onThemeChange, setThemeMode, spacing, themeMode } from './theme';
 import { APP_VERSION } from './version';
 
 // Settings (Vincent tg 720): who am I, where am I connected, which
@@ -57,6 +58,21 @@ export default function SettingsScreen({
         />
       </View>
 
+      <Text style={styles.sectionTitle}>外观</Text>
+      <View style={styles.card}>
+        <Pressable
+          style={({ pressed }) => [styles.row, pressed && { opacity: 0.6 }]}
+          onPress={() => {
+            const next = themeMode() === 'dark' ? 'light' : 'dark';
+            setThemeMode(next);
+            saveThemeMode(next);
+          }}
+        >
+          <Text style={styles.rowLabel}>主题</Text>
+          <Text style={styles.rowValue}>{themeMode() === 'dark' ? '深色' : '浅色'}</Text>
+        </Pressable>
+      </View>
+
       <Text style={styles.sectionTitle}>关于</Text>
       <View style={styles.card}>
         <Row label="版本" value={`v${APP_VERSION}`} />
@@ -87,7 +103,8 @@ function Divider() {
   return <View style={styles.divider} />;
 }
 
-const styles = StyleSheet.create({
+const makeStyles = () =>
+  StyleSheet.create({
   root: { flex: 1, padding: spacing.lg },
   sectionTitle: {
     color: colors.textMuted,
@@ -121,4 +138,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   logoutText: { color: colors.failed, fontSize: 15, fontWeight: '600' },
+});
+
+let styles = makeStyles();
+onThemeChange(() => {
+  styles = makeStyles();
 });

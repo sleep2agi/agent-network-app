@@ -20,8 +20,8 @@ import { fetchStatus, login, HubConfig, Session } from './src/api';
 import ChatScreen from './src/ChatScreen';
 import MessagesScreen from './src/MessagesScreen';
 import SettingsScreen from './src/SettingsScreen';
-import { clearConfig, loadConfig, saveConfig } from './src/storage';
-import { colors, spacing, statusColor } from './src/theme';
+import { clearConfig, loadConfig, loadThemeMode, saveConfig } from './src/storage';
+import { colors, onThemeChange, setThemeMode, spacing, statusColor, themeMode } from './src/theme';
 import { APP_VERSION } from './src/version';
 
 type Screen =
@@ -50,6 +50,10 @@ function AppRoot() {
   const [cfg, setCfg] = useState<HubConfig | null>(null);
   const [screen, setScreen] = useState<Screen>({ name: 'login' });
   const [booting, setBooting] = useState(true);
+  // Keyed remount on theme switch: module-level styles were already
+  // rebuilt by the onThemeChange listeners, the new key re-renders the tree.
+  const [theme, setTheme] = useState(themeMode());
+  useEffect(() => onThemeChange(setTheme), []);
   // RN's SafeAreaView only covers iOS; Android edge-to-edge draws the
   // tab bar under the gesture bar (Vincent tg 802) — pad by the real inset.
   const insets = useSafeAreaInsets();
@@ -57,7 +61,8 @@ function AppRoot() {
 
   // Restore the saved session on cold start — login survives app kills.
   useEffect(() => {
-    loadConfig().then(saved => {
+    Promise.all([loadConfig(), loadThemeMode()]).then(([saved, mode]) => {
+      if (mode === 'light' || mode === 'dark') setThemeMode(mode);
       if (saved) {
         setCfg(saved);
         setScreen({ name: 'agents' });
@@ -89,8 +94,11 @@ function AppRoot() {
   }
 
   return (
-    <SafeAreaView style={styles.root}>
-      <StatusBar barStyle="light-content" backgroundColor={colors.bg} />
+    <SafeAreaView key={theme} style={styles.root}>
+      <StatusBar
+        barStyle={theme === 'light' ? 'dark-content' : 'light-content'}
+        backgroundColor={colors.bg}
+      />
       {screen.name === 'login' || !cfg ? (
         <LoginScreen
           onLogin={c => {
@@ -337,7 +345,8 @@ function AgentsScreen({
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = () =>
+  StyleSheet.create({
   root: {
     flex: 1,
     backgroundColor: colors.bg,
@@ -420,4 +429,9 @@ const styles = StyleSheet.create({
   alias: { color: colors.text, fontSize: 15, fontWeight: '600' },
   task: { color: colors.textSecondary, fontSize: 12, marginTop: 2 },
   status: { color: colors.textMuted, fontSize: 11 },
+});
+
+let styles = makeStyles();
+onThemeChange(() => {
+  styles = makeStyles();
 });

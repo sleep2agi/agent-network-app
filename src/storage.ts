@@ -28,3 +28,21 @@ export const loadConfig = async (): Promise<HubConfig | null> => {
 export const clearConfig = async (): Promise<void> => {
   await SecureStore.deleteItemAsync(KEY);
 };
+
+const THEME_KEY = 'theme_mode_v1';
+
+export const saveThemeMode = async (mode: string): Promise<void> => {
+  try {
+    await SecureStore.setItemAsync(THEME_KEY, mode);
+  } catch {
+    /* theme preference is best-effort */
+  }
+};
+
+export const loadThemeMode = async (): Promise<string | null> => {
+  try {
+    return await SecureStore.getItemAsync(THEME_KEY);
+  } catch {
+    return null;
+  }
+};
