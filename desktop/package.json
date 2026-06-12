@@ -1,0 +1,30 @@
+{
+  "name": "agent-network-desktop",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Agent Network desktop shell — wraps the RN-web export in Electron",
+  "main": "main.js",
+  "scripts": {
+    "sync-web": "rm -rf app && cp -r ../dist app",
+    "start": "electron .",
+    "smoke": "electron . --smoke --ozone-platform=headless --no-sandbox --disable-gpu",
+    "build:mac": "electron-builder --mac zip --arm64 --x64",
+    "build:linux": "electron-builder --linux AppImage --x64"
+  },
+  "devDependencies": {
+    "electron": "^33.2.0",
+    "electron-builder": "^25.1.8"
+  },
+  "build": {
+    "appId": "top.vansin.agentnetwork.desktop",
+    "productName": "Agent Network",
+    "files": ["main.js", "preload.js", "app/**"],
+    "directories": {
+      "output": "release"
+    },
+    "mac": {
+      "category": "public.app-category.developer-tools",
+      "identity": null
+    }
+  }
+}
