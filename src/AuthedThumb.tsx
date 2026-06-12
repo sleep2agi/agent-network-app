@@ -11,9 +11,51 @@ import { colors, spacing } from './theme';
 // FileSystem layer and rendering the local file sidesteps all of it —
 // and gives us offline re-entry for free.
 
-const cachePath = (fileId: string, name?: string) => {
-  // keep the extension so the system "open with" sheet picks the right app
-  const ext = (name?.match(/\.[A-Za-z0-9]{1,8}$/)?.[0] ?? '').toLowerCase();
+// Android resolves "open with" by MIME first, extension second. Agent
+// text refs carry neither (Vincent tg 791: share sheet got a bare-hex
+// octet-stream file it couldn't open), so derive both from whichever
+// side we have.
+const EXT_MIME: Record<string, string> = {
+  '.jpg': 'image/jpeg',
+  '.jpeg': 'image/jpeg',
+  '.png': 'image/png',
+  '.gif': 'image/gif',
+  '.webp': 'image/webp',
+  '.heic': 'image/heic',
+  '.mp4': 'video/mp4',
+  '.mov': 'video/quicktime',
+  '.webm': 'video/webm',
+  '.mkv': 'video/x-matroska',
+  '.mp3': 'audio/mpeg',
+  '.m4a': 'audio/mp4',
+  '.wav': 'audio/wav',
+  '.pdf': 'application/pdf',
+  '.txt': 'text/plain',
+  '.md': 'text/markdown',
+  '.csv': 'text/csv',
+  '.json': 'application/json',
+  '.zip': 'application/zip',
+  '.doc': 'application/msword',
+  '.docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  '.xls': 'application/vnd.ms-excel',
+  '.xlsx': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  '.ppt': 'application/vnd.ms-powerpoint',
+  '.pptx': 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+};
+
+const extOf = (name?: string) =>
+  (name?.match(/\.[A-Za-z0-9]{1,8}$/)?.[0] ?? '').toLowerCase();
+
+export const mimeFromName = (name?: string): string | undefined => EXT_MIME[extOf(name)];
+
+const extFromMime = (mime?: string): string => {
+  if (!mime) return '';
+  for (const [ext, m] of Object.entries(EXT_MIME)) if (m === mime) return ext;
+  return '';
+};
+
+const cachePath = (fileId: string, name?: string, mime?: string) => {
+  const ext = extOf(name) || extFromMime(mime);
   return `${FileSystem.cacheDirectory}att-${fileId}${ext}`;
 };
 
@@ -22,8 +64,9 @@ export const downloadAttachment = async (
   token: string,
   fileId: string,
   name?: string,
+  mime?: string,
 ): Promise<string> => {
-  const dest = cachePath(fileId, name);
+  const dest = cachePath(fileId, name, mime);
   const info = await FileSystem.getInfoAsync(dest);
   if (!info.exists || (info.size ?? 0) === 0) {
     const r = await FileSystem.downloadAsync(`${serverUrl}/api/files/${fileId}`, dest, {
@@ -57,9 +100,10 @@ export function AttachmentFile({
     setBusy(true);
     setError(false);
     try {
-      const local = await downloadAttachment(serverUrl, token, fileId, name);
+      const resolvedMime = mime || mimeFromName(name);
+      const local = await downloadAttachment(serverUrl, token, fileId, name, resolvedMime);
       await Sharing.shareAsync(local, {
-        mimeType: mime || 'application/octet-stream',
+        mimeType: resolvedMime || 'application/octet-stream',
         dialogTitle: name,
       });
     } catch {

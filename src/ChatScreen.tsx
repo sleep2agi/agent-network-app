@@ -15,7 +15,7 @@ import {
   View,
 } from 'react-native';
 import AliasAvatar from './AliasAvatar';
-import AuthedThumb, { AttachmentFile } from './AuthedThumb';
+import AuthedThumb, { AttachmentFile, mimeFromName } from './AuthedThumb';
 import { fetchStatus, fetchTasks, sendTask, HubConfig, HubTask, TaskAttachment } from './api';
 import {
   ATTACH_ENABLED,
@@ -68,13 +68,16 @@ const makePusher = (serverUrl: string, out: AttachmentView[]) => {
   return (fileId: string, name: string, mime?: string) => {
     if (seen.has(fileId)) return;
     seen.add(fileId);
+    // text refs carry no mime — derive it from the extension so the
+    // share sheet can pick a player (Vincent tg 791)
+    const resolved = mime ?? mimeFromName(name);
     out.push({
       key: fileId,
       name,
-      isImage: isImageLike(name, mime),
+      isImage: isImageLike(name, resolved),
       uri: `${serverUrl}/api/files/${fileId}`,
       needsAuth: true,
-      mime,
+      mime: resolved,
     });
   };
 };
