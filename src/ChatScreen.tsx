@@ -14,6 +14,7 @@ import {
   TextInput,
   View,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import AliasAvatar from './AliasAvatar';
 import AuthedThumb, { AttachmentFile, mimeFromName } from './AuthedThumb';
 import { fetchStatus, fetchTasks, sendTask, HubConfig, HubTask, TaskAttachment } from './api';
@@ -147,6 +148,10 @@ interface Props {
 }
 
 export default function ChatScreen({ cfg, alias, onBack }: Props) {
+  // Android edge-to-edge draws the composer under the gesture bar (same
+  // class of bug as the tg 802 tab bar) — pad by the real bottom inset.
+  const insets = useSafeAreaInsets();
+  const composerInset = Platform.OS === 'android' ? insets.bottom : 0;
   const [messages, setMessages] = useState<ChatItem[]>([]);
   const [loaded, setLoaded] = useState(false);
   const [hasOlder, setHasOlder] = useState(true);
@@ -421,7 +426,7 @@ export default function ChatScreen({ cfg, alias, onBack }: Props) {
         </Pressable>
       </Modal>
 
-      <View style={styles.inputRow}>
+      <View style={[styles.inputRow, { paddingBottom: spacing.md + composerInset }]}>
         {ATTACH_ENABLED ? (
           <Pressable
             style={({ pressed }) => [styles.attachBtn, pressed && { opacity: 0.6 }]}

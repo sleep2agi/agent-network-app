@@ -13,6 +13,7 @@ import {
   TextInput,
   View,
 } from 'react-native';
+import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
 import AliasAvatar from './src/AliasAvatar';
 import { fetchStatus, login, HubConfig, Session } from './src/api';
 import ChatScreen from './src/ChatScreen';
@@ -36,9 +37,21 @@ const TABS = [
 ] as const;
 
 export default function App() {
+  return (
+    <SafeAreaProvider>
+      <AppRoot />
+    </SafeAreaProvider>
+  );
+}
+
+function AppRoot() {
   const [cfg, setCfg] = useState<HubConfig | null>(null);
   const [screen, setScreen] = useState<Screen>({ name: 'login' });
   const [booting, setBooting] = useState(true);
+  // RN's SafeAreaView only covers iOS; Android edge-to-edge draws the
+  // tab bar under the gesture bar (Vincent tg 802) — pad by the real inset.
+  const insets = useSafeAreaInsets();
+  const tabBarInset = Platform.OS === 'android' ? insets.bottom : 0;
 
   // Restore the saved session on cold start — login survives app kills.
   useEffect(() => {
@@ -111,7 +124,7 @@ export default function App() {
               />
             )}
           </View>
-          <View style={styles.tabBar}>
+          <View style={[styles.tabBar, { paddingBottom: tabBarInset }]}>
             {TABS.map(tab => (
               <Pressable
                 key={tab.key}
@@ -380,8 +393,9 @@ const styles = StyleSheet.create({
     borderTopColor: colors.border,
     backgroundColor: colors.bg,
   },
-  tab: { flex: 1, alignItems: 'center', paddingVertical: spacing.md },
-  tabLabel: { color: colors.textMuted, fontSize: 13, fontWeight: '600' },
+  // 太偏小了 (Vincent tg 802/803) — bigger labels + taller touch target
+  tab: { flex: 1, alignItems: 'center', paddingVertical: spacing.md + 4 },
+  tabLabel: { color: colors.textMuted, fontSize: 16, fontWeight: '600' },
   tabActive: { color: colors.text },
   card: {
     flexDirection: 'row',
