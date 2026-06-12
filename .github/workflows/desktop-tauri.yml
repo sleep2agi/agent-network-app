@@ -1,0 +1,49 @@
+# Tauri desktop builds (Vincent tg 824: Electron → Tauri).
+# macOS must compile on a mac runner — no cross-build from Linux.
+name: desktop-tauri
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  mac-arm64:
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - run: npm ci
+
+      - name: Export RN web bundle
+        run: npx expo export -p web
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - name: Generate icons
+        run: npx tauri icon assets/icon.png
+
+      - name: Build (unsigned)
+        run: npx tauri build --bundles app,dmg
+
+      - name: Stage artifacts
+        run: |
+          mkdir -p out
+          cp src-tauri/target/release/bundle/dmg/*.dmg out/ || true
+          ditto -c -k --keepParent "src-tauri/target/release/bundle/macos/Agent Network.app" out/AgentNetwork-tauri-arm64-mac.zip
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: mac-arm64
+          path: out/*
+          retention-days: 14

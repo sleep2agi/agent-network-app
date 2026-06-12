@@ -38,6 +38,14 @@ const TABS = [
   { key: 'settings', label: '设置', icon: 'settings-outline', iconActive: 'settings' },
 ] as const;
 
+// Inside the Tauri shell, WKWebView enforces CORS and the hub sets no
+// CORS headers — swap fetch for the Rust-side http plugin (tg 824).
+if ((globalThis as any).__TAURI_INTERNALS__) {
+  import('@tauri-apps/plugin-http').then(m => {
+    (globalThis as any).fetch = m.fetch;
+  });
+}
+
 export default function App() {
   return (
     <SafeAreaProvider>
