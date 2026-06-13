@@ -34,8 +34,20 @@ const headers = (cfg: HubConfig) => ({
   'Content-Type': 'application/json',
 });
 
+// RN's fetch has no timeout: on flaky mobile networks a request can hang
+// forever and the UI spins with no way out (Vincent tg 841). Abort hard.
+const TIMEOUT_MS = 12000;
+
+const withTimeout = (run: (signal: AbortSignal) => Promise<Response>): Promise<Response> => {
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), TIMEOUT_MS);
+  return run(ctrl.signal).finally(() => clearTimeout(timer));
+};
+
 async function get<T>(cfg: HubConfig, path: string): Promise<T> {
-  const res = await fetch(`${cfg.serverUrl}${path}`, { headers: headers(cfg) });
+  const res = await withTimeout(signal =>
+    fetch(`${cfg.serverUrl}${path}`, { headers: headers(cfg), signal }),
+  );
   if (!res.ok) throw new Error(`HTTP ${res.status} on ${path}`);
   return res.json() as Promise<T>;
 }
@@ -72,7 +84,9 @@ export const fetchMessages = (cfg: HubConfig, limit: number) =>
  *  Sends are network-scoped: utok users must pass an explicit network_id. */
 export const fetchNetworkId = async (cfg: HubConfig): Promise<string | undefined> => {
   try {
-    const res = await fetch(`${cfg.serverUrl}/api/auth/me`, { headers: headers(cfg) });
+    const res = await withTimeout(signal =>
+      fetch(`${cfg.serverUrl}/api/auth/me`, { headers: headers(cfg), signal }),
+    );
     const d = await res.json();
     const cur = d?.current_network;
     return (
@@ -98,16 +112,19 @@ export const sendTask = async (
   attachments?: TaskAttachment[],
 ) => {
   const networkId = cfg.networkId ?? (await fetchNetworkId(cfg));
-  const res = await fetch(`${cfg.serverUrl}/api/task`, {
-    method: 'POST',
-    headers: headers(cfg),
-    body: JSON.stringify({
-      alias: to,
-      task: content,
-      network_id: networkId,
-      ...(attachments?.length ? { attachments } : {}),
+  const res = await withTimeout(signal =>
+    fetch(`${cfg.serverUrl}/api/task`, {
+      method: 'POST',
+      headers: headers(cfg),
+      signal,
+      body: JSON.stringify({
+        alias: to,
+        task: content,
+        network_id: networkId,
+        ...(attachments?.length ? { attachments } : {}),
+      }),
     }),
-  });
+  );
   if (!res.ok) throw new Error(`HTTP ${res.status} on /api/task`);
   const data = await res.json();
   if (!data?.ok) throw new Error(String(data?.error ?? 'send failed'));
@@ -132,11 +149,14 @@ export const login = async (
   password: string,
 ): Promise<{ ok: true; cfg: HubConfig } | { ok: false; error: string }> => {
   try {
-    const res = await fetch(`${serverUrl}/api/auth/login`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ username, password }),
-    });
+    const res = await withTimeout(signal =>
+      fetch(`${serverUrl}/api/auth/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        signal,
+        body: JSON.stringify({ username, password }),
+      }),
+    );
     // Vincent hit this against a half-open port: connection succeeds but
     // the body is empty, and res.json() throws a cryptic JSON parse
     // error. Read text first so we can say what actually went wrong.

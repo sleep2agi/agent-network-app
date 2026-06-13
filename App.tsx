@@ -250,14 +250,17 @@ function AgentsScreen({
   const [sessions, setSessions] = useState<Session[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [failed, setFailed] = useState(false);
   const [query, setQuery] = useState('');
 
   const load = useCallback(async () => {
     try {
       const data = await fetchStatus(cfg);
       setSessions(data.sessions ?? []);
+      setFailed(false);
     } catch {
-      /* keep last good list; pull-to-refresh retries */
+      /* keep last good list; with nothing loaded yet, surface the failure */
+      setFailed(true);
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -274,6 +277,26 @@ function AgentsScreen({
     return (
       <View style={styles.center}>
         <ActivityIndicator color={colors.accent} />
+      </View>
+    );
+  }
+
+  // First load failed with nothing cached: a spinner forever is a dead end
+  // (Vincent tg 841) — say so and give a retry button.
+  if (failed && sessions.length === 0) {
+    return (
+      <View style={styles.center}>
+        <Text style={styles.errorTitle}>连接失败</Text>
+        <Text style={styles.errorHint}>网络不稳定或服务器未响应，请重试</Text>
+        <Pressable
+          style={({ pressed }) => [styles.retryBtn, pressed && { opacity: 0.7 }]}
+          onPress={() => {
+            setLoading(true);
+            load();
+          }}
+        >
+          <Text style={styles.retryBtnText}>重试</Text>
+        </Pressable>
       </View>
     );
   }
@@ -363,7 +386,17 @@ const makeStyles = () =>
     // header). Pad the root by the real status-bar height instead.
     paddingTop: Platform.OS === 'android' ? StatusBar.currentHeight ?? 0 : 0,
   },
-  center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
+  center: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: spacing.sm },
+  errorTitle: { color: colors.text, fontSize: 17, fontWeight: '700' },
+  errorHint: { color: colors.textMuted, fontSize: 13 },
+  retryBtn: {
+    backgroundColor: colors.accent,
+    borderRadius: 10,
+    paddingVertical: spacing.md,
+    paddingHorizontal: spacing.xl,
+    marginTop: spacing.md,
+  },
+  retryBtnText: { color: colors.bg, fontSize: 15, fontWeight: '700' },
   loginWrap: { flex: 1, justifyContent: 'center', padding: spacing.xl, gap: spacing.md },
   brand: { color: colors.text, fontSize: 28, fontWeight: '700', textAlign: 'center' },
   brandSub: {
