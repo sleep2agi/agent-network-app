@@ -131,6 +131,22 @@ export const sendTask = async (
   return data;
 };
 
+/** The hub's root/help route is plain text starting with
+ *  "CommHub MCP Server vX.Y.Z …" — scrape the version for the Server tab.
+ *  Returns undefined if unreachable or the banner isn't present. */
+export const fetchServerVersion = async (cfg: HubConfig): Promise<string | undefined> => {
+  try {
+    const res = await withTimeout(signal =>
+      fetch(`${cfg.serverUrl}/api/version`, { headers: headers(cfg), signal }),
+    );
+    const text = await res.text();
+    const m = text.match(/CommHub MCP Server v([^\s]+)/i);
+    return m?.[1];
+  } catch {
+    return undefined;
+  }
+};
+
 /** Probe used by the login screen: token valid ⇔ /api/status readable. */
 export const verifyConfig = async (cfg: HubConfig): Promise<boolean> => {
   try {

@@ -19,6 +19,7 @@ import AliasAvatar from './src/AliasAvatar';
 import { fetchStatus, login, HubConfig, Session } from './src/api';
 import ChatScreen from './src/ChatScreen';
 import MessagesScreen from './src/MessagesScreen';
+import ServerScreen from './src/ServerScreen';
 import SettingsScreen from './src/SettingsScreen';
 import { clearConfig, loadConfig, loadThemeMode, saveConfig } from './src/storage';
 import { colors, onThemeChange, setThemeMode, spacing, statusColor, themeMode } from './src/theme';
@@ -28,13 +29,16 @@ type Screen =
   | { name: 'login' }
   | { name: 'agents' }
   | { name: 'messages' }
+  | { name: 'server' }
   | { name: 'settings' }
   | { name: 'chat'; alias: string };
 
-// 跟微信的学一学 (Vincent tg 807): icon over small label, active tint
+// 跟微信的学一学 (Vincent tg 807): icon over small label, active tint.
+// Server tab sits left of 设置 (Vincent tg 847).
 const TABS = [
   { key: 'agents', label: 'Agents', icon: 'people-outline', iconActive: 'people' },
   { key: 'messages', label: 'Messages', icon: 'chatbubble-ellipses-outline', iconActive: 'chatbubble-ellipses' },
+  { key: 'server', label: 'Server', icon: 'server-outline', iconActive: 'server' },
   { key: 'settings', label: '设置', icon: 'settings-outline', iconActive: 'settings' },
 ] as const;
 
@@ -84,7 +88,7 @@ function AppRoot() {
   // the default exit behavior.
   useEffect(() => {
     const sub = BackHandler.addEventListener('hardwareBackPress', () => {
-      if (screen.name === 'chat' || screen.name === 'messages' || screen.name === 'settings') {
+      if (screen.name !== 'agents' && screen.name !== 'login') {
         setScreen({ name: 'agents' });
         return true;
       }
@@ -126,6 +130,8 @@ function AppRoot() {
           <View style={{ flex: 1 }}>
             {screen.name === 'messages' ? (
               <MessagesScreen cfg={cfg} />
+            ) : screen.name === 'server' ? (
+              <ServerScreen cfg={cfg} />
             ) : screen.name === 'settings' ? (
               <SettingsScreen
                 cfg={cfg}
@@ -147,15 +153,7 @@ function AppRoot() {
               <Pressable
                 key={tab.key}
                 style={styles.tab}
-                onPress={() =>
-                  setScreen(
-                    tab.key === 'agents'
-                      ? { name: 'agents' }
-                      : tab.key === 'messages'
-                        ? { name: 'messages' }
-                        : { name: 'settings' },
-                  )
-                }
+                onPress={() => setScreen({ name: tab.key } as Screen)}
               >
                 <Ionicons
                   name={screen.name === tab.key ? tab.iconActive : tab.icon}
