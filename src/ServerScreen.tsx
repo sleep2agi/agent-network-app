@@ -43,6 +43,9 @@ export default function ServerScreen({ cfg }: { cfg: HubConfig }) {
   }
 
   const online = sessions.length;
+  // 'working' and 'running' are the same busy state under two names —
+  // different agent runtimes report it differently (cf. theme.ts
+  // statusColor, which also folds both) — so count both here.
   const working = sessions.filter(s => s.status === 'working' || s.status === 'running').length;
   const host = cfg.serverUrl.replace(/^https?:\/\//, '');
 
