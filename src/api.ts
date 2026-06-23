@@ -154,16 +154,6 @@ export const fetchServerVersion = async (cfg: HubConfig): Promise<string | undef
   }
 };
 
-/** Probe used by the login screen: token valid ⇔ /api/status readable. */
-export const verifyConfig = async (cfg: HubConfig): Promise<boolean> => {
-  try {
-    await fetchStatus(cfg);
-    return true;
-  } catch {
-    return false;
-  }
-};
-
 /** Username/password login → token (Vincent tg 679: 不需要填 TOKEN).
  *  POST /api/auth/login {username,password} → {ok, token, error?}. */
 export const login = async (
