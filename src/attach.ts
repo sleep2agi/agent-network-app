@@ -3,12 +3,14 @@ import * as FileSystem from 'expo-file-system/legacy';
 import * as ImagePicker from 'expo-image-picker';
 import { Platform } from 'react-native';
 
-// Image attachment groundwork (#220 roadmap ③). The picker/permission
-// chain is complete; upload stays stubbed until the hub ships
-// POST /api/upload (sleep2agi/agent-network#221) and SDK马 posts the
-// final response contract there. ATTACH_ENABLED stays false so no
-// half-wired UI ever reaches Vincent (quality bar, tg 721).
-export const ATTACH_ENABLED = true; // hub /api/upload live since 2026-06-11 (#221)
+// Image/file attachments (#220 roadmap ③) — fully wired end to end:
+// pick → upload → attach (see uploadImage below). The hub's
+// POST /api/upload (sleep2agi/agent-network#221) went live 2026-06-11,
+// so this flag is ON. It originally existed to keep a stubbed,
+// half-wired upload UI away from Vincent (quality bar, tg 721); now that
+// the real upload path is implemented the gate is effectively permanent
+// — kept as a single explicit kill-switch should the endpoint regress.
+export const ATTACH_ENABLED = true;
 
 export interface PickedImage {
   uri: string;
