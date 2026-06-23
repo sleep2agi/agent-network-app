@@ -47,6 +47,11 @@ export const themeMode = (): ThemeMode => mode;
 
 export const setThemeMode = (m: ThemeMode): void => {
   mode = m;
+  // Mutate `colors` IN PLACE — never reassign it. Every module imported
+  // the same `colors` object reference; Object.assign keeps that reference
+  // valid so they all see the new palette. A reassignment (colors = ...)
+  // would leave existing imports pointing at the stale object. Components
+  // re-read these values on App's theme-keyed remount.
   Object.assign(colors, PALETTES[m]);
   listeners.forEach(l => l(m));
 };
