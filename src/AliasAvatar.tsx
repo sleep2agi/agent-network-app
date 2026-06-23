@@ -7,6 +7,9 @@ import { Text, View } from 'react-native';
 const AVATAR_HUES = [180, 200, 220, 270, 300, 330, 30, 90];
 
 export const aliasAvatarColors = (alias: string) => {
+  // djb2-ish rolling hash. `>>> 0` coerces to an unsigned 32-bit int each
+  // step so h stays a non-negative integer — otherwise overflow could make
+  // h negative and `h % length` below would yield a negative index.
   let h = 0;
   for (let i = 0; i < alias.length; i++) h = (h * 31 + alias.charCodeAt(i)) >>> 0;
   const hue = AVATAR_HUES[h % AVATAR_HUES.length];
@@ -17,6 +20,10 @@ export const aliasAvatarColors = (alias: string) => {
   };
 };
 
+// First letter/digit for the avatar — \p{L}\p{N} + /u skips leading
+// emoji/punctuation (so "🚀通信" → "通"). Wrapped in try/catch because
+// Unicode property escapes throw on older JS engines (some Hermes/JSC
+// builds); there we fall back to the raw first char rather than crash.
 export const aliasInitial = (alias?: string): string => {
   if (!alias) return '·';
   try {
