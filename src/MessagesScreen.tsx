@@ -71,6 +71,11 @@ export default function MessagesScreen({ cfg }: { cfg: HubConfig }) {
   }
 
   return (
+    // `inverted` flips the list geometry: index 0 (newest) renders at the
+    // visual bottom, so the feed opens already scrolled to the latest
+    // message. The flip also means `onEndReached` fires at the visual TOP
+    // (the list's geometric end) — which is exactly where we want to pull
+    // OLDER history, hence onEndReached → loadOlder, not a "load newer".
     <FlatList
       inverted
       data={messages}
