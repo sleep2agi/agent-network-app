@@ -277,6 +277,10 @@ export default function ChatScreen({ cfg, alias, onBack }: Props) {
   // while a recent task has no result yet, otherwise the session status
   // so he can tell whether the agent is even online.
   const [sessionStatus, setSessionStatus] = useState('');
+  // Deliberately a slower, separate poll than the 5s message poll above:
+  // an agent's online/offline state changes far less often than messages
+  // do, so 30s keeps the status badge fresh without doubling the chat's
+  // request rate. Don't merge the two — they have different freshness needs.
   useEffect(() => {
     let live = true;
     const poll = async () => {
