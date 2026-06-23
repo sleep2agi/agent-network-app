@@ -257,6 +257,11 @@ export default function ChatScreen({ cfg, alias, onBack }: Props) {
     const img = attached ?? undefined;
     setDraft('');
     setAttached(null);
+    // Optimistic echo: render the message instantly tagged with a
+    // client-only _localId (NOT the server task id, which we don't have
+    // yet). doSend drops this echo on success — the subsequent reload brings
+    // the real server row — or flags _failed so retry() can resend with the
+    // same _localId. localSeq just guarantees each echo's id is unique.
     const localId = `local-${++localSeq.current}`;
     setMessages(prev => [
       { content, created_at: new Date().toISOString(), _localId: localId, _pending: true, _img: img },
