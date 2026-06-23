@@ -68,6 +68,10 @@ export const downloadAttachment = async (
 ): Promise<string> => {
   const dest = cachePath(fileId, name, mime);
   const info = await FileSystem.getInfoAsync(dest);
+  // Cache hit only when the file exists AND is non-empty. A download
+  // aborted mid-flight (app killed, network drop) can leave a 0-byte stub
+  // that would otherwise be trusted forever and render as a broken/black
+  // thumbnail — so treat size 0 as a miss and re-fetch.
   if (!info.exists || (info.size ?? 0) === 0) {
     const r = await FileSystem.downloadAsync(`${serverUrl}/api/files/${fileId}`, dest, {
       headers: { Authorization: `Bearer ${token}` },
