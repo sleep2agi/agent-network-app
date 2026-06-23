@@ -3,6 +3,11 @@
 // MM-DD HH:MM otherwise.
 export const formatTime = (raw?: string): string => {
   if (!raw) return '';
+  // SQLite emits zoneless, space-separated UTC ("2026-06-11 01:23:45").
+  // new Date() of that string parses as DEVICE-LOCAL → an 8h skew on a CN
+  // phone (everything would read "8小时前"). Convert to ISO and append 'Z'
+  // so it's parsed as UTC; the get* accessors below then render device-local.
+  // Inputs that already carry 'T' are assumed ISO-with-zone and pass through.
   const d = new Date(raw.includes('T') ? raw : `${raw.replace(' ', 'T')}Z`);
   if (isNaN(d.getTime())) return '';
   const now = Date.now();
