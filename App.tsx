@@ -83,6 +83,10 @@ function AppRoot() {
   const tabBarInset = Platform.OS === 'android' ? insets.bottom : 0;
 
   // Restore the saved session on cold start — login survives app kills.
+  // Invariant: loadConfig/loadThemeMode must never reject (both swallow
+  // their own errors and return null). A rejection here would skip the
+  // .then, leaving `booting` true forever = a permanent boot spinner —
+  // so keep those two best-effort if they're ever refactored.
   useEffect(() => {
     Promise.all([loadConfig(), loadThemeMode()]).then(([saved, mode]) => {
       if (mode === 'light' || mode === 'dark') setThemeMode(mode);
