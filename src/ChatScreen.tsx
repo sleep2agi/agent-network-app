@@ -305,6 +305,13 @@ export default function ChatScreen({ cfg, alias, onBack }: Props) {
     };
   }, [cfg, alias]);
 
+  // "正在处理…" only while a real (non-echo) task is still in a pre-result
+  // state AND was created within the last 10 min. The 10-min cutoff is a
+  // staleness guard: a task that never produced a result (agent crashed,
+  // went offline mid-run) would otherwise leave the subtitle spinning
+  // forever — after the window we fall back to the plain online/offline
+  // status instead. `created_at` is the hub's space-separated UTC string,
+  // so swap space→T and append Z before parsing (cf. time.ts).
   const processing = messages.some(
     m =>
       !m._localId &&
