@@ -140,6 +140,11 @@ const makeStyles = () =>
   logoutText: { color: colors.failed, fontSize: 15, fontWeight: '600' },
 });
 
+// Theme styling idiom (shared across screens): `styles` is a module-level
+// value rebuilt whenever the theme flips. The reassignment alone does NOT
+// re-render an already-mounted screen — App.tsx remounts the whole tree via
+// a theme-keyed <AppRoot key={theme}>, so the next render reads these fresh
+// styles. Keep both halves in sync: rebuild here, remount there.
 let styles = makeStyles();
 onThemeChange(() => {
   styles = makeStyles();
