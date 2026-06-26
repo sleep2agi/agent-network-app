@@ -348,6 +348,16 @@ function AgentsScreen({
     <FlatList
       data={shown}
       keyExtractor={s => s.alias}
+      // Perf (render time): the real fleet is 150+ agents. Without these the
+      // default virtualization renders/retains far more rows than fit on
+      // screen, spiking first-paint cost and scroll jank. Cap the initial
+      // batch to ~one screenful and shrink the retained window. (Deliberately
+      // NOT using removeClippedSubviews — it can blank rows / break taps on
+      // some RN versions, and correctness beats the marginal extra saving.)
+      initialNumToRender={12}
+      maxToRenderPerBatch={12}
+      windowSize={9}
+      updateCellsBatchingPeriod={50}
       contentContainerStyle={{ padding: spacing.lg }}
       refreshControl={
         <RefreshControl
