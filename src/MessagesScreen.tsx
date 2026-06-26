@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
-  AppState,
   FlatList,
   StyleSheet,
   Text,
@@ -10,6 +9,7 @@ import {
 import { fetchMessages, HubConfig, HubMessage } from './api';
 import { colors, onThemeChange, spacing } from './theme';
 import { formatTime } from './time';
+import { usePoll } from './usePoll';
 
 // Network-wide message feed. Same lazy-window discipline as the chat
 // screen (and dashboard M5): open with the newest PAGE, grow the limit
@@ -46,23 +46,17 @@ export default function MessagesScreen({ cfg }: { cfg: HubConfig }) {
     [cfg],
   );
 
+  // Reset the lazy window when the config changes; usePoll does the initial
+  // fetch + polling (it fires fn() right after this effect, so limit is PAGE).
   useEffect(() => {
     limitRef.current = PAGE;
     setLoaded(false);
     setHasOlder(true);
-    load(PAGE);
-    const t = setInterval(() => load(limitRef.current), 10000);
-    return () => clearInterval(t);
   }, [load]);
 
-  // Perf (freshness on re-open): refresh the current window immediately when
-  // the app returns to the foreground rather than waiting for the next poll.
-  useEffect(() => {
-    const sub = AppState.addEventListener('change', s => {
-      if (s === 'active') load(limitRef.current);
-    });
-    return () => sub.remove();
-  }, [load]);
+  // Foreground-only polling: 10s while visible, paused in background, instant
+  // refresh on resume (shared hook). Reads the live window via limitRef.
+  usePoll(() => load(limitRef.current), 10000, [load]);
 
   const loadOlder = async () => {
     if (loadingOlder || !hasOlder || !loaded) return;

@@ -29,6 +29,7 @@ import {
 } from './attach';
 import { colors, onThemeChange, spacing } from './theme';
 import { formatTime } from './time';
+import { usePoll } from './usePoll';
 
 // Chat with one agent. Mirrors dashboard M4: open with the newest PAGE
 // messages, grow the window when the user scrolls toward older history.
@@ -179,15 +180,18 @@ export default function ChatScreen({ cfg, alias, onBack }: Props) {
     [cfg, alias],
   );
 
+  // Reset the lazy window when the chat target changes; usePoll does the
+  // initial fetch + polling (fires fn() right after this effect → limit=PAGE).
   useEffect(() => {
     limitRef.current = PAGE;
     setMessages([]);
     setLoaded(false);
     setHasOlder(true);
-    load(PAGE);
-    const t = setInterval(() => load(limitRef.current), 5000);
-    return () => clearInterval(t);
   }, [load]);
+
+  // Foreground-only message polling: 5s while visible, paused in background,
+  // instant refresh on resume (shared hook). Reads the live window via limitRef.
+  usePoll(() => load(limitRef.current), 5000, [load]);
 
   const loadOlder = async () => {
     if (loadingOlder || !hasOlder || !loaded) return;
