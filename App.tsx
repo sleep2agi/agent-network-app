@@ -21,7 +21,7 @@ import ChatScreen from './src/ChatScreen';
 import MessagesScreen from './src/MessagesScreen';
 import ServerScreen from './src/ServerScreen';
 import SettingsScreen from './src/SettingsScreen';
-import { clearConfig, loadConfig, loadThemeMode, saveConfig } from './src/storage';
+import { clearConfig, loadConfig, loadThemeMode, saveConfig, saveSessionsCache, loadSessionsCache } from './src/storage';
 import { colors, onThemeChange, setThemeMode, spacing, statusColor, themeMode } from './src/theme';
 import { APP_VERSION } from './src/version';
 
@@ -269,8 +269,11 @@ function AgentsScreen({
   const load = useCallback(async () => {
     try {
       const data = await fetchStatus(cfg);
-      setSessions(data.sessions ?? []);
+      const next = data.sessions ?? [];
+      setSessions(next);
       setFailed(false);
+      // Persist for the next cold start's stale-while-revalidate paint.
+      saveSessionsCache(next);
     } catch {
       /* keep last good list; with nothing loaded yet, surface the failure */
       setFailed(true);
@@ -279,6 +282,22 @@ function AgentsScreen({
       setRefreshing(false);
     }
   }, [cfg]);
+
+  // Perf (load time): paint the last-known agents from the disk cache
+  // immediately so cold start shows content instead of a blank spinner; the
+  // live fetch below refreshes within the same tick. Only fills in if the
+  // fetch hasn't already populated the list (prev.length guard), so fresh
+  // data always wins the race.
+  useEffect(() => {
+    let live = true;
+    loadSessionsCache().then(cached => {
+      if (live && cached && cached.length) {
+        setSessions(prev => (prev.length ? prev : cached));
+        setLoading(false);
+      }
+    });
+    return () => { live = false; };
+  }, []);
 
   useEffect(() => {
     load();
