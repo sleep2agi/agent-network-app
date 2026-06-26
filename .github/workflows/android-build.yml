@@ -1,0 +1,55 @@
+# Android APK build (Vincent /loop perf → A: out an APK for on-device regression).
+# android/ is gitignored (Expo CNG), so we prebuild it in CI, then assembleRelease
+# so the JS bundle is embedded (a debug APK would expect a Metro dev server and
+# not run standalone). Expo's generated release buildType falls back to the debug
+# signing config, so the APK is installable for testing without a release keystore.
+# Artifact is downloadable from the run page.
+name: android-build
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  android-apk:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - uses: android-actions/setup-android@v3
+
+      - run: npm ci
+
+      - name: Prebuild Android (android/ is gitignored — regenerate)
+        run: npx expo prebuild --platform android --no-install
+
+      - name: Build release APK (debug-signed, JS embedded)
+        run: |
+          cd android
+          ./gradlew assembleRelease --no-daemon
+
+      - name: Locate APK
+        id: apk
+        run: |
+          f=$(find android/app/build/outputs/apk/release -name '*.apk' | head -1)
+          echo "path=$f" >> "$GITHUB_OUTPUT"
+          ls -lh "$f"
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: agent-network-android-apk
+          path: ${{ steps.apk.outputs.path }}
+          if-no-files-found: error
