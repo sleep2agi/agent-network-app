@@ -305,21 +305,28 @@ function AgentsScreen({
     return () => { live = false; };
   }, []);
 
+  // Live polling that pauses in the background and refreshes on resume:
+  //  • poll every 10s while foregrounded
+  //  • on background → stop polling: no point spending network/battery on a
+  //    screen the user can't see (and background JS timers get throttled anyway)
+  //  • on return to foreground → refresh immediately + restart the interval, so
+  //    switching back shows current data without waiting for the next tick
   useEffect(() => {
+    let timer: ReturnType<typeof setInterval> | null = setInterval(load, 10000);
     load();
-    const t = setInterval(load, 10000);
-    return () => clearInterval(t);
-  }, [load]);
-
-  // Perf (perceived freshness on re-open): refresh the instant the app returns
-  // to the foreground instead of waiting up to 10s for the next poll tick — so
-  // switching back to the app shows current data immediately. (Background JS
-  // timers are throttled, so the interval alone can be stale on resume.)
-  useEffect(() => {
     const sub = AppState.addEventListener('change', s => {
-      if (s === 'active') load();
+      if (s === 'active') {
+        load();
+        if (!timer) timer = setInterval(load, 10000);
+      } else if (timer) {
+        clearInterval(timer);
+        timer = null;
+      }
     });
-    return () => sub.remove();
+    return () => {
+      if (timer) clearInterval(timer);
+      sub.remove();
+    };
   }, [load]);
 
   if (loading) {
