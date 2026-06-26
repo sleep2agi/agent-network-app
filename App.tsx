@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import {
   ActivityIndicator,
-  AppState,
   BackHandler,
   FlatList,
   Platform,
@@ -24,6 +23,7 @@ import ServerScreen from './src/ServerScreen';
 import SettingsScreen from './src/SettingsScreen';
 import { clearConfig, loadConfig, loadThemeMode, saveConfig, saveSessionsCache, loadSessionsCache } from './src/storage';
 import { colors, onThemeChange, setThemeMode, spacing, statusColor, themeMode } from './src/theme';
+import { usePoll } from './src/usePoll';
 import { APP_VERSION } from './src/version';
 
 type Screen =
@@ -305,29 +305,9 @@ function AgentsScreen({
     return () => { live = false; };
   }, []);
 
-  // Live polling that pauses in the background and refreshes on resume:
-  //  • poll every 10s while foregrounded
-  //  • on background → stop polling: no point spending network/battery on a
-  //    screen the user can't see (and background JS timers get throttled anyway)
-  //  • on return to foreground → refresh immediately + restart the interval, so
-  //    switching back shows current data without waiting for the next tick
-  useEffect(() => {
-    let timer: ReturnType<typeof setInterval> | null = setInterval(load, 10000);
-    load();
-    const sub = AppState.addEventListener('change', s => {
-      if (s === 'active') {
-        load();
-        if (!timer) timer = setInterval(load, 10000);
-      } else if (timer) {
-        clearInterval(timer);
-        timer = null;
-      }
-    });
-    return () => {
-      if (timer) clearInterval(timer);
-      sub.remove();
-    };
-  }, [load]);
+  // Foreground-only polling: 10s while visible, paused in background, instant
+  // refresh on resume (shared hook — see usePoll).
+  usePoll(load, 10000, [load]);
 
   if (loading) {
     return (

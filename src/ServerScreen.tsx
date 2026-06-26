@@ -1,7 +1,8 @@
-import { useCallback, useEffect, useState } from 'react';
-import { ActivityIndicator, AppState, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { useCallback, useState } from 'react';
+import { ActivityIndicator, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { fetchServerVersion, fetchStatus, HubConfig, Session } from './api';
 import { colors, onThemeChange, spacing } from './theme';
+import { usePoll } from './usePoll';
 
 // Server tab (Vincent tg 847): one glance at the CommHub you're talking to —
 // is it reachable, what version, how many agents are live right now. Sits
@@ -28,20 +29,9 @@ export default function ServerScreen({ cfg }: { cfg: HubConfig }) {
     setVersion(await fetchServerVersion(cfg));
   }, [cfg]);
 
-  useEffect(() => {
-    load();
-    const t = setInterval(load, 10000);
-    return () => clearInterval(t);
-  }, [load]);
-
-  // Perf (freshness on re-open): refresh immediately when the app returns to
-  // the foreground rather than waiting for the next poll tick (cf. AgentsScreen).
-  useEffect(() => {
-    const sub = AppState.addEventListener('change', s => {
-      if (s === 'active') load();
-    });
-    return () => sub.remove();
-  }, [load]);
+  // Foreground-only polling: 10s while visible, paused in background, instant
+  // refresh on resume (shared hook — see usePoll).
+  usePoll(load, 10000, [load]);
 
   if (!loaded) {
     return (
