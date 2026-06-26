@@ -16,7 +16,7 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
 import AliasAvatar from './src/AliasAvatar';
-import { fetchStatus, login, HubConfig, Session } from './src/api';
+import { fetchStatus, prefetchStatus, takeStatusPrefetch, login, HubConfig, Session } from './src/api';
 import ChatScreen from './src/ChatScreen';
 import MessagesScreen from './src/MessagesScreen';
 import ServerScreen from './src/ServerScreen';
@@ -93,6 +93,9 @@ function AppRoot() {
       if (saved) {
         setCfg(saved);
         setScreen({ name: 'agents' });
+        // Fire the status request now so its RTT overlaps the boot→AgentsScreen
+        // mount; AgentsScreen's first load consumes this in-flight promise.
+        prefetchStatus(saved);
       }
       setBooting(false);
     });
@@ -268,7 +271,9 @@ function AgentsScreen({
 
   const load = useCallback(async () => {
     try {
-      const data = await fetchStatus(cfg);
+      // First load consumes the boot prefetch if it's still in-flight/fresh;
+      // polls and later loads fall through to a normal fetch.
+      const data = await (takeStatusPrefetch(cfg) ?? fetchStatus(cfg));
       const next = data.sessions ?? [];
       setSessions(next);
       setFailed(false);

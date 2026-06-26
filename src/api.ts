@@ -62,6 +62,31 @@ async function get<T>(cfg: HubConfig, path: string): Promise<T> {
 export const fetchStatus = (cfg: HubConfig) =>
   get<{ sessions: Session[] }>(cfg, '/api/status?light=1');
 
+// Boot-time prefetch (perf: load time). App boot fires the status request the
+// instant the saved session is restored — before AgentsScreen mounts — so the
+// network round-trip overlaps React mount/navigation instead of starting after
+// it. AgentsScreen's first load consumes this in-flight promise; everything
+// else (polls, other screens) ignores it. Consume-once + an 8s freshness gate
+// keep it from ever serving a stale promise to a later, unrelated load.
+let _statusPrefetch: { cfg: HubConfig; promise: Promise<{ sessions: Session[] }>; at: number } | null = null;
+
+export const prefetchStatus = (cfg: HubConfig): void => {
+  const promise = fetchStatus(cfg);
+  // Suppress unhandled-rejection if the prefetch is never consumed; the real
+  // consumer still awaits `promise` and sees any rejection for its own catch.
+  promise.catch(() => {});
+  _statusPrefetch = { cfg, promise, at: Date.now() };
+};
+
+export const takeStatusPrefetch = (cfg: HubConfig): Promise<{ sessions: Session[] }> | null => {
+  const p = _statusPrefetch;
+  if (p && p.cfg.serverUrl === cfg.serverUrl && p.cfg.token === cfg.token && Date.now() - p.at < 8000) {
+    _statusPrefetch = null; // consume once
+    return p.promise;
+  }
+  return null;
+};
+
 export const fetchTasks = (
   cfg: HubConfig,
   params: { to_name?: string; from_name?: string; limit?: number },
