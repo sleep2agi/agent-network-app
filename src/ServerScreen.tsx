@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { ActivityIndicator, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, AppState, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { fetchServerVersion, fetchStatus, HubConfig, Session } from './api';
 import { colors, onThemeChange, spacing } from './theme';
 
@@ -32,6 +32,15 @@ export default function ServerScreen({ cfg }: { cfg: HubConfig }) {
     load();
     const t = setInterval(load, 10000);
     return () => clearInterval(t);
+  }, [load]);
+
+  // Perf (freshness on re-open): refresh immediately when the app returns to
+  // the foreground rather than waiting for the next poll tick (cf. AgentsScreen).
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', s => {
+      if (s === 'active') load();
+    });
+    return () => sub.remove();
   }, [load]);
 
   if (!loaded) {

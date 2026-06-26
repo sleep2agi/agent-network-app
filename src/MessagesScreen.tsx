@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
+  AppState,
   FlatList,
   StyleSheet,
   Text,
@@ -52,6 +53,15 @@ export default function MessagesScreen({ cfg }: { cfg: HubConfig }) {
     load(PAGE);
     const t = setInterval(() => load(limitRef.current), 10000);
     return () => clearInterval(t);
+  }, [load]);
+
+  // Perf (freshness on re-open): refresh the current window immediately when
+  // the app returns to the foreground rather than waiting for the next poll.
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', s => {
+      if (s === 'active') load(limitRef.current);
+    });
+    return () => sub.remove();
   }, [load]);
 
   const loadOlder = async () => {
