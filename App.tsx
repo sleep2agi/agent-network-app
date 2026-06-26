@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import {
   ActivityIndicator,
+  AppState,
   BackHandler,
   FlatList,
   Platform,
@@ -308,6 +309,17 @@ function AgentsScreen({
     load();
     const t = setInterval(load, 10000);
     return () => clearInterval(t);
+  }, [load]);
+
+  // Perf (perceived freshness on re-open): refresh the instant the app returns
+  // to the foreground instead of waiting up to 10s for the next poll tick — so
+  // switching back to the app shows current data immediately. (Background JS
+  // timers are throttled, so the interval alone can be stale on resume.)
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', s => {
+      if (s === 'active') load();
+    });
+    return () => sub.remove();
   }, [load]);
 
   if (loading) {
