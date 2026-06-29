@@ -40,6 +40,14 @@ import { colors, onThemeChange, spacing } from './theme';
 // MUST match exactly — a stale id here ships invalid combos to the hub
 // and surfaces only at submit failure. Caught via local curl probe
 // during wizard build, not as a regression.
+// Hub-side name validator (server/src/create-node-validate.ts:34).
+// Wizard MUST surface the regex at step 0 instead of only validating
+// length > 0 — otherwise uppercase / spaces / Chinese / digit-prefix
+// names pass the wizard, walk all 5 steps, then fail with
+// node_name_invalid only after submit (通信龙 #3 B2 catch).
+const NAME_RE = /^[a-z][a-z0-9_-]{0,63}$/;
+const NAME_RULE_HINT = '小写字母开头，仅允许 a-z 0-9 _ -，最多 64 字符';
+
 const RUNTIMES: { id: string; label: string; models: string[] }[] = [
   { id: 'claude-agent-sdk', label: 'Claude Agent SDK', models: ['deepseek-v4-pro', 'MiniMax-M3', 'claude-sonnet-4-6', 'claude-opus-4-x'] },
   { id: 'codex-sdk', label: 'Codex SDK', models: ['gpt-5.5'] },
@@ -70,7 +78,19 @@ export default function CreateNodeWizardScreen({ cfg, daemon, onBack, onExit }: 
     }
     return RUNTIMES[0].id;
   });
-  const [model, setModel] = useState('');
+  // Initialize model to the runtime's first model (NEVER ''). Hub
+  // schema requires model.min(1) (tools.ts:1977); a 默认/empty pick
+  // makes the create_node call zod-reject which then surfaces as a
+  // misleading "需升级 hub" message — caught by 通信龙 #3 CHANGE_REQ.
+  // No "默认" option in step 2 anymore; we pick first explicitly.
+  const [model, setModel] = useState(() => {
+    const supported = daemon.runtimes_supported;
+    const initRuntime =
+      Array.isArray(supported) && supported.length > 0
+        ? RUNTIMES.find(r => supported.includes(r.id)) || RUNTIMES[0]
+        : RUNTIMES[0];
+    return initRuntime.models[0] || '';
+  });
   const [permissionMode, setPermissionMode] = useState('default');
   const [maxTurns, setMaxTurns] = useState('');
   const [budget, setBudget] = useState('');
@@ -123,16 +143,31 @@ export default function CreateNodeWizardScreen({ cfg, daemon, onBack, onExit }: 
 
   // Derived: runtime details + nav gates
   const runtime = RUNTIMES.find(r => r.id === runtimeId) || RUNTIMES[0];
-  const nameValid = name.trim().length > 0;
+  // Mirror hub regex per [[feedback_doc_capability_claim_verify_code_path]]
+  // — UX surfaces what the hub will accept, not a looser local rule.
+  const nameValid = NAME_RE.test(name.trim());
   const isRuntimeAllowed = useCallback((id: string) => {
     const supported = daemon.runtimes_supported;
     if (!Array.isArray(supported) || supported.length === 0) return true;
     return supported.includes(id);
   }, [daemon.runtimes_supported]);
+  // (#3 nit ②) If the daemon's declared runtimes all sit outside our
+  // known RUNTIMES list (e.g. App is older than the daemon, or the
+  // daemon advertises a future-only runtime), the wizard would init
+  // runtimeId to RUNTIMES[0] which is then disabled by isRuntimeAllowed
+  // — canNext gates at step 1 forever, user trapped. Detect and surface
+  // an empty-state instead of pretending to be functional.
+  const hasUsableRuntime =
+    !Array.isArray(daemon.runtimes_supported) ||
+    daemon.runtimes_supported.length === 0 ||
+    RUNTIMES.some(r => daemon.runtimes_supported!.includes(r.id));
   const canNext =
-    (step === 0 && nameValid) ||
-    (step === 1 && isRuntimeAllowed(runtimeId)) ||
-    (step >= 2 && step < STEPS.length);
+    hasUsableRuntime &&
+    (
+      (step === 0 && nameValid) ||
+      (step === 1 && isRuntimeAllowed(runtimeId)) ||
+      (step >= 2 && step < STEPS.length)
+    );
   const busy = phase === 'creating' || phase === 'awaiting_register';
 
   // ── handlers (no hooks below this line) ────────────────────────────
@@ -143,7 +178,11 @@ export default function CreateNodeWizardScreen({ cfg, daemon, onBack, onExit }: 
     const node_spec: CreateNodeRequest['node_spec'] = {
       name: name.trim(),
       runtime: runtimeId,
-      ...(model ? { model } : {}),
+      // Hub requires model.min(1) (tools.ts:1977) — never omit. State
+      // is initialized + reset to runtime.models[0], so model is always
+      // a real string. Defense-in-depth fallback below in case some
+      // future runtime entry lands with empty models[].
+      model: model || runtime.models[0] || '',
       flags: {
         permissionMode,
         ...(numOrUndef(maxTurns) !== undefined ? { maxTurns: numOrUndef(maxTurns) } : {}),
@@ -213,7 +252,19 @@ export default function CreateNodeWizardScreen({ cfg, daemon, onBack, onExit }: 
         contentContainerStyle={styles.bodyContent}
         keyboardShouldPersistTaps="handled"
       >
-        {phase !== 'form' ? (
+        {!hasUsableRuntime ? (
+          // (#3 nit ②) Daemon advertises only runtimes this App build doesn't
+          // know about — refuse to ship a wizard that can't complete.
+          <View style={styles.warnCard}>
+            <Text style={styles.warnTitle}>⚠  App 太旧</Text>
+            <Text style={styles.warnBody}>
+              {daemon.alias} 声明支持 {daemon.runtimes_supported?.join(', ') || '—'}，App 当前认识的 runtime（{RUNTIMES.map(r => r.id).join(', ')}）都不在其中。
+            </Text>
+            <Text style={styles.warnHint}>
+              升级 App 到带这些 runtime 的版本后再来；或选另一台 host_supervisor。
+            </Text>
+          </View>
+        ) : phase !== 'form' ? (
           <View style={styles.statusBlock}>
             {busy ? <ActivityIndicator color={colors.accent} /> : null}
             <Text style={[
@@ -245,9 +296,9 @@ export default function CreateNodeWizardScreen({ cfg, daemon, onBack, onExit }: 
                   autoCapitalize="none"
                   autoCorrect={false}
                 />
-                {!nameValid && (
-                  <Text style={styles.hint}>名字不能为空</Text>
-                )}
+                <Text style={[styles.hint, name.trim() !== '' && !nameValid && styles.hintErr]}>
+                  {NAME_RULE_HINT}
+                </Text>
               </View>
             )}
 
@@ -266,7 +317,10 @@ export default function CreateNodeWizardScreen({ cfg, daemon, onBack, onExit }: 
                       onPress={() => {
                         if (allowed) {
                           setRuntimeId(r.id);
-                          setModel('');
+                          // Reset model to the FIRST of the new runtime
+                          // (never ''). Same reasoning as initial state
+                          // — hub schema requires non-empty model.
+                          setModel(r.models[0] || '');
                         }
                       }}
                       style={({ pressed }) => [
@@ -298,20 +352,9 @@ export default function CreateNodeWizardScreen({ cfg, daemon, onBack, onExit }: 
             {step === 2 && (
               <View style={styles.section}>
                 <Text style={styles.label}>模型（{runtime.label}）</Text>
+                {/* No 默认 option — hub requires model.min(1). Always one of the listed
+                    models. First is preselected; user can switch. */}
                 <View style={styles.choiceList}>
-                  <Pressable
-                    onPress={() => setModel('')}
-                    style={({ pressed }) => [
-                      styles.choiceRow,
-                      model === '' && styles.choiceRowSelected,
-                      pressed && { opacity: 0.85 },
-                    ]}
-                  >
-                    <Text style={[styles.choiceText, model === '' && styles.choiceTextSelected]}>
-                      默认
-                    </Text>
-                    {model === '' ? <Ionicons name="checkmark" size={18} color={colors.accent} /> : null}
-                  </Pressable>
                   {runtime.models.map(m => (
                     <Pressable
                       key={m}
@@ -403,7 +446,7 @@ export default function CreateNodeWizardScreen({ cfg, daemon, onBack, onExit }: 
                   <Divider />
                   <SummaryRow k="Runtime" v={runtime.label} />
                   <Divider />
-                  <SummaryRow k="模型" v={model || '默认'} />
+                  <SummaryRow k="模型" v={model || runtime.models[0] || '—'} />
                   <Divider />
                   <SummaryRow k="permissionMode" v={permissionMode} />
                   <Divider />
@@ -426,7 +469,7 @@ export default function CreateNodeWizardScreen({ cfg, daemon, onBack, onExit }: 
               onPress={step === 0 ? onBack : () => setStep(step - 1)}
               style={({ pressed }) => [styles.secondaryBtn, pressed && { opacity: 0.7 }]}
             >
-              <Text style={styles.secondaryBtnText}>{step === 0 ? '上一步' : '上一步'}</Text>
+              <Text style={styles.secondaryBtnText}>{step === 0 ? '返回服务器' : '上一步'}</Text>
             </Pressable>
             {step < STEPS.length - 1 ? (
               <Pressable
@@ -462,7 +505,15 @@ export default function CreateNodeWizardScreen({ cfg, daemon, onBack, onExit }: 
             ]}
           >
             <Text style={[styles.primaryBtnText, busy && styles.primaryBtnTextDisabled]}>
-              {busy ? '请稍候…' : phase === 'error' ? '返回修改' : '完成'}
+              {busy
+                ? '请稍候…'
+                : phase === 'error'
+                  ? '返回修改'
+                  : phase === 'done' && childUp
+                    ? '完成'
+                    : phase === 'done'
+                      ? '去 Agents 查看'
+                      : '完成'}
             </Text>
           </Pressable>
         )}
@@ -527,6 +578,7 @@ const makeStyles = () => StyleSheet.create({
   label: { color: colors.textMuted, fontSize: 12 },
   subLabel: { color: colors.textMuted, fontSize: 11 },
   hint: { color: colors.textMuted, fontSize: 11 },
+  hintErr: { color: colors.failed },
 
   input: {
     backgroundColor: colors.inputBg,
@@ -611,6 +663,18 @@ const makeStyles = () => StyleSheet.create({
     alignItems: 'center',
   },
   secondaryBtnText: { color: colors.text, fontSize: 15, fontWeight: '500' },
+
+  // (#3 nit ②) Empty-state warning card for App-doesn't-know-these-runtimes case.
+  warnCard: {
+    backgroundColor: colors.card,
+    borderColor: colors.blocked,
+    borderWidth: 1,
+    borderRadius: 12,
+    padding: spacing.lg,
+  },
+  warnTitle: { color: colors.blocked, fontSize: 15, fontWeight: '600', marginBottom: spacing.sm },
+  warnBody: { color: colors.text, fontSize: 13, lineHeight: 20, marginBottom: spacing.md },
+  warnHint: { color: colors.textMuted, fontSize: 12 },
 });
 
 let styles = makeStyles();

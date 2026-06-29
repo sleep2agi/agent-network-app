@@ -267,10 +267,21 @@ export type CreateNodeResult =
 
 const NEEDS_UPGRADE_HINT = '当前 hub 不响应 create_node MCP 工具，需升级到 commhub-server@0.9.0-preview.8 以上';
 
-function parseMcpToolResponse(rawText: string): unknown {
-  // Hub may answer in plain JSON or SSE-encoded JSON-RPC. Mirror the
-  // dashboard's parseMcpEnvelope shape but inline for the mobile app
-  // (no extra dep, single call site).
+// Discriminated parse result so createNode can distinguish:
+//   - business errors (hub returned ok:false OR JSON-RPC error: tool
+//     rejected the args, schema invalid, validation failed) → real
+//     create_node failure to surface as-is to the user
+//   - version / transport errors (no valid envelope at all, SSE
+//     unparseable, missing result.content.text) → "needs upgrade hub"
+//
+// Mapping ANY parse error to "needs upgrade" (the bug 通信龙 caught) is
+// misleading: it tells a user with bad inputs that their server is broken.
+type ParsedMcp =
+  | { kind: 'payload'; payload: unknown }
+  | { kind: 'jsonRpcError'; message: string }
+  | { kind: 'malformed'; message: string };
+
+function parseMcpToolResponse(rawText: string): ParsedMcp {
   let envelope: unknown;
   try {
     envelope = JSON.parse(rawText);
@@ -282,20 +293,46 @@ function parseMcpToolResponse(rawText: string): unknown {
       .map(l => l.slice(5).trim())
       .filter(Boolean);
     const last = dataLines[dataLines.length - 1];
-    if (!last) throw new Error('empty MCP response');
-    envelope = JSON.parse(last);
+    if (!last) return { kind: 'malformed', message: 'empty MCP response' };
+    try {
+      envelope = JSON.parse(last);
+    } catch {
+      return { kind: 'malformed', message: 'MCP response not parseable as JSON or SSE' };
+    }
   }
   const env = envelope as {
     error?: { message?: string };
-    result?: { content?: Array<{ text?: string }> };
+    result?: { content?: Array<{ text?: string }>; isError?: boolean };
   };
-  if (env.error) throw new Error(env.error.message || 'MCP error');
+  // JSON-RPC envelope-level error = business error from hub
+  // (auth_failed, tool_not_found, validation, etc.) — surface it.
+  if (env.error) {
+    return { kind: 'jsonRpcError', message: env.error.message || 'MCP error' };
+  }
   const text = env.result?.content?.[0]?.text;
-  if (typeof text !== 'string') throw new Error('MCP result missing content.text');
+  if (typeof text !== 'string') {
+    // No result.content.text usually means the response shape doesn't
+    // match the tool contract — either the tool is missing or the
+    // server is on an older protocol. This IS a version concern.
+    return { kind: 'malformed', message: 'MCP result missing content.text' };
+  }
+  // result.isError=true is the MCP convention for tool-level errors
+  // delivered in result.content[0].text as plain text (NOT JSON). We
+  // saw this with create_node's "MCP error -32602: Input validation
+  // error: ..." message when schema fields are missing. Treat as
+  // jsonRpcError so createNode surfaces the raw message instead of
+  // wrongly mapping the unparseable text body to ok:true.
+  if (env.result?.isError === true) {
+    return { kind: 'jsonRpcError', message: text };
+  }
+  // Tool replies typically encode their payload as a JSON string in
+  // result.content[0].text. If that fails to parse, the payload is
+  // a free-form string the tool wanted to return — treat as ok with
+  // text so callers can still surface something.
   try {
-    return JSON.parse(text);
+    return { kind: 'payload', payload: JSON.parse(text) };
   } catch {
-    return { ok: true, text };
+    return { kind: 'payload', payload: { ok: true, text } };
   }
 }
 
@@ -339,17 +376,26 @@ export const createNode = async (cfg: HubConfig, req: CreateNodeRequest): Promis
       }
     }
     const raw = await res.text();
-    let payload: { ok?: boolean; error?: string; request_id?: string } & Record<string, unknown>;
-    try {
-      payload = parseMcpToolResponse(raw) as typeof payload;
-    } catch (e: unknown) {
-      // Most likely older hub returning text help banner / no MCP tool.
+    const parsed = parseMcpToolResponse(raw);
+    if (parsed.kind === 'malformed') {
+      // No valid JSON-RPC envelope OR missing result.content.text — this
+      // is the real "wrong hub version" case.
       return { ok: false, unconfirmed: true, error: NEEDS_UPGRADE_HINT };
     }
-    if (payload?.ok === false) {
-      return { ok: false, error: payload?.error || 'create_node failed' };
+    if (parsed.kind === 'jsonRpcError') {
+      // Hub answered with a JSON-RPC error envelope. This is a business
+      // error (validation rejected, tool not allowed, etc.) — surface it
+      // raw rather than misclassifying as a version mismatch.
+      return { ok: false, error: parsed.message };
     }
-    return { ok: true, request_id: payload?.request_id, result: payload };
+    // payload kind
+    const payload = parsed.payload as { ok?: boolean; error?: string; request_id?: string; result?: unknown } | null;
+    if (!payload) return { ok: false, error: 'empty hub response' };
+    if (payload.ok === false) {
+      // Tool returned ok:false in its content payload — also business.
+      return { ok: false, error: payload.error || 'create_node failed' };
+    }
+    return { ok: true, request_id: payload.request_id, result: payload.result ?? payload };
   } catch (e: unknown) {
     return { ok: false, error: e instanceof Error ? e.message : String(e) };
   }
