@@ -327,39 +327,14 @@ function AgentsScreen({
   // refresh on resume (shared hook — see usePoll).
   usePoll(load, 10000, [load]);
 
-  if (loading) {
-    return (
-      <View style={styles.center}>
-        <ActivityIndicator color={colors.accent} />
-      </View>
-    );
-  }
-
-  // First load failed with nothing cached: a spinner forever is a dead end
-  // (Vincent tg 841) — say so and give a retry button.
-  if (failed && sessions.length === 0) {
-    return (
-      <View style={styles.center}>
-        <Text style={styles.errorTitle}>连接失败</Text>
-        <Text style={styles.errorHint}>网络不稳定或服务器未响应，请重试</Text>
-        <Pressable
-          style={({ pressed }) => [styles.retryBtn, pressed && { opacity: 0.7 }]}
-          onPress={() => {
-            setLoading(true);
-            load();
-          }}
-        >
-          <Text style={styles.retryBtnText}>重试</Text>
-        </Pressable>
-      </View>
-    );
-  }
-
   // 153 agents on the real hub made the flat list unusable. Vincent (tg
   // 1094): group by team so agents are findable, and stop showing offline
   // ones up front. We bucket by team prefix (derived from the alias), order
   // rows inside each team working → idle-online → offline, and sink teams
   // that have no online member to the bottom — so offline never floats up.
+  // NOTE: this useMemo MUST stay above the early returns below — a hook after
+  // a conditional return changes hook order between renders and crashes (the
+  // v0.1.28 launch-crash regression, Vincent tg 1098).
   const q = query.trim().toLowerCase();
   const sections = useMemo(() => {
     const isOffline = (s: Session) => s.status === 'offline';
@@ -390,6 +365,34 @@ function AgentsScreen({
       );
   }, [sessions, q]);
   const shownCount = sections.reduce((n, g) => n + g.data.length, 0);
+
+  if (loading) {
+    return (
+      <View style={styles.center}>
+        <ActivityIndicator color={colors.accent} />
+      </View>
+    );
+  }
+
+  // First load failed with nothing cached: a spinner forever is a dead end
+  // (Vincent tg 841) — say so and give a retry button.
+  if (failed && sessions.length === 0) {
+    return (
+      <View style={styles.center}>
+        <Text style={styles.errorTitle}>连接失败</Text>
+        <Text style={styles.errorHint}>网络不稳定或服务器未响应，请重试</Text>
+        <Pressable
+          style={({ pressed }) => [styles.retryBtn, pressed && { opacity: 0.7 }]}
+          onPress={() => {
+            setLoading(true);
+            load();
+          }}
+        >
+          <Text style={styles.retryBtnText}>重试</Text>
+        </Pressable>
+      </View>
+    );
+  }
 
   return (
     <SectionList
