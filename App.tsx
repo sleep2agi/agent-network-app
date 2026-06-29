@@ -21,7 +21,9 @@ import ChatScreen from './src/ChatScreen';
 import MessagesScreen from './src/MessagesScreen';
 import ServerScreen from './src/ServerScreen';
 import HostSupervisorPickerScreen from './src/HostSupervisorPickerScreen';
+import CreateNodeWizardScreen from './src/CreateNodeWizardScreen';
 import SettingsScreen from './src/SettingsScreen';
+import type { HostSupervisorDaemon } from './src/api';
 import { clearConfig, loadConfig, loadThemeMode, saveConfig, saveSessionsCache, loadSessionsCache } from './src/storage';
 import { colors, onThemeChange, setThemeMode, spacing, statusColor, themeMode } from './src/theme';
 import { usePoll } from './src/usePoll';
@@ -34,7 +36,8 @@ type Screen =
   | { name: 'server' }
   | { name: 'settings' }
   | { name: 'chat'; alias: string }
-  | { name: 'picker' };       // #338 RFC-026 §9.4 host_supervisor picker (modal-style, back returns to agents)
+  | { name: 'picker' }       // #338 RFC-026 §9.4 host_supervisor picker (modal-style, back returns to agents)
+  | { name: 'wizard'; daemon: HostSupervisorDaemon };  // #338 wizard rest (Plan B) — created after picker selects a daemon
 
 // 跟微信的学一学 (Vincent tg 807): icon over small label, active tint.
 // Server tab sits left of 设置 (Vincent tg 847).
@@ -153,6 +156,19 @@ function AppRoot() {
         <HostSupervisorPickerScreen
           cfg={cfg}
           onBack={() => setScreen({ name: 'agents' })}
+          // #338 wizard rest (Plan B) — replaces the previous Alert TODO
+          // with a real navigation into the create-node wizard.
+          onPicked={d => setScreen({ name: 'wizard', daemon: d })}
+        />
+      ) : screen.name === 'wizard' ? (
+        // #338 wizard rest — multi-step create-node form. Back returns
+        // to picker (to re-pick daemon); Exit (after done / cancel)
+        // returns to Agents.
+        <CreateNodeWizardScreen
+          cfg={cfg}
+          daemon={screen.daemon}
+          onBack={() => setScreen({ name: 'picker' })}
+          onExit={() => setScreen({ name: 'agents' })}
         />
       ) : (
         <>

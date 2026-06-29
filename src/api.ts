@@ -239,6 +239,168 @@ export const fetchHostSupervisors = async (cfg: HubConfig): Promise<HostSupervis
   }
 };
 
+// #338 RFC-026 §3.1 — create_node via MCP JSON-RPC. Hub exposes
+// create_node only as an MCP tool at POST /mcp (no REST mirror in
+// preview.8). We send a single stateless tools/call envelope without
+// a prior `initialize` handshake — the hub treats tool calls as session-
+// scoped per token but accepts unsequenced calls (matches dashboard's
+// callMcp pattern in app/lib/hub-mcp.ts).
+//
+// Response body comes back as application/json OR text/event-stream; the
+// tool payload itself lives at envelope.result.content[0].text as a JSON
+// string. claim=reality per [[feedback_doc_capability_claim_verify_code_path]]
+// — caller polls fetchStatus afterwards to confirm the child registered;
+// we never report "succeeded" from this call alone.
+export interface CreateNodeRequest {
+  daemon_node_id: string;
+  network_id?: string;
+  node_spec: {
+    name: string;
+    runtime: string;
+    model?: string;
+    flags?: Record<string, unknown>;
+  };
+}
+export type CreateNodeResult =
+  | { ok: true; request_id?: string; result?: unknown }
+  | { ok: false; unconfirmed?: true; error: string };
+
+const NEEDS_UPGRADE_HINT = '当前 hub 不响应 create_node MCP 工具，需升级到 commhub-server@0.9.0-preview.8 以上';
+
+// Discriminated parse result so createNode can distinguish:
+//   - business errors (hub returned ok:false OR JSON-RPC error: tool
+//     rejected the args, schema invalid, validation failed) → real
+//     create_node failure to surface as-is to the user
+//   - version / transport errors (no valid envelope at all, SSE
+//     unparseable, missing result.content.text) → "needs upgrade hub"
+//
+// Mapping ANY parse error to "needs upgrade" (the bug 通信龙 caught) is
+// misleading: it tells a user with bad inputs that their server is broken.
+type ParsedMcp =
+  | { kind: 'payload'; payload: unknown }
+  | { kind: 'jsonRpcError'; message: string }
+  | { kind: 'malformed'; message: string };
+
+function parseMcpToolResponse(rawText: string): ParsedMcp {
+  let envelope: unknown;
+  try {
+    envelope = JSON.parse(rawText);
+  } catch {
+    // SSE path: find the last `data:` line and parse it.
+    const dataLines = rawText
+      .split('\n')
+      .filter(l => l.startsWith('data:'))
+      .map(l => l.slice(5).trim())
+      .filter(Boolean);
+    const last = dataLines[dataLines.length - 1];
+    if (!last) return { kind: 'malformed', message: 'empty MCP response' };
+    try {
+      envelope = JSON.parse(last);
+    } catch {
+      return { kind: 'malformed', message: 'MCP response not parseable as JSON or SSE' };
+    }
+  }
+  const env = envelope as {
+    error?: { message?: string };
+    result?: { content?: Array<{ text?: string }>; isError?: boolean };
+  };
+  // JSON-RPC envelope-level error = business error from hub
+  // (auth_failed, tool_not_found, validation, etc.) — surface it.
+  if (env.error) {
+    return { kind: 'jsonRpcError', message: env.error.message || 'MCP error' };
+  }
+  const text = env.result?.content?.[0]?.text;
+  if (typeof text !== 'string') {
+    // No result.content.text usually means the response shape doesn't
+    // match the tool contract — either the tool is missing or the
+    // server is on an older protocol. This IS a version concern.
+    return { kind: 'malformed', message: 'MCP result missing content.text' };
+  }
+  // result.isError=true is the MCP convention for tool-level errors
+  // delivered in result.content[0].text as plain text (NOT JSON). We
+  // saw this with create_node's "MCP error -32602: Input validation
+  // error: ..." message when schema fields are missing. Treat as
+  // jsonRpcError so createNode surfaces the raw message instead of
+  // wrongly mapping the unparseable text body to ok:true.
+  if (env.result?.isError === true) {
+    return { kind: 'jsonRpcError', message: text };
+  }
+  // Tool replies typically encode their payload as a JSON string in
+  // result.content[0].text. If that fails to parse, the payload is
+  // a free-form string the tool wanted to return — treat as ok with
+  // text so callers can still surface something.
+  try {
+    return { kind: 'payload', payload: JSON.parse(text) };
+  } catch {
+    return { kind: 'payload', payload: { ok: true, text } };
+  }
+}
+
+export const createNode = async (cfg: HubConfig, req: CreateNodeRequest): Promise<CreateNodeResult> => {
+  const networkId = req.network_id ?? cfg.networkId ?? (await fetchNetworkId(cfg));
+  try {
+    const args = {
+      daemon_node_id: req.daemon_node_id,
+      ...(networkId ? { network_id: networkId } : {}),
+      node_spec: req.node_spec,
+    };
+    const envelope = {
+      jsonrpc: '2.0',
+      id: 1,
+      method: 'tools/call',
+      params: { name: 'create_node', arguments: args },
+    };
+    const res = await withTimeout(signal =>
+      fetch(`${cfg.serverUrl}/mcp`, {
+        method: 'POST',
+        headers: {
+          ...headers(cfg),
+          Accept: 'application/json, text/event-stream',
+          'MCP-Protocol-Version': '2025-03-26',
+        },
+        signal,
+        body: JSON.stringify(envelope),
+      }),
+    );
+    if (res.status === 404 || res.status === 501) {
+      return { ok: false, unconfirmed: true, error: NEEDS_UPGRADE_HINT };
+    }
+    if (!res.ok) {
+      const text = await res.text().catch(() => '');
+      try {
+        const j = JSON.parse(text) as { error?: string | { message?: string } };
+        const err = typeof j?.error === 'string' ? j.error : j?.error?.message;
+        return { ok: false, error: err || `HTTP ${res.status}` };
+      } catch {
+        return { ok: false, error: `HTTP ${res.status}` };
+      }
+    }
+    const raw = await res.text();
+    const parsed = parseMcpToolResponse(raw);
+    if (parsed.kind === 'malformed') {
+      // No valid JSON-RPC envelope OR missing result.content.text — this
+      // is the real "wrong hub version" case.
+      return { ok: false, unconfirmed: true, error: NEEDS_UPGRADE_HINT };
+    }
+    if (parsed.kind === 'jsonRpcError') {
+      // Hub answered with a JSON-RPC error envelope. This is a business
+      // error (validation rejected, tool not allowed, etc.) — surface it
+      // raw rather than misclassifying as a version mismatch.
+      return { ok: false, error: parsed.message };
+    }
+    // payload kind
+    const payload = parsed.payload as { ok?: boolean; error?: string; request_id?: string; result?: unknown } | null;
+    if (!payload) return { ok: false, error: 'empty hub response' };
+    if (payload.ok === false) {
+      // Tool returned ok:false in its content payload — also business.
+      return { ok: false, error: payload.error || 'create_node failed' };
+    }
+    return { ok: true, request_id: payload.request_id, result: payload.result ?? payload };
+  } catch (e: unknown) {
+    return { ok: false, error: e instanceof Error ? e.message : String(e) };
+  }
+};
+
 export const fetchServerVersion = async (cfg: HubConfig): Promise<string | undefined> => {
   try {
     const res = await withTimeout(signal =>
