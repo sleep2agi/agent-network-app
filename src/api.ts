@@ -239,6 +239,122 @@ export const fetchHostSupervisors = async (cfg: HubConfig): Promise<HostSupervis
   }
 };
 
+// #338 RFC-026 §3.1 — create_node via MCP JSON-RPC. Hub exposes
+// create_node only as an MCP tool at POST /mcp (no REST mirror in
+// preview.8). We send a single stateless tools/call envelope without
+// a prior `initialize` handshake — the hub treats tool calls as session-
+// scoped per token but accepts unsequenced calls (matches dashboard's
+// callMcp pattern in app/lib/hub-mcp.ts).
+//
+// Response body comes back as application/json OR text/event-stream; the
+// tool payload itself lives at envelope.result.content[0].text as a JSON
+// string. claim=reality per [[feedback_doc_capability_claim_verify_code_path]]
+// — caller polls fetchStatus afterwards to confirm the child registered;
+// we never report "succeeded" from this call alone.
+export interface CreateNodeRequest {
+  daemon_node_id: string;
+  network_id?: string;
+  node_spec: {
+    name: string;
+    runtime: string;
+    model?: string;
+    flags?: Record<string, unknown>;
+  };
+}
+export type CreateNodeResult =
+  | { ok: true; request_id?: string; result?: unknown }
+  | { ok: false; unconfirmed?: true; error: string };
+
+const NEEDS_UPGRADE_HINT = '当前 hub 不响应 create_node MCP 工具，需升级到 commhub-server@0.9.0-preview.8 以上';
+
+function parseMcpToolResponse(rawText: string): unknown {
+  // Hub may answer in plain JSON or SSE-encoded JSON-RPC. Mirror the
+  // dashboard's parseMcpEnvelope shape but inline for the mobile app
+  // (no extra dep, single call site).
+  let envelope: unknown;
+  try {
+    envelope = JSON.parse(rawText);
+  } catch {
+    // SSE path: find the last `data:` line and parse it.
+    const dataLines = rawText
+      .split('\n')
+      .filter(l => l.startsWith('data:'))
+      .map(l => l.slice(5).trim())
+      .filter(Boolean);
+    const last = dataLines[dataLines.length - 1];
+    if (!last) throw new Error('empty MCP response');
+    envelope = JSON.parse(last);
+  }
+  const env = envelope as {
+    error?: { message?: string };
+    result?: { content?: Array<{ text?: string }> };
+  };
+  if (env.error) throw new Error(env.error.message || 'MCP error');
+  const text = env.result?.content?.[0]?.text;
+  if (typeof text !== 'string') throw new Error('MCP result missing content.text');
+  try {
+    return JSON.parse(text);
+  } catch {
+    return { ok: true, text };
+  }
+}
+
+export const createNode = async (cfg: HubConfig, req: CreateNodeRequest): Promise<CreateNodeResult> => {
+  const networkId = req.network_id ?? cfg.networkId ?? (await fetchNetworkId(cfg));
+  try {
+    const args = {
+      daemon_node_id: req.daemon_node_id,
+      ...(networkId ? { network_id: networkId } : {}),
+      node_spec: req.node_spec,
+    };
+    const envelope = {
+      jsonrpc: '2.0',
+      id: 1,
+      method: 'tools/call',
+      params: { name: 'create_node', arguments: args },
+    };
+    const res = await withTimeout(signal =>
+      fetch(`${cfg.serverUrl}/mcp`, {
+        method: 'POST',
+        headers: {
+          ...headers(cfg),
+          Accept: 'application/json, text/event-stream',
+          'MCP-Protocol-Version': '2025-03-26',
+        },
+        signal,
+        body: JSON.stringify(envelope),
+      }),
+    );
+    if (res.status === 404 || res.status === 501) {
+      return { ok: false, unconfirmed: true, error: NEEDS_UPGRADE_HINT };
+    }
+    if (!res.ok) {
+      const text = await res.text().catch(() => '');
+      try {
+        const j = JSON.parse(text) as { error?: string | { message?: string } };
+        const err = typeof j?.error === 'string' ? j.error : j?.error?.message;
+        return { ok: false, error: err || `HTTP ${res.status}` };
+      } catch {
+        return { ok: false, error: `HTTP ${res.status}` };
+      }
+    }
+    const raw = await res.text();
+    let payload: { ok?: boolean; error?: string; request_id?: string } & Record<string, unknown>;
+    try {
+      payload = parseMcpToolResponse(raw) as typeof payload;
+    } catch (e: unknown) {
+      // Most likely older hub returning text help banner / no MCP tool.
+      return { ok: false, unconfirmed: true, error: NEEDS_UPGRADE_HINT };
+    }
+    if (payload?.ok === false) {
+      return { ok: false, error: payload?.error || 'create_node failed' };
+    }
+    return { ok: true, request_id: payload?.request_id, result: payload };
+  } catch (e: unknown) {
+    return { ok: false, error: e instanceof Error ? e.message : String(e) };
+  }
+};
+
 export const fetchServerVersion = async (cfg: HubConfig): Promise<string | undefined> => {
   try {
     const res = await withTimeout(signal =>
