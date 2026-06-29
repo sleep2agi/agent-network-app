@@ -1,12 +1,12 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   BackHandler,
-  FlatList,
   Platform,
   Pressable,
   RefreshControl,
   SafeAreaView,
+  SectionList,
   StatusBar,
   StyleSheet,
   Text,
@@ -257,6 +257,24 @@ function LoginScreen({ onLogin }: { onLogin: (cfg: HubConfig) => void }) {
   );
 }
 
+// Derive a team/group key from an alias so the agent list can be grouped
+// (Vincent tg 1094 — "支持分组展示"). The fleet's aliases follow a
+// <team><role> convention (通信龙, 工程马, 课程牛, 通信N站马, N站牛 …); we
+// drop the trailing role character to recover the team. An explicit separator
+// wins first; latin/short aliases fall back to a leading slice so they still
+// bucket sensibly.
+function teamOf(alias: string): string {
+  const a = (alias || '').trim();
+  if (!a) return '其他';
+  // explicit separator wins (e.g. "team/role" → "team")
+  const seg = a.split(/[\s/_\-:|·]+/)[0];
+  if (seg && seg !== a) return seg;
+  // coarse team = leading 2 chars: the fleet's <team><role> aliases share a
+  // 2-char team prefix (通信龙 / 通信N站马 / 通信测试牛 → 通信; 工程马 → 工程;
+  // N站牛 → N站). Keeps groups few + findable rather than one-per-agent.
+  return a.length <= 2 ? a : a.slice(0, 2);
+}
+
 function AgentsScreen({
   cfg,
   onOpenChat,
@@ -337,21 +355,55 @@ function AgentsScreen({
     );
   }
 
-  // 153 agents on the real hub made the flat list unusable: working
-  // sessions float to the top, and a search box narrows by alias.
-  const working = (s: Session) => s.status === 'working' || s.status === 'running';
+  // 153 agents on the real hub made the flat list unusable. Vincent (tg
+  // 1094): group by team so agents are findable, and stop showing offline
+  // ones up front. We bucket by team prefix (derived from the alias), order
+  // rows inside each team working → idle-online → offline, and sink teams
+  // that have no online member to the bottom — so offline never floats up.
   const q = query.trim().toLowerCase();
-  const shown = sessions
-    .filter(s => !q || s.alias.toLowerCase().includes(q))
-    .sort((a, b) => {
-      if (working(a) !== working(b)) return working(a) ? -1 : 1;
-      return a.alias.localeCompare(b.alias);
-    });
+  const sections = useMemo(() => {
+    const isOffline = (s: Session) => s.status === 'offline';
+    const isWorking = (s: Session) => s.status === 'working' || s.status === 'running';
+    const rank = (s: Session) => (isWorking(s) ? 0 : isOffline(s) ? 2 : 1);
+    const filtered = sessions.filter(s => !q || s.alias.toLowerCase().includes(q));
+
+    const groups = new Map<string, Session[]>();
+    for (const s of filtered) {
+      const key = teamOf(s.alias);
+      const bucket = groups.get(key);
+      if (bucket) bucket.push(s);
+      else groups.set(key, [s]);
+    }
+
+    return [...groups.entries()]
+      .map(([title, items]) => {
+        items.sort((a, b) => rank(a) - rank(b) || a.alias.localeCompare(b.alias));
+        const online = items.filter(s => !isOffline(s)).length;
+        return { title, data: items, online, total: items.length };
+      })
+      // teams with someone online first; then by online count; then alpha
+      .sort(
+        (a, b) =>
+          (b.online > 0 ? 1 : 0) - (a.online > 0 ? 1 : 0) ||
+          b.online - a.online ||
+          a.title.localeCompare(b.title),
+      );
+  }, [sessions, q]);
+  const shownCount = sections.reduce((n, g) => n + g.data.length, 0);
 
   return (
-    <FlatList
-      data={shown}
+    <SectionList
+      sections={sections}
       keyExtractor={s => s.alias}
+      stickySectionHeadersEnabled={false}
+      renderSectionHeader={({ section }) => (
+        <View style={styles.sectionHeaderRow}>
+          <Text style={styles.sectionHeader}>{section.title}</Text>
+          <Text style={styles.sectionCount}>
+            {section.online}/{section.total} 在线
+          </Text>
+        </View>
+      )}
       // Perf (render time): the real fleet is 150+ agents. Without these the
       // default virtualization renders/retains far more rows than fit on
       // screen, spiking first-paint cost and scroll jank. Cap the initial
@@ -377,7 +429,7 @@ function AgentsScreen({
         <View>
           <View style={styles.listHeaderRow}>
             <Text style={styles.listHeader}>
-              {q ? `${shown.length} / ${sessions.length} agents` : `${sessions.length} agents`}
+              {q ? `${shownCount} / ${sessions.length} agents` : `${sessions.length} agents`}
             </Text>
           </View>
           {sessions.length > 10 ? (
@@ -478,6 +530,20 @@ const makeStyles = () =>
     alignItems: 'center',
     marginBottom: spacing.md,
   },
+  sectionHeaderRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    backgroundColor: colors.bg,
+    paddingTop: spacing.md,
+    paddingBottom: spacing.xs,
+  },
+  sectionHeader: {
+    color: colors.text,
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  sectionCount: { color: colors.textMuted, fontSize: 11 },
   logout: { color: colors.textMuted, fontSize: 12 },
   search: {
     backgroundColor: colors.inputBg,
