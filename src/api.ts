@@ -166,6 +166,79 @@ export const sendTask = async (
 /** The hub's root/help route is plain text starting with
  *  "CommHub MCP Server vX.Y.Z …" — scrape the version for the Server tab.
  *  Returns undefined if unreachable or the banner isn't present. */
+// #338 RFC-026 §9.2.1 — list host_supervisor daemon nodes the caller can
+// dispatch create_node to. Hub side landed in commhub-server preview.8
+// (PR #341 MCP + PR #343 audit) — earlier hubs return 501/404 and we
+// surface the "needs upgrade" state honestly per
+// [[feedback_doc_capability_claim_verify_code_path]] — never a fake
+// empty list.
+export interface HostSupervisorDaemon {
+  daemon_node_id: string;
+  alias: string;
+  hostname?: string | null;
+  online?: boolean;
+  last_seen_at?: string | null;
+  runtimes_supported?: string[];
+  allowed_secret_keys?: string[];
+  host_telemetry?: {
+    alert_level?: 'green' | 'yellow' | 'red' | 'gray';
+    cpu_cores?: number | null;
+    mem_gb?: number | null;
+    ip_internal?: string | null;
+  };
+}
+export type HostSupervisorListResult =
+  | { ok: true; count: number; daemons: HostSupervisorDaemon[] }
+  | { ok: false; unconfirmed: true; error: string }   // hub < preview.8
+  | { ok: false; unconfirmed: false; error: string }; // other failure
+
+export const fetchHostSupervisors = async (cfg: HubConfig): Promise<HostSupervisorListResult> => {
+  const qs = cfg.networkId ? `?network_id=${encodeURIComponent(cfg.networkId)}` : '';
+  const NEEDS_UPGRADE = '当前 hub 未包含 /api/host-supervisors API，需升级到 commhub-server@0.9.0-preview.8 以上';
+  try {
+    const res = await withTimeout(signal =>
+      fetch(`${cfg.serverUrl}/api/host-supervisors${qs}`, { headers: headers(cfg), signal }),
+    );
+    if (res.status === 404 || res.status === 501) {
+      return { ok: false, unconfirmed: true, error: NEEDS_UPGRADE };
+    }
+    if (!res.ok) {
+      return { ok: false, unconfirmed: false, error: `HTTP ${res.status}` };
+    }
+    // ⚠️ Pre-preview.8 hubs serve a plain-text help banner on unknown paths
+    // at HTTP 200 instead of 404 (proven via real curl against preview.7).
+    // A naive `data?.daemons ?? []` slides those into the onboarding state,
+    // silently misreporting "no daemons yet" when the truth is "wrong hub
+    // version". Detect by content-type OR by absence of any contract field.
+    const ct = res.headers.get('content-type') || '';
+    if (!ct.includes('application/json')) {
+      return { ok: false, unconfirmed: true, error: NEEDS_UPGRADE };
+    }
+    const data = (await res.json().catch(() => null)) as
+      { ok?: boolean; count?: number; daemons?: HostSupervisorDaemon[]; error?: string } | null;
+    if (!data) {
+      return { ok: false, unconfirmed: true, error: NEEDS_UPGRADE };
+    }
+    // Endpoint shape sanity: a real /api/host-supervisors response always
+    // carries either `ok` or `daemons` or `count`. Absence of all three
+    // means we hit a different handler (older hub catch-all returning
+    // JSON help, or a proxy front-page). Per
+    // [[feedback_doc_capability_claim_verify_code_path]] never silently
+    // fake "no daemons" — surface upgrade hint.
+    if (data.ok === undefined && data.daemons === undefined && data.count === undefined) {
+      return { ok: false, unconfirmed: true, error: NEEDS_UPGRADE };
+    }
+    if (data.ok === false) {
+      return { ok: false, unconfirmed: false, error: data?.error || 'hub returned ok:false' };
+    }
+    const daemons = Array.isArray(data?.daemons) ? data.daemons : [];
+    const count = typeof data?.count === 'number' ? data.count : daemons.length;
+    return { ok: true, count, daemons };
+  } catch (e: unknown) {
+    return { ok: false, unconfirmed: false, error: e instanceof Error ? e.message : String(e) };
+  }
+};
+
 export const fetchServerVersion = async (cfg: HubConfig): Promise<string | undefined> => {
   try {
     const res = await withTimeout(signal =>
