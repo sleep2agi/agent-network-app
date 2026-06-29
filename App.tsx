@@ -20,6 +20,7 @@ import { fetchStatus, prefetchStatus, takeStatusPrefetch, login, HubConfig, Sess
 import ChatScreen from './src/ChatScreen';
 import MessagesScreen from './src/MessagesScreen';
 import ServerScreen from './src/ServerScreen';
+import HostSupervisorPickerScreen from './src/HostSupervisorPickerScreen';
 import SettingsScreen from './src/SettingsScreen';
 import { clearConfig, loadConfig, loadThemeMode, saveConfig, saveSessionsCache, loadSessionsCache } from './src/storage';
 import { colors, onThemeChange, setThemeMode, spacing, statusColor, themeMode } from './src/theme';
@@ -32,7 +33,8 @@ type Screen =
   | { name: 'messages' }
   | { name: 'server' }
   | { name: 'settings' }
-  | { name: 'chat'; alias: string };
+  | { name: 'chat'; alias: string }
+  | { name: 'picker' };       // #338 RFC-026 §9.4 host_supervisor picker (modal-style, back returns to agents)
 
 // 跟微信的学一学 (Vincent tg 807): icon over small label, active tint.
 // Server tab sits left of 设置 (Vincent tg 847).
@@ -144,6 +146,14 @@ function AppRoot() {
           alias={screen.alias}
           onBack={() => setScreen({ name: 'agents' })}
         />
+      ) : screen.name === 'picker' ? (
+        // #338 RFC-026 §9.4 — modal-style screen, hides tab bar to keep
+        // the wizard flow focused. System back / on-screen back returns
+        // to the agents tab.
+        <HostSupervisorPickerScreen
+          cfg={cfg}
+          onBack={() => setScreen({ name: 'agents' })}
+        />
       ) : (
         <>
           <View style={{ flex: 1 }}>
@@ -164,6 +174,7 @@ function AppRoot() {
               <AgentsScreen
                 cfg={cfg}
                 onOpenChat={alias => setScreen({ name: 'chat', alias })}
+                onOpenPicker={() => setScreen({ name: 'picker' })}
               />
             )}
           </View>
@@ -278,9 +289,12 @@ function teamOf(alias: string): string {
 function AgentsScreen({
   cfg,
   onOpenChat,
+  onOpenPicker,
 }: {
   cfg: HubConfig;
   onOpenChat: (alias: string) => void;
+  /** #338 — top-right `+` opens the host_supervisor picker modal. */
+  onOpenPicker: () => void;
 }) {
   const [sessions, setSessions] = useState<Session[]>([]);
   const [loading, setLoading] = useState(true);
@@ -434,6 +448,15 @@ function AgentsScreen({
             <Text style={styles.listHeader}>
               {q ? `${shownCount} / ${sessions.length} agents` : `${sessions.length} agents`}
             </Text>
+            {/* #338 — `+` opens host_supervisor picker. Top-right (Vincent lock). */}
+            <Pressable
+              onPress={onOpenPicker}
+              hitSlop={10}
+              accessibilityLabel="新建节点"
+              style={({ pressed }) => [styles.addBtn, pressed && { opacity: 0.6 }]}
+            >
+              <Ionicons name="add" size={24} color={colors.accent} />
+            </Pressable>
           </View>
           {sessions.length > 10 ? (
             <TextInput
@@ -532,6 +555,13 @@ const makeStyles = () =>
     justifyContent: 'space-between',
     alignItems: 'center',
     marginBottom: spacing.md,
+  },
+  // #338 — `+` button in agents list header
+  addBtn: {
+    width: 36,
+    height: 36,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   sectionHeaderRow: {
     flexDirection: 'row',
