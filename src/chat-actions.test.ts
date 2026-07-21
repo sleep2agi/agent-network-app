@@ -1,5 +1,5 @@
 // 纯逻辑单测(bun/node 可跑·无 RN 依赖)。run: bun src/chat-actions.test.ts
-import { buildQuote, applyQuote, msgKey, removeMessage, shouldShowJumpPill, nextUnread, jumpPillLabel } from './chat-actions';
+import { buildQuote, applyQuote, msgKey, removeMessage, shouldShowJumpPill, nextUnread, jumpPillLabel, canSend } from './chat-actions';
 let p = 0, t = 0; const ck = (n: string, c: boolean) => { t++; if (c) { p++; console.log('✅', n); } else console.log('❌', n); };
 // round-2 长按动作
 ck('quote 包「」+换行', buildQuote('你好') === '「你好」\n');
@@ -20,4 +20,10 @@ ck('到底清零未读', nextUnread(5, true, 2) === 0);
 ck('未到底累加未读', nextUnread(3, false, 2) === 5);
 ck('pill 有未读显条数', jumpPillLabel(3) === '3 条新消息');
 ck('pill 无未读显回到最新', jumpPillLabel(0) === '回到最新');
+// round-4 发送键可用态
+ck('空+无附件不可发', canSend('', false, false) === false);
+ck('纯空白不可发', canSend('   ', false, false) === false);
+ck('有文字可发', canSend('你好', false, false) === true);
+ck('仅附件可发', canSend('', true, false) === true);
+ck('发送中不可发', canSend('你好', false, true) === false);
 console.log(`\n${p}/${t} passed`); process.exit(p === t ? 0 : 1);

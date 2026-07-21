@@ -29,7 +29,7 @@ import {
 } from './attach';
 import { colors, onThemeChange, spacing } from './theme';
 import { formatChatHeader, shouldShowTimeHeader } from './time';
-import { applyQuote, removeMessage, shouldShowJumpPill, nextUnread, jumpPillLabel } from './chat-actions';
+import { applyQuote, removeMessage, shouldShowJumpPill, nextUnread, jumpPillLabel, canSend } from './chat-actions';
 import type { NativeSyntheticEvent, NativeScrollEvent } from 'react-native';
 import { usePoll } from './usePoll';
 
@@ -549,11 +549,15 @@ export default function ChatScreen({ cfg, alias, onBack }: Props) {
           multiline
         />
         <Pressable
-          style={({ pressed }) => [styles.send, (pressed || sending) && { opacity: 0.6 }]}
+          style={({ pressed }) => [
+            styles.send,
+            !canSend(draft, !!attached, sending) && styles.sendDisabled,
+            pressed && { opacity: 0.6 },
+          ]}
           onPress={submit}
-          disabled={sending || (!draft.trim() && !attached)}
+          disabled={!canSend(draft, !!attached, sending)}
         >
-          <Text style={styles.sendText}>↑</Text>
+          <Text style={[styles.sendText, !canSend(draft, !!attached, sending) && styles.sendTextDisabled]}>↑</Text>
         </Pressable>
       </View>
     </KeyboardAvoidingView>
@@ -704,6 +708,9 @@ const makeStyles = () =>
     justifyContent: 'center',
   },
   sendText: { color: colors.bg, fontSize: 18, fontWeight: '700' },
+  // round-4 发送键停用态:草稿空/发送中 → 灰底灰字(微信式,不再高亮可点)
+  sendDisabled: { backgroundColor: colors.inputBg, borderWidth: 1, borderColor: colors.border },
+  sendTextDisabled: { color: colors.textMuted },
 });
 
 let styles = makeStyles();

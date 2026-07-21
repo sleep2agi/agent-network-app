@@ -33,3 +33,7 @@ export const nextUnread = (current: number, atBottom: boolean, incoming = 0): nu
 // pill 文案:有未读显条数,否则纯「回到最新」。
 export const jumpPillLabel = (unread: number): string =>
   unread > 0 ? `${unread} 条新消息` : '回到最新';
+
+// 更像微信·round-4: 发送键可用态(纯逻辑)。有非空草稿或附件、且不在发送中 → 可发。
+export const canSend = (draft: string, hasAttachment: boolean, sending: boolean): boolean =>
+  !sending && ((draft || '').trim().length > 0 || hasAttachment);
