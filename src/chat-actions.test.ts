@@ -1,5 +1,5 @@
 // 纯逻辑单测(bun/node 可跑·无 RN 依赖)。run: bun src/chat-actions.test.ts
-import { buildQuote, applyQuote, msgKey, removeMessage, shouldShowJumpPill, nextUnread, jumpPillLabel, canSend } from './chat-actions';
+import { buildQuote, applyQuote, msgKey, removeMessage, shouldShowJumpPill, nextUnread, jumpPillLabel, canSend, isAgentOnline } from './chat-actions';
 let p = 0, t = 0; const ck = (n: string, c: boolean) => { t++; if (c) { p++; console.log('✅', n); } else console.log('❌', n); };
 // round-2 长按动作
 ck('quote 包「」+换行', buildQuote('你好') === '「你好」\n');
@@ -26,4 +26,9 @@ ck('纯空白不可发', canSend('   ', false, false) === false);
 ck('有文字可发', canSend('你好', false, false) === true);
 ck('仅附件可发', canSend('', true, false) === true);
 ck('发送中不可发', canSend('你好', false, true) === false);
+// round-5 头像在线态
+ck('working 在线', isAgentOnline('working') === true);
+ck('idle 在线', isAgentOnline('idle') === true);
+ck('offline 离线', isAgentOnline('offline') === false);
+ck('空 离线不崩', isAgentOnline('') === false && isAgentOnline(undefined) === false);
 console.log(`\n${p}/${t} passed`); process.exit(p === t ? 0 : 1);

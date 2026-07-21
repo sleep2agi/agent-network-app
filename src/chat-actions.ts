@@ -37,3 +37,6 @@ export const jumpPillLabel = (unread: number): string =>
 // 更像微信·round-4: 发送键可用态(纯逻辑)。有非空草稿或附件、且不在发送中 → 可发。
 export const canSend = (draft: string, hasAttachment: boolean, sending: boolean): boolean =>
   !sending && ((draft || '').trim().length > 0 || hasAttachment);
+
+// 更像微信·round-5: 会话列表头像的在线态圆点。offline → 灰点(暗);其余(working/idle)→ 亮点。
+export const isAgentOnline = (status?: string): boolean => !!status && status !== 'offline';

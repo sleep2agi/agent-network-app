@@ -16,6 +16,7 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
 import AliasAvatar from './src/AliasAvatar';
+import { isAgentOnline } from './src/chat-actions';
 import { fetchStatus, prefetchStatus, takeStatusPrefetch, login, HubConfig, Session } from './src/api';
 import ChatScreen from './src/ChatScreen';
 import MessagesScreen from './src/MessagesScreen';
@@ -457,7 +458,17 @@ function AgentsScreen({
           ]}
           onPress={() => onOpenChat(item.alias)}
         >
-          <AliasAvatar alias={item.alias} size={34} />
+          <View style={styles.avatarWrap}>
+            <AliasAvatar alias={item.alias} size={34} />
+            {/* 更像微信·round-5: 头像右下在线态圆点(带描边环·offline 灰暗) */}
+            <View
+              style={[
+                styles.statusDot,
+                { backgroundColor: statusColor(item.status ?? '', true) },
+                !isAgentOnline(item.status) && styles.statusDotOffline,
+              ]}
+            />
+          </View>
           <View style={{ flex: 1, minWidth: 0 }}>
             <Text style={styles.alias} numberOfLines={1}>
               {item.alias}
@@ -582,6 +593,18 @@ const makeStyles = () =>
   dot: { width: 8, height: 8, borderRadius: 4 },
   // 下线的灰色调，别都亮着 (Vincent tg 753)
   cardOffline: { opacity: 0.45 },
+  avatarWrap: { position: 'relative' },
+  statusDot: {
+    position: 'absolute',
+    right: -1,
+    bottom: -1,
+    width: 11,
+    height: 11,
+    borderRadius: 6,
+    borderWidth: 2,
+    borderColor: colors.card, // 描边环:让圆点从头像上"浮"出来(微信式)
+  },
+  statusDotOffline: { opacity: 0.5 },
   alias: { color: colors.text, fontSize: 15, fontWeight: '600' },
   task: { color: colors.textSecondary, fontSize: 12, marginTop: 2 },
   status: { color: colors.textMuted, fontSize: 11 },
