@@ -1,0 +1,14 @@
+import { buildQuote, applyQuote, msgKey, removeMessage } from './chat-actions';
+let p=0,t=0;const ck=(n:string,c:boolean)=>{t++;if(c){p++;console.log('  ✅',n)}else console.log('  ❌',n)};
+ck('quote wraps 「」+换行', buildQuote('你好')==='「你好」\n');
+ck('quote 压多行空白为单行', buildQuote('a\n b   c')==='「a b c」\n');
+ck('quote 截断 >40 + …', buildQuote('x'.repeat(50)).startsWith('「'+'x'.repeat(40)+'…'));
+ck('quote 空→""', buildQuote('')===''&&buildQuote(undefined)==='');
+ck('applyQuote 引用在前保留草稿', applyQuote('原文','引')==='「引」\n原文');
+ck('applyQuote 空引用不改草稿', applyQuote('原文','')==='原文');
+ck('msgKey 优先 _localId', msgKey({_localId:'L',task_id:'T'})==='L');
+ck('msgKey 退回 task_id', msgKey({task_id:'T'})==='T');
+const list=[{_localId:'a'},{task_id:'b'},{_localId:'c'}];
+ck('removeMessage 按key删中间', JSON.stringify(removeMessage(list,{task_id:'b'}))===JSON.stringify([{_localId:'a'},{_localId:'c'}]));
+ck('removeMessage 不误伤其它', removeMessage(list,{_localId:'a'}).length===2);
+console.log(`\n  ${p}/${t} passed`);process.exit(p===t?0:1);

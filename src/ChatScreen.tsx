@@ -29,6 +29,7 @@ import {
 } from './attach';
 import { colors, onThemeChange, spacing } from './theme';
 import { formatChatHeader, shouldShowTimeHeader } from './time';
+import { applyQuote, removeMessage } from './chat-actions';
 import { usePoll } from './usePoll';
 
 // Chat with one agent. Mirrors dashboard M4: open with the newest PAGE
@@ -204,6 +205,8 @@ export default function ChatScreen({ cfg, alias, onBack }: Props) {
   const localSeq = useRef(0);
   const [attached, setAttached] = useState<PickedImage | null>(null);
   const [viewerUri, setViewerUri] = useState<string | null>(null);
+  // 更像微信·round-2: 长按气泡的动作菜单(引用/删除)。null = 未打开。
+  const [menuFor, setMenuFor] = useState<ChatItem | null>(null);
 
   // shared by the sent bubble and the reply bubble (tg 771)
   const renderAttachment = (a: AttachmentView) =>
@@ -409,10 +412,16 @@ export default function ChatScreen({ cfg, alias, onBack }: Props) {
                 {showHeader && item.created_at ? (
                   <Text style={styles.timeHeader}>{formatChatHeader(item.created_at)}</Text>
                 ) : null}
-                <View style={styles.bubble}>
-                  <Text style={styles.bubbleText}>{stripFileLinks(item.content || '—')}</Text>
-                  {sentAttachmentViews(item, cfg.serverUrl).map(renderAttachment)}
-                </View>
+                <Pressable
+                  onLongPress={() => setMenuFor(item)}
+                  delayLongPress={300}
+                  style={({ pressed }) => pressed && { opacity: 0.7 }}
+                >
+                  <View style={styles.bubble}>
+                    <Text style={styles.bubbleText}>{stripFileLinks(item.content || '—')}</Text>
+                    {sentAttachmentViews(item, cfg.serverUrl).map(renderAttachment)}
+                  </View>
+                </Pressable>
                 {item.result || item.reply ? (
                   <View style={[styles.bubble, styles.replyBubble]}>
                     <Text style={styles.bubbleText}>
@@ -449,6 +458,40 @@ export default function ChatScreen({ cfg, alias, onBack }: Props) {
           {viewerUri ? (
             <Image source={{ uri: viewerUri }} style={styles.viewerImage} resizeMode="contain" />
           ) : null}
+        </Pressable>
+      </Modal>
+
+      {/* 更像微信·round-2: 长按气泡动作菜单(底部 action sheet·引用/删除/取消) */}
+      <Modal visible={!!menuFor} transparent animationType="fade" onRequestClose={() => setMenuFor(null)}>
+        <Pressable style={styles.menuBackdrop} onPress={() => setMenuFor(null)}>
+          <View style={styles.actionSheet}>
+            <Pressable
+              style={({ pressed }) => [styles.actionItem, pressed && styles.actionItemPressed]}
+              onPress={() => {
+                if (menuFor) setDraft((d) => applyQuote(d, menuFor.content));
+                setMenuFor(null);
+              }}
+            >
+              <Text style={styles.actionText}>引用</Text>
+            </Pressable>
+            <View style={styles.actionSep} />
+            <Pressable
+              style={({ pressed }) => [styles.actionItem, pressed && styles.actionItemPressed]}
+              onPress={() => {
+                if (menuFor) setMessages((prev) => removeMessage(prev, menuFor));
+                setMenuFor(null);
+              }}
+            >
+              <Text style={[styles.actionText, styles.actionDanger]}>删除</Text>
+            </Pressable>
+            <View style={styles.actionSepGap} />
+            <Pressable
+              style={({ pressed }) => [styles.actionItem, pressed && styles.actionItemPressed]}
+              onPress={() => setMenuFor(null)}
+            >
+              <Text style={styles.actionCancel}>取消</Text>
+            </Pressable>
+          </View>
         </Pressable>
       </Modal>
 
@@ -547,6 +590,23 @@ const makeStyles = () =>
     justifyContent: 'center',
   },
   viewerImage: { width: '100%', height: '80%' },
+  // round-2 长按动作菜单(底部 action sheet)
+  menuBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.45)', justifyContent: 'flex-end' },
+  actionSheet: {
+    backgroundColor: colors.card,
+    borderTopLeftRadius: 16,
+    borderTopRightRadius: 16,
+    borderTopWidth: 1,
+    borderColor: colors.border,
+    paddingBottom: spacing.xl,
+  },
+  actionItem: { paddingVertical: spacing.lg, alignItems: 'center' },
+  actionItemPressed: { backgroundColor: colors.inputBg },
+  actionText: { color: colors.text, fontSize: 16 },
+  actionDanger: { color: colors.failed },
+  actionCancel: { color: colors.textSecondary, fontSize: 16, fontWeight: '600' },
+  actionSep: { height: 1, backgroundColor: colors.border },
+  actionSepGap: { height: spacing.sm, backgroundColor: colors.bg },
   attachPreview: {
     flexDirection: 'row',
     alignItems: 'center',
