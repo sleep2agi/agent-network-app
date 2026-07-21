@@ -28,7 +28,7 @@ import {
   PickedImage,
 } from './attach';
 import { colors, onThemeChange, spacing } from './theme';
-import { formatTime } from './time';
+import { formatChatHeader, shouldShowTimeHeader } from './time';
 import { usePoll } from './usePoll';
 
 // Chat with one agent. Mirrors dashboard M4: open with the newest PAGE
@@ -400,31 +400,37 @@ export default function ChatScreen({ cfg, alias, onBack }: Props) {
               <Text style={styles.beginning}>— beginning of history —</Text>
             ) : null
           }
-          renderItem={({ item }) => (
-            <View style={styles.bubbleWrap}>
-              <View style={styles.bubble}>
-                <Text style={styles.bubbleText}>{stripFileLinks(item.content || '—')}</Text>
-                {sentAttachmentViews(item, cfg.serverUrl).map(renderAttachment)}
-              </View>
-              {item.result || item.reply ? (
-                <View style={[styles.bubble, styles.replyBubble]}>
-                  <Text style={styles.bubbleText}>
-                    {stripFileLinks(item.result ?? item.reply ?? '')}
-                  </Text>
-                  {replyAttachmentViews(item, cfg.serverUrl).map(renderAttachment)}
+          renderItem={({ item, index }) => {
+            // 更像微信·时间分组:仅在与上一条(更早)间隔 >5min 时显示居中时间头,
+            // 不再每条气泡都盖时间。inverted 列表下,更早的邻居在 index+1。
+            const showHeader = shouldShowTimeHeader(item.created_at, messages[index + 1]?.created_at);
+            return (
+              <View style={styles.bubbleWrap}>
+                {showHeader && item.created_at ? (
+                  <Text style={styles.timeHeader}>{formatChatHeader(item.created_at)}</Text>
+                ) : null}
+                <View style={styles.bubble}>
+                  <Text style={styles.bubbleText}>{stripFileLinks(item.content || '—')}</Text>
+                  {sentAttachmentViews(item, cfg.serverUrl).map(renderAttachment)}
                 </View>
-              ) : null}
-              {item._pending ? (
-                <Text style={styles.pendingMark}>发送中…</Text>
-              ) : item._failed ? (
-                <Pressable onPress={() => retry(item)} hitSlop={8}>
-                  <Text style={styles.failedMark}>未送达 · 点击重试</Text>
-                </Pressable>
-              ) : item.created_at ? (
-                <Text style={styles.time}>{formatTime(item.created_at)}</Text>
-              ) : null}
-            </View>
-          )}
+                {item.result || item.reply ? (
+                  <View style={[styles.bubble, styles.replyBubble]}>
+                    <Text style={styles.bubbleText}>
+                      {stripFileLinks(item.result ?? item.reply ?? '')}
+                    </Text>
+                    {replyAttachmentViews(item, cfg.serverUrl).map(renderAttachment)}
+                  </View>
+                ) : null}
+                {item._pending ? (
+                  <Text style={styles.pendingMark}>发送中…</Text>
+                ) : item._failed ? (
+                  <Pressable onPress={() => retry(item)} hitSlop={8}>
+                    <Text style={styles.failedMark}>未送达 · 点击重试</Text>
+                  </Pressable>
+                ) : null}
+              </View>
+            );
+          }}
         />
       )}
 
@@ -499,7 +505,13 @@ const makeStyles = () =>
     marginVertical: spacing.md,
   },
   bubbleWrap: { marginBottom: spacing.md, gap: spacing.xs },
-  time: { color: colors.textMuted, fontSize: 10, alignSelf: 'flex-end' },
+  timeHeader: {
+    color: colors.textMuted,
+    fontSize: 11,
+    alignSelf: 'center',
+    marginTop: spacing.md,
+    marginBottom: spacing.sm,
+  },
   bubble: {
     alignSelf: 'flex-end',
     maxWidth: '85%',
