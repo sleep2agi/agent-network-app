@@ -29,7 +29,8 @@ import {
 } from './attach';
 import { colors, onThemeChange, spacing } from './theme';
 import { formatChatHeader, shouldShowTimeHeader } from './time';
-import { applyQuote, removeMessage } from './chat-actions';
+import { applyQuote, removeMessage, shouldShowJumpPill, nextUnread, jumpPillLabel } from './chat-actions';
+import type { NativeSyntheticEvent, NativeScrollEvent } from 'react-native';
 import { usePoll } from './usePoll';
 
 // Chat with one agent. Mirrors dashboard M4: open with the newest PAGE
@@ -207,6 +208,30 @@ export default function ChatScreen({ cfg, alias, onBack }: Props) {
   const [viewerUri, setViewerUri] = useState<string | null>(null);
   // 更像微信·round-2: 长按气泡的动作菜单(引用/删除)。null = 未打开。
   const [menuFor, setMenuFor] = useState<ChatItem | null>(null);
+  // 更像微信·round-3: 滚离底部时的「回到最新」pill + 未读计数。
+  const listRef = useRef<FlatList<ChatItem>>(null);
+  const [showJump, setShowJump] = useState(false);
+  const [unread, setUnread] = useState(0);
+  const newestKeyRef = useRef<string | undefined>(undefined);
+
+  const onScroll = (e: NativeSyntheticEvent<NativeScrollEvent>) => {
+    const y = e.nativeEvent.contentOffset.y; // inverted: 0 = 底部(最新)
+    setShowJump(shouldShowJumpPill(y));
+    if (y < 40) setUnread(0); // 回到底部 → 清未读
+  };
+  const jumpToLatest = () => {
+    listRef.current?.scrollToOffset({ offset: 0, animated: true });
+    setUnread(0);
+    setShowJump(false);
+  };
+  // 滚在上面时来了新消息(最新条 key 变化)→ 未读 +1;停在底部则清零。
+  useEffect(() => {
+    const k = messages[0] && (messages[0]._localId ?? messages[0].task_id);
+    if (newestKeyRef.current !== undefined && k !== newestKeyRef.current) {
+      setUnread(u => nextUnread(u, !showJump, 1));
+    }
+    newestKeyRef.current = k;
+  }, [messages, showJump]);
 
   // shared by the sent bubble and the reply bubble (tg 771)
   const renderAttachment = (a: AttachmentView) =>
@@ -390,6 +415,9 @@ export default function ChatScreen({ cfg, alias, onBack }: Props) {
         </View>
       ) : (
         <FlatList
+          ref={listRef}
+          onScroll={onScroll}
+          scrollEventThrottle={16}
           inverted
           data={messages}
           keyExtractor={(m, i) => m._localId ?? m.task_id ?? String(i)}
@@ -442,6 +470,13 @@ export default function ChatScreen({ cfg, alias, onBack }: Props) {
           }}
         />
       )}
+
+      {/* 更像微信·round-3: 滚离底部时的「回到最新 / N 条新消息」pill */}
+      {showJump ? (
+        <Pressable style={styles.jumpPill} onPress={jumpToLatest} hitSlop={8}>
+          <Text style={styles.jumpPillText}>{jumpPillLabel(unread)} ↓</Text>
+        </Pressable>
+      ) : null}
 
       {attached ? (
         <View style={styles.attachPreview}>
@@ -607,6 +642,19 @@ const makeStyles = () =>
   actionCancel: { color: colors.textSecondary, fontSize: 16, fontWeight: '600' },
   actionSep: { height: 1, backgroundColor: colors.border },
   actionSepGap: { height: spacing.sm, backgroundColor: colors.bg },
+  // round-3 回到最新 pill
+  jumpPill: {
+    position: 'absolute',
+    right: spacing.lg,
+    bottom: 84,
+    backgroundColor: colors.card,
+    borderColor: colors.border,
+    borderWidth: 1,
+    borderRadius: 16,
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.md,
+  },
+  jumpPillText: { color: colors.accent, fontSize: 13, fontWeight: '600' },
   attachPreview: {
     flexDirection: 'row',
     alignItems: 'center',

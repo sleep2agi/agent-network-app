@@ -20,3 +20,16 @@ export const removeMessage = <T extends { _localId?: string; task_id?: string }>
   const k = msgKey(target);
   return k ? list.filter((m) => msgKey(m) !== k) : list.filter((m) => m !== target);
 };
+
+// 更像微信·round-3: 滚动到底「回到最新」pill 的纯逻辑。
+// inverted 列表:offsetY=0 在底部(最新)。滚离底部超过阈值 → 显示 pill。
+export const shouldShowJumpPill = (offsetY: number, threshold = 200): boolean =>
+  offsetY > threshold;
+
+// 停在底部附近时的未读计数应清零;否则保留(供 pill 显示 "N 条新消息")。
+export const nextUnread = (current: number, atBottom: boolean, incoming = 0): number =>
+  atBottom ? 0 : current + incoming;
+
+// pill 文案:有未读显条数,否则纯「回到最新」。
+export const jumpPillLabel = (unread: number): string =>
+  unread > 0 ? `${unread} 条新消息` : '回到最新';
