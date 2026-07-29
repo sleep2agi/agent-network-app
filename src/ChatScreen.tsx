@@ -16,7 +16,7 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import AliasAvatar from './AliasAvatar';
-import AuthedThumb, { AttachmentFile, mimeFromName } from './AuthedThumb';
+import AuthedThumb, { AttachmentFile, AuthedVideo, mimeFromName } from './AuthedThumb';
 import { fetchStatus, fetchTasks, sendTask, HubConfig, HubTask, TaskAttachment } from './api';
 import {
   ATTACH_ENABLED,
@@ -57,19 +57,23 @@ interface AttachmentView {
   key: string;
   name: string;
   isImage: boolean;
+  isVideo: boolean;
   /** local file uri for fresh echoes, authed API uri otherwise */
   uri?: string;
   /** authed API uris need RN Image headers — unavailable on web <img> */
   needsAuth?: boolean;
   mime?: string;
+  size?: number;
 }
 
 const isImageLike = (name?: string, mime?: string) =>
   (mime ?? '').startsWith('image/') || /\.(png|jpe?g|gif|webp|heic)$/i.test(name ?? '');
 
+const isVideoLike = (_name?: string, mime?: string) => (mime ?? '').startsWith('video/');
+
 const makePusher = (serverUrl: string, out: AttachmentView[]) => {
   const seen = new Set<string>();
-  return (fileId: string, name: string, mime?: string) => {
+  return (fileId: string, name: string, mime?: string, size?: number) => {
     if (seen.has(fileId)) return;
     seen.add(fileId);
     // text refs carry no mime — derive it from the extension so the
@@ -79,9 +83,11 @@ const makePusher = (serverUrl: string, out: AttachmentView[]) => {
       key: fileId,
       name,
       isImage: isImageLike(name, resolved),
+      isVideo: isVideoLike(name, resolved),
       uri: `${serverUrl}/api/files/${fileId}`,
       needsAuth: true,
       mime: resolved,
+      size,
     });
   };
 };
@@ -106,7 +112,9 @@ const sentAttachmentViews = (item: ChatItem, serverUrl: string): AttachmentView[
         key: item._img.uri,
         name: item._img.fileName,
         isImage: isImageLike(item._img.fileName, item._img.mimeType),
+        isVideo: isVideoLike(item._img.fileName, item._img.mimeType),
         uri: item._img.uri,
+        size: item._img.fileSize,
       },
     ];
   }
@@ -119,7 +127,12 @@ const sentAttachmentViews = (item: ChatItem, serverUrl: string): AttachmentView[
       const meta = typeof raw === 'string' ? JSON.parse(raw) : raw;
       for (const a of meta?.attachments ?? []) {
         if (a?.type === 'file' && a.file_id) {
-          push(String(a.file_id), String(a.name ?? a.file_id), a.mime ? String(a.mime) : undefined);
+          push(
+            String(a.file_id),
+            String(a.name ?? a.file_id),
+            a.mime ? String(a.mime) : undefined,
+            typeof a.size === 'number' ? a.size : undefined,
+          );
         }
       }
     } catch {
@@ -247,6 +260,16 @@ export default function ChatScreen({ cfg, alias, onBack }: Props) {
         serverUrl={cfg.serverUrl}
         token={cfg.token}
         onPress={localUri => setViewerUri(localUri)}
+      />
+    ) : a.isVideo && a.needsAuth && Platform.OS !== 'web' ? (
+      <AuthedVideo
+        key={a.key}
+        fileId={a.key}
+        name={a.name}
+        mime={a.mime}
+        size={a.size}
+        serverUrl={cfg.serverUrl}
+        token={cfg.token}
       />
     ) : a.needsAuth && Platform.OS !== 'web' ? (
       <AttachmentFile
