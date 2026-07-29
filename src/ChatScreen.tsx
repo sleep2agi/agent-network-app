@@ -28,7 +28,9 @@ import {
   PickedImage,
 } from './attach';
 import { colors, onThemeChange, spacing } from './theme';
-import { formatTime } from './time';
+import { formatChatHeader, shouldShowTimeHeader } from './time';
+import { applyQuote, removeMessage, shouldShowJumpPill, nextUnread, jumpPillLabel, canSend } from './chat-actions';
+import type { NativeSyntheticEvent, NativeScrollEvent } from 'react-native';
 import { usePoll } from './usePoll';
 
 // Chat with one agent. Mirrors dashboard M4: open with the newest PAGE
@@ -204,6 +206,32 @@ export default function ChatScreen({ cfg, alias, onBack }: Props) {
   const localSeq = useRef(0);
   const [attached, setAttached] = useState<PickedImage | null>(null);
   const [viewerUri, setViewerUri] = useState<string | null>(null);
+  // 更像微信·round-2: 长按气泡的动作菜单(引用/删除)。null = 未打开。
+  const [menuFor, setMenuFor] = useState<ChatItem | null>(null);
+  // 更像微信·round-3: 滚离底部时的「回到最新」pill + 未读计数。
+  const listRef = useRef<FlatList<ChatItem>>(null);
+  const [showJump, setShowJump] = useState(false);
+  const [unread, setUnread] = useState(0);
+  const newestKeyRef = useRef<string | undefined>(undefined);
+
+  const onScroll = (e: NativeSyntheticEvent<NativeScrollEvent>) => {
+    const y = e.nativeEvent.contentOffset.y; // inverted: 0 = 底部(最新)
+    setShowJump(shouldShowJumpPill(y));
+    if (y < 40) setUnread(0); // 回到底部 → 清未读
+  };
+  const jumpToLatest = () => {
+    listRef.current?.scrollToOffset({ offset: 0, animated: true });
+    setUnread(0);
+    setShowJump(false);
+  };
+  // 滚在上面时来了新消息(最新条 key 变化)→ 未读 +1;停在底部则清零。
+  useEffect(() => {
+    const k = messages[0] && (messages[0]._localId ?? messages[0].task_id);
+    if (newestKeyRef.current !== undefined && k !== newestKeyRef.current) {
+      setUnread(u => nextUnread(u, !showJump, 1));
+    }
+    newestKeyRef.current = k;
+  }, [messages, showJump]);
 
   // shared by the sent bubble and the reply bubble (tg 771)
   const renderAttachment = (a: AttachmentView) =>
@@ -387,6 +415,9 @@ export default function ChatScreen({ cfg, alias, onBack }: Props) {
         </View>
       ) : (
         <FlatList
+          ref={listRef}
+          onScroll={onScroll}
+          scrollEventThrottle={16}
           inverted
           data={messages}
           keyExtractor={(m, i) => m._localId ?? m.task_id ?? String(i)}
@@ -400,33 +431,52 @@ export default function ChatScreen({ cfg, alias, onBack }: Props) {
               <Text style={styles.beginning}>— beginning of history —</Text>
             ) : null
           }
-          renderItem={({ item }) => (
-            <View style={styles.bubbleWrap}>
-              <View style={styles.bubble}>
-                <Text style={styles.bubbleText}>{stripFileLinks(item.content || '—')}</Text>
-                {sentAttachmentViews(item, cfg.serverUrl).map(renderAttachment)}
-              </View>
-              {item.result || item.reply ? (
-                <View style={[styles.bubble, styles.replyBubble]}>
-                  <Text style={styles.bubbleText}>
-                    {stripFileLinks(item.result ?? item.reply ?? '')}
-                  </Text>
-                  {replyAttachmentViews(item, cfg.serverUrl).map(renderAttachment)}
-                </View>
-              ) : null}
-              {item._pending ? (
-                <Text style={styles.pendingMark}>发送中…</Text>
-              ) : item._failed ? (
-                <Pressable onPress={() => retry(item)} hitSlop={8}>
-                  <Text style={styles.failedMark}>未送达 · 点击重试</Text>
+          renderItem={({ item, index }) => {
+            // 更像微信·时间分组:仅在与上一条(更早)间隔 >5min 时显示居中时间头,
+            // 不再每条气泡都盖时间。inverted 列表下,更早的邻居在 index+1。
+            const showHeader = shouldShowTimeHeader(item.created_at, messages[index + 1]?.created_at);
+            return (
+              <View style={styles.bubbleWrap}>
+                {showHeader && item.created_at ? (
+                  <Text style={styles.timeHeader}>{formatChatHeader(item.created_at)}</Text>
+                ) : null}
+                <Pressable
+                  onLongPress={() => setMenuFor(item)}
+                  delayLongPress={300}
+                  style={({ pressed }) => pressed && { opacity: 0.7 }}
+                >
+                  <View style={styles.bubble}>
+                    <Text style={styles.bubbleText}>{stripFileLinks(item.content || '—')}</Text>
+                    {sentAttachmentViews(item, cfg.serverUrl).map(renderAttachment)}
+                  </View>
                 </Pressable>
-              ) : item.created_at ? (
-                <Text style={styles.time}>{formatTime(item.created_at)}</Text>
-              ) : null}
-            </View>
-          )}
+                {item.result || item.reply ? (
+                  <View style={[styles.bubble, styles.replyBubble]}>
+                    <Text style={styles.bubbleText}>
+                      {stripFileLinks(item.result ?? item.reply ?? '')}
+                    </Text>
+                    {replyAttachmentViews(item, cfg.serverUrl).map(renderAttachment)}
+                  </View>
+                ) : null}
+                {item._pending ? (
+                  <Text style={styles.pendingMark}>发送中…</Text>
+                ) : item._failed ? (
+                  <Pressable onPress={() => retry(item)} hitSlop={8}>
+                    <Text style={styles.failedMark}>未送达 · 点击重试</Text>
+                  </Pressable>
+                ) : null}
+              </View>
+            );
+          }}
         />
       )}
+
+      {/* 更像微信·round-3: 滚离底部时的「回到最新 / N 条新消息」pill */}
+      {showJump ? (
+        <Pressable style={styles.jumpPill} onPress={jumpToLatest} hitSlop={8}>
+          <Text style={styles.jumpPillText}>{jumpPillLabel(unread)} ↓</Text>
+        </Pressable>
+      ) : null}
 
       {attached ? (
         <View style={styles.attachPreview}>
@@ -443,6 +493,40 @@ export default function ChatScreen({ cfg, alias, onBack }: Props) {
           {viewerUri ? (
             <Image source={{ uri: viewerUri }} style={styles.viewerImage} resizeMode="contain" />
           ) : null}
+        </Pressable>
+      </Modal>
+
+      {/* 更像微信·round-2: 长按气泡动作菜单(底部 action sheet·引用/删除/取消) */}
+      <Modal visible={!!menuFor} transparent animationType="fade" onRequestClose={() => setMenuFor(null)}>
+        <Pressable style={styles.menuBackdrop} onPress={() => setMenuFor(null)}>
+          <View style={styles.actionSheet}>
+            <Pressable
+              style={({ pressed }) => [styles.actionItem, pressed && styles.actionItemPressed]}
+              onPress={() => {
+                if (menuFor) setDraft((d) => applyQuote(d, menuFor.content));
+                setMenuFor(null);
+              }}
+            >
+              <Text style={styles.actionText}>引用</Text>
+            </Pressable>
+            <View style={styles.actionSep} />
+            <Pressable
+              style={({ pressed }) => [styles.actionItem, pressed && styles.actionItemPressed]}
+              onPress={() => {
+                if (menuFor) setMessages((prev) => removeMessage(prev, menuFor));
+                setMenuFor(null);
+              }}
+            >
+              <Text style={[styles.actionText, styles.actionDanger]}>删除</Text>
+            </Pressable>
+            <View style={styles.actionSepGap} />
+            <Pressable
+              style={({ pressed }) => [styles.actionItem, pressed && styles.actionItemPressed]}
+              onPress={() => setMenuFor(null)}
+            >
+              <Text style={styles.actionCancel}>取消</Text>
+            </Pressable>
+          </View>
         </Pressable>
       </Modal>
 
@@ -465,11 +549,15 @@ export default function ChatScreen({ cfg, alias, onBack }: Props) {
           multiline
         />
         <Pressable
-          style={({ pressed }) => [styles.send, (pressed || sending) && { opacity: 0.6 }]}
+          style={({ pressed }) => [
+            styles.send,
+            !canSend(draft, !!attached, sending) && styles.sendDisabled,
+            pressed && { opacity: 0.6 },
+          ]}
           onPress={submit}
-          disabled={sending || (!draft.trim() && !attached)}
+          disabled={!canSend(draft, !!attached, sending)}
         >
-          <Text style={styles.sendText}>↑</Text>
+          <Text style={[styles.sendText, !canSend(draft, !!attached, sending) && styles.sendTextDisabled]}>↑</Text>
         </Pressable>
       </View>
     </KeyboardAvoidingView>
@@ -499,7 +587,13 @@ const makeStyles = () =>
     marginVertical: spacing.md,
   },
   bubbleWrap: { marginBottom: spacing.md, gap: spacing.xs },
-  time: { color: colors.textMuted, fontSize: 10, alignSelf: 'flex-end' },
+  timeHeader: {
+    color: colors.textMuted,
+    fontSize: 11,
+    alignSelf: 'center',
+    marginTop: spacing.md,
+    marginBottom: spacing.sm,
+  },
   bubble: {
     alignSelf: 'flex-end',
     maxWidth: '85%',
@@ -535,6 +629,36 @@ const makeStyles = () =>
     justifyContent: 'center',
   },
   viewerImage: { width: '100%', height: '80%' },
+  // round-2 长按动作菜单(底部 action sheet)
+  menuBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.45)', justifyContent: 'flex-end' },
+  actionSheet: {
+    backgroundColor: colors.card,
+    borderTopLeftRadius: 16,
+    borderTopRightRadius: 16,
+    borderTopWidth: 1,
+    borderColor: colors.border,
+    paddingBottom: spacing.xl,
+  },
+  actionItem: { paddingVertical: spacing.lg, alignItems: 'center' },
+  actionItemPressed: { backgroundColor: colors.inputBg },
+  actionText: { color: colors.text, fontSize: 16 },
+  actionDanger: { color: colors.failed },
+  actionCancel: { color: colors.textSecondary, fontSize: 16, fontWeight: '600' },
+  actionSep: { height: 1, backgroundColor: colors.border },
+  actionSepGap: { height: spacing.sm, backgroundColor: colors.bg },
+  // round-3 回到最新 pill
+  jumpPill: {
+    position: 'absolute',
+    right: spacing.lg,
+    bottom: 84,
+    backgroundColor: colors.card,
+    borderColor: colors.border,
+    borderWidth: 1,
+    borderRadius: 16,
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.md,
+  },
+  jumpPillText: { color: colors.accent, fontSize: 13, fontWeight: '600' },
   attachPreview: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -584,6 +708,9 @@ const makeStyles = () =>
     justifyContent: 'center',
   },
   sendText: { color: colors.bg, fontSize: 18, fontWeight: '700' },
+  // round-4 发送键停用态:草稿空/发送中 → 灰底灰字(微信式,不再高亮可点)
+  sendDisabled: { backgroundColor: colors.inputBg, borderWidth: 1, borderColor: colors.border },
+  sendTextDisabled: { color: colors.textMuted },
 });
 
 let styles = makeStyles();
