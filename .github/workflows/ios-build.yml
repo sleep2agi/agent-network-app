@@ -1,0 +1,175 @@
+# iOS signed .ipa build + TestFlight upload (Vincent: ship iOS to TestFlight
+# without an Expo/EAS account — raw xcodebuild + Apple toolchain on a mac runner).
+#
+# ios/ is NOT committed (Expo CNG), so we `expo prebuild -p ios` in CI to
+# generate the Xcode project, then archive + export an App Store .ipa and push
+# it to TestFlight using an App Store Connect API key (.p8) for ALL auth —
+# code signing AND upload. No Apple ID / app-specific password, no EAS.
+#
+# ── How signing works here (no manual keychain/profile import) ──────────────
+# We place the ASC API key at ~/.appstoreconnect/private_keys/AuthKey_<KEYID>.p8
+# (the path xcodebuild/altool auto-discover) and run the archive with
+# `-allowProvisioningUpdates` + `-authenticationKeyPath/-authenticationKeyID/
+# -authenticationKeyIssuerID`. With automatic signing, Xcode uses the API key
+# to create/download the App Store distribution certificate AND provisioning
+# profile on the fly. This is the most robust unattended-CI path: no
+# fastlane match repo, no base64 cert juggling, no keychain unlock.
+#
+# ── Assumptions (see report) ────────────────────────────────────────────────
+#  * An App Store Connect app record for bundle id `top.vansin.agentnetwork`
+#    already exists under team 446BLT75JZ. Auto-provisioning can create certs
+#    & profiles but NOT the app record — create it once in App Store Connect.
+#  * The ASC API key has the "App Manager" role (needed to manage signing
+#    assets and to upload builds to TestFlight).
+#  * macOS runners are billed at 10x Linux minutes — this is manual-trigger only.
+
+name: ios-build
+
+on:
+  workflow_dispatch:
+    inputs:
+      upload_testflight:
+        description: "Upload the built .ipa to TestFlight"
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+jobs:
+  ios-ipa:
+    # macos-14 == Apple silicon, recent Xcode. Pin rather than macos-latest so
+    # an Xcode bump can't silently break signing/export.
+    runs-on: macos-14
+
+    env:
+      # Bundle id / team are also read by Expo from app.json + this team id.
+      APPLE_TEAM_ID: "446BLT75JZ"
+      BUNDLE_ID: "top.vansin.agentnetwork"
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - run: npm ci
+
+      # Generate ios/ from app.json (Expo CNG). --no-install: we already ran
+      # `npm ci`; pods are installed explicitly in the next step for clarity.
+      - name: Expo prebuild (generate ios/)
+        run: npx expo prebuild --platform ios --no-install
+
+      # Resolve the actual scheme name & workspace path Expo generated, instead
+      # of hard-coding (Expo derives them from app.json "name": "Agent Network").
+      - name: Resolve Xcode workspace & scheme
+        id: xc
+        run: |
+          set -euo pipefail
+          WORKSPACE=$(find ios -maxdepth 1 -name '*.xcworkspace' | head -1)
+          if [ -z "$WORKSPACE" ]; then
+            echo "::error::No .xcworkspace found under ios/"; exit 1
+          fi
+          # First shared scheme; Expo names it after the project (e.g. "AgentNetwork").
+          SCHEME=$(xcodebuild -workspace "$WORKSPACE" -list -json \
+            | python3 -c 'import sys,json; print(json.load(sys.stdin)["workspace"]["schemes"][0])')
+          echo "workspace=$WORKSPACE" >> "$GITHUB_OUTPUT"
+          echo "scheme=$SCHEME"       >> "$GITHUB_OUTPUT"
+          echo "Resolved workspace=$WORKSPACE scheme=$SCHEME"
+
+      - name: CocoaPods install
+        run: |
+          set -euo pipefail
+          cd ios
+          pod install
+
+      # Drop the App Store Connect API key where xcodebuild/altool auto-find it.
+      # ASC_KEY_P8 may be either raw .p8 PEM text OR base64 of it — handle both.
+      - name: Install App Store Connect API key
+        env:
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_KEY_P8: ${{ secrets.ASC_KEY_P8 }}
+        run: |
+          set -euo pipefail
+          mkdir -p "$HOME/.appstoreconnect/private_keys"
+          KEY_PATH="$HOME/.appstoreconnect/private_keys/AuthKey_${ASC_KEY_ID}.p8"
+          if printf '%s' "$ASC_KEY_P8" | grep -q 'BEGIN PRIVATE KEY'; then
+            printf '%s' "$ASC_KEY_P8" > "$KEY_PATH"
+          else
+            # assume base64-encoded .p8
+            printf '%s' "$ASC_KEY_P8" | base64 --decode > "$KEY_PATH"
+          fi
+          chmod 600 "$KEY_PATH"
+          # sanity: must be a valid PEM private key now
+          grep -q 'BEGIN PRIVATE KEY' "$KEY_PATH" || { echo "::error::ASC_KEY_P8 did not decode to a PEM .p8"; exit 1; }
+          echo "ASC_KEY_PATH=$KEY_PATH" >> "$GITHUB_ENV"
+
+      # Archive with automatic signing. -allowProvisioningUpdates + the ASC API
+      # key let Xcode mint/download the distribution cert + App Store profile.
+      - name: Archive (xcodebuild)
+        env:
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+        run: |
+          set -euo pipefail
+          xcodebuild \
+            -workspace "${{ steps.xc.outputs.workspace }}" \
+            -scheme "${{ steps.xc.outputs.scheme }}" \
+            -configuration Release \
+            -destination 'generic/platform=iOS' \
+            -archivePath "$RUNNER_TEMP/AgentNetwork.xcarchive" \
+            -allowProvisioningUpdates \
+            -authenticationKeyPath "$ASC_KEY_PATH" \
+            -authenticationKeyID "$ASC_KEY_ID" \
+            -authenticationKeyIssuerID "$ASC_ISSUER_ID" \
+            DEVELOPMENT_TEAM="$APPLE_TEAM_ID" \
+            CODE_SIGN_STYLE=Automatic \
+            clean archive
+
+      # Export the archive to an App Store .ipa using the committed ExportOptions.
+      - name: Export .ipa
+        env:
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/export"
+          xcodebuild -exportArchive \
+            -archivePath "$RUNNER_TEMP/AgentNetwork.xcarchive" \
+            -exportOptionsPlist ios-ci/ExportOptions.plist \
+            -exportPath "$RUNNER_TEMP/export" \
+            -allowProvisioningUpdates \
+            -authenticationKeyPath "$ASC_KEY_PATH" \
+            -authenticationKeyID "$ASC_KEY_ID" \
+            -authenticationKeyIssuerID "$ASC_ISSUER_ID"
+          IPA=$(find "$RUNNER_TEMP/export" -name '*.ipa' | head -1)
+          [ -n "$IPA" ] || { echo "::error::No .ipa produced"; exit 1; }
+          echo "IPA_PATH=$IPA" >> "$GITHUB_ENV"
+          ls -lh "$IPA"
+
+      # Upload the .ipa as an artifact FIRST so it is downloadable even if the
+      # TestFlight upload below fails.
+      - name: Upload .ipa artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: agent-network-ios-ipa
+          path: ${{ env.IPA_PATH }}
+          if-no-files-found: error
+          retention-days: 14
+
+      # Push to TestFlight with the same ASC API key. altool reads the key from
+      # ~/.appstoreconnect/private_keys/AuthKey_<id>.p8 by id+issuer.
+      - name: Upload to TestFlight (altool)
+        if: ${{ inputs.upload_testflight }}
+        env:
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+        run: |
+          set -euo pipefail
+          xcrun altool --upload-app \
+            --type ios \
+            --file "$IPA_PATH" \
+            --apiKey "$ASC_KEY_ID" \
+            --apiIssuer "$ASC_ISSUER_ID"

@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  ExportOptions.plist for `xcodebuild -exportArchive`.
+  Used by .github/workflows/ios-build.yml to export the archive into an
+  App Store (TestFlight) .ipa.
+
+  - method = app-store  -> produces an .ipa suitable for TestFlight / App Store.
+  - signingStyle = automatic -> let Xcode manage signing. Combined with
+    `-allowProvisioningUpdates` and the App Store Connect API key on the archive
+    step, Xcode will create/download the App Store distribution provisioning
+    profile automatically (no manual profile/keychain dance).
+  - teamID = the Apple Developer Team ID (from eas.json).
+
+  NOTE: `destination = export` (default) writes the .ipa to disk; the workflow
+  then uploads it to TestFlight separately so we still get an artifact even if
+  the upload step fails.
+-->
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>method</key>
+  <string>app-store</string>
+
+  <key>teamID</key>
+  <string>446BLT75JZ</string>
+
+  <key>signingStyle</key>
+  <string>automatic</string>
+
+  <!-- Don't strip Bitcode-related symbols; modern App Store no longer uses
+       Bitcode, so leave it off. -->
+  <key>uploadBitcode</key>
+  <false/>
+
+  <key>uploadSymbols</key>
+  <true/>
+
+  <!-- Strip Swift symbols to reduce upload size; safe for App Store. -->
+  <key>stripSwiftSymbols</key>
+  <true/>
+
+  <!-- Use the most up-to-date provisioning when auto-managed. -->
+  <key>manageAppVersionAndBuildNumber</key>
+  <false/>
+</dict>
+</plist>
