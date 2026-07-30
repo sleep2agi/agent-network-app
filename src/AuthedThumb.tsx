@@ -1,5 +1,6 @@
 import * as FileSystem from 'expo-file-system/legacy';
 import * as Sharing from 'expo-sharing';
+import { VideoView, useVideoPlayer } from 'expo-video';
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, Image, Pressable, StyleSheet, Text, View } from 'react-native';
 import { colors, onThemeChange, spacing } from './theme';
@@ -47,6 +48,8 @@ const extOf = (name?: string) =>
   (name?.match(/\.[A-Za-z0-9]{1,8}$/)?.[0] ?? '').toLowerCase();
 
 export const mimeFromName = (name?: string): string | undefined => EXT_MIME[extOf(name)];
+
+export const MAX_ATTACHMENT_BYTES = 12 * 1024 * 1024;
 
 const extFromMime = (mime?: string): string => {
   if (!mime) return '';
@@ -127,6 +130,79 @@ export function AttachmentFile({
   );
 }
 
+function VideoFrame({ uri }: { uri: string }) {
+  const player = useVideoPlayer(uri, p => {
+    p.loop = false;
+  });
+  return (
+    <VideoView
+      player={player}
+      style={styles.video}
+      nativeControls
+      contentFit="contain"
+      fullscreenOptions={{ enable: true }}
+    />
+  );
+}
+
+export function AuthedVideo({
+  fileId,
+  name,
+  mime,
+  size,
+  serverUrl,
+  token,
+}: {
+  fileId: string;
+  name: string;
+  mime?: string;
+  size?: number;
+  serverUrl: string;
+  token: string;
+}) {
+  const [localUri, setLocalUri] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const tooLarge = typeof size === 'number' && size > MAX_ATTACHMENT_BYTES;
+
+  const load = async () => {
+    if (busy || localUri || tooLarge) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const local = await downloadAttachment(serverUrl, token, fileId, name, mime || mimeFromName(name));
+      setLocalUri(local);
+    } catch {
+      setError('视频下载失败，点击重试');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  if (tooLarge) {
+    return (
+      <View style={styles.videoPlaceholder}>
+        <Text style={styles.videoTitle}>▶ {name}</Text>
+        <Text style={styles.videoHint}>视频超过 12MB，无法在对话里播放；请用文件方式打开</Text>
+        <AttachmentFile fileId={fileId} name={name} mime={mime} serverUrl={serverUrl} token={token} />
+      </View>
+    );
+  }
+
+  if (localUri) {
+    return <VideoFrame uri={localUri} />;
+  }
+
+  return (
+    <Pressable style={styles.videoPlaceholder} onPress={load} hitSlop={6}>
+      <Text style={styles.videoTitle}>{busy ? '⏳' : '▶'} {name}</Text>
+      <Text style={[styles.videoHint, error && { color: colors.failed }]}>
+        {error ?? '点击下载并播放'}
+      </Text>
+    </Pressable>
+  );
+}
+
 export default function AuthedThumb({
   fileId,
   name,
@@ -181,6 +257,27 @@ const makeStyles = () =>
   },
   loading: { alignItems: 'center', justifyContent: 'center' },
   fallback: { color: colors.accent, fontSize: 12, marginTop: spacing.xs },
+  video: {
+    width: 220,
+    height: 150,
+    borderRadius: 10,
+    marginTop: spacing.sm,
+    backgroundColor: colors.inputBg,
+  },
+  videoPlaceholder: {
+    width: 220,
+    minHeight: 78,
+    borderRadius: 10,
+    marginTop: spacing.sm,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    backgroundColor: colors.inputBg,
+    borderColor: colors.border,
+    borderWidth: 1,
+    justifyContent: 'center',
+  },
+  videoTitle: { color: colors.text, fontSize: 13, fontWeight: '600' },
+  videoHint: { color: colors.textMuted, fontSize: 11, marginTop: 4 },
 });
 
 let styles = makeStyles();

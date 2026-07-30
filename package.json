@@ -14,6 +14,7 @@
     "expo-secure-store": "~56.0.4",
     "expo-sharing": "~56.0.17",
     "expo-status-bar": "~56.0.4",
+    "expo-video": "~56.1.4",
     "react": "19.2.3",
     "react-dom": "19.2.3",
     "react-native": "0.85.3",
@@ -24,6 +25,9 @@
     "@tauri-apps/cli": "^2.11.2",
     "@types/react": "~19.2.2",
     "typescript": "~6.0.3"
+  },
+  "expoSdkLockedDependencies": {
+    "expo-video": "56.x is paired with Expo SDK 56. Its peerDependencies are wildcards, so SDK upgrades must update this package deliberately."
   },
   "scripts": {
     "start": "expo start",
