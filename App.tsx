@@ -16,6 +16,7 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
 import AliasAvatar from './src/AliasAvatar';
+import { purgeLegacyAttachmentCache } from './src/AuthedThumb';
 import { isAgentOnline } from './src/chat-actions';
 import { fetchStatus, prefetchStatus, takeStatusPrefetch, login, HubConfig, Session } from './src/api';
 import ChatScreen from './src/ChatScreen';
@@ -69,6 +70,16 @@ if ((globalThis as any).__TAURI_INTERNALS__) {
 }
 
 export default function App() {
+  // One-time cleanup of attachment caches written before the download fix.
+  // Versions before it wrote HTTP error bodies to the real filename, and a
+  // non-empty error body is indistinguishable from a valid cached file, so
+  // affected devices never retry and never recover on their own. Runs once
+  // (guarded by a marker in the cache dir), fire-and-forget: a cache we
+  // cannot clean is not a reason to block app start.
+  useEffect(() => {
+    purgeLegacyAttachmentCache().catch(() => {});
+  }, []);
+
   return (
     <SafeAreaProvider>
       <AppRoot />
