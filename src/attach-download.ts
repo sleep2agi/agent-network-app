@@ -215,8 +215,16 @@ export const purgeLegacyAttachmentCacheWith = async (
   try {
     const entries = await fs.readDirectoryAsync(cacheDir);
     for (const entry of entries) {
-      // The marker itself starts with the same prefix — never delete it.
       if (!entry.startsWith(ATTACHMENT_PREFIX)) continue;
+      // The marker shares the `att-` prefix, so a sweep could delete the very
+      // file that stops it running again — turning "purge once" into "purge
+      // every launch", whose only symptom is re-downloading attachments
+      // forever. It cannot currently happen (the marker is written AFTER this
+      // loop, and once it exists we return before reaching the loop at all),
+      // so this guard is unreachable today and no test covers it. It stays
+      // because that safety is a property of the *ordering* above: anyone who
+      // moves the marker write before the sweep would silently reintroduce
+      // the trap, and this line is what would catch them.
       if (`${cacheDir}${entry}` === marker) continue;
       await fs.deleteAsync(`${cacheDir}${entry}`, { idempotent: true }).catch(() => {});
       purged++;
