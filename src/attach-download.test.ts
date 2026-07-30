@@ -23,6 +23,7 @@
 // 下面的 fake 精确复刻上述原生契约。
 
 import {
+  ATTACHMENT_CACHE_SCHEMA,
   downloadAttachmentWith,
   purgeLegacyAttachmentCacheWith,
   cachePathIn,
@@ -152,6 +153,15 @@ const run = async () => {
 
     const r1 = await purgeLegacyAttachmentCacheWith(fs, CACHE);
     ck('一次性清理 → 确实删掉了附件缓存', r1.skipped === false && r1.purged === 1);
+    // marker 自带 att- 前缀, 所以它能活下来靠两道防线: (1) 先遍历后写
+    // marker 的顺序, (2) 遍历里对 marker 自身的 skip。这条断言守的是**结果**
+    // ——"清理跑完之后 marker 还在"。实测两种改法:
+    //   顺序改坏 + 保留 skip → 本条仍绿(skip 兜住了, 行为依然正确)
+    //   顺序改坏 + 去掉 skip → 本条转红, 连带"只跑一次"三条一起红
+    // 即: 两道防线同时失效才红。这仍比只用注释描述强得多, 但别把它读成
+    // "顺序被改就会红"。
+    ck('清理后 → marker 仍在(两道防线同时失效才会红, 见上)',
+      files.has(`${CACHE}att-cache-v${ATTACHMENT_CACHE_SCHEMA}`));
 
     const after = await downloadAttachmentWith(fs, CACHE, 'http://h', 'tok', 'f5', 'deck.pptx', undefined);
     ck('清理后 → 真的重新下载了', calls.download === 1);
