@@ -2,6 +2,7 @@ import * as FileSystem from 'expo-file-system/legacy';
 import {
   describeAttachmentError,
   downloadAttachmentWith,
+  purgeLegacyAttachmentCacheWith,
   mimeFromName,
   MAX_ATTACHMENT_BYTES,
   type DownloadFs,
@@ -244,3 +245,11 @@ let styles = makeStyles();
 onThemeChange(() => {
   styles = makeStyles();
 });
+
+/** 设备侧一次性清理：见 attach-download.ts 里 purgeLegacyAttachmentCacheWith
+ *  的说明。App 启动时调用一次。 */
+export const purgeLegacyAttachmentCache = () =>
+  purgeLegacyAttachmentCacheWith(
+    FileSystem as unknown as DownloadFs,
+    FileSystem.cacheDirectory ?? '',
+  );

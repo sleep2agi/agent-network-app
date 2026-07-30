@@ -77,6 +77,8 @@ export interface DownloadFs {
   deleteAsync(uri: string, options?: { idempotent?: boolean }): Promise<void>;
   moveAsync(options: { from: string; to: string }): Promise<void>;
   readAsStringAsync(uri: string): Promise<string>;
+  readDirectoryAsync(uri: string): Promise<string[]>;
+  writeAsStringAsync(uri: string, contents: string): Promise<void>;
 }
 
 /** Header lookup that tolerates either casing — RN normalises differently
@@ -111,9 +113,15 @@ export const downloadAttachmentWith = async (
 ): Promise<string> => {
   const dest = cachePathIn(cacheDir, fileId, name, mime);
   const info = await fs.getInfoAsync(dest);
-  // Cache hit only when the file exists AND is non-empty. Because a failed
-  // download never reaches `dest` (see below), a present non-empty file here
-  // is one we previously validated.
+  // Cache hit only when the file exists AND is non-empty.
+  //
+  // ⚠ This invariant holds ONLY for files written by THIS implementation:
+  // a failed download never reaches `dest` (see below), so anything found
+  // here was validated on the way in. It does NOT hold for files left by
+  // versions before this fix — those could be a non-empty error body sitting
+  // under the real filename, and this check cannot tell them apart. Devices
+  // carrying such a file do not self-heal; `purgeLegacyAttachmentCacheWith`
+  // below is the one-time cleanup that clears them.
   if (info.exists && (info.size ?? 0) > 0) return dest;
 
   // Download to a sibling temp path. `dest` stays untouched until the bytes
@@ -171,4 +179,52 @@ export const describeAttachmentError = (e: unknown): string => {
   const m = msg.match(/HTTP\s+(\d{3})/);
   if (m) return `下载失败：服务端返回 ${m[1]}`;
   return msg ? `下载失败：${msg}` : '下载失败';
+};
+
+// ── one-time cleanup of caches written before the .part fix ──────────────
+//
+// Versions before this fix wrote the HTTP response body to the real filename
+// regardless of status, so a device can be holding a ~32-byte error payload
+// that `exists && size > 0` happily serves forever. Those devices do not
+// self-heal: the download is never retried, so a later server-side fix never
+// reaches them.
+//
+// The cleanup is deliberately the dumbest thing that works: delete every
+// attachment cache entry once, then drop a marker so it never runs again.
+// Cost is one re-download per attachment, on one launch. The rejected
+// alternative was a heuristic ("file looks too small / content does not match
+// its mime") — that guesses at a question we can answer exactly, and would
+// misfire on legitimately small files.
+export const ATTACHMENT_CACHE_SCHEMA = 2;
+
+/** Files this module owns live under `${cacheDir}att-…`; nothing else in the
+ *  cache directory is touched. */
+const ATTACHMENT_PREFIX = 'att-';
+const markerPath = (cacheDir: string) => `${cacheDir}att-cache-v${ATTACHMENT_CACHE_SCHEMA}`;
+
+export const purgeLegacyAttachmentCacheWith = async (
+  fs: DownloadFs,
+  cacheDir: string,
+): Promise<{ purged: number; skipped: boolean }> => {
+  if (!cacheDir) return { purged: 0, skipped: true };
+  const marker = markerPath(cacheDir);
+  const seen = await fs.getInfoAsync(marker).catch(() => ({ exists: false }));
+  if (seen.exists) return { purged: 0, skipped: true };
+
+  let purged = 0;
+  try {
+    const entries = await fs.readDirectoryAsync(cacheDir);
+    for (const entry of entries) {
+      // The marker itself starts with the same prefix — never delete it.
+      if (!entry.startsWith(ATTACHMENT_PREFIX)) continue;
+      if (`${cacheDir}${entry}` === marker) continue;
+      await fs.deleteAsync(`${cacheDir}${entry}`, { idempotent: true }).catch(() => {});
+      purged++;
+    }
+  } catch {
+    // A cache directory we cannot read is not worth failing app start over;
+    // the marker is still written so this does not retry on every launch.
+  }
+  await fs.writeAsStringAsync(marker, String(ATTACHMENT_CACHE_SCHEMA)).catch(() => {});
+  return { purged, skipped: false };
 };
