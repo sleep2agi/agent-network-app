@@ -30,11 +30,16 @@ export default function AgentsScreen({
   cfg,
   onOpenChat,
   onOpenPicker,
+  onOpenNodeDetail,
 }: {
   cfg: HubConfig;
   onOpenChat: (alias: string) => void;
   /** #338 — top-right `+` opens the host_supervisor picker modal. */
   onOpenPicker: () => void;
+  /** issue #8 row 4 (V1) — long-press a row opens the per-node detail
+   *  screen. `onPress` remains the high-frequency path to chat and is
+   *  NOT changed (通信龙 red-line 71ee862d). */
+  onOpenNodeDetail: (alias: string) => void;
 }) {
   const [sessions, setSessions] = useState<Session[]>([]);
   const [loading, setLoading] = useState(true);
@@ -219,6 +224,8 @@ export default function AgentsScreen({
             pressed && { opacity: 0.7 },
           ]}
           onPress={() => onOpenChat(item.alias)}
+          onLongPress={() => onOpenNodeDetail(item.alias)}
+          delayLongPress={400}
         >
           <View style={styles.avatarWrap}>
             <AliasAvatar alias={item.alias} size={34} />
