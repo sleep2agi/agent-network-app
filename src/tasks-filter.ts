@@ -7,8 +7,9 @@
 // testID string in the screen file (poll-list-ms={POLL_LIST_MS}) share
 // ONE source. Assertions that pull from this same constant are same-
 // source with the behavior (the poll interval), not with a written-down
-// literal — mutation reddens the assertion. See
-// [[feedback_assert_the_fact_not_the_declaration]].
+// literal — mutation reddens the assertion. Two separate literals would
+// let the DOM attribute go stale while the real refreshInterval widens
+// underneath, and the attribute-based assertion would stay green.
 
 import type { HubTask, FetchTaskEventsResult } from './api';
 
@@ -75,7 +76,10 @@ export function eventsResultToState(
 // Status → semantic bucket used for the badge color on list rows.
 // 'unknown' is intentional: a status the app doesn't know about should
 // render as gray (rest) rather than fall through to a default green —
-// see [[feedback_allowlist_must_be_exact_value_not_shape_match]].
+// the accept-set must equal the specification's allowed value set
+// exactly. If we default-mapped unknown into 'running', a new hub-side
+// status would render green like a healthy row instead of prompting
+// someone to notice and add a mapping.
 export type StatusBucket = 'running' | 'failed' | 'replied' | 'pending' | 'unknown';
 
 export function statusBucket(status?: string): StatusBucket {

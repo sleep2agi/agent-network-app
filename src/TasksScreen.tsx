@@ -141,9 +141,10 @@ export default function TasksScreen({
       </ScrollView>
 
       {/* Count row — shows visible / denominator so a filter that reduces
-          the list to zero can't hide as an unqualified "0 tasks". Per
-          [[feedback_checker_scope_bug_vacuous_pass]] +
-          [[feedback_report_case_scope_not_capability]]. */}
+          the list to zero can't hide as an unqualified "0 tasks". An
+          empty result set has to report the input size alongside it:
+          "0 out of 12 with filter=failed" reads very differently from
+          just "0 tasks" (the latter looks like the fetch was empty). */}
       {state.kind === 'ready' ? (
         <View style={styles.countRow} testID="tasks-count">
           <Text style={styles.countText}>

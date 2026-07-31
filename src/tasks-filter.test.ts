@@ -6,10 +6,11 @@
 // pull from the same source.
 //
 // Filter tests report the DENOMINATOR (input count) alongside each
-// filtered count, so a filter that quietly reduces the input to zero
-// can't hide behind a green "expected 0, got 0" — see
-// [[feedback_checker_scope_bug_vacuous_pass]] +
-// [[feedback_report_case_scope_not_capability]].
+// filtered count. A checker that ran across zero items always passes;
+// unless the assertion carries "N items existed and K were the right
+// kind", a filter bug that reduces input to nothing looks identical
+// to a filter that correctly rejected everything. Cases must be
+// scoped explicitly, not left ambiguous.
 
 import {
   filterTasks,
@@ -60,9 +61,13 @@ const replied = filterTasks(TASKS, 'replied');
 ck(`filter=replied strict 'replied' only (1/${TOTAL})`,
    replied.length === 1 && replied.every(t => t.status === 'replied'));
 
-// Two-direction verification (per [[feedback_verify_both_directions_with_real_data]]):
+// Two-direction verification:
 // (a) the filter matches at least one row — not vacuously green on empty
 // (b) the filter *excludes* rows with other statuses — not just accepting everything
+// A tightening-class fix (filter/authz/validate) must be probed in both
+// directions: does the fix DROP what it should drop, AND does it KEEP
+// what it should keep? One-direction assertions miss both under-fixes
+// (still lets bad rows through) and over-fixes (drops legitimate rows).
 ck('filter=running excludes non-running (failed/replied/pending gone)',
    filterTasks(TASKS, 'running').every(t => t.status !== 'failed' && t.status !== 'replied' && t.status !== 'pending'));
 ck('filter=failed excludes running',
@@ -159,8 +164,10 @@ ck('POLL_DETAIL_MS in [1s, 60s] sanity range',
    POLL_DETAIL_MS >= 1000 && POLL_DETAIL_MS <= 60_000);
 
 // TASK_FILTERS must include the three the brief pinned. If someone
-// re-orders or drops one, this red catches it — same shape as a shape-
-// allowlist audit ([[feedback_allowlist_must_be_exact_value_not_shape_match]]).
+// re-orders or drops one, this red catches it — the allowlist is
+// enumerated by exact value, not by a "looks-like-a-status" shape
+// check, so an accidental removal fails here rather than silently
+// hiding the chip on the UI.
 const filterSet = new Set<TaskFilter>(TASK_FILTERS);
 ck('TASK_FILTERS contains running',  filterSet.has('running'));
 ck('TASK_FILTERS contains failed',   filterSet.has('failed'));

@@ -219,9 +219,10 @@ export default function TaskDetailScreen({
           </Section>
 
           {/* Block 5 — EVENTS FEED — 4-state render, never silently omitted.
-              🔴 See [[feedback_unknown_state_ui_must_say_what_and_where]]:
-              a blank block can't distinguish "hub 未暴露" from "本来无 events".
-              Each state gets its own banner + testID so QA can tell them apart. */}
+              🔴 A blank block can't distinguish "hub 未暴露" from "本来无 events"
+              from "connection failed" — an unknown UI state has to say what
+              it doesn't know AND where the user can look. Each state gets
+              its own banner + testID so QA can tell them apart. */}
           <Section title="事件流" testID="task-detail-block-events">
             {eventsState.kind === 'loading' ? (
               <ActivityIndicator color={colors.textMuted} testID="task-events-loading" />

@@ -256,9 +256,10 @@ export const sendTask = async (
 // #338 RFC-026 §9.2.1 — list host_supervisor daemon nodes the caller can
 // dispatch create_node to. Hub side landed in commhub-server preview.8
 // (PR #341 MCP + PR #343 audit) — earlier hubs return 501/404 and we
-// surface the "needs upgrade" state honestly per
-// [[feedback_doc_capability_claim_verify_code_path]] — never a fake
-// empty list.
+// surface the "needs upgrade" state honestly — never a fake empty list
+// (an empty daemons array on an unsupported hub is indistinguishable
+// from a supported hub that genuinely has no daemons yet; the third
+// state must be visible to callers).
 export interface HostSupervisorDaemon {
   daemon_node_id: string;
   alias: string;
@@ -309,9 +310,10 @@ export const fetchHostSupervisors = async (cfg: HubConfig): Promise<HostSupervis
     // Endpoint shape sanity: a real /api/host-supervisors response always
     // carries either `ok` or `daemons` or `count`. Absence of all three
     // means we hit a different handler (older hub catch-all returning
-    // JSON help, or a proxy front-page). Per
-    // [[feedback_doc_capability_claim_verify_code_path]] never silently
-    // fake "no daemons" — surface upgrade hint.
+    // JSON help, or a proxy front-page). Never silently fake "no
+    // daemons" from a non-conforming response — surface the upgrade
+    // hint so the caller can tell "empty for the right reason" apart
+    // from "wrong hub answered".
     if (data.ok === undefined && data.daemons === undefined && data.count === undefined) {
       return { ok: false, unconfirmed: true, error: NEEDS_UPGRADE };
     }
@@ -335,9 +337,10 @@ export const fetchHostSupervisors = async (cfg: HubConfig): Promise<HostSupervis
 //
 // Response body comes back as application/json OR text/event-stream; the
 // tool payload itself lives at envelope.result.content[0].text as a JSON
-// string. claim=reality per [[feedback_doc_capability_claim_verify_code_path]]
-// — caller polls fetchStatus afterwards to confirm the child registered;
-// we never report "succeeded" from this call alone.
+// string. A `ok:true` from the tool means "hub accepted the RPC", not
+// "the child agent is running" — so callers must poll fetchStatus
+// afterwards to confirm the child registered before reporting success
+// to the user.
 export interface CreateNodeRequest {
   daemon_node_id: string;
   network_id?: string;
