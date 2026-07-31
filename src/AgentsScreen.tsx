@@ -24,6 +24,7 @@ import { colors, spacing, statusColor } from './theme';
 import { usePoll } from './usePoll';
 import { styles } from './app-styles';
 import { buildSections, countShown } from './agents-list';
+import { pinyinMatch } from './lib/pinyin';
 
 export default function AgentsScreen({
   cfg,
@@ -93,7 +94,10 @@ export default function AgentsScreen({
   // NOTE: 这个 useMemo 必须留在下面的 early return 之上 —— hook 出现在条件
   // 返回之后会改变 hook 顺序并崩溃(v0.1.28 launch-crash,Vincent tg 1098)。
   const q = query.trim();
-  const sections = useMemo(() => buildSections(sessions, query), [sessions, query]);
+  const sections = useMemo(
+    () => buildSections(sessions, query, { match: pinyinMatch }),
+    [sessions, query],
+  );
   const shownCount = countShown(sections);
 
   if (loading) {
@@ -157,6 +161,26 @@ export default function AgentsScreen({
           }}
           tintColor={colors.accent}
         />
+      }
+      ListEmptyComponent={
+        // 搜不到时必须说出"为什么空",否则用户分不清「搜挂了」和「真没有」
+        // ——空白屏是这两种情况唯一相同的表现。加载中/加载失败在上面的
+        // early return 里已经各自有屏,走到这里必然是"数据到了但没有匹配"。
+        <View style={styles.center}>
+          <Text style={styles.errorTitle}>
+            {q ? `没有匹配「${q}」的 agent` : '还没有 agent'}
+          </Text>
+          <Text style={styles.errorHint}>
+            {q
+              ? `已在 ${sessions.length} 个 agent 里搜过(支持拼音,如 zf → 支付助手)`
+              : '用右上角 + 新建一个'}
+          </Text>
+          {q ? (
+            <Pressable style={styles.retryBtn} onPress={() => setQuery('')}>
+              <Text style={styles.retryBtnText}>清空搜索</Text>
+            </Pressable>
+          ) : null}
+        </View>
       }
       ListHeaderComponent={
         <View>
