@@ -60,8 +60,10 @@ export function pushLogBatch(
 
 // Connection state — three explicit kinds. UI renders three different
 // banners so "no events yet" (connected + zero rows) and "not
-// connected" (transport down) can't be confused. See
-// [[feedback_unknown_state_ui_must_say_what_and_where]].
+// connected" (transport down) can't be confused. A blank empty state
+// that folds both cases looks fine at a glance but leaves the user
+// unable to tell "network is quiet" from "socket is dead" — and the
+// second case needs a retry action the first doesn't.
 export type ConnState = 'connecting' | 'connected' | 'disconnected';
 
 // Type → visual bucket. Colors chosen from the theme (accent / running
@@ -70,7 +72,10 @@ export type ConnState = 'connecting' | 'connected' | 'disconnected';
 // 🔴 Any unrecognized type falls into 'unknown' — NOT into a default
 // bucket. The screen renders the raw type string next to a neutral
 // gray chip so a hub-side new type is visible instead of silently
-// remapped ([[feedback_allowlist_must_be_exact_value_not_shape_match]]).
+// remapped. The accept-set here must equal the specification's allowed
+// value set exactly — no shape matching, no "any string looks fine"
+// fallthrough — or a new type introduced on the hub side would be
+// invisibly absorbed into whichever bucket the default lands in.
 export type TypeBucket =
   | 'task'         // new_task, task_status_transition
   | 'broadcast'
