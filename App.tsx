@@ -24,6 +24,7 @@ import AgentsScreen from './src/AgentsScreen';
 import TasksScreen from './src/TasksScreen';
 import TaskDetailScreen from './src/TaskDetailScreen';
 import NodeDetailScreen from './src/NodeDetailScreen';
+import LogsScreen from './src/LogsScreen';
 import type { HostSupervisorDaemon } from './src/api';
 import { clearConfig, loadConfig, loadThemeMode, saveConfig } from './src/storage';
 import { colors, onThemeChange, setThemeMode, themeMode } from './src/theme';
@@ -40,6 +41,7 @@ type Screen =
   | { name: 'chat'; alias: string }
   | { name: 'taskDetail'; taskId: string }   // full-screen (no tab bar) — hardware back returns to /tasks list
   | { name: 'nodeDetail'; alias: string }  // issue #8 row 4 (V1) — long-press an agent row from AgentsScreen; back returns to agents
+  | { name: 'logs' }                        // row 6 — network event stream leaf reached from Server tab; back returns to server
   | { name: 'picker' }       // #338 RFC-026 §9.4 host_supervisor picker (modal-style, back returns to agents)
   | { name: 'wizard'; daemon: HostSupervisorDaemon };  // #338 wizard rest (Plan B) — created after picker selects a daemon
 
@@ -134,6 +136,12 @@ function AppRoot() {
         setScreen({ name: 'tasks' });
         return true;
       }
+      // logs is a full-screen leaf under the Server tab — hardware back
+      // returns to Server, not skipping past to Agents.
+      if (screen.name === 'logs') {
+        setScreen({ name: 'server' });
+        return true;
+      }
       if (screen.name !== 'agents' && screen.name !== 'login') {
         setScreen({ name: 'agents' });
         return true;
@@ -210,6 +218,14 @@ function AppRoot() {
           taskId={screen.taskId}
           onBack={() => setScreen({ name: 'tasks' })}
         />
+      ) : screen.name === 'logs' ? (
+        // Row 6 — network event stream (SSE). Full-screen leaf reached
+        // from the Server tab's "查看事件流" button. Same routing shape
+        // as taskDetail. Back returns to Server.
+        <LogsScreen
+          cfg={cfg}
+          onBack={() => setScreen({ name: 'server' })}
+        />
       ) : (
         <>
           <View style={{ flex: 1 }}>
@@ -221,7 +237,10 @@ function AppRoot() {
             ) : screen.name === 'messages' ? (
               <MessagesScreen cfg={cfg} />
             ) : screen.name === 'server' ? (
-              <ServerScreen cfg={cfg} />
+              <ServerScreen
+                cfg={cfg}
+                onOpenLogs={() => setScreen({ name: 'logs' })}
+              />
             ) : screen.name === 'settings' ? (
               <SettingsScreen
                 cfg={cfg}

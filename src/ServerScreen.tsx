@@ -1,5 +1,6 @@
 import { useCallback, useState } from 'react';
-import { ActivityIndicator, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { fetchServerVersion, fetchStatus, HubConfig, Session } from './api';
 import { colors, onThemeChange, spacing } from './theme';
 import { usePoll } from './usePoll';
@@ -8,7 +9,15 @@ import { usePoll } from './usePoll';
 // is it reachable, what version, how many agents are live right now. Sits
 // left of 设置 in the bottom bar.
 
-export default function ServerScreen({ cfg }: { cfg: HubConfig }) {
+export default function ServerScreen({
+  cfg,
+  onOpenLogs,
+}: {
+  cfg: HubConfig;
+  // Row 6 leaf — passed in from App.tsx so this file stays free of
+  // navigation state.
+  onOpenLogs?: () => void;
+}) {
   const [sessions, setSessions] = useState<Session[]>([]);
   const [version, setVersion] = useState<string | undefined>();
   const [reachable, setReachable] = useState<boolean | null>(null);
@@ -81,6 +90,29 @@ export default function ServerScreen({ cfg }: { cfg: HubConfig }) {
         <Divider />
         <Row label="网络" value={cfg.networkId ?? '—'} />
       </View>
+
+      {/* Row 6 — jump into the network event stream leaf. Kept as its own
+          Pressable row (not inside the info card above) so a tap here
+          reads unambiguously as navigation, not "edit a field". */}
+      {onOpenLogs ? (
+        <>
+          <Text style={styles.sectionTitle}>诊断</Text>
+          <Pressable
+            onPress={onOpenLogs}
+            testID="server-open-logs"
+            style={({ pressed }) => [styles.card, styles.linkRow, pressed && { opacity: 0.6 }]}
+          >
+            <Ionicons name="pulse-outline" size={18} color={colors.accent} />
+            <View style={{ flex: 1 }}>
+              <Text style={styles.linkRowTitle}>查看事件流</Text>
+              <Text style={styles.linkRowSub}>
+                网络任务流转（不含消息内容）
+              </Text>
+            </View>
+            <Ionicons name="chevron-forward" size={18} color={colors.textMuted} />
+          </Pressable>
+        </>
+      ) : null}
     </ScrollView>
   );
 }
@@ -141,6 +173,15 @@ const makeStyles = () =>
     rowLabel: { color: colors.textSecondary, fontSize: 14 },
     rowValue: { color: colors.text, fontSize: 14, flexShrink: 1 },
     divider: { height: 1, backgroundColor: colors.border, marginLeft: spacing.lg },
+    linkRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: spacing.md,
+      paddingHorizontal: spacing.lg,
+      paddingVertical: spacing.md,
+    },
+    linkRowTitle: { color: colors.text, fontSize: 14, fontWeight: '600' },
+    linkRowSub: { color: colors.textMuted, fontSize: 11, marginTop: 2 },
   });
 
 let styles = makeStyles();
