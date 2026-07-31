@@ -102,6 +102,20 @@ export class AttachmentDownloadError extends Error {
   }
 }
 
+/** Per-entry validation marker (issue #10 CR1). A cache hit on `dest`
+ *  requires this sibling file to exist AND to hold the current
+ *  `ATTACHMENT_CACHE_SCHEMA` — proof the file was written by *this*
+ *  implementation (which validated the bytes) rather than left over by
+ *  a version that wrote the response body regardless of status.
+ *
+ *  Why per-entry and not just the startup purge:
+ *  `purgeLegacyAttachmentCacheWith` is fire-and-forget from App.tsx and
+ *  a downloadAttachmentWith call can race it, or reach the module by a
+ *  path that never mounts App. The marker makes cache trust self-proving
+ *  on every hit rather than a lifecycle assumption. Startup purge stays
+ *  as belt-and-braces (see #10 CR1). */
+const entryMarkerPath = (dest: string) => `${dest}.v`;
+
 export const downloadAttachmentWith = async (
   fs: DownloadFs,
   cacheDir: string,
@@ -113,27 +127,49 @@ export const downloadAttachmentWith = async (
 ): Promise<string> => {
   const dest = cachePathIn(cacheDir, fileId, name, mime);
   const info = await fs.getInfoAsync(dest);
-  // Cache hit only when the file exists AND is non-empty.
+  // Cache hit requires BOTH the bytes AND a per-entry marker proving those
+  // bytes were validated by this implementation. An empty/missing marker
+  // means the file was left by an old version (or by a purge that hasn't
+  // finished) — in either case, treat the entry as absent and re-download.
   //
-  // ⚠ This invariant holds ONLY for files written by THIS implementation:
-  // a failed download never reaches `dest` (see below), so anything found
-  // here was validated on the way in. It does NOT hold for files left by
-  // versions before this fix — those could be a non-empty error body sitting
-  // under the real filename, and this check cannot tell them apart. Devices
-  // carrying such a file do not self-heal; `purgeLegacyAttachmentCacheWith`
-  // below is the one-time cleanup that clears them.
-  if (info.exists && (info.size ?? 0) > 0) return dest;
+  // Failure-direction discipline: every uncertain branch below tips toward
+  // "download one extra time", never toward "trust unvalidated bytes":
+  //   - marker file missing → re-download
+  //   - marker file present but unreadable (catch → empty string) → re-download
+  //   - marker content ≠ current schema → re-download
+  // Cache code fails almost exclusively by *wrongly trusting* the cache;
+  // one extra network round-trip is a cheap cost, an unopenable file is not.
+  if (info.exists && (info.size ?? 0) > 0) {
+    const marker = await fs.getInfoAsync(entryMarkerPath(dest));
+    if (marker.exists) {
+      let markerContent = '';
+      try { markerContent = await fs.readAsStringAsync(entryMarkerPath(dest)); } catch { /* unreadable → treat as "not validated" per note above */ }
+      if (markerContent.trim() === String(ATTACHMENT_CACHE_SCHEMA)) return dest;
+    }
+    // Marker missing or mismatch — stale/pre-validation cache. Fall through
+    // to a fresh download; moveAsync below will overwrite `dest`.
+  }
 
   // Download to a sibling temp path. `dest` stays untouched until the bytes
   // have been checked, so a failure can never poison the cache.
   const part = `${dest}.part`;
   await fs.deleteAsync(part, { idempotent: true }).catch(() => {});
 
-  const r = await fs.downloadAsync(`${serverUrl}/api/files/${fileId}`, part, {
-    headers: { Authorization: `Bearer ${token}` },
-  });
-
   const cleanup = async () => { await fs.deleteAsync(part, { idempotent: true }).catch(() => {}); };
+
+  let r: { status: number; headers?: Record<string, string> };
+  try {
+    r = await fs.downloadAsync(`${serverUrl}/api/files/${fileId}`, part, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+  } catch (e) {
+    // #10 CR2: downloadAsync itself can throw (native abort, offline, DNS,
+    // TLS). The native module may have already opened and partly written
+    // `part` before failing — clean it up before rethrowing so the next
+    // attempt doesn't confuse itself with half-written bytes.
+    await cleanup();
+    throw e;
+  }
 
   if (r.status < 200 || r.status > 299) {
     // The body sitting in `part` right now is the server's error payload —
@@ -166,7 +202,29 @@ export const downloadAttachmentWith = async (
   }
 
   // Atomic-enough landing: `dest` appears only once the bytes are validated.
-  await fs.moveAsync({ from: part, to: dest });
+  // #10 CR2: moveAsync can throw (destination locked, cross-device rename,
+  // permission). If it does, `part` is still on disk holding validated
+  // bytes — but leaving it there defeats the point of the "one attempt
+  // one file" invariant. Clean it up in `finally`.
+  try {
+    await fs.moveAsync({ from: part, to: dest });
+  } finally {
+    await cleanup();
+  }
+  // #10 CR1: write the per-entry marker AFTER the bytes have landed at
+  // `dest`. Order matters — reversing (marker-first, then move) would
+  // create a window where the marker claims "validated" but the bytes
+  // are not yet in place, and the next call would serve a nonexistent
+  // (or half-written) file. That failure is unrecoverable.
+  //
+  // Current order costs at most one extra download if the process dies
+  // between moveAsync and writeAsStringAsync — the file is fine but
+  // unmarked → next call re-downloads (matches the "uncertain branch
+  // → one extra download, never trust unvalidated bytes" rule above).
+  // If a future reader is tempted to reorder these to "optimise away
+  // that one extra download", they need to accept the reverse failure
+  // mode instead — a broken cache entry served as valid. Don't.
+  await fs.writeAsStringAsync(entryMarkerPath(dest), String(ATTACHMENT_CACHE_SCHEMA));
   return dest;
 };
 
