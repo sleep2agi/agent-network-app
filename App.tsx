@@ -23,6 +23,7 @@ import SettingsScreen from './src/SettingsScreen';
 import AgentsScreen from './src/AgentsScreen';
 import TasksScreen from './src/TasksScreen';
 import TaskDetailScreen from './src/TaskDetailScreen';
+import NodeDetailScreen from './src/NodeDetailScreen';
 import type { HostSupervisorDaemon } from './src/api';
 import { clearConfig, loadConfig, loadThemeMode, saveConfig } from './src/storage';
 import { colors, onThemeChange, setThemeMode, themeMode } from './src/theme';
@@ -38,6 +39,7 @@ type Screen =
   | { name: 'settings' }
   | { name: 'chat'; alias: string }
   | { name: 'taskDetail'; taskId: string }   // full-screen (no tab bar) — hardware back returns to /tasks list
+  | { name: 'nodeDetail'; alias: string }  // issue #8 row 4 (V1) — long-press an agent row from AgentsScreen; back returns to agents
   | { name: 'picker' }       // #338 RFC-026 §9.4 host_supervisor picker (modal-style, back returns to agents)
   | { name: 'wizard'; daemon: HostSupervisorDaemon };  // #338 wizard rest (Plan B) — created after picker selects a daemon
 
@@ -169,6 +171,15 @@ function AppRoot() {
           alias={screen.alias}
           onBack={() => setScreen({ name: 'agents' })}
         />
+      ) : screen.name === 'nodeDetail' ? (
+        // issue #8 row 4 (V1) — long-press an agent row in AgentsScreen
+        // opens this. Back returns to agents. Rendered as its own screen
+        // (not a tab) so the tab bar doesn't compete for the header slot.
+        <NodeDetailScreen
+          cfg={cfg}
+          alias={screen.alias}
+          onBack={() => setScreen({ name: 'agents' })}
+        />
       ) : screen.name === 'picker' ? (
         // #338 RFC-026 §9.4 — modal-style screen, hides tab bar to keep
         // the wizard flow focused. System back / on-screen back returns
@@ -225,6 +236,7 @@ function AppRoot() {
                 cfg={cfg}
                 onOpenChat={alias => setScreen({ name: 'chat', alias })}
                 onOpenPicker={() => setScreen({ name: 'picker' })}
+                onOpenNodeDetail={alias => setScreen({ name: 'nodeDetail', alias })}
               />
             )}
           </View>
