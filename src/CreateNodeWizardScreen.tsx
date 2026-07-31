@@ -24,14 +24,17 @@ import { colors, onThemeChange, spacing } from './theme';
 // #338 RFC-026 §3.1 — mobile create-node wizard rest (Plan B).
 // 5 post-picker steps: ① name ② runtime ③ model ④ flags ⑤ confirm.
 // On submit POST /mcp create_node, then poll fetchStatus until the
-// child alias shows up in the session list. claim=reality discipline
-// (per [[feedback_doc_capability_claim_verify_code_path]]) — we don't
-// flip to "✓ 已上线" until the child actually registered.
+// child alias shows up in the session list. A `ok:true` from the RPC
+// means "hub accepted the call", not "the child is running" — we
+// don't flip to "✓ 已上线" until fetchStatus confirms the alias
+// actually registered.
 //
 // React rules of hooks compliance: ALL useState/useEffect/useRef
 // declared BEFORE any conditional early return — guards against the
-// v0.1.29 launch-crash class (Vincent tg 1098, [[feedback_anet_node_behavior_stale_install]]
-// related discipline).
+// v0.1.29 launch-crash class (Vincent tg 1098). Conditionally
+// declaring hooks after an early-return branches the hook order and
+// crashes the JS engine when React tries to match hook indices
+// across renders.
 //
 // Runtime step filters by daemon.runtimes_supported when published;
 // permissive fallback when absent. Mirrors PR4-A dashboard behavior.
@@ -143,8 +146,10 @@ export default function CreateNodeWizardScreen({ cfg, daemon, onBack, onExit }: 
 
   // Derived: runtime details + nav gates
   const runtime = RUNTIMES.find(r => r.id === runtimeId) || RUNTIMES[0];
-  // Mirror hub regex per [[feedback_doc_capability_claim_verify_code_path]]
-  // — UX surfaces what the hub will accept, not a looser local rule.
+  // Mirror hub regex — the UX must surface exactly what the hub will
+  // accept, not a looser local rule. A looser client-side check would
+  // let the user submit names that the server then rejects, turning
+  // "validation" into a delayed failure the user has to guess at.
   const nameValid = NAME_RE.test(name.trim());
   const isRuntimeAllowed = useCallback((id: string) => {
     const supported = daemon.runtimes_supported;

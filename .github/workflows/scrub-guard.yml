@@ -1,0 +1,55 @@
+name: scrub-guard
+
+# Fails if any [[slug]] reference (internal memory system notation)
+# leaks into public repo code. Runs on every push + PR against every
+# branch — this repo is public and outside readers see comments in
+# the same source tree.
+#
+# The guard reports its denominator (files scanned + hits) so an empty
+# scan can't silently pass; a scope typo that matches nothing would
+# otherwise look like "0 hits, all green".
+#
+# Scope is INTENTIONALLY narrow: code files under src/ + App.tsx. It
+# does NOT scan docs/ (internal notes may reference slugs), plans, or
+# generated artefacts (node_modules, ios, android, dist, .next).
+
+on:
+  push:
+    branches: ['**']
+  pull_request:
+    branches: ['**']
+
+jobs:
+  scrub:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Scan for internal [[slug]] refs in code
+        run: |
+          set -euo pipefail
+          # Files to scan: TypeScript/JS/TSX under src/, plus the top-level
+          # App.tsx. Explicit list so a rename doesn't silently widen or
+          # shrink the scope. `find` before `grep` so we can count the
+          # denominator honestly.
+          FILES=$(find src -type f \( -name '*.ts' -o -name '*.tsx' -o -name '*.js' -o -name '*.jsx' \) 2>/dev/null; ls App.tsx 2>/dev/null || true)
+          if [ -z "$FILES" ]; then
+            echo "::error::scrub-guard scanned ZERO files — scope regression, refusing to pass"
+            exit 2
+          fi
+          COUNT=$(echo "$FILES" | wc -l)
+          echo "scanned $COUNT source file(s) under src/ + App.tsx"
+
+          # Hit list. Fixed-string grep to avoid regex escaping surprises.
+          HITS=$(echo "$FILES" | xargs grep -nF '[[' 2>/dev/null || true)
+          if [ -z "$HITS" ]; then
+            echo "✓ no [[slug]] refs in $COUNT scanned files"
+            exit 0
+          fi
+
+          echo "::group::[[ references found — internal memory slugs must not appear in public-repo code"
+          echo "$HITS"
+          echo "::endgroup::"
+          HITCOUNT=$(echo "$HITS" | wc -l)
+          echo "::error::found $HITCOUNT [[ reference(s) across $COUNT scanned files. Replace each with the rationale in prose (see PR #19 for pattern)."
+          exit 1
