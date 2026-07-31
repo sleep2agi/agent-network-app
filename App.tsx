@@ -21,6 +21,8 @@ import HostSupervisorPickerScreen from './src/HostSupervisorPickerScreen';
 import CreateNodeWizardScreen from './src/CreateNodeWizardScreen';
 import SettingsScreen from './src/SettingsScreen';
 import AgentsScreen from './src/AgentsScreen';
+import TasksScreen from './src/TasksScreen';
+import TaskDetailScreen from './src/TaskDetailScreen';
 import type { HostSupervisorDaemon } from './src/api';
 import { clearConfig, loadConfig, loadThemeMode, saveConfig } from './src/storage';
 import { colors, onThemeChange, setThemeMode, themeMode } from './src/theme';
@@ -30,10 +32,12 @@ import { APP_VERSION } from './src/version';
 type Screen =
   | { name: 'login' }
   | { name: 'agents' }
+  | { name: 'tasks' }
   | { name: 'messages' }
   | { name: 'server' }
   | { name: 'settings' }
   | { name: 'chat'; alias: string }
+  | { name: 'taskDetail'; taskId: string }   // full-screen (no tab bar) — hardware back returns to /tasks list
   | { name: 'picker' }       // #338 RFC-026 §9.4 host_supervisor picker (modal-style, back returns to agents)
   | { name: 'wizard'; daemon: HostSupervisorDaemon };  // #338 wizard rest (Plan B) — created after picker selects a daemon
 
@@ -41,6 +45,7 @@ type Screen =
 // Server tab sits left of 设置 (Vincent tg 847).
 const TABS = [
   { key: 'agents', label: 'Agents', icon: 'people-outline', iconActive: 'people' },
+  { key: 'tasks', label: 'Tasks', icon: 'list-outline', iconActive: 'list' },
   { key: 'messages', label: 'Messages', icon: 'chatbubble-ellipses-outline', iconActive: 'chatbubble-ellipses' },
   { key: 'server', label: 'Server', icon: 'server-outline', iconActive: 'server' },
   { key: 'settings', label: '设置', icon: 'settings-outline', iconActive: 'settings' },
@@ -120,6 +125,13 @@ function AppRoot() {
   // the default exit behavior.
   useEffect(() => {
     const sub = BackHandler.addEventListener('hardwareBackPress', () => {
+      // taskDetail is a full-screen leaf under the tasks tab — hardware
+      // back should return to the tasks list, not skip past it back to
+      // agents (that would lose the user's place in the task list).
+      if (screen.name === 'taskDetail') {
+        setScreen({ name: 'tasks' });
+        return true;
+      }
       if (screen.name !== 'agents' && screen.name !== 'login') {
         setScreen({ name: 'agents' });
         return true;
@@ -178,10 +190,24 @@ function AppRoot() {
           onBack={() => setScreen({ name: 'picker' })}
           onExit={() => setScreen({ name: 'agents' })}
         />
+      ) : screen.name === 'taskDetail' ? (
+        // Task detail — full-screen (no tab bar), matches the mobile
+        // two-level pattern: list → detail → back. Hardware back and
+        // the on-screen chevron both return to the tasks tab.
+        <TaskDetailScreen
+          cfg={cfg}
+          taskId={screen.taskId}
+          onBack={() => setScreen({ name: 'tasks' })}
+        />
       ) : (
         <>
           <View style={{ flex: 1 }}>
-            {screen.name === 'messages' ? (
+            {screen.name === 'tasks' ? (
+              <TasksScreen
+                cfg={cfg}
+                onOpenTask={taskId => setScreen({ name: 'taskDetail', taskId })}
+              />
+            ) : screen.name === 'messages' ? (
               <MessagesScreen cfg={cfg} />
             ) : screen.name === 'server' ? (
               <ServerScreen cfg={cfg} />
