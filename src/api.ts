@@ -20,7 +20,13 @@ export interface HubTask {
   result?: string;
   reply?: string;
   status?: string;
+  priority?: string;
   created_at?: string;
+  updated_at?: string;
+  delivered_at?: string;
+  started_at?: string;
+  completed_at?: string;
+  expires_at?: string;
 }
 
 export interface HubConfig {
@@ -96,6 +102,87 @@ export const fetchTasks = (
   if (params.from_name) q.set('from_name', params.from_name);
   q.set('limit', String(params.limit ?? 20));
   return get<{ tasks: HubTask[] }>(cfg, `/api/tasks?${q}`);
+};
+
+// Detail fetch by task_id — hub supports `?task_id=<id>` as a filter on
+// the /api/tasks endpoint (verified against dashboard's proxy at
+// app/api/hub/tasks/route.ts, which accepts task_id and forwards it).
+// Returns the single task or null; distinct from "network error" (which
+// throws) so callers can render "not found" vs "temporary failure".
+export const fetchTaskDetail = async (
+  cfg: HubConfig,
+  taskId: string,
+): Promise<HubTask | null> => {
+  const q = new URLSearchParams({ task_id: taskId, limit: '1' });
+  const data = await get<{ tasks: HubTask[] }>(cfg, `/api/tasks?${q}`);
+  return data.tasks?.[0] ?? null;
+};
+
+// Task events feed — status transitions logged by the hub.
+//
+// 🔴 Path naming warning: on the hub itself this endpoint is
+// `/api/task_events` (UNDERSCORE). The dashboard's proxy at
+// `/api/hub/task-events` (HYPHEN) is a naming choice of the dashboard,
+// NOT the hub. Copy-pasting the dashboard path to hit hub directly will
+// 404. Since the third-state banner below fires on 404, a mis-typed
+// path here would silently produce "hub 未暴露 task_events" for
+// everyone — the runtime evidence and the real cause would look the
+// same. Keep the underscore.
+export interface HubTaskEvent {
+  id?: number;
+  event_type?: string;
+  from_status?: string;
+  to_status?: string;
+  detail?: string;
+  created_at?: string;
+}
+export type FetchTaskEventsResult =
+  | { ok: true; events: HubTaskEvent[]; count: number }
+  | { ok: false; unconfirmed: true; error: string }   // 404 / 501 / non-JSON → hub 未暴露 or 需升级
+  | { ok: false; unconfirmed: false; error: string }; // 网络 / 其它错误
+
+const TASK_EVENTS_NEEDS_UPGRADE =
+  '当前 hub 未暴露 /api/task_events，events feed 不可用（需 hub 升级或缺少该 endpoint）';
+
+export const fetchTaskEvents = async (
+  cfg: HubConfig,
+  taskId: string,
+  limit = 50,
+): Promise<FetchTaskEventsResult> => {
+  try {
+    const q = new URLSearchParams({ task_id: taskId, limit: String(limit) });
+    if (cfg.networkId) q.set('network_id', cfg.networkId);
+    const res = await withTimeout(signal =>
+      // NB: hub path uses underscore — see comment above.
+      fetch(`${cfg.serverUrl}/api/task_events?${q}`, { headers: headers(cfg), signal }),
+    );
+    if (res.status === 404 || res.status === 501) {
+      return { ok: false, unconfirmed: true, error: TASK_EVENTS_NEEDS_UPGRADE };
+    }
+    if (!res.ok) {
+      return { ok: false, unconfirmed: false, error: `HTTP ${res.status}` };
+    }
+    // Pre-support hubs may serve a non-JSON help banner on unknown paths
+    // (same pattern as fetchHostSupervisors). Guard the content-type so
+    // "wrong hub version" doesn't slide into an "empty events" green.
+    const ct = res.headers.get('content-type') || '';
+    if (!ct.includes('application/json')) {
+      return { ok: false, unconfirmed: true, error: TASK_EVENTS_NEEDS_UPGRADE };
+    }
+    const data = (await res.json().catch(() => null)) as
+      { ok?: boolean; events?: HubTaskEvent[]; count?: number; error?: string } | null;
+    if (!data || (data.ok === undefined && data.events === undefined)) {
+      return { ok: false, unconfirmed: true, error: TASK_EVENTS_NEEDS_UPGRADE };
+    }
+    if (data.ok === false) {
+      return { ok: false, unconfirmed: false, error: data.error || 'hub returned ok:false' };
+    }
+    const events = Array.isArray(data.events) ? data.events : [];
+    const count = typeof data.count === 'number' ? data.count : events.length;
+    return { ok: true, events, count };
+  } catch (e: unknown) {
+    return { ok: false, unconfirmed: false, error: e instanceof Error ? e.message : String(e) };
+  }
 };
 
 export interface HubMessage {
