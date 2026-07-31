@@ -1,0 +1,227 @@
+// 节点列表页 —— 从 App.tsx 抽出(纯搬移;分组/排序/过滤逻辑另见 agents-list.ts)。
+//
+// 抽出的动机:App.tsx 已 673 行且是多人同时要改的文件(Tasks tab 等),
+// 把这 220 行独立出来后,列表页的改动不再和导航结构互相踩。
+// 🔴 样式必须从 ./app-styles 引入,不能在本文件复制一份 —— 那是 let 变量,
+// 主题切换时整体重新赋值,复制的那份不会跟着变(见 app-styles.ts 头注释)。
+
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import {
+  ActivityIndicator,
+  Pressable,
+  RefreshControl,
+  SectionList,
+  Text,
+  TextInput,
+  View,
+} from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
+import AliasAvatar from './AliasAvatar';
+import { isAgentOnline } from './chat-actions';
+import { fetchStatus, takeStatusPrefetch, type HubConfig, type Session } from './api';
+import { loadSessionsCache, saveSessionsCache } from './storage';
+import { colors, spacing, statusColor } from './theme';
+import { usePoll } from './usePoll';
+import { styles } from './app-styles';
+import { buildSections, countShown } from './agents-list';
+
+export default function AgentsScreen({
+  cfg,
+  onOpenChat,
+  onOpenPicker,
+}: {
+  cfg: HubConfig;
+  onOpenChat: (alias: string) => void;
+  /** #338 — top-right `+` opens the host_supervisor picker modal. */
+  onOpenPicker: () => void;
+}) {
+  const [sessions, setSessions] = useState<Session[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [failed, setFailed] = useState(false);
+  const [query, setQuery] = useState('');
+
+  const load = useCallback(async () => {
+    try {
+      // First load consumes the boot prefetch if it's still in-flight/fresh;
+      // polls and later loads fall through to a normal fetch.
+      const data = await (takeStatusPrefetch(cfg) ?? fetchStatus(cfg));
+      const next = data.sessions ?? [];
+      setSessions(next);
+      setFailed(false);
+      // Persist for the next cold start's stale-while-revalidate paint.
+      saveSessionsCache(next);
+    } catch {
+      /* keep last good list; with nothing loaded yet, surface the failure */
+      setFailed(true);
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  }, [cfg]);
+
+  // Perf (load time): paint the last-known agents from the disk cache
+  // immediately so cold start shows content instead of a blank spinner; the
+  // live fetch below refreshes within the same tick. Only fills in if the
+  // fetch hasn't already populated the list (prev.length guard), so fresh
+  // data always wins the race.
+  useEffect(() => {
+    let live = true;
+    loadSessionsCache().then(cached => {
+      if (live && cached && cached.length) {
+        setSessions(prev => (prev.length ? prev : cached));
+        setLoading(false);
+      }
+    });
+    return () => { live = false; };
+  }, []);
+
+  // Foreground-only polling: 10s while visible, paused in background, instant
+  // refresh on resume (shared hook — see usePoll).
+  usePoll(load, 10000, [load]);
+
+  // 153 agents on the real hub made the flat list unusable. Vincent (tg
+  // 1094): group by team so agents are findable, and stop showing offline
+  // ones up front. We bucket by team prefix (derived from the alias), order
+  // rows inside each team working → idle-online → offline, and sink teams
+  // that have no online member to the bottom — so offline never floats up.
+  // NOTE: this useMemo MUST stay above the early returns below — a hook after
+  // a conditional return changes hook order between renders and crashes (the
+  // v0.1.28 launch-crash regression, Vincent tg 1098).
+  // 分组/过滤/排序全部下沉到 agents-list.ts(纯逻辑,有 21 条断言钉住;
+  // 组内排序的三级与 web 的数据源差异见那边的注释)。
+  // NOTE: 这个 useMemo 必须留在下面的 early return 之上 —— hook 出现在条件
+  // 返回之后会改变 hook 顺序并崩溃(v0.1.28 launch-crash,Vincent tg 1098)。
+  const q = query.trim();
+  const sections = useMemo(() => buildSections(sessions, query), [sessions, query]);
+  const shownCount = countShown(sections);
+
+  if (loading) {
+    return (
+      <View style={styles.center}>
+        <ActivityIndicator color={colors.accent} />
+      </View>
+    );
+  }
+
+  // First load failed with nothing cached: a spinner forever is a dead end
+  // (Vincent tg 841) — say so and give a retry button.
+  if (failed && sessions.length === 0) {
+    return (
+      <View style={styles.center}>
+        <Text style={styles.errorTitle}>连接失败</Text>
+        <Text style={styles.errorHint}>网络不稳定或服务器未响应，请重试</Text>
+        <Pressable
+          style={({ pressed }) => [styles.retryBtn, pressed && { opacity: 0.7 }]}
+          onPress={() => {
+            setLoading(true);
+            load();
+          }}
+        >
+          <Text style={styles.retryBtnText}>重试</Text>
+        </Pressable>
+      </View>
+    );
+  }
+
+  return (
+    <SectionList
+      sections={sections}
+      keyExtractor={s => s.alias}
+      stickySectionHeadersEnabled={false}
+      renderSectionHeader={({ section }) => (
+        <View style={styles.sectionHeaderRow}>
+          <Text style={styles.sectionHeader}>{section.title}</Text>
+          <Text style={styles.sectionCount}>
+            {section.online}/{section.total} 在线
+          </Text>
+        </View>
+      )}
+      // Perf (render time): the real fleet is 150+ agents. Without these the
+      // default virtualization renders/retains far more rows than fit on
+      // screen, spiking first-paint cost and scroll jank. Cap the initial
+      // batch to ~one screenful and shrink the retained window. (Deliberately
+      // NOT using removeClippedSubviews — it can blank rows / break taps on
+      // some RN versions, and correctness beats the marginal extra saving.)
+      initialNumToRender={12}
+      maxToRenderPerBatch={12}
+      windowSize={9}
+      updateCellsBatchingPeriod={50}
+      contentContainerStyle={{ padding: spacing.lg }}
+      refreshControl={
+        <RefreshControl
+          refreshing={refreshing}
+          onRefresh={() => {
+            setRefreshing(true);
+            load();
+          }}
+          tintColor={colors.accent}
+        />
+      }
+      ListHeaderComponent={
+        <View>
+          <View style={styles.listHeaderRow}>
+            <Text style={styles.listHeader}>
+              {q ? `${shownCount} / ${sessions.length} agents` : `${sessions.length} agents`}
+            </Text>
+            {/* #338 — `+` opens host_supervisor picker. Top-right (Vincent lock). */}
+            <Pressable
+              onPress={onOpenPicker}
+              hitSlop={10}
+              accessibilityLabel="新建节点"
+              style={({ pressed }) => [styles.addBtn, pressed && { opacity: 0.6 }]}
+            >
+              <Ionicons name="add" size={24} color={colors.accent} />
+            </Pressable>
+          </View>
+          {sessions.length > 10 ? (
+            <TextInput
+              style={styles.search}
+              placeholder="搜索 agent…"
+              placeholderTextColor={colors.textMuted}
+              autoCapitalize="none"
+              autoCorrect={false}
+              value={query}
+              onChangeText={setQuery}
+            />
+          ) : null}
+        </View>
+      }
+      renderItem={({ item }) => (
+        <Pressable
+          style={({ pressed }) => [
+            styles.card,
+            item.status === 'offline' && styles.cardOffline,
+            pressed && { opacity: 0.7 },
+          ]}
+          onPress={() => onOpenChat(item.alias)}
+        >
+          <View style={styles.avatarWrap}>
+            <AliasAvatar alias={item.alias} size={34} />
+            {/* 更像微信·round-5: 头像右下在线态圆点(带描边环·offline 灰暗) */}
+            <View
+              style={[
+                styles.statusDot,
+                { backgroundColor: statusColor(item.status ?? '', true) },
+                !isAgentOnline(item.status) && styles.statusDotOffline,
+              ]}
+            />
+          </View>
+          <View style={{ flex: 1, minWidth: 0 }}>
+            <Text style={styles.alias} numberOfLines={1}>
+              {item.alias}
+            </Text>
+            {item.task ? (
+              <Text style={styles.task} numberOfLines={1}>
+                {item.task}
+              </Text>
+            ) : null}
+          </View>
+          <Text style={[styles.status, { color: statusColor(item.status ?? '', true) }]}>
+            {item.status}
+          </Text>
+        </Pressable>
+      )}
+    />
+  );
+}
