@@ -90,6 +90,39 @@ export const fetchHubNodes = (cfg: HubConfig): Promise<{ nodes: HubNode[] }> => 
   return get<{ nodes: HubNode[] }>(cfg, `/api/nodes${q}`);
 };
 
+export type PutAvatarResult =
+  | { ok: true; avatar_url: string | null }
+  | { ok: false; error: string; reason?: string; status?: number };
+
+/** PUT /api/nodes/:ref/avatar — set (or clear with null) a node's cross-device
+ *  `avatar_url`. ref = alias (the hub resolves node_id/node_name/alias). The hub
+ *  validates the URL shape (#550: absolute http(s) or /avatars/<name>.(webp|png|svg))
+ *  — on reject it returns 400 {ok:false, reason}. Session-only aliases (no nodes
+ *  row) return 404; callers should disable the control BEFORE the user tries. */
+export const putNodeAvatar = async (
+  cfg: HubConfig,
+  ref: string,
+  avatarUrl: string | null,
+): Promise<PutAvatarResult> => {
+  try {
+    const res = await withTimeout(signal =>
+      fetch(`${cfg.serverUrl}/api/nodes/${encodeURIComponent(ref)}/avatar`, {
+        method: 'PUT',
+        headers: headers(cfg),
+        signal,
+        body: JSON.stringify({ avatar_url: avatarUrl }),
+      }),
+    );
+    const body = (await res.json().catch(() => ({}))) as any;
+    if (!res.ok || body?.ok === false) {
+      return { ok: false, error: body?.error || `HTTP ${res.status}`, reason: body?.reason, status: res.status };
+    }
+    return { ok: true, avatar_url: (body?.avatar_url ?? avatarUrl) as string | null };
+  } catch (e) {
+    return { ok: false, error: (e as Error)?.message || '网络错误' };
+  }
+};
+
 // Boot-time prefetch (perf: load time). App boot fires the status request the
 // instant the saved session is restored — before AgentsScreen mounts — so the
 // network round-trip overlaps React mount/navigation instead of starting after
