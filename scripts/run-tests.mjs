@@ -17,7 +17,23 @@ function findTests(dir) {
 }
 
 const runner = process.env.TEST_RUNNER || 'bun';
-const files = findTests('src').sort();
+const root = process.env.TEST_DIR || 'src';
+
+// 🔴 Fail closed on "found nothing to run" — `0/0 passed` and `8/8 passed` read as
+// the SAME green (通信龙 08-01). A moved/renamed dir, a wrong suffix, or a file
+// lost in a rebase would otherwise make CI report all-green at ZERO coverage —
+// the exact failure this runner exists to prevent, one level up.
+let files;
+try {
+  files = findTests(root).sort();
+} catch (e) {
+  console.error(`✗ cannot scan ${root}/ for tests (${e.code || e.message}) — refusing to pass`);
+  process.exit(1);
+}
+if (files.length === 0) {
+  console.error(`✗ no *.test.ts found under ${root}/ — scope regression (moved/renamed/lost in rebase?), refusing to pass`);
+  process.exit(1);
+}
 let failed = 0;
 for (const f of files) {
   console.log(`\n# ${f}`);
