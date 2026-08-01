@@ -68,6 +68,28 @@ async function get<T>(cfg: HubConfig, path: string): Promise<T> {
 export const fetchStatus = (cfg: HubConfig) =>
   get<{ sessions: Session[] }>(cfg, '/api/status?light=1');
 
+/** A registered node row (subset we consume). The hub's GET /api/nodes
+ *  returns `{ ok, nodes, count }`; hub #462 added `avatar_url` to the
+ *  projection (server.ts:2784) — nullable, `/avatars/<name>.(webp|png|svg)`
+ *  or an absolute http(s) URL (avatar-validate.ts). */
+export interface HubNode {
+  alias: string;
+  avatar_url?: string | null;
+}
+
+/** GET /api/nodes — the registered-node list, used for avatar resolution.
+ *  Two things matter to the avatar chain: (1) a node's `avatar_url` is the
+ *  CROSS-DEVICE truth (sits above any local layer), (2) an alias *appearing
+ *  here at all* means it is "node-backed" — hub is its whole avatar truth,
+ *  including when avatar_url is null (cleared). Aliases NOT in this list are
+ *  session-only. Network-scoped like the rest; older hubs without the column
+ *  simply omit `avatar_url` (→ alias falls through to the pool), so it's safe
+ *  regardless of server version. */
+export const fetchHubNodes = (cfg: HubConfig): Promise<{ nodes: HubNode[] }> => {
+  const q = cfg.networkId ? `?network_id=${encodeURIComponent(cfg.networkId)}` : '';
+  return get<{ nodes: HubNode[] }>(cfg, `/api/nodes${q}`);
+};
+
 // Boot-time prefetch (perf: load time). App boot fires the status request the
 // instant the saved session is restored — before AgentsScreen mounts — so the
 // network round-trip overlaps React mount/navigation instead of starting after

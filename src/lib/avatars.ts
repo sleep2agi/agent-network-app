@@ -1,48 +1,31 @@
 /**
- * Mobile port of dashboard's app/lib/avatars.ts (dash-loop-wt @ ac4e53b4,
- * deployed as commhub-server dashboard preview.35). Vincent 07-31 asked
- * for App/Web avatar parity — same alias must map to the same illustration
- * on every surface (issue #8, dispatch task 8323008a).
+ * Avatar render module — owns the bundled asset handles and the hub-avatar
+ * store, and materialises the pure resolution plan from ./avatar-resolve.
  *
- * WHAT LANDS HERE
- *   - Pool selection (level 3): djb2 hash → index → bundled WebP
- *   - Named override (level 2): a tiny lookup table for a few special aliases
- *     that had a hand-picked image on web (e.g. 通信N站马 → intern_avatar.png)
+ * Chain (mirrors the web dashboard app/lib/avatars.ts @ origin/main):
+ *   1. hub avatar_url (node-backed aliases) — cross-device truth, from
+ *      GET /api/nodes via hydrateHubAvatars(). Sits ABOVE any local layer;
+ *      when cleared, a node-backed alias uses the designed default chain and
+ *      SKIPS local (this App has no local layer — see avatar-resolve.ts).
+ *   2. named override  3. djb2 pool pick.
  *
- * WHAT DOESN'T LAND (documented, per lead 8323008a):
- *   - Level 1 (user override via localStorage / node settings UI): needs
- *     AsyncStorage integration on RN + a settings entry point that doesn't
- *     exist yet in this app. Deferred to a follow-up. This omission does NOT
- *     break parity — pool assignment is still identical between web and app.
- *
- * WHAT MUST NOT CHANGE (lead hard requirements, verified against source):
- *   - Hash algorithm is djb2 verbatim from dash-loop-wt/app/lib/avatars.ts:
- *       let h = 5381;
- *       for each c: h = ((h << 5) + h + c) >>> 0;
- *       pick pool[h % pool.length]
- *     Note: this is NOT the color-palette hash used in AliasAvatar for the
- *     letter-pill fallback (that one is h*31, initial 0). Pool-pick and
- *     color-pill are TWO different hash functions on the same alias —
- *     copy-paste error here would silently mis-align every avatar.
- *   - Pool array order + count MUST match dashboard's manifest.json _pool.
- *     Source (dash-loop-wt/public/avatars/manifest.json): 20 entries,
- *     avatar-01.webp .. avatar-20.webp, IN THAT ORDER. Reordering or adding
- *     an entry would shift `h % pool.length` and re-assign everyone.
- *   - Named overrides copied from the same manifest.json (non-`_pool` keys).
- *
- * VERIFICATION (lead acceptance criterion):
- *   Given 5 sample aliases, this function must return the same avatar-NN.webp
- *   number as the web dashboard shows. See __smoke_5_aliases below for a
- *   hand-run comparison (documented, not automated — RN test harness is
- *   heavier than the value it adds for a bundle-and-hash file).
+ * The pool + djb2 byte-match the web (20/20 sha256 == web manifest _pool,
+ * verified 2026-08-01). djb2 (pool) is NOT the h*31 color hash in AliasAvatar —
+ * do not merge them (would re-shuffle every assignment).
  */
 
+import { useSyncExternalStore } from 'react';
 import type { ImageSourcePropType } from 'react-native';
 
-// The pool. Order + count MUST match dash-loop-wt/public/avatars/manifest.json
-// "_pool" — index 0 = avatar-01.webp, index 19 = avatar-20.webp. Metro bundles
-// each require() at build time; the numeric value is an opaque asset handle
-// that <Image source={...} /> consumes.
+import {
+  POOL_SIZE,
+  planAvatarFile,
+  poolIndexForAlias,
+  poolFileNameForAlias,
+} from './avatar-resolve';
+
+// Order + count MUST match the web manifest.json "_pool" (index 0 = avatar-01).
+// Metro bundles each require() at build time into an opaque asset handle.
 const AVATAR_POOL: ImageSourcePropType[] = [
   require('../../assets/avatars/avatar-01.webp'),
   require('../../assets/avatars/avatar-02.webp'),
@@ -66,51 +49,84 @@ const AVATAR_POOL: ImageSourcePropType[] = [
   require('../../assets/avatars/avatar-20.webp'),
 ];
 
-// Named overrides (level 2). Copied from manifest.json's non-`_pool` keys.
-// Extend as web adds; each require() must be a bundled asset.
-const NAMED_OVERRIDES: Record<string, ImageSourcePropType> = {
-  '通信N站马': require('../../assets/intern_avatar.png'),
-};
+// Guard the pure/asset split: avatar-resolve's POOL_SIZE drives pool filenames
+// and the djb2 modulus; a drift here would mis-map every relative avatar_url.
+if (AVATAR_POOL.length !== POOL_SIZE) {
+  throw new Error(`avatars: AVATAR_POOL.length ${AVATAR_POOL.length} !== POOL_SIZE ${POOL_SIZE}`);
+}
 
-/**
- * Stable per-alias index into AVATAR_POOL. djb2 over UTF-16 code units.
- * Exported for the smoke check and for any callers that want to log/
- * diagnose which pool slot an alias resolved to.
- */
-export function poolIndexForAlias(alias: string): number {
-  if (!alias) return 0;
-  let h = 5381;
-  for (let i = 0; i < alias.length; i++) h = ((h << 5) + h + alias.charCodeAt(i)) >>> 0;
-  return h % AVATAR_POOL.length;
+// filename → bundled handle. Relative avatar_url (/avatars/<name>) and the
+// named/pool plans resolve through here. Keys must equal avatar-resolve's
+// KNOWN_BUNDLED_FILES (pool avatar-NN.webp + named files).
+const BUNDLED_BY_FILENAME: Record<string, ImageSourcePropType> = {
+  'intern_avatar.png': require('../../assets/intern_avatar.png'),
+};
+AVATAR_POOL.forEach((src, i) => {
+  BUNDLED_BY_FILENAME[`avatar-${String(i + 1).padStart(2, '0')}.webp`] = src;
+});
+
+// ── Hub layer store — hydrated from GET /api/nodes ───────────────────────────
+let hubMap: Record<string, string> = {}; // alias → non-empty avatar_url
+let hubNodeAliases = new Set<string>(); // aliases that HAVE a nodes row (node-backed)
+let hubMapKey = ''; // change detector — avoid re-render storms on every poll
+
+/** Feed GET /api/nodes rows into the resolution chain (layer 1). Cheap to call
+ *  on every poll: only bumps the version (→ re-render) when content changed. */
+export function hydrateHubAvatars(
+  nodes: Array<{ alias?: string; avatar_url?: string | null }> | undefined,
+): void {
+  if (!nodes) return;
+  const nextMap: Record<string, string> = {};
+  const nextAliases = new Set<string>();
+  for (const n of nodes) {
+    if (!n || !n.alias) continue;
+    nextAliases.add(n.alias);
+    if (typeof n.avatar_url === 'string' && n.avatar_url) nextMap[n.alias] = n.avatar_url;
+  }
+  const key = JSON.stringify(nextMap) + '|' + [...nextAliases].sort().join(',');
+  if (key === hubMapKey) return;
+  hubMapKey = key;
+  hubMap = nextMap;
+  hubNodeAliases = nextAliases;
+  emitAvatarsChanged();
+}
+
+// ── re-render subscription (module store; mirrors web useAvatarsVersion) ──────
+const AVATAR_LISTENERS = new Set<() => void>();
+let avatarVersion = 0;
+function emitAvatarsChanged(): void {
+  avatarVersion++;
+  AVATAR_LISTENERS.forEach((l) => l());
+}
+function subscribeAvatars(cb: () => void): () => void {
+  AVATAR_LISTENERS.add(cb);
+  return () => {
+    AVATAR_LISTENERS.delete(cb);
+  };
+}
+/** Subscribe a component so it re-resolves when the hub map hydrates/changes. */
+export function useAvatarsVersion(): number {
+  return useSyncExternalStore(subscribeAvatars, () => avatarVersion, () => avatarVersion);
 }
 
 /**
- * Resolve an alias to a bundled avatar image source, or null when the
- * alias is empty/missing (caller falls back to the letter pill).
- *
- * Precedence (mirrors dashboard):
- *   1. named override (level 2) — hand-picked mapping
- *   2. pool pick (level 3) — djb2-hashed slot from AVATAR_POOL
- * (Level 1 user override is not implemented in this port — see file header.)
+ * Resolve an alias to a renderable source, or null (caller shows the letter
+ * pill). Materialises the pure plan from planAvatarFile against the current
+ * hub store — see avatar-resolve.ts for the chain semantics.
  */
 export function getAvatarSource(alias?: string | null): ImageSourcePropType | null {
-  if (!alias) return null;
-  const named = NAMED_OVERRIDES[alias];
-  if (named !== undefined) return named;
-  return AVATAR_POOL[poolIndexForAlias(alias)] ?? null;
+  const plan = planAvatarFile(alias, { nodeAliases: hubNodeAliases, map: hubMap });
+  if (plan === 'none') return null;
+  if (plan.startsWith('remote:')) return { uri: plan.slice('remote:'.length) };
+  return BUNDLED_BY_FILENAME[plan.slice('file:'.length)] ?? null;
 }
 
-/**
- * Human-legible pool selection for a given alias — returns "avatar-NN.webp"
- * as a string. Not used at render time; kept so we can smoke-check parity
- * against the web dashboard without pulling in a bundler.
- *
- * Web equivalent (dash-loop-wt): pool[h % pool.length] returns a string like
- * "/avatars/avatar-14.webp". App and web must return the same file for the
- * same alias.
- */
-export function poolFileNameForAlias(alias: string): string {
-  const idx = poolIndexForAlias(alias);
-  const num = String(idx + 1).padStart(2, '0');
-  return `avatar-${num}.webp`;
+// Re-exported for existing callers + parity smoke checks.
+export { poolIndexForAlias, poolFileNameForAlias };
+
+/** Test-only: reset hub state between cases. */
+export function __resetHubAvatarsForTest(): void {
+  hubMap = {};
+  hubNodeAliases = new Set<string>();
+  hubMapKey = '';
 }
