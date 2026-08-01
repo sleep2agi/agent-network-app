@@ -13,7 +13,9 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { purgeLegacyAttachmentCache } from './src/AuthedThumb';
-import { prefetchStatus, login, HubConfig } from './src/api';
+import { prefetchStatus, login, fetchHubNodes, HubConfig } from './src/api';
+import { hydrateHubAvatars } from './src/lib/avatars';
+import { usePoll } from './src/usePoll'; // R1 avatar 30s hydrate poll (main's App.tsx no longer imports it)
 import ChatScreen from './src/ChatScreen';
 import MessagesScreen from './src/MessagesScreen';
 import ServerScreen from './src/ServerScreen';
@@ -123,6 +125,21 @@ function AppRoot() {
       setBooting(false);
     });
   }, []);
+
+  // R1 avatar (通信龙 07-31): hydrate the hub avatar layer from GET /api/nodes
+  // so node-backed aliases render their cross-device avatar_url (Vincent changed
+  // an avatar on web → phone should match, not the old pool image). Best-effort:
+  // one immediate load when logged in, then a slow foreground poll to pick up
+  // web-side changes. Failure just leaves pool avatars — never blocks/crashes.
+  useEffect(() => {
+    if (!cfg) return;
+    let alive = true;
+    fetchHubNodes(cfg).then(r => { if (alive) hydrateHubAvatars(r.nodes); }).catch(() => {});
+    return () => { alive = false; };
+  }, [cfg]);
+  usePoll(() => {
+    if (cfg) fetchHubNodes(cfg).then(r => hydrateHubAvatars(r.nodes)).catch(() => {});
+  }, 30000, [cfg]);
 
   // System back (button or fullscreen gesture) navigates within the app
   // instead of exiting (Vincent tg 730). Agents/login fall through to

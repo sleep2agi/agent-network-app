@@ -1,7 +1,7 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Image, Text, View } from 'react-native';
 
-import { getAvatarSource } from './lib/avatars';
+import { getAvatarSource, useAvatarsVersion } from './lib/avatars';
 
 // Port of the dashboard's AliasAvatar (same hash, same palette): the
 // same alias renders the same color on web and mobile (#220 round 27,
@@ -65,8 +65,14 @@ export const aliasInitial = (alias?: string): string => {
 
 export default function AliasAvatar({ alias, size = 32 }: { alias: string; size?: number }) {
   const c = aliasAvatarColors(alias);
+  // Subscribe to hub-avatar hydration so a cross-device avatar change (or its
+  // arrival after the first paint) re-resolves this avatar. Re-render on bump.
+  const version = useAvatarsVersion();
   const source = getAvatarSource(alias);
   const [errored, setErrored] = useState(false);
+  // A new alias, or a hub hydration that swaps the source, must clear a prior
+  // image error so we retry the (possibly now-valid) illustration.
+  useEffect(() => { setErrored(false); }, [alias, version]);
   const showImage = source !== null && !errored;
 
   // Letter pill — always rendered as the base layer. When an illustration
