@@ -22,10 +22,14 @@ export const NAMED_ALIAS_TO_FILE: Record<string, string> = {
   '通信N站马': 'intern_avatar.png',
 };
 
-const POOL_FILENAMES: string[] = Array.from(
+export const POOL_FILENAMES: string[] = Array.from(
   { length: POOL_SIZE },
   (_, i) => `avatar-${String(i + 1).padStart(2, '0')}.webp`,
 );
+
+// Relative avatar_url values the pool picker writes (the exact form the hub #550
+// validator accepts + the web stores): '/avatars/avatar-NN.webp'.
+export const POOL_RELATIVE_PATHS: string[] = POOL_FILENAMES.map((f) => `/avatars/${f}`);
 
 // Filenames the App actually bundles — a relative avatar_url must map to one of
 // these to render (else it falls through, avoiding a broken relative reference).
@@ -59,33 +63,82 @@ export interface HubAvatarState {
   map: Record<string, string>; // alias → non-empty avatar_url
 }
 
-/**
- * Decide what an alias's avatar should be, as a materialiser-agnostic tag:
- *   'remote:<uri>'  — absolute http(s) URL, render remotely
- *   'file:<name>'   — a bundled asset filename (pool or named)
- *   'none'          — nothing resolves; caller shows the letter pill
- *
- * Semantic fork (identical to web):
- *   - Node-backed (alias ∈ nodeAliases): hub is the whole truth. A set url wins
- *     (a set-but-unresolvable relative → 'none' = pill, matching web's 404→pill,
- *     NOT a silent divergence to the pool). Cleared/none (alias ∈ nodeAliases
- *     but no map entry) → designed default chain (named → pool), SKIPPING any
- *     local layer. 🔴 There is NO local layer in this App, so "skip local on
- *     clear" holds structurally — this function takes no local override at all.
- *   - Session-only (alias ∉ nodeAliases): named → pool (unchanged from before).
- */
-export function planAvatarFile(alias: string | null | undefined, hub: HubAvatarState): string {
-  if (!alias) return 'none';
-  if (hub.nodeAliases.has(alias)) {
-    const url = (hub.map[alias] || '').trim();
-    if (url) {
-      if (/^https?:\/\//i.test(url)) return `remote:${url}`;
-      const f = basenameOf(url);
-      return KNOWN_BUNDLED_FILES.has(f) ? `file:${f}` : 'none';
-    }
-    // cleared/none → fall through to the designed default chain below
-  }
+/** Resolve a URL string (hub value or local echo) to a plan tag. Empty → 'none'.
+ *   absolute http(s) → 'remote:<uri>' ; relative bundled → 'file:<name>' ;
+ *   unresolvable → 'none'. */
+function resolveUrlToPlan(url: string): string {
+  const u = url.trim();
+  if (!u) return 'none';
+  if (/^https?:\/\//i.test(u)) return `remote:${u}`;
+  const f = basenameOf(u);
+  return KNOWN_BUNDLED_FILES.has(f) ? `file:${f}` : 'none';
+}
+
+/** Designed default chain: named override → djb2 pool. Never consults local. */
+function designDefault(alias: string): string {
   const namedFile = NAMED_ALIAS_TO_FILE[alias];
   if (namedFile) return `file:${namedFile}`;
   return `file:${poolFileNameForAlias(alias)}`;
+}
+
+/**
+ * Decide an alias's avatar as a materialiser-agnostic tag ('remote:'/'file:'/'none').
+ *
+ * Semantic fork (identical to web #75):
+ *   - Node-backed (alias ∈ nodeAliases): hub is the WHOLE truth. A set url wins
+ *     (set-but-unresolvable → 'none' = pill, matching web 404). Cleared (in
+ *     nodeAliases, no map entry) → designed default (named → pool), **SKIPPING
+ *     the local layer** — 🔴 clear-consistency: a stale local echo on THIS device
+ *     must not resurrect the old picture once the hub value is cleared elsewhere.
+ *     This branch never reads `local`.
+ *   - Session-only (alias ∉ nodeAliases): local echo is the ONLY personalization
+ *     layer → local → named → pool.
+ *
+ * `local` = per-device echo (persisted) of what the user set; consulted ONLY
+ * for session-only aliases. Omit for pure display (R1 read-only behavior).
+ */
+export function planAvatarFile(
+  alias: string | null | undefined,
+  hub: HubAvatarState,
+  local?: Record<string, string>,
+): string {
+  if (!alias) return 'none';
+  if (hub.nodeAliases.has(alias)) {
+    const url = (hub.map[alias] || '').trim();
+    if (url) return resolveUrlToPlan(url);
+    return designDefault(alias); // cleared → default, SKIP local (never reads `local`)
+  }
+  const localUrl = (local && local[alias] ? local[alias] : '').trim();
+  if (localUrl) {
+    const p = resolveUrlToPlan(localUrl);
+    if (p !== 'none') return p;
+  }
+  return designDefault(alias);
+}
+
+/** Can this alias's avatar be edited? Only node-backed aliases (have a hub nodes
+ *  row) — session-only aliases 404 on PUT, so the UI must disable + explain
+ *  BEFORE the user acts (通信龙 判据·披露在动手前). Pure = unit-testable. */
+export function canEditAvatar(alias: string | null | undefined, hub: HubAvatarState): boolean {
+  return !!alias && hub.nodeAliases.has(alias);
+}
+
+/** Client-side validate a custom avatar URL before PUT — mirror hub #550
+ *  (avatar-validate.ts): absolute http(s) only (relative pool paths are set via
+ *  the pool picker, not this field). Rejects early to avoid a doomed round-trip. */
+export function validateCustomAvatarUrl(
+  raw: string,
+): { ok: true; url: string } | { ok: false; reason: string } {
+  const u = (raw || '').trim();
+  if (!u) return { ok: false, reason: '请输入图片 URL,或点上方图案选默认头像' };
+  if (/\s/.test(u)) return { ok: false, reason: 'URL 不能含空格' };
+  if (!/^https?:\/\//i.test(u)) return { ok: false, reason: '只支持 http(s) 绝对图片 URL' };
+  if (u.length > 2048) return { ok: false, reason: 'URL 过长' };
+  try {
+    const parsed = new URL(u);
+    if (parsed.username || parsed.password) return { ok: false, reason: 'URL 不能含账号密码' };
+  } catch {
+    return { ok: false, reason: 'URL 格式无效' };
+  }
+  return { ok: true, url: u };
 }

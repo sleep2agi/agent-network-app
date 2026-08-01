@@ -49,6 +49,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, Text, View } from 'react-native';
 
 import AliasAvatar from './AliasAvatar';
+import AvatarEditSection from './AvatarEditSection';
 import { teamOf } from './agents-list';
 import { fetchStatus, type HubConfig, type Session } from './api';
 import { styles } from './app-styles';
@@ -217,6 +218,9 @@ export default function NodeDetailScreen({
             </Text>
           </View>
         </View>
+
+        {/* R2 avatar editor (pool picker + custom URL; pre-disclosure for session-only) */}
+        <AvatarEditSection cfg={cfg} alias={s.alias} />
 
         {/* Facts block — read-only labeled rows */}
         <View

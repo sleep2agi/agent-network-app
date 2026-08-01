@@ -1,6 +1,6 @@
 // 纯逻辑单测(bun/node 可跑·无 RN 依赖)。run: bun src/lib/avatar-resolve.test.ts
 // R1 avatar 解析链回归(通信龙 07-31 验收:双向 + 同一份数据里的正向对照)。
-import { planAvatarFile, poolFileNameForAlias, poolIndexForAlias, POOL_SIZE, KNOWN_BUNDLED_FILES } from './avatar-resolve';
+import { planAvatarFile, poolFileNameForAlias, poolIndexForAlias, POOL_SIZE, KNOWN_BUNDLED_FILES, canEditAvatar, validateCustomAvatarUrl } from './avatar-resolve';
 
 let p = 0, t = 0;
 const ck = (n: string, c: boolean) => { t++; if (c) { p++; console.log('✅', n); } else console.log('❌', n); };
@@ -22,11 +22,32 @@ ck('B1 session-only(无 nodes 行)→ djb2 池图', planAvatarFile(SESS, hub([NO
 ck('B2 session-only 命名覆盖 → 命名文件', planAvatarFile('通信N站马', hub([])) === 'file:intern_avatar.png');
 ck('B3 session-only 普通别名 → 池图(稳定)', planAvatarFile('随便一个马', hub([])) === POOL_OF('随便一个马'));
 
-// ── 🔴 清空一致性:node-backed 的 avatar_url 为 null(不在 map)→ 走设计默认链,不复活 ──
-// App 无本地层:planAvatarFile 根本不接受 local 覆盖入参 → 结构上不可能复活旧图。
-ck('C1 node-backed 已清空(在 nodeAliases·不在 map)→ 设计默认池图', planAvatarFile(NODE, hub([NODE], {})) === POOL_OF(NODE));
-ck('C2 清空后与"从没设过"同图(池位一致·无缓存差异)', planAvatarFile(NODE, hub([NODE], {})) === planAvatarFile(NODE, hub([NODE])));
-ck('C3 node-backed 命名覆盖 + 已清空 → 命名文件(设计默认含命名层)', planAvatarFile('通信N站马', hub(['通信N站马'], {})) === 'file:intern_avatar.png');
+// ── 🔴 清空一致性(R2 加了本地缓存层后·这是真回归门)──────────────────────────────
+// 关键:node-backed 已清空(在 nodeAliases·hub map 无值)时,即使**本地缓存里有旧值**,
+// 也必须走设计默认链、**不能用本地缓存复活旧图**(网页 #75)。C1/C2 故意喂一个 stale 本地值,
+// 若 planAvatarFile 对 node-backed 误读了 local,这两条立刻红——这就是"真测缓存路径、非恒真"。
+const STALE_LOCAL = { [NODE]: '/avatars/avatar-05.webp' }; // 本地残留的旧图(≠ NODE 的 djb2 默认)
+ck('C1 🔴 node-backed 已清空 + 本地有旧值 → 仍走设计默认(不复活 avatar-05)', planAvatarFile(NODE, hub([NODE], {}), STALE_LOCAL) === POOL_OF(NODE) && POOL_OF(NODE) !== 'file:avatar-05.webp');
+ck('C2 🔴 node-backed 已清空:带 stale local == 不带 local(local 被跳过)', planAvatarFile(NODE, hub([NODE], {}), STALE_LOCAL) === planAvatarFile(NODE, hub([NODE], {})));
+ck('C3 node-backed hub 有值 + 本地有不同值 → hub 全权(非本地)', planAvatarFile(NODE, hub([NODE], { [NODE]: 'https://cdn/hub.png' }), STALE_LOCAL) === 'remote:https://cdn/hub.png');
+ck('C4 node-backed 命名覆盖 + 已清空 → 命名文件(设计默认含命名层)', planAvatarFile('通信N站马', hub(['通信N站马'], {}), { '通信N站马': '/avatars/avatar-05.webp' }) === 'file:intern_avatar.png');
+
+// ── F:本地缓存层是 session-only 别名的唯一个性化层 ─────────────────────────────────
+ck('F1 session-only + 本地绝对URL → remote(本地生效)', planAvatarFile(SESS, hub([]), { [SESS]: 'https://cdn/me.png' }) === 'remote:https://cdn/me.png');
+ck('F2 session-only + 本地相对池图 → file(本地生效)', planAvatarFile(SESS, hub([]), { [SESS]: '/avatars/avatar-12.webp' }) === 'file:avatar-12.webp');
+ck('F3 session-only + 无本地 → djb2 池图(不变)', planAvatarFile(SESS, hub([])) === POOL_OF(SESS) && planAvatarFile(SESS, hub([]), {}) === POOL_OF(SESS));
+ck('F4 session-only 本地设了别人的别名·不串', planAvatarFile(SESS, hub([]), { '别的马': 'https://x/y.png' }) === POOL_OF(SESS));
+
+// ── G:canEditAvatar —— 披露判据(node-backed 可编辑·session-only 不可)双向 ──────────
+ck('G1 node-backed → 可编辑', canEditAvatar(NODE, hub([NODE])) === true);
+ck('G2 session-only → 不可编辑(触发披露+禁用)', canEditAvatar(SESS, hub([NODE])) === false);
+ck('G3 空 alias → 不可编辑', canEditAvatar('', hub([NODE])) === false && canEditAvatar(null, hub([NODE])) === false);
+
+// ── H:validateCustomAvatarUrl —— 客户端预校验(镜像 hub #550·绝对 http(s))──────────
+ck('H1 绝对 https 通过', (() => { const r = validateCustomAvatarUrl(' https://cdn/a.png '); return r.ok && r.url === 'https://cdn/a.png'; })());
+ck('H2 相对路径拒(URL 字段只收绝对·相对走池选择器)', validateCustomAvatarUrl('/avatars/avatar-01.webp').ok === false);
+ck('H3 空/空格/含凭据 拒', validateCustomAvatarUrl('').ok === false && validateCustomAvatarUrl('http://a b').ok === false && validateCustomAvatarUrl('https://u:p@h/x.png').ok === false);
+ck('H4 file:// 等非 http(s) 拒(手机 ImagePicker 本地 URI 挡在这)', validateCustomAvatarUrl('file:///data/x.jpg').ok === false);
 
 // ── set-but-unresolvable:node-backed 设了个 App 没打包的相对文件 → none(=pill·对齐网页 404) ──
 ck('D1 node-backed 相对但未打包文件 → none(pill·不静默降级到池)', planAvatarFile(NODE, hub([NODE], { [NODE]: '/avatars/unknown-99.webp' })) === 'none');

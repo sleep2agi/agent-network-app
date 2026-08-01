@@ -14,7 +14,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { purgeLegacyAttachmentCache } from './src/AuthedThumb';
 import { prefetchStatus, login, fetchHubNodes, HubConfig } from './src/api';
-import { hydrateHubAvatars } from './src/lib/avatars';
+import { hydrateHubAvatars, initLocalAvatars } from './src/lib/avatars';
 import { usePoll } from './src/usePoll'; // R1 avatar 30s hydrate poll (main's App.tsx no longer imports it)
 import ChatScreen from './src/ChatScreen';
 import MessagesScreen from './src/MessagesScreen';
@@ -28,7 +28,7 @@ import TaskDetailScreen from './src/TaskDetailScreen';
 import NodeDetailScreen from './src/NodeDetailScreen';
 import LogsScreen from './src/LogsScreen';
 import type { HostSupervisorDaemon } from './src/api';
-import { clearConfig, loadConfig, loadThemeMode, saveConfig } from './src/storage';
+import { clearConfig, loadConfig, loadLocalAvatars, loadThemeMode, saveConfig, saveLocalAvatars } from './src/storage';
 import { colors, onThemeChange, setThemeMode, themeMode } from './src/theme';
 import { styles } from './src/app-styles';
 import { APP_VERSION } from './src/version';
@@ -113,8 +113,11 @@ function AppRoot() {
   // .then, leaving `booting` true forever = a permanent boot spinner —
   // so keep those two best-effort if they're ever refactored.
   useEffect(() => {
-    Promise.all([loadConfig(), loadThemeMode()]).then(([saved, mode]) => {
+    Promise.all([loadConfig(), loadThemeMode(), loadLocalAvatars()]).then(([saved, mode, localAvatars]) => {
       if (mode === 'light' || mode === 'dark') setThemeMode(mode);
+      // R2 avatar: seed the per-device local echo layer + wire its writer, so
+      // session-only aliases keep their user-set avatar across restarts.
+      initLocalAvatars(localAvatars, (m) => { void saveLocalAvatars(m); });
       if (saved) {
         setCfg(saved);
         setScreen({ name: 'agents' });

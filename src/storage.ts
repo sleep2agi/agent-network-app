@@ -76,3 +76,29 @@ export const loadSessionsCache = async (): Promise<Session[] | null> => {
     return null;
   }
 };
+
+// R2 avatar: per-device local echo of user-set avatars (alias → avatar_url).
+// For session-only aliases (no hub nodes row) this is the ONLY store, so it must
+// PERSIST across app kills → documentDirectory (not the evictable cache dir).
+// For node-backed aliases it's just an echo (hub is authoritative). Best-effort;
+// a small JSON map (only explicitly-customized aliases) so no SecureStore 2KB cap.
+const AVATAR_LOCAL = `${FileSystem.documentDirectory}avatar_local_v1.json`;
+
+export const saveLocalAvatars = async (map: Record<string, string>): Promise<void> => {
+  try {
+    await FileSystem.writeAsStringAsync(AVATAR_LOCAL, JSON.stringify(map));
+  } catch {
+    /* best-effort — never fail the UI on a preference write */
+  }
+};
+
+export const loadLocalAvatars = async (): Promise<Record<string, string>> => {
+  try {
+    const info = await FileSystem.getInfoAsync(AVATAR_LOCAL);
+    if (!info.exists) return {};
+    const parsed = JSON.parse(await FileSystem.readAsStringAsync(AVATAR_LOCAL));
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {};
+  } catch {
+    return {};
+  }
+};

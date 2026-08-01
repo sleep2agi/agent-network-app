@@ -4,10 +4,12 @@
  *
  * Chain (mirrors the web dashboard app/lib/avatars.ts @ origin/main):
  *   1. hub avatar_url (node-backed aliases) — cross-device truth, from
- *      GET /api/nodes via hydrateHubAvatars(). Sits ABOVE any local layer;
+ *      GET /api/nodes via hydrateHubAvatars(). Sits ABOVE the local layer;
  *      when cleared, a node-backed alias uses the designed default chain and
- *      SKIPS local (this App has no local layer — see avatar-resolve.ts).
- *   2. named override  3. djb2 pool pick.
+ *      SKIPS local (clear-consistency — see avatar-resolve.ts).
+ *   2. local echo (R2, session-only aliases only) — per-device persisted store
+ *      of what the user set, seeded via initLocalAvatars/setLocalAvatarEcho.
+ *   3. named override  4. djb2 pool pick.
  *
  * The pool + djb2 byte-match the web (20/20 sha256 == web manifest _pool,
  * verified 2026-08-01). djb2 (pool) is NOT the h*31 color hash in AliasAvatar —
@@ -70,6 +72,37 @@ let hubMap: Record<string, string> = {}; // alias → non-empty avatar_url
 let hubNodeAliases = new Set<string>(); // aliases that HAVE a nodes row (node-backed)
 let hubMapKey = ''; // change detector — avoid re-render storms on every poll
 
+// ── Local echo store (persisted (FileSystem)) — session-only aliases' only layer.
+// Written after a successful hub PUT (mirrors web's setAvatarUrl localStorage echo)
+// so the chosen avatar shows immediately, before the next /api/nodes poll.
+// 🔴 planAvatarFile consults this ONLY for session-only aliases; node-backed skip
+// it (clear-consistency). Persistence is injected so this module stays testable.
+let localMap: Record<string, string> = {};
+let persistLocal: ((map: Record<string, string>) => void) | null = null;
+
+/** Seed from disk + wire the persistence writer (called once on boot). */
+export function initLocalAvatars(
+  saved: Record<string, string> | null,
+  persist: (m: Record<string, string>) => void,
+): void {
+  localMap = saved && typeof saved === 'object' ? { ...saved } : {};
+  persistLocal = persist;
+  emitAvatarsChanged();
+}
+
+/** Set/clear a per-device local echo (url falsy/blank → remove), persist, re-render. */
+export function setLocalAvatarEcho(alias: string, url: string | null): void {
+  if (!alias) return;
+  const next = { ...localMap };
+  if (url && url.trim()) next[alias] = url.trim();
+  else delete next[alias];
+  localMap = next;
+  if (persistLocal) {
+    try { persistLocal(next); } catch {}
+  }
+  emitAvatarsChanged();
+}
+
 /** Feed GET /api/nodes rows into the resolution chain (layer 1). Cheap to call
  *  on every poll: only bumps the version (→ re-render) when content changed. */
 export function hydrateHubAvatars(
@@ -115,10 +148,23 @@ export function useAvatarsVersion(): number {
  * hub store — see avatar-resolve.ts for the chain semantics.
  */
 export function getAvatarSource(alias?: string | null): ImageSourcePropType | null {
-  const plan = planAvatarFile(alias, { nodeAliases: hubNodeAliases, map: hubMap });
+  const plan = planAvatarFile(alias, { nodeAliases: hubNodeAliases, map: hubMap }, localMap);
   if (plan === 'none') return null;
   if (plan.startsWith('remote:')) return { uri: plan.slice('remote:'.length) };
   return BUNDLED_BY_FILENAME[plan.slice('file:'.length)] ?? null;
+}
+
+/** Materialise a bundled filename ('avatar-09.webp' / 'intern_avatar.png') to its
+ *  image source — for the pool picker UI to render each choice. */
+export function sourceForFile(filename: string): ImageSourcePropType | null {
+  return BUNDLED_BY_FILENAME[filename] ?? null;
+}
+
+/** Is this alias node-backed (has a hub nodes row) right now? Drives the R2 edit
+ *  disclosure — only node-backed aliases can set a hub avatar (session-only 404).
+ *  Read after useAvatarsVersion() so it reflects the latest /api/nodes hydration. */
+export function isNodeBacked(alias?: string | null): boolean {
+  return !!alias && hubNodeAliases.has(alias);
 }
 
 // Re-exported for existing callers + parity smoke checks.
@@ -129,4 +175,6 @@ export function __resetHubAvatarsForTest(): void {
   hubMap = {};
   hubNodeAliases = new Set<string>();
   hubMapKey = '';
+  localMap = {};
+  persistLocal = null;
 }
