@@ -62,6 +62,12 @@ jobs:
       - name: Expo prebuild (generate ios/)
         run: npx expo prebuild --platform ios --no-install
 
+      - name: CocoaPods install
+        run: |
+          set -euo pipefail
+          cd ios
+          pod install
+
       # Resolve the actual scheme name & workspace path Expo generated, instead
       # of hard-coding (Expo derives them from app.json "name": "Agent Network").
       - name: Resolve Xcode workspace & scheme
@@ -70,7 +76,7 @@ jobs:
           set -euo pipefail
           WORKSPACE=$(find ios -maxdepth 1 -name '*.xcworkspace' | head -1)
           if [ -z "$WORKSPACE" ]; then
-            echo "::error::No .xcworkspace found under ios/"; exit 1
+            echo "::error::No .xcworkspace under ios/ — pod install should have created it; check the CocoaPods step above"; exit 1
           fi
           # First shared scheme; Expo names it after the project (e.g. "AgentNetwork").
           SCHEME=$(xcodebuild -workspace "$WORKSPACE" -list -json \
@@ -78,12 +84,6 @@ jobs:
           echo "workspace=$WORKSPACE" >> "$GITHUB_OUTPUT"
           echo "scheme=$SCHEME"       >> "$GITHUB_OUTPUT"
           echo "Resolved workspace=$WORKSPACE scheme=$SCHEME"
-
-      - name: CocoaPods install
-        run: |
-          set -euo pipefail
-          cd ios
-          pod install
 
       # Drop the App Store Connect API key where xcodebuild/altool auto-find it.
       # ASC_KEY_P8 may be either raw .p8 PEM text OR base64 of it — handle both.
