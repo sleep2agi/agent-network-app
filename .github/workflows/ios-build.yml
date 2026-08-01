@@ -40,7 +40,10 @@ jobs:
   ios-ipa:
     # macos-14 == Apple silicon, recent Xcode. Pin rather than macos-latest so
     # an Xcode bump can't silently break signing/export.
-    runs-on: macos-14
+    # macos-14 ships Xcode 15.4; React Native requires >= 16.1
+    # ("[!] Invalid `Podfile` file: Please upgrade XCode." at pod install).
+    # macos-15 ships Xcode 16.x.
+    runs-on: macos-15
 
     env:
       # Bundle id / team are also read by Expo from app.json + this team id.
