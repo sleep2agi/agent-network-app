@@ -27,6 +27,7 @@ import TasksScreen from './src/TasksScreen';
 import TaskDetailScreen from './src/TaskDetailScreen';
 import NodeDetailScreen from './src/NodeDetailScreen';
 import LogsScreen from './src/LogsScreen';
+import ScheduledTasksScreen from './src/ScheduledTasksScreen';
 import type { HostSupervisorDaemon } from './src/api';
 import { clearConfig, loadConfig, loadLocalAvatars, loadThemeMode, saveConfig, saveLocalAvatars } from './src/storage';
 import { colors, onThemeChange, setThemeMode, themeMode } from './src/theme';
@@ -37,6 +38,7 @@ type Screen =
   | { name: 'login' }
   | { name: 'agents' }
   | { name: 'tasks' }
+  | { name: 'scheduled' }
   | { name: 'messages' }
   | { name: 'server' }
   | { name: 'settings' }
@@ -52,6 +54,7 @@ type Screen =
 const TABS = [
   { key: 'agents', label: 'Agents', icon: 'people-outline', iconActive: 'people' },
   { key: 'tasks', label: 'Tasks', icon: 'list-outline', iconActive: 'list' },
+  { key: 'scheduled', label: '定时', icon: 'time-outline', iconActive: 'time' },
   { key: 'messages', label: 'Messages', icon: 'chatbubble-ellipses-outline', iconActive: 'chatbubble-ellipses' },
   { key: 'server', label: 'Server', icon: 'server-outline', iconActive: 'server' },
   { key: 'settings', label: '设置', icon: 'settings-outline', iconActive: 'settings' },
@@ -254,6 +257,8 @@ function AppRoot() {
                 cfg={cfg}
                 onOpenTask={taskId => setScreen({ name: 'taskDetail', taskId })}
               />
+            ) : screen.name === 'scheduled' ? (
+              <ScheduledTasksScreen cfg={cfg} />
             ) : screen.name === 'messages' ? (
               <MessagesScreen cfg={cfg} />
             ) : screen.name === 'server' ? (

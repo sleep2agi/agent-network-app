@@ -73,7 +73,9 @@ export const fetchStatus = (cfg: HubConfig) =>
  *  projection (server.ts:2784) — nullable, `/avatars/<name>.(webp|png|svg)`
  *  or an absolute http(s) URL (avatar-validate.ts). */
 export interface HubNode {
+  node_id: string;
   alias: string;
+  node_name?: string | null;
   avatar_url?: string | null;
 }
 
@@ -89,6 +91,78 @@ export const fetchHubNodes = (cfg: HubConfig): Promise<{ nodes: HubNode[] }> => 
   const q = cfg.networkId ? `?network_id=${encodeURIComponent(cfg.networkId)}` : '';
   return get<{ nodes: HubNode[] }>(cfg, `/api/nodes${q}`);
 };
+
+export type HubScheduleSpec =
+  | { type: 'once'; run_at: string }
+  | { type: 'interval'; every_seconds: number }
+  | { type: 'daily'; time: string }
+  | { type: 'weekly'; time: string; weekdays: number[] };
+
+export interface HubScheduledTask {
+  schedule_id: string;
+  network_id: string;
+  name: string;
+  target_node_id: string;
+  target_alias: string;
+  task_content: string;
+  priority: 'high' | 'normal' | 'low';
+  schedule: HubScheduleSpec;
+  timezone: string;
+  status: 'active' | 'paused' | 'completed' | 'cancelled';
+  next_run_at?: string | null;
+  last_run_at?: string | null;
+  revision: number;
+}
+
+export interface HubScheduledRun {
+  run_id: string;
+  schedule_id: string;
+  scheduled_for: string;
+  task_id?: string | null;
+  status: string;
+  error_code?: string | null;
+  error_message?: string | null;
+  created_at: string;
+}
+
+const networkQuery = (cfg: HubConfig) => cfg.networkId
+  ? `?network_id=${encodeURIComponent(cfg.networkId)}`
+  : '';
+
+export const fetchScheduledTasks = (cfg: HubConfig) =>
+  get<{ ok: true; schedules: HubScheduledTask[] }>(cfg, `/api/scheduled-tasks${networkQuery(cfg)}`);
+
+export const fetchScheduledRuns = (cfg: HubConfig, scheduleId: string) => {
+  const q = new URLSearchParams({ limit: '50' });
+  if (cfg.networkId) q.set('network_id', cfg.networkId);
+  return get<{ ok: true; runs: HubScheduledRun[] }>(cfg, `/api/scheduled-tasks/${encodeURIComponent(scheduleId)}/runs?${q}`);
+};
+
+async function scheduledWrite<T>(cfg: HubConfig, path: string, method: string, body?: unknown): Promise<T> {
+  const res = await withTimeout(signal => fetch(`${cfg.serverUrl}${path}`, {
+    method,
+    headers: headers(cfg),
+    signal,
+    ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+  }));
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok || data?.ok === false) throw new Error(data?.message || data?.error || `HTTP ${res.status}`);
+  return data as T;
+}
+
+export const createScheduledTask = (
+  cfg: HubConfig,
+  input: { name: string; target_node_id: string; task: string; priority: string; timezone: string; schedule: HubScheduleSpec },
+) => scheduledWrite<{ ok: true; schedule: HubScheduledTask }>(cfg, '/api/scheduled-tasks', 'POST', { ...input, network_id: cfg.networkId });
+
+export const setScheduledTaskStatus = (cfg: HubConfig, row: HubScheduledTask, status: 'active' | 'paused') =>
+  scheduledWrite<{ ok: true; schedule: HubScheduledTask }>(cfg, `/api/scheduled-tasks/${encodeURIComponent(row.schedule_id)}${networkQuery(cfg)}`, 'PATCH', { revision: row.revision, status });
+
+export const runScheduledTaskNow = (cfg: HubConfig, scheduleId: string) =>
+  scheduledWrite<{ ok: true; taskId?: string; status: string }>(cfg, `/api/scheduled-tasks/${encodeURIComponent(scheduleId)}/run-now${networkQuery(cfg)}`, 'POST', {});
+
+export const cancelScheduledTask = (cfg: HubConfig, scheduleId: string) =>
+  scheduledWrite<{ ok: true; status: string }>(cfg, `/api/scheduled-tasks/${encodeURIComponent(scheduleId)}${networkQuery(cfg)}`, 'DELETE');
 
 export type PutAvatarResult =
   | { ok: true; avatar_url: string | null }
