@@ -149,14 +149,41 @@ async function scheduledWrite<T>(cfg: HubConfig, path: string, method: string, b
     ...(body === undefined ? {} : { body: JSON.stringify(body) }),
   }));
   const data = await res.json().catch(() => ({}));
-  if (!res.ok || data?.ok === false) throw new Error(data?.message || data?.error || `HTTP ${res.status}`);
+  if (!res.ok || data?.ok === false) {
+    throw new ScheduledTaskError(data?.message || data?.error || `HTTP ${res.status}`, res.status, data?.error);
+  }
   return data as T;
 }
 
+export class ScheduledTaskError extends Error {
+  constructor(message: string, readonly status: number, readonly code?: string) {
+    super(message);
+    this.name = 'ScheduledTaskError';
+  }
+}
+
+export type ScheduledTaskMutationInput = {
+  name: string;
+  target_node_id: string;
+  task: string;
+  priority: 'high' | 'normal' | 'low';
+  timezone: string;
+  schedule: HubScheduleSpec;
+  misfire_policy: HubMisfirePolicy;
+};
+
 export const createScheduledTask = (
   cfg: HubConfig,
-  input: { name: string; target_node_id: string; task: string; priority: string; timezone: string; schedule: HubScheduleSpec; misfire_policy: HubMisfirePolicy },
+  input: ScheduledTaskMutationInput,
 ) => scheduledWrite<{ ok: true; schedule: HubScheduledTask }>(cfg, '/api/scheduled-tasks', 'POST', { ...input, network_id: cfg.networkId });
+
+export const updateScheduledTask = (cfg: HubConfig, row: HubScheduledTask, input: ScheduledTaskMutationInput) =>
+  scheduledWrite<{ ok: true; schedule: HubScheduledTask }>(
+    cfg,
+    `/api/scheduled-tasks/${encodeURIComponent(row.schedule_id)}${networkQuery(cfg)}`,
+    'PATCH',
+    { revision: row.revision, ...input },
+  );
 
 export const setScheduledTaskStatus = (cfg: HubConfig, row: HubScheduledTask, status: 'active' | 'paused') =>
   scheduledWrite<{ ok: true; schedule: HubScheduledTask }>(cfg, `/api/scheduled-tasks/${encodeURIComponent(row.schedule_id)}${networkQuery(cfg)}`, 'PATCH', { revision: row.revision, status });

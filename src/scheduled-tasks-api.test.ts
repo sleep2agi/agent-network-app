@@ -4,7 +4,9 @@ import {
   fetchScheduledRuns,
   fetchScheduledTasks,
   runScheduledTaskNow,
+  ScheduledTaskError,
   setScheduledTaskStatus,
+  updateScheduledTask,
   type HubConfig,
   type HubScheduledTask,
 } from './api';
@@ -26,7 +28,11 @@ const response = (body: unknown, status = 200) => new Response(JSON.stringify(bo
   if (url.endsWith('/api/scheduled-tasks?network_id=net_alpha')) return response({ ok: true, schedules: [] });
   if (url.includes('/run-now')) return response({ ok: true, taskId: 'task_1', status: 'delivered' }, 202);
   if (init.method === 'DELETE') return response({ ok: true, status: 'cancelled' });
-  if (init.method === 'PATCH') return response({ ok: true, schedule: { schedule_id: 'sched_1', revision: 3, status: 'paused' } });
+  if (init.method === 'PATCH') {
+    const body = JSON.parse(String(init.body || '{}'));
+    if (body.name === 'conflict') return response({ ok: false, error: 'revision_conflict', current_revision: 8 }, 409);
+    return response({ ok: true, schedule: { schedule_id: 'sched_1', revision: 3, status: 'paused' } });
+  }
   return response({ ok: true, schedule: { schedule_id: 'sched_1', revision: 1 } }, 201);
 };
 
@@ -49,6 +55,25 @@ const row = { schedule_id: 'sched_1', revision: 2, status: 'active' } as HubSche
 await setScheduledTaskStatus(cfg, row, 'paused');
 const patch = calls.at(-1)!;
 ck('pause uses optimistic revision', patch.init.method === 'PATCH' && JSON.parse(String(patch.init.body)).revision === 2);
+await updateScheduledTask(cfg, row, {
+  name: 'edited', target_node_id: 'n_2', task: 'updated report', priority: 'high', timezone: 'America/New_York',
+  schedule: { type: 'weekly', time: '01:30', weekdays: [1, 3] }, misfire_policy: 'catch_up_once',
+});
+const edit = calls.at(-1)!;
+const editBody = JSON.parse(String(edit.init.body));
+ck('full edit PATCH carries exact revision and every mutable field',
+  edit.init.method === 'PATCH' && editBody.revision === 2 && editBody.name === 'edited' &&
+  editBody.target_node_id === 'n_2' && editBody.task === 'updated report' && editBody.priority === 'high' &&
+  editBody.timezone === 'America/New_York' && editBody.schedule.type === 'weekly' && editBody.misfire_policy === 'catch_up_once');
+let conflict: unknown;
+try {
+  await updateScheduledTask(cfg, row, {
+    name: 'conflict', target_node_id: 'n_2', task: 'stale', priority: 'normal', timezone: 'UTC',
+    schedule: { type: 'interval', every_seconds: 60 }, misfire_policy: 'skip',
+  });
+} catch (error) { conflict = error; }
+ck('409 preserves machine-readable revision conflict for refresh UX',
+  conflict instanceof ScheduledTaskError && conflict.status === 409 && conflict.code === 'revision_conflict');
 await runScheduledTaskNow(cfg, row.schedule_id);
 ck('run-now uses explicit action endpoint', calls.at(-1)!.url.includes('/sched_1/run-now?network_id=net_alpha'));
 await fetchScheduledRuns(cfg, row.schedule_id);
@@ -59,5 +84,12 @@ const screen = readFileSync(new URL('./ScheduledTasksScreen.tsx', import.meta.ur
 ck('mobile form shows timezone and rejects empty weekly selection', screen.includes('每天 ${spec.time} · ${timezone}') && screen.includes("kind === 'weekly' && weekdays.length === 0"));
 ck('mobile form exposes catch-up and skip policies and discloses the effective value',
   screen.includes("'catch_up_once'") && screen.includes("'skip'") && screen.includes('misfire_policy: misfirePolicy') && screen.includes('错过后补跑一次') && screen.includes('错过后跳过'));
+ck('mobile cards edit only active or paused schedules and prefill every mutable field',
+  screen.includes("setEditing(row); setShowForm(true)") && screen.includes("['active', 'paused'].includes(row.status)") &&
+  ['setName(editing.name)', 'setTask(editing.task_content)', 'setTarget(editing.target_node_id)',
+    'setPriority(editing.priority)', 'setTimezone(editing.timezone)', 'intervalFormValue'].every(value => screen.includes(value)));
+ck('mobile edit uses full update API and refreshes authoritative data on revision conflict',
+  screen.includes('if (editing) await updateScheduledTask') && screen.includes("e.code === 'revision_conflict'") &&
+  screen.includes('已刷新最新内容，请重新编辑'));
 
 console.log(`scheduled tasks api: ${passed} checks passed`);
