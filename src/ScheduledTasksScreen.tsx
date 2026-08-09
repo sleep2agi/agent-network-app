@@ -22,6 +22,7 @@ import {
   HubNode,
   HubScheduledRun,
   HubScheduledTask,
+  HubMisfirePolicy,
   HubScheduleSpec,
   runScheduledTaskNow,
   setScheduledTaskStatus,
@@ -46,6 +47,8 @@ function describe(spec: HubScheduleSpec, timezone: string) {
   if (spec.type === 'daily') return `每天 ${spec.time} · ${timezone}`;
   return `每周 ${spec.weekdays.map(d => DAYS[d]).join('、')} ${spec.time} · ${timezone}`;
 }
+
+const describeMisfire = (policy?: HubMisfirePolicy) => policy === 'skip' ? '错过后跳过' : '错过后补跑一次';
 
 export default function ScheduledTasksScreen({ cfg }: { cfg: HubConfig }) {
   const [themeVersion, setThemeVersion] = useState(0);
@@ -113,6 +116,7 @@ export default function ScheduledTasksScreen({ cfg }: { cfg: HubConfig }) {
               <Text style={styles.node}>{row.target_alias}</Text>
               <Text style={styles.task} numberOfLines={3}>{row.task_content}</Text>
               <Text style={styles.meta}>{describe(row.schedule, row.timezone)}</Text>
+              <Text style={styles.meta}>{describeMisfire(row.misfire_policy)}</Text>
               <Text style={styles.meta}>下次：{fmt(row.next_run_at)}　上次：{fmt(row.last_run_at)}</Text>
               <View style={styles.actions}>
                 {['active', 'paused'].includes(row.status) && <Pressable disabled={busy} style={styles.action} onPress={() => act(row, 'toggle')}><Text style={styles.actionText}>{row.status === 'active' ? '暂停' : '恢复'}</Text></Pressable>}
@@ -136,6 +140,7 @@ function CreateModal({ cfg, nodes, visible, onClose, onCreated }: { cfg: HubConf
   const [target, setTarget] = useState(''); const [kind, setKind] = useState<HubScheduleSpec['type']>('once');
   const [when, setWhen] = useState(''); const [every, setEvery] = useState('60'); const [clock, setClock] = useState('09:00');
   const [weekdays, setWeekdays] = useState([1]); const [busy, setBusy] = useState(false); const [error, setError] = useState('');
+  const [misfirePolicy, setMisfirePolicy] = useState<HubMisfirePolicy>('catch_up_once');
   const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
   const invalidSchedule = (kind === 'once' && !when) ||
     (kind === 'interval' && (!Number.isFinite(Number(every)) || Number(every) < 1)) ||
@@ -148,8 +153,8 @@ function CreateModal({ cfg, nodes, visible, onClose, onCreated }: { cfg: HubConf
       else if (kind === 'interval') schedule = { type: 'interval', every_seconds: Number(every) * 60 };
       else if (kind === 'daily') schedule = { type: 'daily', time: clock };
       else schedule = { type: 'weekly', time: clock, weekdays };
-      await createScheduledTask(cfg, { name: name.trim(), target_node_id: target, task: task.trim(), priority: 'normal', timezone, schedule });
-      setName(''); setTask(''); setTarget(''); onCreated();
+      await createScheduledTask(cfg, { name: name.trim(), target_node_id: target, task: task.trim(), priority: 'normal', timezone, schedule, misfire_policy: misfirePolicy });
+      setName(''); setTask(''); setTarget(''); setMisfirePolicy('catch_up_once'); onCreated();
     } catch (e) { setError(e instanceof Error ? e.message : String(e)); }
     finally { setBusy(false); }
   };
@@ -161,6 +166,7 @@ function CreateModal({ cfg, nodes, visible, onClose, onCreated }: { cfg: HubConf
         <Label text="执行节点"><View style={styles.nodePicker}>{nodes.map(n => <Pressable key={n.node_id} onPress={() => setTarget(n.node_id)} style={[styles.nodeChoice, target === n.node_id && styles.nodeChoiceActive]}><Text style={target === n.node_id ? styles.nodeChoiceTextActive : styles.actionText}>{n.alias}</Text></Pressable>)}</View></Label>
         <Label text="任务内容"><TextInput style={[styles.input, styles.textarea]} multiline value={task} onChangeText={setTask} placeholder="节点收到的任务" placeholderTextColor={colors.textMuted} /></Label>
         <Label text="类型"><View style={styles.segment}>{(['once','interval','daily','weekly'] as const).map((x, i) => <Pressable key={x} onPress={() => setKind(x)} style={[styles.segmentItem, kind === x && styles.segmentActive]}><Text style={kind === x ? styles.segmentTextActive : styles.segmentText}>{['单次','间隔','每天','每周'][i]}</Text></Pressable>)}</View></Label>
+        <Label text="错过执行"><View style={styles.segment}>{(['catch_up_once','skip'] as const).map((policy) => <Pressable key={policy} onPress={() => setMisfirePolicy(policy)} style={[styles.segmentItem, misfirePolicy === policy && styles.segmentActive]}><Text style={misfirePolicy === policy ? styles.segmentTextActive : styles.segmentText}>{policy === 'catch_up_once' ? '补跑一次' : '跳过本次'}</Text></Pressable>)}</View><Text style={styles.meta}>{misfirePolicy === 'catch_up_once' ? '适合新闻抓取；恢复后最多补跑一次' : '错过后等待下一周期'}</Text></Label>
         {kind === 'once' && <Label text="执行时间（ISO 或 YYYY-MM-DDTHH:mm）"><TextInput style={styles.input} autoCapitalize="none" value={when} onChangeText={setWhen} placeholder="2026-08-10T09:00" placeholderTextColor={colors.textMuted} /></Label>}
         {kind === 'interval' && <Label text="间隔分钟（最少 1）"><TextInput style={styles.input} keyboardType="number-pad" value={every} onChangeText={setEvery} /></Label>}
         {(kind === 'daily' || kind === 'weekly') && <Label text={`时间 · ${timezone}`}><TextInput style={styles.input} value={clock} onChangeText={setClock} placeholder="09:00" placeholderTextColor={colors.textMuted} /></Label>}

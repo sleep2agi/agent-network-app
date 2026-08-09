@@ -98,6 +98,8 @@ export type HubScheduleSpec =
   | { type: 'daily'; time: string }
   | { type: 'weekly'; time: string; weekdays: number[] };
 
+export type HubMisfirePolicy = 'catch_up_once' | 'skip';
+
 export interface HubScheduledTask {
   schedule_id: string;
   network_id: string;
@@ -108,6 +110,7 @@ export interface HubScheduledTask {
   priority: 'high' | 'normal' | 'low';
   schedule: HubScheduleSpec;
   timezone: string;
+  misfire_policy?: HubMisfirePolicy;
   status: 'active' | 'paused' | 'completed' | 'cancelled';
   next_run_at?: string | null;
   last_run_at?: string | null;
@@ -152,7 +155,7 @@ async function scheduledWrite<T>(cfg: HubConfig, path: string, method: string, b
 
 export const createScheduledTask = (
   cfg: HubConfig,
-  input: { name: string; target_node_id: string; task: string; priority: string; timezone: string; schedule: HubScheduleSpec },
+  input: { name: string; target_node_id: string; task: string; priority: string; timezone: string; schedule: HubScheduleSpec; misfire_policy: HubMisfirePolicy },
 ) => scheduledWrite<{ ok: true; schedule: HubScheduledTask }>(cfg, '/api/scheduled-tasks', 'POST', { ...input, network_id: cfg.networkId });
 
 export const setScheduledTaskStatus = (cfg: HubConfig, row: HubScheduledTask, status: 'active' | 'paused') =>
