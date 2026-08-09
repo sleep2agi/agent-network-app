@@ -34,7 +34,7 @@ await fetchScheduledTasks(cfg);
 ck('list is network-scoped', calls.at(-1)!.url.endsWith('/api/scheduled-tasks?network_id=net_alpha'));
 
 await createScheduledTask(cfg, {
-  name: 'daily', target_node_id: 'n_1', task: 'report', priority: 'normal', timezone: 'Asia/Shanghai', schedule: { type: 'daily', time: '09:00' },
+  name: 'daily', target_node_id: 'n_1', task: 'report', priority: 'normal', timezone: 'Asia/Shanghai', schedule: { type: 'daily', time: '09:00' }, misfire_policy: 'skip',
 });
 const create = calls.at(-1)!;
 const createBody = JSON.parse(String(create.init.body));
@@ -42,6 +42,7 @@ ck('create uses POST', create.init.method === 'POST');
 ck('create binds selected network', createBody.network_id === 'net_alpha');
 ck('create sends stable node_id', createBody.target_node_id === 'n_1' && !('target_alias' in createBody));
 ck('create preserves schedule and timezone', createBody.schedule.type === 'daily' && createBody.timezone === 'Asia/Shanghai');
+ck('create sends the selected misfire policy', createBody.misfire_policy === 'skip');
 ck('auth token stays in header, not body/url', (create.init.headers as any).Authorization === 'Bearer utok_test' && !create.url.includes('utok_test') && !JSON.stringify(createBody).includes('utok_test'));
 
 const row = { schedule_id: 'sched_1', revision: 2, status: 'active' } as HubScheduledTask;
@@ -56,5 +57,7 @@ await cancelScheduledTask(cfg, row.schedule_id);
 ck('cancel is soft-delete API verb', calls.at(-1)!.init.method === 'DELETE');
 const screen = readFileSync(new URL('./ScheduledTasksScreen.tsx', import.meta.url), 'utf8');
 ck('mobile form shows timezone and rejects empty weekly selection', screen.includes('每天 ${spec.time} · ${timezone}') && screen.includes("kind === 'weekly' && weekdays.length === 0"));
+ck('mobile form exposes catch-up and skip policies and discloses the effective value',
+  screen.includes("'catch_up_once'") && screen.includes("'skip'") && screen.includes('misfire_policy: misfirePolicy') && screen.includes('错过后补跑一次') && screen.includes('错过后跳过'));
 
 console.log(`scheduled tasks api: ${passed} checks passed`);
