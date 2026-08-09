@@ -8,6 +8,7 @@ import {
   type HubConfig,
   type HubScheduledTask,
 } from './api';
+import { readFileSync } from 'node:fs';
 
 let passed = 0;
 const ck = (label: string, ok: boolean) => {
@@ -53,5 +54,7 @@ await fetchScheduledRuns(cfg, row.schedule_id);
 ck('history is schedule and network scoped', calls.at(-1)!.url.includes('/sched_1/runs?limit=50&network_id=net_alpha'));
 await cancelScheduledTask(cfg, row.schedule_id);
 ck('cancel is soft-delete API verb', calls.at(-1)!.init.method === 'DELETE');
+const screen = readFileSync(new URL('./ScheduledTasksScreen.tsx', import.meta.url), 'utf8');
+ck('mobile form shows timezone and rejects empty weekly selection', screen.includes('每天 ${spec.time} · ${timezone}') && screen.includes("kind === 'weekly' && weekdays.length === 0"));
 
 console.log(`scheduled tasks api: ${passed} checks passed`);

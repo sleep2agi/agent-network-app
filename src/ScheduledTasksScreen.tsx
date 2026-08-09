@@ -43,7 +43,7 @@ function describe(spec: HubScheduleSpec, timezone: string) {
     if (spec.every_seconds % 3600 === 0) return `每 ${spec.every_seconds / 3600} 小时`;
     return `每 ${spec.every_seconds / 60} 分钟`;
   }
-  if (spec.type === 'daily') return `每天 ${spec.time}`;
+  if (spec.type === 'daily') return `每天 ${spec.time} · ${timezone}`;
   return `每周 ${spec.weekdays.map(d => DAYS[d]).join('、')} ${spec.time} · ${timezone}`;
 }
 
@@ -137,6 +137,9 @@ function CreateModal({ cfg, nodes, visible, onClose, onCreated }: { cfg: HubConf
   const [when, setWhen] = useState(''); const [every, setEvery] = useState('60'); const [clock, setClock] = useState('09:00');
   const [weekdays, setWeekdays] = useState([1]); const [busy, setBusy] = useState(false); const [error, setError] = useState('');
   const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
+  const invalidSchedule = (kind === 'once' && !when) ||
+    (kind === 'interval' && (!Number.isFinite(Number(every)) || Number(every) < 1)) ||
+    (kind === 'weekly' && weekdays.length === 0);
   const submit = async () => {
     setBusy(true); setError('');
     try {
@@ -151,7 +154,7 @@ function CreateModal({ cfg, nodes, visible, onClose, onCreated }: { cfg: HubConf
     finally { setBusy(false); }
   };
   return <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
-    <View style={styles.modalRoot}><View style={styles.modalHeader}><Pressable onPress={onClose}><Text style={styles.link}>取消</Text></Pressable><Text style={styles.modalTitle}>新建定时任务</Text><Pressable disabled={busy || !name.trim() || !task.trim() || !target || (kind === 'once' && !when)} onPress={submit}><Text style={styles.link}>保存</Text></Pressable></View>
+    <View style={styles.modalRoot}><View style={styles.modalHeader}><Pressable onPress={onClose}><Text style={styles.link}>取消</Text></Pressable><Text style={styles.modalTitle}>新建定时任务</Text><Pressable disabled={busy || !name.trim() || !task.trim() || !target || invalidSchedule} onPress={submit}><Text style={styles.link}>保存</Text></Pressable></View>
       <ScrollView contentContainerStyle={styles.form} keyboardShouldPersistTaps="handled">
         {error ? <Text style={styles.error}>{error}</Text> : null}
         <Label text="名称"><TextInput style={styles.input} value={name} onChangeText={setName} placeholder="每日巡检" placeholderTextColor={colors.textMuted} /></Label>
