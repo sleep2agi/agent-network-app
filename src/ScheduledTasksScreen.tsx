@@ -14,12 +14,18 @@ import {
 } from 'react-native';
 import {
   cancelScheduledTask,
+  createExternalScheduleEdit,
   createScheduledTask,
+  fetchExternalScheduleEdits,
+  fetchExternalSchedules,
   fetchHubNodes,
   fetchScheduledRuns,
   fetchScheduledTasks,
   HubConfig,
+  HubExternalSchedule,
+  HubExternalScheduleEditIntent,
   HubNode,
+  HubNodeExternalSchedules,
   HubScheduledRun,
   HubScheduledTask,
   HubMisfirePolicy,
@@ -52,6 +58,34 @@ function describe(spec: HubScheduleSpec, timezone: string) {
 
 const describeMisfire = (policy?: HubMisfirePolicy) => policy === 'skip' ? '错过后跳过' : '错过后补跑一次';
 
+const EXTERNAL_KIND_LABEL: Record<HubExternalSchedule['kind'], string> = {
+  cron: 'crontab', systemd: 'systemd', tmux: 'tmux', playwright: 'playwright', custom: '自定义',
+};
+const EXTERNAL_STATUS_LABEL: Record<HubExternalSchedule['last_status'], string> = {
+  success: '成功', failed: '失败', running: '运行中', unknown: '未知',
+};
+const INTENT_STATUS_LABEL: Record<HubExternalScheduleEditIntent['status'], string> = {
+  pending: '待节点领取', delivered: '节点已领取', applied: '已应用', rejected: '被节点拒绝', expired: '已过期',
+};
+
+/** 与 Hub 端 parseManagedCronExpression 同一形状预检（五段、字符白名单），
+ *  只为把明显敲错的输入挡在本地；权威校验仍在 Hub。 */
+const looksLikeCron = (raw: string) => {
+  const fields = raw.trim().split(/ +/);
+  return fields.length === 5 && fields.every(f => /^[0-9*/,-]+$/.test(f));
+};
+
+const editIntentErrorText = (e: unknown): string => {
+  if (e instanceof ScheduledTaskError) {
+    if (e.code === 'revision_conflict') return '计划在节点侧已变化，列表已刷新，请重新操作。';
+    if (e.code === 'edit_in_flight') return '已有一条待应用的编辑意向，等节点确认后再试。';
+    if (e.code === 'schedule_read_only') return '该计划为只读（仅托管 cron 条目可改）。';
+    if (e.code === 'node_owner_required' || e.code === 'node_owner_unclaimed') return '仅节点 owner 能修改该节点的计划。';
+    if (e.code === 'cross_network_node') return '节点不在当前网络内。';
+  }
+  return e instanceof Error ? e.message : String(e);
+};
+
 type IntervalUnit = 'seconds' | 'minutes' | 'hours' | 'days';
 
 const toLocalDateTimeInput = (value: string) => {
@@ -81,6 +115,11 @@ export default function ScheduledTasksScreen({ cfg }: { cfg: HubConfig }) {
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState<HubScheduledTask | null>(null);
   const [history, setHistory] = useState<{ title: string; runs: HubScheduledRun[] } | null>(null);
+  const [tab, setTab] = useState<'hub' | 'node'>('hub');
+  const [external, setExternal] = useState<HubNodeExternalSchedules[]>([]);
+  const [externalLoaded, setExternalLoaded] = useState(false);
+  const [cronEdit, setCronEdit] = useState<{ node: HubNodeExternalSchedules; schedule: HubExternalSchedule } | null>(null);
+  const [intents, setIntents] = useState<{ title: string; edits: HubExternalScheduleEditIntent[] } | null>(null);
 
   const load = useCallback(async (manual = false) => {
     if (manual) setRefreshing(true);
@@ -96,11 +135,24 @@ export default function ScheduledTasksScreen({ cfg }: { cfg: HubConfig }) {
     }
   }, [cfg]);
 
+  const loadExternal = useCallback(async (manual = false) => {
+    if (manual) setRefreshing(true);
+    try {
+      setExternal(await fetchExternalSchedules(cfg));
+      setError('');
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setExternalLoaded(true); setRefreshing(false);
+    }
+  }, [cfg]);
+
   useEffect(() => {
-    void load();
-    const timer = setInterval(load, 10_000);
+    const tick = tab === 'hub' ? load : loadExternal;
+    void tick();
+    const timer = setInterval(tick, 10_000);
     return () => clearInterval(timer);
-  }, [load]);
+  }, [tab, load, loadExternal]);
 
   const act = async (row: HubScheduledTask, action: 'toggle' | 'run' | 'cancel' | 'history') => {
     setBusy(true); setError('');
@@ -117,14 +169,81 @@ export default function ScheduledTasksScreen({ cfg }: { cfg: HubConfig }) {
     finally { setBusy(false); }
   };
 
+  const submitEditIntent = async (node: HubNodeExternalSchedules, schedule: HubExternalSchedule, patch: { enabled?: boolean; cron?: string }) => {
+    if (typeof schedule.revision !== 'number') return;
+    setBusy(true); setError('');
+    try {
+      await createExternalScheduleEdit(cfg, node.node_id, { schedule_id: schedule.id, base_revision: schedule.revision, patch });
+      setCronEdit(null);
+      Alert.alert('意向已提交', '节点在线时会自行应用并回执；结果见「意向记录」。');
+    } catch (e) {
+      setError(editIntentErrorText(e));
+    } finally {
+      setBusy(false);
+      await loadExternal();
+    }
+  };
+
+  const showIntents = async (node: HubNodeExternalSchedules) => {
+    setBusy(true); setError('');
+    try {
+      const data = await fetchExternalScheduleEdits(cfg, node.node_id);
+      setIntents({ title: `${node.alias} · 意向记录`, edits: data.edits || [] });
+    } catch (e) { setError(editIntentErrorText(e)); }
+    finally { setBusy(false); }
+  };
+
   return (
     <View style={styles.root}>
       <View style={styles.header}>
-        <View><Text style={styles.title}>定时任务</Text><Text style={styles.subtitle}>Hub 统一调度 · 节点离线自动排队</Text></View>
-        <Pressable style={styles.primarySmall} onPress={() => { setEditing(null); setShowForm(true); }}><Text style={styles.primaryText}>新建</Text></Pressable>
+        <View><Text style={styles.title}>定时任务</Text><Text style={styles.subtitle}>{tab === 'hub' ? 'Hub 统一调度 · 节点离线自动排队' : '节点上报的本机计划 · owner 可改托管 cron'}</Text></View>
+        {tab === 'hub' ? <Pressable style={styles.primarySmall} onPress={() => { setEditing(null); setShowForm(true); }}><Text style={styles.primaryText}>新建</Text></Pressable> : null}
+      </View>
+      <View style={styles.tabs}>
+        {(['hub', 'node'] as const).map(value => (
+          <Pressable key={value} onPress={() => setTab(value)} style={[styles.segmentItem, tab === value && styles.segmentActive]}>
+            <Text style={tab === value ? styles.segmentTextActive : styles.segmentText}>{value === 'hub' ? 'Hub 计划' : '节点计划'}</Text>
+          </Pressable>
+        ))}
       </View>
       {error ? <Text style={styles.error}>{error}</Text> : null}
-      {loading ? <View style={styles.center}><ActivityIndicator color={colors.accent} /></View> : (
+      {tab === 'node' ? (
+        !externalLoaded ? <View style={styles.center}><ActivityIndicator color={colors.accent} /></View> : (
+          <ScrollView
+            contentContainerStyle={styles.list}
+            refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => loadExternal(true)} tintColor={colors.accent} />}
+          >
+            {external.length === 0 ? (
+              <View style={styles.empty}><Text style={styles.emptyTitle}>暂无节点计划</Text><Text style={styles.muted}>节点升级后会自动上报本机 crontab 等计划。</Text></View>
+            ) : external.map(node => (
+              <View key={node.node_id} style={styles.card}>
+                <View style={styles.cardTop}>
+                  <Text style={styles.cardTitle}>{node.alias}</Text>
+                  <Pressable disabled={busy} style={styles.action} onPress={() => void showIntents(node)}><Text style={styles.actionText}>意向记录</Text></Pressable>
+                </View>
+                <Text style={styles.meta}>快照：{fmt(node.observed_at)}{node.error ? ` · 上报异常（${node.error}）` : ''}</Text>
+                {node.schedules.length === 0 ? <Text style={[styles.muted, { marginTop: spacing.sm }]}>该节点未上报计划</Text> : node.schedules.map(sch => (
+                  <View key={sch.id} style={styles.extRow}>
+                    <View style={styles.cardTop}>
+                      <Text style={styles.cardTitle}>{sch.name}</Text>
+                      <Text style={[styles.badge, sch.enabled ? styles.badgeActive : styles.badgeIdle]}>{sch.enabled ? '启用' : '停用'}</Text>
+                    </View>
+                    <Text style={styles.meta}>{EXTERNAL_KIND_LABEL[sch.kind]} · {sch.frequency}</Text>
+                    <Text style={styles.meta}>上次：{fmt(sch.last_run_at)}（{EXTERNAL_STATUS_LABEL[sch.last_status]}）　下次：{fmt(sch.next_run_at)}</Text>
+                    {sch.last_error ? <Text style={styles.extError}>{sch.last_error}</Text> : null}
+                    {sch.editable === true && sch.kind === 'cron' && typeof sch.revision === 'number' ? (
+                      <View style={styles.actions}>
+                        <Pressable disabled={busy} style={styles.action} onPress={() => void submitEditIntent(node, sch, { enabled: !sch.enabled })}><Text style={styles.actionText}>{sch.enabled ? '停用' : '启用'}</Text></Pressable>
+                        <Pressable disabled={busy} style={styles.action} onPress={() => setCronEdit({ node, schedule: sch })}><Text style={styles.actionText}>改时间</Text></Pressable>
+                      </View>
+                    ) : null}
+                  </View>
+                ))}
+              </View>
+            ))}
+          </ScrollView>
+        )
+      ) : loading ? <View style={styles.center}><ActivityIndicator color={colors.accent} /></View> : (
         <ScrollView
           contentContainerStyle={styles.list}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => load(true)} tintColor={colors.accent} />}
@@ -161,6 +280,13 @@ export default function ScheduledTasksScreen({ cfg }: { cfg: HubConfig }) {
         }}
       />
       <HistoryModal value={history} onClose={() => setHistory(null)} />
+      <CronEditModal
+        value={cronEdit}
+        busy={busy}
+        onClose={() => setCronEdit(null)}
+        onSubmit={cron => { if (cronEdit) void submitEditIntent(cronEdit.node, cronEdit.schedule, { cron }); }}
+      />
+      <IntentsModal value={intents} onClose={() => setIntents(null)} />
     </View>
   );
 }
@@ -255,6 +381,60 @@ function HistoryModal({ value, onClose }: { value: { title: string; runs: HubSch
   return <Modal visible={!!value} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}><View style={s.modalRoot}><View style={s.modalHeader}><Pressable onPress={onClose}><Text style={s.link}>关闭</Text></Pressable><Text style={s.modalTitle}>{value?.title || '执行记录'}</Text><View style={{ width: 40 }} /></View><ScrollView contentContainerStyle={s.form}>{value?.runs.length ? value.runs.map(run => <View key={run.run_id} style={s.run}><View><Text style={s.cardTitle}>{run.status}</Text><Text style={s.meta}>{fmt(run.scheduled_for)}</Text></View><Text style={s.runTask}>{run.task_id?.slice(0, 10) || run.error_code || '—'}</Text></View>) : <Text style={s.muted}>暂无执行记录</Text>}</ScrollView></View></Modal>;
 }
 
+function CronEditModal({ value, busy, onClose, onSubmit }: {
+  value: { node: HubNodeExternalSchedules; schedule: HubExternalSchedule } | null;
+  busy: boolean;
+  onClose: () => void;
+  onSubmit: (cron: string) => void;
+}) {
+  const s = useMemo(makeStyles, [value]);
+  const [cron, setCron] = useState('');
+  useEffect(() => { setCron(''); }, [value?.schedule.id]);
+  const valid = looksLikeCron(cron);
+  return <Modal visible={!!value} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
+    <View style={s.modalRoot}>
+      <View style={s.modalHeader}>
+        <Pressable onPress={onClose}><Text style={s.link}>取消</Text></Pressable>
+        <Text style={s.modalTitle}>改执行时间</Text>
+        <Pressable disabled={busy || !valid} onPress={() => onSubmit(cron.trim().split(/ +/).join(' '))}><Text style={[s.link, (busy || !valid) && s.linkDisabled]}>提交</Text></Pressable>
+      </View>
+      <ScrollView contentContainerStyle={s.form} keyboardShouldPersistTaps="handled">
+        <Text style={s.meta}>{value?.node.alias} · {value?.schedule.name}</Text>
+        <Text style={[s.meta, { marginBottom: spacing.md }]}>当前：{value?.schedule.frequency}</Text>
+        <Label text="新的五段 cron（分 时 日 月 周）">
+          <TextInput style={s.input} autoCapitalize="none" autoCorrect={false} value={cron} onChangeText={setCron} placeholder="*/30 * * * *" placeholderTextColor={colors.textMuted} />
+        </Label>
+        {cron && !valid ? <Text style={s.error}>需要五段，只能含数字和 * / , -（不含命令）。</Text> : null}
+        <Text style={s.muted}>提交后生成编辑意向，由节点自行应用；只改时间与启停，绝不下发命令。</Text>
+      </ScrollView>
+    </View>
+  </Modal>;
+}
+
+function IntentsModal({ value, onClose }: { value: { title: string; edits: HubExternalScheduleEditIntent[] } | null; onClose: () => void }) {
+  const s = useMemo(makeStyles, [value]);
+  const describePatch = (patch: HubExternalScheduleEditIntent['patch']) => [
+    patch.enabled !== undefined ? (patch.enabled ? '启用' : '停用') : null,
+    patch.cron ? `cron → ${patch.cron}` : null,
+  ].filter(Boolean).join('，') || '—';
+  return <Modal visible={!!value} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
+    <View style={s.modalRoot}>
+      <View style={s.modalHeader}><Pressable onPress={onClose}><Text style={s.link}>关闭</Text></Pressable><Text style={s.modalTitle}>{value?.title || '意向记录'}</Text><View style={{ width: 40 }} /></View>
+      <ScrollView contentContainerStyle={s.form}>
+        {value?.edits.length ? value.edits.map(edit => (
+          <View key={edit.intent_id} style={s.run}>
+            <View style={{ flex: 1 }}>
+              <Text style={s.cardTitle}>{edit.schedule_id} · {INTENT_STATUS_LABEL[edit.status] || edit.status}</Text>
+              <Text style={s.meta}>{describePatch(edit.patch)}</Text>
+              <Text style={s.meta}>{fmt(edit.created_at)}{edit.error_code ? ` · ${edit.error_code}` : ''}</Text>
+            </View>
+          </View>
+        )) : <Text style={s.muted}>还没有编辑意向</Text>}
+      </ScrollView>
+    </View>
+  </Modal>;
+}
+
 function makeStyles() { return StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.bg }, header: { padding: spacing.lg, paddingBottom: spacing.md, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }, title: { color: colors.text, fontSize: 24, fontWeight: '700' }, subtitle: { color: colors.textMuted, fontSize: 12, marginTop: 3 },
   primarySmall: { backgroundColor: colors.accent, borderRadius: 9, paddingHorizontal: 16, paddingVertical: 9 }, primaryText: { color: colors.bg, fontWeight: '700' }, center: { flex: 1, alignItems: 'center', justifyContent: 'center' }, list: { padding: spacing.lg, paddingTop: 0, paddingBottom: spacing.xl },
@@ -264,4 +444,8 @@ function makeStyles() { return StyleSheet.create({
   modalRoot: { flex: 1, backgroundColor: colors.bg }, modalHeader: { minHeight: 58, paddingHorizontal: spacing.lg, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderBottomWidth: 1, borderBottomColor: colors.border }, modalTitle: { color: colors.text, fontWeight: '700', fontSize: 16 }, link: { color: colors.accent, minWidth: 40 }, form: { padding: spacing.lg, paddingBottom: 60 }, field: { marginBottom: spacing.lg }, label: { color: colors.textMuted, fontSize: 12, marginBottom: spacing.sm }, input: { color: colors.text, backgroundColor: colors.card, borderColor: colors.border, borderWidth: 1, borderRadius: 9, paddingHorizontal: spacing.md, paddingVertical: 11 }, textarea: { minHeight: 100, textAlignVertical: 'top' },
   nodePicker: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm }, nodeChoice: { borderRadius: 18, borderWidth: 1, borderColor: colors.border, paddingHorizontal: 12, paddingVertical: 8 }, nodeChoiceActive: { backgroundColor: colors.accent, borderColor: colors.accent }, nodeChoiceTextActive: { color: colors.bg, fontSize: 12, fontWeight: '600' }, segment: { flexDirection: 'row', borderWidth: 1, borderColor: colors.border, borderRadius: 9, overflow: 'hidden' }, segmentItem: { flex: 1, alignItems: 'center', paddingVertical: 10, backgroundColor: colors.card }, segmentActive: { backgroundColor: colors.accent }, segmentText: { color: colors.textMuted, fontSize: 12 }, segmentTextActive: { color: colors.bg, fontSize: 12, fontWeight: '700' }, weekdays: { flexDirection: 'row', justifyContent: 'space-between' }, day: { width: 38, height: 38, borderRadius: 19, borderWidth: 1, borderColor: colors.border, alignItems: 'center', justifyContent: 'center' }, dayActive: { backgroundColor: colors.accent, borderColor: colors.accent }, dayTextActive: { color: colors.bg, fontWeight: '700' },
   run: { paddingVertical: spacing.md, borderBottomWidth: 1, borderBottomColor: colors.border, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }, runTask: { color: colors.textMuted, fontFamily: 'monospace', fontSize: 11 },
+  tabs: { flexDirection: 'row', borderWidth: 1, borderColor: colors.border, borderRadius: 9, overflow: 'hidden', marginHorizontal: spacing.lg, marginBottom: spacing.md },
+  extRow: { borderTopWidth: 1, borderTopColor: colors.border, marginTop: spacing.md, paddingTop: spacing.md },
+  extError: { color: colors.failed, fontSize: 11, marginTop: spacing.xs },
+  linkDisabled: { opacity: 0.4 },
 }); }

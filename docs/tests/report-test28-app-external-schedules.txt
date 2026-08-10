@@ -1,0 +1,53 @@
+# test28 — App 节点计划（RFC-036 外部计划展示 + owner 编辑意向）
+
+Date: 2026-08-10
+Repo: https://github.com/sleep2agi/agent-network-app (private)
+PR: #28 (feat/external-node-schedules)
+Base: 621d58e63be289891ecae74797b3bd7c386894ff (origin/main = merge-base)
+Source commit under test: 74988e1e41e9bd1401ba711e7540db324df4c9e2
+Docker tag: anet-app-sched28:dev
+Docker image id: sha256:1988473df2b49ce572b72d85d547fdce998c060c0c0b49b01d63bea8dc9b616b
+Embedded ENV: APP_SCHEDULER_SOURCE_COMMIT=74988e1e41e9bd1401ba711e7540db324df4c9e2
+Build context: git archive <source commit>（干净树，非工作区；.dockerignore 排除 node_modules）
+Runner: tests/test-scheduled-tasks/run.sh（bun 断言 + expo export --platform web）
+
+## Result
+
+PASS. 源提交经 git archive 进入全新 Docker 构建（oven/bun:1.3.14，容器内
+bun install --ignore-scripts），容器首行回显
+`# App scheduled tasks source=74988e1e41e9bd1401ba711e7540db324df4c9e2`。
+未触碰生产 Hub / Dashboard / agent-node / 任何 token 或数据库。
+
+- scheduled-tasks-api 断言：27 checks（本 PR 前 18 → 新增 9），0 失败。
+- expo export --platform web：index.html 产出，RESULT: PASS。
+- Witnessed-red（容器级）：对同一 build context 注入单处 sabotage——
+  fetchExternalSchedules 改回 `/api/status?light=1`——重建镜像
+  （sha256:c4e2d571d5eb…，已删）后容器恰红
+  `FAIL: external fetch uses FULL status (light=1 strips the snapshot)`
+  且容器退出码 1；净源码镜像回归全绿。
+- 主机侧同款 sabotage 红证在提交前已做过一轮（恰红同一条，还原 27/27）。
+
+## 契约/安全事实（App 是 RFC-036 第一个客户端）
+
+1. 读侧走全量 /api/status——Hub server.ts 的 light=1 分支只回 8 字段，
+   external_schedules 会被剥掉；断言钉死 URL 不含 light。
+2. 同一 node_id 多条会话取 updated_at 最新的快照（与 Hub reportedSchedule
+   同准则）；无 node_id 的纯会话、无快照的会话都被跳过（断言含分母）。
+3. 写侧 POST /api/nodes/:id/external-schedule-edits 的 body 恰为契约四键
+   {network_id, schedule_id, base_revision, patch}——Hub exactKeys 拒绝多余
+   键；断言按排序键名逐字比对。
+4. 鉴权：App 登录（POST /api/auth/login 用户名/密码）换取登录用户的 Hub
+   user token，所有请求 Authorization: Bearer <该 token>；#688 requireOwner
+   要求 caller 是 user token 且 user_id === owner_user_id——非 owner 得
+   403 node_owner_required，App 逐码映射为中文提示。App 从不持有 ntok。
+5. 编辑面仅 enabled + 五段 cron；本地 looksLikeCron 预检（五段、
+   [0-9*/,-] 白名单）只挡明显敲错，权威校验在 Hub
+   parseManagedCronExpression；UI 文案明示绝不下发命令。
+6. 409 逐码映射：revision_conflict / edit_in_flight / schedule_read_only /
+   node_owner_required / cross_network_node；冲突后自动刷新快照再操作。
+
+## Scope 边界
+
+- agent-node 侧意向领取/落地（/pending 领取 + /:intent/ack 回执，node
+  token 通道）不在本仓，未动。
+- Dashboard 侧同能力 UI 未做，不在本 PR。

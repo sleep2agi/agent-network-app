@@ -1,6 +1,9 @@
 import {
   cancelScheduledTask,
+  createExternalScheduleEdit,
   createScheduledTask,
+  fetchExternalScheduleEdits,
+  fetchExternalSchedules,
   fetchScheduledRuns,
   fetchScheduledTasks,
   runScheduledTaskNow,
@@ -91,5 +94,77 @@ ck('mobile cards edit only active or paused schedules and prefill every mutable 
 ck('mobile edit uses full update API and refreshes authoritative data on revision conflict',
   screen.includes('if (editing) await updateScheduledTask') && screen.includes("e.code === 'revision_conflict'") &&
   screen.includes('已刷新最新内容，请重新编辑'));
+
+// ── RFC-036 节点外部计划 ────────────────────────────────────────────────
+
+const externalFetch = (globalThis as any).fetch;
+(globalThis as any).fetch = async (url: string, init: RequestInit = {}) => {
+  calls.push({ url, init });
+  if (url.includes('/api/status')) {
+    return response({ sessions: [
+      // 无快照的会话必须被跳过（分母:确实进入了响应）
+      { alias: 'no-snapshot', node_id: 'n_bare', updated_at: '2026-08-10T01:00:00Z' },
+      // 无 node_id 的纯会话代理也必须被跳过
+      { alias: 'session-only', external_schedules: { observed_at: '2026-08-10T01:00:00Z', schedules: [] } },
+      // 同一节点两条会话:取 updated_at 较新的那条快照
+      { alias: 'worker-old', node_id: 'n_9', updated_at: '2026-08-09T00:00:00Z', external_schedules: { observed_at: '2026-08-09T00:00:00Z', schedules: [] } },
+      { alias: 'worker', node_id: 'n_9', updated_at: '2026-08-10T02:00:00Z', external_schedules: {
+        observed_at: '2026-08-10T02:00:00Z',
+        schedules: [
+          { id: 'cron.news', name: '新闻抓取', kind: 'cron', frequency: '*/30 * * * *', last_run_at: '2026-08-10T01:30:00Z', last_status: 'success', last_error: null, next_run_at: '2026-08-10T02:30:00Z', log_ref: null, enabled: true, editable: true, revision: 4 },
+          { id: 'systemd.backup', name: '备份', kind: 'systemd', frequency: 'daily', last_run_at: null, last_status: 'unknown', last_error: null, next_run_at: null, log_ref: null, enabled: true },
+        ],
+      } },
+    ] });
+  }
+  if (url.includes('/external-schedule-edits') && (init.method || 'GET') === 'GET') {
+    return response({ ok: true, edits: [{ intent_id: 'sei_1', node_id: 'n_9', schedule_id: 'cron.news', base_revision: 4, patch: { enabled: false }, status: 'applied', expires_at: '', created_at: '', delivered_at: null, acked_at: null, result_revision: 5, error_code: null }] });
+  }
+  if (url.includes('/external-schedule-edits') && init.method === 'POST') {
+    const body = JSON.parse(String(init.body || '{}'));
+    if (body.base_revision === 3) return response({ ok: false, error: 'revision_conflict', current_revision: 4 }, 409);
+    return response({ ok: true, intent: { intent_id: 'sei_2', status: 'pending' } }, 202);
+  }
+  return externalFetch(url, init);
+};
+
+const externalNodes = await fetchExternalSchedules(cfg);
+ck('external fetch uses FULL status (light=1 strips the snapshot)',
+  calls.at(-1)!.url.endsWith('/api/status?network_id=net_alpha') && !calls.at(-1)!.url.includes('light'));
+ck('external rows dedupe per node keeping the newest snapshot and skip snapshotless/session-only rows',
+  externalNodes.length === 1 && externalNodes[0].node_id === 'n_9' && externalNodes[0].alias === 'worker' &&
+  externalNodes[0].observed_at === '2026-08-10T02:00:00Z' && externalNodes[0].schedules.length === 2);
+ck('editable marker survives the projection (only managed cron rows carry it)',
+  externalNodes[0].schedules[0].editable === true && externalNodes[0].schedules[0].revision === 4 &&
+  externalNodes[0].schedules[1].editable === undefined);
+
+await fetchExternalScheduleEdits(cfg, 'n_9');
+ck('intent list is node and network scoped',
+  calls.at(-1)!.url.endsWith('/api/nodes/n_9/external-schedule-edits?network_id=net_alpha'));
+
+await createExternalScheduleEdit(cfg, 'n_9', { schedule_id: 'cron.news', base_revision: 4, patch: { enabled: false } });
+const intentCall = calls.at(-1)!;
+const intentBody = JSON.parse(String(intentCall.init.body));
+ck('intent POST sends exactly the four contract keys (Hub exactKeys would reject extras)',
+  intentCall.init.method === 'POST' &&
+  Object.keys(intentBody).sort().join(',') === 'base_revision,network_id,patch,schedule_id' &&
+  intentBody.network_id === 'net_alpha' && intentBody.base_revision === 4 && intentBody.patch.enabled === false);
+ck('intent auth stays in header, not body/url',
+  (intentCall.init.headers as any).Authorization === 'Bearer utok_test' && !intentCall.url.includes('utok_test') && !JSON.stringify(intentBody).includes('utok_test'));
+
+let intentConflict: unknown;
+try {
+  await createExternalScheduleEdit(cfg, 'n_9', { schedule_id: 'cron.news', base_revision: 3, patch: { cron: '0 9 * * *' } });
+} catch (error) { intentConflict = error; }
+ck('stale base_revision surfaces machine-readable 409 for refresh UX',
+  intentConflict instanceof ScheduledTaskError && intentConflict.status === 409 && intentConflict.code === 'revision_conflict');
+
+const screen2 = readFileSync(new URL('./ScheduledTasksScreen.tsx', import.meta.url), 'utf8');
+ck('mobile screen gates edit actions on editable cron rows with a numeric revision',
+  screen2.includes("sch.editable === true && sch.kind === 'cron' && typeof sch.revision === 'number'"));
+ck('mobile cron input pre-validates the five-field shape and never sends commands',
+  screen2.includes('looksLikeCron') && screen2.includes('分 时 日 月 周') && screen2.includes('绝不下发命令'));
+ck('mobile surfaces intent lifecycle wording for every terminal state',
+  ['待节点领取', '节点已领取', '已应用', '被节点拒绝', '已过期'].every(value => screen2.includes(value)));
 
 console.log(`scheduled tasks api: ${passed} checks passed`);
