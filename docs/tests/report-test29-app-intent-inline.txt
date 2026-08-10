@@ -1,0 +1,46 @@
+# test29 — App 计划行内联「意向在途」状态并锁操作
+
+Date: 2026-08-10
+Repo: https://github.com/sleep2agi/agent-network-app (private)
+PR: #29 (feat/schedule-intent-inline)
+Base: 86f2eecd… (origin/main = merge-base, #28 合并点)
+Source commit under test: 8a79e4884d122e8c40e61e460cdd6e7027f2ff93
+Docker tag: anet-app-sched29:dev
+Docker image id: sha256:e70ed6d7ffc65ac8296fbafb98e679c81c1ed36b112b7228ff6ddf0eea9d42ae
+Embedded ENV: APP_SCHEDULER_SOURCE_COMMIT=8a79e4884d122e8c40e61e460cdd6e7027f2ff93
+Build context: git archive <source commit>（干净树；.dockerignore 排除 node_modules）
+Runner: tests/test-scheduled-tasks/run.sh（bun 断言 + expo export --platform web）
+
+## Result
+
+PASS. 容器首行回显
+`# App scheduled tasks source=8a79e4884d122e8c40e61e460cdd6e7027f2ff93`，
+容器退出码 0。未触碰生产 Hub / Dashboard / agent-node / 任何 token 或数据库。
+
+- scheduled-tasks-api 断言：34 checks（#28 时 27 → 新增 7），0 失败。
+- expo export --platform web：RESULT: PASS。
+- Witnessed-red（容器级）：同一 build context 注入单处 sabotage——
+  selectOpenIntents 忽略 pending 过期判定——重建镜像
+  （sha256:4a87cc9b2ee9…，已删）后容器恰红
+  `FAIL: open: expired pending is NOT in-flight (mirrors Hub expireOpenIntents)`
+  且容器退出码 1；净源码镜像全绿。主机侧同款 sabotage 在提交前已红过一轮。
+
+## 行为事实
+
+1. selectOpenIntents 纯函数：delivered 恒在途（等节点回执）；pending 仅
+   expires_at > now 在途——镜像 Hub expireOpenIntents 判定，过期死意向不锁
+   按钮；applied/rejected/expired 终态不锁行；同计划多条取 created_at 最新；
+   键 `${node_id}:${schedule_id}`。五条功能断言逐一钉死。
+2. 节点计划 tab 每轮只为「有 editable 条目」的节点拉意向记录
+   （GET /api/nodes/:id/external-schedule-edits，owner 通道）；非 owner 的
+   403（node_owner_required）逐节点静默吞掉——代价只是该节点无徽标，
+   不产生页面级报错。
+3. 行内徽标「意向在途（待节点领取/节点已领取）：停用 / cron → …」，
+   启停与改时间两个按钮同时置灰（断言计数 disabled 绑定恰为 2 处）；
+   意向进入终态后随 10s 轮询自动解锁。
+4. 写路径不变（仍 #28 的四键契约 POST），本 PR 纯读侧/展示层增量。
+
+## Scope 边界
+
+- Hub/agent-node 侧（#684/#688/#689）已在各自仓合并，本 PR 不触碰；
+  线上闭环等 B4 部署 + pilot 节点 ownerScheduleControl=true。

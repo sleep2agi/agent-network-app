@@ -7,6 +7,7 @@ import {
   fetchScheduledRuns,
   fetchScheduledTasks,
   runScheduledTaskNow,
+  selectOpenIntents,
   ScheduledTaskError,
   setScheduledTaskStatus,
   updateScheduledTask,
@@ -166,5 +167,41 @@ ck('mobile cron input pre-validates the five-field shape and never sends command
   screen2.includes('looksLikeCron') && screen2.includes('分 时 日 月 周') && screen2.includes('绝不下发命令'));
 ck('mobile surfaces intent lifecycle wording for every terminal state',
   ['待节点领取', '节点已领取', '已应用', '被节点拒绝', '已过期'].every(value => screen2.includes(value)));
+
+// ── 在途意向筛选（selectOpenIntents 纯函数）────────────────────────────
+
+const T0 = Date.parse('2026-08-10T12:00:00Z');
+const mkIntent = (over: Partial<Parameters<typeof selectOpenIntents>[0][number]>) => ({
+  intent_id: 'sei_x', node_id: 'n_9', schedule_id: 'cron.news', base_revision: 4,
+  patch: { enabled: false }, status: 'pending' as const,
+  expires_at: '2026-08-10T12:05:00Z', created_at: '2026-08-10T11:59:00Z',
+  delivered_at: null, acked_at: null, result_revision: null, error_code: null, ...over,
+});
+ck('open: live pending counts as in-flight',
+  !!selectOpenIntents([mkIntent({})], T0)['n_9:cron.news']);
+ck('open: expired pending is NOT in-flight (mirrors Hub expireOpenIntents)',
+  Object.keys(selectOpenIntents([mkIntent({ expires_at: '2026-08-10T11:59:59Z' })], T0)).length === 0);
+ck('open: delivered stays in-flight regardless of expires_at',
+  !!selectOpenIntents([mkIntent({ status: 'delivered', expires_at: '2026-08-10T11:00:00Z' })], T0)['n_9:cron.news']);
+ck('open: terminal states never gate the row',
+  Object.keys(selectOpenIntents([
+    mkIntent({ status: 'applied' }), mkIntent({ status: 'rejected' }), mkIntent({ status: 'expired' }),
+  ], T0)).length === 0);
+ck('open: newest created_at wins per schedule; other schedules keyed separately',
+  (() => {
+    const map = selectOpenIntents([
+      mkIntent({ intent_id: 'sei_old', created_at: '2026-08-10T11:00:00Z' }),
+      mkIntent({ intent_id: 'sei_new', created_at: '2026-08-10T11:59:30Z' }),
+      mkIntent({ intent_id: 'sei_other', schedule_id: 'cron.report' }),
+    ], T0);
+    return map['n_9:cron.news'].intent_id === 'sei_new' && map['n_9:cron.report'].intent_id === 'sei_other';
+  })());
+
+const screen3 = readFileSync(new URL('./ScheduledTasksScreen.tsx', import.meta.url), 'utf8');
+ck('mobile rows show in-flight intent and gate both actions while one is open',
+  screen3.includes('openIntents[`${node.node_id}:${sch.id}`]') && screen3.includes('意向在途') &&
+  screen3.split('disabled={busy || !!open}').length - 1 === 2);
+ck('mobile loads intents only for nodes with managed rows and swallows non-owner 403',
+  screen3.includes("n.schedules.some(x => x.editable === true)") && screen3.includes('catch { return []; }'));
 
 console.log(`scheduled tasks api: ${passed} checks passed`);

@@ -268,6 +268,25 @@ export interface HubExternalScheduleEditIntent {
 export const fetchExternalScheduleEdits = (cfg: HubConfig, nodeId: string) =>
   get<{ ok: true; edits: HubExternalScheduleEditIntent[] }>(cfg, `/api/nodes/${encodeURIComponent(nodeId)}/external-schedule-edits${networkQuery(cfg)}`);
 
+/** 从意向记录里选出每个计划「仍在途」的那条：delivered（节点已领取、等回执）
+ *  恒为在途；pending 只有未过 TTL（expires_at > now）才算——Hub 侧
+ *  expireOpenIntents 会把过期 pending 收尾，这里镜像同一判定，别把死意向
+ *  当在途去锁按钮。同计划多条取 created_at 最新。键：`${node_id}:${schedule_id}`。 */
+export const selectOpenIntents = (
+  edits: HubExternalScheduleEditIntent[],
+  now: number,
+): Record<string, HubExternalScheduleEditIntent> => {
+  const open: Record<string, HubExternalScheduleEditIntent> = {};
+  for (const edit of edits) {
+    const inFlight = edit.status === 'delivered'
+      || (edit.status === 'pending' && Date.parse(edit.expires_at) > now);
+    if (!inFlight) continue;
+    const key = `${edit.node_id}:${edit.schedule_id}`;
+    if (!open[key] || Date.parse(edit.created_at) > Date.parse(open[key].created_at)) open[key] = edit;
+  }
+  return open;
+};
+
 /** 发起编辑意向。Hub 端 exactKeys 只收这四个键；network_id 必须等于节点归属网络
  *  （requireOwner 校验），patch 只允许 enabled / 五段 cron。冲突语义：
  *  revision_conflict / schedule_read_only / edit_in_flight / node_owner_changed
