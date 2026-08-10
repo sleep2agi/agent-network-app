@@ -32,6 +32,7 @@ import {
   HubScheduleSpec,
   ScheduledTaskError,
   runScheduledTaskNow,
+  selectOpenIntents,
   setScheduledTaskStatus,
   updateScheduledTask,
 } from './api';
@@ -74,6 +75,11 @@ const looksLikeCron = (raw: string) => {
   const fields = raw.trim().split(/ +/);
   return fields.length === 5 && fields.every(f => /^[0-9*/,-]+$/.test(f));
 };
+
+const describeIntentPatch = (patch: HubExternalScheduleEditIntent['patch']) => [
+  patch.enabled !== undefined ? (patch.enabled ? '启用' : '停用') : null,
+  patch.cron ? `cron → ${patch.cron}` : null,
+].filter(Boolean).join('，') || '—';
 
 const editIntentErrorText = (e: unknown): string => {
   if (e instanceof ScheduledTaskError) {
@@ -120,6 +126,7 @@ export default function ScheduledTasksScreen({ cfg }: { cfg: HubConfig }) {
   const [externalLoaded, setExternalLoaded] = useState(false);
   const [cronEdit, setCronEdit] = useState<{ node: HubNodeExternalSchedules; schedule: HubExternalSchedule } | null>(null);
   const [intents, setIntents] = useState<{ title: string; edits: HubExternalScheduleEditIntent[] } | null>(null);
+  const [openIntents, setOpenIntents] = useState<Record<string, HubExternalScheduleEditIntent>>({});
 
   const load = useCallback(async (manual = false) => {
     if (manual) setRefreshing(true);
@@ -138,7 +145,15 @@ export default function ScheduledTasksScreen({ cfg }: { cfg: HubConfig }) {
   const loadExternal = useCallback(async (manual = false) => {
     if (manual) setRefreshing(true);
     try {
-      setExternal(await fetchExternalSchedules(cfg));
+      const rows = await fetchExternalSchedules(cfg);
+      setExternal(rows);
+      // 只查带托管条目的节点；非 owner 的 GET 会 403（node_owner_required）——
+      // 静默跳过，代价只是那台节点看不到在途意向徽标。
+      const lists = await Promise.all(rows.filter(n => n.schedules.some(x => x.editable === true)).map(async n => {
+        try { return (await fetchExternalScheduleEdits(cfg, n.node_id)).edits || []; }
+        catch { return []; }
+      }));
+      setOpenIntents(selectOpenIntents(lists.flat(), Date.now()));
       setError('');
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
@@ -231,12 +246,16 @@ export default function ScheduledTasksScreen({ cfg }: { cfg: HubConfig }) {
                     <Text style={styles.meta}>{EXTERNAL_KIND_LABEL[sch.kind]} · {sch.frequency}</Text>
                     <Text style={styles.meta}>上次：{fmt(sch.last_run_at)}（{EXTERNAL_STATUS_LABEL[sch.last_status]}）　下次：{fmt(sch.next_run_at)}</Text>
                     {sch.last_error ? <Text style={styles.extError}>{sch.last_error}</Text> : null}
-                    {sch.editable === true && sch.kind === 'cron' && typeof sch.revision === 'number' ? (
-                      <View style={styles.actions}>
-                        <Pressable disabled={busy} style={styles.action} onPress={() => void submitEditIntent(node, sch, { enabled: !sch.enabled })}><Text style={styles.actionText}>{sch.enabled ? '停用' : '启用'}</Text></Pressable>
-                        <Pressable disabled={busy} style={styles.action} onPress={() => setCronEdit({ node, schedule: sch })}><Text style={styles.actionText}>改时间</Text></Pressable>
-                      </View>
-                    ) : null}
+                    {sch.editable === true && sch.kind === 'cron' && typeof sch.revision === 'number' ? (() => {
+                      const open = openIntents[`${node.node_id}:${sch.id}`];
+                      return <>
+                        {open ? <Text style={styles.intentBadge}>意向在途（{INTENT_STATUS_LABEL[open.status]}）：{describeIntentPatch(open.patch)}</Text> : null}
+                        <View style={styles.actions}>
+                          <Pressable disabled={busy || !!open} style={[styles.action, open && styles.actionDisabled]} onPress={() => void submitEditIntent(node, sch, { enabled: !sch.enabled })}><Text style={styles.actionText}>{sch.enabled ? '停用' : '启用'}</Text></Pressable>
+                          <Pressable disabled={busy || !!open} style={[styles.action, open && styles.actionDisabled]} onPress={() => setCronEdit({ node, schedule: sch })}><Text style={styles.actionText}>改时间</Text></Pressable>
+                        </View>
+                      </>;
+                    })() : null}
                   </View>
                 ))}
               </View>
@@ -413,10 +432,6 @@ function CronEditModal({ value, busy, onClose, onSubmit }: {
 
 function IntentsModal({ value, onClose }: { value: { title: string; edits: HubExternalScheduleEditIntent[] } | null; onClose: () => void }) {
   const s = useMemo(makeStyles, [value]);
-  const describePatch = (patch: HubExternalScheduleEditIntent['patch']) => [
-    patch.enabled !== undefined ? (patch.enabled ? '启用' : '停用') : null,
-    patch.cron ? `cron → ${patch.cron}` : null,
-  ].filter(Boolean).join('，') || '—';
   return <Modal visible={!!value} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
     <View style={s.modalRoot}>
       <View style={s.modalHeader}><Pressable onPress={onClose}><Text style={s.link}>关闭</Text></Pressable><Text style={s.modalTitle}>{value?.title || '意向记录'}</Text><View style={{ width: 40 }} /></View>
@@ -425,7 +440,7 @@ function IntentsModal({ value, onClose }: { value: { title: string; edits: HubEx
           <View key={edit.intent_id} style={s.run}>
             <View style={{ flex: 1 }}>
               <Text style={s.cardTitle}>{edit.schedule_id} · {INTENT_STATUS_LABEL[edit.status] || edit.status}</Text>
-              <Text style={s.meta}>{describePatch(edit.patch)}</Text>
+              <Text style={s.meta}>{describeIntentPatch(edit.patch)}</Text>
               <Text style={s.meta}>{fmt(edit.created_at)}{edit.error_code ? ` · ${edit.error_code}` : ''}</Text>
             </View>
           </View>
@@ -448,4 +463,6 @@ function makeStyles() { return StyleSheet.create({
   extRow: { borderTopWidth: 1, borderTopColor: colors.border, marginTop: spacing.md, paddingTop: spacing.md },
   extError: { color: colors.failed, fontSize: 11, marginTop: spacing.xs },
   linkDisabled: { opacity: 0.4 },
+  intentBadge: { color: colors.accent, fontSize: 11, marginTop: spacing.sm },
+  actionDisabled: { opacity: 0.4 },
 }); }
