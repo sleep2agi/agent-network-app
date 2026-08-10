@@ -194,6 +194,95 @@ export const runScheduledTaskNow = (cfg: HubConfig, scheduleId: string) =>
 export const cancelScheduledTask = (cfg: HubConfig, scheduleId: string) =>
   scheduledWrite<{ ok: true; status: string }>(cfg, `/api/scheduled-tasks/${encodeURIComponent(scheduleId)}${networkQuery(cfg)}`, 'DELETE');
 
+// ── 节点外部计划（RFC-036）。节点把本机 crontab/systemd 等计划的快照上报到
+// Hub（#684，只有元数据，绝无命令/路径），owner 通过「编辑意向」改 enabled 或
+// 五段 cron 时间（#688）；节点侧领取意向后自行落地并回执。
+
+export interface HubExternalSchedule {
+  id: string;
+  name: string;
+  kind: 'cron' | 'systemd' | 'tmux' | 'playwright' | 'custom';
+  frequency: string;
+  last_run_at: string | null;
+  last_status: 'success' | 'failed' | 'running' | 'unknown';
+  last_error: string | null;
+  next_run_at: string | null;
+  log_ref: string | null;
+  enabled: boolean;
+  /** RFC-036: 只有 agent-node 托管的 cron 条目带 editable+revision，其余只读。 */
+  editable?: boolean;
+  revision?: number;
+}
+
+export interface HubNodeExternalSchedules {
+  node_id: string;
+  alias: string;
+  observed_at: string;
+  error?: string;
+  schedules: HubExternalSchedule[];
+}
+
+/** 汇总各节点上报的外部计划快照。走全量 /api/status —— light=1 会剥掉
+ *  external_schedules 字段，这里绝不能带 light。同一 node_id 若有多条会话，
+ *  取 updated_at 最新且带快照的那条（与 Hub 端 reportedSchedule 同准则）。 */
+export const fetchExternalSchedules = async (cfg: HubConfig): Promise<HubNodeExternalSchedules[]> => {
+  const data = await get<{ sessions: Array<{
+    alias?: string;
+    node_id?: string | null;
+    updated_at?: string | null;
+    external_schedules?: { observed_at?: string; schedules?: HubExternalSchedule[]; error?: string } | null;
+  }> }>(cfg, `/api/status${networkQuery(cfg)}`);
+  const byNode = new Map<string, { updatedAt: number; row: HubNodeExternalSchedules }>();
+  for (const s of data.sessions || []) {
+    if (!s.node_id || !s.external_schedules || !Array.isArray(s.external_schedules.schedules)) continue;
+    const updatedAt = s.updated_at ? Date.parse(s.updated_at) || 0 : 0;
+    const seen = byNode.get(s.node_id);
+    if (seen && seen.updatedAt >= updatedAt) continue;
+    byNode.set(s.node_id, { updatedAt, row: {
+      node_id: s.node_id,
+      alias: s.alias || s.node_id,
+      observed_at: s.external_schedules.observed_at || '',
+      ...(s.external_schedules.error ? { error: s.external_schedules.error } : {}),
+      schedules: s.external_schedules.schedules,
+    } });
+  }
+  return [...byNode.values()].map(v => v.row).sort((a, b) => a.alias.localeCompare(b.alias));
+};
+
+export interface HubExternalScheduleEditIntent {
+  intent_id: string;
+  node_id: string;
+  schedule_id: string;
+  base_revision: number;
+  patch: { enabled?: boolean; cron?: string };
+  status: 'pending' | 'delivered' | 'applied' | 'rejected' | 'expired';
+  expires_at: string;
+  created_at: string;
+  delivered_at: string | null;
+  acked_at: string | null;
+  result_revision: number | null;
+  error_code: string | null;
+}
+
+/** owner 视角的意向记录（最近 100 条，仅本人创建的）。 */
+export const fetchExternalScheduleEdits = (cfg: HubConfig, nodeId: string) =>
+  get<{ ok: true; edits: HubExternalScheduleEditIntent[] }>(cfg, `/api/nodes/${encodeURIComponent(nodeId)}/external-schedule-edits${networkQuery(cfg)}`);
+
+/** 发起编辑意向。Hub 端 exactKeys 只收这四个键；network_id 必须等于节点归属网络
+ *  （requireOwner 校验），patch 只允许 enabled / 五段 cron。冲突语义：
+ *  revision_conflict / schedule_read_only / edit_in_flight / node_owner_changed
+ *  都走 409，由 ScheduledTaskError.code 透出。 */
+export const createExternalScheduleEdit = (
+  cfg: HubConfig,
+  nodeId: string,
+  input: { schedule_id: string; base_revision: number; patch: { enabled?: boolean; cron?: string } },
+) => scheduledWrite<{ ok: true; intent: HubExternalScheduleEditIntent }>(
+  cfg,
+  `/api/nodes/${encodeURIComponent(nodeId)}/external-schedule-edits`,
+  'POST',
+  { network_id: cfg.networkId, schedule_id: input.schedule_id, base_revision: input.base_revision, patch: input.patch },
+);
+
 export type PutAvatarResult =
   | { ok: true; avatar_url: string | null }
   | { ok: false; error: string; reason?: string; status?: number };
