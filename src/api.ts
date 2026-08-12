@@ -170,7 +170,7 @@ export const sendTask = async (
 // dispatch create_node to. Hub side landed in commhub-server preview.8
 // (PR #341 MCP + PR #343 audit) — earlier hubs return 501/404 and we
 // surface the "needs upgrade" state honestly per
-// [[feedback_doc_capability_claim_verify_code_path]] — never a fake
+// 「文档宣称的能力必须对着代码路径逐条验证」这条判据 — never a fake
 // empty list.
 export interface HostSupervisorDaemon {
   daemon_node_id: string;
@@ -223,7 +223,7 @@ export const fetchHostSupervisors = async (cfg: HubConfig): Promise<HostSupervis
     // carries either `ok` or `daemons` or `count`. Absence of all three
     // means we hit a different handler (older hub catch-all returning
     // JSON help, or a proxy front-page). Per
-    // [[feedback_doc_capability_claim_verify_code_path]] never silently
+    // 「文档宣称的能力必须对着代码路径逐条验证」这条判据 never silently
     // fake "no daemons" — surface upgrade hint.
     if (data.ok === undefined && data.daemons === undefined && data.count === undefined) {
       return { ok: false, unconfirmed: true, error: NEEDS_UPGRADE };
@@ -248,7 +248,7 @@ export const fetchHostSupervisors = async (cfg: HubConfig): Promise<HostSupervis
 //
 // Response body comes back as application/json OR text/event-stream; the
 // tool payload itself lives at envelope.result.content[0].text as a JSON
-// string. claim=reality per [[feedback_doc_capability_claim_verify_code_path]]
+// string. claim=reality per 「文档宣称的能力必须对着代码路径逐条验证」这条判据
 // — caller polls fetchStatus afterwards to confirm the child registered;
 // we never report "succeeded" from this call alone.
 export interface CreateNodeRequest {

@@ -25,12 +25,12 @@ import { colors, onThemeChange, spacing } from './theme';
 // 5 post-picker steps: ① name ② runtime ③ model ④ flags ⑤ confirm.
 // On submit POST /mcp create_node, then poll fetchStatus until the
 // child alias shows up in the session list. claim=reality discipline
-// (per [[feedback_doc_capability_claim_verify_code_path]]) — we don't
+// (per 「文档宣称的能力必须对着代码路径逐条验证」这条判据) — we don't
 // flip to "✓ 已上线" until the child actually registered.
 //
 // React rules of hooks compliance: ALL useState/useEffect/useRef
 // declared BEFORE any conditional early return — guards against the
-// v0.1.29 launch-crash class (Vincent tg 1098, [[feedback_anet_node_behavior_stale_install]]
+// v0.1.29 launch-crash class (Vincent tg 1098, 「旧的全局安装会让 anet 行为与文档不符」那类事故
 // related discipline).
 //
 // Runtime step filters by daemon.runtimes_supported when published;
@@ -143,7 +143,7 @@ export default function CreateNodeWizardScreen({ cfg, daemon, onBack, onExit }: 
 
   // Derived: runtime details + nav gates
   const runtime = RUNTIMES.find(r => r.id === runtimeId) || RUNTIMES[0];
-  // Mirror hub regex per [[feedback_doc_capability_claim_verify_code_path]]
+  // Mirror hub regex per 「文档宣称的能力必须对着代码路径逐条验证」这条判据
   // — UX surfaces what the hub will accept, not a looser local rule.
   const nameValid = NAME_RE.test(name.trim());
   const isRuntimeAllowed = useCallback((id: string) => {

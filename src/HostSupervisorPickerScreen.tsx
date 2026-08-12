@@ -88,7 +88,7 @@ export default function HostSupervisorPickerScreen({
     );
   }
 
-  // hub < preview.8 — honest degrade per [[feedback_doc_capability_claim_verify_code_path]]
+  // hub < preview.8 — honest degrade per 「文档宣称的能力必须对着代码路径逐条验证」这条判据
   if (!result.ok && result.unconfirmed) {
     return (
       <View style={styles.root}>
@@ -244,7 +244,7 @@ export default function HostSupervisorPickerScreen({
 function handleNext(d: HostSupervisorDaemon, onPicked?: (d: HostSupervisorDaemon) => void) {
   if (onPicked) { onPicked(d); return; }
   // Wizard rest is a follow-up PR — surface that honestly instead of
-  // pretending to do something. Per [[feedback_doc_capability_claim_verify_code_path]].
+  // pretending to do something. Per 「文档宣称的能力必须对着代码路径逐条验证」这条判据.
   Alert.alert(
     `已选择 ${d.alias}`,
     '节点创建向导（name / runtime / model / flags / confirm）在后续 PR ship。当前 PR 只实现选服务器步骤。',
