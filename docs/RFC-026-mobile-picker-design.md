@@ -147,7 +147,7 @@ Tapping `[详情]` flips to the picker-list view (same as count≥2) so the user
 └─────────────────────────────────────┘
 ```
 
-Honest 501 surface — same discipline as dashboard PR4. Never fake an empty list (per `[[feedback_doc_capability_claim_verify_code_path]]`).
+Honest 501 surface — same discipline as dashboard PR4. Never fake an empty list: a UI that renders "no items" when the capability is merely unimplemented is indistinguishable, to the reader, from one that checked and found nothing. Say which of the two happened.
 
 ## Visual / token mapping to existing theme
 

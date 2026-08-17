@@ -25,29 +25,50 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Scan for internal [[slug]] refs in code
+      - name: Scan for internal [[slug]] refs in code and docs
         run: |
           set -euo pipefail
-          # Files to scan: TypeScript/JS/TSX under src/, plus the top-level
-          # App.tsx. Explicit list so a rename doesn't silently widen or
-          # shrink the scope. `find` before `grep` so we can count the
-          # denominator honestly.
-          FILES=$(find src -type f \( -name '*.ts' -o -name '*.tsx' -o -name '*.js' -o -name '*.jsx' \) 2>/dev/null; ls App.tsx 2>/dev/null || true)
+          # Files to scan: TypeScript/JS/TSX under src/, the top-level App.tsx,
+          # and Markdown under docs/ + the repo root. Explicit list so a rename
+          # doesn't silently widen or shrink the scope. `find` before `grep` so
+          # we can count the denominator honestly.
+          #
+          # 🔴 docs/ was added 2026-08-18. The job used to say "in code", and
+          # docs/RFC-026 carried a real `[[…]]` slug that nothing looked at — a
+          # slug in a public RFC leaks exactly what a slug in public source
+          # leaks, and an RFC is more likely to be read by an outsider. The
+          # guard was clean while the leak sat one directory away.
+          FILES=$(
+            find src -type f \( -name '*.ts' -o -name '*.tsx' -o -name '*.js' -o -name '*.jsx' \) 2>/dev/null
+            find docs -type f -name '*.md' 2>/dev/null
+            ls App.tsx 2>/dev/null || true
+            ls ./*.md 2>/dev/null || true
+          )
           if [ -z "$FILES" ]; then
             echo "::error::scrub-guard scanned ZERO files — scope regression, refusing to pass"
             exit 2
           fi
           COUNT=$(echo "$FILES" | wc -l)
-          echo "scanned $COUNT source file(s) under src/ + App.tsx"
+          echo "scanned $COUNT file(s): src/ sources + App.tsx + docs/*.md + root *.md"
 
-          # Hit list. Fixed-string grep to avoid regex escaping surprises.
-          HITS=$(echo "$FILES" | xargs grep -nF '[[' 2>/dev/null || true)
+          # Hit list. Match the SHAPE of a memory slug, not merely two opening
+          # brackets.
+          #
+          # 🔴 2026-08-18: the old `grep -F '[['` flagged a perfectly legal IPv6
+          # host regex in src/login-flow.ts — an escaped bracket followed by a
+          # character class produces those two characters — and turned main red
+          # for a leak that did not exist. A guard that fires on legitimate code
+          # gets worked around, and then it protects nothing.
+          #
+          # Slugs are lowercase words joined by _ or -, wrapped in doubled
+          # brackets: [[feedback_some_thing]]. Anchor on that.
+          HITS=$(echo "$FILES" | xargs grep -nE '\[\[[a-z0-9][a-z0-9_-]*\]\]' 2>/dev/null || true)
           if [ -z "$HITS" ]; then
-            echo "✓ no [[slug]] refs in $COUNT scanned files"
+            echo "✓ no [[slug]]-shaped refs in $COUNT scanned files"
             exit 0
           fi
 
-          echo "::group::[[ references found — internal memory slugs must not appear in public-repo code"
+          echo "::group::[[ references found — internal memory slugs must not appear in a public repo"
           echo "$HITS"
           echo "::endgroup::"
           HITCOUNT=$(echo "$HITS" | wc -l)
