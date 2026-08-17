@@ -30,7 +30,8 @@ import LogsScreen from './src/LogsScreen';
 import ScheduledTasksScreen from './src/ScheduledTasksScreen';
 import ConnectivityBanner from './src/ConnectivityBanner';
 import type { HostSupervisorDaemon } from './src/api';
-import { clearConfig, loadConfig, loadLocalAvatars, loadThemeMode, saveConfig, saveLocalAvatars } from './src/storage';
+import { clearConfig, loadConfig, loadLocalAvatars, loadOutbox, loadThemeMode, saveConfig, saveLocalAvatars, saveOutbox } from './src/storage';
+import { initOutbox } from './src/outbox';
 import { colors, onThemeChange, setThemeMode, themeMode } from './src/theme';
 import { styles } from './src/app-styles';
 import { APP_VERSION } from './src/version';
@@ -117,11 +118,14 @@ function AppRoot() {
   // .then, leaving `booting` true forever = a permanent boot spinner —
   // so keep those two best-effort if they're ever refactored.
   useEffect(() => {
-    Promise.all([loadConfig(), loadThemeMode(), loadLocalAvatars()]).then(([saved, mode, localAvatars]) => {
+    Promise.all([loadConfig(), loadThemeMode(), loadLocalAvatars(), loadOutbox()]).then(([saved, mode, localAvatars, outbox]) => {
       if (mode === 'light' || mode === 'dark') setThemeMode(mode);
       // R2 avatar: seed the per-device local echo layer + wire its writer, so
       // session-only aliases keep their user-set avatar across restarts.
       initLocalAvatars(localAvatars, (m) => { void saveLocalAvatars(m); });
+      // PR3 判据C:恢复未送达 outbox(pending 一律恢复为 failed=命运未知按未送达),
+      // 注入落盘写手——此后 提交即落盘/确认才删。
+      initOutbox(outbox, (all) => { void saveOutbox(all); });
       if (saved) {
         setCfg(saved);
         setScreen({ name: 'agents' });

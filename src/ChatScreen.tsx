@@ -18,6 +18,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import AliasAvatar from './AliasAvatar';
 import AuthedThumb, { AttachmentFile, AuthedVideo, mimeFromName } from './AuthedThumb';
 import { fetchStatus, fetchTasks, sendTask, HubConfig, HubTask, TaskAttachment } from './api';
+import { outboxAdd, outboxForAlias, outboxMarkFailed, outboxMarkPending, outboxRemove } from './outbox';
 import {
   ATTACH_ENABLED,
   attachmentTextHint,
@@ -49,6 +50,10 @@ type ChatItem = HubTask & {
   _pending?: boolean;
   _failed?: boolean;
   _img?: PickedImage;
+  /** PR3 review①:恢复自 outbox 且原带图片——说明文案走这个标志单独渲染,
+   *  🔴 绝不拼进 content:content 是「要发出去的字」,注解是「给用户看的字」,
+   *  共用一个字段迟早串(重试会把注解原样发给对方 agent)。 */
+  _restoredNoImage?: boolean;
 };
 
 // Received tasks carry attachments inside meta_json (#221). Images get
@@ -197,12 +202,23 @@ export default function ChatScreen({ cfg, alias, onBack }: Props) {
 
   // Reset the lazy window when the chat target changes; usePoll does the
   // initial fetch + polling (fires fn() right after this effect → limit=PAGE).
+  // PR3 判据C:同时把该会话的 outbox 未送达条目并回列表(上次 app 被杀时留下的)。
+  // 恢复项带 _localId → :188 的 merge 会让它们在轮询重载中存活;_failed → 渲染成
+  // 「未送达 · 点击重试」,retry 复用同一 id。恢复项无 _img(附件不持久化,见 outbox.ts)。
   useEffect(() => {
     limitRef.current = PAGE;
-    setMessages([]);
+    const restored = outboxForAlias(alias).map<ChatItem>((e) => ({
+      content: e.content, // 保持原文——重试发的就是它
+      created_at: new Date(e.createdAt).toISOString(),
+      _localId: e.id,
+      _pending: e.state === 'pending',
+      _failed: e.state === 'failed',
+      _restoredNoImage: !!e.hadImage,
+    }));
+    setMessages(restored.reverse()); // inverted 列表:新的在前
     setLoaded(false);
     setHasOlder(true);
-  }, [load]);
+  }, [load, alias]);
 
   // Foreground-only message polling: 5s while visible, paused in background,
   // instant refresh on resume (shared hook). Reads the live window via limitRef.
@@ -296,10 +312,13 @@ export default function ChatScreen({ cfg, alias, onBack }: Props) {
         outgoing = `${content}${attachmentTextHint(img, up)}`;
       }
       await sendTask(cfg, alias, outgoing, attachments);
-      // delivered: drop the echo, the server copy arrives with reload
+      // delivered: drop the echo, the server copy arrives with reload.
+      // 🔴 outbox 唯一删除路径=此处(sendTask 确认成功)。
+      outboxRemove(localId);
       setMessages(prev => prev.filter(t => t._localId !== localId));
       await load(limitRef.current);
     } catch {
+      outboxMarkFailed(localId); // 盘上也是 failed——杀 app 重开仍可重试
       setMessages(prev =>
         prev.map(t => (t._localId === localId ? { ...t, _pending: false, _failed: true } : t)),
       );
@@ -317,7 +336,10 @@ export default function ChatScreen({ cfg, alias, onBack }: Props) {
     // yet). doSend drops this echo on success — the subsequent reload brings
     // the real server row — or flags _failed so retry() can resend with the
     // same _localId. localSeq just guarantees each echo's id is unique.
-    const localId = `local-${++localSeq.current}`;
+    // PR3 判据C:id 跨次启动唯一(重开恢复的旧 local-N 不能和新 id 撞车);
+    // 🔴 提交即落盘(网络尝试之前)——发送中被杀,重开后它还在。
+    const localId = `local-${Date.now()}-${++localSeq.current}`;
+    outboxAdd({ id: localId, alias, content, createdAt: Date.now(), state: 'pending', hadImage: !!img });
     setMessages(prev => [
       { content, created_at: new Date().toISOString(), _localId: localId, _pending: true, _img: img },
       ...prev,
@@ -327,6 +349,7 @@ export default function ChatScreen({ cfg, alias, onBack }: Props) {
 
   const retry = (item: ChatItem) => {
     if (!item._localId || !item.content) return;
+    outboxMarkPending(item._localId); // 重试中被杀照样恢复(仍在盘上)
     setMessages(prev =>
       prev.map(t => (t._localId === item._localId ? { ...t, _pending: true, _failed: false } : t)),
     );
@@ -481,12 +504,19 @@ export default function ChatScreen({ cfg, alias, onBack }: Props) {
                     {replyAttachmentViews(item, cfg.serverUrl).map(renderAttachment)}
                   </View>
                 ) : null}
+                {item._restoredNoImage ? (
+                  <Text style={styles.restoredNote}>（图片附件未保存·重试仅发文本）</Text>
+                ) : null}
                 {item._pending ? (
                   <Text style={styles.pendingMark}>发送中…</Text>
                 ) : item._failed ? (
                   <Pressable onPress={() => retry(item)} hitSlop={8}>
                     <Text style={styles.failedMark}>未送达 · 点击重试</Text>
                   </Pressable>
+                ) : !(item.result ?? item.reply) ? (
+                  // PR3 要求2:「送达了但对方没回」≠「未送达」——前者灰勾不可点(不用重试),
+                  // 后者红字带重试。服务器行(无 _localId 标志)= hub 已收 = 已送达。
+                  <Text style={styles.deliveredMark}>已送达 ✓</Text>
                 ) : null}
               </View>
             );
@@ -629,6 +659,8 @@ const makeStyles = () =>
   },
   replyBubble: { alignSelf: 'flex-start', backgroundColor: colors.inputBg },
   bubbleText: { color: colors.text, fontSize: 14, lineHeight: 20 },
+  restoredNote: { color: colors.textMuted, fontSize: 10, marginTop: 2, alignSelf: 'flex-end' },
+  deliveredMark: { color: colors.textMuted, fontSize: 10, marginTop: 2, alignSelf: 'flex-end' },
   pendingMark: { color: colors.textMuted, fontSize: 10, alignSelf: 'flex-end' },
   typingRow: {
     flexDirection: 'row',
