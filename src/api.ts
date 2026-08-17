@@ -50,12 +50,24 @@ const withTimeout = (run: (signal: AbortSignal) => Promise<Response>): Promise<R
   return run(ctrl.signal).finally(() => clearTimeout(timer));
 };
 
+// 连接状态横幅(通信龙 App战线①):共享读路径上每次请求结局都上报 connectivity——
+// 成功=拿到并解析出数据;失败=网络错/超时/非2xx/解析错(数据没到,UI 是陈旧的)。
+// 只挂在 get()(全部轮询读)上;写路径有各自显式失败 UI,不进此口径。
+import { reportReadFailure, reportReadSuccess } from './connectivity';
+
 async function get<T>(cfg: HubConfig, path: string): Promise<T> {
-  const res = await withTimeout(signal =>
-    fetch(`${cfg.serverUrl}${path}`, { headers: headers(cfg), signal }),
-  );
-  if (!res.ok) throw new Error(`HTTP ${res.status} on ${path}`);
-  return res.json() as Promise<T>;
+  try {
+    const res = await withTimeout(signal =>
+      fetch(`${cfg.serverUrl}${path}`, { headers: headers(cfg), signal }),
+    );
+    if (!res.ok) throw new Error(`HTTP ${res.status} on ${path}`);
+    const data = (await res.json()) as T;
+    reportReadSuccess();
+    return data;
+  } catch (e) {
+    reportReadFailure();
+    throw e;
+  }
 }
 
 // `?light=1` (commhub-server ≥0.8.6) returns a narrow per-session
