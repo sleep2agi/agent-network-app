@@ -22,7 +22,7 @@ export const LOGIN_FAILURE_COPY: Record<LoginFailureKind, LoginFailureCopy> = {
   },
   unreachable: {
     what: '连不上服务器',
-    next: '检查网络连接和服务器地址是否可达;如在内网,确认已连 VPN',
+    next: '检查网络连接和服务器地址是否可达;如在内网,确认已连 VPN;若为内网地址,试试显式填 http://',
   },
   'bad-credentials': {
     what: '用户名或密码不对',

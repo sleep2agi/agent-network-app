@@ -805,13 +805,16 @@ export const login = async (
     // error. Read text first so we can say what actually went wrong.
     const text = await res.text();
     if (!text.trim()) {
-      return { ok: false, kind: classifyLoginFailure(false, res.status), error: '服务器无响应内容 — 检查地址和端口（hub 默认 9999）' };
+      // review-fix(通信龙 #34):响应形状不对=不是 hub → server-error,与 HTTP 状态码无关
+      // (401+空体的常见真身是 basic-auth nginx——判 bad-credentials 会诱导用户反复重打密码)。
+      return { ok: false, kind: 'server-error', error: '服务器无响应内容 — 检查地址和端口（hub 默认 9999）' };
     }
     let data: any;
     try {
       data = JSON.parse(text);
     } catch {
-      return { ok: false, kind: classifyLoginFailure(false, res.status), error: `服务器返回了非 JSON 内容（HTTP ${res.status}）— 确认地址指向 hub` };
+      // 同上:非 JSON 体(HTML 401 页等)= 不是 hub → server-error(kind 必须与本行文案同向)。
+      return { ok: false, kind: 'server-error', error: `服务器返回了非 JSON 内容（HTTP ${res.status}）— 确认地址指向 hub` };
     }
     if (!data?.ok) return { ok: false, kind: classifyLoginFailure(false, res.status), error: String(data?.error ?? `HTTP ${res.status}`) };
     const token = data.token ?? data.user_token ?? data.access_token;
