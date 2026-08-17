@@ -102,3 +102,27 @@ export const loadLocalAvatars = async (): Promise<Record<string, string>> => {
     return {};
   }
 };
+
+// PR3 判据C:未送达消息 outbox(src/outbox.ts)的落盘。documentDirectory(持久·
+// 非可清缓存目录)——判据是「杀掉 app 再开它还在」,放 cacheDirectory 就输在判据上。
+import type { OutboxEntry } from './outbox';
+const OUTBOX_FILE = `${FileSystem.documentDirectory}outbox_v1.json`;
+
+export const saveOutbox = async (all: OutboxEntry[]): Promise<void> => {
+  try {
+    await FileSystem.writeAsStringAsync(OUTBOX_FILE, JSON.stringify(all));
+  } catch {
+    /* best-effort — 落盘失败不阻塞发送 UI;下次 flush 再试 */
+  }
+};
+
+export const loadOutbox = async (): Promise<OutboxEntry[]> => {
+  try {
+    const info = await FileSystem.getInfoAsync(OUTBOX_FILE);
+    if (!info.exists) return [];
+    const parsed = JSON.parse(await FileSystem.readAsStringAsync(OUTBOX_FILE));
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+};
