@@ -50,6 +50,10 @@ type ChatItem = HubTask & {
   _pending?: boolean;
   _failed?: boolean;
   _img?: PickedImage;
+  /** PR3 review①:恢复自 outbox 且原带图片——说明文案走这个标志单独渲染,
+   *  🔴 绝不拼进 content:content 是「要发出去的字」,注解是「给用户看的字」,
+   *  共用一个字段迟早串(重试会把注解原样发给对方 agent)。 */
+  _restoredNoImage?: boolean;
 };
 
 // Received tasks carry attachments inside meta_json (#221). Images get
@@ -204,11 +208,12 @@ export default function ChatScreen({ cfg, alias, onBack }: Props) {
   useEffect(() => {
     limitRef.current = PAGE;
     const restored = outboxForAlias(alias).map<ChatItem>((e) => ({
-      content: e.hadImage ? `${e.content}（图片附件未保存）` : e.content,
+      content: e.content, // 保持原文——重试发的就是它
       created_at: new Date(e.createdAt).toISOString(),
       _localId: e.id,
       _pending: e.state === 'pending',
       _failed: e.state === 'failed',
+      _restoredNoImage: !!e.hadImage,
     }));
     setMessages(restored.reverse()); // inverted 列表:新的在前
     setLoaded(false);
@@ -499,6 +504,9 @@ export default function ChatScreen({ cfg, alias, onBack }: Props) {
                     {replyAttachmentViews(item, cfg.serverUrl).map(renderAttachment)}
                   </View>
                 ) : null}
+                {item._restoredNoImage ? (
+                  <Text style={styles.restoredNote}>（图片附件未保存·重试仅发文本）</Text>
+                ) : null}
                 {item._pending ? (
                   <Text style={styles.pendingMark}>发送中…</Text>
                 ) : item._failed ? (
@@ -651,6 +659,7 @@ const makeStyles = () =>
   },
   replyBubble: { alignSelf: 'flex-start', backgroundColor: colors.inputBg },
   bubbleText: { color: colors.text, fontSize: 14, lineHeight: 20 },
+  restoredNote: { color: colors.textMuted, fontSize: 10, marginTop: 2, alignSelf: 'flex-end' },
   deliveredMark: { color: colors.textMuted, fontSize: 10, marginTop: 2, alignSelf: 'flex-end' },
   pendingMark: { color: colors.textMuted, fontSize: 10, alignSelf: 'flex-end' },
   typingRow: {

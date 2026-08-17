@@ -29,8 +29,6 @@ function flush(): void {
   if (persist) {
     try { persist(Object.values(entries)); } catch { /* best-effort */ }
   }
-  version++;
-  LISTENERS.forEach((l) => l());
 }
 
 /** 启动时注入:saved=磁盘上的条目(重开恢复),persist=落盘写手。
@@ -42,8 +40,6 @@ export function initOutbox(saved: OutboxEntry[] | null, persistFn: (all: OutboxE
     entries[e.id] = { ...e, state: 'failed' };
   }
   persist = persistFn;
-  version++;
-  LISTENERS.forEach((l) => l());
 }
 
 /** 提交即登记(网络尝试之前调)。 */
@@ -80,18 +76,12 @@ export function outboxForAlias(alias: string): OutboxEntry[] {
     .sort((a, b) => a.createdAt - b.createdAt);
 }
 
-// ── 订阅(ChatScreen 挂载中途恢复完成时重并入) ────────────────────────────────
-const LISTENERS = new Set<() => void>();
-let version = 0;
-export function subscribeOutbox(cb: () => void): () => void {
-  LISTENERS.add(cb);
-  return () => { LISTENERS.delete(cb); };
-}
-export function outboxVersion(): number { return version; }
+// 无订阅机制(PR3 review②):「ChatScreen 早于 initOutbox 挂载」的竞态不存在——
+// App.tsx 的 `booting` 早返回把所有 screen 挡在 initOutbox 完成之后。🔴 若将来拆掉
+// booting 门,这里就断了根线:届时需要订阅/重并入机制(或别的 mount-after-init 保证)。
 
 /** Test-only. */
 export function __resetOutboxForTest(): void {
   entries = {};
   persist = null;
-  version = 0;
 }
