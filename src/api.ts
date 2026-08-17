@@ -54,6 +54,7 @@ const withTimeout = (run: (signal: AbortSignal) => Promise<Response>): Promise<R
 // 成功=拿到并解析出数据;失败=网络错/超时/非2xx/解析错(数据没到,UI 是陈旧的)。
 // 只挂在 get()(全部轮询读)上;写路径有各自显式失败 UI,不进此口径。
 import { reportReadFailure, reportReadSuccess } from './connectivity';
+import { classifyLoginFailure, type LoginFailureKind } from './login-flow';
 
 async function get<T>(cfg: HubConfig, path: string): Promise<T> {
   try {
@@ -789,7 +790,7 @@ export const login = async (
   serverUrl: string,
   username: string,
   password: string,
-): Promise<{ ok: true; cfg: HubConfig } | { ok: false; error: string }> => {
+): Promise<{ ok: true; cfg: HubConfig } | { ok: false; error: string; kind: LoginFailureKind }> => {
   try {
     const res = await withTimeout(signal =>
       fetch(`${serverUrl}/api/auth/login`, {
@@ -804,20 +805,24 @@ export const login = async (
     // error. Read text first so we can say what actually went wrong.
     const text = await res.text();
     if (!text.trim()) {
-      return { ok: false, error: '服务器无响应内容 — 检查地址和端口（hub 默认 9999）' };
+      // review-fix(通信龙 #34):响应形状不对=不是 hub → server-error,与 HTTP 状态码无关
+      // (401+空体的常见真身是 basic-auth nginx——判 bad-credentials 会诱导用户反复重打密码)。
+      return { ok: false, kind: 'server-error', error: '服务器无响应内容 — 检查地址和端口（hub 默认 9999）' };
     }
     let data: any;
     try {
       data = JSON.parse(text);
     } catch {
-      return { ok: false, error: `服务器返回了非 JSON 内容（HTTP ${res.status}）— 确认地址指向 hub` };
+      // 同上:非 JSON 体(HTML 401 页等)= 不是 hub → server-error(kind 必须与本行文案同向)。
+      return { ok: false, kind: 'server-error', error: `服务器返回了非 JSON 内容（HTTP ${res.status}）— 确认地址指向 hub` };
     }
-    if (!data?.ok) return { ok: false, error: String(data?.error ?? `HTTP ${res.status}`) };
+    if (!data?.ok) return { ok: false, kind: classifyLoginFailure(false, res.status), error: String(data?.error ?? `HTTP ${res.status}`) };
     const token = data.token ?? data.user_token ?? data.access_token;
-    if (!token) return { ok: false, error: 'login ok but no token in response' };
+    if (!token) return { ok: false, kind: 'server-error', error: 'login ok but no token in response' };
     const networkId = await fetchNetworkId({ serverUrl, token });
     return { ok: true, cfg: { serverUrl, token, networkId } };
   } catch (e) {
-    return { ok: false, error: e instanceof Error ? e.message : 'network error' };
+    // fetch 抛了 = 压根没拿到 HTTP 响应(连接拒绝/DNS/超时)→ unreachable。
+    return { ok: false, kind: classifyLoginFailure(true, null), error: e instanceof Error ? e.message : 'network error' };
   }
 };
