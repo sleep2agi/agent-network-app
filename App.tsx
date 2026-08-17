@@ -14,6 +14,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { purgeLegacyAttachmentCache } from './src/AuthedThumb';
 import { prefetchStatus, login, fetchHubNodes, HubConfig } from './src/api';
+import { LOGIN_FAILURE_COPY, normalizeServerUrl, type LoginFailureKind } from './src/login-flow';
 import { hydrateHubAvatars, initLocalAvatars } from './src/lib/avatars';
 import { usePoll } from './src/usePoll'; // R1 avatar 30s hydrate poll (main's App.tsx no longer imports it)
 import ChatScreen from './src/ChatScreen';
@@ -32,7 +33,7 @@ import ConnectivityBanner from './src/ConnectivityBanner';
 import type { HostSupervisorDaemon } from './src/api';
 import { clearConfig, loadConfig, loadLocalAvatars, loadOutbox, loadThemeMode, saveConfig, saveLocalAvatars, saveOutbox } from './src/storage';
 import { initOutbox } from './src/outbox';
-import { colors, onThemeChange, setThemeMode, themeMode } from './src/theme';
+import { colors, onThemeChange, setThemeMode, spacing, themeMode } from './src/theme';
 import { styles } from './src/app-styles';
 import { APP_VERSION } from './src/version';
 
@@ -323,13 +324,21 @@ function LoginScreen({ onLogin }: { onLogin: (cfg: HubConfig) => void }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
 
+  // PR4:失败按 kind 分开渲染(凭据错/网络不可达/地址不对/服务器异常——用户下一步
+  // 动作完全不同,不许合并成一句「登录失败」)。error=null 即无错。
+  const [failKind, setFailKind] = useState<LoginFailureKind | null>(null);
+  const [failDetail, setFailDetail] = useState('');
+
   const submit = async () => {
+    setFailKind(null); setFailDetail(''); setError('');
+    // 预检:URL 规范化(自动补 https://·去尾斜杠);不合法 → bad-url,不发网络请求。
+    const norm = normalizeServerUrl(serverUrl);
+    if (!norm.ok) { setFailKind('bad-url'); return; }
     setBusy(true);
-    setError('');
-    const result = await login(serverUrl.replace(/\/$/, ''), username.trim(), password);
+    const result = await login(norm.url, username.trim(), password);
     setBusy(false);
     if (result.ok) onLogin(result.cfg);
-    else setError(`登录失败：${result.error}`);
+    else { setFailKind(result.kind); setFailDetail(result.error); }
   };
 
   return (
@@ -363,14 +372,30 @@ function LoginScreen({ onLogin }: { onLogin: (cfg: HubConfig) => void }) {
         value={password}
         onChangeText={setPassword}
       />
-      {error ? <Text style={styles.error}>{error}</Text> : null}
+      {/* 每种失败分开渲染:testID=login-error-<kind>(结构可断言·不耦合文案);
+          文案=发生了什么+下一步做什么;服务器原始信息作小字辅助不当主文案。 */}
+      {failKind ? (
+        <View testID={`login-error-${failKind}`} style={{ alignSelf: 'stretch', marginBottom: spacing.sm }}>
+          <Text style={styles.error}>{LOGIN_FAILURE_COPY[failKind].what}</Text>
+          <Text style={{ color: colors.textMuted, fontSize: 12, marginTop: 2 }}>{LOGIN_FAILURE_COPY[failKind].next}</Text>
+          {failDetail ? (
+            <Text style={{ color: colors.textMuted, fontSize: 10, marginTop: 2 }} numberOfLines={2}>{failDetail}</Text>
+          ) : null}
+        </View>
+      ) : error ? (
+        <Text style={styles.error}>{error}</Text>
+      ) : null}
       <Pressable
         style={({ pressed }) => [styles.button, pressed && { opacity: 0.7 }]}
         onPress={submit}
         disabled={busy || !serverUrl || !username || !password}
+        testID="login-submit"
       >
         {busy ? (
-          <ActivityIndicator color={colors.bg} />
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }} testID="login-busy">
+            <ActivityIndicator color={colors.bg} />
+            <Text style={styles.buttonText}>正在连接服务器…</Text>
+          </View>
         ) : (
           <Text style={styles.buttonText}>登录</Text>
         )}
