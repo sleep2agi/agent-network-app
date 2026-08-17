@@ -28,6 +28,7 @@ import TaskDetailScreen from './src/TaskDetailScreen';
 import NodeDetailScreen from './src/NodeDetailScreen';
 import LogsScreen from './src/LogsScreen';
 import ScheduledTasksScreen from './src/ScheduledTasksScreen';
+import ConnectivityBanner from './src/ConnectivityBanner';
 import type { HostSupervisorDaemon } from './src/api';
 import { clearConfig, loadConfig, loadLocalAvatars, loadThemeMode, saveConfig, saveLocalAvatars } from './src/storage';
 import { colors, onThemeChange, setThemeMode, themeMode } from './src/theme';
@@ -188,6 +189,9 @@ function AppRoot() {
         barStyle={theme === 'light' ? 'dark-content' : 'light-content'}
         backgroundColor={colors.bg}
       />
+      {/* 全局连接状态横幅(App战线①):断连时所有已登录界面顶部出现,声明缓存数据+
+          诚实的"截至"时间(最后一次成功,非尝试)。登录页不挂(还没有 hub 可言)。 */}
+      {screen.name !== 'login' && cfg ? <ConnectivityBanner /> : null}
       {screen.name === 'login' || !cfg ? (
         <LoginScreen
           onLogin={c => {
