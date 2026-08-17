@@ -46,7 +46,18 @@ export function normalizeServerUrl(raw: string): { ok: true; url: string } | { o
     // WHATWG URL 对垃圾宿主名过于宽容(https://ht!tp… 也能 parse)——宿主名限
     // 域名/IP 合法字符集(测试「纯垃圾 → bad-url」钉着这条)。
     if (!parsed.hostname || !['http:', 'https:'].includes(parsed.protocol)) return { ok: false, kind: 'bad-url' };
-    if (!/^[a-z0-9.-]+$/i.test(parsed.hostname) && !/^\[[0-9a-f:]+\]$/i.test(parsed.hostname)) return { ok: false, kind: 'bad-url' };
+    // IPv6 字面量宿主名(WHATWG 会保留方括号)。
+    //
+    // 🔴 这里刻意**不**写成「转义左方括号 + 紧跟一个字符类」的那种正则:仓库的
+    // scrub 门按「连续两个左方括号」找 memory slug,而那种写法在源码里恰好produce
+    // 出那两个字符 —— 一条完全合法的 IPv6 正则会被判成 slug 泄漏。PR #34 就是这么
+    // 把 main 弄红的。拆成「先去掉方括号、再验里面」既躲开误判,也更好读。
+    //
+    //(这条注释本身也不能带上那个序列 —— 第一版注释就因为举例说明而自己触发了
+    // 同一道门。解释一个陷阱的文字掉进那个陷阱,今晚已经是第三次。)
+    const host = parsed.hostname;
+    const v6 = host.startsWith('[') && host.endsWith(']') && /^[0-9a-f:]+$/i.test(host.slice(1, -1));
+    if (!/^[a-z0-9.-]+$/i.test(host) && !v6) return { ok: false, kind: 'bad-url' };
   } catch {
     return { ok: false, kind: 'bad-url' };
   }
