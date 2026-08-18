@@ -62,9 +62,34 @@ jobs:
           #
           # Slugs are lowercase words joined by _ or -, wrapped in doubled
           # brackets: [[feedback_some_thing]]. Anchor on that.
-          HITS=$(echo "$FILES" | xargs grep -nE '\[\[[a-z0-9][a-z0-9_-]*\]\]' 2>/dev/null || true)
+          # 🔴 2026-08-18：只认 [[slug]] 这一种形状是不够的。主仓今天发现同一件事
+          # 写成 markdown 链接或裸路径就整个穿过去了，而门还是绿的
+          # （sleep2agi/agent-network PR #957：`docs/team-collab-playbook.md:368`
+          #  带着完整绝对路径躺在一个本该被守着的文件里，判据一处都没命中）。
+          #
+          # 判据是按**形状**写的，只挡得住那个形状。绿在这里的含义是
+          # 「没有那个形状」，不是「没有那件事」。所以补上 memory 库路径这一种。
+          #
+          # 只认 memory 库路径，故意不认「任何绝对家目录」：后者在测试夹具、
+          # 部署记录里大量正当出现，一道在正当写法上常红的门只会被绕过。
+          SLUG_RE='\[\[[a-z0-9][a-z0-9_-]*\]\]'
+          MEMPATH_RE='(~|/home/[^/[:space:]]+|/Users/[^/[:space:]]+)?/?\.claude/(projects/[^/[:space:]`)]+/)?memory/|agent-orchestra/memory/'
+
+          # 判据自检：先证明这两条各自真的能抓住它该抓的东西。一道从没在
+          # 已知阳性上验过的门，绿了也不知道是「没问题」还是「没看见」。
+          PROBE=$(mktemp -d)
+          printf 'see [[%s]]\n' 'feedback_example_thing' > "$PROBE/a.md"
+          printf 'see [m](../.claude/memory/x.md)\n'      > "$PROBE/b.md"
+          printf 'ordinary /home/testuser/project/src\n'  > "$PROBE/c.md"
+          grep -qE "$SLUG_RE"    "$PROBE/a.md" || { echo "::error::selftest: SLUG_RE 抓不到 [[slug]]"; exit 2; }
+          grep -qE "$MEMPATH_RE" "$PROBE/b.md" || { echo "::error::selftest: MEMPATH_RE 抓不到 memory 路径"; exit 2; }
+          grep -qE "$MEMPATH_RE" "$PROBE/c.md" && { echo "::error::selftest: MEMPATH_RE 冤枉了普通家目录路径"; exit 2; }
+          rm -rf "$PROBE"
+          echo "selftest: 3/3 ok（[[slug]] 命中 / memory 路径命中 / 普通家目录不误报）"
+
+          HITS=$(echo "$FILES" | xargs grep -nE "$SLUG_RE|$MEMPATH_RE" 2>/dev/null || true)
           if [ -z "$HITS" ]; then
-            echo "✓ no [[slug]]-shaped refs in $COUNT scanned files"
+            echo "✓ no internal memory reference ([[slug]] or memory path) in $COUNT scanned files"
             exit 0
           fi
 
