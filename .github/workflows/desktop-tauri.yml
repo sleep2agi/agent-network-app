@@ -3,6 +3,18 @@
 name: desktop-tauri
 
 on:
+  # 🔴 加 push 的理由(见 #30 的评论)：在这之前这条流水线**只有** workflow_dispatch。
+  #    运行历史：main 上最近一次是 2026-06-17，而 #40（补 windows-x64）是 08-18 合的 ——
+  #    也就是说「main 能不能打出 Mac/Win 包」在有人手动点之前从来没被验证过，
+  #    任何把打包改坏的改动都能进 main 并无限期留着，直到下一次有人想起来点它，
+  #    而那通常正是「要发版了」的时候。
+  #
+  #    **没有加 paths 收窄**，这是有意的：本仓是 public，Actions 分钟数免费（含 macOS runner），
+  #    main 近 7 天 9 个提交 —— 收窄省不下任何成本，只会拿覆盖面去换一个不存在的节省。
+  #    而打包的输入几乎就是半个仓（npm ci 吃 package.json，expo export 吃 App.tsx/src/app.json/assets，
+  #    tauri build 吃 src-tauri），任何一份收窄清单都注定会漏。
+  push:
+    branches: [main]
   workflow_dispatch:
 
 permissions:
