@@ -46,8 +46,11 @@ ck('空 text 不命中非空 filter', !pinyinMatch('', 'zf'));
 
 // ── 降级:字典不可用时退化为子串,而不是搜索整个坏掉 ──────────
 {
-  __setPinyinProvider(null);
-  // provider=null 且 require('pinyin-pro') 在 worktree 里不存在 → 走降级分支
+  // 🔴 必须显式关掉 auto-load,不能靠「这台机器上恰好没装 pinyin-pro」。
+  // 原来这里只写 __setPinyinProvider(null),于是 ensureProvider() 仍会去 require,
+  // 在装了依赖的环境(CI、或 bun 的 auto-install)下降级分支根本进不去,这条断言必红。
+  // 实测:`bun` → 20/21;`bun --no-install` → 21/21 —— 同一份代码,只差环境。
+  __setPinyinProvider(null, { disableAutoLoad: true });
   ck('降级:无字典时子串仍可用', pinyinMatch('支付助手', '支付'));
   ck('降级:无字典时拼音不再命中(诚实失效,不假装)', !pinyinMatch('支付助手', 'zf'));
   __setPinyinProvider(t => TABLE[t] ?? ['', '']);

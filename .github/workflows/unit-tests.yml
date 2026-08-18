@@ -1,0 +1,50 @@
+# 13 个测试文件此前**没有任何 CI 会跑**(#30)。
+#
+# 仓里早就有一个写得很稳的 runner —— `scripts/run-tests.mjs`,它自己就做了
+# fail-closed:扫不到测试文件时**主动退非零**,理由写在它的注释里
+# 「`0/0 passed` 和 `8/8 passed` 读起来是同一片绿」。
+# **缺的从来不是 runner,是没有人调用它。**
+#
+# 🔴 关于 runner 的选择:这些测试是自执行脚本,默认用 `bun`。
+#    bun 的 **auto-install** 会在缺 node_modules 时自动把包拉进来 ——
+#    这曾经让 `src/lib/pinyin.test.ts` 里那条「降级分支」断言的结果**取决于环境**:
+#
+#        bun              → require('pinyin-pro') 成功 → 降级分支进不去 → 20/21
+#        bun --no-install → require 失败             → 走降级分支     → 21/21
+#
+#    本 PR 已把那条断言改成显式关闭 auto-load(`disableAutoLoad: true`),
+#    所以它现在**与依赖装没装无关**。这里仍然显式 `npm ci`,让依赖状态是确定的。
+#
+# 本 workflow **只跑单测**。#30 里「构建不自动验」那一半没有解决 ——
+# Expo/EAS 构建需要凭据与长时任务,那是另一件事,不该塞进这道秒级门里假装覆盖了。
+
+name: unit tests
+
+on:
+  push:
+    branches: ['**']
+  pull_request:
+    branches: ['**']
+
+jobs:
+  tests:
+    name: unit-tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - uses: oven-sh/setup-bun@735343b667d3e6f658f44d0eca948eb6282f2b76 # v2.0.2
+        with:
+          bun-version: '1.3.14'
+
+      # npm ci 而不是 npm install:同一个 commit 在不同时间必须装出同一份依赖图。
+      - run: npm ci
+
+      # runner 自己会在「一个测试文件都没扫到」时退非零 —— 那是这道门最该防的
+      # 那种假绿(范围写错 / 文件在 rebase 里丢了 / 后缀改了)。
+      - run: npm test
