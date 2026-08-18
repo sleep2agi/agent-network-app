@@ -93,9 +93,9 @@ jobs:
             exit 0
           fi
 
-          echo "::group::[[ references found — internal memory slugs must not appear in a public repo"
+          echo "::group::internal memory references found — must not appear in a public repo"
           echo "$HITS"
           echo "::endgroup::"
           HITCOUNT=$(echo "$HITS" | wc -l)
-          echo "::error::found $HITCOUNT [[ reference(s) across $COUNT scanned files. Replace each with the rationale in prose (see PR #19 for pattern)."
+          echo "::error::found $HITCOUNT internal memory reference(s) ([[slug]] or memory path) across $COUNT scanned files. Replace each with the rationale in prose (see PR #19 for pattern)."
           exit 1
