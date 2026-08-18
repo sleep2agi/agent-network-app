@@ -23,10 +23,28 @@ let provider: PinyinProvider | null = null;
 let loadFailed = false;
 const cache = new Map<string, PinyinPair>();
 
-/** 测试注入点:避免单测依赖 564KB 字典包。生产路径不调用它。 */
-export function __setPinyinProvider(p: PinyinProvider | null): void {
+/**
+ * 测试注入点:避免单测依赖 564KB 字典包。生产路径不调用它。
+ *
+ * 🔴 `disableAutoLoad` 是给「降级分支」那条测试用的。没有它时,
+ * `__setPinyinProvider(null)` 只是清掉 provider,`ensureProvider()` 随后仍会去
+ * `require('pinyin-pro')` —— 于是那条测试**能不能过,取决于那个包在当前环境里
+ * 装没装**:
+ *
+ *     bun             （auto-install 会把它拉进来)→ require 成功 → 降级分支进不去 → 断言红
+ *     bun --no-install                            → require 失败 → 降级分支 → 断言绿
+ *     CI（npm ci 装了真依赖)                       → require 成功 → 断言红
+ *
+ * 也就是说:那条测试原本**只在「依赖恰好不存在」的机器上才通过**,而它测的偏偏是
+ * 「依赖不存在时怎么办」。传 `disableAutoLoad: true` 之后,降级分支由测试**直接钉住**,
+ * 与环境里装没装那个包无关。
+ */
+export function __setPinyinProvider(
+  p: PinyinProvider | null,
+  opts: { disableAutoLoad?: boolean } = {},
+): void {
   provider = p;
-  loadFailed = false;
+  loadFailed = opts.disableAutoLoad === true;
   cache.clear();
 }
 
