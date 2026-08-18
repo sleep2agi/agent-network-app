@@ -47,3 +47,63 @@ jobs:
           name: mac-arm64
           path: out/*
           retention-days: 14
+
+  windows-x64:
+    # Windows 必须在 windows runner 上编译，理由和上面 mac 那条注释一样：
+    # Tauri 的 Windows 打包要 WiX(msi) 与 NSIS(exe)，这两个都拿不到跨平台产物。
+    #
+    # 🔴 2026-08-19 实测：三个仓（agent-network / agent-network-dashboard /
+    #    agent-network-app）的所有 workflow 里，Windows 打包命中数是 **0** ——
+    #    也就是说 Vincent 目标里与 Mac 并列的那半，此前没有任何流水线。
+    #    这个 job 就是补那一格。
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - run: npm ci
+
+      - name: Export RN web bundle
+        run: npx expo export -p web
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - name: Generate icons
+        # 这一步会生成 icons/icon.ico —— Windows 的可执行图标只认 .ico，
+        # 而 tauri.conf.json 的 bundle.icon 里已经列了它。
+        run: npx tauri icon assets/icon.png
+
+      - name: Build (unsigned)
+        # nsis = 安装器 .exe；msi = WiX 安装包。两个都要，因为分发方式不同：
+        # nsis 体积小、适合直接给人；msi 适合 IT 批量部署。
+        run: npx tauri build --bundles nsis,msi
+
+      - name: Stage artifacts
+        # 用 bash 而不是默认的 pwsh：windows runner 自带 git-bash，
+        # 这样这一步和上面 mac job 的写法保持一致，读的人不用在两种 shell 之间切换。
+        shell: bash
+        run: |
+          mkdir -p out
+          cp src-tauri/target/release/bundle/nsis/*.exe out/ || true
+          cp src-tauri/target/release/bundle/msi/*.msi  out/ || true
+          # 🔴 `|| true` 是照 mac job 抄的，但它会把「一个产物都没出」变成绿。
+          #    所以这里补一条断言：out/ 空 ⇒ 直接失败。
+          if [ -z "$(ls -A out)" ]; then
+            echo "::error::Windows 打包没有产出任何 .exe/.msi —— 上面的 tauri build 说成功了，但产物目录是空的"
+            exit 1
+          fi
+          ls -l out/
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows-x64
+          path: out/*
+          retention-days: 14
