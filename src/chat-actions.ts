@@ -49,10 +49,12 @@ export const agentStatusLabel = (status?: string): string => {
   return '在线';
 };
 
-// Desktop composer contract: Enter sends, Shift+Enter inserts a newline.
-// Composition must win so confirming Chinese/Japanese input never sends early.
+// Desktop composer contract: Enter inserts a newline; Ctrl+Enter sends.
+// Cmd+Enter is the macOS equivalent. Composition must win so confirming
+// Chinese/Japanese input never sends early.
 export const shouldSendOnEnter = (event: {
   key?: string;
-  shiftKey?: boolean;
+  ctrlKey?: boolean;
+  metaKey?: boolean;
   isComposing?: boolean;
-}): boolean => event.key === 'Enter' && !event.shiftKey && !event.isComposing;
+}): boolean => event.key === 'Enter' && !!(event.ctrlKey || event.metaKey) && !event.isComposing;

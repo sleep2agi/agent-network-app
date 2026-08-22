@@ -666,7 +666,7 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
             value={draft}
             onChangeText={setDraft}
             onKeyPress={(event) => {
-              const key = event.nativeEvent as typeof event.nativeEvent & { shiftKey?: boolean; isComposing?: boolean };
+              const key = event.nativeEvent as typeof event.nativeEvent & { ctrlKey?: boolean; metaKey?: boolean; isComposing?: boolean };
               if (!shouldSendOnEnter(key)) return;
               event.preventDefault?.();
               submit();
@@ -680,7 +680,7 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
               </Pressable>
             ) : <View />}
             <View style={styles.desktopToolbarRight}>
-              <Text style={styles.shortcutHint}>Enter 发送 · Shift+Enter 换行</Text>
+              <Text style={styles.shortcutHint}>Ctrl/⌘+Enter 发送 · Enter 换行</Text>
               <Pressable
                 style={({ pressed }) => [styles.desktopSend, !canSend(draft, attached.length > 0, sending) && styles.desktopSendDisabled, pressed && { opacity: 0.7 }]}
                 onPress={submit}
@@ -711,7 +711,8 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
           onKeyPress={(event) => {
             if (!desktop) return;
             const key = event.nativeEvent as typeof event.nativeEvent & {
-              shiftKey?: boolean;
+              ctrlKey?: boolean;
+              metaKey?: boolean;
               isComposing?: boolean;
             };
             if (!shouldSendOnEnter(key)) return;

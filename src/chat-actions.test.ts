@@ -35,11 +35,12 @@ ck('offline 离线', isAgentOnline('offline') === false);
 ck('空 离线不崩', isAgentOnline('') === false && isAgentOnline(undefined) === false);
 ck('列表和聊天头共用状态文案', agentStatusLabel('idle') === '在线' && agentStatusLabel('working') === '工作中' && agentStatusLabel('offline') === '离线');
 // round-6 桌面发送快捷键
-ck('Enter 发送', shouldSendOnEnter({ key: 'Enter' }) === true);
-ck('Shift+Enter 换行', shouldSendOnEnter({ key: 'Enter', shiftKey: true }) === false);
-ck('输入法组词确认不发送', shouldSendOnEnter({ key: 'Enter', isComposing: true }) === false);
+ck('Enter 换行', shouldSendOnEnter({ key: 'Enter' }) === false);
+ck('Ctrl+Enter 发送', shouldSendOnEnter({ key: 'Enter', ctrlKey: true }) === true);
+ck('Cmd+Enter 发送', shouldSendOnEnter({ key: 'Enter', metaKey: true }) === true);
+ck('输入法组词确认不发送', shouldSendOnEnter({ key: 'Enter', ctrlKey: true, isComposing: true }) === false);
 ck('其它按键不发送', shouldSendOnEnter({ key: 'a' }) === false);
 const chatSource = fs.readFileSync(path.join(process.cwd(), 'src/ChatScreen.tsx'), 'utf8');
 ck('桌面输入区使用独立微信式 composer', chatSource.includes('styles.desktopComposer'));
-ck('桌面输入区显示快捷键提示', chatSource.includes('Enter 发送 · Shift+Enter 换行'));
+ck('桌面输入区显示快捷键提示', chatSource.includes('Ctrl/⌘+Enter 发送 · Enter 换行'));
 console.log(`\n${p}/${t} passed`); process.exit(p === t ? 0 : 1);
