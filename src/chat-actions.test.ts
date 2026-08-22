@@ -1,4 +1,6 @@
 // 纯逻辑单测(bun/node 可跑·无 RN 依赖)。run: bun src/chat-actions.test.ts
+import fs from 'node:fs';
+import path from 'node:path';
 import { buildQuote, applyQuote, msgKey, removeMessage, shouldShowJumpPill, nextUnread, jumpPillLabel, canSend, isAgentOnline, agentStatusLabel, shouldSendOnEnter } from './chat-actions';
 let p = 0, t = 0; const ck = (n: string, c: boolean) => { t++; if (c) { p++; console.log('✅', n); } else console.log('❌', n); };
 // round-2 长按动作
@@ -37,4 +39,7 @@ ck('Enter 发送', shouldSendOnEnter({ key: 'Enter' }) === true);
 ck('Shift+Enter 换行', shouldSendOnEnter({ key: 'Enter', shiftKey: true }) === false);
 ck('输入法组词确认不发送', shouldSendOnEnter({ key: 'Enter', isComposing: true }) === false);
 ck('其它按键不发送', shouldSendOnEnter({ key: 'a' }) === false);
+const chatSource = fs.readFileSync(path.join(process.cwd(), 'src/ChatScreen.tsx'), 'utf8');
+ck('桌面输入区使用独立微信式 composer', chatSource.includes('styles.desktopComposer'));
+ck('桌面输入区显示快捷键提示', chatSource.includes('Enter 发送 · Shift+Enter 换行'));
 console.log(`\n${p}/${t} passed`); process.exit(p === t ? 0 : 1);

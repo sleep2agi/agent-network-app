@@ -644,6 +644,41 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
         </Pressable>
       </Modal>
 
+      {desktop ? (
+        <View style={styles.desktopComposer}>
+          <TextInput
+            style={styles.desktopInput}
+            placeholder={`Message ${alias}…`}
+            placeholderTextColor={colors.textMuted}
+            value={draft}
+            onChangeText={setDraft}
+            onKeyPress={(event) => {
+              const key = event.nativeEvent as typeof event.nativeEvent & { shiftKey?: boolean; isComposing?: boolean };
+              if (!shouldSendOnEnter(key)) return;
+              event.preventDefault?.();
+              submit();
+            }}
+            multiline
+          />
+          <View style={styles.desktopToolbar}>
+            {ATTACH_ENABLED ? (
+              <Pressable accessibilityLabel="添加附件" style={({ pressed }) => [styles.desktopToolButton, pressed && { opacity: 0.6 }]} onPress={attach} hitSlop={6}>
+                <Ionicons name="add-circle-outline" size={24} color={colors.textSecondary} />
+              </Pressable>
+            ) : <View />}
+            <View style={styles.desktopToolbarRight}>
+              <Text style={styles.shortcutHint}>Enter 发送 · Shift+Enter 换行</Text>
+              <Pressable
+                style={({ pressed }) => [styles.desktopSend, !canSend(draft, !!attached, sending) && styles.desktopSendDisabled, pressed && { opacity: 0.7 }]}
+                onPress={submit}
+                disabled={!canSend(draft, !!attached, sending)}
+              >
+                <Text style={[styles.desktopSendText, !canSend(draft, !!attached, sending) && styles.sendTextDisabled]}>发送</Text>
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      ) : (
       <View style={[styles.inputRow, { paddingBottom: spacing.md + composerInset }]}>
         {ATTACH_ENABLED ? (
           <Pressable
@@ -684,6 +719,7 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
           <Text style={[styles.sendText, !canSend(draft, !!attached, sending) && styles.sendTextDisabled]}>↑</Text>
         </Pressable>
       </View>
+      )}
     </KeyboardAvoidingView>
   );
 }
@@ -828,6 +864,34 @@ const makeStyles = () =>
     borderTopWidth: 1,
     borderTopColor: colors.border,
   },
+  desktopComposer: {
+    minHeight: 148,
+    maxHeight: 220,
+    backgroundColor: colors.card,
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.md,
+    paddingBottom: spacing.md,
+  },
+  desktopInput: {
+    flex: 1,
+    minHeight: 76,
+    maxHeight: 150,
+    color: colors.text,
+    fontSize: 14,
+    lineHeight: 21,
+    padding: 0,
+    textAlignVertical: 'top',
+    outlineStyle: 'none',
+  } as any,
+  desktopToolbar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingTop: spacing.sm },
+  desktopToolButton: { width: 34, height: 34, alignItems: 'center', justifyContent: 'center' },
+  desktopToolbarRight: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
+  shortcutHint: { color: colors.textMuted, fontSize: 10 },
+  desktopSend: { minWidth: 64, height: 32, borderRadius: 5, paddingHorizontal: spacing.lg, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.accent },
+  desktopSendDisabled: { backgroundColor: colors.inputBg, borderWidth: 1, borderColor: colors.border },
+  desktopSendText: { color: '#ffffff', fontSize: 13, fontWeight: '600' },
   input: {
     flex: 1,
     backgroundColor: colors.inputBg,
