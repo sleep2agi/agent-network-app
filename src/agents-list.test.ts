@@ -38,6 +38,9 @@ ck('teamOf 空别名归「其他」', teamOf('') === '其他');
   ck('pin 级:置顶弱者能翻到最前(顺序确实因这一级改变)', pinA[0].alias === '通信A');
   ck('pin 级:默认不置顶(占位恒 false,不假装已有该能力)',
     compareInTeam(a, b) === compareInTeam(a, b, {}));
+  const sections = buildSections([a, b], '', { sort: { pinned: n => n === '通信A' } });
+  ck('置顶会话形成全局第一组', sections[0]?.title === '置顶');
+  ck('置顶会话不会在原团队重复出现', sections.flatMap(s => s.data).filter(s => s.alias === '通信A').length === 1);
 }
 
 // ── 排序第 2 级:online ───────────────────────────────────────────

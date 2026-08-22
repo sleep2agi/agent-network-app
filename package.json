@@ -3,6 +3,7 @@
   "version": "0.1.30",
   "main": "index.ts",
   "dependencies": {
+    "@tauri-apps/api": "^2.8.0",
     "@expo/vector-icons": "^15.0.2",
     "@tauri-apps/plugin-http": "^2.5.9",
     "@tauri-apps/plugin-opener": "^2.5.4",

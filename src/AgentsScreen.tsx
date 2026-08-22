@@ -33,6 +33,9 @@ export default function AgentsScreen({
   onOpenNodeDetail,
   compact = false,
   selectedAlias,
+  pinnedAliases = [],
+  onTogglePin,
+  onOpenChatWindow,
 }: {
   cfg: HubConfig;
   onOpenChat: (alias: string) => void;
@@ -44,12 +47,16 @@ export default function AgentsScreen({
   onOpenNodeDetail: (alias: string) => void;
   compact?: boolean;
   selectedAlias?: string;
+  pinnedAliases?: string[];
+  onTogglePin?: (alias: string) => void;
+  onOpenChatWindow?: (alias: string) => void;
 }) {
   const [sessions, setSessions] = useState<Session[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [failed, setFailed] = useState(false);
   const [query, setQuery] = useState('');
+  const [contextMenu, setContextMenu] = useState<{ alias: string; x: number; y: number } | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -104,8 +111,11 @@ export default function AgentsScreen({
   // 返回之后会改变 hook 顺序并崩溃(v0.1.28 launch-crash,Vincent tg 1098)。
   const q = query.trim();
   const sections = useMemo(
-    () => buildSections(sessions, query, { match: pinyinMatch }),
-    [sessions, query],
+    () => buildSections(sessions, query, {
+      match: pinyinMatch,
+      sort: { pinned: alias => pinnedAliases.includes(alias) },
+    }),
+    [sessions, query, pinnedAliases],
   );
   const shownCount = countShown(sections);
 
@@ -205,8 +215,23 @@ export default function AgentsScreen({
           ) : null}
         </View>
       }
-      renderItem={({ item }) => (
+      renderItem={({ item }) => {
+        const contextProps = compact ? ({
+          onContextMenu: (event: any) => {
+            event.preventDefault?.();
+            event.stopPropagation?.();
+            const pageX = event.nativeEvent?.pageX ?? 180;
+            const pageY = event.nativeEvent?.pageY ?? 180;
+            setContextMenu({
+              alias: item.alias,
+              x: Math.max(8, Math.min(pageX, ((globalThis as any).innerWidth ?? 1000) - 194)),
+              y: Math.max(8, Math.min(pageY, ((globalThis as any).innerHeight ?? 700) - 112)),
+            });
+          },
+        } as any) : {};
+        return (
         <Pressable
+          {...contextProps}
           style={({ pressed }) => [
             styles.card,
             compact && {
@@ -239,6 +264,7 @@ export default function AgentsScreen({
           </View>
           <View style={{ flex: 1, minWidth: 0 }}>
             <Text style={[styles.alias, compact && { fontSize: 13, fontWeight: '600' }]} numberOfLines={1}>
+              {pinnedAliases.includes(item.alias) ? '📌 ' : ''}
               {item.alias}
             </Text>
             {item.task ? (
@@ -249,8 +275,20 @@ export default function AgentsScreen({
           </View>
           {!compact ? <Text style={[styles.status, { color: statusColor(item.status ?? '', true) }]}>{agentStatusLabel(item.status)}</Text> : null}
         </Pressable>
-      )}
+        );
+      }}
       />
+      {contextMenu ? (<>
+        <Pressable accessibilityLabel="关闭会话菜单" onPress={() => setContextMenu(null)} style={{ position: 'fixed' as any, inset: 0, zIndex: 999 } as any} />
+        <View style={{ position: 'fixed' as any, left: contextMenu.x, top: contextMenu.y, zIndex: 1000, minWidth: 178, paddingVertical: 6, borderRadius: 10, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.card, boxShadow: '0 8px 28px rgba(0,0,0,0.24)' as any }}>
+          <Pressable accessibilityLabel={pinnedAliases.includes(contextMenu.alias) ? '取消置顶会话' : '置顶会话'} style={{ paddingHorizontal: 14, paddingVertical: 11 }} onPress={() => { onTogglePin?.(contextMenu.alias); setContextMenu(null); }}>
+            <Text style={{ color: colors.text, fontSize: 13 }}>{pinnedAliases.includes(contextMenu.alias) ? '取消置顶会话' : '置顶会话'}</Text>
+          </Pressable>
+          <Pressable accessibilityLabel="在新窗口打开" style={{ paddingHorizontal: 14, paddingVertical: 11 }} onPress={() => { onOpenChatWindow?.(contextMenu.alias); setContextMenu(null); }}>
+            <Text style={{ color: colors.text, fontSize: 13 }}>在新窗口打开</Text>
+          </Pressable>
+        </View>
+      </>) : null}
     </View>
   );
 }
