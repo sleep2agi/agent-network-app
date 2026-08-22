@@ -30,6 +30,26 @@ fn clear_desktop_session() -> Result<(), String> {
     }
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // This deliberately exercises the platform credential store, rather than
+    // a mock. It catches builds where keyring compiles but no macOS/Windows
+    // backend feature was enabled (the regression shipped in 0.2.10).
+    #[test]
+    fn desktop_session_round_trip_uses_native_store() {
+        let account = format!("ci-session-{}", std::process::id());
+        let entry = keyring::Entry::new(SESSION_SERVICE, &account)
+            .expect("native credential-store backend must be installed");
+        let value = r#"{"serverUrl":"https://example.invalid","token":"test-token"}"#;
+
+        entry.set_password(value).expect("write native credential store");
+        assert_eq!(entry.get_password().expect("read native credential store"), value);
+        entry.delete_credential().expect("delete native credential store fixture");
+    }
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()

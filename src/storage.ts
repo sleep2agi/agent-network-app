@@ -29,11 +29,11 @@ export const saveConfig = async (cfg: HubConfig): Promise<void> => {
 };
 
 export const loadConfig = async (): Promise<HubConfig | null> => {
+  if (isTauriDesktop()) {
+    const { invoke } = await import('@tauri-apps/api/core');
+    return parseConfig(await invoke<string | null>('load_desktop_session'));
+  }
   try {
-    if (isTauriDesktop()) {
-      const { invoke } = await import('@tauri-apps/api/core');
-      return parseConfig(await invoke<string | null>('load_desktop_session'));
-    }
     return parseConfig(await SecureStore.getItemAsync(KEY));
   } catch {
     return null;
