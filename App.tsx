@@ -6,8 +6,10 @@ import {
   Pressable,
   SafeAreaView,
   StatusBar,
+  StyleSheet,
   Text,
   TextInput,
+  useWindowDimensions,
   View,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
@@ -92,6 +94,8 @@ function AppRoot() {
   // RN's SafeAreaView only covers iOS; Android edge-to-edge draws the
   // tab bar under the gesture bar (Vincent tg 802) — pad by the real inset.
   const insets = useSafeAreaInsets();
+  const { width } = useWindowDimensions();
+  const desktop = Platform.OS === 'web' && !!(globalThis as any).__TAURI_INTERNALS__ && width >= 860;
   const tabBarInset = Platform.OS === 'android' ? insets.bottom : 0;
 
   // Restore the saved session on cold start — login survives app kills.
@@ -165,6 +169,20 @@ function AppRoot() {
     return (
       <SafeAreaView style={[styles.root, styles.center]}>
         <ActivityIndicator color={colors.accent} />
+      </SafeAreaView>
+    );
+  }
+
+  if (desktop && cfg && screen.name !== 'login') {
+    return (
+      <SafeAreaView key={theme} style={styles.root}>
+        <StatusBar barStyle={theme === 'light' ? 'dark-content' : 'light-content'} backgroundColor={colors.bg} />
+        <ConnectivityBanner />
+        <DesktopWorkspace cfg={cfg} screen={screen} setScreen={setScreen} onLogout={() => {
+          clearConfig();
+          setCfg(null);
+          setScreen({ name: 'login' });
+        }} />
       </SafeAreaView>
     );
   }
@@ -297,6 +315,77 @@ function AppRoot() {
     </SafeAreaView>
   );
 }
+
+function DesktopWorkspace({ cfg, screen, setScreen, onLogout }: {
+  cfg: HubConfig;
+  screen: Screen;
+  setScreen: (screen: Screen) => void;
+  onLogout: () => void;
+}) {
+  const active = ['chat', 'nodeDetail', 'picker', 'wizard'].includes(screen.name) ? 'agents' : screen.name;
+  const content = screen.name === 'chat' ? (
+    <ChatScreen
+      cfg={cfg}
+      alias={screen.alias}
+      onBack={() => setScreen({ name: 'agents' })}
+      onOpenSettings={() => setScreen({ name: 'settings' })}
+      desktop
+    />
+  ) : screen.name === 'tasks' ? (
+    <TasksScreen cfg={cfg} onOpenTask={taskId => setScreen({ name: 'taskDetail', taskId })} />
+  ) : screen.name === 'scheduled' ? <ScheduledTasksScreen cfg={cfg} />
+  : screen.name === 'messages' ? <MessagesScreen cfg={cfg} />
+  : screen.name === 'server' ? <ServerScreen cfg={cfg} onOpenLogs={() => setScreen({ name: 'logs' })} />
+  : screen.name === 'settings' ? <SettingsScreen cfg={cfg} onLogout={onLogout} />
+  : screen.name === 'taskDetail' ? <TaskDetailScreen cfg={cfg} taskId={screen.taskId} onBack={() => setScreen({ name: 'tasks' })} />
+  : screen.name === 'nodeDetail' ? <NodeDetailScreen cfg={cfg} alias={screen.alias} onBack={() => setScreen({ name: 'agents' })} />
+  : screen.name === 'logs' ? <LogsScreen cfg={cfg} onBack={() => setScreen({ name: 'server' })} />
+  : screen.name === 'picker' ? <HostSupervisorPickerScreen cfg={cfg} onBack={() => setScreen({ name: 'agents' })} onPicked={d => setScreen({ name: 'wizard', daemon: d })} />
+  : screen.name === 'wizard' ? <CreateNodeWizardScreen cfg={cfg} daemon={screen.daemon} onBack={() => setScreen({ name: 'picker' })} onExit={() => setScreen({ name: 'agents' })} />
+  : (
+    <View style={desktopStyles.empty}>
+      <Ionicons name="chatbubbles-outline" size={52} color={colors.textMuted} />
+      <Text style={desktopStyles.emptyTitle}>选择一个 agent 开始聊天</Text>
+      <Text style={desktopStyles.emptyHint}>会话显示在右侧，列表始终保留</Text>
+    </View>
+  );
+
+  return (
+    <View style={desktopStyles.shell}>
+      <View style={desktopStyles.rail}>
+        <View style={desktopStyles.railBrand}><Text style={desktopStyles.railBrandText}>AN</Text></View>
+        <View style={desktopStyles.railTabs}>
+          {TABS.map(tab => (
+            <Pressable key={tab.key} accessibilityLabel={tab.label} onPress={() => setScreen({ name: tab.key } as Screen)} style={[desktopStyles.railButton, active === tab.key && desktopStyles.railButtonActive]}>
+              <Ionicons name={active === tab.key ? tab.iconActive : tab.icon} size={22} color={active === tab.key ? colors.accent : colors.textSecondary} />
+            </Pressable>
+          ))}
+        </View>
+        <Text style={desktopStyles.railVersion}>v{APP_VERSION}</Text>
+      </View>
+      <View style={desktopStyles.conversations}>
+        <AgentsScreen cfg={cfg} compact selectedAlias={screen.name === 'chat' ? screen.alias : undefined} onOpenChat={alias => setScreen({ name: 'chat', alias })} onOpenPicker={() => setScreen({ name: 'picker' })} onOpenNodeDetail={alias => setScreen({ name: 'nodeDetail', alias })} />
+      </View>
+      <View style={desktopStyles.content}>{content}</View>
+    </View>
+  );
+}
+
+const desktopStyles = StyleSheet.create({
+  shell: { flex: 1, flexDirection: 'row', backgroundColor: colors.bg },
+  rail: { width: 64, backgroundColor: colors.inputBg, borderRightWidth: 1, borderRightColor: colors.border, alignItems: 'center', paddingVertical: 14 },
+  railBrand: { width: 34, height: 34, borderRadius: 10, backgroundColor: colors.accent, alignItems: 'center', justifyContent: 'center' },
+  railBrandText: { color: colors.bg, fontSize: 12, fontWeight: '800' },
+  railTabs: { flex: 1, paddingTop: 22, gap: 8 },
+  railButton: { width: 42, height: 42, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
+  railButtonActive: { backgroundColor: colors.card },
+  railVersion: { color: colors.textMuted, fontSize: 9 },
+  conversations: { width: 304, borderRightWidth: 1, borderRightColor: colors.border, backgroundColor: colors.bg },
+  content: { flex: 1, minWidth: 0, backgroundColor: colors.bg },
+  empty: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: spacing.sm },
+  emptyTitle: { color: colors.textSecondary, fontSize: 16, fontWeight: '600' },
+  emptyHint: { color: colors.textMuted, fontSize: 12 },
+});
 
 function LoginScreen({ onLogin }: { onLogin: (cfg: HubConfig) => void }) {
   const [serverUrl, setServerUrl] = useState('');

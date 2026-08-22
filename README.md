@@ -35,6 +35,12 @@ npx expo start        # Expo Go / dev client
 npx tsc --noEmit      # typecheck
 ```
 
+### Desktop releases
+
+Tauri builds macOS arm64 and Windows x64 packages. Desktop acceptance,
+Developer ID signing, notarization, and release rules are documented in the
+[desktop release SOP](docs/desktop-release-sop.md).
+
 ### Visual verification without a device
 
 `react-native-web` export + playwright renders the same components at a phone viewport, proxying API calls to a live hub (sidesteps CORS, swaps auth):

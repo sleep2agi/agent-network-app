@@ -17,7 +17,7 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import AliasAvatar from './AliasAvatar';
-import { isAgentOnline } from './chat-actions';
+import { agentStatusLabel, isAgentOnline } from './chat-actions';
 import { fetchStatus, takeStatusPrefetch, type HubConfig, type Session } from './api';
 import { loadSessionsCache, saveSessionsCache } from './storage';
 import { colors, spacing, statusColor } from './theme';
@@ -31,6 +31,8 @@ export default function AgentsScreen({
   onOpenChat,
   onOpenPicker,
   onOpenNodeDetail,
+  compact = false,
+  selectedAlias,
 }: {
   cfg: HubConfig;
   onOpenChat: (alias: string) => void;
@@ -40,6 +42,8 @@ export default function AgentsScreen({
    *  screen. `onPress` remains the high-frequency path to chat and is
    *  NOT changed (通信龙 red-line 71ee862d). */
   onOpenNodeDetail: (alias: string) => void;
+  compact?: boolean;
+  selectedAlias?: string;
 }) {
   const [sessions, setSessions] = useState<Session[]>([]);
   const [loading, setLoading] = useState(true);
@@ -134,7 +138,21 @@ export default function AgentsScreen({
   }
 
   return (
-    <SectionList
+    <View style={{ flex: 1 }}>
+      <View style={{ paddingHorizontal: compact ? spacing.sm : spacing.lg, paddingTop: compact ? spacing.sm : spacing.lg, backgroundColor: colors.bg }}>
+        <View style={styles.listHeaderRow}>
+          <Text style={styles.listHeader}>
+            {q ? `${shownCount} / ${sessions.length} agents` : `${sessions.length} agents`}
+          </Text>
+          <Pressable onPress={onOpenPicker} hitSlop={10} accessibilityLabel="新建节点" style={({ pressed }) => [styles.addBtn, pressed && { opacity: 0.6 }]}>
+            <Ionicons name="add" size={24} color={colors.accent} />
+          </Pressable>
+        </View>
+        {sessions.length > 10 ? (
+          <TextInput style={styles.search} placeholder="搜索 agent…" placeholderTextColor={colors.textMuted} autoCapitalize="none" autoCorrect={false} value={query} onChangeText={setQuery} />
+        ) : null}
+      </View>
+      <SectionList
       sections={sections}
       keyExtractor={s => s.alias}
       stickySectionHeadersEnabled={false}
@@ -156,7 +174,7 @@ export default function AgentsScreen({
       maxToRenderPerBatch={12}
       windowSize={9}
       updateCellsBatchingPeriod={50}
-      contentContainerStyle={{ padding: spacing.lg }}
+      contentContainerStyle={{ paddingHorizontal: compact ? spacing.sm : spacing.lg, paddingBottom: compact ? spacing.sm : spacing.lg }}
       refreshControl={
         <RefreshControl
           refreshing={refreshing}
@@ -187,39 +205,19 @@ export default function AgentsScreen({
           ) : null}
         </View>
       }
-      ListHeaderComponent={
-        <View>
-          <View style={styles.listHeaderRow}>
-            <Text style={styles.listHeader}>
-              {q ? `${shownCount} / ${sessions.length} agents` : `${sessions.length} agents`}
-            </Text>
-            {/* #338 — `+` opens host_supervisor picker. Top-right (Vincent lock). */}
-            <Pressable
-              onPress={onOpenPicker}
-              hitSlop={10}
-              accessibilityLabel="新建节点"
-              style={({ pressed }) => [styles.addBtn, pressed && { opacity: 0.6 }]}
-            >
-              <Ionicons name="add" size={24} color={colors.accent} />
-            </Pressable>
-          </View>
-          {sessions.length > 10 ? (
-            <TextInput
-              style={styles.search}
-              placeholder="搜索 agent…"
-              placeholderTextColor={colors.textMuted}
-              autoCapitalize="none"
-              autoCorrect={false}
-              value={query}
-              onChangeText={setQuery}
-            />
-          ) : null}
-        </View>
-      }
       renderItem={({ item }) => (
         <Pressable
           style={({ pressed }) => [
             styles.card,
+            compact && {
+              borderWidth: 0,
+              borderBottomWidth: 1,
+              borderRadius: 8,
+              paddingHorizontal: spacing.md,
+              paddingVertical: spacing.md,
+              marginBottom: 2,
+            },
+            selectedAlias === item.alias && { backgroundColor: colors.inputBg },
             item.status === 'offline' && styles.cardOffline,
             pressed && { opacity: 0.7 },
           ]}
@@ -249,10 +247,11 @@ export default function AgentsScreen({
             ) : null}
           </View>
           <Text style={[styles.status, { color: statusColor(item.status ?? '', true) }]}>
-            {item.status}
+            {agentStatusLabel(item.status)}
           </Text>
         </Pressable>
       )}
-    />
+      />
+    </View>
   );
 }
