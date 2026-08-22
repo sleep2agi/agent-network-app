@@ -20,7 +20,7 @@ import AliasAvatar from './AliasAvatar';
 import { agentStatusLabel, isAgentOnline } from './chat-actions';
 import { fetchStatus, takeStatusPrefetch, type HubConfig, type Session } from './api';
 import { loadSessionsCache, saveSessionsCache } from './storage';
-import { colors, spacing, statusColor } from './theme';
+import { colors, spacing, statusColor, themeMode } from './theme';
 import { usePoll } from './usePoll';
 import { styles } from './app-styles';
 import { buildSections, countShown } from './agents-list';
@@ -138,8 +138,8 @@ export default function AgentsScreen({
   }
 
   return (
-    <View style={{ flex: 1 }}>
-      <View style={{ paddingHorizontal: compact ? spacing.sm : spacing.lg, paddingTop: compact ? spacing.sm : spacing.lg, backgroundColor: colors.bg }}>
+    <View style={{ flex: 1, backgroundColor: compact && themeMode() === 'light' ? '#fafafb' : colors.bg }}>
+      <View style={{ paddingHorizontal: compact ? spacing.sm : spacing.lg, paddingTop: compact ? spacing.sm : spacing.lg, backgroundColor: compact && themeMode() === 'light' ? '#fafafb' : colors.bg }}>
         <View style={styles.listHeaderRow}>
           <Text style={styles.listHeader}>
             {q ? `${shownCount} / ${sessions.length} agents` : `${sessions.length} agents`}
@@ -149,7 +149,7 @@ export default function AgentsScreen({
           </Pressable>
         </View>
         {sessions.length > 10 ? (
-          <TextInput style={styles.search} placeholder="搜索 agent…" placeholderTextColor={colors.textMuted} autoCapitalize="none" autoCorrect={false} value={query} onChangeText={setQuery} />
+          <TextInput style={[styles.search, compact && themeMode() === 'light' && { backgroundColor: '#f0f1f3', borderWidth: 0, borderRadius: 8 }]} placeholder="搜索 agent…" placeholderTextColor={colors.textMuted} autoCapitalize="none" autoCorrect={false} value={query} onChangeText={setQuery} />
         ) : null}
       </View>
       <SectionList
@@ -157,7 +157,7 @@ export default function AgentsScreen({
       keyExtractor={s => s.alias}
       stickySectionHeadersEnabled={false}
       renderSectionHeader={({ section }) => (
-        <View style={styles.sectionHeaderRow}>
+        <View style={[styles.sectionHeaderRow, compact && themeMode() === 'light' && { backgroundColor: '#fafafb' }]}>
           <Text style={styles.sectionHeader}>{section.title}</Text>
           <Text style={styles.sectionCount}>
             {section.online}/{section.total} 在线
@@ -211,13 +211,14 @@ export default function AgentsScreen({
             styles.card,
             compact && {
               borderWidth: 0,
-              borderBottomWidth: 1,
-              borderRadius: 8,
+              borderBottomWidth: 0,
+              borderRadius: 9,
               paddingHorizontal: spacing.md,
-              paddingVertical: spacing.md,
+              paddingVertical: 10,
               marginBottom: 2,
+              backgroundColor: themeMode() === 'light' ? 'transparent' : colors.card,
             },
-            selectedAlias === item.alias && { backgroundColor: colors.inputBg },
+            selectedAlias === item.alias && { backgroundColor: themeMode() === 'light' ? '#e7e9ec' : colors.inputBg },
             item.status === 'offline' && styles.cardOffline,
             pressed && { opacity: 0.7 },
           ]}
@@ -237,18 +238,16 @@ export default function AgentsScreen({
             />
           </View>
           <View style={{ flex: 1, minWidth: 0 }}>
-            <Text style={styles.alias} numberOfLines={1}>
+            <Text style={[styles.alias, compact && { fontSize: 13, fontWeight: '600' }]} numberOfLines={1}>
               {item.alias}
             </Text>
             {item.task ? (
-              <Text style={styles.task} numberOfLines={1}>
+              <Text style={[styles.task, compact && { fontSize: 11 }]} numberOfLines={1}>
                 {item.task}
               </Text>
             ) : null}
           </View>
-          <Text style={[styles.status, { color: statusColor(item.status ?? '', true) }]}>
-            {agentStatusLabel(item.status)}
-          </Text>
+          {!compact ? <Text style={[styles.status, { color: statusColor(item.status ?? '', true) }]}>{agentStatusLabel(item.status)}</Text> : null}
         </Pressable>
       )}
       />

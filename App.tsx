@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   BackHandler,
+  Image,
   Platform,
   Pressable,
   SafeAreaView,
@@ -170,7 +171,9 @@ function AppRoot() {
 
   if (booting) {
     return (
-      <SafeAreaView style={[styles.root, styles.center]}>
+      <SafeAreaView style={[styles.root, styles.center, bootStyles.root]}>
+        <Image source={require('./assets/splash-icon.png')} style={bootStyles.logo} resizeMode="contain" />
+        <Text style={bootStyles.title}>Agent Network</Text>
         <ActivityIndicator color={colors.accent} />
       </SafeAreaView>
     );
@@ -319,6 +322,12 @@ function AppRoot() {
   );
 }
 
+const bootStyles = StyleSheet.create({
+  root: { backgroundColor: '#07152f' },
+  logo: { width: 156, height: 156, borderRadius: 34 },
+  title: { color: '#ffffff', fontSize: 20, fontWeight: '700', letterSpacing: 0.4, marginBottom: 8 },
+});
+
 function DesktopWorkspace({ cfg, screen, setScreen, onLogout }: {
   cfg: HubConfig;
   screen: Screen;
@@ -335,7 +344,7 @@ function DesktopWorkspace({ cfg, screen, setScreen, onLogout }: {
       cfg={cfg}
       alias={screen.alias}
       onBack={() => setScreen({ name: 'agents' })}
-      onOpenSettings={() => setScreen({ name: 'settings' })}
+      onOpenNodeSettings={() => setScreen({ name: 'nodeDetail', alias: screen.alias })}
       desktop
     />
   ) : screen.name === 'tasks' ? (
@@ -360,7 +369,9 @@ function DesktopWorkspace({ cfg, screen, setScreen, onLogout }: {
   return (
     <View style={desktopStyles.shell}>
       <View style={desktopStyles.rail}>
-        <View style={desktopStyles.railBrand}><Text style={desktopStyles.railBrandText}>AN</Text></View>
+        <View style={desktopStyles.railBrand}>
+          <Image source={require('./assets/icon.png')} style={desktopStyles.railBrandImage} resizeMode="cover" />
+        </View>
         <View style={desktopStyles.railTabs}>
           {DESKTOP_MAIN_TABS.map(tab => (
             <Pressable key={tab.key} accessibilityLabel={tab.label} onPress={() => setScreen({ name: tab.key } as Screen)} style={[desktopStyles.railButton, active === tab.key && desktopStyles.railButtonActive]}>
@@ -391,16 +402,16 @@ function DesktopWorkspace({ cfg, screen, setScreen, onLogout }: {
 
 const makeDesktopStyles = () => StyleSheet.create({
   shell: { flex: 1, flexDirection: 'row', backgroundColor: colors.bg },
-  rail: { width: 64, backgroundColor: colors.inputBg, borderRightWidth: 1, borderRightColor: colors.border, alignItems: 'center', paddingVertical: 14 },
-  railBrand: { width: 34, height: 34, borderRadius: 10, backgroundColor: colors.accent, alignItems: 'center', justifyContent: 'center' },
-  railBrandText: { color: colors.bg, fontSize: 12, fontWeight: '800' },
-  railTabs: { flex: 1, paddingTop: 22, gap: 8 },
-  railButton: { width: 42, height: 42, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
-  railButtonActive: { backgroundColor: colors.card },
+  rail: { width: 58, backgroundColor: themeMode() === 'light' ? '#f0f1f3' : colors.inputBg, borderRightWidth: 1, borderRightColor: colors.border, alignItems: 'center', paddingVertical: 12 },
+  railBrand: { width: 38, height: 38, borderRadius: 10, overflow: 'hidden', alignItems: 'center', justifyContent: 'center' },
+  railBrandImage: { width: 38, height: 38 },
+  railTabs: { flex: 1, paddingTop: 20, gap: 6 },
+  railButton: { width: 38, height: 38, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
+  railButtonActive: { backgroundColor: themeMode() === 'light' ? '#dde2e7' : colors.card },
   railSettings: { marginBottom: 10 },
   railVersion: { color: colors.textMuted, fontSize: 9 },
-  conversations: { width: 304, borderRightWidth: 1, borderRightColor: colors.border, backgroundColor: colors.bg },
-  content: { flex: 1, minWidth: 0, backgroundColor: colors.bg },
+  conversations: { width: 310, borderRightWidth: 1, borderRightColor: colors.border, backgroundColor: themeMode() === 'light' ? '#fafafb' : colors.bg },
+  content: { flex: 1, minWidth: 0, backgroundColor: themeMode() === 'light' ? '#f2f4f7' : colors.bg },
   empty: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: spacing.sm },
   emptyTitle: { color: colors.textSecondary, fontSize: 16, fontWeight: '600' },
   emptyHint: { color: colors.textMuted, fontSize: 12 },
