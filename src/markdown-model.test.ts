@@ -12,6 +12,7 @@ ck('仅允许 http/https 链接', isSafeMarkdownUrl('https://example.com') && !i
 ck('原始 HTML 只作为普通文本', parseMarkdownBlocks('<script>alert(1)</script>')[0]?.kind === 'paragraph');
 
 const messageSource = fs.readFileSync(path.join(process.cwd(), 'src/MarkdownMessage.tsx'), 'utf8');
-ck('Tauri Markdown 链接通过系统 opener 打开', messageSource.includes("import('@tauri-apps/plugin-opener')"));
+ck('Tauri Markdown 链接静态加载系统 opener', messageSource.includes("import { openUrl } from '@tauri-apps/plugin-opener'"));
+ck('Markdown 链接点击不被外层气泡吞掉', messageSource.includes('event.stopPropagation()'));
 ck('非 Tauri Markdown 链接保留 Linking fallback', messageSource.includes('await Linking.openURL(url)'));
 console.log(`\n${p}/${t} passed`); process.exit(p === t ? 0 : 1);
