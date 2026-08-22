@@ -48,3 +48,11 @@ export const agentStatusLabel = (status?: string): string => {
   if (status === 'offline' || !status) return '离线';
   return '在线';
 };
+
+// Desktop composer contract: Enter sends, Shift+Enter inserts a newline.
+// Composition must win so confirming Chinese/Japanese input never sends early.
+export const shouldSendOnEnter = (event: {
+  key?: string;
+  shiftKey?: boolean;
+  isComposing?: boolean;
+}): boolean => event.key === 'Enter' && !event.shiftKey && !event.isComposing;

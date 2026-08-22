@@ -1,5 +1,5 @@
 // 纯逻辑单测(bun/node 可跑·无 RN 依赖)。run: bun src/chat-actions.test.ts
-import { buildQuote, applyQuote, msgKey, removeMessage, shouldShowJumpPill, nextUnread, jumpPillLabel, canSend, isAgentOnline, agentStatusLabel } from './chat-actions';
+import { buildQuote, applyQuote, msgKey, removeMessage, shouldShowJumpPill, nextUnread, jumpPillLabel, canSend, isAgentOnline, agentStatusLabel, shouldSendOnEnter } from './chat-actions';
 let p = 0, t = 0; const ck = (n: string, c: boolean) => { t++; if (c) { p++; console.log('✅', n); } else console.log('❌', n); };
 // round-2 长按动作
 ck('quote 包「」+换行', buildQuote('你好') === '「你好」\n');
@@ -32,4 +32,9 @@ ck('idle 在线', isAgentOnline('idle') === true);
 ck('offline 离线', isAgentOnline('offline') === false);
 ck('空 离线不崩', isAgentOnline('') === false && isAgentOnline(undefined) === false);
 ck('列表和聊天头共用状态文案', agentStatusLabel('idle') === '在线' && agentStatusLabel('working') === '工作中' && agentStatusLabel('offline') === '离线');
+// round-6 桌面发送快捷键
+ck('Enter 发送', shouldSendOnEnter({ key: 'Enter' }) === true);
+ck('Shift+Enter 换行', shouldSendOnEnter({ key: 'Enter', shiftKey: true }) === false);
+ck('输入法组词确认不发送', shouldSendOnEnter({ key: 'Enter', isComposing: true }) === false);
+ck('其它按键不发送', shouldSendOnEnter({ key: 'a' }) === false);
 console.log(`\n${p}/${t} passed`); process.exit(p === t ? 0 : 1);

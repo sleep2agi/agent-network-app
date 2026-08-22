@@ -32,7 +32,7 @@ import {
 import { attachmentFromClipboard, isTauriDesktop, releaseClipboardAttachment } from './clipboard-attachment';
 import { colors, onThemeChange, spacing } from './theme';
 import { formatChatHeader, shouldShowTimeHeader } from './time';
-import { agentStatusLabel, applyQuote, removeMessage, shouldShowJumpPill, nextUnread, jumpPillLabel, canSend } from './chat-actions';
+import { agentStatusLabel, applyQuote, removeMessage, shouldShowJumpPill, nextUnread, jumpPillLabel, canSend, shouldSendOnEnter } from './chat-actions';
 import type { NativeSyntheticEvent, NativeScrollEvent } from 'react-native';
 import { usePoll } from './usePoll';
 import { appFetch } from './app-fetch';
@@ -661,6 +661,16 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
           placeholderTextColor={colors.textMuted}
           value={draft}
           onChangeText={setDraft}
+          onKeyPress={(event) => {
+            if (!desktop) return;
+            const key = event.nativeEvent as typeof event.nativeEvent & {
+              shiftKey?: boolean;
+              isComposing?: boolean;
+            };
+            if (!shouldSendOnEnter(key)) return;
+            event.preventDefault?.();
+            submit();
+          }}
           multiline
         />
         <Pressable
