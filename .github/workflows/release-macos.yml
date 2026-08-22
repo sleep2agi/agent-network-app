@@ -83,7 +83,7 @@ jobs:
           chmod 700 "$key_dir"
           printf '%s' "$APPLE_API_KEY_BASE64" | base64 --decode > "$key_dir/AuthKey_${APPLE_API_KEY}.p8"
           chmod 600 "$key_dir/AuthKey_${APPLE_API_KEY}.p8"
-          echo "APPLE_API_KEY_PATH=$key_dir" >> "$GITHUB_ENV"
+          echo "APPLE_API_KEY_PATH=$key_dir/AuthKey_${APPLE_API_KEY}.p8" >> "$GITHUB_ENV"
 
       - name: Build, Developer ID sign, notarize, and staple
         shell: bash
@@ -99,7 +99,7 @@ jobs:
           test -n "$APPLE_CERTIFICATE_PASSWORD"
           test -n "$APPLE_API_ISSUER"
           test -n "$APPLE_API_KEY"
-          test -f "$APPLE_API_KEY_PATH/AuthKey_${APPLE_API_KEY}.p8"
+          test -f "$APPLE_API_KEY_PATH"
           npx tauri build --bundles app,dmg
 
       - name: Verify signed and notarized app
