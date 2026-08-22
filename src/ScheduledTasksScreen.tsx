@@ -37,6 +37,7 @@ import {
   updateScheduledTask,
 } from './api';
 import { colors, onThemeChange, spacing } from './theme';
+import { scheduledTaskActions } from './scheduled-task-actions';
 
 const DAYS = ['日', '一', '二', '三', '四', '五', '六'];
 
@@ -267,7 +268,9 @@ export default function ScheduledTasksScreen({ cfg }: { cfg: HubConfig }) {
           contentContainerStyle={styles.list}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => load(true)} tintColor={colors.accent} />}
         >
-          {items.length === 0 ? <View style={styles.empty}><Text style={styles.emptyTitle}>还没有定时任务</Text><Text style={styles.muted}>点击右上角新建，由 Hub 统一执行。</Text></View> : items.map(row => (
+          {items.length === 0 ? <View style={styles.empty}><Text style={styles.emptyTitle}>还没有定时任务</Text><Text style={styles.muted}>点击右上角新建，由 Hub 统一执行。</Text></View> : items.map(row => {
+            const availableActions = scheduledTaskActions(row.status);
+            return (
             <View key={row.schedule_id} style={styles.card}>
               <View style={styles.cardTop}><Text style={styles.cardTitle}>{row.name}</Text><Text style={[styles.badge, row.status === 'active' ? styles.badgeActive : styles.badgeIdle]}>{row.status}</Text></View>
               <Text style={styles.node}>{row.target_alias}</Text>
@@ -276,14 +279,15 @@ export default function ScheduledTasksScreen({ cfg }: { cfg: HubConfig }) {
               <Text style={styles.meta}>{describeMisfire(row.misfire_policy)}</Text>
               <Text style={styles.meta}>下次：{fmt(row.next_run_at)}　上次：{fmt(row.last_run_at)}</Text>
               <View style={styles.actions}>
-                {['active', 'paused'].includes(row.status) && <Pressable disabled={busy} style={styles.action} onPress={() => { setEditing(row); setShowForm(true); }}><Text style={styles.actionText}>编辑</Text></Pressable>}
-                {['active', 'paused'].includes(row.status) && <Pressable disabled={busy} style={styles.action} onPress={() => act(row, 'toggle')}><Text style={styles.actionText}>{row.status === 'active' ? '暂停' : '恢复'}</Text></Pressable>}
-                <Pressable disabled={busy || row.status === 'cancelled'} style={styles.action} onPress={() => act(row, 'run')}><Text style={styles.actionText}>立即执行</Text></Pressable>
-                <Pressable disabled={busy} style={styles.action} onPress={() => act(row, 'history')}><Text style={styles.actionText}>记录</Text></Pressable>
-                <Pressable disabled={busy || row.status === 'cancelled'} style={[styles.action, styles.danger]} onPress={() => Alert.alert('取消计划？', row.name, [{ text: '返回' }, { text: '取消计划', style: 'destructive', onPress: () => void act(row, 'cancel') }])}><Text style={styles.dangerText}>取消</Text></Pressable>
+                {availableActions.includes('edit') && <Pressable disabled={busy} style={[styles.action, busy && styles.actionDisabled]} onPress={() => { setEditing(row); setShowForm(true); }}><Text style={styles.actionText}>编辑</Text></Pressable>}
+                {availableActions.includes('toggle') && <Pressable disabled={busy} style={[styles.action, busy && styles.actionDisabled]} onPress={() => act(row, 'toggle')}><Text style={styles.actionText}>{row.status === 'active' ? '暂停' : '恢复'}</Text></Pressable>}
+                {availableActions.includes('run') && <Pressable disabled={busy} style={[styles.action, busy && styles.actionDisabled]} onPress={() => act(row, 'run')}><Text style={styles.actionText}>立即执行</Text></Pressable>}
+                <Pressable disabled={busy} style={[styles.action, busy && styles.actionDisabled]} onPress={() => act(row, 'history')}><Text style={styles.actionText}>记录</Text></Pressable>
+                {availableActions.includes('cancel') && <Pressable disabled={busy} style={[styles.action, styles.danger, busy && styles.actionDisabled]} onPress={() => Alert.alert('取消计划？', row.name, [{ text: '返回' }, { text: '取消计划', style: 'destructive', onPress: () => void act(row, 'cancel') }])}><Text style={styles.dangerText}>取消</Text></Pressable>}
               </View>
             </View>
-          ))}
+            );
+          })}
         </ScrollView>
       )}
       <ScheduleFormModal

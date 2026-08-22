@@ -89,7 +89,7 @@ ck('mobile form shows timezone and rejects empty weekly selection', screen.inclu
 ck('mobile form exposes catch-up and skip policies and discloses the effective value',
   screen.includes("'catch_up_once'") && screen.includes("'skip'") && screen.includes('misfire_policy: misfirePolicy') && screen.includes('错过后补跑一次') && screen.includes('错过后跳过'));
 ck('mobile cards edit only active or paused schedules and prefill every mutable field',
-  screen.includes("setEditing(row); setShowForm(true)") && screen.includes("['active', 'paused'].includes(row.status)") &&
+  screen.includes("setEditing(row); setShowForm(true)") && screen.includes("availableActions.includes('edit')") &&
   ['setName(editing.name)', 'setTask(editing.task_content)', 'setTarget(editing.target_node_id)',
     'setPriority(editing.priority)', 'setTimezone(editing.timezone)', 'intervalFormValue'].every(value => screen.includes(value)));
 ck('mobile edit uses full update API and refreshes authoritative data on revision conflict',
