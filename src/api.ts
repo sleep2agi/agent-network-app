@@ -35,6 +35,7 @@ export interface HubConfig {
   serverUrl: string; // e.g. https://hub.example.com
   token: string;
   networkId?: string; // hub scopes sends by network (#220 round 18)
+  profileId?: string; // local-only namespace; never sent to the Hub
 }
 
 const headers = (cfg: HubConfig) => ({

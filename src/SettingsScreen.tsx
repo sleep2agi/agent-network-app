@@ -5,6 +5,7 @@ import { saveThemeMode } from './storage';
 import { colors, onThemeChange, setThemeMode, spacing, themeMode } from './theme';
 import { APP_VERSION } from './version';
 import { appFetch } from './app-fetch';
+import type { HubProfile } from './profile-storage';
 
 // Settings (Vincent tg 720): who am I, where am I connected, which
 // network, which build — and the one destructive action, logout,
@@ -18,9 +19,17 @@ interface Me {
 
 export default function SettingsScreen({
   cfg,
+  activeProfile,
+  profiles,
+  onSwitchProfile,
+  onAddProfile,
   onLogout,
 }: {
   cfg: HubConfig;
+  activeProfile: HubProfile | null;
+  profiles: HubProfile[];
+  onSwitchProfile: (id: string) => void;
+  onAddProfile: () => void;
   onLogout: () => void;
 }) {
   const [me, setMe] = useState<Me>({});
@@ -59,6 +68,32 @@ export default function SettingsScreen({
         />
       </View>
 
+      <Text style={styles.sectionTitle}>账号与服务器</Text>
+      <View style={styles.card}>
+        {profiles.map((profile, index) => {
+          const selected = profile.id === activeProfile?.id;
+          return (
+            <View key={profile.id}>
+              {index ? <Divider /> : null}
+              <Pressable
+                style={({ pressed }) => [styles.profileRow, pressed && { opacity: 0.65 }]}
+                onPress={() => { if (!selected) onSwitchProfile(profile.id); }}
+              >
+                <View style={styles.profileText}>
+                  <Text style={styles.profileName} numberOfLines={1}>{profile.label || profile.username}</Text>
+                  <Text style={styles.profileHub} numberOfLines={1}>{profile.serverUrl}</Text>
+                </View>
+                <Text style={[styles.profileState, selected && styles.profileStateActive]}>{selected ? '当前' : '切换'}</Text>
+              </Pressable>
+            </View>
+          );
+        })}
+        {profiles.length ? <Divider /> : null}
+        <Pressable style={({ pressed }) => [styles.row, pressed && { opacity: 0.6 }]} onPress={onAddProfile}>
+          <Text style={styles.addProfile}>＋ 添加 Hub 或账号</Text>
+        </Pressable>
+      </View>
+
       <Text style={styles.sectionTitle}>外观</Text>
       <View style={styles.card}>
         <Pressable
@@ -83,7 +118,7 @@ export default function SettingsScreen({
         style={({ pressed }) => [styles.logoutBtn, pressed && { opacity: 0.7 }]}
         onPress={onLogout}
       >
-        <Text style={styles.logoutText}>退出登录</Text>
+        <Text style={styles.logoutText}>移除当前账号</Text>
       </Pressable>
     </View>
   );
@@ -129,6 +164,13 @@ const makeStyles = () =>
   },
   rowLabel: { color: colors.textSecondary, fontSize: 14 },
   rowValue: { color: colors.text, fontSize: 14, flexShrink: 1 },
+  profileRow: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: spacing.lg, paddingVertical: spacing.md, gap: spacing.md },
+  profileText: { flex: 1, minWidth: 0 },
+  profileName: { color: colors.text, fontSize: 14, fontWeight: '600' },
+  profileHub: { color: colors.textMuted, fontSize: 11, marginTop: 3 },
+  profileState: { color: colors.textSecondary, fontSize: 12 },
+  profileStateActive: { color: colors.accent, fontWeight: '600' },
+  addProfile: { color: colors.accent, fontSize: 14, fontWeight: '600' },
   divider: { height: 1, backgroundColor: colors.border, marginLeft: spacing.lg },
   logoutBtn: {
     marginTop: spacing.xl,

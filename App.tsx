@@ -34,14 +34,15 @@ import LogsScreen from './src/LogsScreen';
 import ScheduledTasksScreen from './src/ScheduledTasksScreen';
 import ConnectivityBanner from './src/ConnectivityBanner';
 import type { HostSupervisorDaemon } from './src/api';
-import { clearConfig, loadConfig, loadLocalAvatars, loadOutbox, loadThemeMode, saveConfig, saveLocalAvatars, saveOutbox } from './src/storage';
+import { loadLocalAvatars, loadOutbox, loadThemeMode, saveLocalAvatars, saveOutbox } from './src/storage';
+import { activateHubProfile, listHubProfiles, loadActiveHubProfile, removeHubProfile, saveHubProfile, type HubProfile } from './src/profile-storage';
 import { initOutbox } from './src/outbox';
 import { colors, onThemeChange, setThemeMode, spacing, themeMode } from './src/theme';
 import { styles } from './src/app-styles';
 import { APP_VERSION } from './src/version';
 
 type Screen =
-  | { name: 'login' }
+  | { name: 'login'; adding?: boolean }
   | { name: 'agents' }
   | { name: 'tasks' }
   | { name: 'scheduled' }
@@ -89,6 +90,8 @@ export default function App() {
 
 function AppRoot() {
   const [cfg, setCfg] = useState<HubConfig | null>(null);
+  const [activeProfile, setActiveProfile] = useState<HubProfile | null>(null);
+  const [profiles, setProfiles] = useState<HubProfile[]>([]);
   const [screen, setScreen] = useState<Screen>({ name: 'login' });
   const [booting, setBooting] = useState(true);
   // Keyed remount on theme switch: module-level styles were already
@@ -108,24 +111,55 @@ function AppRoot() {
   // .then, leaving `booting` true forever = a permanent boot spinner —
   // so keep those two best-effort if they're ever refactored.
   useEffect(() => {
-    Promise.all([loadConfig(), loadThemeMode(), loadLocalAvatars(), loadOutbox()]).then(([saved, mode, localAvatars, outbox]) => {
+    Promise.all([loadActiveHubProfile(), listHubProfiles(), loadThemeMode()]).then(async ([saved, savedProfiles, mode]) => {
+      setProfiles(savedProfiles);
       if (mode === 'light' || mode === 'dark') setThemeMode(mode);
+      const profileId = saved?.profile.id;
+      const [localAvatars, outbox] = await Promise.all([loadLocalAvatars(profileId), loadOutbox(profileId)]);
       // R2 avatar: seed the per-device local echo layer + wire its writer, so
       // session-only aliases keep their user-set avatar across restarts.
-      initLocalAvatars(localAvatars, (m) => { void saveLocalAvatars(m); });
+      initLocalAvatars(localAvatars, (m) => { void saveLocalAvatars(m, profileId); });
       // PR3 判据C:恢复未送达 outbox(pending 一律恢复为 failed=命运未知按未送达),
       // 注入落盘写手——此后 提交即落盘/确认才删。
-      initOutbox(outbox, (all) => { void saveOutbox(all); });
+      initOutbox(outbox, (all) => { void saveOutbox(all, profileId); });
       if (saved) {
-        setCfg(saved);
+        setProfiles(await listHubProfiles());
+        setCfg(saved.cfg);
+        setActiveProfile(saved.profile);
         setScreen({ name: 'agents' });
         // Fire the status request now so its RTT overlaps the boot→AgentsScreen
         // mount; AgentsScreen's first load consumes this in-flight promise.
-        prefetchStatus(saved);
+        prefetchStatus(saved.cfg);
       }
       setBooting(false);
     });
   }, []);
+
+  const switchProfile = async (id: string) => {
+    const next = await activateHubProfile(id);
+    if (!next) return;
+    const [localAvatars, outbox] = await Promise.all([loadLocalAvatars(id), loadOutbox(id)]);
+    initLocalAvatars(localAvatars, (m) => { void saveLocalAvatars(m, id); });
+    initOutbox(outbox, (all) => { void saveOutbox(all, id); });
+    setCfg(next.cfg);
+    setActiveProfile(next.profile);
+    setProfiles(await listHubProfiles());
+    setScreen({ name: 'agents' });
+    prefetchStatus(next.cfg);
+  };
+
+  const deleteCurrentProfile = async () => {
+    if (activeProfile) await removeHubProfile(activeProfile.id);
+    const remaining = await listHubProfiles();
+    setProfiles(remaining);
+    if (remaining[0]) {
+      await switchProfile(remaining[0].id);
+    } else {
+      setCfg(null);
+      setActiveProfile(null);
+      setScreen({ name: 'login' });
+    }
+  };
 
   // R1 avatar (通信龙 07-31): hydrate the hub avatar layer from GET /api/nodes
   // so node-backed aliases render their cross-device avatar_url (Vincent changed
@@ -184,11 +218,7 @@ function AppRoot() {
       <SafeAreaView key={theme} style={styles.root}>
         <StatusBar barStyle={theme === 'light' ? 'dark-content' : 'light-content'} backgroundColor={colors.bg} />
         <ConnectivityBanner />
-        <DesktopWorkspace cfg={cfg} screen={screen} setScreen={setScreen} onLogout={() => {
-          clearConfig();
-          setCfg(null);
-          setScreen({ name: 'login' });
-        }} />
+        <DesktopWorkspace cfg={cfg} activeProfile={activeProfile} profiles={profiles} screen={screen} setScreen={setScreen} onSwitchProfile={switchProfile} onAddProfile={() => setScreen({ name: 'login', adding: true })} onLogout={deleteCurrentProfile} />
       </SafeAreaView>
     );
   }
@@ -204,9 +234,16 @@ function AppRoot() {
       {screen.name !== 'login' && cfg ? <ConnectivityBanner /> : null}
       {screen.name === 'login' || !cfg ? (
         <LoginScreen
-          onLogin={c => {
-            setCfg(c);
-            saveConfig(c);
+          adding={screen.name === 'login' && !!screen.adding}
+          onCancel={screen.name === 'login' && screen.adding && cfg ? () => setScreen({ name: 'settings' }) : undefined}
+          onLogin={async (c, username) => {
+            const profile = await saveHubProfile(c, username);
+            const [localAvatars, outbox] = await Promise.all([loadLocalAvatars(profile.id), loadOutbox(profile.id)]);
+            initLocalAvatars(localAvatars, (m) => { void saveLocalAvatars(m, profile.id); });
+            initOutbox(outbox, (all) => { void saveOutbox(all, profile.id); });
+            setCfg({ ...c, profileId: profile.id });
+            setActiveProfile(profile);
+            setProfiles(await listHubProfiles());
             setScreen({ name: 'agents' });
           }}
         />
@@ -283,11 +320,11 @@ function AppRoot() {
             ) : screen.name === 'settings' ? (
               <SettingsScreen
                 cfg={cfg}
-                onLogout={() => {
-                  clearConfig();
-                  setCfg(null);
-                  setScreen({ name: 'login' });
-                }}
+                activeProfile={activeProfile}
+                profiles={profiles}
+                onSwitchProfile={switchProfile}
+                onAddProfile={() => setScreen({ name: 'login', adding: true })}
+                onLogout={deleteCurrentProfile}
               />
             ) : (
               <AgentsScreen
@@ -328,10 +365,14 @@ const bootStyles = StyleSheet.create({
   title: { color: '#ffffff', fontSize: 20, fontWeight: '700', letterSpacing: 0.4, marginBottom: 8 },
 });
 
-function DesktopWorkspace({ cfg, screen, setScreen, onLogout }: {
+function DesktopWorkspace({ cfg, activeProfile, profiles, screen, setScreen, onSwitchProfile, onAddProfile, onLogout }: {
   cfg: HubConfig;
+  activeProfile: HubProfile | null;
+  profiles: HubProfile[];
   screen: Screen;
   setScreen: (screen: Screen) => void;
+  onSwitchProfile: (id: string) => void;
+  onAddProfile: () => void;
   onLogout: () => void;
 }) {
   // AppRoot is keyed by theme, so this component remounts after every theme
@@ -352,7 +393,7 @@ function DesktopWorkspace({ cfg, screen, setScreen, onLogout }: {
   ) : screen.name === 'scheduled' ? <ScheduledTasksScreen cfg={cfg} />
   : screen.name === 'messages' ? <MessagesScreen cfg={cfg} />
   : screen.name === 'server' ? <ServerScreen cfg={cfg} onOpenLogs={() => setScreen({ name: 'logs' })} />
-  : screen.name === 'settings' ? <SettingsScreen cfg={cfg} onLogout={onLogout} />
+  : screen.name === 'settings' ? <SettingsScreen cfg={cfg} activeProfile={activeProfile} profiles={profiles} onSwitchProfile={onSwitchProfile} onAddProfile={onAddProfile} onLogout={onLogout} />
   : screen.name === 'taskDetail' ? <TaskDetailScreen cfg={cfg} taskId={screen.taskId} onBack={() => setScreen({ name: 'tasks' })} />
   : screen.name === 'nodeDetail' ? <NodeDetailScreen cfg={cfg} alias={screen.alias} onBack={() => setScreen({ name: 'agents' })} />
   : screen.name === 'logs' ? <LogsScreen cfg={cfg} onBack={() => setScreen({ name: 'server' })} />
@@ -417,7 +458,7 @@ const makeDesktopStyles = () => StyleSheet.create({
   emptyHint: { color: colors.textMuted, fontSize: 12 },
 });
 
-function LoginScreen({ onLogin }: { onLogin: (cfg: HubConfig) => void }) {
+function LoginScreen({ onLogin, adding = false, onCancel }: { onLogin: (cfg: HubConfig, username: string) => void; adding?: boolean; onCancel?: () => void }) {
   const [serverUrl, setServerUrl] = useState('');
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
@@ -437,13 +478,14 @@ function LoginScreen({ onLogin }: { onLogin: (cfg: HubConfig) => void }) {
     setBusy(true);
     const result = await login(norm.url, username.trim(), password);
     setBusy(false);
-    if (result.ok) onLogin(result.cfg);
+    if (result.ok) onLogin(result.cfg, username.trim());
     else { setFailKind(result.kind); setFailDetail(result.error); }
   };
 
   return (
     <View style={styles.loginWrap}>
       <Text style={styles.brand}>Agent Network</Text>
+      {adding ? <Text style={{ color: colors.textSecondary, marginBottom: spacing.md }}>添加 Hub 或账号</Text> : null}
       <TextInput
         style={styles.input}
         placeholder="服务器地址 (https://your-hub.example.com)"
@@ -500,6 +542,11 @@ function LoginScreen({ onLogin }: { onLogin: (cfg: HubConfig) => void }) {
           <Text style={styles.buttonText}>登录</Text>
         )}
       </Pressable>
+      {onCancel ? (
+        <Pressable onPress={onCancel} style={{ marginTop: spacing.md, padding: spacing.sm }}>
+          <Text style={{ color: colors.textSecondary }}>取消</Text>
+        </Pressable>
+      ) : null}
       {/* Version on the login page so device screenshots are
           unambiguous about which build is installed (tg 692). */}
       <Text style={styles.version}>v{APP_VERSION}</Text>
