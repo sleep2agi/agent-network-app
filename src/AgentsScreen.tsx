@@ -20,7 +20,7 @@ import AliasAvatar from './AliasAvatar';
 import { agentStatusLabel, isAgentOnline } from './chat-actions';
 import { fetchStatus, takeStatusPrefetch, type HubConfig, type Session } from './api';
 import { loadSessionsCache, saveSessionsCache } from './storage';
-import { colors, spacing, statusColor } from './theme';
+import { colors, spacing, statusColor, themeMode } from './theme';
 import { usePoll } from './usePoll';
 import { styles } from './app-styles';
 import { buildSections, countShown } from './agents-list';
@@ -138,8 +138,8 @@ export default function AgentsScreen({
   }
 
   return (
-    <View style={{ flex: 1 }}>
-      <View style={{ paddingHorizontal: compact ? spacing.sm : spacing.lg, paddingTop: compact ? spacing.sm : spacing.lg, backgroundColor: colors.bg }}>
+    <View style={{ flex: 1, backgroundColor: compact && themeMode() === 'light' ? '#f8f9fb' : colors.bg }}>
+      <View style={{ paddingHorizontal: compact ? spacing.sm : spacing.lg, paddingTop: compact ? spacing.sm : spacing.lg, backgroundColor: compact && themeMode() === 'light' ? '#f8f9fb' : colors.bg }}>
         <View style={styles.listHeaderRow}>
           <Text style={styles.listHeader}>
             {q ? `${shownCount} / ${sessions.length} agents` : `${sessions.length} agents`}
@@ -157,7 +157,7 @@ export default function AgentsScreen({
       keyExtractor={s => s.alias}
       stickySectionHeadersEnabled={false}
       renderSectionHeader={({ section }) => (
-        <View style={styles.sectionHeaderRow}>
+        <View style={[styles.sectionHeaderRow, compact && themeMode() === 'light' && { backgroundColor: '#f8f9fb' }]}>
           <Text style={styles.sectionHeader}>{section.title}</Text>
           <Text style={styles.sectionCount}>
             {section.online}/{section.total} 在线
@@ -212,12 +212,12 @@ export default function AgentsScreen({
             compact && {
               borderWidth: 0,
               borderBottomWidth: 1,
-              borderRadius: 8,
+              borderRadius: themeMode() === 'light' ? 0 : 8,
               paddingHorizontal: spacing.md,
               paddingVertical: spacing.md,
-              marginBottom: 2,
+              marginBottom: themeMode() === 'light' ? 0 : 2,
             },
-            selectedAlias === item.alias && { backgroundColor: colors.inputBg },
+            selectedAlias === item.alias && { backgroundColor: themeMode() === 'light' ? '#dff3f2' : colors.inputBg },
             item.status === 'offline' && styles.cardOffline,
             pressed && { opacity: 0.7 },
           ]}
