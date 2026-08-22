@@ -324,7 +324,13 @@ function DesktopWorkspace({ cfg, screen, setScreen, onLogout }: {
 }) {
   const active = ['chat', 'nodeDetail', 'picker', 'wizard'].includes(screen.name) ? 'agents' : screen.name;
   const content = screen.name === 'chat' ? (
-    <ChatScreen cfg={cfg} alias={screen.alias} onBack={() => setScreen({ name: 'agents' })} desktop />
+    <ChatScreen
+      cfg={cfg}
+      alias={screen.alias}
+      onBack={() => setScreen({ name: 'agents' })}
+      onOpenSettings={() => setScreen({ name: 'settings' })}
+      desktop
+    />
   ) : screen.name === 'tasks' ? (
     <TasksScreen cfg={cfg} onOpenTask={taskId => setScreen({ name: 'taskDetail', taskId })} />
   ) : screen.name === 'scheduled' ? <ScheduledTasksScreen cfg={cfg} />

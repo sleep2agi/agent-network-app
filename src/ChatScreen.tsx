@@ -15,6 +15,7 @@ import {
   View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { Ionicons } from '@expo/vector-icons';
 import AliasAvatar from './AliasAvatar';
 import AuthedThumb, { AttachmentFile, AuthedVideo, mimeFromName } from './AuthedThumb';
 import { fetchStatus, fetchTasks, sendTask, HubConfig, HubTask, TaskAttachment } from './api';
@@ -169,9 +170,10 @@ interface Props {
   alias: string;
   onBack: () => void;
   desktop?: boolean;
+  onOpenSettings?: () => void;
 }
 
-export default function ChatScreen({ cfg, alias, onBack, desktop = false }: Props) {
+export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpenSettings }: Props) {
   // Android edge-to-edge draws the composer under the gesture bar (same
   // class of bug as the tg 802 tab bar) — pad by the real bottom inset.
   const insets = useSafeAreaInsets();
@@ -488,6 +490,17 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false }: Prop
             </Text>
           ) : null}
         </View>
+        {desktop && onOpenSettings ? (
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="设置"
+            onPress={onOpenSettings}
+            hitSlop={10}
+            style={({ pressed }) => [styles.headerAction, pressed && { opacity: 0.6 }]}
+          >
+            <Ionicons name="settings-outline" size={20} color={colors.textSecondary} />
+          </Pressable>
+        ) : null}
       </View>
 
       {!loaded ? (
@@ -682,6 +695,13 @@ const makeStyles = () =>
   back: { color: colors.accent, fontSize: 28, lineHeight: 30, paddingRight: spacing.sm },
   title: { color: colors.text, fontSize: 16, fontWeight: '600' },
   subtitle: { color: colors.running, fontSize: 11, marginTop: 1 },
+  headerAction: {
+    width: 34,
+    height: 34,
+    borderRadius: 9,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   beginning: {
     color: colors.textMuted,
     fontSize: 11,
