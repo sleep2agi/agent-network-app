@@ -138,7 +138,21 @@ export default function AgentsScreen({
   }
 
   return (
-    <SectionList
+    <View style={{ flex: 1 }}>
+      <View style={{ paddingHorizontal: compact ? spacing.sm : spacing.lg, paddingTop: compact ? spacing.sm : spacing.lg, backgroundColor: colors.bg }}>
+        <View style={styles.listHeaderRow}>
+          <Text style={styles.listHeader}>
+            {q ? `${shownCount} / ${sessions.length} agents` : `${sessions.length} agents`}
+          </Text>
+          <Pressable onPress={onOpenPicker} hitSlop={10} accessibilityLabel="新建节点" style={({ pressed }) => [styles.addBtn, pressed && { opacity: 0.6 }]}>
+            <Ionicons name="add" size={24} color={colors.accent} />
+          </Pressable>
+        </View>
+        {sessions.length > 10 ? (
+          <TextInput style={styles.search} placeholder="搜索 agent…" placeholderTextColor={colors.textMuted} autoCapitalize="none" autoCorrect={false} value={query} onChangeText={setQuery} />
+        ) : null}
+      </View>
+      <SectionList
       sections={sections}
       keyExtractor={s => s.alias}
       stickySectionHeadersEnabled={false}
@@ -160,7 +174,7 @@ export default function AgentsScreen({
       maxToRenderPerBatch={12}
       windowSize={9}
       updateCellsBatchingPeriod={50}
-      contentContainerStyle={{ padding: compact ? spacing.sm : spacing.lg }}
+      contentContainerStyle={{ paddingHorizontal: compact ? spacing.sm : spacing.lg, paddingBottom: compact ? spacing.sm : spacing.lg }}
       refreshControl={
         <RefreshControl
           refreshing={refreshing}
@@ -188,35 +202,6 @@ export default function AgentsScreen({
             <Pressable style={styles.retryBtn} onPress={() => setQuery('')}>
               <Text style={styles.retryBtnText}>清空搜索</Text>
             </Pressable>
-          ) : null}
-        </View>
-      }
-      ListHeaderComponent={
-        <View>
-          <View style={styles.listHeaderRow}>
-            <Text style={styles.listHeader}>
-              {q ? `${shownCount} / ${sessions.length} agents` : `${sessions.length} agents`}
-            </Text>
-            {/* #338 — `+` opens host_supervisor picker. Top-right (Vincent lock). */}
-            <Pressable
-              onPress={onOpenPicker}
-              hitSlop={10}
-              accessibilityLabel="新建节点"
-              style={({ pressed }) => [styles.addBtn, pressed && { opacity: 0.6 }]}
-            >
-              <Ionicons name="add" size={24} color={colors.accent} />
-            </Pressable>
-          </View>
-          {sessions.length > 10 ? (
-            <TextInput
-              style={styles.search}
-              placeholder="搜索 agent…"
-              placeholderTextColor={colors.textMuted}
-              autoCapitalize="none"
-              autoCorrect={false}
-              value={query}
-              onChangeText={setQuery}
-            />
           ) : null}
         </View>
       }
@@ -266,6 +251,7 @@ export default function AgentsScreen({
           </Text>
         </Pressable>
       )}
-    />
+      />
+    </View>
   );
 }
