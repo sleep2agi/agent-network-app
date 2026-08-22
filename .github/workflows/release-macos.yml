@@ -91,19 +91,15 @@ jobs:
           APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
           APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
           APPLE_SIGNING_IDENTITY: "Developer ID Application: wenxing hu (446BLT75JZ)"
-          APPLE_ID: ${{ secrets.APPLE_ID }}
-          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
-          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
           APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
           APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
         run: |
           set -euo pipefail
           test -n "$APPLE_CERTIFICATE"
           test -n "$APPLE_CERTIFICATE_PASSWORD"
-          if [[ -z "$APPLE_API_KEY" && ( -z "$APPLE_ID" || -z "$APPLE_PASSWORD" || -z "$APPLE_TEAM_ID" ) ]]; then
-            echo "::error::notarization needs either App Store Connect API credentials or APPLE_ID/APPLE_PASSWORD/APPLE_TEAM_ID"
-            exit 1
-          fi
+          test -n "$APPLE_API_ISSUER"
+          test -n "$APPLE_API_KEY"
+          test -f "$APPLE_API_KEY_PATH/AuthKey_${APPLE_API_KEY}.p8"
           npx tauri build --bundles app,dmg
 
       - name: Verify signed and notarized app
