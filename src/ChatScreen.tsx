@@ -547,11 +547,10 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
                 {showHeader && item.created_at ? (
                   <Text style={styles.timeHeader}>{formatChatHeader(item.created_at)}</Text>
                 ) : null}
-                <View style={[styles.messageRow, requestSender.isCurrentUser ? styles.sentRow : styles.replyRow]}>
-                  {!requestSender.isCurrentUser ? <AliasAvatar alias={requestSender.alias} size={36} /> : null}
-                  <View style={[styles.messageContent, requestSender.isCurrentUser && styles.sentContent]}>
+                <View style={[styles.messageRow, styles.sentRow]}>
+                  <View style={[styles.messageContent, styles.sentContent]}>
                     <Text
-                      style={[styles.messageAuthor, requestSender.isCurrentUser && styles.sentAuthor]}
+                      style={[styles.messageAuthor, styles.sentAuthor]}
                       numberOfLines={1}
                     >
                       {requestSender.alias}
@@ -561,17 +560,16 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
                       delayLongPress={300}
                       style={({ pressed }) => [
                         styles.bubblePressable,
-                        !requestSender.isCurrentUser && styles.receivedBubblePressable,
                         pressed && { opacity: 0.7 },
                       ]}
                     >
-                      <View style={[styles.bubble, !requestSender.isCurrentUser && styles.replyBubble]}>
+                      <View style={styles.bubble}>
                         <MarkdownMessage>{stripFileLinks(item.content || '—')}</MarkdownMessage>
                         {sentAttachmentViews(item, cfg.serverUrl).map(renderAttachment)}
                       </View>
                     </Pressable>
                   </View>
-                  {requestSender.isCurrentUser ? <AliasAvatar alias={requestSender.alias} size={36} /> : null}
+                  <AliasAvatar alias={requestSender.alias} size={36} />
                 </View>
                 {item.result || item.reply ? (
                   <View style={[styles.messageRow, styles.replyRow]}>
@@ -787,7 +785,6 @@ const makeStyles = () =>
   messageAuthor: { color: colors.textMuted, fontSize: 11, lineHeight: 16, marginBottom: 3 },
   sentAuthor: { textAlign: 'right' },
   bubblePressable: { maxWidth: '100%', alignItems: 'flex-end' },
-  receivedBubblePressable: { alignItems: 'flex-start' },
   timeHeader: {
     color: colors.textMuted,
     fontSize: 11,
