@@ -369,7 +369,9 @@ function DesktopWorkspace({ cfg, screen, setScreen, onLogout }: {
   return (
     <View style={desktopStyles.shell}>
       <View style={desktopStyles.rail}>
-        <View style={desktopStyles.railBrand}><Text style={desktopStyles.railBrandText}>AN</Text></View>
+        <View style={desktopStyles.railBrand}>
+          <Image source={require('./assets/icon.png')} style={desktopStyles.railBrandImage} resizeMode="cover" />
+        </View>
         <View style={desktopStyles.railTabs}>
           {DESKTOP_MAIN_TABS.map(tab => (
             <Pressable key={tab.key} accessibilityLabel={tab.label} onPress={() => setScreen({ name: tab.key } as Screen)} style={[desktopStyles.railButton, active === tab.key && desktopStyles.railButtonActive]}>
@@ -401,8 +403,8 @@ function DesktopWorkspace({ cfg, screen, setScreen, onLogout }: {
 const makeDesktopStyles = () => StyleSheet.create({
   shell: { flex: 1, flexDirection: 'row', backgroundColor: colors.bg },
   rail: { width: 64, backgroundColor: colors.inputBg, borderRightWidth: 1, borderRightColor: colors.border, alignItems: 'center', paddingVertical: 14 },
-  railBrand: { width: 34, height: 34, borderRadius: 10, backgroundColor: colors.accent, alignItems: 'center', justifyContent: 'center' },
-  railBrandText: { color: colors.bg, fontSize: 12, fontWeight: '800' },
+  railBrand: { width: 38, height: 38, borderRadius: 10, overflow: 'hidden', alignItems: 'center', justifyContent: 'center' },
+  railBrandImage: { width: 38, height: 38 },
   railTabs: { flex: 1, paddingTop: 22, gap: 8 },
   railButton: { width: 42, height: 42, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
   railButtonActive: { backgroundColor: colors.card },
