@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   BackHandler,
+  Image,
   Platform,
   Pressable,
   SafeAreaView,
@@ -170,7 +171,9 @@ function AppRoot() {
 
   if (booting) {
     return (
-      <SafeAreaView style={[styles.root, styles.center]}>
+      <SafeAreaView style={[styles.root, styles.center, bootStyles.root]}>
+        <Image source={require('./assets/splash-icon.png')} style={bootStyles.logo} resizeMode="contain" />
+        <Text style={bootStyles.title}>Agent Network</Text>
         <ActivityIndicator color={colors.accent} />
       </SafeAreaView>
     );
@@ -318,6 +321,12 @@ function AppRoot() {
     </SafeAreaView>
   );
 }
+
+const bootStyles = StyleSheet.create({
+  root: { backgroundColor: '#07152f' },
+  logo: { width: 156, height: 156, borderRadius: 34 },
+  title: { color: '#ffffff', fontSize: 20, fontWeight: '700', letterSpacing: 0.4, marginBottom: 8 },
+});
 
 function DesktopWorkspace({ cfg, screen, setScreen, onLogout }: {
   cfg: HubConfig;
