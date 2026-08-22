@@ -31,7 +31,7 @@ import {
 import { attachmentFromClipboard, isTauriDesktop, releaseClipboardAttachment } from './clipboard-attachment';
 import { colors, onThemeChange, spacing } from './theme';
 import { formatChatHeader, shouldShowTimeHeader } from './time';
-import { applyQuote, removeMessage, shouldShowJumpPill, nextUnread, jumpPillLabel, canSend } from './chat-actions';
+import { agentStatusLabel, applyQuote, removeMessage, shouldShowJumpPill, nextUnread, jumpPillLabel, canSend } from './chat-actions';
 import type { NativeSyntheticEvent, NativeScrollEvent } from 'react-native';
 import { usePoll } from './usePoll';
 
@@ -423,15 +423,7 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false }: Prop
       m.created_at &&
       Date.now() - new Date(`${m.created_at.replace(' ', 'T')}Z`).getTime() < 10 * 60 * 1000,
   );
-  const subtitle = processing
-    ? '••• 正在处理…'
-    : sessionStatus === 'working' || sessionStatus === 'running'
-      ? '工作中'
-      : sessionStatus === 'offline'
-        ? '离线'
-        : sessionStatus
-          ? '在线'
-          : '';
+  const subtitle = processing ? '••• 正在处理…' : sessionStatus ? agentStatusLabel(sessionStatus) : '';
 
   const attach = () => {
     // Native gets a 图片/文件 choice; web (test harness) goes straight

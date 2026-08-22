@@ -17,7 +17,7 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import AliasAvatar from './AliasAvatar';
-import { isAgentOnline } from './chat-actions';
+import { agentStatusLabel, isAgentOnline } from './chat-actions';
 import { fetchStatus, takeStatusPrefetch, type HubConfig, type Session } from './api';
 import { loadSessionsCache, saveSessionsCache } from './storage';
 import { colors, spacing, statusColor } from './theme';
@@ -247,7 +247,7 @@ export default function AgentsScreen({
             ) : null}
           </View>
           <Text style={[styles.status, { color: statusColor(item.status ?? '', true) }]}>
-            {item.status}
+            {agentStatusLabel(item.status)}
           </Text>
         </Pressable>
       )}
