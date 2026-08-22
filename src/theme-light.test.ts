@@ -21,4 +21,8 @@ ck('desktop themed workspace imports useMemo', app.includes('useEffect, useMemo,
 const settings = readFileSync(new URL('./SettingsScreen.tsx', import.meta.url), 'utf8');
 ck('settings owns its themed background', settings.includes('backgroundColor: colors.bg'));
 
+const agents = readFileSync(new URL('./AgentsScreen.tsx', import.meta.url), 'utf8');
+ck('light compact agent rows are flat rather than card stacks', agents.includes("backgroundColor: themeMode() === 'light' ? 'transparent' : colors.card"));
+ck('light selected agent uses a quiet neutral highlight', agents.includes("'#e7e9ec'"));
+
 setThemeMode('dark');
