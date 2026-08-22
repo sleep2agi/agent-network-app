@@ -28,6 +28,7 @@ import {
   toTaskAttachment,
   PickedImage,
 } from './attach';
+import { attachmentFromClipboard, isTauriDesktop, releaseClipboardAttachment } from './clipboard-attachment';
 import { colors, onThemeChange, spacing } from './theme';
 import { formatChatHeader, shouldShowTimeHeader } from './time';
 import { applyQuote, removeMessage, shouldShowJumpPill, nextUnread, jumpPillLabel, canSend } from './chat-actions';
@@ -234,6 +235,28 @@ export default function ChatScreen({ cfg, alias, onBack }: Props) {
 
   const localSeq = useRef(0);
   const [attached, setAttached] = useState<PickedImage | null>(null);
+  const replaceAttachment = useCallback((next: PickedImage | null) => {
+    setAttached(previous => {
+      if (previous !== next) releaseClipboardAttachment(previous);
+      return next;
+    });
+  }, []);
+
+  // React Native Web does not expose clipboard files through TextInput's
+  // onChangeText. Listen at the window while this chat is mounted so Ctrl+V
+  // (Windows/Linux) and Cmd+V (macOS) can reuse the normal attachment flow.
+  // Text-only pastes are deliberately untouched.
+  useEffect(() => {
+    if (!isTauriDesktop() || typeof window === 'undefined') return;
+    const onPaste = (event: ClipboardEvent) => {
+      const pasted = attachmentFromClipboard(event.clipboardData?.items);
+      if (!pasted) return;
+      event.preventDefault();
+      replaceAttachment(pasted);
+    };
+    window.addEventListener('paste', onPaste);
+    return () => window.removeEventListener('paste', onPaste);
+  }, [replaceAttachment]);
   const [viewerUri, setViewerUri] = useState<string | null>(null);
   // 更像微信·round-2: 长按气泡的动作菜单(引用/删除)。null = 未打开。
   const [menuFor, setMenuFor] = useState<ChatItem | null>(null);
@@ -312,6 +335,7 @@ export default function ChatScreen({ cfg, alias, onBack }: Props) {
         outgoing = `${content}${attachmentTextHint(img, up)}`;
       }
       await sendTask(cfg, alias, outgoing, attachments);
+      releaseClipboardAttachment(img ?? null);
       // delivered: drop the echo, the server copy arrives with reload.
       // 🔴 outbox 唯一删除路径=此处(sendTask 确认成功)。
       outboxRemove(localId);
@@ -412,12 +436,12 @@ export default function ChatScreen({ cfg, alias, onBack }: Props) {
     // Native gets a 图片/文件 choice; web (test harness) goes straight
     // to the image picker — Alert multi-button is unsupported there.
     if (Platform.OS === 'web') {
-      pickImage().then(img => img && setAttached(img));
+      pickImage().then(img => img && replaceAttachment(img));
       return;
     }
     Alert.alert('发送附件', undefined, [
-      { text: '图片', onPress: () => pickImage().then(img => img && setAttached(img)) },
-      { text: '文件', onPress: () => pickDocument().then(f => f && setAttached(f)) },
+      { text: '图片', onPress: () => pickImage().then(img => img && replaceAttachment(img)) },
+      { text: '文件', onPress: () => pickDocument().then(f => f && replaceAttachment(f)) },
       { text: '取消', style: 'cancel' },
     ]);
   };
@@ -536,7 +560,7 @@ export default function ChatScreen({ cfg, alias, onBack }: Props) {
           <Text style={styles.attachName} numberOfLines={1}>
             📎 {attached.fileName}
           </Text>
-          <Pressable onPress={() => setAttached(null)} hitSlop={10}>
+          <Pressable onPress={() => replaceAttachment(null)} hitSlop={10}>
             <Text style={styles.attachRemove}>✕</Text>
           </Pressable>
         </View>
