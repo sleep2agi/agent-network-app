@@ -344,7 +344,7 @@ function DesktopWorkspace({ cfg, screen, setScreen, onLogout }: {
       cfg={cfg}
       alias={screen.alias}
       onBack={() => setScreen({ name: 'agents' })}
-      onOpenSettings={() => setScreen({ name: 'settings' })}
+      onOpenNodeSettings={() => setScreen({ name: 'nodeDetail', alias: screen.alias })}
       desktop
     />
   ) : screen.name === 'tasks' ? (

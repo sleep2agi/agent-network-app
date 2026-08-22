@@ -171,10 +171,10 @@ interface Props {
   alias: string;
   onBack: () => void;
   desktop?: boolean;
-  onOpenSettings?: () => void;
+  onOpenNodeSettings?: () => void;
 }
 
-export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpenSettings }: Props) {
+export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpenNodeSettings }: Props) {
   // Android edge-to-edge draws the composer under the gesture bar (same
   // class of bug as the tg 802 tab bar) — pad by the real bottom inset.
   const insets = useSafeAreaInsets();
@@ -491,11 +491,11 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
             </Text>
           ) : null}
         </View>
-        {desktop && onOpenSettings ? (
+        {desktop && onOpenNodeSettings ? (
           <Pressable
             accessibilityRole="button"
-            accessibilityLabel="设置"
-            onPress={onOpenSettings}
+            accessibilityLabel="节点设置"
+            onPress={onOpenNodeSettings}
             hitSlop={10}
             style={({ pressed }) => [styles.headerAction, pressed && { opacity: 0.6 }]}
           >

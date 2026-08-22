@@ -12,3 +12,4 @@ check('desktop main navigation excludes Settings', source.includes("TABS.filter(
 check('desktop Settings has a dedicated bottom control', source.includes('desktopStyles.railSettings'));
 check('Settings control is rendered after the main tabs', source.indexOf('{DESKTOP_MAIN_TABS.map') < source.indexOf('accessibilityLabel={DESKTOP_SETTINGS_TAB.label}'));
 check('desktop rail uses the branded app icon', source.includes("source={require('./assets/icon.png')} style={desktopStyles.railBrandImage}"));
+check('chat header settings opens the current node', source.includes("onOpenNodeSettings={() => setScreen({ name: 'nodeDetail', alias: screen.alias })}"));
