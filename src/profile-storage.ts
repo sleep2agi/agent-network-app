@@ -1,9 +1,10 @@
 import * as SecureStore from 'expo-secure-store';
 import type { HubConfig } from './api';
 import { profileIdFor } from './profile-model';
+import { deleteAppData, readAppData, writeAppData } from './app-data';
 
-const REGISTRY_KEY = 'hub_profiles_v2';
-const ACTIVE_KEY = 'hub_active_profile_v2';
+const REGISTRY_FILE = 'profiles.json';
+const ACTIVE_FILE = 'active-profile';
 const LEGACY_KEY = 'hub_config_v1';
 const TOKEN_PREFIX = 'hub_profile_token_v2_';
 
@@ -24,16 +25,17 @@ export interface ActiveHubProfile {
 
 const readRegistry = async (): Promise<HubProfile[]> => {
   try {
-    const raw = await SecureStore.getItemAsync(REGISTRY_KEY);
-    const parsed = raw ? JSON.parse(raw) : [];
-    return Array.isArray(parsed) ? parsed.filter(p => p && typeof p.id === 'string' && typeof p.serverUrl === 'string') : [];
+    const raw = await readAppData(REGISTRY_FILE);
+    const parsed = raw ? JSON.parse(raw) : { profiles: [] };
+    const profiles = Array.isArray(parsed) ? parsed : parsed?.profiles;
+    return Array.isArray(profiles) ? profiles.filter(p => p && typeof p.id === 'string' && typeof p.serverUrl === 'string') : [];
   } catch {
     return [];
   }
 };
 
 const writeRegistry = (profiles: HubProfile[]) =>
-  SecureStore.setItemAsync(REGISTRY_KEY, JSON.stringify(profiles));
+  writeAppData(REGISTRY_FILE, JSON.stringify({ schemaVersion: 1, profiles }));
 
 const tokenKey = (id: string) => `${TOKEN_PREFIX}${id}`;
 
@@ -56,7 +58,7 @@ export const saveHubProfile = async (cfg: HubConfig, username: string, label?: s
   };
   await SecureStore.setItemAsync(tokenKey(id), cfg.token);
   await writeRegistry([profile, ...profiles.filter(p => p.id !== id)]);
-  await SecureStore.setItemAsync(ACTIVE_KEY, id);
+  await writeAppData(ACTIVE_FILE, id);
   return profile;
 };
 
@@ -68,7 +70,7 @@ export const activateHubProfile = async (id: string): Promise<ActiveHubProfile |
   if (!token) return null;
   const profile = { ...found, lastUsedAt: Date.now() };
   await writeRegistry([profile, ...profiles.filter(p => p.id !== id)]);
-  await SecureStore.setItemAsync(ACTIVE_KEY, id);
+  await writeAppData(ACTIVE_FILE, id);
   return { profile, cfg: { serverUrl: profile.serverUrl, token, networkId: profile.networkId, profileId: profile.id } };
 };
 
@@ -76,13 +78,13 @@ export const removeHubProfile = async (id: string): Promise<void> => {
   const profiles = await readRegistry();
   await writeRegistry(profiles.filter(p => p.id !== id));
   await SecureStore.deleteItemAsync(tokenKey(id));
-  if ((await SecureStore.getItemAsync(ACTIVE_KEY)) === id) await SecureStore.deleteItemAsync(ACTIVE_KEY);
+  if ((await readAppData(ACTIVE_FILE)) === id) await deleteAppData(ACTIVE_FILE);
 };
 
 export const loadActiveHubProfile = async (): Promise<ActiveHubProfile | null> => {
   try {
     let profiles = await readRegistry();
-    let activeId = await SecureStore.getItemAsync(ACTIVE_KEY);
+    let activeId = await readAppData(ACTIVE_FILE);
 
     // One-time, lossless migration from the single-account v1 record. The
     // username was not stored in v1, so preserve it as a disclosed legacy

@@ -11,10 +11,10 @@ Profile 的逻辑身份为 `normalized hub URL + username + network_id`，应用
 统一命名空间采用 `.anet/app`，不新增容易混淆的 `~/.anet_app`。
 
 - macOS/Linux 共享数据根：`~/.anet/app/`
-- Windows：`%APPDATA%\Agent Network\`（逻辑上等价于 `.anet/app`）
+- Windows 共享数据根：`%USERPROFILE%\.anet\app\`
 - 移动端：系统分配的 app document/cache 目录
 
-应用应通过平台路径 API 获取真实目录，不拼接硬编码的 `$HOME`。`.anet/app` 只承载 Agent Network 生态需要共享或可诊断的数据；系统沙箱数据仍留在系统 app-data 目录。
+桌面端由 Rust 命令解析用户主目录，并只接受无 `..` 的相对路径；前端不能传绝对路径。`.anet/app` 只承载 Agent Network 生态需要共享或可诊断的数据；系统沙箱数据仍留在系统 app-data 目录。
 
 ```text
 .anet/app/
@@ -48,4 +48,3 @@ Profile 的逻辑身份为 `normalized hub URL + username + network_id`，应用
 - 所有 JSON 顶层带 `schemaVersion`；未知新版本只读失败，不覆盖。
 - 文件写入采用临时文件 + rename；缓存失败不得阻塞主流程。
 - token 写入成功但索引失败时，下次启动执行孤儿凭据清理；索引存在但 token 缺失时显示重新登录。
-
