@@ -36,6 +36,7 @@ import { agentStatusLabel, applyQuote, removeMessage, shouldShowJumpPill, nextUn
 import type { NativeSyntheticEvent, NativeScrollEvent } from 'react-native';
 import { usePoll } from './usePoll';
 import { appFetch } from './app-fetch';
+import MarkdownMessage from './MarkdownMessage';
 
 // Chat with one agent. Mirrors dashboard M4: open with the newest PAGE
 // messages, grow the window when the user scrolls toward older history.
@@ -545,7 +546,7 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
                       style={({ pressed }) => [styles.bubblePressable, pressed && { opacity: 0.7 }]}
                     >
                       <View style={styles.bubble}>
-                        <Text style={styles.bubbleText}>{stripFileLinks(item.content || '—')}</Text>
+                        <MarkdownMessage>{stripFileLinks(item.content || '—')}</MarkdownMessage>
                         {sentAttachmentViews(item, cfg.serverUrl).map(renderAttachment)}
                       </View>
                     </Pressable>
@@ -558,9 +559,7 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
                     <View style={styles.messageContent}>
                       <Text style={styles.messageAuthor} numberOfLines={1}>{alias}</Text>
                       <View style={[styles.bubble, styles.replyBubble]}>
-                        <Text style={styles.bubbleText}>
-                          {stripFileLinks(item.result ?? item.reply ?? '')}
-                        </Text>
+                        <MarkdownMessage>{stripFileLinks(item.result ?? item.reply ?? '')}</MarkdownMessage>
                         {replyAttachmentViews(item, cfg.serverUrl).map(renderAttachment)}
                       </View>
                     </View>

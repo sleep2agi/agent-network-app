@@ -89,12 +89,16 @@ ck('mobile form shows timezone and rejects empty weekly selection', screen.inclu
 ck('mobile form exposes catch-up and skip policies and discloses the effective value',
   screen.includes("'catch_up_once'") && screen.includes("'skip'") && screen.includes('misfire_policy: misfirePolicy') && screen.includes('错过后补跑一次') && screen.includes('错过后跳过'));
 ck('mobile cards edit only active or paused schedules and prefill every mutable field',
-  screen.includes("setEditing(row); setShowForm(true)") && screen.includes("['active', 'paused'].includes(row.status)") &&
+  screen.includes("setEditing(row); setShowForm(true)") && screen.includes("availableActions.includes('edit')") &&
   ['setName(editing.name)', 'setTask(editing.task_content)', 'setTarget(editing.target_node_id)',
     'setPriority(editing.priority)', 'setTimezone(editing.timezone)', 'intervalFormValue'].every(value => screen.includes(value)));
 ck('mobile edit uses full update API and refreshes authoritative data on revision conflict',
   screen.includes('if (editing) await updateScheduledTask') && screen.includes("e.code === 'revision_conflict'") &&
   screen.includes('已刷新最新内容，请重新编辑'));
+ck('cancellation uses an in-app modal and only confirms through the explicit destructive action',
+  screen.includes('setCancelCandidate(row)') && screen.includes('<CancelScheduleModal') &&
+  screen.includes('transparent visible={!!value}') && screen.includes('if (row) void act(row, \'cancel\')') &&
+  screen.includes('onPress={onConfirm}') && screen.includes('取消计划'));
 
 // ── RFC-036 节点外部计划 ────────────────────────────────────────────────
 

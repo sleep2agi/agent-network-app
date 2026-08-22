@@ -37,6 +37,7 @@ import {
   updateScheduledTask,
 } from './api';
 import { colors, onThemeChange, spacing } from './theme';
+import { scheduledTaskActions } from './scheduled-task-actions';
 
 const DAYS = ['日', '一', '二', '三', '四', '五', '六'];
 
@@ -121,6 +122,7 @@ export default function ScheduledTasksScreen({ cfg }: { cfg: HubConfig }) {
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState<HubScheduledTask | null>(null);
   const [history, setHistory] = useState<{ title: string; runs: HubScheduledRun[] } | null>(null);
+  const [cancelCandidate, setCancelCandidate] = useState<HubScheduledTask | null>(null);
   const [tab, setTab] = useState<'hub' | 'node'>('hub');
   const [external, setExternal] = useState<HubNodeExternalSchedules[]>([]);
   const [externalLoaded, setExternalLoaded] = useState(false);
@@ -267,7 +269,9 @@ export default function ScheduledTasksScreen({ cfg }: { cfg: HubConfig }) {
           contentContainerStyle={styles.list}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => load(true)} tintColor={colors.accent} />}
         >
-          {items.length === 0 ? <View style={styles.empty}><Text style={styles.emptyTitle}>还没有定时任务</Text><Text style={styles.muted}>点击右上角新建，由 Hub 统一执行。</Text></View> : items.map(row => (
+          {items.length === 0 ? <View style={styles.empty}><Text style={styles.emptyTitle}>还没有定时任务</Text><Text style={styles.muted}>点击右上角新建，由 Hub 统一执行。</Text></View> : items.map(row => {
+            const availableActions = scheduledTaskActions(row.status);
+            return (
             <View key={row.schedule_id} style={styles.card}>
               <View style={styles.cardTop}><Text style={styles.cardTitle}>{row.name}</Text><Text style={[styles.badge, row.status === 'active' ? styles.badgeActive : styles.badgeIdle]}>{row.status}</Text></View>
               <Text style={styles.node}>{row.target_alias}</Text>
@@ -276,14 +280,15 @@ export default function ScheduledTasksScreen({ cfg }: { cfg: HubConfig }) {
               <Text style={styles.meta}>{describeMisfire(row.misfire_policy)}</Text>
               <Text style={styles.meta}>下次：{fmt(row.next_run_at)}　上次：{fmt(row.last_run_at)}</Text>
               <View style={styles.actions}>
-                {['active', 'paused'].includes(row.status) && <Pressable disabled={busy} style={styles.action} onPress={() => { setEditing(row); setShowForm(true); }}><Text style={styles.actionText}>编辑</Text></Pressable>}
-                {['active', 'paused'].includes(row.status) && <Pressable disabled={busy} style={styles.action} onPress={() => act(row, 'toggle')}><Text style={styles.actionText}>{row.status === 'active' ? '暂停' : '恢复'}</Text></Pressable>}
-                <Pressable disabled={busy || row.status === 'cancelled'} style={styles.action} onPress={() => act(row, 'run')}><Text style={styles.actionText}>立即执行</Text></Pressable>
-                <Pressable disabled={busy} style={styles.action} onPress={() => act(row, 'history')}><Text style={styles.actionText}>记录</Text></Pressable>
-                <Pressable disabled={busy || row.status === 'cancelled'} style={[styles.action, styles.danger]} onPress={() => Alert.alert('取消计划？', row.name, [{ text: '返回' }, { text: '取消计划', style: 'destructive', onPress: () => void act(row, 'cancel') }])}><Text style={styles.dangerText}>取消</Text></Pressable>
+                {availableActions.includes('edit') && <Pressable disabled={busy} style={[styles.action, busy && styles.actionDisabled]} onPress={() => { setEditing(row); setShowForm(true); }}><Text style={styles.actionText}>编辑</Text></Pressable>}
+                {availableActions.includes('toggle') && <Pressable disabled={busy} style={[styles.action, busy && styles.actionDisabled]} onPress={() => act(row, 'toggle')}><Text style={styles.actionText}>{row.status === 'active' ? '暂停' : '恢复'}</Text></Pressable>}
+                {availableActions.includes('run') && <Pressable disabled={busy} style={[styles.action, busy && styles.actionDisabled]} onPress={() => act(row, 'run')}><Text style={styles.actionText}>立即执行</Text></Pressable>}
+                <Pressable disabled={busy} style={[styles.action, busy && styles.actionDisabled]} onPress={() => act(row, 'history')}><Text style={styles.actionText}>记录</Text></Pressable>
+                {availableActions.includes('cancel') && <Pressable disabled={busy} style={[styles.action, styles.danger, busy && styles.actionDisabled]} onPress={() => setCancelCandidate(row)}><Text style={styles.dangerText}>取消</Text></Pressable>}
               </View>
             </View>
-          ))}
+            );
+          })}
         </ScrollView>
       )}
       <ScheduleFormModal
@@ -299,6 +304,16 @@ export default function ScheduledTasksScreen({ cfg }: { cfg: HubConfig }) {
         }}
       />
       <HistoryModal value={history} onClose={() => setHistory(null)} />
+      <CancelScheduleModal
+        value={cancelCandidate}
+        busy={busy}
+        onClose={() => setCancelCandidate(null)}
+        onConfirm={() => {
+          const row = cancelCandidate;
+          setCancelCandidate(null);
+          if (row) void act(row, 'cancel');
+        }}
+      />
       <CronEditModal
         value={cronEdit}
         busy={busy}
@@ -400,6 +415,27 @@ function HistoryModal({ value, onClose }: { value: { title: string; runs: HubSch
   return <Modal visible={!!value} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}><View style={s.modalRoot}><View style={s.modalHeader}><Pressable onPress={onClose}><Text style={s.link}>关闭</Text></Pressable><Text style={s.modalTitle}>{value?.title || '执行记录'}</Text><View style={{ width: 40 }} /></View><ScrollView contentContainerStyle={s.form}>{value?.runs.length ? value.runs.map(run => <View key={run.run_id} style={s.run}><View><Text style={s.cardTitle}>{run.status}</Text><Text style={s.meta}>{fmt(run.scheduled_for)}</Text></View><Text style={s.runTask}>{run.task_id?.slice(0, 10) || run.error_code || '—'}</Text></View>) : <Text style={s.muted}>暂无执行记录</Text>}</ScrollView></View></Modal>;
 }
 
+function CancelScheduleModal({ value, busy, onClose, onConfirm }: {
+  value: HubScheduledTask | null;
+  busy: boolean;
+  onClose: () => void;
+  onConfirm: () => void;
+}) {
+  const s = useMemo(makeStyles, [value]);
+  return <Modal transparent visible={!!value} animationType="fade" onRequestClose={onClose}>
+    <View style={s.confirmOverlay}>
+      <View style={s.confirmCard}>
+        <Text style={s.confirmTitle}>取消计划？</Text>
+        <Text style={s.confirmMessage}>{value?.name}</Text>
+        <View style={s.confirmActions}>
+          <Pressable disabled={busy} style={[s.confirmButton, busy && s.actionDisabled]} onPress={onClose}><Text style={s.actionText}>返回</Text></Pressable>
+          <Pressable disabled={busy} style={[s.confirmButton, s.confirmDanger, busy && s.actionDisabled]} onPress={onConfirm}><Text style={s.dangerText}>取消计划</Text></Pressable>
+        </View>
+      </View>
+    </View>
+  </Modal>;
+}
+
 function CronEditModal({ value, busy, onClose, onSubmit }: {
   value: { node: HubNodeExternalSchedules; schedule: HubExternalSchedule } | null;
   busy: boolean;
@@ -465,4 +501,11 @@ function makeStyles() { return StyleSheet.create({
   linkDisabled: { opacity: 0.4 },
   intentBadge: { color: colors.accent, fontSize: 11, marginTop: spacing.sm },
   actionDisabled: { opacity: 0.4 },
+  confirmOverlay: { flex: 1, backgroundColor: '#00000099', alignItems: 'center', justifyContent: 'center', padding: spacing.xl },
+  confirmCard: { width: '100%', maxWidth: 420, backgroundColor: colors.card, borderColor: colors.border, borderWidth: 1, borderRadius: 14, padding: spacing.xl },
+  confirmTitle: { color: colors.text, fontSize: 18, fontWeight: '700' },
+  confirmMessage: { color: colors.textSecondary, fontSize: 14, marginTop: spacing.md },
+  confirmActions: { flexDirection: 'row', justifyContent: 'flex-end', gap: spacing.sm, marginTop: spacing.xl },
+  confirmButton: { borderWidth: 1, borderColor: colors.border, borderRadius: 8, paddingHorizontal: 16, paddingVertical: 9 },
+  confirmDanger: { borderColor: `${colors.failed}70` },
 }); }

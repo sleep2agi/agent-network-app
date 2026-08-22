@@ -67,6 +67,7 @@ export const onThemeChange = (l: (m: ThemeMode) => void): (() => void) => {
 export const statusColor = (status: string, online: boolean): string => {
   if (!online) return colors.rest;
   switch (status) {
+    case 'idle':
     case 'working':
     case 'running':
       return colors.running;
