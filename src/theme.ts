@@ -18,10 +18,10 @@ const DARK = {
 // 白色主题 (Vincent tg 811/812) — same restraint on white surfaces;
 // accent/status drop to the 600-weight shades for contrast on white.
 const LIGHT: typeof DARK = {
-  bg: '#ffffff',
-  card: '#f7f7f8',
-  border: '#e4e4e7',
-  inputBg: '#fafafa',
+  bg: '#f3f4f6',
+  card: '#ffffff',
+  border: '#d9dce1',
+  inputBg: '#f8fafc',
   text: '#18181b',
   textSecondary: '#52525b',
   textMuted: '#a1a1aa',

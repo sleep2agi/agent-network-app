@@ -106,7 +106,7 @@ function Divider() {
 
 const makeStyles = () =>
   StyleSheet.create({
-  root: { flex: 1, padding: spacing.lg },
+  root: { flex: 1, padding: spacing.lg, backgroundColor: colors.bg },
   sectionTitle: {
     color: colors.textMuted,
     fontSize: 12,

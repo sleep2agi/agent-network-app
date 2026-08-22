@@ -1,9 +1,19 @@
 import { Fragment } from 'react';
 import { Linking, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { openUrl } from '@tauri-apps/plugin-opener';
 import { colors, onThemeChange, spacing } from './theme';
 import { isSafeMarkdownUrl, parseMarkdownBlocks } from './markdown-model';
 
 const INLINE = /(`[^`\n]+`|\*\*[^*\n]+\*\*|__[^_\n]+__|\*[^*\n]+\*|_([^_\n]+)_|\[[^\]\n]+\]\([^\s)]+\))/g;
+
+export async function openMarkdownUrl(url: string) {
+  if (!isSafeMarkdownUrl(url)) return;
+  if ((globalThis as any).__TAURI_INTERNALS__) {
+    await openUrl(url);
+    return;
+  }
+  await Linking.openURL(url);
+}
 
 function Inline({ text }: { text: string }) {
   const out = [];
@@ -16,7 +26,7 @@ function Inline({ text }: { text: string }) {
     const link = token.match(/^\[([^\]]+)\]\(([^)]+)\)$/);
     if (link) {
       const safe = isSafeMarkdownUrl(link[2]);
-      out.push(<Text key={key++} style={safe ? styles.link : undefined} onPress={safe ? () => Linking.openURL(link[2]) : undefined}>{link[1]}</Text>);
+      out.push(<Text key={key++} accessibilityRole={safe ? 'link' : undefined} style={safe ? styles.link : undefined} onPress={safe ? (event) => { event.stopPropagation(); void openMarkdownUrl(link[2]); } : undefined}>{link[1]}</Text>);
     } else if (token.startsWith('`')) {
       out.push(<Text key={key++} style={styles.inlineCode}>{token.slice(1, -1)}</Text>);
     } else if (token.startsWith('**') || token.startsWith('__')) {

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   BackHandler,
@@ -55,15 +55,18 @@ type Screen =
   | { name: 'wizard'; daemon: HostSupervisorDaemon };  // #338 wizard rest (Plan B) — created after picker selects a daemon
 
 // 跟微信的学一学 (Vincent tg 807): icon over small label, active tint.
-// Server tab sits left of 设置 (Vincent tg 847).
+// Desktop keeps operational modules together and pins Settings to the bottom.
 const TABS = [
   { key: 'agents', label: 'Agents', icon: 'people-outline', iconActive: 'people' },
   { key: 'tasks', label: 'Tasks', icon: 'list-outline', iconActive: 'list' },
   { key: 'scheduled', label: '定时', icon: 'time-outline', iconActive: 'time' },
   { key: 'messages', label: 'Messages', icon: 'chatbubble-ellipses-outline', iconActive: 'chatbubble-ellipses' },
-  { key: 'server', label: 'Server', icon: 'server-outline', iconActive: 'server' },
+  { key: 'server', label: '服务器设置', icon: 'server-outline', iconActive: 'server' },
   { key: 'settings', label: '设置', icon: 'settings-outline', iconActive: 'settings' },
 ] as const;
+
+const DESKTOP_MAIN_TABS = TABS.filter(tab => tab.key !== 'settings');
+const DESKTOP_SETTINGS_TAB = TABS.find(tab => tab.key === 'settings')!;
 
 export default function App() {
   // One-time cleanup of attachment caches written before the download fix.
@@ -322,6 +325,10 @@ function DesktopWorkspace({ cfg, screen, setScreen, onLogout }: {
   setScreen: (screen: Screen) => void;
   onLogout: () => void;
 }) {
+  // AppRoot is keyed by theme, so this component remounts after every theme
+  // switch. Build desktop styles on that mount instead of freezing the dark
+  // palette once at module import time.
+  const desktopStyles = useMemo(makeDesktopStyles, []);
   const active = ['chat', 'nodeDetail', 'picker', 'wizard'].includes(screen.name) ? 'agents' : screen.name;
   const content = screen.name === 'chat' ? (
     <ChatScreen
@@ -355,12 +362,23 @@ function DesktopWorkspace({ cfg, screen, setScreen, onLogout }: {
       <View style={desktopStyles.rail}>
         <View style={desktopStyles.railBrand}><Text style={desktopStyles.railBrandText}>AN</Text></View>
         <View style={desktopStyles.railTabs}>
-          {TABS.map(tab => (
+          {DESKTOP_MAIN_TABS.map(tab => (
             <Pressable key={tab.key} accessibilityLabel={tab.label} onPress={() => setScreen({ name: tab.key } as Screen)} style={[desktopStyles.railButton, active === tab.key && desktopStyles.railButtonActive]}>
               <Ionicons name={active === tab.key ? tab.iconActive : tab.icon} size={22} color={active === tab.key ? colors.accent : colors.textSecondary} />
             </Pressable>
           ))}
         </View>
+        <Pressable
+          accessibilityLabel={DESKTOP_SETTINGS_TAB.label}
+          onPress={() => setScreen({ name: DESKTOP_SETTINGS_TAB.key })}
+          style={[desktopStyles.railButton, desktopStyles.railSettings, active === DESKTOP_SETTINGS_TAB.key && desktopStyles.railButtonActive]}
+        >
+          <Ionicons
+            name={active === DESKTOP_SETTINGS_TAB.key ? DESKTOP_SETTINGS_TAB.iconActive : DESKTOP_SETTINGS_TAB.icon}
+            size={22}
+            color={active === DESKTOP_SETTINGS_TAB.key ? colors.accent : colors.textSecondary}
+          />
+        </Pressable>
         <Text style={desktopStyles.railVersion}>v{APP_VERSION}</Text>
       </View>
       <View style={desktopStyles.conversations}>
@@ -371,7 +389,7 @@ function DesktopWorkspace({ cfg, screen, setScreen, onLogout }: {
   );
 }
 
-const desktopStyles = StyleSheet.create({
+const makeDesktopStyles = () => StyleSheet.create({
   shell: { flex: 1, flexDirection: 'row', backgroundColor: colors.bg },
   rail: { width: 64, backgroundColor: colors.inputBg, borderRightWidth: 1, borderRightColor: colors.border, alignItems: 'center', paddingVertical: 14 },
   railBrand: { width: 34, height: 34, borderRadius: 10, backgroundColor: colors.accent, alignItems: 'center', justifyContent: 'center' },
@@ -379,6 +397,7 @@ const desktopStyles = StyleSheet.create({
   railTabs: { flex: 1, paddingTop: 22, gap: 8 },
   railButton: { width: 42, height: 42, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
   railButtonActive: { backgroundColor: colors.card },
+  railSettings: { marginBottom: 10 },
   railVersion: { color: colors.textMuted, fontSize: 9 },
   conversations: { width: 304, borderRightWidth: 1, borderRightColor: colors.border, backgroundColor: colors.bg },
   content: { flex: 1, minWidth: 0, backgroundColor: colors.bg },
