@@ -39,6 +39,7 @@ import { initOutbox } from './src/outbox';
 import { colors, onThemeChange, setThemeMode, spacing, themeMode } from './src/theme';
 import { styles } from './src/app-styles';
 import { APP_VERSION } from './src/version';
+import DesktopUpdatePrompt from './src/DesktopUpdatePrompt';
 import { loadPinnedChats, openChatWindow, requestedChatAlias, savePinnedChats } from './src/desktop-chat-menu';
 
 type Screen =
@@ -84,6 +85,7 @@ export default function App() {
   return (
     <SafeAreaProvider>
       <AppRoot />
+      <DesktopUpdatePrompt />
     </SafeAreaProvider>
   );
 }

@@ -1,10 +1,11 @@
-import { useEffect, useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { useEffect, useState, useSyncExternalStore } from 'react';
+import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 import { HubConfig } from './api';
 import { saveThemeMode } from './storage';
 import { colors, onThemeChange, setThemeMode, spacing, themeMode } from './theme';
 import { APP_VERSION } from './version';
 import { appFetch } from './app-fetch';
+import { checkDesktopUpdate, desktopUpdateSnapshot, subscribeDesktopUpdates } from './desktop-updater';
 
 // Settings (Vincent tg 720): who am I, where am I connected, which
 // network, which build — and the one destructive action, logout,
@@ -24,6 +25,7 @@ export default function SettingsScreen({
   onLogout: () => void;
 }) {
   const [me, setMe] = useState<Me>({});
+  const update = useSyncExternalStore(subscribeDesktopUpdates, desktopUpdateSnapshot, desktopUpdateSnapshot);
 
   useEffect(() => {
     (async () => {
@@ -77,6 +79,13 @@ export default function SettingsScreen({
       <Text style={styles.sectionTitle}>关于</Text>
       <View style={styles.card}>
         <Row label="版本" value={`v${APP_VERSION}`} />
+        <Divider />
+        <Pressable style={({ pressed }) => [styles.row, pressed && { opacity: 0.6 }]} onPress={() => { void checkDesktopUpdate(); }} disabled={update.kind === 'checking'}>
+          <Text style={styles.rowLabel}>软件更新</Text>
+          {update.kind === 'checking' ? <ActivityIndicator color={colors.accent} /> : (
+            <Text style={styles.rowValue}>{update.kind === 'available' ? `发现 v${update.version}` : update.kind === 'up-to-date' ? '已是最新版' : update.kind === 'error' ? '检查失败，点击重试' : '检查更新'}</Text>
+          )}
+        </Pressable>
       </View>
 
       <Pressable

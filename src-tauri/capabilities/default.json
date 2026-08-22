@@ -5,6 +5,8 @@
   "windows": ["main", "chat-*"],
   "permissions": [
     "core:default",
+    "process:allow-restart",
+    "updater:default",
     "core:webview:allow-create-webview-window",
     "opener:default",
     {
