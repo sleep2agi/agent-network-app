@@ -35,6 +35,7 @@ import { formatChatHeader, shouldShowTimeHeader } from './time';
 import { agentStatusLabel, applyQuote, removeMessage, shouldShowJumpPill, nextUnread, jumpPillLabel, canSend, shouldSendOnEnter } from './chat-actions';
 import type { NativeSyntheticEvent, NativeScrollEvent } from 'react-native';
 import { usePoll } from './usePoll';
+import { requestBubbleSender } from './chat-sender';
 import { appFetch } from './app-fetch';
 import MarkdownMessage from './MarkdownMessage';
 
@@ -540,28 +541,37 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
             // 更像微信·时间分组:仅在与上一条(更早)间隔 >5min 时显示居中时间头,
             // 不再每条气泡都盖时间。inverted 列表下,更早的邻居在 index+1。
             const showHeader = shouldShowTimeHeader(item.created_at, messages[index + 1]?.created_at);
+            const requestSender = requestBubbleSender(item, currentUsername);
             return (
               <View style={styles.bubbleWrap}>
                 {showHeader && item.created_at ? (
                   <Text style={styles.timeHeader}>{formatChatHeader(item.created_at)}</Text>
                 ) : null}
-                <View style={[styles.messageRow, styles.sentRow]}>
-                  <View style={[styles.messageContent, styles.sentContent]}>
-                    <Text style={[styles.messageAuthor, styles.sentAuthor]} numberOfLines={1}>
-                      {currentUsername}
+                <View style={[styles.messageRow, requestSender.isCurrentUser ? styles.sentRow : styles.replyRow]}>
+                  {!requestSender.isCurrentUser ? <AliasAvatar alias={requestSender.alias} size={36} /> : null}
+                  <View style={[styles.messageContent, requestSender.isCurrentUser && styles.sentContent]}>
+                    <Text
+                      style={[styles.messageAuthor, requestSender.isCurrentUser && styles.sentAuthor]}
+                      numberOfLines={1}
+                    >
+                      {requestSender.alias}
                     </Text>
                     <Pressable
                       onLongPress={() => setMenuFor(item)}
                       delayLongPress={300}
-                      style={({ pressed }) => [styles.bubblePressable, pressed && { opacity: 0.7 }]}
+                      style={({ pressed }) => [
+                        styles.bubblePressable,
+                        !requestSender.isCurrentUser && styles.receivedBubblePressable,
+                        pressed && { opacity: 0.7 },
+                      ]}
                     >
-                      <View style={styles.bubble}>
+                      <View style={[styles.bubble, !requestSender.isCurrentUser && styles.replyBubble]}>
                         <MarkdownMessage>{stripFileLinks(item.content || '—')}</MarkdownMessage>
                         {sentAttachmentViews(item, cfg.serverUrl).map(renderAttachment)}
                       </View>
                     </Pressable>
                   </View>
-                  <AliasAvatar alias={currentUsername} size={36} />
+                  {requestSender.isCurrentUser ? <AliasAvatar alias={requestSender.alias} size={36} /> : null}
                 </View>
                 {item.result || item.reply ? (
                   <View style={[styles.messageRow, styles.replyRow]}>
@@ -584,7 +594,7 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
                   <Pressable onPress={() => retry(item)} hitSlop={8}>
                     <Text style={styles.failedMark}>未送达 · 点击重试</Text>
                   </Pressable>
-                ) : !(item.result ?? item.reply) ? (
+                ) : requestSender.isCurrentUser && !(item.result ?? item.reply) ? (
                   // PR3 要求2:「送达了但对方没回」≠「未送达」——前者灰勾不可点(不用重试),
                   // 后者红字带重试。服务器行(无 _localId 标志)= hub 已收 = 已送达。
                   <Text style={styles.deliveredMark}>已送达 ✓</Text>
@@ -777,6 +787,7 @@ const makeStyles = () =>
   messageAuthor: { color: colors.textMuted, fontSize: 11, lineHeight: 16, marginBottom: 3 },
   sentAuthor: { textAlign: 'right' },
   bubblePressable: { maxWidth: '100%', alignItems: 'flex-end' },
+  receivedBubblePressable: { alignItems: 'flex-start' },
   timeHeader: {
     color: colors.textMuted,
     fontSize: 11,
