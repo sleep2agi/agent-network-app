@@ -322,6 +322,10 @@ function DesktopWorkspace({ cfg, screen, setScreen, onLogout }: {
   setScreen: (screen: Screen) => void;
   onLogout: () => void;
 }) {
+  // AppRoot is keyed by theme, so this component remounts after every theme
+  // switch. Build desktop styles on that mount instead of freezing the dark
+  // palette once at module import time.
+  const desktopStyles = useMemo(makeDesktopStyles, []);
   const active = ['chat', 'nodeDetail', 'picker', 'wizard'].includes(screen.name) ? 'agents' : screen.name;
   const content = screen.name === 'chat' ? (
     <ChatScreen
@@ -371,7 +375,7 @@ function DesktopWorkspace({ cfg, screen, setScreen, onLogout }: {
   );
 }
 
-const desktopStyles = StyleSheet.create({
+const makeDesktopStyles = () => StyleSheet.create({
   shell: { flex: 1, flexDirection: 'row', backgroundColor: colors.bg },
   rail: { width: 64, backgroundColor: colors.inputBg, borderRightWidth: 1, borderRightColor: colors.border, alignItems: 'center', paddingVertical: 14 },
   railBrand: { width: 34, height: 34, borderRadius: 10, backgroundColor: colors.accent, alignItems: 'center', justifyContent: 'center' },
