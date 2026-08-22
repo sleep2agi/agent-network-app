@@ -39,7 +39,7 @@
     "updater": {
       "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDM1QkMwODAxQkMzQTJBQjkKUldTNUtqcThBUWk4TlNtZjB4L2hOLzRHQjdjNVlNOWMvSjVteGR5aVV5d2FJSENxRWIwUllxMEIK",
       "endpoints": [
-        "https://github.com/sleep2agi/agent-network-app/releases/latest/download/latest.json"
+        "https://anet.sh/desktop/update/latest.json"
       ],
       "windows": {
         "installMode": "passive"

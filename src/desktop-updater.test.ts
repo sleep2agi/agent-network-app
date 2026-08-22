@@ -15,7 +15,7 @@ const checks: Array<[string, boolean]> = [
   ['successful install relaunches', source.includes("plugin-process") && source.includes('await relaunch()')],
   ['non-Tauri platforms stay unsupported', source.includes("kind: 'unsupported'")],
   ['signed updater artifacts are enabled', config.bundle.createUpdaterArtifacts === true],
-  ['HTTPS static updater endpoint configured', config.plugins.updater.endpoints[0].startsWith('https://github.com/')],
+  ['stable anet.sh updater endpoint configured', config.plugins.updater.endpoints[0] === 'https://anet.sh/desktop/update/latest.json'],
   ['updater public key configured', typeof config.plugins.updater.pubkey === 'string' && config.plugins.updater.pubkey.length > 80],
   ['frontend update permissions enabled', capability.permissions.includes('updater:default') && capability.permissions.includes('process:allow-restart')],
 ];
