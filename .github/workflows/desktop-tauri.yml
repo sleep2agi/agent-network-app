@@ -33,6 +33,9 @@ jobs:
 
       - run: npm ci
 
+      - name: Typecheck app sources
+        run: npm run typecheck
+
       - name: Export RN web bundle
         run: npx expo export -p web
 
@@ -78,6 +81,9 @@ jobs:
           cache: npm
 
       - run: npm ci
+
+      - name: Typecheck app sources
+        run: npm run typecheck
 
       - name: Export RN web bundle
         run: npx expo export -p web

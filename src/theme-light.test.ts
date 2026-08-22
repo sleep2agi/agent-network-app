@@ -16,6 +16,7 @@ const app = readFileSync(new URL('../App.tsx', import.meta.url), 'utf8');
 ck('desktop styles are built per themed workspace mount',
   app.includes('const desktopStyles = useMemo(makeDesktopStyles, [])') &&
   app.includes('const makeDesktopStyles = () => StyleSheet.create'));
+ck('desktop themed workspace imports useMemo', app.includes('useEffect, useMemo, useState'));
 
 const settings = readFileSync(new URL('./SettingsScreen.tsx', import.meta.url), 'utf8');
 ck('settings owns its themed background', settings.includes('backgroundColor: colors.bg'));
