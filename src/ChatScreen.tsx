@@ -522,26 +522,34 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false }: Prop
                   <Text style={styles.timeHeader}>{formatChatHeader(item.created_at)}</Text>
                 ) : null}
                 <View style={[styles.messageRow, styles.sentRow]}>
-                  <Pressable
-                    onLongPress={() => setMenuFor(item)}
-                    delayLongPress={300}
-                    style={({ pressed }) => [styles.bubblePressable, pressed && { opacity: 0.7 }]}
-                  >
-                    <View style={styles.bubble}>
-                      <Text style={styles.bubbleText}>{stripFileLinks(item.content || '—')}</Text>
-                      {sentAttachmentViews(item, cfg.serverUrl).map(renderAttachment)}
-                    </View>
-                  </Pressable>
+                  <View style={[styles.messageContent, styles.sentContent]}>
+                    <Text style={[styles.messageAuthor, styles.sentAuthor]} numberOfLines={1}>
+                      {currentUsername}
+                    </Text>
+                    <Pressable
+                      onLongPress={() => setMenuFor(item)}
+                      delayLongPress={300}
+                      style={({ pressed }) => [styles.bubblePressable, pressed && { opacity: 0.7 }]}
+                    >
+                      <View style={styles.bubble}>
+                        <Text style={styles.bubbleText}>{stripFileLinks(item.content || '—')}</Text>
+                        {sentAttachmentViews(item, cfg.serverUrl).map(renderAttachment)}
+                      </View>
+                    </Pressable>
+                  </View>
                   <AliasAvatar alias={currentUsername} size={36} />
                 </View>
                 {item.result || item.reply ? (
                   <View style={[styles.messageRow, styles.replyRow]}>
                     <AliasAvatar alias={alias} size={36} />
-                    <View style={[styles.bubble, styles.replyBubble]}>
-                      <Text style={styles.bubbleText}>
-                        {stripFileLinks(item.result ?? item.reply ?? '')}
-                      </Text>
-                      {replyAttachmentViews(item, cfg.serverUrl).map(renderAttachment)}
+                    <View style={styles.messageContent}>
+                      <Text style={styles.messageAuthor} numberOfLines={1}>{alias}</Text>
+                      <View style={[styles.bubble, styles.replyBubble]}>
+                        <Text style={styles.bubbleText}>
+                          {stripFileLinks(item.result ?? item.reply ?? '')}
+                        </Text>
+                        {replyAttachmentViews(item, cfg.serverUrl).map(renderAttachment)}
+                      </View>
                     </View>
                   </View>
                 ) : null}
@@ -684,7 +692,11 @@ const makeStyles = () =>
   messageRow: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.sm, width: '100%' },
   sentRow: { justifyContent: 'flex-end' },
   replyRow: { justifyContent: 'flex-start' },
-  bubblePressable: { maxWidth: '85%', alignItems: 'flex-end' },
+  messageContent: { maxWidth: '85%', flexShrink: 1, alignItems: 'flex-start' },
+  sentContent: { alignItems: 'flex-end' },
+  messageAuthor: { color: colors.textMuted, fontSize: 11, lineHeight: 16, marginBottom: 3 },
+  sentAuthor: { textAlign: 'right' },
+  bubblePressable: { maxWidth: '100%', alignItems: 'flex-end' },
   timeHeader: {
     color: colors.textMuted,
     fontSize: 11,
