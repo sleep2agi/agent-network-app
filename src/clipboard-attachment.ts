@@ -33,3 +33,8 @@ export const attachmentFromClipboard = (
 export const releaseClipboardAttachment = (attachment: PickedImage | null) => {
   if (attachment?.webFile && attachment.uri.startsWith('blob:')) URL.revokeObjectURL(attachment.uri);
 };
+
+/** Queue pasted files by object/URI identity, not by filename. Clipboard
+ * screenshots commonly all arrive as `image.png`; equal names are valid. */
+export const appendAttachmentQueue = (current: PickedImage[], next: PickedImage, max = 20): PickedImage[] =>
+  current.length >= max ? current : [...current, next];

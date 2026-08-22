@@ -29,7 +29,7 @@ import {
   toTaskAttachment,
   PickedImage,
 } from './attach';
-import { attachmentFromClipboard, isTauriDesktop, releaseClipboardAttachment } from './clipboard-attachment';
+import { appendAttachmentQueue, attachmentFromClipboard, isTauriDesktop, releaseClipboardAttachment } from './clipboard-attachment';
 import { colors, onThemeChange, spacing } from './theme';
 import { formatChatHeader, shouldShowTimeHeader } from './time';
 import { agentStatusLabel, applyQuote, removeMessage, shouldShowJumpPill, nextUnread, jumpPillLabel, canSend, shouldSendOnEnter } from './chat-actions';
@@ -54,6 +54,7 @@ type ChatItem = HubTask & {
   _pending?: boolean;
   _failed?: boolean;
   _img?: PickedImage;
+  _imgs?: PickedImage[];
   /** PR3 review①:恢复自 outbox 且原带图片——说明文案走这个标志单独渲染,
    *  🔴 绝不拼进 content:content 是「要发出去的字」,注解是「给用户看的字」,
    *  共用一个字段迟早串(重试会把注解原样发给对方 agent)。 */
@@ -115,17 +116,16 @@ const pushTextRefs = (text: string, push: (id: string, name: string, mime?: stri
 
 /** Attachments belonging to the SENT bubble: local echo, meta, content refs. */
 const sentAttachmentViews = (item: ChatItem, serverUrl: string): AttachmentView[] => {
-  if (item._img) {
-    return [
-      {
-        key: item._img.uri,
-        name: item._img.fileName,
-        isImage: isImageLike(item._img.fileName, item._img.mimeType),
-        isVideo: isVideoLike(item._img.fileName, item._img.mimeType),
-        uri: item._img.uri,
-        size: item._img.fileSize,
-      },
-    ];
+  const localAttachments = item._imgs ?? (item._img ? [item._img] : []);
+  if (localAttachments.length) {
+    return localAttachments.map(img => ({
+      key: img.uri,
+      name: img.fileName,
+      isImage: isImageLike(img.fileName, img.mimeType),
+      isVideo: isVideoLike(img.fileName, img.mimeType),
+      uri: img.uri,
+      size: img.fileSize,
+    }));
   }
   const out: AttachmentView[] = [];
   const push = makePusher(serverUrl, out);
@@ -254,11 +254,21 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
   };
 
   const localSeq = useRef(0);
-  const [attached, setAttached] = useState<PickedImage | null>(null);
-  const replaceAttachment = useCallback((next: PickedImage | null) => {
+  const [attached, setAttached] = useState<PickedImage[]>([]);
+  const appendAttachment = useCallback((next: PickedImage) => {
     setAttached(previous => {
-      if (previous !== next) releaseClipboardAttachment(previous);
-      return next;
+      if (previous.length >= 20) {
+        releaseClipboardAttachment(next);
+        return previous;
+      }
+      return appendAttachmentQueue(previous, next);
+    });
+  }, []);
+  const removeAttachment = useCallback((uri: string) => {
+    setAttached(previous => {
+      const removed = previous.find(item => item.uri === uri);
+      releaseClipboardAttachment(removed ?? null);
+      return previous.filter(item => item.uri !== uri);
     });
   }, []);
 
@@ -272,11 +282,11 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
       const pasted = attachmentFromClipboard(event.clipboardData?.items);
       if (!pasted) return;
       event.preventDefault();
-      replaceAttachment(pasted);
+      appendAttachment(pasted);
     };
     window.addEventListener('paste', onPaste);
     return () => window.removeEventListener('paste', onPaste);
-  }, [replaceAttachment]);
+  }, [appendAttachment]);
   const [viewerUri, setViewerUri] = useState<string | null>(null);
   // 更像微信·round-2: 长按气泡的动作菜单(引用/删除)。null = 未打开。
   const [menuFor, setMenuFor] = useState<ChatItem | null>(null);
@@ -345,17 +355,17 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
       </Text>
     );
 
-  const doSend = async (content: string, localId: string, img?: PickedImage) => {
+  const doSend = async (content: string, localId: string, imgs: PickedImage[] = []) => {
     try {
       let attachments: TaskAttachment[] | undefined;
       let outgoing = content;
-      if (img) {
-        const up = await uploadImage(cfg, img);
-        attachments = [toTaskAttachment(img, up)];
-        outgoing = `${content}${attachmentTextHint(img, up)}`;
+      if (imgs.length) {
+        const uploaded = await Promise.all(imgs.map(async img => ({ img, up: await uploadImage(cfg, img) })));
+        attachments = uploaded.map(({ img, up }) => toTaskAttachment(img, up));
+        outgoing = `${content}${uploaded.map(({ img, up }) => attachmentTextHint(img, up)).join('')}`;
       }
       await sendTask(cfg, alias, outgoing, attachments);
-      releaseClipboardAttachment(img ?? null);
+      imgs.forEach(releaseClipboardAttachment);
       // delivered: drop the echo, the server copy arrives with reload.
       // 🔴 outbox 唯一删除路径=此处(sendTask 确认成功)。
       outboxRemove(localId);
@@ -370,11 +380,11 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
   };
 
   const submit = () => {
-    const content = draft.trim() || (attached ? `[图片] ${attached.fileName}` : '');
-    if ((!content && !attached) || sending) return;
-    const img = attached ?? undefined;
+    const content = draft.trim() || (attached.length ? `[附件] ${attached.map(item => item.fileName).join('、')}` : '');
+    if ((!content && !attached.length) || sending) return;
+    const imgs = attached;
     setDraft('');
-    setAttached(null);
+    setAttached([]);
     // Optimistic echo: render the message instantly tagged with a
     // client-only _localId (NOT the server task id, which we don't have
     // yet). doSend drops this echo on success — the subsequent reload brings
@@ -383,12 +393,12 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
     // PR3 判据C:id 跨次启动唯一(重开恢复的旧 local-N 不能和新 id 撞车);
     // 🔴 提交即落盘(网络尝试之前)——发送中被杀,重开后它还在。
     const localId = `local-${Date.now()}-${++localSeq.current}`;
-    outboxAdd({ id: localId, alias, content, createdAt: Date.now(), state: 'pending', hadImage: !!img });
+    outboxAdd({ id: localId, alias, content, createdAt: Date.now(), state: 'pending', hadImage: imgs.length > 0 });
     setMessages(prev => [
-      { content, created_at: new Date().toISOString(), _localId: localId, _pending: true, _img: img },
+      { content, created_at: new Date().toISOString(), _localId: localId, _pending: true, _imgs: imgs },
       ...prev,
     ]);
-    doSend(content, localId, img);
+    doSend(content, localId, imgs);
   };
 
   const retry = (item: ChatItem) => {
@@ -397,7 +407,7 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
     setMessages(prev =>
       prev.map(t => (t._localId === item._localId ? { ...t, _pending: true, _failed: false } : t)),
     );
-    doSend(item.content, item._localId, item._img);
+    doSend(item.content, item._localId, item._imgs ?? (item._img ? [item._img] : []));
   };
 
   // Header subtitle, Telegram-style (Vincent tg 739-741): show 正在处理…
@@ -448,12 +458,12 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
     // Native gets a 图片/文件 choice; web (test harness) goes straight
     // to the image picker — Alert multi-button is unsupported there.
     if (Platform.OS === 'web') {
-      pickImage().then(img => img && replaceAttachment(img));
+      pickImage().then(img => img && appendAttachment(img));
       return;
     }
     Alert.alert('发送附件', undefined, [
-      { text: '图片', onPress: () => pickImage().then(img => img && replaceAttachment(img)) },
-      { text: '文件', onPress: () => pickDocument().then(f => f && replaceAttachment(f)) },
+      { text: '图片', onPress: () => pickImage().then(img => img && appendAttachment(img)) },
+      { text: '文件', onPress: () => pickDocument().then(f => f && appendAttachment(f)) },
       { text: '取消', style: 'cancel' },
     ]);
   };
@@ -592,14 +602,17 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
         </Pressable>
       ) : null}
 
-      {attached ? (
-        <View style={styles.attachPreview}>
-          <Text style={styles.attachName} numberOfLines={1}>
-            📎 {attached.fileName}
-          </Text>
-          <Pressable onPress={() => replaceAttachment(null)} hitSlop={10}>
-            <Text style={styles.attachRemove}>✕</Text>
-          </Pressable>
+      {attached.length ? (
+        <View style={styles.attachPreviewList}>
+          {attached.map((item, index) => (
+            <View key={item.uri} style={styles.attachPreview}>
+              <Text style={styles.attachName} numberOfLines={1}>📎 {item.fileName}</Text>
+              <Text style={styles.attachIndex}>{index + 1}</Text>
+              <Pressable onPress={() => removeAttachment(item.uri)} hitSlop={10}>
+                <Text style={styles.attachRemove}>✕</Text>
+              </Pressable>
+            </View>
+          ))}
         </View>
       ) : null}
       <Modal visible={!!viewerUri} transparent animationType="fade">
@@ -669,11 +682,11 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
             <View style={styles.desktopToolbarRight}>
               <Text style={styles.shortcutHint}>Enter 发送 · Shift+Enter 换行</Text>
               <Pressable
-                style={({ pressed }) => [styles.desktopSend, !canSend(draft, !!attached, sending) && styles.desktopSendDisabled, pressed && { opacity: 0.7 }]}
+                style={({ pressed }) => [styles.desktopSend, !canSend(draft, attached.length > 0, sending) && styles.desktopSendDisabled, pressed && { opacity: 0.7 }]}
                 onPress={submit}
-                disabled={!canSend(draft, !!attached, sending)}
+                disabled={!canSend(draft, attached.length > 0, sending)}
               >
-                <Text style={[styles.desktopSendText, !canSend(draft, !!attached, sending) && styles.sendTextDisabled]}>发送</Text>
+                <Text style={[styles.desktopSendText, !canSend(draft, attached.length > 0, sending) && styles.sendTextDisabled]}>发送</Text>
               </Pressable>
             </View>
           </View>
@@ -710,13 +723,13 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
         <Pressable
           style={({ pressed }) => [
             styles.send,
-            !canSend(draft, !!attached, sending) && styles.sendDisabled,
+            !canSend(draft, attached.length > 0, sending) && styles.sendDisabled,
             pressed && { opacity: 0.6 },
           ]}
           onPress={submit}
-          disabled={!canSend(draft, !!attached, sending)}
+          disabled={!canSend(draft, attached.length > 0, sending)}
         >
-          <Text style={[styles.sendText, !canSend(draft, !!attached, sending) && styles.sendTextDisabled]}>↑</Text>
+          <Text style={[styles.sendText, !canSend(draft, attached.length > 0, sending) && styles.sendTextDisabled]}>↑</Text>
         </Pressable>
       </View>
       )}
@@ -837,14 +850,16 @@ const makeStyles = () =>
     paddingHorizontal: spacing.md,
   },
   jumpPillText: { color: colors.accent, fontSize: 13, fontWeight: '600' },
+  attachPreviewList: { maxHeight: 112, paddingVertical: spacing.xs },
   attachPreview: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.md,
     paddingHorizontal: spacing.lg,
-    paddingTop: spacing.sm,
+    paddingVertical: 3,
   },
   attachName: { color: colors.textSecondary, fontSize: 12, flexShrink: 1 },
+  attachIndex: { color: colors.textMuted, fontSize: 10, marginLeft: 'auto' },
   attachRemove: { color: colors.textMuted, fontSize: 14 },
   attachBtn: {
     width: 36,
