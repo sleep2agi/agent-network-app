@@ -31,6 +31,8 @@ export default function AgentsScreen({
   onOpenChat,
   onOpenPicker,
   onOpenNodeDetail,
+  compact = false,
+  selectedAlias,
 }: {
   cfg: HubConfig;
   onOpenChat: (alias: string) => void;
@@ -40,6 +42,8 @@ export default function AgentsScreen({
    *  screen. `onPress` remains the high-frequency path to chat and is
    *  NOT changed (通信龙 red-line 71ee862d). */
   onOpenNodeDetail: (alias: string) => void;
+  compact?: boolean;
+  selectedAlias?: string;
 }) {
   const [sessions, setSessions] = useState<Session[]>([]);
   const [loading, setLoading] = useState(true);
@@ -156,7 +160,7 @@ export default function AgentsScreen({
       maxToRenderPerBatch={12}
       windowSize={9}
       updateCellsBatchingPeriod={50}
-      contentContainerStyle={{ padding: spacing.lg }}
+      contentContainerStyle={{ padding: compact ? spacing.sm : spacing.lg }}
       refreshControl={
         <RefreshControl
           refreshing={refreshing}
@@ -220,6 +224,15 @@ export default function AgentsScreen({
         <Pressable
           style={({ pressed }) => [
             styles.card,
+            compact && {
+              borderWidth: 0,
+              borderBottomWidth: 1,
+              borderRadius: 8,
+              paddingHorizontal: spacing.md,
+              paddingVertical: spacing.md,
+              marginBottom: 2,
+            },
+            selectedAlias === item.alias && { backgroundColor: colors.inputBg },
             item.status === 'offline' && styles.cardOffline,
             pressed && { opacity: 0.7 },
           ]}

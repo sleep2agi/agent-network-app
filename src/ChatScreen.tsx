@@ -167,9 +167,10 @@ interface Props {
   cfg: HubConfig;
   alias: string;
   onBack: () => void;
+  desktop?: boolean;
 }
 
-export default function ChatScreen({ cfg, alias, onBack }: Props) {
+export default function ChatScreen({ cfg, alias, onBack, desktop = false }: Props) {
   // Android edge-to-edge draws the composer under the gesture bar (same
   // class of bug as the tg 802 tab bar) — pad by the real bottom inset.
   const insets = useSafeAreaInsets();
@@ -456,9 +457,11 @@ export default function ChatScreen({ cfg, alias, onBack }: Props) {
       keyboardVerticalOffset={Platform.OS === 'android' ? (StatusBar.currentHeight ?? 0) : 0}
     >
       <View style={styles.header}>
-        <Pressable onPress={onBack} hitSlop={12}>
-          <Text style={styles.back}>‹</Text>
-        </Pressable>
+        {!desktop ? (
+          <Pressable onPress={onBack} hitSlop={12}>
+            <Text style={styles.back}>‹</Text>
+          </Pressable>
+        ) : null}
         <AliasAvatar alias={alias} size={32} />
         <View style={{ flex: 1, minWidth: 0 }}>
           <Text style={styles.title} numberOfLines={1}>
