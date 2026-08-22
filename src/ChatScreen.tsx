@@ -34,6 +34,7 @@ import { formatChatHeader, shouldShowTimeHeader } from './time';
 import { agentStatusLabel, applyQuote, removeMessage, shouldShowJumpPill, nextUnread, jumpPillLabel, canSend } from './chat-actions';
 import type { NativeSyntheticEvent, NativeScrollEvent } from 'react-native';
 import { usePoll } from './usePoll';
+import { appFetch } from './app-fetch';
 
 // Chat with one agent. Mirrors dashboard M4: open with the newest PAGE
 // messages, grow the window when the user scrolls toward older history.
@@ -176,6 +177,7 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false }: Prop
   const insets = useSafeAreaInsets();
   const composerInset = Platform.OS === 'android' ? insets.bottom : 0;
   const [messages, setMessages] = useState<ChatItem[]>([]);
+  const [currentUsername, setCurrentUsername] = useState('我');
   const [loaded, setLoaded] = useState(false);
   const [hasOlder, setHasOlder] = useState(true);
   const [loadingOlder, setLoadingOlder] = useState(false);
@@ -225,6 +227,20 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false }: Prop
   // Foreground-only message polling: 5s while visible, paused in background,
   // instant refresh on resume (shared hook). Reads the live window via limitRef.
   usePoll(() => load(limitRef.current), 5000, [load]);
+
+  useEffect(() => {
+    let alive = true;
+    appFetch(`${cfg.serverUrl}/api/auth/me`, {
+      headers: { Authorization: `Bearer ${cfg.token}` },
+    })
+      .then(res => res.json())
+      .then(data => {
+        const username = data?.user?.username;
+        if (alive && typeof username === 'string' && username.trim()) setCurrentUsername(username.trim());
+      })
+      .catch(() => { /* the stable “我” avatar remains available offline */ });
+    return () => { alive = false; };
+  }, [cfg.serverUrl, cfg.token]);
 
   const loadOlder = async () => {
     if (loadingOlder || !hasOlder || !loaded) return;
@@ -505,22 +521,28 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false }: Prop
                 {showHeader && item.created_at ? (
                   <Text style={styles.timeHeader}>{formatChatHeader(item.created_at)}</Text>
                 ) : null}
-                <Pressable
-                  onLongPress={() => setMenuFor(item)}
-                  delayLongPress={300}
-                  style={({ pressed }) => pressed && { opacity: 0.7 }}
-                >
-                  <View style={styles.bubble}>
-                    <Text style={styles.bubbleText}>{stripFileLinks(item.content || '—')}</Text>
-                    {sentAttachmentViews(item, cfg.serverUrl).map(renderAttachment)}
-                  </View>
-                </Pressable>
+                <View style={[styles.messageRow, styles.sentRow]}>
+                  <Pressable
+                    onLongPress={() => setMenuFor(item)}
+                    delayLongPress={300}
+                    style={({ pressed }) => [styles.bubblePressable, pressed && { opacity: 0.7 }]}
+                  >
+                    <View style={styles.bubble}>
+                      <Text style={styles.bubbleText}>{stripFileLinks(item.content || '—')}</Text>
+                      {sentAttachmentViews(item, cfg.serverUrl).map(renderAttachment)}
+                    </View>
+                  </Pressable>
+                  <AliasAvatar alias={currentUsername} size={36} />
+                </View>
                 {item.result || item.reply ? (
-                  <View style={[styles.bubble, styles.replyBubble]}>
-                    <Text style={styles.bubbleText}>
-                      {stripFileLinks(item.result ?? item.reply ?? '')}
-                    </Text>
-                    {replyAttachmentViews(item, cfg.serverUrl).map(renderAttachment)}
+                  <View style={[styles.messageRow, styles.replyRow]}>
+                    <AliasAvatar alias={alias} size={36} />
+                    <View style={[styles.bubble, styles.replyBubble]}>
+                      <Text style={styles.bubbleText}>
+                        {stripFileLinks(item.result ?? item.reply ?? '')}
+                      </Text>
+                      {replyAttachmentViews(item, cfg.serverUrl).map(renderAttachment)}
+                    </View>
                   </View>
                 ) : null}
                 {item._restoredNoImage ? (
@@ -659,6 +681,10 @@ const makeStyles = () =>
     marginVertical: spacing.md,
   },
   bubbleWrap: { marginBottom: spacing.md, gap: spacing.xs },
+  messageRow: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.sm, width: '100%' },
+  sentRow: { justifyContent: 'flex-end' },
+  replyRow: { justifyContent: 'flex-start' },
+  bubblePressable: { maxWidth: '85%', alignItems: 'flex-end' },
   timeHeader: {
     color: colors.textMuted,
     fontSize: 11,
@@ -668,7 +694,7 @@ const makeStyles = () =>
   },
   bubble: {
     alignSelf: 'flex-end',
-    maxWidth: '85%',
+    maxWidth: '100%',
     backgroundColor: colors.card,
     borderColor: colors.border,
     borderWidth: 1,
@@ -676,7 +702,7 @@ const makeStyles = () =>
     paddingHorizontal: spacing.lg,
     paddingVertical: spacing.md,
   },
-  replyBubble: { alignSelf: 'flex-start', backgroundColor: colors.inputBg },
+  replyBubble: { alignSelf: 'flex-start', maxWidth: '85%', flexShrink: 1, backgroundColor: colors.inputBg },
   bubbleText: { color: colors.text, fontSize: 14, lineHeight: 20 },
   restoredNote: { color: colors.textMuted, fontSize: 10, marginTop: 2, alignSelf: 'flex-end' },
   deliveredMark: { color: colors.textMuted, fontSize: 10, marginTop: 2, alignSelf: 'flex-end' },
