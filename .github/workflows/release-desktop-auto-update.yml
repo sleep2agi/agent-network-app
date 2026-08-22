@@ -58,10 +58,10 @@ jobs:
       - uses: swatinem/rust-cache@v2
         with:
           workspaces: src-tauri
+      - run: npx tauri icon assets/icon.png
       - name: Check Rust app sources
         working-directory: src-tauri
         run: cargo check --locked
-      - run: npx tauri icon assets/icon.png
 
       - name: Decode App Store Connect key
         if: runner.os == 'macOS'
