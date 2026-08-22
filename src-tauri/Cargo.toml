@@ -1,6 +1,6 @@
 [package]
 name = "agent-network-desktop"
-version = "0.2.9"
+version = "0.2.10"
 description = "Agent Network desktop shell — Tauri 2 over the RN-web export"
 edition = "2021"
 
@@ -12,6 +12,7 @@ crate-type = ["staticlib", "cdylib", "rlib"]
 tauri-build = { version = "2", features = [] }
 
 [dependencies]
+keyring = "3"
 serde_json = "1"
 tauri = { version = "2", features = [] }
 tauri-plugin-http = "2"

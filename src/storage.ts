@@ -8,25 +8,44 @@ import { HubConfig, Session } from './api';
 
 const KEY = 'hub_config_v1';
 
+const isTauriDesktop = (): boolean =>
+  typeof globalThis !== 'undefined' && !!(globalThis as any).__TAURI_INTERNALS__;
+
+const parseConfig = (raw: string | null): HubConfig | null => {
+  if (!raw) return null;
+  const parsed = JSON.parse(raw);
+  return typeof parsed?.serverUrl === 'string' && typeof parsed?.token === 'string'
+    ? parsed as HubConfig
+    : null;
+};
+
 export const saveConfig = async (cfg: HubConfig): Promise<void> => {
+  if (isTauriDesktop()) {
+    const { invoke } = await import('@tauri-apps/api/core');
+    await invoke('save_desktop_session', { sessionJson: JSON.stringify(cfg) });
+    return;
+  }
   await SecureStore.setItemAsync(KEY, JSON.stringify(cfg));
 };
 
 export const loadConfig = async (): Promise<HubConfig | null> => {
   try {
-    const raw = await SecureStore.getItemAsync(KEY);
-    if (!raw) return null;
-    const parsed = JSON.parse(raw);
-    if (typeof parsed?.serverUrl === 'string' && typeof parsed?.token === 'string') {
-      return parsed as HubConfig;
+    if (isTauriDesktop()) {
+      const { invoke } = await import('@tauri-apps/api/core');
+      return parseConfig(await invoke<string | null>('load_desktop_session'));
     }
-    return null;
+    return parseConfig(await SecureStore.getItemAsync(KEY));
   } catch {
     return null;
   }
 };
 
 export const clearConfig = async (): Promise<void> => {
+  if (isTauriDesktop()) {
+    const { invoke } = await import('@tauri-apps/api/core');
+    await invoke('clear_desktop_session');
+    return;
+  }
   await SecureStore.deleteItemAsync(KEY);
 };
 
