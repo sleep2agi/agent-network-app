@@ -15,6 +15,7 @@ import {
   View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { Ionicons } from '@expo/vector-icons';
 import AliasAvatar from './AliasAvatar';
 import AuthedThumb, { AttachmentFile, AuthedVideo, mimeFromName } from './AuthedThumb';
 import { fetchStatus, fetchTasks, sendTask, HubConfig, HubTask, TaskAttachment } from './api';
@@ -28,11 +29,13 @@ import {
   toTaskAttachment,
   PickedImage,
 } from './attach';
+import { attachmentFromClipboard, isTauriDesktop, releaseClipboardAttachment } from './clipboard-attachment';
 import { colors, onThemeChange, spacing } from './theme';
 import { formatChatHeader, shouldShowTimeHeader } from './time';
-import { applyQuote, removeMessage, shouldShowJumpPill, nextUnread, jumpPillLabel, canSend } from './chat-actions';
+import { agentStatusLabel, applyQuote, removeMessage, shouldShowJumpPill, nextUnread, jumpPillLabel, canSend, shouldSendOnEnter } from './chat-actions';
 import type { NativeSyntheticEvent, NativeScrollEvent } from 'react-native';
 import { usePoll } from './usePoll';
+import { appFetch } from './app-fetch';
 
 // Chat with one agent. Mirrors dashboard M4: open with the newest PAGE
 // messages, grow the window when the user scrolls toward older history.
@@ -166,14 +169,17 @@ interface Props {
   cfg: HubConfig;
   alias: string;
   onBack: () => void;
+  desktop?: boolean;
+  onOpenSettings?: () => void;
 }
 
-export default function ChatScreen({ cfg, alias, onBack }: Props) {
+export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpenSettings }: Props) {
   // Android edge-to-edge draws the composer under the gesture bar (same
   // class of bug as the tg 802 tab bar) — pad by the real bottom inset.
   const insets = useSafeAreaInsets();
   const composerInset = Platform.OS === 'android' ? insets.bottom : 0;
   const [messages, setMessages] = useState<ChatItem[]>([]);
+  const [currentUsername, setCurrentUsername] = useState('我');
   const [loaded, setLoaded] = useState(false);
   const [hasOlder, setHasOlder] = useState(true);
   const [loadingOlder, setLoadingOlder] = useState(false);
@@ -224,6 +230,20 @@ export default function ChatScreen({ cfg, alias, onBack }: Props) {
   // instant refresh on resume (shared hook). Reads the live window via limitRef.
   usePoll(() => load(limitRef.current), 5000, [load]);
 
+  useEffect(() => {
+    let alive = true;
+    appFetch(`${cfg.serverUrl}/api/auth/me`, {
+      headers: { Authorization: `Bearer ${cfg.token}` },
+    })
+      .then(res => res.json())
+      .then(data => {
+        const username = data?.user?.username;
+        if (alive && typeof username === 'string' && username.trim()) setCurrentUsername(username.trim());
+      })
+      .catch(() => { /* the stable “我” avatar remains available offline */ });
+    return () => { alive = false; };
+  }, [cfg.serverUrl, cfg.token]);
+
   const loadOlder = async () => {
     if (loadingOlder || !hasOlder || !loaded) return;
     setLoadingOlder(true);
@@ -234,6 +254,28 @@ export default function ChatScreen({ cfg, alias, onBack }: Props) {
 
   const localSeq = useRef(0);
   const [attached, setAttached] = useState<PickedImage | null>(null);
+  const replaceAttachment = useCallback((next: PickedImage | null) => {
+    setAttached(previous => {
+      if (previous !== next) releaseClipboardAttachment(previous);
+      return next;
+    });
+  }, []);
+
+  // React Native Web does not expose clipboard files through TextInput's
+  // onChangeText. Listen at the window while this chat is mounted so Ctrl+V
+  // (Windows/Linux) and Cmd+V (macOS) can reuse the normal attachment flow.
+  // Text-only pastes are deliberately untouched.
+  useEffect(() => {
+    if (!isTauriDesktop() || typeof window === 'undefined') return;
+    const onPaste = (event: ClipboardEvent) => {
+      const pasted = attachmentFromClipboard(event.clipboardData?.items);
+      if (!pasted) return;
+      event.preventDefault();
+      replaceAttachment(pasted);
+    };
+    window.addEventListener('paste', onPaste);
+    return () => window.removeEventListener('paste', onPaste);
+  }, [replaceAttachment]);
   const [viewerUri, setViewerUri] = useState<string | null>(null);
   // 更像微信·round-2: 长按气泡的动作菜单(引用/删除)。null = 未打开。
   const [menuFor, setMenuFor] = useState<ChatItem | null>(null);
@@ -312,6 +354,7 @@ export default function ChatScreen({ cfg, alias, onBack }: Props) {
         outgoing = `${content}${attachmentTextHint(img, up)}`;
       }
       await sendTask(cfg, alias, outgoing, attachments);
+      releaseClipboardAttachment(img ?? null);
       // delivered: drop the echo, the server copy arrives with reload.
       // 🔴 outbox 唯一删除路径=此处(sendTask 确认成功)。
       outboxRemove(localId);
@@ -398,26 +441,18 @@ export default function ChatScreen({ cfg, alias, onBack }: Props) {
       m.created_at &&
       Date.now() - new Date(`${m.created_at.replace(' ', 'T')}Z`).getTime() < 10 * 60 * 1000,
   );
-  const subtitle = processing
-    ? '••• 正在处理…'
-    : sessionStatus === 'working' || sessionStatus === 'running'
-      ? '工作中'
-      : sessionStatus === 'offline'
-        ? '离线'
-        : sessionStatus
-          ? '在线'
-          : '';
+  const subtitle = processing ? '••• 正在处理…' : sessionStatus ? agentStatusLabel(sessionStatus) : '';
 
   const attach = () => {
     // Native gets a 图片/文件 choice; web (test harness) goes straight
     // to the image picker — Alert multi-button is unsupported there.
     if (Platform.OS === 'web') {
-      pickImage().then(img => img && setAttached(img));
+      pickImage().then(img => img && replaceAttachment(img));
       return;
     }
     Alert.alert('发送附件', undefined, [
-      { text: '图片', onPress: () => pickImage().then(img => img && setAttached(img)) },
-      { text: '文件', onPress: () => pickDocument().then(f => f && setAttached(f)) },
+      { text: '图片', onPress: () => pickImage().then(img => img && replaceAttachment(img)) },
+      { text: '文件', onPress: () => pickDocument().then(f => f && replaceAttachment(f)) },
       { text: '取消', style: 'cancel' },
     ]);
   };
@@ -432,9 +467,11 @@ export default function ChatScreen({ cfg, alias, onBack }: Props) {
       keyboardVerticalOffset={Platform.OS === 'android' ? (StatusBar.currentHeight ?? 0) : 0}
     >
       <View style={styles.header}>
-        <Pressable onPress={onBack} hitSlop={12}>
-          <Text style={styles.back}>‹</Text>
-        </Pressable>
+        {!desktop ? (
+          <Pressable onPress={onBack} hitSlop={12}>
+            <Text style={styles.back}>‹</Text>
+          </Pressable>
+        ) : null}
         <AliasAvatar alias={alias} size={32} />
         <View style={{ flex: 1, minWidth: 0 }}>
           <Text style={styles.title} numberOfLines={1}>
@@ -453,6 +490,17 @@ export default function ChatScreen({ cfg, alias, onBack }: Props) {
             </Text>
           ) : null}
         </View>
+        {desktop && onOpenSettings ? (
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="设置"
+            onPress={onOpenSettings}
+            hitSlop={10}
+            style={({ pressed }) => [styles.headerAction, pressed && { opacity: 0.6 }]}
+          >
+            <Ionicons name="settings-outline" size={20} color={colors.textSecondary} />
+          </Pressable>
+        ) : null}
       </View>
 
       {!loaded ? (
@@ -486,22 +534,36 @@ export default function ChatScreen({ cfg, alias, onBack }: Props) {
                 {showHeader && item.created_at ? (
                   <Text style={styles.timeHeader}>{formatChatHeader(item.created_at)}</Text>
                 ) : null}
-                <Pressable
-                  onLongPress={() => setMenuFor(item)}
-                  delayLongPress={300}
-                  style={({ pressed }) => pressed && { opacity: 0.7 }}
-                >
-                  <View style={styles.bubble}>
-                    <Text style={styles.bubbleText}>{stripFileLinks(item.content || '—')}</Text>
-                    {sentAttachmentViews(item, cfg.serverUrl).map(renderAttachment)}
-                  </View>
-                </Pressable>
-                {item.result || item.reply ? (
-                  <View style={[styles.bubble, styles.replyBubble]}>
-                    <Text style={styles.bubbleText}>
-                      {stripFileLinks(item.result ?? item.reply ?? '')}
+                <View style={[styles.messageRow, styles.sentRow]}>
+                  <View style={[styles.messageContent, styles.sentContent]}>
+                    <Text style={[styles.messageAuthor, styles.sentAuthor]} numberOfLines={1}>
+                      {currentUsername}
                     </Text>
-                    {replyAttachmentViews(item, cfg.serverUrl).map(renderAttachment)}
+                    <Pressable
+                      onLongPress={() => setMenuFor(item)}
+                      delayLongPress={300}
+                      style={({ pressed }) => [styles.bubblePressable, pressed && { opacity: 0.7 }]}
+                    >
+                      <View style={styles.bubble}>
+                        <Text style={styles.bubbleText}>{stripFileLinks(item.content || '—')}</Text>
+                        {sentAttachmentViews(item, cfg.serverUrl).map(renderAttachment)}
+                      </View>
+                    </Pressable>
+                  </View>
+                  <AliasAvatar alias={currentUsername} size={36} />
+                </View>
+                {item.result || item.reply ? (
+                  <View style={[styles.messageRow, styles.replyRow]}>
+                    <AliasAvatar alias={alias} size={36} />
+                    <View style={styles.messageContent}>
+                      <Text style={styles.messageAuthor} numberOfLines={1}>{alias}</Text>
+                      <View style={[styles.bubble, styles.replyBubble]}>
+                        <Text style={styles.bubbleText}>
+                          {stripFileLinks(item.result ?? item.reply ?? '')}
+                        </Text>
+                        {replyAttachmentViews(item, cfg.serverUrl).map(renderAttachment)}
+                      </View>
+                    </View>
                   </View>
                 ) : null}
                 {item._restoredNoImage ? (
@@ -536,7 +598,7 @@ export default function ChatScreen({ cfg, alias, onBack }: Props) {
           <Text style={styles.attachName} numberOfLines={1}>
             📎 {attached.fileName}
           </Text>
-          <Pressable onPress={() => setAttached(null)} hitSlop={10}>
+          <Pressable onPress={() => replaceAttachment(null)} hitSlop={10}>
             <Text style={styles.attachRemove}>✕</Text>
           </Pressable>
         </View>
@@ -599,6 +661,16 @@ export default function ChatScreen({ cfg, alias, onBack }: Props) {
           placeholderTextColor={colors.textMuted}
           value={draft}
           onChangeText={setDraft}
+          onKeyPress={(event) => {
+            if (!desktop) return;
+            const key = event.nativeEvent as typeof event.nativeEvent & {
+              shiftKey?: boolean;
+              isComposing?: boolean;
+            };
+            if (!shouldSendOnEnter(key)) return;
+            event.preventDefault?.();
+            submit();
+          }}
           multiline
         />
         <Pressable
@@ -633,6 +705,13 @@ const makeStyles = () =>
   back: { color: colors.accent, fontSize: 28, lineHeight: 30, paddingRight: spacing.sm },
   title: { color: colors.text, fontSize: 16, fontWeight: '600' },
   subtitle: { color: colors.running, fontSize: 11, marginTop: 1 },
+  headerAction: {
+    width: 34,
+    height: 34,
+    borderRadius: 9,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   beginning: {
     color: colors.textMuted,
     fontSize: 11,
@@ -640,6 +719,14 @@ const makeStyles = () =>
     marginVertical: spacing.md,
   },
   bubbleWrap: { marginBottom: spacing.md, gap: spacing.xs },
+  messageRow: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.sm, width: '100%' },
+  sentRow: { justifyContent: 'flex-end' },
+  replyRow: { justifyContent: 'flex-start' },
+  messageContent: { maxWidth: '85%', flexShrink: 1, alignItems: 'flex-start' },
+  sentContent: { alignItems: 'flex-end' },
+  messageAuthor: { color: colors.textMuted, fontSize: 11, lineHeight: 16, marginBottom: 3 },
+  sentAuthor: { textAlign: 'right' },
+  bubblePressable: { maxWidth: '100%', alignItems: 'flex-end' },
   timeHeader: {
     color: colors.textMuted,
     fontSize: 11,
@@ -649,7 +736,7 @@ const makeStyles = () =>
   },
   bubble: {
     alignSelf: 'flex-end',
-    maxWidth: '85%',
+    maxWidth: '100%',
     backgroundColor: colors.card,
     borderColor: colors.border,
     borderWidth: 1,
@@ -657,7 +744,7 @@ const makeStyles = () =>
     paddingHorizontal: spacing.lg,
     paddingVertical: spacing.md,
   },
-  replyBubble: { alignSelf: 'flex-start', backgroundColor: colors.inputBg },
+  replyBubble: { alignSelf: 'flex-start', maxWidth: '85%', flexShrink: 1, backgroundColor: colors.inputBg },
   bubbleText: { color: colors.text, fontSize: 14, lineHeight: 20 },
   restoredNote: { color: colors.textMuted, fontSize: 10, marginTop: 2, alignSelf: 'flex-end' },
   deliveredMark: { color: colors.textMuted, fontSize: 10, marginTop: 2, alignSelf: 'flex-end' },

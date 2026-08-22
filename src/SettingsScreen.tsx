@@ -4,6 +4,7 @@ import { HubConfig } from './api';
 import { saveThemeMode } from './storage';
 import { colors, onThemeChange, setThemeMode, spacing, themeMode } from './theme';
 import { APP_VERSION } from './version';
+import { appFetch } from './app-fetch';
 
 // Settings (Vincent tg 720): who am I, where am I connected, which
 // network, which build — and the one destructive action, logout,
@@ -27,7 +28,7 @@ export default function SettingsScreen({
   useEffect(() => {
     (async () => {
       try {
-        const res = await fetch(`${cfg.serverUrl}/api/auth/me`, {
+        const res = await appFetch(`${cfg.serverUrl}/api/auth/me`, {
           headers: { Authorization: `Bearer ${cfg.token}` },
         });
         const d = await res.json();

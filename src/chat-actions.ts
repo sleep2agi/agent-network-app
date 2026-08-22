@@ -40,3 +40,19 @@ export const canSend = (draft: string, hasAttachment: boolean, sending: boolean)
 
 // 更像微信·round-5: 会话列表头像的在线态圆点。offline → 灰点(暗);其余(working/idle)→ 亮点。
 export const isAgentOnline = (status?: string): boolean => !!status && status !== 'offline';
+
+// Keep raw runtime states out of the desktop UI. The conversation row and
+// chat header must describe the same agent with the same user-facing word.
+export const agentStatusLabel = (status?: string): string => {
+  if (status === 'working' || status === 'running') return '工作中';
+  if (status === 'offline' || !status) return '离线';
+  return '在线';
+};
+
+// Desktop composer contract: Enter sends, Shift+Enter inserts a newline.
+// Composition must win so confirming Chinese/Japanese input never sends early.
+export const shouldSendOnEnter = (event: {
+  key?: string;
+  shiftKey?: boolean;
+  isComposing?: boolean;
+}): boolean => event.key === 'Enter' && !event.shiftKey && !event.isComposing;
