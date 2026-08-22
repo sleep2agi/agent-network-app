@@ -107,10 +107,9 @@ function AppRoot() {
   const tabBarInset = Platform.OS === 'android' ? insets.bottom : 0;
 
   // Restore the saved session on cold start — login survives app kills.
-  // Invariant: loadConfig/loadThemeMode must never reject (both swallow
-  // their own errors and return null). A rejection here would skip the
-  // .then, leaving `booting` true forever = a permanent boot spinner —
-  // so keep those two best-effort if they're ever refactored.
+  // Desktop credential-store failures are not treated as "no session": keep
+  // the app usable, log the diagnostic, and require a fresh login whose save
+  // path now reports the error visibly.
   useEffect(() => {
     Promise.all([loadConfig(), loadThemeMode(), loadLocalAvatars(), loadOutbox()]).then(([saved, mode, localAvatars, outbox]) => {
       if (mode === 'light' || mode === 'dark') setThemeMode(mode);
@@ -127,6 +126,9 @@ function AppRoot() {
         // mount; AgentsScreen's first load consumes this in-flight promise.
         prefetchStatus(saved);
       }
+      setBooting(false);
+    }).catch(error => {
+      console.error('Failed to restore desktop session', error);
       setBooting(false);
     });
   }, [initialChat]);
@@ -208,9 +210,9 @@ function AppRoot() {
       {screen.name !== 'login' && cfg ? <ConnectivityBanner /> : null}
       {screen.name === 'login' || !cfg ? (
         <LoginScreen
-          onLogin={c => {
+          onLogin={async c => {
+            await saveConfig(c);
             setCfg(c);
-            saveConfig(c);
             setScreen(initialChat ? { name: 'chat', alias: initialChat } : { name: 'agents' });
           }}
         />
@@ -427,7 +429,7 @@ const makeDesktopStyles = () => StyleSheet.create({
   emptyHint: { color: colors.textMuted, fontSize: 12 },
 });
 
-function LoginScreen({ onLogin }: { onLogin: (cfg: HubConfig) => void }) {
+function LoginScreen({ onLogin }: { onLogin: (cfg: HubConfig) => Promise<void> }) {
   const [serverUrl, setServerUrl] = useState('');
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
@@ -446,9 +448,16 @@ function LoginScreen({ onLogin }: { onLogin: (cfg: HubConfig) => void }) {
     if (!norm.ok) { setFailKind('bad-url'); return; }
     setBusy(true);
     const result = await login(norm.url, username.trim(), password);
+    if (result.ok) {
+      try {
+        await onLogin(result.cfg);
+      } catch (saveError) {
+        setError(`无法保存登录状态：${saveError instanceof Error ? saveError.message : String(saveError)}`);
+      }
+    } else {
+      setFailKind(result.kind); setFailDetail(result.error);
+    }
     setBusy(false);
-    if (result.ok) onLogin(result.cfg);
-    else { setFailKind(result.kind); setFailDetail(result.error); }
   };
 
   return (
