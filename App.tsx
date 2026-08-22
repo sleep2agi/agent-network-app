@@ -55,15 +55,18 @@ type Screen =
   | { name: 'wizard'; daemon: HostSupervisorDaemon };  // #338 wizard rest (Plan B) — created after picker selects a daemon
 
 // 跟微信的学一学 (Vincent tg 807): icon over small label, active tint.
-// Server tab sits left of 设置 (Vincent tg 847).
+// Desktop keeps operational modules together and pins Settings to the bottom.
 const TABS = [
   { key: 'agents', label: 'Agents', icon: 'people-outline', iconActive: 'people' },
   { key: 'tasks', label: 'Tasks', icon: 'list-outline', iconActive: 'list' },
   { key: 'scheduled', label: '定时', icon: 'time-outline', iconActive: 'time' },
   { key: 'messages', label: 'Messages', icon: 'chatbubble-ellipses-outline', iconActive: 'chatbubble-ellipses' },
-  { key: 'server', label: 'Server', icon: 'server-outline', iconActive: 'server' },
+  { key: 'server', label: '服务器设置', icon: 'server-outline', iconActive: 'server' },
   { key: 'settings', label: '设置', icon: 'settings-outline', iconActive: 'settings' },
 ] as const;
+
+const DESKTOP_MAIN_TABS = TABS.filter(tab => tab.key !== 'settings');
+const DESKTOP_SETTINGS_TAB = TABS.find(tab => tab.key === 'settings')!;
 
 export default function App() {
   // One-time cleanup of attachment caches written before the download fix.
@@ -359,12 +362,23 @@ function DesktopWorkspace({ cfg, screen, setScreen, onLogout }: {
       <View style={desktopStyles.rail}>
         <View style={desktopStyles.railBrand}><Text style={desktopStyles.railBrandText}>AN</Text></View>
         <View style={desktopStyles.railTabs}>
-          {TABS.map(tab => (
+          {DESKTOP_MAIN_TABS.map(tab => (
             <Pressable key={tab.key} accessibilityLabel={tab.label} onPress={() => setScreen({ name: tab.key } as Screen)} style={[desktopStyles.railButton, active === tab.key && desktopStyles.railButtonActive]}>
               <Ionicons name={active === tab.key ? tab.iconActive : tab.icon} size={22} color={active === tab.key ? colors.accent : colors.textSecondary} />
             </Pressable>
           ))}
         </View>
+        <Pressable
+          accessibilityLabel={DESKTOP_SETTINGS_TAB.label}
+          onPress={() => setScreen({ name: DESKTOP_SETTINGS_TAB.key })}
+          style={[desktopStyles.railButton, desktopStyles.railSettings, active === DESKTOP_SETTINGS_TAB.key && desktopStyles.railButtonActive]}
+        >
+          <Ionicons
+            name={active === DESKTOP_SETTINGS_TAB.key ? DESKTOP_SETTINGS_TAB.iconActive : DESKTOP_SETTINGS_TAB.icon}
+            size={22}
+            color={active === DESKTOP_SETTINGS_TAB.key ? colors.accent : colors.textSecondary}
+          />
+        </Pressable>
         <Text style={desktopStyles.railVersion}>v{APP_VERSION}</Text>
       </View>
       <View style={desktopStyles.conversations}>
@@ -383,6 +397,7 @@ const makeDesktopStyles = () => StyleSheet.create({
   railTabs: { flex: 1, paddingTop: 22, gap: 8 },
   railButton: { width: 42, height: 42, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
   railButtonActive: { backgroundColor: colors.card },
+  railSettings: { marginBottom: 10 },
   railVersion: { color: colors.textMuted, fontSize: 9 },
   conversations: { width: 304, borderRightWidth: 1, borderRightColor: colors.border, backgroundColor: colors.bg },
   content: { flex: 1, minWidth: 0, backgroundColor: colors.bg },
