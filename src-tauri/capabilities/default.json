@@ -2,11 +2,12 @@
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
   "description": "Main window: core APIs + Rust-side fetch to any hub URL",
-  "windows": ["main"],
+  "windows": ["main", "chat-*"],
   "permissions": [
     "core:default",
     "process:allow-restart",
     "updater:default",
+    "core:webview:allow-create-webview-window",
     "opener:default",
     {
       "identifier": "opener:allow-open-url",

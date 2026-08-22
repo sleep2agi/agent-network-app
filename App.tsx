@@ -40,6 +40,7 @@ import { colors, onThemeChange, setThemeMode, spacing, themeMode } from './src/t
 import { styles } from './src/app-styles';
 import { APP_VERSION } from './src/version';
 import DesktopUpdatePrompt from './src/DesktopUpdatePrompt';
+import { loadPinnedChats, openChatWindow, requestedChatAlias, savePinnedChats } from './src/desktop-chat-menu';
 
 type Screen =
   | { name: 'login' }
@@ -93,6 +94,7 @@ function AppRoot() {
   const [cfg, setCfg] = useState<HubConfig | null>(null);
   const [screen, setScreen] = useState<Screen>({ name: 'login' });
   const [booting, setBooting] = useState(true);
+  const initialChat = useMemo(() => requestedChatAlias(), []);
   // Keyed remount on theme switch: module-level styles were already
   // rebuilt by the onThemeChange listeners, the new key re-renders the tree.
   const [theme, setTheme] = useState(themeMode());
@@ -120,14 +122,14 @@ function AppRoot() {
       initOutbox(outbox, (all) => { void saveOutbox(all); });
       if (saved) {
         setCfg(saved);
-        setScreen({ name: 'agents' });
+        setScreen(initialChat ? { name: 'chat', alias: initialChat } : { name: 'agents' });
         // Fire the status request now so its RTT overlaps the boot→AgentsScreen
         // mount; AgentsScreen's first load consumes this in-flight promise.
         prefetchStatus(saved);
       }
       setBooting(false);
     });
-  }, []);
+  }, [initialChat]);
 
   // R1 avatar (通信龙 07-31): hydrate the hub avatar layer from GET /api/nodes
   // so node-backed aliases render their cross-device avatar_url (Vincent changed
@@ -209,7 +211,7 @@ function AppRoot() {
           onLogin={c => {
             setCfg(c);
             saveConfig(c);
-            setScreen({ name: 'agents' });
+            setScreen(initialChat ? { name: 'chat', alias: initialChat } : { name: 'agents' });
           }}
         />
       ) : screen.name === 'chat' ? (
@@ -340,6 +342,12 @@ function DesktopWorkspace({ cfg, screen, setScreen, onLogout }: {
   // switch. Build desktop styles on that mount instead of freezing the dark
   // palette once at module import time.
   const desktopStyles = useMemo(makeDesktopStyles, []);
+  const [pinnedAliases, setPinnedAliases] = useState(loadPinnedChats);
+  const togglePin = (alias: string) => setPinnedAliases(current => {
+    const next = current.includes(alias) ? current.filter(item => item !== alias) : [alias, ...current];
+    savePinnedChats(next);
+    return next;
+  });
   const active = ['chat', 'nodeDetail', 'picker', 'wizard'].includes(screen.name) ? 'agents' : screen.name;
   const content = screen.name === 'chat' ? (
     <ChatScreen
@@ -395,7 +403,7 @@ function DesktopWorkspace({ cfg, screen, setScreen, onLogout }: {
         <Text style={desktopStyles.railVersion}>v{APP_VERSION}</Text>
       </View>
       <View style={desktopStyles.conversations}>
-        <AgentsScreen cfg={cfg} compact selectedAlias={screen.name === 'chat' ? screen.alias : undefined} onOpenChat={alias => setScreen({ name: 'chat', alias })} onOpenPicker={() => setScreen({ name: 'picker' })} onOpenNodeDetail={alias => setScreen({ name: 'nodeDetail', alias })} />
+        <AgentsScreen cfg={cfg} compact selectedAlias={screen.name === 'chat' ? screen.alias : undefined} pinnedAliases={pinnedAliases} onTogglePin={togglePin} onOpenChatWindow={alias => { void openChatWindow(alias); }} onOpenChat={alias => setScreen({ name: 'chat', alias })} onOpenPicker={() => setScreen({ name: 'picker' })} onOpenNodeDetail={alias => setScreen({ name: 'nodeDetail', alias })} />
       </View>
       <View style={desktopStyles.content}>{content}</View>
     </View>
