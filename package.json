@@ -6,6 +6,8 @@
     "@expo/vector-icons": "^15.0.2",
     "@tauri-apps/plugin-http": "^2.5.9",
     "@tauri-apps/plugin-opener": "^2.5.4",
+    "@tauri-apps/plugin-process": "^2.3.1",
+    "@tauri-apps/plugin-updater": "^2.10.1",
     "expo": "~56.0.9",
     "expo-build-properties": "~56.0.18",
     "expo-clipboard": "~56.0.4",
