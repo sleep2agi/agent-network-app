@@ -2,6 +2,7 @@ import * as DocumentPicker from 'expo-document-picker';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as ImagePicker from 'expo-image-picker';
 import { Platform } from 'react-native';
+import { appFetch } from './app-fetch';
 
 // Image/file attachments (#220 roadmap ③) — fully wired end to end:
 // pick → upload → attach (see uploadImage below). The hub's
@@ -83,7 +84,7 @@ export const uploadImage = async (cfg: HubConfig, img: PickedImage): Promise<Upl
   if (Platform.OS === 'web') {
     const form = new FormData();
     form.append('file', { uri: img.uri, name: img.fileName, type: img.mimeType } as any);
-    const res = await fetch(`${cfg.serverUrl}/api/upload`, {
+    const res = await appFetch(`${cfg.serverUrl}/api/upload`, {
       method: 'POST',
       headers: { Authorization: `Bearer ${cfg.token}` },
       body: form,

@@ -63,25 +63,6 @@ const TABS = [
   { key: 'settings', label: '设置', icon: 'settings-outline', iconActive: 'settings' },
 ] as const;
 
-// Inside the Tauri shell, WKWebView enforces CORS and the hub sets no
-// (valid) CORS headers — swap the global fetch for the Rust-side http
-// plugin, which issues requests from native code and so is not subject to
-// CORS at all (tg 824). Native iOS/Android use RN's fetch directly and
-// never hit this path.
-//
-// Timing note for future readers: the dynamic import is fire-and-forget,
-// so the swap lands a microtask after module eval. Any request issued
-// before it resolves would still use the CORS-bound WKWebView fetch — in
-// practice the import settles during boot, well before the login screen is
-// interactive. api.ts always calls the bare global `fetch` (it never
-// captures a reference), so once this assignment runs every later call
-// routes through the plugin.
-if ((globalThis as any).__TAURI_INTERNALS__) {
-  import('@tauri-apps/plugin-http').then(m => {
-    (globalThis as any).fetch = m.fetch;
-  });
-}
-
 export default function App() {
   // One-time cleanup of attachment caches written before the download fix.
   // Versions before it wrote HTTP error bodies to the real filename, and a

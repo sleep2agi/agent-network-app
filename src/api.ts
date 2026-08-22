@@ -1,3 +1,5 @@
+import { appFetch } from './app-fetch';
+
 // Thin CommHub API client. The app talks to the same hub the dashboard
 // proxies (status / tasks / messages); auth is the network token sent
 // as a Bearer header. Server URL + token live in app state (Settings).
@@ -59,7 +61,7 @@ import { classifyLoginFailure, type LoginFailureKind } from './login-flow';
 async function get<T>(cfg: HubConfig, path: string): Promise<T> {
   try {
     const res = await withTimeout(signal =>
-      fetch(`${cfg.serverUrl}${path}`, { headers: headers(cfg), signal }),
+      appFetch(`${cfg.serverUrl}${path}`, { headers: headers(cfg), signal }),
     );
     if (!res.ok) throw new Error(`HTTP ${res.status} on ${path}`);
     const data = (await res.json()) as T;
@@ -155,7 +157,7 @@ export const fetchScheduledRuns = (cfg: HubConfig, scheduleId: string) => {
 };
 
 async function scheduledWrite<T>(cfg: HubConfig, path: string, method: string, body?: unknown): Promise<T> {
-  const res = await withTimeout(signal => fetch(`${cfg.serverUrl}${path}`, {
+  const res = await withTimeout(signal => appFetch(`${cfg.serverUrl}${path}`, {
     method,
     headers: headers(cfg),
     signal,
@@ -331,7 +333,7 @@ export const putNodeAvatar = async (
 ): Promise<PutAvatarResult> => {
   try {
     const res = await withTimeout(signal =>
-      fetch(`${cfg.serverUrl}/api/nodes/${encodeURIComponent(ref)}/avatar`, {
+      appFetch(`${cfg.serverUrl}/api/nodes/${encodeURIComponent(ref)}/avatar`, {
         method: 'PUT',
         headers: headers(cfg),
         signal,
@@ -434,7 +436,7 @@ export const fetchTaskEvents = async (
     if (cfg.networkId) q.set('network_id', cfg.networkId);
     const res = await withTimeout(signal =>
       // NB: hub path uses underscore — see comment above.
-      fetch(`${cfg.serverUrl}/api/task_events?${q}`, { headers: headers(cfg), signal }),
+      appFetch(`${cfg.serverUrl}/api/task_events?${q}`, { headers: headers(cfg), signal }),
     );
     if (res.status === 404 || res.status === 501) {
       return { ok: false, unconfirmed: true, error: TASK_EVENTS_NEEDS_UPGRADE };
@@ -484,7 +486,7 @@ export const fetchMessages = (cfg: HubConfig, limit: number) =>
 export const fetchNetworkId = async (cfg: HubConfig): Promise<string | undefined> => {
   try {
     const res = await withTimeout(signal =>
-      fetch(`${cfg.serverUrl}/api/auth/me`, { headers: headers(cfg), signal }),
+      appFetch(`${cfg.serverUrl}/api/auth/me`, { headers: headers(cfg), signal }),
     );
     const d = await res.json();
     const cur = d?.current_network;
@@ -512,7 +514,7 @@ export const sendTask = async (
 ) => {
   const networkId = cfg.networkId ?? (await fetchNetworkId(cfg));
   const res = await withTimeout(signal =>
-    fetch(`${cfg.serverUrl}/api/task`, {
+    appFetch(`${cfg.serverUrl}/api/task`, {
       method: 'POST',
       headers: headers(cfg),
       signal,
@@ -565,7 +567,7 @@ export const fetchHostSupervisors = async (cfg: HubConfig): Promise<HostSupervis
   const NEEDS_UPGRADE = '当前 hub 未包含 /api/host-supervisors API，需升级到 commhub-server@0.9.0-preview.8 以上';
   try {
     const res = await withTimeout(signal =>
-      fetch(`${cfg.serverUrl}/api/host-supervisors${qs}`, { headers: headers(cfg), signal }),
+      appFetch(`${cfg.serverUrl}/api/host-supervisors${qs}`, { headers: headers(cfg), signal }),
     );
     if (res.status === 404 || res.status === 501) {
       return { ok: false, unconfirmed: true, error: NEEDS_UPGRADE };
@@ -721,7 +723,7 @@ export const createNode = async (cfg: HubConfig, req: CreateNodeRequest): Promis
       params: { name: 'create_node', arguments: args },
     };
     const res = await withTimeout(signal =>
-      fetch(`${cfg.serverUrl}/mcp`, {
+      appFetch(`${cfg.serverUrl}/mcp`, {
         method: 'POST',
         headers: {
           ...headers(cfg),
@@ -774,7 +776,7 @@ export const createNode = async (cfg: HubConfig, req: CreateNodeRequest): Promis
 export const fetchServerVersion = async (cfg: HubConfig): Promise<string | undefined> => {
   try {
     const res = await withTimeout(signal =>
-      fetch(`${cfg.serverUrl}/api/version`, { headers: headers(cfg), signal }),
+      appFetch(`${cfg.serverUrl}/api/version`, { headers: headers(cfg), signal }),
     );
     const text = await res.text();
     const m = text.match(/CommHub MCP Server v([^\s]+)/i);
@@ -793,7 +795,7 @@ export const login = async (
 ): Promise<{ ok: true; cfg: HubConfig } | { ok: false; error: string; kind: LoginFailureKind }> => {
   try {
     const res = await withTimeout(signal =>
-      fetch(`${serverUrl}/api/auth/login`, {
+      appFetch(`${serverUrl}/api/auth/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         signal,
