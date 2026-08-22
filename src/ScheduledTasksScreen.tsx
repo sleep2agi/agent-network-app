@@ -4,7 +4,6 @@ import {
   ActivityIndicator,
   Alert,
   Modal,
-  Platform,
   Pressable,
   RefreshControl,
   ScrollView,
@@ -60,17 +59,6 @@ function describe(spec: HubScheduleSpec, timezone: string) {
 }
 
 const describeMisfire = (policy?: HubMisfirePolicy) => policy === 'skip' ? '错过后跳过' : '错过后补跑一次';
-
-const confirmScheduleCancellation = (name: string, onConfirm: () => void) => {
-  if (Platform.OS === 'web' && typeof globalThis.confirm === 'function') {
-    if (globalThis.confirm(`取消计划？\n\n${name}`)) onConfirm();
-    return;
-  }
-  Alert.alert('取消计划？', name, [
-    { text: '返回', style: 'cancel' },
-    { text: '取消计划', style: 'destructive', onPress: onConfirm },
-  ]);
-};
 
 const EXTERNAL_KIND_LABEL: Record<HubExternalSchedule['kind'], string> = {
   cron: 'crontab', systemd: 'systemd', tmux: 'tmux', playwright: 'playwright', custom: '自定义',
@@ -134,6 +122,7 @@ export default function ScheduledTasksScreen({ cfg }: { cfg: HubConfig }) {
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState<HubScheduledTask | null>(null);
   const [history, setHistory] = useState<{ title: string; runs: HubScheduledRun[] } | null>(null);
+  const [cancelCandidate, setCancelCandidate] = useState<HubScheduledTask | null>(null);
   const [tab, setTab] = useState<'hub' | 'node'>('hub');
   const [external, setExternal] = useState<HubNodeExternalSchedules[]>([]);
   const [externalLoaded, setExternalLoaded] = useState(false);
@@ -295,7 +284,7 @@ export default function ScheduledTasksScreen({ cfg }: { cfg: HubConfig }) {
                 {availableActions.includes('toggle') && <Pressable disabled={busy} style={[styles.action, busy && styles.actionDisabled]} onPress={() => act(row, 'toggle')}><Text style={styles.actionText}>{row.status === 'active' ? '暂停' : '恢复'}</Text></Pressable>}
                 {availableActions.includes('run') && <Pressable disabled={busy} style={[styles.action, busy && styles.actionDisabled]} onPress={() => act(row, 'run')}><Text style={styles.actionText}>立即执行</Text></Pressable>}
                 <Pressable disabled={busy} style={[styles.action, busy && styles.actionDisabled]} onPress={() => act(row, 'history')}><Text style={styles.actionText}>记录</Text></Pressable>
-                {availableActions.includes('cancel') && <Pressable disabled={busy} style={[styles.action, styles.danger, busy && styles.actionDisabled]} onPress={() => confirmScheduleCancellation(row.name, () => void act(row, 'cancel'))}><Text style={styles.dangerText}>取消</Text></Pressable>}
+                {availableActions.includes('cancel') && <Pressable disabled={busy} style={[styles.action, styles.danger, busy && styles.actionDisabled]} onPress={() => setCancelCandidate(row)}><Text style={styles.dangerText}>取消</Text></Pressable>}
               </View>
             </View>
             );
@@ -315,6 +304,16 @@ export default function ScheduledTasksScreen({ cfg }: { cfg: HubConfig }) {
         }}
       />
       <HistoryModal value={history} onClose={() => setHistory(null)} />
+      <CancelScheduleModal
+        value={cancelCandidate}
+        busy={busy}
+        onClose={() => setCancelCandidate(null)}
+        onConfirm={() => {
+          const row = cancelCandidate;
+          setCancelCandidate(null);
+          if (row) void act(row, 'cancel');
+        }}
+      />
       <CronEditModal
         value={cronEdit}
         busy={busy}
@@ -416,6 +415,27 @@ function HistoryModal({ value, onClose }: { value: { title: string; runs: HubSch
   return <Modal visible={!!value} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}><View style={s.modalRoot}><View style={s.modalHeader}><Pressable onPress={onClose}><Text style={s.link}>关闭</Text></Pressable><Text style={s.modalTitle}>{value?.title || '执行记录'}</Text><View style={{ width: 40 }} /></View><ScrollView contentContainerStyle={s.form}>{value?.runs.length ? value.runs.map(run => <View key={run.run_id} style={s.run}><View><Text style={s.cardTitle}>{run.status}</Text><Text style={s.meta}>{fmt(run.scheduled_for)}</Text></View><Text style={s.runTask}>{run.task_id?.slice(0, 10) || run.error_code || '—'}</Text></View>) : <Text style={s.muted}>暂无执行记录</Text>}</ScrollView></View></Modal>;
 }
 
+function CancelScheduleModal({ value, busy, onClose, onConfirm }: {
+  value: HubScheduledTask | null;
+  busy: boolean;
+  onClose: () => void;
+  onConfirm: () => void;
+}) {
+  const s = useMemo(makeStyles, [value]);
+  return <Modal transparent visible={!!value} animationType="fade" onRequestClose={onClose}>
+    <View style={s.confirmOverlay}>
+      <View style={s.confirmCard}>
+        <Text style={s.confirmTitle}>取消计划？</Text>
+        <Text style={s.confirmMessage}>{value?.name}</Text>
+        <View style={s.confirmActions}>
+          <Pressable disabled={busy} style={[s.confirmButton, busy && s.actionDisabled]} onPress={onClose}><Text style={s.actionText}>返回</Text></Pressable>
+          <Pressable disabled={busy} style={[s.confirmButton, s.confirmDanger, busy && s.actionDisabled]} onPress={onConfirm}><Text style={s.dangerText}>取消计划</Text></Pressable>
+        </View>
+      </View>
+    </View>
+  </Modal>;
+}
+
 function CronEditModal({ value, busy, onClose, onSubmit }: {
   value: { node: HubNodeExternalSchedules; schedule: HubExternalSchedule } | null;
   busy: boolean;
@@ -481,4 +501,11 @@ function makeStyles() { return StyleSheet.create({
   linkDisabled: { opacity: 0.4 },
   intentBadge: { color: colors.accent, fontSize: 11, marginTop: spacing.sm },
   actionDisabled: { opacity: 0.4 },
+  confirmOverlay: { flex: 1, backgroundColor: '#00000099', alignItems: 'center', justifyContent: 'center', padding: spacing.xl },
+  confirmCard: { width: '100%', maxWidth: 420, backgroundColor: colors.card, borderColor: colors.border, borderWidth: 1, borderRadius: 14, padding: spacing.xl },
+  confirmTitle: { color: colors.text, fontSize: 18, fontWeight: '700' },
+  confirmMessage: { color: colors.textSecondary, fontSize: 14, marginTop: spacing.md },
+  confirmActions: { flexDirection: 'row', justifyContent: 'flex-end', gap: spacing.sm, marginTop: spacing.xl },
+  confirmButton: { borderWidth: 1, borderColor: colors.border, borderRadius: 8, paddingHorizontal: 16, paddingVertical: 9 },
+  confirmDanger: { borderColor: `${colors.failed}70` },
 }); }
