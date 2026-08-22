@@ -403,7 +403,7 @@ function DesktopWorkspace({ cfg, screen, setScreen, onLogout }: {
         <Text style={desktopStyles.railVersion}>v{APP_VERSION}</Text>
       </View>
       <View style={desktopStyles.conversations}>
-        <AgentsScreen cfg={cfg} compact selectedAlias={screen.name === 'chat' ? screen.alias : undefined} pinnedAliases={pinnedAliases} onTogglePin={togglePin} onOpenChatWindow={alias => { void openChatWindow(alias); }} onOpenChat={alias => setScreen({ name: 'chat', alias })} onOpenPicker={() => setScreen({ name: 'picker' })} onOpenNodeDetail={alias => setScreen({ name: 'nodeDetail', alias })} />
+        <AgentsScreen cfg={cfg} compact selectedAlias={screen.name === 'chat' ? screen.alias : undefined} pinnedAliases={pinnedAliases} onTogglePin={togglePin} onOpenChatWindow={alias => { void saveConfig(cfg).then(() => openChatWindow(alias)); }} onOpenChat={alias => setScreen({ name: 'chat', alias })} onOpenPicker={() => setScreen({ name: 'picker' })} onOpenNodeDetail={alias => setScreen({ name: 'nodeDetail', alias })} />
       </View>
       <View style={desktopStyles.content}>{content}</View>
     </View>
