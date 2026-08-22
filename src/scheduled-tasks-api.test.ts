@@ -95,6 +95,10 @@ ck('mobile cards edit only active or paused schedules and prefill every mutable 
 ck('mobile edit uses full update API and refreshes authoritative data on revision conflict',
   screen.includes('if (editing) await updateScheduledTask') && screen.includes("e.code === 'revision_conflict'") &&
   screen.includes('已刷新最新内容，请重新编辑'));
+ck('web desktop cancellation uses a real confirm dialog while native keeps Alert fallback',
+  screen.includes("Platform.OS === 'web'") && screen.includes("typeof globalThis.confirm === 'function'") &&
+  screen.includes('globalThis.confirm(`取消计划？\\n\\n${name}`)') && screen.includes("style: 'cancel'") &&
+  screen.includes("confirmScheduleCancellation(row.name, () => void act(row, 'cancel'))"));
 
 // ── RFC-036 节点外部计划 ────────────────────────────────────────────────
 

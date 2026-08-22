@@ -4,6 +4,7 @@ import {
   ActivityIndicator,
   Alert,
   Modal,
+  Platform,
   Pressable,
   RefreshControl,
   ScrollView,
@@ -59,6 +60,17 @@ function describe(spec: HubScheduleSpec, timezone: string) {
 }
 
 const describeMisfire = (policy?: HubMisfirePolicy) => policy === 'skip' ? '错过后跳过' : '错过后补跑一次';
+
+const confirmScheduleCancellation = (name: string, onConfirm: () => void) => {
+  if (Platform.OS === 'web' && typeof globalThis.confirm === 'function') {
+    if (globalThis.confirm(`取消计划？\n\n${name}`)) onConfirm();
+    return;
+  }
+  Alert.alert('取消计划？', name, [
+    { text: '返回', style: 'cancel' },
+    { text: '取消计划', style: 'destructive', onPress: onConfirm },
+  ]);
+};
 
 const EXTERNAL_KIND_LABEL: Record<HubExternalSchedule['kind'], string> = {
   cron: 'crontab', systemd: 'systemd', tmux: 'tmux', playwright: 'playwright', custom: '自定义',
@@ -283,7 +295,7 @@ export default function ScheduledTasksScreen({ cfg }: { cfg: HubConfig }) {
                 {availableActions.includes('toggle') && <Pressable disabled={busy} style={[styles.action, busy && styles.actionDisabled]} onPress={() => act(row, 'toggle')}><Text style={styles.actionText}>{row.status === 'active' ? '暂停' : '恢复'}</Text></Pressable>}
                 {availableActions.includes('run') && <Pressable disabled={busy} style={[styles.action, busy && styles.actionDisabled]} onPress={() => act(row, 'run')}><Text style={styles.actionText}>立即执行</Text></Pressable>}
                 <Pressable disabled={busy} style={[styles.action, busy && styles.actionDisabled]} onPress={() => act(row, 'history')}><Text style={styles.actionText}>记录</Text></Pressable>
-                {availableActions.includes('cancel') && <Pressable disabled={busy} style={[styles.action, styles.danger, busy && styles.actionDisabled]} onPress={() => Alert.alert('取消计划？', row.name, [{ text: '返回' }, { text: '取消计划', style: 'destructive', onPress: () => void act(row, 'cancel') }])}><Text style={styles.dangerText}>取消</Text></Pressable>}
+                {availableActions.includes('cancel') && <Pressable disabled={busy} style={[styles.action, styles.danger, busy && styles.actionDisabled]} onPress={() => confirmScheduleCancellation(row.name, () => void act(row, 'cancel'))}><Text style={styles.dangerText}>取消</Text></Pressable>}
               </View>
             </View>
             );
