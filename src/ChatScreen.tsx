@@ -18,6 +18,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import AliasAvatar from './AliasAvatar';
 import AuthedThumb, { AttachmentFile, AuthedVideo, mimeFromName } from './AuthedThumb';
+import AuthedWebThumb from './AuthedWebThumb';
 import { fetchStatus, fetchTasks, sendTask, HubConfig, HubTask, Session, TaskAttachment } from './api';
 import { outboxAdd, outboxForAlias, outboxMarkFailed, outboxMarkPending, outboxRemove } from './outbox';
 import {
@@ -372,8 +373,16 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
   const renderAttachment = (a: AttachmentView) =>
     a.isImage && a.uri && !a.needsAuth ? (
       <Pressable key={a.key} onPress={() => setViewerUri(a.uri!)}>
-        <Image source={{ uri: a.uri }} style={styles.thumb} resizeMode="cover" />
+        <Image source={{ uri: a.uri }} style={styles.thumb} resizeMode="contain" />
       </Pressable>
+    ) : a.isImage && a.needsAuth && Platform.OS === 'web' && !!(globalThis as any).__TAURI_INTERNALS__ ? (
+      <AuthedWebThumb
+        key={a.key}
+        uri={a.uri!}
+        name={a.name}
+        token={cfg.token}
+        onPress={objectUrl => setViewerUri(objectUrl)}
+      />
     ) : a.isImage && a.needsAuth && Platform.OS !== 'web' ? (
       <AuthedThumb
         key={a.key}
