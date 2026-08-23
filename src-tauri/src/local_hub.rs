@@ -886,8 +886,13 @@ pub fn packaged_smoke() -> Result<(), String> {
             }))
             .send()
             .map_err(|error| error.to_string())?;
-        if !report.status().is_success() {
-            return Err(format!("public report_status returned {}", report.status()));
+        let report_status = report.status();
+        let report_body = report.text().map_err(|error| error.to_string())?;
+        if !report_status.is_success()
+            || report_body.contains("network_token_required")
+            || report_body.contains("\"isError\":true")
+        {
+            return Err(format!("public report_status returned {report_status}"));
         }
         let status: serde_json::Value = client
             .get(format!("{endpoint}/api/status"))
