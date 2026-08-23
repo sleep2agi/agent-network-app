@@ -167,8 +167,14 @@ jobs:
           set -euo pipefail
           APP=$(find "$RUNNER_TEMP/AgentNetwork.xcarchive/Products/Applications" -maxdepth 1 -name '*.app' -print -quit)
           [ -n "$APP" ] || { echo "::error::Archive contains no application"; exit 1; }
-          codesign -dvv "$APP" 2> "$RUNNER_TEMP/archive-codesign.txt"
-          grep -F 'Authority=Apple Distribution:' "$RUNNER_TEMP/archive-codesign.txt"
+          codesign --verify --deep --strict "$APP"
+          codesign -d --verbose=4 "$APP" 2> "$RUNNER_TEMP/archive-codesign.txt"
+          grep -F "TeamIdentifier=$APPLE_TEAM_ID" "$RUNNER_TEMP/archive-codesign.txt"
+          signing_identity=$(/usr/libexec/PlistBuddy -c 'Print :ApplicationProperties:SigningIdentity' "$RUNNER_TEMP/AgentNetwork.xcarchive/Info.plist")
+          case "$signing_identity" in
+            "Apple Distribution:"*) ;;
+            *) echo "::error::Archive signing identity is not Apple Distribution"; exit 1 ;;
+          esac
 
           PROFILE="$APP/embedded.mobileprovision"
           [ -f "$PROFILE" ] || { echo "::error::Archive has no embedded provisioning profile"; exit 1; }

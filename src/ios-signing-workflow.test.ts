@@ -10,7 +10,7 @@ const checks: Array<[string, boolean]> = [
   ['archive manually selects Apple Distribution with the ephemeral profile', workflow.includes('CODE_SIGN_STYLE=Manual') && workflow.includes('CODE_SIGN_IDENTITY="Apple Distribution"') && workflow.includes('PROVISIONING_PROFILE_SPECIFIER=')],
   ['provisioning uses reviewed App Store Connect credentials', workflow.includes('-authenticationKeyPath "$ASC_KEY_PATH"') && signingScript.includes("certificateType: 'IOS_DISTRIBUTION'") && signingScript.includes("profileType: 'IOS_APP_STORE'")],
   ['ephemeral signing assets are always revoked and removed', workflow.includes('if: ${{ always() }}') && signingScript.includes("api('DELETE', `/profiles/") && signingScript.includes("api('DELETE', `/certificates/")],
-  ['archive authority is verified before export', workflow.indexOf("grep -F 'Authority=Apple Distribution:'") < workflow.indexOf('xcodebuild -exportArchive')],
+  ['archive distribution identity and team are verified before export', workflow.indexOf("Print :ApplicationProperties:SigningIdentity") < workflow.indexOf('xcodebuild -exportArchive') && workflow.includes('TeamIdentifier=$APPLE_TEAM_ID')],
   ['App Store profile must not contain registered devices', workflow.includes("Print :ProvisionedDevices") && workflow.includes('expected App Store distribution')],
   ['archive disables debugger entitlement', workflow.includes("Print :Entitlements:get-task-allow") && workflow.includes('= "false"')],
   ['archive application identifier is team plus bundle id', workflow.includes('test "$application_id" = "$APPLE_TEAM_ID.$BUNDLE_ID"')],
