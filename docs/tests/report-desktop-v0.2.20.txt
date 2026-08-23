@@ -1,0 +1,10 @@
+Desktop v0.2.20 — agent hover feedback
+
+- Hovering a desktop agent row adds a subtle themed shadow and surface tint.
+- The corresponding avatar receives a small accent-colored lift shadow.
+- Only the row under the pointer is highlighted; leaving it clears the state.
+- Mobile rows and click/right-click behavior are unchanged.
+
+Verification:
+- Docker: bun run test
+- Docker: bun run typecheck
