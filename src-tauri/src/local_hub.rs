@@ -318,8 +318,27 @@ fn existing_local_session() -> Result<Option<ProfileSessionOutput>, String> {
 }
 
 fn bootstrap(endpoint: &str, database_existed: bool) -> Result<ProfileSessionOutput, String> {
-    if let Some(session) = existing_local_session()? {
-        return Ok(session);
+    if database_existed {
+        if let Some(session) = existing_local_session()? {
+            if session.server_url == endpoint {
+                return Ok(session);
+            }
+            // A saved port can become occupied between launches. Preserve the
+            // immutable profile and native token, but route it to the actual
+            // loopback endpoint selected for this process.
+            let input = ProfileSessionInput {
+                profile_id: Some(session.profile_id),
+                server_url: endpoint.into(),
+                token: session.token,
+                network_id: session.network_id,
+                username: Some(session.username),
+                display_name: session.display_name,
+            };
+            let raw = save_desktop_profile_unlocked(
+                serde_json::to_string(&input).map_err(|error| error.to_string())?,
+            )?;
+            return serde_json::from_str(&raw).map_err(|error| error.to_string());
+        }
     }
     let password_entry = keyring::Entry::new(SESSION_SERVICE, LOCAL_PASSWORD_ACCOUNT)
         .map_err(|error| error.to_string())?;

@@ -39,6 +39,8 @@ Docker gates
 Security/storage assertions
 - Bind address is fixed to 127.0.0.1.
 - Port is selected only from 9200..9299; an occupied port is never killed.
+- If the saved port is occupied, the immutable local profile and native token
+  are atomically retargeted to the selected fallback loopback port.
 - Bootstrap password is randomly generated and saved only via native keyring.
 - Token is saved through the existing native profile credential store.
 - Child environment removes development-open and legacy master-token variables.

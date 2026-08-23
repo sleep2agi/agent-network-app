@@ -9,6 +9,8 @@ const checks: Array<[string, boolean]> = [
   ['first run offers recommended local workspace', app.includes('开始使用（本地）')],
   ['first run retains explicit remote-server path', app.includes('连接已有服务器')],
   ['saved local profile starts before workspace restore', app.includes("stored?.profileId === LOCAL_HUB_PROFILE_ID") && app.includes('await startLocalHub()')],
+  ['local profile follows a fallback loopback port without changing identity', rust.includes('if session.server_url == endpoint') && rust.includes('profile_id: Some(session.profile_id)') && rust.includes('server_url: endpoint.into()')],
+  ['missing local database does not reuse a stale session', rust.includes('if database_existed {\n        if let Some(session) = existing_local_session()?')],
   ['settings exposes local Hub status card', settings.includes('testID="local-hub-settings-card"')],
   ['settings exposes restart, stop and logs', settings.includes('restartLocalHub()') && settings.includes('stopLocalHub()') && settings.includes('openLocalHubLogs()')],
   ['settings exposes explicit backup and confirmed delete', settings.includes('backupLocalHubData()') && settings.includes('deleteLocalHubData()') && settings.includes("localDeleteText !== '删除本地数据'")],
