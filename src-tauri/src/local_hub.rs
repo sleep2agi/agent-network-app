@@ -786,6 +786,71 @@ pub fn restart_local_hub() -> Result<String, String> {
     start_local_hub()
 }
 
+/// Headless acceptance path for the exact packaged desktop executable.
+/// It is intentionally gated by both a private flag (handled in main.rs) and
+/// an environment marker so an ordinary user cannot trigger it accidentally.
+/// Tokens/passwords are compared in memory and never printed.
+pub fn packaged_smoke() -> Result<(), String> {
+    if std::env::var("ANET_PACKAGED_SMOKE").as_deref() != Ok("1") {
+        return Err("packaged smoke requires ANET_PACKAGED_SMOKE=1".into());
+    }
+    let run = || -> Result<(), String> {
+        let first_raw = start_local_hub()?;
+        let first: serde_json::Value =
+            serde_json::from_str(&first_raw).map_err(|error| error.to_string())?;
+        let endpoint = first["endpoint"]
+            .as_str()
+            .ok_or_else(|| "first start omitted endpoint".to_string())?;
+        let first_session = first["session"]
+            .as_object()
+            .ok_or_else(|| "first start omitted session".to_string())?;
+        let token = first_session
+            .get("token")
+            .and_then(|value| value.as_str())
+            .ok_or_else(|| "first start omitted token".to_string())?;
+        let profile_id = first_session
+            .get("profileId")
+            .and_then(|value| value.as_str())
+            .ok_or_else(|| "first start omitted profile id".to_string())?;
+        if profile_id != LOCAL_PROFILE_ID || !endpoint.starts_with("http://127.0.0.1:") {
+            return Err("local identity or loopback endpoint contract mismatch".into());
+        }
+        let client = reqwest::blocking::Client::new();
+        for route in ["/api/auth/me", "/api/status"] {
+            let response = client
+                .get(format!("{endpoint}{route}"))
+                .bearer_auth(token)
+                .send()
+                .map_err(|error| error.to_string())?;
+            if !response.status().is_success() {
+                return Err(format!("public API smoke {route} returned {}", response.status()));
+            }
+        }
+        stop_local_hub_inner()?;
+
+        let second_raw = start_local_hub()?;
+        let second: serde_json::Value =
+            serde_json::from_str(&second_raw).map_err(|error| error.to_string())?;
+        let second_session = second["session"]
+            .as_object()
+            .ok_or_else(|| "restart omitted session".to_string())?;
+        if second["endpoint"].as_str() != Some(endpoint)
+            || second_session.get("profileId").and_then(|value| value.as_str())
+                != Some(profile_id)
+            || second_session.get("token").and_then(|value| value.as_str()) != Some(token)
+        {
+            return Err("restart did not preserve endpoint/profile/credential".into());
+        }
+        if !local_root()?.join("data").join("commhub.db").is_file() {
+            return Err("restart persistence database is missing".into());
+        }
+        Ok(())
+    };
+    let result = run();
+    let stopped = stop_local_hub_inner();
+    result.and(stopped)
+}
+
 #[tauri::command]
 pub fn open_local_hub_logs() -> Result<(), String> {
     let path = local_root()?.join("logs");

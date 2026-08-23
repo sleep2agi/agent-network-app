@@ -727,3 +727,7 @@ pub fn run() {
         .expect("error while running tauri application");
     let _ = local_hub::stop_local_hub_inner();
 }
+
+pub fn run_packaged_local_hub_smoke() -> Result<(), String> {
+    local_hub::packaged_smoke()
+}

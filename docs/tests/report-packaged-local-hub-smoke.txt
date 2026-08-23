@@ -1,0 +1,24 @@
+Packaged local Hub smoke gate
+Date: 2026-08-24
+
+Scope
+- Hidden packaged-binary smoke entrypoint starts the bundled CommHub.
+- It authenticates through the generated local session and calls the public
+  /api/auth/me and /api/status endpoints.
+- It stops and restarts the Hub, then verifies the endpoint, profile, token,
+  and SQLite database persist.
+- The desktop release workflow runs this entrypoint with an isolated home on
+  both macOS and Windows before signing and publishing.
+- Workflow output is checked for known credential markers.
+
+Docker results
+- Bun application suite: 32 passed, 0 failed.
+- Rust local_hub suite: 8 passed, 0 failed.
+- git diff --check: passed.
+
+Notes
+- The Docker Rust fixture supplies ignored placeholder frontend, sidecar, and
+  icon inputs required by tauri::generate_context!; they are not release
+  artifacts and were removed after the test.
+- The decisive packaged-binary run remains the signed macOS/Windows release
+  workflow gate introduced by this change.
