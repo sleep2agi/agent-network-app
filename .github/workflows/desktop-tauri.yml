@@ -51,7 +51,7 @@ jobs:
       - name: Build (unsigned)
         # This validation workflow deliberately has no updater signing key.
         # Disable updater archives here; signed Release builds keep them on.
-        run: npx tauri build --bundles app,dmg --config '{"bundle":{"createUpdaterArtifacts":false}}'
+        run: npx tauri build --bundles app,dmg --config .github/tauri.unsigned.conf.json
 
       - name: Stage artifacts
         run: |
@@ -104,7 +104,7 @@ jobs:
       - name: Build (unsigned)
         # nsis = 安装器 .exe；msi = WiX 安装包。两个都要，因为分发方式不同：
         # nsis 体积小、适合直接给人；msi 适合 IT 批量部署。
-        run: npx tauri build --bundles nsis,msi --config '{"bundle":{"createUpdaterArtifacts":false}}'
+        run: npx tauri build --bundles nsis,msi --config .github/tauri.unsigned.conf.json
 
       - name: Stage artifacts
         # 用 bash 而不是默认的 pwsh：windows runner 自带 git-bash，
