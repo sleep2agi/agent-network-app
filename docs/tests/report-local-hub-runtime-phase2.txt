@@ -5,6 +5,7 @@ Candidate: feat/local-hub-runtime (based on main a4089ccb)
 Scope
 - Supervise the pinned bundled CommHub sidecar from the desktop process.
 - Offer zero-configuration local first run and restore it on cold start.
+- Report preparing, starting, and backup/migration progress on first run.
 - Store local data under ~/.anet/app/local-hub and credentials in the native keyring.
 - Expose local Hub status, endpoint, version, restart/stop, and logs in Settings.
 
@@ -60,5 +61,5 @@ Still required before closing issue #67 / public release
 - Exact macOS arm64 and Windows x64 CI build for this runtime commit.
 - Clean signed-package first-run and restart-persistence E2E on both platforms.
 - Signed-package migration/rollback E2E across two real Hub versions.
-- Explicit local-data backup/delete flow and uninstall retention documentation.
+- Signed-package verification of documented uninstall/reinstall retention.
 - Windows graceful shutdown verification (current fallback terminates the child).

@@ -44,7 +44,7 @@ import { APP_VERSION } from './src/version';
 import DesktopUpdatePrompt from './src/DesktopUpdatePrompt';
 import { loadPinnedChats, requestedChatAlias, requestedChatProfileId, savePinnedChats } from './src/desktop-chat-menu';
 import { openRememberedChatWindow, restoreDetachedChatWindows } from './src/desktop-chat-windows';
-import { LOCAL_HUB_PROFILE_ID, startLocalHub } from './src/local-hub';
+import { LOCAL_HUB_PROFILE_ID, localHubStatus, startLocalHub } from './src/local-hub';
 
 type Screen =
   | { name: 'login' }
@@ -103,6 +103,7 @@ function AppRoot() {
   const [reauthProfile, setReauthProfile] = useState<Pick<HubProfile, 'profileId' | 'serverUrl' | 'username' | 'displayName'> | null>(null);
   const [showRemoteLogin, setShowRemoteLogin] = useState(false);
   const [localHubStarting, setLocalHubStarting] = useState(false);
+  const [localHubStage, setLocalHubStage] = useState<'preparing' | 'starting' | 'migrating' | null>(null);
   const [localHubError, setLocalHubError] = useState<string | null>(null);
   const initialChat = useMemo(() => requestedChatAlias(), []);
   const initialChatProfile = useMemo(() => requestedChatProfileId(), []);
@@ -291,11 +292,16 @@ function AppRoot() {
         tauriDesktop && !reauthProfile && !showRemoteLogin ? (
           <FirstRunScreen
             busy={localHubStarting}
+            stage={localHubStage}
             error={localHubError}
             onStartLocal={async () => {
               setLocalHubStarting(true);
+              setLocalHubStage('preparing');
               setLocalHubError(null);
               try {
+                const status = await localHubStatus();
+                setLocalHubStage(status.requiresMigration ? 'migrating' : 'starting');
+                await new Promise(resolve => setTimeout(resolve, 0));
                 const local = await startLocalHub();
                 if (!local.session) throw new Error(local.error || '本地工作区启动后没有返回会话');
                 await hydrateProfileLocalState(local.session);
@@ -306,6 +312,7 @@ function AppRoot() {
                 setLocalHubError(error instanceof Error ? error.message : String(error));
               } finally {
                 setLocalHubStarting(false);
+                setLocalHubStage(null);
               }
             }}
             onRemote={() => setShowRemoteLogin(true)}
@@ -443,8 +450,9 @@ function AppRoot() {
   );
 }
 
-function FirstRunScreen({ busy, error, onStartLocal, onRemote }: {
+function FirstRunScreen({ busy, stage, error, onStartLocal, onRemote }: {
   busy: boolean;
+  stage: 'preparing' | 'starting' | 'migrating' | null;
   error: string | null;
   onStartLocal: () => Promise<void>;
   onRemote: () => void;
@@ -462,7 +470,12 @@ function FirstRunScreen({ busy, error, onStartLocal, onRemote }: {
           style={[firstRunStyles.primary, busy && firstRunStyles.disabled]}
           onPress={() => { void onStartLocal(); }}
         >
-          {busy ? <ActivityIndicator color="#fff" /> : <Text style={firstRunStyles.primaryText}>开始使用（本地）</Text>}
+          {busy ? (
+            <View style={firstRunStyles.busyRow} testID={`local-hub-stage-${stage ?? 'preparing'}`}>
+              <ActivityIndicator color="#fff" />
+              <Text style={firstRunStyles.primaryText}>{stage === 'migrating' ? '正在备份并迁移…' : stage === 'starting' ? '正在启动本地服务…' : '正在准备本地工作区…'}</Text>
+            </View>
+          ) : <Text style={firstRunStyles.primaryText}>开始使用（本地）</Text>}
         </Pressable>
         <Pressable accessibilityRole="button" disabled={busy} style={firstRunStyles.secondary} onPress={onRemote}>
           <Text style={firstRunStyles.secondaryText}>连接已有服务器</Text>
@@ -482,6 +495,7 @@ const firstRunStyles = StyleSheet.create({
   primary: { height: 46, borderRadius: 10, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.accent },
   disabled: { opacity: 0.6 },
   primaryText: { color: '#fff', fontSize: 15, fontWeight: '700' },
+  busyRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   secondary: { height: 42, alignItems: 'center', justifyContent: 'center' },
   secondaryText: { color: colors.text, fontSize: 14, fontWeight: '600' },
 });

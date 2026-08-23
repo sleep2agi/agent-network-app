@@ -8,6 +8,7 @@ const rust = fs.readFileSync(new URL('../src-tauri/src/local_hub.rs', import.met
 const checks: Array<[string, boolean]> = [
   ['first run offers recommended local workspace', app.includes('开始使用（本地）')],
   ['first run retains explicit remote-server path', app.includes('连接已有服务器')],
+  ['first run reports preparing, starting and migrating stages', app.includes('正在准备本地工作区') && app.includes('正在启动本地服务') && app.includes('正在备份并迁移') && app.includes('status.requiresMigration')],
   ['saved local profile starts before workspace restore', app.includes("stored?.profileId === LOCAL_HUB_PROFILE_ID") && app.includes('await startLocalHub()')],
   ['local profile follows a fallback loopback port without changing identity', rust.includes('if session.server_url == endpoint') && rust.includes('profile_id: Some(session.profile_id)') && rust.includes('server_url: endpoint.into()')],
   ['missing local database does not reuse a stale session', rust.includes('if database_existed {\n        if let Some(session) = existing_local_session()?')],

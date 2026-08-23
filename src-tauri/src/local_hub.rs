@@ -53,6 +53,7 @@ struct LocalHubResult {
     session: Option<ProfileSessionOutput>,
     error: Option<String>,
     logs_path: String,
+    requires_migration: bool,
 }
 
 #[derive(Deserialize)]
@@ -412,6 +413,7 @@ fn running_result(
         logs_path: local_root()
             .map(|root| root.join("logs").display().to_string())
             .unwrap_or_default(),
+        requires_migration: false,
     }
 }
 
@@ -550,6 +552,7 @@ pub fn start_local_hub() -> Result<String, String> {
                 session,
                 error: None,
                 logs_path: logs_dir.display().to_string(),
+                requires_migration: false,
             };
             return serde_json::to_string(&result).map_err(|error| error.to_string());
         }
@@ -718,22 +721,24 @@ pub fn local_hub_status() -> Result<String, String> {
                 state: "error".into(),
                 endpoint: config.endpoint,
                 port: config.port,
-                hub_version: config.hub_version,
+                hub_version: config.hub_version.clone(),
                 pid: None,
                 session: None,
                 error: Some(format!("local Hub exited with {status}")),
                 logs_path: local_root()?.join("logs").display().to_string(),
+                requires_migration: config.hub_version != EXPECTED_HUB_VERSION,
             },
         },
         (_, Some(config)) => LocalHubResult {
             state: "stopped".into(),
             endpoint: config.endpoint,
             port: config.port,
-            hub_version: config.hub_version,
+            hub_version: config.hub_version.clone(),
             pid: None,
             session: None,
             error: None,
             logs_path: local_root()?.join("logs").display().to_string(),
+            requires_migration: config.hub_version != EXPECTED_HUB_VERSION,
         },
         _ => LocalHubResult {
             state: "not_provisioned".into(),
@@ -744,6 +749,7 @@ pub fn local_hub_status() -> Result<String, String> {
             session: None,
             error: None,
             logs_path: local_root()?.join("logs").display().to_string(),
+            requires_migration: false,
         },
     };
     serde_json::to_string(&result).map_err(|error| error.to_string())

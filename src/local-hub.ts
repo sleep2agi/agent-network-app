@@ -11,6 +11,7 @@ export interface LocalHubResult {
   session?: HubConfig | null;
   error?: string | null;
   logsPath: string;
+  requiresMigration: boolean;
 }
 
 const invokeLocalHub = async (command: string): Promise<LocalHubResult> => {
