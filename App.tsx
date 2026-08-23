@@ -405,7 +405,15 @@ function DesktopWorkspace({ cfg, screen, setScreen, onLogout }: {
     <View style={desktopStyles.shell}>
       <View style={desktopStyles.rail}>
         <View style={desktopStyles.railBrand}>
-          <Image source={require('./assets/icon.png')} style={desktopStyles.railBrandImage} resizeMode="cover" />
+          {themeMode() === 'light' ? (
+            <Image
+              source={require('./assets/android-icon-monochrome.png')}
+              style={desktopStyles.railBrandImageLight}
+              resizeMode="contain"
+            />
+          ) : (
+            <Image source={require('./assets/icon.png')} style={desktopStyles.railBrandImage} resizeMode="cover" />
+          )}
         </View>
         <View style={desktopStyles.railTabs}>
           {DESKTOP_MAIN_TABS.map(tab => (
@@ -454,8 +462,19 @@ function serverSectionForScreen(screen: Screen): ServerSection {
 const makeDesktopStyles = () => StyleSheet.create({
   shell: { flex: 1, flexDirection: 'row', backgroundColor: colors.bg },
   rail: { width: 58, backgroundColor: themeMode() === 'light' ? '#f0f1f3' : colors.inputBg, borderRightWidth: 1, borderRightColor: colors.border, alignItems: 'center', paddingVertical: 12 },
-  railBrand: { width: 38, height: 38, borderRadius: 10, overflow: 'hidden', alignItems: 'center', justifyContent: 'center' },
+  railBrand: {
+    width: 38,
+    height: 38,
+    borderRadius: 11,
+    overflow: 'hidden',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: themeMode() === 'light' ? '#e5f5f6' : 'transparent',
+    borderWidth: themeMode() === 'light' ? 1 : 0,
+    borderColor: themeMode() === 'light' ? '#c8e7e9' : 'transparent',
+  },
   railBrandImage: { width: 38, height: 38 },
+  railBrandImageLight: { width: 28, height: 28, tintColor: colors.accent },
   railTabs: { flex: 1, paddingTop: 20, gap: 6 },
   railButton: { width: 38, height: 38, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
   railButtonActive: { backgroundColor: themeMode() === 'light' ? '#dde2e7' : colors.card },

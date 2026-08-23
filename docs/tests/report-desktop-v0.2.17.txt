@@ -1,0 +1,11 @@
+Desktop v0.2.17 — light rail brand treatment
+
+- Light mode no longer places the dark square application artwork by itself
+  on the pale navigation rail.
+- It uses the existing monochrome network mark, tinted with the light-theme
+  accent, on a subtle bordered cyan surface.
+- Dark mode retains the full application artwork.
+
+Verification:
+- Docker: bun run test
+- Docker: bun run typecheck
