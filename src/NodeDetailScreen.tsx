@@ -2,9 +2,9 @@
 //
 // SCOPE (per 通信龙 71ee862d + d349e514 V1 decision):
 //   Health card: alias + status chip + updated_at + current task preview +
-//   team + server + avatar. NO config panel (V2 — depends on hub API
-//   enumeration that's a separate parallel task). NO log stream (row 6).
-//   NO edit / lifecycle actions.
+//   team + server + avatar. V2 progressively adds masked config facts and
+//   lifecycle controls when GET /api/nodes supplies an authoritative node_id.
+//   Session-only aliases remain read-only. Logs stay in the Server workspace.
 //
 // TASK vs NODE distinction (author-厘清 → 通信龙 5a8783bd 认为镜像镜镜):
 //   task = one dispatched task's status/result/reply
@@ -46,12 +46,12 @@
 // verification bullet).
 
 import { useCallback, useEffect, useState } from 'react';
-import { ActivityIndicator, Pressable, ScrollView, Text, View } from 'react-native';
+import { ActivityIndicator, Modal, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 
 import AliasAvatar from './AliasAvatar';
 import AvatarEditSection from './AvatarEditSection';
 import { teamOf } from './agents-list';
-import { fetchStatus, type HubConfig, type Session } from './api';
+import { fetchHubNodes, fetchStatus, runNodeLifecycleAction, type HubConfig, type HubNode, type NodeLifecycleAction, type Session } from './api';
 import { styles } from './app-styles';
 import { colors, onThemeChange, spacing, statusColor } from './theme';
 import { formatTime } from './time';
@@ -93,6 +93,11 @@ export default function NodeDetailScreen({
   onBack: () => void;
 }) {
   const [state, setState] = useState<LoadState>({ kind: 'loading' });
+  const [node, setNode] = useState<HubNode | null>(null);
+  const [pendingAction, setPendingAction] = useState<NodeLifecycleAction | null>(null);
+  const [confirmAlias, setConfirmAlias] = useState('');
+  const [actionBusy, setActionBusy] = useState(false);
+  const [actionMessage, setActionMessage] = useState('');
   // Force re-render on theme switch. `styles` reassigns via live binding
   // (see app-styles.ts header) but child style props are captured at
   // render — a manual bump is how the sibling screens do it too.
@@ -103,6 +108,9 @@ export default function NodeDetailScreen({
     try {
       const data = await fetchStatus(cfg);
       const found = (data.sessions ?? []).find(s => s.alias === alias);
+      void fetchHubNodes(cfg)
+        .then(result => setNode((result.nodes ?? []).find(candidate => candidate.alias === alias) ?? null))
+        .catch(() => setNode(null));
       if (found) setState({ kind: 'ready', session: found });
       else setState(prev => (prev.kind === 'ready' ? prev : { kind: 'not_found' }));
       // If we previously had the session and it's now gone, we keep the
@@ -193,6 +201,23 @@ export default function NodeDetailScreen({
   const online = s.status !== 'offline';
   const chipColor = statusColor(s.status, online);
   const team = teamOf(s.alias);
+  const executeLifecycle = async () => {
+    if (!pendingAction || !node || actionBusy) return;
+    setActionBusy(true);
+    setActionMessage('');
+    const result = await runNodeLifecycleAction(cfg, pendingAction, node);
+    setActionBusy(false);
+    if (!result.ok) {
+      setActionMessage(result.error === 'node_busy_in_flight'
+        ? `节点仍有 ${result.in_flight_count ?? 1} 个处理中任务，未强制操作`
+        : result.error);
+      return;
+    }
+    setActionMessage(pendingAction === 'restart_node' ? '重启请求已提交' : pendingAction === 'stop_node' ? '停止请求已提交' : '删除请求已提交');
+    setPendingAction(null);
+    setConfirmAlias('');
+    void load();
+  };
 
   return (
     <View style={styles.root}>
@@ -236,6 +261,11 @@ export default function NodeDetailScreen({
           <InfoRow label="Server" value={s.server} />
           <InfoRow label="最后更新" value={formatTime(s.updated_at)} />
           <InfoRow label="Agent" value={s.agent} />
+          <InfoRow label="节点 ID" value={node?.node_id} />
+          <InfoRow label="生命周期" value={node?.lifecycle_state} />
+          <InfoRow label="模型" value={node?.config_snapshot?.model} />
+          <InfoRow label="角色" value={node?.config_snapshot?.role} />
+          <InfoRow label="配置版本" value={typeof node?.config_revision === 'number' ? String(node.config_revision) : undefined} />
         </View>
 
         {/* Current task preview — separate section, prose-style */}
@@ -255,7 +285,52 @@ export default function NodeDetailScreen({
             </Text>
           </View>
         </View>
+
+        <View style={{ paddingTop: spacing.xl }}>
+          <Text style={{ color: colors.textMuted, fontSize: 13, marginBottom: spacing.sm }}>节点操作</Text>
+          {node ? (
+            <View style={{ backgroundColor: colors.card, borderRadius: 12, padding: spacing.lg, gap: spacing.md }}>
+              <Text style={{ color: colors.textMuted, fontSize: 12, lineHeight: 18 }}>
+                操作通过公开 CommHub/anet 契约执行。停止不会删除配置；有任务处理中时服务器会拒绝，不会自动强制。
+              </Text>
+              <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm }}>
+                <Pressable style={styles.retryBtn} onPress={() => setPendingAction('restart_node')}><Text style={styles.retryBtnText}>重启节点</Text></Pressable>
+                <Pressable style={styles.retryBtn} onPress={() => setPendingAction('stop_node')}><Text style={styles.retryBtnText}>停止节点</Text></Pressable>
+                <Pressable style={[styles.retryBtn, { borderColor: colors.failed }]} onPress={() => setPendingAction('delete_node')}><Text style={{ color: colors.failed, fontWeight: '600' }}>删除节点</Text></Pressable>
+              </View>
+              {actionMessage ? <Text style={{ color: actionMessage.includes('已提交') ? colors.running : colors.failed, fontSize: 12 }}>{actionMessage}</Text> : null}
+            </View>
+          ) : (
+            <Text style={{ color: colors.textMuted, fontSize: 12 }}>该会话没有权威节点 ID，生命周期操作不可用。</Text>
+          )}
+        </View>
       </ScrollView>
+
+      <Modal transparent visible={!!pendingAction} onRequestClose={() => setPendingAction(null)} animationType="fade">
+        <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.55)', alignItems: 'center', justifyContent: 'center', padding: spacing.xl }}>
+          <View style={{ width: '100%', maxWidth: 420, borderRadius: 14, backgroundColor: colors.card, padding: spacing.xl, gap: spacing.md }}>
+            <Text style={{ color: colors.text, fontSize: 17, fontWeight: '700' }}>
+              {pendingAction === 'restart_node' ? '重启节点？' : pendingAction === 'stop_node' ? '停止节点？' : '删除节点？'}
+            </Text>
+            <Text style={{ color: colors.textSecondary, fontSize: 13, lineHeight: 19 }}>
+              {pendingAction === 'delete_node' ? `删除会撤销节点身份。请输入别名“${alias}”确认；节点配置默认备份保留。` : `目标：${alias}。请求提交后请等待节点状态刷新。`}
+            </Text>
+            {pendingAction === 'delete_node' ? (
+              <TextInput value={confirmAlias} onChangeText={setConfirmAlias} autoCapitalize="none" placeholder={alias} placeholderTextColor={colors.textMuted} style={{ color: colors.text, borderWidth: 1, borderColor: colors.border, borderRadius: 8, padding: spacing.md }} />
+            ) : null}
+            <View style={{ flexDirection: 'row', justifyContent: 'flex-end', gap: spacing.sm }}>
+              <Pressable style={styles.retryBtn} onPress={() => { setPendingAction(null); setConfirmAlias(''); }}><Text style={styles.retryBtnText}>返回</Text></Pressable>
+              <Pressable
+                style={[styles.retryBtn, pendingAction === 'delete_node' && { borderColor: colors.failed }, (actionBusy || (pendingAction === 'delete_node' && confirmAlias !== alias)) && { opacity: 0.4 }]}
+                disabled={actionBusy || (pendingAction === 'delete_node' && confirmAlias !== alias)}
+                onPress={() => void executeLifecycle()}
+              >
+                <Text style={{ color: pendingAction === 'delete_node' ? colors.failed : colors.accent, fontWeight: '600' }}>{actionBusy ? '提交中…' : '确认'}</Text>
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
