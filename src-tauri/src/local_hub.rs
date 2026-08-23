@@ -844,10 +844,10 @@ pub fn packaged_smoke() -> Result<(), String> {
             .and_then(|value| value.as_str())
             .ok_or_else(|| "first start omitted network id".to_string())?;
         let node_token_response = client
-            .post(format!("{endpoint}/api/auth/tokens"))
+            .post(format!("{endpoint}/api/auth/node-token"))
             .bearer_auth(token)
             .json(&serde_json::json!({
-                "name": "packaged-smoke-node",
+                "node_name": "packaged-smoke-node",
                 "network_id": network_id,
             }))
             .send()
