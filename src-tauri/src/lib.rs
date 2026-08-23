@@ -223,14 +223,76 @@ fn profile_index_path() -> Result<PathBuf, String> {
 
 fn read_profile_index() -> Result<ProfileIndex, String> {
     let path = profile_index_path()?;
+    read_profile_index_at(path)
+}
+
+fn read_profile_index_at(path: PathBuf) -> Result<ProfileIndex, String> {
     if !path.exists() {
         return Ok(ProfileIndex {
             schema_version: 1,
             ..Default::default()
         });
     }
-    let raw = fs::read_to_string(path).map_err(|error| error.to_string())?;
-    serde_json::from_str(&raw).map_err(|error| format!("profile registry is corrupt: {error}"))
+    let raw = fs::read_to_string(&path).map_err(|error| error.to_string())?;
+    match serde_json::from_str(&raw) {
+        Ok(index) => Ok(index),
+        Err(_) => {
+            // Never overwrite corrupt user state. Quarantine it beside the
+            // registry, then recover to an empty versioned index so the app
+            // can still open and the user can sign in again.
+            let backup = path.with_file_name(format!(
+                "index.corrupt-{}-{}.json",
+                std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .map_err(|error| error.to_string())?
+                    .as_secs(),
+                uuid::Uuid::new_v4()
+            ));
+            fs::rename(&path, backup).map_err(|error| error.to_string())?;
+            Ok(ProfileIndex {
+                schema_version: 1,
+                ..Default::default()
+            })
+        }
+    }
+}
+
+#[derive(Serialize)]
+struct StorageDiagnostics {
+    root: String,
+    schema_version: u32,
+    profile_count: usize,
+    active_profile_id: Option<String>,
+    corrupt_backups: Vec<String>,
+}
+
+#[tauri::command]
+fn desktop_storage_diagnostics() -> Result<String, String> {
+    let _guard = PROFILE_STORE
+        .lock()
+        .map_err(|_| "profile registry lock poisoned")?;
+    let root = app_root()?;
+    let index = read_profile_index()?;
+    let profiles_dir = root.join("profiles");
+    let mut corrupt_backups = if profiles_dir.exists() {
+        fs::read_dir(&profiles_dir)
+            .map_err(|error| error.to_string())?
+            .filter_map(Result::ok)
+            .filter_map(|entry| entry.file_name().into_string().ok())
+            .filter(|name| name.starts_with("index.corrupt-") && name.ends_with(".json"))
+            .collect::<Vec<_>>()
+    } else {
+        Vec::new()
+    };
+    corrupt_backups.sort();
+    serde_json::to_string_pretty(&StorageDiagnostics {
+        root: root.display().to_string(),
+        schema_version: index.schema_version,
+        profile_count: index.profiles.len(),
+        active_profile_id: index.active_profile_id,
+        corrupt_backups,
+    })
+    .map_err(|error| error.to_string())
 }
 
 fn write_private_atomic(path: &Path, value: &[u8]) -> Result<(), String> {
@@ -532,6 +594,39 @@ mod tests {
         assert!(!json.contains("password"));
         assert!(json.contains("profileId"));
     }
+
+    #[test]
+    fn corrupt_profile_registry_is_quarantined_without_data_loss() {
+        let fixture = std::env::temp_dir().join(format!(
+            "agent-network-profile-recovery-{}",
+            uuid::Uuid::new_v4()
+        ));
+        fs::create_dir_all(&fixture).expect("create recovery fixture");
+        let index_path = fixture.join("index.json");
+        let corrupt_bytes = b"{not-valid-json";
+        fs::write(&index_path, corrupt_bytes).expect("write corrupt registry");
+
+        let recovered = read_profile_index_at(index_path.clone()).expect("recover registry");
+        assert_eq!(recovered.schema_version, 1);
+        assert!(recovered.profiles.is_empty());
+        assert!(!index_path.exists());
+
+        let backups = fs::read_dir(&fixture)
+            .expect("read recovery fixture")
+            .filter_map(Result::ok)
+            .collect::<Vec<_>>();
+        assert_eq!(backups.len(), 1);
+        assert!(backups[0]
+            .file_name()
+            .to_string_lossy()
+            .starts_with("index.corrupt-"));
+        assert_eq!(
+            fs::read(backups[0].path()).expect("read backup"),
+            corrupt_bytes
+        );
+
+        fs::remove_dir_all(fixture).expect("remove recovery fixture");
+    }
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -549,6 +644,7 @@ pub fn run() {
             load_active_desktop_profile,
             write_desktop_profile_file,
             read_desktop_profile_file,
+            desktop_storage_diagnostics,
             start_network_event_stream,
             stop_network_event_stream,
         ])

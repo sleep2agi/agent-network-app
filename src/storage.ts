@@ -26,6 +26,14 @@ export interface HubProfileRegistry {
   profiles: HubProfile[];
 }
 
+export interface DesktopStorageDiagnostics {
+  root: string;
+  schema_version: number;
+  profile_count: number;
+  active_profile_id?: string | null;
+  corrupt_backups: string[];
+}
+
 const isTauriDesktop = (): boolean =>
   typeof globalThis !== 'undefined' && !!(globalThis as any).__TAURI_INTERNALS__;
 
@@ -119,6 +127,12 @@ export const removeHubProfile = async (profileId: string): Promise<void> => {
   }
   const { invoke } = await import('@tauri-apps/api/core');
   await invoke('remove_desktop_profile', { profileId });
+};
+
+export const getDesktopStorageDiagnostics = async (): Promise<DesktopStorageDiagnostics | null> => {
+  if (!isTauriDesktop()) return null;
+  const { invoke } = await import('@tauri-apps/api/core');
+  return JSON.parse(await invoke<string>('desktop_storage_diagnostics')) as DesktopStorageDiagnostics;
 };
 
 const THEME_KEY = 'theme_mode_v1';

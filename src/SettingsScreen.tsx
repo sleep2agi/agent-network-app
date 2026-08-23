@@ -1,7 +1,7 @@
 import { useEffect, useState, useSyncExternalStore } from 'react';
 import { ActivityIndicator, Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 import { HubConfig } from './api';
-import { HubProfile, listHubProfiles, removeHubProfile, saveThemeMode } from './storage';
+import { DesktopStorageDiagnostics, HubProfile, getDesktopStorageDiagnostics, listHubProfiles, removeHubProfile, saveThemeMode } from './storage';
 import { colors, onThemeChange, setThemeMode, spacing, themeMode } from './theme';
 import { APP_VERSION } from './version';
 import { appFetch } from './app-fetch';
@@ -32,10 +32,14 @@ export default function SettingsScreen({
   const [profiles, setProfiles] = useState<HubProfile[]>([]);
   const [removeTarget, setRemoveTarget] = useState<HubProfile | null>(null);
   const [profileError, setProfileError] = useState('');
+  const [storageDiagnostics, setStorageDiagnostics] = useState<DesktopStorageDiagnostics | null>(null);
   const update = useSyncExternalStore(subscribeDesktopUpdates, desktopUpdateSnapshot, desktopUpdateSnapshot);
 
   useEffect(() => {
-    void listHubProfiles().then(registry => setProfiles(registry.profiles)).catch(error => setProfileError(String(error)));
+    void Promise.all([listHubProfiles(), getDesktopStorageDiagnostics()]).then(([registry, diagnostics]) => {
+      setProfiles(registry.profiles);
+      setStorageDiagnostics(diagnostics);
+    }).catch(error => setProfileError(String(error)));
   }, [cfg.profileId]);
 
   useEffect(() => {
@@ -95,6 +99,12 @@ export default function SettingsScreen({
         </Pressable>
       </View>
       {profileError ? <Text style={styles.errorText}>{profileError}</Text> : null}
+      {storageDiagnostics ? (
+        <Text style={styles.storageHint} numberOfLines={2}>
+          本地数据：{storageDiagnostics.root} · {storageDiagnostics.profile_count} profiles
+          {storageDiagnostics.corrupt_backups.length ? ` · 已保留 ${storageDiagnostics.corrupt_backups.length} 个损坏备份` : ''}
+        </Text>
+      ) : null}
 
       <Text style={styles.sectionTitle}>外观</Text>
       <View style={styles.card}>
@@ -199,6 +209,7 @@ const makeStyles = () =>
   addText: { color: colors.accent, fontSize: 14, fontWeight: '600' },
   removeText: { color: colors.failed, fontSize: 12 },
   errorText: { color: colors.failed, fontSize: 12, marginTop: spacing.sm },
+  storageHint: { color: colors.textMuted, fontSize: 11, marginTop: spacing.sm },
   divider: { height: 1, backgroundColor: colors.border, marginLeft: spacing.lg },
   logoutBtn: {
     marginTop: spacing.xl,

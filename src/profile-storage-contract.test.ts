@@ -16,5 +16,6 @@ assert.ok(storage.includes("'cache/sessions.json'") && storage.includes("'outbox
 assert.ok(storage.includes("'preferences/avatars.json'"), 'avatar overrides are profile scoped');
 assert.ok(app.includes("workspaceKey = `${theme}:${cfg?.profileId"), 'workspace remounts on profile switch');
 assert.ok(app.includes('switchHubProfile(initialChatProfile)'), 'detached windows restore their pinned profile');
+assert.ok(rust.includes('index.corrupt-') && rust.includes('desktop_storage_diagnostics'), 'corrupt registry is quarantined and diagnosed');
 
-console.log('profile storage contract: 10 checks passed');
+console.log('profile storage contract: 11 checks passed');

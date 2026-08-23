@@ -1,0 +1,33 @@
+Agent Network desktop multi-Hub registry recovery
+Date: 2026-08-23
+Branch: feat/multihub-recovery
+
+Scope
+- Quarantine malformed profiles/index.json beside the registry as index.corrupt-*.json
+- Preserve the malformed file instead of overwriting or deleting user data
+- Recover to an empty schema-v1 registry so sign-in remains usable
+- Expose non-secret storage diagnostics in Settings: root, schema, profile count,
+  active profile id, and corrupt backup filenames
+- Keep credentials in the platform credential store; diagnostics never expose tokens or passwords
+
+Layer 1 — Docker TypeScript
+Command:
+  sg docker -c 'docker run --rm -v "$PWD":/app -w /app node:22-bookworm bash -lc "npm run typecheck"'
+Result: PASS
+
+Layer 2 — Docker unit/contract tests
+Command:
+  sg docker -c 'docker run --rm -v "$PWD":/app -w /app oven/bun:1.3.10 bun run test'
+Result: PASS — 26/26 test files
+Updated contract: src/profile-storage-contract.test.ts — 11/11 checks
+
+Layer 3 — Docker Rust/Tauri compile
+Command:
+  cargo check --locked in rust:1-bookworm with Tauri Linux build dependencies,
+  after the same frontend export/icon generation steps used by CI.
+Result: PASS
+
+Release gate
+- macOS and Windows native credential/recovery tests remain CI gates.
+- Real-app corrupt-registry recovery and two-Hub cold-start/revocation acceptance
+  are not claimed by this report.
