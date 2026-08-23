@@ -70,6 +70,7 @@ jobs:
         run: |
           cargo test --locked profile_registry_metadata_never_serializes_secrets -- --nocapture
           cargo test --locked corrupt_profile_registry_is_quarantined_without_data_loss -- --nocapture
+          cargo test --locked revoked_profile_marker_is_isolated -- --nocapture
 
       - name: Decode App Store Connect key
         if: runner.os == 'macOS'

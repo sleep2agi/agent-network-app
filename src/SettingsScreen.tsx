@@ -22,11 +22,13 @@ export default function SettingsScreen({
   onLogout,
   onAddAccount,
   onSwitchProfile,
+  onReauthProfile,
 }: {
   cfg: HubConfig;
   onLogout: () => void | Promise<void>;
   onAddAccount: () => void;
   onSwitchProfile: (profileId: string) => void | Promise<void>;
+  onReauthProfile: (profile: Pick<HubProfile, 'profileId' | 'serverUrl' | 'username' | 'displayName'>) => void;
 }) {
   const [me, setMe] = useState<Me>({});
   const [profiles, setProfiles] = useState<HubProfile[]>([]);
@@ -74,11 +76,15 @@ export default function SettingsScreen({
               <Pressable
                 accessibilityLabel={`切换到 ${profile.displayName || profile.username || profile.serverUrl}`}
                 style={({ pressed }) => [styles.profileRow, pressed && { opacity: 0.65 }]}
-                onPress={() => { if (!active) void Promise.resolve(onSwitchProfile(profile.profileId)).catch(error => setProfileError(String(error))); }}
+                onPress={() => {
+                  if (profile.requiresReauth) return onReauthProfile(profile);
+                  if (!active) void Promise.resolve(onSwitchProfile(profile.profileId)).catch(error => setProfileError(String(error)));
+                }}
               >
                 <View style={styles.profileCopy}>
                   <Text style={styles.profileTitle}>{profile.displayName || profile.username || 'Hub 账号'}{active ? ' · 当前' : ''}</Text>
                   <Text style={styles.profileMeta} numberOfLines={1}>{profile.serverUrl} · {profile.username || '未知用户'}{profile.networkId ? ` · ${profile.networkId}` : ''}</Text>
+                  {profile.requiresReauth ? <Text style={styles.reauthText}>需要重新登录 · 点击验证</Text> : null}
                 </View>
                 <Pressable accessibilityLabel={`移除 ${profile.username || profile.serverUrl}`} onPress={event => { event.stopPropagation(); setRemoveTarget(profile); }} hitSlop={8}>
                   <Text style={styles.removeText}>移除</Text>
@@ -208,6 +214,7 @@ const makeStyles = () =>
   profileMeta: { color: colors.textMuted, fontSize: 11, marginTop: 3 },
   addText: { color: colors.accent, fontSize: 14, fontWeight: '600' },
   removeText: { color: colors.failed, fontSize: 12 },
+  reauthText: { color: colors.failed, fontSize: 11, marginTop: 3 },
   errorText: { color: colors.failed, fontSize: 12, marginTop: spacing.sm },
   storageHint: { color: colors.textMuted, fontSize: 11, marginTop: spacing.sm },
   divider: { height: 1, backgroundColor: colors.border, marginLeft: spacing.lg },

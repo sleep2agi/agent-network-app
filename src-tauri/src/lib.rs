@@ -177,6 +177,8 @@ struct ProfileMetadata {
     username: String,
     network_id: Option<String>,
     display_name: Option<String>,
+    #[serde(default)]
+    requires_reauth: bool,
     created_at: u64,
     updated_at: u64,
 }
@@ -441,6 +443,7 @@ fn save_desktop_profile_unlocked(session_json: String) -> Result<String, String>
         username: input.username.unwrap_or_default(),
         network_id: input.network_id,
         display_name: input.display_name,
+        requires_reauth: false,
         created_at,
         updated_at: now,
     };
@@ -515,6 +518,30 @@ fn remove_desktop_profile(profile_id: String) -> Result<(), String> {
 }
 
 #[tauri::command]
+fn mark_desktop_profile_requires_reauth(profile_id: String, required: bool) -> Result<(), String> {
+    let _guard = PROFILE_STORE
+        .lock()
+        .map_err(|_| "profile registry lock poisoned")?;
+    let mut index = read_profile_index()?;
+    set_profile_requires_reauth(&mut index, &profile_id, required)?;
+    save_profile_index(&index)
+}
+
+fn set_profile_requires_reauth(
+    index: &mut ProfileIndex,
+    profile_id: &str,
+    required: bool,
+) -> Result<(), String> {
+    let profile = index
+        .profiles
+        .iter_mut()
+        .find(|profile| profile.profile_id == profile_id)
+        .ok_or_else(|| "profile not found".to_string())?;
+    profile.requires_reauth = required;
+    Ok(())
+}
+
+#[tauri::command]
 fn load_active_desktop_profile() -> Result<Option<String>, String> {
     let _guard = PROFILE_STORE
         .lock()
@@ -581,6 +608,7 @@ mod tests {
             username: "admin".into(),
             network_id: Some("net_test".into()),
             display_name: None,
+            requires_reauth: false,
             created_at: 1,
             updated_at: 2,
         };
@@ -627,6 +655,30 @@ mod tests {
 
         fs::remove_dir_all(fixture).expect("remove recovery fixture");
     }
+
+    #[test]
+    fn revoked_profile_marker_is_isolated() {
+        let make_profile = |profile_id: &str| ProfileMetadata {
+            profile_id: profile_id.into(),
+            server_url: format!("https://{profile_id}.example"),
+            username: "admin".into(),
+            network_id: None,
+            display_name: None,
+            requires_reauth: false,
+            created_at: 1,
+            updated_at: 1,
+        };
+        let mut index = ProfileIndex {
+            schema_version: 1,
+            active_profile_id: Some("profile-b".into()),
+            profiles: vec![make_profile("profile-a"), make_profile("profile-b")],
+        };
+
+        set_profile_requires_reauth(&mut index, "profile-b", true).expect("mark profile b");
+        assert!(!index.profiles[0].requires_reauth);
+        assert!(index.profiles[1].requires_reauth);
+        assert_eq!(index.active_profile_id.as_deref(), Some("profile-b"));
+    }
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -641,6 +693,7 @@ pub fn run() {
             list_desktop_profiles,
             switch_desktop_profile,
             remove_desktop_profile,
+            mark_desktop_profile_requires_reauth,
             load_active_desktop_profile,
             write_desktop_profile_file,
             read_desktop_profile_file,

@@ -35,7 +35,8 @@ import LogsScreen from './src/LogsScreen';
 import ScheduledTasksScreen from './src/ScheduledTasksScreen';
 import ConnectivityBanner from './src/ConnectivityBanner';
 import type { HostSupervisorDaemon } from './src/api';
-import { clearConfig, loadConfig, loadLocalAvatars, loadOutbox, loadThemeMode, onDesktopThemeStorageChange, removeHubProfile, saveConfig, saveLocalAvatars, saveOutbox, switchHubProfile } from './src/storage';
+import { clearConfig, listHubProfiles, loadConfig, loadLocalAvatars, loadOutbox, loadThemeMode, markHubProfileRequiresReauth, onDesktopThemeStorageChange, removeHubProfile, saveConfig, saveLocalAvatars, saveOutbox, switchHubProfile, type HubProfile } from './src/storage';
+import { clearProfileUnauthorized, onProfileUnauthorized } from './src/profile-auth-state';
 import { initOutbox } from './src/outbox';
 import { colors, onThemeChange, setThemeMode, spacing, themeMode } from './src/theme';
 import { styles } from './src/app-styles';
@@ -97,6 +98,7 @@ function AppRoot() {
   const [cfg, setCfg] = useState<HubConfig | null>(null);
   const [screen, setScreen] = useState<Screen>({ name: 'login' });
   const [booting, setBooting] = useState(true);
+  const [reauthProfile, setReauthProfile] = useState<Pick<HubProfile, 'profileId' | 'serverUrl' | 'username' | 'displayName'> | null>(null);
   const initialChat = useMemo(() => requestedChatAlias(), []);
   const initialChatProfile = useMemo(() => requestedChatProfileId(), []);
   // Keyed remount on theme switch: module-level styles were already
@@ -139,6 +141,22 @@ function AppRoot() {
     setScreen({ name: 'agents' });
     prefetchStatus(next);
   };
+
+  const requestProfileReauth = (profile: Pick<HubProfile, 'profileId' | 'serverUrl' | 'username' | 'displayName'>) => {
+    setReauthProfile(profile);
+    setScreen({ name: 'login' });
+  };
+
+  useEffect(() => onProfileUnauthorized(profileId => {
+    if (profileId !== cfg?.profileId) return;
+    void (async () => {
+      try {
+        await markHubProfileRequiresReauth(profileId);
+      } finally {
+        requestProfileReauth({ profileId, serverUrl: cfg.serverUrl, username: cfg.username ?? '', displayName: cfg.displayName });
+      }
+    })();
+  }), [cfg]);
 
   // Restore the saved session on cold start — login survives app kills.
   // Desktop credential-store failures are not treated as "no session": keep
@@ -235,7 +253,7 @@ function AppRoot() {
       <SafeAreaView key={workspaceKey} style={styles.root}>
         <StatusBar barStyle={theme === 'light' ? 'dark-content' : 'light-content'} backgroundColor={colors.bg} />
         <ConnectivityBanner />
-        <DesktopWorkspace cfg={cfg} screen={screen} setScreen={setScreen} onLogout={removeActiveProfile} onAddAccount={() => setScreen({ name: 'login' })} onSwitchProfile={activateProfile} />
+        <DesktopWorkspace cfg={cfg} screen={screen} setScreen={setScreen} onLogout={removeActiveProfile} onAddAccount={() => { setReauthProfile(null); setScreen({ name: 'login' }); }} onSwitchProfile={activateProfile} onReauthProfile={requestProfileReauth} />
       </SafeAreaView>
     );
   }
@@ -251,8 +269,19 @@ function AppRoot() {
       {screen.name !== 'login' && cfg ? <ConnectivityBanner /> : null}
       {screen.name === 'login' || !cfg ? (
         <LoginScreen
+          key={reauthProfile?.profileId ?? 'new-profile'}
+          initialProfile={reauthProfile}
+          onCancelReauth={reauthProfile ? async () => {
+            const registry = await listHubProfiles();
+            const fallback = registry.profiles.find(profile => profile.profileId !== reauthProfile.profileId && !profile.requiresReauth);
+            if (!fallback) throw new Error('没有其他可用账号，请重新验证当前账号');
+            setReauthProfile(null);
+            await activateProfile(fallback.profileId);
+          } : undefined}
           onLogin={async c => {
-            const saved = await saveConfig(c);
+            const saved = await saveConfig(reauthProfile ? { ...c, profileId: reauthProfile.profileId, displayName: reauthProfile.displayName } : c);
+            clearProfileUnauthorized(saved.profileId);
+            setReauthProfile(null);
             await hydrateProfileLocalState(saved);
             setCfg(saved);
             setScreen(initialChat ? { name: 'chat', alias: initialChat } : { name: 'agents' });
@@ -332,8 +361,9 @@ function AppRoot() {
               <SettingsScreen
                 cfg={cfg}
                 onLogout={removeActiveProfile}
-                onAddAccount={() => setScreen({ name: 'login' })}
+                onAddAccount={() => { setReauthProfile(null); setScreen({ name: 'login' }); }}
                 onSwitchProfile={activateProfile}
+                onReauthProfile={requestProfileReauth}
               />
             ) : (
               <AgentsScreen
@@ -374,13 +404,14 @@ const bootStyles = StyleSheet.create({
   title: { color: '#ffffff', fontSize: 20, fontWeight: '700', letterSpacing: 0.4, marginBottom: 8 },
 });
 
-function DesktopWorkspace({ cfg, screen, setScreen, onLogout, onAddAccount, onSwitchProfile }: {
+function DesktopWorkspace({ cfg, screen, setScreen, onLogout, onAddAccount, onSwitchProfile, onReauthProfile }: {
   cfg: HubConfig;
   screen: Screen;
   setScreen: (screen: Screen) => void;
   onLogout: () => void | Promise<void>;
   onAddAccount: () => void;
   onSwitchProfile: (profileId: string) => void | Promise<void>;
+  onReauthProfile: (profile: Pick<HubProfile, 'profileId' | 'serverUrl' | 'username' | 'displayName'>) => void;
 }) {
   // AppRoot is keyed by theme, so this component remounts after every theme
   // switch. Build desktop styles on that mount instead of freezing the dark
@@ -410,7 +441,7 @@ function DesktopWorkspace({ cfg, screen, setScreen, onLogout, onAddAccount, onSw
   : screen.name === 'server' ? <ServerScreen cfg={cfg} onOpenLogs={() => setScreen({ name: 'logs' })} />
   : screen.name === 'serverNodes' ? <AgentsScreen cfg={cfg} onOpenChat={alias => setScreen({ name: 'serverNodeDetail', alias })} onOpenPicker={() => setScreen({ name: 'picker' })} onOpenNodeDetail={alias => setScreen({ name: 'serverNodeDetail', alias })} />
   : screen.name === 'serverNodeDetail' ? <NodeDetailScreen cfg={cfg} alias={screen.alias} onBack={() => setScreen({ name: 'serverNodes' })} />
-  : screen.name === 'settings' ? <SettingsScreen cfg={cfg} onLogout={onLogout} onAddAccount={onAddAccount} onSwitchProfile={onSwitchProfile} />
+  : screen.name === 'settings' ? <SettingsScreen cfg={cfg} onLogout={onLogout} onAddAccount={onAddAccount} onSwitchProfile={onSwitchProfile} onReauthProfile={onReauthProfile} />
   : screen.name === 'taskDetail' ? <TaskDetailScreen cfg={cfg} taskId={screen.taskId} onBack={() => setScreen({ name: 'tasks' })} />
   : screen.name === 'nodeDetail' ? <NodeDetailScreen cfg={cfg} alias={screen.alias} onBack={() => setScreen({ name: 'agents' })} />
   : screen.name === 'logs' ? <LogsScreen cfg={cfg} onBack={() => setScreen({ name: 'server' })} />
@@ -510,9 +541,9 @@ const makeDesktopStyles = () => StyleSheet.create({
   emptyHint: { color: colors.textMuted, fontSize: 12 },
 });
 
-function LoginScreen({ onLogin }: { onLogin: (cfg: HubConfig) => Promise<void> }) {
-  const [serverUrl, setServerUrl] = useState('');
-  const [username, setUsername] = useState('');
+function LoginScreen({ onLogin, initialProfile, onCancelReauth }: { onLogin: (cfg: HubConfig) => Promise<void>; initialProfile?: Pick<HubProfile, 'profileId' | 'serverUrl' | 'username'> | null; onCancelReauth?: () => Promise<void> }) {
+  const [serverUrl, setServerUrl] = useState(initialProfile?.serverUrl ?? '');
+  const [username, setUsername] = useState(initialProfile?.username ?? '');
   const [password, setPassword] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
@@ -544,6 +575,7 @@ function LoginScreen({ onLogin }: { onLogin: (cfg: HubConfig) => Promise<void> }
   return (
     <View style={styles.loginWrap}>
       <Text style={styles.brand}>Agent Network</Text>
+      {initialProfile ? <Text style={styles.version}>登录已失效，请重新验证此账号；其他 Hub 不受影响</Text> : null}
       <TextInput
         style={styles.input}
         placeholder="服务器地址 (https://your-hub.example.com)"
@@ -600,6 +632,11 @@ function LoginScreen({ onLogin }: { onLogin: (cfg: HubConfig) => Promise<void> }
           <Text style={styles.buttonText}>登录</Text>
         )}
       </Pressable>
+      {onCancelReauth ? (
+        <Pressable onPress={() => { void onCancelReauth().catch(cancelError => setError(String(cancelError))); }}>
+          <Text style={styles.version}>暂不处理，切换其他账号</Text>
+        </Pressable>
+      ) : null}
       {/* Version on the login page so device screenshots are
           unambiguous about which build is installed (tg 692). */}
       <Text style={styles.version}>v{APP_VERSION}</Text>

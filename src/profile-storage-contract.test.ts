@@ -17,5 +17,6 @@ assert.ok(storage.includes("'preferences/avatars.json'"), 'avatar overrides are 
 assert.ok(app.includes("workspaceKey = `${theme}:${cfg?.profileId"), 'workspace remounts on profile switch');
 assert.ok(app.includes('switchHubProfile(initialChatProfile)'), 'detached windows restore their pinned profile');
 assert.ok(rust.includes('index.corrupt-') && rust.includes('desktop_storage_diagnostics'), 'corrupt registry is quarantined and diagnosed');
+assert.ok(rust.includes('mark_desktop_profile_requires_reauth') && app.includes('切换其他账号'), 'revoked profile is marked without trapping other profiles');
 
-console.log('profile storage contract: 11 checks passed');
+console.log('profile storage contract: 12 checks passed');
