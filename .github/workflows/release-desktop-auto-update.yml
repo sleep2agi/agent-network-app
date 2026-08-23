@@ -67,7 +67,9 @@ jobs:
         run: cargo test --locked desktop_session_round_trip_uses_native_store -- --nocapture
       - name: Verify profile registry excludes secrets
         working-directory: src-tauri
-        run: cargo test --locked profile_registry_metadata_never_serializes_secrets -- --nocapture
+        run: |
+          cargo test --locked profile_registry_metadata_never_serializes_secrets -- --nocapture
+          cargo test --locked corrupt_profile_registry_is_quarantined_without_data_loss -- --nocapture
 
       - name: Decode App Store Connect key
         if: runner.os == 'macOS'
