@@ -92,6 +92,14 @@ export interface HubNode {
   alias: string;
   node_name?: string | null;
   avatar_url?: string | null;
+  lifecycle_state?: string | null;
+  config_revision?: number | null;
+  config_snapshot?: {
+    model?: string | null;
+    role?: string | null;
+    channels?: unknown[];
+    flags?: Record<string, unknown>;
+  } | null;
 }
 
 /** GET /api/nodes — the registered-node list, used for avatar resolution.
@@ -707,6 +715,57 @@ function parseMcpToolResponse(rawText: string): ParsedMcp {
     return { kind: 'payload', payload: { ok: true, text } };
   }
 }
+
+export type NodeLifecycleAction = 'restart_node' | 'stop_node' | 'delete_node';
+
+export type NodeLifecycleResult =
+  | { ok: true; request_id?: string; update_id?: string; lifecycle_state?: string }
+  | { ok: false; error: string; in_flight_count?: number; unsupported?: true };
+
+/** Invoke only the public, audited CommHub lifecycle tools. The desktop app
+ * deliberately uses the same MCP contract as anet/dashboard; there is no
+ * app-only endpoint to drift from the CLI. */
+export const runNodeLifecycleAction = async (
+  cfg: HubConfig,
+  action: NodeLifecycleAction,
+  node: Pick<HubNode, 'node_id' | 'alias'>,
+  options: { force?: boolean; deleteConfig?: boolean } = {},
+): Promise<NodeLifecycleResult> => {
+  const networkId = cfg.networkId ?? (await fetchNetworkId(cfg));
+  const args = action === 'restart_node'
+    ? { node_id: node.node_id, ...(networkId ? { network_id: networkId } : {}) }
+    : action === 'stop_node'
+      ? { child_node_id: node.node_id, ...(networkId ? { network_id: networkId } : {}), ...(options.force ? { force: true } : {}) }
+      : {
+          child_node_id: node.node_id,
+          confirm_alias: node.alias,
+          ...(networkId ? { network_id: networkId } : {}),
+          ...(options.force ? { force: true } : {}),
+          ...(options.deleteConfig ? { delete_config: true } : {}),
+        };
+  try {
+    const res = await withTimeout(signal => appFetch(`${cfg.serverUrl}/mcp`, {
+      method: 'POST',
+      headers: {
+        ...headers(cfg),
+        Accept: 'application/json, text/event-stream',
+        'MCP-Protocol-Version': '2025-03-26',
+      },
+      signal,
+      body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name: action, arguments: args } }),
+    }));
+    if (res.status === 404 || res.status === 501) return { ok: false, unsupported: true, error: '当前 Hub 不支持节点生命周期操作，请先升级服务器' };
+    if (!res.ok) return { ok: false, error: `HTTP ${res.status}` };
+    const parsed = parseMcpToolResponse(await res.text());
+    if (parsed.kind === 'malformed') return { ok: false, unsupported: true, error: '当前 Hub 未返回兼容的节点生命周期响应' };
+    if (parsed.kind === 'jsonRpcError') return { ok: false, error: parsed.message };
+    const payload = parsed.payload as NodeLifecycleResult | null;
+    if (!payload || payload.ok === false) return payload ?? { ok: false, error: 'Hub 返回空响应' };
+    return payload;
+  } catch (error) {
+    return { ok: false, error: error instanceof Error ? error.message : String(error) };
+  }
+};
 
 export const createNode = async (cfg: HubConfig, req: CreateNodeRequest): Promise<CreateNodeResult> => {
   const networkId = req.network_id ?? cfg.networkId ?? (await fetchNetworkId(cfg));
