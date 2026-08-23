@@ -1,0 +1,11 @@
+Desktop v0.2.19 — desktop agent context menu
+
+- Agent-row right clicks are intercepted in the DOM capture phase before
+  WKWebView can display its native Reload menu.
+- The row is identified through a stable data attribute.
+- Only the application actions (pin/unpin and open in a new window) remain.
+- Left-click chat navigation is unchanged.
+
+Verification:
+- Docker: bun run test
+- Docker: bun run typecheck
