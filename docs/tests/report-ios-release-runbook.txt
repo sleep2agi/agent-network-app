@@ -6,9 +6,9 @@ iOS release runbook and workflow contract
   Connect API-key authentication.
 - `EXPO_USE_PRECOMPILED_MODULES=false` keeps native modules built from checkout.
 - `github.run_number` supplies a unique numeric `CFBundleVersion`.
-- Xcode automatic signing selects the archive identity; CI then fails closed
-  unless codesign reports Apple Distribution and the embedded profile is an
-  App Store profile without registered devices or get-task-allow.
+- CI creates an ephemeral Apple Distribution identity and IOS_APP_STORE profile
+  through the official API, signs manually, and then fails closed unless the
+  archive has no registered devices or get-task-allow.
 - The IPA artifact gate precedes the optional TestFlight upload.
 - The remote-Mac section documents a temporary keychain without exposing any
   repository credential values.

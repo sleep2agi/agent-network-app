@@ -5,10 +5,9 @@
   App Store (TestFlight) .ipa.
 
   - method = app-store  -> produces an .ipa suitable for TestFlight / App Store.
-  - signingStyle = automatic -> let Xcode manage signing. Combined with
-    `-allowProvisioningUpdates` and the App Store Connect API key on the archive
-    step, Xcode will create/download the App Store distribution provisioning
-    profile automatically (no manual profile/keychain dance).
+  - signingStyle is changed to manual in CI's temporary copy, where the
+    ephemeral IOS_APP_STORE profile and Apple Distribution identity are added.
+    The committed file remains a safe reusable base for local workflows.
   - teamID = the Apple Developer Team ID (from eas.json).
 
   NOTE: `destination = export` (default) writes the .ipa to disk; the workflow

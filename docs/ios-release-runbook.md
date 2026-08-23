@@ -29,10 +29,12 @@ Use `.github/workflows/ios-build.yml`.
 3. The reviewed `macos-signing` environment supplies the App Store Connect API
    key. Its deployment policy is main-only; never broaden it to arbitrary PR
    branches.
-4. Archive uses a generic iOS destination and automatic signing, with
-   `github.run_number` as `CURRENT_PROJECT_VERSION`. Do not also force
-   `CODE_SIGN_IDENTITY`: Xcode treats that as conflicting with automatic
-   signing. The next step verifies that Xcode selected Apple Distribution.
+4. The protected job creates an ephemeral Apple Distribution private key/CSR,
+   certificate, and `IOS_APP_STORE` profile through the App Store Connect API.
+   It imports the identity into a temporary keychain, then archives with manual
+   distribution signing and `github.run_number` as `CURRENT_PROJECT_VERSION`.
+   An `always()` cleanup revokes the temporary profile/certificate and removes
+   local key material.
 5. Before export, CI verifies the archive authority and embedded profile:
    no registered-device list, `get-task-allow=false`, and the expected
    team-qualified application identifier.
@@ -82,7 +84,9 @@ xcodebuild \
   -archivePath build/App.xcarchive \
   -allowProvisioningUpdates \
   DEVELOPMENT_TEAM=446BLT75JZ \
-  CODE_SIGN_STYLE=Automatic \
+  CODE_SIGN_STYLE=Manual \
+  'CODE_SIGN_IDENTITY=Apple Distribution' \
+  PROVISIONING_PROFILE_SPECIFIER='<EPHEMERAL_IOS_APP_STORE_PROFILE>' \
   CURRENT_PROJECT_VERSION=<UNIQUE_NUMERIC_BUILD> \
   clean archive
 
