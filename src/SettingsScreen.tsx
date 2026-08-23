@@ -6,6 +6,7 @@ import { colors, onThemeChange, setThemeMode, spacing, themeMode } from './theme
 import { APP_VERSION } from './version';
 import { appFetch } from './app-fetch';
 import { checkDesktopUpdate, desktopUpdateSnapshot, subscribeDesktopUpdates } from './desktop-updater';
+import { LOCAL_HUB_PROFILE_ID, localHubStatus, openLocalHubLogs, restartLocalHub, stopLocalHub, type LocalHubResult } from './local-hub';
 
 // Settings (Vincent tg 720): who am I, where am I connected, which
 // network, which build — and the one destructive action, logout,
@@ -35,6 +36,8 @@ export default function SettingsScreen({
   const [removeTarget, setRemoveTarget] = useState<HubProfile | null>(null);
   const [profileError, setProfileError] = useState('');
   const [storageDiagnostics, setStorageDiagnostics] = useState<DesktopStorageDiagnostics | null>(null);
+  const [localHub, setLocalHub] = useState<LocalHubResult | null>(null);
+  const [localHubBusy, setLocalHubBusy] = useState(false);
   const update = useSyncExternalStore(subscribeDesktopUpdates, desktopUpdateSnapshot, desktopUpdateSnapshot);
 
   useEffect(() => {
@@ -43,6 +46,11 @@ export default function SettingsScreen({
       setStorageDiagnostics(diagnostics);
     }).catch(error => setProfileError(String(error)));
   }, [cfg.profileId]);
+
+  useEffect(() => {
+    if (cfg.profileId !== LOCAL_HUB_PROFILE_ID && !profiles.some(profile => profile.profileId === LOCAL_HUB_PROFILE_ID)) return;
+    void localHubStatus().then(setLocalHub).catch(error => setProfileError(String(error)));
+  }, [cfg.profileId, profiles]);
 
   useEffect(() => {
     (async () => {
@@ -86,9 +94,11 @@ export default function SettingsScreen({
                   <Text style={styles.profileMeta} numberOfLines={1}>{profile.serverUrl} · {profile.username || '未知用户'}{profile.networkId ? ` · ${profile.networkId}` : ''}</Text>
                   {profile.requiresReauth ? <Text style={styles.reauthText}>需要重新登录 · 点击验证</Text> : null}
                 </View>
-                <Pressable accessibilityLabel={`移除 ${profile.username || profile.serverUrl}`} onPress={event => { event.stopPropagation(); setRemoveTarget(profile); }} hitSlop={8}>
-                  <Text style={styles.removeText}>移除</Text>
-                </Pressable>
+                {profile.profileId !== LOCAL_HUB_PROFILE_ID ? (
+                  <Pressable accessibilityLabel={`移除 ${profile.username || profile.serverUrl}`} onPress={event => { event.stopPropagation(); setRemoveTarget(profile); }} hitSlop={8}>
+                    <Text style={styles.removeText}>移除</Text>
+                  </Pressable>
+                ) : null}
               </Pressable>
             </View>
           );
@@ -110,6 +120,34 @@ export default function SettingsScreen({
           本地数据：{storageDiagnostics.root} · {storageDiagnostics.profile_count} profiles
           {storageDiagnostics.corrupt_backups.length ? ` · 已保留 ${storageDiagnostics.corrupt_backups.length} 个损坏备份` : ''}
         </Text>
+      ) : null}
+
+      {localHub ? (
+        <>
+          <Text style={styles.sectionTitle}>本地 Hub</Text>
+          <View style={styles.card} testID="local-hub-settings-card">
+            <Row label="状态" value={localHub.state === 'running' || localHub.state === 'running_external' ? '运行中' : localHub.state === 'error' ? '异常' : '已停止'} />
+            <Divider />
+            <Row label="地址" value={localHub.endpoint} />
+            <Divider />
+            <Row label="版本" value={localHub.hubVersion} />
+            {localHub.error ? <Text style={styles.localHubError}>{localHub.error}</Text> : null}
+            <Divider />
+            <View style={styles.localHubActions}>
+              <Pressable disabled={localHubBusy} style={styles.localHubButton} onPress={() => {
+                setLocalHubBusy(true);
+                void restartLocalHub().then(setLocalHub).catch(error => setProfileError(String(error))).finally(() => setLocalHubBusy(false));
+              }}><Text style={styles.addText}>{localHubBusy ? '处理中…' : '重新启动'}</Text></Pressable>
+              <Pressable disabled={localHubBusy || localHub.state === 'stopped'} style={styles.localHubButton} onPress={() => {
+                setLocalHubBusy(true);
+                void stopLocalHub().then(() => localHubStatus()).then(setLocalHub).catch(error => setProfileError(String(error))).finally(() => setLocalHubBusy(false));
+              }}><Text style={styles.rowValue}>停止</Text></Pressable>
+              <Pressable style={styles.localHubButton} onPress={() => {
+                void openLocalHubLogs().catch(error => setProfileError(String(error)));
+              }}><Text style={styles.rowValue}>打开日志</Text></Pressable>
+            </View>
+          </View>
+        </>
       ) : null}
 
       <Text style={styles.sectionTitle}>外观</Text>
@@ -139,12 +177,12 @@ export default function SettingsScreen({
         </Pressable>
       </View>
 
-      <Pressable
+      {cfg.profileId !== LOCAL_HUB_PROFILE_ID ? <Pressable
         style={({ pressed }) => [styles.logoutBtn, pressed && { opacity: 0.7 }]}
         onPress={onLogout}
       >
         <Text style={styles.logoutText}>移除当前账号</Text>
-      </Pressable>
+      </Pressable> : null}
 
       <Modal visible={!!removeTarget} transparent animationType="fade" onRequestClose={() => setRemoveTarget(null)}>
         <View style={styles.modalBackdrop}>
@@ -217,6 +255,9 @@ const makeStyles = () =>
   reauthText: { color: colors.failed, fontSize: 11, marginTop: 3 },
   errorText: { color: colors.failed, fontSize: 12, marginTop: spacing.sm },
   storageHint: { color: colors.textMuted, fontSize: 11, marginTop: spacing.sm },
+  localHubError: { color: colors.failed, fontSize: 12, paddingHorizontal: spacing.lg, paddingVertical: spacing.sm },
+  localHubActions: { flexDirection: 'row', justifyContent: 'flex-end', gap: spacing.sm, padding: spacing.md },
+  localHubButton: { borderWidth: 1, borderColor: colors.border, borderRadius: 8, paddingHorizontal: spacing.md, paddingVertical: spacing.sm },
   divider: { height: 1, backgroundColor: colors.border, marginLeft: spacing.lg },
   logoutBtn: {
     marginTop: spacing.xl,

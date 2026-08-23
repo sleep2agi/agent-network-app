@@ -3,6 +3,7 @@
 // CORS and the hub sets no CORS headers, so requests go through Rust.
 const SESSION_SERVICE: &str = "top.vansin.agentnetwork.desktop";
 const SESSION_ACCOUNT: &str = "active-hub-session";
+mod local_hub;
 
 #[cfg(windows)]
 use atomicwrites::{AllowOverwrite, AtomicFile};
@@ -201,7 +202,7 @@ struct ProfileSessionInput {
     display_name: Option<String>,
 }
 
-#[derive(Serialize)]
+#[derive(serde::Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 struct ProfileSessionOutput {
     profile_id: String,
@@ -495,6 +496,9 @@ fn switch_desktop_profile(profile_id: String) -> Result<String, String> {
 
 #[tauri::command]
 fn remove_desktop_profile(profile_id: String) -> Result<(), String> {
+    if local_hub::is_local_profile(&profile_id) {
+        return Err("local workspace cannot be removed as a normal account; use the explicit local-data reset flow".into());
+    }
     let _guard = PROFILE_STORE
         .lock()
         .map_err(|_| "profile registry lock poisoned")?;
@@ -700,7 +704,13 @@ pub fn run() {
             desktop_storage_diagnostics,
             start_network_event_stream,
             stop_network_event_stream,
+            local_hub::start_local_hub,
+            local_hub::local_hub_status,
+            local_hub::stop_local_hub,
+            local_hub::restart_local_hub,
+            local_hub::open_local_hub_logs,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
+    let _ = local_hub::stop_local_hub_inner();
 }
