@@ -133,7 +133,9 @@ jobs:
             "$binary" --smoke-multihub
           test -s "$smoke_root/.anet/app/local-hub/data/commhub.db"
           if grep -R -E 'local-hub-bootstrap-password|atok_|ntok_|utok_' \
-            "$smoke_root/.anet/app/local-hub/logs" "$smoke_root/.anet/app/smoke-hub-b/commhub.log"; then
+            "$smoke_root/.anet/app/local-hub/logs" \
+            "$smoke_root/.anet/app/smoke-hub-b/commhub.log" \
+            "$smoke_root/.anet/app/smoke-hub-c/commhub.log"; then
             echo "::error::Packaged Hub logs contain credential material"
             exit 1
           fi

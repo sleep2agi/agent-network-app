@@ -799,6 +799,8 @@ pub fn packaged_smoke() -> Result<(), String> {
         return Err("packaged smoke requires ANET_PACKAGED_SMOKE=1".into());
     }
     let run = || -> Result<(), String> {
+        let preferred_port_guard = TcpListener::bind(("127.0.0.1", PREFERRED_PORT))
+            .map_err(|error| format!("cannot reserve preferred smoke port: {error}"))?;
         let first_raw = start_local_hub()?;
         let first: serde_json::Value =
             serde_json::from_str(&first_raw).map_err(|error| error.to_string())?;
@@ -816,9 +818,13 @@ pub fn packaged_smoke() -> Result<(), String> {
             .get("profileId")
             .and_then(|value| value.as_str())
             .ok_or_else(|| "first start omitted profile id".to_string())?;
-        if profile_id != LOCAL_PROFILE_ID || !endpoint.starts_with("http://127.0.0.1:") {
+        if profile_id != LOCAL_PROFILE_ID
+            || !endpoint.starts_with("http://127.0.0.1:")
+            || first["port"].as_u64() == Some(PREFERRED_PORT.into())
+        {
             return Err("local identity or loopback endpoint contract mismatch".into());
         }
+        drop(preferred_port_guard);
         let client = reqwest::blocking::Client::new();
         for route in ["/api/auth/me", "/api/status"] {
             let response = client
@@ -887,13 +893,14 @@ fn start_isolated_smoke_hub(root: &Path, port: u16) -> Result<Child, String> {
 fn register_smoke_profile(
     endpoint: &str,
     profile_id: &str,
+    display_name: &str,
 ) -> Result<ProfileSessionOutput, String> {
     let response = reqwest::blocking::Client::new()
         .post(format!("{endpoint}/api/auth/register"))
         .json(&serde_json::json!({
             "username": "operator",
             "password": random_password(),
-            "display_name": "Smoke Hub B",
+            "display_name": display_name,
         }))
         .send()
         .map_err(|error| error.to_string())?;
@@ -912,7 +919,7 @@ fn register_smoke_profile(
             .ok_or_else(|| "Hub B registration omitted token".to_string())?,
         network_id: payload.network_id,
         username: Some("operator".into()),
-        display_name: Some("Smoke Hub B".into()),
+        display_name: Some(display_name.into()),
     };
     let raw = save_desktop_profile_unlocked(
         serde_json::to_string(&input).map_err(|error| error.to_string())?,
@@ -953,7 +960,12 @@ pub fn packaged_multihub_cold_start_verify() -> Result<(), String> {
         .iter()
         .find(|profile| profile.profile_id == "smoke-remote-b")
         .ok_or_else(|| "cold-start child omitted Hub B".to_string())?;
-    for profile in [profile_a, profile_b] {
+    let profile_c = index
+        .profiles
+        .iter()
+        .find(|profile| profile.profile_id == "smoke-remote-c")
+        .ok_or_else(|| "cold-start child omitted Hub C".to_string())?;
+    for profile in [profile_a, profile_b, profile_c] {
         let session = output_for(profile)?;
         assert_authenticated(&session.server_url, &session.token)?;
         let windows = fs::read_to_string(profile_data_path(&profile.profile_id, "windows.json")?)
@@ -964,13 +976,14 @@ pub fn packaged_multihub_cold_start_verify() -> Result<(), String> {
     }
     if !profile_data_path(LOCAL_PROFILE_ID, "outbox.json")?.is_file()
         || profile_data_path("smoke-remote-b", "outbox.json")?.exists()
+        || profile_data_path("smoke-remote-c", "outbox.json")?.exists()
     {
         return Err("cold-start child crossed profile outboxes".into());
     }
     Ok(())
 }
 
-/// Exact packaged-executable acceptance for #66. This uses two real secured
+/// Exact packaged-executable acceptance for #66/#67. This uses three secured
 /// bundled CommHub processes and the platform credential backend. It never
 /// prints passwords or tokens and is gated by the same private CI marker as
 /// the local-Hub smoke.
@@ -979,15 +992,24 @@ pub fn packaged_multihub_smoke() -> Result<(), String> {
         return Err("packaged multi-Hub smoke requires ANET_PACKAGED_SMOKE=1".into());
     }
     const PROFILE_B: &str = "smoke-remote-b";
+    const PROFILE_C: &str = "smoke-remote-c";
     let second_root = app_root()?.join("smoke-hub-b");
+    let third_root = app_root()?.join("smoke-hub-c");
     let listener = TcpListener::bind(("127.0.0.1", 0)).map_err(|error| error.to_string())?;
     let second_port = listener
         .local_addr()
         .map_err(|error| error.to_string())?
         .port();
     drop(listener);
+    let listener = TcpListener::bind(("127.0.0.1", 0)).map_err(|error| error.to_string())?;
+    let third_port = listener
+        .local_addr()
+        .map_err(|error| error.to_string())?
+        .port();
+    drop(listener);
 
     let mut second: Option<Child> = None;
+    let mut third: Option<Child> = None;
     let mut run = || -> Result<(), String> {
         let first_raw = start_local_hub()?;
         let first: LocalHubResult =
@@ -1000,24 +1022,28 @@ pub fn packaged_multihub_smoke() -> Result<(), String> {
         let child = start_isolated_smoke_hub(&second_root, second_port)?;
         second = Some(child);
         let endpoint_b = endpoint(second_port);
-        let profile_b = register_smoke_profile(&endpoint_b, PROFILE_B)?;
+        let profile_b = register_smoke_profile(&endpoint_b, PROFILE_B, "Smoke Hub B")?;
+        third = Some(start_isolated_smoke_hub(&third_root, third_port)?);
+        let endpoint_c = endpoint(third_port);
+        let profile_c = register_smoke_profile(&endpoint_c, PROFILE_C, "Smoke Hub C")?;
 
         let index = read_profile_index()?;
-        if index.profiles.len() != 2
+        if index.profiles.len() != 3
             || !index
                 .profiles
                 .iter()
                 .any(|p| p.profile_id == LOCAL_PROFILE_ID)
             || !index.profiles.iter().any(|p| p.profile_id == PROFILE_B)
+            || !index.profiles.iter().any(|p| p.profile_id == PROFILE_C)
         {
-            return Err("cold-start registry did not retain both profiles".into());
+            return Err("cold-start registry did not retain all three profiles".into());
         }
-        for expected in [&profile_a, &profile_b, &profile_a] {
+        for expected in [&profile_a, &profile_b, &profile_c, &profile_a] {
             let actual_raw = switch_desktop_profile(expected.profile_id.clone())?;
             let actual: ProfileSessionOutput =
                 serde_json::from_str(&actual_raw).map_err(|error| error.to_string())?;
             if actual.server_url != expected.server_url || actual.token != expected.token {
-                return Err("A -> B -> A switch crossed profile credentials".into());
+                return Err("A -> B -> C -> A switch crossed profile credentials".into());
             }
             assert_authenticated(&actual.server_url, &actual.token)?;
         }
@@ -1026,16 +1052,18 @@ pub fn packaged_multihub_smoke() -> Result<(), String> {
             &profile_data_path(LOCAL_PROFILE_ID, "outbox.json")?,
             br#"[{"id":"offline-a","alias":"worker","content":"A only","createdAt":1,"state":"failed"}]"#,
         )?;
-        for profile_id in [LOCAL_PROFILE_ID, PROFILE_B] {
+        for profile_id in [LOCAL_PROFILE_ID, PROFILE_B, PROFILE_C] {
             write_private_atomic(
                 &profile_data_path(profile_id, "windows.json")?,
                 br#"[{"alias":"worker"}]"#,
             )?;
         }
         if profile_data_path(PROFILE_B, "outbox.json")?.exists()
+            || profile_data_path(PROFILE_C, "outbox.json")?.exists()
             || !profile_data_path(LOCAL_PROFILE_ID, "outbox.json")?.is_file()
             || !profile_data_path(LOCAL_PROFILE_ID, "windows.json")?.is_file()
             || !profile_data_path(PROFILE_B, "windows.json")?.is_file()
+            || !profile_data_path(PROFILE_C, "windows.json")?.is_file()
         {
             return Err("profile-scoped outbox/window isolation failed".into());
         }
@@ -1045,14 +1073,18 @@ pub fn packaged_multihub_smoke() -> Result<(), String> {
             .status()
             .map_err(|error| format!("cannot launch cold-start verifier: {error}"))?;
         if !cold_start.success() {
-            return Err("fresh packaged process failed the two-Hub cold-start matrix".into());
+            return Err("fresh packaged process failed the three-Hub cold-start matrix".into());
         }
 
         stop_local_hub_inner()?;
         if let Some(child) = second.as_mut() {
             stop_child_gracefully(child)?;
         }
+        if let Some(child) = third.as_mut() {
+            stop_child_gracefully(child)?;
+        }
         second = Some(start_isolated_smoke_hub(&second_root, second_port)?);
+        third = Some(start_isolated_smoke_hub(&third_root, third_port)?);
         let restarted_a: serde_json::Value =
             serde_json::from_str(&start_local_hub()?).map_err(|error| error.to_string())?;
         if restarted_a["session"]["token"].as_str() != Some(profile_a.token.as_str()) {
@@ -1060,6 +1092,7 @@ pub fn packaged_multihub_smoke() -> Result<(), String> {
         }
         assert_authenticated(&endpoint_a, &profile_a.token)?;
         assert_authenticated(&endpoint_b, &profile_b.token)?;
+        assert_authenticated(&endpoint_c, &profile_c.token)?;
 
         let client = reqwest::blocking::Client::new();
         let tokens: serde_json::Value = client
@@ -1096,6 +1129,7 @@ pub fn packaged_multihub_smoke() -> Result<(), String> {
         }
         mark_desktop_profile_requires_reauth(PROFILE_B.into(), true)?;
         assert_authenticated(&endpoint_a, &profile_a.token)?;
+        assert_authenticated(&endpoint_c, &profile_c.token)?;
 
         remove_desktop_profile_unlocked(PROFILE_B)?;
         let final_index = read_profile_index()?;
@@ -1103,19 +1137,30 @@ pub fn packaged_multihub_smoke() -> Result<(), String> {
             profile_entry(PROFILE_B)?.get_password(),
             Err(keyring::Error::NoEntry)
         );
-        if final_index.profiles.len() != 1
-            || final_index.profiles[0].profile_id != LOCAL_PROFILE_ID
+        let remaining_a = final_index
+            .profiles
+            .iter()
+            .find(|profile| profile.profile_id == LOCAL_PROFILE_ID)
+            .ok_or_else(|| "Hub A missing after Hub B removal".to_string())?;
+        if final_index.profiles.len() != 2
+            || !final_index
+                .profiles
+                .iter()
+                .any(|p| p.profile_id == PROFILE_C)
             || profile_data_path(PROFILE_B, "windows.json")?.exists()
             || !b_credential_removed
-            || output_for(&final_index.profiles[0])?.token != profile_a.token
+            || output_for(remaining_a)?.token != profile_a.token
         {
-            return Err("removing Hub B changed or removed Hub A".into());
+            return Err("removing Hub B changed or removed Hub A/C".into());
         }
         Ok(())
     };
     let result = run();
     let stopped_a = stop_local_hub_inner();
     if let Some(child) = second.as_mut() {
+        let _ = stop_child_gracefully(child);
+    }
+    if let Some(child) = third.as_mut() {
         let _ = stop_child_gracefully(child);
     }
     result.and(stopped_a)
