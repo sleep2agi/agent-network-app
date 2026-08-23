@@ -41,7 +41,8 @@
     "ios": "expo run:ios",
     "web": "expo start --web",
     "typecheck": "tsc --noEmit -p tsconfig.build.json",
-    "test": "node scripts/run-tests.mjs"
+    "test": "node scripts/run-tests.mjs",
+    "build:local-hub-sidecar": "node scripts/build-local-hub-sidecar.mjs"
   },
   "private": true
 }

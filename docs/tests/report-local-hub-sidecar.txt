@@ -1,0 +1,24 @@
+Local CommHub sidecar — Phase 1 packaging report
+
+Contract
+- Exact server pin: @sleep2agi/commhub-server@0.9.0-preview.29.
+- npm package integrity is locked and copied into the generated manifest.
+- Bun 1.3.14 compiles one native binary; users need no global Bun/npm install.
+- CommHub version is embedded at build time because compiled Bun executables
+  cannot read the npm package.json through import.meta.url at runtime.
+- Tauri externalBin packages the platform binary and its SHA256/size manifest.
+- Raw sidecar hard cap: 110 MiB. Final installer delta remains a release gate.
+
+Docker spike (Linux x64, representative compiler validation)
+- npm ci from the isolated sidecar lock: passed.
+- bun build --compile: passed.
+- raw binary: 95,230,080 bytes.
+- loopback launch with explicit HOST/PORT/COMMHUB_DB: passed.
+- GET /health: ok=true, version=0.9.0-preview.29, api_version=v3.
+- graceful container teardown: passed.
+
+Remaining before #67 can close
+- Rust one-process supervisor and bounded logs.
+- secure first-user bootstrap and native-keystore local profile.
+- first-run and Settings UX.
+- signed Mac/Windows clean-install and failure matrices.

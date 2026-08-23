@@ -55,6 +55,11 @@ jobs:
       - run: npm run typecheck
       - run: npx expo export -p web
       - uses: dtolnay/rust-toolchain@stable
+      - name: Build pinned local CommHub sidecar
+        shell: bash
+        run: |
+          npm ci --prefix local-hub-sidecar --ignore-scripts
+          npm run build:local-hub-sidecar
       - uses: swatinem/rust-cache@v2
         with:
           workspaces: src-tauri

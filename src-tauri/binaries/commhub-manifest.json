@@ -1,0 +1,10 @@
+{
+  "schemaVersion": 1,
+  "commhubVersion": "0.9.0-preview.29",
+  "apiVersion": "v3",
+  "target": "build-required",
+  "executable": "commhub",
+  "sourceIntegrity": null,
+  "sha256": "build-required",
+  "size": 0
+}

@@ -23,6 +23,8 @@
   "bundle": {
     "active": true,
     "createUpdaterArtifacts": true,
+    "externalBin": ["binaries/commhub"],
+    "resources": ["binaries/commhub-manifest.json"],
     "targets": ["app", "dmg"],
     "macOS": {
       "signingIdentity": "-"

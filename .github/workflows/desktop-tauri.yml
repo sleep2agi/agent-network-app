@@ -31,6 +31,10 @@ jobs:
           node-version: 20
           cache: npm
 
+      - uses: oven-sh/setup-bun@735343b667d3e6f658f44d0eca948eb6282f2b76 # v2.0.2
+        with:
+          bun-version: '1.3.14'
+
       - run: npm ci
 
       - name: Typecheck app sources
@@ -40,6 +44,12 @@ jobs:
         run: npx expo export -p web
 
       - uses: dtolnay/rust-toolchain@stable
+
+      - name: Build pinned local CommHub sidecar
+        shell: bash
+        run: |
+          npm ci --prefix local-hub-sidecar --ignore-scripts
+          npm run build:local-hub-sidecar
 
       - uses: swatinem/rust-cache@v2
         with:
@@ -90,6 +100,10 @@ jobs:
           node-version: 20
           cache: npm
 
+      - uses: oven-sh/setup-bun@735343b667d3e6f658f44d0eca948eb6282f2b76 # v2.0.2
+        with:
+          bun-version: '1.3.14'
+
       - run: npm ci
 
       - name: Typecheck app sources
@@ -99,6 +113,12 @@ jobs:
         run: npx expo export -p web
 
       - uses: dtolnay/rust-toolchain@stable
+
+      - name: Build pinned local CommHub sidecar
+        shell: bash
+        run: |
+          npm ci --prefix local-hub-sidecar --ignore-scripts
+          npm run build:local-hub-sidecar
 
       - uses: swatinem/rust-cache@v2
         with:
