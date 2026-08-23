@@ -55,8 +55,11 @@ try {
     target,
     executable: `commhub${extension}`,
     sourceIntegrity,
-    sha256: createHash('sha256').update(bytes).digest('hex'),
-    size,
+    // Tauri/platform signing may rewrite the bundled executable after this
+    // manifest is generated. Name these as pre-bundle facts so consumers do
+    // not incorrectly compare them with the signed installed binary.
+    preBundleSha256: createHash('sha256').update(bytes).digest('hex'),
+    preBundleSize: size,
   };
   writeFileSync(join(outDir, 'commhub-manifest.json'), `${JSON.stringify(manifest, null, 2)}\n`);
   console.log(JSON.stringify(manifest));

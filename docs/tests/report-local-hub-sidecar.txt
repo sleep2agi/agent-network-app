@@ -6,7 +6,10 @@ Contract
 - Bun 1.3.14 compiles one native binary; users need no global Bun/npm install.
 - CommHub version is embedded at build time because compiled Bun executables
   cannot read the npm package.json through import.meta.url at runtime.
-- Tauri externalBin packages the platform binary and its SHA256/size manifest.
+- Tauri externalBin packages the platform binary and a manifest containing its
+  pre-bundle SHA256/size. The field is deliberately named `preBundle*`: macOS
+  platform signing rewrites the bundled executable, so installed authenticity
+  must be established by the signed/notarized app rather than a stale raw hash.
 - Raw sidecar hard cap: 110 MiB. Final installer delta remains a release gate.
 
 Docker spike (Linux x64, representative compiler validation)

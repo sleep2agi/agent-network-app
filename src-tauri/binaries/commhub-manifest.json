@@ -5,6 +5,6 @@
   "target": "build-required",
   "executable": "commhub",
   "sourceIntegrity": null,
-  "sha256": "build-required",
-  "size": 0
+  "preBundleSha256": "build-required",
+  "preBundleSize": 0
 }
