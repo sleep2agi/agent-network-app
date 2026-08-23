@@ -46,6 +46,9 @@ a server URL or global CLI/runtime installation. Storage, backup, deletion,
 shutdown, and uninstall behavior are documented in the
 [local workspace guide](docs/local-workspace.md).
 
+The CLI/API-only path from Expo prebuild through IPA, TestFlight, and App Store
+submission is documented in the [iOS release runbook](docs/ios-release-runbook.md).
+
 ### Visual verification without a device
 
 `react-native-web` export + playwright renders the same components at a phone viewport, proxying API calls to a live hub (sidesteps CORS, swaps auth):
