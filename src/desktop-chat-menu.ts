@@ -38,6 +38,15 @@ export function requestedChatProfileId(search = typeof location === 'undefined' 
   return profileId || null;
 }
 
+export interface DetachedChatWindowRecord {
+  alias: string;
+  context?: string;
+}
+
+export function mergeDetachedChatWindow(windows: DetachedChatWindowRecord[], next: DetachedChatWindowRecord): DetachedChatWindowRecord[] {
+  return [...windows.filter(window => window.alias !== next.alias), next];
+}
+
 export async function openChatWindow(alias: string, profileId?: string, context?: string): Promise<void> {
   if (!(globalThis as any).__TAURI_INTERNALS__) return;
   const { WebviewWindow } = await import('@tauri-apps/api/webviewWindow');
