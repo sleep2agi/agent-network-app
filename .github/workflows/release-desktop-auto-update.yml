@@ -113,6 +113,30 @@ jobs:
           updaterJsonPreferNsis: true
           args: ${{ matrix.args }}
 
+      - name: Smoke exact packaged app with bundled local Hub
+        shell: bash
+        run: |
+          set -euo pipefail
+          smoke_root="$RUNNER_TEMP/packaged-local-hub-smoke"
+          mkdir -p "$smoke_root/AppData/Roaming" "$smoke_root/AppData/Local"
+          if [ "$RUNNER_OS" = "macOS" ]; then
+            binary=$(find src-tauri/target/release/bundle/macos -path '*.app/Contents/MacOS/agent-network-desktop' -print -quit)
+          else
+            binary='src-tauri/target/release/agent-network-desktop.exe'
+          fi
+          test -f "$binary"
+          ANET_PACKAGED_SMOKE=1 \
+            HOME="$smoke_root" \
+            USERPROFILE="$smoke_root" \
+            APPDATA="$smoke_root/AppData/Roaming" \
+            LOCALAPPDATA="$smoke_root/AppData/Local" \
+            "$binary" --smoke-local-hub
+          test -s "$smoke_root/.anet/app/local-hub/data/commhub.db"
+          if grep -R -E 'local-hub-bootstrap-password|atok_|ntok_' "$smoke_root/.anet/app/local-hub/logs"; then
+            echo "::error::Packaged local Hub logs contain credential material"
+            exit 1
+          fi
+
       - name: Enforce desktop distribution size ceiling
         shell: bash
         run: |

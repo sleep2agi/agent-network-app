@@ -4,6 +4,7 @@ const app = fs.readFileSync(new URL('../App.tsx', import.meta.url), 'utf8');
 const settings = fs.readFileSync(new URL('./SettingsScreen.tsx', import.meta.url), 'utf8');
 const bridge = fs.readFileSync(new URL('./local-hub.ts', import.meta.url), 'utf8');
 const rust = fs.readFileSync(new URL('../src-tauri/src/local_hub.rs', import.meta.url), 'utf8');
+const appWorkflow = fs.readFileSync(new URL('../.github/workflows/release-desktop-auto-update.yml', import.meta.url), 'utf8');
 
 const checks: Array<[string, boolean]> = [
   ['first run offers recommended local workspace', app.includes('开始使用（本地）')],
@@ -17,6 +18,7 @@ const checks: Array<[string, boolean]> = [
   ['settings exposes explicit backup and confirmed delete', settings.includes('backupLocalHubData()') && settings.includes('deleteLocalHubData()') && settings.includes("localDeleteText !== '删除本地数据'")],
   ['ordinary account removal hides for local profile', settings.includes("profile.profileId !== LOCAL_HUB_PROFILE_ID")],
   ['bridge uses Tauri supervisor commands', bridge.includes("invokeLocalHub('start_local_hub')") && bridge.includes("invokeLocalHub('local_hub_status')")],
+  ['signed release runs the packaged executable local Hub smoke on both platforms', rust.includes('pub fn packaged_smoke()') && rust.includes('/api/auth/me') && rust.includes('/api/status') && appWorkflow.includes('--smoke-local-hub')],
   ['Hub binds loopback only', rust.includes('.env("HOST", "127.0.0.1")')],
   ['supervisor has capped exponential retries', rust.includes('[1_u64, 2, 4, 8, 16, 30]')],
   ['supervisor refuses a duplicate when lock owner is alive but unhealthy', rust.includes('owner_pid.is_some_and(process_is_alive)') && rust.includes('refusing to start a duplicate')],
