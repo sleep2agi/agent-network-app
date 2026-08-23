@@ -523,13 +523,22 @@ fn mark_desktop_profile_requires_reauth(profile_id: String, required: bool) -> R
         .lock()
         .map_err(|_| "profile registry lock poisoned")?;
     let mut index = read_profile_index()?;
+    set_profile_requires_reauth(&mut index, &profile_id, required)?;
+    save_profile_index(&index)
+}
+
+fn set_profile_requires_reauth(
+    index: &mut ProfileIndex,
+    profile_id: &str,
+    required: bool,
+) -> Result<(), String> {
     let profile = index
         .profiles
         .iter_mut()
         .find(|profile| profile.profile_id == profile_id)
         .ok_or_else(|| "profile not found".to_string())?;
     profile.requires_reauth = required;
-    save_profile_index(&index)
+    Ok(())
 }
 
 #[tauri::command]
@@ -645,6 +654,30 @@ mod tests {
         );
 
         fs::remove_dir_all(fixture).expect("remove recovery fixture");
+    }
+
+    #[test]
+    fn revoked_profile_marker_is_isolated() {
+        let make_profile = |profile_id: &str| ProfileMetadata {
+            profile_id: profile_id.into(),
+            server_url: format!("https://{profile_id}.example"),
+            username: "admin".into(),
+            network_id: None,
+            display_name: None,
+            requires_reauth: false,
+            created_at: 1,
+            updated_at: 1,
+        };
+        let mut index = ProfileIndex {
+            schema_version: 1,
+            active_profile_id: Some("profile-b".into()),
+            profiles: vec![make_profile("profile-a"), make_profile("profile-b")],
+        };
+
+        set_profile_requires_reauth(&mut index, "profile-b", true).expect("mark profile b");
+        assert!(!index.profiles[0].requires_reauth);
+        assert!(index.profiles[1].requires_reauth);
+        assert_eq!(index.active_profile_id.as_deref(), Some("profile-b"));
     }
 }
 
