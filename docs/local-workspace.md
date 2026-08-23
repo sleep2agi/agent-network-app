@@ -55,5 +55,11 @@ credential store are also retained. Users who want a full data removal must use
 **删除本地工作区数据…** in Settings before uninstalling, then remove any backups
 they no longer need.
 
-Package removal behavior still requires a signed clean-machine test on both
-platforms before the local-workspace feature is published as stable.
+The signed release gate creates previous-version data with a real published
+CommHub, upgrades it with the current packaged app, and requires the user,
+node, task, and pre-migration database snapshot to survive on macOS and
+Windows. Installer removal itself intentionally leaves this application-data
+directory in place; reinstall restores it when the same OS account and native
+credential store are retained. A clean-machine uninstall/reinstall audit is
+tracked separately because CI must not silently claim operating-system
+uninstaller behavior from an in-process data test.

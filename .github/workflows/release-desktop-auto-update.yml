@@ -131,11 +131,26 @@ jobs:
           ANET_PACKAGED_SMOKE=1 \
             ANET_PACKAGED_SMOKE_ROOT="$smoke_root/.anet/app" \
             "$binary" --smoke-multihub
+          migration_root="$RUNNER_TEMP/packaged-local-hub-migration"
+          previous_prefix="$RUNNER_TEMP/commhub-preview-28"
+          password_file="$RUNNER_TEMP/previous-hub-password"
+          npm install --prefix "$previous_prefix" --ignore-scripts \
+            @sleep2agi/commhub-server@0.9.0-preview.28
+          node scripts/seed-previous-local-hub.mjs \
+            "$migration_root/.anet/app" \
+            "$previous_prefix/node_modules/@sleep2agi/commhub-server" \
+            "$password_file"
+          ANET_PACKAGED_SMOKE=1 \
+            ANET_PACKAGED_SMOKE_ROOT="$migration_root/.anet/app" \
+            ANET_PREVIOUS_HUB_PASSWORD_FILE="$password_file" \
+            "$binary" --smoke-local-hub-migration
           test -s "$smoke_root/.anet/app/local-hub/data/commhub.db"
+          test -s "$migration_root/.anet/app/local-hub/data/commhub.db"
           if grep -R -E 'local-hub-bootstrap-password|atok_|ntok_|utok_' \
             "$smoke_root/.anet/app/local-hub/logs" \
             "$smoke_root/.anet/app/smoke-hub-b/commhub.log" \
-            "$smoke_root/.anet/app/smoke-hub-c/commhub.log"; then
+            "$smoke_root/.anet/app/smoke-hub-c/commhub.log" \
+            "$migration_root/.anet/app/local-hub/logs"; then
             echo "::error::Packaged Hub logs contain credential material"
             exit 1
           fi

@@ -970,6 +970,110 @@ pub fn packaged_smoke() -> Result<(), String> {
     result.and(stopped)
 }
 
+/// Upgrade acceptance using a database produced by the previous published
+/// CommHub. The workflow seeds that database with public APIs, while this exact
+/// packaged executable owns the native credential and migration/backup path.
+pub fn packaged_migration_smoke() -> Result<(), String> {
+    if std::env::var("ANET_PACKAGED_SMOKE").as_deref() != Ok("1") {
+        return Err("packaged migration smoke requires ANET_PACKAGED_SMOKE=1".into());
+    }
+    let password_file = PathBuf::from(
+        std::env::var("ANET_PREVIOUS_HUB_PASSWORD_FILE")
+            .map_err(|_| "previous Hub password file is missing".to_string())?,
+    );
+    let password = fs::read_to_string(&password_file)
+        .map_err(|error| format!("cannot read previous Hub credential: {error}"))?;
+    fs::remove_file(&password_file)
+        .map_err(|error| format!("cannot remove previous Hub credential file: {error}"))?;
+    let password_entry = keyring::Entry::new(SESSION_SERVICE, LOCAL_PASSWORD_ACCOUNT)
+        .map_err(|error| error.to_string())?;
+    password_entry
+        .set_password(password.trim())
+        .map_err(|error| error.to_string())?;
+
+    let run = || -> Result<(), String> {
+        let started: LocalHubResult =
+            serde_json::from_str(&start_local_hub()?).map_err(|error| error.to_string())?;
+        if started.hub_version != EXPECTED_HUB_VERSION
+            || started
+                .session
+                .as_ref()
+                .map(|session| session.username.as_str())
+                != Some(LOCAL_USERNAME)
+        {
+            return Err("previous Hub identity/version did not survive migration".into());
+        }
+        let session = started
+            .session
+            .ok_or_else(|| "migration start omitted session".to_string())?;
+        let client = reqwest::blocking::Client::new();
+        let status: serde_json::Value = client
+            .get(format!("{}/api/status", session.server_url))
+            .bearer_auth(&session.token)
+            .send()
+            .map_err(|error| error.to_string())?
+            .json()
+            .map_err(|error| error.to_string())?;
+        if !status["sessions"].as_array().is_some_and(|sessions| {
+            sessions
+                .iter()
+                .any(|item| item["alias"] == "previous-version-node")
+        }) {
+            return Err("previous-version node is missing after migration".into());
+        }
+        let tasks: serde_json::Value = client
+            .get(format!(
+                "{}/api/tasks?network_id={}",
+                session.server_url,
+                session.network_id.as_deref().unwrap_or_default()
+            ))
+            .bearer_auth(&session.token)
+            .send()
+            .map_err(|error| error.to_string())?
+            .json()
+            .map_err(|error| error.to_string())?;
+        if !tasks["tasks"].as_array().is_some_and(|items| {
+            items.iter().any(|item| {
+                item["to_name"] == "previous-version-node"
+                    && item["content"] == "previous-version-task"
+            })
+        }) {
+            return Err("previous-version task is missing after migration".into());
+        }
+        let config = read_config()?.ok_or_else(|| "migration omitted config".to_string())?;
+        if config.hub_version != EXPECTED_HUB_VERSION {
+            return Err("migration did not persist the current Hub version".into());
+        }
+        let prefix = format!(
+            "local-hub-migration-{}-to-{}-",
+            safe_version_fragment("0.9.0-preview.28"),
+            safe_version_fragment(EXPECTED_HUB_VERSION)
+        );
+        let backups = app_root()?.join("backups");
+        let snapshot_found = fs::read_dir(&backups)
+            .map_err(|error| error.to_string())?
+            .filter_map(Result::ok)
+            .any(|entry| {
+                entry.file_name().to_string_lossy().starts_with(&prefix)
+                    && entry.path().join("data").join("commhub.db").is_file()
+            });
+        if !snapshot_found {
+            return Err("migration backup snapshot is missing".into());
+        }
+        Ok(())
+    };
+    let result = run();
+    let stopped = stop_local_hub_inner();
+    let credential_removed = password_entry
+        .delete_credential()
+        .or_else(|error| match error {
+            keyring::Error::NoEntry => Ok(()),
+            other => Err(other),
+        })
+        .map_err(|error| error.to_string());
+    result.and(stopped).and(credential_removed)
+}
+
 fn start_isolated_smoke_hub(root: &Path, port: u16) -> Result<Child, String> {
     super::ensure_private_dir(root)?;
     let log = open_log(&root.join("commhub.log"))?;

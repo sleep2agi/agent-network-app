@@ -5,6 +5,7 @@ const settings = fs.readFileSync(new URL('./SettingsScreen.tsx', import.meta.url
 const bridge = fs.readFileSync(new URL('./local-hub.ts', import.meta.url), 'utf8');
 const rust = fs.readFileSync(new URL('../src-tauri/src/local_hub.rs', import.meta.url), 'utf8');
 const appWorkflow = fs.readFileSync(new URL('../.github/workflows/release-desktop-auto-update.yml', import.meta.url), 'utf8');
+const migrationSeed = fs.readFileSync(new URL('../scripts/seed-previous-local-hub.mjs', import.meta.url), 'utf8');
 
 const checks: Array<[string, boolean]> = [
   ['first run offers recommended local workspace', app.includes('开始使用（本地）')],
@@ -29,6 +30,7 @@ const checks: Array<[string, boolean]> = [
   ['bootstrap removes unsafe development/master-token env', rust.includes('.env_remove("COMMHUB_DEV_OPEN")') && rust.includes('.env_remove("COMMHUB_AUTH_TOKEN")')],
   ['delete requires an exact native-side confirmation and backup first', rust.includes('confirmation != "DELETE LOCAL WORKSPACE"') && rust.lastIndexOf('backup_local_hub_stopped()?') < rust.indexOf('remove_local_profile_data()?')],
   ['version migration snapshots and restores data on failure', rust.includes('snapshot_data_for_migration') && rust.includes('restore_migration_snapshot') && rust.includes('config.hub_version != EXPECTED_HUB_VERSION')],
+  ['signed packages migrate real previous-version node/task data', appWorkflow.includes('@sleep2agi/commhub-server@0.9.0-preview.28') && appWorkflow.includes('--smoke-local-hub-migration') && migrationSeed.includes('previous-version-node') && migrationSeed.includes('previous-version-task') && rust.includes('previous-version node is missing after migration') && rust.includes('migration backup snapshot is missing')],
 ];
 
 for (const [name, ok] of checks) {
