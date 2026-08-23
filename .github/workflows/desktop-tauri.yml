@@ -48,6 +48,12 @@ jobs:
       - name: Generate icons
         run: npx tauri icon assets/icon.png
 
+      - name: Verify profile credential and registry contracts
+        working-directory: src-tauri
+        run: |
+          cargo test --locked desktop_session_round_trip_uses_native_store -- --nocapture
+          cargo test --locked profile_registry_metadata_never_serializes_secrets -- --nocapture
+
       - name: Build (unsigned)
         # This validation workflow deliberately has no updater signing key.
         # Disable updater archives here; signed Release builds keep them on.
@@ -100,6 +106,12 @@ jobs:
         # 这一步会生成 icons/icon.ico —— Windows 的可执行图标只认 .ico，
         # 而 tauri.conf.json 的 bundle.icon 里已经列了它。
         run: npx tauri icon assets/icon.png
+
+      - name: Verify profile credential and registry contracts
+        working-directory: src-tauri
+        run: |
+          cargo test --locked desktop_session_round_trip_uses_native_store -- --nocapture
+          cargo test --locked profile_registry_metadata_never_serializes_secrets -- --nocapture
 
       - name: Build (unsigned)
         # nsis = 安装器 .exe；msi = WiX 安装包。两个都要，因为分发方式不同：
