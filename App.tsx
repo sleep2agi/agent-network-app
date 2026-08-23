@@ -35,13 +35,13 @@ import LogsScreen from './src/LogsScreen';
 import ScheduledTasksScreen from './src/ScheduledTasksScreen';
 import ConnectivityBanner from './src/ConnectivityBanner';
 import type { HostSupervisorDaemon } from './src/api';
-import { clearConfig, loadConfig, loadLocalAvatars, loadOutbox, loadThemeMode, onDesktopThemeStorageChange, saveConfig, saveLocalAvatars, saveOutbox } from './src/storage';
+import { clearConfig, loadConfig, loadLocalAvatars, loadOutbox, loadThemeMode, onDesktopThemeStorageChange, removeHubProfile, saveConfig, saveLocalAvatars, saveOutbox, switchHubProfile } from './src/storage';
 import { initOutbox } from './src/outbox';
 import { colors, onThemeChange, setThemeMode, spacing, themeMode } from './src/theme';
 import { styles } from './src/app-styles';
 import { APP_VERSION } from './src/version';
 import DesktopUpdatePrompt from './src/DesktopUpdatePrompt';
-import { loadPinnedChats, openChatWindow, requestedChatAlias, savePinnedChats } from './src/desktop-chat-menu';
+import { loadPinnedChats, openChatWindow, requestedChatAlias, requestedChatProfileId, savePinnedChats } from './src/desktop-chat-menu';
 
 type Screen =
   | { name: 'login' }
@@ -98,6 +98,7 @@ function AppRoot() {
   const [screen, setScreen] = useState<Screen>({ name: 'login' });
   const [booting, setBooting] = useState(true);
   const initialChat = useMemo(() => requestedChatAlias(), []);
+  const initialChatProfile = useMemo(() => requestedChatProfileId(), []);
   // Keyed remount on theme switch: module-level styles were already
   // rebuilt by the onThemeChange listeners, the new key re-renders the tree.
   const [theme, setTheme] = useState(themeMode());
@@ -113,20 +114,44 @@ function AppRoot() {
   const desktop = tauriDesktop && width >= 860;
   const dedicatedChatWindow = tauriDesktop && !!initialChat;
   const tabBarInset = Platform.OS === 'android' ? insets.bottom : 0;
+  const workspaceKey = `${theme}:${cfg?.profileId ?? cfg?.serverUrl ?? 'login'}`;
+
+  const hydrateProfileLocalState = async (profileCfg: HubConfig | null) => {
+    const profileId = profileCfg?.profileId;
+    const [localAvatars, outbox] = await Promise.all([loadLocalAvatars(profileId), loadOutbox(profileId)]);
+    initLocalAvatars(localAvatars, (map) => { void saveLocalAvatars(map, profileId); });
+    initOutbox(outbox, (all) => { void saveOutbox(all, profileId); });
+  };
+
+  const removeActiveProfile = async () => {
+    if (cfg?.profileId) await removeHubProfile(cfg.profileId);
+    else await clearConfig();
+    const next = await loadConfig();
+    await hydrateProfileLocalState(next);
+    setCfg(next);
+    setScreen(next ? { name: 'agents' } : { name: 'login' });
+  };
+
+  const activateProfile = async (profileId: string) => {
+    const next = await switchHubProfile(profileId);
+    await hydrateProfileLocalState(next);
+    setCfg(next);
+    setScreen({ name: 'agents' });
+    prefetchStatus(next);
+  };
 
   // Restore the saved session on cold start — login survives app kills.
   // Desktop credential-store failures are not treated as "no session": keep
   // the app usable, log the diagnostic, and require a fresh login whose save
   // path now reports the error visibly.
   useEffect(() => {
-    Promise.all([loadConfig(), loadThemeMode(), loadLocalAvatars(), loadOutbox()]).then(([saved, mode, localAvatars, outbox]) => {
+    Promise.all([initialChatProfile ? switchHubProfile(initialChatProfile).catch(() => loadConfig()) : loadConfig(), loadThemeMode()]).then(async ([saved, mode]) => {
       if (mode === 'light' || mode === 'dark') setThemeMode(mode);
       // R2 avatar: seed the per-device local echo layer + wire its writer, so
       // session-only aliases keep their user-set avatar across restarts.
-      initLocalAvatars(localAvatars, (m) => { void saveLocalAvatars(m); });
+      await hydrateProfileLocalState(saved);
       // PR3 判据C:恢复未送达 outbox(pending 一律恢复为 failed=命运未知按未送达),
       // 注入落盘写手——此后 提交即落盘/确认才删。
-      initOutbox(outbox, (all) => { void saveOutbox(all); });
       if (saved) {
         setCfg(saved);
         setScreen(initialChat ? { name: 'chat', alias: initialChat } : { name: 'agents' });
@@ -139,7 +164,7 @@ function AppRoot() {
       console.error('Failed to restore desktop session', error);
       setBooting(false);
     });
-  }, [initialChat]);
+  }, [initialChat, initialChatProfile]);
 
   // R1 avatar (通信龙 07-31): hydrate the hub avatar layer from GET /api/nodes
   // so node-backed aliases render their cross-device avatar_url (Vincent changed
@@ -198,7 +223,7 @@ function AppRoot() {
   // when the detached window is wide enough for the normal three-column UI.
   if (dedicatedChatWindow && cfg && screen.name === 'chat') {
     return (
-      <SafeAreaView key={theme} style={styles.root} testID="dedicated-chat-window">
+      <SafeAreaView key={workspaceKey} style={styles.root} testID="dedicated-chat-window">
         <StatusBar barStyle={theme === 'light' ? 'dark-content' : 'light-content'} backgroundColor={colors.bg} />
         <ChatScreen cfg={cfg} alias={screen.alias} onBack={() => {}} desktop />
       </SafeAreaView>
@@ -207,20 +232,16 @@ function AppRoot() {
 
   if (desktop && cfg && screen.name !== 'login') {
     return (
-      <SafeAreaView key={theme} style={styles.root}>
+      <SafeAreaView key={workspaceKey} style={styles.root}>
         <StatusBar barStyle={theme === 'light' ? 'dark-content' : 'light-content'} backgroundColor={colors.bg} />
         <ConnectivityBanner />
-        <DesktopWorkspace cfg={cfg} screen={screen} setScreen={setScreen} onLogout={() => {
-          clearConfig();
-          setCfg(null);
-          setScreen({ name: 'login' });
-        }} />
+        <DesktopWorkspace cfg={cfg} screen={screen} setScreen={setScreen} onLogout={removeActiveProfile} onAddAccount={() => setScreen({ name: 'login' })} onSwitchProfile={activateProfile} />
       </SafeAreaView>
     );
   }
 
   return (
-    <SafeAreaView key={theme} style={styles.root}>
+    <SafeAreaView key={workspaceKey} style={styles.root}>
       <StatusBar
         barStyle={theme === 'light' ? 'dark-content' : 'light-content'}
         backgroundColor={colors.bg}
@@ -231,8 +252,9 @@ function AppRoot() {
       {screen.name === 'login' || !cfg ? (
         <LoginScreen
           onLogin={async c => {
-            await saveConfig(c);
-            setCfg(c);
+            const saved = await saveConfig(c);
+            await hydrateProfileLocalState(saved);
+            setCfg(saved);
             setScreen(initialChat ? { name: 'chat', alias: initialChat } : { name: 'agents' });
           }}
         />
@@ -309,11 +331,9 @@ function AppRoot() {
             ) : screen.name === 'settings' ? (
               <SettingsScreen
                 cfg={cfg}
-                onLogout={() => {
-                  clearConfig();
-                  setCfg(null);
-                  setScreen({ name: 'login' });
-                }}
+                onLogout={removeActiveProfile}
+                onAddAccount={() => setScreen({ name: 'login' })}
+                onSwitchProfile={activateProfile}
               />
             ) : (
               <AgentsScreen
@@ -354,20 +374,23 @@ const bootStyles = StyleSheet.create({
   title: { color: '#ffffff', fontSize: 20, fontWeight: '700', letterSpacing: 0.4, marginBottom: 8 },
 });
 
-function DesktopWorkspace({ cfg, screen, setScreen, onLogout }: {
+function DesktopWorkspace({ cfg, screen, setScreen, onLogout, onAddAccount, onSwitchProfile }: {
   cfg: HubConfig;
   screen: Screen;
   setScreen: (screen: Screen) => void;
-  onLogout: () => void;
+  onLogout: () => void | Promise<void>;
+  onAddAccount: () => void;
+  onSwitchProfile: (profileId: string) => void | Promise<void>;
 }) {
   // AppRoot is keyed by theme, so this component remounts after every theme
   // switch. Build desktop styles on that mount instead of freezing the dark
   // palette once at module import time.
   const desktopStyles = useMemo(makeDesktopStyles, []);
-  const [pinnedAliases, setPinnedAliases] = useState(loadPinnedChats);
+  const [pinnedAliases, setPinnedAliases] = useState(() => loadPinnedChats(cfg.profileId));
+  useEffect(() => setPinnedAliases(loadPinnedChats(cfg.profileId)), [cfg.profileId]);
   const togglePin = (alias: string) => setPinnedAliases(current => {
     const next = current.includes(alias) ? current.filter(item => item !== alias) : [alias, ...current];
-    savePinnedChats(next);
+    savePinnedChats(next, cfg.profileId);
     return next;
   });
   const serverWorkspace = ['server', 'serverNodes', 'serverNodeDetail', 'logs', 'picker', 'wizard'].includes(screen.name);
@@ -387,7 +410,7 @@ function DesktopWorkspace({ cfg, screen, setScreen, onLogout }: {
   : screen.name === 'server' ? <ServerScreen cfg={cfg} onOpenLogs={() => setScreen({ name: 'logs' })} />
   : screen.name === 'serverNodes' ? <AgentsScreen cfg={cfg} onOpenChat={alias => setScreen({ name: 'serverNodeDetail', alias })} onOpenPicker={() => setScreen({ name: 'picker' })} onOpenNodeDetail={alias => setScreen({ name: 'serverNodeDetail', alias })} />
   : screen.name === 'serverNodeDetail' ? <NodeDetailScreen cfg={cfg} alias={screen.alias} onBack={() => setScreen({ name: 'serverNodes' })} />
-  : screen.name === 'settings' ? <SettingsScreen cfg={cfg} onLogout={onLogout} />
+  : screen.name === 'settings' ? <SettingsScreen cfg={cfg} onLogout={onLogout} onAddAccount={onAddAccount} onSwitchProfile={onSwitchProfile} />
   : screen.name === 'taskDetail' ? <TaskDetailScreen cfg={cfg} taskId={screen.taskId} onBack={() => setScreen({ name: 'tasks' })} />
   : screen.name === 'nodeDetail' ? <NodeDetailScreen cfg={cfg} alias={screen.alias} onBack={() => setScreen({ name: 'agents' })} />
   : screen.name === 'logs' ? <LogsScreen cfg={cfg} onBack={() => setScreen({ name: 'server' })} />
@@ -444,7 +467,7 @@ function DesktopWorkspace({ cfg, screen, setScreen, onLogout }: {
             else setScreen({ name: 'logs' });
           }} />
         ) : (
-          <AgentsScreen cfg={cfg} compact selectedAlias={screen.name === 'chat' ? screen.alias : undefined} pinnedAliases={pinnedAliases} onTogglePin={togglePin} onOpenChatWindow={alias => { void saveConfig(cfg).then(() => openChatWindow(alias)); }} onOpenChat={alias => setScreen({ name: 'chat', alias })} onOpenPicker={() => setScreen({ name: 'picker' })} onOpenNodeDetail={alias => setScreen({ name: 'nodeDetail', alias })} />
+          <AgentsScreen cfg={cfg} compact selectedAlias={screen.name === 'chat' ? screen.alias : undefined} pinnedAliases={pinnedAliases} onTogglePin={togglePin} onOpenChatWindow={alias => { void openChatWindow(alias, cfg.profileId, cfg.username || cfg.serverUrl); }} onOpenChat={alias => setScreen({ name: 'chat', alias })} onOpenPicker={() => setScreen({ name: 'picker' })} onOpenNodeDetail={alias => setScreen({ name: 'nodeDetail', alias })} />
         )}
       </View>
       <View style={desktopStyles.content}>{content}</View>

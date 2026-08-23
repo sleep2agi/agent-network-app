@@ -1,7 +1,7 @@
 import { useEffect, useState, useSyncExternalStore } from 'react';
-import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 import { HubConfig } from './api';
-import { saveThemeMode } from './storage';
+import { HubProfile, listHubProfiles, removeHubProfile, saveThemeMode } from './storage';
 import { colors, onThemeChange, setThemeMode, spacing, themeMode } from './theme';
 import { APP_VERSION } from './version';
 import { appFetch } from './app-fetch';
@@ -20,12 +20,23 @@ interface Me {
 export default function SettingsScreen({
   cfg,
   onLogout,
+  onAddAccount,
+  onSwitchProfile,
 }: {
   cfg: HubConfig;
-  onLogout: () => void;
+  onLogout: () => void | Promise<void>;
+  onAddAccount: () => void;
+  onSwitchProfile: (profileId: string) => void | Promise<void>;
 }) {
   const [me, setMe] = useState<Me>({});
+  const [profiles, setProfiles] = useState<HubProfile[]>([]);
+  const [removeTarget, setRemoveTarget] = useState<HubProfile | null>(null);
+  const [profileError, setProfileError] = useState('');
   const update = useSyncExternalStore(subscribeDesktopUpdates, desktopUpdateSnapshot, desktopUpdateSnapshot);
+
+  useEffect(() => {
+    void listHubProfiles().then(registry => setProfiles(registry.profiles)).catch(error => setProfileError(String(error)));
+  }, [cfg.profileId]);
 
   useEffect(() => {
     (async () => {
@@ -49,17 +60,41 @@ export default function SettingsScreen({
 
   return (
     <View style={styles.root}>
-      <Text style={styles.sectionTitle}>连接</Text>
+      <Text style={styles.sectionTitle}>账号与 Hub</Text>
       <View style={styles.card}>
-        <Row label="服务器" value={cfg.serverUrl} />
+        {profiles.length ? profiles.map((profile, index) => {
+          const active = profile.profileId === cfg.profileId;
+          return (
+            <View key={profile.profileId}>
+              {index ? <Divider /> : null}
+              <Pressable
+                accessibilityLabel={`切换到 ${profile.displayName || profile.username || profile.serverUrl}`}
+                style={({ pressed }) => [styles.profileRow, pressed && { opacity: 0.65 }]}
+                onPress={() => { if (!active) void Promise.resolve(onSwitchProfile(profile.profileId)).catch(error => setProfileError(String(error))); }}
+              >
+                <View style={styles.profileCopy}>
+                  <Text style={styles.profileTitle}>{profile.displayName || profile.username || 'Hub 账号'}{active ? ' · 当前' : ''}</Text>
+                  <Text style={styles.profileMeta} numberOfLines={1}>{profile.serverUrl} · {profile.username || '未知用户'}{profile.networkId ? ` · ${profile.networkId}` : ''}</Text>
+                </View>
+                <Pressable accessibilityLabel={`移除 ${profile.username || profile.serverUrl}`} onPress={event => { event.stopPropagation(); setRemoveTarget(profile); }} hitSlop={8}>
+                  <Text style={styles.removeText}>移除</Text>
+                </Pressable>
+              </Pressable>
+            </View>
+          );
+        }) : (
+          <>
+            <Row label="服务器" value={cfg.serverUrl} />
+            <Divider />
+            <Row label="用户名" value={me.username ?? cfg.username ?? '—'} />
+          </>
+        )}
         <Divider />
-        <Row label="用户名" value={me.username ?? '—'} />
-        <Divider />
-        <Row
-          label="网络"
-          value={me.networkName ? `${me.networkName} (${me.networkId ?? ''})` : cfg.networkId ?? '—'}
-        />
+        <Pressable style={({ pressed }) => [styles.row, pressed && { opacity: 0.6 }]} onPress={onAddAccount}>
+          <Text style={styles.addText}>＋ 添加 Hub / 账号</Text>
+        </Pressable>
       </View>
+      {profileError ? <Text style={styles.errorText}>{profileError}</Text> : null}
 
       <Text style={styles.sectionTitle}>外观</Text>
       <View style={styles.card}>
@@ -92,8 +127,27 @@ export default function SettingsScreen({
         style={({ pressed }) => [styles.logoutBtn, pressed && { opacity: 0.7 }]}
         onPress={onLogout}
       >
-        <Text style={styles.logoutText}>退出登录</Text>
+        <Text style={styles.logoutText}>移除当前账号</Text>
       </Pressable>
+
+      <Modal visible={!!removeTarget} transparent animationType="fade" onRequestClose={() => setRemoveTarget(null)}>
+        <View style={styles.modalBackdrop}>
+          <View style={styles.modalCard}>
+            <Text style={styles.modalTitle}>移除这个账号？</Text>
+            <Text style={styles.modalBody}>{removeTarget ? `${removeTarget.serverUrl} · ${removeTarget.username}` : ''}\n只删除这个 profile 的系统凭据和本地目录，不影响其他 Hub。</Text>
+            <View style={styles.modalActions}>
+              <Pressable style={styles.modalButton} onPress={() => setRemoveTarget(null)}><Text style={styles.rowValue}>返回</Text></Pressable>
+              <Pressable style={[styles.modalButton, styles.modalDanger]} onPress={() => {
+                const target = removeTarget;
+                setRemoveTarget(null);
+                if (!target) return;
+                if (target.profileId === cfg.profileId) void Promise.resolve(onLogout()).catch(error => setProfileError(String(error)));
+                else void removeHubProfile(target.profileId).then(() => setProfiles(current => current.filter(item => item.profileId !== target.profileId))).catch(error => setProfileError(String(error)));
+              }}><Text style={styles.logoutText}>移除账号</Text></Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -138,6 +192,13 @@ const makeStyles = () =>
   },
   rowLabel: { color: colors.textSecondary, fontSize: 14 },
   rowValue: { color: colors.text, fontSize: 14, flexShrink: 1 },
+  profileRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingHorizontal: spacing.lg, paddingVertical: spacing.md },
+  profileCopy: { flex: 1, minWidth: 0 },
+  profileTitle: { color: colors.text, fontSize: 14, fontWeight: '600' },
+  profileMeta: { color: colors.textMuted, fontSize: 11, marginTop: 3 },
+  addText: { color: colors.accent, fontSize: 14, fontWeight: '600' },
+  removeText: { color: colors.failed, fontSize: 12 },
+  errorText: { color: colors.failed, fontSize: 12, marginTop: spacing.sm },
   divider: { height: 1, backgroundColor: colors.border, marginLeft: spacing.lg },
   logoutBtn: {
     marginTop: spacing.xl,
@@ -148,6 +209,13 @@ const makeStyles = () =>
     alignItems: 'center',
   },
   logoutText: { color: colors.failed, fontSize: 15, fontWeight: '600' },
+  modalBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.55)', alignItems: 'center', justifyContent: 'center', padding: spacing.xl },
+  modalCard: { width: '100%', maxWidth: 440, backgroundColor: colors.card, borderColor: colors.border, borderWidth: 1, borderRadius: 14, padding: spacing.lg },
+  modalTitle: { color: colors.text, fontSize: 17, fontWeight: '700' },
+  modalBody: { color: colors.textSecondary, fontSize: 13, lineHeight: 20, marginTop: spacing.sm },
+  modalActions: { flexDirection: 'row', justifyContent: 'flex-end', gap: spacing.sm, marginTop: spacing.lg },
+  modalButton: { borderColor: colors.border, borderWidth: 1, borderRadius: 9, paddingHorizontal: spacing.lg, paddingVertical: spacing.sm },
+  modalDanger: { borderColor: colors.failed },
 });
 
 // Theme styling idiom (shared across screens): `styles` is a module-level

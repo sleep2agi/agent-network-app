@@ -93,7 +93,7 @@ export default function AgentsScreen({
       setSessions(next);
       setFailed(false);
       // Persist for the next cold start's stale-while-revalidate paint.
-      saveSessionsCache(next);
+      saveSessionsCache(next, cfg.profileId);
     } catch {
       /* keep last good list; with nothing loaded yet, surface the failure */
       setFailed(true);
@@ -110,14 +110,14 @@ export default function AgentsScreen({
   // data always wins the race.
   useEffect(() => {
     let live = true;
-    loadSessionsCache().then(cached => {
+    loadSessionsCache(cfg.profileId).then(cached => {
       if (live && cached && cached.length) {
         setSessions(prev => (prev.length ? prev : cached));
         setLoading(false);
       }
     });
     return () => { live = false; };
-  }, []);
+  }, [cfg.profileId]);
 
   // Foreground-only polling: 10s while visible, paused in background, instant
   // refresh on resume (shared hook — see usePoll).
