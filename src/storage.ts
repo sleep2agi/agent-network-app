@@ -35,6 +35,11 @@ export interface DesktopStorageDiagnostics {
   corrupt_backups: string[];
 }
 
+export interface DetachedChatWindow {
+  alias: string;
+  context?: string;
+}
+
 const isTauriDesktop = (): boolean =>
   typeof globalThis !== 'undefined' && !!(globalThis as any).__TAURI_INTERNALS__;
 
@@ -140,6 +145,23 @@ export const getDesktopStorageDiagnostics = async (): Promise<DesktopStorageDiag
   if (!isTauriDesktop()) return null;
   const { invoke } = await import('@tauri-apps/api/core');
   return JSON.parse(await invoke<string>('desktop_storage_diagnostics')) as DesktopStorageDiagnostics;
+};
+
+export const loadDetachedChatWindows = async (profileId?: string): Promise<DetachedChatWindow[]> => {
+  try {
+    const value = await readDesktopProfileJson<unknown>(profileId, 'windows.json');
+    if (!Array.isArray(value)) return [];
+    return value.filter((item): item is DetachedChatWindow =>
+      !!item && typeof item === 'object' && typeof (item as DetachedChatWindow).alias === 'string' && !!(item as DetachedChatWindow).alias.trim(),
+    );
+  } catch {
+    // Replaceable presentation state must never block account/session restore.
+    return [];
+  }
+};
+
+export const saveDetachedChatWindows = async (profileId: string | undefined, windows: DetachedChatWindow[]): Promise<void> => {
+  await writeDesktopProfileJson(profileId, 'windows.json', windows);
 };
 
 const THEME_KEY = 'theme_mode_v1';

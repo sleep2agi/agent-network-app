@@ -1,5 +1,5 @@
 import { strict as assert } from 'node:assert';
-import { chatWindowLabel, chatWindowUrl, requestedChatAlias, requestedChatProfileId } from './desktop-chat-menu';
+import { chatWindowLabel, chatWindowUrl, mergeDetachedChatWindow, requestedChatAlias, requestedChatProfileId } from './desktop-chat-menu';
 import fs from 'node:fs';
 import path from 'node:path';
 
@@ -8,6 +8,10 @@ assert.equal(chatWindowUrl('通信牛', 'p-1'), '/?chat=%E9%80%9A%E4%BF%A1%E7%89
 assert.equal(requestedChatAlias('?chat=%E9%80%9A%E4%BF%A1%E7%89%9B'), '通信牛');
 assert.equal(requestedChatProfileId('?chat=x&profile=p-1'), 'p-1');
 assert.equal(requestedChatAlias('?chat='), null);
+assert.deepEqual(
+  mergeDetachedChatWindow([{ alias: 'worker', context: 'old' }, { alias: 'other' }], { alias: 'worker', context: 'Hub B' }),
+  [{ alias: 'other' }, { alias: 'worker', context: 'Hub B' }],
+);
 assert.equal(chatWindowLabel('通信牛'), chatWindowLabel('通信牛'));
 assert.notEqual(chatWindowLabel('通信牛'), chatWindowLabel('工程牛'));
 assert.notEqual(chatWindowLabel('通信牛', 'hub-a'), chatWindowLabel('通信牛', 'hub-b'));
