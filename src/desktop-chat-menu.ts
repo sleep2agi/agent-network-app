@@ -43,9 +43,9 @@ export async function openChatWindow(alias: string): Promise<void> {
   new WebviewWindow(label, {
     url: chatWindowUrl(alias),
     title: `${alias} · Agent Network`,
-    width: 980,
+    width: 760,
     height: 720,
-    minWidth: 620,
+    minWidth: 480,
     minHeight: 520,
     focus: true,
   });

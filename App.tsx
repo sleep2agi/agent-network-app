@@ -103,7 +103,9 @@ function AppRoot() {
   // tab bar under the gesture bar (Vincent tg 802) — pad by the real inset.
   const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
-  const desktop = Platform.OS === 'web' && !!(globalThis as any).__TAURI_INTERNALS__ && width >= 860;
+  const tauriDesktop = Platform.OS === 'web' && !!(globalThis as any).__TAURI_INTERNALS__;
+  const desktop = tauriDesktop && width >= 860;
+  const dedicatedChatWindow = tauriDesktop && !!initialChat;
   const tabBarInset = Platform.OS === 'android' ? insets.bottom : 0;
 
   // Restore the saved session on cold start — login survives app kills.
@@ -181,6 +183,18 @@ function AppRoot() {
         <Image source={require('./assets/splash-icon.png')} style={bootStyles.logo} resizeMode="contain" />
         <Text style={bootStyles.title}>Agent Network</Text>
         <ActivityIndicator color={colors.accent} />
+      </SafeAreaView>
+    );
+  }
+
+  // A window opened from the agent context menu is a WeChat-style detached
+  // conversation: chat chrome only. Never mount DesktopWorkspace here, even
+  // when the detached window is wide enough for the normal three-column UI.
+  if (dedicatedChatWindow && cfg && screen.name === 'chat') {
+    return (
+      <SafeAreaView key={theme} style={styles.root} testID="dedicated-chat-window">
+        <StatusBar barStyle={theme === 'light' ? 'dark-content' : 'light-content'} backgroundColor={colors.bg} />
+        <ChatScreen cfg={cfg} alias={screen.alias} onBack={() => {}} desktop />
       </SafeAreaView>
     );
   }
