@@ -48,6 +48,10 @@ jobs:
     runs-on: macos-15
 
     env:
+      # Expo SDK 56's ExpoModulesJSI Swift package declares tools-version 6.2.
+      # macos-15 still defaults to Xcode 16.4 / Swift 6.1, so select the
+      # runner image's pinned Xcode 26.2 explicitly.
+      DEVELOPER_DIR: /Applications/Xcode_26.2.app/Contents/Developer
       # Bundle id / team are also read by Expo from app.json + this team id.
       APPLE_TEAM_ID: "446BLT75JZ"
       BUNDLE_ID: "top.vansin.agentnetwork"
@@ -60,6 +64,14 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+
+      - name: Require Xcode 26.2 and Swift 6.2
+        run: |
+          set -euo pipefail
+          test -d "$DEVELOPER_DIR"
+          xcodebuild -version | tee "$RUNNER_TEMP/xcode-version.txt"
+          swiftc --version | tee "$RUNNER_TEMP/swift-version.txt"
+          grep -E 'Apple Swift version 6\.2([ .]|$)' "$RUNNER_TEMP/swift-version.txt"
 
       - uses: actions/setup-node@v4
         with:
