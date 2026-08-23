@@ -8,6 +8,10 @@ const tauriConfig = JSON.parse(fs.readFileSync(new URL('../src-tauri/tauri.conf.
 const cargoToml = fs.readFileSync(new URL('../src-tauri/Cargo.toml', import.meta.url), 'utf8');
 const cargoLock = fs.readFileSync(new URL('../src-tauri/Cargo.lock', import.meta.url), 'utf8');
 const versionSource = fs.readFileSync(new URL('./version.ts', import.meta.url), 'utf8');
+const normalizeNewlines = (text: string) => text.replace(/\r\n?/g, '\n');
+const cargoPackagePattern = new RegExp(
+  `name = "agent-network-desktop"\\nversion = "${expected.replaceAll('.', '\\.')}"`,
+);
 
 const checks: Array<[string, boolean]> = [
   ['package.json', packageJson.version === expected],
@@ -16,7 +20,8 @@ const checks: Array<[string, boolean]> = [
   ['app.json', appJson.expo?.version === expected],
   ['tauri.conf.json', tauriConfig.version === expected],
   ['Cargo.toml', new RegExp(`^version = "${expected.replaceAll('.', '\\.')}"$`, 'm').test(cargoToml)],
-  ['Cargo.lock root package', new RegExp(`name = "agent-network-desktop"\\nversion = "${expected.replaceAll('.', '\\.')}"`).test(cargoLock)],
+  ['Cargo.lock root package', cargoPackagePattern.test(normalizeNewlines(cargoLock))],
+  ['Cargo.lock CRLF checkout', cargoPackagePattern.test(normalizeNewlines(cargoLock.replaceAll('\n', '\r\n')))],
   ['display version', versionSource.includes(`APP_VERSION = '${expected}'`)],
 ];
 

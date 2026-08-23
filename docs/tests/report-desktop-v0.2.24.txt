@@ -13,6 +13,8 @@ Release gates
 - Native Rust/profile-contract checks: passed on macOS arm64 and Windows x64.
 - GitHub Actions unsigned build: passed on macOS arm64 and Windows x64
   (run 32645426190; the signed release workflow remains the release gate).
+- Version consistency gate normalizes LF/CRLF and includes a synthetic CRLF
+  regression check after signed run 32646348042 exposed the Windows checkout.
 - Real install/runtime smoke: pending (Mac runner currently returns 402 quota exhausted).
 
 Release policy
