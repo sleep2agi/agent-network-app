@@ -157,6 +157,10 @@ jobs:
             ANET_PACKAGED_SMOKE_ROOT="$failed_migration_root/.anet/app" \
             ANET_PREVIOUS_HUB_PASSWORD_FILE="$failed_password_file" \
             "$binary" --smoke-local-hub-failed-migration
+          corrupt_root="$RUNNER_TEMP/packaged-local-hub-corrupt-data"
+          ANET_PACKAGED_SMOKE=1 \
+            ANET_PACKAGED_SMOKE_ROOT="$corrupt_root/.anet/app" \
+            "$binary" --smoke-local-hub-corrupt-data
           test -s "$smoke_root/.anet/app/local-hub/data/commhub.db"
           test -s "$migration_root/.anet/app/local-hub/data/commhub.db"
           test -s "$failed_migration_root/.anet/app/local-hub/data/commhub.db"
@@ -165,7 +169,8 @@ jobs:
             "$smoke_root/.anet/app/smoke-hub-b/commhub.log" \
             "$smoke_root/.anet/app/smoke-hub-c/commhub.log" \
             "$migration_root/.anet/app/local-hub/logs" \
-            "$failed_migration_root/.anet/app/local-hub/logs"; then
+            "$failed_migration_root/.anet/app/local-hub/logs" \
+            "$corrupt_root/.anet/app/local-hub/logs"; then
             echo "::error::Packaged Hub logs contain credential material"
             exit 1
           fi
