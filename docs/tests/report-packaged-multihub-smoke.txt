@@ -20,6 +20,10 @@ Scope
 - That exact packaged smoke also mints a network-scoped node token through the
   public auth API, reports a disposable node through public MCP, dispatches a
   task through `POST /api/task`, and verifies both public status/tasks views.
+- A separate migration root is seeded by the real previous published CommHub
+  `0.9.0-preview.28` through public register/node/status/task APIs. The exact
+  current package must migrate it to `0.9.0-preview.29`, preserve the user,
+  node and task, and create a database-bearing pre-migration snapshot.
 
 Required gates
 - Docker Bun application suite.

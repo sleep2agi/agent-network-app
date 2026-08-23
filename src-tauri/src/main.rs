@@ -11,6 +11,15 @@ fn main() {
             }
         }
     }
+    if std::env::args().any(|arg| arg == "--smoke-local-hub-migration") {
+        match app_lib::run_packaged_local_hub_migration_smoke() {
+            Ok(()) => std::process::exit(0),
+            Err(error) => {
+                eprintln!("packaged local Hub migration smoke failed: {error}");
+                std::process::exit(1);
+            }
+        }
+    }
     if std::env::args().any(|arg| arg == "--smoke-multihub") {
         match app_lib::run_packaged_multihub_smoke() {
             Ok(()) => std::process::exit(0),

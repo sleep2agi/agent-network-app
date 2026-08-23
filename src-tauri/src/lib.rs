@@ -737,6 +737,10 @@ pub fn run_packaged_local_hub_smoke() -> Result<(), String> {
     local_hub::packaged_smoke()
 }
 
+pub fn run_packaged_local_hub_migration_smoke() -> Result<(), String> {
+    local_hub::packaged_migration_smoke()
+}
+
 pub fn run_packaged_multihub_smoke() -> Result<(), String> {
     local_hub::packaged_multihub_smoke()
 }
