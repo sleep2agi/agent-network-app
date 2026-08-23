@@ -46,6 +46,81 @@ export function openNetworkEventStream(
   netId: string,
   handlers: OpenEventStreamHandlers,
 ): () => void {
+  if ((globalThis as any).__TAURI_INTERNALS__) {
+    return openTauriNetworkEventStream(cfg, netId, handlers);
+  }
+  return openXhrNetworkEventStream(cfg, netId, handlers);
+}
+
+type NativePayload =
+  | { kind: 'state'; stream_id: string; state: ConnState; error?: string | null }
+  | { kind: 'event'; stream_id: string; event: LogEvent };
+
+function openTauriNetworkEventStream(
+  cfg: HubConfig,
+  netId: string,
+  handlers: OpenEventStreamHandlers,
+): () => void {
+  const streamId = `logs-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  let stopped = false;
+  let unlisten: (() => void) | undefined;
+  let reconnectTimer: ReturnType<typeof setTimeout> | undefined;
+  let backoffMs = RECONNECT_MIN_MS;
+  let invokeStart: (() => Promise<void>) | undefined;
+
+  handlers.onState('connecting');
+  void Promise.all([import('@tauri-apps/api/core'), import('@tauri-apps/api/event')])
+    .then(async ([core, events]) => {
+      if (stopped) return;
+      unlisten = await events.listen<NativePayload>('network-event-stream', ({ payload }) => {
+        if (stopped || payload.stream_id !== streamId) return;
+        if (payload.kind === 'event') {
+          handlers.onEvent({ ...payload.event, _at: Date.now() });
+          return;
+        }
+        handlers.onState(payload.state, payload.error ?? undefined);
+        if (payload.state === 'connected') backoffMs = RECONNECT_MIN_MS;
+        if (payload.state === 'disconnected' && !reconnectTimer) {
+          const delay = backoffMs;
+          backoffMs = nextBackoffMs(backoffMs);
+          reconnectTimer = setTimeout(() => {
+            reconnectTimer = undefined;
+            if (!stopped) void invokeStart?.().catch((error) => {
+              handlers.onState('disconnected', String(error));
+            });
+          }, delay);
+        }
+      });
+      if (stopped) { unlisten(); unlisten = undefined; return; }
+      invokeStart = async () => { await core.invoke('start_network_event_stream', {
+          streamId,
+          serverUrl: cfg.serverUrl,
+          token: cfg.token,
+          networkId: netId,
+        }); };
+      await invokeStart();
+    })
+    .catch((error) => {
+      if (!stopped) handlers.onState('disconnected', String(error));
+    });
+
+  return () => {
+    stopped = true;
+    if (reconnectTimer) clearTimeout(reconnectTimer);
+    reconnectTimer = undefined;
+    unlisten?.();
+    unlisten = undefined;
+    void import('@tauri-apps/api/core')
+      .then(({ invoke }) => invoke('stop_network_event_stream', { streamId }))
+      .catch(() => undefined);
+  };
+}
+
+function openXhrNetworkEventStream(
+  cfg: HubConfig,
+  netId: string,
+  handlers: OpenEventStreamHandlers,
+): () => void {
   let xhr: XMLHttpRequest | null = null;
   let stopped = false;
   let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
