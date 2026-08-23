@@ -57,6 +57,7 @@ export default function AgentsScreen({
   const [failed, setFailed] = useState(false);
   const [query, setQuery] = useState('');
   const [contextMenu, setContextMenu] = useState<{ alias: string; x: number; y: number } | null>(null);
+  const [hoveredAlias, setHoveredAlias] = useState<string | null>(null);
 
   // RN Web's bubbling onContextMenu can run after WKWebView has already
   // decided to show its native "Reload" menu. Intercept in the capture phase
@@ -244,6 +245,8 @@ export default function AgentsScreen({
         return (
         <Pressable
           {...(compact ? ({ dataSet: { agentAlias: item.alias } } as any) : {})}
+          onHoverIn={compact ? () => setHoveredAlias(item.alias) : undefined}
+          onHoverOut={compact ? () => setHoveredAlias(current => current === item.alias ? null : current) : undefined}
           style={({ pressed }) => [
             styles.card,
             compact && ({ userSelect: 'none', cursor: 'default' } as any),
@@ -257,6 +260,13 @@ export default function AgentsScreen({
               backgroundColor: themeMode() === 'light' ? 'transparent' : colors.card,
             },
             selectedAlias === item.alias && { backgroundColor: themeMode() === 'light' ? '#e7e9ec' : colors.inputBg },
+            compact && hoveredAlias === item.alias && ({
+              backgroundColor: themeMode() === 'light' ? '#f1f3f5' : colors.inputBg,
+              boxShadow: themeMode() === 'light'
+                ? '0 4px 14px rgba(31, 41, 55, 0.12)'
+                : '0 4px 16px rgba(0, 0, 0, 0.38)',
+              zIndex: 2,
+            } as any),
             item.status === 'offline' && styles.cardOffline,
             pressed && { opacity: 0.7 },
           ]}
@@ -264,7 +274,15 @@ export default function AgentsScreen({
           onLongPress={compact ? undefined : () => onOpenNodeDetail(item.alias)}
           delayLongPress={400}
         >
-          <View style={styles.avatarWrap}>
+          <View style={[
+            styles.avatarWrap,
+            compact && hoveredAlias === item.alias && ({
+              borderRadius: 18,
+              boxShadow: themeMode() === 'light'
+                ? '0 3px 10px rgba(7, 153, 168, 0.24)'
+                : '0 3px 12px rgba(34, 211, 238, 0.25)',
+            } as any),
+          ]}>
             <AliasAvatar alias={item.alias} size={34} />
             {/* 更像微信·round-5: 头像右下在线态圆点(带描边环·offline 灰暗) */}
             <View

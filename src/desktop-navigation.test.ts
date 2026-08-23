@@ -27,3 +27,4 @@ check('server workspace reuses the create-node flow', source.includes("section =
 check('desktop agent rows prevent browser text selection', agents.includes("userSelect: 'none'") && agents.includes('selectable={false}'));
 check('desktop agent rows reserve long press for mobile', agents.includes('onLongPress={compact ? undefined'));
 check('desktop agent rows retain left click and captured right-click menu', agents.includes('onPress={() => onOpenChat(item.alias)}') && agents.includes("addEventListener('contextmenu', handleContextMenu, true)"));
+check('desktop agent hover highlights the row and avatar', agents.includes('onHoverIn={compact ?') && agents.includes('hoveredAlias === item.alias') && agents.includes('boxShadow:'));
