@@ -1,6 +1,8 @@
 import * as SecureStore from 'expo-secure-store';
 import * as FileSystem from 'expo-file-system/legacy';
 import { HubConfig, Session } from './api';
+import { loadDesktopThemeMode, saveDesktopThemeMode } from './desktop-theme-storage';
+export { onDesktopThemeStorageChange } from './desktop-theme-storage';
 
 // Token + server persist in the platform keystore (Android Keystore /
 // iOS Keychain) so login survives app restarts. Vincent tg 683 known
@@ -53,6 +55,7 @@ const THEME_KEY = 'theme_mode_v1';
 
 export const saveThemeMode = async (mode: string): Promise<void> => {
   try {
+    if (saveDesktopThemeMode(mode)) return;
     await SecureStore.setItemAsync(THEME_KEY, mode);
   } catch {
     /* theme preference is best-effort */
@@ -61,6 +64,8 @@ export const saveThemeMode = async (mode: string): Promise<void> => {
 
 export const loadThemeMode = async (): Promise<string | null> => {
   try {
+    const desktop = loadDesktopThemeMode();
+    if (desktop !== undefined) return desktop;
     return await SecureStore.getItemAsync(THEME_KEY);
   } catch {
     return null;

@@ -35,7 +35,7 @@ import LogsScreen from './src/LogsScreen';
 import ScheduledTasksScreen from './src/ScheduledTasksScreen';
 import ConnectivityBanner from './src/ConnectivityBanner';
 import type { HostSupervisorDaemon } from './src/api';
-import { clearConfig, loadConfig, loadLocalAvatars, loadOutbox, loadThemeMode, saveConfig, saveLocalAvatars, saveOutbox } from './src/storage';
+import { clearConfig, loadConfig, loadLocalAvatars, loadOutbox, loadThemeMode, onDesktopThemeStorageChange, saveConfig, saveLocalAvatars, saveOutbox } from './src/storage';
 import { initOutbox } from './src/outbox';
 import { colors, onThemeChange, setThemeMode, spacing, themeMode } from './src/theme';
 import { styles } from './src/app-styles';
@@ -102,6 +102,9 @@ function AppRoot() {
   // rebuilt by the onThemeChange listeners, the new key re-renders the tree.
   const [theme, setTheme] = useState(themeMode());
   useEffect(() => onThemeChange(setTheme), []);
+  useEffect(() => onDesktopThemeStorageChange(mode => {
+    if (mode === 'light' || mode === 'dark') setThemeMode(mode);
+  }), []);
   // RN's SafeAreaView only covers iOS; Android edge-to-edge draws the
   // tab bar under the gesture bar (Vincent tg 802) — pad by the real inset.
   const insets = useSafeAreaInsets();
