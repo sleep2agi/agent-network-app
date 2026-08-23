@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 use std::{
     fs::{self, File, OpenOptions},
-    io::Write,
+    io::{Seek, SeekFrom, Write},
     net::TcpListener,
     path::{Path, PathBuf},
     process::{Child, Command, Stdio},
@@ -506,6 +506,10 @@ pub fn start_local_hub() -> Result<String, String> {
     let port = select_port(saved.as_ref().map(|config| config.port))?;
     let endpoint = endpoint(port);
     let lock_path = root.join("supervisor.lock");
+    let backups_dir = root
+        .parent()
+        .ok_or_else(|| "local Hub app root is unavailable".to_string())?
+        .join("backups");
     if lock_path.exists() {
         if let Ok(payload) = wait_ready(
             saved
@@ -547,6 +551,17 @@ pub fn start_local_hub() -> Result<String, String> {
         .write(true)
         .open(&lock_path)
         .map_err(|error| format!("cannot acquire local Hub ownership: {error}"))?;
+    // Write a live owner immediately. If the desktop crashes before the
+    // sidecar is spawned, the next launch can safely identify this as a stale
+    // lock instead of getting stuck behind an empty/invalid file.
+    writeln!(lock, "{}", std::process::id()).map_err(|error| {
+        let _ = fs::remove_file(&lock_path);
+        error.to_string()
+    })?;
+    lock.flush().map_err(|error| {
+        let _ = fs::remove_file(&lock_path);
+        error.to_string()
+    })?;
 
     let executable = sidecar_path()?;
     if !executable.is_file() {
@@ -560,12 +575,18 @@ pub fn start_local_hub() -> Result<String, String> {
         .as_ref()
         .filter(|config| database_existed && config.hub_version != EXPECTED_HUB_VERSION)
     {
-        Some(config) => Some(snapshot_data_for_migration(
+        Some(config) => match snapshot_data_for_migration(
             &data_dir,
-            &app_root()?.join("backups"),
+            &backups_dir,
             &config.hub_version,
             EXPECTED_HUB_VERSION,
-        )?),
+        ) {
+            Ok(snapshot) => Some(snapshot),
+            Err(error) => {
+                let _ = fs::remove_file(&lock_path);
+                return Err(error);
+            }
+        },
         None => None,
     };
     let log_path = logs_dir.join("commhub.log");
@@ -592,7 +613,12 @@ pub fn start_local_hub() -> Result<String, String> {
             let _ = fs::remove_file(&lock_path);
             format!("cannot start bundled local Hub: {error}")
         })?;
-    if let Err(error) = writeln!(lock, "{}", child.id()) {
+    if let Err(error) = lock
+        .set_len(0)
+        .and_then(|_| lock.seek(SeekFrom::Start(0)).map(|_| ()))
+        .and_then(|_| writeln!(lock, "{}", child.id()))
+        .and_then(|_| lock.flush())
+    {
         terminate_child(&mut child, &lock_path);
         return Err(error.to_string());
     }

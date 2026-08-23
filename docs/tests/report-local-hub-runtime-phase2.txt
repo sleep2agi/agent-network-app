@@ -46,7 +46,8 @@ Security/storage assertions
 - Local profile cannot be removed through ordinary account removal.
 - Supervisor retries unexpected exits with finite capped exponential backoff.
 - A live but unhealthy lock owner blocks duplicate startup; only a dead PID is
-  treated as a stale lock.
+  treated as a stale lock. The desktop PID is flushed into the lock before
+  sidecar spawn, so a crash in that window remains safely recoverable.
 - Settings can create a stopped-data backup; destructive deletion requires
   typed confirmation, creates a backup first, and leaves remote profiles intact.
 - Unix shutdown sends SIGTERM and falls back to forced termination only after 2s.

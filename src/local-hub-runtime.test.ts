@@ -17,6 +17,7 @@ const checks: Array<[string, boolean]> = [
   ['Hub binds loopback only', rust.includes('.env("HOST", "127.0.0.1")')],
   ['supervisor has capped exponential retries', rust.includes('[1_u64, 2, 4, 8, 16, 30]')],
   ['supervisor refuses a duplicate when lock owner is alive but unhealthy', rust.includes('owner_pid.is_some_and(process_is_alive)') && rust.includes('refusing to start a duplicate')],
+  ['ownership lock records a live desktop PID before sidecar spawn', rust.indexOf('writeln!(lock, "{}", std::process::id())') < rust.indexOf('let mut child = Command::new(executable)')],
   ['bootstrap removes unsafe development/master-token env', rust.includes('.env_remove("COMMHUB_DEV_OPEN")') && rust.includes('.env_remove("COMMHUB_AUTH_TOKEN")')],
   ['delete requires an exact native-side confirmation and backup first', rust.includes('confirmation != "DELETE LOCAL WORKSPACE"') && rust.lastIndexOf('backup_local_hub_stopped()?') < rust.indexOf('remove_local_profile_data()?')],
   ['version migration snapshots and restores data on failure', rust.includes('snapshot_data_for_migration') && rust.includes('restore_migration_snapshot') && rust.includes('config.hub_version != EXPECTED_HUB_VERSION')],
