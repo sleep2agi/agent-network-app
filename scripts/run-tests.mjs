@@ -38,7 +38,10 @@ let failed = 0;
 for (const f of files) {
   console.log(`\n# ${f}`);
   const r = spawnSync(runner, [f], { stdio: 'inherit' });
-  if (r.status !== 0) failed++;
+  if (r.error || r.status !== 0) {
+    failed++;
+    if (r.error) console.error(`✗ could not start ${runner}: ${r.error.message}`);
+  }
 }
 console.log(`\n=== ${files.length - failed}/${files.length} test files passed ===`);
 process.exit(failed ? 1 : 0);
