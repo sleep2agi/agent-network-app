@@ -1,0 +1,9 @@
+Desktop v0.2.18 — preserve the app brand in light mode
+
+- Light and dark navigation rails now use the same official application logo.
+- Light mode keeps the logo compact with breathing room on a subtle bordered
+  surface, rather than replacing the brand with a different glyph.
+
+Verification:
+- Docker: bun run test
+- Docker: bun run typecheck

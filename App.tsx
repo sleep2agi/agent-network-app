@@ -407,9 +407,9 @@ function DesktopWorkspace({ cfg, screen, setScreen, onLogout }: {
         <View style={desktopStyles.railBrand}>
           {themeMode() === 'light' ? (
             <Image
-              source={require('./assets/android-icon-monochrome.png')}
+              source={require('./assets/icon.png')}
               style={desktopStyles.railBrandImageLight}
-              resizeMode="contain"
+              resizeMode="cover"
             />
           ) : (
             <Image source={require('./assets/icon.png')} style={desktopStyles.railBrandImage} resizeMode="cover" />
@@ -474,7 +474,7 @@ const makeDesktopStyles = () => StyleSheet.create({
     borderColor: themeMode() === 'light' ? '#c8e7e9' : 'transparent',
   },
   railBrandImage: { width: 38, height: 38 },
-  railBrandImageLight: { width: 28, height: 28, tintColor: colors.accent },
+  railBrandImageLight: { width: 30, height: 30, borderRadius: 8 },
   railTabs: { flex: 1, paddingTop: 20, gap: 6 },
   railButton: { width: 38, height: 38, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
   railButtonActive: { backgroundColor: themeMode() === 'light' ? '#dde2e7' : colors.card },
