@@ -42,7 +42,8 @@ import { colors, onThemeChange, setThemeMode, spacing, themeMode } from './src/t
 import { styles } from './src/app-styles';
 import { APP_VERSION } from './src/version';
 import DesktopUpdatePrompt from './src/DesktopUpdatePrompt';
-import { loadPinnedChats, openChatWindow, requestedChatAlias, requestedChatProfileId, savePinnedChats } from './src/desktop-chat-menu';
+import { loadPinnedChats, requestedChatAlias, requestedChatProfileId, savePinnedChats } from './src/desktop-chat-menu';
+import { openRememberedChatWindow, restoreDetachedChatWindows } from './src/desktop-chat-windows';
 
 type Screen =
   | { name: 'login' }
@@ -176,6 +177,7 @@ function AppRoot() {
         // Fire the status request now so its RTT overlaps the boot→AgentsScreen
         // mount; AgentsScreen's first load consumes this in-flight promise.
         prefetchStatus(saved);
+        if (!initialChat) void restoreDetachedChatWindows().catch(error => console.error('Failed to restore detached chats', error));
       }
       setBooting(false);
     }).catch(error => {
@@ -498,7 +500,7 @@ function DesktopWorkspace({ cfg, screen, setScreen, onLogout, onAddAccount, onSw
             else setScreen({ name: 'logs' });
           }} />
         ) : (
-          <AgentsScreen cfg={cfg} compact selectedAlias={screen.name === 'chat' ? screen.alias : undefined} pinnedAliases={pinnedAliases} onTogglePin={togglePin} onOpenChatWindow={alias => { void openChatWindow(alias, cfg.profileId, cfg.username || cfg.serverUrl); }} onOpenChat={alias => setScreen({ name: 'chat', alias })} onOpenPicker={() => setScreen({ name: 'picker' })} onOpenNodeDetail={alias => setScreen({ name: 'nodeDetail', alias })} />
+          <AgentsScreen cfg={cfg} compact selectedAlias={screen.name === 'chat' ? screen.alias : undefined} pinnedAliases={pinnedAliases} onTogglePin={togglePin} onOpenChatWindow={alias => { void openRememberedChatWindow(alias, cfg.profileId, cfg.username || cfg.serverUrl); }} onOpenChat={alias => setScreen({ name: 'chat', alias })} onOpenPicker={() => setScreen({ name: 'picker' })} onOpenNodeDetail={alias => setScreen({ name: 'nodeDetail', alias })} />
         )}
       </View>
       <View style={desktopStyles.content}>{content}</View>

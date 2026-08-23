@@ -1,0 +1,26 @@
+Agent Network desktop detached-chat restoration
+Date: 2026-08-23
+Branch: feat/detached-window-restore
+
+Scope
+- Persist each detached chat in its profile-scoped `windows.json`
+- Key native window identity by immutable profile ID + alias
+- Restore records for every saved profile only from the main window cold start
+- Never recursively restore from a detached child window
+- Reuse an existing label instead of opening duplicates
+- Preserve Hub/account context in restored window titles
+
+Layer 1 — Docker TypeScript
+Result: PASS
+
+Layer 2 — Docker unit/contract tests
+Result: PASS — 27/27 test files
+Desktop chat menu: 14 checks
+Profile storage contract: 13 checks
+
+Layer 3 — native package build
+Result: pending exact macOS and Windows CI
+
+Runtime gate
+- Cross-profile cold-start restoration on a real signed app remains required
+  before #66 can close.
