@@ -17,3 +17,9 @@ Fix
 Required CI validation
 - mac-arm64 emits DMG and app zip.
 - windows-x64 emits NSIS EXE and MSI.
+
+Follow-up from run 32612406467
+- mac-arm64 passed and uploaded both artifacts.
+- PowerShell stripped quotes from the inline JSON override on Windows.
+- Both jobs now consume the same checked-in JSON override file, avoiding
+  shell-specific quoting.
