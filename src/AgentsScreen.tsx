@@ -234,6 +234,7 @@ export default function AgentsScreen({
           {...contextProps}
           style={({ pressed }) => [
             styles.card,
+            compact && ({ userSelect: 'none', cursor: 'default' } as any),
             compact && {
               borderWidth: 0,
               borderBottomWidth: 0,
@@ -248,7 +249,7 @@ export default function AgentsScreen({
             pressed && { opacity: 0.7 },
           ]}
           onPress={() => onOpenChat(item.alias)}
-          onLongPress={() => onOpenNodeDetail(item.alias)}
+          onLongPress={compact ? undefined : () => onOpenNodeDetail(item.alias)}
           delayLongPress={400}
         >
           <View style={styles.avatarWrap}>
@@ -263,12 +264,12 @@ export default function AgentsScreen({
             />
           </View>
           <View style={{ flex: 1, minWidth: 0 }}>
-            <Text style={[styles.alias, compact && { fontSize: 13, fontWeight: '600' }]} numberOfLines={1}>
+            <Text selectable={false} style={[styles.alias, compact && { fontSize: 13, fontWeight: '600' }]} numberOfLines={1}>
               {pinnedAliases.includes(item.alias) ? '📌 ' : ''}
               {item.alias}
             </Text>
             {item.task ? (
-              <Text style={[styles.task, compact && { fontSize: 11 }]} numberOfLines={1}>
+              <Text selectable={false} style={[styles.task, compact && { fontSize: 11 }]} numberOfLines={1}>
                 {item.task}
               </Text>
             ) : null}

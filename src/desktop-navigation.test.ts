@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 
 const source = fs.readFileSync(path.join(process.cwd(), 'App.tsx'), 'utf8');
+const agents = fs.readFileSync(path.join(process.cwd(), 'src/AgentsScreen.tsx'), 'utf8');
 const check = (name: string, ok: boolean) => {
   if (!ok) throw new Error(`FAIL: ${name}`);
   console.log(`PASS: ${name}`);
@@ -22,3 +23,6 @@ check('detached chat has no back or node-settings controls', detachedBlock.inclu
 check('server workspace has a dedicated sidebar', source.includes('<ServerSidebar cfg={cfg}') && source.includes('serverSectionForScreen(screen)'));
 check('server workspace exposes node inventory', source.includes("screen.name === 'serverNodes'") && source.includes("name: 'serverNodeDetail'"));
 check('server workspace reuses the create-node flow', source.includes("section === 'create'") && source.includes("setScreen({ name: 'picker' })"));
+check('desktop agent rows prevent browser text selection', agents.includes("userSelect: 'none'") && agents.includes('selectable={false}'));
+check('desktop agent rows reserve long press for mobile', agents.includes('onLongPress={compact ? undefined'));
+check('desktop agent rows retain left click and right-click menu', agents.includes('onPress={() => onOpenChat(item.alias)}') && agents.includes('onContextMenu:'));

@@ -1,0 +1,13 @@
+Agent Network Desktop v0.2.15 release candidate
+Date: 2026-08-23
+Base: b8660d20d0561c081e211d6fe61c83950ef583d6
+
+Scope
+- Desktop Agent rows cannot select text with mouse drag.
+- Left click opens the conversation.
+- Right click retains pin/unpin and open-in-new-window actions.
+- Desktop long press no longer routes to node details.
+
+Release gates
+- Docker unit tests and TypeScript validation.
+- Signed Windows and notarized macOS release workflow.
