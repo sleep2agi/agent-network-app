@@ -26,6 +26,14 @@ Docker gates
    command: bun run test
    result: 31/31 test files passed
 
+4. Compiled Hub runtime E2E
+   Dockerfile: tests/local-hub-runtime/Dockerfile
+   command: docker run with the pinned compiled Linux sidecar mounted read-only
+   result: passed
+   evidence: loopback health v0.9.0-preview.29 / API v3 / secured;
+             public register + auth/me; SIGTERM exit; database restart login;
+             no password or token present in captured stdout/stderr.
+
 Security/storage assertions
 - Bind address is fixed to 127.0.0.1.
 - Port is selected only from 9200..9299; an occupied port is never killed.
