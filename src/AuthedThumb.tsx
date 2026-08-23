@@ -217,7 +217,7 @@ export default function AuthedThumb({
   }
   return (
     <Pressable onPress={() => onPress(uri)}>
-      <Image source={{ uri }} style={styles.thumb} resizeMode="cover" />
+      <Image source={{ uri }} style={styles.thumb} resizeMode="contain" />
     </Pressable>
   );
 }

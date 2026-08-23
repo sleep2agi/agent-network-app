@@ -1,0 +1,26 @@
+Agent Network Tauri authenticated image thumbnails
+Date: 2026-08-23
+Branch: fix/tauri-auth-image-thumbnails
+
+Scope
+- Render authenticated Hub image attachments in macOS/Windows Tauri instead
+  of falling through the React Native Web text-only branch
+- Fetch bytes with the Tauri HTTP transport and bearer authorization
+- Convert octet-stream responses to filename-derived image Blob MIME types
+- Revoke Blob URLs on unmount
+- Show an explicit retryable failure tile
+- Use `contain` for local and authenticated thumbnails so long/wide images
+  are not cropped or stretched
+
+Layer 1 — Docker TypeScript
+Result: PASS
+
+Layer 2 — Docker tests
+Result: PASS — 28/28 test files
+Authenticated web image loader: 4 checks
+
+Layer 3 — native package build
+Result: pending exact macOS and Windows CI
+
+Runtime gate
+- macOS/Windows light/dark visual matrix remains required before #54 closes.
