@@ -139,6 +139,14 @@ function AppRoot() {
     setScreen(next ? { name: 'agents' } : { name: 'login' });
   };
 
+  const finishLocalDataDeletion = async () => {
+    const next = await loadConfig();
+    await hydrateProfileLocalState(next);
+    setCfg(next);
+    setShowRemoteLogin(false);
+    setScreen(next ? { name: 'agents' } : { name: 'login' });
+  };
+
   const activateProfile = async (profileId: string) => {
     const next = await switchHubProfile(profileId);
     await hydrateProfileLocalState(next);
@@ -265,7 +273,7 @@ function AppRoot() {
       <SafeAreaView key={workspaceKey} style={styles.root}>
         <StatusBar barStyle={theme === 'light' ? 'dark-content' : 'light-content'} backgroundColor={colors.bg} />
         <ConnectivityBanner />
-        <DesktopWorkspace cfg={cfg} screen={screen} setScreen={setScreen} onLogout={removeActiveProfile} onAddAccount={() => { setReauthProfile(null); setScreen({ name: 'login' }); }} onSwitchProfile={activateProfile} onReauthProfile={requestProfileReauth} />
+        <DesktopWorkspace cfg={cfg} screen={screen} setScreen={setScreen} onLogout={removeActiveProfile} onLocalDataDeleted={finishLocalDataDeletion} onAddAccount={() => { setReauthProfile(null); setScreen({ name: 'login' }); }} onSwitchProfile={activateProfile} onReauthProfile={requestProfileReauth} />
       </SafeAreaView>
     );
   }
@@ -400,6 +408,7 @@ function AppRoot() {
                 onAddAccount={() => { setReauthProfile(null); setScreen({ name: 'login' }); }}
                 onSwitchProfile={activateProfile}
                 onReauthProfile={requestProfileReauth}
+                onLocalDataDeleted={finishLocalDataDeletion}
               />
             ) : (
               <AgentsScreen
@@ -483,11 +492,12 @@ const bootStyles = StyleSheet.create({
   title: { color: '#ffffff', fontSize: 20, fontWeight: '700', letterSpacing: 0.4, marginBottom: 8 },
 });
 
-function DesktopWorkspace({ cfg, screen, setScreen, onLogout, onAddAccount, onSwitchProfile, onReauthProfile }: {
+function DesktopWorkspace({ cfg, screen, setScreen, onLogout, onLocalDataDeleted, onAddAccount, onSwitchProfile, onReauthProfile }: {
   cfg: HubConfig;
   screen: Screen;
   setScreen: (screen: Screen) => void;
   onLogout: () => void | Promise<void>;
+  onLocalDataDeleted: () => void | Promise<void>;
   onAddAccount: () => void;
   onSwitchProfile: (profileId: string) => void | Promise<void>;
   onReauthProfile: (profile: Pick<HubProfile, 'profileId' | 'serverUrl' | 'username' | 'displayName'>) => void;
@@ -520,7 +530,7 @@ function DesktopWorkspace({ cfg, screen, setScreen, onLogout, onAddAccount, onSw
   : screen.name === 'server' ? <ServerScreen cfg={cfg} onOpenLogs={() => setScreen({ name: 'logs' })} />
   : screen.name === 'serverNodes' ? <AgentsScreen cfg={cfg} onOpenChat={alias => setScreen({ name: 'serverNodeDetail', alias })} onOpenPicker={() => setScreen({ name: 'picker' })} onOpenNodeDetail={alias => setScreen({ name: 'serverNodeDetail', alias })} />
   : screen.name === 'serverNodeDetail' ? <NodeDetailScreen cfg={cfg} alias={screen.alias} onBack={() => setScreen({ name: 'serverNodes' })} />
-  : screen.name === 'settings' ? <SettingsScreen cfg={cfg} onLogout={onLogout} onAddAccount={onAddAccount} onSwitchProfile={onSwitchProfile} onReauthProfile={onReauthProfile} />
+  : screen.name === 'settings' ? <SettingsScreen cfg={cfg} onLogout={onLogout} onLocalDataDeleted={onLocalDataDeleted} onAddAccount={onAddAccount} onSwitchProfile={onSwitchProfile} onReauthProfile={onReauthProfile} />
   : screen.name === 'taskDetail' ? <TaskDetailScreen cfg={cfg} taskId={screen.taskId} onBack={() => setScreen({ name: 'tasks' })} />
   : screen.name === 'nodeDetail' ? <NodeDetailScreen cfg={cfg} alias={screen.alias} onBack={() => setScreen({ name: 'agents' })} />
   : screen.name === 'logs' ? <LogsScreen cfg={cfg} onBack={() => setScreen({ name: 'server' })} />

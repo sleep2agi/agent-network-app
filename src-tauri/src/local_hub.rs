@@ -15,7 +15,7 @@ use super::{
     ProfileSessionInput, ProfileSessionOutput, SESSION_SERVICE,
 };
 
-const LOCAL_PROFILE_ID: &str = "local-workspace";
+pub(super) const LOCAL_PROFILE_ID: &str = "local-workspace";
 const LOCAL_USERNAME: &str = "local-admin";
 const LOCAL_PASSWORD_ACCOUNT: &str = "local-hub-bootstrap-password";
 const PREFERRED_PORT: u16 = 9200;
@@ -69,6 +69,13 @@ struct BootstrapPayload {
     error: Option<String>,
     token: Option<String>,
     network_id: Option<String>,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct LocalHubBackupResult {
+    path: String,
+    restarted: bool,
 }
 
 fn local_root() -> Result<PathBuf, String> {
@@ -145,6 +152,40 @@ fn open_log(path: &Path) -> Result<File, String> {
         .append(true)
         .open(path)
         .map_err(|error| error.to_string())
+}
+
+fn copy_dir_recursive(source: &Path, destination: &Path) -> Result<(), String> {
+    super::ensure_private_dir(destination)?;
+    for entry in fs::read_dir(source).map_err(|error| error.to_string())? {
+        let entry = entry.map_err(|error| error.to_string())?;
+        let kind = entry.file_type().map_err(|error| error.to_string())?;
+        let target = destination.join(entry.file_name());
+        if kind.is_dir() {
+            copy_dir_recursive(&entry.path(), &target)?;
+        } else if kind.is_file() {
+            fs::copy(entry.path(), target).map_err(|error| error.to_string())?;
+        }
+    }
+    Ok(())
+}
+
+fn backup_local_hub_stopped() -> Result<PathBuf, String> {
+    let source = local_root()?;
+    if !source.exists() {
+        return Err("local Hub has no data to back up".into());
+    }
+    let timestamp = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_err(|error| error.to_string())?
+        .as_secs();
+    let destination = app_root()?
+        .join("backups")
+        .join(format!("local-hub-{timestamp}"));
+    if destination.exists() {
+        return Err("local Hub backup destination already exists; retry in one second".into());
+    }
+    copy_dir_recursive(&source, &destination)?;
+    Ok(destination)
 }
 
 fn health(endpoint: &str) -> Result<HealthPayload, String> {
@@ -291,6 +332,35 @@ fn terminate_child(child: &mut Child, lock_path: &Path) {
     let _ = child.kill();
     let _ = child.wait();
     let _ = fs::remove_file(lock_path);
+}
+
+fn stop_child_gracefully(child: &mut Child) -> Result<(), String> {
+    if child
+        .try_wait()
+        .map_err(|error| error.to_string())?
+        .is_some()
+    {
+        return Ok(());
+    }
+    #[cfg(unix)]
+    {
+        let result = unsafe { libc::kill(child.id() as i32, libc::SIGTERM) };
+        if result == 0 {
+            for _ in 0..40 {
+                if child
+                    .try_wait()
+                    .map_err(|error| error.to_string())?
+                    .is_some()
+                {
+                    return Ok(());
+                }
+                thread::sleep(Duration::from_millis(50));
+            }
+        }
+    }
+    child.kill().map_err(|error| error.to_string())?;
+    child.wait().map_err(|error| error.to_string())?;
+    Ok(())
 }
 
 fn monitor_local_hub(generation: String) {
@@ -541,8 +611,7 @@ pub fn stop_local_hub_inner() -> Result<(), String> {
             .map_err(|error| error.to_string())?
             .is_none()
         {
-            managed.child.kill().map_err(|error| error.to_string())?;
-            managed.child.wait().map_err(|error| error.to_string())?;
+            stop_child_gracefully(&mut managed.child)?;
         }
         if managed.lock_path.exists() {
             fs::remove_file(managed.lock_path).map_err(|error| error.to_string())?;
@@ -577,6 +646,51 @@ pub fn open_local_hub_logs() -> Result<(), String> {
         .spawn()
         .map_err(|error| error.to_string())?;
     Ok(())
+}
+
+#[tauri::command]
+pub fn backup_local_hub_data() -> Result<String, String> {
+    let was_running = LOCAL_HUB
+        .lock()
+        .map_err(|_| "local Hub supervisor lock poisoned")?
+        .is_some();
+    if was_running {
+        stop_local_hub_inner()?;
+    }
+    let backup = backup_local_hub_stopped();
+    let restart = if was_running {
+        start_local_hub().map(|_| true)
+    } else {
+        Ok(false)
+    };
+    let path = backup?;
+    let restarted = restart?;
+    serde_json::to_string(&LocalHubBackupResult {
+        path: path.display().to_string(),
+        restarted,
+    })
+    .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+pub fn delete_local_hub_data(confirmation: String) -> Result<String, String> {
+    if confirmation != "DELETE LOCAL WORKSPACE" {
+        return Err("exact local-data deletion confirmation is required".into());
+    }
+    stop_local_hub_inner()?;
+    let backup = backup_local_hub_stopped()?;
+    super::remove_local_profile_data()?;
+    let password_entry = keyring::Entry::new(SESSION_SERVICE, LOCAL_PASSWORD_ACCOUNT)
+        .map_err(|error| error.to_string())?;
+    match password_entry.delete_credential() {
+        Ok(()) | Err(keyring::Error::NoEntry) => {}
+        Err(error) => return Err(error.to_string()),
+    }
+    let root = local_root()?;
+    if root.exists() {
+        fs::remove_dir_all(root).map_err(|error| error.to_string())?;
+    }
+    Ok(backup.display().to_string())
 }
 
 pub fn is_local_profile(profile_id: &str) -> bool {
@@ -627,6 +741,29 @@ mod tests {
                 .unwrap()
                 .len(),
             MAX_LOG_BYTES
+        );
+    }
+
+    #[test]
+    fn recursive_backup_preserves_nested_data() {
+        let source = tempfile::tempdir().unwrap();
+        let destination_root = tempfile::tempdir().unwrap();
+        fs::create_dir(source.path().join("uploads")).unwrap();
+        fs::write(source.path().join("commhub.db"), b"sqlite-fixture").unwrap();
+        fs::write(
+            source.path().join("uploads").join("fixture.txt"),
+            b"attachment",
+        )
+        .unwrap();
+        let destination = destination_root.path().join("backup");
+        copy_dir_recursive(source.path(), &destination).unwrap();
+        assert_eq!(
+            fs::read(destination.join("commhub.db")).unwrap(),
+            b"sqlite-fixture"
+        );
+        assert_eq!(
+            fs::read(destination.join("uploads").join("fixture.txt")).unwrap(),
+            b"attachment"
         );
     }
 }

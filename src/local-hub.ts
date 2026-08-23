@@ -29,3 +29,15 @@ export const openLocalHubLogs = async (): Promise<void> => {
   const { invoke } = await import('@tauri-apps/api/core');
   await invoke('open_local_hub_logs');
 };
+
+export interface LocalHubBackupResult { path: string; restarted: boolean }
+
+export const backupLocalHubData = async (): Promise<LocalHubBackupResult> => {
+  const { invoke } = await import('@tauri-apps/api/core');
+  return JSON.parse(await invoke<string>('backup_local_hub_data')) as LocalHubBackupResult;
+};
+
+export const deleteLocalHubData = async (): Promise<string> => {
+  const { invoke } = await import('@tauri-apps/api/core');
+  return invoke<string>('delete_local_hub_data', { confirmation: 'DELETE LOCAL WORKSPACE' });
+};

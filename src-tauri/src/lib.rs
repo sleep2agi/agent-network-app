@@ -502,23 +502,34 @@ fn remove_desktop_profile(profile_id: String) -> Result<(), String> {
     let _guard = PROFILE_STORE
         .lock()
         .map_err(|_| "profile registry lock poisoned")?;
+    remove_desktop_profile_unlocked(&profile_id)
+}
+
+fn remove_desktop_profile_unlocked(profile_id: &str) -> Result<(), String> {
     let mut index = read_profile_index()?;
     if !index.profiles.iter().any(|p| p.profile_id == profile_id) {
         return Ok(());
     }
-    match profile_entry(&profile_id)?.delete_credential() {
+    match profile_entry(profile_id)?.delete_credential() {
         Ok(()) | Err(keyring::Error::NoEntry) => {}
         Err(error) => return Err(error.to_string()),
     }
     index.profiles.retain(|p| p.profile_id != profile_id);
-    if index.active_profile_id.as_deref() == Some(&profile_id) {
+    if index.active_profile_id.as_deref() == Some(profile_id) {
         index.active_profile_id = index.profiles.first().map(|p| p.profile_id.clone());
     }
-    let profile_dir = app_root()?.join("profiles").join(&profile_id);
+    let profile_dir = app_root()?.join("profiles").join(profile_id);
     if profile_dir.exists() {
         fs::remove_dir_all(profile_dir).map_err(|error| error.to_string())?;
     }
     save_profile_index(&index)
+}
+
+fn remove_local_profile_data() -> Result<(), String> {
+    let _guard = PROFILE_STORE
+        .lock()
+        .map_err(|_| "profile registry lock poisoned")?;
+    remove_desktop_profile_unlocked(local_hub::LOCAL_PROFILE_ID)
 }
 
 #[tauri::command]
@@ -709,6 +720,8 @@ pub fn run() {
             local_hub::stop_local_hub,
             local_hub::restart_local_hub,
             local_hub::open_local_hub_logs,
+            local_hub::backup_local_hub_data,
+            local_hub::delete_local_hub_data,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

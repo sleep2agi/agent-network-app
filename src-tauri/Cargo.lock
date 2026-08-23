@@ -15,6 +15,7 @@ dependencies = [
  "atomicwrites",
  "futures-util",
  "keyring",
+ "libc",
  "reqwest 0.13.4",
  "serde",
  "serde_json",
