@@ -131,6 +131,9 @@ jobs:
           ANET_PACKAGED_SMOKE=1 \
             ANET_PACKAGED_SMOKE_ROOT="$smoke_root/.anet/app" \
             "$binary" --smoke-multihub
+          ANET_PACKAGED_SMOKE=1 \
+            ANET_PACKAGED_SMOKE_ROOT="$smoke_root/.anet/app" \
+            "$binary" --smoke-local-hub-crash-recovery
           migration_root="$RUNNER_TEMP/packaged-local-hub-migration"
           previous_prefix="$RUNNER_TEMP/commhub-preview-28"
           password_file="$RUNNER_TEMP/previous-hub-password"
@@ -144,16 +147,87 @@ jobs:
             ANET_PACKAGED_SMOKE_ROOT="$migration_root/.anet/app" \
             ANET_PREVIOUS_HUB_PASSWORD_FILE="$password_file" \
             "$binary" --smoke-local-hub-migration
+          failed_migration_root="$RUNNER_TEMP/packaged-local-hub-failed-migration"
+          failed_password_file="$RUNNER_TEMP/failed-migration-password"
+          node scripts/seed-previous-local-hub.mjs \
+            "$failed_migration_root/.anet/app" \
+            "$previous_prefix/node_modules/@sleep2agi/commhub-server" \
+            "$failed_password_file"
+          ANET_PACKAGED_SMOKE=1 \
+            ANET_PACKAGED_SMOKE_ROOT="$failed_migration_root/.anet/app" \
+            ANET_PREVIOUS_HUB_PASSWORD_FILE="$failed_password_file" \
+            "$binary" --smoke-local-hub-failed-migration
           test -s "$smoke_root/.anet/app/local-hub/data/commhub.db"
           test -s "$migration_root/.anet/app/local-hub/data/commhub.db"
+          test -s "$failed_migration_root/.anet/app/local-hub/data/commhub.db"
           if grep -R -E 'local-hub-bootstrap-password|atok_|ntok_|utok_' \
             "$smoke_root/.anet/app/local-hub/logs" \
             "$smoke_root/.anet/app/smoke-hub-b/commhub.log" \
             "$smoke_root/.anet/app/smoke-hub-c/commhub.log" \
-            "$migration_root/.anet/app/local-hub/logs"; then
+            "$migration_root/.anet/app/local-hub/logs" \
+            "$failed_migration_root/.anet/app/local-hub/logs"; then
             echo "::error::Packaged Hub logs contain credential material"
             exit 1
           fi
+
+      - name: Audit macOS app removal and reinstall data retention
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          set -euo pipefail
+          source_app=$(find src-tauri/target/release/bundle/macos -maxdepth 1 -name '*.app' -print -quit)
+          install_parent="$RUNNER_TEMP/Applications"
+          installed_app="$install_parent/Agent Network.app"
+          retention_root="$RUNNER_TEMP/install-retention/.anet/app"
+          test -d "$source_app"
+          mkdir -p "$install_parent"
+          ditto "$source_app" "$installed_app"
+          codesign --verify --deep --strict "$installed_app"
+          ANET_PACKAGED_SMOKE=1 ANET_PACKAGED_SMOKE_ROOT="$retention_root" \
+            "$installed_app/Contents/MacOS/agent-network-desktop" --smoke-local-hub
+          test -s "$retention_root/local-hub/data/commhub.db"
+          rm -rf "$installed_app"
+          test ! -e "$installed_app"
+          test -s "$retention_root/local-hub/data/commhub.db"
+          test -s "$retention_root/profiles/index.json"
+          ditto "$source_app" "$installed_app"
+          ANET_PACKAGED_SMOKE=1 ANET_PACKAGED_SMOKE_ROOT="$retention_root" \
+            "$installed_app/Contents/MacOS/agent-network-desktop" --smoke-local-hub
+          test -s "$retention_root/local-hub/data/commhub.db"
+
+      - name: Audit Windows NSIS uninstall and reinstall data retention
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $installer = Get-ChildItem 'src-tauri/target/release/bundle/nsis' -Filter '*-setup.exe' | Select-Object -First 1
+          if (-not $installer) { throw 'NSIS installer missing' }
+          $installDir = Join-Path $env:RUNNER_TEMP 'AgentNetworkInstalled'
+          $retentionRoot = Join-Path $env:RUNNER_TEMP 'install-retention/.anet/app'
+          $install = Start-Process -FilePath $installer.FullName -ArgumentList '/S', "/D=$installDir" -Wait -PassThru
+          if ($install.ExitCode -ne 0) { throw "NSIS install failed: $($install.ExitCode)" }
+          $binary = Get-ChildItem $installDir -Recurse -Filter 'agent-network-desktop.exe' | Select-Object -First 1
+          if (-not $binary) { throw 'installed desktop executable missing' }
+          $env:ANET_PACKAGED_SMOKE = '1'
+          $env:ANET_PACKAGED_SMOKE_ROOT = $retentionRoot
+          & $binary.FullName --smoke-local-hub
+          if ($LASTEXITCODE -ne 0) { throw "installed smoke failed: $LASTEXITCODE" }
+          $database = Join-Path $retentionRoot 'local-hub/data/commhub.db'
+          $profiles = Join-Path $retentionRoot 'profiles/index.json'
+          if (-not (Test-Path $database) -or (Get-Item $database).Length -eq 0) { throw 'retention database missing' }
+          $uninstaller = Get-ChildItem $installDir -Recurse -Filter '*uninstall*.exe' | Select-Object -First 1
+          if (-not $uninstaller) { throw 'NSIS uninstaller missing' }
+          $uninstall = Start-Process -FilePath $uninstaller.FullName -ArgumentList '/S' -Wait -PassThru
+          if ($uninstall.ExitCode -ne 0) { throw "NSIS uninstall failed: $($uninstall.ExitCode)" }
+          Start-Sleep -Seconds 2
+          if (Test-Path $binary.FullName) { throw 'NSIS uninstall left the application binary installed' }
+          if (-not (Test-Path $database) -or -not (Test-Path $profiles)) { throw 'NSIS uninstall deleted retained app data' }
+          $reinstall = Start-Process -FilePath $installer.FullName -ArgumentList '/S', "/D=$installDir" -Wait -PassThru
+          if ($reinstall.ExitCode -ne 0) { throw "NSIS reinstall failed: $($reinstall.ExitCode)" }
+          $binary = Get-ChildItem $installDir -Recurse -Filter 'agent-network-desktop.exe' | Select-Object -First 1
+          & $binary.FullName --smoke-local-hub
+          if ($LASTEXITCODE -ne 0) { throw "reinstalled smoke failed: $LASTEXITCODE" }
+          if (-not (Test-Path $database) -or (Get-Item $database).Length -eq 0) { throw 'reinstall lost retained database' }
 
       - name: Enforce desktop distribution size ceiling
         shell: bash
