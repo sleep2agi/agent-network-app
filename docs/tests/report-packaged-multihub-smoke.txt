@@ -17,6 +17,9 @@ Scope
   C are still present and authenticated.
 - The separate local-Hub packaged smoke reserves port 9200 before first start
   and requires an automatic loopback fallback, covering real port conflicts.
+- That exact packaged smoke also mints a network-scoped node token through the
+  public auth API, reports a disposable node through public MCP, dispatches a
+  task through `POST /api/task`, and verifies both public status/tasks views.
 
 Required gates
 - Docker Bun application suite.

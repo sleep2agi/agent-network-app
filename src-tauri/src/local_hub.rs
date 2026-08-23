@@ -839,6 +839,105 @@ pub fn packaged_smoke() -> Result<(), String> {
                 ));
             }
         }
+        let network_id = first_session
+            .get("networkId")
+            .and_then(|value| value.as_str())
+            .ok_or_else(|| "first start omitted network id".to_string())?;
+        let node_token_response = client
+            .post(format!("{endpoint}/api/auth/tokens"))
+            .bearer_auth(token)
+            .json(&serde_json::json!({
+                "name": "packaged-smoke-node",
+                "network_id": network_id,
+            }))
+            .send()
+            .map_err(|error| error.to_string())?;
+        if !node_token_response.status().is_success() {
+            return Err(format!(
+                "public token creation returned {}",
+                node_token_response.status()
+            ));
+        }
+        let node_token_payload: serde_json::Value = node_token_response
+            .json()
+            .map_err(|error| error.to_string())?;
+        let node_token = node_token_payload["token"]
+            .as_str()
+            .ok_or_else(|| "public token creation omitted token".to_string())?;
+        let report = client
+            .post(format!("{endpoint}/mcp"))
+            .bearer_auth(node_token)
+            .header("Accept", "application/json, text/event-stream")
+            .header("MCP-Protocol-Version", "2025-03-26")
+            .json(&serde_json::json!({
+                "jsonrpc": "2.0",
+                "id": 1,
+                "method": "tools/call",
+                "params": {
+                    "name": "report_status",
+                    "arguments": {
+                        "resume_id": "packaged-smoke-resume",
+                        "alias": "packaged-smoke-node",
+                        "status": "idle",
+                        "agent": "desktop-packaged-smoke",
+                        "network_id": network_id,
+                    }
+                }
+            }))
+            .send()
+            .map_err(|error| error.to_string())?;
+        if !report.status().is_success() {
+            return Err(format!("public report_status returned {}", report.status()));
+        }
+        let status: serde_json::Value = client
+            .get(format!("{endpoint}/api/status"))
+            .bearer_auth(token)
+            .send()
+            .map_err(|error| error.to_string())?
+            .json()
+            .map_err(|error| error.to_string())?;
+        let node_visible = status["sessions"].as_array().is_some_and(|sessions| {
+            sessions
+                .iter()
+                .any(|item| item["alias"] == "packaged-smoke-node")
+        });
+        if !node_visible {
+            return Err("reported node is missing from public status API".into());
+        }
+        let dispatched = client
+            .post(format!("{endpoint}/api/task"))
+            .bearer_auth(token)
+            .json(&serde_json::json!({
+                "alias": "packaged-smoke-node",
+                "task": "packaged local workspace task",
+                "priority": "normal",
+                "network_id": network_id,
+                "from": "local-admin",
+            }))
+            .send()
+            .map_err(|error| error.to_string())?;
+        if !dispatched.status().is_success() {
+            return Err(format!(
+                "public task dispatch returned {}",
+                dispatched.status()
+            ));
+        }
+        let tasks: serde_json::Value = client
+            .get(format!("{endpoint}/api/tasks?network_id={network_id}"))
+            .bearer_auth(token)
+            .send()
+            .map_err(|error| error.to_string())?
+            .json()
+            .map_err(|error| error.to_string())?;
+        let task_visible = tasks["tasks"].as_array().is_some_and(|items| {
+            items.iter().any(|item| {
+                item["to_name"] == "packaged-smoke-node"
+                    && item["content"] == "packaged local workspace task"
+            })
+        });
+        if !task_visible {
+            return Err("dispatched task is missing from public tasks API".into());
+        }
         stop_local_hub_inner()?;
 
         let second_raw = start_local_hub()?;
