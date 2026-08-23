@@ -63,10 +63,10 @@ export function outboxMarkFailed(id: string): void {
 }
 
 /** 重试前标回 pending(仍在盘上——重试中被杀照样恢复)。 */
-export function outboxMarkPending(id: string): void {
+export function outboxMarkPending(id: string, createdAt = Date.now()): void {
   const e = entries[id];
-  if (!e || e.state === 'pending') return;
-  entries[id] = { ...e, state: 'pending' };
+  if (!e) return;
+  entries[id] = { ...e, state: 'pending', createdAt };
   flush();
 }
 

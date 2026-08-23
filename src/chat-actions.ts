@@ -58,3 +58,34 @@ export const shouldSendOnEnter = (event: {
   metaKey?: boolean;
   isComposing?: boolean;
 }): boolean => event.key === 'Enter' && !!(event.ctrlKey || event.metaKey) && !event.isComposing;
+
+type TimedMessage = { content?: string; created_at?: string; _localId?: string };
+type TimedOutbox = { id: string; content: string; createdAt: number };
+
+const messageTime = (value?: string): number => {
+  if (!value) return Number.NaN;
+  const normalized = value.includes('T') ? value : `${value.replace(' ', 'T')}Z`;
+  return Date.parse(normalized);
+};
+
+// A write may reach the Hub while its HTTP acknowledgement is lost. When the
+// next poll sees the authoritative row, retire the matching local retry echo
+// instead of showing both "delivered" and "未送达" forever. The short time
+// window prevents an older repeated message with identical text from matching.
+export const confirmedOutboxIds = (
+  local: TimedOutbox[],
+  fetched: TimedMessage[],
+  windowMs = 2 * 60 * 1000,
+): string[] => local.filter(entry => fetched.some(item => {
+  if ((item.content ?? '').trim() !== entry.content.trim()) return false;
+  const remoteTime = messageTime(item.created_at);
+  return Number.isFinite(remoteTime) && Math.abs(remoteTime - entry.createdAt) <= windowMs;
+})).map(entry => entry.id);
+
+// FlatList is inverted: newest must stay at index 0. Local retry echoes and
+// Hub rows therefore need one shared chronological order, not "all locals first".
+export const mergeMessagesNewestFirst = <T extends TimedMessage>(local: T[], fetched: T[]): T[] =>
+  [...local.filter(item => item._localId), ...fetched]
+    .map((item, index) => ({ item, index, time: messageTime(item.created_at) }))
+    .sort((a, b) => (Number.isFinite(b.time) ? b.time : -Infinity) - (Number.isFinite(a.time) ? a.time : -Infinity) || a.index - b.index)
+    .map(row => row.item);

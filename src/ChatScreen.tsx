@@ -32,7 +32,7 @@ import {
 import { appendAttachmentQueue, attachmentFromClipboard, isTauriDesktop, releaseClipboardAttachment } from './clipboard-attachment';
 import { colors, onThemeChange, spacing } from './theme';
 import { formatChatHeader, shouldShowTimeHeader } from './time';
-import { agentStatusLabel, applyQuote, removeMessage, shouldShowJumpPill, nextUnread, jumpPillLabel, canSend, shouldSendOnEnter } from './chat-actions';
+import { agentStatusLabel, applyQuote, confirmedOutboxIds, mergeMessagesNewestFirst, removeMessage, shouldShowJumpPill, nextUnread, jumpPillLabel, canSend, shouldSendOnEnter } from './chat-actions';
 import type { NativeSyntheticEvent, NativeScrollEvent } from 'react-native';
 import { usePoll } from './usePoll';
 import { appFetch } from './app-fetch';
@@ -194,10 +194,14 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
         const data = await fetchTasks(cfg, { to_name: alias, limit });
         const fetched = data.tasks ?? [];
         if (fetched.length < limit) setHasOlder(false);
-        // Hub returns newest-first, which matches inverted-list order.
-        // Local echoes stay in front; the send path removes them once
-        // the server confirms, so no content-matching is needed here.
-        setMessages(prev => [...prev.filter(t => t._localId), ...fetched]);
+        // Hub returns newest-first, which matches inverted-list order. Reconcile
+        // accepted retries before merging local echoes into that same timeline.
+        const confirmed = new Set(confirmedOutboxIds(outboxForAlias(alias), fetched));
+        confirmed.forEach(outboxRemove);
+        setMessages(prev => mergeMessagesNewestFirst(
+          prev.filter(t => t._localId && !confirmed.has(t._localId)),
+          fetched,
+        ));
       } catch {
         /* poll retries */
       } finally {
@@ -403,9 +407,13 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
 
   const retry = (item: ChatItem) => {
     if (!item._localId || !item.content) return;
-    outboxMarkPending(item._localId); // 重试中被杀照样恢复(仍在盘上)
+    const retriedAt = Date.now();
+    outboxMarkPending(item._localId, retriedAt); // 重试中被杀照样恢复(仍在盘上)
     setMessages(prev =>
-      prev.map(t => (t._localId === item._localId ? { ...t, _pending: true, _failed: false } : t)),
+      mergeMessagesNewestFirst(
+        prev.map(t => (t._localId === item._localId ? { ...t, created_at: new Date(retriedAt).toISOString(), _pending: true, _failed: false } : t)),
+        [],
+      ),
     );
     doSend(item.content, item._localId, item._imgs ?? (item._img ? [item._img] : []));
   };

@@ -33,6 +33,8 @@ outboxMarkFailed('a1');
 ck('L2 失败落盘为 failed', disk[0].state === 'failed');
 outboxMarkPending('a1');
 ck('L3 重试标回 pending(仍在盘上·重试中被杀照样恢复)', disk[0].state === 'pending' && disk.length === 1);
+outboxMarkPending('a1', 999);
+ck('L3b 重试刷新尝试时间供 Hub 对账', disk[0].createdAt === 999);
 outboxRemove('a1');
 ck('L4 确认成功=唯一删除路径:remove 后盘空', disk.length === 0);
 

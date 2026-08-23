@@ -1,7 +1,7 @@
 // 纯逻辑单测(bun/node 可跑·无 RN 依赖)。run: bun src/chat-actions.test.ts
 import fs from 'node:fs';
 import path from 'node:path';
-import { buildQuote, applyQuote, msgKey, removeMessage, shouldShowJumpPill, nextUnread, jumpPillLabel, canSend, isAgentOnline, agentStatusLabel, shouldSendOnEnter } from './chat-actions';
+import { buildQuote, applyQuote, confirmedOutboxIds, mergeMessagesNewestFirst, msgKey, removeMessage, shouldShowJumpPill, nextUnread, jumpPillLabel, canSend, isAgentOnline, agentStatusLabel, shouldSendOnEnter } from './chat-actions';
 let p = 0, t = 0; const ck = (n: string, c: boolean) => { t++; if (c) { p++; console.log('✅', n); } else console.log('❌', n); };
 // round-2 长按动作
 ck('quote 包「」+换行', buildQuote('你好') === '「你好」\n');
@@ -40,6 +40,19 @@ ck('Ctrl+Enter 发送', shouldSendOnEnter({ key: 'Enter', ctrlKey: true }) === t
 ck('Cmd+Enter 发送', shouldSendOnEnter({ key: 'Enter', metaKey: true }) === true);
 ck('输入法组词确认不发送', shouldSendOnEnter({ key: 'Enter', ctrlKey: true, isComposing: true }) === false);
 ck('其它按键不发送', shouldSendOnEnter({ key: 'a' }) === false);
+const base = Date.parse('2026-08-23T08:00:00.000Z');
+ck('Hub 出现同内容近时消息后确认并清除未送达副本', confirmedOutboxIds(
+  [{ id: 'retry-1', content: 'hello', createdAt: base }],
+  [{ content: 'hello', created_at: '2026-08-23 08:00:20' }],
+).join() === 'retry-1');
+ck('同内容旧历史不会误确认本次重试', confirmedOutboxIds(
+  [{ id: 'retry-2', content: 'hello', createdAt: base }],
+  [{ content: 'hello', created_at: '2026-08-23 07:00:00' }],
+).length === 0);
+ck('本地失败消息与 Hub 消息统一按时间倒序', mergeMessagesNewestFirst(
+  [{ _localId: 'old-failed', content: 'old', created_at: '2026-08-23T07:00:00.000Z' }],
+  [{ content: 'new', created_at: '2026-08-23 08:00:00' }],
+)[0].content === 'new');
 const chatSource = fs.readFileSync(path.join(process.cwd(), 'src/ChatScreen.tsx'), 'utf8');
 ck('桌面输入区使用独立微信式 composer', chatSource.includes('styles.desktopComposer'));
 ck('桌面输入区显示快捷键提示', chatSource.includes('Ctrl/⌘+Enter 发送 · Enter 换行'));
