@@ -58,6 +58,31 @@ export default function AgentsScreen({
   const [query, setQuery] = useState('');
   const [contextMenu, setContextMenu] = useState<{ alias: string; x: number; y: number } | null>(null);
 
+  // RN Web's bubbling onContextMenu can run after WKWebView has already
+  // decided to show its native "Reload" menu. Intercept in the capture phase
+  // at document level so desktop agent rows only ever show our own menu.
+  useEffect(() => {
+    const doc = (globalThis as any).document;
+    if (!compact || !doc?.addEventListener) return;
+    const handleContextMenu = (event: any) => {
+      const row = event.target?.closest?.('[data-agent-alias]');
+      const alias = row?.getAttribute?.('data-agent-alias');
+      if (!alias) return;
+      event.preventDefault?.();
+      event.stopPropagation?.();
+      event.stopImmediatePropagation?.();
+      const pageX = event.pageX ?? 180;
+      const pageY = event.pageY ?? 180;
+      setContextMenu({
+        alias,
+        x: Math.max(8, Math.min(pageX, ((globalThis as any).innerWidth ?? 1000) - 194)),
+        y: Math.max(8, Math.min(pageY, ((globalThis as any).innerHeight ?? 700) - 112)),
+      });
+    };
+    doc.addEventListener('contextmenu', handleContextMenu, true);
+    return () => doc.removeEventListener('contextmenu', handleContextMenu, true);
+  }, [compact]);
+
   const load = useCallback(async () => {
     try {
       // First load consumes the boot prefetch if it's still in-flight/fresh;
@@ -216,22 +241,9 @@ export default function AgentsScreen({
         </View>
       }
       renderItem={({ item }) => {
-        const contextProps = compact ? ({
-          onContextMenu: (event: any) => {
-            event.preventDefault?.();
-            event.stopPropagation?.();
-            const pageX = event.nativeEvent?.pageX ?? 180;
-            const pageY = event.nativeEvent?.pageY ?? 180;
-            setContextMenu({
-              alias: item.alias,
-              x: Math.max(8, Math.min(pageX, ((globalThis as any).innerWidth ?? 1000) - 194)),
-              y: Math.max(8, Math.min(pageY, ((globalThis as any).innerHeight ?? 700) - 112)),
-            });
-          },
-        } as any) : {};
         return (
         <Pressable
-          {...contextProps}
+          {...(compact ? ({ dataSet: { agentAlias: item.alias } } as any) : {})}
           style={({ pressed }) => [
             styles.card,
             compact && ({ userSelect: 'none', cursor: 'default' } as any),
