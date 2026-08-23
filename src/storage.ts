@@ -16,6 +16,7 @@ export interface HubProfile {
   username: string;
   networkId?: string;
   displayName?: string;
+  requiresReauth?: boolean;
   createdAt: number;
   updatedAt: number;
 }
@@ -127,6 +128,12 @@ export const removeHubProfile = async (profileId: string): Promise<void> => {
   }
   const { invoke } = await import('@tauri-apps/api/core');
   await invoke('remove_desktop_profile', { profileId });
+};
+
+export const markHubProfileRequiresReauth = async (profileId: string, required = true): Promise<void> => {
+  if (!isTauriDesktop()) return;
+  const { invoke } = await import('@tauri-apps/api/core');
+  await invoke('mark_desktop_profile_requires_reauth', { profileId, required });
 };
 
 export const getDesktopStorageDiagnostics = async (): Promise<DesktopStorageDiagnostics | null> => {

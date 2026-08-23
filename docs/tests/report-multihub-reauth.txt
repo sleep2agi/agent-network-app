@@ -1,0 +1,26 @@
+Agent Network desktop revoked-profile reauthentication
+Date: 2026-08-23
+Branch: feat/multihub-reauth
+
+Scope
+- Detect Hub 401 responses on authenticated reads by immutable profile ID;
+  do not misclassify permission-only 403 responses as expired credentials
+- Persist `requiresReauth` only on the rejected profile; never delete its credential or local data
+- Deduplicate repeated unauthorized polling events
+- Prefill server URL and username while requiring the password again
+- Save the refreshed token back into the same profile ID
+- Allow switching to another healthy account from the reauthentication screen
+- Display `需要重新登录` in the account switcher
+
+Layer 1 — Docker TypeScript
+Result: PASS
+
+Layer 2 — Docker unit/contract tests
+Result: PASS — 27/27 test files
+
+Layer 3 — Docker Rust/Tauri compile
+Result: PASS
+
+Release gate
+- Exact macOS and Windows native builds remain required.
+- A live revoked-token two-Hub test remains required before #66 can close.

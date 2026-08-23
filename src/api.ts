@@ -1,4 +1,5 @@
 import { appFetch } from './app-fetch';
+import { reportProfileAuthResponse } from './profile-auth-state';
 
 // Thin CommHub API client. The app talks to the same hub the dashboard
 // proxies (status / tasks / messages); auth is the network token sent
@@ -66,6 +67,7 @@ async function get<T>(cfg: HubConfig, path: string): Promise<T> {
     const res = await withTimeout(signal =>
       appFetch(`${cfg.serverUrl}${path}`, { headers: headers(cfg), signal }),
     );
+    reportProfileAuthResponse(res.status, cfg.profileId);
     if (!res.ok) throw new Error(`HTTP ${res.status} on ${path}`);
     const data = (await res.json()) as T;
     reportReadSuccess();
