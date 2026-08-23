@@ -12,10 +12,11 @@ Docker gates
 1. Rust unit tests
    docker image: anet-app-rust-check:bookworm
    command: cargo test --locked --manifest-path src-tauri/Cargo.toml local_hub -- --nocapture
-   result: 6 passed, 0 failed
+   result: 8 passed, 0 failed
    coverage: loopback endpoint, random credential, stable local profile id,
              occupied preferred port fallback, bounded log rotation.
-             nested backup preservation.
+             nested backup preservation, live-process ownership detection,
+             and failed-migration snapshot restoration.
 
 2. TypeScript build typecheck
    docker image: node:22-bookworm
@@ -44,13 +45,17 @@ Security/storage assertions
 - Logs rotate at 2 MiB and retain one previous file.
 - Local profile cannot be removed through ordinary account removal.
 - Supervisor retries unexpected exits with finite capped exponential backoff.
+- A live but unhealthy lock owner blocks duplicate startup; only a dead PID is
+  treated as a stale lock.
 - Settings can create a stopped-data backup; destructive deletion requires
   typed confirmation, creates a backup first, and leaves remote profiles intact.
 - Unix shutdown sends SIGTERM and falls back to forced termination only after 2s.
+- A pinned Hub version change snapshots the stopped data directory before
+  launch; health/bootstrap failure restores both the old data and old config.
 
 Still required before closing issue #67 / public release
 - Exact macOS arm64 and Windows x64 CI build for this runtime commit.
 - Clean signed-package first-run and restart-persistence E2E on both platforms.
-- Transactional data migration/rollback gate for future Hub version changes.
+- Signed-package migration/rollback E2E across two real Hub versions.
 - Explicit local-data backup/delete flow and uninstall retention documentation.
 - Windows graceful shutdown verification (current fallback terminates the child).

@@ -130,6 +130,28 @@ fn select_port(saved: Option<u16>) -> Result<u16, String> {
         .ok_or_else(|| format!("no free loopback port in {PREFERRED_PORT}..={LAST_PORT}"))
 }
 
+fn process_is_alive(pid: u32) -> bool {
+    #[cfg(unix)]
+    {
+        let result = unsafe { libc::kill(pid as i32, 0) };
+        return result == 0 || std::io::Error::last_os_error().raw_os_error() == Some(libc::EPERM);
+    }
+    #[cfg(windows)]
+    {
+        let filter = format!("PID eq {pid}");
+        return Command::new("tasklist")
+            .args(["/FI", filter.as_str(), "/FO", "CSV", "/NH"])
+            .output()
+            .map(|output| String::from_utf8_lossy(&output.stdout).contains(&format!("\"{pid}\"")))
+            .unwrap_or(false);
+    }
+    #[cfg(not(any(unix, windows)))]
+    {
+        let _ = pid;
+        false
+    }
+}
+
 fn endpoint(port: u16) -> String {
     format!("http://127.0.0.1:{port}")
 }
@@ -186,6 +208,52 @@ fn backup_local_hub_stopped() -> Result<PathBuf, String> {
     }
     copy_dir_recursive(&source, &destination)?;
     Ok(destination)
+}
+
+fn safe_version_fragment(value: &str) -> String {
+    value
+        .chars()
+        .map(|character| {
+            if character.is_ascii_alphanumeric() || matches!(character, '.' | '-') {
+                character
+            } else {
+                '_'
+            }
+        })
+        .collect()
+}
+
+fn snapshot_data_for_migration(
+    data_dir: &Path,
+    backups_dir: &Path,
+    from_version: &str,
+    to_version: &str,
+) -> Result<PathBuf, String> {
+    let timestamp = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_err(|error| error.to_string())?
+        .as_secs();
+    let snapshot = backups_dir.join(format!(
+        "local-hub-migration-{}-to-{}-{timestamp}",
+        safe_version_fragment(from_version),
+        safe_version_fragment(to_version)
+    ));
+    if snapshot.exists() {
+        return Err("local Hub migration snapshot already exists; retry in one second".into());
+    }
+    copy_dir_recursive(data_dir, &snapshot.join("data"))?;
+    Ok(snapshot)
+}
+
+fn restore_migration_snapshot(snapshot: &Path, data_dir: &Path) -> Result<(), String> {
+    let saved_data = snapshot.join("data");
+    if !saved_data.is_dir() {
+        return Err("local Hub migration snapshot is incomplete".into());
+    }
+    if data_dir.exists() {
+        fs::remove_dir_all(data_dir).map_err(|error| error.to_string())?;
+    }
+    copy_dir_recursive(&saved_data, data_dir)
 }
 
 fn health(endpoint: &str) -> Result<HealthPayload, String> {
@@ -462,6 +530,15 @@ pub fn start_local_hub() -> Result<String, String> {
             };
             return serde_json::to_string(&result).map_err(|error| error.to_string());
         }
+        let owner_pid = fs::read_to_string(&lock_path)
+            .ok()
+            .and_then(|value| value.trim().parse::<u32>().ok());
+        if owner_pid.is_some_and(process_is_alive) {
+            return Err("an existing local Hub process owns the data but is not healthy; refusing to start a duplicate. Open local Hub logs or restart the owning app".into());
+        }
+        if owner_pid.is_none() {
+            return Err("local Hub ownership lock is invalid; refusing unsafe automatic recovery. Use diagnostics to inspect ~/.anet/app/local-hub/supervisor.lock".into());
+        }
         fs::remove_file(&lock_path)
             .map_err(|error| format!("cannot recover stale local Hub lock: {error}"))?;
     }
@@ -479,6 +556,18 @@ pub fn start_local_hub() -> Result<String, String> {
             executable.display()
         ));
     }
+    let migration_snapshot = match saved
+        .as_ref()
+        .filter(|config| database_existed && config.hub_version != EXPECTED_HUB_VERSION)
+    {
+        Some(config) => Some(snapshot_data_for_migration(
+            &data_dir,
+            &app_root()?.join("backups"),
+            &config.hub_version,
+            EXPECTED_HUB_VERSION,
+        )?),
+        None => None,
+    };
     let log_path = logs_dir.join("commhub.log");
     let stdout = open_log(&log_path).map_err(|error| {
         let _ = fs::remove_file(&lock_path);
@@ -515,6 +604,12 @@ pub fn start_local_hub() -> Result<String, String> {
         Ok(payload) => payload,
         Err(error) => {
             terminate_child(&mut child, &lock_path);
+            if let Some(snapshot) = migration_snapshot.as_deref() {
+                restore_migration_snapshot(snapshot, &data_dir)?;
+                if let Some(previous) = saved.as_ref() {
+                    save_config(previous)?;
+                }
+            }
             return Err(error);
         }
     };
@@ -530,12 +625,21 @@ pub fn start_local_hub() -> Result<String, String> {
     };
     if let Err(error) = save_config(&config) {
         terminate_child(&mut child, &lock_path);
+        if let Some(snapshot) = migration_snapshot.as_deref() {
+            restore_migration_snapshot(snapshot, &data_dir)?;
+        }
         return Err(error);
     }
     let session = match bootstrap(&endpoint, database_existed) {
         Ok(session) => session,
         Err(error) => {
             terminate_child(&mut child, &lock_path);
+            if let Some(snapshot) = migration_snapshot.as_deref() {
+                restore_migration_snapshot(snapshot, &data_dir)?;
+                if let Some(previous) = saved.as_ref() {
+                    save_config(previous)?;
+                }
+            }
             return Err(error);
         }
     };
@@ -730,6 +834,11 @@ mod tests {
     }
 
     #[test]
+    fn current_process_is_reported_alive() {
+        assert!(process_is_alive(std::process::id()));
+    }
+
+    #[test]
     fn oversized_log_is_rotated() {
         let dir = tempfile::tempdir().unwrap();
         let log = dir.path().join("commhub.log");
@@ -765,5 +874,30 @@ mod tests {
             fs::read(destination.join("uploads").join("fixture.txt")).unwrap(),
             b"attachment"
         );
+    }
+
+    #[test]
+    fn migration_snapshot_restores_previous_data() {
+        let source_root = tempfile::tempdir().unwrap();
+        let backup_root = tempfile::tempdir().unwrap();
+        let data = source_root.path().join("data");
+        fs::create_dir(&data).unwrap();
+        fs::write(data.join("commhub.db"), b"before-migration").unwrap();
+        let snapshot = snapshot_data_for_migration(
+            &data,
+            backup_root.path(),
+            "0.8.0-preview.1",
+            EXPECTED_HUB_VERSION,
+        )
+        .unwrap();
+        fs::write(data.join("commhub.db"), b"mutated-by-failed-migration").unwrap();
+        fs::write(data.join("new-file"), b"must-disappear").unwrap();
+        restore_migration_snapshot(&snapshot, &data).unwrap();
+        assert_eq!(
+            fs::read(data.join("commhub.db")).unwrap(),
+            b"before-migration"
+        );
+        assert!(!data.join("new-file").exists());
+        assert!(snapshot.join("data").join("commhub.db").exists());
     }
 }
