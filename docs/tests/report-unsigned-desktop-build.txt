@@ -1,0 +1,19 @@
+Unsigned desktop build regression
+Date: 2026-08-23
+Failure run: 32612108071
+
+Observed failure
+- Tauri completed the macOS app and DMG bundles.
+- It then attempted to create updater artifacts because a public updater key
+  is present in tauri.conf.json.
+- The validation workflow intentionally has no TAURI_SIGNING_PRIVATE_KEY, so
+  the job failed after a successful native build.
+
+Fix
+- Disable createUpdaterArtifacts only in the unsigned Mac and Windows
+  validation jobs.
+- Signed release workflows retain updater artifact generation and signing.
+
+Required CI validation
+- mac-arm64 emits DMG and app zip.
+- windows-x64 emits NSIS EXE and MSI.
