@@ -38,6 +38,10 @@ permissions:
 
 jobs:
   ios-ipa:
+    # Reuse the reviewed signing environment used by desktop notarization.
+    # It already owns the App Store Connect API key; keeping one credential
+    # namespace avoids stale duplicate ASC_* repository secrets.
+    environment: macos-signing
     # macos-14 == Apple silicon, recent Xcode. Pin rather than macos-latest so
     # an Xcode bump can't silently break signing/export.
     # macos-14 ships Xcode 15.4; React Native requires >= 16.1
@@ -88,33 +92,29 @@ jobs:
           echo "scheme=$SCHEME"       >> "$GITHUB_OUTPUT"
           echo "Resolved workspace=$WORKSPACE scheme=$SCHEME"
 
-      # Drop the App Store Connect API key where xcodebuild/altool auto-find it.
-      # ASC_KEY_P8 may be either raw .p8 PEM text OR base64 of it — handle both.
+      # Drop the base64 App Store Connect API key where xcodebuild/altool
+      # auto-find it. The same reviewed environment secret is used by desktop
+      # notarization, so iOS cannot silently drift onto a stale duplicate key.
       - name: Install App Store Connect API key
         env:
-          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
-          ASC_KEY_P8: ${{ secrets.ASC_KEY_P8 }}
+          APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
+          APPLE_API_KEY_BASE64: ${{ secrets.APPLE_API_KEY_BASE64 }}
         run: |
           set -euo pipefail
           mkdir -p "$HOME/.appstoreconnect/private_keys"
-          KEY_PATH="$HOME/.appstoreconnect/private_keys/AuthKey_${ASC_KEY_ID}.p8"
-          if printf '%s' "$ASC_KEY_P8" | grep -q 'BEGIN PRIVATE KEY'; then
-            printf '%s' "$ASC_KEY_P8" > "$KEY_PATH"
-          else
-            # assume base64-encoded .p8
-            printf '%s' "$ASC_KEY_P8" | base64 --decode > "$KEY_PATH"
-          fi
+          KEY_PATH="$HOME/.appstoreconnect/private_keys/AuthKey_${APPLE_API_KEY}.p8"
+          printf '%s' "$APPLE_API_KEY_BASE64" | base64 --decode > "$KEY_PATH"
           chmod 600 "$KEY_PATH"
           # sanity: must be a valid PEM private key now
-          grep -q 'BEGIN PRIVATE KEY' "$KEY_PATH" || { echo "::error::ASC_KEY_P8 did not decode to a PEM .p8"; exit 1; }
+          grep -q 'BEGIN PRIVATE KEY' "$KEY_PATH" || { echo "::error::APPLE_API_KEY_BASE64 did not decode to a PEM .p8"; exit 1; }
           echo "ASC_KEY_PATH=$KEY_PATH" >> "$GITHUB_ENV"
 
       # Archive with automatic signing. -allowProvisioningUpdates + the ASC API
       # key let Xcode mint/download the distribution cert + App Store profile.
       - name: Archive (xcodebuild)
         env:
-          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
-          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+          ASC_KEY_ID: ${{ secrets.APPLE_API_KEY }}
+          ASC_ISSUER_ID: ${{ secrets.APPLE_API_ISSUER }}
         run: |
           set -euo pipefail
           xcodebuild \
@@ -134,8 +134,8 @@ jobs:
       # Export the archive to an App Store .ipa using the committed ExportOptions.
       - name: Export .ipa
         env:
-          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
-          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+          ASC_KEY_ID: ${{ secrets.APPLE_API_KEY }}
+          ASC_ISSUER_ID: ${{ secrets.APPLE_API_ISSUER }}
         run: |
           set -euo pipefail
           mkdir -p "$RUNNER_TEMP/export"
@@ -167,8 +167,8 @@ jobs:
       - name: Upload to TestFlight (altool)
         if: ${{ inputs.upload_testflight }}
         env:
-          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
-          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+          ASC_KEY_ID: ${{ secrets.APPLE_API_KEY }}
+          ASC_ISSUER_ID: ${{ secrets.APPLE_API_ISSUER }}
         run: |
           set -euo pipefail
           xcrun altool --upload-app \
