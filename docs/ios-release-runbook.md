@@ -24,6 +24,8 @@ potentially incompatible precompiled React Native framework.
 Use `.github/workflows/ios-build.yml`.
 
 1. The workflow is manual and runs on `macos-15`.
+   It explicitly selects Xcode 26.2 / Swift 6.2 because the image default
+   Xcode 16.4 cannot resolve Expo SDK 56's Swift 6.2 package dependencies.
 2. It generates `ios/` with Expo CNG, installs pods, and resolves the generated
    workspace and shared scheme.
 3. The reviewed `macos-signing` environment supplies the App Store Connect API

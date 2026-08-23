@@ -5,6 +5,7 @@ const exportOptions = fs.readFileSync(new URL('../ios-ci/ExportOptions.plist', i
 const signingScript = fs.readFileSync(new URL('../scripts/ios-distribution-signing.mjs', import.meta.url), 'utf8');
 
 const checks: Array<[string, boolean]> = [
+  ['workflow pins a Swift 6.2-capable Xcode', workflow.includes('DEVELOPER_DIR: /Applications/Xcode_26.2.app/Contents/Developer') && workflow.includes("Apple Swift version 6\\.2")],
   ['archive targets a generic iOS device', workflow.includes("-destination 'generic/platform=iOS'")],
   ['archive manually selects Apple Distribution with the ephemeral profile', workflow.includes('CODE_SIGN_STYLE=Manual') && workflow.includes('CODE_SIGN_IDENTITY="Apple Distribution"') && workflow.includes('PROVISIONING_PROFILE_SPECIFIER=')],
   ['provisioning uses reviewed App Store Connect credentials', workflow.includes('-authenticationKeyPath "$ASC_KEY_PATH"') && signingScript.includes("certificateType: 'IOS_DISTRIBUTION'") && signingScript.includes("profileType: 'IOS_APP_STORE'")],

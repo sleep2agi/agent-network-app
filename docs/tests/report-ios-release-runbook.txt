@@ -6,6 +6,7 @@ iOS release runbook and workflow contract
   Connect API-key authentication.
 - `EXPO_USE_PRECOMPILED_MODULES=false` keeps native modules built from checkout.
 - `github.run_number` supplies a unique numeric `CFBundleVersion`.
+- The workflow pins Xcode 26.2 and fails early unless Swift 6.2 is active.
 - CI creates an ephemeral Apple Distribution identity and IOS_APP_STORE profile
   through the official API, signs manually, and then fails closed unless the
   archive has no registered devices or get-task-allow.
