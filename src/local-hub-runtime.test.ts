@@ -11,7 +11,7 @@ const checks: Array<[string, boolean]> = [
   ['first run reports preparing, starting and migrating stages', app.includes('正在准备本地工作区') && app.includes('正在启动本地服务') && app.includes('正在备份并迁移') && app.includes('status.requiresMigration')],
   ['saved local profile starts before workspace restore', app.includes("stored?.profileId === LOCAL_HUB_PROFILE_ID") && app.includes('await startLocalHub()')],
   ['local profile follows a fallback loopback port without changing identity', rust.includes('if session.server_url == endpoint') && rust.includes('profile_id: Some(session.profile_id)') && rust.includes('server_url: endpoint.into()')],
-  ['missing local database does not reuse a stale session', rust.includes('if database_existed {\n        if let Some(session) = existing_local_session()?')],
+  ['missing local database does not reuse a stale session', /if database_existed\s*\{\s*if let Some\(session\) = existing_local_session\(\)\?/.test(rust)],
   ['settings exposes local Hub status card', settings.includes('testID="local-hub-settings-card"')],
   ['settings exposes restart, stop and logs', settings.includes('restartLocalHub()') && settings.includes('stopLocalHub()') && settings.includes('openLocalHubLogs()')],
   ['settings exposes explicit backup and confirmed delete', settings.includes('backupLocalHubData()') && settings.includes('deleteLocalHubData()') && settings.includes("localDeleteText !== '删除本地数据'")],
