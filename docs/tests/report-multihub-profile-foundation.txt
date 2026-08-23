@@ -1,0 +1,33 @@
+Agent Network desktop multi-Hub profile foundation
+Date: 2026-08-23
+Branch: feat/multihub-profiles
+
+Scope
+- Canonical desktop registry: ~/.anet/app/schema.json and profiles/index.json
+- Non-secret profile metadata only; profile tokens use macOS Keychain / Windows Credential Manager
+- One-time migration from active-hub-session
+- Atomic registry/profile JSON writes and private Unix permissions
+- Settings account list/add/switch/remove UX
+- Workspace remount, sessions cache, avatar overrides, and outbox isolation by profile_id
+- Detached chat windows pin profile_id + alias and use distinct labels/titles
+
+Layer 1 — Docker TypeScript
+Command:
+  sg docker -c 'docker run --rm -v "$PWD":/app -w /app node:22-bookworm bash -lc "npm run typecheck"'
+Result: PASS
+
+Layer 2 — Docker unit/contract tests
+Command:
+  sg docker -c 'docker run --rm -v "$PWD":/app -w /app oven/bun:1.3.10 bun run test'
+Result: PASS — 26/26 test files
+New contract: src/profile-storage-contract.test.ts — 10/10 checks
+
+Layer 3 — Docker Rust/Tauri compile
+Command:
+  cargo check --locked in rust:1-bookworm with Tauri Linux build dependencies,
+  after the same frontend export/icon generation steps used by CI.
+Result: PASS
+
+Release gate
+- macOS and Windows credential-store tests and signed build remain CI/runtime gates.
+- Two-real-Hub cold-start/revocation acceptance is not claimed by this report.

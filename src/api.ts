@@ -35,6 +35,9 @@ export interface HubConfig {
   serverUrl: string; // e.g. https://hub.example.com
   token: string;
   networkId?: string; // hub scopes sends by network (#220 round 18)
+  profileId?: string;
+  username?: string;
+  displayName?: string;
 }
 
 const headers = (cfg: HubConfig) => ({
@@ -881,7 +884,7 @@ export const login = async (
     const token = data.token ?? data.user_token ?? data.access_token;
     if (!token) return { ok: false, kind: 'server-error', error: 'login ok but no token in response' };
     const networkId = await fetchNetworkId({ serverUrl, token });
-    return { ok: true, cfg: { serverUrl, token, networkId } };
+    return { ok: true, cfg: { serverUrl, token, networkId, username } };
   } catch (e) {
     // fetch 抛了 = 压根没拿到 HTTP 响应(连接拒绝/DNS/超时)→ unreachable。
     return { ok: false, kind: classifyLoginFailure(true, null), error: e instanceof Error ? e.message : 'network error' };
