@@ -10,8 +10,9 @@ Release gates
 - Version consistency test: passed (all eight version surfaces report 0.2.24).
 - Docker npm ci / typecheck / full unit tests / Expo export: passed.
 - Docker unit suite: 29/29 test files passed.
-- Docker Rust cargo check: pending.
-- GitHub Actions macOS arm64 + Windows x64 signed build: pending.
+- Native Rust/profile-contract checks: passed on macOS arm64 and Windows x64.
+- GitHub Actions unsigned build: passed on macOS arm64 and Windows x64
+  (run 32645426190; the signed release workflow remains the release gate).
 - Real install/runtime smoke: pending (Mac runner currently returns 402 quota exhausted).
 
 Release policy
