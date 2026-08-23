@@ -172,7 +172,7 @@ jobs:
           grep -F "TeamIdentifier=$APPLE_TEAM_ID" "$RUNNER_TEMP/archive-codesign.txt"
           signing_identity=$(/usr/libexec/PlistBuddy -c 'Print :ApplicationProperties:SigningIdentity' "$RUNNER_TEMP/AgentNetwork.xcarchive/Info.plist")
           case "$signing_identity" in
-            "Apple Distribution:"*) ;;
+            "Apple Distribution:"*|"iPhone Distribution:"*) ;;
             *) echo "::error::Archive signing identity is not Apple Distribution"; exit 1 ;;
           esac
 

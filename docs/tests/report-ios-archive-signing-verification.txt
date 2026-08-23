@@ -9,4 +9,10 @@ The gate now verifies the code signature itself, checks the signed app team,
 and reads Xcode's archive SigningIdentity metadata for the Apple Distribution
 identity. Existing App Store provisioning-profile checks remain in place.
 
+Run 32655529007 showed that the newly generated distribution certificate is
+reported by Xcode 26.2 using the legacy `iPhone Distribution:` display label.
+The verifier accepts both Apple display labels while continuing to require the
+expected team, a valid signature, an App Store profile with no device list,
+`get-task-allow=false`, and the exact application identifier.
+
 The exact-main IPA workflow remains the decisive end-to-end validation.
