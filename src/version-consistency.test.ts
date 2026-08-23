@@ -1,0 +1,26 @@
+import fs from 'node:fs';
+
+const expected = '0.2.24';
+const packageJson = JSON.parse(fs.readFileSync(new URL('../package.json', import.meta.url), 'utf8'));
+const packageLock = JSON.parse(fs.readFileSync(new URL('../package-lock.json', import.meta.url), 'utf8'));
+const appJson = JSON.parse(fs.readFileSync(new URL('../app.json', import.meta.url), 'utf8'));
+const tauriConfig = JSON.parse(fs.readFileSync(new URL('../src-tauri/tauri.conf.json', import.meta.url), 'utf8'));
+const cargoToml = fs.readFileSync(new URL('../src-tauri/Cargo.toml', import.meta.url), 'utf8');
+const cargoLock = fs.readFileSync(new URL('../src-tauri/Cargo.lock', import.meta.url), 'utf8');
+const versionSource = fs.readFileSync(new URL('./version.ts', import.meta.url), 'utf8');
+
+const checks: Array<[string, boolean]> = [
+  ['package.json', packageJson.version === expected],
+  ['package-lock root', packageLock.version === expected],
+  ['package-lock workspace', packageLock.packages?.['']?.version === expected],
+  ['app.json', appJson.expo?.version === expected],
+  ['tauri.conf.json', tauriConfig.version === expected],
+  ['Cargo.toml', new RegExp(`^version = "${expected.replaceAll('.', '\\.')}"$`, 'm').test(cargoToml)],
+  ['Cargo.lock root package', new RegExp(`name = "agent-network-desktop"\\nversion = "${expected.replaceAll('.', '\\.')}"`).test(cargoLock)],
+  ['display version', versionSource.includes(`APP_VERSION = '${expected}'`)],
+];
+
+for (const [name, ok] of checks) {
+  if (!ok) throw new Error(`FAIL: ${name} must be ${expected}`);
+  console.log(`PASS: ${name} = ${expected}`);
+}
