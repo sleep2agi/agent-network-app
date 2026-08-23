@@ -1,0 +1,12 @@
+iOS archive signing verification regression
+Date: 2026-08-24
+
+Run 32654807780 proved that Xcode 26.2 completed the distribution archive, but
+the following gate relied on an `Authority=Apple Distribution:` line from
+codesign diagnostic output and rejected the archive when that line was absent.
+
+The gate now verifies the code signature itself, checks the signed app team,
+and reads Xcode's archive SigningIdentity metadata for the Apple Distribution
+identity. Existing App Store provisioning-profile checks remain in place.
+
+The exact-main IPA workflow remains the decisive end-to-end validation.
