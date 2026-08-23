@@ -1,0 +1,14 @@
+Agent Network Desktop v0.2.14 release candidate
+Date: 2026-08-23
+Base: 861201fa5982431a15f37d01ba282c4f5072e518
+
+Scope
+- Detached chat windows inherit the main window light/dark theme.
+- Existing desktop windows react to later cross-window theme changes.
+- Unsigned Mac and Windows validation builds use a portable Tauri override.
+
+Release gates
+- Docker unit test and TypeScript validation required before merge.
+- Main desktop-tauri must produce mac-arm64 and windows-x64 artifacts.
+- release-desktop-auto-update must sign both platforms and notarize macOS.
+- Draft release remains unpublished until install/theme smoke validation.
