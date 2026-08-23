@@ -21,7 +21,7 @@ const checks: Array<[string, boolean]> = [
   ['tauri.conf.json', tauriConfig.version === expected],
   ['Cargo.toml', new RegExp(`^version = "${expected.replaceAll('.', '\\.')}"$`, 'm').test(cargoToml)],
   ['Cargo.lock root package', cargoPackagePattern.test(normalizeNewlines(cargoLock))],
-  ['Cargo.lock CRLF checkout', cargoPackagePattern.test(normalizeNewlines(cargoLock.replaceAll('\n', '\r\n')))],
+  ['Cargo.lock CRLF checkout', cargoPackagePattern.test(normalizeNewlines(normalizeNewlines(cargoLock).replaceAll('\n', '\r\n')))],
   ['display version', versionSource.includes(`APP_VERSION = '${expected}'`)],
 ];
 
