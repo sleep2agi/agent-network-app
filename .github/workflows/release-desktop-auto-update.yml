@@ -126,10 +126,7 @@ jobs:
           fi
           test -f "$binary"
           ANET_PACKAGED_SMOKE=1 \
-            HOME="$smoke_root" \
-            USERPROFILE="$smoke_root" \
-            APPDATA="$smoke_root/AppData/Roaming" \
-            LOCALAPPDATA="$smoke_root/AppData/Local" \
+            ANET_PACKAGED_SMOKE_ROOT="$smoke_root/.anet/app" \
             "$binary" --smoke-local-hub
           test -s "$smoke_root/.anet/app/local-hub/data/commhub.db"
           if grep -R -E 'local-hub-bootstrap-password|atok_|ntok_' "$smoke_root/.anet/app/local-hub/logs"; then

@@ -22,3 +22,6 @@ Notes
   artifacts and were removed after the test.
 - The decisive packaged-binary run remains the signed macOS/Windows release
   workflow gate introduced by this change.
+- Run 32656310789 showed that replacing HOME also hides the runner's default
+  macOS keychain. The smoke now isolates only `~/.anet/app` through a guarded
+  test root while leaving the native credential-store environment intact.

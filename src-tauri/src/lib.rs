@@ -214,6 +214,11 @@ struct ProfileSessionOutput {
 }
 
 fn app_root() -> Result<PathBuf, String> {
+    if std::env::var("ANET_PACKAGED_SMOKE").as_deref() == Ok("1") {
+        if let Some(root) = std::env::var_os("ANET_PACKAGED_SMOKE_ROOT") {
+            return Ok(PathBuf::from(root));
+        }
+    }
     let home = std::env::var_os("HOME")
         .or_else(|| std::env::var_os("USERPROFILE"))
         .ok_or_else(|| "home directory unavailable".to_string())?;
