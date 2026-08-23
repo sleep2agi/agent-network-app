@@ -1,0 +1,12 @@
+Desktop v0.2.21 — message context menu and forwarding
+
+- Desktop sent and reply bubbles open the app action menu on right click.
+- WKWebView's native Reload menu is suppressed in the capture phase.
+- The action menu supports Quote, Forward, and local Delete.
+- Forward opens a searchable agent picker and sends the original message body
+  through the authenticated Hub API; embedded file references remain intact.
+- Mobile long press continues to open the same action menu.
+
+Verification:
+- Docker: bun run test
+- Docker: bun run typecheck

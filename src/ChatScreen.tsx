@@ -18,7 +18,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import AliasAvatar from './AliasAvatar';
 import AuthedThumb, { AttachmentFile, AuthedVideo, mimeFromName } from './AuthedThumb';
-import { fetchStatus, fetchTasks, sendTask, HubConfig, HubTask, TaskAttachment } from './api';
+import { fetchStatus, fetchTasks, sendTask, HubConfig, HubTask, Session, TaskAttachment } from './api';
 import { outboxAdd, outboxForAlias, outboxMarkFailed, outboxMarkPending, outboxRemove } from './outbox';
 import {
   ATTACH_ENABLED,
@@ -32,7 +32,7 @@ import {
 import { appendAttachmentQueue, attachmentFromClipboard, isTauriDesktop, releaseClipboardAttachment } from './clipboard-attachment';
 import { colors, onThemeChange, spacing } from './theme';
 import { formatChatHeader, shouldShowTimeHeader } from './time';
-import { agentStatusLabel, applyQuote, confirmedOutboxIds, mergeMessagesNewestFirst, removeMessage, shouldShowJumpPill, nextUnread, jumpPillLabel, canSend, shouldSendOnEnter } from './chat-actions';
+import { agentStatusLabel, applyQuote, confirmedOutboxIds, mergeMessagesNewestFirst, msgKey, removeMessage, shouldShowJumpPill, nextUnread, jumpPillLabel, canSend, shouldSendOnEnter } from './chat-actions';
 import type { NativeSyntheticEvent, NativeScrollEvent } from 'react-native';
 import { usePoll } from './usePoll';
 import { appFetch } from './app-fetch';
@@ -60,6 +60,8 @@ type ChatItem = HubTask & {
    *  共用一个字段迟早串(重试会把注解原样发给对方 agent)。 */
   _restoredNoImage?: boolean;
 };
+
+type MessageSelection = { item: ChatItem; text: string };
 
 // Received tasks carry attachments inside meta_json (#221). Images get
 // tappable thumbnails (Vincent tg 748), other files a 📎 line.
@@ -293,7 +295,56 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
   }, [appendAttachment]);
   const [viewerUri, setViewerUri] = useState<string | null>(null);
   // 更像微信·round-2: 长按气泡的动作菜单(引用/删除)。null = 未打开。
-  const [menuFor, setMenuFor] = useState<ChatItem | null>(null);
+  const [menuFor, setMenuFor] = useState<MessageSelection | null>(null);
+  const [forwardFor, setForwardFor] = useState<MessageSelection | null>(null);
+  const [forwardTargets, setForwardTargets] = useState<Session[]>([]);
+  const [forwardQuery, setForwardQuery] = useState('');
+  const [forwardingTo, setForwardingTo] = useState<string | null>(null);
+
+  useEffect(() => {
+    const doc = (globalThis as any).document;
+    if (!desktop || !doc?.addEventListener) return;
+    const handleMessageContextMenu = (event: any) => {
+      const bubble = event.target?.closest?.('[data-message-key]');
+      const key = bubble?.getAttribute?.('data-message-key');
+      const part = bubble?.getAttribute?.('data-message-part');
+      if (!key || !part) return;
+      const item = messages.find(message => msgKey(message) === key);
+      const text = part === 'reply' ? (item?.result ?? item?.reply ?? '') : (item?.content ?? '');
+      if (!item || !text) return;
+      event.preventDefault?.();
+      event.stopPropagation?.();
+      event.stopImmediatePropagation?.();
+      setMenuFor({ item, text });
+    };
+    doc.addEventListener('contextmenu', handleMessageContextMenu, true);
+    return () => doc.removeEventListener('contextmenu', handleMessageContextMenu, true);
+  }, [desktop, messages]);
+
+  const openForwardPicker = async (selection: MessageSelection) => {
+    setMenuFor(null);
+    setForwardFor(selection);
+    setForwardQuery('');
+    try {
+      const data = await fetchStatus(cfg);
+      setForwardTargets((data.sessions ?? []).filter(session => session.alias));
+    } catch {
+      setForwardTargets([]);
+    }
+  };
+
+  const forwardMessage = async (target: string) => {
+    if (!forwardFor || forwardingTo) return;
+    setForwardingTo(target);
+    try {
+      await sendTask(cfg, target, forwardFor.text);
+      setForwardFor(null);
+    } catch (error) {
+      Alert.alert('转发失败', error instanceof Error ? error.message : '请稍后重试');
+    } finally {
+      setForwardingTo(null);
+    }
+  };
   // 更像微信·round-3: 滚离底部时的「回到最新」pill + 未读计数。
   const listRef = useRef<FlatList<ChatItem>>(null);
   const [showJump, setShowJump] = useState(false);
@@ -559,7 +610,8 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
                       {currentUsername}
                     </Text>
                     <Pressable
-                      onLongPress={() => setMenuFor(item)}
+                      {...(desktop ? ({ dataSet: { messageKey: msgKey(item), messagePart: 'sent' } } as any) : {})}
+                      onLongPress={() => setMenuFor({ item, text: item.content ?? '' })}
                       delayLongPress={300}
                       style={({ pressed }) => [styles.bubblePressable, pressed && { opacity: 0.7 }]}
                     >
@@ -576,10 +628,16 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
                     <AliasAvatar alias={alias} size={36} />
                     <View style={styles.messageContent}>
                       <Text style={styles.messageAuthor} numberOfLines={1}>{alias}</Text>
-                      <View style={[styles.bubble, styles.replyBubble]}>
-                        <MarkdownMessage>{stripFileLinks(item.result ?? item.reply ?? '')}</MarkdownMessage>
-                        {replyAttachmentViews(item, cfg.serverUrl).map(renderAttachment)}
-                      </View>
+                      <Pressable
+                        {...(desktop ? ({ dataSet: { messageKey: msgKey(item), messagePart: 'reply' } } as any) : {})}
+                        onLongPress={() => setMenuFor({ item, text: item.result ?? item.reply ?? '' })}
+                        delayLongPress={300}
+                      >
+                        <View style={[styles.bubble, styles.replyBubble]}>
+                          <MarkdownMessage>{stripFileLinks(item.result ?? item.reply ?? '')}</MarkdownMessage>
+                          {replyAttachmentViews(item, cfg.serverUrl).map(renderAttachment)}
+                        </View>
+                      </Pressable>
                     </View>
                   </View>
                 ) : null}
@@ -638,7 +696,7 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
             <Pressable
               style={({ pressed }) => [styles.actionItem, pressed && styles.actionItemPressed]}
               onPress={() => {
-                if (menuFor) setDraft((d) => applyQuote(d, menuFor.content));
+                if (menuFor) setDraft((d) => applyQuote(d, menuFor.text));
                 setMenuFor(null);
               }}
             >
@@ -647,8 +705,15 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
             <View style={styles.actionSep} />
             <Pressable
               style={({ pressed }) => [styles.actionItem, pressed && styles.actionItemPressed]}
+              onPress={() => menuFor && openForwardPicker(menuFor)}
+            >
+              <Text style={styles.actionText}>转发</Text>
+            </Pressable>
+            <View style={styles.actionSep} />
+            <Pressable
+              style={({ pressed }) => [styles.actionItem, pressed && styles.actionItemPressed]}
               onPress={() => {
-                if (menuFor) setMessages((prev) => removeMessage(prev, menuFor));
+                if (menuFor) setMessages((prev) => removeMessage(prev, menuFor.item));
                 setMenuFor(null);
               }}
             >
@@ -662,6 +727,28 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
               <Text style={styles.actionCancel}>取消</Text>
             </Pressable>
           </View>
+        </Pressable>
+      </Modal>
+
+      <Modal visible={!!forwardFor} transparent animationType="fade" onRequestClose={() => setForwardFor(null)}>
+        <Pressable style={styles.forwardBackdrop} onPress={() => setForwardFor(null)}>
+          <Pressable style={styles.forwardPanel} onPress={() => {}}>
+            <Text style={styles.forwardTitle}>转发给</Text>
+            <TextInput value={forwardQuery} onChangeText={setForwardQuery} placeholder="搜索 agent…" placeholderTextColor={colors.textMuted} style={styles.forwardSearch} />
+            <FlatList
+              style={styles.forwardList}
+              data={forwardTargets.filter(target => target.alias.toLowerCase().includes(forwardQuery.trim().toLowerCase()))}
+              keyExtractor={target => target.alias}
+              renderItem={({ item: target }) => (
+                <Pressable style={({ pressed }) => [styles.forwardTarget, pressed && styles.actionItemPressed]} onPress={() => forwardMessage(target.alias)} disabled={!!forwardingTo}>
+                  <AliasAvatar alias={target.alias} size={32} />
+                  <Text style={styles.forwardAlias} numberOfLines={1}>{target.alias}</Text>
+                  {forwardingTo === target.alias ? <ActivityIndicator size="small" color={colors.accent} /> : null}
+                </Pressable>
+              )}
+              ListEmptyComponent={<Text style={styles.forwardEmpty}>没有匹配的 agent</Text>}
+            />
+          </Pressable>
         </Pressable>
       </Modal>
 
@@ -844,6 +931,14 @@ const makeStyles = () =>
   actionText: { color: colors.text, fontSize: 16 },
   actionDanger: { color: colors.failed },
   actionCancel: { color: colors.textSecondary, fontSize: 16, fontWeight: '600' },
+  forwardBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.38)', alignItems: 'center', justifyContent: 'center', padding: spacing.xl },
+  forwardPanel: { width: 360, maxWidth: '92%', maxHeight: 520, borderRadius: 14, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.card, padding: spacing.lg },
+  forwardTitle: { color: colors.text, fontSize: 17, fontWeight: '700', marginBottom: spacing.md },
+  forwardSearch: { color: colors.text, backgroundColor: colors.inputBg, borderRadius: 9, paddingHorizontal: spacing.md, paddingVertical: 10, marginBottom: spacing.sm },
+  forwardList: { maxHeight: 400 },
+  forwardTarget: { minHeight: 50, flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingHorizontal: spacing.sm, borderRadius: 9 },
+  forwardAlias: { flex: 1, minWidth: 0, color: colors.text, fontSize: 14, fontWeight: '600' },
+  forwardEmpty: { color: colors.textMuted, textAlign: 'center', paddingVertical: spacing.xl },
   actionSep: { height: 1, backgroundColor: colors.border },
   actionSepGap: { height: spacing.sm, backgroundColor: colors.bg },
   // round-3 回到最新 pill
