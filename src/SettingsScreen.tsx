@@ -1,11 +1,12 @@
 import { useEffect, useState, useSyncExternalStore } from 'react';
-import { ActivityIndicator, Modal, Pressable, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Modal, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { HubConfig } from './api';
 import { DesktopStorageDiagnostics, HubProfile, getDesktopStorageDiagnostics, listHubProfiles, removeHubProfile, saveThemeMode } from './storage';
 import { colors, onThemeChange, setThemeMode, spacing, themeMode } from './theme';
 import { APP_VERSION } from './version';
 import { appFetch } from './app-fetch';
 import { checkDesktopUpdate, desktopUpdateSnapshot, subscribeDesktopUpdates } from './desktop-updater';
+import { backupLocalHubData, deleteLocalHubData, LOCAL_HUB_PROFILE_ID, localHubStatus, openLocalHubLogs, restartLocalHub, stopLocalHub, type LocalHubResult } from './local-hub';
 
 // Settings (Vincent tg 720): who am I, where am I connected, which
 // network, which build — and the one destructive action, logout,
@@ -20,12 +21,14 @@ interface Me {
 export default function SettingsScreen({
   cfg,
   onLogout,
+  onLocalDataDeleted,
   onAddAccount,
   onSwitchProfile,
   onReauthProfile,
 }: {
   cfg: HubConfig;
   onLogout: () => void | Promise<void>;
+  onLocalDataDeleted: () => void | Promise<void>;
   onAddAccount: () => void;
   onSwitchProfile: (profileId: string) => void | Promise<void>;
   onReauthProfile: (profile: Pick<HubProfile, 'profileId' | 'serverUrl' | 'username' | 'displayName'>) => void;
@@ -35,6 +38,11 @@ export default function SettingsScreen({
   const [removeTarget, setRemoveTarget] = useState<HubProfile | null>(null);
   const [profileError, setProfileError] = useState('');
   const [storageDiagnostics, setStorageDiagnostics] = useState<DesktopStorageDiagnostics | null>(null);
+  const [localHub, setLocalHub] = useState<LocalHubResult | null>(null);
+  const [localHubBusy, setLocalHubBusy] = useState(false);
+  const [localBackupMessage, setLocalBackupMessage] = useState('');
+  const [localDeleteVisible, setLocalDeleteVisible] = useState(false);
+  const [localDeleteText, setLocalDeleteText] = useState('');
   const update = useSyncExternalStore(subscribeDesktopUpdates, desktopUpdateSnapshot, desktopUpdateSnapshot);
 
   useEffect(() => {
@@ -43,6 +51,11 @@ export default function SettingsScreen({
       setStorageDiagnostics(diagnostics);
     }).catch(error => setProfileError(String(error)));
   }, [cfg.profileId]);
+
+  useEffect(() => {
+    if (cfg.profileId !== LOCAL_HUB_PROFILE_ID && !profiles.some(profile => profile.profileId === LOCAL_HUB_PROFILE_ID)) return;
+    void localHubStatus().then(setLocalHub).catch(error => setProfileError(String(error)));
+  }, [cfg.profileId, profiles]);
 
   useEffect(() => {
     (async () => {
@@ -86,9 +99,11 @@ export default function SettingsScreen({
                   <Text style={styles.profileMeta} numberOfLines={1}>{profile.serverUrl} · {profile.username || '未知用户'}{profile.networkId ? ` · ${profile.networkId}` : ''}</Text>
                   {profile.requiresReauth ? <Text style={styles.reauthText}>需要重新登录 · 点击验证</Text> : null}
                 </View>
-                <Pressable accessibilityLabel={`移除 ${profile.username || profile.serverUrl}`} onPress={event => { event.stopPropagation(); setRemoveTarget(profile); }} hitSlop={8}>
-                  <Text style={styles.removeText}>移除</Text>
-                </Pressable>
+                {profile.profileId !== LOCAL_HUB_PROFILE_ID ? (
+                  <Pressable accessibilityLabel={`移除 ${profile.username || profile.serverUrl}`} onPress={event => { event.stopPropagation(); setRemoveTarget(profile); }} hitSlop={8}>
+                    <Text style={styles.removeText}>移除</Text>
+                  </Pressable>
+                ) : null}
               </Pressable>
             </View>
           );
@@ -110,6 +125,43 @@ export default function SettingsScreen({
           本地数据：{storageDiagnostics.root} · {storageDiagnostics.profile_count} profiles
           {storageDiagnostics.corrupt_backups.length ? ` · 已保留 ${storageDiagnostics.corrupt_backups.length} 个损坏备份` : ''}
         </Text>
+      ) : null}
+
+      {localHub ? (
+        <>
+          <Text style={styles.sectionTitle}>本地 Hub</Text>
+          <View style={styles.card} testID="local-hub-settings-card">
+            <Row label="状态" value={localHub.state === 'running' || localHub.state === 'running_external' ? '运行中' : localHub.state === 'error' ? '异常' : '已停止'} />
+            <Divider />
+            <Row label="地址" value={localHub.endpoint} />
+            <Divider />
+            <Row label="版本" value={localHub.hubVersion} />
+            {localHub.error ? <Text style={styles.localHubError}>{localHub.error}</Text> : null}
+            <Divider />
+            <View style={styles.localHubActions}>
+              <Pressable disabled={localHubBusy} style={styles.localHubButton} onPress={() => {
+                setLocalHubBusy(true);
+                void restartLocalHub().then(setLocalHub).catch(error => setProfileError(String(error))).finally(() => setLocalHubBusy(false));
+              }}><Text style={styles.addText}>{localHubBusy ? '处理中…' : '重新启动'}</Text></Pressable>
+              <Pressable disabled={localHubBusy || localHub.state === 'stopped'} style={styles.localHubButton} onPress={() => {
+                setLocalHubBusy(true);
+                void stopLocalHub().then(() => localHubStatus()).then(setLocalHub).catch(error => setProfileError(String(error))).finally(() => setLocalHubBusy(false));
+              }}><Text style={styles.rowValue}>停止</Text></Pressable>
+              <Pressable style={styles.localHubButton} onPress={() => {
+                void openLocalHubLogs().catch(error => setProfileError(String(error)));
+              }}><Text style={styles.rowValue}>打开日志</Text></Pressable>
+              <Pressable disabled={localHubBusy} style={styles.localHubButton} onPress={() => {
+                setLocalHubBusy(true);
+                setLocalBackupMessage('');
+                void backupLocalHubData().then(result => setLocalBackupMessage(`备份已保存：${result.path}`)).catch(error => setProfileError(String(error))).finally(() => setLocalHubBusy(false));
+              }}><Text style={styles.rowValue}>立即备份</Text></Pressable>
+            </View>
+            {localBackupMessage ? <Text style={styles.storageHint}>{localBackupMessage}</Text> : null}
+            <Pressable style={styles.localDeleteButton} onPress={() => { setLocalDeleteText(''); setLocalDeleteVisible(true); }}>
+              <Text style={styles.logoutText}>删除本地工作区数据…</Text>
+            </Pressable>
+          </View>
+        </>
       ) : null}
 
       <Text style={styles.sectionTitle}>外观</Text>
@@ -139,12 +191,12 @@ export default function SettingsScreen({
         </Pressable>
       </View>
 
-      <Pressable
+      {cfg.profileId !== LOCAL_HUB_PROFILE_ID ? <Pressable
         style={({ pressed }) => [styles.logoutBtn, pressed && { opacity: 0.7 }]}
         onPress={onLogout}
       >
         <Text style={styles.logoutText}>移除当前账号</Text>
-      </Pressable>
+      </Pressable> : null}
 
       <Modal visible={!!removeTarget} transparent animationType="fade" onRequestClose={() => setRemoveTarget(null)}>
         <View style={styles.modalBackdrop}>
@@ -160,6 +212,34 @@ export default function SettingsScreen({
                 if (target.profileId === cfg.profileId) void Promise.resolve(onLogout()).catch(error => setProfileError(String(error)));
                 else void removeHubProfile(target.profileId).then(() => setProfiles(current => current.filter(item => item.profileId !== target.profileId))).catch(error => setProfileError(String(error)));
               }}><Text style={styles.logoutText}>移除账号</Text></Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      <Modal visible={localDeleteVisible} transparent animationType="fade" onRequestClose={() => setLocalDeleteVisible(false)}>
+        <View style={styles.modalBackdrop}>
+          <View style={styles.modalCard}>
+            <Text style={styles.modalTitle}>删除本地工作区？</Text>
+            <Text style={styles.modalBody}>应用会先在 ~/.anet/app/backups 创建完整备份，再删除本地 Hub 数据和系统凭据。远程 Hub 账号不受影响。请输入“删除本地数据”继续。</Text>
+            <TextInput
+              value={localDeleteText}
+              onChangeText={setLocalDeleteText}
+              placeholder="删除本地数据"
+              placeholderTextColor={colors.textMuted}
+              style={styles.confirmInput}
+              autoCapitalize="none"
+            />
+            <View style={styles.modalActions}>
+              <Pressable style={styles.modalButton} onPress={() => setLocalDeleteVisible(false)}><Text style={styles.rowValue}>返回</Text></Pressable>
+              <Pressable disabled={localDeleteText !== '删除本地数据' || localHubBusy} style={[styles.modalButton, styles.modalDanger, localDeleteText !== '删除本地数据' && styles.disabled]} onPress={() => {
+                setLocalHubBusy(true);
+                void deleteLocalHubData().then(async backupPath => {
+                  setLocalDeleteVisible(false);
+                  setLocalBackupMessage(`删除前备份：${backupPath}`);
+                  await onLocalDataDeleted();
+                }).catch(error => setProfileError(String(error))).finally(() => setLocalHubBusy(false));
+              }}><Text style={styles.logoutText}>备份并删除</Text></Pressable>
             </View>
           </View>
         </View>
@@ -217,6 +297,12 @@ const makeStyles = () =>
   reauthText: { color: colors.failed, fontSize: 11, marginTop: 3 },
   errorText: { color: colors.failed, fontSize: 12, marginTop: spacing.sm },
   storageHint: { color: colors.textMuted, fontSize: 11, marginTop: spacing.sm },
+  localHubError: { color: colors.failed, fontSize: 12, paddingHorizontal: spacing.lg, paddingVertical: spacing.sm },
+  localHubActions: { flexDirection: 'row', justifyContent: 'flex-end', gap: spacing.sm, padding: spacing.md },
+  localHubButton: { borderWidth: 1, borderColor: colors.border, borderRadius: 8, paddingHorizontal: spacing.md, paddingVertical: spacing.sm },
+  localDeleteButton: { margin: spacing.md, marginTop: 0, borderWidth: 1, borderColor: colors.failed, borderRadius: 8, alignItems: 'center', paddingVertical: spacing.sm },
+  confirmInput: { marginTop: spacing.md, borderWidth: 1, borderColor: colors.border, borderRadius: 8, color: colors.text, backgroundColor: colors.inputBg, paddingHorizontal: spacing.md, paddingVertical: spacing.sm },
+  disabled: { opacity: 0.45 },
   divider: { height: 1, backgroundColor: colors.border, marginLeft: spacing.lg },
   logoutBtn: {
     marginTop: spacing.xl,

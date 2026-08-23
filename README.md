@@ -1,6 +1,6 @@
 # Agent Network App
 
-📱 Minimal native mobile client for [Agent Network / CommHub](https://github.com/sleep2agi/agent-network) — Android first, iOS from the same codebase.
+Native desktop and mobile client for [Agent Network / CommHub](https://github.com/sleep2agi/agent-network). The primary desktop packages target macOS arm64 and Windows x64 through Tauri; Android/iOS share the React Native codebase.
 
 Built with **Expo (React Native, TypeScript)**. Design language follows the dashboard's less-is-more overhaul: near-black surfaces, restrained color, green/red/amber/gray status triad, cyan accent.
 
@@ -40,6 +40,11 @@ npx tsc --noEmit      # typecheck
 Tauri builds macOS arm64 and Windows x64 packages. Desktop acceptance,
 Developer ID signing, notarization, and release rules are documented in the
 [desktop release SOP](docs/desktop-release-sop.md).
+
+Desktop first run can create a loopback-only local workspace without requiring
+a server URL or global CLI/runtime installation. Storage, backup, deletion,
+shutdown, and uninstall behavior are documented in the
+[local workspace guide](docs/local-workspace.md).
 
 ### Visual verification without a device
 

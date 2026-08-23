@@ -1,0 +1,65 @@
+Agent Network Desktop local Hub runtime — phase 2 report
+Date: 2026-08-24
+Candidate: feat/local-hub-runtime (based on main a4089ccb)
+
+Scope
+- Supervise the pinned bundled CommHub sidecar from the desktop process.
+- Offer zero-configuration local first run and restore it on cold start.
+- Report preparing, starting, and backup/migration progress on first run.
+- Store local data under ~/.anet/app/local-hub and credentials in the native keyring.
+- Expose local Hub status, endpoint, version, restart/stop, and logs in Settings.
+
+Docker gates
+1. Rust unit tests
+   docker image: anet-app-rust-check:bookworm
+   command: cargo test --locked --manifest-path src-tauri/Cargo.toml local_hub -- --nocapture
+   result: 8 passed, 0 failed
+   coverage: loopback endpoint, random credential, stable local profile id,
+             occupied preferred port fallback, bounded log rotation.
+             nested backup preservation, live-process ownership detection,
+             and failed-migration snapshot restoration.
+
+2. TypeScript build typecheck
+   docker image: node:22-bookworm
+   command: npm run typecheck --if-present
+   result: passed
+
+3. Application unit/contract suite
+   docker image: oven/bun:1.3.10
+   command: bun run test
+   result: 31/31 test files passed
+
+4. Compiled Hub runtime E2E
+   Dockerfile: tests/local-hub-runtime/Dockerfile
+   command: docker run with the pinned compiled Linux sidecar mounted read-only
+   result: passed
+   evidence: loopback health v0.9.0-preview.29 / API v3 / secured;
+             public register + auth/me; SIGTERM exit; database restart login;
+             no password or token present in captured stdout/stderr.
+
+Security/storage assertions
+- Bind address is fixed to 127.0.0.1.
+- Port is selected only from 9200..9299; an occupied port is never killed.
+- If the saved port is occupied, the immutable local profile and native token
+  are atomically retargeted to the selected fallback loopback port.
+- Bootstrap password is randomly generated and saved only via native keyring.
+- Token is saved through the existing native profile credential store.
+- Child environment removes development-open and legacy master-token variables.
+- Logs rotate at 2 MiB and retain one previous file.
+- Local profile cannot be removed through ordinary account removal.
+- Supervisor retries unexpected exits with finite capped exponential backoff.
+- A live but unhealthy lock owner blocks duplicate startup; only a dead PID is
+  treated as a stale lock. The desktop PID is flushed into the lock before
+  sidecar spawn, so a crash in that window remains safely recoverable.
+- Settings can create a stopped-data backup; destructive deletion requires
+  typed confirmation, creates a backup first, and leaves remote profiles intact.
+- Unix shutdown sends SIGTERM and falls back to forced termination only after 2s.
+- A pinned Hub version change snapshots the stopped data directory before
+  launch; health/bootstrap failure restores both the old data and old config.
+
+Still required before closing issue #67 / public release
+- Exact macOS arm64 and Windows x64 CI build for this runtime commit.
+- Clean signed-package first-run and restart-persistence E2E on both platforms.
+- Signed-package migration/rollback E2E across two real Hub versions.
+- Signed-package verification of documented uninstall/reinstall retention.
+- Windows graceful shutdown verification (current fallback terminates the child).

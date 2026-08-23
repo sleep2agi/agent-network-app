@@ -44,6 +44,7 @@ import { APP_VERSION } from './src/version';
 import DesktopUpdatePrompt from './src/DesktopUpdatePrompt';
 import { loadPinnedChats, requestedChatAlias, requestedChatProfileId, savePinnedChats } from './src/desktop-chat-menu';
 import { openRememberedChatWindow, restoreDetachedChatWindows } from './src/desktop-chat-windows';
+import { LOCAL_HUB_PROFILE_ID, localHubStatus, startLocalHub } from './src/local-hub';
 
 type Screen =
   | { name: 'login' }
@@ -100,6 +101,10 @@ function AppRoot() {
   const [screen, setScreen] = useState<Screen>({ name: 'login' });
   const [booting, setBooting] = useState(true);
   const [reauthProfile, setReauthProfile] = useState<Pick<HubProfile, 'profileId' | 'serverUrl' | 'username' | 'displayName'> | null>(null);
+  const [showRemoteLogin, setShowRemoteLogin] = useState(false);
+  const [localHubStarting, setLocalHubStarting] = useState(false);
+  const [localHubStage, setLocalHubStage] = useState<'preparing' | 'starting' | 'migrating' | null>(null);
+  const [localHubError, setLocalHubError] = useState<string | null>(null);
   const initialChat = useMemo(() => requestedChatAlias(), []);
   const initialChatProfile = useMemo(() => requestedChatProfileId(), []);
   // Keyed remount on theme switch: module-level styles were already
@@ -135,6 +140,14 @@ function AppRoot() {
     setScreen(next ? { name: 'agents' } : { name: 'login' });
   };
 
+  const finishLocalDataDeletion = async () => {
+    const next = await loadConfig();
+    await hydrateProfileLocalState(next);
+    setCfg(next);
+    setShowRemoteLogin(false);
+    setScreen(next ? { name: 'agents' } : { name: 'login' });
+  };
+
   const activateProfile = async (profileId: string) => {
     const next = await switchHubProfile(profileId);
     await hydrateProfileLocalState(next);
@@ -164,7 +177,13 @@ function AppRoot() {
   // the app usable, log the diagnostic, and require a fresh login whose save
   // path now reports the error visibly.
   useEffect(() => {
-    Promise.all([initialChatProfile ? switchHubProfile(initialChatProfile).catch(() => loadConfig()) : loadConfig(), loadThemeMode()]).then(async ([saved, mode]) => {
+    Promise.all([initialChatProfile ? switchHubProfile(initialChatProfile).catch(() => loadConfig()) : loadConfig(), loadThemeMode()]).then(async ([stored, mode]) => {
+      let saved = stored;
+      if (tauriDesktop && stored?.profileId === LOCAL_HUB_PROFILE_ID) {
+        const local = await startLocalHub();
+        if (!local.session) throw new Error(local.error || '本地工作区启动后没有返回会话');
+        saved = local.session;
+      }
       if (mode === 'light' || mode === 'dark') setThemeMode(mode);
       // R2 avatar: seed the per-device local echo layer + wire its writer, so
       // session-only aliases keep their user-set avatar across restarts.
@@ -184,7 +203,7 @@ function AppRoot() {
       console.error('Failed to restore desktop session', error);
       setBooting(false);
     });
-  }, [initialChat, initialChatProfile]);
+  }, [initialChat, initialChatProfile, tauriDesktop]);
 
   // R1 avatar (通信龙 07-31): hydrate the hub avatar layer from GET /api/nodes
   // so node-backed aliases render their cross-device avatar_url (Vincent changed
@@ -255,7 +274,7 @@ function AppRoot() {
       <SafeAreaView key={workspaceKey} style={styles.root}>
         <StatusBar barStyle={theme === 'light' ? 'dark-content' : 'light-content'} backgroundColor={colors.bg} />
         <ConnectivityBanner />
-        <DesktopWorkspace cfg={cfg} screen={screen} setScreen={setScreen} onLogout={removeActiveProfile} onAddAccount={() => { setReauthProfile(null); setScreen({ name: 'login' }); }} onSwitchProfile={activateProfile} onReauthProfile={requestProfileReauth} />
+        <DesktopWorkspace cfg={cfg} screen={screen} setScreen={setScreen} onLogout={removeActiveProfile} onLocalDataDeleted={finishLocalDataDeletion} onAddAccount={() => { setReauthProfile(null); setScreen({ name: 'login' }); }} onSwitchProfile={activateProfile} onReauthProfile={requestProfileReauth} />
       </SafeAreaView>
     );
   }
@@ -270,6 +289,35 @@ function AppRoot() {
           诚实的"截至"时间(最后一次成功,非尝试)。登录页不挂(还没有 hub 可言)。 */}
       {screen.name !== 'login' && cfg ? <ConnectivityBanner /> : null}
       {screen.name === 'login' || !cfg ? (
+        tauriDesktop && !reauthProfile && !showRemoteLogin ? (
+          <FirstRunScreen
+            busy={localHubStarting}
+            stage={localHubStage}
+            error={localHubError}
+            onStartLocal={async () => {
+              setLocalHubStarting(true);
+              setLocalHubStage('preparing');
+              setLocalHubError(null);
+              try {
+                const status = await localHubStatus();
+                setLocalHubStage(status.requiresMigration ? 'migrating' : 'starting');
+                await new Promise(resolve => setTimeout(resolve, 0));
+                const local = await startLocalHub();
+                if (!local.session) throw new Error(local.error || '本地工作区启动后没有返回会话');
+                await hydrateProfileLocalState(local.session);
+                setCfg(local.session);
+                setScreen({ name: 'agents' });
+                prefetchStatus(local.session);
+              } catch (error) {
+                setLocalHubError(error instanceof Error ? error.message : String(error));
+              } finally {
+                setLocalHubStarting(false);
+                setLocalHubStage(null);
+              }
+            }}
+            onRemote={() => setShowRemoteLogin(true)}
+          />
+        ) : (
         <LoginScreen
           key={reauthProfile?.profileId ?? 'new-profile'}
           initialProfile={reauthProfile}
@@ -289,6 +337,7 @@ function AppRoot() {
             setScreen(initialChat ? { name: 'chat', alias: initialChat } : { name: 'agents' });
           }}
         />
+        )
       ) : screen.name === 'chat' ? (
         <ChatScreen
           cfg={cfg}
@@ -366,6 +415,7 @@ function AppRoot() {
                 onAddAccount={() => { setReauthProfile(null); setScreen({ name: 'login' }); }}
                 onSwitchProfile={activateProfile}
                 onReauthProfile={requestProfileReauth}
+                onLocalDataDeleted={finishLocalDataDeletion}
               />
             ) : (
               <AgentsScreen
@@ -400,17 +450,68 @@ function AppRoot() {
   );
 }
 
+function FirstRunScreen({ busy, stage, error, onStartLocal, onRemote }: {
+  busy: boolean;
+  stage: 'preparing' | 'starting' | 'migrating' | null;
+  error: string | null;
+  onStartLocal: () => Promise<void>;
+  onRemote: () => void;
+}) {
+  return (
+    <View style={firstRunStyles.root} testID="first-run-local-hub">
+      <View style={firstRunStyles.card}>
+        <Image source={require('./assets/splash-icon.png')} style={firstRunStyles.logo} resizeMode="contain" />
+        <Text style={firstRunStyles.title}>开始使用 Agent Network</Text>
+        <Text style={firstRunStyles.copy}>推荐在这台电脑创建本地工作区。无需填写服务器地址，数据保存在 ~/.anet/app。</Text>
+        {error ? <Text style={firstRunStyles.error}>{error}</Text> : null}
+        <Pressable
+          accessibilityRole="button"
+          disabled={busy}
+          style={[firstRunStyles.primary, busy && firstRunStyles.disabled]}
+          onPress={() => { void onStartLocal(); }}
+        >
+          {busy ? (
+            <View style={firstRunStyles.busyRow} testID={`local-hub-stage-${stage ?? 'preparing'}`}>
+              <ActivityIndicator color="#fff" />
+              <Text style={firstRunStyles.primaryText}>{stage === 'migrating' ? '正在备份并迁移…' : stage === 'starting' ? '正在启动本地服务…' : '正在准备本地工作区…'}</Text>
+            </View>
+          ) : <Text style={firstRunStyles.primaryText}>开始使用（本地）</Text>}
+        </Pressable>
+        <Pressable accessibilityRole="button" disabled={busy} style={firstRunStyles.secondary} onPress={onRemote}>
+          <Text style={firstRunStyles.secondaryText}>连接已有服务器</Text>
+        </Pressable>
+      </View>
+    </View>
+  );
+}
+
+const firstRunStyles = StyleSheet.create({
+  root: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 32, backgroundColor: colors.bg },
+  card: { width: '100%', maxWidth: 460, gap: 16, padding: 32, borderRadius: 20, backgroundColor: colors.card, borderWidth: StyleSheet.hairlineWidth, borderColor: colors.border },
+  logo: { width: 64, height: 64, alignSelf: 'center' },
+  title: { color: colors.text, fontSize: 24, fontWeight: '700', textAlign: 'center' },
+  copy: { color: colors.textMuted, fontSize: 15, lineHeight: 23, textAlign: 'center' },
+  error: { color: colors.failed, fontSize: 13, lineHeight: 19 },
+  primary: { height: 46, borderRadius: 10, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.accent },
+  disabled: { opacity: 0.6 },
+  primaryText: { color: '#fff', fontSize: 15, fontWeight: '700' },
+  busyRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  secondary: { height: 42, alignItems: 'center', justifyContent: 'center' },
+  secondaryText: { color: colors.text, fontSize: 14, fontWeight: '600' },
+});
+
 const bootStyles = StyleSheet.create({
   root: { backgroundColor: '#07152f' },
   logo: { width: 156, height: 156, borderRadius: 34 },
   title: { color: '#ffffff', fontSize: 20, fontWeight: '700', letterSpacing: 0.4, marginBottom: 8 },
 });
 
-function DesktopWorkspace({ cfg, screen, setScreen, onLogout, onAddAccount, onSwitchProfile, onReauthProfile }: {
+function DesktopWorkspace({ cfg, screen, setScreen, onLogout, onLocalDataDeleted, onAddAccount, onSwitchProfile, onReauthProfile }: {
   cfg: HubConfig;
   screen: Screen;
   setScreen: (screen: Screen) => void;
   onLogout: () => void | Promise<void>;
+  onLocalDataDeleted: () => void | Promise<void>;
   onAddAccount: () => void;
   onSwitchProfile: (profileId: string) => void | Promise<void>;
   onReauthProfile: (profile: Pick<HubProfile, 'profileId' | 'serverUrl' | 'username' | 'displayName'>) => void;
@@ -443,7 +544,7 @@ function DesktopWorkspace({ cfg, screen, setScreen, onLogout, onAddAccount, onSw
   : screen.name === 'server' ? <ServerScreen cfg={cfg} onOpenLogs={() => setScreen({ name: 'logs' })} />
   : screen.name === 'serverNodes' ? <AgentsScreen cfg={cfg} onOpenChat={alias => setScreen({ name: 'serverNodeDetail', alias })} onOpenPicker={() => setScreen({ name: 'picker' })} onOpenNodeDetail={alias => setScreen({ name: 'serverNodeDetail', alias })} />
   : screen.name === 'serverNodeDetail' ? <NodeDetailScreen cfg={cfg} alias={screen.alias} onBack={() => setScreen({ name: 'serverNodes' })} />
-  : screen.name === 'settings' ? <SettingsScreen cfg={cfg} onLogout={onLogout} onAddAccount={onAddAccount} onSwitchProfile={onSwitchProfile} onReauthProfile={onReauthProfile} />
+  : screen.name === 'settings' ? <SettingsScreen cfg={cfg} onLogout={onLogout} onLocalDataDeleted={onLocalDataDeleted} onAddAccount={onAddAccount} onSwitchProfile={onSwitchProfile} onReauthProfile={onReauthProfile} />
   : screen.name === 'taskDetail' ? <TaskDetailScreen cfg={cfg} taskId={screen.taskId} onBack={() => setScreen({ name: 'tasks' })} />
   : screen.name === 'nodeDetail' ? <NodeDetailScreen cfg={cfg} alias={screen.alias} onBack={() => setScreen({ name: 'agents' })} />
   : screen.name === 'logs' ? <LogsScreen cfg={cfg} onBack={() => setScreen({ name: 'server' })} />
