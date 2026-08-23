@@ -37,6 +37,7 @@ import type { NativeSyntheticEvent, NativeScrollEvent } from 'react-native';
 import { usePoll } from './usePoll';
 import { appFetch } from './app-fetch';
 import MarkdownMessage from './MarkdownMessage';
+import { cleanAttachmentDebugText } from './attachment-display';
 
 // Chat with one agent. Mirrors dashboard M4: open with the newest PAGE
 // messages, grow the window when the user scrolls toward older history.
@@ -165,9 +166,6 @@ const replyAttachmentViews = (item: ChatItem, serverUrl: string): AttachmentView
 
 /** Replace markdown file links with just the file name — the attachment
  *  itself renders as a thumbnail/📎 row below the text. */
-const stripFileLinks = (text: string) =>
-  text.replace(/\[([^\]]+)\]\([^()\s]*\/api\/files\/[A-Za-z0-9_-]{8,64}\)/g, '$1');
-
 interface Props {
   cfg: HubConfig;
   alias: string;
@@ -616,7 +614,7 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
                       style={({ pressed }) => [styles.bubblePressable, pressed && { opacity: 0.7 }]}
                     >
                       <View style={styles.bubble}>
-                        <MarkdownMessage>{stripFileLinks(item.content || '—')}</MarkdownMessage>
+                        <MarkdownMessage>{cleanAttachmentDebugText(item.content || '—')}</MarkdownMessage>
                         {sentAttachmentViews(item, cfg.serverUrl).map(renderAttachment)}
                       </View>
                     </Pressable>
@@ -634,7 +632,7 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
                         delayLongPress={300}
                       >
                         <View style={[styles.bubble, styles.replyBubble]}>
-                          <MarkdownMessage>{stripFileLinks(item.result ?? item.reply ?? '')}</MarkdownMessage>
+                          <MarkdownMessage>{cleanAttachmentDebugText(item.result ?? item.reply ?? '')}</MarkdownMessage>
                           {replyAttachmentViews(item, cfg.serverUrl).map(renderAttachment)}
                         </View>
                       </Pressable>
