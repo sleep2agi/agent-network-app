@@ -13,7 +13,7 @@ check('desktop main navigation excludes Settings', source.includes("TABS.filter(
 check('desktop Settings has a dedicated bottom control', source.includes('desktopStyles.railSettings'));
 check('Settings control is rendered after the main tabs', source.indexOf('{DESKTOP_MAIN_TABS.map') < source.indexOf('accessibilityLabel={DESKTOP_SETTINGS_TAB.label}'));
 check('desktop rail keeps the full branded icon in dark mode', source.includes("source={require('./assets/icon.png')} style={desktopStyles.railBrandImage}"));
-check('desktop rail uses a light-theme monochrome brand mark', source.includes("source={require('./assets/android-icon-monochrome.png')}") && source.includes('railBrandImageLight'));
+check('desktop rail preserves the branded artwork in light mode', source.match(/source=\{require\('\.\/assets\/icon\.png'\)\}/g)?.length === 2 && source.includes('railBrandImageLight'));
 check('chat header settings opens the current node', source.includes("onOpenNodeSettings={() => setScreen({ name: 'nodeDetail', alias: screen.alias })}"));
 const detachedStart = source.indexOf('if (dedicatedChatWindow && cfg');
 const workspaceStart = source.indexOf("if (desktop && cfg && screen.name !== 'login')");
