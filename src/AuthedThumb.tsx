@@ -179,6 +179,7 @@ export default function AuthedThumb({
 }) {
   const [uri, setUri] = useState<string | null>(null);
   const [failed, setFailed] = useState(false);
+  const [attempt, setAttempt] = useState(0);
 
   useEffect(() => {
     let live = true;
@@ -188,10 +189,24 @@ export default function AuthedThumb({
     return () => {
       live = false;
     };
-  }, [fileId, name, serverUrl, token]);
+  }, [fileId, name, serverUrl, token, attempt]);
 
   if (failed) {
-    return <Text style={styles.fallback}>📎 {name}</Text>;
+    return (
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={`${name} 加载失败，点击重试`}
+        style={styles.failedThumb}
+        onPress={() => {
+          setFailed(false);
+          setAttempt(value => value + 1);
+        }}
+      >
+        <Text style={styles.failedIcon}>↻</Text>
+        <Text style={styles.failedTitle} numberOfLines={1}>{name}</Text>
+        <Text style={styles.failedHint}>图片加载失败 · 点击重试</Text>
+      </Pressable>
+    );
   }
   if (!uri) {
     return (
@@ -217,6 +232,21 @@ const makeStyles = () =>
     backgroundColor: colors.inputBg,
   },
   loading: { alignItems: 'center', justifyContent: 'center' },
+  failedThumb: {
+    width: 180,
+    height: 112,
+    borderRadius: 10,
+    marginTop: spacing.sm,
+    padding: spacing.sm,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.inputBg,
+    borderColor: colors.border,
+    borderWidth: 1,
+  },
+  failedIcon: { color: colors.failed, fontSize: 22, marginBottom: 4 },
+  failedTitle: { color: colors.text, fontSize: 12, maxWidth: 156 },
+  failedHint: { color: colors.failed, fontSize: 11, marginTop: 3 },
   fallback: { color: colors.accent, fontSize: 12, marginTop: spacing.xs },
   video: {
     width: 220,
