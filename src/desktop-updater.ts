@@ -21,13 +21,16 @@ export const subscribeDesktopUpdates = (listener: () => void) => {
   return () => listeners.delete(listener);
 };
 
-export async function checkDesktopUpdate(): Promise<DesktopUpdateState> {
+type UpdateCheck = (options: { timeout: number }) => Promise<any>;
+
+export async function checkDesktopUpdate(checkOverride?: UpdateCheck): Promise<DesktopUpdateState> {
   if (!(globalThis as any).__TAURI_INTERNALS__) return publish({ kind: 'unsupported' });
   if (checkInFlight) return checkInFlight;
   checkInFlight = (async () => {
     publish({ kind: 'checking' });
+    pendingUpdate = undefined;
     try {
-      const { check } = await import('@tauri-apps/plugin-updater');
+      const check = checkOverride || (await import('@tauri-apps/plugin-updater')).check;
       pendingUpdate = await check({ timeout: 20_000 });
       if (!pendingUpdate) return publish({ kind: 'up-to-date' });
       return publish({

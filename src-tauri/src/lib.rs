@@ -749,6 +749,10 @@ pub fn run_packaged_local_hub_crash_recovery_smoke() -> Result<(), String> {
     local_hub::packaged_crash_recovery_smoke()
 }
 
+pub fn run_packaged_local_hub_corrupt_data_smoke() -> Result<(), String> {
+    local_hub::packaged_corrupt_data_smoke()
+}
+
 pub fn run_packaged_multihub_smoke() -> Result<(), String> {
     local_hub::packaged_multihub_smoke()
 }

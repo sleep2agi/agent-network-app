@@ -34,6 +34,12 @@ Scope
 - macOS app-bundle removal/reinstall and Windows NSIS silent
   install/uninstall/reinstall must preserve the external app-data namespace and
   successfully reopen it with the exact packaged binary.
+- A malformed legacy SQLite fixture must fail in the exact packaged app with
+  an actionable diagnostic, restore its original bytes and compatibility
+  metadata, and leave no stale ownership lock.
+- The desktop updater offline test stages an update, forces its endpoint check
+  to fail, requires a published retryable error and stale-update invalidation,
+  then proves a later manual retry succeeds.
 
 Required gates
 - Docker Bun application suite.
@@ -42,7 +48,8 @@ Required gates
 - Credential markers must not appear in smoke logs for A, B, or C.
 
 Status
-- Docker Bun local-Hub contract suite: 26/26 checks passed.
+- Docker Bun local-Hub contract suite: 27/27 checks passed.
+- Docker updater offline/retry suite: 5/5 checks passed.
 - Docker Rust local_hub suite: 8/8 tests passed.
 - Docker Rust `cargo check --locked`, Rust formatting, workflow YAML parse, and
   git diff checks passed.

@@ -14,6 +14,7 @@ const checks: Array<[string, boolean]> = [
   ['download and install reports progress', source.includes('downloadAndInstall') && source.includes("kind: 'downloading'")],
   ['successful install relaunches', source.includes("plugin-process") && source.includes('await relaunch()')],
   ['non-Tauri platforms stay unsupported', source.includes("kind: 'unsupported'")],
+  ['offline checks clear stale staged updates', source.includes('pendingUpdate = undefined') && source.includes('checkOverride')],
   ['signed updater artifacts are enabled', config.bundle.createUpdaterArtifacts === true],
   ['stable anet.sh updater endpoint configured', config.plugins.updater.endpoints[0] === 'https://anet.sh/desktop/update/latest.json'],
   ['updater public key configured', typeof config.plugins.updater.pubkey === 'string' && config.plugins.updater.pubkey.length > 80],

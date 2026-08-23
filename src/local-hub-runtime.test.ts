@@ -34,6 +34,7 @@ const checks: Array<[string, boolean]> = [
   ['failed packaged migration restores exact previous data and metadata', appWorkflow.includes('--smoke-local-hub-failed-migration') && rust.includes('failed migration did not restore the exact previous database') && rust.includes('failed migration did not restore previous compatibility metadata') && rust.includes('failed migration left a stale supervisor lock')],
   ['packaged supervisor recovers a force-killed Hub', appWorkflow.includes('--smoke-local-hub-crash-recovery') && rust.includes('kill_process_for_smoke') && rust.includes('supervisor did not recover the killed sidecar within 20 seconds') && rust.includes('crash recovery changed profile or native credential')],
   ['signed release audits macOS and Windows uninstall/reinstall retention', appWorkflow.includes('Audit macOS app removal and reinstall data retention') && appWorkflow.includes('Audit Windows NSIS uninstall and reinstall data retention') && appWorkflow.includes('NSIS uninstall deleted retained app data') && appWorkflow.includes('reinstall lost retained database')],
+  ['signed packages reject corrupt data with rollback and diagnostics', appWorkflow.includes('--smoke-local-hub-corrupt-data') && rust.includes('corrupt-data failure did not restore the exact original bytes') && rust.includes('corrupt data returned a non-actionable diagnostic') && rust.includes('corrupt-data failure left a stale supervisor lock')],
 ];
 
 for (const [name, ok] of checks) {

@@ -662,7 +662,7 @@ pub fn start_local_hub() -> Result<String, String> {
                     save_config(previous)?;
                 }
             }
-            return Err(error);
+            return Err(format!("local Hub bootstrap failed: {error}"));
         }
     };
     let config = LocalHubConfig {
@@ -1133,6 +1133,71 @@ pub fn packaged_failed_migration_smoke() -> Result<(), String> {
             });
         if !snapshot_found {
             return Err("failed migration did not retain its recovery snapshot".into());
+        }
+        Ok(())
+    };
+    let result = run();
+    let stopped = stop_local_hub_inner();
+    let credential_removed = password_entry
+        .delete_credential()
+        .or_else(|error| match error {
+            keyring::Error::NoEntry => Ok(()),
+            other => Err(other),
+        })
+        .map_err(|error| error.to_string());
+    result.and(stopped).and(credential_removed)
+}
+
+/// Starts the exact packaged sidecar against a deliberately malformed legacy
+/// database. Startup must fail with a useful diagnostic and transactionally
+/// restore every byte plus the previous compatibility metadata.
+pub fn packaged_corrupt_data_smoke() -> Result<(), String> {
+    if std::env::var("ANET_PACKAGED_SMOKE").as_deref() != Ok("1") {
+        return Err("packaged corrupt-data smoke requires ANET_PACKAGED_SMOKE=1".into());
+    }
+    let data_dir = local_root()?.join("data");
+    super::ensure_private_dir(&data_dir)?;
+    let database = data_dir.join("commhub.db");
+    let corrupt = b"not-a-sqlite-database\0corrupt-local-hub-fixture";
+    fs::write(&database, corrupt).map_err(|error| error.to_string())?;
+    let previous = LocalHubConfig {
+        schema_version: 1,
+        enabled: true,
+        host: "127.0.0.1".into(),
+        port: PREFERRED_PORT,
+        endpoint: endpoint(PREFERRED_PORT),
+        hub_version: "0.9.0-preview.28".into(),
+    };
+    save_config(&previous)?;
+    let password_entry = keyring::Entry::new(SESSION_SERVICE, LOCAL_PASSWORD_ACCOUNT)
+        .map_err(|error| error.to_string())?;
+    password_entry
+        .set_password(&random_password())
+        .map_err(|error| error.to_string())?;
+
+    let run = || -> Result<(), String> {
+        let failure = start_local_hub()
+            .expect_err("corrupt database unexpectedly started the packaged local Hub");
+        if failure.trim().is_empty() || !failure.to_ascii_lowercase().contains("local hub") {
+            return Err(format!(
+                "corrupt data returned a non-actionable diagnostic: {failure}"
+            ));
+        }
+        if fs::read(&database).map_err(|error| error.to_string())? != corrupt {
+            return Err("corrupt-data failure did not restore the exact original bytes".into());
+        }
+        let restored =
+            read_config()?.ok_or_else(|| "corrupt-data failure lost config".to_string())?;
+        if restored.hub_version != previous.hub_version
+            || restored.endpoint != previous.endpoint
+            || restored.port != previous.port
+        {
+            return Err(
+                "corrupt-data failure did not restore previous compatibility metadata".into(),
+            );
+        }
+        if local_root()?.join("supervisor.lock").exists() {
+            return Err("corrupt-data failure left a stale supervisor lock".into());
         }
         Ok(())
     };
