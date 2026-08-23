@@ -210,8 +210,8 @@ jobs:
           if (-not $binary) { throw 'installed desktop executable missing' }
           $env:ANET_PACKAGED_SMOKE = '1'
           $env:ANET_PACKAGED_SMOKE_ROOT = $retentionRoot
-          & $binary.FullName --smoke-local-hub
-          if ($LASTEXITCODE -ne 0) { throw "installed smoke failed: $LASTEXITCODE" }
+          $smoke = Start-Process -FilePath $binary.FullName -ArgumentList '--smoke-local-hub' -Wait -PassThru
+          if ($smoke.ExitCode -ne 0) { throw "installed smoke failed: $($smoke.ExitCode)" }
           $database = Join-Path $retentionRoot 'local-hub/data/commhub.db'
           $profiles = Join-Path $retentionRoot 'profiles/index.json'
           if (-not (Test-Path $database) -or (Get-Item $database).Length -eq 0) { throw 'retention database missing' }
@@ -225,8 +225,8 @@ jobs:
           $reinstall = Start-Process -FilePath $installer.FullName -ArgumentList '/S', "/D=$installDir" -Wait -PassThru
           if ($reinstall.ExitCode -ne 0) { throw "NSIS reinstall failed: $($reinstall.ExitCode)" }
           $binary = Get-ChildItem $installDir -Recurse -Filter 'agent-network-desktop.exe' | Select-Object -First 1
-          & $binary.FullName --smoke-local-hub
-          if ($LASTEXITCODE -ne 0) { throw "reinstalled smoke failed: $LASTEXITCODE" }
+          $smoke = Start-Process -FilePath $binary.FullName -ArgumentList '--smoke-local-hub' -Wait -PassThru
+          if ($smoke.ExitCode -ne 0) { throw "reinstalled smoke failed: $($smoke.ExitCode)" }
           if (-not (Test-Path $database) -or (Get-Item $database).Length -eq 0) { throw 'reinstall lost retained database' }
 
       - name: Enforce desktop distribution size ceiling
