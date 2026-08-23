@@ -55,6 +55,11 @@ jobs:
       - run: npm run typecheck
       - run: npx expo export -p web
       - uses: dtolnay/rust-toolchain@stable
+      - name: Build pinned local CommHub sidecar
+        shell: bash
+        run: |
+          npm ci --prefix local-hub-sidecar --ignore-scripts
+          npm run build:local-hub-sidecar
       - uses: swatinem/rust-cache@v2
         with:
           workspaces: src-tauri
@@ -107,3 +112,13 @@ jobs:
           prerelease: false
           updaterJsonPreferNsis: true
           args: ${{ matrix.args }}
+
+      - name: Enforce desktop distribution size ceiling
+        shell: bash
+        run: |
+          oversized="$(find src-tauri/target/release/bundle -type f \( -name '*.dmg' -o -name '*.exe' -o -name '*.msi' \) -size +55M -print)"
+          if [ -n "$oversized" ]; then
+            echo "::error::Desktop artifact exceeds the 55 MiB distribution ceiling"
+            echo "$oversized"
+            exit 1
+          fi

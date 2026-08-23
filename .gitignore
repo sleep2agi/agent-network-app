@@ -39,3 +39,6 @@ yarn-error.*
 # generated native folders
 /ios
 /android
+src-tauri/binaries/commhub-*-apple-darwin
+src-tauri/binaries/commhub-*-pc-windows-msvc.exe
+src-tauri/binaries/commhub-*-unknown-linux-gnu
