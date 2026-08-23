@@ -19,3 +19,6 @@ const detachedBlock = source.slice(detachedStart, workspaceStart);
 check('detached chat is selected before the full desktop workspace', detachedStart > 0 && detachedStart < workspaceStart);
 check('detached chat renders only the chat screen', detachedBlock.includes('<ChatScreen') && !detachedBlock.includes('<DesktopWorkspace'));
 check('detached chat has no back or node-settings controls', detachedBlock.includes('onBack={() => {}} desktop') && !detachedBlock.includes('onOpenNodeSettings'));
+check('server workspace has a dedicated sidebar', source.includes('<ServerSidebar cfg={cfg}') && source.includes('serverSectionForScreen(screen)'));
+check('server workspace exposes node inventory', source.includes("screen.name === 'serverNodes'") && source.includes("name: 'serverNodeDetail'"));
+check('server workspace reuses the create-node flow', source.includes("section === 'create'") && source.includes("setScreen({ name: 'picker' })"));

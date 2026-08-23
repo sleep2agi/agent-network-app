@@ -23,6 +23,7 @@ import { usePoll } from './src/usePoll'; // R1 avatar 30s hydrate poll (main's A
 import ChatScreen from './src/ChatScreen';
 import MessagesScreen from './src/MessagesScreen';
 import ServerScreen from './src/ServerScreen';
+import ServerSidebar, { type ServerSection } from './src/ServerSidebar';
 import HostSupervisorPickerScreen from './src/HostSupervisorPickerScreen';
 import CreateNodeWizardScreen from './src/CreateNodeWizardScreen';
 import SettingsScreen from './src/SettingsScreen';
@@ -49,6 +50,8 @@ type Screen =
   | { name: 'scheduled' }
   | { name: 'messages' }
   | { name: 'server' }
+  | { name: 'serverNodes' }
+  | { name: 'serverNodeDetail'; alias: string }
   | { name: 'settings' }
   | { name: 'chat'; alias: string }
   | { name: 'taskDetail'; taskId: string }   // full-screen (no tab bar) — hardware back returns to /tasks list
@@ -364,7 +367,8 @@ function DesktopWorkspace({ cfg, screen, setScreen, onLogout }: {
     savePinnedChats(next);
     return next;
   });
-  const active = ['chat', 'nodeDetail', 'picker', 'wizard'].includes(screen.name) ? 'agents' : screen.name;
+  const serverWorkspace = ['server', 'serverNodes', 'serverNodeDetail', 'logs', 'picker', 'wizard'].includes(screen.name);
+  const active = serverWorkspace ? 'server' : ['chat', 'nodeDetail'].includes(screen.name) ? 'agents' : screen.name;
   const content = screen.name === 'chat' ? (
     <ChatScreen
       cfg={cfg}
@@ -378,12 +382,14 @@ function DesktopWorkspace({ cfg, screen, setScreen, onLogout }: {
   ) : screen.name === 'scheduled' ? <ScheduledTasksScreen cfg={cfg} />
   : screen.name === 'messages' ? <MessagesScreen cfg={cfg} />
   : screen.name === 'server' ? <ServerScreen cfg={cfg} onOpenLogs={() => setScreen({ name: 'logs' })} />
+  : screen.name === 'serverNodes' ? <AgentsScreen cfg={cfg} onOpenChat={alias => setScreen({ name: 'serverNodeDetail', alias })} onOpenPicker={() => setScreen({ name: 'picker' })} onOpenNodeDetail={alias => setScreen({ name: 'serverNodeDetail', alias })} />
+  : screen.name === 'serverNodeDetail' ? <NodeDetailScreen cfg={cfg} alias={screen.alias} onBack={() => setScreen({ name: 'serverNodes' })} />
   : screen.name === 'settings' ? <SettingsScreen cfg={cfg} onLogout={onLogout} />
   : screen.name === 'taskDetail' ? <TaskDetailScreen cfg={cfg} taskId={screen.taskId} onBack={() => setScreen({ name: 'tasks' })} />
   : screen.name === 'nodeDetail' ? <NodeDetailScreen cfg={cfg} alias={screen.alias} onBack={() => setScreen({ name: 'agents' })} />
   : screen.name === 'logs' ? <LogsScreen cfg={cfg} onBack={() => setScreen({ name: 'server' })} />
-  : screen.name === 'picker' ? <HostSupervisorPickerScreen cfg={cfg} onBack={() => setScreen({ name: 'agents' })} onPicked={d => setScreen({ name: 'wizard', daemon: d })} />
-  : screen.name === 'wizard' ? <CreateNodeWizardScreen cfg={cfg} daemon={screen.daemon} onBack={() => setScreen({ name: 'picker' })} onExit={() => setScreen({ name: 'agents' })} />
+  : screen.name === 'picker' ? <HostSupervisorPickerScreen cfg={cfg} onBack={() => setScreen({ name: 'server' })} onPicked={d => setScreen({ name: 'wizard', daemon: d })} />
+  : screen.name === 'wizard' ? <CreateNodeWizardScreen cfg={cfg} daemon={screen.daemon} onBack={() => setScreen({ name: 'picker' })} onExit={() => setScreen({ name: 'serverNodes' })} />
   : (
     <View style={desktopStyles.empty}>
       <Ionicons name="chatbubbles-outline" size={52} color={colors.textMuted} />
@@ -419,11 +425,27 @@ function DesktopWorkspace({ cfg, screen, setScreen, onLogout }: {
         <Text style={desktopStyles.railVersion}>v{APP_VERSION}</Text>
       </View>
       <View style={desktopStyles.conversations}>
-        <AgentsScreen cfg={cfg} compact selectedAlias={screen.name === 'chat' ? screen.alias : undefined} pinnedAliases={pinnedAliases} onTogglePin={togglePin} onOpenChatWindow={alias => { void saveConfig(cfg).then(() => openChatWindow(alias)); }} onOpenChat={alias => setScreen({ name: 'chat', alias })} onOpenPicker={() => setScreen({ name: 'picker' })} onOpenNodeDetail={alias => setScreen({ name: 'nodeDetail', alias })} />
+        {serverWorkspace ? (
+          <ServerSidebar cfg={cfg} active={serverSectionForScreen(screen)} onSelect={section => {
+            if (section === 'overview') setScreen({ name: 'server' });
+            else if (section === 'nodes') setScreen({ name: 'serverNodes' });
+            else if (section === 'create') setScreen({ name: 'picker' });
+            else setScreen({ name: 'logs' });
+          }} />
+        ) : (
+          <AgentsScreen cfg={cfg} compact selectedAlias={screen.name === 'chat' ? screen.alias : undefined} pinnedAliases={pinnedAliases} onTogglePin={togglePin} onOpenChatWindow={alias => { void saveConfig(cfg).then(() => openChatWindow(alias)); }} onOpenChat={alias => setScreen({ name: 'chat', alias })} onOpenPicker={() => setScreen({ name: 'picker' })} onOpenNodeDetail={alias => setScreen({ name: 'nodeDetail', alias })} />
+        )}
       </View>
       <View style={desktopStyles.content}>{content}</View>
     </View>
   );
+}
+
+function serverSectionForScreen(screen: Screen): ServerSection {
+  if (screen.name === 'serverNodes' || screen.name === 'serverNodeDetail') return 'nodes';
+  if (screen.name === 'picker' || screen.name === 'wizard') return 'create';
+  if (screen.name === 'logs') return 'logs';
+  return 'overview';
 }
 
 const makeDesktopStyles = () => StyleSheet.create({
