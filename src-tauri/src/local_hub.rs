@@ -281,7 +281,9 @@ fn running_result(
         pid: Some(managed.child.id()),
         session,
         error: None,
-        logs_path: local_root().map(|root| root.join("logs").display().to_string()).unwrap_or_default(),
+        logs_path: local_root()
+            .map(|root| root.join("logs").display().to_string())
+            .unwrap_or_default(),
     }
 }
 
@@ -500,8 +502,8 @@ pub fn local_hub_status() -> Result<String, String> {
                 hub_version: config.hub_version,
                 pid: None,
                 session: None,
-                    error: Some(format!("local Hub exited with {status}")),
-                    logs_path: local_root()?.join("logs").display().to_string(),
+                error: Some(format!("local Hub exited with {status}")),
+                logs_path: local_root()?.join("logs").display().to_string(),
             },
         },
         (_, Some(config)) => LocalHubResult {
@@ -570,7 +572,10 @@ pub fn open_local_hub_logs() -> Result<(), String> {
     let mut command = Command::new("explorer.exe");
     #[cfg(not(any(target_os = "macos", target_os = "windows")))]
     let mut command = Command::new("xdg-open");
-    command.arg(path).spawn().map_err(|error| error.to_string())?;
+    command
+        .arg(path)
+        .spawn()
+        .map_err(|error| error.to_string())?;
     Ok(())
 }
 
