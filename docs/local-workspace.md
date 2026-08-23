@@ -58,8 +58,9 @@ they no longer need.
 The signed release gate creates previous-version data with a real published
 CommHub, upgrades it with the current packaged app, and requires the user,
 node, task, and pre-migration database snapshot to survive on macOS and
-Windows. Installer removal itself intentionally leaves this application-data
-directory in place; reinstall restores it when the same OS account and native
-credential store are retained. A clean-machine uninstall/reinstall audit is
-tracked separately because CI must not silently claim operating-system
-uninstaller behavior from an in-process data test.
+Windows. It also installs the macOS app bundle and Windows NSIS package into an
+empty location, provisions local data, removes the installed application,
+requires the external app-data namespace to remain, reinstalls, and launches
+the exact packaged binary against the retained profile and credential. This is
+the release-blocking definition of uninstall/reinstall retention; explicit
+**删除本地工作区数据…** remains the only supported destructive flow.

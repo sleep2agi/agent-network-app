@@ -1074,6 +1074,151 @@ pub fn packaged_migration_smoke() -> Result<(), String> {
     result.and(stopped).and(credential_removed)
 }
 
+/// Proves that a failed upgrade restores the exact previous database and
+/// compatibility metadata. The workflow supplies a valid database produced by
+/// the previous published Hub, then this smoke deliberately installs the wrong
+/// native credential so bootstrap fails after the migration snapshot exists.
+pub fn packaged_failed_migration_smoke() -> Result<(), String> {
+    if std::env::var("ANET_PACKAGED_SMOKE").as_deref() != Ok("1") {
+        return Err("packaged failed-migration smoke requires ANET_PACKAGED_SMOKE=1".into());
+    }
+    let password_file = PathBuf::from(
+        std::env::var("ANET_PREVIOUS_HUB_PASSWORD_FILE")
+            .map_err(|_| "previous Hub password file is missing".to_string())?,
+    );
+    fs::remove_file(&password_file)
+        .map_err(|error| format!("cannot remove previous Hub credential file: {error}"))?;
+    let database = local_root()?.join("data").join("commhub.db");
+    let before = fs::read(&database).map_err(|error| error.to_string())?;
+    let previous = read_config()?.ok_or_else(|| "previous Hub config is missing".to_string())?;
+    if previous.hub_version != "0.9.0-preview.28" {
+        return Err("failed-migration fixture is not the pinned previous Hub".into());
+    }
+    let password_entry = keyring::Entry::new(SESSION_SERVICE, LOCAL_PASSWORD_ACCOUNT)
+        .map_err(|error| error.to_string())?;
+    password_entry
+        .set_password(&random_password())
+        .map_err(|error| error.to_string())?;
+
+    let run = || -> Result<(), String> {
+        let failure = start_local_hub()
+            .expect_err("wrong migration credential unexpectedly started the local Hub");
+        if failure.trim().is_empty() {
+            return Err("failed migration returned an empty diagnostic".into());
+        }
+        if fs::read(&database).map_err(|error| error.to_string())? != before {
+            return Err("failed migration did not restore the exact previous database".into());
+        }
+        let restored = read_config()?.ok_or_else(|| "failed migration lost config".to_string())?;
+        if restored.hub_version != previous.hub_version
+            || restored.endpoint != previous.endpoint
+            || restored.port != previous.port
+        {
+            return Err("failed migration did not restore previous compatibility metadata".into());
+        }
+        if local_root()?.join("supervisor.lock").exists() {
+            return Err("failed migration left a stale supervisor lock".into());
+        }
+        let prefix = format!(
+            "local-hub-migration-{}-to-{}-",
+            safe_version_fragment(&previous.hub_version),
+            safe_version_fragment(EXPECTED_HUB_VERSION)
+        );
+        let snapshot_found = fs::read_dir(app_root()?.join("backups"))
+            .map_err(|error| error.to_string())?
+            .filter_map(Result::ok)
+            .any(|entry| {
+                entry.file_name().to_string_lossy().starts_with(&prefix)
+                    && entry.path().join("data").join("commhub.db").is_file()
+            });
+        if !snapshot_found {
+            return Err("failed migration did not retain its recovery snapshot".into());
+        }
+        Ok(())
+    };
+    let result = run();
+    let stopped = stop_local_hub_inner();
+    let credential_removed = password_entry
+        .delete_credential()
+        .or_else(|error| match error {
+            keyring::Error::NoEntry => Ok(()),
+            other => Err(other),
+        })
+        .map_err(|error| error.to_string());
+    result.and(stopped).and(credential_removed)
+}
+
+fn kill_process_for_smoke(pid: u32) -> Result<(), String> {
+    #[cfg(unix)]
+    {
+        let result = unsafe { libc::kill(pid as i32, libc::SIGKILL) };
+        if result != 0 {
+            return Err(std::io::Error::last_os_error().to_string());
+        }
+    }
+    #[cfg(windows)]
+    {
+        let status = Command::new("taskkill")
+            .args(["/PID", &pid.to_string(), "/F"])
+            .status()
+            .map_err(|error| error.to_string())?;
+        if !status.success() {
+            return Err(format!("taskkill returned {status}"));
+        }
+    }
+    Ok(())
+}
+
+/// Kills the owned sidecar and waits for the finite-backoff supervisor to
+/// replace it while preserving the same endpoint, profile and database.
+pub fn packaged_crash_recovery_smoke() -> Result<(), String> {
+    if std::env::var("ANET_PACKAGED_SMOKE").as_deref() != Ok("1") {
+        return Err("packaged crash-recovery smoke requires ANET_PACKAGED_SMOKE=1".into());
+    }
+    let first: LocalHubResult =
+        serde_json::from_str(&start_local_hub()?).map_err(|error| error.to_string())?;
+    let first_pid = first
+        .pid
+        .ok_or_else(|| "initial Hub omitted pid".to_string())?;
+    let first_session = first
+        .session
+        .as_ref()
+        .ok_or_else(|| "initial Hub omitted session".to_string())?;
+    let endpoint = first.endpoint.clone();
+    let profile_id = first_session.profile_id.clone();
+    let token = first_session.token.clone();
+    kill_process_for_smoke(first_pid)?;
+
+    let run = || -> Result<(), String> {
+        for _ in 0..80 {
+            thread::sleep(Duration::from_millis(250));
+            let status: LocalHubResult =
+                serde_json::from_str(&local_hub_status()?).map_err(|error| error.to_string())?;
+            if status.state == "running"
+                && status.pid.is_some_and(|pid| pid != first_pid)
+                && status.endpoint == endpoint
+            {
+                let restarted: LocalHubResult =
+                    serde_json::from_str(&start_local_hub()?).map_err(|error| error.to_string())?;
+                let session = restarted
+                    .session
+                    .ok_or_else(|| "restarted Hub omitted session".to_string())?;
+                if session.profile_id != profile_id || session.token != token {
+                    return Err("crash recovery changed profile or native credential".into());
+                }
+                if !local_root()?.join("data").join("commhub.db").is_file() {
+                    return Err("crash recovery lost the local database".into());
+                }
+                return Ok(());
+            }
+        }
+        Err("local Hub supervisor did not recover the killed sidecar within 20 seconds".into())
+    };
+    let result = run();
+    let stopped = stop_local_hub_inner();
+    result.and(stopped)
+}
+
 fn start_isolated_smoke_hub(root: &Path, port: u16) -> Result<Child, String> {
     super::ensure_private_dir(root)?;
     let log = open_log(&root.join("commhub.log"))?;

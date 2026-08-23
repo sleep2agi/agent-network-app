@@ -24,6 +24,16 @@ Scope
   `0.9.0-preview.28` through public register/node/status/task APIs. The exact
   current package must migrate it to `0.9.0-preview.29`, preserve the user,
   node and task, and create a database-bearing pre-migration snapshot.
+- A second previous-version root deliberately receives a wrong native
+  credential. The exact packaged app must fail migration with a diagnostic,
+  restore byte-identical database and previous compatibility metadata, retain
+  the recovery snapshot, and remove its ownership lock.
+- The owned Hub sidecar is force-killed and the finite-backoff supervisor must
+  replace it within 20 seconds without changing endpoint, profile, credential,
+  or database.
+- macOS app-bundle removal/reinstall and Windows NSIS silent
+  install/uninstall/reinstall must preserve the external app-data namespace and
+  successfully reopen it with the exact packaged binary.
 
 Required gates
 - Docker Bun application suite.
@@ -32,7 +42,8 @@ Required gates
 - Credential markers must not appear in smoke logs for A, B, or C.
 
 Status
-- Docker Bun application suite: 32/32 test files passed.
-- Docker Rust local_hub suite: pending for this revision.
-- Rust formatting and git diff checks passed.
+- Docker Bun local-Hub contract suite: 26/26 checks passed.
+- Docker Rust local_hub suite: 8/8 tests passed.
+- Docker Rust `cargo check --locked`, Rust formatting, workflow YAML parse, and
+  git diff checks passed.
 - Exact signed macOS and Windows packaged-executable run remains pending.
