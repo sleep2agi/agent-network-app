@@ -20,6 +20,8 @@ const checks: Array<[string, boolean]> = [
   ['build enforces raw-size cap', buildScript.includes('110 * 1024 * 1024')],
   ['unsigned Mac/Windows workflow builds sidecar', desktopWorkflow.match(/Build pinned local CommHub sidecar/g)?.length === 2],
   ['signed workflow builds sidecar', releaseWorkflow.includes('Build pinned local CommHub sidecar')],
+  ['unsigned Mac/Windows artifacts have a 55 MiB gate', desktopWorkflow.match(/55 MiB distribution ceiling/g)?.length === 2],
+  ['signed artifacts have a 55 MiB gate', releaseWorkflow.includes('55 MiB distribution ceiling')],
 ];
 
 for (const [name, ok] of checks) {

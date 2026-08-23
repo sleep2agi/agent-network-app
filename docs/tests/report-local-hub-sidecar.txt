@@ -10,7 +10,8 @@ Contract
   pre-bundle SHA256/size. The field is deliberately named `preBundle*`: macOS
   platform signing rewrites the bundled executable, so installed authenticity
   must be established by the signed/notarized app rather than a stale raw hash.
-- Raw sidecar hard cap: 110 MiB. Final installer delta remains a release gate.
+- Raw sidecar hard cap: 110 MiB.
+- Final DMG/EXE/MSI hard cap: 55 MiB in validation and signed-release workflows.
 
 Docker spike (Linux x64, representative compiler validation)
 - npm ci from the isolated sidecar lock: passed.

@@ -76,6 +76,12 @@ jobs:
           mkdir -p out
           cp src-tauri/target/release/bundle/dmg/*.dmg out/ || true
           ditto -c -k --keepParent "src-tauri/target/release/bundle/macos/Agent Network.app" out/AgentNetwork-tauri-arm64-mac.zip
+          oversized="$(find out -type f -size +55M -print)"
+          if [ -n "$oversized" ]; then
+            echo "::error::Desktop artifact exceeds the 55 MiB distribution ceiling"
+            echo "$oversized"
+            exit 1
+          fi
 
       - uses: actions/upload-artifact@v4
         with:
@@ -154,6 +160,12 @@ jobs:
           #    所以这里补一条断言：out/ 空 ⇒ 直接失败。
           if [ -z "$(ls -A out)" ]; then
             echo "::error::Windows 打包没有产出任何 .exe/.msi —— 上面的 tauri build 说成功了，但产物目录是空的"
+            exit 1
+          fi
+          oversized="$(find out -type f -size +55M -print)"
+          if [ -n "$oversized" ]; then
+            echo "::error::Desktop artifact exceeds the 55 MiB distribution ceiling"
+            echo "$oversized"
             exit 1
           fi
           ls -l out/

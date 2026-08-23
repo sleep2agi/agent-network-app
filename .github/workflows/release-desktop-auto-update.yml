@@ -112,3 +112,13 @@ jobs:
           prerelease: false
           updaterJsonPreferNsis: true
           args: ${{ matrix.args }}
+
+      - name: Enforce desktop distribution size ceiling
+        shell: bash
+        run: |
+          oversized="$(find src-tauri/target/release/bundle -type f \( -name '*.dmg' -o -name '*.exe' -o -name '*.msi' \) -size +55M -print)"
+          if [ -n "$oversized" ]; then
+            echo "::error::Desktop artifact exceeds the 55 MiB distribution ceiling"
+            echo "$oversized"
+            exit 1
+          fi
