@@ -1,0 +1,33 @@
+iOS App Store distribution signing gate
+Date: 2026-08-24
+Issue: #86
+
+Failure addressed
+- Release archive previously resolved an iOS App Development profile and
+  requested registered device UDIDs.
+
+Workflow contract
+- Archive destination remains generic/platform=iOS.
+- Release archive explicitly selects Apple Distribution while keeping Xcode
+  automatic signing authenticated by the reviewed App Store Connect API key.
+- Before export, CI verifies the app's code-signing authority is Apple
+  Distribution, the embedded profile contains no ProvisionedDevices array,
+  get-task-allow is false, and application-identifier matches the team and
+  bundle ID.
+- Export remains App Store distribution and uploads the IPA artifact before
+  the optional TestFlight upload.
+
+Authoritative platform distinction
+- Apple Development and development profiles are for running on registered
+  devices.
+- Apple Distribution and an App Store Connect distribution profile are for
+  App Store/TestFlight submission and do not require a device allow-list.
+- Sources:
+  https://developer.apple.com/help/account/create-certificates/certificates-overview
+  https://developer.apple.com/help/account/provisioning-profiles/create-an-app-store-provisioning-profile
+
+Required live gate
+- Run ios-build with upload_testflight=false.
+- Require Archive, distribution-profile verification, Export .ipa, and IPA
+  artifact upload to pass.
+- Only then run once with upload_testflight=true.
