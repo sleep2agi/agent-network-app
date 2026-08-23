@@ -19,6 +19,7 @@ const checks: Array<[string, boolean]> = [
   ['ordinary account removal hides for local profile', settings.includes("profile.profileId !== LOCAL_HUB_PROFILE_ID")],
   ['bridge uses Tauri supervisor commands', bridge.includes("invokeLocalHub('start_local_hub')") && bridge.includes("invokeLocalHub('local_hub_status')")],
   ['signed release runs the packaged executable local Hub smoke on both platforms', rust.includes('pub fn packaged_smoke()') && rust.includes('/api/auth/me') && rust.includes('/api/status') && appWorkflow.includes('--smoke-local-hub') && appWorkflow.includes('ANET_PACKAGED_SMOKE_ROOT') && !appWorkflow.includes('HOME="$smoke_root"')],
+  ['signed release runs the two-real-Hub profile matrix on both platforms', rust.includes('pub fn packaged_multihub_smoke()') && rust.includes('A -> B -> A switch crossed profile credentials') && rust.includes('revoked Hub B token was not rejected') && appWorkflow.includes('--smoke-multihub')],
   ['Hub binds loopback only', rust.includes('.env("HOST", "127.0.0.1")')],
   ['supervisor has capped exponential retries', rust.includes('[1_u64, 2, 4, 8, 16, 30]')],
   ['supervisor refuses a duplicate when lock owner is alive but unhealthy', rust.includes('owner_pid.is_some_and(process_is_alive)') && rust.includes('refusing to start a duplicate')],

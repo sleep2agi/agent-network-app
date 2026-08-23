@@ -736,3 +736,11 @@ pub fn run() {
 pub fn run_packaged_local_hub_smoke() -> Result<(), String> {
     local_hub::packaged_smoke()
 }
+
+pub fn run_packaged_multihub_smoke() -> Result<(), String> {
+    local_hub::packaged_multihub_smoke()
+}
+
+pub fn run_packaged_multihub_cold_start_verify() -> Result<(), String> {
+    local_hub::packaged_multihub_cold_start_verify()
+}

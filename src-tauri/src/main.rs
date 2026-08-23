@@ -11,5 +11,23 @@ fn main() {
             }
         }
     }
+    if std::env::args().any(|arg| arg == "--smoke-multihub") {
+        match app_lib::run_packaged_multihub_smoke() {
+            Ok(()) => std::process::exit(0),
+            Err(error) => {
+                eprintln!("packaged multi-Hub smoke failed: {error}");
+                std::process::exit(1);
+            }
+        }
+    }
+    if std::env::args().any(|arg| arg == "--smoke-multihub-verify") {
+        match app_lib::run_packaged_multihub_cold_start_verify() {
+            Ok(()) => std::process::exit(0),
+            Err(error) => {
+                eprintln!("packaged multi-Hub cold-start verification failed: {error}");
+                std::process::exit(1);
+            }
+        }
+    }
     app_lib::run()
 }

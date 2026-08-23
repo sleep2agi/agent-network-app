@@ -1,0 +1,28 @@
+Packaged multi-Hub acceptance gate
+Date: 2026-08-24
+
+Scope
+- Run two real secured bundled CommHub processes from the exact packaged app.
+- Persist Hub A/admin and Hub B/operator as immutable profiles in the platform
+  credential backend, then verify A -> B -> A switching without token leakage.
+- Launch a fresh copy of the packaged executable while both Hubs are live and
+  verify both native sessions, scoped windows, and A-only outbox survive; then
+  stop/restart both Hubs and verify both sessions remain valid.
+- Revoke only Hub B's live user token, mark only B for reauthentication, and
+  prove Hub A remains authenticated.
+- Persist the same `worker` detached chat under both profile directories and
+  an offline outbox entry under A only.
+- Remove B and verify its credential/profile directory disappear while A is
+  still present and authenticated.
+
+Required gates
+- Docker Bun application suite.
+- Docker Rust local_hub suite.
+- Exact signed macOS and Windows packaged-executable workflow.
+- Credential markers must not appear in smoke logs.
+
+Status
+- Docker Bun application suite: 32/32 test files passed.
+- Docker Rust local_hub suite: 8/8 tests passed.
+- Rust formatting and git diff checks passed.
+- Exact signed macOS and Windows packaged-executable run remains pending.

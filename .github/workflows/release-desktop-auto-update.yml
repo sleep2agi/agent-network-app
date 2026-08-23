@@ -128,9 +128,13 @@ jobs:
           ANET_PACKAGED_SMOKE=1 \
             ANET_PACKAGED_SMOKE_ROOT="$smoke_root/.anet/app" \
             "$binary" --smoke-local-hub
+          ANET_PACKAGED_SMOKE=1 \
+            ANET_PACKAGED_SMOKE_ROOT="$smoke_root/.anet/app" \
+            "$binary" --smoke-multihub
           test -s "$smoke_root/.anet/app/local-hub/data/commhub.db"
-          if grep -R -E 'local-hub-bootstrap-password|atok_|ntok_' "$smoke_root/.anet/app/local-hub/logs"; then
-            echo "::error::Packaged local Hub logs contain credential material"
+          if grep -R -E 'local-hub-bootstrap-password|atok_|ntok_|utok_' \
+            "$smoke_root/.anet/app/local-hub/logs" "$smoke_root/.anet/app/smoke-hub-b/commhub.log"; then
+            echo "::error::Packaged Hub logs contain credential material"
             exit 1
           fi
 
