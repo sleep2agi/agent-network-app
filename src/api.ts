@@ -35,6 +35,9 @@ export interface HubConfig {
   serverUrl: string; // e.g. https://hub.example.com
   token: string;
   networkId?: string; // hub scopes sends by network (#220 round 18)
+  /** Authenticated Hub username. Sent as REST task `from` so message feeds
+   *  show the human identity instead of the transport fallback `api`. */
+  username?: string;
 }
 
 const headers = (cfg: HubConfig) => ({
@@ -483,20 +486,26 @@ export const fetchMessages = (cfg: HubConfig, limit: number) =>
 /** The hub's REST send endpoint is POST /api/task with {alias, task} —
  *  /api/send_task does not exist (it 404s into the server help text).
  *  Sends are network-scoped: utok users must pass an explicit network_id. */
-export const fetchNetworkId = async (cfg: HubConfig): Promise<string | undefined> => {
+const fetchAuthIdentity = async (cfg: HubConfig): Promise<{ networkId?: string; username?: string }> => {
   try {
     const res = await withTimeout(signal =>
       appFetch(`${cfg.serverUrl}/api/auth/me`, { headers: headers(cfg), signal }),
     );
     const d = await res.json();
     const cur = d?.current_network;
-    return (
-      (typeof cur === 'string' ? cur : cur?.network_id) ?? d?.networks?.[0]?.network_id
-    );
+    const networkId = (typeof cur === 'string' ? cur : cur?.network_id) ?? d?.networks?.[0]?.network_id;
+    const username = d?.user?.username ?? d?.username;
+    return {
+      ...(typeof networkId === 'string' && networkId.trim() ? { networkId } : {}),
+      ...(typeof username === 'string' && username.trim() ? { username: username.trim() } : {}),
+    };
   } catch {
-    return undefined;
+    return {};
   }
 };
+
+export const fetchNetworkId = async (cfg: HubConfig): Promise<string | undefined> =>
+  (await fetchAuthIdentity(cfg)).networkId;
 
 export interface TaskAttachment {
   type: 'file';
@@ -512,7 +521,17 @@ export const sendTask = async (
   content: string,
   attachments?: TaskAttachment[],
 ) => {
-  const networkId = cfg.networkId ?? (await fetchNetworkId(cfg));
+  let networkId = cfg.networkId;
+  let username = cfg.username?.trim();
+  if (!networkId || !username) {
+    const identity = await fetchAuthIdentity(cfg);
+    networkId ??= identity.networkId;
+    username ||= identity.username;
+    // Cache identity on the in-memory config. New logins persist both fields;
+    // this only avoids repeated /auth/me calls for configs saved by older apps.
+    if (networkId) cfg.networkId = networkId;
+    if (username) cfg.username = username;
+  }
   const res = await withTimeout(signal =>
     appFetch(`${cfg.serverUrl}/api/task`, {
       method: 'POST',
@@ -521,6 +540,7 @@ export const sendTask = async (
       body: JSON.stringify({
         alias: to,
         task: content,
+        ...(username ? { from: username } : {}),
         network_id: networkId,
         ...(attachments?.length ? { attachments } : {}),
       }),
@@ -822,7 +842,7 @@ export const login = async (
     const token = data.token ?? data.user_token ?? data.access_token;
     if (!token) return { ok: false, kind: 'server-error', error: 'login ok but no token in response' };
     const networkId = await fetchNetworkId({ serverUrl, token });
-    return { ok: true, cfg: { serverUrl, token, networkId } };
+    return { ok: true, cfg: { serverUrl, token, networkId, username: username.trim() } };
   } catch (e) {
     // fetch 抛了 = 压根没拿到 HTTP 响应(连接拒绝/DNS/超时)→ unreachable。
     return { ok: false, kind: classifyLoginFailure(true, null), error: e instanceof Error ? e.message : 'network error' };
