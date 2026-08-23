@@ -1,0 +1,14 @@
+Desktop v0.2.16 — retry reconciliation and message ordering
+
+Regression covered:
+- If a send reaches CommHub but the HTTP acknowledgement is lost, the next poll
+  reconciles the authoritative Hub row with the matching local outbox entry.
+- The stale local “未送达 · 点击重试” echo is removed after delivery is observed.
+- A repeated message from older history is not mistaken for the current retry.
+- Local pending/failed echoes and Hub messages share one newest-first timeline,
+  so an older failed message no longer remains pinned below newer messages.
+- Retrying refreshes the outbox timestamp used by the bounded reconciliation.
+
+Verification:
+- Docker: bun run test
+- Docker: bun run typecheck
