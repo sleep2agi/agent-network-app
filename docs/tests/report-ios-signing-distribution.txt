@@ -8,8 +8,10 @@ Failure addressed
 
 Workflow contract
 - Archive destination remains generic/platform=iOS.
-- Release archive explicitly selects Apple Distribution while keeping Xcode
-  automatic signing authenticated by the reviewed App Store Connect API key.
+- Release archive uses Xcode automatic signing authenticated by the reviewed
+  App Store Connect API key. It does not force a signing identity because that
+  conflicts with automatic signing; the post-archive gate requires Apple
+  Distribution before export.
 - Before export, CI verifies the app's code-signing authority is Apple
   Distribution, the embedded profile contains no ProvisionedDevices array,
   get-task-allow is false, and application-identifier matches the team and

@@ -53,6 +53,12 @@ jobs:
       # Bundle id / team are also read by Expo from app.json + this team id.
       APPLE_TEAM_ID: "446BLT75JZ"
       BUNDLE_ID: "top.vansin.agentnetwork"
+      # Avoid the precompiled React Native framework ABI mismatch previously
+      # observed in archive builds. Build native modules from this checkout.
+      EXPO_USE_PRECOMPILED_MODULES: "false"
+      # App Store Connect rejects a reused CFBundleVersion. The repository run
+      # number is numeric and monotonically increases across manual builds.
+      IOS_BUILD_NUMBER: ${{ github.run_number }}
 
     steps:
       - uses: actions/checkout@v4
@@ -129,7 +135,7 @@ jobs:
             -authenticationKeyIssuerID "$ASC_ISSUER_ID" \
             DEVELOPMENT_TEAM="$APPLE_TEAM_ID" \
             CODE_SIGN_STYLE=Automatic \
-            CODE_SIGN_IDENTITY="Apple Distribution" \
+            CURRENT_PROJECT_VERSION="$IOS_BUILD_NUMBER" \
             clean archive
 
       # Fail before export if Xcode silently falls back to a Development
@@ -180,7 +186,7 @@ jobs:
       - name: Upload .ipa artifact
         uses: actions/upload-artifact@v4
         with:
-          name: agent-network-ios-ipa
+          name: agent-network-ios-ipa-${{ github.run_number }}
           path: ${{ env.IPA_PATH }}
           if-no-files-found: error
           retention-days: 14
