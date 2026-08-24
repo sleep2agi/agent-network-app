@@ -46,7 +46,7 @@
 // verification bullet).
 
 import { useCallback, useEffect, useState } from 'react';
-import { ActivityIndicator, Modal, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 
 import AliasAvatar from './AliasAvatar';
 import AvatarEditSection from './AvatarEditSection';
@@ -56,8 +56,44 @@ import { styles } from './app-styles';
 import { colors, onThemeChange, spacing, statusColor } from './theme';
 import { formatTime } from './time';
 import { usePoll } from './usePoll';
+import { nodeActionVisual, type NodeActionTone } from './node-action-visual';
 
 const POLL_MS = 10_000; // same cadence as AgentsScreen — hub-friendly, felt-live
+
+function NodeActionButton({
+  label,
+  tone,
+  onPress,
+}: {
+  label: string;
+  tone: NodeActionTone;
+  onPress: () => void;
+}) {
+  const [hovered, setHovered] = useState(false);
+  const [focused, setFocused] = useState(false);
+  const visual = nodeActionVisual(colors, tone);
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      accessibilityHint={tone === 'danger' ? '需要输入节点别名再次确认' : '打开确认窗口'}
+      onHoverIn={() => setHovered(true)}
+      onHoverOut={() => setHovered(false)}
+      onFocus={() => setFocused(true)}
+      onBlur={() => setFocused(false)}
+      onPress={onPress}
+      style={({ pressed }) => [
+        localStyles.actionButton,
+        { borderColor: visual.borderColor, backgroundColor: visual.backgroundColor },
+        (hovered || focused) && { backgroundColor: colors.inputBg },
+        focused && { borderColor: visual.textColor },
+        pressed && localStyles.actionButtonPressed,
+      ]}
+    >
+      <Text style={[localStyles.actionButtonText, { color: visual.textColor }]}>{label}</Text>
+    </Pressable>
+  );
+}
 
 type LoadState =
   | { kind: 'loading' }
@@ -293,10 +329,10 @@ export default function NodeDetailScreen({
               <Text style={{ color: colors.textMuted, fontSize: 12, lineHeight: 18 }}>
                 操作通过公开 CommHub/anet 契约执行。停止不会删除配置；有任务处理中时服务器会拒绝，不会自动强制。
               </Text>
-              <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm }}>
-                <Pressable style={styles.retryBtn} onPress={() => setPendingAction('restart_node')}><Text style={styles.retryBtnText}>重启节点</Text></Pressable>
-                <Pressable style={styles.retryBtn} onPress={() => setPendingAction('stop_node')}><Text style={styles.retryBtnText}>停止节点</Text></Pressable>
-                <Pressable style={[styles.retryBtn, { borderColor: colors.failed }]} onPress={() => setPendingAction('delete_node')}><Text style={{ color: colors.failed, fontWeight: '600' }}>删除节点</Text></Pressable>
+              <View style={localStyles.actionRow}>
+                <NodeActionButton label="重启节点" tone="neutral" onPress={() => setPendingAction('restart_node')} />
+                <NodeActionButton label="停止节点" tone="caution" onPress={() => setPendingAction('stop_node')} />
+                <NodeActionButton label="删除节点" tone="danger" onPress={() => setPendingAction('delete_node')} />
               </View>
               {actionMessage ? <Text style={{ color: actionMessage.includes('已提交') ? colors.running : colors.failed, fontSize: 12 }}>{actionMessage}</Text> : null}
             </View>
@@ -334,3 +370,30 @@ export default function NodeDetailScreen({
     </View>
   );
 }
+
+const localStyles = StyleSheet.create({
+  actionRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    alignItems: 'center',
+    gap: spacing.sm,
+  },
+  actionButton: {
+    minWidth: 92,
+    height: 34,
+    borderRadius: 7,
+    borderWidth: 1,
+    paddingHorizontal: spacing.md,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  actionButtonPressed: {
+    opacity: 0.68,
+    transform: [{ scale: 0.98 }],
+  },
+  actionButtonText: {
+    fontSize: 13,
+    lineHeight: 18,
+    fontWeight: '600',
+  },
+});
