@@ -1,0 +1,90 @@
+# switching agents — a slow answer for one thread landing in another
+
+Date: 2026-08-24
+Repo: https://github.com/sleep2agi/agent-network-app (public)
+Branch: fix/conversation-switch-race
+Base: 37f2476 (= origin/main, after #132 and #134 merged)
+Source commit under test: see PR head
+Docker: built from git archive <source commit>, npm ci inside the image
+
+## The defect, located
+
+`src/ChatScreen.tsx`:
+
+    const data = await fetchTasks(cfg, { to_name: alias, limit });
+    ...
+    setMessages(prev => mergeMessagesNewestFirst(...));
+
+`load` is a `useCallback` over `[cfg, alias]`, so it closes over the alias it
+started with — but `setMessages` writes to the screen, which by then may be
+showing a different agent. The reset effect clears the list on switch, and that
+does not help: the late response arrives *after* the clear and refills the list
+under the new title. That is the reported symptom, exactly.
+
+Nothing cached per conversation either, so returning to an agent means a blank
+list and a fresh round trip.
+
+## The fix
+
+A cache alone would have made the wrong content appear faster. What is needed is
+that a response can only be applied while it is still the one being waited for.
+
+Each mounted `ChatScreen` owns a request gate. Opening a conversation advances
+that screen's generation; an ordinary render does not. A response may update
+React state only while its token is current for that screen. Separate windows
+have separate gates, so they cannot invalidate one another.
+
+Around that:
+
+- each conversation keeps its own bounded message cache, so reopening one is
+  instant and refreshes behind the visible content rather than replacing it
+  with a spinner;
+- a conversation never opened reports no content, which is the difference
+  between "loading" and "empty" — the screen needs it to show a skeleton instead
+  of somebody else's messages;
+- a stale result is still cached against *its own* conversation. It is correct
+  data, just not for this screen, so going back to it is instant;
+- the key includes the profile, because two hubs can host the same alias;
+- the cache is capped at 50 conversations (LRU), and logout or reauthentication
+  clears that profile. URL fallback keys strip credentials and query data.
+
+The cache is module level so it outlives an unmount. Request ownership is not
+module-global: it belongs to each screen. The store imports no react-native, so
+its behaviour is driven by tests rather than described only by regexes.
+
+## Result
+
+PASS, exit 0.
+
+- `npm test` → **39/39 test files passed**
+- `src/conversation-store.test.ts` → **18 checks**, all PASS
+- `npm run typecheck` → clean
+- scrub gate → replayed verbatim, 109 files scanned, clean
+
+Coverage includes A→B residue, A→B→A order, ordinary rerenders, two simultaneous
+windows, instant reopen, no-cache state, unmount, LRU eviction, profile clearing,
+URL-secret stripping, and the two-hub key.
+
+## Witnessed-red (container grade)
+
+| sabotage | result |
+|---|---|
+| **render-time invalidation reproduced** — call `open` from the `useRef` initializer | `FAIL: a normal rerender cannot open or invalidate a request` · 38/39 · exit 1 |
+| **cross-window invalidation reproduced** — share one request gate between screens | `FAIL: two independent windows do not invalidate each other` · 38/39 · exit 1 |
+
+These reproduce the two blockers found during review: render-time side effects
+and a module-global active generation. Both were green under the first draft.
+
+Also recorded: one assertion in the first draft of this test was written as a
+negative lookahead across lines and could never hold, so the suite failed on my
+own guard rather than on the code. It was replaced with a structural check —
+the gate must appear between the `await` and the first state write — which is
+what the assertion was trying to say.
+
+## Not verified here
+
+**That switching feels fast.** These tests cover which result is applied and
+what is cached; they cannot show a title changing in the same frame or a list
+that does not flash. That needs the app running — a desktop or device build,
+switching A→B→C quickly on a slow network, watching the title and the first
+paint. Listed as the acceptance step for this change.

@@ -21,6 +21,7 @@ import AuthedThumb, { AttachmentFile, AuthedVideo, mimeFromName } from './Authed
 import AuthedWebThumb from './AuthedWebThumb';
 import { fetchStatus, fetchTasks, sendTask, HubConfig, HubTask, Session, TaskAttachment } from './api';
 import { outboxAdd, outboxForAlias, outboxMarkFailed, outboxMarkPending, outboxRemove } from './outbox';
+import { conversationKey, conversationScope, createConversationRequestGate, createConversationStore } from './conversation-store';
 import { resolveSender } from './chat-sender';
 import {
   ATTACH_ENABLED,
@@ -176,6 +177,14 @@ interface Props {
   onOpenNodeSettings?: () => void;
 }
 
+// Module level on purpose: the cache has to outlive a screen unmount, or
+// returning to a conversation is a blank list and a fetch all over again.
+const conversations = createConversationStore<ChatItem>();
+
+export const clearChatConversationCache = (profileId?: string, serverUrl = ''): void => {
+  conversations.clearScope(conversationScope(profileId, serverUrl));
+};
+
 export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpenNodeSettings }: Props) {
   // Android edge-to-edge draws the composer under the gesture bar (same
   // class of bug as the tg 802 tab bar) — pad by the real bottom inset.
@@ -190,24 +199,52 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
   const sending = false; // optimistic echo frees the input immediately
   const limitRef = useRef(PAGE);
 
+  const conversationKeyFor = conversationKey(cfg.profileId, cfg.serverUrl, alias);
+  const requestGateRef = useRef<ReturnType<typeof createConversationRequestGate> | null>(null);
+  if (!requestGateRef.current) requestGateRef.current = createConversationRequestGate();
+  const requestGate = requestGateRef.current;
+  const mountedRef = useRef(true);
+
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+      const token = requestGate.current();
+      if (token) requestGate.close(token);
+    };
+  }, []);
+
   const load = useCallback(
     async (limit: number) => {
+      const token = requestGate.current();
+      if (!token) return;
       try {
         const data = await fetchTasks(cfg, { to_name: alias, limit });
+        // The await is where the conversation can change underneath us. Every
+        // line below writes to screen state, so nothing may run for an answer
+        // that is no longer the one being waited for — that is the whole bug.
         const fetched = data.tasks ?? [];
+        if (!requestGate.isCurrent(token) || !mountedRef.current) {
+          conversations.put(token.key, fetched);
+          return;
+        }
         if (fetched.length < limit) setHasOlder(false);
         // Hub returns newest-first, which matches inverted-list order. Reconcile
         // accepted retries before merging local echoes into that same timeline.
         const confirmed = new Set(confirmedOutboxIds(outboxForAlias(alias), fetched));
         confirmed.forEach(outboxRemove);
-        setMessages(prev => mergeMessagesNewestFirst(
-          prev.filter(t => t._localId && !confirmed.has(t._localId)),
-          fetched,
-        ));
+        setMessages(prev => {
+          const merged = mergeMessagesNewestFirst(
+            prev.filter(t => t._localId && !confirmed.has(t._localId)),
+            fetched,
+          );
+          conversations.put(token.key, merged);
+          return merged;
+        });
       } catch {
-        /* poll retries */
+        /* poll retries — the conversation keeps whatever it already had */
       } finally {
-        setLoaded(true);
+        if (requestGate.isCurrent(token) && mountedRef.current) setLoaded(true);
       }
     },
     [cfg, alias],
@@ -228,10 +265,27 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
       _failed: e.state === 'failed',
       _restoredNoImage: !!e.hadImage,
     }));
-    setMessages(restored.reverse()); // inverted 列表:新的在前
-    setLoaded(false);
+    // Opening invalidates anything still in flight for the previous
+    // conversation, then hands back this one's cached content.
+    const token = requestGate.open(conversationKeyFor);
+    const snapshot = conversations.open(conversationKeyFor);
+    const restoredNewestFirst = restored.reverse(); // inverted 列表:新的在前
+    if (snapshot && snapshot.messages.length > 0) {
+      // Cached: show it in the same frame as the title change, then refresh in
+      // the background. A spinner over content we already have is a downgrade.
+      setMessages(mergeMessagesNewestFirst(restoredNewestFirst, snapshot.messages));
+      setLoaded(true);
+    } else {
+      // Nothing cached: an empty list plus loaded=false is the skeleton state.
+      // Never carry the previous conversation's messages into this frame.
+      setMessages(restoredNewestFirst);
+      setLoaded(false);
+    }
     setHasOlder(true);
-  }, [load, alias]);
+    return () => {
+      requestGate.close(token);
+    };
+  }, [load, alias, conversationKeyFor]);
 
   // Foreground-only message polling: 5s while visible, paused in background,
   // instant refresh on resume (shared hook). Reads the live window via limitRef.
