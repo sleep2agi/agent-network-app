@@ -7,6 +7,11 @@ on:
         description: CFBundleVersion to inspect
         required: true
         default: "15"
+      enable_public_testing:
+        description: Declare exempt encryption, attach the build to the public group, and submit it for Beta Review
+        required: true
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -22,6 +27,7 @@ jobs:
           APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
           APPLE_API_KEY_BASE64: ${{ secrets.APPLE_API_KEY_BASE64 }}
           BUILD_NUMBER: ${{ inputs.build_number }}
+          ENABLE_PUBLIC_TESTING: ${{ inputs.enable_public_testing }}
           BUNDLE_ID: top.vansin.agentnetwork
           PUBLIC_LINK_ID: ZvqYnCA9
         shell: bash
@@ -64,6 +70,19 @@ jobs:
               "https://api.appstoreconnect.apple.com/v1/$endpoint" "$@"
           }
 
+          asc_write() {
+            local method="$1"
+            local endpoint="$2"
+            local body="$3"
+            curl --fail-with-body --silent --show-error \
+              --request "$method" \
+              -H "Authorization: Bearer $jwt" \
+              -H 'Accept: application/json' \
+              -H 'Content-Type: application/json' \
+              --data "$body" \
+              "https://api.appstoreconnect.apple.com/v1/$endpoint"
+          }
+
           app_json="$RUNNER_TEMP/app.json"
           asc_get apps --data-urlencode "filter[bundleId]=$BUNDLE_ID" --data-urlencode 'limit=2' > "$app_json"
           app_id=$(jq -r '.data[0].id // empty' "$app_json")
@@ -86,11 +105,51 @@ jobs:
           details_json="$RUNNER_TEMP/build-details.json"
           asc_get buildBetaDetails --data-urlencode "filter[build]=$build_id" --data-urlencode 'limit=2' > "$details_json"
 
-          reviews_json="$RUNNER_TEMP/reviews.json"
-          asc_get betaAppReviewSubmissions --data-urlencode "filter[build]=$build_id" --data-urlencode 'limit=10' > "$reviews_json"
-
           groups_json="$RUNNER_TEMP/groups.json"
           asc_get betaGroups --data-urlencode "filter[app]=$app_id" --data-urlencode 'limit=200' > "$groups_json"
+
+          if [ "$ENABLE_PUBLIC_TESTING" = 'true' ]; then
+            group_id=$(jq -r --arg link "$PUBLIC_LINK_ID" '.data[] | select(.attributes.publicLinkId == $link) | .id' "$groups_json" | head -n 1)
+            if [ -z "$group_id" ]; then
+              echo "::error::public TestFlight group $PUBLIC_LINK_ID was not found"
+              exit 1
+            fi
+
+            echo "Declaring that build $BUILD_NUMBER does not use non-exempt encryption."
+            build_patch=$(jq -cn --arg id "$build_id" '{data:{type:"builds",id:$id,attributes:{usesNonExemptEncryption:false}}}')
+            asc_write PATCH "builds/$build_id" "$build_patch" > /dev/null
+
+            echo "Adding build $BUILD_NUMBER to the existing Public external-testing group."
+            group_link=$(jq -cn --arg id "$build_id" '{data:[{type:"builds",id:$id}]}')
+            asc_write POST "betaGroups/$group_id/relationships/builds" "$group_link" > /dev/null
+
+            for attempt in 1 2 3 4 5 6; do
+              asc_get buildBetaDetails --data-urlencode "filter[build]=$build_id" --data-urlencode 'limit=2' > "$details_json"
+              external_state=$(jq -r '.data[0].attributes.externalBuildState // "UNKNOWN"' "$details_json")
+              echo "External build state after configuration: $external_state"
+              case "$external_state" in
+                READY_TO_SUBMIT|WAITING_FOR_BETA_REVIEW|IN_BETA_TESTING|APPROVED) break ;;
+              esac
+              sleep 5
+            done
+
+            if [ "$external_state" = 'READY_TO_SUBMIT' ]; then
+              echo "Submitting build $BUILD_NUMBER for Beta App Review."
+              review_submission=$(jq -cn --arg id "$build_id" '{data:{type:"betaAppReviewSubmissions",relationships:{build:{data:{type:"builds",id:$id}}}}}')
+              asc_write POST betaAppReviewSubmissions "$review_submission" > /dev/null
+            elif [ "$external_state" = 'WAITING_FOR_BETA_REVIEW' ] || [ "$external_state" = 'IN_BETA_TESTING' ] || [ "$external_state" = 'APPROVED' ]; then
+              echo 'Beta App Review is already pending or complete; no duplicate submission was created.'
+            else
+              echo "::error::build is not ready for Beta App Review after configuration: $external_state"
+              exit 1
+            fi
+
+            asc_get buildBetaDetails --data-urlencode "filter[build]=$build_id" --data-urlencode 'limit=2' > "$details_json"
+            asc_get betaGroups --data-urlencode "filter[app]=$app_id" --data-urlencode 'limit=200' > "$groups_json"
+          fi
+
+          reviews_json="$RUNNER_TEMP/reviews.json"
+          asc_get betaAppReviewSubmissions --data-urlencode "filter[build]=$build_id" --data-urlencode 'limit=10' > "$reviews_json"
 
           memberships="$RUNNER_TEMP/memberships.jsonl"
           : > "$memberships"
