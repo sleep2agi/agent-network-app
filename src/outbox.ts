@@ -20,6 +20,7 @@ export interface OutboxEntry {
   createdAt: number;
   state: 'pending' | 'failed';
   hadImage?: boolean;
+  priority?: 'high' | 'normal';
 }
 
 let entries: Record<string, OutboxEntry> = {};

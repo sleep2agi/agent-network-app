@@ -19,7 +19,7 @@ import { Ionicons } from '@expo/vector-icons';
 import AliasAvatar from './AliasAvatar';
 import AuthedThumb, { AttachmentFile, AuthedVideo, mimeFromName } from './AuthedThumb';
 import AuthedWebThumb from './AuthedWebThumb';
-import { fetchStatus, fetchTasks, sendTask, HubConfig, HubTask, Session, TaskAttachment } from './api';
+import { fetchStatus, fetchTasks, sendTask, HubConfig, HubTask, Session, TaskAttachment, TaskPriority } from './api';
 import { outboxAdd, outboxForAlias, outboxMarkFailed, outboxMarkPending, outboxRemove } from './outbox';
 import { conversationKey, conversationScope, createConversationRequestGate, createConversationStore } from './conversation-store';
 import { resolveSender } from './chat-sender';
@@ -63,6 +63,7 @@ type ChatItem = HubTask & {
    *  🔴 绝不拼进 content:content 是「要发出去的字」,注解是「给用户看的字」,
    *  共用一个字段迟早串(重试会把注解原样发给对方 agent)。 */
   _restoredNoImage?: boolean;
+  _priority?: 'high' | 'normal';
 };
 
 type MessageSelection = { item: ChatItem; text: string };
@@ -196,6 +197,7 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
   const [hasOlder, setHasOlder] = useState(true);
   const [loadingOlder, setLoadingOlder] = useState(false);
   const [draft, setDraft] = useState('');
+  const [sendPriority, setSendPriority] = useState<'high' | 'normal'>('normal');
   const sending = false; // optimistic echo frees the input immediately
   const limitRef = useRef(PAGE);
 
@@ -264,6 +266,7 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
       _pending: e.state === 'pending',
       _failed: e.state === 'failed',
       _restoredNoImage: !!e.hadImage,
+      _priority: e.priority ?? 'normal',
     }));
     // Opening invalidates anything still in flight for the previous
     // conversation, then hands back this one's cached content.
@@ -472,7 +475,12 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
       </Text>
     );
 
-  const doSend = async (content: string, localId: string, imgs: PickedImage[] = []) => {
+  const doSend = async (
+    content: string,
+    localId: string,
+    imgs: PickedImage[] = [],
+    priority: TaskPriority = 'normal',
+  ) => {
     try {
       let attachments: TaskAttachment[] | undefined;
       let outgoing = content;
@@ -481,7 +489,7 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
         attachments = uploaded.map(({ img, up }) => toTaskAttachment(img, up));
         outgoing = `${content}${uploaded.map(({ img, up }) => attachmentTextHint(img, up)).join('')}`;
       }
-      await sendTask(cfg, alias, outgoing, attachments);
+      await sendTask(cfg, alias, outgoing, attachments, priority);
       imgs.forEach(releaseClipboardAttachment);
       // delivered: drop the echo, the server copy arrives with reload.
       // 🔴 outbox 唯一删除路径=此处(sendTask 确认成功)。
@@ -500,8 +508,10 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
     const content = draft.trim() || (attached.length ? `[附件] ${attached.map(item => item.fileName).join('、')}` : '');
     if ((!content && !attached.length) || sending) return;
     const imgs = attached;
+    const priority = sendPriority;
     setDraft('');
     setAttached([]);
+    setSendPriority('normal');
     // Optimistic echo: render the message instantly tagged with a
     // client-only _localId (NOT the server task id, which we don't have
     // yet). doSend drops this echo on success — the subsequent reload brings
@@ -510,12 +520,12 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
     // PR3 判据C:id 跨次启动唯一(重开恢复的旧 local-N 不能和新 id 撞车);
     // 🔴 提交即落盘(网络尝试之前)——发送中被杀,重开后它还在。
     const localId = `local-${Date.now()}-${++localSeq.current}`;
-    outboxAdd({ id: localId, alias, content, createdAt: Date.now(), state: 'pending', hadImage: imgs.length > 0 });
+    outboxAdd({ id: localId, alias, content, createdAt: Date.now(), state: 'pending', hadImage: imgs.length > 0, priority });
     setMessages(prev => [
-      { content, created_at: new Date().toISOString(), _localId: localId, _pending: true, _imgs: imgs },
+      { content, created_at: new Date().toISOString(), _localId: localId, _pending: true, _imgs: imgs, _priority: priority },
       ...prev,
     ]);
-    doSend(content, localId, imgs);
+    doSend(content, localId, imgs, priority);
   };
 
   const retry = (item: ChatItem) => {
@@ -528,7 +538,8 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
         [],
       ),
     );
-    doSend(item.content, item._localId, item._imgs ?? (item._img ? [item._img] : []));
+    const priority = item._priority ?? outboxForAlias(alias).find(e => e.id === item._localId)?.priority ?? 'normal';
+    doSend(item.content, item._localId, item._imgs ?? (item._img ? [item._img] : []), priority);
   };
 
   // Header subtitle, Telegram-style (Vincent tg 739-741): show 正在处理…
@@ -842,6 +853,15 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
               </Pressable>
             ) : <View />}
             <View style={styles.desktopToolbarRight}>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={sendPriority === 'high' ? '取消优先发送' : '设为优先发送'}
+                accessibilityState={{ selected: sendPriority === 'high' }}
+                onPress={() => setSendPriority(value => value === 'high' ? 'normal' : 'high')}
+                style={({ pressed }) => [styles.priorityButton, sendPriority === 'high' && styles.priorityButtonActive, pressed && { opacity: 0.7 }]}
+              >
+                <Text style={[styles.priorityButtonText, sendPriority === 'high' && styles.priorityButtonTextActive]}>⚡ 优先</Text>
+              </Pressable>
               <Text style={styles.shortcutHint}>Ctrl/⌘+Enter 发送 · Enter 换行</Text>
               <Pressable
                 style={({ pressed }) => [styles.desktopSend, !canSend(draft, attached.length > 0, sending) && styles.desktopSendDisabled, pressed && { opacity: 0.7 }]}
@@ -864,6 +884,15 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
             <Text style={styles.attachBtnText}>＋</Text>
           </Pressable>
         ) : null}
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={sendPriority === 'high' ? '取消优先发送' : '设为优先发送'}
+          accessibilityState={{ selected: sendPriority === 'high' }}
+          onPress={() => setSendPriority(value => value === 'high' ? 'normal' : 'high')}
+          style={({ pressed }) => [styles.mobilePriorityButton, sendPriority === 'high' && styles.priorityButtonActive, pressed && { opacity: 0.6 }]}
+        >
+          <Text style={[styles.mobilePriorityText, sendPriority === 'high' && styles.priorityButtonTextActive]}>⚡</Text>
+        </Pressable>
         <TextInput
           style={styles.input}
           placeholder={`Message ${alias}…`}
@@ -1075,6 +1104,12 @@ const makeStyles = () =>
   desktopToolbar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingTop: spacing.sm },
   desktopToolButton: { width: 34, height: 34, alignItems: 'center', justifyContent: 'center' },
   desktopToolbarRight: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
+  priorityButton: { height: 28, borderRadius: 5, borderWidth: 1, borderColor: colors.border, paddingHorizontal: spacing.sm, alignItems: 'center', justifyContent: 'center' },
+  priorityButtonActive: { borderColor: colors.failed, backgroundColor: colors.inputBg },
+  priorityButtonText: { color: colors.textMuted, fontSize: 11, fontWeight: '600' },
+  priorityButtonTextActive: { color: colors.failed },
+  mobilePriorityButton: { width: 36, height: 36, borderRadius: 18, borderWidth: 1, borderColor: colors.border, alignItems: 'center', justifyContent: 'center' },
+  mobilePriorityText: { color: colors.textMuted, fontSize: 15 },
   shortcutHint: { color: colors.textMuted, fontSize: 10 },
   desktopSend: { minWidth: 64, height: 32, borderRadius: 5, paddingHorizontal: spacing.lg, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.accent },
   desktopSendDisabled: { backgroundColor: colors.inputBg, borderWidth: 1, borderColor: colors.border },
