@@ -1,0 +1,136 @@
+name: ios TestFlight status
+
+on:
+  workflow_dispatch:
+    inputs:
+      build_number:
+        description: CFBundleVersion to inspect
+        required: true
+        default: "15"
+
+permissions:
+  contents: read
+
+jobs:
+  inspect-testflight:
+    runs-on: ubuntu-latest
+    environment: macos-signing
+    steps:
+      - name: Query App Store Connect without exposing credentials
+        env:
+          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+          APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
+          APPLE_API_KEY_BASE64: ${{ secrets.APPLE_API_KEY_BASE64 }}
+          BUILD_NUMBER: ${{ inputs.build_number }}
+          BUNDLE_ID: top.vansin.agentnetwork
+          PUBLIC_LINK_ID: ZvqYnCA9
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          case "$BUILD_NUMBER" in
+            ''|*[!0-9]*) echo "::error::build_number must be numeric"; exit 1 ;;
+          esac
+
+          jwt_file="$RUNNER_TEMP/app-store-connect.jwt"
+          node <<'NODE' > "$jwt_file"
+          const crypto = require('node:crypto');
+          const b64url = (value) => Buffer.from(value).toString('base64url');
+          const now = Math.floor(Date.now() / 1000);
+          const header = b64url(JSON.stringify({ alg: 'ES256', kid: process.env.APPLE_API_KEY, typ: 'JWT' }));
+          const payload = b64url(JSON.stringify({
+            iss: process.env.APPLE_API_ISSUER,
+            iat: now,
+            exp: now + 900,
+            aud: 'appstoreconnect-v1',
+          }));
+          const unsigned = `${header}.${payload}`;
+          const key = Buffer.from(process.env.APPLE_API_KEY_BASE64, 'base64').toString('utf8');
+          const signature = crypto.sign('sha256', Buffer.from(unsigned), {
+            key,
+            dsaEncoding: 'ieee-p1363',
+          }).toString('base64url');
+          process.stdout.write(`${unsigned}.${signature}`);
+          NODE
+          chmod 600 "$jwt_file"
+          jwt=$(<"$jwt_file")
+
+          asc_get() {
+            local endpoint="$1"
+            shift
+            curl --fail-with-body --silent --show-error --get \
+              -H "Authorization: Bearer $jwt" \
+              -H 'Accept: application/json' \
+              "https://api.appstoreconnect.apple.com/v1/$endpoint" "$@"
+          }
+
+          app_json="$RUNNER_TEMP/app.json"
+          asc_get apps --data-urlencode "filter[bundleId]=$BUNDLE_ID" --data-urlencode 'limit=2' > "$app_json"
+          app_id=$(jq -r '.data[0].id // empty' "$app_json")
+          if [ -z "$app_id" ]; then
+            echo "::error::no App Store Connect app found for $BUNDLE_ID"
+            exit 1
+          fi
+
+          builds_json="$RUNNER_TEMP/builds.json"
+          asc_get builds \
+            --data-urlencode "filter[app]=$app_id" \
+            --data-urlencode "filter[version]=$BUILD_NUMBER" \
+            --data-urlencode 'limit=10' > "$builds_json"
+          build_id=$(jq -r '.data[0].id // empty' "$builds_json")
+          if [ -z "$build_id" ]; then
+            echo "::error::build $BUILD_NUMBER was not found"
+            exit 1
+          fi
+
+          details_json="$RUNNER_TEMP/build-details.json"
+          asc_get buildBetaDetails --data-urlencode "filter[build]=$build_id" --data-urlencode 'limit=2' > "$details_json"
+
+          reviews_json="$RUNNER_TEMP/reviews.json"
+          asc_get betaAppReviewSubmissions --data-urlencode "filter[build]=$build_id" --data-urlencode 'limit=10' > "$reviews_json"
+
+          groups_json="$RUNNER_TEMP/groups.json"
+          asc_get betaGroups --data-urlencode "filter[app]=$app_id" --data-urlencode 'limit=200' > "$groups_json"
+
+          memberships="$RUNNER_TEMP/memberships.jsonl"
+          : > "$memberships"
+          while IFS= read -r group; do
+            group_id=$(jq -r '.id' <<< "$group")
+            group_name=$(jq -r '.attributes.name' <<< "$group")
+            public_enabled=$(jq -r '.attributes.publicLinkEnabled // false' <<< "$group")
+            public_id=$(jq -r '.attributes.publicLinkId // ""' <<< "$group")
+            limit_enabled=$(jq -r '.attributes.publicLinkLimitEnabled // false' <<< "$group")
+            tester_limit=$(jq -r '.attributes.publicLinkLimit // 0' <<< "$group")
+            rel_json="$RUNNER_TEMP/group-$group_id-builds.json"
+            asc_get "betaGroups/$group_id/relationships/builds" --data-urlencode 'limit=200' > "$rel_json"
+            contains_build=$(jq --arg build "$build_id" 'any(.data[]?; .id == $build)' "$rel_json")
+            jq -cn \
+              --arg id "$group_id" \
+              --arg name "$group_name" \
+              --arg publicLinkId "$public_id" \
+              --argjson publicLinkEnabled "$public_enabled" \
+              --argjson publicLinkLimitEnabled "$limit_enabled" \
+              --argjson publicLinkLimit "$tester_limit" \
+              --argjson containsBuild "$contains_build" \
+              '{id:$id,name:$name,publicLinkEnabled:$publicLinkEnabled,publicLinkId:$publicLinkId,publicLinkLimitEnabled:$publicLinkLimitEnabled,publicLinkLimit:$publicLinkLimit,containsBuild:$containsBuild}' \
+              >> "$memberships"
+          done < <(jq -c '.data[]' "$groups_json")
+
+          echo 'TestFlight status (credentials and JWT intentionally omitted):'
+          jq -n \
+            --arg bundleId "$BUNDLE_ID" \
+            --arg buildNumber "$BUILD_NUMBER" \
+            --arg publicLinkId "$PUBLIC_LINK_ID" \
+            --slurpfile builds "$builds_json" \
+            --slurpfile details "$details_json" \
+            --slurpfile reviews "$reviews_json" \
+            --slurpfile memberships "$memberships" \
+            '{
+              bundleId: $bundleId,
+              buildNumber: $buildNumber,
+              build: ($builds[0].data[0] | {id, attributes}),
+              betaDetail: ($details[0].data[0] // null),
+              betaReviewSubmissions: [$reviews[0].data[]? | {id, attributes}],
+              matchingPublicGroup: ([$memberships[] | select(.publicLinkId == $publicLinkId)] | first // null),
+              allExternalGroups: [$memberships[] | select(.publicLinkId != "")]
+            }'
