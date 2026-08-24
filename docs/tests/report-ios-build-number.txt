@@ -4,12 +4,12 @@ Date: 2026-08-24
 Repo: https://github.com/sleep2agi/agent-network-app (public)
 Branch: fix/ios-build-number
 Base: ee43181ed6635e98584122c66f2291115a1e0959 (= origin/main, merge-base)
-Source commit under test: 984c0922a9b7aa1dc4df7016d129ad4bd0b803b4
-  (revision 2 — review found the revision 1 guard was false-green; revision 1
-  was 80f0bf87c3d3892001817a1c5c0261dca63e6e9c)
-Docker tag: anet-iosbn2:dev
-Docker image id: sha256:e9e814e2c4b1933440aa2318b0830066599111881958ad2ff644e2284fb2e5d3
-Embedded ENV: IOSBN_SOURCE_COMMIT=984c0922a9b7aa1dc4df7016d129ad4bd0b803b4
+Source commit under test: 285691cd910f431eec27581174e9040a59f6e605
+  (revision 3 — Bash 3.2 portability; rev2 was 984c0922a9b7aa1dc4df7016d129ad4bd0b803b4,
+  rev1 was 80f0bf87c3d3892001817a1c5c0261dca63e6e9c)
+Docker tag: anet-iosbn3:dev
+Docker image id: sha256:7725d92e9422e0c701fd01ef7ae2f7002e5b278d355247fccde86531b5a58d86
+Embedded ENV: IOSBN_SOURCE_COMMIT=285691cd910f431eec27581174e9040a59f6e605
 Build context: git archive <source commit> (clean tree; npm ci runs inside the
   image — no host node_modules mounted, copied, or symlinked)
 
@@ -82,22 +82,67 @@ Three assumptions the step was making silently are now gates:
    silently — `Add` would paper over a config change that should be visible.
    Documented in the step so the choice is not mistaken for an oversight.
 
+## Revision 3: the uniqueness check needed the Bash macOS actually ships
+
+`mapfile` is a Bash 4 builtin. macOS ships Bash 3.2 as `/bin/bash`, where it is
+a "command not found" — and it would have surfaced *after* prebuild and pod
+install, the most expensive place in the job to learn about a portability bug,
+discoverable only by spending a macOS dispatch.
+
+Same guarantee without arrays: candidates are written to a file, `wc -l` counts
+them, `sed -n '1p'` reads the single one back. Both preserve spaces in paths, as
+does the `IFS= read -r` enumeration loop.
+
+Zero candidates no longer enters the enumeration at all. Iterating an empty file
+printed nothing useful while `set -u` turned the surrounding code into noise; the
+count line already states what happened, so the loop is guarded by `count > 0`.
+
+The negative assertions now run against the step's **code with comment lines
+stripped**. Explaining why `mapfile` is unusable requires writing `mapfile`, so a
+whole-section negation would have failed on its own rationale — the guard would
+have made the explanation unwritable.
+
+### Behavioural check of the fragment
+
+Static assertions cannot show that the shell works. The fragment was run
+directly, outside CI, over four scenarios:
+
+| scenario | result |
+|---|---|
+| exactly one candidate, path containing a space (`ios/Agent Network/Info.plist`) | `OK PLIST=[ios/Agent Network/Info.plist]`, exit 0 |
+| zero candidates (only `ios/Pods/...`) | `::error::… found 0`, no enumeration noise, exit 1 |
+| two candidates, one with a space | `::error::… found 2` plus both candidates listed verbatim, exit 1 |
+| same fragment under `dash` (POSIX sh) | `OK PLIST=[ios/Agent Network/Info.plist]`, exit 0 |
+
+The `dash` run matters: it is stricter than Bash 3.2, so passing there settles
+the portability question by measurement instead of by assumption.
+
 ## Result
 
 PASS. Container echoed
 `# ios-build-number source=80f0bf87c3d3892001817a1c5c0261dca63e6e9c`, exit 0.
 
 - `npm test` → **36/36 test files passed** (35 before this change)
-- `src/ios-build-number.test.ts` → **20 checks** (was 11), all PASS
+- `src/ios-build-number.test.ts` → **25 checks** (was 20, was 11), all PASS
 - `npm run typecheck` → clean
 - workflow YAML → all 7 files parse with a real YAML parser, including the
   edited `ios-build.yml`
 - scrub gate → replayed verbatim from the workflow, 102 files scanned, clean
 
-## Witnessed-red (container grade, three independent sabotages)
+## Witnessed-red (container grade)
 
 Each gate is exercised on its own; one sabotage would only show that one of them
 is covered.
+
+### Revision 3 sabotages
+
+| sabotage | result |
+|---|---|
+| candidate collection reverted to `mapfile` | `FAIL: injection writes every candidate to a file, sorted` · 35/36 · exit 1 |
+| `count == 1` gate deleted (first line taken regardless) | `FAIL: injection requires exactly one candidate` · 35/36 · exit 1 |
+| `count > 0` guard around the diagnostics removed | `FAIL: candidates are only enumerated when there is at least one` · 35/36 · exit 1 |
+
+### Revision 2 sabotages (assertions unchanged, still red)
 
 A. **Only the read-back comparison deleted** — the `written=` assignment and the
    trailing echo left in place. This is precisely the sabotage revision 1
