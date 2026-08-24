@@ -1,0 +1,95 @@
+# desktop v0.2.31 — version bump
+
+Date: 2026-08-24
+Repo: https://github.com/sleep2agi/agent-network-app (public)
+Branch: chore/release-0.2.31
+Base: 080eb010d3307c124411c9875bb791aba8be1198 (= origin/main after #121 and
+  #126 merged; merge-base)
+Source commit under test: e3fce4846a8418327cdf7b98ac27d90506f8aa12
+Docker tag: anet-release031:dev
+Docker image id: sha256:aad58029bf3df03490e01d950f89a3dfaa8f40f6a840ee3fe718646b351fe741
+Embedded ENV: V031_SOURCE_COMMIT=e3fce4846a8418327cdf7b98ac27d90506f8aa12
+Build context: git archive <source commit> (clean tree; npm ci runs inside the
+  image — no host node_modules mounted, copied, or symlinked)
+
+## Preflight (docs/desktop-release-sop.md §2)
+
+Nothing already claims this version:
+
+- draft releases present: desktop-v0.2.24, desktop-v0.2.15,
+  desktop-v0.2.24-obsolete-d6c688d — **none is desktop-v0.2.31**
+- `git ls-remote origin refs/tags/desktop-v0.2.31` → no ref
+- `gh pr list --state all --search "0.2.31"` → no results
+
+The three leftover drafts remain untouched; they are tracked in issue #123 and
+mean 0.2.24 and 0.2.15 must not be reused.
+
+## Scope
+
+Version only, across the eight files the SOP lists:
+
+    app.json                        2 +-
+    package.json                    2 +-
+    package-lock.json               4 ++--   (root "version" and packages[""])
+    src-tauri/Cargo.toml            2 +-
+    src-tauri/Cargo.lock            2 +-     (agent-network-desktop entry only)
+    src-tauri/tauri.conf.json       2 +-
+    src/version.ts                  2 +-
+    src/version-consistency.test.ts 2 +-
+    8 files changed, 9 insertions(+), 9 deletions(-)
+
+Every changed line is a version literal; no other content moved.
+
+### Cargo.lock
+
+Edited by locating the entry named `agent-network-desktop` and substituting only
+its `version` line, asserted to match exactly once. `git diff src-tauri/Cargo.lock`
+shows one changed line.
+
+Worth recording next to it: the v0.2.30 bump (#119) came to **10** changed lines
+across the same set, because a blanket search-replace also moved the unrelated
+crate `filetime` from 0.2.29 to 0.2.30 while leaving its checksum, which #120
+then had to restore. This bump is **9**. The missing line is the collateral
+damage, and the line count is a cheap check on the next bump too.
+
+## Result
+
+PASS. Container echoed
+`# release-0.2.31 source=e3fce4846a8418327cdf7b98ac27d90506f8aa12` and exited 0.
+
+- `npm test` → **35/35 test files passed** (35, not 34: #121 and #126 each added
+  a guard and both are on main now)
+- `src/version-consistency.test.ts` → 9 checks, all `= 0.2.31`, including the
+  CRLF-checkout variant
+- `npm run typecheck` → clean
+- scrub gate → replayed verbatim from `.github/workflows/scrub-guard.yml`,
+  101 files scanned, gate selftest 3/3, no internal memory reference
+
+## Witnessed-red (container grade)
+
+Same build context, one sabotage: `app.json` left at 0.2.30 — a partial bump,
+the realistic failure for this kind of change. Rebuilt as anet-release031:red
+and run:
+
+    # src/version-consistency.test.ts
+    error: FAIL: app.json must be 0.2.31
+    === 34/35 test files passed ===
+    exit code 1
+
+Exactly one file red, naming the file that was missed.
+
+## Not covered here
+
+The other Cargo.lock failure — a *collateral* crate moved rather than a version
+missed — is not caught by `version-consistency`, which only asserts the root
+entry. Its guard is `cargo check --locked` in
+`.github/workflows/release-desktop-auto-update.yml`, which fails on the checksum
+mismatch; that step needs the Rust toolchain and the full crate set, so it runs
+in the release workflow rather than in this container. The diff review above is
+the pre-CI check for it.
+
+## Not done
+
+No release workflow triggered, no `macos-signing` approval requested, no tag or
+release created or modified, no manifest deployed. The pull request is a draft
+and was not marked ready.
