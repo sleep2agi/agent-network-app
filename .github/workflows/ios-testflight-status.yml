@@ -128,12 +128,12 @@ jobs:
               external_state=$(jq -r '.data[0].attributes.externalBuildState // "UNKNOWN"' "$details_json")
               echo "External build state after configuration: $external_state"
               case "$external_state" in
-                READY_TO_SUBMIT|WAITING_FOR_BETA_REVIEW|IN_BETA_TESTING|APPROVED) break ;;
+                READY_TO_SUBMIT|READY_FOR_BETA_SUBMISSION|WAITING_FOR_BETA_REVIEW|IN_BETA_TESTING|APPROVED) break ;;
               esac
               sleep 5
             done
 
-            if [ "$external_state" = 'READY_TO_SUBMIT' ]; then
+            if [ "$external_state" = 'READY_TO_SUBMIT' ] || [ "$external_state" = 'READY_FOR_BETA_SUBMISSION' ]; then
               echo "Submitting build $BUILD_NUMBER for Beta App Review."
               review_submission=$(jq -cn --arg id "$build_id" '{data:{type:"betaAppReviewSubmissions",relationships:{build:{data:{type:"builds",id:$id}}}}}')
               asc_write POST betaAppReviewSubmissions "$review_submission" > /dev/null
