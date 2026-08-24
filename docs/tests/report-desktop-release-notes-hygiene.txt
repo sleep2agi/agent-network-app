@@ -4,10 +4,11 @@ Date: 2026-08-24
 Repo: https://github.com/sleep2agi/agent-network-app (public)
 Branch: docs/desktop-release-sop-current
 Base: 972a45e2646c555b7955d9b2d7fede6a01225e3b (= origin/main, merge-base)
-Source commit under test: 6b8d5c90fe39ea4655a0d410612b0b4087978aa0
-Docker tag: anet-sop-test121:dev
-Docker image id: sha256:24a66f06a821434df231e99c256e588b0089fd81d0a1fe499460380d8672143c
-Embedded ENV: SOP_SOURCE_COMMIT=6b8d5c90fe39ea4655a0d410612b0b4087978aa0
+Source commit under test: 9985d3e2229c1b14afbd4b844c02d39b3eb44714
+  (revision 2 — three review blockers fixed; revision 1 was 6b8d5c90fe39ea46)
+Docker tag: anet-sop-test121:dev2
+Docker image id: sha256:90b7aaa794f32e710c38f5dd3c71c3cea61de65271f54492fb63d6ad63b31459
+Embedded ENV: SOP_SOURCE_COMMIT=9985d3e2229c1b14afbd4b844c02d39b3eb44714
 Build context: git archive <source commit> (clean tree; npm ci runs inside the
   image from package.json + package-lock.json only — no host node_modules is
   mounted, copied, or symlinked)
@@ -21,18 +22,18 @@ Build context: git archive <source commit> (clean tree; npm ci runs inside the
 
 ## Commands
 
-  docker build --build-arg SOURCE_COMMIT=6b8d5c90fe39ea4655a0d410612b0b4087978aa0 \
-    -t anet-sop-test121:dev .
-  docker run --rm anet-sop-test121:dev
+  docker build --build-arg SOURCE_COMMIT=9985d3e2229c1b14afbd4b844c02d39b3eb44714 \
+    -t anet-sop-test121:dev2 .
+  docker run --rm anet-sop-test121:dev2
 
 The container runs, in order: `npm test` (scripts/run-tests.mjs, bun 1.3.14),
-`npm run typecheck` (tsc --noEmit -p tsconfig.build.json), and an independent
-YAML parse of every workflow file.
+`npm run typecheck` (tsc --noEmit -p tsconfig.build.json), an independent YAML
+parse of every workflow file, and a verbatim replay of the scrub gate.
 
 ## Result
 
 PASS. Container echoed
-`# desktop-sop source=6b8d5c90fe39ea4655a0d410612b0b4087978aa0`
+`# desktop-sop source=9985d3e2229c1b14afbd4b844c02d39b3eb44714`
 and exited 0.
 
 - npm test: **34/34 test files passed** (33 before this change; the new file is
@@ -41,6 +42,11 @@ and exited 0.
 - src/release-notes-hygiene.test.ts: 8 assertions, all PASS.
 - npm run typecheck: clean.
 - YAML parse: all 7 workflow files under .github/workflows parse.
+- scrub gate: **replayed verbatim**, not re-implemented. scripts/_ci_scrub_replay.cjs
+  parses .github/workflows/scrub-guard.yml, extracts the 73-line run block, and
+  executes it with bash, so the container runs the same predicate CI runs
+  rather than a hand-copy that could drift. Result: 99 files scanned, the
+  gate's own 3/3 selftest ok, "no internal memory reference".
 - Independent cross-check: the YAML parser (not a regex) extracted
   jobs.build-release.steps[tauri-apps/tauri-action].with.releaseBody and
   confirmed the same two properties the test asserts. Two different readers,
@@ -51,6 +57,30 @@ Parsed releaseBody:
   Signed and notarized desktop update for macOS (Apple Silicon) and Windows
   (x64). Existing installations can update in place; new installations use the
   assets below.
+
+## Revision 2: three review blockers
+
+Review of revision 1 (6b8d5c90fe39ea46) found three, all fixed here.
+
+1. **scrub CI was FAILURE and this report did not say so.** The SOP spelled the
+   Cargo lock package header literally, twice; scrub-guard reads a doubled
+   bracket around a lowercase token as an internal memory slug. The section now
+   identifies the entry by its `name` field. Revision 1's evidence was
+   incomplete rather than wrong: it ran npm test, typecheck and a YAML parse,
+   and never ran the gate that was red. The container now replays scrub too, so
+   this class of miss cannot repeat silently.
+2. **Section 5 contradicted itself.** It required the tag ref to resolve before
+   publishing, while the same work established that GitHub creates the tag at
+   publish time — a draft never has one, so the condition could not be met. The
+   audit is now split: targetCommitish, job conclusions and assets before
+   publishing; the tag ref immediately after, before the manifest sync. A tag
+   present *before* publishing is now named as the alarm.
+3. **Section 8 said an authorized reuse "re-binds" the tag**, contradicting the
+   rule that a tag ref is never moved. Reuse now requires deleting assets by ID,
+   removing the failed draft, and confirming no remote tag of that name exists;
+   if one does, the version is spent. Section 2 gained the matching preflight,
+   since tauri-action resolves a release by tag name and otherwise appends to an
+   existing draft.
 
 ## Witnessed-red (container grade)
 
@@ -67,7 +97,9 @@ installation smoke tests pass.` Rebuilt as anet-sop-test121:red
   exit code 1
 
 Exactly one file red, and it is the regression the guard exists for. The clean
-image is fully green. The sabotage was applied only inside the throwaway build
+image is fully green. Not repeated for revision 2: the guard and its subject are
+unchanged since that run, and the scrub gate carries its own selftest, which the
+replay executes (3/3) on every run. The sabotage was applied only inside the throwaway build
 context, never in the worktree or the branch.
 
 ## Not done (out of the permission granted for this change)
