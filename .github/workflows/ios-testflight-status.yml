@@ -115,13 +115,28 @@ jobs:
               exit 1
             fi
 
-            echo "Declaring that build $BUILD_NUMBER does not use non-exempt encryption."
-            build_patch=$(jq -cn --arg id "$build_id" '{data:{type:"builds",id:$id,attributes:{usesNonExemptEncryption:false}}}')
-            asc_write PATCH "builds/$build_id" "$build_patch" > /dev/null
+            encryption=$(jq -r '.data[0].attributes.usesNonExemptEncryption // "unset"' "$builds_json")
+            if [ "$encryption" = 'unset' ]; then
+              echo "Declaring that build $BUILD_NUMBER does not use non-exempt encryption."
+              build_patch=$(jq -cn --arg id "$build_id" '{data:{type:"builds",id:$id,attributes:{usesNonExemptEncryption:false}}}')
+              asc_write PATCH "builds/$build_id" "$build_patch" > /dev/null
+            elif [ "$encryption" = 'false' ]; then
+              echo "Build $BUILD_NUMBER already declares exempt encryption; leaving it unchanged."
+            else
+              echo "::error::build $BUILD_NUMBER declares non-exempt encryption; refusing to overwrite it"
+              exit 1
+            fi
 
-            echo "Adding build $BUILD_NUMBER to the existing Public external-testing group."
-            group_link=$(jq -cn --arg id "$build_id" '{data:[{type:"builds",id:$id}]}')
-            asc_write POST "betaGroups/$group_id/relationships/builds" "$group_link" > /dev/null
+            group_builds="$RUNNER_TEMP/public-group-builds.json"
+            asc_get "betaGroups/$group_id/relationships/builds" --data-urlencode 'limit=200' > "$group_builds"
+            in_group=$(jq --arg build "$build_id" 'any(.data[]?; .id == $build)' "$group_builds")
+            if [ "$in_group" = 'true' ]; then
+              echo "Build $BUILD_NUMBER is already in the Public group; leaving membership unchanged."
+            else
+              echo "Adding build $BUILD_NUMBER to the existing Public external-testing group."
+              group_link=$(jq -cn --arg id "$build_id" '{data:[{type:"builds",id:$id}]}')
+              asc_write POST "betaGroups/$group_id/relationships/builds" "$group_link" > /dev/null
+            fi
 
             for attempt in 1 2 3 4 5 6; do
               asc_get buildBetaDetails --data-urlencode "filter[build]=$build_id" --data-urlencode 'limit=2' > "$details_json"
