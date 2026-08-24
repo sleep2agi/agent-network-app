@@ -118,8 +118,19 @@ const checks: Array<[string, boolean]> = [
     /conversations\.open\(conversationKeyFor\b/.test(screen)],
   ['ChatScreen refuses to apply a stale answer',
     /if \(!conversations\.isCurrent\(token\)\) return;/.test(screen)],
-  ['ChatScreen no longer sets messages without checking the token',
-    !/const data = await fetchTasks\(cfg, \{ to_name: alias, limit \}\);\n(?!.*isCurrent)/.test(screen)],
+  // The gate must sit between the await and the first state write; anywhere
+  // later and a stale answer has already been applied.
+  ['the token check sits between the fetch and the first state write',
+    (() => {
+      const afterFetch = screen.slice(screen.indexOf('await fetchTasks('));
+      const gate = afterFetch.indexOf('conversations.isCurrent(token)');
+      const write = afterFetch.indexOf('setMessages(');
+      return gate > 0 && write > 0 && gate < write;
+    })()],
+  ['loaded is only set for the conversation still on screen',
+    /if \(conversations\.isCurrent\(token\)\) setLoaded\(true\);/.test(screen)],
+  ['a cached conversation is shown without a loading state',
+    /setLoaded\(true\);/.test(screen) && /snapshot\.messages\.length > 0/.test(screen)],
 ];
 
 for (const [name, ok] of checks) {

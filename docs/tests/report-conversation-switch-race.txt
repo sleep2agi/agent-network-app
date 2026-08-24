@@ -1,0 +1,90 @@
+# switching agents — a slow answer for one thread landing in another
+
+Date: 2026-08-24
+Repo: https://github.com/sleep2agi/agent-network-app (public)
+Branch: fix/conversation-switch-race
+Base: 37f2476 (= origin/main, after #132 and #134 merged)
+Source commit under test: see PR head
+Docker: built from git archive <source commit>, npm ci inside the image
+
+## The defect, located
+
+`src/ChatScreen.tsx`:
+
+    const data = await fetchTasks(cfg, { to_name: alias, limit });
+    ...
+    setMessages(prev => mergeMessagesNewestFirst(...));
+
+`load` is a `useCallback` over `[cfg, alias]`, so it closes over the alias it
+started with — but `setMessages` writes to the screen, which by then may be
+showing a different agent. The reset effect clears the list on switch, and that
+does not help: the late response arrives *after* the clear and refills the list
+under the new title. That is the reported symptom, exactly.
+
+Nothing cached per conversation either, so returning to an agent means a blank
+list and a fresh round trip.
+
+## The fix
+
+A cache alone would have made the wrong content appear faster. What is needed is
+that a response can only be applied while it is still the one being waited for.
+
+`src/conversation-store.ts` hands out a token per `open`. Opening invalidates
+every token issued before it, and `put` applies a result only while its token is
+current — one condition, and it is what stops an answer for A landing in C.
+
+Around that:
+
+- each conversation keeps its own messages and scroll offset, so reopening one
+  is instant and refreshes behind the visible content rather than replacing it
+  with a spinner;
+- a conversation never opened reports no content, which is the difference
+  between "loading" and "empty" — the screen needs it to show a skeleton instead
+  of somebody else's messages;
+- a stale result is still cached against *its own* conversation. It is correct
+  data, just not for this screen, so going back to it is instant;
+- sends and realtime updates address a conversation by key, so a reply for A
+  arriving while B is open is stored against A and never rendered under B;
+- the key includes the profile, because two hubs can host the same alias.
+
+The store is module level so the cache outlives an unmount, and imports no
+react-native so the behaviour is driven by tests rather than described by
+regexes.
+
+## Result
+
+PASS, exit 0.
+
+- `npm test` → **39/39 test files passed**
+- `src/conversation-store.test.ts` → **29 checks**, all PASS
+- `npm run typecheck` → clean
+- scrub gate → replayed verbatim, 109 files scanned, clean
+
+Coverage maps to the scenarios named in the dispatch: A→B residue, A→B→A out of
+order, instant reopen from cache, no-cache skeleton, failure, unmount, and
+per-conversation scroll position — plus send isolation and the two-hub key.
+
+## Witnessed-red (container grade)
+
+| sabotage | result |
+|---|---|
+| **stale content reproduced** — the token gate removed from `ChatScreen` | `FAIL: ChatScreen refuses to apply a stale answer` · 38/39 · exit 1 |
+| **late overwrite reproduced** — `put` accepts unconditionally | `FAIL: a late answer for A is not applied while B is open` · 38/39 · exit 1 |
+
+The second is the interesting one: it leaves every line of `ChatScreen` intact
+and only weakens the store, and the behavioural test still catches it. A guard
+that only read the screen's source would have passed.
+
+Also recorded: one assertion in the first draft of this test was written as a
+negative lookahead across lines and could never hold, so the suite failed on my
+own guard rather than on the code. It was replaced with a structural check —
+the gate must appear between the `await` and the first state write — which is
+what the assertion was trying to say.
+
+## Not verified here
+
+**That switching feels fast.** These tests cover which result is applied and
+what is cached; they cannot show a title changing in the same frame or a list
+that does not flash. That needs the app running — a desktop or device build,
+switching A→B→C quickly on a slow network, watching the title and the first
+paint. Listed as the acceptance step for this change.
