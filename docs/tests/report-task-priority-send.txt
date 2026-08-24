@@ -1,0 +1,41 @@
+Issue: sleep2agi/agent-network-app#138
+Source base: origin/main 67345449418ba946ea7eef60ddb19f409f566d1e
+
+Problem reproduced
+------------------
+ChatScreen called sendTask without a priority and api.ts omitted priority from
+POST /api/task. Hub therefore applied its default "normal" priority to every
+Desktop message, even though the Hub schema and dequeue order support high.
+
+Implemented contract
+--------------------
+- Desktop and mobile composers expose an explicit "priority send" control.
+- sendTask always transmits an explicit high/normal priority.
+- The chosen priority is recorded before the network attempt and survives
+  failure, restart restoration, and retry. Old persisted rows without the new
+  field remain normal.
+- After submission the composer resets to normal, preventing accidental
+  priority inheritance by later messages.
+- This is queue priority, not a claim that an in-progress Codex turn was
+  interrupted. True TUI steering remains a runtime capability boundary.
+
+Docker verification
+-------------------
+Image: anet-app-issue138:test
+Dockerfile: tests/test-task-priority/Dockerfile
+
+  task priority send: 11/11 checks passed
+  npm test: 40/40 test files passed
+  npm run typecheck: clean
+  container exit: 0
+
+Witnessed red
+-------------
+Single sabotage: remove the priority field from POST /api/task while leaving
+the UI, outbox and test unchanged.
+
+  FAIL: normal send explicitly carries normal priority
+  container exit: 1
+
+This proves the new test observes the actual outbound request body; it is not
+made green solely by the presence of the priority button or stored metadata.
