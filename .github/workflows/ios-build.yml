@@ -120,13 +120,30 @@ jobs:
           # Collect every candidate rather than taking the first match. Two
           # plists would mean the Expo layout changed, and silently picking one
           # is how a build ships the wrong bundle's version.
-          mapfile -t PLISTS < <(find ios -maxdepth 2 -name Info.plist -not -path '*/Pods/*' | sort)
-          if [ "${#PLISTS[@]}" -ne 1 ]; then
-            echo "::error::expected exactly 1 generated ios Info.plist outside Pods, found ${#PLISTS[@]}"
-            printf '::error::candidate: %s\n' "${PLISTS[@]}"
+          #
+          # Written for Bash 3.2: macOS ships that as /bin/bash, and mapfile /
+          # readarray are Bash 4 builtins. On a 3.2 shell those fail as
+          # "command not found" — after prebuild and pod install have already
+          # run, which is an expensive place to discover a portability bug.
+          # A file of candidates plus wc/sed needs no array support and keeps
+          # spaces in paths intact (find emits one newline-terminated path per
+          # line; a newline inside a filename is out of scope here).
+          CANDIDATES="$RUNNER_TEMP/ios-info-plists.txt"
+          find ios -maxdepth 2 -name Info.plist -not -path '*/Pods/*' | LC_ALL=C sort > "$CANDIDATES"
+          count=$(wc -l < "$CANDIDATES" | tr -d '[:space:]')
+          if [ "$count" -ne 1 ]; then
+            echo "::error::expected exactly 1 generated ios Info.plist outside Pods, found $count"
+            # Only enumerate when there is something to enumerate: at zero the
+            # loop would print nothing useful, and the count line above already
+            # says what happened.
+            if [ "$count" -gt 0 ]; then
+              while IFS= read -r candidate; do
+                echo "::error::candidate: $candidate"
+              done < "$CANDIDATES"
+            fi
             exit 1
           fi
-          PLIST="${PLISTS[0]}"
+          PLIST=$(sed -n '1p' "$CANDIDATES")
 
           # Set, never Add: app.json must already provide expo.ios.buildNumber
           # so prebuild emits the key. If the key is missing, PlistBuddy fails

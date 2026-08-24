@@ -29,6 +29,18 @@ const section = (heading: string): string => {
 const injection = section('- name: Inject CFBundleVersion from the run number');
 const verify = section('- name: Verify archive uses App Store distribution signing');
 
+// Negative assertions run against code only. The step's comments name the very
+// constructs being banned — explaining why `mapfile` is unusable on Bash 3.2
+// requires writing `mapfile` — and a negation matching the whole section would
+// red on its own rationale.
+const codeOnly = (yamlSection: string): string =>
+  yamlSection
+    .split('\n')
+    .filter(line => !/^\s*#/.test(line))
+    .join('\n');
+
+const injectionCode = codeOnly(injection);
+
 const checks: Array<[string, boolean]> = [
   ['IOS_BUILD_NUMBER is the run number',
     /IOS_BUILD_NUMBER:\s*\$\{\{\s*github\.run_number\s*\}\}/.test(workflow)],
@@ -47,15 +59,26 @@ const checks: Array<[string, boolean]> = [
   ['the non-positive branch errors and exits',
     /::error::IOS_BUILD_NUMBER must be greater than zero/.test(injection)],
 
-  // 2. Exactly one target plist — not "the first one found".
-  ['injection collects every candidate plist',
-    /mapfile -t PLISTS < <\(find ios -maxdepth 2 -name Info\.plist -not -path '\*\/Pods\/\*' \| sort\)/.test(injection)],
+  // 2. Exactly one target plist — not "the first one found" — using only
+  // constructs Bash 3.2 has, since that is what macOS ships as /bin/bash.
+  ['injection writes every candidate to a file, sorted',
+    /find ios -maxdepth 2 -name Info\.plist -not -path '\*\/Pods\/\*' \| LC_ALL=C sort > "\$CANDIDATES"/.test(injection)],
+  ['injection counts candidates without arrays',
+    /count=\$\(wc -l < "\$CANDIDATES" \| tr -d '\[:space:\]'\)/.test(injection)],
   ['injection requires exactly one candidate',
-    /if \[ "\$\{#PLISTS\[@\]\}" -ne 1 \]; then/.test(injection)],
+    /if \[ "\$count" -ne 1 \]; then/.test(injection)],
   ['the ambiguous/missing case errors and exits',
-    /::error::expected exactly 1 generated ios Info\.plist outside Pods, found/.test(injection)],
+    /::error::expected exactly 1 generated ios Info\.plist outside Pods, found \$count/.test(injection)],
+  ['candidates are only enumerated when there is at least one',
+    /if \[ "\$count" -gt 0 \]; then/.test(injection)],
+  ['enumeration preserves spaces in paths',
+    /while IFS= read -r candidate; do/.test(injection) && /done < "\$CANDIDATES"/.test(injection)],
+  ['the single candidate is read back preserving spaces',
+    /PLIST=\$\(sed -n '1p' "\$CANDIDATES"\)/.test(injection)],
+  ['injection uses no Bash 4 array builtins',
+    !/\bmapfile\b/.test(injectionCode) && !/\breadarray\b/.test(injectionCode)],
   ['injection never silently takes the first match',
-    !/-print -quit/.test(injection)],
+    !/-print -quit/.test(injectionCode)],
 
   // 3. Set, not Add — a missing key must fail rather than be created.
   ['injection writes with Set',
