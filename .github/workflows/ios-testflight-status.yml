@@ -115,7 +115,12 @@ jobs:
               exit 1
             fi
 
-            encryption=$(jq -r '.data[0].attributes.usesNonExemptEncryption // "unset"' "$builds_json")
+            encryption=$(jq -r '
+              if (.data[0].attributes.usesNonExemptEncryption | type) == "boolean"
+              then (.data[0].attributes.usesNonExemptEncryption | tostring)
+              else "unset"
+              end
+            ' "$builds_json")
             if [ "$encryption" = 'unset' ]; then
               echo "Declaring that build $BUILD_NUMBER does not use non-exempt encryption."
               build_patch=$(jq -cn --arg id "$build_id" '{data:{type:"builds",id:$id,attributes:{usesNonExemptEncryption:false}}}')
