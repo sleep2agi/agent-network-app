@@ -47,10 +47,45 @@ reportReadSuccess(T1); reportReadSuccess(T2);
 ck('在线态连续成功:version 不动(不触发重渲染)', connectivityVersion() === v0);
 reportReadFailure(T3);
 ck('翻转为 offline:version +1', connectivityVersion() === v0 + 1);
+// 🔴 两跳阈值(2026-08-24)后这里多了一次真实的状态跃迁:第 1 次失败=reconnecting,
+// 第 2 次才 offline。原断言写的是"已 offline 再失败 version 不动",但在新语义下
+// 第 2 次失败是 reconnecting→offline 的翻转,理应通知 UI。这两条按新行为更新,
+// **不是**为了让门变绿——上面 10 条(含诚实契约那条)一字未改且仍绿。
 reportReadFailure(T3 + 1);
-ck('已 offline 再失败:version 不动(横幅内容也没变)', connectivityVersion() === v0 + 1);
-reportReadSuccess(T3 + 2);
-ck('翻回在线:version 再 +1', connectivityVersion() === v0 + 2);
+ck('第2次失败:reconnecting→offline 是真翻转,version +1', connectivityVersion() === v0 + 2);
+reportReadFailure(T3 + 2);
+ck('已 offline 再失败:version 不动(口径没变)', connectivityVersion() === v0 + 2);
+reportReadSuccess(T3 + 3);
+ck('翻回在线:version 再 +1', connectivityVersion() === v0 + 3);
+
+// ── 🔴 两跳阈值:单次抖动不得播报"连不上" ────────────────────────────────────────
+R();
+reportReadSuccess(T1);
+reportReadFailure(T2);
+ck('有缓存+失败1次:offline=false(单次抖动不喊挂了)', connectivityState().offline === false);
+ck('有缓存+失败1次:reconnecting=true', connectivityState().reconnecting === true);
+ck('抖动档文案不含「无法连接服务器」', !(bannerText(connectivityState()) || '').includes('无法连接服务器'));
+ck('抖动档仍然可见(不是静默吞掉)', bannerText(connectivityState()) !== null);
+ck('抖动后一次成功即恢复静默', (reportReadSuccess(T3), bannerText(connectivityState()) === null));
+
+R();
+reportReadSuccess(T1); reportReadFailure(T2); reportReadFailure(T3);
+ck('有缓存+连续失败2次:offline=true', connectivityState().offline === true);
+ck('offline 档文案含「无法连接服务器」', (bannerText(connectivityState()) || '').includes('无法连接服务器'));
+ck('offline 档仍显示最后成功时刻 10:05', (bannerText(connectivityState()) || '').includes('10:05'));
+
+// 冷启动不设宽限:屏上无数据时一次失败就要说话
+R();
+reportReadFailure(T2);
+ck('🔴 冷启动(从未成功)失败1次:立即 offline(不吞)', connectivityState().offline === true);
+ck('🔴 冷启动失败1次:reconnecting=false(不是抖动档)', connectivityState().reconnecting === false);
+
+// 计数器语义
+R();
+reportReadSuccess(T1); reportReadFailure(T2); reportReadFailure(T3);
+ck('consecutiveFailures 累加到 2', connectivityState().consecutiveFailures === 2);
+reportReadSuccess(T3 + 1);
+ck('一次成功即归零', connectivityState().consecutiveFailures === 0);
 
 console.log(`\n${p}/${t} passed`);
 if (p !== t) { if (typeof process !== 'undefined') process.exit(1); }
