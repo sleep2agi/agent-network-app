@@ -1,0 +1,13 @@
+{
+  "_why": "#50 updated assets/icon.png and left the Android adaptive icons on the previous cyan mark, so mobile shipped a logo the desktop and the website had already replaced. Nothing failed, because nothing tied the derived assets to the source. This file is that tie: the test recomputes these digests, and a brand change that skips regeneration turns red.",
+  "source": "assets/icon.png",
+  "source_sha256": "834f58f77ad0c62fadc3cf4c6f8b17f5941df37fefcb1af90b9bcfd63582aeb3",
+  "canvas": 1024,
+  "safe_zone_fraction": 0.66,
+  "background_color": "#011133",
+  "derived": {
+    "assets/android-icon-foreground.png": "38c571af960a2e15b2d9520d7bac1ef68b2ee4bfed72877384f364d1795f6226",
+    "assets/android-icon-background.png": "6585d998e013f7e55b02c54e57e077f4db599b16fc86de9e92f54d139c373c6d",
+    "assets/android-icon-monochrome.png": "86d29b4d9d4d304b3133828f59566cbed5097c4687e89499d454bedf4e2dd337"
+  }
+}
