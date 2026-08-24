@@ -169,8 +169,18 @@ failing still reports the other.
    Windows: silent NSIS install, smoke, silent uninstall, assert the binary is
    gone *and* the data survives, reinstall, smoke again.
 9. **Size ceiling**: any `.dmg`, `.exe`, or `.msi` over **55 MiB** fails the
-   job. At v0.2.30 the `.msi` was 48.7 MB — roughly 6 MB of headroom. Weigh new
-   bundled dependencies against that number before adding them.
+   job. The check is `find -size +55M`, and `find`'s `M` is **MiB**
+   (1,048,576 bytes), so the limit is 57,671,680 bytes — do not read it as
+   55 MB. At v0.2.30 the `.msi` was 48,742,400 bytes = **46.48 MiB**, leaving
+   **8,929,280 bytes = 8.52 MiB (8.93 MB)** of headroom; the `.dmg` was
+   36,541,885 bytes = 34.85 MiB. The `.msi` is the binding one.
+
+   That headroom is recent. The `.msi` sat between 9.46 and 9.55 MiB from
+   v0.2.9 through v0.2.23, then reached 46.43 MiB at v0.2.25 — a 4.9× step
+   when the pinned local CommHub sidecar and the supervised zero-config local
+   Hub were bundled (#95, #96). Until then the ceiling was slack; it is now
+   the real constraint. Weigh any new bundled runtime against these bytes
+   before adding it.
 
 ## 5. Audit the draft before publishing
 

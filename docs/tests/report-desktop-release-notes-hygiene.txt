@@ -82,6 +82,28 @@ Review of revision 1 (6b8d5c90fe39ea46) found three, all fixed here.
    since tauri-action resolves a release by tag name and otherwise appends to an
    existing draft.
 
+## Revision 3: size figures corrected
+
+The SOP's size-ceiling paragraph read "48.7 MB — roughly 6 MB of headroom",
+which mixed decimal MB against a gate expressed in MiB. `find -size +55M` uses
+MiB, so the limit is 55 × 1,048,576 = 57,671,680 bytes. Measured from the
+published v0.2.30 assets:
+
+    .msi          48,742,400 bytes  = 46.48 MiB   headroom 8,929,280 B = 8.52 MiB
+    .dmg          36,541,885 bytes  = 34.85 MiB
+    .app.tar.gz   35,817,590 bytes  = 34.16 MiB
+    -setup.exe    35,169,470 bytes  = 33.54 MiB
+
+The error was conservative — it understated the remaining room — so nothing
+built on it was unsafe. It is corrected because the paragraph exists to be used
+as an arithmetic input, and an input with the wrong base is not usable.
+
+The same query produced the trend now recorded alongside it: the `.msi` moved
+between 9.46 and 9.55 MiB from v0.2.9 to v0.2.23, then to 46.43 MiB at v0.2.25
+(4.9×), matching the bundling of the pinned local CommHub sidecar and the
+supervised local Hub (#95, #96). v0.2.24 has no published release — it is one
+of the leftover drafts noted in section 2.
+
 ## Witnessed-red (container grade)
 
 Same build context, one sabotage: releaseBody restored to the v0.2.30 string
