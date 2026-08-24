@@ -21,7 +21,7 @@ import AuthedThumb, { AttachmentFile, AuthedVideo, mimeFromName } from './Authed
 import AuthedWebThumb from './AuthedWebThumb';
 import { fetchStatus, fetchTasks, sendTask, HubConfig, HubTask, Session, TaskAttachment } from './api';
 import { outboxAdd, outboxForAlias, outboxMarkFailed, outboxMarkPending, outboxRemove } from './outbox';
-import { senderLabelFor } from './chat-sender';
+import { resolveSender } from './chat-sender';
 import {
   ATTACH_ENABLED,
   attachmentTextHint,
@@ -610,7 +610,7 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
             // 会话是按收件人拉的(to_name=alias),发件人是谁得读 from_name ——
             // 网络里任何节点都能派单给这个 alias,一律记成本人会把别人的指令
             // 显示成自己说过的话。
-            const sender = senderLabelFor(item, currentUsername);
+            const sender = resolveSender(item, currentUsername);
             return (
               <View style={styles.bubbleWrap}>
                 {showHeader && item.created_at ? (
@@ -619,7 +619,7 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
                 <View style={[styles.messageRow, styles.sentRow]}>
                   <View style={[styles.messageContent, styles.sentContent]}>
                     <Text style={[styles.messageAuthor, styles.sentAuthor]} numberOfLines={1}>
-                      {sender}
+                      {sender.alias}
                     </Text>
                     <Pressable
                       {...(desktop ? ({ dataSet: { messageKey: msgKey(item), messagePart: 'sent' } } as any) : {})}
@@ -633,7 +633,7 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
                       </View>
                     </Pressable>
                   </View>
-                  <AliasAvatar alias={sender} size={36} />
+                  <AliasAvatar alias={sender.alias} size={36} />
                 </View>
                 {item.result || item.reply ? (
                   <View style={[styles.messageRow, styles.replyRow]}>
@@ -662,9 +662,10 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
                   <Pressable onPress={() => retry(item)} hitSlop={8}>
                     <Text style={styles.failedMark}>未送达 · 点击重试</Text>
                   </Pressable>
-                ) : !(item.result ?? item.reply) ? (
+                ) : sender.isCurrentUser && !(item.result ?? item.reply) ? (
                   // PR3 要求2:「送达了但对方没回」≠「未送达」——前者灰勾不可点(不用重试),
                   // 后者红字带重试。服务器行(无 _localId 标志)= hub 已收 = 已送达。
+                  // 只对自己发出的消息成立:别人派来的任务标「已送达」等于说这条是你发的。
                   <Text style={styles.deliveredMark}>已送达 ✓</Text>
                 ) : null}
               </View>
