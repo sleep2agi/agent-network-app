@@ -1,13 +1,24 @@
 {
-  "_why": "#50 updated assets/icon.png and left the Android adaptive icons on the previous cyan mark, so mobile shipped a logo the desktop and the website had already replaced. Nothing failed, because nothing tied the derived assets to the source. This file is that tie: the test recomputes these digests, and a brand change that skips regeneration turns red.",
+  "_why": "Ties the Android adaptive layers to the brand mark they are cut from. #50 replaced assets/icon.png and left these behind, and no gate noticed. src/icon-assets.test.ts re-runs the generator recorded here and compares pixels, so a brand change that skips regeneration fails at commit time instead of shipping.",
+  "generator": "scripts/generate-android-icons.mjs",
+  "generator_sha256": "887b667de651e3e1f331c4cce0d85defafbbe4bc48af41bc6b596859e976c251",
+  "params": {
+    "canvas": 1024,
+    "safeZoneFraction": 0.66,
+    "lumaLow": 32,
+    "lumaHigh": 120,
+    "coreThreshold": 0.45,
+    "dilateRadius": 10,
+    "plateMaskCeiling": 0.03,
+    "plateAlphaFloor": 200
+  },
+  "background_color_rule": "per-channel median of source pixels with mark-mask < plateMaskCeiling and alpha >= plateAlphaFloor",
   "source": "assets/icon.png",
   "source_sha256": "834f58f77ad0c62fadc3cf4c6f8b17f5941df37fefcb1af90b9bcfd63582aeb3",
-  "canvas": 1024,
-  "safe_zone_fraction": 0.66,
   "background_color": "#011133",
   "derived": {
-    "assets/android-icon-foreground.png": "38c571af960a2e15b2d9520d7bac1ef68b2ee4bfed72877384f364d1795f6226",
-    "assets/android-icon-background.png": "6585d998e013f7e55b02c54e57e077f4db599b16fc86de9e92f54d139c373c6d",
-    "assets/android-icon-monochrome.png": "86d29b4d9d4d304b3133828f59566cbed5097c4687e89499d454bedf4e2dd337"
+    "assets/android-icon-foreground.png": "3e5abd839c4e26b079889070270eae597ae6b63714acfa59104dbf0ebeb7ec08",
+    "assets/android-icon-background.png": "e584bd737e9e78a2c3b1337c5ddaaea45259e9575ed7963e92b4a80a69a57368",
+    "assets/android-icon-monochrome.png": "701a518bc79cb4d59dc976aa688faa262bf18c9624d3315a7277d98527b1bcbb"
   }
 }
