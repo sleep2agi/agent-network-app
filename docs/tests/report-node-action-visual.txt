@@ -24,7 +24,7 @@ Image: anet-app-issue140:test
 Dockerfile: tests/test-node-action-visual/Dockerfile
 
   node action visual hierarchy: 17/17 checks passed
-  npm test: 40/40 test files passed
+  npm test on the rebased integration head: 41/41 test files passed
   npm run typecheck: clean
   container exit: 0
 
