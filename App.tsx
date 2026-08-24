@@ -39,6 +39,7 @@ import { clearConfig, listHubProfiles, loadConfig, loadLocalAvatars, loadOutbox,
 import { clearProfileUnauthorized, onProfileUnauthorized } from './src/profile-auth-state';
 import { initOutbox } from './src/outbox';
 import { colors, onThemeChange, setThemeMode, spacing, themeMode } from './src/theme';
+import { installWebScrollbarTheme } from './src/web-scrollbar';
 import { styles } from './src/app-styles';
 import { APP_VERSION } from './src/version';
 import DesktopUpdatePrompt from './src/DesktopUpdatePrompt';
@@ -111,6 +112,9 @@ function AppRoot() {
   // rebuilt by the onThemeChange listeners, the new key re-renders the tree.
   const [theme, setTheme] = useState(themeMode());
   useEffect(() => onThemeChange(setTheme), []);
+  // Scrollbars are painted by the browser, outside React Native's style
+  // system, so they need the palette pushed to them explicitly.
+  useEffect(() => installWebScrollbarTheme(), []);
   useEffect(() => onDesktopThemeStorageChange(mode => {
     if (mode === 'light' || mode === 'dark') setThemeMode(mode);
   }), []);
