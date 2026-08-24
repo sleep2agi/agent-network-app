@@ -94,6 +94,13 @@ jobs:
       # One draft release receives both platform bundles, their mandatory
       # updater signatures, and latest.json. Publishing the draft atomically
       # makes it visible to installed clients via releases/latest.
+      #
+      # 🔴 `releaseBody` is USER-FACING, not a note to ourselves: tauri-action
+      # copies it verbatim into latest.json `notes`, and the in-app updater
+      # renders those notes in the update prompt. Release *discipline* (audit
+      # the draft, publish only after the smoke gates pass, sync the manifest
+      # afterwards) belongs in docs/desktop-release-sop.md — never in a string
+      # that ships to users. src/release-notes-hygiene.test.ts enforces this.
       - uses: tauri-apps/tauri-action@944946e3e4cac6603d1fe8f514171e9ecd3c78aa # v1
         env:
           GITHUB_TOKEN: ${{ github.token }}
@@ -107,7 +114,7 @@ jobs:
         with:
           tagName: desktop-v__VERSION__
           releaseName: Agent Network Desktop v__VERSION__
-          releaseBody: Signed macOS and Windows desktop update. Publish this draft only after installation smoke tests pass.
+          releaseBody: Signed and notarized desktop update for macOS (Apple Silicon) and Windows (x64). Existing installations can update in place; new installations use the assets below.
           releaseDraft: true
           prerelease: false
           updaterJsonPreferNsis: true
