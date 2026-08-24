@@ -4,7 +4,9 @@ Date: 2026-08-24
 Repo: https://github.com/sleep2agi/agent-network-app (public)
 Branch: fix/mobile-logo-sync
 Base: 8a454431d0f952296195067471cc01fecaca0920 (= origin/main, merge-base)
-Source commit under test: 71455690b92bbdc45675585008258a08e4537cb8
+Source commit under test: 79fce38b7961f8861dfff84bb4509bbbf0f8ece2
+  (revision 2 — the derivation is now a script the build re-runs; revision 1 was
+  71455690b92bbdc45675585008258a08e4537cb8)
 Docker tag: anet-logo:dev
 Embedded ENV: LOGO_SOURCE_COMMIT=71455690b92bbdc45675585008258a08e4537cb8
 
@@ -49,6 +51,36 @@ Android guarantees survives every launcher mask.
 colour. Left at the old value, any launcher mask larger than the background
 image would show a ring of the wrong dark around the icon.
 
+## Revision 2: a recorded process, not a recorded result
+
+Revision 1 generated the layers on a laptop with Pillow and SciPy — neither is a
+dependency of this repository — and recorded digests. Two problems with that:
+
+1. **It recorded what the files are, not how they came to be.** Anything the
+   build cannot re-run is a claim.
+2. **Digests do not catch the mistake that shipped.** Replace the brand mark and
+   leave the derived layers untouched, and every derived digest still matches,
+   because those files were never edited. Only the source digest moves — and
+   updating it is the obvious thing to do when you change the source.
+
+`scripts/generate-android-icons.mjs` now carries the process end to end, using
+one declared dependency (`pngjs`) and arithmetic: luminance ramp, largest
+connected component, area-average resample, safe-circle fit, and the background
+colour as the per-channel median of the plate pixels — a rule that re-derives
+itself on new artwork rather than a number someone read once.
+
+The test re-runs it into a temporary directory and compares **decoded pixels**
+against what is committed. Pixels rather than bytes, so a different PNG encoder
+is not mistaken for a different icon.
+
+Cross-checks before committing:
+
+- consecutive runs are byte-identical;
+- the JS pipeline finds the same 275511-pixel component and the same `#011133`
+  plate colour as the throwaway Python one it replaces;
+- the manifest records the generator, its digest, every parameter and the colour
+  rule, so a silent change to the process is as visible as one to its output.
+
 ## The guard
 
 `assets/icon-derivation.json` records the source digest, the three derived
@@ -65,19 +97,37 @@ time rather than being noticed in a screenshot after release.
 PASS, exit 0.
 
 - `npm test` → **37/37 test files passed**
-- `src/icon-assets.test.ts` → **17 checks**, all PASS
+- `src/icon-assets.test.ts` → **22 checks** (was 17), all PASS
 - `npm run typecheck` → clean
 - scrub gate → replayed verbatim, 103 files scanned, clean
 
 ## Witnessed-red (container grade)
 
+### Revision 2
+
 | sabotage | result |
 |---|---|
-| **the original incident re-enacted** — `icon.png` changed, derived assets untouched | `FAIL: the brand source matches the digest the icons were derived from` · 36/37 · exit 1 |
-| foreground reverted to the old cyan file | `FAIL: assets/android-icon-foreground.png matches its recorded digest` · 36/37 · exit 1 |
-| `app.json` backgroundColor put back to `#0b0b0d` | `FAIL: adaptive backgroundColor matches the generated background` · 36/37 · exit 1 |
+| **the incident, played straight**: brand source replaced, `source_sha256` honestly updated, derived layers untouched | `FAIL: assets/android-icon-foreground.png is what the generator produces from the current source` · 36/37 · exit 1 |
+| generator parameter changed (`safeZoneFraction` 0.66 → 0.80), outputs and manifest untouched | same assertion · 36/37 · exit 1 |
 
-The first row is the point: the guard fails on the exact mistake that shipped.
+The first row is the one that matters, and note **where** it fails: not on a
+digest. Every recorded digest still matched — the source digest was updated
+truthfully and the derived files were never edited. A digest-only guard passes
+this. It fails because regenerating no longer reproduces what is committed.
+
+Recorded honestly: the first attempt at that sabotage did not apply — the script
+could not resolve `pngjs` from outside the project and exited before touching
+anything, so the run came back 37/37 against an unmodified tree. A green run on
+a tree that was never sabotaged proves nothing; it was redone by swapping the
+source for a different real image, which needs no image library.
+
+### Revision 1 (digest-only assertions, superseded)
+
+| sabotage | result |
+|---|---|
+| `icon.png` changed, derived assets untouched | `FAIL: the brand source matches the digest…` · 36/37 · exit 1 |
+| foreground reverted to the old cyan file | `FAIL: … matches its recorded digest` · 36/37 · exit 1 |
+| `app.json` backgroundColor back to `#0b0b0d` | `FAIL: adaptive backgroundColor matches…` · 36/37 · exit 1 |
 
 ## Verified elsewhere, and what is still open
 
