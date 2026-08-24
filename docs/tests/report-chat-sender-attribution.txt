@@ -81,6 +81,22 @@ pure-function test would have stayed green through that sabotage, since the
 function it tests is still correct — it is simply no longer called. The guard
 has to cover the wiring, because the wiring is what broke.
 
+## Windows CI red, and what it was
+
+The first push was green on ubuntu and **red on windows-latest**:
+
+    error: FAIL: the author line renders the derived sender
+    at D:\a\agent-network-app\agent-network-app\src\chat-sender.test.ts:52:22
+
+The source-contract assertions matched on "\n" while a Windows checkout has
+CRLF, so the guard failed on the platform rather than on the code — the exact
+trap src/version-consistency.test.ts already normalises against. The test now
+normalises newlines before matching.
+
+Re-verified by reproducing the condition rather than assuming: the build context
+was converted to CRLF and rebuilt as anet-chat-test122:crlf, giving 16/16 checks
+and 34/34 files green, exit 0.
+
 ## Not verified here
 
 The fix is asserted at unit and source level, not against a live hub — that

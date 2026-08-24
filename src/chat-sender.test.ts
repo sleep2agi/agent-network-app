@@ -5,7 +5,12 @@ const ME = 'vansin';
 
 // A pure-function test alone would stay green if the screen stopped calling it,
 // which is exactly the defect being fixed. Pin the wiring too.
-const screen = fs.readFileSync(new URL('./ChatScreen.tsx', import.meta.url), 'utf8');
+// Normalised: a Windows checkout has CRLF, and an assertion anchored on "\n"
+// would red there while passing on Linux — the trap version-consistency.test.ts
+// already guards against.
+const screen = fs
+  .readFileSync(new URL('./ChatScreen.tsx', import.meta.url), 'utf8')
+  .replace(/\r\n?/g, '\n');
 
 const checks: Array<[string, boolean]> = [
   // The bug: a task dispatched to this alias by another node was credited to
