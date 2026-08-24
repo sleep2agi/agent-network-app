@@ -1,0 +1,24 @@
+{
+  "_why": "Ties the Android adaptive layers to the brand mark they are cut from. #50 replaced assets/icon.png and left these behind, and no gate noticed. src/icon-assets.test.ts re-runs the generator recorded here and compares pixels, so a brand change that skips regeneration fails at commit time instead of shipping.",
+  "generator": "scripts/generate-android-icons.mjs",
+  "generator_sha256": "4c0b3bc03f1f63ccd96e921e5d7386cef583e3276adb01cc5765fc65042d5573",
+  "params": {
+    "canvas": 1024,
+    "safeZoneFraction": 0.66,
+    "lumaLow": 32,
+    "lumaHigh": 120,
+    "coreThreshold": 0.45,
+    "dilateRadius": 10,
+    "plateMaskCeiling": 0.03,
+    "plateAlphaFloor": 200
+  },
+  "background_color_rule": "per-channel median of source pixels with mark-mask < plateMaskCeiling and alpha >= plateAlphaFloor",
+  "source": "assets/icon.png",
+  "source_sha256": "834f58f77ad0c62fadc3cf4c6f8b17f5941df37fefcb1af90b9bcfd63582aeb3",
+  "background_color": "#011133",
+  "derived": {
+    "assets/android-icon-foreground.png": "3e5abd839c4e26b079889070270eae597ae6b63714acfa59104dbf0ebeb7ec08",
+    "assets/android-icon-background.png": "e584bd737e9e78a2c3b1337c5ddaaea45259e9575ed7963e92b4a80a69a57368",
+    "assets/android-icon-monochrome.png": "701a518bc79cb4d59dc976aa688faa262bf18c9624d3315a7277d98527b1bcbb"
+  }
+}

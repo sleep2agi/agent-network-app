@@ -1,0 +1,150 @@
+# Android adaptive icon — regenerated from the current brand mark
+
+Date: 2026-08-24
+Repo: https://github.com/sleep2agi/agent-network-app (public)
+Branch: fix/mobile-logo-sync
+Base: 8a454431d0f952296195067471cc01fecaca0920 (= origin/main, merge-base)
+Source commit under test: 79fce38b7961f8861dfff84bb4509bbbf0f8ece2
+  (revision 2 — the derivation is now a script the build re-runs; revision 1 was
+  71455690b92bbdc45675585008258a08e4537cb8)
+Docker tag: anet-logo:dev
+Embedded ENV: LOGO_SOURCE_COMMIT=71455690b92bbdc45675585008258a08e4537cb8
+
+## What was wrong, measured
+
+Colour profiles of the shipped assets on `main`:
+
+    icon.png                    27.1% transparent, dominant #000020 (dark navy plate)
+    splash-icon.png             27.2% transparent, dominant #000020   ← same artwork
+    favicon.png                 24.9% transparent, dominant #000020   ← same artwork
+    android-icon-foreground.png 98.2% transparent, dominant #20c0e0   ← the OLD cyan hub
+    android-icon-monochrome.png 98.2% transparent, same silhouette    ← from the OLD mark
+    android-icon-background.png 100% opaque #000000
+
+So #50 replaced the brand icon, the favicon and the splash, and left the three
+Android adaptive assets on the previous mark. Nothing failed at any gate,
+because **nothing tied the derived icons to the source they are derived from**.
+
+## Extracting the mark
+
+Colour distance does not separate mark from plate: the plate is a gradient (the
+three corner samples were `#12296b`, `#012f75`, `#000f37`) and its rounded
+outline is as saturated as the mark. Thresholding by luminance alone kept that
+outline, and because the outline reaches further than the mark it also drove the
+centring and the scale — the mark came out small and off-centre.
+
+Luminance plus connected components separates them cleanly:
+
+    largest components (px): 275511, 9710, 46, 41
+                             ^mark   ^plate outline
+
+Keeping only the largest leaves the mark with its glow, no plate edge.
+
+Scale then follows geometry instead of a guessed number: the mark is fitted so
+its outermost visible pixel lands exactly on the 66% safe circle — the region
+Android guarantees survives every launcher mask.
+
+    significant radius 337px / safe radius 338px
+    background colour sampled from the plate: #011133
+
+`app.json`'s `adaptiveIcon.backgroundColor` moves from `#0b0b0d` to that sampled
+colour. Left at the old value, any launcher mask larger than the background
+image would show a ring of the wrong dark around the icon.
+
+## Revision 2: a recorded process, not a recorded result
+
+Revision 1 generated the layers on a laptop with Pillow and SciPy — neither is a
+dependency of this repository — and recorded digests. Two problems with that:
+
+1. **It recorded what the files are, not how they came to be.** Anything the
+   build cannot re-run is a claim.
+2. **Digests do not catch the mistake that shipped.** Replace the brand mark and
+   leave the derived layers untouched, and every derived digest still matches,
+   because those files were never edited. Only the source digest moves — and
+   updating it is the obvious thing to do when you change the source.
+
+`scripts/generate-android-icons.mjs` now carries the process end to end, using
+one declared dependency (`pngjs`) and arithmetic: luminance ramp, largest
+connected component, area-average resample, safe-circle fit, and the background
+colour as the per-channel median of the plate pixels — a rule that re-derives
+itself on new artwork rather than a number someone read once.
+
+The test re-runs it into a temporary directory and compares **decoded pixels**
+against what is committed. Pixels rather than bytes, so a different PNG encoder
+is not mistaken for a different icon.
+
+Cross-checks before committing:
+
+- consecutive runs are byte-identical;
+- the JS pipeline finds the same 275511-pixel component and the same `#011133`
+  plate colour as the throwaway Python one it replaces;
+- the manifest records the generator, its digest, every parameter and the colour
+  rule, so a silent change to the process is as visible as one to its output.
+
+## The guard
+
+`assets/icon-derivation.json` records the source digest, the three derived
+digests, the canvas, the safe-zone fraction and the sampled colour.
+`src/icon-assets.test.ts` recomputes all of it.
+
+The important assertion is the first one: **the brand source must still hash to
+what the icons were derived from**. That is exactly the invariant whose absence
+allowed this bug — updating `icon.png` without regenerating now fails at commit
+time rather than being noticed in a screenshot after release.
+
+## Result
+
+PASS, exit 0.
+
+- `npm test` → **37/37 test files passed**
+- `src/icon-assets.test.ts` → **22 checks** (was 17), all PASS
+- `npm run typecheck` → clean
+- scrub gate → replayed verbatim, 103 files scanned, clean
+
+## Witnessed-red (container grade)
+
+### Revision 2
+
+| sabotage | result |
+|---|---|
+| **the incident, played straight**: brand source replaced, `source_sha256` honestly updated, derived layers untouched | `FAIL: assets/android-icon-foreground.png is what the generator produces from the current source` · 36/37 · exit 1 |
+| generator parameter changed (`safeZoneFraction` 0.66 → 0.80), outputs and manifest untouched | same assertion · 36/37 · exit 1 |
+
+The first row is the one that matters, and note **where** it fails: not on a
+digest. Every recorded digest still matched — the source digest was updated
+truthfully and the derived files were never edited. A digest-only guard passes
+this. It fails because regenerating no longer reproduces what is committed.
+
+Recorded honestly: the first attempt at that sabotage did not apply — the script
+could not resolve `pngjs` from outside the project and exited before touching
+anything, so the run came back 37/37 against an unmodified tree. A green run on
+a tree that was never sabotaged proves nothing; it was redone by swapping the
+source for a different real image, which needs no image library.
+
+### Revision 1 (digest-only assertions, superseded)
+
+| sabotage | result |
+|---|---|
+| `icon.png` changed, derived assets untouched | `FAIL: the brand source matches the digest…` · 36/37 · exit 1 |
+| foreground reverted to the old cyan file | `FAIL: … matches its recorded digest` · 36/37 · exit 1 |
+| `app.json` backgroundColor back to `#0b0b0d` | `FAIL: adaptive backgroundColor matches…` · 36/37 · exit 1 |
+
+## Verified elsewhere, and what is still open
+
+`splash-icon.png` and `favicon.png` were checked and are **already** the current
+artwork — their colour profiles match `icon.png`. They are not touched here.
+
+iOS `AppIcon` is generated by `expo prebuild` from `expo.icon`, which points at
+`assets/icon.png` — the source this branch pins. That is the wiring; it is not
+proof.
+
+**Still open — real-package verification.** Nothing here unpacks an APK or an
+`Assets.car`. Confirming the launcher icon and the iOS AppIcon actually render
+the new mark needs the next Android and iOS builds from this branch, then:
+
+- APK: unzip and inspect `res/mipmap-*/` for the adaptive drawable and its
+  foreground/background layers;
+- IPA: extract `Payload/*.app/Assets.car` and confirm the AppIcon slots carry the
+  new mark.
+
+Listed as the acceptance step, not claimed here.
