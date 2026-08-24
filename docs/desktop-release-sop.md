@@ -61,10 +61,10 @@ cannot correct it at trigger time.
 
 ### `src-tauri/Cargo.lock`: change the root package only
 
-Edit exactly this stanza:
+The lock file lists every crate as a package entry. Edit only the `version`
+line of the entry whose name is the app itself:
 
 ```toml
-[[package]]
 name = "agent-network-desktop"
 version = "<new version>"
 ```
@@ -74,15 +74,36 @@ v0.2.30 did exactly that (#119) and moved an unrelated crate — `filetime`
 happened to sit at `0.2.29` — to `0.2.30` while leaving its checksum line
 untouched. `cargo check --locked` then failed on the checksum mismatch, and
 #120 had to restore the pinned version. After editing, run
-`git diff src-tauri/Cargo.lock` and confirm that **exactly one `[[package]]`
-stanza changed**. A second changed stanza is collateral damage; revert it.
+`git diff src-tauri/Cargo.lock` and confirm that **exactly one package entry
+changed**. A second changed entry is collateral damage; revert it.
 
 Every push and pull request runs `.github/workflows/unit-tests.yml`
 (`npm ci && npm test` on ubuntu and windows). Merge only when it is green.
 
 ## 2. Trigger the signed release
 
-Take the full 40-character SHA of the merged commit:
+### Preflight: nothing may already claim this version
+
+`tauri-action` looks a release up **by tag name**. If a release with that tag
+already exists — including an unpublished draft — the run attaches its bundles
+to that existing release instead of creating a new one, and a single draft ends
+up holding artifacts from two different commits with no tag ref to expose the
+mismatch. Check both before triggering:
+
+```bash
+gh api repos/sleep2agi/agent-network-app/releases \
+  --paginate -q '.[]|select(.draft==true)|"\(.tag_name)\t\(.target_commitish)"'
+git ls-remote origin refs/tags/desktop-v<version>
+```
+
+Stop if either the draft list contains `desktop-v<version>` or the tag ref
+exists. Resolve it first (section 8) or pick the next version. As of
+2026-08-24 the repository carried three such leftovers — `desktop-v0.2.24`,
+`desktop-v0.2.15`, and `desktop-v0.2.24-obsolete-d6c688d` — each holding eight
+signed assets with no tag ref, and the "obsolete" name is what a manual
+workaround for this looks like.
+
+Then take the full 40-character SHA of the merged commit:
 
 ```bash
 git rev-parse origin/main
@@ -159,25 +180,40 @@ with a clean way back.
 ```bash
 gh release view desktop-v<version> --repo sleep2agi/agent-network-app \
   --json tagName,isDraft,isPrerelease,targetCommitish,assets
-gh api repos/sleep2agi/agent-network-app/git/ref/tags/desktop-v<version> \
-  -q '.object.sha,.object.type'
 gh run view <run id> --repo sleep2agi/agent-network-app --json jobs
 ```
 
 Publish only when all of these hold:
 
-- `targetCommitish` equals the 40-character SHA you triggered with, and the tag
-  ref resolves to that same commit;
+- `targetCommitish` equals the 40-character SHA you triggered with;
 - both platform jobs concluded `success`;
 - the eight expected assets are present: macOS `.dmg` and `.app.tar.gz`,
   Windows `x64-setup.exe` and `x64_en-US.msi`, the `.sig` for each updater
   artifact, and `latest.json`;
 - asset sizes match the build log.
 
+**Do not look for a tag here.** GitHub creates the tag when the release is
+published, not when the draft is created, so `git/ref/tags/desktop-v<version>`
+returns 404 at this point and that is the expected state. Its *presence* before
+publishing is the alarming case: it means a tag of that name already exists
+from some earlier attempt, which is the preflight stop condition in section 2.
+
 An updater signature is bound to the **exact bytes** it signed. Swapping an
 asset while keeping its `.sig` breaks updates for every installed client.
 
-## 6. Publish, then sync the manifest
+## 6. Publish, verify the tag, then sync the manifest
+
+Publish the draft, then immediately confirm the tag GitHub just created points
+at the commit you audited:
+
+```bash
+gh api repos/sleep2agi/agent-network-app/git/ref/tags/desktop-v<version> \
+  -q '.object.sha,.object.type'
+```
+
+The SHA must equal the `targetCommitish` from section 5 and the commit passed
+to the workflow. Only then continue to the manifest. If it does not match, stop
+and escalate — do not attempt to correct it by moving the tag (section 8).
 
 **Order matters and cannot be reversed.** The URLs inside `latest.json` point
 at `https://api.github.com/repos/.../releases/assets/<id>`, and assets attached
@@ -229,13 +265,22 @@ ones that catch real breakage:
 Fix the cause and re-trigger; the same version number may be reused with the
 new `main` SHA.
 
-**Once a draft, tag, or any platform asset exists** — the default is to bump
-the patch version and release again. Reusing the version is permitted only
-when all of the following are true: the failed draft's assets are deleted
-precisely by asset ID, the tag is re-bound to the exact intended target, the
-run is repeated in full, and a maintainer has explicitly authorized the reuse.
-Otherwise a single tag ends up holding artifacts built from two different
-commits.
+**Once a draft, a tag, or any platform asset exists** — the default is to bump
+the patch version and release again. Reusing the version number is permitted
+only when a maintainer explicitly authorizes it *and* all of the following are
+done first:
+
+1. delete the failed draft's assets precisely, by asset ID — never by name;
+2. delete the failed draft outright, or empty it, so nothing from the previous
+   attempt can be inherited;
+3. confirm that **no remote tag ref of that name exists**
+   (`git ls-remote origin refs/tags/desktop-v<version>` must print nothing);
+4. re-run the workflow in full against the exact new `main` SHA.
+
+If step 3 finds a tag, the version number is spent. Bump instead. A tag ref
+that already exists is never moved, re-bound, or deleted to make room — not for
+a draft, not for a failed run, not for a published release. Skipping these
+steps leaves one tag holding artifacts built from two different commits.
 
 **Once published** — a release cannot be recalled; clients may already have
 updated. The only remedies are to point `latest.json` back at the previous
