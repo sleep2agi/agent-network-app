@@ -1,0 +1,46 @@
+Issue: sleep2agi/agent-network-app#140
+Base: origin/main 67345449418ba946ea7eef60ddb19f409f566d1e
+
+Observed problem
+----------------
+Desktop 0.2.33-1 rendered restart, stop and delete as three oversized,
+high-saturation primary buttons. Delete changed only its text colour, leaving
+the same cyan fill and therefore the same visual weight as ordinary actions.
+
+Implemented hierarchy
+---------------------
+- Restart: compact neutral outline.
+- Stop: compact amber caution outline.
+- Delete: compact red destructive outline and exact-alias confirmation remains.
+- All three are 34px high with a 92px minimum width, wrap on narrow layouts,
+  and expose hover, pressed, keyboard-focus and accessibility states.
+- The semantic colour resolver is palette-driven and verified independently
+  against both the dark and light palettes. No action uses the primary accent
+  as an opaque fill.
+
+Docker verification
+-------------------
+Image: anet-app-issue140:test
+Dockerfile: tests/test-node-action-visual/Dockerfile
+
+  node action visual hierarchy: 17/17 checks passed
+  npm test on the rebased integration head: 41/41 test files passed
+  npm run typecheck: clean
+  container exit: 0
+
+Witnessed red
+-------------
+Single sabotage: remove the danger mapping so delete falls through to the
+neutral action style.
+
+  FAIL: dark: delete is destructive red
+  container exit: 1
+
+This proves the guard observes the semantic danger styling rather than merely
+the presence of three labels or press handlers.
+
+Not proven by this suite
+------------------------
+Pixel-level aesthetic approval still needs a packaged Desktop screenshot in
+dark and light themes. The test proves hierarchy, dimensions and interaction
+wiring; it does not claim that a human has approved the final appearance.
