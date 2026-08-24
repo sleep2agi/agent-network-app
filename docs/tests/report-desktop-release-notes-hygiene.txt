@@ -1,0 +1,87 @@
+# desktop release SOP rewrite + user-facing release notes guard
+
+Date: 2026-08-24
+Repo: https://github.com/sleep2agi/agent-network-app (public)
+Branch: docs/desktop-release-sop-current
+Base: 972a45e2646c555b7955d9b2d7fede6a01225e3b (= origin/main, merge-base)
+Source commit under test: 6b8d5c90fe39ea4655a0d410612b0b4087978aa0
+Docker tag: anet-sop-test121:dev
+Docker image id: sha256:24a66f06a821434df231e99c256e588b0089fd81d0a1fe499460380d8672143c
+Embedded ENV: SOP_SOURCE_COMMIT=6b8d5c90fe39ea4655a0d410612b0b4087978aa0
+Build context: git archive <source commit> (clean tree; npm ci runs inside the
+  image from package.json + package-lock.json only — no host node_modules is
+  mounted, copied, or symlinked)
+
+## Scope
+
+1. docs/desktop-release-sop.md rewritten from the retired manual-signing path
+   to the current .github/workflows/release-desktop-auto-update.yml path.
+2. releaseBody no longer ships a maintainer instruction to end users.
+3. src/release-notes-hygiene.test.ts added as the guard.
+
+## Commands
+
+  docker build --build-arg SOURCE_COMMIT=6b8d5c90fe39ea4655a0d410612b0b4087978aa0 \
+    -t anet-sop-test121:dev .
+  docker run --rm anet-sop-test121:dev
+
+The container runs, in order: `npm test` (scripts/run-tests.mjs, bun 1.3.14),
+`npm run typecheck` (tsc --noEmit -p tsconfig.build.json), and an independent
+YAML parse of every workflow file.
+
+## Result
+
+PASS. Container echoed
+`# desktop-sop source=6b8d5c90fe39ea4655a0d410612b0b4087978aa0`
+and exited 0.
+
+- npm test: **34/34 test files passed** (33 before this change; the new file is
+  picked up by scripts/run-tests.mjs automatically — it scans src/ for
+  *.test.ts, no registration needed).
+- src/release-notes-hygiene.test.ts: 8 assertions, all PASS.
+- npm run typecheck: clean.
+- YAML parse: all 7 workflow files under .github/workflows parse.
+- Independent cross-check: the YAML parser (not a regex) extracted
+  jobs.build-release.steps[tauri-apps/tauri-action].with.releaseBody and
+  confirmed the same two properties the test asserts. Two different readers,
+  same conclusion.
+
+Parsed releaseBody:
+
+  Signed and notarized desktop update for macOS (Apple Silicon) and Windows
+  (x64). Existing installations can update in place; new installations use the
+  assets below.
+
+## Witnessed-red (container grade)
+
+Same build context, one sabotage: releaseBody restored to the v0.2.30 string
+`Signed macOS and Windows desktop update. Publish this draft only after
+installation smoke tests pass.` Rebuilt as anet-sop-test121:red
+(sha256:… separate image) and run:
+
+  # src/release-notes-hygiene.test.ts
+  error: FAIL: no "draft" (the GitHub draft state is ours, not the user's) —
+    release discipline belongs in docs/desktop-release-sop.md, not in notes
+    shipped to users
+  === 33/34 test files passed ===
+  exit code 1
+
+Exactly one file red, and it is the regression the guard exists for. The clean
+image is fully green. The sabotage was applied only inside the throwaway build
+context, never in the worktree or the branch.
+
+## Not done (out of the permission granted for this change)
+
+- No release workflow was triggered.
+- No macos-signing environment approval was requested or granted.
+- No tag, release, or release asset was created, modified, or published.
+- No deployment of any kind.
+- The pull request is a draft and was not marked ready for review.
+
+## Notes
+
+Anything the guard cannot see: it checks the string the workflow passes to
+tauri-action. If a future change moves the notes to a file or generates them at
+runtime, the test fails closed (no `releaseBody:` key found) rather than
+silently passing — that failure is the signal to update the guard, not to
+delete it.
