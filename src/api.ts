@@ -519,11 +519,14 @@ export interface TaskAttachment {
   size?: number;
 }
 
+export type TaskPriority = 'high' | 'normal' | 'low';
+
 export const sendTask = async (
   cfg: HubConfig,
   to: string,
   content: string,
   attachments?: TaskAttachment[],
+  priority: TaskPriority = 'normal',
 ) => {
   const networkId = cfg.networkId ?? (await fetchNetworkId(cfg));
   const res = await withTimeout(signal =>
@@ -534,6 +537,7 @@ export const sendTask = async (
       body: JSON.stringify({
         alias: to,
         task: content,
+        priority,
         network_id: networkId,
         ...(attachments?.length ? { attachments } : {}),
       }),
