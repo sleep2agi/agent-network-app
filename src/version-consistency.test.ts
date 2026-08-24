@@ -1,6 +1,6 @@
 import fs from 'node:fs';
 
-const expected = '0.2.33-beta.1';
+const expected = '0.2.33-1';
 const packageJson = JSON.parse(fs.readFileSync(new URL('../package.json', import.meta.url), 'utf8'));
 const packageLock = JSON.parse(fs.readFileSync(new URL('../package-lock.json', import.meta.url), 'utf8'));
 const appJson = JSON.parse(fs.readFileSync(new URL('../app.json', import.meta.url), 'utf8'));
@@ -9,11 +9,13 @@ const cargoToml = fs.readFileSync(new URL('../src-tauri/Cargo.toml', import.meta
 const cargoLock = fs.readFileSync(new URL('../src-tauri/Cargo.lock', import.meta.url), 'utf8');
 const versionSource = fs.readFileSync(new URL('./version.ts', import.meta.url), 'utf8');
 const normalizeNewlines = (text: string) => text.replace(/\r\n?/g, '\n');
+const prerelease = expected.split('-', 2)[1];
 const cargoPackagePattern = new RegExp(
   `name = "agent-network-desktop"\\nversion = "${expected.replaceAll('.', '\\.')}"`,
 );
 
 const checks: Array<[string, boolean]> = [
+  ['Windows MSI prerelease identifier', !prerelease || /^\d+$/.test(prerelease) && Number(prerelease) <= 65535],
   ['package.json', packageJson.version === expected],
   ['package-lock root', packageLock.version === expected],
   ['package-lock workspace', packageLock.packages?.['']?.version === expected],
