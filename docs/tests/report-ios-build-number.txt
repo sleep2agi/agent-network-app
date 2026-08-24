@@ -1,0 +1,93 @@
+# iOS CFBundleVersion — inject the run number, and assert it archived
+
+Date: 2026-08-24
+Repo: https://github.com/sleep2agi/agent-network-app (public)
+Branch: fix/ios-build-number
+Base: ee43181ed6635e98584122c66f2291115a1e0959 (= origin/main, merge-base)
+Source commit under test: 80f0bf87c3d3892001817a1c5c0261dca63e6e9c
+Docker tag: anet-iosbn:dev
+Docker image id: sha256:c1305c181d0f346620e70393e897546f10c37eb056a4b06d7126c3ec15a21341
+Embedded ENV: IOSBN_SOURCE_COMMIT=80f0bf87c3d3892001817a1c5c0261dca63e6e9c
+Build context: git archive <source commit> (clean tree; npm ci runs inside the
+  image — no host node_modules mounted, copied, or symlinked)
+
+## The defect, as observed
+
+The .ipa produced by run 32691034648 (head ee43181e, the 0.2.32 commit) carries:
+
+    CFBundleIdentifier         top.vansin.agentnetwork
+    CFBundleShortVersionString 0.2.32
+    CFBundleVersion            1        <-- run_number was 13
+
+## Why it looked wired and was not
+
+- `app.json` pins `expo.ios.buildNumber: "1"`, so `expo prebuild` writes the
+  literal `1` into the generated `Info.plist`.
+- The archive step passes `CURRENT_PROJECT_VERSION="$IOS_BUILD_NUMBER"`. A build
+  setting can only reach the plist if the plist references it; this one stores a
+  literal, so there is nothing to expand. The setting is accepted and ignored.
+- `INFOPLIST_KEY_CFBundleVersion` would be the same class of no-op: those
+  settings apply only when Xcode generates the plist
+  (`GENERATE_INFOPLIST_FILE=YES`), and Expo ships a real `INFOPLIST_FILE`.
+- The run number *did* reach the artifact name (`agent-network-ios-ipa-13`),
+  which is what made the wiring look correct from the outside.
+
+Nothing fails at build time. App Store Connect rejects a reused
+`CFBundleVersion`, so the error surfaces on the first upload following another
+build with the same number — which is exactly where the 0.2.32 TestFlight run
+was headed.
+
+## Change
+
+1. A step after `expo prebuild` writes `$IOS_BUILD_NUMBER` into the generated
+   `Info.plist` with PlistBuddy (excluding `Pods/`), reads the value back, and
+   fails closed if the plist is missing or the read-back disagrees.
+2. The existing `Verify archive uses App Store distribution signing` step now
+   also reads `CFBundleVersion` from the **archived app** and exits 1 with an
+   `::error::` when it differs from `IOS_BUILD_NUMBER`.
+3. `CURRENT_PROJECT_VERSION` is kept — it is consistent with the Xcode side, it
+   is simply no longer the only thing standing between us and a rejected upload.
+
+The archive assertion is the load-bearing half. Injection happens ten steps
+before the archive; a pod install or a plist regeneration in between could undo
+it with no error at all. The only value that matters is the one inside the app
+that was actually archived.
+
+## Result
+
+PASS. Container echoed
+`# ios-build-number source=80f0bf87c3d3892001817a1c5c0261dca63e6e9c`, exit 0.
+
+- `npm test` → **36/36 test files passed** (35 before this change)
+- `src/ios-build-number.test.ts` → **11 checks**, all PASS
+- `npm run typecheck` → clean
+- workflow YAML → all 7 files parse with a real YAML parser, including the
+  edited `ios-build.yml`
+- scrub gate → replayed verbatim from the workflow, 102 files scanned, clean
+
+## Witnessed-red (container grade, two independent sabotages)
+
+The dispatch asks that removing either half reds. Proven separately, because a
+single sabotage would only show that one of them is covered.
+
+A. Injection step deleted (Verify step untouched):
+
+    error: FAIL: an injection step exists
+    === 35/36 test files passed ===   exit 1
+
+B. Injection kept, the archived-value assertion deleted:
+
+    error: FAIL: the verify step reads the archived app CFBundleVersion
+    === 35/36 test files passed ===   exit 1
+
+Each names the half that went missing. Both sabotages existed only inside the
+throwaway build context.
+
+## Not verified here
+
+That the fix produces `CFBundleVersion=13…` in a real archive. That needs a
+macOS runner and the signing environment, which this change deliberately does
+not trigger. What the container can prove is that both mechanisms are wired and
+that removing either is caught — and the archive assertion means the next real
+run cannot ship a wrong build number silently: it will fail the build instead of
+failing an upload weeks later.
