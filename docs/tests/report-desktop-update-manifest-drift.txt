@@ -1,0 +1,47 @@
+Issue: sleep2agi/agent-network-app#125
+Base: origin/main c9c0a5adc1f172d0616967624beb56dc70116c96
+
+Problem
+-------
+The Tauri release and the deployed updater endpoint carry separate latest.json
+copies. Formatting differences are harmless, but a semantic drift can send a
+client a signature or asset URL different from the generated release metadata.
+
+Guard
+-----
+- Reads the deployed manifest and derives its exact desktop-v<version> tag.
+- Resolves that published GitHub release and its latest.json asset.
+- Rejects a draft, missing asset, malformed JSON/content type, or invalid
+  version before comparison.
+- Recursively canonicalizes object keys while preserving array order, then
+  compares every JSON field.
+- Runs manually after a deployment and automatically every six hours with
+  contents:read only.
+
+Current live evidence
+---------------------
+Release asset, deployed endpoint, and docs-site source differ in bytes because
+of formatting, but all three canonical JSON documents match. The online value
+is version 0.2.33-1 with five signed platform entries.
+
+Docker verification
+-------------------
+Image: anet-app-issue125:test
+Dockerfile: tests/test-desktop-update-manifest-drift/Dockerfile
+
+  desktop update manifest drift: 9/9 checks passed
+  npm test: 42/42 test files passed
+  npm run typecheck: clean
+  live online comparison: desktop updater manifests match: 0.2.33-1
+  container exit: 0
+
+Witnessed red
+-------------
+Single sabotage: weaken the comparator to check version only while changing
+the release notes field in the generated manifest fixture.
+
+  FAIL: a semantic field drift fails closed
+  container exit: 1
+
+This is the exact historical risk: version still agrees while another field
+has drifted. The red proves the guard checks the full canonical document.

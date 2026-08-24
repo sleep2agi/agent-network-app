@@ -1,0 +1,23 @@
+name: desktop update manifest drift
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '17 */6 * * *'
+
+permissions:
+  contents: read
+
+jobs:
+  compare-release-and-deployment:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Compare deployed manifest with its release asset
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          DESKTOP_UPDATE_ENDPOINT: https://www.anet.sh/desktop/update/latest.json
+        run: node scripts/verify-desktop-update-manifest.mjs
