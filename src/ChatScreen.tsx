@@ -21,6 +21,7 @@ import AuthedThumb, { AttachmentFile, AuthedVideo, mimeFromName } from './Authed
 import AuthedWebThumb from './AuthedWebThumb';
 import { fetchStatus, fetchTasks, sendTask, HubConfig, HubTask, Session, TaskAttachment } from './api';
 import { outboxAdd, outboxForAlias, outboxMarkFailed, outboxMarkPending, outboxRemove } from './outbox';
+import { senderLabelFor } from './chat-sender';
 import {
   ATTACH_ENABLED,
   attachmentTextHint,
@@ -606,6 +607,10 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
             // 更像微信·时间分组:仅在与上一条(更早)间隔 >5min 时显示居中时间头,
             // 不再每条气泡都盖时间。inverted 列表下,更早的邻居在 index+1。
             const showHeader = shouldShowTimeHeader(item.created_at, messages[index + 1]?.created_at);
+            // 会话是按收件人拉的(to_name=alias),发件人是谁得读 from_name ——
+            // 网络里任何节点都能派单给这个 alias,一律记成本人会把别人的指令
+            // 显示成自己说过的话。
+            const sender = senderLabelFor(item, currentUsername);
             return (
               <View style={styles.bubbleWrap}>
                 {showHeader && item.created_at ? (
@@ -614,7 +619,7 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
                 <View style={[styles.messageRow, styles.sentRow]}>
                   <View style={[styles.messageContent, styles.sentContent]}>
                     <Text style={[styles.messageAuthor, styles.sentAuthor]} numberOfLines={1}>
-                      {currentUsername}
+                      {sender}
                     </Text>
                     <Pressable
                       {...(desktop ? ({ dataSet: { messageKey: msgKey(item), messagePart: 'sent' } } as any) : {})}
@@ -628,7 +633,7 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
                       </View>
                     </Pressable>
                   </View>
-                  <AliasAvatar alias={currentUsername} size={36} />
+                  <AliasAvatar alias={sender} size={36} />
                 </View>
                 {item.result || item.reply ? (
                   <View style={[styles.messageRow, styles.replyRow]}>
