@@ -1,5 +1,5 @@
 import fs from 'node:fs';
-import { scrollbarCss, STYLE_ELEMENT_ID } from './web-scrollbar';
+import { scrollbarCss, STYLE_ELEMENT_ID } from './web-scrollbar-css';
 
 // Dark and light palettes as theme.ts defines them. Passed explicitly so the
 // test states which values it expects rather than reading whatever the module

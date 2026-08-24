@@ -8,55 +8,10 @@
 // into every scrollable panel and re-copying it whenever a token changes.
 import { Platform } from 'react-native';
 import { colors, onThemeChange } from './theme';
+import { STYLE_ELEMENT_ID, scrollbarCss } from './web-scrollbar-css';
 
-export const STYLE_ELEMENT_ID = 'anet-scrollbar-theme';
-
-/** The subset of the palette the scrollbar needs. */
-export interface ScrollbarPalette {
-  /** Resting thumb — deliberately low contrast; a scrollbar is not content. */
-  textMuted: string;
-  /** Hover/active thumb — one step brighter, still not competing with text. */
-  textSecondary: string;
-}
-
-/**
- * Build the stylesheet from theme tokens.
- *
- * The track stays transparent on purpose. Painting it any colour reintroduces
- * the original defect the moment a panel's background differs from the one
- * assumed here — a visible seam beside the list. Transparent inherits whatever
- * the scrolling element already has, so it cannot mismatch.
- */
-export const scrollbarCss = (palette: ScrollbarPalette): string => `
-/* Pointer devices only. Touch surfaces already overlay a scrollbar that hides
-   itself, and narrowing it there costs the user grab area for no gain. */
-@media (pointer: fine) {
-  * {
-    scrollbar-width: thin;
-    scrollbar-color: ${palette.textMuted} transparent;
-  }
-  ::-webkit-scrollbar {
-    width: 7px;
-    height: 7px;
-  }
-  ::-webkit-scrollbar-track {
-    background: transparent;
-  }
-  ::-webkit-scrollbar-corner {
-    background: transparent;
-  }
-  ::-webkit-scrollbar-thumb {
-    background: ${palette.textMuted};
-    border-radius: 999px;
-  }
-  ::-webkit-scrollbar-thumb:hover {
-    background: ${palette.textSecondary};
-  }
-  ::-webkit-scrollbar-thumb:active {
-    background: ${palette.textSecondary};
-  }
-}
-`;
+export { STYLE_ELEMENT_ID, scrollbarCss } from './web-scrollbar-css';
+export type { ScrollbarPalette } from './web-scrollbar-css';
 
 const apply = (): void => {
   const doc = (globalThis as { document?: Document }).document;
