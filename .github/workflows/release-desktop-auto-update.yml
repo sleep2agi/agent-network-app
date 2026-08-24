@@ -114,7 +114,15 @@ jobs:
         with:
           tagName: desktop-v__VERSION__
           releaseName: Agent Network Desktop v__VERSION__
-          releaseBody: Signed and notarized desktop update for macOS (Apple Silicon) and Windows (x64). Existing installations can update in place; new installations use the assets below.
+          releaseBody: |-
+            Signed and notarized Beta update for macOS (Apple Silicon) and Windows (x64).
+
+            What's new in 0.2.33-2:
+            - Send urgent tasks with high priority so the Hub queues them ahead of normal work.
+            - Clearer node controls: restart is neutral, stop is a warning, and delete is distinctly destructive.
+            - Automatic consistency checks now detect if the deployed updater manifest drifts from its matching GitHub release.
+
+            High priority changes queue order; it does not interrupt a task that is already running. Existing installations can update in place; new installations can use the assets below.
           releaseDraft: true
           prerelease: false
           updaterJsonPreferNsis: true
