@@ -1,0 +1,92 @@
+# desktop v0.2.32 — version bump
+
+Date: 2026-08-24
+Repo: https://github.com/sleep2agi/agent-network-app (public)
+Branch: chore/release-0.2.32
+Base: 385a854d362194bd62d44f8cc48d158aa72d111b (= origin/main after #128 merged;
+  merge-base)
+Source commit under test: 7623cd188497c2194fb9585ee952619efdc7f806
+Docker tag: anet-release032:dev
+Docker image id: sha256:45be19f0e10c62c7b56b74809625f190f7c5f180c898bc404528b1b7c09c7056
+Embedded ENV: V032_SOURCE_COMMIT=7623cd188497c2194fb9585ee952619efdc7f806
+Build context: git archive <source commit> (clean tree; npm ci runs inside the
+  image — no host node_modules mounted, copied, or symlinked)
+
+## Why this patch exists
+
+0.2.31 renders `已送达 ✓` under messages the viewer did not send — a claim that
+they sent them. #128 gates that marker on ownership; this bump carries it.
+
+## Preflight (docs/desktop-release-sop.md §2)
+
+- draft releases present: desktop-v0.2.24, desktop-v0.2.15,
+  desktop-v0.2.24-obsolete-d6c688d — **none is desktop-v0.2.32**
+- `git ls-remote origin refs/tags/desktop-v0.2.32` → no ref
+- `gh pr list --state all --search "0.2.32"` (no result limit) → no results
+
+The three leftover drafts are untouched (issue #123); 0.2.24 and 0.2.15 remain
+unusable version numbers.
+
+## Scope
+
+Version only, the eight files the SOP lists:
+
+    app.json                        2 +-
+    package.json                    2 +-
+    package-lock.json               4 ++--   (root "version" and packages[""])
+    src-tauri/Cargo.toml            2 +-
+    src-tauri/Cargo.lock            2 +-     (agent-network-desktop entry only)
+    src-tauri/tauri.conf.json       2 +-
+    src/version.ts                  2 +-
+    src/version-consistency.test.ts 2 +-
+    8 files changed, 9 insertions(+), 9 deletions(-)
+
+Every changed line is a version literal. #68 is deliberately not included: this
+patch carries the merged #128 fix and nothing else.
+
+`src-tauri/Cargo.lock` was edited by locating the entry named
+`agent-network-desktop` and substituting only its `version` line, asserted to
+match exactly once — nine lines total, the same shape as v0.2.31. The v0.2.30
+bump was ten, and that tenth line was an unrelated crate carried along by a
+blanket replace (#119, undone by #120). The line count remains a cheap check.
+
+## Result
+
+PASS. Container echoed
+`# release-0.2.32 source=7623cd188497c2194fb9585ee952619efdc7f806` and exited 0.
+
+- `npm test` → **35/35 test files passed**
+- `src/version-consistency.test.ts` → 9 checks, all `= 0.2.32`, including the
+  CRLF-checkout variant
+- `src/chat-sender.test.ts` → 24 checks (the #128 guards, carried on this base)
+- `npm run typecheck` → clean
+- scrub gate → replayed verbatim from `.github/workflows/scrub-guard.yml`,
+  101 files scanned, gate selftest 3/3, no internal memory reference
+
+## Witnessed-red (container grade)
+
+Same build context, one sabotage: `src-tauri/tauri.conf.json` left at 0.2.31 —
+a partial bump. A different file was chosen from the v0.2.31 report's sabotage
+(`app.json`) on purpose: repeating the same one would only re-prove that one
+assertion, not that the guard covers the set. Rebuilt as anet-release032:red
+and run:
+
+    # src/version-consistency.test.ts
+    error: FAIL: tauri.conf.json must be 0.2.32
+    === 34/35 test files passed ===
+    exit code 1
+
+Exactly one file red, naming the file that was missed.
+
+## Not covered here
+
+A *collateral* crate moved in Cargo.lock, rather than a version missed, is
+invisible to `version-consistency` — it asserts the root entry only. Its guard
+is `cargo check --locked` in the release workflow, failing on the checksum
+mismatch. The diff review above is the pre-CI check for it.
+
+## Not done
+
+No release workflow triggered, no macos-signing approval requested, no tag or
+release created or modified, no manifest deployed, PR left as a draft and not
+marked ready.
