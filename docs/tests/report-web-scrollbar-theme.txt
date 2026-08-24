@@ -1,0 +1,93 @@
+# themed scrollbar — the dark theme no longer scrolls with a white gutter
+
+Date: 2026-08-24
+Repo: https://github.com/sleep2agi/agent-network-app (public)
+Branch: fix/dark-scrollbar
+Base: 8a454431d0f952296195067471cc01fecaca0920 (= origin/main, merge-base)
+Source commit under test: abd831595f24e70ffc478eed41d13581b59ea755
+Docker tag: anet-sb:dev
+Docker image id: built from git archive <source commit>
+Embedded ENV: SB_SOURCE_COMMIT=abd831595f24e70ffc478eed41d13581b59ea755
+
+## The defect
+
+The agent list scrolls with the platform's default scrollbar. On the dark theme
+that is a white gutter down the right edge of a near-black panel.
+
+## Why it could not be fixed where the list is
+
+React Native styles cannot express `::-webkit-scrollbar` — it has no equivalent
+in the RN style system — and this repository has no global stylesheet to put it
+in. It is an Expo RN-web app with no CSS files at all.
+
+So the rules are generated from the same theme tokens every component reads and
+injected once into the document. Per-list styling would mean copying the same
+block into every scrollable panel and re-copying it whenever a token moves.
+
+## Change
+
+`src/web-scrollbar-css.ts` — pure: `scrollbarCss(palette)` builds the rules from
+`textMuted` (resting thumb) and `textSecondary` (hover/active). Split out of the
+DOM half deliberately: react-native's entry point ships Flow syntax
+(`import typeof * as …`) that the bun runner cannot parse, so a test importing
+anything that pulls react-native in dies before asserting anything.
+
+`src/web-scrollbar.ts` — injects a single `<style id="anet-scrollbar-theme">`,
+reuses it on later calls, and re-renders it through `onThemeChange`. No-ops off
+web and when there is no `document`.
+
+`App.tsx` — installs it once alongside the existing theme subscription.
+
+Three decisions worth stating:
+
+- **The track stays transparent.** Painting it any colour reintroduces the
+  original defect the moment a panel's background differs from the one assumed
+  here. Transparent inherits whatever the scrolling element already has and
+  cannot mismatch — that, not the thumb colour, is what removes the gutter.
+- **Firefox is covered.** It has no `::-webkit` pseudo-elements; without
+  `scrollbar-width` and `scrollbar-color` the fix would exist only in Chrome,
+  Edge, Safari and the Tauri webview, and Firefox users would still see white.
+- **Pointer devices only.** Touch surfaces already overlay a scrollbar that
+  hides itself; narrowing it there removes grab area and fixes nothing.
+
+Width is 7px, thumb `border-radius: 999px`, hover/active one token brighter.
+
+## Result
+
+PASS. Container echoed
+`# web-scrollbar source=abd831595f24e70ffc478eed41d13581b59ea755`, exit 0.
+
+- `npm test` → **37/37 test files passed** (36 before this change)
+- `src/web-scrollbar.test.ts` → **26 checks**, all PASS
+- `npm run typecheck` → clean
+- scrub gate → replayed verbatim from the workflow, 105 files scanned, clean
+
+The colour assertions are behavioural: `scrollbarCss` is called with the dark and
+the light palette and the two outputs are compared, so "the light theme is also
+handled" is measured rather than asserted about the source text. The module is
+also checked to contain none of those hex values itself, which is what makes
+"derived from tokens" true rather than coincidental.
+
+## Witnessed-red (container grade, four independent sabotages)
+
+| sabotage | result |
+|---|---|
+| Firefox `scrollbar-color` removed (Chrome-only fix) | `FAIL: firefox scrollbar-color is wired` · 36/37 · exit 1 |
+| track painted `#ffffff` (the original gutter) | `FAIL: webkit track is transparent` · 36/37 · exit 1 |
+| `@media (pointer: fine)` guard removed (touch affected) | `FAIL: rules are scoped to pointer devices` · 36/37 · exit 1 |
+| `App.tsx` installer call removed (css never injected) | `FAIL: App installs the themed scrollbar` · 36/37 · exit 1 |
+
+Each names the promise that went missing.
+
+Recorded honestly: the third sabotage passed 37/37 on its first attempt because
+the script that was meant to apply it failed on shell quoting and left the file
+untouched. A green run against an unmodified tree proves nothing; it was redone
+from a script file and then red as above.
+
+## Not verified here
+
+**How it looks.** These assertions cover which rules are emitted, that both
+themes differ, and that the css reaches the document — none of them can show the
+gutter is gone. That needs a screenshot from a real macOS and Windows build,
+which is listed as the acceptance step for this change and is not something the
+container can stand in for.
