@@ -297,6 +297,17 @@ export const generate = (sourcePath) => {
 
 const sha256 = (buf) => createHash('sha256').update(buf).digest('hex');
 
+/**
+ * Digest of a text file with newlines normalised.
+ *
+ * A Windows checkout converts line endings on text files, so hashing raw bytes
+ * makes this script's digest depend on which platform cloned the repository —
+ * the guard then fails on Windows CI while nothing is actually wrong. Binary
+ * assets are unaffected and keep their byte digests.
+ */
+const sha256Text = (path) =>
+  sha256(Buffer.from(readFileSync(path, 'utf8').replace(/\r\n?/g, '\n'), 'utf8'));
+
 const main = () => {
   const args = process.argv.slice(2);
   const outIndex = args.indexOf('--out');
@@ -322,7 +333,7 @@ const main = () => {
         're-runs the generator recorded here and compares pixels, so a brand change that skips ' +
         'regeneration fails at commit time instead of shipping.',
       generator: 'scripts/generate-android-icons.mjs',
-      generator_sha256: sha256(readFileSync(join(HERE, 'generate-android-icons.mjs'))),
+      generator_sha256: sha256Text(join(HERE, 'generate-android-icons.mjs')),
       params: PARAMS,
       background_color_rule:
         'per-channel median of source pixels with mark-mask < plateMaskCeiling and alpha >= plateAlphaFloor',

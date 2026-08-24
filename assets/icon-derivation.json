@@ -1,7 +1,7 @@
 {
   "_why": "Ties the Android adaptive layers to the brand mark they are cut from. #50 replaced assets/icon.png and left these behind, and no gate noticed. src/icon-assets.test.ts re-runs the generator recorded here and compares pixels, so a brand change that skips regeneration fails at commit time instead of shipping.",
   "generator": "scripts/generate-android-icons.mjs",
-  "generator_sha256": "887b667de651e3e1f331c4cce0d85defafbbe4bc48af41bc6b596859e976c251",
+  "generator_sha256": "4c0b3bc03f1f63ccd96e921e5d7386cef583e3276adb01cc5765fc65042d5573",
   "params": {
     "canvas": 1024,
     "safeZoneFraction": 0.66,

@@ -23,6 +23,17 @@ const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const read = (rel: string): Buffer => fs.readFileSync(path.join(REPO, rel));
 const sha256 = (buf: Buffer): string => createHash('sha256').update(buf).digest('hex');
 
+/**
+ * Digest of a text file with newlines normalised.
+ *
+ * A Windows checkout converts line endings on text files, so a raw byte digest
+ * of the generator depends on which platform cloned the repository and fails on
+ * Windows CI while nothing is wrong. The PNGs are binary, unconverted, and keep
+ * their byte digests.
+ */
+const sha256Text = (rel: string): string =>
+  sha256(Buffer.from(read(rel).toString('utf8').replace(/\r\n?/g, '\n'), 'utf8'));
+
 const manifest = JSON.parse(read('assets/icon-derivation.json').toString('utf8')) as {
   generator: string;
   generator_sha256: string;
@@ -87,7 +98,7 @@ const checks: Array<[string, boolean]> = [
   // The generator itself is pinned, so a silent change to the process is as
   // visible as a change to its output.
   ['the recorded generator is the one in the repository',
-    sha256(read(manifest.generator)) === manifest.generator_sha256],
+    sha256Text(manifest.generator) === manifest.generator_sha256],
   ['the recorded source digest matches the source', sha256(read(manifest.source)) === manifest.source_sha256],
   ...derivedPaths.map((rel): [string, boolean] => [
     `${rel} matches its recorded digest`,
