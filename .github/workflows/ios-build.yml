@@ -101,14 +101,44 @@ jobs:
       - name: Inject CFBundleVersion from the run number
         run: |
           set -euo pipefail
-          PLIST=$(find ios -maxdepth 2 -name Info.plist -not -path '*/Pods/*' -print -quit)
-          [ -n "$PLIST" ] || { echo "::error::generated ios Info.plist not found"; exit 1; }
+          # The run number is the only source of build numbers here, but write
+          # that assumption down as a gate instead of trusting it. App Store
+          # Connect takes CFBundleVersion as an increasing numeric string; an
+          # empty or non-numeric value sails through PlistBuddy and only fails
+          # at upload, far from the cause.
+          case "$IOS_BUILD_NUMBER" in
+            ''|*[!0-9]*)
+              echo "::error::IOS_BUILD_NUMBER must be a positive integer, got '$IOS_BUILD_NUMBER'"
+              exit 1
+              ;;
+          esac
+          if [ "$IOS_BUILD_NUMBER" -le 0 ]; then
+            echo "::error::IOS_BUILD_NUMBER must be greater than zero, got '$IOS_BUILD_NUMBER'"
+            exit 1
+          fi
+
+          # Collect every candidate rather than taking the first match. Two
+          # plists would mean the Expo layout changed, and silently picking one
+          # is how a build ships the wrong bundle's version.
+          mapfile -t PLISTS < <(find ios -maxdepth 2 -name Info.plist -not -path '*/Pods/*' | sort)
+          if [ "${#PLISTS[@]}" -ne 1 ]; then
+            echo "::error::expected exactly 1 generated ios Info.plist outside Pods, found ${#PLISTS[@]}"
+            printf '::error::candidate: %s\n' "${PLISTS[@]}"
+            exit 1
+          fi
+          PLIST="${PLISTS[0]}"
+
+          # Set, never Add: app.json must already provide expo.ios.buildNumber
+          # so prebuild emits the key. If the key is missing, PlistBuddy fails
+          # here and that is the correct outcome — Add would paper over a
+          # config change that should be visible.
           /usr/libexec/PlistBuddy -c "Set :CFBundleVersion $IOS_BUILD_NUMBER" "$PLIST"
+
           written=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$PLIST")
-          [ "$written" = "$IOS_BUILD_NUMBER" ] || {
+          if [ "$written" != "$IOS_BUILD_NUMBER" ]; then
             echo "::error::CFBundleVersion is $written after injection, expected $IOS_BUILD_NUMBER"
             exit 1
-          }
+          fi
           echo "CFBundleVersion=$written in $PLIST"
 
       - name: CocoaPods install
