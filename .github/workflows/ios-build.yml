@@ -85,6 +85,79 @@ jobs:
       - name: Expo prebuild (generate ios/)
         run: npx expo prebuild --platform ios --no-install
 
+      # app.json pins `expo.ios.buildNumber: "1"`, so prebuild writes a literal
+      # 1 into the generated Info.plist. Passing CURRENT_PROJECT_VERSION to
+      # xcodebuild does not change that: the generated plist stores a literal,
+      # not $(CURRENT_PROJECT_VERSION), so the setting has nothing to expand
+      # into. INFOPLIST_KEY_CFBundleVersion would be no better — those settings
+      # only apply when Xcode generates the plist (GENERATE_INFOPLIST_FILE=YES),
+      # and Expo ships a real INFOPLIST_FILE. Both are silent no-ops, which is
+      # how every build so far shipped CFBundleVersion=1 while the run number
+      # showed up only in the artifact name.
+      #
+      # Write the value into the plist prebuild just produced, then assert the
+      # archive's real value further down — the assertion is what makes this
+      # trustworthy, whatever the mechanism.
+      - name: Inject CFBundleVersion from the run number
+        run: |
+          set -euo pipefail
+          # The run number is the only source of build numbers here, but write
+          # that assumption down as a gate instead of trusting it. App Store
+          # Connect takes CFBundleVersion as an increasing numeric string; an
+          # empty or non-numeric value sails through PlistBuddy and only fails
+          # at upload, far from the cause.
+          case "$IOS_BUILD_NUMBER" in
+            ''|*[!0-9]*)
+              echo "::error::IOS_BUILD_NUMBER must be a positive integer, got '$IOS_BUILD_NUMBER'"
+              exit 1
+              ;;
+          esac
+          if [ "$IOS_BUILD_NUMBER" -le 0 ]; then
+            echo "::error::IOS_BUILD_NUMBER must be greater than zero, got '$IOS_BUILD_NUMBER'"
+            exit 1
+          fi
+
+          # Collect every candidate rather than taking the first match. Two
+          # plists would mean the Expo layout changed, and silently picking one
+          # is how a build ships the wrong bundle's version.
+          #
+          # Written for Bash 3.2: macOS ships that as /bin/bash, and mapfile /
+          # readarray are Bash 4 builtins. On a 3.2 shell those fail as
+          # "command not found" — after prebuild and pod install have already
+          # run, which is an expensive place to discover a portability bug.
+          # A file of candidates plus wc/sed needs no array support and keeps
+          # spaces in paths intact (find emits one newline-terminated path per
+          # line; a newline inside a filename is out of scope here).
+          CANDIDATES="$RUNNER_TEMP/ios-info-plists.txt"
+          find ios -maxdepth 2 -name Info.plist -not -path '*/Pods/*' | LC_ALL=C sort > "$CANDIDATES"
+          count=$(wc -l < "$CANDIDATES" | tr -d '[:space:]')
+          if [ "$count" -ne 1 ]; then
+            echo "::error::expected exactly 1 generated ios Info.plist outside Pods, found $count"
+            # Only enumerate when there is something to enumerate: at zero the
+            # loop would print nothing useful, and the count line above already
+            # says what happened.
+            if [ "$count" -gt 0 ]; then
+              while IFS= read -r candidate; do
+                echo "::error::candidate: $candidate"
+              done < "$CANDIDATES"
+            fi
+            exit 1
+          fi
+          PLIST=$(sed -n '1p' "$CANDIDATES")
+
+          # Set, never Add: app.json must already provide expo.ios.buildNumber
+          # so prebuild emits the key. If the key is missing, PlistBuddy fails
+          # here and that is the correct outcome — Add would paper over a
+          # config change that should be visible.
+          /usr/libexec/PlistBuddy -c "Set :CFBundleVersion $IOS_BUILD_NUMBER" "$PLIST"
+
+          written=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$PLIST")
+          if [ "$written" != "$IOS_BUILD_NUMBER" ]; then
+            echo "::error::CFBundleVersion is $written after injection, expected $IOS_BUILD_NUMBER"
+            exit 1
+          fi
+          echo "CFBundleVersion=$written in $PLIST"
+
       - name: CocoaPods install
         run: |
           set -euo pipefail
@@ -170,6 +243,17 @@ jobs:
           codesign --verify --deep --strict "$APP"
           codesign -d --verbose=4 "$APP" 2> "$RUNNER_TEMP/archive-codesign.txt"
           grep -F "TeamIdentifier=$APPLE_TEAM_ID" "$RUNNER_TEMP/archive-codesign.txt"
+          # Fail closed on the build number too. Injection happens ten steps
+          # earlier, and a pod install or a plist regeneration in between could
+          # undo it without any error — the only value that matters is the one
+          # actually inside the archived app.
+          archived_build=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$APP/Info.plist")
+          if [ "$archived_build" != "$IOS_BUILD_NUMBER" ]; then
+            echo "::error::Archived CFBundleVersion is $archived_build, expected $IOS_BUILD_NUMBER — App Store Connect rejects a reused build number"
+            exit 1
+          fi
+          echo "Archived CFBundleVersion=$archived_build"
+
           signing_identity=$(/usr/libexec/PlistBuddy -c 'Print :ApplicationProperties:SigningIdentity' "$RUNNER_TEMP/AgentNetwork.xcarchive/Info.plist")
           case "$signing_identity" in
             "Apple Distribution:"*|"iPhone Distribution:"*) ;;

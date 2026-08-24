@@ -1,0 +1,177 @@
+# iOS CFBundleVersion — inject the run number, and assert it archived
+
+Date: 2026-08-24
+Repo: https://github.com/sleep2agi/agent-network-app (public)
+Branch: fix/ios-build-number
+Base: ee43181ed6635e98584122c66f2291115a1e0959 (= origin/main, merge-base)
+Source commit under test: 285691cd910f431eec27581174e9040a59f6e605
+  (revision 3 — Bash 3.2 portability; rev2 was 984c0922a9b7aa1dc4df7016d129ad4bd0b803b4,
+  rev1 was 80f0bf87c3d3892001817a1c5c0261dca63e6e9c)
+Docker tag: anet-iosbn3:dev
+Docker image id: sha256:7725d92e9422e0c701fd01ef7ae2f7002e5b278d355247fccde86531b5a58d86
+Embedded ENV: IOSBN_SOURCE_COMMIT=285691cd910f431eec27581174e9040a59f6e605
+Build context: git archive <source commit> (clean tree; npm ci runs inside the
+  image — no host node_modules mounted, copied, or symlinked)
+
+## The defect, as observed
+
+The .ipa produced by run 32691034648 (head ee43181e, the 0.2.32 commit) carries:
+
+    CFBundleIdentifier         top.vansin.agentnetwork
+    CFBundleShortVersionString 0.2.32
+    CFBundleVersion            1        <-- run_number was 13
+
+## Why it looked wired and was not
+
+- `app.json` pins `expo.ios.buildNumber: "1"`, so `expo prebuild` writes the
+  literal `1` into the generated `Info.plist`.
+- The archive step passes `CURRENT_PROJECT_VERSION="$IOS_BUILD_NUMBER"`. A build
+  setting can only reach the plist if the plist references it; this one stores a
+  literal, so there is nothing to expand. The setting is accepted and ignored.
+- `INFOPLIST_KEY_CFBundleVersion` would be the same class of no-op: those
+  settings apply only when Xcode generates the plist
+  (`GENERATE_INFOPLIST_FILE=YES`), and Expo ships a real `INFOPLIST_FILE`.
+- The run number *did* reach the artifact name (`agent-network-ios-ipa-13`),
+  which is what made the wiring look correct from the outside.
+
+Nothing fails at build time. App Store Connect rejects a reused
+`CFBundleVersion`, so the error surfaces on the first upload following another
+build with the same number — which is exactly where the 0.2.32 TestFlight run
+was headed.
+
+## Change
+
+1. A step after `expo prebuild` writes `$IOS_BUILD_NUMBER` into the generated
+   `Info.plist` with PlistBuddy (excluding `Pods/`), reads the value back, and
+   fails closed if the plist is missing or the read-back disagrees.
+2. The existing `Verify archive uses App Store distribution signing` step now
+   also reads `CFBundleVersion` from the **archived app** and exits 1 with an
+   `::error::` when it differs from `IOS_BUILD_NUMBER`.
+3. `CURRENT_PROJECT_VERSION` is kept — it is consistent with the Xcode side, it
+   is simply no longer the only thing standing between us and a rejected upload.
+
+The archive assertion is the load-bearing half. Injection happens ten steps
+before the archive; a pod install or a plist regeneration in between could undo
+it with no error at all. The only value that matters is the one inside the app
+that was actually archived.
+
+## Revision 2: the guard was false-green, and the step relied on unstated assumptions
+
+Review found that revision 1's assertion "injection reads the value back and
+compares it" matched `Print :CFBundleVersion` and `$IOS_BUILD_NUMBER` as two
+separate substrings. Both occur elsewhere in the same step — the Set line
+carries the variable, the read-back carries Print — so **deleting the actual
+comparison still passed 11/11**. A guard that neighbouring lines can satisfy is
+not guarding anything, which is the same failure shape this fix exists to
+remove, one level up. Every assertion now matches a string that exists only in
+the line it guards.
+
+Three assumptions the step was making silently are now gates:
+
+1. **The build number is numeric and positive.** Its source is
+   `github.run_number`, but an empty or non-numeric value would pass through
+   PlistBuddy untouched and surface only at upload. Written down as a gate
+   rather than trusted.
+2. **Exactly one candidate plist.** `find -print -quit` took whichever match
+   came first; two matches would mean the Expo layout changed, and silently
+   picking one is how a build ships another bundle's version. Candidates are
+   collected, sorted, and required to number exactly one — 0 and >1 both fail
+   with the count in the message.
+3. **`Set`, never `Add`.** app.json must already provide
+   `expo.ios.buildNumber`, so a missing key fails here instead of being created
+   silently — `Add` would paper over a config change that should be visible.
+   Documented in the step so the choice is not mistaken for an oversight.
+
+## Revision 3: the uniqueness check needed the Bash macOS actually ships
+
+`mapfile` is a Bash 4 builtin. macOS ships Bash 3.2 as `/bin/bash`, where it is
+a "command not found" — and it would have surfaced *after* prebuild and pod
+install, the most expensive place in the job to learn about a portability bug,
+discoverable only by spending a macOS dispatch.
+
+Same guarantee without arrays: candidates are written to a file, `wc -l` counts
+them, `sed -n '1p'` reads the single one back. Both preserve spaces in paths, as
+does the `IFS= read -r` enumeration loop.
+
+Zero candidates no longer enters the enumeration at all. Iterating an empty file
+printed nothing useful while `set -u` turned the surrounding code into noise; the
+count line already states what happened, so the loop is guarded by `count > 0`.
+
+The negative assertions now run against the step's **code with comment lines
+stripped**. Explaining why `mapfile` is unusable requires writing `mapfile`, so a
+whole-section negation would have failed on its own rationale — the guard would
+have made the explanation unwritable.
+
+### Behavioural check of the fragment
+
+Static assertions cannot show that the shell works. The fragment was run
+directly, outside CI, over four scenarios:
+
+| scenario | result |
+|---|---|
+| exactly one candidate, path containing a space (`ios/Agent Network/Info.plist`) | `OK PLIST=[ios/Agent Network/Info.plist]`, exit 0 |
+| zero candidates (only `ios/Pods/...`) | `::error::… found 0`, no enumeration noise, exit 1 |
+| two candidates, one with a space | `::error::… found 2` plus both candidates listed verbatim, exit 1 |
+| same fragment under `dash` (POSIX sh) | `OK PLIST=[ios/Agent Network/Info.plist]`, exit 0 |
+
+The `dash` run matters: it is stricter than Bash 3.2, so passing there settles
+the portability question by measurement instead of by assumption.
+
+## Result
+
+PASS. Container echoed
+`# ios-build-number source=80f0bf87c3d3892001817a1c5c0261dca63e6e9c`, exit 0.
+
+- `npm test` → **36/36 test files passed** (35 before this change)
+- `src/ios-build-number.test.ts` → **25 checks** (was 20, was 11), all PASS
+- `npm run typecheck` → clean
+- workflow YAML → all 7 files parse with a real YAML parser, including the
+  edited `ios-build.yml`
+- scrub gate → replayed verbatim from the workflow, 102 files scanned, clean
+
+## Witnessed-red (container grade)
+
+Each gate is exercised on its own; one sabotage would only show that one of them
+is covered.
+
+### Revision 3 sabotages
+
+| sabotage | result |
+|---|---|
+| candidate collection reverted to `mapfile` | `FAIL: injection writes every candidate to a file, sorted` · 35/36 · exit 1 |
+| `count == 1` gate deleted (first line taken regardless) | `FAIL: injection requires exactly one candidate` · 35/36 · exit 1 |
+| `count > 0` guard around the diagnostics removed | `FAIL: candidates are only enumerated when there is at least one` · 35/36 · exit 1 |
+
+### Revision 2 sabotages (assertions unchanged, still red)
+
+A. **Only the read-back comparison deleted** — the `written=` assignment and the
+   trailing echo left in place. This is precisely the sabotage revision 1
+   survived:
+
+    error: FAIL: injection compares the read-back against the build number
+    === 35/36 test files passed ===   exit 1
+
+B. **Uniqueness gate replaced** by the original `find … -print -quit`:
+
+    error: FAIL: injection collects every candidate plist
+    === 35/36 test files passed ===   exit 1
+
+C. **Numeric/positive validation deleted**:
+
+    error: FAIL: injection rejects a non-numeric build number
+    === 35/36 test files passed ===   exit 1
+
+Each names the gate that went missing. All three sabotages existed only inside
+the throwaway build context; the branch was never modified.
+
+Revision 1's two sabotages (whole injection step removed; archived-value
+assertion removed) both still red — those assertions are unchanged.
+
+## Not verified here
+
+That the fix produces `CFBundleVersion=13…` in a real archive. That needs a
+macOS runner and the signing environment, which this change deliberately does
+not trigger. What the container can prove is that both mechanisms are wired and
+that removing either is caught — and the archive assertion means the next real
+run cannot ship a wrong build number silently: it will fail the build instead of
+failing an upload weeks later.
