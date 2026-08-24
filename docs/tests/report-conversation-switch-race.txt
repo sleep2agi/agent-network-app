@@ -29,51 +29,51 @@ list and a fresh round trip.
 A cache alone would have made the wrong content appear faster. What is needed is
 that a response can only be applied while it is still the one being waited for.
 
-`src/conversation-store.ts` hands out a token per `open`. Opening invalidates
-every token issued before it, and `put` applies a result only while its token is
-current — one condition, and it is what stops an answer for A landing in C.
+Each mounted `ChatScreen` owns a request gate. Opening a conversation advances
+that screen's generation; an ordinary render does not. A response may update
+React state only while its token is current for that screen. Separate windows
+have separate gates, so they cannot invalidate one another.
 
 Around that:
 
-- each conversation keeps its own messages and scroll offset, so reopening one
-  is instant and refreshes behind the visible content rather than replacing it
+- each conversation keeps its own bounded message cache, so reopening one is
+  instant and refreshes behind the visible content rather than replacing it
   with a spinner;
 - a conversation never opened reports no content, which is the difference
   between "loading" and "empty" — the screen needs it to show a skeleton instead
   of somebody else's messages;
 - a stale result is still cached against *its own* conversation. It is correct
   data, just not for this screen, so going back to it is instant;
-- sends and realtime updates address a conversation by key, so a reply for A
-  arriving while B is open is stored against A and never rendered under B;
-- the key includes the profile, because two hubs can host the same alias.
+- the key includes the profile, because two hubs can host the same alias;
+- the cache is capped at 50 conversations (LRU), and logout or reauthentication
+  clears that profile. URL fallback keys strip credentials and query data.
 
-The store is module level so the cache outlives an unmount, and imports no
-react-native so the behaviour is driven by tests rather than described by
-regexes.
+The cache is module level so it outlives an unmount. Request ownership is not
+module-global: it belongs to each screen. The store imports no react-native, so
+its behaviour is driven by tests rather than described only by regexes.
 
 ## Result
 
 PASS, exit 0.
 
 - `npm test` → **39/39 test files passed**
-- `src/conversation-store.test.ts` → **29 checks**, all PASS
+- `src/conversation-store.test.ts` → **18 checks**, all PASS
 - `npm run typecheck` → clean
 - scrub gate → replayed verbatim, 109 files scanned, clean
 
-Coverage maps to the scenarios named in the dispatch: A→B residue, A→B→A out of
-order, instant reopen from cache, no-cache skeleton, failure, unmount, and
-per-conversation scroll position — plus send isolation and the two-hub key.
+Coverage includes A→B residue, A→B→A order, ordinary rerenders, two simultaneous
+windows, instant reopen, no-cache state, unmount, LRU eviction, profile clearing,
+URL-secret stripping, and the two-hub key.
 
 ## Witnessed-red (container grade)
 
 | sabotage | result |
 |---|---|
-| **stale content reproduced** — the token gate removed from `ChatScreen` | `FAIL: ChatScreen refuses to apply a stale answer` · 38/39 · exit 1 |
-| **late overwrite reproduced** — `put` accepts unconditionally | `FAIL: a late answer for A is not applied while B is open` · 38/39 · exit 1 |
+| **render-time invalidation reproduced** — call `open` from the `useRef` initializer | `FAIL: a normal rerender cannot open or invalidate a request` · 38/39 · exit 1 |
+| **cross-window invalidation reproduced** — share one request gate between screens | `FAIL: two independent windows do not invalidate each other` · 38/39 · exit 1 |
 
-The second is the interesting one: it leaves every line of `ChatScreen` intact
-and only weakens the store, and the behavioural test still catches it. A guard
-that only read the screen's source would have passed.
+These reproduce the two blockers found during review: render-time side effects
+and a module-global active generation. Both were green under the first draft.
 
 Also recorded: one assertion in the first draft of this test was written as a
 negative lookahead across lines and could never hold, so the suite failed on my

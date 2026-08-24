@@ -20,7 +20,7 @@ import { prefetchStatus, login, fetchHubNodes, HubConfig } from './src/api';
 import { LOGIN_FAILURE_COPY, normalizeServerUrl, type LoginFailureKind } from './src/login-flow';
 import { hydrateHubAvatars, initLocalAvatars } from './src/lib/avatars';
 import { usePoll } from './src/usePoll'; // R1 avatar 30s hydrate poll (main's App.tsx no longer imports it)
-import ChatScreen from './src/ChatScreen';
+import ChatScreen, { clearChatConversationCache } from './src/ChatScreen';
 import MessagesScreen from './src/MessagesScreen';
 import ServerScreen from './src/ServerScreen';
 import ServerSidebar, { type ServerSection } from './src/ServerSidebar';
@@ -136,6 +136,7 @@ function AppRoot() {
   };
 
   const removeActiveProfile = async () => {
+    clearChatConversationCache(cfg?.profileId, cfg?.serverUrl);
     if (cfg?.profileId) await removeHubProfile(cfg.profileId);
     else await clearConfig();
     const next = await loadConfig();
@@ -161,6 +162,7 @@ function AppRoot() {
   };
 
   const requestProfileReauth = (profile: Pick<HubProfile, 'profileId' | 'serverUrl' | 'username' | 'displayName'>) => {
+    clearChatConversationCache(profile.profileId, profile.serverUrl);
     setReauthProfile(profile);
     setScreen({ name: 'login' });
   };
