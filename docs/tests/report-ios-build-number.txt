@@ -4,10 +4,12 @@ Date: 2026-08-24
 Repo: https://github.com/sleep2agi/agent-network-app (public)
 Branch: fix/ios-build-number
 Base: ee43181ed6635e98584122c66f2291115a1e0959 (= origin/main, merge-base)
-Source commit under test: 80f0bf87c3d3892001817a1c5c0261dca63e6e9c
-Docker tag: anet-iosbn:dev
-Docker image id: sha256:c1305c181d0f346620e70393e897546f10c37eb056a4b06d7126c3ec15a21341
-Embedded ENV: IOSBN_SOURCE_COMMIT=80f0bf87c3d3892001817a1c5c0261dca63e6e9c
+Source commit under test: 984c0922a9b7aa1dc4df7016d129ad4bd0b803b4
+  (revision 2 — review found the revision 1 guard was false-green; revision 1
+  was 80f0bf87c3d3892001817a1c5c0261dca63e6e9c)
+Docker tag: anet-iosbn2:dev
+Docker image id: sha256:e9e814e2c4b1933440aa2318b0830066599111881958ad2ff644e2284fb2e5d3
+Embedded ENV: IOSBN_SOURCE_COMMIT=984c0922a9b7aa1dc4df7016d129ad4bd0b803b4
 Build context: git archive <source commit> (clean tree; npm ci runs inside the
   image — no host node_modules mounted, copied, or symlinked)
 
@@ -53,35 +55,72 @@ before the archive; a pod install or a plist regeneration in between could undo
 it with no error at all. The only value that matters is the one inside the app
 that was actually archived.
 
+## Revision 2: the guard was false-green, and the step relied on unstated assumptions
+
+Review found that revision 1's assertion "injection reads the value back and
+compares it" matched `Print :CFBundleVersion` and `$IOS_BUILD_NUMBER` as two
+separate substrings. Both occur elsewhere in the same step — the Set line
+carries the variable, the read-back carries Print — so **deleting the actual
+comparison still passed 11/11**. A guard that neighbouring lines can satisfy is
+not guarding anything, which is the same failure shape this fix exists to
+remove, one level up. Every assertion now matches a string that exists only in
+the line it guards.
+
+Three assumptions the step was making silently are now gates:
+
+1. **The build number is numeric and positive.** Its source is
+   `github.run_number`, but an empty or non-numeric value would pass through
+   PlistBuddy untouched and surface only at upload. Written down as a gate
+   rather than trusted.
+2. **Exactly one candidate plist.** `find -print -quit` took whichever match
+   came first; two matches would mean the Expo layout changed, and silently
+   picking one is how a build ships another bundle's version. Candidates are
+   collected, sorted, and required to number exactly one — 0 and >1 both fail
+   with the count in the message.
+3. **`Set`, never `Add`.** app.json must already provide
+   `expo.ios.buildNumber`, so a missing key fails here instead of being created
+   silently — `Add` would paper over a config change that should be visible.
+   Documented in the step so the choice is not mistaken for an oversight.
+
 ## Result
 
 PASS. Container echoed
 `# ios-build-number source=80f0bf87c3d3892001817a1c5c0261dca63e6e9c`, exit 0.
 
 - `npm test` → **36/36 test files passed** (35 before this change)
-- `src/ios-build-number.test.ts` → **11 checks**, all PASS
+- `src/ios-build-number.test.ts` → **20 checks** (was 11), all PASS
 - `npm run typecheck` → clean
 - workflow YAML → all 7 files parse with a real YAML parser, including the
   edited `ios-build.yml`
 - scrub gate → replayed verbatim from the workflow, 102 files scanned, clean
 
-## Witnessed-red (container grade, two independent sabotages)
+## Witnessed-red (container grade, three independent sabotages)
 
-The dispatch asks that removing either half reds. Proven separately, because a
-single sabotage would only show that one of them is covered.
+Each gate is exercised on its own; one sabotage would only show that one of them
+is covered.
 
-A. Injection step deleted (Verify step untouched):
+A. **Only the read-back comparison deleted** — the `written=` assignment and the
+   trailing echo left in place. This is precisely the sabotage revision 1
+   survived:
 
-    error: FAIL: an injection step exists
+    error: FAIL: injection compares the read-back against the build number
     === 35/36 test files passed ===   exit 1
 
-B. Injection kept, the archived-value assertion deleted:
+B. **Uniqueness gate replaced** by the original `find … -print -quit`:
 
-    error: FAIL: the verify step reads the archived app CFBundleVersion
+    error: FAIL: injection collects every candidate plist
     === 35/36 test files passed ===   exit 1
 
-Each names the half that went missing. Both sabotages existed only inside the
-throwaway build context.
+C. **Numeric/positive validation deleted**:
+
+    error: FAIL: injection rejects a non-numeric build number
+    === 35/36 test files passed ===   exit 1
+
+Each names the gate that went missing. All three sabotages existed only inside
+the throwaway build context; the branch was never modified.
+
+Revision 1's two sabotages (whole injection step removed; archived-value
+assertion removed) both still red — those assertions are unchanged.
 
 ## Not verified here
 
