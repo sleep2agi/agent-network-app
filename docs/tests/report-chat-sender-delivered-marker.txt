@@ -1,0 +1,86 @@
+# chat sender — delivery marker follows ownership
+
+Date: 2026-08-24
+Repo: https://github.com/sleep2agi/agent-network-app (public)
+Branch: fix/sender-delivered-marker
+Base: 054ed937bfd35fe82ab8c15d4b943d79161c1b3e (= origin/main, merge-base;
+  the v0.2.31 release commit)
+Source commit under test: 84520f8b0b981ed30f7f363cf2da86ba36d5e9ee
+Docker tag: anet-sender2:dev
+Docker image id: sha256:45746aa95147315a07377dd90b3e693e8177a22da2cc812ecfab4c3a9bca8097
+Embedded ENV: SENDER2_SOURCE_COMMIT=84520f8b0b981ed30f7f363cf2da86ba36d5e9ee
+Build context: git archive <source commit> (clean tree; npm ci runs inside the
+  image — no host node_modules mounted, copied, or symlinked)
+
+## What shipped wrong in 0.2.31
+
+#126 changed who a request bubble is attributed to and left the `已送达 ✓`
+marker on every row. The result is a bubble credited to another node with
+"delivered" underneath — which reads as "you sent this, and it arrived".
+
+Before either change every row was labelled `我`, so the marker agreed with the
+label. Correcting the label alone made this spot **less** coherent than it was
+before, not more. That is the shape worth remembering: a partial fix to a
+display that had two wrong halves can leave it worse than untouched.
+
+## Provenance
+
+PR #55 (opened 2026-08-22, still open) had already solved this, and two further
+cases. It was open when #126 landed and was not found: the duplicate search used
+keyword matching with a result limit, and #55 ranked below the limit. A path
+overlap check would have caught it — and did, when run before this change:
+
+    open PR   intersection with {ChatScreen.tsx, chat-sender.ts, chat-sender.test.ts}
+    #68       none
+    #55       all three
+    #52       none
+
+Its three rules are adopted here with credit.
+
+## Change
+
+`src/chat-sender.ts` — `resolveSender()` returns `{alias, isCurrentUser}`:
+
+- `_localId` present → the viewer's, whatever `from_name` claims. An optimistic
+  echo is ours by construction; provenance cannot outrank that.
+- viewer's name still the placeholder (`GET /api/auth/me` unresolved) → nothing
+  can be classified against an unknown name, so rows stay on the current-user
+  side. Judging during that window would push the viewer's own messages to the
+  far side for a frame and, now that the marker follows ownership, take
+  `已送达 ✓` with them and put it back.
+- otherwise `from_name`, with the legacy `api` label mapping back to the viewer
+  (rest-identity.ts records it when a user-token request carries no resolvable
+  identity, so leaving it raw renders the viewer as a stranger).
+
+`src/ChatScreen.tsx` — author line and avatar use `sender.alias`; the delivery
+marker is gated on `sender.isCurrentUser`.
+
+## Result
+
+PASS. Container echoed
+`# sender-marker source=84520f8b0b981ed30f7f363cf2da86ba36d5e9ee` and exited 0.
+
+- `npm test` → **35/35 test files passed**
+- `src/chat-sender.test.ts` → **24 checks**, all PASS (was 16)
+- `npm run typecheck` → clean
+- scrub gate → replayed verbatim from the workflow, 101 files scanned, clean
+
+## Witnessed-red (container grade)
+
+Same build context, one sabotage: the `sender.isCurrentUser &&` gate removed —
+i.e. exactly what 0.2.31 ships. Rebuilt as anet-sender2:red and run:
+
+    # src/chat-sender.test.ts
+    error: FAIL: the delivered marker is gated on ownership
+    === 34/35 test files passed ===
+    exit code 1
+
+Exactly one file red, naming the missing gate.
+
+## Not verified here
+
+That a real client renders it correctly. The assertions cover the resolver and
+the wiring in `ChatScreen.tsx`; they cannot show the marker's absence on screen.
+A desktop client on 0.2.31 would show the defect today — a bubble from another
+node carrying `已送达 ✓` — which is also the cheapest way to confirm the fix
+once it ships.
