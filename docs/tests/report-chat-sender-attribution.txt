@@ -1,0 +1,107 @@
+# chat sender attribution — other nodes' messages were credited to the viewer
+
+Date: 2026-08-24
+Repo: https://github.com/sleep2agi/agent-network-app (public)
+Branch: fix/chat-sender-attribution
+Base: 972a45e2646c555b7955d9b2d7fede6a01225e3b (= origin/main, merge-base)
+Source commit under test: 20216d32f0114637715bff7c758b57279f69e21a
+Docker tag: anet-chat-test122:dev
+Docker image id: sha256:514ddd0614d09f25f7483e9e33aac68b308bec4b0fc7ab410b6b85c2a1d50be7
+Embedded ENV: CHAT_SOURCE_COMMIT=20216d32f0114637715bff7c758b57279f69e21a
+Build context: git archive <source commit> (clean tree; npm ci runs inside the
+  image — no host node_modules mounted, copied, or symlinked)
+Issue: #122
+
+## The defect
+
+ChatScreen fetches a conversation by recipient:
+
+    fetchTasks(cfg, { to_name: alias, limit })
+
+`to_name` constrains who received a task and says nothing about who sent it.
+Any node on the network can dispatch to that alias. The renderer nonetheless
+labelled every message with the viewer's identity:
+
+    <Text …>{currentUsername}</Text>
+    <AliasAvatar alias={currentUsername} size={36} />
+
+`currentUsername` comes from GET /api/auth/me and has no relationship to the
+message. A dispatch sent by 通信牛 therefore rendered as something the viewer
+had written — reported from desktop v0.2.30 with a screenshot.
+
+## Why the data was already there
+
+- `tasks.from_name` is `TEXT NOT NULL DEFAULT 'hub'` (server/src/db.ts) and
+  GET /api/tasks returns the full row, so the field is always present.
+- server/src/rest-identity.ts `resolveRestFromSession` decides it:
+  user-token client -> `requested || authenticatedUsername || "api"`;
+  node token -> the node's own alias, and a node claiming another name is
+  refused with 403 rather than silently relabelled.
+- The client type already declared `from_name?: string` (src/api.ts).
+
+So a non-empty `from_name` that is neither this client's username nor the
+legacy `api` label is genuinely another sender.
+
+## The change
+
+`src/chat-sender.ts` — `senderLabelFor(item, currentUsername)`:
+falls back to the viewer for a missing/blank/non-string `from_name` (optimistic
+local echoes have none yet), for the viewer's own username, and for the legacy
+`api` label; otherwise returns the sender's alias, trimmed. `hub` is treated as
+a real distinct sender, because a hub broadcast is not the viewer's message.
+`ChatScreen.tsx` uses it for both the author line and the avatar. Bubble
+placement is unchanged — only the attribution.
+
+## Result
+
+PASS. Container echoed
+`# chat-sender source=20216d32f0114637715bff7c758b57279f69e21a` and exited 0.
+
+- npm test: **34/34 test files passed** (33 before this change)
+- src/chat-sender.test.ts: **16 checks**, all PASS
+- npm run typecheck: clean
+- scrub gate: replayed verbatim from .github/workflows/scrub-guard.yml,
+  100 files scanned, no internal memory reference
+
+## Witnessed-red (container grade)
+
+Same build context, one sabotage: the two wiring sites reverted to
+`currentUsername`, reproducing the original bug. Rebuilt as
+anet-chat-test122:red and run:
+
+    # src/chat-sender.test.ts
+    error: FAIL: the author line renders the derived sender
+    === 33/34 test files passed ===
+    exit code 1
+
+Exactly one file red, and it is the defect itself.
+
+This is why the test reads ChatScreen.tsx as well as calling the function: a
+pure-function test would have stayed green through that sabotage, since the
+function it tests is still correct — it is simply no longer called. The guard
+has to cover the wiring, because the wiring is what broke.
+
+## Windows CI red, and what it was
+
+The first push was green on ubuntu and **red on windows-latest**:
+
+    error: FAIL: the author line renders the derived sender
+    at D:\a\agent-network-app\agent-network-app\src\chat-sender.test.ts:52:22
+
+The source-contract assertions matched on "\n" while a Windows checkout has
+CRLF, so the guard failed on the platform rather than on the code — the exact
+trap src/version-consistency.test.ts already normalises against. The test now
+normalises newlines before matching.
+
+Re-verified by reproducing the condition rather than assuming: the build context
+was converted to CRLF and rebuilt as anet-chat-test122:crlf, giving 16/16 checks
+and 34/34 files green, exit 0.
+
+## Not verified here
+
+The fix is asserted at unit and source level, not against a live hub — that
+would mean pointing a client at production. What a live check would add: that
+`from_name` on real rows matches the alias a human recognises. The hub schema
+(NOT NULL) and the identity resolver make an empty or spoofed value the
+excluded case, and an unexpected value degrades to showing that value rather
+than to showing the wrong person.
