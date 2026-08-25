@@ -49,15 +49,24 @@ export const agentStatusLabel = (status?: string): string => {
   return '在线';
 };
 
-// Desktop composer contract: Enter inserts a newline; Ctrl+Enter sends.
-// Cmd+Enter is the macOS equivalent. Composition must win so confirming
+// WeChat-style desktop composer contract: bare Enter sends, while a modifier
+// plus Enter inserts a newline. Composition must win so confirming
 // Chinese/Japanese input never sends early.
 export const shouldSendOnEnter = (event: {
   key?: string;
   ctrlKey?: boolean;
   metaKey?: boolean;
+  shiftKey?: boolean;
   isComposing?: boolean;
-}): boolean => event.key === 'Enter' && !!(event.ctrlKey || event.metaKey) && !event.isComposing;
+  keyCode?: number;
+  which?: number;
+}): boolean => event.key === 'Enter'
+  && !event.ctrlKey
+  && !event.metaKey
+  && !event.shiftKey
+  && !event.isComposing
+  && event.keyCode !== 229
+  && event.which !== 229;
 
 type TimedMessage = { content?: string; created_at?: string; _localId?: string };
 type TimedOutbox = { id: string; content: string; createdAt: number };
