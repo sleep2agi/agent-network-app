@@ -40,6 +40,7 @@ import { clearProfileUnauthorized, onProfileUnauthorized } from './src/profile-a
 import { initOutbox } from './src/outbox';
 import { colors, onThemeChange, setThemeMode, spacing, themeMode } from './src/theme';
 import { installWebScrollbarTheme } from './src/web-scrollbar';
+import DesktopWindowPin from './src/DesktopWindowPin';
 import { styles } from './src/app-styles';
 import { APP_VERSION } from './src/version';
 import DesktopUpdatePrompt from './src/DesktopUpdatePrompt';
@@ -271,6 +272,7 @@ function AppRoot() {
       <SafeAreaView key={workspaceKey} style={styles.root} testID="dedicated-chat-window">
         <StatusBar barStyle={theme === 'light' ? 'dark-content' : 'light-content'} backgroundColor={colors.bg} />
         <ChatScreen cfg={cfg} alias={screen.alias} onBack={() => {}} desktop />
+        <DesktopWindowPin />
       </SafeAreaView>
     );
   }
@@ -281,6 +283,7 @@ function AppRoot() {
         <StatusBar barStyle={theme === 'light' ? 'dark-content' : 'light-content'} backgroundColor={colors.bg} />
         <ConnectivityBanner />
         <DesktopWorkspace cfg={cfg} screen={screen} setScreen={setScreen} onLogout={removeActiveProfile} onLocalDataDeleted={finishLocalDataDeletion} onAddAccount={() => { setReauthProfile(null); setScreen({ name: 'login' }); }} onSwitchProfile={activateProfile} onReauthProfile={requestProfileReauth} />
+        <DesktopWindowPin />
       </SafeAreaView>
     );
   }

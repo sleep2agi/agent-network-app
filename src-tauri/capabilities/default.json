@@ -5,6 +5,7 @@
   "windows": ["main", "chat-*"],
   "permissions": [
     "core:default",
+    "core:window:allow-set-always-on-top",
     "process:allow-restart",
     "updater:default",
     "core:webview:allow-create-webview-window",
