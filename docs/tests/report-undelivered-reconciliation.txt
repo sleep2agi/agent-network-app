@@ -1,6 +1,6 @@
 P0 — false "Not delivered / retry" reconciliation (#170)
 
-Source commit under test: pending
+Source commit under test: e63fb3f79bc303d8d20383713a7bf305a627d304
 
 Behavior changed
 - A pending outbox row stays pending across process restart. It is unknown until Hub reconciliation, not a proven failure.
