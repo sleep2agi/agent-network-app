@@ -40,6 +40,9 @@ ck('Shift+Enter 换行', shouldSendOnEnter({ key: 'Enter', shiftKey: true }) ===
 ck('Ctrl+Enter 换行', shouldSendOnEnter({ key: 'Enter', ctrlKey: true }) === false);
 ck('Cmd+Enter 换行', shouldSendOnEnter({ key: 'Enter', metaKey: true }) === false);
 ck('输入法组词确认不发送', shouldSendOnEnter({ key: 'Enter', isComposing: true }) === false);
+ck('旧 WebView 输入法 keyCode=229 不发送', shouldSendOnEnter({ key: 'Enter', keyCode: 229 }) === false);
+ck('旧 WebView 输入法 which=229 不发送', shouldSendOnEnter({ key: 'Enter', which: 229 }) === false);
+ck('输入法 Process 键不发送', shouldSendOnEnter({ key: 'Process' }) === false);
 ck('其它按键不发送', shouldSendOnEnter({ key: 'a' }) === false);
 const base = Date.parse('2026-08-23T08:00:00.000Z');
 ck('Hub 出现同内容近时消息后确认并清除未送达副本', confirmedOutboxIds(

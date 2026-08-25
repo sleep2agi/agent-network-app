@@ -58,11 +58,15 @@ export const shouldSendOnEnter = (event: {
   metaKey?: boolean;
   shiftKey?: boolean;
   isComposing?: boolean;
+  keyCode?: number;
+  which?: number;
 }): boolean => event.key === 'Enter'
   && !event.ctrlKey
   && !event.metaKey
   && !event.shiftKey
-  && !event.isComposing;
+  && !event.isComposing
+  && event.keyCode !== 229
+  && event.which !== 229;
 
 type TimedMessage = { content?: string; created_at?: string; _localId?: string };
 type TimedOutbox = { id: string; content: string; createdAt: number };

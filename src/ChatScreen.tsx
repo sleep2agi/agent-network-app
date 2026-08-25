@@ -839,7 +839,7 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
             value={draft}
             onChangeText={setDraft}
             onKeyPress={(event) => {
-              const key = event.nativeEvent as typeof event.nativeEvent & { ctrlKey?: boolean; metaKey?: boolean; shiftKey?: boolean; isComposing?: boolean };
+              const key = event.nativeEvent as typeof event.nativeEvent & { ctrlKey?: boolean; metaKey?: boolean; shiftKey?: boolean; isComposing?: boolean; keyCode?: number; which?: number };
               if (!shouldSendOnEnter(key)) return;
               event.preventDefault?.();
               submit();
@@ -906,6 +906,8 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
               metaKey?: boolean;
               shiftKey?: boolean;
               isComposing?: boolean;
+              keyCode?: number;
+              which?: number;
             };
             if (!shouldSendOnEnter(key)) return;
             event.preventDefault?.();
