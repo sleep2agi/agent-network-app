@@ -9,5 +9,6 @@ bun src/side-thread-api.test.ts
 bun src/side-thread-model.test.ts
 bun src/side-thread-ui.test.ts
 bun run typecheck
+bun run test
 
 echo "PASS BTW SideThread App parser/API/model/shared UI contract @ ${BTW_UI_SOURCE_COMMIT}"
