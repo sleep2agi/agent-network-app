@@ -27,6 +27,7 @@ const record = (id: string, prompt: string, state: SideThreadRecord['state'], up
     createdAt: 1,
     updatedAt,
   }],
+  bringBacks: [],
   createdAt: 1,
   updatedAt,
 });
@@ -55,6 +56,12 @@ const optimistic: ReturnType<typeof sideThreadCardFromRecord> = {
   sourceThreadId: 'main-thread', createdAt: 50, updatedAt: 50,
 };
 check('并发 list 不会删掉尚未拿到 Hub id 的 creating card', mergeSideThreadRecords([optimistic!], []).some(card => card.id === optimistic!.id));
+const broughtBackRecord = record('side-back', '写回问题', 'completed', 60, '写回答案');
+broughtBackRecord.bringBacks = [{
+  bringBackId: 'sbb-1', attemptId: 'attempt-side-back', destinationThreadId: 'main-thread',
+  destinationTurnId: 'main-turn-new', state: 'completed', createdAt: 61, updatedAt: 62,
+}];
+check('重开从 owner bringBack projection 恢复已带回标志', sideThreadCardFromRecord(broughtBackRecord)?.broughtBack === true);
 
 // Close/reopen consumes an owner-authorized Hub projection; no client-only
 // question cache is needed to recover the same cards in another window.

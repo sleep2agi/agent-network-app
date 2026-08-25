@@ -19,6 +19,7 @@ const wireRecord = (overrides: Record<string, unknown> = {}) => ({
   state: 'running',
   activeAttemptId: 'sat_12345678',
   attempts: [{ attemptId: 'sat_12345678', threadId: 'thread-side', turnId: 'turn-side', state: 'running', createdAt: 1, updatedAt: 2 }],
+  bringBacks: [],
   createdAt: 1,
   updatedAt: 2,
   ...overrides,
@@ -67,6 +68,10 @@ const run = async () => {
   try { decodeSideThreadRecord(wireRecord({ prompt: undefined })); }
   catch (error) { missingPromptRejected = error instanceof SideThreadApiError && error.code === 'SIDE_THREAD_PROTOCOL_ERROR'; }
   check('缺 owner-readable prompt 的 projection fail closed', missingPromptRejected);
+  let missingBringBacksRejected = false;
+  try { decodeSideThreadRecord(wireRecord({ bringBacks: undefined })); }
+  catch (error) { missingBringBacksRejected = error instanceof SideThreadApiError && error.code === 'SIDE_THREAD_PROTOCOL_ERROR'; }
+  check('缺 bringBacks 的 projection fail closed，防止重开重复写回', missingBringBacksRejected);
 
   let implicitCapabilityRejected = false;
   const malformed = createSideThreadClient(

@@ -38,6 +38,16 @@ export interface SideThreadAttemptRecord {
   updatedAt: number;
 }
 
+export interface SideThreadBringBackRecord {
+  bringBackId: string;
+  attemptId: string;
+  destinationThreadId: string;
+  destinationTurnId?: string;
+  state: 'starting' | 'completed' | 'failed';
+  createdAt: number;
+  updatedAt: number;
+}
+
 /** Owner-authorized projection. `prompt` is deliberately required: returning
  * only a prompt hash makes close/reopen and detached-window hydration lie. */
 export interface SideThreadRecord {
@@ -56,6 +66,7 @@ export interface SideThreadRecord {
   topology?: string;
   evidenceRevision?: string;
   attempts: SideThreadAttemptRecord[];
+  bringBacks: SideThreadBringBackRecord[];
   createdAt: number;
   updatedAt: number;
 }
@@ -152,6 +163,7 @@ const REQUEST_TIMEOUT_MS = 12_000;
 const ID = /^[A-Za-z0-9._:-]{1,512}$/;
 const STATES = new Set<SideThreadRecordState>(['creating', 'running', 'completed', 'failed', 'cancelled', 'archived', 'purged']);
 const ATTEMPT_STATES = new Set<SideThreadAttemptState>(['starting', 'running', 'completed', 'failed', 'cancelled']);
+const BRING_BACK_STATES = new Set<SideThreadBringBackRecord['state']>(['starting', 'completed', 'failed']);
 
 let requestSequence = 0;
 export const createSideThreadRequestKey = (purpose: 'create' | 'retry' | 'bring-back' = 'create'): string => {
@@ -216,12 +228,26 @@ const decodeAttempt = (value: any): SideThreadAttemptRecord => {
   };
 };
 
+const decodeBringBack = (value: any): SideThreadBringBackRecord => {
+  if (!value || !BRING_BACK_STATES.has(value.state)) protocolError('SideThread response has invalid bring-back state');
+  return {
+    bringBackId: stringField(value.bringBackId, 'bringBackId'),
+    attemptId: stringField(value.attemptId, 'bringBack.attemptId'),
+    destinationThreadId: stringField(value.destinationThreadId, 'bringBack.destinationThreadId'),
+    ...(value.destinationTurnId === undefined ? {} : { destinationTurnId: stringField(value.destinationTurnId, 'destinationTurnId') }),
+    state: value.state,
+    createdAt: numberField(value.createdAt, 'bringBack.createdAt'),
+    updatedAt: numberField(value.updatedAt, 'bringBack.updatedAt'),
+  };
+};
+
 export const decodeSideThreadRecord = (value: any): SideThreadRecord => {
   if (!value || !STATES.has(value.state)) protocolError('SideThread response has invalid state');
   if (typeof value.prompt !== 'string' || !value.prompt.trim()) {
     protocolError('SideThread owner projection omitted prompt');
   }
   if (!Array.isArray(value.attempts)) protocolError('SideThread response omitted attempts');
+  if (!Array.isArray(value.bringBacks)) protocolError('SideThread owner projection omitted bringBacks');
   return {
     sideChatId: stringField(value.sideChatId, 'sideChatId'),
     networkId: stringField(value.networkId, 'networkId'),
@@ -238,6 +264,7 @@ export const decodeSideThreadRecord = (value: any): SideThreadRecord => {
     ...(typeof value.topology === 'string' ? { topology: value.topology } : {}),
     ...(typeof value.evidenceRevision === 'string' ? { evidenceRevision: value.evidenceRevision } : {}),
     attempts: value.attempts.map(decodeAttempt),
+    bringBacks: value.bringBacks.map(decodeBringBack),
     createdAt: numberField(value.createdAt, 'createdAt'),
     updatedAt: numberField(value.updatedAt, 'updatedAt'),
   };

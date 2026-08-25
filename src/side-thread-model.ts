@@ -48,6 +48,7 @@ export const sideThreadCardFromRecord = (record: SideThreadRecord): SideThreadCa
     ...(record.runtime ? { runtime: record.runtime } : {}),
     createdAt: record.createdAt,
     updatedAt: record.updatedAt,
+    ...(record.bringBacks.some(item => item.state === 'completed') ? { broughtBack: true } : {}),
   };
 };
 
