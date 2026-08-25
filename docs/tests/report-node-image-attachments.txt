@@ -1,0 +1,82 @@
+Issue #173 — authenticated node image attachments
+=================================================
+
+Source commit under test
+------------------------
+063826b5f26e3b5380d7364ced9a607337354edc
+
+Root cause
+----------
+Both the main workspace and detached chat window render ChatScreen. The node-reply
+dialect shown in #173 uses two plain-text lines (`图片 file_id: ...` and
+`取回: GET /api/files/... (需 Bearer)`). The old parser noticed only the bare API
+path, discarded its image type, assigned a generic filename, and therefore selected
+the generic file row instead of an authenticated image preview. The internal fetch
+instruction also remained visible as message text. Structured task attachments are
+available in meta_json, but the reply column remains plain text, so both paths need
+support.
+
+Scope and overlap check
+-----------------------
+Every open PR and every changedFiles page was fetched without a result limit before
+editing. PR #133 changes connectivity files, #68 changes api.ts and sender tests,
+and #52 changes App.tsx and several profile/storage files. None intersects this
+change's ChatScreen, attachment display/download, web image, or attachment tests.
+api.ts was intentionally left untouched.
+
+What changed
+------------
+* Parse structured meta_json attachments and the legacy node `图片 file_id` reply,
+  including pure-image, text-plus-image, and multiple-image messages.
+* Remove internal server paths and Bearer-fetch instructions from displayed text.
+* Render authenticated thumbnails with explicit preview, original-file download,
+  actionable authentication/network errors, and click-to-retry on web and native.
+* Reuse ChatScreen so the main workspace and detached chat have the same behavior.
+* Namespace native cache files by an opaque Hub/profile authentication scope. The
+  raw server URL and token never enter filenames, DOM URLs, or the browser download
+  manager; legacy unscoped cache entries are purged by a schema bump.
+* Sniff PNG/JPEG/GIF/WebP bytes when a legacy server returns octet-stream without a
+  useful filename.
+
+Docker evidence
+---------------
+The image was built from `git archive` of the exact source commit above. Dependencies
+were installed inside the image; no host node_modules were copied or mounted.
+
+Image: sha256:364df4732ea722e0be4e15a0de5020db5d98bb0289b16cf6f83da05b873eb873
+Label: anet.issue173.source_commit=063826b5f26e3b5380d7364ced9a607337354edc
+
+Atomic layer (run before dependent suites):
+* chat attachment display: 13 checks passed
+* web authenticated image download: 9 checks passed
+* native/cache attachment download: 45 checks passed
+
+Dependent layers:
+* npm test: 47/47 test files passed
+* TypeScript typecheck: passed
+* scrub guard replay: 121 files passed
+
+Witnessed-red
+-------------
+Each mutation was made only in a disposable copy; the branch was never mutated.
+
+1. Downgrade the typed node image to an untyped generic file:
+   FAIL: node image marker was flattened or downgraded
+2. Remove ChatScreen's legacy reply parser wiring:
+   FAIL: both chat windows do not wire parsed node images to preview + download
+3. Remove the authentication-scope namespace from native cache destinations:
+   42/45 checks passed; scoped destination, marker, and cache-hit checks failed
+
+The first mutation reproduces the issue's flattening failure. The second proves the
+shared renderer is wired rather than merely providing an unused parser. The third
+proves equal file IDs from different Hub/profile credentials cannot share cached
+bytes.
+
+Not verified here
+-----------------
+No live production Hub was mutated. This run did not create signed macOS, Windows,
+Android, or iOS packages, so packaged-window screenshots, OS download dialogs, and
+real expired-token retry behavior remain release-candidate acceptance checks. The
+Docker suite verifies parsing, authentication headers, retry state, download handoff,
+cache isolation, main/detached shared wiring, type safety, and repository guards; it
+does not claim visual approval of a packaged app.
