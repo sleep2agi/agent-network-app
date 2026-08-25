@@ -2,7 +2,7 @@
 
 Date: 2026-08-26 (Asia/Shanghai)
 
-Source under test: `1f07a88e43fc` (`feat/btw-side-thread-ui`)
+Source under test: `3ed9f3e6491c` (`feat/btw-side-thread-ui`)
 
 ## Scope
 
@@ -26,11 +26,11 @@ Source under test: `1f07a88e43fc` (`feat/btw-side-thread-ui`)
 
 ```sh
 sg docker -c 'docker build \
-  --build-arg SOURCE_COMMIT=1f07a88e43fc \
+  --build-arg SOURCE_COMMIT=3ed9f3e6491c \
   -f tests/test-btw-side-thread-ui/Dockerfile \
-  -t anet-app-btw-ui:1f07a88e43fc .'
+  -t anet-app-btw-ui:3ed9f3e6491c .'
 
-sg docker -c 'docker run --rm anet-app-btw-ui:1f07a88e43fc'
+sg docker -c 'docker run --rm anet-app-btw-ui:3ed9f3e6491c'
 ```
 
 ## Results
@@ -43,7 +43,7 @@ sg docker -c 'docker run --rm anet-app-btw-ui:1f07a88e43fc'
 - TypeScript build check: passed;
 - repository regression suite: 52/52 test files passed;
 - Expo SDK 56 web export: passed (Metro bundled 472 modules);
-- final container line: `PASS BTW SideThread App parser/API/model/shared UI contract @ 1f07a88e43fc`.
+- final container line: `PASS BTW SideThread App parser/API/model/shared UI contract @ 3ed9f3e6491c`.
 
 All results above, including the Expo export, were produced inside the same Docker test suite.
 
