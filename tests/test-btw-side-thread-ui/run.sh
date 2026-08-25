@@ -10,5 +10,6 @@ bun src/side-thread-model.test.ts
 bun src/side-thread-ui.test.ts
 bun run typecheck
 bun run test
+bunx expo export --platform web --output-dir /tmp/anet-btw-ui-web-export
 
 echo "PASS BTW SideThread App parser/API/model/shared UI contract @ ${BTW_UI_SOURCE_COMMIT}"
