@@ -336,6 +336,12 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
     return () => window.removeEventListener('paste', onPaste);
   }, [appendAttachment]);
   const [viewerUri, setViewerUri] = useState<string | null>(null);
+  const attachmentViewerScope = `${conversationKeyFor}::${attachmentCacheScope(cfg.serverUrl, cfg.token)}`;
+  // A blob: URL (Tauri web) and a file: URI (native) both identify bytes that
+  // were fetched under the previous credentials. Closing the parent modal is
+  // part of the auth boundary; resetting only the child thumbnail would leave
+  // those already-open bytes visible after a profile/Hub/conversation switch.
+  useEffect(() => setViewerUri(null), [attachmentViewerScope]);
   // 更像微信·round-2: 长按气泡的动作菜单(引用/删除)。null = 未打开。
   const [menuFor, setMenuFor] = useState<MessageSelection | null>(null);
   const [forwardFor, setForwardFor] = useState<MessageSelection | null>(null);

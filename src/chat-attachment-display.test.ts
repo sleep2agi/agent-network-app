@@ -63,5 +63,20 @@ if (!chatSource.includes('AuthedWebThumb') || !chatSource.includes('__TAURI_INTE
 if (!chatSource.includes('parseAttachmentRefs(text)') || !chatSource.includes('label="下载原图"')) {
   throw new Error('both chat windows do not wire parsed node images to preview + download');
 }
+const viewerScope = chatSource.match(
+  /const attachmentViewerScope = `\$\{conversationKeyFor\}::\$\{attachmentCacheScope\(cfg\.serverUrl, cfg\.token\)\}`;/,
+);
+const viewerReset = chatSource.match(
+  /useEffect\(\(\) => setViewerUri\(null\), \[attachmentViewerScope\]\);/,
+);
+if (!viewerScope || !viewerReset) {
+  throw new Error('the image viewer is closed when conversation or authenticated scope changes');
+}
+if (!/AuthedWebThumb[\s\S]*?onPress=\{objectUrl => setViewerUri\(objectUrl\)\}/.test(chatSource)) {
+  throw new Error('the scoped viewer guard does not cover Tauri blob previews');
+}
+if (!/AuthedThumb[\s\S]*?onPress=\{localUri => setViewerUri\(localUri\)\}/.test(chatSource)) {
+  throw new Error('the scoped viewer guard does not cover native file previews');
+}
 
-console.log('chat attachment display: 13 checks passed');
+console.log('chat attachment display: 16 checks passed');

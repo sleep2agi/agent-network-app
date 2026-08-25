@@ -65,9 +65,10 @@ const hash32 = (text: string, seed: number) => {
   return hash.toString(16).padStart(8, '0');
 };
 
-/** Opaque cache namespace for one authenticated Hub profile. The raw server
- * URL and bearer token never appear in filenames/logs, while two profiles on
- * one Hub and identical file IDs on two Hubs cannot share trusted bytes. */
+/** Opaque best-effort cache namespace for one authenticated Hub profile. The
+ * raw server URL and bearer token never appear in filenames/logs. Its two
+ * independent 32-bit hashes make accidental cross-scope reuse very unlikely,
+ * but this is isolation bookkeeping rather than a cryptographic digest. */
 export const attachmentCacheScope = (serverUrl: string, token: string) => {
   let origin = serverUrl.trim().replace(/\/+$/, '');
   try {
