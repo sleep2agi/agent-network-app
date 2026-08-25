@@ -1,0 +1,20 @@
+Desktop chat Enter-key behaviour
+Date: 2026-08-25
+
+Contract
+- Bare Enter sends the current message.
+- Shift+Enter, Ctrl+Enter, and Command+Enter insert a newline.
+- An IME composition-confirmation Enter never sends early.
+- The desktop composer shows the same shortcut contract to the user.
+
+Docker verification
+- Image: oven/bun:1.3.14
+- The checkout was mounted read-only and copied inside the container.
+- bun install --frozen-lockfile completed.
+- npm-equivalent test runner: 42/42 test files passed.
+- chat-actions.test.ts: 38/38 checks passed.
+- TypeScript typecheck passed.
+
+Scope
+- No mobile send-button behaviour changed.
+- No Hub API or message payload changed.
