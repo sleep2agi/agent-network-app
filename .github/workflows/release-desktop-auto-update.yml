@@ -117,13 +117,13 @@ jobs:
           releaseBody: |-
             Signed and notarized stable update for macOS (Apple Silicon) and Windows (x64).
 
-            What's new in 0.2.35:
-            - Duplicate tasks already accepted by the Hub no longer accumulate as red “Not delivered” retry bubbles. Existing false retry entries are reconciled automatically.
-            - Detached agent chat windows now include a settings entry for that exact agent and return to the same conversation afterward.
-            - Desktop chat windows can be pinned above other apps and unpinned from the same control.
-            - Android navigation is reduced to four focused destinations: Agents, Schedules, Servers, and Settings.
+            What's new in 0.2.36:
+            - New authenticated Dashboard messages can enter an active Codex app-server turn instead of always waiting behind the current task. Normal and high priority remain explicit, and rejected steering falls back to the queue rather than losing the message.
+            - Ambiguous send timeouts are reconciled with the Hub before showing “Not delivered”, preventing accepted tasks from being presented as failed duplicates.
+            - Historical false “Not delivered · Retry” entries are retired automatically, while genuine failures remain retryable with the same request identity.
+            - A send response that arrives after switching agents stays with its original conversation instead of appearing under the newly selected agent.
 
-            High-priority sending affects queued work; it does not interrupt an already-running Codex turn. Existing installations can update in place; new installations can use the assets below.
+            Existing installations can update in place; new installations can use the assets below.
           releaseDraft: true
           prerelease: false
           updaterJsonPreferNsis: true
