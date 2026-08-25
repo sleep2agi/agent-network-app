@@ -18,13 +18,15 @@ export type SideThreadBoundary =
 export type SideThreadRecordState =
   | 'creating'
   | 'running'
+  | 'ambiguous'
+  | 'reconciling'
   | 'completed'
   | 'failed'
   | 'cancelled'
   | 'archived'
   | 'purged';
 
-export type SideThreadAttemptState = 'starting' | 'running' | 'completed' | 'failed' | 'cancelled';
+export type SideThreadAttemptState = 'starting' | 'running' | 'ambiguous' | 'reconciling' | 'completed' | 'failed' | 'cancelled';
 
 export interface SideThreadAttemptRecord {
   attemptId: string;
@@ -41,17 +43,20 @@ export interface SideThreadAttemptRecord {
 export interface SideThreadBringBackRecord {
   bringBackId: string;
   attemptId: string;
+  requestKey: string;
   destinationThreadId: string;
   destinationTurnId?: string;
   state: 'starting' | 'completed' | 'failed';
   createdAt: number;
   updatedAt: number;
+  completedAt?: number;
 }
 
 /** Owner-authorized projection. `prompt` is deliberately required: returning
  * only a prompt hash makes close/reopen and detached-window hydration lie. */
 export interface SideThreadRecord {
   sideChatId: string;
+  requestKey: string;
   networkId: string;
   nodeId: string;
   ownerUserId: string;
@@ -94,6 +99,7 @@ export type SideThreadErrorCode =
   | 'SIDE_THREAD_NOT_FOUND'
   | 'SIDE_THREAD_CONFLICT'
   | 'SIDE_THREAD_RUNTIME_ERROR'
+  | 'SIDE_THREAD_AMBIGUOUS'
   | 'SIDE_THREAD_PROTOCOL_ERROR'
   | 'SIDE_THREAD_NETWORK_ERROR';
 
@@ -161,8 +167,8 @@ type JsonTransport = (path: string, init?: RequestInit) => Promise<unknown>;
 
 const REQUEST_TIMEOUT_MS = 12_000;
 const ID = /^[A-Za-z0-9._:-]{1,512}$/;
-const STATES = new Set<SideThreadRecordState>(['creating', 'running', 'completed', 'failed', 'cancelled', 'archived', 'purged']);
-const ATTEMPT_STATES = new Set<SideThreadAttemptState>(['starting', 'running', 'completed', 'failed', 'cancelled']);
+const STATES = new Set<SideThreadRecordState>(['creating', 'running', 'ambiguous', 'reconciling', 'completed', 'failed', 'cancelled', 'archived', 'purged']);
+const ATTEMPT_STATES = new Set<SideThreadAttemptState>(['starting', 'running', 'ambiguous', 'reconciling', 'completed', 'failed', 'cancelled']);
 const BRING_BACK_STATES = new Set<SideThreadBringBackRecord['state']>(['starting', 'completed', 'failed']);
 
 let requestSequence = 0;
@@ -233,11 +239,13 @@ const decodeBringBack = (value: any): SideThreadBringBackRecord => {
   return {
     bringBackId: stringField(value.bringBackId, 'bringBackId'),
     attemptId: stringField(value.attemptId, 'bringBack.attemptId'),
+    requestKey: stringField(value.requestKey, 'bringBack.requestKey'),
     destinationThreadId: stringField(value.destinationThreadId, 'bringBack.destinationThreadId'),
     ...(value.destinationTurnId === undefined ? {} : { destinationTurnId: stringField(value.destinationTurnId, 'destinationTurnId') }),
     state: value.state,
     createdAt: numberField(value.createdAt, 'bringBack.createdAt'),
     updatedAt: numberField(value.updatedAt, 'bringBack.updatedAt'),
+    ...(value.completedAt === undefined ? {} : { completedAt: numberField(value.completedAt, 'bringBack.completedAt') }),
   };
 };
 
@@ -250,6 +258,7 @@ export const decodeSideThreadRecord = (value: any): SideThreadRecord => {
   if (!Array.isArray(value.bringBacks)) protocolError('SideThread owner projection omitted bringBacks');
   return {
     sideChatId: stringField(value.sideChatId, 'sideChatId'),
+    requestKey: stringField(value.requestKey, 'requestKey'),
     networkId: stringField(value.networkId, 'networkId'),
     nodeId: stringField(value.nodeId, 'nodeId'),
     ownerUserId: stringField(value.ownerUserId, 'ownerUserId'),

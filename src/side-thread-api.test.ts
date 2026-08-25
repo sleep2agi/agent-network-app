@@ -10,6 +10,7 @@ const check = (name: string, condition: boolean) => {
 
 const wireRecord = (overrides: Record<string, unknown> = {}) => ({
   sideChatId: 'sch_12345678',
+  requestKey: 'app:create:request:1',
   networkId: 'network-1',
   nodeId: 'node-1',
   ownerUserId: 'user-1',

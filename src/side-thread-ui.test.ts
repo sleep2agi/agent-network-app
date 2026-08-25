@@ -21,7 +21,7 @@ check('BTW 分支不生成主会话 optimistic echo', chat.includes('Do not add 
 check('SideThreadDrawer 无主 draft/scroll/title/selection 写入能力', !/setDraft|setMessages|listRef|setScreen|setSelection/.test(props));
 check('BTW 异步状态完全封装在 drawer，不接普通 sendTask', !/\bsendTask\s*\(/.test(drawer) && !drawer.includes('/api/task'));
 check('unsupported UI 明说不降级', drawer.includes('不会降级为普通发送、优先任务或 steer。'));
-for (const state of ['creating', 'running', 'succeeded', 'failed', 'cancelled', 'archived']) {
+for (const state of ['creating', 'running', 'reconciling', 'succeeded', 'failed', 'cancelled', 'archived']) {
   check(`card 状态机包含 ${state}`, fs.readFileSync('src/side-thread-model.ts', 'utf8').includes(`'${state}'`));
 }
 for (const action of ['cancel', 'retry', 'archive', 'bring-back']) {
@@ -30,6 +30,8 @@ for (const action of ['cancel', 'retry', 'archive', 'bring-back']) {
 check('显式带回使用原 sourceThreadId，不自动写回', drawer.includes('destinationThreadId: card.sourceThreadId') && drawer.includes('actions.bringBack'));
 check('关闭 drawer 不调用 cancel/archive', drawer.includes('onRequestClose={() => setVisible(false)}'));
 check('问题和卡片由 drawer 自有 state 持有', drawer.includes("const [question, setQuestion]") && drawer.includes("const [cards, setCards]"));
+check('切换 agent/窗口后迟到 create/action 不能写入新 owner', (drawer.match(/generation !== generationRef\.current/g) ?? []).length >= 7 && drawer.includes('return () => { generationRef.current += 1; }'));
+check('ambiguous 不冒充 failed，提示等待/刷新', drawer.includes("error.code === 'SIDE_THREAD_AMBIGUOUS'") && drawer.includes('正在确认运行状态') && drawer.includes('请等待或刷新'));
 
 console.log(`\n${passed}/${total} passed`);
 process.exit(passed === total ? 0 : 1);

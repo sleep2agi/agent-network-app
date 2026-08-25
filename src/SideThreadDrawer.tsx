@@ -24,6 +24,7 @@ import {
 import {
   markSideThreadAction,
   markSideThreadBroughtBack,
+  markSideThreadReconciling,
   mergeSideThreadRecords,
   SIDE_THREAD_STATE_LABELS,
   sideThreadActionAvailability,
@@ -66,6 +67,7 @@ const capabilityFailure = (error: unknown): CapabilityView => {
 
 const stateColor = (state: SideThreadCard['state']) => {
   if (state === 'failed') return colors.failed;
+  if (state === 'reconciling') return colors.blocked;
   if (state === 'running' || state === 'creating' || state === 'succeeded') return colors.running;
   return colors.textMuted;
 };
@@ -131,6 +133,7 @@ export default function SideThreadDrawer({ cfg, alias, desktop, launch }: Props)
     setCreateError('');
     setActionErrors({});
     pendingPromptRef.current = undefined;
+    return () => { generationRef.current += 1; };
   }, [alias, cfg.profileId, cfg.serverUrl]);
 
   useEffect(() => {
@@ -143,6 +146,7 @@ export default function SideThreadDrawer({ cfg, alias, desktop, launch }: Props)
   }, [launch, checkCapability]);
 
   const create = useCallback(async (rawPrompt: string) => {
+    const generation = generationRef.current;
     const prompt = rawPrompt.trim();
     if (!prompt) {
       setCreateError('请输入旁路问题');
@@ -159,6 +163,7 @@ export default function SideThreadDrawer({ cfg, alias, desktop, launch }: Props)
     setQuestion('');
     setCards(current => [{
       id: optimisticId,
+      requestKey,
       prompt,
       state: 'creating',
       sourceThreadId: capability.value.context!.sourceThreadId,
@@ -171,8 +176,15 @@ export default function SideThreadDrawer({ cfg, alias, desktop, launch }: Props)
         ...capability.value.context,
         prompt,
       });
+      if (generation !== generationRef.current) return;
       setCards(current => upsertSideThreadRecord(current.filter(card => card.id !== optimisticId), record));
     } catch (error) {
+      if (generation !== generationRef.current) return;
+      if (error instanceof SideThreadApiError && error.code === 'SIDE_THREAD_AMBIGUOUS') {
+        setCards(current => markSideThreadReconciling(current, optimisticId));
+        setCreateError('请求结果暂不确定，正在从 Hub 确认运行状态。请等待或刷新，不要重复提交。');
+        return;
+      }
       setCards(current => current.filter(card => card.id !== optimisticId));
       const view = capabilityFailure(error);
       if (view.kind === 'unsupported') setCapability(view);
@@ -203,20 +215,24 @@ export default function SideThreadDrawer({ cfg, alias, desktop, launch }: Props)
   }, [visible, capability.kind, client, alias]);
 
   const runAction = async (card: SideThreadCard, action: SideThreadCardAction) => {
+    const generation = generationRef.current;
     setCards(current => markSideThreadAction(current, card.id, action));
     setActionErrors(current => ({ ...current, [card.id]: '' }));
     try {
       if (action === 'cancel') {
         const record = await client.cancel(card.id);
+        if (generation !== generationRef.current) return;
         setCards(current => upsertSideThreadRecord(current, record));
       } else if (action === 'retry') {
         const record = await client.retry(card.id, {
           requestKey: createSideThreadRequestKey('retry'),
           prompt: card.prompt,
         });
+        if (generation !== generationRef.current) return;
         setCards(current => upsertSideThreadRecord(current, record));
       } else if (action === 'archive') {
         const record = await client.archive(card.id);
+        if (generation !== generationRef.current) return;
         setCards(current => upsertSideThreadRecord(current, record));
       } else {
         await client.bringBack(card.id, {
@@ -224,9 +240,16 @@ export default function SideThreadDrawer({ cfg, alias, desktop, launch }: Props)
           destinationThreadId: card.sourceThreadId,
           ...(card.latestAttemptId ? { attemptId: card.latestAttemptId } : {}),
         });
+        if (generation !== generationRef.current) return;
         setCards(current => markSideThreadBroughtBack(current, card.id));
       }
     } catch (error) {
+      if (generation !== generationRef.current) return;
+      if (error instanceof SideThreadApiError && error.code === 'SIDE_THREAD_AMBIGUOUS') {
+        setCards(current => markSideThreadReconciling(current, card.id));
+        setActionErrors(current => ({ ...current, [card.id]: '结果暂不确定，正在确认运行状态。请等待或刷新。' }));
+        return;
+      }
       setCards(current => markSideThreadAction(current, card.id));
       setActionErrors(current => ({
         ...current,

@@ -11,6 +11,7 @@ const check = (name: string, condition: boolean) => {
 
 const record = (id: string, prompt: string, state: SideThreadRecord['state'], updatedAt: number, result?: string): SideThreadRecord => ({
   sideChatId: id,
+  requestKey: `request-${id}`,
   networkId: 'network-1',
   nodeId: 'node-1',
   ownerUserId: 'user-1',
@@ -52,14 +53,26 @@ check('只有有答案的 succeeded 可显式带回', (() => {
   return !!card && sideThreadActionAvailability(card).bringBack;
 })());
 const optimistic: ReturnType<typeof sideThreadCardFromRecord> = {
-  id: 'pending:app:create:test', prompt: '正在创建的问题', state: 'creating',
+  id: 'pending:app:create:test', requestKey: 'app:create:test', prompt: '正在创建的问题', state: 'creating',
   sourceThreadId: 'main-thread', createdAt: 50, updatedAt: 50,
 };
 check('并发 list 不会删掉尚未拿到 Hub id 的 creating card', mergeSideThreadRecords([optimistic!], []).some(card => card.id === optimistic!.id));
+const matchedCreate = record('side-created', '正在创建的问题', 'running', 51);
+matchedCreate.requestKey = 'app:create:test';
+check('ambiguous create 由同 requestKey Hub record 替换，不留双卡', (() => {
+  const merged = mergeSideThreadRecords([optimistic!], [matchedCreate]);
+  return merged.length === 1 && merged[0]?.id === 'side-created';
+})());
+const reconciling = sideThreadCardFromRecord(record('side-r', '待确认', 'reconciling', 70));
+check('reconciling 显示等待且禁用所有副作用动作', (() => {
+  if (!reconciling || reconciling.state !== 'reconciling') return false;
+  return Object.values(sideThreadActionAvailability(reconciling)).every(value => value === false);
+})());
+check('Hub ambiguous wire state 同样映射为 reconciling', sideThreadCardFromRecord(record('side-a2', '待确认2', 'ambiguous', 71))?.state === 'reconciling');
 const broughtBackRecord = record('side-back', '写回问题', 'completed', 60, '写回答案');
 broughtBackRecord.bringBacks = [{
   bringBackId: 'sbb-1', attemptId: 'attempt-side-back', destinationThreadId: 'main-thread',
-  destinationTurnId: 'main-turn-new', state: 'completed', createdAt: 61, updatedAt: 62,
+  requestKey: 'app:bring-back:1', destinationTurnId: 'main-turn-new', state: 'completed', createdAt: 61, updatedAt: 62,
 }];
 check('重开从 owner bringBack projection 恢复已带回标志', sideThreadCardFromRecord(broughtBackRecord)?.broughtBack === true);
 

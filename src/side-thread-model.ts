@@ -3,6 +3,7 @@ import type { SideThreadRecord, SideThreadRecordState } from './side-thread-api'
 export type SideThreadCardState =
   | 'creating'
   | 'running'
+  | 'reconciling'
   | 'succeeded'
   | 'failed'
   | 'cancelled'
@@ -12,6 +13,7 @@ export type SideThreadCardAction = 'cancel' | 'retry' | 'archive' | 'bring-back'
 
 export interface SideThreadCard {
   id: string;
+  requestKey: string;
   prompt: string;
   state: SideThreadCardState;
   result?: string;
@@ -28,6 +30,7 @@ export interface SideThreadCard {
 
 export const toSideThreadCardState = (state: SideThreadRecordState): SideThreadCardState | null => {
   if (state === 'completed') return 'succeeded';
+  if (state === 'ambiguous') return 'reconciling';
   if (state === 'purged') return null;
   return state;
 };
@@ -38,6 +41,7 @@ export const sideThreadCardFromRecord = (record: SideThreadRecord): SideThreadCa
   const latest = record.attempts[record.attempts.length - 1];
   return {
     id: record.sideChatId,
+    requestKey: record.requestKey,
     prompt: record.prompt,
     state,
     ...(latest?.result ? { result: latest.result } : {}),
@@ -80,7 +84,8 @@ export const mergeSideThreadRecords = (
   // A create call may still be waiting for the Hub to return its durable id;
   // an overlapping list response cannot contain that client placeholder yet.
   // Keep it until create resolves or fails instead of making the card blink.
-  for (const pending of current.filter(card => card.id.startsWith('pending:'))) {
+  const hydratedRequestKeys = new Set(next.map(card => card.requestKey));
+  for (const pending of current.filter(card => card.id.startsWith('pending:') && !hydratedRequestKeys.has(card.requestKey))) {
     if (!next.some(card => card.id === pending.id)) next.push(pending);
   }
   return newestFirst(next);
@@ -115,6 +120,13 @@ export const markSideThreadBroughtBack = (
   ? { ...card, pendingAction: undefined, broughtBack: true }
   : card);
 
+export const markSideThreadReconciling = (
+  current: SideThreadCard[],
+  id: string,
+): SideThreadCard[] => current.map(card => card.id === id
+  ? { ...card, state: 'reconciling', pendingAction: undefined, error: undefined }
+  : card);
+
 export const sideThreadActionAvailability = (card: SideThreadCard) => ({
   cancel: (card.state === 'creating' || card.state === 'running') && !card.id.startsWith('pending:') && !card.pendingAction,
   retry: (card.state === 'failed' || card.state === 'cancelled') && !card.pendingAction,
@@ -125,6 +137,7 @@ export const sideThreadActionAvailability = (card: SideThreadCard) => ({
 export const SIDE_THREAD_STATE_LABELS: Record<SideThreadCardState, string> = {
   creating: '正在创建',
   running: '旁路处理中',
+  reconciling: '正在确认运行状态',
   succeeded: '已完成',
   failed: '失败',
   cancelled: '已取消',
