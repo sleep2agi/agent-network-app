@@ -50,12 +50,14 @@ export function AttachmentFile({
   mime,
   serverUrl,
   token,
+  label,
 }: {
   fileId: string;
   name: string;
   mime?: string;
   serverUrl: string;
   token: string;
+  label?: string;
 }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -79,9 +81,9 @@ export function AttachmentFile({
   };
 
   return (
-    <Pressable onPress={open} hitSlop={6}>
+    <Pressable accessibilityRole="button" accessibilityLabel={label ?? name} onPress={open} hitSlop={6}>
       <Text style={[styles.fallback, error && { color: colors.failed }]}>
-        {busy ? '⏳' : '📎'} {name}
+        {busy ? '⏳' : label ? '↓' : '📎'} {label ?? name}
         {error ? `（${error}，点击重试）` : ''}
       </Text>
     </Pressable>
@@ -167,44 +169,50 @@ export function AuthedVideo({
 export default function AuthedThumb({
   fileId,
   name,
+  mime,
   serverUrl,
   token,
   onPress,
 }: {
   fileId: string;
   name: string;
+  mime?: string;
   serverUrl: string;
   token: string;
   onPress: (localUri: string) => void;
 }) {
   const [uri, setUri] = useState<string | null>(null);
-  const [failed, setFailed] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [attempt, setAttempt] = useState(0);
 
   useEffect(() => {
     let live = true;
-    downloadAttachment(serverUrl, token, fileId, name)
+    // Never keep another Hub/profile's cached pixels visible while the scoped
+    // authenticated download below is resolving.
+    setUri(null);
+    setError(null);
+    downloadAttachment(serverUrl, token, fileId, name, mime)
       .then(local => live && setUri(local))
-      .catch(() => live && setFailed(true));
+      .catch(e => live && setError(describeAttachmentError(e)));
     return () => {
       live = false;
     };
-  }, [fileId, name, serverUrl, token, attempt]);
+  }, [fileId, name, mime, serverUrl, token, attempt]);
 
-  if (failed) {
+  if (error) {
     return (
       <Pressable
         accessibilityRole="button"
         accessibilityLabel={`${name} 加载失败，点击重试`}
         style={styles.failedThumb}
         onPress={() => {
-          setFailed(false);
+          setError(null);
           setAttempt(value => value + 1);
         }}
       >
         <Text style={styles.failedIcon}>↻</Text>
         <Text style={styles.failedTitle} numberOfLines={1}>{name}</Text>
-        <Text style={styles.failedHint}>图片加载失败 · 点击重试</Text>
+        <Text style={styles.failedHint}>{error} · 点击重试</Text>
       </Pressable>
     );
   }

@@ -41,7 +41,8 @@ import type { NativeSyntheticEvent, NativeScrollEvent } from 'react-native';
 import { usePoll } from './usePoll';
 import { appFetch } from './app-fetch';
 import MarkdownMessage from './MarkdownMessage';
-import { cleanAttachmentDebugText } from './attachment-display';
+import { cleanAttachmentDebugText, parseAttachmentRefs, parseMetaAttachmentRefs } from './attachment-display';
+import { attachmentCacheScope } from './attach-download';
 
 // Chat with one agent. Mirrors dashboard M4: open with the newest PAGE
 // messages, grow the window when the user scrolls toward older history.
@@ -114,12 +115,7 @@ const makePusher = (serverUrl: string, out: AttachmentView[]) => {
 // render any /api/files/<id> mention as an openable attachment —
 // markdown [name](…/api/files/id) keeps its name, bare refs get a stub.
 const pushTextRefs = (text: string, push: (id: string, name: string, mime?: string) => void) => {
-  for (const m of text.matchAll(/\[([^\]]+)\]\([^()\s]*\/api\/files\/([A-Za-z0-9_-]{8,64})\)/g)) {
-    push(m[2], m[1]);
-  }
-  for (const m of text.matchAll(/\/api\/files\/([A-Za-z0-9_-]{8,64})/g)) {
-    push(m[1], `文件 ${m[1].slice(0, 8)}…`);
-  }
+  for (const ref of parseAttachmentRefs(text)) push(ref.fileId, ref.name, ref.mime);
 };
 
 /** Attachments belonging to the SENT bubble: local echo, meta, content refs. */
@@ -138,23 +134,8 @@ const sentAttachmentViews = (item: ChatItem, serverUrl: string): AttachmentView[
   const out: AttachmentView[] = [];
   const push = makePusher(serverUrl, out);
 
-  const raw = (item as any).meta_json;
-  if (raw) {
-    try {
-      const meta = typeof raw === 'string' ? JSON.parse(raw) : raw;
-      for (const a of meta?.attachments ?? []) {
-        if (a?.type === 'file' && a.file_id) {
-          push(
-            String(a.file_id),
-            String(a.name ?? a.file_id),
-            a.mime ? String(a.mime) : undefined,
-            typeof a.size === 'number' ? a.size : undefined,
-          );
-        }
-      }
-    } catch {
-      /* fall through to text refs */
-    }
+  for (const a of parseMetaAttachmentRefs((item as any).meta_json)) {
+    push(a.fileId, a.name, a.mime, a.size);
   }
   pushTextRefs(item.content ?? '', push);
   return out;
@@ -439,24 +420,35 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
       </Pressable>
     ) : a.isImage && a.needsAuth && Platform.OS === 'web' && !!(globalThis as any).__TAURI_INTERNALS__ ? (
       <AuthedWebThumb
-        key={a.key}
+        key={`${attachmentCacheScope(cfg.serverUrl, cfg.token)}-${a.key}`}
         uri={a.uri!}
         name={a.name}
+        mime={a.mime}
         token={cfg.token}
         onPress={objectUrl => setViewerUri(objectUrl)}
       />
     ) : a.isImage && a.needsAuth && Platform.OS !== 'web' ? (
-      <AuthedThumb
-        key={a.key}
-        fileId={a.key}
-        name={a.name}
-        serverUrl={cfg.serverUrl}
-        token={cfg.token}
-        onPress={localUri => setViewerUri(localUri)}
-      />
+      <View key={`${attachmentCacheScope(cfg.serverUrl, cfg.token)}-${a.key}`} style={styles.attachmentImage}>
+        <AuthedThumb
+          fileId={a.key}
+          name={a.name}
+          mime={a.mime}
+          serverUrl={cfg.serverUrl}
+          token={cfg.token}
+          onPress={localUri => setViewerUri(localUri)}
+        />
+        <AttachmentFile
+          fileId={a.key}
+          name={a.name}
+          mime={a.mime}
+          serverUrl={cfg.serverUrl}
+          token={cfg.token}
+          label="下载原图"
+        />
+      </View>
     ) : a.isVideo && a.needsAuth && Platform.OS !== 'web' ? (
       <AuthedVideo
-        key={a.key}
+        key={`${attachmentCacheScope(cfg.serverUrl, cfg.token)}-${a.key}`}
         fileId={a.key}
         name={a.name}
         mime={a.mime}
@@ -466,7 +458,7 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
       />
     ) : a.needsAuth && Platform.OS !== 'web' ? (
       <AttachmentFile
-        key={a.key}
+        key={`${attachmentCacheScope(cfg.serverUrl, cfg.token)}-${a.key}`}
         fileId={a.key}
         name={a.name}
         mime={a.mime}
@@ -1041,6 +1033,7 @@ const makeStyles = () =>
   },
   typingText: { color: colors.textMuted, fontSize: 12 },
   attachmentLine: { color: colors.accent, fontSize: 12, marginTop: spacing.xs },
+  attachmentImage: { alignItems: 'flex-start' },
   thumb: {
     width: 180,
     height: 180,

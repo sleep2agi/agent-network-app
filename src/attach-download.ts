@@ -59,9 +59,32 @@ export const extFromMime = (mime?: string): string => {
 
 export const MAX_ATTACHMENT_BYTES = 12 * 1024 * 1024;
 
-export const cachePathIn = (cacheDir: string, fileId: string, name?: string, mime?: string) => {
+const hash32 = (text: string, seed: number) => {
+  let hash = seed >>> 0;
+  for (let i = 0; i < text.length; i++) hash = Math.imul(hash ^ text.charCodeAt(i), 0x01000193) >>> 0;
+  return hash.toString(16).padStart(8, '0');
+};
+
+/** Opaque cache namespace for one authenticated Hub profile. The raw server
+ * URL and bearer token never appear in filenames/logs, while two profiles on
+ * one Hub and identical file IDs on two Hubs cannot share trusted bytes. */
+export const attachmentCacheScope = (serverUrl: string, token: string) => {
+  let origin = serverUrl.trim().replace(/\/+$/, '');
+  try {
+    const parsed = new URL(origin);
+    parsed.username = '';
+    parsed.password = '';
+    parsed.search = '';
+    parsed.hash = '';
+    origin = parsed.toString().replace(/\/+$/, '');
+  } catch { /* keep the non-secret raw endpoint spelling */ }
+  const input = `${origin}\u0000${token}`;
+  return `${hash32(input, 0x811c9dc5)}${hash32(input, 0x9e3779b9)}`;
+};
+
+export const cachePathIn = (cacheDir: string, fileId: string, name?: string, mime?: string, scope?: string) => {
   const ext = extOf(name) || extFromMime(mime);
-  return `${cacheDir}att-${fileId}${ext}`;
+  return `${cacheDir}att-${scope ? `${scope}-` : ''}${fileId}${ext}`;
 };
 
 /** The slice of expo-file-system this path needs, injected so the logic runs
@@ -125,7 +148,7 @@ export const downloadAttachmentWith = async (
   name?: string,
   mime?: string,
 ): Promise<string> => {
-  const dest = cachePathIn(cacheDir, fileId, name, mime);
+  const dest = cachePathIn(cacheDir, fileId, name, mime, attachmentCacheScope(serverUrl, token));
   const info = await fs.getInfoAsync(dest);
   // Cache hit requires BOTH the bytes AND a per-entry marker proving those
   // bytes were validated by this implementation. An empty/missing marker
@@ -253,7 +276,7 @@ export const describeAttachmentError = (e: unknown): string => {
 // alternative was a heuristic ("file looks too small / content does not match
 // its mime") — that guesses at a question we can answer exactly, and would
 // misfire on legitimately small files.
-export const ATTACHMENT_CACHE_SCHEMA = 2;
+export const ATTACHMENT_CACHE_SCHEMA = 3;
 
 /** Files this module owns live under `${cacheDir}att-…`; nothing else in the
  *  cache directory is touched. */

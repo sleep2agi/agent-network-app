@@ -27,6 +27,7 @@ import {
   downloadAttachmentWith,
   purgeLegacyAttachmentCacheWith,
   cachePathIn,
+  attachmentCacheScope,
   type DownloadFs,
 } from './attach-download';
 
@@ -34,6 +35,8 @@ let pass = 0, total = 0;
 const ck = (n: string, c: boolean) => { total++; if (c) { pass++; console.log('✅', n); } else console.log('❌', n); };
 
 const CACHE = '/cache/';
+const scopedPath = (cacheDir: string, fileId: string, name?: string, mime?: string) =>
+  cachePathIn(cacheDir, fileId, name, mime, attachmentCacheScope('http://h', 'tok'));
 const NOT_FOUND_BODY = '{"ok":false,"error":"not_found"}';           // 32 bytes — 正是"大小过小"
 const GOOD_BODY = 'PKreal-pptx-bytes-'.padEnd(400, 'x'); // 一个像样的文件
 
@@ -156,7 +159,7 @@ const run = async () => {
   // 两条一起才钉住"拒缓存 → 重下 → 正确落地" 完整链路。
   {
     const { fs, files, calls } = makeFs({ status: 200, body: GOOD_BODY, contentLength: String(Buffer.byteLength(GOOD_BODY)) });
-    const dest = cachePathIn(CACHE, 'f5', 'deck.pptx', undefined);
+    const dest = scopedPath(CACHE, 'f5', 'deck.pptx', undefined);
     // 旧版留下的坏文件: 非空, 所以躲过 size>0 判据; **无 marker**
     files.set(dest, NOT_FOUND_BODY);
 
@@ -183,7 +186,7 @@ const run = async () => {
   // 性彻底重来"仍然可用。两条互不依赖, 都测。
   {
     const { fs, files, calls } = makeFs({ status: 200, body: GOOD_BODY, contentLength: String(Buffer.byteLength(GOOD_BODY)) });
-    const dest = cachePathIn(CACHE, 'f5b', 'deck.pptx', undefined);
+    const dest = scopedPath(CACHE, 'f5b', 'deck.pptx', undefined);
     files.set(dest, NOT_FOUND_BODY);
 
     const r1 = await purgeLegacyAttachmentCacheWith(fs, CACHE);
@@ -216,12 +219,12 @@ const run = async () => {
     ck('moveAsync 抛错 → 抛给上层(不是静默成功)', threw !== null);
     ck('moveAsync 抛错 → 错误消息带 EXDEV', threw !== null && /EXDEV/.test(threw.message));
     // 关键: .part 必须被清 —— 别让部分写入的 tmp 留着
-    const part = `${cachePathIn(CACHE, 'f5c', 'deck.pptx', undefined)}.part`;
+    const part = `${scopedPath(CACHE, 'f5c', 'deck.pptx', undefined)}.part`;
     ck('moveAsync 抛错 → .part 已清, 无孤儿', !files.has(part));
     ck('moveAsync 抛错 → dest 未产生 (原子性保住)',
-      !files.has(cachePathIn(CACHE, 'f5c', 'deck.pptx', undefined)));
+      !files.has(scopedPath(CACHE, 'f5c', 'deck.pptx', undefined)));
     ck('moveAsync 抛错 → 未写 marker (因为没成功落地)',
-      !files.has(`${cachePathIn(CACHE, 'f5c', 'deck.pptx', undefined)}.v`));
+      !files.has(`${scopedPath(CACHE, 'f5c', 'deck.pptx', undefined)}.v`));
     // 恢复不影响其它 test
     fs.moveAsync = originalMove;
   }
@@ -232,7 +235,7 @@ const run = async () => {
   {
     const { fs, files, calls } = makeFs({ status: 200, body: GOOD_BODY });
     // Inject: downloadAsync 抛错前半途写了 partial 数据 (模拟原生 partial write)
-    const dest = cachePathIn(CACHE, 'f5d', 'deck.pptx', undefined);
+    const dest = scopedPath(CACHE, 'f5d', 'deck.pptx', undefined);
     const part = `${dest}.part`;
     fs.downloadAsync = async (_url, destArg) => {
       calls.download++;
@@ -256,26 +259,40 @@ const run = async () => {
   // ── 6) 清理只跑一次 ──────────────────────────────────────────────
   {
     const { fs, files } = makeFs({ status: 200, body: GOOD_BODY });
-    files.set(cachePathIn(CACHE, 'f6', 'a.pptx', undefined), NOT_FOUND_BODY);
+    files.set(scopedPath(CACHE, 'f6', 'a.pptx', undefined), NOT_FOUND_BODY);
     const first = await purgeLegacyAttachmentCacheWith(fs, CACHE);
-    files.set(cachePathIn(CACHE, 'f7', 'b.pptx', undefined), NOT_FOUND_BODY); // 之后又产生的缓存
+    files.set(scopedPath(CACHE, 'f7', 'b.pptx', undefined), NOT_FOUND_BODY); // 之后又产生的缓存
     const second = await purgeLegacyAttachmentCacheWith(fs, CACHE);
     ck('清理只跑一次 → 第一次执行', first.skipped === false && first.purged === 1);
     ck('清理只跑一次 → 第二次跳过(marker 已在)', second.skipped === true && second.purged === 0);
     ck('清理只跑一次 → 第二次没有误删后来的缓存',
-      files.get(cachePathIn(CACHE, 'f7', 'b.pptx', undefined)) === NOT_FOUND_BODY);
+      files.get(scopedPath(CACHE, 'f7', 'b.pptx', undefined)) === NOT_FOUND_BODY);
   }
 
   // ── 7) 清理只删附件, 不碰同目录的其他缓存 ────────────────────────
   {
     const { fs, files } = makeFs({ status: 200, body: GOOD_BODY });
     files.set(`${CACHE}sessions_cache_v1.json`, '{"sessions":[]}');
-    files.set(cachePathIn(CACHE, 'f8', 'c.pptx', undefined), NOT_FOUND_BODY);
+    files.set(scopedPath(CACHE, 'f8', 'c.pptx', undefined), NOT_FOUND_BODY);
     await purgeLegacyAttachmentCacheWith(fs, CACHE);
     ck('清理 → 别的缓存文件原样保留',
       files.get(`${CACHE}sessions_cache_v1.json`) === '{"sessions":[]}');
     ck('清理 → 附件缓存被删',
-      files.has(cachePathIn(CACHE, 'f8', 'c.pptx', undefined)) === false);
+      files.has(scopedPath(CACHE, 'f8', 'c.pptx', undefined)) === false);
+  }
+
+  // ── 8) 同 file_id 不能跨 Hub / profile 共用鉴权缓存 ──────────────
+  {
+    const a = attachmentCacheScope('https://hub-a.example/', 'atok_profile_a');
+    const b = attachmentCacheScope('https://hub-b.example', 'atok_profile_a');
+    const c = attachmentCacheScope('https://hub-a.example', 'atok_profile_b');
+    ck('cache scope → 不同 Hub 隔离', a !== b);
+    ck('cache scope → 同 Hub 不同 profile/token 隔离', a !== c);
+    const path = cachePathIn(CACHE, 'same-file-id', 'photo.png', 'image/png', a);
+    ck('cache scope → 路径不泄露 Hub URL', !path.includes('hub-a.example'));
+    ck('cache scope → 路径不泄露 bearer token', !path.includes('atok_profile_a'));
+    ck('cache scope → 规范化同一 Hub 拼写',
+      a === attachmentCacheScope('https://hub-a.example/#ignored', 'atok_profile_a'));
   }
 
   console.log(`\n${pass}/${total} passed`);
