@@ -17,7 +17,7 @@ check('共享 ChatScreen 同时覆盖独立窗口/桌面主窗口/移动端', (a
 check('共享 ChatScreen 只挂一份 SideThreadDrawer', (chat.match(/<SideThreadDrawer/g) ?? []).length === 1);
 check('+ 菜单明确提供 BTW 入口', chat.includes('accessibilityLabel="新建 BTW 旁路线程"') && chat.includes('不打断、不 steer 当前主任务'));
 check('首 token parser 在普通 sendTask 前截获 BTW', chat.indexOf('parseBtwFirstToken(draft)') < chat.indexOf('outboxAdd({'));
-check('BTW 分支不生成主会话 optimistic echo', chat.includes('Do not add an optimistic\n      // main-chat bubble and never call sendTask as a fallback.'));
+check('BTW 分支不生成主会话 optimistic echo', chat.includes('Do not add an optimistic') && chat.includes('main-chat bubble and never call sendTask as a fallback.'));
 check('SideThreadDrawer 无主 draft/scroll/title/selection 写入能力', !/setDraft|setMessages|listRef|setScreen|setSelection/.test(props));
 check('BTW 异步状态完全封装在 drawer，不接普通 sendTask', !/\bsendTask\s*\(/.test(drawer) && !drawer.includes('/api/task'));
 check('unsupported UI 明说不降级', drawer.includes('不会降级为普通发送、优先任务或 steer。'));
