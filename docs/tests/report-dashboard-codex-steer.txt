@@ -1,0 +1,55 @@
+Dashboard → active Codex TUI turn steering
+Date: 2026-08-25
+Base: 06f84d17af003152713706fea13f9b949b423bdb
+
+Observed production failure
+---------------------------
+The app POSTed /api/task without meta.source or meta.client_request_id.
+The Hub correctly stamped auth_origin from the bearer token, but it does not
+invent the two missing interaction fields. agent-node therefore classified the
+rows as ordinary FIFO work. The live node log confirmed the result repeatedly:
+"task ... queued (a turn is in flight)".
+
+Current end-to-end contract
+---------------------------
+1. The app labels an interactive chat send with source=dashboard-chat and a
+   unique dreq_<32 lowercase hex> correlation id.
+2. The Hub overwrites auth_origin from authentication facts. The app does not
+   and cannot grant itself steering authority.
+3. agent-node accepts steering only when source, request id and auth_origin=user
+   all pass. Node-authenticated or legacy rows remain FIFO.
+4. codex-app-server sends turn/steer with the exact active thread and expected
+   turn id. A non-steerable/review/compact/network-owned turn remains FIFO.
+5. An accepted steer is attributed to the exact CommHub task id. If completion
+   arrives before the successful steer acknowledgement, the bridge temporarily
+   holds that terminal event and then completes the same task without requeueing.
+   Rejection, expected-turn mismatch, or an RPC error falls back to FIFO.
+
+Known uncertainty window
+------------------------
+If app-server accepts `turn/steer` but its acknowledgement is lost in transport,
+the bridge cannot distinguish that from a pre-acceptance RPC failure and falls
+back to FIFO. That can inject the same logical message twice. This change does
+not claim exactly-once delivery across that response-loss boundary; the request
+id makes the attempt observable and leaves room for a later deduplication ACK.
+
+Docker verification
+-------------------
+Image: anet-app-steer151:dev
+Focused contract: dashboard Codex steer 7/7
+Full app suite: 46/46 test files passed
+TypeScript: clean
+
+Witnessed red
+-------------
+Mutation: remove only source='dashboard-chat' from the real request body while
+leaving request-id generation and every other send field intact.
+Result: exit 1 at
+  FAIL: chat sends declare authenticated Dashboard provenance
+
+Scope boundary
+--------------
+Queue priority remains independent. Both normal and high chat sends carry the
+interactive provenance; high still controls queued order and is not presented
+as an interrupt/cancel operation. The bridge appends instructions to a live
+human turn and never kills an in-flight tool process.
