@@ -274,11 +274,26 @@ function AppRoot() {
   // A window opened from the agent context menu is a WeChat-style detached
   // conversation: chat chrome only. Never mount DesktopWorkspace here, even
   // when the detached window is wide enough for the normal three-column UI.
-  if (dedicatedChatWindow && cfg && screen.name === 'chat') {
+  if (dedicatedChatWindow && cfg && (screen.name === 'chat' || screen.name === 'nodeDetail')) {
+    const detachedAlias = screen.alias;
     return (
       <SafeAreaView key={workspaceKey} style={styles.root} testID="dedicated-chat-window">
         <StatusBar barStyle={theme === 'light' ? 'dark-content' : 'light-content'} backgroundColor={colors.bg} />
-        <ChatScreen cfg={cfg} alias={screen.alias} onBack={() => {}} desktop />
+        {screen.name === 'chat' ? (
+          <ChatScreen
+            cfg={cfg}
+            alias={detachedAlias}
+            onBack={() => {}}
+            onOpenNodeSettings={() => setScreen({ name: 'nodeDetail', alias: detachedAlias })}
+            desktop
+          />
+        ) : (
+          <NodeDetailScreen
+            cfg={cfg}
+            alias={detachedAlias}
+            onBack={() => setScreen({ name: 'chat', alias: detachedAlias })}
+          />
+        )}
         <DesktopWindowPin />
       </SafeAreaView>
     );

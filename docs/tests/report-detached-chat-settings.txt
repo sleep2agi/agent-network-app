@@ -1,0 +1,21 @@
+Detached chat settings entry
+================================
+
+Source base: c92f3b2593c8512df5f6989f4c639b7cfd8200ba
+
+Scope
+-----
+- A detached desktop chat window exposes the existing node-settings action.
+- Settings reuse NodeDetailScreen for the detached window's exact alias.
+- Back returns to the same detached conversation.
+- The detached window never mounts the full DesktopWorkspace.
+
+Docker verification
+-------------------
+- npm test: 44/44 test files passed.
+- npm run typecheck: passed.
+- Container exit code: 0.
+
+Not verified here
+-----------------
+- Pixel-level appearance on signed macOS and Windows packages.
