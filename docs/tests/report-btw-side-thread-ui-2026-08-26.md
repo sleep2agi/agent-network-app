@@ -2,14 +2,15 @@
 
 Date: 2026-08-26 (Asia/Shanghai)
 
-Source under test: `3cbe719f68ed` (`feat/btw-side-thread-ui`)
+Source under test: `c92d2f30c530` (`feat/btw-side-thread-ui`)
 
 ## Scope
 
 - shared first-token `/btw` parser, `\/btw` escape, empty-question validation;
 - runtime-neutral typed SideThread client and explicit capability gate;
 - owner-authorized `prompt` projection contract for close/reopen and detached-window consistency;
-- creating/running/succeeded/failed/cancelled/archived card states;
+- creating/running/reconciling/succeeded/failed/cancelled/archived card states;
+- ambiguous/reconciling operations are shown as awaiting confirmation and cannot trigger retry, archive, purge or another side effect;
 - cancel, retry, archive and explicit bring-back actions;
 - main window, detached desktop chat and mobile all reuse `ChatScreen`/`SideThreadDrawer`;
 - main conversation state isolation and no `/api/task` / `sendTask` fallback;
@@ -20,22 +21,22 @@ Source under test: `3cbe719f68ed` (`feat/btw-side-thread-ui`)
 
 ```sh
 sg docker -c 'docker build \
-  --build-arg SOURCE_COMMIT=3cbe719f68ed \
+  --build-arg SOURCE_COMMIT=c92d2f30c530 \
   -f tests/test-btw-side-thread-ui/Dockerfile \
-  -t anet-app-btw-ui:3cbe719f68ed .'
+  -t anet-app-btw-ui:c92d2f30c530 .'
 
-sg docker -c 'docker run --rm anet-app-btw-ui:3cbe719f68ed'
+sg docker -c 'docker run --rm anet-app-btw-ui:c92d2f30c530'
 ```
 
 ## Results
 
 - parser and IME contract: 12/12 passed;
 - typed API, capability and update-subscription contract: 10/10 passed;
-- card identity/lifecycle/reopen contract: 9/9 passed;
-- shared UI and main-state isolation contract: 21/21 passed;
+- card identity/lifecycle/reopen/reconciliation contract: 12/12 passed;
+- shared UI and main-state isolation contract: 24/24 passed;
 - TypeScript build check: passed;
 - repository regression suite: 51/51 test files passed;
-- final container line: `PASS BTW SideThread App parser/API/model/shared UI contract @ 3cbe719f68ed`.
+- final container line: `PASS BTW SideThread App parser/API/model/shared UI contract @ c92d2f30c530`.
 
 An Expo SDK 56 web export was also produced from the same implementation before the Docker run: Metro bundled 470 modules successfully.
 
