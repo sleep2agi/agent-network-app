@@ -1,0 +1,29 @@
+P0 — false "Not delivered / retry" reconciliation (#170)
+
+Source commit under test: 492debd4729a049dc6fb1e78e7aa4b26c4903023
+
+Behavior changed
+- A pending outbox row stays pending across process restart. It is unknown until Hub reconciliation, not a proven failure.
+- A timeout refreshes the authoritative task list before exposing a red retry action. If the Hub row exists, the optimistic row is retired.
+- One optimistic bubble owns one dreq correlation id. Repeated retries reuse it, including deterministic migration for legacy local-* rows.
+- Historical failed `local-*` rows from pre-dreq builds are retired and the cleaned outbox is persisted at boot; they cannot be retried idempotently and no longer repopulate every conversation.
+- The sidebar window reuses one ChatScreen while aliases change. A send started in A now captures A's conversation key; after switching to B, A's late success/failure may reconcile only A's cache and can never mutate B's visible state or borrow B's request token. The fixed-alias detached window follows the same ownership rule.
+
+Docker verification
+- Image: anet-app-undelivered170:dev4 (suite definition: tests/test-undelivered-reconciliation/Dockerfile)
+- Full suite: 47/47 test files passed
+- TypeScript: clean
+- Focused request-id contract: 10/10
+- Outbox lifecycle/process restart and legacy cleanup: 13/13
+- ACK-loss reconciliation and conversation ownership: 6/6
+
+Witnessed red
+- Restore pending rows as failed again: the restart assertions fail.
+- Inspect the optimistic row before Hub reconciliation: `Hub reconciliation retires an ACK-lost optimistic row before failure UI` fails.
+- Ignore the caller's stable request id and generate one per HTTP call: `sendTask honors the bubble correlation id across retries` fails.
+- Remove the legacy failed-row retirement: outbox lifecycle falls to 10/13 and the historical-clutter assertion fails.
+- Remove the conversation-key ownership check: `a late result from A cannot mutate B in the reused sidebar screen` fails, reproducing the main-window-only symptom.
+
+Boundary
+- A genuine failed write still exposes one retry action after an authoritative refresh cannot find it.
+- Current dreq failed rows remain user-actionable. Only legacy failed rows without a stable request id are retired.

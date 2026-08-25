@@ -537,12 +537,32 @@ export const createDashboardRequestId = () => {
   return `dreq_${time}${random}${sequence}`;
 };
 
+const DASHBOARD_REQUEST_ID = /^dreq_[a-f0-9]{32}$/;
+
+/** Retries of one optimistic bubble are one logical send. Legacy local-* rows
+ * receive a deterministic, non-secret correlation id instead of a new id on
+ * every click. */
+export const dashboardRequestIdForLocalId = (localId: string): string => {
+  if (DASHBOARD_REQUEST_ID.test(localId)) return localId;
+  let output = '';
+  for (let seed = 0; seed < 4; seed += 1) {
+    let hash = (0x811c9dc5 ^ seed) >>> 0;
+    for (let i = 0; i < localId.length; i += 1) {
+      hash ^= localId.charCodeAt(i);
+      hash = Math.imul(hash, 0x01000193) >>> 0;
+    }
+    output += hash.toString(16).padStart(8, '0');
+  }
+  return `dreq_${output}`;
+};
+
 export const sendTask = async (
   cfg: HubConfig,
   to: string,
   content: string,
   attachments?: TaskAttachment[],
   priority: TaskPriority = 'normal',
+  clientRequestId = createDashboardRequestId(),
 ) => {
   const networkId = cfg.networkId ?? (await fetchNetworkId(cfg));
   const res = await withTimeout(signal =>
@@ -557,7 +577,7 @@ export const sendTask = async (
         network_id: networkId,
         meta: {
           source: 'dashboard-chat',
-          client_request_id: createDashboardRequestId(),
+          client_request_id: clientRequestId,
         },
         ...(attachments?.length ? { attachments } : {}),
       }),

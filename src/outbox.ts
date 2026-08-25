@@ -33,14 +33,25 @@ function flush(): void {
 }
 
 /** 启动时注入:saved=磁盘上的条目(重开恢复),persist=落盘写手。
- *  🔴 恢复时 pending→failed(死在发送中=命运未知=按未送达交用户裁)。 */
+ * A process exit while a request is in flight is ambiguous: the Hub may have
+ * committed it before the HTTP acknowledgement was lost. Preserve `pending`
+ * until ChatScreen reconciles against the authoritative task list. */
 export function initOutbox(saved: OutboxEntry[] | null, persistFn: (all: OutboxEntry[]) => void): void {
   entries = {};
   for (const e of saved ?? []) {
     if (!e || !e.id || !e.alias) continue;
-    entries[e.id] = { ...e, state: 'failed' };
+    // Pre-dreq app versions persisted every ambiguous timeout/restart as a
+    // red failed local-* row. Those rows have no stable Hub correlation id,
+    // cannot be retried idempotently, and accumulated across every chat. Retire
+    // that legacy failed-state clutter once; current dreq rows remain eligible
+    // for authoritative reconciliation and a real retry.
+    if (e.state === 'failed' && !/^dreq_[a-f0-9]{32}$/.test(e.id)) continue;
+    entries[e.id] = { ...e };
   }
   persist = persistFn;
+  // Persist the migration immediately so retired legacy rows do not return on
+  // the next launch even if no chat screen is opened in this process.
+  flush();
 }
 
 /** 提交即登记(网络尝试之前调)。 */
