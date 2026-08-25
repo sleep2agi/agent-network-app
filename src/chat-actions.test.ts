@@ -49,6 +49,10 @@ ck('Hub 出现同内容近时消息后确认并清除未送达副本', confirmed
   [{ id: 'retry-1', content: 'hello', createdAt: base }],
   [{ content: 'hello', created_at: '2026-08-23 08:00:20' }],
 ).join() === 'retry-1');
+ck('Hub 五分钟去重窗口内的送达记录会清除错误未送达标记', confirmedOutboxIds(
+  [{ id: 'retry-five-min', content: 'hello', createdAt: base }],
+  [{ content: 'hello', created_at: '2026-08-23 08:05:00' }],
+).join() === 'retry-five-min');
 ck('同内容旧历史不会误确认本次重试', confirmedOutboxIds(
   [{ id: 'retry-2', content: 'hello', createdAt: base }],
   [{ content: 'hello', created_at: '2026-08-23 07:00:00' }],

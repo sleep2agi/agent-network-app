@@ -1,0 +1,25 @@
+False undelivered chat bubbles
+================================
+
+Base: 63c00de0d569ff911ad17894fd50c659a32ebc7c
+
+Cause
+-----
+CommHub returns HTTP 429 with error=duplicate_send only after an identical
+task was already recorded inside its five-minute deduplication window. The app
+treated every non-2xx response as a failed delivery, persisted another outbox
+entry, and rendered it as “未送达 · 点击重试”.
+
+Fix
+---
+- Treat only the structured duplicate_send response as already delivered.
+- Keep unrelated 429 and malformed gateway responses as failures.
+- Reconcile persisted outbox rows over a six-minute window, slightly wider
+  than the Hub's five-minute deduplication window.
+
+Docker verification
+-------------------
+- npm test: 45/45 test files passed.
+- send-dedup-response.test.ts: 3/3 checks passed.
+- npm run typecheck: passed.
+- Container exit code: 0.
