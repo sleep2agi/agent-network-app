@@ -46,6 +46,8 @@ import { attachmentCacheScope } from './attach-download';
 import ActualRecipientNotice from './ActualRecipientNotice';
 import { sendConfirmationFromResponse, sendNoticeFor, type SendConfirmation } from './actual-recipient';
 import { beginForward, confirmForward, markForwardAmbiguous, mayProjectForward, resetForwardWithoutResend } from './forward-controller';
+import { parseBtwFirstToken } from './btw-command';
+import SideThreadDrawer, { type SideThreadLaunch } from './SideThreadDrawer';
 
 // Chat with one agent. Mirrors dashboard M4: open with the newest PAGE
 // messages, grow the window when the user scrolls toward older history.
@@ -183,6 +185,8 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
   const [loadingOlder, setLoadingOlder] = useState(false);
   const [draft, setDraft] = useState('');
   const [sendPriority, setSendPriority] = useState<'high' | 'normal'>('normal');
+  const [plusMenuOpen, setPlusMenuOpen] = useState(false);
+  const [btwLaunch, setBtwLaunch] = useState<SideThreadLaunch>();
   const sending = false; // optimistic echo frees the input immediately
   const limitRef = useRef(PAGE);
 
@@ -580,7 +584,20 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
   };
 
   const submit = () => {
-    const content = draft.trim() || (attached.length ? `[附件] ${attached.map(item => item.fileName).join('、')}` : '');
+    const parsed = parseBtwFirstToken(draft);
+    if (parsed.kind === 'invalid') {
+      Alert.alert('BTW 需要一个问题', parsed.message);
+      setBtwLaunch(current => ({ id: (current?.id ?? 0) + 1 }));
+      return;
+    }
+    if (parsed.kind === 'btw') {
+      // SideThread owns this prompt from here on. Do not add an optimistic
+      // main-chat bubble and never call sendTask as a fallback.
+      setDraft('');
+      setBtwLaunch(current => ({ id: (current?.id ?? 0) + 1, prompt: parsed.prompt }));
+      return;
+    }
+    const content = parsed.content.trim() || (attached.length ? `[附件] ${attached.map(item => item.fileName).join('、')}` : '');
     if ((!content && !attached.length) || sending) return;
     const imgs = attached;
     const priority = sendPriority;
@@ -676,6 +693,16 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
     ]);
   };
 
+  const openBtwComposer = () => {
+    setPlusMenuOpen(false);
+    setBtwLaunch(current => ({ id: (current?.id ?? 0) + 1 }));
+  };
+
+  const openAttachmentPicker = () => {
+    setPlusMenuOpen(false);
+    attach();
+  };
+
   return (
     <KeyboardAvoidingView
       style={styles.root}
@@ -709,6 +736,15 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
             </Text>
           ) : null}
         </View>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="打开 BTW 旁路线程"
+          onPress={openBtwComposer}
+          hitSlop={8}
+          style={({ pressed }) => [styles.btwHeaderButton, pressed && { opacity: 0.6 }]}
+        >
+          <Text style={styles.btwHeaderText}>BTW</Text>
+        </Pressable>
         {onOpenNodeSettings ? (
           <Pressable
             accessibilityRole="button"
@@ -918,6 +954,39 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
         </Pressable>
       </Modal>
 
+      <Modal visible={plusMenuOpen} transparent animationType="fade" onRequestClose={() => setPlusMenuOpen(false)}>
+        <Pressable style={styles.plusMenuBackdrop} onPress={() => setPlusMenuOpen(false)}>
+          <Pressable style={[styles.plusMenu, desktop ? styles.plusMenuDesktop : styles.plusMenuMobile]} onPress={() => {}}>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="新建 BTW 旁路线程"
+              style={({ pressed }) => [styles.plusMenuItem, pressed && styles.actionItemPressed]}
+              onPress={openBtwComposer}
+            >
+              <View style={styles.plusMenuIcon}><Text style={styles.plusMenuBtw}>BTW</Text></View>
+              <View style={styles.plusMenuCopy}>
+                <Text style={styles.plusMenuTitle}>旁路提问</Text>
+                <Text style={styles.plusMenuHint}>不打断、不 steer 当前主任务</Text>
+              </View>
+            </Pressable>
+            {ATTACH_ENABLED ? (
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="添加附件"
+                style={({ pressed }) => [styles.plusMenuItem, pressed && styles.actionItemPressed]}
+                onPress={openAttachmentPicker}
+              >
+                <View style={styles.plusMenuIcon}><Ionicons name="attach" size={21} color={colors.textSecondary} /></View>
+                <View style={styles.plusMenuCopy}>
+                  <Text style={styles.plusMenuTitle}>添加附件</Text>
+                  <Text style={styles.plusMenuHint}>添加到主会话草稿</Text>
+                </View>
+              </Pressable>
+            ) : null}
+          </Pressable>
+        </Pressable>
+      </Modal>
+
       {desktop ? (
         <View style={styles.desktopComposer}>
           <TextInput
@@ -935,11 +1004,9 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
             multiline
           />
           <View style={styles.desktopToolbar}>
-            {ATTACH_ENABLED ? (
-              <Pressable accessibilityLabel="添加附件" style={({ pressed }) => [styles.desktopToolButton, pressed && { opacity: 0.6 }]} onPress={attach} hitSlop={6}>
+            <Pressable accessibilityLabel="更多发送方式" style={({ pressed }) => [styles.desktopToolButton, pressed && { opacity: 0.6 }]} onPress={() => setPlusMenuOpen(true)} hitSlop={6}>
                 <Ionicons name="add-circle-outline" size={24} color={colors.textSecondary} />
-              </Pressable>
-            ) : <View />}
+            </Pressable>
             <View style={styles.desktopToolbarRight}>
               <Pressable
                 accessibilityRole="button"
@@ -963,15 +1030,14 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
         </View>
       ) : (
       <View style={[styles.inputRow, { paddingBottom: spacing.md + composerInset }]}>
-        {ATTACH_ENABLED ? (
-          <Pressable
-            style={({ pressed }) => [styles.attachBtn, pressed && { opacity: 0.6 }]}
-            onPress={attach}
-            hitSlop={6}
-          >
-            <Text style={styles.attachBtnText}>＋</Text>
-          </Pressable>
-        ) : null}
+        <Pressable
+          accessibilityLabel="更多发送方式"
+          style={({ pressed }) => [styles.attachBtn, pressed && { opacity: 0.6 }]}
+          onPress={() => setPlusMenuOpen(true)}
+          hitSlop={6}
+        >
+          <Text style={styles.attachBtnText}>＋</Text>
+        </Pressable>
         <Pressable
           accessibilityRole="button"
           accessibilityLabel={sendPriority === 'high' ? '取消优先发送' : '设为优先发送'}
@@ -1016,6 +1082,7 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
         </Pressable>
       </View>
       )}
+      <SideThreadDrawer cfg={cfg} alias={alias} desktop={desktop} launch={btwLaunch} />
     </KeyboardAvoidingView>
   );
 }
@@ -1051,6 +1118,8 @@ const makeStyles = () =>
   // DesktopWindowPin owns the top-right 34px. Reserve a separate hit target
   // instead of letting its absolute z-index cover this action.
   headerActionWithWindowPin: { marginRight: 42 },
+  btwHeaderButton: { height: 28, minWidth: 42, paddingHorizontal: spacing.sm, borderWidth: 1, borderColor: colors.accent, borderRadius: 7, alignItems: 'center', justifyContent: 'center' },
+  btwHeaderText: { color: colors.accent, fontSize: 10, fontWeight: '800' },
   beginning: {
     color: colors.textMuted,
     fontSize: 11,
@@ -1126,6 +1195,16 @@ const makeStyles = () =>
   actionText: { color: colors.text, fontSize: 16 },
   actionDanger: { color: colors.failed },
   actionCancel: { color: colors.textSecondary, fontSize: 16, fontWeight: '600' },
+  plusMenuBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.38)', justifyContent: 'flex-end' },
+  plusMenu: { backgroundColor: colors.card, borderColor: colors.border, borderWidth: 1, overflow: 'hidden' },
+  plusMenuDesktop: { width: 320, marginLeft: spacing.lg, marginBottom: 164, borderRadius: 12 },
+  plusMenuMobile: { width: '100%', borderTopLeftRadius: 16, borderTopRightRadius: 16, paddingBottom: spacing.xl },
+  plusMenuItem: { minHeight: 68, flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingHorizontal: spacing.lg, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.border },
+  plusMenuIcon: { width: 36, height: 36, borderRadius: 10, backgroundColor: colors.inputBg, alignItems: 'center', justifyContent: 'center' },
+  plusMenuBtw: { color: colors.accent, fontSize: 9, fontWeight: '800' },
+  plusMenuCopy: { flex: 1, minWidth: 0 },
+  plusMenuTitle: { color: colors.text, fontSize: 14, fontWeight: '600' },
+  plusMenuHint: { color: colors.textMuted, fontSize: 11, marginTop: 2 },
   forwardBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.38)', alignItems: 'center', justifyContent: 'center', padding: spacing.xl },
   forwardPanel: { width: 360, maxWidth: '92%', maxHeight: 520, borderRadius: 14, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.card, padding: spacing.lg },
   forwardTitle: { color: colors.text, fontSize: 17, fontWeight: '700', marginBottom: spacing.md },
