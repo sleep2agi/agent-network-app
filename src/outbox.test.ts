@@ -39,7 +39,7 @@ outboxRemove('a1');
 ck('L4 确认成功=唯一删除路径:remove 后盘空', disk.length === 0);
 
 __resetOutboxForTest(); initOutbox([E('x1', 'A', 'pending'), E('x2', 'B', 'failed')], spy);
-ck('🔴 L5 重开恢复:pending 一律恢复为 failed(死在发送中=命运未知=按未送达)', outboxForAlias('A')[0].state === 'failed');
+ck('🔴 L5 重开恢复:pending 保持待确认,不能把 ACK 丢失冒充确定失败', outboxForAlias('A')[0].state === 'pending');
 ck('L6 恢复不误删:两条都在·按会话过滤', outboxForAlias('A').length === 1 && outboxForAlias('B').length === 1);
 
 __resetOutboxForTest(); initOutbox([E('t2'), E('t1')].map((e, i) => ({ ...e, createdAt: 2 - i })), spy);
@@ -60,7 +60,7 @@ process.exit(0); // 被杀:落盘发生在 add 当下,不靠退出钩子
 `);
 const ra = spawnSync('bun', [scriptA], { encoding: 'utf-8' });
 ck('K1 进程A 已死(exit 0·无收尾钩子)', ra.status === 0);
-// 进程 B:全新进程,从真文件恢复 → 断言条目仍在且为 failed,然后走 remove
+// 进程 B:全新进程,从真文件恢复 → 条目仍 pending 等待 Hub 对账,然后走 remove
 const scriptB = join(dir, 'b.ts');
 writeFileSync(scriptB, `
 import { initOutbox, outboxForAlias, outboxRemove } from ${JSON.stringify(mod)};
@@ -68,12 +68,12 @@ import { readFileSync, writeFileSync } from 'node:fs';
 const saved = JSON.parse(readFileSync(${JSON.stringify(file)}, 'utf-8'));
 initOutbox(saved, (all) => writeFileSync(${JSON.stringify(file)}, JSON.stringify(all)));
 const got = outboxForAlias('通信龙');
-if (got.length !== 1 || got[0].id !== 'k1' || got[0].state !== 'failed' || got[0].content !== '杀我之前发的') process.exit(1);
+if (got.length !== 1 || got[0].id !== 'k1' || got[0].state !== 'pending' || got[0].content !== '杀我之前发的') process.exit(1);
 outboxRemove('k1'); // 模拟重试成功后的确认删除
 process.exit(0);
 `);
 const rb = spawnSync('bun', [scriptB], { encoding: 'utf-8' });
-ck('🔴 K2 杀掉再开:全新进程从真文件里看到它·内容一致·pending→failed', rb.status === 0);
+ck('🔴 K2 杀掉再开:全新进程看到它·内容一致·pending 等 Hub 对账', rb.status === 0);
 const after = JSON.parse(readFileSync(file, 'utf-8'));
 ck('K3 进程B remove 后:真文件为空(送达确认才删·且删干净)', Array.isArray(after) && after.length === 0);
 rmSync(dir, { recursive: true, force: true });

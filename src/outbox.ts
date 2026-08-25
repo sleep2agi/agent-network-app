@@ -33,12 +33,14 @@ function flush(): void {
 }
 
 /** 启动时注入:saved=磁盘上的条目(重开恢复),persist=落盘写手。
- *  🔴 恢复时 pending→failed(死在发送中=命运未知=按未送达交用户裁)。 */
+ * A process exit while a request is in flight is ambiguous: the Hub may have
+ * committed it before the HTTP acknowledgement was lost. Preserve `pending`
+ * until ChatScreen reconciles against the authoritative task list. */
 export function initOutbox(saved: OutboxEntry[] | null, persistFn: (all: OutboxEntry[]) => void): void {
   entries = {};
   for (const e of saved ?? []) {
     if (!e || !e.id || !e.alias) continue;
-    entries[e.id] = { ...e, state: 'failed' };
+    entries[e.id] = { ...e };
   }
   persist = persistFn;
 }

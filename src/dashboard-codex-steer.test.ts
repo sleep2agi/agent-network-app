@@ -1,4 +1,4 @@
-import { createDashboardRequestId, sendTask, type HubConfig } from './api';
+import { createDashboardRequestId, dashboardRequestIdForLocalId, sendTask, type HubConfig } from './api';
 
 let passed = 0;
 let total = 0;
@@ -12,6 +12,10 @@ const firstId = createDashboardRequestId();
 const secondId = createDashboardRequestId();
 check('Dashboard request ids use the Hub steering contract', /^dreq_[a-f0-9]{32}$/.test(firstId));
 check('consecutive Dashboard request ids are distinct', firstId !== secondId);
+check('a current dreq bubble keeps its request id on retry', dashboardRequestIdForLocalId(firstId) === firstId);
+check('a legacy local bubble gets one stable valid request id',
+  dashboardRequestIdForLocalId('local-123-1') === dashboardRequestIdForLocalId('local-123-1')
+  && /^dreq_[a-f0-9]{32}$/.test(dashboardRequestIdForLocalId('local-123-1')));
 
 const requests: any[] = [];
 const originalFetch = globalThis.fetch;
@@ -31,6 +35,7 @@ try {
   };
   await sendTask(cfg, 'codex-tui', 'please handle this now');
   await sendTask(cfg, 'codex-tui', 'keep this urgent', undefined, 'high');
+  await sendTask(cfg, 'codex-tui', 'retry me once', undefined, 'normal', firstId);
 } finally {
   globalThis.fetch = originalFetch;
 }
@@ -43,6 +48,8 @@ check('every send gets a valid client request id', requests.every(
 ));
 check('separate sends never reuse the correlation id',
   requests[0].meta.client_request_id !== requests[1].meta.client_request_id);
+check('sendTask honors the bubble correlation id across retries',
+  requests[2].meta.client_request_id === firstId);
 check('the client cannot self-assert the security boundary', requests.every(
   request => !Object.prototype.hasOwnProperty.call(request.meta, 'auth_origin'),
 ));

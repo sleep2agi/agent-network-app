@@ -19,8 +19,9 @@ import { Ionicons } from '@expo/vector-icons';
 import AliasAvatar from './AliasAvatar';
 import AuthedThumb, { AttachmentFile, AuthedVideo, mimeFromName } from './AuthedThumb';
 import AuthedWebThumb from './AuthedWebThumb';
-import { fetchStatus, fetchTasks, sendTask, HubConfig, HubTask, Session, TaskAttachment, TaskPriority } from './api';
+import { createDashboardRequestId, dashboardRequestIdForLocalId, fetchStatus, fetchTasks, sendTask, HubConfig, HubTask, Session, TaskAttachment, TaskPriority } from './api';
 import { outboxAdd, outboxForAlias, outboxMarkFailed, outboxMarkPending, outboxRemove } from './outbox';
+import { shouldExposeSendFailure } from './send-reconciliation';
 import { conversationKey, conversationScope, createConversationRequestGate, createConversationStore } from './conversation-store';
 import { resolveSender } from './chat-sender';
 import {
@@ -316,7 +317,6 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
     setLoadingOlder(false);
   };
 
-  const localSeq = useRef(0);
   const [attached, setAttached] = useState<PickedImage[]>([]);
   const appendAttachment = useCallback((next: PickedImage) => {
     setAttached(previous => {
@@ -489,7 +489,7 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
         attachments = uploaded.map(({ img, up }) => toTaskAttachment(img, up));
         outgoing = `${content}${uploaded.map(({ img, up }) => attachmentTextHint(img, up)).join('')}`;
       }
-      await sendTask(cfg, alias, outgoing, attachments, priority);
+      await sendTask(cfg, alias, outgoing, attachments, priority, dashboardRequestIdForLocalId(localId));
       imgs.forEach(releaseClipboardAttachment);
       // delivered: drop the echo, the server copy arrives with reload.
       // 🔴 outbox 唯一删除路径=此处(sendTask 确认成功)。
@@ -497,6 +497,14 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
       setMessages(prev => prev.filter(t => t._localId !== localId));
       await load(limitRef.current);
     } catch {
+      // Timeout is not proof that the write failed. The Hub may have committed
+      // the task and lost only the HTTP acknowledgement; reconcile before a
+      // red retry action can manufacture duplicate work.
+      const exposeFailure = await shouldExposeSendFailure(
+        () => load(limitRef.current),
+        () => outboxForAlias(alias).some(entry => entry.id === localId),
+      );
+      if (!exposeFailure) return;
       outboxMarkFailed(localId); // 盘上也是 failed——杀 app 重开仍可重试
       setMessages(prev =>
         prev.map(t => (t._localId === localId ? { ...t, _pending: false, _failed: true } : t)),
@@ -516,10 +524,11 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
     // client-only _localId (NOT the server task id, which we don't have
     // yet). doSend drops this echo on success — the subsequent reload brings
     // the real server row — or flags _failed so retry() can resend with the
-    // same _localId. localSeq just guarantees each echo's id is unique.
+    // same _localId. The dreq id is both the echo key and the stable Hub
+    // correlation id, so retrying this bubble cannot create a new logical send.
     // PR3 判据C:id 跨次启动唯一(重开恢复的旧 local-N 不能和新 id 撞车);
     // 🔴 提交即落盘(网络尝试之前)——发送中被杀,重开后它还在。
-    const localId = `local-${Date.now()}-${++localSeq.current}`;
+    const localId = createDashboardRequestId();
     outboxAdd({ id: localId, alias, content, createdAt: Date.now(), state: 'pending', hadImage: imgs.length > 0, priority });
     setMessages(prev => [
       { content, created_at: new Date().toISOString(), _localId: localId, _pending: true, _imgs: imgs, _priority: priority },
