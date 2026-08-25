@@ -321,8 +321,11 @@ jobs:
             --file "$IPA_PATH" \
             --apiKey "$ASC_KEY_ID" \
             --apiIssuer "$ASC_ISSUER_ID"
+          # App Store validation is asynchronous. Revoking this certificate as
+          # soon as altool returns turns the accepted upload into ITMS-90035.
+          echo 'IOS_RETAIN_REMOTE_SIGNING_ASSETS=true' >> "$GITHUB_ENV"
 
-      - name: Revoke and remove ephemeral signing assets
+      - name: Remove local signing material; revoke remote assets only after an unsuccessful upload
         if: ${{ always() }}
         env:
           ASC_KEY_ID: ${{ secrets.APPLE_API_KEY }}

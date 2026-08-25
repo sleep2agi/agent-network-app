@@ -121,8 +121,13 @@ async function prepare() {
 async function cleanup() {
   const profileId = process.env.IOS_PROFILE_ID;
   const certificateId = process.env.IOS_CERTIFICATE_ID;
-  if (profileId) await api('DELETE', `/profiles/${encodeURIComponent(profileId)}`).catch(error => console.error(`profile cleanup: ${error.message}`));
-  if (certificateId) await api('DELETE', `/certificates/${encodeURIComponent(certificateId)}`).catch(error => console.error(`certificate cleanup: ${error.message}`));
+  const retainRemote = process.env.IOS_RETAIN_REMOTE_SIGNING_ASSETS === 'true';
+  if (retainRemote) {
+    console.log('Retaining the remote distribution certificate and profile because Apple still needs them to validate the uploaded binary');
+  } else {
+    if (profileId) await api('DELETE', `/profiles/${encodeURIComponent(profileId)}`).catch(error => console.error(`profile cleanup: ${error.message}`));
+    if (certificateId) await api('DELETE', `/certificates/${encodeURIComponent(certificateId)}`).catch(error => console.error(`certificate cleanup: ${error.message}`));
+  }
   const profilePath = process.env.IOS_PROFILE_PATH;
   if (profilePath) fs.rmSync(profilePath, { force: true });
   const keychain = process.env.IOS_KEYCHAIN_PATH;
@@ -131,7 +136,7 @@ async function cleanup() {
   }
   const temp = process.env.IOS_SIGNING_TEMP;
   if (temp) fs.rmSync(temp, { recursive: true, force: true });
-  console.log('Cleaned ephemeral iOS distribution signing assets');
+  console.log('Removed runner-local iOS signing keychain and private-key material');
 }
 
 await (mode === 'cleanup' ? cleanup() : prepare());
