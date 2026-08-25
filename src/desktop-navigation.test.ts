@@ -14,13 +14,13 @@ check('desktop Settings has a dedicated bottom control', source.includes('deskto
 check('Settings control is rendered after the main tabs', source.indexOf('{DESKTOP_MAIN_TABS.map') < source.indexOf('accessibilityLabel={DESKTOP_SETTINGS_TAB.label}'));
 check('desktop rail keeps the full branded icon in dark mode', source.includes("source={require('./assets/icon.png')} style={desktopStyles.railBrandImage}"));
 check('desktop rail preserves the branded artwork in light mode', source.match(/source=\{require\('\.\/assets\/icon\.png'\)\}/g)?.length === 2 && source.includes('railBrandImageLight'));
-check('chat header settings opens the current node', source.includes("onOpenNodeSettings={() => setScreen({ name: 'nodeDetail', alias: screen.alias })}"));
+check('chat header settings opens read-only info for the current node', source.includes("onOpenNodeSettings={() => setScreen({ name: 'nodeInfo', alias: screen.alias })}"));
 const detachedStart = source.indexOf('if (dedicatedChatWindow && cfg');
 const workspaceStart = source.indexOf("if (desktop && cfg && screen.name !== 'login')");
 const detachedBlock = source.slice(detachedStart, workspaceStart);
 check('detached chat is selected before the full desktop workspace', detachedStart > 0 && detachedStart < workspaceStart);
 check('detached window never mounts the full workspace', detachedBlock.includes('<ChatScreen') && !detachedBlock.includes('<DesktopWorkspace'));
-check('detached chat exposes settings for its exact alias', detachedBlock.includes("onOpenNodeSettings={() => setScreen({ name: 'nodeDetail', alias: detachedAlias })}"));
+check('detached chat exposes settings for its exact alias', detachedBlock.includes("onOpenNodeSettings={() => setScreen({ name: 'nodeInfo', alias: detachedAlias })}"));
 check('detached settings reuses the node detail screen', detachedBlock.includes('<NodeDetailScreen') && detachedBlock.includes('alias={detachedAlias}'));
 check('detached settings returns to the same chat', detachedBlock.includes("onBack={() => setScreen({ name: 'chat', alias: detachedAlias })}"));
 check('server workspace has a dedicated sidebar', source.includes('<ServerSidebar cfg={cfg}') && source.includes('serverSectionForScreen(screen)'));

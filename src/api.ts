@@ -12,6 +12,16 @@ export interface Session {
   task?: string;
   server?: string;
   updated_at?: string;
+  node_id?: string | null;
+  hostname?: string | null;
+  ip?: string | null;
+  project_dir?: string | null;
+  version?: string | null;
+  model?: string | null;
+  runtime?: string | null;
+  /** Explicit runtime-reported OS identity only. Never infer this from project_dir. */
+  os_user?: string | null;
+  system_user?: string | null;
 }
 
 export interface HubTask {
@@ -88,6 +98,12 @@ async function get<T>(cfg: HubConfig, path: string): Promise<T> {
 export const fetchStatus = (cfg: HubConfig) =>
   get<{ sessions: Session[] }>(cfg, '/api/status?light=1');
 
+/** Full, authenticated status projection for the one-node details screen.
+ * List/chat polling stays on `?light=1`; this opt-in read is where legacy
+ * Hubs may omit newer nullable facts such as `os_user`. */
+export const fetchNodeStatus = (cfg: HubConfig) =>
+  get<{ sessions: Session[] }>(cfg, '/api/status');
+
 /** A registered node row (subset we consume). The hub's GET /api/nodes
  *  returns `{ ok, nodes, count }`; hub #462 added `avatar_url` to the
  *  projection (server.ts:2784) — nullable, `/avatars/<name>.(webp|png|svg)`
@@ -98,6 +114,11 @@ export interface HubNode {
   node_name?: string | null;
   avatar_url?: string | null;
   lifecycle_state?: string | null;
+  runtime?: string | null;
+  model?: string | null;
+  server?: string | null;
+  hostname?: string | null;
+  role?: string | null;
   config_revision?: number | null;
   config_snapshot?: {
     model?: string | null;

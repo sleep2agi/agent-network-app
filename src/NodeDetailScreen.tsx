@@ -51,12 +51,13 @@ import { ActivityIndicator, Modal, Pressable, ScrollView, StyleSheet, Text, Text
 import AliasAvatar from './AliasAvatar';
 import AvatarEditSection from './AvatarEditSection';
 import { teamOf } from './agents-list';
-import { fetchHubNodes, fetchStatus, runNodeLifecycleAction, type HubConfig, type HubNode, type NodeLifecycleAction, type Session } from './api';
+import { fetchHubNodes, fetchNodeStatus, runNodeLifecycleAction, type HubConfig, type HubNode, type NodeLifecycleAction, type Session } from './api';
 import { styles } from './app-styles';
 import { colors, onThemeChange, spacing, statusColor } from './theme';
 import { formatTime } from './time';
 import { usePoll } from './usePoll';
 import { nodeActionVisual, type NodeActionTone } from './node-action-visual';
+import { nodeInfoFacts } from './node-info';
 
 const POLL_MS = 10_000; // same cadence as AgentsScreen — hub-friendly, felt-live
 
@@ -123,10 +124,12 @@ export default function NodeDetailScreen({
   cfg,
   alias,
   onBack,
+  readOnly = false,
 }: {
   cfg: HubConfig;
   alias: string;
   onBack: () => void;
+  readOnly?: boolean;
 }) {
   const [state, setState] = useState<LoadState>({ kind: 'loading' });
   const [node, setNode] = useState<HubNode | null>(null);
@@ -142,7 +145,7 @@ export default function NodeDetailScreen({
 
   const load = useCallback(async () => {
     try {
-      const data = await fetchStatus(cfg);
+      const data = await fetchNodeStatus(cfg);
       const found = (data.sessions ?? []).find(s => s.alias === alias);
       void fetchHubNodes(cfg)
         .then(result => setNode((result.nodes ?? []).find(candidate => candidate.alias === alias) ?? null))
@@ -183,7 +186,7 @@ export default function NodeDetailScreen({
       <Pressable onPress={onBack} hitSlop={12}>
         <Text style={{ color: colors.accent, fontSize: 28 }}>‹</Text>
       </Pressable>
-      <Text style={{ color: colors.text, fontSize: 17, fontWeight: '600' }}>节点详情</Text>
+      <Text style={{ color: colors.text, fontSize: 17, fontWeight: '600' }}>{readOnly ? '节点信息' : '节点详情'}</Text>
     </View>
   );
 
@@ -281,7 +284,7 @@ export default function NodeDetailScreen({
         </View>
 
         {/* R2 avatar editor (pool picker + custom URL; pre-disclosure for session-only) */}
-        <AvatarEditSection cfg={cfg} alias={s.alias} />
+        {!readOnly ? <AvatarEditSection cfg={cfg} alias={s.alias} /> : null}
 
         {/* Facts block — read-only labeled rows */}
         <View
@@ -293,19 +296,17 @@ export default function NodeDetailScreen({
             gap: 0,
           }}
         >
+          {nodeInfoFacts(s, node, cfg.serverUrl).map(fact => (
+            <InfoRow key={fact.label} label={fact.label} value={fact.value} />
+          ))}
           <InfoRow label="所属 team" value={team} />
-          <InfoRow label="Server" value={s.server} />
           <InfoRow label="最后更新" value={formatTime(s.updated_at)} />
-          <InfoRow label="Agent" value={s.agent} />
-          <InfoRow label="节点 ID" value={node?.node_id} />
           <InfoRow label="生命周期" value={node?.lifecycle_state} />
-          <InfoRow label="模型" value={node?.config_snapshot?.model} />
-          <InfoRow label="角色" value={node?.config_snapshot?.role} />
           <InfoRow label="配置版本" value={typeof node?.config_revision === 'number' ? String(node.config_revision) : undefined} />
         </View>
 
         {/* Current task preview — separate section, prose-style */}
-        <View style={{ paddingTop: spacing.xl }}>
+        {!readOnly ? <View style={{ paddingTop: spacing.xl }}>
           <Text style={{ color: colors.textMuted, fontSize: 13, marginBottom: spacing.sm }}>
             当前任务
           </Text>
@@ -320,9 +321,9 @@ export default function NodeDetailScreen({
               {s.task && s.task.trim().length > 0 ? s.task : '—'}
             </Text>
           </View>
-        </View>
+        </View> : null}
 
-        <View style={{ paddingTop: spacing.xl }}>
+        {!readOnly ? <View style={{ paddingTop: spacing.xl }}>
           <Text style={{ color: colors.textMuted, fontSize: 13, marginBottom: spacing.sm }}>节点操作</Text>
           {node ? (
             <View style={{ backgroundColor: colors.card, borderRadius: 12, padding: spacing.lg, gap: spacing.md }}>
@@ -339,10 +340,10 @@ export default function NodeDetailScreen({
           ) : (
             <Text style={{ color: colors.textMuted, fontSize: 12 }}>该会话没有权威节点 ID，生命周期操作不可用。</Text>
           )}
-        </View>
+        </View> : null}
       </ScrollView>
 
-      <Modal transparent visible={!!pendingAction} onRequestClose={() => setPendingAction(null)} animationType="fade">
+      <Modal transparent visible={!readOnly && !!pendingAction} onRequestClose={() => setPendingAction(null)} animationType="fade">
         <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.55)', alignItems: 'center', justifyContent: 'center', padding: spacing.xl }}>
           <View style={{ width: '100%', maxWidth: 420, borderRadius: 14, backgroundColor: colors.card, padding: spacing.xl, gap: spacing.md }}>
             <Text style={{ color: colors.text, fontSize: 17, fontWeight: '700' }}>
