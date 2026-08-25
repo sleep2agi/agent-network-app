@@ -2,7 +2,7 @@
 
 Date: 2026-08-26 (Asia/Shanghai)
 
-Source under test: `8567be9a204f` (`feat/btw-side-thread-ui`)
+Source under test: `fae90ec01db2` (`feat/btw-side-thread-ui`)
 
 ## Scope
 
@@ -20,22 +20,22 @@ Source under test: `8567be9a204f` (`feat/btw-side-thread-ui`)
 
 ```sh
 sg docker -c 'docker build \
-  --build-arg SOURCE_COMMIT=8567be9a204f \
+  --build-arg SOURCE_COMMIT=fae90ec01db2 \
   -f tests/test-btw-side-thread-ui/Dockerfile \
-  -t anet-app-btw-ui:8567be9a204f .'
+  -t anet-app-btw-ui:fae90ec01db2 .'
 
-sg docker -c 'docker run --rm anet-app-btw-ui:8567be9a204f'
+sg docker -c 'docker run --rm anet-app-btw-ui:fae90ec01db2'
 ```
 
 ## Results
 
 - parser and IME contract: 12/12 passed;
-- typed API, capability and update-subscription contract: 9/9 passed;
-- card identity/lifecycle/reopen contract: 8/8 passed;
+- typed API, capability and update-subscription contract: 10/10 passed;
+- card identity/lifecycle/reopen contract: 9/9 passed;
 - shared UI and main-state isolation contract: 21/21 passed;
 - TypeScript build check: passed;
 - repository regression suite: 51/51 test files passed;
-- final container line: `PASS BTW SideThread App parser/API/model/shared UI contract @ 8567be9a204f`.
+- final container line: `PASS BTW SideThread App parser/API/model/shared UI contract @ fae90ec01db2`.
 
 An Expo SDK 56 web export was also produced from the same implementation before the Docker run: Metro bundled 470 modules successfully.
 
