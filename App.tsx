@@ -67,7 +67,7 @@ type Screen =
 
 // 跟微信的学一学 (Vincent tg 807): icon over small label, active tint.
 // Desktop keeps operational modules together and pins Settings to the bottom.
-const TABS = [
+const DESKTOP_TABS = [
   { key: 'agents', label: 'Agents', icon: 'people-outline', iconActive: 'people' },
   { key: 'tasks', label: 'Tasks', icon: 'list-outline', iconActive: 'list' },
   { key: 'scheduled', label: '定时', icon: 'time-outline', iconActive: 'time' },
@@ -76,8 +76,15 @@ const TABS = [
   { key: 'settings', label: '设置', icon: 'settings-outline', iconActive: 'settings' },
 ] as const;
 
-const DESKTOP_MAIN_TABS = TABS.filter(tab => tab.key !== 'settings');
-const DESKTOP_SETTINGS_TAB = TABS.find(tab => tab.key === 'settings')!;
+const MOBILE_TABS = [
+  { key: 'agents', label: 'Agent', icon: 'people-outline', iconActive: 'people' },
+  { key: 'scheduled', label: '定时任务', icon: 'time-outline', iconActive: 'time' },
+  { key: 'server', label: '服务器', icon: 'server-outline', iconActive: 'server' },
+  { key: 'settings', label: '设置', icon: 'settings-outline', iconActive: 'settings' },
+] as const;
+
+const DESKTOP_MAIN_TABS = DESKTOP_TABS.filter(tab => tab.key !== 'settings');
+const DESKTOP_SETTINGS_TAB = DESKTOP_TABS.find(tab => tab.key === 'settings')!;
 
 export default function App() {
   // One-time cleanup of attachment caches written before the download fix.
@@ -436,7 +443,7 @@ function AppRoot() {
             )}
           </View>
           <View style={[styles.tabBar, { paddingBottom: tabBarInset }]}>
-            {TABS.map(tab => (
+            {MOBILE_TABS.map(tab => (
               <Pressable
                 key={tab.key}
                 style={styles.tab}
