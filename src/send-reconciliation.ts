@@ -8,3 +8,14 @@ export async function shouldExposeSendFailure(
   await reconcile();
   return optimisticRowStillExists();
 }
+
+/** A send can outlive the conversation that started it in the sidebar window.
+ * Its durable outbox/cache work still belongs to the original conversation,
+ * but it may only touch visible React state while that conversation is active. */
+export function mayApplySendResult(
+  startedConversationKey: string,
+  visibleConversationKey: string,
+  mounted: boolean,
+): boolean {
+  return mounted && startedConversationKey === visibleConversationKey;
+}

@@ -21,7 +21,7 @@ import AuthedThumb, { AttachmentFile, AuthedVideo, mimeFromName } from './Authed
 import AuthedWebThumb from './AuthedWebThumb';
 import { createDashboardRequestId, dashboardRequestIdForLocalId, fetchStatus, fetchTasks, sendTask, HubConfig, HubTask, Session, TaskAttachment, TaskPriority } from './api';
 import { outboxAdd, outboxForAlias, outboxMarkFailed, outboxMarkPending, outboxRemove } from './outbox';
-import { shouldExposeSendFailure } from './send-reconciliation';
+import { mayApplySendResult, shouldExposeSendFailure } from './send-reconciliation';
 import { conversationKey, conversationScope, createConversationRequestGate, createConversationStore } from './conversation-store';
 import { resolveSender } from './chat-sender';
 import {
@@ -203,6 +203,10 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
   const limitRef = useRef(PAGE);
 
   const conversationKeyFor = conversationKey(cfg.profileId, cfg.serverUrl, alias);
+  // Updated during render, before effects: an async send from the previous
+  // sidebar selection must see the new owner immediately.
+  const visibleConversationKeyRef = useRef(conversationKeyFor);
+  visibleConversationKeyRef.current = conversationKeyFor;
   const requestGateRef = useRef<ReturnType<typeof createConversationRequestGate> | null>(null);
   if (!requestGateRef.current) requestGateRef.current = createConversationRequestGate();
   const requestGate = requestGateRef.current;
@@ -481,6 +485,20 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
     imgs: PickedImage[] = [],
     priority: TaskPriority = 'normal',
   ) => {
+    const startedConversationKey = conversationKeyFor;
+    const startedAlias = alias;
+    const mayTouchVisibleState = () => mayApplySendResult(
+      startedConversationKey,
+      visibleConversationKeyRef.current,
+      mountedRef.current,
+    );
+    const reconcileStartedConversation = async () => {
+      const data = await fetchTasks(cfg, { to_name: startedAlias, limit: limitRef.current });
+      const fetched = data.tasks ?? [];
+      const confirmed = new Set(confirmedOutboxIds(outboxForAlias(startedAlias), fetched));
+      confirmed.forEach(outboxRemove);
+      conversations.put(startedConversationKey, fetched);
+    };
     try {
       let attachments: TaskAttachment[] | undefined;
       let outgoing = content;
@@ -494,15 +512,28 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
       // delivered: drop the echo, the server copy arrives with reload.
       // 🔴 outbox 唯一删除路径=此处(sendTask 确认成功)。
       outboxRemove(localId);
+      if (!mayTouchVisibleState()) {
+        // The main window reuses ChatScreen while switching aliases. The old
+        // send succeeded, but its completion belongs to the old cache only.
+        try { await reconcileStartedConversation(); } catch { /* next open refreshes it */ }
+        return;
+      }
       setMessages(prev => prev.filter(t => t._localId !== localId));
       await load(limitRef.current);
     } catch {
       // Timeout is not proof that the write failed. The Hub may have committed
       // the task and lost only the HTTP acknowledgement; reconcile before a
       // red retry action can manufacture duplicate work.
+      if (!mayTouchVisibleState()) {
+        // A late A failure while B is visible is ambiguous, not a reason to
+        // paint a retry under B. Reconcile A directly without borrowing B's
+        // request token; leave it pending if the Hub is unreachable.
+        try { await reconcileStartedConversation(); } catch { /* remain pending */ }
+        return;
+      }
       const exposeFailure = await shouldExposeSendFailure(
         () => load(limitRef.current),
-        () => outboxForAlias(alias).some(entry => entry.id === localId),
+        () => outboxForAlias(startedAlias).some(entry => entry.id === localId),
       );
       if (!exposeFailure) return;
       outboxMarkFailed(localId); // 盘上也是 failed——杀 app 重开仍可重试
