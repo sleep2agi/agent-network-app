@@ -30,10 +30,8 @@ export interface ScrollbarPalette {
  * "Stronger" is contrast, not brightness — on the light palette `text` is
  * darker than `textSecondary`, which is the same step away from the surface.
  */
-export const scrollbarCss = (palette: ScrollbarPalette): string => `
-/* Pointer devices only. Touch surfaces already overlay a scrollbar that hides
-   itself, and narrowing it there costs the user grab area for no gain. */
-@media (pointer: fine) {
+export const scrollbarCss = (palette: ScrollbarPalette, desktopShell = false): string => {
+  const rules = `
   * {
     scrollbar-width: thin;
     scrollbar-color: ${palette.textMuted} transparent;
@@ -58,5 +56,11 @@ export const scrollbarCss = (palette: ScrollbarPalette): string => `
   ::-webkit-scrollbar-thumb:active {
     background: ${palette.text};
   }
-}
 `;
+  if (desktopShell) return rules;
+  return `
+/* Browser touch surfaces keep their native overlay scrollbar. pointer:fine
+   is unreliable in macOS WKWebView, so the Tauri shell bypasses this guard. */
+@media (any-pointer: fine), (hover: hover) {${rules}}
+`;
+};

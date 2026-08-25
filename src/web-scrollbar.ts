@@ -21,7 +21,7 @@ export type { ScrollbarPalette } from './web-scrollbar-css';
 
 const install = createScrollbarInstaller({
   getDocument: () => (globalThis as { document?: StyleHostLike }).document ?? null,
-  renderCss: () => scrollbarCss(colors),
+  renderCss: () => scrollbarCss(colors, !!(globalThis as any).__TAURI_INTERNALS__),
   subscribe: (listener) => onThemeChange(listener),
 });
 
