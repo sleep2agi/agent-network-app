@@ -11,8 +11,11 @@ Workflow contract
 - The protected job uses the reviewed App Store Connect API key to create an
   ephemeral Apple Distribution certificate and IOS_APP_STORE profile, imports
   the matching private key into a temporary keychain, and archives with manual
-  distribution signing. An always-run cleanup revokes both API resources and
-  deletes local key material.
+  distribution signing. The always-run cleanup deletes runner-local key
+  material. After a successful TestFlight upload it retains the remote
+  certificate and profile because App Store validation is asynchronous;
+  revoking the certificate immediately caused ITMS-90035 Invalid Signature.
+  Failed or non-upload runs still revoke their unused remote signing assets.
 - Before export, CI verifies the app's code-signing authority is Apple
   Distribution, the embedded profile contains no ProvisionedDevices array,
   get-task-allow is false, and application-identifier matches the team and
