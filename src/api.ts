@@ -521,6 +521,22 @@ export interface TaskAttachment {
 
 export type TaskPriority = 'high' | 'normal' | 'low';
 
+// Dashboard chat is the only user-authenticated lane that may steer an
+// already-running human Codex TUI turn. The Hub overwrites `auth_origin` from
+// the bearer token; this client supplies only the interaction provenance and
+// a per-send correlation id. The id is for routing/idempotency, not a secret.
+let dashboardRequestSequence = 0;
+export const createDashboardRequestId = () => {
+  dashboardRequestSequence = (dashboardRequestSequence + 1) >>> 0;
+  const time = Date.now().toString(16).padStart(12, '0').slice(-12);
+  const random = Math.floor(Math.random() * Number.MAX_SAFE_INTEGER)
+    .toString(16)
+    .padStart(13, '0')
+    .slice(-13);
+  const sequence = dashboardRequestSequence.toString(16).padStart(7, '0');
+  return `dreq_${time}${random}${sequence}`;
+};
+
 export const sendTask = async (
   cfg: HubConfig,
   to: string,
@@ -539,6 +555,10 @@ export const sendTask = async (
         task: content,
         priority,
         network_id: networkId,
+        meta: {
+          source: 'dashboard-chat',
+          client_request_id: createDashboardRequestId(),
+        },
         ...(attachments?.length ? { attachments } : {}),
       }),
     }),
