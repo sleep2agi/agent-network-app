@@ -115,14 +115,17 @@ jobs:
           tagName: desktop-v__VERSION__
           releaseName: Agent Network Desktop v__VERSION__
           releaseBody: |-
-            Signed and notarized Beta update for macOS (Apple Silicon) and Windows (x64).
+            Signed and notarized stable update for macOS (Apple Silicon) and Windows (x64).
 
-            What's new in 0.2.33-3:
-            - Press Enter to send a chat message, matching familiar desktop messaging apps.
-            - Use Shift+Enter, Ctrl+Enter, or Command+Enter to insert a newline.
-            - Confirming Chinese or another IME candidate with Enter no longer sends the unfinished composition. Both modern composition events and legacy WebView key code 229 are covered.
+            What's new in 0.2.34:
+            - Switching between agent conversations is faster and stale responses can no longer appear under the wrong agent.
+            - Press Enter to send; use Shift+Enter, Ctrl+Enter, or Command+Enter for a newline. Confirming an IME candidate never sends the unfinished composition.
+            - High-priority sends move waiting Hub tasks ahead of normal queued work.
+            - Dark-mode scrollbars now use the app theme inside the Tauri desktop shell, removing the light gutter.
+            - Android adaptive icons now use the current Agent Network brand mark.
+            - Node action controls have a clearer visual hierarchy.
 
-            This Beta does not yet add true steering into an already-running Codex turn; the existing high-priority control only moves waiting Hub tasks ahead of normal work. Existing installations can update in place; new installations can use the assets below.
+            High-priority sending affects queued work; it does not interrupt an already-running Codex turn. Existing installations can update in place; new installations can use the assets below.
           releaseDraft: true
           prerelease: false
           updaterJsonPreferNsis: true

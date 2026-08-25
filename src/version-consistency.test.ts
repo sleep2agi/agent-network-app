@@ -1,6 +1,6 @@
 import fs from 'node:fs';
 
-const expected = '0.2.33-3';
+const expected = '0.2.34';
 const packageJson = JSON.parse(fs.readFileSync(new URL('../package.json', import.meta.url), 'utf8'));
 const packageLock = JSON.parse(fs.readFileSync(new URL('../package-lock.json', import.meta.url), 'utf8'));
 const appJson = JSON.parse(fs.readFileSync(new URL('../app.json', import.meta.url), 'utf8'));
@@ -15,6 +15,7 @@ const cargoPackagePattern = new RegExp(
 );
 
 const checks: Array<[string, boolean]> = [
+  ['release version is numeric major.minor.patch for Apple compatibility', /^\d+\.\d+\.\d+$/.test(expected)],
   ['Windows MSI prerelease identifier', !prerelease || /^\d+$/.test(prerelease) && Number(prerelease) <= 65535],
   ['package.json', packageJson.version === expected],
   ['package-lock root', packageLock.version === expected],
