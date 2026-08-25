@@ -117,13 +117,11 @@ jobs:
           releaseBody: |-
             Signed and notarized stable update for macOS (Apple Silicon) and Windows (x64).
 
-            What's new in 0.2.34:
-            - Switching between agent conversations is faster and stale responses can no longer appear under the wrong agent.
-            - Press Enter to send; use Shift+Enter, Ctrl+Enter, or Command+Enter for a newline. Confirming an IME candidate never sends the unfinished composition.
-            - High-priority sends move waiting Hub tasks ahead of normal queued work.
-            - Dark-mode scrollbars now use the app theme inside the Tauri desktop shell, removing the light gutter.
-            - Android adaptive icons now use the current Agent Network brand mark.
-            - Node action controls have a clearer visual hierarchy.
+            What's new in 0.2.35:
+            - Duplicate tasks already accepted by the Hub no longer accumulate as red “Not delivered” retry bubbles. Existing false retry entries are reconciled automatically.
+            - Detached agent chat windows now include a settings entry for that exact agent and return to the same conversation afterward.
+            - Desktop chat windows can be pinned above other apps and unpinned from the same control.
+            - Android navigation is reduced to four focused destinations: Agents, Schedules, Servers, and Settings.
 
             High-priority sending affects queued work; it does not interrupt an already-running Codex turn. Existing installations can update in place; new installations can use the assets below.
           releaseDraft: true
