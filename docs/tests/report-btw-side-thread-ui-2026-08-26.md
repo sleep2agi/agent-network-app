@@ -2,7 +2,7 @@
 
 Date: 2026-08-26 (Asia/Shanghai)
 
-Source under test: `c92d2f30c530` (`feat/btw-side-thread-ui`)
+Source under test: `8f36dd8fa7c5` (`feat/btw-side-thread-ui`)
 
 ## Scope
 
@@ -21,11 +21,11 @@ Source under test: `c92d2f30c530` (`feat/btw-side-thread-ui`)
 
 ```sh
 sg docker -c 'docker build \
-  --build-arg SOURCE_COMMIT=c92d2f30c530 \
+  --build-arg SOURCE_COMMIT=8f36dd8fa7c5 \
   -f tests/test-btw-side-thread-ui/Dockerfile \
-  -t anet-app-btw-ui:c92d2f30c530 .'
+  -t anet-app-btw-ui:8f36dd8fa7c5 .'
 
-sg docker -c 'docker run --rm anet-app-btw-ui:c92d2f30c530'
+sg docker -c 'docker run --rm anet-app-btw-ui:8f36dd8fa7c5'
 ```
 
 ## Results
@@ -36,9 +36,10 @@ sg docker -c 'docker run --rm anet-app-btw-ui:c92d2f30c530'
 - shared UI and main-state isolation contract: 24/24 passed;
 - TypeScript build check: passed;
 - repository regression suite: 51/51 test files passed;
-- final container line: `PASS BTW SideThread App parser/API/model/shared UI contract @ c92d2f30c530`.
+- Expo SDK 56 web export: passed (Metro bundled 470 modules);
+- final container line: `PASS BTW SideThread App parser/API/model/shared UI contract @ 8f36dd8fa7c5`.
 
-An Expo SDK 56 web export was also produced from the same implementation before the Docker run: Metro bundled 470 modules successfully.
+All results above, including the Expo export, were produced inside the same Docker test suite.
 
 ## Honesty boundary
 
