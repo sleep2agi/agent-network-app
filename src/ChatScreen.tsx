@@ -187,6 +187,7 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
   const [sendPriority, setSendPriority] = useState<'high' | 'normal'>('normal');
   const [plusMenuOpen, setPlusMenuOpen] = useState(false);
   const [btwLaunch, setBtwLaunch] = useState<SideThreadLaunch>();
+  const mainComposerRef = useRef<TextInput>(null);
   const sending = false; // optimistic echo frees the input immediately
   const limitRef = useRef(PAGE);
 
@@ -583,7 +584,7 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
     }
   };
 
-  const submit = () => {
+  const submit = async () => {
     const parsed = parseBtwFirstToken(draft);
     if (parsed.kind === 'invalid') {
       Alert.alert('BTW 需要一个问题', parsed.message);
@@ -593,8 +594,17 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
     if (parsed.kind === 'btw') {
       // SideThread owns this prompt from here on. Do not add an optimistic
       // main-chat bubble and never call sendTask as a fallback.
-      setDraft('');
-      setBtwLaunch(current => ({ id: (current?.id ?? 0) + 1, prompt: parsed.prompt }));
+      try {
+        const uploaded = await Promise.all(attached.map(item => uploadImage(cfg, item)));
+        const attachments = uploaded.map(item => ({ fileId: item.file_id }));
+        attached.forEach(releaseClipboardAttachment);
+        setDraft('');
+        setAttached([]);
+        setSendPriority('normal');
+        setBtwLaunch(current => ({ id: (current?.id ?? 0) + 1, prompt: parsed.prompt, attachments }));
+      } catch (error) {
+        Alert.alert('BTW 附件上传失败', error instanceof Error ? error.message : '附件未上传，草稿已保留');
+      }
       return;
     }
     const content = parsed.content.trim() || (attached.length ? `[附件] ${attached.map(item => item.fileName).join('、')}` : '');
@@ -697,6 +707,14 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
     setPlusMenuOpen(false);
     setBtwLaunch(current => ({ id: (current?.id ?? 0) + 1 }));
   };
+
+  const exactSideThreadTask = messages.find(message => message.thread_id && message.turn_id);
+  const sideThreadScope = exactSideThreadTask?.thread_id && exactSideThreadTask.turn_id
+    ? {
+      sourceThreadId: exactSideThreadTask.thread_id,
+      boundary: { kind: 'through' as const, turnId: exactSideThreadTask.turn_id },
+    }
+    : undefined;
 
   const openAttachmentPicker = () => {
     setPlusMenuOpen(false);
@@ -990,6 +1008,7 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
       {desktop ? (
         <View style={styles.desktopComposer}>
           <TextInput
+            ref={mainComposerRef}
             style={styles.desktopInput}
             placeholder={`Message ${alias}…`}
             placeholderTextColor={colors.textMuted}
@@ -999,7 +1018,7 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
               const key = event.nativeEvent as typeof event.nativeEvent & { ctrlKey?: boolean; metaKey?: boolean; shiftKey?: boolean; isComposing?: boolean; keyCode?: number; which?: number };
               if (!shouldSendOnEnter(key)) return;
               event.preventDefault?.();
-              submit();
+              void submit();
             }}
             multiline
           />
@@ -1020,7 +1039,7 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
               <Text style={styles.shortcutHint}>Enter 发送 · Shift/Ctrl/⌘+Enter 换行</Text>
               <Pressable
                 style={({ pressed }) => [styles.desktopSend, !canSend(draft, attached.length > 0, sending) && styles.desktopSendDisabled, pressed && { opacity: 0.7 }]}
-                onPress={submit}
+                onPress={() => void submit()}
                 disabled={!canSend(draft, attached.length > 0, sending)}
               >
                 <Text style={[styles.desktopSendText, !canSend(draft, attached.length > 0, sending) && styles.sendTextDisabled]}>发送</Text>
@@ -1048,6 +1067,7 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
           <Text style={[styles.mobilePriorityText, sendPriority === 'high' && styles.priorityButtonTextActive]}>⚡</Text>
         </Pressable>
         <TextInput
+          ref={mainComposerRef}
           style={styles.input}
           placeholder={`Message ${alias}…`}
           placeholderTextColor={colors.textMuted}
@@ -1065,7 +1085,7 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
             };
             if (!shouldSendOnEnter(key)) return;
             event.preventDefault?.();
-            submit();
+            void submit();
           }}
           multiline
         />
@@ -1075,14 +1095,21 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
             !canSend(draft, attached.length > 0, sending) && styles.sendDisabled,
             pressed && { opacity: 0.6 },
           ]}
-          onPress={submit}
+          onPress={() => void submit()}
           disabled={!canSend(draft, attached.length > 0, sending)}
         >
           <Text style={[styles.sendText, !canSend(draft, attached.length > 0, sending) && styles.sendTextDisabled]}>↑</Text>
         </Pressable>
       </View>
       )}
-      <SideThreadDrawer cfg={cfg} alias={alias} desktop={desktop} launch={btwLaunch} />
+      <SideThreadDrawer
+        cfg={cfg}
+        alias={alias}
+        desktop={desktop}
+        launch={btwLaunch}
+        scope={sideThreadScope}
+        restoreFocusRef={mainComposerRef}
+      />
     </KeyboardAvoidingView>
   );
 }

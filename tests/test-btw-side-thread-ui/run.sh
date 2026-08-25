@@ -7,6 +7,7 @@ test "${BTW_UI_SOURCE_COMMIT}" != "unrecorded"
 bun src/btw-command.test.ts
 bun src/side-thread-api.test.ts
 bun src/side-thread-model.test.ts
+bun src/side-thread-scope-gate.test.ts
 bun src/side-thread-ui.test.ts
 bun run typecheck
 bun run test

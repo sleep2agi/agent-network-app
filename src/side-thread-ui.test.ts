@@ -28,10 +28,16 @@ for (const action of ['cancel', 'retry', 'archive', 'bring-back']) {
   check(`drawer 接入 ${action}`, drawer.includes(`'${action}'`));
 }
 check('显式带回使用原 sourceThreadId，不自动写回', drawer.includes('destinationThreadId: card.sourceThreadId') && drawer.includes('actions.bringBack'));
-check('关闭 drawer 不调用 cancel/archive', drawer.includes('onRequestClose={() => setVisible(false)}'));
+check('关闭 drawer 不调用 cancel/archive', drawer.includes('onRequestClose={closeDrawer}') && !/const closeDrawer[\s\S]{0,300}client\.(cancel|archive)/.test(drawer));
 check('问题和卡片由 drawer 自有 state 持有', drawer.includes("const [question, setQuestion]") && drawer.includes("const [cards, setCards]"));
-check('切换 agent/窗口后迟到 create/action 不能写入新 owner', (drawer.match(/generation !== generationRef\.current/g) ?? []).length >= 7 && drawer.includes('return () => { generationRef.current += 1; }'));
+check('render-time scope gate 在 effect 前阻止旧 owner 写入', drawer.includes('scopeGate.render(scopeKey)') && drawer.includes('requestIsCurrent'));
+check('每 scope/lane request sequence 拒绝乱序 response', drawer.includes('scopeGate.begin(scopeKey, lane)') && drawer.includes('beginRequest(\'list\')') && drawer.includes('beginRequest(\'capability\')'));
 check('ambiguous 不冒充 failed，提示等待/刷新', drawer.includes("error.code === 'SIDE_THREAD_AMBIGUOUS'") && drawer.includes('正在确认运行状态') && drawer.includes('请等待或刷新'));
+check('同步 ref 锁阻止 bring-back double tap', drawer.includes('actionLocksRef.current.has(lockKey)') && drawer.indexOf('actionLocksRef.current.add(lockKey)') < drawer.indexOf("setCards(current => markSideThreadAction"));
+check('/btw 附件上传后显式传 SideThread 并清 composer', chat.includes('attachments = uploaded.map(item => ({ fileId: item.file_id }))') && chat.includes('setAttached([])') && chat.includes('attachments }));'));
+check('retry 保留 authoritative attempt attachments', drawer.includes('attachments: card.attachments'));
+check('Modal focus/restore/keyboard/safe-area 已接入', drawer.includes('questionInputRef.current?.focus()') && drawer.includes('restoreFocusRef?.current?.focus()') && drawer.includes('<KeyboardAvoidingView') && drawer.includes('insets.bottom'));
+check('dialog/state/live region 无障碍语义已接入', drawer.includes('role="dialog"') && drawer.includes('accessibilityState={{ busy:') && drawer.includes('accessibilityLiveRegion="polite"') && drawer.includes('accessibilityLiveRegion="assertive"'));
 
 console.log(`\n${passed}/${total} passed`);
 process.exit(passed === total ? 0 : 1);
