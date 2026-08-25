@@ -80,3 +80,36 @@ real expired-token retry behavior remain release-candidate acceptance checks. Th
 Docker suite verifies parsing, authentication headers, retry state, download handoff,
 cache isolation, main/detached shared wiring, type safety, and repository guards; it
 does not claim visual approval of a packaged app.
+
+Revision 2 — close an already-open viewer at the auth boundary
+--------------------------------------------------------------
+Source commit under test:
+29016d69dc4bf4960c4533364e18551c31573dd3
+
+Independent review found that the thumbnail children cleared their own pixels when
+credentials changed, but the parent ChatScreen retained `viewerUri`. Consequently an
+already-open Tauri `blob:` URL or native `file:` URI could remain visible after moving
+to another conversation, profile, or Hub. ChatScreen now derives a viewer scope from
+the conversation key plus the opaque authentication cache scope and closes the modal
+whenever that combined scope changes. The wiring test independently pins both producers:
+AuthedWebThumb's blob preview and AuthedThumb's native file preview.
+
+The cache-scope comment was also narrowed: the 64-bit value is best-effort high-entropy
+isolation bookkeeping, not a cryptographic digest or a claim that collision is
+impossible. No new dependency was introduced.
+
+Exact-source Docker evidence:
+* Image: sha256:fa6d4243b966dbe20185d510118f1397ddf12585c4aa348bc768acc6746b472c
+* Label: anet.issue173.source_commit=29016d69dc4bf4960c4533364e18551c31573dd3
+* chat attachment display: 16 checks passed
+* web authenticated image download: 9 checks passed
+* native/cache attachment download: 45 checks passed
+* npm test: 47/47 test files passed
+* TypeScript typecheck: passed
+* scrub guard replay: 121 files passed
+
+Revision-2 witnessed-red: remove only the scope-change `setViewerUri(null)` effect
+while leaving both preview producers intact. The attachment display suite exits 1 at:
+`FAIL: the image viewer is closed when conversation or authenticated scope changes`.
+This directly distinguishes an implementation that can open both URI types but cannot
+revoke either already-open preview on a scope switch.
