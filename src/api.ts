@@ -543,8 +543,14 @@ export const sendTask = async (
       }),
     }),
   );
+  const data = await res.json().catch(() => null);
+  // CommHub returns this exact 429 only after an identical task was already
+  // recorded during its five-minute deduplication window. Retire the local
+  // optimistic row instead of accumulating a false “未送达” bubble.
+  if (res.status === 429 && data?.error === 'duplicate_send') {
+    return { ...data, ok: true, deduplicated: true };
+  }
   if (!res.ok) throw new Error(`HTTP ${res.status} on /api/task`);
-  const data = await res.json();
   if (!data?.ok) throw new Error(String(data?.error ?? 'send failed'));
   return data;
 };

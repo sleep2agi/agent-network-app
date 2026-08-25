@@ -84,7 +84,8 @@ const messageTime = (value?: string): number => {
 export const confirmedOutboxIds = (
   local: TimedOutbox[],
   fetched: TimedMessage[],
-  windowMs = 2 * 60 * 1000,
+  // Slightly wider than CommHub's five-minute duplicate-send window.
+  windowMs = 6 * 60 * 1000,
 ): string[] => local.filter(entry => fetched.some(item => {
   if ((item.content ?? '').trim() !== entry.content.trim()) return false;
   const remoteTime = messageTime(item.created_at);
