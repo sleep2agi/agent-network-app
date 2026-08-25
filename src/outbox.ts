@@ -40,9 +40,18 @@ export function initOutbox(saved: OutboxEntry[] | null, persistFn: (all: OutboxE
   entries = {};
   for (const e of saved ?? []) {
     if (!e || !e.id || !e.alias) continue;
+    // Pre-dreq app versions persisted every ambiguous timeout/restart as a
+    // red failed local-* row. Those rows have no stable Hub correlation id,
+    // cannot be retried idempotently, and accumulated across every chat. Retire
+    // that legacy failed-state clutter once; current dreq rows remain eligible
+    // for authoritative reconciliation and a real retry.
+    if (e.state === 'failed' && !/^dreq_[a-f0-9]{32}$/.test(e.id)) continue;
     entries[e.id] = { ...e };
   }
   persist = persistFn;
+  // Persist the migration immediately so retired legacy rows do not return on
+  // the next launch even if no chat screen is opened in this process.
+  flush();
 }
 
 /** 提交即登记(网络尝试之前调)。 */

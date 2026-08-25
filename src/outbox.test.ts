@@ -38,9 +38,11 @@ ck('L3b 重试刷新尝试时间供 Hub 对账', disk[0].createdAt === 999);
 outboxRemove('a1');
 ck('L4 确认成功=唯一删除路径:remove 后盘空', disk.length === 0);
 
-__resetOutboxForTest(); initOutbox([E('x1', 'A', 'pending'), E('x2', 'B', 'failed')], spy);
+__resetOutboxForTest(); initOutbox([E('x1', 'A', 'pending'), E('x2', 'B', 'failed'), E('dreq_0123456789abcdef0123456789abcdef', 'B', 'failed')], spy);
 ck('🔴 L5 重开恢复:pending 保持待确认,不能把 ACK 丢失冒充确定失败', outboxForAlias('A')[0].state === 'pending');
-ck('L6 恢复不误删:两条都在·按会话过滤', outboxForAlias('A').length === 1 && outboxForAlias('B').length === 1);
+ck('🔴 L6 历史 local-* failed 不再重新污染对话框', !disk.some(entry => entry.id === 'x2'));
+ck('L6b 当前 dreq failed 仍保留真实重试入口', outboxForAlias('B').map(entry => entry.id).join() === 'dreq_0123456789abcdef0123456789abcdef');
+ck('L6c 历史清理立即落盘,不等用户打开对应会话', disk.length === 2);
 
 __resetOutboxForTest(); initOutbox([E('t2'), E('t1')].map((e, i) => ({ ...e, createdAt: 2 - i })), spy);
 ck('L7 outboxForAlias 按 createdAt 升序', outboxForAlias('通信龙').map(e => e.createdAt).join(',') === '1,2');
