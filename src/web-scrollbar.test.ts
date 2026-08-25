@@ -16,6 +16,7 @@ const LIGHT = { textMuted: '#929aa6', textSecondary: '#626a76', text: '#20242a' 
 
 const dark = scrollbarCss(DARK);
 const light = scrollbarCss(LIGHT);
+const desktop = scrollbarCss(DARK, true);
 
 const cssSource = fs
   .readFileSync(new URL('./web-scrollbar-css.ts', import.meta.url), 'utf8')
@@ -112,9 +113,11 @@ const checks: Array<[string, boolean]> = [
   ['webkit corner is transparent',
     /::-webkit-scrollbar-corner \{\n\s*background: transparent;/.test(dark)],
   ['no opaque white is painted anywhere', !/#fff|#ffffff|rgb\(255/i.test(dark)],
-  ['rules are scoped to pointer devices', /@media \(pointer: fine\) \{/.test(dark)],
+  ['browser rules are scoped to pointer-capable devices', /@media \(any-pointer: fine\), \(hover: hover\) \{/.test(dark)],
   ['every rule sits inside that guard',
-    dark.indexOf('@media (pointer: fine)') < dark.indexOf('::-webkit-scrollbar')],
+    dark.indexOf('@media (any-pointer: fine)') < dark.indexOf('::-webkit-scrollbar')],
+  ['Tauri desktop bypasses unreliable pointer media detection',
+    !desktop.includes('@media') && desktop.includes('::-webkit-scrollbar-track')],
 
   // Three distinct states: resting, hover, and a stronger active step so a drag
   // does not look like a hover that failed to catch.
