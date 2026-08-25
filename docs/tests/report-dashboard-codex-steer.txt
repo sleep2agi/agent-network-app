@@ -20,8 +20,18 @@ Current end-to-end contract
    all pass. Node-authenticated or legacy rows remain FIFO.
 4. codex-app-server sends turn/steer with the exact active thread and expected
    turn id. A non-steerable/review/compact/network-owned turn remains FIFO.
-5. A completion race or rejected/mismatched steer requeues the row; an accepted
-   steer is attributed to the exact CommHub task id.
+5. An accepted steer is attributed to the exact CommHub task id. If completion
+   arrives before the successful steer acknowledgement, the bridge temporarily
+   holds that terminal event and then completes the same task without requeueing.
+   Rejection, expected-turn mismatch, or an RPC error falls back to FIFO.
+
+Known uncertainty window
+------------------------
+If app-server accepts `turn/steer` but its acknowledgement is lost in transport,
+the bridge cannot distinguish that from a pre-acceptance RPC failure and falls
+back to FIFO. That can inject the same logical message twice. This change does
+not claim exactly-once delivery across that response-loss boundary; the request
+id makes the attempt observable and leaves room for a later deduplication ACK.
 
 Docker verification
 -------------------
