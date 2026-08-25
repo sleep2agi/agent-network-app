@@ -117,12 +117,12 @@ jobs:
           releaseBody: |-
             Signed and notarized Beta update for macOS (Apple Silicon) and Windows (x64).
 
-            What's new in 0.2.33-2:
-            - Send urgent tasks with high priority so the Hub queues them ahead of normal work.
-            - Clearer node controls: restart is neutral, stop is a warning, and delete is distinctly destructive.
-            - Automatic consistency checks now detect if the deployed updater manifest drifts from its matching GitHub release.
+            What's new in 0.2.33-3:
+            - Press Enter to send a chat message, matching familiar desktop messaging apps.
+            - Use Shift+Enter, Ctrl+Enter, or Command+Enter to insert a newline.
+            - Confirming Chinese or another IME candidate with Enter no longer sends the unfinished composition. Both modern composition events and legacy WebView key code 229 are covered.
 
-            High priority changes queue order; it does not interrupt a task that is already running. Existing installations can update in place; new installations can use the assets below.
+            This Beta does not yet add true steering into an already-running Codex turn; the existing high-priority control only moves waiting Hub tasks ahead of normal work. Existing installations can update in place; new installations can use the assets below.
           releaseDraft: true
           prerelease: false
           updaterJsonPreferNsis: true
