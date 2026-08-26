@@ -1,7 +1,7 @@
 # Local workspace lifecycle and data
 
 Agent Network Desktop can manage a bundled, version-pinned CommHub for users
-who do not already have a server. Choose **开始使用（本地）** on first run. The
+who do not already have a server. Choose **创建本地工作区** on first run. The
 app binds the service to `127.0.0.1`, generates credentials in the native
 credential store, waits for a secured health check, and then enters the same
 workspace used for remote Hubs.

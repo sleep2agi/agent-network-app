@@ -8,8 +8,8 @@ const appWorkflow = fs.readFileSync(new URL('../.github/workflows/release-deskto
 const migrationSeed = fs.readFileSync(new URL('../scripts/seed-previous-local-hub.mjs', import.meta.url), 'utf8');
 
 const checks: Array<[string, boolean]> = [
-  ['first run offers recommended local workspace', app.includes('开始使用（本地）')],
-  ['first run retains explicit remote-server path', app.includes('连接已有服务器')],
+  ['first run offers recommended local workspace', app.includes('创建本地工作区')],
+  ['first run retains explicit remote-server path', app.includes('使用已有服务器登录')],
   ['first run reports preparing, starting and migrating stages', app.includes('正在准备本地工作区') && app.includes('正在启动本地服务') && app.includes('正在备份并迁移') && app.includes('status.requiresMigration')],
   ['saved local profile starts before workspace restore', app.includes("stored?.profileId === LOCAL_HUB_PROFILE_ID") && app.includes('await startLocalHub()')],
   ['local profile follows a fallback loopback port without changing identity', rust.includes('if session.server_url == endpoint') && rust.includes('profile_id: Some(session.profile_id)') && rust.includes('server_url: endpoint.into()')],

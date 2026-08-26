@@ -1,0 +1,30 @@
+Agent Network App — onboarding and login visual refresh
+
+Scope
+- Restyle the desktop/mobile first-run surface and username/password login.
+- Preserve local Hub startup, remote login, typed error states, reauthentication,
+  accessibility, and compact-screen keyboard behavior.
+
+Visual changes
+- Shared ambient entry surface, elevated card, logo halo, clearer hierarchy.
+- First-run benefits explain local startup and local data before the CTA.
+- Login uses persistent field labels, leading icons, password visibility control,
+  semantic error cards, a security/version footer, and keyboard-safe scrolling.
+- Widths below 520px use reduced card padding and stacked benefit rows.
+
+Candidate Docker
+  sg docker -c 'docker build -f tests/onboarding-ui/Dockerfile \
+    --build-arg SOURCE_COMMIT=0000000000000000000000000000000000000000 \
+    -t anet-app-onboarding-ui-candidate . && \
+    docker run --rm anet-app-onboarding-ui-candidate'
+
+Layered result
+1. First run stopped at the harness SHA validator before product assertions; the
+   hand-counted shell pattern was corrected to an anchored 40-character regex.
+2. The entry UI contract passed 8/8. The next layer stopped because the legacy
+   test pinned the replaced CTA copy. The contract and local-workspace guide now
+   assert the clearer visible labels without weakening the local/remote split.
+3. Candidate passed: entry UI 8/8, local Hub runtime 27/27, login flow 18/18,
+   TypeScript, and Expo SDK 56 web export (470 modules).
+
+Exact commit Docker evidence is appended after commit and rerun.
