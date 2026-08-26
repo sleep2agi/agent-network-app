@@ -16,7 +16,8 @@ Docker image: `tests/test165-chat-node-info/Dockerfile` (Node 22 + Bun 1.3.14).
 
 Results:
 
-- node information behavior: 16/16
+- node information behavior: 23/23, including safe server labels and encoded network scope
+- witnessed-red mutations: 3/3 (URL credential leak, unsafe plain label, unencoded network id)
 - desktop navigation composition: 19 checks
 - desktop window pin: 9/9
 - chat behavior regression: 42/42

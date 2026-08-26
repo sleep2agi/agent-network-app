@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { nodeInfoFacts } from './node-info';
+import { nodeStatusPath } from './api';
+import { nodeInfoFacts, safeServerLabel } from './node-info';
 
 let passed = 0;
 const check = (name: string, ok: boolean) => {
@@ -31,6 +32,15 @@ const legacy = nodeInfoFacts({
 check('missing OS user is honest and never inferred from project_dir', value(legacy, '系统用户') === '未上报');
 check('safe projection allowlists labels and excludes arbitrary secrets', !legacy.some(f => /token|secret|config/i.test(f.label)) && !JSON.stringify(legacy).includes('atok_secret'));
 check('server URL is a truthful fallback', value(legacy, '服务器') === 'https://hub.example');
+check('credential-bearing server URL is reduced to its safe origin', safeServerLabel('https://user:secret@hub.example/base?q=token#private') === 'https://hub.example');
+check('invalid or non-http server URL fails closed', safeServerLabel('not://[a-secret') === undefined && safeServerLabel('file:///tmp/secret') === undefined);
+check('plain server labels reject credential/query/path shapes', safeServerLabel('hub.example?token=SECRET') === undefined && safeServerLabel('user@host') === undefined && safeServerLabel('host/path') === undefined && safeServerLabel('host name') === undefined);
+check('plain hostname IPv4 IPv6 and valid ports remain usable', safeServerLabel('edge-a.example:443') === 'edge-a.example:443' && safeServerLabel('10.0.0.8:8080') === '10.0.0.8:8080' && safeServerLabel('[2001:db8::1]:443') === '[2001:db8::1]:443');
+check('invalid plain port fails closed', safeServerLabel('hub.example:99999') === undefined);
+check('full status is network scoped and URL encoded', nodeStatusPath('net /甲?') === '/api/status?network_id=net%20%2F%E7%94%B2%3F');
+let missingNetworkRejected = false;
+try { nodeStatusPath(undefined); } catch { missingNetworkRejected = true; }
+check('full status refuses an unscoped request', missingNetworkRejected);
 
 const root = process.cwd();
 const app = fs.readFileSync(path.join(root, 'App.tsx'), 'utf8');
@@ -43,6 +53,6 @@ check('Android hardware Back restores the same chat', app.includes("if (screen.n
 check('settings action has visible text and accessibility help', chat.includes('>设置</Text>') && chat.includes('accessibilityHint="打开当前节点的只读详细信息"'));
 check('desktop settings reserves a separate pin hit target', chat.includes('headerActionWithWindowPin') && chat.includes('marginRight: 42'));
 check('read-only details hide all existing mutation surfaces', detail.includes('!readOnly ? <AvatarEditSection') && detail.includes('visible={!readOnly && !!pendingAction}') && detail.includes("{readOnly ? '节点信息' : '节点详情'}"));
-check('details use full status rather than the list projection', detail.includes('fetchNodeStatus(cfg)'));
+check('details use network-scoped full status rather than the list projection', detail.includes('fetchNodeStatus(cfg)'));
 
 console.log(`node info: ${passed}/${passed} checks passed`);

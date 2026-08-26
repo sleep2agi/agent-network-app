@@ -101,8 +101,14 @@ export const fetchStatus = (cfg: HubConfig) =>
 /** Full, authenticated status projection for the one-node details screen.
  * List/chat polling stays on `?light=1`; this opt-in read is where legacy
  * Hubs may omit newer nullable facts such as `os_user`. */
+export function nodeStatusPath(networkId?: string): string {
+  const scoped = networkId?.trim();
+  if (!scoped) throw new Error('network_id is required for node details');
+  return `/api/status?network_id=${encodeURIComponent(scoped)}`;
+}
+
 export const fetchNodeStatus = (cfg: HubConfig) =>
-  get<{ sessions: Session[] }>(cfg, '/api/status');
+  get<{ sessions: Session[] }>(cfg, nodeStatusPath(cfg.networkId));
 
 /** A registered node row (subset we consume). The hub's GET /api/nodes
  *  returns `{ ok, nodes, count }`; hub #462 added `avatar_url` to the

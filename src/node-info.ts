@@ -5,6 +5,30 @@ export interface NodeInfoFact {
   value?: string | null;
 }
 
+const SAFE_SERVER_LABEL = /^(?:[A-Za-z0-9._-]+|\[[0-9A-Fa-f:]+\])(?::[0-9]{1,5})?$/;
+
+export function safeServerLabel(value?: string | null): string | undefined {
+  const trimmed = value?.trim();
+  if (!trimmed || trimmed.length > 200 || /[\u0000-\u001f\u007f]/.test(trimmed)) return undefined;
+  if (!trimmed.includes('://')) {
+    // Plain labels are deliberately ASCII-only. Unicode hostnames must arrive
+    // as a parsed URL (URL normalizes them to punycode); never accept free-form
+    // strings containing credentials, paths, query text, fragments or spaces.
+    if (!SAFE_SERVER_LABEL.test(trimmed)) return undefined;
+    const port = trimmed.match(/:([0-9]{1,5})$/)?.[1];
+    if (port && Number(port) > 65535) return undefined;
+    return trimmed;
+  }
+  try {
+    const parsed = new URL(trimmed);
+    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return undefined;
+    // origin intentionally strips userinfo, path, query, and fragment.
+    return parsed.origin;
+  } catch {
+    return undefined;
+  }
+}
+
 /** Build the safe, read-only node facts shown from a chat header.
  * Deliberately allowlists public fields: tokens, config contents and arbitrary
  * session keys can never become rows by accident. */
@@ -12,7 +36,7 @@ export function nodeInfoFacts(session: Session, node: HubNode | null, serverUrl:
   return [
     { label: '节点名称', value: node?.node_name ?? session.alias },
     { label: '节点 ID', value: node?.node_id ?? session.node_id },
-    { label: '服务器', value: node?.server ?? session.server ?? serverUrl },
+    { label: '服务器', value: safeServerLabel(node?.server ?? session.server ?? serverUrl) },
     { label: 'Hostname', value: node?.hostname ?? session.hostname },
     { label: 'IP', value: session.ip },
     // Only explicit runtime-reported identities are accepted. In particular,
