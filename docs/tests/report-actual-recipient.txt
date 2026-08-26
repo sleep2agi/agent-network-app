@@ -1,11 +1,11 @@
 # App actual recipient / forward acknowledgement gate
 
 Date: 2026-08-26
-Source commit: 7db1acc826020e7132feee69584f285bf8b8f530
-Docker image id: sha256:e33a6f46d1e087da63766e92ce9bb2ec45bcfe44507ba78b035ec06951204445
+Source commit: d912240c25485031f2eb5d51285246f3dd945342
+Docker image id: sha256:66a4d742322169f347226f970a40b6e797b3012da8240906a04e667f99d0e801
 
 PASS: contract 7/7; HTTP 202 1/1; a11y 1/1; async controller including production wiring 9/9; full tests 52/52; TypeScript and Expo SDK 56 web export PASS.
 
-The controller performs authoritative ACK/ambiguous bookkeeping regardless of UI ownership. Persistence is revisioned and serialized; rejected writes remain dirty and retry without an unhandled rejection. Async tests cover late ACK after A→B/unmount, delayed pending followed by confirm/ambiguous, remount non-resurrection, and save rejection recovery.
+The controller performs authoritative ACK/ambiguous bookkeeping regardless of UI ownership. Persistence is revisioned and serialized; the latest rejected snapshot automatically retries once without an unhandled rejection, then remains dirty for the next event if storage is still unavailable. Async production-wiring tests do not call the drain helper and prove a rejected confirm snapshot is retried to empty before remount.
 
 Blocked on Hub draft PR #1209 and forward reconciliation issue #1213. The App PR remains Draft and does not claim exactly-once delivery.
