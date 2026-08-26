@@ -7,7 +7,7 @@ const buildScript = fs.readFileSync(new URL('../scripts/build-local-hub-sidecar.
 const desktopWorkflow = fs.readFileSync(new URL('../.github/workflows/desktop-tauri.yml', import.meta.url), 'utf8');
 const releaseWorkflow = fs.readFileSync(new URL('../.github/workflows/release-desktop-auto-update.yml', import.meta.url), 'utf8');
 
-const pinned = '0.9.0-preview.29';
+const pinned = '0.9.0-preview.30';
 const checks: Array<[string, boolean]> = [
   ['CommHub dependency is exact', packageJson.dependencies['@sleep2agi/commhub-server'] === pinned],
   ['lock resolves exact CommHub', packageLock.packages['node_modules/@sleep2agi/commhub-server'].version === pinned],

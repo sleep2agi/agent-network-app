@@ -117,11 +117,10 @@ jobs:
           releaseBody: |-
             Signed and notarized stable update for macOS (Apple Silicon) and Windows (x64).
 
-            What's new in 0.2.37:
-            - Images sent by agent nodes now render directly in chat, with authenticated previews, download and retry actions, support for older image-reply formats, and separate caches for each server profile.
-            - The Settings button is restored beside the pin control in agent chat headers, including detached desktop chat windows, and returns you to the same conversation after viewing details.
-            - Node information is now a read-only, detailed view of the node name and ID, server, hostname and IP, system user, working path, node type, runtime, agent, model, version, and status. Server values are sanitized and credentials are never displayed.
-            - System user is shown only when it is explicitly reported. Update the Hub and node runtime to versions that support OS-user reporting; older components display “Not reported” instead of guessing from the working path.
+            What's new in 0.2.38:
+            - Forwarded messages now show the recipient actually selected by the Hub, so the conversation reflects delivery to a fallback or replacement node instead of continuing to display the original request target. Remote Hubs need CommHub Server 0.9.0-preview.30 or newer to report the authoritative recipient.
+            - First-run and login screens have clearer local and remote workspace choices, improved guidance and validation, a visible password control, and layouts that remain usable in compact windows and light or dark themes.
+            - The bundled local Hub is updated to CommHub Server 0.9.0-preview.30. Codex TUI co-presence remains compatible with Agent Network 2.3.0-preview.46 and Agent Node 2.5.0-preview.34.
 
             Existing installations can update in place; new installations can use the assets below.
           releaseDraft: true
