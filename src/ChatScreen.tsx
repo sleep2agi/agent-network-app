@@ -43,6 +43,9 @@ import { appFetch } from './app-fetch';
 import MarkdownMessage from './MarkdownMessage';
 import { cleanAttachmentDebugText, parseAttachmentRefs, parseMetaAttachmentRefs } from './attachment-display';
 import { attachmentCacheScope } from './attach-download';
+import ActualRecipientNotice from './ActualRecipientNotice';
+import { sendConfirmationFromResponse, type SendConfirmation } from './actual-recipient';
+import { beginForward, confirmForward, markForwardAmbiguous, mayProjectForward, resetForwardWithoutResend } from './forward-controller';
 
 // Chat with one agent. Mirrors dashboard M4: open with the newest PAGE
 // messages, grow the window when the user scrolls toward older history.
@@ -345,9 +348,20 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
   // 更像微信·round-2: 长按气泡的动作菜单(引用/删除)。null = 未打开。
   const [menuFor, setMenuFor] = useState<MessageSelection | null>(null);
   const [forwardFor, setForwardFor] = useState<MessageSelection | null>(null);
+  const [forwardUiOwner, setForwardUiOwner] = useState<string | null>(null);
   const [forwardTargets, setForwardTargets] = useState<Session[]>([]);
   const [forwardQuery, setForwardQuery] = useState('');
   const [forwardingTo, setForwardingTo] = useState<string | null>(null);
+  const forwardingRef = useRef(false);
+  const forwardOperationKeyRef = useRef<string | null>(null);
+  const [forwardAmbiguous, setForwardAmbiguous] = useState(false);
+  const [sendConfirmation, setSendConfirmation] = useState<SendConfirmation | null>(null);
+
+  // ChatScreen is reused while navigating between aliases. A confirmation is
+  // scoped to the conversation where that write completed, never the next one.
+  useEffect(() => {
+    setSendConfirmation(null); setForwardFor(null); setForwardUiOwner(null); setForwardingTo(null); setForwardAmbiguous(false);
+  }, [conversationKeyFor]);
 
   useEffect(() => {
     const doc = (globalThis as any).document;
@@ -372,7 +386,9 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
   const openForwardPicker = async (selection: MessageSelection) => {
     setMenuFor(null);
     setForwardFor(selection);
+    setForwardUiOwner(conversationKeyFor);
     setForwardQuery('');
+    setForwardAmbiguous(false);
     try {
       const data = await fetchStatus(cfg);
       setForwardTargets((data.sessions ?? []).filter(session => session.alias));
@@ -382,15 +398,33 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
   };
 
   const forwardMessage = async (target: string) => {
-    if (!forwardFor || forwardingTo) return;
+    if (!forwardFor || forwardingRef.current || forwardAmbiguous) return;
+    const startedKey = conversationKeyFor;
+    const mayWrite = () => mayProjectForward(startedKey, visibleConversationKeyRef.current, mountedRef.current);
+    const begun = beginForward(startedKey, target, forwardFor.text, createDashboardRequestId);
+    forwardOperationKeyRef.current = begun.operation.key;
+    if (!begun.started) { setForwardAmbiguous(true); return; }
+    forwardingRef.current = true;
     setForwardingTo(target);
     try {
-      await sendTask(cfg, target, forwardFor.text);
-      setForwardFor(null);
+      const requestId = begun.operation.requestId;
+      const response = await sendTask(cfg, target, forwardFor.text, undefined, 'normal', requestId);
+      confirmForward(begun.operation.key);
+      if (mayWrite()) {
+        setSendConfirmation(sendConfirmationFromResponse(response));
+        setForwardFor(null);
+      }
     } catch (error) {
-      Alert.alert('转发失败', error instanceof Error ? error.message : '请稍后重试');
+      // No public forward reconciliation endpoint currently proves whether an
+      // ACK-loss write committed. Fail closed and disable repeat taps.
+      markForwardAmbiguous(begun.operation.key);
+      if (mayWrite()) {
+        setForwardAmbiguous(true);
+        Alert.alert('转发结果待确认', '可能已经送达。为避免重复转发，请先在目标会话确认。');
+      }
     } finally {
-      setForwardingTo(null);
+      forwardingRef.current = false;
+      if (mayWrite()) setForwardingTo(null);
     }
   };
   // 更像微信·round-3: 滚离底部时的「回到最新」pill + 未读计数。
@@ -505,7 +539,7 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
         attachments = uploaded.map(({ img, up }) => toTaskAttachment(img, up));
         outgoing = `${content}${uploaded.map(({ img, up }) => attachmentTextHint(img, up)).join('')}`;
       }
-      await sendTask(cfg, alias, outgoing, attachments, priority, dashboardRequestIdForLocalId(localId));
+      const response = await sendTask(cfg, alias, outgoing, attachments, priority, dashboardRequestIdForLocalId(localId));
       imgs.forEach(releaseClipboardAttachment);
       // delivered: drop the echo, the server copy arrives with reload.
       // 🔴 outbox 唯一删除路径=此处(sendTask 确认成功)。
@@ -516,6 +550,7 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
         try { await reconcileStartedConversation(); } catch { /* next open refreshes it */ }
         return;
       }
+      setSendConfirmation(sendConfirmationFromResponse(response));
       setMessages(prev => prev.filter(t => t._localId !== localId));
       await load(limitRef.current);
     } catch {
@@ -799,6 +834,9 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
           ))}
         </View>
       ) : null}
+      {sendConfirmation ? (
+        <ActualRecipientNotice confirmation={sendConfirmation} onDismiss={() => setSendConfirmation(null)} />
+      ) : null}
       <Modal visible={!!viewerUri} transparent animationType="fade">
         <Pressable style={styles.viewerBackdrop} onPress={() => setViewerUri(null)}>
           {viewerUri ? (
@@ -848,17 +886,24 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
         </Pressable>
       </Modal>
 
-      <Modal visible={!!forwardFor} transparent animationType="fade" onRequestClose={() => setForwardFor(null)}>
+      <Modal visible={!!forwardFor && forwardUiOwner === conversationKeyFor} transparent animationType="fade" onRequestClose={() => setForwardFor(null)}>
         <Pressable style={styles.forwardBackdrop} onPress={() => setForwardFor(null)}>
           <Pressable style={styles.forwardPanel} onPress={() => {}}>
             <Text style={styles.forwardTitle}>转发给</Text>
+            {forwardAmbiguous ? <Text style={styles.forwardEmpty}>结果待确认，请勿重复转发</Text> : null}
+            {forwardAmbiguous && forwardOperationKeyRef.current ? (
+              <Pressable onPress={() => Alert.alert('清除待确认状态？', '这不会重新转发，也不代表消息未送达。', [
+                { text: '取消', style: 'cancel' },
+                { text: '仅清除状态', onPress: () => { resetForwardWithoutResend(forwardOperationKeyRef.current!); setForwardAmbiguous(false); } },
+              ])}><Text style={styles.forwardEmpty}>仅清除待确认状态（不会重发）</Text></Pressable>
+            ) : null}
             <TextInput value={forwardQuery} onChangeText={setForwardQuery} placeholder="搜索 agent…" placeholderTextColor={colors.textMuted} style={styles.forwardSearch} />
             <FlatList
               style={styles.forwardList}
               data={forwardTargets.filter(target => target.alias.toLowerCase().includes(forwardQuery.trim().toLowerCase()))}
               keyExtractor={target => target.alias}
               renderItem={({ item: target }) => (
-                <Pressable style={({ pressed }) => [styles.forwardTarget, pressed && styles.actionItemPressed]} onPress={() => forwardMessage(target.alias)} disabled={!!forwardingTo}>
+                <Pressable style={({ pressed }) => [styles.forwardTarget, pressed && styles.actionItemPressed]} onPress={() => forwardMessage(target.alias)} disabled={!!forwardingTo || forwardAmbiguous}>
                   <AliasAvatar alias={target.alias} size={32} />
                   <Text style={styles.forwardAlias} numberOfLines={1}>{target.alias}</Text>
                   {forwardingTo === target.alias ? <ActivityIndicator size="small" color={colors.accent} /> : null}
