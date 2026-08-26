@@ -1,32 +1,11 @@
-# App REST 发送确认展示实际接收节点
+# App actual recipient / forward acknowledgement gate
 
 Date: 2026-08-26
-Base: feec56e7bcd26a996d50e0fec89b001fb32c6907 (origin/main)
-Source commit under test: dca68b074396051414816049157417579e0b846d
-Hub contract provenance: sleep2agi/agent-network draft PR #1209
-Docker image: anet-app-actual-to:atomic
-Docker image id: sha256:29f39eeab6a13afb22f0bdcde59043c912cf5f04b7dfac76dcd2ac5aea9ac51e
-Runner: tests/test-actual-recipient/run.sh
+Source commit: 8630c30fad2c0dcdbc3b17eb696c9f942759ccef
+Docker image id: sha256:64d29db9c7555d27c20b83f7714357b17c3c7c4507f6a4b742207abfead42b75
 
-## Result
+PASS: contract 7/7; HTTP 202 1/1; a11y 1/1; async controller 7/7; full tests 52/52; TypeScript and Expo SDK 56 web export PASS.
 
-PASS. Docker 容器退出码 0；未连接生产 Hub，未使用真实 token。
+The controller performs authoritative ACK/ambiguous bookkeeping regardless of UI ownership. Persistence is revisioned and serialized; rejected writes remain dirty and retry without an unhandled rejection. Async tests cover late ACK after A→B/unmount, delayed pending followed by confirm/ambiguous, remount non-resurrection, and save rejection recovery.
 
-- actual_to 契约投影：7/7；真实 mock HTTP 202：1/1；UI/race/a11y：6/6。
-- controller 真实序列：7/7（double tap、A→B、unmount、close/reopen、process remount、safe reset、ACK）。
-- 全量单测：52/52 test files passed。
-- TypeScript：`tsc --noEmit -p tsconfig.build.json` PASS。
-- Expo SDK 56 Web export：PASS，生成 index.html。
-
-## Compatibility / security
-
-- 只白名单复制 `actual_to.alias/to_node_id/network_id`，绝不渲染原始 Hub 响应。
-- 旧 Hub 缺少 `actual_to` 时明确显示“Hub 未报告（兼容旧版）”，不从请求 alias、rename 字段或当前会话推断。
-- `queued:true` 或 `session_status:offline` 显示“已排队”，仍展示同一实际节点身份。
-- HTTP 202 `ok:false/queued:true/error:alias_offline` 作为 Hub 已接受写入处理；nullable node/network 分别显示“未报告”。
-- UI 为 React Native 共享组件，桌面与移动使用同一路径。
-- 转发使用稳定 request id、同步 single-flight 和 conversation/mounted guard；ACK 丢失时锁为“结果待确认”，不提供盲重试。
-
-## Blocker
-
-Hub PR #1209 尚为 Draft / OPEN，因此 App PR 必须保持 Draft且标记依赖；合并前需用已合并 Hub 契约再做真实 REST online/offline E2E。Hub 当前也没有 forward 专用查询/对账 endpoint；在此能力落地前，ACK-loss 转发只能 fail closed 待人工确认，不能自动重试。
+Blocked on Hub draft PR #1209 and forward reconciliation issue #1213. The App PR remains Draft and does not claim exactly-once delivery.
