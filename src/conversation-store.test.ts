@@ -9,14 +9,14 @@ import {
 const screen = fs.readFileSync(new URL('./ChatScreen.tsx', import.meta.url), 'utf8').replace(/\r\n?/g, '\n');
 const app = fs.readFileSync(new URL('../App.tsx', import.meta.url), 'utf8').replace(/\r\n?/g, '\n');
 
-const A = conversationKey('p1', 'https://hub', 'agent-a');
-const B = conversationKey('p1', 'https://hub', 'agent-b');
+const A = conversationKey('p1', 'https://hub', 'net-a', 'agent-a');
+const B = conversationKey('p1', 'https://hub', 'net-a', 'agent-b');
 
 const cache = createConversationStore<string>(2);
 cache.put(A, ['a']);
 cache.put(B, ['b']);
 cache.open(A); // touch A, so B is the least-recently-used entry
-const C = conversationKey('p1', 'https://hub', 'agent-c');
+const C = conversationKey('p1', 'https://hub', 'net-a', 'agent-c');
 cache.put(C, ['c']);
 
 const firstWindow = createConversationRequestGate();
@@ -28,8 +28,25 @@ const firstAAgain = firstWindow.open(A);
 
 const cleared = createConversationStore<string>();
 cleared.put(A, ['a']);
-cleared.put(conversationKey('p2', 'https://hub', 'agent-a'), ['other-profile']);
+cleared.put(conversationKey('p2', 'https://hub', 'net-a', 'agent-a'), ['other-profile']);
 cleared.clearScope(conversationScope('p1', 'https://hub'));
+
+// Same profile, same hub, same alias — two networks. #187 fixed the request;
+// without the network in the key the *cache* still answers the second network
+// with the first network's messages, instantly and with no loading state.
+const inNetA = conversationKey('p1', 'https://hub', 'net-a', 'shared-alias');
+const inNetB = conversationKey('p1', 'https://hub', 'net-b', 'shared-alias');
+const noNetwork = conversationKey('p1', 'https://hub', undefined, 'shared-alias');
+
+const crossNetwork = createConversationStore<string>();
+crossNetwork.put(inNetA, ['message-from-net-a']);
+const netBOpen = crossNetwork.open(inNetB);
+
+// One profile spans its networks: clearing on logout must not leave one behind.
+const loggedOut = createConversationStore<string>();
+loggedOut.put(inNetA, ['a']);
+loggedOut.put(inNetB, ['b']);
+loggedOut.clearScope(conversationScope('p1', 'https://hub'));
 
 const checks: Array<[string, boolean]> = [
   ['a normal rerender cannot open or invalidate a request',
@@ -74,12 +91,29 @@ const checks: Array<[string, boolean]> = [
   ['profile keys never fall back to a token or username',
     A.startsWith('profile:p1::')],
   ['server fallback strips userinfo, query strings, and fragments',
-    !conversationKey(null, 'https://user:secret@example.com/base?token=bad#x', 'a').includes('secret')
-      && !conversationKey(null, 'https://example.com/base?token=bad#x', 'a').includes('token=')],
+    !conversationKey(null, 'https://user:secret@example.com/base?token=bad#x', null, 'a').includes('secret')
+      && !conversationKey(null, 'https://example.com/base?token=bad#x', null, 'a').includes('token=')],
   ['the same alias on different hubs is isolated',
-    conversationKey(null, 'https://one', 'x') !== conversationKey(null, 'https://two', 'x')],
+    conversationKey(null, 'https://one', null, 'x') !== conversationKey(null, 'https://two', null, 'x')],
   ['aliases are encoded instead of becoming key delimiters',
-    conversationKey('p', 'https://hub', 'a::b').endsWith('a%3A%3Ab')],
+    conversationKey('p', 'https://hub', 'net-a', 'a::b').endsWith('a%3A%3Ab')],
+
+  // ---- the network dimension of the key ----
+  ['the same alias in two networks is two conversations', inNetA !== inNetB],
+  ['opening a conversation in the second network shows no messages from the first',
+    netBOpen === null],
+  ["the first network's messages are still cached against their own network",
+    crossNetwork.peek(inNetA)?.messages.join() === 'message-from-net-a'],
+  ['a config with no network is its own conversation, not a wildcard',
+    noNetwork !== inNetA && noNetwork !== inNetB],
+  ['logging out clears every network of the profile',
+    loggedOut.peek(inNetA) === null && loggedOut.peek(inNetB) === null && loggedOut.size() === 0],
+  ['the network segment sits inside the profile scope, so clearing by profile still matches',
+    inNetA.startsWith('profile:p1::') && inNetA.includes('::net:net-a::')],
+  ['network ids are encoded instead of becoming key delimiters',
+    conversationKey('p1', 'https://hub', 'x::y', 'a') !== conversationKey('p1', 'https://hub', 'x', 'y::a')],
+  ['the screen keys its conversation by the configured network',
+    /conversationKey\(cfg\.profileId, cfg\.serverUrl, cfg\.networkId, alias\)/.test(screen)],
 ];
 
 for (const [name, ok] of checks) {
