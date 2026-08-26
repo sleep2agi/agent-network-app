@@ -94,8 +94,33 @@ export const confirmedOutboxIds = (
 
 // FlatList is inverted: newest must stay at index 0. Local retry echoes and
 // Hub rows therefore need one shared chronological order, not "all locals first".
-export const mergeMessagesNewestFirst = <T extends TimedMessage>(local: T[], fetched: T[]): T[] =>
-  [...local.filter(item => item._localId), ...fetched]
+//
+// 🔴 Deduplicated by `_localId` (issue #178). Concatenating was correct only
+// while `fetched` came straight from the Hub, which never carries a
+// `_localId`. ChatScreen also calls this with the *conversation cache* as
+// `fetched`, and that cache was written by an earlier merge — so it already
+// holds the same local echoes. Every A→B→A return stacked another copy, and
+// the user saw one undelivered message four times. The standalone chat window
+// opens once against a cold cache, which is exactly why it never reproduced
+// there.
+//
+// The first occurrence wins, and `local` is passed first, so the entry that
+// survives is the one carrying the current `_pending` / `_failed` state rather
+// than whatever the cache froze a poll ago.
+export const mergeMessagesNewestFirst = <T extends TimedMessage>(local: T[], fetched: T[]): T[] => {
+  const seenLocalIds = new Set<string>();
+  return [...local.filter(item => item._localId), ...fetched]
+    .filter(item => {
+      const id = item._localId;
+      // Hub rows have no `_localId`; they are never deduplicated here. Their
+      // own identity is `task_id`, and collapsing on it would hide genuinely
+      // repeated sends the user made on purpose.
+      if (!id) return true;
+      if (seenLocalIds.has(id)) return false;
+      seenLocalIds.add(id);
+      return true;
+    })
     .map((item, index) => ({ item, index, time: messageTime(item.created_at) }))
     .sort((a, b) => (Number.isFinite(b.time) ? b.time : -Infinity) - (Number.isFinite(a.time) ? a.time : -Infinity) || a.index - b.index)
     .map(row => row.item);
+};

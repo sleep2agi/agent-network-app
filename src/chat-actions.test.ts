@@ -61,6 +61,35 @@ ck('本地失败消息与 Hub 消息统一按时间倒序', mergeMessagesNewestF
   [{ _localId: 'old-failed', content: 'old', created_at: '2026-08-23T07:00:00.000Z' }],
   [{ content: 'new', created_at: '2026-08-23 08:00:00' }],
 )[0].content === 'new');
+// ── #178 P0:主窗口重复恢复历史 outbox ──────────────────────────────────────
+// 复现路径(ChatScreen.tsx):切换 alias 的 effect 把 outboxForAlias() 的全部条目
+// 当作 `restored` 并进【缓存快照】,而那份快照本身是上一次轮询用
+// `conversations.put(token.key, merged)` 写回去的 —— merged 里已经含同一批
+// _localId 项。于是每次 A→B→A 回来就再叠一层,用户看到同一条"未送达"4 遍。
+// 独立聊天窗口只开一次(冷缓存)所以不复现,与用户报告一致。
+const restoredOnce = [{ _localId: 'L1', content: '还有多久新的能出来', created_at: '2026-08-25T23:00:00.000Z', _failed: true }];
+const cachedAfterFirstMount = [
+  { _localId: 'L1', content: '还有多久新的能出来', created_at: '2026-08-25T23:00:00.000Z', _failed: true },
+  { task_id: 'T9', content: 'hub 的历史消息', created_at: '2026-08-25T22:00:00.000Z' },
+];
+const remerged = mergeMessagesNewestFirst(restoredOnce, cachedAfterFirstMount);
+ck('#178 同一 _localId 重挂载后只出现一次', remerged.filter(m => m._localId === 'L1').length === 1);
+// 三次重挂载 = 用户截图里的那种堆叠
+let acc = mergeMessagesNewestFirst(restoredOnce, cachedAfterFirstMount);
+for (let i = 0; i < 2; i++) acc = mergeMessagesNewestFirst(restoredOnce, acc);
+ck('#178 连续三次重挂载仍只有一条', acc.filter(m => m._localId === 'L1').length === 1);
+// 🔴 去重不能吞掉别的消息:Hub 行没有 _localId,一条都不许少
+ck('#178 去重不误删 Hub 消息', acc.filter(m => m.task_id === 'T9').length === 1);
+// 🔴 保留的必须是【本地那份】—— 它带着最新的 _failed/_pending 状态,
+//    缓存里那份可能是上一轮的旧状态。
+const staleCached = [{ _localId: 'L2', content: 'x', created_at: '2026-08-25T23:00:00.000Z', _failed: true }];
+const freshLocal = [{ _localId: 'L2', content: 'x', created_at: '2026-08-25T23:00:00.000Z', _pending: true }];
+ck('#178 冲突时保留本地(更新)的那份状态',
+  mergeMessagesNewestFirst(freshLocal, staleCached).find(m => m._localId === 'L2')?._pending === true);
+// 无 _localId 的本地项本来就会被丢弃,这条行为不许因为去重而改变
+ck('#178 无 _localId 的本地项仍被丢弃',
+  mergeMessagesNewestFirst([{ content: 'no-id', created_at: '2026-08-25T23:00:00.000Z' }], []).length === 0);
+
 const chatSource = fs.readFileSync(path.join(process.cwd(), 'src/ChatScreen.tsx'), 'utf8');
 ck('桌面输入区使用独立微信式 composer', chatSource.includes('styles.desktopComposer'));
 ck('桌面输入区显示快捷键提示', chatSource.includes('Enter 发送 · Shift/Ctrl/⌘+Enter 换行'));
