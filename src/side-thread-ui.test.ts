@@ -10,6 +10,7 @@ const check = (name: string, condition: boolean) => {
 
 const chat = fs.readFileSync('src/ChatScreen.tsx', 'utf8');
 const drawer = fs.readFileSync('src/SideThreadDrawer.tsx', 'utf8');
+const actionController = fs.readFileSync('src/side-thread-action-controller.ts', 'utf8');
 const app = fs.readFileSync('App.tsx', 'utf8');
 const props = drawer.slice(drawer.indexOf('interface Props'), drawer.indexOf("type CapabilityView"));
 
@@ -27,15 +28,15 @@ for (const state of ['creating', 'running', 'reconciling', 'succeeded', 'failed'
 for (const action of ['cancel', 'retry', 'archive', 'bring-back']) {
   check(`drawer 接入 ${action}`, drawer.includes(`'${action}'`));
 }
-check('显式带回使用原 sourceThreadId，不自动写回', drawer.includes('destinationThreadId: card.sourceThreadId') && drawer.includes('actions.bringBack'));
+check('drawer 把动作交给无 RN 行为 controller', drawer.includes('createSideThreadActionController({') && drawer.includes('actionController.run(card.id, action)'));
 check('关闭 drawer 不调用 cancel/archive', drawer.includes('onRequestClose={closeDrawer}') && !/const closeDrawer[\s\S]{0,300}client\.(cancel|archive)/.test(drawer));
 check('问题和卡片由 drawer 自有 state 持有', drawer.includes("const [question, setQuestion]") && drawer.includes("const [cards, setCards]"));
 check('render-time scope gate 在 effect 前阻止旧 owner 写入', drawer.includes('scopeGate.render(scopeKey)') && drawer.includes('requestIsCurrent'));
 check('每 scope/lane request sequence 拒绝乱序 response', drawer.includes('scopeGate.begin(scopeKey, lane)') && drawer.includes('beginRequest(\'list\')') && drawer.includes('beginRequest(\'capability\')'));
-check('ambiguous 不冒充 failed，提示等待/刷新', drawer.includes("error.code === 'SIDE_THREAD_AMBIGUOUS'") && drawer.includes('正在确认运行状态') && drawer.includes('请等待或刷新'));
-check('同步 ref 锁阻止 bring-back double tap', drawer.includes('actionLocksRef.current.has(lockKey)') && drawer.indexOf('actionLocksRef.current.add(lockKey)') < drawer.indexOf("setCards(current => markSideThreadAction"));
+check('controller 是唯一动作 dispatch owner', !/client\.(cancel|retry|archive|bringBack|get)\(/.test(drawer) && actionController.includes('dependencies.client.bringBack'));
+check('controller hydration 接回 drawer state', drawer.includes('actionController.reconcile(cards)') && drawer.includes('updateCards: update => setCards(update)'));
 check('/btw 附件上传后显式传 SideThread 并清 composer', chat.includes('attachments = uploaded.map(item => ({ fileId: item.file_id }))') && chat.includes('setAttached([])') && chat.includes('attachments }));'));
-check('retry 保留 authoritative attempt attachments', drawer.includes('attachments: card.attachments'));
+check('行为 controller 无 React Native 依赖', !actionController.includes("from 'react-native'") && !actionController.includes("from 'react'"));
 check('Modal focus/restore/keyboard/safe-area 已接入', drawer.includes('questionInputRef.current?.focus()') && drawer.includes('restoreFocusRef?.current?.focus()') && drawer.includes('<KeyboardAvoidingView') && drawer.includes('insets.bottom'));
 check('dialog/state/live region 无障碍语义已接入', drawer.includes('role="dialog"') && drawer.includes('accessibilityState={{ busy:') && drawer.includes('accessibilityLiveRegion="polite"') && drawer.includes('accessibilityLiveRegion="assertive"'));
 

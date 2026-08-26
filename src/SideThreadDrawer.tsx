@@ -28,7 +28,6 @@ import {
   type SideThreadRecord,
 } from './side-thread-api';
 import {
-  markSideThreadAction,
   markSideThreadReconciling,
   mergeSideThreadRecords,
   SIDE_THREAD_STATE_LABELS,
@@ -37,6 +36,7 @@ import {
   type SideThreadCard,
   type SideThreadCardAction,
 } from './side-thread-model';
+import { createSideThreadActionController } from './side-thread-action-controller';
 import { colors, onThemeChange, spacing } from './theme';
 import { createSideThreadScopeGate } from './side-thread-scope-gate';
 
@@ -107,11 +107,20 @@ export default function SideThreadDrawer({ cfg, alias, desktop, launch, scope, r
   const handledLaunchRef = useRef(0);
   const pendingPromptRef = useRef<string | undefined>(undefined);
   const pendingAttachmentsRef = useRef<Array<{ fileId: string }>>([]);
-  const actionLocksRef = useRef(new Set<string>());
   const questionInputRef = useRef<TextInput>(null);
 
   const beginRequest = (lane: string) => scopeGate.begin(scopeKey, lane);
   const requestIsCurrent = (request: ReturnType<typeof beginRequest>) => scopeGate.isCurrent(request);
+  const cardsRef = useRef(cards);
+  cardsRef.current = cards;
+  const actionController = useMemo(() => createSideThreadActionController({
+    client,
+    getCards: () => cardsRef.current,
+    updateCards: update => setCards(update),
+    setError: (cardId, message) => setActionErrors(current => ({ ...current, [cardId]: message })),
+    beginRequest,
+    isCurrent: requestIsCurrent,
+  }), [client, scopeKey]);
 
   const closeDrawer = useCallback(() => {
     setVisible(false);
@@ -177,7 +186,6 @@ export default function SideThreadDrawer({ cfg, alias, desktop, launch, scope, r
     setActionErrors({});
     pendingPromptRef.current = undefined;
     pendingAttachmentsRef.current = [];
-    actionLocksRef.current.clear();
   }, [scopeKey]);
 
   useEffect(() => {
@@ -282,72 +290,11 @@ export default function SideThreadDrawer({ cfg, alias, desktop, launch, scope, r
   }, [visible, capability, client, alias, scope, scopeKey]);
 
   useEffect(() => {
-    for (const lock of actionLocksRef.current) {
-      const [cardId] = lock.split('\u0000');
-      const card = cards.find(candidate => candidate.id === cardId);
-      if (!card || (!card.pendingAction && !card.bringingBack && card.state !== 'reconciling')) {
-        actionLocksRef.current.delete(lock);
-      }
-    }
-  }, [cards]);
+    actionController.reconcile(cards);
+  }, [actionController, cards]);
 
   const runAction = async (card: SideThreadCard, action: SideThreadCardAction) => {
-    const lockKey = `${card.id}\u0000${action}`;
-    if (actionLocksRef.current.has(lockKey)) return;
-    actionLocksRef.current.add(lockKey);
-    const request = beginRequest(`action:${card.id}:${action}`);
-    const requestKey = card.actionRequestKeys?.[action] ?? createSideThreadRequestKey(action);
-    setCards(current => markSideThreadAction(current, card.id, action, requestKey));
-    setActionErrors(current => ({ ...current, [card.id]: '' }));
-    let bringBackAcknowledged = false;
-    try {
-      if (action === 'cancel') {
-        const record = await client.cancel(card.id, { requestKey });
-        if (!requestIsCurrent(request)) return;
-        setCards(current => upsertSideThreadRecord(current, record));
-      } else if (action === 'retry') {
-        const record = await client.retry(card.id, {
-          requestKey,
-          question: card.question,
-          attachments: card.attachments,
-        });
-        if (!requestIsCurrent(request)) return;
-        setCards(current => upsertSideThreadRecord(current, record));
-      } else if (action === 'archive') {
-        const record = await client.archive(card.id, { requestKey });
-        if (!requestIsCurrent(request)) return;
-        setCards(current => upsertSideThreadRecord(current, record));
-      } else {
-        await client.bringBack(card.id, {
-          requestKey,
-          destinationThreadId: card.sourceThreadId,
-          ...(card.latestAttemptId ? { attemptId: card.latestAttemptId } : {}),
-        });
-        if (!requestIsCurrent(request)) return;
-        bringBackAcknowledged = true;
-        const record = await client.get(card.id);
-        if (!requestIsCurrent(request)) return;
-        setCards(current => upsertSideThreadRecord(current, record));
-      }
-      actionLocksRef.current.delete(lockKey);
-    } catch (error) {
-      if (!requestIsCurrent(request)) return;
-      if (bringBackAcknowledged) {
-        setActionErrors(current => ({ ...current, [card.id]: 'Hub 已接收带回请求，正在确认完成状态。请等待或刷新。' }));
-        return;
-      }
-      if (error instanceof SideThreadApiError && error.code === 'SIDE_THREAD_AMBIGUOUS') {
-        setCards(current => markSideThreadReconciling(current, card.id));
-        setActionErrors(current => ({ ...current, [card.id]: '结果暂不确定，正在确认运行状态。请等待或刷新。' }));
-        return;
-      }
-      actionLocksRef.current.delete(lockKey);
-      setCards(current => markSideThreadAction(current, card.id));
-      setActionErrors(current => ({
-        ...current,
-        [card.id]: error instanceof Error ? error.message : `${action} 失败`,
-      }));
-    }
+    await actionController.run(card.id, action);
   };
 
   const renderCard = ({ item: card }: { item: SideThreadCard }) => {
