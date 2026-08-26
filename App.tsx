@@ -494,7 +494,7 @@ function AppRoot() {
   );
 }
 
-function FirstRunScreen({ busy, stage, error, onStartLocal, onRemote }: {
+export function FirstRunScreen({ busy, stage, error, onStartLocal, onRemote }: {
   busy: boolean;
   stage: 'preparing' | 'starting' | 'migrating' | null;
   error: string | null;
@@ -508,6 +508,7 @@ function FirstRunScreen({ busy, stage, error, onStartLocal, onRemote }: {
     <View style={entryStyles.root} testID="first-run-local-hub">
       <View pointerEvents="none" style={[entryStyles.glow, entryStyles.glowTop]} />
       <View pointerEvents="none" style={[entryStyles.glow, entryStyles.glowBottom]} />
+      <ScrollView style={loginStylesShared.scrollView} contentContainerStyle={loginStylesShared.scrollContent} showsVerticalScrollIndicator={false}>
       <View style={[entryStyles.card, compact && entryStyles.cardCompact]}>
         <View style={entryStyles.logoHalo}>
           <Image source={require('./assets/splash-icon.png')} style={entryStyles.logo} resizeMode="contain" />
@@ -544,6 +545,7 @@ function FirstRunScreen({ busy, stage, error, onStartLocal, onRemote }: {
           <Text style={entryStyles.secondaryText}>使用已有服务器登录</Text>
         </Pressable>
       </View>
+      </ScrollView>
     </View>
   );
 }
@@ -578,6 +580,11 @@ const makeEntryStyles = () => StyleSheet.create({
   secondary: { height: 46, borderRadius: 13, flexDirection: 'row', gap: 8, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: colors.border, backgroundColor: themeMode() === 'light' ? '#fafbfc' : colors.inputBg },
   secondaryPressed: { backgroundColor: colors.border },
   secondaryText: { color: colors.textSecondary, fontSize: 14, fontWeight: '600' },
+});
+
+const loginStylesShared = StyleSheet.create({
+  scrollView: { width: '100%' },
+  scrollContent: { flexGrow: 1, alignItems: 'center', justifyContent: 'center', paddingVertical: 20 },
 });
 
 const bootStyles = StyleSheet.create({
@@ -725,7 +732,7 @@ const makeDesktopStyles = () => StyleSheet.create({
   emptyHint: { color: colors.textMuted, fontSize: 12 },
 });
 
-function LoginScreen({ onLogin, initialProfile, onCancelReauth }: { onLogin: (cfg: HubConfig) => Promise<void>; initialProfile?: Pick<HubProfile, 'profileId' | 'serverUrl' | 'username'> | null; onCancelReauth?: () => Promise<void> }) {
+export function LoginScreen({ onLogin, initialProfile, onCancelReauth }: { onLogin: (cfg: HubConfig) => Promise<void>; initialProfile?: Pick<HubProfile, 'profileId' | 'serverUrl' | 'username'> | null; onCancelReauth?: () => Promise<void> }) {
   const [serverUrl, setServerUrl] = useState(initialProfile?.serverUrl ?? '');
   const [username, setUsername] = useState(initialProfile?.username ?? '');
   const [password, setPassword] = useState('');

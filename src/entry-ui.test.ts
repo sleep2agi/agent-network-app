@@ -9,6 +9,7 @@ const checks: Array<[string, boolean]> = [
   ['login uses visible labels instead of placeholder-only fields', app.includes('<Text style={loginStyles.label}>服务器地址</Text>') && app.includes('<Text style={loginStyles.label}>用户名</Text>') && app.includes('<Text style={loginStyles.label}>密码</Text>')],
   ['password visibility control is accessible', app.includes("accessibilityLabel={passwordVisible ? '隐藏密码' : '显示密码'}") && app.includes('secureTextEntry={!passwordVisible}')],
   ['login remains keyboard-safe and scrollable on compact screens', app.includes('<KeyboardAvoidingView') && app.includes('keyboardShouldPersistTaps="handled"')],
+  ['first run remains scrollable in short compact windows', /testID="first-run-local-hub"[\s\S]*?<ScrollView/.test(app) && app.includes('compact && entryStyles.benefitsCompact')],
   ['login failures remain announced and structurally classified', app.includes('testID={`login-error-${failKind}`}') && app.includes('accessibilityRole="alert"')],
   ['busy and disabled states remain explicit', app.includes('testID="login-busy"') && app.includes('disabled={busy || !serverUrl || !username || !password}')],
 ];

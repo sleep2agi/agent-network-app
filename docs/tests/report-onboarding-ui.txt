@@ -38,3 +38,16 @@ Exact results
 - Login flow: 18/18
 - TypeScript: PASS
 - Expo SDK 56 web export: PASS (470 modules)
+
+Independent review revision
+- First review found the compact first-run card could exceed a short window with
+  no scroll escape, and that source assertions were insufficient visual proof.
+- FirstRunScreen now uses a real ScrollView; below 520px its benefit rows stack
+  and the primary/remote actions remain reachable by scrolling.
+- Playwright 1.55.0 rendered the actual exported React Native Web components in
+  Chromium. It verified dark/light 1280x800, compact 420x520 before/after scroll,
+  login input interaction, accessible password toggle, and typed bad-URL error.
+- Interactive render result: PASS. Screenshots are under
+  docs/tests/onboarding-ui/.
+- Rev2 Docker: Entry UI 9/9, local Hub runtime 27/27, login flow 18/18,
+  TypeScript PASS, Expo SDK 56 web export PASS (470 modules).
