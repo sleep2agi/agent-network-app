@@ -409,8 +409,8 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
     try {
       const requestId = begun.operation.requestId;
       const response = await sendTask(cfg, target, forwardFor.text, undefined, 'normal', requestId);
+      confirmForward(begun.operation.key);
       if (mayWrite()) {
-        confirmForward(begun.operation.key);
         setSendConfirmation(sendConfirmationFromResponse(response));
         setForwardFor(null);
       }

@@ -1,8 +1,22 @@
 export type ForwardState = 'pending' | 'ambiguous';
 export interface ForwardOperation { key: string; conversationKey: string; target: string; sourceHash: string; requestId: string; state: ForwardState; }
 let ops: Record<string, ForwardOperation> = {};
-let persist: ((all: ForwardOperation[]) => void) | null = null;
-const flush = () => { try { persist?.(Object.values(ops)); } catch {} };
+let persist: ((all: ForwardOperation[]) => void | Promise<void>) | null = null;
+let revision = 0;
+let persistedRevision = 0;
+let writeChain: Promise<void> = Promise.resolve();
+const flush = () => {
+  if (!persist) return;
+  const snapshot = structuredClone(Object.values(ops));
+  const writeRevision = ++revision;
+  writeChain = writeChain.then(async () => {
+    try { await persist?.(snapshot); persistedRevision = writeRevision; } catch { /* dirty; next mutation/drain retries latest */ }
+  });
+};
+export const drainForwardWrites = async () => {
+  await writeChain;
+  if (persistedRevision < revision) { flush(); await writeChain; }
+};
 export const forwardSourceHash = (text: string) => {
   let h = 0x811c9dc5;
   for (let i = 0; i < text.length; i++) { h ^= text.charCodeAt(i); h = Math.imul(h, 0x01000193); }
@@ -10,9 +24,9 @@ export const forwardSourceHash = (text: string) => {
 };
 export const forwardOperationKey = (conversationKey: string, target: string, text: string) =>
   `${conversationKey}::${encodeURIComponent(target)}::${forwardSourceHash(text)}`;
-export const initForwardController = (saved: ForwardOperation[] | null, fn: (all: ForwardOperation[]) => void) => {
+export const initForwardController = (saved: ForwardOperation[] | null, fn: (all: ForwardOperation[]) => void | Promise<void>) => {
   ops = {}; for (const op of saved ?? []) if (op?.key && (op.state === 'pending' || op.state === 'ambiguous')) ops[op.key] = op;
-  persist = fn; flush();
+  persist = fn; revision = 0; persistedRevision = 0; writeChain = Promise.resolve();
 };
 export const beginForward = (conversationKey: string, target: string, text: string, createId: () => string) => {
   const key = forwardOperationKey(conversationKey, target, text);
