@@ -415,6 +415,13 @@ export const takeStatusPrefetch = (cfg: HubConfig): Promise<{ sessions: Session[
   return null;
 };
 
+// 🔴 network_id is not optional decoration here. The hub resolves an unscoped
+// user-token read as "every network this user belongs to"
+// (server/src/network-scope.ts resolveRestNetworkScope, last branch →
+// getUserNetworkIds), and /api/tasks then filters with
+// `AND network_id IN (…)`. Without this parameter a conversation with alias X
+// returns X's messages from *all* of the user's networks, interleaved by
+// created_at — the same alias in two networks reads as one thread.
 export const fetchTasks = (
   cfg: HubConfig,
   params: { to_name?: string; from_name?: string; limit?: number },
@@ -423,6 +430,7 @@ export const fetchTasks = (
   if (params.to_name) q.set('to_name', params.to_name);
   if (params.from_name) q.set('from_name', params.from_name);
   q.set('limit', String(params.limit ?? 20));
+  if (cfg.networkId) q.set('network_id', cfg.networkId);
   return get<{ tasks: HubTask[] }>(cfg, `/api/tasks?${q}`);
 };
 
@@ -436,6 +444,9 @@ export const fetchTaskDetail = async (
   taskId: string,
 ): Promise<HubTask | null> => {
   const q = new URLSearchParams({ task_id: taskId, limit: '1' });
+  // Same endpoint, same scoping rule — a task id is unique, but an unscoped
+  // read still asks across every network the user belongs to.
+  if (cfg.networkId) q.set('network_id', cfg.networkId);
   const data = await get<{ tasks: HubTask[] }>(cfg, `/api/tasks?${q}`);
   return data.tasks?.[0] ?? null;
 };
