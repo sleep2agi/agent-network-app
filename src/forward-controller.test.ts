@@ -1,0 +1,12 @@
+import { beginForward, confirmForward, findForward, initForwardController, markForwardAmbiguous, mayProjectForward, resetForwardWithoutResend } from './forward-controller';
+const ck=(n:string,v:boolean)=>{if(!v)throw new Error(`FAIL: ${n}`)}; let disk:any[]=[]; let ids=0;
+initForwardController([], all => disk=structuredClone(all));
+const a=beginForward('A','T','source',()=>`id_${++ids}`); const twice=beginForward('A','T','source',()=>`id_${++ids}`);
+ck('doubletap starts once and reuses request id',a.started&&!twice.started&&a.operation.requestId===twice.operation.requestId&&ids===1);
+markForwardAmbiguous(a.operation.key); ck('modal close/reopen retains ambiguous',findForward('A','T','source')?.state==='ambiguous');
+ck('A operation does not contaminate B',findForward('B','T','source')===null);
+ck('late A ACK cannot project into B or unmounted view',!mayProjectForward('A','B',true)&&!mayProjectForward('A','A',false));
+initForwardController(disk,()=>{}); ck('process remount restores ambiguous',findForward('A','T','source')?.state==='ambiguous');
+resetForwardWithoutResend(a.operation.key); ck('explicit reset clears without creating new send',findForward('A','T','source')===null&&ids===1);
+const u=beginForward('A','T','other',()=>`id_${++ids}`); confirmForward(u.operation.key); ck('authoritative ACK clears operation',findForward('A','T','other')===null);
+console.log('forward controller sequences: 7/7 checks passed');

@@ -1,6 +1,7 @@
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import type { SendConfirmation } from './actual-recipient';
 import { colors, spacing } from './theme';
+import { ACTUAL_NOTICE_A11Y } from './actual-recipient';
 
 export default function ActualRecipientNotice({
   confirmation,
@@ -14,8 +15,7 @@ export default function ActualRecipientNotice({
     <View
       style={styles.notice}
       testID="actual-recipient-notice"
-      role="status"
-      accessibilityLiveRegion="polite"
+      {...ACTUAL_NOTICE_A11Y}
     >
       <View style={styles.copy}>
         <Text style={styles.title}>{confirmation.queued ? '已排队' : '已发送'}</Text>

@@ -4,6 +4,7 @@ export interface ActualRecipient {
   toNodeId: string | null;
   networkId: string | null;
 }
+export const ACTUAL_NOTICE_A11Y = { role: 'status', accessibilityLiveRegion: 'polite' } as const;
 
 export interface SendConfirmation {
   actualRecipient: ActualRecipient | null;

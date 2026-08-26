@@ -1,0 +1,28 @@
+export type ForwardState = 'pending' | 'ambiguous';
+export interface ForwardOperation { key: string; conversationKey: string; target: string; sourceHash: string; requestId: string; state: ForwardState; }
+let ops: Record<string, ForwardOperation> = {};
+let persist: ((all: ForwardOperation[]) => void) | null = null;
+const flush = () => { try { persist?.(Object.values(ops)); } catch {} };
+export const forwardSourceHash = (text: string) => {
+  let h = 0x811c9dc5;
+  for (let i = 0; i < text.length; i++) { h ^= text.charCodeAt(i); h = Math.imul(h, 0x01000193); }
+  return (h >>> 0).toString(16).padStart(8, '0');
+};
+export const forwardOperationKey = (conversationKey: string, target: string, text: string) =>
+  `${conversationKey}::${encodeURIComponent(target)}::${forwardSourceHash(text)}`;
+export const initForwardController = (saved: ForwardOperation[] | null, fn: (all: ForwardOperation[]) => void) => {
+  ops = {}; for (const op of saved ?? []) if (op?.key && (op.state === 'pending' || op.state === 'ambiguous')) ops[op.key] = op;
+  persist = fn; flush();
+};
+export const beginForward = (conversationKey: string, target: string, text: string, createId: () => string) => {
+  const key = forwardOperationKey(conversationKey, target, text);
+  if (ops[key]) return { operation: ops[key], started: false };
+  const operation: ForwardOperation = { key, conversationKey, target, sourceHash: forwardSourceHash(text), requestId: createId(), state: 'pending' };
+  ops[key] = operation; flush(); return { operation, started: true };
+};
+export const markForwardAmbiguous = (key: string) => { if (ops[key]) { ops[key] = { ...ops[key], state: 'ambiguous' }; flush(); } };
+export const confirmForward = (key: string) => { delete ops[key]; flush(); };
+export const resetForwardWithoutResend = (key: string) => { delete ops[key]; flush(); };
+export const findForward = (conversationKey: string, target: string, text: string) => ops[forwardOperationKey(conversationKey, target, text)] ?? null;
+export const mayProjectForward = (operationConversation: string, visibleConversation: string, mounted: boolean) =>
+  mounted && operationConversation === visibleConversation;

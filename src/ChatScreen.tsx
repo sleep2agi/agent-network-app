@@ -45,6 +45,7 @@ import { cleanAttachmentDebugText, parseAttachmentRefs, parseMetaAttachmentRefs 
 import { attachmentCacheScope } from './attach-download';
 import ActualRecipientNotice from './ActualRecipientNotice';
 import { sendConfirmationFromResponse, type SendConfirmation } from './actual-recipient';
+import { beginForward, confirmForward, markForwardAmbiguous, mayProjectForward, resetForwardWithoutResend } from './forward-controller';
 
 // Chat with one agent. Mirrors dashboard M4: open with the newest PAGE
 // messages, grow the window when the user scrolls toward older history.
@@ -351,13 +352,15 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
   const [forwardQuery, setForwardQuery] = useState('');
   const [forwardingTo, setForwardingTo] = useState<string | null>(null);
   const forwardingRef = useRef(false);
-  const forwardRequestIdRef = useRef<string | null>(null);
+  const forwardOperationKeyRef = useRef<string | null>(null);
   const [forwardAmbiguous, setForwardAmbiguous] = useState(false);
   const [sendConfirmation, setSendConfirmation] = useState<SendConfirmation | null>(null);
 
   // ChatScreen is reused while navigating between aliases. A confirmation is
   // scoped to the conversation where that write completed, never the next one.
-  useEffect(() => setSendConfirmation(null), [conversationKeyFor]);
+  useEffect(() => {
+    setSendConfirmation(null); setForwardFor(null); setForwardingTo(null); setForwardAmbiguous(false);
+  }, [conversationKeyFor]);
 
   useEffect(() => {
     const doc = (globalThis as any).document;
@@ -384,7 +387,6 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
     setForwardFor(selection);
     setForwardQuery('');
     setForwardAmbiguous(false);
-    forwardRequestIdRef.current = createDashboardRequestId();
     try {
       const data = await fetchStatus(cfg);
       setForwardTargets((data.sessions ?? []).filter(session => session.alias));
@@ -396,20 +398,24 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
   const forwardMessage = async (target: string) => {
     if (!forwardFor || forwardingRef.current || forwardAmbiguous) return;
     const startedKey = conversationKeyFor;
-    const mayWrite = () => mayApplySendResult(startedKey, visibleConversationKeyRef.current, mountedRef.current);
+    const mayWrite = () => mayProjectForward(startedKey, visibleConversationKeyRef.current, mountedRef.current);
+    const begun = beginForward(startedKey, target, forwardFor.text, createDashboardRequestId);
+    forwardOperationKeyRef.current = begun.operation.key;
+    if (!begun.started) { setForwardAmbiguous(true); return; }
     forwardingRef.current = true;
     setForwardingTo(target);
     try {
-      const requestId = forwardRequestIdRef.current ?? createDashboardRequestId();
-      forwardRequestIdRef.current = requestId;
+      const requestId = begun.operation.requestId;
       const response = await sendTask(cfg, target, forwardFor.text, undefined, 'normal', requestId);
       if (mayWrite()) {
+        confirmForward(begun.operation.key);
         setSendConfirmation(sendConfirmationFromResponse(response));
         setForwardFor(null);
       }
     } catch (error) {
       // No public forward reconciliation endpoint currently proves whether an
       // ACK-loss write committed. Fail closed and disable repeat taps.
+      markForwardAmbiguous(begun.operation.key);
       if (mayWrite()) {
         setForwardAmbiguous(true);
         Alert.alert('转发结果待确认', '可能已经送达。为避免重复转发，请先在目标会话确认。');
@@ -883,6 +889,12 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
           <Pressable style={styles.forwardPanel} onPress={() => {}}>
             <Text style={styles.forwardTitle}>转发给</Text>
             {forwardAmbiguous ? <Text style={styles.forwardEmpty}>结果待确认，请勿重复转发</Text> : null}
+            {forwardAmbiguous && forwardOperationKeyRef.current ? (
+              <Pressable onPress={() => Alert.alert('清除待确认状态？', '这不会重新转发，也不代表消息未送达。', [
+                { text: '取消', style: 'cancel' },
+                { text: '仅清除状态', onPress: () => { resetForwardWithoutResend(forwardOperationKeyRef.current!); setForwardAmbiguous(false); } },
+              ])}><Text style={styles.forwardEmpty}>仅清除待确认状态（不会重发）</Text></Pressable>
+            ) : null}
             <TextInput value={forwardQuery} onChangeText={setForwardQuery} placeholder="搜索 agent…" placeholderTextColor={colors.textMuted} style={styles.forwardSearch} />
             <FlatList
               style={styles.forwardList}
