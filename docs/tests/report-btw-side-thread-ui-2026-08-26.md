@@ -2,7 +2,7 @@
 
 Date: 2026-08-26 (Asia/Shanghai)
 
-Source under test: `a0ca874761d1b2b1c9bdfc069a6094f620c83545` (`feat/btw-side-thread-ui`, rebased on desktop `0.2.37`)
+Source under test: `0cb9f8cbaab18b6d46c18d9c11c786bd646a198c` (`feat/btw-side-thread-ui`, rebased on desktop `0.2.37`)
 
 ## Scope
 
@@ -14,6 +14,7 @@ Source under test: `a0ca874761d1b2b1c9bdfc069a6094f620c83545` (`feat/btw-side-th
 - creating/running/reconciling/succeeded/failed/cancelled/archived card states;
 - ambiguous/reconciling operations are shown as awaiting confirmation and cannot trigger retry, archive, purge or another side effect;
 - all six POST kinds turn acknowledgement loss into reconciliation while retaining the caller request key;
+- runtime-neutral action controller with synchronous dispatch locking, ambiguous retry key reuse and authoritative bring-back GET hydration;
 - `/btw` attachments, retry attachment preservation, authoritative bring-back hydration and synchronous double-tap locking;
 - render-time scope ownership, per-scope request sequencing, equal-timestamp terminal precedence and independent-window isolation;
 - modal focus/restore, keyboard avoidance, safe-area and live-region accessibility semantics;
@@ -27,11 +28,11 @@ Source under test: `a0ca874761d1b2b1c9bdfc069a6094f620c83545` (`feat/btw-side-th
 
 ```sh
 sg docker -c 'docker build \
-  --build-arg SOURCE_COMMIT=a0ca874761d1b2b1c9bdfc069a6094f620c83545 \
+  --build-arg SOURCE_COMMIT=0cb9f8cbaab18b6d46c18d9c11c786bd646a198c \
   -f tests/test-btw-side-thread-ui/Dockerfile \
-  -t anet-app-btw-ui:a0ca874 .'
+  -t anet-app-btw-ui:0cb9f8c .'
 
-sg docker -c 'docker run --rm anet-app-btw-ui:a0ca874'
+sg docker -c 'docker run --rm anet-app-btw-ui:0cb9f8c'
 ```
 
 ## Results
@@ -39,13 +40,20 @@ sg docker -c 'docker run --rm anet-app-btw-ui:a0ca874'
 - parser and IME contract: 12/12 passed;
 - typed API, frozen fixture, ACK-loss and capability contract: 21/21 passed;
 - production HTTP transport integration: 7/7 passed;
+- runtime-neutral action controller: 4/4 passed;
 - card identity/lifecycle/reopen/reconciliation contract: 16/16 passed;
 - scope and out-of-order request ownership contract: 4/4 passed;
 - shared UI, attachments, accessibility and main-state isolation contract: 30/30 passed;
 - TypeScript build check: passed;
-- repository regression suite: 54/54 test files passed;
-- Expo SDK 56 web export: passed (Metro bundled 473 modules);
-- final container line: `PASS BTW SideThread App parser/API/model/shared UI contract @ a0ca874761d1b2b1c9bdfc069a6094f620c83545`.
+- repository regression suite: 55/55 test files passed;
+- Expo SDK 56 web export: passed (Metro bundled 474 modules);
+- final container line: `PASS BTW SideThread App parser/API/model/shared UI contract @ 0cb9f8cbaab18b6d46c18d9c11c786bd646a198c`.
+
+## Witnessed-red mutations
+
+- force an ambiguous action retry to allocate a new request key: controller test exits 1 (`3/4`);
+- remove the authoritative GET after bring-back ACK: controller test exits 1 (`3/4`);
+- disable the synchronous in-flight lock: controller test exits 1 (`2/4`, duplicate dispatch observed).
 
 All results above, including the Expo export, were produced inside the same Docker test suite.
 
