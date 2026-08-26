@@ -1,0 +1,29 @@
+# App REST 发送确认展示实际接收节点
+
+Date: 2026-08-26
+Base: feec56e7bcd26a996d50e0fec89b001fb32c6907 (origin/main)
+Source commit under test: 54c44fe48b33d2b2f73a8298617bb516786ab500
+Hub contract provenance: sleep2agi/agent-network draft PR #1209
+Docker image: anet-app-actual-to:54c44fe
+Docker image id: sha256:3bae9b85441a535429a110d6dc0f3cb94a4dd4fa3d155e71869822b9a7b7c12a
+Runner: tests/test-actual-recipient/run.sh
+
+## Result
+
+PASS. Docker 容器退出码 0；未连接生产 Hub，未使用真实 token。
+
+- actual_to 契约投影：5/5 checks（canonical rename、同 alias 跨网络、offline queued、旧 Hub 无字段、恶意/不完整字段 fail closed）。
+- 全量单测：49/49 test files passed。
+- TypeScript：`tsc --noEmit -p tsconfig.build.json` PASS。
+- Expo SDK 56 Web export：PASS，生成 index.html。
+
+## Compatibility / security
+
+- 只白名单复制 `actual_to.alias/to_node_id/network_id`，绝不渲染原始 Hub 响应。
+- 旧 Hub 缺少 `actual_to` 时明确显示“Hub 未报告（兼容旧版）”，不从请求 alias、rename 字段或当前会话推断。
+- `queued:true` 或 `session_status:offline` 显示“已排队”，仍展示同一实际节点身份。
+- UI 为 React Native 共享组件，桌面与移动使用同一路径。
+
+## Blocker
+
+Hub PR #1209 尚为 Draft / OPEN，因此 App PR 必须保持 Draft 且标记依赖；合并前需用已合并 Hub 契约再做真实 REST online/offline E2E。
