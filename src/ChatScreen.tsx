@@ -186,7 +186,7 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
   const sending = false; // optimistic echo frees the input immediately
   const limitRef = useRef(PAGE);
 
-  const conversationKeyFor = conversationKey(cfg.profileId, cfg.serverUrl, alias);
+  const conversationKeyFor = conversationKey(cfg.profileId, cfg.serverUrl, cfg.networkId, alias);
   // Updated during render, before effects: an async send from the previous
   // sidebar selection must see the new owner immediately.
   const visibleConversationKeyRef = useRef(conversationKeyFor);

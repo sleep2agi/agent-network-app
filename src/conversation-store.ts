@@ -20,11 +20,31 @@ export const conversationScope = (
   serverUrl: string,
 ): string => profileId ? `profile:${profileId}` : `server:${normalizeServerUrl(serverUrl)}`;
 
+/**
+ * The network segment sits *inside* the profile scope, so `clearScope` still
+ * clears every network of a profile with one prefix match.
+ *
+ * Encoded, because an un-encoded id containing `::` could otherwise forge a
+ * segment boundary and make two different networks share a key.
+ */
+const networkSegment = (networkId: string | null | undefined): string =>
+  `net:${encodeURIComponent(networkId ?? '')}`;
+
+/**
+ * A conversation is identified by (profile-or-server, network, alias).
+ *
+ * The network belongs in the key for the same reason it belongs in the request
+ * (#187): one alias can exist in two of the user's networks, and they are two
+ * different conversations. Leaving it out means the cached messages of the
+ * first are shown, instantly and with no loading state, under the second.
+ */
 export const conversationKey = (
   profileId: string | null | undefined,
   serverUrl: string,
+  networkId: string | null | undefined,
   alias: string,
-): string => `${conversationScope(profileId, serverUrl)}::${encodeURIComponent(alias)}`;
+): string =>
+  `${conversationScope(profileId, serverUrl)}::${networkSegment(networkId)}::${encodeURIComponent(alias)}`;
 
 /** Shared message cache only. Request ownership stays inside each ChatScreen. */
 export const createConversationStore = <T>(maxEntries = 50) => {
