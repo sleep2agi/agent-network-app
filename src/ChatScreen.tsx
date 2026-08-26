@@ -43,6 +43,8 @@ import { appFetch } from './app-fetch';
 import MarkdownMessage from './MarkdownMessage';
 import { cleanAttachmentDebugText, parseAttachmentRefs, parseMetaAttachmentRefs } from './attachment-display';
 import { attachmentCacheScope } from './attach-download';
+import ActualRecipientNotice from './ActualRecipientNotice';
+import { sendConfirmationFromResponse, type SendConfirmation } from './actual-recipient';
 
 // Chat with one agent. Mirrors dashboard M4: open with the newest PAGE
 // messages, grow the window when the user scrolls toward older history.
@@ -348,6 +350,11 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
   const [forwardTargets, setForwardTargets] = useState<Session[]>([]);
   const [forwardQuery, setForwardQuery] = useState('');
   const [forwardingTo, setForwardingTo] = useState<string | null>(null);
+  const [sendConfirmation, setSendConfirmation] = useState<SendConfirmation | null>(null);
+
+  // ChatScreen is reused while navigating between aliases. A confirmation is
+  // scoped to the conversation where that write completed, never the next one.
+  useEffect(() => setSendConfirmation(null), [conversationKeyFor]);
 
   useEffect(() => {
     const doc = (globalThis as any).document;
@@ -385,7 +392,8 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
     if (!forwardFor || forwardingTo) return;
     setForwardingTo(target);
     try {
-      await sendTask(cfg, target, forwardFor.text);
+      const response = await sendTask(cfg, target, forwardFor.text);
+      setSendConfirmation(sendConfirmationFromResponse(response));
       setForwardFor(null);
     } catch (error) {
       Alert.alert('转发失败', error instanceof Error ? error.message : '请稍后重试');
@@ -505,7 +513,7 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
         attachments = uploaded.map(({ img, up }) => toTaskAttachment(img, up));
         outgoing = `${content}${uploaded.map(({ img, up }) => attachmentTextHint(img, up)).join('')}`;
       }
-      await sendTask(cfg, alias, outgoing, attachments, priority, dashboardRequestIdForLocalId(localId));
+      const response = await sendTask(cfg, alias, outgoing, attachments, priority, dashboardRequestIdForLocalId(localId));
       imgs.forEach(releaseClipboardAttachment);
       // delivered: drop the echo, the server copy arrives with reload.
       // 🔴 outbox 唯一删除路径=此处(sendTask 确认成功)。
@@ -516,6 +524,7 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
         try { await reconcileStartedConversation(); } catch { /* next open refreshes it */ }
         return;
       }
+      setSendConfirmation(sendConfirmationFromResponse(response));
       setMessages(prev => prev.filter(t => t._localId !== localId));
       await load(limitRef.current);
     } catch {
@@ -798,6 +807,9 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
             </View>
           ))}
         </View>
+      ) : null}
+      {sendConfirmation ? (
+        <ActualRecipientNotice confirmation={sendConfirmation} onDismiss={() => setSendConfirmation(null)} />
       ) : null}
       <Modal visible={!!viewerUri} transparent animationType="fade">
         <Pressable style={styles.viewerBackdrop} onPress={() => setViewerUri(null)}>

@@ -548,6 +548,18 @@ export interface TaskAttachment {
 
 export type TaskPriority = 'high' | 'normal' | 'low';
 
+export interface SendTaskResponse {
+  ok: true;
+  task_id?: string;
+  message_id?: string;
+  queued?: boolean;
+  session_status?: string;
+  deduplicated?: boolean;
+  /** Hub contract provenance: agent-network draft PR #1209 (additive). */
+  actual_to?: { alias: string; to_node_id: string; network_id: string };
+  [key: string]: unknown;
+}
+
 // Dashboard chat is the only user-authenticated lane that may steer an
 // already-running human Codex TUI turn. The Hub overwrites `auth_origin` from
 // the bearer token; this client supplies only the interaction provenance and
@@ -590,7 +602,7 @@ export const sendTask = async (
   attachments?: TaskAttachment[],
   priority: TaskPriority = 'normal',
   clientRequestId = createDashboardRequestId(),
-) => {
+): Promise<SendTaskResponse> => {
   const networkId = cfg.networkId ?? (await fetchNetworkId(cfg));
   const res = await withTimeout(signal =>
     appFetch(`${cfg.serverUrl}/api/task`, {
@@ -615,11 +627,11 @@ export const sendTask = async (
   // recorded during its five-minute deduplication window. Retire the local
   // optimistic row instead of accumulating a false “未送达” bubble.
   if (res.status === 429 && data?.error === 'duplicate_send') {
-    return { ...data, ok: true, deduplicated: true };
+    return { ...data, ok: true, deduplicated: true } as SendTaskResponse;
   }
   if (!res.ok) throw new Error(`HTTP ${res.status} on /api/task`);
   if (!data?.ok) throw new Error(String(data?.error ?? 'send failed'));
-  return data;
+  return data as SendTaskResponse;
 };
 
 /** The hub's root/help route is plain text starting with
