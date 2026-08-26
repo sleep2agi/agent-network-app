@@ -16,6 +16,32 @@ const sorted = (value) => {
 
 export const canonicalJson = (value) => JSON.stringify(sorted(value));
 
+export const normalizeGeneratedManifestAssetUrls = (manifest, release) => {
+  if (!manifest?.platforms || typeof manifest.platforms !== 'object' || Array.isArray(manifest.platforms)) {
+    throw new Error('release manifest: platforms must be an object');
+  }
+  if (!Array.isArray(release?.assets)) throw new Error('release: assets must be an array');
+
+  const platforms = Object.fromEntries(Object.entries(manifest.platforms).map(([name, entry]) => {
+    if (!entry || typeof entry !== 'object' || Array.isArray(entry) || typeof entry.url !== 'string') {
+      throw new Error(`release manifest: ${name} has no asset API URL`);
+    }
+    const matches = release.assets.filter((asset) => asset?.url === entry.url);
+    if (matches.length === 0) {
+      throw new Error(`release manifest: no browser download mapping for ${name}`);
+    }
+    if (matches.length !== 1) {
+      throw new Error(`release manifest: ambiguous browser download mapping for ${name}`);
+    }
+    const direct = matches[0]?.browser_download_url;
+    if (typeof direct !== 'string' || direct.length === 0) {
+      throw new Error(`release manifest: missing browser download URL for ${name}`);
+    }
+    return [name, { ...entry, url: direct }];
+  }));
+  return { ...manifest, platforms };
+};
+
 const jsonResponse = async (response, label, requireJsonContentType = true) => {
   if (!response.ok) throw new Error(`${label}: HTTP ${response.status}`);
   const contentType = response.headers.get('content-type') ?? '';
@@ -45,17 +71,21 @@ export async function verifyDesktopUpdateManifest({
   const releaseUrl = `https://api.github.com/repos/${repository}/releases/tags/${encodeURIComponent(tag)}`;
   const release = await jsonResponse(await fetchImpl(releaseUrl, { headers }), `release ${tag}`);
   if (release.draft) throw new Error(`release ${tag}: still a draft`);
-  const asset = Array.isArray(release.assets)
-    ? release.assets.find((candidate) => candidate?.name === 'latest.json')
-    : undefined;
-  if (!asset?.browser_download_url) throw new Error(`release ${tag}: latest.json asset missing`);
+  const manifestAssets = Array.isArray(release.assets)
+    ? release.assets.filter((candidate) => candidate?.name === 'latest.json')
+    : [];
+  if (manifestAssets.length === 0) throw new Error(`release ${tag}: latest.json asset missing`);
+  if (manifestAssets.length !== 1) throw new Error(`release ${tag}: latest.json asset ambiguous`);
+  const [asset] = manifestAssets;
+  if (!asset?.browser_download_url) throw new Error(`release ${tag}: latest.json download URL missing`);
 
   const generated = await jsonResponse(
     await fetchImpl(asset.browser_download_url, { headers }),
     `release ${tag} latest.json`,
     false,
   );
-  if (canonicalJson(deployed) !== canonicalJson(generated)) {
+  const normalizedGenerated = normalizeGeneratedManifestAssetUrls(generated, release);
+  if (canonicalJson(deployed) !== canonicalJson(normalizedGenerated)) {
     throw new Error(`desktop updater drift: deployed manifest differs from ${tag} release asset`);
   }
 
