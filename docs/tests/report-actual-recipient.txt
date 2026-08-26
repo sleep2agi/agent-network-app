@@ -2,10 +2,10 @@
 
 Date: 2026-08-26
 Base: feec56e7bcd26a996d50e0fec89b001fb32c6907 (origin/main)
-Source commit under test: 93bed5c4037b2a3a6838e1393b250b681f8a2d5e
+Source commit under test: dca68b074396051414816049157417579e0b846d
 Hub contract provenance: sleep2agi/agent-network draft PR #1209
-Docker image: anet-app-actual-to:controller
-Docker image id: sha256:a0fe4cac95bf5385a6be8e7c0d135ea9bd080cedbc0e3ab4935c25410ec1c3d3
+Docker image: anet-app-actual-to:atomic
+Docker image id: sha256:29f39eeab6a13afb22f0bdcde59043c912cf5f04b7dfac76dcd2ac5aea9ac51e
 Runner: tests/test-actual-recipient/run.sh
 
 ## Result
