@@ -348,6 +348,7 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
   // 更像微信·round-2: 长按气泡的动作菜单(引用/删除)。null = 未打开。
   const [menuFor, setMenuFor] = useState<MessageSelection | null>(null);
   const [forwardFor, setForwardFor] = useState<MessageSelection | null>(null);
+  const [forwardUiOwner, setForwardUiOwner] = useState<string | null>(null);
   const [forwardTargets, setForwardTargets] = useState<Session[]>([]);
   const [forwardQuery, setForwardQuery] = useState('');
   const [forwardingTo, setForwardingTo] = useState<string | null>(null);
@@ -359,7 +360,7 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
   // ChatScreen is reused while navigating between aliases. A confirmation is
   // scoped to the conversation where that write completed, never the next one.
   useEffect(() => {
-    setSendConfirmation(null); setForwardFor(null); setForwardingTo(null); setForwardAmbiguous(false);
+    setSendConfirmation(null); setForwardFor(null); setForwardUiOwner(null); setForwardingTo(null); setForwardAmbiguous(false);
   }, [conversationKeyFor]);
 
   useEffect(() => {
@@ -385,6 +386,7 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
   const openForwardPicker = async (selection: MessageSelection) => {
     setMenuFor(null);
     setForwardFor(selection);
+    setForwardUiOwner(conversationKeyFor);
     setForwardQuery('');
     setForwardAmbiguous(false);
     try {
@@ -884,7 +886,7 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
         </Pressable>
       </Modal>
 
-      <Modal visible={!!forwardFor} transparent animationType="fade" onRequestClose={() => setForwardFor(null)}>
+      <Modal visible={!!forwardFor && forwardUiOwner === conversationKeyFor} transparent animationType="fade" onRequestClose={() => setForwardFor(null)}>
         <Pressable style={styles.forwardBackdrop} onPress={() => setForwardFor(null)}>
           <Pressable style={styles.forwardPanel} onPress={() => {}}>
             <Text style={styles.forwardTitle}>转发给</Text>
