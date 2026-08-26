@@ -38,7 +38,7 @@ import type { HostSupervisorDaemon } from './src/api';
 import { clearConfig, listHubProfiles, loadConfig, loadLocalAvatars, loadOutbox, loadForwardOperations, saveForwardOperations, loadThemeMode, markHubProfileRequiresReauth, onDesktopThemeStorageChange, removeHubProfile, saveConfig, saveLocalAvatars, saveOutbox, switchHubProfile, type HubProfile } from './src/storage';
 import { clearProfileUnauthorized, onProfileUnauthorized } from './src/profile-auth-state';
 import { initOutbox } from './src/outbox';
-import { initForwardController } from './src/forward-controller';
+import { createForwardPersistence, initForwardController } from './src/forward-controller';
 import { colors, onThemeChange, setThemeMode, spacing, themeMode } from './src/theme';
 import { installWebScrollbarTheme } from './src/web-scrollbar';
 import DesktopWindowPin from './src/DesktopWindowPin';
@@ -143,7 +143,7 @@ function AppRoot() {
     const [localAvatars, outbox, forwards] = await Promise.all([loadLocalAvatars(profileId), loadOutbox(profileId), loadForwardOperations(profileId)]);
     initLocalAvatars(localAvatars, (map) => { void saveLocalAvatars(map, profileId); });
     initOutbox(outbox, (all) => { void saveOutbox(all, profileId); });
-    initForwardController(forwards, (all) => { void saveForwardOperations(all, profileId); });
+    initForwardController(forwards, createForwardPersistence(saveForwardOperations, profileId));
   };
 
   const removeActiveProfile = async () => {

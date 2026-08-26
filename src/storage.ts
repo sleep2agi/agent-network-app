@@ -276,7 +276,8 @@ export const loadOutbox = async (profileId?: string): Promise<OutboxEntry[]> => 
 import type { ForwardOperation } from './forward-controller';
 const FORWARD_FILE = `${FileSystem.documentDirectory}forward_operations_v1.json`;
 export const saveForwardOperations = async (all: ForwardOperation[], profileId?: string): Promise<void> => {
-  try { if (await writeDesktopProfileJson(profileId, 'forward-operations.json', all)) return; await FileSystem.writeAsStringAsync(FORWARD_FILE, JSON.stringify(all)); } catch {}
+  if (await writeDesktopProfileJson(profileId, 'forward-operations.json', all)) return;
+  await FileSystem.writeAsStringAsync(FORWARD_FILE, JSON.stringify(all));
 };
 export const loadForwardOperations = async (profileId?: string): Promise<ForwardOperation[]> => {
   try { const desktop=await readDesktopProfileJson<unknown>(profileId,'forward-operations.json'); if(desktop!==undefined)return Array.isArray(desktop)?desktop as ForwardOperation[]:[]; const info=await FileSystem.getInfoAsync(FORWARD_FILE); if(!info.exists)return []; const v=JSON.parse(await FileSystem.readAsStringAsync(FORWARD_FILE)); return Array.isArray(v)?v:[]; } catch { return []; }

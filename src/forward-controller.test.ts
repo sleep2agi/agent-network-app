@@ -1,4 +1,4 @@
-import { beginForward, confirmForward, drainForwardWrites, findForward, initForwardController, markForwardAmbiguous, mayProjectForward, resetForwardWithoutResend } from './forward-controller';
+import { beginForward, confirmForward, createForwardPersistence, drainForwardWrites, findForward, initForwardController, markForwardAmbiguous, mayProjectForward, resetForwardWithoutResend } from './forward-controller';
 const ck=(n:string,v:boolean)=>{if(!v)throw new Error(`FAIL: ${n}`)}; let ids=0;
 let disk:any[]=[]; initForwardController([], async all => { disk=structuredClone(all); });
 const ack=beginForward('A','T','ack',()=>`id_${++ids}`); let uiWrites=0;
@@ -24,4 +24,13 @@ resetForwardWithoutResend(amb.operation.key); ck('safe reset clears without rese
 let attempts=0; disk=[]; initForwardController([],async all=>{attempts++;if(attempts===1)throw new Error('disk');disk=structuredClone(all)});
 beginForward('A','T','retry-save',()=>`id_${++ids}`); await drainForwardWrites();
 ck('rejected save stays dirty and retries without unhandled rejection',attempts===2&&disk.length===1);
-console.log('forward controller async sequences: 7/7 checks passed');
+
+// Exercise the exact production adapter used by App.tsx. A storage rejection
+// must reach the controller; a delayed pending save must finish before confirm.
+let productionCalls=0; let release3!:()=>void; const held3=new Promise<void>(r=>{release3=r}); disk=[];
+const productionSave=async(all:any[],profileId?:string)=>{productionCalls++;if(profileId!=='profile-x')throw new Error('scope');if(productionCalls===1)await held3;if(productionCalls===2)throw new Error('disk reject');disk=structuredClone(all)};
+initForwardController([],createForwardPersistence(productionSave,'profile-x'));
+const wired=beginForward('A','T','wired',()=>`id_${++ids}`); confirmForward(wired.operation.key); release3(); await drainForwardWrites();
+ck('production wiring awaits delay, observes reject, retries latest empty snapshot',productionCalls===3&&disk.length===0);
+initForwardController(disk,async()=>{}); ck('production storage remount cannot resurrect confirmed pending',findForward('A','T','wired')===null);
+console.log('forward controller async sequences: 9/9 checks passed');

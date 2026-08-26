@@ -40,3 +40,10 @@ export const resetForwardWithoutResend = (key: string) => { delete ops[key]; flu
 export const findForward = (conversationKey: string, target: string, text: string) => ops[forwardOperationKey(conversationKey, target, text)] ?? null;
 export const mayProjectForward = (operationConversation: string, visibleConversation: string, mounted: boolean) =>
   mounted && operationConversation === visibleConversation;
+
+/** Production wiring: deliberately returns the storage Promise so the
+ * controller write chain observes ordering and rejection. */
+export const createForwardPersistence = (
+  save: (all: ForwardOperation[], profileId?: string) => Promise<void>,
+  profileId?: string,
+) => (all: ForwardOperation[]) => save(all, profileId);
