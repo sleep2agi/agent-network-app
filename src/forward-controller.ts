@@ -5,17 +5,26 @@ let persist: ((all: ForwardOperation[]) => void | Promise<void>) | null = null;
 let revision = 0;
 let persistedRevision = 0;
 let writeChain: Promise<void> = Promise.resolve();
-const flush = () => {
+const flush = (allowAutoRetry = true) => {
   if (!persist) return;
   const snapshot = structuredClone(Object.values(ops));
   const writeRevision = ++revision;
   writeChain = writeChain.then(async () => {
-    try { await persist?.(snapshot); persistedRevision = writeRevision; } catch { /* dirty; next mutation/drain retries latest */ }
+    try { await persist?.(snapshot); persistedRevision = writeRevision; } catch {
+      // Retry the latest state once without spinning forever. If that retry
+      // also fails, dirty remains observable (persistedRevision < revision)
+      // and the next controller event/lifecycle drain submits it again.
+      if (allowAutoRetry && writeRevision === revision) flush(false);
+    }
   });
 };
 export const drainForwardWrites = async () => {
-  await writeChain;
-  if (persistedRevision < revision) { flush(); await writeChain; }
+  let observed: Promise<void>;
+  do { observed = writeChain; await observed; } while (observed !== writeChain);
+  if (persistedRevision < revision) {
+    flush();
+    do { observed = writeChain; await observed; } while (observed !== writeChain);
+  }
 };
 export const forwardSourceHash = (text: string) => {
   let h = 0x811c9dc5;
