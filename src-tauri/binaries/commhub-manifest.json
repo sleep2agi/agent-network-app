@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "commhubVersion": "0.9.0-preview.29",
+  "commhubVersion": "0.9.0-preview.30",
   "apiVersion": "v3",
   "target": "build-required",
   "executable": "commhub",
