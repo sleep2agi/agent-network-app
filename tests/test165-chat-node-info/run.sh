@@ -16,7 +16,7 @@ mv /tmp/node-info.ts src/node-info.ts
 
 # Witnessed red: accepting arbitrary plain labels would leak @/?/path secrets.
 cp src/node-info.ts /tmp/node-info.ts
-sed -i 's/if (!SAFE_SERVER_LABEL\.test(trimmed))/if (false)/' src/node-info.ts
+sed -i 's/if (TOKEN_SHAPE\.test(trimmed)) return undefined;/if (false) return undefined;/' src/node-info.ts
 if bun src/node-info.test.ts >/tmp/plain-server-red.log 2>&1; then
   echo "FAIL unsafe plain server label mutation survived"
   exit 1

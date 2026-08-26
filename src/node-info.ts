@@ -5,7 +5,9 @@ export interface NodeInfoFact {
   value?: string | null;
 }
 
-const SAFE_SERVER_LABEL = /^(?:[A-Za-z0-9._-]+|\[[0-9A-Fa-f:]+\])(?::[0-9]{1,5})?$/;
+const TOKEN_SHAPE = /^(?:[aun]tok(?:[_\-.\s]|[A-Za-z0-9]{8})|bearer(?:\s|[_\-.])|sk[-_])\S*/i;
+const SAFE_HOSTNAME = /^(?=.{1,253}$)(?:[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?)(?:\.(?:[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?))*$/;
+const SAFE_IP_LITERAL = /^\[[0-9A-Fa-f:]+\]$/;
 
 export function safeServerLabel(value?: string | null): string | undefined {
   const trimmed = value?.trim();
@@ -14,8 +16,10 @@ export function safeServerLabel(value?: string | null): string | undefined {
     // Plain labels are deliberately ASCII-only. Unicode hostnames must arrive
     // as a parsed URL (URL normalizes them to punycode); never accept free-form
     // strings containing credentials, paths, query text, fragments or spaces.
-    if (!SAFE_SERVER_LABEL.test(trimmed)) return undefined;
-    const port = trimmed.match(/:([0-9]{1,5})$/)?.[1];
+    if (TOKEN_SHAPE.test(trimmed)) return undefined;
+    const match = trimmed.match(/^(\[[0-9A-Fa-f:]+\]|[^:]+)(?::([0-9]{1,5}))?$/);
+    if (!match || (!SAFE_HOSTNAME.test(match[1]) && !SAFE_IP_LITERAL.test(match[1]))) return undefined;
+    const port = match[2];
     if (port && Number(port) > 65535) return undefined;
     return trimmed;
   }
@@ -29,6 +33,12 @@ export function safeServerLabel(value?: string | null): string | undefined {
   }
 }
 
+export function safeServerUrl(value?: string | null): string | undefined {
+  const trimmed = value?.trim();
+  if (!trimmed || !trimmed.includes('://')) return undefined;
+  return safeServerLabel(trimmed);
+}
+
 /** Build the safe, read-only node facts shown from a chat header.
  * Deliberately allowlists public fields: tokens, config contents and arbitrary
  * session keys can never become rows by accident. */
@@ -36,7 +46,7 @@ export function nodeInfoFacts(session: Session, node: HubNode | null, serverUrl:
   return [
     { label: '节点名称', value: node?.node_name ?? session.alias },
     { label: '节点 ID', value: node?.node_id ?? session.node_id },
-    { label: '服务器', value: safeServerLabel(node?.server ?? session.server ?? serverUrl) },
+    { label: '服务器', value: safeServerLabel(node?.server ?? session.server) ?? safeServerUrl(serverUrl) },
     { label: 'Hostname', value: node?.hostname ?? session.hostname },
     { label: 'IP', value: session.ip },
     // Only explicit runtime-reported identities are accepted. In particular,

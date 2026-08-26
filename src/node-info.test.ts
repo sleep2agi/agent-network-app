@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { nodeStatusPath } from './api';
-import { nodeInfoFacts, safeServerLabel } from './node-info';
+import { nodeInfoFacts, safeServerLabel, safeServerUrl } from './node-info';
 
 let passed = 0;
 const check = (name: string, ok: boolean) => {
@@ -35,8 +35,11 @@ check('server URL is a truthful fallback', value(legacy, '服务器') === 'https
 check('credential-bearing server URL is reduced to its safe origin', safeServerLabel('https://user:secret@hub.example/base?q=token#private') === 'https://hub.example');
 check('invalid or non-http server URL fails closed', safeServerLabel('not://[a-secret') === undefined && safeServerLabel('file:///tmp/secret') === undefined);
 check('plain server labels reject credential/query/path shapes', safeServerLabel('hub.example?token=SECRET') === undefined && safeServerLabel('user@host') === undefined && safeServerLabel('host/path') === undefined && safeServerLabel('host name') === undefined);
+check('plain server labels reject token-shaped secrets', ['atok_TOPSECRET', 'atok-TOPSECRET', 'ntok.TOPSECRET', 'Bearer TOPSECRET', 'sk-TOPSECRET'].every(label => safeServerLabel(label) === undefined));
+check('plain labels require hostname syntax', safeServerLabel('not_a_hostname') === undefined && safeServerLabel('-bad.example') === undefined && safeServerLabel('bad-.example') === undefined);
 check('plain hostname IPv4 IPv6 and valid ports remain usable', safeServerLabel('edge-a.example:443') === 'edge-a.example:443' && safeServerLabel('10.0.0.8:8080') === '10.0.0.8:8080' && safeServerLabel('[2001:db8::1]:443') === '[2001:db8::1]:443');
 check('invalid plain port fails closed', safeServerLabel('hub.example:99999') === undefined);
+check('configured server fallback requires URL origin', safeServerUrl('hub.example') === undefined && safeServerUrl('https://user:secret@hub.example/path?q=x') === 'https://hub.example');
 check('full status is network scoped and URL encoded', nodeStatusPath('net /甲?') === '/api/status?network_id=net%20%2F%E7%94%B2%3F');
 let missingNetworkRejected = false;
 try { nodeStatusPath(undefined); } catch { missingNetworkRejected = true; }
