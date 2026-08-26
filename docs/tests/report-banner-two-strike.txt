@@ -1,0 +1,76 @@
+# 连接横幅:单次抖动不再播报「无法连接服务器」
+
+Date: 2026-08-24
+Repo: https://github.com/sleep2agi/agent-network-app
+Branch: fix/banner-two-strike
+Base: origin/main @ 8a454431d0f952296195067471cc01fecaca0920
+
+## 缺陷,以及它是怎么被观测到的
+
+用户在一天内报了 5 次「commhub 挂了 / 又挂了 / 无法连接服务器」。每一次去量
+hub 都是健康的,于是每一次都得出「没问题」——而这个绿在结构上必然出现:
+
+  src/connectivity.ts(改动前)
+      offline = lastFailureAt !== null && (lastSuccessAt === null || lastFailureAt > lastSuccessAt)
+
+即「最近一次完成的读失败了」就立刻显示横幅,下一次轮询成功就自动清除。
+症状的生命周期比任何事后采样都短,且它清除自己不留痕:请求是在客户端 abort 的,
+hub 侧连一条失败记录都没有。
+
+## 量到的数字(为什么单次失败会发生)
+
+  app 超时           src/api.ts:45  TIMEOUT_MS = 12000
+  app 每轮拉取量      /api/status 388KB + /api/tasks 80KB + /api/nodes 98KB
+                     + /api/messages 54KB ≈ 620KB,轮询 5s/10s/30s
+  隧道抖动           对 2KB 的 /health 连续采样 42 次:中位 5.5ms,
+                     但 5/42 超过 1s,最大 5627ms
+
+2KB 都能停 5.6 秒;388KB 撞上同一个停顿越过 12s 只是时间问题。越线一次 → abort
+→ 横幅 → 用户读成「服务器挂了」。
+
+## 改动
+
+有缓存数据在屏上时,连续失败达到 2 次才改口径为 offline;第 1 次记为
+reconnecting,文案是「网络不稳定 · 正在重试」,不出现「无法连接服务器」。
+冷启动(lastSuccessAt === null)不设宽限,一次失败即 offline——那时屏幕上没有
+任何数据,沉默比误报更糟。
+
+诚实契约未变:lastSuccessAt 仍然只在成功时更新。
+
+未触碰 MessagesScreen 的整屏失败态:messages-view-state.ts 里
+`if (count > 0) return 'list'`,即它只在**一条消息都没有**时才出现,与冷启动
+规则同构,本就正确。
+
+## 既有测试:10/12 保持不变,2 条按新行为更新
+
+未改测试文件、只改实现时的结果是 10/12。红的两条是
+  「已 offline 再失败:version 不动」
+  「翻回在线:version 再 +1」
+它们红是因为新增了一次**真实的**状态跃迁(reconnecting→offline),不是判据被削弱。
+包含诚实契约那条在内的其余 10 条一字未改且仍绿。
+
+## Witnessed-red(五次独立变异,每次只改一处,变异目标均断言恰好命中 1 次)
+
+  M1 取消两跳(阈值恒为 1)=退回旧行为    → exit 1  ❌ 第2次失败:reconnecting→offline 是真翻转
+  M2 冷启动也给宽限(屏上无数据却沉默)    → exit 1  ❌ 从未成功过+失败 →「尚未获取到数据」变体
+  M3 抖动档静默吞掉(不给任何提示)        → exit 1  ❌ 抖动档仍然可见(不是静默吞掉)
+  M4 只在 offline 翻转时通知             → exit 1  ❌ 翻转为 offline:version +1
+  M5 成功时不清零计数                    → exit 1  ❌ 失败→成功:offline=false·横幅消失
+
+五条各自报出不同的断言名,说明它们是五道独立的闸,不是同一条。
+
+## 绿
+
+  bun src/connectivity.test.ts     25/25 passed
+  npm test                          === 36/36 test files passed ===
+
+## Not verified here
+
+真机上「连续两次 12s 超时」这一路径没有被真实触发过——它需要复现隧道停顿。
+本改动能证明的是判据本身:单次失败不再产生「无法连接服务器」,两次才产生,
+冷启动仍然立即产生。真实误报是否归零,要等下一次隧道抖动时观察,
+/home/vansin/.commhub/probe/app-path.log 正在按 app 的同路请求(388KB、12s 超时)
+每 30 秒记录一次,越线会标红。
+
+tsc 在本机报 34 条 TS2591(缺 @types/node),origin/main 上同样是 34 条,
+connectivity 相关 0 条 ⇒ 既有环境缺口,非本次引入;package.json 亦无 tsc 门。
