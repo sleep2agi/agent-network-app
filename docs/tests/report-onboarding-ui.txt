@@ -1,0 +1,55 @@
+Agent Network App — onboarding and login visual refresh
+
+Scope
+- Restyle the desktop/mobile first-run surface and username/password login.
+- Preserve local Hub startup, remote login, typed error states, reauthentication,
+  accessibility, and compact-screen keyboard behavior.
+
+Visual changes
+- Shared ambient entry surface, elevated card, logo halo, clearer hierarchy.
+- First-run benefits explain local startup and local data before the CTA.
+- Login uses persistent field labels, leading icons, password visibility control,
+  semantic error cards, a security/version footer, and keyboard-safe scrolling.
+- Widths below 520px use reduced card padding and stacked benefit rows.
+
+Candidate Docker
+  sg docker -c 'docker build -f tests/onboarding-ui/Dockerfile \
+    --build-arg SOURCE_COMMIT=0000000000000000000000000000000000000000 \
+    -t anet-app-onboarding-ui-candidate . && \
+    docker run --rm anet-app-onboarding-ui-candidate'
+
+Layered result
+1. First run stopped at the harness SHA validator before product assertions; the
+   hand-counted shell pattern was corrected to an anchored 40-character regex.
+2. The entry UI contract passed 8/8. The next layer stopped because the legacy
+   test pinned the replaced CTA copy. The contract and local-workspace guide now
+   assert the clearer visible labels without weakening the local/remote split.
+3. Candidate passed: entry UI 8/8, local Hub runtime 27/27, login flow 18/18,
+   TypeScript, and Expo SDK 56 web export (470 modules).
+
+Exact commit Docker
+  source_commit=4b22c64c58375021684a655a3355e7636fd3d9c5
+  no-cache image=anet-app-onboarding-ui-4b22c64c
+  RESULT: PASS
+
+Exact results
+- Entry UI: 8/8
+- Local Hub runtime: 27/27
+- Login flow: 18/18
+- TypeScript: PASS
+- Expo SDK 56 web export: PASS (470 modules)
+
+Independent review revision
+- First review found the compact first-run card could exceed a short window with
+  no scroll escape, and that source assertions were insufficient visual proof.
+- FirstRunScreen now uses a real ScrollView; below 520px its benefit rows stack
+  and the primary/remote actions remain reachable by scrolling.
+- Playwright 1.55.0 rendered the actual exported React Native Web components in
+  Chromium. It verified dark/light 1280x800, compact 420x520 before/after scroll,
+  login input interaction, accessible password toggle, and typed bad-URL error.
+- Interactive render result: PASS. Screenshots are under
+  docs/tests/onboarding-ui/.
+- Rev2 Docker: Entry UI 9/9, local Hub runtime 27/27, login flow 18/18,
+  TypeScript PASS, Expo SDK 56 web export PASS (470 modules).
+- Rev2 exact source_commit=5867f9d3d21661cb1886fabb11f82af58c24bf78;
+  no-cache image=anet-app-onboarding-ui-5867f9d3; RESULT: PASS.

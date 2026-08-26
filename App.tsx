@@ -3,9 +3,11 @@ import {
   ActivityIndicator,
   BackHandler,
   Image,
+  KeyboardAvoidingView,
   Platform,
   Pressable,
   SafeAreaView,
+  ScrollView,
   StatusBar,
   StyleSheet,
   Text,
@@ -492,54 +494,97 @@ function AppRoot() {
   );
 }
 
-function FirstRunScreen({ busy, stage, error, onStartLocal, onRemote }: {
+export function FirstRunScreen({ busy, stage, error, onStartLocal, onRemote }: {
   busy: boolean;
   stage: 'preparing' | 'starting' | 'migrating' | null;
   error: string | null;
   onStartLocal: () => Promise<void>;
   onRemote: () => void;
 }) {
+  const entryStyles = useMemo(makeEntryStyles, []);
+  const { width } = useWindowDimensions();
+  const compact = width < 520;
   return (
-    <View style={firstRunStyles.root} testID="first-run-local-hub">
-      <View style={firstRunStyles.card}>
-        <Image source={require('./assets/splash-icon.png')} style={firstRunStyles.logo} resizeMode="contain" />
-        <Text style={firstRunStyles.title}>开始使用 Agent Network</Text>
-        <Text style={firstRunStyles.copy}>推荐在这台电脑创建本地工作区。无需填写服务器地址，数据保存在 ~/.anet/app。</Text>
-        {error ? <Text style={firstRunStyles.error}>{error}</Text> : null}
+    <View style={entryStyles.root} testID="first-run-local-hub">
+      <View pointerEvents="none" style={[entryStyles.glow, entryStyles.glowTop]} />
+      <View pointerEvents="none" style={[entryStyles.glow, entryStyles.glowBottom]} />
+      <ScrollView style={loginStylesShared.scrollView} contentContainerStyle={loginStylesShared.scrollContent} showsVerticalScrollIndicator={false}>
+      <View style={[entryStyles.card, compact && entryStyles.cardCompact]}>
+        <View style={entryStyles.logoHalo}>
+          <Image source={require('./assets/splash-icon.png')} style={entryStyles.logo} resizeMode="contain" />
+        </View>
+        <Text style={entryStyles.eyebrow}>YOUR AI WORKSPACE</Text>
+        <Text style={entryStyles.title}>让 Agent 在这里协作</Text>
+        <Text style={entryStyles.copy}>在这台电脑创建安全的本地工作区，几秒钟即可开始。无需配置服务器，数据默认留在本机。</Text>
+        <View style={[entryStyles.benefits, compact && entryStyles.benefitsCompact]}>
+          <View style={entryStyles.benefit}>
+            <View style={entryStyles.benefitIcon}><Ionicons name="flash-outline" size={16} color={colors.accent} /></View>
+            <View style={entryStyles.benefitCopy}><Text style={entryStyles.benefitTitle}>开箱即用</Text><Text style={entryStyles.benefitText}>自动启动本地服务</Text></View>
+          </View>
+          <View style={entryStyles.benefit}>
+            <View style={entryStyles.benefitIcon}><Ionicons name="shield-checkmark-outline" size={16} color={colors.accent} /></View>
+            <View style={entryStyles.benefitCopy}><Text style={entryStyles.benefitTitle}>本地优先</Text><Text style={entryStyles.benefitText}>工作数据保存在 ~/.anet/app</Text></View>
+          </View>
+        </View>
+        {error ? <View style={entryStyles.errorBox}><Ionicons name="alert-circle-outline" size={17} color={colors.failed} /><Text style={entryStyles.error}>{error}</Text></View> : null}
         <Pressable
           accessibilityRole="button"
           disabled={busy}
-          style={[firstRunStyles.primary, busy && firstRunStyles.disabled]}
+          style={({ pressed }) => [entryStyles.primary, busy && entryStyles.disabled, pressed && entryStyles.pressed]}
           onPress={() => { void onStartLocal(); }}
         >
           {busy ? (
-            <View style={firstRunStyles.busyRow} testID={`local-hub-stage-${stage ?? 'preparing'}`}>
+            <View style={entryStyles.busyRow} testID={`local-hub-stage-${stage ?? 'preparing'}`}>
               <ActivityIndicator color="#fff" />
-              <Text style={firstRunStyles.primaryText}>{stage === 'migrating' ? '正在备份并迁移…' : stage === 'starting' ? '正在启动本地服务…' : '正在准备本地工作区…'}</Text>
+              <Text style={entryStyles.primaryText}>{stage === 'migrating' ? '正在备份并迁移…' : stage === 'starting' ? '正在启动本地服务…' : '正在准备本地工作区…'}</Text>
             </View>
-          ) : <Text style={firstRunStyles.primaryText}>开始使用（本地）</Text>}
+          ) : <View style={entryStyles.buttonRow}><Text style={entryStyles.primaryText}>创建本地工作区</Text><Ionicons name="arrow-forward" size={18} color="#fff" /></View>}
         </Pressable>
-        <Pressable accessibilityRole="button" disabled={busy} style={firstRunStyles.secondary} onPress={onRemote}>
-          <Text style={firstRunStyles.secondaryText}>连接已有服务器</Text>
+        <Pressable accessibilityRole="button" disabled={busy} style={({ pressed }) => [entryStyles.secondary, pressed && entryStyles.secondaryPressed]} onPress={onRemote}>
+          <Ionicons name="globe-outline" size={17} color={colors.textSecondary} />
+          <Text style={entryStyles.secondaryText}>使用已有服务器登录</Text>
         </Pressable>
       </View>
+      </ScrollView>
     </View>
   );
 }
 
-const firstRunStyles = StyleSheet.create({
-  root: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 32, backgroundColor: colors.bg },
-  card: { width: '100%', maxWidth: 460, gap: 16, padding: 32, borderRadius: 20, backgroundColor: colors.card, borderWidth: StyleSheet.hairlineWidth, borderColor: colors.border },
-  logo: { width: 64, height: 64, alignSelf: 'center' },
-  title: { color: colors.text, fontSize: 24, fontWeight: '700', textAlign: 'center' },
-  copy: { color: colors.textMuted, fontSize: 15, lineHeight: 23, textAlign: 'center' },
-  error: { color: colors.failed, fontSize: 13, lineHeight: 19 },
-  primary: { height: 46, borderRadius: 10, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.accent },
+const makeEntryStyles = () => StyleSheet.create({
+  root: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24, backgroundColor: colors.bg, overflow: 'hidden' },
+  glow: { position: 'absolute', width: 420, height: 420, borderRadius: 210, opacity: themeMode() === 'light' ? 0.13 : 0.09, backgroundColor: colors.accent },
+  glowTop: { top: -280, right: -120 },
+  glowBottom: { bottom: -330, left: -160 },
+  card: { width: '100%', maxWidth: 480, gap: 16, paddingHorizontal: 38, paddingVertical: 36, borderRadius: 28, backgroundColor: colors.card, borderWidth: 1, borderColor: colors.border, shadowColor: '#000', shadowOffset: { width: 0, height: 20 }, shadowOpacity: themeMode() === 'light' ? 0.12 : 0.35, shadowRadius: 42, elevation: 12 },
+  cardCompact: { paddingHorizontal: 22, paddingVertical: 26, borderRadius: 22 },
+  logoHalo: { width: 74, height: 74, borderRadius: 23, alignSelf: 'center', alignItems: 'center', justifyContent: 'center', backgroundColor: themeMode() === 'light' ? '#e8f8fa' : '#102b32', borderWidth: 1, borderColor: themeMode() === 'light' ? '#c9eef2' : '#19434b' },
+  logo: { width: 58, height: 58 },
+  eyebrow: { color: colors.accent, fontSize: 11, fontWeight: '800', letterSpacing: 1.8, textAlign: 'center', marginTop: 2 },
+  title: { color: colors.text, fontSize: 27, lineHeight: 34, fontWeight: '800', letterSpacing: -0.4, textAlign: 'center' },
+  copy: { color: colors.textSecondary, fontSize: 14, lineHeight: 22, textAlign: 'center', maxWidth: 390, alignSelf: 'center' },
+  benefits: { flexDirection: 'row', gap: 10, marginVertical: 2 },
+  benefitsCompact: { flexDirection: 'column' },
+  benefit: { flex: 1, minHeight: 68, flexDirection: 'row', alignItems: 'center', gap: 9, padding: 11, borderRadius: 14, backgroundColor: colors.inputBg, borderWidth: 1, borderColor: colors.border },
+  benefitIcon: { width: 30, height: 30, borderRadius: 10, alignItems: 'center', justifyContent: 'center', backgroundColor: themeMode() === 'light' ? '#ddf5f7' : '#123038' },
+  benefitCopy: { flex: 1, minWidth: 0 },
+  benefitTitle: { color: colors.text, fontSize: 12, fontWeight: '700' },
+  benefitText: { color: colors.textMuted, fontSize: 10, lineHeight: 15, marginTop: 2 },
+  errorBox: { flexDirection: 'row', alignItems: 'flex-start', gap: 8, padding: 11, borderRadius: 12, backgroundColor: themeMode() === 'light' ? '#fff1f2' : '#291417', borderWidth: 1, borderColor: themeMode() === 'light' ? '#fecdd3' : '#552329' },
+  error: { flex: 1, color: colors.failed, fontSize: 12, lineHeight: 18 },
+  primary: { height: 52, borderRadius: 14, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.accent, shadowColor: colors.accent, shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.22, shadowRadius: 16, elevation: 5 },
   disabled: { opacity: 0.6 },
-  primaryText: { color: '#fff', fontSize: 15, fontWeight: '700' },
-  busyRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  secondary: { height: 42, alignItems: 'center', justifyContent: 'center' },
-  secondaryText: { color: colors.text, fontSize: 14, fontWeight: '600' },
+  pressed: { transform: [{ scale: 0.99 }], opacity: 0.9 },
+  primaryText: { color: '#fff', fontSize: 15, fontWeight: '800' },
+  busyRow: { flexDirection: 'row', alignItems: 'center', gap: 9 },
+  buttonRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  secondary: { height: 46, borderRadius: 13, flexDirection: 'row', gap: 8, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: colors.border, backgroundColor: themeMode() === 'light' ? '#fafbfc' : colors.inputBg },
+  secondaryPressed: { backgroundColor: colors.border },
+  secondaryText: { color: colors.textSecondary, fontSize: 14, fontWeight: '600' },
+});
+
+const loginStylesShared = StyleSheet.create({
+  scrollView: { width: '100%' },
+  scrollContent: { flexGrow: 1, alignItems: 'center', justifyContent: 'center', paddingVertical: 20 },
 });
 
 const bootStyles = StyleSheet.create({
@@ -687,12 +732,17 @@ const makeDesktopStyles = () => StyleSheet.create({
   emptyHint: { color: colors.textMuted, fontSize: 12 },
 });
 
-function LoginScreen({ onLogin, initialProfile, onCancelReauth }: { onLogin: (cfg: HubConfig) => Promise<void>; initialProfile?: Pick<HubProfile, 'profileId' | 'serverUrl' | 'username'> | null; onCancelReauth?: () => Promise<void> }) {
+export function LoginScreen({ onLogin, initialProfile, onCancelReauth }: { onLogin: (cfg: HubConfig) => Promise<void>; initialProfile?: Pick<HubProfile, 'profileId' | 'serverUrl' | 'username'> | null; onCancelReauth?: () => Promise<void> }) {
   const [serverUrl, setServerUrl] = useState(initialProfile?.serverUrl ?? '');
   const [username, setUsername] = useState(initialProfile?.username ?? '');
   const [password, setPassword] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  const [passwordVisible, setPasswordVisible] = useState(false);
+  const entryStyles = useMemo(makeEntryStyles, []);
+  const loginStyles = useMemo(makeLoginStyles, []);
+  const { width } = useWindowDimensions();
+  const compact = width < 520;
 
   // PR4:失败按 kind 分开渲染(凭据错/网络不可达/地址不对/服务器异常——用户下一步
   // 动作完全不同,不许合并成一句「登录失败」)。error=null 即无错。
@@ -719,73 +769,141 @@ function LoginScreen({ onLogin, initialProfile, onCancelReauth }: { onLogin: (cf
   };
 
   return (
-    <View style={styles.loginWrap}>
-      <Text style={styles.brand}>Agent Network</Text>
-      {initialProfile ? <Text style={styles.version}>登录已失效，请重新验证此账号；其他 Hub 不受影响</Text> : null}
-      <TextInput
-        style={styles.input}
-        placeholder="服务器地址 (https://your-hub.example.com)"
-        placeholderTextColor={colors.textMuted}
-        autoCapitalize="none"
-        autoCorrect={false}
-        keyboardType="url"
-        value={serverUrl}
-        onChangeText={setServerUrl}
-      />
-      <TextInput
-        style={styles.input}
-        placeholder="用户名"
-        placeholderTextColor={colors.textMuted}
-        autoCapitalize="none"
-        autoCorrect={false}
-        value={username}
-        onChangeText={setUsername}
-      />
-      <TextInput
-        style={styles.input}
-        placeholder="密码"
-        placeholderTextColor={colors.textMuted}
-        autoCapitalize="none"
-        secureTextEntry
-        value={password}
-        onChangeText={setPassword}
-      />
+    <KeyboardAvoidingView style={entryStyles.root} behavior={Platform.OS === 'ios' ? 'padding' : undefined} testID="login-screen">
+      <View pointerEvents="none" style={[entryStyles.glow, entryStyles.glowTop]} />
+      <View pointerEvents="none" style={[entryStyles.glow, entryStyles.glowBottom]} />
+      <ScrollView style={loginStyles.scrollView} contentContainerStyle={loginStyles.scrollContent} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
+      <View style={[entryStyles.card, loginStyles.card, compact && entryStyles.cardCompact]}>
+        <View style={entryStyles.logoHalo}>
+          <Image source={require('./assets/splash-icon.png')} style={entryStyles.logo} resizeMode="contain" />
+        </View>
+        <View style={loginStyles.heading}>
+          <Text style={entryStyles.eyebrow}>{initialProfile ? 'RECONNECT ACCOUNT' : 'WELCOME BACK'}</Text>
+          <Text style={entryStyles.title}>{initialProfile ? '重新验证账号' : '连接你的工作区'}</Text>
+          <Text style={entryStyles.copy}>{initialProfile ? '登录状态已失效。重新验证只会更新这个账号，其他工作区不会受到影响。' : '输入服务器和账号信息，继续与你的 Agent 协作。'}</Text>
+        </View>
+        <View style={loginStyles.form}>
+          <View style={loginStyles.field}>
+            <Text style={loginStyles.label}>服务器地址</Text>
+            <View style={loginStyles.inputShell}>
+              <Ionicons name="server-outline" size={18} color={colors.textMuted} />
+              <TextInput
+                style={loginStyles.input}
+                placeholder="https://your-hub.example.com"
+                placeholderTextColor={colors.textMuted}
+                autoCapitalize="none"
+                autoCorrect={false}
+                keyboardType="url"
+                value={serverUrl}
+                onChangeText={setServerUrl}
+                accessibilityLabel="服务器地址"
+              />
+            </View>
+          </View>
+          <View style={loginStyles.field}>
+            <Text style={loginStyles.label}>用户名</Text>
+            <View style={loginStyles.inputShell}>
+              <Ionicons name="person-outline" size={18} color={colors.textMuted} />
+              <TextInput
+                style={loginStyles.input}
+                placeholder="输入用户名"
+                placeholderTextColor={colors.textMuted}
+                autoCapitalize="none"
+                autoCorrect={false}
+                value={username}
+                onChangeText={setUsername}
+                accessibilityLabel="用户名"
+              />
+            </View>
+          </View>
+          <View style={loginStyles.field}>
+            <Text style={loginStyles.label}>密码</Text>
+            <View style={loginStyles.inputShell}>
+              <Ionicons name="lock-closed-outline" size={18} color={colors.textMuted} />
+              <TextInput
+                style={loginStyles.input}
+                placeholder="输入密码"
+                placeholderTextColor={colors.textMuted}
+                autoCapitalize="none"
+                secureTextEntry={!passwordVisible}
+                value={password}
+                onChangeText={setPassword}
+                accessibilityLabel="密码"
+              />
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={passwordVisible ? '隐藏密码' : '显示密码'}
+                hitSlop={8}
+                onPress={() => setPasswordVisible(current => !current)}
+                style={loginStyles.eyeButton}
+              >
+                <Ionicons name={passwordVisible ? 'eye-off-outline' : 'eye-outline'} size={19} color={colors.textSecondary} />
+              </Pressable>
+            </View>
+          </View>
+        </View>
       {/* 每种失败分开渲染:testID=login-error-<kind>(结构可断言·不耦合文案);
           文案=发生了什么+下一步做什么;服务器原始信息作小字辅助不当主文案。 */}
       {failKind ? (
-        <View testID={`login-error-${failKind}`} style={{ alignSelf: 'stretch', marginBottom: spacing.sm }}>
-          <Text style={styles.error}>{LOGIN_FAILURE_COPY[failKind].what}</Text>
-          <Text style={{ color: colors.textMuted, fontSize: 12, marginTop: 2 }}>{LOGIN_FAILURE_COPY[failKind].next}</Text>
+        <View testID={`login-error-${failKind}`} style={loginStyles.errorBox} accessibilityRole="alert">
+          <Ionicons name="alert-circle-outline" size={18} color={colors.failed} />
+          <View style={loginStyles.errorCopy}>
+          <Text style={loginStyles.errorTitle}>{LOGIN_FAILURE_COPY[failKind].what}</Text>
+          <Text style={loginStyles.errorNext}>{LOGIN_FAILURE_COPY[failKind].next}</Text>
           {failDetail ? (
-            <Text style={{ color: colors.textMuted, fontSize: 10, marginTop: 2 }} numberOfLines={2}>{failDetail}</Text>
+            <Text style={loginStyles.errorDetail} numberOfLines={2}>{failDetail}</Text>
           ) : null}
+          </View>
         </View>
       ) : error ? (
-        <Text style={styles.error}>{error}</Text>
+        <View style={loginStyles.errorBox} accessibilityRole="alert"><Ionicons name="alert-circle-outline" size={18} color={colors.failed} /><Text style={loginStyles.errorTitle}>{error}</Text></View>
       ) : null}
       <Pressable
-        style={({ pressed }) => [styles.button, pressed && { opacity: 0.7 }]}
+        style={({ pressed }) => [entryStyles.primary, (!serverUrl || !username || !password) && loginStyles.inactive, pressed && entryStyles.pressed]}
         onPress={submit}
         disabled={busy || !serverUrl || !username || !password}
         testID="login-submit"
       >
         {busy ? (
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }} testID="login-busy">
-            <ActivityIndicator color={colors.bg} />
-            <Text style={styles.buttonText}>正在连接服务器…</Text>
+            <ActivityIndicator color="#fff" />
+            <Text style={entryStyles.primaryText}>正在安全连接…</Text>
           </View>
         ) : (
-          <Text style={styles.buttonText}>登录</Text>
+          <View style={entryStyles.buttonRow}><Text style={entryStyles.primaryText}>登录工作区</Text><Ionicons name="arrow-forward" size={18} color="#fff" /></View>
         )}
       </Pressable>
       {onCancelReauth ? (
-        <Pressable onPress={() => { void onCancelReauth().catch(cancelError => setError(String(cancelError))); }}>
-          <Text style={styles.version}>暂不处理，切换其他账号</Text>
+        <Pressable style={entryStyles.secondary} onPress={() => { void onCancelReauth().catch(cancelError => setError(String(cancelError))); }}>
+          <Text style={entryStyles.secondaryText}>暂不处理，切换其他账号</Text>
         </Pressable>
       ) : null}
       {/* Version on the login page so device screenshots are
           unambiguous about which build is installed (tg 692). */}
-      <Text style={styles.version}>v{APP_VERSION}</Text>
-    </View>
+      <View style={loginStyles.securityNote}><Ionicons name="shield-checkmark-outline" size={13} color={colors.textMuted} /><Text style={loginStyles.version}>安全连接 · v{APP_VERSION}</Text></View>
+      </View>
+      </ScrollView>
+    </KeyboardAvoidingView>
   );
 }
+
+const makeLoginStyles = () => StyleSheet.create({
+  scrollView: { width: '100%' },
+  scrollContent: { flexGrow: 1, alignItems: 'center', justifyContent: 'center', paddingVertical: 20 },
+  card: { maxWidth: 450, gap: 18 },
+  heading: { gap: 7 },
+  form: { gap: 13, marginTop: 1 },
+  field: { gap: 7 },
+  label: { color: colors.textSecondary, fontSize: 12, fontWeight: '700', marginLeft: 2 },
+  inputShell: { minHeight: 50, flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 14, borderRadius: 13, backgroundColor: colors.inputBg, borderWidth: 1, borderColor: colors.border },
+  input: { flex: 1, minWidth: 0, color: colors.text, fontSize: 14, paddingVertical: 12 },
+  eyeButton: { width: 28, height: 34, alignItems: 'center', justifyContent: 'center' },
+  inactive: { opacity: 0.45, shadowOpacity: 0 },
+  errorBox: { flexDirection: 'row', alignItems: 'flex-start', gap: 9, padding: 11, borderRadius: 12, backgroundColor: themeMode() === 'light' ? '#fff1f2' : '#291417', borderWidth: 1, borderColor: themeMode() === 'light' ? '#fecdd3' : '#552329' },
+  errorCopy: { flex: 1 },
+  errorTitle: { flex: 1, color: colors.failed, fontSize: 12, lineHeight: 18, fontWeight: '700' },
+  errorNext: { color: colors.textSecondary, fontSize: 11, lineHeight: 16, marginTop: 2 },
+  errorDetail: { color: colors.textMuted, fontSize: 10, lineHeight: 14, marginTop: 3 },
+  securityNote: { flexDirection: 'row', alignItems: 'center', alignSelf: 'center', gap: 5, marginTop: -3 },
+  version: { color: colors.textMuted, fontSize: 10 },
+});
