@@ -21,6 +21,7 @@ const record = (overrides: Partial<SideThreadRecord> = {}): SideThreadRecord => 
 const harness = (client: SideThreadActionControllerClient, initial = record()) => {
   let cards: SideThreadCard[] = [sideThreadCardFromRecord(initial)!];
   const errors: string[] = [];
+  let generatedKeySequence = 0;
   const controller = createSideThreadActionController({
     client,
     getCards: () => cards,
@@ -28,7 +29,7 @@ const harness = (client: SideThreadActionControllerClient, initial = record()) =
     setError: (_cardId, message) => { errors.push(message); },
     beginRequest: lane => lane,
     isCurrent: () => true,
-    createRequestKey: action => `generated-${action}`,
+    createRequestKey: action => `generated-${action}-${++generatedKeySequence}`,
   });
   return { controller, cards: () => cards, setCards: (next: SideThreadCard[]) => { cards = next; }, errors };
 };
@@ -52,7 +53,7 @@ const run = async () => {
   ambiguous.setCards([sideThreadCardFromRecord(hydrated)!]);
   ambiguous.controller.reconcile(ambiguous.cards());
   await ambiguous.controller.run('side-1', 'cancel');
-  check('ambiguous action 显式重试复用 authoritative requestKey', cancelKeys.length === 2 && cancelKeys[0] === 'generated-cancel' && cancelKeys[1] === cancelKeys[0]);
+  check('ambiguous action 显式重试复用 authoritative requestKey', cancelKeys.length === 2 && cancelKeys[0] === 'generated-cancel-1' && cancelKeys[1] === cancelKeys[0]);
 
   let releaseFirst!: () => void;
   const firstDispatch = new Promise<void>(resolve => { releaseFirst = resolve; });
@@ -60,7 +61,7 @@ const run = async () => {
   let getCalls = 0;
   const authoritative = record({
     updatedAt: 4,
-    bringBacks: [{ bringBackId: 'bring-1', attemptId: 'attempt-1', requestKey: 'generated-bring-back', destinationThreadId: 'main-thread', destinationTurnId: 'destination-turn', state: 'completed', broughtBack: true, createdAt: 3, updatedAt: 4, completedAt: 4 }],
+    bringBacks: [{ bringBackId: 'bring-1', attemptId: 'attempt-1', requestKey: 'generated-bring-back-1', destinationThreadId: 'main-thread', destinationTurnId: 'destination-turn', state: 'completed', broughtBack: true, createdAt: 3, updatedAt: 4, completedAt: 4 }],
   });
   const bringBackClient: SideThreadActionControllerClient = {
     cancel: unused, retry: unused, archive: unused,
