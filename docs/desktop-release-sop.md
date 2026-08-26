@@ -211,7 +211,7 @@ from some earlier attempt, which is the preflight stop condition in section 2.
 An updater signature is bound to the **exact bytes** it signed. Swapping an
 asset while keeping its `.sig` breaks updates for every installed client.
 
-## 6. Publish, verify the tag, then sync the manifest
+## 6. Publish, verify the tag, then let the dynamic endpoint resolve it
 
 Publish the draft, then immediately confirm the tag GitHub just created points
 at the commit you audited:
@@ -222,26 +222,22 @@ gh api repos/sleep2agi/agent-network-app/git/ref/tags/desktop-v<version> \
 ```
 
 The SHA must equal the `targetCommitish` from section 5 and the commit passed
-to the workflow. Only then continue to the manifest. If it does not match, stop
-and escalate — do not attempt to correct it by moving the tag (section 8).
+to the workflow. If it does not match, stop and escalate — do not attempt to
+correct it by moving the tag (section 8).
 
-**Order matters and cannot be reversed.** The URLs inside `latest.json` point
-at `https://api.github.com/repos/.../releases/assets/<id>`, and assets attached
-to a *draft* release are not anonymously downloadable. Publish the release
-first; only then deploy the manifest. Deploying first hands every client an
-update instruction pointing at an asset it cannot fetch.
+`https://www.anet.sh/desktop/update/latest.json` is a dynamic endpoint. It
+selects the highest-semver published `desktop-v*` release, fetches that
+release's generated `latest.json` through the GitHub asset API, and rewrites
+each platform asset API URL to the matching anonymous `browser_download_url`.
+It is served with `Cache-Control: no-store, max-age=0`; there is no per-release
+manifest copy or docs-site deployment step.
 
-Copy the generated `latest.json` from the release into the docs site repository:
-
-```
-sleep2agi/agent-network : docs-site/docs/public/desktop/update/latest.json
-```
-
-`docs-site/vercel.json` serves that path directly with an explicit
-`Cache-Control` header and **no rewrite**;
-`docs-site/scripts/check-desktop-update-route.mjs` asserts exactly that, plus a
-semver `version` and the presence of the `darwin-aarch64` and `windows-x86_64`
-signatures. Run it before deploying. Deploy the docs site to production.
+**Publishing is still the activation boundary.** Draft assets are not
+anonymously downloadable and the dynamic endpoint ignores draft releases.
+Publishing makes the audited release eligible for selection; do not try to
+stage or activate it by editing the endpoint's fallback file. The fallback is
+only an availability path when GitHub resolution fails, not the normal release
+pointer.
 
 ## 7. Verify what users actually get
 
@@ -249,25 +245,33 @@ signatures. Run it before deploying. Deploy the docs site to production.
 curl -sS -D - -L https://www.anet.sh/desktop/update/latest.json -o latest.json
 ```
 
-Require `200`, `content-type: application/json`, the new `version`, and the
-expected platform entries. Then two checks that are easy to skip and are the
-ones that catch real breakage:
+Require `200`, `content-type: application/json`, `Cache-Control: no-store`, the
+new `version`, and the expected platform entries. The endpoint response is not
+byte-identical to the release asset: its platform URLs are intentionally
+normalized from GitHub asset API URLs to anonymous browser download URLs.
 
-- **Deployment freshness** — the served file and the file in the docs site
-  repository must hash identically. A stale CDN or an undeployed merge shows up
-  here and nowhere else.
-- **Anonymous reachability** — fetch an asset URL from the manifest with **no
-  credentials at all**:
+Run the drift verifier after publishing:
 
-  ```bash
-  env -u GITHUB_TOKEN -u GH_TOKEN curl -sS -D - \
-    -H 'Accept: application/octet-stream' -L '<asset url from manifest>'
-  ```
+```bash
+gh workflow run desktop-update-manifest-drift.yml \
+  --repo sleep2agi/agent-network-app
+```
 
-  Expect `302` to the release asset host, then `200`,
-  `content-type: application/octet-stream`, and a `content-length` matching the
-  published asset. Testing this with a token proves nothing: users do not have
-  one.
+The verifier performs the same unique API-URL-to-browser-URL mapping from the
+published release's asset list and then canonical-compares every manifest
+field. A missing or ambiguous mapping, or any non-URL drift, fails closed.
+
+Finally, verify **anonymous reachability** by fetching an asset URL from the
+served manifest with no credentials at all:
+
+```bash
+env -u GITHUB_TOKEN -u GH_TOKEN curl -sS -D - \
+  -H 'Accept: application/octet-stream' -L '<asset url from manifest>'
+```
+
+Expect `200`, `content-type: application/octet-stream`, and a `content-length`
+matching the published asset. Testing this with a token proves nothing: users
+do not have one.
 
 ## 8. When something fails
 
