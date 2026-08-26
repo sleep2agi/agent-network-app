@@ -27,4 +27,14 @@ Layered result
 3. Candidate passed: entry UI 8/8, local Hub runtime 27/27, login flow 18/18,
    TypeScript, and Expo SDK 56 web export (470 modules).
 
-Exact commit Docker evidence is appended after commit and rerun.
+Exact commit Docker
+  source_commit=4b22c64c58375021684a655a3355e7636fd3d9c5
+  no-cache image=anet-app-onboarding-ui-4b22c64c
+  RESULT: PASS
+
+Exact results
+- Entry UI: 8/8
+- Local Hub runtime: 27/27
+- Login flow: 18/18
+- TypeScript: PASS
+- Expo SDK 56 web export: PASS (470 modules)
