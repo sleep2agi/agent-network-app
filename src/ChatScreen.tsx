@@ -671,15 +671,17 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
             </Text>
           ) : null}
         </View>
-        {desktop && onOpenNodeSettings ? (
+        {onOpenNodeSettings ? (
           <Pressable
             accessibilityRole="button"
-            accessibilityLabel="节点设置"
+            accessibilityLabel="查看节点信息"
+            accessibilityHint="打开当前节点的只读详细信息"
             onPress={onOpenNodeSettings}
             hitSlop={10}
-            style={({ pressed }) => [styles.headerAction, pressed && { opacity: 0.6 }]}
+            style={({ pressed }) => [styles.headerAction, desktop && styles.headerActionWithWindowPin, pressed && { opacity: 0.6 }]}
           >
             <Ionicons name="settings-outline" size={20} color={colors.textSecondary} />
+            <Text style={styles.headerActionText}>设置</Text>
           </Pressable>
         ) : null}
       </View>
@@ -988,12 +990,19 @@ const makeStyles = () =>
   title: { color: colors.text, fontSize: 16, fontWeight: '600' },
   subtitle: { color: colors.running, fontSize: 11, marginTop: 1 },
   headerAction: {
-    width: 34,
+    minWidth: 58,
     height: 34,
+    paddingHorizontal: spacing.sm,
+    flexDirection: 'row',
+    gap: 4,
     borderRadius: 9,
     alignItems: 'center',
     justifyContent: 'center',
   },
+  headerActionText: { color: colors.textSecondary, fontSize: 12 },
+  // DesktopWindowPin owns the top-right 34px. Reserve a separate hit target
+  // instead of letting its absolute z-index cover this action.
+  headerActionWithWindowPin: { marginRight: 42 },
   beginning: {
     color: colors.textMuted,
     fontSize: 11,

@@ -59,6 +59,7 @@ type Screen =
   | { name: 'serverNodeDetail'; alias: string }
   | { name: 'settings' }
   | { name: 'chat'; alias: string }
+  | { name: 'nodeInfo'; alias: string }
   | { name: 'taskDetail'; taskId: string }   // full-screen (no tab bar) — hardware back returns to /tasks list
   | { name: 'nodeDetail'; alias: string }  // issue #8 row 4 (V1) — long-press an agent row from AgentsScreen; back returns to agents
   | { name: 'logs' }                        // row 6 — network event stream leaf reached from Server tab; back returns to server
@@ -252,6 +253,10 @@ function AppRoot() {
         setScreen({ name: 'server' });
         return true;
       }
+      if (screen.name === 'nodeInfo') {
+        setScreen({ name: 'chat', alias: screen.alias });
+        return true;
+      }
       if (screen.name !== 'agents' && screen.name !== 'login') {
         setScreen({ name: 'agents' });
         return true;
@@ -274,7 +279,7 @@ function AppRoot() {
   // A window opened from the agent context menu is a WeChat-style detached
   // conversation: chat chrome only. Never mount DesktopWorkspace here, even
   // when the detached window is wide enough for the normal three-column UI.
-  if (dedicatedChatWindow && cfg && (screen.name === 'chat' || screen.name === 'nodeDetail')) {
+  if (dedicatedChatWindow && cfg && (screen.name === 'chat' || screen.name === 'nodeInfo')) {
     const detachedAlias = screen.alias;
     return (
       <SafeAreaView key={workspaceKey} style={styles.root} testID="dedicated-chat-window">
@@ -284,7 +289,7 @@ function AppRoot() {
             cfg={cfg}
             alias={detachedAlias}
             onBack={() => {}}
-            onOpenNodeSettings={() => setScreen({ name: 'nodeDetail', alias: detachedAlias })}
+            onOpenNodeSettings={() => setScreen({ name: 'nodeInfo', alias: detachedAlias })}
             desktop
           />
         ) : (
@@ -292,6 +297,7 @@ function AppRoot() {
             cfg={cfg}
             alias={detachedAlias}
             onBack={() => setScreen({ name: 'chat', alias: detachedAlias })}
+            readOnly
           />
         )}
         <DesktopWindowPin />
@@ -374,7 +380,10 @@ function AppRoot() {
           cfg={cfg}
           alias={screen.alias}
           onBack={() => setScreen({ name: 'agents' })}
+          onOpenNodeSettings={() => setScreen({ name: 'nodeInfo', alias: screen.alias })}
         />
+      ) : screen.name === 'nodeInfo' ? (
+        <NodeDetailScreen cfg={cfg} alias={screen.alias} onBack={() => setScreen({ name: 'chat', alias: screen.alias })} readOnly />
       ) : screen.name === 'nodeDetail' ? (
         // issue #8 row 4 (V1) — long-press an agent row in AgentsScreen
         // opens this. Back returns to agents. Rendered as its own screen
@@ -559,13 +568,13 @@ function DesktopWorkspace({ cfg, screen, setScreen, onLogout, onLocalDataDeleted
     return next;
   });
   const serverWorkspace = ['server', 'serverNodes', 'serverNodeDetail', 'logs', 'picker', 'wizard'].includes(screen.name);
-  const active = serverWorkspace ? 'server' : ['chat', 'nodeDetail'].includes(screen.name) ? 'agents' : screen.name;
+  const active = serverWorkspace ? 'server' : ['chat', 'nodeDetail', 'nodeInfo'].includes(screen.name) ? 'agents' : screen.name;
   const content = screen.name === 'chat' ? (
     <ChatScreen
       cfg={cfg}
       alias={screen.alias}
       onBack={() => setScreen({ name: 'agents' })}
-      onOpenNodeSettings={() => setScreen({ name: 'nodeDetail', alias: screen.alias })}
+      onOpenNodeSettings={() => setScreen({ name: 'nodeInfo', alias: screen.alias })}
       desktop
     />
   ) : screen.name === 'tasks' ? (
@@ -578,6 +587,7 @@ function DesktopWorkspace({ cfg, screen, setScreen, onLogout, onLocalDataDeleted
   : screen.name === 'settings' ? <SettingsScreen cfg={cfg} onLogout={onLogout} onLocalDataDeleted={onLocalDataDeleted} onAddAccount={onAddAccount} onSwitchProfile={onSwitchProfile} onReauthProfile={onReauthProfile} />
   : screen.name === 'taskDetail' ? <TaskDetailScreen cfg={cfg} taskId={screen.taskId} onBack={() => setScreen({ name: 'tasks' })} />
   : screen.name === 'nodeDetail' ? <NodeDetailScreen cfg={cfg} alias={screen.alias} onBack={() => setScreen({ name: 'agents' })} />
+  : screen.name === 'nodeInfo' ? <NodeDetailScreen cfg={cfg} alias={screen.alias} onBack={() => setScreen({ name: 'chat', alias: screen.alias })} readOnly />
   : screen.name === 'logs' ? <LogsScreen cfg={cfg} onBack={() => setScreen({ name: 'server' })} />
   : screen.name === 'picker' ? <HostSupervisorPickerScreen cfg={cfg} onBack={() => setScreen({ name: 'server' })} onPicked={d => setScreen({ name: 'wizard', daemon: d })} />
   : screen.name === 'wizard' ? <CreateNodeWizardScreen cfg={cfg} daemon={screen.daemon} onBack={() => setScreen({ name: 'picker' })} onExit={() => setScreen({ name: 'serverNodes' })} />
@@ -632,7 +642,7 @@ function DesktopWorkspace({ cfg, screen, setScreen, onLogout, onLocalDataDeleted
             else setScreen({ name: 'logs' });
           }} />
         ) : (
-          <AgentsScreen cfg={cfg} compact selectedAlias={screen.name === 'chat' ? screen.alias : undefined} pinnedAliases={pinnedAliases} onTogglePin={togglePin} onOpenChatWindow={alias => { void openRememberedChatWindow(alias, cfg.profileId, cfg.username || cfg.serverUrl); }} onOpenChat={alias => setScreen({ name: 'chat', alias })} onOpenPicker={() => setScreen({ name: 'picker' })} onOpenNodeDetail={alias => setScreen({ name: 'nodeDetail', alias })} />
+          <AgentsScreen cfg={cfg} compact selectedAlias={screen.name === 'chat' || screen.name === 'nodeInfo' ? screen.alias : undefined} pinnedAliases={pinnedAliases} onTogglePin={togglePin} onOpenChatWindow={alias => { void openRememberedChatWindow(alias, cfg.profileId, cfg.username || cfg.serverUrl); }} onOpenChat={alias => setScreen({ name: 'chat', alias })} onOpenPicker={() => setScreen({ name: 'picker' })} onOpenNodeDetail={alias => setScreen({ name: 'nodeDetail', alias })} />
         )}
       </View>
       <View style={desktopStyles.content}>{content}</View>

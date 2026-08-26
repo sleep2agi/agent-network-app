@@ -1,0 +1,41 @@
+# test165 — shared read-only chat node information
+
+Date: 2026-08-26
+Branch: `fix/165-chat-node-settings`
+Base: `1fb5a9dbd8d01053d80eab5afcf7a72e4b4eaf44`
+
+Scope:
+
+- desktop main workspace, detached desktop window, and Android share the chat-header settings entry;
+- desktop settings reserves a hit target separate from the always-on-top pin;
+- node information is allowlisted and read-only;
+- missing explicit OS user renders `未上报` and is never inferred from `project_dir`;
+- tokens, config secrets, prompt/config-file editing, avatar editing, and lifecycle mutations are excluded.
+
+Docker image: `tests/test165-chat-node-info/Dockerfile` (Node 22 + Bun 1.3.14).
+
+Results:
+
+- node information behavior: 26/26, including strict hostname/IP labels, token-shape rejection, URL-only configured-server fallback, and encoded network scope
+- witnessed-red mutations: 3/3 (URL credential leak, token-shaped plain label, unencoded network id)
+- desktop navigation composition: 19 checks
+- desktop window pin: 9/9
+- chat behavior regression: 42/42
+- TypeScript: PASS
+- complete repository tests: 48/48 files
+- Expo SDK 56 web export: PASS (467 modules)
+- scrub guard equivalent scan: PASS
+
+Revision 3 security follow-up: plain labels no longer permit underscores and
+must satisfy hostname/IP syntax; `atok`/`utok`/`ntok`, Bearer, and `sk-` token
+shapes fail closed. The configured profile `serverUrl` is independently treated
+as URL-only and can only contribute its sanitized HTTP(S) origin.
+
+The first two full-suite attempts stopped before a meaningful code assertion:
+the initial Bun-only image lacked `node`, then the dual-runtime image invoked
+the absent `bunx` symlink. The committed Dockerfile uses real Node plus the
+pinned Bun binary, and the runner uses `bun x`; the results above are from
+that corrected environment.
+
+Backend dependency: sleep2agi/agent-network#1197. Until the Hub/runtime reports
+an explicit nullable OS identity, the App truthfully displays `未上报`.
