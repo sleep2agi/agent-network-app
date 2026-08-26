@@ -51,3 +51,5 @@ Independent review revision
   docs/tests/onboarding-ui/.
 - Rev2 Docker: Entry UI 9/9, local Hub runtime 27/27, login flow 18/18,
   TypeScript PASS, Expo SDK 56 web export PASS (470 modules).
+- Rev2 exact source_commit=5867f9d3d21661cb1886fabb11f82af58c24bf78;
+  no-cache image=anet-app-onboarding-ui-5867f9d3; RESULT: PASS.
