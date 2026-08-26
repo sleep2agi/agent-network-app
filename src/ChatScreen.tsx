@@ -350,6 +350,9 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
   const [forwardTargets, setForwardTargets] = useState<Session[]>([]);
   const [forwardQuery, setForwardQuery] = useState('');
   const [forwardingTo, setForwardingTo] = useState<string | null>(null);
+  const forwardingRef = useRef(false);
+  const forwardRequestIdRef = useRef<string | null>(null);
+  const [forwardAmbiguous, setForwardAmbiguous] = useState(false);
   const [sendConfirmation, setSendConfirmation] = useState<SendConfirmation | null>(null);
 
   // ChatScreen is reused while navigating between aliases. A confirmation is
@@ -380,6 +383,8 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
     setMenuFor(null);
     setForwardFor(selection);
     setForwardQuery('');
+    setForwardAmbiguous(false);
+    forwardRequestIdRef.current = createDashboardRequestId();
     try {
       const data = await fetchStatus(cfg);
       setForwardTargets((data.sessions ?? []).filter(session => session.alias));
@@ -389,16 +394,29 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
   };
 
   const forwardMessage = async (target: string) => {
-    if (!forwardFor || forwardingTo) return;
+    if (!forwardFor || forwardingRef.current || forwardAmbiguous) return;
+    const startedKey = conversationKeyFor;
+    const mayWrite = () => mayApplySendResult(startedKey, visibleConversationKeyRef.current, mountedRef.current);
+    forwardingRef.current = true;
     setForwardingTo(target);
     try {
-      const response = await sendTask(cfg, target, forwardFor.text);
-      setSendConfirmation(sendConfirmationFromResponse(response));
-      setForwardFor(null);
+      const requestId = forwardRequestIdRef.current ?? createDashboardRequestId();
+      forwardRequestIdRef.current = requestId;
+      const response = await sendTask(cfg, target, forwardFor.text, undefined, 'normal', requestId);
+      if (mayWrite()) {
+        setSendConfirmation(sendConfirmationFromResponse(response));
+        setForwardFor(null);
+      }
     } catch (error) {
-      Alert.alert('转发失败', error instanceof Error ? error.message : '请稍后重试');
+      // No public forward reconciliation endpoint currently proves whether an
+      // ACK-loss write committed. Fail closed and disable repeat taps.
+      if (mayWrite()) {
+        setForwardAmbiguous(true);
+        Alert.alert('转发结果待确认', '可能已经送达。为避免重复转发，请先在目标会话确认。');
+      }
     } finally {
-      setForwardingTo(null);
+      forwardingRef.current = false;
+      if (mayWrite()) setForwardingTo(null);
     }
   };
   // 更像微信·round-3: 滚离底部时的「回到最新」pill + 未读计数。
@@ -864,13 +882,14 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
         <Pressable style={styles.forwardBackdrop} onPress={() => setForwardFor(null)}>
           <Pressable style={styles.forwardPanel} onPress={() => {}}>
             <Text style={styles.forwardTitle}>转发给</Text>
+            {forwardAmbiguous ? <Text style={styles.forwardEmpty}>结果待确认，请勿重复转发</Text> : null}
             <TextInput value={forwardQuery} onChangeText={setForwardQuery} placeholder="搜索 agent…" placeholderTextColor={colors.textMuted} style={styles.forwardSearch} />
             <FlatList
               style={styles.forwardList}
               data={forwardTargets.filter(target => target.alias.toLowerCase().includes(forwardQuery.trim().toLowerCase()))}
               keyExtractor={target => target.alias}
               renderItem={({ item: target }) => (
-                <Pressable style={({ pressed }) => [styles.forwardTarget, pressed && styles.actionItemPressed]} onPress={() => forwardMessage(target.alias)} disabled={!!forwardingTo}>
+                <Pressable style={({ pressed }) => [styles.forwardTarget, pressed && styles.actionItemPressed]} onPress={() => forwardMessage(target.alias)} disabled={!!forwardingTo || forwardAmbiguous}>
                   <AliasAvatar alias={target.alias} size={32} />
                   <Text style={styles.forwardAlias} numberOfLines={1}>{target.alias}</Text>
                   {forwardingTo === target.alias ? <ActivityIndicator size="small" color={colors.accent} /> : null}

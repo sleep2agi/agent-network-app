@@ -27,6 +27,6 @@ const chatSource = fs.readFileSync(path.join(process.cwd(), 'src/ChatScreen.tsx'
 assert.ok(chatSource.includes("addEventListener('contextmenu', handleMessageContextMenu, true)"));
 assert.ok(chatSource.includes("messagePart: 'sent'") && chatSource.includes("messagePart: 'reply'"));
 assert.ok(chatSource.includes('<Text style={styles.actionText}>转发</Text>'));
-assert.ok(chatSource.includes('await sendTask(cfg, target, forwardFor.text)'));
+assert.ok(chatSource.includes('await sendTask(cfg, target, forwardFor.text, undefined, \'normal\', requestId)'));
 
 console.log('desktop chat menu: 14 checks passed');

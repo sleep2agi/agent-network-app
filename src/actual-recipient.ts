@@ -1,8 +1,8 @@
 /** Additive response contract introduced by agent-network Hub draft PR #1209. */
 export interface ActualRecipient {
   alias: string;
-  toNodeId: string;
-  networkId: string;
+  toNodeId: string | null;
+  networkId: string | null;
 }
 
 export interface SendConfirmation {
@@ -13,6 +13,7 @@ export interface SendConfirmation {
 const safeText = (value: unknown): string | null => {
   if (typeof value !== 'string') return null;
   const cleaned = value.replace(/[\u0000-\u001f\u007f]/g, '').trim();
+  if (/\b(?:atok|utok|ntok)_[A-Za-z0-9._-]+\b|\bBearer\s+/i.test(cleaned)) return null;
   return cleaned ? cleaned.slice(0, 160) : null;
 };
 
@@ -29,8 +30,7 @@ export const sendConfirmationFromResponse = (value: unknown): SendConfirmation =
   const toNodeId = safeText(raw?.to_node_id);
   const networkId = safeText(raw?.network_id);
   return {
-    actualRecipient: alias && toNodeId && networkId ? { alias, toNodeId, networkId } : null,
+    actualRecipient: alias ? { alias, toNodeId, networkId } : null,
     queued: response.queued === true || response.session_status === 'offline',
   };
 };
-

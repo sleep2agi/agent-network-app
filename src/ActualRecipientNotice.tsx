@@ -11,13 +11,20 @@ export default function ActualRecipientNotice({
 }) {
   const actual = confirmation.actualRecipient;
   return (
-    <View style={styles.notice} testID="actual-recipient-notice">
+    <View
+      style={styles.notice}
+      testID="actual-recipient-notice"
+      role="status"
+      accessibilityLiveRegion="polite"
+    >
       <View style={styles.copy}>
         <Text style={styles.title}>{confirmation.queued ? '已排队' : '已发送'}</Text>
         {actual ? (
           <>
             <Text style={styles.alias} selectable>实际接收：{actual.alias}</Text>
-            <Text style={styles.identity} selectable>节点 {actual.toNodeId} · 网络 {actual.networkId}</Text>
+            <Text style={styles.identity} selectable>
+              节点 {actual.toNodeId ?? '未报告'} · 网络 {actual.networkId ?? '未报告'}
+            </Text>
           </>
         ) : (
           <Text style={styles.identity}>实际接收方：Hub 未报告（兼容旧版）</Text>
@@ -44,4 +51,3 @@ const styles = StyleSheet.create({
   identity: { color: colors.textMuted, fontSize: 10, marginTop: 2 },
   close: { color: colors.textMuted, fontSize: 20, lineHeight: 20, paddingLeft: spacing.sm },
 });
-

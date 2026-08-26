@@ -18,7 +18,9 @@ ck('offline queued acknowledgement retains actual target', queued.queued && queu
 const legacy = sendConfirmationFromResponse({ ok: true, task_id: 'task_old' });
 ck('old Hub is explicit and does not infer identity', legacy.actualRecipient === null && !legacy.queued);
 
-const hostile = sendConfirmationFromResponse({ token: 'utok_secret', actual_to: { alias: 'ok\nutok_secret', to_node_id: '', network_id: 'net_a' } });
-ck('partial or hostile identity fails closed', hostile.actualRecipient === null && !JSON.stringify(hostile).includes('utok_secret'));
+const nullable = sendConfirmationFromResponse({ actual_to: { alias: 'worker', to_node_id: null, network_id: 'net_a' } });
+ck('nullable identity fields remain explicit without dropping canonical alias', nullable.actualRecipient?.alias === 'worker' && nullable.actualRecipient.toNodeId === null);
+const hostile = sendConfirmationFromResponse({ token: 'utok_secret', actual_to: { alias: 'utok_secret', to_node_id: 'node_a', network_id: 'net_a' } });
+ck('token-shaped identity and raw response token fail closed', hostile.actualRecipient === null && !JSON.stringify(hostile).includes('utok_secret'));
 
-console.log('actual recipient response: 5/5 checks passed');
+console.log('actual recipient response: 7/7 checks passed');

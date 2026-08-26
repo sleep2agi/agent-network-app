@@ -556,7 +556,7 @@ export interface SendTaskResponse {
   session_status?: string;
   deduplicated?: boolean;
   /** Hub contract provenance: agent-network draft PR #1209 (additive). */
-  actual_to?: { alias: string; to_node_id: string; network_id: string };
+  actual_to?: { alias: string; to_node_id: string | null; network_id: string | null };
   [key: string]: unknown;
 }
 
@@ -628,6 +628,11 @@ export const sendTask = async (
   // optimistic row instead of accumulating a false “未送达” bubble.
   if (res.status === 429 && data?.error === 'duplicate_send') {
     return { ...data, ok: true, deduplicated: true } as SendTaskResponse;
+  }
+  // Hub #1209 intentionally keeps the existing offline body semantics:
+  // HTTP 202 + ok:false + queued:true + alias_offline is an accepted write.
+  if (res.status === 202 && data?.queued === true && data?.error === 'alias_offline') {
+    return { ...data, ok: true } as SendTaskResponse;
   }
   if (!res.ok) throw new Error(`HTTP ${res.status} on /api/task`);
   if (!data?.ok) throw new Error(String(data?.error ?? 'send failed'));
