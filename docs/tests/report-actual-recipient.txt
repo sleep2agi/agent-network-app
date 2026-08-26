@@ -1,10 +1,10 @@
 # App actual recipient / forward acknowledgement gate
 
 Date: 2026-08-26
-Source commit: 8630c30fad2c0dcdbc3b17eb696c9f942759ccef
-Docker image id: sha256:64d29db9c7555d27c20b83f7714357b17c3c7c4507f6a4b742207abfead42b75
+Source commit: 7db1acc826020e7132feee69584f285bf8b8f530
+Docker image id: sha256:e33a6f46d1e087da63766e92ce9bb2ec45bcfe44507ba78b035ec06951204445
 
-PASS: contract 7/7; HTTP 202 1/1; a11y 1/1; async controller 7/7; full tests 52/52; TypeScript and Expo SDK 56 web export PASS.
+PASS: contract 7/7; HTTP 202 1/1; a11y 1/1; async controller including production wiring 9/9; full tests 52/52; TypeScript and Expo SDK 56 web export PASS.
 
 The controller performs authoritative ACK/ambiguous bookkeeping regardless of UI ownership. Persistence is revisioned and serialized; rejected writes remain dirty and retry without an unhandled rejection. Async tests cover late ACK after A→B/unmount, delayed pending followed by confirm/ambiguous, remount non-resurrection, and save rejection recovery.
 
