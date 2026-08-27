@@ -117,10 +117,10 @@ jobs:
           releaseBody: |-
             Signed and notarized stable update for macOS (Apple Silicon) and Windows (x64).
 
-            What's new in 0.2.38:
-            - Forwarded messages now show the recipient actually selected by the Hub, so the conversation reflects delivery to a fallback or replacement node instead of continuing to display the original request target. Remote Hubs need CommHub Server 0.9.0-preview.30 or newer to report the authoritative recipient.
-            - First-run and login screens have clearer local and remote workspace choices, improved guidance and validation, a visible password control, and layouts that remain usable in compact windows and light or dark themes.
-            - The bundled local Hub is updated to CommHub Server 0.9.0-preview.30. Codex TUI co-presence remains compatible with Agent Network 2.3.0-preview.46 and Agent Node 2.5.0-preview.34.
+            What's new in 0.2.39:
+            - Delivery confirmation above the composer is now a compact, theme-aware status card instead of a large dark banner. Sent and queued states use restrained semantic colors, with recipient details kept secondary and readable.
+            - Conversations, task reads, and restored local messages are isolated more reliably by Hub and network, preventing stale content or duplicate undelivered rows when switching workspaces.
+            - The bundled local Hub remains CommHub Server 0.9.0-preview.30. Codex TUI co-presence remains compatible with Agent Network 2.3.0-preview.46 and Agent Node 2.5.0-preview.34.
 
             Existing installations can update in place; new installations can use the assets below.
           releaseDraft: true
