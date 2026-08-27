@@ -1,0 +1,34 @@
+Desktop v0.2.40 release-candidate report
+Date: 2026-08-27
+
+Source
+- Base: 6afa437cc8180aa7e61631a251b265e3f011adc2
+- Release implementation: 153b7e7ea86a524a224357f0dcef997704f54339
+- Target: desktop-v0.2.40
+- Preflight: local/remote tag, GitHub release, and same-version release PR were absent.
+
+Scope
+- Bump the desktop application consistently to 0.2.40.
+- Ship the merged BTW side-thread experience: `/btw` and the plus-menu entry,
+  separate drawer/status, attachments, retry/cancel/archive, and bring-back.
+- Keep the BTW path fail closed when native SideThread support is unavailable;
+  it does not fall back to an ordinary task or optimistic main-conversation state.
+
+Exact Docker gate
+- Dockerfile: tests/test-btw-side-thread-ui/Dockerfile
+- SOURCE_COMMIT: 153b7e7ea86a524a224357f0dcef997704f54339
+- BTW parser: 12/12 PASS
+- Side-thread API: 21/21 PASS
+- Real HTTP integration: 7/7 PASS
+- Action controller: 4/4 PASS
+- Model: 16/16 PASS
+- Scope gate: 4/4 PASS
+- Shared UI: 30/30 PASS
+- Full repository suite: 62/62 test files PASS
+- TypeScript typecheck: PASS
+- Expo Web production export: PASS (522 modules)
+
+Safety
+- Tests ran in Docker from the exact committed source.
+- No tag, release, updater endpoint, production database, or running client was
+  changed by this preparation gate.
