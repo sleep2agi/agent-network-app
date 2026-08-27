@@ -1,7 +1,7 @@
 Recipient confirmation notice visual fix
 ========================================
 
-Implementation source: b283eaaca37a865d988d1083d17b49ec322f0330
+Implementation source: cdd119e (patch-equivalent rebase onto main b2774481)
 
 Problem
 -------
@@ -29,6 +29,9 @@ tests/test-actual-recipient/Dockerfile and completed:
 - repository test files: 55/55
 - TypeScript typecheck: PASS
 - Expo web export: PASS (470 modules)
+
+The same gates were rerun after the patch-equivalent rebase onto current main;
+all counts and outcomes remained unchanged.
 
 The test explicitly rejects a return to the static dark card surface and pins
 the live-theme, light sent, queued, compact identity, and legacy-copy behavior.
