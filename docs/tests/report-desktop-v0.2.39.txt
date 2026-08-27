@@ -1,0 +1,37 @@
+Desktop v0.2.39 release preparation
+===================================
+
+Source
+------
+- Base: main at fca9bb977a4a1fb7b05ec5a360ee117bcc5a3489
+- Release implementation: 34f910c (version and user-facing release notes)
+- Target: desktop-v0.2.39
+- Preflight: no matching draft release, tag, or prior release PR existed.
+
+Scope
+-----
+- Bump all desktop version authorities from 0.2.38 to 0.2.39.
+- Cargo.lock changes only the agent-network-desktop root package stanza.
+- Describe the compact theme-aware delivery notice and network-scoped
+  conversation/task reliability improvements in user-facing release notes.
+- Keep the bundled CommHub and Agent Network/Agent Node compatibility pins
+  unchanged.
+
+Docker gate
+-----------
+The exact source was built with tests/test-actual-recipient/Dockerfile:
+
+- actual recipient contract: 7/7
+- recipient visual contract: 6/6
+- repository tests: 55/55 files
+- TypeScript typecheck: PASS
+- Expo web export: PASS (470 modules)
+- version consistency: 0.2.39 across every authority
+
+Release boundary
+----------------
+No tag, GitHub Release, signed asset, production service, global package, or
+updater endpoint was changed during preparation. The signed macOS/Windows
+workflow and its packaged smoke gates remain the publishing authority.
+
+RESULT: PASS
