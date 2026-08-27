@@ -1,62 +1,70 @@
-import { Pressable, StyleSheet, Text, View } from 'react-native';
-import type { SendConfirmation } from './actual-recipient';
-import { colors, spacing, themeMode } from './theme';
-import { ACTUAL_NOTICE_A11Y } from './actual-recipient';
+import { useEffect, useRef } from 'react';
+import { Animated, Easing, Pressable, StyleSheet, Text } from 'react-native';
+import { ACTUAL_NOTICE_A11Y, NOTICE_AUTO_DISMISS_MS, noticePalette, type SendNotice } from './actual-recipient';
+import { spacing, themeMode } from './theme';
 
+/**
+ * 一条自动消失的居中提示,只在**值得打断**的时候出现(排队 / Hub 改投了别的
+ * 节点)。正常送达不走这里 —— 见 sendNoticeFor。
+ *
+ * 形态上刻意不是横幅:限宽居中、圆角、跟随主题的浅底、到点自己走。全宽 + 常驻
+ * + 要人手动点 × 的那一版把「送达」呈现成了待办事项。
+ */
 export default function ActualRecipientNotice({
-  confirmation,
+  notice,
   onDismiss,
 }: {
-  confirmation: SendConfirmation;
+  notice: SendNotice;
   onDismiss?: () => void;
 }) {
-  const actual = confirmation.actualRecipient;
-  const queued = confirmation.queued;
-  const light = themeMode() === 'light';
-  const tone = queued ? colors.blocked : colors.running;
-  const surface = light
-    ? (queued ? '#fff8eb' : '#effaf3')
-    : (queued ? '#261d0e' : '#102219');
-  const outline = light
-    ? (queued ? '#f0d7a6' : '#bfe5cc')
-    : (queued ? '#5b4420' : '#245b38');
+  const palette = noticePalette(notice.kind, themeMode() === 'light' ? 'light' : 'dark');
+  const opacity = useRef(new Animated.Value(0)).current;
+
+  // 每换一条提示重新计时:连发两条时,第二条不该继承第一条剩下的时间。
+  useEffect(() => {
+    opacity.setValue(0);
+    Animated.timing(opacity, { toValue: 1, duration: 140, easing: Easing.out(Easing.quad), useNativeDriver: true }).start();
+    if (!onDismiss) return;
+    const timer = setTimeout(onDismiss, NOTICE_AUTO_DISMISS_MS);
+    return () => clearTimeout(timer);
+  }, [notice, onDismiss, opacity]);
+
   return (
-    <View
-      style={[styles.notice, { backgroundColor: surface, borderColor: outline }]}
+    <Animated.View
+      style={[styles.toast, { backgroundColor: palette.surface, borderColor: palette.outline, opacity }]}
       testID="actual-recipient-notice"
       {...ACTUAL_NOTICE_A11Y}
     >
-      <View style={[styles.statusDot, { backgroundColor: tone }]} />
-      <View style={styles.copy}>
-        <Text style={[styles.title, { color: colors.text }]}>{queued ? '已排队' : '已发送'}</Text>
-        {actual ? (
-          <Text style={[styles.identity, { color: colors.textSecondary }]} selectable numberOfLines={1}>
-            接收方 {actual.alias} · 节点 {actual.toNodeId ?? '未报告'} · 网络 {actual.networkId ?? '未报告'}
-          </Text>
-        ) : (
-          <Text style={[styles.identity, { color: colors.textSecondary }]} numberOfLines={1}>
-            接收方由旧版 Hub 处理
-          </Text>
-        )}
-      </View>
-      {onDismiss ? (
-        <Pressable accessibilityRole="button" accessibilityLabel="关闭发送确认" onPress={onDismiss} hitSlop={8}>
-          <Text style={[styles.close, { color: colors.textMuted }]}>×</Text>
-        </Pressable>
-      ) : null}
-    </View>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel="关闭发送提示"
+        onPress={onDismiss}
+        hitSlop={8}
+        style={styles.body}
+      >
+        <Animated.View style={[styles.dot, { backgroundColor: palette.dot }]} />
+        <Text style={[styles.title, { color: palette.title }]} numberOfLines={1}>{notice.title}</Text>
+        <Text style={[styles.detail, { color: palette.detail }]} numberOfLines={1}>{notice.detail}</Text>
+      </Pressable>
+    </Animated.View>
   );
 }
 
 const styles = StyleSheet.create({
-  notice: {
-    flexDirection: 'row', alignItems: 'center', marginHorizontal: spacing.md,
-    marginBottom: spacing.xs, paddingHorizontal: spacing.md, paddingVertical: 7, borderRadius: 9,
+  toast: {
+    alignSelf: 'center',
+    maxWidth: 420,
+    marginBottom: spacing.xs,
+    borderRadius: 999,
     borderWidth: 1,
   },
-  statusDot: { width: 7, height: 7, borderRadius: 4, marginRight: spacing.sm },
-  copy: { flex: 1 },
-  title: { fontSize: 12, fontWeight: '700', lineHeight: 16 },
-  identity: { fontSize: 11, lineHeight: 15 },
-  close: { fontSize: 18, lineHeight: 18, paddingLeft: spacing.sm },
+  body: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: spacing.md,
+    paddingVertical: 6,
+  },
+  dot: { width: 6, height: 6, borderRadius: 3, marginRight: spacing.sm },
+  title: { fontSize: 12, fontWeight: '600', marginRight: spacing.sm },
+  detail: { fontSize: 12, flexShrink: 1 },
 });

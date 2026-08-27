@@ -44,7 +44,7 @@ import MarkdownMessage from './MarkdownMessage';
 import { cleanAttachmentDebugText, parseAttachmentRefs, parseMetaAttachmentRefs } from './attachment-display';
 import { attachmentCacheScope } from './attach-download';
 import ActualRecipientNotice from './ActualRecipientNotice';
-import { sendConfirmationFromResponse, type SendConfirmation } from './actual-recipient';
+import { sendConfirmationFromResponse, sendNoticeFor, type SendConfirmation } from './actual-recipient';
 import { beginForward, confirmForward, markForwardAmbiguous, mayProjectForward, resetForwardWithoutResend } from './forward-controller';
 
 // Chat with one agent. Mirrors dashboard M4: open with the newest PAGE
@@ -356,6 +356,9 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
   const forwardOperationKeyRef = useRef<string | null>(null);
   const [forwardAmbiguous, setForwardAmbiguous] = useState(false);
   const [sendConfirmation, setSendConfirmation] = useState<SendConfirmation | null>(null);
+  // 成功且送达如你所愿时这里是 null,于是什么都不渲染 —— 气泡角上的「已送达 ✓」
+  // 已经说过一次了。
+  const sendNotice = sendConfirmation ? sendNoticeFor(sendConfirmation, alias) : null;
 
   // ChatScreen is reused while navigating between aliases. A confirmation is
   // scoped to the conversation where that write completed, never the next one.
@@ -834,8 +837,8 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
           ))}
         </View>
       ) : null}
-      {sendConfirmation ? (
-        <ActualRecipientNotice confirmation={sendConfirmation} onDismiss={() => setSendConfirmation(null)} />
+      {sendNotice ? (
+        <ActualRecipientNotice notice={sendNotice} onDismiss={() => setSendConfirmation(null)} />
       ) : null}
       <Modal visible={!!viewerUri} transparent animationType="fade">
         <Pressable style={styles.viewerBackdrop} onPress={() => setViewerUri(null)}>
