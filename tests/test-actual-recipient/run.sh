@@ -2,6 +2,7 @@
 set -eu
 echo "# App actual recipient source=${APP_ACTUAL_TO_SOURCE_COMMIT:-unknown}"
 bun src/actual-recipient.test.ts
+bun src/actual-recipient-visual.test.ts
 bun run test
 bun run typecheck
 APP_EXPORT_DIR=$(mktemp -d /tmp/anet-app-actual-to-web.XXXXXX)

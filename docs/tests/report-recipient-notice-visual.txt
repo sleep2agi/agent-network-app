@@ -1,0 +1,39 @@
+Recipient confirmation notice visual fix
+========================================
+
+Implementation source: cdd119e (patch-equivalent rebase onto main b2774481)
+
+Problem
+-------
+In a light desktop workspace, ActualRecipientNotice retained the dark theme's
+module-initialized card color. The result was a large near-black bar above the
+composer, visually dominating the conversation.
+
+Change
+------
+- Resolve the notice palette at render time from the active theme.
+- Use restrained pale green (sent) and amber (queued) semantic surfaces with
+  matching outlines in light and dark themes.
+- Reduce vertical padding, use a small status dot, and keep recipient identity
+  on one compact line.
+- Shorten the legacy-Hub fallback without inferring recipient identity.
+- Preserve polite status accessibility and the labelled dismiss action.
+
+Docker evidence
+---------------
+Exact implementation source was built with
+tests/test-actual-recipient/Dockerfile and completed:
+
+- recipient contract: 7/7
+- visual contract: 6/6
+- repository test files: 55/55
+- TypeScript typecheck: PASS
+- Expo web export: PASS (470 modules)
+
+The same gates were rerun after the patch-equivalent rebase onto current main;
+all counts and outcomes remained unchanged.
+
+The test explicitly rejects a return to the static dark card surface and pins
+the live-theme, light sent, queued, compact identity, and legacy-copy behavior.
+
+Result: PASS
