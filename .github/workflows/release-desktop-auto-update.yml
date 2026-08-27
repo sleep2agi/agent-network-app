@@ -117,9 +117,10 @@ jobs:
           releaseBody: |-
             Signed and notarized stable update for macOS (Apple Silicon) and Windows (x64).
 
-            What's new in 0.2.39:
-            - Delivery confirmation above the composer is now a compact, theme-aware status card instead of a large dark banner. Sent and queued states use restrained semantic colors, with recipient details kept secondary and readable.
-            - Conversations, task reads, and restored local messages are isolated more reliably by Hub and network, preventing stale content or duplicate undelivered rows when switching workspaces.
+            What's new in 0.2.40:
+            - BTW mode lets you ask a side question without interrupting or writing into the active main conversation. Type `/btw your question` as the first command token, or open BTW from the composer + menu.
+            - Side questions have their own drawer, status cards, attachments, retry/cancel/archive actions, and an explicit bring-back action when you want a completed answer in the main conversation.
+            - BTW operations fail closed when the Hub does not advertise native SideThread support; they never silently fall back to an ordinary task or create a main-conversation optimistic message.
             - The bundled local Hub remains CommHub Server 0.9.0-preview.30. Codex TUI co-presence remains compatible with Agent Network 2.3.0-preview.46 and Agent Node 2.5.0-preview.34.
 
             Existing installations can update in place; new installations can use the assets below.
