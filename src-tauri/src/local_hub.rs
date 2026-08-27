@@ -22,7 +22,7 @@ const LOCAL_USERNAME: &str = "local-admin";
 const LOCAL_PASSWORD_ACCOUNT: &str = "local-hub-bootstrap-password";
 const PREFERRED_PORT: u16 = 9200;
 const LAST_PORT: u16 = 9299;
-const EXPECTED_HUB_VERSION: &str = "0.9.0-preview.30";
+const EXPECTED_HUB_VERSION: &str = "0.9.0-preview.31";
 const MAX_LOG_BYTES: u64 = 2 * 1024 * 1024;
 
 struct ManagedHub {
