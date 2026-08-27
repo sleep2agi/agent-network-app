@@ -40,6 +40,9 @@ export interface HubTask {
   started_at?: string;
   completed_at?: string;
   expires_at?: string;
+  /** Exact runtime context exposed by SideThread-capable Hubs. */
+  thread_id?: string;
+  turn_id?: string;
 }
 
 export interface HubConfig {
