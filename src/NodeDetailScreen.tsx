@@ -65,10 +65,14 @@ function NodeActionButton({
   label,
   tone,
   onPress,
+  disabled,
 }: {
   label: string;
   tone: NodeActionTone;
   onPress: () => void;
+  /** app#196 —— 置灰而不是隐藏（Vincent 定）：隐藏会让人以为功能不存在，
+   *  置灰 + 底下一句说明能告诉他为什么、以及替代做法。 */
+  disabled?: boolean;
 }) {
   const [hovered, setHovered] = useState(false);
   const [focused, setFocused] = useState(false);
@@ -77,18 +81,21 @@ function NodeActionButton({
     <Pressable
       accessibilityRole="button"
       accessibilityLabel={label}
-      accessibilityHint={tone === 'danger' ? '需要输入节点别名再次确认' : '打开确认窗口'}
+      accessibilityState={{ disabled: !!disabled }}
+      accessibilityHint={disabled ? '此节点不支持远程生命周期操作' : tone === 'danger' ? '需要输入节点别名再次确认' : '打开确认窗口'}
       onHoverIn={() => setHovered(true)}
       onHoverOut={() => setHovered(false)}
       onFocus={() => setFocused(true)}
       onBlur={() => setFocused(false)}
-      onPress={onPress}
+      onPress={disabled ? undefined : onPress}
+      disabled={disabled}
       style={({ pressed }) => [
         localStyles.actionButton,
         { borderColor: visual.borderColor, backgroundColor: visual.backgroundColor },
-        (hovered || focused) && { backgroundColor: colors.inputBg },
-        focused && { borderColor: visual.textColor },
-        pressed && localStyles.actionButtonPressed,
+        !disabled && (hovered || focused) && { backgroundColor: colors.inputBg },
+        !disabled && focused && { borderColor: visual.textColor },
+        !disabled && pressed && localStyles.actionButtonPressed,
+        disabled && { opacity: 0.35 },
       ]}
     >
       <Text style={[localStyles.actionButtonText, { color: visual.textColor }]}>{label}</Text>
@@ -330,11 +337,20 @@ export default function NodeDetailScreen({
               <Text style={{ color: colors.textMuted, fontSize: 12, lineHeight: 18 }}>
                 操作通过公开 CommHub/anet 契约执行。停止不会删除配置；有任务处理中时服务器会拒绝，不会自动强制。
               </Text>
+              {/* app#196 —— hub 明确说不可控时置灰。
+                  🔴 undefined（旧 hub 没这个字段）按可控渲染：与升级前行为逐字相同，
+                  真不行的话提交时 hub 会拒绝并显示错误 —— 宁可多让用户点一次，
+                  也不能因为 hub 旧就把 11 个真正可控的节点全灰掉。 */}
               <View style={localStyles.actionRow}>
-                <NodeActionButton label="重启节点" tone="neutral" onPress={() => setPendingAction('restart_node')} />
-                <NodeActionButton label="停止节点" tone="caution" onPress={() => setPendingAction('stop_node')} />
-                <NodeActionButton label="删除节点" tone="danger" onPress={() => setPendingAction('delete_node')} />
+                <NodeActionButton label="重启节点" tone="neutral" disabled={node?.lifecycle_controllable === false} onPress={() => setPendingAction('restart_node')} />
+                <NodeActionButton label="停止节点" tone="caution" disabled={node?.lifecycle_controllable === false} onPress={() => setPendingAction('stop_node')} />
+                <NodeActionButton label="删除节点" tone="danger" disabled={node?.lifecycle_controllable === false} onPress={() => setPendingAction('delete_node')} />
               </View>
+              {node?.lifecycle_controllable === false ? (
+                <Text style={{ color: colors.textMuted, fontSize: 12, lineHeight: 18 }}>
+                  此节点不是由 daemon 创建的，无法远程停止/删除。请在它所在的机器上执行 `anet node stop {alias}`。
+                </Text>
+              ) : null}
               {actionMessage ? <Text style={{ color: actionMessage.includes('已提交') ? colors.running : colors.failed, fontSize: 12 }}>{actionMessage}</Text> : null}
             </View>
           ) : (

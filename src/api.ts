@@ -128,6 +128,13 @@ export interface HubNode {
   server?: string | null;
   hostname?: string | null;
   role?: string | null;
+  /** app#196 —— hub 显式告知这个节点能不能走 stop/restart/delete。
+   *  判据在 hub 侧（node_create_requests 里真有创建记录，或它本身是 daemon），
+   *  🔴 **不是 id 前缀** —— 前缀是实现细节，今天恰好等价，明天会悄悄失效。
+   *  旧 hub 没有这个字段 ⇒ undefined ⇒ 按可控渲染（与升级前行为逐字相同，
+   *  错误仍会在提交时由 hub 拒绝并显示）。 */
+  lifecycle_controllable?: boolean;
+  lifecycle_daemon_node_id?: string | null;
   config_revision?: number | null;
   config_snapshot?: {
     model?: string | null;
