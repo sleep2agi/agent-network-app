@@ -55,6 +55,12 @@ const RUNTIMES: { id: string; label: string; models: string[] }[] = [
   { id: 'claude-agent-sdk', label: 'Claude Agent SDK', models: ['deepseek-v4-pro', 'MiniMax-M3', 'claude-sonnet-4-6', 'claude-opus-4-x'] },
   { id: 'codex-sdk', label: 'Codex SDK', models: ['gpt-5.5'] },
   { id: 'grok-build-acp', label: 'Grok (build-acp)', models: ['grok-build'] },
+  // 共存 runtime：复用宿主 TUI 的会员登录态，不选模型、不输 key。
+  // models 为空数组 ⇒ 第 3 步显示「跟随宿主登录」，提交时省略 model
+  // 字段（hub 侧自 da84f34d 起 model optional/nullable）。
+  { id: 'claude-code-cli', label: 'Claude Code（TUI 共存）', models: [] },
+  { id: 'codex-app-server', label: 'Codex（TUI 共存）', models: [] },
+  { id: 'grok-build-cli', label: 'Grok（TUI 共存）', models: [] },
 ];
 const PERMISSION_MODES = ['default', 'acceptEdits', 'plan', 'bypassPermissions'];
 const STEPS = ['名字', 'Runtime', '模型', '参数', '确认'];
@@ -183,11 +189,10 @@ export default function CreateNodeWizardScreen({ cfg, daemon, onBack, onExit }: 
     const node_spec: CreateNodeRequest['node_spec'] = {
       name: name.trim(),
       runtime: runtimeId,
-      // Hub requires model.min(1) (tools.ts:1977) — never omit. State
-      // is initialized + reset to runtime.models[0], so model is always
-      // a real string. Defense-in-depth fallback below in case some
-      // future runtime entry lands with empty models[].
-      model: model || runtime.models[0] || '',
+      // model 可空（hub 自 da84f34d 起 optional/nullable）：共存 runtime
+      // 的 models 为空数组，跟随宿主 TUI 登录态 —— 此时必须**省略**字段，
+      // 传空串仍会被 min(1) 拒。
+      ...((model || runtime.models[0]) ? { model: model || runtime.models[0] } : {}),
       flags: {
         permissionMode,
         ...(numOrUndef(maxTurns) !== undefined ? { maxTurns: numOrUndef(maxTurns) } : {}),
@@ -357,8 +362,11 @@ export default function CreateNodeWizardScreen({ cfg, daemon, onBack, onExit }: 
             {step === 2 && (
               <View style={styles.section}>
                 <Text style={styles.label}>模型（{runtime.label}）</Text>
-                {/* No 默认 option — hub requires model.min(1). Always one of the listed
-                    models. First is preselected; user can switch. */}
+                {runtime.models.length === 0 ? (
+                  <Text style={styles.hint}>
+                    跟随宿主 TUI 的会员登录态，无需选择模型、无需输入 key。
+                  </Text>
+                ) : null}
                 <View style={styles.choiceList}>
                   {runtime.models.map(m => (
                     <Pressable
@@ -451,7 +459,7 @@ export default function CreateNodeWizardScreen({ cfg, daemon, onBack, onExit }: 
                   <Divider />
                   <SummaryRow k="Runtime" v={runtime.label} />
                   <Divider />
-                  <SummaryRow k="模型" v={model || runtime.models[0] || '—'} />
+                  <SummaryRow k="模型" v={model || runtime.models[0] || '跟随宿主登录'} />
                   <Divider />
                   <SummaryRow k="permissionMode" v={permissionMode} />
                   <Divider />
