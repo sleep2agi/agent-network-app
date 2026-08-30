@@ -40,6 +40,7 @@ import { agentStatusLabel, applyQuote, confirmedOutboxIds, mergeMessagesNewestFi
 import type { NativeSyntheticEvent, NativeScrollEvent } from 'react-native';
 import { usePoll } from './usePoll';
 import { retryUnreadPersistFromPoll } from './conversation-unread-persist';
+import { dispatchUnread } from './unread-store';
 import { appFetch } from './app-fetch';
 import MarkdownMessage from './MarkdownMessage';
 import { cleanAttachmentDebugText, parseAttachmentRefs, parseMetaAttachmentRefs } from './attachment-display';
@@ -182,6 +183,7 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
   const [messages, setMessages] = useState<ChatItem[]>([]);
   const [currentUsername, setCurrentUsername] = useState('我');
   const [loaded, setLoaded] = useState(false);
+  const [conversationReady, setConversationReady] = useState(false);
   const [hasOlder, setHasOlder] = useState(true);
   const [loadingOlder, setLoadingOlder] = useState(false);
   const [draft, setDraft] = useState('');
@@ -238,6 +240,7 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
           conversations.put(token.key, merged);
           return merged;
         });
+        setConversationReady(true);
       } catch {
         /* poll retries — the conversation keeps whatever it already had */
       } finally {
@@ -274,11 +277,13 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
       // the background. A spinner over content we already have is a downgrade.
       setMessages(mergeMessagesNewestFirst(restoredNewestFirst, snapshot.messages));
       setLoaded(true);
+      setConversationReady(true);
     } else {
       // Nothing cached: an empty list plus loaded=false is the skeleton state.
       // Never carry the previous conversation's messages into this frame.
       setMessages(restoredNewestFirst);
       setLoaded(false);
+      setConversationReady(false);
     }
     setHasOlder(true);
     return () => {
@@ -461,6 +466,22 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
     }
     newestKeyRef.current = k;
   }, [messages, showJump]);
+
+  // #161 列表徽标：打开会话不清零；只有消息真正展示到最新才清。
+  useEffect(() => {
+    dispatchUnread({ kind: 'conversation_opened', agent: alias });
+    return () => {
+      dispatchUnread({ kind: 'conversation_left' });
+    };
+  }, [alias]);
+  useEffect(() => {
+    if (!conversationReady) return;
+    if (showJump) {
+      dispatchUnread({ kind: 'conversation_opened', agent: alias });
+      return;
+    }
+    dispatchUnread({ kind: 'rendered_to_latest', agent: alias });
+  }, [alias, conversationReady, showJump]);
 
   // shared by the sent bubble and the reply bubble (tg 771)
   const renderAttachment = (a: AttachmentView) =>

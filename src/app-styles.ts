@@ -134,6 +134,28 @@ const makeStyles = () =>
     borderColor: colors.card, // 描边环:让圆点从头像上"浮"出来(微信式)
   },
   statusDotOffline: { opacity: 0.5 },
+  // 头像右上角未读徽标（#161）。在线点在右下，两者错开。
+  unreadBadge: {
+    position: 'absolute',
+    top: -5,
+    right: -6,
+    minWidth: 18,
+    height: 18,
+    paddingHorizontal: 5,
+    borderRadius: 9,
+    backgroundColor: colors.failed,
+    borderWidth: 2,
+    borderColor: colors.card,
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 2,
+  },
+  unreadBadgeText: {
+    color: '#ffffff',
+    fontSize: 10,
+    fontWeight: '700',
+    lineHeight: 12,
+  },
   alias: { color: colors.text, fontSize: 15, fontWeight: '600' },
   task: { color: colors.textSecondary, fontSize: 12, marginTop: 2 },
   status: { color: colors.textMuted, fontSize: 11 },

@@ -15,7 +15,7 @@
 //    所以下面显式断言页面有可见文本，没有就以非零退出。
 //
 // 用法：
-//   node scripts/web-screenshot.mjs <url> <out.png> [--min-text N] [--viewport WxH] [--wait-text "…"]
+//   node scripts/web-screenshot.mjs <url> <out.png> [--min-text N] [--viewport WxH] [--wait-text "…"] [--channel chrome]
 //
 // 已知限制（不要当成原生端的证据）：
 //   - 渲染的是 react-native-web，不是 macOS 原生控件；布局/字体可能有差异。
@@ -42,7 +42,7 @@ const args = process.argv.slice(2);
 const url = args[0];
 const out = args[1];
 if (!url || !out) {
-  console.error('用法: node scripts/web-screenshot.mjs <url> <out.png> [--min-text N] [--viewport WxH] [--wait-text "…"]');
+  console.error('用法: node scripts/web-screenshot.mjs <url> <out.png> [--min-text N] [--viewport WxH] [--wait-text "…"] [--channel chrome]');
   process.exit(2);
 }
 const flag = (name, dflt) => {
@@ -55,9 +55,12 @@ const waitText = flag('--wait-text', '');
 const navTimeout = Number(flag('--timeout', '240000'));
 
 const chromium = loadChromium();
+const channel = flag('--channel', process.env.PW_CHANNEL || '');
 // 🔴 --no-sandbox：本机（以及多数 CI 容器）没有可用的 user namespace 沙箱，
 //    不加这个 flag 会以 `No usable sandbox!` 直接崩，而那和页面本身无关。
-const browser = await chromium.launch({ args: ['--no-sandbox', '--disable-dev-shm-usage'] });
+const launch = { args: ['--no-sandbox', '--disable-dev-shm-usage'] };
+if (channel) launch.channel = channel;
+const browser = await chromium.launch(launch);
 const page = await browser.newPage({ viewport: { width: vw, height: vh } });
 
 const errors = [];

@@ -50,6 +50,7 @@ import DesktopUpdatePrompt from './src/DesktopUpdatePrompt';
 import { loadPinnedChats, requestedChatAlias, requestedChatProfileId, savePinnedChats } from './src/desktop-chat-menu';
 import { openRememberedChatWindow, restoreDetachedChatWindows } from './src/desktop-chat-windows';
 import { LOCAL_HUB_PROFILE_ID, localHubStatus, startLocalHub } from './src/local-hub';
+import UnreadBadgeFixtureScreen, { readWebFixture } from './src/UnreadBadgeFixtureScreen';
 
 type Screen =
   | { name: 'login' }
@@ -100,6 +101,15 @@ export default function App() {
   useEffect(() => {
     purgeLegacyAttachmentCache().catch(() => {});
   }, []);
+
+  const fixture = readWebFixture();
+  if (fixture) {
+    return (
+      <SafeAreaProvider>
+        <UnreadBadgeFixtureScreen theme={fixture.theme} compact={fixture.compact} />
+      </SafeAreaProvider>
+    );
+  }
 
   return (
     <SafeAreaProvider>
