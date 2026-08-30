@@ -36,15 +36,25 @@ enum NetworkEventPayload {
     },
 }
 
-fn emit_network_state(app: &tauri::AppHandle, stream_id: &str, state: &str, error: Option<String>) {
+fn emit_stream_state(
+    app: &tauri::AppHandle,
+    event_name: &str,
+    stream_id: &str,
+    state: &str,
+    error: Option<String>,
+) {
     let _ = app.emit(
-        "network-event-stream",
+        event_name,
         NetworkEventPayload::State {
             stream_id: stream_id.to_owned(),
             state: state.to_owned(),
             error,
         },
     );
+}
+
+fn emit_network_state(app: &tauri::AppHandle, stream_id: &str, state: &str, error: Option<String>) {
+    emit_stream_state(app, "network-event-stream", stream_id, state, error);
 }
 
 #[tauri::command]
@@ -164,6 +174,130 @@ fn stop_network_event_stream(stream_id: String) -> Result<(), String> {
         handle.abort();
     }
     Ok(())
+}
+
+#[tauri::command]
+fn start_user_event_stream(
+    app: tauri::AppHandle,
+    stream_id: String,
+    server_url: String,
+    token: String,
+    network_id: String,
+) -> Result<(), String> {
+    if stream_id.is_empty() || stream_id.len() > 160 || network_id.is_empty() {
+        return Err("invalid stream identity".into());
+    }
+    let base = reqwest::Url::parse(&server_url).map_err(|_| "invalid server URL")?;
+    if !matches!(base.scheme(), "http" | "https") {
+        return Err("server URL must use http or https".into());
+    }
+    let mut url = base
+        .join("events/users/me")
+        .map_err(|_| "invalid user event URL")?;
+    url.query_pairs_mut().append_pair("network_id", &network_id);
+
+    if let Some(old) = NETWORK_EVENT_TASKS
+        .lock()
+        .map_err(|_| "stream registry poisoned")?
+        .remove(&stream_id)
+    {
+        old.abort();
+    }
+
+    let task_id = stream_id.clone();
+    let handle = tauri::async_runtime::spawn(async move {
+        emit_stream_state(&app, "user-event-stream", &task_id, "connecting", None);
+        let response = match reqwest::Client::new()
+            .get(url)
+            .bearer_auth(token)
+            .header("Accept", "text/event-stream")
+            .send()
+            .await
+        {
+            Ok(response) => response,
+            Err(error) => {
+                emit_stream_state(
+                    &app,
+                    "user-event-stream",
+                    &task_id,
+                    "disconnected",
+                    Some(error.to_string()),
+                );
+                return;
+            }
+        };
+        if !response.status().is_success() {
+            emit_stream_state(
+                &app,
+                "user-event-stream",
+                &task_id,
+                "disconnected",
+                Some(format!("HTTP {}", response.status().as_u16())),
+            );
+            return;
+        }
+        emit_stream_state(&app, "user-event-stream", &task_id, "connected", None);
+
+        let mut bytes = response.bytes_stream();
+        let mut carry = String::new();
+        while let Some(chunk) = bytes.next().await {
+            let chunk = match chunk {
+                Ok(value) => value,
+                Err(error) => {
+                    emit_stream_state(
+                        &app,
+                        "user-event-stream",
+                        &task_id,
+                        "disconnected",
+                        Some(error.to_string()),
+                    );
+                    return;
+                }
+            };
+            carry.push_str(&String::from_utf8_lossy(&chunk));
+            while let Some(end) = carry.find("\n\n") {
+                let frame = carry[..end].replace("\r\n", "\n");
+                carry.drain(..end + 2);
+                let data = frame
+                    .lines()
+                    .filter_map(|line| line.strip_prefix("data:").map(str::trim_start))
+                    .collect::<Vec<_>>()
+                    .join("\n");
+                if data.is_empty() {
+                    continue;
+                }
+                let event = serde_json::from_str(&data).unwrap_or_else(|_| {
+                    serde_json::json!({
+                        "type": "unknown", "_raw": data,
+                    })
+                });
+                let _ = app.emit(
+                    "user-event-stream",
+                    NetworkEventPayload::Event {
+                        stream_id: task_id.clone(),
+                        event,
+                    },
+                );
+            }
+        }
+        emit_stream_state(
+            &app,
+            "user-event-stream",
+            &task_id,
+            "disconnected",
+            Some("server closed stream".into()),
+        );
+    });
+    NETWORK_EVENT_TASKS
+        .lock()
+        .map_err(|_| "stream registry poisoned")?
+        .insert(stream_id, handle);
+    Ok(())
+}
+
+#[tauri::command]
+fn stop_user_event_stream(stream_id: String) -> Result<(), String> {
+    stop_network_event_stream(stream_id)
 }
 
 fn session_entry() -> Result<keyring::Entry, String> {
@@ -720,6 +854,8 @@ pub fn run() {
             desktop_storage_diagnostics,
             start_network_event_stream,
             stop_network_event_stream,
+            start_user_event_stream,
+            stop_user_event_stream,
             local_hub::start_local_hub,
             local_hub::local_hub_status,
             local_hub::stop_local_hub,
