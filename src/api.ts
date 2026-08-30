@@ -76,6 +76,7 @@ const withTimeout = (run: (signal: AbortSignal) => Promise<Response>): Promise<R
 // 只挂在 get()(全部轮询读)上;写路径有各自显式失败 UI,不进此口径。
 import { reportReadFailure, reportReadSuccess } from './connectivity';
 import { classifyLoginFailure, type LoginFailureKind } from './login-flow';
+import { userMessagesPath } from './user-unread';
 
 async function get<T>(cfg: HubConfig, path: string): Promise<T> {
   try {
@@ -542,6 +543,16 @@ export interface HubMessage {
 
 export const fetchMessages = (cfg: HubConfig, limit: number) =>
   get<{ messages: HubMessage[] }>(cfg, `/api/messages?limit=${limit}`);
+
+/**
+ * #1563 —— agent 主动发给**登录用户**的消息落在 hub 的 `user_inbox` 表,
+ * 上面那个 `fetchMessages` 走的是 **alias 分支**(读 `inbox` 表),取不到它们。
+ * 服务端的 user 作用域返回 `{ ok, messages, unread, pending_count }`,
+ * 其中 `unread` 就是给角标读的 —— 而这个客户端此前**一次都没调过**
+ * (全仓 `scope=user` 0 处)。
+ */
+export const fetchUserMessages = (cfg: HubConfig, limit: number) =>
+  get<{ messages: HubMessage[]; unread?: number; pending_count?: number }>(cfg, userMessagesPath(limit, cfg.networkId));
 
 /** The hub's REST send endpoint is POST /api/task with {alias, task} —
  *  /api/send_task does not exist (it 404s into the server help text).
