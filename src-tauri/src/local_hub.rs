@@ -970,6 +970,36 @@ pub fn packaged_smoke() -> Result<(), String> {
     result.and(stopped)
 }
 
+fn smoke_previous_hub_version() -> Result<String, String> {
+    let raw = std::env::var("ANET_SMOKE_PREVIOUS_HUB_VERSION").map_err(|_| {
+        "ANET_SMOKE_PREVIOUS_HUB_VERSION is required; refusing a silent default that would keep this smoke green when the seed is missing".to_string()
+    })?;
+    let version = raw.trim();
+    if version.is_empty() {
+        return Err(
+            "ANET_SMOKE_PREVIOUS_HUB_VERSION is empty; refusing a silent default".into(),
+        );
+    }
+    Ok(version.to_string())
+}
+
+fn migration_backup_name_prefix(from_version: &str, to_version: &str) -> String {
+    format!(
+        "local-hub-migration-{}-to-{}-",
+        safe_version_fragment(from_version),
+        safe_version_fragment(to_version)
+    )
+}
+
+fn require_seeded_previous_hub_version(recorded: &str, expected: &str) -> Result<(), String> {
+    if recorded != expected {
+        return Err(format!(
+            "failed-migration fixture is not the pinned previous Hub: recorded {recorded}, expected {expected}"
+        ));
+    }
+    Ok(())
+}
+
 /// Upgrade acceptance using a database produced by the previous published
 /// CommHub. The workflow seeds that database with public APIs, while this exact
 /// packaged executable owns the native credential and migration/backup path.
@@ -1044,11 +1074,8 @@ pub fn packaged_migration_smoke() -> Result<(), String> {
         if config.hub_version != EXPECTED_HUB_VERSION {
             return Err("migration did not persist the current Hub version".into());
         }
-        let prefix = format!(
-            "local-hub-migration-{}-to-{}-",
-            safe_version_fragment("0.9.0-preview.28"),
-            safe_version_fragment(EXPECTED_HUB_VERSION)
-        );
+        let previous_hub = smoke_previous_hub_version()?;
+        let prefix = migration_backup_name_prefix(&previous_hub, EXPECTED_HUB_VERSION);
         let backups = app_root()?.join("backups");
         let snapshot_found = fs::read_dir(&backups)
             .map_err(|error| error.to_string())?
@@ -1091,9 +1118,10 @@ pub fn packaged_failed_migration_smoke() -> Result<(), String> {
     let database = local_root()?.join("data").join("commhub.db");
     let before = fs::read(&database).map_err(|error| error.to_string())?;
     let previous = read_config()?.ok_or_else(|| "previous Hub config is missing".to_string())?;
-    if previous.hub_version != "0.9.0-preview.28" {
-        return Err("failed-migration fixture is not the pinned previous Hub".into());
-    }
+    require_seeded_previous_hub_version(
+        &previous.hub_version,
+        &smoke_previous_hub_version()?,
+    )?;
     let password_entry = keyring::Entry::new(SESSION_SERVICE, LOCAL_PASSWORD_ACCOUNT)
         .map_err(|error| error.to_string())?;
     password_entry
@@ -1166,7 +1194,7 @@ pub fn packaged_corrupt_data_smoke() -> Result<(), String> {
         host: "127.0.0.1".into(),
         port: PREFERRED_PORT,
         endpoint: endpoint(PREFERRED_PORT),
-        hub_version: "0.9.0-preview.28".into(),
+        hub_version: smoke_previous_hub_version()?,
     };
     save_config(&previous)?;
     let password_entry = keyring::Entry::new(SESSION_SERVICE, LOCAL_PASSWORD_ACCOUNT)
@@ -1748,5 +1776,54 @@ mod tests {
         );
         assert!(!data.join("new-file").exists());
         assert!(snapshot.join("data").join("commhub.db").exists());
+    }
+
+    static SMOKE_PREV_ENV_LOCK: Mutex<()> = Mutex::new(());
+
+    #[test]
+    fn smoke_previous_hub_version_fails_closed_when_unset() {
+        let _guard = SMOKE_PREV_ENV_LOCK.lock().unwrap();
+        let previous = std::env::var("ANET_SMOKE_PREVIOUS_HUB_VERSION").ok();
+        unsafe { std::env::remove_var("ANET_SMOKE_PREVIOUS_HUB_VERSION"); }
+        let err = smoke_previous_hub_version().unwrap_err();
+        assert!(err.contains("required"), "{err}");
+        match previous {
+            Some(value) => unsafe { std::env::set_var("ANET_SMOKE_PREVIOUS_HUB_VERSION", value) },
+            None => unsafe { std::env::remove_var("ANET_SMOKE_PREVIOUS_HUB_VERSION") },
+        }
+    }
+
+    #[test]
+    fn smoke_previous_hub_version_fails_closed_when_empty() {
+        let _guard = SMOKE_PREV_ENV_LOCK.lock().unwrap();
+        let previous = std::env::var("ANET_SMOKE_PREVIOUS_HUB_VERSION").ok();
+        unsafe { std::env::set_var("ANET_SMOKE_PREVIOUS_HUB_VERSION", "   "); }
+        let err = smoke_previous_hub_version().unwrap_err();
+        assert!(err.contains("empty"), "{err}");
+        match previous {
+            Some(value) => unsafe { std::env::set_var("ANET_SMOKE_PREVIOUS_HUB_VERSION", value) },
+            None => unsafe { std::env::remove_var("ANET_SMOKE_PREVIOUS_HUB_VERSION") },
+        }
+    }
+
+    #[test]
+    fn migration_backup_prefix_matches_real_user_path_31_to_44() {
+        assert_eq!(
+            migration_backup_name_prefix("0.9.0-preview.31", "0.9.0-preview.44"),
+            "local-hub-migration-0.9.0-preview.31-to-0.9.0-preview.44-"
+        );
+    }
+
+    #[test]
+    fn seeded_previous_version_mismatch_is_red() {
+        let err = require_seeded_previous_hub_version("0.9.0-preview.31", "0.9.0-preview.99")
+            .unwrap_err();
+        assert!(err.contains("0.9.0-preview.31"), "{err}");
+        assert!(err.contains("0.9.0-preview.99"), "{err}");
+    }
+
+    #[test]
+    fn seeded_previous_version_match_is_ok() {
+        require_seeded_previous_hub_version("0.9.0-preview.31", "0.9.0-preview.31").unwrap();
     }
 }
