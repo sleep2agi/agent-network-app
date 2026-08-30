@@ -117,11 +117,11 @@ jobs:
           releaseBody: |-
             Signed and notarized stable update for macOS (Apple Silicon) and Windows (x64).
 
-            What's new in 0.2.41:
-            - BTW mode now works end to end with the bundled local Hub. Ask a side question without interrupting or writing into the active main conversation.
-            - Type `/btw your question` as the first command token, or open BTW from the composer + menu. Side questions keep their own status, attachments, retry/cancel/archive controls, and explicit bring-back action.
-            - The bundled local Hub is CommHub Server 0.9.0-preview.31, which provides the native durable SideThread API required by BTW. Unsupported Hubs still fail closed instead of silently creating an ordinary task.
-            - Codex TUI co-presence remains compatible with Agent Network 2.3.0-preview.50 and Agent Node 2.5.0-preview.36.
+            What's new in 0.2.42:
+            - Nodes that cannot be controlled remotely now show greyed-out stop, restart, and delete actions, with a short explanation of what to do instead of hiding the buttons.
+            - The create-node wizard can start Claude Code, Codex, and Grok TUI co-presence runtimes from the app.
+            - Chat messages sent from the desktop app are attributed to the logged-in username.
+            - Unread counts survive a failed disk or native write: the latest snapshot stays pending and is retried on the next poll instead of disappearing after restart.
 
             Existing installations can update in place; new installations can use the assets below.
           releaseDraft: true
