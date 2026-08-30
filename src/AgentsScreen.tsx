@@ -18,11 +18,20 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import AliasAvatar from './AliasAvatar';
 import { agentStatusLabel, isAgentOnline } from './chat-actions';
-import { fetchStatus, takeStatusPrefetch, type HubConfig, type Session } from './api';
+import { fetchStatus, fetchUserMessages, takeStatusPrefetch, type HubConfig, type Session } from './api';
 import { loadSessionsCache, saveSessionsCache } from './storage';
 import { colors, spacing, statusColor, themeMode } from './theme';
 import { usePoll } from './usePoll';
 import { retryUnreadPersistFromPoll } from './conversation-unread-persist';
+import AgentUnreadBadge from './AgentUnreadBadge';
+import { formatUnreadBadge, type UnreadState } from './unread-ledger';
+import { unreadCountForAgentRow } from './unread-badge';
+import {
+  bindUnreadAppState,
+  getUnreadSnapshot,
+  ingestUserMessagesBody,
+  subscribeUnread,
+} from './unread-store';
 import { styles } from './app-styles';
 import { buildSections, countShown } from './agents-list';
 import { pinyinMatch } from './lib/pinyin';
@@ -37,6 +46,7 @@ export default function AgentsScreen({
   pinnedAliases = [],
   onTogglePin,
   onOpenChatWindow,
+  preview,
 }: {
   cfg: HubConfig;
   onOpenChat: (alias: string) => void;
@@ -51,14 +61,19 @@ export default function AgentsScreen({
   pinnedAliases?: string[];
   onTogglePin?: (alias: string) => void;
   onOpenChatWindow?: (alias: string) => void;
+  /** GUI 夹具：跳过 Hub 拉取，用同一套行渲染钉死徽标。 */
+  preview?: { sessions: Session[]; ledger: UnreadState; serverBody: unknown };
 }) {
-  const [sessions, setSessions] = useState<Session[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [sessions, setSessions] = useState<Session[]>(preview?.sessions ?? []);
+  const [loading, setLoading] = useState(!preview);
   const [refreshing, setRefreshing] = useState(false);
   const [failed, setFailed] = useState(false);
   const [query, setQuery] = useState('');
   const [contextMenu, setContextMenu] = useState<{ alias: string; x: number; y: number } | null>(null);
   const [hoveredAlias, setHoveredAlias] = useState<string | null>(null);
+  const [unreadSnap, setUnreadSnap] = useState(getUnreadSnapshot);
+  useEffect(() => subscribeUnread(() => setUnreadSnap(getUnreadSnapshot())), []);
+  useEffect(() => { bindUnreadAppState(); }, []);
 
   // RN Web's bubbling onContextMenu can run after WKWebView has already
   // decided to show its native "Reload" menu. Intercept in the capture phase
@@ -86,6 +101,13 @@ export default function AgentsScreen({
   }, [compact]);
 
   const load = useCallback(async () => {
+    if (preview) {
+      setSessions(preview.sessions);
+      setFailed(false);
+      setLoading(false);
+      setRefreshing(false);
+      return;
+    }
     try {
       // First load consumes the boot prefetch if it's still in-flight/fresh;
       // polls and later loads fall through to a normal fetch.
@@ -103,7 +125,12 @@ export default function AgentsScreen({
       setRefreshing(false);
       void retryUnreadPersistFromPoll();
     }
-  }, [cfg]);
+    try {
+      ingestUserMessagesBody(await fetchUserMessages(cfg, 50));
+    } catch {
+      /* 列表照常显示；服务端未读拿不到时 unreadCountForAgentRow 退回 ledger */
+    }
+  }, [cfg, preview]);
 
   // Perf (load time): paint the last-known agents from the disk cache
   // immediately so cold start shows content instead of a blank spinner; the
@@ -111,6 +138,7 @@ export default function AgentsScreen({
   // fetch hasn't already populated the list (prev.length guard), so fresh
   // data always wins the race.
   useEffect(() => {
+    if (preview) return;
     let live = true;
     loadSessionsCache(cfg.profileId).then(cached => {
       if (live && cached && cached.length) {
@@ -293,6 +321,14 @@ export default function AgentsScreen({
                 { backgroundColor: statusColor(item.status ?? '', true) },
                 !isAgentOnline(item.status) && styles.statusDotOffline,
               ]}
+            />
+            <AgentUnreadBadge
+              badge={formatUnreadBadge(unreadCountForAgentRow(
+                preview?.serverBody ?? unreadSnap.serverBody,
+                preview?.ledger ?? unreadSnap.ledger,
+                item.alias,
+              ))}
+              testID={`unread-badge-${item.alias}`}
             />
           </View>
           <View style={{ flex: 1, minWidth: 0 }}>
