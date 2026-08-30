@@ -8,12 +8,27 @@ Built with **Expo (React Native, TypeScript)**. Design language follows the dash
 |---|---|---|
 | ![agents](docs/screens/app-web-agents.png) | ![chat](docs/screens/app-web-chat.png) | ![messages](docs/screens/app-web-messages.png) |
 
-## Features (v0.1.7)
+## Features (v0.2.41)
 
 - **Login** — server URL + username/password (`POST /api/auth/login` → user token); friendly errors for empty/non-JSON responses; session persists in the platform keystore (expo-secure-store)
 - **Agents** — live fleet list: status dot, current-task one-liner, pull-to-refresh, 10s polling; working sessions sort to the top; search box appears beyond 10 agents
 - **Chat** — tap an agent card to chat; inverted list opens at the newest 20 and lazy-loads older history at the visual top; timestamps; send via `POST /api/send_task` with draft restore on failure
 - **Messages** — network-wide feed: from → to routes, type dots (task/reply/broadcast), HIGH priority chips, timestamps, same lazy window
+- **Create nodes** — five-step wizard (name / runtime / model / limits / confirm) that dispatches
+  `create_node` to a host daemon. Co-presence runtimes (`claude-code-cli`, `codex-app-server`)
+  need **no model and no API key** — they reuse the host TUI's logged-in session; the model field
+  is omitted rather than sent empty. Runtime choices are filtered by what the daemon reports it
+  supports. — `src/CreateNodeWizardScreen.tsx`
+- **Node lifecycle** — stop / restart / delete from the node detail screen. Controls that cannot
+  work on a given node are **disabled with a reason** rather than failing after the tap.
+  — `src/NodeDetailScreen.tsx`, `src/node-lifecycle-api.test.ts`
+- **Side threads (`/btw`)** — ask a question without interrupting the agent's running turn.
+  `/btw` is a first-token command; `\/btw` escapes it, and `/btwfoo` or a later `/btw` is
+  ordinary text. — `src/btw-command.ts`, `src/SideThreadDrawer.tsx`
+- **Unread counts** — per-agent unread badges on the fleet list. — `src/AgentsScreen.tsx`
+- **Bundled local Hub** — the desktop build ships a pinned CommHub sidecar, so a first-run user
+  gets a working Hub without installing anything else. Upgrading the pin snapshots the existing
+  data directory into `backups/` before migrating. — `src-tauri/src/local_hub.rs`
 - **Branding** — cyan hub-and-spokes launcher icon (adaptive + monochrome for Material You)
 
 ## Server
