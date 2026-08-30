@@ -39,6 +39,7 @@ import { formatChatHeader, shouldShowTimeHeader } from './time';
 import { agentStatusLabel, applyQuote, confirmedOutboxIds, mergeMessagesNewestFirst, msgKey, removeMessage, shouldShowJumpPill, nextUnread, jumpPillLabel, canSend, shouldSendOnEnter } from './chat-actions';
 import type { NativeSyntheticEvent, NativeScrollEvent } from 'react-native';
 import { usePoll } from './usePoll';
+import { retryUnreadPersistFromPoll } from './conversation-unread-persist';
 import { appFetch } from './app-fetch';
 import MarkdownMessage from './MarkdownMessage';
 import { cleanAttachmentDebugText, parseAttachmentRefs, parseMetaAttachmentRefs } from './attachment-display';
@@ -241,6 +242,7 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
         /* poll retries — the conversation keeps whatever it already had */
       } finally {
         if (requestGate.isCurrent(token) && mountedRef.current) setLoaded(true);
+        void retryUnreadPersistFromPoll();
       }
     },
     [cfg, alias],

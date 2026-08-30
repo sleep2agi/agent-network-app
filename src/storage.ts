@@ -275,6 +275,16 @@ export const loadOutbox = async (profileId?: string): Promise<OutboxEntry[]> => 
 
 import type { ForwardOperation } from './forward-controller';
 const FORWARD_FILE = `${FileSystem.documentDirectory}forward_operations_v1.json`;
+
+const UNREAD_PERSIST_FILE = `${FileSystem.documentDirectory}unread_persist_v1.json`;
+
+/** Unread snapshots must persist across kill. Write errors throw — callers
+ *  keep a pending snapshot and retry. Do not catch here. */
+export async function saveUnreadPersistSnapshot(snapshot: unknown, profileId?: string): Promise<void> {
+  if (await writeDesktopProfileJson(profileId, 'cache/unread.json', snapshot)) return;
+  await FileSystem.writeAsStringAsync(UNREAD_PERSIST_FILE, JSON.stringify(snapshot));
+}
+
 export const saveForwardOperations = async (all: ForwardOperation[], profileId?: string): Promise<void> => {
   if (await writeDesktopProfileJson(profileId, 'forward-operations.json', all)) return;
   await FileSystem.writeAsStringAsync(FORWARD_FILE, JSON.stringify(all));
