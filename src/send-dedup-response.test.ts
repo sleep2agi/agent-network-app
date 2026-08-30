@@ -8,7 +8,7 @@ const check = (name: string, condition: boolean) => {
   passed++;
 };
 
-const cfg: HubConfig = { serverUrl: 'https://hub.example', token: 'utok_test', networkId: 'net_1' };
+const cfg: HubConfig = { serverUrl: 'https://hub.example', token: 'utok_test', networkId: 'net_1', username: 'admin' };
 const originalFetch = globalThis.fetch;
 
 try {

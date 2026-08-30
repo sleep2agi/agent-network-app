@@ -32,6 +32,7 @@ try {
     serverUrl: 'https://hub.example',
     token: 'utok_authenticated_user',
     networkId: 'net_1',
+    username: 'admin',
   };
   await sendTask(cfg, 'codex-tui', 'please handle this now');
   await sendTask(cfg, 'codex-tui', 'keep this urgent', undefined, 'high');

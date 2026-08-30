@@ -29,7 +29,7 @@ globalThis.fetch = (async (url: string | URL | Request, init?: RequestInit) => {
 }) as typeof fetch;
 
 try {
-  const cfg: HubConfig = { serverUrl: 'https://hub.example', token: 'utok_test', networkId: 'net_1' };
+  const cfg: HubConfig = { serverUrl: 'https://hub.example', token: 'utok_test', networkId: 'net_1', username: 'admin' };
   await sendTask(cfg, 'codex-tui', 'normal work');
   await sendTask(cfg, 'codex-tui', 'urgent work', undefined, 'high');
   await sendTask(cfg, 'codex-tui', 'urgent attachment', [{ type: 'file', file_id: 'f_1' }], 'high');
