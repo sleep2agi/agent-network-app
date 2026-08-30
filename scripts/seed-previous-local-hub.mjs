@@ -14,7 +14,10 @@ const localRoot = join(appRoot, 'local-hub');
 const dataDir = join(localRoot, 'data');
 const logsDir = join(localRoot, 'logs');
 const endpoint = 'http://127.0.0.1:9200';
-const previousVersion = '0.9.0-preview.28';
+const previousVersion = (process.env.ANET_SMOKE_PREVIOUS_HUB_VERSION || '').trim();
+if (!previousVersion) {
+  throw new Error('ANET_SMOKE_PREVIOUS_HUB_VERSION is required; refusing a silent default that would keep this smoke green when the seed is missing');
+}
 mkdirSync(dataDir, { recursive: true, mode: 0o700 });
 mkdirSync(logsDir, { recursive: true, mode: 0o700 });
 
