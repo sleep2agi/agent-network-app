@@ -1,0 +1,21 @@
+Desktop v0.2.42 release-candidate report
+Date: 2026-08-30
+
+Source
+- Base: 447b2a523d83323d310972762edf42e41b6802b5
+- Target: desktop-v0.2.42
+- Preflight: local/remote tag desktop-v0.2.42 absent; no draft named desktop-v0.2.42.
+
+Scope
+- Bump the desktop application consistently to 0.2.42.
+- Ship already-merged main changes that 0.2.41 users do not have:
+  lifecycle buttons greyed with a path when a node is not remotely controllable,
+  create-node wizard co-presence runtimes, REST send attributed to the logged-in
+  username, and unread persist that retries a failed disk write.
+- Do not change the bundled CommHub sidecar version.
+
+Safety
+- Version files match src/version-consistency.test.ts.
+- Cargo.lock edits the agent-network-desktop package stanza only.
+- No tag, release, updater endpoint, production database, or running client is
+  changed by this preparation gate.
