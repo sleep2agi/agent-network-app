@@ -29,6 +29,7 @@ import {
   fetchStatus,
   fetchTaskDetail,
   fetchTasks,
+  fetchUserMessages,
   type HubConfig,
 } from './api';
 
@@ -100,6 +101,12 @@ const ENDPOINTS: Record<string, { scope: Scope; drive: () => Promise<unknown> }>
   fetchExternalScheduleEdits: {
     scope: { kind: 'network' },
     drive: () => fetchExternalScheduleEdits(cfg, 'node_1'),
+  },
+  fetchUserMessages: {
+    // #1563 —— agent 主动发给登录用户的消息落在 user_inbox;这个读必须按网络
+    //   作用域,否则会跨网络返回别的网络的私信。
+    scope: { kind: 'network' },
+    drive: () => fetchUserMessages(cfg, 20),
   },
   fetchTasks: {
     scope: { kind: 'network' },
