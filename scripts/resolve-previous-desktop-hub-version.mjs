@@ -9,13 +9,22 @@
 
 import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
-const current = JSON.parse(readFileSync('package.json', 'utf8')).version;
-if (!/^\d+\.\d+\.\d+$/.test(current)) {
-  throw new Error(`package.json version ${current} is not major.minor.patch`);
+const STABLE_VERSION = /^\d+\.\d+\.\d+$/;
+const STABLE_DESKTOP_TAG = /^desktop-v(\d+\.\d+\.\d+)$/;
+const HUB_DEP = '@sleep2agi/commhub-server';
+
+export function requireStableAppVersion(version) {
+  const current = String(version ?? '').trim();
+  if (!STABLE_VERSION.test(current)) {
+    throw new Error(`package.json version ${version} is not major.minor.patch`);
+  }
+  return current;
 }
 
-function cmp(a, b) {
+export function compareStableVersions(a, b) {
   const pa = a.split('.').map(Number);
   const pb = b.split('.').map(Number);
   for (let i = 0; i < 3; i++) {
@@ -24,24 +33,72 @@ function cmp(a, b) {
   return 0;
 }
 
-const raw = execFileSync('git', ['tag', '-l', 'desktop-v*'], { encoding: 'utf8' });
-const stable = [];
-for (const line of raw.split('\n')) {
-  const tag = line.trim();
-  const m = /^desktop-v(\d+\.\d+\.\d+)$/.exec(tag);
-  if (m) stable.push({ tag, version: m[1] });
-}
-stable.sort((a, b) => cmp(a.version, b.version));
-const prev = [...stable].reverse().find((item) => cmp(item.version, current) < 0);
-if (!prev) {
-  throw new Error(`no published desktop-vMAJOR.MINOR.PATCH tag older than ${current}`);
+export function parseStableDesktopTags(tagList) {
+  const lines = Array.isArray(tagList) ? tagList : String(tagList ?? '').split('\n');
+  const stable = [];
+  for (const line of lines) {
+    const tag = String(line).trim();
+    const match = STABLE_DESKTOP_TAG.exec(tag);
+    if (match) stable.push({ tag, version: match[1] });
+  }
+  return stable;
 }
 
-const pkg = execFileSync('git', ['show', `${prev.tag}:local-hub-sidecar/package.json`], {
-  encoding: 'utf8',
-});
-const hub = JSON.parse(pkg).dependencies?.['@sleep2agi/commhub-server'];
-if (typeof hub !== 'string' || !hub.trim()) {
-  throw new Error(`${prev.tag} local-hub-sidecar/package.json has no @sleep2agi/commhub-server pin`);
+export function selectPreviousDesktopTag(currentVersion, tagList) {
+  const current = requireStableAppVersion(currentVersion);
+  const stable = parseStableDesktopTags(tagList);
+  stable.sort((left, right) => compareStableVersions(left.version, right.version));
+  const previous = [...stable].reverse().find((item) => compareStableVersions(item.version, current) < 0);
+  if (!previous) {
+    throw new Error(`no published desktop-vMAJOR.MINOR.PATCH tag older than ${current}`);
+  }
+  return previous;
 }
-process.stdout.write(hub.trim());
+
+export function hubPinFromSidecarPackage(tag, packageJsonText) {
+  let pkg;
+  try {
+    pkg = JSON.parse(packageJsonText);
+  } catch {
+    throw new Error(`${tag} local-hub-sidecar/package.json is not JSON`);
+  }
+  const hub = pkg?.dependencies?.[HUB_DEP];
+  if (typeof hub !== 'string' || !hub.trim()) {
+    throw new Error(`${tag} local-hub-sidecar/package.json has no @sleep2agi/commhub-server pin`);
+  }
+  return hub.trim();
+}
+
+export function resolvePreviousFactoryHub({ currentVersion, tags, sidecarPackageJsonByTag }) {
+  const previous = selectPreviousDesktopTag(currentVersion, tags);
+  const text = sidecarPackageJsonByTag?.[previous.tag];
+  if (typeof text !== 'string') {
+    throw new Error(`${previous.tag} local-hub-sidecar/package.json is missing`);
+  }
+  return {
+    tag: previous.tag,
+    version: previous.version,
+    hub: hubPinFromSidecarPackage(previous.tag, text),
+  };
+}
+
+function gitTagList() {
+  return execFileSync('git', ['tag', '-l', 'desktop-v*'], { encoding: 'utf8' });
+}
+
+function gitShowSidecar(tag) {
+  return execFileSync('git', ['show', `${tag}:local-hub-sidecar/package.json`], {
+    encoding: 'utf8',
+  });
+}
+
+function main() {
+  const current = JSON.parse(readFileSync('package.json', 'utf8')).version;
+  const previous = selectPreviousDesktopTag(current, gitTagList());
+  process.stdout.write(hubPinFromSidecarPackage(previous.tag, gitShowSidecar(previous.tag)));
+}
+
+const isMain = process.argv[1] && fileURLToPath(import.meta.url) === resolve(process.argv[1]);
+if (isMain) {
+  main();
+}
