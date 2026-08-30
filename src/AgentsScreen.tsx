@@ -22,6 +22,7 @@ import { fetchStatus, takeStatusPrefetch, type HubConfig, type Session } from '.
 import { loadSessionsCache, saveSessionsCache } from './storage';
 import { colors, spacing, statusColor, themeMode } from './theme';
 import { usePoll } from './usePoll';
+import { retryUnreadPersistFromPoll } from './conversation-unread-persist';
 import { styles } from './app-styles';
 import { buildSections, countShown } from './agents-list';
 import { pinyinMatch } from './lib/pinyin';
@@ -100,6 +101,7 @@ export default function AgentsScreen({
     } finally {
       setLoading(false);
       setRefreshing(false);
+      void retryUnreadPersistFromPoll();
     }
   }, [cfg]);
 
