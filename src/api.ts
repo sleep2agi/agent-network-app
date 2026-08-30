@@ -50,6 +50,8 @@ export interface HubConfig {
   token: string;
   networkId?: string; // hub scopes sends by network (#220 round 18)
   profileId?: string;
+  /** Authenticated Hub username. Sent as REST task `from` so older hubs
+   *  do not persist the transport fallback `api`. New logins set this. */
   username?: string;
   displayName?: string;
 }
@@ -544,20 +546,26 @@ export const fetchMessages = (cfg: HubConfig, limit: number) =>
 /** The hub's REST send endpoint is POST /api/task with {alias, task} —
  *  /api/send_task does not exist (it 404s into the server help text).
  *  Sends are network-scoped: utok users must pass an explicit network_id. */
-export const fetchNetworkId = async (cfg: HubConfig): Promise<string | undefined> => {
+const fetchAuthIdentity = async (cfg: HubConfig): Promise<{ networkId?: string; username?: string }> => {
   try {
     const res = await withTimeout(signal =>
       appFetch(`${cfg.serverUrl}/api/auth/me`, { headers: headers(cfg), signal }),
     );
     const d = await res.json();
     const cur = d?.current_network;
-    return (
-      (typeof cur === 'string' ? cur : cur?.network_id) ?? d?.networks?.[0]?.network_id
-    );
+    const networkId = (typeof cur === 'string' ? cur : cur?.network_id) ?? d?.networks?.[0]?.network_id;
+    const username = d?.user?.username ?? d?.username;
+    return {
+      ...(typeof networkId === 'string' && networkId.trim() ? { networkId } : {}),
+      ...(typeof username === 'string' && username.trim() ? { username: username.trim() } : {}),
+    };
   } catch {
-    return undefined;
+    return {};
   }
 };
+
+export const fetchNetworkId = async (cfg: HubConfig): Promise<string | undefined> =>
+  (await fetchAuthIdentity(cfg)).networkId;
 
 export interface TaskAttachment {
   type: 'file';
@@ -624,7 +632,19 @@ export const sendTask = async (
   priority: TaskPriority = 'normal',
   clientRequestId = createDashboardRequestId(),
 ): Promise<SendTaskResponse> => {
-  const networkId = cfg.networkId ?? (await fetchNetworkId(cfg));
+  let networkId = cfg.networkId;
+  let username = cfg.username?.trim();
+  // #68 replacement: current hubs (#1156 / preview.38+) attribute omitted
+  // `from` from the user token. Still send `from` when we have a username so
+  // older hubs do not persist the transport label `api`. Lookup is lazy and
+  // fail-open — missing identity means omit `from`, never block the send.
+  if (!networkId || !username) {
+    const identity = await fetchAuthIdentity(cfg);
+    networkId ??= identity.networkId;
+    username ||= identity.username;
+    if (networkId) cfg.networkId = networkId;
+    if (username) cfg.username = username;
+  }
   const res = await withTimeout(signal =>
     appFetch(`${cfg.serverUrl}/api/task`, {
       method: 'POST',
@@ -635,6 +655,7 @@ export const sendTask = async (
         task: content,
         priority,
         network_id: networkId,
+        ...(username ? { from: username } : {}),
         meta: {
           source: 'dashboard-chat',
           client_request_id: clientRequestId,

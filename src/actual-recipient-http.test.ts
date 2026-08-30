@@ -1,7 +1,7 @@
 import { sendTask, type HubConfig } from './api';
 import { sendConfirmationFromResponse } from './actual-recipient';
 
-const cfg: HubConfig = { serverUrl: 'https://hub.example', token: 'utok_fixture', networkId: 'net_a' };
+const cfg: HubConfig = { serverUrl: 'https://hub.example', token: 'utok_fixture', networkId: 'net_a', username: 'admin' };
 const original = globalThis.fetch;
 try {
   globalThis.fetch = (async () => new Response(JSON.stringify({
