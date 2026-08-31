@@ -41,6 +41,7 @@ import { clearConfig, listHubProfiles, loadConfig, loadLocalAvatars, loadOutbox,
 import { clearProfileUnauthorized, onProfileUnauthorized } from './src/profile-auth-state';
 import { initOutbox } from './src/outbox';
 import { createForwardPersistence, initForwardController } from './src/forward-controller';
+import { loadDesktopThemeMode } from './src/desktop-theme-storage';
 import { colors, onThemeChange, setThemeMode, spacing, themeMode } from './src/theme';
 import { installWebScrollbarTheme } from './src/web-scrollbar';
 import DesktopWindowPin from './src/DesktopWindowPin';
@@ -93,6 +94,22 @@ const DESKTOP_MAIN_TABS = DESKTOP_TABS.filter(tab => tab.key !== 'settings');
 const DESKTOP_SETTINGS_TAB = DESKTOP_TABS.find(tab => tab.key === 'settings')!;
 
 export default function App() {
+  // 🔴 冷启动时用户存的主题原先只在一个 **await 了 loadConfig()/loadThemeMode() 的
+  // useEffect** 里恢复(见下方 "Restore the saved session on cold start")——
+  // 那意味着**首帧一定是默认 DARK**,存了 light 的用户每次冷启动都会闪一下深色。
+  // 而桌面/web 的 `loadDesktopThemeMode()` 是**纯同步**的(localStorage.getItem),
+  // 所以这一支可以在首帧之前就定下来。
+  //
+  // 同一个形状 Mac打包牛 在 UnreadBadgeFixtureScreen 里先撞到:用 useEffect 设主题
+  // 太晚,截图截到的永远是默认 dark。那里的修法就是这条。
+  //
+  // ⚠️ 移动端仍会闪:它的持久化走 SecureStore.getItemAsync,拿不到同步值 ——
+  // 这一半本条修不了,不假装修好。
+  {
+    const early = loadDesktopThemeMode();
+    if ((early === 'light' || early === 'dark') && themeMode() !== early) setThemeMode(early);
+  }
+
   // One-time cleanup of attachment caches written before the download fix.
   // Versions before it wrote HTTP error bodies to the real filename, and a
   // non-empty error body is indistinguishable from a valid cached file, so
