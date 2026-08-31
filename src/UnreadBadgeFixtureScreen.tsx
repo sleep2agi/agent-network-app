@@ -4,7 +4,7 @@
  *
  * 三行钉死 #161 视觉：有未读显示数字 / 无未读完全没有红点 / 超过 99 显示 99+。
  */
-import { useEffect, useMemo } from 'react';
+import { useMemo } from 'react';
 import { Platform, SafeAreaView, View } from 'react-native';
 import AgentsScreen from './AgentsScreen';
 import type { HubConfig, Session } from './api';
@@ -13,8 +13,7 @@ import {
   reduceUnread,
   type UnreadEvent,
 } from './unread-ledger';
-import { setThemeMode } from './theme';
-import { colors } from './theme';
+import { colors, setThemeMode, themeMode } from './theme';
 
 const DUMMY_CFG: HubConfig = { serverUrl: 'http://127.0.0.1:9', token: 'fixture' };
 
@@ -48,9 +47,7 @@ export default function UnreadBadgeFixtureScreen({
   theme: 'dark' | 'light';
   compact: boolean;
 }) {
-  useEffect(() => {
-    setThemeMode(theme);
-  }, [theme]);
+  if (themeMode() !== theme) setThemeMode(theme);
 
   const preview = useMemo(() => ({
     sessions: [
@@ -66,7 +63,12 @@ export default function UnreadBadgeFixtureScreen({
   }), []);
 
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: colors.bg }} testID="unread-badge-fixture">
+    <SafeAreaView
+      testID="unread-badge-fixture"
+      nativeID={`unread-badge-fixture-${theme}`}
+      {...({ dataSet: { fixtureTheme: theme } } as object)}
+      style={{ flex: 1, backgroundColor: colors.bg }}
+    >
       <View style={{ flex: 1 }}>
         <AgentsScreen
           cfg={DUMMY_CFG}

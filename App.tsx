@@ -105,6 +105,9 @@ export default function App() {
 
   const fixture = readWebFixture();
   if (fixture) {
+    // Before the first paint. useEffect was too late: the first frame stayed
+    // on the default dark palette, which is the side this app already passes.
+    if (themeMode() !== fixture.theme) setThemeMode(fixture.theme);
     return (
       <SafeAreaProvider>
         <UnreadBadgeFixtureScreen theme={fixture.theme} compact={fixture.compact} />
