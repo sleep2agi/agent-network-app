@@ -61,6 +61,11 @@ const RUNTIMES: { id: string; label: string; models: string[] }[] = [
   { id: 'claude-code-cli', label: 'Claude Code（TUI 共存）', models: [] },
   { id: 'codex-app-server', label: 'Codex（TUI 共存）', models: [] },
   { id: 'grok-build-cli', label: 'Grok（TUI 共存）', models: [] },
+  // #199 —— hub / daemon / CLI 三处的 runtime 全集都是 7 个,只有这里是 6 个。
+  // `opencode-cli` 出现在 agent-network/src/codex-copresence-profile.ts:223 的共存
+  // profile 里 ⇒ 与上面三个同族,models 同样留空。(目录名叫 opencode-**acp**,
+  //  但 runtime id 只有 opencode-**cli** —— normalize-runtime.ts:108 把两者归一。)
+  { id: 'opencode-cli', label: 'OpenCode（TUI 共存）', models: [] },
 ];
 const PERMISSION_MODES = ['default', 'acceptEdits', 'plan', 'bypassPermissions'];
 const STEPS = ['名字', 'Runtime', '模型', '参数', '确认'];
