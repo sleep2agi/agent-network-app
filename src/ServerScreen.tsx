@@ -60,7 +60,7 @@ export default function ServerScreen({
   return (
     <ScrollView
       style={styles.root}
-      contentContainerStyle={{ padding: spacing.lg }}
+      contentContainerStyle={styles.content}
       refreshControl={
         <RefreshControl
           refreshing={refreshing}
@@ -77,8 +77,9 @@ export default function ServerScreen({
         <Text style={styles.statusText}>{reachable ? '已连接' : '连接失败'}</Text>
       </View>
 
-      <View style={styles.metrics}>
-        <Metric value={String(online)} label="在线 Agents" />
+      <View style={[styles.card, styles.metrics]}>
+        <Metric value={String(online)} label="在线 Agents" primary />
+        <View style={styles.metricSplit} />
         <Metric value={String(working)} label="工作中" />
       </View>
 
@@ -117,10 +118,10 @@ export default function ServerScreen({
   );
 }
 
-function Metric({ value, label }: { value: string; label: string }) {
+function Metric({ value, label, primary }: { value: string; label: string; primary?: boolean }) {
   return (
     <View style={styles.metric}>
-      <Text style={styles.metricValue}>{value}</Text>
+      <Text style={[styles.metricValue, primary && styles.metricValuePrimary]}>{value}</Text>
       <Text style={styles.metricLabel}>{label}</Text>
     </View>
   );
@@ -144,21 +145,21 @@ function Divider() {
 const makeStyles = () =>
   StyleSheet.create({
     root: { flex: 1 },
+    // 🔴 桌面窗口宽 1600+,而这一屏只有 5 条信息。不设上限的话「地址」和
+    // 「y.vansin.top:9300」之间会隔着 1200px 空白 —— 那不是留白,是没排版。
+    // maxWidth 在比它窄的屏上是 no-op,所以手机端逐像素不变。
+    content: { padding: spacing.lg, width: '100%', maxWidth: 720, alignSelf: 'center' },
     center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
     statusRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginBottom: spacing.lg },
     dot: { width: 10, height: 10, borderRadius: 5 },
     statusText: { color: colors.text, fontSize: 16, fontWeight: '600' },
-    metrics: { flexDirection: 'row', gap: spacing.md, marginBottom: spacing.md },
-    metric: {
-      flex: 1,
-      backgroundColor: colors.card,
-      borderColor: colors.border,
-      borderWidth: 1,
-      borderRadius: 12,
-      paddingVertical: spacing.lg,
-      alignItems: 'center',
-    },
-    metricValue: { color: colors.text, fontSize: 26, fontWeight: '700' },
+    // 两个数原先是两张等宽等高的大卡。「0 工作中」凭什么和「271 在线」一样重 ——
+    // 271 是这一屏唯一有信息量的数。合成一张卡、主数放大、次数降级。
+    metrics: { flexDirection: 'row', marginBottom: spacing.md, paddingVertical: spacing.md },
+    metricSplit: { width: 1, backgroundColor: colors.border, alignSelf: 'stretch' },
+    metric: { flex: 1, alignItems: 'center', paddingVertical: spacing.xs },
+    metricValue: { color: colors.textSecondary, fontSize: 22, fontWeight: '700' },
+    metricValuePrimary: { color: colors.text, fontSize: 34 },
     metricLabel: { color: colors.textMuted, fontSize: 12, marginTop: 2 },
     sectionTitle: { color: colors.textMuted, fontSize: 12, marginBottom: spacing.sm, marginTop: spacing.md },
     card: { backgroundColor: colors.card, borderColor: colors.border, borderWidth: 1, borderRadius: 12 },
