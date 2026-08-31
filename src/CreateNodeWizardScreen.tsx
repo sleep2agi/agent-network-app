@@ -664,7 +664,7 @@ const makeStyles = () => StyleSheet.create({
     alignItems: 'center',
   },
   primaryBtnDisabled: { backgroundColor: colors.border },
-  primaryBtnText: { color: '#0b0b0d', fontSize: 15, fontWeight: '600' },
+  primaryBtnText: { color: colors.onAccent, fontSize: 15, fontWeight: '600' },
   primaryBtnTextDisabled: { color: colors.textMuted },
   secondaryBtn: {
     flex: 1,

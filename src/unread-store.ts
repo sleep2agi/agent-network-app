@@ -3,6 +3,7 @@
  * 计数只经过 reduceUnread；组件不准自己 +1 / 清零。
  */
 import { AppState, type AppStateStatus } from 'react-native';
+import type { HubMessage } from './api';
 import { ingestUserMessages } from './unread-badge';
 import {
   initialUnreadState,

@@ -1,0 +1,25 @@
+Theme semantic contrast report
+
+Base: origin/main e8e0340f1ffbd165a6f6ef344df548f145769db6
+Scope: light/dark semantic foreground contrast and hardcoded-colour consumers
+
+Contrast (WCAG ratio, before -> after):
+- avatar success / light card: 1.92 FAIL -> 5.02 PASS
+- avatar success / dark card: 9.40 PASS -> 7.93 PASS
+- avatar error / light card: 2.77 FAIL -> 4.83 PASS
+- avatar error / dark card: 6.53 PASS -> 4.80 PASS
+- broadcast / light card: 2.72 FAIL -> 5.70 PASS
+- broadcast / dark card: 6.64 PASS -> 6.64 PASS
+- on-accent / light accent: 3.43 FAIL -> 5.74 PASS
+- on-accent / dark accent: 1.81 FAIL -> 10.88 PASS
+
+Docker gates:
+- theme-semantic-contrast.test.ts: PASS (15 checks)
+- mutation: ChatScreen desktopSendText changed back to a literal: witnessed RED, rc=1
+- full test runner: 70/70 test files PASS
+- TypeScript: PASS
+- Expo SDK 56 web export: PASS (532 modules)
+
+The first full run exposed an origin/main typecheck regression: unread-store.ts used
+HubMessage without importing the type. A one-line type-only import repairs the baseline;
+no unread runtime behaviour changed.
