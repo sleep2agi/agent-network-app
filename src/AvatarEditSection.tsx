@@ -151,7 +151,7 @@ export default function AvatarEditSection({ cfg, alias }: { cfg: HubConfig; alia
       {msg ? (
         <Text
           testID={msg.ok ? 'avatar-save-ok' : 'avatar-save-error'}
-          style={{ marginTop: spacing.sm, fontSize: 12, color: msg.ok ? '#34d399' : '#f87171' }}
+          style={{ marginTop: spacing.sm, fontSize: 12, color: msg.ok ? colors.running : colors.failed }}
         >
           {msg.text}
         </Text>

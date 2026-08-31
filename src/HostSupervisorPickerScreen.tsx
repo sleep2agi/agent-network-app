@@ -524,7 +524,7 @@ const makeStyles = () => StyleSheet.create({
     alignItems: 'center',
   },
   primaryBtnDisabled: { backgroundColor: colors.border },
-  primaryBtnText: { color: '#0b0b0d', fontSize: 15, fontWeight: '600' },
+  primaryBtnText: { color: colors.onAccent, fontSize: 15, fontWeight: '600' },
   primaryBtnTextDisabled: { color: colors.textMuted },
 
   // 501 degrade
@@ -548,7 +548,7 @@ const makeStyles = () => StyleSheet.create({
     paddingVertical: spacing.md,
     borderRadius: 10,
   },
-  retryBtnText: { color: '#0b0b0d', fontSize: 14, fontWeight: '600' },
+  retryBtnText: { color: colors.onAccent, fontSize: 14, fontWeight: '600' },
 });
 
 let styles = makeStyles();

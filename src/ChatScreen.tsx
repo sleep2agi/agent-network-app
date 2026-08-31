@@ -1341,7 +1341,7 @@ const makeStyles = () =>
   shortcutHint: { color: colors.textMuted, fontSize: 10 },
   desktopSend: { minWidth: 64, height: 32, borderRadius: 5, paddingHorizontal: spacing.lg, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.accent },
   desktopSendDisabled: { backgroundColor: colors.inputBg, borderWidth: 1, borderColor: colors.border },
-  desktopSendText: { color: '#ffffff', fontSize: 13, fontWeight: '600' },
+  desktopSendText: { color: colors.onAccent, fontSize: 13, fontWeight: '600' },
   input: {
     flex: 1,
     backgroundColor: colors.inputBg,

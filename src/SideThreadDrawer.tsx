@@ -465,7 +465,7 @@ const makeStyles = () => StyleSheet.create({
   composer: { flexDirection: 'row', alignItems: 'flex-end', gap: spacing.sm, padding: spacing.lg, paddingBottom: spacing.sm },
   input: { flex: 1, minHeight: 64, maxHeight: 120, paddingHorizontal: spacing.md, paddingVertical: 10, color: colors.text, backgroundColor: colors.inputBg, borderWidth: 1, borderColor: colors.border, borderRadius: 10, textAlignVertical: 'top' },
   askButton: { height: 38, paddingHorizontal: spacing.md, alignItems: 'center', justifyContent: 'center', borderRadius: 8, backgroundColor: colors.accent },
-  askButtonText: { color: '#fff', fontSize: 12, fontWeight: '700' },
+  askButtonText: { color: colors.onAccent, fontSize: 12, fontWeight: '700' },
   buttonDisabled: { backgroundColor: colors.inputBg, borderWidth: 1, borderColor: colors.border },
   buttonTextDisabled: { color: colors.textMuted },
   createError: { color: colors.failed, fontSize: 12, paddingHorizontal: spacing.lg, paddingBottom: spacing.sm },

@@ -9,6 +9,8 @@ const DARK = {
   textSecondary: '#a1a1aa',
   textMuted: '#52525b',
   accent: '#22d3ee',
+  onAccent: '#0b0b0d',
+  broadcast: '#a78bfa',
   running: '#22c55e',
   failed: '#ef4444',
   blocked: '#f59e0b',
@@ -16,7 +18,7 @@ const DARK = {
 };
 
 // 白色主题 (Vincent tg 811/812) — same restraint on white surfaces;
-// accent/status drop to the 600-weight shades for contrast on white.
+// accent/status use darker shades where needed for AA contrast on white.
 const LIGHT: typeof DARK = {
   bg: '#f4f6f8',
   card: '#ffffff',
@@ -26,7 +28,9 @@ const LIGHT: typeof DARK = {
   textSecondary: '#626a76',
   textMuted: '#929aa6',
   accent: '#0799a8',
-  running: '#16a34a',
+  onAccent: '#0b0b0d',
+  broadcast: '#7c3aed',
+  running: '#15803d',
   failed: '#dc2626',
   blocked: '#d97706',
   rest: '#71717a',

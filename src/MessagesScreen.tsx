@@ -20,10 +20,11 @@ import { Pressable } from 'react-native';
 
 const PAGE = 30;
 
-const TYPE_COLOR: Record<string, string> = {
-  task: colors.running,
-  reply: colors.accent,
-  broadcast: '#a78bfa',
+const typeColor = (type: string): string => {
+  if (type === 'task') return colors.running;
+  if (type === 'reply') return colors.accent;
+  if (type === 'broadcast') return colors.broadcast;
+  return colors.rest;
 };
 
 export default function MessagesScreen({ cfg }: { cfg: HubConfig }) {
@@ -146,7 +147,7 @@ export default function MessagesScreen({ cfg }: { cfg: HubConfig }) {
         <View style={styles.card}>
           <View style={styles.headerRow}>
             <View
-              style={[styles.typeDot, { backgroundColor: TYPE_COLOR[item.type ?? ''] ?? colors.rest }]}
+              style={[styles.typeDot, { backgroundColor: typeColor(item.type ?? '') }]}
             />
             <Text style={styles.route} numberOfLines={1}>
               {item.from_alias ?? '?'} → {item.to_alias ?? '?'}
