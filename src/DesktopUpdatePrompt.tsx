@@ -1,7 +1,7 @@
 import { useEffect, useSyncExternalStore } from 'react';
 import { ActivityIndicator, Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 import { checkDesktopUpdate, desktopUpdateSnapshot, installDesktopUpdate, subscribeDesktopUpdates } from './desktop-updater';
-import { colors, spacing } from './theme';
+import { colors, onThemeChange, spacing } from './theme';
 
 export default function DesktopUpdatePrompt() {
   const update = useSyncExternalStore(subscribeDesktopUpdates, desktopUpdateSnapshot, desktopUpdateSnapshot);
@@ -33,7 +33,8 @@ export default function DesktopUpdatePrompt() {
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = () =>
+  StyleSheet.create({
   backdrop: { flex: 1, backgroundColor: '#0009', alignItems: 'center', justifyContent: 'center', padding: 24 },
   card: { width: '100%', maxWidth: 440, borderRadius: 16, padding: 22, backgroundColor: colors.card, borderWidth: 1, borderColor: colors.border },
   title: { color: colors.text, fontSize: 18, fontWeight: '700' },
@@ -43,4 +44,12 @@ const styles = StyleSheet.create({
   button: { marginTop: spacing.lg, backgroundColor: colors.accent, borderRadius: 10, paddingVertical: 12, alignItems: 'center' },
   buttonText: { color: '#fff', fontSize: 14, fontWeight: '700' },
   hint: { color: colors.textMuted, fontSize: 10, lineHeight: 15, marginTop: spacing.md },
+});
+
+// 🔴 模块级 StyleSheet 是在 import 那一刻按当时的 colors 算死的。
+// 不重建的话,这个文件永远停在 DARK —— 白色主题下侧栏/弹窗仍是黑的。
+// 同 ServerScreen.tsx 的写法;有一道测试守着,见 theme-restyle-coverage.test.ts。
+let styles = makeStyles();
+onThemeChange(() => {
+  styles = makeStyles();
 });
