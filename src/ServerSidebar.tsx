@@ -2,7 +2,7 @@ import { useCallback, useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { fetchStatus, type HubConfig } from './api';
-import { colors, spacing } from './theme';
+import { colors, onThemeChange, spacing } from './theme';
 import { usePoll } from './usePoll';
 
 export type ServerSection = 'overview' | 'nodes' | 'create' | 'logs';
@@ -75,7 +75,8 @@ export default function ServerSidebar({ cfg, active, onSelect }: {
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = () =>
+  StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.bg },
   header: { padding: spacing.lg, borderBottomWidth: 1, borderBottomColor: colors.border },
   titleRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
@@ -97,4 +98,12 @@ const styles = StyleSheet.create({
   footer: { marginTop: 'auto', borderTopWidth: 1, borderTopColor: colors.border, padding: spacing.lg },
   footerLabel: { color: colors.textMuted, fontSize: 10 },
   footerValue: { color: colors.textSecondary, fontSize: 12, marginTop: 3 },
+});
+
+// 🔴 模块级 StyleSheet 是在 import 那一刻按当时的 colors 算死的。
+// 不重建的话,这个文件永远停在 DARK —— 白色主题下侧栏/弹窗仍是黑的。
+// 同 ServerScreen.tsx 的写法;有一道测试守着,见 theme-restyle-coverage.test.ts。
+let styles = makeStyles();
+onThemeChange(() => {
+  styles = makeStyles();
 });
