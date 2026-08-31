@@ -18,6 +18,7 @@ import {
   HostSupervisorListResult,
   HubConfig,
 } from './api';
+import { describeDaemonCapability } from './daemon-capability';
 import { colors, onThemeChange, spacing } from './theme';
 import { usePoll } from './usePoll';
 
@@ -189,6 +190,17 @@ export default function HostSupervisorPickerScreen({
           <Text style={styles.autoPickHint}>
             将在 {d.alias} 上创建（仅此一台）
           </Text>
+          {/* 🔴 只有一台、且它现在建不了节点时,上面那句会把人直接送进一次
+              必然失败的提交。这里把它说出来 —— 但**不禁用「下一步」**:
+              判据的权威在 hub(它在派发那一刻用新鲜数据再判一次),
+              而这份列表可能已经旧了几分钟;禁用会把一个 daemon
+              已经恢复的用户彻底卡死,且没有任何出路。
+              让他知道 + 让他能试,而不是替他下结论。 */}
+          {describeDaemonCapability(d, Date.now()).kind === 'blocked' ? (
+            <Text style={styles.autoPickBlocked}>
+              ⚠ 这台现在报告「建不了节点」——照上面的原因修好再试，或下拉刷新。
+            </Text>
+          ) : null}
         </ScrollView>
         <Footer
           disabled={!selected}
@@ -339,6 +351,7 @@ function DaemonCard({
         <Text style={styles.cardSubtitle} numberOfLines={1}>{daemon.hostname}</Text>
       ) : null}
       <RuntimeChips runtimes={daemon.runtimes_supported} />
+      <CapabilityRow daemon={daemon} />
       {(daemon.host_telemetry?.cpu_cores != null || daemon.host_telemetry?.mem_gb != null) ? (
         <Text style={styles.telemetry}>
           {daemon.host_telemetry?.cpu_cores != null ? `${daemon.host_telemetry.cpu_cores} 核` : ''}
@@ -356,6 +369,26 @@ function DaemonCard({
     );
   }
   return <View style={cardStyle}>{inner}</View>;
+}
+
+// #1545 —— 卡片上那一行「它现在能不能建节点」。
+// 三态各一句话,措辞与判据都不在这里产生:见 src/daemon-capability.ts。
+function CapabilityRow({ daemon }: { daemon: HostSupervisorDaemon }) {
+  const v = describeDaemonCapability(daemon, Date.now());
+  const tone = {
+    ready: colors.running,
+    blocked: colors.failed,
+    unknown: colors.rest,
+  }[v.kind];
+  return (
+    <View style={styles.capBlock}>
+      <Text style={[styles.capLabel, { color: tone }]}>
+        {v.kind === 'ready' ? '✓ ' : v.kind === 'blocked' ? '✕ ' : '? '}
+        {v.label}
+      </Text>
+      {v.detail ? <Text style={styles.capDetail}>{v.detail}</Text> : null}
+    </View>
+  );
 }
 
 function RuntimeChips({ runtimes }: { runtimes?: string[] }) {
@@ -405,6 +438,10 @@ function CopyableCommand({ text }: { text: string }) {
 // ── styles ───────────────────────────────────────────────────────────
 
 const makeStyles = () => StyleSheet.create({
+  capBlock: { marginTop: spacing.sm },
+  capLabel: { fontSize: 12, fontWeight: '600' },
+  capDetail: { color: colors.textMuted, fontSize: 11, lineHeight: 15, marginTop: 2 },
+  autoPickBlocked: { color: colors.failed, fontSize: 12, marginTop: spacing.sm, lineHeight: 17, textAlign: 'center' },
   root: { flex: 1, backgroundColor: colors.bg },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: spacing.lg },
   contentPad: { padding: spacing.lg },

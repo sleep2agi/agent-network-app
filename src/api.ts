@@ -716,6 +716,19 @@ export interface HostSupervisorDaemon {
     mem_gb?: number | null;
     ip_internal?: string | null;
   };
+  // #1545 —— daemon 自报的「我现在能不能建节点」,hub 在 server.ts 的
+  // /api/host-supervisors 里原样带出(只在 daemon 真报了时才出现这三格)。
+  //
+  // 🔴 三态,不是两态:`undefined`(从没报过)**不等于** `false`(报了说不能)。
+  //    把没升级的 daemon 渲染成"不能建",会让人去修一台其实好好的机器;
+  //    反过来把它渲染成"能建",又是朝"没问题"方向说谎。渲染见
+  //    src/daemon-capability.ts,那里三态各有一句不同的话。
+  can_create_nodes?: boolean;
+  create_nodes_blocked_reason?: string;
+  /** 该能力值是在**这份 report 发出前 N 毫秒**测得的。
+   *  绝对年龄 = (now - last_seen_at) + 本值 —— daemon 只给时长,
+   *  绝对时间由 hub/本地的钟出,它自己的钟偏移污染不到这个数。 */
+  create_capability_observed_ms_ago?: number;
 }
 export type HostSupervisorListResult =
   | { ok: true; count: number; daemons: HostSupervisorDaemon[] }
