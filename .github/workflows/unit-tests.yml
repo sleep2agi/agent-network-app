@@ -49,6 +49,15 @@ jobs:
       # npm ci 而不是 npm install:同一个 commit 在不同时间必须装出同一份依赖图。
       - run: npm ci
 
+      # 🔴 2026-08-31:#213 在 unread-store.ts 用了 HubMessage 却没 import(TS2304),
+      #    PR 上全绿合进 main —— 因为 PR 期**没有任何 typecheck**:`npm test` 走 bun,
+      #    bun 不做类型检查;唯一跑 tsc 的 desktop-tauri 是 `push: main` 触发的。
+      #    结果 desktop-tauri 在 main 上连红 4 次、约 2 小时,直到 #217 顺手补上那行 import。
+      #    这一步把同一个判据前移到 PR 期 —— 复用仓里既有的 `npm run typecheck`
+      #    (tsconfig.build.json),不另造一套;本 job 已经 npm ci 过,几乎不增加成本。
+      - name: Typecheck app sources
+        run: npm run typecheck
+
       # runner 自己会在「一个测试文件都没扫到」时退非零 —— 那是这道门最该防的
       # 那种假绿(范围写错 / 文件在 rebase 里丢了 / 后缀改了)。
       - run: npm test
