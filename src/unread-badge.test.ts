@@ -74,5 +74,12 @@ check('列表 onPress 只打开会话，不在行上清零',
 check('web 夹具不连生产 hub',
   app.includes('readWebFixture') && app.includes('UnreadBadgeFixtureScreen'));
 
+
+const fixtureSrc = readFileSync(new URL('./UnreadBadgeFixtureScreen.tsx', import.meta.url), 'utf8');
+check('夹具在首屏前 setThemeMode，不把 light 交给 useEffect（那会截到默认 dark）',
+  fixtureSrc.includes('if (themeMode() !== theme) setThemeMode(theme)') &&
+  !/useEffect\(\(\) => \{\s*setThemeMode\(theme\);/.test(fixtureSrc) &&
+  app.includes('if (themeMode() !== fixture.theme) setThemeMode(fixture.theme)'));
+
 console.log(`\n${passed}/${total} passed`);
 if (passed !== total) process.exit(1);
