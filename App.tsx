@@ -47,6 +47,7 @@ import DesktopWindowPin from './src/DesktopWindowPin';
 import { styles } from './src/app-styles';
 import { APP_VERSION } from './src/version';
 import DesktopUpdatePrompt from './src/DesktopUpdatePrompt';
+import DesktopMessageListener from './src/DesktopMessageListener';
 import { loadPinnedChats, requestedChatAlias, requestedChatProfileId, savePinnedChats } from './src/desktop-chat-menu';
 import { openRememberedChatWindow, restoreDetachedChatWindows } from './src/desktop-chat-windows';
 import { LOCAL_HUB_PROFILE_ID, localHubStatus, startLocalHub } from './src/local-hub';
@@ -314,6 +315,7 @@ function AppRoot() {
             readOnly
           />
         )}
+        <DesktopMessageListener cfg={cfg} />
         <DesktopWindowPin />
       </SafeAreaView>
     );
@@ -325,6 +327,7 @@ function AppRoot() {
         <StatusBar barStyle={theme === 'light' ? 'dark-content' : 'light-content'} backgroundColor={colors.bg} />
         <ConnectivityBanner />
         <DesktopWorkspace cfg={cfg} screen={screen} setScreen={setScreen} onLogout={removeActiveProfile} onLocalDataDeleted={finishLocalDataDeletion} onAddAccount={() => { setReauthProfile(null); setScreen({ name: 'login' }); }} onSwitchProfile={activateProfile} onReauthProfile={requestProfileReauth} />
+        <DesktopMessageListener cfg={cfg} />
         <DesktopWindowPin />
       </SafeAreaView>
     );
@@ -339,6 +342,7 @@ function AppRoot() {
       {/* 全局连接状态横幅(App战线①):断连时所有已登录界面顶部出现,声明缓存数据+
           诚实的"截至"时间(最后一次成功,非尝试)。登录页不挂(还没有 hub 可言)。 */}
       {screen.name !== 'login' && cfg ? <ConnectivityBanner /> : null}
+      {screen.name !== 'login' && cfg ? <DesktopMessageListener cfg={cfg} /> : null}
       {screen.name === 'login' || !cfg ? (
         tauriDesktop && !reauthProfile && !showRemoteLogin ? (
           <FirstRunScreen
