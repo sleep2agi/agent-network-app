@@ -1,7 +1,7 @@
 import { useEffect, useRef } from 'react';
 import { Animated, Easing, Pressable, StyleSheet, Text } from 'react-native';
 import type { DesktopMessageNotice as Notice } from './desktop-message-consume';
-import { colors, spacing, themeMode } from './theme';
+import { colors, onThemeChange, spacing, themeMode } from './theme';
 
 const AUTO_DISMISS_MS = 8000;
 
@@ -57,7 +57,8 @@ export default function DesktopMessageNotice({
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = () =>
+  StyleSheet.create({
   toast: {
     alignSelf: 'center',
     maxWidth: 440,
@@ -74,4 +75,12 @@ const styles = StyleSheet.create({
   dot: { width: 6, height: 6, borderRadius: 3, marginRight: spacing.sm },
   title: { fontSize: 12, fontWeight: '600', marginRight: spacing.sm, maxWidth: 120 },
   detail: { fontSize: 12, flexShrink: 1 },
+});
+
+// 🔴 模块级 StyleSheet 是在 import 那一刻按当时的 colors 算死的;不重建的话
+// 这个组件永远停在 DARK —— 白色主题下会是黑的。同 ServerScreen/ServerSidebar 的写法,
+// 有一道门守着(theme-restyle-coverage.test.ts),本文件正是被它逮住的。
+let styles = makeStyles();
+onThemeChange(() => {
+  styles = makeStyles();
 });
