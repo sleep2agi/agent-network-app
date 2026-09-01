@@ -117,11 +117,15 @@ jobs:
           releaseBody: |-
             Signed and notarized stable update for macOS (Apple Silicon) and Windows (x64).
 
-            What's new in 0.2.42:
-            - Nodes that cannot be controlled remotely now show greyed-out stop, restart, and delete actions, with a short explanation of what to do instead of hiding the buttons.
-            - The create-node wizard can start Claude Code, Codex, and Grok TUI co-presence runtimes from the app.
-            - Chat messages sent from the desktop app are attributed to the logged-in username.
-            - Unread counts survive a failed disk or native write: the latest snapshot stays pending and is retried on the next poll instead of disappearing after restart.
+            What's new in 0.2.43:
+            - Unread badges now show messages an agent sent you directly: the app finally reads the hub's
+              server-side unread count instead of only its local tally.
+            - Unread counts are aggregated across agents, so the Agents list tells you where the new messages are.
+            - Light theme fixes: the sidebar is no longer dark on a light background, and the app no longer
+              flashes dark for a moment at every cold start when you have chosen light.
+            - The create-node wizard now offers all seven runtimes, matching the hub, the daemon and the CLI.
+            - Choosing a server now tells you whether that daemon can currently create nodes.
+            - The bundled local Hub moves to CommHub Server 0.9.0-preview.44.
 
             Existing installations can update in place; new installations can use the assets below.
           releaseDraft: true
