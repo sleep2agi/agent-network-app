@@ -1,0 +1,36 @@
+Desktop v0.2.43 release-candidate report
+Date: 2026-09-02
+
+Source
+- Base: 477d52366c2e99fb58e024c369005af32869b48c
+- Target: desktop-v0.2.43
+- Preflight: remote tag desktop-v0.2.43 absent (git ls-remote --tags = 0);
+  no release named desktop-v0.2.43 (gh release view -> release not found).
+- Note: the earlier draft desktop-v0.2.42 targets 8e423426, which is 17 commits
+  behind main and predates the unread fix (6c2a9ddb, 2026-08-31 06:47) by 8.5
+  hours. Publishing that draft would not ship the unread work.
+
+Scope
+- Bump the desktop application consistently to 0.2.43 (9 pinned stamps).
+- Ship already-merged main changes that 0.2.42 users do not have:
+  the client finally reads the hub's server-side unread count
+  (/api/messages?scope=user), cross-agent unread aggregation, light-theme
+  sidebar and cold-start flash fixes, create-node wizard covering all seven
+  runtimes, server picker reporting whether a daemon can create nodes, and the
+  bundled CommHub sidecar moving to 0.9.0-preview.44.
+- Rewrite the updater release notes so the text users read in the update dialog
+  describes 0.2.43 rather than 0.2.42.
+
+Safety
+- Version files match src/version-consistency.test.ts (11/11 PASS, run locally).
+- Cargo.lock edits the agent-network-desktop package stanza only.
+- package-lock.json has exactly two "version" stamps for this package
+  (root + packages[""]), both asserted before rewriting.
+- No tag, release, updater endpoint, production database, or running client is
+  changed by this preparation gate.
+
+Evidence
+- src/version-consistency.test.ts: 11/11 PASS at 0.2.43.
+- .github/workflows/release-desktop-auto-update.yml parses as YAML after the
+  release-notes rewrite; zero remaining "0.2.42" occurrences in that file.
+- Every release-note bullet maps to a commit in 8e423426..origin/main.
