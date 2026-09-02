@@ -12,6 +12,8 @@ Desktop v0.2.44 release-candidate report
 Changes
 - Bump the desktop application consistently to 0.2.44 (9 pinned stamps).
 - Ship #229 (follow the in-flight request instead of erroring; readable save button).
+- Bundled local Hub sidecar pin 0.9.0-preview.44 -> 0.9.0-preview.45 (real migration for the
+  packaged migration smoke; the previous published tag desktop-v0.2.43 already pins .44).
 - Updater release notes describe 0.2.44.
 
 Checks
