@@ -67,3 +67,11 @@ export function hasUnsavedChanges(editor: string, onNode: string | null): boolea
   if (onNode === null) return editor.length > 0;
   return editor !== onNode;
 }
+
+/** hub 单飞拒绝（request_in_flight）时会带回正在跑的那条 request_id：
+ *  再进一次页面 / 连点「重新读取」不该报错，应该接着等它。返回要跟的 id，或 null。 */
+export function requestIdToFollow(enq: { ok: boolean; request_id?: string; existing_request_id?: string }): string | null {
+  if (enq.ok && enq.request_id) return enq.request_id;
+  if (!enq.ok && enq.existing_request_id) return enq.existing_request_id;
+  return null;
+}
