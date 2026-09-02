@@ -121,6 +121,7 @@ jobs:
             - Node rules: opening a node's details while a previous rules-file request is still running now waits for it
               instead of showing an error, and the save button label is readable in the light theme.
             - Nodes on an older agent-node still show a clear hint after 60 seconds instead of a generic error.
+            - The bundled local Hub moves to CommHub Server 0.9.0-preview.45, which adds the node-rules tools.
             
             What's new in 0.2.43:
             - Unread badges now show messages an agent sent you directly: the app finally reads the hub's
