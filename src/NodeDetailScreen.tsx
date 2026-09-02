@@ -58,6 +58,7 @@ import { formatTime } from './time';
 import { usePoll } from './usePoll';
 import { nodeActionVisual, type NodeActionTone } from './node-action-visual';
 import { nodeInfoFacts } from './node-info';
+import NodeRulesSection from './NodeRulesSection';
 
 const POLL_MS = 10_000; // same cadence as AgentsScreen — hub-friendly, felt-live
 
@@ -357,6 +358,10 @@ export default function NodeDetailScreen({
             <Text style={{ color: colors.textMuted, fontSize: 12 }}>该会话没有权威节点 ID，生命周期操作不可用。</Text>
           )}
         </View> : null}
+
+        {/* app#225 —— 节点规则文件（CLAUDE.md / AGENTS.md）查看/编辑。
+            需要权威 node_id（hub 工具按 node_id 定位节点）；只读模式不显示。 */}
+        {!readOnly && node ? <NodeRulesSection cfg={cfg} node={node} session={s} /> : null}
       </ScrollView>
 
       <Modal transparent visible={!readOnly && !!pendingAction} onRequestClose={() => setPendingAction(null)} animationType="fade">

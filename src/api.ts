@@ -932,6 +932,124 @@ export const runNodeLifecycleAction = async (
   }
 };
 
+// ── app#225 —— 节点规则文件（CLAUDE.md / AGENTS.md）读写 ────────────────
+//
+// 走的是和生命周期操作同一条公开 MCP 契约（tools/call），hub 侧工具见主仓
+// server/src/tools.ts 的 read_node_rules_file / write_node_rules_file /
+// get_rules_file_result。🔴 入参只有 node_id（+ network_id）和 content：
+// 没有路径、没有文件名 —— 文件名由节点按自己的运行时决定，目录固定是节点
+// 工作目录。这里不拼任何路径（#225 验收第 5 条）。
+
+export type RulesFileRequestStatus = 'pending' | 'in_progress' | 'done' | 'failed' | 'timeout';
+
+export interface RulesFileResult {
+  ok: true;
+  request_id: string;
+  op: 'read' | 'write';
+  status: RulesFileRequestStatus;
+  file_name: string | null;
+  exists: boolean | null;
+  content?: string;
+  error: string | null;
+  age_ms: number;
+}
+
+export type RulesFileEnqueueResult =
+  | { ok: true; request_id: string; op: 'read' | 'write' }
+  | { ok: false; error: string; unsupported?: true; existing_request_id?: string };
+
+export type RulesFileOutcome =
+  | RulesFileResult
+  | { ok: false; error: string; unsupported?: true };
+
+const callHubTool = async (cfg: HubConfig, name: string, args: Record<string, unknown>): Promise<
+  | { kind: 'payload'; payload: any }
+  | { kind: 'unsupported'; error: string }
+  | { kind: 'error'; error: string }
+> => {
+  try {
+    const res = await withTimeout(signal => appFetch(`${cfg.serverUrl}/mcp`, {
+      method: 'POST',
+      headers: {
+        ...headers(cfg),
+        Accept: 'application/json, text/event-stream',
+        'MCP-Protocol-Version': '2025-03-26',
+      },
+      signal,
+      body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name, arguments: args } }),
+    }));
+    if (res.status === 404 || res.status === 501) return { kind: 'unsupported', error: '当前 Hub 不支持节点规则文件，请先升级服务器' };
+    if (!res.ok) return { kind: 'error', error: `HTTP ${res.status}` };
+    const parsed = parseMcpToolResponse(await res.text());
+    if (parsed.kind === 'malformed') return { kind: 'unsupported', error: '当前 Hub 未返回兼容的响应' };
+    if (parsed.kind === 'jsonRpcError') {
+      // 旧 hub 没有这个工具时 SDK 回 "Tool xxx not found"（-32602）。
+      if (/not found|unknown tool/i.test(parsed.message)) return { kind: 'unsupported', error: '当前 Hub 版本还没有规则文件工具，请先升级服务器（commhub-server 含 app#225）' };
+      return { kind: 'error', error: parsed.message };
+    }
+    return { kind: 'payload', payload: parsed.payload };
+  } catch (error) {
+    return { kind: 'error', error: error instanceof Error ? error.message : String(error) };
+  }
+};
+
+const enqueueRulesFile = async (
+  cfg: HubConfig,
+  tool: 'read_node_rules_file' | 'write_node_rules_file',
+  node: Pick<HubNode, 'node_id'>,
+  content?: string,
+): Promise<RulesFileEnqueueResult> => {
+  const networkId = cfg.networkId ?? (await fetchNetworkId(cfg));
+  const args = {
+    node_id: node.node_id,
+    ...(networkId ? { network_id: networkId } : {}),
+    ...(tool === 'write_node_rules_file' ? { content: content ?? '' } : {}),
+  };
+  const r = await callHubTool(cfg, tool, args);
+  if (r.kind === 'unsupported') return { ok: false, unsupported: true, error: r.error };
+  if (r.kind === 'error') return { ok: false, error: r.error };
+  const p = r.payload;
+  if (!p || p.ok !== true || typeof p.request_id !== 'string') {
+    return { ok: false, error: p?.error === 'request_in_flight' ? '节点还有一个规则文件请求没做完，请稍后再试' : String(p?.error ?? 'Hub 返回空响应'), ...(p?.existing_request_id ? { existing_request_id: p.existing_request_id } : {}) };
+  }
+  return { ok: true, request_id: p.request_id, op: p.op === 'write' ? 'write' : 'read' };
+};
+
+export const readNodeRulesFile = (cfg: HubConfig, node: Pick<HubNode, 'node_id'>): Promise<RulesFileEnqueueResult> =>
+  enqueueRulesFile(cfg, 'read_node_rules_file', node);
+
+export const writeNodeRulesFile = (cfg: HubConfig, node: Pick<HubNode, 'node_id'>, content: string): Promise<RulesFileEnqueueResult> =>
+  enqueueRulesFile(cfg, 'write_node_rules_file', node, content);
+
+export const getRulesFileResult = async (cfg: HubConfig, requestId: string): Promise<RulesFileOutcome> => {
+  const networkId = cfg.networkId ?? (await fetchNetworkId(cfg));
+  const r = await callHubTool(cfg, 'get_rules_file_result', { request_id: requestId, ...(networkId ? { network_id: networkId } : {}) });
+  if (r.kind === 'unsupported') return { ok: false, unsupported: true, error: r.error };
+  if (r.kind === 'error') return { ok: false, error: r.error };
+  const p = r.payload;
+  if (!p || p.ok !== true) return { ok: false, error: String(p?.error ?? 'Hub 返回空响应') };
+  return p as RulesFileResult;
+};
+
+/** 轮询到终态（done / failed / timeout）或本地上限；`isCancelled` 让组件卸载时停下。 */
+export const waitForRulesFileResult = async (
+  cfg: HubConfig,
+  requestId: string,
+  options: { nextDelayMs: (elapsedMs: number) => number; isTerminal: (s: RulesFileRequestStatus) => boolean; isCancelled?: () => boolean; maxWaitMs?: number } ,
+): Promise<RulesFileOutcome> => {
+  const started = Date.now();
+  const maxWait = options.maxWaitMs ?? 70_000;
+  for (;;) {
+    if (options.isCancelled?.()) return { ok: false, error: 'cancelled' };
+    const r = await getRulesFileResult(cfg, requestId);
+    if (!r.ok) return r;
+    if (options.isTerminal(r.status)) return r;
+    const elapsed = Date.now() - started;
+    if (elapsed > maxWait) return { ok: false, error: '等待节点响应超时' };
+    await new Promise(resolve => setTimeout(resolve, options.nextDelayMs(elapsed)));
+  }
+};
+
 export const createNode = async (cfg: HubConfig, req: CreateNodeRequest): Promise<CreateNodeResult> => {
   const networkId = req.network_id ?? cfg.networkId ?? (await fetchNetworkId(cfg));
   try {
