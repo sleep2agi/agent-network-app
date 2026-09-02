@@ -117,6 +117,11 @@ jobs:
           releaseBody: |-
             Signed and notarized stable update for macOS (Apple Silicon) and Windows (x64).
 
+            What's new in 0.2.44:
+            - Node rules: opening a node's details while a previous rules-file request is still running now waits for it
+              instead of showing an error, and the save button label is readable in the light theme.
+            - Nodes on an older agent-node still show a clear hint after 60 seconds instead of a generic error.
+            
             What's new in 0.2.43:
             - Unread badges now show messages an agent sent you directly: the app finally reads the hub's
               server-side unread count instead of only its local tally.

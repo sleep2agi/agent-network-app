@@ -1,0 +1,19 @@
+Desktop v0.2.44 release-candidate report
+
+- Base: db255ada11d34456a8dcba6b28b602be5d394b4e (main after #229)
+- Target: desktop-v0.2.44
+- Preflight: remote tag desktop-v0.2.44 absent; no release named desktop-v0.2.44.
+- Why a point release 10 hours after 0.2.43: the node-rules block shipped in 0.2.43 shows
+  "还有一个规则文件请求没做完" whenever a node runs an agent-node older than
+  2.5.0-preview.58 and the screen is reopened within 60 s (most fleet nodes today),
+  and the save button label is invisible in the light theme. Both reported by Vincent
+  from a 0.2.43 build on 2026-09-02 23:5x. Fixed in #229.
+
+Changes
+- Bump the desktop application consistently to 0.2.44 (9 pinned stamps).
+- Ship #229 (follow the in-flight request instead of erroring; readable save button).
+- Updater release notes describe 0.2.44.
+
+Checks
+- src/version-consistency.test.ts and src/release-notes-hygiene.test.ts run locally (see PR).
+- No tag, release, updater endpoint, production database, or running client is touched by this PR.
