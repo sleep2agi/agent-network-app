@@ -13,6 +13,7 @@ Source
 Scope
 - Bump the desktop application consistently to 0.2.43 (9 pinned stamps).
 - Ship already-merged main changes that 0.2.42 users do not have:
+  - #225 node rules file (CLAUDE.md / AGENTS.md) view + edit in node details (PR #227).
   the client finally reads the hub's server-side unread count
   (/api/messages?scope=user), cross-agent unread aggregation, light-theme
   sidebar and cold-start flash fixes, create-node wizard covering all seven
