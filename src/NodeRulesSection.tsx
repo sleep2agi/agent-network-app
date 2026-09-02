@@ -14,7 +14,7 @@ import { ActivityIndicator, Platform, Pressable, Text, TextInput, View } from 'r
 
 import { readNodeRulesFile, waitForRulesFileResult, writeNodeRulesFile, type HubConfig, type HubNode, type Session } from './api';
 import { styles } from './app-styles';
-import { hasUnsavedChanges, isTerminal, nextPollDelayMs, predictedRulesFileName, rulesStatusMessage } from './node-rules';
+import { hasUnsavedChanges, isTerminal, nextPollDelayMs, predictedRulesFileName, requestIdToFollow, rulesStatusMessage } from './node-rules';
 import { colors, spacing } from './theme';
 
 type Phase = 'loading' | 'ready' | 'saving' | 'unavailable';
@@ -36,8 +36,10 @@ export default function NodeRulesSection({ cfg, node, session }: { cfg: HubConfi
     say(`正在向节点读取 ${predictedRulesFileName(session, node)}…`);
     const enq = await readNodeRulesFile(cfg, node);
     if (cancelled.current) return;
-    if (!enq.ok) { setPhase('unavailable'); say(enq.error, 'error'); return; }
-    const res = await waitForRulesFileResult(cfg, enq.request_id, { nextDelayMs: nextPollDelayMs, isTerminal, isCancelled: () => cancelled.current });
+    // 单飞被拒(request_in_flight)时 hub 带回正在跑的那条,接着等它,不报错。
+    const follow = requestIdToFollow(enq);
+    if (!follow) { setPhase('unavailable'); say(enq.ok ? '' : enq.error, 'error'); return; }
+    const res = await waitForRulesFileResult(cfg, follow, { nextDelayMs: nextPollDelayMs, isTerminal, isCancelled: () => cancelled.current });
     if (cancelled.current) return;
     if (!res.ok) { setPhase('unavailable'); say(res.error, 'error'); return; }
     if (res.file_name) setFileName(res.file_name);
@@ -57,7 +59,12 @@ export default function NodeRulesSection({ cfg, node, session }: { cfg: HubConfi
     say(`正在写入 ${fileName}…`);
     const enq = await writeNodeRulesFile(cfg, node, editor);
     if (cancelled.current) return;
-    if (!enq.ok) { setPhase('ready'); say(enq.error, 'error'); return; }
+    if (!enq.ok) {
+      // 上一条(多半是读)还没做完:等它结束再让用户重试保存,不把「等一下」说成失败。
+      const follow = requestIdToFollow(enq);
+      if (follow) { await waitForRulesFileResult(cfg, follow, { nextDelayMs: nextPollDelayMs, isTerminal, isCancelled: () => cancelled.current }); if (cancelled.current) return; setPhase('ready'); say('上一条请求已结束，请再点一次保存', 'muted'); return; }
+      setPhase('ready'); say(enq.error, 'error'); return;
+    }
     const res = await waitForRulesFileResult(cfg, enq.request_id, { nextDelayMs: nextPollDelayMs, isTerminal, isCancelled: () => cancelled.current });
     if (cancelled.current) return;
     setPhase('ready');
@@ -116,7 +123,8 @@ export default function NodeRulesSection({ cfg, node, session }: { cfg: HubConfi
             <Text style={styles.retryBtnText}>重新读取</Text>
           </Pressable>
           <Pressable style={[styles.retryBtn, !dirty && { opacity: 0.4 }]} disabled={!dirty} onPress={() => void runSave()}>
-            <Text style={{ color: colors.accent, fontWeight: '600' }}>{phase === 'saving' ? '保存中…' : dirty ? '保存到节点' : '已是最新'}</Text>
+            {/* 用 retryBtnText(底色上的反色字):强调色字压在强调色底上,浅色主题下看不见(Vincent 09-02 截图里那个空白按钮)。 */}
+            <Text style={styles.retryBtnText}>{phase === 'saving' ? '保存中…' : dirty ? '保存到节点' : '已是最新'}</Text>
           </Pressable>
         </View>
         {phase !== 'loading' && message ? <Text style={{ color: toneColor, fontSize: 12, lineHeight: 18 }}>{message}</Text> : null}

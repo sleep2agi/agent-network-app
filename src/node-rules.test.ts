@@ -1,5 +1,5 @@
 // app#225 规则文件区块纯逻辑 — run: bun src/node-rules.test.ts
-import { hasUnsavedChanges, isTerminal, nextPollDelayMs, predictedRulesFileName, rulesStatusMessage } from './node-rules';
+import { hasUnsavedChanges, isTerminal, nextPollDelayMs, predictedRulesFileName, requestIdToFollow, rulesStatusMessage } from './node-rules';
 
 let pass = 0, total = 0;
 const ck = (name: string, cond: boolean, extra = '') => {
@@ -48,6 +48,11 @@ ck('相同 → 无改动', !hasUnsavedChanges('a\n', 'a\n'));
 ck('只差末尾换行也算改动', hasUnsavedChanges('a', 'a\n'));
 ck('节点上没读到过(null)且编辑器空 → 无改动', !hasUnsavedChanges('', null));
 ck('节点上没读到过(null)但编辑器有字 → 有改动', hasUnsavedChanges('x', null));
+
+// ── 单飞被拒时接着等已有请求(#225 Vincent 09-02 截图:「还有一个请求没做完」) ──
+ck('成功 → 跟自己的 request_id', requestIdToFollow({ ok: true, request_id: 'rf_a' }) === 'rf_a');
+ck('request_in_flight 且带 existing_request_id → 跟已有的那条', requestIdToFollow({ ok: false, existing_request_id: 'rf_old' }) === 'rf_old');
+ck('失败且没有 existing → null(真错误)', requestIdToFollow({ ok: false }) === null);
 
 console.log(`\n${pass}/${total} passed`);
 if (pass !== total) process.exit(1);
