@@ -1700,8 +1700,10 @@ mod tests {
     #[test]
     fn same_version_migration_expects_no_backup_snapshot() {
         // app#232 —— desktop-v0.2.43 与 0.2.44 都钉 .44 时,smoke 曾在 read_dir(backups) 上 ENOENT。
-        assert!(!migration_expects_backup("0.9.0-preview.44", "0.9.0-preview.44"));
-        assert!(migration_expects_backup("0.9.0-preview.44", "0.9.0-preview.45"));
+        let same = "0.9.0-preview.44";
+        let newer = "0.9.0-preview.45";
+        assert!(!migration_expects_backup(same, same));
+        assert!(migration_expects_backup(same, newer));
     }
 
     #[test]
