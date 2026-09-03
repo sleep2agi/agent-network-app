@@ -58,6 +58,7 @@ import { formatTime } from './time';
 import { usePoll } from './usePoll';
 import { nodeActionVisual, type NodeActionTone } from './node-action-visual';
 import { nodeInfoFacts } from './node-info';
+import { nodeIdentityNotice, taskSectionTitle } from './node-identity';
 import NodeRulesSection from './NodeRulesSection';
 
 const POLL_MS = 10_000; // same cadence as AgentsScreen — hub-friendly, felt-live
@@ -141,6 +142,7 @@ export default function NodeDetailScreen({
 }) {
   const [state, setState] = useState<LoadState>({ kind: 'loading' });
   const [node, setNode] = useState<HubNode | null>(null);
+  const [nodeListState, setNodeListState] = useState<'loading' | 'loaded' | 'failed'>('loading');
   const [pendingAction, setPendingAction] = useState<NodeLifecycleAction | null>(null);
   const [confirmAlias, setConfirmAlias] = useState('');
   const [actionBusy, setActionBusy] = useState(false);
@@ -155,9 +157,11 @@ export default function NodeDetailScreen({
     try {
       const data = await fetchNodeStatus(cfg);
       const found = (data.sessions ?? []).find(s => s.alias === alias);
+      // 拉取失败时**保留上一次的 node**:否则一次超时就让操作区/规则区整块消失,
+      // 文案还会说「没有权威节点 ID」,和上面显示的 ID 自相矛盾(Vincent 09-03 截图)。
       void fetchHubNodes(cfg)
-        .then(result => setNode((result.nodes ?? []).find(candidate => candidate.alias === alias) ?? null))
-        .catch(() => setNode(null));
+        .then(result => { setNode((result.nodes ?? []).find(candidate => candidate.alias === alias) ?? null); setNodeListState('loaded'); })
+        .catch(() => setNodeListState('failed'));
       if (found) setState({ kind: 'ready', session: found });
       else setState(prev => (prev.kind === 'ready' ? prev : { kind: 'not_found' }));
       // If we previously had the session and it's now gone, we keep the
@@ -316,7 +320,7 @@ export default function NodeDetailScreen({
         {/* Current task preview — separate section, prose-style */}
         {!readOnly ? <View style={{ paddingTop: spacing.xl }}>
           <Text style={{ color: colors.textMuted, fontSize: 13, marginBottom: spacing.sm }}>
-            当前任务
+            {taskSectionTitle(s.status)}
           </Text>
           <View
             style={{
@@ -355,7 +359,7 @@ export default function NodeDetailScreen({
               {actionMessage ? <Text style={{ color: actionMessage.includes('已提交') ? colors.running : colors.failed, fontSize: 12 }}>{actionMessage}</Text> : null}
             </View>
           ) : (
-            <Text style={{ color: colors.textMuted, fontSize: 12 }}>该会话没有权威节点 ID，生命周期操作不可用。</Text>
+            <Text style={{ color: colors.textMuted, fontSize: 12 }}>{nodeIdentityNotice(s, node, nodeListState)}</Text>
           )}
         </View> : null}
 
