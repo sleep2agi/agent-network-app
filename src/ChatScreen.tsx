@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
+  BackHandler,
   FlatList,
   Image,
   KeyboardAvoidingView,
@@ -39,6 +40,7 @@ import { formatChatHeader, shouldShowTimeHeader } from './time';
 import { agentStatusLabel, applyQuote, confirmedOutboxIds, mergeMessagesNewestFirst, msgKey, removeMessage, shouldShowJumpPill, nextUnread, jumpPillLabel, canSend, shouldSendOnEnter } from './chat-actions';
 import type { NativeSyntheticEvent, NativeScrollEvent } from 'react-native';
 import { usePoll } from './usePoll';
+import { chatSearchState, isHighlighted, isStaleSearch, matchCountLabel, searchItems, shouldLoadOlderForSearch, stepHit, type SearchHit } from './chat-search';
 import { retryUnreadPersistFromPoll } from './conversation-unread-persist';
 import { dispatchUnread } from './unread-store';
 import { appFetch } from './app-fetch';
@@ -193,6 +195,21 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
   const mainComposerRef = useRef<TextInput>(null);
   const sending = false; // optimistic echo frees the input immediately
   const limitRef = useRef(PAGE);
+
+  // app#166 —— 微信式「聊天记录搜索」:范围永远是当前会话;结果只认开始搜索时的会话 key。
+  const SEARCH_MAX_OLDER_PAGES = 5;
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [searchHits, setSearchHits] = useState<SearchHit[]>([]);
+  const [searchCurrent, setSearchCurrent] = useState(-1);
+  const [searchLoading, setSearchLoading] = useState(false);
+  const [searchFailed, setSearchFailed] = useState(false);
+  const searchPagesRef = useRef(0);
+  const searchInputRef = useRef<TextInput>(null);
+  const [highlight, setHighlight] = useState<{ key: string; at: number } | null>(null);
+  const [highlightTick, setHighlightTick] = useState(0);
+  const lastOffsetRef = useRef(0);
+  const savedOffsetRef = useRef<number | null>(null);
 
   const conversationKeyFor = conversationKey(cfg.profileId, cfg.serverUrl, cfg.networkId, alias);
   // Updated during render, before effects: an async send from the previous
@@ -376,7 +393,93 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
   // scoped to the conversation where that write completed, never the next one.
   useEffect(() => {
     setSendConfirmation(null); setForwardFor(null); setForwardUiOwner(null); setForwardingTo(null); setForwardAmbiguous(false);
+    // app#166 —— 快速切换会话时,上一个 Agent 的搜索结果一条都不能留下。
+    setSearchOpen(false); setSearchQuery(''); setSearchHits([]); setSearchCurrent(-1); setSearchLoading(false); setSearchFailed(false);
+    searchPagesRef.current = 0; savedOffsetRef.current = null; setHighlight(null);
   }, [conversationKeyFor]);
+
+  // app#166 —— 搜索:先在已加载历史里找;没命中就向 hub 要更早的页(有上限),结果只认当前会话。
+  const searchable = messages.map(m => ({
+    key: msgKey(m),
+    text: [m.content, m.result ?? m.reply].filter(Boolean).join('\n'),
+    sender: resolveSender(m, currentUsername).alias,
+    createdAt: m.created_at,
+  }));
+  useEffect(() => {
+    if (!searchOpen) return;
+    const startedKey = conversationKeyFor;
+    const hits = searchItems(searchable, searchQuery);
+    setSearchHits(hits);
+    setSearchCurrent(prev => (hits.length === 0 ? -1 : Math.min(Math.max(prev, 0), hits.length - 1)));
+    if (!shouldLoadOlderForSearch({ hits: hits.length, hasOlder, pagesLoaded: searchPagesRef.current, maxPages: SEARCH_MAX_OLDER_PAGES })) {
+      setSearchLoading(false);
+      return;
+    }
+    if (loadingOlder) return; // 上一页还在路上;它落地后 messages 变化会再进这里
+    let cancelled = false;
+    setSearchLoading(true);
+    setSearchFailed(false);
+    (async () => {
+      try {
+        searchPagesRef.current += 1;
+        await loadOlder();
+      } catch {
+        if (!cancelled && !isStaleSearch(startedKey, visibleConversationKeyRef.current)) setSearchFailed(true);
+      } finally {
+        if (!cancelled && !isStaleSearch(startedKey, visibleConversationKeyRef.current)) setSearchLoading(false);
+      }
+    })();
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchOpen, searchQuery, messages, hasOlder, conversationKeyFor]);
+
+  const openSearch = () => {
+    savedOffsetRef.current = lastOffsetRef.current;
+    searchPagesRef.current = 0;
+    setSearchFailed(false);
+    setSearchOpen(true);
+    setTimeout(() => searchInputRef.current?.focus(), 50);
+  };
+  const closeSearch = () => {
+    setSearchOpen(false);
+    setSearchQuery(''); setSearchHits([]); setSearchCurrent(-1); setSearchLoading(false); setSearchFailed(false);
+    // 关闭搜索回到同一会话、同一滚动位置。
+    const saved = savedOffsetRef.current;
+    if (saved !== null) {
+      setTimeout(() => listRef.current?.scrollToOffset({ offset: saved, animated: false }), 0);
+      savedOffsetRef.current = null;
+    }
+  };
+  const retrySearchOlder = () => {
+    setSearchFailed(false);
+    searchPagesRef.current = Math.max(0, searchPagesRef.current - 1);
+    setSearchQuery(q => q); // 触发 effect 重跑
+    setHighlightTick(t => t + 1);
+  };
+  const locateHit = (i: number) => {
+    const hit = searchHits[i];
+    if (!hit) return;
+    setSearchCurrent(i);
+    // 用 key 找**当前** messages 里的下标(列表可能在结果算出后又长了)。
+    const index = messages.findIndex(m => msgKey(m) === hit.key);
+    if (index < 0) return;
+    listRef.current?.scrollToIndex({ index, animated: true, viewPosition: 0.5 });
+    setHighlight({ key: hit.key, at: Date.now() });
+    setTimeout(() => setHighlightTick(t => t + 1), 2100);
+  };
+  const stepSearch = (dir: 'older' | 'newer') => {
+    const next = stepHit(searchCurrent, searchHits.length, dir);
+    if (next >= 0) locateHit(next);
+  };
+  // Android 返回键:先关搜索,不退出会话。
+  useEffect(() => {
+    if (!searchOpen || Platform.OS !== 'android') return;
+    const sub = BackHandler.addEventListener('hardwareBackPress', () => { closeSearch(); return true; });
+    return () => sub.remove();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchOpen]);
+  const searchState = chatSearchState({ query: searchQuery, loading: searchLoading, hits: searchHits.length, failed: searchFailed });
+  void highlightTick;
 
   useEffect(() => {
     const doc = (globalThis as any).document;
@@ -450,6 +553,7 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
 
   const onScroll = (e: NativeSyntheticEvent<NativeScrollEvent>) => {
     const y = e.nativeEvent.contentOffset.y; // inverted: 0 = 底部(最新)
+    lastOffsetRef.current = y;
     setShowJump(shouldShowJumpPill(y));
     if (y < 40) setUnread(0); // 回到底部 → 清未读
   };
@@ -779,6 +883,16 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
         </View>
         <Pressable
           accessibilityRole="button"
+          accessibilityLabel="搜索聊天记录"
+          accessibilityHint="只搜当前会话的消息"
+          onPress={searchOpen ? closeSearch : openSearch}
+          hitSlop={10}
+          style={({ pressed }) => [styles.headerAction, pressed && { opacity: 0.6 }]}
+        >
+          <Ionicons name={searchOpen ? 'close-outline' : 'search-outline'} size={20} color={searchOpen ? colors.accent : colors.textSecondary} />
+        </Pressable>
+        <Pressable
+          accessibilityRole="button"
           accessibilityLabel="打开 BTW 旁路线程"
           onPress={openBtwComposer}
           hitSlop={8}
@@ -801,6 +915,143 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
         ) : null}
       </View>
 
+      {searchOpen ? (
+
+        <View style={styles.searchPanel}>
+
+          <View style={styles.searchBar}>
+
+            <Ionicons name="search-outline" size={16} color={colors.textMuted} />
+
+            <TextInput
+
+              ref={searchInputRef}
+
+              value={searchQuery}
+
+              onChangeText={setSearchQuery}
+
+              placeholder="搜索当前会话"
+
+              placeholderTextColor={colors.textMuted}
+
+              style={styles.searchInput}
+
+              autoCapitalize="none"
+
+              autoCorrect={false}
+
+              returnKeyType="search"
+
+              onSubmitEditing={() => stepSearch('older')}
+
+              onKeyPress={(e: any) => {
+
+                const k = e?.nativeEvent?.key;
+
+                if (k === 'Escape') closeSearch();
+
+                else if (k === 'Enter' && e?.nativeEvent?.shiftKey) { e.preventDefault?.(); stepSearch('newer'); }
+
+              }}
+
+              accessibilityLabel="搜索聊天记录输入框"
+
+            />
+
+            <Text style={styles.searchCount}>{matchCountLabel(searchCurrent, searchHits.length)}</Text>
+
+            <Pressable onPress={() => stepSearch('newer')} hitSlop={8} accessibilityLabel="上一条(更新)" disabled={searchHits.length === 0} style={({ pressed }) => [styles.searchNav, pressed && { opacity: 0.6 }]}>
+
+              <Ionicons name="chevron-down-outline" size={18} color={searchHits.length ? colors.text : colors.textMuted} />
+
+            </Pressable>
+
+            <Pressable onPress={() => stepSearch('older')} hitSlop={8} accessibilityLabel="下一条(更早)" disabled={searchHits.length === 0} style={({ pressed }) => [styles.searchNav, pressed && { opacity: 0.6 }]}>
+
+              <Ionicons name="chevron-up-outline" size={18} color={searchHits.length ? colors.text : colors.textMuted} />
+
+            </Pressable>
+
+            <Pressable onPress={closeSearch} hitSlop={8} accessibilityLabel="关闭搜索" style={({ pressed }) => [styles.searchNav, pressed && { opacity: 0.6 }]}>
+
+              <Text style={styles.searchClose}>取消</Text>
+
+            </Pressable>
+
+          </View>
+
+          {searchState === 'idle' ? (
+
+            <Text style={styles.searchHint}>输入关键词,只搜「{alias}」这个会话。Enter 下一条,Shift+Enter 上一条,Esc 关闭。</Text>
+
+          ) : searchState === 'failed' ? (
+
+            <View style={styles.searchStateRow}>
+
+              <Text style={styles.searchHint}>拉取更早的历史失败</Text>
+
+              <Pressable onPress={retrySearchOlder} hitSlop={8}><Text style={styles.searchAction}>重试</Text></Pressable>
+
+            </View>
+
+          ) : searchState === 'loading' ? (
+
+            <View style={styles.searchStateRow}>
+
+              <ActivityIndicator color={colors.textMuted} />
+
+              <Text style={styles.searchHint}>已加载的消息里没有,正在往更早的历史里找…</Text>
+
+            </View>
+
+          ) : searchState === 'empty' ? (
+
+            <Text style={styles.searchHint}>{hasOlder && searchPagesRef.current >= SEARCH_MAX_OLDER_PAGES ? `最近 ${limitRef.current} 条里没有找到;更早的历史请继续上滑后再搜` : '没有找到'}</Text>
+
+          ) : (
+
+            <FlatList
+
+              data={searchHits}
+
+              keyExtractor={h => h.key}
+
+              style={styles.searchResults}
+
+              keyboardShouldPersistTaps="handled"
+
+              renderItem={({ item: h, index: i }) => (
+
+                <Pressable onPress={() => locateHit(i)} style={({ pressed }) => [styles.resultRow, i === searchCurrent && styles.resultRowCurrent, pressed && { opacity: 0.7 }]}>
+
+                  <View style={{ flex: 1 }}>
+
+                    <Text style={styles.resultMeta} numberOfLines={1}>{h.sender ?? '—'}{h.createdAt ? ` · ${formatChatHeader(h.createdAt)}` : ''}</Text>
+
+                    <Text style={styles.resultSnippet} numberOfLines={2}>{h.snippet}</Text>
+
+                  </View>
+
+                  <Pressable onPress={() => locateHit(i)} hitSlop={8} accessibilityLabel="定位到聊天">
+
+                    <Text style={styles.searchAction}>定位</Text>
+
+                  </Pressable>
+
+                </Pressable>
+
+              )}
+
+            />
+
+          )}
+
+        </View>
+
+      ) : null}
+
+
       {!loaded ? (
         <View style={styles.center}>
           <ActivityIndicator color={colors.accent} />
@@ -815,6 +1066,11 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
           keyExtractor={(m, i) => m._localId ?? m.task_id ?? String(i)}
           contentContainerStyle={{ padding: spacing.lg }}
           onEndReached={loadOlder}
+          onScrollToIndexFailed={info => {
+            // 目标还没量到布局:先按平均高度滚过去,再补一次精确定位。
+            listRef.current?.scrollToOffset({ offset: info.averageItemLength * info.index, animated: false });
+            setTimeout(() => listRef.current?.scrollToIndex({ index: info.index, animated: true, viewPosition: 0.5 }), 120);
+          }}
           onEndReachedThreshold={0.2}
           ListFooterComponent={
             loadingOlder ? (
@@ -832,7 +1088,7 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
             // 显示成自己说过的话。
             const sender = resolveSender(item, currentUsername);
             return (
-              <View style={styles.bubbleWrap}>
+              <View style={[styles.bubbleWrap, isHighlighted(msgKey(item), highlight, Date.now()) && styles.bubbleHighlight]}>
                 {showHeader && item.created_at ? (
                   <Text style={styles.timeHeader}>{formatChatHeader(item.created_at)}</Text>
                 ) : null}
@@ -1177,6 +1433,22 @@ const makeStyles = () =>
     marginVertical: spacing.md,
   },
   bubbleWrap: { marginBottom: spacing.md, gap: spacing.xs },
+  // app#166 —— 搜索定位后的临时高亮(2 s)
+  bubbleHighlight: { backgroundColor: colors.accent + '22', borderRadius: 12, marginHorizontal: -spacing.xs, paddingHorizontal: spacing.xs },
+  searchPanel: { borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.border, backgroundColor: colors.card, maxHeight: 320 },
+  searchBar: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, paddingHorizontal: spacing.md, paddingVertical: spacing.sm },
+  searchInput: { flex: 1, color: colors.text, fontSize: 15, paddingVertical: 6, paddingHorizontal: spacing.sm, backgroundColor: colors.bg, borderRadius: 8 },
+  searchCount: { color: colors.textMuted, fontSize: 12, minWidth: 36, textAlign: 'center' },
+  searchNav: { paddingHorizontal: 4, paddingVertical: 4 },
+  searchClose: { color: colors.accent, fontSize: 14 },
+  searchHint: { color: colors.textMuted, fontSize: 12, paddingHorizontal: spacing.md, paddingBottom: spacing.sm, flexShrink: 1 },
+  searchStateRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, paddingHorizontal: spacing.md, paddingBottom: spacing.sm },
+  searchAction: { color: colors.accent, fontSize: 13, paddingHorizontal: spacing.sm },
+  searchResults: { maxHeight: 240 },
+  resultRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, paddingHorizontal: spacing.md, paddingVertical: spacing.sm, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border },
+  resultRowCurrent: { backgroundColor: colors.accent + '14' },
+  resultMeta: { color: colors.textMuted, fontSize: 11, marginBottom: 2 },
+  resultSnippet: { color: colors.text, fontSize: 13 },
   messageRow: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.sm, width: '100%' },
   sentRow: { justifyContent: 'flex-end' },
   replyRow: { justifyContent: 'flex-start' },
