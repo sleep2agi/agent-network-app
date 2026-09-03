@@ -991,6 +991,13 @@ fn migration_backup_name_prefix(from_version: &str, to_version: &str) -> String 
     )
 }
 
+/// app#232 —— 点版本不升自带 Hub 时,`previous == current`:app 侧没有迁移可做,
+/// 也就不会写 `backups/local-hub-migration-<from>-to-<to>-*`;此时 smoke 该验的是
+/// 「同版本原地启动、数据保留」,而不是去 `read_dir(backups)` 撞 ENOENT。
+fn migration_expects_backup(previous_hub: &str, current_hub: &str) -> bool {
+    previous_hub != current_hub
+}
+
 fn require_seeded_previous_hub_version(recorded: &str, expected: &str) -> Result<(), String> {
     if recorded != expected {
         return Err(format!(
@@ -1075,6 +1082,14 @@ pub fn packaged_migration_smoke() -> Result<(), String> {
             return Err("migration did not persist the current Hub version".into());
         }
         let previous_hub = smoke_previous_hub_version()?;
+        if !migration_expects_backup(&previous_hub, EXPECTED_HUB_VERSION) {
+            // app#232 —— 同版本:启动成功 + 身份/版本保留 + 旧任务仍在 + config 版本正确
+            // 四条上面都验过了;没有迁移就没有快照,不能拿 ENOENT 当失败。
+            eprintln!(
+                "packaged migration smoke: previous Hub {previous_hub} == current pin {EXPECTED_HUB_VERSION}; verified same-version in-place start with data retained (no backup snapshot expected)"
+            );
+            return Ok(());
+        }
         let prefix = migration_backup_name_prefix(&previous_hub, EXPECTED_HUB_VERSION);
         let backups = app_root()?.join("backups");
         let snapshot_found = fs::read_dir(&backups)
@@ -1681,6 +1696,15 @@ pub fn is_local_profile(profile_id: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn same_version_migration_expects_no_backup_snapshot() {
+        // app#232 —— desktop-v0.2.43 与 0.2.44 都钉 .44 时,smoke 曾在 read_dir(backups) 上 ENOENT。
+        let same = "0.9.0-preview.44";
+        let newer = "0.9.0-preview.45";
+        assert!(!migration_expects_backup(same, same));
+        assert!(migration_expects_backup(same, newer));
+    }
 
     #[test]
     fn endpoint_is_always_loopback() {
