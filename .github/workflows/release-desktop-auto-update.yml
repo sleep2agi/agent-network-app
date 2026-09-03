@@ -117,6 +117,11 @@ jobs:
           releaseBody: |-
             Signed and notarized stable update for macOS (Apple Silicon) and Windows (x64).
 
+            What's new in 0.2.45:
+            - Chat search (WeChat-style): a magnifier in the conversation header searches only the current
+              Agent's history, shows sender/time/snippet with a "locate" action, jumps to the message with a
+              short highlight, lets you keep scrolling both ways from it, and returns you to where you were.
+            
             What's new in 0.2.44:
             - Node rules: opening a node's details while a previous rules-file request is still running now waits for it
               instead of showing an error, and the save button label is readable in the light theme.

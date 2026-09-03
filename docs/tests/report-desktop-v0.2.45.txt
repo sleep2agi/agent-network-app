@@ -1,0 +1,19 @@
+Desktop v0.2.45 release-candidate report
+
+- Base: eb19c2252f9cbf0544e04eee2c9accd017880726 (main after app#235)
+- Target: desktop-v0.2.45
+- Preflight: remote tag desktop-v0.2.45 absent; no release named desktop-v0.2.45.
+- Why: Vincent /goal 2026-09-03 22:26 (app#166) — WeChat-style chat history search with
+  locate-and-highlight and bidirectional scrolling from the hit. Shipped in #235.
+  Also carries app#232 (same-version migration smoke) from #234.
+
+Changes
+- Bump the desktop application consistently to 0.2.45 (9 pinned stamps).
+- Ship #235 (chat search) and #234 (same-version migration smoke branch).
+- Updater release notes describe 0.2.45.
+- Bundled Hub pin stays 0.9.0-preview.45 (previous published tag 0.2.43 pins .44, so the
+  migration smoke exercises a real .44 -> .45 migration).
+
+Checks
+- src/version-consistency.test.ts and src/release-notes-hygiene.test.ts run locally (see PR).
+- No tag, release, updater endpoint, production database, or running client is touched by this PR.
