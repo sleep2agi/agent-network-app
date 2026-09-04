@@ -117,6 +117,11 @@ jobs:
           releaseBody: |-
             Signed and notarized stable update for macOS (Apple Silicon) and Windows (x64).
 
+            What's new in 0.2.46:
+            - Resizable message box: drag the divider above the message box up or down to make it taller or
+              shorter (keeps at least one line and leaves the conversation visible). Your choice is remembered
+              across conversations and restarts, in both the main window and detached chat windows.
+
             What's new in 0.2.45:
             - Chat search (WeChat-style): a magnifier in the conversation header searches only the current
               Agent's history, shows sender/time/snippet with a "locate" action, jumps to the message with a

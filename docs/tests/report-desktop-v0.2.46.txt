@@ -1,0 +1,29 @@
+Desktop v0.2.46 release-candidate report
+
+- Base: 2141493b984da07444b90304eed475be8fab9be7 (main after app#238)
+- Target: desktop-v0.2.46
+- Preflight: remote tag desktop-v0.2.46 absent; no release named desktop-v0.2.46.
+- Why: Vincent /goal 2026-09-04 13:29 (app#237) — resizable chat message box with drag handle,
+  min/max bounds and persistence, main + detached chat windows. Shipped in #238.
+
+Changes
+- Bump the desktop application consistently to 0.2.46 (9 pinned stamps).
+- Ship #238 (composer resize: divider + PanResponder, 148px min / window-200px max,
+  localStorage chat_composer_height_v1, same ChatScreen path for detached windows).
+- Updater release notes describe 0.2.46.
+- Bundled Hub pin unchanged.
+
+Evidence
+- src/composer-resize.test.ts: 24 checks (bounds, clamp, drag direction, edge stop, persistence
+  round-trip, bad values, non-desktop).
+- npm run typecheck: 0 errors; npm test: 78/78 files (+1 new).
+- expo export --platform web: bundle contains ns-resize + chat_composer_height_v1.
+- PR #238 CI: unit-tests (ubuntu, windows) + scrub all green; merged via squash after
+  assert-pr-mergeable (5/5).
+
+Hand-check list for the draft build (desktop-v0.2.46)
+1. Hover the divider above the message box → ns-resize cursor.
+2. Drag up/down → message box follows; stops at 148px min and window-200px max.
+3. Restart the app → height kept; switch conversation → kept.
+4. Detached chat window → same behaviour.
+5. Settings / pin / search entry not overlapped by the divider.
