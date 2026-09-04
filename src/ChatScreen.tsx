@@ -1,5 +1,6 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
+  PanResponder,
   ActivityIndicator,
   Alert,
   BackHandler,
@@ -25,6 +26,7 @@ import { outboxAdd, outboxForAlias, outboxMarkFailed, outboxMarkPending, outboxR
 import { mayApplySendResult, shouldExposeSendFailure } from './send-reconciliation';
 import { conversationKey, conversationScope, createConversationRequestGate, createConversationStore } from './conversation-store';
 import { resolveSender } from './chat-sender';
+import { COMPOSER_HEIGHT_DEFAULT, clampComposerHeight, composerHeightFromDrag, inputMaxHeight, loadComposerHeight, saveComposerHeight } from './composer-resize';
 import {
   ATTACH_ENABLED,
   attachmentTextHint,
@@ -193,6 +195,28 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
   const [plusMenuOpen, setPlusMenuOpen] = useState(false);
   const [btwLaunch, setBtwLaunch] = useState<SideThreadLaunch>();
   const mainComposerRef = useRef<TextInput>(null);
+  // app#237 —— 桌面端输入区高度可拖拽:根容器高度决定上界(消息区至少留 200px),
+  // 值全局持久化(切会话 / 重启保持)。分隔条在输入区上沿,向上拖变高。
+  const [rootHeight, setRootHeight] = useState(0);
+  const rootHeightRef = useRef(0);
+  const [composerHeightRaw, setComposerHeightRaw] = useState<number>(() => loadComposerHeight() ?? COMPOSER_HEIGHT_DEFAULT);
+  const composerHeight = clampComposerHeight(composerHeightRaw, rootHeight || undefined);
+  const composerDragStart = useRef(composerHeight);
+  const composerPan = useMemo(() => PanResponder.create({
+    onStartShouldSetPanResponder: () => true,
+    onMoveShouldSetPanResponder: () => true,
+    onPanResponderGrant: () => { composerDragStart.current = clampComposerHeight(composerHeightRaw, rootHeightRef.current || undefined); },
+    onPanResponderMove: (_event, gesture) => {
+      setComposerHeightRaw(composerHeightFromDrag(composerDragStart.current, gesture.dy, rootHeightRef.current || undefined));
+    },
+    onPanResponderRelease: (_event, gesture) => {
+      const next = composerHeightFromDrag(composerDragStart.current, gesture.dy, rootHeightRef.current || undefined);
+      setComposerHeightRaw(next);
+      saveComposerHeight(next);
+    },
+    onPanResponderTerminate: () => { saveComposerHeight(composerHeightRaw); },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }), [composerHeightRaw]);
   const sending = false; // optimistic echo frees the input immediately
   const limitRef = useRef(PAGE);
 
@@ -855,6 +879,7 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
       // left the keyboard covering the input (Vincent tg 738). 'padding'
       // works on both platforms under edge-to-edge.
       behavior={Platform.OS === 'ios' ? 'padding' : 'padding'}
+      onLayout={(event) => { const h = event.nativeEvent.layout.height; rootHeightRef.current = h; setRootHeight(h); }}
       keyboardVerticalOffset={Platform.OS === 'android' ? (StatusBar.currentHeight ?? 0) : 0}
     >
       <View style={styles.header}>
@@ -1285,10 +1310,19 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
       </Modal>
 
       {desktop ? (
-        <View style={styles.desktopComposer}>
+        <>
+        <View
+          {...composerPan.panHandlers}
+          accessibilityRole="adjustable"
+          accessibilityLabel="拖动调整输入框高度"
+          style={styles.composerDivider}
+        >
+          <View style={styles.composerDividerGrip} />
+        </View>
+        <View style={[styles.desktopComposer, { height: composerHeight, minHeight: undefined, maxHeight: undefined }]}>
           <TextInput
             ref={mainComposerRef}
-            style={styles.desktopInput}
+            style={[styles.desktopInput, { maxHeight: inputMaxHeight(composerHeight) }]}
             placeholder={`Message ${alias}…`}
             placeholderTextColor={colors.textMuted}
             value={draft}
@@ -1326,6 +1360,7 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
             </View>
           </View>
         </View>
+        </>
       ) : (
       <View style={[styles.inputRow, { paddingBottom: spacing.md + composerInset }]}>
         <Pressable
@@ -1580,6 +1615,14 @@ const makeStyles = () =>
     borderTopWidth: 1,
     borderTopColor: colors.border,
   },
+  composerDivider: {
+    height: 6,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.bg,
+    cursor: 'ns-resize',
+  } as any,
+  composerDividerGrip: { width: 36, height: 3, borderRadius: 2, backgroundColor: colors.border },
   desktopComposer: {
     minHeight: 148,
     maxHeight: 220,
