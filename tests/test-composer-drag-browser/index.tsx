@@ -1,3 +1,5 @@
+// @ts-nocheck —— 手动证据 harness,不在应用包里:直接引 react-native-web 的 CJS 产物(无 .d.ts),
+// tsconfig.build.json 会扫到 tests/,这里整文件关掉类型检查。逻辑本身由 src/composer-resize.test.ts 覆盖。
 import React, { useMemo, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { View, Text, PanResponder } from 'react-native-web/dist/cjs/index.js';
