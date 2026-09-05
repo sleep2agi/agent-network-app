@@ -118,6 +118,13 @@ jobs:
           releaseBody: |-
             Signed and notarized stable update for macOS (Apple Silicon) and Windows (x64).
 
+            What's new in 0.2.48:
+            - Local Hub takeover: if an older bundled Hub left behind by a previous version is still running
+              on the local port (the "local Hub version mismatch" message), the app now stops it, backs up
+              the data, migrates and takes over automatically — when you switch to Local workspace, on cold
+              start, or via the new "Upgrade local Hub" button in Settings. Updating the app now stops the
+              local Hub before relaunching, so this no longer happens in the first place.
+
             What's new in 0.2.47:
             - Local workspace recovers by itself: switching to it now starts the bundled local Hub first, and
               if the native credential store lost its login entry (the "No matching entry found in secure

@@ -1,0 +1,27 @@
+Desktop v0.2.48 release-candidate report
+
+- Base: 4dc2147 (main after app#247)
+- Target: desktop-v0.2.48
+- Why: Vincent 2026-09-05 17:4x (app#246): after 0.2.47, Local workspace shows "local Hub version
+  mismatch: expected 0.9.0-preview.45, got 0.9.0-preview.29" — an older sidecar left running by the
+  previous app version holds the port and the ownership lock; the app only reported it.
+
+Changes
+- Bump the desktop application consistently to 0.2.48 (9 pinned stamps + updater release notes).
+- Ship #247: automatic takeover of a stale owned sidecar on version mismatch (stop → backup → migrate →
+  start), "Upgrade local Hub to <bundled>" button in Settings, updater stops the local Hub before relaunch,
+  new --smoke-local-hub-stale-takeover in the release gate (fixture: previous-hub seed kept running as
+  0.9.0-preview.29 on 9200 with supervisor.lock; positive control before takeover).
+- Bundled Hub pin unchanged (0.9.0-preview.45).
+
+Evidence
+- #247: cargo check --locked --tests whole crate 0 warnings (tauri image); desktop-tauri.yml on the
+  branch: mac-arm64 + windows-x64 success (run 33959052400); npm test 80/80; typecheck 0.
+- This bump: npm test (version-consistency) + typecheck, see PR.
+- Release gate runs all packaged smokes incl. lost-credential and stale-takeover before any draft.
+
+Hand-check list for the draft build (desktop-v0.2.48)
+1. With the old 0.9.0-preview.29 sidecar still running: Settings → Local workspace → no red line; 本地 Hub
+   状态 → 运行中, 版本 0.9.0-preview.45; ~/.anet/app/backups/ has a local-hub-migration-… snapshot.
+2. Settings shows no "升级本地 Hub" button afterwards (requiresMigration false).
+3. 检查更新 from 0.2.47 offers 0.2.48; after the update relaunch there is no leftover commhub process.
