@@ -1,3 +1,5 @@
+import { stopLocalHub } from './local-hub';
+
 export type DesktopUpdateState =
   | { kind: 'idle' | 'unsupported' | 'checking' | 'up-to-date' }
   | { kind: 'available'; version: string; notes: string }
@@ -62,6 +64,9 @@ export async function installDesktopUpdate(): Promise<void> {
         percent: total ? Math.min(100, Math.round(downloaded * 100 / total)) : undefined,
       });
     });
+    // app#246:重启前先停掉本 app 托管的本地 Hub,否则旧版 sidecar 会以孤儿身份继续占着端口和
+    // ownership lock,新版 app 起来只看到「version mismatch」。停不掉也不阻塞更新(接管逻辑兜底)。
+    await stopLocalHub().catch(() => undefined);
     const { relaunch } = await import('@tauri-apps/plugin-process');
     await relaunch();
   } catch (error: any) {

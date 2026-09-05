@@ -137,6 +137,16 @@ export default function SettingsScreen({
             <Divider />
             <Row label="版本" value={localHub.hubVersion} />
             {localHub.error ? <Text style={styles.localHubError}>{localHub.error}</Text> : null}
+            {/* app#246(Vincent 2026-09-05「版本低了就加个触发安装的按钮」):本地数据还是旧版 Hub 写的
+                (requiresMigration)或端口上跑着旧版 sidecar(version mismatch)时,给一个显式的升级入口。
+                它做的事 = 重新启动:停掉旧 sidecar → 备份 → 迁移 → 用捆绑的 Hub 接管。 */}
+            {localHub.requiresMigration || (localHub.error ?? '').includes('version mismatch') ? (
+              <Pressable disabled={localHubBusy} testID="local-hub-upgrade" style={[styles.localHubButton, { alignSelf: 'flex-start', marginHorizontal: spacing.lg, marginTop: spacing.sm }]} onPress={() => {
+                setLocalHubBusy(true);
+                setProfileError('');
+                void restartLocalHub().then(setLocalHub).catch(error => setProfileError(String(error))).finally(() => setLocalHubBusy(false));
+              }}><Text style={styles.addText}>{localHubBusy ? '升级中…' : `升级本地 Hub 到 ${localHub.expectedHubVersion ?? '当前捆绑版本'}`}</Text></Pressable>
+            ) : null}
             <Divider />
             <View style={styles.localHubActions}>
               <Pressable disabled={localHubBusy} style={styles.localHubButton} onPress={() => {

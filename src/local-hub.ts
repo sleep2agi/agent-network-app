@@ -12,6 +12,8 @@ export interface LocalHubResult {
   error?: string | null;
   logsPath: string;
   requiresMigration: boolean;
+  /** 本 app 捆绑的 Hub 版本(「升级本地 Hub」按钮标签)。旧 app 不带此字段。 */
+  expectedHubVersion?: string;
 }
 
 const invokeLocalHub = async (command: string): Promise<LocalHubResult> => {

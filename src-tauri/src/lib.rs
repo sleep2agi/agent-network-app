@@ -890,6 +890,10 @@ pub fn run_packaged_local_hub_lost_credential_smoke() -> Result<(), String> {
     local_hub::packaged_lost_credential_smoke()
 }
 
+pub fn run_packaged_local_hub_stale_takeover_smoke() -> Result<(), String> {
+    local_hub::packaged_stale_hub_takeover_smoke()
+}
+
 pub fn run_packaged_local_hub_corrupt_data_smoke() -> Result<(), String> {
     local_hub::packaged_corrupt_data_smoke()
 }
