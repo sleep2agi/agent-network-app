@@ -1,6 +1,6 @@
 import { useEffect, useSyncExternalStore } from 'react';
-import { ActivityIndicator, Modal, Pressable, StyleSheet, Text, View } from 'react-native';
-import { checkDesktopUpdate, desktopUpdateSnapshot, installDesktopUpdate, subscribeDesktopUpdates } from './desktop-updater';
+import { ActivityIndicator, Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { checkDesktopUpdate, desktopUpdateSnapshot, installDesktopUpdate, latestReleaseNotes, subscribeDesktopUpdates } from './desktop-updater';
 import { colors, onThemeChange, spacing } from './theme';
 
 export default function DesktopUpdatePrompt() {
@@ -18,7 +18,12 @@ export default function DesktopUpdatePrompt() {
         <View style={styles.card}>
           <Text style={styles.title}>发现新版本</Text>
           <Text style={styles.version}>v{'version' in update ? update.version : ''}</Text>
-          {update.kind === 'available' ? <Text style={styles.notes}>{update.notes}</Text> : null}
+          {update.kind === 'available' ? (
+            // 只放本版那一段,限高可滚动;按钮在滚动区外面,永远看得见。
+            <ScrollView style={styles.notesScroll} contentContainerStyle={styles.notesContent} testID="desktop-update-notes">
+              <Text style={styles.notes} selectable>{latestReleaseNotes(update.notes)}</Text>
+            </ScrollView>
+          ) : null}
           {update.kind === 'downloading' ? (
             <View style={styles.progress}><ActivityIndicator color={colors.accent} /><Text style={styles.notes}>正在下载安装…{update.percent == null ? '' : ` ${update.percent}%`}</Text></View>
           ) : (
@@ -36,7 +41,9 @@ export default function DesktopUpdatePrompt() {
 const makeStyles = () =>
   StyleSheet.create({
   backdrop: { flex: 1, backgroundColor: '#0009', alignItems: 'center', justifyContent: 'center', padding: 24 },
-  card: { width: '100%', maxWidth: 440, borderRadius: 16, padding: 22, backgroundColor: colors.card, borderWidth: 1, borderColor: colors.border },
+  card: { width: '100%', maxWidth: 440, maxHeight: '85%', borderRadius: 16, padding: 22, backgroundColor: colors.card, borderWidth: 1, borderColor: colors.border },
+  notesScroll: { maxHeight: 240, marginTop: spacing.md, borderRadius: 10, backgroundColor: colors.bg, borderWidth: 1, borderColor: colors.border },
+  notesContent: { paddingHorizontal: spacing.md, paddingBottom: spacing.md },
   title: { color: colors.text, fontSize: 18, fontWeight: '700' },
   version: { color: colors.accent, fontSize: 14, marginTop: spacing.xs },
   notes: { color: colors.textSecondary, fontSize: 13, lineHeight: 19, marginTop: spacing.md },

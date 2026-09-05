@@ -9,6 +9,9 @@ const capability = JSON.parse(fs.readFileSync(new URL('../src-tauri/capabilities
 
 const checks: Array<[string, boolean]> = [
   ['startup mounts automatic update prompt', app.includes('<DesktopUpdatePrompt />')],
+  ['detached chat windows do not mount the prompt (2026-09-06 screenshot: every window prompted)', app.includes('{dedicatedChatWindow ? null : <DesktopUpdatePrompt />}') && app.includes('!!requestedChatAlias()')],
+  ['prompt shows only the newest section in a bounded scroll view', prompt.includes('latestReleaseNotes(update.notes)') && prompt.includes('<ScrollView style={styles.notesScroll}') && prompt.includes('maxHeight: 240')],
+  ['install button stays outside the scroll view', prompt.indexOf('</ScrollView>') < prompt.indexOf('installDesktopUpdate()')],
   ['startup check is delayed and non-blocking', prompt.includes('setTimeout') && prompt.includes('checkDesktopUpdate')],
   ['manual settings check exists', settings.includes('checkDesktopUpdate')],
   ['download and install reports progress', source.includes('downloadAndInstall') && source.includes("kind: 'downloading'")],

@@ -1,5 +1,23 @@
 import { stopLocalHub } from './local-hub';
 
+/**
+ * 更新提示只展示**本次**新版本那一段(Vincent 2026-09-06 截图:发布说明是累计的,8 个版本全铺在
+ * 弹窗里、没滚动、按钮被顶出窗口)。发布说明的形状由 release-desktop-auto-update.yml 固定:
+ * 一行前言 + 若干段 `What's new in X.Y.Z:` + 结尾一句。这里取第一段;没有这种标题就退回整段。
+ */
+export function latestReleaseNotes(body: string | null | undefined): string {
+  const text = (body ?? '').replace(/\r\n/g, '\n').trim();
+  if (!text) return '';
+  const headings = [...text.matchAll(/^What's new in [^\n]+:\s*$/gm)];
+  if (headings.length === 0) return text;
+  const start = headings[0].index ?? 0;
+  const end = headings.length > 1 ? (headings[1].index ?? text.length) : text.length;
+  let section = text.slice(start, end).trim();
+  // 只有一段时,结尾的「Existing installations can update in place…」那句属于全文尾注,不是本版内容。
+  section = section.replace(/\n+Existing installations[^\n]*$/i, '').trim();
+  return section;
+}
+
 export type DesktopUpdateState =
   | { kind: 'idle' | 'unsupported' | 'checking' | 'up-to-date' }
   | { kind: 'available'; version: string; notes: string }
