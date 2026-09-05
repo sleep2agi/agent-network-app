@@ -13,6 +13,7 @@ const checks: Array<[string, boolean]> = [
   ['manual settings check exists', settings.includes('checkDesktopUpdate')],
   ['download and install reports progress', source.includes('downloadAndInstall') && source.includes("kind: 'downloading'")],
   ['successful install relaunches', source.includes("plugin-process") && source.includes('await relaunch()')],
+  ['relaunch stops the local Hub first (app#246: no orphaned old sidecar)', source.includes('await stopLocalHub().catch(') && source.indexOf('await stopLocalHub()') < source.indexOf('await relaunch()')],
   ['non-Tauri platforms stay unsupported', source.includes("kind: 'unsupported'")],
   ['offline checks clear stale staged updates', source.includes('pendingUpdate = undefined') && source.includes('checkOverride')],
   ['signed updater artifacts are enabled', config.bundle.createUpdaterArtifacts === true],

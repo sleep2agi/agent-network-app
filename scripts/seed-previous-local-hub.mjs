@@ -3,7 +3,8 @@ import { mkdirSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { spawn } from 'node:child_process';
 
-const [appRootArg, packageRootArg, passwordFileArg] = process.argv.slice(2);
+const keepRunning = process.argv.includes('--keep-running');
+const [appRootArg, packageRootArg, passwordFileArg] = process.argv.slice(2).filter(arg => arg !== '--keep-running');
 if (!appRootArg || !packageRootArg || !passwordFileArg) {
   throw new Error('usage: seed-previous-local-hub.mjs <app-root> <package-root> <password-file>');
 }
@@ -32,6 +33,9 @@ const child = spawn('bun', [join(packageRoot, 'bin/commhub.ts')], {
     COMMHUB_SERVER_VERSION: previousVersion,
   },
   stdio: 'ignore',
+  // --keep-running(app#246 stale-takeover smoke):让这个「旧版」Hub 在脚本退出后继续占着 9200,
+  // 并把它的 pid 写进 supervisor.lock —— 复现 app 自动更新后旧 sidecar 没被收掉的现场。
+  detached: keepRunning,
 });
 
 const waitForHealth = async () => {
@@ -106,8 +110,14 @@ try {
     schemaVersion: 1, enabled: true, host: '127.0.0.1', port: 9200,
     endpoint, hubVersion: previousVersion,
   }, null, 2)}\n`, { mode: 0o600 });
+  if (keepRunning) {
+    writeFileSync(join(localRoot, 'supervisor.lock'), `${child.pid}\n`, { mode: 0o600 });
+    console.log(`stale previous Hub ${previousVersion} kept running on ${endpoint} as pid ${child.pid}`);
+  }
 } finally {
-  if (child.exitCode === null) {
+  if (keepRunning && child.exitCode === null) {
+    child.unref();
+  } else if (child.exitCode === null) {
     child.kill('SIGTERM');
     await new Promise(resolve => child.once('exit', resolve));
   }

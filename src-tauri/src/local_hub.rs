@@ -56,6 +56,8 @@ struct LocalHubResult {
     error: Option<String>,
     logs_path: String,
     requires_migration: bool,
+    /// 本 app 捆绑的 Hub 版本(设置页「升级本地 Hub」按钮用它做标签)。
+    expected_hub_version: String,
 }
 
 #[derive(Deserialize)]
@@ -455,6 +457,7 @@ fn running_result(
             .map(|root| root.join("logs").display().to_string())
             .unwrap_or_default(),
         requires_migration: false,
+        expected_hub_version: EXPECTED_HUB_VERSION.into(),
     }
 }
 
@@ -576,13 +579,41 @@ pub fn start_local_hub() -> Result<String, String> {
         .ok_or_else(|| "local Hub app root is unavailable".to_string())?
         .join("backups");
     if lock_path.exists() {
+        let owner_pid = fs::read_to_string(&lock_path)
+            .ok()
+            .and_then(|value| value.trim().parse::<u32>().ok());
+        let saved_port = saved.as_ref().map(|config| config.port).unwrap_or(port);
+        let mut stale_owner_taken_over = false;
         if let Ok(payload) = wait_ready(
             saved
                 .as_ref()
                 .map(|config| config.endpoint.as_str())
                 .unwrap_or(&endpoint),
         ) {
-            validate_health(&payload)?;
+            if let Err(reason) = validate_health(&payload) {
+                // 端口上是一个健康但版本不对的 Hub,而且 ownership lock 是本 app 写的 ——
+                // 典型:app 自动更新重启后没收掉的旧版 sidecar(Vincent 2026-09-05:
+                // 「expected 0.9.0-preview.45, got 0.9.0-preview.29」,本地 Hub 一直「已停止」)。
+                // 只报错等于让用户自己去活动监视器里杀进程;这里改成自动接管:
+                // lock 里的 pid 还活着 → 它就是我们的旧 sidecar,停掉它、清 lock,
+                // 然后走下面正常的启动路径(config 里的旧版本号会触发迁移快照 + 备份)。
+                // lock 里的 pid 已死 → 端口上的东西不是我们的,清掉过期 lock,select_port 会换端口。
+                match owner_pid {
+                    Some(pid) if process_is_alive(pid) => {
+                        stop_stale_process(pid, saved_port)
+                            .map_err(|error| format!("{reason}; automatic takeover failed: {error}"))?;
+                        stale_owner_taken_over = true;
+                    }
+                    Some(_) => {}
+                    None => {
+                        return Err(format!(
+                            "{reason}; the local Hub ownership lock is invalid, refusing automatic takeover. Use diagnostics to inspect ~/.anet/app/local-hub/supervisor.lock"
+                        ));
+                    }
+                }
+                fs::remove_file(&lock_path)
+                    .map_err(|error| format!("cannot clear stale local Hub lock: {error}"))?;
+            } else {
             let external_endpoint = saved
                 .as_ref()
                 .map(|config| config.endpoint.clone())
@@ -601,12 +632,14 @@ pub fn start_local_hub() -> Result<String, String> {
                 error: None,
                 logs_path: logs_dir.display().to_string(),
                 requires_migration: false,
+                expected_hub_version: EXPECTED_HUB_VERSION.into(),
             };
             return serde_json::to_string(&result).map_err(|error| error.to_string());
+            }
         }
-        let owner_pid = fs::read_to_string(&lock_path)
-            .ok()
-            .and_then(|value| value.trim().parse::<u32>().ok());
+        if stale_owner_taken_over {
+            // 已接管:lock 已清,直接进入正常启动。
+        } else if lock_path.exists() {
         if owner_pid.is_some_and(process_is_alive) {
             return Err("an existing local Hub process owns the data but is not healthy; refusing to start a duplicate. Open local Hub logs or restart the owning app".into());
         }
@@ -615,6 +648,7 @@ pub fn start_local_hub() -> Result<String, String> {
         }
         fs::remove_file(&lock_path)
             .map_err(|error| format!("cannot recover stale local Hub lock: {error}"))?;
+        }
     }
     let mut lock = OpenOptions::new()
         .create_new(true)
@@ -790,6 +824,7 @@ pub fn local_hub_status() -> Result<String, String> {
                 error: Some(format!("local Hub exited with {status}")),
                 logs_path: local_root()?.join("logs").display().to_string(),
                 requires_migration: config.hub_version != EXPECTED_HUB_VERSION,
+                expected_hub_version: EXPECTED_HUB_VERSION.into(),
             },
         },
         (_, Some(config)) => LocalHubResult {
@@ -802,6 +837,7 @@ pub fn local_hub_status() -> Result<String, String> {
             error: None,
             logs_path: local_root()?.join("logs").display().to_string(),
             requires_migration: config.hub_version != EXPECTED_HUB_VERSION,
+            expected_hub_version: EXPECTED_HUB_VERSION.into(),
         },
         _ => LocalHubResult {
             state: "not_provisioned".into(),
@@ -813,6 +849,7 @@ pub fn local_hub_status() -> Result<String, String> {
             error: None,
             logs_path: local_root()?.join("logs").display().to_string(),
             requires_migration: false,
+            expected_hub_version: EXPECTED_HUB_VERSION.into(),
         },
     };
     serde_json::to_string(&result).map_err(|error| error.to_string())
@@ -1326,6 +1363,33 @@ pub fn packaged_corrupt_data_smoke() -> Result<(), String> {
     result.and(stopped).and(credential_removed)
 }
 
+/// 停掉一个不是本进程 child 的 sidecar(旧版 app 留下的孤儿):unix 先 SIGTERM 等 2s 再 SIGKILL,
+/// windows 直接 taskkill /F;然后等它退出、端口释放(最多 5s)。
+fn stop_stale_process(pid: u32, port: u16) -> Result<(), String> {
+    #[cfg(unix)]
+    {
+        let _ = unsafe { libc::kill(pid as i32, libc::SIGTERM) };
+        for _ in 0..40 {
+            if !process_is_alive(pid) {
+                break;
+            }
+            thread::sleep(Duration::from_millis(50));
+        }
+    }
+    if process_is_alive(pid) {
+        kill_process_for_smoke(pid)?;
+    }
+    for _ in 0..50 {
+        if !process_is_alive(pid) && port_is_free(port) {
+            return Ok(());
+        }
+        thread::sleep(Duration::from_millis(100));
+    }
+    Err(format!(
+        "stale local Hub process {pid} did not release port {port} after being stopped"
+    ))
+}
+
 fn kill_process_for_smoke(pid: u32) -> Result<(), String> {
     #[cfg(unix)]
     {
@@ -1480,6 +1544,115 @@ pub fn packaged_lost_credential_smoke() -> Result<(), String> {
     let result = run();
     let stopped = stop_local_hub_inner();
     result.and(stopped)
+}
+
+/// 旧版 sidecar 占着端口 + 持有 lock(Vincent 2026-09-05 的形状):工作流先用
+/// scripts/seed-previous-local-hub.mjs --keep-running 起一个报旧版本号的 Hub 在 9200、写好
+/// config.json(旧版本)与 supervisor.lock(它的 pid)。这里期望 start_local_hub **自动接管**:
+/// 旧进程死、新 Hub 是当前版本、local-admin 会话可用、旧数据(节点/任务)还在、有迁移快照。
+pub fn packaged_stale_hub_takeover_smoke() -> Result<(), String> {
+    if std::env::var("ANET_PACKAGED_SMOKE").as_deref() != Ok("1") {
+        return Err("packaged stale-hub takeover smoke requires ANET_PACKAGED_SMOKE=1".into());
+    }
+    let password_file = PathBuf::from(
+        std::env::var("ANET_PREVIOUS_HUB_PASSWORD_FILE")
+            .map_err(|_| "previous Hub password file is missing".to_string())?,
+    );
+    let password = fs::read_to_string(&password_file)
+        .map_err(|error| format!("cannot read previous Hub credential: {error}"))?;
+    fs::remove_file(&password_file)
+        .map_err(|error| format!("cannot remove previous Hub credential file: {error}"))?;
+    let password_entry = keyring::Entry::new(SESSION_SERVICE, LOCAL_PASSWORD_ACCOUNT)
+        .map_err(|error| error.to_string())?;
+    password_entry
+        .set_password(password.trim())
+        .map_err(|error| error.to_string())?;
+    let lock_path = local_root()?.join("supervisor.lock");
+    let stale_pid: u32 = fs::read_to_string(&lock_path)
+        .map_err(|error| format!("stale-hub fixture left no supervisor.lock: {error}"))?
+        .trim()
+        .parse()
+        .map_err(|_| "stale-hub fixture lock does not hold a pid".to_string())?;
+    if !process_is_alive(stale_pid) {
+        return Err(format!("stale-hub fixture process {stale_pid} is not running"));
+    }
+    let previous = read_config()?.ok_or_else(|| "stale-hub fixture left no config".to_string())?;
+    let stale_version = previous.hub_version.clone();
+    if stale_version == EXPECTED_HUB_VERSION {
+        return Err("stale-hub fixture must report a version different from the bundled Hub".into());
+    }
+    // 阳性对照:接管前,端口上确实是那个旧版本
+    let before = health(&previous.endpoint)?;
+    if before.version.as_deref() != Some(stale_version.as_str()) {
+        return Err(format!(
+            "positive control failed: port answers with {:?}, fixture says {stale_version}",
+            before.version
+        ));
+    }
+
+    let run = || -> Result<(), String> {
+        let started: LocalHubResult =
+            serde_json::from_str(&start_local_hub()?).map_err(|error| error.to_string())?;
+        if started.state != "running" || started.hub_version != EXPECTED_HUB_VERSION {
+            return Err(format!(
+                "takeover did not start the bundled Hub: state={} version={}",
+                started.state, started.hub_version
+            ));
+        }
+        if process_is_alive(stale_pid) {
+            return Err(format!("stale Hub process {stale_pid} is still alive after takeover"));
+        }
+        if started.pid == Some(stale_pid) {
+            return Err("takeover reused the stale pid".into());
+        }
+        let session = started
+            .session
+            .ok_or_else(|| "takeover omitted session".to_string())?;
+        if session.username != LOCAL_USERNAME || session.profile_id != LOCAL_PROFILE_ID {
+            return Err("takeover changed the local profile identity".into());
+        }
+        assert_authenticated(&session.server_url, &session.token)?;
+        let status: serde_json::Value = reqwest::blocking::Client::new()
+            .get(format!("{}/api/status", session.server_url))
+            .bearer_auth(&session.token)
+            .send()
+            .map_err(|error| error.to_string())?
+            .json()
+            .map_err(|error| error.to_string())?;
+        if !status["sessions"].as_array().is_some_and(|sessions| {
+            sessions
+                .iter()
+                .any(|item| item["alias"] == "previous-version-node")
+        }) {
+            return Err("previous-version node is missing after takeover".into());
+        }
+        let config = read_config()?.ok_or_else(|| "takeover omitted config".to_string())?;
+        if config.hub_version != EXPECTED_HUB_VERSION {
+            return Err("takeover did not persist the bundled Hub version".into());
+        }
+        let prefix = migration_backup_name_prefix(&stale_version, EXPECTED_HUB_VERSION);
+        let snapshot_found = fs::read_dir(app_root()?.join("backups"))
+            .map_err(|error| error.to_string())?
+            .filter_map(Result::ok)
+            .any(|entry| {
+                entry.file_name().to_string_lossy().starts_with(&prefix)
+                    && entry.path().join("data").join("commhub.db").is_file()
+            });
+        if !snapshot_found {
+            return Err("takeover did not leave a migration snapshot".into());
+        }
+        Ok(())
+    };
+    let result = run();
+    let stopped = stop_local_hub_inner();
+    let credential_removed = password_entry
+        .delete_credential()
+        .or_else(|error| match error {
+            keyring::Error::NoEntry => Ok(()),
+            other => Err(other),
+        })
+        .map_err(|error| error.to_string());
+    result.and(stopped).and(credential_removed)
 }
 
 fn start_isolated_smoke_hub(root: &Path, port: u16) -> Result<Child, String> {
