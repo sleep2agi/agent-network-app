@@ -83,7 +83,10 @@ async function prepare() {
   const bundles = await api('GET', `/bundleIds?filter%5Bidentifier%5D=${encodeURIComponent(bundleIdentifier)}&limit=2`);
   if (bundles.data.length !== 1) throw new Error(`expected one bundle id for ${bundleIdentifier}, got ${bundles.data.length}`);
   const profileName = `Agent Network App Store CI ${process.env.GITHUB_RUN_ID || Date.now()}`;
-  const profile = await api('POST', '/profiles', {
+  // 2026-09-05 ios-build #19/#20:证书刚 POST 成功,紧接着 POST /profiles 两次都被 Apple 回
+  // 500 UNEXPECTED_ERROR(4 分钟内两次,8-27 同一脚本正常)。App Store Connect 对刚签发的证书
+  // 建 profile 偶发 5xx,只对 5xx 退避重试;4xx(配额、协议、权限)照旧立刻失败。
+  const profileRequest = {
     data: {
       type: 'profiles',
       attributes: { name: profileName, profileType: 'IOS_APP_STORE' },
@@ -92,7 +95,20 @@ async function prepare() {
         certificates: { data: [{ type: 'certificates', id: certificateId }] },
       },
     },
-  });
+  };
+  let profile;
+  for (let attempt = 1; ; attempt++) {
+    try {
+      profile = await api('POST', '/profiles', profileRequest);
+      break;
+    } catch (error) {
+      const transient = /failed \(5\d\d\)/.test(error?.message || '');
+      if (!transient || attempt >= 4) throw error;
+      const delayMs = attempt * 15_000;
+      console.error(`POST /profiles attempt ${attempt} got a 5xx from App Store Connect; retrying in ${delayMs / 1000}s`);
+      await new Promise(resolve => setTimeout(resolve, delayMs));
+    }
+  }
   const profileId = profile.data.id;
   env('IOS_PROFILE_ID', profileId);
   const profileDir = path.join(os.homedir(), 'Library', 'MobileDevice', 'Provisioning Profiles');
