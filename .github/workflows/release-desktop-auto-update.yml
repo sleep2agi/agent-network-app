@@ -118,6 +118,11 @@ jobs:
           releaseBody: |-
             Signed and notarized stable update for macOS (Apple Silicon) and Windows (x64).
 
+            What's new in 0.2.49:
+            - Update prompt: shows only this version's notes in a scrollable box, keeps the "Update and
+              restart" button visible, and appears only in the main window (detached chat windows no longer
+              prompt). Please install this version manually from anet.sh once; later updates work in-app.
+
             What's new in 0.2.48:
             - Local Hub takeover: if an older bundled Hub left behind by a previous version is still running
               on the local port (the "local Hub version mismatch" message), the app now stops it, backs up
