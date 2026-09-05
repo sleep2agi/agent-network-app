@@ -65,6 +65,7 @@ jobs:
           cargo test --locked profile_registry_metadata_never_serializes_secrets -- --nocapture
           cargo test --locked corrupt_profile_registry_is_quarantined_without_data_loss -- --nocapture
           cargo test --locked revoked_profile_marker_is_isolated -- --nocapture
+          cargo test --locked local_credentials:: -- --nocapture
 
       - name: Build (unsigned)
         # This validation workflow deliberately has no updater signing key.
@@ -142,6 +143,7 @@ jobs:
           cargo test --locked profile_registry_metadata_never_serializes_secrets -- --nocapture
           cargo test --locked corrupt_profile_registry_is_quarantined_without_data_loss -- --nocapture
           cargo test --locked revoked_profile_marker_is_isolated -- --nocapture
+          cargo test --locked local_credentials:: -- --nocapture
 
       - name: Build (unsigned)
         # nsis = 安装器 .exe；msi = WiX 安装包。两个都要，因为分发方式不同：

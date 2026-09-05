@@ -51,7 +51,7 @@ import DesktopUpdatePrompt from './src/DesktopUpdatePrompt';
 import DesktopMessageListener from './src/DesktopMessageListener';
 import { loadPinnedChats, requestedChatAlias, requestedChatProfileId, savePinnedChats } from './src/desktop-chat-menu';
 import { openRememberedChatWindow, restoreDetachedChatWindows } from './src/desktop-chat-windows';
-import { LOCAL_HUB_PROFILE_ID, localHubStatus, startLocalHub } from './src/local-hub';
+import { activateHubProfile, LOCAL_HUB_PROFILE_ID, localHubStatus, startLocalHub } from './src/local-hub';
 import UnreadBadgeFixtureScreen, { readWebFixture } from './src/UnreadBadgeFixtureScreen';
 
 type Screen =
@@ -198,7 +198,8 @@ function AppRoot() {
   };
 
   const activateProfile = async (profileId: string) => {
-    const next = await switchHubProfile(profileId);
+    // Local workspace:先启动本地 Hub(钥匙串凭据丢了会在这里自动恢复),再切 profile。
+    const next = await activateHubProfile(profileId, { isDesktop: () => tauriDesktop, startLocalHub, switchHubProfile });
     await hydrateProfileLocalState(next);
     setCfg(next);
     setScreen({ name: 'agents' });

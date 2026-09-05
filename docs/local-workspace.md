@@ -39,6 +39,26 @@ Before a bundled Hub version changes, the stopped data directory is copied to
 `~/.anet/app/backups/`. Failed health checks or bootstrap restore the previous
 data and configuration.
 
+## Lost native credentials
+
+The local profile's token and the generated bootstrap password live only in the
+native credential store. If the store loses them (the profile still appears in
+**账号与 Hub**, but switching to it used to fail with *No matching entry found in
+secure storage*), the app recovers on the next local Hub start instead of asking
+the user to reset data:
+
+- token missing, bootstrap password present: the app logs in again with the
+  stored password and rewrites the profile credential;
+- bootstrap password missing too: with the Hub stopped and the data directory
+  backed up, the app resets `local-admin`'s password directly in the local
+  database (same scrypt format the Hub writes), revokes the old user tokens,
+  stores the new password, then starts and logs in as usual.
+
+Switching to **Local workspace** from Settings starts the local Hub first (and
+runs this recovery) before the profile becomes active. Local data is never
+deleted by recovery; the release gate exercises it with
+`--smoke-local-hub-lost-credential`.
+
 ## Backup and deletion
 
 Settings provides **立即备份**, restart/stop, and log-folder actions. Explicit

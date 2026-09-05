@@ -3,6 +3,7 @@
 // CORS and the hub sets no CORS headers, so requests go through Rust.
 const SESSION_SERVICE: &str = "top.vansin.agentnetwork.desktop";
 const SESSION_ACCOUNT: &str = "active-hub-session";
+mod local_credentials;
 mod local_hub;
 
 #[cfg(windows)]
@@ -883,6 +884,10 @@ pub fn run_packaged_local_hub_failed_migration_smoke() -> Result<(), String> {
 
 pub fn run_packaged_local_hub_crash_recovery_smoke() -> Result<(), String> {
     local_hub::packaged_crash_recovery_smoke()
+}
+
+pub fn run_packaged_local_hub_lost_credential_smoke() -> Result<(), String> {
+    local_hub::packaged_lost_credential_smoke()
 }
 
 pub fn run_packaged_local_hub_corrupt_data_smoke() -> Result<(), String> {
