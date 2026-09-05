@@ -38,6 +38,15 @@ fn main() {
             }
         }
     }
+    if std::env::args().any(|arg| arg == "--smoke-local-hub-lost-credential") {
+        match app_lib::run_packaged_local_hub_lost_credential_smoke() {
+            Ok(()) => std::process::exit(0),
+            Err(error) => {
+                eprintln!("packaged local Hub lost-credential smoke failed: {error}");
+                std::process::exit(1);
+            }
+        }
+    }
     if std::env::args().any(|arg| arg == "--smoke-local-hub-corrupt-data") {
         match app_lib::run_packaged_local_hub_corrupt_data_smoke() {
             Ok(()) => std::process::exit(0),

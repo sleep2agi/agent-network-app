@@ -310,14 +310,53 @@ fn random_password() -> String {
 
 fn existing_local_session() -> Result<Option<ProfileSessionOutput>, String> {
     let index = read_profile_index()?;
-    match index
+    let Some(profile) = index
         .profiles
         .iter()
         .find(|profile| profile.profile_id == LOCAL_PROFILE_ID)
-    {
-        Some(profile) => output_for(profile).map(Some),
-        None => Ok(None),
+    else {
+        return Ok(None);
+    };
+    match profile_entry(&profile.profile_id)?.get_password() {
+        Ok(token) => Ok(Some(ProfileSessionOutput {
+            profile_id: profile.profile_id.clone(),
+            server_url: profile.server_url.clone(),
+            token,
+            network_id: profile.network_id.clone(),
+            username: profile.username.clone(),
+            display_name: profile.display_name.clone(),
+        })),
+        // 钥匙串里没有这个 profile 的 token(条目丢了,profiles 列表里还有它):当作「没有会话」,
+        // 让调用方用引导密码重新登录补回来,而不是把 keyring 的报错原样抛到设置页
+        // (2026-09-05 Vincent 看到的「No matching entry found in secure storage」就是这条路)。
+        Err(keyring::Error::NoEntry) => Ok(None),
+        Err(error) => Err(error.to_string()),
     }
+}
+
+fn local_bootstrap_password_present() -> Result<bool, String> {
+    let entry = keyring::Entry::new(SESSION_SERVICE, LOCAL_PASSWORD_ACCOUNT)
+        .map_err(|error| error.to_string())?;
+    match entry.get_password() {
+        Ok(_) => Ok(true),
+        Err(keyring::Error::NoEntry) => Ok(false),
+        Err(error) => Err(error.to_string()),
+    }
+}
+
+/// 钥匙串里连引导密码都没了(实际发生时 profile token 通常一起没了):本地 Hub 此刻停着、数据库
+/// 由本应用独占 —— 先整份备份,再直接在库里给 local-admin 换一个新随机密码(哈希格式与服务端一致,
+/// 见 local_credentials.rs)、吊销旧 token,把新密码写回钥匙串。随后正常的启动流程会用它登录并
+/// 补回 profile token。数据一行不动;用户什么都不用做。
+fn recover_lost_local_credential(database: &Path) -> Result<(), String> {
+    backup_local_hub_stopped()?;
+    let password = random_password();
+    super::local_credentials::reset_local_user_password(database, LOCAL_USERNAME, &password)?;
+    keyring::Entry::new(SESSION_SERVICE, LOCAL_PASSWORD_ACCOUNT)
+        .map_err(|error| error.to_string())?
+        .set_password(&password)
+        .map_err(|error| error.to_string())?;
+    Ok(())
 }
 
 fn bootstrap(endpoint: &str, database_existed: bool) -> Result<ProfileSessionOutput, String> {
@@ -347,7 +386,7 @@ fn bootstrap(endpoint: &str, database_existed: bool) -> Result<ProfileSessionOut
         .map_err(|error| error.to_string())?;
     let password = if database_existed {
         password_entry.get_password().map_err(|_| {
-            "local Hub data exists but its native credential is missing; use diagnostics or explicit local-data reset".to_string()
+            "local Hub data exists but its native credential is missing; restart the local Hub to recover it automatically".to_string()
         })?
     } else {
         let generated = random_password();
@@ -510,12 +549,13 @@ pub fn start_local_hub() -> Result<String, String> {
         {
             let config =
                 read_config()?.ok_or_else(|| "running local Hub has no config".to_string())?;
-            return serde_json::to_string(&running_result(
-                managed,
-                &config,
-                existing_local_session()?,
-            ))
-            .map_err(|error| error.to_string());
+            let session = match existing_local_session()? {
+                Some(session) => session,
+                // Hub 还在跑、钥匙串里的 profile token 没了:用引导密码重新登录补回来。
+                None => bootstrap(&config.endpoint, true)?,
+            };
+            return serde_json::to_string(&running_result(managed, &config, Some(session)))
+                .map_err(|error| error.to_string());
         }
         *guard = None;
     }
@@ -543,13 +583,17 @@ pub fn start_local_hub() -> Result<String, String> {
                 .unwrap_or(&endpoint),
         ) {
             validate_health(&payload)?;
-            let session = existing_local_session()?;
+            let external_endpoint = saved
+                .as_ref()
+                .map(|config| config.endpoint.clone())
+                .unwrap_or_else(|| endpoint.clone());
+            let session = match existing_local_session()? {
+                Some(session) => Some(session),
+                None => Some(bootstrap(&external_endpoint, true)?),
+            };
             let result = LocalHubResult {
                 state: "running_external".into(),
-                endpoint: saved
-                    .as_ref()
-                    .map(|config| config.endpoint.clone())
-                    .unwrap_or(endpoint),
+                endpoint: external_endpoint,
                 port: saved.as_ref().map(|config| config.port).unwrap_or(port),
                 hub_version: EXPECTED_HUB_VERSION.into(),
                 pid: None,
@@ -588,6 +632,21 @@ pub fn start_local_hub() -> Result<String, String> {
         let _ = fs::remove_file(&lock_path);
         error.to_string()
     })?;
+
+    // 钥匙串丢了引导密码 → 在 spawn 之前、拿着 ownership lock 的时候恢复(此刻没有别的进程开着这个库)。
+    let needs_credential_recovery = match local_bootstrap_password_present() {
+        Ok(present) => database_existed && !present,
+        Err(error) => {
+            let _ = fs::remove_file(&lock_path);
+            return Err(error);
+        }
+    };
+    if needs_credential_recovery {
+        if let Err(error) = recover_lost_local_credential(&database) {
+            let _ = fs::remove_file(&lock_path);
+            return Err(format!("local Hub credential recovery failed: {error}"));
+        }
+    }
 
     let executable = sidecar_path()?;
     if !executable.is_file() {
@@ -1321,6 +1380,91 @@ pub fn packaged_crash_recovery_smoke() -> Result<(), String> {
             }
         }
         Err("local Hub supervisor did not recover the killed sidecar within 20 seconds".into())
+    };
+    let result = run();
+    let stopped = stop_local_hub_inner();
+    result.and(stopped)
+}
+
+/// 钥匙串条目丢失恢复(2026-09-05 Vincent 的形状:profiles 列表里还有 Local workspace,
+/// 钥匙串里它的 token 和引导密码都没了,切换报「No matching entry found in secure storage」)。
+/// 起一次 → 停 → 删掉两条钥匙串条目 → 先证明 switch 会像用户看到的那样失败(阳性对照)→ 再起,
+/// 期望:自动恢复出一个能通过认证的 local-admin 会话、profile 身份不变、旧 token 被吊销、
+/// 数据库还在、留下一份备份、switch 恢复成功。
+pub fn packaged_lost_credential_smoke() -> Result<(), String> {
+    if std::env::var("ANET_PACKAGED_SMOKE").as_deref() != Ok("1") {
+        return Err("packaged lost-credential smoke requires ANET_PACKAGED_SMOKE=1".into());
+    }
+    let first: LocalHubResult =
+        serde_json::from_str(&start_local_hub()?).map_err(|error| error.to_string())?;
+    let endpoint = first.endpoint.clone();
+    let first_session = first
+        .session
+        .ok_or_else(|| "initial Hub omitted session".to_string())?;
+    stop_local_hub_inner()?;
+    for account in [
+        format!("hub-profile-{LOCAL_PROFILE_ID}"),
+        LOCAL_PASSWORD_ACCOUNT.to_string(),
+    ] {
+        match keyring::Entry::new(SESSION_SERVICE, &account)
+            .map_err(|error| error.to_string())?
+            .delete_credential()
+        {
+            Ok(()) | Err(keyring::Error::NoEntry) => {}
+            Err(error) => return Err(error.to_string()),
+        }
+    }
+    let backups = app_root()?.join("backups");
+    let backups_before = match fs::read_dir(&backups) {
+        Ok(entries) => entries.count(),
+        Err(_) => 0,
+    };
+
+    let run = || -> Result<(), String> {
+        if switch_desktop_profile(LOCAL_PROFILE_ID.into()).is_ok() {
+            return Err(
+                "positive control failed: profile switch succeeded with the credential deleted"
+                    .into(),
+            );
+        }
+        let recovered: LocalHubResult =
+            serde_json::from_str(&start_local_hub()?).map_err(|error| error.to_string())?;
+        let session = recovered
+            .session
+            .ok_or_else(|| "recovered Hub omitted session".to_string())?;
+        if session.profile_id != first_session.profile_id
+            || session.username != LOCAL_USERNAME
+            || recovered.endpoint != endpoint
+        {
+            return Err("credential recovery changed the local profile identity".into());
+        }
+        if session.token == first_session.token {
+            return Err("credential recovery did not rotate the token".into());
+        }
+        assert_authenticated(&endpoint, &session.token)?;
+        let old = reqwest::blocking::Client::new()
+            .get(format!("{endpoint}/api/auth/me"))
+            .bearer_auth(&first_session.token)
+            .send()
+            .map_err(|error| error.to_string())?;
+        if old.status().as_u16() != 401 {
+            return Err(format!(
+                "old token still accepted after recovery: HTTP {}",
+                old.status().as_u16()
+            ));
+        }
+        if !local_root()?.join("data").join("commhub.db").is_file() {
+            return Err("credential recovery lost the local database".into());
+        }
+        let backups_after = fs::read_dir(&backups)
+            .map_err(|error| error.to_string())?
+            .count();
+        if backups_after <= backups_before {
+            return Err("credential recovery did not leave a backup".into());
+        }
+        switch_desktop_profile(LOCAL_PROFILE_ID.into())
+            .map_err(|error| format!("profile switch still fails after recovery: {error}"))?;
+        Ok(())
     };
     let result = run();
     let stopped = stop_local_hub_inner();
