@@ -132,10 +132,13 @@ export default function App() {
     );
   }
 
+  // 更新提示只在主窗口弹;分离出来的聊天窗(?chat=<alias>)不弹 —— 否则每个窗各弹一次
+  // (Vincent 2026-09-06 截图:两个分离窗同时被同一份更新说明盖住)。
+  const dedicatedChatWindow = Platform.OS === 'web' && !!(globalThis as any).__TAURI_INTERNALS__ && !!requestedChatAlias();
   return (
     <SafeAreaProvider>
       <AppRoot />
-      <DesktopUpdatePrompt />
+      {dedicatedChatWindow ? null : <DesktopUpdatePrompt />}
     </SafeAreaProvider>
   );
 }
