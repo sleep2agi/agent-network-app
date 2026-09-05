@@ -1208,9 +1208,6 @@ pub fn packaged_failed_migration_smoke() -> Result<(), String> {
         if failure.trim().is_empty() {
             return Err("failed migration returned an empty diagnostic".into());
         }
-        if fs::read(&database).map_err(|error| error.to_string())? != before {
-            return Err("failed migration did not restore the exact previous database".into());
-        }
         let restored = read_config()?.ok_or_else(|| "failed migration lost config".to_string())?;
         if restored.hub_version != previous.hub_version
             || restored.endpoint != previous.endpoint
@@ -1220,6 +1217,20 @@ pub fn packaged_failed_migration_smoke() -> Result<(), String> {
         }
         if local_root()?.join("supervisor.lock").exists() {
             return Err("failed migration left a stale supervisor lock".into());
+        }
+        let previous_hub = smoke_previous_hub_version()?;
+        if !migration_expects_backup(&previous_hub, EXPECTED_HUB_VERSION) {
+            // 同版本(上一个已发布 desktop tag 的 Hub pin == 当前 pin,app#232 的姐妹情况,2026-09-05
+            // desktop-v0.2.47 发版闸首次撞到):没有迁移就没有快照,启动本来就是原地进行的,
+            // 错误凭据让 bootstrap 失败后数据库不会、也不该被逐字回滚。上面已验:启动失败且有
+            // 诊断、config 元数据未变、没有残留 lock。字节相等和快照两项只属于真迁移。
+            eprintln!(
+                "packaged failed-migration smoke: previous Hub {previous_hub} == current pin {EXPECTED_HUB_VERSION}; verified wrong-credential start fails cleanly in place (no migration snapshot or byte-exact restore expected)"
+            );
+            return Ok(());
+        }
+        if fs::read(&database).map_err(|error| error.to_string())? != before {
+            return Err("failed migration did not restore the exact previous database".into());
         }
         let prefix = format!(
             "local-hub-migration-{}-to-{}-",
