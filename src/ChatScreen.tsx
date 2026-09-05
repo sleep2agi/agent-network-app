@@ -26,7 +26,7 @@ import { outboxAdd, outboxForAlias, outboxMarkFailed, outboxMarkPending, outboxR
 import { mayApplySendResult, shouldExposeSendFailure } from './send-reconciliation';
 import { conversationKey, conversationScope, createConversationRequestGate, createConversationStore } from './conversation-store';
 import { resolveSender } from './chat-sender';
-import { COMPOSER_HEIGHT_DEFAULT, clampComposerHeight, composerHeightFromDrag, inputMaxHeight, loadComposerHeight, saveComposerHeight } from './composer-resize';
+import { COMPOSER_HEIGHT_DEFAULT, clampComposerHeight, composerDragHandlers, inputMaxHeight, loadComposerHeight, lockDocumentSelection, saveComposerHeight } from './composer-resize';
 import {
   ATTACH_ENABLED,
   attachmentTextHint,
@@ -201,22 +201,18 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
   const rootHeightRef = useRef(0);
   const [composerHeightRaw, setComposerHeightRaw] = useState<number>(() => loadComposerHeight() ?? COMPOSER_HEIGHT_DEFAULT);
   const composerHeight = clampComposerHeight(composerHeightRaw, rootHeight || undefined);
-  const composerDragStart = useRef(composerHeight);
-  const composerPan = useMemo(() => PanResponder.create({
-    onStartShouldSetPanResponder: () => true,
-    onMoveShouldSetPanResponder: () => true,
-    onPanResponderGrant: () => { composerDragStart.current = clampComposerHeight(composerHeightRaw, rootHeightRef.current || undefined); },
-    onPanResponderMove: (_event, gesture) => {
-      setComposerHeightRaw(composerHeightFromDrag(composerDragStart.current, gesture.dy, rootHeightRef.current || undefined));
-    },
-    onPanResponderRelease: (_event, gesture) => {
-      const next = composerHeightFromDrag(composerDragStart.current, gesture.dy, rootHeightRef.current || undefined);
-      setComposerHeightRaw(next);
-      saveComposerHeight(next);
-    },
-    onPanResponderTerminate: () => { saveComposerHeight(composerHeightRaw); },
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }), [composerHeightRaw]);
+  const composerHeightRawRef = useRef(composerHeightRaw);
+  composerHeightRawRef.current = composerHeightRaw;
+  // 🔴 只创建一次(空依赖):每次高度变化重建 PanResponder 会让 react-native-web 在拖拽中途
+  // 换 responder config,新 gestureState 的 dy 从 0 重新累计 → 拖不动(见 composer-resize.ts)。
+  // 会变的值全部经 ref 现读。
+  const composerPan = useMemo(() => PanResponder.create(composerDragHandlers({
+    getHeight: () => composerHeightRawRef.current,
+    getRootHeight: () => rootHeightRef.current || undefined,
+    setHeight: setComposerHeightRaw,
+    save: saveComposerHeight,
+    lockSelection: Platform.OS === 'web' ? lockDocumentSelection : undefined,
+  })), []);
   const sending = false; // optimistic echo frees the input immediately
   const limitRef = useRef(PAGE);
 
@@ -1621,6 +1617,8 @@ const makeStyles = () =>
     justifyContent: 'center',
     backgroundColor: colors.bg,
     cursor: 'ns-resize',
+    // 分隔条本身不可选(拖拽期间整页禁选由 lockDocumentSelection 负责)。
+    userSelect: 'none',
   } as any,
   composerDividerGrip: { width: 36, height: 3, borderRadius: 2, backgroundColor: colors.border },
   desktopComposer: {
