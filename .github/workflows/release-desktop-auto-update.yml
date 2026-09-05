@@ -118,6 +118,15 @@ jobs:
           releaseBody: |-
             Signed and notarized stable update for macOS (Apple Silicon) and Windows (x64).
 
+            What's new in 0.2.47:
+            - Local workspace recovers by itself: switching to it now starts the bundled local Hub first, and
+              if the native credential store lost its login entry (the "No matching entry found in secure
+              storage" message), the app logs in again with the stored bootstrap password — or, if that is
+              gone too, backs up the data directory and resets the local-admin password in place. No local
+              data is deleted.
+            - Message box divider: dragging it upward no longer selects the conversation text, and the box
+              now follows the mouse for the whole drag instead of moving a few pixels and stopping.
+
             What's new in 0.2.46:
             - Resizable message box: drag the divider above the message box up or down to make it taller or
               shorter (keeps at least one line and leaves the conversation visible). Your choice is remembered

@@ -1,0 +1,27 @@
+Desktop v0.2.47 release-candidate report
+
+- Base: 210b029 (main after app#243)
+- Target: desktop-v0.2.47
+- Why: Vincent 2026-09-05 13:34 (app#240, drag divider selects text + stalls) and 13:42 (app#242,
+  Local workspace "No matching entry found in secure storage", local Hub stopped; "先把 local 的先做好").
+
+Changes
+- Bump the desktop application consistently to 0.2.47 (9 pinned stamps + updater release notes).
+- Ship #241 (composer divider: stable PanResponder, preventDefault, page selection lock).
+- Ship #243 (Local workspace: start-before-switch, token re-login, in-place bootstrap-password
+  recovery with backup, new --smoke-local-hub-lost-credential in the release gate).
+- Bundled Hub pin unchanged (0.9.0-preview.45).
+
+Evidence
+- #241: src/composer-resize.test.ts 47 checks; real-mouse harness tests/test-composer-drag-browser
+  (0.2.46 shape: 200→205 + 232 chars selected; fixed: 200→340 + 0). CI unit-tests ubuntu/windows green.
+- #243: cargo check --locked --tests whole crate 0 warnings (tauri image); cargo test local_credentials::
+  4/4 in the real crate; desktop-tauri.yml dispatched on the branch: mac-arm64 + windows-x64 success
+  (run 33948850019); npm test 79/79; typecheck 0.
+- This bump: npm test (version-consistency) + typecheck, see PR.
+- Release gate additionally runs --smoke-local-hub-lost-credential on macOS and Windows before any draft.
+
+Hand-check list for the draft build (desktop-v0.2.47)
+1. Settings → 账号与 Hub → Local workspace: no red line; 本地 Hub 状态 → 运行中 within seconds; nodes still there.
+2. Drag the divider above the message box upward: no text highlight; the box follows the mouse to the top bound.
+3. 检查更新 from 0.2.46 offers 0.2.47.
