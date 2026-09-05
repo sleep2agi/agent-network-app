@@ -225,11 +225,17 @@ jobs:
             "$binary" --smoke-local-hub-failed-migration
           stale_root="$RUNNER_TEMP/packaged-local-hub-stale-takeover"
           stale_password_file="$RUNNER_TEMP/stale-takeover-password"
-          # 旧版 sidecar 占着 9200 + 持有 lock(app#246):版本号固定用一个肯定 != 当前 pin 的值
-          ANET_SMOKE_PREVIOUS_HUB_VERSION="0.9.0-preview.29" \
+          # 旧版 sidecar 占着 9200 + 持有 lock(app#246)。要一个**真的**旧包:服务端不认
+          # COMMHUB_SERVER_VERSION 之类的环境变量,版本号只能来自装的那个包(0.2.48 首轮发版闸
+          # 就红在这里:拿当前包冒充 .29,health 答的还是 .45)。固定装 Vincent 机器上那一版。
+          STALE_HUB="0.9.0-preview.29"
+          stale_prefix="$RUNNER_TEMP/commhub-stale"
+          npm install --prefix "$stale_prefix" --ignore-scripts \
+            "@sleep2agi/commhub-server@${STALE_HUB}"
+          ANET_SMOKE_PREVIOUS_HUB_VERSION="$STALE_HUB" \
             node scripts/seed-previous-local-hub.mjs --keep-running \
             "$stale_root/.anet/app" \
-            "$previous_prefix/node_modules/@sleep2agi/commhub-server" \
+            "$stale_prefix/node_modules/@sleep2agi/commhub-server" \
             "$stale_password_file"
           ANET_PACKAGED_SMOKE=1 \
             ANET_PACKAGED_SMOKE_ROOT="$stale_root/.anet/app" \

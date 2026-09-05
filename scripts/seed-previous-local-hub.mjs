@@ -45,8 +45,11 @@ const waitForHealth = async () => {
       const response = await fetch(`${endpoint}/health`);
       const body = await response.json();
       if (response.ok && body.ok && body.version === previousVersion) return;
-      if (response.ok && body.ok) last = `unexpected version ${body.version ?? 'missing'}`;
-      last = `HTTP ${response.status}`;
+      // 版本对不上要说出对不上的是什么(0.2.48 首轮:这里被下一行的 `HTTP 200` 盖掉,
+      // 日志只剩「did not become healthy: HTTP 200」,看不出是包版本 != 期望版本)。
+      last = response.ok && body.ok
+        ? `package reports version ${body.version ?? 'missing'}, expected ${previousVersion} (the server does not take the version from env; install that exact package)`
+        : `HTTP ${response.status}`;
     } catch (error) {
       last = error instanceof Error ? error.message : String(error);
     }
