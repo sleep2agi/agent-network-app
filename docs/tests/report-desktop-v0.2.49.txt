@@ -1,0 +1,23 @@
+Desktop v0.2.49 release-candidate report
+
+- Base: 0166481 (main after app#251)
+- Target: desktop-v0.2.49
+- Why: Vincent 2026-09-06 07:2x screenshot + 「更新日志太长导致点击不了更新」: the cumulative release
+  notes filled the update modal in every window, no scroll, the install button pushed off-screen.
+
+Changes
+- Bump the desktop application consistently to 0.2.49 (9 pinned stamps + updater release notes).
+- Ship #251: latestReleaseNotes() shows only the newest "What's new" section, notes in a 240px
+  ScrollView, card maxHeight 85%, button outside the scroll; detached chat windows do not mount the
+  prompt.
+- Bundled Hub pin unchanged (0.9.0-preview.45).
+
+Evidence
+- #251: src/desktop-update-notes.test.ts 9 checks; desktop-updater.test.ts +3 wiring contracts;
+  npm test 81/81; typecheck 0. CI unit-tests ubuntu/windows green.
+- This bump: npm test (version-consistency) + typecheck, see PR.
+
+Hand-check list for the build (desktop-v0.2.49) — 0.2.48 users must install this one manually
+(the 0.2.48 prompt's button is unreachable); later versions update in-app.
+1. Main window prompt for the next version: one section of notes, scrollable, button visible.
+2. Detached chat windows: no prompt.
