@@ -3,6 +3,7 @@ import { ActivityIndicator, Image, Pressable, StyleSheet, Text, View } from 'rea
 import { appFetch } from './app-fetch';
 import { colors, onThemeChange, spacing } from './theme';
 import { downloadImageObjectUrl, saveImageObjectUrl } from './web-image-download';
+import { isTauriDesktop, revealInFolder, saveToDownloads, displayDownloadPath } from './desktop-download';
 
 export default function AuthedWebThumb({
   uri,
@@ -20,6 +21,17 @@ export default function AuthedWebThumb({
   const [objectUrl, setObjectUrl] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [attempt, setAttempt] = useState(0);
+  const [savedPath, setSavedPath] = useState<string | null>(null);
+  const saveOriginal = async (url: string) => {
+    // Tauri 的 WebView 里 <a download> 不落盘(Vincent 2026-09-07):走 Rust 写进「下载」目录
+    if (!isTauriDesktop()) { saveImageObjectUrl(url, name); return; }
+    try {
+      const bytes = new Uint8Array(await (await fetch(url)).arrayBuffer());
+      setSavedPath(await saveToDownloads(name, bytes));
+    } catch (reason) {
+      setError(`保存失败(${reason instanceof Error ? reason.message : String(reason)})`);
+    }
+  };
 
   useEffect(() => {
     let live = true;
@@ -71,10 +83,15 @@ export default function AuthedWebThumb({
         accessibilityRole="button"
         accessibilityLabel={`下载 ${name}`}
         hitSlop={6}
-        onPress={() => saveImageObjectUrl(objectUrl, name)}
+        onPress={() => { void saveOriginal(objectUrl); }}
       >
-        <Text style={styles.download}>↓ 下载原图</Text>
+        <Text style={styles.download}>{savedPath ? `✓ 已保存到 ${displayDownloadPath(savedPath)}` : '↓ 下载原图'}</Text>
       </Pressable>
+      {savedPath ? (
+        <Pressable accessibilityRole="button" hitSlop={6} onPress={() => { void revealInFolder(savedPath).catch(() => undefined); }}>
+          <Text style={styles.download}>在文件夹中显示</Text>
+        </Pressable>
+      ) : null}
     </View>
   );
 }

@@ -19,6 +19,7 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import AliasAvatar from './AliasAvatar';
+import AttachmentFileDesktop from './AttachmentFileDesktop';
 import AuthedThumb, { AttachmentFile, AuthedVideo, mimeFromName } from './AuthedThumb';
 import AuthedWebThumb from './AuthedWebThumb';
 import { createDashboardRequestId, dashboardRequestIdForLocalId, fetchStatus, fetchTasks, sendTask, HubConfig, HubTask, Session, TaskAttachment, TaskPriority } from './api';
@@ -665,6 +666,15 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
         mime={a.mime}
         serverUrl={cfg.serverUrl}
         token={cfg.token}
+      />
+    ) : a.needsAuth && a.uri && Platform.OS === 'web' && !!(globalThis as any).__TAURI_INTERNALS__ ? (
+      // 桌面端非图片附件(含视频):此前只画一行文字没接点击(Vincent 2026-09-07「点击了没反应」)
+      <AttachmentFileDesktop
+        key={`${attachmentCacheScope(cfg.serverUrl, cfg.token)}-${a.key}`}
+        uri={a.uri}
+        name={a.name}
+        token={cfg.token}
+        size={a.size}
       />
     ) : (
       <Text key={a.key} style={styles.attachmentLine}>
