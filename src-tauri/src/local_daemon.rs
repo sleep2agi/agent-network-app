@@ -16,6 +16,10 @@ use std::{
     io::Read,
     path::{Path, PathBuf},
     process::{Command, Stdio},
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        Arc, Mutex,
+    },
     thread,
     time::{Duration, Instant},
 };
@@ -104,6 +108,11 @@ struct CommandOutcome {
 
 /// 经登录 shell 跑一条命令,stdout/stderr 合并,带超时(超时后 kill 这条 shell;
 /// 它 detached 派生出去的子进程不受影响)。
+///
+/// 🔴 读输出的线程**不能无条件 join**:`anet daemon start` 派生出去的 daemon 会继承这条管道的
+/// 写端,shell 退出后管道也不会 EOF —— 0.2.50 首轮发版闸的 macOS job 就是这样挂在
+/// `reader.join()` 上 27 分钟以上。现在:输出攒在共享缓冲里,shell 退出后最多再等 2 秒收尾,
+/// 然后带着已经读到的内容返回;读线程自己会在管道最终关闭时结束。
 fn run_shell(
     command: &str,
     cwd: Option<&Path>,
@@ -126,11 +135,26 @@ fn run_shell(
         .spawn()
         .map_err(|error| format!("cannot start {shell}: {error}"))?;
     let mut stdout = child.stdout.take().ok_or_else(|| "no stdout pipe".to_string())?;
-    let reader = thread::spawn(move || {
-        let mut buffer = String::new();
-        let _ = stdout.read_to_string(&mut buffer);
-        buffer
-    });
+    let buffer: Arc<Mutex<Vec<u8>>> = Arc::new(Mutex::new(Vec::new()));
+    let done = Arc::new(AtomicBool::new(false));
+    {
+        let buffer = Arc::clone(&buffer);
+        let done = Arc::clone(&done);
+        thread::spawn(move || {
+            let mut chunk = [0u8; 4096];
+            loop {
+                match stdout.read(&mut chunk) {
+                    Ok(0) | Err(_) => break,
+                    Ok(n) => {
+                        if let Ok(mut guard) = buffer.lock() {
+                            guard.extend_from_slice(&chunk[..n]);
+                        }
+                    }
+                }
+            }
+            done.store(true, Ordering::SeqCst);
+        });
+    }
     let started = Instant::now();
     let code = loop {
         match child.try_wait().map_err(|error| error.to_string())? {
@@ -143,7 +167,14 @@ fn run_shell(
             None => thread::sleep(Duration::from_millis(100)),
         }
     };
-    let output = reader.join().unwrap_or_default();
+    let settle = Instant::now();
+    while !done.load(Ordering::SeqCst) && settle.elapsed() < Duration::from_secs(2) {
+        thread::sleep(Duration::from_millis(50));
+    }
+    let output = buffer
+        .lock()
+        .map(|guard| String::from_utf8_lossy(&guard).into_owned())
+        .unwrap_or_default();
     Ok(CommandOutcome {
         code,
         output,
@@ -471,6 +502,26 @@ mod tests {
     fn registry_failure_signals_match_install_sh() {
         assert!(looks_like_registry_failure("npm ERR! code ETIMEDOUT\nnpm ERR! network request to https://registry.npmjs.org failed"));
         assert!(!looks_like_registry_failure("npm ERR! code EACCES\nnpm ERR! syscall mkdir"));
+    }
+
+    /// 复现 0.2.50 首轮发版闸的挂死:shell 退出了,但它后台派生的进程还握着 stdout 管道。
+    #[cfg(unix)]
+    #[test]
+    fn run_shell_returns_when_a_detached_grandchild_keeps_the_pipe_open() {
+        let started = Instant::now();
+        let outcome = run_shell("echo before; (sleep 20 &) ; echo after; exit 0", None, &[], Duration::from_secs(30)).unwrap();
+        assert!(started.elapsed() < Duration::from_secs(10), "took {:?}", started.elapsed());
+        assert_eq!(outcome.code, Some(0));
+        assert!(!outcome.timed_out);
+        assert!(outcome.output.contains("before") && outcome.output.contains("after"), "{}", outcome.output);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn run_shell_times_out_and_reports_partial_output() {
+        let outcome = run_shell("echo partial; sleep 30", None, &[], Duration::from_secs(1)).unwrap();
+        assert!(outcome.timed_out && outcome.code.is_none());
+        assert!(outcome.output.contains("partial"), "{}", outcome.output);
     }
 
     #[test]
