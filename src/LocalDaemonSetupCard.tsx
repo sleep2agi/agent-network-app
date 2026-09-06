@@ -36,7 +36,7 @@ export default function LocalDaemonSetupCard({ onInstalled }: { onInstalled: () 
   return (
     <View style={styles.card} testID="local-daemon-setup-card">
       <Text style={styles.title}>本机就是这台服务器?一键装上本机 daemon</Text>
-      <Text style={styles.body}>扫描本机的 Node.js / npm / anet CLI,缺什么装什么,然后用本地 Hub 的凭据注册并启动 host_supervisor。每一步都由你点按钮触发,不会后台偷偷装。</Text>
+      <Text style={styles.body}>扫描本机的 Node.js / npm / anet CLI,缺什么装什么(缺 Node 或版本太低会自动下载一份私有 Node 22,装在 app 自己的目录里,不动系统、不要 sudo),然后用本地 Hub 的凭据注册并启动 host_supervisor。每一步都由你点按钮触发,不会后台偷偷装。</Text>
       <View style={styles.actions}>
         <Pressable disabled={scanning || installing} testID="local-daemon-scan" style={({ pressed }) => [styles.button, styles.buttonGhost, pressed && { opacity: 0.7 }]} onPress={() => { void runScan(); }}>
           <Text style={styles.buttonGhostText}>{scanning ? '扫描中…' : scan ? '重新扫描' : '扫描本机'}</Text>
@@ -62,7 +62,7 @@ export default function LocalDaemonSetupCard({ onInstalled }: { onInstalled: () 
         </View>
       ) : null}
       {installing ? (
-        <View style={styles.progress}><ActivityIndicator color={colors.accent} /><Text style={styles.rowDetail}>正在安装并启动……第一次装 anet 要下载 npm 包,可能需要 1–2 分钟。</Text></View>
+        <View style={styles.progress}><ActivityIndicator color={colors.accent} /><Text style={styles.rowDetail}>正在安装并启动……第一次可能要下载私有 Node(约 50 MB)和 anet 的 npm 包,1–3 分钟。</Text></View>
       ) : null}
       {report ? (
         <View style={styles.report}>

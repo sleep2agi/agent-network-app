@@ -11,6 +11,8 @@ export interface LocalDaemonScan {
   node?: DaemonToolInfo | null;
   npm?: DaemonToolInfo | null;
   anet?: DaemonToolInfo | null;
+  /** 已下载的私有 Node(~/.anet/app/local-daemon/node)。 */
+  privateNode?: DaemonToolInfo | null;
   daemonDir: string;
   daemonName: string;
   profileExists: boolean;
@@ -49,11 +51,17 @@ export function nodeVersionOk(version: string | null | undefined): boolean {
 
 export function daemonChecklist(scan: LocalDaemonScan): ChecklistRow[] {
   const tool = (info: DaemonToolInfo | null | undefined) => info ? `${info.version ?? '?'} · ${info.path}` : '未找到';
-  const nodeState: ChecklistState = !scan.node ? 'missing' : nodeVersionOk(scan.node.version) ? 'ok' : 'bad';
+  const systemOk = !!scan.node && nodeVersionOk(scan.node.version);
+  const privateOk = !!scan.privateNode && nodeVersionOk(scan.privateNode.version);
+  const nodeState: ChecklistState = systemOk || privateOk ? 'ok' : scan.node ? 'bad' : 'missing';
+  const nodeDetail = systemOk ? tool(scan.node)
+    : privateOk ? `私有 ${tool(scan.privateNode)}`
+    : scan.node ? `${tool(scan.node)}(版本太低)—— 点安装会自动下载一份私有 Node 22(约 50 MB,不动系统/nvm)`
+    : '未找到 —— 点安装会自动下载一份私有 Node 22(约 50 MB,装在 ~/.anet/app/local-daemon/node,不动系统)';
   return [
-    { key: 'node', label: 'Node.js ≥ 22.13', state: nodeState, detail: scan.node ? tool(scan.node) + (nodeState === 'bad' ? '(版本太低)' : '') : '未找到 —— 从 https://nodejs.org 安装' },
-    { key: 'npm', label: 'npm', state: scan.npm ? 'ok' : 'missing', detail: tool(scan.npm) },
-    { key: 'anet', label: 'anet CLI', state: scan.anet ? 'ok' : 'missing', detail: scan.anet ? tool(scan.anet) : '未安装 —— 点安装会执行 npm install -g @sleep2agi/agent-network' },
+    { key: 'node', label: 'Node.js ≥ 22.13', state: nodeState, detail: nodeDetail },
+    { key: 'npm', label: 'npm', state: systemOk && scan.npm ? 'ok' : privateOk ? 'ok' : 'missing', detail: systemOk && scan.npm ? tool(scan.npm) : privateOk ? '私有 Node 自带' : '随私有 Node 一起下载' },
+    { key: 'anet', label: 'anet CLI', state: scan.anet ? 'ok' : 'missing', detail: scan.anet ? tool(scan.anet) : '未安装 —— 点安装会装进 ~/.anet/app/local-daemon/anet(私有目录,不要 sudo)' },
     { key: 'daemon', label: '本机 daemon', state: scan.profileExists ? 'ok' : 'missing', detail: scan.profileExists ? `${scan.daemonName} · ${scan.nodeId ?? '(node_id 未知)'}` : `未初始化(将建在 ${scan.daemonDir})` },
   ];
 }
@@ -61,9 +69,7 @@ export function daemonChecklist(scan: LocalDaemonScan): ChecklistRow[] {
 /** 能不能点「安装」:Windows 不行;没 Node/npm 或 Node 太低不行(装不了 anet)。返回 null = 可以。 */
 export function installBlocker(scan: LocalDaemonScan): string | null {
   if (!scan.supported) return scan.reason ?? '当前平台不支持本机 daemon';
-  if (!scan.node) return '先安装 Node.js(≥ 22.13):https://nodejs.org';
-  if (!nodeVersionOk(scan.node.version)) return `Node.js ${scan.node.version ?? ''} 太低,anet 需要 ≥ 22.13`;
-  if (!scan.npm) return '有 Node.js 但没有 npm,请重新安装 Node.js';
+  // Node 缺/太低不再是阻塞:安装会自动下载私有 Node 22(Vincent 2026-09-06「node 也自动安装一下?」)
   if (!scan.hubEndpoint) return '本地 Hub 还没运行,先切到 Local workspace';
   return null;
 }
