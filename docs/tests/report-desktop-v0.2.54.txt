@@ -1,0 +1,23 @@
+Desktop v0.2.54 release-candidate report
+
+- Base: 62014af (main after app#267)
+- Target: desktop-v0.2.54
+- Why: Vincent 2026-09-07 07:5x (app#266): non-image attachments on desktop had no click handler; image
+  "下载原图" used <a download>, which the Tauri WebView never honours.
+
+Changes
+- Bump the desktop application consistently to 0.2.54 (9 pinned stamps + updater release notes).
+- Ship #267: Rust save_download into the system Downloads dir (basename only, dedupe), TS authed fetch →
+  base64 → invoke → reveal in folder (opener), AttachmentFileDesktop component, AuthedWebThumb saves via
+  the same path on Tauri.
+- Bundled Hub pin unchanged (0.9.0-preview.45).
+
+Evidence
+- #267: cargo check 0 warnings; cargo test download_ 2/2; desktop-tauri.yml mac + windows success
+  (run 34067492257); npm test 84/84 (+desktop-download.test.ts 10 checks); typecheck 0.
+- This bump: npm test (version-consistency) + typecheck, see PR.
+
+Hand-check (Vincent, 0.2.54)
+1. Open the conversation with 通信龙 → click agent-network-intro.pdf → ⏳ then ✓ 已保存到 …/Downloads/… →
+   在文件夹中显示 opens Finder at the file.
+2. Click 下载原图 under an image → same.

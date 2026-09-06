@@ -119,6 +119,11 @@ jobs:
           releaseBody: |-
             Signed and notarized stable update for macOS (Apple Silicon) and Windows (x64).
 
+            What's new in 0.2.54:
+            - Attachments on desktop: files an agent sends you (PDF, PPTX, Markdown, HTML, video…) are now
+              clickable — one click downloads them into your Downloads folder and offers "Show in folder";
+              "Download original" on images works the same way instead of doing nothing.
+
             What's new in 0.2.53:
             - Local daemon installer: the daemon is now started in the background and the installer confirms
               its registration with the Hub right away (up to 90 s) instead of waiting out a foreground
