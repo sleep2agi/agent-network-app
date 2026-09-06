@@ -119,6 +119,12 @@ jobs:
           releaseBody: |-
             Signed and notarized stable update for macOS (Apple Silicon) and Windows (x64).
 
+            What's new in 0.2.53:
+            - Local daemon installer: the daemon is now started in the background and the installer confirms
+              its registration with the Hub right away (up to 90 s) instead of waiting out a foreground
+              command; if the Hub still does not list it, the step says whether the daemon session is online
+              and shows the daemon's start log.
+
             What's new in 0.2.52:
             - Unread badges finally count agent replies: an agent that answered you while you were elsewhere
               now shows a red count on its avatar (WeChat-style), cleared when you open that conversation and

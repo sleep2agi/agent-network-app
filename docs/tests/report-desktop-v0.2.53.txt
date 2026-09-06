@@ -1,0 +1,25 @@
+Desktop v0.2.53 release-candidate report
+
+- Base: aa73fa5 (main after app#263)
+- Target: desktop-v0.2.53
+- Why: Vincent 2026-09-06 17:xx screenshot (0.2.52): private Node, anet and daemon init all succeeded,
+  daemon registered, but "Hub did not list the daemon within 45 s".
+
+Changes
+- Bump the desktop application consistently to 0.2.53 (9 pinned stamps + updater release notes).
+- Ship #263: `anet daemon start` is a foreground command; start it detached (setsid + nohup, start.log),
+  poll /api/host-supervisors for 90 s immediately, and on failure report the session state from
+  /api/status plus the start.log tail.
+- Bundled Hub pin unchanged (0.9.0-preview.45).
+
+Evidence
+- DEV repro against a scratch Hub 0.9.0-preview.45 with anet 2.3.0-preview.76 (private prefix) and
+  agent-node .58: foreground start killed by the 60 s timeout took the daemon down with it; detached
+  start returned in 1 s, daemon stayed alive, /api/host-supervisors listed it online within ~2 s.
+- #263: cargo check 0 warnings; cargo test local_daemon:: 10/10; desktop-tauri.yml mac + windows success
+  (run 34025070613); unit-tests ubuntu/windows green.
+- This bump: npm test (version-consistency) + typecheck, see PR.
+
+Hand-check (Vincent, 0.2.53)
+1. 选服务器 → 重新扫描 → 重新注册并启动本机 daemon → the last step turns green within ~10 s and
+   local-daemon appears in the list; 下一步 creates a node on it.
