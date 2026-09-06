@@ -25,12 +25,17 @@ use std::{
 };
 
 use serde::Serialize;
+use sha2::{Digest, Sha256};
 
 use super::{app_root, ensure_private_dir, write_private_atomic};
 
 pub const LOCAL_DAEMON_NAME: &str = "local-daemon";
 const ANET_PACKAGE: &str = "@sleep2agi/agent-network@latest";
 const NPM_MIRROR: &str = "https://registry.npmmirror.com";
+/// 私有 Node 运行时:缺 Node 或版本太低时从 nodejs.org 下 v22 最新 LTS 到 ~/.anet/app/local-daemon/node,
+/// 不动系统、不动 nvm、不要 sudo(Vincent 2026-09-06「node 也自动安装一下?」)。
+const NODE_DIST_LATEST_V22: &str = "https://nodejs.org/dist/latest-v22.x";
+const NODE_DIST_MIRROR_V22: &str = "https://npmmirror.com/mirrors/node/latest-v22.x";
 
 #[derive(Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -48,6 +53,8 @@ pub struct DaemonScan {
     pub node: Option<ToolInfo>,
     pub npm: Option<ToolInfo>,
     pub anet: Option<ToolInfo>,
+    /// ~/.anet/app/local-daemon/node 里已经下好的私有 Node(有则优先用它)。
+    pub private_node: Option<ToolInfo>,
     pub daemon_dir: String,
     pub daemon_name: String,
     pub profile_exists: bool,
@@ -121,7 +128,11 @@ fn run_shell(
 ) -> Result<CommandOutcome, String> {
     let shell = login_shell();
     let mut cmd = Command::new(&shell);
-    cmd.args(["-l", "-c", &format!("{command} 2>&1")])
+    // -l -i:登录 + 交互。nvm / homebrew 的 PATH 多半写在 .zshrc / .bashrc(交互 rc)里,只 -l 读不到
+    // (Vincent 2026-09-06:终端里 node v20.12 在,app 扫描四行全 ✗)。TERM=dumb + stdin 关掉,
+    // rc 里的提示符/补全不会挂住;输出里可能夹着 "Now using node …" 之类噪音,parse_tool_probe 会跳过。
+    cmd.args(["-l", "-i", "-c", &format!("{command} 2>&1")])
+        .env("TERM", "dumb")
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
         .stderr(Stdio::null());
@@ -182,21 +193,37 @@ fn run_shell(
     })
 }
 
-/// `command -v X` + `X --version` 的输出:第一行是路径,第二行(可选)是版本。
-pub fn parse_tool_probe(output: &str) -> Option<ToolInfo> {
-    let mut lines = output.lines().map(str::trim).filter(|line| !line.is_empty());
-    let path = lines.next()?;
-    if !path.starts_with('/') {
-        return None;
+/// 去掉终端控制序列(交互 shell 的 rc 可能往 stdout 吐颜色/光标码)。
+pub fn strip_ansi(text: &str) -> String {
+    let mut out = String::with_capacity(text.len());
+    let mut chars = text.chars().peekable();
+    while let Some(c) = chars.next() {
+        if c == '\u{1b}' {
+            if chars.peek() == Some(&'[') {
+                chars.next();
+                while let Some(&n) = chars.peek() {
+                    chars.next();
+                    if ('@'..='~').contains(&n) { break; }
+                }
+            }
+            continue;
+        }
+        if c != '\r' { out.push(c); }
     }
+    out
+}
+
+/// `command -v X` + `X --version` 的输出:路径行以 `/` 开头;版本取路径之后第一行像版本号的
+/// (`v22.1.0` / `10.5.0` / `2.3.0-preview.76`)。其它行(nvm 的 "Now using node …" 等)一律跳过。
+pub fn parse_tool_probe(output: &str) -> Option<ToolInfo> {
+    let clean = strip_ansi(output);
+    let mut lines = clean.lines().map(str::trim).filter(|line| !line.is_empty());
+    let path = lines.find(|line| line.starts_with('/') && !line.contains(char::is_whitespace))?;
     let version = lines
-        .next()
-        .map(|line| line.trim_start_matches('v').to_string())
-        .filter(|line| !line.is_empty() && line.len() < 40);
-    Some(ToolInfo {
-        path: path.to_string(),
-        version,
-    })
+        .map(|line| line.trim_start_matches('v'))
+        .find(|line| line.len() < 40 && line.chars().next().is_some_and(|c| c.is_ascii_digit()) && line.contains('.'))
+        .map(str::to_string);
+    Some(ToolInfo { path: path.to_string(), version })
 }
 
 fn probe_tool(tool: &str, version_flag: &str) -> Option<ToolInfo> {
@@ -244,6 +271,105 @@ pub fn looks_like_registry_failure(text: &str) -> bool {
     .any(|needle| lower.contains(needle))
 }
 
+fn private_node_dir() -> Result<PathBuf, String> {
+    Ok(daemon_root()?.join("node"))
+}
+
+fn private_anet_prefix() -> Result<PathBuf, String> {
+    Ok(daemon_root()?.join("anet"))
+}
+
+fn probe_private_node() -> Option<ToolInfo> {
+    let node = private_node_dir().ok()?.join("bin").join("node");
+    if !node.is_file() { return None; }
+    let output = Command::new(&node).arg("-v").output().ok()?;
+    if !output.status.success() { return None; }
+    let version = String::from_utf8_lossy(&output.stdout).trim().trim_start_matches('v').to_string();
+    Some(ToolInfo { path: node.display().to_string(), version: Some(version) })
+}
+
+/// nodejs.org 的 SHASUMS256.txt 里挑出本平台的 tar.gz:返回 (文件名, sha256)。
+pub fn pick_node_tarball(shasums: &str, os: &str, arch: &str) -> Option<(String, String)> {
+    let suffix = format!("-{os}-{arch}.tar.gz");
+    shasums.lines().find_map(|line| {
+        let mut parts = line.split_whitespace();
+        let sha = parts.next()?;
+        let name = parts.next()?;
+        (name.starts_with("node-v") && name.ends_with(&suffix) && sha.len() == 64).then(|| (name.to_string(), sha.to_string()))
+    })
+}
+
+pub fn node_platform() -> Option<(&'static str, &'static str)> {
+    let os = match std::env::consts::OS { "macos" => "darwin", "linux" => "linux", _ => return None };
+    let arch = match std::env::consts::ARCH { "aarch64" => "arm64", "x86_64" => "x64", _ => return None };
+    Some((os, arch))
+}
+
+fn fetch_text(url: &str) -> Result<String, String> {
+    reqwest::blocking::Client::new()
+        .get(url)
+        .timeout(Duration::from_secs(60))
+        .send()
+        .map_err(|error| error.to_string())?
+        .error_for_status()
+        .map_err(|error| error.to_string())?
+        .text()
+        .map_err(|error| error.to_string())
+}
+
+fn fetch_bytes(url: &str) -> Result<Vec<u8>, String> {
+    reqwest::blocking::Client::new()
+        .get(url)
+        .timeout(Duration::from_secs(600))
+        .send()
+        .map_err(|error| error.to_string())?
+        .error_for_status()
+        .map_err(|error| error.to_string())?
+        .bytes()
+        .map(|b| b.to_vec())
+        .map_err(|error| error.to_string())
+}
+
+/// 下载并校验私有 Node v22(nodejs.org,失败退 npmmirror 镜像),解压到 ~/.anet/app/local-daemon/node。
+fn install_private_node(log: &mut String) -> Result<ToolInfo, String> {
+    let (os, arch) = node_platform().ok_or_else(|| format!("不支持的平台 {}/{}", std::env::consts::OS, std::env::consts::ARCH))?;
+    let mut last_error = String::new();
+    for base in [NODE_DIST_LATEST_V22, NODE_DIST_MIRROR_V22] {
+        let attempt = (|| -> Result<ToolInfo, String> {
+            let shasums = fetch_text(&format!("{base}/SHASUMS256.txt"))?;
+            let (name, expected) = pick_node_tarball(&shasums, os, arch)
+                .ok_or_else(|| format!("SHASUMS256.txt 里没有 {os}-{arch} 的 tar.gz"))?;
+            log.push_str(&format!("下载 {base}/{name}\n"));
+            let bytes = fetch_bytes(&format!("{base}/{name}"))?;
+            let actual = format!("{:x}", Sha256::digest(&bytes));
+            if actual != expected {
+                return Err(format!("{name} SHA256 不符:期望 {expected},实际 {actual}"));
+            }
+            log.push_str(&format!("SHA256 校验通过({} 字节)\n", bytes.len()));
+            let root = daemon_root()?;
+            ensure_private_dir(&root)?;
+            let tmp = root.join("node-download.tar.gz");
+            fs::write(&tmp, &bytes).map_err(|error| error.to_string())?;
+            let extracted = root.join(name.trim_end_matches(".tar.gz"));
+            let _ = fs::remove_dir_all(&extracted);
+            let status = Command::new("tar").args(["-xzf"]).arg(&tmp).arg("-C").arg(&root).status().map_err(|error| error.to_string())?;
+            let _ = fs::remove_file(&tmp);
+            if !status.success() {
+                return Err(format!("tar 解压失败:{status}"));
+            }
+            let target = private_node_dir()?;
+            let _ = fs::remove_dir_all(&target);
+            fs::rename(&extracted, &target).map_err(|error| format!("放置私有 Node 失败:{error}"))?;
+            probe_private_node().ok_or_else(|| "解压后的 node 无法执行".to_string())
+        })();
+        match attempt {
+            Ok(info) => return Ok(info),
+            Err(error) => { log.push_str(&format!("{base}: {error}\n")); last_error = error; }
+        }
+    }
+    Err(format!("私有 Node 下载失败:{last_error}"))
+}
+
 pub fn scan(session: Option<&LocalHubSession>) -> Result<DaemonScan, String> {
     let daemon_dir = daemon_root()?;
     let supported = cfg!(unix);
@@ -262,6 +388,7 @@ pub fn scan(session: Option<&LocalHubSession>) -> Result<DaemonScan, String> {
         (None, None, None)
     };
     let profile_exists = daemon_profile_path(LOCAL_DAEMON_NAME)?.is_file();
+    let private_node = if supported { probe_private_node() } else { None };
     Ok(DaemonScan {
         supported,
         reason,
@@ -269,6 +396,7 @@ pub fn scan(session: Option<&LocalHubSession>) -> Result<DaemonScan, String> {
         node,
         npm,
         anet,
+        private_node,
         daemon_dir: daemon_dir.display().to_string(),
         daemon_name: LOCAL_DAEMON_NAME.into(),
         profile_exists,
@@ -329,44 +457,74 @@ pub fn install(session: &LocalHubSession) -> Result<DaemonInstallReport, String>
             describe(&first.anet)
         ),
     });
-    let Some(node) = &first.node else {
-        return fail(steps, "本机没有 Node.js(需要 ≥ 22.13)。请先从 https://nodejs.org 安装,再回来点这个按钮。".into());
-    };
-    if !node_version_ok(node.version.as_deref()) {
-        return fail(steps, format!("本机 Node.js 是 {},anet 需要 ≥ 22.13。升级后再回来点这个按钮。", node.version.as_deref().unwrap_or("未知版本")));
-    }
-    if first.npm.is_none() {
-        return fail(steps, "本机有 Node.js 但没有 npm,请重新安装 Node.js(自带 npm)。".into());
-    }
     let daemon_dir = daemon_root()?;
     ensure_private_dir(&daemon_dir)?;
 
-    // 1. anet CLI
-    let anet = match first.anet.clone() {
-        Some(anet) => {
-            steps.push(StepReport { name: "anet CLI".into(), ok: true, output: format!("已安装 {} ({})", anet.version.as_deref().unwrap_or("?"), anet.path) });
-            anet
+    // 1. Node 运行时:系统的 ≥ 22.13 就用系统的;否则用/下私有 Node 22
+    let node_bin_dir: PathBuf = match (&first.node, &first.private_node) {
+        (Some(node), _) if node_version_ok(node.version.as_deref()) => {
+            steps.push(StepReport { name: "Node.js".into(), ok: true, output: format!("用系统的 {} ({})", node.version.as_deref().unwrap_or("?"), node.path) });
+            Path::new(&node.path).parent().map(Path::to_path_buf).unwrap_or_default()
         }
-        None => {
-            let primary = run_shell(&format!("npm install -g {ANET_PACKAGE}"), Some(&daemon_dir), &[], Duration::from_secs(600))?;
-            let mut output = primary.output.clone();
-            let mut ok = primary.code == Some(0);
-            if !ok && !primary.timed_out && looks_like_registry_failure(&primary.output) {
-                let mirror = run_shell(&format!("npm install -g {ANET_PACKAGE} --registry {NPM_MIRROR}"), Some(&daemon_dir), &[], Duration::from_secs(600))?;
-                output.push_str("\n--- retry via npmmirror ---\n");
-                output.push_str(&mirror.output);
-                ok = mirror.code == Some(0);
-            }
-            steps.push(StepReport { name: "npm install -g @sleep2agi/agent-network".into(), ok, output: tail(&output, 1500) });
-            if !ok {
-                let hint = if primary.timed_out { "npm 安装超时(10 分钟)。" } else if output.contains("EACCES") { "npm 全局目录没有写权限。在终端里跑一次:sudo npm install -g @sleep2agi/agent-network" } else { "npm 安装失败,见上面的输出。" };
-                return fail(steps, hint.into());
-            }
-            match probe_tool("anet", "--version") {
-                Some(anet) => anet,
-                None => return fail(steps, "npm 装完了但登录 shell 里找不到 anet。检查 `npm config get prefix` 对应的 bin 目录是否在 PATH 里。".into()),
+        (_, Some(private)) if node_version_ok(private.version.as_deref()) => {
+            steps.push(StepReport { name: "Node.js".into(), ok: true, output: format!("用私有的 {} ({})", private.version.as_deref().unwrap_or("?"), private.path) });
+            Path::new(&private.path).parent().map(Path::to_path_buf).unwrap_or_default()
+        }
+        _ => {
+            let mut log = String::new();
+            match install_private_node(&mut log) {
+                Ok(private) => {
+                    log.push_str(&format!("私有 Node {} 就绪:{}", private.version.as_deref().unwrap_or("?"), private.path));
+                    steps.push(StepReport { name: "下载私有 Node 22(不动系统)".into(), ok: true, output: tail(&log, 1500) });
+                    Path::new(&private.path).parent().map(Path::to_path_buf).unwrap_or_default()
+                }
+                Err(error) => {
+                    steps.push(StepReport { name: "下载私有 Node 22(不动系统)".into(), ok: false, output: tail(&log, 1500) });
+                    return fail(steps, format!("{error}。也可以自己装 Node.js ≥ 22.13(https://nodejs.org)后再点一次。"));
+                }
             }
         }
+    };
+    let npm_bin = node_bin_dir.join("npm");
+    if !npm_bin.is_file() {
+        return fail(steps, format!("{} 里没有 npm", node_bin_dir.display()));
+    }
+
+    // 2. anet CLI:装进私有 prefix(不需要 sudo,不碰系统的全局 node_modules)
+    let anet_prefix = private_anet_prefix()?;
+    ensure_private_dir(&anet_prefix)?;
+    let anet_bin = anet_prefix.join("bin").join("anet");
+    let path_prefix = format!("{}:{}", node_bin_dir.display(), anet_prefix.join("bin").display());
+    let with_path = |cmd: &str| format!("export PATH={}:\"$PATH\"; {cmd}", shell_quote(&path_prefix));
+    let anet = if anet_bin.is_file() {
+        let probe = run_shell(&with_path(&format!("{} --version", shell_quote(&anet_bin.display().to_string()))), None, &[], Duration::from_secs(30))?;
+        let version = strip_ansi(&probe.output).lines().map(str::trim).find(|l| !l.is_empty()).unwrap_or("?").to_string();
+        steps.push(StepReport { name: "anet CLI".into(), ok: true, output: format!("已在私有目录:{} ({version})", anet_bin.display()) });
+        ToolInfo { path: anet_bin.display().to_string(), version: Some(version) }
+    } else {
+        let install_cmd = |registry: Option<&str>| with_path(&format!(
+            "{} install -g --prefix {} {ANET_PACKAGE}{}",
+            shell_quote(&npm_bin.display().to_string()),
+            shell_quote(&anet_prefix.display().to_string()),
+            registry.map(|r| format!(" --registry {r}")).unwrap_or_default()
+        ));
+        let primary = run_shell(&install_cmd(None), Some(&daemon_dir), &[], Duration::from_secs(600))?;
+        let mut output = primary.output.clone();
+        let mut ok = primary.code == Some(0);
+        if !ok && !primary.timed_out && looks_like_registry_failure(&primary.output) {
+            let mirror = run_shell(&install_cmd(Some(NPM_MIRROR)), Some(&daemon_dir), &[], Duration::from_secs(600))?;
+            output.push_str("\n--- retry via npmmirror ---\n");
+            output.push_str(&mirror.output);
+            ok = mirror.code == Some(0);
+        }
+        steps.push(StepReport { name: format!("npm install -g --prefix {} @sleep2agi/agent-network", anet_prefix.display()), ok, output: tail(&output, 1500) });
+        if !ok {
+            return fail(steps, if primary.timed_out { "npm 安装超时(10 分钟)。".into() } else { "npm 安装失败,见上面的输出。".into() });
+        }
+        if !anet_bin.is_file() {
+            return fail(steps, format!("npm 装完了但 {} 不存在", anet_bin.display()));
+        }
+        ToolInfo { path: anet_bin.display().to_string(), version: None }
     };
 
     // 2. 私有 HOME 里写 anet 全局配置(只给 daemon init 用)
@@ -385,7 +543,7 @@ pub fn install(session: &LocalHubSession) -> Result<DaemonInstallReport, String>
     // 3. anet daemon init(HOME=私有)
     let init_env = [("HOME", home.display().to_string())];
     let init = run_shell(
-        &format!("{} daemon init {} --force", shell_quote(&anet.path), LOCAL_DAEMON_NAME),
+        &with_path(&format!("{} daemon init {} --force", shell_quote(&anet.path), LOCAL_DAEMON_NAME)),
         Some(&daemon_dir),
         &init_env,
         Duration::from_secs(90),
@@ -402,7 +560,7 @@ pub fn install(session: &LocalHubSession) -> Result<DaemonInstallReport, String>
 
     // 4. anet daemon start(用户真实 HOME;它 detached 派生 daemon 进程)
     let start = run_shell(
-        &format!("{} daemon start {}", shell_quote(&anet.path), LOCAL_DAEMON_NAME),
+        &with_path(&format!("{} daemon start {}", shell_quote(&anet.path), LOCAL_DAEMON_NAME)),
         Some(&daemon_dir),
         &[],
         Duration::from_secs(60),
@@ -444,7 +602,10 @@ pub fn install(session: &LocalHubSession) -> Result<DaemonInstallReport, String>
 /// 只给打包 smoke 用:停掉刚起的 daemon(`anet node stop <name>`),失败不算错。
 pub fn stop_for_smoke() -> Result<(), String> {
     let daemon_dir = daemon_root()?;
-    let _ = run_shell(&format!("anet node stop {LOCAL_DAEMON_NAME}"), Some(&daemon_dir), &[], Duration::from_secs(30))?;
+    let anet = private_anet_prefix()?.join("bin").join("anet");
+    let node_bin = private_node_dir()?.join("bin");
+    let cmd = format!("export PATH={}:{}:\"$PATH\"; {} node stop {LOCAL_DAEMON_NAME}", shell_quote(&node_bin.display().to_string()), shell_quote(&anet.parent().unwrap().display().to_string()), if anet.is_file() { shell_quote(&anet.display().to_string()) } else { "anet".into() });
+    let _ = run_shell(&cmd, Some(&daemon_dir), &[], Duration::from_secs(30))?;
     Ok(())
 }
 
@@ -470,6 +631,25 @@ fn shell_quote(value: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn probe_skips_nvm_noise_and_ansi() {
+        let noisy = "\u{1b}[32mNow using node v20.12.2 (npm v10.5.0)\u{1b}[0m\r\n/Users/v/.nvm/versions/node/v20.12.2/bin/node\r\nv20.12.2\r\n";
+        let info = parse_tool_probe(noisy).unwrap();
+        assert_eq!(info.path, "/Users/v/.nvm/versions/node/v20.12.2/bin/node");
+        assert_eq!(info.version.as_deref(), Some("20.12.2"));
+        assert_eq!(strip_ansi("a\u{1b}[1;31mb\u{1b}[0m"), "ab");
+    }
+
+    #[test]
+    fn picks_platform_tarball_from_shasums() {
+        let shasums = "61130f394c1630d211dd50aecc4353d379480f36d3ac913cd85dbba1aed585c6  node-v22.23.2-darwin-arm64.tar.gz\n58e99022c2ff89395576cc7fd4d98cea24bb68081475d5f88b801ee8729fb026  node-v22.23.2-darwin-x64.tar.gz\n013b59cfd2819703a6f4a14ab891fc46fc2a4e3f5bcd92de3fb4929b43e35b30  node-v22.23.2-linux-arm64.tar.gz\nb294a556e639d64338823920e5866c21c02741742d2e1529ee1a225c1ec9252a  node-v22.23.2-linux-x64.tar.gz\nzzz  node-v22.23.2-darwin-arm64.tar.xz\n";
+        assert_eq!(pick_node_tarball(shasums, "darwin", "arm64"), Some(("node-v22.23.2-darwin-arm64.tar.gz".into(), "61130f394c1630d211dd50aecc4353d379480f36d3ac913cd85dbba1aed585c6".into())));
+        assert_eq!(pick_node_tarball(shasums, "linux", "x64").map(|t| t.0), Some("node-v22.23.2-linux-x64.tar.gz".into()));
+        assert_eq!(pick_node_tarball(shasums, "win", "x64"), None);
+        // Windows 没有 daemon(POSIX-only),node_platform 也按设计返回 None。
+        assert_eq!(node_platform().is_some(), cfg!(unix));
+    }
 
     #[test]
     fn parses_tool_probe_path_and_version() {

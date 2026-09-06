@@ -9,26 +9,34 @@ const base = { supported: true, shell: '/bin/zsh', daemonDir: '/Users/x/.anet/ap
 
 check(nodeVersionOk('v22.13.0') && nodeVersionOk('24.0.1') && !nodeVersionOk('v22.12.0') && !nodeVersionOk('v20.20.0') && !nodeVersionOk(null), 'node gate = engines.node >= 22.13');
 
-// 全缺:node 缺 → 不能装,清单四行都是 ✗
+// 全缺:清单四行都是 ✗,但**不阻塞**——安装会自动下载私有 Node 22
 {
   const scan = { ...base };
   const rows = daemonChecklist(scan);
   check(rows.map(r => r.state).join(',') === 'missing,missing,missing,missing', 'all missing');
-  check(rows[0].detail.includes('nodejs.org'), 'node row points at nodejs.org');
-  check(installBlocker(scan)?.includes('Node.js') === true, 'blocked on Node');
+  check(rows[0].detail.includes('私有 Node 22') && rows[0].detail.includes('不动系统'), 'node row explains the private download');
+  check(installBlocker(scan) === null, 'missing node is not a blocker any more');
 }
-// node 太低
+// node 太低(Vincent 的 v20.12.2):bad 但不阻塞
 {
-  const scan = { ...base, node: { path: '/usr/local/bin/node', version: '20.20.0' }, npm: { path: '/usr/local/bin/npm', version: '10' } };
-  check(daemonChecklist(scan)[0].state === 'bad', 'old node → bad');
-  check(installBlocker(scan)?.includes('太低') === true, 'blocked on old node');
+  const scan = { ...base, node: { path: '/Users/v/.nvm/versions/node/v20.12.2/bin/node', version: '20.12.2' }, npm: { path: '/Users/v/.nvm/versions/node/v20.12.2/bin/npm', version: '10.5.0' } };
+  const rows = daemonChecklist(scan);
+  check(rows[0].state === 'bad' && rows[0].detail.includes('版本太低') && rows[0].detail.includes('私有 Node 22'), 'old node → bad with private-node hint');
+  check(installBlocker(scan) === null, 'old node is not a blocker');
+}
+// 已有私有 Node:node/npm 两行 ✓
+{
+  const scan = { ...base, node: { path: '/usr/local/bin/node', version: '20.20.0' }, privateNode: { path: '/Users/v/.anet/app/local-daemon/node/bin/node', version: '22.23.2' } };
+  const rows = daemonChecklist(scan);
+  check(rows[0].state === 'ok' && rows[0].detail.startsWith('私有'), 'private node satisfies the node row');
+  check(rows[1].state === 'ok' && rows[1].detail.includes('私有 Node 自带'), 'npm row satisfied by private node');
 }
 // node+npm 在、anet 缺:可以装,anet 行说明会 npm install
 {
   const scan = { ...base, node: { path: '/opt/homebrew/bin/node', version: '22.14.0' }, npm: { path: '/opt/homebrew/bin/npm', version: '10.9.0' } };
   check(installBlocker(scan) === null, 'installable');
   const rows = daemonChecklist(scan);
-  check(rows[2].state === 'missing' && rows[2].detail.includes('npm install -g @sleep2agi/agent-network'), 'anet row explains the install');
+  check(rows[2].state === 'missing' && rows[2].detail.includes('local-daemon/anet'), 'anet row explains the private-prefix install');
   check(rows[3].detail.includes(base.daemonDir), 'daemon row names the target dir');
 }
 // 已装 + 已注册
