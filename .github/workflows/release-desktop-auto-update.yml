@@ -119,6 +119,12 @@ jobs:
           releaseBody: |-
             Signed and notarized stable update for macOS (Apple Silicon) and Windows (x64).
 
+            What's new in 0.2.50:
+            - Local workspace: in "New node → Choose server", when this machine has no host_supervisor yet,
+              a new card scans this Mac/Linux box for Node.js, npm and the anet CLI, installs anet if it is
+              missing, registers and starts a local daemon against the local Hub, and shows each step.
+              Nothing runs until you press the button.
+
             What's new in 0.2.49:
             - Update prompt: shows only this version's notes in a scrollable box, keeps the "Update and
               restart" button visible, and appears only in the main window (detached chat windows no longer
