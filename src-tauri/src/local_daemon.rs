@@ -625,14 +625,17 @@ pub fn stop_for_smoke() -> Result<(), String> {
     Ok(())
 }
 
-/// 把 `anet daemon start <name>` 放到后台:新会话(setsid)+ nohup + 输出进日志文件,shell 立刻返回。
-/// macOS 没有 setsid 时退化为 nohup(daemon 自己 detached 派生子进程,父进程退出不影响它)。
+/// 把 `anet daemon start <name>` 放到后台:有 setsid(Linux)就 setsid + nohup,没有(macOS)就 nohup;
+/// 输出进日志文件,shell 立刻返回。
+///
+/// 🔴 0.2.53 首轮发版闸(macOS)红在这里:原来写成 `(command -v setsid && setsid nohup … &) || (nohup … &)`,
+/// 而 `&` 作用于整个 `A && B` 列表 —— macOS 上 `command -v setsid` 失败后整个列表异步退出、子 shell 返回 0,
+/// `||` 那半永远不跑,daemon 根本没起来(start.log 空)。所以先 if/else 选定,再 `&`。
 pub fn detached_start_command(anet_path: &str, name: &str, log: &Path) -> String {
+    let a = shell_quote(anet_path);
+    let l = shell_quote(&log.display().to_string());
     format!(
-        "(command -v setsid >/dev/null 2>&1 && setsid nohup {a} daemon start {n} >{l} 2>&1 < /dev/null & ) || (nohup {a} daemon start {n} >{l} 2>&1 < /dev/null &); sleep 1; echo started",
-        a = shell_quote(anet_path),
-        n = name,
-        l = shell_quote(&log.display().to_string())
+        "if command -v setsid >/dev/null 2>&1; then setsid nohup {a} daemon start {name} >{l} 2>&1 </dev/null & else nohup {a} daemon start {name} >{l} 2>&1 </dev/null & fi; sleep 1; echo started"
     )
 }
 
@@ -753,9 +756,41 @@ mod tests {
     #[test]
     fn detached_start_command_backgrounds_and_logs() {
         let cmd = detached_start_command("/p/anet", "local-daemon", Path::new("/d/start.log"));
-        assert!(cmd.contains("setsid nohup '/p/anet' daemon start local-daemon >'/d/start.log' 2>&1 < /dev/null &"), "{cmd}");
-        assert!(cmd.contains("|| (nohup '/p/anet' daemon start local-daemon"), "fallback without setsid: {cmd}");
+        assert!(cmd.starts_with("if command -v setsid >/dev/null 2>&1; then setsid nohup '/p/anet' daemon start local-daemon >'/d/start.log' 2>&1 </dev/null & else nohup '/p/anet' daemon start local-daemon >'/d/start.log' 2>&1 </dev/null & fi"), "{cmd}");
         assert!(cmd.trim_end().ends_with("echo started"));
+    }
+
+    /// 语义测试:真的跑这条命令。两种环境都要起来 —— 有 setsid(PATH 里有)与没有 setsid(macOS 的形状,
+    /// 用一个只含假 anet 的 PATH 模拟)。0.2.53 首轮的 bug 在第二种下:daemon 从没被执行,日志为空。
+    #[cfg(unix)]
+    #[test]
+    fn detached_start_command_actually_starts_the_daemon_with_and_without_setsid() {
+        use std::os::unix::fs::PermissionsExt;
+        let dir = tempfile::tempdir().unwrap();
+        let fake = dir.path().join("anet");
+        fs::write(&fake, "#!/bin/sh\necho \"fake-daemon $*\"; sleep 30\n").unwrap();
+        fs::set_permissions(&fake, fs::Permissions::from_mode(0o755)).unwrap();
+        // 「没有 setsid」的环境(macOS 的形状):PATH 只放一个目录,里面有 nohup/sleep/sh,没有 setsid。
+        let no_setsid_bin = dir.path().join("bin");
+        fs::create_dir_all(&no_setsid_bin).unwrap();
+        for tool in ["nohup", "sleep", "sh"] {
+            let found = ["/usr/bin", "/bin"].iter().map(|d| Path::new(d).join(tool)).find(|p| p.exists()).expect(tool);
+            std::os::unix::fs::symlink(found, no_setsid_bin.join(tool)).unwrap();
+        }
+        for (label, path_env) in [("with-setsid", std::env::var("PATH").unwrap_or_default()), ("without-setsid", no_setsid_bin.display().to_string())] {
+            let log = dir.path().join(format!("{label}.log"));
+            let cmd = detached_start_command(&fake.display().to_string(), "local-daemon", &log);
+            let status = Command::new("/bin/sh").arg("-c").arg(&cmd).env("PATH", &path_env).status().unwrap();
+            assert!(status.success(), "{label}: shell must return 0");
+            let mut content = String::new();
+            for _ in 0..40 {
+                content = fs::read_to_string(&log).unwrap_or_default();
+                if content.contains("fake-daemon daemon start local-daemon") { break; }
+                thread::sleep(Duration::from_millis(50));
+            }
+            assert!(content.contains("fake-daemon daemon start local-daemon"), "{label}: daemon never ran, log={content:?}");
+        }
+        let _ = Command::new("pkill").args(["-f", &fake.display().to_string()]).status();
     }
 
     #[test]
