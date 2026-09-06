@@ -44,7 +44,7 @@ import type { NativeSyntheticEvent, NativeScrollEvent } from 'react-native';
 import { usePoll } from './usePoll';
 import { chatSearchState, isHighlighted, isStaleSearch, matchCountLabel, searchItems, shouldLoadOlderForSearch, stepHit, type SearchHit } from './chat-search';
 import { retryUnreadPersistFromPoll } from './conversation-unread-persist';
-import { dispatchUnread } from './unread-store';
+import { dispatchUnread, markAgentRepliesSeen } from './unread-store';
 import { appFetch } from './app-fetch';
 import MarkdownMessage from './MarkdownMessage';
 import { cleanAttachmentDebugText, parseAttachmentRefs, parseMetaAttachmentRefs, parseMetaReplyAttachmentRefs } from './attachment-display';
@@ -609,6 +609,8 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
       return;
     }
     dispatchUnread({ kind: 'rendered_to_latest', agent: alias });
+    // 回复未读(inbox 表那一半)也在这一刻清:推进该 agent 的水位线并持久化。
+    markAgentRepliesSeen(alias);
   }, [alias, conversationReady, showJump]);
 
   // shared by the sent bubble and the reply bubble (tg 771)

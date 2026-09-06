@@ -16,10 +16,14 @@ export function unreadCountForAgentRow(
   body: unknown,
   ledger: UnreadState,
   agentId: string,
+  /** agent 回给用户的未读(reply-unread.ts,来自 inbox 表),与 user_inbox 那一半相加。 */
+  replyUnread?: Readonly<Record<string, number>>,
 ): number {
   const local = unreadOf(ledger, agentId);
   const server = readServerUnread(body);
-  return resolveUnread(server === 0 ? 0 : null, local);
+  const userInboxPart = resolveUnread(server === 0 ? 0 : null, local);
+  const replyPart = replyUnread?.[agentId] ?? 0;
+  return userInboxPart + (Number.isFinite(replyPart) && replyPart > 0 ? Math.floor(replyPart) : 0);
 }
 
 export function ingestUserMessages(
