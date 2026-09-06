@@ -647,7 +647,8 @@ mod tests {
         assert_eq!(pick_node_tarball(shasums, "darwin", "arm64"), Some(("node-v22.23.2-darwin-arm64.tar.gz".into(), "61130f394c1630d211dd50aecc4353d379480f36d3ac913cd85dbba1aed585c6".into())));
         assert_eq!(pick_node_tarball(shasums, "linux", "x64").map(|t| t.0), Some("node-v22.23.2-linux-x64.tar.gz".into()));
         assert_eq!(pick_node_tarball(shasums, "win", "x64"), None);
-        assert!(node_platform().is_some());
+        // Windows 没有 daemon(POSIX-only),node_platform 也按设计返回 None。
+        assert_eq!(node_platform().is_some(), cfg!(unix));
     }
 
     #[test]
