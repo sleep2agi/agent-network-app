@@ -47,7 +47,7 @@ import { retryUnreadPersistFromPoll } from './conversation-unread-persist';
 import { dispatchUnread } from './unread-store';
 import { appFetch } from './app-fetch';
 import MarkdownMessage from './MarkdownMessage';
-import { cleanAttachmentDebugText, parseAttachmentRefs, parseMetaAttachmentRefs } from './attachment-display';
+import { cleanAttachmentDebugText, parseAttachmentRefs, parseMetaAttachmentRefs, parseMetaReplyAttachmentRefs } from './attachment-display';
 import { attachmentCacheScope } from './attach-download';
 import ActualRecipientNotice from './ActualRecipientNotice';
 import { sendConfirmationFromResponse, sendNoticeFor, type SendConfirmation } from './actual-recipient';
@@ -157,7 +157,11 @@ const sentAttachmentViews = (item: ChatItem, serverUrl: string): AttachmentView[
  *  reply showed raw markdown). */
 const replyAttachmentViews = (item: ChatItem, serverUrl: string): AttachmentView[] => {
   const out: AttachmentView[] = [];
-  pushTextRefs(item.result ?? (item as any).reply ?? '', makePusher(serverUrl, out));
+  const push = makePusher(serverUrl, out);
+  // #1823 —— hub ≥ 0.9.0-preview.50 把回复附件放在 meta_json.reply_attachments;
+  // 旧 hub 把它们并进 attachments(会画到提问者气泡),这里不去猜,只认新键。
+  for (const a of parseMetaReplyAttachmentRefs((item as any).meta_json)) push(a.fileId, a.name, a.mime, a.size);
+  pushTextRefs(item.result ?? (item as any).reply ?? '', push);
   return out;
 };
 

@@ -80,3 +80,23 @@ if (!/AuthedThumb[\s\S]*?onPress=\{localUri => setViewerUri\(localUri\)\}/.test(
 }
 
 console.log('chat attachment display: 16 checks passed');
+
+// #1823 —— 回复附件读 meta_json.reply_attachments;attachments 仍属提问者;旧 hub 无此键 → 空
+{
+  const { parseMetaReplyAttachmentRefs: parseReply, parseMetaAttachmentRefs: parseSent } = await import('./attachment-display');
+  const meta = JSON.stringify({
+    attachments: [{ type: 'file', file_id: 'a1b2c3d4e5f6a7b8', name: 'asked.png', mime: 'image/png', size: 10 }],
+    reply_attachments: [{ type: 'file', file_id: 'f1e2d3c4b5a69788', name: 'answer.md', mime: 'text/markdown', size: 20 }, { type: 'file', file_id: 'bad id' }],
+  });
+  const reply = parseReply(meta);
+  const sent = parseSent(meta);
+  if (reply.length !== 1 || reply[0].fileId !== 'f1e2d3c4b5a69788' || reply[0].name !== 'answer.md') throw new Error(`reply refs wrong: ${JSON.stringify(reply)}`);
+  if (sent.length !== 1 || sent[0].fileId !== 'a1b2c3d4e5f6a7b8') throw new Error(`sent refs wrong: ${JSON.stringify(sent)}`);
+  if (parseReply(JSON.stringify({ attachments: [{ type: 'file', file_id: 'a1b2c3d4e5f6a7b8' }] })).length !== 0) throw new Error('old hub shape must not leak into reply refs');
+  if (parseReply('not json').length !== 0 || parseReply(null).length !== 0) throw new Error('garbage → empty');
+  const { readFileSync } = await import('node:fs');
+  const chat = readFileSync(new URL('./ChatScreen.tsx', import.meta.url), 'utf8');
+  const fn = chat.slice(chat.indexOf('const replyAttachmentViews'), chat.indexOf('const replyAttachmentViews') + 700);
+  if (!fn.includes('parseMetaReplyAttachmentRefs((item as any).meta_json)')) throw new Error('reply bubble must read meta_json.reply_attachments');
+  console.log('PASS: reply attachments read from meta_json.reply_attachments (#1823)');
+}

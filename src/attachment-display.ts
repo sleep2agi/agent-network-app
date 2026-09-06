@@ -13,12 +13,18 @@ export type ParsedAttachmentRef = {
 /** Preserve the Hub's canonical `meta.attachments` fields rather than making
  * callers re-parse them into text. Malformed metadata is an empty attachment
  * set, never a reason to hide the surrounding message. */
-export const parseMetaAttachmentRefs = (raw: unknown): ParsedAttachmentRef[] => {
+/** #1823 —— agent 回复带的附件:hub 把它们写在任务行 meta_json.reply_attachments(不和提问者的
+ *  attachments 混在一个键里)。旧 hub 没有这个键 → 空数组(回复附件仍只能靠正文里的 /api/files 引用)。 */
+export const parseMetaReplyAttachmentRefs = (raw: unknown): ParsedAttachmentRef[] => parseMetaRefs(raw, 'reply_attachments');
+
+export const parseMetaAttachmentRefs = (raw: unknown): ParsedAttachmentRef[] => parseMetaRefs(raw, 'attachments');
+
+const parseMetaRefs = (raw: unknown, key: 'attachments' | 'reply_attachments'): ParsedAttachmentRef[] => {
   if (!raw) return [];
   try {
     const meta = typeof raw === 'string' ? JSON.parse(raw) : raw;
-    if (!meta || typeof meta !== 'object' || !Array.isArray((meta as any).attachments)) return [];
-    return (meta as any).attachments.flatMap((value: any) => {
+    if (!meta || typeof meta !== 'object' || !Array.isArray((meta as any)[key])) return [];
+    return (meta as any)[key].flatMap((value: any) => {
       if (!value || value.type !== 'file' || typeof value.file_id !== 'string'
         || !VALID_FILE_ID.test(value.file_id)) return [];
       return [{
