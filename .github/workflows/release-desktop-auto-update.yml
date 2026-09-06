@@ -77,6 +77,7 @@ jobs:
           cargo test --locked corrupt_profile_registry_is_quarantined_without_data_loss -- --nocapture
           cargo test --locked revoked_profile_marker_is_isolated -- --nocapture
           cargo test --locked local_credentials:: -- --nocapture
+          cargo test --locked local_daemon:: -- --nocapture
 
       - name: Decode App Store Connect key
         if: runner.os == 'macOS'
@@ -246,6 +247,13 @@ jobs:
             ANET_PACKAGED_SMOKE_ROOT="$stale_root/.anet/app" \
             ANET_PREVIOUS_HUB_PASSWORD_FILE="$stale_password_file" \
             "$binary" --smoke-local-hub-stale-takeover
+          if [ "$RUNNER_OS" = "macOS" ]; then
+            # app#253 一键安装本机 daemon:用 runner 自带的 Node/npm 真装 anet、真注册 host_supervisor。
+            daemon_root="$RUNNER_TEMP/packaged-local-daemon"
+            ANET_PACKAGED_SMOKE=1 \
+              ANET_PACKAGED_SMOKE_ROOT="$daemon_root/.anet/app" \
+              "$binary" --smoke-local-daemon-install
+          fi
           corrupt_root="$RUNNER_TEMP/packaged-local-hub-corrupt-data"
           ANET_PACKAGED_SMOKE=1 \
             ANET_PACKAGED_SMOKE_ROOT="$corrupt_root/.anet/app" \

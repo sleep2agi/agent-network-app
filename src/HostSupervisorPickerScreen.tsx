@@ -19,6 +19,9 @@ import {
   HubConfig,
 } from './api';
 import { describeDaemonCapability } from './daemon-capability';
+import LocalDaemonSetupCard from './LocalDaemonSetupCard';
+import { LOCAL_HUB_PROFILE_ID } from './local-hub';
+import { isTauriDesktop } from './clipboard-attachment';
 import { colors, onThemeChange, spacing } from './theme';
 import { usePoll } from './usePoll';
 
@@ -145,6 +148,8 @@ export default function HostSupervisorPickerScreen({
             />
           }
         >
+          {/* app#253 —— 桌面端 + Local workspace:这台机器就是「那台机器」,给一键扫描/安装卡片 */}
+          {cfg.profileId === LOCAL_HUB_PROFILE_ID && isTauriDesktop() ? <LocalDaemonSetupCard onInstalled={() => { setRefreshing(true); void load(); }} /> : null}
           <View style={styles.onboardingCard}>
             <Text style={styles.onboardingTitle}>ⓘ  还没有可用的 host_supervisor 节点</Text>
             <Text style={styles.onboardingBody}>

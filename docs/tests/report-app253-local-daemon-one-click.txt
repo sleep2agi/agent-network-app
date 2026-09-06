@@ -1,0 +1,31 @@
+app#253 — Local workspace: one-click scan/install of the local host_supervisor daemon (2026-09-06)
+
+Trigger: Vincent screenshot (0.2.49, Local workspace on 127.0.0.1:9201, 选服务器 empty state) +
+「本地的也可以自动启动 local 的 daemon 吧」→「不要自己启动的吧,有个一键扫描和安装按钮」.
+
+What ships
+- src-tauri/src/local_daemon.rs: scan() probes node/npm/anet through the user's login shell
+  (GUI processes do not see nvm/homebrew PATH); install() = npm install -g (npmmirror fallback on
+  registry-shaped failures, same signal list as docs-site/public/install.sh) → private-HOME
+  ~/.anet/config.json with the local Hub's endpoint/utok/network_id → anet daemon init <name> --force
+  (HOME=private) → anet daemon start <name> (real HOME, cwd ~/.anet/app/local-daemon) → poll
+  /api/host-supervisors for the daemon_node_id (45 s). Tauri commands local_daemon_scan (sync) and
+  local_daemon_install (async, spawn_blocking).
+- src/local-daemon.ts + src/LocalDaemonSetupCard.tsx: checklist + blockers (no Node / old Node /
+  no npm / unsupported platform / local Hub not running) + install button + step log.
+  Mounted in HostSupervisorPickerScreen's count=0 state only for desktop + LOCAL_HUB_PROFILE_ID.
+- Release gate: --smoke-local-daemon-install on macOS (runner has Node/npm): real npm install of
+  anet, real host_supervisor registration against the packaged local Hub; then anet node stop.
+
+Evidence
+- cargo check --locked --tests whole crate: 0 warnings (tauri image, rust 1.98.1).
+- cargo test --locked local_daemon:: 5/5 (probe parsing, node_id parsing, node gate = engines.node,
+  registry-failure signals, shell quoting) inside the real crate.
+- npm test 82/82 (+ src/local-daemon.test.ts 16 checks incl. wiring contracts); typecheck 0.
+- macOS/Windows compile + keyring tests: desktop-tauri.yml dispatched on the branch (see PR).
+- Not run on DEV: the packaged smoke (needs a packaged app); it runs in the release gate on macOS.
+
+Hand-check (Vincent, after the next desktop release)
+1. Settings → Local workspace → 新建节点 → 选服务器 → 「扫描本机」 shows the four rows.
+2. 「一键安装并启动本机 daemon」 → within ~1–2 min the list shows local-daemon; 下一步 creates a node on it.
+3. ~/.anet/config.json untouched (the app used ~/.anet/app/local-daemon/home).

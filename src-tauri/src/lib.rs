@@ -4,6 +4,7 @@
 const SESSION_SERVICE: &str = "top.vansin.agentnetwork.desktop";
 const SESSION_ACCOUNT: &str = "active-hub-session";
 mod local_credentials;
+mod local_daemon;
 mod local_hub;
 
 #[cfg(windows)]
@@ -864,6 +865,8 @@ pub fn run() {
             local_hub::open_local_hub_logs,
             local_hub::backup_local_hub_data,
             local_hub::delete_local_hub_data,
+            local_daemon_scan,
+            local_daemon_install,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
@@ -884,6 +887,28 @@ pub fn run_packaged_local_hub_failed_migration_smoke() -> Result<(), String> {
 
 pub fn run_packaged_local_hub_crash_recovery_smoke() -> Result<(), String> {
     local_hub::packaged_crash_recovery_smoke()
+}
+
+#[tauri::command]
+fn local_daemon_scan() -> Result<String, String> {
+    let session = local_hub::local_daemon_session()?;
+    serde_json::to_string(&local_daemon::scan(session.as_ref())?).map_err(|error| error.to_string())
+}
+
+/// npm install 可能跑 1–2 分钟:放到阻塞线程池,别卡主线程/UI。
+#[tauri::command]
+async fn local_daemon_install() -> Result<String, String> {
+    tauri::async_runtime::spawn_blocking(|| -> Result<String, String> {
+        let session = local_hub::local_daemon_session()?
+            .ok_or_else(|| "本地 Hub 还没启动或没有会话;先切到 Local workspace 让本地 Hub 运行起来".to_string())?;
+        serde_json::to_string(&local_daemon::install(&session)?).map_err(|error| error.to_string())
+    })
+    .await
+    .map_err(|error| error.to_string())?
+}
+
+pub fn run_packaged_local_daemon_install_smoke() -> Result<(), String> {
+    local_hub::packaged_local_daemon_install_smoke()
 }
 
 pub fn run_packaged_local_hub_lost_credential_smoke() -> Result<(), String> {
