@@ -1,0 +1,27 @@
+Desktop v0.2.51 release-candidate report
+
+- Base: 0e80f96 (main after app#258)
+- Target: desktop-v0.2.51
+- Why: Vincent 2026-09-06 09:5x screenshot (daemon scan saw no Node although nvm node v20.12.2 was in his
+  terminal) + 「node 也自动安装一下?」; and the reply-attachment placement bug (agent-network#1823).
+
+Changes
+- Bump the desktop application consistently to 0.2.51 (9 pinned stamps + updater release notes).
+- Ship #258: interactive login-shell probing (nvm visible), private Node 22 download with SHASUMS256
+  verification into ~/.anet/app/local-daemon/node when Node is missing/old, anet in a private prefix.
+- Ship #257: reply bubble reads meta_json.reply_attachments (hub ≥ 0.9.0-preview.50, published 11:16).
+- Bundled Hub pin unchanged (0.9.0-preview.45).
+
+Evidence
+- #258: cargo check 0 warnings; cargo test local_daemon:: 9/9; desktop-tauri.yml mac + windows success
+  (run 34009099120, after fixing a Windows-only assertion); npm test 82/82.
+- #257: chat-attachment-display.test.ts +1 group; server side agent-network#1824 48/48 related tests.
+- This bump: npm test (version-consistency) + typecheck, see PR.
+
+Hand-check list (desktop-v0.2.51, Vincent's Mac with nvm node v20)
+1. Local workspace → 新建节点 → 选服务器 → 扫描本机: Node row shows v20.12.2 (版本太低) with the private
+   download hint, install button enabled.
+2. 一键安装并启动本机 daemon → step log shows the private Node download + SHA256 ok, npm install into
+   ~/.anet/app/local-daemon/anet, daemon init/start, Hub confirmation; list shows local-daemon.
+3. After the production Hub moves to 0.9.0-preview.50: an agent reply with attachments renders them under
+   the agent bubble.

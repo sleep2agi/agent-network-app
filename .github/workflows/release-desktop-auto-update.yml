@@ -119,6 +119,14 @@ jobs:
           releaseBody: |-
             Signed and notarized stable update for macOS (Apple Silicon) and Windows (x64).
 
+            What's new in 0.2.51:
+            - Local daemon installer: the scan now sees Node installed through nvm (it runs in your interactive
+              login shell), and if Node is missing or older than 22.13 the installer downloads a private,
+              checksum-verified Node 22 into the app's own folder (no system changes, no sudo) and installs
+              anet into a private prefix.
+            - Chat: files an agent attaches to its reply now show under the agent's reply bubble (needs a
+              Hub at 0.9.0-preview.50 or newer).
+
             What's new in 0.2.50:
             - Local workspace: in "New node → Choose server", when this machine has no host_supervisor yet,
               a new card scans this Mac/Linux box for Node.js, npm and the anet CLI, installs anet if it is
