@@ -558,24 +558,27 @@ pub fn install(session: &LocalHubSession) -> Result<DaemonInstallReport, String>
         return fail(steps, "daemon 初始化成功但没拿到 node_id".into());
     };
 
-    // 4. anet daemon start(用户真实 HOME;它 detached 派生 daemon 进程)
+    // 4. anet daemon start —— 🔴 它是**前台**命令,不会自己返回(DEV 对 0.9.0-preview.45 实测:60s 后被
+    //    timeout 打死,daemon 随之 shutting down)。0.2.52 之前这里等满 60s 才开始问 Hub,而且靠 kill shell
+    //    让 daemon 侥幸活下来。现在:setsid + nohup 放到后台,输出进 start.log,立刻返回去轮询 Hub。
+    let start_log = daemon_dir.join("start.log");
     let start = run_shell(
-        &with_path(&format!("{} daemon start {}", shell_quote(&anet.path), LOCAL_DAEMON_NAME)),
+        &with_path(&detached_start_command(&anet.path, LOCAL_DAEMON_NAME, &start_log)),
         Some(&daemon_dir),
         &[],
-        Duration::from_secs(60),
+        Duration::from_secs(20),
     )?;
     steps.push(StepReport {
-        name: format!("anet daemon start {LOCAL_DAEMON_NAME}"),
-        ok: start.code == Some(0) || start.timed_out,
-        output: tail(&start.output, 1500),
+        name: format!("anet daemon start {LOCAL_DAEMON_NAME}(后台)"),
+        ok: start.code == Some(0),
+        output: format!("{}\n日志:{}", tail(&start.output, 600), start_log.display()),
     });
-    if start.code.is_some() && start.code != Some(0) {
-        return fail(steps, "anet daemon start 失败,见上面的输出。".into());
+    if start.code != Some(0) {
+        return fail(steps, "anet daemon start 没能放到后台,见上面的输出。".into());
     }
 
-    // 5. 向 Hub 确认注册(最多 45s)
-    let deadline = Instant::now() + Duration::from_secs(45);
+    // 5. 向 Hub 确认注册(最多 90s);没出现时说清是「会话都没上线」还是「上线了但没进 host_supervisors」
+    let deadline = Instant::now() + Duration::from_secs(90);
     let mut registered = false;
     let mut last_error = String::new();
     while Instant::now() < deadline {
@@ -586,10 +589,23 @@ pub fn install(session: &LocalHubSession) -> Result<DaemonInstallReport, String>
         }
         thread::sleep(Duration::from_secs(2));
     }
+    let diagnosis = if registered {
+        format!("daemon_node_id={node_id}")
+    } else {
+        let session_state = session_online(session, LOCAL_DAEMON_NAME);
+        let start_tail = fs::read_to_string(&start_log).map(|t| tail(&t, 800)).unwrap_or_default();
+        format!(
+            "90 秒内 Hub 的 /api/host-supervisors(network {}) 里没有出现 {node_id}。会话 {LOCAL_DAEMON_NAME} 在 /api/status 里:{}。{}\n--- start.log ---\n{}",
+            session.network_id.as_deref().unwrap_or("(none)"),
+            session_state,
+            if last_error.is_empty() { String::new() } else { format!("最后一次查询错误:{last_error}") },
+            start_tail
+        )
+    };
     steps.push(StepReport {
         name: "Hub 确认 host_supervisor 已注册".into(),
         ok: registered,
-        output: if registered { format!("daemon_node_id={node_id}") } else if last_error.is_empty() { "45 秒内 Hub 的 /api/host-supervisors 里没有出现这台 daemon".into() } else { last_error.clone() },
+        output: diagnosis,
     });
     Ok(DaemonInstallReport {
         ok: registered,
@@ -607,6 +623,36 @@ pub fn stop_for_smoke() -> Result<(), String> {
     let cmd = format!("export PATH={}:{}:\"$PATH\"; {} node stop {LOCAL_DAEMON_NAME}", shell_quote(&node_bin.display().to_string()), shell_quote(&anet.parent().unwrap().display().to_string()), if anet.is_file() { shell_quote(&anet.display().to_string()) } else { "anet".into() });
     let _ = run_shell(&cmd, Some(&daemon_dir), &[], Duration::from_secs(30))?;
     Ok(())
+}
+
+/// 把 `anet daemon start <name>` 放到后台:新会话(setsid)+ nohup + 输出进日志文件,shell 立刻返回。
+/// macOS 没有 setsid 时退化为 nohup(daemon 自己 detached 派生子进程,父进程退出不影响它)。
+pub fn detached_start_command(anet_path: &str, name: &str, log: &Path) -> String {
+    format!(
+        "(command -v setsid >/dev/null 2>&1 && setsid nohup {a} daemon start {n} >{l} 2>&1 < /dev/null & ) || (nohup {a} daemon start {n} >{l} 2>&1 < /dev/null &); sleep 1; echo started",
+        a = shell_quote(anet_path),
+        n = name,
+        l = shell_quote(&log.display().to_string())
+    )
+}
+
+/// 诊断用:该 alias 在 Hub /api/status 里的状态(拿不到就说拿不到)。
+fn session_online(session: &LocalHubSession, alias: &str) -> String {
+    let body: Result<serde_json::Value, String> = reqwest::blocking::Client::new()
+        .get(format!("{}/api/status", session.endpoint))
+        .bearer_auth(&session.token)
+        .timeout(Duration::from_secs(10))
+        .send()
+        .map_err(|e| e.to_string())
+        .and_then(|r| r.json().map_err(|e| e.to_string()));
+    match body {
+        Ok(json) => json["sessions"]
+            .as_array()
+            .and_then(|list| list.iter().find(|s| s["alias"] == alias))
+            .map(|s| format!("status={} version={}", s["status"].as_str().unwrap_or("?"), s["version"].as_str().unwrap_or("?")))
+            .unwrap_or_else(|| "没有这个会话(daemon 没起来或没注册)".into()),
+        Err(error) => format!("查不到(/api/status:{error})"),
+    }
 }
 
 fn describe(tool: &Option<ToolInfo>) -> String {
@@ -702,6 +748,14 @@ mod tests {
         let outcome = run_shell("echo partial; sleep 30", None, &[], Duration::from_secs(1)).unwrap();
         assert!(outcome.timed_out && outcome.code.is_none());
         assert!(outcome.output.contains("partial"), "{}", outcome.output);
+    }
+
+    #[test]
+    fn detached_start_command_backgrounds_and_logs() {
+        let cmd = detached_start_command("/p/anet", "local-daemon", Path::new("/d/start.log"));
+        assert!(cmd.contains("setsid nohup '/p/anet' daemon start local-daemon >'/d/start.log' 2>&1 < /dev/null &"), "{cmd}");
+        assert!(cmd.contains("|| (nohup '/p/anet' daemon start local-daemon"), "fallback without setsid: {cmd}");
+        assert!(cmd.trim_end().ends_with("echo started"));
     }
 
     #[test]
