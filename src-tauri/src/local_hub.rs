@@ -1655,6 +1655,47 @@ pub fn packaged_stale_hub_takeover_smoke() -> Result<(), String> {
     result.and(stopped).and(credential_removed)
 }
 
+/// 一键安装本机 daemon(app#253):起本地 Hub → local_daemon::install → Hub 的
+/// /api/host-supervisors 里出现这台 daemon → 停掉 daemon 与 Hub。需要 runner 上有 Node ≥ 22.13 + npm
+/// (GitHub macOS runner 有);Windows 不支持 daemon,工作流里只在 macOS 跑。
+pub fn packaged_local_daemon_install_smoke() -> Result<(), String> {
+    if std::env::var("ANET_PACKAGED_SMOKE").as_deref() != Ok("1") {
+        return Err("packaged local-daemon smoke requires ANET_PACKAGED_SMOKE=1".into());
+    }
+    let started: LocalHubResult =
+        serde_json::from_str(&start_local_hub()?).map_err(|error| error.to_string())?;
+    if started.session.is_none() {
+        return Err("local Hub omitted session".into());
+    }
+    let run = || -> Result<(), String> {
+        let session = local_daemon_session()?.ok_or_else(|| "no local daemon session".to_string())?;
+        let scan = super::local_daemon::scan(Some(&session))?;
+        if scan.node.is_none() {
+            return Err("smoke runner has no Node.js on the login-shell PATH".into());
+        }
+        let report = super::local_daemon::install(&session)?;
+        if !report.ok {
+            let steps = report
+                .steps
+                .iter()
+                .map(|step| format!("[{}] {}\n{}", if step.ok { "ok" } else { "FAIL" }, step.name, step.output))
+                .collect::<Vec<_>>()
+                .join("\n");
+            return Err(format!("local daemon install failed: {}\n{steps}", report.error.unwrap_or_default()));
+        }
+        let node_id = report.node_id.ok_or_else(|| "install omitted node_id".to_string())?;
+        let after = super::local_daemon::scan(Some(&session))?;
+        if !after.profile_exists || after.node_id.as_deref() != Some(node_id.as_str()) {
+            return Err("scan after install does not report the registered daemon".into());
+        }
+        Ok(())
+    };
+    let result = run();
+    let _ = super::local_daemon::stop_for_smoke();
+    let stopped = stop_local_hub_inner();
+    result.and(stopped)
+}
+
 fn start_isolated_smoke_hub(root: &Path, port: u16) -> Result<Child, String> {
     super::ensure_private_dir(root)?;
     let log = open_log(&root.join("commhub.log"))?;
@@ -2015,6 +2056,18 @@ pub fn delete_local_hub_data(confirmation: String) -> Result<String, String> {
         fs::remove_dir_all(root).map_err(|error| error.to_string())?;
     }
     Ok(backup.display().to_string())
+}
+
+/// 给 local_daemon 用:本地 Hub 的 endpoint + local-admin utok + network_id。
+/// Hub 没配置 / 没会话时返回 None(调用方据此提示「先启动本地 Hub」)。
+pub(super) fn local_daemon_session() -> Result<Option<super::local_daemon::LocalHubSession>, String> {
+    let Some(config) = read_config()? else { return Ok(None) };
+    let Some(session) = existing_local_session()? else { return Ok(None) };
+    Ok(Some(super::local_daemon::LocalHubSession {
+        endpoint: config.endpoint,
+        token: session.token,
+        network_id: session.network_id,
+    }))
 }
 
 pub fn is_local_profile(profile_id: &str) -> bool {
