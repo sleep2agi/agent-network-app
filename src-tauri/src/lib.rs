@@ -18,7 +18,7 @@ use std::{
     path::{Path, PathBuf},
     sync::{LazyLock, Mutex},
 };
-use tauri::Emitter;
+use tauri::{Emitter, Manager};
 
 static NETWORK_EVENT_TASKS: LazyLock<Mutex<HashMap<String, tauri::async_runtime::JoinHandle<()>>>> =
     LazyLock::new(|| Mutex::new(HashMap::new()));
@@ -734,6 +734,25 @@ fn load_active_desktop_profile() -> Result<Option<String>, String> {
 mod tests {
     use super::*;
 
+    #[test]
+    fn download_name_is_basename_only() {
+        assert_eq!(sanitize_download_name("../../etc/passwd"), "passwd");
+        assert_eq!(sanitize_download_name("C:\\Users\\x\\a.pptx"), "a.pptx");
+        assert_eq!(sanitize_download_name("  report.pdf "), "report.pdf");
+        assert_eq!(sanitize_download_name(""), "download");
+        assert_eq!(sanitize_download_name(".."), "download");
+    }
+
+    #[test]
+    fn download_path_dedupes_before_extension() {
+        let dir = Path::new("/d");
+        let taken = |p: &Path| p == Path::new("/d/a.pdf") || p == Path::new("/d/a (2).pdf");
+        assert_eq!(dedupe_download_path(dir, "a.pdf", &taken), PathBuf::from("/d/a (3).pdf"));
+        assert_eq!(dedupe_download_path(dir, "b.pdf", &taken), PathBuf::from("/d/b.pdf"));
+        let noext = |p: &Path| p == Path::new("/d/README");
+        assert_eq!(dedupe_download_path(dir, "README", &noext), PathBuf::from("/d/README (2)"));
+    }
+
     // This deliberately exercises the platform credential store, rather than
     // a mock. It catches builds where keyring compiles but no macOS/Windows
     // backend feature was enabled (the regression shipped in 0.2.10).
@@ -867,6 +886,7 @@ pub fn run() {
             local_hub::delete_local_hub_data,
             local_daemon_scan,
             local_daemon_install,
+            save_download,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
@@ -887,6 +907,42 @@ pub fn run_packaged_local_hub_failed_migration_smoke() -> Result<(), String> {
 
 pub fn run_packaged_local_hub_crash_recovery_smoke() -> Result<(), String> {
     local_hub::packaged_crash_recovery_smoke()
+}
+
+/// 桌面端附件下载(Vincent 2026-09-07「点击了没反应」):WKWebView/WebView2 里 `<a download>` 不会真的
+/// 下载,而非图片附件此前根本没接点击。前端带凭据拿到字节后交给这里,写进系统「下载」目录,
+/// 返回落盘路径(同名自动加 (2)、(3)…)。文件名只取 basename,拒绝路径分隔符。
+fn sanitize_download_name(name: &str) -> String {
+    let base = name.rsplit(['/', '\\']).next().unwrap_or("").trim();
+    let cleaned: String = base.chars().filter(|c| !c.is_control()).collect();
+    if cleaned.is_empty() || cleaned == "." || cleaned == ".." { "download".into() } else { cleaned }
+}
+
+fn dedupe_download_path(dir: &Path, name: &str, exists: &dyn Fn(&Path) -> bool) -> PathBuf {
+    let first = dir.join(name);
+    if !exists(&first) { return first; }
+    let (stem, ext) = match name.rfind('.') {
+        Some(i) if i > 0 => (&name[..i], &name[i..]),
+        _ => (name, ""),
+    };
+    for n in 2..10_000 {
+        let candidate = dir.join(format!("{stem} ({n}){ext}"));
+        if !exists(&candidate) { return candidate; }
+    }
+    dir.join(format!("{stem}-{}{ext}", std::process::id()))
+}
+
+#[tauri::command]
+fn save_download(app: tauri::AppHandle, name: String, bytes_base64: String) -> Result<String, String> {
+    use base64::Engine as _;
+    let bytes = base64::engine::general_purpose::STANDARD
+        .decode(bytes_base64.as_bytes())
+        .map_err(|error| format!("bad payload: {error}"))?;
+    let dir = app.path().download_dir().map_err(|error| format!("no download dir: {error}"))?;
+    fs::create_dir_all(&dir).map_err(|error| error.to_string())?;
+    let target = dedupe_download_path(&dir, &sanitize_download_name(&name), &|p| p.exists());
+    fs::write(&target, &bytes).map_err(|error| format!("write failed: {error}"))?;
+    Ok(target.display().to_string())
 }
 
 #[tauri::command]
