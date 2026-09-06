@@ -1,0 +1,22 @@
+Desktop v0.2.52 release-candidate report
+
+- Base: 139a864 (main after app#261)
+- Target: desktop-v0.2.52
+- Why: Vincent 2026-09-06 12:0x (app#260): no WeChat-style unread red badge on agents that replied.
+
+Changes
+- Bump the desktop application consistently to 0.2.52 (9 pinned stamps + updater release notes).
+- Ship #261: reply-unread counting from the hub's inbox rows addressed to the logged-in user
+  (7-day window), per-agent seen watermark persisted on desktop, cleared on rendered_to_latest.
+- Bundled Hub pin unchanged (0.9.0-preview.45).
+
+Evidence
+- #261: reply-unread.test.ts 21 checks (real inbox row shapes, watermark semantics, 7-day window,
+  persistence round-trip, wiring contracts); npm test 83/83; typecheck 0; unit-tests ubuntu/windows green.
+- Production-hub read-only evidence for the defect: 70 replies to admin in 24h all in `inbox`
+  (type=reply, acked=0), `user_inbox` only 2 rows.
+- This bump: npm test (version-consistency) + typecheck, see PR.
+
+Hand-check list (desktop-v0.2.52)
+1. Have an agent reply while another conversation is open → its avatar shows a red count in the list.
+2. Open that conversation and let it render to the latest → badge disappears; restart app → stays cleared.

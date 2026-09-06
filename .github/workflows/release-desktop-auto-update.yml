@@ -119,6 +119,11 @@ jobs:
           releaseBody: |-
             Signed and notarized stable update for macOS (Apple Silicon) and Windows (x64).
 
+            What's new in 0.2.52:
+            - Unread badges finally count agent replies: an agent that answered you while you were elsewhere
+              now shows a red count on its avatar (WeChat-style), cleared when you open that conversation and
+              it renders to the latest message. Works with the current Hub; no server upgrade required.
+
             What's new in 0.2.51:
             - Local daemon installer: the scan now sees Node installed through nvm (it runs in your interactive
               login shell), and if Node is missing or older than 22.13 the installer downloads a private,
