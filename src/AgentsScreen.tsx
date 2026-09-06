@@ -18,7 +18,10 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import AliasAvatar from './AliasAvatar';
 import { agentStatusLabel, isAgentOnline } from './chat-actions';
-import { fetchStatus, fetchUserMessages, takeStatusPrefetch, type HubConfig, type Session } from './api';
+import { fetchStatus, fetchUserMessages, takeStatusPrefetch, type HubConfig, type Session,
+  fetchMessages,
+  replyUnreadSince,
+} from './api';
 import { loadSessionsCache, saveSessionsCache } from './storage';
 import { colors, spacing, statusColor, themeMode } from './theme';
 import { usePoll } from './usePoll';
@@ -29,7 +32,9 @@ import { unreadCountForAgentRow } from './unread-badge';
 import {
   bindUnreadAppState,
   getUnreadSnapshot,
+  ingestInboxMessagesBody,
   ingestUserMessagesBody,
+  replyUnreadCounts,
   subscribeUnread,
 } from './unread-store';
 import { styles } from './app-styles';
@@ -129,6 +134,12 @@ export default function AgentsScreen({
       ingestUserMessagesBody(await fetchUserMessages(cfg, 50));
     } catch {
       /* 列表照常显示；服务端未读拿不到时 unreadCountForAgentRow 退回 ledger */
+    }
+    try {
+      // agent 回给用户的消息在 inbox 表(alias 分支),不在 user_inbox —— 红点的另一半(reply-unread.ts)
+      ingestInboxMessagesBody(await fetchMessages(cfg, 300, replyUnreadSince()), cfg.username);
+    } catch {
+      /* 拿不到就沿用上一份 replyRows */
     }
   }, [cfg, preview]);
 
@@ -327,6 +338,7 @@ export default function AgentsScreen({
                 preview?.serverBody ?? unreadSnap.serverBody,
                 preview?.ledger ?? unreadSnap.ledger,
                 item.alias,
+                preview ? undefined : replyUnreadCounts(unreadSnap),
               ))}
               testID={`unread-badge-${item.alias}`}
             />

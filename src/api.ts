@@ -541,8 +541,14 @@ export interface HubMessage {
   created_at?: string;
 }
 
-export const fetchMessages = (cfg: HubConfig, limit: number) =>
-  get<{ messages: HubMessage[] }>(cfg, `/api/messages?limit=${limit}`);
+/** alias 分支(inbox 表)。🔴 hub 不给 `since` 时默认只看最近 1 小时 —— 算「回复未读」要把窗口拉开,
+ *  否则一小时前的未读会凭空消失(reply-unread.ts)。 */
+export const fetchMessages = (cfg: HubConfig, limit: number, since?: string) =>
+  get<{ messages: HubMessage[] }>(cfg, `/api/messages?limit=${limit}${since ? `&since=${encodeURIComponent(since)}` : ''}`);
+
+/** 回复未读的取数窗口:最近 7 天(hub 的 UTC `YYYY-MM-DD HH:MM:SS`)。 */
+export const replyUnreadSince = (now: Date = new Date()): string =>
+  new Date(now.getTime() - 7 * 24 * 3600 * 1000).toISOString().replace('T', ' ').slice(0, 19);
 
 /**
  * #1563 —— agent 主动发给**登录用户**的消息落在 hub 的 `user_inbox` 表,
