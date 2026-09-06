@@ -1,0 +1,23 @@
+Desktop v0.2.50 release-candidate report
+
+- Base: 19bb8f6 (main after app#254)
+- Target: desktop-v0.2.50
+- Why: Vincent 2026-09-06 09:0x (app#253): one-click scan/install of the local host_supervisor daemon
+  from the 选服务器 empty state (button-driven, not automatic).
+
+Changes
+- Bump the desktop application consistently to 0.2.50 (9 pinned stamps + updater release notes).
+- Ship #254 (local_daemon.rs scan/install, LocalDaemonSetupCard, macOS release-gate smoke
+  --smoke-local-daemon-install that installs anet from npm and registers a real host_supervisor).
+- Bundled Hub pin unchanged (0.9.0-preview.45).
+
+Evidence
+- #254: cargo check --locked --tests 0 warnings; cargo test local_daemon:: 5/5; npm test 82/82;
+  desktop-tauri.yml on the branch mac-arm64 + windows-x64 success (run 34003876787).
+- This bump: npm test (version-consistency) + typecheck, see PR.
+- The daemon install smoke runs for the first time in this release gate (macOS job).
+
+Hand-check list (desktop-v0.2.50)
+1. Local workspace → 新建节点 → 选服务器 → 扫描本机 → four rows; 一键安装并启动本机 daemon → list shows
+   local-daemon within ~1–2 min; ~/.anet/config.json untouched.
+2. Update prompt from 0.2.49 shows only the 0.2.50 section, scrollable, button visible.
