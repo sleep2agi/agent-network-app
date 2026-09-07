@@ -119,6 +119,12 @@ jobs:
           releaseBody: |-
             Signed and notarized stable update for macOS (Apple Silicon) and Windows (x64).
 
+            What's new in 0.2.59:
+            - Node details now have a Tasks section: what the node is running right now and the queue
+              waiting behind it, numbered in execution order, with elapsed times; tap a row for the full text.
+            - Messages an agent sends you on its own (progress reports, alerts) now appear in that agent's
+              chat as reply bubbles tagged "主动汇报", instead of only a passing banner.
+
             What's new in 0.2.58:
             - Unread badges: with Hub 0.9.0-preview.51 or newer the per-agent unread count comes from the
               Hub itself (agent replies included), so it is the same on every device; opening a chat to
