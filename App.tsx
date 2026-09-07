@@ -50,6 +50,7 @@ import { APP_VERSION } from './src/version';
 import DesktopUpdatePrompt from './src/DesktopUpdatePrompt';
 import DesktopMessageListener from './src/DesktopMessageListener';
 import { loadPinnedChats, requestedChatAlias, requestedChatProfileId, requestedWorkspaceProfileId, savePinnedChats } from './src/desktop-chat-menu';
+import { loadChatPins, saveChatPins, togglePinned } from './src/chat-pins';
 import { bindUnreadProfile } from './src/unread-store';
 import { openRememberedChatWindow, restoreDetachedChatWindows } from './src/desktop-chat-windows';
 import { activateHubProfile, LOCAL_HUB_PROFILE_ID, localHubStatus, startLocalHub } from './src/local-hub';
@@ -147,6 +148,20 @@ export default function App() {
 
 function AppRoot() {
   const [cfg, setCfg] = useState<HubConfig | null>(null);
+  // app#168(手机端):会话置顶,按 profile/server 分、落盘;桌面端 DesktopWorkspace 自己管一份(localStorage)。
+  const [mobilePins, setMobilePins] = useState<string[]>([]);
+  useEffect(() => {
+    let alive = true;
+    if (!cfg) { setMobilePins([]); return; }
+    void loadChatPins(cfg).then(pins => { if (alive) setMobilePins(pins); });
+    return () => { alive = false; };
+  }, [cfg?.profileId, cfg?.serverUrl, cfg?.username]);
+  const toggleMobilePin = (alias: string) => {
+    if (!cfg) return;
+    const next = togglePinned(mobilePins, alias);
+    setMobilePins(next);
+    void saveChatPins(next, cfg).catch(error => { console.warn('save chat pins failed', error); setMobilePins(mobilePins); });
+  };
   const [screen, setScreen] = useState<Screen>({ name: 'login' });
   const [booting, setBooting] = useState(true);
   const [reauthProfile, setReauthProfile] = useState<Pick<HubProfile, 'profileId' | 'serverUrl' | 'username' | 'displayName'> | null>(null);
@@ -432,6 +447,8 @@ function AppRoot() {
           alias={screen.alias}
           onBack={() => setScreen({ name: 'agents' })}
           onOpenNodeSettings={() => setScreen({ name: 'nodeInfo', alias: screen.alias })}
+          pinned={mobilePins.includes(screen.alias)}
+          onTogglePin={() => toggleMobilePin(screen.alias)}
         />
       ) : screen.name === 'nodeInfo' ? (
         <NodeDetailScreen cfg={cfg} alias={screen.alias} onBack={() => setScreen({ name: 'chat', alias: screen.alias })} readOnly />
@@ -514,6 +531,8 @@ function AppRoot() {
                 onOpenChat={alias => setScreen({ name: 'chat', alias })}
                 onOpenPicker={() => setScreen({ name: 'picker' })}
                 onOpenNodeDetail={alias => setScreen({ name: 'nodeDetail', alias })}
+                pinnedAliases={mobilePins}
+                onTogglePin={toggleMobilePin}
               />
             )}
           </View>
