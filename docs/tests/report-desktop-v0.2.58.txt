@@ -1,0 +1,27 @@
+Desktop v0.2.58 release-candidate report
+
+- Base: main after app#278
+- Target: desktop-v0.2.58
+- Why: finish the unread story behind Vincent's 「节点上根本没有微信那样的红点」(app#260): the Hub now owns
+  per-agent unread (agent-network #1828 → commhub-server 0.9.0-preview.51) and the client defers to it;
+  plus app#275 (watermarks per account after the 0.2.56 multi-window feature).
+
+Changes
+- Bump the desktop application consistently to 0.2.58 (9 pinned stamps + updater release notes).
+- Ship #278: `readServerUnreadByAgent` (scope=user `unread_by_agent`), badge uses it when present
+  (local ledger + reply watermark retire), `ackUserMessages` on rendered_to_latest when the Hub supports
+  it (ids = user_inbox message_id + inbox reply ids for that agent). Older Hubs: behaviour identical to 0.2.57.
+- Ship #277 (app#275): reply-unread watermarks keyed by profileId with a one-time seed from the legacy
+  global map; unread store re-binds on profile hydrate.
+- Bundled Hub pin unchanged (0.9.0-preview.45). No Rust changes since 0.2.57.
+
+Evidence
+- unread-badge.test.ts +6 (#278), reply-unread.test.ts +9 (#277); api-network-scope 57 checks;
+  npm test 84/84 and typecheck 0 on both PRs. Hub side: user-inbox-by-agent-http.test.ts 7/7 with two
+  witnessed-red mutations (agent-network #1838).
+- This bump: npm test (version-consistency) + typecheck, see PR.
+
+Hand-check (Vincent, 0.2.58 — after the production Hub is upgraded to 0.9.0-preview.51)
+1. An agent replies to one of your tasks while you are on the Agents list: that agent's row shows a red
+   count; open the chat and scroll to the bottom: the count clears and stays cleared after a restart.
+2. Before the Hub upgrade everything behaves exactly like 0.2.57.

@@ -119,6 +119,13 @@ jobs:
           releaseBody: |-
             Signed and notarized stable update for macOS (Apple Silicon) and Windows (x64).
 
+            What's new in 0.2.58:
+            - Unread badges: with Hub 0.9.0-preview.51 or newer the per-agent unread count comes from the
+              Hub itself (agent replies included), so it is the same on every device; opening a chat to
+              the latest message marks those messages read on the Hub. Older Hubs keep the previous
+              local estimate. Unread watermarks are now kept per account, so two account windows no
+              longer share them.
+
             What's new in 0.2.57:
             - Fix: the per-account workspace window from 0.2.56 could not reach any hub ("plugin:http|fetch
               not allowed by ACL") because its window label was missing from the app's permission list.
