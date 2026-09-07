@@ -1,0 +1,28 @@
+Desktop v0.2.55 release-candidate report
+
+- Base: aa35770 (main after app#271)
+- Target: desktop-v0.2.55
+- Why: Vincent 2026-09-07: save-as folder choice (#270); daemon listed nowhere although registered — his
+  daemon log lacked every host_supervisor line, i.e. an old agent-node from PATH ran it (#271); Hub-view
+  diagnostics row (#269).
+
+Changes
+- Bump the desktop application consistently to 0.2.55 (9 pinned stamps + updater release notes).
+- Ship #269 (Hub 视角 row + verdict), #270 (Save As dialog, remembered folder, Alt-click direct save;
+  tauri-plugin-dialog + dialog:allow-save), #271 (private agent-node beside anet, PATH-first, stop old
+  daemon before re-register, agent-node checklist row).
+- Bundled Hub pin unchanged (0.9.0-preview.45).
+
+Evidence
+- #271: DEV PATH-order test — a fake old agent-node later in PATH is not touched; moved first (positive
+  control) it is. cargo check 0 warnings; cargo test local_daemon:: 11/11; desktop-tauri.yml mac + windows
+  success (run 34071009436).
+- #270: cargo check with tauri-plugin-dialog 0 warnings; desktop-tauri.yml mac + windows success
+  (run 34070135097); desktop-download.test.ts 17 checks.
+- #269: local-daemon.test.ts 28 checks; npm test 84/84 on each PR; typecheck 0.
+- This bump: npm test (version-consistency) + typecheck, see PR.
+
+Hand-check (Vincent, 0.2.55)
+1. 选服务器 → 重新扫描: agent-node row present; 重新注册并启动本机 daemon → old daemon stopped, new one
+   started with the private agent-node; Hub 视角 row turns ✓ and local-daemon appears in the list.
+2. Click a file attachment → Save As dialog; cancel → nothing saved; Option-click → straight to Downloads.

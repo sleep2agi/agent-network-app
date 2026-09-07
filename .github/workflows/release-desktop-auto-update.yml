@@ -119,6 +119,16 @@ jobs:
           releaseBody: |-
             Signed and notarized stable update for macOS (Apple Silicon) and Windows (x64).
 
+            What's new in 0.2.55:
+            - Downloads: clicking an attachment now opens the system "Save As" dialog so you pick the folder
+              and name (it remembers the last folder); hold Option/Alt while clicking to save straight to
+              Downloads without the dialog. "Download original" on images works the same way.
+            - Local daemon installer: agent-node is now installed into the app's private folder next to anet
+              and used first, so a daemon no longer registers as a plain node when an older agent-node sits
+              on your PATH; the old daemon process is stopped before re-registering; the checklist shows the
+              agent-node in use plus a "Hub view" row (session, node row/role, supervisor list) with a plain
+              verdict when something is off.
+
             What's new in 0.2.54:
             - Attachments on desktop: files an agent sends you (PDF, PPTX, Markdown, HTML, video…) are now
               clickable — one click downloads them into your Downloads folder and offers "Show in folder";
