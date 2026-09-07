@@ -7,6 +7,7 @@
 // 都必须在同文件里被 onThemeChange 回调重新赋值。判据是纯函数,先喂已知阳性看它红,再扫真仓。
 import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 let passed = 0, total = 0;
 const check = (name: string, ok: boolean) => { total++; if (ok) { passed++; console.log('✅', name); } else { console.error('❌', name); } };
@@ -59,7 +60,7 @@ const inComponent = `function X() {\n  const styles = useMemo(() => StyleSheet.c
 check('component-scoped create is out of scope', frozenThemeStyles(inComponent).length === 0);
 
 // 真仓普查:src/**/*.tsx + App.tsx(不含测试)。
-const root = new URL('..', import.meta.url).pathname;
+const root = fileURLToPath(new URL('..', import.meta.url)); // Windows: pathname 会是 /C:/…,要 fileURLToPath
 const files: string[] = ['App.tsx'];
 for (const e of readdirSync(join(root, 'src'))) if (e.endsWith('.tsx') && !e.endsWith('.test.tsx')) files.push(join('src', e));
 const hits: string[] = [];
