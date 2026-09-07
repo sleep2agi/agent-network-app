@@ -50,6 +50,7 @@ import { APP_VERSION } from './src/version';
 import DesktopUpdatePrompt from './src/DesktopUpdatePrompt';
 import DesktopMessageListener from './src/DesktopMessageListener';
 import { loadPinnedChats, requestedChatAlias, requestedChatProfileId, requestedWorkspaceProfileId, savePinnedChats } from './src/desktop-chat-menu';
+import { bindUnreadProfile } from './src/unread-store';
 import { openRememberedChatWindow, restoreDetachedChatWindows } from './src/desktop-chat-windows';
 import { activateHubProfile, LOCAL_HUB_PROFILE_ID, localHubStatus, startLocalHub } from './src/local-hub';
 import UnreadBadgeFixtureScreen, { readWebFixture } from './src/UnreadBadgeFixtureScreen';
@@ -184,6 +185,8 @@ function AppRoot() {
     initLocalAvatars(localAvatars, (map) => { void saveLocalAvatars(map, profileId); });
     initOutbox(outbox, (all) => { void saveOutbox(all, profileId); });
     initForwardController(forwards, createForwardPersistence(saveForwardOperations, profileId));
+    // app#275:回复未读水位线按账号分 key(应用多开时两个账号窗口各算各的)。
+    bindUnreadProfile(profileId);
   };
 
   const removeActiveProfile = async () => {

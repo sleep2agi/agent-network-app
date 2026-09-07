@@ -56,4 +56,28 @@ const idx = chat.indexOf("dispatchUnread({ kind: 'rendered_to_latest', agent: al
 check(idx > 0 && chat.slice(idx, idx + 300).includes('markAgentRepliesSeen(alias)'), 'rendering to latest advances the reply watermark');
 const badge = readFileSync(new URL('./unread-badge.ts', import.meta.url), 'utf8');
 check(badge.includes('const replyPart = replyUnread?.[agentId] ?? 0;') && badge.includes('return userInboxPart +'), 'row count = user_inbox part + reply part');
+// app#275:水位线按账号分 key;没有自己那份时从旧全局 map 接种;两个账号互不覆盖。
+{
+  (globalThis as any).__TAURI_INTERNALS__ = {};
+  const { replyWatermarkStorageKey } = await import('./reply-unread');
+  values.clear();
+  check(replyWatermarkStorageKey() === REPLY_WATERMARK_KEY && replyWatermarkStorageKey('p-a') === `${REPLY_WATERMARK_KEY}:p-a`, 'per-profile key is namespaced under the legacy key');
+  saveReplyWatermarks({ '通信龙': '2026-09-07 01:00:00' });                       // legacy global map
+  check(loadReplyWatermarks('p-a')['通信龙'] === '2026-09-07 01:00:00', 'first load for a profile seeds from the legacy map');
+  saveReplyWatermarks({ '通信龙': '2026-09-07 02:00:00' }, 'p-a');
+  saveReplyWatermarks({ '通信龙': '2026-09-07 03:00:00' }, 'p-b');
+  check(loadReplyWatermarks('p-a')['通信龙'] === '2026-09-07 02:00:00' && loadReplyWatermarks('p-b')['通信龙'] === '2026-09-07 03:00:00', 'two profiles keep separate watermarks for the same alias');
+  check(loadReplyWatermarks()['通信龙'] === '2026-09-07 01:00:00', 'legacy global map untouched by per-profile saves');
+  values.set(`${REPLY_WATERMARK_KEY}:p-c`, '{}');
+  check(Object.keys(loadReplyWatermarks('p-c')).length === 0, 'an existing (empty) per-profile map is not re-seeded from legacy');
+  // unread-store 接线(它 import react-native 的 AppState,bun 里不能直接加载,按源码契约查):
+  // 绑定账号 = 换成该账号的水位线 + 清掉上一账号的 inbox 行;标记已读按当前绑定的账号存。
+  const store = readFileSync(new URL('./unread-store.ts', import.meta.url), 'utf8');
+  check(store.includes('saveReplyWatermarks(next, snapshot.replyProfileId)'), 'markAgentRepliesSeen persists under the bound profile');
+  const bind = store.slice(store.indexOf('export function bindUnreadProfile'));
+  check(bind.includes('replyWatermarks: loadReplyWatermarks(profileId)') && bind.includes('replyRows: []'), 'bindUnreadProfile loads that profile watermarks and drops the other profile rows');
+  const app = readFileSync(new URL('../App.tsx', import.meta.url), 'utf8');
+  const hydrate = app.slice(app.indexOf('const hydrateProfileLocalState'), app.indexOf('const removeActiveProfile'));
+  check(hydrate.includes('bindUnreadProfile(profileId)'), 'App binds the unread store to the hydrated profile');
+}
 console.log(`reply unread: ${ck} checks passed`);

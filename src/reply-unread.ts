@@ -92,15 +92,24 @@ export function parseStoredWatermarks(raw: string | null | undefined): ReplyWate
   }
 }
 
-export function loadReplyWatermarks(): ReplyWatermarks {
-  const desktop = storage();
-  if (!desktop) return {};
-  return parseStoredWatermarks(desktop.getItem(REPLY_WATERMARK_KEY));
+// app#275:应用多开后两个账号窗口同时开,水位线要按账号分 key —— 否则 A 站的「通信牛」和 B 站的
+// 「通信牛」共用一条,后写的窗口还会把先写的整张 map 冲掉。不带 profileId 时仍用旧的全局 key。
+export function replyWatermarkStorageKey(profileId?: string): string {
+  return profileId ? `${REPLY_WATERMARK_KEY}:${profileId}` : REPLY_WATERMARK_KEY;
 }
 
-export function saveReplyWatermarks(watermarks: ReplyWatermarks): boolean {
+export function loadReplyWatermarks(profileId?: string): ReplyWatermarks {
+  const desktop = storage();
+  if (!desktop) return {};
+  const own = desktop.getItem(replyWatermarkStorageKey(profileId));
+  // 首次按账号分 key:没有自己那份就从旧的全局 map 接过来,免得升级后所有回复重新变成未读。
+  if (own == null && profileId) return parseStoredWatermarks(desktop.getItem(REPLY_WATERMARK_KEY));
+  return parseStoredWatermarks(own);
+}
+
+export function saveReplyWatermarks(watermarks: ReplyWatermarks, profileId?: string): boolean {
   const desktop = storage();
   if (!desktop) return false;
-  desktop.setItem(REPLY_WATERMARK_KEY, JSON.stringify(watermarks));
+  desktop.setItem(replyWatermarkStorageKey(profileId), JSON.stringify(watermarks));
   return true;
 }
