@@ -178,6 +178,9 @@ interface Props {
   onBack: () => void;
   desktop?: boolean;
   onOpenNodeSettings?: () => void;
+  /** app#168(手机端):会话置顶开关;桌面端用窗口置顶 + 列表长按,不传。 */
+  pinned?: boolean;
+  onTogglePin?: () => void;
 }
 
 // Module level on purpose: the cache has to outlive a screen unmount, or
@@ -188,7 +191,7 @@ export const clearChatConversationCache = (profileId?: string, serverUrl = ''): 
   conversations.clearScope(conversationScope(profileId, serverUrl));
 };
 
-export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpenNodeSettings }: Props) {
+export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpenNodeSettings, pinned = false, onTogglePin }: Props) {
   // Android edge-to-edge draws the composer under the gesture bar (same
   // class of bug as the tg 802 tab bar) — pad by the real bottom inset.
   const insets = useSafeAreaInsets();
@@ -950,6 +953,19 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
         >
           <Text style={styles.btwHeaderText}>BTW</Text>
         </Pressable>
+        {onTogglePin ? (
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={pinned ? '取消置顶会话' : '置顶会话'}
+            accessibilityState={{ selected: pinned }}
+            onPress={onTogglePin}
+            hitSlop={10}
+            style={({ pressed }) => [styles.headerAction, pressed && { opacity: 0.6 }]}
+          >
+            <Ionicons name={pinned ? 'pin' : 'pin-outline'} size={20} color={pinned ? colors.accent : colors.textSecondary} />
+            <Text style={[styles.headerActionText, pinned && { color: colors.accent }]}>{pinned ? '已置顶' : '置顶'}</Text>
+          </Pressable>
+        ) : null}
         {onOpenNodeSettings ? (
           <Pressable
             accessibilityRole="button"
