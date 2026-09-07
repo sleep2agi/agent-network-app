@@ -861,6 +861,7 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_http::init())
         .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_process::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .invoke_handler(tauri::generate_handler![
@@ -932,12 +933,22 @@ fn dedupe_download_path(dir: &Path, name: &str, exists: &dyn Fn(&Path) -> bool) 
     dir.join(format!("{stem}-{}{ext}", std::process::id()))
 }
 
+/// `target_path` 来自系统「另存为」对话框(Vincent 2026-09-07「支持一下选择保存文件夹路径」):给了就写到
+/// 那里(对话框已经处理了覆盖确认),没给就落到「下载」目录并自动去重。
 #[tauri::command]
-fn save_download(app: tauri::AppHandle, name: String, bytes_base64: String) -> Result<String, String> {
+fn save_download(app: tauri::AppHandle, name: String, bytes_base64: String, target_path: Option<String>) -> Result<String, String> {
     use base64::Engine as _;
     let bytes = base64::engine::general_purpose::STANDARD
         .decode(bytes_base64.as_bytes())
         .map_err(|error| format!("bad payload: {error}"))?;
+    if let Some(chosen) = target_path.filter(|p| !p.trim().is_empty()) {
+        let target = PathBuf::from(chosen);
+        if let Some(parent) = target.parent() {
+            fs::create_dir_all(parent).map_err(|error| error.to_string())?;
+        }
+        fs::write(&target, &bytes).map_err(|error| format!("write failed: {error}"))?;
+        return Ok(target.display().to_string());
+    }
     let dir = app.path().download_dir().map_err(|error| format!("no download dir: {error}"))?;
     fs::create_dir_all(&dir).map_err(|error| error.to_string())?;
     let target = dedupe_download_path(&dir, &sanitize_download_name(&name), &|p| p.exists());
