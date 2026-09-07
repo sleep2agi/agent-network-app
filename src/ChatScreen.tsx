@@ -22,7 +22,7 @@ import AliasAvatar from './AliasAvatar';
 import AttachmentFileDesktop from './AttachmentFileDesktop';
 import AuthedThumb, { AttachmentFile, AuthedVideo, mimeFromName } from './AuthedThumb';
 import AuthedWebThumb from './AuthedWebThumb';
-import { createDashboardRequestId, dashboardRequestIdForLocalId, fetchStatus, fetchTasks, sendTask, HubConfig, HubTask, Session, TaskAttachment, TaskPriority } from './api';
+import { ackUserMessages, createDashboardRequestId, dashboardRequestIdForLocalId, fetchStatus, fetchTasks, sendTask, HubConfig, HubTask, Session, TaskAttachment, TaskPriority } from './api';
 import { outboxAdd, outboxForAlias, outboxMarkFailed, outboxMarkPending, outboxRemove } from './outbox';
 import { mayApplySendResult, shouldExposeSendFailure } from './send-reconciliation';
 import { conversationKey, conversationScope, createConversationRequestGate, createConversationStore } from './conversation-store';
@@ -45,7 +45,7 @@ import type { NativeSyntheticEvent, NativeScrollEvent } from 'react-native';
 import { usePoll } from './usePoll';
 import { chatSearchState, isHighlighted, isStaleSearch, matchCountLabel, searchItems, shouldLoadOlderForSearch, stepHit, type SearchHit } from './chat-search';
 import { retryUnreadPersistFromPoll } from './conversation-unread-persist';
-import { dispatchUnread, markAgentRepliesSeen } from './unread-store';
+import { dispatchUnread, hubHasAgentUnread, markAgentRepliesSeen, unackedIdsForAgent } from './unread-store';
 import { appFetch } from './app-fetch';
 import MarkdownMessage from './MarkdownMessage';
 import { cleanAttachmentDebugText, parseAttachmentRefs, parseMetaAttachmentRefs, parseMetaReplyAttachmentRefs } from './attachment-display';
@@ -612,6 +612,11 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
     dispatchUnread({ kind: 'rendered_to_latest', agent: alias });
     // 回复未读(inbox 表那一半)也在这一刻清:推进该 agent 的水位线并持久化。
     markAgentRepliesSeen(alias);
+    // #1828:hub 给权威数时,同一刻把这个 agent 的未读在 hub 上 ack 掉(两表);失败不影响本地清零,下次渲染再补。
+    if (hubHasAgentUnread()) {
+      const ids = unackedIdsForAgent(alias);
+      if (ids.length) void ackUserMessages(cfg, ids).catch(error => console.warn('ack unread failed', error));
+    }
   }, [alias, conversationReady, showJump]);
 
   // shared by the sent bubble and the reply bubble (tg 771)

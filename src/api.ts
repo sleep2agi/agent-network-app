@@ -539,6 +539,14 @@ export interface HubMessage {
   priority?: string;
   content?: string;
   created_at?: string;
+  acked?: number;
+}
+
+/** scope=user 分支(user_inbox 表)的一行;字段名与 inbox 行不同。 */
+export interface HubUserMessage {
+  message_id?: string;
+  from_session?: string;
+  acked?: number;
 }
 
 /** alias 分支(inbox 表)。🔴 hub 不给 `since` 时默认只看最近 1 小时 —— 算「回复未读」要把窗口拉开,
@@ -557,8 +565,32 @@ export const replyUnreadSince = (now: Date = new Date()): string =>
  * 其中 `unread` 就是给角标读的 —— 而这个客户端此前**一次都没调过**
  * (全仓 `scope=user` 0 处)。
  */
+export interface UserMessagesResponse {
+  messages: HubMessage[];
+  unread?: number;
+  pending_count?: number;
+  /** #1828(hub ≥ 0.9.0-preview.51):按 from_session 分的权威未读;老 hub 没有这个字段。 */
+  unread_by_agent?: Record<string, number>;
+  unread_total?: number;
+}
 export const fetchUserMessages = (cfg: HubConfig, limit: number) =>
-  get<{ messages: HubMessage[]; unread?: number; pending_count?: number }>(cfg, userMessagesPath(limit, cfg.networkId));
+  get<UserMessagesResponse>(cfg, userMessagesPath(limit, cfg.networkId));
+
+/** #1828:把看过的消息在 hub 上标已读(user_inbox 行 + inbox 里发给自己用户名的回复行);hub 只改自己的行。 */
+export const ackUserMessages = async (cfg: HubConfig, messageIds: string[]): Promise<number> => {
+  if (!messageIds.length) return 0;
+  const res = await withTimeout(signal =>
+    appFetch(`${cfg.serverUrl}/api/messages/ack`, {
+      method: 'POST',
+      headers: headers(cfg),
+      signal,
+      body: JSON.stringify({ message_ids: messageIds.slice(0, 500) }),
+    }),
+  );
+  if (!res.ok) throw new Error(`ack failed: HTTP ${res.status}`);
+  const d = await res.json();
+  return typeof d?.acked === 'number' ? d.acked : 0;
+};
 
 /** The hub's REST send endpoint is POST /api/task with {alias, task} —
  *  /api/send_task does not exist (it 404s into the server help text).

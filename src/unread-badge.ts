@@ -10,7 +10,7 @@
  */
 import type { HubMessage } from './api';
 import { reduceUnread, unreadOf, type UnreadState } from './unread-ledger';
-import { readServerUnread, resolveUnread } from './user-unread';
+import { readServerUnread, readServerUnreadByAgent, resolveUnread } from './user-unread';
 
 export function unreadCountForAgentRow(
   body: unknown,
@@ -19,6 +19,9 @@ export function unreadCountForAgentRow(
   /** agent 回给用户的未读(reply-unread.ts,来自 inbox 表),与 user_inbox 那一半相加。 */
   replyUnread?: Readonly<Record<string, number>>,
 ): number {
+  // #1828:hub 给了按 agent 的权威数 → 直接用它,本地 ledger 与回复水位线都退位。
+  const authoritative = readServerUnreadByAgent(body);
+  if (authoritative) return authoritative[agentId] ?? 0;
   const local = unreadOf(ledger, agentId);
   const server = readServerUnread(body);
   const userInboxPart = resolveUnread(server === 0 ? 0 : null, local);

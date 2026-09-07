@@ -3,7 +3,8 @@
  * 计数只经过 reduceUnread；组件不准自己 +1 / 清零。
  */
 import { AppState, type AppStateStatus } from 'react-native';
-import type { HubMessage } from './api';
+import type { HubMessage, HubUserMessage } from './api';
+import { readServerUnreadByAgent } from './user-unread';
 import { ingestUserMessages } from './unread-badge';
 import { advanceWatermark, loadReplyWatermarks, replyUnreadByAgent, saveReplyWatermarks, watermarkAfterRender, type ReplyWatermarks } from './reply-unread';
 import {
@@ -97,6 +98,28 @@ export function bindUnreadProfile(profileId: string | undefined): void {
   if (profileId === snapshot.replyProfileId && (profileId !== undefined || snapshot.replyRows.length === 0)) return;
   snapshot = { ...snapshot, replyProfileId: profileId, replyWatermarks: loadReplyWatermarks(profileId), replyRows: [] };
   emit();
+}
+
+/** #1828:hub 是否给了按 agent 的权威未读(有 → ChatScreen 渲染到底时要向 hub ack)。 */
+export function hubHasAgentUnread(snap: UnreadStoreSnapshot = snapshot): boolean {
+  return readServerUnreadByAgent(snap.serverBody) !== null;
+}
+
+/**
+ * #1828:某个 agent 在当前快照里还没 ack 的消息 id —— user_inbox 那半(scope=user 响应里的 message_id)
+ * 加 inbox 回复那半(alias 分支里 from_alias=agent、to_alias=登录用户名 的行)。给 ackUserMessages 用。
+ */
+export function unackedIdsForAgent(agent: string, snap: UnreadStoreSnapshot = snapshot): string[] {
+  if (!agent) return [];
+  const ids = new Set<string>();
+  const body = snap.serverBody as { messages?: HubUserMessage[] } | null;
+  for (const m of Array.isArray(body?.messages) ? body!.messages! : []) {
+    if (m?.from_session === agent && m.acked === 0 && typeof m.message_id === 'string' && m.message_id) ids.add(m.message_id);
+  }
+  for (const r of snap.replyRows) {
+    if (r?.from_alias === agent && r.to_alias === snap.replyUsername && r.acked === 0 && r.id) ids.add(r.id);
+  }
+  return [...ids];
 }
 
 /** 当前快照下每个 agent 的回复未读数。 */

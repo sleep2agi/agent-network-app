@@ -28,6 +28,19 @@ const run = (evs: UnreadEvent[]) => evs.reduce(reduceUnread, initialUnreadState(
   check('服务端 0 权威全已读，即使本地还有数', unreadCountForAgentRow({ unread: 0 }, ledger, 'a') === 0);
   check('服务端正总数不是 per-Agent，不画到每一行', unreadCountForAgentRow({ unread: 9 }, ledger, 'a') === 2);
   check('无未读的行是 0 不是 undefined', unreadCountForAgentRow(null, ledger, 'zzz') === 0);
+  // #1828:hub 给了 unread_by_agent → 权威,本地 ledger 与回复那半都退位;没给 → 老算法。
+  const authoritative = { unread: 9, unread_by_agent: { a: 5, c: 1.9, d: -1, e: 'x' }, unread_total: 6 };
+  check('#1828 权威数覆盖本地 ledger', unreadCountForAgentRow(authoritative, ledger, 'a', { a: 7 }) === 5);
+  check('#1828 权威表里没有的 agent 是 0(即使本地有)', unreadCountForAgentRow(authoritative, ledger, 'b', { b: 3 }) === 0);
+  check('#1828 小数向下取整、负数/非数字丢弃', unreadCountForAgentRow(authoritative, ledger, 'c') === 1 && unreadCountForAgentRow(authoritative, ledger, 'd') === 0 && unreadCountForAgentRow(authoritative, ledger, 'e') === 0);
+  check('#1828 unread_by_agent 不是对象 → 退回老算法', unreadCountForAgentRow({ unread: 9, unread_by_agent: [1] }, ledger, 'a', { a: 1 }) === 3);
+  check('老 hub(无 unread_by_agent)仍是 user_inbox 半 + 回复半', unreadCountForAgentRow({ unread: 9 }, ledger, 'a', { a: 4 }) === 6);
+  // 接线契约(ChatScreen / unread-store import react-native,bun 里按源码查):渲染到底时向 hub ack 两表 id。
+  const chat = readFileSync(new URL('./ChatScreen.tsx', import.meta.url), 'utf8');
+  const at = chat.indexOf("dispatchUnread({ kind: 'rendered_to_latest', agent: alias });");
+  check('#1828 ChatScreen 渲染到底 → hubHasAgentUnread 时 ackUserMessages(unackedIdsForAgent)', at > 0 && chat.slice(at, at + 600).includes('if (hubHasAgentUnread())') && chat.slice(at, at + 600).includes('ackUserMessages(cfg, ids)'));
+  const store = readFileSync(new URL('./unread-store.ts', import.meta.url), 'utf8');
+  check('#1828 unackedIdsForAgent 合并 user_inbox message_id 与 inbox 回复 id', store.includes('ids.add(m.message_id)') && store.includes('ids.add(r.id)') && store.includes('r.to_alias === snap.replyUsername'));
 }
 
 {
