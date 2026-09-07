@@ -34,6 +34,21 @@ export type UserMessagesBody = {
  * 两个名字是同一个数(服务端注释:「一处计算,不是两处实现」),
  * 优先 `unread`(角标专用名),再 `pending_count`(与 alias 分支同名)。
  */
+/**
+ * #1828:hub ≥ 0.9.0-preview.51 在 scope=user 响应里给 `unread_by_agent`(user_inbox + inbox 回复行,
+ * 按 from_session 分)。有它就是权威数,客户端两半本地算法都退位;没有(老 hub)返回 null。
+ */
+export function readServerUnreadByAgent(body: unknown): Readonly<Record<string, number>> | null {
+  if (!body || typeof body !== 'object') return null;
+  const raw = (body as { unread_by_agent?: unknown }).unread_by_agent;
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null;
+  const out: Record<string, number> = {};
+  for (const [agent, n] of Object.entries(raw as Record<string, unknown>)) {
+    if (typeof n === 'number' && Number.isFinite(n) && n > 0) out[agent] = Math.floor(n);
+  }
+  return out;
+}
+
 export function readServerUnread(body: unknown): number | null {
   if (!body || typeof body !== 'object') return null;
   const b = body as UserMessagesBody;
