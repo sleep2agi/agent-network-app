@@ -1,0 +1,25 @@
+Desktop v0.2.59 release-candidate report
+
+- Base: main after app#283
+- Target: desktop-v0.2.59
+- Why: two user-visible features merged today — app#157 (node task queue) and app#160 (proactive agent
+  messages inside the chat timeline); bundling them so Vincent gets one update prompt, not two.
+
+Changes
+- Bump the desktop application consistently to 0.2.59 (9 pinned stamps + updater release notes).
+- Ship #282 (app#157): NodeDetailScreen "任务" section — running (delivered/acked/running/in_progress,
+  by start time) and queue (pending/created/queued/restarting, by created_at = execution order, #n),
+  elapsed labels, 10 s foreground poll + manual refresh, loading/empty/error states, rows expand.
+- Ship #283 (app#160): user_inbox rows from the agent (send_desktop_message) render in that agent's
+  chat as reply-only bubbles tagged "· 主动汇报"; fetched alongside tasks in the same poll; ack/unread
+  paths unchanged.
+- Bundled Hub pin unchanged (0.9.0-preview.45). No Rust changes since 0.2.57.
+
+Evidence
+- node-tasks.test.ts 14 checks; proactive-messages.test.ts 10 checks; conversation-store contract
+  updated to the new cache line (26 checks); npm test 88/88, typecheck 0 on both PRs.
+- This bump: npm test (version-consistency) + typecheck, see PR.
+
+Hand-check (Vincent, 0.2.59)
+1. Agent 列表 → 任一节点 → 节点详情:看到「任务」区;给它连发两条任务,队列显示 #1/#2,处理中的一条在「正在运行」。
+2. 让某个 agent 用 send_desktop_message 发一条主动消息:它出现在该 agent 的会话里,作者后带「· 主动汇报」,列表红点计入。
