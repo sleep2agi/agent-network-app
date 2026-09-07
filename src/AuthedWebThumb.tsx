@@ -3,7 +3,7 @@ import { ActivityIndicator, Image, Pressable, StyleSheet, Text, View } from 'rea
 import { appFetch } from './app-fetch';
 import { colors, onThemeChange, spacing } from './theme';
 import { downloadImageObjectUrl, saveImageObjectUrl } from './web-image-download';
-import { isTauriDesktop, revealInFolder, saveToDownloads, displayDownloadPath } from './desktop-download';
+import { chooseSavePath, isTauriDesktop, revealInFolder, saveToDownloads, displayDownloadPath } from './desktop-download';
 
 export default function AuthedWebThumb({
   uri,
@@ -22,12 +22,15 @@ export default function AuthedWebThumb({
   const [error, setError] = useState<string | null>(null);
   const [attempt, setAttempt] = useState(0);
   const [savedPath, setSavedPath] = useState<string | null>(null);
-  const saveOriginal = async (url: string) => {
-    // Tauri 的 WebView 里 <a download> 不落盘(Vincent 2026-09-07):走 Rust 写进「下载」目录
+  const saveOriginal = async (url: string, direct = false) => {
+    // Tauri 的 WebView 里 <a download> 不落盘(Vincent 2026-09-07):走 Rust 写进「下载」目录;
+    // 点 → 另存为对话框选位置,⌥/Alt 点 → 直接存到下载。
     if (!isTauriDesktop()) { saveImageObjectUrl(url, name); return; }
     try {
+      let target: string | null | undefined;
+      if (!direct) { target = await chooseSavePath(name).catch(() => undefined); if (target === null) return; }
       const bytes = new Uint8Array(await (await fetch(url)).arrayBuffer());
-      setSavedPath(await saveToDownloads(name, bytes));
+      setSavedPath(await saveToDownloads(name, bytes, target ?? null));
     } catch (reason) {
       setError(`保存失败(${reason instanceof Error ? reason.message : String(reason)})`);
     }
@@ -83,7 +86,7 @@ export default function AuthedWebThumb({
         accessibilityRole="button"
         accessibilityLabel={`下载 ${name}`}
         hitSlop={6}
-        onPress={() => { void saveOriginal(objectUrl); }}
+        onPress={(e: any) => { void saveOriginal(objectUrl, !!(e?.nativeEvent?.altKey ?? e?.altKey)); }}
       >
         <Text style={styles.download}>{savedPath ? `✓ 已保存到 ${displayDownloadPath(savedPath)}` : '↓ 下载原图'}</Text>
       </Pressable>

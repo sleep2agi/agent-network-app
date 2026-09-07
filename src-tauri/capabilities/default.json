@@ -11,6 +11,7 @@
     "core:webview:allow-create-webview-window",
     "opener:default",
     "opener:allow-reveal-item-in-dir",
+    "dialog:allow-save",
     {
       "identifier": "opener:allow-open-url",
       "allow": [
