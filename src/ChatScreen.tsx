@@ -264,11 +264,10 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
       const token = requestGate.current();
       if (!token) return;
       try {
-        // app#160:同一次轮询顺带取 Agent 主动发给用户的消息(user_inbox);它失败不影响任务行。
-        const [data, userMessages] = await Promise.all([
-          fetchTasks(cfg, { to_name: alias, limit }),
-          fetchUserMessages(cfg, 200).catch(() => ({ messages: [] as any[] })),
-        ]);
+        // app#160:同一次轮询顺带取 Agent 主动发给用户的消息(user_inbox),与任务并行;它失败不影响任务行。
+        const userMessagesPromise = fetchUserMessages(cfg, 200).catch(() => ({ messages: [] as any[] }));
+        const data = await fetchTasks(cfg, { to_name: alias, limit });
+        const userMessages = await userMessagesPromise;
         // The await is where the conversation can change underneath us. Every
         // line below writes to screen state, so nothing may run for an answer
         // that is no longer the one being waited for — that is the whole bug.

@@ -69,7 +69,8 @@ const checks: Array<[string, boolean]> = [
     return !secondWindow.isCurrent(secondB) && secondWindow.current() === null;
   })()],
   ['a stale answer is cached by its own key before screen writes are refused',
-    /conversations\.put\(token\.key, fetched\);\n\s*return;/.test(screen)],
+    // app#160 起缓存的是任务行 + 主动消息(同一份合并输入),仍然是「先按自己的 key 缓存、再拒绝写屏」。
+    /conversations\.put\(token\.key, \[\.\.\.fetched, \.\.\.proactive\]\);\n\s*return;/.test(screen)],
   ['the screen checks request ownership before its first state write', (() => {
     const afterFetch = screen.slice(screen.indexOf('await fetchTasks('));
     const gate = afterFetch.indexOf('requestGate.isCurrent(token)');
