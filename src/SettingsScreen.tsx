@@ -7,6 +7,7 @@ import { APP_VERSION } from './version';
 import { appFetch } from './app-fetch';
 import { checkDesktopUpdate, desktopUpdateSnapshot, subscribeDesktopUpdates } from './desktop-updater';
 import { backupLocalHubData, deleteLocalHubData, LOCAL_HUB_PROFILE_ID, localHubStatus, openLocalHubLogs, restartLocalHub, stopLocalHub, type LocalHubResult } from './local-hub';
+import { openWorkspaceWindow } from './desktop-chat-menu';
 
 // Settings (Vincent tg 720): who am I, where am I connected, which
 // network, which build — and the one destructive action, logout,
@@ -77,6 +78,7 @@ export default function SettingsScreen({
     })();
   }, [cfg]);
 
+  const tauriDesktop = !!(globalThis as any).__TAURI_INTERNALS__;
   return (
     <View style={styles.root}>
       <Text style={styles.sectionTitle}>账号与 Hub</Text>
@@ -99,6 +101,12 @@ export default function SettingsScreen({
                   <Text style={styles.profileMeta} numberOfLines={1}>{profile.serverUrl} · {profile.username || '未知用户'}{profile.networkId ? ` · ${profile.networkId}` : ''}</Text>
                   {profile.requiresReauth ? <Text style={styles.reauthText}>需要重新登录 · 点击验证</Text> : null}
                 </View>
+                {tauriDesktop && !profile.requiresReauth ? (
+                  // 应用多开(Vincent 2026-09-07):给这个账号开一个独立工作区窗口,主窗口的当前账号不动;同一账号再点就聚焦已开的窗。
+                  <Pressable accessibilityLabel={`在新窗口打开 ${profile.displayName || profile.username || profile.serverUrl}`} onPress={event => { event.stopPropagation(); void openWorkspaceWindow(profile).catch(error => setProfileError(String(error))); }} hitSlop={8} style={styles.rowAction}>
+                    <Text style={styles.openWindowText}>新窗口</Text>
+                  </Pressable>
+                ) : null}
                 {profile.profileId !== LOCAL_HUB_PROFILE_ID ? (
                   <Pressable accessibilityLabel={`移除 ${profile.username || profile.serverUrl}`} onPress={event => { event.stopPropagation(); setRemoveTarget(profile); }} hitSlop={8}>
                     <Text style={styles.removeText}>移除</Text>
@@ -304,6 +312,8 @@ const makeStyles = () =>
   profileMeta: { color: colors.textMuted, fontSize: 11, marginTop: 3 },
   addText: { color: colors.accent, fontSize: 14, fontWeight: '600' },
   removeText: { color: colors.failed, fontSize: 12 },
+  rowAction: { paddingHorizontal: spacing.xs },
+  openWindowText: { color: colors.accent, fontSize: 12, fontWeight: '600' },
   reauthText: { color: colors.failed, fontSize: 11, marginTop: 3 },
   errorText: { color: colors.failed, fontSize: 12, marginTop: spacing.sm },
   storageHint: { color: colors.textMuted, fontSize: 11, marginTop: spacing.sm },

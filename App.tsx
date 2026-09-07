@@ -37,7 +37,7 @@ import LogsScreen from './src/LogsScreen';
 import ScheduledTasksScreen from './src/ScheduledTasksScreen';
 import ConnectivityBanner from './src/ConnectivityBanner';
 import type { HostSupervisorDaemon } from './src/api';
-import { clearConfig, listHubProfiles, loadConfig, loadLocalAvatars, loadOutbox, loadForwardOperations, saveForwardOperations, loadThemeMode, markHubProfileRequiresReauth, onDesktopThemeStorageChange, removeHubProfile, saveConfig, saveLocalAvatars, saveOutbox, switchHubProfile, type HubProfile } from './src/storage';
+import { clearConfig, listHubProfiles, loadConfig, loadHubProfile, loadLocalAvatars, loadOutbox, loadForwardOperations, saveForwardOperations, loadThemeMode, markHubProfileRequiresReauth, onDesktopThemeStorageChange, removeHubProfile, saveConfig, saveLocalAvatars, saveOutbox, switchHubProfile, type HubProfile } from './src/storage';
 import { clearProfileUnauthorized, onProfileUnauthorized } from './src/profile-auth-state';
 import { initOutbox } from './src/outbox';
 import { createForwardPersistence, initForwardController } from './src/forward-controller';
@@ -49,7 +49,7 @@ import { styles } from './src/app-styles';
 import { APP_VERSION } from './src/version';
 import DesktopUpdatePrompt from './src/DesktopUpdatePrompt';
 import DesktopMessageListener from './src/DesktopMessageListener';
-import { loadPinnedChats, requestedChatAlias, requestedChatProfileId, savePinnedChats } from './src/desktop-chat-menu';
+import { loadPinnedChats, requestedChatAlias, requestedChatProfileId, requestedWorkspaceProfileId, savePinnedChats } from './src/desktop-chat-menu';
 import { openRememberedChatWindow, restoreDetachedChatWindows } from './src/desktop-chat-windows';
 import { activateHubProfile, LOCAL_HUB_PROFILE_ID, localHubStatus, startLocalHub } from './src/local-hub';
 import UnreadBadgeFixtureScreen, { readWebFixture } from './src/UnreadBadgeFixtureScreen';
@@ -134,7 +134,8 @@ export default function App() {
 
   // 更新提示只在主窗口弹;分离出来的聊天窗(?chat=<alias>)不弹 —— 否则每个窗各弹一次
   // (Vincent 2026-09-06 截图:两个分离窗同时被同一份更新说明盖住)。
-  const dedicatedChatWindow = Platform.OS === 'web' && !!(globalThis as any).__TAURI_INTERNALS__ && !!requestedChatAlias();
+  // 应用多开的工作区窗口(?workspace=<profileId>)同理只让主窗口弹。
+  const dedicatedChatWindow = Platform.OS === 'web' && !!(globalThis as any).__TAURI_INTERNALS__ && (!!requestedChatAlias() || !!requestedWorkspaceProfileId());
   return (
     <SafeAreaProvider>
       <AppRoot />
@@ -154,6 +155,9 @@ function AppRoot() {
   const [localHubError, setLocalHubError] = useState<string | null>(null);
   const initialChat = useMemo(() => requestedChatAlias(), []);
   const initialChatProfile = useMemo(() => requestedChatProfileId(), []);
+  // 应用多开(Vincent 2026-09-07):?workspace=<profileId> 的窗口只「借用」那个账号,不动全局「当前账号」。
+  const initialWorkspaceProfile = useMemo(() => requestedWorkspaceProfileId(), []);
+  const borrowedProfile = initialWorkspaceProfile ?? initialChatProfile;
   // Keyed remount on theme switch: module-level styles were already
   // rebuilt by the onThemeChange listeners, the new key re-renders the tree.
   const [theme, setTheme] = useState(themeMode());
@@ -202,7 +206,8 @@ function AppRoot() {
 
   const activateProfile = async (profileId: string) => {
     // Local workspace:先启动本地 Hub(钥匙串凭据丢了会在这里自动恢复),再切 profile。
-    const next = await activateHubProfile(profileId, { isDesktop: () => tauriDesktop, startLocalHub, switchHubProfile });
+    // 工作区窗口里切账号只换这个窗口,不改主窗口的「当前账号」。
+    const next = await activateHubProfile(profileId, { isDesktop: () => tauriDesktop, startLocalHub, switchHubProfile: initialWorkspaceProfile ? loadHubProfile : switchHubProfile });
     await hydrateProfileLocalState(next);
     setCfg(next);
     setScreen({ name: 'agents' });
@@ -231,7 +236,8 @@ function AppRoot() {
   // the app usable, log the diagnostic, and require a fresh login whose save
   // path now reports the error visibly.
   useEffect(() => {
-    Promise.all([initialChatProfile ? switchHubProfile(initialChatProfile).catch(() => loadConfig()) : loadConfig(), loadThemeMode()]).then(async ([stored, mode]) => {
+    // 分离聊天窗 / 工作区窗都按窗口借用账号(以前聊天窗用 switchHubProfile,会把主窗口的「当前账号」一起切走)。
+    Promise.all([borrowedProfile ? loadHubProfile(borrowedProfile).catch(() => loadConfig()) : loadConfig(), loadThemeMode()]).then(async ([stored, mode]) => {
       let saved = stored;
       if (tauriDesktop && stored?.profileId === LOCAL_HUB_PROFILE_ID) {
         const local = await startLocalHub();
@@ -250,14 +256,14 @@ function AppRoot() {
         // Fire the status request now so its RTT overlaps the boot→AgentsScreen
         // mount; AgentsScreen's first load consumes this in-flight promise.
         prefetchStatus(saved);
-        if (!initialChat) void restoreDetachedChatWindows().catch(error => console.error('Failed to restore detached chats', error));
+        if (!initialChat && !initialWorkspaceProfile) void restoreDetachedChatWindows().catch(error => console.error('Failed to restore detached chats', error));
       }
       setBooting(false);
     }).catch(error => {
       console.error('Failed to restore desktop session', error);
       setBooting(false);
     });
-  }, [initialChat, initialChatProfile, tauriDesktop]);
+  }, [initialChat, borrowedProfile, initialWorkspaceProfile, tauriDesktop]);
 
   // R1 avatar (通信龙 07-31): hydrate the hub avatar layer from GET /api/nodes
   // so node-backed aliases render their cross-device avatar_url (Vincent changed

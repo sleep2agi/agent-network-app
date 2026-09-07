@@ -635,6 +635,24 @@ fn switch_desktop_profile(profile_id: String) -> Result<String, String> {
     serde_json::to_string(&output).map_err(|error| error.to_string())
 }
 
+// 应用多开(Vincent 2026-09-07「允许多个不同账号的 UI 同时存在」):给某个账号开独立工作区
+// 窗口时,只读这个 profile 的会话,**不改** active_profile_id —— 主窗口的「当前账号」不受影响。
+// switch_desktop_profile 是「切换」,这个是「借用」。
+#[tauri::command]
+fn load_desktop_profile(profile_id: String) -> Result<String, String> {
+    let _guard = PROFILE_STORE
+        .lock()
+        .map_err(|_| "profile registry lock poisoned")?;
+    let index = read_profile_index()?;
+    let profile = index
+        .profiles
+        .iter()
+        .find(|p| p.profile_id == profile_id)
+        .ok_or_else(|| "profile not found".to_string())?;
+    let output = output_for(profile)?;
+    serde_json::to_string(&output).map_err(|error| error.to_string())
+}
+
 #[tauri::command]
 fn remove_desktop_profile(profile_id: String) -> Result<(), String> {
     if local_hub::is_local_profile(&profile_id) {
@@ -868,6 +886,7 @@ pub fn run() {
             save_desktop_profile,
             list_desktop_profiles,
             switch_desktop_profile,
+            load_desktop_profile,
             remove_desktop_profile,
             mark_desktop_profile_requires_reauth,
             load_active_desktop_profile,

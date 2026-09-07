@@ -61,7 +61,8 @@ for (const [id, desktop] of [['remote-1', true], [LOCAL_HUB_PROFILE_ID, false]] 
   const { readFileSync } = await import('node:fs');
   const app = readFileSync(new URL('../App.tsx', import.meta.url), 'utf8').replace(/\r\n/g, '\n');
   const body = app.slice(app.indexOf('const activateProfile = async'), app.indexOf('const requestProfileReauth'));
-  check(body.includes('activateHubProfile(profileId, { isDesktop: () => tauriDesktop, startLocalHub, switchHubProfile })'), 'App.activateProfile delegates to activateHubProfile with the real start/switch');
+  // 应用多开:工作区窗口(?workspace=)里切账号只换本窗口(loadHubProfile),主窗口仍是真正的 switchHubProfile。
+  check(body.includes('activateHubProfile(profileId, { isDesktop: () => tauriDesktop, startLocalHub, switchHubProfile: initialWorkspaceProfile ? loadHubProfile : switchHubProfile })'), 'App.activateProfile delegates to activateHubProfile with the real start/switch');
   check(!/\bawait switchHubProfile\(profileId\)/.test(body), 'App.activateProfile no longer calls switchHubProfile directly');
 }
 

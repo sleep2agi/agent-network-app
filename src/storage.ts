@@ -125,6 +125,15 @@ export const switchHubProfile = async (profileId: string): Promise<HubConfig> =>
   return cfg;
 };
 
+// 应用多开:按窗口借用一个账号的会话,不改全局「当前账号」(switchHubProfile 会改)。
+export const loadHubProfile = async (profileId: string): Promise<HubConfig> => {
+  if (!isTauriDesktop()) throw new Error('per-window profiles are currently available on desktop');
+  const { invoke } = await import('@tauri-apps/api/core');
+  const cfg = parseConfig(await invoke<string>('load_desktop_profile', { profileId }));
+  if (!cfg) throw new Error('saved profile is invalid');
+  return cfg;
+};
+
 export const removeHubProfile = async (profileId: string): Promise<void> => {
   if (!isTauriDesktop()) {
     const cfg = await loadConfig();
