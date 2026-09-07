@@ -119,6 +119,11 @@ jobs:
           releaseBody: |-
             Signed and notarized stable update for macOS (Apple Silicon) and Windows (x64).
 
+            What's new in 0.2.57:
+            - Fix: the per-account workspace window from 0.2.56 could not reach any hub ("plugin:http|fetch
+              not allowed by ACL") because its window label was missing from the app's permission list.
+              Now granted, with a test that keeps every window label covered.
+
             What's new in 0.2.56:
             - Multiple accounts side by side: in Settings → Accounts & Hub every account row has a
               "New window" button that opens a full workspace window (agents, chats, settings) signed in

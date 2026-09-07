@@ -1,5 +1,5 @@
 import { strict as assert } from 'node:assert';
-import { chatWindowLabel, chatWindowUrl, mergeDetachedChatWindow, requestedChatAlias, requestedChatProfileId } from './desktop-chat-menu';
+import { chatWindowLabel, chatWindowUrl, mergeDetachedChatWindow, requestedChatAlias, requestedChatProfileId, workspaceWindowLabel } from './desktop-chat-menu';
 import fs from 'node:fs';
 import path from 'node:path';
 
@@ -52,4 +52,16 @@ console.log('desktop chat menu: 14 checks passed');
   // 非 Tauri 环境是 no-op,不能抛。
   await openWorkspaceWindow({ profileId: 'p-1', serverUrl: 'http://x' });
   console.log('desktop chat menu: workspace window checks passed');
+}
+
+// ── Tauri 权限按窗口标签给(Vincent 2026-09-07 截图:新窗口「plugin:http|fetch not allowed by ACL」)。
+// 这里铸出的每种标签前缀都必须在 capabilities/default.json 的 windows 里,否则新窗口里所有 invoke 全拒。
+{
+  const capability = JSON.parse(fs.readFileSync(new URL('../src-tauri/capabilities/default.json', import.meta.url), 'utf8')) as { windows?: string[] };
+  const granted = capability.windows ?? [];
+  const covers = (label: string) => granted.some(pattern => pattern === label || (pattern.endsWith('*') && label.startsWith(pattern.slice(0, -1))));
+  for (const label of ['main', chatWindowLabel('通信牛', 'p-1'), workspaceWindowLabel('p-1')]) {
+    assert.ok(covers(label), `capability windows must cover window label ${label} (got ${JSON.stringify(granted)})`);
+  }
+  console.log('desktop chat menu: capability covers every minted window label');
 }
