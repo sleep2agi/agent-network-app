@@ -56,6 +56,7 @@ import { styles } from './app-styles';
 import { colors, onThemeChange, spacing, statusColor } from './theme';
 import { formatTime } from './time';
 import { usePoll } from './usePoll';
+import NodeTasksSection from './NodeTasksSection';
 import { nodeActionVisual, type NodeActionTone } from './node-action-visual';
 import { nodeInfoFacts } from './node-info';
 import { nodeIdentityNotice, taskSectionTitle } from './node-identity';
@@ -334,6 +335,9 @@ export default function NodeDetailScreen({
             </Text>
           </View>
         </View> : null}
+
+        {/* app#157 —— 这个节点正在跑什么、前面排着几条(只读视图也显示,它不改任何东西) */}
+        <NodeTasksSection cfg={cfg} alias={alias} />
 
         {!readOnly ? <View style={{ paddingTop: spacing.xl }}>
           <Text style={{ color: colors.textMuted, fontSize: 13, marginBottom: spacing.sm }}>节点操作</Text>
