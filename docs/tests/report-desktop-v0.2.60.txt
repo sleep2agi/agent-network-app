@@ -1,0 +1,24 @@
+Desktop v0.2.60 release-candidate report
+
+- Base: main after app#286
+- Target: desktop-v0.2.60
+- Why: bundled local Hub pin 0.9.0-preview.45 → 0.9.0-preview.52 so the Local workspace gains the Hub-side
+  features shipped since (#1828 per-agent unread + ack in .51; #1843 create-request status in .52) and the
+  wizard (app#286) can show the daemon's failure reason (Vincent 2026-09-07: opencode-cli on Mac).
+
+Changes
+- local-hub-sidecar/package.json + package-lock: @sleep2agi/commhub-server 0.9.0-preview.52 (lock integrity
+  regenerated from npm); src-tauri/src/local_hub.rs EXPECTED_HUB_VERSION; src/local-hub-sidecar.test.ts pin.
+- Bump the desktop application consistently to 0.2.60 (9 pinned stamps + updater release notes).
+- No functional app changes beyond what main already carries (#286 wizard reasons).
+
+Evidence
+- npm test (local-hub-sidecar contract: exact dep, lock resolves exact, integrity sha512) + typecheck on PR.
+- desktop-tauri.yml mac + windows dispatched on the branch (Rust constant changed).
+- Release gate smokes now exercise a real migration (.45 → .52): migration, failed-migration (rollback),
+  crash-recovery, lost-credential, stale-takeover (fixture .29), local-daemon-install (macOS), corrupt-data.
+
+Hand-check (Vincent, 0.2.60)
+1. 更新后 Local workspace 自动迁移到 Hub .52:设置 → 本地 Hub 版本显示 0.9.0-preview.52,节点/会话都还在。
+2. 新建节点选 opencode-cli:向导应立刻显示 daemon 的失败原因(Linux-only 校验),不再等 24s。
+3. Agent 列表红点在 Local workspace 上由 Hub 权威给出;看完会话即清。
