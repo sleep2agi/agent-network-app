@@ -119,6 +119,13 @@ jobs:
           releaseBody: |-
             Signed and notarized stable update for macOS (Apple Silicon) and Windows (x64).
 
+            What's new in 0.2.56:
+            - Multiple accounts side by side: in Settings → Accounts & Hub every account row has a
+              "New window" button that opens a full workspace window (agents, chats, settings) signed in
+              as that account, titled "account · hub host · Agent Network". The main window keeps its
+              current account; one window per account, clicking again just focuses it. Detached chat
+              windows no longer switch the main window's account either.
+
             What's new in 0.2.55:
             - Downloads: clicking an attachment now opens the system "Save As" dialog so you pick the folder
               and name (it remembers the last folder); hold Option/Alt while clicking to save straight to

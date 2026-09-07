@@ -1,0 +1,32 @@
+Desktop v0.2.56 release-candidate report
+
+- Base: main after app#273
+- Target: desktop-v0.2.56
+- Why: Vincent 2026-09-07 「允许多个不同账号的 UI 同时存在」「应用多开」(screenshot: Settings → 账号与 Hub).
+
+Changes
+- Bump the desktop application consistently to 0.2.56 (9 pinned stamps + updater release notes).
+- Ship #273: one full workspace window per account ("新窗口" on every account row; /?workspace=<profileId>;
+  label hashed from profileId so one window per account, re-click focuses; title "account · hub host ·
+  Agent Network"). Rust `load_desktop_profile` borrows a profile session without touching
+  active_profile_id; detached chat windows switch to the same borrow (they used to flip the main window's
+  current account via switch_desktop_profile). Update prompt + detached-chat restore stay main-window only.
+- Not a second process on purpose: two processes would fight over ~/.anet/app and the local Hub port 9201.
+- Bundled Hub pin unchanged (0.9.0-preview.45).
+
+Evidence
+- desktop-chat-menu.test.ts workspace-window checks (URL round-trip, label dedupe and no collision with
+  chat labels, title, non-Tauri no-op); local-hub-activate + profile-storage-contract updated to the new
+  contract and assert load_desktop_profile never rewrites the active profile and is registered.
+- npm test 84/84, typecheck 0 on #273; desktop-tauri.yml mac + windows on the branch (run 34077955264).
+- This bump: npm test (version-consistency) + typecheck, see PR.
+
+Known limit
+- Reply-unread watermarks (chat_reply_unread_watermarks_v1) are still one global map shared by all windows;
+  two accounts open at once share per-alias watermarks. Follow-up: key by profileId.
+
+Hand-check (Vincent, 0.2.56)
+1. Settings → 账号与 Hub → on the non-current account click 「新窗口」: a second full window opens signed in
+   as that account with its own title; the first window's 「· 当前」 account is unchanged after a restart.
+2. Click 「新窗口」 again for the same account: the existing window is focused, no third window.
+3. Chat in both windows at the same time; close the second window; main window unaffected.
