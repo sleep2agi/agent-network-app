@@ -1,0 +1,22 @@
+Desktop v0.2.61 release-candidate report
+
+- Base: main after app#288
+- Target: desktop-v0.2.61
+- Why: app#288 — the wizard sent no model for opencode-cli while agent-node's OpenCode co-presence runtime
+  requires an explicit provider/model (found by the macOS host smoke for agent-network #1845; Linux same).
+
+Changes
+- Bump the desktop application consistently to 0.2.61 (9 pinned stamps + updater release notes).
+- Ship #288: RUNTIMES opencode-cli models = ['opencode/mimo-v2.5-free', 'opencode/north-mini-code-free'];
+  other TUI co-presence runtimes unchanged (follow host login). wizard-runtimes.test.ts 6 checks.
+- Bundled Hub pin unchanged (0.9.0-preview.52). No Rust changes since 0.2.60.
+
+Evidence
+- Mac mini host smoke (agent-network #1845 comments): the same node with --model opencode/mimo-v2.5-free
+  reached "[opencode-copresence] ready", received a task and replied; without a model it failed at
+  "requires an explicit provider/model".
+- npm test 91/91, typecheck 0 on #288; this bump: npm test (version-consistency) + typecheck, see PR.
+
+Hand-check (Vincent, 0.2.61 — after anet/agent-node latest are promoted to .87/.67)
+1. 新建节点 → OpenCode（TUI 共存）→ 第 3 步出现模型列表(默认 opencode/mimo-v2.5-free)→ 确认:节点出现在列表并在线。
+2. 给它发一条任务,收到回复;停/重启/删收敛。
