@@ -24,6 +24,8 @@ export type UnreadStoreSnapshot = {
   replyWatermarks: ReplyWatermarks;
   /** 登录用户名(replyRows 里 to_alias 要等于它)。 */
   replyUsername: string;
+  /** 水位线属于哪个账号(app#275:按 profile 分 key;undefined = 旧的全局 key)。 */
+  replyProfileId?: string;
 };
 
 let snapshot: UnreadStoreSnapshot = {
@@ -33,6 +35,7 @@ let snapshot: UnreadStoreSnapshot = {
   replyRows: [],
   replyWatermarks: loadReplyWatermarks(),
   replyUsername: '',
+  replyProfileId: undefined,
 };
 const listeners = new Set<() => void>();
 
@@ -81,8 +84,18 @@ export function markAgentRepliesSeen(agent: string): void {
   const ts = watermarkAfterRender(snapshot.replyRows, snapshot.replyUsername, agent);
   const next = advanceWatermark(snapshot.replyWatermarks, agent, ts);
   if (next === snapshot.replyWatermarks) return;
-  saveReplyWatermarks(next);
+  saveReplyWatermarks(next, snapshot.replyProfileId);
   snapshot = { ...snapshot, replyWatermarks: next };
+  emit();
+}
+
+/**
+ * app#275:切到(或以工作区窗口借用)某个账号时,把回复水位线换成那个账号自己的一份,
+ * 上一个账号的 inbox 行也清掉 —— 两个账号窗口各算各的。同一账号重复绑定是 no-op。
+ */
+export function bindUnreadProfile(profileId: string | undefined): void {
+  if (profileId === snapshot.replyProfileId && (profileId !== undefined || snapshot.replyRows.length === 0)) return;
+  snapshot = { ...snapshot, replyProfileId: profileId, replyWatermarks: loadReplyWatermarks(profileId), replyRows: [] };
   emit();
 }
 
