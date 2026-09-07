@@ -22,7 +22,8 @@ import AliasAvatar from './AliasAvatar';
 import AttachmentFileDesktop from './AttachmentFileDesktop';
 import AuthedThumb, { AttachmentFile, AuthedVideo, mimeFromName } from './AuthedThumb';
 import AuthedWebThumb from './AuthedWebThumb';
-import { ackUserMessages, createDashboardRequestId, dashboardRequestIdForLocalId, fetchStatus, fetchTasks, sendTask, HubConfig, HubTask, Session, TaskAttachment, TaskPriority } from './api';
+import { ackUserMessages, createDashboardRequestId, dashboardRequestIdForLocalId, fetchStatus, fetchTasks, fetchUserMessages, sendTask, HubConfig, HubTask, Session, TaskAttachment, TaskPriority } from './api';
+import { proactiveItemsForAgent } from './proactive-messages';
 import { outboxAdd, outboxForAlias, outboxMarkFailed, outboxMarkPending, outboxRemove } from './outbox';
 import { mayApplySendResult, shouldExposeSendFailure } from './send-reconciliation';
 import { conversationKey, conversationScope, createConversationRequestGate, createConversationStore } from './conversation-store';
@@ -78,6 +79,9 @@ type ChatItem = HubTask & {
    *  共用一个字段迟早串(重试会把注解原样发给对方 agent)。 */
   _restoredNoImage?: boolean;
   _priority?: 'high' | 'normal';
+  /** app#160:Agent 主动发给用户的消息(user_inbox),只有回复气泡、没有发送气泡。 */
+  _proactive?: boolean;
+  _severity?: string;
 };
 
 type MessageSelection = { item: ChatItem; text: string };
@@ -260,13 +264,18 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
       const token = requestGate.current();
       if (!token) return;
       try {
-        const data = await fetchTasks(cfg, { to_name: alias, limit });
+        // app#160:同一次轮询顺带取 Agent 主动发给用户的消息(user_inbox);它失败不影响任务行。
+        const [data, userMessages] = await Promise.all([
+          fetchTasks(cfg, { to_name: alias, limit }),
+          fetchUserMessages(cfg, 200).catch(() => ({ messages: [] as any[] })),
+        ]);
         // The await is where the conversation can change underneath us. Every
         // line below writes to screen state, so nothing may run for an answer
         // that is no longer the one being waited for — that is the whole bug.
         const fetched = data.tasks ?? [];
+        const proactive = proactiveItemsForAgent(userMessages.messages as any, alias, cfg.username);
         if (!requestGate.isCurrent(token) || !mountedRef.current) {
-          conversations.put(token.key, fetched);
+          conversations.put(token.key, [...fetched, ...proactive]);
           return;
         }
         if (fetched.length < limit) setHasOlder(false);
@@ -277,7 +286,7 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
         setMessages(prev => {
           const merged = mergeMessagesNewestFirst(
             prev.filter(t => t._localId && !confirmed.has(t._localId)),
-            fetched,
+            [...fetched, ...proactive],
           );
           conversations.put(token.key, merged);
           return merged;
@@ -1134,6 +1143,7 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
                 {showHeader && item.created_at ? (
                   <Text style={styles.timeHeader}>{formatChatHeader(item.created_at)}</Text>
                 ) : null}
+                {!item._proactive ? (
                 <View style={[styles.messageRow, styles.sentRow]}>
                   <View style={[styles.messageContent, styles.sentContent]}>
                     <Text style={[styles.messageAuthor, styles.sentAuthor]} numberOfLines={1}>
@@ -1153,11 +1163,12 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
                   </View>
                   <AliasAvatar alias={sender.alias} size={36} />
                 </View>
+                ) : null}
                 {item.result || item.reply ? (
                   <View style={[styles.messageRow, styles.replyRow]}>
                     <AliasAvatar alias={alias} size={36} />
                     <View style={styles.messageContent}>
-                      <Text style={styles.messageAuthor} numberOfLines={1}>{alias}</Text>
+                      <Text style={styles.messageAuthor} numberOfLines={1}>{alias}{item._proactive ? ' · 主动汇报' : ''}</Text>
                       <Pressable
                         {...(desktop ? ({ dataSet: { messageKey: msgKey(item), messagePart: 'reply' } } as any) : {})}
                         onLongPress={() => setMenuFor({ item, text: item.result ?? item.reply ?? '' })}
