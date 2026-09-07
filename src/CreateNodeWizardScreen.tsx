@@ -11,14 +11,8 @@ import {
   View,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import {
-  createNode,
-  CreateNodeRequest,
-  fetchStatus,
-  HostSupervisorDaemon,
-  HubConfig,
-  Session,
-} from './api';
+import { createNode, CreateNodeRequest, fetchStatus, HostSupervisorDaemon, HubConfig, Session, fetchCreateRequestStatus } from './api';
+import { createRequestVerdict, timeoutMessage, type CreateRequestVerdict } from './create-request-status';
 import { colors, onThemeChange, spacing } from './theme';
 
 // #338 RFC-026 §3.1 — mobile create-node wizard rest (Plan B).
@@ -116,6 +110,7 @@ export default function CreateNodeWizardScreen({ cfg, daemon, onBack, onExit }: 
   // confirmed (claim=reality). We poll up to ~24s before giving up
   // and showing an "unconfirmed" message — matches dashboard wizard.
   const [childUp, setChildUp] = useState(false);
+  const [requestId, setRequestId] = useState<string | null>(null);
   const pollAlive = useRef(true);
 
   // Stop polling on unmount + on screen exit
@@ -130,6 +125,7 @@ export default function CreateNodeWizardScreen({ cfg, daemon, onBack, onExit }: 
     if (phase !== 'awaiting_register' || childUp) return;
     let tries = 0;
     const want = name.trim();
+    let lastVerdict: CreateRequestVerdict = { kind: 'unknown' };
     const tick = async () => {
       if (!pollAlive.current) return;
       tries += 1;
@@ -142,18 +138,31 @@ export default function CreateNodeWizardScreen({ cfg, daemon, onBack, onExit }: 
           return;
         }
       } catch { /* transient — keep polling */ }
+      // 同一轮顺带问 hub:daemon 对这次 create 说了什么。它明确说失败就别再等了,把原因摆出来
+      // (Vincent 2026-09-07:Mac 上 opencode 共存起不来,向导只会说「24s 没注册」)。老 hub 404 → unknown。
+      if (requestId) {
+        try {
+          lastVerdict = createRequestVerdict(await fetchCreateRequestStatus(cfg, requestId));
+          if (pollAlive.current && lastVerdict.kind === 'failed') {
+            setPhase('error');
+            setMsg(`创建失败:${lastVerdict.text}`);
+            return;
+          }
+          if (pollAlive.current && lastVerdict.kind === 'waiting') setMsg(lastVerdict.text);
+        } catch { /* 读不到就按原来的方式等 */ }
+      }
       if (pollAlive.current && tries < 16) {
         setTimeout(tick, 1500);
       } else if (pollAlive.current) {
         // Timeout — don't flip to error (hub may have accepted the dispatch
         // but the child is slow to bootstrap). Honest message.
         setPhase('done');
-        setMsg('已下发，但 24s 内未看到子节点注册。可能仍在拉起中——稍后到 Agents 列表查看。');
+        setMsg(timeoutMessage(lastVerdict));
       }
     };
     const t = setTimeout(tick, 1200);
     return () => { clearTimeout(t); };
-  }, [phase, childUp, cfg, name]);
+  }, [phase, childUp, cfg, name, requestId]);
 
   // Derived: runtime details + nav gates
   const runtime = RUNTIMES.find(r => r.id === runtimeId) || RUNTIMES[0];
@@ -211,6 +220,7 @@ export default function CreateNodeWizardScreen({ cfg, daemon, onBack, onExit }: 
     });
     if (res.ok) {
       // Hub accepted dispatch. Now POLL to confirm child registered.
+      setRequestId(res.request_id ?? null);
       setPhase('awaiting_register');
       setMsg('创建请求已下发，正在监测子节点注册…');
     } else if (res.unconfirmed) {

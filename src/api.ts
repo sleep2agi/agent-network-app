@@ -844,6 +844,7 @@ export interface CreateNodeRequest {
     flags?: Record<string, unknown>;
   };
 }
+import type { CreateRequestRow } from './create-request-status';
 export type CreateNodeResult =
   | { ok: true; request_id?: string; result?: unknown }
   | { ok: false; unconfirmed?: true; error: string };
@@ -1086,6 +1087,17 @@ export const waitForRulesFileResult = async (
     if (elapsed > maxWait) return { ok: false, error: '等待节点响应超时' };
     await new Promise(resolve => setTimeout(resolve, options.nextDelayMs(elapsed)));
   }
+};
+
+/** 读一条 create_node 请求的结果(daemon 回的 status/error)。老 hub 没有这个接口 → 404 → null(向导退回只等注册)。 */
+export const fetchCreateRequestStatus = async (cfg: HubConfig, requestId: string): Promise<CreateRequestRow | null> => {
+  const q = new URLSearchParams({ request_id: requestId });
+  if (cfg.networkId) q.set('network_id', cfg.networkId);
+  const res = await withTimeout(signal => appFetch(`${cfg.serverUrl}/api/node-create-requests?${q}`, { headers: headers(cfg), signal }));
+  if (res.status === 404) return null;
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  const d = await res.json();
+  return d?.ok && d.request && typeof d.request === 'object' ? d.request as CreateRequestRow : null;
 };
 
 export const createNode = async (cfg: HubConfig, req: CreateNodeRequest): Promise<CreateNodeResult> => {
