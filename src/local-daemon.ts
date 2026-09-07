@@ -73,3 +73,46 @@ export function installBlocker(scan: LocalDaemonScan): string | null {
   if (!scan.hubEndpoint) return '本地 Hub 还没运行,先切到 Local workspace';
   return null;
 }
+
+// ---------------------------------------------------------------------------
+// 「Hub 视角」(Vincent 2026-09-07 截图:本机 daemon ✓、1 个在线节点,但 host_supervisor 列表为空)。
+// 清单里只有本机文件的视角;列表认的是 Hub 里 nodes 行的 config_snapshot.role。这里把 Hub 那一侧
+// 的三个事实并排给出:会话在不在线、nodes 行有没有 / 快照 role 是什么、host_supervisors 里有没有。
+// 纯函数,三份数据由调用方用既有 API 取(fetchStatus / fetchHubNodes / fetchHostSupervisors)。
+// ---------------------------------------------------------------------------
+export interface HubDaemonViewInput {
+  nodeId: string | null | undefined;
+  alias: string;
+  sessions?: Array<{ alias?: string; status?: string; version?: string | null }> | null;
+  nodes?: Array<{ node_id: string; alias?: string; role?: string | null; lifecycle_state?: string | null; config_snapshot?: { role?: string | null } | null }> | null;
+  supervisors?: Array<{ daemon_node_id?: string; alias?: string; online?: boolean }> | null;
+  /** 三个请求各自的错误(拿不到 ≠ 没有)。 */
+  errors?: { sessions?: string; nodes?: string; supervisors?: string };
+}
+
+export interface HubDaemonView {
+  ok: boolean;
+  lines: string[];
+  /** 一句话结论,给人读。 */
+  verdict: string;
+}
+
+export function hubDaemonView(input: HubDaemonViewInput): HubDaemonView {
+  const lines: string[] = [];
+  const e = input.errors ?? {};
+  const session = input.sessions?.find(s => s.alias === input.alias);
+  lines.push(e.sessions ? `会话:查不到(${e.sessions})` : session ? `会话:${session.status ?? '?'} · agent-node ${session.version ?? '?'}` : '会话:Hub 上没有这个 alias(daemon 没起来或没注册)');
+  const node = input.nodeId ? input.nodes?.find(n => n.node_id === input.nodeId) : undefined;
+  const snapRole = node?.config_snapshot?.role ?? node?.role ?? null;
+  lines.push(e.nodes ? `节点行:查不到(${e.nodes})` : !input.nodeId ? '节点行:本机没有 node_id' : node ? `节点行:有 · role=${snapRole ?? '(快照里没有 role)'}${node.lifecycle_state ? ` · ${node.lifecycle_state}` : ''}` : `节点行:Hub 这个网络里没有 ${input.nodeId}(daemon 注册到了别的网络,或 init 没成功)`);
+  const listed = input.supervisors?.find(d => d.daemon_node_id === input.nodeId || d.alias === input.alias);
+  lines.push(e.supervisors ? `host_supervisors:查不到(${e.supervisors})` : listed ? `host_supervisors:在列表里${listed.online ? '(online)' : '(offline)'}` : 'host_supervisors:不在列表里');
+  const ok = !!listed;
+  let verdict: string;
+  if (ok) verdict = 'Hub 已经认到这台 daemon,选服务器列表应能看到它。';
+  else if (!session) verdict = 'daemon 进程没有向 Hub 注册:点「打开日志」看 daemon 输出(常见:hub 地址/凭据不对,或进程已退出)。';
+  else if (!node) verdict = 'daemon 在线但 Hub 这个网络里没有它的节点行:大概率注册到了别的网络,重新点「重新注册并启动本机 daemon」。';
+  else if (snapRole !== 'host_supervisor') verdict = `daemon 在线、节点行也在,但配置快照的 role 是 ${snapRole ?? '空'} 而不是 host_supervisor:Hub 没收到/没接受 daemon 的 config_snapshot。把这一行截图给通信龙。`;
+  else verdict = '节点行 role 是 host_supervisor 却不在列表里:多半是 node token 被吊销(多次重新注册后旧进程还在跑旧 token)。先停掉旧 daemon 再重新注册。';
+  return { ok, lines, verdict };
+}

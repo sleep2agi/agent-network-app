@@ -1,7 +1,10 @@
 import { useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { colors, onThemeChange, spacing } from './theme';
+import { fetchHostSupervisors, fetchHubNodes, fetchStatus, type HubConfig } from './api';
 import {
+  hubDaemonView,
+  type HubDaemonView,
   daemonChecklist,
   installBlocker,
   installLocalDaemon,
@@ -12,7 +15,17 @@ import {
 
 // app#253 —— 「选服务器」空状态里的本机 daemon 一键扫描/安装卡片(只在桌面端 Local workspace 出现)。
 // 不自己偷偷起(Vincent 定):扫描、安装都要点按钮;安装完成后由父组件刷新 host_supervisor 列表。
-export default function LocalDaemonSetupCard({ onInstalled }: { onInstalled: () => void }) {
+export default function LocalDaemonSetupCard({ cfg, onInstalled }: { cfg: HubConfig; onInstalled: () => void }) {
+  const [hubView, setHubView] = useState<HubDaemonView | null>(null);
+  const loadHubView = async (nodeId: string | null | undefined, alias: string) => {
+    const errors: { sessions?: string; nodes?: string; supervisors?: string } = {};
+    const [sessions, nodes, supervisors] = await Promise.all([
+      fetchStatus(cfg).then(r => r.sessions ?? []).catch(e => { errors.sessions = String(e); return null; }),
+      fetchHubNodes(cfg).then(r => r.nodes ?? []).catch(e => { errors.nodes = String(e); return null; }),
+      fetchHostSupervisors(cfg).then(r => (r.ok ? r.daemons : [])).catch(e => { errors.supervisors = String(e); return null; }),
+    ]);
+    setHubView(hubDaemonView({ nodeId, alias, sessions, nodes: nodes as any, supervisors: supervisors as any, errors }));
+  };
   const [scan, setScan] = useState<LocalDaemonScan | null>(null);
   const [scanning, setScanning] = useState(false);
   const [installing, setInstalling] = useState(false);
@@ -21,14 +34,15 @@ export default function LocalDaemonSetupCard({ onInstalled }: { onInstalled: () 
 
   const runScan = async () => {
     setScanning(true); setError(''); setReport(null);
-    try { setScan(await scanLocalDaemon()); } catch (e) { setError(String(e)); } finally { setScanning(false); }
+    try { const next = await scanLocalDaemon(); setScan(next); if (next.profileExists) await loadHubView(next.nodeId, next.daemonName); else setHubView(null); } catch (e) { setError(String(e)); } finally { setScanning(false); }
   };
   const runInstall = async () => {
     setInstalling(true); setError(''); setReport(null);
     try {
       const result = await installLocalDaemon();
       setReport(result);
-      if (result.ok) { onInstalled(); void scanLocalDaemon().then(setScan).catch(() => undefined); }
+      if (result.ok) onInstalled();
+      void scanLocalDaemon().then(async next => { setScan(next); if (next.profileExists) await loadHubView(next.nodeId, next.daemonName); }).catch(() => undefined);
     } catch (e) { setError(String(e)); } finally { setInstalling(false); }
   };
   const blocker = scan ? installBlocker(scan) : null;
@@ -58,6 +72,16 @@ export default function LocalDaemonSetupCard({ onInstalled }: { onInstalled: () 
               </View>
             </View>
           ))}
+          {hubView ? (
+            <View style={styles.row} testID="local-daemon-hub-view">
+              <Text style={[styles.mark, hubView.ok ? styles.markOk : styles.markBad]}>{hubView.ok ? '✓' : '✗'}</Text>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.rowLabel}>Hub 视角(本地 Hub 怎么看这台 daemon)</Text>
+                {hubView.lines.map(line => <Text key={line} style={styles.rowDetail} selectable>{line}</Text>)}
+                <Text style={[styles.rowDetail, { color: hubView.ok ? colors.running : colors.failed }]} selectable>{hubView.verdict}</Text>
+              </View>
+            </View>
+          ) : null}
           {blocker ? <Text style={styles.blocker}>{blocker}</Text> : null}
         </View>
       ) : null}

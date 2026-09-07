@@ -1,7 +1,7 @@
 import { strict as assert } from 'node:assert';
 import { readFileSync } from 'node:fs';
 
-const { daemonChecklist, installBlocker, nodeVersionOk } = await import('./local-daemon');
+const { daemonChecklist, installBlocker, nodeVersionOk, hubDaemonView } = await import('./local-daemon');
 let ck = 0;
 const check = (cond: boolean, msg: string) => { assert.ok(cond, msg); ck++; };
 
@@ -57,4 +57,23 @@ const lib = readFileSync(new URL('../src-tauri/src/lib.rs', import.meta.url), 'u
 check(lib.includes('local_daemon_scan,') && lib.includes('local_daemon_install,') && lib.includes('async fn local_daemon_install()') && lib.includes('spawn_blocking'), 'Rust commands registered; install runs off the main thread');
 const wf = readFileSync(new URL('../.github/workflows/release-desktop-auto-update.yml', import.meta.url), 'utf8');
 check(wf.includes('--smoke-local-daemon-install') && wf.includes('if [ "$RUNNER_OS" = "macOS" ]; then'), 'release gate runs the daemon install smoke on macOS');
+
+// Hub 视角(Vincent 2026-09-07:daemon ✓ + 1 在线节点,但列表为空)
+{
+  const base = { nodeId: 'node_daemon_6f85', alias: 'local-daemon' };
+  const v1 = hubDaemonView({ ...base, sessions: [], nodes: [], supervisors: [] });
+  check(!v1.ok && v1.verdict.includes('没有向 Hub 注册'), 'no session → not registered verdict');
+  const v2 = hubDaemonView({ ...base, sessions: [{ alias: 'local-daemon', status: 'idle', version: '2.5.0-preview.66' }], nodes: [], supervisors: [] });
+  check(!v2.ok && v2.verdict.includes('别的网络') && v2.lines[0].includes('idle') && v2.lines[0].includes('preview.66'), 'session but no node row → wrong-network verdict');
+  const v3 = hubDaemonView({ ...base, sessions: [{ alias: 'local-daemon', status: 'idle' }], nodes: [{ node_id: 'node_daemon_6f85', config_snapshot: { role: null } }], supervisors: [] });
+  check(!v3.ok && v3.verdict.includes('config_snapshot') && v3.lines[1].includes('快照里没有 role'), 'node row without role → snapshot verdict');
+  const v4 = hubDaemonView({ ...base, sessions: [{ alias: 'local-daemon', status: 'idle' }], nodes: [{ node_id: 'node_daemon_6f85', config_snapshot: { role: 'host_supervisor' } }], supervisors: [] });
+  check(!v4.ok && v4.verdict.includes('token'), 'role ok but unlisted → token verdict');
+  const v5 = hubDaemonView({ ...base, sessions: [{ alias: 'local-daemon', status: 'idle' }], nodes: [{ node_id: 'node_daemon_6f85', config_snapshot: { role: 'host_supervisor' } }], supervisors: [{ daemon_node_id: 'node_daemon_6f85', online: true }] });
+  check(v5.ok && v5.lines[2].includes('online'), 'listed → ok');
+  const v6 = hubDaemonView({ ...base, errors: { supervisors: 'HTTP 401' } });
+  check(v6.lines[2].includes('查不到') && v6.lines[2].includes('401'), 'fetch error is not reported as absence');
+  const card = readFileSync(new URL('./LocalDaemonSetupCard.tsx', import.meta.url), 'utf8');
+  check(card.includes('testID="local-daemon-hub-view"') && card.includes('fetchHostSupervisors(cfg)') && card.includes('fetchHubNodes(cfg)') && card.includes('fetchStatus(cfg)'), 'card renders the hub view from the three hub endpoints');
+}
 console.log(`local daemon: ${ck} checks passed`);
