@@ -13,7 +13,7 @@ check(nodeVersionOk('v22.13.0') && nodeVersionOk('24.0.1') && !nodeVersionOk('v2
 {
   const scan = { ...base };
   const rows = daemonChecklist(scan);
-  check(rows.map(r => r.state).join(',') === 'missing,missing,missing,missing', 'all missing');
+  check(rows.map(r => r.state).join(',') === 'missing,missing,missing,missing,missing', 'all missing');
   check(rows[0].detail.includes('私有 Node 22') && rows[0].detail.includes('不动系统'), 'node row explains the private download');
   check(installBlocker(scan) === null, 'missing node is not a blocker any more');
 }
@@ -37,14 +37,15 @@ check(nodeVersionOk('v22.13.0') && nodeVersionOk('24.0.1') && !nodeVersionOk('v2
   check(installBlocker(scan) === null, 'installable');
   const rows = daemonChecklist(scan);
   check(rows[2].state === 'missing' && rows[2].detail.includes('local-daemon/anet'), 'anet row explains the private-prefix install');
-  check(rows[3].detail.includes(base.daemonDir), 'daemon row names the target dir');
+  check(rows[4].detail.includes(base.daemonDir), 'daemon row names the target dir');
+  check(rows[3].key === 'agentNode' && rows[3].state === 'missing' && rows[3].detail.includes('私有目录'), 'agent-node row explains the private install');
 }
 // 已装 + 已注册
 {
-  const scan = { ...base, node: { path: '/n', version: '22.14.0' }, npm: { path: '/m', version: '10' }, anet: { path: '/a', version: '2.3.0-preview.76' }, profileExists: true, nodeId: 'node_daemon_abc' };
+  const scan = { ...base, node: { path: '/n', version: '22.14.0' }, npm: { path: '/m', version: '10' }, anet: { path: '/a', version: '2.3.0-preview.76' }, agentNode: { path: '/p/lib/node_modules/@sleep2agi/agent-node', version: '2.5.0-preview.58' }, profileExists: true, nodeId: 'node_daemon_abc' };
   const rows = daemonChecklist(scan);
   check(rows.every(r => r.state === 'ok'), 'all ok');
-  check(rows[3].detail.includes('node_daemon_abc'), 'daemon row shows node_id');
+  check(rows[4].detail.includes('node_daemon_abc'), 'daemon row shows node_id');
 }
 // Windows / 本地 Hub 没起
 check(installBlocker({ ...base, supported: false, reason: '只支持 macOS / Linux' })?.includes('macOS') === true, 'unsupported platform blocks with the Rust reason');
@@ -66,7 +67,11 @@ check(wf.includes('--smoke-local-daemon-install') && wf.includes('if [ "$RUNNER_
   const v2 = hubDaemonView({ ...base, sessions: [{ alias: 'local-daemon', status: 'idle', version: '2.5.0-preview.66' }], nodes: [], supervisors: [] });
   check(!v2.ok && v2.verdict.includes('别的网络') && v2.lines[0].includes('idle') && v2.lines[0].includes('preview.66'), 'session but no node row → wrong-network verdict');
   const v3 = hubDaemonView({ ...base, sessions: [{ alias: 'local-daemon', status: 'idle' }], nodes: [{ node_id: 'node_daemon_6f85', config_snapshot: { role: null } }], supervisors: [] });
-  check(!v3.ok && v3.verdict.includes('config_snapshot') && v3.lines[1].includes('快照里没有 role'), 'node row without role → snapshot verdict');
+  check(!v3.ok && v3.verdict.includes('旧版 agent-node') && v3.lines[1].includes('快照里没有 role'), 'node row without role → old agent-node verdict (Vincent 2026-09-07 logs)');
+  const oldOnPath = daemonChecklist({ ...base, node: { path: '/n', version: '22.14.0' }, npm: { path: '/m' }, agentNodeOnPath: '/Users/v/.nvm/versions/node/v20.12.2/bin/agent-node' });
+  check(oldOnPath[3].state === 'missing' && oldOnPath[3].detail.includes('v20.12.2') && oldOnPath[3].detail.includes('旧版'), 'agent-node row warns about the PATH copy');
+  const rust = readFileSync(new URL('../src-tauri/src/local_daemon.rs', import.meta.url), 'utf8');
+  check(rust.includes('@sleep2agi/agent-node@latest') && rust.includes('probe_private_agent_node()') && rust.includes('node stop {}') , 'installer installs a private agent-node beside anet and stops the old daemon before starting');
   const v4 = hubDaemonView({ ...base, sessions: [{ alias: 'local-daemon', status: 'idle' }], nodes: [{ node_id: 'node_daemon_6f85', config_snapshot: { role: 'host_supervisor' } }], supervisors: [] });
   check(!v4.ok && v4.verdict.includes('token'), 'role ok but unlisted → token verdict');
   const v5 = hubDaemonView({ ...base, sessions: [{ alias: 'local-daemon', status: 'idle' }], nodes: [{ node_id: 'node_daemon_6f85', config_snapshot: { role: 'host_supervisor' } }], supervisors: [{ daemon_node_id: 'node_daemon_6f85', online: true }] });

@@ -31,6 +31,8 @@ use super::{app_root, ensure_private_dir, write_private_atomic};
 
 pub const LOCAL_DAEMON_NAME: &str = "local-daemon";
 const ANET_PACKAGE: &str = "@sleep2agi/agent-network@latest";
+/// 与 anet@latest 配对的 agent-node 通道;装进同一个私有 prefix,成为 anet 的 sibling(#1813 sibling-first)。
+const AGENT_NODE_PACKAGE: &str = "@sleep2agi/agent-node@latest";
 const NPM_MIRROR: &str = "https://registry.npmmirror.com";
 /// 私有 Node 运行时:缺 Node 或版本太低时从 nodejs.org 下 v22 最新 LTS 到 ~/.anet/app/local-daemon/node,
 /// 不动系统、不动 nvm、不要 sudo(Vincent 2026-09-06「node 也自动安装一下?」)。
@@ -55,6 +57,10 @@ pub struct DaemonScan {
     pub anet: Option<ToolInfo>,
     /// ~/.anet/app/local-daemon/node 里已经下好的私有 Node(有则优先用它)。
     pub private_node: Option<ToolInfo>,
+    /// 私有 prefix 里与 anet 同目录的 agent-node(daemon 真正用的运行时外壳)。
+    pub agent_node: Option<ToolInfo>,
+    /// 登录 shell PATH 上另有的 agent-node(Vincent 2026-09-07:nvm v20 里的旧版被 daemon 用上了)。
+    pub agent_node_on_path: Option<String>,
     pub daemon_dir: String,
     pub daemon_name: String,
     pub profile_exists: bool,
@@ -279,6 +285,18 @@ fn private_anet_prefix() -> Result<PathBuf, String> {
     Ok(daemon_root()?.join("anet"))
 }
 
+fn private_agent_node_package() -> Result<PathBuf, String> {
+    Ok(private_anet_prefix()?.join("lib").join("node_modules").join("@sleep2agi").join("agent-node"))
+}
+
+fn probe_private_agent_node() -> Option<ToolInfo> {
+    let pkg = private_agent_node_package().ok()?.join("package.json");
+    let raw = fs::read_to_string(&pkg).ok()?;
+    let json: serde_json::Value = serde_json::from_str(&raw).ok()?;
+    let version = json.get("version")?.as_str()?.to_string();
+    Some(ToolInfo { path: pkg.parent()?.display().to_string(), version: Some(version) })
+}
+
 fn probe_private_node() -> Option<ToolInfo> {
     let node = private_node_dir().ok()?.join("bin").join("node");
     if !node.is_file() { return None; }
@@ -389,6 +407,12 @@ pub fn scan(session: Option<&LocalHubSession>) -> Result<DaemonScan, String> {
     };
     let profile_exists = daemon_profile_path(LOCAL_DAEMON_NAME)?.is_file();
     let private_node = if supported { probe_private_node() } else { None };
+    let agent_node = if supported { probe_private_agent_node() } else { None };
+    let agent_node_on_path = if supported {
+        run_shell("command -v agent-node", None, &[], Duration::from_secs(20)).ok()
+            .filter(|o| o.code == Some(0))
+            .and_then(|o| strip_ansi(&o.output).lines().map(str::trim).find(|l| l.starts_with('/')).map(str::to_string))
+    } else { None };
     Ok(DaemonScan {
         supported,
         reason,
@@ -397,6 +421,8 @@ pub fn scan(session: Option<&LocalHubSession>) -> Result<DaemonScan, String> {
         npm,
         anet,
         private_node,
+        agent_node,
+        agent_node_on_path,
         daemon_dir: daemon_dir.display().to_string(),
         daemon_name: LOCAL_DAEMON_NAME.into(),
         profile_exists,
@@ -527,6 +553,42 @@ pub fn install(session: &LocalHubSession) -> Result<DaemonInstallReport, String>
         ToolInfo { path: anet_bin.display().to_string(), version: None }
     };
 
+    // 2b. agent-node 也装进同一个私有 prefix(anet 的 sibling,#1813 sibling-first)。
+    //    Vincent 2026-09-07 的日志:私有 anet 起 daemon 时从 PATH 捡到了 nvm v20 里的旧 agent-node,
+    //    以普通节点身份注册,快照没有 role → 永远进不了 host_supervisor 列表。
+    let agent_node = match probe_private_agent_node() {
+        Some(info) => {
+            steps.push(StepReport { name: "agent-node(私有,与 anet 同目录)".into(), ok: true, output: format!("已安装 {} ({})", info.version.as_deref().unwrap_or("?"), info.path) });
+            info
+        }
+        None => {
+            let install_cmd = |registry: Option<&str>| with_path(&format!(
+                "{} install -g --prefix {} {AGENT_NODE_PACKAGE}{}",
+                shell_quote(&npm_bin.display().to_string()),
+                shell_quote(&anet_prefix.display().to_string()),
+                registry.map(|r| format!(" --registry {r}")).unwrap_or_default()
+            ));
+            let primary = run_shell(&install_cmd(None), Some(&daemon_dir), &[], Duration::from_secs(600))?;
+            let mut output = primary.output.clone();
+            let mut ok = primary.code == Some(0);
+            if !ok && !primary.timed_out && looks_like_registry_failure(&primary.output) {
+                let mirror = run_shell(&install_cmd(Some(NPM_MIRROR)), Some(&daemon_dir), &[], Duration::from_secs(600))?;
+                output.push_str("\n--- retry via npmmirror ---\n");
+                output.push_str(&mirror.output);
+                ok = mirror.code == Some(0);
+            }
+            steps.push(StepReport { name: format!("npm install -g --prefix {} @sleep2agi/agent-node", anet_prefix.display()), ok, output: tail(&output, 1500) });
+            if !ok {
+                return fail(steps, if primary.timed_out { "agent-node 安装超时(10 分钟)。".into() } else { "agent-node 安装失败,见上面的输出。".into() });
+            }
+            match probe_private_agent_node() {
+                Some(info) => info,
+                None => return fail(steps, "npm 装完了但私有目录里没有 agent-node 包".into()),
+            }
+        }
+    };
+    let _ = &agent_node;
+
     // 2. 私有 HOME 里写 anet 全局配置(只给 daemon init 用)
     let home = isolated_home()?;
     let anet_dir = home.join(".anet");
@@ -557,6 +619,16 @@ pub fn install(session: &LocalHubSession) -> Result<DaemonInstallReport, String>
     let Some(node_id) = node_id else {
         return fail(steps, "daemon 初始化成功但没拿到 node_id".into());
     };
+
+    // 3b. 先停掉旧的 daemon 进程:anet 对同 alias「已经在跑的节点不起第二个」(#1130),旧进程(可能还是旧
+    //     agent-node)不停,新的永远起不来。停不掉不算错(可能本来就没在跑)。
+    let stop = run_shell(
+        &with_path(&format!("{} node stop {}", shell_quote(&anet.path), LOCAL_DAEMON_NAME)),
+        Some(&daemon_dir),
+        &[],
+        Duration::from_secs(30),
+    )?;
+    steps.push(StepReport { name: format!("anet node stop {LOCAL_DAEMON_NAME}(停掉旧进程)"), ok: true, output: tail(&stop.output, 400) });
 
     // 4. anet daemon start —— 🔴 它是**前台**命令,不会自己返回(DEV 对 0.9.0-preview.45 实测:60s 后被
     //    timeout 打死,daemon 随之 shutting down)。0.2.52 之前这里等满 60s 才开始问 Hub,而且靠 kill shell
