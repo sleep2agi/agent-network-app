@@ -57,9 +57,14 @@ const RUNTIMES: { id: string; label: string; models: string[] }[] = [
   { id: 'grok-build-cli', label: 'Grok（TUI 共存）', models: [] },
   // #199 —— hub / daemon / CLI 三处的 runtime 全集都是 7 个,只有这里是 6 个。
   // `opencode-cli` 出现在 agent-network/src/codex-copresence-profile.ts:223 的共存
-  // profile 里 ⇒ 与上面三个同族,models 同样留空。(目录名叫 opencode-**acp**,
-  //  但 runtime id 只有 opencode-**cli** —— normalize-runtime.ts:108 把两者归一。)
-  { id: 'opencode-cli', label: 'OpenCode（TUI 共存）', models: [] },
+  // profile 里。(目录名叫 opencode-**acp**,但 runtime id 只有 opencode-**cli** ——
+  //  normalize-runtime.ts:108 把两者归一。)
+  // 🔴 与上面三个不同:OpenCode 共存 runtime **要求显式 provider/model**
+  //  (agent-node opencode-copresence/runtime.ts requireOpenCodeCopresenceModel),
+  //  models 留空 ⇒ 提交省略 model ⇒ daemon 起子节点时「OpenCode copresence requires an explicit
+  //  provider/model」(2026-09-07 Mac mini 真跑抓到)。这里给 OpenCode 自带的免费模型(不需要任何 key,
+  //  DEV 上 opencode-指挥狗 / opencode测试1号 就用它们);要用别的 provider 走 anet opencode auth-login。
+  { id: 'opencode-cli', label: 'OpenCode（TUI 共存）', models: ['opencode/mimo-v2.5-free', 'opencode/north-mini-code-free'] },
 ];
 const PERMISSION_MODES = ['default', 'acceptEdits', 'plan', 'bypassPermissions'];
 const STEPS = ['名字', 'Runtime', '模型', '参数', '确认'];
