@@ -13,6 +13,10 @@ export interface LocalDaemonScan {
   anet?: DaemonToolInfo | null;
   /** 已下载的私有 Node(~/.anet/app/local-daemon/node)。 */
   privateNode?: DaemonToolInfo | null;
+  /** 私有 prefix 里与 anet 同目录的 agent-node。 */
+  agentNode?: DaemonToolInfo | null;
+  /** PATH 上另有的 agent-node(旧版会被 daemon 误用)。 */
+  agentNodeOnPath?: string | null;
   daemonDir: string;
   daemonName: string;
   profileExists: boolean;
@@ -40,7 +44,7 @@ export const installLocalDaemon = async (): Promise<LocalDaemonInstallReport> =>
 };
 
 export type ChecklistState = 'ok' | 'missing' | 'bad';
-export interface ChecklistRow { key: 'node' | 'npm' | 'anet' | 'daemon'; label: string; state: ChecklistState; detail: string }
+export interface ChecklistRow { key: 'node' | 'npm' | 'anet' | 'agentNode' | 'daemon'; label: string; state: ChecklistState; detail: string }
 
 /** 与 anet 包的 engines.node(>= 22.13)一致;Rust 侧 node_version_ok 同一判据。 */
 export function nodeVersionOk(version: string | null | undefined): boolean {
@@ -62,6 +66,7 @@ export function daemonChecklist(scan: LocalDaemonScan): ChecklistRow[] {
     { key: 'node', label: 'Node.js ≥ 22.13', state: nodeState, detail: nodeDetail },
     { key: 'npm', label: 'npm', state: systemOk && scan.npm ? 'ok' : privateOk ? 'ok' : 'missing', detail: systemOk && scan.npm ? tool(scan.npm) : privateOk ? '私有 Node 自带' : '随私有 Node 一起下载' },
     { key: 'anet', label: 'anet CLI', state: scan.anet ? 'ok' : 'missing', detail: scan.anet ? tool(scan.anet) : '未安装 —— 点安装会装进 ~/.anet/app/local-daemon/anet(私有目录,不要 sudo)' },
+    { key: 'agentNode', label: 'agent-node(daemon 运行时)', state: scan.agentNode ? 'ok' : 'missing', detail: scan.agentNode ? `私有 ${tool(scan.agentNode)}` : scan.agentNodeOnPath ? `私有目录没有 —— PATH 上的 ${scan.agentNodeOnPath} 可能是旧版(不支持 host_supervisor),点安装会装私有版本并优先使用` : '未安装 —— 点安装会装进私有目录(与 anet 同目录)' },
     { key: 'daemon', label: '本机 daemon', state: scan.profileExists ? 'ok' : 'missing', detail: scan.profileExists ? `${scan.daemonName} · ${scan.nodeId ?? '(node_id 未知)'}` : `未初始化(将建在 ${scan.daemonDir})` },
   ];
 }
@@ -112,7 +117,7 @@ export function hubDaemonView(input: HubDaemonViewInput): HubDaemonView {
   if (ok) verdict = 'Hub 已经认到这台 daemon,选服务器列表应能看到它。';
   else if (!session) verdict = 'daemon 进程没有向 Hub 注册:点「打开日志」看 daemon 输出(常见:hub 地址/凭据不对,或进程已退出)。';
   else if (!node) verdict = 'daemon 在线但 Hub 这个网络里没有它的节点行:大概率注册到了别的网络,重新点「重新注册并启动本机 daemon」。';
-  else if (snapRole !== 'host_supervisor') verdict = `daemon 在线、节点行也在,但配置快照的 role 是 ${snapRole ?? '空'} 而不是 host_supervisor:Hub 没收到/没接受 daemon 的 config_snapshot。把这一行截图给通信龙。`;
+  else if (snapRole !== 'host_supervisor') verdict = `daemon 在线、节点行也在,但配置快照的 role 是 ${snapRole ?? '空'} 而不是 host_supervisor:daemon 用的多半是 PATH 上的旧版 agent-node(不支持 host_supervisor)。点「重新注册并启动本机 daemon」,安装器会装私有 agent-node 并先停掉旧进程。`;
   else verdict = '节点行 role 是 host_supervisor 却不在列表里:多半是 node token 被吊销(多次重新注册后旧进程还在跑旧 token)。先停掉旧 daemon 再重新注册。';
   return { ok, lines, verdict };
 }
