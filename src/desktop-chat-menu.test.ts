@@ -30,3 +30,26 @@ assert.ok(chatSource.includes('<Text style={styles.actionText}>转发</Text>'));
 assert.ok(chatSource.includes('await sendTask(cfg, target, forwardFor.text, undefined, \'normal\', requestId)'));
 
 console.log('desktop chat menu: 14 checks passed');
+
+// ── 应用多开:工作区窗口(Vincent 2026-09-07)──────────────────────────────────
+{
+  const { openWorkspaceWindow, requestedWorkspaceProfileId, workspaceWindowLabel, workspaceWindowTitle, workspaceWindowUrl } = await import('./desktop-chat-menu');
+  assert.equal(workspaceWindowUrl('p-1'), '/?workspace=p-1');
+  assert.equal(workspaceWindowUrl('a b'), '/?workspace=a+b');
+  assert.equal(requestedWorkspaceProfileId('?workspace=p-1'), 'p-1');
+  assert.equal(requestedWorkspaceProfileId('?workspace=%20'), null, 'blank workspace id is no workspace');
+  assert.equal(requestedWorkspaceProfileId('?chat=x&profile=p-1'), null, 'a detached chat window is not a workspace window');
+  assert.equal(requestedWorkspaceProfileId(workspaceWindowUrl('p 2').slice(1)), 'p 2', 'url and parser round-trip');
+  // 同一账号 → 同一标签(去重、再点聚焦);不同账号 → 不同标签;和聊天窗口标签不撞。
+  assert.equal(workspaceWindowLabel('p-1'), workspaceWindowLabel('p-1'));
+  assert.notEqual(workspaceWindowLabel('p-1'), workspaceWindowLabel('p-2'));
+  assert.match(workspaceWindowLabel('p-1'), /^workspace-[0-9a-f]+$/);
+  assert.notEqual(workspaceWindowLabel('p-1'), chatWindowLabel('p-1'));
+  // 标题:账号 · Hub 主机 · Agent Network;displayName 优先,其次 username;serverUrl 不是 URL 时原样。
+  assert.equal(workspaceWindowTitle({ displayName: 'Vincent', username: 'admin', serverUrl: 'http://y.vansin.top:9300' }), 'Vincent · y.vansin.top:9300 · Agent Network');
+  assert.equal(workspaceWindowTitle({ username: 'local-admin', serverUrl: 'http://127.0.0.1:9201' }), 'local-admin · 127.0.0.1:9201 · Agent Network');
+  assert.equal(workspaceWindowTitle({ serverUrl: 'not a url' }), 'Hub 账号 · not a url · Agent Network');
+  // 非 Tauri 环境是 no-op,不能抛。
+  await openWorkspaceWindow({ profileId: 'p-1', serverUrl: 'http://x' });
+  console.log('desktop chat menu: workspace window checks passed');
+}
