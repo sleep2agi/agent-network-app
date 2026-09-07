@@ -119,6 +119,14 @@ jobs:
           releaseBody: |-
             Signed and notarized stable update for macOS (Apple Silicon) and Windows (x64).
 
+            What's new in 0.2.60:
+            - The bundled local Hub moves to CommHub Server 0.9.0-preview.52 (from .45). With it, the Local
+              workspace gets per-agent unread counts owned by the Hub, agent replies counted as unread and
+              acked when you read them, and the "New node" wizard now shows the daemon's own reason when a
+              child node fails to start instead of only waiting for it to register.
+            - Your existing Local workspace data is migrated on first launch and rolled back automatically if
+              the migration fails.
+
             What's new in 0.2.59:
             - Node details now have a Tasks section: what the node is running right now and the queue
               waiting behind it, numbered in execution order, with elapsed times; tap a row for the full text.
