@@ -1,0 +1,22 @@
+Desktop v0.2.62 release-candidate report
+
+- Base: main after app#289 (0.2.61)
+- Target: desktop-v0.2.62
+- Why: Vincent 2026-09-08 「创建失败:model_invalid」 when creating an OpenCode node from the wizard —
+  the hub (and daemon) MODEL_RE rejected provider/model names; fixed in agent-network #1853 →
+  commhub-server 0.9.0-preview.53 (+ agent-node .68 for the daemon mirror).
+
+Changes
+- Bundled local Hub pin 0.9.0-preview.52 → 0.9.0-preview.53 (sidecar package.json + lock regenerated
+  from npm, local_hub.rs EXPECTED_HUB_VERSION, sidecar contract test pin).
+- Bump the desktop application consistently to 0.2.62 (9 pinned stamps + updater release notes).
+- No app-side changes since 0.2.61.
+
+Evidence
+- create-node-validate.test.ts 37/37 and create-node-daemon.test.ts 73/73 on #1853; sidecar contract
+  (exact dep / lock exact / integrity) in npm test; desktop-tauri.yml dispatched on the branch.
+- Release gate runs the .52 → .53 migration / rollback smokes.
+
+Hand-check (Vincent, 0.2.62; remote daemons also need agent-node ≥ .68 for the daemon-side mirror)
+1. 新建节点 → OpenCode（TUI 共存）→ 默认模型 → 确认:不再 model_invalid;daemon 起子节点(需要 daemon 用 agent-node ≥ .68,
+   本机 daemon 在 promote latest 后重新「一键安装」即可)。
