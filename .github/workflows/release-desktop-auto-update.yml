@@ -119,6 +119,11 @@ jobs:
           releaseBody: |-
             Signed and notarized stable update for macOS (Apple Silicon) and Windows (x64).
 
+            What's new in 0.2.63:
+            - Chat: a reply containing a very long code block no longer stretches into a screen-tall empty
+              bubble on Android; code blocks and tables wrap on phones, and code blocks longer than 40 lines
+              start folded with a "show N more lines" toggle (desktop gets the fold too).
+
             What's new in 0.2.62:
             - The bundled local Hub moves to CommHub Server 0.9.0-preview.53: creating an OpenCode
               (TUI co-presence) node no longer fails with "model_invalid" — provider/model names such as
