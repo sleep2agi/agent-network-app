@@ -1,0 +1,21 @@
+Desktop v0.2.63 release-candidate report
+
+- Base: main after app#291 (0.2.62)
+- Target: desktop-v0.2.63
+- Why: 2026-09-12 a community user's Android chat with a node showed the message area as two
+  screen-tall empty strips (a reply with a very long code block grew past the screen with its text
+  undrawn; code blocks/tables were a horizontal ScrollView nested inside the inverted FlatList).
+  Fixed in app#291.
+
+Changes
+- Chat renderer (app#291): on native platforms code blocks and tables wrap instead of nesting a
+  horizontal ScrollView; code blocks longer than 40 lines start folded with a show/hide toggle.
+  Desktop/web keep horizontal scrolling and gain the fold.
+- Bump the desktop application consistently to 0.2.63 (9 pinned stamps + updater release notes).
+- Bundled local Hub pin unchanged (0.9.0-preview.53); no migration on first launch.
+
+Verification
+- npm test: all self-executing suites pass (92 files before this bump; version-consistency and
+  release-notes-hygiene re-run on the bump).
+- Android APK for the same fix: android-build run 34687391563 (attached to the GitHub release as an
+  extra asset so community users get a public download link).
