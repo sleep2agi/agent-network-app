@@ -572,26 +572,11 @@ export function FirstRunScreen({ busy, stage, error, onStartLocal, onRemote }: {
   const compact = width < 520;
   return (
     <View style={entryStyles.root} testID="first-run-local-hub">
-      <View pointerEvents="none" style={[entryStyles.glow, entryStyles.glowTop]} />
-      <View pointerEvents="none" style={[entryStyles.glow, entryStyles.glowBottom]} />
       <ScrollView style={loginStylesShared.scrollView} contentContainerStyle={loginStylesShared.scrollContent} showsVerticalScrollIndicator={false}>
       <View style={[entryStyles.card, compact && entryStyles.cardCompact]}>
-        <View style={entryStyles.logoHalo}>
-          <Image source={require('./assets/splash-icon.png')} style={entryStyles.logo} resizeMode="contain" />
-        </View>
-        <Text style={entryStyles.eyebrow}>YOUR AI WORKSPACE</Text>
-        <Text style={entryStyles.title}>让 Agent 在这里协作</Text>
-        <Text style={entryStyles.copy}>在这台电脑创建安全的本地工作区，几秒钟即可开始。无需配置服务器，数据默认留在本机。</Text>
-        <View style={[entryStyles.benefits, compact && entryStyles.benefitsCompact]}>
-          <View style={entryStyles.benefit}>
-            <View style={entryStyles.benefitIcon}><Ionicons name="flash-outline" size={16} color={colors.accent} /></View>
-            <View style={entryStyles.benefitCopy}><Text style={entryStyles.benefitTitle}>开箱即用</Text><Text style={entryStyles.benefitText}>自动启动本地服务</Text></View>
-          </View>
-          <View style={entryStyles.benefit}>
-            <View style={entryStyles.benefitIcon}><Ionicons name="shield-checkmark-outline" size={16} color={colors.accent} /></View>
-            <View style={entryStyles.benefitCopy}><Text style={entryStyles.benefitTitle}>本地优先</Text><Text style={entryStyles.benefitText}>工作数据保存在 ~/.anet/app</Text></View>
-          </View>
-        </View>
+        <Image source={require('./assets/splash-icon.png')} style={entryStyles.logo} resizeMode="contain" />
+        <Text style={entryStyles.title}>Agent Network</Text>
+        <Text style={entryStyles.copy}>在这台电脑创建本地工作区，数据留在本机；也可以登录已有服务器。</Text>
         {error ? <View style={entryStyles.errorBox}><Ionicons name="alert-circle-outline" size={17} color={colors.failed} /><Text style={entryStyles.error}>{error}</Text></View> : null}
         <Pressable
           accessibilityRole="button"
@@ -617,24 +602,12 @@ export function FirstRunScreen({ busy, stage, error, onStartLocal, onRemote }: {
 }
 
 const makeEntryStyles = () => StyleSheet.create({
-  root: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24, backgroundColor: colors.bg, overflow: 'hidden' },
-  glow: { position: 'absolute', width: 420, height: 420, borderRadius: 210, opacity: themeMode() === 'light' ? 0.13 : 0.09, backgroundColor: colors.accent },
-  glowTop: { top: -280, right: -120 },
-  glowBottom: { bottom: -330, left: -160 },
-  card: { width: '100%', maxWidth: 480, gap: 16, paddingHorizontal: 38, paddingVertical: 36, borderRadius: 28, backgroundColor: colors.card, borderWidth: 1, borderColor: colors.border, shadowColor: '#000', shadowOffset: { width: 0, height: 20 }, shadowOpacity: themeMode() === 'light' ? 0.12 : 0.35, shadowRadius: 42, elevation: 12 },
+  root: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24, backgroundColor: colors.bg },
+  card: { width: '100%', maxWidth: 440, gap: 14, paddingHorizontal: 32, paddingVertical: 32, borderRadius: 20, backgroundColor: colors.card, borderWidth: 1, borderColor: colors.border, shadowColor: '#000', shadowOffset: { width: 0, height: 20 }, shadowOpacity: themeMode() === 'light' ? 0.12 : 0.35, shadowRadius: 42, elevation: 12 },
   cardCompact: { paddingHorizontal: 22, paddingVertical: 26, borderRadius: 22 },
-  logoHalo: { width: 74, height: 74, borderRadius: 23, alignSelf: 'center', alignItems: 'center', justifyContent: 'center', backgroundColor: themeMode() === 'light' ? '#e8f8fa' : '#102b32', borderWidth: 1, borderColor: themeMode() === 'light' ? '#c9eef2' : '#19434b' },
-  logo: { width: 58, height: 58 },
-  eyebrow: { color: colors.accent, fontSize: 11, fontWeight: '800', letterSpacing: 1.8, textAlign: 'center', marginTop: 2 },
-  title: { color: colors.text, fontSize: 27, lineHeight: 34, fontWeight: '800', letterSpacing: -0.4, textAlign: 'center' },
+  logo: { width: 72, height: 72, borderRadius: 18, alignSelf: 'center' },
+  title: { color: colors.text, fontSize: 24, lineHeight: 32, fontWeight: '700', letterSpacing: -0.2, textAlign: 'center' },
   copy: { color: colors.textSecondary, fontSize: 14, lineHeight: 22, textAlign: 'center', maxWidth: 390, alignSelf: 'center' },
-  benefits: { flexDirection: 'row', gap: 10, marginVertical: 2 },
-  benefitsCompact: { flexDirection: 'column' },
-  benefit: { flex: 1, minHeight: 68, flexDirection: 'row', alignItems: 'center', gap: 9, padding: 11, borderRadius: 14, backgroundColor: colors.inputBg, borderWidth: 1, borderColor: colors.border },
-  benefitIcon: { width: 30, height: 30, borderRadius: 10, alignItems: 'center', justifyContent: 'center', backgroundColor: themeMode() === 'light' ? '#ddf5f7' : '#123038' },
-  benefitCopy: { flex: 1, minWidth: 0 },
-  benefitTitle: { color: colors.text, fontSize: 12, fontWeight: '700' },
-  benefitText: { color: colors.textMuted, fontSize: 10, lineHeight: 15, marginTop: 2 },
   errorBox: { flexDirection: 'row', alignItems: 'flex-start', gap: 8, padding: 11, borderRadius: 12, backgroundColor: themeMode() === 'light' ? '#fff1f2' : '#291417', borderWidth: 1, borderColor: themeMode() === 'light' ? '#fecdd3' : '#552329' },
   error: { flex: 1, color: colors.failed, fontSize: 12, lineHeight: 18 },
   primary: { height: 52, borderRadius: 14, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.accent, shadowColor: colors.accent, shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.22, shadowRadius: 16, elevation: 5 },
@@ -653,11 +626,14 @@ const loginStylesShared = StyleSheet.create({
   scrollContent: { flexGrow: 1, alignItems: 'center', justifyContent: 'center', paddingVertical: 20 },
 });
 
-const bootStyles = StyleSheet.create({
-  root: { backgroundColor: '#07152f' },
-  logo: { width: 156, height: 156, borderRadius: 34 },
-  title: { color: '#ffffff', fontSize: 20, fontWeight: '700', letterSpacing: 0.4, marginBottom: 8 },
+// #193 机制:模块级 StyleSheet 引用主题值必须随主题重建,否则冻在导入时的那套颜色。
+const makeBootStyles = () => StyleSheet.create({
+  root: { backgroundColor: colors.bg, gap: 14 },
+  logo: { width: 96, height: 96, borderRadius: 22 },
+  title: { color: colors.text, fontSize: 18, fontWeight: '600', letterSpacing: 0.3 },
 });
+let bootStyles = makeBootStyles();
+onThemeChange(() => { bootStyles = makeBootStyles(); });
 
 function DesktopWorkspace({ cfg, screen, setScreen, onLogout, onLocalDataDeleted, onAddAccount, onSwitchProfile, onReauthProfile }: {
   cfg: HubConfig;
@@ -836,15 +812,10 @@ export function LoginScreen({ onLogin, initialProfile, onCancelReauth }: { onLog
 
   return (
     <KeyboardAvoidingView style={entryStyles.root} behavior={Platform.OS === 'ios' ? 'padding' : undefined} testID="login-screen">
-      <View pointerEvents="none" style={[entryStyles.glow, entryStyles.glowTop]} />
-      <View pointerEvents="none" style={[entryStyles.glow, entryStyles.glowBottom]} />
       <ScrollView style={loginStyles.scrollView} contentContainerStyle={loginStyles.scrollContent} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
       <View style={[entryStyles.card, loginStyles.card, compact && entryStyles.cardCompact]}>
-        <View style={entryStyles.logoHalo}>
-          <Image source={require('./assets/splash-icon.png')} style={entryStyles.logo} resizeMode="contain" />
-        </View>
+        <Image source={require('./assets/splash-icon.png')} style={entryStyles.logo} resizeMode="contain" />
         <View style={loginStyles.heading}>
-          <Text style={entryStyles.eyebrow}>{initialProfile ? 'RECONNECT ACCOUNT' : 'WELCOME BACK'}</Text>
           <Text style={entryStyles.title}>{initialProfile ? '重新验证账号' : '连接你的工作区'}</Text>
           <Text style={entryStyles.copy}>{initialProfile ? '登录状态已失效。重新验证只会更新这个账号，其他工作区不会受到影响。' : '输入服务器和账号信息，继续与你的 Agent 协作。'}</Text>
         </View>
