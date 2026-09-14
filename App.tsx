@@ -934,7 +934,7 @@ const makeLoginStyles = () => StyleSheet.create({
   field: { gap: 7 },
   label: { color: colors.textSecondary, fontSize: 12, fontWeight: '700', marginLeft: 2 },
   inputShell: { minHeight: 50, flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 14, borderRadius: 13, backgroundColor: colors.inputBg, borderWidth: 1, borderColor: colors.border },
-  input: { flex: 1, minWidth: 0, color: colors.text, fontSize: 14, paddingVertical: 12 },
+  input: { flex: 1, minWidth: 0, color: colors.text, fontSize: 14, paddingVertical: 12, ...(Platform.OS === 'web' ? ({ outlineStyle: 'none' } as any) : {}) },
   eyeButton: { width: 28, height: 34, alignItems: 'center', justifyContent: 'center' },
   inactive: { backgroundColor: colors.border },
   errorBox: { flexDirection: 'row', alignItems: 'flex-start', gap: 9, padding: 11, borderRadius: 12, backgroundColor: themeMode() === 'light' ? '#fff1f2' : '#291417', borderWidth: 1, borderColor: themeMode() === 'light' ? '#fecdd3' : '#552329' },
