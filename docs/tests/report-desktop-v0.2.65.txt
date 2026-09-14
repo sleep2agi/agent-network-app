@@ -1,0 +1,18 @@
+Desktop v0.2.65 release-candidate report
+
+- Base: main after app#294 (0.2.64)
+- Target: desktop-v0.2.65
+- Why: Vincent 2026-09-14 「那个启动页美化一下 简洁一点」+「这个按钮好像也有点丑了」; screenshots reviewed by
+  Vincent (「可以的」) before the bump.
+
+Changes
+- First-run / sign-in / launch screens simplified (app#294): no glows, eyebrow labels or benefit cards; logo,
+  one title, one line of copy, actions. Launch splash follows the theme (was hard-coded navy).
+- Primary button: accent background with dark (onAccent) text; inactive state is a neutral fill instead of
+  a translucent accent; no arrow/shadow. Sign-in footer keeps only the version. Web/WebView input focus
+  outline removed.
+- Bump the desktop application consistently to 0.2.65 (9 pinned stamps + updater release notes).
+- Bundled local Hub pin unchanged (0.9.0-preview.53).
+
+Verification
+- npm test: 92/92 self-executing suites pass (entry-ui contract updated to the new shape).
