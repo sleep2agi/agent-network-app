@@ -586,10 +586,10 @@ export function FirstRunScreen({ busy, stage, error, onStartLocal, onRemote }: {
         >
           {busy ? (
             <View style={entryStyles.busyRow} testID={`local-hub-stage-${stage ?? 'preparing'}`}>
-              <ActivityIndicator color="#fff" />
+              <ActivityIndicator color={colors.onAccent} />
               <Text style={entryStyles.primaryText}>{stage === 'migrating' ? '正在备份并迁移…' : stage === 'starting' ? '正在启动本地服务…' : '正在准备本地工作区…'}</Text>
             </View>
-          ) : <View style={entryStyles.buttonRow}><Text style={entryStyles.primaryText}>创建本地工作区</Text><Ionicons name="arrow-forward" size={18} color="#fff" /></View>}
+          ) : <Text style={entryStyles.primaryText}>创建本地工作区</Text>}
         </Pressable>
         <Pressable accessibilityRole="button" disabled={busy} style={({ pressed }) => [entryStyles.secondary, pressed && entryStyles.secondaryPressed]} onPress={onRemote}>
           <Ionicons name="globe-outline" size={17} color={colors.textSecondary} />
@@ -610,11 +610,12 @@ const makeEntryStyles = () => StyleSheet.create({
   copy: { color: colors.textSecondary, fontSize: 14, lineHeight: 22, textAlign: 'center', maxWidth: 390, alignSelf: 'center' },
   errorBox: { flexDirection: 'row', alignItems: 'flex-start', gap: 8, padding: 11, borderRadius: 12, backgroundColor: themeMode() === 'light' ? '#fff1f2' : '#291417', borderWidth: 1, borderColor: themeMode() === 'light' ? '#fecdd3' : '#552329' },
   error: { flex: 1, color: colors.failed, fontSize: 12, lineHeight: 18 },
-  primary: { height: 52, borderRadius: 14, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.accent, shadowColor: colors.accent, shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.22, shadowRadius: 16, elevation: 5 },
-  disabled: { opacity: 0.6 },
+  primary: { height: 48, borderRadius: 12, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.accent },
+  disabled: { backgroundColor: colors.border },
   pressed: { transform: [{ scale: 0.99 }], opacity: 0.9 },
-  primaryText: { color: '#fff', fontSize: 15, fontWeight: '800' },
+  primaryText: { color: colors.onAccent, fontSize: 15, fontWeight: '700' },
   busyRow: { flexDirection: 'row', alignItems: 'center', gap: 9 },
+  primaryTextDisabled: { color: colors.textMuted },
   buttonRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   secondary: { height: 46, borderRadius: 13, flexDirection: 'row', gap: 8, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: colors.border, backgroundColor: themeMode() === 'light' ? '#fafbfc' : colors.inputBg },
   secondaryPressed: { backgroundColor: colors.border },
@@ -903,11 +904,11 @@ export function LoginScreen({ onLogin, initialProfile, onCancelReauth }: { onLog
       >
         {busy ? (
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }} testID="login-busy">
-            <ActivityIndicator color="#fff" />
+            <ActivityIndicator color={colors.onAccent} />
             <Text style={entryStyles.primaryText}>正在安全连接…</Text>
           </View>
         ) : (
-          <View style={entryStyles.buttonRow}><Text style={entryStyles.primaryText}>登录工作区</Text><Ionicons name="arrow-forward" size={18} color="#fff" /></View>
+          <Text style={[entryStyles.primaryText, (busy || !serverUrl || !username || !password) && entryStyles.primaryTextDisabled]}>登录工作区</Text>
         )}
       </Pressable>
       {onCancelReauth ? (
@@ -917,7 +918,7 @@ export function LoginScreen({ onLogin, initialProfile, onCancelReauth }: { onLog
       ) : null}
       {/* Version on the login page so device screenshots are
           unambiguous about which build is installed (tg 692). */}
-      <View style={loginStyles.securityNote}><Ionicons name="shield-checkmark-outline" size={13} color={colors.textMuted} /><Text style={loginStyles.version}>安全连接 · v{APP_VERSION}</Text></View>
+      <View style={loginStyles.securityNote}><Text style={loginStyles.version}>v{APP_VERSION}</Text></View>
       </View>
       </ScrollView>
     </KeyboardAvoidingView>
@@ -935,7 +936,7 @@ const makeLoginStyles = () => StyleSheet.create({
   inputShell: { minHeight: 50, flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 14, borderRadius: 13, backgroundColor: colors.inputBg, borderWidth: 1, borderColor: colors.border },
   input: { flex: 1, minWidth: 0, color: colors.text, fontSize: 14, paddingVertical: 12 },
   eyeButton: { width: 28, height: 34, alignItems: 'center', justifyContent: 'center' },
-  inactive: { opacity: 0.45, shadowOpacity: 0 },
+  inactive: { backgroundColor: colors.border },
   errorBox: { flexDirection: 'row', alignItems: 'flex-start', gap: 9, padding: 11, borderRadius: 12, backgroundColor: themeMode() === 'light' ? '#fff1f2' : '#291417', borderWidth: 1, borderColor: themeMode() === 'light' ? '#fecdd3' : '#552329' },
   errorCopy: { flex: 1 },
   errorTitle: { flex: 1, color: colors.failed, fontSize: 12, lineHeight: 18, fontWeight: '700' },
