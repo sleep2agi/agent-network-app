@@ -1,0 +1,15 @@
+Desktop v0.2.64 release-candidate report
+
+- Base: main after desktop-v0.2.63
+- Target: desktop-v0.2.64
+- Why: Vincent 2026-09-14 — every restart reopened all detached chat windows; not wanted.
+
+Changes
+- Launch no longer replays detached chat windows (App.tsx); windows.json is still written per profile so a
+  manual "reopen" entry can use it later. Contract test now asserts the launch path does not call
+  restoreDetachedChatWindows.
+- Bump the desktop application consistently to 0.2.64 (9 pinned stamps + updater release notes).
+- Bundled local Hub pin unchanged (0.9.0-preview.53).
+
+Verification
+- npm test: 92/92 self-executing suites pass (profile-storage-contract updated).

@@ -52,7 +52,7 @@ import DesktopMessageListener from './src/DesktopMessageListener';
 import { loadPinnedChats, requestedChatAlias, requestedChatProfileId, requestedWorkspaceProfileId, savePinnedChats } from './src/desktop-chat-menu';
 import { loadChatPins, saveChatPins, togglePinned } from './src/chat-pins';
 import { bindUnreadProfile } from './src/unread-store';
-import { openRememberedChatWindow, restoreDetachedChatWindows } from './src/desktop-chat-windows';
+import { openRememberedChatWindow } from './src/desktop-chat-windows';
 import { activateHubProfile, LOCAL_HUB_PROFILE_ID, localHubStatus, startLocalHub } from './src/local-hub';
 import UnreadBadgeFixtureScreen, { readWebFixture } from './src/UnreadBadgeFixtureScreen';
 
@@ -274,7 +274,7 @@ function AppRoot() {
         // Fire the status request now so its RTT overlaps the boot→AgentsScreen
         // mount; AgentsScreen's first load consumes this in-flight promise.
         prefetchStatus(saved);
-        if (!initialChat && !initialWorkspaceProfile) void restoreDetachedChatWindows().catch(error => console.error('Failed to restore detached chats', error));
+        // Vincent 2026-09-14:重启后不再自动把拆出去的聊天窗口全部重开(windows.json 仍记着,只是不再在启动时回放)。
       }
       setBooting(false);
     }).catch(error => {

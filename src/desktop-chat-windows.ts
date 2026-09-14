@@ -9,6 +9,7 @@ export async function openRememberedChatWindow(alias: string, profileId?: string
   await openChatWindow(alias, profileId, context);
 }
 
+/** 启动时曾自动回放所有拆出去的聊天窗口;2026-09-14 起不再在启动时调用(Vincent:重启不需要全部重开)。保留给将来的手动「恢复窗口」入口。 */
 export async function restoreDetachedChatWindows(): Promise<void> {
   if (!(globalThis as any).__TAURI_INTERNALS__) return;
   const registry = await listHubProfiles();
