@@ -28,6 +28,6 @@ assert.ok(app.includes('loadHubProfile(borrowedProfile)') && !app.includes('swit
 }
 assert.ok(rust.includes('index.corrupt-') && rust.includes('desktop_storage_diagnostics'), 'corrupt registry is quarantined and diagnosed');
 assert.ok(rust.includes('mark_desktop_profile_requires_reauth') && app.includes('切换其他账号'), 'revoked profile is marked without trapping other profiles');
-assert.ok(storage.includes("'windows.json'") && app.includes('restoreDetachedChatWindows'), 'detached windows persist and restore per profile');
+assert.ok(storage.includes("'windows.json'") && !app.includes('restoreDetachedChatWindows('), 'detached windows persist per profile but are NOT replayed on launch (Vincent 2026-09-14)');
 
 console.log('profile storage contract: 13 checks passed');
