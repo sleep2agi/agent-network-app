@@ -119,6 +119,10 @@ jobs:
           releaseBody: |-
             Signed and notarized stable update for macOS (Apple Silicon) and Windows (x64).
 
+            What's new in 0.2.64:
+            - Restarting the app no longer reopens every chat window you had detached; they stay remembered
+              but only open when you open them.
+
             What's new in 0.2.63:
             - Chat: a reply containing a very long code block no longer stretches into a screen-tall empty
               bubble on Android; code blocks and tables wrap on phones, and code blocks longer than 40 lines
