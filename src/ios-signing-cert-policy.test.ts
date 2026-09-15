@@ -4,7 +4,7 @@ import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { describeCertificate, partitionCiCertificates, runWindows, windowFor, parseX509Time, IN_FLIGHT_GRACE_MS, WINDOW_SLACK_MS } from '../scripts/ios-signing-cert-policy.mjs';
+import { describeCertificate, partitionCiCertificates, runWindows, windowFor, parseX509Time, IN_FLIGHT_GRACE_MS, WINDOW_SLACK_MS, WINDOW_LEAD_MS } from '../scripts/ios-signing-cert-policy.mjs';
 
 let p = 0, t = 0;
 const ck = (n: string, c: boolean) => { t++; if (c) { p++; console.log(`  ✓ ${n}`); } else console.log(`  ✗ ${n}`); };
@@ -36,7 +36,10 @@ const runs = [
 ];
 const w = runWindows(runs);
 ck('runWindows: unparseable run dropped', w.length === 2);
-ck('runWindows: slack applied both ends', w[0].start.getTime() === Date.parse('2026-09-05T10:08:56Z') - WINDOW_SLACK_MS && w[0].end.getTime() === Date.parse('2026-09-05T10:13:48Z') + WINDOW_SLACK_MS);
+ck('runWindows: 15 min lead at the start, 5 min slack at the end', w[0].start.getTime() === Date.parse('2026-09-05T10:08:56Z') - WINDOW_LEAD_MS && w[0].end.getTime() === Date.parse('2026-09-05T10:13:48Z') + WINDOW_SLACK_MS);
+// ios-build #24 真机:Apple 把 notBefore 回拨 10 分钟 —— #21 的 Prepare 在 10:10:20,证书 notBefore 是 10:00:22(早于 run_started_at 10:08:56)
+ck('windowFor: Apple-backdated cert (10:00:22) still matches run 33959865436', windowFor(new Date('2026-09-05T10:00:22Z'), w)?.id === 33959865436);
+ck('windowFor: 20 min before run start matches nothing', windowFor(new Date('2026-09-05T09:48:00Z'), w) === null);
 ck('windowFor: cert issued at Prepare step (10:10:22) matches run 33959865436', windowFor(new Date('2026-09-05T10:10:22Z'), w)?.id === 33959865436);
 ck('windowFor: cert issued a day earlier matches nothing', windowFor(new Date('2026-09-04T10:10:22Z'), w) === null);
 ck('windowFor: null validFrom matches nothing', windowFor(null, w) === null);

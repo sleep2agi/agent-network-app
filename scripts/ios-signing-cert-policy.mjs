@@ -8,7 +8,11 @@ import crypto from 'node:crypto';
 
 // 刚造出来不久的证书可能属于一个并行的 ios-build,别把它吊了
 export const IN_FLIGHT_GRACE_MS = 2 * 60 * 60 * 1000;
-// run 的 created_at 早于 Prepare 步(排队 + 装 Xcode),updated_at 晚于它;两头各放一点余量
+// run 的 run_started_at 早于 Prepare 步(排队 + 装 Xcode),updated_at 晚于它,尾部放 5 分钟余量。
+// 🔴 头部要更宽:ios-build #24 真机三张证书的 notBefore 都比各自 run 的 Prepare 步**早整 10 分钟**
+// (Apple 签发时把 notBefore 回拨 10 分钟抵消时钟偏差),而 Prepare 步本身在 run_started_at 之后 1–2 分钟,
+// 所以证书时间可能比 run_started_at 还早 ~9 分钟;头部放 15 分钟。
+export const WINDOW_LEAD_MS = 15 * 60 * 1000;
 export const WINDOW_SLACK_MS = 5 * 60 * 1000;
 
 // OpenSSL 风格「Sep  5 10:10:22 2026 GMT」;Node 20 的 X509Certificate 没有 validFromDate
@@ -44,13 +48,13 @@ export function describeCertificate(resource) {
 }
 
 /** GitHub run 列表 → 时间窗 [{ id, start, end }],start/end 为 Date */
-export function runWindows(runs, slackMs = WINDOW_SLACK_MS) {
+export function runWindows(runs, slackMs = WINDOW_SLACK_MS, leadMs = WINDOW_LEAD_MS) {
   const out = [];
   for (const r of runs ?? []) {
     const start = new Date(r.run_started_at ?? r.created_at ?? NaN);
     const end = new Date(r.updated_at ?? r.run_started_at ?? r.created_at ?? NaN);
     if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) continue;
-    out.push({ id: r.id ?? null, start: new Date(start.getTime() - slackMs), end: new Date(end.getTime() + slackMs) });
+    out.push({ id: r.id ?? null, start: new Date(start.getTime() - leadMs), end: new Date(end.getTime() + slackMs) });
   }
   return out;
 }
