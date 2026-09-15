@@ -150,3 +150,17 @@ export const mergeMessagesNewestFirst = <T extends TimedMessage>(local: T[], fet
     .sort((a, b) => (Number.isFinite(b.time) ? b.time : -Infinity) - (Number.isFinite(a.time) ? a.time : -Infinity) || a.index - b.index)
     .map(row => row.item);
 };
+
+// 2026-09-16(Vincent:「需要支持一下复制消息的按钮」):复制的是气泡里显示的正文 —— 去掉开头的
+// 「@作者: 内容」引用块(那是被引用的别人的话),保留正文的换行;空正文时退回引用文本本身。
+export const copyTextOf = (content?: string): string => {
+  const { quote, body } = parseQuoted(content);
+  const text = body.trim();
+  if (text) return text;
+  return quote ? quoteLabel(quote) : '';
+};
+
+// 「已复制」提示只停 1.4s,和微信一致的短反馈;传入 now 便于测试。
+export const COPIED_TOAST_MS = 1400;
+export const copiedToastVisible = (copiedAt: number | null, now: number): boolean =>
+  copiedAt !== null && now - copiedAt < COPIED_TOAST_MS;
