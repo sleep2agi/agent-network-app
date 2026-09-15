@@ -1,0 +1,22 @@
+Desktop v0.2.66 release-candidate report
+
+- Base: main after app#300 (0.2.65 + quote replies)
+- Target: desktop-v0.2.66
+- Why: Vincent 2026-09-15 「客户端显示增加个 回复 引用功能,如果是回复某条消息引用的话,抄一下微信这个设计」
+  (screenshot of WeChat's grey "author: text" card under a bubble) + 「推进 /goal 上面这个目标实现」.
+
+Changes
+- Quote replies (app#300): 引用 no longer pastes 「…」 into the draft; it pins a quote strip (author: text, ×)
+  above the composer. The sent text is 「@author: text」 + body, so agents still receive plain readable
+  context. Rendering splits that leading block out of the bubble into a one-line grey quote card under
+  the bubble (sent: right-aligned; reply: left-aligned), matching WeChat. Legacy 「text」 quotes render too.
+- Desktop right-click and mobile long-press selections now carry the author (sender alias / agent alias).
+- Bump the desktop application consistently to 0.2.66 (9 pinned stamps + updater release notes).
+- Bundled local Hub pin unchanged.
+
+Verification
+- npm test: 93/93 self-executing suites pass; chat-actions.test.ts +17 (parseQuoted/buildQuote/quoteLabel and
+  ChatScreen source contracts), mutant "drop author parsing" witnessed red.
+- npm run typecheck: no errors beyond the local @tauri-apps/plugin-* baseline.
+- No UI screenshot on DEV (web export lands on the sign-in page without a workspace); to be eyeballed on the
+  desktop build after release.

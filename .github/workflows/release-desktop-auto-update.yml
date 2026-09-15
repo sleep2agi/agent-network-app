@@ -119,6 +119,11 @@ jobs:
           releaseBody: |-
             Signed and notarized stable update for macOS (Apple Silicon) and Windows (x64).
 
+            What's new in 0.2.66:
+            - Quote replies, WeChat style: long-press or right-click a message and choose 引用 to attach it as a
+              quote strip above the composer; the sent message shows the quoted line as a small grey
+              "author: text" card under the bubble, and quotes coming back from agents render the same way.
+
             What's new in 0.2.65:
             - A cleaner start: the first-run, sign-in and launch screens drop the decorative glows, labels and
               feature cards and keep just the logo, one title, one line and the actions; the primary button
