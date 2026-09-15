@@ -1,15 +1,41 @@
 // 更像微信·round-2: 长按气泡动作的纯逻辑(可单测·无 RN 依赖)。
 
-// 微信「引用」:把被引用内容压成单行、截断,包成引用块前缀,拼到输入框草稿前。
-export const buildQuote = (content?: string, max = 40): string => {
+// 微信「引用」:把被引用内容压成单行、截断,包成引用块前缀,拼到正文前。
+// 2026-09-15(Vincent:抄微信的引用设计):带作者时写成「@作者: 文本」,客户端把这一行从气泡里
+// 拆出来,渲染成气泡下方的灰色引用条;agent 收到的仍是纯文本,上下文不丢。不带作者的旧格式照旧。
+export const compactQuoteText = (content?: string, max = 40): string => {
   const t = (content || '').replace(/\s+/g, ' ').trim();
   if (!t) return '';
-  const clip = t.length > max ? `${t.slice(0, max)}…` : t;
-  return `「${clip}」\n`;
+  return t.length > max ? `${t.slice(0, max)}…` : t;
+};
+
+export const buildQuote = (content?: string, max = 40, author?: string): string => {
+  const clip = compactQuoteText(content, max);
+  if (!clip) return '';
+  const who = (author || '').replace(/[\s「」:：]+/g, ' ').trim();
+  return who ? `「@${who}: ${clip}」\n` : `「${clip}」\n`;
 };
 
 // 被引用文本拼进已有草稿:引用块在前,保留用户已输入的内容。
-export const applyQuote = (draft: string, content?: string): string => buildQuote(content) + (draft || '');
+export const applyQuote = (draft: string, content?: string, author?: string): string => buildQuote(content, 40, author) + (draft || '');
+
+export type QuoteRef = { author?: string; text: string };
+
+// 把「@作者: 文本」/「文本」前缀从消息正文里拆出来。只认**开头第一行**是引用块的形状;
+// 正文里别处的「」不动。返回 body 是去掉引用块后的正文(可能为空串)。
+export const parseQuoted = (content?: string): { quote: QuoteRef | null; body: string } => {
+  const raw = content || '';
+  const m = /^「([^\n」]{1,200})」[ \t]*\n?/.exec(raw);
+  if (!m) return { quote: null, body: raw };
+  const inner = m[1];
+  const withAuthor = /^@([^:：]{1,64})[:：]\s?(.*)$/.exec(inner);
+  const quote: QuoteRef = withAuthor ? { author: withAuthor[1].trim(), text: withAuthor[2] } : { text: inner };
+  if (!quote.text.trim()) return { quote: null, body: raw };
+  return { quote, body: raw.slice(m[0].length) };
+};
+
+// 引用条文案:微信是「作者: 内容」一行;旧格式没作者就只显示内容。
+export const quoteLabel = (q: QuoteRef): string => (q.author ? `${q.author}: ${q.text}` : q.text);
 
 // 稳定标识(本地乐观消息用 _localId,已入库用 task_id)——删除/去重都靠它。
 export const msgKey = (m: { _localId?: string; task_id?: string }): string =>

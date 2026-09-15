@@ -41,7 +41,7 @@ import {
 import { appendAttachmentQueue, attachmentFromClipboard, isTauriDesktop, releaseClipboardAttachment } from './clipboard-attachment';
 import { colors, onThemeChange, spacing } from './theme';
 import { formatChatHeader, shouldShowTimeHeader } from './time';
-import { agentStatusLabel, applyQuote, confirmedOutboxIds, mergeMessagesNewestFirst, msgKey, removeMessage, shouldShowJumpPill, nextUnread, jumpPillLabel, canSend, shouldSendOnEnter } from './chat-actions';
+import { agentStatusLabel, buildQuote, compactQuoteText, confirmedOutboxIds, parseQuoted, quoteLabel, type QuoteRef, mergeMessagesNewestFirst, msgKey, removeMessage, shouldShowJumpPill, nextUnread, jumpPillLabel, canSend, shouldSendOnEnter } from './chat-actions';
 import type { NativeSyntheticEvent, NativeScrollEvent } from 'react-native';
 import { usePoll } from './usePoll';
 import { chatSearchState, isHighlighted, isStaleSearch, matchCountLabel, searchItems, shouldLoadOlderForSearch, stepHit, type SearchHit } from './chat-search';
@@ -84,7 +84,7 @@ type ChatItem = HubTask & {
   _severity?: string;
 };
 
-type MessageSelection = { item: ChatItem; text: string };
+type MessageSelection = { item: ChatItem; text: string; author?: string };
 
 // Received tasks carry attachments inside meta_json (#221). Images get
 // tappable thumbnails (Vincent tg 748), other files a 📎 line.
@@ -412,6 +412,9 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
   useEffect(() => setViewerUri(null), [attachmentViewerScope]);
   // 更像微信·round-2: 长按气泡的动作菜单(引用/删除)。null = 未打开。
   const [menuFor, setMenuFor] = useState<MessageSelection | null>(null);
+  // 微信式引用:选中「引用」后不往输入框塞文字,而是在输入框上方挂一条引用条(可 ×),发送时拼成
+  // 「@作者: 文本」前缀;对方气泡下方渲染成灰色引用条。null = 没在引用。
+  const [quote, setQuote] = useState<QuoteRef | null>(null);
   const [forwardFor, setForwardFor] = useState<MessageSelection | null>(null);
   const [forwardUiOwner, setForwardUiOwner] = useState<string | null>(null);
   const [forwardTargets, setForwardTargets] = useState<Session[]>([]);
@@ -531,7 +534,8 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
       event.preventDefault?.();
       event.stopPropagation?.();
       event.stopImmediatePropagation?.();
-      setMenuFor({ item, text });
+      const author = part === 'reply' ? alias : resolveSender(item, currentUsername).alias;
+      setMenuFor({ item, text, author });
     };
     doc.addEventListener('contextmenu', handleMessageContextMenu, true);
     return () => doc.removeEventListener('contextmenu', handleMessageContextMenu, true);
@@ -778,6 +782,7 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
         const attachments = uploaded.map(item => ({ fileId: item.file_id }));
         attached.forEach(releaseClipboardAttachment);
         setDraft('');
+        setQuote(null);
         setAttached([]);
         setSendPriority('normal');
         setBtwLaunch(current => ({ id: (current?.id ?? 0) + 1, prompt: parsed.prompt, attachments }));
@@ -786,11 +791,14 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
       }
       return;
     }
-    const content = parsed.content.trim() || (attached.length ? `[附件] ${attached.map(item => item.fileName).join('、')}` : '');
-    if ((!content && !attached.length) || sending) return;
+    const body = parsed.content.trim() || (attached.length ? `[附件] ${attached.map(item => item.fileName).join('、')}` : '');
+    if ((!body && !attached.length) || sending) return;
+    // 引用条在前、正文在后;agent 端看到的是「@作者: 被引用内容」+ 正文,客户端渲染时再拆开。
+    const content = quote ? buildQuote(quote.text, 40, quote.author) + body : body;
     const imgs = attached;
     const priority = sendPriority;
     setDraft('');
+    setQuote(null);
     setAttached([]);
     setSendPriority('normal');
     // Optimistic echo: render the message instantly tagged with a
@@ -1153,6 +1161,9 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
             // 网络里任何节点都能派单给这个 alias,一律记成本人会把别人的指令
             // 显示成自己说过的话。
             const sender = resolveSender(item, currentUsername);
+            // 微信式引用条:开头的「@作者: 文本」不进气泡,渲染成气泡下方的灰条
+            const sentQuoted = parseQuoted(item.content);
+            const replyQuoted = parseQuoted(item.result ?? item.reply ?? '');
             return (
               <View style={[styles.bubbleWrap, isHighlighted(msgKey(item), highlight, Date.now()) && styles.bubbleHighlight]}>
                 {showHeader && item.created_at ? (
@@ -1166,14 +1177,19 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
                     </Text>
                     <Pressable
                       {...(desktop ? ({ dataSet: { messageKey: msgKey(item), messagePart: 'sent' } } as any) : {})}
-                      onLongPress={() => setMenuFor({ item, text: item.content ?? '' })}
+                      onLongPress={() => setMenuFor({ item, text: item.content ?? '', author: sender.alias })}
                       delayLongPress={300}
                       style={({ pressed }) => [styles.bubblePressable, pressed && { opacity: 0.7 }]}
                     >
                       <View style={styles.bubble}>
-                        <MarkdownMessage>{cleanAttachmentDebugText(item.content || '—')}</MarkdownMessage>
+                        <MarkdownMessage>{cleanAttachmentDebugText(sentQuoted.body || (sentQuoted.quote ? '' : '—'))}</MarkdownMessage>
                         {sentAttachmentViews(item, cfg.serverUrl).map(renderAttachment)}
                       </View>
+                      {sentQuoted.quote ? (
+                        <View style={[styles.quoteChip, styles.quoteChipSent]} accessibilityLabel="引用">
+                          <Text style={styles.quoteChipText} numberOfLines={1}>{quoteLabel(sentQuoted.quote)}</Text>
+                        </View>
+                      ) : null}
                     </Pressable>
                   </View>
                   <AliasAvatar alias={sender.alias} size={36} />
@@ -1186,13 +1202,18 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
                       <Text style={styles.messageAuthor} numberOfLines={1}>{alias}{item._proactive ? ' · 主动汇报' : ''}</Text>
                       <Pressable
                         {...(desktop ? ({ dataSet: { messageKey: msgKey(item), messagePart: 'reply' } } as any) : {})}
-                        onLongPress={() => setMenuFor({ item, text: item.result ?? item.reply ?? '' })}
+                        onLongPress={() => setMenuFor({ item, text: item.result ?? item.reply ?? '', author: alias })}
                         delayLongPress={300}
                       >
                         <View style={[styles.bubble, styles.replyBubble]}>
-                          <MarkdownMessage>{cleanAttachmentDebugText(item.result ?? item.reply ?? '')}</MarkdownMessage>
+                          <MarkdownMessage>{cleanAttachmentDebugText(replyQuoted.body)}</MarkdownMessage>
                           {replyAttachmentViews(item, cfg.serverUrl).map(renderAttachment)}
                         </View>
+                        {replyQuoted.quote ? (
+                          <View style={[styles.quoteChip, styles.quoteChipReply]} accessibilityLabel="引用">
+                            <Text style={styles.quoteChipText} numberOfLines={1}>{quoteLabel(replyQuoted.quote)}</Text>
+                          </View>
+                        ) : null}
                       </Pressable>
                     </View>
                   </View>
@@ -1256,8 +1277,9 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
             <Pressable
               style={({ pressed }) => [styles.actionItem, pressed && styles.actionItemPressed]}
               onPress={() => {
-                if (menuFor) setDraft((d) => applyQuote(d, menuFor.text));
+                if (menuFor) setQuote({ author: menuFor.author, text: compactQuoteText(menuFor.text) });
                 setMenuFor(null);
+                mainComposerRef.current?.focus?.();
               }}
             >
               <Text style={styles.actionText}>引用</Text>
@@ -1362,6 +1384,15 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
         >
           <View style={styles.composerDividerGrip} />
         </View>
+{quote ? (
+          <View style={styles.quoteStrip} accessibilityLabel="正在引用">
+            <View style={styles.quoteStripBar} />
+            <Text style={styles.quoteStripText} numberOfLines={1}>{quoteLabel(quote)}</Text>
+            <Pressable accessibilityLabel="取消引用" onPress={() => setQuote(null)} hitSlop={8} style={styles.quoteStripClose}>
+              <Ionicons name="close" size={16} color={colors.textMuted} />
+            </Pressable>
+          </View>
+        ) : null}
         <View style={[styles.desktopComposer, { height: composerHeight, minHeight: undefined, maxHeight: undefined }]}>
           <TextInput
             ref={mainComposerRef}
@@ -1405,6 +1436,16 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
         </View>
         </>
       ) : (
+      <>
+      {quote ? (
+        <View style={styles.quoteStrip} accessibilityLabel="正在引用">
+          <View style={styles.quoteStripBar} />
+          <Text style={styles.quoteStripText} numberOfLines={1}>{quoteLabel(quote)}</Text>
+          <Pressable accessibilityLabel="取消引用" onPress={() => setQuote(null)} hitSlop={8} style={styles.quoteStripClose}>
+            <Ionicons name="close" size={16} color={colors.textMuted} />
+          </Pressable>
+        </View>
+      ) : null}
       <View style={[styles.inputRow, { paddingBottom: spacing.md + composerInset }]}>
         <Pressable
           accessibilityLabel="更多发送方式"
@@ -1458,6 +1499,7 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
           <Text style={[styles.sendText, !canSend(draft, attached.length > 0, sending) && styles.sendTextDisabled]}>↑</Text>
         </Pressable>
       </View>
+      </>
       )}
       <SideThreadDrawer
         cfg={cfg}
@@ -1554,6 +1596,16 @@ const makeStyles = () =>
   },
   replyBubble: { alignSelf: 'flex-start', maxWidth: '85%', flexShrink: 1, backgroundColor: colors.card },
   bubbleText: { color: colors.text, fontSize: 14, lineHeight: 20 },
+  // 微信式引用:气泡下方一条灰底小字「作者: 内容」(单行省略)
+  quoteChip: { marginTop: 4, maxWidth: '100%', backgroundColor: colors.border + '66', borderRadius: 6, paddingHorizontal: 8, paddingVertical: 4 },
+  quoteChipSent: { alignSelf: 'flex-end' },
+  quoteChipReply: { alignSelf: 'flex-start' },
+  quoteChipText: { color: colors.textMuted, fontSize: 12, lineHeight: 16 },
+  // 输入框上方的「正在引用」条
+  quoteStrip: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginHorizontal: spacing.md, marginTop: spacing.sm, paddingHorizontal: spacing.sm, paddingVertical: 6, backgroundColor: colors.border + '55', borderRadius: 8 },
+  quoteStripBar: { width: 3, alignSelf: 'stretch', borderRadius: 2, backgroundColor: colors.accent },
+  quoteStripText: { flex: 1, color: colors.textMuted, fontSize: 12 },
+  quoteStripClose: { padding: 2 },
   restoredNote: { color: colors.textMuted, fontSize: 10, marginTop: 2, alignSelf: 'flex-end' },
   deliveredMark: { color: colors.textMuted, fontSize: 10, marginTop: 2, alignSelf: 'flex-end' },
   pendingMark: { color: colors.textMuted, fontSize: 10, alignSelf: 'flex-end' },
