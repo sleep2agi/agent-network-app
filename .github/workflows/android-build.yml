@@ -29,6 +29,11 @@ jobs:
           java-version: 17
 
       - uses: android-actions/setup-android@v3
+        with:
+          # 2026-09-15 runs #34948072790/#rerun:action 默认装 `tools platform-tools`,runner 镜像升到
+          # cmdline-tools 16 后 sdkmanager 里已没有 `tools` 这个包 → "Failed to find package 'tools'" 退出 1。
+          # 我们只需要 platform-tools(adb 等);SDK platform/build-tools 由 Gradle 按 build.gradle 自装。
+          packages: platform-tools
 
       - run: npm ci
 
