@@ -4,6 +4,7 @@ import crypto from 'node:crypto';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { describeCertificate, partitionStaleCiCertificates } from './ios-signing-cert-policy.mjs';
 
 const API = 'https://api.appstoreconnect.apple.com/v1';
 const mode = process.argv[2] || 'prepare';
@@ -64,6 +65,16 @@ async function prepare() {
 
   execFileSync('openssl', ['genrsa', '-out', privateKey, '2048'], { stdio: 'ignore' });
   execFileSync('openssl', ['req', '-new', '-key', privateKey, '-out', csr, '-subj', `/CN=Agent Network CI/OU=${team}/O=Agent Network`], { stdio: 'ignore' });
+
+  // 上一次成功上传保留下来的 CI 证书(私钥已随 runner 销毁)会让这次 POST 撞 409 —— 先只吊销「本流程造的、
+  // 不是刚刚签发的」那些;手动建的证书只列出来不动。见 ios-signing-cert-policy.mjs。
+  const existing = await api('GET', '/certificates?filter%5BcertificateType%5D=IOS_DISTRIBUTION&limit=200');
+  const { revoke, keep, reason } = partitionStaleCiCertificates((existing?.data ?? []).map(describeCertificate));
+  for (const c of keep) console.log(`keeping IOS_DISTRIBUTION certificate ${c.id} (${c.name ?? '?'}): ${reason.get(c.id)}`);
+  for (const c of revoke) {
+    console.log(`revoking stale CI certificate ${c.id} (serial ${c.serial ?? '?'}, issued ${c.validFrom?.toISOString() ?? '?'}): ${reason.get(c.id)}`);
+    await api('DELETE', `/certificates/${encodeURIComponent(c.id)}`);
+  }
 
   const certificate = await api('POST', '/certificates', {
     data: {
