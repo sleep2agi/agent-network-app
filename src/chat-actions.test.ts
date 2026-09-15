@@ -1,6 +1,7 @@
 // 纯逻辑单测(bun/node 可跑·无 RN 依赖)。run: bun src/chat-actions.test.ts
 import fs from 'node:fs';
 import path from 'node:path';
+import * as chatActions from './chat-actions';
 import { buildQuote, applyQuote, confirmedOutboxIds, mergeMessagesNewestFirst, msgKey, removeMessage, shouldShowJumpPill, nextUnread, jumpPillLabel, canSend, isAgentOnline, agentStatusLabel, shouldSendOnEnter } from './chat-actions';
 let p = 0, t = 0; const ck = (n: string, c: boolean) => { t++; if (c) { p++; console.log('✅', n); } else console.log('❌', n); };
 // round-2 长按动作
@@ -93,4 +94,28 @@ ck('#178 无 _localId 的本地项仍被丢弃',
 const chatSource = fs.readFileSync(path.join(process.cwd(), 'src/ChatScreen.tsx'), 'utf8');
 ck('桌面输入区使用独立微信式 composer', chatSource.includes('styles.desktopComposer'));
 ck('桌面输入区显示快捷键提示', chatSource.includes('Enter 发送 · Shift/Ctrl/⌘+Enter 换行'));
+// ---- 2026-09-15 微信式引用条(Vincent:抄微信的引用设计) ----
+{
+  const { parseQuoted, quoteLabel, compactQuoteText } = chatActions;
+  ck('buildQuote 带作者 → 「@作者: 文本」', buildQuote('这纯故意的吧', 40, '博馍馍') === '「@博馍馍: 这纯故意的吧」\n');
+  ck('buildQuote 作者里的「」: 被压掉', buildQuote('x', 40, '「甲:乙」') === '「@甲 乙: x」\n');
+  ck('parseQuoted 带作者', JSON.stringify(parseQuoted('「@博馍馍: 这纯故意的吧」\n应该是')) === JSON.stringify({ quote: { author: '博馍馍', text: '这纯故意的吧' }, body: '应该是' }));
+  ck('parseQuoted 旧格式无作者', JSON.stringify(parseQuoted('「你好」\n正文')) === JSON.stringify({ quote: { text: '你好' }, body: '正文' }));
+  ck('parseQuoted 只有引用没正文 → body 空串', parseQuoted('「@a: b」').body === '' && parseQuoted('「@a: b」').quote?.author === 'a');
+  ck('parseQuoted 正文里的「」不算引用', parseQuoted('先说「你好」再说').quote === null);
+  ck('parseQuoted 多行正文保留换行', parseQuoted('「@a: b」\n一\n二').body === '一\n二');
+  ck('parseQuoted 空 → null', parseQuoted('').quote === null && parseQuoted(undefined).quote === null);
+  ck('parseQuoted 引用块里有换行不算', parseQuoted('「a\nb」\nc').quote === null);
+  ck('quoteLabel 作者: 内容', quoteLabel({ author: '通信龙', text: 'ok' }) === '通信龙: ok' && quoteLabel({ text: 'ok' }) === 'ok');
+  ck('compactQuoteText 压空白截 40', compactQuoteText('a\n  b') === 'a b' && compactQuoteText('x'.repeat(50)).endsWith('…'));
+  // 源码契约:ChatScreen 用引用条而不是往草稿塞文字;两种气泡都渲染引用条;发送前拼前缀
+  const src = fs.readFileSync(path.join(__dirname, 'ChatScreen.tsx'), 'utf8');
+  ck('引用动作 → setQuote 而不是 applyQuote', src.includes('setQuote({ author: menuFor.author, text: compactQuoteText(menuFor.text) })') && !src.includes('applyQuote('));
+  ck('发送时把引用拼在正文前', src.includes('const content = quote ? buildQuote(quote.text, 40, quote.author) + body : body;'));
+  ck('发出/回复两种气泡都渲染引用条', src.includes('styles.quoteChipSent') && src.includes('styles.quoteChipReply') && src.includes('quoteLabel(sentQuoted.quote)') && src.includes('quoteLabel(replyQuoted.quote)'));
+  ck('气泡正文用去掉引用后的 body', src.includes('cleanAttachmentDebugText(replyQuoted.body)') && src.includes("cleanAttachmentDebugText(sentQuoted.body || (sentQuoted.quote ? '' : '—'))"));
+  ck('桌面和手机输入框上方都有引用条', src.split('accessibilityLabel="正在引用"').length === 3);
+  ck('右键/长按选中都带作者', src.includes("author: sender.alias })") && src.includes("author: alias })") && src.includes('resolveSender(item, currentUsername).alias;'));
+}
+
 console.log(`\n${p}/${t} passed`); process.exit(p === t ? 0 : 1);
