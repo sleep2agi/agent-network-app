@@ -4,7 +4,7 @@ import crypto from 'node:crypto';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { describeCertificate, partitionStaleCiCertificates } from './ios-signing-cert-policy.mjs';
+import { describeCertificate, partitionCiCertificates, runWindows } from './ios-signing-cert-policy.mjs';
 
 const API = 'https://api.appstoreconnect.apple.com/v1';
 const mode = process.argv[2] || 'prepare';
@@ -47,6 +47,23 @@ function env(name, value) {
   fs.appendFileSync(required('GITHUB_ENV'), `${name}=${value}\n`);
 }
 
+// 本仓 ios-build 的历史 run(最近 200 条),用 run 时间窗认证书。GH_TOKEN = ${{ github.token }},由 workflow 注入。
+async function listIosBuildRuns() {
+  const repo = required('GITHUB_REPOSITORY');
+  const token = required('GH_TOKEN');
+  const runs = [];
+  for (let page = 1; page <= 2; page++) {
+    const response = await fetch(`https://api.github.com/repos/${repo}/actions/workflows/ios-build.yml/runs?per_page=100&page=${page}`, {
+      headers: { Authorization: `Bearer ${token}`, Accept: 'application/vnd.github+json', 'X-GitHub-Api-Version': '2022-11-28' },
+    });
+    if (!response.ok) throw new Error(`GET ios-build runs page ${page} failed (${response.status}): ${(await response.text()).slice(0, 500)}`);
+    const body = await response.json();
+    runs.push(...(body.workflow_runs ?? []));
+    if ((body.workflow_runs ?? []).length < 100) break;
+  }
+  return runs;
+}
+
 async function prepare() {
   const team = required('APPLE_TEAM_ID');
   const bundleIdentifier = required('BUNDLE_ID');
@@ -66,13 +83,16 @@ async function prepare() {
   execFileSync('openssl', ['genrsa', '-out', privateKey, '2048'], { stdio: 'ignore' });
   execFileSync('openssl', ['req', '-new', '-key', privateKey, '-out', csr, '-subj', `/CN=Agent Network CI/OU=${team}/O=Agent Network`], { stdio: 'ignore' });
 
-  // 上一次成功上传保留下来的 CI 证书(私钥已随 runner 销毁)会让这次 POST 撞 409 —— 先只吊销「本流程造的、
-  // 不是刚刚签发的」那些;手动建的证书只列出来不动。见 ios-signing-cert-policy.mjs。
+  // 上一次成功上传保留下来的 CI 证书(私钥已随 runner 销毁)会让这次 POST 撞 409(Apple 上限 3 张)。
+  // Apple 会改写 CSR 主题,按 CN 认不出来;只认「签发时间落在某次 ios-build run 时间窗里」的证书,
+  // 且不动 2 小时内签发的(可能是并行 run)。不在任何窗里的只列出来。见 ios-signing-cert-policy.mjs。
   const existing = await api('GET', '/certificates?filter%5BcertificateType%5D=IOS_DISTRIBUTION&limit=200');
-  const { revoke, keep, reason } = partitionStaleCiCertificates((existing?.data ?? []).map(describeCertificate));
-  for (const c of keep) console.log(`keeping IOS_DISTRIBUTION certificate ${c.id} (${c.name ?? '?'}): ${reason.get(c.id)}`);
+  const windows = runWindows(await listIosBuildRuns());
+  console.log(`ios-build run windows known: ${windows.length}`);
+  const { revoke, keep, reason } = partitionCiCertificates((existing?.data ?? []).map(describeCertificate), windows);
+  for (const c of keep) console.log(`keeping IOS_DISTRIBUTION certificate ${c.id} [${c.subject ?? '?'}] issued ${c.validFrom?.toISOString() ?? '?'}: ${reason.get(c.id)}`);
   for (const c of revoke) {
-    console.log(`revoking stale CI certificate ${c.id} (serial ${c.serial ?? '?'}, issued ${c.validFrom?.toISOString() ?? '?'}): ${reason.get(c.id)}`);
+    console.log(`revoking IOS_DISTRIBUTION certificate ${c.id} [${c.subject ?? '?'}] issued ${c.validFrom?.toISOString() ?? '?'}: ${reason.get(c.id)}`);
     await api('DELETE', `/certificates/${encodeURIComponent(c.id)}`);
   }
 

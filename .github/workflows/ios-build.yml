@@ -203,6 +203,8 @@ jobs:
         env:
           ASC_KEY_ID: ${{ secrets.APPLE_API_KEY }}
           ASC_ISSUER_ID: ${{ secrets.APPLE_API_ISSUER }}
+          # 只读:拉本仓 ios-build 的 run 历史,用 run 时间窗认出「本流程造的」分发证书(见 scripts/ios-signing-cert-policy.mjs)
+          GH_TOKEN: ${{ github.token }}
         run: node scripts/ios-distribution-signing.mjs prepare
 
       # Archive with the exact ephemeral App Store profile. Automatic archive
