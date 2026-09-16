@@ -119,6 +119,11 @@ jobs:
           releaseBody: |-
             Signed and notarized stable update for macOS (Apple Silicon) and Windows (x64).
 
+            What's new in 0.2.68:
+            - The hover copy button now sits on the bubble itself, so agent replies on the left show it too
+              (it used to float past the bubble's edge). Dark theme declares its colour scheme to the
+              WebView, so the conversation list scrollbar no longer paints a white track.
+
             What's new in 0.2.67:
             - Copy a message: the long-press / right-click menu gains 复制 as its first action, and on desktop a
               small copy button appears when you hover a bubble. Copying takes the visible text (without the

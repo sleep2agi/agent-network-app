@@ -1,0 +1,22 @@
+Desktop v0.2.68 release-candidate report
+
+- Base: main after app#305 (0.2.67 + copy-button anchoring + color-scheme)
+- Target: desktop-v0.2.68
+- Why: Vincent 2026-09-16 screenshots: 「左边的消息为什么没有复制按钮」 and 「怎么 深色模式 还有这种问题」(white
+  scrollbar track beside the conversation list in the dark theme).
+
+Changes
+- Copy button (app#305): anchored inside the bubble view (sent: top-left, reply: top-right) instead of on the
+  outer pressable, whose width exceeds the bubble's; on main the button rendered 12px past the reply bubble's
+  edge in Chromium and off the bubble in WKWebView. Hover uses Pressable onHoverIn/Out plus mouse events.
+- Dark theme (app#305): the scrollbar stylesheet now declares `:root { color-scheme: dark|light }` following
+  themeMode(), so WKWebView paints native scrollbars for the active theme.
+- Bump the desktop application consistently to 0.2.68 (9 pinned stamps + updater release notes).
+- Bundled local Hub pin unchanged.
+
+Verification
+- npm test: 94/94 self-executing suites pass; web-scrollbar.test +4; copy-message 13/13.
+- Playwright against the web export with a mocked Tauri shell and a throwaway hub: hovering a reply bubble shows
+  the copy button inside the bubble (fix) vs 12px outside (main control).
+- The white-track scrollbar cannot be reproduced on DEV (WKWebView only); the fix relies on the standard
+  color-scheme behaviour and must be confirmed on macOS after release.
