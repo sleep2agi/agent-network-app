@@ -119,6 +119,11 @@ jobs:
           releaseBody: |-
             Signed and notarized stable update for macOS (Apple Silicon) and Windows (x64).
 
+            What's new in 0.2.67:
+            - Copy a message: the long-press / right-click menu gains 复制 as its first action, and on desktop a
+              small copy button appears when you hover a bubble. Copying takes the visible text (without the
+              quoted line) and shows a brief 已复制 confirmation.
+
             What's new in 0.2.66:
             - Quote replies, WeChat style: long-press or right-click a message and choose 引用 to attach it as a
               quote strip above the composer; the sent message shows the quoted line as a small grey
