@@ -65,6 +65,9 @@ export async function openChatWindow(alias: string, profileId?: string, context?
     minWidth: 480,
     minHeight: 520,
     focus: true,
+    // macOS:和主窗一样隐藏原生标题栏(2026-09-16);Windows 忽略这两个键
+    titleBarStyle: 'overlay',
+    hiddenTitle: true,
   });
 }
 
@@ -113,5 +116,7 @@ export async function openWorkspaceWindow(profile: { profileId: string; displayN
     minWidth: 420,
     minHeight: 600,
     focus: true,
+    titleBarStyle: 'overlay',
+    hiddenTitle: true,
   });
 }

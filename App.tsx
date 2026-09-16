@@ -44,6 +44,7 @@ import { createForwardPersistence, initForwardController } from './src/forward-c
 import { loadDesktopThemeMode } from './src/desktop-theme-storage';
 import { colors, onThemeChange, setThemeMode, spacing, themeMode } from './src/theme';
 import { installWebScrollbarTheme } from './src/web-scrollbar';
+import MacTitleStrip from './src/mac-title-strip';
 import DesktopWindowPin from './src/DesktopWindowPin';
 import { styles } from './src/app-styles';
 import { APP_VERSION } from './src/version';
@@ -140,7 +141,10 @@ export default function App() {
   const dedicatedChatWindow = Platform.OS === 'web' && !!(globalThis as any).__TAURI_INTERNALS__ && (!!requestedChatAlias() || !!requestedWorkspaceProfileId());
   return (
     <SafeAreaProvider>
-      <AppRoot />
+      <View style={{ flex: 1 }}>
+        <MacTitleStrip />
+        <AppRoot />
+      </View>
       {dedicatedChatWindow ? null : <DesktopUpdatePrompt />}
     </SafeAreaProvider>
   );
