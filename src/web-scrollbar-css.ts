@@ -8,6 +8,10 @@ void _id;
 
 /** The subset of the palette the scrollbar needs. */
 export interface ScrollbarPalette {
+  /** Which native colour scheme the page is in. WKWebView paints its own scrollbar (and other native
+   *  chrome) from `color-scheme`; without it a dark theme still gets a white scrollbar track
+   *  (Vincent 2026-09-16 screenshot, macOS 0.2.66). */
+  scheme: 'dark' | 'light';
   /** Resting thumb — deliberately low contrast; a scrollbar is not content. */
   textMuted: string;
   /** Hover thumb — one step up, still not competing with text. */
@@ -32,6 +36,9 @@ export interface ScrollbarPalette {
  */
 export const scrollbarCss = (palette: ScrollbarPalette, desktopShell = false): string => {
   const rules = `
+  :root {
+    color-scheme: ${palette.scheme};
+  }
   * {
     scrollbar-width: thin;
     scrollbar-color: ${palette.textMuted} transparent;

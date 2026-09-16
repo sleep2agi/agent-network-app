@@ -11,7 +11,7 @@
 // The behaviour lives in web-scrollbar-dom.ts, which takes its document as an
 // argument so a test can drive it instead of asserting about this file's text.
 import { Platform } from 'react-native';
-import { colors, onThemeChange } from './theme';
+import { colors, onThemeChange, themeMode } from './theme';
 import { createScrollbarInstaller, type StyleHostLike } from './web-scrollbar-dom';
 import { scrollbarCss } from './web-scrollbar-css';
 
@@ -21,7 +21,7 @@ export type { ScrollbarPalette } from './web-scrollbar-css';
 
 const install = createScrollbarInstaller({
   getDocument: () => (globalThis as { document?: StyleHostLike }).document ?? null,
-  renderCss: () => scrollbarCss(colors, !!(globalThis as any).__TAURI_INTERNALS__),
+  renderCss: () => scrollbarCss({ ...colors, scheme: themeMode() === 'light' ? 'light' : 'dark' }, !!(globalThis as any).__TAURI_INTERNALS__),
   subscribe: (listener) => onThemeChange(listener),
 });
 

@@ -11,8 +11,8 @@ import {
 // Dark and light palettes as theme.ts defines them. Passed explicitly so the
 // test states which values it expects rather than reading whatever the module
 // singleton happens to hold at import time.
-const DARK = { textMuted: '#52525b', textSecondary: '#a1a1aa', text: '#f4f4f5' };
-const LIGHT = { textMuted: '#929aa6', textSecondary: '#626a76', text: '#20242a' };
+const DARK = { scheme: 'dark' as const, textMuted: '#52525b', textSecondary: '#a1a1aa', text: '#f4f4f5' };
+const LIGHT = { scheme: 'light' as const, textMuted: '#929aa6', textSecondary: '#626a76', text: '#20242a' };
 
 const dark = scrollbarCss(DARK);
 const light = scrollbarCss(LIGHT);
@@ -107,6 +107,12 @@ const checks: Array<[string, boolean]> = [
   ['webkit scrollbar width is 6-8px', /::-webkit-scrollbar \{\n\s*width: 7px;/.test(dark)],
   ['webkit thumb is rounded', /::-webkit-scrollbar-thumb \{[^}]*border-radius: 999px;/.test(dark)],
   ['firefox scrollbar-width is thin', /scrollbar-width: thin;/.test(dark)],
+  // 2026-09-16 Vincent (macOS 0.2.66 dark theme): a white scrollbar track. WKWebView paints native chrome
+  // from `color-scheme`; declare it so the native scrollbar follows the theme when the custom rules do not.
+  ['dark palette declares color-scheme: dark', /:root \{\n\s*color-scheme: dark;/.test(dark)],
+  ['light palette declares color-scheme: light', /:root \{\n\s*color-scheme: light;/.test(light)],
+  ['desktop shell declares color-scheme too', /color-scheme: dark;/.test(desktop)],
+  ['installer derives scheme from themeMode()', /scheme: themeMode\(\) === 'light' \? 'light' : 'dark'/.test(fs.readFileSync(new URL('./web-scrollbar.ts', import.meta.url), 'utf8'))],
   ['firefox scrollbar-color is wired', /scrollbar-color: #52525b transparent;/.test(dark)],
   ['webkit track is transparent',
     /::-webkit-scrollbar-track \{\n\s*background: transparent;/.test(dark)],
