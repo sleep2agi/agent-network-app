@@ -119,6 +119,12 @@ jobs:
           releaseBody: |-
             Signed and notarized stable update for macOS (Apple Silicon) and Windows (x64).
 
+            What's new in 0.2.71:
+            - Every message now shows its time next to the sender (sent: when it was sent; replies: when they
+              completed), and the centered time separators no longer get clipped on narrow screens.
+            - Mobile: tables with three or more columns render as one card per row (header: value), and
+              narrower tables size their columns to the bubble instead of overflowing the screen.
+
             What's new in 0.2.70:
             - macOS: the native title bar is gone. The window keeps its traffic lights in the top-left with a
               slim drag strip above the app, and detached chat and workspace windows follow the same style.
