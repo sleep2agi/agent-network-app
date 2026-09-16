@@ -1197,17 +1197,17 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
                       {sender.alias}
                     </Text>
                     <Pressable
-                      {...(desktop ? ({ dataSet: { messageKey: msgKey(item), messagePart: 'sent' }, onMouseEnter: () => setHoverKey(`${msgKey(item)}:sent`), onMouseLeave: () => setHoverKey(null) } as any) : {})}
+                      {...(desktop ? ({ dataSet: { messageKey: msgKey(item), messagePart: 'sent' }, onHoverIn: () => setHoverKey(`${msgKey(item)}:sent`), onHoverOut: () => setHoverKey(null), onMouseEnter: () => setHoverKey(`${msgKey(item)}:sent`), onMouseLeave: () => setHoverKey(null) } as any) : {})}
                       onLongPress={() => setMenuFor({ item, text: item.content ?? '', author: sender.alias })}
                       delayLongPress={300}
                       style={({ pressed }) => [styles.bubblePressable, pressed && { opacity: 0.7 }]}
                     >
-                      {desktop && hoverKey === `${msgKey(item)}:sent` && item.content ? (
-                        <Pressable accessibilityLabel="复制消息" hitSlop={6} onPress={() => void copyMessage(item.content ?? '')} style={({ pressed }) => [styles.copyHover, styles.copyHoverSent, pressed && { opacity: 0.6 }]}>
-                          <Ionicons name="copy-outline" size={14} color={colors.textMuted} />
-                        </Pressable>
-                      ) : null}
                       <View style={styles.bubble}>
+                        {desktop && hoverKey === `${msgKey(item)}:sent` && item.content ? (
+                          <Pressable accessibilityLabel="复制消息" hitSlop={6} onPress={() => void copyMessage(item.content ?? '')} style={({ pressed }) => [styles.copyHover, styles.copyHoverSent, pressed && { opacity: 0.6 }]}>
+                            <Ionicons name="copy-outline" size={14} color={colors.textMuted} />
+                          </Pressable>
+                        ) : null}
                         <MarkdownMessage>{cleanAttachmentDebugText(sentQuoted.body || (sentQuoted.quote ? '' : '—'))}</MarkdownMessage>
                         {sentAttachmentViews(item, cfg.serverUrl).map(renderAttachment)}
                       </View>
@@ -1227,17 +1227,17 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
                     <View style={styles.messageContent}>
                       <Text style={styles.messageAuthor} numberOfLines={1}>{alias}{item._proactive ? ' · 主动汇报' : ''}</Text>
                       <Pressable
-                        {...(desktop ? ({ dataSet: { messageKey: msgKey(item), messagePart: 'reply' }, onMouseEnter: () => setHoverKey(`${msgKey(item)}:reply`), onMouseLeave: () => setHoverKey(null) } as any) : {})}
+                        {...(desktop ? ({ dataSet: { messageKey: msgKey(item), messagePart: 'reply' }, onHoverIn: () => setHoverKey(`${msgKey(item)}:reply`), onHoverOut: () => setHoverKey(null), onMouseEnter: () => setHoverKey(`${msgKey(item)}:reply`), onMouseLeave: () => setHoverKey(null) } as any) : {})}
                         onLongPress={() => setMenuFor({ item, text: item.result ?? item.reply ?? '', author: alias })}
                         delayLongPress={300}
                         style={styles.replyPressable}
                       >
-                        {desktop && hoverKey === `${msgKey(item)}:reply` ? (
-                          <Pressable accessibilityLabel="复制消息" hitSlop={6} onPress={() => void copyMessage(item.result ?? item.reply ?? '')} style={({ pressed }) => [styles.copyHover, styles.copyHoverReply, pressed && { opacity: 0.6 }]}>
-                            <Ionicons name="copy-outline" size={14} color={colors.textMuted} />
-                          </Pressable>
-                        ) : null}
                         <View style={[styles.bubble, styles.replyBubble]}>
+                          {desktop && hoverKey === `${msgKey(item)}:reply` ? (
+                            <Pressable accessibilityLabel="复制消息" hitSlop={6} onPress={() => void copyMessage(item.result ?? item.reply ?? '')} style={({ pressed }) => [styles.copyHover, styles.copyHoverReply, pressed && { opacity: 0.6 }]}>
+                              <Ionicons name="copy-outline" size={14} color={colors.textMuted} />
+                            </Pressable>
+                          ) : null}
                           <MarkdownMessage>{cleanAttachmentDebugText(replyQuoted.body)}</MarkdownMessage>
                           {replyAttachmentViews(item, cfg.serverUrl).map(renderAttachment)}
                         </View>
@@ -1731,7 +1731,7 @@ const makeStyles = () =>
   },
   jumpPillText: { color: colors.accent, fontSize: 13, fontWeight: '600' },
   // 复制消息:桌面端悬停气泡时的右上角小按钮 + 底部「已复制」提示
-  replyPressable: { maxWidth: '100%' },
+  replyPressable: { maxWidth: '100%', alignSelf: 'flex-start' },
   copyHover: { position: 'absolute', top: -10, zIndex: 2, width: 24, height: 24, borderRadius: 12, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.card, borderWidth: 1, borderColor: colors.border },
   copyHoverSent: { left: -12 },
   copyHoverReply: { right: -12 },
