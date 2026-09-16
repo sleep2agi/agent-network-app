@@ -20,7 +20,7 @@ serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 uuid = { version = "1", features = ["v4"] }
 tauri = { version = "2", features = [] }
-tauri-plugin-http = "2"
+tauri-plugin-http = { version = "2", features = ["gzip"] } # 2026-09-16: hub 对 Accept-Encoding: gzip 压缩 JSON,reqwest 要开 gzip 才会请求并解压
 tauri-plugin-process = "2"
 tauri-plugin-updater = "2"
 tauri-plugin-opener = "2"
