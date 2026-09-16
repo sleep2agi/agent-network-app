@@ -1,0 +1,18 @@
+Desktop v0.2.70 release-candidate report
+
+- Base: main after app#310 (0.2.69 + macOS overlay title bar)
+- Target: desktop-v0.2.70
+- Why: Vincent 2026-09-16 「上面多余的那一行 是不是可以删了」 (screenshot of the grey macOS title bar).
+
+Changes
+- macOS overlay title bar (app#310): main window `titleBarStyle: Overlay` + `hiddenTitle`; detached chat and
+  workspace windows pass the same options; a 28 px `data-tauri-drag-region` strip is mounted above AppRoot only
+  in the Tauri shell on macOS so the traffic lights have room and the window stays draggable; capability adds
+  `core:window:allow-start-dragging`. Windows keeps its native title bar (the keys are ignored there).
+- Bump the desktop application consistently to 0.2.70 (9 pinned stamps + updater release notes).
+- Bundled local Hub pin unchanged.
+
+Verification
+- npm test: 96/96 self-executing suites pass (mac-title-strip.test.ts 10 checks, CRLF-safe after a Windows red).
+- npm run typecheck: no errors beyond the local @tauri-apps/plugin-* baseline.
+- The visual result must be confirmed on the macOS build; the drag strip cannot be exercised on DEV.
