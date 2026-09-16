@@ -1,0 +1,19 @@
+Desktop v0.2.71 release-candidate report
+
+- Base: main after app#312 + app#313 (0.2.70 + per-message time + mobile tables)
+- Target: desktop-v0.2.71
+- Why: Vincent 2026-09-16/17 (Android screenshots): 「每条消息都展示下时间吧」 and 「手机端的那个表格显示还是很有问题」.
+
+Changes
+- Per-message time (app#312): author lines read 「admin · 09:41」 / 「通信龙 · 09:43」 (sent = created_at, reply =
+  completed_at with created_at fallback); the 5-minute gap headers stay and no longer shrink (the Android
+  screenshot showed one clipped to "06:1").
+- Mobile tables (app#313): native cannot nest horizontal scrolling, so tables with ≥3 columns become one card
+  per row (header: value) and ≤2-column tables use flexible column widths; web/desktop keep the scrollable grid.
+- Bump the desktop application consistently to 0.2.71 (9 pinned stamps + updater release notes).
+- Bundled local Hub pin unchanged.
+
+Verification
+- npm test: 98/98 self-executing suites pass (message-time 7 checks, mobile-table 12 checks).
+- npm run typecheck: no errors beyond the local @tauri-apps/plugin-* baseline.
+- Android rendering to be eyeballed on the new APK; DEV has no device.
