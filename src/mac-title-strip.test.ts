@@ -21,11 +21,11 @@ ck('main window hides the native title bar (Overlay + hiddenTitle)', main.titleB
 const caps = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'src-tauri', 'capabilities', 'default.json'), 'utf8'));
 ck('capability allows start-dragging (data-tauri-drag-region needs it in Tauri 2)', caps.permissions.includes('core:window:allow-start-dragging'));
 ck('capability still covers main + chat windows', (caps.windows as string[]).includes('main') && (caps.windows as string[]).includes('chat-*'));
-const menu = fs.readFileSync(path.join(__dirname, 'desktop-chat-menu.ts'), 'utf8');
+const menu = fs.readFileSync(path.join(__dirname, 'desktop-chat-menu.ts'), 'utf8').replace(/\r\n?/g, '\n');
 ck('both detached window kinds use the overlay title bar', menu.split("titleBarStyle: 'overlay'").length === 3 && menu.split('hiddenTitle: true').length === 3);
-const app = fs.readFileSync(path.join(__dirname, '..', 'App.tsx'), 'utf8');
+const app = fs.readFileSync(path.join(__dirname, '..', 'App.tsx'), 'utf8').replace(/\r\n?/g, '\n');
 ck('App mounts the strip above AppRoot', app.includes('<MacTitleStrip />\n        <AppRoot />'));
-const strip = fs.readFileSync(path.join(__dirname, 'mac-title-strip.tsx'), 'utf8');
+const strip = fs.readFileSync(path.join(__dirname, 'mac-title-strip.tsx'), 'utf8').replace(/\r\n?/g, '\n');
 ck('strip is a drag region', strip.includes("dataSet: { tauriDragRegion: '' }"));
 
 console.log(`\n${p}/${t} passed`); process.exit(p === t ? 0 : 1);
