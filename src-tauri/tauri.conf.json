@@ -13,7 +13,9 @@
         "width": 1200,
         "height": 800,
         "minWidth": 420,
-        "minHeight": 600
+        "minHeight": 600,
+        "titleBarStyle": "Overlay",
+        "hiddenTitle": true
       }
     ],
     "security": {
@@ -23,9 +25,16 @@
   "bundle": {
     "active": true,
     "createUpdaterArtifacts": true,
-    "externalBin": ["binaries/commhub"],
-    "resources": ["binaries/commhub-manifest.json"],
-    "targets": ["app", "dmg"],
+    "externalBin": [
+      "binaries/commhub"
+    ],
+    "resources": [
+      "binaries/commhub-manifest.json"
+    ],
+    "targets": [
+      "app",
+      "dmg"
+    ],
     "macOS": {
       "signingIdentity": "-"
     },
