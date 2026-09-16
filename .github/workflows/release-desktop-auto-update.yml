@@ -119,6 +119,12 @@ jobs:
           releaseBody: |-
             Signed and notarized stable update for macOS (Apple Silicon) and Windows (x64).
 
+            What's new in 0.2.69:
+            - Faster on slow links: a sent message stays on screen the moment it is accepted instead of
+              vanishing until the next refresh; background polling no longer overlaps itself and backs off
+              when the Hub is slow to answer; the desktop now accepts gzip-compressed Hub responses
+              (needs a Hub that compresses, agent-network #1897).
+
             What's new in 0.2.68:
             - The hover copy button now sits on the bubble itself, so agent replies on the left show it too
               (it used to float past the bubble's edge). Dark theme declares its colour scheme to the
