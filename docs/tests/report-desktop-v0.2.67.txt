@@ -1,0 +1,19 @@
+Desktop v0.2.67 release-candidate report
+
+- Base: main after app#303 (0.2.66 + copy message)
+- Target: desktop-v0.2.67
+- Why: Vincent 2026-09-16 「需要支持一下复制消息的按钮」 (screenshot pointing at a proactive-report bubble).
+
+Changes
+- Copy message (app#303): 复制 is the first item of the bubble action menu (long-press / desktop right-click);
+  on desktop a small copy button appears at the bubble's outer top corner on hover (sent bubbles on the left,
+  reply bubbles on the right). Copies the visible body without the leading quote block, keeps newlines;
+  expo-clipboard with a navigator.clipboard fallback; a 1.4 s 已复制 pill confirms.
+- Bump the desktop application consistently to 0.2.67 (9 pinned stamps + updater release notes).
+- Bundled local Hub pin unchanged.
+
+Verification
+- npm test: 94/94 self-executing suites pass; copy-message.test.ts 13 checks (pure helpers + ChatScreen source
+  contracts), mutant "copy keeps the quote block" witnessed red.
+- npm run typecheck: no errors beyond the local @tauri-apps/plugin-* baseline.
+- No UI screenshot on DEV (no signed-in desktop session available); eyeball on the desktop build after release.
