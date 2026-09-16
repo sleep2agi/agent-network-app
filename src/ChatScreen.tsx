@@ -1201,7 +1201,7 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
                 <View style={[styles.messageRow, styles.sentRow]}>
                   <View style={[styles.messageContent, styles.sentContent]}>
                     <Text style={[styles.messageAuthor, styles.sentAuthor]} numberOfLines={1}>
-                      {sender.alias}
+                      {sender.alias}{item.created_at ? ` · ${formatChatHeader(item.created_at)}` : ''}
                     </Text>
                     <Pressable
                       {...(desktop ? ({ dataSet: { messageKey: msgKey(item), messagePart: 'sent' }, onHoverIn: () => setHoverKey(`${msgKey(item)}:sent`), onHoverOut: () => setHoverKey(null), onMouseEnter: () => setHoverKey(`${msgKey(item)}:sent`), onMouseLeave: () => setHoverKey(null) } as any) : {})}
@@ -1232,7 +1232,8 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
                   <View style={[styles.messageRow, styles.replyRow]}>
                     <AliasAvatar alias={alias} size={36} />
                     <View style={styles.messageContent}>
-                      <Text style={styles.messageAuthor} numberOfLines={1}>{alias}{item._proactive ? ' · 主动汇报' : ''}</Text>
+                      {/* 2026-09-16 Vincent:「每条消息都展示下时间吧」—— 回复用完成时刻,没有就用创建时刻 */}
+                      <Text style={styles.messageAuthor} numberOfLines={1}>{alias}{item._proactive ? ' · 主动汇报' : ''}{(item.completed_at ?? item.created_at) ? ` · ${formatChatHeader(item.completed_at ?? item.created_at)}` : ''}</Text>
                       <Pressable
                         {...(desktop ? ({ dataSet: { messageKey: msgKey(item), messagePart: 'reply' }, onHoverIn: () => setHoverKey(`${msgKey(item)}:reply`), onHoverOut: () => setHoverKey(null), onMouseEnter: () => setHoverKey(`${msgKey(item)}:reply`), onMouseLeave: () => setHoverKey(null) } as any) : {})}
                         onLongPress={() => setMenuFor({ item, text: item.result ?? item.reply ?? '', author: alias })}
@@ -1638,6 +1639,8 @@ const makeStyles = () =>
     color: colors.textMuted,
     fontSize: 11,
     alignSelf: 'center',
+    flexShrink: 0, // Android 截图里被裁成「06:1」:居中文本不能被行内收缩
+    textAlign: 'center',
     marginTop: spacing.md,
     marginBottom: spacing.sm,
   },
