@@ -4,6 +4,7 @@ import { openUrl } from '@tauri-apps/plugin-opener';
 import { colors, onThemeChange, spacing } from './theme';
 import { isSafeMarkdownUrl, parseMarkdownBlocks } from './markdown-model';
 import { foldCode, foldLabel } from './markdown-code-fold';
+import { stackedRows, tableLayoutFor } from './table-layout';
 
 const INLINE = /(`[^`\n]+`|\*\*[^*\n]+\*\*|__[^_\n]+__|\*[^*\n]+\*|_([^_\n]+)_|\[[^\]\n]+\]\([^\s)]+\))/g;
 
@@ -48,6 +49,42 @@ function WideBlock({ style, children }: { style: any; children: ReactNode }) {
   return NATIVE ? <View style={style}>{children}</View> : <ScrollView horizontal style={style}>{children}</ScrollView>;
 }
 
+// 表格三种布局(table-layout.ts):web 横向滚动网格;原生 ≤2 列自适应网格;原生 ≥3 列每行一张卡。
+function TableBlock({ rows }: { rows: string[][] }) {
+  const columns = rows.reduce((max, row) => Math.max(max, row.length), 0);
+  const layout = tableLayoutFor(columns, NATIVE);
+  if (layout === 'stacked') {
+    return (
+      <View style={styles.tableStack}>
+        {stackedRows(rows).map((cells, rowIndex) => (
+          <View key={rowIndex} style={styles.tableCard}>
+            {cells.map((cell, cellIndex) => (
+              <View key={cellIndex} style={styles.tableCardLine}>
+                <Text style={[styles.text, styles.tableCardLabel]} numberOfLines={2}>{cell.label}</Text>
+                <Text style={[styles.text, styles.tableCardValue]}><Inline text={cell.value} /></Text>
+              </View>
+            ))}
+          </View>
+        ))}
+      </View>
+    );
+  }
+  const cellStyle = layout === 'grid-flex' ? styles.tableCellFlex : styles.tableCell;
+  return (
+    <WideBlock style={styles.table}>
+      <View>
+        {rows.map((row, rowIndex) => (
+          <View key={rowIndex} style={[styles.tableRow, rowIndex === 0 && styles.tableHead]}>
+            {row.map((cell, cellIndex) => (
+              <Text key={cellIndex} style={[styles.text, cellStyle, rowIndex === 0 && styles.strong]}><Inline text={cell} /></Text>
+            ))}
+          </View>
+        ))}
+      </View>
+    </WideBlock>
+  );
+}
+
 function CodeBlock({ text }: { text: string }) {
   const [expanded, setExpanded] = useState(false);
   const fold = foldCode(text, expanded);
@@ -74,7 +111,7 @@ export default function MarkdownMessage({ children }: { children: string }) {
         if (block.kind === 'list') return <View key={index} style={styles.block}>{block.items.map((item, itemIndex) => <View key={itemIndex} style={styles.listRow}><Text style={styles.marker}>{block.ordered ? `${itemIndex + 1}.` : '•'}</Text><Text style={[styles.text, styles.listText]}><Inline text={item} /></Text></View>)}</View>;
         if (block.kind === 'quote') return <View key={index} style={styles.quote}><Text style={styles.text}><Inline text={block.text} /></Text></View>;
         if (block.kind === 'code') return <CodeBlock key={index} text={block.text} />;
-        if (block.kind === 'table') return <WideBlock key={index} style={styles.table}><View>{block.rows.map((row, rowIndex) => <View key={rowIndex} style={[styles.tableRow, rowIndex === 0 && styles.tableHead]}>{row.map((cell, cellIndex) => <Text key={cellIndex} style={[styles.text, styles.tableCell, rowIndex === 0 && styles.strong]}><Inline text={cell} /></Text>)}</View>)}</View></WideBlock>;
+        if (block.kind === 'table') return <TableBlock key={index} rows={block.rows} />;
         return <Text key={index} style={[styles.text, styles.block]}><Inline text={block.text} /></Text>;
       })}
     </View>
@@ -101,6 +138,14 @@ const makeStyles = () => StyleSheet.create({
   tableRow: { flexDirection: 'row' },
   tableHead: { backgroundColor: colors.inputBg },
   tableCell: { width: 150, paddingHorizontal: spacing.sm, paddingVertical: spacing.xs, borderRightWidth: 1, borderBottomWidth: 1, borderColor: colors.border },
+  // 原生 ≤2 列:列宽随气泡走,不再定宽 150 撑出屏幕
+  tableCellFlex: { flex: 1, minWidth: 0, paddingHorizontal: spacing.sm, paddingVertical: spacing.xs, borderRightWidth: 1, borderBottomWidth: 1, borderColor: colors.border },
+  // 原生 ≥3 列:每行一张卡,「表头: 值」逐行
+  tableStack: { gap: spacing.sm },
+  tableCard: { borderWidth: 1, borderColor: colors.border, borderRadius: 8, paddingHorizontal: spacing.md, paddingVertical: spacing.sm, backgroundColor: colors.inputBg + '55', gap: 2 },
+  tableCardLine: { flexDirection: 'row', gap: spacing.sm, alignItems: 'flex-start' },
+  tableCardLabel: { color: colors.textMuted, fontSize: 12, lineHeight: 20, minWidth: 64, maxWidth: '40%', flexShrink: 0 },
+  tableCardValue: { flex: 1, minWidth: 0 },
 });
 
 let styles = makeStyles();
