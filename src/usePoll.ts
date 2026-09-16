@@ -1,5 +1,6 @@
 import { useEffect } from 'react';
 import { AppState } from 'react-native';
+import { nextPollDelay } from './poll-delay';
 
 /**
  * Foreground-only polling (perf: access speed / battery / data).
@@ -15,23 +16,39 @@ import { AppState } from 'react-native';
  * `fn` may close over refs (e.g. () => load(limitRef.current)) since refs read
  * live at call time.
  */
-export function usePoll(fn: () => void, intervalMs: number, deps: React.DependencyList): void {
+export function usePoll(fn: () => void | Promise<unknown>, intervalMs: number, deps: React.DependencyList): void {
   useEffect(() => {
-    let timer: ReturnType<typeof setInterval> | null = setInterval(fn, intervalMs);
-    fn();
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    let active = true;
+    let running = false;
+    const schedule = (delay: number) => {
+      if (!active) return;
+      if (timer) clearTimeout(timer);
+      timer = setTimeout(tick, delay);
+    };
+    const tick = async () => {
+      if (!active) return;
+      if (running) { schedule(intervalMs); return; }
+      running = true;
+      const started = Date.now();
+      try { await fn(); } catch { /* the poller itself never throws; keep polling */ }
+      running = false;
+      schedule(nextPollDelay(intervalMs, Date.now() - started));
+    };
+    void tick();
     const sub = AppState.addEventListener('change', s => {
       if (s === 'active') {
-        fn();
-        if (!timer) timer = setInterval(fn, intervalMs);
-      } else if (timer) {
-        clearInterval(timer);
-        timer = null;
+        active = true;
+        void tick();
+      } else {
+        active = false;
+        if (timer) { clearTimeout(timer); timer = null; }
       }
     });
     return () => {
-      if (timer) clearInterval(timer);
+      active = false;
+      if (timer) clearTimeout(timer);
       sub.remove();
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, deps);
 }

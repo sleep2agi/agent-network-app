@@ -42,6 +42,7 @@ import {
 import { appendAttachmentQueue, attachmentFromClipboard, isTauriDesktop, releaseClipboardAttachment } from './clipboard-attachment';
 import { colors, onThemeChange, spacing } from './theme';
 import { formatChatHeader, shouldShowTimeHeader } from './time';
+import { echoSupersededByFetched } from './chat-echo';
 import { agentStatusLabel, buildQuote, compactQuoteText, confirmedOutboxIds, copyTextOf, copiedToastVisible, COPIED_TOAST_MS, parseQuoted, quoteLabel, type QuoteRef, mergeMessagesNewestFirst, msgKey, removeMessage, shouldShowJumpPill, nextUnread, jumpPillLabel, canSend, shouldSendOnEnter } from './chat-actions';
 import type { NativeSyntheticEvent, NativeScrollEvent } from 'react-native';
 import { usePoll } from './usePoll';
@@ -83,6 +84,9 @@ type ChatItem = HubTask & {
   /** app#160:Agent 主动发给用户的消息(user_inbox),只有回复气泡、没有发送气泡。 */
   _proactive?: boolean;
   _severity?: string;
+  /** 2026-09-16:发送成功后本地回显不再立刻撤掉(慢链路上会「吞」几秒),而是记下 hub 返回的
+   *  task_id,等轮询把同 id 的服务器行拉回来再让位;没拿到 id 时按内容+时间对账(confirmedOutboxIds)。 */
+  _confirmedTaskId?: string;
 };
 
 type MessageSelection = { item: ChatItem; text: string; author?: string };
@@ -288,7 +292,7 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
         confirmed.forEach(outboxRemove);
         setMessages(prev => {
           const merged = mergeMessagesNewestFirst(
-            prev.filter(t => t._localId && !confirmed.has(t._localId)),
+            prev.filter(t => t._localId && !confirmed.has(t._localId) && !echoSupersededByFetched(t, fetched)),
             [...fetched, ...proactive],
           );
           conversations.put(token.key, merged);
@@ -763,7 +767,10 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
         return;
       }
       setSendConfirmation(sendConfirmationFromResponse(response));
-      setMessages(prev => prev.filter(t => t._localId !== localId));
+      // Keep the echo on screen, marked delivered, until the server row arrives; the merge in
+      // load() drops it once a fetched row carries the same task_id (or matches by content/time).
+      const confirmedTaskId = typeof (response as any)?.task_id === 'string' ? (response as any).task_id : undefined;
+      setMessages(prev => prev.map(t => (t._localId === localId ? { ...t, _pending: false, _confirmedTaskId: confirmedTaskId } : t)));
       await load(limitRef.current);
     } catch {
       // Timeout is not proof that the write failed. The Hub may have committed
