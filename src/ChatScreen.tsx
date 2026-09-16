@@ -18,6 +18,7 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+import * as Clipboard from 'expo-clipboard';
 import AliasAvatar from './AliasAvatar';
 import AttachmentFileDesktop from './AttachmentFileDesktop';
 import AuthedThumb, { AttachmentFile, AuthedVideo, mimeFromName } from './AuthedThumb';
@@ -41,7 +42,7 @@ import {
 import { appendAttachmentQueue, attachmentFromClipboard, isTauriDesktop, releaseClipboardAttachment } from './clipboard-attachment';
 import { colors, onThemeChange, spacing } from './theme';
 import { formatChatHeader, shouldShowTimeHeader } from './time';
-import { agentStatusLabel, buildQuote, compactQuoteText, confirmedOutboxIds, parseQuoted, quoteLabel, type QuoteRef, mergeMessagesNewestFirst, msgKey, removeMessage, shouldShowJumpPill, nextUnread, jumpPillLabel, canSend, shouldSendOnEnter } from './chat-actions';
+import { agentStatusLabel, buildQuote, compactQuoteText, confirmedOutboxIds, copyTextOf, copiedToastVisible, COPIED_TOAST_MS, parseQuoted, quoteLabel, type QuoteRef, mergeMessagesNewestFirst, msgKey, removeMessage, shouldShowJumpPill, nextUnread, jumpPillLabel, canSend, shouldSendOnEnter } from './chat-actions';
 import type { NativeSyntheticEvent, NativeScrollEvent } from 'react-native';
 import { usePoll } from './usePoll';
 import { chatSearchState, isHighlighted, isStaleSearch, matchCountLabel, searchItems, shouldLoadOlderForSearch, stepHit, type SearchHit } from './chat-search';
@@ -415,6 +416,26 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
   // 微信式引用:选中「引用」后不往输入框塞文字,而是在输入框上方挂一条引用条(可 ×),发送时拼成
   // 「@作者: 文本」前缀;对方气泡下方渲染成灰色引用条。null = 没在引用。
   const [quote, setQuote] = useState<QuoteRef | null>(null);
+  // 复制消息(Vincent 2026-09-16):动作菜单里的「复制」+ 桌面端悬停气泡时右上角的复制按钮。
+  // 复制成功后底部居中出一个「已复制」小 pill,1.4s 自动消失。
+  const [copiedAt, setCopiedAt] = useState<number | null>(null);
+  const [hoverKey, setHoverKey] = useState<string | null>(null);
+  const copyMessage = async (text: string) => {
+    const value = copyTextOf(text);
+    if (!value) return;
+    try {
+      await Clipboard.setStringAsync(value);
+    } catch {
+      // RN Web / 旧 WebView 没有原生剪贴板时退回浏览器 API
+      try { await (globalThis as any).navigator?.clipboard?.writeText?.(value); } catch { return; }
+    }
+    setCopiedAt(Date.now());
+  };
+  useEffect(() => {
+    if (copiedAt === null) return;
+    const timer = setTimeout(() => setCopiedAt(null), COPIED_TOAST_MS);
+    return () => clearTimeout(timer);
+  }, [copiedAt]);
   const [forwardFor, setForwardFor] = useState<MessageSelection | null>(null);
   const [forwardUiOwner, setForwardUiOwner] = useState<string | null>(null);
   const [forwardTargets, setForwardTargets] = useState<Session[]>([]);
@@ -1176,11 +1197,16 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
                       {sender.alias}
                     </Text>
                     <Pressable
-                      {...(desktop ? ({ dataSet: { messageKey: msgKey(item), messagePart: 'sent' } } as any) : {})}
+                      {...(desktop ? ({ dataSet: { messageKey: msgKey(item), messagePart: 'sent' }, onMouseEnter: () => setHoverKey(`${msgKey(item)}:sent`), onMouseLeave: () => setHoverKey(null) } as any) : {})}
                       onLongPress={() => setMenuFor({ item, text: item.content ?? '', author: sender.alias })}
                       delayLongPress={300}
                       style={({ pressed }) => [styles.bubblePressable, pressed && { opacity: 0.7 }]}
                     >
+                      {desktop && hoverKey === `${msgKey(item)}:sent` && item.content ? (
+                        <Pressable accessibilityLabel="复制消息" hitSlop={6} onPress={() => void copyMessage(item.content ?? '')} style={({ pressed }) => [styles.copyHover, styles.copyHoverSent, pressed && { opacity: 0.6 }]}>
+                          <Ionicons name="copy-outline" size={14} color={colors.textMuted} />
+                        </Pressable>
+                      ) : null}
                       <View style={styles.bubble}>
                         <MarkdownMessage>{cleanAttachmentDebugText(sentQuoted.body || (sentQuoted.quote ? '' : '—'))}</MarkdownMessage>
                         {sentAttachmentViews(item, cfg.serverUrl).map(renderAttachment)}
@@ -1201,10 +1227,16 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
                     <View style={styles.messageContent}>
                       <Text style={styles.messageAuthor} numberOfLines={1}>{alias}{item._proactive ? ' · 主动汇报' : ''}</Text>
                       <Pressable
-                        {...(desktop ? ({ dataSet: { messageKey: msgKey(item), messagePart: 'reply' } } as any) : {})}
+                        {...(desktop ? ({ dataSet: { messageKey: msgKey(item), messagePart: 'reply' }, onMouseEnter: () => setHoverKey(`${msgKey(item)}:reply`), onMouseLeave: () => setHoverKey(null) } as any) : {})}
                         onLongPress={() => setMenuFor({ item, text: item.result ?? item.reply ?? '', author: alias })}
                         delayLongPress={300}
+                        style={styles.replyPressable}
                       >
+                        {desktop && hoverKey === `${msgKey(item)}:reply` ? (
+                          <Pressable accessibilityLabel="复制消息" hitSlop={6} onPress={() => void copyMessage(item.result ?? item.reply ?? '')} style={({ pressed }) => [styles.copyHover, styles.copyHoverReply, pressed && { opacity: 0.6 }]}>
+                            <Ionicons name="copy-outline" size={14} color={colors.textMuted} />
+                          </Pressable>
+                        ) : null}
                         <View style={[styles.bubble, styles.replyBubble]}>
                           <MarkdownMessage>{cleanAttachmentDebugText(replyQuoted.body)}</MarkdownMessage>
                           {replyAttachmentViews(item, cfg.serverUrl).map(renderAttachment)}
@@ -1239,6 +1271,12 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
         />
       )}
 
+      {copiedToastVisible(copiedAt, Date.now()) ? (
+        <View style={styles.copiedToast} pointerEvents="none" accessibilityLiveRegion="polite">
+          <Ionicons name="checkmark-circle" size={14} color={colors.accent} />
+          <Text style={styles.copiedToastText}>已复制</Text>
+        </View>
+      ) : null}
       {/* 更像微信·round-3: 滚离底部时的「回到最新 / N 条新消息」pill */}
       {showJump ? (
         <Pressable style={styles.jumpPill} onPress={jumpToLatest} hitSlop={8}>
@@ -1274,6 +1312,18 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
       <Modal visible={!!menuFor} transparent animationType="fade" onRequestClose={() => setMenuFor(null)}>
         <Pressable style={styles.menuBackdrop} onPress={() => setMenuFor(null)}>
           <View style={styles.actionSheet}>
+            <Pressable
+              accessibilityLabel="复制消息"
+              style={({ pressed }) => [styles.actionItem, pressed && styles.actionItemPressed]}
+              onPress={() => {
+                const text = menuFor?.text ?? '';
+                setMenuFor(null);
+                void copyMessage(text);
+              }}
+            >
+              <Text style={styles.actionText}>复制</Text>
+            </Pressable>
+            <View style={styles.actionSep} />
             <Pressable
               style={({ pressed }) => [styles.actionItem, pressed && styles.actionItemPressed]}
               onPress={() => {
@@ -1680,6 +1730,13 @@ const makeStyles = () =>
     paddingHorizontal: spacing.md,
   },
   jumpPillText: { color: colors.accent, fontSize: 13, fontWeight: '600' },
+  // 复制消息:桌面端悬停气泡时的右上角小按钮 + 底部「已复制」提示
+  replyPressable: { maxWidth: '100%' },
+  copyHover: { position: 'absolute', top: -10, zIndex: 2, width: 24, height: 24, borderRadius: 12, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.card, borderWidth: 1, borderColor: colors.border },
+  copyHoverSent: { left: -12 },
+  copyHoverReply: { right: -12 },
+  copiedToast: { position: 'absolute', alignSelf: 'center', bottom: 96, flexDirection: 'row', alignItems: 'center', gap: 6, paddingVertical: 6, paddingHorizontal: 12, borderRadius: 14, backgroundColor: colors.card, borderWidth: 1, borderColor: colors.border },
+  copiedToastText: { color: colors.text, fontSize: 12 },
   attachPreviewList: { maxHeight: 112, paddingVertical: spacing.xs },
   attachPreview: {
     flexDirection: 'row',
