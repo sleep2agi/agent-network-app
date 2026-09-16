@@ -1,0 +1,23 @@
+Desktop v0.2.69 release-candidate report
+
+- Base: main after app#307 (0.2.68 + slow-link fixes)
+- Target: desktop-v0.2.69
+- Why: Vincent 2026-09-16 「我现在发一个消息都要被吞一段时间，才会显示」 and 「现在打开一个窗口 历史记录很久才出来」.
+  Measured cause: his desktop reaches the Hub through the RELAY (y.vansin.top:9300); that path moves ~13 KB/s
+  (20-task page 41 KB → 5.6 s, ?light=1 status 128 KB → 17 s, polled every 10 s), while the same calls take
+  0.1 s on the Hub host.
+
+Changes
+- Sent echo stays (app#307): after the Hub accepts a send, the local bubble is marked delivered and keeps the
+  returned task_id; it yields only when a fetched row carries that id (or matches by content within 6 min).
+- usePoll (app#307): schedules the next tick after the previous finishes; delay = max(interval, 2× last
+  duration), capped at 6× interval. Fast links unchanged.
+- tauri-plugin-http gains the `gzip` feature so the desktop advertises and decodes gzip; the Hub side
+  compression ships in agent-network #1897 (commhub-server next preview).
+- Bump the desktop application consistently to 0.2.69 (9 pinned stamps + updater release notes).
+- Bundled local Hub pin unchanged.
+
+Verification
+- npm test: 95/95 self-executing suites pass; slow-link.test.ts 14 checks.
+- npm run typecheck: no errors beyond the local @tauri-apps/plugin-* baseline.
+- Desktop Cargo change is compiled only by the release workflow (macOS/Windows runners); watch the build.
