@@ -2,6 +2,7 @@ import { useCallback, useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { fetchStatus, type HubConfig } from './api';
+import { railBadgeText } from './rail-nav';
 import { colors, onThemeChange, spacing } from './theme';
 import { usePoll } from './usePoll';
 
@@ -61,9 +62,13 @@ export default function ServerSidebar({ cfg, active, onSelect }: {
             onPress={() => onSelect(item.key)}
             style={({ pressed }) => [styles.item, active === item.key && styles.itemActive, pressed && { opacity: 0.65 }]}
           >
-            <Ionicons name={item.icon} size={18} color={active === item.key ? colors.accent : colors.textSecondary} />
+            <View style={styles.itemIcon}>
+              <Ionicons name={item.icon} size={18} color={active === item.key ? colors.accent : colors.textSecondary} />
+              {item.key === 'nodes' && railBadgeText(online) ? (
+                <View style={styles.badge}><Text style={styles.badgeText}>{railBadgeText(online)}</Text></View>
+              ) : null}
+            </View>
             <Text style={[styles.itemText, active === item.key && styles.itemTextActive]}>{item.label}</Text>
-            {item.key === 'nodes' && online !== null ? <Text style={styles.badge}>{online}</Text> : null}
           </Pressable>
         ))}
       </View>
@@ -91,10 +96,13 @@ const makeStyles = () =>
   sectionLabel: { color: colors.textMuted, fontSize: 11, paddingHorizontal: spacing.lg, paddingTop: spacing.lg, paddingBottom: spacing.sm },
   items: { paddingHorizontal: spacing.sm, gap: 3 },
   item: { height: 42, borderRadius: 8, paddingHorizontal: spacing.md, flexDirection: 'row', alignItems: 'center', gap: spacing.md },
-  itemActive: { backgroundColor: colors.card },
+  itemActive: { backgroundColor: colors.railActiveBg },
+  itemIcon: { width: 24, height: 24, alignItems: 'center', justifyContent: 'center' },
   itemText: { color: colors.textSecondary, fontSize: 13, fontWeight: '500' },
   itemTextActive: { color: colors.text, fontWeight: '600' },
-  badge: { marginLeft: 'auto', color: colors.textMuted, fontSize: 11 },
+  // 角标:图标右上角的小圆标(与桌面 rail 同款),不再是行尾灰字。
+  badge: { position: 'absolute', top: -6, right: -8, minWidth: 16, height: 16, borderRadius: 8, paddingHorizontal: 4, backgroundColor: colors.accent, alignItems: 'center', justifyContent: 'center' },
+  badgeText: { color: colors.onAccent, fontSize: 9, fontWeight: '700', lineHeight: 12 },
   footer: { marginTop: 'auto', borderTopWidth: 1, borderTopColor: colors.border, padding: spacing.lg },
   footerLabel: { color: colors.textMuted, fontSize: 10 },
   footerValue: { color: colors.textSecondary, fontSize: 12, marginTop: 3 },
