@@ -3,6 +3,7 @@
 // CORS and the hub sets no CORS headers, so requests go through Rust.
 const SESSION_SERVICE: &str = "top.vansin.agentnetwork.desktop";
 const SESSION_ACCOUNT: &str = "active-hub-session";
+mod tray;
 mod local_credentials;
 mod local_daemon;
 mod local_hub;
@@ -882,6 +883,14 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_process::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
+        .plugin(tauri_plugin_notification::init())
+        .setup(|app| {
+            // 0.2.76 系统栏常驻项;失败只记日志,不能拖垮主窗口
+            if let Err(error) = tray::init(app.handle()) {
+                eprintln!("[tray] init failed: {error}");
+            }
+            Ok(())
+        })
         .invoke_handler(tauri::generate_handler![
             save_desktop_profile,
             list_desktop_profiles,
@@ -907,6 +916,7 @@ pub fn run() {
             local_daemon_scan,
             local_daemon_install,
             save_download,
+            tray::tray_update,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

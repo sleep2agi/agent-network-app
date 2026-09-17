@@ -17,6 +17,11 @@
     "opener:default",
     "opener:allow-reveal-item-in-dir",
     "dialog:allow-save",
+    "notification:default",
+    "core:window:allow-set-focus",
+    "core:window:allow-show",
+    "core:window:allow-unminimize",
+    "core:window:allow-is-focused",
     {
       "identifier": "opener:allow-open-url",
       "allow": [
