@@ -15,6 +15,12 @@ const DARK = {
   failed: '#ef4444',
   blocked: '#f59e0b',
   rest: '#71717a',
+  // 桌面左侧导航栏(rail):比会话列表再深一档;激活态用弱化的 accent 底色。
+  railBg: '#09090b',
+  railHover: '#18181b',
+  railActiveBg: '#0e2f35',
+  railTooltipBg: '#27272a',
+  railTooltipText: '#f4f4f5',
 };
 
 // 白色主题 (Vincent tg 811/812) — same restraint on white surfaces;
@@ -34,6 +40,11 @@ const LIGHT: typeof DARK = {
   failed: '#dc2626',
   blocked: '#d97706',
   rest: '#71717a',
+  railBg: '#eaeef2',
+  railHover: '#dfe5eb',
+  railActiveBg: '#d6eef1',
+  railTooltipBg: '#20242a',
+  railTooltipText: '#f4f4f5',
 };
 
 export type ThemeMode = 'dark' | 'light';

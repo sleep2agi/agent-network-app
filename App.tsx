@@ -48,6 +48,7 @@ import MacTitleStrip from './src/mac-title-strip';
 import DesktopWindowPin from './src/DesktopWindowPin';
 import { styles } from './src/app-styles';
 import { APP_VERSION } from './src/version';
+import { railBadgeText, railIconFor, railSurface, railTooltipVisible } from './src/rail-nav';
 import DesktopUpdatePrompt from './src/DesktopUpdatePrompt';
 import DesktopMessageListener from './src/DesktopMessageListener';
 import { loadPinnedChats, requestedChatAlias, requestedChatProfileId, requestedWorkspaceProfileId, savePinnedChats } from './src/desktop-chat-menu';
@@ -654,6 +655,8 @@ function DesktopWorkspace({ cfg, screen, setScreen, onLogout, onLocalDataDeleted
   // switch. Build desktop styles on that mount instead of freezing the dark
   // palette once at module import time.
   const desktopStyles = useMemo(makeDesktopStyles, []);
+  // 导航栏悬停提示(微信/飞书式):只记当前悬停的 tab key,提示条挂在按钮右侧。
+  const [railHover, setRailHover] = useState<string | null>(null);
   const [pinnedAliases, setPinnedAliases] = useState(() => loadPinnedChats(cfg.profileId));
   useEffect(() => setPinnedAliases(loadPinnedChats(cfg.profileId)), [cfg.profileId]);
   const togglePin = (alias: string) => setPinnedAliases(current => {
@@ -695,7 +698,7 @@ function DesktopWorkspace({ cfg, screen, setScreen, onLogout, onLocalDataDeleted
 
   return (
     <View style={desktopStyles.shell}>
-      <View style={desktopStyles.rail}>
+      <View style={desktopStyles.rail} testID="desktop-rail">
         <View style={desktopStyles.railBrand}>
           {themeMode() === 'light' ? (
             <Image
@@ -709,22 +712,26 @@ function DesktopWorkspace({ cfg, screen, setScreen, onLogout, onLocalDataDeleted
         </View>
         <View style={desktopStyles.railTabs}>
           {DESKTOP_MAIN_TABS.map(tab => (
-            <Pressable key={tab.key} accessibilityLabel={tab.label} onPress={() => setScreen({ name: tab.key } as Screen)} style={[desktopStyles.railButton, active === tab.key && desktopStyles.railButtonActive]}>
-              <Ionicons name={active === tab.key ? tab.iconActive : tab.icon} size={22} color={active === tab.key ? colors.accent : colors.textSecondary} />
-            </Pressable>
+            <RailButton
+              key={tab.key}
+              tab={tab}
+              active={active === tab.key}
+              hovered={railHover === tab.key}
+              onHover={setRailHover}
+              onPress={() => setScreen({ name: tab.key } as Screen)}
+              styles={desktopStyles}
+            />
           ))}
         </View>
-        <Pressable
-          accessibilityLabel={DESKTOP_SETTINGS_TAB.label}
+        <RailButton
+          tab={DESKTOP_SETTINGS_TAB}
+          active={active === DESKTOP_SETTINGS_TAB.key}
+          hovered={railHover === DESKTOP_SETTINGS_TAB.key}
+          onHover={setRailHover}
           onPress={() => setScreen({ name: DESKTOP_SETTINGS_TAB.key })}
-          style={[desktopStyles.railButton, desktopStyles.railSettings, active === DESKTOP_SETTINGS_TAB.key && desktopStyles.railButtonActive]}
-        >
-          <Ionicons
-            name={active === DESKTOP_SETTINGS_TAB.key ? DESKTOP_SETTINGS_TAB.iconActive : DESKTOP_SETTINGS_TAB.icon}
-            size={22}
-            color={active === DESKTOP_SETTINGS_TAB.key ? colors.accent : colors.textSecondary}
-          />
-        </Pressable>
+          styles={desktopStyles}
+          extraStyle={desktopStyles.railSettings}
+        />
         <Text style={desktopStyles.railVersion}>v{APP_VERSION}</Text>
       </View>
       <View style={desktopStyles.conversations}>
@@ -744,6 +751,47 @@ function DesktopWorkspace({ cfg, screen, setScreen, onLogout, onLocalDataDeleted
   );
 }
 
+// 桌面左侧导航栏按钮:40×40 命中区、激活=淡 accent 底 + accent 图标、悬停/聚焦=浅底、
+// 悬停时右侧弹出文字提示(触屏没有悬停,不显示)。角标是图标右上角的小圆标,不是行内文字。
+function RailButton({ tab, active, hovered, onHover, onPress, styles, extraStyle, badge }: {
+  tab: { key: string; label: string; icon: string; iconActive: string };
+  active: boolean;
+  hovered: boolean;
+  onHover: (key: string | null) => void;
+  onPress: () => void;
+  styles: ReturnType<typeof makeDesktopStyles>;
+  extraStyle?: object;
+  badge?: number | null;
+}) {
+  const badgeText = railBadgeText(badge);
+  return (
+    <View style={[styles.railSlot, extraStyle]}>
+      <Pressable
+        accessibilityLabel={tab.label}
+        accessibilityRole="tab"
+        accessibilityState={{ selected: active }}
+        onPress={onPress}
+        onHoverIn={() => onHover(tab.key)}
+        onHoverOut={() => onHover(null)}
+        style={state => {
+          const surface = railSurface({ active, hovered: (state as { hovered?: boolean }).hovered, focused: (state as { focused?: boolean }).focused, pressed: state.pressed });
+          return [styles.railButton, surface === 'active' && styles.railButtonActive, surface === 'hover' && styles.railButtonHover];
+        }}
+      >
+        <Ionicons name={railIconFor(tab, active ? tab.key : '') as keyof typeof Ionicons.glyphMap} size={22} color={active ? colors.accent : colors.textSecondary} />
+        {badgeText ? (
+          <View style={styles.railBadge}><Text style={styles.railBadgeText}>{badgeText}</Text></View>
+        ) : null}
+      </Pressable>
+      {railTooltipVisible(hovered ? tab.key : null, tab.key, true) ? (
+        <View style={styles.railTooltip} pointerEvents="none">
+          <Text style={styles.railTooltipText} numberOfLines={1}>{tab.label}</Text>
+        </View>
+      ) : null}
+    </View>
+  );
+}
+
 function serverSectionForScreen(screen: Screen): ServerSection {
   if (screen.name === 'serverNodes' || screen.name === 'serverNodeDetail') return 'nodes';
   if (screen.name === 'picker' || screen.name === 'wizard') return 'create';
@@ -753,25 +801,23 @@ function serverSectionForScreen(screen: Screen): ServerSection {
 
 const makeDesktopStyles = () => StyleSheet.create({
   shell: { flex: 1, flexDirection: 'row', backgroundColor: colors.bg },
-  rail: { width: 58, backgroundColor: themeMode() === 'light' ? '#f0f1f3' : colors.inputBg, borderRightWidth: 1, borderRightColor: colors.border, alignItems: 'center', paddingVertical: 12 },
-  railBrand: {
-    width: 38,
-    height: 38,
-    borderRadius: 11,
-    overflow: 'hidden',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: themeMode() === 'light' ? '#e5f5f6' : 'transparent',
-    borderWidth: themeMode() === 'light' ? 1 : 0,
-    borderColor: themeMode() === 'light' ? '#c8e7e9' : 'transparent',
-  },
-  railBrandImage: { width: 38, height: 38 },
-  railBrandImageLight: { width: 30, height: 30, borderRadius: 8 },
-  railTabs: { flex: 1, paddingTop: 20, gap: 6 },
-  railButton: { width: 38, height: 38, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
-  railButtonActive: { backgroundColor: themeMode() === 'light' ? '#dde2e7' : colors.card },
-  railSettings: { marginBottom: 10 },
-  railVersion: { color: colors.textMuted, fontSize: 9 },
+  // 微信/飞书式 rail:64 宽、比列表深一档的底、右侧发丝线;按钮 40×40 等距 12;
+  // 激活 = 10 圆角淡 accent 底;悬停/聚焦 = 浅底;提示条挂在右侧。
+  rail: { width: 64, backgroundColor: colors.railBg, borderRightWidth: StyleSheet.hairlineWidth, borderRightColor: colors.border, alignItems: 'center', paddingTop: 14, paddingBottom: 10 },
+  railBrand: { width: 36, height: 36, borderRadius: 10, overflow: 'hidden', alignItems: 'center', justifyContent: 'center' },
+  railBrandImage: { width: 36, height: 36 },
+  railBrandImageLight: { width: 36, height: 36, borderRadius: 10 },
+  railTabs: { flex: 1, paddingTop: 18, gap: 12, alignItems: 'center' },
+  railSlot: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
+  railButton: { width: 40, height: 40, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
+  railButtonActive: { backgroundColor: colors.railActiveBg },
+  railButtonHover: { backgroundColor: colors.railHover },
+  railBadge: { position: 'absolute', top: 3, right: 3, minWidth: 16, height: 16, borderRadius: 8, paddingHorizontal: 4, backgroundColor: colors.failed, alignItems: 'center', justifyContent: 'center' },
+  railBadgeText: { color: '#fff', fontSize: 9, fontWeight: '700', lineHeight: 12 },
+  railTooltip: { position: 'absolute', left: 48, top: 8, paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6, backgroundColor: colors.railTooltipBg, zIndex: 20 },
+  railTooltipText: { color: colors.railTooltipText, fontSize: 12, fontWeight: '500' },
+  railSettings: { marginBottom: 0 },
+  railVersion: { color: colors.textMuted, fontSize: 10, marginTop: 8, textAlign: 'center' },
   conversations: { width: 310, borderRightWidth: 1, borderRightColor: colors.border, backgroundColor: themeMode() === 'light' ? '#fafafb' : colors.bg },
   content: { flex: 1, minWidth: 0, backgroundColor: themeMode() === 'light' ? '#f2f4f7' : colors.bg },
   empty: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: spacing.sm },
