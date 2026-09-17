@@ -34,6 +34,7 @@ pub fn item_label(item: &TrayItem) -> String {
 }
 
 /// 标题/工具提示文本。0 未读时 macOS 标题留空(只剩图标),tooltip 仍写应用名。
+#[cfg_attr(not(target_os = "macos"), allow(dead_code))] // 只有 macOS 托盘有 title
 pub fn title_for(total: u32) -> String {
     if total == 0 { String::new() } else { total.to_string() }
 }

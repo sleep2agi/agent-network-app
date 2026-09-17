@@ -80,6 +80,7 @@ const app = norm('../App.tsx'), settings = norm('SettingsScreen.tsx'), notifier 
 ck('App:只有主窗口接托盘,点菜单打开会话', app.includes('const trayWindow = tauriDesktop && !initialChat && !initialWorkspaceProfile;') && app.includes("bindDesktopTray(alias => setScreen({ name: 'chat', alias }))"));
 ck('App:通知组件只在主窗口挂', app.includes('{trayWindow ? <DesktopNotifier /> : null}'));
 ck('通知组件订阅 unread-store,合并后一轮只响一次', notifier.includes('subscribeUnread(onSnapshot)') && notifier.includes('if (ring) playChime();'));
+ck('通知组件等 user_inbox 拉到后才登记首份快照(登录不弹历史)', notifier.includes('if (!seen.current.seeded && !snap.serverBody) return;'));
 ck('托盘数用列表同一函数算', tray.includes('unreadCountForAgentRow(snap.serverBody, snap.ledger, alias, reply)') && tray.includes("invoke('tray_update'"));
 ck('设置页有「消息提示音」和「免打扰时段」', settings.includes('<Text style={styles.rowLabel}>消息提示音</Text>') && settings.includes('<Text style={styles.rowLabel}>免打扰时段</Text>'));
 const rust = norm('../src-tauri/src/tray.rs'), lib = norm('../src-tauri/src/lib.rs'), cargo = norm('../src-tauri/Cargo.toml'), cap = norm('../src-tauri/capabilities/default.json');

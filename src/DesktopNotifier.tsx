@@ -52,6 +52,9 @@ export default function DesktopNotifier() {
   useEffect(() => {
     const onSnapshot = () => {
       const snap = getUnreadSnapshot();
+      // 登录后第一份快照可能还没拉到 user_inbox(serverBody 为空)——那时登记会把随后到达的
+      // 历史行当成「新消息」弹一屏;等 serverBody 有了再登记首份。
+      if (!seen.current.seeded && !snap.serverBody) return;
       const body = snap.serverBody as { messages?: any[] } | null;
       const incoming = [
         ...fromUserMessages(Array.isArray(body?.messages) ? body!.messages : []),
