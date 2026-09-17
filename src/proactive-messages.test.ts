@@ -1,5 +1,5 @@
 import { readFileSync } from 'node:fs';
-import { proactiveBody, proactiveItemsForAgent } from './proactive-messages';
+import { proactiveBody, proactiveInReplyTo, proactiveItemsForAgent } from './proactive-messages';
 
 let passed = 0, total = 0;
 const check = (name: string, ok: boolean) => { total++; if (ok) { passed++; console.log('✅', name); } else { console.error('❌', name); } };
@@ -28,5 +28,11 @@ const render = chat.slice(chat.indexOf('renderItem={({ item, index }) => {'));
 // 0.2.72:请求气泡按发送方分两支(自己→右侧,别的节点→左侧),主动项仍两支都不画
 check('渲染:主动项不画发送气泡', /\{!item\._proactive \? sender\.isCurrentUser \? \(/.test(render));
 check('渲染:主动项回复气泡带「主动汇报」标', render.includes('主动汇报'));
+// ---- 2026-09-17 回复引用条:主动消息带上它回的是哪条任务 ----
+check('in_reply_to 行字段优先', proactiveInReplyTo({ in_reply_to: ' t-1 ', meta_json: '{"in_reply_to":"t-9"}' }) === 't-1');
+check('in_reply_to 退回 meta_json', proactiveInReplyTo({ in_reply_to: null, meta_json: '{"in_reply_to":"t-9"}' }) === 't-9');
+check('meta_json 坏 JSON → null', proactiveInReplyTo({ meta_json: '{oops' }) === null && proactiveInReplyTo({ meta_json: null }) === null);
+check('映射后的主动条目带 in_reply_to', proactiveItemsForAgent([{ message_id: 'dm_q', from_session: 'demo', content: '修好了', created_at: '2026-09-17 00:00:00', meta_json: '{"in_reply_to":"t-1"}' }] as any, 'demo', 'tester')[0]?.in_reply_to === 't-1');
+
 console.log(`proactive messages: ${passed}/${total} checks passed`);
 if (passed !== total) process.exit(1);

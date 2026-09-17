@@ -11,9 +11,23 @@ export interface ProactiveMessageRow extends HubUserMessage {
   severity?: string;
   created_at?: string;
   meta_json?: string | null;
+  in_reply_to?: string | null;
 }
 
-export type ProactiveChatItem = HubTask & { _proactive: true; _severity?: string };
+export type ProactiveChatItem = HubTask & { _proactive: true; _severity?: string; in_reply_to?: string | null };
+
+/** 主动消息若是对某条任务的回应:行上的 in_reply_to 优先,否则看 meta_json.in_reply_to。 */
+export function proactiveInReplyTo(row: Pick<ProactiveMessageRow, 'in_reply_to' | 'meta_json'>): string | null {
+  if (typeof row.in_reply_to === 'string' && row.in_reply_to.trim()) return row.in_reply_to.trim();
+  if (typeof row.meta_json !== 'string' || !row.meta_json) return null;
+  try {
+    const meta = JSON.parse(row.meta_json);
+    const id = meta && typeof meta === 'object' ? (meta as { in_reply_to?: unknown }).in_reply_to : null;
+    return typeof id === 'string' && id.trim() ? id.trim() : null;
+  } catch {
+    return null;
+  }
+}
 
 /** 标题 + 正文合成回复气泡的 Markdown;只有其一时原样。 */
 export function proactiveBody(row: Pick<ProactiveMessageRow, 'title' | 'content'>): string {
@@ -40,6 +54,7 @@ export function proactiveItemsForAgent(rows: readonly ProactiveMessageRow[] | un
       created_at: row.created_at,
       _proactive: true,
       _severity: row.severity,
+      in_reply_to: proactiveInReplyTo(row),
     });
   }
   return out;
