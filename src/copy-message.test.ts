@@ -16,7 +16,8 @@ const src = fs.readFileSync(path.join(__dirname, 'ChatScreen.tsx'), 'utf8');
 ck('动作菜单第一项是「复制」', src.indexOf('<Text style={styles.actionText}>复制</Text>') > 0 && src.indexOf('<Text style={styles.actionText}>复制</Text>') < src.indexOf('<Text style={styles.actionText}>引用</Text>'));
 ck('复制走 expo-clipboard,失败退回 navigator.clipboard', src.includes("import * as Clipboard from 'expo-clipboard';") && src.includes('await Clipboard.setStringAsync(value);') && src.includes('navigator?.clipboard?.writeText?.(value)'));
 ck('复制的是 copyTextOf(去引用块)', src.includes('const value = copyTextOf(text);'));
-ck('桌面端两种气泡悬停都有复制按钮', src.split('accessibilityLabel="复制消息"').length === 4 && src.includes('hoverKey === `${msgKey(item)}:sent`') && src.includes('hoverKey === `${msgKey(item)}:reply`'));
+// 0.2.72:第三种气泡(别的节点派来的任务,收到侧)也带复制按钮 → 3 处
+ck('桌面端三种气泡悬停都有复制按钮', src.split('accessibilityLabel="复制消息"').length === 5 && src.includes('hoverKey === `${msgKey(item)}:sent`') && src.includes('hoverKey === `${msgKey(item)}:reply`'));
 ck('悬停按钮只在桌面端', src.includes('desktop && hoverKey ==='));
 ck('「已复制」提示到点自动清', src.includes('setTimeout(() => setCopiedAt(null), COPIED_TOAST_MS)') && src.includes('copiedToastVisible(copiedAt, Date.now())'));
 

@@ -119,6 +119,14 @@ jobs:
           releaseBody: |-
             Signed and notarized stable update for macOS (Apple Silicon) and Windows (x64).
 
+            What's new in 0.2.72:
+            - Chat: a task another node dispatched to the agent you are viewing now shows on the left with that
+              node's name and avatar (「sender → agent」) instead of being credited to you. Previously, if the
+              identity lookup failed once (typical over a slow relay link), every request bubble was labelled
+              as yours for the rest of the session.
+            - The identity lookup now retries (2s, 4s, 8s, then every 30s) instead of giving up after one failed
+              request.
+
             What's new in 0.2.71:
             - Every message now shows its time next to the sender (sent: when it was sent; replies: when they
               completed), and the centered time separators no longer get clipped on narrow screens.

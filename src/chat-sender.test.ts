@@ -52,6 +52,22 @@ const checks: Array<[string, boolean]> = [
   ['empty username is treated as identity pending',
     resolveSender({ from_name: '通信牛' }, '   ').isCurrentUser],
 
+  // 2026-09-17 Vincent (app 0.2.72): rows the hub stamps with from_node_id came
+  // from a node token. A node is never this client — not while identity is
+  // pending, and not even when its alias collides with the viewer's username.
+  ['node-originated row is foreign while identity is pending',
+    !resolveSender({ from_node_id: 'n_354adc27', from_name: 'TMA门户鲸' }, '我').isCurrentUser],
+  ['node-originated row keeps its alias while identity is pending',
+    senderLabelFor({ from_node_id: 'n_354adc27', from_name: 'TMA门户鲸' }, '我') === 'TMA门户鲸'],
+  ['node-originated row is foreign even when from_name equals the viewer',
+    !resolveSender({ from_node_id: 'n_1', from_name: ME }, ME).isCurrentUser],
+  ['node-originated row without from_name falls back to the node id',
+    senderLabelFor({ from_node_id: 'n_1' }, ME) === 'n_1'],
+  ['null from_node_id with the admin name maps to the viewer',
+    resolveSender({ from_node_id: null, from_name: 'admin' }, 'admin').isCurrentUser],
+  ['local echo still outranks a stale from_node_id',
+    resolveSender({ _localId: 'l', from_node_id: 'n_1', from_name: 'x' }, ME).isCurrentUser],
+
   // The hub is a real, distinct sender: a broadcast is not the viewer's message.
   ['hub keeps its own name', senderLabelFor({ from_name: 'hub' }, ME) === 'hub'],
   ['hub is not the current user', !resolveSender({ from_name: 'hub' }, ME).isCurrentUser],
@@ -70,6 +86,16 @@ const checks: Array<[string, boolean]> = [
     !screen.includes('alias={currentUsername}')],
   // The marker that says "you sent this, and it arrived" must not appear under
   // a message the viewer did not send.
+  // 0.2.72: a foreign request renders on the received side, credited
+  // 「<sender> → <agent>」, with the sender's avatar — not in the viewer's row.
+  ['foreign requests take the received-side branch',
+    /sender\.isCurrentUser \? \(/.test(screen) && screen.includes('styles.foreignRow')],
+  ['foreign requests are labelled sender → agent',
+    screen.includes('{`${sender.alias} → ${alias}`}')],
+  ['foreign requests show the sender avatar on the left',
+    /styles\.foreignRow\]\}>\s*<AliasAvatar alias=\{sender\.alias\} size=\{36\} \/>/.test(screen)],
+  ['the identity lookup retries instead of giving up once',
+    screen.includes('nextIdentityRetryDelay(')],
   ['the delivered marker is gated on ownership',
     /sender\.isCurrentUser && !\(item\.result \?\? item\.reply\)/.test(screen)],
 ];

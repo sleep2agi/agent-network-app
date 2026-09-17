@@ -1,0 +1,26 @@
+Desktop v0.2.72 release-candidate report
+
+- Base: main after app#314 (0.2.71)
+- Target: desktop-v0.2.72
+- Why: Vincent 2026-09-17 (desktop 0.2.70 screenshot, task cce8a1fa): a task TMA门户鲸 dispatched to TMAI鲸
+  rendered in the TMAI鲸 thread as 「我」 with Vincent's avatar. Hub row was correct
+  (from_name=TMA门户鲸, from_node_id set); the client's one-shot GET /api/auth/me had not resolved, so
+  resolveSender's identity-pending rule credited every request bubble to the viewer.
+
+Changes
+- chat-sender: a row with from_node_id (hub stamps it on every node-token dispatch) is always foreign,
+  evaluated before the identity-pending rule; label = from_name, fallback node id. Local echo still wins.
+- ChatScreen: foreign requests render on the received side (sender avatar, 「sender → agent · HH:mm」 label,
+  copy button, quote chip); the viewer's own requests are unchanged (right side, 已送达 marker).
+- ChatScreen: identity lookup retries with backoff (2s, 4s, 8s, then every 30s; src/identity-retry.ts)
+  until it resolves or the screen unmounts.
+- Bump the desktop application consistently to 0.2.72 (9 pinned stamps + updater release notes).
+- Bundled local Hub pin unchanged.
+
+Verification
+- npm test: 99/99 self-executing suites pass (chat-sender 34 checks incl. 6 new; identity-retry 7;
+  copy-message and proactive-messages contracts updated for the third bubble branch).
+- npm run typecheck: no errors beyond the local @tauri-apps/plugin-* baseline.
+- Playwright harness (web export + mocked Tauri internals, throwaway hub 9299): seeded one task with
+  from_node_id=n_tongxin01/from_name=通信牛 and one from the logged-in user. Result: 「通信牛 → demo」 bubble
+  at x=428..886 (left half, own avatar), user bubbles at x≥1146 (right); screenshot scratchpad/v0272-chat.png.

@@ -14,6 +14,12 @@
 
 export interface SenderAttributable {
   from_name?: string;
+  /**
+   * Stamped by the hub on every task a node token dispatched
+   * (`tasks.from_node_id`); null for user-token clients. A node is never this
+   * client, so it outranks the identity-pending fallback.
+   */
+  from_node_id?: string | null;
   /** Set on optimistic echoes that have not yet round-tripped through the hub. */
   _localId?: string;
 }
@@ -56,6 +62,18 @@ export const resolveSender = (
   const mine: ResolvedSender = { alias: current, isCurrentUser: true };
 
   if (item._localId) return mine;
+
+  // 2026-09-17 Vincent: a task 通信牛-style nodes dispatched to the viewed agent
+  // rendered as 「我」 with the viewer's avatar whenever the one-shot
+  // GET /api/auth/me had failed (identity stayed pending). A node-originated row
+  // carries `from_node_id`; it can never be the viewer, so classify it before
+  // the pending rule instead of hiding it behind the viewer's name.
+  const fromNode = typeof item.from_node_id === 'string' ? item.from_node_id.trim() : '';
+  if (fromNode) {
+    const label = typeof item.from_name === 'string' && item.from_name.trim() ? item.from_name.trim() : fromNode;
+    return { alias: label, isCurrentUser: false };
+  }
+
   if (current === IDENTITY_PENDING_LABEL) return mine;
 
   const from = typeof item.from_name === 'string' ? item.from_name.trim() : '';
