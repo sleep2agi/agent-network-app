@@ -23,7 +23,7 @@ import AliasAvatar from './AliasAvatar';
 import AttachmentFileDesktop from './AttachmentFileDesktop';
 import AuthedThumb, { AttachmentFile, AuthedVideo, mimeFromName } from './AuthedThumb';
 import AuthedWebThumb from './AuthedWebThumb';
-import { ackUserMessages, createDashboardRequestId, dashboardRequestIdForLocalId, fetchStatus, fetchTasks, fetchUserMessages, sendTask, HubConfig, HubTask, Session, TaskAttachment, TaskPriority } from './api';
+import { ackAgentMessages, ackUserMessages, createDashboardRequestId, dashboardRequestIdForLocalId, fetchStatus, fetchTasks, fetchUserMessages, sendTask, HubConfig, HubTask, Session, TaskAttachment, TaskPriority } from './api';
 import { proactiveItemsForAgent } from './proactive-messages';
 import { outboxAdd, outboxForAlias, outboxMarkFailed, outboxMarkPending, outboxRemove } from './outbox';
 import { mayApplySendResult, shouldExposeSendFailure } from './send-reconciliation';
@@ -49,7 +49,8 @@ import type { NativeSyntheticEvent, NativeScrollEvent } from 'react-native';
 import { usePoll } from './usePoll';
 import { chatSearchState, isHighlighted, isStaleSearch, matchCountLabel, searchItems, shouldLoadOlderForSearch, stepHit, type SearchHit } from './chat-search';
 import { retryUnreadPersistFromPoll } from './conversation-unread-persist';
-import { dispatchUnread, hubHasAgentUnread, markAgentRepliesSeen, unackedIdsForAgent } from './unread-store';
+import { dispatchUnread, hubHasAgentUnread, markAgentRepliesSeen, markAgentServerUnreadCleared, unackedIdsForAgent } from './unread-store';
+import { ackAgentUnread } from './agent-ack';
 import { appFetch } from './app-fetch';
 import MarkdownMessage from './MarkdownMessage';
 import { cleanAttachmentDebugText, parseAttachmentRefs, parseMetaAttachmentRefs, parseMetaReplyAttachmentRefs } from './attachment-display';
@@ -667,9 +668,15 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
     // 回复未读(inbox 表那一半)也在这一刻清:推进该 agent 的水位线并持久化。
     markAgentRepliesSeen(alias);
     // #1828:hub 给权威数时,同一刻把这个 agent 的未读在 hub 上 ack 掉(两表);失败不影响本地清零,下次渲染再补。
+    // 先试 agent 级 ack(hub ≥ .55 一次清该 agent 全部未读;老 hub 400 → 退回按当前页 id)。
     if (hubHasAgentUnread()) {
-      const ids = unackedIdsForAgent(alias);
-      if (ids.length) void ackUserMessages(cfg, ids).catch(error => console.warn('ack unread failed', error));
+      void ackAgentUnread(alias, {
+        ackAgent: agent => ackAgentMessages(cfg, agent),
+        ackIds: ids => ackUserMessages(cfg, ids),
+        idsFor: agent => unackedIdsForAgent(agent),
+        clearServerUnread: agent => markAgentServerUnreadCleared(agent),
+        warn: (message, error) => console.warn(message, error),
+      });
     }
   }, [alias, conversationReady, showJump]);
 

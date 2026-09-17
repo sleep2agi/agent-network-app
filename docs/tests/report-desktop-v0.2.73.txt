@@ -1,0 +1,25 @@
+Desktop v0.2.73 release-candidate report
+
+- Base: main after app#315 (0.2.72)
+- Target: desktop-v0.2.73
+- Why: Vincent 2026-09-17 (desktop screenshot, task f597434f): agent rows keep showing 99+ after the chat is
+  opened. Hub `unread_by_agent` counts every unacked row from that agent for the user (user_inbox + inbox,
+  all time; production admin: 5660 unacked inbox rows), but ChatScreen only acked the ids present in the
+  current pages (200 user_inbox rows / 300 inbox rows within 7 days), so older rows were never acked.
+
+Changes
+- api: ackAgentMessages(cfg, agent) posts { agent } to POST /api/messages/ack (hub >= 0.9.0-preview.55);
+  HTTP 400 from an older hub is reported as unsupported.
+- agent-ack.ts (pure): try the agent-level ack first; on unsupported fall back to the id list; only a
+  successful agent-level ack clears the local server-side count; errors never clear.
+- unread-store: markAgentServerUnreadCleared(agent) zeroes unread_by_agent[agent] (and unread_total) in the
+  cached body so the badge disappears immediately instead of after the next 30 s poll.
+- ChatScreen: rendered_to_latest effect wires the above; dispatch/watermark logic unchanged.
+- Bump the desktop application consistently to 0.2.73 (9 pinned stamps + updater release notes).
+- Bundled local Hub pin unchanged.
+
+Verification
+- npm test: 100/100 test files passed (new src/agent-ack.test.ts: 9/9; unread-badge contract updated).
+- npm run typecheck: rc=0.
+- Hub side: commhub-server PR adding the { agent } body form ships as 0.9.0-preview.55 (separate PR);
+  until the production hub is upgraded the app takes the id fallback (unchanged behaviour).

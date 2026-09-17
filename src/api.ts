@@ -592,6 +592,25 @@ export const ackUserMessages = async (cfg: HubConfig, messageIds: string[]): Pro
   return typeof d?.acked === 'number' ? d.acked : 0;
 };
 
+/** agent 级 ack(hub ≥ 0.9.0-preview.55):把该 agent 发给当前用户的**全部**未读行(两表、全部时间)一次标已读。
+ *  老 hub 不认 `agent` 字段,回 400 message_id_required → supported=false,调用方退回按 id。 */
+export const ackAgentMessages = async (cfg: HubConfig, agent: string): Promise<{ supported: boolean; acked: number }> => {
+  if (!agent) return { supported: false, acked: 0 };
+  const res = await withTimeout(signal =>
+    appFetch(`${cfg.serverUrl}/api/messages/ack`, {
+      method: 'POST',
+      headers: headers(cfg),
+      signal,
+      body: JSON.stringify({ agent }),
+    }),
+  );
+  if (res.status === 400) return { supported: false, acked: 0 };
+  if (!res.ok) throw new Error(`ack failed: HTTP ${res.status}`);
+  const d = await res.json();
+  if (d?.ok !== true || d?.scope !== 'agent') return { supported: false, acked: 0 };
+  return { supported: true, acked: typeof d?.acked === 'number' ? d.acked : 0 };
+};
+
 /** The hub's REST send endpoint is POST /api/task with {alias, task} —
  *  /api/send_task does not exist (it 404s into the server help text).
  *  Sends are network-scoped: utok users must pass an explicit network_id. */

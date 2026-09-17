@@ -101,6 +101,24 @@ export function bindUnreadProfile(profileId: string | undefined): void {
 }
 
 /** #1828:hub 是否给了按 agent 的权威未读(有 → ChatScreen 渲染到底时要向 hub ack)。 */
+/** agent 级 ack 成功后立刻把该 agent 的权威未读归零,角标不用等下一次 30s 轮询。 */
+export function markAgentServerUnreadCleared(agent: string): void {
+  if (!agent) return;
+  const body = snapshot.serverBody;
+  if (!body || typeof body !== 'object') return;
+  const raw = (body as { unread_by_agent?: unknown }).unread_by_agent;
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return;
+  const byAgent = raw as Record<string, unknown>;
+  if (!(agent in byAgent) || byAgent[agent] === 0) return;
+  const nextByAgent = { ...byAgent, [agent]: 0 };
+  const prevTotal = (body as { unread_total?: unknown }).unread_total;
+  const removed = typeof byAgent[agent] === 'number' && Number.isFinite(byAgent[agent] as number) ? Math.floor(byAgent[agent] as number) : 0;
+  const nextBody: Record<string, unknown> = { ...(body as Record<string, unknown>), unread_by_agent: nextByAgent };
+  if (typeof prevTotal === 'number' && Number.isFinite(prevTotal)) nextBody.unread_total = Math.max(0, prevTotal - removed);
+  snapshot = { ...snapshot, serverBody: nextBody };
+  emit();
+}
+
 export function hubHasAgentUnread(snap: UnreadStoreSnapshot = snapshot): boolean {
   return readServerUnreadByAgent(snap.serverBody) !== null;
 }
