@@ -119,6 +119,19 @@ jobs:
           releaseBody: |-
             Signed and notarized stable update for macOS (Apple Silicon) and Windows (x64).
 
+            What's new in 0.2.76:
+            - Desktop: Agent Network now lives in the system tray / macOS menu bar (Vincent, 2026-09-17: "把 Agent
+              Network 做到系统栏吧,有新消息做个提示 类似飞书这样,再做个消息提示音"). The menu-bar item shows the
+              total unread count next to the icon (Feishu-style) and its dropdown lists every agent with unread
+              messages as "N  <agent>" (top 20); picking one focuses the window and opens that conversation.
+              Windows shows the count in the tray tooltip.
+            - Desktop: new inbound messages (replies, tasks and proactive agent messages addressed to you) raise a
+              system notification titled with the agent's name and the first 80 characters, merged per agent.
+              Nothing fires for the conversation you are looking at while the window is focused, nor for the
+              history loaded at login.
+            - Desktop: a short built-in chime plays with each notification round. Settings gains a "通知" section
+              with a sound toggle (default on) and a quiet-hours window (default off, supports overnight ranges).
+
             What's new in 0.2.75:
             - Desktop: the left navigation rail is redesigned (Vincent, 2026-09-17: "这边还是偏丑"). It is now
               64px wide on a surface one step deeper than the conversation list, with a hairline divider; the
