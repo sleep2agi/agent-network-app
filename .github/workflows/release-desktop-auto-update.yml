@@ -119,6 +119,13 @@ jobs:
           releaseBody: |-
             Signed and notarized stable update for macOS (Apple Silicon) and Windows (x64).
 
+            What's new in 0.2.73:
+            - Chat: opening a conversation now clears that agent's unread badge for good. The badge counted every
+              unread row the hub holds for that agent, but the app only marked the rows it had on screen as read,
+              so old rows kept the badge at 99+ no matter how often you opened the chat. With Hub 0.9.0-preview.55
+              or newer the app asks the hub to mark all of that agent's messages read in one call; on older hubs
+              it falls back to the previous per-message behaviour.
+
             What's new in 0.2.72:
             - Chat: a task another node dispatched to the agent you are viewing now shows on the left with that
               node's name and avatar (「sender → agent」) instead of being credited to you. Previously, if the
