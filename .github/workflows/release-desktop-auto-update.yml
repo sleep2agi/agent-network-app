@@ -119,6 +119,15 @@ jobs:
           releaseBody: |-
             Signed and notarized stable update for macOS (Apple Silicon) and Windows (x64).
 
+            What's new in 0.2.75:
+            - Desktop: the left navigation rail is redesigned (Vincent, 2026-09-17: "这边还是偏丑"). It is now
+              64px wide on a surface one step deeper than the conversation list, with a hairline divider; the
+              logo is a plain 36px rounded tile; each item is a 40×40 target with an evenly spaced 22px icon;
+              the active item is a soft accent-tinted rounded pill with the icon in the accent color, hover and
+              keyboard focus get a subtle tint, and hovering shows the item's name in a tooltip to the right.
+              Counters on rail items are small pills at the icon's top-right; Settings stays pinned at the
+              bottom with the version in tiny muted text beneath it. Both themes.
+
             What's new in 0.2.74:
             - Chat: an agent's reply now carries the same quote chip a user message has, naming the human
               message it answers (for example "admin: 先修这个啊"). Tap the chip to jump to and highlight the

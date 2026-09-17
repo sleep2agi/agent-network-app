@@ -1,0 +1,32 @@
+Desktop v0.2.75 release-candidate report
+
+- Base: main after app#317 (0.2.74)
+- Target: desktop-v0.2.75
+- Why: Vincent 2026-09-17 (desktop screenshot, task 72478a06): "这边还是偏丑" — the narrow left navigation
+  rail (logo tile, five nav icons, settings gear, version) still looked unfinished: grey square highlight,
+  bordered logo tile in light mode, uneven rhythm, no hover affordance, inline text counters.
+
+Changes
+- App.tsx: rail rebuilt as a 64px column on colors.railBg with a hairline right border; RailButton
+  component (40×40 hit area, 22px icon, accessibilityRole tab + selected state); active = 10px-radius
+  pill on colors.railActiveBg with the accent icon; hover/keyboard focus = colors.railHover; tooltip with
+  the item label to the right on hover; counter pill at the icon's top-right; settings gear pinned at the
+  bottom with the 10px version string 8px beneath it; rail raised (zIndex) so tooltips are not covered
+  by the conversation column.
+- src/theme.ts: rail tokens for both palettes (railBg / railHover / railActiveBg / railTooltipBg /
+  railTooltipText).
+- src/rail-nav.ts: pure helpers railIconFor / railSurface / railBadgeText / railTooltipVisible (18 ck cases).
+- src/ServerSidebar.tsx: the node-count badge is a pill at the icon's top-right; active row uses railActiveBg.
+- src/desktop-navigation.test.ts: five new contracts (active token, hover surface, RailButton + tooltip,
+  64px hairline rail, pill badge); the settings-order anchor follows the new RailButton shape.
+
+Verification
+- npm test: 102/102 files green. npm run typecheck: 0 new errors (local @tauri-apps/plugin-* baseline only).
+- Playwright desktop-shell harness (mock __TAURI_INTERNALS__, throwaway hub 9299, web export of this
+  branch) at 1400×900 in light and dark: rail measures 64×900 at x=0; hovering Tasks shows the tooltip;
+  active pill on Agents; clicking Tasks moves the pill. Screenshots kept in the session scratchpad
+  (v0275-rail-light.png, v0275-rail-dark.png) and sent to Vincent as attachments for preview.
+
+Not covered
+- Chromium ≠ WKWebView: native scrollbar/blur behaviour on macOS not exercised.
+- No behaviour change to navigation keys or badge counts; the mobile tab bar is untouched.
