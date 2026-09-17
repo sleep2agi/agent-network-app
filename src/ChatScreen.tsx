@@ -25,6 +25,7 @@ import AuthedThumb, { AttachmentFile, AuthedVideo, mimeFromName } from './Authed
 import AuthedWebThumb from './AuthedWebThumb';
 import { ackAgentMessages, ackUserMessages, createDashboardRequestId, dashboardRequestIdForLocalId, fetchStatus, fetchTasks, fetchUserMessages, sendTask, HubConfig, HubTask, Session, TaskAttachment, TaskPriority } from './api';
 import { proactiveItemsForAgent } from './proactive-messages';
+import { replyQuoteFor } from './reply-quote';
 import { outboxAdd, outboxForAlias, outboxMarkFailed, outboxMarkPending, outboxRemove } from './outbox';
 import { mayApplySendResult, shouldExposeSendFailure } from './send-reconciliation';
 import { conversationKey, conversationScope, createConversationRequestGate, createConversationStore } from './conversation-store';
@@ -204,6 +205,8 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
   const insets = useSafeAreaInsets();
   const composerInset = Platform.OS === 'android' ? insets.bottom : 0;
   const [messages, setMessages] = useState<ChatItem[]>([]);
+  // 回复引用条要按 task_id 找到被回的那条(主动消息的 in_reply_to)
+  const byTaskId = useMemo(() => new Map(messages.map(m => [msgKey(m), m] as const)), [messages]);
   const [currentUsername, setCurrentUsername] = useState('我');
   const [loaded, setLoaded] = useState(false);
   const [conversationReady, setConversationReady] = useState(false);
@@ -535,16 +538,20 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
     setSearchQuery(q => q); // 触发 effect 重跑
     setHighlightTick(t => t + 1);
   };
+  // 用 key 找**当前** messages 里的下标(列表可能在结果算出后又长了),滚过去并高亮 2 秒。
+  // 搜索定位和回复引用条点击共用。
+  const locateKey = (key: string) => {
+    const index = messages.findIndex(m => msgKey(m) === key);
+    if (index < 0) return;
+    listRef.current?.scrollToIndex({ index, animated: true, viewPosition: 0.5 });
+    setHighlight({ key, at: Date.now() });
+    setTimeout(() => setHighlightTick(t => t + 1), 2100);
+  };
   const locateHit = (i: number) => {
     const hit = searchHits[i];
     if (!hit) return;
     setSearchCurrent(i);
-    // 用 key 找**当前** messages 里的下标(列表可能在结果算出后又长了)。
-    const index = messages.findIndex(m => msgKey(m) === hit.key);
-    if (index < 0) return;
-    listRef.current?.scrollToIndex({ index, animated: true, viewPosition: 0.5 });
-    setHighlight({ key: hit.key, at: Date.now() });
-    setTimeout(() => setHighlightTick(t => t + 1), 2100);
+    locateKey(hit.key);
   };
   const stepSearch = (dir: 'older' | 'newer') => {
     const next = stepHit(searchCurrent, searchHits.length, dir);
@@ -1213,6 +1220,9 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
             // 微信式引用条:开头的「@作者: 文本」不进气泡,渲染成气泡下方的灰条
             const sentQuoted = parseQuoted(item.content);
             const replyQuoted = parseQuoted(item.result ?? item.reply ?? '');
+            // 2026-09-17 Vincent:「Agent 节点回复人类也要这个引用啊」—— 回复没自带引用行时,
+            // 挂一条指向它所回的那条请求的引用条,点击定位原文。
+            const replyQuote = replyQuoted.quote ? null : replyQuoteFor(item, currentUsername, byTaskId);
             return (
               <View style={[styles.bubbleWrap, isHighlighted(msgKey(item), highlight, Date.now()) && styles.bubbleHighlight]}>
                 {showHeader && item.created_at ? (
@@ -1306,6 +1316,10 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
                           <View style={[styles.quoteChip, styles.quoteChipReply]} accessibilityLabel="引用">
                             <Text style={styles.quoteChipText} numberOfLines={1}>{quoteLabel(replyQuoted.quote)}</Text>
                           </View>
+                        ) : replyQuote ? (
+                          <Pressable accessibilityLabel="引用" accessibilityRole="button" hitSlop={4} onPress={() => locateKey(replyQuote.targetKey)} style={({ pressed }) => [styles.quoteChip, styles.quoteChipReply, pressed && { opacity: 0.6 }]}>
+                            <Text style={styles.quoteChipText} numberOfLines={1}>{quoteLabel(replyQuote)}</Text>
+                          </Pressable>
                         ) : null}
                       </Pressable>
                     </View>
