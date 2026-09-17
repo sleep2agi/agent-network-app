@@ -1,12 +1,13 @@
 {
   "name": "agent-network-app",
-  "version": "0.2.75",
+  "version": "0.2.76",
   "main": "index.ts",
   "dependencies": {
     "@expo/vector-icons": "^15.0.2",
     "@tauri-apps/api": "^2.8.0",
     "@tauri-apps/plugin-dialog": "^2.7.3",
     "@tauri-apps/plugin-http": "^2.5.9",
+    "@tauri-apps/plugin-notification": "^2.4.0",
     "@tauri-apps/plugin-opener": "^2.5.4",
     "@tauri-apps/plugin-process": "^2.3.1",
     "@tauri-apps/plugin-updater": "^2.10.1",

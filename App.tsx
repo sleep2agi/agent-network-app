@@ -51,6 +51,8 @@ import { APP_VERSION } from './src/version';
 import { railBadgeText, railIconFor, railSurface, railTooltipVisible } from './src/rail-nav';
 import DesktopUpdatePrompt from './src/DesktopUpdatePrompt';
 import DesktopMessageListener from './src/DesktopMessageListener';
+import DesktopNotifier from './src/DesktopNotifier';
+import { bindDesktopTray } from './src/desktop-tray';
 import { loadPinnedChats, requestedChatAlias, requestedChatProfileId, requestedWorkspaceProfileId, savePinnedChats } from './src/desktop-chat-menu';
 import { loadChatPins, saveChatPins, togglePinned } from './src/chat-pins';
 import { bindUnreadProfile } from './src/unread-store';
@@ -196,6 +198,13 @@ function AppRoot() {
   const tauriDesktop = Platform.OS === 'web' && !!(globalThis as any).__TAURI_INTERNALS__;
   const desktop = tauriDesktop && width >= 860;
   const dedicatedChatWindow = tauriDesktop && !!initialChat;
+  // 0.2.76 系统栏托盘:只有主窗口接(分离聊天窗/工作区窗不接,否则一个 app 三个托盘项)。
+  // 托盘点某个 agent → 打开那个会话。
+  const trayWindow = tauriDesktop && !initialChat && !initialWorkspaceProfile;
+  useEffect(() => {
+    if (!cfg || !trayWindow) return;
+    return bindDesktopTray(alias => setScreen({ name: 'chat', alias }));
+  }, [cfg?.profileId, cfg?.serverUrl, trayWindow]);
   const tabBarInset = Platform.OS === 'android' ? insets.bottom : 0;
   const workspaceKey = `${theme}:${cfg?.profileId ?? cfg?.serverUrl ?? 'login'}`;
 
@@ -381,6 +390,7 @@ function AppRoot() {
         <ConnectivityBanner />
         <DesktopWorkspace cfg={cfg} screen={screen} setScreen={setScreen} onLogout={removeActiveProfile} onLocalDataDeleted={finishLocalDataDeletion} onAddAccount={() => { setReauthProfile(null); setScreen({ name: 'login' }); }} onSwitchProfile={activateProfile} onReauthProfile={requestProfileReauth} />
         <DesktopMessageListener cfg={cfg} />
+        {trayWindow ? <DesktopNotifier /> : null}
         <DesktopWindowPin />
       </SafeAreaView>
     );

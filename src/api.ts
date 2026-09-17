@@ -547,6 +547,11 @@ export interface HubUserMessage {
   message_id?: string;
   from_session?: string;
   acked?: number;
+  /** 0.2.76 系统通知要念正文/时间;hub 一直返回这些字段,之前客户端没读。 */
+  kind?: string;
+  title?: string | null;
+  content?: string;
+  created_at?: string;
 }
 
 /** alias 分支(inbox 表)。🔴 hub 不给 `since` 时默认只看最近 1 小时 —— 算「回复未读」要把窗口拉开,

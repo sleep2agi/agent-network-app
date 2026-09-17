@@ -1,0 +1,47 @@
+Desktop v0.2.76 release-candidate report
+
+- Base: main after app#318 (0.2.75)
+- Target: desktop-v0.2.76
+- Why: Vincent 2026-09-17 (Feishu menu-bar screenshot, task 97624927): "把 Agent Network 做到系统栏吧,有新消息做个提示
+  类似飞书这样,再做个消息提示音。"
+
+Changes
+- src-tauri/src/tray.rs (new): system tray / macOS menu-bar item. Monochrome template icon on macOS
+  (src-tauri/tray/trayTemplate.png, generated from assets/icon.png), colour 32px elsewhere. Title = total unread
+  (macOS), tooltip "Agent Network · N 条未读". Dropdown: "N  <alias>" rows (max 20, desc), separator, "打开 Agent
+  Network", "退出". Picking a row focuses the main window and emits `tray-open-chat`. Command `tray_update`
+  rebuilds menu/title/tooltip. Two unit tests (label shape; normalize drops 0 / sorts / caps).
+- src-tauri/Cargo.toml: tauri features tray-icon + image-png; tauri-plugin-notification = "2". Cargo.lock regenerated
+  with local cargo metadata (adds tauri-plugin-notification, notify-rust, mac-notification-sys, tauri-winrt-notification…).
+- src-tauri/capabilities/default.json: notification:default, core:window:allow-set-focus / show / unminimize / is-focused.
+- src/desktop-tray.ts: subscribes unread-store; per-agent counts via unreadCountForAgentRow (same function as the list
+  badges); invokes tray_update only when the model changed; listens tray-open-chat → setScreen chat. Main window only.
+- src/DesktopNotifier.tsx + src/notify-policy.ts: incoming rows = user_inbox rows + inbox rows addressed to the login
+  username (reply/task/message). First snapshot after user_inbox has been fetched only seeds; afterwards only unseen rows
+  created within 10 min notify. Suppressed when the window is focused and that conversation is open, or in quiet hours.
+  Grouped per agent (title "alias(N 条新消息)", body ≤ 80 chars). System notification via @tauri-apps/plugin-notification
+  (Web Notification fallback outside Tauri). One chime per round.
+- src/chime.ts + src/chime-data.ts (scripts/gen-chime.py): 16 kHz 8-bit WAV, 0.42 s two-tone, 9 KB data URI; HTMLAudio;
+  ≥ 800 ms gap.
+- src/quiet-hours.ts, src/notify-settings.ts (localStorage notify_settings_v1), SettingsScreen "通知" section:
+  消息提示音 (default on, chimes on enable), 免打扰时段 (default off, start/end inputs, overnight ranges).
+- src/api.ts: HubUserMessage gains kind/title/content/created_at (hub already returned them).
+
+Verification
+- npm test: 102/102 files green (src/notify-policy.test.ts 32 cases incl. wiring contracts; desktop-navigation.test.ts
+  +2 App contracts). npm run typecheck: 0 errors.
+- Rust: `cargo check --locked --tests` and `cargo test --locked tray::` (2/2) in ivangabriele/tauri:debian-bookworm-18
+  with the host toolchain; desktop-tauri.yml dispatched on the branch (mac-arm64 green, windows-x64 see PR).
+- Playwright desktop-shell harness (mock __TAURI_INTERNALS__ + Notification/Audio stubs, throwaway hub 9299, web export
+  of this branch): after login tray_update was invoked with the per-agent model; Settings shows the 通知 card; toggling
+  消息提示音 persisted {"soundEnabled":false…} then back to true (chime on re-enable); enabling 免打扰 shows the start/end
+  inputs; a desktop_message sent through the hub while on the Settings screen produced one system notification
+  ({title, body}) and one chime, and tray_update advanced to the new total. Screenshots in the session scratchpad
+  (v0276-settings-quiet.png, v0276-notified.png).
+
+Not covered
+- The real menu-bar item / native notification centre cannot be exercised in Chromium; verified by crate build + the
+  invoke-level harness only.
+- Clicking a system notification only activates the app (plugin has no desktop click callback); the tray dropdown is the
+  path that opens a specific conversation.
+- Windows tray icon has no numeric overlay; the count is in the tooltip.

@@ -8,6 +8,8 @@ import { appFetch } from './app-fetch';
 import { checkDesktopUpdate, desktopUpdateSnapshot, subscribeDesktopUpdates } from './desktop-updater';
 import { backupLocalHubData, deleteLocalHubData, LOCAL_HUB_PROFILE_ID, localHubStatus, openLocalHubLogs, restartLocalHub, stopLocalHub, type LocalHubResult } from './local-hub';
 import { openWorkspaceWindow } from './desktop-chat-menu';
+import { loadNotifySettings, saveNotifySettings, subscribeNotifySettings } from './notify-settings';
+import { playChime } from './chime';
 
 // Settings (Vincent tg 720): who am I, where am I connected, which
 // network, which build — and the one destructive action, logout,
@@ -45,6 +47,10 @@ export default function SettingsScreen({
   const [localDeleteVisible, setLocalDeleteVisible] = useState(false);
   const [localDeleteText, setLocalDeleteText] = useState('');
   const update = useSyncExternalStore(subscribeDesktopUpdates, desktopUpdateSnapshot, desktopUpdateSnapshot);
+  // 0.2.76 通知设置(桌面端落 localStorage)
+  const notify = useSyncExternalStore(subscribeNotifySettings, loadNotifySettings, loadNotifySettings);
+  const [quietStart, setQuietStart] = useState(notify.quiet.start);
+  const [quietEnd, setQuietEnd] = useState(notify.quiet.end);
 
   useEffect(() => {
     void Promise.all([listHubProfiles(), getDesktopStorageDiagnostics()]).then(([registry, diagnostics]) => {
@@ -197,6 +203,61 @@ export default function SettingsScreen({
         </Pressable>
       </View>
 
+      <Text style={styles.sectionTitle}>通知</Text>
+      <View style={styles.card} testID="notify-settings-card">
+        <Pressable
+          accessibilityRole="switch"
+          accessibilityState={{ checked: notify.soundEnabled }}
+          style={({ pressed }) => [styles.row, pressed && { opacity: 0.6 }]}
+          onPress={() => {
+            const next = { ...notify, soundEnabled: !notify.soundEnabled };
+            saveNotifySettings(next);
+            if (next.soundEnabled) playChime();
+          }}
+        >
+          <Text style={styles.rowLabel}>消息提示音</Text>
+          <Text style={styles.rowValue}>{notify.soundEnabled ? '开' : '关'}</Text>
+        </Pressable>
+        <Divider />
+        <Pressable
+          accessibilityRole="switch"
+          accessibilityState={{ checked: notify.quiet.enabled }}
+          style={({ pressed }) => [styles.row, pressed && { opacity: 0.6 }]}
+          onPress={() => saveNotifySettings({ ...notify, quiet: { ...notify.quiet, enabled: !notify.quiet.enabled } })}
+        >
+          <Text style={styles.rowLabel}>免打扰时段</Text>
+          <Text style={styles.rowValue}>{notify.quiet.enabled ? `${notify.quiet.start} – ${notify.quiet.end}` : '关'}</Text>
+        </Pressable>
+        {notify.quiet.enabled ? (
+          <View style={[styles.row, { gap: spacing.sm }]}>
+            <Text style={styles.rowLabel}>从</Text>
+            <TextInput
+              accessibilityLabel="免打扰开始时间"
+              style={styles.quietInput}
+              value={quietStart}
+              onChangeText={setQuietStart}
+              onBlur={() => saveNotifySettings({ ...notify, quiet: { ...notify.quiet, start: quietStart } })}
+              placeholder="22:00"
+              placeholderTextColor={colors.textMuted}
+            />
+            <Text style={styles.rowLabel}>到</Text>
+            <TextInput
+              accessibilityLabel="免打扰结束时间"
+              style={styles.quietInput}
+              value={quietEnd}
+              onChangeText={setQuietEnd}
+              onBlur={() => saveNotifySettings({ ...notify, quiet: { ...notify.quiet, end: quietEnd } })}
+              placeholder="08:00"
+              placeholderTextColor={colors.textMuted}
+            />
+          </View>
+        ) : null}
+        <Divider />
+        <View style={styles.row}>
+          <Text style={styles.rowHint}>新消息会在系统栏和系统通知里提示;你正开着的会话不提示。</Text>
+        </View>
+      </View>
+
       <Text style={styles.sectionTitle}>关于</Text>
       <View style={styles.card}>
         <Row label="版本" value={`v${APP_VERSION}`} />
@@ -306,6 +367,8 @@ const makeStyles = () =>
   },
   rowLabel: { color: colors.textSecondary, fontSize: 14 },
   rowValue: { color: colors.text, fontSize: 14, flexShrink: 1 },
+  rowHint: { color: colors.textMuted, fontSize: 12, flexShrink: 1 },
+  quietInput: { color: colors.text, fontSize: 14, borderWidth: 1, borderColor: colors.border, borderRadius: 6, paddingHorizontal: 8, paddingVertical: 4, minWidth: 64, textAlign: 'center' },
   profileRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingHorizontal: spacing.lg, paddingVertical: spacing.md },
   profileCopy: { flex: 1, minWidth: 0 },
   profileTitle: { color: colors.text, fontSize: 14, fontWeight: '600' },

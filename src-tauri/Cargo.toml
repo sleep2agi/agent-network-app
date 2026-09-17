@@ -1,6 +1,6 @@
 [package]
 name = "agent-network-desktop"
-version = "0.2.75"
+version = "0.2.76"
 description = "Agent Network desktop shell — Tauri 2 over the RN-web export"
 edition = "2021"
 
@@ -19,7 +19,7 @@ reqwest = { version = "0.13", default-features = false, features = ["native-tls"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 uuid = { version = "1", features = ["v4"] }
-tauri = { version = "2", features = [] }
+tauri = { version = "2", features = ["tray-icon", "image-png"] } # 0.2.76: 系统栏托盘 + include_image!(PNG)
 tauri-plugin-http = { version = "2", features = ["gzip"] } # 2026-09-16: hub 对 Accept-Encoding: gzip 压缩 JSON,reqwest 要开 gzip 才会请求并解压
 tauri-plugin-process = "2"
 tauri-plugin-updater = "2"
@@ -29,6 +29,7 @@ scrypt = { version = "0.11", default-features = false }
 base64 = "0.22"
 sha2 = "0.10"
 tauri-plugin-dialog = "2"
+tauri-plugin-notification = "2" # 0.2.76: 新消息系统通知(飞书式)
 
 [target.'cfg(target_os = "macos")'.dependencies]
 keyring = { version = "3", features = ["apple-native"] }
