@@ -1,0 +1,25 @@
+Desktop v0.2.74 release-candidate report
+
+- Base: main after app#316 (0.2.73)
+- Target: desktop-v0.2.74
+- Why: Vincent 2026-09-17 (desktop screenshot, task a27a209f): "Agent节点回复 人类 也要这个引用啊" —
+  user messages got a WeChat-style quote chip in 0.2.66, but an agent's reply bubble showed nothing
+  about which human message it answered.
+
+Changes
+- src/reply-quote.ts: replyQuoteFor(item, currentUsername, byTaskId). A task row with a reply quotes its own
+  request (author = resolveSender, request text with any nested "「@x: …」" line stripped, max 40 chars);
+  a proactive message with in_reply_to quotes the loaded task it points at, none otherwise; a reply that
+  already starts with a quote line is left to the existing renderer (no double chip).
+- ChatScreen: reply branch renders the chip as a button (accessibilityLabel "引用"); locateKey (extracted
+  from the search locate flow) scrolls to and highlights the target row for 2 s.
+- proactive-messages: proactive items carry in_reply_to (row field, else meta_json.in_reply_to).
+
+Verification
+- npm test: all suites green (reply-quote 17/17, proactive-messages +4). npm run typecheck rc=0.
+- Playwright desktop-shell harness (mock __TAURI_INTERNALS__, throwaway hub 9299): the reply bubble shows
+  "tester: 这条是我(tester)发的" under the agent's reply; clicking it highlights the row; the user-side chips
+  are unchanged. Screenshot kept in the session scratchpad (v0274-quote-clicked.png).
+
+Not covered
+- Real hub proactive messages carrying in_reply_to were not exercised end to end (mapping is unit-tested).

@@ -119,6 +119,12 @@ jobs:
           releaseBody: |-
             Signed and notarized stable update for macOS (Apple Silicon) and Windows (x64).
 
+            What's new in 0.2.74:
+            - Chat: an agent's reply now carries the same quote chip a user message has, naming the human
+              message it answers (for example "admin: 先修这个啊"). Tap the chip to jump to and highlight the
+              original. Proactive agent messages that reference a task quote that task the same way; replies
+              that already start with their own quote line are left as they were.
+
             What's new in 0.2.73:
             - Chat: opening a conversation now clears that agent's unread badge for good. The badge counted every
               unread row the hub holds for that agent, but the app only marked the rows it had on screen as read,
