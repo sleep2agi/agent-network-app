@@ -29,6 +29,7 @@ import { outboxAdd, outboxForAlias, outboxMarkFailed, outboxMarkPending, outboxR
 import { mayApplySendResult, shouldExposeSendFailure } from './send-reconciliation';
 import { conversationKey, conversationScope, createConversationRequestGate, createConversationStore } from './conversation-store';
 import { resolveSender } from './chat-sender';
+import { nextIdentityRetryDelay } from './identity-retry';
 import { COMPOSER_HEIGHT_DEFAULT, clampComposerHeight, composerDragHandlers, inputMaxHeight, loadComposerHeight, lockDocumentSelection, saveComposerHeight } from './composer-resize';
 import {
   ATTACH_ENABLED,
@@ -354,17 +355,30 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
   usePoll(() => load(limitRef.current), 5000, [load]);
 
   useEffect(() => {
+    // 2026-09-17 Vincent:身份只查一次,走 RELAY 隧道那一次失败,整场会话都不知道
+    // 「我是谁」——别人派给这个 agent 的任务全按占位身份显示成「我」。改成退避重试。
     let alive = true;
-    appFetch(`${cfg.serverUrl}/api/auth/me`, {
-      headers: { Authorization: `Bearer ${cfg.token}` },
-    })
-      .then(res => res.json())
-      .then(data => {
-        const username = data?.user?.username;
-        if (alive && typeof username === 'string' && username.trim()) setCurrentUsername(username.trim());
+    let attempt = 0;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    const lookup = () => {
+      appFetch(`${cfg.serverUrl}/api/auth/me`, {
+        headers: { Authorization: `Bearer ${cfg.token}` },
       })
-      .catch(() => { /* the stable “我” avatar remains available offline */ });
-    return () => { alive = false; };
+        .then(res => res.json())
+        .then(data => {
+          const username = data?.user?.username;
+          if (!alive) return;
+          if (typeof username === 'string' && username.trim()) { setCurrentUsername(username.trim()); return; }
+          schedule();
+        })
+        .catch(() => { if (alive) schedule(); });
+    };
+    const schedule = () => {
+      attempt += 1;
+      timer = setTimeout(lookup, nextIdentityRetryDelay(attempt));
+    };
+    lookup();
+    return () => { alive = false; if (timer) clearTimeout(timer); };
   }, [cfg.serverUrl, cfg.token]);
 
   const loadOlder = async () => {
@@ -1197,7 +1211,7 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
                 {showHeader && item.created_at ? (
                   <Text style={styles.timeHeader}>{formatChatHeader(item.created_at)}</Text>
                 ) : null}
-                {!item._proactive ? (
+                {!item._proactive ? sender.isCurrentUser ? (
                 <View style={[styles.messageRow, styles.sentRow]}>
                   <View style={[styles.messageContent, styles.sentContent]}>
                     <Text style={[styles.messageAuthor, styles.sentAuthor]} numberOfLines={1}>
@@ -1226,6 +1240,38 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
                     </Pressable>
                   </View>
                   <AliasAvatar alias={sender.alias} size={36} />
+                </View>
+                ) : (
+                // 0.2.72 Vincent:别的节点派给这个 agent 的任务不是「我」说的 ——
+                // 放在收到侧,头像用发送方,作者行写「发送方 → 本 agent」。
+                <View style={[styles.messageRow, styles.foreignRow]}>
+                  <AliasAvatar alias={sender.alias} size={36} />
+                  <View style={styles.messageContent}>
+                    <Text style={styles.messageAuthor} numberOfLines={1}>
+                      {`${sender.alias} → ${alias}`}{item.created_at ? ` · ${formatChatHeader(item.created_at)}` : ''}
+                    </Text>
+                    <Pressable
+                      {...(desktop ? ({ dataSet: { messageKey: msgKey(item), messagePart: 'sent' }, onHoverIn: () => setHoverKey(`${msgKey(item)}:sent`), onHoverOut: () => setHoverKey(null), onMouseEnter: () => setHoverKey(`${msgKey(item)}:sent`), onMouseLeave: () => setHoverKey(null) } as any) : {})}
+                      onLongPress={() => setMenuFor({ item, text: item.content ?? '', author: sender.alias })}
+                      delayLongPress={300}
+                      style={styles.replyPressable}
+                    >
+                      <View style={[styles.bubble, styles.replyBubble]}>
+                        {desktop && hoverKey === `${msgKey(item)}:sent` && item.content ? (
+                          <Pressable accessibilityLabel="复制消息" hitSlop={6} onPress={() => void copyMessage(item.content ?? '')} style={({ pressed }) => [styles.copyHover, styles.copyHoverReply, pressed && { opacity: 0.6 }]}>
+                            <Ionicons name="copy-outline" size={14} color={colors.textMuted} />
+                          </Pressable>
+                        ) : null}
+                        <MarkdownMessage>{cleanAttachmentDebugText(sentQuoted.body || (sentQuoted.quote ? '' : '—'))}</MarkdownMessage>
+                        {sentAttachmentViews(item, cfg.serverUrl).map(renderAttachment)}
+                      </View>
+                      {sentQuoted.quote ? (
+                        <View style={[styles.quoteChip, styles.quoteChipReply]} accessibilityLabel="引用">
+                          <Text style={styles.quoteChipText} numberOfLines={1}>{quoteLabel(sentQuoted.quote)}</Text>
+                        </View>
+                      ) : null}
+                    </Pressable>
+                  </View>
                 </View>
                 ) : null}
                 {item.result || item.reply ? (
@@ -1629,6 +1675,7 @@ const makeStyles = () =>
   resultSnippet: { color: colors.text, fontSize: 13 },
   messageRow: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.sm, width: '100%' },
   sentRow: { justifyContent: 'flex-end' },
+  foreignRow: { justifyContent: 'flex-start' },
   replyRow: { justifyContent: 'flex-start' },
   messageContent: { maxWidth: '85%', flexShrink: 1, alignItems: 'flex-start' },
   sentContent: { alignItems: 'flex-end' },

@@ -25,7 +25,8 @@ const load = chat.slice(chat.indexOf('const load = useCallback('), chat.indexOf(
 check('ChatScreen.load 与任务同一次轮询里取 scope=user 消息并映射为主动项', load.includes('fetchUserMessages(cfg') && load.includes('proactiveItemsForAgent('));
 check('主动项与任务行一起进 mergeMessagesNewestFirst(按 created_at 排)', load.includes('[...fetched, ...proactive]'));
 const render = chat.slice(chat.indexOf('renderItem={({ item, index }) => {'));
-check('渲染:主动项不画发送气泡', /\{!item\._proactive \? \(/.test(render));
+// 0.2.72:请求气泡按发送方分两支(自己→右侧,别的节点→左侧),主动项仍两支都不画
+check('渲染:主动项不画发送气泡', /\{!item\._proactive \? sender\.isCurrentUser \? \(/.test(render));
 check('渲染:主动项回复气泡带「主动汇报」标', render.includes('主动汇报'));
 console.log(`proactive messages: ${passed}/${total} checks passed`);
 if (passed !== total) process.exit(1);
