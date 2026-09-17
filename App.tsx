@@ -803,7 +803,7 @@ const makeDesktopStyles = () => StyleSheet.create({
   shell: { flex: 1, flexDirection: 'row', backgroundColor: colors.bg },
   // 微信/飞书式 rail:64 宽、比列表深一档的底、右侧发丝线;按钮 40×40 等距 12;
   // 激活 = 10 圆角淡 accent 底;悬停/聚焦 = 浅底;提示条挂在右侧。
-  rail: { width: 64, backgroundColor: colors.railBg, borderRightWidth: StyleSheet.hairlineWidth, borderRightColor: colors.border, alignItems: 'center', paddingTop: 14, paddingBottom: 10 },
+  rail: { width: 64, backgroundColor: colors.railBg, borderRightWidth: StyleSheet.hairlineWidth, borderRightColor: colors.border, alignItems: 'center', paddingTop: 14, paddingBottom: 10, zIndex: 10, overflow: 'visible' },
   railBrand: { width: 36, height: 36, borderRadius: 10, overflow: 'hidden', alignItems: 'center', justifyContent: 'center' },
   railBrandImage: { width: 36, height: 36 },
   railBrandImageLight: { width: 36, height: 36, borderRadius: 10 },
