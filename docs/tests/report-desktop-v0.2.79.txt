@@ -1,0 +1,67 @@
+Desktop v0.2.79 release-candidate report
+
+- Base: main after app#321 (0.2.78)
+- Target: desktop-v0.2.79
+- Why: Vincent 2026-09-19 (menu-bar screenshot, task b6f15da2): "提供栏也没看到 agent network 的图标",
+  followed by task af090189: "先把已有的放上去啊"
+
+What was wrong
+- The icon was never missing. Magnifying his screenshot shows our status item leftmost in the cluster,
+  with the unread count "6" beside it — the tray from 0.2.76 was working. What he could not do was
+  recognise it: it renders as a washed-out grey rounded plate while every neighbour (OpenAI, WeChat…)
+  is a crisp white glyph.
+- Root cause: src-tauri/tray/trayTemplate.png was cut from the FULL product icon, plate included. A macOS
+  template image is painted from its alpha alone — the system supplies the colour — so the rounded plate
+  became a solid white block and the mark became a darker layer inside it.
+- The wiring was never wrong: tray.rs has called .icon_as_template(true) since 0.2.76. Only the artwork
+  was wrong. Measured: the shipped 1x file covered 82.0% of its canvas (a plate); the mark covers ~41%.
+
+Changes
+- scripts/generate-tray-icons.mjs (new): derives the templates from assets/android-icon-monochrome.png —
+  the Android themed-icon layer we already ship, which is the mark alone on transparency. That layer is
+  itself derived from assets/icon.png by generate-android-icons.mjs, so a brand change propagates: that
+  generator rewrites the monochrome layer, this manifest's source digest stops matching, and the test
+  fails until the tray images are regenerated too. pngjs + arithmetic only, so CI re-runs it verbatim.
+- Geometry: the canvas is sized by HEIGHT, with width following the mark's own aspect (1.14:1), not a
+  square. tray-icon 0.24 forces the status image to NSSize{height: 18.0, width: 18.0 * aspect} whatever
+  pixel size it receives (src/platform_impl/macos/mod.rs), so height is the only budget that exists and a
+  square canvas would spend ~13% of it on empty side margins.
+- src-tauri/src/tray.rs: embeds trayTemplate@2x.png (50x44) instead of the 1x. Same reason — the image is
+  scaled to 18pt regardless, so 22px is upscaled (soft) on a Retina bar and 44px is a slight downscale
+  (crisp). One line; the template flag and everything else is unchanged.
+- Windows is untouched and stays on the colour src-tauri/tray/tray.png. A template image there renders as
+  a black smear in the notification area. The manifest records this, and a test asserts the Windows icon
+  is NOT covered by the template manifest and still carries colour.
+- src/tray-icon-assets.test.ts (new, 25 checks), modelled on src/icon-assets.test.ts: re-runs the
+  generator into a temp dir and compares decoded pixels, pins generator/source/derived digests, and adds
+  the shape contract — pure black RGB, at least one transparent pixel, coverage inside a glyph's range.
+
+Witnessing (the part that matters)
+- The coverage check is the load-bearing one, not the colour check. The file that shipped in 0.2.76 was
+  ALREADY pure black — it passed "carries no colour" — so a guard that only looked at colour would have
+  let it through. Applying the new shape check to the old bytes:
+      OLD trayTemplate.png     22x22 coverage=82.0% allBlack=true -> glyph-coverage check FAILS (correct)
+      OLD trayTemplate@2x.png  44x44 coverage=82.6% allBlack=true -> FAILS (correct)
+  Swapping the old files into place and running the whole test goes red; swapping back gives 25/25.
+  Ceiling is 0.60, floor 0.15; the new images sit at 44.4% (1x) and 41.0% (2x).
+- src/notify-policy.test.ts carried 0.2.76's source contract pinning the literal
+  include_image!("./tray/trayTemplate.png"). It went red on this change, which is exactly what it is for.
+  Updated to the new contract with a comment pointing at where the shape contract now lives.
+
+Verification
+- npm test: 104/104 test files. npm run typecheck: rc=0.
+- PNG format checked against include_image!'s requirements: both templates are 8-bit RGBA, non-interlaced.
+- NOT run locally: cargo check. src-tauri/icons/ and the sidecar placeholder have to be generated on this
+  box and the disk is at 88%. The Rust delta is one include_image! path to a file proven to exist and to
+  be a valid RGBA PNG; the macOS and Windows compiles in the release workflow are the gate.
+- NOT available: a real menu-bar screenshot. This host runs nodes in a background session and cannot
+  capture a GUI. Vincent was sent simulated composites instead (dark and light bar, old row above new
+  row), labelled as simulations in the message, with the real check being his own menu bar after updating.
+
+Residual risk
+- The composites model how AppKit paints a template image; they are not a capture. If macOS renders the
+  glyph differently at 18pt than the composite suggests (for example heavier anti-aliasing), the shape is
+  still right and only the weight would differ.
+- glyphFraction (0.92) was chosen against the neighbours in Vincent's screenshot, not measured against
+  Apple's own metrics. If the mark reads slightly large or small next to other apps, that one number is
+  the knob, and it is recorded in the manifest rather than buried in the code.
