@@ -1,0 +1,49 @@
+Desktop v0.2.77 release-candidate report
+
+- Base: main after app#319 (0.2.76)
+- Target: desktop-v0.2.77
+- Why: Vincent 2026-09-18 (rail screenshot, task 1777f2b6): "这个黑色的图标有点太丑了"
+
+Root cause
+- 0.2.75's rail rendered `assets/icon.png` at 36x36 with resizeMode="cover", in two themed branches.
+  That asset is the installable app icon: the brand mark on its own dark plate. At rail size the plate is
+  most of what you see, and it lands directly above the active-tab pill — same rounded-square silhouette,
+  similar tint — so the two read as competing blocks rather than "brand, then navigation".
+- Measured before choosing a replacement (PIL, on the committed assets):
+    assets/icon.png                     1254x1254, opaque plate (centre pixel #011E45), alpha bbox ~ full canvas
+    assets/android-icon-foreground.png  1024x1024, transparent, mark bbox (222,261)-(802,764) = 57% x 49%
+    assets/android-icon-monochrome.png  1024x1024, flat white silhouette (loses the gradient + node detail)
+    assets/splash-icon.png               512x512,  also plated (centre #00163F)
+  Opaque mark pixels sample at mean luma 160, min 102 — saturated blues that hold on both rail surfaces
+  (#09090b dark, #eaeef2 light), so one asset serves both themes.
+
+Changes
+- App.tsx: the two themed <Image> branches collapse to one `assets/android-icon-foreground.png` with
+  resizeMode="contain". Styles: `railBrand` keeps the 36x36 slot (borderRadius/overflow dropped — nothing
+  to clip now), `railBrandImage`/`railBrandImageLight` replaced by `railBrandMark` at 54x54.
+  The oversized box is deliberate: the Android adaptive foreground reserves ~22% safe-zone padding, so
+  `contain` at 36 would render the mark at ~20px — smaller than the 22px stroke icons below it. At 54 the
+  mark lands ~30x26px, optically matching them; the surplus transparent padding falls inside the slot.
+- Why this asset and not a new one: it is derived from assets/icon.png by scripts/generate-android-icons.mjs
+  and pixel-gated by src/icon-assets.test.ts (the gate re-runs the generator and compares). A future brand
+  change regenerates it, so the rail cannot keep showing a stale mark — which is exactly the failure #50
+  shipped on Android. No new binary, no new gate.
+- src/desktop-navigation.test.ts: the two assertions that pinned "both themes render icon.png" now pin the
+  new contract (transparent mark + railBrandMark, and no assets/icon.png within 400 chars of railBrand),
+  plus the 36-slot/54-box relationship. The file's two source reads gained CRLF normalisation so the new
+  multi-line regexes cannot false-red on a Windows checkout.
+
+Verification
+- Witnessed red: swapping the asset back to assets/icon.png fails
+  "desktop rail renders the transparent brand mark, not the plated app icon"; reverting is green again.
+- npm test: 103/103 files green. npm run typecheck: 0 errors (locally requires installing the two declared
+  but locally absent packages @tauri-apps/plugin-notification and @tauri-apps/plugin-dialog; CI installs them).
+- Playwright desktop-shell harness (mock __TAURI_INTERNALS__, throwaway hub 9299 with the seeded demo agent,
+  web export of this branch), 1400x900, both colour schemes: the rail's brand slot shows the mark on the rail
+  surface with no plate, and no longer echoes the active pill beneath it. Before/after strips (0.2.75 vs this
+  branch, both themes) were sent to Vincent for approval before release:
+  scratchpad/v0277-logo-light.png, scratchpad/v0277-logo-dark.png.
+
+Not touched
+- No image asset was added, regenerated or edited; icon-derivation.json and its gate are untouched.
+- Tray, notification, chime and unread paths from 0.2.76 are untouched.
