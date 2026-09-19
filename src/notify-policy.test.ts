@@ -84,7 +84,10 @@ ck('通知组件等 user_inbox 拉到后才登记首份快照(登录不弹历史
 ck('托盘数用列表同一函数算', tray.includes('unreadCountForAgentRow(snap.serverBody, snap.ledger, alias, reply)') && tray.includes("invoke('tray_update'"));
 ck('设置页有「消息提示音」和「免打扰时段」', settings.includes('<Text style={styles.rowLabel}>消息提示音</Text>') && settings.includes('<Text style={styles.rowLabel}>免打扰时段</Text>'));
 const rust = norm('../src-tauri/src/tray.rs'), lib = norm('../src-tauri/src/lib.rs'), cargo = norm('../src-tauri/Cargo.toml'), cap = norm('../src-tauri/capabilities/default.json');
-ck('Rust:托盘 macOS 用 template 图标,菜单点行 emit tray-open-chat', rust.includes('icon_as_template(true)') && rust.includes('app.emit("tray-open-chat"') && rust.includes('include_image!("./tray/trayTemplate.png")'));
+// 0.2.79 起嵌的是 @2x:tray-icon 把状态栏图像强制成 18pt 高,22px 那份在 Retina 上
+// 是放大后显示。图标本身的形状判据在 src/tray-icon-assets.test.ts(它才是 0.2.76
+// 那块「灰方片」的回归测试),这里只钉「macOS 走 template + 嵌的是哪一份」。
+ck('Rust:托盘 macOS 用 template 图标(@2x),菜单点行 emit tray-open-chat', rust.includes('icon_as_template(true)') && rust.includes('app.emit("tray-open-chat"') && rust.includes('include_image!("./tray/trayTemplate@2x.png")'));
 ck('Rust:tray_update 已注册,notification 插件已挂', lib.includes('tray::tray_update,') && lib.includes('.plugin(tauri_plugin_notification::init())'));
 ck('Cargo:tray-icon + image-png 特性,notification 插件', cargo.includes('"tray-icon", "image-png"') && cargo.includes('tauri-plugin-notification = "2"'));
 ck('capability:notification:default + 聚焦窗口权限', cap.includes('"notification:default"') && cap.includes('"core:window:allow-set-focus"'));
