@@ -78,8 +78,12 @@ fn focus_main<R: Runtime>(app: &AppHandle<R>) {
 }
 
 pub fn init<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<()> {
+    // 🔴 嵌入 @2x(50×44)而不是 1x:tray-icon 0.24 不管给它多大的像素,都把状态栏图像
+    //    强制成 `NSSize { height: 18.0, width: 18.0 * aspect }`
+    //    (tray-icon/src/platform_impl/macos/mod.rs)。所以 22px 那份在 Retina 上是**放大**后
+    //    再显示 = 糊;44px 那份是轻微缩小 = 清楚。两份都留着:1x 是人读/对照用的基准尺寸。
     #[cfg(target_os = "macos")]
-    let icon = tauri::include_image!("./tray/trayTemplate.png");
+    let icon = tauri::include_image!("./tray/trayTemplate@2x.png");
     #[cfg(not(target_os = "macos"))]
     let icon = tauri::include_image!("./tray/tray.png");
 
