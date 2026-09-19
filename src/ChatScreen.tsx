@@ -10,10 +10,12 @@ import {
   Modal,
   Platform,
   Pressable,
+  ScrollView,
   StatusBar,
   StyleSheet,
   Text,
   TextInput,
+  useWindowDimensions,
   View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -45,6 +47,7 @@ import { appendAttachmentQueue, attachmentFromClipboard, isTauriDesktop, release
 import { colors, onThemeChange, spacing } from './theme';
 import { formatChatHeader, shouldShowTimeHeader } from './time';
 import { echoSupersededByFetched } from './chat-echo';
+import { messageMenuGroups, selectionBarActions, type MessageMenuKey } from './message-menu-model';
 import { agentStatusLabel, buildQuote, compactQuoteText, confirmedOutboxIds, copyTextOf, copiedToastVisible, COPIED_TOAST_MS, parseQuoted, quoteLabel, type QuoteRef, mergeMessagesNewestFirst, msgKey, removeMessage, shouldShowJumpPill, nextUnread, jumpPillLabel, canSend, shouldSendOnEnter } from './chat-actions';
 import type { NativeSyntheticEvent, NativeScrollEvent } from 'react-native';
 import { usePoll } from './usePoll';
@@ -435,6 +438,16 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
   useEffect(() => setViewerUri(null), [attachmentViewerScope]);
   // 更像微信·round-2: 长按气泡的动作菜单(引用/删除)。null = 未打开。
   const [menuFor, setMenuFor] = useState<MessageSelection | null>(null);
+  // 0.2.78 Vincent:「右键的效果和微信对齐」—— 桌面端菜单落在光标处(微信桌面端就是这样),
+  // 触摸端仍是底部 action sheet。null = 用底部 sheet。
+  const [menuAt, setMenuAt] = useState<{ x: number; y: number } | null>(null);
+  // 放大阅读:单条消息的全屏可选中视图(我们的代码块很长,气泡里读不完)。
+  const [expandFor, setExpandFor] = useState<MessageSelection | null>(null);
+  // 光标定位的菜单要夹在窗口内,否则贴右/贴底时会被切掉。
+  const { width: menuWindowWidth, height: menuWindowHeight } = useWindowDimensions();
+  // 多选:进入后气泡带复选框,底栏给转发/删除。
+  const [selectionMode, setSelectionMode] = useState(false);
+  const [selectedKeys, setSelectedKeys] = useState<string[]>([]);
   // 微信式引用:选中「引用」后不往输入框塞文字,而是在输入框上方挂一条引用条(可 ×),发送时拼成
   // 「@作者: 文本」前缀;对方气泡下方渲染成灰色引用条。null = 没在引用。
   const [quote, setQuote] = useState<QuoteRef | null>(null);
@@ -459,6 +472,10 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
     return () => clearTimeout(timer);
   }, [copiedAt]);
   const [forwardFor, setForwardFor] = useState<MessageSelection | null>(null);
+  // 多选转发:一批消息按时间顺序逐条转发。每条仍走各自的 beginForward(操作键含正文哈希),
+  // 所以去重/fail-closed 语义与单条完全一致;**第一条失败即停**,剩下的不发。
+  const [forwardBatch, setForwardBatch] = useState<MessageSelection[] | null>(null);
+  const [forwardProgress, setForwardProgress] = useState<string | null>(null);
   const [forwardUiOwner, setForwardUiOwner] = useState<string | null>(null);
   const [forwardTargets, setForwardTargets] = useState<Session[]>([]);
   const [forwardQuery, setForwardQuery] = useState('');
@@ -582,15 +599,36 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
       event.stopPropagation?.();
       event.stopImmediatePropagation?.();
       const author = part === 'reply' ? alias : resolveSender(item, currentUsername).alias;
+      // 微信桌面端的菜单落在光标处,不是屏幕底部。坐标在这里就有,不用再测一次布局。
+      const x = typeof event.clientX === 'number' ? event.clientX : null;
+      const y = typeof event.clientY === 'number' ? event.clientY : null;
+      setMenuAt(x !== null && y !== null ? { x, y } : null);
       setMenuFor({ item, text, author });
     };
     doc.addEventListener('contextmenu', handleMessageContextMenu, true);
     return () => doc.removeEventListener('contextmenu', handleMessageContextMenu, true);
   }, [desktop, messages]);
 
-  const openForwardPicker = async (selection: MessageSelection) => {
+  // 菜单/放大阅读:Esc 关闭(桌面端)。微信桌面端也没有「取消」那一行。
+  useEffect(() => {
+    const doc = (globalThis as any).document;
+    if (!desktop || !doc?.addEventListener) return;
+    if (!menuFor && !expandFor) return;
+    const onKeyDown = (event: any) => {
+      if (event.key !== 'Escape') return;
+      event.preventDefault?.();
+      if (expandFor) setExpandFor(null);
+      else setMenuFor(null);
+    };
+    doc.addEventListener('keydown', onKeyDown);
+    return () => doc.removeEventListener('keydown', onKeyDown);
+  }, [desktop, menuFor, expandFor]);
+
+  const openForwardPicker = async (selection: MessageSelection, batch?: MessageSelection[]) => {
     setMenuFor(null);
     setForwardFor(selection);
+    setForwardBatch(batch && batch.length > 1 ? batch : null);
+    setForwardProgress(null);
     setForwardUiOwner(conversationKeyFor);
     setForwardQuery('');
     setForwardAmbiguous(false);
@@ -606,31 +644,112 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
     if (!forwardFor || forwardingRef.current || forwardAmbiguous) return;
     const startedKey = conversationKeyFor;
     const mayWrite = () => mayProjectForward(startedKey, visibleConversationKeyRef.current, mountedRef.current);
-    const begun = beginForward(startedKey, target, forwardFor.text, createDashboardRequestId);
-    forwardOperationKeyRef.current = begun.operation.key;
-    if (!begun.started) { setForwardAmbiguous(true); return; }
+    // 一批消息按时间顺序逐条发。每条各自 beginForward,所以「同一条重复转发」仍然被操作键挡住;
+    // 🔴 第一条不确定就停 —— 继续发下去会把「哪一条没确认」埋进一串成功里。
+    const queue = forwardBatch ?? [forwardFor];
     forwardingRef.current = true;
     setForwardingTo(target);
+    let sent = 0;
+    let lastResponse: Awaited<ReturnType<typeof sendTask>> | null = null;
     try {
-      const requestId = begun.operation.requestId;
-      const response = await sendTask(cfg, target, forwardFor.text, undefined, 'normal', requestId);
-      confirmForward(begun.operation.key);
-      if (mayWrite()) {
-        setSendConfirmation(sendConfirmationFromResponse(response));
-        setForwardFor(null);
+      for (const selection of queue) {
+        const begun = beginForward(startedKey, target, selection.text, createDashboardRequestId);
+        forwardOperationKeyRef.current = begun.operation.key;
+        if (!begun.started) {
+          // 这条已经有一个未完成的转发操作(pending/ambiguous):不重发,停在这里。
+          if (mayWrite()) {
+            setForwardAmbiguous(true);
+            setForwardProgress(queue.length > 1 ? `已转发 ${sent}/${queue.length}，其余未发送` : null);
+          }
+          return;
+        }
+        try {
+          lastResponse = await sendTask(cfg, target, selection.text, undefined, 'normal', begun.operation.requestId);
+          confirmForward(begun.operation.key);
+          sent += 1;
+        } catch (error) {
+          // No public forward reconciliation endpoint currently proves whether an
+          // ACK-loss write committed. Fail closed and disable repeat taps.
+          markForwardAmbiguous(begun.operation.key);
+          if (mayWrite()) {
+            setForwardAmbiguous(true);
+            setForwardProgress(queue.length > 1 ? `已转发 ${sent}/${queue.length}，其余未发送` : null);
+            Alert.alert(
+              '转发结果待确认',
+              queue.length > 1
+                ? `已转发 ${sent}/${queue.length} 条，这一条可能已经送达。为避免重复转发，请先在目标会话确认。`
+                : '可能已经送达。为避免重复转发，请先在目标会话确认。',
+            );
+          }
+          return;
+        }
       }
-    } catch (error) {
-      // No public forward reconciliation endpoint currently proves whether an
-      // ACK-loss write committed. Fail closed and disable repeat taps.
-      markForwardAmbiguous(begun.operation.key);
       if (mayWrite()) {
-        setForwardAmbiguous(true);
-        Alert.alert('转发结果待确认', '可能已经送达。为避免重复转发，请先在目标会话确认。');
+        if (lastResponse) setSendConfirmation(sendConfirmationFromResponse(lastResponse));
+        setForwardFor(null);
+        setForwardBatch(null);
+        setForwardProgress(null);
+        exitSelectionMode();
       }
     } finally {
       forwardingRef.current = false;
       if (mayWrite()) setForwardingTo(null);
     }
+  };
+
+  // ── 菜单动作(0.2.78) ────────────────────────────────────────────────────
+  const menuGroups = useMemo(
+    () => messageMenuGroups({ hasText: !!menuFor?.text, selectionMode, canForward: true }),
+    [menuFor, selectionMode],
+  );
+  const onMenuAction = (key: MessageMenuKey) => {
+    const selection = menuFor;
+    if (!selection) return;
+    if (key === 'copy') { setMenuFor(null); void copyMessage(selection.text); return; }
+    if (key === 'quote') {
+      setQuote({ author: selection.author, text: compactQuoteText(selection.text) });
+      setMenuFor(null);
+      mainComposerRef.current?.focus?.();
+      return;
+    }
+    if (key === 'forward') { void openForwardPicker(selection); return; }
+    if (key === 'multiSelect') {
+      setMenuFor(null);
+      setSelectionMode(true);
+      setSelectedKeys([msgKey(selection.item)]);
+      return;
+    }
+    if (key === 'expand') { setMenuFor(null); setExpandFor(selection); return; }
+    if (key === 'delete') { setMessages(prev => removeMessage(prev, selection.item)); setMenuFor(null); }
+  };
+
+  // ── 多选(0.2.78) ────────────────────────────────────────────────────────
+  const exitSelectionMode = () => { setSelectionMode(false); setSelectedKeys([]); };
+  const toggleSelected = (key: string) =>
+    setSelectedKeys(prev => (prev.includes(key) ? prev.filter(k => k !== key) : [...prev, key]));
+  /** 选中的消息按会话顺序(旧→新)排,转发时才不会把上下文发颠倒。 */
+  const selectedSelections = (): MessageSelection[] => {
+    const chosen = new Set(selectedKeys);
+    return messages
+      .filter(item => chosen.has(msgKey(item)))
+      .slice()
+      .reverse() // messages 是 newest-first(inverted 列表)
+      .map(item => ({
+        item,
+        text: item.content ?? '',
+        author: resolveSender(item, currentUsername).alias,
+      }))
+      .filter(selection => selection.text);
+  };
+  const onSelectionAction = (key: MessageMenuKey) => {
+    const chosen = selectedSelections();
+    if (key === 'delete') {
+      const keys = new Set(selectedKeys);
+      setMessages(prev => prev.filter(item => !keys.has(msgKey(item))));
+      exitSelectionMode();
+      return;
+    }
+    if (key === 'forward' && chosen.length > 0) void openForwardPicker(chosen[0], chosen);
   };
   // 更像微信·round-3: 滚离底部时的「回到最新」pill + 未读计数。
   const listRef = useRef<FlatList<ChatItem>>(null);
@@ -1228,6 +1347,15 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
                 {showHeader && item.created_at ? (
                   <Text style={styles.timeHeader}>{formatChatHeader(item.created_at)}</Text>
                 ) : null}
+                <View style={selectionMode ? styles.selectRow : undefined}>
+                {selectionMode ? (
+                  <Pressable accessibilityLabel="选中" hitSlop={8} onPress={() => toggleSelected(msgKey(item))} style={styles.selectBoxWrap}>
+                    <View style={[styles.selectBox, selectedKeys.includes(msgKey(item)) && styles.selectBoxOn]}>
+                      {selectedKeys.includes(msgKey(item)) ? <Ionicons name="checkmark" size={12} color={colors.onAccent} /> : null}
+                    </View>
+                  </Pressable>
+                ) : null}
+                <View style={selectionMode ? styles.selectBody : undefined} pointerEvents={selectionMode ? 'none' : 'auto'}>
                 {!item._proactive ? sender.isCurrentUser ? (
                 <View style={[styles.messageRow, styles.sentRow]}>
                   <View style={[styles.messageContent, styles.sentContent]}>
@@ -1325,6 +1453,8 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
                     </View>
                   </View>
                 ) : null}
+                </View>
+                </View>
                 {item._restoredNoImage ? (
                   <Text style={styles.restoredNote}>（图片附件未保存·重试仅发文本）</Text>
                 ) : null}
@@ -1345,6 +1475,27 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
           }}
         />
       )}
+
+      {selectionMode ? (
+        <View style={styles.selectionBar}>
+          <Pressable accessibilityLabel="退出多选" hitSlop={8} onPress={exitSelectionMode} style={({ pressed }) => [styles.selectionCancel, pressed && { opacity: 0.6 }]}>
+            <Text style={styles.selectionCancelText}>取消</Text>
+          </Pressable>
+          <View style={styles.selectionActions}>
+            {selectionBarActions(selectedKeys.length, true).map(action => (
+              <Pressable
+                key={action.key}
+                accessibilityLabel={action.label}
+                onPress={() => onSelectionAction(action.key)}
+                style={({ pressed }) => [styles.selectionAction, pressed && styles.actionItemPressed]}
+              >
+                <Text style={[styles.actionText, action.danger && styles.actionDanger]}>{action.label}</Text>
+              </Pressable>
+            ))}
+            {selectedKeys.length === 0 ? <Text style={styles.selectionHint}>选择要转发或删除的消息</Text> : null}
+          </View>
+        </View>
+      ) : null}
 
       {copiedToastVisible(copiedAt, Date.now()) ? (
         <View style={styles.copiedToast} pointerEvents="none" accessibilityLiveRegion="polite">
@@ -1383,64 +1534,69 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
         </Pressable>
       </Modal>
 
-      {/* 更像微信·round-2: 长按气泡动作菜单(底部 action sheet·引用/删除/取消) */}
+      {/* 0.2.78 Vincent:和微信对齐 —— 分组 + 分隔线,删除单独一组,没有「取消」行(Esc/点空白关)。
+          桌面端落在光标处;触摸端仍是底部 action sheet。 */}
       <Modal visible={!!menuFor} transparent animationType="fade" onRequestClose={() => setMenuFor(null)}>
-        <Pressable style={styles.menuBackdrop} onPress={() => setMenuFor(null)}>
-          <View style={styles.actionSheet}>
+        <Pressable style={desktop && menuAt ? styles.menuBackdropAnchored : styles.menuBackdrop} onPress={() => setMenuFor(null)}>
+          <View
+            style={desktop && menuAt
+              ? [styles.actionMenuDesktop, { left: Math.max(8, Math.min(menuAt.x, menuWindowWidth - 188)), top: Math.max(8, Math.min(menuAt.y, menuWindowHeight - 300)) }]
+              : styles.actionSheet}
+          >
+            {menuGroups.map((group, groupIndex) => (
+              <View key={`menu-group-${groupIndex}`}>
+                {groupIndex > 0 ? <View style={styles.actionGroupGap} /> : null}
+                {group.map((item, itemIndex) => (
+                  <View key={item.key}>
+                    {itemIndex > 0 ? <View style={styles.actionSep} /> : null}
+                    <Pressable
+                      accessibilityLabel={item.key === 'copy' ? '复制消息' : item.label}
+                      style={({ pressed }) => [
+                        desktop && menuAt ? styles.actionItemDesktop : styles.actionItem,
+                        pressed && styles.actionItemPressed,
+                      ]}
+                      onPress={() => onMenuAction(item.key)}
+                    >
+                      <Text style={[styles.actionText, item.danger && styles.actionDanger]}>{item.label}</Text>
+                    </Pressable>
+                  </View>
+                ))}
+              </View>
+            ))}
+          </View>
+        </Pressable>
+      </Modal>
+
+      {/* 放大阅读:单条消息的全屏视图。气泡里读不完的长代码块用这个。 */}
+      <Modal visible={!!expandFor} transparent animationType="fade" onRequestClose={() => setExpandFor(null)}>
+        <Pressable style={styles.expandBackdrop} onPress={() => setExpandFor(null)}>
+          <Pressable style={styles.expandPanel} onPress={() => {}} accessibilityLabel="放大阅读">
+            <View style={styles.expandHeader}>
+              <Text style={styles.expandTitle} numberOfLines={1}>{expandFor?.author ?? ''}</Text>
+              <Pressable accessibilityLabel="关闭放大阅读" hitSlop={8} onPress={() => setExpandFor(null)}>
+                <Ionicons name="close" size={20} color={colors.textMuted} />
+              </Pressable>
+            </View>
+            <ScrollView style={styles.expandScroll} contentContainerStyle={styles.expandContent}>
+              <MarkdownMessage>{cleanAttachmentDebugText(parseQuoted(expandFor?.text ?? '').body || (expandFor?.text ?? ''))}</MarkdownMessage>
+            </ScrollView>
             <Pressable
               accessibilityLabel="复制消息"
-              style={({ pressed }) => [styles.actionItem, pressed && styles.actionItemPressed]}
-              onPress={() => {
-                const text = menuFor?.text ?? '';
-                setMenuFor(null);
-                void copyMessage(text);
-              }}
+              style={({ pressed }) => [styles.expandCopy, pressed && styles.actionItemPressed]}
+              onPress={() => void copyMessage(expandFor?.text ?? '')}
             >
-              <Text style={styles.actionText}>复制</Text>
+              <Ionicons name="copy-outline" size={15} color={colors.textSecondary} />
+              <Text style={styles.expandCopyText}>复制全文</Text>
             </Pressable>
-            <View style={styles.actionSep} />
-            <Pressable
-              style={({ pressed }) => [styles.actionItem, pressed && styles.actionItemPressed]}
-              onPress={() => {
-                if (menuFor) setQuote({ author: menuFor.author, text: compactQuoteText(menuFor.text) });
-                setMenuFor(null);
-                mainComposerRef.current?.focus?.();
-              }}
-            >
-              <Text style={styles.actionText}>引用</Text>
-            </Pressable>
-            <View style={styles.actionSep} />
-            <Pressable
-              style={({ pressed }) => [styles.actionItem, pressed && styles.actionItemPressed]}
-              onPress={() => menuFor && openForwardPicker(menuFor)}
-            >
-              <Text style={styles.actionText}>转发</Text>
-            </Pressable>
-            <View style={styles.actionSep} />
-            <Pressable
-              style={({ pressed }) => [styles.actionItem, pressed && styles.actionItemPressed]}
-              onPress={() => {
-                if (menuFor) setMessages((prev) => removeMessage(prev, menuFor.item));
-                setMenuFor(null);
-              }}
-            >
-              <Text style={[styles.actionText, styles.actionDanger]}>删除</Text>
-            </Pressable>
-            <View style={styles.actionSepGap} />
-            <Pressable
-              style={({ pressed }) => [styles.actionItem, pressed && styles.actionItemPressed]}
-              onPress={() => setMenuFor(null)}
-            >
-              <Text style={styles.actionCancel}>取消</Text>
-            </Pressable>
-          </View>
+          </Pressable>
         </Pressable>
       </Modal>
 
       <Modal visible={!!forwardFor && forwardUiOwner === conversationKeyFor} transparent animationType="fade" onRequestClose={() => setForwardFor(null)}>
         <Pressable style={styles.forwardBackdrop} onPress={() => setForwardFor(null)}>
           <Pressable style={styles.forwardPanel} onPress={() => {}}>
-            <Text style={styles.forwardTitle}>转发给</Text>
+            <Text style={styles.forwardTitle}>{forwardBatch ? `转发给（${forwardBatch.length} 条）` : '转发给'}</Text>
+            {forwardProgress ? <Text style={styles.forwardEmpty}>{forwardProgress}</Text> : null}
             {forwardAmbiguous ? <Text style={styles.forwardEmpty}>结果待确认，请勿重复转发</Text> : null}
             {forwardAmbiguous && forwardOperationKeyRef.current ? (
               <Pressable onPress={() => Alert.alert('清除待确认状态？', '这不会重新转发，也不代表消息未送达。', [
@@ -1774,7 +1930,42 @@ const makeStyles = () =>
   actionItemPressed: { backgroundColor: colors.inputBg },
   actionText: { color: colors.text, fontSize: 16 },
   actionDanger: { color: colors.failed },
-  actionCancel: { color: colors.textSecondary, fontSize: 16, fontWeight: '600' },
+  // 0.2.78 桌面端:菜单落在光标处(微信桌面端形状),左对齐、行更紧。
+  menuBackdropAnchored: { flex: 1, backgroundColor: 'transparent' },
+  actionMenuDesktop: {
+    position: 'absolute',
+    width: 180,
+    backgroundColor: colors.card,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: colors.border,
+    paddingVertical: spacing.xs,
+    overflow: 'hidden',
+  },
+  actionItemDesktop: { paddingVertical: 9, paddingHorizontal: spacing.md, alignItems: 'flex-start' },
+  // 组与组之间是一段留白(不是发丝线),危险动作因此够不着常用动作。
+  actionGroupGap: { height: spacing.sm, backgroundColor: colors.bg },
+  // 放大阅读
+  expandBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.55)', alignItems: 'center', justifyContent: 'center', padding: spacing.lg },
+  expandPanel: { width: 760, maxWidth: '96%', height: '86%', borderRadius: 14, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.card, overflow: 'hidden' },
+  expandHeader: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingHorizontal: spacing.lg, paddingVertical: spacing.md, borderBottomWidth: 1, borderBottomColor: colors.border },
+  expandTitle: { flex: 1, minWidth: 0, color: colors.text, fontSize: 15, fontWeight: '700' },
+  expandScroll: { flex: 1 },
+  expandContent: { padding: spacing.lg },
+  expandCopy: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.xs, paddingVertical: spacing.md, borderTopWidth: 1, borderTopColor: colors.border },
+  expandCopyText: { color: colors.textSecondary, fontSize: 13 },
+  // 多选
+  selectRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  selectBoxWrap: { paddingLeft: spacing.xs },
+  selectBox: { width: 20, height: 20, borderRadius: 10, borderWidth: 1.5, borderColor: colors.border, alignItems: 'center', justifyContent: 'center' },
+  selectBoxOn: { backgroundColor: colors.accent, borderColor: colors.accent },
+  selectBody: { flex: 1, minWidth: 0 },
+  selectionBar: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingHorizontal: spacing.lg, paddingVertical: spacing.md, borderTopWidth: 1, borderTopColor: colors.border, backgroundColor: colors.card },
+  selectionCancel: { paddingVertical: spacing.xs, paddingRight: spacing.sm },
+  selectionCancelText: { color: colors.textSecondary, fontSize: 14 },
+  selectionActions: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', gap: spacing.md },
+  selectionAction: { paddingVertical: spacing.xs, paddingHorizontal: spacing.sm, borderRadius: 8 },
+  selectionHint: { color: colors.textMuted, fontSize: 12 },
   plusMenuBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.38)', justifyContent: 'flex-end' },
   plusMenu: { backgroundColor: colors.card, borderColor: colors.border, borderWidth: 1, overflow: 'hidden' },
   plusMenuDesktop: { width: 320, marginLeft: spacing.lg, marginBottom: 164, borderRadius: 12 },
@@ -1794,7 +1985,6 @@ const makeStyles = () =>
   forwardAlias: { flex: 1, minWidth: 0, color: colors.text, fontSize: 14, fontWeight: '600' },
   forwardEmpty: { color: colors.textMuted, textAlign: 'center', paddingVertical: spacing.xl },
   actionSep: { height: 1, backgroundColor: colors.border },
-  actionSepGap: { height: spacing.sm, backgroundColor: colors.bg },
   // round-3 回到最新 pill
   jumpPill: {
     position: 'absolute',

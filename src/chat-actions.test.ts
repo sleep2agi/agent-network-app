@@ -110,7 +110,7 @@ ck('桌面输入区显示快捷键提示', chatSource.includes('Enter 发送 · 
   ck('compactQuoteText 压空白截 40', compactQuoteText('a\n  b') === 'a b' && compactQuoteText('x'.repeat(50)).endsWith('…'));
   // 源码契约:ChatScreen 用引用条而不是往草稿塞文字;两种气泡都渲染引用条;发送前拼前缀
   const src = fs.readFileSync(path.join(__dirname, 'ChatScreen.tsx'), 'utf8');
-  ck('引用动作 → setQuote 而不是 applyQuote', src.includes('setQuote({ author: menuFor.author, text: compactQuoteText(menuFor.text) })') && !src.includes('applyQuote('));
+  ck('引用动作 → setQuote 而不是 applyQuote', src.includes('setQuote({ author: selection.author, text: compactQuoteText(selection.text) })') && !src.includes('applyQuote('));
   ck('发送时把引用拼在正文前', src.includes('const content = quote ? buildQuote(quote.text, 40, quote.author) + body : body;'));
   ck('发出/回复两种气泡都渲染引用条', src.includes('styles.quoteChipSent') && src.includes('styles.quoteChipReply') && src.includes('quoteLabel(sentQuoted.quote)') && src.includes('quoteLabel(replyQuoted.quote)'));
   ck('气泡正文用去掉引用后的 body', src.includes('cleanAttachmentDebugText(replyQuoted.body)') && src.includes("cleanAttachmentDebugText(sentQuoted.body || (sentQuoted.quote ? '' : '—'))"));
