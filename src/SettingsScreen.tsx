@@ -1,5 +1,5 @@
 import { useEffect, useState, useSyncExternalStore } from 'react';
-import { ActivityIndicator, Modal, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { HubConfig } from './api';
 import { DesktopStorageDiagnostics, HubProfile, getDesktopStorageDiagnostics, listHubProfiles, removeHubProfile, saveThemeMode } from './storage';
 import { colors, onThemeChange, setThemeMode, spacing, themeMode } from './theme';
@@ -87,6 +87,15 @@ export default function SettingsScreen({
   const tauriDesktop = !!(globalThis as any).__TAURI_INTERNALS__;
   return (
     <View style={styles.root}>
+      {/* 0.2.80(Vincent 2026-09-19「设置页面往下面滑动不了」):这一屏从来没有过
+          ScrollView,窗口矮一点时「通知」「关于」整段就够不着了。滚动条只在
+          桌面端常驻——移动端由系统自己做淡入淡出。padding 挪到 contentContainer:
+          留在滚动根上的话它在可滚区域之外,最后一行照样贴着窗口底边。 */}
+      <ScrollView
+        contentContainerStyle={styles.content}
+        showsVerticalScrollIndicator
+        testID="settings-scroll"
+      >
       <Text style={styles.sectionTitle}>账号与 Hub</Text>
       <View style={styles.card}>
         {profiles.length ? profiles.map((profile, index) => {
@@ -276,7 +285,10 @@ export default function SettingsScreen({
       >
         <Text style={styles.logoutText}>移除当前账号</Text>
       </Pressable> : null}
+      </ScrollView>
 
+      {/* 两个确认弹窗是 ScrollView 的兄弟不是子节点:Modal 套进滚动容器里会继承它的
+          触摸处理,背板也不再铺满窗口。 */}
       <Modal visible={!!removeTarget} transparent animationType="fade" onRequestClose={() => setRemoveTarget(null)}>
         <View style={styles.modalBackdrop}>
           <View style={styles.modalCard}>
@@ -344,7 +356,10 @@ function Divider() {
 
 const makeStyles = () =>
   StyleSheet.create({
-  root: { flex: 1, padding: spacing.lg, backgroundColor: colors.bg },
+  root: { flex: 1, backgroundColor: colors.bg },
+  // 底部多留一个 spacing.xl:最后一行(移除账号/通知说明)要能完全离开窗口下沿,
+  // 而不是刚好贴上去——贴上去看起来就和「滚不动」一样。
+  content: { padding: spacing.lg, paddingBottom: spacing.xl * 2 },
   sectionTitle: {
     color: colors.textMuted,
     fontSize: 12,

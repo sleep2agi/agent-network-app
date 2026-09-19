@@ -1,0 +1,63 @@
+Desktop v0.2.80 release-candidate report
+
+- Base: main after app#322 (0.2.79)
+- Target: desktop-v0.2.80
+- Why: Vincent 2026-09-19 (settings screenshot, task 6253495c): "它那个设置页面，它那个往下面滑动不了啊"
+
+What was wrong
+- src/SettingsScreen.tsx returned `<View style={styles.root}>` and never imported ScrollView at all. Not a
+  broken scroll container — no scroll container. Every row past the window fold was unreachable, and the
+  last line (the notification hint) sat flush against the bottom edge, which is what the screenshot shows.
+- Every sibling screen already scrolls: TasksScreen, ScheduledTasksScreen, CreateNodeWizardScreen,
+  HostSupervisorPickerScreen, NodeDetailScreen, ServerScreen, TaskDetailScreen, ChatScreen, plus
+  FirstRunScreen and LoginScreen in App.tsx use ScrollView; AgentsScreen, LogsScreen and MessagesScreen
+  scroll through FlatList. Settings is the one screen that never got one.
+- It bites hardest on the configuration Vincent runs: with a local hub registered, the 本地 Hub card adds
+  four rows plus an action strip, pushing 外观 / 通知 / 关于 / 移除当前账号 off a normal window.
+
+Changes
+- src/SettingsScreen.tsx: import ScrollView; wrap the body in
+  `<ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator testID="settings-scroll">`;
+  `root` drops its padding and keeps `flex: 1` only; new `content: { padding: spacing.lg,
+  paddingBottom: spacing.xl * 2 }`.
+- Padding had to move onto the content container. Left on the scroll root it sits OUTSIDE the scrollable
+  area, so the last row stays pinned under the window edge even once a ScrollView exists — the fix would
+  have looked applied and still failed the thing it was for.
+- The extra bottom padding is deliberate: a final row resting exactly on the window edge reads as
+  "cut off" whether or not it can scroll, which is the complaint we are answering.
+- Both confirm modals (remove-account, delete-local-workspace) stay siblings of the ScrollView, not
+  children. A Modal nested in a scroll container inherits its touch handling and its backdrop stops
+  filling the window.
+- src/settings-scroll.test.ts (new): five source-contract assertions — ScrollView imported, body wrapped
+  with a content container, scroll root carries no padding, content container carries padding plus extra
+  bottom room, and both modals sit after the closing </ScrollView>.
+
+Screens audited (scroll containers), no other genuine defect found
+- ScrollView: ChatScreen, CreateNodeWizardScreen, HostSupervisorPickerScreen, NodeDetailScreen,
+  ScheduledTasksScreen, ServerScreen, TaskDetailScreen, TasksScreen, SettingsScreen (this change),
+  FirstRunScreen + LoginScreen (App.tsx).
+- FlatList / SectionList, which scroll natively: AgentsScreen, LogsScreen, MessagesScreen.
+- Left alone on purpose: UnreadBadgeFixtureScreen — a web GUI test fixture ("?fixture=unread-badge") that
+  mounts AgentsScreen inside a fixed SafeAreaView. Its child list scrolls; the fixture's own frame is
+  meant to be fixed, and wrapping it would change what the fixture pins.
+
+Verification
+- Witnessed red before the fix: `node --experimental-strip-types src/settings-scroll.test.ts` exits 1 with
+  "FAIL: SettingsScreen imports ScrollView from react-native". After the fix all five assertions pass.
+- npm test: 106/106 test files passed. npm run typecheck: rc=0.
+- Runtime, Playwright desktop-shell harness against a throwaway hub (9299) and a web export of this
+  branch, theme forced through the app's own theme_mode_v1 key because the app does not follow the OS
+  colour scheme:
+    viewport 1400x620  scrollHeight 670 / clientHeight 620  scrollTop 0 -> 50   SCROLLED: true
+    viewport 1400x460  scrollHeight 670 / clientHeight 460  scrollTop 0 -> 210  SCROLLED: true
+  In both, the 关于 section becomes visible after scrolling and the notification hint's box ends above the
+  window bottom (y+h <= viewport height). Captured light and dark.
+- Note on the runtime numbers: the harness logs in to a remote throwaway hub, so the 本地 Hub card is
+  absent and the page is only ~670px tall. Vincent's window has that card, so his overflow is larger —
+  the assertion that matters is that the container scrolls and the final row clears the edge, which holds
+  at both viewports.
+
+Artifacts
+- scratchpad/v0280-settings-bottom.png (1400x620, light, scrolled to bottom)
+- scratchpad/v0280-settings-460-bottom.png (1400x460, light, scrolled to bottom — sent to Vincent)
+- scratchpad/v0280-settings-dark-bottom.png (1400x620, dark)
