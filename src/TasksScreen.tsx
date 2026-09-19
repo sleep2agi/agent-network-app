@@ -116,6 +116,7 @@ export default function TasksScreen({
       <ScrollView
         horizontal
         showsHorizontalScrollIndicator={false}
+        style={styles.filterScroll}
         contentContainerStyle={styles.filterRow}
       >
         {TASK_FILTERS.map(f => {
@@ -252,6 +253,16 @@ const makeStyles = () =>
   StyleSheet.create({
     root: { flex: 1, backgroundColor: colors.bg },
     center: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: spacing.xl },
+    // 0.2.80(Vincent 2026-09-19 截图):桌面端四个筛选 chip 被撑成整屏高的竖条。
+    // 这一行是 `root: { flex: 1 }` 里的横向 ScrollView,react-native-web 下它保留
+    // 默认的 flex-grow: 1 ⇒ 吃掉整块剩余高度,内容行默认 align-items: stretch 再把
+    // 每个 chip 拉到那么高。实测(同一个运行中的构建,一次只改一处):
+    //   原样                        chip 361px / 容器 385px
+    //   只给内容行 alignItems:center chip  31px / 容器 385px ← chip 好了,底下留 330px 空带
+    //   只给 ScrollView flexGrow:0   chip  31px / 容器  55px ← 两个都好了
+    // 所以承重的是 flexGrow: 0,而且必须落在 ScrollView 的 style 上——它和
+    // contentContainerStyle 是两个不同的元素。横向滚动本身要保留(窄窗口用)。
+    filterScroll: { flexGrow: 0 },
     filterRow: {
       paddingHorizontal: spacing.lg,
       paddingVertical: spacing.md,
