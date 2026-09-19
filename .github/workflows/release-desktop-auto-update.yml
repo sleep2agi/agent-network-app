@@ -119,6 +119,15 @@ jobs:
           releaseBody: |-
             Signed and notarized stable update for macOS (Apple Silicon) and Windows (x64).
 
+            What's new in 0.2.80:
+            - Settings scrolls (Vincent, 2026-09-19: "它那个往下面滑动不了啊"). That screen never had a scroll
+              container at all — every other screen does — so on a short window the 通知, 关于 and account rows
+              below the fold were simply unreachable, with the last line resting against the window edge. The body
+              now scrolls, with room left under the final row so the end of the page reads as the end rather than
+              as a cut-off. Padding moved onto the scroll content, because padding left on a scroll root sits
+              outside the scrollable area and keeps the last row pinned under the edge. Both confirm dialogs stay
+              outside the scroll view so their backdrops still cover the window. A contract test pins this.
+
             What's new in 0.2.79:
             - macOS: the menu-bar icon is the Agent Network mark again instead of a grey slab (Vincent, 2026-09-19:
               "提供栏也没看到 agent network 的图标"). The item was there all along, unread count and all — but 0.2.76
