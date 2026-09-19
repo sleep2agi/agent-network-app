@@ -119,6 +119,18 @@ jobs:
           releaseBody: |-
             Signed and notarized stable update for macOS (Apple Silicon) and Windows (x64).
 
+            What's new in 0.2.78:
+            - Chat: the message context menu now follows WeChat's shape (Vincent, 2026-09-19: "在消息上右键的效果和
+              微信对齐一下,是有单独的部分显示转发啥的,而不是只显示在最下面"). It is three separated groups —
+              copy/quote, then forward…/multi-select/expand, then delete alone in red — so the destructive action no
+              longer sits against the one you reach for most. The "cancel" row is gone; Escape or a click outside
+              closes it, and on desktop the menu opens at the cursor instead of as a bottom sheet.
+            - Chat: "expand" opens one message full-screen with its markdown intact and a copy-all button — our code
+              blocks are routinely taller than a bubble.
+            - Chat: "multi-select" puts checkboxes on the bubbles and a bar at the bottom offering forward (N) and
+              delete (N). Forwarding many sends them oldest-first, each through its own guarded operation, and stops
+              at the first send it cannot confirm, reporting "已转发 N/M" rather than continuing past an unknown.
+
             What's new in 0.2.77:
             - Desktop: the navigation rail now carries the brand mark itself instead of the installable app icon
               (Vincent, 2026-09-18: "这个黑色的图标有点太丑了"). The app icon ships with a dark plate, which at

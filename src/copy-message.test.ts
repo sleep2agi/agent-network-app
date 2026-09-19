@@ -1,5 +1,6 @@
 // 2026-09-16 Vincent:「需要支持一下复制消息的按钮」—— 动作菜单「复制」+ 桌面悬停复制按钮 + 「已复制」提示。
 import fs from 'node:fs';
+import { messageMenuGroups as menuGroups } from './message-menu-model';
 import path from 'node:path';
 import { copyTextOf, copiedToastVisible, COPIED_TOAST_MS } from './chat-actions';
 let p = 0, t = 0; const ck = (n: string, c: boolean) => { t++; if (c) { p++; console.log('✅', n); } else console.log('❌', n); };
@@ -13,7 +14,9 @@ ck('toast 到点消失', copiedToastVisible(1000, 1000 + COPIED_TOAST_MS) === fa
 ck('toast 未复制过不显示', copiedToastVisible(null, 5000) === false);
 
 const src = fs.readFileSync(path.join(__dirname, 'ChatScreen.tsx'), 'utf8');
-ck('动作菜单第一项是「复制」', src.indexOf('<Text style={styles.actionText}>复制</Text>') > 0 && src.indexOf('<Text style={styles.actionText}>复制</Text>') < src.indexOf('<Text style={styles.actionText}>引用</Text>'));
+// 0.2.78:菜单项由 message-menu-model 产出,第一组第一项仍是「复制」——断言落在模型上。
+ck('动作菜单第一项是「复制」', menuGroups({ hasText: true }).at(0)!.at(0)!.key === 'copy');
+ck('复制项带无障碍名', src.includes("item.key === 'copy' ? '复制消息' : item.label"));
 ck('复制走 expo-clipboard,失败退回 navigator.clipboard', src.includes("import * as Clipboard from 'expo-clipboard';") && src.includes('await Clipboard.setStringAsync(value);') && src.includes('navigator?.clipboard?.writeText?.(value)'));
 ck('复制的是 copyTextOf(去引用块)', src.includes('const value = copyTextOf(text);'));
 // 0.2.72:第三种气泡(别的节点派来的任务,收到侧)也带复制按钮 → 3 处

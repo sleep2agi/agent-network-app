@@ -26,10 +26,12 @@ assert.ok(agentsSource.includes('dataSet: { agentAlias: item.alias }'));
 const chatSource = fs.readFileSync(path.join(process.cwd(), 'src/ChatScreen.tsx'), 'utf8');
 assert.ok(chatSource.includes("addEventListener('contextmenu', handleMessageContextMenu, true)"));
 assert.ok(chatSource.includes("messagePart: 'sent'") && chatSource.includes("messagePart: 'reply'"));
-assert.ok(chatSource.includes('<Text style={styles.actionText}>转发</Text>'));
-assert.ok(chatSource.includes('await sendTask(cfg, target, forwardFor.text, undefined, \'normal\', requestId)'));
+// 0.2.78: 菜单项从 messageMenuGroups 出,不再是写死的一行一项;转发按选中批次逐条发。
+assert.ok(chatSource.includes('messageMenuGroups(') && chatSource.includes("{item.label}</Text>"));
+assert.ok(chatSource.includes('const queue = forwardBatch ?? [forwardFor];'));
+assert.ok(chatSource.includes("await sendTask(cfg, target, selection.text, undefined, 'normal', begun.operation.requestId)"));
 
-console.log('desktop chat menu: 14 checks passed');
+console.log('desktop chat menu: 15 checks passed');
 
 // ── 应用多开:工作区窗口(Vincent 2026-09-07)──────────────────────────────────
 {
