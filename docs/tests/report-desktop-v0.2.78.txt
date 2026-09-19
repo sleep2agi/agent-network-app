@@ -1,0 +1,59 @@
+Desktop v0.2.78 release-candidate report
+
+- Base: main after app#320 (0.2.77)
+- Target: desktop-v0.2.78
+- Why: Vincent 2026-09-19 (two WeChat screenshots, task 3bd22339): "在消息上右键的效果和 微信对齐一下，
+  是有单独的部分显示转发啥的，而不是只显示在最下面"
+
+What was wrong
+- The message menu was a flat column: 复制 / 引用 / 转发 / 删除 / 取消, one hairline between每 item.
+  删除 sat directly under 转发 — the destructive action shared an edge with a routine one — and the
+  sheet ended with a 取消 row that WeChat's desktop client does not have.
+- WeChat's shape (from the screenshots): three groups separated by gaps —
+  [复制 放大阅读 翻译 搜一搜] / [转发... 收藏 多选 提醒 引用] / [删除 in red, alone].
+  The grouping carries meaning: act on the message, move the message, destroy the message.
+
+Changes
+- src/message-menu-model.ts (new, pure): messageMenuGroups(ctx) returns groups of {key,label,danger?}.
+  Shipped shape: [复制, 引用] / [转发…, 多选, 放大阅读] / [删除 danger]. Items drop out when unavailable
+  (no text ⇒ no copy/quote/forward/expand) and empty groups are filtered, so a separator can never render
+  above nothing. selectionBarActions(count, canForward) models the multi-select bar.
+- src/ChatScreen.tsx:
+  * Menu renders from the model: gap between groups, hairline inside a group, danger styling on 删除,
+    no 取消 row. Escape closes (desktop); backdrop click still closes everywhere.
+  * Desktop menus open at the cursor (clientX/clientY from the existing contextmenu handler, clamped into
+    the window). Touch keeps the bottom action sheet. Right-click already opened the menu before this
+    release — that part is unchanged.
+  * 放大阅读: full-screen modal, markdown rendered as in the bubble, scrollable, copy-all at the bottom.
+  * 多选: checkboxes beside bubbles, bottom bar with 转发…（N）/ 删除（N）and a cancel affordance.
+- Multi-forward safety (the part worth reviewing): the batch is sent oldest-first and each message still
+  goes through its own beginForward, so the per-message dedupe/fail-closed guard is untouched. On the
+  first send that cannot be confirmed — or the first message that already has an in-flight operation —
+  the loop STOPS, marks that one ambiguous, and reports 已转发 N/M. Continuing past an unconfirmed send
+  would bury "which one is unknown" inside a run of successes.
+
+Scope explicitly not taken
+- 收藏 / 提醒 / 翻译 / 搜一搜 need storage or external services; Vincent was told they are out.
+
+Verification
+- npm test: 104/104 test files pass (src/message-menu-model.test.ts is new, 27 assertions).
+- npm run typecheck: clean.
+- Two-way checks in the model test: no group is ever empty for any input; danger appears only on 删除 and
+  never in the same group as 转发; the menu carries no cancel item; the bottom bar shows nothing at 0
+  selected and counted labels above that.
+- Source contracts updated rather than deleted: desktop-chat-menu.test.ts now pins the model-driven render
+  and the batch forward call; copy-message.test.ts pins "first item is 复制" on the model; chat-actions.test.ts
+  follows the renamed selection variable.
+- Live UI (Playwright desktop-shell harness, throwaway hub on 127.0.0.1:9297 seeded with three tasks,
+  web export of this branch, 1400x900):
+    menu items          ["复制消息","引用","转发…","多选","放大阅读","删除"]
+    menu at cursor      right-click at (494,644) → menu column left edge x=495
+    expand              opens on the long code message, shows all 24 lines that the bubble truncated;
+                        Escape closes it (asserted)
+    multi-select        3 checkboxes; selecting two ⇒ bar reads 转发…（2） | 删除（2）
+  Screenshots: scratchpad/v0278-{dark,light}-menu.png, v0278-dark-expand.png, v0278-{dark,light}-multiselect.png
+  (both themes captured by presetting the app's own theme_mode_v1 key — the app does not follow the OS
+  colour scheme, so Playwright's colorScheme alone reproduces dark twice; worth knowing for future runs).
+- Screenshots were sent to Vincent before release. The attachment path (send_reply with in_reply_to)
+  refused because his task was already terminal (reply_task_terminal), so they went as a desktop message
+  carrying the /api/files links instead; that message persisted with no live subscriber at the time.
