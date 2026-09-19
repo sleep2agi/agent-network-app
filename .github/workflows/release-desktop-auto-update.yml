@@ -127,6 +127,12 @@ jobs:
               as a cut-off. Padding moved onto the scroll content, because padding left on a scroll root sits
               outside the scrollable area and keeps the last row pinned under the edge. Both confirm dialogs stay
               outside the scroll view so their backdrops still cover the window. A contract test pins this.
+            - Desktop: the task filter chips are small pills again instead of full-height vertical bars (Vincent,
+              2026-09-19). Same class of defect, one screen over: the filter row is a horizontal scroll view inside
+              a flex column, which on the desktop shell keeps its default flex-grow and swallows the pane's whole
+              remaining height, stretching every chip to match. Measured one property at a time — centring the
+              content shrinks the chips but leaves a 330px dead band above the list, so the fix is to stop the
+              scroll view growing, which corrects both. Horizontal scrolling for narrow windows is unchanged.
 
             What's new in 0.2.79:
             - macOS: the menu-bar icon is the Agent Network mark again instead of a grey slab (Vincent, 2026-09-19:

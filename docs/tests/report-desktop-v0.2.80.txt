@@ -2,9 +2,11 @@ Desktop v0.2.80 release-candidate report
 
 - Base: main after app#322 (0.2.79)
 - Target: desktop-v0.2.80
-- Why: Vincent 2026-09-19 (settings screenshot, task 6253495c): "它那个设置页面，它那个往下面滑动不了啊"
+- Why: two desktop-only layout breaks Vincent reported minutes apart on 2026-09-19
+    * task 6253495c (settings screenshot): "它那个设置页面，它那个往下面滑动不了啊"
+    * second screenshot: the four task filter chips render as full-height vertical bars
 
-What was wrong
+Defect 1 — settings page could not scroll
 - src/SettingsScreen.tsx returned `<View style={styles.root}>` and never imported ScrollView at all. Not a
   broken scroll container — no scroll container. Every row past the window fold was unreachable, and the
   last line (the notification hint) sat flush against the bottom edge, which is what the screenshot shows.
@@ -15,7 +17,7 @@ What was wrong
 - It bites hardest on the configuration Vincent runs: with a local hub registered, the 本地 Hub card adds
   four rows plus an action strip, pushing 外观 / 通知 / 关于 / 移除当前账号 off a normal window.
 
-Changes
+Changes (defect 1)
 - src/SettingsScreen.tsx: import ScrollView; wrap the body in
   `<ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator testID="settings-scroll">`;
   `root` drops its padding and keeps `flex: 1` only; new `content: { padding: spacing.lg,
@@ -32,7 +34,32 @@ Changes
   with a content container, scroll root carries no padding, content container carries padding plus extra
   bottom room, and both modals sit after the closing </ScrollView>.
 
-Screens audited (scroll containers), no other genuine defect found
+Defect 2 — task filter chips stretched to full pane height
+- src/TasksScreen.tsx:116 renders the filter row as a horizontal ScrollView inside root: { flex: 1 }. On
+  react-native-web that element keeps the default flex-grow: 1, so it takes the pane's whole remaining
+  height; the content row's default align-items: stretch then stretches every chip to match. On a phone
+  the scroll view hugs its content, which is why this is desktop-only.
+- Which half is load-bearing was measured, not assumed — one property at a time, injected into the same
+  running build so nothing else moved:
+    baseline                                chip 361px   container 385px
+    content container align-items: center   chip  31px   container 385px
+    ScrollView flex-grow: 0                 chip  31px   container  55px
+  Centring the content fixes the chips and leaves a 330px dead band pushing the task list down the pane —
+  it would have looked fixed in a screenshot cropped to the chips. Only stopping the scroll view from
+  growing corrects both, so that is the entire change: `style={styles.filterScroll}` with
+  `filterScroll: { flexGrow: 0 }`. flexShrink was not needed and was not added.
+- `style` and `contentContainerStyle` are two different elements on a ScrollView; the property has to land
+  on the former. The test pins that as well, so a later edit cannot move it into the content container.
+- Horizontal scrolling for narrow widths is deliberate and unchanged.
+- src/tasks-filter-row-layout.test.ts (new): four assertions — the ScrollView carries a style prop,
+  filterScroll pins flexGrow: 0, the row is still horizontal, and the fix is not a hard-coded height
+  (a height cap would hide the symptom and clip a longer label instead of growing).
+- Witnessed red before the fix: exits 1 with
+  "FAIL: filter ScrollView carries a style prop, not only a contentContainerStyle". All four pass after.
+- Runtime, same harness and build as defect 1: chip 31px, container 55px, scroller flex-grow 0.
+
+Screens audited, both shapes, no other genuine defect found
+Shape A — a screen whose body can exceed the window with no scroll container:
 - ScrollView: ChatScreen, CreateNodeWizardScreen, HostSupervisorPickerScreen, NodeDetailScreen,
   ScheduledTasksScreen, ServerScreen, TaskDetailScreen, TasksScreen, SettingsScreen (this change),
   FirstRunScreen + LoginScreen (App.tsx).
@@ -41,10 +68,20 @@ Screens audited (scroll containers), no other genuine defect found
   mounts AgentsScreen inside a fixed SafeAreaView. Its child list scrolls; the fixture's own frame is
   meant to be fixed, and wrapping it would change what the fixture pins.
 
+Shape B — a horizontal ScrollView inside a stretching flex parent (the defect-2 shape). Three sites:
+- src/TasksScreen.tsx:116 — parent is root: { flex: 1 }. This is the defect. Fixed.
+- src/AvatarEditSection.tsx:75 — its own root is <View style={{ paddingVertical }}> with no flex, mounted
+  inside NodeDetailScreen's ScrollView, so the parent is content-sized and there is no free height to
+  stretch into. Not a defect; left alone.
+- src/MarkdownMessage.tsx:49 and :96 (WideBlock, code blocks and tables) — live inside chat bubbles, which
+  are content-sized, and the caller passes an explicit style. Native already takes a different branch on
+  purpose (an inverted FlatList nesting a horizontal scroll view blew these up on Android, 2026-09-12).
+  Not a defect; left alone.
+
 Verification
 - Witnessed red before the fix: `node --experimental-strip-types src/settings-scroll.test.ts` exits 1 with
   "FAIL: SettingsScreen imports ScrollView from react-native". After the fix all five assertions pass.
-- npm test: 106/106 test files passed. npm run typecheck: rc=0.
+- npm test: 107/107 test files passed. npm run typecheck: rc=0.
 - Runtime, Playwright desktop-shell harness against a throwaway hub (9299) and a web export of this
   branch, theme forced through the app's own theme_mode_v1 key because the app does not follow the OS
   colour scheme:
@@ -61,3 +98,5 @@ Artifacts
 - scratchpad/v0280-settings-bottom.png (1400x620, light, scrolled to bottom)
 - scratchpad/v0280-settings-460-bottom.png (1400x460, light, scrolled to bottom — sent to Vincent)
 - scratchpad/v0280-settings-dark-bottom.png (1400x620, dark)
+- scratchpad/v0280-chips-fixed-baseline.png (1400x900, tasks screen after the fix — sent to Vincent)
+- scratchpad/v0280-chips-baseline.png / -onlyB.png / -onlyA.png (the three measured states, before the fix)
