@@ -709,16 +709,22 @@ function DesktopWorkspace({ cfg, screen, setScreen, onLogout, onLocalDataDeleted
   return (
     <View style={desktopStyles.shell}>
       <View style={desktopStyles.rail} testID="desktop-rail">
+        {/* The rail carries the brand mark, not the product icon. `assets/icon.png`
+            is the installable app icon: mark plus its dark plate, which on a 36px
+            rail slot reads as a black block and collides with the active-tab pill
+            underneath (same rounded square, similar tint). The Android adaptive
+            foreground is the same mark on transparency, derived from icon.png and
+            pixel-gated by src/icon-assets.test.ts, so it tracks any brand change.
+            It keeps ~22% safe-zone padding, hence the oversized box inside the
+            36px slot: the mark lands at ~30px, optically matching the 22px stroke
+            icons below. Both themes share it — the mark's saturated blues hold up
+            on the near-black rail and on the light one. */}
         <View style={desktopStyles.railBrand}>
-          {themeMode() === 'light' ? (
-            <Image
-              source={require('./assets/icon.png')}
-              style={desktopStyles.railBrandImageLight}
-              resizeMode="cover"
-            />
-          ) : (
-            <Image source={require('./assets/icon.png')} style={desktopStyles.railBrandImage} resizeMode="cover" />
-          )}
+          <Image
+            source={require('./assets/android-icon-foreground.png')}
+            style={desktopStyles.railBrandMark}
+            resizeMode="contain"
+          />
         </View>
         <View style={desktopStyles.railTabs}>
           {DESKTOP_MAIN_TABS.map(tab => (
@@ -814,9 +820,8 @@ const makeDesktopStyles = () => StyleSheet.create({
   // 微信/飞书式 rail:64 宽、比列表深一档的底、右侧发丝线;按钮 40×40 等距 12;
   // 激活 = 10 圆角淡 accent 底;悬停/聚焦 = 浅底;提示条挂在右侧。
   rail: { width: 64, backgroundColor: colors.railBg, borderRightWidth: StyleSheet.hairlineWidth, borderRightColor: colors.border, alignItems: 'center', paddingTop: 14, paddingBottom: 10, zIndex: 10, overflow: 'visible' },
-  railBrand: { width: 36, height: 36, borderRadius: 10, overflow: 'hidden', alignItems: 'center', justifyContent: 'center' },
-  railBrandImage: { width: 36, height: 36 },
-  railBrandImageLight: { width: 36, height: 36, borderRadius: 10 },
+  railBrand: { width: 36, height: 36, alignItems: 'center', justifyContent: 'center' },
+  railBrandMark: { width: 54, height: 54 },
   railTabs: { flex: 1, paddingTop: 18, gap: 12, alignItems: 'center' },
   railSlot: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
   railButton: { width: 40, height: 40, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },

@@ -1,8 +1,10 @@
 import fs from 'node:fs';
 import path from 'node:path';
 
-const source = fs.readFileSync(path.join(process.cwd(), 'App.tsx'), 'utf8');
-const agents = fs.readFileSync(path.join(process.cwd(), 'src/AgentsScreen.tsx'), 'utf8');
+// Windows checkouts convert line endings, so multi-line assertions below read a
+// normalised copy rather than whatever the clone produced.
+const source = fs.readFileSync(path.join(process.cwd(), 'App.tsx'), 'utf8').replace(/\r\n?/g, '\n');
+const agents = fs.readFileSync(path.join(process.cwd(), 'src/AgentsScreen.tsx'), 'utf8').replace(/\r\n?/g, '\n');
 const check = (name: string, ok: boolean) => {
   if (!ok) throw new Error(`FAIL: ${name}`);
   console.log(`PASS: ${name}`);
@@ -12,8 +14,21 @@ check('server module is labelled 服务器设置', source.includes("key: 'server
 check('desktop main navigation excludes Settings', source.includes("TABS.filter(tab => tab.key !== 'settings')"));
 check('desktop Settings has a dedicated bottom control', source.includes('desktopStyles.railSettings'));
 check('Settings control is rendered after the main tabs', source.indexOf('{DESKTOP_MAIN_TABS.map') < source.indexOf('tab={DESKTOP_SETTINGS_TAB}'));
-check('desktop rail keeps the full branded icon in dark mode', source.includes("source={require('./assets/icon.png')} style={desktopStyles.railBrandImage}"));
-check('desktop rail preserves the branded artwork in light mode', source.match(/source=\{require\('\.\/assets\/icon\.png'\)\}/g)?.length === 2 && source.includes('railBrandImageLight'));
+// The rail brand slot: 0.2.75 rendered `assets/icon.png` — the app icon with its
+// dark plate — which read as a black block on the rail. These two pin the fix so
+// the plated artwork cannot come back by accident, and so the mark keeps the
+// oversized box that compensates for the adaptive foreground's safe-zone padding.
+check(
+  'desktop rail renders the transparent brand mark, not the plated app icon',
+  source.includes("source={require('./assets/android-icon-foreground.png')}") &&
+    source.includes('style={desktopStyles.railBrandMark}') &&
+    !/railBrand[\s\S]{0,400}assets\/icon\.png/.test(source),
+);
+check(
+  'rail brand mark is oversized inside the 36px slot so it matches the nav icons',
+  /railBrandMark:\s*\{[^}]*width:\s*54[^}]*height:\s*54/.test(source) &&
+    /railBrand:\s*\{[^}]*width:\s*36[^}]*height:\s*36/.test(source),
+);
 check('chat header settings opens read-only info for the current node', source.includes("onOpenNodeSettings={() => setScreen({ name: 'nodeInfo', alias: screen.alias })}"));
 const detachedStart = source.indexOf('if (dedicatedChatWindow && cfg');
 const workspaceStart = source.indexOf("if (desktop && cfg && screen.name !== 'login')");
