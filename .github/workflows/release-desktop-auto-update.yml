@@ -119,6 +119,13 @@ jobs:
           releaseBody: |-
             Signed and notarized stable update for macOS (Apple Silicon) and Windows (x64).
 
+            What's new in 0.2.77:
+            - Desktop: the navigation rail now carries the brand mark itself instead of the installable app icon
+              (Vincent, 2026-09-18: "这个黑色的图标有点太丑了"). The app icon ships with a dark plate, which at
+              36px read as a black block and collided with the active-tab pill right beneath it. The rail now
+              uses the transparent mark — the same artwork, derived from the app icon and pixel-gated, so it
+              follows any brand change — sized to match the 22px navigation icons. Both themes.
+
             What's new in 0.2.76:
             - Desktop: Agent Network now lives in the system tray / macOS menu bar (Vincent, 2026-09-17: "把 Agent
               Network 做到系统栏吧,有新消息做个提示 类似飞书这样,再做个消息提示音"). The menu-bar item shows the
