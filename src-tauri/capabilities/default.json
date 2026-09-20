@@ -5,7 +5,8 @@
   "windows": [
     "main",
     "chat-*",
-    "workspace-*"
+    "workspace-*",
+    "tray-panel"
   ],
   "permissions": [
     "core:default",
@@ -21,6 +22,10 @@
     "core:window:allow-set-focus",
     "core:window:allow-show",
     "core:window:allow-unminimize",
+    "core:window:allow-is-visible",
+    "core:window:allow-set-size",
+    "core:window:allow-hide",
+    "core:window:allow-set-position",
     "core:window:allow-is-focused",
     {
       "identifier": "opener:allow-open-url",

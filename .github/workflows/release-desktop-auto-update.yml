@@ -119,6 +119,22 @@ jobs:
           releaseBody: |-
             Signed and notarized stable update for macOS (Apple Silicon) and Windows (x64).
 
+            What's new in 0.2.82:
+            - The menu-bar / tray dropdown is now a panel the app draws itself, matching the Feishu layout
+              Vincent asked for (2026-09-20: "通知用这个啊"): the app name top-left, 忽略全部 top-right, then one
+              row per agent with a round avatar, the alias, and a red unread count on the right. Clicking a row
+              focuses the window and opens that conversation; 忽略全部 clears every unread the panel is showing.
+              The 0.2.76 version was a native menu, where a row can only be plain text — no avatar, no red badge.
+            - The panel is a separate webview and deliberately has no hub access: it holds no token and never
+              calls the hub. The main window keeps pushing its unread snapshot to Rust, and the panel reads it
+              back, so the count still has exactly one source and the tray, the panel and the agent list cannot
+              disagree. 忽略全部 clears only the agents the panel is actually showing, not the full unread set.
+            - On Linux the dropdown is unchanged. Tauri does not emit tray click events there at all
+              ("Linux: Unsupported. The event is not emitted"), and a tray menu cannot be replaced once set, so
+              the panel is macOS and Windows only and Linux keeps the native menu. On macOS and Windows a
+              right-click still opens that menu, so 打开 Agent Network and 退出 stay where they were.
+            - The tray icon and its unread count are untouched from 0.2.79.
+
             What's new in 0.2.81:
             - Windows gets the custom title bar macOS has had since 0.2.70 (Vincent, 2026-09-20: "这个地方在
               Windows 上也很难看"). It was still showing the OS title bar — a white strip with a small icon and
