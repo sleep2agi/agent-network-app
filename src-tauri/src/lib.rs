@@ -878,6 +878,9 @@ mod tests {
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        // 0.2.82: 托盘面板是独立 webview,读不到主窗口的 unread-store;
+        // 主窗口推上来的模型存这里,面板再来取。
+        .manage(tray::TrayModelState::default())
         .plugin(tauri_plugin_http::init())
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
@@ -930,6 +933,10 @@ pub fn run() {
             local_daemon_install,
             save_download,
             tray::tray_update,
+            tray::tray_panel_model,
+            tray::tray_open_chat,
+            tray::tray_dismiss_all,
+            tray::tray_panel_hide,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

@@ -53,7 +53,8 @@ import { railBadgeText, railIconFor, railSurface, railTooltipVisible } from './s
 import DesktopUpdatePrompt from './src/DesktopUpdatePrompt';
 import DesktopMessageListener from './src/DesktopMessageListener';
 import DesktopNotifier from './src/DesktopNotifier';
-import { bindDesktopTray } from './src/desktop-tray';
+import { bindDesktopTray, dismissAllForConfig } from './src/desktop-tray';
+import TrayPanel, { readTrayPanelRoute } from './src/TrayPanel';
 import { loadPinnedChats, requestedChatAlias, requestedChatProfileId, requestedWorkspaceProfileId, savePinnedChats } from './src/desktop-chat-menu';
 import { loadChatPins, saveChatPins, togglePinned } from './src/chat-pins';
 import { bindUnreadProfile } from './src/unread-store';
@@ -126,6 +127,15 @@ export default function App() {
   useEffect(() => {
     purgeLegacyAttachmentCache().catch(() => {});
   }, []);
+
+  // 0.2.82:`?tray=1` 的窗口是托盘面板 —— 无边框小窗,只画未读列表,不挂主界面/更新提示。
+  if (readTrayPanelRoute()) {
+    return (
+      <SafeAreaProvider>
+        <TrayPanel />
+      </SafeAreaProvider>
+    );
+  }
 
   const fixture = readWebFixture();
   if (fixture) {
@@ -205,7 +215,10 @@ function AppRoot() {
   const trayWindow = tauriDesktop && !initialChat && !initialWorkspaceProfile;
   useEffect(() => {
     if (!cfg || !trayWindow) return;
-    return bindDesktopTray(alias => setScreen({ name: 'chat', alias }));
+    return bindDesktopTray(
+      alias => setScreen({ name: 'chat', alias }),
+      () => { void dismissAllForConfig(cfg); },
+    );
   }, [cfg?.profileId, cfg?.serverUrl, trayWindow]);
   const tabBarInset = Platform.OS === 'android' ? insets.bottom : 0;
   const workspaceKey = `${theme}:${cfg?.profileId ?? cfg?.serverUrl ?? 'login'}`;
