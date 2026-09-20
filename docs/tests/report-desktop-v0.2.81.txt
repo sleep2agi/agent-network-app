@@ -1,0 +1,84 @@
+desktop v0.2.81 — Windows 自绘标题栏 + 通知点击跳会话 + 通知正文去 Markdown
+================================================================================
+
+来源：Vincent 2026-09-20
+  · task b17328d1「这个地方在 Windows 上也很难看」(截图：Windows 原生标题栏白带)
+  · task d1c607ae「这个消息通知 要能点击跳到具体的对话啊」(截图：Windows toast)
+
+A. Windows 自绘标题栏
+--------------------------------------------------------------------------------
+原因：macOS 在 0.2.70 就用 titleBarStyle=Overlay + hiddenTitle 去掉了原生标题栏，
+      Windows 一直没做同等处理，于是顶上挂着一条系统白带 + 小图标 + "Agent Network"，
+      和下面自绘的界面完全两个世界。
+
+改动：
+  · src/window-shell.ts(新)      —— 壳平台判定一处说了算(mac/windows/other/null)；
+                                     mac-shell.ts 保留原导出转发，不并存两份实现。
+  · src/win-title-bar.tsx(新)    —— 标题居左 + 最小化/最大化-还原/关闭(46×32，关闭悬停 #c42b1c)。
+  · src-tauri/src/lib.rs         —— #[cfg(target_os = "windows")] 里 set_decorations(false)。
+  · capabilities/default.json    —— 补 minimize / toggle-maximize / close / is-maximized /
+                                     set-decorations；windows 列表仍是 main + chat-* + workspace-*。
+
+🔴 为什么 decorations 不写进 tauri.conf.json：那里的 decorations 是跨平台的，关掉会连
+   macOS 的红黄绿灯一起没了(macOS 走 Overlay 标题栏，必须保留 decorations)。契约测试钉住
+   「tauri.conf.json 里不得出现 decorations」。
+
+🔴 控件图形用几何形状而不是字体图标：Segoe MDL2 Assets 只有 Windows 有，缺字体就是三个豆腐块
+   ——而这三个按钮是窗口唯一的关闭入口。Linux 上截图时正好复现了豆腐块，改成几何图形后消失。
+
+窗口行为逐条(自绘标题栏最容易做丢的那些)：
+  · 拖动窗口          —— 整条 bar 标 data-tauri-drag-region(和 macOS 那条空带同一机制)；
+                          能力清单已有 core:window:allow-start-dragging。契约测试钉住。
+  · 双击最大化/还原    —— Tauri 的 drag region 自带，未额外接线。
+  · 边缘/角缩放        —— decorations=false 时由 Tauri 画不可见 resize 边框。
+  · 最大化后仍可拖动   —— drag region 在最大化态拖拽 = 还原并跟随，系统行为。
+  · Win11 Snap Layouts —— ⚠️ **本次不支持**：悬停「最大化按钮」弹出的分屏布局提示只对系统标题栏
+                          按钮有效，自绘按钮拿不到。拖到屏幕边缘的贴边仍由系统处理，不受影响。
+  ⚠️ 以上除「拖动区/权限/decorations 关闭」有契约测试外，**运行时行为无法在这台 Linux 机上验证**
+     —— 需要真机 Windows。本条如实记录，不冒充已验。
+
+B. 通知点击 → 跳会话
+--------------------------------------------------------------------------------
+🔴 先说做不到的那件：@tauri-apps/plugin-notification 2.4.0 的 **桌面端不回发点击事件**。
+   证据：该 crate 的 src/desktop.rs::show() 只把 title/body/icon/sound 交给 notify-rust 然后
+   show()，既不保留 handle 也不 emit 任何事件；extra / actionTypeId 只在 mobile.rs 有实现。
+   ⇒ 挂 onAction() 会写出一个永远不响的回调，比不修更糟(看起来修好了)。契约测试显式禁止
+   本文件出现 onAction。
+
+做得到的那件：Windows toast 归属应用 AUMID，点它会激活应用 ⇒「通知之后窗口拿到焦点」可观测。
+  · src/notify-target.ts(新) —— 记住通知指向谁，焦点回来时跳过去。
+  · 四条护栏(宁可不跳也不跳错)：唯一 agent / 20s 窗口内 / 通知时窗口本来没焦点 / 一次性。
+  · 两个 agent 同时来 → 不猜，交给未读角标。
+  · 跳转复用托盘那条路(App 里同一个 setScreen({name:'chat',alias}))，不另造一条。
+
+C. 通知正文去 Markdown
+--------------------------------------------------------------------------------
+  · src/notify-text.ts(新) —— 块级复用 markdown-model 的 parseMarkdownBlocks(仓里唯一的
+    Markdown 解析器)，本模块只补一层行内剥离(仓里此前没有行内剥离器)。
+  · 链接只留标签、URL 不进通知；代码块→［语言 代码］；表格→［表格：表头］；标题去 #。
+  · 按字符截断(Array.from)，中文/emoji 不会被算错。
+
+验证
+--------------------------------------------------------------------------------
+  · npm test      110/110 文件通过
+  · npm run typecheck  rc=0
+  · 见证(每条新断言都先红后绿)：
+      - notify-text    : 改前 15/16，缺的是「DesktopNotifier 用 plainTextForNotification」
+      - notify-target  : 改前 13/17，缺的是登记/查目标/回调/App 接线四条
+      - win-title-bar  : 单独回退 App.tsx → ✗「App 挂了 WinTitleBar」(24/25)
+                         单独回退 lib.rs  → ✗「Rust 只在 Windows 关 decorations」(24/25)
+      - 字体图标判据两向：把 fontFamily 图标塞回去 → 红；恢复 → 绿
+  · 既有契约被这次改动打红并已重钉(它们做对了事)：
+      - desktop-navigation.test.ts / notify-policy.test.ts：DesktopNotifier 多了 onOpenChat
+      - mac-title-strip.test.ts：WinTitleBar 插在 MacTitleStrip 与 AppRoot 之间，
+        判据从「紧挨着」改成「在 AppRoot 之前」，否则每加一条顶部栏都要改 pin
+  · Playwright 桌面壳截图(伪装 Win32 UA + __TAURI_INTERNALS__)：深浅两色标题栏
+    渲染正确、盒模型 1200×32、控件为几何图形。
+    scratchpad/v0281-titlebar-{dark,light}.png、v0281-window-{dark,light}.png
+    ⚠️ 这是**组件渲染**截图，不是真机 Windows 截图——本机是 Linux，截不了 Windows 窗口。
+
+一格自纠
+--------------------------------------------------------------------------------
+「控件不用字体图标」这条判据第一版写成 !bar.includes('Segoe MDL2 Assets')，结果被**解释为什么
+不用它的注释**打红 —— 判据对、取集错(同日在 parity 门上刚踩过同一形状)。改成判 !includes('fontFamily')，
+并做了两向见证。

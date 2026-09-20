@@ -45,6 +45,7 @@ import { loadDesktopThemeMode } from './src/desktop-theme-storage';
 import { colors, onThemeChange, setThemeMode, spacing, themeMode } from './src/theme';
 import { installWebScrollbarTheme } from './src/web-scrollbar';
 import MacTitleStrip from './src/mac-title-strip';
+import WinTitleBar from './src/win-title-bar';
 import DesktopWindowPin from './src/DesktopWindowPin';
 import { styles } from './src/app-styles';
 import { APP_VERSION } from './src/version';
@@ -146,6 +147,7 @@ export default function App() {
     <SafeAreaProvider>
       <View style={{ flex: 1 }}>
         <MacTitleStrip />
+        <WinTitleBar />
         <AppRoot />
       </View>
       {dedicatedChatWindow ? null : <DesktopUpdatePrompt />}
@@ -390,7 +392,7 @@ function AppRoot() {
         <ConnectivityBanner />
         <DesktopWorkspace cfg={cfg} screen={screen} setScreen={setScreen} onLogout={removeActiveProfile} onLocalDataDeleted={finishLocalDataDeletion} onAddAccount={() => { setReauthProfile(null); setScreen({ name: 'login' }); }} onSwitchProfile={activateProfile} onReauthProfile={requestProfileReauth} />
         <DesktopMessageListener cfg={cfg} />
-        {trayWindow ? <DesktopNotifier /> : null}
+        {trayWindow ? <DesktopNotifier onOpenChat={alias => setScreen({ name: 'chat', alias })} /> : null}
         <DesktopWindowPin />
       </SafeAreaView>
     );

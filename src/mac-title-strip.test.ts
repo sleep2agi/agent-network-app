@@ -24,7 +24,10 @@ ck('capability still covers main + chat windows', (caps.windows as string[]).inc
 const menu = fs.readFileSync(path.join(__dirname, 'desktop-chat-menu.ts'), 'utf8').replace(/\r\n?/g, '\n');
 ck('both detached window kinds use the overlay title bar', menu.split("titleBarStyle: 'overlay'").length === 3 && menu.split('hiddenTitle: true').length === 3);
 const app = fs.readFileSync(path.join(__dirname, '..', 'App.tsx'), 'utf8').replace(/\r\n?/g, '\n');
-ck('App mounts the strip above AppRoot', app.includes('<MacTitleStrip />\n        <AppRoot />'));
+// 0.2.81:Windows 自绘标题栏插在两者之间 ⇒ 判据改成「strip 在 AppRoot 之前」,
+// 而不是「紧挨着 AppRoot」——否则每加一条顶部栏都要改这个 pin。
+ck('App mounts the strip above AppRoot', app.indexOf('<MacTitleStrip />') > -1 && app.indexOf('<MacTitleStrip />') < app.indexOf('<AppRoot />'));
+ck('0.2.81:Windows 标题栏也挂在 AppRoot 之前', app.indexOf('<WinTitleBar />') > -1 && app.indexOf('<WinTitleBar />') < app.indexOf('<AppRoot />'));
 const strip = fs.readFileSync(path.join(__dirname, 'mac-title-strip.tsx'), 'utf8').replace(/\r\n?/g, '\n');
 ck('strip is a drag region', strip.includes("dataSet: { tauriDragRegion: '' }"));
 

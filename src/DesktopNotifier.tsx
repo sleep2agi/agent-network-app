@@ -19,6 +19,8 @@ import {
   type SeenState,
 } from './notify-policy';
 import { localMinutes } from './quiet-hours';
+import { plainTextForNotification } from './notify-text';
+import { initialNotifyTarget, recordNotified, targetOnFocus, type NotifyTargetState } from './notify-target';
 import { getUnreadSnapshot, subscribeUnread, type UnreadStoreSnapshot } from './unread-store';
 
 const isTauri = () => !!(globalThis as any).__TAURI_INTERNALS__;
@@ -47,8 +49,25 @@ async function sendSystemNotification(title: string, body: string): Promise<void
   new N(title, { body });
 }
 
-export default function DesktopNotifier() {
+export default function DesktopNotifier({ onOpenChat }: { onOpenChat?: (alias: string) => void } = {}) {
   const seen = useRef<SeenState>(initialSeen());
+  const target = useRef<NotifyTargetState>(initialNotifyTarget());
+  const openChat = useRef(onOpenChat);
+  openChat.current = onOpenChat;
+
+  // 通知点击 → 跳会话。插件在桌面端不回发点击事件(见 notify-target.ts 顶部),
+  // 能观测到的是「通知之后窗口被带到前台」——Windows 的 toast 属于应用的 AUMID,点它会激活应用。
+  useEffect(() => {
+    if (typeof window === 'undefined' || typeof window.addEventListener !== 'function') return;
+    const onFocus = () => {
+      const picked = targetOnFocus(target.current, Date.now());
+      target.current = picked.next;
+      if (picked.agent) openChat.current?.(picked.agent);
+    };
+    window.addEventListener('focus', onFocus);
+    return () => window.removeEventListener('focus', onFocus);
+  }, []);
+
   useEffect(() => {
     const onSnapshot = () => {
       const snap = getUnreadSnapshot();
@@ -71,7 +90,12 @@ export default function DesktopNotifier() {
         const d = decide(group.agent, presence, settings, minutes);
         if (!d.notify) continue;
         ring = ring || d.sound;
-        void sendSystemNotification(notificationTitle(group.agent, group.count), group.body).catch(() => { /* 权限被拒/平台不支持 */ });
+        // 正文里可能是 Markdown(链接语法 + 绝对路径),toast 只读得下一两行 → 压成纯文本。
+        void sendSystemNotification(
+          notificationTitle(group.agent, group.count),
+          plainTextForNotification(group.body),
+        ).catch(() => { /* 权限被拒/平台不支持 */ });
+        target.current = recordNotified(target.current, group.agent, Date.now(), presence.windowFocused);
       }
       if (ring) playChime();
     };

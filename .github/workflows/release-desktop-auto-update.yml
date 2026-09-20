@@ -119,6 +119,32 @@ jobs:
           releaseBody: |-
             Signed and notarized stable update for macOS (Apple Silicon) and Windows (x64).
 
+            What's new in 0.2.81:
+            - Windows gets the custom title bar macOS has had since 0.2.70 (Vincent, 2026-09-20: "这个地方在
+              Windows 上也很难看"). It was still showing the OS title bar — a white strip with a small icon and
+              the app name, visually unrelated to everything below it. The bar is now drawn by the app in the
+              rail's colours: title on the left, minimise / maximise-restore / close at the top right in Windows
+              order at the usual 46x32 hit size, close going red on hover. Decorations are turned off from Rust
+              under a target_os guard rather than in tauri.conf.json, because that setting is cross-platform and
+              turning it off there would take macOS's traffic lights with it.
+            - The window controls are drawn as geometry, not font icons. Segoe MDL2 Assets exists only on Windows,
+              and a missing font would turn the only way to close the window into three tofu boxes — which is
+              exactly what the Linux screenshot showed before the change.
+            - Clicking a new-message notification opens that conversation (Vincent, 2026-09-20: "这个消息通知
+              要能点击跳到具体的对话啊"). Note what this does and does not do: the notification plugin does not
+              deliver click events on desktop at all — its desktop implementation forwards title/body/icon/sound
+              to the OS and keeps no handle, and extra/actionTypeId are dropped — so a click callback would never
+              fire. What is observable is the window coming to the front shortly after a notification, since a
+              Windows toast activates the app. So the app remembers who the notification was about and routes
+              there on focus, but only when exactly one agent is waiting, only within 20 seconds, and only if the
+              window was unfocused when the notification fired. When two agents notify at once it deliberately
+              does nothing rather than guess, because being thrown into the wrong conversation is worse than not
+              jumping at all.
+            - Notification bodies are plain text instead of raw Markdown. They were reading out link syntax and
+              absolute paths — "[API-UAT-SGC-NETWORK-REPORT-20260920.md](/data/workspaces/agent..." — in a toast
+              that shows two lines. Links keep their label and lose the URL, code blocks collapse to a placeholder,
+              tables to their header, and the result is truncated by character count so CJK is not miscounted.
+
             What's new in 0.2.80:
             - Settings scrolls (Vincent, 2026-09-19: "它那个往下面滑动不了啊"). That screen never had a scroll
               container at all — every other screen does — so on a short window the 通知, 关于 and account rows

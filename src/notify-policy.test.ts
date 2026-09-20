@@ -78,7 +78,8 @@ ck('同一轮内不重复响', !shouldPlayChime(1000, 1000 - 1) && shouldPlayChi
 const norm = (f: string) => fs.readFileSync(path.join(__dirname, f), 'utf8').replace(/\r\n?/g, '\n');
 const app = norm('../App.tsx'), settings = norm('SettingsScreen.tsx'), notifier = norm('DesktopNotifier.tsx'), tray = norm('desktop-tray.ts');
 ck('App:只有主窗口接托盘,点菜单打开会话', app.includes('const trayWindow = tauriDesktop && !initialChat && !initialWorkspaceProfile;') && app.includes("bindDesktopTray(alias => setScreen({ name: 'chat', alias }))"));
-ck('App:通知组件只在主窗口挂', app.includes('{trayWindow ? <DesktopNotifier /> : null}'));
+// 0.2.81:通知要能点进会话 ⇒ 通知组件接上和托盘同一条 onOpenChat 路。
+ck('App:通知组件只在主窗口挂', app.includes("{trayWindow ? <DesktopNotifier onOpenChat={alias => setScreen({ name: 'chat', alias })} /> : null}"));
 ck('通知组件订阅 unread-store,合并后一轮只响一次', notifier.includes('subscribeUnread(onSnapshot)') && notifier.includes('if (ring) playChime();'));
 ck('通知组件等 user_inbox 拉到后才登记首份快照(登录不弹历史)', notifier.includes('if (!seen.current.seeded && !snap.serverBody) return;'));
 ck('托盘数用列表同一函数算', tray.includes('unreadCountForAgentRow(snap.serverBody, snap.ledger, alias, reply)') && tray.includes("invoke('tray_update'"));
