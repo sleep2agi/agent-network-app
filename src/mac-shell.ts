@@ -1,10 +1,5 @@
 // 纯逻辑,不 import react-native:判断「Tauri 桌面壳 + macOS」,给标题栏空带用(测试直接引这里)。
-export const MAC_TITLE_STRIP_HEIGHT = 28;
-
-export const isMacTauriShell = (platformOS: string = 'web'): boolean => {
-  if (platformOS !== 'web') return false;
-  const g = globalThis as { __TAURI_INTERNALS__?: unknown; navigator?: { platform?: string; userAgent?: string } };
-  if (!g.__TAURI_INTERNALS__) return false;
-  const hint = `${g.navigator?.platform ?? ''} ${g.navigator?.userAgent ?? ''}`;
-  return /Mac/i.test(hint);
-};
+//
+// 0.2.81:判定本体搬去 window-shell.ts(Windows 也要同一个问题的答案),这里保留原导出转发,
+// 免得既有 import 和契约测试跟着改;两份实现不并存。
+export { MAC_TITLE_STRIP_HEIGHT, isMacTauriShell } from './window-shell';

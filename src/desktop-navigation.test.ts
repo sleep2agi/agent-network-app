@@ -56,4 +56,5 @@ check('desktop agent hover highlights the row and avatar', agents.includes('onHo
 // 0.2.76 系统栏托盘 + 新消息通知(Vincent 2026-09-17):只有主窗口接托盘/通知;托盘菜单点 agent 打开那个会话
 const src076 = source.replace(/\r\n?/g, '\n');
 check('desktop tray is bound only in the main window and opens the picked chat', src076.includes('const trayWindow = tauriDesktop && !initialChat && !initialWorkspaceProfile;') && src076.includes("bindDesktopTray(alias => setScreen({ name: 'chat', alias }))"));
-check('desktop notifier mounts only in the main window', src076.includes('{trayWindow ? <DesktopNotifier /> : null}'));
+// 0.2.81:通知要能点进会话 ⇒ DesktopNotifier 接上和托盘同一条 onOpenChat 路(props 变了,契约跟着变)。
+check('desktop notifier mounts only in the main window', src076.includes("{trayWindow ? <DesktopNotifier onOpenChat={alias => setScreen({ name: 'chat', alias })} /> : null}"));

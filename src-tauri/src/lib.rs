@@ -889,6 +889,19 @@ pub fn run() {
             if let Err(error) = tray::init(app.handle()) {
                 eprintln!("[tray] init failed: {error}");
             }
+            // 0.2.81(Vincent:「这个地方在 Windows 上也很难看」):Windows 去掉系统标题栏,
+            // 改由前端自绘(src/win-title-bar.tsx)。
+            // 🔴 只能在这里按平台关,不能写进 tauri.conf.json —— 那里的 `decorations` 是
+            //    跨平台的,关掉会连 macOS 的红黄绿灯一起没了(macOS 走的是 Overlay 标题栏,
+            //    要保留 decorations)。
+            #[cfg(target_os = "windows")]
+            {
+                for (label, window) in app.webview_windows() {
+                    if let Err(error) = window.set_decorations(false) {
+                        eprintln!("[window] {label}: set_decorations(false) failed: {error}");
+                    }
+                }
+            }
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
