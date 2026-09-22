@@ -119,6 +119,22 @@ jobs:
           releaseBody: |-
             Signed and notarized stable update for macOS (Apple Silicon) and Windows (x64).
 
+            What's new in 0.2.83:
+            - Settings is laid out the way Vincent asked for (2026-09-20, Claude-desktop reference): a left
+              column with a search box and the categories (账号 / 本地 Hub / 外观 / 通知 / 关于, icon + label,
+              active one highlighted) and a right pane titled with the category, holding label-left /
+              control-right rows with a one-line hint where a row needs one. 消息提示音 and 免打扰时段 are
+              real switches now; 主题 reads as a dropdown value. 删除本地工作区数据 sits alone in a
+              red-bordered 危险区. Search filters rows by label across every category. Nothing was added or
+              dropped — the same settings, regrouped. The 0.2.80 scroll fix is kept (the right pane scrolls).
+            - Clicking a notification now opens that conversation in the case that matters: you are in the
+              app on agent A, agent B messages you, you click B's toast. 0.2.81 only remembered a toast when the
+              window was unfocused at the moment it fired, which excluded exactly that case, so nothing ever
+              jumped. Every toast is remembered now; on activation the app routes unless you are already viewing
+              that agent. The window widened from 20 s to 60 s, and when several agents notified in a row it
+              routes to the most recent instead of doing nothing. The plugin still delivers no click event on
+              desktop, so this remains focus-based and cannot be verified from a Linux build machine.
+
             What's new in 0.2.82:
             - The menu-bar / tray dropdown is now a panel the app draws itself, matching the Feishu layout
               Vincent asked for (2026-09-20: "通知用这个啊"): the app name top-left, 忽略全部 top-right, then one

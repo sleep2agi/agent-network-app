@@ -512,7 +512,7 @@ const makeStyles = () =>
   sidebarTop: { paddingHorizontal: spacing.md, gap: spacing.md, marginBottom: spacing.md },
   closeButton: { width: 32, height: 32, borderRadius: 8, borderWidth: 1, borderColor: colors.border, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.card },
   searchBox: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, borderWidth: 1, borderColor: colors.border, borderRadius: 10, backgroundColor: colors.inputBg, paddingHorizontal: spacing.md, height: 36 },
-  searchInput: { flex: 1, color: colors.text, fontSize: 13, padding: 0 },
+  searchInput: { flex: 1, color: colors.text, fontSize: 13, padding: 0, outlineStyle: 'none' } as any,
   categoryList: { paddingHorizontal: spacing.sm, gap: 2 },
   categoryRow: { flexDirection: 'row', paddingHorizontal: spacing.md, gap: spacing.sm },
   categoryItem: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, paddingHorizontal: spacing.md, paddingVertical: spacing.sm + 2, borderRadius: 10 },
