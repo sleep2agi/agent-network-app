@@ -12,9 +12,9 @@
 //   · 最大化后仍可拖动 → drag region 在最大化状态下拖拽 = 还原并跟随,系统行为
 //
 // 只在 Tauri 桌面壳 + Windows 渲染;macOS/网页/移动端返回 null。
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useSyncExternalStore } from 'react';
 import { Platform, Pressable, Text, View } from 'react-native';
-import { colors } from './theme';
+import { colors, onThemeChange, themeMode } from './theme';
 import { WINDOWS_TITLE_BAR_HEIGHT, isWindowsTauriShell } from './window-shell';
 
 export { WINDOWS_TITLE_BAR_HEIGHT, isWindowsTauriShell } from './window-shell';
@@ -61,6 +61,8 @@ function glyph(op: WindowOp, maximized: boolean) {
 }
 
 export default function WinTitleBar() {
+  // 0.2.83:同 MacTitleStrip——挂在 AppRoot 外面,主题翻了不会自动重画,自己订阅(见 window-background.ts)。
+  useSyncExternalStore(onThemeChange, themeMode, themeMode);
   const show = isWindowsTauriShell(Platform.OS);
   const [maximized, setMaximized] = useState(false);
 
