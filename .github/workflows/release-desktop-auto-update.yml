@@ -134,6 +134,11 @@ jobs:
               that agent. The window widened from 20 s to 60 s, and when several agents notified in a row it
               routes to the most recent instead of doing nothing. The plugin still delivers no click event on
               desktop, so this remains focus-based and cannot be verified from a Linux build machine.
+            - macOS, dark theme: the strip at the very top where the traffic lights sit no longer stays white.
+              That strip (and the Windows title bar) is mounted above the themed tree, so it never repainted
+              when the theme changed; it now subscribes to the theme itself. The Tauri window's own background
+              is pinned to the dark ground and re-set whenever the theme flips, so nothing white shows through
+              the overlay title-bar region or the first frame.
 
             What's new in 0.2.82:
             - The menu-bar / tray dropdown is now a panel the app draws itself, matching the Feishu layout

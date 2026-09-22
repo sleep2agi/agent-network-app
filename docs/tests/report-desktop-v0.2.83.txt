@@ -1,8 +1,9 @@
-desktop v0.2.83 — 设置页改成「左栏分类 + 右栏行式选项 + 搜索」;通知点击跳会话去掉错误前置
+desktop v0.2.83 — 设置页改成「左栏分类 + 右栏行式选项 + 搜索」;通知点击跳会话去掉错误前置;macOS 顶部拖动区跟主题
 ================================================================================
 
 来源：Vincent 2026-09-20 task 6562cc89「设置改为这种样式和交互吧」(截图：Claude 桌面端设置弹层)
       Vincent 2026-09-20 task 8a0afd60「消息点击通知 还是不通跳转到对于的聊天界面」(截图：Windows toast)
+      Vincent 2026-09-22 macOS 深色主题截图：红黄绿灯那条顶部区域是白的,下面全是深色
 
 A. 设置页
 --------------------------------------------------------------------------------
@@ -61,6 +62,34 @@ B. 通知点击跳会话
 ⚠️ 本机验不了的：Windows 上点 toast 时,若应用已在前台,webview 是否会收到 blur→focus 对
    (或 visibilitychange)。若两者都不发生,这条路径在「应用已前台」时仍观测不到激活——
    这是插件不传点击事件的硬限制,不是本版能绕过的。装上后若仍不跳,需要 Windows 真机日志。
+
+C. macOS 深色主题下顶部拖动区(MacTitleStrip)是白的
+--------------------------------------------------------------------------------
+诊断：两层,两层都堵。
+  1. `MacTitleStrip` / `WinTitleBar` 挂在 `<AppRoot>` 外面(它们必须在最顶上,不能进 key={theme}
+     那棵随主题整体重挂的树),所以主题一翻它们**不重画**——inline 的 `backgroundColor: colors.bg`
+     是首次渲染那一刻的值。默认主题是深色,之后切浅色再切回深色、或首次渲染时主题还没从存储里
+     读出来,这条就停在浅色底上。
+  2. Tauri 窗口自身底色默认是白;Overlay 标题栏区域、webview 未画出的那一帧、主题切换那一帧露出来
+     的都是它(页面 body 是透明的,量到 body=rgba(0,0,0,0))。
+改法：
+  · 两个组件各自 `useSyncExternalStore(onThemeChange, themeMode, themeMode)` 订阅主题;底色仍是
+    调色板 token(`colors.bg` / `colors.railBg`),不是字面量。
+  · `src-tauri/tauri.conf.json` 主窗口加 `backgroundColor: "#0b0b0d"`(= DARK.bg,默认主题);
+    运行时主题一翻 `applyWindowBackground(mode)` → `getCurrentWindow().setBackgroundColor([r,g,b])`,
+    capability 加 `core:window:allow-set-background-color`;失败不抛(底色只是保底)。
+  · 纯模块 `src/window-background.ts`(主题→底色表、hex→rgb、守卫过的副作用)。
+测试  src/window-background.test.ts 13/13:底色表与 theme.ts 的 DARK.bg/LIGHT.bg 逐字一致、
+      tauri.conf 主窗口底色 = 深色地面、capability 在、两个组件订阅主题、底色来自调色板不是 `'#…'`
+      字面量、App 在主题变化时同步窗口底色。见证:组件/App 改动前跑 → 3 条红(10/13)。
+真机验证(同一套 Playwright 桌面壳 harness,UA 冒充 Mac 让 MacTitleStrip 渲染,桩记录
+      plugin:window|set_background_color 调用):
+      深色起 → 拖动区 bg=rgb(11,11,13);设置里翻到浅色 → rgb(244,246,248),窗口底色调用 [244,246,248]
+      浅色起 → rgb(244,246,248);翻到深色 → rgb(11,11,13),窗口底色调用 [11,11,13]
+      截图：scratchpad/v0283-strip-{dark,light}-top.png、v0283-strip-{dark-to-light,light-to-dark}-{top,full}.png
+  ⚠️ 本机 Linux 跑不了 Tauri 壳,更没有 macOS:真机上 Overlay 标题栏区域是否完全被
+     window backgroundColor 盖住,只能装 dmg 看。改动前的「翻主题后拖动区停在旧色」没在 harness
+     里重跑旧包见证(机制由源码+契约测试钉住,见 window-background.ts 头注)。
 
 版本戳(9 处):app.json / package.json / package-lock.json×2 / src-tauri/Cargo.toml / Cargo.lock /
              tauri.conf.json / src/version.ts / src/version-consistency.test.ts

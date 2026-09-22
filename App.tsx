@@ -46,6 +46,7 @@ import { colors, onThemeChange, setThemeMode, spacing, themeMode } from './src/t
 import { installWebScrollbarTheme } from './src/web-scrollbar';
 import MacTitleStrip from './src/mac-title-strip';
 import WinTitleBar from './src/win-title-bar';
+import { applyWindowBackground } from './src/window-background';
 import DesktopWindowPin from './src/DesktopWindowPin';
 import { styles } from './src/app-styles';
 import { APP_VERSION } from './src/version';
@@ -196,7 +197,12 @@ function AppRoot() {
   // Keyed remount on theme switch: module-level styles were already
   // rebuilt by the onThemeChange listeners, the new key re-renders the tree.
   const [theme, setTheme] = useState(themeMode());
-  useEffect(() => onThemeChange(setTheme), []);
+  useEffect(() => {
+    // 0.2.83:窗口自己的底色也跟主题走——Overlay 标题栏区域和 webview 未画出的那一帧露出来的是它,
+    // 默认是白的(Vincent 2026-09-22 macOS 深色主题顶部白条)。失败不抛,底色只是保底。
+    void applyWindowBackground(themeMode());
+    return onThemeChange((m) => { setTheme(m); void applyWindowBackground(m); });
+  }, []);
   // Scrollbars are painted by the browser, outside React Native's style
   // system, so they need the palette pushed to them explicitly.
   useEffect(() => installWebScrollbarTheme(), []);
