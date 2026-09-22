@@ -119,6 +119,14 @@ jobs:
           releaseBody: |-
             Signed and notarized stable update for macOS (Apple Silicon) and Windows (x64).
 
+            What's new in 0.2.84:
+            - The node detail page gets a 模型 card: change a node's model straight from the client through
+              the hub's update_node_config (RFC-024), with no LLM in the loop. Suggested models per runtime
+              plus a free-text id; the control is disabled with an explanation when the node cannot be
+              restarted remotely; conflict and timeout are shown as such rather than as success.
+            - Known limit: on opencode co-presence nodes the restart only completes once agent-node
+              2.5.0-preview.78 (agent-network #1950) is installed on that node.
+
             What's new in 0.2.83:
             - Settings is laid out the way Vincent asked for (2026-09-20, Claude-desktop reference): a left
               column with a search box and the categories (账号 / 本地 Hub / 外观 / 通知 / 关于, icon + label,
