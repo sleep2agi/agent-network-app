@@ -55,17 +55,23 @@ export default function DesktopNotifier({ onOpenChat }: { onOpenChat?: (alias: s
   const openChat = useRef(onOpenChat);
   openChat.current = onOpenChat;
 
-  // 通知点击 → 跳会话。插件在桌面端不回发点击事件(见 notify-target.ts 顶部),
-  // 能观测到的是「通知之后窗口被带到前台」——Windows 的 toast 属于应用的 AUMID,点它会激活应用。
+  // 0.2.83:两条激活信号都接——点 toast 时 Windows 会把应用带到前台(focus);若窗口本来就在
+  // 前台、只是被 toast 短暂遮过,能观测到的可能只是 visibilitychange。目标是不是「正在看的
+  // 那个会话」在激活当刻判,不在通知当刻判(见 notify-target.ts 文件头)。
   useEffect(() => {
     if (typeof window === 'undefined' || typeof window.addEventListener !== 'function') return;
-    const onFocus = () => {
-      const picked = targetOnFocus(target.current, Date.now());
+    const onActivate = () => {
+      const picked = targetOnFocus(target.current, Date.now(), getUnreadSnapshot().ledger.open);
       target.current = picked.next;
       if (picked.agent) openChat.current?.(picked.agent);
     };
-    window.addEventListener('focus', onFocus);
-    return () => window.removeEventListener('focus', onFocus);
+    const onVisible = () => { if (typeof document !== 'undefined' && document.visibilityState === 'visible') onActivate(); };
+    window.addEventListener('focus', onActivate);
+    if (typeof document !== 'undefined' && typeof document.addEventListener === 'function') document.addEventListener('visibilitychange', onVisible);
+    return () => {
+      window.removeEventListener('focus', onActivate);
+      if (typeof document !== 'undefined' && typeof document.removeEventListener === 'function') document.removeEventListener('visibilitychange', onVisible);
+    };
   }, []);
 
   useEffect(() => {
@@ -95,7 +101,7 @@ export default function DesktopNotifier({ onOpenChat }: { onOpenChat?: (alias: s
           notificationTitle(group.agent, group.count),
           plainTextForNotification(group.body),
         ).catch(() => { /* 权限被拒/平台不支持 */ });
-        target.current = recordNotified(target.current, group.agent, Date.now(), presence.windowFocused);
+        target.current = recordNotified(target.current, group.agent, Date.now());
       }
       if (ring) playChime();
     };

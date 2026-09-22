@@ -549,6 +549,7 @@ function AppRoot() {
             ) : screen.name === 'settings' ? (
               <SettingsScreen
                 cfg={cfg}
+                onClose={() => setScreen({ name: 'agents' })}
                 onLogout={removeActiveProfile}
                 onAddAccount={() => { setReauthProfile(null); setScreen({ name: 'login' }); }}
                 onSwitchProfile={activateProfile}
