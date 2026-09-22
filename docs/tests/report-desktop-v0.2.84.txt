@@ -1,0 +1,30 @@
+desktop v0.2.84 — 节点详情页直接改模型(走 hub update_node_config,不经任何大模型)
+================================================================================
+
+来源：Vincent 2026-09-22 task 6a4d2052「现在每次切模型都要让大模型干，感觉好慢」→ task b354c8a8「做啊」
+
+A. 改动(app#328,合入 1794a989)
+--------------------------------------------------------------------------------
+  src/api.ts                 fetchNodeConfig(GET /api/nodes/:id/config;404/501/非 JSON → null)
+                             updateNodeConfig(MCP tools/call update_node_config;冲突 → conflict)
+  src/node-model-change.ts   纯状态机 idle → submitting → restarting(轮询 3s×30) → applied | timeout | conflict | error
+                             三态可用性:无端点 / 节点不支持远程重启 / 可用;模型 id 校验(非空、无空白)
+  src/runtime-catalog.ts     各运行时候选模型(与创建向导同一份,测试断言相等)
+  src/NodeModelSection.tsx   「模型」卡:当前模型 + 候选 chips + 自填 id;config_update_capable=false 时禁用并说明
+  src/NodeDetailScreen.tsx   可编辑且有 node_id 的节点挂载该卡
+
+  hub 侧冲突格式对照源码核过:base_revision 不匹配返回 content payload {ok:false,error:"revision_conflict"}
+  (agent-network server/src/tools.ts:2888),落在 payload.ok===false 分支,/revision/ 命中 → conflict。
+
+测试
+  src/node-model-change.test.ts  31/31(capable=false 禁用 / 校验 / 409→conflict / 版本号涨且模型匹配→applied / 超时)
+  全仓 115/115 测试文件通过(合前 114)。typecheck 触及的非测试文件 0 新增错误。
+
+B. 真机边界(如实)
+--------------------------------------------------------------------------------
+  hub 路径本身 2026-09-22 21:28 在 DEV 的 opencode 共存节点上跑过一次:hub 3s 标 applied、启动器认 exit 75
+  重生 —— 但新一代起 opencode 共存时撞 agent-network #1946(工作区 ANET-COMMHUB.md 未清 → EEXIST),节点死。
+  修复 = agent-network #1950(agent-node),本版发出时尚未发到 npm。
+  ⇒ 本版的按钮在 claude-code / codex 等单进程节点上可用;在 opencode 共存节点上要等 #1950 发到 agent-node
+     之后才能真正完成重启。界面会如实显示「重启超时,请检查节点」而不是假成功。
+  ⚠️ 未做点击→节点回来的端到端;本机 Linux 跑不了 Tauri 壳。发出后在 通信欧 上补一次真实切换并截图。
