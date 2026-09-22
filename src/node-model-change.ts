@@ -1,0 +1,87 @@
+// 节点详情页「模型」行的纯状态机(RFC-024 update_node_config 路径)。
+//
+// 不经过任何 LLM:app → hub update_node_config{model} → 节点收 SSE config_update
+// → 写配置、exit 75 → 启动器原地拉起。改模型属于 apply_mode=restart,所以
+// 提交后要**轮询** GET /api/nodes/:id/config,等 config_revision 抬高且 model
+// 等于我们要的那个,才算 applied;hub 表里的 applied 是内容匹配快照定的,
+// 不等价于「节点活着」,所以这里只信读回来的 config。
+//
+// 纯模块:没有 fetch、没有 React,方便 ck 测试逐个状态转移断言。
+
+export interface NodeConfigView {
+  config_revision: number;
+  model: string | null;
+  config_update_capable: boolean;
+}
+
+export type ModelChangePhase =
+  | { kind: 'idle' }
+  | { kind: 'submitting'; requested: string }
+  | { kind: 'restarting'; requested: string; baseRevision: number; polls: number }
+  | { kind: 'applied'; model: string }
+  | { kind: 'timeout'; requested: string }
+  | { kind: 'conflict' }
+  | { kind: 'error'; message: string };
+
+/** 3 s × 30 = 90 s:共存节点重启(serve + attach + 注册)实测 5–45 s。 */
+export const RESTART_POLL_MS = 3000;
+export const RESTART_MAX_POLLS = 30;
+
+/** 和向导同一条校验(非空、无空白);opencode 是 provider/model 形态,不再限字符集。 */
+export function validateModelId(raw: string): { ok: true; model: string } | { ok: false; reason: string } {
+  const model = (raw ?? '').trim();
+  if (!model) return { ok: false, reason: '模型 id 不能为空' };
+  if (/\s/.test(model)) return { ok: false, reason: '模型 id 不能含空白字符' };
+  if (model.length > 200) return { ok: false, reason: '模型 id 过长(≤200)' };
+  return { ok: true, model };
+}
+
+/** 三态:null = hub 没有这个接口(旧 hub);false = 节点不是在能重启它的启动器下跑的;true = 可改。 */
+export function modelControlAvailability(view: NodeConfigView | null | undefined): { enabled: boolean; hint: string } {
+  if (!view) return { enabled: false, hint: '当前 Hub 未提供节点配置接口(需升级 commhub-server)' };
+  if (!view.config_update_capable) {
+    return { enabled: false, hint: '此节点不是由 anet 启动器托管的,无法远程改模型。请在它所在机器上执行 anet node edit <name> --model <id> 后重启。' };
+  }
+  return { enabled: true, hint: '' };
+}
+
+export type SubmitOutcome =
+  | { ok: true }
+  | { ok: false; conflict: true; error: string }
+  | { ok: false; conflict?: false; error: string };
+
+export function afterSubmit(requested: string, baseRevision: number, outcome: SubmitOutcome): ModelChangePhase {
+  if (outcome.ok) return { kind: 'restarting', requested, baseRevision, polls: 0 };
+  if (outcome.conflict) return { kind: 'conflict' };
+  return { kind: 'error', message: outcome.error };
+}
+
+/** 一次轮询读回配置后的转移。view=null(读失败)算一次轮询但不改判。 */
+export function afterPoll(
+  phase: Extract<ModelChangePhase, { kind: 'restarting' }>,
+  view: NodeConfigView | null,
+  maxPolls: number = RESTART_MAX_POLLS,
+): ModelChangePhase {
+  if (view && view.config_revision > phase.baseRevision && view.model === phase.requested) {
+    return { kind: 'applied', model: phase.requested };
+  }
+  const polls = phase.polls + 1;
+  if (polls >= maxPolls) return { kind: 'timeout', requested: phase.requested };
+  return { ...phase, polls };
+}
+
+export function phaseText(phase: ModelChangePhase): string {
+  switch (phase.kind) {
+    case 'idle': return '';
+    case 'submitting': return `正在提交模型 ${phase.requested}…`;
+    case 'restarting': return `已下发,节点正在以新模型重启…(${phase.polls * RESTART_POLL_MS / 1000}s)`;
+    case 'applied': return `已切换到 ${phase.model}`;
+    case 'timeout': return `已下发 ${phase.requested},但 ${RESTART_MAX_POLLS * RESTART_POLL_MS / 1000}s 内节点没有以新模型回来。请到它所在机器看日志(anet node logs)。`;
+    case 'conflict': return '配置在别处被改过了,已重新加载,请再选一次。';
+    case 'error': return `失败:${phase.message}`;
+  }
+}
+
+export function phaseIsBusy(phase: ModelChangePhase): boolean {
+  return phase.kind === 'submitting' || phase.kind === 'restarting';
+}
