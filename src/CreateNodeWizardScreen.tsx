@@ -64,7 +64,7 @@ const RUNTIMES: { id: string; label: string; models: string[] }[] = [
   //  models 留空 ⇒ 提交省略 model ⇒ daemon 起子节点时「OpenCode copresence requires an explicit
   //  provider/model」(2026-09-07 Mac mini 真跑抓到)。这里给 OpenCode 自带的免费模型(不需要任何 key,
   //  DEV 上 opencode-指挥狗 / opencode测试1号 就用它们);要用别的 provider 走 anet opencode auth-login。
-  { id: 'opencode-cli', label: 'OpenCode（TUI 共存）', models: ['opencode/mimo-v2.5-free', 'opencode/north-mini-code-free'] },
+  { id: 'opencode-cli', label: 'OpenCode（TUI 共存）', models: ['opencode/mimo-v2.6-flash-free', 'opencode/north-mini-code-free'] },
 ];
 const PERMISSION_MODES = ['default', 'acceptEdits', 'plan', 'bypassPermissions'];
 const STEPS = ['名字', 'Runtime', '模型', '参数', '确认'];

@@ -82,6 +82,25 @@ export function phaseText(phase: ModelChangePhase): string {
   }
 }
 
+/** Chips to render: the catalog's suggestions, plus the node's current model
+ * prepended when the catalog does not list it. The catalog is a built-in
+ * snapshot that lags the provider (mimo-v2.5-free was withdrawn while still
+ * listed), so a node on an unlisted model must still see itself selected
+ * rather than have its model silently disappear. Order and duplicates of
+ * the catalog are preserved; `current` is never duplicated. */
+export function modelChips(suggestions: readonly string[], current: string | null | undefined): string[] {
+  const cur = (current ?? '').trim();
+  if (!cur || suggestions.includes(cur)) return [...suggestions];
+  return [cur, ...suggestions];
+}
+
+/** One-line caveat under the chips for runtimes whose catalog is known to lag
+ * the provider; null for runtimes with no such caveat. */
+export function catalogHint(runtime: string | null | undefined): string | null {
+  if (runtime === 'opencode-cli') return '候选来自内置列表,可能滞后于 OpenCode Zen 实际可用模型;选错会在重启后回件报错。';
+  return null;
+}
+
 export function phaseIsBusy(phase: ModelChangePhase): boolean {
   return phase.kind === 'submitting' || phase.kind === 'restarting';
 }
