@@ -1,5 +1,5 @@
 import { readFileSync } from 'node:fs';
-import { afterPoll, afterSubmit, modelControlAvailability, phaseText, validateModelId, RESTART_MAX_POLLS } from './node-model-change';
+import { afterPoll, afterSubmit, modelControlAvailability, phaseText, validateModelId, RESTART_MAX_POLLS, modelChips, catalogHint } from './node-model-change';
 import { RUNTIME_MODEL_SUGGESTIONS, suggestedModels } from './runtime-catalog';
 
 let passed = 0, total = 0;
@@ -58,5 +58,14 @@ check('section offers suggested models plus a custom id input', section.includes
 const detail = readFileSync(new URL('./NodeDetailScreen.tsx', import.meta.url), 'utf8');
 check('detail screen mounts the model section for editable nodes only', detail.includes('<NodeModelSection cfg={cfg} node={node} />') && detail.includes("!readOnly && node ? <NodeModelSection"));
 
+// stale-catalog resilience (2026-09-23: mimo-v2.5-free withdrawn from OpenCode Zen while still listed)
+check('catalog no longer lists the withdrawn opencode/mimo-v2.5-free', !Object.values(RUNTIME_MODEL_SUGGESTIONS).flat().includes('opencode/mimo-v2.5-free'));
+check('catalog lists the live-verified opencode/mimo-v2.6-flash-free first for opencode-cli', suggestedModels('opencode-cli')[0] === 'opencode/mimo-v2.6-flash-free');
+check('a current model absent from the catalog is still rendered (prepended)', JSON.stringify(modelChips(['a/b', 'c/d'], 'x/y')) === JSON.stringify(['x/y', 'a/b', 'c/d']));
+check('a current model present in the catalog is not duplicated', JSON.stringify(modelChips(['a/b', 'c/d'], 'c/d')) === JSON.stringify(['a/b', 'c/d']));
+check('no current model → chips are exactly the catalog', JSON.stringify(modelChips(['a/b'], null)) === JSON.stringify(['a/b']) && JSON.stringify(modelChips(['a/b'], '  ')) === JSON.stringify(['a/b']));
+check('empty catalog with a current model still shows that model', JSON.stringify(modelChips([], 'p/m')) === JSON.stringify(['p/m']));
+check('opencode-cli gets the lagging-catalog hint; others get none', catalogHint('opencode-cli') !== null && catalogHint('opencode-cli')!.includes('OpenCode Zen') && catalogHint('claude-agent-sdk') === null && catalogHint(null) === null);
+check('section renders chips via modelChips and shows the catalog hint', section.includes('modelChips(') && section.includes('catalogHint('));
 console.log(`node model change: ${passed}/${total} checks passed`);
 if (passed !== total) process.exit(1);

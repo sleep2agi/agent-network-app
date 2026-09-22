@@ -12,6 +12,8 @@ import { styles } from './app-styles';
 import {
   afterPoll,
   afterSubmit,
+  catalogHint,
+  modelChips,
   modelControlAvailability,
   phaseIsBusy,
   phaseText,
@@ -63,6 +65,8 @@ export default function NodeModelSection({ cfg, node }: { cfg: HubConfig; node: 
   const suggestions = suggestedModels(node.runtime);
   const currentModel = view?.model ?? node.model ?? node.config_snapshot?.model ?? null;
   const candidate = custom.trim() ? custom : picked;
+  const chips = modelChips(suggestions, currentModel);
+  const hint = catalogHint(node.runtime);
 
   const submit = async () => {
     if (!view || busy) return;
@@ -97,10 +101,12 @@ export default function NodeModelSection({ cfg, node }: { cfg: HubConfig; node: 
             <Text style={{ color: colors.textMuted, fontSize: 12, lineHeight: 18 }}>
               改模型不经过任何大模型:Hub 下发后节点自己写配置并重启一次(约 5–45 秒),期间它不接任务。
             </Text>
-            {suggestions.length > 0 ? (
-              <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm }}>
-                {suggestions.map(m => {
-                  const active = !custom.trim() && picked === m;
+            {chips.length > 0 ? (
+              <View style={{ gap: spacing.sm }}>
+                <Text style={{ color: colors.textMuted, fontSize: 12 }}>建议</Text>
+                <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm }}>
+                {chips.map(m => {
+                  const active = !custom.trim() && (picked ? picked === m : m === currentModel);
                   return (
                     <Pressable
                       key={m}
@@ -116,6 +122,8 @@ export default function NodeModelSection({ cfg, node }: { cfg: HubConfig; node: 
                     </Pressable>
                   );
                 })}
+                </View>
+                {hint ? <Text style={{ color: colors.textMuted, fontSize: 12, lineHeight: 18 }}>{hint}</Text> : null}
               </View>
             ) : null}
             <TextInput

@@ -9,7 +9,8 @@ const src = readFileSync(new URL('./CreateNodeWizardScreen.tsx', import.meta.url
 const table = src.slice(src.indexOf('const RUNTIMES'), src.indexOf('const PERMISSION_MODES'));
 const entry = (id: string) => table.split('\n').find(l => l.includes(`id: '${id}'`)) ?? '';
 check('opencode-cli offers at least one provider/model (never an empty list)', /models: \['opencode\/[^']+'/.test(entry('opencode-cli')));
-check('opencode-cli default model is an OpenCode free model (no key needed)', entry('opencode-cli').includes("'opencode/mimo-v2.5-free'"));
+check('opencode-cli default model is an OpenCode free model (no key needed)', entry('opencode-cli').includes("'opencode/mimo-v2.6-flash-free'"));
+check('opencode-cli no longer offers the withdrawn mimo-v2.5-free (HTTP 500 on OpenCode Zen)', !entry('opencode-cli').includes('mimo-v2.5-free'));
 for (const id of ['claude-code-cli', 'codex-app-server', 'grok-build-cli']) {
   check(`${id} still follows the host login (empty models)`, entry(id).includes('models: []'));
 }
