@@ -61,6 +61,7 @@ import { nodeActionVisual, type NodeActionTone } from './node-action-visual';
 import { nodeInfoFacts } from './node-info';
 import { nodeIdentityNotice, taskSectionTitle } from './node-identity';
 import NodeRulesSection from './NodeRulesSection';
+import NodeModelSection from './NodeModelSection';
 
 const POLL_MS = 10_000; // same cadence as AgentsScreen — hub-friendly, felt-live
 
@@ -370,6 +371,9 @@ export default function NodeDetailScreen({
         {/* app#225 —— 节点规则文件（CLAUDE.md / AGENTS.md）查看/编辑。
             需要权威 node_id（hub 工具按 node_id 定位节点）；只读模式不显示。 */}
         {!readOnly && node ? <NodeRulesSection cfg={cfg} node={node} session={s} /> : null}
+
+        {/* RFC-024 —— 不经 LLM 直接改模型;需要权威 node_id。 */}
+        {!readOnly && node ? <NodeModelSection cfg={cfg} node={node} /> : null}
       </ScrollView>
 
       <Modal transparent visible={!readOnly && !!pendingAction} onRequestClose={() => setPendingAction(null)} animationType="fade">

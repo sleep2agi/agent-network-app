@@ -995,6 +995,96 @@ export const runNodeLifecycleAction = async (
   }
 };
 
+// ── RFC-024 —— 节点模型远程修改（不经 LLM）──────────────────────────────
+//
+// GET /api/nodes/:id/config 是 dashboard 拥有的读接口(server.ts nodeConfigMatch),
+// `config_update_capable` 三态见 node-model-change.ts。update_node_config 走和
+// 生命周期操作同一条公开 MCP 契约;改模型 = apply_mode "restart"(节点 exit 75,
+// 启动器原地拉起),所以调用方拿到 ok 只表示「已下发」,是否生效要轮询 config。
+
+export interface NodeConfigRead {
+  node_id: string;
+  alias?: string;
+  config_revision: number;
+  model: string | null;
+  flags?: Record<string, unknown>;
+  config_update_capable: boolean;
+}
+
+/** null = hub 没有这个接口(404/501/非 JSON);其它失败抛错(调用方按「读失败」处理)。 */
+export const fetchNodeConfig = async (cfg: HubConfig, nodeId: string): Promise<NodeConfigRead | null> => {
+  const res = await withTimeout(signal =>
+    appFetch(`${cfg.serverUrl}/api/nodes/${encodeURIComponent(nodeId)}/config`, { headers: headers(cfg), signal }),
+  );
+  if (res.status === 404 || res.status === 501) return null;
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  const ct = res.headers.get('content-type') || '';
+  if (!ct.includes('application/json')) return null;
+  const d = (await res.json().catch(() => null)) as (Partial<NodeConfigRead> & { ok?: boolean }) | null;
+  if (!d || d.ok === false || typeof d.config_revision !== 'number') return null;
+  return {
+    node_id: typeof d.node_id === 'string' ? d.node_id : nodeId,
+    alias: typeof d.alias === 'string' ? d.alias : undefined,
+    config_revision: d.config_revision,
+    model: typeof d.model === 'string' ? d.model : null,
+    flags: d.flags && typeof d.flags === 'object' ? d.flags : undefined,
+    config_update_capable: d.config_update_capable === true,
+  };
+};
+
+export interface UpdateNodeConfigRequest {
+  nodeId: string;
+  baseRevision: number;
+  patch: { model: string };
+}
+
+export type UpdateNodeConfigResult =
+  | { ok: true; update_id?: string; apply_mode?: string }
+  | { ok: false; conflict: true; error: string }
+  | { ok: false; conflict?: false; unsupported?: true; error: string };
+
+export const updateNodeConfig = async (cfg: HubConfig, req: UpdateNodeConfigRequest): Promise<UpdateNodeConfigResult> => {
+  const networkId = cfg.networkId ?? (await fetchNetworkId(cfg));
+  const args = {
+    node_id: req.nodeId,
+    base_revision: req.baseRevision,
+    patch: { model: req.patch.model },
+    ...(networkId ? { network_id: networkId } : {}),
+  };
+  try {
+    const res = await withTimeout(signal => appFetch(`${cfg.serverUrl}/mcp`, {
+      method: 'POST',
+      headers: {
+        ...headers(cfg),
+        Accept: 'application/json, text/event-stream',
+        'MCP-Protocol-Version': '2025-03-26',
+      },
+      signal,
+      body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name: 'update_node_config', arguments: args } }),
+    }));
+    if (res.status === 404 || res.status === 501) return { ok: false, unsupported: true, error: '当前 Hub 不支持远程修改节点配置，请先升级服务器' };
+    if (res.status === 409) return { ok: false, conflict: true, error: 'revision conflict' };
+    if (!res.ok) return { ok: false, error: `HTTP ${res.status}` };
+    const parsed = parseMcpToolResponse(await res.text());
+    if (parsed.kind === 'malformed') return { ok: false, unsupported: true, error: '当前 Hub 未返回兼容的节点配置响应' };
+    if (parsed.kind === 'jsonRpcError') {
+      // hub 侧 base_revision 不匹配走 MCP 错误文本(不是 HTTP 409):按文案识别。
+      if (/409|conflict|revision/i.test(parsed.message)) return { ok: false, conflict: true, error: parsed.message };
+      return { ok: false, error: parsed.message };
+    }
+    const payload = parsed.payload as { ok?: boolean; error?: string; update_id?: string; apply_mode?: string } | null;
+    if (!payload) return { ok: false, error: 'Hub 返回空响应' };
+    if (payload.ok === false) {
+      const msg = payload.error || 'update_node_config failed';
+      if (/409|conflict|revision/i.test(msg)) return { ok: false, conflict: true, error: msg };
+      return { ok: false, error: msg };
+    }
+    return { ok: true, update_id: payload.update_id, apply_mode: payload.apply_mode };
+  } catch (error) {
+    return { ok: false, error: error instanceof Error ? error.message : String(error) };
+  }
+};
+
 // ── app#225 —— 节点规则文件（CLAUDE.md / AGENTS.md）读写 ────────────────
 //
 // 走的是和生命周期操作同一条公开 MCP 契约（tools/call），hub 侧工具见主仓
