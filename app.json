@@ -10,7 +10,10 @@
       "icon": "./assets/icon-ios.png",
       "supportsTablet": true,
       "bundleIdentifier": "top.vansin.agentnetwork",
-      "buildNumber": "1"
+      "buildNumber": "1",
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false
+      }
     },
     "web": {
       "favicon": "./assets/favicon.png"
