@@ -12,6 +12,11 @@ on:
         required: true
         type: boolean
         default: false
+      set_export_compliance_only:
+        description: Declare exempt encryption (usesNonExemptEncryption=false) for this build so internal testers can install it. Does NOT touch groups or Beta Review.
+        required: false
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -28,6 +33,7 @@ jobs:
           APPLE_API_KEY_BASE64: ${{ secrets.APPLE_API_KEY_BASE64 }}
           BUILD_NUMBER: ${{ inputs.build_number }}
           ENABLE_PUBLIC_TESTING: ${{ inputs.enable_public_testing }}
+          SET_EXPORT_COMPLIANCE_ONLY: ${{ inputs.set_export_compliance_only }}
           BUNDLE_ID: top.vansin.agentnetwork
           PUBLIC_LINK_ID: ZvqYnCA9
         shell: bash
@@ -107,6 +113,41 @@ jobs:
 
           groups_json="$RUNNER_TEMP/groups.json"
           asc_get betaGroups --data-urlencode "filter[app]=$app_id" --data-urlencode 'limit=200' > "$groups_json"
+
+          if [ "$SET_EXPORT_COMPLIANCE_ONLY" = 'true' ] && [ "$ENABLE_PUBLIC_TESTING" = 'true' ]; then
+            echo "::error::set_export_compliance_only and enable_public_testing are mutually exclusive"
+            exit 1
+          fi
+
+          # Compliance-only: the app uses only OS-provided HTTPS/TLS (exempt encryption).
+          # Declares that for this build so internal testers can install it; never
+          # touches beta groups and never submits for Beta App Review.
+          if [ "$SET_EXPORT_COMPLIANCE_ONLY" = 'true' ]; then
+            encryption=$(jq -r '
+              if (.data[0].attributes.usesNonExemptEncryption | type) == "boolean"
+              then (.data[0].attributes.usesNonExemptEncryption | tostring)
+              else "unset"
+              end
+            ' "$builds_json")
+            if [ "$encryption" = 'unset' ]; then
+              echo "Compliance-only: declaring that build $BUILD_NUMBER does not use non-exempt encryption."
+              build_patch=$(jq -cn --arg id "$build_id" '{data:{type:"builds",id:$id,attributes:{usesNonExemptEncryption:false}}}')
+              asc_write PATCH "builds/$build_id" "$build_patch" > /dev/null
+            elif [ "$encryption" = 'false' ]; then
+              echo "Compliance-only: build $BUILD_NUMBER already declares exempt encryption; leaving it unchanged."
+            else
+              echo "::error::build $BUILD_NUMBER declares non-exempt encryption; refusing to overwrite it"
+              exit 1
+            fi
+            for attempt in 1 2 3 4 5 6; do
+              asc_get builds --data-urlencode "filter[app]=$app_id" --data-urlencode "filter[version]=$BUILD_NUMBER" --data-urlencode 'limit=10' > "$builds_json"
+              asc_get buildBetaDetails --data-urlencode "filter[build]=$build_id" --data-urlencode 'limit=2' > "$details_json"
+              internal_state=$(jq -r '.data[0].attributes.internalBuildState // "UNKNOWN"' "$details_json")
+              echo "Compliance-only: usesNonExemptEncryption=$(jq -r '.data[0].attributes.usesNonExemptEncryption' "$builds_json") internalBuildState=$internal_state"
+              [ "$internal_state" != 'MISSING_EXPORT_COMPLIANCE' ] && break
+              sleep 5
+            done
+          fi
 
           if [ "$ENABLE_PUBLIC_TESTING" = 'true' ]; then
             group_id=$(jq -r --arg link "$PUBLIC_LINK_ID" '.data[] | select(.attributes.publicLinkId == $link) | .id' "$groups_json" | head -n 1)
