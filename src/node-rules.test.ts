@@ -1,5 +1,6 @@
 // app#225 规则文件区块纯逻辑 — run: bun src/node-rules.test.ts
-import { hasUnsavedChanges, isTerminal, nextPollDelayMs, predictedRulesFileName, requestIdToFollow, rulesStatusMessage } from './node-rules';
+import { hasUnsavedChanges, isTerminal, nextPollDelayMs, predictedRulesFileName, requestIdToFollow, rulesFileTarget, rulesStatusMessage } from './node-rules';
+import { rulesTargetArgs } from './api';
 
 let pass = 0, total = 0;
 const ck = (name: string, cond: boolean, extra = '') => {
@@ -53,6 +54,24 @@ ck('节点上没读到过(null)但编辑器有字 → 有改动', hasUnsavedChan
 ck('成功 → 跟自己的 request_id', requestIdToFollow({ ok: true, request_id: 'rf_a' }) === 'rf_a');
 ck('request_in_flight 且带 existing_request_id → 跟已有的那条', requestIdToFollow({ ok: false, existing_request_id: 'rf_old' }) === 'rf_old');
 ck('失败且没有 existing → null(真错误)', requestIdToFollow({ ok: false }) === null);
+
+// ── app#225 follow-up:规则区块显示给谁、发给谁(rulesFileTarget / rulesTargetArgs) ──
+{
+  const node = { node_id: 'n_1', alias: 'a', runtime: 'claude-code-cli' };
+  const cap = { alias: 'a', rules_file_capable: true };
+  const noCap = { alias: 'a' };
+  ck('会话上报 capable + 有 nodes 行:详情页按 node_id 发', rulesFileTarget({ readOnly: false, node, session: cap })?.node_id === 'n_1');
+  ck('会话上报 capable:只读「节点信息」页也显示(Vincent 看的那页)', rulesFileTarget({ readOnly: true, node, session: cap })?.node_id === 'n_1');
+  const sessionOnly = rulesFileTarget({ readOnly: true, node: null, session: cap });
+  ck('capable 但没有 nodes 行(claude-code 会话):按 alias 发', !!sessionOnly && sessionOnly.alias === 'a' && !sessionOnly.node_id, JSON.stringify(sessionOnly));
+  ck('未上报 capable + 可编辑 + 有 nodes 行:保持原行为(显示)', rulesFileTarget({ readOnly: false, node, session: noCap })?.node_id === 'n_1');
+  ck('未上报 capable + 只读:保持原行为(不显示)', rulesFileTarget({ readOnly: true, node, session: noCap }) === null);
+  ck('未上报 capable + 没有 nodes 行:不显示(节点答不了,免得人等 60s 超时)', rulesFileTarget({ readOnly: false, node: null, session: noCap }) === null);
+  ck('capable 必须严格为 true(字符串 "true" 不算)', rulesFileTarget({ readOnly: true, node: null, session: { alias: 'a', rules_file_capable: 'true' as any } }) === null);
+  ck('有 node_id 时参数只带 node_id(alias 不能改道已知节点)', JSON.stringify(rulesTargetArgs({ node_id: 'n_1', alias: 'b' })) === JSON.stringify({ node_id: 'n_1' }));
+  ck('没有 node_id 时参数只带 alias', JSON.stringify(rulesTargetArgs({ alias: 'a' })) === JSON.stringify({ alias: 'a' }));
+  ck('会话目标的文件名预测:claude-code → CLAUDE.md', predictedRulesFileName({ agent: 'claude-code' }, sessionOnly) === 'CLAUDE.md');
+}
 
 console.log(`\n${pass}/${total} passed`);
 if (pass !== total) process.exit(1);
