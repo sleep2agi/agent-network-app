@@ -23,7 +23,7 @@ import { fetchStatus, fetchUserMessages, takeStatusPrefetch, type HubConfig, typ
   replyUnreadSince,
 } from './api';
 import { loadSessionsCache, saveSessionsCache } from './storage';
-import { colors, spacing, statusColor, themeMode } from './theme';
+import { colors, radius, spacing, statusColor } from './theme';
 import { usePoll } from './usePoll';
 import { retryUnreadPersistFromPoll } from './conversation-unread-persist';
 import AgentUnreadBadge from './AgentUnreadBadge';
@@ -215,8 +215,8 @@ export default function AgentsScreen({
   }
 
   return (
-    <View style={{ flex: 1, backgroundColor: compact && themeMode() === 'light' ? '#fafafb' : colors.bg }}>
-      <View style={{ paddingHorizontal: compact ? spacing.sm : spacing.lg, paddingTop: compact ? spacing.sm : spacing.lg, backgroundColor: compact && themeMode() === 'light' ? '#fafafb' : colors.bg }}>
+    <View style={{ flex: 1, backgroundColor: compact ? colors.listBg : colors.bg }}>
+      <View style={{ paddingHorizontal: compact ? spacing.sm : spacing.lg, paddingTop: compact ? spacing.sm : spacing.lg, backgroundColor: compact ? colors.listBg : colors.bg }}>
         <View style={styles.listHeaderRow}>
           <Text style={styles.listHeader}>
             {q ? `${shownCount} / ${sessions.length} agents` : `${sessions.length} agents`}
@@ -226,7 +226,7 @@ export default function AgentsScreen({
           </Pressable>
         </View>
         {sessions.length > 10 ? (
-          <TextInput style={[styles.search, compact && themeMode() === 'light' && { backgroundColor: '#f0f1f3', borderWidth: 0, borderRadius: 8 }]} placeholder="搜索 agent…" placeholderTextColor={colors.textMuted} autoCapitalize="none" autoCorrect={false} value={query} onChangeText={setQuery} />
+          <TextInput style={[styles.search, compact && { backgroundColor: colors.subtleFill, borderWidth: 0, borderRadius: radius.sm }]} placeholder="搜索 agent…" placeholderTextColor={colors.textMuted} autoCapitalize="none" autoCorrect={false} value={query} onChangeText={setQuery} />
         ) : null}
       </View>
       <SectionList
@@ -234,7 +234,7 @@ export default function AgentsScreen({
       keyExtractor={s => s.alias}
       stickySectionHeadersEnabled={false}
       renderSectionHeader={({ section }) => (
-        <View style={[styles.sectionHeaderRow, compact && themeMode() === 'light' && { backgroundColor: '#fafafb' }]}>
+        <View style={[styles.sectionHeaderRow, compact && { backgroundColor: colors.listBg }]}>
           <Text style={styles.sectionHeader}>{section.title}</Text>
           <Text style={styles.sectionCount}>
             {section.online}/{section.total} 在线
@@ -294,20 +294,15 @@ export default function AgentsScreen({
             compact && {
               borderWidth: 0,
               borderBottomWidth: 0,
-              borderRadius: 9,
+              borderRadius: radius.md,
               paddingHorizontal: spacing.md,
               paddingVertical: 10,
               marginBottom: 2,
-              backgroundColor: themeMode() === 'light' ? 'transparent' : colors.card,
+              // 极简:两种主题的行都是平铺(不成卡片),只靠悬停/选中的一档中性底色表达状态。
+              backgroundColor: 'transparent',
             },
-            selectedAlias === item.alias && { backgroundColor: themeMode() === 'light' ? '#e7e9ec' : colors.inputBg },
-            compact && hoveredAlias === item.alias && ({
-              backgroundColor: themeMode() === 'light' ? '#f1f3f5' : colors.inputBg,
-              boxShadow: themeMode() === 'light'
-                ? '0 4px 14px rgba(31, 41, 55, 0.12)'
-                : '0 4px 16px rgba(0, 0, 0, 0.38)',
-              zIndex: 2,
-            } as any),
+            compact && hoveredAlias === item.alias && { backgroundColor: colors.rowHover },
+            selectedAlias === item.alias && { backgroundColor: colors.rowActive },
             item.status === 'offline' && styles.cardOffline,
             pressed && { opacity: 0.7 },
           ]}
@@ -315,15 +310,7 @@ export default function AgentsScreen({
           onLongPress={compact ? undefined : () => onOpenNodeDetail(item.alias)}
           delayLongPress={400}
         >
-          <View style={[
-            styles.avatarWrap,
-            compact && hoveredAlias === item.alias && ({
-              borderRadius: 18,
-              boxShadow: themeMode() === 'light'
-                ? '0 3px 10px rgba(7, 153, 168, 0.24)'
-                : '0 3px 12px rgba(34, 211, 238, 0.25)',
-            } as any),
-          ]}>
+          <View style={styles.avatarWrap}>
             <AliasAvatar alias={item.alias} size={34} />
             {/* 更像微信·round-5: 头像右下在线态圆点(带描边环·offline 灰暗) */}
             <View

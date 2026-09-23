@@ -44,7 +44,7 @@ import {
   PickedImage,
 } from './attach';
 import { appendAttachmentQueue, attachmentFromClipboard, isTauriDesktop, releaseClipboardAttachment } from './clipboard-attachment';
-import { colors, onThemeChange, spacing } from './theme';
+import { colors, onThemeChange, radius, spacing } from './theme';
 import { formatChatHeader, shouldShowTimeHeader } from './time';
 import { echoSupersededByFetched } from './chat-echo';
 import { messageMenuGroups, selectionBarActions, type MessageMenuKey } from './message-menu-model';
@@ -1825,8 +1825,8 @@ const makeStyles = () =>
   // DesktopWindowPin owns the top-right 34px. Reserve a separate hit target
   // instead of letting its absolute z-index cover this action.
   headerActionWithWindowPin: { marginRight: 42 },
-  btwHeaderButton: { height: 28, minWidth: 42, paddingHorizontal: spacing.sm, borderWidth: 1, borderColor: colors.accent, borderRadius: 7, alignItems: 'center', justifyContent: 'center' },
-  btwHeaderText: { color: colors.accent, fontSize: 10, fontWeight: '600' },
+  btwHeaderButton: { height: 28, minWidth: 42, paddingHorizontal: spacing.sm, borderRadius: radius.sm, alignItems: 'center', justifyContent: 'center' },
+  btwHeaderText: { color: colors.textSecondary, fontSize: 11, fontWeight: '600', letterSpacing: 0.4 },
   beginning: {
     color: colors.textMuted,
     fontSize: 11,
@@ -1868,20 +1868,19 @@ const makeStyles = () =>
     marginTop: spacing.md,
     marginBottom: spacing.sm,
   },
+  // 极简:气泡不描边。发出的用中性的 rowActive 一档底色,回复用卡片色——靠底色区分,不靠边框。
   bubble: {
     alignSelf: 'flex-end',
     maxWidth: '100%',
-    backgroundColor: colors.card,
-    borderColor: colors.border,
-    borderWidth: 1,
-    borderRadius: 8,
+    backgroundColor: colors.rowActive,
+    borderRadius: radius.lg,
     paddingHorizontal: spacing.lg,
     paddingVertical: spacing.md,
   },
   replyBubble: { alignSelf: 'flex-start', maxWidth: '85%', flexShrink: 1, backgroundColor: colors.card },
   bubbleText: { color: colors.text, fontSize: 14, lineHeight: 20 },
   // 微信式引用:气泡下方一条灰底小字「作者: 内容」(单行省略)
-  quoteChip: { marginTop: 4, maxWidth: '100%', backgroundColor: colors.border + '66', borderRadius: 6, paddingHorizontal: 8, paddingVertical: 4 },
+  quoteChip: { marginTop: 4, maxWidth: '100%', borderLeftWidth: 2, borderLeftColor: colors.border, paddingLeft: spacing.sm, paddingVertical: 1 },
   quoteChipSent: { alignSelf: 'flex-end' },
   quoteChipReply: { alignSelf: 'flex-start' },
   quoteChipText: { color: colors.textMuted, fontSize: 12, lineHeight: 16 },
@@ -2069,15 +2068,15 @@ const makeStyles = () =>
   desktopToolbar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingTop: spacing.sm },
   desktopToolButton: { width: 34, height: 34, alignItems: 'center', justifyContent: 'center' },
   desktopToolbarRight: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
-  priorityButton: { height: 28, borderRadius: 5, borderWidth: 1, borderColor: colors.border, paddingHorizontal: spacing.sm, alignItems: 'center', justifyContent: 'center' },
+  priorityButton: { height: 28, borderRadius: radius.sm, borderWidth: 1, borderColor: 'transparent', paddingHorizontal: spacing.sm, alignItems: 'center', justifyContent: 'center' },
   priorityButtonActive: { borderColor: colors.failed, backgroundColor: colors.inputBg },
   priorityButtonText: { color: colors.textMuted, fontSize: 11, fontWeight: '600' },
   priorityButtonTextActive: { color: colors.failed },
   mobilePriorityButton: { width: 36, height: 36, borderRadius: 18, borderWidth: 1, borderColor: colors.border, alignItems: 'center', justifyContent: 'center' },
   mobilePriorityText: { color: colors.textMuted, fontSize: 15 },
   shortcutHint: { color: colors.textMuted, fontSize: 10 },
-  desktopSend: { minWidth: 64, height: 32, borderRadius: 5, paddingHorizontal: spacing.lg, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.accent },
-  desktopSendDisabled: { backgroundColor: colors.inputBg, borderWidth: 1, borderColor: colors.border },
+  desktopSend: { minWidth: 64, height: 32, borderRadius: radius.sm, paddingHorizontal: spacing.lg, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.accent },
+  desktopSendDisabled: { backgroundColor: colors.subtleFill },
   desktopSendText: { color: colors.onAccent, fontSize: 13, fontWeight: '600' },
   input: {
     flex: 1,
