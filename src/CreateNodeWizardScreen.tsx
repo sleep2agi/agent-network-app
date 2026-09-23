@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { Fragment, useCallback, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   KeyboardAvoidingView,
@@ -45,7 +45,7 @@ import { colors, onThemeChange, spacing } from './theme';
 const NAME_RE = /^[a-z][a-z0-9_-]{0,63}$/;
 const NAME_RULE_HINT = '小写字母开头，仅允许 a-z 0-9 _ -，最多 64 字符';
 
-const RUNTIMES: { id: string; label: string; models: string[] }[] = [
+const RUNTIMES: { id: string; label: string; models: string[]; note?: string }[] = [
   { id: 'claude-agent-sdk', label: 'Claude Agent SDK', models: ['deepseek-v4-pro', 'MiniMax-M3', 'claude-sonnet-4-6', 'claude-opus-4-x'] },
   { id: 'codex-sdk', label: 'Codex SDK', models: ['gpt-5.5'] },
   { id: 'grok-build-acp', label: 'Grok (build-acp)', models: ['grok-build'] },
@@ -54,7 +54,8 @@ const RUNTIMES: { id: string; label: string; models: string[] }[] = [
   // 字段（hub 侧自 da84f34d 起 model optional/nullable）。
   { id: 'claude-code-cli', label: 'Claude Code（TUI 共存）', models: [] },
   { id: 'codex-app-server', label: 'Codex（TUI 共存）', models: [] },
-  { id: 'grok-build-cli', label: 'Grok（TUI 共存）', models: [] },
+  // grok TUI 共存是预览能力(owner 09-23 选方案 A):标出来,并指向稳定的 grok-build-acp。
+  { id: 'grok-build-cli', label: 'Grok（TUI 共存 · 预览）', models: [], note: '预览：人在 TUI 里打字时网络任务会排队；grok 自更新后可能要重新钉版。要稳定接活选 Grok (build-acp)。' },
   // #199 —— hub / daemon / CLI 三处的 runtime 全集都是 7 个,只有这里是 6 个。
   // `opencode-cli` 出现在 agent-network/src/codex-copresence-profile.ts:223 的共存
   // profile 里。(目录名叫 opencode-**acp**,但 runtime id 只有 opencode-**cli** ——
@@ -341,8 +342,8 @@ export default function CreateNodeWizardScreen({ cfg, daemon, onBack, onExit }: 
                   const allowed = isRuntimeAllowed(r.id);
                   const selected = runtimeId === r.id;
                   return (
+                    <Fragment key={r.id}>
                     <Pressable
-                      key={r.id}
                       disabled={!allowed}
                       onPress={() => {
                         if (allowed) {
@@ -374,6 +375,10 @@ export default function CreateNodeWizardScreen({ cfg, daemon, onBack, onExit }: 
                         <Ionicons name="checkmark" size={18} color={colors.accent} />
                       ) : null}
                     </Pressable>
+                    {r.note && selected && allowed ? (
+                      <Text style={styles.hint}>{r.note}</Text>
+                    ) : null}
+                    </Fragment>
                   );
                 })}
               </View>

@@ -15,5 +15,10 @@ for (const id of ['claude-code-cli', 'codex-app-server', 'grok-build-cli']) {
   check(`${id} still follows the host login (empty models)`, entry(id).includes('models: []'));
 }
 check('summary falls back to the first model of the runtime', src.includes("v={model || runtime.models[0] || '跟随宿主登录'}"));
+// grok TUI 共存标为预览(owner 09-23 方案 A),并在选中时提示稳定替代 grok-build-acp。
+check('grok-build-cli is labelled as preview in the runtime list', /label: '[^']*预览[^']*'/.test(entry('grok-build-cli')));
+check('grok-build-cli note points at the stable grok-build-acp alternative', /note: '[^']*build-acp[^']*'/.test(entry('grok-build-cli')));
+check('runtime notes are rendered under the selected row', src.includes('{r.note && selected && allowed ? ('));
+check('grok-build-cli keeps its runtime id (existing nodes unaffected)', entry('grok-build-cli').includes("id: 'grok-build-cli'"));
 console.log(`wizard runtimes: ${passed}/${total} checks passed`);
 if (passed !== total) process.exit(1);
