@@ -12,7 +12,7 @@ const plist = app?.expo?.ios?.infoPlist ?? {};
 ck('app.json expo.ios.infoPlist declares ITSAppUsesNonExemptEncryption', 'ITSAppUsesNonExemptEncryption' in plist);
 ck('ITSAppUsesNonExemptEncryption is boolean false', plist.ITSAppUsesNonExemptEncryption === false);
 
-const wf = fs.readFileSync('.github/workflows/ios-testflight-status.yml', 'utf8');
+const wf = fs.readFileSync('.github/workflows/ios-testflight-status.yml', 'utf8').replace(/\r\n?/g, '\n');
 ck('status workflow has set_export_compliance_only input', /\n      set_export_compliance_only:\n/.test(wf));
 const start = wf.indexOf(`if [ "$SET_EXPORT_COMPLIANCE_ONLY" = 'true' ]; then`);
 const end = wf.indexOf(`if [ "$ENABLE_PUBLIC_TESTING" = 'true' ]; then\n            group_id=`);
