@@ -96,7 +96,8 @@ const makeStyles = () =>
   sectionLabel: { color: colors.textMuted, fontSize: 11, paddingHorizontal: spacing.lg, paddingTop: spacing.lg, paddingBottom: spacing.sm },
   items: { paddingHorizontal: spacing.sm, gap: 3 },
   item: { height: 42, borderRadius: 8, paddingHorizontal: spacing.md, flexDirection: 'row', alignItems: 'center', gap: spacing.md },
-  itemActive: { backgroundColor: colors.railActiveBg },
+  // 极简:二级导航的选中态用中性 rowActive(与会话列表一致);强调色只留给最左侧 rail。
+  itemActive: { backgroundColor: colors.rowActive },
   itemIcon: { width: 24, height: 24, alignItems: 'center', justifyContent: 'center' },
   itemText: { color: colors.textSecondary, fontSize: 13, fontWeight: '500' },
   itemTextActive: { color: colors.text, fontWeight: '600' },
