@@ -42,9 +42,9 @@ for (const f of ['AgentsScreen.tsx', 'DesktopWindowPin.tsx', 'TasksScreen.tsx'])
 }
 
 // 全局:没有 700/800/bold 字重(最重 600)。取集:src 下全部 .tsx + App.tsx。
-const tsx = readdirSync(new URL('.', import.meta.url)).filter(f => f.endsWith('.tsx')).map(f => `./${f}`).concat('../App.tsx');
+const tsx = readdirSync(new URL('.', import.meta.url)).filter((f: string) => f.endsWith('.tsx')).map((f: string) => `./${f}`).concat('../App.tsx');
 ck('collected at least 30 tsx files', tsx.length >= 30);
-const heavy = tsx.filter(f => /fontWeight:\s*['"](700|800|900|bold)['"]/.test(readFileSync(new URL(f, import.meta.url), 'utf8')));
+const heavy = tsx.filter((f: string) => /fontWeight:\s*['"](700|800|900|bold)['"]/.test(readFileSync(new URL(f, import.meta.url), 'utf8')));
 ck(`no font weight above 600 in any tsx (${heavy.join(', ') || 'none'})`, heavy.length === 0);
 
 // 聊天:气泡不描边,引用是左侧细线而不是灰底块。
