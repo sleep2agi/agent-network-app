@@ -7,7 +7,31 @@
 // 🔴 桌面端不传路径、不传文件名 —— hub 工具的入参里根本没有那些字段
 //（#225 验收第 5 条）。这个文件里没有任何路径拼接。
 
-import type { HubNode, Session } from './api';
+import type { HubNode, RulesTarget, Session } from './api';
+
+/**
+ * app#225 follow-up —— 规则文件区块显示给谁、请求发给谁。
+ *
+ *  - 会话上报了 rules_file_capable(hub /api/status):节点**确实会答**门铃 ⇒
+ *    详情页和只读「节点信息」页都显示。有 nodes 行就按 node_id 发,没有(claude-code
+ *    会话大多如此)就按 alias 发。
+ *  - 没上报(旧 hub / 旧节点):保持原行为 —— 只在可编辑的详情页、且有 nodes 行时显示。
+ *  - 其余:不显示(节点答不了,显示出来只会让人等 60 秒超时)。
+ */
+export function rulesFileTarget(args: {
+  readOnly: boolean;
+  node: Pick<HubNode, 'node_id' | 'alias' | 'runtime'> | null | undefined;
+  session: Pick<Session, 'alias' | 'rules_file_capable'> | null | undefined;
+}): RulesTarget | null {
+  const { readOnly, node, session } = args;
+  if (session?.rules_file_capable === true) {
+    return node?.node_id
+      ? { node_id: node.node_id, alias: node.alias, runtime: node.runtime ?? null }
+      : { alias: session.alias };
+  }
+  if (!readOnly && node?.node_id) return { node_id: node.node_id, alias: node.alias, runtime: node.runtime ?? null };
+  return null;
+}
 
 export type RulesFileName = 'CLAUDE.md' | 'AGENTS.md';
 

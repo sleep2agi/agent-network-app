@@ -12,14 +12,14 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Platform, Pressable, Text, TextInput, View } from 'react-native';
 
-import { readNodeRulesFile, waitForRulesFileResult, writeNodeRulesFile, type HubConfig, type HubNode, type Session } from './api';
+import { readNodeRulesFile, waitForRulesFileResult, writeNodeRulesFile, type HubConfig, type RulesTarget, type Session } from './api';
 import { styles } from './app-styles';
 import { hasUnsavedChanges, isTerminal, nextPollDelayMs, predictedRulesFileName, requestIdToFollow, rulesStatusMessage } from './node-rules';
 import { colors, spacing } from './theme';
 
 type Phase = 'loading' | 'ready' | 'saving' | 'unavailable';
 
-export default function NodeRulesSection({ cfg, node, session }: { cfg: HubConfig; node: HubNode; session: Session }) {
+export default function NodeRulesSection({ cfg, node, session }: { cfg: HubConfig; node: RulesTarget; session: Session }) {
   const [phase, setPhase] = useState<Phase>('loading');
   const [fileName, setFileName] = useState<string>(() => predictedRulesFileName(session, node));
   const [onNode, setOnNode] = useState<string | null>(null);

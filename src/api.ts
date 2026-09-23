@@ -22,6 +22,10 @@ export interface Session {
   /** Explicit runtime-reported OS identity only. Never infer this from project_dir. */
   os_user?: string | null;
   system_user?: string | null;
+  /** app#225 follow-up — hub `/api/status`: this session answers the rules-file
+   *  doorbell (agent-node, or a claude-code session's channel server). Absent on
+   *  older hubs / older nodes ⇒ treat as false. */
+  rules_file_capable?: boolean;
 }
 
 export interface HubTask {
@@ -1149,12 +1153,12 @@ const callHubTool = async (cfg: HubConfig, name: string, args: Record<string, un
 const enqueueRulesFile = async (
   cfg: HubConfig,
   tool: 'read_node_rules_file' | 'write_node_rules_file',
-  node: Pick<HubNode, 'node_id'>,
+  node: RulesTarget,
   content?: string,
 ): Promise<RulesFileEnqueueResult> => {
   const networkId = cfg.networkId ?? (await fetchNetworkId(cfg));
   const args = {
-    node_id: node.node_id,
+    ...rulesTargetArgs(node),
     ...(networkId ? { network_id: networkId } : {}),
     ...(tool === 'write_node_rules_file' ? { content: content ?? '' } : {}),
   };
@@ -1168,10 +1172,20 @@ const enqueueRulesFile = async (
   return { ok: true, request_id: p.request_id, op: p.op === 'write' ? 'write' : 'read' };
 };
 
-export const readNodeRulesFile = (cfg: HubConfig, node: Pick<HubNode, 'node_id'>): Promise<RulesFileEnqueueResult> =>
+/** app#225 follow-up — who a rules-file request goes to: a hub `nodes` row
+ *  (node_id), or — for claude-code sessions that have none — just the alias. */
+export type RulesTarget = { node_id?: string | null; alias: string; runtime?: string | null };
+
+/** Hub tool args for a target: node_id when the hub has a nodes row; otherwise the
+ *  alias (the hub resolves it to a session that reported rules_file_capable).
+ *  Never both — a node_id always wins, so an alias can't redirect a known node. */
+export const rulesTargetArgs = (t: RulesTarget): { node_id: string } | { alias: string } =>
+  t.node_id ? { node_id: t.node_id } : { alias: t.alias };
+
+export const readNodeRulesFile = (cfg: HubConfig, node: RulesTarget): Promise<RulesFileEnqueueResult> =>
   enqueueRulesFile(cfg, 'read_node_rules_file', node);
 
-export const writeNodeRulesFile = (cfg: HubConfig, node: Pick<HubNode, 'node_id'>, content: string): Promise<RulesFileEnqueueResult> =>
+export const writeNodeRulesFile = (cfg: HubConfig, node: RulesTarget, content: string): Promise<RulesFileEnqueueResult> =>
   enqueueRulesFile(cfg, 'write_node_rules_file', node, content);
 
 export const getRulesFileResult = async (cfg: HubConfig, requestId: string): Promise<RulesFileOutcome> => {
