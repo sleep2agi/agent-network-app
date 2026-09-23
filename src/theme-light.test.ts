@@ -7,10 +7,10 @@ function ck(name: string, ok: boolean) {
 }
 
 setThemeMode('light');
-ck('light workspace is a neutral gray canvas', colors.bg === '#f4f6f8');
+ck('light workspace is a neutral gray canvas', colors.bg === '#f6f7f9');
 ck('light cards are white and distinct from canvas', colors.card === '#ffffff' && colors.card !== colors.bg);
-ck('light inputs retain a separate subtle surface', colors.inputBg === '#eef1f4' && colors.inputBg !== colors.card);
-ck('light borders are visible', colors.border === '#e1e5ea');
+ck('light inputs retain a separate subtle surface', colors.inputBg === '#f1f2f5' && colors.inputBg !== colors.card);
+ck('light borders are visible', colors.border === '#e6e8ec');
 
 const app = readFileSync(new URL('../App.tsx', import.meta.url), 'utf8');
 ck('desktop styles are built per themed workspace mount',

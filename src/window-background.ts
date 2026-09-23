@@ -14,8 +14,8 @@ import { type ThemeMode } from './theme';
 
 /** 与 theme.ts 的 DARK.bg / LIGHT.bg 逐字相同——测试钉住,改调色板要一起改。 */
 export const WINDOW_BACKGROUND: Readonly<Record<ThemeMode, string>> = {
-  dark: '#0b0b0d',
-  light: '#f4f6f8',
+  dark: '#111113',
+  light: '#f6f7f9',
 };
 
 export const windowBackgroundFor = (mode: ThemeMode): string => WINDOW_BACKGROUND[mode] ?? WINDOW_BACKGROUND.dark;

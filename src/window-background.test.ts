@@ -7,10 +7,10 @@ const ck = (n: string, c: boolean) => { t++; if (c) { p++; console.log(`  ✓ ${
 const norm = (f: string) => readFileSync(new URL(f, import.meta.url), 'utf-8').replace(/\r\n?/g, '\n');
 
 // —— 纯函数 ——
-ck('dark → 深色地面', windowBackgroundFor('dark') === '#0b0b0d');
-ck('light → 浅色地面', windowBackgroundFor('light') === '#f4f6f8');
-ck('hex → rgb', JSON.stringify(hexToRgb('#0b0b0d')) === '[11,11,13]');
-ck('非法 hex 回落到深色(宁黑勿白)', JSON.stringify(hexToRgb('white')) === '[11,11,13]');
+ck('dark → 深色地面', windowBackgroundFor('dark') === '#111113');
+ck('light → 浅色地面', windowBackgroundFor('light') === '#f6f7f9');
+ck('hex → rgb', JSON.stringify(hexToRgb('#111113')) === '[17,17,19]');
+ck('非法 hex 回落到深色(宁黑勿白)', JSON.stringify(hexToRgb('white')) === '[17,17,19]');
 
 // —— 底色表与 theme.ts 调色板逐字一致(改一处必须改另一处) ——
 {
