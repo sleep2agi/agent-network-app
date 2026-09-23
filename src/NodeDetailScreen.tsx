@@ -279,7 +279,7 @@ export default function NodeDetailScreen({
         {/* Identity block */}
         <View style={{ alignItems: 'center', paddingVertical: spacing.lg, gap: spacing.md }}>
           <AliasAvatar alias={s.alias} size={96} />
-          <Text style={{ color: colors.text, fontSize: 20, fontWeight: '700' }} selectable>
+          <Text style={{ color: colors.text, fontSize: 20, fontWeight: '600' }} selectable>
             {s.alias}
           </Text>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm }}>
@@ -379,7 +379,7 @@ export default function NodeDetailScreen({
       <Modal transparent visible={!readOnly && !!pendingAction} onRequestClose={() => setPendingAction(null)} animationType="fade">
         <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.55)', alignItems: 'center', justifyContent: 'center', padding: spacing.xl }}>
           <View style={{ width: '100%', maxWidth: 420, borderRadius: 14, backgroundColor: colors.card, padding: spacing.xl, gap: spacing.md }}>
-            <Text style={{ color: colors.text, fontSize: 17, fontWeight: '700' }}>
+            <Text style={{ color: colors.text, fontSize: 17, fontWeight: '600' }}>
               {pendingAction === 'restart_node' ? '重启节点？' : pendingAction === 'stop_node' ? '停止节点？' : '删除节点？'}
             </Text>
             <Text style={{ color: colors.textSecondary, fontSize: 13, lineHeight: 19 }}>

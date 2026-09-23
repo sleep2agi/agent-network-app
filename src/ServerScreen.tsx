@@ -158,7 +158,7 @@ const makeStyles = () =>
     metrics: { flexDirection: 'row', marginBottom: spacing.md, paddingVertical: spacing.md },
     metricSplit: { width: 1, backgroundColor: colors.border, alignSelf: 'stretch' },
     metric: { flex: 1, alignItems: 'center', paddingVertical: spacing.xs },
-    metricValue: { color: colors.textSecondary, fontSize: 22, fontWeight: '700' },
+    metricValue: { color: colors.textSecondary, fontSize: 22, fontWeight: '600' },
     metricValuePrimary: { color: colors.text, fontSize: 34 },
     metricLabel: { color: colors.textMuted, fontSize: 12, marginTop: 2 },
     sectionTitle: { color: colors.textMuted, fontSize: 12, marginBottom: spacing.sm, marginTop: spacing.md },

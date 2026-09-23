@@ -282,7 +282,7 @@ const makeStyles = () =>
       backgroundColor: colors.accent + '22',
     },
     chipText: { color: colors.textSecondary, fontSize: 12, fontWeight: '500' },
-    chipTextActive: { color: colors.accent, fontWeight: '700' },
+    chipTextActive: { color: colors.accent, fontWeight: '600' },
     countRow: {
       paddingHorizontal: spacing.lg,
       paddingBottom: spacing.sm,
@@ -308,7 +308,7 @@ const makeStyles = () =>
     },
     statusDot: { width: 8, height: 8, borderRadius: 4 },
     status: { color: colors.textSecondary, fontSize: 12, fontWeight: '600', flex: 1 },
-    high: { color: colors.failed, fontSize: 10, fontWeight: '700' },
+    high: { color: colors.failed, fontSize: 10, fontWeight: '600' },
     time: { color: colors.textMuted, fontSize: 10 },
     aliasRow: {
       flexDirection: 'row',
@@ -328,7 +328,7 @@ const makeStyles = () =>
     emptyBox: { alignItems: 'center', paddingVertical: spacing.xl * 2, gap: spacing.sm },
     emptyTitle: { color: colors.textSecondary, fontSize: 14, fontWeight: '600' },
     emptySub: { color: colors.textMuted, fontSize: 12 },
-    errorTitle: { color: colors.failed, fontSize: 14, fontWeight: '700', marginBottom: spacing.sm },
+    errorTitle: { color: colors.failed, fontSize: 14, fontWeight: '600', marginBottom: spacing.sm },
     errorBody: { color: colors.textSecondary, fontSize: 12, textAlign: 'center', marginBottom: spacing.md },
     retryBtn: {
       paddingHorizontal: spacing.lg,

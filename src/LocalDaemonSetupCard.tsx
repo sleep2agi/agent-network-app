@@ -117,7 +117,7 @@ const makeStyles = () => StyleSheet.create({
   buttonGhostText: { color: colors.text, fontSize: 14, fontWeight: '600' },
   checklist: { gap: spacing.sm },
   row: { flexDirection: 'row', gap: spacing.sm, alignItems: 'flex-start' },
-  mark: { width: 18, fontSize: 14, fontWeight: '700' },
+  mark: { width: 18, fontSize: 14, fontWeight: '600' },
   markOk: { color: colors.running },
   markBad: { color: colors.failed },
   rowLabel: { color: colors.text, fontSize: 13, fontWeight: '600' },

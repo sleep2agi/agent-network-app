@@ -582,7 +582,7 @@ const makeStyles = () => StyleSheet.create({
   warnHint: { color: colors.textMuted, fontSize: 12 },
 
   // Generic error
-  errorTitle: { color: colors.failed, fontSize: 17, fontWeight: '700', marginBottom: spacing.sm },
+  errorTitle: { color: colors.failed, fontSize: 17, fontWeight: '600', marginBottom: spacing.sm },
   errorHint: { color: colors.textSecondary, fontSize: 14, marginBottom: spacing.lg, textAlign: 'center' },
   retryBtn: {
     backgroundColor: colors.accent,

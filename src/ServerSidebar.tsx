@@ -87,7 +87,7 @@ const makeStyles = () =>
   titleRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
   serverIcon: { width: 36, height: 36, borderRadius: 10, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.accent },
   serverIconFailed: { backgroundColor: colors.failed },
-  title: { color: colors.text, fontSize: 14, fontWeight: '700' },
+  title: { color: colors.text, fontSize: 14, fontWeight: '600' },
   host: { color: colors.textMuted, fontSize: 11, marginTop: 2 },
   statusRow: { flexDirection: 'row', alignItems: 'center', marginTop: spacing.md, gap: 7 },
   dot: { width: 7, height: 7, borderRadius: 4 },
@@ -102,7 +102,7 @@ const makeStyles = () =>
   itemTextActive: { color: colors.text, fontWeight: '600' },
   // 角标:图标右上角的小圆标(与桌面 rail 同款),不再是行尾灰字。
   badge: { position: 'absolute', top: -6, right: -8, minWidth: 16, height: 16, borderRadius: 8, paddingHorizontal: 4, backgroundColor: colors.accent, alignItems: 'center', justifyContent: 'center' },
-  badgeText: { color: colors.onAccent, fontSize: 9, fontWeight: '700', lineHeight: 12 },
+  badgeText: { color: colors.onAccent, fontSize: 9, fontWeight: '600', lineHeight: 12 },
   footer: { marginTop: 'auto', borderTopWidth: 1, borderTopColor: colors.border, padding: spacing.lg },
   footerLabel: { color: colors.textMuted, fontSize: 10 },
   footerValue: { color: colors.textSecondary, fontSize: 12, marginTop: 3 },

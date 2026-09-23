@@ -524,7 +524,7 @@ const makeStyles = () =>
   emptySide: { color: colors.textMuted, fontSize: 12, paddingHorizontal: spacing.md, paddingVertical: spacing.sm },
   // 右栏
   pane: { flex: 1, minWidth: 0 },
-  paneTitle: { color: colors.text, fontSize: 20, fontWeight: '700', paddingHorizontal: spacing.xl, paddingTop: spacing.xl, paddingBottom: spacing.md, borderBottomWidth: 1, borderBottomColor: colors.border, marginHorizontal: spacing.lg },
+  paneTitle: { color: colors.text, fontSize: 20, fontWeight: '600', paddingHorizontal: spacing.xl, paddingTop: spacing.xl, paddingBottom: spacing.md, borderBottomWidth: 1, borderBottomColor: colors.border, marginHorizontal: spacing.lg },
   // 底部多留一个 spacing.xl:最后一行要能完全离开窗口下沿,而不是刚好贴上去——贴上去看起来就和「滚不动」一样。
   content: { padding: spacing.lg, paddingBottom: spacing.xl * 2 },
   section: { paddingHorizontal: spacing.md, paddingBottom: spacing.md },
@@ -564,7 +564,7 @@ const makeStyles = () =>
   divider: { height: 1, backgroundColor: colors.border, marginLeft: spacing.md },
   modalBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.55)', alignItems: 'center', justifyContent: 'center', padding: spacing.xl },
   modalCard: { width: '100%', maxWidth: 440, backgroundColor: colors.card, borderColor: colors.border, borderWidth: 1, borderRadius: 14, padding: spacing.lg },
-  modalTitle: { color: colors.text, fontSize: 17, fontWeight: '700' },
+  modalTitle: { color: colors.text, fontSize: 17, fontWeight: '600' },
   modalBody: { color: colors.textSecondary, fontSize: 13, lineHeight: 20, marginTop: spacing.sm },
   modalActions: { flexDirection: 'row', justifyContent: 'flex-end', gap: spacing.sm, marginTop: spacing.lg },
   modalButton: { borderColor: colors.border, borderWidth: 1, borderRadius: 9, paddingHorizontal: spacing.lg, paddingVertical: spacing.sm },

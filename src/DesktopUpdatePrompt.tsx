@@ -44,12 +44,12 @@ const makeStyles = () =>
   card: { width: '100%', maxWidth: 440, maxHeight: '85%', borderRadius: 16, padding: 22, backgroundColor: colors.card, borderWidth: 1, borderColor: colors.border },
   notesScroll: { maxHeight: 240, marginTop: spacing.md, borderRadius: 10, backgroundColor: colors.bg, borderWidth: 1, borderColor: colors.border },
   notesContent: { paddingHorizontal: spacing.md, paddingBottom: spacing.md },
-  title: { color: colors.text, fontSize: 18, fontWeight: '700' },
+  title: { color: colors.text, fontSize: 18, fontWeight: '600' },
   version: { color: colors.accent, fontSize: 14, marginTop: spacing.xs },
   notes: { color: colors.textSecondary, fontSize: 13, lineHeight: 19, marginTop: spacing.md },
   progress: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   button: { marginTop: spacing.lg, backgroundColor: colors.accent, borderRadius: 10, paddingVertical: 12, alignItems: 'center' },
-  buttonText: { color: '#fff', fontSize: 14, fontWeight: '700' },
+  buttonText: { color: '#fff', fontSize: 14, fontWeight: '600' },
   hint: { color: colors.textMuted, fontSize: 10, lineHeight: 15, marginTop: spacing.md },
 });
 

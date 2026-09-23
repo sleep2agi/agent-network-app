@@ -173,7 +173,7 @@ function makePanelStyles() {
     paddingTop: 12,
     paddingBottom: 8,
   },
-  brand: { color: colors.text, fontSize: 14, fontWeight: '700' as const, flexShrink: 1 },
+  brand: { color: colors.text, fontSize: 14, fontWeight: '600' as const, flexShrink: 1 },
   dismiss: { paddingHorizontal: 6, paddingVertical: 2, borderRadius: 6 },
   dismissPressed: { opacity: 0.6 },
   dismissText: { color: colors.accent, fontSize: 12 },
@@ -198,7 +198,7 @@ function makePanelStyles() {
     justifyContent: 'center' as const,
     backgroundColor: colors.failed,
   },
-  badgeText: { color: '#fff', fontSize: 11, fontWeight: '700' as const },
+  badgeText: { color: '#fff', fontSize: 11, fontWeight: '600' as const },
   empty: { flex: 1, alignItems: 'center' as const, justifyContent: 'center' as const, padding: 24 },
   emptyText: { color: colors.textMuted, fontSize: 12 },
   };
