@@ -19,7 +19,7 @@ import {
   type TaskFilter,
   type StatusBucket,
 } from './tasks-filter';
-import { colors, onThemeChange, spacing } from './theme';
+import { colors, onThemeChange, radius, spacing } from './theme';
 import { formatTime } from './time';
 import { usePoll } from './usePoll';
 
@@ -269,20 +269,17 @@ const makeStyles = () =>
       gap: spacing.sm,
       flexDirection: 'row',
     },
+    // 极简:筛选从描边胶囊改为安静的分段标签——未选中无底无框,选中一档中性底色 + 正文色。
     chip: {
       paddingHorizontal: spacing.md,
       paddingVertical: spacing.xs + 2,
-      borderRadius: 999,
-      borderWidth: 1,
-      borderColor: colors.border,
-      backgroundColor: colors.card,
+      borderRadius: radius.sm,
     },
     chipActive: {
-      borderColor: colors.accent,
-      backgroundColor: colors.accent + '22',
+      backgroundColor: colors.rowActive,
     },
     chipText: { color: colors.textSecondary, fontSize: 12, fontWeight: '500' },
-    chipTextActive: { color: colors.accent, fontWeight: '600' },
+    chipTextActive: { color: colors.text, fontWeight: '600' },
     countRow: {
       paddingHorizontal: spacing.lg,
       paddingBottom: spacing.sm,
@@ -292,11 +289,10 @@ const makeStyles = () =>
     },
     countText: { color: colors.textMuted, fontSize: 11 },
     countError: { color: colors.failed, fontSize: 11 },
+    // 极简:任务卡不描边,靠卡片色与地面的一档差区分;圆角进 token。
     card: {
       backgroundColor: colors.card,
-      borderColor: colors.border,
-      borderWidth: 1,
-      borderRadius: 12,
+      borderRadius: radius.md,
       padding: spacing.lg,
       marginBottom: spacing.sm,
     },

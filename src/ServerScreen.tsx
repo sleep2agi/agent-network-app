@@ -162,7 +162,7 @@ const makeStyles = () =>
     metricValuePrimary: { color: colors.text, fontSize: 34 },
     metricLabel: { color: colors.textMuted, fontSize: 12, marginTop: 2 },
     sectionTitle: { color: colors.textMuted, fontSize: 12, marginBottom: spacing.sm, marginTop: spacing.md },
-    card: { backgroundColor: colors.card, borderColor: colors.border, borderWidth: 1, borderRadius: 12 },
+    card: { backgroundColor: colors.card, borderRadius: 10 }, // 极简:信息卡不描边
     row: {
       flexDirection: 'row',
       justifyContent: 'space-between',

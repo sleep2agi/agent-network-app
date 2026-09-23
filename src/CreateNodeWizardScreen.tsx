@@ -653,8 +653,6 @@ const makeStyles = () => StyleSheet.create({
 
   summaryCard: {
     backgroundColor: colors.card,
-    borderColor: colors.border,
-    borderWidth: 1,
     borderRadius: 12,
   },
   summaryRow: {

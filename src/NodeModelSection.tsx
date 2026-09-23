@@ -113,7 +113,7 @@ export default function NodeModelSection({ cfg, node }: { cfg: HubConfig; node: 
                       disabled={busy}
                       onPress={() => { setPicked(m); setCustom(''); }}
                       style={({ pressed }) => [
-                        { borderWidth: 1, borderRadius: 7, paddingHorizontal: spacing.md, height: 34, justifyContent: 'center', borderColor: active ? colors.accent : colors.border, backgroundColor: colors.card },
+                        { borderWidth: 1, borderRadius: 6, paddingHorizontal: spacing.md, height: 34, justifyContent: 'center', borderColor: active ? colors.accent : colors.border, backgroundColor: colors.card },
                         pressed && { opacity: 0.7 },
                         busy && { opacity: 0.5 },
                       ]}
@@ -134,7 +134,7 @@ export default function NodeModelSection({ cfg, node }: { cfg: HubConfig; node: 
               placeholderTextColor={colors.textMuted}
               autoCapitalize="none"
               autoCorrect={false}
-              style={{ borderWidth: 1, borderColor: colors.border, borderRadius: 7, paddingHorizontal: spacing.md, height: 36, color: colors.text, fontSize: 13 }}
+              style={{ borderWidth: 1, borderColor: colors.border, borderRadius: 6, paddingHorizontal: spacing.md, height: 36, color: colors.text, fontSize: 13 }}
             />
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.md }}>
               <Pressable
