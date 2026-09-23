@@ -23,8 +23,14 @@ for (const mode of ['dark', 'light'] as const) {
     ck(`${mode} text on ${surface} ≥ 7:1`, contrast(colors.text, colors[surface]) >= 7);
     ck(`${mode} textSecondary on ${surface} ≥ 4.5:1`, contrast(colors.textSecondary, colors[surface]) >= 4.5);
   }
-  ck(`${mode} textMuted on bg ≥ 4.5:1 (was 2.6:1 in dark before 2026-09-24)`, contrast(colors.textMuted, colors.bg) >= 4.5 || mode === 'light');
-  ck(`${mode} textMuted on card ≥ 3:1 (timestamps / hints)`, contrast(colors.textMuted, colors.card) >= 3);
+  // 弱化文字(时间戳/提示)也是文字:在所有承载面上 ≥ 4.5:1(深色旧值 #52525b 仅 2.6:1)。
+  for (const surface of ['bg', 'card', 'listBg', 'rowHover', 'rowActive'] as const) {
+    ck(`${mode} textMuted on ${surface} ≥ 4.5:1`, contrast(colors.textMuted, colors[surface]) >= 4.5);
+  }
+  // 强调色会被当文字用(链接、「复制」「刷新」):在卡片与地面上 ≥ 4.5:1;按钮字在强调色上 ≥ 4.5:1。
+  ck(`${mode} accent as text on card ≥ 4.5:1`, contrast(colors.accent, colors.card) >= 4.5);
+  ck(`${mode} accent as text on bg ≥ 4.5:1`, contrast(colors.accent, colors.bg) >= 4.5);
+  ck(`${mode} onAccent on accent ≥ 4.5:1`, contrast(colors.onAccent, colors.accent) >= 4.5);
   // 状态面要能被看出来,但不能抢:行悬停/选中与列表底色各差一档。
   ck(`${mode} rowHover differs from listBg`, colors.rowHover !== colors.listBg);
   ck(`${mode} rowActive differs from rowHover`, colors.rowActive !== colors.rowHover);

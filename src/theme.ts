@@ -8,8 +8,8 @@ const DARK = {
   inputBg: '#151518',
   text: '#ededef',
   textSecondary: '#a1a1aa',
-  // 旧 #52525b 在近黑地面上对比 2.6:1,时间戳/提示几乎看不见;抬到 ≥4.5:1。
-  textMuted: '#7c7c86',
+  // 旧 #52525b 在近黑地面上对比 2.6:1,时间戳/提示几乎看不见;抬到在所有深色面上 ≥4.5:1。
+  textMuted: '#8b8b95',
   // 霓虹青 #22d3ee 改成同色相、降饱和的青:仍是品牌色,但不再抢眼。
   accent: '#4cc3d6',
   onAccent: '#0b0b0d',
@@ -41,9 +41,11 @@ const LIGHT: typeof DARK = {
   inputBg: '#f1f2f5',
   text: '#1d2026',
   textSecondary: '#5d6470',
-  textMuted: '#848b96',
-  accent: '#0799a8',
-  onAccent: '#0b0b0d',
+  // 弱化文字在全部浅色面(含选中行)上 ≥4.5:1。
+  textMuted: '#636a75',
+  // 强调色作为文字(链接/「复制」「刷新」)在白底 ≥4.5:1;按钮上的字改白色(5.1:1)。
+  accent: '#067a86',
+  onAccent: '#ffffff',
   broadcast: '#7c3aed',
   running: '#15803d',
   failed: '#dc2626',
