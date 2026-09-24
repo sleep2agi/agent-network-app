@@ -119,6 +119,15 @@ jobs:
           releaseBody: |-
             Signed and notarized stable update for macOS (Apple Silicon) and Windows (x64).
 
+            What's new in 0.2.87:
+            - The node page is redesigned: a header card with the node's name, status and runtime, and a
+              section bar to jump between Overview, Model & runtime, Rules file, Skills, Tasks and Danger zone.
+              Reminders a node sent to itself are grouped and no longer counted as running tasks.
+            - A read-only Skills section lists the skills a node has. It appears once both the hub and the node
+              support reporting skills; until then the section stays hidden.
+            - Long inline code, hashes and URLs wrap inside chat bubbles instead of overflowing them.
+            - Switching the theme in Settings keeps you on the Appearance page instead of jumping back to Account.
+
             What's new in 0.2.86:
             - Scrollbars are now thin and stay hidden until you hover over a list or scroll it, like in WeChat,
               so long conversations and lists look cleaner.
