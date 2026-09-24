@@ -51,7 +51,7 @@ check('server workspace reuses the create-node flow', source.includes("section =
 check('desktop agent rows prevent browser text selection', agents.includes("userSelect: 'none'") && agents.includes('selectable={false}'));
 check('desktop agent rows reserve long press for mobile', agents.includes('onLongPress={compact ? undefined'));
 check('desktop agent rows retain left click and captured right-click menu', agents.includes('onPress={() => onOpenChat(item.alias)}') && agents.includes("addEventListener('contextmenu', handleContextMenu, true)"));
-check('desktop agent hover highlights the row and avatar', agents.includes('onHoverIn={compact ?') && agents.includes('hoveredAlias === item.alias') && agents.includes('boxShadow:'));
+check('desktop agent hover highlights the row with the neutral rowHover token (no drop shadow)', agents.includes('onHoverIn={compact ?') && agents.includes('hoveredAlias === item.alias && { backgroundColor: colors.rowHover }') && !/hoveredAlias === item\.alias && \(?\{[^}]*boxShadow/.test(agents));
 
 // 0.2.76 系统栏托盘 + 新消息通知(Vincent 2026-09-17):只有主窗口接托盘/通知;托盘菜单点 agent 打开那个会话
 const src076 = source.replace(/\r\n?/g, '\n');

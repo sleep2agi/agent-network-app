@@ -473,8 +473,6 @@ const makeStyles = () => StyleSheet.create({
   // count=0 onboarding
   onboardingCard: {
     backgroundColor: colors.card,
-    borderColor: colors.border,
-    borderWidth: 1,
     borderRadius: 12,
     padding: spacing.lg,
   },
@@ -511,8 +509,6 @@ const makeStyles = () => StyleSheet.create({
   // Daemon card (shared between count=1 + count≥2 + forced-list)
   card: {
     backgroundColor: colors.card,
-    borderColor: colors.border,
-    borderWidth: 1,
     borderRadius: 12,
     padding: spacing.md + 2,
   },
@@ -582,7 +578,7 @@ const makeStyles = () => StyleSheet.create({
   warnHint: { color: colors.textMuted, fontSize: 12 },
 
   // Generic error
-  errorTitle: { color: colors.failed, fontSize: 17, fontWeight: '700', marginBottom: spacing.sm },
+  errorTitle: { color: colors.failed, fontSize: 17, fontWeight: '600', marginBottom: spacing.sm },
   errorHint: { color: colors.textSecondary, fontSize: 14, marginBottom: spacing.lg, textAlign: 'center' },
   retryBtn: {
     backgroundColor: colors.accent,

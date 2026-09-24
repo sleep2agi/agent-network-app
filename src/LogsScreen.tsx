@@ -175,7 +175,7 @@ export default function LogsScreen({
           }}
         >
           <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: CONN_COLOR[conn] }} />
-          <Text style={{ color: CONN_COLOR[conn], fontSize: 11, fontWeight: '700' }}>
+          <Text style={{ color: CONN_COLOR[conn], fontSize: 11, fontWeight: '600' }}>
             {CONN_LABEL[conn]}
           </Text>
         </View>
@@ -183,10 +183,10 @@ export default function LogsScreen({
 
       {/* Title + subtitle — the "UI truth" line */}
       <View style={{ paddingHorizontal: spacing.lg, paddingTop: spacing.md, paddingBottom: spacing.sm }}>
-        <Text style={{ color: colors.text, fontSize: 18, fontWeight: '700' }}>事件流</Text>
+        <Text style={{ color: colors.text, fontSize: 18, fontWeight: '600' }}>事件流</Text>
         <Text style={{ color: colors.textMuted, fontSize: 12, marginTop: 2, lineHeight: 17 }}>
           显示网络任务流转（task_id / 发起 → 接收 / 状态 / 优先级），
-          <Text style={{ fontWeight: '700' }}>不含消息内容</Text> — 看内容请到对应会话
+          <Text style={{ fontWeight: '600' }}>不含消息内容</Text> — 看内容请到对应会话
         </Text>
       </View>
 
@@ -221,7 +221,7 @@ export default function LogsScreen({
         </View>
       ) : state.kind === 'disconnected' && events.length === 0 ? (
         <View style={appStyles.center} testID="logs-disconnected">
-          <Text style={{ color: colors.failed, fontSize: 15, fontWeight: '700' }}>连接失败</Text>
+          <Text style={{ color: colors.failed, fontSize: 15, fontWeight: '600' }}>连接失败</Text>
           <Text style={{ color: colors.textSecondary, fontSize: 12, textAlign: 'center', marginTop: spacing.sm, paddingHorizontal: spacing.xl }}>
             {connErr || '未知错误'}
           </Text>
@@ -264,7 +264,7 @@ export default function LogsScreen({
                 backgroundColor: colors.accent,
               }}
             >
-              <Text style={{ color: colors.bg, fontSize: 13, fontWeight: '700' }}>
+              <Text style={{ color: colors.bg, fontSize: 13, fontWeight: '600' }}>
                 ↓ 跳到底
               </Text>
             </Pressable>
@@ -334,13 +334,13 @@ function EventRow({ ev, now }: { ev: LogEvent; now: number }) {
             borderWidth: 1,
           }}
         >
-          <Text style={{ color: bucketColor, fontSize: 10, fontWeight: '700' }}>{rawType}</Text>
+          <Text style={{ color: bucketColor, fontSize: 10, fontWeight: '600' }}>{rawType}</Text>
         </View>
         {status ? (
           <Text style={{ color: colors.textSecondary, fontSize: 11 }}>{status}</Text>
         ) : null}
         {priority === 'high' ? (
-          <Text style={{ color: colors.failed, fontSize: 10, fontWeight: '700' }}>HIGH</Text>
+          <Text style={{ color: colors.failed, fontSize: 10, fontWeight: '600' }}>HIGH</Text>
         ) : null}
         <View style={{ flex: 1 }} />
         <Text style={{ color: colors.textMuted, fontSize: 10 }}>{time}</Text>

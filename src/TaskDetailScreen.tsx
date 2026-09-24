@@ -377,7 +377,7 @@ const makeStyles = () =>
       padding: spacing.lg,
       gap: spacing.sm,
     },
-    sectionTitle: { color: colors.textSecondary, fontSize: 11, fontWeight: '700', letterSpacing: 0.4, textTransform: 'uppercase' },
+    sectionTitle: { color: colors.textSecondary, fontSize: 11, fontWeight: '600', letterSpacing: 0.4, textTransform: 'uppercase' },
     sectionBody: { gap: spacing.sm },
     timelineRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' },
     timelineStep: { flex: 1, alignItems: 'center', gap: 4, position: 'relative' },
@@ -410,7 +410,7 @@ const makeStyles = () =>
       borderRadius: 8,
       gap: spacing.xs,
     },
-    notWiredTitle: { color: colors.blocked, fontSize: 13, fontWeight: '700' },
+    notWiredTitle: { color: colors.blocked, fontSize: 13, fontWeight: '600' },
     notWiredBody: { color: colors.textSecondary, fontSize: 12, lineHeight: 17 },
     notWiredErr: { color: colors.textMuted, fontSize: 10, fontFamily: 'monospace' },
     errorBanner: {
@@ -444,7 +444,7 @@ const makeStyles = () =>
       marginTop: spacing.md,
     },
     retryText: { color: colors.accent, fontSize: 13, fontWeight: '600' },
-    errTitle: { color: colors.failed, fontSize: 14, fontWeight: '700', marginBottom: spacing.sm },
+    errTitle: { color: colors.failed, fontSize: 14, fontWeight: '600', marginBottom: spacing.sm },
     errBody: { color: colors.textSecondary, fontSize: 12, textAlign: 'center' },
     transientError: {
       color: colors.failed,

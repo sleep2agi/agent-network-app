@@ -13,9 +13,8 @@ export default function DesktopWindowPin() {
       position: 'absolute', top: 10, right: 10, zIndex: 1000,
       width: 34, height: 34, borderRadius: 8,
       alignItems: 'center', justifyContent: 'center',
-      backgroundColor: pinned ? colors.inputBg : colors.card,
-      borderColor: pinned ? colors.accent : colors.border,
-      borderWidth: 1,
+      // 极简:未置顶时是无底无框的图标;置顶时一档中性底色表示「开着」。
+      backgroundColor: pinned ? colors.rowActive : 'transparent',
       opacity: busy ? 0.55 : 0.92,
     },
   }), [busy, pinned]);
