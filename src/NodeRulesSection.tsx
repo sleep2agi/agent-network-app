@@ -15,6 +15,7 @@ import { ActivityIndicator, Platform, Pressable, Text, TextInput, View } from 'r
 import { readNodeRulesFile, waitForRulesFileResult, writeNodeRulesFile, type HubConfig, type RulesTarget, type Session } from './api';
 import { styles } from './app-styles';
 import { hasUnsavedChanges, isTerminal, nextPollDelayMs, predictedRulesFileName, requestIdToFollow, rulesStatusMessage } from './node-rules';
+import { NODE_RULES_EDITOR_MIN_HEIGHT } from './node-page-model';
 import { colors, spacing } from './theme';
 
 type Phase = 'loading' | 'ready' | 'saving' | 'unavailable';
@@ -78,22 +79,30 @@ export default function NodeRulesSection({ cfg, node, session }: { cfg: HubConfi
   const dirty = phase === 'ready' && hasUnsavedChanges(editor, onNode);
   const toneColor = messageTone === 'ok' ? colors.running : messageTone === 'error' ? colors.failed : colors.textMuted;
 
+  const busy = phase === 'loading' || phase === 'saving';
+  const mono = Platform.OS === 'ios' ? 'Menlo' : 'monospace';
+
+  // 编辑框吃满节点页剩余高度(flex: 1,最矮 NODE_RULES_EDITOR_MIN_HEIGHT);按钮放在编辑框**上方**
+  // 的工具条里 —— 放下面的话矮窗(Vincent 的 2000×650)里要先滚页面才看得到「保存」。
   return (
-    <View style={{ paddingTop: spacing.xl }}>
-      <View style={{ flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: spacing.sm }}>
-        <Text style={{ color: colors.textMuted, fontSize: 13 }}>节点规则</Text>
-        <Text style={{ color: colors.textMuted, fontSize: 12, fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace' }} selectable>{fileName}</Text>
-      </View>
-      <View style={{ backgroundColor: colors.card, borderRadius: 12, padding: spacing.lg, gap: spacing.md }}>
+    <View style={{ flex: 1, paddingTop: spacing.lg }}>
+      <View style={{ flex: 1, backgroundColor: colors.card, borderRadius: 12, padding: spacing.lg, gap: spacing.md }}>
         <Text style={{ color: colors.textMuted, fontSize: 12, lineHeight: 18 }}>
           这是节点工作目录里的 {fileName}，节点每次开工都会读它。保存会直接覆盖节点机器上的这个文件；文件名和位置由节点自己决定，这里改不了。
         </Text>
-        {phase === 'loading' ? (
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm }}>
-            <ActivityIndicator color={colors.accent} />
-            <Text style={{ color: colors.textMuted, fontSize: 12 }}>{message}</Text>
-          </View>
-        ) : null}
+        <View style={{ flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: spacing.sm }}>
+          <Text style={{ color: colors.text, fontSize: 13, fontFamily: mono, flexShrink: 1 }} selectable numberOfLines={1}>{fileName}</Text>
+          {phase === 'loading' ? <ActivityIndicator color={colors.accent} /> : null}
+          <View style={{ flex: 1 }} />
+          <Pressable style={[styles.retryBtn, busy ? { opacity: 0.4 } : null]} disabled={busy} onPress={() => void runRead()}>
+            <Text style={styles.retryBtnText}>重新读取</Text>
+          </Pressable>
+          <Pressable style={[styles.retryBtn, !dirty && { opacity: 0.4 }]} disabled={!dirty} onPress={() => void runSave()}>
+            {/* 用 retryBtnText(底色上的反色字):强调色字压在强调色底上,浅色主题下看不见(Vincent 09-02 截图里那个空白按钮)。 */}
+            <Text style={styles.retryBtnText}>{phase === 'saving' ? '保存中…' : dirty ? '保存到节点' : '已是最新'}</Text>
+          </Pressable>
+        </View>
+        {message ? <Text style={{ color: phase === 'loading' ? colors.textMuted : toneColor, fontSize: 12, lineHeight: 18 }}>{message}</Text> : null}
         {phase === 'ready' || phase === 'saving' ? (
           <TextInput
             value={editor}
@@ -106,28 +115,19 @@ export default function NodeRulesSection({ cfg, node, session }: { cfg: HubConfi
             placeholderTextColor={colors.textMuted}
             textAlignVertical="top"
             style={{
+              flex: 1,
               color: colors.text,
               borderWidth: 1,
               borderColor: dirty ? colors.accent : colors.border,
               borderRadius: 8,
               padding: spacing.md,
-              minHeight: 180,
+              minHeight: NODE_RULES_EDITOR_MIN_HEIGHT,
               fontSize: 13,
               lineHeight: 19,
-              fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
+              fontFamily: mono,
             }}
           />
         ) : null}
-        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', gap: spacing.sm }}>
-          <Pressable style={[styles.retryBtn, phase === 'loading' || phase === 'saving' ? { opacity: 0.4 } : null]} disabled={phase === 'loading' || phase === 'saving'} onPress={() => void runRead()}>
-            <Text style={styles.retryBtnText}>重新读取</Text>
-          </Pressable>
-          <Pressable style={[styles.retryBtn, !dirty && { opacity: 0.4 }]} disabled={!dirty} onPress={() => void runSave()}>
-            {/* 用 retryBtnText(底色上的反色字):强调色字压在强调色底上,浅色主题下看不见(Vincent 09-02 截图里那个空白按钮)。 */}
-            <Text style={styles.retryBtnText}>{phase === 'saving' ? '保存中…' : dirty ? '保存到节点' : '已是最新'}</Text>
-          </Pressable>
-        </View>
-        {phase !== 'loading' && message ? <Text style={{ color: toneColor, fontSize: 12, lineHeight: 18 }}>{message}</Text> : null}
       </View>
     </View>
   );
