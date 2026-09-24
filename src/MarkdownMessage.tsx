@@ -103,11 +103,17 @@ function CodeBlock({ text }: { text: string }) {
   );
 }
 
-export default function MarkdownMessage({ children }: { children: string }) {
+// onHeadingLayout:第 n 个标题(全文序号,0 起)相对本组件顶部的 y —— 规则文件全屏目录靠它滚到标题。
+// 不传就和以前一样,聊天里不多挂 onLayout。
+export default function MarkdownMessage({ children, onHeadingLayout }: { children: string; onHeadingLayout?: (index: number, y: number) => void }) {
+  let headingIndex = 0;
   return (
     <View style={styles.root}>
       {parseMarkdownBlocks(children).map((block, index) => {
-        if (block.kind === 'heading') return <Text key={index} style={[styles.text, styles.heading, { fontSize: Math.max(15, 20 - block.level) }]}><Inline text={block.text} /></Text>;
+        if (block.kind === 'heading') {
+          const nth = headingIndex++;
+          return <Text key={index} onLayout={onHeadingLayout ? (event) => onHeadingLayout(nth, event.nativeEvent.layout.y) : undefined} style={[styles.text, styles.heading, { fontSize: Math.max(15, 20 - block.level) }]}><Inline text={block.text} /></Text>;
+        }
         if (block.kind === 'list') return <View key={index} style={styles.block}>{block.items.map((item, itemIndex) => <View key={itemIndex} style={styles.listRow}><Text style={styles.marker}>{block.ordered ? `${itemIndex + 1}.` : '•'}</Text><Text style={[styles.text, styles.listText]}><Inline text={item} /></Text></View>)}</View>;
         if (block.kind === 'quote') return <View key={index} style={styles.quote}><Text style={styles.text}><Inline text={block.text} /></Text></View>;
         if (block.kind === 'code') return <CodeBlock key={index} text={block.text} />;
