@@ -15,15 +15,21 @@ import type { HubNode, RulesTarget, Session } from './api';
  *  - 会话上报了 rules_file_capable(hub /api/status):节点**确实会答**门铃 ⇒
  *    详情页和只读「节点信息」页都显示。有 nodes 行就按 node_id 发,没有(claude-code
  *    会话大多如此)就按 alias 发。
- *  - 没上报(旧 hub / 旧节点):保持原行为 —— 只在可编辑的详情页、且有 nodes 行时显示。
- *  - 其余:不显示(节点答不了,显示出来只会让人等 60 秒超时)。
+ *  - 没上报,但会话是 agent-node 进程(agent 以 `agent-node:` 开头)且有 nodes 行:
+ *    agent-node 早就会答规则文件门铃(#225),只是 2.5.0-preview.84 起才上报这个旗 ⇒
+ *    详情页和只读页都显示,按 node_id 发(只读页上 Vincent 看不到 通信欧 的 AGENTS.md 就是这条缺口)。
+ *  - 其余没上报的(旧 hub / 旧 claude-code 通道):保持原行为 —— 只在可编辑的详情页、且有 nodes 行时显示。
+ *  - 再其余:不显示(节点答不了,显示出来只会让人等 60 秒超时)。
  */
 export function rulesFileTarget(args: {
   readOnly: boolean;
   node: Pick<HubNode, 'node_id' | 'alias' | 'runtime'> | null | undefined;
-  session: Pick<Session, 'alias' | 'rules_file_capable'> | null | undefined;
+  session: Pick<Session, 'alias' | 'rules_file_capable' | 'agent'> | null | undefined;
 }): RulesTarget | null {
   const { readOnly, node, session } = args;
+  if (node?.node_id && isAgentNodeSession(session)) {
+    return { node_id: node.node_id, alias: node.alias, runtime: node.runtime ?? null };
+  }
   if (session?.rules_file_capable === true) {
     return node?.node_id
       ? { node_id: node.node_id, alias: node.alias, runtime: node.runtime ?? null }
@@ -33,12 +39,20 @@ export function rulesFileTarget(args: {
   return null;
 }
 
+/** agent-node 进程在 hub 上的 agent 字段形如 `agent-node:codex` / `agent-node:opencode` /
+ *  `agent-node:claude`;纯 `claude-code` 会话不算(它们要 anet ≥ 2.3.0-preview.111 才会答门铃,
+ *  那条路靠 rules_file_capable)。 */
+export function isAgentNodeSession(session?: Pick<Session, 'agent'> | null): boolean {
+  return typeof session?.agent === 'string' && session.agent.toLowerCase().startsWith('agent-node:');
+}
+
 export type RulesFileName = 'CLAUDE.md' | 'AGENTS.md';
 
 /** 与 agent-node 的 rulesFileNameForRuntime 同规则；输入可以是 session.runtime /
  *  node.runtime / session.agent 里任何一个，谁先有值用谁。 */
 export function predictedRulesFileName(session?: Pick<Session, 'agent' | 'runtime'> | null, node?: Pick<HubNode, 'runtime'> | null): RulesFileName {
-  const raw = (session?.runtime ?? node?.runtime ?? session?.agent ?? '').toLowerCase();
+  // hub 上 agent-node 进程的 agent 字段带 `agent-node:` 前缀(如 `agent-node:claude`),先剥掉再判。
+  const raw = (session?.runtime ?? node?.runtime ?? session?.agent ?? '').toLowerCase().replace(/^agent-node:/, '');
   return raw.startsWith('claude') ? 'CLAUDE.md' : 'AGENTS.md';
 }
 
