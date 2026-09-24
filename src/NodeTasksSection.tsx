@@ -1,4 +1,8 @@
-// app#157 —— 节点页「任务」区:正在运行 + 等待队列;2026-09-24 节点页重做后再加两组:
+// app#157 —— 节点页「任务」区:进行中 + 排队;2026-09-25 重做(Vincent「任务的展示也非常难看」):
+//   - 签收后超过一天没动静的件从「进行中」拆到「可能卡住」(默认折叠),见 node-task-view.ts 的 splitStale(;
+//   - 预览去掉 markdown 符号和与「来自 X」重复的【X → Y】抬头;发件人头像 + 相对时间;优先级只在非常态时出标签;
+//   - 点开用聊天同一个 MarkdownMessage 渲染全文。
+// 2026-09-24 节点页重做时加的两组:
 //   - 最近完成(终态,倒序,默认露出前几条);
 //   - 自己发给自己的提醒(from === to,未结束):单独一组、默认折叠、**不计入运行中**
 //     (有节点把 send_task→自己 当定时器用,只 ack 不回件,会把「运行中」堆到几十条)。
@@ -7,7 +11,10 @@
 import { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, Pressable, Text, View } from 'react-native';
 import { fetchTasks, type HubConfig } from './api';
-import { elapsedLabel, type NodeTaskRow } from './node-tasks';
+import AliasAvatar from './AliasAvatar';
+import MarkdownMessage, { WRAP_ANYWHERE } from './MarkdownMessage';
+import { type NodeTaskRow } from './node-tasks';
+import { priorityPill, relativeTime, splitStale, taskPreview, type PillTone } from './node-task-view';
 import { groupNodeTasks, type NodeTaskGroups } from './node-task-groups';
 import { colors, onThemeChange, radius, spacing, type as typeScale, weight } from './theme';
 import { usePoll } from './usePoll';
@@ -20,39 +27,70 @@ type Load =
   | { kind: 'ready'; groups: NodeTaskGroups; fetchedAt: number }
   | { kind: 'error'; message: string; groups?: NodeTaskGroups };
 
-type RowKind = 'running' | 'queue' | 'self' | 'done';
+type RowKind = 'running' | 'stale' | 'queue' | 'self' | 'done';
+
+// 时间后缀:进行中看「最后一次动静」,卡住的说清是「从那时起没动静」。
+const TIME_SUFFIX: Record<RowKind, string> = { running: '开始', stale: '起没有动静', queue: '入队', self: '', done: '结束' };
+
+function Pill({ label, tone }: { label: string; tone: PillTone }) {
+  const color = tone === 'danger' ? colors.failed : tone === 'warn' ? colors.blocked : colors.textMuted;
+  return (
+    <View style={{ borderRadius: radius.pill, borderWidth: 1, borderColor: color, paddingHorizontal: 6, paddingVertical: 1 }}>
+      <Text style={{ color, fontSize: 11, lineHeight: 15, fontWeight: weight.strong }}>{label}</Text>
+    </View>
+  );
+}
 
 function TaskRow({ row, index, kind, now }: { row: NodeTaskRow; index: number; kind: RowKind; now: Date }) {
   const [expanded, setExpanded] = useState(false);
-  const age = elapsedLabel(row.since, now);
-  const ageVerb = kind === 'running' ? '已运行' : kind === 'queue' ? '已等待' : kind === 'done' ? '' : '';
-  const dot = kind === 'running' ? colors.running : kind === 'done' ? (row.status === 'failed' ? colors.failed : colors.rest) : colors.textMuted;
+  const when = relativeTime(kind === 'running' || kind === 'stale' ? row.lastActivity ?? row.since : row.since, now);
+  const preview = taskPreview(row.content || row.summary, row.from);
+  const pill = priorityPill(row.priority);
+  const failed = kind === 'done' && ['failed', 'timeout', 'expired'].includes(row.status);
+  const muted = kind === 'stale' || kind === 'self';
   return (
     <Pressable
       onPress={() => setExpanded(v => !v)}
-      style={({ pressed }) => [{ paddingVertical: spacing.sm, gap: 4 }, pressed && { opacity: 0.7 }]}
-      accessibilityLabel={`${kind === 'running' ? '运行中' : kind === 'queue' ? `队列第 ${index + 1}` : kind === 'done' ? '已结束' : '自投提醒'}:${row.summary}`}
+      accessibilityRole="button"
+      accessibilityState={{ expanded }}
+      accessibilityLabel={`${kind === 'queue' ? `排队第 ${index + 1} 条,` : ''}来自 ${row.from}:${preview}`}
+      style={(state: { pressed: boolean; hovered?: boolean }) => [
+        { flexDirection: 'row', gap: spacing.md, paddingVertical: spacing.sm, paddingHorizontal: spacing.sm, marginHorizontal: -spacing.sm, borderRadius: radius.md },
+        (state.hovered || expanded) && { backgroundColor: colors.rowHover },
+        state.pressed && { opacity: 0.8 },
+      ]}
     >
-      <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm }}>
-        {kind === 'queue' ? (
-          <Text style={{ color: colors.textMuted, fontSize: typeScale.small, minWidth: 18 }}>#{index + 1}</Text>
-        ) : (
-          <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: dot }} />
-        )}
-        <Text style={{ color: colors.text, fontSize: typeScale.body, flex: 1 }} numberOfLines={expanded ? undefined : 2} selectable={expanded}>
-          {expanded ? row.content || row.summary : row.summary}
-        </Text>
+      <View style={{ opacity: muted ? 0.6 : 1 }}>
+        <AliasAvatar alias={row.from} size={28} />
       </View>
-      <Text style={{ color: colors.textMuted, fontSize: typeScale.small, marginLeft: kind === 'queue' ? 26 : 16 }}>
-        {row.status}{row.from ? ` · 来自 ${row.from}` : ''}{age ? ` · ${ageVerb ? `${ageVerb} ` : ''}${age}${kind === 'done' || kind === 'self' ? '前' : ''}` : ''}{row.priority && row.priority !== 'normal' ? ` · ${row.priority}` : ''}
-      </Text>
+      <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm, flexWrap: 'wrap' }}>
+          {kind === 'queue' ? <Text style={{ color: colors.textMuted, fontSize: typeScale.small, fontVariant: ['tabular-nums'] }}>#{index + 1}</Text> : null}
+          <Text style={{ color: muted ? colors.textMuted : colors.textSecondary, fontSize: typeScale.small, fontWeight: weight.strong }} numberOfLines={1}>{row.from}</Text>
+          {when ? <Text style={{ color: colors.textMuted, fontSize: typeScale.small }}>{when}{TIME_SUFFIX[kind]}</Text> : null}
+          {pill ? <Pill label={pill.label} tone={pill.tone} /> : null}
+          {failed ? <Pill label="失败" tone="danger" /> : null}
+        </View>
+        {expanded ? (
+          <View style={{ paddingTop: 2 }}>
+            <MarkdownMessage>{row.content || row.summary}</MarkdownMessage>
+          </View>
+        ) : (
+          <Text style={[{ color: muted ? colors.textSecondary : colors.text, fontSize: typeScale.body, lineHeight: 21 }, WRAP_ANYWHERE]} numberOfLines={2}>
+            {preview}
+          </Text>
+        )}
+      </View>
     </Pressable>
   );
 }
 
-function Group({ title, count, children, collapsible, defaultOpen = true, hint }: { title: string; count: number; children: React.ReactNode; collapsible?: boolean; defaultOpen?: boolean; hint?: string }) {
+function Group({ title, count, children, collapsible, defaultOpen = true, hint, quiet }: { title: string; count: number; children: React.ReactNode; collapsible?: boolean; defaultOpen?: boolean; hint?: string; quiet?: boolean }) {
   const [open, setOpen] = useState(defaultOpen);
-  const card = { backgroundColor: colors.card, borderRadius: radius.lg, paddingHorizontal: spacing.lg, paddingVertical: spacing.md } as const;
+  // quiet:只描边不填底,给「可能卡住」这类次要分组,视觉上退后一层。
+  const card = quiet
+    ? { borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, paddingHorizontal: spacing.lg, paddingVertical: spacing.md }
+    : { backgroundColor: colors.card, borderRadius: radius.lg, paddingHorizontal: spacing.lg, paddingVertical: spacing.md };
   return (
     <View style={card}>
       <Pressable
@@ -60,15 +98,15 @@ function Group({ title, count, children, collapsible, defaultOpen = true, hint }
         onPress={() => setOpen(v => !v)}
         accessibilityRole={collapsible ? 'button' : undefined}
         accessibilityState={collapsible ? { expanded: open } : undefined}
-        style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingBottom: open ? spacing.xs : 0 }}
+        style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}
       >
-        <Text style={{ color: colors.textSecondary, fontSize: typeScale.small, fontWeight: weight.strong }}>
+        <Text style={{ color: colors.text, fontSize: typeScale.body, fontWeight: weight.strong }}>
           {title} <Text style={{ color: colors.textMuted, fontWeight: weight.regular }}>{count}</Text>
         </Text>
         {collapsible ? <Text style={{ color: colors.accent, fontSize: typeScale.small }}>{open ? '收起' : '展开'}</Text> : null}
       </Pressable>
-      {open && hint ? <Text style={{ color: colors.textMuted, fontSize: typeScale.small, lineHeight: 18, marginBottom: spacing.xs }}>{hint}</Text> : null}
-      {open ? children : null}
+      {hint ? <Text style={{ color: colors.textMuted, fontSize: typeScale.small, lineHeight: 18, marginTop: 2 }}>{hint}</Text> : null}
+      {open ? <View style={{ marginTop: spacing.sm }}>{children}</View> : null}
     </View>
   );
 }
@@ -93,13 +131,14 @@ export default function NodeTasksSection({ cfg, alias, embedded = false }: { cfg
 
   const g = state.kind === 'loading' ? null : state.groups ?? null;
   const now = new Date();
+  const split = g ? splitStale(g.running, now) : { active: [], stale: [] };
   const empty = (text: string) => <Text style={{ color: colors.textMuted, fontSize: typeScale.body, paddingVertical: spacing.xs }}>{text}</Text>;
 
   return (
     <View style={{ paddingTop: embedded ? 0 : spacing.xl }}>
       <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: spacing.sm }}>
         <Text style={{ color: colors.textMuted, fontSize: typeScale.small }}>
-          {g ? `运行中 ${g.running.length} · 等待 ${g.queue.length}${g.selfOpen.length ? ` · 自投提醒 ${g.selfOpen.length}` : ''}` : '任务'}
+          {g ? `进行中 ${split.active.length} · 排队 ${g.queue.length}${split.stale.length ? ` · 可能卡住 ${split.stale.length}` : ''}` : '任务'}
         </Text>
         <Pressable onPress={() => void load()} hitSlop={8} accessibilityLabel="刷新任务">
           <Text style={{ color: colors.accent, fontSize: typeScale.small, fontWeight: weight.strong }}>刷新</Text>
@@ -116,12 +155,26 @@ export default function NodeTasksSection({ cfg, alias, embedded = false }: { cfg
       ) : null}
       {g ? (
         <View style={{ gap: spacing.md }}>
-          <Group title="正在运行" count={g.running.length}>
-            {g.running.length ? g.running.map((row, i) => <TaskRow key={row.taskId} row={row} index={i} kind="running" now={now} />) : empty('没有正在运行的任务')}
+          <Group title="进行中" count={split.active.length}>
+            {split.active.length ? split.active.map((row, i) => <TaskRow key={row.taskId} row={row} index={i} kind="running" now={now} />) : empty(split.stale.length ? '最近一天没有在动的任务' : '没有正在进行的任务')}
           </Group>
-          <Group title="等待队列(按执行顺序)" count={g.queue.length}>
-            {g.queue.length ? g.queue.map((row, i) => <TaskRow key={row.taskId} row={row} index={i} kind="queue" now={now} />) : empty('队列是空的')}
-          </Group>
+          {g.queue.length ? (
+            <Group title="排队" count={g.queue.length} hint="按执行顺序">
+              {g.queue.map((row, i) => <TaskRow key={row.taskId} row={row} index={i} kind="queue" now={now} />)}
+            </Group>
+          ) : null}
+          {split.stale.length ? (
+            <Group
+              title="可能卡住"
+              count={split.stale.length}
+              collapsible
+              defaultOpen={false}
+              quiet
+              hint="签收后超过一天没动静。多半是节点收到了但没有回件,不一定还在跑。"
+            >
+              {split.stale.map((row, i) => <TaskRow key={row.taskId} row={row} index={i} kind="stale" now={now} />)}
+            </Group>
+          ) : null}
           <Group title="最近完成" count={g.recent.length} collapsible defaultOpen>
             {g.recent.length ? g.recent.map((row, i) => <TaskRow key={row.taskId} row={row} index={i} kind="done" now={now} />) : empty('最近没有结束的任务')}
           </Group>

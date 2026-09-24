@@ -45,6 +45,8 @@ export interface HubTask {
   updated_at?: string;
   delivered_at?: string;
   started_at?: string;
+  runtime_submitted_at?: string;
+  consumed_at?: string;
   completed_at?: string;
   expires_at?: string;
   /** Exact runtime context exposed by SideThread-capable Hubs. */
