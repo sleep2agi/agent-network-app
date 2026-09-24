@@ -34,18 +34,47 @@ export interface ScrollbarPalette {
  * "Stronger" is contrast, not brightness — on the light palette `text` is
  * darker than `textSecondary`, which is the same step away from the surface.
  */
+export const SCROLLING_CLASS = 'anet-scrolling';
+/** Custom property carrying the thumb colour, so show/hide can fade (a registered
+ *  <color> property is interpolable; the ::-webkit-scrollbar-thumb background is not). */
+export const THUMB_VAR = '--anet-sb-thumb';
+
 export const scrollbarCss = (palette: ScrollbarPalette, desktopShell = false): string => {
+  // WeChat-style (Vincent 2026-09-24): thin, and invisible unless the pointer is over the
+  // scroll area or it is scrolling right now. The gutter keeps a constant width so showing
+  // and hiding never shifts layout — WebKit's classic scrollbar cannot overlay content.
   const rules = `
+  @property ${THUMB_VAR} {
+    syntax: '<color>';
+    inherits: true;
+    initial-value: transparent;
+  }
   :root {
     color-scheme: ${palette.scheme};
   }
   * {
-    scrollbar-width: thin;
-    scrollbar-color: ${palette.textMuted} transparent;
+    ${THUMB_VAR}: transparent;
+    transition: ${THUMB_VAR} 200ms ease-out;
+  }
+  *:hover, .${SCROLLING_CLASS} {
+    ${THUMB_VAR}: ${palette.textMuted};
+    transition-duration: 80ms;
+  }
+  /* Only engines without ::-webkit-scrollbar get the standard properties: Chromium 121+
+     ignores every ::-webkit-scrollbar rule on an element that sets scrollbar-width or
+     scrollbar-color, which would leave WebView2 with its ~10px native bar. */
+  @supports not selector(::-webkit-scrollbar) {
+    * {
+      scrollbar-width: thin;
+      scrollbar-color: transparent transparent;
+    }
+    *:hover, .${SCROLLING_CLASS} {
+      scrollbar-color: ${palette.textMuted} transparent;
+    }
   }
   ::-webkit-scrollbar {
-    width: 7px;
-    height: 7px;
+    width: 6px;
+    height: 6px;
   }
   ::-webkit-scrollbar-track {
     background: transparent;
@@ -54,14 +83,21 @@ export const scrollbarCss = (palette: ScrollbarPalette, desktopShell = false): s
     background: transparent;
   }
   ::-webkit-scrollbar-thumb {
-    background: ${palette.textMuted};
+    background-color: var(${THUMB_VAR});
+    border: 1px solid transparent;
+    background-clip: padding-box;
     border-radius: 999px;
   }
   ::-webkit-scrollbar-thumb:hover {
-    background: ${palette.textSecondary};
+    background-color: ${palette.textSecondary};
   }
   ::-webkit-scrollbar-thumb:active {
-    background: ${palette.text};
+    background-color: ${palette.text};
+  }
+  @media (prefers-reduced-motion: reduce) {
+    * {
+      transition: none;
+    }
   }
 `;
   if (desktopShell) return rules;
@@ -70,4 +106,28 @@ export const scrollbarCss = (palette: ScrollbarPalette, desktopShell = false): s
    is unreliable in macOS WKWebView, so the Tauri shell bypasses this guard. */
 @media (any-pointer: fine), (hover: hover) {${rules}}
 `;
+};
+
+/**
+ * "Is this element scrolling right now?" — marks the element on every scroll event and
+ * clears the mark after `delayMs` of quiet. Pure over its clock so a test can drive it.
+ */
+export interface ClassListLike { add(c: string): void; remove(c: string): void }
+export interface ScrollTargetLike { classList?: ClassListLike }
+export interface QuietClock {
+  setTimeout(fn: () => void, ms: number): unknown;
+  clearTimeout(handle: unknown): void;
+}
+export const createScrollQuiet = (clock: QuietClock, delayMs = 1000) => {
+  const timers = new Map<ScrollTargetLike, unknown>();
+  return (target: ScrollTargetLike | null | undefined): void => {
+    if (!target || !target.classList) return;
+    target.classList.add(SCROLLING_CLASS);
+    const prev = timers.get(target);
+    if (prev !== undefined) clock.clearTimeout(prev);
+    timers.set(target, clock.setTimeout(() => {
+      target.classList?.remove(SCROLLING_CLASS);
+      timers.delete(target);
+    }, delayMs));
+  };
 };

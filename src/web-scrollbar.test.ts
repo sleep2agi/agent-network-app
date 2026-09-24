@@ -1,5 +1,5 @@
 import fs from 'node:fs';
-import { scrollbarCss } from './web-scrollbar-css';
+import { scrollbarCss, createScrollQuiet, SCROLLING_CLASS, THUMB_VAR } from './web-scrollbar-css';
 import {
   STYLE_ELEMENT_ID,
   applyScrollbarCss,
@@ -102,18 +102,49 @@ strict.install();
 strict.setPalette(LIGHT);
 strict.emit();
 
+
+// ---- scroll-quiet timer (pure, fake clock) ----
+const quietClock = () => {
+  let now = 0; let seq = 0;
+  const pending = new Map<number, { at: number; fn: () => void }>();
+  return {
+    setTimeout: (fn: () => void, ms: number) => { const id = ++seq; pending.set(id, { at: now + ms, fn }); return id; },
+    clearTimeout: (h: unknown) => { pending.delete(h as number); },
+    advance: (ms: number) => { now += ms; for (const [id, t] of [...pending]) if (t.at <= now) { pending.delete(id); t.fn(); } },
+    pendingCount: () => pending.size,
+  };
+};
+const qc = quietClock();
+const classes = new Set<string>();
+const el = { classList: { add: (c: string) => void classes.add(c), remove: (c: string) => void classes.delete(c) } };
+const markScroll = createScrollQuiet(qc, 1000);
+markScroll(el);
+const markedOnScroll = classes.has('anet-scrolling');
+qc.advance(600); markScroll(el);            // still scrolling: timer restarts
+qc.advance(600);
+const stillMarkedMidStream = classes.has('anet-scrolling');
+const onePendingTimer = qc.pendingCount() === 1;
+qc.advance(500);                            // 1000ms after the last event
+const clearedAfterQuiet = !classes.has('anet-scrolling');
+markScroll(null); markScroll({});           // no element / no classList: ignored
+const noThrowOnJunk = true;
+
 const checks: Array<[string, boolean]> = [
   // ---- generated css ----
-  ['webkit scrollbar width is 6-8px', /::-webkit-scrollbar \{\n\s*width: 7px;/.test(dark)],
+  ['webkit scrollbar width is 6px (WeChat-thin)', /::-webkit-scrollbar \{\n\s*width: 6px;\n\s*height: 6px;/.test(dark)],
+  ['painted thumb is ~4px: 1px transparent border clipped', /::-webkit-scrollbar-thumb \{[^}]*border: 1px solid transparent;[^}]*background-clip: padding-box;/.test(dark)],
   ['webkit thumb is rounded', /::-webkit-scrollbar-thumb \{[^}]*border-radius: 999px;/.test(dark)],
   ['firefox scrollbar-width is thin', /scrollbar-width: thin;/.test(dark)],
+  ['standard scrollbar props are fenced off from webkit/blink (Chromium 121+ would drop the ::-webkit rules)', /@supports not selector\(::-webkit-scrollbar\) \{\n\s*\* \{\n\s*scrollbar-width: thin;/.test(dark)],
+  ['no unfenced scrollbar-width outside the @supports block', dark.indexOf('scrollbar-width:') > dark.indexOf('@supports not selector(::-webkit-scrollbar)')],
   // 2026-09-16 Vincent (macOS 0.2.66 dark theme): a white scrollbar track. WKWebView paints native chrome
   // from `color-scheme`; declare it so the native scrollbar follows the theme when the custom rules do not.
   ['dark palette declares color-scheme: dark', /:root \{\n\s*color-scheme: dark;/.test(dark)],
   ['light palette declares color-scheme: light', /:root \{\n\s*color-scheme: light;/.test(light)],
   ['desktop shell declares color-scheme too', /color-scheme: dark;/.test(desktop)],
   ['installer derives scheme from themeMode()', /scheme: themeMode\(\) === 'light' \? 'light' : 'dark'/.test(fs.readFileSync(new URL('./web-scrollbar.ts', import.meta.url), 'utf8'))],
-  ['firefox scrollbar-color is wired', /scrollbar-color: #52525b transparent;/.test(dark)],
+  ['firefox scrollbar is transparent at rest', /\* \{\n\s*scrollbar-width: thin;\n\s*scrollbar-color: transparent transparent;/.test(dark)],
+  ['firefox scrollbar shows the muted token on hover/scrolling', /\*:hover, \.anet-scrolling \{\n\s*scrollbar-color: #52525b transparent;/.test(dark)],
   ['webkit track is transparent',
     /::-webkit-scrollbar-track \{\n\s*background: transparent;/.test(dark)],
   ['webkit corner is transparent',
@@ -123,17 +154,23 @@ const checks: Array<[string, boolean]> = [
   ['every rule sits inside that guard',
     dark.indexOf('@media (any-pointer: fine)') < dark.indexOf('::-webkit-scrollbar')],
   ['Tauri desktop bypasses unreliable pointer media detection',
-    !desktop.includes('@media') && desktop.includes('::-webkit-scrollbar-track')],
+    !desktop.includes('any-pointer') && desktop.includes('::-webkit-scrollbar-track')],
 
   // Three distinct states: resting, hover, and a stronger active step so a drag
   // does not look like a hover that failed to catch.
-  ['resting thumb uses the muted token', /::-webkit-scrollbar-thumb \{\n\s*background: #52525b;/.test(dark)],
+  ['thumb colour comes from the fade variable', /::-webkit-scrollbar-thumb \{\n\s*background-color: var\(--anet-sb-thumb\);/.test(dark)],
+  ['the variable is transparent at rest', /\* \{[^}]*--anet-sb-thumb: transparent;/.test(dark)],
+  ['hover or scrolling sets the variable to the muted token', /\*:hover, \.anet-scrolling \{[^}]*--anet-sb-thumb: #52525b;/.test(dark)],
+  ['the variable is registered as an interpolable <color> (so it can fade)', /@property --anet-sb-thumb \{\n\s*syntax: '<color>';\n\s*inherits: true;\n\s*initial-value: transparent;/.test(dark)],
+  ['the fade is a transition on the variable', /transition: --anet-sb-thumb 200ms/.test(dark)],
+  ['reduced motion drops the fade', /@media \(prefers-reduced-motion: reduce\) \{\n\s*\* \{\n\s*transition: none;/.test(dark)],
+  ['constants match the css', SCROLLING_CLASS === 'anet-scrolling' && THUMB_VAR === '--anet-sb-thumb'],
   ['hover thumb uses the secondary token',
-    /::-webkit-scrollbar-thumb:hover \{\n\s*background: #a1a1aa;/.test(dark)],
+    /::-webkit-scrollbar-thumb:hover \{\n\s*background-color: #a1a1aa;/.test(dark)],
   ['active thumb goes one step beyond hover',
-    /::-webkit-scrollbar-thumb:active \{\n\s*background: #f4f4f5;/.test(dark)],
+    /::-webkit-scrollbar-thumb:active \{\n\s*background-color: #f4f4f5;/.test(dark)],
   ['active differs from hover on the light palette too',
-    /::-webkit-scrollbar-thumb:active \{\n\s*background: #20242a;/.test(light)],
+    /::-webkit-scrollbar-thumb:active \{\n\s*background-color: #20242a;/.test(light)],
 
   ['light thumb uses the light muted token', light.includes('#929aa6')],
   ['the two themes produce different css', dark !== light],
@@ -162,6 +199,16 @@ const checks: Array<[string, boolean]> = [
   ['the surviving installer still tracks the theme',
     strict.text() === scrollbarCss(LIGHT)],
 
+  // ---- scroll-quiet ----
+  ['a scroll event marks the element as scrolling', markedOnScroll],
+  ['continued scrolling keeps the mark (timer restarts)', stillMarkedMidStream],
+  ['restarting replaces the timer instead of stacking', onePendingTimer],
+  ['the mark clears after 1s of quiet', clearedAfterQuiet],
+  ['null targets and elements without classList are ignored', noThrowOnJunk],
+  ['the installer wires a capture-phase passive scroll listener',
+    /addEventListener\('scroll', onScroll, \{ capture: true, passive: true \}\)/.test(fs.readFileSync(new URL('./web-scrollbar.ts', import.meta.url), 'utf8'))],
+  ['teardown removes that listener',
+    /removeEventListener\('scroll', onScroll/.test(fs.readFileSync(new URL('./web-scrollbar.ts', import.meta.url), 'utf8'))],
   // ---- wiring ----
   ['App installs the themed scrollbar',
     /useEffect\(\(\) => installWebScrollbarTheme\(\), \[\]\)/.test(app)],
