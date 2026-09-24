@@ -118,19 +118,24 @@ export default function MarkdownMessage({ children }: { children: string }) {
   );
 }
 
+// 长串(hash、URL、路径、行内代码)没有可断点时会把整行撑出气泡(2026-09-24 Vincent 截图)。
+// web/桌面:允许在任意位置断行;原生端 Text 本来就按字符换行,不需要。
+export const WRAP_ANYWHERE = Platform.OS === 'web' ? ({ overflowWrap: 'anywhere', wordBreak: 'break-word' } as any) : {};
+
 const makeStyles = () => StyleSheet.create({
-  root: { gap: spacing.sm },
-  text: { color: colors.text, fontSize: 14, lineHeight: 21 },
+  // minWidth 0:气泡里的列与行是 flex 子项,默认 min-width:auto 会按内容宽度撑开父级
+  root: { gap: spacing.sm, minWidth: 0, maxWidth: '100%' },
+  text: { color: colors.text, fontSize: 14, lineHeight: 21, ...WRAP_ANYWHERE },
   block: { marginBottom: 2 },
   heading: { fontWeight: '600', marginTop: spacing.xs },
   strong: { fontWeight: '600' },
   em: { fontStyle: 'italic' },
-  inlineCode: { color: colors.accent, backgroundColor: colors.inputBg, fontFamily: 'monospace', fontSize: 13 },
+  inlineCode: { color: colors.accent, backgroundColor: colors.inputBg, fontFamily: 'monospace', fontSize: 13, ...WRAP_ANYWHERE },
   link: { color: colors.accent, textDecorationLine: 'underline' },
-  listRow: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.sm },
+  listRow: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.sm, minWidth: 0 },
   marker: { color: colors.textSecondary, fontSize: 14, lineHeight: 21, minWidth: 16, textAlign: 'right' },
-  listText: { flexShrink: 1 },
-  quote: { borderLeftWidth: 3, borderLeftColor: colors.textMuted, paddingLeft: spacing.md, opacity: 0.9 },
+  listText: { flexShrink: 1, flexGrow: 1, flexBasis: 0, minWidth: 0 },
+  quote: { borderLeftWidth: 3, borderLeftColor: colors.textMuted, paddingLeft: spacing.md, opacity: 0.9, minWidth: 0 },
   code: { maxWidth: '100%', backgroundColor: colors.inputBg, borderRadius: 8, padding: spacing.md },
   codeText: { color: colors.text, fontFamily: 'monospace', fontSize: 12, lineHeight: 18 },
   foldToggle: { color: colors.accent, fontSize: 12, marginTop: spacing.xs },
