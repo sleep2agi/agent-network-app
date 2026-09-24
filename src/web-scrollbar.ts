@@ -13,7 +13,7 @@
 import { Platform } from 'react-native';
 import { colors, onThemeChange, themeMode } from './theme';
 import { createScrollbarInstaller, type StyleHostLike } from './web-scrollbar-dom';
-import { scrollbarCss } from './web-scrollbar-css';
+import { scrollbarCss, createScrollQuiet } from './web-scrollbar-css';
 
 export { STYLE_ELEMENT_ID } from './web-scrollbar-dom';
 export { scrollbarCss } from './web-scrollbar-css';
@@ -33,5 +33,19 @@ const install = createScrollbarInstaller({
  */
 export const installWebScrollbarTheme = (): (() => void) => {
   if (Platform.OS !== 'web') return () => {};
-  return install();
+  const teardownTheme = install();
+  const doc = (globalThis as { document?: Document }).document;
+  if (!doc) return teardownTheme;
+  // One capture-phase listener marks whichever element is scrolling, so every list,
+  // chat pane and settings column gets the same show-while-scrolling behaviour.
+  const mark = createScrollQuiet({ setTimeout: (f, ms) => setTimeout(f, ms), clearTimeout: (h) => clearTimeout(h as ReturnType<typeof setTimeout>) });
+  const onScroll = (e: Event): void => {
+    const t = e.target as unknown;
+    mark((t === doc ? doc.documentElement : t) as { classList?: DOMTokenList });
+  };
+  doc.addEventListener('scroll', onScroll, { capture: true, passive: true });
+  return () => {
+    doc.removeEventListener('scroll', onScroll, { capture: true } as EventListenerOptions);
+    teardownTheme();
+  };
 };
