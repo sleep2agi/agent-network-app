@@ -119,6 +119,20 @@ jobs:
           releaseBody: |-
             Signed and notarized stable update for macOS (Apple Silicon) and Windows (x64).
 
+            What's new in 0.2.85:
+            - A quieter, more minimal look. Surfaces are separated by background tone instead of borders,
+              the accent color is kept for the navigation rail, primary buttons and links, headings top out at
+              semi-bold, and every text color meets a 4.5:1 contrast ratio in both light and dark themes. The
+              dark accent is a softer cyan. Chat bubbles, the conversation list, task filters, server and
+              settings pages all follow the same tokens; features, wording and layout are unchanged.
+            - Node details now show the rules file (CLAUDE.md for Claude Code nodes, AGENTS.md for others)
+              whenever the node reports it can serve one, including on the read-only node info page. Claude
+              Code nodes need a restart on agent-network 2.3.0-preview.111 or later to report it.
+            - The model picker no longer suggests opencode/mimo-v2.5-free, which OpenCode Zen withdrew; a node
+              whose current model is not in the suggestion list still shows that model as selected.
+            - The Grok TUI co-presence runtime is labelled Preview in the create-node wizard, with a pointer
+              to the stable Grok (build-acp) runtime.
+
             What's new in 0.2.84:
             - The node detail page gets a 模型 card: change a node's model straight from the client through
               the hub's update_node_config (RFC-024), with no LLM in the loop. Suggested models per runtime
