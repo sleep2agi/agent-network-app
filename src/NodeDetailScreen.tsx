@@ -46,23 +46,26 @@
 // verification bullet).
 
 import { useCallback, useEffect, useState } from 'react';
-import { ActivityIndicator, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View, useWindowDimensions } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 
 import AliasAvatar from './AliasAvatar';
 import AvatarEditSection from './AvatarEditSection';
 import { teamOf } from './agents-list';
 import { fetchHubNodes, fetchNodeStatus, runNodeLifecycleAction, type HubConfig, type HubNode, type NodeLifecycleAction, type Session } from './api';
 import { styles } from './app-styles';
-import { colors, onThemeChange, spacing, statusColor } from './theme';
+import { colors, onThemeChange, radius, spacing, statusColor, type as typeScale, weight } from './theme';
 import { formatTime } from './time';
 import { usePoll } from './usePoll';
 import NodeTasksSection from './NodeTasksSection';
 import { nodeActionVisual, type NodeActionTone } from './node-action-visual';
-import { nodeInfoFacts } from './node-info';
+import { nodeInfoFacts, type NodeInfoFact } from './node-info';
 import { nodeIdentityNotice, taskSectionTitle } from './node-identity';
 import NodeRulesSection from './NodeRulesSection';
 import { rulesFileTarget } from './node-rules';
 import NodeModelSection from './NodeModelSection';
+import NodeSkillsSection from './NodeSkillsSection';
+import { NODE_PAGE_COMPACT_WIDTH, NODE_SECTIONS, factText, headerChips, resolveActiveSection, splitOverviewFacts, visibleNodeSections, type NodeSectionKey } from './node-page-model';
 
 const POLL_MS = 10_000; // same cadence as AgentsScreen — hub-friendly, felt-live
 
@@ -108,29 +111,31 @@ function NodeActionButton({
   );
 }
 
+/** 概览网格里的一格:小号灰色标签在上,值在下;空值显示「—」(分得清「没上报」和「坏了」)。 */
+function FactCell({ fact, wide }: { fact: NodeInfoFact; wide: boolean }) {
+  return (
+    <View style={{ width: wide ? '50%' : '100%', paddingVertical: spacing.sm, paddingRight: spacing.lg, gap: 2 }}>
+      <Text style={{ color: colors.textMuted, fontSize: typeScale.small }}>{fact.label}</Text>
+      <Text style={{ color: colors.text, fontSize: typeScale.body }} selectable numberOfLines={2}>{factText(fact.value)}</Text>
+    </View>
+  );
+}
+
+/** 分区标题 + 一句说明;分区之间不画框,靠留白和标题分层(0.2.85 极简语言)。 */
+function SectionTitle({ title, hint }: { title: string; hint?: string }) {
+  return (
+    <View style={{ marginBottom: spacing.md, gap: 4 }}>
+      <Text style={{ color: colors.text, fontSize: typeScale.title, fontWeight: weight.strong }}>{title}</Text>
+      {hint ? <Text style={{ color: colors.textMuted, fontSize: typeScale.small, lineHeight: 18 }}>{hint}</Text> : null}
+    </View>
+  );
+}
+
 type LoadState =
   | { kind: 'loading' }
   | { kind: 'ready'; session: Session }
   | { kind: 'not_found' } // alias no longer in the fleet
   | { kind: 'error' };    // fetch itself failed (network / auth / server)
-
-/**
- * Render a labeled row where `value` may be absent. Absent renders as
- * `—` so the user can distinguish "field not populated by hub" from
- * "screen crashed and shows nothing". Kept inline (not exported) — this
- * pattern is scoped to this screen for now.
- */
-function InfoRow({ label, value }: { label: string; value?: string | null }) {
-  const shown = value && value.trim().length > 0 ? value : '—';
-  return (
-    <View style={{ flexDirection: 'row', paddingVertical: spacing.sm }}>
-      <Text style={{ color: colors.textMuted, width: 96, fontSize: 13 }}>{label}</Text>
-      <Text style={{ color: colors.text, flex: 1, fontSize: 14 }} selectable>
-        {shown}
-      </Text>
-    </View>
-  );
-}
 
 export default function NodeDetailScreen({
   cfg,
@@ -150,6 +155,10 @@ export default function NodeDetailScreen({
   const [confirmAlias, setConfirmAlias] = useState('');
   const [actionBusy, setActionBusy] = useState(false);
   const [actionMessage, setActionMessage] = useState('');
+  const [activeSection, setActiveSection] = useState<NodeSectionKey>('overview');
+  const [showMoreFacts, setShowMoreFacts] = useState(false);
+  const { width } = useWindowDimensions();
+  const compact = width < NODE_PAGE_COMPACT_WIDTH;
   // Force re-render on theme switch. `styles` reassigns via live binding
   // (see app-styles.ts header) but child style props are captured at
   // render — a manual bump is how the sibling screens do it too.
@@ -274,81 +283,155 @@ export default function NodeDetailScreen({
     void load();
   };
 
-  return (
-    <View style={styles.root}>
-      {header}
-      <ScrollView contentContainerStyle={{ padding: spacing.lg }}>
-        {/* Identity block */}
-        <View style={{ alignItems: 'center', paddingVertical: spacing.lg, gap: spacing.md }}>
-          <AliasAvatar alias={s.alias} size={96} />
-          <Text style={{ color: colors.text, fontSize: 20, fontWeight: '600' }} selectable>
+  const facts: NodeInfoFact[] = [
+    ...nodeInfoFacts(s, node, cfg.serverUrl),
+    { label: '所属 team', value: team },
+    { label: '最后更新', value: formatTime(s.updated_at) },
+    { label: '生命周期', value: node?.lifecycle_state },
+    { label: '配置版本', value: typeof node?.config_revision === 'number' ? String(node.config_revision) : undefined },
+  ];
+  const { primary, secondary } = splitOverviewFacts(facts);
+  const chips = headerChips(facts);
+  const skillsCapable = (s as Session & { skills_capable?: boolean }).skills_capable === true;
+  const visibleSections = visibleNodeSections({ readOnly, hasRulesTarget: !!rulesTarget, skillsCapable });
+  const section = resolveActiveSection(activeSection, visibleSections);
+  const sectionMeta = NODE_SECTIONS.filter(item => visibleSections.includes(item.key));
+  const runtimeFacts = facts.filter(f => ['Runtime', 'Agent', '模型', '版本', '节点类型'].includes(f.label));
+
+  // 头部卡片:头像 + 名字 + 在线状态 + 运行时/模型/版本/主机小标签。常驻,切分区不动。
+  const headerCard = (
+    <View style={[localStyles.headerCard, { borderBottomColor: colors.border }]}>
+      <AliasAvatar alias={s.alias} size={compact ? 44 : 56} />
+      <View style={{ flex: 1, minWidth: 0, gap: 6 }}>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm, flexWrap: 'wrap' }}>
+          <Text style={{ color: colors.text, fontSize: typeScale.heading, fontWeight: weight.strong }} selectable numberOfLines={1}>
             {s.alias}
           </Text>
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm }}>
-            <View
-              style={{
-                width: 8,
-                height: 8,
-                borderRadius: 4,
-                backgroundColor: chipColor,
-              }}
-            />
-            <Text style={{ color: colors.textMuted, fontSize: 13 }}>
-              {online ? s.status : 'offline'}
-            </Text>
+          <View style={[localStyles.statusPill, { borderColor: colors.border }]}>
+            <View style={{ width: 7, height: 7, borderRadius: 4, backgroundColor: chipColor }} />
+            <Text style={{ color: colors.textSecondary, fontSize: typeScale.small }}>{online ? s.status : 'offline'}</Text>
           </View>
         </View>
+        {chips.length ? (
+          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: spacing.xs }}>
+            {chips.map(chip => (
+              <View key={chip} style={[localStyles.chip, { backgroundColor: colors.subtleFill }]}>
+                <Text style={{ color: colors.textSecondary, fontSize: typeScale.small }} numberOfLines={1}>{chip}</Text>
+              </View>
+            ))}
+          </View>
+        ) : null}
+      </View>
+    </View>
+  );
 
+  // 分区导航:宽窗左栏(同设置页),窄窗顶部一排分段标签。
+  const nav = (
+    <View style={compact ? [localStyles.tabsWrap, { borderBottomColor: colors.border }] : [localStyles.rail, { borderRightColor: colors.border }]} testID="node-section-nav">
+      <ScrollView horizontal={compact} showsHorizontalScrollIndicator={false} contentContainerStyle={compact ? localStyles.tabsRow : localStyles.railList}>
+        {sectionMeta.map(item => {
+          const isActive = item.key === section;
+          const danger = item.key === 'danger';
+          return (
+            <Pressable
+              key={item.key}
+              accessibilityRole="tab"
+              accessibilityState={{ selected: isActive }}
+              accessibilityLabel={item.label}
+              onPress={() => setActiveSection(item.key)}
+              style={({ pressed, hovered }: any) => [
+                compact ? localStyles.tab : localStyles.railItem,
+                (hovered || pressed) && { backgroundColor: colors.rowHover },
+                isActive && { backgroundColor: colors.rowActive },
+              ]}
+            >
+              {!compact ? <Ionicons name={item.icon as any} size={16} color={danger ? colors.failed : isActive ? colors.text : colors.textMuted} /> : null}
+              <Text style={{ color: danger ? colors.failed : isActive ? colors.text : colors.textSecondary, fontSize: typeScale.body, fontWeight: isActive ? weight.strong : weight.regular }} numberOfLines={1}>
+                {item.label}
+              </Text>
+            </Pressable>
+          );
+        })}
+      </ScrollView>
+    </View>
+  );
+
+  const card = { backgroundColor: colors.card, borderRadius: radius.lg, paddingHorizontal: spacing.lg, paddingVertical: spacing.sm } as const;
+
+  const content = (() => {
+    if (section === 'overview') return (
+      <View style={{ gap: spacing.xl }}>
+        <View>
+          <SectionTitle title="概览" />
+          <View style={[card, { flexDirection: 'row', flexWrap: 'wrap' }]}>
+            {primary.map(fact => <FactCell key={fact.label} fact={fact} wide={!compact} />)}
+          </View>
+          {secondary.length ? (
+            <View style={{ marginTop: spacing.sm }}>
+              <Pressable onPress={() => setShowMoreFacts(v => !v)} accessibilityRole="button" accessibilityState={{ expanded: showMoreFacts }} hitSlop={8} style={{ paddingVertical: spacing.xs }}>
+                <Text style={{ color: colors.accent, fontSize: typeScale.small, fontWeight: weight.strong }}>{showMoreFacts ? '收起更多信息' : `更多信息(${secondary.length})`}</Text>
+              </Pressable>
+              {showMoreFacts ? (
+                <View style={[card, { flexDirection: 'row', flexWrap: 'wrap', marginTop: spacing.xs }]}>
+                  {secondary.map(fact => <FactCell key={fact.label} fact={fact} wide={!compact} />)}
+                </View>
+              ) : null}
+            </View>
+          ) : null}
+        </View>
+        <View>
+          <SectionTitle title={taskSectionTitle(s.status)} />
+          <View style={[card, { paddingVertical: spacing.md }]}>
+            {s.task && s.task.trim().length > 0 ? (
+              <Text style={{ color: colors.text, fontSize: typeScale.body, lineHeight: 20 }} selectable>{s.task}</Text>
+            ) : (
+              <Text style={{ color: colors.textMuted, fontSize: typeScale.small }}>节点还没有上报任务。完整记录见「任务」分区。</Text>
+            )}
+          </View>
+        </View>
         {/* R2 avatar editor (pool picker + custom URL; pre-disclosure for session-only) */}
         {!readOnly ? <AvatarEditSection cfg={cfg} alias={s.alias} /> : null}
-
-        {/* Facts block — read-only labeled rows */}
-        <View
-          style={{
-            backgroundColor: colors.card,
-            borderRadius: 12,
-            paddingHorizontal: spacing.lg,
-            paddingVertical: spacing.sm,
-            gap: 0,
-          }}
-        >
-          {nodeInfoFacts(s, node, cfg.serverUrl).map(fact => (
-            <InfoRow key={fact.label} label={fact.label} value={fact.value} />
-          ))}
-          <InfoRow label="所属 team" value={team} />
-          <InfoRow label="最后更新" value={formatTime(s.updated_at)} />
-          <InfoRow label="生命周期" value={node?.lifecycle_state} />
-          <InfoRow label="配置版本" value={typeof node?.config_revision === 'number' ? String(node.config_revision) : undefined} />
+      </View>
+    );
+    if (section === 'model') return (
+      <View>
+        <SectionTitle title="模型与运行时" hint={readOnly ? '只读视图:在节点详情里可以直接改模型。' : '改模型会让节点重启一次,不经过大模型。'} />
+        <View style={[card, { flexDirection: 'row', flexWrap: 'wrap' }]}>
+          {runtimeFacts.map(fact => <FactCell key={fact.label} fact={fact} wide={!compact} />)}
         </View>
-
-        {/* Current task preview — separate section, prose-style */}
-        {!readOnly ? <View style={{ paddingTop: spacing.xl }}>
-          <Text style={{ color: colors.textMuted, fontSize: 13, marginBottom: spacing.sm }}>
-            {taskSectionTitle(s.status)}
-          </Text>
-          <View
-            style={{
-              backgroundColor: colors.card,
-              borderRadius: 12,
-              padding: spacing.lg,
-            }}
-          >
-            <Text style={{ color: colors.text, fontSize: 14, lineHeight: 20 }} selectable>
-              {s.task && s.task.trim().length > 0 ? s.task : '—'}
-            </Text>
-          </View>
-        </View> : null}
-
+        {/* RFC-024 —— 不经 LLM 直接改模型;需要权威 node_id。 */}
+        {!readOnly && node ? <NodeModelSection cfg={cfg} node={node} /> : null}
+      </View>
+    );
+    if (section === 'rules') return (
+      <View>
+        <SectionTitle title="规则文件" hint="节点工作目录里的 CLAUDE.md / AGENTS.md,节点每次开会话都会读。" />
+        {/* app#225 —— 节点规则文件（CLAUDE.md / AGENTS.md）查看/编辑。显示条件与请求目标见
+            node-rules.ts rulesFileTarget:会话上报 rules_file_capable 时详情/只读页都显示
+            (claude-code 会话没有 nodes 行也能按 alias 发);否则保持原行为。 */}
+        {rulesTarget ? <NodeRulesSection cfg={cfg} node={rulesTarget} session={s} /> : null}
+      </View>
+    );
+    if (section === 'skills') return (
+      <View>
+        <SectionTitle title="技能" hint="这个节点实际能加载的技能(只读)。" />
+        <NodeSkillsSection cfg={cfg} alias={alias} session={s} />
+      </View>
+    );
+    if (section === 'tasks') return (
+      <View>
+        <SectionTitle title="任务" hint="发给这个节点的任务。自己发给自己的定时提醒单独一组,不算运行中。" />
         {/* app#157 —— 这个节点正在跑什么、前面排着几条(只读视图也显示,它不改任何东西) */}
-        <NodeTasksSection cfg={cfg} alias={alias} />
-
-        {!readOnly ? <View style={{ paddingTop: spacing.xl }}>
-          <Text style={{ color: colors.textMuted, fontSize: 13, marginBottom: spacing.sm }}>节点操作</Text>
+        <NodeTasksSection cfg={cfg} alias={alias} embedded />
+      </View>
+    );
+    // danger
+    return (
+      <View>
+        <SectionTitle title="危险操作" hint="操作通过公开 CommHub/anet 契约执行。停止不会删除配置；有任务处理中时服务器会拒绝，不会自动强制。" />
+        {!readOnly ? <View style={[localStyles.dangerZone, { borderColor: colors.failed }]}>
           {node ? (
-            <View style={{ backgroundColor: colors.card, borderRadius: 12, padding: spacing.lg, gap: spacing.md }}>
-              <Text style={{ color: colors.textMuted, fontSize: 12, lineHeight: 18 }}>
-                操作通过公开 CommHub/anet 契约执行。停止不会删除配置；有任务处理中时服务器会拒绝，不会自动强制。
-              </Text>
+            <View style={{ gap: spacing.md }}>
               {/* app#196 —— hub 明确说不可控时置灰。
                   🔴 undefined（旧 hub 没这个字段）按可控渲染：与升级前行为逐字相同，
                   真不行的话提交时 hub 会拒绝并显示错误 —— 宁可多让用户点一次，
@@ -359,25 +442,30 @@ export default function NodeDetailScreen({
                 <NodeActionButton label="删除节点" tone="danger" disabled={node?.lifecycle_controllable === false} onPress={() => setPendingAction('delete_node')} />
               </View>
               {node?.lifecycle_controllable === false ? (
-                <Text style={{ color: colors.textMuted, fontSize: 12, lineHeight: 18 }}>
+                <Text style={{ color: colors.textMuted, fontSize: typeScale.small, lineHeight: 18 }}>
                   此节点不是由 daemon 创建的，无法远程停止/删除。请在它所在的机器上执行 `anet node stop {alias}`。
                 </Text>
               ) : null}
-              {actionMessage ? <Text style={{ color: actionMessage.includes('已提交') ? colors.running : colors.failed, fontSize: 12 }}>{actionMessage}</Text> : null}
+              {actionMessage ? <Text style={{ color: actionMessage.includes('已提交') ? colors.running : colors.failed, fontSize: typeScale.small }}>{actionMessage}</Text> : null}
             </View>
           ) : (
-            <Text style={{ color: colors.textMuted, fontSize: 12 }}>{nodeIdentityNotice(s, node, nodeListState)}</Text>
+            <Text style={{ color: colors.textMuted, fontSize: typeScale.small }}>{nodeIdentityNotice(s, node, nodeListState)}</Text>
           )}
         </View> : null}
+      </View>
+    );
+  })();
 
-        {/* app#225 —— 节点规则文件（CLAUDE.md / AGENTS.md）查看/编辑。显示条件与请求目标见
-            node-rules.ts rulesFileTarget:会话上报 rules_file_capable 时详情/只读页都显示
-            (claude-code 会话没有 nodes 行也能按 alias 发);否则保持原行为。 */}
-        {rulesTarget ? <NodeRulesSection cfg={cfg} node={rulesTarget} session={s} /> : null}
-
-        {/* RFC-024 —— 不经 LLM 直接改模型;需要权威 node_id。 */}
-        {!readOnly && node ? <NodeModelSection cfg={cfg} node={node} /> : null}
-      </ScrollView>
+  return (
+    <View style={styles.root}>
+      {header}
+      {headerCard}
+      <View style={{ flex: 1, flexDirection: compact ? 'column' : 'row', minHeight: 0 }}>
+        {nav}
+        <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: compact ? spacing.lg : spacing.xl, paddingBottom: spacing.xl * 2, maxWidth: 880 }}>
+          {content}
+        </ScrollView>
+      </View>
 
       <Modal transparent visible={!readOnly && !!pendingAction} onRequestClose={() => setPendingAction(null)} animationType="fade">
         <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.55)', alignItems: 'center', justifyContent: 'center', padding: spacing.xl }}>
@@ -409,6 +497,58 @@ export default function NodeDetailScreen({
 }
 
 const localStyles = StyleSheet.create({
+  headerCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.lg,
+    paddingHorizontal: spacing.xl,
+    paddingVertical: spacing.lg,
+    borderBottomWidth: 1,
+  },
+  statusPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    borderWidth: 1,
+    borderRadius: 999,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 2,
+  },
+  chip: {
+    borderRadius: 6,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 3,
+    maxWidth: 260,
+  },
+  rail: {
+    width: 200,
+    borderRightWidth: 1,
+    paddingTop: spacing.md,
+  },
+  railList: { paddingHorizontal: spacing.sm, gap: 2 },
+  railItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm + 2,
+    borderRadius: 10,
+  },
+  tabsWrap: {
+    borderBottomWidth: 1,
+    paddingVertical: spacing.sm,
+  },
+  tabsRow: { flexDirection: 'row', paddingHorizontal: spacing.md, gap: spacing.xs },
+  tab: {
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.xs + 2,
+    borderRadius: 10,
+  },
+  dangerZone: {
+    borderWidth: 1,
+    borderRadius: 14,
+    padding: spacing.lg,
+  },
   actionRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
