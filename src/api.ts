@@ -26,6 +26,9 @@ export interface Session {
    *  doorbell (agent-node, or a claude-code session's channel server). Absent on
    *  older hubs / older nodes ⇒ treat as false. */
   rules_file_capable?: boolean;
+  /** Node skills view — hub `/api/status`: this session answers skills_list /
+   *  skill_read on the rules-file doorbell. Absent ⇒ false (no fallback). */
+  skills_capable?: boolean;
 }
 
 export interface HubTask {
@@ -1187,6 +1190,37 @@ export const readNodeRulesFile = (cfg: HubConfig, node: RulesTarget): Promise<Ru
 
 export const writeNodeRulesFile = (cfg: HubConfig, node: RulesTarget, content: string): Promise<RulesFileEnqueueResult> =>
   enqueueRulesFile(cfg, 'write_node_rules_file', node, content);
+
+/** Node skills view — enqueue list_node_skills / read_node_skill (read-only; the
+ *  only argument besides the target is a skill NAME). Result comes back through
+ *  getRulesFileResult / waitForRulesFileResult like the rules file. */
+const enqueueSkills = async (
+  cfg: HubConfig,
+  tool: 'list_node_skills' | 'read_node_skill',
+  node: RulesTarget,
+  name?: string,
+): Promise<RulesFileEnqueueResult> => {
+  const networkId = cfg.networkId ?? (await fetchNetworkId(cfg));
+  const args = {
+    ...rulesTargetArgs(node),
+    ...(networkId ? { network_id: networkId } : {}),
+    ...(tool === 'read_node_skill' ? { name: name ?? '' } : {}),
+  };
+  const r = await callHubTool(cfg, tool, args);
+  if (r.kind === 'unsupported') return { ok: false, unsupported: true, error: '当前 Hub 版本还没有技能查看工具,请先升级服务器' };
+  if (r.kind === 'error') return { ok: false, error: /not found|unknown tool/i.test(r.error) ? '当前 Hub 版本还没有技能查看工具,请先升级服务器' : r.error };
+  const p = r.payload;
+  if (!p || p.ok !== true || typeof p.request_id !== 'string') {
+    return { ok: false, error: p?.error === 'request_in_flight' ? '节点还有一个技能请求没做完,请稍后再试' : String(p?.error ?? 'Hub 返回空响应'), ...(p?.existing_request_id ? { existing_request_id: p.existing_request_id } : {}) };
+  }
+  return { ok: true, request_id: p.request_id, op: 'read' };
+};
+
+export const listNodeSkills = (cfg: HubConfig, node: RulesTarget): Promise<RulesFileEnqueueResult> =>
+  enqueueSkills(cfg, 'list_node_skills', node);
+
+export const readNodeSkill = (cfg: HubConfig, node: RulesTarget, name: string): Promise<RulesFileEnqueueResult> =>
+  enqueueSkills(cfg, 'read_node_skill', node, name);
 
 export const getRulesFileResult = async (cfg: HubConfig, requestId: string): Promise<RulesFileOutcome> => {
   const networkId = cfg.networkId ?? (await fetchNetworkId(cfg));

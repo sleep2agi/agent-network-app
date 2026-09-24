@@ -415,7 +415,7 @@ export default function NodeDetailScreen({
     if (section === 'skills') return (
       <View>
         <SectionTitle title="技能" hint="这个节点实际能加载的技能(只读)。" />
-        <NodeSkillsSection cfg={cfg} alias={alias} session={s} />
+        <NodeSkillsSection cfg={cfg} alias={alias} node={rulesTarget} session={s} readOnly={readOnly} />
       </View>
     );
     if (section === 'tasks') return (
