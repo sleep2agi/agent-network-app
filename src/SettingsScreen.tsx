@@ -6,7 +6,8 @@ import { DesktopStorageDiagnostics, HubProfile, getDesktopStorageDiagnostics, li
 import { colors, onThemeChange, setThemeMode, spacing, themeMode } from './theme';
 import { APP_VERSION } from './version';
 import { appFetch } from './app-fetch';
-import { checkDesktopUpdate, desktopUpdateSnapshot, subscribeDesktopUpdates } from './desktop-updater';
+import { checkDesktopUpdate, desktopUpdateLastCheckedAt, desktopUpdateSnapshot, subscribeDesktopUpdates } from './desktop-updater';
+import { describeUpdateRow } from './update-check-state';
 import { backupLocalHubData, deleteLocalHubData, LOCAL_HUB_PROFILE_ID, localHubStatus, openLocalHubLogs, restartLocalHub, stopLocalHub, type LocalHubResult } from './local-hub';
 import { openWorkspaceWindow } from './desktop-chat-menu';
 import { loadNotifySettings, saveNotifySettings, subscribeNotifySettings } from './notify-settings';
@@ -414,15 +415,32 @@ export default function SettingsScreen({
               {show('about', 'update') ? (
                 <>
                   <Divider />
-                  <Pressable style={({ pressed }) => [styles.row, pressed && { opacity: 0.6 }]} onPress={() => { void checkDesktopUpdate(); }} disabled={update.kind === 'checking'} accessibilityRole="button">
-                    <Text style={styles.rowLabel}>软件更新</Text>
-                    {update.kind === 'checking' ? <ActivityIndicator color={colors.accent} /> : (
-                      <View style={styles.dropdownValue}>
-                        <Text style={styles.rowValue}>{update.kind === 'available' ? `发现 v${update.version}` : update.kind === 'up-to-date' ? '已是最新版' : update.kind === 'error' ? '检查失败，点击重试' : '检查更新'}</Text>
-                        <Ionicons name="chevron-forward" size={14} color={colors.textSecondary} />
-                      </View>
-                    )}
-                  </Pressable>
+                  {(() => {
+                    // 「点击更新好像没用」:每次手动检查都要落到一句看得见、和上一次不同的话上
+                    // (版本号 + 刚刚检查 / 失败原因),而不是闪一下转圈又回到同一句。
+                    const view = describeUpdateRow(update, { currentVersion: APP_VERSION, lastCheckedAt: desktopUpdateLastCheckedAt(), now: Date.now() });
+                    const valueColor = view.tone === 'danger' ? colors.failed : view.tone === 'accent' ? colors.accent : colors.textSecondary;
+                    return (
+                      <Pressable
+                        testID="settings-update-row"
+                        style={({ pressed }) => [styles.row, pressed && view.actionable && { opacity: 0.6 }]}
+                        onPress={() => { if (view.actionable) void checkDesktopUpdate(undefined, { manual: true }); }}
+                        disabled={!view.actionable}
+                        accessibilityRole="button"
+                        accessibilityState={{ busy: view.busy, disabled: !view.actionable }}
+                      >
+                        <Text style={styles.rowLabel}>软件更新</Text>
+                        <View style={{ alignItems: 'flex-end', flexShrink: 1, marginLeft: 12 }}>
+                          <View style={styles.dropdownValue}>
+                            {view.busy ? <ActivityIndicator size="small" color={colors.accent} style={{ marginRight: 6 }} /> : null}
+                            <Text testID="settings-update-label" style={[styles.rowValue, { color: valueColor }]} numberOfLines={2}>{view.label}</Text>
+                            {view.actionable && !view.busy ? <Ionicons name="chevron-forward" size={14} color={colors.textSecondary} /> : null}
+                          </View>
+                          {view.detail ? <Text testID="settings-update-detail" style={[styles.rowValue, { fontSize: 11, color: colors.textMuted, marginTop: 2 }]}>{view.detail}</Text> : null}
+                        </View>
+                      </Pressable>
+                    );
+                  })()}
                 </>
               ) : null}
             </View>
