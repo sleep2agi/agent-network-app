@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, useSyncExternalStore } from 'react';
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { ActivityIndicator, Modal, Pressable, ScrollView, StyleSheet, Switch, Text, TextInput, View, useWindowDimensions } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { HubConfig } from './api';
@@ -11,7 +11,7 @@ import { backupLocalHubData, deleteLocalHubData, LOCAL_HUB_PROFILE_ID, localHubS
 import { openWorkspaceWindow } from './desktop-chat-menu';
 import { loadNotifySettings, saveNotifySettings, subscribeNotifySettings } from './notify-settings';
 import { playChime } from './chime';
-import { SETTINGS_CATEGORIES, activeCategoryKey, filterSettings, visibleRowKeys, type SettingsCategoryKey } from './settings-model';
+import { SETTINGS_CATEGORIES, activeCategoryKey, filterSettings, rememberSettingsCategory, rememberSettingsScroll, rememberedSettingsView, visibleRowKeys, type SettingsCategoryKey } from './settings-model';
 
 // Settings (Vincent tg 720): who am I, where am I connected, which network, which build —
 // and the destructive actions live here instead of cluttering the agents list header.
@@ -62,7 +62,14 @@ export default function SettingsScreen({
   const [quietStart, setQuietStart] = useState(notify.quiet.start);
   const [quietEnd, setQuietEnd] = useState(notify.quiet.end);
   const [query, setQuery] = useState('');
-  const [category, setCategory] = useState<SettingsCategoryKey>('account');
+  // 切主题会整棵重挂(App.tsx key={theme}),分类与滚动位置从模块级记忆恢复,不回到「账号」。
+  const [category, setCategoryState] = useState<SettingsCategoryKey>(() => rememberedSettingsView().category);
+  const setCategory = (key: SettingsCategoryKey) => { rememberSettingsCategory(key); setCategoryState(key); };
+  const paneScrollRef = useRef<ScrollView>(null);
+  useEffect(() => {
+    const { scrollY } = rememberedSettingsView();
+    if (scrollY > 0) requestAnimationFrame(() => paneScrollRef.current?.scrollTo({ y: scrollY, animated: false }));
+  }, []);
   const { width } = useWindowDimensions();
   const compact = width < 640;
 
@@ -169,8 +176,11 @@ export default function SettingsScreen({
         {/* 0.2.80(Vincent 2026-09-19「设置页面往下面滑动不了」):右栏是 ScrollView,padding 在
             contentContainer 上——留在滚动根上的话它在可滚区域之外,最后一行照样贴着窗口底边。 */}
         <ScrollView
+          ref={paneScrollRef}
           contentContainerStyle={styles.content}
           showsVerticalScrollIndicator
+          onScroll={e => rememberSettingsScroll(e.nativeEvent.contentOffset.y)}
+          scrollEventThrottle={100}
           testID="settings-scroll"
         >
           {searching && filtered.length === 0 ? (

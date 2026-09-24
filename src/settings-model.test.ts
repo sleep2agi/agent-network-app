@@ -1,6 +1,6 @@
 // 0.2.83 设置页「左栏分类 + 右栏行式选项 + 搜索」的纯模型。
 import { readFileSync } from 'fs';
-import { SETTINGS_CATEGORIES, activeCategoryKey, filterSettings, rowMatches, visibleRowKeys } from './settings-model';
+import { SETTINGS_CATEGORIES, activeCategoryKey, filterSettings, rememberSettingsCategory, rememberSettingsScroll, rememberedSettingsView, resetSettingsViewMemory, rowMatches, visibleRowKeys } from './settings-model';
 
 let p = 0, t = 0;
 const ck = (n: string, c: boolean) => { t++; if (c) { p++; console.log(`  ✓ ${n}`); } else console.log(`  ✗ ${n}`); };
@@ -65,6 +65,30 @@ const norm = (f: string) => readFileSync(new URL(f, import.meta.url), 'utf-8').r
   ck('右栏标题 = 当前分类名', src.includes('<Text style={styles.paneTitle}>'));
   ck('删除本地工作区放在单独的危险区', src.includes('testID="settings-danger-zone"'));
   ck('提示音 / 免打扰用真正的开关', src.includes('<Switch'));
+}
+
+// 0.2.87:切主题整棵重挂后,设置分类与滚动位置要从模块级记忆恢复(不回到「账号」)。
+{
+  const m = { rememberSettingsCategory, rememberSettingsScroll, rememberedSettingsView, resetSettingsViewMemory };
+  m.resetSettingsViewMemory();
+  ck('默认记忆 = 账号、顶部', m.rememberedSettingsView().category === 'account' && m.rememberedSettingsView().scrollY === 0);
+  m.rememberSettingsCategory('appearance');
+  ck('选了外观后记忆为外观', m.rememberedSettingsView().category === 'appearance');
+  m.rememberSettingsScroll(240.6);
+  ck('记住右栏滚动位置(取整)', m.rememberedSettingsView().scrollY === 241);
+  m.rememberSettingsCategory('appearance');
+  ck('再点同一分类不清滚动位置', m.rememberedSettingsView().scrollY === 241);
+  m.rememberSettingsCategory('notifications');
+  ck('换分类把滚动位置归零', m.rememberedSettingsView().category === 'notifications' && m.rememberedSettingsView().scrollY === 0);
+  m.rememberSettingsScroll(-5); ck('负数滚动位置按 0 记', m.rememberedSettingsView().scrollY === 0);
+  m.rememberSettingsScroll(Number.NaN); ck('非数字滚动位置按 0 记', m.rememberedSettingsView().scrollY === 0);
+  const ret = m.rememberedSettingsView(); (ret as { category: string }).category = 'about';
+  ck('返回的是副本,外部改不到记忆', m.rememberedSettingsView().category === 'notifications');
+  m.resetSettingsViewMemory();
+  const src = norm('./SettingsScreen.tsx');
+  ck('SettingsScreen 用记忆初始化分类(不是写死 account)', src.includes('useState<SettingsCategoryKey>(() => rememberedSettingsView().category)') && !src.includes("useState<SettingsCategoryKey>('account')"));
+  ck('切分类写入记忆', /const setCategory = \(key: SettingsCategoryKey\) => \{ rememberSettingsCategory\(key\);/.test(src));
+  ck('右栏滚动写入记忆并在挂载时恢复', src.includes('onScroll={e => rememberSettingsScroll(e.nativeEvent.contentOffset.y)}') && src.includes('paneScrollRef.current?.scrollTo({ y: scrollY, animated: false })'));
 }
 
 console.log(`${p}/${t} passed`);
