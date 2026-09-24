@@ -1,0 +1,78 @@
+// 节点页的纯模型(2026-09-24 节点页重做,Vincent「每个节点的设置的页面要好好重新设计一下,现在太简陋了」)。
+// 结构照抄设置页(settings-model.ts):左栏分区 + 右栏内容;窄窗(< 640)左栏变顶部一排分段标签。
+// 这里只放「有哪些分区、什么时候出现、概览里哪些字段是主要的」,渲染在 NodeDetailScreen。
+// 纯逻辑,不 import react-native。
+import type { NodeInfoFact } from './node-info';
+
+export type NodeSectionKey = 'overview' | 'model' | 'rules' | 'skills' | 'tasks' | 'danger';
+
+export interface NodeSection {
+  readonly key: NodeSectionKey;
+  readonly label: string;
+  /** Ionicons 名。 */
+  readonly icon: string;
+}
+
+export const NODE_SECTIONS: readonly NodeSection[] = [
+  { key: 'overview', label: '概览', icon: 'grid-outline' },
+  { key: 'model', label: '模型与运行时', icon: 'hardware-chip-outline' },
+  { key: 'rules', label: '规则文件', icon: 'document-text-outline' },
+  { key: 'skills', label: '技能', icon: 'extension-puzzle-outline' },
+  { key: 'tasks', label: '任务', icon: 'list-outline' },
+  { key: 'danger', label: '危险操作', icon: 'warning-outline' },
+];
+
+/** 窄于这个宽度:左栏换成顶部分段标签(与设置页同一断点)。 */
+export const NODE_PAGE_COMPACT_WIDTH = 640;
+
+export interface NodeSectionVisibility {
+  readOnly: boolean;
+  /** 规则文件区有可发请求的目标(node-rules.ts rulesFileTarget 非空)。 */
+  hasRulesTarget: boolean;
+  /** 会话上报了 skills_capable === true。 */
+  skillsCapable: boolean;
+}
+
+/**
+ * 哪些分区出现。原则:只读页**隐藏的是编辑控件,不是分区** —— 有数据的分区都在;
+ * 只有「危险操作」本身就是一组变更动作,只读页整区不出现。
+ */
+export function visibleNodeSections(v: NodeSectionVisibility): NodeSectionKey[] {
+  return NODE_SECTIONS.map(s => s.key).filter(key => {
+    if (key === 'rules') return v.hasRulesTarget;
+    if (key === 'skills') return v.skillsCapable;
+    if (key === 'danger') return !v.readOnly;
+    return true;
+  });
+}
+
+/** 当前选中的分区被隐藏了(比如能力还没上报)→ 回到第一个可见分区。 */
+export function resolveActiveSection(active: NodeSectionKey, visible: readonly NodeSectionKey[]): NodeSectionKey {
+  return visible.includes(active) ? active : visible[0] ?? 'overview';
+}
+
+/** 概览网格里默认露出的字段;其余放进「更多信息」折叠区。 */
+export const PRIMARY_FACT_LABELS: readonly string[] = ['节点 ID', '服务器', 'Hostname', '工作路径', '所属 team', '最后更新'];
+
+export function splitOverviewFacts(facts: readonly NodeInfoFact[]): { primary: NodeInfoFact[]; secondary: NodeInfoFact[] } {
+  const primary: NodeInfoFact[] = [];
+  const secondary: NodeInfoFact[] = [];
+  for (const label of PRIMARY_FACT_LABELS) {
+    const fact = facts.find(f => f.label === label);
+    if (fact) primary.push(fact);
+  }
+  for (const fact of facts) if (!PRIMARY_FACT_LABELS.includes(fact.label)) secondary.push(fact);
+  return { primary, secondary };
+}
+
+/** 空值统一显示「—」,让人分得清「字段没上报」和「界面坏了」。 */
+export function factText(value?: string | null): string {
+  return value && value.trim().length > 0 ? value : '—';
+}
+
+/** 头部卡片名字下面那一排小标签:运行时 · 模型 · 版本 · 主机,缺的不显示。 */
+export function headerChips(facts: readonly NodeInfoFact[]): string[] {
+  const get = (label: string) => facts.find(f => f.label === label)?.value?.trim() || '';
+  const version = get('版本');
+  return [get('Runtime'), get('模型'), version ? `v${version.replace(/^v/, '')}` : '', get('Hostname') || get('服务器')].filter(Boolean);
+}
