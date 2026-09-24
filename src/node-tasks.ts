@@ -18,6 +18,8 @@ export interface NodeTaskRow {
   createdAt?: string;
   /** 运行中:started_at ?? delivered_at ?? created_at;排队:created_at。 */
   since?: string;
+  /** 节点侧最后一次动静(送达/开始/提交运行时/消费/创建里最晚的),判「可能卡住」用。 */
+  lastActivity?: string;
   priority?: string;
 }
 
@@ -34,6 +36,14 @@ export function summarizeTask(content?: string, max = 140): string {
   return first.length > max ? `${first.slice(0, max - 1)}…` : first || '(空任务)';
 }
 
+/** 这条任务在节点侧最后一次有动静的时间;hub 各时间戳同格式,按字符串比即可。 */
+export function latestActivity(t: HubTask): string | undefined {
+  const all = [t.created_at, t.delivered_at, t.started_at, t.runtime_submitted_at, t.consumed_at]
+    .filter((v): v is string => typeof v === 'string' && v.length > 0)
+    .map(v => v.replace('T', ' ').slice(0, 19));
+  return all.length ? all.sort()[all.length - 1] : undefined;
+}
+
 function toRow(t: HubTask, since?: string): NodeTaskRow | null {
   if (!t?.task_id) return null;
   return {
@@ -44,6 +54,7 @@ function toRow(t: HubTask, since?: string): NodeTaskRow | null {
     content: t.content ?? '',
     createdAt: t.created_at,
     since,
+    lastActivity: latestActivity(t),
     priority: t.priority,
   };
 }

@@ -33,5 +33,7 @@ const screen = readFileSync(new URL('./NodeDetailScreen.tsx', import.meta.url), 
 check('NodeDetailScreen 渲染 NodeTasksSection(cfg, alias)', /<NodeTasksSection cfg=\{cfg\} alias=\{alias\}/.test(screen));
 const section = readFileSync(new URL('./NodeTasksSection.tsx', import.meta.url), 'utf8');
 check('NodeTasksSection 按 to_name=alias 拉任务并分组', section.includes('fetchTasks(cfg, { to_name: alias') && (section.includes('partitionNodeTasks(') || section.includes('groupNodeTasks(')));
+check('NodeTasksSection 用 taskPreview / splitStale / priorityPill / AliasAvatar / MarkdownMessage(2026-09-25 重做)',
+  ['taskPreview(', 'splitStale(', 'priorityPill(', '<AliasAvatar', '<MarkdownMessage'].every(s => section.includes(s)));
 console.log(`node tasks: ${passed}/${total} checks passed`);
 if (passed !== total) process.exit(1);
