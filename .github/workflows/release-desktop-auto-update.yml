@@ -119,6 +119,12 @@ jobs:
           releaseBody: |-
             Signed and notarized stable update for macOS (Apple Silicon) and Windows (x64).
 
+            What's new in 0.2.86:
+            - Scrollbars are now thin and stay hidden until you hover over a list or scroll it, like in WeChat,
+              so long conversations and lists look cleaner.
+            - Node details show the rules file for Codex and OpenCode nodes too, even before those nodes are
+              upgraded to report the capability; Claude nodes are labelled CLAUDE.md.
+
             What's new in 0.2.85:
             - A quieter, more minimal look. Surfaces are separated by background tone instead of borders,
               the accent color is kept for the navigation rail, primary buttons and links, headings top out at
