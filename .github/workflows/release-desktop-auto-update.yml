@@ -119,6 +119,16 @@ jobs:
           releaseBody: |-
             Signed and notarized stable update for macOS (Apple Silicon) and Windows (x64).
 
+            What's new in 0.2.88:
+            - Checking for updates in Settings → About now always ends in a visible result: you see that a check is running,
+              then either the new version, "up to date" with when it was checked, or the reason the check failed.
+            - The node page uses wide windows: the content is centered and grows to 1080px instead of sticking
+              to the left, and the rules-file editor fills the window height with Reload and Save above it.
+            - The node Tasks section is easier to read: previews are plain text without markdown symbols or a
+              repeated sender header; tasks are grouped into In progress, Queued, Possibly stuck (no activity for
+              over a day, collapsed by default) and Recently finished; each row shows the sender, a relative time
+              and a priority tag, and clicking a row shows the full text.
+
             What's new in 0.2.87:
             - The node page is redesigned: a header card with the node's name, status and runtime, and a
               section bar to jump between Overview, Model & runtime, Rules file, Skills, Tasks and Danger zone.
