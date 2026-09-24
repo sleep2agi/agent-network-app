@@ -1,4 +1,6 @@
 import { stopLocalHub } from './local-hub';
+import { atLeast, type DesktopUpdateState } from './update-check-state';
+export type { DesktopUpdateState } from './update-check-state';
 
 /**
  * 更新提示只展示**本次**新版本那一段(Vincent 2026-09-06 截图:发布说明是累计的,8 个版本全铺在
@@ -18,14 +20,10 @@ export function latestReleaseNotes(body: string | null | undefined): string {
   return section;
 }
 
-export type DesktopUpdateState =
-  | { kind: 'idle' | 'unsupported' | 'checking' | 'up-to-date' }
-  | { kind: 'available'; version: string; notes: string }
-  | { kind: 'downloading'; version: string; percent?: number }
-  | { kind: 'error'; message: string };
 
 let state: DesktopUpdateState = { kind: 'idle' };
 let pendingUpdate: any;
+let lastCheckedAt: number | undefined;
 let checkInFlight: Promise<DesktopUpdateState> | undefined;
 const listeners = new Set<() => void>();
 
@@ -36,6 +34,8 @@ const publish = (next: DesktopUpdateState) => {
 };
 
 export const desktopUpdateSnapshot = () => state;
+/** 上一次检查**结束**的时间(成功或失败都算);设置页用它显示「刚刚检查 / N 分钟前检查」。 */
+export const desktopUpdateLastCheckedAt = () => lastCheckedAt;
 export const subscribeDesktopUpdates = (listener: () => void) => {
   listeners.add(listener);
   return () => listeners.delete(listener);
@@ -43,7 +43,14 @@ export const subscribeDesktopUpdates = (listener: () => void) => {
 
 type UpdateCheck = (options: { timeout: number }) => Promise<any>;
 
-export async function checkDesktopUpdate(checkOverride?: UpdateCheck): Promise<DesktopUpdateState> {
+/**
+ * `manual: true` = 用户点的:「检查中…」至少可见 700ms,结果一定落到一个看得见的状态上。
+ * 启动时的自动检查不传,没有新版本时安静地结束(设置页那一行不会自己跳变提醒)。
+ */
+export async function checkDesktopUpdate(
+  checkOverride?: UpdateCheck,
+  opts: { manual?: boolean; minVisibleMs?: number; sleep?: (ms: number) => Promise<void> } = {},
+): Promise<DesktopUpdateState> {
   if (!(globalThis as any).__TAURI_INTERNALS__) return publish({ kind: 'unsupported' });
   if (checkInFlight) return checkInFlight;
   checkInFlight = (async () => {
@@ -51,7 +58,14 @@ export async function checkDesktopUpdate(checkOverride?: UpdateCheck): Promise<D
     pendingUpdate = undefined;
     try {
       const check = checkOverride || (await import('@tauri-apps/plugin-updater')).check;
-      pendingUpdate = await check({ timeout: 20_000 });
+      const found = check({ timeout: 20_000 });
+      pendingUpdate = opts.manual
+        ? await atLeast(found, opts.minVisibleMs ?? 700, {
+          now: () => Date.now(),
+          sleep: opts.sleep ?? (ms => new Promise(resolve => setTimeout(resolve, ms))),
+        })
+        : await found;
+      lastCheckedAt = Date.now();
       if (!pendingUpdate) return publish({ kind: 'up-to-date' });
       return publish({
         kind: 'available',
@@ -59,6 +73,7 @@ export async function checkDesktopUpdate(checkOverride?: UpdateCheck): Promise<D
         notes: pendingUpdate.body || '此版本包含功能改进和问题修复。',
       });
     } catch (error: any) {
+      lastCheckedAt = Date.now();
       return publish({ kind: 'error', message: error?.message || String(error) });
     } finally {
       checkInFlight = undefined;
