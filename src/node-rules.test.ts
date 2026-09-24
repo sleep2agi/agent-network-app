@@ -73,5 +73,21 @@ ck('失败且没有 existing → null(真错误)', requestIdToFollow({ ok: false
   ck('会话目标的文件名预测:claude-code → CLAUDE.md', predictedRulesFileName({ agent: 'claude-code' }, sessionOnly) === 'CLAUDE.md');
 }
 
+// ── agent-node 会话即使没上报 rules_file_capable 也能读(agent-node 早就答门铃,.84 起才上报旗) ──
+{
+  const ocNode = { node_id: 'n_oc', alias: 'node-a', runtime: 'opencode-cli' };
+  const ocSession = { alias: 'node-a', agent: 'agent-node:opencode' };
+  const viaAgentNode = rulesFileTarget({ readOnly: true, node: ocNode, session: ocSession });
+  ck('agent-node 会话未上报旗 + 有 nodes 行:只读页也显示,按 node_id 发', viaAgentNode?.node_id === 'n_oc', JSON.stringify(viaAgentNode));
+  ck('agent-node 会话未上报旗 + 可编辑详情页:显示', rulesFileTarget({ readOnly: false, node: ocNode, session: ocSession })?.node_id === 'n_oc');
+  ck('agent-node 会话但没有 nodes 行:不显示(按 alias 发要靠节点声明旗)', rulesFileTarget({ readOnly: true, node: null, session: ocSession }) === null);
+  ck('纯 claude-code 会话未上报旗 + 只读:仍不显示(要 anet .111)', rulesFileTarget({ readOnly: true, node: { node_id: 'n_cc', alias: 'b', runtime: 'claude-code-cli' }, session: { alias: 'b', agent: 'claude-code' } }) === null);
+  ck('上报了旗的 claude-code 会话仍显示', rulesFileTarget({ readOnly: true, node: null, session: { alias: 'b', agent: 'claude-code', rules_file_capable: true } })?.alias === 'b');
+  ck('agent 前缀大小写不敏感', rulesFileTarget({ readOnly: true, node: ocNode, session: { alias: 'node-a', agent: 'Agent-Node:codex' } })?.node_id === 'n_oc');
+  ck('agent-node:opencode 只有 agent 字段时 → AGENTS.md', predictedRulesFileName({ agent: 'agent-node:opencode' }) === 'AGENTS.md');
+  ck('agent-node:claude 只有 agent 字段时 → CLAUDE.md(先剥 agent-node: 前缀)', predictedRulesFileName({ agent: 'agent-node:claude' }) === 'CLAUDE.md');
+  ck('agent-node:codex-app-server → AGENTS.md', predictedRulesFileName({ agent: 'agent-node:codex-app-server' }) === 'AGENTS.md');
+}
+
 console.log(`\n${pass}/${total} passed`);
 if (pass !== total) process.exit(1);
