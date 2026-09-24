@@ -127,3 +127,28 @@ export function activeCategoryKey(
   if (filtered.some((c) => c.key === current)) return current;
   return filtered[0]?.key ?? current;
 }
+
+// 0.2.87(Vincent 2026-09-24「点击切换主题之后,跳转到其他地方去了,没有停留在外观处」):
+// App.tsx 用 key={theme}(workspaceKey 以 theme 开头)在切主题时整棵重挂,好让模块级 styles
+// 重算;SettingsScreen 的 useState 随之重置,分类回到默认「账号」。这里用**模块级**记忆
+// 保存「当前分类 + 右栏滚动位置」——模块不随重挂重载,所以切主题后能原样恢复。
+// 纯逻辑,不 import react-native。
+let viewMemory: { category: SettingsCategoryKey; scrollY: number } = { category: 'account', scrollY: 0 };
+
+export function rememberedSettingsView(): { category: SettingsCategoryKey; scrollY: number } {
+  return { ...viewMemory };
+}
+
+/** 切分类时记下新分类;换了分类就把滚动位置归零(新分类从顶部看起)。 */
+export function rememberSettingsCategory(key: SettingsCategoryKey): void {
+  if (viewMemory.category !== key) viewMemory = { category: key, scrollY: 0 };
+}
+
+export function rememberSettingsScroll(y: number): void {
+  viewMemory = { ...viewMemory, scrollY: Number.isFinite(y) && y > 0 ? Math.round(y) : 0 };
+}
+
+/** 测试用。 */
+export function resetSettingsViewMemory(): void {
+  viewMemory = { category: 'account', scrollY: 0 };
+}
