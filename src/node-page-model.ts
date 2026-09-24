@@ -25,6 +25,30 @@ export const NODE_SECTIONS: readonly NodeSection[] = [
 /** 窄于这个宽度:左栏换成顶部分段标签(与设置页同一断点)。 */
 export const NODE_PAGE_COMPACT_WIDTH = 640;
 
+/**
+ * 内容列的上限(Vincent 09-24「空了」:宽窗下内容被 880 卡成左边一窄条,右边一大片空)。
+ * 列随窗口变宽、到这里封顶,在右栏里**居中**:封顶以后多出来的宽度分到两边,
+ * 不会全堆在一侧读成「空了」;1080 放得下一行约 70 个汉字 / 130 个等宽字符,
+ * 再宽规则文件这类长文就难读了。
+ */
+export const NODE_PAGE_CONTENT_MAX_WIDTH = 1080;
+
+/** 规则文件编辑框的最矮高度;窗口更高时编辑框吃掉剩下的竖向空间。 */
+export const NODE_RULES_EDITOR_MIN_HEIGHT = 320;
+
+/** 右栏宽 paneWidth、左右内边距 padding 时,内容列实际多宽。 */
+export function nodePageContentWidth(paneWidth: number, padding: number): number {
+  if (!Number.isFinite(paneWidth) || paneWidth <= 0) return 0;
+  return Math.max(0, Math.min(paneWidth - 2 * padding, NODE_PAGE_CONTENT_MAX_WIDTH));
+}
+
+/** 概览字段网格几列:窄一列,常规两列,内容列够宽(≥ 900)三列。 */
+export function overviewFactColumns(contentWidth: number): 1 | 2 | 3 {
+  if (contentWidth >= 900) return 3;
+  if (contentWidth >= 480) return 2;
+  return 1;
+}
+
 export interface NodeSectionVisibility {
   readOnly: boolean;
   /** 规则文件区有可发请求的目标(node-rules.ts rulesFileTarget 非空)。 */

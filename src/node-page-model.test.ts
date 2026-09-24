@@ -1,7 +1,7 @@
 // 节点页重做(2026-09-24):分组与分区的纯逻辑。ck 风格自执行脚本(不是 bun:test)。
 import { groupNodeTasks, isSelfTask } from './node-task-groups';
 import { partitionNodeTasks } from './node-tasks';
-import { NODE_SECTIONS, factText, headerChips, resolveActiveSection, splitOverviewFacts, visibleNodeSections } from './node-page-model';
+import { NODE_PAGE_CONTENT_MAX_WIDTH, NODE_RULES_EDITOR_MIN_HEIGHT, NODE_SECTIONS, nodePageContentWidth, overviewFactColumns, factText, headerChips, resolveActiveSection, splitOverviewFacts, visibleNodeSections } from './node-page-model';
 
 let p = 0, t = 0;
 const ck = (n: string, c: boolean) => { t++; if (c) p++; else console.log(`  ✗ ${n}`); };
@@ -52,6 +52,15 @@ ck('其余字段进「更多信息」且不重复', split.secondary.length === f
 ck('头部标签:运行时 · 模型 · 版本 · 主机', JSON.stringify(headerChips(facts)) === JSON.stringify(['codex-sdk', 'gpt-5.5', 'v2.5.0-preview.83', 'devbox']));
 ck('头部标签:缺的不显示,版本不重复加 v', JSON.stringify(headerChips([{ label: '版本', value: 'v1.2' }])) === JSON.stringify(['v1.2']));
 ck('空值显示「—」', factText('') === '—' && factText(null) === '—' && factText('  ') === '—' && factText('x') === 'x');
+
+// 宽窗布局(Vincent 09-24「空了」)
+ck('内容列随窗口变宽', nodePageContentWidth(900, 24) === 852 && nodePageContentWidth(1100, 24) === 1052);
+ck('内容列到上限封顶,不再是 880 的窄条', nodePageContentWidth(1426, 24) === NODE_PAGE_CONTENT_MAX_WIDTH && NODE_PAGE_CONTENT_MAX_WIDTH >= 960 && NODE_PAGE_CONTENT_MAX_WIDTH <= 1100);
+ck('封顶边界:恰好等于上限 + 两侧内边距', nodePageContentWidth(NODE_PAGE_CONTENT_MAX_WIDTH + 48, 24) === NODE_PAGE_CONTENT_MAX_WIDTH && nodePageContentWidth(NODE_PAGE_CONTENT_MAX_WIDTH + 47, 24) === NODE_PAGE_CONTENT_MAX_WIDTH - 1);
+ck('窄屏:内容列 = 窗宽减内边距', nodePageContentWidth(600, 16) === 568);
+ck('未测到宽度 / 比内边距还窄 → 0,不出负数', nodePageContentWidth(0, 24) === 0 && nodePageContentWidth(NaN, 24) === 0 && nodePageContentWidth(30, 24) === 0);
+ck('概览网格列数:1/2/3 与边界', overviewFactColumns(479) === 1 && overviewFactColumns(480) === 2 && overviewFactColumns(899) === 2 && overviewFactColumns(900) === 3 && overviewFactColumns(NODE_PAGE_CONTENT_MAX_WIDTH) === 3);
+ck('编辑框最矮高度 ≥ 320', NODE_RULES_EDITOR_MIN_HEIGHT >= 320);
 
 console.log(`node page model: ${p}/${t} checks passed`);
 process.exit(p === t ? 0 : 1);

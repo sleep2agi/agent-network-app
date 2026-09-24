@@ -65,7 +65,7 @@ import NodeRulesSection from './NodeRulesSection';
 import { rulesFileTarget } from './node-rules';
 import NodeModelSection from './NodeModelSection';
 import NodeSkillsSection from './NodeSkillsSection';
-import { NODE_PAGE_COMPACT_WIDTH, NODE_SECTIONS, factText, headerChips, resolveActiveSection, splitOverviewFacts, visibleNodeSections, type NodeSectionKey } from './node-page-model';
+import { NODE_PAGE_COMPACT_WIDTH, NODE_PAGE_CONTENT_MAX_WIDTH, NODE_SECTIONS, factText, headerChips, nodePageContentWidth, overviewFactColumns, resolveActiveSection, splitOverviewFacts, visibleNodeSections, type NodeSectionKey } from './node-page-model';
 
 const POLL_MS = 10_000; // same cadence as AgentsScreen — hub-friendly, felt-live
 
@@ -112,9 +112,9 @@ function NodeActionButton({
 }
 
 /** 概览网格里的一格:小号灰色标签在上,值在下;空值显示「—」(分得清「没上报」和「坏了」)。 */
-function FactCell({ fact, wide }: { fact: NodeInfoFact; wide: boolean }) {
+function FactCell({ fact, columns }: { fact: NodeInfoFact; columns: number }) {
   return (
-    <View style={{ width: wide ? '50%' : '100%', paddingVertical: spacing.sm, paddingRight: spacing.lg, gap: 2 }}>
+    <View style={{ width: `${100 / columns}%`, paddingVertical: spacing.sm, paddingRight: spacing.lg, gap: 2 }}>
       <Text style={{ color: colors.textMuted, fontSize: typeScale.small }}>{fact.label}</Text>
       <Text style={{ color: colors.text, fontSize: typeScale.body }} selectable numberOfLines={2}>{factText(fact.value)}</Text>
     </View>
@@ -159,6 +159,10 @@ export default function NodeDetailScreen({
   const [showMoreFacts, setShowMoreFacts] = useState(false);
   const { width } = useWindowDimensions();
   const compact = width < NODE_PAGE_COMPACT_WIDTH;
+  // 右栏实测宽度(左侧还有服务器侧栏/分区栏,窗口宽≠右栏宽);没量到之前按窗口估。
+  const [paneWidth, setPaneWidth] = useState(0);
+  const contentPadding = compact ? spacing.lg : spacing.xl;
+  const factColumns = compact ? 1 : overviewFactColumns(nodePageContentWidth(paneWidth || width, contentPadding));
   // Force re-render on theme switch. `styles` reassigns via live binding
   // (see app-styles.ts header) but child style props are captured at
   // render — a manual bump is how the sibling screens do it too.
@@ -364,7 +368,7 @@ export default function NodeDetailScreen({
         <View>
           <SectionTitle title="概览" />
           <View style={[card, { flexDirection: 'row', flexWrap: 'wrap' }]}>
-            {primary.map(fact => <FactCell key={fact.label} fact={fact} wide={!compact} />)}
+            {primary.map(fact => <FactCell key={fact.label} fact={fact} columns={factColumns} />)}
           </View>
           {secondary.length ? (
             <View style={{ marginTop: spacing.sm }}>
@@ -373,7 +377,7 @@ export default function NodeDetailScreen({
               </Pressable>
               {showMoreFacts ? (
                 <View style={[card, { flexDirection: 'row', flexWrap: 'wrap', marginTop: spacing.xs }]}>
-                  {secondary.map(fact => <FactCell key={fact.label} fact={fact} wide={!compact} />)}
+                  {secondary.map(fact => <FactCell key={fact.label} fact={fact} columns={factColumns} />)}
                 </View>
               ) : null}
             </View>
@@ -397,14 +401,14 @@ export default function NodeDetailScreen({
       <View>
         <SectionTitle title="模型与运行时" hint={readOnly ? '只读视图:在节点详情里可以直接改模型。' : '改模型会让节点重启一次,不经过大模型。'} />
         <View style={[card, { flexDirection: 'row', flexWrap: 'wrap' }]}>
-          {runtimeFacts.map(fact => <FactCell key={fact.label} fact={fact} wide={!compact} />)}
+          {runtimeFacts.map(fact => <FactCell key={fact.label} fact={fact} columns={factColumns} />)}
         </View>
         {/* RFC-024 —— 不经 LLM 直接改模型;需要权威 node_id。 */}
         {!readOnly && node ? <NodeModelSection cfg={cfg} node={node} /> : null}
       </View>
     );
     if (section === 'rules') return (
-      <View>
+      <View style={{ flex: 1 }}>
         <SectionTitle title="规则文件" hint="节点工作目录里的 CLAUDE.md / AGENTS.md,节点每次开会话都会读。" />
         {/* app#225 —— 节点规则文件（CLAUDE.md / AGENTS.md）查看/编辑。显示条件与请求目标见
             node-rules.ts rulesFileTarget:会话上报 rules_file_capable 时详情/只读页都显示
@@ -462,8 +466,13 @@ export default function NodeDetailScreen({
       {headerCard}
       <View style={{ flex: 1, flexDirection: compact ? 'column' : 'row', minHeight: 0 }}>
         {nav}
-        <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: compact ? spacing.lg : spacing.xl, paddingBottom: spacing.xl * 2, maxWidth: 880 }}>
-          {content}
+        {/* 内容列随窗口变宽、到 NODE_PAGE_CONTENT_MAX_WIDTH 封顶并居中(Vincent 09-24「空了」:
+            原来 maxWidth 880 贴左,2000px 宽窗右边空一大片)。flexGrow 让规则文件编辑框能吃满剩余高度。 */}
+        <ScrollView style={{ flex: 1 }} onLayout={e => setPaneWidth(e.nativeEvent.layout.width)}
+          contentContainerStyle={{ flexGrow: 1, padding: contentPadding, paddingBottom: section === 'rules' ? contentPadding : spacing.xl * 2 }}>
+          <View style={{ flexGrow: 1, width: '100%', maxWidth: NODE_PAGE_CONTENT_MAX_WIDTH, alignSelf: 'center' }} testID="node-page-content">
+            {content}
+          </View>
         </ScrollView>
       </View>
 
