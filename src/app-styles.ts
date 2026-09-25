@@ -108,6 +108,10 @@ const makeStyles = () =>
   tab: { flex: 1, alignItems: 'center', paddingVertical: spacing.sm, gap: 2 },
   tabLabel: { color: colors.textSecondary, fontSize: 11, fontWeight: '500' },
   tabActive: { color: colors.accent, fontWeight: '600' },
+  // Non-desktop shell: [left rail slot | content]; the rail only renders in the
+  // Android wide layout (src/nav-chrome.ts). On the phone the slot is empty.
+  navShell: { flex: 1, flexDirection: 'row', minHeight: 0 },
+  navContent: { flex: 1, minWidth: 0 },
   // Android wide (foldable unfolded / tablet) list + detail — see src/wide-layout.ts.
   twoPane: { flex: 1, flexDirection: 'row', minHeight: 0 },
   twoPaneList: { borderRightWidth: 1, borderRightColor: colors.border },
