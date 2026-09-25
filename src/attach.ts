@@ -58,6 +58,28 @@ export const pickImage = async (): Promise<PickedImage | null> => {
   };
 };
 
+/** 「＋」 panel 拍照: take one photo with the system camera. Same PickedImage shape
+ *  as pickImage. CAMERA is already declared by expo-image-picker's own
+ *  AndroidManifest (merged at build); iOS text comes from the app.json plugin. */
+export const pickCameraPhoto = async (): Promise<PickedImage | null> => {
+  const perm = await ImagePicker.requestCameraPermissionsAsync();
+  if (!perm.granted) return null;
+  const result = await ImagePicker.launchCameraAsync({
+    mediaTypes: ['images'],
+    quality: 0.85,
+    allowsEditing: false,
+  });
+  if (result.canceled || !result.assets?.length) return null;
+  const a = result.assets[0];
+  return {
+    uri: a.uri,
+    fileName: a.fileName ?? `photo-${Date.now()}.jpg`,
+    mimeType: a.mimeType ?? 'image/jpeg',
+    fileSize: a.fileSize,
+    webFile: (a as any).file,
+  };
+};
+
 import { HubConfig } from './api';
 
 // Frozen contract from sleep2agi/agent-network#221 (commit 72fc790):

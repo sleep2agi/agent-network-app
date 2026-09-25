@@ -39,6 +39,7 @@ import { COMPOSER_HEIGHT_DEFAULT, clampComposerHeight, composerDragHandlers, inp
 import {
   ATTACH_ENABLED,
   attachmentTextHint,
+  pickCameraPhoto,
   pickDocument,
   pickImage,
   uploadImage,
@@ -67,6 +68,7 @@ import { beginForward, confirmForward, markForwardAmbiguous, mayProjectForward, 
 import { parseBtwFirstToken } from './btw-command';
 import { layoutGeneration, releaseOnUnmount, takeHandoff } from './layout-handoff';
 import SideThreadDrawer, { type SideThreadLaunch } from './SideThreadDrawer';
+import { nextPlusPanel, plusPanelHeight, plusPanelItems, type PlusItemKey, type PlusPanelEvent } from './composer-plus-panel';
 
 // Chat with one agent. Mirrors dashboard M4: open with the newest PAGE
 // messages, grow the window when the user scrolls toward older history.
@@ -240,6 +242,48 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
   // 值全局持久化(切会话 / 重启保持)。分隔条在输入区上沿,向上拖变高。
   const [rootHeight, setRootHeight] = useState(0);
   const keyboardVisible = useKeyboardVisible(Keyboard, Platform.OS);
+  // 「＋」 panel (composer-plus-panel.ts). Mobile: inline panel under the input row,
+  // sharing the keyboard's slot. Desktop: the small popover Modal. One level either way.
+  const plusOpenRef = useRef(plusMenuOpen);
+  plusOpenRef.current = plusMenuOpen;
+  const lastKeyboardHeightRef = useRef<number | undefined>(undefined);
+  const plusEvent = (event: PlusPanelEvent): boolean => {
+    const t = nextPlusPanel(plusOpenRef.current, event);
+    plusOpenRef.current = t.open;
+    if (t.dismissKeyboard && !desktop) {
+      mainComposerRef.current?.blur();
+      Keyboard.dismiss();
+    }
+    setPlusMenuOpen(t.open);
+    return t.handled;
+  };
+  // Keyboard up (tap on the input, IME restore, …) → panel down: they never stack.
+  useEffect(() => {
+    if (keyboardVisible) plusEvent('keyboardShown');
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [keyboardVisible]);
+  // Remember the real IME height so the panel occupies the same slot (WeChat).
+  useEffect(() => {
+    if (Platform.OS === 'web') return;
+    const sub = Keyboard.addListener('keyboardDidShow', (e: any) => {
+      const h = e?.endCoordinates?.height;
+      if (typeof h === 'number' && h > 0) lastKeyboardHeightRef.current = h;
+    });
+    return () => sub.remove();
+  }, []);
+  // Android back closes the panel before it leaves the chat.
+  useEffect(() => {
+    if (!plusMenuOpen || desktop || Platform.OS !== 'android') return;
+    const sub = BackHandler.addEventListener('hardwareBackPress', () => plusEvent('back'));
+    return () => sub.remove();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [plusMenuOpen, desktop]);
+  // Switching conversation (two-pane sidebar) never carries an open panel over.
+  useEffect(() => {
+    plusEvent('conversationChanged');
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [alias]);
+  const { height: plusWindowHeight } = useWindowDimensions();
   const rootHeightRef = useRef(0);
   const [composerHeightRaw, setComposerHeightRaw] = useState<number>(() => loadComposerHeight() ?? COMPOSER_HEIGHT_DEFAULT);
   const composerHeight = clampComposerHeight(composerHeightRaw, rootHeight || undefined);
@@ -1068,24 +1112,20 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
   );
   const subtitle = processing ? '••• 正在处理…' : sessionStatus ? agentStatusLabel(sessionStatus) : '';
 
-  const attach = () => {
-    // Native gets a 图片/文件 choice; web (test harness) goes straight
-    // to the image picker — Alert multi-button is unsupported there.
-    if (Platform.OS === 'web') {
-      pickImage().then(img => img && appendAttachment(img));
-      return;
-    }
-    Alert.alert('发送附件', undefined, [
-      { text: '图片', onPress: () => pickImage().then(img => img && appendAttachment(img)) },
-      { text: '文件', onPress: () => pickDocument().then(f => f && appendAttachment(f)) },
-      { text: '取消', style: 'cancel' },
-    ]);
+  // One tap = one action (no intermediate 「发送附件」 Alert any more). Picked items go
+  // to the main composer draft, exactly as the old 图片/文件 Alert buttons did.
+  const runPlusItem = (key: PlusItemKey) => {
+    plusEvent('itemPicked');
+    const pickInto = (pick: () => Promise<PickedImage | null>) =>
+      pick()
+        .then(item => { if (item) appendAttachment(item); })
+        .catch(error => Alert.alert('无法打开', error instanceof Error ? error.message : String(error)));
+    if (key === 'album') pickInto(pickImage);
+    else if (key === 'file') pickInto(pickDocument);
+    else if (key === 'camera') pickInto(pickCameraPhoto);
+    else setBtwLaunch(current => ({ id: (current?.id ?? 0) + 1 }));
   };
-
-  const openBtwComposer = () => {
-    setPlusMenuOpen(false);
-    setBtwLaunch(current => ({ id: (current?.id ?? 0) + 1 }));
-  };
+  const plusItems = plusPanelItems({ os: Platform.OS, desktop, attachEnabled: ATTACH_ENABLED });
 
   const exactSideThreadTask = messages.find(message => message.thread_id && message.turn_id);
   const sideThreadScope = exactSideThreadTask?.thread_id && exactSideThreadTask.turn_id
@@ -1094,11 +1134,6 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
       boundary: { kind: 'through' as const, turnId: exactSideThreadTask.turn_id },
     }
     : undefined;
-
-  const openAttachmentPicker = () => {
-    setPlusMenuOpen(false);
-    attach();
-  };
 
   return (
     <KeyboardAvoidingView
@@ -1152,7 +1187,7 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
         <Pressable
           accessibilityRole="button"
           accessibilityLabel="打开 BTW 旁路线程"
-          onPress={openBtwComposer}
+          onPress={() => runPlusItem('btw')}
           hitSlop={8}
           style={({ pressed }) => [styles.btwHeaderButton, pressed && { opacity: 0.6 }]}
         >
@@ -1644,35 +1679,26 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
         </Pressable>
       </Modal>
 
-      <Modal visible={plusMenuOpen} transparent animationType="fade" onRequestClose={() => setPlusMenuOpen(false)}>
+      <Modal visible={desktop && plusMenuOpen} transparent animationType="fade" onRequestClose={() => setPlusMenuOpen(false)}>
         <Pressable style={styles.plusMenuBackdrop} onPress={() => setPlusMenuOpen(false)}>
-          <Pressable style={[styles.plusMenu, desktop ? styles.plusMenuDesktop : styles.plusMenuMobile]} onPress={() => {}}>
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel="新建 BTW 旁路线程"
-              style={({ pressed }) => [styles.plusMenuItem, pressed && styles.actionItemPressed]}
-              onPress={openBtwComposer}
-            >
-              <View style={styles.plusMenuIcon}><Text style={styles.plusMenuBtw}>BTW</Text></View>
-              <View style={styles.plusMenuCopy}>
-                <Text style={styles.plusMenuTitle}>旁路提问</Text>
-                <Text style={styles.plusMenuHint}>不打断、不 steer 当前主任务</Text>
-              </View>
-            </Pressable>
-            {ATTACH_ENABLED ? (
+          <Pressable style={[styles.plusMenu, styles.plusMenuDesktop]} onPress={() => {}}>
+            {plusItems.map(item => (
               <Pressable
+                key={item.key}
                 accessibilityRole="button"
-                accessibilityLabel="添加附件"
+                accessibilityLabel={item.a11y}
                 style={({ pressed }) => [styles.plusMenuItem, pressed && styles.actionItemPressed]}
-                onPress={openAttachmentPicker}
+                onPress={() => runPlusItem(item.key)}
               >
-                <View style={styles.plusMenuIcon}><Ionicons name="attach" size={21} color={colors.textSecondary} /></View>
+                <View style={styles.plusMenuIcon}>
+                  {item.icon ? <Ionicons name={item.icon as any} size={20} color={colors.textSecondary} /> : <Text style={styles.plusMenuBtw}>BTW</Text>}
+                </View>
                 <View style={styles.plusMenuCopy}>
-                  <Text style={styles.plusMenuTitle}>添加附件</Text>
-                  <Text style={styles.plusMenuHint}>添加到主会话草稿</Text>
+                  <Text style={styles.plusMenuTitle}>{item.label}</Text>
+                  {item.key === 'btw' ? <Text style={styles.plusMenuHint}>不打断、不 steer 当前主任务</Text> : null}
                 </View>
               </Pressable>
-            ) : null}
+            ))}
           </Pressable>
         </Pressable>
       </Modal>
@@ -1713,7 +1739,7 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
             multiline
           />
           <View style={styles.desktopToolbar}>
-            <Pressable accessibilityLabel="更多发送方式" style={({ pressed }) => [styles.desktopToolButton, pressed && { opacity: 0.6 }]} onPress={() => setPlusMenuOpen(true)} hitSlop={6}>
+            <Pressable accessibilityLabel="更多发送方式" style={({ pressed }) => [styles.desktopToolButton, pressed && { opacity: 0.6 }]} onPress={() => plusEvent('toggle')} hitSlop={6}>
                 <Ionicons name="add-circle-outline" size={24} color={colors.textSecondary} />
             </Pressable>
             <View style={styles.desktopToolbarRight}>
@@ -1749,14 +1775,15 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
           </Pressable>
         </View>
       ) : null}
-      <View style={[styles.inputRow, { paddingBottom: spacing.md + composerInset }]}>
+      <View style={[styles.inputRow, { paddingBottom: spacing.md + (plusMenuOpen ? 0 : composerInset) }]}>
         <Pressable
-          accessibilityLabel="更多发送方式"
-          style={({ pressed }) => [styles.attachBtn, pressed && { opacity: 0.6 }]}
-          onPress={() => setPlusMenuOpen(true)}
+          accessibilityLabel={plusMenuOpen ? '收起更多发送方式' : '更多发送方式'}
+          accessibilityState={{ expanded: plusMenuOpen }}
+          style={({ pressed }) => [styles.attachBtn, plusMenuOpen && styles.attachBtnActive, pressed && { opacity: 0.6 }]}
+          onPress={() => plusEvent('toggle')}
           hitSlop={6}
         >
-          <Text style={styles.attachBtnText}>＋</Text>
+          <Text style={[styles.attachBtnText, plusMenuOpen && styles.attachBtnTextActive]}>＋</Text>
         </Pressable>
         <Pressable
           accessibilityRole="button"
@@ -1774,6 +1801,7 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
           placeholderTextColor={colors.textMuted}
           value={draft}
           onChangeText={setDraft}
+          onFocus={() => plusEvent('inputFocus')}
           onKeyPress={(event) => {
             if (!desktop) return;
             const key = event.nativeEvent as typeof event.nativeEvent & {
@@ -1802,6 +1830,32 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
           <Text style={[styles.sendText, !canSend(draft, attached.length > 0, sending) && styles.sendTextDisabled]}>↑</Text>
         </Pressable>
       </View>
+      {plusMenuOpen ? (
+        // Inline, in the chat pane only (two-pane: never over the agent list). It is a
+        // sibling after the input row inside the root column, so the inverted message
+        // list (flex:1) shrinks by the panel height and the newest message stays visible.
+        <View
+          accessibilityLabel="更多发送方式面板"
+          style={[styles.plusPanel, { height: plusPanelHeight(plusWindowHeight, lastKeyboardHeightRef.current) + composerInset, paddingBottom: composerInset }]}
+        >
+          <View style={styles.plusGrid}>
+            {plusItems.map(item => (
+              <Pressable
+                key={item.key}
+                accessibilityRole="button"
+                accessibilityLabel={item.a11y}
+                style={({ pressed }) => [styles.plusCell, pressed && { opacity: 0.6 }]}
+                onPress={() => runPlusItem(item.key)}
+              >
+                <View style={styles.plusCellIcon}>
+                  {item.icon ? <Ionicons name={item.icon as any} size={28} color={colors.text} /> : <Text style={styles.plusCellBtw}>BTW</Text>}
+                </View>
+                <Text style={styles.plusCellLabel} numberOfLines={1}>{item.label}</Text>
+              </Pressable>
+            ))}
+          </View>
+        </View>
+      ) : null}
       </>
       )}
       <SideThreadDrawer
@@ -1990,7 +2044,12 @@ const makeStyles = () =>
   plusMenuBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.38)', justifyContent: 'flex-end' },
   plusMenu: { backgroundColor: colors.card, borderColor: colors.border, borderWidth: 1, overflow: 'hidden' },
   plusMenuDesktop: { width: 320, marginLeft: spacing.lg, marginBottom: 164, borderRadius: 12 },
-  plusMenuMobile: { width: '100%', borderTopLeftRadius: 16, borderTopRightRadius: 16, paddingBottom: spacing.xl },
+  plusPanel: { backgroundColor: colors.inputBg, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border },
+  plusGrid: { flexDirection: 'row', flexWrap: 'wrap', paddingHorizontal: spacing.md, paddingTop: spacing.lg },
+  plusCell: { width: '25%', maxWidth: 104, alignItems: 'center', marginBottom: spacing.lg },
+  plusCellIcon: { width: 60, height: 60, borderRadius: 16, backgroundColor: colors.card, borderWidth: StyleSheet.hairlineWidth, borderColor: colors.border, alignItems: 'center', justifyContent: 'center' },
+  plusCellBtw: { color: colors.accent, fontSize: 13, fontWeight: '600' },
+  plusCellLabel: { color: colors.textSecondary, fontSize: 12, marginTop: 6 },
   plusMenuItem: { minHeight: 68, flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingHorizontal: spacing.lg, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.border },
   plusMenuIcon: { width: 36, height: 36, borderRadius: 10, backgroundColor: colors.inputBg, alignItems: 'center', justifyContent: 'center' },
   plusMenuBtw: { color: colors.accent, fontSize: 9, fontWeight: '600' },
@@ -2047,6 +2106,8 @@ const makeStyles = () =>
     justifyContent: 'center',
   },
   attachBtnText: { color: colors.textSecondary, fontSize: 20, lineHeight: 22 },
+  attachBtnActive: { borderColor: colors.accent },
+  attachBtnTextActive: { color: colors.accent },
   failedMark: { color: colors.failed, fontSize: 11, alignSelf: 'flex-end', fontWeight: '600' },
   inputRow: {
     flexDirection: 'row',

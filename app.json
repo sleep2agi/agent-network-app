@@ -32,7 +32,8 @@
       [
         "expo-image-picker",
         {
-          "photosPermission": "允许访问相册以发送图片给 agent"
+          "photosPermission": "允许访问相册以发送图片给 agent",
+          "cameraPermission": "允许使用相机拍照发送给 agent"
         }
       ],
       "expo-sharing"
