@@ -4,6 +4,7 @@ const source = fs.readFileSync(new URL('./desktop-updater.ts', import.meta.url),
 const prompt = fs.readFileSync(new URL('./DesktopUpdatePrompt.tsx', import.meta.url), 'utf8');
 const app = fs.readFileSync(new URL('../App.tsx', import.meta.url), 'utf8');
 const settings = fs.readFileSync(new URL('./SettingsScreen.tsx', import.meta.url), 'utf8');
+const androidUpdater = fs.readFileSync(new URL('./android-updater.ts', import.meta.url), 'utf8');
 const config = JSON.parse(fs.readFileSync(new URL('../src-tauri/tauri.conf.json', import.meta.url), 'utf8'));
 const capability = JSON.parse(fs.readFileSync(new URL('../src-tauri/capabilities/default.json', import.meta.url), 'utf8'));
 
@@ -23,6 +24,11 @@ const checks: Array<[string, boolean]> = [
   ['stable anet.sh updater endpoint configured', config.plugins.updater.endpoints[0] === 'https://anet.sh/desktop/update/latest.json'],
   ['updater public key configured', typeof config.plugins.updater.pubkey === 'string' && config.plugins.updater.pubkey.length > 80],
   ['frontend update permissions enabled', capability.permissions.includes('updater:default') && capability.permissions.includes('process:allow-restart')],
+  // 安卓(app 2026-09-25「安卓点击更新好像更新不了」):同一行在安卓上走 GitHub release 的 APK,不再落到「不支持」。
+  ['settings row calls the Android check on Android', /if \(isAndroid\) void checkAndroidUpdate\(APP_VERSION\);\s*else void checkDesktopUpdate\(undefined, \{ manual: true \}\);/.test(settings)],
+  ['settings row renders the Android view on Android', settings.includes('? describeAndroidUpdateRow(androidUpdate')],
+  ['App mounts the Android prompt only on Android', app.includes("{Platform.OS === 'android' ? <AndroidUpdatePrompt /> : null}")],
+  ['installer intent grants read permission on a content:// uri', androidUpdater.includes('getContentUriAsync(current.fileUri)') && androidUpdater.includes('flags: 1, // Intent.FLAG_GRANT_READ_URI_PERMISSION') && androidUpdater.includes("'android.intent.action.VIEW'")],
 ];
 for (const [name, ok] of checks) {
   if (!ok) throw new Error(`FAIL: ${name}`);

@@ -45,7 +45,11 @@
         "monochromeImage": "./assets/android-icon-monochrome.png"
       },
       "predictiveBackGestureEnabled": false,
-      "package": "com.anonymous.agentnetworkapp"
+      "package": "com.anonymous.agentnetworkapp",
+      "versionCode": 2098,
+      "permissions": [
+        "android.permission.REQUEST_INSTALL_PACKAGES"
+      ]
     }
   }
 }
