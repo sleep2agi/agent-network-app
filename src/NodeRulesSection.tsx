@@ -18,7 +18,7 @@ import { hasUnsavedChanges, isTerminal, nextPollDelayMs, predictedRulesFileName,
 import { NODE_RULES_EDITOR_MIN_HEIGHT } from './node-page-model';
 import { colors, spacing } from './theme';
 import MarkdownMessage from './MarkdownMessage';
-import { buildRulesOutline, RULES_DEFAULT_MODE, rulesReadKey, rulesViewState, type RulesViewMode } from './node-rules-view';
+import { blockLineForCaret, buildRulesOutline, jumpText, lineAtOffset, RULES_DEFAULT_MODE, rulesReadKey, rulesViewState, sourceRangeFromDataset, sourceSelection, type RulesViewMode, type SourceLineRange } from './node-rules-view';
 
 type Phase = 'loading' | 'ready' | 'saving' | 'unavailable';
 
@@ -30,6 +30,10 @@ export default function NodeRulesSection({ cfg, node, session }: { cfg: HubConfi
   const [message, setMessage] = useState('');
   const [messageTone, setMessageTone] = useState<'muted' | 'ok' | 'error'>('muted');
   const [mode, setMode] = useState<RulesViewMode>(RULES_DEFAULT_MODE);
+  // 双击跳源码:jump = 切到编辑后要选中的原文行;anchorLine = 编辑切回阅读时滚回光标所在块。
+  const [jump, setJump] = useState<SourceLineRange | null>(null);
+  const [anchorLine, setAnchorLine] = useState<number | null>(null);
+  const editorRef = useRef<any>(null);
   const [full, setFull] = useState(false);
   const fullBtn = useRef<any>(null);
   // 退出全屏后焦点回到「全屏」按钮(键盘用户不至于掉回页面顶部)。
@@ -100,10 +104,22 @@ export default function NodeRulesSection({ cfg, node, session }: { cfg: HubConfi
   const hasContent = phase === 'ready' || phase === 'saving';
   const view = rulesViewState(editor, hasContent ? onNode : null);
 
+  const changeMode = (next: RulesViewMode) => {
+    if (next === mode) return;
+    if (mode === 'edit' && next === 'read') {
+      const ta = editorRef.current;
+      const caret = ta?.selectionStart;
+      setAnchorLine(typeof caret === 'number' ? lineAtOffset(jumpText(ta?.value, editor), caret) : null);
+    }
+    setMode(next);
+  };
+  const jumpToSource = (range: SourceLineRange) => { setJump(range); setMode('edit'); };
+
   const toolbar = (
     <View style={{ flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: spacing.sm }}>
-      <ModeToggle mode={mode} onChange={setMode} />
+      <ModeToggle mode={mode} onChange={changeMode} />
       <Text style={{ color: colors.text, fontSize: 13, fontFamily: MONO, flexShrink: 1 }} selectable numberOfLines={1}>{fileName}</Text>
+      {mode === 'read' && hasContent && WEB ? <Text style={{ color: colors.textMuted, fontSize: 12 }}>双击内容可跳到源码编辑</Text> : null}
       {view.unsaved ? <UnsavedMark /> : null}
       {phase === 'loading' ? <ActivityIndicator color={colors.accent} /> : null}
       <View style={{ flex: 1 }} />
@@ -117,7 +133,10 @@ export default function NodeRulesSection({ cfg, node, session }: { cfg: HubConfi
     </View>
   );
 
-  const bodyProps = { mode, draft: editor, onDraft: setEditor, editable: phase === 'ready', dirty, fileName };
+  const bodyProps: RulesBodyProps = {
+    mode, draft: editor, onDraft: setEditor, editable: phase === 'ready', dirty, fileName,
+    onJump: jumpToSource, jump, clearJump: () => setJump(null), anchorLine, clearAnchor: () => setAnchorLine(null), editorRef,
+  };
 
   // 编辑框/阅读区吃满节点页剩余高度(flex: 1,最矮 NODE_RULES_EDITOR_MIN_HEIGHT);按钮放在内容**上方**
   // 的工具条里 —— 放下面的话矮窗(Vincent 的 2000×650)里要先滚页面才看得到「保存」。
@@ -146,6 +165,27 @@ export default function NodeRulesSection({ cfg, node, session }: { cfg: HubConfi
 }
 
 const MONO = Platform.OS === 'ios' ? 'Menlo' : 'monospace';
+const WEB = Platform.OS === 'web';
+
+// 编辑框里某个字符偏移处的 y(相对 textarea 内容顶部)。长行会折行,按行号乘行高会越滚越偏,
+// 所以用一个同宽同字体的隐藏镜像 div 量真实高度。只在 web 用。
+function caretTopInTextarea(ta: any, offset: number): number | null {
+  const doc = (globalThis as any).document;
+  const win = globalThis as any;
+  if (!doc?.createElement || !win.getComputedStyle) return null;
+  const cs = win.getComputedStyle(ta);
+  const div = doc.createElement('div');
+  for (const k of ['fontFamily', 'fontSize', 'fontWeight', 'lineHeight', 'letterSpacing', 'tabSize', 'paddingTop', 'paddingRight', 'paddingBottom', 'paddingLeft']) div.style[k] = cs[k];
+  Object.assign(div.style, { position: 'absolute', visibility: 'hidden', top: '0', left: '-99999px', boxSizing: 'border-box', width: `${ta.clientWidth}px`, whiteSpace: 'pre-wrap', overflowWrap: 'break-word', wordBreak: 'break-word', border: '0' });
+  div.textContent = String(ta.value ?? '').slice(0, offset);
+  const mark = doc.createElement('span');
+  mark.textContent = '\u200b';
+  div.appendChild(mark);
+  doc.body.appendChild(div);
+  const top = mark.offsetTop;
+  div.remove();
+  return top;
+}
 
 function prefersReducedMotion(): boolean {
   const mm = (globalThis as any).matchMedia;
@@ -182,10 +222,64 @@ function UnsavedMark() {
   );
 }
 
-function RulesBody({ mode, draft, onDraft, editable, dirty, fileName, onHeadingLayout, scrollRef }: RulesBodyProps & {
+function RulesBody({ mode, draft, onDraft, editable, dirty, fileName, onHeadingLayout, scrollRef, onJump, jump, clearJump, anchorLine, clearAnchor, editorRef }: RulesBodyProps & {
   onHeadingLayout?: (index: number, y: number) => void; scrollRef?: any;
 }) {
   const frame = { flex: 1, minHeight: NODE_RULES_EDITOR_MIN_HEIGHT, borderWidth: 1, borderColor: dirty ? colors.accent : colors.border, borderRadius: 8 } as const;
+  const readRef = useRef<any>(null);
+  const onJumpRef = useRef(onJump);
+  onJumpRef.current = onJump;
+
+  // 阅读区:双击任意带行号的块 → 跳到编辑框里对应的原文行。原生双击会选中一个词,这里只在规则阅读区里接管。
+  useEffect(() => {
+    const el = readRef.current;
+    if (mode !== 'read' || !el?.addEventListener) return;
+    const onDbl = (event: any) => {
+      const hit = event.target?.closest?.('[data-md-line]');
+      const range = hit ? sourceRangeFromDataset(hit.dataset) : null;
+      if (!range) return;
+      event.preventDefault?.();
+      (globalThis as any).getSelection?.()?.removeAllRanges?.();
+      onJumpRef.current(range);
+    };
+    el.addEventListener('dblclick', onDbl);
+    return () => el.removeEventListener('dblclick', onDbl);
+  }, [mode, draft.trim() === '']);
+
+  // 编辑框:刚从双击切过来 ⇒ 选中那几行、滚到框中间。等 textarea 挂上再做。
+  useEffect(() => {
+    if (mode !== 'edit' || !jump) return;
+    const t = setTimeout(() => {
+      const ta = editorRef.current;
+      if (!ta) return;
+      const sel = sourceSelection(jumpText(ta.value, draft), jump);
+      ta.focus?.();
+      ta.setSelectionRange?.(sel.start, sel.end);
+      const top = caretTopInTextarea(ta, sel.start);
+      if (top != null && ta.clientHeight) {
+        const lh = parseFloat((globalThis as any).getComputedStyle?.(ta)?.lineHeight) || 19;
+        ta.scrollTop = Math.max(0, top - ta.clientHeight / 2 + lh / 2);
+      }
+      clearJump();
+    }, 0);
+    return () => clearTimeout(t);
+  }, [mode, jump]);
+
+  // 阅读区:刚从编辑切回来 ⇒ 滚到光标所在的那一块。
+  useEffect(() => {
+    if (mode !== 'read' || anchorLine == null) return;
+    const t = setTimeout(() => {
+      const root = readRef.current;
+      const nodes: any[] = root?.querySelectorAll ? Array.from(root.querySelectorAll('[data-md-line]')) : [];
+      const starts = nodes.map((n) => Number(n.dataset.mdLine)).filter((n) => Number.isInteger(n));
+      const line = blockLineForCaret(starts, anchorLine);
+      const target = line == null ? null : nodes.find((n) => Number(n.dataset.mdLine) === line);
+      target?.scrollIntoView?.({ block: 'center' });
+      clearAnchor();
+    }, 0);
+    return () => clearTimeout(t);
+  }, [mode, anchorLine]);
+
   if (mode === 'read') {
     // 阅读区要和编辑框一样「吃满剩余高度、内部滚动」。直接给 ScrollView flex:1 不行:节点页外层是
     // 高度不定的滚动容器,48 KB 的文档会把它撑到一万多像素高、整页一起滚。外层 View 占位(flex:1,
@@ -194,7 +288,7 @@ function RulesBody({ mode, draft, onDraft, editable, dirty, fileName, onHeadingL
       <View style={frame}>
         <ScrollView ref={scrollRef} style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }} contentContainerStyle={{ padding: spacing.lg }}>
           {draft.trim()
-            ? <MarkdownMessage onHeadingLayout={onHeadingLayout}>{draft}</MarkdownMessage>
+            ? <View ref={readRef}><MarkdownMessage onHeadingLayout={onHeadingLayout} sourceLines={WEB}>{draft}</MarkdownMessage></View>
             : <Text style={{ color: colors.textMuted, fontSize: 13 }}>{fileName} 还没有内容。切到「编辑」写点规则再保存。</Text>}
         </ScrollView>
       </View>
@@ -202,6 +296,7 @@ function RulesBody({ mode, draft, onDraft, editable, dirty, fileName, onHeadingL
   }
   return (
     <TextInput
+      ref={editorRef}
       value={draft}
       onChangeText={onDraft}
       editable={editable}
@@ -218,7 +313,11 @@ function RulesBody({ mode, draft, onDraft, editable, dirty, fileName, onHeadingL
 
 // 全屏:盖住整个应用窗口(不是系统全屏)。左边目录(h1–h3),右边同一份内容 + 同一条工具条。
 // Esc / 关闭按钮退出,焦点回到「全屏」按钮。
-type RulesBodyProps = { mode: RulesViewMode; draft: string; onDraft: (s: string) => void; editable: boolean; dirty: boolean; fileName: string };
+type RulesBodyProps = {
+  mode: RulesViewMode; draft: string; onDraft: (s: string) => void; editable: boolean; dirty: boolean; fileName: string;
+  onJump: (range: SourceLineRange) => void; jump: SourceLineRange | null; clearJump: () => void;
+  anchorLine: number | null; clearAnchor: () => void; editorRef: any;
+};
 
 function RulesFullscreen({ onClose, toolbar, source, bodyProps }: {
   onClose: () => void; toolbar: ReactNode; source: string; bodyProps: RulesBodyProps;

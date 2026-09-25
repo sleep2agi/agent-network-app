@@ -71,3 +71,79 @@ export function rulesReadKey(
 ): string {
   return JSON.stringify([cfg.serverUrl, cfg.networkId ?? null, cfg.profileId ?? null, node.node_id ?? null, node.alias]);
 }
+
+// ── 阅读模式「双击跳到源码」(2026-09-25 Vincent:「双击对应内容,跳转到对应的 Markdown 进行编辑」) ──
+// 渲染出来的每个块带着它在原文里的行号(markdown-model 的 line/endLine/itemLines/rowLines);
+// 双击 → 切到编辑 → 把这几行选中并滚到编辑框中间。行号换成字符偏移必须在**草稿**上算
+// (阅读模式渲染的就是草稿),并且认 \r\n、\r、\n 三种换行 —— 解析器也是这么切行的。
+
+export interface SourceLineRange {
+  /** 首行,0 起。 */
+  readonly start: number;
+  /** 末行,0 起,含。 */
+  readonly end: number;
+}
+
+/** 第 line 行(0 起)行首在 text 里的字符偏移;超出末行时返回 text.length。 */
+export function lineStartOffset(text: string, line: number): number {
+  if (line <= 0) return 0;
+  let seen = 0;
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
+    if (ch === '\r' || ch === '\n') {
+      if (ch === '\r' && text[i + 1] === '\n') i++;
+      seen++;
+      if (seen === line) return i + 1;
+    }
+  }
+  return text.length;
+}
+
+/** 第 line 行行尾(换行符之前)的偏移。 */
+export function lineEndOffset(text: string, line: number): number {
+  let i = lineStartOffset(text, line);
+  while (i < text.length && text[i] !== '\r' && text[i] !== '\n') i++;
+  return i;
+}
+
+/** 行范围 → 编辑框要选中的字符区间 [start, end)。 */
+export function sourceSelection(text: string, range: SourceLineRange): { start: number; end: number } {
+  const start = lineStartOffset(text, range.start);
+  const end = Math.max(start, lineEndOffset(text, Math.max(range.start, range.end)));
+  return { start, end };
+}
+
+/** 偏移落在第几行(0 起)。编辑切回阅读时用光标所在行找回对应的块。 */
+export function lineAtOffset(text: string, offset: number): number {
+  const head = text.slice(0, Math.min(Math.max(0, offset), text.length));
+  return (head.match(/\r\n|\r|\n/g) ?? []).length;
+}
+
+/** 渲染元素上的 data-md-line / data-md-end 读回行范围;缺失或不是非负整数 ⇒ null(不跳)。 */
+export function sourceRangeFromDataset(ds: { mdLine?: string; mdEnd?: string } | null | undefined): SourceLineRange | null {
+  if (!ds || ds.mdLine == null) return null;
+  const isLine = (v: string) => /^\d+$/.test(v);
+  if (!isLine(ds.mdLine)) return null;
+  const start = Number(ds.mdLine);
+  const end = ds.mdEnd != null && isLine(ds.mdEnd) ? Math.max(start, Number(ds.mdEnd)) : start;
+  return { start, end };
+}
+
+/**
+ * 从编辑切回阅读时,滚回哪一块:起始行 ≤ 光标行里最靠后的那一块(光标在块中间也算这块)。
+ * starts 是阅读区里所有带行号元素的起始行(任意顺序);空 ⇒ null。
+ */
+export function blockLineForCaret(starts: readonly number[], caretLine: number): number | null {
+  let best: number | null = null;
+  for (const s of starts) if (s <= caretLine && (best === null || s > best)) best = s;
+  return best;
+}
+
+/**
+ * 在哪份文字上把行号换成偏移:编辑框里真实的文字(浏览器 textarea 会把 \r\n 规范成 \n,
+ * 选区偏移按规范后的算);拿不到编辑框时退回草稿。永远不是节点上的原文。
+ * 行号在两者上相同(解析器也把 \r\n 当一次换行),偏移不同 —— CRLF 文件每行差一个字符。
+ */
+export function jumpText(editorValue: unknown, draft: string): string {
+  return typeof editorValue === 'string' ? editorValue : draft;
+}

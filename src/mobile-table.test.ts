@@ -17,7 +17,7 @@ ck('extra cells beyond the header get a positional label', stackedRows([['a'], [
 ck('empty table → no cards', stackedRows([]).length === 0);
 
 const src = fs.readFileSync(path.join(__dirname, 'MarkdownMessage.tsx'), 'utf8').replace(/\r\n?/g, '\n');
-ck('table block delegates to TableBlock', src.includes("if (block.kind === 'table') return <TableBlock key={index} rows={block.rows} />;"));
+ck('table block delegates to TableBlock', /if \(block\.kind === 'table'\) return <TableBlock key=\{index\} rows=\{block\.rows\}[^>]*\/>;/.test(src));
 ck('TableBlock uses the layout helper with the native flag', src.includes('tableLayoutFor(columns, NATIVE)'));
 ck('flex cells have no fixed width', /tableCellFlex: \{ flex: 1, minWidth: 0,/.test(src) && !/tableCellFlex: \{[^}]*width: 150/.test(src));
 ck('stacked cards render label + value per cell', src.includes('styles.tableCardLabel') && src.includes('styles.tableCardValue'));
