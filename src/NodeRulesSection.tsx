@@ -14,7 +14,7 @@ import { ActivityIndicator, Modal, Platform, Pressable, ScrollView, Text, TextIn
 
 import { readNodeRulesFile, waitForRulesFileResult, writeNodeRulesFile, type HubConfig, type RulesTarget, type Session } from './api';
 import { styles } from './app-styles';
-import { hasUnsavedChanges, isTerminal, nextPollDelayMs, predictedRulesFileName, requestIdToFollow, rulesStatusMessage } from './node-rules';
+import { hasUnsavedChanges, isTerminal, nextPollDelayMs, predictedRulesFileName, requestIdToFollow, rulesStatusMessage, rulesSupport, rulesUnsupportedMessage } from './node-rules';
 import { NODE_RULES_EDITOR_MIN_HEIGHT } from './node-page-model';
 import { colors, spacing } from './theme';
 import MarkdownMessage from './MarkdownMessage';
@@ -40,7 +40,11 @@ export default function NodeRulesSection({ cfg, node, session }: { cfg: HubConfi
 
   const say = (text: string, tone: 'muted' | 'ok' | 'error' = 'muted') => { setMessage(text); setMessageTone(tone); };
 
+  // 版本明确太旧就不发请求 —— 当场说清楚要升到哪一版,而不是转 60 秒圈再报超时。
+  const support = rulesSupport(session);
+
   const runRead = useCallback(async () => {
+    if (support.kind === 'unsupported') { setPhase('unavailable'); say(rulesUnsupportedMessage(support), 'error'); return; }
     setPhase('loading');
     say(`正在向节点读取 ${predictedRulesFileName(session, node)}…`);
     const enq = await readNodeRulesFile(cfg, node);
@@ -52,13 +56,13 @@ export default function NodeRulesSection({ cfg, node, session }: { cfg: HubConfi
     if (cancelled.current) return;
     if (!res.ok) { setPhase('unavailable'); say(res.error, 'error'); return; }
     if (res.file_name) setFileName(res.file_name);
-    if (res.status !== 'done') { setPhase('unavailable'); say(rulesStatusMessage(res), 'error'); return; }
+    if (res.status !== 'done') { setPhase('unavailable'); say(rulesStatusMessage(res, support), 'error'); return; }
     const content = res.content ?? '';
     setOnNode(res.exists === false ? '' : content);
     setEditor(content);
     setPhase('ready');
-    say(rulesStatusMessage(res), 'muted');
-  }, [cfg, node, session]);
+    say(rulesStatusMessage(res, support), 'muted');
+  }, [cfg, node, session, support.kind]);
 
   // 只在「读哪个文件」变了时重读(rulesReadKey):节点页每次刷新都新造 node/session 对象,
   // 挂在 runRead 身份上会一刷新就重读、把没保存的草稿冲掉。手动重读走「重新读取」按钮。
@@ -84,9 +88,9 @@ export default function NodeRulesSection({ cfg, node, session }: { cfg: HubConfi
     setPhase('ready');
     if (!res.ok) { say(res.error, 'error'); return; }
     if (res.file_name) setFileName(res.file_name);
-    if (res.status !== 'done') { say(rulesStatusMessage(res), 'error'); return; }
+    if (res.status !== 'done') { say(rulesStatusMessage(res, support), 'error'); return; }
     setOnNode(editor);
-    say(rulesStatusMessage(res), 'ok');
+    say(rulesStatusMessage(res, support), 'ok');
   };
 
   const dirty = phase === 'ready' && hasUnsavedChanges(editor, onNode);

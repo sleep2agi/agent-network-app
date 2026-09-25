@@ -1,6 +1,8 @@
 // app#225 规则文件区块纯逻辑 — run: bun src/node-rules.test.ts
-import { hasUnsavedChanges, isTerminal, nextPollDelayMs, predictedRulesFileName, requestIdToFollow, rulesFileTarget, rulesStatusMessage } from './node-rules';
+import { compareNodeVersion, hasUnsavedChanges, isTerminal, nextPollDelayMs, parseNodeVersion, predictedRulesFileName, requestIdToFollow, rulesFileTarget, rulesStatusMessage, rulesSupport, rulesTimeoutMessage, rulesUnsupportedMessage, RULES_MIN_AGENT_NODE } from './node-rules';
 import { rulesTargetArgs } from './api';
+// @ts-expect-error -- the app tsconfig has no node types; this test runs under bun, which has node:fs
+import { readFileSync } from 'node:fs';
 
 let pass = 0, total = 0;
 const ck = (name: string, cond: boolean, extra = '') => {
@@ -87,6 +89,47 @@ ck('失败且没有 existing → null(真错误)', requestIdToFollow({ ok: false
   ck('agent-node:opencode 只有 agent 字段时 → AGENTS.md', predictedRulesFileName({ agent: 'agent-node:opencode' }) === 'AGENTS.md');
   ck('agent-node:claude 只有 agent 字段时 → CLAUDE.md(先剥 agent-node: 前缀)', predictedRulesFileName({ agent: 'agent-node:claude' }) === 'CLAUDE.md');
   ck('agent-node:codex-app-server → AGENTS.md', predictedRulesFileName({ agent: 'agent-node:codex-app-server' }) === 'AGENTS.md');
+}
+
+// ── 发请求之前先判版本:答不了就当场说,不转 60 秒圈 ──
+{
+  ck('版本解析:preview 号', JSON.stringify(parseNodeVersion('2.5.0-preview.71')) === JSON.stringify([2, 5, 0, 71]));
+  ck('版本解析:认不出 → null', parseNodeVersion('dev') === null && parseNodeVersion(null) === null && parseNodeVersion('') === null);
+  ck('比较:.71 > .58', (compareNodeVersion('2.5.0-preview.71', '2.5.0-preview.58') ?? 0) > 0);
+  ck('比较:.33 < .58', (compareNodeVersion('2.5.0-preview.33', '2.5.0-preview.58') ?? 0) < 0);
+  ck('比较:.58 == .58', compareNodeVersion('2.5.0-preview.58', '2.5.0-preview.58') === 0);
+  ck('比较:按数字不按字符串(.9 < .58)', (compareNodeVersion('2.5.0-preview.9', '2.5.0-preview.58') ?? 0) < 0);
+  ck('比较:旧 minor 的正式版 < 新 minor 的 preview(2.4.13 < 2.5.0-preview.58)', (compareNodeVersion('2.4.13', '2.5.0-preview.58') ?? 0) < 0);
+  ck('比较:同 x.y.z 正式版 > preview', (compareNodeVersion('2.5.0', '2.5.0-preview.58') ?? 0) > 0);
+
+  ck('上报了 rules_file_capable → capable(不看版本)', rulesSupport({ agent: 'agent-node:codex', version: '2.5.0-preview.33', rules_file_capable: true }).kind === 'capable');
+  ck('agent-node .33 没上报 → unsupported', rulesSupport({ agent: 'agent-node:codex-app-server', version: '2.5.0-preview.33' }).kind === 'unsupported');
+  ck('agent-node .71 没上报 → supported(.58 起就会答,.85 起才上报旗)', rulesSupport({ agent: 'agent-node:grok', version: '2.5.0-preview.71' }).kind === 'supported');
+  ck('agent-node 恰好 .58 → supported', rulesSupport({ agent: 'agent-node:grok', version: RULES_MIN_AGENT_NODE }).kind === 'supported');
+  ck('agent-node 版本认不出 → unknown(照旧发请求)', rulesSupport({ agent: 'agent-node:codex', version: 'dev' }).kind === 'unknown');
+  ck('claude-code 会话没上报 → unsupported(通道太旧,指向 anet)', (() => { const s = rulesSupport({ agent: 'claude-code', version: '2.2.21' }); return s.kind === 'unsupported' && s.component === 'anet'; })());
+  ck('其它/空会话 → unknown', rulesSupport({ agent: 'mystery' }).kind === 'unknown' && rulesSupport(null).kind === 'unknown');
+
+  const old = rulesSupport({ agent: 'agent-node:codex', version: '2.5.0-preview.33' });
+  const oldMsg = old.kind === 'unsupported' ? rulesUnsupportedMessage(old) : '';
+  ck('太旧的说法:带当前版本 + 要升到的版本', oldMsg.includes('v2.5.0-preview.33') && oldMsg.includes(RULES_MIN_AGENT_NODE));
+  const cc = rulesSupport({ agent: 'claude-code', version: '2.2.21' });
+  ck('Claude Code 太旧的说法:指向 anet', cc.kind === 'unsupported' && /anet 2\.3\.0-preview\.111/.test(rulesUnsupportedMessage(cc)));
+
+  const t71 = rulesTimeoutMessage(rulesSupport({ agent: 'agent-node:grok', version: '2.5.0-preview.71' }));
+  ck('支持的版本超时:不再说「版本不支持」,说连接/卡住 + 重启', !/太旧|不支持/.test(t71) && /连接/.test(t71) && /重启/.test(t71) && t71.includes('v2.5.0-preview.71'));
+  const tUnknown = rulesTimeoutMessage();
+  ck('不知道版本时超时:两种可能都说,并给出两条最低版本', /离线/.test(tUnknown) && tUnknown.includes(RULES_MIN_AGENT_NODE) && tUnknown.includes('2.3.0-preview.111'));
+  ck('rulesStatusMessage 把 support 传给超时文案', rulesStatusMessage({ op: 'read', status: 'timeout', error: null, exists: null, file_name: null }, rulesSupport({ agent: 'agent-node:grok', version: '2.5.0-preview.71' })) === t71);
+}
+
+// ── 区块接线:版本太旧时在发请求之前就返回(源码层钉住,真机截图另验) ──
+{
+  const src = readFileSync(new URL('./NodeRulesSection.tsx', import.meta.url), 'utf8');
+  const gate = src.indexOf("support.kind === 'unsupported'");
+  const firstRead = src.indexOf('await readNodeRulesFile(');
+  ck('NodeRulesSection 在 readNodeRulesFile 之前判 unsupported', gate > 0 && firstRead > 0 && gate < firstRead);
+  ck('NodeRulesSection 的超时文案带上 support', /rulesStatusMessage\(res, support\)/.test(src));
 }
 
 console.log(`\n${pass}/${total} passed`);
