@@ -4,7 +4,7 @@
 // 这里钉两件事:① 平台判定(只有 Tauri+macOS 才让出空带);② 全屏确实挂了它、挂在工具条之前。
 // @ts-expect-error app tsconfig 不带 node 类型(其余读源码的 ck 测试同样报这一条);运行时由 node/bun 提供。
 import { readFileSync } from 'node:fs';
-import { isMacTauriShell, MAC_TITLE_STRIP_HEIGHT } from './window-shell';
+import { isMacTauriShell, isWindowsTauriShell, MAC_TITLE_STRIP_HEIGHT } from './window-shell';
 
 let p = 0, t = 0;
 const ck = (n: string, c: boolean) => { t++; if (c) { p++; console.log('✅', n); } else console.log('❌', n); };
@@ -21,6 +21,14 @@ ck('Tauri + Windows → 不让(Windows 不变)', inset(true, WIN) === false);
 ck('Tauri + Linux → 不让(Linux 不变)', inset(true, LINUX) === false);
 ck('浏览器里的 Mac(非 Tauri)→ 不让', inset(false, MAC) === false);
 ck('iOS/Android(Platform.OS≠web)→ 不让', inset(true, MAC, 'ios') === false);
+// Windows(2026-09-25 追加):全屏也盖住了自绘标题栏 ⇒ 只有 Tauri+Windows 让出 WinTitleBar。
+const winBar = (tauri: boolean, nav: object, os = 'web') => { g.__TAURI_INTERNALS__ = tauri ? {} : undefined; g.navigator = nav; return isWindowsTauriShell(os); };
+ck('Tauri + Windows → 挂 WinTitleBar', winBar(true, WIN) === true);
+ck('Tauri + macOS → 不挂 WinTitleBar', winBar(true, MAC) === false);
+ck('Tauri + Linux → 不挂 WinTitleBar(Linux 不变)', winBar(true, LINUX) === false);
+ck('浏览器里的 Windows(非 Tauri)→ 不挂', winBar(false, WIN) === false);
+ck('Platform.OS≠web → 不挂', winBar(true, WIN, 'android') === false);
+ck('任何平台两条最多出一条(互斥)', [MAC, WIN, LINUX].every((n) => !(inset(true, n) && winBar(true, n))));
 g.__TAURI_INTERNALS__ = saved.tauri; g.navigator = saved.nav;
 ck('空带 28px ≥ 红黄绿灯下沿(约 y=17)', MAC_TITLE_STRIP_HEIGHT >= 17);
 
@@ -39,10 +47,18 @@ ck('strip 在 Modal 里面', iModal >= 0 && iStrip > iModal);
 ck('strip 在工具条之前(工具条被推到空带下面)', iStrip >= 0 && iToolbar > iStrip);
 ck('「退出全屏 Esc」仍在工具条那一行(strip 之后)', iEsc > iStrip);
 ck('全屏里只挂一次', code.split('<MacTitleStrip />').length === 2);
+ck('从 win-title-bar 引入 WinTitleBar(同一个组件)', /import WinTitleBar from '\.\/win-title-bar';/.test(src));
+const iWin = code.indexOf('<WinTitleBar />');
+ck('WinTitleBar 在 Modal 里面', iModal >= 0 && iWin > iModal);
+ck('WinTitleBar 在工具条之前', iWin >= 0 && iToolbar > iWin);
+ck('WinTitleBar 全屏里只挂一次', code.split('<WinTitleBar />').length === 2);
 
 // ③ strip 本身:只在 Tauri+macOS 渲染、是拖动区(别人改了它,这里也要红)。
 const strip = readFileSync(new URL('./mac-title-strip.tsx', import.meta.url), 'utf8').replace(/\r\n?/g, '\n');
 ck('strip 非 macOS 壳返回 null', strip.includes('if (!isMacTauriShell(Platform.OS)) return null;'));
 ck('strip 是拖动区', strip.includes("dataSet: { tauriDragRegion: '' }"));
+const bar = readFileSync(new URL('./win-title-bar.tsx', import.meta.url), 'utf8').replace(/\r\n?/g, '\n');
+ck('WinTitleBar 用 isWindowsTauriShell 判定、非 Windows 壳返回 null', bar.includes('const show = isWindowsTauriShell(Platform.OS);') && bar.includes('if (!show) return null;'));
+ck('WinTitleBar 是拖动区', bar.includes("dataSet: { tauriDragRegion: '' }"));
 
 console.log(`\n${p}/${t} passed`); process.exit(p === t ? 0 : 1);

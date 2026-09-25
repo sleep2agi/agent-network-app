@@ -20,6 +20,7 @@ import MarkdownMessage from './MarkdownMessage';
 import { blockLineForCaret, buildRulesOutline, jumpText, lineAtOffset, RULES_DEFAULT_MODE, rulesInfoText, rulesReadKey, rulesViewState, saveButtonLabel, sourceRangeFromDataset, sourceSelection, statusAutoHideMs, type RulesViewMode, type SourceLineRange } from './node-rules-view';
 import InfoTip from './InfoTip';
 import MacTitleStrip from './mac-title-strip';
+import WinTitleBar from './win-title-bar';
 
 type Phase = 'loading' | 'ready' | 'saving' | 'unavailable';
 
@@ -368,8 +369,11 @@ function RulesFullscreen({ onClose, toolbar, source, bodyProps }: {
       <View style={{ flex: 1, backgroundColor: colors.bg }} accessibilityViewIsModal>
         {/* Modal 是 position:fixed 铺满整个窗口的,App.tsx 顶上那条 MacTitleStrip 被它盖住了 ⇒ macOS 的
             红黄绿灯直接压在「阅读/编辑」上(Vincent 0.2.94 截图)。这里再挂同一个组件:28px 空带 +
-            data-tauri-drag-region,只在 Tauri+macOS 渲染,Windows/Linux/网页返回 null、布局不变。 */}
+            data-tauri-drag-region,只在 Tauri+macOS 渲染,Windows/Linux/网页返回 null、布局不变。
+            Windows 同理:decorations=false,自绘的 WinTitleBar(最小化/最大化/关闭 + 拖动)也被盖住 ⇒
+            同样再挂一次;它自己只在 Tauri+Windows 渲染。两者平台互斥,任何平台最多出一条。 */}
         <MacTitleStrip />
+        <WinTitleBar />
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingHorizontal: spacing.lg, paddingVertical: spacing.md, borderBottomWidth: 1, borderBottomColor: colors.border }}>
           <View style={{ flex: 1 }}>{toolbar}</View>
           <FocusRing ref={closeRef} onPress={onClose} accessibilityLabel="退出全屏(Esc)" style={{ paddingHorizontal: spacing.md, paddingVertical: 5, borderRadius: 6, borderWidth: 1, borderColor: colors.border }}>
