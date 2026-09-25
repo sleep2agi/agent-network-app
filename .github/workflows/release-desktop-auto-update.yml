@@ -119,6 +119,9 @@ jobs:
           releaseBody: |-
             Signed and notarized stable update for macOS (Apple Silicon) and Windows (x64).
 
+            What's new in 0.2.102:
+            - 安卓折叠屏 / 平板展开时,左侧改为竖向导航栏,替代底部标签栏。
+
             What's new in 0.2.101:
             - 手机上编辑规则文件:工具栏(阅读/编辑、保存)固定在顶部不会再被滚走;双击某段直接跳到编辑位置;
               弹出键盘时页面会让开;有未保存的修改时切走或返回会先提示「放弃未保存的修改?」。
