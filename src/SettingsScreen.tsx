@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
-import { ActivityIndicator, Modal, Pressable, ScrollView, StyleSheet, Switch, Text, TextInput, View, useWindowDimensions } from 'react-native';
+import { ActivityIndicator, Modal, Platform, Pressable, ScrollView, StyleSheet, Switch, Text, TextInput, View, useWindowDimensions } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { HubConfig } from './api';
 import { DesktopStorageDiagnostics, HubProfile, getDesktopStorageDiagnostics, listHubProfiles, removeHubProfile, saveThemeMode } from './storage';
@@ -8,6 +8,8 @@ import { APP_VERSION } from './version';
 import { appFetch } from './app-fetch';
 import { checkDesktopUpdate, desktopUpdateLastCheckedAt, desktopUpdateSnapshot, subscribeDesktopUpdates } from './desktop-updater';
 import { describeUpdateRow } from './update-check-state';
+import { androidUpdateLastCheckedAt, androidUpdateSnapshot, checkAndroidUpdate, subscribeAndroidUpdates } from './android-updater';
+import { describeAndroidUpdateRow } from './android-update-core';
 import { backupLocalHubData, deleteLocalHubData, LOCAL_HUB_PROFILE_ID, localHubStatus, openLocalHubLogs, restartLocalHub, stopLocalHub, type LocalHubResult } from './local-hub';
 import { openWorkspaceWindow } from './desktop-chat-menu';
 import { loadNotifySettings, saveNotifySettings, subscribeNotifySettings } from './notify-settings';
@@ -58,6 +60,9 @@ export default function SettingsScreen({
   const [localDeleteVisible, setLocalDeleteVisible] = useState(false);
   const [localDeleteText, setLocalDeleteText] = useState('');
   const update = useSyncExternalStore(subscribeDesktopUpdates, desktopUpdateSnapshot, desktopUpdateSnapshot);
+  // 安卓:GitHub release 里的 universal APK(桌面端的 latest.json 不含安卓,走 Tauri 那条路只会落到「不支持」)。
+  const androidUpdate = useSyncExternalStore(subscribeAndroidUpdates, androidUpdateSnapshot, androidUpdateSnapshot);
+  const isAndroid = Platform.OS === 'android';
   // 0.2.76 通知设置(桌面端落 localStorage)
   const notify = useSyncExternalStore(subscribeNotifySettings, loadNotifySettings, loadNotifySettings);
   const [quietStart, setQuietStart] = useState(notify.quiet.start);
@@ -418,13 +423,19 @@ export default function SettingsScreen({
                   {(() => {
                     // 「点击更新好像没用」:每次手动检查都要落到一句看得见、和上一次不同的话上
                     // (版本号 + 刚刚检查 / 失败原因),而不是闪一下转圈又回到同一句。
-                    const view = describeUpdateRow(update, { currentVersion: APP_VERSION, lastCheckedAt: desktopUpdateLastCheckedAt(), now: Date.now() });
+                    const view = isAndroid
+                      ? describeAndroidUpdateRow(androidUpdate, { currentVersion: APP_VERSION, lastCheckedAt: androidUpdateLastCheckedAt(), now: Date.now() })
+                      : describeUpdateRow(update, { currentVersion: APP_VERSION, lastCheckedAt: desktopUpdateLastCheckedAt(), now: Date.now() });
                     const valueColor = view.tone === 'danger' ? colors.failed : view.tone === 'accent' ? colors.accent : colors.textSecondary;
                     return (
                       <Pressable
                         testID="settings-update-row"
                         style={({ pressed }) => [styles.row, pressed && view.actionable && { opacity: 0.6 }]}
-                        onPress={() => { if (view.actionable) void checkDesktopUpdate(undefined, { manual: true }); }}
+                        onPress={() => {
+                          if (!view.actionable) return;
+                          if (isAndroid) void checkAndroidUpdate(APP_VERSION);
+                          else void checkDesktopUpdate(undefined, { manual: true });
+                        }}
                         disabled={!view.actionable}
                         accessibilityRole="button"
                         accessibilityState={{ busy: view.busy, disabled: !view.actionable }}

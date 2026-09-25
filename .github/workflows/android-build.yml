@@ -52,6 +52,40 @@ jobs:
           echo "path=$f" >> "$GITHUB_OUTPUT"
           ls -lh "$f"
 
+      # In-app update (Settings → 软件更新) installs this APK over the one on the phone. Android only
+      # allows that when (a) the signing certificate is the same as the installed APK's and (b) the
+      # versionCode is not lower. Every APK attached to desktop-v0.2.63 … desktop-v0.2.98 was signed
+      # by the same certificate (the React Native template debug key that `expo prebuild` writes into
+      # android/app/debug.keystore) and carried versionCode 1. Check both on the real artefact, plus
+      # the REQUEST_INSTALL_PACKAGES permission the updater needs to hand the file to the installer.
+      - name: Verify APK (versionCode, install permission, signing certificate)
+        env:
+          APK: ${{ steps.apk.outputs.path }}
+          # SHA-256 of the signing certificate of every released APK so far. Changing it means every
+          # existing install fails to update in place (「应用未安装 / 与已安装的应用签名冲突」).
+          EXPECTED_SIGNER_SHA256: fac61745dc0903786fb9ede62a962b399f7348f0bb6f899b8332667591033b9c
+        run: |
+          set -euo pipefail
+          bt_list=$(ls "$ANDROID_HOME/build-tools" | sort -V)
+          BT="$ANDROID_HOME/build-tools/${bt_list##*$'\n'}"
+          expected_code=$(node -e 'const v=require("./app.json").expo.version.split(".").map(Number);process.stdout.write(String(v[0]*1e6+v[1]*1e3+v[2]))')
+          badging=$("$BT/aapt2" dump badging "$APK")
+          code=$(sed -n "s/^package: .*versionCode='\([0-9]*\)'.*/\1/p" <<<"$badging")
+          name=$(sed -n "s/^package: .*versionName='\([^']*\)'.*/\1/p" <<<"$badging")
+          echo "versionCode=$code versionName=$name (expected versionCode $expected_code)"
+          if [ "$code" != "$expected_code" ]; then echo "::error::versionCode is '$code', expected $expected_code"; exit 1; fi
+          # here-string, not `printf | grep -q`: under pipefail grep -q exiting early SIGPIPEs printf (141).
+          if ! grep -Fq "uses-permission: name='android.permission.REQUEST_INSTALL_PACKAGES'" <<<"$badging"; then
+            echo "::error::APK lacks android.permission.REQUEST_INSTALL_PACKAGES"; exit 1
+          fi
+          certs=$("$BT/apksigner" verify --print-certs "$APK")
+          printf '%s\n' "$certs"
+          digest=$(sed -n 's/^Signer #1 certificate SHA-256 digest: //p' <<<"$certs")
+          if [ "$digest" != "$EXPECTED_SIGNER_SHA256" ]; then
+            echo "::error::signing certificate $digest differs from the released APKs ($EXPECTED_SIGNER_SHA256) — installed apps could not update in place"
+            exit 1
+          fi
+
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:

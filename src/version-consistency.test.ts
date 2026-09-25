@@ -1,4 +1,5 @@
 import fs from 'node:fs';
+import { ANDROID_PACKAGE, androidVersionCode } from './android-update-core';
 
 const expected = '0.2.98';
 const packageJson = JSON.parse(fs.readFileSync(new URL('../package.json', import.meta.url), 'utf8'));
@@ -26,6 +27,11 @@ const checks: Array<[string, boolean]> = [
   ['Cargo.lock root package', cargoPackagePattern.test(normalizeNewlines(cargoLock))],
   ['Cargo.lock CRLF checkout', cargoPackagePattern.test(normalizeNewlines(normalizeNewlines(cargoLock).replaceAll('\n', '\r\n')))],
   ['display version', versionSource.includes(`APP_VERSION = '${expected}'`)],
+  // 安卓 versionCode 必须随版本单调递增(以前恒为 1):bump 版本时同步改 app.json expo.android.versionCode,
+  // 值 = major*1000000 + minor*1000 + patch(见 android-update-core.ts androidVersionCode)。
+  [`app.json android.versionCode (= ${androidVersionCode(expected)})`, appJson.expo?.android?.versionCode === androidVersionCode(expected)],
+  ['app.json android.package matches the in-app updater', appJson.expo?.android?.package === ANDROID_PACKAGE],
+  ['app.json android.permissions has REQUEST_INSTALL_PACKAGES', (appJson.expo?.android?.permissions ?? []).includes('android.permission.REQUEST_INSTALL_PACKAGES')],
 ];
 
 for (const [name, ok] of checks) {

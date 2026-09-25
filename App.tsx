@@ -52,6 +52,7 @@ import { styles } from './src/app-styles';
 import { APP_VERSION } from './src/version';
 import { railBadgeText, railIconFor, railSurface, railTooltipVisible } from './src/rail-nav';
 import DesktopUpdatePrompt from './src/DesktopUpdatePrompt';
+import AndroidUpdatePrompt from './src/AndroidUpdatePrompt';
 import DesktopMessageListener from './src/DesktopMessageListener';
 import DesktopNotifier from './src/DesktopNotifier';
 import { bindDesktopTray, dismissAllForConfig } from './src/desktop-tray';
@@ -164,6 +165,7 @@ export default function App() {
         <AppRoot />
       </View>
       {dedicatedChatWindow ? null : <DesktopUpdatePrompt />}
+      {Platform.OS === 'android' ? <AndroidUpdatePrompt /> : null}
     </SafeAreaProvider>
   );
 }
