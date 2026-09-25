@@ -3,31 +3,20 @@
 // 只在 Tauri 主窗口生效(分离聊天窗/工作区窗不接托盘)。
 
 import { createTrayPusher, trayModelFrom, type TrayModel } from './tray-menu-model';
-import { getUnreadSnapshot, replyUnreadCounts, subscribeUnread, type UnreadStoreSnapshot } from './unread-store';
-import { unreadCountForAgentRow } from './unread-badge';
-import { readServerUnreadByAgent } from './user-unread';
+import { getUnreadSnapshot, subscribeUnread, type UnreadStoreSnapshot } from './unread-store';
+import { agentUnreadCounts } from './agent-unread-counts';
 import { ackAgentUnread } from './agent-ack';
 import { ackAgentMessages, ackUserMessages, type HubConfig } from './api';
 import { markAgentServerUnreadCleared, unackedIdsForAgent } from './unread-store';
 
 export const isTauriDesktop = (): boolean => !!(globalThis as any).__TAURI_INTERNALS__;
 
-/** 每个 agent 的角标数(和列表行同一函数算),只挑 > 0 的。 */
+/**
+ * 每个 agent 的角标数,只挑 > 0 的。实现在 agent-unread-counts.ts —— 节点列表「新消息」组用的是
+ * **同一个函数**,所以托盘和列表永远同一组会话。
+ */
 export function trayCountsFrom(snap: UnreadStoreSnapshot): Record<string, number> {
-  const out: Record<string, number> = {};
-  const authoritative = readServerUnreadByAgent(snap.serverBody);
-  const reply = replyUnreadCounts(snap);
-  const aliases = new Set<string>([
-    ...Object.keys(authoritative ?? {}),
-    ...Object.keys(reply),
-    ...Object.keys(snap.ledger.counts),
-  ]);
-  for (const alias of aliases) {
-    if (!alias || alias === 'hub') continue;
-    const n = unreadCountForAgentRow(snap.serverBody, snap.ledger, alias, reply);
-    if (n > 0) out[alias] = n;
-  }
-  return out;
+  return agentUnreadCounts(snap);
 }
 
 const pusher = createTrayPusher(async model => {

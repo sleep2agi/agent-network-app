@@ -83,7 +83,9 @@ ck('App:只有主窗口接托盘,点行打开会话', app.includes('const trayWi
 ck('App:通知组件只在主窗口挂', app.includes("{trayWindow ? <DesktopNotifier onOpenChat={alias => setScreen({ name: 'chat', alias })} /> : null}"));
 ck('通知组件订阅 unread-store,合并后一轮只响一次', notifier.includes('subscribeUnread(onSnapshot)') && notifier.includes('if (ring) playChime();'));
 ck('通知组件等 user_inbox 拉到后才登记首份快照(登录不弹历史)', notifier.includes('if (!seen.current.seeded && !snap.serverBody) return;'));
-ck('托盘数用列表同一函数算', tray.includes('unreadCountForAgentRow(snap.serverBody, snap.ledger, alias, reply)') && tray.includes("invoke('tray_update'"));
+// 0.2.95:函数体搬到 agent-unread-counts.ts(节点列表「新消息」组也用它),托盘只委托 ⇒ 契约跟着搬。
+const unreadCounts = norm('agent-unread-counts.ts');
+ck('托盘数用列表同一函数算', unreadCounts.includes('unreadCountForAgentRow(snap.serverBody, snap.ledger, alias, reply)') && tray.includes('return agentUnreadCounts(snap);') && tray.includes("invoke('tray_update'"));
 ck('设置页有「消息提示音」和「免打扰时段」', settings.includes('<Text style={styles.rowLabel}>消息提示音</Text>') && settings.includes('<Text style={styles.rowLabel}>免打扰时段</Text>'));
 const rust = norm('../src-tauri/src/tray.rs'), lib = norm('../src-tauri/src/lib.rs'), cargo = norm('../src-tauri/Cargo.toml'), cap = norm('../src-tauri/capabilities/default.json');
 // 0.2.79 起嵌的是 @2x:tray-icon 把状态栏图像强制成 18pt 高,22px 那份在 Retina 上
