@@ -19,6 +19,12 @@ import {
   lineNumberGutter, parentPath, parseFileContent, parseFilesListing, pathCrumbs, relativeTime, SECRET_FILE_MESSAGE, viewerModeFor,
   type NodeFileContent, type NodeFileEntry, type NodeFilesListing,
 } from './node-files';
+import {
+  dropInFlight, expandDir, FILES_TREE_GAP, FilesTreeCache, invalidateTree, markError, markLoading, mergeListing, missingExpanded, revealPath, toggleDir,
+  visibleRows, type FilesTreeMode, type FilesTreeState,
+} from './node-files-tree';
+import { NodeFilesTreeButton, NodeFilesTreeDocked, NodeFilesTreeDrawer, readTreeWidth } from './NodeFilesTree';
+import { NODE_PAGE_CONTENT_MAX_WIDTH } from './node-page-model';
 import { isTerminal, nextPollDelayMs, requestIdToFollow, resultProblem } from './node-rules';
 import { colors, radius, spacing, type } from './theme';
 
@@ -26,9 +32,13 @@ const MONO = Platform.OS === 'ios' ? 'Menlo' : 'monospace';
 const WEB = Platform.OS === 'web';
 const INFO = '节点工作目录里的文件(只读)。路径以工作目录为根,不能跳出去;指向外面的链接不跟随。.env、密钥、auth.json 等凭据文件只显示名字,不显示内容;node_modules 和 .git 不展开。';
 
-export type NodeFilesSectionProps = { cfg: HubConfig; alias?: string; node?: RulesTarget | null; session: Session };
+export type NodeFilesSectionProps = {
+  cfg: HubConfig; alias?: string; node?: RulesTarget | null; session: Session;
+  /** 右侧文件树怎么挂(node-files-tree.ts filesTreeMode,由节点页按内容列宽度算);不传 = 不挂(手机布局)。 */
+  treeMode?: FilesTreeMode;
+};
 
-export function NodeFilesSection({ cfg, alias, node, session }: NodeFilesSectionProps) {
+export function NodeFilesSection({ cfg, alias, node, session, treeMode = 'none' }: NodeFilesSectionProps) {
   const s = { ...session, alias: session.alias || alias || '' };
   const support = filesSupport(s);
   const target = support.kind === 'capable' ? filesTarget({ node: node ?? null, session: s }) : null;
@@ -41,13 +51,18 @@ export function NodeFilesSection({ cfg, alias, node, session }: NodeFilesSection
       </Card>
     );
   }
-  return <FilesBrowser cfg={cfg} target={target} />;
+  return <FilesBrowser cfg={cfg} target={target} treeMode={treeMode} />;
 }
 
 type Phase = 'loading' | 'ready' | 'error';
 type Open = { path: string; name: string } | null;
+type DirResult = { ok: true; listing: NodeFilesListing } | { ok: false; message: string };
 
-function FilesBrowser({ cfg, target }: { cfg: HubConfig; target: RulesTarget }) {
+// 树的状态按节点存在模块里:离开分区再回来(组件重建)不重新列(node-files-tree.ts FilesTreeCache)。
+const treeCache = new FilesTreeCache();
+
+function FilesBrowser({ cfg, target, treeMode }: { cfg: HubConfig; target: RulesTarget; treeMode: FilesTreeMode }) {
+  const key = `${cfg.profileId ?? cfg.serverUrl}|${target.node_id ?? ''}|${target.alias}`;
   const [dir, setDir] = useState('');
   const [listing, setListing] = useState<NodeFilesListing | null>(null);
   const [listPhase, setListPhase] = useState<Phase>('loading');
@@ -57,47 +72,94 @@ function FilesBrowser({ cfg, target }: { cfg: HubConfig; target: RulesTarget }) 
   const [filePhase, setFilePhase] = useState<Phase>('ready');
   const [fileMsg, setFileMsg] = useState('');
   const [note, setNote] = useState('');
+  const [tree, setTree] = useState<FilesTreeState>(() => dropInFlight(treeCache.get(key)));
+  const [drawer, setDrawer] = useState(false);
+  const [treeWidth, setTreeWidth] = useState(readTreeWidth);
+  const treeRef = useRef(tree);
   const cancelled = useRef(false);
   const seq = useRef(0);
+  const chain = useRef<Promise<unknown>>(Promise.resolve());
+  const inflight = useRef(new Map<string, Promise<DirResult | null>>());
   useEffect(() => () => { cancelled.current = true; }, []);
-  const key = `${target.node_id ?? ''}|${target.alias}`;
 
-  // 同一节点的列 / 读共用一条单飞通道:上一条还在跑就先等它,再发一次(不把「等一下」说成失败)。
-  const ask = useCallback(async (enqueue: () => Promise<RulesFileEnqueueResult>) => {
-    let enq = await enqueue();
-    if (!enq.ok && enq.existing_request_id) {
-      await waitForRulesFileResult(cfg, enq.existing_request_id, { nextDelayMs: nextPollDelayMs, isTerminal, isCancelled: () => cancelled.current });
-      if (cancelled.current) return null;
-      enq = await enqueue();
-    }
-    const follow = requestIdToFollow(enq);
-    if (!follow) return { ok: false as const, error: enq.ok ? 'Hub 返回空响应' : enq.error };
-    return waitForRulesFileResult(cfg, follow, { nextDelayMs: nextPollDelayMs, isTerminal, isCancelled: () => cancelled.current });
+  const updateTree = useCallback((fn: (s: FilesTreeState) => FilesTreeState) => {
+    const next = fn(treeRef.current);
+    if (next === treeRef.current) return;
+    treeRef.current = next; treeCache.set(key, next); setTree(next);
+  }, [key]);
+
+  // 同一节点的列 / 读共用一条单飞通道(hub 同一节点同时只收一条):这里先在本地排队一条条发,
+  // 上一条还在跑(别处发的)就先等它,再发一次(不把「等一下」说成失败)。
+  // `wanted` 返回 false = 排到时已经没人要了(比如连点了好几个文件),直接跳过不发。
+  const ask = useCallback((enqueue: () => Promise<RulesFileEnqueueResult>, wanted: () => boolean = () => true) => {
+    const run = async () => {
+      if (cancelled.current || !wanted()) return null;
+      let enq = await enqueue();
+      if (!enq.ok && enq.existing_request_id) {
+        await waitForRulesFileResult(cfg, enq.existing_request_id, { nextDelayMs: nextPollDelayMs, isTerminal, isCancelled: () => cancelled.current });
+        if (cancelled.current) return null;
+        enq = await enqueue();
+      }
+      const follow = requestIdToFollow(enq);
+      if (!follow) return { ok: false as const, error: enq.ok ? 'Hub 返回空响应' : enq.error };
+      return waitForRulesFileResult(cfg, follow, { nextDelayMs: nextPollDelayMs, isTerminal, isCancelled: () => cancelled.current });
+    };
+    const p = chain.current.then(run, run);
+    chain.current = p.catch(() => undefined);
+    return p;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [cfg, key]);
 
-  const loadDir = useCallback(async (path: string) => {
+  // 列一个目录(列表视图和树共用):同一目录同时只发一次,结果进树的缓存。
+  const fetchDir = useCallback((d: string): Promise<DirResult | null> => {
+    const cur = inflight.current.get(d);
+    if (cur) return cur;
+    updateTree(s => markLoading(s, d));
+    const p = (async (): Promise<DirResult | null> => {
+      const res = await ask(() => listNodeFiles(cfg, target, d));
+      if (cancelled.current || !res) return null;
+      let out: DirResult;
+      const problem = resultProblem(res);
+      if (problem !== null) out = { ok: false, message: problem };
+      else if (!res.ok) out = { ok: false, message: res.error };
+      else if (res.status !== 'done') out = { ok: false, message: filesStatusMessage(res.status, res.error) };
+      else {
+        const l = parseFilesListing(res.content);
+        out = l ? { ok: true, listing: l } : { ok: false, message: '节点返回的目录内容无法解析' };
+      }
+      updateTree(s => (out.ok ? mergeListing(s, d, out.listing) : markError(s, d, out.message)));
+      return out;
+    })();
+    inflight.current.set(d, p);
+    void p.finally(() => { if (inflight.current.get(d) === p) inflight.current.delete(d); });
+    return p;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ask, key, updateTree]);
+
+  const fetchDirs = useCallback(async (dirs: string[]) => {
+    for (const d of dirs) { if (cancelled.current) return; await fetchDir(d); }
+  }, [fetchDir]);
+
+  /** 列表视图进入一个目录。缓存里有就直接用(「刷新」才强制重列)。 */
+  const loadDir = useCallback(async (path: string, force = false) => {
     const my = ++seq.current;
     setDir(path); setOpen(null); setFile(null); setNote('');
+    const cached = force ? undefined : treeRef.current.listings[path];
+    if (cached) { setListing(cached); setListPhase('ready'); setListMsg(''); return; }
     setListPhase('loading'); setListMsg(filesStatusMessage('pending', null));
-    const res = await ask(() => listNodeFiles(cfg, target, path));
+    const res = await fetchDir(path);
     if (cancelled.current || my !== seq.current || !res) return;
-    const problem = resultProblem(res);
-    if (problem !== null) { setListPhase('error'); setListMsg(problem); return; }
-    if (!res.ok) return;
-    if (res.status !== 'done') { setListPhase('error'); setListMsg(filesStatusMessage(res.status, res.error)); return; }
-    const l = parseFilesListing(res.content);
-    if (!l) { setListPhase('error'); setListMsg('节点返回的目录内容无法解析'); return; }
-    setListing(l); setListPhase('ready'); setListMsg('');
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ask, key]);
+    if (!res.ok) { setListPhase('error'); setListMsg(res.message); return; }
+    setListing(res.listing); setListPhase('ready'); setListMsg('');
+  }, [fetchDir]);
 
   const openFile = useCallback(async (path: string, name: string, secret: boolean) => {
     const my = ++seq.current;
-    setOpen({ path, name }); setNote('');
+    // 从树里点开的文件可能不在当前目录:目录跟着文件走,面包屑和「返回目录」才对得上。
+    setDir(parentPath(path)); setOpen({ path, name }); setNote('');
     if (secret) { setFile({ path, name, kind: 'secret' }); setFilePhase('ready'); setFileMsg(''); return; }
     setFile(null); setFilePhase('loading'); setFileMsg(filesStatusMessage('pending', null));
-    const res = await ask(() => readNodeFile(cfg, target, path));
+    const res = await ask(() => readNodeFile(cfg, target, path), () => my === seq.current);
     if (cancelled.current || my !== seq.current || !res) return;
     const problem = resultProblem(res);
     if (problem !== null) { setFilePhase('error'); setFileMsg(problem); return; }
@@ -110,6 +172,42 @@ function FilesBrowser({ cfg, target }: { cfg: HubConfig; target: RulesTarget }) 
   }, [ask, key]);
 
   useEffect(() => { void loadDir(''); }, [loadDir]);
+
+  const showTree = treeMode !== 'none';
+  // 树挂出来时:补列展开着却没缓存的目录(上次离开分区时被打断的)。
+  useEffect(() => {
+    if (!showTree) return;
+    void fetchDirs(missingExpanded(treeRef.current));
+  }, [showTree, fetchDirs]);
+
+  // 打开文件(或列表视图换目录)时,让它在树里看得见:祖先全部展开,缺的从根到叶一层层补列。
+  const revealTarget = open?.path ?? dir;
+  useEffect(() => {
+    if (!showTree) return;
+    const r = revealPath(treeRef.current, revealTarget);
+    updateTree(() => r.state);
+    void fetchDirs(r.fetch);
+  }, [showTree, revealTarget, fetchDirs, updateTree]);
+
+  const onTreeToggle = useCallback((path: string) => {
+    const r = toggleDir(treeRef.current, path);
+    updateTree(() => r.state);
+    if (r.fetch) void fetchDir(path);
+  }, [fetchDir, updateTree]);
+  const onTreeRetry = useCallback((d: string) => {
+    const r = expandDir(treeRef.current, d);
+    updateTree(() => r.state);
+    if (r.fetch) void fetchDir(d);
+  }, [fetchDir, updateTree]);
+
+  const refresh = () => {
+    // 缓存整棵作废(节点那边可能加 / 删了文件);树挂着就重列看得见的展开目录,没挂就等用到时再列。
+    const inv = invalidateTree(treeRef.current);
+    updateTree(() => (showTree ? inv.state : { ...inv.state, loading: [] }));
+    if (open) void openFile(open.path, open.name, file?.kind === 'secret');
+    else void loadDir(dir, true);
+    if (showTree) void fetchDirs(inv.fetch);
+  };
 
   const onEntry = (e: NodeFileEntry) => {
     const a = entryAction(dir, e);
@@ -144,8 +242,16 @@ function FilesBrowser({ cfg, target }: { cfg: HubConfig; target: RulesTarget }) 
     </View>
   );
   const countText = !open && listPhase === 'ready' && listing ? `${listing.total} 项` : '';
+  const treeProps = {
+    rows: visibleRows(tree),
+    selected: open?.path ?? (dir || null),
+    onToggle: onTreeToggle,
+    onOpen: (path: string, name: string, secret: boolean) => void openFile(path, name, secret),
+    onNote: setNote,
+    onRetry: onTreeRetry,
+  };
 
-  return (
+  const card = (
     <Card testID="node-files">
       <Toolbar
         crumbs={crumbRow}
@@ -154,13 +260,14 @@ function FilesBrowser({ cfg, target }: { cfg: HubConfig; target: RulesTarget }) 
             {busy ? <ActivityIndicator size="small" color={colors.accent} /> : null}
             {countText ? <Text style={{ color: colors.textMuted, fontSize: 12 }}>{countText}</Text> : null}
             <InfoTip label="项目文件夹说明" text={INFO} />
-            <SmallBtn label="刷新" disabled={busy} onPress={() => (open ? void openFile(open.path, open.name, file?.kind === 'secret') : void loadDir(dir))} />
+            {treeMode === 'drawer' ? <NodeFilesTreeButton open={drawer} onPress={() => setDrawer(v => !v)} /> : null}
+            <SmallBtn label="刷新" disabled={busy} onPress={refresh} />
           </>
         )}
       />
       {note ? <Text style={{ color: colors.textMuted, fontSize: 12 }}>{note}</Text> : null}
       {open ? (
-        <FileViewer file={file} phase={filePhase} message={fileMsg} name={open.name} onBack={() => { setOpen(null); setFile(null); seq.current++; }} />
+        <FileViewer file={file} phase={filePhase} message={fileMsg} name={open.name} onBack={() => { seq.current++; void loadDir(dir); }} />
       ) : listPhase === 'loading' && !listing ? (
         <Text style={{ color: colors.textMuted, fontSize: type.small }}>{listMsg}</Text>
       ) : listPhase === 'error' ? (
@@ -169,6 +276,21 @@ function FilesBrowser({ cfg, target }: { cfg: HubConfig; target: RulesTarget }) 
         <DirList listing={listing} dir={dir} dim={listPhase === 'loading'} onEntry={onEntry} onUp={() => void loadDir(parentPath(dir))} />
       ) : null}
     </Card>
+  );
+
+  if (treeMode === 'docked') {
+    return (
+      <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: FILES_TREE_GAP, width: '100%', maxWidth: NODE_PAGE_CONTENT_MAX_WIDTH + FILES_TREE_GAP + treeWidth }}>
+        <View style={{ flex: 1, minWidth: 0 }}>{card}</View>
+        <NodeFilesTreeDocked {...treeProps} width={treeWidth} onWidth={setTreeWidth} />
+      </View>
+    );
+  }
+  return (
+    <>
+      {card}
+      {treeMode === 'drawer' ? <NodeFilesTreeDrawer {...treeProps} visible={drawer} onClose={() => setDrawer(false)} /> : null}
+    </>
   );
 }
 
