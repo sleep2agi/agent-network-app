@@ -66,6 +66,7 @@ import ActualRecipientNotice from './ActualRecipientNotice';
 import { sendConfirmationFromResponse, sendNoticeFor, type SendConfirmation } from './actual-recipient';
 import { beginForward, confirmForward, markForwardAmbiguous, mayProjectForward, resetForwardWithoutResend } from './forward-controller';
 import { parseBtwFirstToken } from './btw-command';
+import { SHOW_BOLT_ENTRY, SHOW_BTW_ENTRY } from './chat-entry-flags';
 import { layoutGeneration, releaseOnUnmount, takeHandoff } from './layout-handoff';
 import SideThreadDrawer, { type SideThreadLaunch } from './SideThreadDrawer';
 import { nextPlusPanel, plusPanelHeight, plusPanelItems, type PlusItemKey, type PlusPanelEvent } from './composer-plus-panel';
@@ -1184,15 +1185,18 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
         >
           <Ionicons name={searchOpen ? 'close-outline' : 'search-outline'} size={20} color={searchOpen ? colors.accent : colors.textSecondary} />
         </Pressable>
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="打开 BTW 旁路线程"
-          onPress={() => runPlusItem('btw')}
-          hitSlop={8}
-          style={({ pressed }) => [styles.btwHeaderButton, pressed && { opacity: 0.6 }]}
-        >
-          <Text style={styles.btwHeaderText}>BTW</Text>
-        </Pressable>
+        {/* Hidden since 0.2.105 (chat-entry-flags.ts); `/btw <问题>` still opens the drawer. */}
+        {SHOW_BTW_ENTRY ? (
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="打开 BTW 旁路线程"
+            onPress={() => runPlusItem('btw')}
+            hitSlop={8}
+            style={({ pressed }) => [styles.btwHeaderButton, pressed && { opacity: 0.6 }]}
+          >
+            <Text style={styles.btwHeaderText}>BTW</Text>
+          </Pressable>
+        ) : null}
         {onTogglePin ? (
           <Pressable
             accessibilityRole="button"
@@ -1743,15 +1747,18 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
                 <Ionicons name="add-circle-outline" size={24} color={colors.textSecondary} />
             </Pressable>
             <View style={styles.desktopToolbarRight}>
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel={sendPriority === 'high' ? '取消优先发送' : '设为优先发送'}
-                accessibilityState={{ selected: sendPriority === 'high' }}
-                onPress={() => setSendPriority(value => value === 'high' ? 'normal' : 'high')}
-                style={({ pressed }) => [styles.priorityButton, sendPriority === 'high' && styles.priorityButtonActive, pressed && { opacity: 0.7 }]}
-              >
-                <Text style={[styles.priorityButtonText, sendPriority === 'high' && styles.priorityButtonTextActive]}>⚡ 优先</Text>
-              </Pressable>
+              {/* ⚡ 优先 toggle hidden since 0.2.105 (chat-entry-flags.ts). */}
+              {SHOW_BOLT_ENTRY ? (
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel={sendPriority === 'high' ? '取消优先发送' : '设为优先发送'}
+                  accessibilityState={{ selected: sendPriority === 'high' }}
+                  onPress={() => setSendPriority(value => value === 'high' ? 'normal' : 'high')}
+                  style={({ pressed }) => [styles.priorityButton, sendPriority === 'high' && styles.priorityButtonActive, pressed && { opacity: 0.7 }]}
+                >
+                  <Text style={[styles.priorityButtonText, sendPriority === 'high' && styles.priorityButtonTextActive]}>⚡ 优先</Text>
+                </Pressable>
+              ) : null}
               <Text style={styles.shortcutHint}>Enter 发送 · Shift/Ctrl/⌘+Enter 换行</Text>
               <Pressable
                 style={({ pressed }) => [styles.desktopSend, !canSend(draft, attached.length > 0, sending) && styles.desktopSendDisabled, pressed && { opacity: 0.7 }]}
@@ -1785,15 +1792,18 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
         >
           <Text style={[styles.attachBtnText, plusMenuOpen && styles.attachBtnTextActive]}>＋</Text>
         </Pressable>
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel={sendPriority === 'high' ? '取消优先发送' : '设为优先发送'}
-          accessibilityState={{ selected: sendPriority === 'high' }}
-          onPress={() => setSendPriority(value => value === 'high' ? 'normal' : 'high')}
-          style={({ pressed }) => [styles.mobilePriorityButton, sendPriority === 'high' && styles.priorityButtonActive, pressed && { opacity: 0.6 }]}
-        >
-          <Text style={[styles.mobilePriorityText, sendPriority === 'high' && styles.priorityButtonTextActive]}>⚡</Text>
-        </Pressable>
+        {/* ⚡ toggle hidden since 0.2.105 (chat-entry-flags.ts); the row is then ＋ / input / send. */}
+        {SHOW_BOLT_ENTRY ? (
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={sendPriority === 'high' ? '取消优先发送' : '设为优先发送'}
+            accessibilityState={{ selected: sendPriority === 'high' }}
+            onPress={() => setSendPriority(value => value === 'high' ? 'normal' : 'high')}
+            style={({ pressed }) => [styles.mobilePriorityButton, sendPriority === 'high' && styles.priorityButtonActive, pressed && { opacity: 0.6 }]}
+          >
+            <Text style={[styles.mobilePriorityText, sendPriority === 'high' && styles.priorityButtonTextActive]}>⚡</Text>
+          </Pressable>
+        ) : null}
         <TextInput
           ref={mainComposerRef}
           style={styles.input}
