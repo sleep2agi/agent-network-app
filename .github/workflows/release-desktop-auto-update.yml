@@ -119,6 +119,13 @@ jobs:
           releaseBody: |-
             Signed and notarized stable update for macOS (Apple Silicon) and Windows (x64).
 
+            What's new in 0.2.94:
+            - 节点设置里新增「项目文件夹」:可以一层一层浏览节点的工作目录,点开文件直接查看——
+              Markdown 按排版显示,代码带行号。
+            - .env、密钥之类的凭据文件只显示文件名,不显示内容;太大的文件和二进制文件只显示大小。
+            - 需要节点升级到 agent-node 2.5.0-preview.88(或 anet 2.3.0-preview.115),hub 升级到 0.9.0-preview.59;
+              版本不够时会直接提示要升级什么,不用干等。
+
             What's new in 0.2.93:
             - 节点页「规则文件」和「技能」区的顶部收成一行工具栏:阅读/编辑、文件名、ⓘ 说明、全屏/重新读取/保存都在一行,
               原来重复的两段说明收进 ⓘ 里,正文往上挪,阅读区在 1200×800 窗口下高了约 190 像素。
