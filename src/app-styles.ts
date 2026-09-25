@@ -161,6 +161,8 @@ const makeStyles = () =>
     justifyContent: 'center',
     zIndex: 2,
   },
+  // 0.2.106 phone / two-pane rows: the badge sits in the row's right column (WeChat), no ring.
+  unreadBadgeInline: { position: 'relative', top: 0, right: 0, borderWidth: 0, flexShrink: 0 },
   unreadBadgeText: {
     color: '#ffffff',
     fontSize: 10,

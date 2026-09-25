@@ -11,19 +11,20 @@ import {
   Pressable,
   RefreshControl,
   SectionList,
+  StyleSheet,
   Text,
   TextInput,
   View,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import AliasAvatar from './AliasAvatar';
-import { agentStatusLabel, isAgentOnline } from './chat-actions';
+import { isAgentOnline } from './chat-actions';
 import { fetchStatus, fetchUserMessages, takeStatusPrefetch, type HubConfig, type Session,
   fetchMessages,
   replyUnreadSince,
 } from './api';
 import { loadSessionsCache, saveSessionsCache } from './storage';
-import { colors, radius, spacing, statusColor } from './theme';
+import { colors, radius, spacing, statusColor, type, weight } from './theme';
 import { usePoll } from './usePoll';
 import { retryUnreadPersistFromPoll } from './conversation-unread-persist';
 import AgentUnreadBadge from './AgentUnreadBadge';
@@ -38,7 +39,9 @@ import {
   subscribeUnread,
 } from './unread-store';
 import { styles } from './app-styles';
-import { buildSections, countShown, holdWhileActive } from './agents-list';
+import { applyCollapsed, buildSections, countShown, holdWhileActive, toggleCollapsed } from './agents-list';
+import { AGENT_ROW_AVATAR, AGENT_ROW_DOT, AGENT_ROW_GAP, AGENT_ROW_HEIGHT, AGENT_ROW_PAD_X, AGENT_ROW_SEPARATOR_INSET, agentRowModel, latestMessageByAgent } from './agent-row-model';
+import { loadCollapsedGroups, saveCollapsedGroups } from './agent-list-prefs';
 import { agentUnreadCounts, latestMessageAtByAgent } from './agent-unread-counts';
 import { pinyinMatch } from './lib/pinyin';
 
@@ -89,6 +92,24 @@ export default function AgentsScreen({
       : unreadSnap;
     return { counts: agentUnreadCounts(src), lastAt: latestMessageAtByAgent(src) };
   }, [preview, unreadSnap]);
+  // Row right column + preview line (phone / two-pane rows): the same snapshot as the counts.
+  const latestByAgent = useMemo(() => latestMessageByAgent(preview
+    ? { serverBody: preview.serverBody, replyRows: [], replyUsername: '' }
+    : unreadSnap), [preview, unreadSnap]);
+  // Folded group headers, remembered per device (agent-list-prefs.ts).
+  const [collapsed, setCollapsed] = useState<string[]>([]);
+  useEffect(() => {
+    let live = true;
+    loadCollapsedGroups().then(v => { if (live) setCollapsed(v); }).catch(() => {});
+    return () => { live = false; };
+  }, []);
+  const toggleGroup = useCallback((title: string) => {
+    setCollapsed(prev => {
+      const next = toggleCollapsed(prev, title);
+      void saveCollapsedGroups(next);
+      return next;
+    });
+  }, []);
   // 指针在列表行间移动 / 滚动的这一小段时间里,先按住上一份分组输入,停手 1.2s 后再换成最新的 ——
   // 否则新消息把行顶下去,光标底下的那一行会跳走。只按住「活动中」,鼠标停在列表上不动时照常上浮。
   const [listActive, setListActive] = useState(false);
@@ -209,6 +230,8 @@ export default function AgentsScreen({
     [sessions, query, pinnedAliases, floatInput],
   );
   const shownCount = countShown(sections);
+  const shownSections = useMemo(() => applyCollapsed(sections, collapsed, query), [sections, collapsed, query]);
+  const nowMs = Date.now();
 
   if (loading) {
     return (
@@ -238,9 +261,126 @@ export default function AgentsScreen({
     );
   }
 
+  // Unread badge for one row — the same computation for the desktop row and the phone row.
+  const rowBadge = (alias: string) => formatUnreadBadge(unreadCountForAgentRow(
+    preview?.serverBody ?? unreadSnap.serverBody,
+    preview?.ledger ?? unreadSnap.ledger,
+    alias,
+    preview ? undefined : replyUnreadCounts(unreadSnap),
+  ));
+
+  // Desktop (Tauri) sidebar row — unchanged by the 0.2.106 phone / two-pane redesign.
+  const renderCompactRow = (item: Session) => {
+    return (
+    <Pressable
+      {...(compact ? ({ dataSet: { agentAlias: item.alias } } as any) : {})}
+      onHoverIn={compact ? () => { setHoveredAlias(item.alias); markListActive(); } : undefined}
+      onHoverOut={compact ? () => setHoveredAlias(current => current === item.alias ? null : current) : undefined}
+      style={({ pressed }) => [
+        styles.card,
+        compact && ({ userSelect: 'none', cursor: 'default' } as any),
+        compact && {
+          borderWidth: 0,
+          borderBottomWidth: 0,
+          borderRadius: radius.md,
+          paddingHorizontal: spacing.md,
+          paddingVertical: 10,
+          marginBottom: 2,
+          // 极简:两种主题的行都是平铺(不成卡片),只靠悬停/选中的一档中性底色表达状态。
+          backgroundColor: 'transparent',
+        },
+        compact && hoveredAlias === item.alias && { backgroundColor: colors.rowHover },
+        selectedAlias === item.alias && { backgroundColor: colors.rowActive },
+        item.status === 'offline' && styles.cardOffline,
+        pressed && { opacity: 0.7 },
+      ]}
+      onPress={() => onOpenChat(item.alias)}
+      onLongPress={compact ? undefined : () => onOpenNodeDetail(item.alias)}
+      delayLongPress={400}
+    >
+      <View style={styles.avatarWrap}>
+        <AliasAvatar alias={item.alias} size={34} />
+        {/* 更像微信·round-5: 头像右下在线态圆点(带描边环·offline 灰暗) */}
+        <View
+          style={[
+            styles.statusDot,
+            { backgroundColor: statusColor(item.status ?? '', true) },
+            !isAgentOnline(item.status) && styles.statusDotOffline,
+          ]}
+        />
+        <AgentUnreadBadge badge={rowBadge(item.alias)} testID={`unread-badge-${item.alias}`} />
+      </View>
+      <View style={{ flex: 1, minWidth: 0 }}>
+        <Text selectable={false} style={[styles.alias, compact && { fontSize: 13, fontWeight: '600' }]} numberOfLines={1}>
+          {pinnedAliases.includes(item.alias) ? '📌 ' : ''}
+          {item.alias}
+        </Text>
+        {item.task ? (
+          <Text selectable={false} style={[styles.task, compact && { fontSize: 11 }]} numberOfLines={1}>
+            {item.task}
+          </Text>
+        ) : null}
+      </View>
+    </Pressable>
+    );
+  };
+
+  // Phone / Android two-pane row (0.2.106, WeChat-style): flat 68 dp, 44 dp avatar with the
+  // online dot, name + last message on two lines, time + unread badge on the right.
+  // Model (status → dot / label, time format): agent-row-model.ts.
+  const renderPhoneRow = (item: Session) => {
+    const pinned = pinnedAliases.includes(item.alias);
+    const model = agentRowModel(item, { latest: latestByAgent[item.alias], pinned, nowMs });
+    const selected = selectedAlias === item.alias;
+    const rowBg = selected ? colors.rowActive : colors.bg;
+    const badge = rowBadge(item.alias);
+    return (
+      <Pressable
+        testID={`agent-row-${item.alias}`}
+        accessibilityRole="button"
+        accessibilityState={{ selected }}
+        style={({ pressed }) => [
+          rowStyles.row,
+          { backgroundColor: selected ? colors.rowActive : pressed ? colors.rowHover : colors.bg },
+        ]}
+        onPress={() => onOpenChat(item.alias)}
+        onLongPress={() => onOpenNodeDetail(item.alias)}
+        delayLongPress={400}
+      >
+        <View style={rowStyles.avatar}>
+          <View style={!model.status.online ? rowStyles.avatarOffline : null}>
+            <AliasAvatar alias={item.alias} size={AGENT_ROW_AVATAR} />
+          </View>
+          <View
+            testID={`agent-dot-${item.alias}`}
+            style={[rowStyles.dot, { backgroundColor: colors[model.status.dot], borderColor: rowBg }]}
+          />
+        </View>
+        <View style={rowStyles.body}>
+          <View style={rowStyles.line}>
+            <Text selectable={false} numberOfLines={1} style={[rowStyles.name, { color: model.status.online ? colors.text : colors.textSecondary }]}>
+              {item.alias}
+            </Text>
+            {pinned ? <Ionicons name="pin" size={12} color={colors.textMuted} accessibilityLabel="已置顶" style={rowStyles.pin} /> : null}
+            <Text selectable={false} numberOfLines={1} style={[rowStyles.time, { color: colors.textMuted }]}>{model.time}</Text>
+          </View>
+          {/* No second line when there is nothing to say (and no badge): the name then centres. */}
+          {model.status.label || model.preview || badge ? <View style={rowStyles.line}>
+            {model.status.label && model.status.labelTone ? (
+              <Text selectable={false} style={[rowStyles.label, { color: colors[model.status.labelTone] }]}>{model.status.label}</Text>
+            ) : null}
+            <Text selectable={false} numberOfLines={1} style={[rowStyles.preview, { color: colors.textMuted }]}>{model.preview}</Text>
+            <AgentUnreadBadge inline badge={badge} testID={`unread-badge-${item.alias}`} />
+          </View> : null}
+        </View>
+      </Pressable>
+    );
+  };
+
   return (
     <View style={{ flex: 1, backgroundColor: compact ? colors.listBg : colors.bg }}>
-      <View style={{ paddingHorizontal: compact ? spacing.sm : spacing.lg, paddingTop: compact ? spacing.sm : spacing.lg, backgroundColor: compact ? colors.listBg : colors.bg }}>
+      {compact ? (
+        <View style={{ paddingHorizontal: compact ? spacing.sm : spacing.lg, paddingTop: compact ? spacing.sm : spacing.lg, backgroundColor: compact ? colors.listBg : colors.bg }}>
         <View style={styles.listHeaderRow}>
           <Text style={styles.listHeader}>
             {q ? `${shownCount} / ${sessions.length} agents` : `${sessions.length} agents`}
@@ -253,19 +393,58 @@ export default function AgentsScreen({
           <TextInput style={[styles.search, compact && { backgroundColor: colors.subtleFill, borderWidth: 0, borderRadius: radius.sm }]} placeholder="搜索 agent…" placeholderTextColor={colors.textMuted} autoCapitalize="none" autoCorrect={false} value={query} onChangeText={setQuery} />
         ) : null}
       </View>
+      ) : (
+        <View style={[rowStyles.head, { backgroundColor: colors.bg }]}>
+          <View style={rowStyles.headRow}>
+            {sessions.length > 10 ? (
+              <View style={[rowStyles.searchBox, { backgroundColor: colors.subtleFill }]}>
+                <Ionicons name="search" size={16} color={colors.textMuted} />
+                <TextInput
+                  style={[rowStyles.searchInput, { color: colors.text }]}
+                  placeholder={`搜索 ${sessions.length} 个 agent`}
+                  placeholderTextColor={colors.textMuted}
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  value={query}
+                  onChangeText={setQuery}
+                />
+              </View>
+            ) : (
+              <Text style={[styles.listHeader, { flex: 1 }]}>{`${sessions.length} agents`}</Text>
+            )}
+            <Pressable onPress={onOpenPicker} hitSlop={10} accessibilityLabel="新建节点" style={({ pressed }) => [styles.addBtn, pressed && { opacity: 0.6 }]}>
+              <Ionicons name="add" size={24} color={colors.accent} />
+            </Pressable>
+          </View>
+          {q ? <Text style={[styles.listHeader, rowStyles.searchCount]}>{`${shownCount} / ${sessions.length} agents`}</Text> : null}
+        </View>
+      )}
       <SectionList
-      sections={sections}
+      sections={shownSections}
       keyExtractor={s => s.alias}
       onScroll={markListActive}
       scrollEventThrottle={100}
       stickySectionHeadersEnabled={false}
       renderSectionHeader={({ section }) => (
-        <View style={[styles.sectionHeaderRow, compact && { backgroundColor: colors.listBg }]}>
-          <Text style={styles.sectionHeader}>{section.title}</Text>
-          <Text style={styles.sectionCount}>
-            {section.online}/{section.total} 在线
-          </Text>
-        </View>
+        // Small section label + online/total; tap folds the group (not 新消息, not while searching).
+        <Pressable
+          testID={`agent-group-${section.title}`}
+          disabled={!section.collapsible}
+          onPress={() => toggleGroup(section.title)}
+          accessibilityRole={section.collapsible ? 'button' : 'header'}
+          accessibilityLabel={`${section.title} ${section.online}/${section.total} 在线${section.collapsible ? (section.collapsed ? ',已折叠' : ',已展开') : ''}`}
+          accessibilityState={section.collapsible ? { expanded: !section.collapsed } : undefined}
+          style={[rowStyles.group, compact ? rowStyles.groupCompact : null, { backgroundColor: compact ? colors.listBg : colors.bg }]}
+        >
+          {section.collapsible ? (
+            <Ionicons name={section.collapsed ? 'chevron-forward' : 'chevron-down'} size={12} color={colors.textMuted} />
+          ) : null}
+          <Text selectable={false} numberOfLines={1} style={[rowStyles.groupTitle, { color: colors.textMuted }]}>{section.title}</Text>
+          <Text selectable={false} style={[rowStyles.groupCount, { color: colors.textMuted }]}>{section.online}/{section.total}</Text>
+        </Pressable>
+      )}
+      ItemSeparatorComponent={compact ? undefined : () => (
+        <View style={[rowStyles.separator, { backgroundColor: colors.border }]} />
       )}
       // Perf (render time): the real fleet is 150+ agents. Without these the
       // default virtualization renders/retains far more rows than fit on
@@ -277,7 +456,7 @@ export default function AgentsScreen({
       maxToRenderPerBatch={12}
       windowSize={9}
       updateCellsBatchingPeriod={50}
-      contentContainerStyle={{ paddingHorizontal: compact ? spacing.sm : spacing.lg, paddingBottom: compact ? spacing.sm : spacing.lg }}
+      contentContainerStyle={compact ? { paddingHorizontal: spacing.sm, paddingBottom: spacing.sm } : { paddingBottom: spacing.sm }}
       refreshControl={
         <RefreshControl
           refreshing={refreshing}
@@ -308,69 +487,7 @@ export default function AgentsScreen({
           ) : null}
         </View>
       }
-      renderItem={({ item }) => {
-        return (
-        <Pressable
-          {...(compact ? ({ dataSet: { agentAlias: item.alias } } as any) : {})}
-          onHoverIn={compact ? () => { setHoveredAlias(item.alias); markListActive(); } : undefined}
-          onHoverOut={compact ? () => setHoveredAlias(current => current === item.alias ? null : current) : undefined}
-          style={({ pressed }) => [
-            styles.card,
-            compact && ({ userSelect: 'none', cursor: 'default' } as any),
-            compact && {
-              borderWidth: 0,
-              borderBottomWidth: 0,
-              borderRadius: radius.md,
-              paddingHorizontal: spacing.md,
-              paddingVertical: 10,
-              marginBottom: 2,
-              // 极简:两种主题的行都是平铺(不成卡片),只靠悬停/选中的一档中性底色表达状态。
-              backgroundColor: 'transparent',
-            },
-            compact && hoveredAlias === item.alias && { backgroundColor: colors.rowHover },
-            selectedAlias === item.alias && { backgroundColor: colors.rowActive },
-            item.status === 'offline' && styles.cardOffline,
-            pressed && { opacity: 0.7 },
-          ]}
-          onPress={() => onOpenChat(item.alias)}
-          onLongPress={compact ? undefined : () => onOpenNodeDetail(item.alias)}
-          delayLongPress={400}
-        >
-          <View style={styles.avatarWrap}>
-            <AliasAvatar alias={item.alias} size={34} />
-            {/* 更像微信·round-5: 头像右下在线态圆点(带描边环·offline 灰暗) */}
-            <View
-              style={[
-                styles.statusDot,
-                { backgroundColor: statusColor(item.status ?? '', true) },
-                !isAgentOnline(item.status) && styles.statusDotOffline,
-              ]}
-            />
-            <AgentUnreadBadge
-              badge={formatUnreadBadge(unreadCountForAgentRow(
-                preview?.serverBody ?? unreadSnap.serverBody,
-                preview?.ledger ?? unreadSnap.ledger,
-                item.alias,
-                preview ? undefined : replyUnreadCounts(unreadSnap),
-              ))}
-              testID={`unread-badge-${item.alias}`}
-            />
-          </View>
-          <View style={{ flex: 1, minWidth: 0 }}>
-            <Text selectable={false} style={[styles.alias, compact && { fontSize: 13, fontWeight: '600' }]} numberOfLines={1}>
-              {pinnedAliases.includes(item.alias) ? '📌 ' : ''}
-              {item.alias}
-            </Text>
-            {item.task ? (
-              <Text selectable={false} style={[styles.task, compact && { fontSize: 11 }]} numberOfLines={1}>
-                {item.task}
-              </Text>
-            ) : null}
-          </View>
-          {!compact ? <Text style={[styles.status, { color: statusColor(item.status ?? '', true) }]}>{agentStatusLabel(item.status)}</Text> : null}
-        </Pressable>
-        );
-      }}
+      renderItem={({ item }) => (compact ? renderCompactRow(item) : renderPhoneRow(item))}
       />
       {contextMenu ? (<>
         <Pressable accessibilityLabel="关闭会话菜单" onPress={() => setContextMenu(null)} style={{ position: 'fixed' as any, inset: 0, zIndex: 999 } as any} />
@@ -386,3 +503,45 @@ export default function AgentsScreen({
     </View>
   );
 }
+
+// Phone / two-pane list chrome (0.2.106). A plain object, and no colours here: it is built once at import,
+// and a colour captured now would not follow a theme switch (theme-restyle-coverage.test.ts) —
+// colours are passed inline from `colors` at render time.
+const rowStyles = {
+  head: { paddingHorizontal: AGENT_ROW_PAD_X, paddingTop: spacing.sm, paddingBottom: spacing.xs },
+  headRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, minHeight: 36 },
+  searchBox: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 6, height: 36, borderRadius: radius.md, paddingHorizontal: 10 },
+  searchInput: { flex: 1, minWidth: 0, fontSize: type.body, paddingVertical: 0, height: 36 },
+  searchCount: { marginTop: spacing.xs },
+  group: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: AGENT_ROW_PAD_X, paddingTop: spacing.md, paddingBottom: spacing.xs },
+  groupCompact: { paddingHorizontal: spacing.md, paddingTop: spacing.sm },
+  groupTitle: { flexShrink: 1, fontSize: type.small, fontWeight: weight.medium, letterSpacing: 0.4 },
+  groupCount: { fontSize: type.caption, marginLeft: 2 },
+  row: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: AGENT_ROW_GAP,
+    minHeight: AGENT_ROW_HEIGHT,
+    paddingHorizontal: AGENT_ROW_PAD_X,
+    paddingVertical: (AGENT_ROW_HEIGHT - AGENT_ROW_AVATAR) / 2,
+  },
+  avatar: { width: AGENT_ROW_AVATAR, height: AGENT_ROW_AVATAR },
+  avatarOffline: { opacity: 0.45 },
+  dot: {
+    position: 'absolute',
+    right: -1,
+    bottom: -1,
+    width: AGENT_ROW_DOT,
+    height: AGENT_ROW_DOT,
+    borderRadius: AGENT_ROW_DOT / 2,
+    borderWidth: 2,
+  },
+  body: { flex: 1, minWidth: 0, gap: 3 },
+  line: { flexDirection: 'row', alignItems: 'center', gap: 6, minHeight: 20 },
+  name: { flexShrink: 1, fontSize: type.title, fontWeight: weight.medium },
+  pin: { marginLeft: -2 },
+  time: { marginLeft: 'auto', fontSize: type.small, paddingLeft: spacing.sm },
+  label: { fontSize: type.small, fontWeight: weight.medium },
+  preview: { flex: 1, minWidth: 0, fontSize: type.body },
+  separator: { height: StyleSheet.hairlineWidth, marginLeft: AGENT_ROW_SEPARATOR_INSET },
+} as const;

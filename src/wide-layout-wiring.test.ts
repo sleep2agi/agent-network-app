@@ -41,7 +41,7 @@ ck('two-pane ChatScreen is not the desktop (hover) variant', !/<ChatScreen[\s\S]
 ck('two-pane list highlights the selection', two.includes('selectedAlias={twoPaneSelection.selectedAlias}'));
 // With the rail, the panes split the width beside it (not the whole window).
 ck('two-pane node screens get pane width + touch', (two.match(/layoutWidth=\{paneAreaWidth - paneListWidth\} touch/g) ?? []).length === 2);
-ck('two-pane list width is computed from the area beside the rail', two.includes('{ width: paneListWidth }') && app.includes('const paneListWidth = twoPaneListWidth(paneAreaWidth);'));
+ck('two-pane list width is computed from the area beside the rail (and the dragged preference)', two.includes('{ width: paneListWidth }') && app.includes('const paneListWidth = twoPaneListWidth(paneAreaWidth, listPaneWidth);'));
 ck('pane area = window minus rail and insets when the rail shows', app.includes('const paneAreaWidth = railShown ? contentWidthBesideRail(width, insets.left, insets.right) : width;'));
 // Insets: the rail takes the left one (its background runs to the edge), the content the right one.
 ck('rail gets the left and bottom insets', /<MobileNavRail[\s\S]*?insetLeft=\{insets\.left\}[\s\S]*?insetBottom=\{tabBarInset\}[\s\S]*?\/>/.test(app));
