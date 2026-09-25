@@ -119,6 +119,12 @@ jobs:
           releaseBody: |-
             Signed and notarized stable update for macOS (Apple Silicon) and Windows (x64).
 
+            What's new in 0.2.89:
+            - 节点的规则文件(CLAUDE.md / AGENTS.md)默认以「阅读」模式显示:标题、列表、代码块、表格都按排版渲染,
+              长文件在框内滚动;点「编辑」切回原来的编辑器改内容,两种模式共用同一份草稿,没保存的改动会标「未保存」。
+            - 新增「全屏」:在应用内铺满窗口查看规则文件,左侧有按标题生成的目录,点一下跳到对应章节;按 Esc 退出。
+            - 修复:节点页定时刷新时会重新读取规则文件,可能把你正在编辑、还没保存的内容冲掉。现在只在打开节点页时读一次。
+
             What's new in 0.2.88:
             - Checking for updates in Settings → About now always ends in a visible result: you see that a check is running,
               then either the new version, "up to date" with when it was checked, or the reason the check failed.
