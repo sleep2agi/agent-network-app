@@ -14,6 +14,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { createNode, CreateNodeRequest, fetchStatus, HostSupervisorDaemon, HubConfig, Session, fetchCreateRequestStatus } from './api';
 import { createRequestVerdict, timeoutMessage, type CreateRequestVerdict } from './create-request-status';
 import { colors, onThemeChange, spacing } from './theme';
+import { advancedExpanded, advancedRuntimesOf, primaryRuntimes, runtimeDisplayLabel, showsAdvancedToggle, type WizardRuntime } from './wizard-runtime-groups';
 
 // #338 RFC-026 §3.1 — mobile create-node wizard rest (Plan B).
 // 5 post-picker steps: ① name ② runtime ③ model ④ flags ⑤ confirm.
@@ -45,17 +46,19 @@ import { colors, onThemeChange, spacing } from './theme';
 const NAME_RE = /^[a-z][a-z0-9_-]{0,63}$/;
 const NAME_RULE_HINT = '小写字母开头，仅允许 a-z 0-9 _ -，最多 64 字符';
 
-const RUNTIMES: { id: string; label: string; models: string[]; note?: string }[] = [
+const RUNTIMES: WizardRuntime[] = [
   { id: 'claude-agent-sdk', label: 'Claude Agent SDK', models: ['deepseek-v4-pro', 'MiniMax-M3', 'claude-sonnet-4-6', 'claude-opus-4-x'] },
   { id: 'codex-sdk', label: 'Codex SDK', models: ['gpt-5.5'] },
-  { id: 'grok-build-acp', label: 'Grok (build-acp)', models: ['grok-build'] },
+  // Grok 只显示一行,建出来是 headless ACP(owner 2026-09-25 定为默认/推荐)。
+  { id: 'grok-build-acp', label: 'Grok', models: ['grok-build'] },
   // 共存 runtime：复用宿主 TUI 的会员登录态，不选模型、不输 key。
   // models 为空数组 ⇒ 第 3 步显示「跟随宿主登录」，提交时省略 model
   // 字段（hub 侧自 da84f34d 起 model optional/nullable）。
   { id: 'claude-code-cli', label: 'Claude Code（TUI 共存）', models: [] },
   { id: 'codex-app-server', label: 'Codex（TUI 共存）', models: [] },
-  // grok TUI 共存是预览能力(owner 09-23 选方案 A):标出来,并指向稳定的 grok-build-acp。
-  { id: 'grok-build-cli', label: 'Grok（TUI 共存 · 预览）', models: [], note: '预览：人在 TUI 里打字时网络任务会排队；grok 自更新后可能要重新钉版。要稳定接活选 Grok (build-acp)。' },
+  // grok TUI 共存降为「实验性」(owner 2026-09-25):不进主列表,收在 Grok 行的「高级」折叠里,
+  // 展开即显示限制。id 不变 ⇒ 已有的 grok-build-cli 节点不受影响。
+  { id: 'grok-build-cli', label: '共存模式（实验性）', models: [], advancedOf: 'grok-build-acp', note: '实验性：人在 TUI 输入框打字时网络任务会排队直到超时；grok 须钉在已验证版本（新版会拒绝启动）；macOS 需特殊处理；不加载 .agents/skills 技能。要稳定接活用上面的 Grok（ACP，默认）。' },
   // #199 —— hub / daemon / CLI 三处的 runtime 全集都是 7 个,只有这里是 6 个。
   // `opencode-cli` 出现在 agent-network/src/codex-copresence-profile.ts:223 的共存
   // profile 里。(目录名叫 opencode-**acp**,但 runtime id 只有 opencode-**cli** ——
@@ -87,7 +90,9 @@ export default function CreateNodeWizardScreen({ cfg, daemon, onBack, onExit }: 
     // Initial runtime: first supported by daemon if it published; else default.
     const supported = daemon.runtimes_supported;
     if (Array.isArray(supported) && supported.length > 0) {
-      const match = RUNTIMES.find(r => supported.includes(r.id));
+      // 先在主列表里找,找不到才落到「高级」折叠项(不把实验性 runtime 当默认)。
+      const match = primaryRuntimes(RUNTIMES).find(r => supported.includes(r.id))
+        ?? RUNTIMES.find(r => supported.includes(r.id));
       return match?.id ?? RUNTIMES[0].id;
     }
     return RUNTIMES[0].id;
@@ -101,10 +106,12 @@ export default function CreateNodeWizardScreen({ cfg, daemon, onBack, onExit }: 
     const supported = daemon.runtimes_supported;
     const initRuntime =
       Array.isArray(supported) && supported.length > 0
-        ? RUNTIMES.find(r => supported.includes(r.id)) || RUNTIMES[0]
+        ? primaryRuntimes(RUNTIMES).find(r => supported.includes(r.id)) || RUNTIMES.find(r => supported.includes(r.id)) || RUNTIMES[0]
         : RUNTIMES[0];
     return initRuntime.models[0] || '';
   });
+  // 「高级」折叠(目前只有 Grok 行有:共存模式·实验性)。默认收起。
+  const [advancedOpen, setAdvancedOpen] = useState(false);
   const [permissionMode, setPermissionMode] = useState('default');
   const [maxTurns, setMaxTurns] = useState('');
   const [budget, setBudget] = useState('');
@@ -202,6 +209,54 @@ export default function CreateNodeWizardScreen({ cfg, daemon, onBack, onExit }: 
   const busy = phase === 'creating' || phase === 'awaiting_register';
 
   // ── handlers (no hooks below this line) ────────────────────────────
+  // One runtime choice row. `nested` = it lives inside a 「高级」 disclosure:
+  // indented, and its note (the experimental warning) shows as soon as the
+  // disclosure is open — the cost is visible BEFORE it is picked.
+  const renderRuntimeRow = (r: WizardRuntime, nested: boolean) => {
+    const allowed = isRuntimeAllowed(r.id);
+    const selected = runtimeId === r.id;
+    const showNote = !!r.note && allowed && (selected || nested);
+    return (
+      <Fragment key={r.id}>
+        <Pressable
+          disabled={!allowed}
+          onPress={() => {
+            if (allowed) {
+              setRuntimeId(r.id);
+              // Reset model to the FIRST of the new runtime
+              // (never ''). Same reasoning as initial state
+              // — hub schema requires non-empty model.
+              setModel(r.models[0] || '');
+            }
+          }}
+          style={({ pressed }) => [
+            styles.choiceRow,
+            nested && styles.choiceRowNested,
+            selected && allowed && styles.choiceRowSelected,
+            !allowed && styles.choiceRowDisabled,
+            pressed && allowed && { opacity: 0.85 },
+          ]}
+        >
+          <Text style={[
+            styles.choiceText,
+            selected && allowed && styles.choiceTextSelected,
+            !allowed && styles.choiceTextDisabled,
+          ]}>
+            {r.label}
+            {!allowed && (
+              <Text style={styles.choiceUnsupported}>  · 该 daemon 不支持</Text>
+            )}
+          </Text>
+          {selected && allowed ? (
+            <Ionicons name="checkmark" size={18} color={colors.accent} />
+          ) : null}
+        </Pressable>
+        {showNote ? (
+          <Text style={[styles.hint, nested && styles.hintNested]}>{r.note}</Text>
+        ) : null}
+      </Fragment>
+    );
+  };
   const handleSubmit = async () => {
     setPhase('creating');
     setMsg('');
@@ -338,46 +393,29 @@ export default function CreateNodeWizardScreen({ cfg, daemon, onBack, onExit }: 
                 <Text style={styles.label}>
                   Runtime（{daemon.alias} 支持）
                 </Text>
-                {RUNTIMES.map(r => {
-                  const allowed = isRuntimeAllowed(r.id);
-                  const selected = runtimeId === r.id;
+                {primaryRuntimes(RUNTIMES).map(r => {
+                  // 「高级」折叠:只挂在有折叠项的行下面(目前是 Grok → 共存模式·实验性),
+                  // 且只在该行(或其折叠项)被选中时出现,不给其他 runtime 添噪音。
+                  const kids = advancedRuntimesOf(RUNTIMES, r.id);
+                  const toggle = showsAdvancedToggle(RUNTIMES, r.id, runtimeId);
+                  const open = advancedExpanded(RUNTIMES, r.id, runtimeId, advancedOpen);
                   return (
                     <Fragment key={r.id}>
-                    <Pressable
-                      disabled={!allowed}
-                      onPress={() => {
-                        if (allowed) {
-                          setRuntimeId(r.id);
-                          // Reset model to the FIRST of the new runtime
-                          // (never ''). Same reasoning as initial state
-                          // — hub schema requires non-empty model.
-                          setModel(r.models[0] || '');
-                        }
-                      }}
-                      style={({ pressed }) => [
-                        styles.choiceRow,
-                        selected && allowed && styles.choiceRowSelected,
-                        !allowed && styles.choiceRowDisabled,
-                        pressed && allowed && { opacity: 0.85 },
-                      ]}
-                    >
-                      <Text style={[
-                        styles.choiceText,
-                        selected && allowed && styles.choiceTextSelected,
-                        !allowed && styles.choiceTextDisabled,
-                      ]}>
-                        {r.label}
-                        {!allowed && (
-                          <Text style={styles.choiceUnsupported}>  · 该 daemon 不支持</Text>
-                        )}
-                      </Text>
-                      {selected && allowed ? (
-                        <Ionicons name="checkmark" size={18} color={colors.accent} />
+                      {renderRuntimeRow(r, false)}
+                      {toggle ? (
+                        <Pressable
+                          accessibilityRole="button"
+                          accessibilityLabel="高级"
+                          accessibilityState={{ expanded: open }}
+                          onPress={() => setAdvancedOpen(!open)}
+                          hitSlop={6}
+                          style={({ pressed }) => [styles.advancedToggle, pressed && { opacity: 0.6 }]}
+                        >
+                          <Ionicons name={open ? 'chevron-down' : 'chevron-forward'} size={13} color={colors.textMuted} />
+                          <Text style={styles.advancedToggleText}>高级</Text>
+                        </Pressable>
                       ) : null}
-                    </Pressable>
-                    {r.note && selected && allowed ? (
-                      <Text style={styles.hint}>{r.note}</Text>
-                    ) : null}
+                      {open ? kids.map(k => renderRuntimeRow(k, true)) : null}
                     </Fragment>
                   );
                 })}
@@ -386,7 +424,7 @@ export default function CreateNodeWizardScreen({ cfg, daemon, onBack, onExit }: 
 
             {step === 2 && (
               <View style={styles.section}>
-                <Text style={styles.label}>模型（{runtime.label}）</Text>
+                <Text style={styles.label}>模型（{runtimeDisplayLabel(RUNTIMES, runtime)}）</Text>
                 {runtime.models.length === 0 ? (
                   <Text style={styles.hint}>
                     跟随宿主 TUI 的会员登录态，无需选择模型、无需输入 key。
@@ -482,7 +520,7 @@ export default function CreateNodeWizardScreen({ cfg, daemon, onBack, onExit }: 
                   <Divider />
                   <SummaryRow k="名字" v={name.trim() || '—'} />
                   <Divider />
-                  <SummaryRow k="Runtime" v={runtime.label} />
+                  <SummaryRow k="Runtime" v={runtimeDisplayLabel(RUNTIMES, runtime)} />
                   <Divider />
                   <SummaryRow k="模型" v={model || runtime.models[0] || '跟随宿主登录'} />
                   <Divider />
@@ -647,6 +685,11 @@ const makeStyles = () => StyleSheet.create({
   choiceTextSelected: { color: colors.accent, fontWeight: '600' },
   choiceTextDisabled: { color: colors.textMuted },
   choiceUnsupported: { color: colors.textMuted, fontSize: 11 },
+  // 「高级」折叠开关 + 折叠里的行:紧凑,缩进一级,不抢主列表的视觉权重。
+  advancedToggle: { flexDirection: 'row', alignItems: 'center', gap: 4, alignSelf: 'flex-start', paddingVertical: 2, paddingHorizontal: spacing.xs },
+  advancedToggleText: { color: colors.textMuted, fontSize: 12 },
+  choiceRowNested: { marginLeft: spacing.lg },
+  hintNested: { marginLeft: spacing.lg, color: colors.blocked },
 
   row3: { flexDirection: 'row', gap: spacing.sm },
   row3Cell: { flex: 1, gap: spacing.xs },
