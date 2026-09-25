@@ -21,6 +21,8 @@ import { blockLineForCaret, buildRulesOutline, jumpText, lineAtOffset, RULES_DEF
 import InfoTip from './InfoTip';
 import MacTitleStrip from './mac-title-strip';
 import WinTitleBar from './win-title-bar';
+import { RulesFindBar, useRulesFind } from './RulesFind';
+import { contentKey } from './rules-find';
 
 type Phase = 'loading' | 'ready' | 'saving' | 'unavailable';
 
@@ -129,6 +131,13 @@ export default function NodeRulesSection({ cfg, node, session }: { cfg: HubConfi
   };
   const jumpToSource = (range: SourceLineRange) => { setJump(range); setMode('edit'); };
 
+  // Ctrl/⌘+F 查找 / 替换(RulesFind.tsx):阅读区、编辑框、全屏共用一份查找状态。
+  const sectionRef = useRef<any>(null);
+  const find = useRulesFind({
+    mode, draft: editor, setDraft: setEditor, editable: phase === 'ready', hasContent, full, editorRef, sectionRef,
+    jumpLine: jump ? jump.start : null, onRequestEdit: () => changeMode('edit'),
+  });
+
   // 一行工具条:左 = 阅读/编辑 + 文件名 + ⓘ + 未保存;中 = 内联状态句;右 = 全屏 / 重新读取 / 保存(小按钮)。
   // 分区说明和卡片说明原来叠两段,现在收进 ⓘ(Vincent 09-25「这个地方占的位置太大了」)。
   const statusColor = phase === 'loading' || phase === 'saving' ? colors.textMuted : toneColor;
@@ -139,13 +148,15 @@ export default function NodeRulesSection({ cfg, node, session }: { cfg: HubConfi
       <InfoTip label="规则文件说明" text={rulesInfoText(fileName, WEB)} />
       {view.unsaved ? <UnsavedMark /> : null}
       {busy ? <ActivityIndicator size="small" color={colors.accent} /> : null}
-      <View style={{ flex: 1, minWidth: 120 }}>
+      {find.open && inFull === full ? <RulesFindBar find={find} /> : null}
+      {/* 查找栏开着时状态句让位(minWidth 0、不显示双击提示),免得把右边按钮挤到下一行。 */}
+      <View style={{ flex: 1, minWidth: find.open ? 0 : 120 }}>
         {message ? (
           <Text
             numberOfLines={messageTone === 'error' ? undefined : 1}
             style={[{ color: statusColor, fontSize: 12, lineHeight: 18 }, WEB ? { transitionProperty: 'opacity', transitionDuration: '300ms', opacity: fading ? 0 : 1 } as any : null]}
           >{message}</Text>
-        ) : mode === 'read' && hasContent && WEB ? (
+        ) : mode === 'read' && hasContent && WEB && !find.open ? (
           <Text numberOfLines={1} style={{ color: colors.textMuted, fontSize: 11, opacity: 0.8 }}>双击内容可跳到源码编辑</Text>
         ) : null}
       </View>
@@ -160,13 +171,13 @@ export default function NodeRulesSection({ cfg, node, session }: { cfg: HubConfi
 
   const bodyProps: RulesBodyProps = {
     mode, draft: editor, onDraft: setEditor, editable: phase === 'ready', dirty, fileName,
-    onJump: jumpToSource, jump, clearJump: () => setJump(null), anchorLine, clearAnchor: () => setAnchorLine(null), editorRef,
+    onJump: jumpToSource, jump, clearJump: () => setJump(null), anchorLine, clearAnchor: () => setAnchorLine(null), editorRef, findReadRef: find.readRef,
   };
 
   // 编辑框/阅读区吃满节点页剩余高度(flex: 1,最矮 NODE_RULES_EDITOR_MIN_HEIGHT);按钮在内容**上方**
   // 的工具条里 —— 放下面的话矮窗(Vincent 的 2000×650)里要先滚页面才看得到「保存」。
   return (
-    <View style={{ flex: 1 }}>
+    <View ref={sectionRef} style={{ flex: 1 }}>
       <View style={{ flex: 1, backgroundColor: colors.card, borderRadius: 12, padding: spacing.md, gap: spacing.sm }}>
         {toolbar(false)}
         {hasContent && !full ? <RulesBody {...bodyProps} /> : null}
@@ -249,11 +260,12 @@ function UnsavedMark() {
   );
 }
 
-function RulesBody({ mode, draft, onDraft, editable, dirty, fileName, onHeadingLayout, scrollRef, onJump, jump, clearJump, anchorLine, clearAnchor, editorRef }: RulesBodyProps & {
+function RulesBody({ mode, draft, onDraft, editable, dirty, fileName, onHeadingLayout, scrollRef, onJump, jump, clearJump, anchorLine, clearAnchor, editorRef, findReadRef }: RulesBodyProps & {
   onHeadingLayout?: (index: number, y: number) => void; scrollRef?: any;
 }) {
   const frame = { flex: 1, minHeight: NODE_RULES_EDITOR_MIN_HEIGHT, borderWidth: 1, borderColor: dirty ? colors.accent : colors.border, borderRadius: 8 } as const;
   const readRef = useRef<any>(null);
+  const setReadEl = useCallback((el: any) => { readRef.current = el; findReadRef?.(el); }, [findReadRef]);
   const onJumpRef = useRef(onJump);
   onJumpRef.current = onJump;
 
@@ -315,7 +327,7 @@ function RulesBody({ mode, draft, onDraft, editable, dirty, fileName, onHeadingL
       <View style={frame}>
         <ScrollView ref={scrollRef} style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }} contentContainerStyle={{ padding: spacing.lg }}>
           {draft.trim()
-            ? <View ref={readRef}><MarkdownMessage onHeadingLayout={onHeadingLayout} sourceLines={WEB}>{draft}</MarkdownMessage></View>
+            ? <View ref={setReadEl}><MarkdownMessage onHeadingLayout={onHeadingLayout} key={contentKey(draft)} sourceLines={WEB}>{draft}</MarkdownMessage></View>
             : <Text style={{ color: colors.textMuted, fontSize: 13 }}>{fileName} 还没有内容。切到「编辑」写点规则再保存。</Text>}
         </ScrollView>
       </View>
@@ -344,6 +356,8 @@ type RulesBodyProps = {
   mode: RulesViewMode; draft: string; onDraft: (s: string) => void; editable: boolean; dirty: boolean; fileName: string;
   onJump: (range: SourceLineRange) => void; jump: SourceLineRange | null; clearJump: () => void;
   anchorLine: number | null; clearAnchor: () => void; editorRef: any;
+  /** 查找:阅读区容器(遍历文本节点、挂高亮用)。 */
+  findReadRef?: (el: any) => void;
 };
 
 function RulesFullscreen({ onClose, toolbar, source, bodyProps }: {
