@@ -58,7 +58,7 @@ export const SETTINGS_CATEGORIES: readonly SettingsCategory[] = [
     label: '外观',
     icon: 'color-palette-outline',
     rows: [
-      { key: 'theme', label: '主题', keywords: ['深色', '浅色', '暗色', 'dark', 'light', 'theme'] },
+      { key: 'theme', label: '主题', keywords: ['深色', '浅色', '暗色', '跟随系统', '系统', '自动', 'dark', 'light', 'system', 'auto', 'theme'] },
     ],
   },
   {

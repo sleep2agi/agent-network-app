@@ -1,10 +1,13 @@
 import { useEffect, useSyncExternalStore } from 'react';
 import { ActivityIndicator, Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { checkDesktopUpdate, desktopUpdateSnapshot, installDesktopUpdate, latestReleaseNotes, subscribeDesktopUpdates } from './desktop-updater';
-import { colors, onThemeChange, spacing } from './theme';
+import { colors, onThemeChange, spacing, themeMode } from './theme';
 
 export default function DesktopUpdatePrompt() {
   const update = useSyncExternalStore(subscribeDesktopUpdates, desktopUpdateSnapshot, desktopUpdateSnapshot);
+  // 挂在 AppRoot 的 key={theme} 重挂树外面:弹窗开着时系统配色一变(跟随系统),模块级 styles
+  // 已重建,但不订阅就不重画 —— 半边新主题半边旧主题。
+  useSyncExternalStore(onThemeChange, themeMode, themeMode);
   useEffect(() => {
     if (!(globalThis as any).__TAURI_INTERNALS__) return;
     const timer = setTimeout(() => { void checkDesktopUpdate(); }, 2500);

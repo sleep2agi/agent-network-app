@@ -5,7 +5,7 @@
     "version": "0.2.100",
     "orientation": "default",
     "icon": "./assets/icon.png",
-    "userInterfaceStyle": "dark",
+    "userInterfaceStyle": "automatic",
     "ios": {
       "icon": "./assets/icon-ios.png",
       "supportsTablet": true,

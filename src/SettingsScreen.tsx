@@ -3,7 +3,7 @@ import { ActivityIndicator, Modal, Platform, Pressable, ScrollView, StyleSheet, 
 import { Ionicons } from '@expo/vector-icons';
 import { HubConfig } from './api';
 import { DesktopStorageDiagnostics, HubProfile, getDesktopStorageDiagnostics, listHubProfiles, removeHubProfile, saveThemeMode } from './storage';
-import { colors, onThemeChange, setThemeMode, spacing, themeMode } from './theme';
+import { THEME_PREFERENCES, THEME_PREFERENCE_LABEL, colors, onThemeChange, onThemePreferenceChange, setThemePreference, spacing, themeMode, themePreference, themePreferenceSummary, type ThemePreference } from './theme';
 import { APP_VERSION } from './version';
 import { appFetch } from './app-fetch';
 import { checkDesktopUpdate, desktopUpdateLastCheckedAt, desktopUpdateSnapshot, subscribeDesktopUpdates } from './desktop-updater';
@@ -65,6 +65,12 @@ export default function SettingsScreen({
   const isAndroid = Platform.OS === 'android';
   // 0.2.76 通知设置(桌面端落 localStorage)
   const notify = useSyncExternalStore(subscribeNotifySettings, loadNotifySettings, loadNotifySettings);
+  // 偏好从「深色」换成「跟随系统(当前深色)」时生效主题没变,App 不会重挂 —— 这一行要自己订阅才会刷新。
+  const themeKey = useSyncExternalStore(onThemePreferenceChange, themeSnapshotKey, themeSnapshotKey);
+  const themeSnap = useMemo(() => {
+    const [pref, mode] = themeKey.split('|') as [ThemePreference, 'light' | 'dark'];
+    return { pref, mode };
+  }, [themeKey]);
   const [quietStart, setQuietStart] = useState(notify.quiet.start);
   const [quietEnd, setQuietEnd] = useState(notify.quiet.end);
   const [query, setQuery] = useState('');
@@ -325,22 +331,35 @@ export default function SettingsScreen({
             <View style={styles.section}>
               {heading('appearance')}
               {show('appearance', 'theme') ? (
-                <Pressable
-                  accessibilityRole="button"
-                  accessibilityLabel="主题"
-                  style={({ pressed }) => [styles.row, pressed && { opacity: 0.6 }]}
-                  onPress={() => {
-                    const next = themeMode() === 'dark' ? 'light' : 'dark';
-                    setThemeMode(next);
-                    saveThemeMode(next);
-                  }}
-                >
-                  <Text style={styles.rowLabel}>主题</Text>
-                  <View style={styles.dropdownValue}>
-                    <Text style={styles.rowValue}>{themeMode() === 'dark' ? '深色' : '浅色'}</Text>
-                    <Ionicons name="chevron-down" size={14} color={colors.textSecondary} />
+                // 0.2.101:三选一分段控件(浅色 / 深色 / 跟随系统)。说明行写明当前生效的主题。
+                <View style={[styles.row, styles.themeRow]} testID="settings-theme-row">
+                  <View style={[styles.rowCopy, styles.themeRowCopy]}>
+                    <Text style={styles.rowLabel}>主题</Text>
+                    <Text style={styles.rowHint} testID="settings-theme-summary">{themePreferenceSummary(themeSnap.pref, themeSnap.mode)}</Text>
                   </View>
-                </Pressable>
+                  <View style={styles.segmented} accessibilityRole="radiogroup" accessibilityLabel="主题">
+                    {THEME_PREFERENCES.map(option => {
+                      const selected = themeSnap.pref === option;
+                      return (
+                        <Pressable
+                          key={option}
+                          accessibilityRole="radio"
+                          accessibilityState={{ selected, checked: selected }}
+                          accessibilityLabel={THEME_PREFERENCE_LABEL[option]}
+                          testID={`settings-theme-${option}`}
+                          style={({ pressed }) => [styles.segment, selected && styles.segmentSelected, pressed && !selected && { opacity: 0.6 }]}
+                          onPress={() => {
+                            if (selected) return;
+                            setThemePreference(option);
+                            void saveThemeMode(option);
+                          }}
+                        >
+                          <Text style={[styles.segmentText, selected && styles.segmentTextSelected]} numberOfLines={1}>{THEME_PREFERENCE_LABEL[option]}</Text>
+                        </Pressable>
+                      );
+                    })}
+                  </View>
+                </View>
               ) : null}
             </View>
           ) : null}
@@ -584,6 +603,15 @@ const makeStyles = () =>
   rowHint: { color: colors.textMuted, fontSize: 12, flexShrink: 1 },
   footHint: { color: colors.textMuted, fontSize: 12, paddingHorizontal: spacing.md, paddingVertical: spacing.sm },
   dropdownValue: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
+  // 主题三选一。宽处与说明并排;窄屏(手机竖屏)放不下「跟随系统（当前：深色）」一整行时,
+  // 分段控件整体折到下一行 —— 说明文字不被挤成两行半个词。
+  themeRow: { flexWrap: 'wrap', rowGap: spacing.sm, columnGap: spacing.md },
+  themeRowCopy: { flexGrow: 1, flexShrink: 1, flexBasis: 150, minWidth: 150 },
+  segmented: { flexDirection: 'row', flexShrink: 0, padding: 2, borderRadius: 8, backgroundColor: colors.subtleFill, borderWidth: 1, borderColor: colors.border },
+  segment: { paddingHorizontal: spacing.sm + 2, paddingVertical: 6, borderRadius: 6, alignItems: 'center', justifyContent: 'center', minWidth: 44, borderWidth: 1, borderColor: 'transparent' },
+  segmentSelected: { backgroundColor: colors.card, borderColor: colors.border },
+  segmentText: { color: colors.textSecondary, fontSize: 13 },
+  segmentTextSelected: { color: colors.text, fontWeight: '600' },
   quietRow: { justifyContent: 'flex-start', gap: spacing.sm },
   quietInput: { color: colors.text, fontSize: 14, borderWidth: 1, borderColor: colors.border, borderRadius: 6, paddingHorizontal: 8, paddingVertical: 4, minWidth: 64, textAlign: 'center', backgroundColor: colors.inputBg },
   profileRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingHorizontal: spacing.md, paddingVertical: spacing.md },
@@ -616,6 +644,8 @@ const makeStyles = () =>
 // putting key={theme} on the root <SafeAreaView> inside AppRoot, so the next
 // render reads these fresh styles. Keep both halves in sync: rebuild here,
 // remount there.
+const themeSnapshotKey = (): string => `${themePreference()}|${themeMode()}`;
+
 let styles = makeStyles();
 onThemeChange(() => {
   styles = makeStyles();

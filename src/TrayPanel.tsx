@@ -12,10 +12,11 @@
 // 动作同样不在这里落地:点行 → `tray_open_chat`(Rust 复用 0.2.76 那条 `tray-open-chat`
 // 事件),点「忽略全部」→ `tray_dismiss_all` → 主窗口用它已有的 agent 级 ack 去清。
 // 面板只负责画和转述。
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useState, useSyncExternalStore } from 'react';
 import { Platform, Pressable, ScrollView, Text, View } from 'react-native';
 import AliasAvatar from './AliasAvatar';
-import { colors } from './theme';
+import { colors, onThemeChange, parseStoredThemePreference, setThemePreference, themeMode } from './theme';
+import { onDesktopThemeStorageChange } from './desktop-theme-storage';
 import { trayPanelModelFrom, type TrayPanelModel } from './tray-panel-model';
 import type { TrayItem } from './tray-menu-model';
 
@@ -45,6 +46,10 @@ async function hidePanel(): Promise<void> {
 export default function TrayPanel() {
   // 🔴 每次渲染重算:`colors` 是就地 mutate 的单例,模块级字面量会把**导入那一刻**的
   //    值(默认 dark)拷走再也不变 —— 浅色模式下面板会一直是深色的。
+  // 0.2.101:托盘面板不在 App 的 key={theme} 重挂树里 —— 系统配色变了(跟随系统)或主窗口改了偏好
+  //    (storage 事件),都要自己订阅才会重画。
+  useSyncExternalStore(onThemeChange, themeMode, themeMode);
+  useEffect(() => onDesktopThemeStorageChange(mode => setThemePreference(parseStoredThemePreference(mode))), []);
   const panelStyles = makePanelStyles();
   const [model, setModel] = useState<TrayPanelModel>(() => trayPanelModelFrom([]));
   const [busy, setBusy] = useState(false);
