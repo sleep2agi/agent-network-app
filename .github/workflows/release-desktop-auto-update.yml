@@ -119,6 +119,9 @@ jobs:
           releaseBody: |-
             Signed and notarized stable update for macOS (Apple Silicon) and Windows (x64).
 
+            What's new in 0.2.103:
+            - 修复安卓收起输入法后聊天区底部留白、「回到最新」按钮压在输入框上的问题。
+
             What's new in 0.2.102:
             - 安卓折叠屏 / 平板展开时,左侧改为竖向导航栏,替代底部标签栏。
 
