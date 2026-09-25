@@ -119,6 +119,12 @@ jobs:
           releaseBody: |-
             Signed and notarized stable update for macOS (Apple Silicon) and Windows (x64).
 
+            What's new in 0.2.90:
+            - 节点的 agent-node 版本太旧、还不支持查看规则文件时,节点页直接告诉你当前版本和需要升级到哪个版本,
+              不再转圈干等 60 秒。
+            - 版本够新但节点没有回应时,提示改为「节点没有来取这次请求,可能连接断了或卡住了,重启节点通常能恢复」,
+              不再给出「需要 2.5.0-preview.58+」这种误导的版本说法;技能区的超时提示同样修正。
+
             What's new in 0.2.89:
             - 节点的规则文件(CLAUDE.md / AGENTS.md)默认以「阅读」模式显示:标题、列表、代码块、表格都按排版渲染,
               长文件在框内滚动;点「编辑」切回原来的编辑器改内容,两种模式共用同一份草稿,没保存的改动会标「未保存」。
