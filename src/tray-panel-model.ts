@@ -4,7 +4,7 @@
 // 每行 = 头像 + 名字 + 右侧红色未读数。0.2.76 那版是**原生菜单**,一行只能是纯文本
 // 「N  <alias>」,画不出头像和红点 —— 所以这一版改成自绘面板,行模型搬到这里。
 //
-// 数的来源仍然只有一个:unread-store → trayModelFrom(已排序、已截断)。这里**不重新排序**,
+// 数的来源仍然只有一个:unread-store → trayModelFrom(已排序;0.2.92 起不截断)。这里**不重新排序**,
 // 只把它翻译成「能画的行」,避免托盘、面板、列表三处各排一次、排出三种顺序。
 import { formatUnreadBadge, type UnreadBadge } from './unread-ledger';
 import type { TrayItem } from './tray-menu-model';
@@ -41,8 +41,8 @@ export function trayPanelModelFrom(items: readonly TrayItem[] | null | undefined
  * 「忽略全部」要清哪些 agent。
  *
  * 🔴 取自**面板当前显示的行**,而不是 unread-store 的全量:面板只承诺清掉它列出来的那些。
- *    托盘模型本来就截断到 20 行(TRAY_MAX_ITEMS),如果这里去读全量,用户点一下会清掉
- *    他根本没看见的会话 —— 那是「按钮做的事比它说的多」,比少清更糟。
+ *    0.2.92 起面板列出全部有未读的会话(不再截断),两者此刻相等;但如果它们再度分叉,
+ *    宁可少清也不能清掉用户没看见的会话 —— 「按钮做的事比它说的多」比少清更糟。
  */
 export function dismissAllTargets(model: TrayPanelModel | null | undefined): string[] {
   const seen = new Set<string>();

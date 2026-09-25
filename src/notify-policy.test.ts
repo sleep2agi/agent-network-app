@@ -62,7 +62,7 @@ ck('关闭永不静音;起止相同全天静音', !inQuietHours({ enabled: false
 const model = trayModelFrom({ A: 3, B: 0, C: 7.9, ' ': 5, D: -1, E: 3 });
 ck('托盘:去 0/负/空名,向下取整,按数降序同数按名', model.total === 13 && model.items.map(i => `${i.alias}:${i.count}`).join(',') === 'C:7,A:3,E:3');
 const big = trayModelFrom(Object.fromEntries(Array.from({ length: 30 }, (_, i) => [`a${i}`, i + 1])));
-ck('托盘最多 20 行,总数不截', big.items.length === TRAY_MAX_ITEMS && big.total === 465 && big.items[0].count === 30);
+ck('托盘模型不截断(0.2.92):30 个会话都在,总数 = 各行之和', big.items.length === 30 && big.items.length > TRAY_MAX_ITEMS && big.total === 465 && big.items[0].count === 30 && big.items.reduce((a, i) => a + i.count, 0) === big.total);
 ck('模型相等判断', trayModelEqual(model, trayModelFrom({ A: 3, C: 7, E: 3 })) && !trayModelEqual(model, trayModelFrom({ A: 4, C: 7, E: 3 })) && !trayModelEqual(null, model));
 
 // ── 设置解析 ──
