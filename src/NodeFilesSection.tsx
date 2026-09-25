@@ -19,7 +19,7 @@ import {
   lineNumberGutter, parentPath, parseFileContent, parseFilesListing, pathCrumbs, relativeTime, SECRET_FILE_MESSAGE, viewerModeFor,
   type NodeFileContent, type NodeFileEntry, type NodeFilesListing,
 } from './node-files';
-import { isTerminal, nextPollDelayMs, requestIdToFollow } from './node-rules';
+import { isTerminal, nextPollDelayMs, requestIdToFollow, resultProblem } from './node-rules';
 import { colors, radius, spacing, type } from './theme';
 
 const MONO = Platform.OS === 'ios' ? 'Menlo' : 'monospace';
@@ -82,7 +82,9 @@ function FilesBrowser({ cfg, target }: { cfg: HubConfig; target: RulesTarget }) 
     setListPhase('loading'); setListMsg(filesStatusMessage('pending', null));
     const res = await ask(() => listNodeFiles(cfg, target, path));
     if (cancelled.current || my !== seq.current || !res) return;
-    if (!res.ok) { setListPhase('error'); setListMsg(res.error); return; }
+    const problem = resultProblem(res);
+    if (problem !== null) { setListPhase('error'); setListMsg(problem); return; }
+    if (!res.ok) return;
     if (res.status !== 'done') { setListPhase('error'); setListMsg(filesStatusMessage(res.status, res.error)); return; }
     const l = parseFilesListing(res.content);
     if (!l) { setListPhase('error'); setListMsg('节点返回的目录内容无法解析'); return; }
@@ -97,7 +99,9 @@ function FilesBrowser({ cfg, target }: { cfg: HubConfig; target: RulesTarget }) 
     setFile(null); setFilePhase('loading'); setFileMsg(filesStatusMessage('pending', null));
     const res = await ask(() => readNodeFile(cfg, target, path));
     if (cancelled.current || my !== seq.current || !res) return;
-    if (!res.ok) { setFilePhase('error'); setFileMsg(res.error); return; }
+    const problem = resultProblem(res);
+    if (problem !== null) { setFilePhase('error'); setFileMsg(problem); return; }
+    if (!res.ok) return;
     if (res.status !== 'done') { setFilePhase('error'); setFileMsg(filesStatusMessage(res.status, res.error)); return; }
     const f = parseFileContent(res.content);
     if (!f) { setFilePhase('error'); setFileMsg('节点返回的文件内容无法解析'); return; }

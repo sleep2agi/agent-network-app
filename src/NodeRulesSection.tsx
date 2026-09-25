@@ -13,7 +13,7 @@ import { forwardRef, useCallback, useEffect, useRef, useState, type ReactNode } 
 import { ActivityIndicator, Modal, Platform, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 
 import { readNodeRulesFile, waitForRulesFileResult, writeNodeRulesFile, type HubConfig, type RulesTarget, type Session } from './api';
-import { hasUnsavedChanges, isTerminal, nextPollDelayMs, predictedRulesFileName, requestIdToFollow, rulesStatusMessage, rulesSupport, rulesUnsupportedMessage } from './node-rules';
+import { hasUnsavedChanges, isTerminal, nextPollDelayMs, predictedRulesFileName, requestIdToFollow, rulesErrorMessage, rulesMaxWaitMessage, rulesReadOutcome, rulesStatusMessage, rulesSupport, rulesUnsupportedMessage, RULES_MAX_WAIT_MS } from './node-rules';
 import { NODE_RULES_EDITOR_MIN_HEIGHT } from './node-page-model';
 import { colors, spacing } from './theme';
 import MarkdownMessage from './MarkdownMessage';
@@ -41,8 +41,15 @@ export default function NodeRulesSection({ cfg, node, session }: { cfg: HubConfi
   // 退出全屏后焦点回到「全屏」按钮(键盘用户不至于掉回页面顶部)。
   // Modal 卸载时 web 端会把焦点放回 body,所以等它卸完(fade 约 300 ms)再聚焦;两次都试,哪次赶上算哪次。
   const closeFull = useCallback(() => { setFull(false); for (const ms of [0, 350]) setTimeout(() => fullBtn.current?.focus?.(), ms); }, []);
-  const cancelled = useRef(false);
-  useEffect(() => () => { cancelled.current = true; }, []);
+  // 挂载标志 + 读取代数。代数:每次 runRead 自增,只有最新一次的结果能改界面 —— 读取中切走再切回、
+  // 连点「重新读取」、兜底计时器已经放弃的那次,晚到的结果一律丢掉,不会把新状态盖回去。
+  // (原先是一个只在卸载时置 true、从不复位的 cancelled:同一实例的 effect 被清理后再跑一次
+  // —— StrictMode —— 之后每次读取都在入队后静默 return,界面停在「正在读取」。)
+  const mounted = useRef(true);
+  const readGen = useRef(0);
+  const watchdog = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const clearWatchdog = () => { if (watchdog.current) { clearTimeout(watchdog.current); watchdog.current = null; } };
+  useEffect(() => { mounted.current = true; return () => { mounted.current = false; readGen.current++; clearWatchdog(); }; }, []);
 
   const say = (text: string, tone: 'muted' | 'ok' | 'error' = 'muted') => { setMessage(text); setMessageTone(tone); };
 
@@ -50,24 +57,42 @@ export default function NodeRulesSection({ cfg, node, session }: { cfg: HubConfi
   const support = rulesSupport(session);
 
   const runRead = useCallback(async () => {
+    const gen = ++readGen.current;
+    const stale = () => !mounted.current || gen !== readGen.current;
+    clearWatchdog();
     if (support.kind === 'unsupported') { setPhase('unavailable'); say(rulesUnsupportedMessage(support), 'error'); return; }
     setPhase('loading');
     say(`正在向节点读取 ${predictedRulesFileName(session, node)}…`);
-    const enq = await readNodeRulesFile(cfg, node);
-    if (cancelled.current) return;
-    // 单飞被拒(request_in_flight)时 hub 带回正在跑的那条,接着等它,不报错。
-    const follow = requestIdToFollow(enq);
-    if (!follow) { setPhase('unavailable'); say(enq.ok ? '' : enq.error, 'error'); return; }
-    const res = await waitForRulesFileResult(cfg, follow, { nextDelayMs: nextPollDelayMs, isTerminal, isCancelled: () => cancelled.current });
-    if (cancelled.current) return;
-    if (!res.ok) { setPhase('unavailable'); say(res.error, 'error'); return; }
-    if (res.file_name) setFileName(res.file_name);
-    if (res.status !== 'done') { setPhase('unavailable'); say(rulesStatusMessage(res, support), 'error'); return; }
-    const content = res.content ?? '';
-    setOnNode(res.exists === false ? '' : content);
-    setEditor(content);
-    setPhase('ready');
-    say(rulesStatusMessage(res, support), 'muted');
+    // 兜底:不管下面的 await 链卡在哪一步,RULES_MAX_WAIT_MS 后一定退出加载态、让「重新读取」可点。
+    watchdog.current = setTimeout(() => {
+      if (stale()) return;
+      readGen.current++; // 放弃这一次:它之后就算回来了也不再改界面
+      setPhase('unavailable');
+      say(rulesMaxWaitMessage(), 'error');
+    }, RULES_MAX_WAIT_MS);
+    try {
+      const enq = await readNodeRulesFile(cfg, node);
+      if (stale()) return;
+      // 单飞被拒(request_in_flight)时 hub 带回正在跑的那条,接着等它,不报错。
+      const follow = requestIdToFollow(enq);
+      if (!follow) { setPhase('unavailable'); say(enq.ok ? 'Hub 返回空响应' : enq.error, 'error'); return; }
+      const res = await waitForRulesFileResult(cfg, follow, { nextDelayMs: nextPollDelayMs, isTerminal, isCancelled: stale });
+      if (stale()) return;
+      const out = rulesReadOutcome(res, support);
+      if (out.fileName) setFileName(out.fileName);
+      // 过期(content_purged)、找不到、认不出的状态、失败、超时:退出加载态、说原因,绝不当成空文件放进编辑器。
+      if (out.kind === 'problem') { setPhase('unavailable'); say(out.message || '读取没有完成，请点「重新读取」', 'error'); return; }
+      setOnNode(out.exists === false ? '' : out.content);
+      setEditor(out.content);
+      setPhase('ready');
+      say(out.message, 'muted');
+    } catch (e) {
+      if (stale()) return;
+      setPhase('unavailable');
+      say(`读取出错：${e instanceof Error ? e.message : String(e)}`, 'error');
+    } finally {
+      if (gen === readGen.current) clearWatchdog();
+    }
   }, [cfg, node, session, support.kind]);
 
   // 只在「读哪个文件」变了时重读(rulesReadKey):节点页每次刷新都新造 node/session 对象,
@@ -79,24 +104,31 @@ export default function NodeRulesSection({ cfg, node, session }: { cfg: HubConfi
 
   const runSave = async () => {
     if (phase !== 'ready') return;
+    const gone = () => !mounted.current;
     setPhase('saving');
     say(`正在写入 ${fileName}…`);
-    const enq = await writeNodeRulesFile(cfg, node, editor);
-    if (cancelled.current) return;
-    if (!enq.ok) {
-      // 上一条(多半是读)还没做完:等它结束再让用户重试保存,不把「等一下」说成失败。
-      const follow = requestIdToFollow(enq);
-      if (follow) { await waitForRulesFileResult(cfg, follow, { nextDelayMs: nextPollDelayMs, isTerminal, isCancelled: () => cancelled.current }); if (cancelled.current) return; setPhase('ready'); say('上一条请求已结束，请再点一次保存', 'muted'); return; }
-      setPhase('ready'); say(enq.error, 'error'); return;
+    try {
+      const enq = await writeNodeRulesFile(cfg, node, editor);
+      if (gone()) return;
+      if (!enq.ok) {
+        // 上一条(多半是读)还没做完:等它结束再让用户重试保存,不把「等一下」说成失败。
+        const follow = requestIdToFollow(enq);
+        if (follow) { await waitForRulesFileResult(cfg, follow, { nextDelayMs: nextPollDelayMs, isTerminal, isCancelled: gone }); if (gone()) return; setPhase('ready'); say('上一条请求已结束，请再点一次保存', 'muted'); return; }
+        setPhase('ready'); say(enq.error, 'error'); return;
+      }
+      const res = await waitForRulesFileResult(cfg, enq.request_id, { nextDelayMs: nextPollDelayMs, isTerminal, isCancelled: gone });
+      if (gone()) return;
+      setPhase('ready');
+      if (!res.ok) { say(rulesErrorMessage(res.error), 'error'); return; }
+      if (res.file_name) setFileName(res.file_name);
+      if (res.status !== 'done') { say(rulesStatusMessage(res, support), 'error'); return; }
+      setOnNode(editor);
+      say(rulesStatusMessage(res, support), 'ok');
+    } catch (e) {
+      if (gone()) return;
+      setPhase('ready');
+      say(`保存出错：${e instanceof Error ? e.message : String(e)}`, 'error');
     }
-    const res = await waitForRulesFileResult(cfg, enq.request_id, { nextDelayMs: nextPollDelayMs, isTerminal, isCancelled: () => cancelled.current });
-    if (cancelled.current) return;
-    setPhase('ready');
-    if (!res.ok) { say(res.error, 'error'); return; }
-    if (res.file_name) setFileName(res.file_name);
-    if (res.status !== 'done') { say(rulesStatusMessage(res, support), 'error'); return; }
-    setOnNode(editor);
-    say(rulesStatusMessage(res, support), 'ok');
   };
 
   const dirty = phase === 'ready' && hasUnsavedChanges(editor, onNode);
