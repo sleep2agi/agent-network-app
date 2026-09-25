@@ -407,6 +407,18 @@ original signatures: the plugin verifies the minisign signature over the
 Limitation: if anet.sh answers but the GitHub download itself is blocked, the
 updater does not fall back — the manifest endpoint already succeeded.
 
+**Android in-app update reads the mirror first** (`src/android-updater.ts`, from
+0.2.103). It reads `desktop/latest/VERSION`; when that is newer than the
+installed app it reads `desktop/<ver>/SHA256SUMS` (required), `desktop/<ver>/latest.json`
+(release notes, optional) and downloads `desktop/<ver>/Agent.Network_<ver>_android-universal.apk`,
+checking it against `SHA256SUMS` before handing it to the installer. The
+GitHub REST API (60 unauthenticated requests per hour per IP) is used only when
+the mirror fails, or when `VERSION` has moved but that version's `SHA256SUMS`
+has no APK line yet. Consequence for releasing: **Android users do not see a
+release until the mirror run for it has finished** — while the mirror lags, a
+phone that already runs the previous version reports "up to date". Dispatch the
+mirror as part of publishing (above) and check `latest/VERSION` afterwards.
+
 **Rollback touches both endpoints.** Section 8's "point `latest.json` back at the
 previous version" now means the anet.sh route *and* `desktop/latest/` on
 ModelScope. The mirror always follows the newest *published* release, so the cron
