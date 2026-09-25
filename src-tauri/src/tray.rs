@@ -26,7 +26,7 @@ const MENU_CHAT_PREFIX: &str = "tray-chat:";
 /// 下拉里最多列多少个 agent(飞书也不会把上百个联系人全铺出来)。
 pub const MAX_ITEMS: usize = 20;
 
-#[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct TrayItem {
     pub alias: String,
     pub count: u32,
