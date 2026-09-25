@@ -147,3 +147,37 @@ export function blockLineForCaret(starts: readonly number[], caretLine: number):
 export function jumpText(editorValue: unknown, draft: string): string {
   return typeof editorValue === 'string' ? editorValue : draft;
 }
+
+// ── 紧凑工具条(2026-09-25,Vincent「这个地方占的位置太大了」) ─────────────────
+// 原来标题下面叠了 分区说明 + 卡片内说明(两段几乎同义) + 工具条 + 独占一行的状态句,内容要到 ~430px 才开始。
+// 现在只剩一行工具条:说明收进 ⓘ,状态句内联在按钮左边,成功类提示过几秒自己消失。
+
+/** 成功/普通提示在工具条里停留多久后自动消失(毫秒)。 */
+export const RULES_STATUS_HIDE_MS = 3000;
+
+export type RulesStatusTone = 'muted' | 'ok' | 'error';
+export type RulesPhase = 'loading' | 'ready' | 'saving' | 'unavailable';
+
+/**
+ * 工具条里的状态句要不要自动消失,多久后消失。
+ *  - 错误:一直留着,直到下一次操作换掉它(null)。
+ *  - 读取中 / 保存中:进行中的说明要一直在(null)。
+ *  - 不可用:那句话就是这一区唯一的内容(版本太旧、节点离线…),不能消失(null)。
+ *  - 其余(已读取、已保存):RULES_STATUS_HIDE_MS 后消失。
+ */
+export function statusAutoHideMs(tone: RulesStatusTone, phase: RulesPhase): number | null {
+  if (tone === 'error') return null;
+  if (phase === 'loading' || phase === 'saving' || phase === 'unavailable') return null;
+  return RULES_STATUS_HIDE_MS;
+}
+
+/** 保存按钮文案:干净时按钮置灰但仍叫「保存」(不再显示「已是最新」这种像状态的字)。 */
+export function saveButtonLabel(phase: RulesPhase): string {
+  return phase === 'saving' ? '保存中…' : '保存';
+}
+
+/** ⓘ 里的说明:原先分区说明和卡片说明两段合成一段;web 端再附一句双击提示。 */
+export function rulesInfoText(fileName: string, web: boolean): string {
+  const base = `这是节点工作目录里的 ${fileName}，节点每次开会话都会读它。保存会直接覆盖节点机器上的这个文件；文件名和位置由节点自己决定，这里改不了。`;
+  return web ? `${base}阅读模式下双击任意内容，可跳到对应的源码行编辑。` : base;
+}
