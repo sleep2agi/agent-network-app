@@ -759,3 +759,29 @@ jobs:
             echo "$oversized"
             exit 1
           fi
+
+  dispatch-ios-testflight:
+    # Keep mobile in step with desktop: after every successful desktop release
+    # build, queue the iOS build + TestFlight upload. ios-build.yml has no
+    # commit input, so it builds main HEAD (the same commit when nothing has
+    # merged since the release was dispatched). Its job runs in the protected
+    # macos-signing environment, so a maintainer still approves each iOS run.
+    # Promoting the build to the public TestFlight group stays a separate,
+    # deliberate step (ios-testflight-status.yml, enable_public_testing=true)
+    # because it submits to Apple's Beta App Review.
+    needs: build-release
+    runs-on: ubuntu-latest
+    permissions:
+      actions: write
+    steps:
+      - name: Dispatch ios-build.yml on main
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_COMMIT: ${{ inputs.commit }}
+        run: |
+          main_sha="$(gh api "repos/${GITHUB_REPOSITORY}/commits/main" -q .sha)"
+          if [ "$main_sha" != "$RELEASE_COMMIT" ]; then
+            echo "::notice::main moved since the release commit ($RELEASE_COMMIT -> $main_sha); iOS builds main HEAD"
+          fi
+          gh workflow run ios-build.yml --repo "$GITHUB_REPOSITORY" --ref main -f upload_testflight=true
+          echo "::notice::ios-build.yml dispatched for main $main_sha — approve its macos-signing deployment to proceed"
