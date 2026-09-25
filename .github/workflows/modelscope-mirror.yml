@@ -1,0 +1,96 @@
+# China download mirror: copies every published desktop-v* release to the public ModelScope
+# dataset SmartFlowAI/agent-network-releases (desktop/<ver>/ + desktop/latest/).
+# Layout, update pointer and the updater fallback are described in
+# docs/desktop-release-sop.md section 10 and at the top of scripts/modelscope-mirror.mjs.
+#
+# Why three triggers:
+#   * release: published  — the normal path. Starts as soon as the draft is published.
+#     The Android APK is attached to the release by hand a few minutes AFTER publishing,
+#     and GitHub fires no workflow event for an asset upload (`release: edited` is only
+#     for title/body/flag edits). So this run waits up to 30 min for the APK, then mirrors
+#     whatever is there.
+#   * schedule            — reconcile. Every 30 min, compare the newest published release
+#     against the mirror by sha256 (GitHub asset digests vs the ModelScope listing) and
+#     upload only what differs. In sync = two API calls, no download, no commit. This is what
+#     catches an APK attached late, a run that failed half way, or a ModelScope outage.
+#   * workflow_dispatch   — re-sync any past release by tag. An old tag never moves
+#     desktop/latest/ (only the newest published release does).
+name: modelscope mirror
+
+on:
+  release:
+    types: [published]
+  schedule:
+    - cron: '11,41 * * * *'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Release tag to (re)sync, e.g. desktop-v0.2.98. Empty = newest published desktop release.'
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+# One mirror run at a time, across all triggers: two runs committing the same files to the
+# dataset concurrently is the one race this design has. GitHub keeps at most ONE pending run
+# per group — a newer pending run replaces an older pending one. For cron runs that is
+# harmless (they are equivalent); when re-syncing several old tags by hand, dispatch the next
+# one after the previous run has started.
+concurrency:
+  group: modelscope-mirror
+  cancel-in-progress: false
+
+jobs:
+  mirror:
+    if: github.event_name != 'release' || startsWith(github.event.release.tag_name, 'desktop-v')
+    runs-on: ubuntu-latest
+    timeout-minutes: 75
+    steps:
+      - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4.3.0
+
+      - name: Install ModelScope SDK (pinned)
+        run: |
+          set -euo pipefail
+          python3 -m venv "$RUNNER_TEMP/ms"
+          "$RUNNER_TEMP/ms/bin/pip" install --disable-pip-version-check --quiet 'modelscope==1.40.1'
+          "$RUNNER_TEMP/ms/bin/python" -c 'import modelscope; print("modelscope", modelscope.__version__)'
+
+      - name: List what the mirror holds (anonymous)
+        run: |
+          set -euo pipefail
+          "$RUNNER_TEMP/ms/bin/python" scripts/modelscope-mirror-upload.py list --out "$RUNNER_TEMP/remote.json"
+
+      - name: Plan and stage changed files
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.event.release.tag_name || inputs.tag }}
+          WAIT_APK_MINUTES: ${{ github.event_name == 'release' && '30' || '0' }}
+        run: |
+          set -euo pipefail
+          node scripts/modelscope-mirror.mjs prepare \
+            --remote "$RUNNER_TEMP/remote.json" \
+            --out "$RUNNER_TEMP/mirror" \
+            --tag "$TAG" \
+            --wait-apk-minutes "$WAIT_APK_MINUTES"
+
+      - name: Upload (one commit) and verify anonymously
+        env:
+          MODELSCOPE_API_TOKEN: ${{ secrets.MODELSCOPE_API_TOKEN }}
+        run: |
+          set -euo pipefail
+          "$RUNNER_TEMP/ms/bin/python" scripts/modelscope-mirror-upload.py upload --dir "$RUNNER_TEMP/mirror"
+
+      - name: Summary
+        if: always()
+        run: |
+          f="$RUNNER_TEMP/mirror/summary.json"
+          if [ -f "$f" ]; then
+            {
+              echo '### ModelScope mirror'
+              echo '```json'
+              jq '{tag, isNewest, newest, planned, changed}' "$f"
+              echo '```'
+              echo "Browse: https://modelscope.cn/datasets/SmartFlowAI/agent-network-releases/files"
+            } >> "$GITHUB_STEP_SUMMARY"
+          fi
