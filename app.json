@@ -3,7 +3,7 @@
     "name": "Agent Network",
     "slug": "agent-network-app",
     "version": "0.2.99",
-    "orientation": "portrait",
+    "orientation": "default",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "dark",
     "ios": {

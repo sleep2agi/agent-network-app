@@ -78,6 +78,16 @@ jobs:
           if ! grep -Fq "uses-permission: name='android.permission.REQUEST_INSTALL_PACKAGES'" <<<"$badging"; then
             echo "::error::APK lacks android.permission.REQUEST_INSTALL_PACKAGES"; exit 1
           fi
+          # 0.2.100: no orientation lock. app.json "portrait" → android:screenOrientation="portrait" → Android
+          # letterboxes the app on an unfolded foldable / tablet in landscape and the two-pane layout never
+          # gets the wide width (Vincent's foldable screenshot). expo writes "unspecified" (-1) for "default".
+          # Any other screenOrientation value, or resizeableActivity=false, on any activity fails the build.
+          tree=$("$BT/aapt2" dump xmltree --file AndroidManifest.xml "$APK")
+          locks=$(grep -E ':screenOrientation\(0x[0-9a-f]+\)=' <<<"$tree" | grep -vE '\)=-1$' || true)
+          if [ -n "$locks" ]; then echo "::error::APK locks screen orientation (expected none / unspecified): $locks"; exit 1; fi
+          unresizable=$(grep -E ':resizeableActivity\(0x[0-9a-f]+\)=(false|0)' <<<"$tree" || true)
+          if [ -n "$unresizable" ]; then echo "::error::APK sets resizeableActivity=false: $unresizable"; exit 1; fi
+          echo "orientation: no screenOrientation lock, resizeableActivity not false"
           certs=$("$BT/apksigner" verify --print-certs "$APK")
           printf '%s\n' "$certs"
           # apksigner prints `Signer #1 certificate …` when a v1 signature is present and
