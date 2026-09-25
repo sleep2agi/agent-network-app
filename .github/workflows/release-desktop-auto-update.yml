@@ -119,6 +119,11 @@ jobs:
           releaseBody: |-
             Signed and notarized stable update for macOS (Apple Silicon) and Windows (x64).
 
+            What's new in 0.2.91:
+            - 规则文件(CLAUDE.md / AGENTS.md)的「阅读」模式里,双击任意一段内容(标题、段落、列表项、引用、代码块、
+              表格行),会自动切到「编辑」并选中这段对应的 Markdown 原文、滚到编辑框中间,直接就能改;全屏模式里也一样。
+            - 改完切回「阅读」,会停在刚才那一段附近,不用重新找。
+
             What's new in 0.2.90:
             - 节点的 agent-node 版本太旧、还不支持查看规则文件时,节点页直接告诉你当前版本和需要升级到哪个版本,
               不再转圈干等 60 秒。
