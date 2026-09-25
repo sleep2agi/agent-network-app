@@ -13,5 +13,8 @@ assert.equal(loadDesktopThemeMode(), null);
 assert.equal(saveDesktopThemeMode('light'), true);
 assert.equal(loadDesktopThemeMode(), 'light');
 assert.equal(values.get('theme_mode_v1'), 'light');
+// 0.2.101:「跟随系统」存的是字面量 system,同一个 key;读回来原样。
+assert.equal(saveDesktopThemeMode('system'), true);
+assert.equal(loadDesktopThemeMode(), 'system');
 
-console.log('desktop theme storage: 3 checks passed');
+console.log('desktop theme storage: 5 checks passed');

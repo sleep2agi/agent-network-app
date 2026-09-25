@@ -12,7 +12,7 @@ import {
   subscribeAndroidUpdates,
 } from './android-updater';
 import { latestReleaseNotes } from './desktop-updater';
-import { colors, onThemeChange, spacing } from './theme';
+import { colors, onThemeChange, spacing, themeMode } from './theme';
 
 /**
  * 安卓更新弹窗。只在用户点了「软件更新」之后出现(安卓不做启动时自动检查)。
@@ -21,6 +21,8 @@ import { colors, onThemeChange, spacing } from './theme';
 export default function AndroidUpdatePrompt() {
   const update = useSyncExternalStore(subscribeAndroidUpdates, androidUpdateSnapshot, androidUpdateSnapshot);
   const dismissed = useSyncExternalStore(subscribeAndroidUpdates, androidUpdatePromptDismissed, androidUpdatePromptDismissed);
+  // 同 DesktopUpdatePrompt:在 key={theme} 重挂树外面,跟随系统时要自己订阅主题才会重画。
+  useSyncExternalStore(onThemeChange, themeMode, themeMode);
   const visible = androidPromptVisible(update, dismissed);
   if (!('apk' in update)) return null;
   const sizeMb = update.apk.size ? ` · ${(update.apk.size / 1024 / 1024).toFixed(1)} MB` : '';

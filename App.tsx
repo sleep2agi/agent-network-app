@@ -42,7 +42,8 @@ import { clearProfileUnauthorized, onProfileUnauthorized } from './src/profile-a
 import { initOutbox } from './src/outbox';
 import { createForwardPersistence, initForwardController } from './src/forward-controller';
 import { loadDesktopThemeMode } from './src/desktop-theme-storage';
-import { colors, onThemeChange, setThemeMode, spacing, themeMode } from './src/theme';
+import { colors, onThemeChange, parseStoredThemePreference, setThemeMode, setThemePreference, spacing, themeMode } from './src/theme';
+import { installSystemThemeFollower } from './src/system-color-scheme';
 import { installWebScrollbarTheme } from './src/web-scrollbar';
 import MacTitleStrip from './src/mac-title-strip';
 import WinTitleBar from './src/win-title-bar';
@@ -117,9 +118,14 @@ export default function App() {
   //
   // ⚠️ 移动端仍会闪:它的持久化走 SecureStore.getItemAsync,拿不到同步值 ——
   // 这一半本条修不了,不假装修好。
+  //
+  // 0.2.101「跟随系统」:先同步读系统配色并订阅它的变化(幂等,每个窗口的 JS 上下文装一次),
+  // 再同步读用户偏好。存储里没有值(新装)= 跟随系统;旧版存的 light/dark 原样沿用。
+  // undefined = 不是桌面壳(移动端),偏好等下面异步的 loadThemeMode() 再定。
+  installSystemThemeFollower();
   {
     const early = loadDesktopThemeMode();
-    if ((early === 'light' || early === 'dark') && themeMode() !== early) setThemeMode(early);
+    if (early !== undefined) setThemePreference(parseStoredThemePreference(early));
   }
 
   // One-time cleanup of attachment caches written before the download fix.
@@ -210,8 +216,10 @@ function AppRoot() {
   // Scrollbars are painted by the browser, outside React Native's style
   // system, so they need the palette pushed to them explicitly.
   useEffect(() => installWebScrollbarTheme(), []);
+  // 别的窗口改了偏好(localStorage 的 storage 事件):light / dark / system 都要认,
+  // 否则在主窗选「跟随系统」,分离聊天窗不跟。
   useEffect(() => onDesktopThemeStorageChange(mode => {
-    if (mode === 'light' || mode === 'dark') setThemeMode(mode);
+    setThemePreference(parseStoredThemePreference(mode));
   }), []);
   // RN's SafeAreaView only covers iOS; Android edge-to-edge draws the
   // tab bar under the gesture bar (Vincent tg 802) — pad by the real inset.
@@ -321,7 +329,8 @@ function AppRoot() {
         if (!local.session) throw new Error(local.error || '本地工作区启动后没有返回会话');
         saved = local.session;
       }
-      if (mode === 'light' || mode === 'dark') setThemeMode(mode);
+      // 移动端偏好在这里才读到(SecureStore 是异步的);null = 新装 → 跟随系统。
+      setThemePreference(parseStoredThemePreference(mode));
       // R2 avatar: seed the per-device local echo layer + wire its writer, so
       // session-only aliases keep their user-set avatar across restarts.
       await hydrateProfileLocalState(saved);
