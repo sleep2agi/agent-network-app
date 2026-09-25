@@ -46,7 +46,7 @@ export default function AndroidUpdatePrompt() {
           ) : null}
 
           {update.kind === 'download-error' ? (
-            <Text style={styles.error} testID="android-update-error">下载失败：{update.message}。可以重试(会接着已下载的部分继续),或在浏览器中下载后手动安装。</Text>
+            <Text style={styles.error} testID="android-update-error">下载失败：{update.message}。可以重试,或在浏览器中下载后手动安装。</Text>
           ) : null}
 
           {update.kind === 'ready' && update.installAttempted ? (
