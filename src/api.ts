@@ -29,6 +29,10 @@ export interface Session {
   /** Node skills view — hub `/api/status`: this session answers skills_list /
    *  skill_read on the rules-file doorbell. Absent ⇒ false (no fallback). */
   skills_capable?: boolean;
+  /** Project folder view — hub `/api/status`: this session answers files_list /
+   *  file_read. A hub that predates it omits the key entirely (node-files.ts
+   *  filesSupport tells the two apart). */
+  files_capable?: boolean;
 }
 
 export interface HubTask {
@@ -1223,6 +1227,39 @@ export const listNodeSkills = (cfg: HubConfig, node: RulesTarget): Promise<Rules
 
 export const readNodeSkill = (cfg: HubConfig, node: RulesTarget, name: string): Promise<RulesFileEnqueueResult> =>
   enqueueSkills(cfg, 'read_node_skill', node, name);
+
+/** Project folder view — enqueue list_node_files / read_node_file (read-only). The
+ *  only argument besides the target is a path RELATIVE to the node's work dir;
+ *  hub and node both refuse absolute paths and `..`. Results come back through
+ *  getRulesFileResult / waitForRulesFileResult like the rules file. */
+const FILES_TOOL_MISSING = '当前 Hub 版本还没有项目文件夹工具,请先升级服务器';
+const enqueueFiles = async (
+  cfg: HubConfig,
+  tool: 'list_node_files' | 'read_node_file',
+  node: RulesTarget,
+  relPath: string,
+): Promise<RulesFileEnqueueResult> => {
+  const networkId = cfg.networkId ?? (await fetchNetworkId(cfg));
+  const args = {
+    ...rulesTargetArgs(node),
+    ...(networkId ? { network_id: networkId } : {}),
+    path: relPath,
+  };
+  const r = await callHubTool(cfg, tool, args);
+  if (r.kind === 'unsupported') return { ok: false, unsupported: true, error: FILES_TOOL_MISSING };
+  if (r.kind === 'error') return { ok: false, error: /not found|unknown tool/i.test(r.error) ? FILES_TOOL_MISSING : r.error };
+  const p = r.payload;
+  if (!p || p.ok !== true || typeof p.request_id !== 'string') {
+    return { ok: false, error: p?.error === 'request_in_flight' ? '节点还有一个项目文件夹请求没做完,请稍后再试' : String(p?.error ?? 'Hub 返回空响应'), ...(p?.existing_request_id ? { existing_request_id: p.existing_request_id } : {}) };
+  }
+  return { ok: true, request_id: p.request_id, op: 'read' };
+};
+
+export const listNodeFiles = (cfg: HubConfig, node: RulesTarget, relPath: string): Promise<RulesFileEnqueueResult> =>
+  enqueueFiles(cfg, 'list_node_files', node, relPath);
+
+export const readNodeFile = (cfg: HubConfig, node: RulesTarget, relPath: string): Promise<RulesFileEnqueueResult> =>
+  enqueueFiles(cfg, 'read_node_file', node, relPath);
 
 export const getRulesFileResult = async (cfg: HubConfig, requestId: string): Promise<RulesFileOutcome> => {
   const networkId = cfg.networkId ?? (await fetchNetworkId(cfg));
