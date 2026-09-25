@@ -75,6 +75,36 @@ export function compareInTeam(a: Session, b: Session, ctx: SortContext = {}): nu
   );
 }
 
+export const NEW_MESSAGES_TITLE = '新消息';
+export const PINNED_TITLE = '置顶';
+
+/**
+ * 「新消息」组的输入(Vincent 2026-09-25「有消息的那些节点,你要置顶」)。
+ *
+ * 🔴 count 必须来自 agent-unread-counts.ts 的 agentUnreadCounts —— 托盘角标用的同一个函数。
+ *    这里只收一个查询函数,不自己算未读,免得列表和托盘数出两组会话。
+ */
+export type UnreadContext = {
+  /** 该会话的未读数;> 0 即进「新消息」组。 */
+  count: (alias: string) => number;
+  /** 该会话最近一条消息的时间(ms);读不到(0/缺省)时退回 session.updated_at。 */
+  lastMessageAt?: (alias: string) => number;
+};
+
+/** 「新消息」组内:最近一条消息新的在前 → 别名字母序(稳定,不随轮询抖动)。 */
+export function compareNewMessages(a: Session, b: Session, u: UnreadContext): number {
+  const at = (s: Session) => u.lastMessageAt?.(s.alias) || ts(s);
+  return at(b) - at(a) || a.alias.localeCompare(b.alias);
+}
+
+/**
+ * 用户正在列表上移动指针/滚动时,「新消息」组的输入先按住上一份,停手后再换成最新的 ——
+ * 否则行会在光标底下跳走(点到的不是想点的那个)。没被按住或还没有上一份时直接用最新的。
+ */
+export function holdWhileActive<T>(prev: T | null, live: T, active: boolean): T {
+  return active && prev !== null ? prev : live;
+}
+
 /**
  * 分组 + 过滤 + 排序。组间顺序保持原有规则(有人在线的团队优先 → 在线人数
  * 多者优先 → 组名字母序),只有**组内**顺序改用 compareInTeam。
@@ -82,15 +112,21 @@ export function compareInTeam(a: Session, b: Session, ctx: SortContext = {}): nu
 export function buildSections(
   sessions: Session[],
   query: string,
-  opts: { match?: Matcher; sort?: SortContext } = {},
+  opts: { match?: Matcher; sort?: SortContext; unread?: UnreadContext } = {},
 ): AgentSection[] {
   const q = query.trim();
   const match = opts.match ?? substringMatch;
   const filtered = q ? sessions.filter(s => match(s.alias, q)) : sessions.slice();
+  // 「新消息」组:有未读的会话整体上浮到最顶(在「置顶」之上),**搬走**而不是复制;
+  // 读完(未读→0)下一次计算时自然回到原来的组。搜索时不浮动,保持搜索结果原有的顺序。
+  const floating = !q && opts.unread ? filtered.filter(s => opts.unread!.count(s.alias) > 0) : [];
+  if (floating.length) floating.sort((a, b) => compareNewMessages(a, b, opts.unread!));
+  const floatSet = new Set(floating.map(s => s.alias));
+  const rest = floatSet.size ? filtered.filter(s => !floatSet.has(s.alias)) : filtered;
   const pinned = opts.sort?.pinned
-    ? filtered.filter(s => opts.sort!.pinned!(s.alias)).sort((a, b) => compareInTeam(a, b, opts.sort))
+    ? rest.filter(s => opts.sort!.pinned!(s.alias)).sort((a, b) => compareInTeam(a, b, opts.sort))
     : [];
-  const unpinned = pinned.length ? filtered.filter(s => !opts.sort!.pinned!(s.alias)) : filtered;
+  const unpinned = pinned.length ? rest.filter(s => !opts.sort!.pinned!(s.alias)) : rest;
 
   const groups = new Map<string, Session[]>();
   for (const s of unpinned) {
@@ -112,10 +148,14 @@ export function buildSections(
         b.online - a.online ||
         a.title.localeCompare(b.title),
     );
-  return pinned.length
-    ? [{ title: '置顶', data: pinned, online: pinned.filter(s => !isOffline(s)).length, total: pinned.length }, ...grouped]
-    : grouped;
+  const head: AgentSection[] = [];
+  if (floating.length) head.push(sectionOf(NEW_MESSAGES_TITLE, floating));
+  if (pinned.length) head.push(sectionOf(PINNED_TITLE, pinned));
+  return head.length ? [...head, ...grouped] : grouped;
 }
+
+const sectionOf = (title: string, data: Session[]): AgentSection =>
+  ({ title, data, online: data.filter(s => !isOffline(s)).length, total: data.length });
 
 export const countShown = (sections: AgentSection[]): number =>
   sections.reduce((n, g) => n + g.data.length, 0);

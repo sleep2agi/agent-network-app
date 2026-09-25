@@ -5,7 +5,7 @@
 // 🔴 样式必须从 ./app-styles 引入,不能在本文件复制一份 —— 那是 let 变量,
 // 主题切换时整体重新赋值,复制的那份不会跟着变(见 app-styles.ts 头注释)。
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Pressable,
@@ -38,7 +38,8 @@ import {
   subscribeUnread,
 } from './unread-store';
 import { styles } from './app-styles';
-import { buildSections, countShown } from './agents-list';
+import { buildSections, countShown, holdWhileActive } from './agents-list';
+import { agentUnreadCounts, latestMessageAtByAgent } from './agent-unread-counts';
 import { pinyinMatch } from './lib/pinyin';
 
 export default function AgentsScreen({
@@ -79,6 +80,28 @@ export default function AgentsScreen({
   const [unreadSnap, setUnreadSnap] = useState(getUnreadSnapshot);
   useEffect(() => subscribeUnread(() => setUnreadSnap(getUnreadSnapshot())), []);
   useEffect(() => { bindUnreadAppState(); }, []);
+
+  // 「新消息」组(Vincent 2026-09-25「有消息的那些节点,你要置顶」):未读数取自 agentUnreadCounts ——
+  // 托盘角标用的同一个函数,列表和托盘永远是同一组会话。
+  const liveUnread = useMemo(() => {
+    const src = preview
+      ? { serverBody: preview.serverBody, ledger: preview.ledger, replyRows: [], replyUsername: '', replyWatermarks: {} }
+      : unreadSnap;
+    return { counts: agentUnreadCounts(src), lastAt: latestMessageAtByAgent(src) };
+  }, [preview, unreadSnap]);
+  // 指针在列表行间移动 / 滚动的这一小段时间里,先按住上一份分组输入,停手 1.2s 后再换成最新的 ——
+  // 否则新消息把行顶下去,光标底下的那一行会跳走。只按住「活动中」,鼠标停在列表上不动时照常上浮。
+  const [listActive, setListActive] = useState(false);
+  const activeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const markListActive = useCallback(() => {
+    setListActive(true);
+    if (activeTimer.current) clearTimeout(activeTimer.current);
+    activeTimer.current = setTimeout(() => setListActive(false), 1200);
+  }, []);
+  useEffect(() => () => { if (activeTimer.current) clearTimeout(activeTimer.current); }, []);
+  const heldUnread = useRef<typeof liveUnread | null>(null);
+  const floatInput = holdWhileActive(heldUnread.current, liveUnread, listActive);
+  heldUnread.current = floatInput;
 
   // RN Web's bubbling onContextMenu can run after WKWebView has already
   // decided to show its native "Reload" menu. Intercept in the capture phase
@@ -181,8 +204,9 @@ export default function AgentsScreen({
     () => buildSections(sessions, query, {
       match: pinyinMatch,
       sort: { pinned: alias => pinnedAliases.includes(alias) },
+      unread: { count: alias => floatInput.counts[alias] ?? 0, lastMessageAt: alias => floatInput.lastAt[alias] ?? 0 },
     }),
-    [sessions, query, pinnedAliases],
+    [sessions, query, pinnedAliases, floatInput],
   );
   const shownCount = countShown(sections);
 
@@ -232,6 +256,8 @@ export default function AgentsScreen({
       <SectionList
       sections={sections}
       keyExtractor={s => s.alias}
+      onScroll={markListActive}
+      scrollEventThrottle={100}
       stickySectionHeadersEnabled={false}
       renderSectionHeader={({ section }) => (
         <View style={[styles.sectionHeaderRow, compact && { backgroundColor: colors.listBg }]}>
@@ -286,7 +312,7 @@ export default function AgentsScreen({
         return (
         <Pressable
           {...(compact ? ({ dataSet: { agentAlias: item.alias } } as any) : {})}
-          onHoverIn={compact ? () => setHoveredAlias(item.alias) : undefined}
+          onHoverIn={compact ? () => { setHoveredAlias(item.alias); markListActive(); } : undefined}
           onHoverOut={compact ? () => setHoveredAlias(current => current === item.alias ? null : current) : undefined}
           style={({ pressed }) => [
             styles.card,
