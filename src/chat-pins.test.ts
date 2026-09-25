@@ -12,9 +12,16 @@ check('scope key falls back to server+username and is filename-safe', pinScopeKe
 check('two hubs with the same alias get different scopes', pinScopeKey({ serverUrl: 'http://a', username: 'u' }) !== pinScopeKey({ serverUrl: 'http://b', username: 'u' }));
 check('empty everything → default', pinScopeKey({}) === 'default');
 // 接线契约(App / ChatScreen import react-native,bun 里按源码查)
-const app = readFileSync(new URL('../App.tsx', import.meta.url), 'utf8');
-const mobileChat = app.slice(app.indexOf("      ) : screen.name === 'chat' ? ("), app.indexOf("      ) : screen.name === 'nodeInfo' ? ("));
-check('mobile chat header gets pinned + onTogglePin', mobileChat.includes('pinned={mobilePins.includes(screen.alias)}') && mobileChat.includes('onTogglePin={() => toggleMobilePin(screen.alias)}'));
+// CRLF-normalised: the Windows runner checks out with autocrlf, and the markers below contain \n.
+const app = readFileSync(new URL('../App.tsx', import.meta.url), 'utf8').replace(/\r\n/g, '\n');
+// Search for the end marker from the start marker: the Android two-pane branch (above the
+// phone branch) has its own nested `) : screen.name === 'nodeInfo' ? (`.
+const mobileChatStart = app.indexOf("\n      ) : screen.name === 'chat' ? (");
+const mobileChat = app.slice(mobileChatStart, app.indexOf("\n      ) : screen.name === 'nodeInfo' ? (", mobileChatStart));
+check('mobile chat header gets pinned + onTogglePin', mobileChatStart > 0 && mobileChat.includes('<ChatScreen') && mobileChat.includes('pinned={mobilePins.includes(screen.alias)}') && mobileChat.includes('onTogglePin={() => toggleMobilePin(screen.alias)}'));
+const twoPaneStart = app.indexOf('testID="android-two-pane"');
+const twoPaneChat = app.slice(twoPaneStart, app.indexOf("screen.name === 'nodeInfo'", twoPaneStart));
+check('Android two-pane chat header gets the same pinned + onTogglePin', twoPaneStart > 0 && twoPaneChat.includes('<ChatScreen') && twoPaneChat.includes('pinned={mobilePins.includes(screen.alias)}') && twoPaneChat.includes('onTogglePin={() => toggleMobilePin(screen.alias)}'));
 check('mobile agents list gets pinnedAliases + onTogglePin', app.includes('pinnedAliases={mobilePins}') && app.includes('onTogglePin={toggleMobilePin}'));
 check('pins reload when the profile/server changes', app.includes('[cfg?.profileId, cfg?.serverUrl, cfg?.username]'));
 check('a failed save rolls the UI back instead of lying', app.includes("console.warn('save chat pins failed', error); setMobilePins(mobilePins);"));

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   BackHandler,
@@ -62,6 +62,8 @@ import { bindUnreadProfile } from './src/unread-store';
 import { openRememberedChatWindow } from './src/desktop-chat-windows';
 import { activateHubProfile, LOCAL_HUB_PROFILE_ID, localHubStatus, startLocalHub } from './src/local-hub';
 import UnreadBadgeFixtureScreen, { readWebFixture } from './src/UnreadBadgeFixtureScreen';
+import { chooseAppLayout, paneSelectionFor, twoPaneListWidth } from './src/wide-layout';
+import { bumpLayoutGeneration } from './src/layout-handoff';
 
 type Screen =
   | { name: 'login' }
@@ -214,7 +216,27 @@ function AppRoot() {
   const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
   const tauriDesktop = Platform.OS === 'web' && !!(globalThis as any).__TAURI_INTERNALS__;
-  const desktop = tauriDesktop && width >= 860;
+  // Layout choice lives in src/wide-layout.ts (pure + tested). Desktop is still exactly
+  // `tauriDesktop && width >= 860`; Android at ≥ 700 dp (unfolded foldables, tablets)
+  // gets list + detail; everything else is the phone stack as before.
+  const layout = chooseAppLayout({
+    os: Platform.OS,
+    tauri: tauriDesktop,
+    userAgent: Platform.OS === 'web' ? String((globalThis as any).navigator?.userAgent ?? '') : '',
+    width,
+  });
+  const desktop = layout === 'desktop';
+  // Fold/unfold remounts the chat / node screens at a new tree position; bump the
+  // handoff generation in this render (before their unmount cleanup runs) so the
+  // unsent draft and the node tab are carried over. See src/layout-handoff.ts.
+  // Only Android fold/unfold (a switch into or out of 'twoPane') bumps: the desktop
+  // ⇄ phone resize at 860 keeps its existing behaviour.
+  const lastLayout = useRef(layout);
+  if (lastLayout.current !== layout) {
+    if (lastLayout.current === 'twoPane' || layout === 'twoPane') bumpLayoutGeneration();
+    lastLayout.current = layout;
+  }
+  const twoPaneSelection = layout === 'twoPane' ? paneSelectionFor(screen) : null;
   const dedicatedChatWindow = tauriDesktop && !!initialChat;
   // 0.2.76 系统栏托盘:只有主窗口接(分离聊天窗/工作区窗不接,否则一个 app 三个托盘项)。
   // 托盘点某个 agent → 打开那个会话。
@@ -364,6 +386,29 @@ function AppRoot() {
     return () => sub.remove();
   }, [screen]);
 
+  // Bottom tab bar, shared by the phone stack and the Android two-pane (where the
+  // list is always showing, so 'agents' is the active tab).
+  const mobileTabBar = (activeName: string) => (
+    <View style={[styles.tabBar, { paddingBottom: tabBarInset }]}>
+      {MOBILE_TABS.map(tab => (
+        <Pressable
+          key={tab.key}
+          style={styles.tab}
+          onPress={() => setScreen({ name: tab.key } as Screen)}
+        >
+          <Ionicons
+            name={activeName === tab.key ? tab.iconActive : tab.icon}
+            size={26}
+            color={activeName === tab.key ? colors.accent : colors.textSecondary}
+          />
+          <Text style={[styles.tabLabel, activeName === tab.key && styles.tabActive]}>
+            {tab.label}
+          </Text>
+        </Pressable>
+      ))}
+    </View>
+  );
+
   if (booting) {
     return (
       <SafeAreaView style={[styles.root, styles.center, bootStyles.root]}>
@@ -477,6 +522,50 @@ function AppRoot() {
           }}
         />
         )
+      ) : twoPaneSelection ? (
+        // Android wide (unfolded foldable / tablet): phone-sized list on the left,
+        // the same phone screens on the right. Navigation state is the same
+        // `screen` value the phone stack uses, so folding back just re-reads it.
+        <>
+          <View style={[styles.twoPane, { paddingLeft: insets.left, paddingRight: insets.right }]} testID="android-two-pane">
+            <View style={[styles.twoPaneList, { width: twoPaneListWidth(width) }]} testID="two-pane-list">
+              <AgentsScreen
+                cfg={cfg}
+                selectedAlias={twoPaneSelection.selectedAlias}
+                onOpenChat={alias => setScreen({ name: 'chat', alias })}
+                onOpenPicker={() => setScreen({ name: 'picker' })}
+                onOpenNodeDetail={alias => setScreen({ name: 'nodeDetail', alias })}
+                pinnedAliases={mobilePins}
+                onTogglePin={toggleMobilePin}
+              />
+            </View>
+            <View style={styles.twoPaneDetail} testID="two-pane-detail">
+              {screen.name === 'chat' ? (
+                <ChatScreen
+                  key={`chat:${screen.alias}`}
+                  cfg={cfg}
+                  alias={screen.alias}
+                  onBack={() => setScreen({ name: 'agents' })}
+                  hideBack
+                  onOpenNodeSettings={() => setScreen({ name: 'nodeInfo', alias: screen.alias })}
+                  pinned={mobilePins.includes(screen.alias)}
+                  onTogglePin={() => toggleMobilePin(screen.alias)}
+                />
+              ) : screen.name === 'nodeInfo' ? (
+                <NodeDetailScreen key={`nodeInfo:${screen.alias}`} cfg={cfg} alias={screen.alias} onBack={() => setScreen({ name: 'chat', alias: screen.alias })} readOnly layoutWidth={width - twoPaneListWidth(width)} touch />
+              ) : screen.name === 'nodeDetail' ? (
+                <NodeDetailScreen key={`nodeDetail:${screen.alias}`} cfg={cfg} alias={screen.alias} onBack={() => setScreen({ name: 'agents' })} layoutWidth={width - twoPaneListWidth(width)} touch />
+              ) : (
+                <View style={styles.twoPaneEmpty}>
+                  <Ionicons name="chatbubbles-outline" size={52} color={colors.textMuted} />
+                  <Text style={styles.twoPaneEmptyTitle}>选择一个 agent 开始聊天</Text>
+                  <Text style={styles.twoPaneEmptyHint}>长按列表里的 agent 查看节点详情</Text>
+                </View>
+              )}
+            </View>
+          </View>
+          {mobileTabBar('agents')}
+        </>
       ) : screen.name === 'chat' ? (
         <ChatScreen
           cfg={cfg}
@@ -573,24 +662,7 @@ function AppRoot() {
               />
             )}
           </View>
-          <View style={[styles.tabBar, { paddingBottom: tabBarInset }]}>
-            {MOBILE_TABS.map(tab => (
-              <Pressable
-                key={tab.key}
-                style={styles.tab}
-                onPress={() => setScreen({ name: tab.key } as Screen)}
-              >
-                <Ionicons
-                  name={screen.name === tab.key ? tab.iconActive : tab.icon}
-                  size={26}
-                  color={screen.name === tab.key ? colors.accent : colors.textSecondary}
-                />
-                <Text style={[styles.tabLabel, screen.name === tab.key && styles.tabActive]}>
-                  {tab.label}
-                </Text>
-              </Pressable>
-            ))}
-          </View>
+          {mobileTabBar(screen.name)}
         </>
       )}
     </SafeAreaView>

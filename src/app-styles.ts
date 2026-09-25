@@ -108,6 +108,13 @@ const makeStyles = () =>
   tab: { flex: 1, alignItems: 'center', paddingVertical: spacing.sm, gap: 2 },
   tabLabel: { color: colors.textSecondary, fontSize: 11, fontWeight: '500' },
   tabActive: { color: colors.accent, fontWeight: '600' },
+  // Android wide (foldable unfolded / tablet) list + detail — see src/wide-layout.ts.
+  twoPane: { flex: 1, flexDirection: 'row', minHeight: 0 },
+  twoPaneList: { borderRightWidth: 1, borderRightColor: colors.border },
+  twoPaneDetail: { flex: 1, minWidth: 0 },
+  twoPaneEmpty: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: spacing.sm, paddingHorizontal: spacing.lg },
+  twoPaneEmptyTitle: { color: colors.textSecondary, fontSize: 16, fontWeight: '600' },
+  twoPaneEmptyHint: { color: colors.textMuted, fontSize: 13, textAlign: 'center' },
   card: {
     flexDirection: 'row',
     alignItems: 'center',

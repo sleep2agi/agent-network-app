@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import {
   PanResponder,
   ActivityIndicator,
@@ -63,6 +63,7 @@ import ActualRecipientNotice from './ActualRecipientNotice';
 import { sendConfirmationFromResponse, sendNoticeFor, type SendConfirmation } from './actual-recipient';
 import { beginForward, confirmForward, markForwardAmbiguous, mayProjectForward, resetForwardWithoutResend } from './forward-controller';
 import { parseBtwFirstToken } from './btw-command';
+import { layoutGeneration, releaseOnUnmount, takeHandoff } from './layout-handoff';
 import SideThreadDrawer, { type SideThreadLaunch } from './SideThreadDrawer';
 
 // Chat with one agent. Mirrors dashboard M4: open with the newest PAGE
@@ -192,6 +193,8 @@ interface Props {
   /** app#168(手机端):会话置顶开关;桌面端用窗口置顶 + 列表长按,不传。 */
   pinned?: boolean;
   onTogglePin?: () => void;
+  /** Android two-pane: the conversation sits next to the list, so no back chevron. */
+  hideBack?: boolean;
 }
 
 // Module level on purpose: the cache has to outlive a screen unmount, or
@@ -202,7 +205,7 @@ export const clearChatConversationCache = (profileId?: string, serverUrl = ''): 
   conversations.clearScope(conversationScope(profileId, serverUrl));
 };
 
-export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpenNodeSettings, pinned = false, onTogglePin }: Props) {
+export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpenNodeSettings, pinned = false, onTogglePin, hideBack = false }: Props) {
   // Android edge-to-edge draws the composer under the gesture bar (same
   // class of bug as the tg 802 tab bar) — pad by the real bottom inset.
   const insets = useSafeAreaInsets();
@@ -216,6 +219,17 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
   const [hasOlder, setHasOlder] = useState(true);
   const [loadingOlder, setLoadingOlder] = useState(false);
   const [draft, setDraft] = useState('');
+  // Fold/unfold remounts this screen (phone stack ⇄ two-pane); carry the unsent
+  // draft across that remount only. Ordinary back/leave still drops it, as before.
+  const draftHandoffKey = `chatDraft:${cfg.profileId ?? cfg.serverUrl}:${alias}`;
+  const draftRef = useRef(draft);
+  draftRef.current = draft;
+  useLayoutEffect(() => {
+    const mountedGeneration = layoutGeneration();
+    const handed = takeHandoff<string>(draftHandoffKey);
+    if (handed) setDraft(handed);
+    return () => releaseOnUnmount(draftHandoffKey, draftRef.current, mountedGeneration);
+  }, [draftHandoffKey]);
   const [sendPriority, setSendPriority] = useState<'high' | 'normal'>('normal');
   const [plusMenuOpen, setPlusMenuOpen] = useState(false);
   const [btwLaunch, setBtwLaunch] = useState<SideThreadLaunch>();
@@ -1094,7 +1108,7 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
       keyboardVerticalOffset={Platform.OS === 'android' ? (StatusBar.currentHeight ?? 0) : 0}
     >
       <View style={styles.header}>
-        {!desktop ? (
+        {!desktop && !hideBack ? (
           <Pressable onPress={onBack} hitSlop={12}>
             <Text style={styles.back}>‹</Text>
           </Pressable>
