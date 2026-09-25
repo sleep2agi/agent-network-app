@@ -17,9 +17,9 @@ ck('空文本安全', foldCode('', false).shown === '' && foldCode('', false).to
 
 const src = fs.readFileSync(path.join(process.cwd(), 'src/MarkdownMessage.tsx'), 'utf8');
 ck('原生端判定常量存在', src.includes("const NATIVE = Platform.OS !== 'web';"));
-ck('代码块走 CodeBlock', src.includes('<CodeBlock key={index} text={block.text} />'));
+ck('代码块走 CodeBlock', /<CodeBlock key=\{index\} text=\{block\.text\}[^>]*\/>/.test(src));
 // 2026-09-16:表格先经 TableBlock 判布局,网格分支仍走 WideBlock(原生 View / web 横向滚动)
-ck('表格走 TableBlock,网格分支仍走 WideBlock', src.includes("if (block.kind === 'table') return <TableBlock key={index} rows={block.rows} />;") && src.includes('<WideBlock style={styles.table}>'));
+ck('表格走 TableBlock,网格分支仍走 WideBlock', /if \(block\.kind === 'table'\) return <TableBlock key=\{index\} rows=\{block\.rows\}[^>]*\/>;/.test(src) && src.includes('<WideBlock style={styles.table}>'));
 ck('原生端 WideBlock 是普通 View、web 才横向滚动', /NATIVE \? <View style=\{style\}>\{children\}<\/View> : <ScrollView horizontal/.test(src));
 ck('代码块不再直接渲染成横向 ScrollView', !/block\.kind === 'code'\) return <ScrollView/.test(src));
 ck('代码块有展开/收起按钮', src.includes('setExpanded((v) => !v)'));
