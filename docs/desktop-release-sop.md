@@ -231,6 +231,14 @@ The SHA must equal the `targetCommitish` from section 5 and the commit passed
 to the workflow. If it does not match, stop and escalate — do not attempt to
 correct it by moving the tag (section 8).
 
+Then start the China mirror explicitly (section 10) — do not count on the
+`release: published` trigger:
+
+```bash
+gh workflow run modelscope-mirror.yml --repo sleep2agi/agent-network-app \
+  -f tag=desktop-v<version>
+```
+
 `https://www.anet.sh/desktop/update/latest.json` is a dynamic endpoint. It
 selects the highest-semver published `desktop-v*` release, fetches that
 release's generated `latest.json` through the GitHub asset API, and rewrites
@@ -346,6 +354,14 @@ Nothing has to be triggered by hand in a normal release.
 
 Anonymous download URL:
 `https://modelscope.cn/datasets/SmartFlowAI/agent-network-releases/resolve/master/<path>`.
+
+**`release: published` did not fire in practice.** For both 0.2.98 and 0.2.99
+the repository's `ReleaseEvent` for `published` was attributed to
+`github-actions[bot]` (the draft is created by `tauri-action` with
+`GITHUB_TOKEN`), and no mirror run was started by it. Events GitHub attributes
+to `GITHUB_TOKEN` do not start workflows, which is consistent with this. So the
+publish step (section 6) dispatches the mirror by hand; the triggers below are
+the safety net, not the primary path.
 
 **When it runs.** On `release: published` it starts at once and waits up to
 30 minutes for the Android APK, which is attached after publishing (GitHub fires
