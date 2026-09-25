@@ -119,6 +119,12 @@ jobs:
           releaseBody: |-
             Signed and notarized stable update for macOS (Apple Silicon) and Windows (x64).
 
+            What's new in 0.2.98:
+            - 安卓折叠屏和平板:屏幕宽度达到 700 dp 以上时(比如展开的小米 MIX Fold,或平板),
+              左边显示节点列表,右边显示聊天或节点详情页,不用再来回切换页面。
+            - 折叠、展开时会自动切换布局,正在看的对话、节点页当前的标签、还没发出去的草稿都会保留。
+            - 桌面端和普通手机的界面不变。
+
             What's new in 0.2.97:
             - 规则文件支持查找:按 Ctrl+F(macOS 上是 ⌘F)打开查找栏,「阅读」「编辑」「全屏」里都能用。
               匹配的文字会高亮,显示「第几个/共几个」;按回车或上下方向键在结果之间跳转。
