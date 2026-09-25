@@ -2,11 +2,9 @@ import { Fragment, useState, type ReactNode } from 'react';
 import { Linking, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { openUrl } from '@tauri-apps/plugin-opener';
 import { colors, onThemeChange, spacing } from './theme';
-import { isSafeMarkdownUrl, parseMarkdownBlocks } from './markdown-model';
+import { isSafeMarkdownUrl, parseInline, parseMarkdownBlocks, type InlineNode } from './markdown-model';
 import { foldCode, foldLabel } from './markdown-code-fold';
 import { stackedRows, tableLayoutFor } from './table-layout';
-
-const INLINE = /(`[^`\n]+`|\*\*[^*\n]+\*\*|__[^_\n]+__|\*[^*\n]+\*|_([^_\n]+)_|\[[^\]\n]+\]\([^\s)]+\))/g;
 
 export async function openMarkdownUrl(url: string) {
   if (!isSafeMarkdownUrl(url)) return;
@@ -17,29 +15,25 @@ export async function openMarkdownUrl(url: string) {
   await Linking.openURL(url);
 }
 
+// 行内解析在 markdown-model.ts 的 parseInline(纯函数、有测试):裸链接 / 行内代码 / [文字](链接) 是原子段,
+// 里面的 `_`、`*` 一个都不当记号;`_` 遵守 CommonMark 词内规则(snake_case 原样)。
+function LinkText({ url, label }: { url: string; label: string }) {
+  const safe = isSafeMarkdownUrl(url);
+  return <Text accessibilityRole={safe ? 'link' : undefined} style={safe ? styles.link : undefined} onPress={safe ? (event) => { event.stopPropagation(); void openMarkdownUrl(url); } : undefined}>{label}</Text>;
+}
+
+function InlineNodes({ nodes }: { nodes: InlineNode[] }) {
+  return <>{nodes.map((node, key) => {
+    if (node.kind === 'text') return <Fragment key={key}>{node.text}</Fragment>;
+    if (node.kind === 'code') return <Text key={key} style={styles.inlineCode}>{node.text}</Text>;
+    if (node.kind === 'link' || node.kind === 'autolink') return <LinkText key={key} url={node.url} label={node.text} />;
+    if (node.kind === 'strong') return <Text key={key} style={styles.strong}><InlineNodes nodes={node.children} /></Text>;
+    return <Text key={key} style={styles.em}><InlineNodes nodes={node.children} /></Text>;
+  })}</>;
+}
+
 function Inline({ text }: { text: string }) {
-  const out = [];
-  let cursor = 0;
-  let key = 0;
-  for (const match of text.matchAll(INLINE)) {
-    const at = match.index ?? 0;
-    if (at > cursor) out.push(<Fragment key={key++}>{text.slice(cursor, at)}</Fragment>);
-    const token = match[0];
-    const link = token.match(/^\[([^\]]+)\]\(([^)]+)\)$/);
-    if (link) {
-      const safe = isSafeMarkdownUrl(link[2]);
-      out.push(<Text key={key++} accessibilityRole={safe ? 'link' : undefined} style={safe ? styles.link : undefined} onPress={safe ? (event) => { event.stopPropagation(); void openMarkdownUrl(link[2]); } : undefined}>{link[1]}</Text>);
-    } else if (token.startsWith('`')) {
-      out.push(<Text key={key++} style={styles.inlineCode}>{token.slice(1, -1)}</Text>);
-    } else if (token.startsWith('**') || token.startsWith('__')) {
-      out.push(<Text key={key++} style={styles.strong}>{token.slice(2, -2)}</Text>);
-    } else {
-      out.push(<Text key={key++} style={styles.em}>{token.slice(1, -1)}</Text>);
-    }
-    cursor = at + token.length;
-  }
-  if (cursor < text.length) out.push(<Fragment key={key++}>{text.slice(cursor)}</Fragment>);
-  return <>{out}</>;
+  return <InlineNodes nodes={parseInline(text)} />;
 }
 
 // 安卓:inverted FlatList 里嵌套横向 ScrollView 会把代码块/表格撑成看不见文字的整屏高气泡(2026-09-12 社区截图),

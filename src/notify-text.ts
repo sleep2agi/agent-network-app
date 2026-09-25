@@ -6,20 +6,18 @@
 // 🔴 块级结构复用 markdown-model 的 parseMarkdownBlocks(仓里唯一的 Markdown 解析器),
 //    本模块只补一层**行内**记号的剥离——仓里此前没有行内剥离器(MarkdownMessage 是直接渲染,
 //    不产出纯文本),所以这一层是新的,而不是第三份块解析。
-import { parseMarkdownBlocks, type MarkdownBlock } from './markdown-model';
+import { inlinePlainText, parseInline, parseMarkdownBlocks, type MarkdownBlock } from './markdown-model';
 
 /** 行内记号 → 纯文本。顺序承重:图片要在链接之前,否则 `![x](y)` 的 `!` 会被留下。 */
 export function stripInlineMarkdown(text: string): string {
-  return (text || '')
+  const noLinks = (text || '')
     // 图片 ![alt](url) → alt(没有 alt 就整个丢掉,URL 不进通知)
     .replace(/!\[([^\]]*)\]\([^)]*\)/g, '$1')
     // 链接 [label](url) → label
-    .replace(/\[([^\]]*)\]\([^)]*\)/g, '$1')
-    // 行内代码 `x` → x
-    .replace(/`([^`]*)`/g, '$1')
-    // 粗体/斜体/删除线的成对记号
-    .replace(/(\*\*|__)(.*?)\1/g, '$2')
-    .replace(/(\*|_)(.*?)\1/g, '$2')
+    .replace(/\[([^\]]*)\]\([^)]*\)/g, '$1');
+  // 行内代码 / 粗体斜体:交给 markdown-model 的 parseInline —— 旧的 `(\*|_)(.*?)\1` 会把 URL 里的
+  // `_0.2.99_` 也当斜体剥掉(0.2.100 同一个缺陷),parseInline 认得裸链接和词内 `_`。
+  return inlinePlainText(parseInline(noLinks))
     .replace(/~~(.*?)~~/g, '$1')
     .trim();
 }
