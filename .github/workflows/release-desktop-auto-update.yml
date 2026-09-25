@@ -119,6 +119,12 @@ jobs:
           releaseBody: |-
             Signed and notarized stable update for macOS (Apple Silicon) and Windows (x64).
 
+            What's new in 0.2.96:
+            - 规则文件「全屏」阅读时,macOS 左上角的红黄绿灯不再压住工具栏上的「阅读/编辑」切换;
+              工具栏整体下移,给红黄绿灯留出位置。
+            - Windows 上进入规则文件「全屏」后,右上角的最小化/最大化/关闭按钮仍然可以直接点,
+              窗口顶部也仍然可以拖动,不用先按 Esc 退出全屏。
+
             What's new in 0.2.95:
             - 节点列表最上面新增「新消息」组:有未读消息的节点会浮到这里,最新收到消息的排在最前面,
               一眼就能看到谁给你发了消息。
