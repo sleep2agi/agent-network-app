@@ -80,7 +80,11 @@ jobs:
           fi
           certs=$("$BT/apksigner" verify --print-certs "$APK")
           printf '%s\n' "$certs"
-          digest=$(sed -n 's/^Signer #1 certificate SHA-256 digest: //p' <<<"$certs")
+          # apksigner prints `Signer #1 certificate …` when a v1 signature is present and
+          # `V2 Signer: certificate …` for v2-only APKs (minSdk ≥ 24, which is what we build).
+          # An empty match falls through to the mismatch error below, never to a pass.
+          digest=$(sed -n -E 's/^(Signer #1|V[0-9]+ Signer):? certificate SHA-256 digest: //p' <<<"$certs")
+          digest=${digest%%$'\n'*}
           if [ "$digest" != "$EXPECTED_SIGNER_SHA256" ]; then
             echo "::error::signing certificate $digest differs from the released APKs ($EXPECTED_SIGNER_SHA256) — installed apps could not update in place"
             exit 1
