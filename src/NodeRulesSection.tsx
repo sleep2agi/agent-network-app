@@ -10,7 +10,8 @@
 // agent-node 旧、读失败），每种都有一句话说明为什么和怎么办。
 
 import { forwardRef, useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
-import { ActivityIndicator, Modal, Platform, Pressable, ScrollView, Text, TextInput, View, useWindowDimensions } from 'react-native';
+import { ActivityIndicator, Modal, Platform, Pressable, ScrollView, StatusBar, Text, TextInput, View, useWindowDimensions } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { readNodeRulesFile, waitForRulesFileResult, writeNodeRulesFile, type HubConfig, type RulesTarget, type Session } from './api';
 import { hasUnsavedChanges, isTerminal, nextPollDelayMs, predictedRulesFileName, requestIdToFollow, rulesErrorMessage, rulesMaxWaitMessage, rulesReadOutcome, rulesStatusMessage, rulesSupport, rulesUnsupportedMessage, RULES_MAX_WAIT_MS } from './node-rules';
@@ -23,6 +24,7 @@ import MacTitleStrip from './mac-title-strip';
 import WinTitleBar from './win-title-bar';
 import { RulesFindBar, useRulesFind } from './RulesFind';
 import { contentKey } from './rules-find';
+import { editorLineHeightPx, editorScrollTopForLine, rulesFullscreenPadding, RULES_EDITOR_FONT_SIZE, RULES_EDITOR_LINE_HEIGHT } from './rules-fullscreen-layout';
 
 type Phase = 'loading' | 'ready' | 'saving' | 'unavailable';
 
@@ -394,8 +396,8 @@ function RulesBody({ mode, draft, onDraft, editable, dirty, fileName, onHeadingL
       ta.setSelectionRange?.(sel.start, sel.end);
       const top = caretTopInTextarea(ta, sel.start);
       if (top != null && ta.clientHeight) {
-        const lh = parseFloat((globalThis as any).getComputedStyle?.(ta)?.lineHeight) || 19;
-        ta.scrollTop = Math.max(0, top - ta.clientHeight / 2 + lh / 2);
+        const lh = editorLineHeightPx((globalThis as any).getComputedStyle?.(ta)?.lineHeight);
+        ta.scrollTop = editorScrollTopForLine(top, ta.clientHeight, lh);
       }
       clearJump();
     }, 0);
@@ -456,7 +458,7 @@ function RulesBody({ mode, draft, onDraft, editable, dirty, fileName, onHeadingL
       placeholder={`# ${fileName}\n\n（还没有内容，写点规则再保存）`}
       placeholderTextColor={colors.textMuted}
       textAlignVertical="top"
-      style={{ ...frame, color: colors.text, padding: spacing.md, fontSize: 13, lineHeight: 19, fontFamily: MONO }}
+      style={{ ...frame, color: colors.text, padding: spacing.md, fontSize: RULES_EDITOR_FONT_SIZE, lineHeight: RULES_EDITOR_LINE_HEIGHT, fontFamily: MONO }}
     />
   );
 }
@@ -484,6 +486,8 @@ function RulesFullscreen({ onClose, toolbar, source, bodyProps }: {
   const ys = useRef<Record<number, number>>({});
   const scrollRef = useRef<any>(null);
   const closeRef = useRef<any>(null);
+  // Android edge-to-edge 下 Modal 恒画到状态栏 / 挖孔底下(见 rules-fullscreen-layout.ts ①):四边按安全区垫。
+  const safe = rulesFullscreenPadding(Platform.OS, useSafeAreaInsets(), StatusBar.currentHeight);
   useEffect(() => {
     const doc = (globalThis as any).document;
     if (!doc?.addEventListener) return;
@@ -496,7 +500,7 @@ function RulesFullscreen({ onClose, toolbar, source, bodyProps }: {
   const content = <RulesBody {...bodyProps} onHeadingLayout={(i, y) => { ys.current[i] = y + spacing.lg; }} scrollRef={scrollRef} />;
   return (
     <Modal transparent={false} visible onRequestClose={onClose} animationType={prefersReducedMotion() ? 'none' : 'fade'}>
-      <View style={{ flex: 1, backgroundColor: colors.bg }} accessibilityViewIsModal>
+      <View style={[{ flex: 1, backgroundColor: colors.bg }, safe]} accessibilityViewIsModal>
         {/* Modal 是 position:fixed 铺满整个窗口的,App.tsx 顶上那条 MacTitleStrip 被它盖住了 ⇒ macOS 的
             红黄绿灯直接压在「阅读/编辑」上(Vincent 0.2.94 截图)。这里再挂同一个组件:28px 空带 +
             data-tauri-drag-region,只在 Tauri+macOS 渲染,Windows/Linux/网页返回 null、布局不变。
