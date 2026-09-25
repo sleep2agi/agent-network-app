@@ -17,7 +17,7 @@ export interface MessageMenuItem {
   readonly danger?: boolean;
 }
 
-export type MessageMenuKey = 'copy' | 'quote' | 'forward' | 'multiSelect' | 'expand' | 'delete';
+export type MessageMenuKey = 'copySelection' | 'copy' | 'selectText' | 'quote' | 'forward' | 'multiSelect' | 'expand' | 'delete';
 
 export type MessageMenuGroup = readonly MessageMenuItem[];
 
@@ -28,6 +28,17 @@ export interface MessageMenuContext {
   readonly selectionMode?: boolean;
   /** 转发要拿目标名册；没有可达 hub 时不提供（避免点开一个空选择器）。 */
   readonly canForward?: boolean;
+  /**
+   * 触摸端(安卓/iOS/手机浏览器)。原生 `<Text selectable>` 的选区跨不过 Markdown 的块边界,而且长按已经给了
+   * 这个菜单 —— 所以触摸端给「选择文本」:打开一个只读原生文本框,系统手柄可以拖过任意段落(微信同款)。
+   * 桌面端鼠标本来就能在气泡里拖选跨段落,不给这一项(给了只是多一步)。
+   */
+  readonly touch?: boolean;
+  /**
+   * 桌面端:右键时气泡里已经有一段鼠标选中的文字。我们的右键菜单替掉了浏览器自带的「复制」,
+   * 不补这一项的话,用户拖选完右键只能复制整条 —— 正是 Vincent 要解决的那件事。
+   */
+  readonly selectedText?: string;
 }
 
 /**
@@ -37,7 +48,9 @@ export function messageMenuGroups(ctx: MessageMenuContext): MessageMenuGroup[] {
   const canForward = ctx.canForward !== false && ctx.hasText;
   const groups: MessageMenuItem[][] = [
     [
+      ...(ctx.hasText && ctx.selectedText?.trim() ? [{ key: 'copySelection' as const, label: '复制选中内容' }] : []),
       ...(ctx.hasText ? [{ key: 'copy' as const, label: '复制' }] : []),
+      ...(ctx.hasText && ctx.touch ? [{ key: 'selectText' as const, label: '选择文本' }] : []),
       ...(ctx.hasText ? [{ key: 'quote' as const, label: '引用' }] : []),
     ],
     [

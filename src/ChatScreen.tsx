@@ -60,6 +60,8 @@ import { dispatchUnread, hubHasAgentUnread, markAgentRepliesSeen, markAgentServe
 import { ackAgentUnread } from './agent-ack';
 import { appFetch } from './app-fetch';
 import MarkdownMessage from './MarkdownMessage';
+import SelectTextSheet from './SelectTextSheet';
+import { selectedTextWithin } from './message-plain-text';
 import { cleanAttachmentDebugText, parseAttachmentRefs, parseMetaAttachmentRefs, parseMetaReplyAttachmentRefs } from './attachment-display';
 import { attachmentCacheScope } from './attach-download';
 import ActualRecipientNotice from './ActualRecipientNotice';
@@ -101,7 +103,8 @@ type ChatItem = HubTask & {
   _confirmedTaskId?: string;
 };
 
-type MessageSelection = { item: ChatItem; text: string; author?: string };
+// selectedText:桌面端右键时气泡里已有的鼠标选区(只在这个气泡内才算),菜单据此给「复制选中内容」。
+type MessageSelection = { item: ChatItem; text: string; author?: string; selectedText?: string };
 
 // Received tasks carry attachments inside meta_json (#221). Images get
 // tappable thumbnails (Vincent tg 748), other files a 📎 line.
@@ -505,6 +508,9 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
   const [menuAt, setMenuAt] = useState<{ x: number; y: number } | null>(null);
   // 放大阅读:单条消息的全屏可选中视图(我们的代码块很长,气泡里读不完)。
   const [expandFor, setExpandFor] = useState<MessageSelection | null>(null);
+  // 选择文本(2026-09-26 Vincent 安卓折叠屏:「只能复制整个的消息…想划选部分段落或句子」):
+  // 全屏只读文本,系统选区手柄可跨段落。null = 未打开。
+  const [selectTextFor, setSelectTextFor] = useState<MessageSelection | null>(null);
   // 光标定位的菜单要夹在窗口内,否则贴右/贴底时会被切掉。
   const { width: menuWindowWidth, height: menuWindowHeight } = useWindowDimensions();
   // 多选:进入后气泡带复选框,底栏给转发/删除。
@@ -517,8 +523,9 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
   // 复制成功后底部居中出一个「已复制」小 pill,1.4s 自动消失。
   const [copiedAt, setCopiedAt] = useState<number | null>(null);
   const [hoverKey, setHoverKey] = useState<string | null>(null);
-  const copyMessage = async (text: string) => {
-    const value = copyTextOf(text);
+  const copyMessage = (text: string) => copyValue(copyTextOf(text));
+  // 原样复制(选中内容 / 选择视图的全文):不再过 copyTextOf,那会把以「」开头的选区当引用行剥掉。
+  const copyValue = async (value: string) => {
     if (!value) return;
     try {
       await Clipboard.setStringAsync(value);
@@ -665,7 +672,9 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
       const x = typeof event.clientX === 'number' ? event.clientX : null;
       const y = typeof event.clientY === 'number' ? event.clientY : null;
       setMenuAt(x !== null && y !== null ? { x, y } : null);
-      setMenuFor({ item, text, author });
+      // 我们的右键菜单替掉了浏览器自带的「复制」:拖选完再右键,要能只复制选中的那段。
+      const selectedText = selectedTextWithin(bubble, (globalThis as any).getSelection?.());
+      setMenuFor({ item, text, author, selectedText });
     };
     doc.addEventListener('contextmenu', handleMessageContextMenu, true);
     return () => doc.removeEventListener('contextmenu', handleMessageContextMenu, true);
@@ -761,13 +770,15 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
 
   // ── 菜单动作(0.2.78) ────────────────────────────────────────────────────
   const menuGroups = useMemo(
-    () => messageMenuGroups({ hasText: !!menuFor?.text, selectionMode, canForward: true }),
-    [menuFor, selectionMode],
+    () => messageMenuGroups({ hasText: !!menuFor?.text, selectionMode, canForward: true, touch: !desktop, selectedText: menuFor?.selectedText }),
+    [menuFor, selectionMode, desktop],
   );
   const onMenuAction = (key: MessageMenuKey) => {
     const selection = menuFor;
     if (!selection) return;
     if (key === 'copy') { setMenuFor(null); void copyMessage(selection.text); return; }
+    if (key === 'copySelection') { setMenuFor(null); void copyValue(selection.selectedText ?? ''); return; }
+    if (key === 'selectText') { setMenuFor(null); setSelectTextFor(selection); return; }
     if (key === 'quote') {
       setQuote({ author: selection.author, text: compactQuoteText(selection.text) });
       setMenuFor(null);
@@ -1652,6 +1663,13 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
           </Pressable>
         </Pressable>
       </Modal>
+
+      <SelectTextSheet
+        text={selectTextFor ? selectTextFor.text : null}
+        author={selectTextFor?.author}
+        onClose={() => setSelectTextFor(null)}
+        onCopyAll={(value) => { void copyValue(value); }}
+      />
 
       <Modal visible={!!forwardFor && forwardUiOwner === conversationKeyFor} transparent animationType="fade" onRequestClose={() => setForwardFor(null)}>
         <Pressable style={styles.forwardBackdrop} onPress={() => setForwardFor(null)}>
