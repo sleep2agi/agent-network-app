@@ -41,7 +41,7 @@ export default function AndroidUpdatePrompt() {
             <View style={styles.progressBlock} testID="android-update-progress">
               <View style={styles.progressRow}>
                 <ActivityIndicator color={colors.accent} />
-                <Text style={styles.notes}>正在下载…{update.percent == null ? '' : ` ${update.percent}%`}</Text>
+                <Text style={styles.notes}>{update.verifying ? '正在校验安装包(sha256)…' : `正在下载…${update.percent == null ? '' : ` ${update.percent}%`}`}</Text>
               </View>
               <View style={styles.bar}><View style={[styles.barFill, { width: `${update.percent ?? 0}%` }]} /></View>
             </View>
@@ -88,7 +88,12 @@ export default function AndroidUpdatePrompt() {
               </Pressable>
             ) : null}
           </View>
-          <Text style={styles.hint}>安装包来自 GitHub Releases,由安卓系统安装器校验签名;不会静默安装。</Text>
+          <Text style={styles.hint}>
+            {update.apk.source === 'mirror'
+              ? '安装包来自 ModelScope 国内镜像(与 GitHub Releases 逐字节相同),镜像不可用时改从 GitHub 下载;'
+              : '安装包来自 GitHub Releases;'}
+            下载后先校验 sha256,再交给安卓系统安装器;不会静默安装。
+          </Text>
         </View>
       </View>
     </Modal>
