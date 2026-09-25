@@ -43,16 +43,35 @@ pub fn title_for(total: u32) -> String {
     if total == 0 { String::new() } else { total.to_string() }
 }
 
+/// 交给 `set_title` 的参数。
+///
+/// 🔴 0.2.92 永远是 `Some(..)`,0 未读时是 `Some("")`。tray-icon 0.24.2 的 macOS 实现
+///    (`platform_impl/macos/mod.rs` `set_title_inner`)收到 `None` 时**什么也不做**,
+///    按钮上的旧标题原样留着 —— 于是未读从 1 清到 0 以后,菜单栏一直挂着「1」,
+///    而面板(读的是同一份模型)正确地显示「没有未读消息」。只有 `Some("")` 才会真的清掉。
+#[cfg_attr(not(target_os = "macos"), allow(dead_code))]
+pub fn title_arg(total: u32) -> Option<String> {
+    Some(title_for(total))
+}
+
 pub fn tooltip_for(total: u32) -> String {
     if total == 0 { "Agent Network".to_string() } else { format!("Agent Network · {total} 条未读") }
 }
 
-/// 只取前 MAX_ITEMS 个、按未读数降序、忽略 0。前端已经排好序,这里再守一次。
+/// 按未读数降序、忽略 0。前端已经排好序,这里再守一次。
+///
+/// 🔴 0.2.92 **不再截断**:面板从这里取模型,截断会让角标数里包含面板列不出来的会话。
+///    行数上限只作用于原生菜单(见 `menu_rows`)。
 pub fn normalize_items(mut items: Vec<TrayItem>) -> Vec<TrayItem> {
     items.retain(|i| i.count > 0 && !i.alias.trim().is_empty());
     items.sort_by(|a, b| b.count.cmp(&a.count).then_with(|| a.alias.cmp(&b.alias)));
-    items.truncate(MAX_ITEMS);
     items
+}
+
+/// 原生菜单里画哪些行,以及塞不下的还有几个会话(末尾画「还有 N 个会话…」,点了打开主窗口)。
+pub fn menu_rows(items: &[TrayItem]) -> (&[TrayItem], usize) {
+    let shown = items.len().min(MAX_ITEMS);
+    (&items[..shown], items.len() - shown)
 }
 
 /// 面板窗口标签。必须同时出现在 `capabilities/default.json` 的 `windows` 里,
@@ -118,10 +137,15 @@ fn build_menu<R: Runtime>(app: &AppHandle<R>, items: &[TrayItem]) -> tauri::Resu
         let none = MenuItem::with_id(app, "tray-none", "没有未读消息", false, None::<&str>)?;
         menu.append(&none)?;
     } else {
-        for item in items {
+        let (shown, hidden) = menu_rows(items);
+        for item in shown {
             let id = format!("{MENU_CHAT_PREFIX}{}", item.alias);
             let row = MenuItem::with_id(app, id, item_label(item), true, None::<&str>)?;
             menu.append(&row)?;
+        }
+        if hidden > 0 {
+            let more = MenuItem::with_id(app, MENU_OPEN, format!("还有 {hidden} 个会话有未读…"), true, None::<&str>)?;
+            menu.append(&more)?;
         }
     }
     menu.append(&PredefinedMenuItem::separator(app)?)?;
@@ -310,8 +334,7 @@ pub fn tray_update<R: Runtime>(app: AppHandle<R>, total: u32, items: Vec<TrayIte
     tray.set_tooltip(Some(tooltip_for(total))).map_err(|e| e.to_string())?;
     #[cfg(target_os = "macos")]
     {
-        let title = title_for(total);
-        tray.set_title(if title.is_empty() { None } else { Some(title) }).map_err(|e| e.to_string())?;
+        tray.set_title(title_arg(total)).map_err(|e| e.to_string())?;
     }
     Ok(())
 }
@@ -369,13 +392,31 @@ mod tests {
     }
 
     #[test]
-    fn normalize_drops_zero_sorts_desc_and_caps() {
+    fn normalize_drops_zero_sorts_desc_and_keeps_everything_countable() {
         let mut items: Vec<TrayItem> = (0..30).map(|i| TrayItem { alias: format!("a{i}"), count: i }).collect();
         items.push(TrayItem { alias: "  ".into(), count: 9 });
         let out = normalize_items(items);
-        assert_eq!(out.len(), MAX_ITEMS);
+        // 0 那个和空白别名被丢;其余 29 个全部保留 —— 面板要能列出每一个被计入角标的会话。
+        assert_eq!(out.len(), 29);
         assert_eq!(out[0].count, 29);
         assert!(out.iter().all(|i| i.count > 0));
         assert!(out.windows(2).all(|w| w[0].count >= w[1].count));
+    }
+
+    #[test]
+    fn native_menu_caps_rows_and_counts_the_rest() {
+        let items: Vec<TrayItem> = (1..=25).rev().map(|i| TrayItem { alias: format!("a{i}"), count: i }).collect();
+        let (shown, hidden) = menu_rows(&items);
+        assert_eq!(shown.len(), MAX_ITEMS);
+        assert_eq!(hidden, 5);
+        let few = &items[..3];
+        assert_eq!(menu_rows(few), (few, 0));
+    }
+
+    #[test]
+    fn zero_unread_clears_the_macos_title_instead_of_leaving_the_old_one() {
+        // tray-icon 0.24.2 macOS: set_title(None) 不动按钮,旧标题留着。必须传 Some("")。
+        assert_eq!(title_arg(0), Some(String::new()));
+        assert_eq!(title_arg(1), Some("1".to_string()));
     }
 }

@@ -2,7 +2,7 @@
 // 托盘菜单点某个 agent → Rust 聚焦主窗口并 emit `tray-open-chat` → 这里回调打开会话。
 // 只在 Tauri 主窗口生效(分离聊天窗/工作区窗不接托盘)。
 
-import { trayModelEqual, trayModelFrom, type TrayModel } from './tray-menu-model';
+import { createTrayPusher, trayModelFrom, type TrayModel } from './tray-menu-model';
 import { getUnreadSnapshot, replyUnreadCounts, subscribeUnread, type UnreadStoreSnapshot } from './unread-store';
 import { unreadCountForAgentRow } from './unread-badge';
 import { readServerUnreadByAgent } from './user-unread';
@@ -30,13 +30,13 @@ export function trayCountsFrom(snap: UnreadStoreSnapshot): Record<string, number
   return out;
 }
 
-let last: TrayModel | null = null;
-
-export async function pushTrayModel(model: TrayModel): Promise<void> {
-  if (trayModelEqual(last, model)) return;
-  last = model;
+const pusher = createTrayPusher(async model => {
   const { invoke } = await import('@tauri-apps/api/core');
   await invoke('tray_update', { total: model.total, items: model.items });
+});
+
+export function pushTrayModel(model: TrayModel): Promise<void> {
+  return pusher.push(model);
 }
 
 /**
@@ -70,6 +70,15 @@ export function bindDesktopTray(onOpenChat: (alias: string) => void, onDismissAl
   };
   const unsubscribe = subscribeUnread(sync);
   sync();
+  // 窗口重新获得焦点 / 页面重新可见时强制重推一次:任何一次推送失败或 Rust 侧状态丢失,
+  // 都会在用户回到应用时被纠正,而不是一直挂着旧角标。
+  const resync = () => {
+    if (stopped) return;
+    void pusher.resync(trayModelFrom(trayCountsFrom(getUnreadSnapshot()))).catch(error => console.warn('tray resync failed', error));
+  };
+  const onVisible = () => { if (typeof document === 'undefined' || document.visibilityState === 'visible') resync(); };
+  globalThis.addEventListener?.('focus', resync);
+  if (typeof document !== 'undefined') document.addEventListener('visibilitychange', onVisible);
   let unlisten: (() => void) | undefined;
   void import('@tauri-apps/api/event').then(async events => {
     if (stopped) return;
@@ -84,6 +93,8 @@ export function bindDesktopTray(onOpenChat: (alias: string) => void, onDismissAl
     stopped = true;
     unsubscribe();
     unlisten?.();
+    globalThis.removeEventListener?.('focus', resync);
+    if (typeof document !== 'undefined') document.removeEventListener('visibilitychange', onVisible);
   };
 }
 
