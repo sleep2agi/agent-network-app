@@ -33,6 +33,9 @@ export interface Session {
    *  file_read. A hub that predates it omits the key entirely (node-files.ts
    *  filesSupport tells the two apart). */
   files_capable?: boolean;
+  /** Node environment variables — hub `/api/status`: this session answers env_list /
+   *  env_set / env_unset. A hub that predates it omits the key (node-env.ts envSupport). */
+  env_capable?: boolean;
 }
 
 export interface HubTask {
@@ -1260,6 +1263,67 @@ export const listNodeFiles = (cfg: HubConfig, node: RulesTarget, relPath: string
 
 export const readNodeFile = (cfg: HubConfig, node: RulesTarget, relPath: string): Promise<RulesFileEnqueueResult> =>
   enqueueFiles(cfg, 'read_node_file', node, relPath);
+
+/** Node environment variables — enqueue list_node_env / set_node_env / unset_node_env.
+ *  🔴 Values are write-only: the hub never returns one, so there is no "read value"
+ *  call here. list comes back through getRulesFileResult like the rules file
+ *  (content = JSON {keys:[{key,set,length,in_effect,kind,reserved?}], restart}). */
+export type EnvWriteBlocked = { error: 'insecure_transport'; leg: 'client' | 'node'; message?: string };
+
+export type NodeEnvEnqueueResult =
+  | { ok: true; request_id: string; op: 'env_list' | 'env_set' | 'env_unset'; key?: string; length?: number; write_allowed?: boolean; write_blocked?: EnvWriteBlocked }
+  | { ok: false; error: string; code?: string; reason?: string; leg?: 'client' | 'node'; unsupported?: true; existing_request_id?: string };
+
+const ENV_TOOL_MISSING = '当前 Hub 版本还没有环境变量工具,请先升级服务器';
+const enqueueEnv = async (
+  cfg: HubConfig,
+  tool: 'list_node_env' | 'set_node_env' | 'unset_node_env',
+  node: RulesTarget,
+  extra: { key?: string; value?: string } = {},
+): Promise<NodeEnvEnqueueResult> => {
+  const networkId = cfg.networkId ?? (await fetchNetworkId(cfg));
+  const args = {
+    ...rulesTargetArgs(node),
+    ...(networkId ? { network_id: networkId } : {}),
+    ...(tool !== 'list_node_env' ? { key: extra.key ?? '' } : {}),
+    ...(tool === 'set_node_env' ? { value: extra.value ?? '' } : {}),
+  };
+  const r = await callHubTool(cfg, tool, args);
+  if (r.kind === 'unsupported') return { ok: false, unsupported: true, error: ENV_TOOL_MISSING };
+  // 🔴 A transport-level error text is shown to the user; never let it carry the value.
+  if (r.kind === 'error') return { ok: false, error: /not found|unknown tool/i.test(r.error) ? ENV_TOOL_MISSING : (extra.value && r.error.includes(extra.value) ? 'Hub 拒绝了这次写入' : r.error) };
+  const p = r.payload;
+  if (!p || p.ok !== true || typeof p.request_id !== 'string') {
+    const code = typeof p?.error === 'string' ? p.error : undefined;
+    return {
+      ok: false,
+      error: code ?? 'Hub 返回空响应',
+      ...(code ? { code } : {}),
+      ...(typeof p?.reason === 'string' ? { reason: p.reason } : {}),
+      ...(p?.leg === 'client' || p?.leg === 'node' ? { leg: p.leg } : {}),
+      ...(p?.existing_request_id ? { existing_request_id: p.existing_request_id } : {}),
+    };
+  }
+  const wb = p.write_blocked;
+  return {
+    ok: true,
+    request_id: p.request_id,
+    op: p.op === 'env_set' || p.op === 'env_unset' ? p.op : 'env_list',
+    ...(typeof p.key === 'string' ? { key: p.key } : {}),
+    ...(typeof p.length === 'number' ? { length: p.length } : {}),
+    ...(typeof p.write_allowed === 'boolean' ? { write_allowed: p.write_allowed } : {}),
+    ...(wb && wb.error === 'insecure_transport' && (wb.leg === 'client' || wb.leg === 'node') ? { write_blocked: { error: 'insecure_transport', leg: wb.leg, ...(typeof wb.message === 'string' ? { message: wb.message } : {}) } } : {}),
+  };
+};
+
+export const listNodeEnv = (cfg: HubConfig, node: RulesTarget): Promise<NodeEnvEnqueueResult> =>
+  enqueueEnv(cfg, 'list_node_env', node);
+
+export const setNodeEnv = (cfg: HubConfig, node: RulesTarget, key: string, value: string): Promise<NodeEnvEnqueueResult> =>
+  enqueueEnv(cfg, 'set_node_env', node, { key, value });
+
+export const unsetNodeEnv = (cfg: HubConfig, node: RulesTarget, key: string): Promise<NodeEnvEnqueueResult> =>
+  enqueueEnv(cfg, 'unset_node_env', node, { key });
 
 export const getRulesFileResult = async (cfg: HubConfig, requestId: string): Promise<RulesFileOutcome> => {
   const networkId = cfg.networkId ?? (await fetchNetworkId(cfg));

@@ -4,7 +4,7 @@
 // 纯逻辑,不 import react-native。
 import type { NodeInfoFact } from './node-info';
 
-export type NodeSectionKey = 'overview' | 'model' | 'rules' | 'skills' | 'files' | 'tasks' | 'danger';
+export type NodeSectionKey = 'overview' | 'model' | 'rules' | 'skills' | 'files' | 'env' | 'tasks' | 'danger';
 
 export interface NodeSection {
   readonly key: NodeSectionKey;
@@ -20,6 +20,9 @@ export const NODE_SECTIONS: readonly NodeSection[] = [
   { key: 'skills', label: '技能', icon: 'extension-puzzle-outline' },
   // 项目文件夹(只读):始终出现 —— 节点没上报 files_capable 时分区里直接说要升级什么(node-files.ts filesSupport)。
   { key: 'files', label: '项目文件夹', icon: 'folder-open-outline' },
+  // 环境变量:同上,始终出现 —— 没上报 env_capable 时分区里直接说要升级什么(node-env.ts envSupport);
+  // 只读页隐藏的是添加 / 修改 / 删除,不是分区。
+  { key: 'env', label: '环境变量', icon: 'key-outline' },
   { key: 'tasks', label: '任务', icon: 'list-outline' },
   { key: 'danger', label: '危险操作', icon: 'warning-outline' },
 ];

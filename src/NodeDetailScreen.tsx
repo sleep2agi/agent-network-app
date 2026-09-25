@@ -66,6 +66,7 @@ import { rulesFileTarget } from './node-rules';
 import NodeModelSection from './NodeModelSection';
 import NodeSkillsSection from './NodeSkillsSection';
 import NodeFilesSection from './NodeFilesSection';
+import NodeEnvSection from './NodeEnvSection';
 import { NODE_PAGE_COMPACT_WIDTH, NODE_PAGE_CONTENT_MAX_WIDTH, NODE_SECTIONS, factText, headerChips, nodePageContentWidth, overviewFactColumns, resolveActiveSection, splitOverviewFacts, visibleNodeSections, type NodeSectionKey } from './node-page-model';
 
 const POLL_MS = 10_000; // same cadence as AgentsScreen — hub-friendly, felt-live
@@ -429,6 +430,13 @@ export default function NodeDetailScreen({
         <SectionTitle title="项目文件夹" />
         {/* 节点工作目录的只读文件树。有 nodes 行按 node_id 发(rulesTarget 带权威 node_id),否则按 alias。 */}
         <NodeFilesSection cfg={cfg} alias={alias} node={rulesTarget} session={s} />
+      </View>
+    );
+    if (section === 'env') return (
+      <View>
+        <SectionTitle title="环境变量" />
+        {/* 节点 config.json 的 env 块:键 + 长度,值只写不读。「保存并重启」走与危险操作同一个 restart_node。 */}
+        <NodeEnvSection cfg={cfg} alias={alias} node={rulesTarget} hubNode={node} session={s} readOnly={readOnly} />
       </View>
     );
     if (section === 'tasks') return (
