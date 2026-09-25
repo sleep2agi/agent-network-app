@@ -80,7 +80,7 @@ ck('节点页按 nodePageScrolls 决定包不包 ScrollView', /const pageScrolls
 ck('头部卡片 / 规则标题按 nodePageChrome 显示', /chrome\.headerCard \? headerCard : null/.test(screen) && /chrome\.sectionTitle \? <SectionTitle title="规则文件" \/> : null/.test(screen));
 ck('切分区 / 页头返回都走 guard', /guardLeave\(\(\) => setActiveSection\(item\.key\)\)/.test(screen) && /<Pressable onPress=\{guardedBack\}/.test(screen));
 ck('Android 返回键在有草稿时拦下', /BackHandler\.addEventListener\('hardwareBackPress'/.test(screen) && /\}, \[rulesDirty\]\);/.test(screen));
-ck('键盘避让只在原生规则分区启用', /enabled=\{Platform\.OS !== 'web' && section === 'rules'\}/.test(screen));
+ck('键盘避让只在原生规则分区启用', /enabled=\{keyboardAvoidEnabled\(Platform\.OS, keyboardVisible, Platform\.OS !== 'web' && section === 'rules'\)\}/.test(screen));
 
 console.log(`node page model: ${p}/${t} checks passed`);
 process.exit(p === t ? 0 : 1);

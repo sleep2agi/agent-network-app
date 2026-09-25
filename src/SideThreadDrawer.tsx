@@ -3,6 +3,7 @@ import {
   AccessibilityInfo,
   ActivityIndicator,
   FlatList,
+  Keyboard,
   KeyboardAvoidingView,
   Modal,
   Platform,
@@ -37,6 +38,7 @@ import {
   type SideThreadCardAction,
 } from './side-thread-model';
 import { createSideThreadActionController } from './side-thread-action-controller';
+import { keyboardAvoidEnabled, useKeyboardVisible } from './keyboard-visibility';
 import { colors, onThemeChange, spacing } from './theme';
 import { createSideThreadScopeGate } from './side-thread-scope-gate';
 
@@ -91,6 +93,7 @@ const recordsForScope = (
 
 export default function SideThreadDrawer({ cfg, alias, desktop, launch, scope, restoreFocusRef }: Props) {
   const insets = useSafeAreaInsets();
+  const keyboardVisible = useKeyboardVisible(Keyboard, Platform.OS);
   const client = useMemo(() => createSideThreadClient(cfg), [cfg.serverUrl, cfg.token, cfg.networkId]);
   const [visible, setVisible] = useState(false);
   const [question, setQuestion] = useState('');
@@ -341,6 +344,8 @@ export default function SideThreadDrawer({ cfg, alias, desktop, launch, scope, r
       <KeyboardAvoidingView
         style={styles.modalRoot}
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        // Android KAV doesn't reset on keyboardDidHide — see keyboard-visibility.ts.
+        enabled={keyboardAvoidEnabled(Platform.OS, keyboardVisible)}
       >
       <Pressable style={[styles.backdrop, desktop && styles.desktopBackdrop]} onPress={closeDrawer}>
         <Pressable

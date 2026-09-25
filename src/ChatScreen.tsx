@@ -6,6 +6,7 @@ import {
   BackHandler,
   FlatList,
   Image,
+  Keyboard,
   KeyboardAvoidingView,
   Modal,
   Platform,
@@ -32,6 +33,7 @@ import { outboxAdd, outboxForAlias, outboxMarkFailed, outboxMarkPending, outboxR
 import { mayApplySendResult, shouldExposeSendFailure } from './send-reconciliation';
 import { conversationKey, conversationScope, createConversationRequestGate, createConversationStore } from './conversation-store';
 import { resolveSender } from './chat-sender';
+import { keyboardAvoidEnabled, useKeyboardVisible } from './keyboard-visibility';
 import { nextIdentityRetryDelay } from './identity-retry';
 import { COMPOSER_HEIGHT_DEFAULT, clampComposerHeight, composerDragHandlers, inputMaxHeight, loadComposerHeight, lockDocumentSelection, saveComposerHeight } from './composer-resize';
 import {
@@ -237,6 +239,7 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
   // app#237 —— 桌面端输入区高度可拖拽:根容器高度决定上界(消息区至少留 200px),
   // 值全局持久化(切会话 / 重启保持)。分隔条在输入区上沿,向上拖变高。
   const [rootHeight, setRootHeight] = useState(0);
+  const keyboardVisible = useKeyboardVisible(Keyboard, Platform.OS);
   const rootHeightRef = useRef(0);
   const [composerHeightRaw, setComposerHeightRaw] = useState<number>(() => loadComposerHeight() ?? COMPOSER_HEIGHT_DEFAULT);
   const composerHeight = clampComposerHeight(composerHeightRaw, rootHeight || undefined);
@@ -1104,6 +1107,11 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
       // left the keyboard covering the input (Vincent tg 738). 'padding'
       // works on both platforms under edge-to-edge.
       behavior={Platform.OS === 'ios' ? 'padding' : 'padding'}
+      // RN's Android KAV never resets its padding on keyboardDidHide (it
+      // recomputes it from the hide event), which left a keyboard-height band
+      // under the composer after dismissing (Vincent, 0.2.102 foldable). Only
+      // let it pad while the keyboard is actually up. See keyboard-visibility.ts.
+      enabled={keyboardAvoidEnabled(Platform.OS, keyboardVisible)}
       onLayout={(event) => { const h = event.nativeEvent.layout.height; rootHeightRef.current = h; setRootHeight(h); }}
       keyboardVerticalOffset={Platform.OS === 'android' ? (StatusBar.currentHeight ?? 0) : 0}
     >
