@@ -11,7 +11,7 @@ import { ActivityIndicator, Platform, Pressable, Text, View } from 'react-native
 import { listNodeSkills, readNodeSkill, waitForRulesFileResult, type HubConfig, type RulesTarget, type Session } from './api';
 import InfoTip from './InfoTip';
 import MarkdownMessage from './MarkdownMessage';
-import { isTerminal, nextPollDelayMs, requestIdToFollow } from './node-rules';
+import { isTerminal, nextPollDelayMs, requestIdToFollow, resultProblem } from './node-rules';
 import { parseSkillDetail, parseSkillsList, scopeLabel, skillsStatusMessage, skillsTarget, stripFrontmatter, type SkillDetail, type SkillSummary } from './node-skills';
 import { colors, radius, spacing, type, weight } from './theme';
 
@@ -50,7 +50,10 @@ function SkillsCard({ cfg, target }: { cfg: HubConfig; target: RulesTarget }) {
     if (!follow) { setPhase('unavailable'); setMessage(enq.ok ? '' : enq.error); return; }
     const res = await wait(follow);
     if (cancelled.current) return;
-    if (!res.ok) { setPhase('unavailable'); setMessage(res.error); return; }
+    // 过期(content_purged)/找不到/认不出的状态:说原因,不当成「0 个技能」。
+    const problem = resultProblem(res);
+    if (problem !== null) { setPhase('unavailable'); setMessage(problem); return; }
+    if (!res.ok) return;
     if (res.status !== 'done') { setPhase('unavailable'); setMessage(skillsStatusMessage(res.status, res.error)); return; }
     const list = parseSkillsList(res.content);
     setSkills(list);
@@ -74,7 +77,9 @@ function SkillsCard({ cfg, target }: { cfg: HubConfig; target: RulesTarget }) {
     }
     const res = await wait(enq.request_id);
     if (cancelled.current) return;
-    if (!res.ok) { setDetailMsg(res.error); return; }
+    const problem = resultProblem(res);
+    if (problem !== null) { setDetailMsg(problem); return; }
+    if (!res.ok) return;
     if (res.status !== 'done') { setDetailMsg(skillsStatusMessage(res.status, res.error)); return; }
     const d = parseSkillDetail(res.content);
     if (!d) { setDetailMsg('节点返回的技能内容无法解析'); return; }

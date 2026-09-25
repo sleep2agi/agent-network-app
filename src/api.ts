@@ -1,5 +1,7 @@
 import { appFetch } from './app-fetch';
 import { reportProfileAuthResponse } from './profile-auth-state';
+import { withDeadline } from './deadline';
+import { pollUntilTerminal } from './node-rules';
 
 // Thin CommHub API client. The app talks to the same hub the dashboard
 // proxies (status / tasks / messages); auth is the network token sent
@@ -77,6 +79,8 @@ const headers = (cfg: HubConfig) => ({
 // RN's fetch has no timeout: on flaky mobile networks a request can hang
 // forever and the UI spins with no way out (Vincent tg 841). Abort hard.
 const TIMEOUT_MS = 12000;
+/** hub MCP 工具调用(含读完响应体)的硬上限。withTimeout 只管到响应头。 */
+const HUB_TOOL_DEADLINE_MS = TIMEOUT_MS + 3_000;
 
 const withTimeout = (run: (signal: AbortSignal) => Promise<Response>): Promise<Response> => {
   const ctrl = new AbortController();
@@ -634,10 +638,13 @@ export const ackAgentMessages = async (cfg: HubConfig, agent: string): Promise<{
  *  Sends are network-scoped: utok users must pass an explicit network_id. */
 const fetchAuthIdentity = async (cfg: HubConfig): Promise<{ networkId?: string; username?: string }> => {
   try {
-    const res = await withTimeout(signal =>
-      appFetch(`${cfg.serverUrl}/api/auth/me`, { headers: headers(cfg), signal }),
-    );
-    const d = await res.json();
+    // 响应体也要有上限:规则文件/技能/项目文件夹的每一次入队和轮询都会先走这里拿 network_id。
+    const d = await withDeadline((async () => {
+      const res = await withTimeout(signal =>
+        appFetch(`${cfg.serverUrl}/api/auth/me`, { headers: headers(cfg), signal }),
+      );
+      return res.json();
+    })(), HUB_TOOL_DEADLINE_MS, () => null);
     const cur = d?.current_network;
     const networkId = (typeof cur === 'string' ? cur : cur?.network_id) ?? d?.networks?.[0]?.network_id;
     const username = d?.user?.username ?? d?.username;
@@ -1118,6 +1125,8 @@ export interface RulesFileResult {
   content?: string;
   error: string | null;
   age_ms: number;
+  /** hub ≥ #2001:首次终态读取 60 秒后内容被清掉,之后再读只剩这个旗、没有 content。 */
+  content_purged?: boolean;
 }
 
 export type RulesFileEnqueueResult =
@@ -1126,27 +1135,38 @@ export type RulesFileEnqueueResult =
 
 export type RulesFileOutcome =
   | RulesFileResult
-  | { ok: false; error: string; unsupported?: true };
+  | { ok: false; error: string; unsupported?: true; transient?: boolean };
 
 const callHubTool = async (cfg: HubConfig, name: string, args: Record<string, unknown>): Promise<
   | { kind: 'payload'; payload: any }
   | { kind: 'unsupported'; error: string }
-  | { kind: 'error'; error: string }
+  | { kind: 'error'; error: string; transient?: boolean }
 > => {
   try {
-    const res = await withTimeout(signal => appFetch(`${cfg.serverUrl}/mcp`, {
-      method: 'POST',
-      headers: {
-        ...headers(cfg),
-        Accept: 'application/json, text/event-stream',
-        'MCP-Protocol-Version': '2025-03-26',
-      },
-      signal,
-      body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name, arguments: args } }),
-    }));
+    // 🔴 整个请求(含响应体)一个硬上限:withTimeout 只管到响应头,`res.text()` 卡住时
+    // 规则文件/技能/项目文件夹的轮询会永远 await,界面一直转圈(见 deadline.ts)。
+    const got = await withDeadline(
+      (async () => {
+        const res = await withTimeout(signal => appFetch(`${cfg.serverUrl}/mcp`, {
+          method: 'POST',
+          headers: {
+            ...headers(cfg),
+            Accept: 'application/json, text/event-stream',
+            'MCP-Protocol-Version': '2025-03-26',
+          },
+          signal,
+          body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name, arguments: args } }),
+        }));
+        return { res, text: res.status === 404 || res.status === 501 || !res.ok ? '' : await res.text() };
+      })(),
+      HUB_TOOL_DEADLINE_MS,
+      () => null,
+    );
+    if (!got) return { kind: 'error', error: `服务器 ${HUB_TOOL_DEADLINE_MS / 1000} 秒内没有返回完整响应`, transient: true };
+    const { res } = got;
     if (res.status === 404 || res.status === 501) return { kind: 'unsupported', error: '当前 Hub 不支持节点规则文件，请先升级服务器' };
     if (!res.ok) return { kind: 'error', error: `HTTP ${res.status}` };
-    const parsed = parseMcpToolResponse(await res.text());
+    const parsed = parseMcpToolResponse(got.text);
     if (parsed.kind === 'malformed') return { kind: 'unsupported', error: '当前 Hub 未返回兼容的响应' };
     if (parsed.kind === 'jsonRpcError') {
       // 旧 hub 没有这个工具时 SDK 回 "Tool xxx not found"（-32602）。
@@ -1155,7 +1175,9 @@ const callHubTool = async (cfg: HubConfig, name: string, args: Record<string, un
     }
     return { kind: 'payload', payload: parsed.payload };
   } catch (error) {
-    return { kind: 'error', error: error instanceof Error ? error.message : String(error) };
+    const msg = error instanceof Error ? error.message : String(error);
+    const aborted = (error instanceof Error && error.name === 'AbortError') || /abort/i.test(msg);
+    return { kind: 'error', error: aborted ? `服务器 ${TIMEOUT_MS / 1000} 秒内没有响应` : msg, transient: true };
   }
 };
 
@@ -1265,30 +1287,23 @@ export const getRulesFileResult = async (cfg: HubConfig, requestId: string): Pro
   const networkId = cfg.networkId ?? (await fetchNetworkId(cfg));
   const r = await callHubTool(cfg, 'get_rules_file_result', { request_id: requestId, ...(networkId ? { network_id: networkId } : {}) });
   if (r.kind === 'unsupported') return { ok: false, unsupported: true, error: r.error };
-  if (r.kind === 'error') return { ok: false, error: r.error };
+  if (r.kind === 'error') return { ok: false, error: r.error, ...(r.transient ? { transient: true } : {}) };
   const p = r.payload;
   if (!p || p.ok !== true) return { ok: false, error: String(p?.error ?? 'Hub 返回空响应') };
   return p as RulesFileResult;
 };
 
-/** 轮询到终态（done / failed / timeout）或本地上限；`isCancelled` 让组件卸载时停下。 */
+/** 轮询到终态（done / failed / timeout / 认不出的状态）或本地上限；`isCancelled` 让组件卸载时停下。
+ *  循环本体在 node-rules.ts 的 pollUntilTerminal(纯函数,有单测);这里只接上真实的 hub 调用。 */
 export const waitForRulesFileResult = async (
   cfg: HubConfig,
   requestId: string,
-  options: { nextDelayMs: (elapsedMs: number) => number; isTerminal: (s: RulesFileRequestStatus) => boolean; isCancelled?: () => boolean; maxWaitMs?: number } ,
-): Promise<RulesFileOutcome> => {
-  const started = Date.now();
-  const maxWait = options.maxWaitMs ?? 70_000;
-  for (;;) {
-    if (options.isCancelled?.()) return { ok: false, error: 'cancelled' };
-    const r = await getRulesFileResult(cfg, requestId);
-    if (!r.ok) return r;
-    if (options.isTerminal(r.status)) return r;
-    const elapsed = Date.now() - started;
-    if (elapsed > maxWait) return { ok: false, error: '等待节点响应超时' };
-    await new Promise(resolve => setTimeout(resolve, options.nextDelayMs(elapsed)));
-  }
-};
+  options: { nextDelayMs: (elapsedMs: number) => number; isTerminal: (s: string) => boolean; isCancelled?: () => boolean; maxWaitMs?: number } ,
+): Promise<RulesFileOutcome> =>
+  pollUntilTerminal<RulesFileOutcome>(() => getRulesFileResult(cfg, requestId), {
+    ...options,
+    callDeadlineMs: HUB_TOOL_DEADLINE_MS + 3_000,
+  });
 
 /** 读一条 create_node 请求的结果(daemon 回的 status/error)。老 hub 没有这个接口 → 404 → null(向导退回只等注册)。 */
 export const fetchCreateRequestStatus = async (cfg: HubConfig, requestId: string): Promise<CreateRequestRow | null> => {
