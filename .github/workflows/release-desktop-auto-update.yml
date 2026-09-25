@@ -119,6 +119,11 @@ jobs:
           releaseBody: |-
             Signed and notarized stable update for macOS (Apple Silicon) and Windows (x64).
 
+            What's new in 0.2.106:
+            - 长按消息新增「选择文本」，可以拖动选择任意一段复制；电脑端右键可复制选中内容。
+            - 定时任务页重新设计：按状态筛选、紧凑列表、宽屏左右分栏、一键暂停/恢复。
+            - Agent 列表更紧凑（微信式），折叠屏展开时列表和聊天之间可以左右拖动调宽窄。
+
             What's new in 0.2.105:
             - 聊天界面精简：去掉不常用的 ⚡ 和 BTW（旁路提问）入口。
 
