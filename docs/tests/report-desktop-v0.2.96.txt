@@ -1,0 +1,22 @@
+desktop v0.2.96 — 规则文件全屏不再被 macOS 红黄绿灯 / Windows 标题栏问题挡住
+================================================================================
+
+来源:Vincent(desktop 0.2.94,macOS)反馈规则文件「全屏」里红黄绿灯压在「阅读/编辑」切换上。
+
+A. 改动(#362)
+--------------------------------------------------------------------------------
+  src/NodeRulesSection.tsx 的 RulesFullscreen(react-native Modal,web 端 position:fixed 铺满窗口)
+  盖住了 App.tsx 里给红黄绿灯让位的 <MacTitleStrip /> 和 Windows 自绘的 <WinTitleBar />。
+  修法:在 Modal 根里、工具条之前再挂一次同一组件。两者各自带平台门(isMacTauriShell /
+  isWindowsTauriShell),平台互斥,任何平台最多一条;Linux / 网页 / 移动端布局不变。
+  macOS:工具条下移 28px,不再与红黄绿灯重叠。
+  Windows:全屏里最小化/最大化/关闭可点、顶部可拖动,不必先 Esc。
+  0.2.95 版本号提交(#361)之后 main 上只合入了 #362 这一个 PR。
+
+B. 验证边界(如实)
+--------------------------------------------------------------------------------
+  #362 自测:src/rules-fullscreen-mac-inset.test.ts 26 项;14 个变异全部被测试抓到;npm test 127/127;
+  tsc -p tsconfig.build.json 0 错误。Playwright(web 导出 + 模拟 __TAURI_INTERNALS__,一次性 hub)
+  量坐标:mac 模拟下工具条 y=41(修复前 y=13 与红黄绿灯重叠);Windows 模拟下右上角点到「关闭」、顶部是拖动区。
+  Chromium / Linux WebKit 不等于 macOS WKWebView,真机外观以发版后实际截图为准。不涉及 Rust。
+  本 PR 只改版本号与发版说明;version-consistency 测试通过。
