@@ -85,10 +85,13 @@ ck('history is schedule and network scoped', calls.at(-1)!.url.includes('/sched_
 await cancelScheduledTask(cfg, row.schedule_id);
 ck('cancel is soft-delete API verb', calls.at(-1)!.init.method === 'DELETE');
 const screen = readFileSync(new URL('./ScheduledTasksScreen.tsx', import.meta.url), 'utf8');
-ck('mobile form shows timezone and rejects empty weekly selection', screen.includes('每天 ${spec.time} · ${timezone}') && screen.includes("kind === 'weekly' && weekdays.length === 0"));
-ck('mobile form exposes catch-up and skip policies and discloses the effective value',
-  screen.includes("'catch_up_once'") && screen.includes("'skip'") && screen.includes('misfire_policy: misfirePolicy') && screen.includes('错过后补跑一次') && screen.includes('错过后跳过'));
-ck('mobile cards edit only active or paused schedules and prefill every mutable field',
+const viewModel = readFileSync(new URL('./scheduled-view-model.ts', import.meta.url), 'utf8');
+ck('mobile detail shows the timezone and the form rejects empty weekly selection',
+  screen.includes('<Fact label="时区" value={row.timezone} />') && screen.includes("kind === 'weekly' && weekdays.length === 0"));
+ck('mobile form exposes catch-up and skip policies and the detail discloses the effective value',
+  screen.includes("'catch_up_once'") && screen.includes("'skip'") && screen.includes('misfire_policy: misfirePolicy') &&
+  screen.includes('describeMisfire(row.misfire_policy)') && viewModel.includes('错过后补跑一次') && viewModel.includes('错过后跳过'));
+ck('mobile detail edits only active or paused schedules and prefill every mutable field',
   screen.includes("setEditing(row); setShowForm(true)") && screen.includes("availableActions.includes('edit')") &&
   ['setName(editing.name)', 'setTask(editing.task_content)', 'setTarget(editing.target_node_id)',
     'setPriority(editing.priority)', 'setTimezone(editing.timezone)', 'intervalFormValue'].every(value => screen.includes(value)));

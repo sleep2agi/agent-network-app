@@ -3,14 +3,17 @@ import type { ReactNode } from 'react';
 import {
   ActivityIndicator,
   Alert,
+  BackHandler,
   Modal,
   Pressable,
   RefreshControl,
   ScrollView,
   StyleSheet,
+  Switch,
   Text,
   TextInput,
   View,
+  useWindowDimensions,
 } from 'react-native';
 import {
   cancelScheduledTask,
@@ -36,8 +39,28 @@ import {
   setScheduledTaskStatus,
   updateScheduledTask,
 } from './api';
-import { colors, onThemeChange, spacing } from './theme';
+import AliasAvatar from './AliasAvatar';
+import { colors, onThemeChange, radius, spacing, type as fontSize, weight } from './theme';
 import { scheduledTaskActions } from './scheduled-task-actions';
+import {
+  DEFAULT_SCHEDULE_FILTER,
+  countByStatus,
+  describeMisfire,
+  describeSchedule,
+  emptyStateFor,
+  filterChips,
+  formatAbsolute,
+  formatRelative,
+  isMasterDetail,
+  masterListWidth,
+  reconcileSelection,
+  runErrorText,
+  runStatusMeta,
+  scheduleRowModel,
+  scheduleStatusMeta,
+  visibleSchedules,
+} from './scheduled-view-model';
+import type { ScheduleStatus, StatusTone } from './scheduled-view-model';
 
 const DAYS = ['日', '一', '二', '三', '四', '五', '六'];
 
@@ -46,19 +69,6 @@ const fmt = (value?: string | null) => {
   const d = new Date(value);
   return Number.isFinite(d.getTime()) ? d.toLocaleString() : value;
 };
-
-function describe(spec: HubScheduleSpec, timezone: string) {
-  if (spec.type === 'once') return `单次 · ${fmt(spec.run_at)}`;
-  if (spec.type === 'interval') {
-    if (spec.every_seconds % 86400 === 0) return `每 ${spec.every_seconds / 86400} 天`;
-    if (spec.every_seconds % 3600 === 0) return `每 ${spec.every_seconds / 3600} 小时`;
-    return `每 ${spec.every_seconds / 60} 分钟`;
-  }
-  if (spec.type === 'daily') return `每天 ${spec.time} · ${timezone}`;
-  return `每周 ${spec.weekdays.map(d => DAYS[d]).join('、')} ${spec.time} · ${timezone}`;
-}
-
-const describeMisfire = (policy?: HubMisfirePolicy) => policy === 'skip' ? '错过后跳过' : '错过后补跑一次';
 
 const EXTERNAL_KIND_LABEL: Record<HubExternalSchedule['kind'], string> = {
   cron: 'crontab', systemd: 'systemd', tmux: 'tmux', playwright: 'playwright', custom: '自定义',
@@ -109,6 +119,15 @@ const intervalFormValue = (seconds: number): { every: string; unit: IntervalUnit
   return { every: String(seconds), unit: 'seconds' };
 };
 
+const DEVICE_TIMEZONE = (() => {
+  try { return Intl.DateTimeFormat().resolvedOptions().timeZone || undefined; } catch { return undefined; }
+})();
+
+const toneColor = (tone: StatusTone) =>
+  tone === 'running' ? colors.running : tone === 'blocked' ? colors.blocked : tone === 'failed' ? colors.failed : colors.textMuted;
+
+type ScheduleAction = 'toggle' | 'run' | 'cancel';
+
 export default function ScheduledTasksScreen({ cfg }: { cfg: HubConfig }) {
   const [themeVersion, setThemeVersion] = useState(0);
   useEffect(() => onThemeChange(() => setThemeVersion(v => v + 1)), []);
@@ -121,14 +140,20 @@ export default function ScheduledTasksScreen({ cfg }: { cfg: HubConfig }) {
   const [error, setError] = useState('');
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState<HubScheduledTask | null>(null);
-  const [history, setHistory] = useState<{ title: string; runs: HubScheduledRun[] } | null>(null);
   const [cancelCandidate, setCancelCandidate] = useState<HubScheduledTask | null>(null);
   const [tab, setTab] = useState<'hub' | 'node'>('hub');
+  const [filter, setFilter] = useState<ScheduleStatus>(DEFAULT_SCHEDULE_FILTER);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [runs, setRuns] = useState<{ id: string; runs: HubScheduledRun[]; error: string } | null>(null);
   const [external, setExternal] = useState<HubNodeExternalSchedules[]>([]);
   const [externalLoaded, setExternalLoaded] = useState(false);
   const [cronEdit, setCronEdit] = useState<{ node: HubNodeExternalSchedules; schedule: HubExternalSchedule } | null>(null);
   const [intents, setIntents] = useState<{ title: string; edits: HubExternalScheduleEditIntent[] } | null>(null);
   const [openIntents, setOpenIntents] = useState<Record<string, HubExternalScheduleEditIntent>>({});
+  // 双栏按本屏实际宽度判断(Android 展开时本屏在导航栏右侧,不是整窗宽)。
+  const { width: windowWidth } = useWindowDimensions();
+  const [measuredWidth, setMeasuredWidth] = useState<number | null>(null);
+  const wide = isMasterDetail(measuredWidth ?? windowWidth);
 
   const load = useCallback(async (manual = false) => {
     if (manual) setRefreshing(true);
@@ -171,17 +196,45 @@ export default function ScheduledTasksScreen({ cfg }: { cfg: HubConfig }) {
     return () => clearInterval(timer);
   }, [tab, load, loadExternal]);
 
-  const act = async (row: HubScheduledTask, action: 'toggle' | 'run' | 'cancel' | 'history') => {
+  const counts = useMemo(() => countByStatus(items), [items]);
+  const visible = useMemo(() => visibleSchedules(items, filter), [items, filter]);
+  // 选中项由当前筛选派生:宽屏总有一条(第一条),窄屏只有点过才有。
+  const activeId = reconcileSelection(visible, selectedId, wide);
+  const selected = visible.find(row => row.schedule_id === activeId) ?? null;
+  const now = Date.now();
+
+  const loadRuns = useCallback(async (scheduleId: string) => {
+    try {
+      const data = await fetchScheduledRuns(cfg, scheduleId);
+      setRuns({ id: scheduleId, runs: data.runs || [], error: '' });
+    } catch (e) {
+      setRuns({ id: scheduleId, runs: [], error: e instanceof Error ? e.message : String(e) });
+    }
+  }, [cfg]);
+
+  // 执行记录跟着选中项走;计划被执行过(last_run_at/revision 变了)再拉一次。
+  const runsKey = selected ? `${selected.schedule_id}:${selected.last_run_at ?? ''}:${selected.revision}` : '';
+  useEffect(() => {
+    if (!selected) return;
+    void loadRuns(selected.schedule_id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [runsKey, loadRuns]);
+
+  // 窄屏详情:系统返回键回到列表(后注册的监听先被调用,盖过 App 的返回处理)。
+  useEffect(() => {
+    if (wide || !selected) return;
+    const sub = BackHandler.addEventListener('hardwareBackPress', () => { setSelectedId(null); return true; });
+    return () => sub.remove();
+  }, [wide, selected]);
+
+  const act = async (row: HubScheduledTask, action: ScheduleAction) => {
     setBusy(true); setError('');
     try {
       if (action === 'toggle') await setScheduledTaskStatus(cfg, row, row.status === 'active' ? 'paused' : 'active');
       if (action === 'run') await runScheduledTaskNow(cfg, row.schedule_id);
       if (action === 'cancel') await cancelScheduledTask(cfg, row.schedule_id);
-      if (action === 'history') {
-        const data = await fetchScheduledRuns(cfg, row.schedule_id);
-        setHistory({ title: row.name, runs: data.runs || [] });
-      }
-      if (action !== 'history') await load();
+      await load();
+      if (action === 'run') await loadRuns(row.schedule_id);
     } catch (e) { setError(e instanceof Error ? e.message : String(e)); }
     finally { setBusy(false); }
   };
@@ -210,87 +263,135 @@ export default function ScheduledTasksScreen({ cfg }: { cfg: HubConfig }) {
     finally { setBusy(false); }
   };
 
-  return (
-    <View style={styles.root}>
-      <View style={styles.header}>
-        <View><Text style={styles.title}>定时任务</Text><Text style={styles.subtitle}>{tab === 'hub' ? 'Hub 统一调度 · 节点离线自动排队' : '节点上报的本机计划 · owner 可改托管 cron'}</Text></View>
-        {tab === 'hub' ? <Pressable style={styles.primarySmall} onPress={() => { setEditing(null); setShowForm(true); }}><Text style={styles.primaryText}>新建</Text></Pressable> : null}
-      </View>
-      <View style={styles.tabs}>
-        {(['hub', 'node'] as const).map(value => (
-          <Pressable key={value} onPress={() => setTab(value)} style={[styles.segmentItem, tab === value && styles.segmentActive]}>
-            <Text style={tab === value ? styles.segmentTextActive : styles.segmentText}>{value === 'hub' ? 'Hub 计划' : '节点计划'}</Text>
+  const openCreate = () => { setEditing(null); setShowForm(true); };
+
+  const detail = selected ? (
+    <ScheduleDetail
+      row={selected}
+      now={now}
+      busy={busy}
+      runs={runs?.id === selected.schedule_id ? runs : null}
+      onBack={wide ? undefined : () => setSelectedId(null)}
+      onEdit={row => { setEditing(row); setShowForm(true); }}
+      onAction={(row, action) => void act(row, action)}
+      onCancel={row => setCancelCandidate(row)}
+    />
+  ) : null;
+
+  const hubBody = loading ? <View style={styles.center}><ActivityIndicator color={colors.accent} /></View> : (
+    <View style={styles.hubBody}>
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chipsScroll} contentContainerStyle={styles.chips}>
+        {filterChips(counts, filter).map(chip => (
+          <Pressable
+            key={chip.status}
+            testID={`schedule-filter-${chip.status}`}
+            accessibilityRole="button"
+            accessibilityState={{ selected: chip.selected }}
+            onPress={() => { setFilter(chip.status); setSelectedId(null); }}
+            style={[styles.chip, chip.selected && styles.chipActive]}
+          >
+            <Text style={chip.selected ? styles.chipTextActive : styles.chipText}>{chip.label}</Text>
+            <Text style={chip.selected ? styles.chipCountActive : styles.chipCount}>{chip.count}</Text>
           </Pressable>
         ))}
-      </View>
-      {error ? <Text style={styles.error}>{error}</Text> : null}
-      {tab === 'node' ? (
-        !externalLoaded ? <View style={styles.center}><ActivityIndicator color={colors.accent} /></View> : (
-          <ScrollView
-            contentContainerStyle={styles.list}
-            refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => loadExternal(true)} tintColor={colors.accent} />}
-          >
-            {external.length === 0 ? (
-              <View style={styles.empty}><Text style={styles.emptyTitle}>暂无节点计划</Text><Text style={styles.muted}>节点升级后会自动上报本机 crontab 等计划。</Text></View>
-            ) : external.map(node => (
-              <View key={node.node_id} style={styles.card}>
-                <View style={styles.cardTop}>
-                  <Text style={styles.cardTitle}>{node.alias}</Text>
-                  <Pressable disabled={busy} style={styles.action} onPress={() => void showIntents(node)}><Text style={styles.actionText}>意向记录</Text></Pressable>
-                </View>
-                <Text style={styles.meta}>快照：{fmt(node.observed_at)}{node.error ? ` · 上报异常（${node.error}）` : ''}</Text>
-                {node.schedules.length === 0 ? <Text style={[styles.muted, { marginTop: spacing.sm }]}>该节点未上报计划</Text> : node.schedules.map(sch => (
-                  <View key={sch.id} style={styles.extRow}>
-                    <View style={styles.cardTop}>
-                      <Text style={styles.cardTitle}>{sch.name}</Text>
-                      <Text style={[styles.badge, sch.enabled ? styles.badgeActive : styles.badgeIdle]}>{sch.enabled ? '启用' : '停用'}</Text>
-                    </View>
-                    <Text style={styles.meta}>{EXTERNAL_KIND_LABEL[sch.kind]} · {sch.frequency}</Text>
-                    <Text style={styles.meta}>上次：{fmt(sch.last_run_at)}（{EXTERNAL_STATUS_LABEL[sch.last_status]}）　下次：{fmt(sch.next_run_at)}</Text>
-                    {sch.last_error ? <Text style={styles.extError}>{sch.last_error}</Text> : null}
-                    {sch.editable === true && sch.kind === 'cron' && typeof sch.revision === 'number' ? (() => {
-                      const open = openIntents[`${node.node_id}:${sch.id}`];
-                      return <>
-                        {open ? <Text style={styles.intentBadge}>意向在途（{INTENT_STATUS_LABEL[open.status]}）：{describeIntentPatch(open.patch)}</Text> : null}
-                        <View style={styles.actions}>
-                          <Pressable disabled={busy || !!open} style={[styles.action, open && styles.actionDisabled]} onPress={() => void submitEditIntent(node, sch, { enabled: !sch.enabled })}><Text style={styles.actionText}>{sch.enabled ? '停用' : '启用'}</Text></Pressable>
-                          <Pressable disabled={busy || !!open} style={[styles.action, open && styles.actionDisabled]} onPress={() => setCronEdit({ node, schedule: sch })}><Text style={styles.actionText}>改时间</Text></Pressable>
-                        </View>
-                      </>;
-                    })() : null}
-                  </View>
-                ))}
-              </View>
-            ))}
-          </ScrollView>
-        )
-      ) : loading ? <View style={styles.center}><ActivityIndicator color={colors.accent} /></View> : (
+      </ScrollView>
+      <View style={styles.masterDetail}>
+        <View style={wide ? [styles.masterList, { width: masterListWidth(measuredWidth ?? windowWidth) }] : styles.flex}>
         <ScrollView
-          contentContainerStyle={styles.list}
+          style={styles.flex}
+          contentContainerStyle={styles.listContent}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => load(true)} tintColor={colors.accent} />}
         >
-          {items.length === 0 ? <View style={styles.empty}><Text style={styles.emptyTitle}>还没有定时任务</Text><Text style={styles.muted}>点击右上角新建，由 Hub 统一执行。</Text></View> : items.map(row => {
-            const availableActions = scheduledTaskActions(row.status);
+          {visible.length === 0 ? (() => {
+            const empty = emptyStateFor(filter, items.length);
             return (
-            <View key={row.schedule_id} style={styles.card}>
-              <View style={styles.cardTop}><Text style={styles.cardTitle}>{row.name}</Text><Text style={[styles.badge, row.status === 'active' ? styles.badgeActive : styles.badgeIdle]}>{row.status}</Text></View>
-              <Text style={styles.node}>{row.target_alias}</Text>
-              <Text style={styles.task} numberOfLines={3}>{row.task_content}</Text>
-              <Text style={styles.meta}>{describe(row.schedule, row.timezone)}</Text>
-              <Text style={styles.meta}>{describeMisfire(row.misfire_policy)}</Text>
-              <Text style={styles.meta}>下次：{fmt(row.next_run_at)}　上次：{fmt(row.last_run_at)}</Text>
-              <View style={styles.actions}>
-                {availableActions.includes('edit') && <Pressable disabled={busy} style={[styles.action, busy && styles.actionDisabled]} onPress={() => { setEditing(row); setShowForm(true); }}><Text style={styles.actionText}>编辑</Text></Pressable>}
-                {availableActions.includes('toggle') && <Pressable disabled={busy} style={[styles.action, busy && styles.actionDisabled]} onPress={() => act(row, 'toggle')}><Text style={styles.actionText}>{row.status === 'active' ? '暂停' : '恢复'}</Text></Pressable>}
-                {availableActions.includes('run') && <Pressable disabled={busy} style={[styles.action, busy && styles.actionDisabled]} onPress={() => act(row, 'run')}><Text style={styles.actionText}>立即执行</Text></Pressable>}
-                <Pressable disabled={busy} style={[styles.action, busy && styles.actionDisabled]} onPress={() => act(row, 'history')}><Text style={styles.actionText}>记录</Text></Pressable>
-                {availableActions.includes('cancel') && <Pressable disabled={busy} style={[styles.action, styles.danger, busy && styles.actionDisabled]} onPress={() => setCancelCandidate(row)}><Text style={styles.dangerText}>取消</Text></Pressable>}
+              <View style={styles.empty} testID="schedule-empty">
+                <Text style={styles.emptyTitle}>{empty.title}</Text>
+                <Text style={styles.emptyBody}>{empty.body}</Text>
+                {empty.showCreate ? <Pressable style={[styles.primarySmall, { marginTop: spacing.lg }]} onPress={openCreate}><Text style={styles.primaryText}>新建定时任务</Text></Pressable> : null}
               </View>
-            </View>
             );
-          })}
+          })() : visible.map(row => (
+            <ScheduleRow
+              key={row.schedule_id}
+              row={row}
+              now={now}
+              busy={busy}
+              selected={wide && row.schedule_id === activeId}
+              onOpen={() => setSelectedId(row.schedule_id)}
+              onToggle={() => void act(row, 'toggle')}
+            />
+          ))}
         </ScrollView>
-      )}
+        </View>
+        {wide ? (
+          <View style={styles.detailPane} testID="schedule-detail-pane">
+            {detail ?? <View style={styles.center}><Text style={styles.muted}>选择一个计划查看详情</Text></View>}
+          </View>
+        ) : null}
+      </View>
+    </View>
+  );
+
+  return (
+    <View style={styles.root} onLayout={e => setMeasuredWidth(e.nativeEvent.layout.width)}>
+      {!wide && selected ? detail : <>
+        <View style={styles.header}>
+          <Text style={styles.title} numberOfLines={1}>定时任务</Text>
+          <View style={styles.tabs}>
+            {(['hub', 'node'] as const).map(value => (
+              <Pressable key={value} accessibilityRole="tab" accessibilityState={{ selected: tab === value }} onPress={() => setTab(value)} style={[styles.tabItem, tab === value && styles.tabActive]}>
+                <Text style={tab === value ? styles.tabTextActive : styles.tabText}>{value === 'hub' ? 'Hub 计划' : '节点计划'}</Text>
+              </Pressable>
+            ))}
+          </View>
+          <View style={styles.flex} />
+          {tab === 'hub' ? <Pressable style={styles.primarySmall} onPress={openCreate}><Text style={styles.primaryText}>新建</Text></Pressable> : null}
+        </View>
+        {error ? <Text style={styles.error}>{error}</Text> : null}
+        {tab === 'node' ? (
+          !externalLoaded ? <View style={styles.center}><ActivityIndicator color={colors.accent} /></View> : (
+            <ScrollView
+              contentContainerStyle={styles.list}
+              refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => loadExternal(true)} tintColor={colors.accent} />}
+            >
+              <Text style={[styles.muted, { marginBottom: spacing.md }]}>节点上报的本机计划 · owner 可改托管 cron</Text>
+              {external.length === 0 ? (
+                <View style={styles.empty}><Text style={styles.emptyTitle}>暂无节点计划</Text><Text style={styles.emptyBody}>节点升级后会自动上报本机 crontab 等计划。</Text></View>
+              ) : external.map(node => (
+                <View key={node.node_id} style={styles.card}>
+                  <View style={styles.cardTop}>
+                    <Text style={styles.cardTitle}>{node.alias}</Text>
+                    <Pressable disabled={busy} style={styles.action} onPress={() => void showIntents(node)}><Text style={styles.actionText}>意向记录</Text></Pressable>
+                  </View>
+                  <Text style={styles.meta}>快照：{fmt(node.observed_at)}{node.error ? ` · 上报异常（${node.error}）` : ''}</Text>
+                  {node.schedules.length === 0 ? <Text style={[styles.muted, { marginTop: spacing.sm }]}>该节点未上报计划</Text> : node.schedules.map(sch => (
+                    <View key={sch.id} style={styles.extRow}>
+                      <View style={styles.cardTop}>
+                        <Text style={styles.cardTitle}>{sch.name}</Text>
+                        <Text style={[styles.badge, sch.enabled ? styles.badgeActive : styles.badgeIdle]}>{sch.enabled ? '启用' : '停用'}</Text>
+                      </View>
+                      <Text style={styles.meta}>{EXTERNAL_KIND_LABEL[sch.kind]} · {sch.frequency}</Text>
+                      <Text style={styles.meta}>上次：{fmt(sch.last_run_at)}（{EXTERNAL_STATUS_LABEL[sch.last_status]}）　下次：{fmt(sch.next_run_at)}</Text>
+                      {sch.last_error ? <Text style={styles.extError}>{sch.last_error}</Text> : null}
+                      {sch.editable === true && sch.kind === 'cron' && typeof sch.revision === 'number' ? (() => {
+                        const open = openIntents[`${node.node_id}:${sch.id}`];
+                        return <>
+                          {open ? <Text style={styles.intentBadge}>意向在途（{INTENT_STATUS_LABEL[open.status]}）：{describeIntentPatch(open.patch)}</Text> : null}
+                          <View style={styles.actions}>
+                            <Pressable disabled={busy || !!open} style={[styles.action, open && styles.actionDisabled]} onPress={() => void submitEditIntent(node, sch, { enabled: !sch.enabled })}><Text style={styles.actionText}>{sch.enabled ? '停用' : '启用'}</Text></Pressable>
+                            <Pressable disabled={busy || !!open} style={[styles.action, open && styles.actionDisabled]} onPress={() => setCronEdit({ node, schedule: sch })}><Text style={styles.actionText}>改时间</Text></Pressable>
+                          </View>
+                        </>;
+                      })() : null}
+                    </View>
+                  ))}
+                </View>
+              ))}
+            </ScrollView>
+          )
+        ) : hubBody}
+      </>}
       <ScheduleFormModal
         cfg={cfg}
         nodes={nodes}
@@ -303,7 +404,6 @@ export default function ScheduledTasksScreen({ cfg }: { cfg: HubConfig }) {
           setError('计划已在其他设备更新，已刷新最新内容，请重新编辑。');
         }}
       />
-      <HistoryModal value={history} onClose={() => setHistory(null)} />
       <CancelScheduleModal
         value={cancelCandidate}
         busy={busy}
@@ -321,6 +421,144 @@ export default function ScheduledTasksScreen({ cfg }: { cfg: HubConfig }) {
         onSubmit={cron => { if (cronEdit) void submitEditIntent(cronEdit.node, cronEdit.schedule, { cron }); }}
       />
       <IntentsModal value={intents} onClose={() => setIntents(null)} />
+    </View>
+  );
+}
+
+function StatusPill({ label, tone }: { label: string; tone: StatusTone }) {
+  const s = useMemo(makeStyles, [label, tone]);
+  const c = toneColor(tone);
+  return <Text style={[s.pill, { color: c, backgroundColor: `${c}1f` }]}>{label}</Text>;
+}
+
+/** 列表行:56–72dp。头像 = 执行节点;没有下次也没有上次时不画时间(不出「—」)。 */
+function ScheduleRow({ row, now, busy, selected, onOpen, onToggle }: {
+  row: HubScheduledTask;
+  now: number;
+  busy: boolean;
+  selected: boolean;
+  onOpen: () => void;
+  onToggle: () => void;
+}) {
+  const s = useMemo(makeStyles, [row, selected]);
+  const vm = scheduleRowModel(row, now, DEVICE_TIMEZONE);
+  return (
+    <View style={[s.row, selected && s.rowSelected]} testID={`schedule-row-${row.schedule_id}`}>
+      <Pressable style={s.rowMain} onPress={onOpen} accessibilityRole="button" accessibilityLabel={`${vm.name}，${vm.status.label}`}>
+        <AliasAvatar alias={vm.target} size={36} />
+        <View style={s.rowText}>
+          <View style={s.rowLine}>
+            <Text style={s.rowName} numberOfLines={1}>{vm.name}</Text>
+            <StatusPill label={vm.status.label} tone={vm.status.tone} />
+          </View>
+          <View style={s.rowLine}>
+            <Text style={s.rowTarget} numberOfLines={1}>{vm.target}</Text>
+            <Text style={s.scheduleChip} numberOfLines={1}>{vm.scheduleText}</Text>
+            {vm.when ? <Text style={s.rowWhen} numberOfLines={1}>{vm.when.text}</Text> : null}
+          </View>
+        </View>
+      </Pressable>
+      {vm.toggle !== null ? (
+        <Switch
+          accessibilityLabel={vm.toggle ? `暂停 ${vm.name}` : `恢复 ${vm.name}`}
+          value={vm.toggle}
+          disabled={busy}
+          onValueChange={onToggle}
+          trackColor={{ true: colors.accent, false: colors.border }}
+          thumbColor={colors.card}
+        />
+      ) : null}
+    </View>
+  );
+}
+
+function ScheduleDetail({ row, now, busy, runs, onBack, onEdit, onAction, onCancel }: {
+  row: HubScheduledTask;
+  now: number;
+  busy: boolean;
+  runs: { runs: HubScheduledRun[]; error: string } | null;
+  onBack?: () => void;
+  onEdit: (row: HubScheduledTask) => void;
+  onAction: (row: HubScheduledTask, action: ScheduleAction) => void;
+  onCancel: (row: HubScheduledTask) => void;
+}) {
+  const s = useMemo(makeStyles, [row]);
+  const status = scheduleStatusMeta(row.status);
+  const availableActions = scheduledTaskActions(row.status);
+  const misfire = describeMisfire(row.misfire_policy);
+  const timeLine = (raw: string | null | undefined, none: string) => {
+    const abs = formatAbsolute(raw, now);
+    return abs ? `${abs}（${formatRelative(raw, now)}）` : none;
+  };
+  return (
+    <View style={s.flex} testID="schedule-detail">
+      {onBack ? (
+        <View style={s.detailBar}>
+          <Pressable onPress={onBack} accessibilityRole="button" accessibilityLabel="返回定时任务" style={s.backButton}>
+            <Text style={s.backText}>‹ 定时任务</Text>
+          </Pressable>
+        </View>
+      ) : null}
+      <ScrollView contentContainerStyle={s.detailContent}>
+        <View style={s.rowLine}>
+          <Text style={s.detailTitle} selectable>{row.name}</Text>
+          <StatusPill label={status.label} tone={status.tone} />
+        </View>
+        <View style={[s.rowLine, { marginTop: spacing.sm }]}>
+          <AliasAvatar alias={row.target_alias} size={22} />
+          <Text style={s.detailTarget}>{row.target_alias}</Text>
+          {row.priority !== 'normal' ? <Text style={s.metaInline}>{row.priority === 'high' ? '高优先级' : '低优先级'}</Text> : null}
+        </View>
+        {availableActions.some(a => a !== 'history') ? <View style={s.actionsRow}>
+          {availableActions.includes('run') && <Pressable disabled={busy} style={[s.primarySmall, busy && s.actionDisabled]} onPress={() => onAction(row, 'run')}><Text style={s.primaryText}>立即执行</Text></Pressable>}
+          {availableActions.includes('toggle') && <Pressable disabled={busy} style={[s.action, busy && s.actionDisabled]} onPress={() => onAction(row, 'toggle')}><Text style={s.actionText}>{row.status === 'active' ? '暂停' : '恢复'}</Text></Pressable>}
+          {availableActions.includes('edit') && <Pressable disabled={busy} style={[s.action, busy && s.actionDisabled]} onPress={() => onEdit(row)}><Text style={s.actionText}>编辑</Text></Pressable>}
+          {availableActions.includes('cancel') && <Pressable disabled={busy} style={[s.action, s.danger, busy && s.actionDisabled]} onPress={() => onCancel(row)}><Text style={s.dangerText}>取消计划</Text></Pressable>}
+        </View> : null}
+
+        <Text style={s.sectionLabel}>任务内容</Text>
+        <Text style={s.prompt} selectable>{row.task_content}</Text>
+
+        <Text style={s.sectionLabel}>计划</Text>
+        <View style={s.facts}>
+          <Fact label="频率" value={describeSchedule(row.schedule, row.timezone, DEVICE_TIMEZONE, now)} />
+          <Fact label="时区" value={row.timezone} />
+          <Fact label="错过执行" value={misfire.short} hint={misfire.long} />
+          <Fact label="下次执行" value={row.status === 'active' ? timeLine(row.next_run_at, '暂无') : row.status === 'paused' ? '已暂停，恢复后继续' : '不会再执行'} />
+          <Fact label="上次执行" value={timeLine(row.last_run_at, '还没执行过')} last />
+        </View>
+
+        <Text style={s.sectionLabel}>执行记录</Text>
+        {!runs ? <ActivityIndicator color={colors.accent} style={{ alignSelf: 'flex-start', marginTop: spacing.sm }} />
+          : runs.error ? <Text style={s.error}>{runs.error}</Text>
+          : runs.runs.length === 0 ? <Text style={s.muted}>还没有执行记录</Text>
+          : <View style={s.facts}>{runs.runs.map((run, i) => {
+            const meta = runStatusMeta(run.status);
+            const err = runErrorText(run);
+            return (
+              <View key={run.run_id} style={[s.runRow, i === runs.runs.length - 1 && s.lastFact]}>
+                <View style={s.flex}>
+                  <Text style={s.runTime}>{formatAbsolute(run.scheduled_for, now) || run.scheduled_for}</Text>
+                  {err ? <Text style={s.runError}>{err}</Text> : null}
+                </View>
+                <StatusPill label={meta.label} tone={meta.tone} />
+              </View>
+            );
+          })}</View>}
+      </ScrollView>
+    </View>
+  );
+}
+
+function Fact({ label, value, hint, last }: { label: string; value: string; hint?: string; last?: boolean }) {
+  const s = useMemo(makeStyles, [label, value]);
+  return (
+    <View style={[s.fact, last && s.lastFact]}>
+      <Text style={s.factLabel}>{label}</Text>
+      <View style={s.flex}>
+        <Text style={s.factValue} selectable>{value}</Text>
+        {hint ? <Text style={s.factHint}>{hint}</Text> : null}
+      </View>
     </View>
   );
 }
@@ -410,11 +648,6 @@ function ScheduleFormModal({ cfg, nodes, visible, editing, onClose, onSaved, onC
 
 function Label({ text, children }: { text: string; children: ReactNode }) { const s = useMemo(makeStyles, []); return <View style={s.field}><Text style={s.label}>{text}</Text>{children}</View>; }
 
-function HistoryModal({ value, onClose }: { value: { title: string; runs: HubScheduledRun[] } | null; onClose: () => void }) {
-  const s = useMemo(makeStyles, [value]);
-  return <Modal visible={!!value} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}><View style={s.modalRoot}><View style={s.modalHeader}><Pressable onPress={onClose}><Text style={s.link}>关闭</Text></Pressable><Text style={s.modalTitle}>{value?.title || '执行记录'}</Text><View style={{ width: 40 }} /></View><ScrollView contentContainerStyle={s.form}>{value?.runs.length ? value.runs.map(run => <View key={run.run_id} style={s.run}><View><Text style={s.cardTitle}>{run.status}</Text><Text style={s.meta}>{fmt(run.scheduled_for)}</Text></View><Text style={s.runTask}>{run.task_id?.slice(0, 10) || run.error_code || '—'}</Text></View>) : <Text style={s.muted}>暂无执行记录</Text>}</ScrollView></View></Modal>;
-}
-
 function CancelScheduleModal({ value, busy, onClose, onConfirm }: {
   value: HubScheduledTask | null;
   busy: boolean;
@@ -487,15 +720,64 @@ function IntentsModal({ value, onClose }: { value: { title: string; edits: HubEx
 }
 
 function makeStyles() { return StyleSheet.create({
-  root: { flex: 1, backgroundColor: colors.bg }, header: { padding: spacing.lg, paddingBottom: spacing.md, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }, title: { color: colors.text, fontSize: 24, fontWeight: '600' }, subtitle: { color: colors.textMuted, fontSize: 12, marginTop: 3 },
-  primarySmall: { backgroundColor: colors.accent, borderRadius: 9, paddingHorizontal: 16, paddingVertical: 9 }, primaryText: { color: colors.bg, fontWeight: '600' }, center: { flex: 1, alignItems: 'center', justifyContent: 'center' }, list: { padding: spacing.lg, paddingTop: 0, paddingBottom: spacing.xl },
+  root: { flex: 1, backgroundColor: colors.bg }, flex: { flex: 1 },
+  header: { paddingHorizontal: spacing.lg, paddingTop: spacing.md, paddingBottom: spacing.sm, flexDirection: 'row', alignItems: 'center', gap: spacing.md },
+  title: { color: colors.text, fontSize: fontSize.heading, fontWeight: weight.strong },
+  tabs: { flexDirection: 'row', backgroundColor: colors.subtleFill, borderRadius: radius.md, padding: 3 },
+  tabItem: { paddingHorizontal: spacing.md, paddingVertical: 5, borderRadius: 7 },
+  tabActive: { backgroundColor: colors.card, borderWidth: StyleSheet.hairlineWidth, borderColor: colors.border },
+  tabText: { color: colors.textMuted, fontSize: fontSize.small },
+  tabTextActive: { color: colors.text, fontSize: fontSize.small, fontWeight: weight.strong },
+  primarySmall: { backgroundColor: colors.accent, borderRadius: radius.md, paddingHorizontal: 14, paddingVertical: 8, alignItems: 'center' }, primaryText: { color: colors.onAccent, fontWeight: weight.strong, fontSize: fontSize.body },
+  center: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: spacing.xl }, list: { padding: spacing.lg, paddingTop: spacing.sm, paddingBottom: spacing.xl },
+  hubBody: { flex: 1 },
+  chipsScroll: { flexGrow: 0 },
+  chips: { paddingHorizontal: spacing.lg, paddingBottom: spacing.sm, gap: spacing.sm, flexDirection: 'row' },
+  chip: { flexDirection: 'row', alignItems: 'center', gap: 6, borderRadius: radius.pill, borderWidth: 1, borderColor: colors.border, paddingHorizontal: 12, paddingVertical: 6, minHeight: 32 },
+  chipActive: { backgroundColor: colors.text, borderColor: colors.text },
+  chipText: { color: colors.textSecondary, fontSize: fontSize.small },
+  chipTextActive: { color: colors.bg, fontSize: fontSize.small, fontWeight: weight.strong },
+  chipCount: { color: colors.textMuted, fontSize: fontSize.small },
+  chipCountActive: { color: colors.bg, fontSize: fontSize.small, opacity: 0.75 },
+  masterDetail: { flex: 1, flexDirection: 'row', borderTopWidth: 1, borderTopColor: colors.border },
+  masterList: { flexShrink: 0, borderRightWidth: 1, borderRightColor: colors.border },
+  listContent: { paddingVertical: spacing.xs, paddingBottom: spacing.xl },
+  detailPane: { flex: 1, backgroundColor: colors.bg },
+  row: { flexDirection: 'row', alignItems: 'center', minHeight: 64, paddingRight: spacing.lg, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.border },
+  rowSelected: { backgroundColor: colors.rowActive },
+  rowMain: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingLeft: spacing.lg, paddingRight: spacing.sm, paddingVertical: 10 },
+  rowText: { flex: 1, minWidth: 0, gap: 4 },
+  rowLine: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, minWidth: 0 },
+  rowName: { flexShrink: 1, color: colors.text, fontSize: fontSize.body + 1, fontWeight: weight.strong },
+  rowTarget: { flexShrink: 1, color: colors.textSecondary, fontSize: fontSize.small, maxWidth: 110 },
+  scheduleChip: { flexShrink: 0, color: colors.textSecondary, fontSize: fontSize.caption, backgroundColor: colors.subtleFill, borderRadius: radius.sm, paddingHorizontal: 6, paddingVertical: 2, overflow: 'hidden' },
+  rowWhen: { flexShrink: 1, color: colors.textMuted, fontSize: fontSize.caption },
+  pill: { flexShrink: 0, fontSize: fontSize.caption, fontWeight: weight.medium, overflow: 'hidden', paddingHorizontal: 8, paddingVertical: 2, borderRadius: radius.pill },
+  detailBar: { minHeight: 48, justifyContent: 'center', paddingHorizontal: spacing.sm, borderBottomWidth: 1, borderBottomColor: colors.border },
+  backButton: { paddingHorizontal: spacing.sm, paddingVertical: spacing.sm, alignSelf: 'flex-start' },
+  backText: { color: colors.accent, fontSize: fontSize.title },
+  detailContent: { padding: spacing.xl, paddingBottom: 60, maxWidth: 760 },
+  detailTitle: { flexShrink: 1, color: colors.text, fontSize: fontSize.heading, fontWeight: weight.strong },
+  detailTarget: { color: colors.textSecondary, fontSize: fontSize.body },
+  metaInline: { color: colors.textMuted, fontSize: fontSize.small },
+  actionsRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm, marginTop: spacing.lg },
+  sectionLabel: { color: colors.textMuted, fontSize: fontSize.small, fontWeight: weight.medium, marginTop: spacing.xl, marginBottom: spacing.sm },
+  prompt: { color: colors.text, fontSize: fontSize.body, lineHeight: 21, backgroundColor: colors.card, borderColor: colors.border, borderWidth: 1, borderRadius: radius.md, padding: spacing.md },
+  facts: { backgroundColor: colors.card, borderColor: colors.border, borderWidth: 1, borderRadius: radius.md, paddingHorizontal: spacing.md },
+  fact: { flexDirection: 'row', gap: spacing.md, paddingVertical: 10, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.border },
+  lastFact: { borderBottomWidth: 0 },
+  factLabel: { width: 72, color: colors.textMuted, fontSize: fontSize.small, paddingTop: 1 },
+  factValue: { color: colors.text, fontSize: fontSize.body },
+  factHint: { color: colors.textMuted, fontSize: fontSize.small, marginTop: 2, lineHeight: 17 },
+  runRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingVertical: 10, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.border },
+  runTime: { color: colors.text, fontSize: fontSize.body },
+  runError: { color: colors.textMuted, fontSize: fontSize.small, marginTop: 2 },
   card: { backgroundColor: colors.card, borderColor: colors.border, borderWidth: 1, borderRadius: 13, padding: spacing.md, marginBottom: spacing.md }, cardTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }, cardTitle: { color: colors.text, fontWeight: '600', fontSize: 15, flex: 1 }, badge: { fontSize: 11, overflow: 'hidden', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 10 }, badgeActive: { color: colors.running, backgroundColor: `${colors.running}20` }, badgeIdle: { color: colors.textMuted, backgroundColor: colors.bg },
-  node: { color: colors.accent, fontSize: 13, marginTop: spacing.xs }, task: { color: colors.textSecondary, fontSize: 13, lineHeight: 19, marginTop: spacing.sm }, meta: { color: colors.textMuted, fontSize: 11, marginTop: spacing.xs }, actions: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm, marginTop: spacing.md }, action: { borderWidth: 1, borderColor: colors.border, borderRadius: 7, paddingHorizontal: 11, paddingVertical: 7 }, actionText: { color: colors.textSecondary, fontSize: 12 }, danger: { borderColor: `${colors.failed}50` }, dangerText: { color: colors.failed, fontSize: 12 },
-  error: { color: colors.failed, marginHorizontal: spacing.lg, marginBottom: spacing.md, fontSize: 13 }, empty: { paddingVertical: 80, alignItems: 'center' }, emptyTitle: { color: colors.text, fontSize: 16, fontWeight: '600', marginBottom: spacing.sm }, muted: { color: colors.textMuted, fontSize: 13 },
+  meta: { color: colors.textMuted, fontSize: 11, marginTop: spacing.xs }, actions: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm, marginTop: spacing.md }, action: { borderWidth: 1, borderColor: colors.border, borderRadius: radius.md, paddingHorizontal: 14, paddingVertical: 8, alignItems: 'center' }, actionText: { color: colors.textSecondary, fontSize: fontSize.body }, danger: { borderColor: `${colors.failed}50` }, dangerText: { color: colors.failed, fontSize: fontSize.body },
+  error: { color: colors.failed, marginHorizontal: spacing.lg, marginBottom: spacing.md, fontSize: 13 }, empty: { paddingVertical: 64, paddingHorizontal: spacing.xl, alignItems: 'center' }, emptyTitle: { color: colors.text, fontSize: fontSize.title, fontWeight: weight.strong, marginBottom: spacing.sm }, emptyBody: { color: colors.textMuted, fontSize: 13, textAlign: 'center', lineHeight: 19, maxWidth: 300 }, muted: { color: colors.textMuted, fontSize: 13 },
   modalRoot: { flex: 1, backgroundColor: colors.bg }, modalHeader: { minHeight: 58, paddingHorizontal: spacing.lg, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderBottomWidth: 1, borderBottomColor: colors.border }, modalTitle: { color: colors.text, fontWeight: '600', fontSize: 16 }, link: { color: colors.accent, minWidth: 40 }, form: { padding: spacing.lg, paddingBottom: 60 }, field: { marginBottom: spacing.lg }, label: { color: colors.textMuted, fontSize: 12, marginBottom: spacing.sm }, input: { color: colors.text, backgroundColor: colors.card, borderColor: colors.border, borderWidth: 1, borderRadius: 9, paddingHorizontal: spacing.md, paddingVertical: 11 }, textarea: { minHeight: 100, textAlignVertical: 'top' },
-  nodePicker: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm }, nodeChoice: { borderRadius: 18, borderWidth: 1, borderColor: colors.border, paddingHorizontal: 12, paddingVertical: 8 }, nodeChoiceActive: { backgroundColor: colors.accent, borderColor: colors.accent }, nodeChoiceTextActive: { color: colors.bg, fontSize: 12, fontWeight: '600' }, segment: { flexDirection: 'row', borderWidth: 1, borderColor: colors.border, borderRadius: 9, overflow: 'hidden' }, segmentItem: { flex: 1, alignItems: 'center', paddingVertical: 10, backgroundColor: colors.card }, segmentActive: { backgroundColor: colors.accent }, segmentText: { color: colors.textMuted, fontSize: 12 }, segmentTextActive: { color: colors.bg, fontSize: 12, fontWeight: '600' }, weekdays: { flexDirection: 'row', justifyContent: 'space-between' }, day: { width: 38, height: 38, borderRadius: 19, borderWidth: 1, borderColor: colors.border, alignItems: 'center', justifyContent: 'center' }, dayActive: { backgroundColor: colors.accent, borderColor: colors.accent }, dayTextActive: { color: colors.bg, fontWeight: '600' },
-  run: { paddingVertical: spacing.md, borderBottomWidth: 1, borderBottomColor: colors.border, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }, runTask: { color: colors.textMuted, fontFamily: 'monospace', fontSize: 11 },
-  tabs: { flexDirection: 'row', borderWidth: 1, borderColor: colors.border, borderRadius: 9, overflow: 'hidden', marginHorizontal: spacing.lg, marginBottom: spacing.md },
+  nodePicker: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm }, nodeChoice: { borderRadius: 18, borderWidth: 1, borderColor: colors.border, paddingHorizontal: 12, paddingVertical: 8 }, nodeChoiceActive: { backgroundColor: colors.accent, borderColor: colors.accent }, nodeChoiceTextActive: { color: colors.onAccent, fontSize: 12, fontWeight: '600' }, segment: { flexDirection: 'row', borderWidth: 1, borderColor: colors.border, borderRadius: 9, overflow: 'hidden' }, segmentItem: { flex: 1, alignItems: 'center', paddingVertical: 10, backgroundColor: colors.card }, segmentActive: { backgroundColor: colors.accent }, segmentText: { color: colors.textMuted, fontSize: 12 }, segmentTextActive: { color: colors.onAccent, fontSize: 12, fontWeight: '600' }, weekdays: { flexDirection: 'row', justifyContent: 'space-between' }, day: { width: 38, height: 38, borderRadius: 19, borderWidth: 1, borderColor: colors.border, alignItems: 'center', justifyContent: 'center' }, dayActive: { backgroundColor: colors.accent, borderColor: colors.accent }, dayTextActive: { color: colors.onAccent, fontWeight: '600' },
+  run: { paddingVertical: spacing.md, borderBottomWidth: 1, borderBottomColor: colors.border, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   extRow: { borderTopWidth: 1, borderTopColor: colors.border, marginTop: spacing.md, paddingTop: spacing.md },
   extError: { color: colors.failed, fontSize: 11, marginTop: spacing.xs },
   linkDisabled: { opacity: 0.4 },
