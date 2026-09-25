@@ -181,3 +181,114 @@ export function rulesInfoText(fileName: string, web: boolean): string {
   const base = `这是节点工作目录里的 ${fileName}，节点每次开会话都会读它。保存会直接覆盖节点机器上的这个文件；文件名和位置由节点自己决定，这里改不了。`;
   return web ? `${base}阅读模式下双击任意内容，可跳到对应的源码行编辑。` : base;
 }
+
+// ── 手机 / 触屏(2026-09-26,Vincent 小米折叠屏 0.2.99:「好像编辑不了那个规则文件」) ─────────────
+// 原生端没有 DOM:阅读区的「双击跳源码」靠 data-md-line + dblclick 做不了。原生端改成:
+// MarkdownMessage 逐块报 onLayout(块 id、父块 id、行号、y、高) → 这里拼成相对阅读内容顶部的矩形 →
+// 双击时按手指的 y 找块。触摸点和阅读内容顶部都取 page 坐标(同一坐标系),不做任何换算。
+
+/** 一个渲染块的布局回报。y 相对父级:顶层块相对 MarkdownMessage 根,列表项相对所在的列表。 */
+export interface BlockLayout {
+  readonly id: string;
+  /** 列表项所在列表的 id;顶层块没有。 */
+  readonly parent?: string;
+  readonly start: number;
+  readonly end: number;
+  readonly y: number;
+  readonly height: number;
+}
+
+export interface BlockRect {
+  readonly start: number;
+  readonly end: number;
+  /** 相对 MarkdownMessage 根顶部。 */
+  readonly top: number;
+  readonly bottom: number;
+  /** 0 = 顶层块,1 = 列表项。 */
+  readonly depth: number;
+}
+
+/**
+ * 回报 → 绝对矩形。子块的 y 加上父块的 top;父块没报上来(还没布局 / 旧文档残留)的子块丢掉,
+ * 不猜它在哪。父子链有环也不会死循环(深度封顶)。
+ */
+export function resolveBlockRects(entries: Iterable<BlockLayout>): BlockRect[] {
+  const byId = new Map<string, BlockLayout>();
+  for (const e of entries) byId.set(e.id, e);
+  const out: BlockRect[] = [];
+  for (const e of byId.values()) {
+    let top = e.y;
+    let depth = 0;
+    let parentId = e.parent;
+    let ok = true;
+    while (parentId != null) {
+      const parent = byId.get(parentId);
+      if (!parent || depth > 8) { ok = false; break; }
+      top += parent.y;
+      depth++;
+      parentId = parent.parent;
+    }
+    if (!ok || !Number.isFinite(top) || !(e.height >= 0)) continue;
+    out.push({ start: e.start, end: e.end, top, bottom: top + e.height, depth });
+  }
+  return out.sort((a, b) => a.top - b.top || b.depth - a.depth);
+}
+
+/**
+ * 手指落在 y(相对 MarkdownMessage 根顶部)⇒ 跳哪几行。
+ *  - 落在块里:最深的那个(列表里点的是哪一项就跳哪一项,不是整张列表)。
+ *  - 落在两块之间的空隙:上面那一块(和编辑切回阅读时「光标所在块」同一个方向)。
+ *  - 在第一块上面:第一块。没有任何块:null(不跳)。
+ */
+export function blockAtY(rects: readonly BlockRect[], y: number): SourceLineRange | null {
+  if (!rects.length || !Number.isFinite(y)) return null;
+  let hit: BlockRect | null = null;
+  for (const r of rects) {
+    if (y >= r.top && y < r.bottom && (!hit || r.depth > hit.depth || (r.depth === hit.depth && r.bottom - r.top < hit.bottom - hit.top))) hit = r;
+  }
+  if (!hit) {
+    for (const r of rects) if (r.depth === 0 && r.top <= y && (!hit || r.top > hit.top)) hit = r;
+  }
+  if (!hit) hit = rects.reduce((a, b) => (b.top < a.top ? b : a));
+  return { start: hit.start, end: hit.end };
+}
+
+/** 两次轻触相隔多久以内算双击(毫秒)。Android 系统的 double-tap timeout 就是 300。 */
+export const DOUBLE_TAP_MS = 300;
+/** 两次轻触落点相距多远以内算同一处(dp)。 */
+export const DOUBLE_TAP_SLOP = 32;
+/** 按下到抬起移动超过它 = 在滑动,不算一次轻触(dp)。 */
+export const TAP_MOVE_SLOP = 10;
+
+export interface Tap { readonly t: number; readonly x: number; readonly y: number }
+
+/** 按下 → 抬起没怎么动,才是一次轻触(滚动阅读区的那一下不算)。 */
+export function isTap(down: { x: number; y: number }, up: { x: number; y: number }): boolean {
+  return Math.hypot(up.x - down.x, up.y - down.y) <= TAP_MOVE_SLOP;
+}
+
+/** 上一次轻触 prev 和这一次 cur 合起来是不是一次双击。 */
+export function isDoubleTap(prev: Tap | null, cur: Tap): boolean {
+  if (!prev) return false;
+  const dt = cur.t - prev.t;
+  return dt >= 0 && dt <= DOUBLE_TAP_MS && Math.hypot(cur.x - prev.x, cur.y - prev.y) <= DOUBLE_TAP_SLOP;
+}
+
+/**
+ * 工具条在这个宽度以下是「窄」的(手机竖屏):状态句挪到按钮下面单独一行(否则它要么占 120 宽把按钮挤到第三行,
+ * 要么被挤成一条缝、读取中 / 出错的说明看不见),双击提示不显示(ⓘ 里有)。
+ */
+export const RULES_TOOLBAR_NARROW_WIDTH = 560;
+
+export function rulesToolbarLayout(width: number): { statusOwnLine: boolean; showHint: boolean } {
+  // 还没量到(0)按宽算 = 以前的样子,不在桌面上先闪一下窄版。
+  const narrow = width > 0 && width < RULES_TOOLBAR_NARROW_WIDTH;
+  return { statusOwnLine: narrow, showHint: !narrow };
+}
+
+/** 全屏左侧目录要 260 宽:窗口窄于这个就不放目录(手机竖屏上目录会把正文挤成一条)。 */
+export const RULES_OUTLINE_MIN_WINDOW = 720;
+
+export function showRulesOutline(windowWidth: number, entries: number): boolean {
+  return entries > 0 && windowWidth >= RULES_OUTLINE_MIN_WINDOW;
+}

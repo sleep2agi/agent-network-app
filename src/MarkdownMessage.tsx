@@ -50,12 +50,13 @@ const NO_SRC: Src = () => ({});
 const WITH_SRC: Src = (start, end) => (start == null ? {} : ({ dataSet: { mdLine: String(start), mdEnd: String(end ?? start) } } as object));
 
 // 表格三种布局(table-layout.ts):web 横向滚动网格;原生 ≤2 列自适应网格;原生 ≥3 列每行一张卡。
-function TableBlock({ rows, rowLines, src = NO_SRC }: { rows: string[][]; rowLines?: number[]; src?: Src }) {
+// rootProps:挂在表格最外层元素上(规则文件原生阅读区用它报块布局)。
+function TableBlock({ rows, rowLines, src = NO_SRC, rootProps }: { rows: string[][]; rowLines?: number[]; src?: Src; rootProps?: object }) {
   const columns = rows.reduce((max, row) => Math.max(max, row.length), 0);
   const layout = tableLayoutFor(columns, NATIVE);
   if (layout === 'stacked') {
     return (
-      <View style={styles.tableStack}>
+      <View style={styles.tableStack} {...rootProps}>
         {stackedRows(rows).map((cells, rowIndex) => (
           <View key={rowIndex} style={styles.tableCard} {...src(rowLines?.[rowIndex + 1])}>
             {cells.map((cell, cellIndex) => (
@@ -70,7 +71,7 @@ function TableBlock({ rows, rowLines, src = NO_SRC }: { rows: string[][]; rowLin
     );
   }
   const cellStyle = layout === 'grid-flex' ? styles.tableCellFlex : styles.tableCell;
-  return (
+  const grid = (
     <WideBlock style={styles.table}>
       <View>
         {rows.map((row, rowIndex) => (
@@ -83,6 +84,7 @@ function TableBlock({ rows, rowLines, src = NO_SRC }: { rows: string[][]; rowLin
       </View>
     </WideBlock>
   );
+  return rootProps && Object.keys(rootProps).length ? <View {...rootProps}>{grid}</View> : grid;
 }
 
 function CodeBlock({ text, srcProps }: { text: string; srcProps?: object }) {
@@ -105,22 +107,34 @@ function CodeBlock({ text, srcProps }: { text: string; srcProps?: object }) {
 
 // onHeadingLayout:第 n 个标题(全文序号,0 起)相对本组件顶部的 y —— 规则文件全屏目录靠它滚到标题。
 // sourceLines:每个块(列表逐项、表格逐行)挂上它在原文里的行号,规则文件阅读模式双击跳源码用。
-// 两个都不传就和以前一样,聊天里不多挂 onLayout、不多挂属性。
-export default function MarkdownMessage({ children, onHeadingLayout, sourceLines }: { children: string; onHeadingLayout?: (index: number, y: number) => void; sourceLines?: boolean }) {
+// onBlockLayout:原生端的同一件事(没有 DOM、读不到 data-md-line):顶层块和列表项各报一次 onLayout,
+// 带行号;列表项的 y 相对所在列表(parent)。node-rules-view.ts resolveBlockRects / blockAtY 用它按手指位置找块。
+// 都不传就和以前一样,聊天里不多挂 onLayout、不多挂属性。
+export type MarkdownBlockLayout = { id: string; parent?: string; start: number; end: number; y: number; height: number };
+export default function MarkdownMessage({ children, onHeadingLayout, sourceLines, onBlockLayout }: {
+  children: string; onHeadingLayout?: (index: number, y: number) => void; sourceLines?: boolean; onBlockLayout?: (layout: MarkdownBlockLayout) => void;
+}) {
   let headingIndex = 0;
   const src = sourceLines ? WITH_SRC : NO_SRC;
+  // 报块布局的 onLayout;没有 onBlockLayout 或块没有行号时返回空对象(一个属性都不多挂)。
+  const lay = (id: string, start?: number, end?: number, parent?: string) => (onBlockLayout && start != null
+    ? { onLayout: (event: any) => { const { y, height } = event.nativeEvent.layout; onBlockLayout({ id, parent, start, end: end ?? start, y, height }); } }
+    : {});
   return (
     <View style={styles.root}>
       {parseMarkdownBlocks(children).map((block, index) => {
+        const id = `b${index}`;
         if (block.kind === 'heading') {
           const nth = headingIndex++;
-          return <Text key={index} {...src(block.line, block.endLine)} onLayout={onHeadingLayout ? (event) => onHeadingLayout(nth, event.nativeEvent.layout.y) : undefined} style={[styles.text, styles.heading, { fontSize: Math.max(15, 20 - block.level) }]}><Inline text={block.text} /></Text>;
+          const report = lay(id, block.line, block.endLine) as { onLayout?: (event: any) => void };
+          const onLayout = onHeadingLayout || report.onLayout ? (event: any) => { if (onHeadingLayout) onHeadingLayout(nth, event.nativeEvent.layout.y); report.onLayout?.(event); } : undefined;
+          return <Text key={index} {...src(block.line, block.endLine)} onLayout={onLayout} style={[styles.text, styles.heading, { fontSize: Math.max(15, 20 - block.level) }]}><Inline text={block.text} /></Text>;
         }
-        if (block.kind === 'list') return <View key={index} style={styles.block}>{block.items.map((item, itemIndex) => <View key={itemIndex} style={styles.listRow} {...src(block.itemLines?.[itemIndex])}><Text style={styles.marker}>{block.ordered ? `${itemIndex + 1}.` : '•'}</Text><Text style={[styles.text, styles.listText]}><Inline text={item} /></Text></View>)}</View>;
-        if (block.kind === 'quote') return <View key={index} style={styles.quote} {...src(block.line, block.endLine)}><Text style={styles.text}><Inline text={block.text} /></Text></View>;
-        if (block.kind === 'code') return <CodeBlock key={index} text={block.text} srcProps={src(block.line, block.endLine)} />;
-        if (block.kind === 'table') return <TableBlock key={index} rows={block.rows} rowLines={block.rowLines} src={src} />;
-        return <Text key={index} {...src(block.line, block.endLine)} style={[styles.text, styles.block]}><Inline text={block.text} /></Text>;
+        if (block.kind === 'list') return <View key={index} style={styles.block} {...lay(id, block.line, block.endLine)}>{block.items.map((item, itemIndex) => <View key={itemIndex} style={styles.listRow} {...src(block.itemLines?.[itemIndex])} {...lay(`${id}.${itemIndex}`, block.itemLines?.[itemIndex], block.itemLines?.[itemIndex], id)}><Text style={styles.marker}>{block.ordered ? `${itemIndex + 1}.` : '•'}</Text><Text style={[styles.text, styles.listText]}><Inline text={item} /></Text></View>)}</View>;
+        if (block.kind === 'quote') return <View key={index} style={styles.quote} {...src(block.line, block.endLine)} {...lay(id, block.line, block.endLine)}><Text style={styles.text}><Inline text={block.text} /></Text></View>;
+        if (block.kind === 'code') return <CodeBlock key={index} text={block.text} srcProps={{ ...src(block.line, block.endLine), ...lay(id, block.line, block.endLine) }} />;
+        if (block.kind === 'table') return <TableBlock key={index} rows={block.rows} rowLines={block.rowLines} src={src} rootProps={lay(id, block.line, block.endLine)} />;
+        return <Text key={index} {...src(block.line, block.endLine)} {...lay(id, block.line, block.endLine)} style={[styles.text, styles.block]}><Inline text={block.text} /></Text>;
       })}
     </View>
   );

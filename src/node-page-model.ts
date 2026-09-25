@@ -35,8 +35,36 @@ export const NODE_PAGE_COMPACT_WIDTH = 640;
  */
 export const NODE_PAGE_CONTENT_MAX_WIDTH = 1080;
 
-/** 规则文件编辑框的最矮高度;窗口更高时编辑框吃掉剩下的竖向空间。 */
-export const NODE_RULES_EDITOR_MIN_HEIGHT = 320;
+/**
+ * 规则文件阅读区 / 编辑框的最矮高度;窗口更高时吃掉剩下的竖向空间。
+ * 以前是 320,而且整页跟着一起滚:手机上(小米折叠屏外屏 + 系统字号)页头 + 工具条 + 320 装不下 ⇒
+ * 整页可滚,Android 上嵌套的阅读区又接不到手势(外层 ScrollView 抢走)⇒ 手指一滑,滚走的是整页,
+ * 「阅读/编辑」和「保存」一起滚出屏幕(2026-09-26 Vincent「好像编辑不了那个规则文件」)。
+ * 现在规则分区整页不滚(nodePageScrolls),这个值只防止压扁;它要小到手机键盘弹起后也放得下。
+ */
+export const NODE_RULES_EDITOR_MIN_HEIGHT = 120;
+
+/**
+ * 这个分区要不要包在整页的 ScrollView 里。规则文件不要:它自己的阅读区 / 编辑框各自滚动,
+ * 工具条(阅读/编辑、保存)钉在上面永远看得见;嵌套滚动在 Android 上外层抢手势。
+ */
+export function nodePageScrolls(section: NodeSectionKey): boolean {
+  return section !== 'rules';
+}
+
+/**
+ * 页面上方哪些常驻块要显示。规则文件分区正在打字(软键盘弹起)时收起头部卡片和分区标题,
+ * 把高度让给编辑框 —— 手机竖屏 + 键盘,不收的话编辑框只剩两三行。
+ */
+export function nodePageChrome(input: { section: NodeSectionKey; keyboardVisible: boolean }): { headerCard: boolean; sectionTitle: boolean } {
+  const typing = input.section === 'rules' && input.keyboardVisible;
+  return { headerCard: !typing, sectionTitle: !typing };
+}
+
+/** 离开当前分区 / 返回上一页之前要不要先问「放弃未保存的修改?」。 */
+export function leaveNeedsConfirm(input: { section: NodeSectionKey; rulesDirty: boolean }): boolean {
+  return input.section === 'rules' && input.rulesDirty;
+}
 
 /** 右栏宽 paneWidth、左右内边距 padding 时,内容列实际多宽。 */
 export function nodePageContentWidth(paneWidth: number, padding: number): number {
