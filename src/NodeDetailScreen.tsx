@@ -67,7 +67,8 @@ import { rulesFileTarget } from './node-rules';
 import NodeModelSection from './NodeModelSection';
 import NodeSkillsSection from './NodeSkillsSection';
 import NodeFilesSection from './NodeFilesSection';
-import { NODE_PAGE_COMPACT_WIDTH, NODE_PAGE_CONTENT_MAX_WIDTH, NODE_SECTIONS, factText, headerChips, nodePageContentWidth, overviewFactColumns, resolveActiveSection, splitOverviewFacts, visibleNodeSections, type NodeSectionKey } from './node-page-model';
+import { filesTreeMode, nodePageColumnMaxWidth } from './node-files-tree';
+import { NODE_PAGE_COMPACT_WIDTH, NODE_SECTIONS, factText, headerChips, nodePageContentWidth, overviewFactColumns, resolveActiveSection, splitOverviewFacts, visibleNodeSections, type NodeSectionKey } from './node-page-model';
 
 const POLL_MS = 10_000; // same cadence as AgentsScreen — hub-friendly, felt-live
 
@@ -184,6 +185,9 @@ export default function NodeDetailScreen({
   const [paneWidth, setPaneWidth] = useState(0);
   const contentPadding = compact ? spacing.lg : spacing.xl;
   const factColumns = compact ? 1 : overviewFactColumns(nodePageContentWidth(paneWidth || width, contentPadding));
+  // 项目文件夹右侧文件树(node-files-tree.ts filesTreeMode):按内容列**封顶前**能拿到的宽度决定并排 / 抽屉;
+  // 手机单栏(窄且不是安卓双栏)不挂,手机布局不变。右栏没量到之前按抽屉算,不先挂出来再收回去。
+  const filesTree = filesTreeMode({ contentWidth: paneWidth > 0 ? paneWidth - 2 * contentPadding : 0, phone: compact && layoutWidth === undefined });
   // Force re-render on theme switch. `styles` reassigns via live binding
   // (see app-styles.ts header) but child style props are captured at
   // render — a manual bump is how the sibling screens do it too.
@@ -449,7 +453,7 @@ export default function NodeDetailScreen({
       <View>
         <SectionTitle title="项目文件夹" />
         {/* 节点工作目录的只读文件树。有 nodes 行按 node_id 发(rulesTarget 带权威 node_id),否则按 alias。 */}
-        <NodeFilesSection cfg={cfg} alias={alias} node={rulesTarget} session={s} />
+        <NodeFilesSection cfg={cfg} alias={alias} node={rulesTarget} session={s} treeMode={filesTree} />
       </View>
     );
     if (section === 'tasks') return (
@@ -500,7 +504,7 @@ export default function NodeDetailScreen({
             原来 maxWidth 880 贴左,2000px 宽窗右边空一大片)。flexGrow 让规则文件编辑框能吃满剩余高度。 */}
         <ScrollView style={{ flex: 1 }} onLayout={e => setPaneWidth(e.nativeEvent.layout.width)}
           contentContainerStyle={{ flexGrow: 1, padding: contentPadding, paddingBottom: section === 'rules' ? contentPadding : spacing.xl * 2 }}>
-          <View style={{ flexGrow: 1, width: '100%', maxWidth: NODE_PAGE_CONTENT_MAX_WIDTH, alignSelf: 'center' }} testID="node-page-content">
+          <View style={{ flexGrow: 1, width: '100%', maxWidth: nodePageColumnMaxWidth(section, filesTree), alignSelf: 'center' }} testID="node-page-content">
             {content}
           </View>
         </ScrollView>

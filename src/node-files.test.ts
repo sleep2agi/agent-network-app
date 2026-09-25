@@ -156,7 +156,7 @@ try {
   ck('能力不够时不发请求:先判 filesSupport 再建浏览器', /const support = filesSupport\(s\);[\s\S]{0,400}if \(support\.kind !== 'capable' \|\| !target\)[\s\S]{0,400}return <FilesBrowser/.test(comp));
   ck('凭据文件点开不发请求', /if \(secret\) \{ setFile\(\{ path, name, kind: 'secret' \}\);[^\n]*return; \}/.test(comp));
   const screen = readFileSync(new URL('./NodeDetailScreen.tsx', import.meta.url), 'utf8');
-  ck('节点页「项目文件夹」分区挂载', /section === 'files'[\s\S]{0,400}<NodeFilesSection cfg=\{cfg\} alias=\{alias\} node=\{rulesTarget\} session=\{s\} \/>/.test(screen));
+  ck('节点页「项目文件夹」分区挂载', /section === 'files'[\s\S]{0,400}<NodeFilesSection cfg=\{cfg\} alias=\{alias\} node=\{rulesTarget\} session=\{s\}[^>]*\/>/.test(screen));
   ck('只挂载一次', (screen.match(/<NodeFilesSection /g) ?? []).length === 1);
 }
 
