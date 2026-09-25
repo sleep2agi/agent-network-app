@@ -1,0 +1,41 @@
+desktop v0.2.100 — 聊天链接可点、不再被下划线吃掉 + 安卓折叠屏横屏宽屏 + 更新走 ModelScope 兜底
+================================================================================
+
+A. 本版内容(0.2.99 版本号提交 #373 之后 main 上合入的 PR + 本 PR)
+--------------------------------------------------------------------------------
+  #374 ModelScope 镜像:发版后把安装包逐字节镜像到 ModelScope(国内可直连),
+       tauri.conf.json 的更新源加第二个 endpoint(ModelScope 上改写过 URL 的 latest.json,签名不变)。
+       从 0.2.100 起的桌面端在 anet.sh 连不上时会自动走这个镜像。
+  #375 SOP:发布后手动 dispatch modelscope-mirror.yml(release: published 由 github-actions[bot]
+       触发时不会再触发下游 workflow)。
+  #376 聊天 Markdown:裸链接(http(s)://、www.)自动识别为可点击链接(桌面 Tauri opener / 移动端 Linking);
+       链接、行内代码里的 `_`、`*` 不再当强调记号;`_` 遵守 CommonMark 词内规则(snake_case 原样);
+       链接边界按 GFM(末尾 . , : ! ? 等不算、配对括号保留)并在第一个中文字符 / 全角标点处结束。
+       同一个渲染器覆盖聊天、规则文件阅读模式、技能、任务、文件预览;通知正文的纯文本化也不再吃下划线。
+       markdown-model.test.ts 9 → 51 条;11 个变异全部抓到。
+  本 PR(版本号 + 方向锁)
+       app.json "orientation": "portrait" → "default"。竖屏锁让安卓在展开的折叠屏横屏时把应用
+       letterbox 成中间一条手机宽的窄栏(两边模糊壁纸),0.2.98 的双栏布局拿不到宽度。
+       prebuild 后 MainActivity screenOrientation = "unspecified";iPhone 多了横屏,iPad 本来就四向、
+       UIRequiresFullScreen 仍为 false。android-build.yml 用 aapt2 xmltree 检查产物:任何非 -1 的
+       screenOrientation 或 resizeableActivity=false 直接红(用 0.2.99 的 APK 见证过变红)。
+       版本号 8 个文件 → 0.2.100,android.versionCode 2099 → 2100。
+
+B. 第一次出现三位数 patch:版本比较审计(全部按数值比较,0.2.100 > 0.2.99 成立)
+--------------------------------------------------------------------------------
+  桌面更新器   tauri-plugin-updater 2.10.1,未设 version_comparator → `release.version > current_version`
+               (semver::Version,数值比较)。
+  安卓更新     src/android-update-core.ts compareVersions:三段 Number 比较;实测 (0.2.100, 0.2.99) → 1。
+               androidVersionCode('0.2.100') = 2100 > 2099。
+  镜像 newest  scripts/modelscope-mirror.mjs compareDesktopVersions:core 三段数值;实测在
+               [0.2.99, 0.2.100, 0.2.98] 中选 desktop-v0.2.100。
+  anet.sh      agent-network docs-site/api/desktop-update-latest.mjs selectDesktopRelease(origin/main):
+               同一套数值比较;实测选 desktop-v0.2.100(草稿 0.2.101 被排除)。
+  字符串比较陷阱 '0.2.100' > '0.2.99' 为 false —— 上面四处都没有用它。
+
+C. 验证边界(如实)
+--------------------------------------------------------------------------------
+  #376 的真机外观在 Chromium(web 导出 + 模拟 Tauri)里看过,浅色 / 深色都看了;没有在安卓 WebView / 原生 Text 上截图。
+  横屏:web 导出在 844×390 看过,Android UA 进双栏(列表 320 + 聊天 524)、iOS UA 单栏,都能用。
+  竖直空间只有约 390 dp,横屏下偏紧,这是预期的。没有加按设备的方向锁。
+  方向锁的真正效果(折叠屏展开横屏不再 letterbox)只能在真机上确认。
