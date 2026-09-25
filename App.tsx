@@ -66,6 +66,8 @@ import { activateHubProfile, LOCAL_HUB_PROFILE_ID, localHubStatus, startLocalHub
 import UnreadBadgeFixtureScreen, { readWebFixture } from './src/UnreadBadgeFixtureScreen';
 import { chooseAppLayout, paneSelectionFor, twoPaneListWidth } from './src/wide-layout';
 import { bumpLayoutGeneration } from './src/layout-handoff';
+import MobileNavRail from './src/MobileNavRail';
+import { contentWidthBesideRail, navActiveKey, navChromeFor, railShowsBrand, screenForNavPress } from './src/nav-chrome';
 
 type Screen =
   | { name: 'login' }
@@ -224,7 +226,7 @@ function AppRoot() {
   // RN's SafeAreaView only covers iOS; Android edge-to-edge draws the
   // tab bar under the gesture bar (Vincent tg 802) — pad by the real inset.
   const insets = useSafeAreaInsets();
-  const { width } = useWindowDimensions();
+  const { width, height } = useWindowDimensions();
   const tauriDesktop = Platform.OS === 'web' && !!(globalThis as any).__TAURI_INTERNALS__;
   // Layout choice lives in src/wide-layout.ts (pure + tested). Desktop is still exactly
   // `tauriDesktop && width >= 860`; Android at ≥ 700 dp (unfolded foldables, tablets)
@@ -247,6 +249,18 @@ function AppRoot() {
     lastLayout.current = layout;
   }
   const twoPaneSelection = layout === 'twoPane' ? paneSelectionFor(screen) : null;
+  // Navigation chrome (src/nav-chrome.ts): the two-pane gets a left rail like the desktop
+  // app (Vincent 0.2.100: 「下面那一栏放在左边会好一点」); the phone keeps its bottom tabs.
+  const navChrome = navChromeFor(layout, screen.name);
+  const navActive = navActiveKey(screen.name);
+  const railShown = navChrome === 'rail';
+  // Width to the right of the rail; the two panes split this, not the whole window.
+  const paneAreaWidth = railShown ? contentWidthBesideRail(width, insets.left, insets.right) : width;
+  const paneListWidth = twoPaneListWidth(paneAreaWidth);
+  const onNavPress = (key: string) => {
+    const next = screenForNavPress(key, screen.name);
+    if (next) setScreen(next as Screen);
+  };
   const dedicatedChatWindow = tauriDesktop && !!initialChat;
   // 0.2.76 系统栏托盘:只有主窗口接(分离聊天窗/工作区窗不接,否则一个 app 三个托盘项)。
   // 托盘点某个 agent → 打开那个会话。
@@ -397,15 +411,14 @@ function AppRoot() {
     return () => sub.remove();
   }, [screen]);
 
-  // Bottom tab bar, shared by the phone stack and the Android two-pane (where the
-  // list is always showing, so 'agents' is the active tab).
+  // Phone bottom tab bar. The Android two-pane shows MobileNavRail instead (navChrome).
   const mobileTabBar = (activeName: string) => (
     <View style={[styles.tabBar, { paddingBottom: tabBarInset }]}>
       {MOBILE_TABS.map(tab => (
         <Pressable
           key={tab.key}
           style={styles.tab}
-          onPress={() => setScreen({ name: tab.key } as Screen)}
+          onPress={() => onNavPress(tab.key)}
         >
           <Ionicons
             name={activeName === tab.key ? tab.iconActive : tab.icon}
@@ -533,147 +546,165 @@ function AppRoot() {
           }}
         />
         )
-      ) : twoPaneSelection ? (
-        // Android wide (unfolded foldable / tablet): phone-sized list on the left,
-        // the same phone screens on the right. Navigation state is the same
-        // `screen` value the phone stack uses, so folding back just re-reads it.
+      ) : (
+        // One shell for phone and two-pane: [rail slot | content], then the bottom tab
+        // slot. The rail and the tab bar are the only things that change on fold/unfold,
+        // so a screen that renders the same in both layouts (定时任务 / 服务器 / 设置 …)
+        // keeps its tree position and its state (scroll, inputs) across the switch.
         <>
-          <View style={[styles.twoPane, { paddingLeft: insets.left, paddingRight: insets.right }]} testID="android-two-pane">
-            <View style={[styles.twoPaneList, { width: twoPaneListWidth(width) }]} testID="two-pane-list">
-              <AgentsScreen
-                cfg={cfg}
-                selectedAlias={twoPaneSelection.selectedAlias}
-                onOpenChat={alias => setScreen({ name: 'chat', alias })}
-                onOpenPicker={() => setScreen({ name: 'picker' })}
-                onOpenNodeDetail={alias => setScreen({ name: 'nodeDetail', alias })}
-                pinnedAliases={mobilePins}
-                onTogglePin={toggleMobilePin}
+          <View style={styles.navShell} testID="nav-shell">
+            {railShown ? (
+              <MobileNavRail
+                tabs={MOBILE_TABS}
+                active={navActive}
+                onSelect={onNavPress}
+                insetLeft={insets.left}
+                insetBottom={tabBarInset}
+                showBrand={railShowsBrand(height)}
               />
-            </View>
-            <View style={styles.twoPaneDetail} testID="two-pane-detail">
-              {screen.name === 'chat' ? (
+            ) : null}
+            <View style={[styles.navContent, railShown && { paddingRight: insets.right }]}>
+              {twoPaneSelection ? (
+                // Android wide (unfolded foldable / tablet): phone-sized list on the left,
+                // the same phone screens on the right. Navigation state is the same
+                // `screen` value the phone stack uses, so folding back just re-reads it.
+                // Safe-area insets: the rail takes the left one, navContent the right one.
+                <View style={styles.twoPane} testID="android-two-pane">
+                  <View style={[styles.twoPaneList, { width: paneListWidth }]} testID="two-pane-list">
+                    <AgentsScreen
+                      cfg={cfg}
+                      selectedAlias={twoPaneSelection.selectedAlias}
+                      onOpenChat={alias => setScreen({ name: 'chat', alias })}
+                      onOpenPicker={() => setScreen({ name: 'picker' })}
+                      onOpenNodeDetail={alias => setScreen({ name: 'nodeDetail', alias })}
+                      pinnedAliases={mobilePins}
+                      onTogglePin={toggleMobilePin}
+                    />
+                  </View>
+                  <View style={styles.twoPaneDetail} testID="two-pane-detail">
+                    {screen.name === 'chat' ? (
+                      <ChatScreen
+                        key={`chat:${screen.alias}`}
+                        cfg={cfg}
+                        alias={screen.alias}
+                        onBack={() => setScreen({ name: 'agents' })}
+                        hideBack
+                        onOpenNodeSettings={() => setScreen({ name: 'nodeInfo', alias: screen.alias })}
+                        pinned={mobilePins.includes(screen.alias)}
+                        onTogglePin={() => toggleMobilePin(screen.alias)}
+                      />
+                    ) : screen.name === 'nodeInfo' ? (
+                      <NodeDetailScreen key={`nodeInfo:${screen.alias}`} cfg={cfg} alias={screen.alias} onBack={() => setScreen({ name: 'chat', alias: screen.alias })} readOnly layoutWidth={paneAreaWidth - paneListWidth} touch />
+                    ) : screen.name === 'nodeDetail' ? (
+                      <NodeDetailScreen key={`nodeDetail:${screen.alias}`} cfg={cfg} alias={screen.alias} onBack={() => setScreen({ name: 'agents' })} layoutWidth={paneAreaWidth - paneListWidth} touch />
+                    ) : (
+                      <View style={styles.twoPaneEmpty}>
+                        <Ionicons name="chatbubbles-outline" size={52} color={colors.textMuted} />
+                        <Text style={styles.twoPaneEmptyTitle}>选择一个 agent 开始聊天</Text>
+                        <Text style={styles.twoPaneEmptyHint}>长按列表里的 agent 查看节点详情</Text>
+                      </View>
+                    )}
+                  </View>
+                </View>
+              ) : screen.name === 'chat' ? (
                 <ChatScreen
-                  key={`chat:${screen.alias}`}
                   cfg={cfg}
                   alias={screen.alias}
                   onBack={() => setScreen({ name: 'agents' })}
-                  hideBack
                   onOpenNodeSettings={() => setScreen({ name: 'nodeInfo', alias: screen.alias })}
                   pinned={mobilePins.includes(screen.alias)}
                   onTogglePin={() => toggleMobilePin(screen.alias)}
                 />
               ) : screen.name === 'nodeInfo' ? (
-                <NodeDetailScreen key={`nodeInfo:${screen.alias}`} cfg={cfg} alias={screen.alias} onBack={() => setScreen({ name: 'chat', alias: screen.alias })} readOnly layoutWidth={width - twoPaneListWidth(width)} touch />
+                <NodeDetailScreen cfg={cfg} alias={screen.alias} onBack={() => setScreen({ name: 'chat', alias: screen.alias })} readOnly />
               ) : screen.name === 'nodeDetail' ? (
-                <NodeDetailScreen key={`nodeDetail:${screen.alias}`} cfg={cfg} alias={screen.alias} onBack={() => setScreen({ name: 'agents' })} layoutWidth={width - twoPaneListWidth(width)} touch />
+                // issue #8 row 4 (V1) — long-press an agent row in AgentsScreen
+                // opens this. Back returns to agents. Rendered as its own screen
+                // (not a tab) so the tab bar doesn't compete for the header slot.
+                <NodeDetailScreen
+                  cfg={cfg}
+                  alias={screen.alias}
+                  onBack={() => setScreen({ name: 'agents' })}
+                />
+              ) : screen.name === 'picker' ? (
+                // #338 RFC-026 §9.4 — modal-style screen, hides tab bar to keep
+                // the wizard flow focused. System back / on-screen back returns
+                // to the agents tab.
+                <HostSupervisorPickerScreen
+                  cfg={cfg}
+                  onBack={() => setScreen({ name: 'agents' })}
+                  // #338 wizard rest (Plan B) — replaces the previous Alert TODO
+                  // with a real navigation into the create-node wizard.
+                  onPicked={d => setScreen({ name: 'wizard', daemon: d })}
+                />
+              ) : screen.name === 'wizard' ? (
+                // #338 wizard rest — multi-step create-node form. Back returns
+                // to picker (to re-pick daemon); Exit (after done / cancel)
+                // returns to Agents.
+                <CreateNodeWizardScreen
+                  cfg={cfg}
+                  daemon={screen.daemon}
+                  onBack={() => setScreen({ name: 'picker' })}
+                  onExit={() => setScreen({ name: 'agents' })}
+                />
+              ) : screen.name === 'taskDetail' ? (
+                // Task detail — full-screen (no tab bar), matches the mobile
+                // two-level pattern: list → detail → back. Hardware back and
+                // the on-screen chevron both return to the tasks tab.
+                <TaskDetailScreen
+                  cfg={cfg}
+                  taskId={screen.taskId}
+                  onBack={() => setScreen({ name: 'tasks' })}
+                />
+              ) : screen.name === 'logs' ? (
+                // Row 6 — network event stream (SSE). Full-screen leaf reached
+                // from the Server tab's "查看事件流" button. Same routing shape
+                // as taskDetail. Back returns to Server.
+                <LogsScreen
+                  cfg={cfg}
+                  onBack={() => setScreen({ name: 'server' })}
+                />
               ) : (
-                <View style={styles.twoPaneEmpty}>
-                  <Ionicons name="chatbubbles-outline" size={52} color={colors.textMuted} />
-                  <Text style={styles.twoPaneEmptyTitle}>选择一个 agent 开始聊天</Text>
-                  <Text style={styles.twoPaneEmptyHint}>长按列表里的 agent 查看节点详情</Text>
+                <View style={{ flex: 1 }}>
+                  {screen.name === 'tasks' ? (
+                    <TasksScreen
+                      cfg={cfg}
+                      onOpenTask={taskId => setScreen({ name: 'taskDetail', taskId })}
+                    />
+                  ) : screen.name === 'scheduled' ? (
+                    <ScheduledTasksScreen cfg={cfg} />
+                  ) : screen.name === 'messages' ? (
+                    <MessagesScreen cfg={cfg} />
+                  ) : screen.name === 'server' ? (
+                    <ServerScreen
+                      cfg={cfg}
+                      onOpenLogs={() => setScreen({ name: 'logs' })}
+                    />
+                  ) : screen.name === 'settings' ? (
+                    <SettingsScreen
+                      cfg={cfg}
+                      onClose={() => setScreen({ name: 'agents' })}
+                      onLogout={removeActiveProfile}
+                      onAddAccount={() => { setReauthProfile(null); setScreen({ name: 'login' }); }}
+                      onSwitchProfile={activateProfile}
+                      onReauthProfile={requestProfileReauth}
+                      onLocalDataDeleted={finishLocalDataDeletion}
+                    />
+                  ) : (
+                    <AgentsScreen
+                      cfg={cfg}
+                      onOpenChat={alias => setScreen({ name: 'chat', alias })}
+                      onOpenPicker={() => setScreen({ name: 'picker' })}
+                      onOpenNodeDetail={alias => setScreen({ name: 'nodeDetail', alias })}
+                      pinnedAliases={mobilePins}
+                      onTogglePin={toggleMobilePin}
+                    />
+                  )}
                 </View>
               )}
             </View>
           </View>
-          {mobileTabBar('agents')}
-        </>
-      ) : screen.name === 'chat' ? (
-        <ChatScreen
-          cfg={cfg}
-          alias={screen.alias}
-          onBack={() => setScreen({ name: 'agents' })}
-          onOpenNodeSettings={() => setScreen({ name: 'nodeInfo', alias: screen.alias })}
-          pinned={mobilePins.includes(screen.alias)}
-          onTogglePin={() => toggleMobilePin(screen.alias)}
-        />
-      ) : screen.name === 'nodeInfo' ? (
-        <NodeDetailScreen cfg={cfg} alias={screen.alias} onBack={() => setScreen({ name: 'chat', alias: screen.alias })} readOnly />
-      ) : screen.name === 'nodeDetail' ? (
-        // issue #8 row 4 (V1) — long-press an agent row in AgentsScreen
-        // opens this. Back returns to agents. Rendered as its own screen
-        // (not a tab) so the tab bar doesn't compete for the header slot.
-        <NodeDetailScreen
-          cfg={cfg}
-          alias={screen.alias}
-          onBack={() => setScreen({ name: 'agents' })}
-        />
-      ) : screen.name === 'picker' ? (
-        // #338 RFC-026 §9.4 — modal-style screen, hides tab bar to keep
-        // the wizard flow focused. System back / on-screen back returns
-        // to the agents tab.
-        <HostSupervisorPickerScreen
-          cfg={cfg}
-          onBack={() => setScreen({ name: 'agents' })}
-          // #338 wizard rest (Plan B) — replaces the previous Alert TODO
-          // with a real navigation into the create-node wizard.
-          onPicked={d => setScreen({ name: 'wizard', daemon: d })}
-        />
-      ) : screen.name === 'wizard' ? (
-        // #338 wizard rest — multi-step create-node form. Back returns
-        // to picker (to re-pick daemon); Exit (after done / cancel)
-        // returns to Agents.
-        <CreateNodeWizardScreen
-          cfg={cfg}
-          daemon={screen.daemon}
-          onBack={() => setScreen({ name: 'picker' })}
-          onExit={() => setScreen({ name: 'agents' })}
-        />
-      ) : screen.name === 'taskDetail' ? (
-        // Task detail — full-screen (no tab bar), matches the mobile
-        // two-level pattern: list → detail → back. Hardware back and
-        // the on-screen chevron both return to the tasks tab.
-        <TaskDetailScreen
-          cfg={cfg}
-          taskId={screen.taskId}
-          onBack={() => setScreen({ name: 'tasks' })}
-        />
-      ) : screen.name === 'logs' ? (
-        // Row 6 — network event stream (SSE). Full-screen leaf reached
-        // from the Server tab's "查看事件流" button. Same routing shape
-        // as taskDetail. Back returns to Server.
-        <LogsScreen
-          cfg={cfg}
-          onBack={() => setScreen({ name: 'server' })}
-        />
-      ) : (
-        <>
-          <View style={{ flex: 1 }}>
-            {screen.name === 'tasks' ? (
-              <TasksScreen
-                cfg={cfg}
-                onOpenTask={taskId => setScreen({ name: 'taskDetail', taskId })}
-              />
-            ) : screen.name === 'scheduled' ? (
-              <ScheduledTasksScreen cfg={cfg} />
-            ) : screen.name === 'messages' ? (
-              <MessagesScreen cfg={cfg} />
-            ) : screen.name === 'server' ? (
-              <ServerScreen
-                cfg={cfg}
-                onOpenLogs={() => setScreen({ name: 'logs' })}
-              />
-            ) : screen.name === 'settings' ? (
-              <SettingsScreen
-                cfg={cfg}
-                onClose={() => setScreen({ name: 'agents' })}
-                onLogout={removeActiveProfile}
-                onAddAccount={() => { setReauthProfile(null); setScreen({ name: 'login' }); }}
-                onSwitchProfile={activateProfile}
-                onReauthProfile={requestProfileReauth}
-                onLocalDataDeleted={finishLocalDataDeletion}
-              />
-            ) : (
-              <AgentsScreen
-                cfg={cfg}
-                onOpenChat={alias => setScreen({ name: 'chat', alias })}
-                onOpenPicker={() => setScreen({ name: 'picker' })}
-                onOpenNodeDetail={alias => setScreen({ name: 'nodeDetail', alias })}
-                pinnedAliases={mobilePins}
-                onTogglePin={toggleMobilePin}
-              />
-            )}
-          </View>
-          {mobileTabBar(screen.name)}
+          {navChrome === 'bottomTabs' ? mobileTabBar(navActive) : null}
         </>
       )}
     </SafeAreaView>

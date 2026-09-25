@@ -16,8 +16,10 @@ check('empty everything → default', pinScopeKey({}) === 'default');
 const app = readFileSync(new URL('../App.tsx', import.meta.url), 'utf8').replace(/\r\n/g, '\n');
 // Search for the end marker from the start marker: the Android two-pane branch (above the
 // phone branch) has its own nested `) : screen.name === 'nodeInfo' ? (`.
-const mobileChatStart = app.indexOf("\n      ) : screen.name === 'chat' ? (");
-const mobileChat = app.slice(mobileChatStart, app.indexOf("\n      ) : screen.name === 'nodeInfo' ? (", mobileChatStart));
+// Indentation-agnostic: the branches now sit inside the nav shell (rail slot | content).
+const mobileChatStart = app.search(/\n *\) : screen\.name === 'chat' \? \(/);
+const mobileChatEndRel = app.slice(mobileChatStart + 1).search(/\n *\) : screen\.name === 'nodeInfo' \? \(/);
+const mobileChat = app.slice(mobileChatStart, mobileChatEndRel < 0 ? -1 : mobileChatStart + 1 + mobileChatEndRel);
 check('mobile chat header gets pinned + onTogglePin', mobileChatStart > 0 && mobileChat.includes('<ChatScreen') && mobileChat.includes('pinned={mobilePins.includes(screen.alias)}') && mobileChat.includes('onTogglePin={() => toggleMobilePin(screen.alias)}'));
 const twoPaneStart = app.indexOf('testID="android-two-pane"');
 const twoPaneChat = app.slice(twoPaneStart, app.indexOf("screen.name === 'nodeInfo'", twoPaneStart));
