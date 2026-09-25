@@ -21,7 +21,7 @@ check('Grok shows as ONE plain choice that creates ACP (label "Grok", id grok-bu
   /id: 'grok-build-acp', label: 'Grok', /.test(entry('grok-build-acp')) && !entry('grok-build-acp').includes('advancedOf'));
 check('grok-build-cli is labelled 共存模式（实验性）', entry('grok-build-cli').includes("label: '共存模式（实验性）'"));
 check('grok-build-cli sits inside the Grok 「高级」 disclosure', entry('grok-build-cli').includes("advancedOf: 'grok-build-acp'"));
-for (const k of ['实验性', '打字', '钉', 'macOS', 'skills', 'ACP']) {
+for (const k of ['实验性', '打字', '钉', 'macOS', '不加载 .agents/skills 技能', 'ACP']) {
   check(`grok-build-cli warning mentions ${k}`, /note: '[^']*'/.test(entry('grok-build-cli')) && (entry('grok-build-cli').match(/note: '([^']*)'/)?.[1] ?? '').includes(k));
 }
 check('ACP row comes before the co-presence row in the table', table.indexOf("id: 'grok-build-acp'") < table.indexOf("id: 'grok-build-cli'"));

@@ -58,7 +58,7 @@ const RUNTIMES: WizardRuntime[] = [
   { id: 'codex-app-server', label: 'Codex（TUI 共存）', models: [] },
   // grok TUI 共存降为「实验性」(owner 2026-09-25):不进主列表,收在 Grok 行的「高级」折叠里,
   // 展开即显示限制。id 不变 ⇒ 已有的 grok-build-cli 节点不受影响。
-  { id: 'grok-build-cli', label: '共存模式（实验性）', models: [], advancedOf: 'grok-build-acp', note: '实验性：人在 TUI 输入框打字时网络任务会排队直到超时；grok 须钉在已验证版本（新版会拒绝启动）；macOS 需特殊处理；skills 按会话定格。要稳定接活用上面的 Grok（ACP，默认）。' },
+  { id: 'grok-build-cli', label: '共存模式（实验性）', models: [], advancedOf: 'grok-build-acp', note: '实验性：人在 TUI 输入框打字时网络任务会排队直到超时；grok 须钉在已验证版本（新版会拒绝启动）；macOS 需特殊处理；不加载 .agents/skills 技能。要稳定接活用上面的 Grok（ACP，默认）。' },
   // #199 —— hub / daemon / CLI 三处的 runtime 全集都是 7 个,只有这里是 6 个。
   // `opencode-cli` 出现在 agent-network/src/codex-copresence-profile.ts:223 的共存
   // profile 里。(目录名叫 opencode-**acp**,但 runtime id 只有 opencode-**cli** ——
