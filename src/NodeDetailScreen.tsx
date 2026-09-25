@@ -409,7 +409,8 @@ export default function NodeDetailScreen({
     );
     if (section === 'rules') return (
       <View style={{ flex: 1 }}>
-        <SectionTitle title="规则文件" hint="节点工作目录里的 CLAUDE.md / AGENTS.md,节点每次开会话都会读。" />
+        {/* 说明收进规则区工具条的 ⓘ(09-25 紧凑化),标题下不再常驻一行。 */}
+        <SectionTitle title="规则文件" />
         {/* app#225 —— 节点规则文件（CLAUDE.md / AGENTS.md）查看/编辑。显示条件与请求目标见
             node-rules.ts rulesFileTarget:会话上报 rules_file_capable 时详情/只读页都显示
             (claude-code 会话没有 nodes 行也能按 alias 发);否则保持原行为。 */}
@@ -418,7 +419,7 @@ export default function NodeDetailScreen({
     );
     if (section === 'skills') return (
       <View>
-        <SectionTitle title="技能" hint="这个节点实际能加载的技能(只读)。" />
+        <SectionTitle title="技能" />
         <NodeSkillsSection cfg={cfg} alias={alias} node={rulesTarget} session={s} readOnly={readOnly} />
       </View>
     );

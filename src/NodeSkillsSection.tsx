@@ -9,6 +9,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Platform, Pressable, Text, View } from 'react-native';
 
 import { listNodeSkills, readNodeSkill, waitForRulesFileResult, type HubConfig, type RulesTarget, type Session } from './api';
+import InfoTip from './InfoTip';
 import MarkdownMessage from './MarkdownMessage';
 import { isTerminal, nextPollDelayMs, requestIdToFollow } from './node-rules';
 import { parseSkillDetail, parseSkillsList, scopeLabel, skillsStatusMessage, skillsTarget, stripFrontmatter, type SkillDetail, type SkillSummary } from './node-skills';
@@ -84,9 +85,15 @@ function SkillsCard({ cfg, target }: { cfg: HubConfig; target: RulesTarget }) {
     // 标题由节点页的 SectionTitle「技能」给出(2026-09-24 节点页重做),这里不再重复。
     <View>
       <View style={{ backgroundColor: colors.card, borderRadius: radius.lg, padding: spacing.lg, gap: spacing.md }}>
-        <Text style={{ color: colors.textMuted, fontSize: type.small, lineHeight: 18 }}>
-          {phase === 'ready' ? `共 ${skills.length} 个 · ` : ''}SKILL.md 所在目录由节点按自己的运行时决定,这里只能查看,不能修改。
-        </Text>
+        {/* 一行头:数量 + ⓘ(原先分区说明 + 这里的说明两段合进 ⓘ)+ 刷新(原在底部)。09-25 紧凑化。 */}
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm, zIndex: 10 }}>
+          <Text style={{ color: colors.textSecondary, fontSize: type.small }}>{phase === 'ready' ? `共 ${skills.length} 个技能` : '技能'}</Text>
+          <InfoTip label="技能说明" text="这个节点实际能加载的技能(只读)。SKILL.md 所在目录由节点按自己的运行时决定,这里只能查看,不能修改。" />
+          <View style={{ flex: 1 }} />
+          <Pressable accessibilityRole="button" style={{ height: 30, justifyContent: 'center', paddingHorizontal: spacing.md, borderRadius: radius.md, borderWidth: 1, borderColor: colors.border, opacity: phase === 'loading' ? 0.4 : 1 }} disabled={phase === 'loading'} onPress={() => { setOpen(null); setDetail(null); void runList(); }}>
+            <Text style={{ color: colors.textSecondary, fontSize: type.small }}>刷新</Text>
+          </Pressable>
+        </View>
         {phase === 'loading' ? (
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm }}>
             <ActivityIndicator color={colors.accent} />
@@ -131,11 +138,6 @@ function SkillsCard({ cfg, target }: { cfg: HubConfig; target: RulesTarget }) {
             ))}
           </View>
         ) : null}
-        <View style={{ flexDirection: 'row', justifyContent: 'flex-end' }}>
-          <Pressable style={{ paddingVertical: 6, paddingHorizontal: spacing.md, borderRadius: radius.md, borderWidth: 1, borderColor: colors.border, opacity: phase === 'loading' ? 0.4 : 1 }} disabled={phase === 'loading'} onPress={() => { setOpen(null); setDetail(null); void runList(); }}>
-            <Text style={{ color: colors.text, fontSize: type.small }}>刷新</Text>
-          </Pressable>
-        </View>
       </View>
     </View>
   );

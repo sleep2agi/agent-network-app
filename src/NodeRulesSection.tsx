@@ -13,12 +13,12 @@ import { forwardRef, useCallback, useEffect, useRef, useState, type ReactNode } 
 import { ActivityIndicator, Modal, Platform, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 
 import { readNodeRulesFile, waitForRulesFileResult, writeNodeRulesFile, type HubConfig, type RulesTarget, type Session } from './api';
-import { styles } from './app-styles';
 import { hasUnsavedChanges, isTerminal, nextPollDelayMs, predictedRulesFileName, requestIdToFollow, rulesStatusMessage, rulesSupport, rulesUnsupportedMessage } from './node-rules';
 import { NODE_RULES_EDITOR_MIN_HEIGHT } from './node-page-model';
 import { colors, spacing } from './theme';
 import MarkdownMessage from './MarkdownMessage';
-import { blockLineForCaret, buildRulesOutline, jumpText, lineAtOffset, RULES_DEFAULT_MODE, rulesReadKey, rulesViewState, sourceRangeFromDataset, sourceSelection, type RulesViewMode, type SourceLineRange } from './node-rules-view';
+import { blockLineForCaret, buildRulesOutline, jumpText, lineAtOffset, RULES_DEFAULT_MODE, rulesInfoText, rulesReadKey, rulesViewState, saveButtonLabel, sourceRangeFromDataset, sourceSelection, statusAutoHideMs, type RulesViewMode, type SourceLineRange } from './node-rules-view';
+import InfoTip from './InfoTip';
 
 type Phase = 'loading' | 'ready' | 'saving' | 'unavailable';
 
@@ -98,6 +98,18 @@ export default function NodeRulesSection({ cfg, node, session }: { cfg: HubConfi
   };
 
   const dirty = phase === 'ready' && hasUnsavedChanges(editor, onNode);
+
+  // 成功/普通提示几秒后自己消失(先淡出再清掉;系统要求减少动效时不淡出、直接消失);错误和进行中的说明一直留着。
+  const [fading, setFading] = useState(false);
+  useEffect(() => {
+    setFading(false);
+    const ms = message ? statusAutoHideMs(messageTone, phase) : null;
+    if (ms == null) return;
+    const reduce = prefersReducedMotion();
+    const fadeT = reduce ? null : setTimeout(() => setFading(true), Math.max(0, ms - 300));
+    const clearT = setTimeout(() => { setMessage(''); setFading(false); }, ms);
+    return () => { if (fadeT) clearTimeout(fadeT); clearTimeout(clearT); };
+  }, [message, messageTone, phase]);
   const toneColor = messageTone === 'ok' ? colors.running : messageTone === 'error' ? colors.failed : colors.textMuted;
 
   const busy = phase === 'loading' || phase === 'saving';
@@ -115,21 +127,32 @@ export default function NodeRulesSection({ cfg, node, session }: { cfg: HubConfi
   };
   const jumpToSource = (range: SourceLineRange) => { setJump(range); setMode('edit'); };
 
-  const toolbar = (
-    <View style={{ flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: spacing.sm }}>
+  // 一行工具条:左 = 阅读/编辑 + 文件名 + ⓘ + 未保存;中 = 内联状态句;右 = 全屏 / 重新读取 / 保存(小按钮)。
+  // 分区说明和卡片说明原来叠两段,现在收进 ⓘ(Vincent 09-25「这个地方占的位置太大了」)。
+  const statusColor = phase === 'loading' || phase === 'saving' ? colors.textMuted : toneColor;
+  const toolbar = (inFull: boolean) => (
+    <View style={{ flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: spacing.sm, zIndex: 10 }}>
       <ModeToggle mode={mode} onChange={changeMode} />
       <Text style={{ color: colors.text, fontSize: 13, fontFamily: MONO, flexShrink: 1 }} selectable numberOfLines={1}>{fileName}</Text>
-      {mode === 'read' && hasContent && WEB ? <Text style={{ color: colors.textMuted, fontSize: 12 }}>双击内容可跳到源码编辑</Text> : null}
+      <InfoTip label="规则文件说明" text={rulesInfoText(fileName, WEB)} />
       {view.unsaved ? <UnsavedMark /> : null}
-      {phase === 'loading' ? <ActivityIndicator color={colors.accent} /> : null}
-      <View style={{ flex: 1 }} />
-      <Pressable style={[styles.retryBtn, busy ? { opacity: 0.4 } : null]} disabled={busy} onPress={() => void runRead()}>
-        <Text style={styles.retryBtnText}>重新读取</Text>
-      </Pressable>
-      <Pressable style={[styles.retryBtn, !dirty && { opacity: 0.4 }]} disabled={!dirty} onPress={() => void runSave()}>
-        {/* 用 retryBtnText(底色上的反色字):强调色字压在强调色底上,浅色主题下看不见(Vincent 09-02 截图里那个空白按钮)。 */}
-        <Text style={styles.retryBtnText}>{phase === 'saving' ? '保存中…' : dirty ? '保存到节点' : '已是最新'}</Text>
-      </Pressable>
+      {busy ? <ActivityIndicator size="small" color={colors.accent} /> : null}
+      <View style={{ flex: 1, minWidth: 120 }}>
+        {message ? (
+          <Text
+            numberOfLines={messageTone === 'error' ? undefined : 1}
+            style={[{ color: statusColor, fontSize: 12, lineHeight: 18 }, WEB ? { transitionProperty: 'opacity', transitionDuration: '300ms', opacity: fading ? 0 : 1 } as any : null]}
+          >{message}</Text>
+        ) : mode === 'read' && hasContent && WEB ? (
+          <Text numberOfLines={1} style={{ color: colors.textMuted, fontSize: 11, opacity: 0.8 }}>双击内容可跳到源码编辑</Text>
+        ) : null}
+      </View>
+      {hasContent && !inFull ? (
+        <SmallBtn ref={fullBtn} onPress={() => setFull(true)} accessibilityLabel="全屏阅读规则文件" label="全屏" />
+      ) : null}
+      <SmallBtn onPress={() => void runRead()} disabled={busy} label="重新读取" />
+      {/* 主按钮:强调色底 + onAccent 字(强调色字压强调色底在浅色主题下看不见,Vincent 09-02 截图里那个空白按钮)。 */}
+      <SmallBtn primary onPress={() => void runSave()} disabled={!dirty} label={saveButtonLabel(phase)} />
     </View>
   );
 
@@ -138,27 +161,16 @@ export default function NodeRulesSection({ cfg, node, session }: { cfg: HubConfi
     onJump: jumpToSource, jump, clearJump: () => setJump(null), anchorLine, clearAnchor: () => setAnchorLine(null), editorRef,
   };
 
-  // 编辑框/阅读区吃满节点页剩余高度(flex: 1,最矮 NODE_RULES_EDITOR_MIN_HEIGHT);按钮放在内容**上方**
+  // 编辑框/阅读区吃满节点页剩余高度(flex: 1,最矮 NODE_RULES_EDITOR_MIN_HEIGHT);按钮在内容**上方**
   // 的工具条里 —— 放下面的话矮窗(Vincent 的 2000×650)里要先滚页面才看得到「保存」。
   return (
-    <View style={{ flex: 1, paddingTop: spacing.lg }}>
-      <View style={{ flex: 1, backgroundColor: colors.card, borderRadius: 12, padding: spacing.lg, gap: spacing.md }}>
-        <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: spacing.md }}>
-          <Text style={{ flex: 1, color: colors.textMuted, fontSize: 12, lineHeight: 18 }}>
-            这是节点工作目录里的 {fileName}，节点每次开工都会读它。保存会直接覆盖节点机器上的这个文件；文件名和位置由节点自己决定，这里改不了。
-          </Text>
-          {hasContent ? (
-            <FocusRing ref={fullBtn} onPress={() => setFull(true)} accessibilityLabel="全屏阅读规则文件" style={{ paddingHorizontal: spacing.sm, paddingVertical: 4, borderRadius: 6, borderWidth: 1, borderColor: colors.border }}>
-              <Text style={{ color: colors.textSecondary, fontSize: 12 }}>全屏</Text>
-            </FocusRing>
-          ) : null}
-        </View>
-        {toolbar}
-        {message ? <Text style={{ color: phase === 'loading' ? colors.textMuted : toneColor, fontSize: 12, lineHeight: 18 }}>{message}</Text> : null}
+    <View style={{ flex: 1 }}>
+      <View style={{ flex: 1, backgroundColor: colors.card, borderRadius: 12, padding: spacing.md, gap: spacing.sm }}>
+        {toolbar(false)}
         {hasContent && !full ? <RulesBody {...bodyProps} /> : null}
       </View>
       {full ? (
-        <RulesFullscreen onClose={closeFull} toolbar={toolbar} source={view.renderSource} bodyProps={bodyProps} />
+        <RulesFullscreen onClose={closeFull} toolbar={toolbar(true)} source={view.renderSource} bodyProps={bodyProps} />
       ) : null}
     </View>
   );
@@ -200,6 +212,19 @@ const FocusRing = forwardRef<any, any>(function FocusRing({ style, children, ...
     </Pressable>
   );
 });
+
+// 工具条小按钮(约 30px 高)。primary = 强调色底(保存);其余描边。
+const SmallBtn = forwardRef<any, { label: string; onPress: () => void; disabled?: boolean; primary?: boolean; accessibilityLabel?: string }>(
+  function SmallBtn({ label, onPress, disabled, primary, accessibilityLabel }, ref) {
+    return (
+      <FocusRing ref={ref} onPress={onPress} disabled={disabled} accessibilityRole="button" accessibilityLabel={accessibilityLabel ?? label} accessibilityState={{ disabled: !!disabled }}
+        style={[{ height: 30, paddingHorizontal: spacing.md, borderRadius: 6, justifyContent: 'center', alignItems: 'center' },
+          primary ? { backgroundColor: colors.accent } : { borderWidth: 1, borderColor: colors.border },
+          disabled ? { opacity: 0.4 } : null]}>
+        <Text style={{ fontSize: 12, fontWeight: primary ? '600' : '400', color: primary ? colors.onAccent : colors.textSecondary }}>{label}</Text>
+      </FocusRing>
+    );
+  });
 
 function ModeToggle({ mode, onChange }: { mode: RulesViewMode; onChange: (m: RulesViewMode) => void }) {
   return (

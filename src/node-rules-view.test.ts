@@ -1,7 +1,7 @@
 // 规则文件「阅读 / 编辑 / 全屏目录」纯模型。ck 风格自执行脚本(不是 bun:test)。
 // @ts-expect-error app tsconfig 不带 node 类型(其余读源码的 ck 测试同样报这一条);运行时由 node/bun 提供。
 import { readFileSync } from 'node:fs';
-import { blockLineForCaret, buildRulesOutline, jumpText, lineAtOffset, lineEndOffset, lineStartOffset, outlineText, OUTLINE_MAX_LEVEL, RULES_DEFAULT_MODE, rulesReadKey, rulesViewState, sourceRangeFromDataset, sourceSelection } from './node-rules-view';
+import { blockLineForCaret, buildRulesOutline, RULES_STATUS_HIDE_MS, rulesInfoText, saveButtonLabel, statusAutoHideMs, jumpText, lineAtOffset, lineEndOffset, lineStartOffset, outlineText, OUTLINE_MAX_LEVEL, RULES_DEFAULT_MODE, rulesReadKey, rulesViewState, sourceRangeFromDataset, sourceSelection } from './node-rules-view';
 import { parseMarkdownBlocks } from './markdown-model';
 
 let p = 0, t = 0;
@@ -143,6 +143,24 @@ ck('CRLF 草稿 + 规范化的编辑框:偏移指向编辑框里的那一行', t
 const bad = sourceSelection(crlfDraft, { start: deepItem, end: deepItem });
 ck('(对照)在 CRLF 草稿上算偏移放到规范化编辑框里会错位', taValue.slice(bad.start, bad.end) !== '- 丙项');
 ck('拿不到编辑框 ⇒ 退回草稿', jumpText(undefined, 'x') === 'x' && jumpText(null, 'x') === 'x' && jumpText('y', 'x') === 'y');
+
+
+// ── 紧凑工具条(2026-09-25) ──
+ck('已读取/已保存(ready + muted/ok)⇒ 3 秒后自动消失', statusAutoHideMs('muted', 'ready') === RULES_STATUS_HIDE_MS && statusAutoHideMs('ok', 'ready') === RULES_STATUS_HIDE_MS && RULES_STATUS_HIDE_MS === 3000);
+ck('错误一直留着(不论阶段)', statusAutoHideMs('error', 'ready') === null && statusAutoHideMs('error', 'unavailable') === null && statusAutoHideMs('error', 'loading') === null);
+ck('读取中/保存中的说明不自动消失', statusAutoHideMs('muted', 'loading') === null && statusAutoHideMs('muted', 'saving') === null && statusAutoHideMs('ok', 'saving') === null);
+ck('不可用阶段那句话是唯一内容,不消失', statusAutoHideMs('muted', 'unavailable') === null);
+ck('保存按钮干净时也叫「保存」(不再是「已是最新」)', saveButtonLabel('ready') === '保存' && saveButtonLabel('unavailable') === '保存');
+ck('保存中显示「保存中…」', saveButtonLabel('saving') === '保存中…');
+ck('ⓘ 说明带上真实文件名,并合并了覆盖/改不了文件名两层意思', rulesInfoText('AGENTS.md', false).includes('AGENTS.md') && rulesInfoText('AGENTS.md', false).includes('覆盖') && rulesInfoText('AGENTS.md', false).includes('改不了'));
+ck('web 端 ⓘ 附双击提示,原生端不附', rulesInfoText('CLAUDE.md', true).includes('双击') && !rulesInfoText('CLAUDE.md', false).includes('双击'));
+ck('规则区只剩一行工具条:卡片里不再有独立的说明段', !/这是节点工作目录里的 \{fileName\}/.test(section) && /<InfoTip label="规则文件说明" text=\{rulesInfoText\(fileName, WEB\)\} \/>/.test(section));
+ck('状态句按 statusAutoHideMs 自动消失', /statusAutoHideMs\(messageTone, phase\)/.test(section));
+ck('保存按钮文案走 saveButtonLabel,源码里不再有「已是最新」', /saveButtonLabel\(phase\)/.test(section) && !section.includes('已是最新'));
+const screenSrc = readFileSync(new URL('./NodeDetailScreen.tsx', import.meta.url), 'utf8');
+ck('节点页规则/技能标题下不再常驻说明行', /<SectionTitle title="规则文件" \/>/.test(screenSrc) && /<SectionTitle title="技能" \/>/.test(screenSrc));
+const skillsSrc = readFileSync(new URL('./NodeSkillsSection.tsx', import.meta.url), 'utf8');
+ck('技能区说明收进 ⓘ,刷新在头部同一行', /<InfoTip label="技能说明"/.test(skillsSrc) && skillsSrc.indexOf('<InfoTip label="技能说明"') < skillsSrc.indexOf('刷新</Text>') && skillsSrc.indexOf('刷新</Text>') < skillsSrc.indexOf('skills.map('));
 
 console.log(`node rules view: ${p}/${t} checks passed`);
 process.exit(p === t ? 0 : 1);
