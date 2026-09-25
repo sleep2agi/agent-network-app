@@ -12,7 +12,8 @@ check('scope key falls back to server+username and is filename-safe', pinScopeKe
 check('two hubs with the same alias get different scopes', pinScopeKey({ serverUrl: 'http://a', username: 'u' }) !== pinScopeKey({ serverUrl: 'http://b', username: 'u' }));
 check('empty everything → default', pinScopeKey({}) === 'default');
 // 接线契约(App / ChatScreen import react-native,bun 里按源码查)
-const app = readFileSync(new URL('../App.tsx', import.meta.url), 'utf8');
+// CRLF-normalised: the Windows runner checks out with autocrlf, and the markers below contain \n.
+const app = readFileSync(new URL('../App.tsx', import.meta.url), 'utf8').replace(/\r\n/g, '\n');
 // Search for the end marker from the start marker: the Android two-pane branch (above the
 // phone branch) has its own nested `) : screen.name === 'nodeInfo' ? (`.
 const mobileChatStart = app.indexOf("\n      ) : screen.name === 'chat' ? (");

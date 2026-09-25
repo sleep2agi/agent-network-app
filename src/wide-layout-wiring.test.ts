@@ -1,13 +1,14 @@
 // Wiring contract for the Android two-pane: App.tsx / ChatScreen / NodeDetailScreen import
-// react-native, so (like chat-pins.test.ts) the wiring is checked on source text.
+// react-native, so (like chat-pins.test.ts) the wiring is checked on source text
+// (CRLF-normalised: the Windows runner checks out with autocrlf).
 import { readFileSync } from 'node:fs';
 
 let p = 0, t = 0;
 const ck = (n: string, c: boolean) => { t++; if (c) { p++; console.log(`PASS: ${n}`); } else console.log(`FAIL: ${n}`); };
 
-const app = readFileSync(new URL('../App.tsx', import.meta.url), 'utf8');
-const chat = readFileSync(new URL('./ChatScreen.tsx', import.meta.url), 'utf8');
-const node = readFileSync(new URL('./NodeDetailScreen.tsx', import.meta.url), 'utf8');
+const app = readFileSync(new URL('../App.tsx', import.meta.url), 'utf8').replace(/\r\n/g, '\n');
+const chat = readFileSync(new URL('./ChatScreen.tsx', import.meta.url), 'utf8').replace(/\r\n/g, '\n');
+const node = readFileSync(new URL('./NodeDetailScreen.tsx', import.meta.url), 'utf8').replace(/\r\n/g, '\n');
 
 // Decision comes from the tested helper, and desktop is still "layout === 'desktop'".
 ck('App decides via chooseAppLayout', app.includes('chooseAppLayout({'));
