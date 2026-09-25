@@ -16,7 +16,7 @@ import { compareNodeVersion, isAgentNodeSession } from './node-rules';
 
 export const ENV_MIN_AGENT_NODE = '2.5.0-preview.89';
 export const ENV_MIN_ANET_FOR_CLAUDE_CODE = '2.3.0-preview.116';
-export const ENV_MIN_HUB = '0.9.0-preview.60';
+export const ENV_MIN_HUB = '0.9.0-preview.61';
 
 export const ENV_KEY_RE = /^[A-Z_][A-Z0-9_]{0,127}$/;
 export const ENV_VALUE_MAX_BYTES = 8 * 1024;
