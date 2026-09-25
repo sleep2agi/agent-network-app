@@ -10,6 +10,10 @@
 // directly. Desktop keeps its small popover but lists the same actions (one level).
 //
 // Pure (no react-native import) so the ck test can drive it.
+//
+// 0.2.105: the 旁路提问 (BTW) cell is hidden by default — see chat-entry-flags.ts.
+
+import { SHOW_BTW_ENTRY } from './chat-entry-flags';
 
 export type PlusItemKey = 'album' | 'file' | 'btw' | 'camera';
 
@@ -25,6 +29,8 @@ export interface PlusItemEnv {
   os: string;
   desktop: boolean;
   attachEnabled: boolean;
+  /** Show the 旁路提问 (BTW) cell. Defaults to SHOW_BTW_ENTRY (currently false). */
+  btwEntry?: boolean;
 }
 
 /** Camera needs a native capture intent (expo-image-picker launchCameraAsync);
@@ -33,14 +39,17 @@ export function cameraAvailable(os: string): boolean {
   return os === 'android' || os === 'ios';
 }
 
-/** The panel's cells, in owner priority order: 相册, 文件, 旁路提问, 拍照. */
+/** The panel's cells, in owner priority order: 相册, 文件, [旁路提问], 拍照.
+ *  旁路提问 only when `btwEntry` (default SHOW_BTW_ENTRY) is on. */
 export function plusPanelItems(env: PlusItemEnv): PlusItem[] {
   const items: PlusItem[] = [];
   if (env.attachEnabled) {
     items.push({ key: 'album', label: '相册', icon: 'image-outline', a11y: '从相册选择图片' });
     items.push({ key: 'file', label: '文件', icon: 'document-outline', a11y: '选择文件' });
   }
-  items.push({ key: 'btw', label: '旁路提问', icon: null, a11y: '新建 BTW 旁路线程' });
+  if (env.btwEntry ?? SHOW_BTW_ENTRY) {
+    items.push({ key: 'btw', label: '旁路提问', icon: null, a11y: '新建 BTW 旁路线程' });
+  }
   if (env.attachEnabled && !env.desktop && cameraAvailable(env.os)) {
     items.push({ key: 'camera', label: '拍照', icon: 'camera-outline', a11y: '拍照' });
   }

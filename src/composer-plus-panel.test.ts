@@ -36,15 +36,20 @@ const check = (cond: boolean, msg: string) => { assert.ok(cond, msg); ck++; };
 
 // ── cells per platform ─────────────────────────────────────────────────────
 const keys = (env: Parameters<typeof plusPanelItems>[0]) => plusPanelItems(env).map(i => i.key).join(',');
-check(keys({ os: 'android', desktop: false, attachEnabled: true }) === 'album,file,btw,camera', 'android: 相册, 文件, 旁路提问, 拍照 (owner priority order)');
-check(keys({ os: 'ios', desktop: false, attachEnabled: true }) === 'album,file,btw,camera', 'ios: same as android');
-check(keys({ os: 'web', desktop: false, attachEnabled: true }) === 'album,file,btw', 'web (mobile layout): no camera');
-check(keys({ os: 'web', desktop: true, attachEnabled: true }) === 'album,file,btw', 'desktop popover: 图片/文件 directly (one level), no camera');
-check(keys({ os: 'ios', desktop: true, attachEnabled: true }) === 'album,file,btw', 'desktop popover never lists camera, whatever os reports');
-check(keys({ os: 'android', desktop: false, attachEnabled: false }) === 'btw', 'attach kill-switch off: only 旁路提问');
+// 0.2.105 default: 旁路提问 (BTW) hidden (chat-entry-flags.ts SHOW_BTW_ENTRY = false).
+check(keys({ os: 'android', desktop: false, attachEnabled: true }) === 'album,file,camera', 'android default: 相册, 文件, 拍照 — no 旁路提问');
+check(keys({ os: 'ios', desktop: false, attachEnabled: true }) === 'album,file,camera', 'ios default: same as android');
+check(keys({ os: 'web', desktop: false, attachEnabled: true }) === 'album,file', 'web (mobile layout) default: no camera, no BTW');
+check(keys({ os: 'web', desktop: true, attachEnabled: true }) === 'album,file', 'desktop popover default: 图片/文件 only');
+check(keys({ os: 'ios', desktop: true, attachEnabled: true }) === 'album,file', 'desktop popover never lists camera, whatever os reports');
+check(keys({ os: 'android', desktop: false, attachEnabled: false }) === '', 'attach kill-switch off + BTW hidden: empty');
+// With the flag back on (btwEntry: true) the old layout returns unchanged.
+check(keys({ os: 'android', desktop: false, attachEnabled: true, btwEntry: true }) === 'album,file,btw,camera', 'btwEntry on: 相册, 文件, 旁路提问, 拍照 (owner priority order)');
+check(keys({ os: 'web', desktop: true, attachEnabled: true, btwEntry: true }) === 'album,file,btw', 'btwEntry on, desktop: 图片/文件/旁路提问');
+check(keys({ os: 'android', desktop: false, attachEnabled: false, btwEntry: true }) === 'btw', 'btwEntry on, attach off: only 旁路提问');
 check(cameraAvailable('android') && cameraAvailable('ios') && !cameraAvailable('web') && !cameraAvailable('windows'), 'camera only on native');
 {
-  const items = plusPanelItems({ os: 'android', desktop: false, attachEnabled: true });
+  const items = plusPanelItems({ os: 'android', desktop: false, attachEnabled: true, btwEntry: true });
   const byKey = Object.fromEntries(items.map(i => [i.key, i]));
   check(byKey.album.label === '相册' && byKey.file.label === '文件' && byKey.btw.label === '旁路提问' && byKey.camera.label === '拍照', 'cell labels');
   check(byKey.btw.icon === null && items.filter(i => i.key !== 'btw').every(i => typeof i.icon === 'string' && i.icon.length > 0), 'BTW uses the text badge, others an icon');
