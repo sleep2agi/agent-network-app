@@ -51,7 +51,8 @@
     "updater": {
       "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDM1QkMwODAxQkMzQTJBQjkKUldTNUtqcThBUWk4TlNtZjB4L2hOLzRHQjdjNVlNOWMvSjVteGR5aVV5d2FJSENxRWIwUllxMEIK",
       "endpoints": [
-        "https://anet.sh/desktop/update/latest.json"
+        "https://anet.sh/desktop/update/latest.json",
+        "https://modelscope.cn/datasets/SmartFlowAI/agent-network-releases/resolve/master/desktop/latest/latest.json"
       ],
       "windows": {
         "installMode": "passive"

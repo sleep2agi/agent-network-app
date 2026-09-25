@@ -323,6 +323,79 @@ pass."` — an instruction to ourselves, displayed to everyone who saw the updat
 prompt. Keep release discipline in this document; keep the notes about what the
 user is getting. `src/release-notes-hygiene.test.ts` enforces the boundary.
 
+## 10. China mirror on ModelScope (automatic after publishing)
+
+`.github/workflows/modelscope-mirror.yml` copies every published `desktop-v*`
+release to the public ModelScope dataset
+[`SmartFlowAI/agent-network-releases`](https://modelscope.cn/datasets/SmartFlowAI/agent-network-releases).
+Nothing has to be triggered by hand in a normal release.
+
+| Path in the dataset | Contents |
+|---|---|
+| `desktop/<ver>/` | every release asset, byte-identical to GitHub, plus `SHA256SUMS` |
+| `desktop/latest/latest.json` | updater manifest; platform URLs point at `desktop/<ver>/` on ModelScope, signatures unchanged |
+| `desktop/latest/VERSION` | the version `desktop/latest/` currently holds |
+| `desktop/latest/Agent.Network_{aarch64.dmg,x64-setup.exe,x64_en-US.msi,android-universal.apk}` | version-less copies of the installers (stable download-page links) |
+| `desktop/latest/SHA256SUMS` | over the files in `desktop/latest/` |
+
+Anonymous download URL:
+`https://modelscope.cn/datasets/SmartFlowAI/agent-network-releases/resolve/master/<path>`.
+
+**When it runs.** On `release: published` it starts at once and waits up to
+30 minutes for the Android APK, which is attached after publishing (GitHub fires
+no event for an asset upload). A cron run every 30 minutes reconciles the newest
+published release by sha256 — GitHub asset digests against the ModelScope
+listing — and uploads only what differs, so a late APK, a failed run or a
+ModelScope outage heals itself. In sync, it downloads and commits nothing.
+
+**`desktop/latest/` only moves forward.** It is written only when the tag being
+mirrored is the newest published desktop release (the same selection as the
+anet.sh endpoint). Re-syncing an old release never rolls it back.
+
+**Re-sync a past release** (idempotent; safe to repeat):
+
+```bash
+gh workflow run modelscope-mirror.yml --repo sleep2agi/agent-network-app -f tag=desktop-v<version>
+```
+
+Dispatch several tags one at a time: the workflow has one concurrency group and
+GitHub keeps only one pending run in it, so a third dispatch replaces the queued
+second one.
+
+**Verify after a release** (no credentials — users have none):
+
+```bash
+base=https://modelscope.cn/datasets/SmartFlowAI/agent-network-releases/resolve/master/desktop
+curl -sSL "$base/latest/VERSION"                     # the new version
+curl -sSL "$base/<version>/SHA256SUMS"               # compare with the GitHub digests
+curl -sSL "$base/<version>/Agent.Network_<version>_android-universal.apk" | sha256sum
+```
+
+The job itself verifies anonymously: every expected path must be listed with its
+expected sha256, and every small file (`latest.json`, `.sig`, `SHA256SUMS`,
+`VERSION`) is downloaded and compared byte for byte.
+
+**Updater fallback.** `tauri.conf.json` lists two endpoints: anet.sh first, then
+`desktop/latest/latest.json` on ModelScope. The Tauri updater tries them in
+order and moves on only when one errors, times out (20 s, set in
+`src/desktop-updater.ts`) or answers non-2xx — the anet.sh route answers 503
+when both GitHub and its `fallback.json` fail. The ModelScope manifest keeps the
+original signatures: the plugin verifies the minisign signature over the
+**downloaded bytes**, not over the URL, and the mirrored bytes are identical.
+Limitation: if anet.sh answers but the GitHub download itself is blocked, the
+updater does not fall back — the manifest endpoint already succeeded.
+
+**Rollback touches both endpoints.** Section 8's "point `latest.json` back at the
+previous version" now means the anet.sh route *and* `desktop/latest/` on
+ModelScope. The mirror always follows the newest *published* release, so the cron
+would undo a hand-made rollback within 30 minutes: first
+`gh workflow disable modelscope-mirror.yml`, then commit the previous release's
+`desktop/latest/` files to the dataset by hand, and re-enable the workflow once a
+higher version is published.
+
+The upload token is the repository secret `MODELSCOPE_API_TOKEN`; it is read
+from the environment only and never printed.
+
 ---
 
 ## Appendix A: Tauri constraints that still apply

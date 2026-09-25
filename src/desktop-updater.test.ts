@@ -21,6 +21,14 @@ const checks: Array<[string, boolean]> = [
   ['offline checks clear stale staged updates', source.includes('pendingUpdate = undefined') && source.includes('checkOverride')],
   ['signed updater artifacts are enabled', config.bundle.createUpdaterArtifacts === true],
   ['stable anet.sh updater endpoint configured', config.plugins.updater.endpoints[0] === 'https://anet.sh/desktop/update/latest.json'],
+  // Tauri tries endpoints in order and moves on only when one errors or answers non-2xx (the
+  // anet.sh route answers 503 when both GitHub and its fallback.json fail). The ModelScope
+  // manifest is written by .github/workflows/modelscope-mirror.yml with platform URLs on
+  // ModelScope and the original signatures (the plugin verifies the signature over the
+  // downloaded bytes, which are identical). It must stay second: it lags publishing by the
+  // mirror run, and anet.sh is the activation boundary.
+  ['ModelScope China mirror is the second (fallback) updater endpoint', config.plugins.updater.endpoints.length === 2
+    && config.plugins.updater.endpoints[1] === 'https://modelscope.cn/datasets/SmartFlowAI/agent-network-releases/resolve/master/desktop/latest/latest.json'],
   ['updater public key configured', typeof config.plugins.updater.pubkey === 'string' && config.plugins.updater.pubkey.length > 80],
   ['frontend update permissions enabled', capability.permissions.includes('updater:default') && capability.permissions.includes('process:allow-restart')],
 ];
