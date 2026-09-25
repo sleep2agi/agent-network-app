@@ -119,6 +119,12 @@ jobs:
           releaseBody: |-
             Signed and notarized stable update for macOS (Apple Silicon) and Windows (x64).
 
+            What's new in 0.2.92:
+            - 修复 macOS 菜单栏图标上的未读数字不消失:未读清零后,菜单栏数字现在会跟着清掉,
+              不会再出现「图标上显示 1、点开却是『没有未读消息』」。
+            - 菜单栏面板不再只列前 20 个会话,图标上的数字和面板里能看到的未读总是一致。
+            - 未读数字偶尔同步失败后会自动重试,切回主窗口时也会重新同步一次。
+
             What's new in 0.2.91:
             - 规则文件(CLAUDE.md / AGENTS.md)的「阅读」模式里,双击任意一段内容(标题、段落、列表项、引用、代码块、
               表格行),会自动切到「编辑」并选中这段对应的 Markdown 原文、滚到编辑框中间,直接就能改;全屏模式里也一样。
