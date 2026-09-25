@@ -1,0 +1,23 @@
+desktop v0.2.97 — 规则文件 Ctrl/⌘+F 查找替换 + 读取不再一直转圈 + Grok 默认 ACP
+================================================================================
+
+来源:Vincent 09-25 反馈「规则文件不能 Ctrl+F 搜索定位」「规则文件一直转圈」;owner 09-25 定 Grok 默认 ACP。
+
+A. 本版内容(0.2.96 版本号提交 #363 之后 main 上合入的全部 PR,共 4 个)
+--------------------------------------------------------------------------------
+  #367 规则文件查找/替换:⌘F(macOS)/ Ctrl+F(Windows/Linux)在「阅读」「编辑」「全屏」里都能用;
+       高亮所有匹配、显示 n/N、回车/方向键跳转;「编辑」里「替换」「全部替换」只改草稿,保存才写回节点。
+  #366 规则文件读取不再一直转圈:响应体卡住有硬上限,独立兜底计时器 90 s;内容过期(content_purged)、
+       done 但没有 content、request_not_found、认不出的状态都退出加载态并说明原因,
+       不再把空串当文件内容放进编辑器。
+  #365 新建节点:Grok 默认创建 grok-build-acp;共存模式(grok-build-cli)收到 Grok 下的「高级」里,
+       标「实验性」并提前显示限制。已有共存节点不受影响(runtime id 不变)。
+  #364 CI:改到 src-tauri 的 PR 会编译并测试 Rust(不影响用户可见行为,不写进发版说明)。
+
+B. 验证边界(如实)
+--------------------------------------------------------------------------------
+  各 PR 自测见各自 PR 正文(#367 rules-find.test.ts 93 项 + 23/23 变异;#366 rules-reader-stuck.test.ts
+  47 项 + 14 变异;#365 wizard 测试 + 5 个变异);均为 web 导出 + 模拟 __TAURI_INTERNALS__ 的 Playwright,
+  Chromium / Linux WebKit 不等于 macOS WKWebView / WebView2,真机表现以发版后实际使用为准。
+  本 PR 只改版本号(8 个文件)与发版说明;本地 bun src/version-consistency.test.ts 11/11 PASS。
+  Cargo.toml / Cargo.lock 改动会触发 #364 的 rust-check。
