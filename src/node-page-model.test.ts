@@ -1,7 +1,9 @@
 // 节点页重做(2026-09-24):分组与分区的纯逻辑。ck 风格自执行脚本(不是 bun:test)。
+// @ts-expect-error app tsconfig 不带 node 类型(其余读源码的 ck 测试同样报这一条);运行时由 node/bun 提供。
+import { readFileSync } from 'node:fs';
 import { groupNodeTasks, isSelfTask } from './node-task-groups';
 import { partitionNodeTasks } from './node-tasks';
-import { NODE_PAGE_CONTENT_MAX_WIDTH, NODE_RULES_EDITOR_MIN_HEIGHT, NODE_SECTIONS, nodePageContentWidth, overviewFactColumns, factText, headerChips, resolveActiveSection, splitOverviewFacts, visibleNodeSections } from './node-page-model';
+import { NODE_PAGE_CONTENT_MAX_WIDTH, NODE_RULES_EDITOR_MIN_HEIGHT, NODE_SECTIONS, leaveNeedsConfirm, nodePageChrome, nodePageContentWidth, nodePageScrolls, overviewFactColumns, factText, headerChips, resolveActiveSection, splitOverviewFacts, visibleNodeSections } from './node-page-model';
 
 let p = 0, t = 0;
 const ck = (n: string, c: boolean) => { t++; if (c) p++; else console.log(`  ✗ ${n}`); };
@@ -60,7 +62,25 @@ ck('封顶边界:恰好等于上限 + 两侧内边距', nodePageContentWidth(NOD
 ck('窄屏:内容列 = 窗宽减内边距', nodePageContentWidth(600, 16) === 568);
 ck('未测到宽度 / 比内边距还窄 → 0,不出负数', nodePageContentWidth(0, 24) === 0 && nodePageContentWidth(NaN, 24) === 0 && nodePageContentWidth(30, 24) === 0);
 ck('概览网格列数:1/2/3 与边界', overviewFactColumns(479) === 1 && overviewFactColumns(480) === 2 && overviewFactColumns(899) === 2 && overviewFactColumns(900) === 3 && overviewFactColumns(NODE_PAGE_CONTENT_MAX_WIDTH) === 3);
-ck('编辑框最矮高度 ≥ 320', NODE_RULES_EDITOR_MIN_HEIGHT >= 320);
+// 手机上规则文件编辑不了(2026-09-26 Vincent 小米折叠屏 0.2.99):工具条跟着整页滚出屏幕。
+ck('规则分区整页不滚(工具条钉住,阅读区/编辑框自己滚)', nodePageScrolls('rules') === false);
+ck('其余分区照旧整页滚', (['overview', 'model', 'skills', 'files', 'tasks', 'danger'] as const).every(k => nodePageScrolls(k) === true));
+// 最矮高度:整页不滚了,这个值只防压扁;要小到手机竖屏 + 键盘(可用 ~440dp,顶部占 ~200)后仍放得下,又不至于只剩一行。
+ck('编辑框最矮高度在 [96, 200]:防压扁且放得进键盘上方', NODE_RULES_EDITOR_MIN_HEIGHT >= 96 && NODE_RULES_EDITOR_MIN_HEIGHT <= 200);
+ck('规则分区 + 键盘弹起:收起头部卡片和分区标题', JSON.stringify(nodePageChrome({ section: 'rules', keyboardVisible: true })) === JSON.stringify({ headerCard: false, sectionTitle: false }));
+ck('规则分区无键盘:都显示', JSON.stringify(nodePageChrome({ section: 'rules', keyboardVisible: false })) === JSON.stringify({ headerCard: true, sectionTitle: true }));
+ck('别的分区有键盘(改头像 URL 等):不收', nodePageChrome({ section: 'overview', keyboardVisible: true }).headerCard === true && nodePageChrome({ section: 'model', keyboardVisible: true }).sectionTitle === true);
+ck('规则有草稿:离开要确认', leaveNeedsConfirm({ section: 'rules', rulesDirty: true }) === true);
+ck('规则没草稿:直接走', leaveNeedsConfirm({ section: 'rules', rulesDirty: false }) === false);
+ck('不在规则分区(残留的 dirty 不拦别的分区)', leaveNeedsConfirm({ section: 'skills', rulesDirty: true }) === false);
+
+// 渲染侧契约:节点页确实按这些 helper 渲染。
+const screen = readFileSync(new URL('./NodeDetailScreen.tsx', import.meta.url), 'utf8');
+ck('节点页按 nodePageScrolls 决定包不包 ScrollView', /const pageScrolls = nodePageScrolls\(section\)/.test(screen) && /\{pageScrolls \? \(\s*<ScrollView/.test(screen));
+ck('头部卡片 / 规则标题按 nodePageChrome 显示', /chrome\.headerCard \? headerCard : null/.test(screen) && /chrome\.sectionTitle \? <SectionTitle title="规则文件" \/> : null/.test(screen));
+ck('切分区 / 页头返回都走 guard', /guardLeave\(\(\) => setActiveSection\(item\.key\)\)/.test(screen) && /<Pressable onPress=\{guardedBack\}/.test(screen));
+ck('Android 返回键在有草稿时拦下', /BackHandler\.addEventListener\('hardwareBackPress'/.test(screen) && /\}, \[rulesDirty\]\);/.test(screen));
+ck('键盘避让只在原生规则分区启用', /enabled=\{Platform\.OS !== 'web' && section === 'rules'\}/.test(screen));
 
 console.log(`node page model: ${p}/${t} checks passed`);
 process.exit(p === t ? 0 : 1);

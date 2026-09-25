@@ -47,7 +47,7 @@
 
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { layoutGeneration, releaseOnUnmount, takeHandoff } from './layout-handoff';
-import { ActivityIndicator, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View, useWindowDimensions } from 'react-native';
+import { ActivityIndicator, BackHandler, Keyboard, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StatusBar, StyleSheet, Text, TextInput, View, useWindowDimensions } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 
 import AliasAvatar from './AliasAvatar';
@@ -68,7 +68,7 @@ import NodeModelSection from './NodeModelSection';
 import NodeSkillsSection from './NodeSkillsSection';
 import NodeFilesSection from './NodeFilesSection';
 import { filesTreeMode, nodePageColumnMaxWidth } from './node-files-tree';
-import { NODE_PAGE_COMPACT_WIDTH, NODE_SECTIONS, factText, headerChips, nodePageContentWidth, overviewFactColumns, resolveActiveSection, splitOverviewFacts, visibleNodeSections, type NodeSectionKey } from './node-page-model';
+import { NODE_PAGE_COMPACT_WIDTH, NODE_SECTIONS, factText, headerChips, leaveNeedsConfirm, nodePageChrome, nodePageContentWidth, nodePageScrolls, overviewFactColumns, resolveActiveSection, splitOverviewFacts, visibleNodeSections, type NodeSectionKey } from './node-page-model';
 
 const POLL_MS = 10_000; // same cadence as AgentsScreen — hub-friendly, felt-live
 
@@ -178,6 +178,32 @@ export default function NodeDetailScreen({
     return () => releaseOnUnmount(sectionHandoffKey, activeSectionRef.current, mountedGeneration);
   }, [sectionHandoffKey]);
   const [showMoreFacts, setShowMoreFacts] = useState(false);
+  // 规则文件草稿没保存时,切分区 / 返回之前先问(草稿只活在 NodeRulesSection 里,一卸载就没了)。
+  const [rulesDirty, setRulesDirty] = useState(false);
+  const [pendingLeave, setPendingLeave] = useState<null | (() => void)>(null);
+  // 软键盘弹起(原生端):规则分区里收起头部卡片,把高度让给编辑框;web / 桌面没有这些事件,恒 false。
+  const [keyboardVisible, setKeyboardVisible] = useState(false);
+  useEffect(() => {
+    if (Platform.OS === 'web') return;
+    const show = Keyboard.addListener(Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow', () => setKeyboardVisible(true));
+    const hide = Keyboard.addListener(Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide', () => setKeyboardVisible(false));
+    return () => { show.remove(); hide.remove(); };
+  }, []);
+  // 返回(页头 ‹ 和 Android 系统返回键)也要过确认。needConfirm 在下面算(要先有 section),这里用 ref 读最新值。
+  const onBackRef = useRef(onBack);
+  onBackRef.current = onBack;
+  const confirmLeaveRef = useRef(false);
+  const guardedBack = () => { if (confirmLeaveRef.current) setPendingLeave(() => onBackRef.current); else onBackRef.current(); };
+  useEffect(() => {
+    if (!rulesDirty) return;
+    // 只在有草稿时挂:它比 App.tsx 的返回处理晚注册 ⇒ 先被调用(BackHandler 后注册先调)。
+    const sub = BackHandler.addEventListener('hardwareBackPress', () => {
+      if (!confirmLeaveRef.current) return false;
+      setPendingLeave(() => onBackRef.current);
+      return true;
+    });
+    return () => sub.remove();
+  }, [rulesDirty]);
   const { width: windowWidth } = useWindowDimensions();
   const width = layoutWidth ?? windowWidth;
   const compact = width < NODE_PAGE_COMPACT_WIDTH;
@@ -236,7 +262,7 @@ export default function NodeDetailScreen({
         gap: spacing.md,
       }}
     >
-      <Pressable onPress={onBack} hitSlop={12}>
+      <Pressable onPress={guardedBack} hitSlop={12} accessibilityRole="button" accessibilityLabel="返回">
         <Text style={{ color: colors.accent, fontSize: 28 }}>‹</Text>
       </Pressable>
       <Text style={{ color: colors.text, fontSize: 17, fontWeight: '600' }}>{readOnly ? '节点信息' : '节点详情'}</Text>
@@ -325,6 +351,12 @@ export default function NodeDetailScreen({
   const visibleSections = visibleNodeSections({ readOnly, hasRulesTarget: !!rulesTarget, skillsCapable });
   const section = resolveActiveSection(activeSection, visibleSections);
   const sectionMeta = NODE_SECTIONS.filter(item => visibleSections.includes(item.key));
+  const needConfirm = leaveNeedsConfirm({ section, rulesDirty });
+  confirmLeaveRef.current = needConfirm;
+  // 要离开规则分区 / 这一页:有没保存的草稿就先弹确认,确认了才真的走。
+  const guardLeave = (go: () => void) => { if (needConfirm) setPendingLeave(() => go); else go(); };
+  const chrome = nodePageChrome({ section, keyboardVisible });
+  const pageScrolls = nodePageScrolls(section);
   const runtimeFacts = facts.filter(f => ['Runtime', 'Agent', '模型', '版本', '节点类型'].includes(f.label));
 
   // 头部卡片:头像 + 名字 + 在线状态 + 运行时/模型/版本/主机小标签。常驻,切分区不动。
@@ -367,7 +399,7 @@ export default function NodeDetailScreen({
               accessibilityRole="tab"
               accessibilityState={{ selected: isActive }}
               accessibilityLabel={item.label}
-              onPress={() => setActiveSection(item.key)}
+              onPress={() => { if (item.key !== section) guardLeave(() => setActiveSection(item.key)); }}
               style={({ pressed, hovered }: any) => [
                 compact ? localStyles.tab : localStyles.railItem,
                 touch && (compact ? localStyles.tabTouch : localStyles.railItemTouch),
@@ -436,11 +468,11 @@ export default function NodeDetailScreen({
     if (section === 'rules') return (
       <View style={{ flex: 1 }}>
         {/* 说明收进规则区工具条的 ⓘ(09-25 紧凑化),标题下不再常驻一行。 */}
-        <SectionTitle title="规则文件" />
+        {chrome.sectionTitle ? <SectionTitle title="规则文件" /> : null}
         {/* app#225 —— 节点规则文件（CLAUDE.md / AGENTS.md）查看/编辑。显示条件与请求目标见
             node-rules.ts rulesFileTarget:会话上报 rules_file_capable 时详情/只读页都显示
             (claude-code 会话没有 nodes 行也能按 alias 发);否则保持原行为。 */}
-        {rulesTarget ? <NodeRulesSection cfg={cfg} node={rulesTarget} session={s} /> : null}
+        {rulesTarget ? <NodeRulesSection cfg={cfg} node={rulesTarget} session={s} onDirtyChange={setRulesDirty} /> : null}
       </View>
     );
     if (section === 'skills') return (
@@ -494,21 +526,59 @@ export default function NodeDetailScreen({
     );
   })();
 
+  const column = (
+    <View style={{ flexGrow: 1, width: '100%', maxWidth: nodePageColumnMaxWidth(section, filesTree), alignSelf: 'center' }} testID="node-page-content">
+      {content}
+    </View>
+  );
   return (
-    <View style={styles.root}>
+    // 规则分区在原生端打字时:键盘把页面底部顶上来(Android edge-to-edge 下 adjustResize 不生效,同 ChatScreen 的做法),
+    // 编辑框底边和光标所在行不被键盘盖住;别的分区不启用,行为不变。
+    <KeyboardAvoidingView
+      style={styles.root}
+      enabled={Platform.OS !== 'web' && section === 'rules'}
+      behavior="padding"
+      keyboardVerticalOffset={Platform.OS === 'android' ? (StatusBar.currentHeight ?? 0) : 0}
+    >
       {header}
-      {headerCard}
+      {chrome.headerCard ? headerCard : null}
       <View style={{ flex: 1, flexDirection: compact ? 'column' : 'row', minHeight: 0 }}>
         {nav}
         {/* 内容列随窗口变宽、到 NODE_PAGE_CONTENT_MAX_WIDTH 封顶并居中(Vincent 09-24「空了」:
-            原来 maxWidth 880 贴左,2000px 宽窗右边空一大片)。flexGrow 让规则文件编辑框能吃满剩余高度。 */}
-        <ScrollView style={{ flex: 1 }} onLayout={e => setPaneWidth(e.nativeEvent.layout.width)}
-          contentContainerStyle={{ flexGrow: 1, padding: contentPadding, paddingBottom: section === 'rules' ? contentPadding : spacing.xl * 2 }}>
-          <View style={{ flexGrow: 1, width: '100%', maxWidth: nodePageColumnMaxWidth(section, filesTree), alignSelf: 'center' }} testID="node-page-content">
-            {content}
+            原来 maxWidth 880 贴左,2000px 宽窗右边空一大片)。
+            规则文件分区整页不滚(nodePageScrolls):工具条钉在上面,阅读区 / 编辑框自己滚 ——
+            包在 ScrollView 里时手机上一滑就把「阅读/编辑」「保存」滚出屏幕(2026-09-26 小米折叠屏)。 */}
+        {pageScrolls ? (
+          <ScrollView style={{ flex: 1 }} onLayout={e => setPaneWidth(e.nativeEvent.layout.width)}
+            contentContainerStyle={{ flexGrow: 1, padding: contentPadding, paddingBottom: spacing.xl * 2 }}>
+            {column}
+          </ScrollView>
+        ) : (
+          <View style={{ flex: 1, minHeight: 0, padding: contentPadding }} onLayout={e => setPaneWidth(e.nativeEvent.layout.width)} testID="node-page-fixed">
+            {column}
           </View>
-        </ScrollView>
+        )}
       </View>
+
+      {/* 规则文件有没保存的草稿,又要切分区 / 返回。 */}
+      <Modal transparent visible={!!pendingLeave} onRequestClose={() => setPendingLeave(null)} animationType="fade">
+        <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.55)', alignItems: 'center', justifyContent: 'center', padding: spacing.xl }}>
+          <View style={{ width: '100%', maxWidth: 420, borderRadius: 14, backgroundColor: colors.card, padding: spacing.xl, gap: spacing.md }} accessibilityViewIsModal>
+            <Text style={{ color: colors.text, fontSize: 17, fontWeight: '600' }}>放弃未保存的修改？</Text>
+            <Text style={{ color: colors.textSecondary, fontSize: 13, lineHeight: 19 }}>规则文件的改动还没有保存到节点。离开后这些改动会丢失。</Text>
+            <View style={{ flexDirection: 'row', justifyContent: 'flex-end', gap: spacing.sm, flexWrap: 'wrap' }}>
+              <Pressable style={styles.retryBtn} accessibilityRole="button" onPress={() => setPendingLeave(null)}><Text style={styles.retryBtnText}>继续编辑</Text></Pressable>
+              <Pressable
+                style={[styles.retryBtn, { borderColor: colors.failed }]}
+                accessibilityRole="button"
+                onPress={() => { const go = pendingLeave; setPendingLeave(null); setRulesDirty(false); go?.(); }}
+              >
+                <Text style={{ color: colors.failed, fontWeight: '600' }}>放弃修改</Text>
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
 
       <Modal transparent visible={!readOnly && !!pendingAction} onRequestClose={() => setPendingAction(null)} animationType="fade">
         <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.55)', alignItems: 'center', justifyContent: 'center', padding: spacing.xl }}>
@@ -535,7 +605,7 @@ export default function NodeDetailScreen({
           </View>
         </View>
       </Modal>
-    </View>
+    </KeyboardAvoidingView>
   );
 }
 

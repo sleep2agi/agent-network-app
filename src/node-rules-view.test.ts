@@ -1,7 +1,7 @@
 // 规则文件「阅读 / 编辑 / 全屏目录」纯模型。ck 风格自执行脚本(不是 bun:test)。
 // @ts-expect-error app tsconfig 不带 node 类型(其余读源码的 ck 测试同样报这一条);运行时由 node/bun 提供。
 import { readFileSync } from 'node:fs';
-import { blockLineForCaret, buildRulesOutline, RULES_STATUS_HIDE_MS, rulesInfoText, saveButtonLabel, statusAutoHideMs, jumpText, lineAtOffset, lineEndOffset, lineStartOffset, outlineText, OUTLINE_MAX_LEVEL, RULES_DEFAULT_MODE, rulesReadKey, rulesViewState, sourceRangeFromDataset, sourceSelection } from './node-rules-view';
+import { blockAtY, blockLineForCaret, buildRulesOutline, DOUBLE_TAP_MS, DOUBLE_TAP_SLOP, isDoubleTap, isTap, resolveBlockRects, RULES_OUTLINE_MIN_WINDOW, RULES_TOOLBAR_NARROW_WIDTH, rulesToolbarLayout, showRulesOutline, TAP_MOVE_SLOP, RULES_STATUS_HIDE_MS, rulesInfoText, saveButtonLabel, statusAutoHideMs, jumpText, lineAtOffset, lineEndOffset, lineStartOffset, outlineText, OUTLINE_MAX_LEVEL, RULES_DEFAULT_MODE, rulesReadKey, rulesViewState, sourceRangeFromDataset, sourceSelection } from './node-rules-view';
 import { parseMarkdownBlocks } from './markdown-model';
 
 let p = 0, t = 0;
@@ -154,13 +154,67 @@ ck('保存按钮干净时也叫「保存」(不再是「已是最新」)', saveB
 ck('保存中显示「保存中…」', saveButtonLabel('saving') === '保存中…');
 ck('ⓘ 说明带上真实文件名,并合并了覆盖/改不了文件名两层意思', rulesInfoText('AGENTS.md', false).includes('AGENTS.md') && rulesInfoText('AGENTS.md', false).includes('覆盖') && rulesInfoText('AGENTS.md', false).includes('改不了'));
 ck('web 端 ⓘ 附双击提示,原生端不附', rulesInfoText('CLAUDE.md', true).includes('双击') && !rulesInfoText('CLAUDE.md', false).includes('双击'));
-ck('规则区只剩一行工具条:卡片里不再有独立的说明段', !/这是节点工作目录里的 \{fileName\}/.test(section) && /<InfoTip label="规则文件说明" text=\{rulesInfoText\(fileName, WEB\)\} \/>/.test(section));
+ck('规则区只剩一行工具条:卡片里不再有独立的说明段;ⓘ 带双击提示(原生端也能双击了)', !/这是节点工作目录里的 \{fileName\}/.test(section) && /<InfoTip label="规则文件说明" text=\{rulesInfoText\(fileName, true\)\} \/>/.test(section));
 ck('状态句按 statusAutoHideMs 自动消失', /statusAutoHideMs\(messageTone, phase\)/.test(section));
 ck('保存按钮文案走 saveButtonLabel,源码里不再有「已是最新」', /saveButtonLabel\(phase\)/.test(section) && !section.includes('已是最新'));
 const screenSrc = readFileSync(new URL('./NodeDetailScreen.tsx', import.meta.url), 'utf8');
 ck('节点页规则/技能标题下不再常驻说明行', /<SectionTitle title="规则文件" \/>/.test(screenSrc) && /<SectionTitle title="技能" \/>/.test(screenSrc));
 const skillsSrc = readFileSync(new URL('./NodeSkillsSection.tsx', import.meta.url), 'utf8');
 ck('技能区说明收进 ⓘ,刷新在头部同一行', /<InfoTip label="技能说明"/.test(skillsSrc) && skillsSrc.indexOf('<InfoTip label="技能说明"') < skillsSrc.indexOf('刷新</Text>') && skillsSrc.indexOf('刷新</Text>') < skillsSrc.indexOf('skills.map('));
+
+// ── 手机 / 触屏(2026-09-26 Vincent 小米折叠屏:「好像编辑不了那个规则文件」) ──
+// 块布局 → 绝对矩形:列表项 y 相对列表,要加上列表的 y。
+const layouts = [
+  { id: 'b0', start: 0, end: 0, y: 0, height: 30 },          // # 标题
+  { id: 'b1', start: 2, end: 4, y: 40, height: 90 },          // 列表(3 项)
+  { id: 'b1.0', parent: 'b1', start: 2, end: 2, y: 0, height: 30 },
+  { id: 'b1.1', parent: 'b1', start: 3, end: 3, y: 30, height: 30 },
+  { id: 'b1.2', parent: 'b1', start: 4, end: 4, y: 60, height: 30 },
+  { id: 'b2', start: 6, end: 8, y: 140, height: 60 },         // 段落
+];
+const rects = resolveBlockRects(layouts);
+const li1 = rects.find(r => r.start === 3)!;
+ck('列表项的 top = 列表 y + 项 y', li1.top === 70 && li1.bottom === 100 && li1.depth === 1);
+ck('顶层块 depth 0,按 top 排序', rects[0].start === 0 && rects[0].depth === 0 && rects.every((r, i) => i === 0 || rects[i - 1].top <= r.top));
+ck('父块没报上来的列表项丢掉(不猜位置)', resolveBlockRects([{ id: 'x.0', parent: 'x', start: 1, end: 1, y: 5, height: 5 }]).length === 0);
+ck('父子成环不死循环', resolveBlockRects([{ id: 'a', parent: 'b', start: 0, end: 0, y: 0, height: 1 }, { id: 'b', parent: 'a', start: 1, end: 1, y: 0, height: 1 }]).length === 0);
+ck('坏高度 / NaN y 丢掉', resolveBlockRects([{ id: 'n', start: 0, end: 0, y: NaN, height: 1 }, { id: 'h', start: 1, end: 1, y: 0, height: -1 }]).length === 0);
+const at = (y: number) => JSON.stringify(blockAtY(rects, y));
+ck('点在标题上 → 标题那行', at(10) === JSON.stringify({ start: 0, end: 0 }));
+ck('点在列表第二项 → 那一项,不是整张列表', at(75) === JSON.stringify({ start: 3, end: 3 }));
+ck('项的上边界算这一项,下边界算下一项', at(70) === JSON.stringify({ start: 3, end: 3 }) && at(100) === JSON.stringify({ start: 4, end: 4 }));
+ck('点在两块之间的空隙 → 上面那块', at(135) === JSON.stringify({ start: 2, end: 4 }) && at(35) === JSON.stringify({ start: 0, end: 0 }));
+ck('点在段落里 → 段落整段', at(150) === JSON.stringify({ start: 6, end: 8 }));
+ck('点在最后一块下面 → 最后一块', at(900) === JSON.stringify({ start: 6, end: 8 }));
+ck('点在第一块上面(内边距)→ 第一块', at(-8) === JSON.stringify({ start: 0, end: 0 }));
+ck('没有块 / y 不是数 → null(不跳)', blockAtY([], 10) === null && blockAtY(rects, NaN) === null);
+ck('嵌套同深度重叠取小的那个', JSON.stringify(blockAtY([{ start: 0, end: 9, top: 0, bottom: 100, depth: 0 }, { start: 3, end: 4, top: 10, bottom: 20, depth: 0 }], 15)) === JSON.stringify({ start: 3, end: 4 }));
+
+ck('轻触:移动 ≤ 10dp 算点', isTap({ x: 0, y: 0 }, { x: 6, y: 8 }) && TAP_MOVE_SLOP === 10);
+ck('滑动(滚阅读区)不算点', !isTap({ x: 0, y: 0 }, { x: 0, y: 11 }));
+ck('300ms 内同一处两次 = 双击', isDoubleTap({ t: 1000, x: 50, y: 50 }, { t: 1000 + DOUBLE_TAP_MS, x: 60, y: 60 }) && DOUBLE_TAP_MS === 300);
+ck('超过 300ms 不算', !isDoubleTap({ t: 1000, x: 50, y: 50 }, { t: 1301, x: 50, y: 50 }));
+ck('两次落点相距太远不算', !isDoubleTap({ t: 1000, x: 50, y: 50 }, { t: 1100, x: 50, y: 50 + DOUBLE_TAP_SLOP + 1 }));
+ck('没有上一次 / 时间倒流不算', !isDoubleTap(null, { t: 1, x: 0, y: 0 }) && !isDoubleTap({ t: 2000, x: 0, y: 0 }, { t: 1990, x: 0, y: 0 }));
+
+ck('窄工具条(手机竖屏):状态句单独一行、不显示双击提示', JSON.stringify(rulesToolbarLayout(328)) === JSON.stringify({ statusOwnLine: true, showHint: false }));
+ck('宽工具条:照旧(状态句在按钮左边、有双击提示)', JSON.stringify(rulesToolbarLayout(900)) === JSON.stringify({ statusOwnLine: false, showHint: true }));
+ck('窄/宽边界 560', rulesToolbarLayout(RULES_TOOLBAR_NARROW_WIDTH - 1).showHint === false && rulesToolbarLayout(RULES_TOOLBAR_NARROW_WIDTH).showHint === true && RULES_TOOLBAR_NARROW_WIDTH === 560);
+ck('还没量到宽度(0)按宽算,桌面不先闪窄版', rulesToolbarLayout(0).showHint === true);
+ck('全屏目录:手机竖屏不放', showRulesOutline(393, 12) === false);
+ck('全屏目录:折叠屏展开 / 桌面放', showRulesOutline(1200, 12) === true && showRulesOutline(RULES_OUTLINE_MIN_WINDOW, 1) === true && showRulesOutline(RULES_OUTLINE_MIN_WINDOW - 1, 1) === false);
+ck('全屏目录:没有标题不放', showRulesOutline(1200, 0) === false);
+
+// 渲染侧契约
+ck('阅读区 ScrollView 开 nestedScrollEnabled(Android 嵌套时手势归它)', /<ScrollView ref=\{readScroll\} nestedScrollEnabled/.test(section));
+ck('原生阅读区:onTouchStart/End 做双击,按 blockAtY 找块', /onTouchEnd:/.test(section) && /blockAtY\(currentRects\(\), pageY - originY\.current\)/.test(section) && /isDoubleTap\(lastTap\.current, tap\)/.test(section));
+ck('原生阅读区才挂 onBlockLayout(web 仍走 data-md-line)', /onBlockLayout=\{WEB \? undefined : onBlockLayout\}/.test(section) && /sourceLines=\{WEB\}/.test(section));
+ck('原生编辑框跳转用 setSelection', /ta\.setSelection\?\.\(sel\.start, sel\.end\)/.test(section));
+ck('原生编辑框记光标(onSelectionChange)', /onSelectionChange=\{\(e\) => onCaret\?\.\(e\.nativeEvent\.selection\.start\)\}/.test(section));
+ck('工具条按 rulesToolbarLayout 决定状态句位置和提示', /\{bar\.statusOwnLine \? <View style=\{\{ flex: 1 \}\} \/> :/.test(section) && /\{bar\.statusOwnLine && message \? <View style=\{\{ width: '100%' \}\}>\{statusLine\}<\/View> : null\}/.test(section) && /bar\.showHint/.test(section));
+ck('全屏目录按 showRulesOutline', /showRulesOutline\(windowWidth, outline\.length\)/.test(section));
+ck('草稿状态往上报(节点页据此确认离开)', /onDirtyRef\.current\?\.\(unsavedForLeave\)/.test(section));
+ck('MarkdownMessage:列表项报布局时带父列表 id', /lay\(`\$\{id\}\.\$\{itemIndex\}`, block\.itemLines\?\.\[itemIndex\], block\.itemLines\?\.\[itemIndex\], id\)/.test(md));
 
 console.log(`node rules view: ${p}/${t} checks passed`);
 process.exit(p === t ? 0 : 1);
