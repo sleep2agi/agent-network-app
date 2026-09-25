@@ -16,7 +16,9 @@ const props = drawer.slice(drawer.indexOf('interface Props'), drawer.indexOf("ty
 
 check('共享 ChatScreen 同时覆盖独立窗口/桌面主窗口/移动端/安卓宽屏双栏', (app.match(/<ChatScreen/g) ?? []).length === 4);
 check('共享 ChatScreen 只挂一份 SideThreadDrawer', (chat.match(/<SideThreadDrawer/g) ?? []).length === 1);
-check('+ 菜单明确提供 BTW 入口', chat.includes('accessibilityLabel="新建 BTW 旁路线程"') && chat.includes('不打断、不 steer 当前主任务'));
+// + 面板的格子来自 composer-plus-panel.ts(见 composer-plus-panel.test.ts);BTW 格子在那里定义,ChatScreen 按 key 分派。
+const plusPanel = fs.readFileSync('src/composer-plus-panel.ts', 'utf8');
+check('+ 菜单明确提供 BTW 入口', plusPanel.includes("a11y: '新建 BTW 旁路线程'") && chat.includes('不打断、不 steer 当前主任务') && chat.includes('setBtwLaunch(current => ({ id: (current?.id ?? 0) + 1 }))'));
 check('首 token parser 在普通 sendTask 前截获 BTW', chat.indexOf('parseBtwFirstToken(draft)') < chat.indexOf('outboxAdd({'));
 check('BTW 分支不生成主会话 optimistic echo', chat.includes('Do not add an optimistic') && chat.includes('main-chat bubble and never call sendTask as a fallback.'));
 check('SideThreadDrawer 无主 draft/scroll/title/selection 写入能力', !/setDraft|setMessages|listRef|setScreen|setSelection/.test(props));
