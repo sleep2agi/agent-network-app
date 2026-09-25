@@ -159,3 +159,42 @@ const sectionOf = (title: string, data: Session[]): AgentSection =>
 
 export const countShown = (sections: AgentSection[]): number =>
   sections.reduce((n, g) => n + g.data.length, 0);
+
+// ── collapsible group headers (0.2.106) ──
+//
+// A header tap folds its group; the folded titles are persisted per device
+// (agent-list-prefs.ts). Two groups never fold:
+//   - 新消息: folding it would hide exactly the rows that want attention;
+//   - any group while searching: a search shows every match, folded or not.
+
+export type ShownSection = AgentSection & { collapsed: boolean; collapsible: boolean };
+
+export const isCollapsible = (title: string): boolean => title !== NEW_MESSAGES_TITLE;
+
+export function applyCollapsed(
+  sections: AgentSection[],
+  collapsed: readonly string[],
+  query: string,
+): ShownSection[] {
+  const searching = query.trim() !== '';
+  const folded = new Set(collapsed);
+  return sections.map(s => {
+    const collapsible = !searching && isCollapsible(s.title);
+    const isFolded = collapsible && folded.has(s.title);
+    return { ...s, data: isFolded ? [] : s.data, collapsed: isFolded, collapsible };
+  });
+}
+
+/** Toggle one title in the folded set (returns a new array; order is not meaningful). */
+export function toggleCollapsed(collapsed: readonly string[], title: string): string[] {
+  return collapsed.includes(title) ? collapsed.filter(t => t !== title) : [...collapsed, title];
+}
+
+/** Persisted value → folded titles. Anything malformed reads as "nothing folded". */
+export function parseCollapsed(raw: unknown): string[] {
+  let v = raw;
+  if (typeof v === 'string') {
+    try { v = JSON.parse(v); } catch { return []; }
+  }
+  return Array.isArray(v) ? [...new Set(v.filter((t): t is string => typeof t === 'string' && t !== ''))] : [];
+}

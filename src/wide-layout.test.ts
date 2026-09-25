@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs';
 import {
   ANDROID_TWO_PANE_MIN_WIDTH, TAURI_DESKTOP_MIN_WIDTH, chooseAppLayout, isAndroidLike,
   paneSelectionFor, screenForPaneSelection, splitsInTwoPane, twoPaneListWidth,
+  CHAT_PANE_MIN_WIDTH, LIST_PANE_DEFAULT_WIDTH, LIST_PANE_MAX_WIDTH, LIST_PANE_MIN_WIDTH, listWidthFromDrag, parseStoredListWidth,
 } from './wide-layout';
 
 let p = 0, t = 0;
@@ -56,10 +57,26 @@ for (const w of [320, 390, 700, 900, 1366]) {
 }
 
 // ── list pane width ──
-ck('list width at 700 = 320 (min)', twoPaneListWidth(700) === 320);
-ck('list width at 900 = 342', twoPaneListWidth(900) === 342);
-ck('list width at 1280 = 400 (max)', twoPaneListWidth(1280) === 400);
-ck('detail pane at threshold ≥ 380', 700 - twoPaneListWidth(700) >= 380);
+// 0.2.106: a fixed default (320) the user drags within 260–420, not 38% of the area.
+// Areas are the width beside the 72 dp rail (window − 72).
+ck('default list width is 320 on a roomy area (1128 = 1200 window)', twoPaneListWidth(1128) === 320);
+ck('default does not grow with the window (2000)', twoPaneListWidth(2000) === 320);
+ck('unfolded MIX Fold area (≈808) keeps the default 320', twoPaneListWidth(808) === 320);
+ck('at the 700 threshold (area 628) the chat keeps ≥ 320: list 308', twoPaneListWidth(628) === 308 && 628 - twoPaneListWidth(628) >= 320);
+ck('tiny area never pushes the list below 260', twoPaneListWidth(400) === 260);
+ck('dragged width is honoured inside the bounds', twoPaneListWidth(1128, 300) === 300 && twoPaneListWidth(1128, 400) === 400);
+ck('dragged width clamps to 420 max', twoPaneListWidth(1128, 900) === 420);
+ck('dragged width clamps to 260 min', twoPaneListWidth(1128, 100) === 260);
+ck('max also leaves the chat 320 (area 700 → ≤ 380)', twoPaneListWidth(700, 420) === 380);
+ck('NaN / 0 / negative preference → default', twoPaneListWidth(1128, NaN) === 320 && twoPaneListWidth(1128, 0) === 320 && twoPaneListWidth(1128, -5) === 320);
+ck('fractional preference rounds', twoPaneListWidth(1128, 300.6) === 301);
+ck('constants are the documented 320 / 260 / 420 / chat 320',
+  LIST_PANE_DEFAULT_WIDTH === 320 && LIST_PANE_MIN_WIDTH === 260 && LIST_PANE_MAX_WIDTH === 420 && CHAT_PANE_MIN_WIDTH === 320);
+ck('drag right widens, left narrows, both clamped', listWidthFromDrag(320, 40, 1128) === 360 && listWidthFromDrag(320, -40, 1128) === 280
+  && listWidthFromDrag(320, 500, 1128) === 420 && listWidthFromDrag(320, -500, 1128) === 260);
+ck('drag with NaN dx stays put', listWidthFromDrag(333, NaN, 1128) === 333);
+ck('stored width parses and clamps', parseStoredListWidth('300') === 300 && parseStoredListWidth('9999') === 420 && parseStoredListWidth('12') === 260);
+ck('stored garbage reads as never saved', [null, undefined, '', 'abc', '0', '-3', 'Infinity'].every(v => parseStoredListWidth(v as any) === null));
 
 // ── which screens split ──
 ck('agents splits', splitsInTwoPane({ name: 'agents' }));

@@ -61,9 +61,48 @@ export function chooseAppLayout({ os, tauri, userAgent = '', width }: LayoutInpu
   return 'phone';
 }
 
-/** Left (list) pane width: a phone-width column, never more than ~40% of the window. */
-export function twoPaneListWidth(width: number): number {
-  return Math.round(Math.max(320, Math.min(400, width * 0.38)));
+// ── list pane width (0.2.106: fixed default + draggable divider) ──
+//
+// 0.2.98–0.2.105 sized the list as 38% of the area beside the rail, clamped 320–400. On an
+// unfolded foldable held landscape that is the 400 dp end — Vincent on 0.2.104:
+// 「左边这个 agent 的列表是不是占的区间也太大了」. A conversation list does not get more
+// useful as the window grows (WeChat / Telegram keep it fixed), so it is now a fixed
+// 320 dp that the user can drag between 260 and 420; the chat takes the rest.
+
+/** Default list pane width (dp) before the user drags the divider. */
+export const LIST_PANE_DEFAULT_WIDTH = 320;
+/** Narrowest list: 44 dp avatar + a readable name + the time column. */
+export const LIST_PANE_MIN_WIDTH = 260;
+export const LIST_PANE_MAX_WIDTH = 420;
+/** The chat never gets narrower than this because of the list (a phone-width column). */
+export const CHAT_PANE_MIN_WIDTH = 320;
+
+/**
+ * Left (list) pane width for an area `areaWidth` dp wide (the width beside the rail).
+ * `preferred` is the user's dragged width (or the default). Always within
+ * [LIST_PANE_MIN_WIDTH, LIST_PANE_MAX_WIDTH]; below that, also leaves the chat at least
+ * CHAT_PANE_MIN_WIDTH — except that the list never drops under its own minimum.
+ */
+export function twoPaneListWidth(areaWidth: number, preferred: number = LIST_PANE_DEFAULT_WIDTH): number {
+  const want = Number.isFinite(preferred) && preferred > 0 ? preferred : LIST_PANE_DEFAULT_WIDTH;
+  const roomy = Number.isFinite(areaWidth) ? areaWidth - CHAT_PANE_MIN_WIDTH : LIST_PANE_MAX_WIDTH;
+  const hi = Math.max(LIST_PANE_MIN_WIDTH, Math.min(LIST_PANE_MAX_WIDTH, roomy));
+  return Math.round(Math.max(LIST_PANE_MIN_WIDTH, Math.min(hi, want)));
+}
+
+/** Divider drag: finger moved `dx` dp since the press (right = wider list). */
+export function listWidthFromDrag(startWidth: number, dx: number, areaWidth: number): number {
+  // Floor at the minimum *before* the clamp: a drag far past the left edge gives a negative
+  // raw width, which twoPaneListWidth would read as "no preference" and snap back to 320.
+  return twoPaneListWidth(areaWidth, Math.max(LIST_PANE_MIN_WIDTH, startWidth + (Number.isFinite(dx) ? dx : 0)));
+}
+
+/** A persisted width: anything that is not a positive finite number reads as "never saved". */
+export function parseStoredListWidth(raw: string | null | undefined): number | null {
+  if (raw == null || raw === '') return null;
+  const n = Number(raw);
+  if (!Number.isFinite(n) || n <= 0) return null;
+  return Math.round(Math.max(LIST_PANE_MIN_WIDTH, Math.min(LIST_PANE_MAX_WIDTH, n)));
 }
 
 // ── selected-item mapping between the phone stack and the two panes ──

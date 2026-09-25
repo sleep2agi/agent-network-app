@@ -64,7 +64,9 @@ import { bindUnreadProfile } from './src/unread-store';
 import { openRememberedChatWindow } from './src/desktop-chat-windows';
 import { activateHubProfile, LOCAL_HUB_PROFILE_ID, localHubStatus, startLocalHub } from './src/local-hub';
 import UnreadBadgeFixtureScreen, { readWebFixture } from './src/UnreadBadgeFixtureScreen';
-import { chooseAppLayout, paneSelectionFor, twoPaneListWidth } from './src/wide-layout';
+import { chooseAppLayout, LIST_PANE_DEFAULT_WIDTH, paneSelectionFor, twoPaneListWidth } from './src/wide-layout';
+import TwoPaneDivider from './src/TwoPaneDivider';
+import { loadListPaneWidth, saveListPaneWidth } from './src/agent-list-prefs';
 import { bumpLayoutGeneration } from './src/layout-handoff';
 import MobileNavRail from './src/MobileNavRail';
 import { contentWidthBesideRail, navActiveKey, navChromeFor, railShowsBrand, screenForNavPress } from './src/nav-chrome';
@@ -256,7 +258,17 @@ function AppRoot() {
   const railShown = navChrome === 'rail';
   // Width to the right of the rail; the two panes split this, not the whole window.
   const paneAreaWidth = railShown ? contentWidthBesideRail(width, insets.left, insets.right) : width;
-  const paneListWidth = twoPaneListWidth(paneAreaWidth);
+  // 0.2.106: fixed 320 dp by default, dragged by the user (TwoPaneDivider), remembered per
+  // device. listPaneWidth is the saved preference; twoPaneListWidth clamps it to 260–420 and
+  // to what the current area leaves for the chat.
+  const [listPaneWidth, setListPaneWidth] = useState(LIST_PANE_DEFAULT_WIDTH);
+  useEffect(() => {
+    let live = true;
+    loadListPaneWidth().then(w => { if (live && w !== null) setListPaneWidth(w); }).catch(() => {});
+    return () => { live = false; };
+  }, []);
+  const onListPaneWidth = (w: number) => { setListPaneWidth(w); void saveListPaneWidth(w); };
+  const paneListWidth = twoPaneListWidth(paneAreaWidth, listPaneWidth);
   const onNavPress = (key: string) => {
     const next = screenForNavPress(key, screen.name);
     if (next) setScreen(next as Screen);
@@ -605,6 +617,8 @@ function AppRoot() {
                       </View>
                     )}
                   </View>
+                  {/* Last child so it stacks above both panes; absolutely positioned over the border. */}
+                  <TwoPaneDivider width={paneListWidth} areaWidth={paneAreaWidth} onWidth={onListPaneWidth} />
                 </View>
               ) : screen.name === 'chat' ? (
                 <ChatScreen
