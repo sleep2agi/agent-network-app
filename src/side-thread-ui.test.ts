@@ -14,7 +14,7 @@ const actionController = fs.readFileSync('src/side-thread-action-controller.ts',
 const app = fs.readFileSync('App.tsx', 'utf8');
 const props = drawer.slice(drawer.indexOf('interface Props'), drawer.indexOf("type CapabilityView"));
 
-check('共享 ChatScreen 同时覆盖独立窗口/桌面主窗口/移动端', (app.match(/<ChatScreen/g) ?? []).length === 3);
+check('共享 ChatScreen 同时覆盖独立窗口/桌面主窗口/移动端/安卓宽屏双栏', (app.match(/<ChatScreen/g) ?? []).length === 4);
 check('共享 ChatScreen 只挂一份 SideThreadDrawer', (chat.match(/<SideThreadDrawer/g) ?? []).length === 1);
 check('+ 菜单明确提供 BTW 入口', chat.includes('accessibilityLabel="新建 BTW 旁路线程"') && chat.includes('不打断、不 steer 当前主任务'));
 check('首 token parser 在普通 sendTask 前截获 BTW', chat.indexOf('parseBtwFirstToken(draft)') < chat.indexOf('outboxAdd({'));

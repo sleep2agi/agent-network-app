@@ -45,7 +45,8 @@
 // "field absent" apart from "screen broken" (lead 71ee862d
 // verification bullet).
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { layoutGeneration, releaseOnUnmount, takeHandoff } from './layout-handoff';
 import { ActivityIndicator, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View, useWindowDimensions } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 
@@ -143,11 +144,18 @@ export default function NodeDetailScreen({
   alias,
   onBack,
   readOnly = false,
+  layoutWidth,
+  touch = false,
 }: {
   cfg: HubConfig;
   alias: string;
   onBack: () => void;
   readOnly?: boolean;
+  /** Android two-pane: the width this screen actually gets (window minus the list).
+   *  Omitted everywhere else, where the window width decides as before. */
+  layoutWidth?: number;
+  /** Android two-pane: finger-sized section rail rows (≥ 48 dp) when the rail shows. */
+  touch?: boolean;
 }) {
   const [state, setState] = useState<LoadState>({ kind: 'loading' });
   const [node, setNode] = useState<HubNode | null>(null);
@@ -157,8 +165,20 @@ export default function NodeDetailScreen({
   const [actionBusy, setActionBusy] = useState(false);
   const [actionMessage, setActionMessage] = useState('');
   const [activeSection, setActiveSection] = useState<NodeSectionKey>('overview');
+  // Fold/unfold remounts this screen; keep the selected tab (概览/规则文件/技能/…)
+  // across that remount only (see layout-handoff.ts).
+  const sectionHandoffKey = `nodeSection:${readOnly ? 'info' : 'detail'}:${cfg.profileId ?? cfg.serverUrl}:${alias}`;
+  const activeSectionRef = useRef(activeSection);
+  activeSectionRef.current = activeSection;
+  useLayoutEffect(() => {
+    const mountedGeneration = layoutGeneration();
+    const handed = takeHandoff<NodeSectionKey>(sectionHandoffKey);
+    if (handed) setActiveSection(handed);
+    return () => releaseOnUnmount(sectionHandoffKey, activeSectionRef.current, mountedGeneration);
+  }, [sectionHandoffKey]);
   const [showMoreFacts, setShowMoreFacts] = useState(false);
-  const { width } = useWindowDimensions();
+  const { width: windowWidth } = useWindowDimensions();
+  const width = layoutWidth ?? windowWidth;
   const compact = width < NODE_PAGE_COMPACT_WIDTH;
   // 右栏实测宽度(左侧还有服务器侧栏/分区栏,窗口宽≠右栏宽);没量到之前按窗口估。
   const [paneWidth, setPaneWidth] = useState(0);
@@ -346,6 +366,7 @@ export default function NodeDetailScreen({
               onPress={() => setActiveSection(item.key)}
               style={({ pressed, hovered }: any) => [
                 compact ? localStyles.tab : localStyles.railItem,
+                touch && (compact ? localStyles.tabTouch : localStyles.railItemTouch),
                 (hovered || pressed) && { backgroundColor: colors.rowHover },
                 isActive && { backgroundColor: colors.rowActive },
               ]}
@@ -552,6 +573,9 @@ const localStyles = StyleSheet.create({
     paddingVertical: spacing.sm + 2,
     borderRadius: 10,
   },
+  // Android two-pane (touch): Material's 48 dp minimum for the rail, 40 dp for the chip row.
+  railItemTouch: { minHeight: 48 },
+  tabTouch: { minHeight: 40, justifyContent: 'center' },
   tabsWrap: {
     borderBottomWidth: 1,
     paddingVertical: spacing.sm,
