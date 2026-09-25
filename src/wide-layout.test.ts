@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import {
   ANDROID_TWO_PANE_MIN_WIDTH, TAURI_DESKTOP_MIN_WIDTH, chooseAppLayout, isAndroidLike,
   paneSelectionFor, screenForPaneSelection, splitsInTwoPane, twoPaneListWidth,
@@ -97,6 +98,19 @@ const sels = [{ detail: null }, { selectedAlias: 'x', detail: 'chat' as const },
 for (const sel of sels) {
   const back = paneSelectionFor(screenForPaneSelection(sel))!;
   ck(`panes→stack→panes identity for ${sel.detail}`, back.detail === sel.detail && back.selectedAlias === (sel as any).selectedAlias);
+}
+
+// ── app.json must not lock orientation (0.2.100) ──
+// "portrait" → expo prebuild writes android:screenOrientation="portrait" → Android letterboxes the app on an
+// unfolded foldable in landscape and the two-pane branch above never sees the wide width (Vincent's screenshot).
+// The built APK is checked too (android-build.yml, aapt2 xmltree); this catches it at PR time.
+{
+  const appJson = JSON.parse(readFileSync(new URL('../app.json', import.meta.url), 'utf8'));
+  const orientation = appJson.expo?.orientation;
+  ck(`app.json orientation is "default" (got ${JSON.stringify(orientation)})`, orientation === 'default');
+  ck('android block does not set its own orientation / resizeableActivity lock',
+    appJson.expo?.android?.orientation === undefined && appJson.expo?.android?.resizeableActivity !== false);
+  ck('iPad stays multitasking-capable (ios.requireFullScreen not true)', appJson.expo?.ios?.requireFullScreen !== true);
 }
 
 console.log(`${p}/${t} passed`);

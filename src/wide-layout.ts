@@ -11,8 +11,12 @@
  *
  * Why 700 and not Material's 600 / 840:
  * - Folded cover screens are phones: MIX Fold cover 1080 px wide @ ~2.75 ≈ 390–420 dp.
- *   Portrait phones top out around 480 dp (and app.json locks portrait, so a phone
- *   never reports its ~900 dp landscape width). → stays well below 700.
+ *   Portrait phones top out around 480 dp. → stays well below 700.
+ * - 0.2.100: app.json `orientation` is "default" (was "portrait"). A portrait lock made
+ *   Android letterbox the app on an unfolded foldable held landscape — a phone-shaped
+ *   column between blurred bars — so this branch never saw the wide width. A phone
+ *   rotated to landscape (~800–930 dp × ~360–410 dp) now also splits; checked usable
+ *   in the web-export harness at 844×390 (list 320 + chat 524).
  * - Unfolded MIX Fold-class inner screens (≈2200–2480 px at ~420–440 dpi,
  *   density ≈ 2.6–2.75) report ≈ 800–950 dp, and Galaxy Z Fold inner ≈ 840–900 dp.
  *   → comfortably above 700, even with a little system-bar/letterbox margin.

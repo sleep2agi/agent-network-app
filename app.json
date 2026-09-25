@@ -2,8 +2,8 @@
   "expo": {
     "name": "Agent Network",
     "slug": "agent-network-app",
-    "version": "0.2.99",
-    "orientation": "portrait",
+    "version": "0.2.100",
+    "orientation": "default",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "dark",
     "ios": {
@@ -46,7 +46,7 @@
       },
       "predictiveBackGestureEnabled": false,
       "package": "com.anonymous.agentnetworkapp",
-      "versionCode": 2099,
+      "versionCode": 2100,
       "permissions": [
         "android.permission.REQUEST_INSTALL_PACKAGES"
       ]
