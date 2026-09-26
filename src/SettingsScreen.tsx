@@ -20,6 +20,7 @@ import { getNotifyDiagnostics, subscribeNotifyDiagnostics } from './notify-diagn
 import { keepAliveAvailable, keepAliveLastError, keepAliveRunning, subscribeKeepAlive } from './keep-alive';
 import { refreshNotifyDiagnostics, sendTestNotification } from './notifier-runtime';
 import XiaomiGuideModal from './XiaomiGuideModal';
+import VoiceSettingsSection from './VoiceSettingsSection';
 import { playChime } from './chime';
 import { SETTINGS_CATEGORIES, activeCategoryKey, filterSettings, rememberSettingsCategory, rememberSettingsScroll, rememberedSettingsView, settingsPlatform, visibleRowKeys, type SettingsCategoryKey, type SettingsPlatform } from './settings-model';
 
@@ -652,6 +653,13 @@ export default function SettingsScreen({
                 </>
               ) : null}
               {!searching ? <><Divider /><Text style={styles.footHint}>{nativeNotify ? '你正开着的会话不提示;在应用里看着别的会话时照常提示。' : '新消息会在系统栏和系统通知里提示;你正开着的会话不提示。'}</Text></> : null}
+            </View>
+          ) : null}
+
+          {sectionsToRender.includes('voice') ? (
+            <View style={styles.section} testID="settings-section-voice">
+              {heading('voice')}
+              <VoiceSettingsSection showCredentials={show('voice', 'credentials')} showTest={show('voice', 'test')} />
             </View>
           ) : null}
 

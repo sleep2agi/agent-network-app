@@ -307,6 +307,48 @@ fn session_entry() -> Result<keyring::Entry, String> {
     keyring::Entry::new(SESSION_SERVICE, SESSION_ACCOUNT).map_err(|error| error.to_string())
 }
 
+// 语音输入(豆包 ASR)凭据:与登录 token 同一个 keyring service、独立 account。只在本机,
+// 不进 profile 目录的明文文件、不上传 hub。JSON 形状由前端 voice-credentials-model.ts 规整;
+// 这里只做大小上限,不解析、不打日志。
+const VOICE_CREDENTIALS_ACCOUNT: &str = "voice-asr-v1";
+const VOICE_CREDENTIALS_MAX_BYTES: usize = 8 * 1024;
+
+fn voice_credentials_entry() -> Result<keyring::Entry, String> {
+    keyring::Entry::new(SESSION_SERVICE, VOICE_CREDENTIALS_ACCOUNT).map_err(|error| error.to_string())
+}
+
+fn check_voice_credentials_size(json: &str) -> Result<(), String> {
+    if json.is_empty() || json.len() > VOICE_CREDENTIALS_MAX_BYTES {
+        return Err("voice credentials payload size out of range".into());
+    }
+    Ok(())
+}
+
+#[tauri::command]
+fn save_voice_credentials(json: String) -> Result<(), String> {
+    check_voice_credentials_size(&json)?;
+    voice_credentials_entry()?
+        .set_password(&json)
+        .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+fn load_voice_credentials() -> Result<Option<String>, String> {
+    match voice_credentials_entry()?.get_password() {
+        Ok(value) => Ok(Some(value)),
+        Err(keyring::Error::NoEntry) => Ok(None),
+        Err(error) => Err(error.to_string()),
+    }
+}
+
+#[tauri::command]
+fn clear_voice_credentials() -> Result<(), String> {
+    match voice_credentials_entry()?.delete_credential() {
+        Ok(()) | Err(keyring::Error::NoEntry) => Ok(()),
+        Err(error) => Err(error.to_string()),
+    }
+}
+
 #[derive(Clone, serde::Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 struct ProfileMetadata {
@@ -754,6 +796,13 @@ mod tests {
     use super::*;
 
     #[test]
+    fn voice_credentials_size_is_bounded() {
+        assert!(check_voice_credentials_size("").is_err());
+        assert!(check_voice_credentials_size(&"x".repeat(VOICE_CREDENTIALS_MAX_BYTES + 1)).is_err());
+        assert!(check_voice_credentials_size(r#"{"accessToken":"t"}"#).is_ok());
+    }
+
+    #[test]
     fn download_name_is_basename_only() {
         assert_eq!(sanitize_download_name("../../etc/passwd"), "passwd");
         assert_eq!(sanitize_download_name("C:\\Users\\x\\a.pptx"), "a.pptx");
@@ -918,6 +967,9 @@ pub fn run() {
             write_desktop_profile_file,
             read_desktop_profile_file,
             desktop_storage_diagnostics,
+            save_voice_credentials,
+            load_voice_credentials,
+            clear_voice_credentials,
             start_network_event_stream,
             stop_network_event_stream,
             start_user_event_stream,

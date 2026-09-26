@@ -37,6 +37,15 @@
         }
       ],
       "expo-sharing",
+      [
+        "expo-audio",
+        {
+          "microphonePermission": "按住说话时录音,转成文字填进输入框(语音输入)",
+          "recordAudioAndroid": true,
+          "enableBackgroundRecording": false,
+          "enableBackgroundPlayback": false
+        }
+      ],
       "./plugins/with-no-aps-environment",
       [
         "expo-notifications",
