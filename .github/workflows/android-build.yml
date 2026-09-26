@@ -92,7 +92,7 @@ jobs:
           # prompt never shows), and the 「后台保持连接」 foreground service must carry its
           # foregroundServiceType in the manifest plus the matching permission — on Android 14+ a
           # startForeground() whose type is not declared throws and the app crashes.
-          for perm in POST_NOTIFICATIONS FOREGROUND_SERVICE FOREGROUND_SERVICE_REMOTE_MESSAGING; do
+          for perm in POST_NOTIFICATIONS FOREGROUND_SERVICE FOREGROUND_SERVICE_REMOTE_MESSAGING ACCESS_NOTIFICATION_POLICY; do
             if ! grep -Fq "uses-permission: name='android.permission.$perm'" <<<"$badging"; then
               echo "::error::APK lacks android.permission.$perm"; exit 1
             fi

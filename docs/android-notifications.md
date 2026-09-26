@@ -95,3 +95,50 @@ state from `isRunning()`, not the toggle value.
   `desktop_message` (`user_inbox`) is pushed. Replies arrive through polling: 10 s in the
   foreground, 20 s in the background with keep-alive.
 * iOS gets the same local notifications while the app is running. There is no background mode.
+
+## 0.2.109: DND, task status, diagnostics
+
+**Why 0.2.107 showed nothing on the owner's phone.** Do Not Disturb was on. With DND off,
+notifications appear. The trigger path itself was working. The harness
+(`src/notifier-runtime-e2e.test.ts`) runs the real `notifier-runtime.ts` and posts on the first
+agent reply to admin. It found two smaller defects, both fixed here:
+* **Half-seeded baseline.** The first snapshot was recorded when `user_inbox` arrived. The `inbox`
+  half landed one tick later and was treated as new, so replies up to 10 minutes old were
+  re-notified at every cold start.
+* **Baseline never recorded.** If `scope=user` failed (404 or 5xx), the baseline was never
+  recorded, so replies were never notified. Nothing logged this.
+
+Seeding now waits for both halves, or for the end of the runtime's first (forced) fetch round.
+
+**「免打扰时仍然提醒」 (default on).** The message channel is now `agent-messages-v3`.
+`agent-messages-v2` shipped in 0.2.108 without `bypassDnd`, so it is deleted and listed in
+`LEGACY_CHANNEL_IDS`. The channel's `bypassDnd` follows this setting. AOSP only honours it once the
+user has granted notification-policy access (`ACCESS_NOTIFICATION_POLICY`, declared in the
+keep-alive module's manifest). Without that access, `createNotificationChannel` forces it to
+false. After access is granted, the app re-sends the channel whenever it returns to the
+foreground, and the system accepts the new value as long as the user has not edited the channel.
+Turning the toggle on opens `NOTIFICATION_POLICY_ACCESS_SETTINGS` when access is missing.
+
+**Task status.** The runtime also polls `GET /api/tasks?from_name=<username>&skip_stats=1`, the same
+endpoint the 任务 tab uses. A task the user sent that reaches `replied`/`completed` (done) or
+`failed`/`expired`/`timeout` produces at most one sound:
+* If the agent's reply arrives in the same round, that message notification is titled
+  「✅ X 完成了任务:…」.
+* If the reply arrived just before, that notification is updated in place with the label, on the
+  quiet channel.
+* If no reply arrives within 45 s (common for failures), a separate 「❌ X 任务失败:…」
+  notification is posted. It carries `taskId`, and tapping it opens the task detail.
+
+**Diagnostics.** 设置 → 通知 → 通知诊断 shows the following. It is available in all builds, and
+「复制诊断信息」 copies the same rows as text.
+* Runtime state
+* Notification permission
+* Each channel's real importance, sound and bypassDnd, including whether the legacy ids are gone
+* DND state and DND access
+* Last poll time and per-source counts
+* The last decision and its reason: notified, viewing, muted, master off, quiet hours, stale, no
+  permission, or an error with its message
+* Keep-alive state
+* The last error
+
+Every `catch` that used to swallow silently now writes here.

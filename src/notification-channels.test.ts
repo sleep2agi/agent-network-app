@@ -40,7 +40,9 @@ ck('有声渠道重要性 HIGH 或 MAX(悬浮横幅)', msg.importance === 6 || m
 ck('有声渠道带 audioAttributes(usage=NOTIFICATION)', (msg.audioAttributes as any)?.usage === 5 && (msg.audioAttributes as any)?.contentType === 4);
 ck('有声渠道振动开、有振动节奏', msg.enableVibrate === true && Array.isArray(msg.vibrationPattern) && (msg.vibrationPattern as number[]).length > 0);
 ck('有声渠道锁屏可见性 = PRIVATE(与 0.2.107 设置一致)', msg.lockscreenVisibility === 2);
-ck('不绕过勿扰模式', msg.bypassDnd === false);
+ck('默认(「免打扰时仍然提醒」关)不绕过勿扰模式', msg.bypassDnd === false);
+ck('「免打扰时仍然提醒」开 → 有声渠道 bypassDnd=true', toExpoChannelInput(MESSAGE_CHANNEL, enums, { bypassDnd: true }).bypassDnd === true);
+ck('静默渠道即使开了也不绕过勿扰', toExpoChannelInput(QUIET_CHANNEL, enums, { bypassDnd: true }).bypassDnd === false);
 ck('用户看到的名字仍是「Agent 消息」', msg.name === 'Agent 消息' && MESSAGE_CHANNEL_NAME === 'Agent 消息');
 
 // ── 2. 静默渠道 ──
@@ -51,7 +53,7 @@ ck('静默渠道不振动、没有 audioAttributes', quiet.enableVibrate === fal
 
 // ── 3. id 与迁移 ──
 ck('有声渠道换了新 id(不是 0.2.107 的 agent-messages)', MESSAGE_CHANNEL_ID !== 'agent-messages' && MESSAGE_CHANNEL.id === MESSAGE_CHANNEL_ID);
-ck('旧 id 在待删列表里', LEGACY_CHANNEL_IDS.includes('agent-messages'));
+ck('旧 id 在待删列表里(0.2.107 的 agent-messages + 0.2.108 的 agent-messages-v2)', LEGACY_CHANNEL_IDS.includes('agent-messages') && LEGACY_CHANNEL_IDS.includes('agent-messages-v2'));
 ck('建的渠道里没有任何旧 id(删了再用同 id 重建会恢复无声设置)', NOTIFICATION_CHANNELS.every(c => !LEGACY_CHANNEL_IDS.includes(c.id)));
 ck('渠道 id 互不相同,且不撞前台服务渠道', new Set([...NOTIFICATION_CHANNELS.map(c => c.id), KEEPALIVE_CHANNEL_ID]).size === NOTIFICATION_CHANNELS.length + 1);
 
@@ -77,7 +79,7 @@ const loud = accumulate({}, [{ agent: 'B', count: 1, body: 'x' }], { mode: 'all'
 const q1 = accumulate({}, [{ agent: 'B', count: 1, body: 'x' }], { mode: 'new', profileKey: 'p', sound: true });
 const q2 = accumulate(q1.buckets, [{ agent: 'B', count: 1, body: 'y' }], { mode: 'new', profileKey: 'p', sound: true });
 const off = accumulate({}, [{ agent: 'B', count: 1, body: 'x' }], { mode: 'all', profileKey: 'p', sound: false });
-ck('消息通知(响)走新 id', loud.posts[0].channelId === MESSAGE_CHANNEL_ID && loud.posts[0].channelId === 'agent-messages-v2');
+ck('消息通知(响)走新 id', loud.posts[0].channelId === MESSAGE_CHANNEL_ID && loud.posts[0].channelId === 'agent-messages-v3');
 ck('仅新消息的后续 / 提示音关 → 静默渠道', q2.posts[0].channelId === QUIET_CHANNEL_ID && off.posts[0].channelId === QUIET_CHANNEL_ID);
 ck('没有任何发出的通知落在旧 id 上', [loud, q1, q2, off].every(a => a.posts.every(x => !LEGACY_CHANNEL_IDS.includes(x.channelId))));
 
@@ -100,7 +102,7 @@ const roots = [__dirname, path.join(__dirname, '../modules'), path.join(__dirnam
 const scanned = roots.flatMap(walk);
 const hits = scanned.flatMap(f => fs.readFileSync(f, 'utf8').split('\n')
   .map((line, i) => ({ f, i, line }))
-  .filter(x => /['"]agent-messages['"]/.test(x.line) && !x.line.trimStart().startsWith('*') && !x.line.trimStart().startsWith('//')));
+  .filter(x => /['"]agent-messages(-v2)?['"]/.test(x.line) && !x.line.trimStart().startsWith('*') && !x.line.trimStart().startsWith('//')));
 ck(`扫描取集非空(${scanned.length} 个文件,含原生前台服务)`, scanned.length > 20 && scanned.some(f => f.endsWith('AnetKeepAliveService.kt')));
 ck('旧 id 字面量只出现在 LEGACY_CHANNEL_IDS', hits.length === 1 && hits[0].line.includes('LEGACY_CHANNEL_IDS'));
 

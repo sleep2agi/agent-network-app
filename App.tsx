@@ -526,7 +526,7 @@ function AppRoot() {
       {screen.name !== 'login' && cfg ? <ConnectivityBanner /> : null}
       {screen.name !== 'login' && cfg ? <DesktopMessageListener cfg={cfg} /> : null}
       {/* 0.2.107 手机系统通知:登出(cfg=null)也要挂着,好让运行时停掉轮询和前台服务。 */}
-      {Platform.OS === 'android' || Platform.OS === 'ios' ? <MobileNotifier cfg={cfg} onOpenChat={alias => setScreen({ name: 'chat', alias })} /> : null}
+      {Platform.OS === 'android' || Platform.OS === 'ios' ? <MobileNotifier cfg={cfg} onOpenChat={alias => setScreen({ name: 'chat', alias })} onOpenTask={taskId => setScreen({ name: 'taskDetail', taskId })} /> : null}
       {screen.name === 'login' || !cfg ? (
         tauriDesktop && !reauthProfile && !showRemoteLogin ? (
           <FirstRunScreen

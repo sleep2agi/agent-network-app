@@ -6,6 +6,8 @@
 
 import { Platform } from 'react-native';
 import { ANDROID_PACKAGE } from './android-update-core';
+import { AnetKeepAlive } from '../modules/anet-keepalive';
+import { loadNotifySettings } from './notify-settings';
 import {
   setupAndroidChannels,
   type ChannelEnums,
@@ -25,6 +27,17 @@ function mod(): Promise<NotificationsModule> {
 
 let setupPromise: Promise<void> | null = null;
 
+/** 按当前设置下发安卓渠道(「免打扰时仍然提醒」→ 消息渠道 bypassDnd)。 */
+async function applyAndroidChannels(N: NotificationsModule): Promise<void> {
+  // 渠道配置与迁移(删 0.2.107/0.2.108 的旧渠道)在 mobile-notify-model.setupAndroidChannels,有测试。
+  await setupAndroidChannels({
+    enums: N as unknown as ChannelEnums,
+    set: (id, input) => N.setNotificationChannelAsync(id, input),
+    del: id => N.deleteNotificationChannelAsync(id),
+    bypassDnd: loadNotifySettings().dndBypass,
+  });
+}
+
 /** 前台展示策略 + 安卓渠道。幂等;安卓 13+ 要先有渠道再请求权限。 */
 export function ensureNotificationSetup(): Promise<void> {
   if (!mobileNotificationsSupported()) return Promise.resolve();
@@ -35,19 +48,46 @@ export function ensureNotificationSetup(): Promise<void> {
     N.setNotificationHandler({
       handleNotification: async () => ({ shouldShowBanner: true, shouldShowList: true, shouldPlaySound: true, shouldSetBadge: false }),
     });
-    if (Platform.OS === 'android') {
-      // 渠道配置与迁移(删 0.2.107 那条没声音的旧渠道)在 mobile-notify-model.setupAndroidChannels,有测试。
-      await setupAndroidChannels({
-        enums: N as unknown as ChannelEnums,
-        set: (id, input) => N.setNotificationChannelAsync(id, input),
-        del: id => N.deleteNotificationChannelAsync(id),
-      });
-    }
+    if (Platform.OS === 'android') await applyAndroidChannels(N);
   })().catch(error => {
     setupPromise = null;
     throw error;
   });
   return setupPromise;
+}
+
+/**
+ * 重新下发渠道(不走 ensure 的缓存)。🔴 bypassDnd 只有在用户授予勿扰权限**之后**再下发一次才生效
+ * (AOSP:无权限时建/改渠道,bypassDnd 被忽略)—— 所以从系统「勿扰权限」页回到应用、或开关改了,都要调。
+ */
+export async function reapplyNotificationChannels(): Promise<void> {
+  if (Platform.OS !== 'android') return;
+  await ensureNotificationSetup();
+  await applyAndroidChannels(await mod());
+}
+
+/** 诊断:这些渠道此刻在系统里的真实设置(不存在 → exists=false)。 */
+export async function readNotificationChannels(ids: readonly string[]): Promise<Array<{ id: string; exists: boolean; importance: number | null; sound: string | null; bypassDnd: boolean | null }>> {
+  if (Platform.OS !== 'android') return [];
+  const N = await mod();
+  const out = [];
+  for (const id of ids) {
+    const c: any = await N.getNotificationChannelAsync(id).catch(() => null);
+    out.push(c ? { id, exists: true, importance: c.importance ?? null, sound: c.sound ?? null, bypassDnd: typeof c.bypassDnd === 'boolean' ? c.bypassDnd : null } : { id, exists: false, importance: null, sound: null, bypassDnd: null });
+  }
+  return out;
+}
+
+/** 用户是否授予了「勿扰权限」;null = 不知道(非安卓 / 旧 APK 没有这个原生函数)。 */
+export function dndAccessGranted(): boolean | null {
+  if (Platform.OS !== 'android') return null;
+  try { const v = AnetKeepAlive?.isNotificationPolicyAccessGranted?.(); return typeof v === 'boolean' ? v : null; } catch { return null; }
+}
+
+/** 当前勿扰状态(1=关 2=仅优先 3=完全静音 4=仅闹钟);null = 不知道。 */
+export function currentInterruptionFilter(): number | null {
+  if (Platform.OS !== 'android') return null;
+  try { const v = AnetKeepAlive?.currentInterruptionFilter?.(); return typeof v === 'number' ? v : null; } catch { return null; }
 }
 
 export async function notificationPermission(): Promise<{ status: PermissionStatus; canAskAgain: boolean }> {
@@ -130,6 +170,13 @@ async function startActivity(action: string, params: IntentExtras): Promise<bool
 export async function openAppDetailsSettings(): Promise<void> {
   if (Platform.OS !== 'android') return;
   await startActivity('android.settings.APPLICATION_DETAILS_SETTINGS', { data: `package:${ANDROID_PACKAGE}` });
+}
+
+/** 系统「勿扰权限」页(授予后渠道的 bypassDnd 才生效)。 */
+export async function openDndAccessSettings(): Promise<void> {
+  if (Platform.OS !== 'android') return;
+  const ok = await startActivity('android.settings.NOTIFICATION_POLICY_ACCESS_SETTINGS', {});
+  if (!ok) await openAppNotificationSettings();
 }
 
 /** 本应用的通知设置页(权限被永久拒绝后,只能让人去这里开)。 */

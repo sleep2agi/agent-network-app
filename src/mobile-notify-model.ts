@@ -21,7 +21,8 @@ import type { NotifyMode } from './notify-settings';
  * 「声音:无」。已装的机器上那条渠道改不回来,所以换新 id,并删掉旧的(LEGACY_CHANNEL_IDS)。
  * 🔴 以后再改这条渠道的声音/重要性,同样只能换 id(-v3…)并把旧 id 加进 LEGACY_CHANNEL_IDS。
  */
-export const MESSAGE_CHANNEL_ID = 'agent-messages-v2';
+// 0.2.109:-v2 随 0.2.108 发出去时没有 bypassDnd;为「免打扰时仍然提醒」换 -v3,-v2 进待删列表。
+export const MESSAGE_CHANNEL_ID = 'agent-messages-v3';
 export const MESSAGE_CHANNEL_NAME = 'Agent 消息';
 /** 「仅新消息」模式下,同一个 agent 后续消息走这个渠道:只更新通知,不响铃不弹横幅。 */
 export const QUIET_CHANNEL_ID = 'agent-messages-quiet';
@@ -30,7 +31,7 @@ export const QUIET_CHANNEL_NAME = 'Agent 消息(同一会话的后续消息)';
  * 旧版本建过、现在要删掉的渠道 id。🔴 删掉的 id 永远不能再用来建渠道:安卓对「删了又用同一个 id
  * 重建」会原样恢复被删时的设置(包括没有声音)。
  */
-export const LEGACY_CHANNEL_IDS: readonly string[] = ['agent-messages'];
+export const LEGACY_CHANNEL_IDS: readonly string[] = ['agent-messages', 'agent-messages-v2'];
 
 /** 渠道配置(纯数据;expo 的枚举在 toExpoChannelInput 里按名字换成数值)。 */
 export type ChannelSpec = {
@@ -44,6 +45,14 @@ export type ChannelSpec = {
   readonly vibrationPattern: readonly number[] | null;
   readonly lockscreenVisibility: 'PUBLIC' | 'PRIVATE';
   readonly showBadge: boolean;
+  /**
+   * 0.2.108「免打扰时仍然提醒」开着时,这条渠道要不要绕过勿扰。实际写进渠道的值 = 这一格 && 设置开着。
+   * 🔴 安卓的规矩(AOSP PreferencesHelper.createNotificationChannel):应用**没有**勿扰权限
+   *    (ACCESS_NOTIFICATION_POLICY 授权)时建渠道,bypassDnd 被系统强制改成 false;有权限后
+   *    再调一次 setNotificationChannelAsync,且用户没手动改过这条渠道(userLockedFields==0),
+   *    系统才接受 bypassDnd 的新值。所以授权回来后要**重新下发**渠道(reapplyNotificationChannels)。
+   */
+  readonly bypassDndWhenAllowed: boolean;
 };
 
 export const MESSAGE_CHANNEL: ChannelSpec = {
@@ -56,6 +65,7 @@ export const MESSAGE_CHANNEL: ChannelSpec = {
   vibrationPattern: [0, 200, 120, 200],
   lockscreenVisibility: 'PRIVATE', // 与 0.2.107 相同:锁屏上显示「有通知」,不露正文
   showBadge: true,
+  bypassDndWhenAllowed: true,
 };
 
 export const QUIET_CHANNEL: ChannelSpec = {
@@ -68,6 +78,7 @@ export const QUIET_CHANNEL: ChannelSpec = {
   vibrationPattern: null,
   lockscreenVisibility: 'PRIVATE',
   showBadge: true,
+  bypassDndWhenAllowed: false, // 静默渠道本来就不响,绕过勿扰没有意义
 };
 
 /** ensureNotificationSetup 在安卓上建的全部渠道(前台服务那条在原生里建,不在这里)。 */
@@ -82,7 +93,7 @@ export type ChannelEnums = {
 };
 
 /** ChannelSpec → setNotificationChannelAsync 的入参。有声渠道显式带 sound + audioAttributes。 */
-export function toExpoChannelInput(spec: ChannelSpec, e: ChannelEnums): Record<string, unknown> {
+export function toExpoChannelInput(spec: ChannelSpec, e: ChannelEnums, opts: { bypassDnd?: boolean } = {}): Record<string, unknown> {
   const input: Record<string, unknown> = {
     name: spec.name,
     description: spec.description,
@@ -92,7 +103,8 @@ export function toExpoChannelInput(spec: ChannelSpec, e: ChannelEnums): Record<s
     vibrationPattern: spec.vibrationPattern ? [...spec.vibrationPattern] : null,
     lockscreenVisibility: e.AndroidNotificationVisibility[spec.lockscreenVisibility],
     showBadge: spec.showBadge,
-    bypassDnd: false, // 勿扰模式不绕过:要在勿扰时收到,由用户把本应用加进「例外应用」
+    // 默认不绕过勿扰;设置里开了「免打扰时仍然提醒」且渠道允许时才绕过(还要系统勿扰权限,见 bypassDndWhenAllowed)。
+    bypassDnd: spec.bypassDndWhenAllowed && opts.bypassDnd === true,
   };
   if (spec.sound) {
     input.audioAttributes = { usage: e.AndroidAudioUsage.NOTIFICATION, contentType: e.AndroidAudioContentType.SONIFICATION };
@@ -105,8 +117,9 @@ export async function setupAndroidChannels(api: {
   enums: ChannelEnums;
   set: (id: string, input: any) => Promise<unknown>;
   del: (id: string) => Promise<unknown>;
+  bypassDnd?: boolean;
 }): Promise<void> {
-  for (const spec of NOTIFICATION_CHANNELS) await api.set(spec.id, toExpoChannelInput(spec, api.enums));
+  for (const spec of NOTIFICATION_CHANNELS) await api.set(spec.id, toExpoChannelInput(spec, api.enums, { bypassDnd: api.bypassDnd }));
   for (const id of LEGACY_CHANNEL_IDS) {
     if (NOTIFICATION_CHANNELS.some(c => c.id === id)) continue;
     try { await api.del(id); } catch { /* 没有这条渠道 / 删不掉:不影响新渠道 */ }
@@ -199,13 +212,22 @@ export function conversationBeingViewed(open: string | null | undefined, foregro
  * 只认我们自己发的消息通知,且属于当前账号(别的账号的通知点了不能打开一个不存在的会话)。
  */
 export function routeFromNotificationData(data: unknown, currentProfileKey: string): string | null {
+  return routeTargetFromNotificationData(data, currentProfileKey)?.alias ?? null;
+}
+
+/** 0.2.109 任务状态通知(kind = task-notify.TASK_NOTIFICATION_KIND,与之同值)。 */
+export const TASK_STATUS_NOTIFICATION_KIND = 'anet-task-status';
+
+/** 同上,但任务状态通知还带 taskId(点它进任务详情)。 */
+export function routeTargetFromNotificationData(data: unknown, currentProfileKey: string): { alias: string; taskId: string | null } | null {
   if (!data || typeof data !== 'object') return null;
   const d = data as Record<string, unknown>;
-  if (d.kind !== NOTIFICATION_KIND) return null;
+  if (d.kind !== NOTIFICATION_KIND && d.kind !== TASK_STATUS_NOTIFICATION_KIND) return null;
   const alias = typeof d.alias === 'string' ? d.alias.trim() : '';
   if (!alias) return null;
   if (typeof d.profileKey === 'string' && d.profileKey !== currentProfileKey) return null;
-  return alias;
+  const taskId = d.kind === TASK_STATUS_NOTIFICATION_KIND && typeof d.taskId === 'string' && d.taskId ? d.taskId : null;
+  return { alias, taskId };
 }
 
 export type PermissionStatus = 'granted' | 'denied' | 'undetermined';
@@ -277,13 +299,15 @@ export function receiveTap(q: TapQueue, data: unknown, key: string): TapQueue {
 export function takeRoute(
   q: TapQueue,
   ready: { loggedIn: boolean; uiAttached: boolean; profileKey: string },
-): { queue: TapQueue; alias: string | null; consumed: boolean } {
-  if (!q.pending || !ready.loggedIn || !ready.uiAttached) return { queue: q, alias: null, consumed: false };
+): { queue: TapQueue; alias: string | null; taskId: string | null; consumed: boolean } {
+  if (!q.pending || !ready.loggedIn || !ready.uiAttached) return { queue: q, alias: null, taskId: null, consumed: false };
   const handled = new Set(q.handled);
   handled.add(q.pending.key);
+  const target = routeTargetFromNotificationData(q.pending.data, ready.profileKey);
   return {
     queue: { pending: null, handled },
-    alias: routeFromNotificationData(q.pending.data, ready.profileKey),
+    alias: target?.alias ?? null,
+    taskId: target?.taskId ?? null,
     consumed: true,
   };
 }

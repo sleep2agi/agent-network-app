@@ -7,6 +7,9 @@
   <uses-permission android:name="android.permission.FOREGROUND_SERVICE_REMOTE_MESSAGING" />
   <!-- The service holds a partial wake lock while the headless JS task runs (HeadlessJsTaskService). -->
   <uses-permission android:name="android.permission.WAKE_LOCK" />
+  <!-- 0.2.109「免打扰时仍然提醒」: without this the app is not listed on the system's
+       "Do Not Disturb access" page, so the user cannot grant it and channel bypassDnd never sticks. -->
+  <uses-permission android:name="android.permission.ACCESS_NOTIFICATION_POLICY" />
   <application>
     <!-- foregroundServiceType MUST be declared here on Android 14+ or startForeground() throws
          MissingForegroundServiceTypeException and the app crashes. -->
