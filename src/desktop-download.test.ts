@@ -22,7 +22,7 @@ check(displayDownloadPath('/Users/v/Downloads/a.pdf') === '…/Downloads/a.pdf' 
 const chat = readFileSync(new URL('./ChatScreen.tsx', import.meta.url), 'utf8');
 check(chat.includes("a.needsAuth && a.uri && Platform.OS === 'web' && !!(globalThis as any).__TAURI_INTERNALS__ ? (") && chat.includes('<AttachmentFileDesktop'), 'desktop non-image attachments render the downloadable component');
 const thumb = readFileSync(new URL('./AuthedWebThumb.tsx', import.meta.url), 'utf8');
-check(thumb.includes('if (!isTauriDesktop()) { saveImageObjectUrl(url, name); return; }') && thumb.includes('saveToDownloads(name, bytes, target ?? null)'), 'desktop 下载原图 goes through Rust save_download; plain web keeps the anchor');
+check(thumb.includes('if (!isTauriDesktop()) { saveImageObjectUrl(url, name); return null; }') && thumb.includes('saveToDownloads(name, bytes, target ?? null)'), 'desktop 下载原图 goes through Rust save_download; plain web keeps the anchor');
 const lib = readFileSync(new URL('../src-tauri/src/lib.rs', import.meta.url), 'utf8');
 check(lib.includes('fn save_download(app: tauri::AppHandle, name: String, bytes_base64: String, target_path: Option<String>)') && lib.includes('save_download,'), 'Rust save_download command registered');
 const cap = JSON.parse(readFileSync(new URL('../src-tauri/capabilities/default.json', import.meta.url), 'utf8'));

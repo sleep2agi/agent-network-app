@@ -87,6 +87,22 @@ export const parseAttachmentRefs = (text: string): ParsedAttachmentRef[] => {
 /** Keep transport hints in the task payload for legacy runtimes, but never
  * expose Hub filesystem paths, raw file IDs, or authenticated GET instructions
  * as chat copy. The attachment card owns filename, retry, preview and download. */
+/** 多图气泡已经用 3 列方格画出了这些图:再逐行列出「📎 附件 名字（image/…）」只是噪音
+ *  (8 张图 = 8 行)。只删「名字在方格里」的那几行;文件行、别的文字原样保留。 */
+export const hideGridImageLines = (text: string, gridNames: readonly string[]) => {
+  if (gridNames.length < 2) return text;
+  const names = new Set(gridNames);
+  return text
+    .split('\n')
+    .filter(line => {
+      const m = /^\s*📎\s*附件\s+(.+?)\s*[（(]image\/[^)）]*[)）]\s*$/.exec(line);
+      return !(m && names.has(m[1]));
+    })
+    .join('\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+};
+
 export const cleanAttachmentDebugText = (text: string) =>
   text
     .replace(/\[([^\]]+)\]\([^()\s]*\/api\/files\/[A-Za-z0-9_-]{8,64}\)/g, '$1')

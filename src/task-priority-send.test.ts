@@ -61,7 +61,7 @@ check('old entries without priority remain backward-compatible', (() => {
 
 const screen = readFileSync('src/ChatScreen.tsx', 'utf8').replace(/\r\n?/g, '\n');
 check('desktop and mobile both expose the priority control', (screen.match(/accessibilityLabel=\{sendPriority === 'high'/g) ?? []).length === 2);
-check('submit records priority before the network attempt', screen.indexOf('outboxAdd({ id: localId') < screen.indexOf('doSend(content, localId, imgs, priority)'));
+check('submit records priority before the network attempt', screen.indexOf('outboxAdd({ id: localId') < screen.indexOf('doSend(content, localId, imgs, priority, original)'));
 check('retry recovers stored priority', screen.includes("outboxForAlias(alias).find(e => e.id === item._localId)?.priority ?? 'normal'"));
 check('the UI resets the next send to normal', screen.includes("setSendPriority('normal')"));
 
