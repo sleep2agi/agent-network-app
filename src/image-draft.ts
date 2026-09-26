@@ -132,11 +132,22 @@ export const planCompression = (input: {
 };
 
 /**
- * 原生端(Android/iOS)没有重采样库(仓里没有 expo-image-manipulator),只能在选图时让
- * expo-image-picker 按 quality 重编码:Android 上 quality === 1 走 RawImageExporter
- * (逐字节复制原文件),< 1 走 CompressionImageExporter(JPEG 重编码,不缩边长)。
+ * 选图一律 quality 1(Android 上走 RawImageExporter,逐字节复制原文件),原图开关在**发送时**
+ * 才生效:原生端用 expo-image-manipulator、web/桌面用 canvas,规则同 planCompression。
+ * 所以草稿里的图在点「发送」之前随时可以切原图,不用重选。
  */
-export const pickerQualityFor = (original: boolean): number => (original ? 1 : COMPRESS_QUALITY);
+export const PICKER_QUALITY = 1;
+
+/** 这张图会不会在上传前被缩小(决定要不要按原始体积拦 12MB)。 */
+export const willCompressBeforeUpload = (
+  img: Pick<PickedImage, 'fileName' | 'mimeType' | 'webFile'>,
+  opts: { original: boolean; platform: string },
+): boolean =>
+  !opts.original &&
+  isDraftImage(img) &&
+  !/gif|svg/i.test(img.mimeType ?? '') &&
+  !/\.(gif|svg)$/i.test(img.fileName ?? '') &&
+  (opts.platform !== 'web' || !!img.webFile);
 
 /** 压缩后的文件名:换成 .jpg,保持原主干名。 */
 export const compressedFileName = (fileName: string): string => {
@@ -146,7 +157,7 @@ export const compressedFileName = (fileName: string): string => {
 
 /**
  * 点「发送」前的拦截:返回要提示的一句话,null = 可以发。
- * `willCompressLater(img)` 为 true 的图(web 端、原图关闭)会在上传前缩小,这里不预判它的体积。
+ * `willCompressLater(img)` 为 true 的图(原图关闭)会在上传前缩小,这里不预判它的体积。
  */
 export const sendBlocker = (
   draft: readonly PickedImage[],
