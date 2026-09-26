@@ -5,7 +5,7 @@
 // (the desktop shows it as a hover tooltip) and each hit box is 64×56 dp.
 //
 // The decision of *when* this shows lives in src/nav-chrome.ts (pure + tested).
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, useSyncExternalStore } from 'react';
 import { Image, Pressable, StyleSheet, View } from 'react-native';
 import { Text } from './ui-text';
 import { Ionicons } from './icons';
@@ -13,7 +13,8 @@ import { colors } from './theme';
 import { APP_VERSION } from './version';
 import { railBadgeText, railIconFor } from './rail-nav';
 import { mobileRailItem, mobileRailWidth, railUnreadTotal } from './nav-chrome';
-import { ds, listFont, uiScale } from './ui-scale';
+import { ds, listText, uiScale } from './ui-scale';
+import { alignedRailLayout, denserRowPitch, listFirstRowTop, onListFirstRowTopChange } from './list-rail-align';
 import { getUnreadSnapshot, subscribeUnread } from './unread-store';
 import { agentUnreadCounts } from './agent-unread-counts';
 
@@ -48,6 +49,10 @@ export default function MobileNavRail({ tabs, active, onSelect, insetLeft, inset
   const unread = useAgentsUnreadTotal();
   const main = tabs.filter(tab => tab.key !== 'settings');
   const settings = tabs.find(tab => tab.key === 'settings');
+  // 更紧凑: rail item n shares a band with agent-list row n (same top, same pitch) — see
+  // list-rail-align.ts for what "aligned" means. Other densities keep the ordinary rail.
+  const firstRowTop = useSyncExternalStore(onListFirstRowTopChange, listFirstRowTop, listFirstRowTop);
+  const align = uiScale().listDense ? alignedRailLayout(firstRowTop, denserRowPitch(uiScale().denseFontMultiplier), ds(12) + (showBrand ? ds(40) : 0)) : null;
 
   const item = (tab: MobileNavTab) => {
     const selected = active === tab.key;
@@ -62,7 +67,7 @@ export default function MobileNavRail({ tabs, active, onSelect, insetLeft, inset
         aria-selected={selected}
         onPress={() => onSelect(tab.key)}
         android_ripple={{ color: colors.railHover, borderless: true, radius: 30 }}
-        style={({ pressed }) => [s.item, pressed && !selected && s.itemPressed]}
+        style={({ pressed }) => [s.item, align && { height: align.itemHeight }, pressed && !selected && s.itemPressed]}
       >
         <View style={[s.indicator, selected && s.indicatorActive]}>
           <Ionicons
@@ -91,7 +96,7 @@ export default function MobileNavRail({ tabs, active, onSelect, insetLeft, inset
           <Image source={require('../assets/android-icon-foreground.png')} style={s.brandMark} resizeMode="contain" />
         </View>
       ) : null}
-      <View style={[s.tabs, !showBrand && s.tabsCompact]}>{main.map(item)}</View>
+      <View style={[s.tabs, !showBrand && s.tabsCompact, align && { paddingTop: align.tabsPaddingTop, gap: align.gap }]} testID="mobile-nav-rail-tabs">{main.map(item)}</View>
       {settings ? item(settings) : null}
       {showBrand ? <Text style={s.version}>v{APP_VERSION}</Text> : null}
     </View>
@@ -123,8 +128,8 @@ const makeStyles = () => StyleSheet.create({
   // Material 3 style active indicator: a pill behind the icon, label underneath.
   indicator: { width: ds(52), height: ds(30), borderRadius: ds(15), alignItems: 'center', justifyContent: 'center' },
   indicatorActive: { backgroundColor: colors.railActiveBg },
-  // listFont: 10 at 更紧凑 (one step down with the list), 11 otherwise.
-  label: { color: colors.textSecondary, fontSize: listFont(11), fontWeight: '500', maxWidth: mobileRailItem(uiScale().densityFactor).width },
+  // listText('railLabel'): 10 at 更紧凑 — the same size as the list's row time and group header; 11 otherwise.
+  label: { color: colors.textSecondary, ...listText('railLabel'), fontWeight: '500', maxWidth: mobileRailItem(uiScale().densityFactor).width },
   labelActive: { color: colors.accent, fontWeight: '600' },
   badge: {
     position: 'absolute', top: -3, right: 4, minWidth: 18, height: 18, borderRadius: 9, paddingHorizontal: 4,

@@ -9,12 +9,12 @@ import { Ionicons } from './icons';
 import AliasAvatar from './AliasAvatar';
 import { colors, radius, spacing } from './theme';
 import { saveUiScalePrefs } from './storage';
-import { AGENT_ROW_AVATAR, AGENT_ROW_DOT, AGENT_ROW_GAP, AGENT_ROW_HEIGHT, AGENT_ROW_PAD_X, AGENT_ROW_PAD_Y, AGENT_ROW_TOUCH_MIN } from './agent-row-model';
+import { agentRowGeometry } from './agent-row-model';
 import {
   DENSITY_OPTIONS,
   FONT_SIZE_OPTIONS,
   ds,
-  listFont,
+  listText,
   onUiScalePrefsChange,
   setUiScalePrefs,
   uiScale,
@@ -124,7 +124,7 @@ export function UiScalePreview() {
       <Text style={st.caption}>预览</Text>
       <View style={st.row}>
         <View style={st.avatar}>
-          <AliasAvatar alias="预览助手" size={AGENT_ROW_AVATAR} />
+          <AliasAvatar alias="预览助手" size={agentRowGeometry(uiScale().listDense, uiScale().densityFactor).avatar} fixedSize />
           <View style={[st.dot, { backgroundColor: colors.running, borderColor: colors.card }]} />
         </View>
         <View style={st.body}>
@@ -154,18 +154,18 @@ export function UiScalePreview() {
 }
 
 // Built per render (cheap, a handful of entries): it must follow both the theme and the scale.
-const makePreviewStyles = () => StyleSheet.create({
+const makePreviewStyles = () => { const g = agentRowGeometry(uiScale().listDense, uiScale().densityFactor); return StyleSheet.create({
   frame: { marginHorizontal: spacing.md, marginTop: spacing.sm, borderWidth: 1, borderColor: colors.border, borderRadius: radius.md, backgroundColor: colors.card, overflow: 'hidden' },
   caption: { color: colors.textMuted, fontSize: 11, paddingHorizontal: spacing.md, paddingTop: spacing.sm },
-  // Same geometry and list text as AgentsScreen's phone row (makeRowStyles).
-  row: { flexDirection: 'row', alignItems: 'center', gap: ds(AGENT_ROW_GAP), minHeight: ds(AGENT_ROW_HEIGHT, AGENT_ROW_TOUCH_MIN), paddingHorizontal: ds(AGENT_ROW_PAD_X), paddingVertical: ds(AGENT_ROW_PAD_Y) },
-  avatar: { width: ds(AGENT_ROW_AVATAR), height: ds(AGENT_ROW_AVATAR) },
-  dot: { position: 'absolute', right: -1, bottom: -1, width: ds(AGENT_ROW_DOT), height: ds(AGENT_ROW_DOT), borderRadius: ds(AGENT_ROW_DOT) / 2, borderWidth: 2 },
-  body: { flex: 1, minWidth: 0, gap: ds(3) },
-  line: { flexDirection: 'row', alignItems: 'center', gap: ds(6), minHeight: ds(20) },
-  name: { flexShrink: 1, color: colors.text, fontSize: listFont(16), fontWeight: '500' },
-  time: { marginLeft: 'auto', color: colors.textMuted, fontSize: listFont(12) },
-  preview: { flex: 1, minWidth: 0, color: colors.textMuted, fontSize: listFont(14) },
+  // Same geometry and list text as AgentsScreen's phone row (makeRowStyles / agentRowGeometry).
+  row: { flexDirection: 'row', alignItems: 'center', gap: g.gap, minHeight: g.height, paddingHorizontal: g.padX, paddingVertical: g.padY },
+  avatar: { width: g.avatar, height: g.avatar },
+  dot: { position: 'absolute', right: -1, bottom: -1, width: g.dot, height: g.dot, borderRadius: g.dot / 2, borderWidth: 2 },
+  body: { flex: 1, minWidth: 0, gap: g.bodyGap },
+  line: { flexDirection: 'row', alignItems: 'center', gap: ds(6), minHeight: g.lineMin },
+  name: { flexShrink: 1, color: colors.text, ...listText('name'), fontWeight: '500' },
+  time: { marginLeft: 'auto', color: colors.textMuted, ...listText('meta') },
+  preview: { flex: 1, minWidth: 0, color: colors.textMuted, ...listText('preview') },
   badge: { minWidth: 18, height: 18, paddingHorizontal: 5, borderRadius: 9, backgroundColor: colors.failed, alignItems: 'center', justifyContent: 'center' },
   badgeText: { color: '#ffffff', fontSize: 10, fontWeight: '600', lineHeight: 12 },
   chat: { gap: spacing.sm, paddingHorizontal: spacing.md, paddingVertical: spacing.sm, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border, backgroundColor: colors.bg },
@@ -176,4 +176,4 @@ const makePreviewStyles = () => StyleSheet.create({
   buttons: { flexDirection: 'row', justifyContent: 'flex-end', padding: spacing.md, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border },
   button: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs, height: ds(36), paddingHorizontal: spacing.lg, borderRadius: radius.sm, backgroundColor: colors.accent },
   buttonText: { color: colors.onAccent, fontSize: 13, fontWeight: '600' },
-});
+}); };

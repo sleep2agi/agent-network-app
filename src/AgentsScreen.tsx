@@ -18,7 +18,8 @@ import { fetchStatus, fetchUserMessages, takeStatusPrefetch, type HubConfig, typ
 } from './api';
 import { loadSessionsCache, saveSessionsCache } from './storage';
 import { colors, onThemeChange, radius, spacing, statusColor, type, weight } from './theme';
-import { ds, fs, listFont } from './ui-scale';
+import { ds, fs, listText, uiScale } from './ui-scale';
+import { denserRowPitch, publishListFirstRowTop } from './list-rail-align';
 import { usePoll } from './usePoll';
 import { retryUnreadPersistFromPoll } from './conversation-unread-persist';
 import AgentUnreadBadge from './AgentUnreadBadge';
@@ -34,7 +35,7 @@ import {
 } from './unread-store';
 import { styles } from './app-styles';
 import { applyCollapsed, buildSections, countShown, holdWhileActive, SORT_BY_ACTIVITY, toggleCollapsed } from './agents-list';
-import { AGENT_ROW_AVATAR, AGENT_ROW_DOT, AGENT_ROW_GAP, AGENT_ROW_HEIGHT, AGENT_ROW_PAD_X, AGENT_ROW_PAD_Y, AGENT_ROW_SEPARATOR_INSET, AGENT_ROW_TOUCH_MIN, agentRowModel, latestMessageByAgent, rowActivity } from './agent-row-model';
+import { AGENT_ROW_AVATAR, AGENT_ROW_DOT, AGENT_ROW_GAP, AGENT_ROW_HEIGHT, AGENT_ROW_PAD_X, AGENT_ROW_PAD_Y, AGENT_ROW_SEPARATOR_INSET, AGENT_ROW_TOUCH_MIN, agentRowGeometry, agentRowModel, latestMessageByAgent, rowActivity } from './agent-row-model';
 import { TaskTimeResolver } from './agent-task-time';
 import { loadCollapsedGroups, saveCollapsedGroups } from './agent-list-prefs';
 import { agentUnreadCounts, latestMessageAtByAgent } from './agent-unread-counts';
@@ -265,6 +266,16 @@ export default function AgentsScreen({
   );
   const shownCount = countShown(sections);
   const shownSections = useMemo(() => applyCollapsed(sections, collapsed, query), [sections, collapsed, query]);
+  // 更紧凑 (two-pane): tell the nav rail where the first row is and how tall rows are, so rail item n
+  // sits beside row n (list-rail-align.ts). Only when the first section has rows on screen
+  // (row height/pitch is not measured: both sides compute it with denserRowPitch).
+  const alignFirstRow = !compact && uiScale().listDense && (shownSections[0]?.data?.length ?? 0) > 0;
+  const listYRef = useRef<number | null>(null); // bottom of head + filter bar
+  const firstHeaderHRef = useRef<number | null>(null);
+  const publishFirstRowTop = () => {
+    if (listYRef.current == null || firstHeaderHRef.current == null) return;
+    publishListFirstRowTop(listYRef.current + firstHeaderHRef.current);
+  };
   const nowMs = Date.now();
 
   if (loading) {
@@ -384,7 +395,7 @@ export default function AgentsScreen({
       >
         <View style={rowStyles.avatar}>
           <View style={!model.status.online ? rowStyles.avatarOffline : null}>
-            <AliasAvatar alias={item.alias} size={AGENT_ROW_AVATAR} />
+            <AliasAvatar alias={item.alias} size={rowGeom().avatar} fixedSize />
           </View>
           <View
             testID={`agent-dot-${item.alias}`}
@@ -415,6 +426,8 @@ export default function AgentsScreen({
 
   return (
     <View style={{ flex: 1, backgroundColor: compact ? colors.listBg : colors.bg }}>
+      {/* Everything above the list (head + filter bar): its height is where the first group header starts. */}
+      <View onLayout={alignFirstRow ? e => { listYRef.current = e.nativeEvent.layout.y + e.nativeEvent.layout.height; publishFirstRowTop(); } : undefined}>
       {compact ? (
         <View style={{ paddingHorizontal: compact ? spacing.sm : spacing.lg, paddingTop: compact ? spacing.sm : spacing.lg, backgroundColor: compact ? colors.listBg : colors.bg }}>
         <View style={styles.listHeaderRow}>
@@ -483,6 +496,7 @@ export default function AgentsScreen({
           </Pressable>
         </View>
       ) : null}
+      </View>
       <SectionList
       sections={shownSections}
       keyExtractor={s => s.alias}
@@ -492,6 +506,7 @@ export default function AgentsScreen({
       renderSectionHeader={({ section }) => (
         // Small section label + online/total; tap folds the group (not 新消息, not while searching).
         <Pressable
+          onLayout={alignFirstRow && section === shownSections[0] ? e => { firstHeaderHRef.current = e.nativeEvent.layout.height; publishFirstRowTop(); } : undefined}
           testID={`agent-group-${section.title}`}
           disabled={!section.collapsible}
           onPress={() => toggleGroup(section.title)}
@@ -580,6 +595,7 @@ export default function AgentsScreen({
 // Phone / two-pane list chrome (0.2.106). No colours here — they are passed inline from `colors` at
 // render time. Rebuilt on every restyle (theme or 界面密度, src/ui-scale.ts): the row geometry goes
 // through ds(), and `spacing` itself is density-scaled.
+const rowGeom = () => agentRowGeometry(uiScale().listDense, uiScale().densityFactor);
 const makeRowStyles = () => ({
   head: { paddingHorizontal: ds(AGENT_ROW_PAD_X), paddingTop: spacing.sm, paddingBottom: spacing.xs },
   headRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, minHeight: ds(36) },
@@ -591,42 +607,45 @@ const makeRowStyles = () => ({
   filterChip: { minHeight: ds(26), borderRadius: radius.pill, paddingHorizontal: 10, alignItems: 'center', justifyContent: 'center' },
   filterChipText: { fontSize: type.small, fontWeight: weight.medium },
   filterClear: { flexDirection: 'row', alignItems: 'center', gap: 4, marginLeft: 'auto' },
-  group: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: ds(AGENT_ROW_PAD_X), paddingTop: spacing.md, paddingBottom: spacing.xs },
+  group: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: rowGeom().padX, paddingTop: rowGeom().groupPadTop, paddingBottom: rowGeom().groupPadBottom },
   groupCompact: { paddingHorizontal: spacing.md, paddingTop: spacing.sm },
-  groupTitle: { flexShrink: 1, fontSize: listFont(type.small), fontWeight: weight.medium, letterSpacing: 0.4 },
-  groupCount: { fontSize: listFont(type.caption), marginLeft: 2 },
+  groupTitle: { flexShrink: 1, ...listText('meta'), fontWeight: weight.medium, letterSpacing: 0.4 },
+  groupCount: { ...listText('count'), marginLeft: 2 },
   row: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: ds(AGENT_ROW_GAP),
-    // 标准 68 dp / 44 dp avatar; 紧凑 58 / 37; 更紧凑 (the Android wide default) 51 / 33 with
-    // 15 / 13 text ⇒ 51 dp rows (57 at OS font 1.15); 宽松 78 / 51. Two text lines + 2 × AGENT_ROW_PAD_Y can make a
-    // row taller than minHeight (OS font 1.15), never shorter than the 44 dp touch floor.
-    minHeight: ds(AGENT_ROW_HEIGHT, AGENT_ROW_TOUCH_MIN),
-    paddingHorizontal: ds(AGENT_ROW_PAD_X),
-    paddingVertical: ds(AGENT_ROW_PAD_Y),
+    gap: rowGeom().gap,
+    // agentRowGeometry (agent-row-model.ts): 标准 68 dp / 44 dp avatar; 紧凑 58 / 37; 宽松 78 / 51;
+    // 更紧凑 (the Android wide default) 44 / 28 with 14/18 + 12/16 text — the rail's scale. Two text
+    // lines + 2 × padY can make a row taller than minHeight (OS font 1.15), never shorter than 44.
+    // 更紧凑: every row is exactly the pitch (one- and two-line rows alike) so the rail can match it.
+    ...(uiScale().listDense ? { height: denserRowPitch(uiScale().denseFontMultiplier) } : { minHeight: rowGeom().height }),
+    paddingHorizontal: rowGeom().padX,
+    paddingVertical: rowGeom().padY,
   },
-  // Same ds() as AliasAvatar applies to its own size, so the dot sits on the avatar's corner.
-  avatar: { width: ds(AGENT_ROW_AVATAR), height: ds(AGENT_ROW_AVATAR) },
+  // AliasAvatar gets the same resolved size with fixedSize, so the dot sits on the avatar's corner.
+  avatar: { width: rowGeom().avatar, height: rowGeom().avatar },
   avatarOffline: { opacity: 0.45 },
   dot: {
     position: 'absolute',
     right: -1,
     bottom: -1,
-    width: ds(AGENT_ROW_DOT),
-    height: ds(AGENT_ROW_DOT),
-    borderRadius: ds(AGENT_ROW_DOT) / 2,
+    width: rowGeom().dot,
+    height: rowGeom().dot,
+    borderRadius: rowGeom().dot / 2,
     borderWidth: 2,
   },
-  body: { flex: 1, minWidth: 0, gap: ds(3) },
-  line: { flexDirection: 'row', alignItems: 'center', gap: ds(6), minHeight: ds(20) },
-  // listFont(): one step smaller at 更紧凑 (16 → 15 / 14 → 13 / 12 → 11); unchanged otherwise.
-  name: { flexShrink: 1, fontSize: listFont(type.title), fontWeight: weight.medium },
+  body: { flex: 1, minWidth: 0, gap: rowGeom().bodyGap },
+  line: { flexDirection: 'row', alignItems: 'center', gap: ds(6), minHeight: rowGeom().lineMin },
+  // listText(): 16 / 14 / 12 at 紧凑·标准·宽松; 14 / 12 / 10 at 更紧凑 (time + group = the rail label).
+  name: { flexShrink: 1, ...listText('name'), fontWeight: weight.medium },
   pin: { marginLeft: -2 },
-  time: { marginLeft: 'auto', fontSize: listFont(type.small), paddingLeft: spacing.sm },
-  label: { fontSize: listFont(type.small), fontWeight: weight.medium },
-  preview: { flex: 1, minWidth: 0, fontSize: listFont(type.body) },
-  separator: { height: StyleSheet.hairlineWidth, marginLeft: ds(AGENT_ROW_PAD_X) + ds(AGENT_ROW_AVATAR) + ds(AGENT_ROW_GAP) },
+  time: { marginLeft: 'auto', ...listText('meta'), paddingLeft: spacing.sm },
+  label: { ...listText('meta'), fontWeight: weight.medium },
+  preview: { flex: 1, minWidth: 0, ...listText('preview') },
+  // 更紧凑: the hairline overlaps the row above (negative margin) so the row pitch is exactly the
+  // row height — the rail's item pitch is set to the same number (list-rail-align.ts).
+  separator: { height: StyleSheet.hairlineWidth, marginLeft: rowGeom().padX + rowGeom().avatar + rowGeom().gap, ...(rowGeom().separatorOverlap ? { marginTop: -StyleSheet.hairlineWidth } : null) },
 } as const);
 let rowStyles = makeRowStyles();
 onThemeChange(() => { rowStyles = makeRowStyles(); });
