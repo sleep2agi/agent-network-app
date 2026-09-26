@@ -138,3 +138,22 @@ export function slotSwapAnimation(reduceMotion: boolean): SlotSwapAnimation {
     ? { duration: 0, fromOpacity: 1, fromScale: 1 }
     : { duration: 140, fromOpacity: 0, fromScale: 0.8 };
 }
+
+// ── in-field mic (keyboard mode) ──────────────────────────────────────────
+// Owner 2026-09-26:「…选择光标在哪个地方继续输入」 — keyboard mode gets a compact hold-to-talk
+// mic INSIDE the input's right edge, so dictation lands at the cursor. It must not add height or
+// move the centre line (#424): it is `control − 2·inset` tall and sits `inset` from the input's
+// bottom-right corner, so on a one-line input its centre IS the input's centre; on a multi-line
+// input it stays by the last line, next to the bottom-aligned buttons (WeChat).
+/** Gap between the in-field mic and the input's border box (dp). */
+export const FIELD_MIC_INSET = 4;
+
+/** Diameter of the in-field mic for a given row control height (32 at 40, 28 at the 36 floor). */
+export function composerFieldMicSize(control: number): number {
+  return Math.max(0, control - 2 * FIELD_MIC_INSET);
+}
+
+/** Right padding the input needs so text never runs under the mic (mic + its inset + 4dp air). */
+export function composerInputPadRightWithMic(control: number): number {
+  return composerFieldMicSize(control) + FIELD_MIC_INSET + 4;
+}

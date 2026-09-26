@@ -62,6 +62,7 @@ const start: Composer = { mode: parseComposerInputMode('voice'), draft: '', focu
   ck('点卡片 → focus 一次(唯一会弹键盘的路)', c.focusCalls === 1);
   ck('点卡片 → 草稿原样带进输入框', c.draft === 'hello');
   ck('点卡片 → 不写回偏好(记住的仍是语音)', c.saved === 'voice' && onVoiceDraftCardTap().persist === false);
+  ck('点卡片 → 光标放草稿末尾(cursorAtEnd)', onVoiceDraftCardTap().cursorAtEnd === true && afterRecognized().cursorAtEnd === false);
   ck('键盘模式下不画卡片(文字在输入框里)', !showVoiceDraftCard(c.mode === 'voice', c.draft));
 }
 // ── 卡片可见性 ──
@@ -93,10 +94,17 @@ ck('语音模式 + 图片 → 发送(同 #419 规则)', composerRightSlot({ draf
 const chat = read('src/ChatScreen.tsx');
 const ui = read('src/VoiceInputUI.tsx');
 const onInsertAt = chat.indexOf('onInsert: text => {');
-const onInsert = chat.slice(onInsertAt, chat.indexOf('onNotice: setComposerNotice', onInsertAt));
-ck('找到 onInsert(松手路径)', onInsertAt > 0 && onInsert.length > 0);
+const onInsertCb = chat.slice(onInsertAt, chat.indexOf('onNotice: setComposerNotice', onInsertAt));
+ck('找到 onInsert(松手路径),它只转给 insertVoiceText', onInsertAt > 0 && /onInsert: text => \{\s*insertVoiceText\(text\);\s*\}/.test(onInsertCb));
+// 大条(#422)那一支 = insertVoiceText 里 refocusAfterInsert(source) 为 false 的分支(到第一个 return;)。
+const ivtAt = chat.indexOf('const insertVoiceText = (text: string) => {');
+const ivt = chat.slice(ivtAt, chat.indexOf('\n  };', ivtAt));
+const holdBarBranch = ivt.slice(ivt.indexOf('if (!refocusAfterInsert(source)) {'), ivt.indexOf('return;'));
+ck('找到大条分支', ivtAt > 0 && holdBarBranch.length > 0);
+const onInsert = holdBarBranch;
+ck('大条分支接末尾(insertRecognized)', onInsert.includes('setDraft(d => insertRecognized(d, text));'));
 ck('松手路径里没有 focus()', !/\.focus\(\)/.test(onInsert) && !onInsert.includes('focusAfterInsertRef'));
-ck("松手路径里不切 setInputMode('keyboard')", !onInsert.includes("setInputMode('keyboard')"));
+ck("松手路径里不切 setInputMode('keyboard')", !onInsert.includes("setInputMode('keyboard')") && !ivt.includes("setInputMode('keyboard')"));
 ck('松手路径走 afterRecognized()', onInsert.includes('applyComposerTransition(afterRecognized());'));
 const applyAt = chat.indexOf('const applyComposerTransition = ');
 const applyFn = chat.slice(applyAt, chat.indexOf('};', applyAt));

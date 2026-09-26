@@ -1,26 +1,36 @@
 // 语音输入的界面:
 //   · 手机 / 双栏(微信式):输入行最左边 🎤/⌨ 切换按钮;语音模式下输入框整条变成「按住 说话」大按钮。
-//   · 桌面:工具栏里的麦克风按钮(按住说话),不变。
+//   · 手机 / 双栏键盘模式:输入框右侧里的小麦克风(按住说话),识别结果插到按下时的光标处。
+//   · 桌面:工具栏里的麦克风按钮(按住说话),同样插到光标处。
 //   · 录音浮层:屏幕中间的大卡片(流式中间结果 + 电平 + 计时),底部一个明确的「取消区」。
 //   · 未配置时的「去设置」提示条。
 // 状态与手势全在 useVoiceInput;这里只画。
 
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, Platform, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { Text } from './ui-text';
 import { Ionicons } from './icons';
 import { colors, onThemeChange, spacing } from './theme';
 import { ds, uiScale } from './ui-scale';
-import { composerControlSize } from './composer-row-layout';
+import { composerControlSize, composerFieldMicSize, FIELD_MIC_INSET } from './composer-row-layout';
 import { cancelZoneLabel, formatElapsed, holdBarLabel, holdBarTone, overlayHint, toggleButtonShows, VOICE_DRAFT_CARD_MAX_LINES, type ComposerInputMode } from './voice-input-model';
 import type { VoiceInput } from './useVoiceInput';
 
-/** 桌面工具栏里的麦克风按钮(按住说话)。手机上不再用它 —— 改为切换按钮 + 「按住 说话」条。 */
-export function VoiceMicButton({ voice, size = 20, style }: { voice: VoiceInput; size?: number; style?: object }) {
+type MicHandlers = VoiceInput['micHandlers'];
+
+/**
+ * 网页 / 桌面 webview:mousedown 的默认动作会把焦点从输入框挪到按钮上(textarea 失焦)。
+ * 麦克风不需要焦点,阻止默认动作 → 按住说话期间输入框保持焦点、选区不动。原生上不需要(也没有这个事件)。
+ */
+const keepInputFocus = Platform.OS === 'web' ? { onMouseDown: (e: { preventDefault(): void }) => e.preventDefault() } : null;
+
+/** 桌面工具栏里的麦克风按钮(按住说话)。手机键盘模式用 VoiceFieldMic(框内),语音模式用「按住 说话」条。 */
+export function VoiceMicButton({ voice, size = 20, style, handlers }: { voice: VoiceInput; size?: number; style?: object; handlers?: MicHandlers }) {
   const busy = voice.state.phase === 'transcribing';
   const live = voice.state.phase === 'recording' || voice.state.phase === 'cancelArmed' || voice.state.phase === 'starting';
   return (
     <View
-      {...voice.micHandlers}
+      {...(handlers ?? voice.micHandlers)}
+      {...keepInputFocus}
       accessible
       accessibilityRole="button"
       accessibilityLabel={voice.configured ? '按住说话' : '语音输入(未配置)'}
@@ -32,6 +42,33 @@ export function VoiceMicButton({ voice, size = 20, style }: { voice: VoiceInput;
       {busy
         ? <ActivityIndicator size="small" color={colors.textMuted} />
         : <Ionicons name={live ? 'mic' : 'mic-outline'} size={size} color={live ? colors.bg : voice.configured ? colors.textSecondary : colors.textMuted} />}
+    </View>
+  );
+}
+
+/**
+ * 键盘模式输入框右侧里的小麦克风(owner:「…选择光标在哪个地方继续输入」)。按住说话,松手把识别文字插到
+ * 按下那一刻的光标处(选中了就替换);浮层、取消区、未配置提示和大条完全一样(同一个 useVoiceInput)。
+ * 尺寸 = 行高 − 2×4(composer-row-layout.ts composerFieldMicSize):不改行高、圆心就是单行输入框的中线(#424)。
+ */
+export function VoiceFieldMic({ voice, handlers }: { voice: VoiceInput; handlers: MicHandlers }) {
+  const busy = voice.state.phase === 'transcribing';
+  const live = voice.state.phase === 'recording' || voice.state.phase === 'cancelArmed' || voice.state.phase === 'starting';
+  return (
+    <View
+      {...handlers}
+      {...keepInputFocus}
+      accessible
+      accessibilityRole="button"
+      accessibilityLabel={voice.configured ? '按住说话,插到光标处' : '语音输入(未配置)'}
+      accessibilityHint={voice.configured ? '按住录音,松开把文字插到光标处,上滑取消' : '需要先在 设置 → 语音输入 里配置'}
+      accessibilityState={{ busy, disabled: busy }}
+      testID="voice-field-mic"
+      style={[styles.fieldMic, live && styles.micLive]}
+    >
+      {busy
+        ? <ActivityIndicator size="small" color={colors.textMuted} />
+        : <Ionicons name={live ? 'mic' : 'mic-outline'} size={ds(18)} color={live ? colors.bg : voice.configured ? colors.textSecondary : colors.textMuted} />}
     </View>
   );
 }
@@ -69,12 +106,12 @@ export function ComposerModeToggle({ mode, onToggle, disabled }: { mode: Compose
 }
 
 /** 语音模式下代替输入框的整条「按住 说话」。高 = 行内按钮高(composerControlSize),亮 / 暗主题都用正文色 + 实心底,不再是灰色小图标。 */
-export function VoiceHoldBar({ voice }: { voice: VoiceInput }) {
+export function VoiceHoldBar({ voice, handlers }: { voice: VoiceInput; handlers?: MicHandlers }) {
   const { phase } = voice.state;
   const tone = holdBarTone(phase);
   return (
     <View
-      {...voice.micHandlers}
+      {...(handlers ?? voice.micHandlers)}
       accessible
       accessibilityRole="button"
       accessibilityLabel={holdBarLabel(phase)}
@@ -197,6 +234,19 @@ export function VoiceDraftCard({ text, onPress, onClear, disabled }: { text: str
 const makeStyles = () => StyleSheet.create({
   mic: { width: 32, height: 32, borderRadius: 16, alignItems: 'center', justifyContent: 'center' },
   micLive: { backgroundColor: colors.accent },
+  // Absolute in the input's column wrapper (ChatScreen styles.inputWrap), pinned to the input's
+  // bottom-right: one-line input → same centre line as the row; multi-line → by the last line.
+  fieldMic: {
+    position: 'absolute',
+    right: FIELD_MIC_INSET,
+    bottom: FIELD_MIC_INSET,
+    width: composerFieldMicSize(composerControlSize(uiScale().densityFactor)),
+    height: composerFieldMicSize(composerControlSize(uiScale().densityFactor)),
+    borderRadius: composerFieldMicSize(composerControlSize(uiScale().densityFactor)) / 2,
+    alignItems: 'center',
+    justifyContent: 'center',
+    userSelect: 'none',
+  } as any,
   // Same height as the 「按住 说话」 bar and the ＋ / 发送 slot (composer-row-layout.ts composerControlSize).
   toggle: { width: composerControlSize(uiScale().densityFactor), height: composerControlSize(uiScale().densityFactor), borderRadius: composerControlSize(uiScale().densityFactor) / 2, borderWidth: 1.5, borderColor: colors.text, alignItems: 'center', justifyContent: 'center' },
   kbd: { width: ds(20), height: ds(15), borderWidth: 1.5, borderRadius: 3, alignItems: 'center', justifyContent: 'space-evenly', paddingVertical: 1 },

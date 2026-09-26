@@ -10,6 +10,8 @@
 //
 // 纯逻辑,不 import react-native。
 
+import { insertAtSelection } from './voice-insert-model';
+
 export const CANCEL_SLIDE_PX = 60;
 
 export type VoicePhase = 'idle' | 'starting' | 'recording' | 'cancelArmed' | 'transcribing';
@@ -122,10 +124,8 @@ export function overlayHint(phase: VoicePhase): string {
  * 中文、标点、已有空白处直接相接(「你好。」+「在吗」)。
  */
 export function insertRecognized(draft: string, text: string): string {
-  const t = text.trim();
-  if (!t) return draft;
-  if (!draft) return t;
-  return /[A-Za-z0-9]$/.test(draft) && /^[A-Za-z0-9]/.test(t) ? `${draft} ${t}` : draft + t;
+  // 同一条空格规则的「光标在末尾」特例;插到光标处见 voice-insert-model.ts insertAtSelection。
+  return insertAtSelection(draft, text, null).value;
 }
 
 /** 00:07 这种计时。 */
@@ -203,9 +203,11 @@ export type ComposerModeTransition = {
   focusInput: boolean;
   /** 要不要写回每设备偏好。 */
   persist: boolean;
+  /** focus 之后光标放到草稿末尾(点草稿卡片:接着往后写;之后用户可以挪光标,输入框麦克风插到挪到的地方)。 */
+  cursorAtEnd: boolean;
 };
 
-const STAY: ComposerModeTransition = { mode: null, focusInput: false, persist: false };
+const STAY: ComposerModeTransition = { mode: null, focusInput: false, persist: false, cursorAtEnd: false };
 
 /**
  * 识别结果进草稿之后输入区怎么动。手机 / 双栏:什么都不动(留在语音模式、不 focus)。
@@ -215,9 +217,9 @@ export function afterRecognized(): ComposerModeTransition {
   return STAY;
 }
 
-/** 点语音草稿卡片:切到键盘并聚焦,不写偏好。 */
+/** 点语音草稿卡片:切到键盘并聚焦、光标放末尾,不写偏好。 */
 export function onVoiceDraftCardTap(): ComposerModeTransition {
-  return { mode: 'keyboard', focusInput: true, persist: false };
+  return { mode: 'keyboard', focusInput: true, persist: false, cursorAtEnd: true };
 }
 
 /** 语音模式下草稿卡片要不要画:有非空白草稿才画。 */
