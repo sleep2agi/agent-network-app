@@ -153,7 +153,7 @@ ck('connectedSince: 失败后成功重新计时', nextConnectedSince(nextConnect
   const passes = app.split("filter={screen.name === 'agents' ? screen.filter : undefined}").length - 1;
   ck('手机列表和双栏左侧列表都拿到 filter(2 处)', passes === 2, String(passes));
   ck('桌面节点清单拿到 filter', app.includes('<AgentsScreen cfg={cfg} filter={screen.filter}'));
-  ck('列表用 applyAgentFilter 过滤后再分组', agents.includes('buildSections(applyAgentFilter(sessions, activeFilter), query'));
+  ck('列表用 applyAgentFilter 过滤后再分组', agents.includes('buildSections(applyAgentFilter(visibleSessions, activeFilter), query'));
   ck('列表在 filter 变化时重新应用', agents.includes('useEffect(() => { if (filter) setActiveFilter(filter); }, [filter]);'));
   ck('卡片 onPress 传 card.filter', server.includes('onPress={() => onOpenAgents?.(card.filter)}'));
   ck('分组 onPress 传 group', server.includes('onPress={() => onOpenAgents?.({ group: g.title })}'));

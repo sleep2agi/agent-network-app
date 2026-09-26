@@ -52,6 +52,7 @@ import { bindDesktopTray, dismissAllForConfig } from './src/desktop-tray';
 import TrayPanel, { readTrayPanelRoute } from './src/TrayPanel';
 import { loadPinnedChats, requestedChatAlias, requestedChatProfileId, requestedWorkspaceProfileId, savePinnedChats } from './src/desktop-chat-menu';
 import { loadChatPins, saveChatPins, togglePinned } from './src/chat-pins';
+import { ROW_MENU_EMPTY_HINT } from './src/agent-row-menu';
 import { bindUnreadProfile } from './src/unread-store';
 import { openRememberedChatWindow } from './src/desktop-chat-windows';
 import { activateHubProfile, LOCAL_HUB_PROFILE_ID, localHubStatus, startLocalHub } from './src/local-hub';
@@ -78,7 +79,7 @@ type Screen =
   | { name: 'chat'; alias: string }
   | { name: 'nodeInfo'; alias: string }
   | { name: 'taskDetail'; taskId: string }   // full-screen (no tab bar) — hardware back returns to /tasks list
-  | { name: 'nodeDetail'; alias: string }  // issue #8 row 4 (V1) — long-press an agent row from AgentsScreen; back returns to agents
+  | { name: 'nodeDetail'; alias: string }  // issue #8 row 4 (V1) — 会话行菜单「节点详情」(以前是直接长按); back returns to agents
   | { name: 'logs' }                        // row 6 — network event stream leaf reached from Server tab; back returns to server
   | { name: 'picker' }       // #338 RFC-026 §9.4 host_supervisor picker (modal-style, back returns to agents)
   | { name: 'wizard'; daemon: HostSupervisorDaemon };  // #338 wizard rest (Plan B) — created after picker selects a daemon
@@ -643,6 +644,7 @@ function AppRoot() {
                       pinnedAliases={mobilePins}
                       onTogglePin={toggleMobilePin}
                       mutedAliases={mutedAliases}
+                      onToggleMute={toggleMute}
                     />
                   </View>
                   <View style={styles.twoPaneDetail} testID="two-pane-detail">
@@ -668,7 +670,7 @@ function AppRoot() {
                       <View style={styles.twoPaneEmpty}>
                         <Ionicons name="chatbubbles-outline" size={52} color={colors.textMuted} />
                         <Text style={styles.twoPaneEmptyTitle}>选择一个 agent 开始聊天</Text>
-                        <Text style={styles.twoPaneEmptyHint}>长按列表里的 agent 查看节点详情</Text>
+                        <Text style={styles.twoPaneEmptyHint}>{ROW_MENU_EMPTY_HINT}</Text>
                       </View>
                     )}
                   </View>
@@ -690,7 +692,7 @@ function AppRoot() {
               ) : screen.name === 'nodeInfo' ? (
                 <NodeDetailScreen cfg={cfg} alias={screen.alias} onBack={() => setScreen({ name: 'chat', alias: screen.alias })} readOnly />
               ) : screen.name === 'nodeDetail' ? (
-                // issue #8 row 4 (V1) — long-press an agent row in AgentsScreen
+                // issue #8 row 4 (V1) — 会话行菜单(长按)里的「节点详情」
                 // opens this. Back returns to agents. Rendered as its own screen
                 // (not a tab) so the tab bar doesn't compete for the header slot.
                 <NodeDetailScreen
@@ -776,6 +778,7 @@ function AppRoot() {
                       pinnedAliases={mobilePins}
                       onTogglePin={toggleMobilePin}
                       mutedAliases={mutedAliases}
+                      onToggleMute={toggleMute}
                     />
                   )}
                 </View>

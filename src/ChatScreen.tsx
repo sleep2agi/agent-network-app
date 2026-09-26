@@ -44,6 +44,7 @@ import type { NativeSyntheticEvent, NativeScrollEvent } from 'react-native';
 import { usePoll } from './usePoll';
 import { chatSearchState, isHighlighted, isStaleSearch, matchCountLabel, searchItems, shouldLoadOlderForSearch, stepHit, type SearchHit } from './chat-search';
 import { retryUnreadPersistFromPoll } from './conversation-unread-persist';
+import { conversationOpened } from './conversation-flags';
 import { dispatchUnread, hubHasAgentUnread, markAgentRepliesSeen, markAgentServerUnreadCleared, unackedIdsForAgent } from './unread-store';
 import { ackAgentUnread } from './agent-ack';
 import { appFetch } from './app-fetch';
@@ -972,6 +973,8 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
   // #161 列表徽标：打开会话不清零；只有消息真正展示到最新才清。
   useEffect(() => {
     dispatchUnread({ kind: 'conversation_opened', agent: alias });
+    // 列表菜单里手动「标为未读」的红点:点进会话就算读过(微信同款)。
+    conversationOpened(cfg, alias);
     return () => {
       dispatchUnread({ kind: 'conversation_left' });
     };

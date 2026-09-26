@@ -29,9 +29,9 @@
 //      fleet), error (fetch failed) — separated on screen, not merged
 //      into a blank canvas.
 //
-// ENTRY: `AgentsScreen` row `onLongPress` (pending PR #14 merge — do NOT
-//   touch AgentsScreen until lead greenlights). Existing tap → chat is
-//   a high-frequency path, preserved unchanged.
+// ENTRY: the agent row menu's 「节点详情」 (long-press on touch, right-click on
+//   desktop — AgentRowMenu.tsx; before 2026-09-26 long-press opened this
+//   directly). Existing tap → chat is a high-frequency path, preserved unchanged.
 //
 // WIRING: App.tsx adds one route case + one prop. Coordinated with
 //   demo马's Tasks tab that also touches App.tsx (lead-mediated order:

@@ -25,6 +25,8 @@ export type UnreadEvent =
   /** 该会话已成功渲染到最新一条。**这一步才清零。** */
   | { kind: "rendered_to_latest"; agent: AgentId }
   | { kind: "conversation_left" }
+  /** 列表行菜单「标为已读」:用户明确说读过了,不用打开会话就清零(只清这一个 agent)。 */
+  | { kind: "marked_read"; agent: AgentId }
   | { kind: "foreground_changed"; foreground: boolean };
 
 export type UnreadState = {
@@ -66,6 +68,11 @@ export function reduceUnread(state: UnreadState, ev: UnreadEvent): UnreadState {
       return { ...state, open: null, renderedToLatest: false };
     case "foreground_changed":
       return { ...state, foreground: ev.foreground };
+    case "marked_read": {
+      if (!(ev.agent in state.counts)) return state;
+      const { [ev.agent]: _drop, ...rest } = state.counts;
+      return { ...state, counts: rest };
+    }
   }
 }
 

@@ -9,7 +9,8 @@ export default function AgentUnreadBadge({
   testID,
   inline = false,
 }: {
-  badge: UnreadBadge | null;
+  /** `dot: true` = 手动「标为未读」(agent-row-menu.ts rowBadgeWithManual):不带数字的小红点。 */
+  badge: (UnreadBadge & { dot?: boolean }) | null;
   testID?: string;
   /** Phone / two-pane rows (0.2.106): in the row's right column, not pinned to the avatar corner. */
   inline?: boolean;
@@ -20,9 +21,9 @@ export default function AgentUnreadBadge({
       testID={testID ?? 'unread-badge'}
       accessibilityRole="text"
       accessibilityLabel={badge.a11yLabel}
-      style={inline ? [styles.unreadBadge, styles.unreadBadgeInline] : styles.unreadBadge}
+      style={[inline ? [styles.unreadBadge, styles.unreadBadgeInline] : styles.unreadBadge, badge.dot ? styles.unreadDot : null]}
     >
-      <Text style={styles.unreadBadgeText}>{badge.text}</Text>
+      {badge.dot ? null : <Text style={styles.unreadBadgeText}>{badge.text}</Text>}
     </View>
   );
 }
