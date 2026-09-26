@@ -63,8 +63,8 @@ import { layoutGeneration, releaseOnUnmount, takeHandoff } from './layout-handof
 import SideThreadDrawer, { type SideThreadLaunch } from './SideThreadDrawer';
 import { nextPlusPanel, plusPanelHeight, plusPanelItems, type PlusItemKey, type PlusPanelEvent } from './composer-plus-panel';
 import { useVoiceInput } from './useVoiceInput';
-import { insertRecognized, toggleComposerInputMode, type ComposerInputMode } from './voice-input-model';
-import { ComposerModeToggle, VoiceHoldBar, VoiceMicButton, VoiceRecordingOverlay, VoiceSettingsPrompt } from './VoiceInputUI';
+import { afterRecognized, insertRecognized, onVoiceDraftCardTap, showVoiceDraftCard, toggleComposerInputMode, type ComposerInputMode, type ComposerModeTransition } from './voice-input-model';
+import { ComposerModeToggle, VoiceDraftCard, VoiceHoldBar, VoiceMicButton, VoiceRecordingOverlay, VoiceSettingsPrompt } from './VoiceInputUI';
 import { composerLineCount, composerRightSlot, nextFullEditor, shouldShowExpand, type FullEditorEvent } from './composer-row-layout';
 import { ComposerExpandButton, ComposerFullscreenEditor, ComposerRightSlot } from './ComposerRowParts';
 import { loadComposerInputMode, saveComposerInputMode } from './voice-prefs';
@@ -505,15 +505,21 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
     return () => clearTimeout(timer);
   }, [composerNotice]);
   // 手机 / 双栏的输入方式(微信式):键盘,或整条「按住 说话」。每台设备记住用户**点切换**选的那个;
-  // 识别完回到键盘是这一句的临时状态(文字要给人改),不写回偏好 —— 下次进来还是用户选的语音模式。
+  // 点语音草稿卡片切到键盘是临时状态(文字要给人改),不写回偏好 —— 下次进来还是用户选的语音模式。
   const [inputMode, setInputMode] = useState<ComposerInputMode>('keyboard');
   const focusAfterInsertRef = useRef(false);
   useEffect(() => { void loadComposerInputMode().then(setInputMode).catch(() => {}); }, []);
-  // 语音输入(按住说话):识别结果接到草稿后面,不自动发送,切回键盘让用户改完再发。
+  const applyComposerTransition = (tr: ComposerModeTransition) => {
+    if (tr.focusInput) focusAfterInsertRef.current = true;
+    if (tr.mode) setInputMode(tr.mode);
+    if (tr.mode && tr.persist) void saveComposerInputMode(tr.mode);
+  };
+  // 语音输入(按住说话):识别结果接到草稿后面,不自动发送。🔴 松手后留在语音模式、不聚焦输入框
+  // (owner:「按住说话之后，别直接把输入法弹出来」):文字进「按住 说话」上方的草稿卡片,右格变「发送」。
   const voice = useVoiceInput({
     onInsert: text => {
       setDraft(d => insertRecognized(d, text));
-      if (!desktop) { focusAfterInsertRef.current = true; setInputMode('keyboard'); }
+      applyComposerTransition(afterRecognized());
     },
     onNotice: setComposerNotice,
   });
@@ -539,7 +545,7 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [alias]);
   const voiceBusy = voice.state.phase !== 'idle';
-  // 识别完切回键盘:TextInput 这一帧才重新挂上,挂上之后再 focus。
+  // 点草稿卡片 / 点 ⌨ 切回键盘:TextInput 这一帧才重新挂上,挂上之后再 focus。
   useEffect(() => {
     if (voiceMode || !focusAfterInsertRef.current) return;
     focusAfterInsertRef.current = false;
@@ -2167,6 +2173,16 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
             <Ionicons name="close" size={16} color={colors.textMuted} />
           </Pressable>
         </View>
+      ) : null}
+      {/* 语音模式的草稿卡片:识别文字在这里显示(不弹键盘)。点卡片 = 切键盘并聚焦;✕ 清空草稿。
+          叠放顺序:图片草稿条(#402)→ 引用条 → 这张卡片 →「按住 说话」行。 */}
+      {showVoiceDraftCard(voiceMode, draft) ? (
+        <VoiceDraftCard
+          text={draft}
+          disabled={voiceBusy}
+          onPress={() => applyComposerTransition(onVoiceDraftCardTap())}
+          onClear={() => setDraft('')}
+        />
       ) : null}
       <View style={[styles.inputRow, { paddingBottom: spacing.md + (plusMenuOpen ? 0 : composerInset) }]}>
         {/* 微信式(composer-row-layout.ts):左 🎤/⌨ 切换 | 中 输入框或「按住 说话」 | 右 ＋ ⇄「发送」。

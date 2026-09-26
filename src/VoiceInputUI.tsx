@@ -5,12 +5,12 @@
 //   · 未配置时的「去设置」提示条。
 // 状态与手势全在 useVoiceInput;这里只画。
 
-import { ActivityIndicator, Pressable, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { Text } from './ui-text';
 import { Ionicons } from './icons';
 import { colors, onThemeChange, spacing } from './theme';
 import { ds } from './ui-scale';
-import { cancelZoneLabel, formatElapsed, holdBarLabel, holdBarTone, overlayHint, toggleButtonShows, type ComposerInputMode } from './voice-input-model';
+import { cancelZoneLabel, formatElapsed, holdBarLabel, holdBarTone, overlayHint, toggleButtonShows, VOICE_DRAFT_CARD_MAX_LINES, type ComposerInputMode } from './voice-input-model';
 import type { VoiceInput } from './useVoiceInput';
 
 /** 桌面工具栏里的麦克风按钮(按住说话)。手机上不再用它 —— 改为切换按钮 + 「按住 说话」条。 */
@@ -163,6 +163,36 @@ export function VoiceSettingsPrompt({ voice, onOpenSettings }: { voice: VoiceInp
   );
 }
 
+const DRAFT_CARD_LINE_HEIGHT = 20;
+
+/**
+ * 语音模式下的草稿卡片(「按住 说话」上方):显示识别出来的草稿,最多 4 行,再多在卡片里滚。
+ * 点文字 = 切到键盘并聚焦(唯一会弹软键盘的路);✕ = 清空草稿。只画,状态在 ChatScreen。
+ */
+export function VoiceDraftCard({ text, onPress, onClear, disabled }: { text: string; onPress: () => void; onClear: () => void; disabled?: boolean }) {
+  return (
+    <View style={styles.draftCardWrap} testID="voice-draft-card">
+      <View style={styles.draftCard}>
+        <ScrollView style={{ flex: 1, maxHeight: DRAFT_CARD_LINE_HEIGHT * VOICE_DRAFT_CARD_MAX_LINES }} nestedScrollEnabled keyboardShouldPersistTaps="handled">
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="编辑语音草稿"
+            accessibilityHint="切换到键盘输入并编辑这段文字"
+            disabled={disabled}
+            onPress={onPress}
+            testID="voice-draft-card-text"
+          >
+            <Text style={styles.draftCardText}>{text}</Text>
+          </Pressable>
+        </ScrollView>
+        <Pressable accessibilityRole="button" accessibilityLabel="清空语音草稿" disabled={disabled} onPress={onClear} hitSlop={8} style={styles.draftCardClear} testID="voice-draft-card-clear">
+          <Ionicons name="close" size={14} color={colors.textMuted} />
+        </Pressable>
+      </View>
+    </View>
+  );
+}
+
 const makeStyles = () => StyleSheet.create({
   mic: { width: 32, height: 32, borderRadius: 16, alignItems: 'center', justifyContent: 'center' },
   micLive: { backgroundColor: colors.accent },
@@ -209,6 +239,10 @@ const makeStyles = () => StyleSheet.create({
   prompt: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingVertical: 6, paddingHorizontal: 12, borderRadius: 12, backgroundColor: colors.card, borderWidth: 1, borderColor: colors.border, maxWidth: '92%' },
   promptText: { color: colors.text, fontSize: 12 },
   promptLink: { color: colors.accent, fontWeight: '600' },
+  draftCardWrap: { paddingHorizontal: spacing.md, paddingTop: spacing.xs },
+  draftCard: { flexDirection: 'row', alignItems: 'flex-start', gap: 6, paddingVertical: 8, paddingLeft: 12, paddingRight: 8, borderRadius: 10, backgroundColor: colors.inputBg, borderWidth: StyleSheet.hairlineWidth, borderColor: colors.border },
+  draftCardText: { color: colors.text, fontSize: 15, lineHeight: DRAFT_CARD_LINE_HEIGHT },
+  draftCardClear: { width: 20, height: 20, borderRadius: 10, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.border },
 });
 
 let styles = makeStyles();

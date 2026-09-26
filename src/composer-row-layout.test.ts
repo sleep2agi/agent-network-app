@@ -21,8 +21,9 @@ check(slot('', 3) === 'send', 'several attachments, no text → 发送');
 check(slot('   \n\t ') === 'plus', 'whitespace-only → ＋');
 check(slot('  x  ') === 'send', 'text with surrounding whitespace → 发送');
 check(slot('', 0, true) === 'plus', 'voice mode, nothing drafted → ＋');
-check(slot('left over text', 0, true) === 'plus', 'voice mode with a draft → still ＋ (the bar owns the middle)');
-check(slot('', 2, true) === 'plus', 'voice mode with attachments → still ＋');
+check(slot('  \n', 0, true) === 'plus', 'voice mode, whitespace-only draft → ＋');
+check(slot('识别出来的文字', 0, true) === 'send', 'voice mode with a recognized draft → 发送 (sent without opening the keyboard)');
+check(slot('', 2, true) === 'send', 'voice mode with attachments → 发送 (same rule as keyboard mode)');
 check(slot(undefined as unknown as string) === 'plus', 'undefined draft does not throw → ＋');
 
 // ── line count / ⤢ threshold ──────────────────────────────────────────────
@@ -88,7 +89,7 @@ check(rowAt > 0 && mobileRow.length > 200, 'found the mobile input row');
   check(mobileRow.includes("onPlus={() => plusEvent('toggle')}") && mobileRow.includes('onSend={() => void submit()}'), 'right slot: ＋ → panel toggle, 发送 → submit');
   check(mobileRow.includes('slot={rightSlot}') && mobileRow.includes('plusOpen={plusMenuOpen}'), 'right slot gets the decided slot and panel state');
   check(mobileRow.includes('sendDisabled={!canSend(draft, attached.length > 0, sending)}'), '发送 disabled while sending / nothing sendable (same canSend as before)');
-  check(!/<ComposerRightSlot[\s\S]*?\/>[\s\S]*?voiceMode \? null/.test(mobileRow) && !mobileRow.includes('{voiceMode ? null : ('), 'right slot is always drawn (voice mode shows ＋ there)');
+  check(!/<ComposerRightSlot[\s\S]*?\/>[\s\S]*?voiceMode \? null/.test(mobileRow) && !mobileRow.includes('{voiceMode ? null : ('), 'right slot is always drawn (voice mode shows ＋ or 发送 there)');
   check(!mobileRow.includes('>↑<'), 'no arrow send button left in the mobile row');
 }
 check(chat.includes('const rightSlot = composerRightSlot({ draft, attachmentCount: attached.length, voiceMode });'), 'slot decided from draft + attachment count + voice mode');
