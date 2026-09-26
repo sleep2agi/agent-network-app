@@ -12,8 +12,8 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Text, TextInput } from './ui-text';
 import { Ionicons } from './icons';
 import { colors, onThemeChange, radius, spacing } from './theme';
-import { ds } from './ui-scale';
-import { slotSwapAnimation, type ComposerRightSlot as Slot } from './composer-row-layout';
+import { ds, uiScale } from './ui-scale';
+import { composerControlSize, slotSwapAnimation, type ComposerRightSlot as Slot } from './composer-row-layout';
 import { rulesFullscreenPadding } from './rules-fullscreen-layout';
 
 function useReduceMotion(): boolean {
@@ -154,7 +154,8 @@ export function ComposerFullscreenEditor({ visible, alias, draft, onChangeDraft,
 const makeStyles = () => StyleSheet.create({
   sendPill: {
     minWidth: ds(56),
-    height: ds(36),
+    // Row control height (composer-row-layout.ts) — same as ＋, the toggle and the bar/input.
+    height: composerControlSize(uiScale().densityFactor),
     borderRadius: radius.sm,
     paddingHorizontal: spacing.md,
     alignItems: 'center',
@@ -165,9 +166,9 @@ const makeStyles = () => StyleSheet.create({
   sendPillDisabled: { opacity: 0.45 },
   sendPillText: { color: colors.onAccent, fontSize: 15, fontWeight: '600' },
   plusBtn: {
-    width: ds(36),
-    height: ds(36),
-    borderRadius: ds(36) / 2,
+    width: composerControlSize(uiScale().densityFactor),
+    height: composerControlSize(uiScale().densityFactor),
+    borderRadius: composerControlSize(uiScale().densityFactor) / 2,
     borderColor: colors.text,
     borderWidth: 1.5,
     alignItems: 'center',

@@ -37,6 +37,45 @@ export function composerRightSlot({ draft, attachmentCount }: RightSlotInput): C
   return 'plus';
 }
 
+// ── one height for the whole row ─────────────────────────────────────────
+// Owner 2026-09-26 (unfolded foldable, 更紧凑): 「这个对齐你是在搞笑的吗」 — the 「按住 说话」 bar
+// was 44dp (floored) while the ⌨ / ＋ circles were ds(36) = 27dp, and the row was
+// alignItems:'flex-end', so the bar's centre sat ~8.5dp above the buttons' centre line. The fix is
+// structural: every control in the row (toggle, ＋, 发送, the hold bar, the single-line input) takes
+// THIS height, and a single-line row is centred.
+/** Row control height at density 1 (dp). */
+export const COMPOSER_CONTROL_BASE = 40;
+/** Never smaller than this, whatever the density (touch target; ＋/⌨ also carry hitSlop). */
+export const COMPOSER_CONTROL_MIN = 36;
+/** Border width of the text input (ChatScreen styles.input.borderWidth). */
+export const COMPOSER_INPUT_BORDER = 1;
+
+/** Height of every control in the composer row. Same rounding as ui-scale ds(base, min). */
+export function composerControlSize(densityFactor: number): number {
+  const f = Number.isFinite(densityFactor) && densityFactor > 0 ? densityFactor : 1;
+  return Math.max(COMPOSER_CONTROL_MIN, Math.round(COMPOSER_CONTROL_BASE * f));
+}
+
+/**
+ * Vertical padding that makes a ONE-line input exactly `control` tall:
+ * border + pad + line + pad + border. Floored; the input also gets minHeight=control, so an
+ * odd remainder never makes it shorter than the buttons. 0 when the font is so large that one
+ * line alone is taller than the control (then the input is taller and the row is bottom-aligned
+ * like a multi-line one — see composerRowAlign).
+ */
+export function composerInputPadY(control: number, lineHeightPx: number, border = COMPOSER_INPUT_BORDER): number {
+  return Math.max(0, Math.floor((control - lineHeightPx - 2 * border) / 2));
+}
+
+/**
+ * Cross-axis alignment of the row. One line (and voice mode): 'center' — toggle, bar/input and
+ * right slot share one centre line. Multi-line input: 'flex-end' — the buttons stay at the
+ * bottom next to the last line, like WeChat (the input grows upwards).
+ */
+export function composerRowAlign(lines: number, voiceMode: boolean): 'center' | 'flex-end' {
+  return !voiceMode && lines > 1 ? 'flex-end' : 'center';
+}
+
 // ── expand (⤢) button ──────────────────────────────────────────────────────
 /** Show ⤢ once the input needs MORE than this many lines. */
 export const EXPAND_AFTER_LINES = 3;

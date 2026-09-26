@@ -9,7 +9,8 @@ import { ActivityIndicator, Pressable, ScrollView, StyleSheet, View } from 'reac
 import { Text } from './ui-text';
 import { Ionicons } from './icons';
 import { colors, onThemeChange, spacing } from './theme';
-import { ds } from './ui-scale';
+import { ds, uiScale } from './ui-scale';
+import { composerControlSize } from './composer-row-layout';
 import { cancelZoneLabel, formatElapsed, holdBarLabel, holdBarTone, overlayHint, toggleButtonShows, VOICE_DRAFT_CARD_MAX_LINES, type ComposerInputMode } from './voice-input-model';
 import type { VoiceInput } from './useVoiceInput';
 
@@ -67,7 +68,7 @@ export function ComposerModeToggle({ mode, onToggle, disabled }: { mode: Compose
   );
 }
 
-/** 语音模式下代替输入框的整条「按住 说话」。高 ≥ 44dp,亮 / 暗主题都用正文色 + 实心底,不再是灰色小图标。 */
+/** 语音模式下代替输入框的整条「按住 说话」。高 = 行内按钮高(composerControlSize),亮 / 暗主题都用正文色 + 实心底,不再是灰色小图标。 */
 export function VoiceHoldBar({ voice }: { voice: VoiceInput }) {
   const { phase } = voice.state;
   const tone = holdBarTone(phase);
@@ -196,13 +197,18 @@ export function VoiceDraftCard({ text, onPress, onClear, disabled }: { text: str
 const makeStyles = () => StyleSheet.create({
   mic: { width: 32, height: 32, borderRadius: 16, alignItems: 'center', justifyContent: 'center' },
   micLive: { backgroundColor: colors.accent },
-  toggle: { width: ds(36), height: ds(36), borderRadius: ds(36) / 2, borderWidth: 1.5, borderColor: colors.text, alignItems: 'center', justifyContent: 'center' },
+  // Same height as the 「按住 说话」 bar and the ＋ / 发送 slot (composer-row-layout.ts composerControlSize).
+  toggle: { width: composerControlSize(uiScale().densityFactor), height: composerControlSize(uiScale().densityFactor), borderRadius: composerControlSize(uiScale().densityFactor) / 2, borderWidth: 1.5, borderColor: colors.text, alignItems: 'center', justifyContent: 'center' },
   kbd: { width: ds(20), height: ds(15), borderWidth: 1.5, borderRadius: 3, alignItems: 'center', justifyContent: 'space-evenly', paddingVertical: 1 },
   kbdRow: { flexDirection: 'row', gap: ds(1.5) },
   kbdSpace: { width: ds(9), height: 1.5, borderRadius: 1 },
   holdBar: {
-    flex: 1,
-    minHeight: Math.max(44, ds(44)),
+    // Inside the column-direction inputWrap: stretch across, fixed height. (flex:1 here is a
+    // VERTICAL flex with basis 0 — the web export collapsed the bar to its text height.)
+    alignSelf: 'stretch',
+    // Exactly the row control height (was a 44dp floor while the circles were ds(36) → the bar
+    // stood taller than the buttons and off their centre line).
+    height: composerControlSize(uiScale().densityFactor),
     borderRadius: 10,
     borderWidth: 1,
     borderColor: colors.border,

@@ -34,7 +34,7 @@ import { addToDraft, draftCountLabel, draftImageCount, isDraftImage, MAX_DRAFT_I
 import { createUploadMemo, removeAttachmentAt, runUploadQueue, UPLOAD_CONCURRENCY, uploadFailureSummary, withUploadState, type UploadState } from './upload-queue';
 import type { UploadedFile } from './attach';
 import { colors, onThemeChange, radius, spacing } from './theme';
-import { ds } from './ui-scale';
+import { ds, uiScale } from './ui-scale';
 import { formatChatHeader, shouldShowTimeHeader } from './time';
 import { chooseHeaderLayout, NAME_MIN_WIDTH, type HeaderActionKey } from './chat-header-layout';
 import { echoSupersededByFetched } from './chat-echo';
@@ -65,7 +65,7 @@ import { nextPlusPanel, plusPanelHeight, plusPanelItems, type PlusItemKey, type 
 import { useVoiceInput } from './useVoiceInput';
 import { afterRecognized, insertRecognized, onVoiceDraftCardTap, showVoiceDraftCard, toggleComposerInputMode, type ComposerInputMode, type ComposerModeTransition } from './voice-input-model';
 import { ComposerModeToggle, VoiceDraftCard, VoiceHoldBar, VoiceMicButton, VoiceRecordingOverlay, VoiceSettingsPrompt } from './VoiceInputUI';
-import { composerLineCount, composerRightSlot, nextFullEditor, shouldShowExpand, type FullEditorEvent } from './composer-row-layout';
+import { COMPOSER_INPUT_BORDER, COMPOSER_LINE_HEIGHT, composerControlSize, composerInputPadY, composerLineCount, composerRightSlot, composerRowAlign, nextFullEditor, shouldShowExpand, type FullEditorEvent } from './composer-row-layout';
 import { ComposerExpandButton, ComposerFullscreenEditor, ComposerRightSlot } from './ComposerRowParts';
 import { loadComposerInputMode, saveComposerInputMode } from './voice-prefs';
 
@@ -2184,7 +2184,7 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
           onClear={() => setDraft('')}
         />
       ) : null}
-      <View style={[styles.inputRow, { paddingBottom: spacing.md + (plusMenuOpen ? 0 : composerInset) }]}>
+      <View style={[styles.inputRow, { alignItems: composerRowAlign(inputLines, voiceMode), paddingBottom: spacing.md + (plusMenuOpen ? 0 : composerInset) }]}>
         {/* 微信式(composer-row-layout.ts):左 🎤/⌨ 切换 | 中 输入框或「按住 说话」 | 右 ＋ ⇄「发送」。
             ⤢ 在左列顶上,只在输入超过 3 行时出现(左列靠 stretch 撑满整行高度,不压输入框)。 */}
         {voice.available || showExpand ? (
@@ -2210,7 +2210,11 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
         {voiceMode ? <VoiceHoldBar voice={voice} /> : (
         <TextInput
           ref={mainComposerRef}
-          style={[styles.input, styles.inputInWrap]}
+          style={[styles.input, styles.inputInWrap, Platform.OS === 'web' && { height: webComposerInputHeight(inputLines), flexBasis: 'auto' }]}
+          // Web only: a textarea without rows is 2 lines tall, not 1 (native TextInput starts at
+          // one line). rows=1 + the explicit height above make the web export lay out like the
+          // phone, so the Playwright alignment check measures the real geometry.
+          {...(Platform.OS === 'web' ? { rows: 1 } : null)}
           placeholder={`Message ${alias}…`}
           placeholderTextColor={colors.textMuted}
           value={draft}
@@ -2282,6 +2286,14 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
       />
     </KeyboardAvoidingView>
   );
+}
+
+/** Web export only: the textarea's height for `lines` lines (native TextInput sizes itself). */
+function webComposerInputHeight(lines: number): number {
+  const control = composerControlSize(uiScale().densityFactor);
+  const line = COMPOSER_LINE_HEIGHT * uiScale().fontMultiplier;
+  const pad = composerInputPadY(control, line);
+  return Math.min(120, Math.max(control, Math.ceil(lines * line + 2 * pad + 2 * COMPOSER_INPUT_BORDER)));
 }
 
 const makeStyles = () =>
@@ -2545,9 +2557,11 @@ const makeStyles = () =>
   // 左列:⤢(顶)+ 🎤/⌨(底);stretch 到整行高度,⤢ 才能落在左上角。
   inputLeftCol: { alignSelf: 'stretch', justifyContent: 'space-between', alignItems: 'center' },
   draftAddTile: { width: 64, height: 64, borderRadius: 6, borderWidth: 1, borderStyle: 'dashed', borderColor: colors.border, alignItems: 'center', justifyContent: 'center' },
+  // alignItems is set inline from composerRowAlign(): 'center' for one line / voice mode,
+  // 'flex-end' (WeChat: buttons stay by the last line) once the input is multi-line.
   inputRow: {
     flexDirection: 'row',
-    alignItems: 'flex-end',
+    alignItems: 'center',
     gap: spacing.sm,
     padding: spacing.md,
     borderTopWidth: 1,
@@ -2591,7 +2605,7 @@ const makeStyles = () =>
   priorityButtonActive: { borderColor: colors.failed, backgroundColor: colors.inputBg },
   priorityButtonText: { color: colors.textMuted, fontSize: 11, fontWeight: '600' },
   priorityButtonTextActive: { color: colors.failed },
-  mobilePriorityButton: { width: ds(36), height: ds(36), borderRadius: ds(36) / 2, borderWidth: 1, borderColor: colors.border, alignItems: 'center', justifyContent: 'center' },
+  mobilePriorityButton: { width: composerControlSize(uiScale().densityFactor), height: composerControlSize(uiScale().densityFactor), borderRadius: composerControlSize(uiScale().densityFactor) / 2, borderWidth: 1, borderColor: colors.border, alignItems: 'center', justifyContent: 'center' },
   mobilePriorityText: { color: colors.textMuted, fontSize: 15 },
   shortcutHint: { color: colors.textMuted, fontSize: 10 },
   desktopSend: { minWidth: ds(64), height: ds(32), borderRadius: radius.sm, paddingHorizontal: spacing.lg, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.accent },
@@ -2601,10 +2615,12 @@ const makeStyles = () =>
     flex: 1,
     backgroundColor: colors.inputBg,
     borderColor: colors.border,
-    borderWidth: 1,
+    borderWidth: COMPOSER_INPUT_BORDER,
     borderRadius: 18,
     paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.md,
+    // One line is exactly the row control height (the ⌨ / ＋ buttons): border + pad + line + pad + border.
+    paddingVertical: composerInputPadY(composerControlSize(uiScale().densityFactor), COMPOSER_LINE_HEIGHT * uiScale().fontMultiplier),
+    minHeight: composerControlSize(uiScale().densityFactor),
     color: colors.text,
     fontSize: 14,
     // composer-row-layout.ts COMPOSER_LINE_HEIGHT — the ⤢ threshold counts lines in this unit.
