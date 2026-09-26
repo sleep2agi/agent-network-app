@@ -58,6 +58,9 @@ export interface HubTask {
   /** Exact runtime context exposed by SideThread-capable Hubs. */
   thread_id?: string;
   turn_id?: string;
+  /** Task meta as stored by the hub (JSON). Dashboard sends carry meta.client_request_id — the
+   *  optimistic bubble's id — which is how ChatScreen matches its echo to this row (chat-echo.ts). */
+  meta_json?: string | null;
 }
 
 export interface HubConfig {

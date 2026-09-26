@@ -18,6 +18,14 @@ export const AGENT_ROW_AVATAR = 44;
 export const AGENT_ROW_DOT = 12;
 export const AGENT_ROW_PAD_X = 16;
 export const AGENT_ROW_GAP = 12;
+/**
+ * Vertical padding (dp, density-scaled). The row is max(minHeight, text + 2 × this): at 标准 /
+ * 宽松 the 68 / 78 dp minHeight still decides; at 紧凑 / 更紧凑 the two text lines do, and the old
+ * (height − avatar) / 2 padding (10.5 dp at 紧凑) made those rows 63 dp instead of 58.
+ */
+export const AGENT_ROW_PAD_Y = 8;
+/** No row is ever shorter than this, whatever the density or font (touch target). */
+export const AGENT_ROW_TOUCH_MIN = 44;
 /** Hairline separators start under the text, not under the avatar (WeChat). */
 export const AGENT_ROW_SEPARATOR_INSET = AGENT_ROW_PAD_X + AGENT_ROW_AVATAR + AGENT_ROW_GAP;
 

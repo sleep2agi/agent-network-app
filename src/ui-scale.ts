@@ -27,7 +27,7 @@ import { SPACING_BASE, restyleAll, spacing } from './theme';
 // ── options ──
 
 export type FontSizePref = 'small' | 'standard' | 'large' | 'xlarge';
-export type DensityPref = 'compact' | 'standard' | 'comfortable';
+export type DensityPref = 'denser' | 'compact' | 'standard' | 'comfortable';
 
 export const FONT_SIZE_OPTIONS: readonly { key: FontSizePref; label: string; factor: number }[] = [
   { key: 'small', label: '小', factor: 0.9 },
@@ -37,18 +37,19 @@ export const FONT_SIZE_OPTIONS: readonly { key: FontSizePref; label: string; fac
 ];
 
 export const DENSITY_OPTIONS: readonly { key: DensityPref; label: string; factor: number }[] = [
+  { key: 'denser', label: '更紧凑', factor: 0.75 },
   { key: 'compact', label: '紧凑', factor: 0.85 },
   { key: 'standard', label: '标准', factor: 1.0 },
   { key: 'comfortable', label: '宽松', factor: 1.15 },
 ];
 
 const FONT_FACTOR: Record<FontSizePref, number> = { small: 0.9, standard: 1.0, large: 1.15, xlarge: 1.3 };
-const DENSITY_FACTOR: Record<DensityPref, number> = { compact: 0.85, standard: 1.0, comfortable: 1.15 };
+const DENSITY_FACTOR: Record<DensityPref, number> = { denser: 0.75, compact: 0.85, standard: 1.0, comfortable: 1.15 };
 
 export const isFontSizePref = (v: unknown): v is FontSizePref =>
   v === 'small' || v === 'standard' || v === 'large' || v === 'xlarge';
 export const isDensityPref = (v: unknown): v is DensityPref =>
-  v === 'compact' || v === 'standard' || v === 'comfortable';
+  v === 'denser' || v === 'compact' || v === 'standard' || v === 'comfortable';
 
 // ── defaults ──
 
@@ -57,13 +58,28 @@ export const DEFAULT_FONT_SIZE: FontSizePref = 'standard';
 
 /**
  * Density when the user never chose one. Phone and desktop: 标准 (unchanged look).
- * Android wide two-pane (unfolded foldable / tablet): 紧凑 — the owner's 0.2.112 screenshot
- * on an unfolded foldable had ~68 dp rows with a 44 dp avatar and a big rail, and he still
- * found the left side too big. 紧凑 gives a 37 dp avatar in a 58 dp row (still above the
- * 48 dp touch minimum; with two lines of 标准 text the row is text-bound at ~63 dp), a 62 dp rail with 54×48 dp items. It follows the layout live: fold
- * the phone and it goes back to 标准, unfold and it is 紧凑 again — until the user picks one.
+ * Android wide two-pane (unfolded foldable / tablet): 更紧凑.
+ *
+ * History: 0.2.113 made it 紧凑 (37 dp avatar, rows text-bound at 63 dp). The owner's 0.2.113
+ * screenshot (2048×1449 px unfolded, light, 紧凑 default) measured an 85 px avatar ⇒ 85 / 37 =
+ * 2.3 px per dp ⇒ an 891 × 630 dp window; 142 px rows = 62 dp, 34 px name glyphs = 15 dp
+ * (a 16 dp CJK name), 7 rows on screen — and he still found it too big
+ * (「这些字、字体、头像，能不能再小一点」).
+ * 更紧凑 on that 891 × 630 dp window (web harness, OS font 1.0): 33 dp avatar, 15 / 13 list
+ * text, 51 dp rows (touch target ≥ 44 at any OS scale: 57 dp at OS 1.15), 56 dp rail with
+ * 48 × 48 items — 10 rows fit instead of 8 (OS 1.15: 9 instead of 7).
+ * It follows the layout live: fold the phone and it goes back to 标准, unfold and it is
+ * 更紧凑 again — until the user picks one.
  */
-export const defaultDensity = (wide: boolean): DensityPref => (wide ? 'compact' : 'standard');
+export const defaultDensity = (wide: boolean): DensityPref => (wide ? 'denser' : 'standard');
+
+/**
+ * 更紧凑 also steps the *list chrome* text down one step (agent-row name 16 → 15, preview
+ * 14 → 13, time / group header 12 → 11, rail label 11 → 10). Only the surfaces that call
+ * listFont(): chat bubbles, the composer and every other screen keep their size — the
+ * message text only shrinks when the user picks 字体大小「小」.
+ */
+export const listFontStep = (pref: DensityPref): number => (pref === 'denser' ? -1 : 0);
 
 // ── OS font scale composition ──
 
@@ -167,6 +183,8 @@ export interface ResolvedUiScale {
   fontMultiplier: number;
   denseFontMultiplier: number;
   densityFactor: number;
+  /** One-step size change for the list chrome text (listFont); -1 at 更紧凑, else 0. */
+  listFontStep: number;
   /** The raw OS font scale that went in (before clamping) — the settings hint shows it. */
   osFontScale: number;
 }
@@ -177,7 +195,7 @@ export function resolveUiScale(s: Pick<State, 'prefs' | 'osFontScale' | 'wide' |
   if (s.legacy) {
     // Pre-setting behaviour: RN multiplied every Text by the raw OS scale; nothing else scaled.
     const os = finiteOr(s.osFontScale, 1);
-    return { font, density: 'standard', fontIsDefault: true, densityIsDefault: true, fontMultiplier: os, denseFontMultiplier: os, densityFactor: 1, osFontScale: os };
+    return { font, density: 'standard', fontIsDefault: true, densityIsDefault: true, fontMultiplier: os, denseFontMultiplier: os, densityFactor: 1, listFontStep: 0, osFontScale: os };
   }
   return {
     font,
@@ -187,6 +205,7 @@ export function resolveUiScale(s: Pick<State, 'prefs' | 'osFontScale' | 'wide' |
     fontMultiplier: fontMultiplier(font, s.osFontScale),
     denseFontMultiplier: fontMultiplier(font, s.osFontScale, true),
     densityFactor: densityFactor(density),
+    listFontStep: listFontStep(density),
     osFontScale: finiteOr(s.osFontScale, 1),
   };
 }
@@ -197,7 +216,7 @@ export const uiScale = (): ResolvedUiScale => resolved;
 export const uiScalePrefs = (): UiScalePrefs => ({ ...state.prefs });
 
 /** Stable string for App's keyed remount; changes exactly when something rendered would change. */
-export const uiScaleKey = (): string => `f${resolved.fontMultiplier}/${resolved.denseFontMultiplier}-d${resolved.densityFactor}`;
+export const uiScaleKey = (): string => `f${resolved.fontMultiplier}/${resolved.denseFontMultiplier}-d${resolved.densityFactor}-l${resolved.listFontStep}`;
 
 /** Scaled spacing tokens for a density factor (rounded to whole dp; never below 1 for a non-zero base). */
 export function scaledSpacing(factor: number): Record<keyof typeof SPACING_BASE, number> {
@@ -311,6 +330,13 @@ export const fs = (n: number, dense = false): number =>
 
 /** Density helper: icon sizes, avatars, row heights, paddings, rail. `floor` keeps touch targets usable. */
 export const ds = (n: number, floor = 0): number => Math.max(floor, Math.round(n * resolved.densityFactor));
+
+/**
+ * List-chrome text size: the base size, one step smaller at 更紧凑 (listFontStep). Returns a
+ * fontSize / lineHeight *base* — src/ui-text.tsx still multiplies it by the font setting, so
+ * write `fontSize: listFont(16)` (never `fs(listFont(…))`).
+ */
+export const listFont = (n: number): number => Math.max(9, n + resolved.listFontStep);
 
 /** Test-only reset. */
 export function __resetUiScale(): void {

@@ -9,11 +9,12 @@ import { Ionicons } from './icons';
 import AliasAvatar from './AliasAvatar';
 import { colors, radius, spacing } from './theme';
 import { saveUiScalePrefs } from './storage';
-import { AGENT_ROW_AVATAR, AGENT_ROW_DOT, AGENT_ROW_GAP, AGENT_ROW_HEIGHT, AGENT_ROW_PAD_X } from './agent-row-model';
+import { AGENT_ROW_AVATAR, AGENT_ROW_DOT, AGENT_ROW_GAP, AGENT_ROW_HEIGHT, AGENT_ROW_PAD_X, AGENT_ROW_PAD_Y, AGENT_ROW_TOUCH_MIN } from './agent-row-model';
 import {
   DENSITY_OPTIONS,
   FONT_SIZE_OPTIONS,
   ds,
+  listFont,
   onUiScalePrefsChange,
   setUiScalePrefs,
   uiScale,
@@ -156,14 +157,15 @@ export function UiScalePreview() {
 const makePreviewStyles = () => StyleSheet.create({
   frame: { marginHorizontal: spacing.md, marginTop: spacing.sm, borderWidth: 1, borderColor: colors.border, borderRadius: radius.md, backgroundColor: colors.card, overflow: 'hidden' },
   caption: { color: colors.textMuted, fontSize: 11, paddingHorizontal: spacing.md, paddingTop: spacing.sm },
-  row: { flexDirection: 'row', alignItems: 'center', gap: ds(AGENT_ROW_GAP), minHeight: ds(AGENT_ROW_HEIGHT), paddingHorizontal: ds(AGENT_ROW_PAD_X), paddingVertical: (ds(AGENT_ROW_HEIGHT) - ds(AGENT_ROW_AVATAR)) / 2 },
+  // Same geometry and list text as AgentsScreen's phone row (makeRowStyles).
+  row: { flexDirection: 'row', alignItems: 'center', gap: ds(AGENT_ROW_GAP), minHeight: ds(AGENT_ROW_HEIGHT, AGENT_ROW_TOUCH_MIN), paddingHorizontal: ds(AGENT_ROW_PAD_X), paddingVertical: ds(AGENT_ROW_PAD_Y) },
   avatar: { width: ds(AGENT_ROW_AVATAR), height: ds(AGENT_ROW_AVATAR) },
   dot: { position: 'absolute', right: -1, bottom: -1, width: ds(AGENT_ROW_DOT), height: ds(AGENT_ROW_DOT), borderRadius: ds(AGENT_ROW_DOT) / 2, borderWidth: 2 },
-  body: { flex: 1, minWidth: 0, gap: 3 },
+  body: { flex: 1, minWidth: 0, gap: ds(3) },
   line: { flexDirection: 'row', alignItems: 'center', gap: ds(6), minHeight: ds(20) },
-  name: { flexShrink: 1, color: colors.text, fontSize: 16, fontWeight: '500' },
-  time: { marginLeft: 'auto', color: colors.textMuted, fontSize: 12 },
-  preview: { flex: 1, minWidth: 0, color: colors.textMuted, fontSize: 14 },
+  name: { flexShrink: 1, color: colors.text, fontSize: listFont(16), fontWeight: '500' },
+  time: { marginLeft: 'auto', color: colors.textMuted, fontSize: listFont(12) },
+  preview: { flex: 1, minWidth: 0, color: colors.textMuted, fontSize: listFont(14) },
   badge: { minWidth: 18, height: 18, paddingHorizontal: 5, borderRadius: 9, backgroundColor: colors.failed, alignItems: 'center', justifyContent: 'center' },
   badgeText: { color: '#ffffff', fontSize: 10, fontWeight: '600', lineHeight: 12 },
   chat: { gap: spacing.sm, paddingHorizontal: spacing.md, paddingVertical: spacing.sm, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border, backgroundColor: colors.bg },

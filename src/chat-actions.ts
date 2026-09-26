@@ -1,4 +1,5 @@
 // 更像微信·round-2: 长按气泡动作的纯逻辑(可单测·无 RN 依赖)。
+import { clientRequestIdOfRow, rowIsLocalSend } from './chat-echo';
 
 // 微信「引用」:把被引用内容压成单行、截断,包成引用块前缀,拼到正文前。
 // 2026-09-15(Vincent:抄微信的引用设计):带作者时写成「@作者: 文本」,客户端把这一行从气泡里
@@ -94,7 +95,7 @@ export const shouldSendOnEnter = (event: {
   && event.keyCode !== 229
   && event.which !== 229;
 
-type TimedMessage = { content?: string; created_at?: string; _localId?: string };
+type TimedMessage = { content?: string; created_at?: string; _localId?: string; meta_json?: string | null; meta?: unknown };
 type TimedOutbox = { id: string; content: string; createdAt: number };
 
 const messageTime = (value?: string): number => {
@@ -113,6 +114,12 @@ export const confirmedOutboxIds = (
   // Slightly wider than CommHub's five-minute duplicate-send window.
   windowMs = 6 * 60 * 1000,
 ): string[] => local.filter(entry => fetched.some(item => {
+  // The hub row carries this entry's request id (meta.client_request_id): it is this send,
+  // whatever its content became (attachment hints) and however long ago it was made.
+  if (rowIsLocalSend(item, entry.id)) return true;
+  // A row that carries *another* request id is another send (the user may repeat a text on
+  // purpose); content + time is only the fallback for rows from hubs that do not return meta.
+  if (clientRequestIdOfRow(item) !== null) return false;
   if ((item.content ?? '').trim() !== entry.content.trim()) return false;
   const remoteTime = messageTime(item.created_at);
   return Number.isFinite(remoteTime) && Math.abs(remoteTime - entry.createdAt) <= windowMs;
