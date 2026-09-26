@@ -11,10 +11,10 @@ import {
   openApkInBrowser,
   openUnknownSourcesSettings,
   androidDownloadRoutes,
-  chooseAndroidUpdateRoute,
+  androidBrowserApkUrl,
   subscribeAndroidUpdates,
 } from './android-updater';
-import { createRoutePrefsStore, memoryRouteStorage, ROUTE_LAST_OK_KEY, ROUTE_PREF_KEY } from './update-route';
+import { createRoutePrefsStore, LEGACY_ROUTE_PREF_KEY, memoryRouteStorage, ROUTE_LAST_OK_KEY } from './update-route';
 import { describeAndroidUpdateRow, githubApkUrl, mirrorApkUrl, mirrorManifestUrl, mirrorSumsUrl, MIRROR_VERSION_URL, ANDROID_LATEST_RELEASE_API } from './android-update-core';
 import { Sha256 } from './sha256';
 
@@ -333,109 +333,105 @@ for (const mode of ['stall-then-ok', 'stall-reject'] as DlMode[]) {
 }
 
 
-// ════════ 下载线路(线路一 ModelScope / 线路二 GitHub)════════
+// ════════ 下载来源(内部:镜像优先、GitHub 兜底、记住上次成功的;用户看不到也选不了)════════
 const storeWith = (data: Record<string, string> = {}) => { const st = memoryRouteStorage(data); return { st, store: createRoutePrefsStore(st) }; };
 const watchStates = () => { const seen: any[] = []; const off = subscribeAndroidUpdates(() => seen.push(androidUpdateSnapshot())); return { seen, off }; };
+const MS_APK = 'https://modelscope.cn/datasets/SmartFlowAI/agent-network-releases/resolve/master/desktop/0.2.101/Agent.Network_0.2.101_android-universal.apk';
+const GH_APK = 'https://github.com/sleep2agi/agent-network-app/releases/download/desktop-v0.2.101/Agent.Network_0.2.101_android-universal.apk';
 
-// R1. 默认(auto,无记录):线路一先下;成功后记下「上次成功 = 线路一」,状态标明线路
+// R1. 无记录:镜像先下;成功后记下「上次成功 = 镜像」
 {
   const { deps, calls } = makeDeps(mirrorModes('ok'));
   const { st, store } = storeWith();
   __resetAndroidUpdaterForTest(deps, { routeStore: store });
   await checkMirrorOk();
-  ck('route: auto + no history → order 线路一, 线路二', androidDownloadRoutes().join(',') === 'mirror,github');
+  ck('source: no history → order mirror, github', androidDownloadRoutes().join(',') === 'mirror,github');
   const w = watchStates();
   await downloadAndroidUpdate();
   w.off();
-  ck('route: downloading state carries route=mirror and byte counts', w.seen.some(x => x.kind === 'downloading' && x.route === 'mirror' && x.written === SIZE && x.total === SIZE));
-  const s = androidUpdateSnapshot();
-  ck('route: ready records route=mirror', s.kind === 'ready' && s.route === 'mirror');
-  ck('route: last good route persisted = mirror', st.data[ROUTE_LAST_OK_KEY] === 'mirror' && calls.created[0] === mirrorApkUrl('0.2.101'));
+  ck('source: downloading state carries byte counts', w.seen.some(x => x.kind === 'downloading' && x.written === SIZE && x.total === SIZE));
+  ck('source: last good persisted = mirror', st.data[ROUTE_LAST_OK_KEY] === 'mirror' && calls.created[0] === mirrorApkUrl('0.2.101'));
 }
-// R2. 线路一失败 → 自动切线路二,下载中状态带 fallbackFrom(弹窗据此写「已自动切换到线路二」);成功线路 = github 被记住
+// R2. 镜像失败 → 静默切 GitHub;成功来源 = github 被记住
 {
   const { deps, calls } = makeDeps(mirrorModes('throw', 'ok'));
   const { st, store } = storeWith();
   __resetAndroidUpdaterForTest(deps, { routeStore: store });
   await checkMirrorOk();
-  const w = watchStates();
   await downloadAndroidUpdate();
-  w.off();
-  const fb = w.seen.find(x => x.kind === 'downloading' && x.route === 'github');
-  ck('fallback: GitHub attempt announces fallbackFrom 线路一 + reason', !!fb && fb.fallbackFrom?.route === 'mirror' && fb.fallbackFrom?.reason === '网络不通');
-  ck('fallback: first attempt had no fallbackFrom', w.seen.some(x => x.kind === 'downloading' && x.route === 'mirror' && !x.fallbackFrom));
-  ck('fallback: ready via github, remembered as last good', androidUpdateSnapshot().kind === 'ready' && (androidUpdateSnapshot() as any).route === 'github' && st.data[ROUTE_LAST_OK_KEY] === 'github');
   ck('fallback: order mirror→github', calls.created.join(',') === `${mirrorApkUrl('0.2.101')},${githubApkUrl('0.2.101')}`);
+  ck('fallback: ready via github, remembered as last good', androidUpdateSnapshot().kind === 'ready' && st.data[ROUTE_LAST_OK_KEY] === 'github');
 }
-// R3. 上次成功 = github(auto)→ 这次先走线路二
+// R3. 上次成功 = github → 这次先走 GitHub
 {
   const { deps, calls } = makeDeps(mirrorModes('ok', 'ok'));
   const { store } = storeWith({ [ROUTE_LAST_OK_KEY]: 'github' });
   __resetAndroidUpdaterForTest(deps, { routeStore: store });
   await checkMirrorOk();
   await downloadAndroidUpdate();
-  ck('auto + last good github → GitHub first', calls.created[0] === githubApkUrl('0.2.101') && calls.created.length === 1);
+  ck('last good github → GitHub first', calls.created[0] === githubApkUrl('0.2.101') && calls.created.length === 1);
 }
-// R4. 设置里明确选了线路一,即使上次成功是 github,也先走线路一
+// R4. 0.2.121 存过「线路二」偏好:忽略(按自动走镜像),并且被删掉
 {
   const { deps, calls } = makeDeps(mirrorModes('ok', 'ok'));
-  const { store } = storeWith({ [ROUTE_LAST_OK_KEY]: 'github', [ROUTE_PREF_KEY]: 'mirror' });
+  const { st, store } = storeWith({ [LEGACY_ROUTE_PREF_KEY]: 'github' });
   __resetAndroidUpdaterForTest(deps, { routeStore: store });
-  await checkMirrorOk();
+  const f = makeFetch({ ...mirrorRoutes('0.2.101'), [ANDROID_LATEST_RELEASE_API]: { status: 200, json: ghRelease('0.2.101') } });
+  await checkAndroidUpdate('0.2.100', { fetchImpl: f.fetchImpl, ...noSleep });
+  ck('legacy 线路二 pref: check still asks the mirror first', f.calls[0] === MIRROR_VERSION_URL && f.gh() === 0);
   await downloadAndroidUpdate();
-  ck('pref mirror beats last-good github', calls.created[0] === mirrorApkUrl('0.2.101'));
+  ck('legacy 线路二 pref: download still starts on the mirror', calls.created[0] === mirrorApkUrl('0.2.101'));
+  ck('legacy 线路二 pref: key deleted from storage', !(LEGACY_ROUTE_PREF_KEY in st.data));
 }
-// R5. 弹窗里点「线路二」:本次先走 GitHub;两条都失败 → attempts 按顺序列出两条
+// R5. 两个来源都失败 → 一个 download-error,重试从镜像重新来
 {
   const { deps, calls } = makeDeps(mirrorModes('404', '404'));
-  const { store } = storeWith();
-  __resetAndroidUpdaterForTest(deps, { routeStore: store });
+  __resetAndroidUpdaterForTest(deps, { routeStore: storeWith().store });
   await checkMirrorOk();
-  chooseAndroidUpdateRoute('github');
-  ck('chosen route in prompt → order github, mirror', androidDownloadRoutes().join(',') === 'github,mirror');
   await downloadAndroidUpdate();
-  const s = androidUpdateSnapshot();
-  ck('chosen github: GitHub attempted first', calls.created[0] === githubApkUrl('0.2.101') && calls.created[1] === mirrorApkUrl('0.2.101'));
-  ck('both fail: attempts list both routes in order with reasons', s.kind === 'download-error' && s.attempts?.map(a => `${a.route}:${a.reason}`).join('|') === 'github:安装包地址不可用(404)|mirror:安装包地址不可用(404)');
-  // 失败后换回线路一:顺序跟着变,从线路一重新开始
-  chooseAndroidUpdateRoute('mirror');
+  ck('both fail: mirror then GitHub attempted, one error state', calls.created.join(',') === `${mirrorApkUrl('0.2.101')},${githubApkUrl('0.2.101')}` && androidUpdateSnapshot().kind === 'download-error');
   await downloadAndroidUpdate();
-  ck('re-choosing 线路一 after failure restarts from the mirror', calls.created[2] === mirrorApkUrl('0.2.101'));
+  ck('retry after both failed restarts from the mirror', calls.created[2] === mirrorApkUrl('0.2.101'));
 }
-// R6. 浏览器下载:两条线路各自带版本号的直链(经 openURL = Linking)
+// R6. 浏览器下载:一个按钮;默认镜像直链,已知镜像不行才给 GitHub
 {
   const { deps, calls } = makeDeps({});
   __resetAndroidUpdaterForTest(deps, { routeStore: storeWith().store });
   await checkMirrorOk();
-  await openApkInBrowser('mirror');
-  await openApkInBrowser('github');
-  ck('browser: 线路一 opens versioned ModelScope URL', calls.urls[0] === 'https://modelscope.cn/datasets/SmartFlowAI/agent-network-releases/resolve/master/desktop/0.2.101/Agent.Network_0.2.101_android-universal.apk');
-  ck('browser: 线路二 opens versioned GitHub URL', calls.urls[1] === 'https://github.com/sleep2agi/agent-network-app/releases/download/desktop-v0.2.101/Agent.Network_0.2.101_android-universal.apk');
-}
-// R7. 检查阶段:偏好 github → 先问 GitHub REST(不先打镜像);up-to-date 状态带回答的线路
-{
-  const { deps } = makeDeps({});
-  __resetAndroidUpdaterForTest(deps, { routeStore: storeWith({ [ROUTE_PREF_KEY]: 'github' }).store });
-  const f = makeFetch({ ...mirrorRoutes('0.2.101'), [ANDROID_LATEST_RELEASE_API]: { status: 200, json: ghRelease('0.2.101') } });
-  const s = await checkAndroidUpdate('0.2.101', { fetchImpl: f.fetchImpl, ...noSleep });
-  ck('pref github: check asks GitHub first and stops there', f.calls[0] === ANDROID_LATEST_RELEASE_API && f.calls.length === 1);
-  ck('pref github: up-to-date carries route=github', s.kind === 'up-to-date' && s.route === 'github');
+  await openApkInBrowser();
+  ck('browser: opens the versioned mirror URL by default', calls.urls[0] === MS_APK && androidBrowserApkUrl() === MS_APK);
 }
 {
-  const { deps } = makeDeps({});
-  __resetAndroidUpdaterForTest(deps, { routeStore: storeWith({ [ROUTE_PREF_KEY]: 'github' }).store });
-  const f = makeFetch({ ...mirrorRoutes('0.2.101'), [ANDROID_LATEST_RELEASE_API]: GH_403_RL });
-  const s = await checkAndroidUpdate('0.2.101', { fetchImpl: f.fetchImpl, ...noSleep });
-  ck('pref github + GitHub rate-limited → mirror answers, route=mirror', s.kind === 'up-to-date' && s.route === 'mirror' && f.calls[1] === MIRROR_VERSION_URL);
+  const { deps, calls } = makeDeps(mirrorModes('throw', '404'));
+  __resetAndroidUpdaterForTest(deps, { routeStore: storeWith().store });
+  await checkMirrorOk();
+  await downloadAndroidUpdate();
+  await openApkInBrowser();
+  ck('browser: after the mirror download failed → GitHub URL', calls.urls[0] === GH_APK);
 }
+{
+  const { deps, calls } = makeDeps({});
+  __resetAndroidUpdaterForTest(deps, { routeStore: storeWith().store });
+  await checkAndroidUpdate('0.2.100', { fetchImpl: makeFetch({ [MIRROR_VERSION_URL]: 'throw', [ANDROID_LATEST_RELEASE_API]: { status: 200, json: ghRelease('0.2.101') } }).fetchImpl, ...noSleep });
+  await openApkInBrowser();
+  ck('browser: mirror check failed (GitHub answered) → GitHub URL', calls.urls[0] === GH_APK);
+}
+{
+  // 镜像这次下载失败但 GitHub 成功了、上次成功 = github;浏览器按钮只看「镜像是否已知不行」
+  const { deps } = makeDeps(mirrorModes('ok', 'ok'));
+  __resetAndroidUpdaterForTest(deps, { routeStore: storeWith({ [ROUTE_LAST_OK_KEY]: 'github' }).store });
+  await checkMirrorOk();
+  ck('browser: an old GitHub success alone does not skip a healthy mirror', androidBrowserApkUrl() === MS_APK);
+}
+// R7. 检查阶段:镜像回答 → 不打 GitHub;设置行不带来源
 {
   const { deps } = makeDeps({});
   __resetAndroidUpdaterForTest(deps, { routeStore: storeWith().store });
   const f = makeFetch({ ...mirrorRoutes('0.2.101') });
   const s = await checkAndroidUpdate('0.2.101', { fetchImpl: f.fetchImpl, ...noSleep });
-  ck('auto: mirror answers the check, route=mirror, no GitHub', s.kind === 'up-to-date' && s.route === 'mirror' && f.gh() === 0);
+  ck('mirror answers the check, no GitHub', s.kind === 'up-to-date' && f.gh() === 0);
   const row = describeAndroidUpdateRow(s, { currentVersion: '0.2.101', lastCheckedAt: Date.now(), now: Date.now() });
-  ck('settings row: 已是最新版本 v0.2.101 · 刚刚检查 · 线路一', row.label === '已是最新版本 v0.2.101' && row.detail === '刚刚检查 · 线路一');
+  ck('settings row: 已是最新版本 v0.2.101 · 刚刚检查 (no 线路 suffix)', row.label === '已是最新版本 v0.2.101' && row.detail === '刚刚检查');
 }
 // R8. GitHub 回答的检查(镜像不通)+ 无记录 → 先走 GitHub,不先撞镜像
 {

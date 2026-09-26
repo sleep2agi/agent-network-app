@@ -1,8 +1,8 @@
 /**
- * web GUI 验收夹具(更新弹窗 · 下载线路)。不连 Hub、不打网络。
+ * web GUI 验收夹具(更新弹窗)。不连 Hub、不打网络。
  * `?fixture=update-prompt&platform=android|desktop&state=available|downloading|fallback|error|ready|uptodate&theme=dark|light`
  *
- * 背后是 设置 → 关于(按安卓渲染:版本 / 软件更新 / 下载线路),前面是对应状态的更新弹窗。
+ * 背后是 设置 → 关于(按安卓渲染:版本 / 软件更新),前面是对应状态的更新弹窗。
  * 浏览器里 Platform.OS 恒为 web,App 不会挂 AndroidUpdatePrompt —— 这里直接挂。
  */
 import { useState } from 'react';
@@ -21,7 +21,7 @@ const FIXTURE_CFG: HubConfig = { serverUrl: 'http://127.0.0.1:9', token: 'fixtur
 export const FIXTURE_CURRENT = '0.2.117';
 export const FIXTURE_NEXT = '0.2.118';
 const SIZE = 80_740_352; // ≈ 77.0 MB
-const NOTES = `Signed and notarized stable update for macOS (Apple Silicon) and Windows (x64).\n\nWhat's new in ${FIXTURE_NEXT}:\n- 检查更新显示「当前版本 → 新版本」,可选下载线路:线路一(国内 · ModelScope)/ 线路二(GitHub)。\n- 线路一失败时自动改用线路二,并记住本机上次成功的线路。\n- 设置 → 关于 新增「下载线路」:自动 / 线路一 / 线路二。\n\nWhat's new in ${FIXTURE_CURRENT}:\n- 旧版本说明(不应出现在弹窗里)。`;
+const NOTES = `Signed and notarized stable update for macOS (Apple Silicon) and Windows (x64).\n\nWhat's new in ${FIXTURE_NEXT}:\n- 检查更新显示「当前版本 → 新版本」、本版说明和下载进度。\n- 下载失败时自动重试另一个下载源,并校验 sha256。\n\nWhat's new in ${FIXTURE_CURRENT}:\n- 旧版本说明(不应出现在弹窗里)。`;
 
 export type UpdatePromptFixture = { theme: 'dark' | 'light'; platform: 'android' | 'desktop'; state: string };
 

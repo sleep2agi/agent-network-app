@@ -20,7 +20,7 @@ export default function DesktopUpdatePrompt() {
   }, []);
 
   const visible = update.kind === 'available' || update.kind === 'downloading';
-  // 当前版本 → 新版本、更新来源(清单地址的主机:线路一 ModelScope / 线路二 GitHub)、下载进度与大小。
+  // 当前版本 → 新版本、下载进度与大小。
   const view = desktopPromptView(update, APP_VERSION);
   const safe = useModalSafePadding('fullScreen'); // 0 on desktop; the rule is uniform (modal-safe-area.ts)
   return (
@@ -43,7 +43,6 @@ export default function DesktopUpdatePrompt() {
               <Text style={styles.versionNew}>{view?.versions.next ?? ''}</Text>
             </View>
           </View>
-          {view?.sourceLine ? <Text style={styles.meta} testID="desktop-update-source">{view.sourceLine}</Text> : null}
           {update.kind === 'available' ? (
             // 只放本版那一段,限高可滚动;按钮在滚动区外面,永远看得见。
             <ScrollView style={styles.notesScroll} contentContainerStyle={styles.notesContent} testID="desktop-update-notes">

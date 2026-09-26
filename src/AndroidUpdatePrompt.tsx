@@ -1,12 +1,10 @@
-import { useSyncExternalStore } from 'react';
+import { useEffect, useSyncExternalStore } from 'react';
 import { ActivityIndicator, Modal, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { Text } from './ui-text';
 import { androidPromptVisible, INSTALL_PERMISSION_HINT } from './android-update-core';
 import {
-  androidPreferredRoute,
   androidUpdatePromptDismissed,
   androidUpdateSnapshot,
-  chooseAndroidUpdateRoute,
   dismissAndroidUpdate,
   downloadAndroidUpdate,
   installAndroidUpdate,
@@ -16,29 +14,27 @@ import {
 } from './android-updater';
 import { latestReleaseNotes } from './desktop-updater';
 import { androidPromptView } from './update-prompt-model';
-import { UPDATE_ROUTES, ROUTE_SHORT, type UpdateRoute } from './update-route';
+import { routePrefs } from './update-route-prefs';
 import { colors, onThemeChange, spacing, themeMode } from './theme';
 import { APP_VERSION } from './version';
 import { useModalSafePadding } from './safe-area-runtime';
 import { withBasePadding } from './modal-safe-area';
 
-/** 分段按钮第二行:线路是什么。 */
-const ROUTE_SUB: Record<UpdateRoute, string> = { mirror: '国内 · ModelScope · 推荐', github: 'GitHub' };
-
 /**
  * 安卓更新弹窗。只在用户点了「软件更新」之后出现(安卓不做启动时自动检查)。
- * 当前版本 → 新版本 + 本版说明 → 选下载线路(线路一 ModelScope 默认 / 线路二 GitHub,另一条自动兜底)
- * → 下载(线路、大小、进度)→ sha256 → 系统安装器;「在浏览器中下载」两条线路各一个带版本号的直链。
+ * 当前版本 → 新版本 + 本版说明 → 下载(大小、进度)→ sha256 → 系统安装器;一个「在浏览器中下载」。
+ * 下载来源(镜像优先、GitHub 兜底、记住上次成功的)全在 android-updater.ts 里静默处理,这里不出现任何来源。
  * 文案全部来自 update-prompt-model.ts(有测试),这里只摆放。
  */
 export default function AndroidUpdatePrompt({ currentVersion = APP_VERSION }: { currentVersion?: string } = {}) {
   const update = useSyncExternalStore(subscribeAndroidUpdates, androidUpdateSnapshot, androidUpdateSnapshot);
   const dismissed = useSyncExternalStore(subscribeAndroidUpdates, androidUpdatePromptDismissed, androidUpdatePromptDismissed);
-  const route = useSyncExternalStore(subscribeAndroidUpdates, androidPreferredRoute, androidPreferredRoute);
   // 同 DesktopUpdatePrompt:在 key={theme} 重挂树外面,跟随系统时要自己订阅主题才会重画。
   useSyncExternalStore(onThemeChange, themeMode, themeMode);
   const visible = androidPromptVisible(update, dismissed);
-  const view = androidPromptView(update, { currentVersion, route });
+  const view = androidPromptView(update, { currentVersion });
+  // 启动时读一次「上次成功来源」;顺带静默删掉 0.2.121 遗留的「下载线路」偏好。
+  useEffect(() => { void routePrefs.hydrate().catch(() => undefined); }, []);
   const safe = useModalSafePadding('fullScreen');
   if (!view || !('apk' in update)) return null;
   const onPrimary = () => {
@@ -75,29 +71,6 @@ export default function AndroidUpdatePrompt({ currentVersion = APP_VERSION }: { 
               <Text style={styles.notes} selectable>{latestReleaseNotes(update.notes)}</Text>
             </ScrollView>
 
-            <Text style={styles.sectionLabel}>下载线路</Text>
-            <View style={styles.segmented} accessibilityRole="radiogroup" accessibilityLabel="下载线路" testID="android-update-routes">
-              {UPDATE_ROUTES.map(r => {
-                const selected = (update.kind === 'downloading' && update.route ? update.route : route) === r;
-                return (
-                  <Pressable
-                    key={r}
-                    testID={`android-update-route-${r}`}
-                    accessibilityRole="radio"
-                    accessibilityState={{ selected, checked: selected, disabled: !view.routePickerEnabled }}
-                    disabled={!view.routePickerEnabled}
-                    onPress={() => chooseAndroidUpdateRoute(r)}
-                    style={({ pressed }) => [styles.segment, selected && styles.segmentSelected, pressed && !selected && { opacity: 0.6 }, !view.routePickerEnabled && !selected && { opacity: 0.45 }]}
-                  >
-                    <Text style={[styles.segmentText, selected && styles.segmentTextSelected]} numberOfLines={1}>{ROUTE_SHORT[r]}</Text>
-                    <Text style={[styles.segmentSub, selected && styles.segmentSubSelected]} numberOfLines={1}>{ROUTE_SUB[r]}</Text>
-                  </Pressable>
-                );
-              })}
-            </View>
-
-            {view.fallbackNotice ? <Text style={styles.warn} testID="android-update-fallback">{view.fallbackNotice}</Text> : null}
-
             {update.kind === 'downloading' ? (
               <View style={styles.progressBlock} testID="android-update-progress">
                 <View style={styles.progressRow}>
@@ -110,9 +83,8 @@ export default function AndroidUpdatePrompt({ currentVersion = APP_VERSION }: { 
 
             {update.kind === 'download-error' ? (
               <View testID="android-update-error">
-                <Text style={styles.error}>{view.errorTitle}</Text>
-                {view.attemptLines.map(line => <Text key={line} style={styles.errorLine}>{line}</Text>)}
-                <Text style={styles.hintBlock}>可以换一条线路重试,或在浏览器中下载后手动安装。</Text>
+                <Text style={styles.error} testID="android-update-error-title">{view.errorTitle}</Text>
+                {view.errorDetail ? <Text style={styles.errorLine}>{view.errorDetail}</Text> : null}
               </View>
             ) : null}
 
@@ -131,14 +103,9 @@ export default function AndroidUpdatePrompt({ currentVersion = APP_VERSION }: { 
               </Pressable>
             ) : null}
 
-            <Text style={styles.sectionLabel}>在浏览器中下载</Text>
-            <View style={styles.browserRow} testID="android-update-browser">
-              {UPDATE_ROUTES.map(r => (
-                <Pressable key={r} testID={`android-update-browser-${r}`} style={styles.browserButton} onPress={() => { void openApkInBrowser(r); }}>
-                  <Text style={styles.browserText} numberOfLines={1}>{ROUTE_SHORT[r]} · {r === 'mirror' ? 'ModelScope' : 'GitHub'}</Text>
-                </Pressable>
-              ))}
-            </View>
+            <Pressable testID="android-update-browser" style={styles.browserButton} onPress={() => { void openApkInBrowser(); }}>
+              <Text style={styles.browserText} numberOfLines={1}>在浏览器中下载</Text>
+            </Pressable>
 
             {view.showLater ? (
               <Pressable testID="android-update-later" style={styles.later} onPress={dismissAndroidUpdate}>
@@ -146,7 +113,7 @@ export default function AndroidUpdatePrompt({ currentVersion = APP_VERSION }: { 
               </Pressable>
             ) : null}
             <Text style={styles.hint}>
-              两条线路的安装包逐字节相同;选中的线路失败会自动改用另一条。下载后先校验 sha256,再交给安卓系统安装器,不会静默安装。
+              下载后先校验 sha256,再交给安卓系统安装器,不会静默安装。
             </Text>
           </ScrollView>
         </View>
@@ -174,14 +141,6 @@ const makeStyles = () =>
     notesScroll: { maxHeight: 150, borderRadius: 10, backgroundColor: colors.bg, borderWidth: 1, borderColor: colors.border },
     notesContent: { padding: spacing.md },
     notes: { color: colors.textSecondary, fontSize: 13, lineHeight: 19 },
-    segmented: { flexDirection: 'row', padding: 2, borderRadius: 10, backgroundColor: colors.subtleFill, borderWidth: 1, borderColor: colors.border },
-    segment: { flex: 1, flexBasis: 0, alignItems: 'center', justifyContent: 'center', paddingVertical: 7, paddingHorizontal: 6, borderRadius: 8, borderWidth: 1, borderColor: 'transparent' },
-    segmentSelected: { backgroundColor: colors.card, borderColor: colors.accent },
-    segmentText: { color: colors.textSecondary, fontSize: 14, fontWeight: '500' },
-    segmentTextSelected: { color: colors.accent, fontWeight: '600' },
-    segmentSub: { color: colors.textMuted, fontSize: 11, marginTop: 1 },
-    segmentSubSelected: { color: colors.textSecondary },
-    warn: { color: colors.accent, fontSize: 12, lineHeight: 18, marginTop: spacing.sm },
     progressBlock: { marginTop: spacing.md },
     progressRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
     progressText: { color: colors.textSecondary, fontSize: 13, flexShrink: 1 },
@@ -190,13 +149,12 @@ const makeStyles = () =>
     error: { color: colors.failed, fontSize: 13, lineHeight: 19, marginTop: spacing.md },
     errorLine: { color: colors.failed, fontSize: 12, lineHeight: 18 },
     hintBlock: { color: colors.textSecondary, fontSize: 12, lineHeight: 18, marginTop: spacing.sm },
-    // 主按钮 / 次按钮 / 稍后 同宽(撑满卡片内容宽)、同一条中线;浏览器两个按钮 flex:1 等宽、同一行。
+    // 主按钮 / 次按钮 / 在浏览器中下载 / 稍后 同宽(撑满卡片内容宽)、同一条中线。
     button: { marginTop: spacing.lg, height: 44, backgroundColor: colors.accent, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
     buttonText: { color: '#fff', fontSize: 15, fontWeight: '600' },
     secondary: { marginTop: spacing.sm, height: 44, borderRadius: 10, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: colors.accent },
     secondaryText: { color: colors.accent, fontSize: 14, fontWeight: '600' },
-    browserRow: { flexDirection: 'row', gap: spacing.sm },
-    browserButton: { flex: 1, flexBasis: 0, height: 38, borderRadius: 10, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: colors.border, paddingHorizontal: 6 },
+    browserButton: { marginTop: spacing.sm, height: 40, borderRadius: 10, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: colors.border },
     browserText: { color: colors.accent, fontSize: 13 },
     later: { marginTop: spacing.sm, height: 40, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
     laterText: { color: colors.textSecondary, fontSize: 14 },

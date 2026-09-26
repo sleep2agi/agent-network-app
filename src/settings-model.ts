@@ -106,9 +106,6 @@ export const SETTINGS_CATEGORIES: readonly SettingsCategory[] = [
     rows: [
       { key: 'version', label: '版本', keywords: ['version'] },
       { key: 'update', label: '软件更新', keywords: ['升级', '检查更新', 'update', 'upgrade'] },
-      // 安卓安装包的下载线路(线路一 ModelScope / 线路二 GitHub)。桌面端走 Tauri updater 的 endpoints,
-      // JS 侧改不了,所以只在安卓显示;桌面端在更新弹窗里写明实际来源。
-      { key: 'updateRoute', label: '下载线路', keywords: ['线路', '线路一', '线路二', '镜像', '国内', 'modelscope', 'github', 'route', 'mirror'], platforms: ['android'] },
     ],
   },
 ];

@@ -11,8 +11,6 @@ import { checkDesktopUpdate, desktopUpdateLastCheckedAt, desktopUpdateSnapshot, 
 import { describeUpdateRow } from './update-check-state';
 import { androidUpdateLastCheckedAt, androidUpdateSnapshot, checkAndroidUpdate, subscribeAndroidUpdates } from './android-updater';
 import { describeAndroidUpdateRow } from './android-update-core';
-import { ROUTE_PREFERENCES, ROUTE_PREFERENCE_LABEL, routePreferenceSummary } from './update-route';
-import { routePrefs } from './update-route-prefs';
 import { backupLocalHubData, deleteLocalHubData, LOCAL_HUB_PROFILE_ID, localHubStatus, openLocalHubLogs, restartLocalHub, stopLocalHub, type LocalHubResult } from './local-hub';
 import { openWorkspaceWindow } from './desktop-chat-menu';
 import { loadNotifySettings, mutedAgents, notifyProfileKey, saveNotifySettings, subscribeNotifySettings, toggleAgentMuted, type NotifySettings } from './notify-settings';
@@ -82,9 +80,6 @@ export default function SettingsScreen({
   const androidUpdate = useSyncExternalStore(subscribeAndroidUpdates, androidUpdateSnapshot, androidUpdateSnapshot);
   // web 验收夹具按安卓渲染时(notifyPreview.platform=android)也走安卓那一套更新行,截图才看得到真实形状。
   const isAndroid = Platform.OS === 'android' || notifyPreview?.platform === 'android';
-  // 下载线路偏好(按设备):自动 / 线路一 / 线路二。
-  const routeSnap = useSyncExternalStore(routePrefs.subscribe, routePrefs.snapshot, routePrefs.snapshot);
-  useEffect(() => { if (isAndroid) void routePrefs.hydrate(); }, [isAndroid]);
   // 0.2.76 通知设置(桌面端落 localStorage)
   const notify = useSyncExternalStore(subscribeNotifySettings, loadNotifySettings, loadNotifySettings);
   // 偏好从「深色」换成「跟随系统(当前深色)」时生效主题没变,App 不会重挂 —— 这一行要自己订阅才会刷新。
@@ -716,36 +711,6 @@ export default function SettingsScreen({
                       </Pressable>
                     );
                   })()}
-                </>
-              ) : null}
-              {show('about', 'updateRoute') ? (
-                <>
-                  <Divider />
-                  {/* 同「主题」那一行的三选一分段控件。 */}
-                  <View style={[styles.row, styles.themeRow]} testID="settings-update-route-row">
-                    <View style={[styles.rowCopy, styles.themeRowCopy]}>
-                      <Text style={styles.rowLabel}>下载线路</Text>
-                      <Text style={styles.rowHint} testID="settings-update-route-summary">{routePreferenceSummary(routeSnap.pref, routeSnap.lastGood)}</Text>
-                    </View>
-                    <View style={styles.segmented} accessibilityRole="radiogroup" accessibilityLabel="下载线路">
-                      {ROUTE_PREFERENCES.map(option => {
-                        const selected = routeSnap.pref === option;
-                        return (
-                          <Pressable
-                            key={option}
-                            accessibilityRole="radio"
-                            accessibilityState={{ selected, checked: selected }}
-                            accessibilityLabel={ROUTE_PREFERENCE_LABEL[option]}
-                            testID={`settings-update-route-${option}`}
-                            style={({ pressed }) => [styles.segment, selected && styles.segmentSelected, pressed && !selected && { opacity: 0.6 }]}
-                            onPress={() => { if (!selected) void routePrefs.setPreference(option); }}
-                          >
-                            <Text style={[styles.segmentText, selected && styles.segmentTextSelected]} numberOfLines={1}>{ROUTE_PREFERENCE_LABEL[option]}</Text>
-                          </Pressable>
-                        );
-                      })}
-                    </View>
-                  </View>
                 </>
               ) : null}
             </View>
