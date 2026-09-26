@@ -119,6 +119,9 @@ jobs:
           releaseBody: |-
             Signed and notarized stable update for macOS (Apple Silicon) and Windows (x64).
 
+            What's new in 0.2.110:
+            - 服务器页重新设计：在线/工作中/异常/离线状态卡（点击直达筛选）、分组在线比例、连接延迟；修复把总数当成在线数的问题。
+
             What's new in 0.2.109:
             - 通知：免打扰时也能提醒（需授权一次）、任务完成/失败通知、设置里新增通知诊断。
             - 修复冷启动时重复通知、以及服务器接口异常时回复不提醒的问题。
