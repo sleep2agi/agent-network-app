@@ -3,7 +3,9 @@ import * as FileSystem from 'expo-file-system/legacy';
 import * as ImagePicker from 'expo-image-picker';
 import { Platform } from 'react-native';
 import { appFetch } from './app-fetch';
-import { compressedFileName, isDraftImage, pickerQualityFor, planCompression } from './image-draft';
+import { ImageManipulator, SaveFormat, type ImageRef } from 'expo-image-manipulator';
+import { compressedFileName, isDraftImage, PICKER_QUALITY, planCompression } from './image-draft';
+import { resizeForUpload } from './native-resize';
 
 // Image/file attachments (#220 roadmap ③) — fully wired end to end:
 // pick → upload → attach (see uploadImage below). The hub's
@@ -22,9 +24,6 @@ export interface PickedImage {
   /** Pixel size when the picker reports it (multi-image compression decision). */
   width?: number;
   height?: number;
-  /** Native only: picked with quality 1 (原图, original bytes) vs 0.8 (re-encoded).
-   *  undefined on web, where compression happens at send time instead. */
-  pickedOriginal?: boolean;
   /** Browser/Tauri clipboard and picker payload. Keeping the original Blob
    * lets FormData upload the bytes instead of serializing a blob: URL. */
   webFile?: Blob;
@@ -52,9 +51,9 @@ export const pickDocument = async (): Promise<PickedImage | null> => {
  *    Photo Picker 支持时显示 1、2、3… 序号徽标并按点选顺序返回。
  *  - iOS 14+:PHPicker,selectionLimit 生效,orderedSelection 需 iOS 15+。
  *  - web/桌面:<input type=file multiple>;浏览器不认 selectionLimit,多出的在 addToDraft 截掉。
- *  `limit` = 本次还能选几张(9 减去草稿里已有的图)。原生端按 `original` 选 quality:
- *  1 = 原字节(Android RawImageExporter),0.8 = JPEG 重编码(见 image-draft.pickerQualityFor)。 */
-export const pickImages = async (limit: number, original: boolean): Promise<PickedImage[]> => {
+ *  `limit` = 本次还能选几张(9 减去草稿里已有的图)。一律按 quality 1 取原字节,
+ *  原图开关在发送时由 prepareForUpload 决定(见 image-draft.PICKER_QUALITY)。 */
+export const pickImages = async (limit: number): Promise<PickedImage[]> => {
   if (limit <= 0) return [];
   const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
   if (!perm.granted) return [];
@@ -63,7 +62,7 @@ export const pickImages = async (limit: number, original: boolean): Promise<Pick
     allowsMultipleSelection: true,
     selectionLimit: limit,
     orderedSelection: true,
-    quality: pickerQualityFor(original),
+    quality: PICKER_QUALITY,
     allowsEditing: false,
   });
   if (result.canceled || !result.assets?.length) return [];
@@ -76,16 +75,40 @@ export const pickImages = async (limit: number, original: boolean): Promise<Pick
     fileSize: a.fileSize,
     width: a.width,
     height: a.height,
-    pickedOriginal: Platform.OS === 'web' ? undefined : original,
     webFile: (a as any).file,
   }));
 };
 
-/** web/桌面端发送前按原图开关压缩(canvas 重采样,最长边 2048、JPEG 0.8)。
- *  原生端的压缩已在选图时由 picker 的 quality 完成,这里原样返回。
+/** 原生端(Android/iOS):expo-image-manipulator 解码(已按 EXIF 摆正)→ 缩放 → JPEG 落盘。 */
+const nativeResizeDeps = {
+  decode: async (uri: string) => ImageManipulator.manipulate(uri).renderAsync(),
+  resizeAndSave: async (decoded: ImageRef, width: number, height: number, quality: number) => {
+    const context = ImageManipulator.manipulate(decoded).resize({ width, height });
+    try {
+      const resized = await context.renderAsync();
+      try {
+        const saved = await resized.saveAsync({ compress: quality, format: SaveFormat.JPEG });
+        return { uri: saved.uri, width: saved.width, height: saved.height };
+      } finally {
+        resized.release();
+      }
+    } finally {
+      context.release();
+    }
+  },
+  sizeOf: async (uri: string) => {
+    const info = await FileSystem.getInfoAsync(uri);
+    return info.exists && typeof (info as any).size === 'number' ? (info as any).size : undefined;
+  },
+  release: (decoded: ImageRef) => decoded.release(),
+};
+
+/** 发送前按原图开关压缩(最长边 2048、JPEG 0.8;规则见 image-draft.planCompression)。
+ *  原生端走 expo-image-manipulator(native-resize.ts),web/桌面走 canvas 重采样。
  *  压缩失败或压完反而更大:退回原文件(之后的 12MB 检查照常把关)。 */
 export const prepareForUpload = async (img: PickedImage, original: boolean): Promise<PickedImage> => {
-  if (Platform.OS !== 'web' || original || !img.webFile || !isDraftImage(img)) return img;
+  if (Platform.OS !== 'web') return resizeForUpload(img, original, nativeResizeDeps);
+  if (original || !img.webFile || !isDraftImage(img)) return img;
   try {
     const g: any = globalThis as any;
     if (typeof g.createImageBitmap !== 'function' || typeof g.document === 'undefined') return img;

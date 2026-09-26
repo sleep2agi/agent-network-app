@@ -8,7 +8,7 @@ const draft = await import('./image-draft');
 const queue = await import('./upload-queue');
 const {
   addToDraft, removeFromDraft, remainingImageSlots, draftCountLabel, draftImageCount, isDraftImage,
-  planCompression, pickerQualityFor, compressedFileName, oversizeMessage, sendBlocker,
+  planCompression, PICKER_QUALITY, willCompressBeforeUpload, compressedFileName, oversizeMessage, sendBlocker,
   MAX_DRAFT_IMAGES, MAX_DRAFT_ATTACHMENTS, MAX_UPLOAD_BYTES, COMPRESS_MAX_EDGE, COMPRESS_QUALITY,
 } = draft;
 const { runUploadQueue, createUploadMemo, withUploadState, removeAttachmentAt, uploadFailureSummary, UPLOAD_CONCURRENCY } = queue;
@@ -77,7 +77,12 @@ check(MAX_UPLOAD_BYTES === 12 * 1024 * 1024, 'hub /api/upload cap: 12 MiB');
   check(planCompression({ ...big, mimeType: 'image/gif', fileName: 'a.gif', original: false }).kind === 'keep', 'GIF kept (animation)');
   check(planCompression({ mimeType: 'application/pdf', fileName: 'a.pdf', fileSize: 9e6, width: 5000, height: 5000, original: false }).kind === 'keep', 'non-images never touched');
   check(planCompression({ ...big, width: 0, height: 0, original: false }).kind === 'keep', 'unknown pixel size → keep (never guess)');
-  check(pickerQualityFor(true) === 1 && pickerQualityFor(false) === COMPRESS_QUALITY, 'native: 原图 → picker quality 1 (raw), else 0.8');
+  check(PICKER_QUALITY === 1 && COMPRESS_QUALITY === 0.8, 'picker always returns original bytes (quality 1); 0.8 is applied at send time');
+  const jpg = { fileName: 'a.jpg', mimeType: 'image/jpeg' };
+  check(willCompressBeforeUpload(jpg, { original: false, platform: 'android' }) && willCompressBeforeUpload(jpg, { original: false, platform: 'ios' }), 'native with 原图 off: compressed before upload');
+  check(!willCompressBeforeUpload(jpg, { original: true, platform: 'android' }), '原图 on: never compressed');
+  check(!willCompressBeforeUpload(jpg, { original: false, platform: 'web' }) && willCompressBeforeUpload({ ...jpg, webFile: new Blob(['x']) }, { original: false, platform: 'web' }), 'web compresses only when it has the File bytes');
+  check(!willCompressBeforeUpload({ fileName: 'a.gif', mimeType: 'image/gif' }, { original: false, platform: 'android' }) && !willCompressBeforeUpload({ fileName: 'r.pdf', mimeType: 'application/pdf' }, { original: false, platform: 'android' }), 'GIF and files are never compressed');
   check(compressedFileName('IMG_0001.PNG') === 'IMG_0001.jpg' && compressedFileName('noext') === 'noext.jpg', 'compressed file gets a .jpg name');
 }
 
@@ -181,17 +186,22 @@ const attach = readFileSync(new URL('./attach.ts', import.meta.url), 'utf8');
   check(/selectionLimit:\s*limit/.test(pick), 'picker: selectionLimit = remaining slots');
   check(/orderedSelection:\s*true/.test(pick), 'picker: orderedSelection (numbered badges)');
   check(/mediaTypes:\s*\['images'\]/.test(pick), 'picker: images only');
-  check(/quality:\s*pickerQualityFor\(original\)/.test(pick), 'picker quality follows 原图');
+  check(/quality:\s*PICKER_QUALITY/.test(pick) && /export const pickImages = async \(limit: number\)/.test(pick), 'picker always takes original bytes; 原图 is not a pick-time input');
   check(/if \(limit <= 0\) return \[\]/.test(pick), 'never opens with 0 slots');
   check(!/\.slice\(0, limit\)/.test(pick) && /return result\.assets\.map\(/.test(pick), 'web ignores selectionLimit → overflow goes to addToDraft (toast), never silently sliced');
   check(!/\.sort\(/.test(pick), 'selection order is not re-sorted');
   const prep = attach.slice(attach.indexOf('export const prepareForUpload'));
-  check(/Platform\.OS !== 'web' \|\| original/.test(prep), 'prepareForUpload: native and 原图 pass through untouched');
+  check(/if \(Platform\.OS !== 'web'\) return resizeForUpload\(img, original, nativeResizeDeps\)/.test(prep), 'prepareForUpload: native resizes via expo-image-manipulator');
+  check(/SaveFormat\.JPEG/.test(attach) && /\.resize\(\{ width, height \}\)/.test(attach), 'native deps: resize + JPEG save');
+  check(/decode: async \(uri: string\) => ImageManipulator\.manipulate\(uri\)\.renderAsync\(\)/.test(attach), 'native decodes first so EXIF-rotated dimensions drive the plan');
   check(/planCompression\(/.test(prep) && /toBlob\(resolve, plan\.mimeType, plan\.quality\)/.test(prep), 'web compression follows planCompression');
   check(/blob\.size >= /.test(prep), 'a bigger re-encode falls back to the original');
 }
 // the Kotlin side of expo-image-picker actually reads the options we pass (types say orderedSelection is iOS-only)
 {
+  const pkg = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8'));
+  const bundled = JSON.parse(readFileSync(new URL('../node_modules/expo/bundledNativeModules.json', import.meta.url), 'utf8'));
+  check(pkg.dependencies['expo-image-manipulator'] === bundled['expo-image-manipulator'], `expo-image-manipulator pinned to the SDK's version (${bundled['expo-image-manipulator']})`);
   const kt = readFileSync(new URL('../node_modules/expo-image-picker/android/src/main/java/expo/modules/imagepicker/contracts/ImageLibraryContract.kt', import.meta.url), 'utf8');
   check(kt.includes('.setOrderedSelection(input.options.orderedSelection)'), 'Android picker forwards orderedSelection to the Photo Picker');
   check(kt.includes('PickMultipleVisualMedia(selectionLimit)'), 'Android picker forwards selectionLimit');
@@ -209,6 +219,8 @@ const chat = readFileSync(new URL('./ChatScreen.tsx', import.meta.url), 'utf8').
   check(/uploadMemo\.get\(cfg\.serverUrl, img\.uri, original\)/.test(send), 'retry skips already-uploaded images');
   check(/prepareForUpload\(img, original\)/.test(send) && /oversizeMessage\(prepared\)/.test(send), 'compress, then check 12MB, then upload');
   const submit = chat.slice(chat.indexOf('  const submit = async'), chat.indexOf('  const retry = '));
+  check(/willCompressBeforeUpload\(img, \{ original: sendOriginal, platform: Platform\.OS \}\)/.test(chat), 'draft oversize marking follows the send-time rule');
+  check(!chat.includes('原图对之后选择的图片生效') && /const toggleSendOriginal = \(\) => setSendOriginal\(value => !value\);/.test(chat), '原图 toggle applies at send time; no pick-time toast');
   check(/sendBlocker\(attached, willCompressLater\)/.test(submit) && submit.indexOf('sendBlocker(') < submit.indexOf('const imgs = attached') && /if \(blocked\) \{\s*setComposerNotice\(blocked\);[^\n]*\n\s*return;/.test(submit), 'oversize/limit blocks BEFORE the draft is cleared');
   check(/doSend\(content, localId, imgs, priority, original\)/.test(submit), 'send carries the 原图 choice');
   const retry = chat.slice(chat.indexOf('  const retry = '), chat.indexOf('  const removeFailedAttachment'));

@@ -49,7 +49,7 @@ import {
   PickedImage,
 } from './attach';
 import { attachmentFromClipboard, isTauriDesktop, releaseClipboardAttachment } from './clipboard-attachment';
-import { addToDraft, draftCountLabel, draftImageCount, isDraftImage, MAX_DRAFT_IMAGES, oversizeMessage, remainingImageSlots, removeFromDraft, sendBlocker } from './image-draft';
+import { addToDraft, draftCountLabel, draftImageCount, isDraftImage, MAX_DRAFT_IMAGES, oversizeMessage, remainingImageSlots, removeFromDraft, sendBlocker, willCompressBeforeUpload } from './image-draft';
 import { createUploadMemo, removeAttachmentAt, runUploadQueue, UPLOAD_CONCURRENCY, uploadFailureSummary, withUploadState, type UploadState } from './upload-queue';
 import type { UploadedFile } from './attach';
 import { colors, onThemeChange, radius, spacing } from './theme';
@@ -521,9 +521,8 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
     result.rejected.forEach(releaseClipboardAttachment);
     attachedRef.current = result.next;
     setAttached(result.next);
-    const tooBig = result.accepted.map(oversizeMessage).filter(Boolean);
-    const notice = [result.notice, ...(Platform.OS === 'web' ? [] : tooBig)].filter(Boolean).join('；');
-    if (notice) setComposerNotice(notice);
+    // 超 12MB 的图不在这里弹:原图开关到发送时才定,缩略图上的「超 12MB」和发送拦截会按当时的开关判断。
+    if (result.notice) setComposerNotice(result.notice);
   }, []);
   const appendAttachment = useCallback((next: PickedImage) => appendAttachments([next]), [appendAttachments]);
   const removeAttachment = useCallback((uri: string) => {
@@ -532,19 +531,13 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
     attachedRef.current = next;
     setAttached(next);
   }, []);
-  // web/桌面:原图关闭的图在上传前才压缩,这里不按原始体积拦它。
+  // 原图关闭的图在上传前才压缩(原生 expo-image-manipulator / web canvas),这里不按原始体积拦它。
   const willCompressLater = useCallback(
-    (img: PickedImage) => Platform.OS === 'web' && !sendOriginal && !!img.webFile && isDraftImage(img) && !/gif|svg/i.test(img.mimeType),
+    (img: PickedImage) => willCompressBeforeUpload(img, { original: sendOriginal, platform: Platform.OS }),
     [sendOriginal],
   );
-  const toggleSendOriginal = () => {
-    const next = !sendOriginal;
-    setSendOriginal(next);
-    // 原生端的压缩发生在选图那一刻:已经选进来的图保持选图时的档位,这里说清楚,不假装改了它们。
-    if (Platform.OS !== 'web' && attached.some(img => img.pickedOriginal !== undefined && img.pickedOriginal !== next)) {
-      setComposerNotice(next ? '原图对之后选择的图片生效；已选的图片已压缩' : '已选的原图不会再压缩；之后选择的图片会压缩');
-    }
-  };
+  // 原图开关在发送时才生效:选图一律取原字节,所以切换对草稿里已有的图同样有效。
+  const toggleSendOriginal = () => setSendOriginal(value => !value);
 
   // React Native Web does not expose clipboard files through TextInput's
   // onChangeText. Listen at the window while this chat is mounted so Ctrl+V
@@ -1327,7 +1320,7 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
         setComposerNotice(`最多选择 ${MAX_DRAFT_IMAGES} 张图片`);
         return;
       }
-      pickImages(slots, sendOriginal)
+      pickImages(slots)
         .then(appendAttachments)
         .catch(error => Alert.alert('无法打开', error instanceof Error ? error.message : String(error)));
     }
