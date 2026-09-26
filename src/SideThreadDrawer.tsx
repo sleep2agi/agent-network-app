@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AccessibilityInfo, ActivityIndicator, FlatList, Keyboard, KeyboardAvoidingView, Modal, Platform, Pressable, StyleSheet, View } from 'react-native';
 import { Text, TextInput } from './ui-text';
 import type { RefObject } from 'react';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useModalSafePadding } from './safe-area-runtime';
 import { Ionicons } from './icons';
 import type { HubConfig } from './api';
 import MarkdownMessage from './MarkdownMessage';
@@ -80,7 +80,9 @@ const recordsForScope = (
   record.boundary.turnId === scope.boundary.turnId) : [];
 
 export default function SideThreadDrawer({ cfg, alias, desktop, launch, scope, restoreFocusRef }: Props) {
-  const insets = useSafeAreaInsets();
+  // Own window (safe-area rule 2). Bottom sheet on phones (overlay: top 0 — it never reaches the
+  // status bar); the panel, not the scrim, pads bottom / sides so the scrim still dims edge to edge.
+  const safe = useModalSafePadding('overlay');
   const keyboardVisible = useKeyboardVisible(Keyboard, Platform.OS);
   const client = useMemo(() => createSideThreadClient(cfg), [cfg.serverUrl, cfg.token, cfg.networkId]);
   const [visible, setVisible] = useState(false);
@@ -343,7 +345,7 @@ export default function SideThreadDrawer({ cfg, alias, desktop, launch, scope, r
           style={[
             styles.panel,
             desktop ? styles.desktopPanel : styles.mobilePanel,
-            { paddingBottom: Math.max(insets.bottom, spacing.sm) },
+            { paddingBottom: Math.max(safe.paddingBottom, spacing.sm), paddingLeft: safe.paddingLeft, paddingRight: safe.paddingRight },
           ]}
           onPress={() => {}}
         >

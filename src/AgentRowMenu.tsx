@@ -6,7 +6,7 @@
 import { useEffect, useState } from 'react';
 import { AccessibilityInfo, Modal, Platform, Pressable, View, useWindowDimensions } from 'react-native';
 import * as Haptics from 'expo-haptics';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useModalSafePadding } from './safe-area-runtime';
 import { Text } from './ui-text';
 import { colors, themeMode } from './theme';
 import { uiScale } from './ui-scale';
@@ -46,7 +46,12 @@ export default function AgentRowMenu({
 }) {
   const reduceMotion = useReduceMotion();
   const win = useWindowDimensions();
-  const insets = useSafeAreaInsets();
+  // Floating anchored menu in its own window (safe-area rule 2, modal-safe-area.ts): the root is NOT
+  // padded — the scrim dims edge to edge and the menu sits at the finger. The insets only clamp
+  // where the menu may land, so the helper's values feed anchorRowMenu. Same table as every other
+  // Modal: on Android the top is max(safe-area top, StatusBar.currentHeight), because the context
+  // can read 0 inside a Modal window; web / desktop get 0 (the clamp there is not touch anyway).
+  const safe = useModalSafePadding('fullScreen');
   // Modal 铺满后的真实尺寸(安卓 edge-to-edge 下与窗口一致;先用窗口尺寸,量到了再换)。
   const [area, setArea] = useState<{ width: number; height: number } | null>(null);
   const open = !!target;
@@ -66,7 +71,7 @@ export default function AgentRowMenu({
     menuHeight,
     viewportWidth: area?.width ?? win.width,
     viewportHeight: area?.height ?? win.height,
-    insets: touch ? { top: insets.top, bottom: insets.bottom, left: insets.left, right: insets.right } : undefined,
+    insets: touch ? { top: safe.paddingTop, bottom: safe.paddingBottom, left: safe.paddingLeft, right: safe.paddingRight } : undefined,
   }) : null;
   // 手机长按:淡遮罩(微信同款,让菜单从列表里「浮」出来);桌面右键:透明,和系统右键菜单一样只截住外部点击。
   const scrim = touch ? (themeMode() === 'dark' ? 'rgba(0,0,0,0.45)' : 'rgba(0,0,0,0.18)') : 'transparent';

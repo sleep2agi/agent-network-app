@@ -72,6 +72,8 @@ import NodeFilesSection from './NodeFilesSection';
 import { keyboardAvoidEnabled, useKeyboardVisible } from './keyboard-visibility';
 import { filesTreeMode, nodePageColumnMaxWidth } from './node-files-tree';
 import { NODE_PAGE_COMPACT_WIDTH, NODE_SECTIONS, factText, headerChips, leaveNeedsConfirm, nodePageChrome, nodePageContentWidth, nodePageScrolls, overviewFactColumns, resolveActiveSection, splitOverviewFacts, visibleNodeSections, type NodeSectionKey } from './node-page-model';
+import { useModalSafePadding } from './safe-area-runtime';
+import { withBasePadding } from './modal-safe-area';
 
 const POLL_MS = 10_000; // same cadence as AgentsScreen — hub-friendly, felt-live
 
@@ -202,6 +204,9 @@ export default function NodeDetailScreen({
     return () => sub.remove();
   }, [rulesDirty]);
   const { width: windowWidth } = useWindowDimensions();
+  // The two confirm dialogs below are Modals = their own window (safe-area rule 2). The page itself
+  // gets NO inset: it renders inside the root / a pane that already applied it (rule 1).
+  const dialogSafe = useModalSafePadding('fullScreen');
   const width = layoutWidth ?? windowWidth;
   const compact = width < NODE_PAGE_COMPACT_WIDTH;
   // 右栏实测宽度(左侧还有服务器侧栏/分区栏,窗口宽≠右栏宽);没量到之前按窗口估。
@@ -561,7 +566,7 @@ export default function NodeDetailScreen({
 
       {/* 规则文件有没保存的草稿,又要切分区 / 返回。 */}
       <Modal transparent visible={!!pendingLeave} onRequestClose={() => setPendingLeave(null)} animationType="fade">
-        <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.55)', alignItems: 'center', justifyContent: 'center', padding: spacing.xl }}>
+        <View style={[{ flex: 1, backgroundColor: 'rgba(0,0,0,0.55)', alignItems: 'center', justifyContent: 'center' }, withBasePadding(dialogSafe, spacing.xl)]}>
           <View style={{ width: '100%', maxWidth: 420, borderRadius: 14, backgroundColor: colors.card, padding: spacing.xl, gap: spacing.md }} accessibilityViewIsModal>
             <Text style={{ color: colors.text, fontSize: 17, fontWeight: '600' }}>放弃未保存的修改？</Text>
             <Text style={{ color: colors.textSecondary, fontSize: 13, lineHeight: 19 }}>规则文件的改动还没有保存到节点。离开后这些改动会丢失。</Text>
@@ -580,7 +585,7 @@ export default function NodeDetailScreen({
       </Modal>
 
       <Modal transparent visible={!readOnly && !!pendingAction} onRequestClose={() => setPendingAction(null)} animationType="fade">
-        <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.55)', alignItems: 'center', justifyContent: 'center', padding: spacing.xl }}>
+        <View style={[{ flex: 1, backgroundColor: 'rgba(0,0,0,0.55)', alignItems: 'center', justifyContent: 'center' }, withBasePadding(dialogSafe, spacing.xl)]}>
           <View style={{ width: '100%', maxWidth: 420, borderRadius: 14, backgroundColor: colors.card, padding: spacing.xl, gap: spacing.md }}>
             <Text style={{ color: colors.text, fontSize: 17, fontWeight: '600' }}>
               {pendingAction === 'restart_node' ? '重启节点？' : pendingAction === 'stop_node' ? '停止节点？' : '删除节点？'}

@@ -7,19 +7,18 @@
 // 这里 `export let styles` 依赖 ES module 的 live binding:重新赋值后
 // 所有 import 方拿到的都是新对象。改动这里前先确认这一点仍成立。
 
-import { Platform, StatusBar, StyleSheet } from 'react-native';
+import { StyleSheet } from 'react-native';
 import { colors, onThemeChange, spacing } from './theme';
-import { layoutOs, statusBarHeight } from './safe-area-runtime';
 
 const makeStyles = () =>
   StyleSheet.create({
+  // 🔴 No inset here. This style is reused by screens INSIDE the root (NodeDetailScreen,
+  // LogsScreen, …); when it carried the status-bar padding (Vincent tg 729) every one of them
+  // got it a second time — 0.2.118 节点信息 in the two-pane sat a whole status bar too low.
+  // The root applies the top inset once, in App.tsx (mainWindowTopPadding, modal-safe-area.ts).
   root: {
     flex: 1,
     backgroundColor: colors.bg,
-    // RN's SafeAreaView is iOS-only; Android edge-to-edge draws content
-    // under the status bar (Vincent tg 729: clock overlapped the chat
-    // header). Pad the root by the real status-bar height instead.
-    paddingTop: layoutOs() === 'android' ? statusBarHeight() ?? 0 : 0,
   },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: spacing.sm },
   errorTitle: { color: colors.text, fontSize: 17, fontWeight: '700' },

@@ -34,6 +34,7 @@ import WinTitleBar from './win-title-bar';
 import NodePickerSheet, { NodePickerField } from './NodePicker';
 import { pickerNodes } from './node-picker-model';
 import { useModalSafePadding } from './safe-area-runtime';
+import { withBasePadding } from './modal-safe-area';
 import { loadChatPins } from './chat-pins';
 import { loadScheduleTargetRecents, rememberScheduleTarget } from './schedule-target-recents';
 import { colors, onThemeChange, radius, spacing, type as fontSize, weight } from './theme';
@@ -682,8 +683,9 @@ function CancelScheduleModal({ value, busy, onClose, onConfirm }: {
   onConfirm: () => void;
 }) {
   const s = useMemo(makeStyles, [value]);
+  const safe = useModalSafePadding('fullScreen');
   return <Modal transparent visible={!!value} animationType="fade" onRequestClose={onClose}>
-    <View style={s.confirmOverlay}>
+    <View style={[s.confirmOverlay, withBasePadding(safe, spacing.xl)]}>
       <View style={s.confirmCard}>
         <Text style={s.confirmTitle}>取消计划？</Text>
         <Text style={s.confirmMessage}>{value?.name}</Text>

@@ -19,6 +19,8 @@ import { androidPromptView } from './update-prompt-model';
 import { UPDATE_ROUTES, ROUTE_SHORT, type UpdateRoute } from './update-route';
 import { colors, onThemeChange, spacing, themeMode } from './theme';
 import { APP_VERSION } from './version';
+import { useModalSafePadding } from './safe-area-runtime';
+import { withBasePadding } from './modal-safe-area';
 
 /** 分段按钮第二行:线路是什么。 */
 const ROUTE_SUB: Record<UpdateRoute, string> = { mirror: '国内 · ModelScope · 推荐', github: 'GitHub' };
@@ -37,6 +39,7 @@ export default function AndroidUpdatePrompt({ currentVersion = APP_VERSION }: { 
   useSyncExternalStore(onThemeChange, themeMode, themeMode);
   const visible = androidPromptVisible(update, dismissed);
   const view = androidPromptView(update, { currentVersion, route });
+  const safe = useModalSafePadding('fullScreen');
   if (!view || !('apk' in update)) return null;
   const onPrimary = () => {
     if (!view.primary) return;
@@ -46,7 +49,7 @@ export default function AndroidUpdatePrompt({ currentVersion = APP_VERSION }: { 
 
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={() => { if (update.kind !== 'downloading') dismissAndroidUpdate(); }}>
-      <View style={styles.backdrop}>
+      <View style={[styles.backdrop, withBasePadding(safe, 20)]}>
         <View style={styles.card} testID="android-update-prompt">
           <ScrollView style={styles.body} contentContainerStyle={styles.bodyContent} bounces={false}>
             <Text style={styles.title}>{view.title}</Text>
