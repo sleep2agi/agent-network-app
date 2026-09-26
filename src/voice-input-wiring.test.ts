@@ -27,7 +27,8 @@ const plusAt = mobileRow.indexOf("plusEvent('toggle')");
 ck('手机:切换按钮在输入行最左边(＋ 之前)', toggleAt > 0 && plusAt > toggleAt);
 ck('手机:切换按钮只在 voice.available 时画', /\{voice\.available \? <ComposerModeToggle mode=\{inputMode\} onToggle=\{toggleInputMode\} disabled=\{voiceBusy\} \/> : null\}/.test(mobileRow));
 ck('手机:语音模式 = 整条「按住 说话」代替输入框', /\{voiceMode \? <VoiceHoldBar voice=\{voice\} \/> : \(\s*<TextInput/.test(mobileRow));
-ck('手机:语音模式下不画发送键(整条给按住说话)', /\{voiceMode \? null : \(\s*<Pressable/.test(mobileRow));
+// 微信式(composer-row-layout.ts):右侧一格在语音模式下显示 ＋,不是发送键 —— 判定本身在 composer-row-layout.test.ts。
+ck('手机:语音模式下右侧不是发送键(右格判定带 voiceMode)', chat.includes('composerRightSlot({ draft, attachmentCount: attached.length, voiceMode })') && mobileRow.includes('slot={rightSlot}'));
 ck('手机:输入框里不再有灰色小麦克风', !mobileRow.includes('<VoiceMicButton') && !chat.includes('inputWithMic') && !chat.includes('styles.inputMic'));
 ck('voiceMode 只在非桌面 + available + 用户选了语音时成立', chat.includes("const voiceMode = !desktop && voice.available && inputMode === 'voice';"));
 ck('切换写入每设备偏好;启动时读回', chat.includes('void saveComposerInputMode(next);') && chat.includes('void loadComposerInputMode().then(setInputMode)'));

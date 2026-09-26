@@ -118,7 +118,12 @@ const chat = read('src/ChatScreen.tsx');
 // Density (incl. 更紧凑's one-step list text) must never reach message text: only 字体大小 does.
 ck('chat content is independent of density: no listFont in ChatScreen / MarkdownMessage', !chat.includes('listFont(') && !read('src/MarkdownMessage.tsx').includes('listFont('));
 ck('chat header: action heights via ds()', chat.includes('height: ds(34),') && chat.includes('headerActionCompact: { width: 36, height: ds(34),'));
-ck('composer: send button via ds()', /send: \{\n\s+backgroundColor: colors\.accent,\n\s+width: ds\(36\),\n\s+height: ds\(36\),/.test(chat));
+// Mobile send / ＋ moved into ComposerRowParts.tsx (WeChat row, composer-row-layout.ts).
+{
+  const rowParts = read('src/ComposerRowParts.tsx');
+  ck('composer: send button via ds()', /sendPill: \{\n\s+minWidth: ds\(56\),\n\s+height: ds\(36\),/.test(rowParts));
+  ck('composer: ＋ button via ds()', /plusBtn: \{\n\s+width: ds\(36\),\n\s+height: ds\(36\),/.test(rowParts));
+}
 const node = read('src/NodeDetailScreen.tsx');
 ck('node page: tabs/rail rebuilt + ds()', node.includes('onThemeChange(() => { localStyles = makeLocalStyles(); });') && node.includes('width: ds(200),') && node.includes('tabTouch: { minHeight: ds(40, 36)'));
 const settings = read('src/SettingsScreen.tsx');

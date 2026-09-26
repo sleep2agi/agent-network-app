@@ -65,6 +65,8 @@ import { nextPlusPanel, plusPanelHeight, plusPanelItems, type PlusItemKey, type 
 import { useVoiceInput } from './useVoiceInput';
 import { insertRecognized, toggleComposerInputMode, type ComposerInputMode } from './voice-input-model';
 import { ComposerModeToggle, VoiceHoldBar, VoiceMicButton, VoiceRecordingOverlay, VoiceSettingsPrompt } from './VoiceInputUI';
+import { composerLineCount, composerRightSlot, nextFullEditor, shouldShowExpand, type FullEditorEvent } from './composer-row-layout';
+import { ComposerExpandButton, ComposerFullscreenEditor, ComposerRightSlot } from './ComposerRowParts';
 import { loadComposerInputMode, saveComposerInputMode } from './voice-prefs';
 
 // Chat with one agent. Mirrors dashboard M4: open with the newest PAGE
@@ -516,6 +518,26 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
     onNotice: setComposerNotice,
   });
   const voiceMode = !desktop && voice.available && inputMode === 'voice';
+  // 微信式输入行(composer-row-layout.ts):输入超过 3 行 → 左上角 ⤢ 打开全屏编辑(同一份草稿)。
+  const [fullEditorOpen, setFullEditorOpen] = useState(false);
+  const fullEditorEvent = (event: FullEditorEvent): boolean => {
+    const t = nextFullEditor(fullEditorOpen, event);
+    setFullEditorOpen(t.open);
+    return t.handled;
+  };
+  const [inputContentHeight, setInputContentHeight] = useState<number | undefined>(undefined);
+  // Smallest content height seen = one line (the empty input reports it on mount).
+  const oneLineHeightRef = useRef<number | undefined>(undefined);
+  const onInputContentSize = (h: number) => {
+    if (!(h > 0)) return;
+    if (oneLineHeightRef.current === undefined || h < oneLineHeightRef.current) oneLineHeightRef.current = h;
+    setInputContentHeight(h);
+  };
+  const inputLines = composerLineCount(draft, inputContentHeight, oneLineHeightRef.current);
+  useEffect(() => {
+    fullEditorEvent('conversationChanged');
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [alias]);
   const voiceBusy = voice.state.phase !== 'idle';
   // 识别完切回键盘:TextInput 这一帧才重新挂上,挂上之后再 focus。
   useEffect(() => {
@@ -1353,6 +1375,9 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
     else setBtwLaunch(current => ({ id: (current?.id ?? 0) + 1 }));
   };
   const plusItems = plusPanelItems({ os: Platform.OS, desktop, attachEnabled: ATTACH_ENABLED });
+  // Mobile row right slot: ＋ when there is nothing to send, 「发送」 once there is.
+  const rightSlot = composerRightSlot({ draft, attachmentCount: attached.length, voiceMode });
+  const showExpand = !desktop && shouldShowExpand(inputLines, voiceMode);
 
   const exactSideThreadTask = messages.find(message => message.thread_id && message.turn_id);
   const sideThreadScope = exactSideThreadTask?.thread_id && exactSideThreadTask.turn_id
@@ -1910,6 +1935,18 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
                 </View>
               );
             })}
+            {/* 有附件时右下角是「发送」,不是 ＋:继续加图/文件从草稿条末尾这一格进同一个 ＋ 面板。 */}
+            {!desktop && ATTACH_ENABLED && remainingImageSlots(attached) > 0 ? (
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="继续添加"
+                testID="composer-draft-add"
+                onPress={() => plusEvent('toggle')}
+                style={({ pressed }) => [styles.draftAddTile, pressed && { opacity: 0.6 }]}
+              >
+                <Ionicons name="add" size={26} color={colors.textMuted} />
+              </Pressable>
+            ) : null}
           </ScrollView>
         </View>
       ) : null}
@@ -2020,6 +2057,17 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
         </Pressable>
       </Modal>
 
+      {/* ⤢ 全屏编辑(手机/双栏):同一份草稿;Android 返回 / Esc 走 onRequestClose 收起,草稿保留。 */}
+      <ComposerFullscreenEditor
+        visible={!desktop && fullEditorOpen}
+        alias={alias}
+        draft={draft}
+        onChangeDraft={setDraft}
+        sendDisabled={!canSend(draft, attached.length > 0, sending)}
+        onSend={() => { fullEditorEvent('sent'); void submit(); }}
+        onClose={() => fullEditorEvent('back')}
+      />
+
       <Modal visible={desktop && plusMenuOpen} transparent animationType="fade" onRequestClose={() => setPlusMenuOpen(false)}>
         <Pressable style={styles.plusMenuBackdrop} onPress={() => setPlusMenuOpen(false)}>
           <Pressable style={[styles.plusMenu, styles.plusMenuDesktop]} onPress={() => {}}>
@@ -2121,18 +2169,15 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
         </View>
       ) : null}
       <View style={[styles.inputRow, { paddingBottom: spacing.md + (plusMenuOpen ? 0 : composerInset) }]}>
-        {/* 微信式:最左边 🎤/⌨ 切换;＋ 留在原位(第二个),不挪动用户已经按惯的按钮。 */}
-        {voice.available ? <ComposerModeToggle mode={inputMode} onToggle={toggleInputMode} disabled={voiceBusy} /> : null}
-        <Pressable
-          accessibilityLabel={plusMenuOpen ? '收起更多发送方式' : '更多发送方式'}
-          accessibilityState={{ expanded: plusMenuOpen }}
-          style={({ pressed }) => [styles.attachBtn, plusMenuOpen && styles.attachBtnActive, pressed && { opacity: 0.6 }]}
-          onPress={() => plusEvent('toggle')}
-          hitSlop={6}
-        >
-          <Text style={[styles.attachBtnText, plusMenuOpen && styles.attachBtnTextActive]}>＋</Text>
-        </Pressable>
-        {/* ⚡ toggle hidden since 0.2.105 (chat-entry-flags.ts); the row is then ＋ / input / send. */}
+        {/* 微信式(composer-row-layout.ts):左 🎤/⌨ 切换 | 中 输入框或「按住 说话」 | 右 ＋ ⇄「发送」。
+            ⤢ 在左列顶上,只在输入超过 3 行时出现(左列靠 stretch 撑满整行高度,不压输入框)。 */}
+        {voice.available || showExpand ? (
+          <View style={styles.inputLeftCol}>
+            {showExpand ? <ComposerExpandButton onPress={() => fullEditorEvent('expand')} /> : <View />}
+            {voice.available ? <ComposerModeToggle mode={inputMode} onToggle={toggleInputMode} disabled={voiceBusy} /> : null}
+          </View>
+        ) : null}
+        {/* ⚡ toggle hidden since 0.2.105 (chat-entry-flags.ts). */}
         {SHOW_BOLT_ENTRY ? (
           <Pressable
             accessibilityRole="button"
@@ -2154,6 +2199,7 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
           placeholderTextColor={colors.textMuted}
           value={draft}
           onChangeText={setDraft}
+          onContentSizeChange={event => onInputContentSize(event.nativeEvent.contentSize.height)}
           onFocus={() => plusEvent('inputFocus')}
           onKeyPress={(event) => {
             if (!desktop) return;
@@ -2173,19 +2219,13 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
         />
         )}
         </View>
-        {voiceMode ? null : (
-        <Pressable
-          style={({ pressed }) => [
-            styles.send,
-            !canSend(draft, attached.length > 0, sending) && styles.sendDisabled,
-            pressed && { opacity: 0.6 },
-          ]}
-          onPress={() => void submit()}
-          disabled={!canSend(draft, attached.length > 0, sending)}
-        >
-          <Text style={[styles.sendText, !canSend(draft, attached.length > 0, sending) && styles.sendTextDisabled]}>↑</Text>
-        </Pressable>
-        )}
+        <ComposerRightSlot
+          slot={rightSlot}
+          sendDisabled={!canSend(draft, attached.length > 0, sending)}
+          plusOpen={plusMenuOpen}
+          onSend={() => void submit()}
+          onPlus={() => plusEvent('toggle')}
+        />
       </View>
       {plusMenuOpen ? (
         // Inline, in the chat pane only (two-pane: never over the agent list). It is a
@@ -2485,19 +2525,10 @@ const makeStyles = () =>
   attachName: { color: colors.textSecondary, fontSize: 12, flexShrink: 1 },
   attachIndex: { color: colors.textMuted, fontSize: 10, marginLeft: 'auto' },
   attachRemove: { color: colors.textMuted, fontSize: 14 },
-  attachBtn: {
-    width: ds(36),
-    height: ds(36),
-    borderRadius: ds(36) / 2,
-    borderColor: colors.border,
-    borderWidth: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  attachBtnText: { color: colors.textSecondary, fontSize: 20, lineHeight: 22 },
-  attachBtnActive: { borderColor: colors.accent },
-  attachBtnTextActive: { color: colors.accent },
   failedMark: { color: colors.failed, fontSize: 11, alignSelf: 'flex-end', fontWeight: '600' },
+  // 左列:⤢(顶)+ 🎤/⌨(底);stretch 到整行高度,⤢ 才能落在左上角。
+  inputLeftCol: { alignSelf: 'stretch', justifyContent: 'space-between', alignItems: 'center' },
+  draftAddTile: { width: 64, height: 64, borderRadius: 6, borderWidth: 1, borderStyle: 'dashed', borderColor: colors.border, alignItems: 'center', justifyContent: 'center' },
   inputRow: {
     flexDirection: 'row',
     alignItems: 'flex-end',
@@ -2560,22 +2591,13 @@ const makeStyles = () =>
     paddingVertical: spacing.md,
     color: colors.text,
     fontSize: 14,
+    // composer-row-layout.ts COMPOSER_LINE_HEIGHT — the ⤢ threshold counts lines in this unit.
+    lineHeight: 20,
     maxHeight: 120,
   },
   inputWrap: { flex: 1, justifyContent: 'flex-end' },
   // flex 归零:输入框在列方向的 inputWrap 里,flexBasis 0 会被压扁。
   inputInWrap: { flex: 0, alignSelf: 'stretch' },
-  send: {
-    backgroundColor: colors.accent,
-    width: ds(36),
-    height: ds(36),
-    borderRadius: ds(36) / 2,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  sendText: { color: colors.bg, fontSize: 18, fontWeight: '600' },
-  // round-4 发送键停用态:草稿空/发送中 → 灰底灰字(微信式,不再高亮可点)
-  sendDisabled: { backgroundColor: colors.inputBg, borderWidth: 1, borderColor: colors.border },
   sendTextDisabled: { color: colors.textMuted },
 });
 
