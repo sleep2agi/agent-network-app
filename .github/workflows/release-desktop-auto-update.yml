@@ -119,6 +119,9 @@ jobs:
           releaseBody: |-
             Signed and notarized stable update for macOS (Apple Silicon) and Windows (x64).
 
+            What's new in 0.2.119:
+            - 检查更新：显示当前版本→新版本和更新说明；可选线路一（国内 ModelScope）/线路二（GitHub），失败自动切换。
+
             What's new in 0.2.118:
             - 修复输入栏对齐：『按住 说话』和两侧按钮在同一条中线上，高度一致。
 
