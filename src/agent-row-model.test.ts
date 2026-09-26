@@ -6,7 +6,7 @@
 
 import {
   AGENT_ROW_AVATAR, AGENT_ROW_DOT, AGENT_ROW_GAP, AGENT_ROW_HEIGHT, AGENT_ROW_PAD_X, AGENT_ROW_SEPARATOR_INSET,
-  agentRowModel, formatRowTime, latestMessageByAgent, previewText, rowStatus,
+  agentRowModel, formatRowTime, latestMessageByAgent, previewText, rowActivity, rowStatus,
 } from './agent-row-model';
 import { latestMessageAtByAgent } from './agent-unread-counts';
 
@@ -87,6 +87,28 @@ ck('message → preview is its text, time is its time', withMsg.preview === '好
 ck('pinned flag carried', withMsg.pinned && !noMsg.pinned);
 ck('nothing at all → empty preview (not "undefined")', agentRowModel({ alias: 'x', status: 'offline' }, { nowMs: now }).preview === '');
 ck('model status is rowStatus(status)', JSON.stringify(agentRowModel({ alias: 'w', status: 'working' }).status) === JSON.stringify(rowStatus('working')));
+
+// ── preview ↔ time pairing (0.2.114: every row whose preview has a source gets that source's time) ──
+const taskAt = at(2026, 9, 26, 8, 13);
+const taskRow = agentRowModel(heartbeat, { taskAt, nowMs: now });
+ck('task text preview → time is that task\'s time', taskRow.preview === '在跑 CI' && taskRow.time === '08:13' && taskRow.source === 'task', JSON.stringify(taskRow));
+const msgWins = agentRowModel(heartbeat, { latest: { at: at(2026, 9, 24, 9), text: '旧消息' }, taskAt, nowMs: now });
+ck('message preview → message time, never the task time', msgWins.preview === '旧消息' && msgWins.time === '周四' && msgWins.source === 'message', JSON.stringify(msgWins));
+const emptyMsg = agentRowModel(heartbeat, { latest: { at: at(2026, 9, 24, 9), text: '' }, taskAt, nowMs: now });
+ck('message with no text → preview is the task, and so is the time', emptyMsg.preview === '在跑 CI' && emptyMsg.time === '08:13' && emptyMsg.source === 'task', JSON.stringify(emptyMsg));
+const emptyMsgNoTask = agentRowModel({ alias: 'q', status: 'idle' }, { latest: { at: at(2026, 9, 24, 9), text: '' }, nowMs: now });
+ck('message with no text and no task → no preview, message time', emptyMsgNoTask.preview === '' && emptyMsgNoTask.time === '周四');
+const unmatchedEmptyMsg = agentRowModel(heartbeat, { latest: { at: at(2026, 9, 24, 9), text: '' }, taskAt: 0, nowMs: now });
+ck('task text preview with no task time never borrows a (textless) message time', unmatchedEmptyMsg.preview === '在跑 CI' && unmatchedEmptyMsg.time === '', JSON.stringify(unmatchedEmptyMsg));
+const unmatched = agentRowModel(heartbeat, { taskAt: 0, nowMs: now });
+ck('task text with no task row behind it → no time (not a borrowed one)', unmatched.time === '' && unmatched.source === null && unmatched.activityAt === 0);
+ck('no data at all → no preview, no time', (() => { const m = agentRowModel({ alias: 'z', status: 'idle' }, { taskAt, nowMs: now }); return m.preview === '' && m.time === '' && m.activityAt === 0; })());
+// heartbeat immunity: updated_at moves, activity stays
+const hb1 = agentRowModel({ ...heartbeat, updated_at: new Date(now - 3600_000).toISOString() }, { taskAt, nowMs: now });
+const hb2 = agentRowModel({ ...heartbeat, updated_at: new Date(now).toISOString() }, { taskAt, nowMs: now });
+ck('heartbeat (updated_at moves) → same time and activityAt', hb1.time === hb2.time && hb1.activityAt === hb2.activityAt && hb2.time === '08:13');
+ck('activityAt is the shown event\'s ms', taskRow.activityAt === taskAt && msgWins.activityAt === at(2026, 9, 24, 9));
+ck('rowActivity is what agentRowModel shows', JSON.stringify(rowActivity(heartbeat, undefined, taskAt)) === JSON.stringify({ preview: '在跑 CI', source: 'task', at: taskAt }));
 
 console.log(`${p}/${t} passed`);
 process.exit(p === t ? 0 : 1);

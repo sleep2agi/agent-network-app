@@ -44,7 +44,14 @@ ck('prefs parse through the tested parsers', prefs.includes('parseStoredListWidt
 // ── AgentsScreen: phone / two-pane rows ──
 const phoneRow = agents.slice(agents.indexOf('const renderPhoneRow = (item: Session) => {'), agents.indexOf('  return (\n    <View style={{ flex: 1'));
 ck('phone row block located', phoneRow.length > 200);
-ck('row content comes from agentRowModel', phoneRow.includes('agentRowModel(item, { latest: latestByAgent[item.alias], pinned, nowMs })'));
+ck('row content comes from agentRowModel, with the task time for the text it shows', phoneRow.includes('agentRowModel(item, { latest: latestByAgent[item.alias], taskAt: taskTimes.timeFor(item.alias, item.task), pinned, nowMs })'));
+// ── last-activity time (0.2.114): task times come from the latest task row, never updated_at ──
+ck('task-time resolver reads the latest task row for that alias only', agents.includes('fetchTasks(cfg, { to_name: alias, limit: 1, skipStats: true })'));
+ck('lookups only for rows whose preview IS the task text (no message text)', agents.includes('.filter(s => s.task && !latestByAgent[s.alias]?.text)'));
+ck('a resolved task time re-renders the list', agents.includes('taskTimes.subscribe(() => setTaskTimesTick(n => n + 1))'));
+ck('the screen never derives a row time from updated_at', !/updated_at/.test(agents));
+ck('sort-by-activity is wired through the flag (one-line switch), not hard-coded', agents.includes('sortByActivity: SORT_BY_ACTIVITY,') && agents.includes('activityAt: alias => activityByAlias.get(alias) ?? 0,'));
+ck('sort-by-activity flag is ON (owner 2026-09-26)', /export const SORT_BY_ACTIVITY = true;/.test(read('./agents-list.ts')));
 ck('no 「在线」 status word in the phone row', !phoneRow.includes('agentStatusLabel') && !phoneRow.includes("'在线'"));
 ck('44 dp avatar + dot coloured by the model', phoneRow.includes('size={AGENT_ROW_AVATAR}') && phoneRow.includes('colors[model.status.dot]'));
 ck('label only when the model gives one, in its tone', phoneRow.includes('model.status.label && model.status.labelTone ?') && phoneRow.includes('colors[model.status.labelTone]'));
@@ -69,7 +76,7 @@ ck('header shows online/total', agents.includes('{section.online}/{section.total
 // ── search / + / sorting kept ──
 ck('search input still bound to query', (agents.match(/value=\{query\}/g) ?? []).length === 2 && (agents.match(/onChangeText=\{setQuery\}/g) ?? []).length === 2);
 ck('+ still opens the picker in both headers', (agents.match(/onPress=\{onOpenPicker\}/g) ?? []).length === 2);
-ck('sorting / pins / 新消息 still from buildSections', agents.includes('buildSections(applyAgentFilter(sessions, activeFilter), query, {') && agents.includes('sort: { pinned: alias => pinnedAliases.includes(alias) }'));
+ck('sorting / pins / 新消息 still from buildSections', agents.includes('buildSections(applyAgentFilter(sessions, activeFilter), query, {') && agents.includes('pinned: alias => pinnedAliases.includes(alias),'));
 
 // ── desktop (Tauri) sidebar row unchanged ──
 const deskRow = agents.slice(agents.indexOf('const renderCompactRow = (item: Session) => {'), agents.indexOf('const renderPhoneRow'));
