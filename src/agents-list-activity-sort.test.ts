@@ -1,46 +1,81 @@
-// sortByActivity flag (off by default) — run: bun src/agents-list-activity-sort.test.ts
+// Sort by activity (SORT_BY_ACTIVITY, ON since the owner's 2026-09-26 call) — run: bun src/agents-list-activity-sort.test.ts
 //
-// Pins: with the flag off the in-team recency is still session.updated_at (today's order is
-// unchanged); with it on, recency is the row's activity time (message / task), a heartbeat that
-// moves updated_at does not reorder, rows with no activity sink below rows with activity, and the
-// group order and the pinned / online levels above recency are untouched.
+// Pins, with the flag ON: pinned rows stay on top; groups (and their order) are kept; inside a group
+// rows go most recent activity first; rows with no time go after every timed row, in the old order
+// minus updated_at (online > alias); a heartbeat (updated_at moving) never reorders anything.
+// With the flag OFF the old comparator (pinned > online > updated_at > alias) is untouched.
 
-import { buildSections, compareInTeam, SORT_BY_ACTIVITY } from './agents-list';
+import { buildSections, compareInTeam, SORT_BY_ACTIVITY, type SortContext } from './agents-list';
 import type { Session } from './api';
 
 let p = 0, t = 0;
 const ck = (n: string, c: boolean, extra = '') => { t++; if (c) { p++; console.log(`PASS: ${n}`); } else console.log(`FAIL: ${n} ${extra}`); };
 
 const S = (alias: string, status: string, updated_at: string): Session => ({ alias, status, updated_at } as Session);
-// 甲 heartbeats most recently; 乙 had the most recent real activity.
-const a = S('TM甲', 'idle', '2026-09-26T10:00:00Z');
-const b = S('TM乙', 'idle', '2026-09-26T09:00:00Z');
-const c = S('TM丙', 'idle', '2026-09-26T08:00:00Z');
-const act: Record<string, number> = { TM甲: Date.parse('2026-09-20T00:00:00Z'), TM乙: Date.parse('2026-09-26T08:30:00Z'), TM丙: 0 };
+const ms = (iso: string) => Date.parse(iso);
+
+// Team 演示: 甲 heartbeats most recently but its activity is old; 乙 had the latest activity;
+// 丙 / 丁 / 戊 have no activity at all (戊 offline, 丁 heartbeating hardest).
+const a = S('演示甲', 'idle', '2026-09-26T10:00:00Z');
+const b = S('演示乙', 'idle', '2026-09-26T09:00:00Z');
+const c = S('演示丙', 'idle', '2026-09-26T08:00:00Z');
+const d = S('演示丁', 'idle', '2026-09-26T11:00:00Z');
+const e = S('演示戊', 'offline', '2026-09-26T07:00:00Z');
+// An offline row with recent activity: activity outranks online when both rows have a time.
+const f = S('演示己', 'offline', '2026-09-20T00:00:00Z');
+// Team 工程 (a second group).
+const g = S('工程一', 'idle', '2026-09-26T01:00:00Z');
+const h = S('工程二', 'idle', '2026-09-26T01:00:00Z');
+const act: Record<string, number> = {
+  演示甲: ms('2026-09-20T00:00:00Z'), 演示乙: ms('2026-09-26T08:30:00Z'), 演示己: ms('2026-09-25T12:00:00Z'),
+  工程一: ms('2026-09-24T00:00:00Z'), 工程二: ms('2026-09-26T09:59:00Z'),
+};
 const activityAt = (alias: string) => act[alias] ?? 0;
-const order = (sort: Parameters<typeof buildSections>[2]) =>
-  buildSections([c, a, b], '', sort).map(s => `${s.title}:${s.data.map(x => x.alias).join(',')}`).join(' | ');
+const ON: SortContext = { sortByActivity: true, activityAt };
+const all = [e, c, a, d, g, b, f, h];
+const layout = (list: Session[], sort: SortContext) =>
+  buildSections(list, '', { sort }).map(s => `${s.title}:${s.data.map(x => x.alias).join(',')}`).join(' | ');
 
-ck('flag is off by default', SORT_BY_ACTIVITY === false);
-ck('flag off → in-team order by updated_at (unchanged behaviour)', order({ sort: { activityAt } }) === 'TM:TM甲,TM乙,TM丙', order({ sort: { activityAt } }));
-ck('flag off explicitly → same', order({ sort: { sortByActivity: false, activityAt } }) === 'TM:TM甲,TM乙,TM丙');
-ck('flag on → in-team order by activity, no-activity last', order({ sort: { sortByActivity: true, activityAt } }) === 'TM:TM乙,TM甲,TM丙', order({ sort: { sortByActivity: true, activityAt } }));
-ck('flag on but no activityAt given → falls back to updated_at', order({ sort: { sortByActivity: true } }) === 'TM:TM甲,TM乙,TM丙');
+// ── the flag ──
+ck('flag is ON (owner 2026-09-26)', SORT_BY_ACTIVITY === true);
 
-// heartbeat immunity: bump 丙's updated_at to "now"; with the flag on it must not move up
-const c2 = { ...c, updated_at: '2026-09-26T12:00:00Z' };
-ck('flag on: a heartbeat (updated_at → now) does not reorder', buildSections([c2, a, b], '', { sort: { sortByActivity: true, activityAt } })[0].data.map(x => x.alias).join(',') === 'TM乙,TM甲,TM丙');
-ck('flag off: the same heartbeat does reorder (what the flag exists to fix)', buildSections([c2, a, b], '', { sort: { activityAt } })[0].data[0].alias === 'TM丙');
+// ── ON: order inside a group ──
+const on = layout(all, ON);
+ck('ON: timed rows most recent first, then untimed rows (online > alias), groups kept',
+  on === '演示:演示乙,演示己,演示甲,演示丁,演示丙,演示戊 | 工程:工程二,工程一', on);
+ck('ON: every timed row is above every untimed row in its group', (() => {
+  const rows = buildSections(all, '', { sort: ON })[0].data.map(x => activityAt(x.alias) > 0);
+  return rows.indexOf(false) > 0 && rows.slice(rows.indexOf(false)).every(x => !x);
+})());
+ck('ON: untimed rows ignore updated_at (丁 is the freshest heartbeat but sorts by name after online peers)',
+  compareInTeam(c, d, ON) > 0 && compareInTeam(d, c, ON) < 0);
+ck('ON: untimed online row above untimed offline row (old order level kept)', compareInTeam(c, e, ON) < 0);
+const early = S('演示一', 'offline', '2026-09-26T12:00:00Z'); // name sorts before every other 演示 row
+ck('ON: untimed offline row sorts after untimed online rows even when its name sorts first', compareInTeam(early, c, ON) > 0 && compareInTeam(c, early, ON) < 0);
+ck('ON: a NaN / negative activity time counts as no time', compareInTeam(S('演示N', 'idle', ''), b, { sortByActivity: true, activityAt: x => (x === '演示N' ? NaN : activityAt(x)) }) > 0);
 
-// levels above recency still win
-const off = S('TM丁', 'offline', '2026-09-26T11:00:00Z');
-act['TM丁'] = Date.parse('2026-09-26T11:59:00Z');
-ck('flag on: online still ranks above a more recent offline row', compareInTeam(b, off, { sortByActivity: true, activityAt }) < 0);
-ck('flag on: pinned still ranks first', compareInTeam(c, b, { sortByActivity: true, activityAt, pinned: x => x === 'TM丙' }) < 0);
-// group order unchanged by the flag
-const x1 = S('工程A', 'idle', '2026-09-26T01:00:00Z'), x2 = S('工程B', 'idle', '2026-09-26T01:00:00Z');
-const titles = (on: boolean) => buildSections([a, b, x1, x2], '', { sort: { sortByActivity: on, activityAt } }).map(s => s.title).join(',');
-ck('group order is the same with the flag on or off', titles(true) === titles(false), `${titles(true)} vs ${titles(false)}`);
+// ── ON: pinned stays on top ──
+const pinnedCtx: SortContext = { ...ON, pinned: x => x === '演示丙' || x === '工程一' };
+const secs = buildSections(all, '', { sort: pinnedCtx });
+ck('ON: pinned rows go to the 置顶 group, first', secs[0].title === '置顶' && secs[0].data.map(x => x.alias).join(',') === '工程一,演示丙', secs.map(s => s.title).join(','));
+ck('ON: pinned (untimed) still ranks above a timed row in the comparator', compareInTeam(c, b, pinnedCtx) < 0);
+
+// ── ON: heartbeat immunity ──
+const beat = (s: Session, iso: string) => ({ ...s, updated_at: iso });
+const beaten = [beat(e, '2026-09-26T12:00:00Z'), beat(c, '2026-09-26T12:00:01Z'), a, beat(d, '2026-09-20T00:00:00Z'), g, beat(b, '2020-01-01T00:00:00Z'), f, beat(h, '2026-09-26T12:00:00Z')];
+ck('ON: heartbeats (every updated_at moved) do not reorder anything', layout(beaten, ON) === on, layout(beaten, ON));
+ck('ON: input order does not matter', layout([...all].reverse(), ON) === on);
+
+// ── group order is independent of the flag ──
+const titles = (sort: SortContext) => buildSections(all, '', { sort }).map(s => s.title).join(',');
+ck('group order is the same with the flag on or off', titles(ON) === titles({ activityAt }), `${titles(ON)} vs ${titles({ activityAt })}`);
+
+// ── OFF: the old comparator, untouched ──
+const off = layout(all, { activityAt });
+ck('OFF: in-team order is online > updated_at > alias (old behaviour)', off === '演示:演示丁,演示甲,演示乙,演示丙,演示戊,演示己 | 工程:工程一,工程二', off);
+ck('OFF explicitly → same as omitted', layout(all, { sortByActivity: false, activityAt }) === off);
+ck('ON without activityAt → falls back to the old order', layout(all, { sortByActivity: true }) === off);
+ck('OFF: a heartbeat does reorder (what the flag fixes)', layout(beaten, { activityAt }) !== off);
 
 console.log(`${p}/${t} passed`);
 process.exit(p === t ? 0 : 1);

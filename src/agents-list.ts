@@ -56,8 +56,8 @@ export type SortContext = {
   /** R29 语义的迟滞:60s 内出现过在线即视为在线。默认只看当前 status。 */
   recentlyOnline?: (alias: string) => boolean;
   /**
-   * 组内第三级(recency)改用行上显示的那个活动时间(agent-row-model.ts rowActivity:
-   * 最后一条消息 / 当前任务的派发时间),而不是 session.updated_at(心跳每次都会顶它)。
+   * 组内按行上显示的那个活动时间排序(agent-row-model.ts rowActivity:最后一条消息 /
+   * 当前任务的派发时间),而不是 session.updated_at(心跳每次都会顶它)。
    * 只有 sortByActivity 为 true 且给了 activityAt 时才生效;组间顺序不受影响。
    */
   sortByActivity?: boolean;
@@ -66,28 +66,41 @@ export type SortContext = {
 };
 
 /**
- * 按活动时间排序的开关 —— 默认关(0.2.114:行上先显示时间,排序由 owner 再定)。
- * 打开只需改这一行:AgentsScreen 把它传给 SortContext.sortByActivity。
+ * 按活动时间排序 —— 已打开(owner 2026-09-26「就先根据那个时间进行活跃吧,然后也把这个时间显示出来」)。
+ * 关掉只需改这一行:AgentsScreen 把它传给 SortContext.sortByActivity。
  */
-export const SORT_BY_ACTIVITY = false;
+export const SORT_BY_ACTIVITY = true;
 
 const ts = (s: Session): number => {
   const t = Date.parse(s.updated_at ?? '');
   return Number.isFinite(t) ? t : 0;
 };
 
-/** 组内比较器:pinned > online > recency > 别名字母序。 */
+/**
+ * 组内比较器。
+ *   sortByActivity 关:pinned > online > updated_at > 别名字母序(原规则)。
+ *   sortByActivity 开:pinned > 有时间的行在前 > 活动时间新的在前 > online > 别名字母序。
+ *     没有时间的行排在有时间的行之后,保持原规则去掉 updated_at 那一级(online > 别名)——
+ *     updated_at 每次心跳都会动,留着它心跳就会让这些行来回跳。
+ */
 export function compareInTeam(a: Session, b: Session, ctx: SortContext = {}): number {
   const pin = (s: Session) => (ctx.pinned?.(s.alias) ? 1 : 0);
   const on = (s: Session) =>
     ctx.recentlyOnline ? (ctx.recentlyOnline(s.alias) ? 1 : 0) : (isOffline(s) ? 0 : 1);
-  const recency = ctx.sortByActivity && ctx.activityAt
-    ? (s: Session) => ctx.activityAt!(s.alias) || 0
-    : ts;
+  if (ctx.sortByActivity && ctx.activityAt) {
+    // 没有时间 = 0,降序里天然排在所有有时间的行之后。
+    const at = (s: Session) => { const v = ctx.activityAt!(s.alias); return Number.isFinite(v) && v > 0 ? v : 0; };
+    return (
+      pin(b) - pin(a) ||
+      at(b) - at(a) ||
+      on(b) - on(a) ||
+      a.alias.localeCompare(b.alias)
+    );
+  }
   return (
     pin(b) - pin(a) ||
     on(b) - on(a) ||
-    recency(b) - recency(a) ||
+    ts(b) - ts(a) ||
     a.alias.localeCompare(b.alias)
   );
 }

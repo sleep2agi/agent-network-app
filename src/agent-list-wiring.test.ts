@@ -50,8 +50,8 @@ ck('task-time resolver reads the latest task row for that alias only', agents.in
 ck('lookups only for rows whose preview IS the task text (no message text)', agents.includes('.filter(s => s.task && !latestByAgent[s.alias]?.text)'));
 ck('a resolved task time re-renders the list', agents.includes('taskTimes.subscribe(() => setTaskTimesTick(n => n + 1))'));
 ck('the screen never derives a row time from updated_at', !/updated_at/.test(agents));
-ck('sort-by-activity is wired through the flag, not hard-coded on', agents.includes('sortByActivity: SORT_BY_ACTIVITY,') && agents.includes('activityAt: alias => activityByAlias.get(alias) ?? 0,'));
-ck('sort-by-activity flag is OFF by default', /export const SORT_BY_ACTIVITY = false;/.test(read('./agents-list.ts')));
+ck('sort-by-activity is wired through the flag (one-line switch), not hard-coded', agents.includes('sortByActivity: SORT_BY_ACTIVITY,') && agents.includes('activityAt: alias => activityByAlias.get(alias) ?? 0,'));
+ck('sort-by-activity flag is ON (owner 2026-09-26)', /export const SORT_BY_ACTIVITY = true;/.test(read('./agents-list.ts')));
 ck('no 「在线」 status word in the phone row', !phoneRow.includes('agentStatusLabel') && !phoneRow.includes("'在线'"));
 ck('44 dp avatar + dot coloured by the model', phoneRow.includes('size={AGENT_ROW_AVATAR}') && phoneRow.includes('colors[model.status.dot]'));
 ck('label only when the model gives one, in its tone', phoneRow.includes('model.status.label && model.status.labelTone ?') && phoneRow.includes('colors[model.status.labelTone]'));
