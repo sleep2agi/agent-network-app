@@ -1,4 +1,4 @@
-// 「下载线路」偏好 + 本机上次成功的线路,按设备存(同 agent-list-prefs.ts 的做法):
+// 本机上次下载成功的来源(内部,不展示),按设备存;顺带删掉 0.2.121 遗留的「下载线路」偏好(同 agent-list-prefs.ts 的做法):
 // web / Tauri 桌面壳 → localStorage;原生 → documentDirectory 下一个小 JSON 文件。
 // expo-file-system 惰性 import:这个文件会被 android-updater.ts 引用,而后者在 ck 测试(bun)里加载,
 // 原生模块在那里加载不了。任何读写失败都只影响「记不住」,不影响更新本身。
@@ -55,7 +55,21 @@ export const deviceRouteStorage: RouteStorage = {
     nativeWrite = next;
     return next as Promise<void>;
   },
+  remove(key) {
+    const ls = webStorage();
+    if (ls) { try { ls.removeItem(key); } catch { /* 无所谓 */ } return Promise.resolve(); }
+    const next = nativeWrite.then(async () => {
+      const FileSystem = await nativeFs();
+      if (!FileSystem) return;
+      const prefs = await readNative();
+      if (!(key in prefs)) return;
+      delete prefs[key];
+      await FileSystem.writeAsStringAsync(`${FileSystem.documentDirectory}${FILE_NAME}`, JSON.stringify(prefs));
+    }).catch(() => { /* 无所谓 */ });
+    nativeWrite = next;
+    return next as Promise<void>;
+  },
 };
 
-/** 全局唯一的线路偏好 store(设置页和更新弹窗共用)。 */
+/** 全局唯一的「上次成功来源」store。 */
 export const routePrefs = createRoutePrefsStore(deviceRouteStorage);

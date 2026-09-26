@@ -4,7 +4,7 @@
  * 也只写「检查失败」,不说为什么。这里是纯逻辑:手动检查的每一次都落到一个看得见的结果上。
  */
 
-/** 桌面更新包从哪条线路下:清单里平台地址的主机决定(见 desktop-updater.ts desktopUpdateSource)。 */
+/** 桌面更新包从哪个来源下(内部,不展示):清单里平台地址的主机决定(见 desktop-updater.ts desktopUpdateSource)。 */
 export type DesktopUpdateSource = 'mirror' | 'github';
 
 export type DesktopUpdateState =

@@ -3,10 +3,10 @@ import { atLeast, type DesktopUpdateSource, type DesktopUpdateState } from './up
 export type { DesktopUpdateState } from './update-check-state';
 
 /**
- * 这次更新包走哪条线路。Tauri updater 按 tauri.conf.json 的 endpoints 顺序取清单(anet.sh → ModelScope),
- * 插件的 JS `check()` 不能改 endpoints,所以桌面端**不做**强制线路,只把实际来源写出来:
- *   anet.sh 的 latest.json 平台地址指向 github.com/…/releases/download → 线路二(GitHub);
- *   ModelScope 的 latest.json 被 modelscope-mirror 改写成 modelscope.cn/…/desktop/<ver>/… → 线路一。
+ * 这次更新包从哪个来源下(内部记录,不展示)。Tauri updater 按 tauri.conf.json 的 endpoints 顺序取清单(anet.sh → ModelScope),
+ * 插件的 JS `check()` 不能改 endpoints,所以桌面端**不做**强制来源,只在内部记下实际来源:
+ *   anet.sh 的 latest.json 平台地址指向 github.com/…/releases/download → github;
+ *   ModelScope 的 latest.json 被 modelscope-mirror 改写成 modelscope.cn/…/desktop/<ver>/… → mirror。
  * 看的是**本机平台**用到的那些地址:全是同一主机才下结论,混着或认不出 → undefined(不猜)。
  */
 export function desktopUpdateSource(rawJson: unknown): DesktopUpdateSource | undefined {

@@ -120,16 +120,16 @@ export function pickAndroidApk(release: ReleaseJson): ApkAsset | null {
   return anyApk ? toApk(anyApk) : null;
 }
 
-/** 一条线路的一次下载尝试失败了:哪条、为什么(已翻成人话)。 */
+/** 一个来源的一次下载尝试失败了:哪个、为什么(已翻成人话)。内部用,不展示。 */
 export type RouteAttempt = { route: UpdateRoute; reason: string };
-/** 下载中的附加信息:走的哪条线路、已下多少、是不是从另一条切过来的。 */
+/** 下载中的附加信息:走的哪个来源(内部)、已下多少、是不是从另一个切过来的(内部)。 */
 export type DownloadProgress = {
   route?: UpdateRoute;
   percent?: number;
   written?: number;
   total?: number;
   verifying?: boolean;
-  /** 首选线路失败、已自动切到当前线路时,首选那条为什么失败。 */
+  /** 首选来源失败、已自动切到当前来源时,首选那个为什么失败(内部)。 */
   fallbackFrom?: RouteAttempt;
 };
 
@@ -282,9 +282,6 @@ export const INSTALL_PERMISSION_HINT =
 /** `package:<id>` —— MANAGE_UNKNOWN_APP_SOURCES 直达本应用那一页。 */
 export const UNKNOWN_SOURCES_SETTINGS_DATA = `package:${ANDROID_PACKAGE}`;
 
-/** 线路短名。定义在这里而不是 update-route.ts:那边 import 了本文件,反过来值引用会成环(update-route 转出为 ROUTE_SHORT)。 */
-export const ROUTE_SHORT_NAME: Record<UpdateRoute, string> = { mirror: '线路一', github: '线路二' };
-
 /** 设置页「软件更新」那一行(安卓)。检查阶段与桌面端同一套文案;下载/安装阶段点一下就把弹窗叫回来。 */
 export function describeAndroidUpdateRow(
   state: AndroidUpdateState,
@@ -292,11 +289,9 @@ export function describeAndroidUpdateRow(
 ): UpdateRowView {
   switch (state.kind) {
     case 'up-to-date': {
-      // 「已是最新版本 v0.2.117」+「刚刚检查 · 线路一」:哪条线路回答的这次检查也写出来。
+      // 「已是最新版本 v0.2.117」+「刚刚检查」。哪个来源回答的只留在内部,不展示。
       const base = describeUpdateRow({ kind: 'up-to-date' }, opts);
-      const checked = formatCheckedAt(opts.lastCheckedAt, opts.now);
-      const parts = [checked, state.route ? ROUTE_SHORT_NAME[state.route] : undefined].filter(Boolean);
-      return { ...base, detail: parts.length ? parts.join(' · ') : undefined };
+      return { ...base, detail: formatCheckedAt(opts.lastCheckedAt, opts.now) };
     }
     case 'error': {
       // 走到这里 = 国内镜像也没连上(镜像通的时候根本不问 GitHub)。说清楚是哪两个都不行,以及大概多久恢复。
@@ -313,12 +308,6 @@ export function describeAndroidUpdateRow(
     case 'available':
       return describeUpdateRow({ kind: 'available', version: state.version, notes: state.notes }, opts);
     case 'downloading':
-      if (state.route && !state.verifying) {
-        return {
-          label: `正在下载 v${state.version}${state.percent == null ? '' : ` ${state.percent}%`}`,
-          detail: `${ROUTE_SHORT_NAME[state.route]} · 点击查看进度`, tone: 'accent', busy: true, actionable: true,
-        };
-      }
       if (state.verifying) return { label: `正在校验 v${state.version} 安装包`, detail: '点击查看进度', tone: 'accent', busy: true, actionable: true };
       return {
         label: `正在下载 v${state.version}${state.percent == null ? '' : ` ${state.percent}%`}`,
