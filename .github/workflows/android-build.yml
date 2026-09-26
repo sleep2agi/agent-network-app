@@ -102,10 +102,13 @@ jobs:
           # remoteMessaging = 0x200. Read the attribute that follows the service element, not any one.
           svc_line=${svc%%:*}
           svc_type=$(tail -n "+$svc_line" <<<"$tree" | grep -m1 -E ':foregroundServiceType\(0x[0-9a-f]+\)=' || true)
-          case "$svc_type" in
-            *'=0x200'|*'=512'|*'=(type 0x11)0x200') echo "keep-alive service: foregroundServiceType remoteMessaging ($svc_type)";;
-            *) echo "::error::AnetKeepAliveService foregroundServiceType is not remoteMessaging: '$svc_type'"; exit 1;;
-          esac
+          # aapt2 prints flags as hex, e.g. `…foregroundServiceType(0x01010599)=0x00000200`. Compare numerically.
+          svc_val=${svc_type##*=}
+          if [[ "$svc_val" =~ ^(0x[0-9a-fA-F]+|[0-9]+)$ ]] && (( (svc_val & 0x200) != 0 )); then
+            echo "keep-alive service: foregroundServiceType includes remoteMessaging ($svc_val)"
+          else
+            echo "::error::AnetKeepAliveService foregroundServiceType is not remoteMessaging: '$svc_type'"; exit 1
+          fi
           certs=$("$BT/apksigner" verify --print-certs "$APK")
           printf '%s\n' "$certs"
           # apksigner prints `Signer #1 certificate …` when a v1 signature is present and
