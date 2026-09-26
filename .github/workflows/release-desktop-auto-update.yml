@@ -119,6 +119,9 @@ jobs:
           releaseBody: |-
             Signed and notarized stable update for macOS (Apple Silicon) and Windows (x64).
 
+            What's new in 0.2.118:
+            - 修复输入栏对齐：『按住 说话』和两侧按钮在同一条中线上，高度一致。
+
             What's new in 0.2.117:
             - 折叠屏左侧列表与导航栏同一尺寸：头像和文字更小、行高更紧凑。
             - 按住说话松开后不再自动弹出键盘：识别结果显示在卡片里，可直接发送，点卡片才进入编辑。
