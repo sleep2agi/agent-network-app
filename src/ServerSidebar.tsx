@@ -5,6 +5,7 @@ import { fetchStatus, type HubConfig } from './api';
 import { railBadgeText } from './rail-nav';
 import { colors, onThemeChange, spacing } from './theme';
 import { usePoll } from './usePoll';
+import { summarize } from './server-stats';
 
 export type ServerSection = 'overview' | 'nodes' | 'create' | 'logs';
 
@@ -20,12 +21,15 @@ export default function ServerSidebar({ cfg, active, onSelect }: {
   active: ServerSection;
   onSelect: (section: ServerSection) => void;
 }) {
-  const [online, setOnline] = useState<number | null>(null);
+  // 在线 / 总数 —— 与服务器页、Agent 列表分组头同一口径(server-stats.ts)。
+  // 以前这里是 `sessions.length`,把全部已注册会话当成「在线节点」。
+  const [counts, setCounts] = useState<{ online: number; total: number } | null>(null);
   const [reachable, setReachable] = useState<boolean | null>(null);
   const load = useCallback(async () => {
     try {
       const result = await fetchStatus(cfg);
-      setOnline(result.sessions?.length ?? 0);
+      const stats = summarize(result.sessions ?? []);
+      setCounts({ online: stats.online, total: stats.total });
       setReachable(true);
     } catch {
       setReachable(false);
@@ -49,7 +53,7 @@ export default function ServerSidebar({ cfg, active, onSelect }: {
         <View style={styles.statusRow}>
           <View style={[styles.dot, { backgroundColor: reachable === false ? colors.failed : reachable ? colors.running : colors.textMuted }]} />
           <Text style={styles.status}>{reachable === null ? '正在连接' : reachable ? '已连接' : '连接失败'}</Text>
-          {online === null ? <ActivityIndicator size="small" color={colors.textMuted} /> : <Text style={styles.count}>{online} 个在线节点</Text>}
+          {counts === null ? <ActivityIndicator size="small" color={colors.textMuted} /> : <Text style={styles.count}>{counts.online}/{counts.total} 在线</Text>}
         </View>
       </View>
 
@@ -64,8 +68,8 @@ export default function ServerSidebar({ cfg, active, onSelect }: {
           >
             <View style={styles.itemIcon}>
               <Ionicons name={item.icon} size={18} color={active === item.key ? colors.accent : colors.textSecondary} />
-              {item.key === 'nodes' && railBadgeText(online) ? (
-                <View style={styles.badge}><Text style={styles.badgeText}>{railBadgeText(online)}</Text></View>
+              {item.key === 'nodes' && railBadgeText(counts?.online ?? null) ? (
+                <View style={styles.badge}><Text style={styles.badgeText}>{railBadgeText(counts?.online ?? null)}</Text></View>
               ) : null}
             </View>
             <Text style={[styles.itemText, active === item.key && styles.itemTextActive]}>{item.label}</Text>
