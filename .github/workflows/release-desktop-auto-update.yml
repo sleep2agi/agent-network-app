@@ -119,6 +119,9 @@ jobs:
           releaseBody: |-
             Signed and notarized stable update for macOS (Apple Silicon) and Windows (x64).
 
+            What's new in 0.2.108:
+            - 修复安卓通知没有提示音的问题；小米指引补充勿扰模式说明。
+
             What's new in 0.2.107:
             - 安卓消息通知：agent 发来新消息时弹系统通知（按 agent 合并、点击直达聊天、可对单个 agent 免打扰）。
             - 设置 → 通知：可选『后台保持连接』，app 在后台也能收到消息；附小米/HyperOS 后台设置指引。
