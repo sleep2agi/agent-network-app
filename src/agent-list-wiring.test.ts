@@ -53,10 +53,10 @@ ck('pinned indicator kept', phoneRow.includes('pinned ? <Ionicons name="pin"'));
 ck('selected row highlighted with rowActive', phoneRow.includes('selected ? colors.rowActive'));
 ck('tap opens chat, long-press opens node detail', phoneRow.includes('onPress={() => onOpenChat(item.alias)}') && phoneRow.includes('onLongPress={() => onOpenNodeDetail(item.alias)}'));
 ck('rows are flat: no card style / border in the phone row', !phoneRow.includes('styles.card') && !/borderWidth/.test(phoneRow));
-ck('hairline separators between phone rows only', /ItemSeparatorComponent=\{compact \? undefined : \(\) => \(/.test(agents) && /separator: \{ height: StyleSheet\.hairlineWidth, marginLeft: AGENT_ROW_SEPARATOR_INSET \}/.test(agents));
+ck('hairline separators between phone rows only', /ItemSeparatorComponent=\{compact \? undefined : \(\) => \(/.test(agents) && /separator: \{ height: StyleSheet\.hairlineWidth, marginLeft: ds\(AGENT_ROW_PAD_X\) \+ ds\(AGENT_ROW_AVATAR\) \+ ds\(AGENT_ROW_GAP\) \}/.test(agents));
 ck('rows are full-bleed on the phone (no list side padding)', agents.includes('contentContainerStyle={compact ? { paddingHorizontal: spacing.sm, paddingBottom: spacing.sm } : { paddingBottom: spacing.sm }}'));
 ck('renderItem picks the desktop or phone row', agents.includes('renderItem={({ item }) => (compact ? renderCompactRow(item) : renderPhoneRow(item))}'));
-ck('rowStyles hold no theme colours', agents.includes('const rowStyles = {') && !/colors\./.test(agents.slice(agents.indexOf('const rowStyles = {'))));
+ck('rowStyles hold no theme colours', agents.includes('const makeRowStyles = () => ({') && !/colors\./.test(agents.slice(agents.indexOf('const makeRowStyles = () => ({'))));
 ck('preview line uses the same snapshot as the counts', agents.includes('latestMessageByAgent(preview') && agents.includes(': unreadSnap), [preview, unreadSnap]);'));
 
 // ── group headers ──

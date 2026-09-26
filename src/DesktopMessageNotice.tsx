@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react';
-import { Animated, Easing, Pressable, StyleSheet, Text } from 'react-native';
+import { Animated, Easing, Pressable, StyleSheet } from 'react-native';
+import { Text } from './ui-text';
 import type { DesktopMessageNotice as Notice } from './desktop-message-consume';
 import { colors, onThemeChange, spacing, themeMode } from './theme';
 

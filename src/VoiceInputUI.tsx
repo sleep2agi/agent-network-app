@@ -1,8 +1,9 @@
 // 语音输入的三块界面:麦克风按钮(按住说话)、录音浮层、未配置时的「去设置」提示条。
 // 状态与手势全在 useVoiceInput;这里只画。
 
-import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+import { ActivityIndicator, Pressable, StyleSheet, View } from 'react-native';
+import { Text } from './ui-text';
+import { Ionicons } from './icons';
 import { colors, onThemeChange, spacing } from './theme';
 import { formatElapsed, overlayHint } from './voice-input-model';
 import type { VoiceInput } from './useVoiceInput';

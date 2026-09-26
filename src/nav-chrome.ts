@@ -70,6 +70,24 @@ export const MOBILE_RAIL_WIDTH = 72;
 export const MOBILE_RAIL_ITEM = { width: 64, height: 56 } as const;
 
 /**
+ * 界面密度 (src/ui-scale.ts) applied to the rail: 紧凑 0.85 → 62 dp rail (54 dp item + 4 dp each side) with 54×48 items,
+ * 标准 → 72 / 64×56, 宽松 1.15 → 83 / 74×64. Item sides never go below 48 dp (Material touch
+ * minimum), and the rail is never narrower than its item plus 4 dp of margin on each side.
+ */
+export const RAIL_TOUCH_MIN = 48;
+export function mobileRailItem(density: number): { width: number; height: number } {
+  const d = Number.isFinite(density) && density > 0 ? density : 1;
+  return {
+    width: Math.max(RAIL_TOUCH_MIN, Math.round(MOBILE_RAIL_ITEM.width * d)),
+    height: Math.max(RAIL_TOUCH_MIN, Math.round(MOBILE_RAIL_ITEM.height * d)),
+  };
+}
+export function mobileRailWidth(density: number): number {
+  const d = Number.isFinite(density) && density > 0 ? density : 1;
+  return Math.max(mobileRailItem(d).width + 8, Math.round(MOBILE_RAIL_WIDTH * d));
+}
+
+/**
  * The brand mark and version take ~70 dp. A phone in landscape inside the two-pane has
  * ~330–360 dp of height after the status and gesture bars, so drop them there and keep
  * every destination reachable without scrolling. Unfolded foldables (≈ 780–850 dp tall)
@@ -82,8 +100,8 @@ export const railShowsBrand = (windowHeight: number): boolean => windowHeight >=
  * Width left for the content to the right of the rail (the two panes, or a full-width
  * screen). The rail absorbs the left inset; the content is padded by the right one.
  */
-export function contentWidthBesideRail(windowWidth: number, insetLeft = 0, insetRight = 0): number {
-  return Math.max(0, windowWidth - MOBILE_RAIL_WIDTH - insetLeft - insetRight);
+export function contentWidthBesideRail(windowWidth: number, insetLeft = 0, insetRight = 0, railWidth: number = MOBILE_RAIL_WIDTH): number {
+  return Math.max(0, windowWidth - railWidth - insetLeft - insetRight);
 }
 
 /** Total unread across agents for the Agent destination's badge (same counts as the list rows). */

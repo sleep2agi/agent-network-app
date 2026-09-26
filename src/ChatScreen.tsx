@@ -1,26 +1,8 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import {
-  PanResponder,
-  ActivityIndicator,
-  Alert,
-  BackHandler,
-  FlatList,
-  Image,
-  Keyboard,
-  KeyboardAvoidingView,
-  Modal,
-  Platform,
-  Pressable,
-  ScrollView,
-  StatusBar,
-  StyleSheet,
-  Text,
-  TextInput,
-  useWindowDimensions,
-  View,
-} from 'react-native';
+import { PanResponder, ActivityIndicator, Alert, BackHandler, FlatList, Image, Keyboard, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StatusBar, StyleSheet, useWindowDimensions, View } from 'react-native';
+import { Text, TextInput } from './ui-text';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Ionicons } from '@expo/vector-icons';
+import { Ionicons } from './icons';
 import * as Clipboard from 'expo-clipboard';
 import AliasAvatar from './AliasAvatar';
 import AttachmentFileDesktop from './AttachmentFileDesktop';
@@ -52,6 +34,7 @@ import { addToDraft, draftCountLabel, draftImageCount, isDraftImage, MAX_DRAFT_I
 import { createUploadMemo, removeAttachmentAt, runUploadQueue, UPLOAD_CONCURRENCY, uploadFailureSummary, withUploadState, type UploadState } from './upload-queue';
 import type { UploadedFile } from './attach';
 import { colors, onThemeChange, radius, spacing } from './theme';
+import { ds } from './ui-scale';
 import { formatChatHeader, shouldShowTimeHeader } from './time';
 import { chooseHeaderLayout, NAME_MIN_WIDTH, type HeaderActionKey } from './chat-header-layout';
 import { echoSupersededByFetched } from './chat-echo';
@@ -2227,9 +2210,11 @@ const makeStyles = () =>
   back: { color: colors.accent, fontSize: 28, lineHeight: 30, paddingRight: spacing.sm },
   title: { color: colors.text, fontSize: 16, fontWeight: '600' },
   subtitle: { color: colors.running, fontSize: 11, marginTop: 1 },
+  // 界面密度: heights follow ds(); widths stay what chat-header-layout.ts budgets for (it decides
+  // which actions fit), so a denser header never overflows its own layout plan.
   headerAction: {
     minWidth: 58,
-    height: 34,
+    height: ds(34),
     paddingHorizontal: spacing.sm,
     flexDirection: 'row',
     gap: 4,
@@ -2239,7 +2224,7 @@ const makeStyles = () =>
   },
   headerActionText: { color: colors.textSecondary, fontSize: 12 },
   // Phone widths: icon-only square target (chat-header-layout ICON_BUTTON = 36).
-  headerActionCompact: { width: 36, height: 34, borderRadius: 9, alignItems: 'center', justifyContent: 'center' },
+  headerActionCompact: { width: 36, height: ds(34), borderRadius: 9, alignItems: 'center', justifyContent: 'center' },
   // Only flexible child of the header; minWidth is set inline from the layout.
   headerTitleCol: { flex: 1 },
   // DesktopWindowPin owns the top-right 34px. Reserve a separate hit target
@@ -2466,9 +2451,9 @@ const makeStyles = () =>
   attachIndex: { color: colors.textMuted, fontSize: 10, marginLeft: 'auto' },
   attachRemove: { color: colors.textMuted, fontSize: 14 },
   attachBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+    width: ds(36),
+    height: ds(36),
+    borderRadius: ds(36) / 2,
     borderColor: colors.border,
     borderWidth: 1,
     alignItems: 'center',
@@ -2518,16 +2503,16 @@ const makeStyles = () =>
     outlineStyle: 'none',
   } as any,
   desktopToolbar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingTop: spacing.sm },
-  desktopToolButton: { width: 34, height: 34, alignItems: 'center', justifyContent: 'center' },
+  desktopToolButton: { width: ds(34), height: ds(34), alignItems: 'center', justifyContent: 'center' },
   desktopToolbarRight: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
   priorityButton: { height: 28, borderRadius: radius.sm, borderWidth: 1, borderColor: 'transparent', paddingHorizontal: spacing.sm, alignItems: 'center', justifyContent: 'center' },
   priorityButtonActive: { borderColor: colors.failed, backgroundColor: colors.inputBg },
   priorityButtonText: { color: colors.textMuted, fontSize: 11, fontWeight: '600' },
   priorityButtonTextActive: { color: colors.failed },
-  mobilePriorityButton: { width: 36, height: 36, borderRadius: 18, borderWidth: 1, borderColor: colors.border, alignItems: 'center', justifyContent: 'center' },
+  mobilePriorityButton: { width: ds(36), height: ds(36), borderRadius: ds(36) / 2, borderWidth: 1, borderColor: colors.border, alignItems: 'center', justifyContent: 'center' },
   mobilePriorityText: { color: colors.textMuted, fontSize: 15 },
   shortcutHint: { color: colors.textMuted, fontSize: 10 },
-  desktopSend: { minWidth: 64, height: 32, borderRadius: radius.sm, paddingHorizontal: spacing.lg, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.accent },
+  desktopSend: { minWidth: ds(64), height: ds(32), borderRadius: radius.sm, paddingHorizontal: spacing.lg, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.accent },
   desktopSendDisabled: { backgroundColor: colors.subtleFill },
   desktopSendText: { color: colors.onAccent, fontSize: 13, fontWeight: '600' },
   input: {
@@ -2544,13 +2529,13 @@ const makeStyles = () =>
   },
   inputWrap: { flex: 1, justifyContent: 'flex-end' },
   // 在输入框里给麦克风留出右侧位置;flex 归零,否则在列方向的 inputWrap 里 flexBasis 0 会被压扁。
-  inputWithMic: { flex: 0, alignSelf: 'stretch', paddingRight: 44 },
+  inputWithMic: { flex: 0, alignSelf: 'stretch', paddingRight: ds(44) },
   inputMic: { position: 'absolute', right: 4, bottom: 5 },
   send: {
     backgroundColor: colors.accent,
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+    width: ds(36),
+    height: ds(36),
+    borderRadius: ds(36) / 2,
     alignItems: 'center',
     justifyContent: 'center',
   },

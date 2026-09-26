@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
-import { ActivityIndicator, AppState, Modal, Platform, Pressable, ScrollView, StyleSheet, Switch, Text, TextInput, View, useWindowDimensions } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+import { ActivityIndicator, AppState, Modal, Platform, Pressable, ScrollView, StyleSheet, Switch, View, useWindowDimensions } from 'react-native';
+import { Text, TextInput } from './ui-text';
+import { Ionicons } from './icons';
 import { HubConfig } from './api';
 import { DesktopStorageDiagnostics, HubProfile, getDesktopStorageDiagnostics, listHubProfiles, removeHubProfile, saveThemeMode } from './storage';
 import { THEME_PREFERENCES, THEME_PREFERENCE_LABEL, colors, onThemeChange, onThemePreferenceChange, setThemePreference, spacing, themeMode, themePreference, themePreferenceSummary, type ThemePreference } from './theme';
@@ -21,6 +22,8 @@ import { keepAliveAvailable, keepAliveLastError, keepAliveRunning, subscribeKeep
 import { refreshNotifyDiagnostics, sendTestNotification } from './notifier-runtime';
 import XiaomiGuideModal from './XiaomiGuideModal';
 import VoiceSettingsSection from './VoiceSettingsSection';
+import UiScaleSettings from './UiScaleSettings';
+import { ds } from './ui-scale';
 import { playChime } from './chime';
 import { SETTINGS_CATEGORIES, activeCategoryKey, filterSettings, rememberSettingsCategory, rememberSettingsScroll, rememberedSettingsView, settingsPlatform, visibleRowKeys, type SettingsCategoryKey, type SettingsPlatform } from './settings-model';
 
@@ -411,6 +414,8 @@ export default function SettingsScreen({
                   </View>
                 </View>
               ) : null}
+              {/* 字体大小 / 界面密度 + 预览 + 恢复默认 (src/UiScaleSettings.tsx, src/ui-scale.ts). */}
+              <UiScaleSettings s={styles} showFont={show('appearance', 'fontSize')} showDensity={show('appearance', 'density')} />
             </View>
           ) : null}
 
@@ -823,8 +828,8 @@ const makeStyles = () =>
   sidebar: { width: 232, backgroundColor: colors.railBg, borderRightWidth: 1, borderRightColor: colors.border, paddingTop: spacing.lg },
   sidebarCompact: { width: '100%', borderRightWidth: 0, borderBottomWidth: 1, borderBottomColor: colors.border, paddingBottom: spacing.sm },
   sidebarTop: { paddingHorizontal: spacing.md, gap: spacing.md, marginBottom: spacing.md },
-  closeButton: { width: 32, height: 32, borderRadius: 8, borderWidth: 1, borderColor: colors.border, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.card },
-  searchBox: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, borderWidth: 1, borderColor: colors.border, borderRadius: 10, backgroundColor: colors.inputBg, paddingHorizontal: spacing.md, height: 36 },
+  closeButton: { width: ds(32), height: ds(32), borderRadius: 8, borderWidth: 1, borderColor: colors.border, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.card },
+  searchBox: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, borderWidth: 1, borderColor: colors.border, borderRadius: 10, backgroundColor: colors.inputBg, paddingHorizontal: spacing.md, minHeight: ds(36) },
   searchInput: { flex: 1, color: colors.text, fontSize: 13, padding: 0, outlineStyle: 'none' } as any,
   categoryList: { paddingHorizontal: spacing.sm, gap: 2 },
   categoryRow: { flexDirection: 'row', paddingHorizontal: spacing.md, gap: spacing.sm },
@@ -863,7 +868,7 @@ const makeStyles = () =>
   themeRow: { flexWrap: 'wrap', rowGap: spacing.sm, columnGap: spacing.md },
   themeRowCopy: { flexGrow: 1, flexShrink: 1, flexBasis: 150, minWidth: 150 },
   segmented: { flexDirection: 'row', flexShrink: 0, padding: 2, borderRadius: 8, backgroundColor: colors.subtleFill, borderWidth: 1, borderColor: colors.border },
-  segment: { paddingHorizontal: spacing.sm + 2, paddingVertical: 6, borderRadius: 6, alignItems: 'center', justifyContent: 'center', minWidth: 44, borderWidth: 1, borderColor: 'transparent' },
+  segment: { paddingHorizontal: spacing.sm + 2, paddingVertical: ds(6), borderRadius: 6, alignItems: 'center', justifyContent: 'center', minWidth: 44, borderWidth: 1, borderColor: 'transparent' },
   segmentSelected: { backgroundColor: colors.card, borderColor: colors.border },
   segmentText: { color: colors.textSecondary, fontSize: 13 },
   segmentTextSelected: { color: colors.text, fontWeight: '600' },

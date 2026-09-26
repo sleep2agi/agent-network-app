@@ -1,16 +1,7 @@
 import { Fragment, useCallback, useEffect, useRef, useState } from 'react';
-import {
-  ActivityIndicator,
-  KeyboardAvoidingView,
-  Platform,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  View,
-} from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+import { ActivityIndicator, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { Text, TextInput } from './ui-text';
+import { Ionicons } from './icons';
 import { createNode, CreateNodeRequest, fetchStatus, HostSupervisorDaemon, HubConfig, Session, fetchCreateRequestStatus } from './api';
 import { createRequestVerdict, timeoutMessage, type CreateRequestVerdict } from './create-request-status';
 import { colors, onThemeChange, spacing } from './theme';

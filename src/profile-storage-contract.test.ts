@@ -14,7 +14,7 @@ assert.ok(rust.includes('profile_registry_metadata_never_serializes_secrets'), '
 assert.ok(rust.includes('active-hub-session') && rust.includes('One-time migration'), 'legacy credential is migrated');
 assert.ok(storage.includes("'cache/sessions.json'") && storage.includes("'outbox.json'"), 'cache and outbox are profile scoped');
 assert.ok(storage.includes("'preferences/avatars.json'"), 'avatar overrides are profile scoped');
-assert.ok(app.includes("workspaceKey = `${theme}:${cfg?.profileId"), 'workspace remounts on profile switch');
+assert.ok(app.includes("workspaceKey = `${theme}:${scaleKey}:${cfg?.profileId"), 'workspace remounts on profile switch');
 // 应用多开(2026-09-07):分离聊天窗 / 工作区窗都「借用」自己那个账号(loadHubProfile),不再 switchHubProfile —— 那会把主窗口的当前账号一起切走。
 assert.ok(app.includes('loadHubProfile(borrowedProfile)') && !app.includes('switchHubProfile(initialChatProfile)'), 'detached windows restore their pinned profile without switching the main window');
 {

@@ -10,7 +10,8 @@ import {
 import * as Sharing from 'expo-sharing';
 import { VideoView, useVideoPlayer } from 'expo-video';
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, Image, Pressable, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Image, Pressable, StyleSheet, View } from 'react-native';
+import { Text } from './ui-text';
 import { colors, onThemeChange, spacing } from './theme';
 
 // Server-side attachment thumbnails were black boxes on device (Vincent

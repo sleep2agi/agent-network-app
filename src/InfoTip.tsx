@@ -1,7 +1,8 @@
 // 小 ⓘ 按钮 + 展开的说明卡。把「分区说明」这类一次读懂就不必常驻的文字收起来,给内容让位。
 // 键盘可达:Tab 聚焦后 Enter/Space 展开;展开时 Esc 收起;再按一次也收起。
 import { useEffect, useState } from 'react';
-import { Platform, Pressable, Text, View } from 'react-native';
+import { Platform, Pressable, View } from 'react-native';
+import { Text } from './ui-text';
 
 import { colors, spacing } from './theme';
 

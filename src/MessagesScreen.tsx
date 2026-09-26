@@ -1,11 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import {
-  ActivityIndicator,
-  FlatList,
-  StyleSheet,
-  Text,
-  View,
-} from 'react-native';
+import { ActivityIndicator, FlatList, StyleSheet, View } from 'react-native';
+import { Text } from './ui-text';
 import { fetchMessages, HubConfig, HubMessage } from './api';
 import { connectivityState } from './connectivity';
 import { messagesViewState } from './messages-view-state';

@@ -1,13 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import {
-  ActivityIndicator,
-  FlatList,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Text,
-  View,
-} from 'react-native';
+import { ActivityIndicator, FlatList, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { Text } from './ui-text';
 import AliasAvatar from './AliasAvatar';
 import { fetchTasks, HubConfig, HubTask } from './api';
 import {

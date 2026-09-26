@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { Text } from './ui-text';
 import { colors, onThemeChange, spacing } from './theme';
 import { fetchHostSupervisors, fetchHubNodes, fetchStatus, type HubConfig } from './api';
 import {

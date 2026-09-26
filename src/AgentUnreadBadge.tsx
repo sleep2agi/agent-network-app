@@ -1,4 +1,5 @@
-import { Text, View } from 'react-native';
+import { View } from 'react-native';
+import { Text } from './ui-text';
 import type { UnreadBadge } from './unread-ledger';
 import { styles } from './app-styles';
 

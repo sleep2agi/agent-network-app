@@ -7,9 +7,10 @@
 //    都在 hub 和节点两侧。凭据文件这里连请求都不发,直接说「凭据文件，不显示内容」。
 // 版本不够(没上报 files_capable)当场说要升级什么,不转 60 秒圈(同 app#347)。
 
-import { Ionicons } from '@expo/vector-icons';
+import { Ionicons } from './icons';
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
-import { ActivityIndicator, Platform, Pressable, ScrollView, Text, View } from 'react-native';
+import { ActivityIndicator, Platform, Pressable, ScrollView, View } from 'react-native';
+import { Text } from './ui-text';
 
 import { listNodeFiles, readNodeFile, waitForRulesFileResult, type HubConfig, type RulesFileEnqueueResult, type RulesTarget, type Session } from './api';
 import InfoTip from './InfoTip';

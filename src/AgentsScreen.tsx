@@ -6,17 +6,9 @@
 // 主题切换时整体重新赋值,复制的那份不会跟着变(见 app-styles.ts 头注释)。
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import {
-  ActivityIndicator,
-  Pressable,
-  RefreshControl,
-  SectionList,
-  StyleSheet,
-  Text,
-  TextInput,
-  View,
-} from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+import { ActivityIndicator, Pressable, RefreshControl, SectionList, StyleSheet, View } from 'react-native';
+import { Text, TextInput } from './ui-text';
+import { Ionicons } from './icons';
 import AliasAvatar from './AliasAvatar';
 import { isAgentOnline } from './chat-actions';
 import { fetchStatus, fetchUserMessages, takeStatusPrefetch, type HubConfig, type Session,
@@ -24,7 +16,8 @@ import { fetchStatus, fetchUserMessages, takeStatusPrefetch, type HubConfig, typ
   replyUnreadSince,
 } from './api';
 import { loadSessionsCache, saveSessionsCache } from './storage';
-import { colors, radius, spacing, statusColor, type, weight } from './theme';
+import { colors, onThemeChange, radius, spacing, statusColor, type, weight } from './theme';
+import { ds, fs } from './ui-scale';
 import { usePoll } from './usePoll';
 import { retryUnreadPersistFromPoll } from './conversation-unread-persist';
 import AgentUnreadBadge from './AgentUnreadBadge';
@@ -325,13 +318,13 @@ export default function AgentsScreen({
         <AgentUnreadBadge badge={rowBadge(item.alias)} testID={`unread-badge-${item.alias}`} />
       </View>
       <View style={{ flex: 1, minWidth: 0 }}>
-        <Text selectable={false} style={[styles.alias, compact && { fontSize: 13, fontWeight: '600' }]} numberOfLines={1}>
+        <Text dense selectable={false} style={[styles.alias, compact && { fontSize: 13, fontWeight: '600' }]} numberOfLines={1}>
           {pinnedAliases.includes(item.alias) ? '📌 ' : ''}
           {item.alias}
           {mutedAliases.includes(item.alias) ? ' 🔕' : ''}
         </Text>
         {item.task ? (
-          <Text selectable={false} style={[styles.task, compact && { fontSize: 11 }]} numberOfLines={1}>
+          <Text dense selectable={false} style={[styles.task, compact && { fontSize: 11 }]} numberOfLines={1}>
             {item.task}
           </Text>
         ) : null}
@@ -373,19 +366,19 @@ export default function AgentsScreen({
         </View>
         <View style={rowStyles.body}>
           <View style={rowStyles.line}>
-            <Text selectable={false} numberOfLines={1} style={[rowStyles.name, { color: model.status.online ? colors.text : colors.textSecondary }]}>
+            <Text dense selectable={false} numberOfLines={1} style={[rowStyles.name, { color: model.status.online ? colors.text : colors.textSecondary }]}>
               {item.alias}
             </Text>
             {pinned ? <Ionicons name="pin" size={12} color={colors.textMuted} accessibilityLabel="已置顶" style={rowStyles.pin} /> : null}
             {mutedAliases.includes(item.alias) ? <Ionicons name="notifications-off-outline" size={12} color={colors.textMuted} accessibilityLabel="消息免打扰" style={rowStyles.pin} testID={`agent-muted-${item.alias}`} /> : null}
-            <Text selectable={false} numberOfLines={1} style={[rowStyles.time, { color: colors.textMuted }]}>{model.time}</Text>
+            <Text dense selectable={false} numberOfLines={1} style={[rowStyles.time, { color: colors.textMuted }]}>{model.time}</Text>
           </View>
           {/* No second line when there is nothing to say (and no badge): the name then centres. */}
           {model.status.label || model.preview || badge ? <View style={rowStyles.line}>
             {model.status.label && model.status.labelTone ? (
-              <Text selectable={false} style={[rowStyles.label, { color: colors[model.status.labelTone] }]}>{model.status.label}</Text>
+              <Text dense selectable={false} style={[rowStyles.label, { color: colors[model.status.labelTone] }]}>{model.status.label}</Text>
             ) : null}
-            <Text selectable={false} numberOfLines={1} style={[rowStyles.preview, { color: colors.textMuted }]}>{model.preview}</Text>
+            <Text dense selectable={false} numberOfLines={1} style={[rowStyles.preview, { color: colors.textMuted }]}>{model.preview}</Text>
             <AgentUnreadBadge inline badge={badge} testID={`unread-badge-${item.alias}`} />
           </View> : null}
         </View>
@@ -557,49 +550,53 @@ export default function AgentsScreen({
   );
 }
 
-// Phone / two-pane list chrome (0.2.106). A plain object, and no colours here: it is built once at import,
-// and a colour captured now would not follow a theme switch (theme-restyle-coverage.test.ts) —
-// colours are passed inline from `colors` at render time.
-const rowStyles = {
-  head: { paddingHorizontal: AGENT_ROW_PAD_X, paddingTop: spacing.sm, paddingBottom: spacing.xs },
-  headRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, minHeight: 36 },
-  searchBox: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 6, height: 36, borderRadius: radius.md, paddingHorizontal: 10 },
-  searchInput: { flex: 1, minWidth: 0, fontSize: type.body, paddingVertical: 0, height: 36 },
+// Phone / two-pane list chrome (0.2.106). No colours here — they are passed inline from `colors` at
+// render time. Rebuilt on every restyle (theme or 界面密度, src/ui-scale.ts): the row geometry goes
+// through ds(), and `spacing` itself is density-scaled.
+const makeRowStyles = () => ({
+  head: { paddingHorizontal: ds(AGENT_ROW_PAD_X), paddingTop: spacing.sm, paddingBottom: spacing.xs },
+  headRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, minHeight: ds(36) },
+  searchBox: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: ds(6), minHeight: ds(36), borderRadius: radius.md, paddingHorizontal: ds(10) },
+  searchInput: { flex: 1, minWidth: 0, fontSize: type.body, paddingVertical: 0, height: Math.max(ds(36), fs(type.body) + 14) },
   searchCount: { marginTop: spacing.xs },
   // 服务器页带来的筛选:一行小胶囊,只在有筛选时出现(平时列表不变)。
-  filterBar: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 6, paddingHorizontal: AGENT_ROW_PAD_X, paddingVertical: spacing.xs },
-  filterChip: { height: 26, borderRadius: radius.pill, paddingHorizontal: 10, alignItems: 'center', justifyContent: 'center' },
+  filterBar: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 6, paddingHorizontal: ds(AGENT_ROW_PAD_X), paddingVertical: spacing.xs },
+  filterChip: { minHeight: ds(26), borderRadius: radius.pill, paddingHorizontal: 10, alignItems: 'center', justifyContent: 'center' },
   filterChipText: { fontSize: type.small, fontWeight: weight.medium },
   filterClear: { flexDirection: 'row', alignItems: 'center', gap: 4, marginLeft: 'auto' },
-  group: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: AGENT_ROW_PAD_X, paddingTop: spacing.md, paddingBottom: spacing.xs },
+  group: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: ds(AGENT_ROW_PAD_X), paddingTop: spacing.md, paddingBottom: spacing.xs },
   groupCompact: { paddingHorizontal: spacing.md, paddingTop: spacing.sm },
   groupTitle: { flexShrink: 1, fontSize: type.small, fontWeight: weight.medium, letterSpacing: 0.4 },
   groupCount: { fontSize: type.caption, marginLeft: 2 },
   row: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: AGENT_ROW_GAP,
-    minHeight: AGENT_ROW_HEIGHT,
-    paddingHorizontal: AGENT_ROW_PAD_X,
-    paddingVertical: (AGENT_ROW_HEIGHT - AGENT_ROW_AVATAR) / 2,
+    gap: ds(AGENT_ROW_GAP),
+    // 标准 68 dp / 44 dp avatar; 紧凑 (the Android wide default) 58 / 37; 宽松 78 / 51.
+    minHeight: ds(AGENT_ROW_HEIGHT),
+    paddingHorizontal: ds(AGENT_ROW_PAD_X),
+    paddingVertical: (ds(AGENT_ROW_HEIGHT) - ds(AGENT_ROW_AVATAR)) / 2,
   },
-  avatar: { width: AGENT_ROW_AVATAR, height: AGENT_ROW_AVATAR },
+  // Same ds() as AliasAvatar applies to its own size, so the dot sits on the avatar's corner.
+  avatar: { width: ds(AGENT_ROW_AVATAR), height: ds(AGENT_ROW_AVATAR) },
   avatarOffline: { opacity: 0.45 },
   dot: {
     position: 'absolute',
     right: -1,
     bottom: -1,
-    width: AGENT_ROW_DOT,
-    height: AGENT_ROW_DOT,
-    borderRadius: AGENT_ROW_DOT / 2,
+    width: ds(AGENT_ROW_DOT),
+    height: ds(AGENT_ROW_DOT),
+    borderRadius: ds(AGENT_ROW_DOT) / 2,
     borderWidth: 2,
   },
   body: { flex: 1, minWidth: 0, gap: 3 },
-  line: { flexDirection: 'row', alignItems: 'center', gap: 6, minHeight: 20 },
+  line: { flexDirection: 'row', alignItems: 'center', gap: ds(6), minHeight: ds(20) },
   name: { flexShrink: 1, fontSize: type.title, fontWeight: weight.medium },
   pin: { marginLeft: -2 },
   time: { marginLeft: 'auto', fontSize: type.small, paddingLeft: spacing.sm },
   label: { fontSize: type.small, fontWeight: weight.medium },
   preview: { flex: 1, minWidth: 0, fontSize: type.body },
-  separator: { height: StyleSheet.hairlineWidth, marginLeft: AGENT_ROW_SEPARATOR_INSET },
-} as const;
+  separator: { height: StyleSheet.hairlineWidth, marginLeft: ds(AGENT_ROW_PAD_X) + ds(AGENT_ROW_AVATAR) + ds(AGENT_ROW_GAP) },
+} as const);
+let rowStyles = makeRowStyles();
+onThemeChange(() => { rowStyles = makeRowStyles(); });

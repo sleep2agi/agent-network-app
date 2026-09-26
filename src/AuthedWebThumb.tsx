@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, Image, Pressable, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Image, Pressable, StyleSheet, View } from 'react-native';
+import { Text } from './ui-text';
 import { appFetch } from './app-fetch';
 import { colors, onThemeChange, spacing } from './theme';
 import { downloadImageObjectUrl, saveImageObjectUrl } from './web-image-download';

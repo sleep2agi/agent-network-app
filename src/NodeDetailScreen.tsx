@@ -47,8 +47,9 @@
 
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { layoutGeneration, releaseOnUnmount, takeHandoff } from './layout-handoff';
-import { ActivityIndicator, BackHandler, Keyboard, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StatusBar, StyleSheet, Text, TextInput, View, useWindowDimensions } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+import { ActivityIndicator, BackHandler, Keyboard, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StatusBar, StyleSheet, View, useWindowDimensions } from 'react-native';
+import { Text, TextInput } from './ui-text';
+import { Ionicons } from './icons';
 
 import AliasAvatar from './AliasAvatar';
 import AvatarEditSection from './AvatarEditSection';
@@ -56,6 +57,7 @@ import { teamOf } from './agents-list';
 import { fetchHubNodes, fetchNodeStatus, runNodeLifecycleAction, type HubConfig, type HubNode, type NodeLifecycleAction, type Session } from './api';
 import { styles } from './app-styles';
 import { colors, onThemeChange, radius, spacing, statusColor, type as typeScale, weight } from './theme';
+import { ds } from './ui-scale';
 import { formatTime } from './time';
 import { usePoll } from './usePoll';
 import NodeTasksSection from './NodeTasksSection';
@@ -605,7 +607,8 @@ export default function NodeDetailScreen({
   );
 }
 
-const localStyles = StyleSheet.create({
+// Rebuilt on every restyle: it reads `spacing` (density-scaled) and ds() (src/ui-scale.ts).
+const makeLocalStyles = () => StyleSheet.create({
   headerCard: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -630,7 +633,7 @@ const localStyles = StyleSheet.create({
     maxWidth: 260,
   },
   rail: {
-    width: 200,
+    width: ds(200),
     borderRightWidth: 1,
     paddingTop: spacing.md,
   },
@@ -644,8 +647,8 @@ const localStyles = StyleSheet.create({
     borderRadius: 10,
   },
   // Android two-pane (touch): Material's 48 dp minimum for the rail, 40 dp for the chip row.
-  railItemTouch: { minHeight: 48 },
-  tabTouch: { minHeight: 40, justifyContent: 'center' },
+  railItemTouch: { minHeight: ds(48, 44) },
+  tabTouch: { minHeight: ds(40, 36), justifyContent: 'center' },
   tabsWrap: {
     borderBottomWidth: 1,
     paddingVertical: spacing.sm,
@@ -668,8 +671,8 @@ const localStyles = StyleSheet.create({
     gap: spacing.sm,
   },
   actionButton: {
-    minWidth: 92,
-    height: 34,
+    minWidth: ds(92),
+    height: ds(34),
     borderRadius: 7,
     borderWidth: 1,
     paddingHorizontal: spacing.md,
@@ -686,3 +689,5 @@ const localStyles = StyleSheet.create({
     fontWeight: '600',
   },
 });
+let localStyles = makeLocalStyles();
+onThemeChange(() => { localStyles = makeLocalStyles(); });

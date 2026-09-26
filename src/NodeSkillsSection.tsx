@@ -6,7 +6,8 @@
 // 🔴 只传技能名,不传路径;目录由节点决定。会话没上报 skills_capable 就不显示。
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Platform, Pressable, Text, View } from 'react-native';
+import { ActivityIndicator, Platform, Pressable, View } from 'react-native';
+import { Text } from './ui-text';
 
 import { listNodeSkills, readNodeSkill, waitForRulesFileResult, type HubConfig, type RulesTarget, type Session } from './api';
 import InfoTip from './InfoTip';

@@ -20,8 +20,9 @@
 // Same pattern as NodeDetailScreen.
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { FlatList, Pressable, Text, View, ActivityIndicator } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+import { FlatList, Pressable, View, ActivityIndicator } from 'react-native';
+import { Text } from './ui-text';
+import { Ionicons } from './icons';
 import AliasAvatar from './AliasAvatar';
 import { HubConfig } from './api';
 import {

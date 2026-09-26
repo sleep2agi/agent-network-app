@@ -1,4 +1,5 @@
-import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Modal, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { Text } from './ui-text';
 import { colors, spacing } from './theme';
 import { XIAOMI_GUIDE_FOOTNOTE, XIAOMI_GUIDE_INTRO, XIAOMI_GUIDE_STEPS, XIAOMI_GUIDE_TITLE } from './xiaomi-guide';
 import { openAppDetailsSettings, openXiaomiAutostartSettings } from './mobile-notifications';

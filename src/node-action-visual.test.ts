@@ -32,7 +32,7 @@ check('all three semantic tones are wired to their exact actions',
   screen.includes('label="重启节点" tone="neutral"') &&
   screen.includes('label="停止节点" tone="caution"') &&
   screen.includes('label="删除节点" tone="danger"'));
-check('buttons are compact desktop controls', /actionButton:\s*\{[\s\S]*?minWidth: 92,[\s\S]*?height: 34,[\s\S]*?borderRadius: 7,/.test(screen));
+check('buttons are compact desktop controls', /actionButton:\s*\{[\s\S]*?minWidth: ds\(92\),[\s\S]*?height: ds\(34\),[\s\S]*?borderRadius: 7,/.test(screen));
 check('row wraps instead of overflowing narrow windows', /actionRow:\s*\{[\s\S]*?flexWrap: 'wrap'/.test(screen));
 check('hover and keyboard focus are both handled', screen.includes('onHoverIn=') && screen.includes('onHoverOut=') && screen.includes('onFocus=') && screen.includes('onBlur='));
 check('pressed state is visible without layout shift', /actionButtonPressed:\s*\{[\s\S]*?opacity: 0\.68,[\s\S]*?scale: 0\.98/.test(screen));

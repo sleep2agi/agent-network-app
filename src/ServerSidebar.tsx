@@ -1,6 +1,7 @@
 import { useCallback, useState } from 'react';
-import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+import { ActivityIndicator, Pressable, StyleSheet, View } from 'react-native';
+import { Text } from './ui-text';
+import { Ionicons } from './icons';
 import { fetchStatus, type HubConfig } from './api';
 import { railBadgeText } from './rail-nav';
 import { colors, onThemeChange, spacing } from './theme';

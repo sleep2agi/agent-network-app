@@ -1,21 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import {
-  AccessibilityInfo,
-  ActivityIndicator,
-  FlatList,
-  Keyboard,
-  KeyboardAvoidingView,
-  Modal,
-  Platform,
-  Pressable,
-  StyleSheet,
-  Text,
-  TextInput,
-  View,
-} from 'react-native';
+import { AccessibilityInfo, ActivityIndicator, FlatList, Keyboard, KeyboardAvoidingView, Modal, Platform, Pressable, StyleSheet, View } from 'react-native';
+import { Text, TextInput } from './ui-text';
 import type { RefObject } from 'react';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Ionicons } from '@expo/vector-icons';
+import { Ionicons } from './icons';
 import type { HubConfig } from './api';
 import MarkdownMessage from './MarkdownMessage';
 import { shouldSubmitBtwOnEnter } from './btw-command';

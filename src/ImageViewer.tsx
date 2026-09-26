@@ -1,20 +1,8 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
-import {
-  ActivityIndicator,
-  Animated,
-  Image,
-  Modal,
-  PanResponder,
-  Platform,
-  Pressable,
-  StyleSheet,
-  Text,
-  View,
-  type GestureResponderEvent,
-  type PanResponderGestureState,
-} from 'react-native';
+import { ActivityIndicator, Animated, Image, Modal, PanResponder, Platform, Pressable, StyleSheet, View, type GestureResponderEvent, type PanResponderGestureState } from 'react-native';
+import { Text } from './ui-text';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Ionicons } from '@expo/vector-icons';
+import { Ionicons } from './icons';
 import { AttachmentFile, downloadAttachment } from './AuthedThumb';
 import { saveObjectUrlOriginal } from './AuthedWebThumb';
 import { appFetch } from './app-fetch';

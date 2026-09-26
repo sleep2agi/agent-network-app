@@ -10,7 +10,8 @@
 // agent-node 旧、读失败），每种都有一句话说明为什么和怎么办。
 
 import { forwardRef, useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
-import { ActivityIndicator, Modal, Platform, Pressable, ScrollView, StatusBar, Text, TextInput, View, useWindowDimensions } from 'react-native';
+import { ActivityIndicator, Modal, Platform, Pressable, ScrollView, StatusBar, View, useWindowDimensions } from 'react-native';
+import { Text, TextInput } from './ui-text';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { readNodeRulesFile, waitForRulesFileResult, writeNodeRulesFile, type HubConfig, type RulesTarget, type Session } from './api';
