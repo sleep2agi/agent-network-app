@@ -70,7 +70,8 @@ const run = (evs: UnreadEvent[]) => evs.reduce(reduceUnread, initialUnreadState(
   check('同一批再 ingest 不加倍', unreadOf(again.ledger, '通信龙') === 2);
 }
 
-const agents = readFileSync(new URL('./AgentsScreen.tsx', import.meta.url), 'utf8');
+// Windows checkouts are CRLF: normalise so the multi-line anchors below match on every runner.
+const agents = readFileSync(new URL('./AgentsScreen.tsx', import.meta.url), 'utf8').replace(/\r\n?/g, '\n');
 const badge = readFileSync(new URL('./AgentUnreadBadge.tsx', import.meta.url), 'utf8');
 const chat = readFileSync(new URL('./ChatScreen.tsx', import.meta.url), 'utf8');
 const row = readFileSync(new URL('./unread-badge.ts', import.meta.url), 'utf8');
