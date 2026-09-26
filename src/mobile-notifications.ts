@@ -7,10 +7,8 @@
 import { Platform } from 'react-native';
 import { ANDROID_PACKAGE } from './android-update-core';
 import {
-  MESSAGE_CHANNEL_ID,
-  MESSAGE_CHANNEL_NAME,
-  QUIET_CHANNEL_ID,
-  QUIET_CHANNEL_NAME,
+  setupAndroidChannels,
+  type ChannelEnums,
   type PermissionStatus,
   type PostPlan,
 } from './mobile-notify-model';
@@ -38,23 +36,11 @@ export function ensureNotificationSetup(): Promise<void> {
       handleNotification: async () => ({ shouldShowBanner: true, shouldShowList: true, shouldPlaySound: true, shouldSetBadge: false }),
     });
     if (Platform.OS === 'android') {
-      await N.setNotificationChannelAsync(MESSAGE_CHANNEL_ID, {
-        name: MESSAGE_CHANNEL_NAME,
-        description: 'agent 发来新消息时提醒',
-        importance: N.AndroidImportance.HIGH,
-        vibrationPattern: [0, 200, 120, 200],
-        lockscreenVisibility: N.AndroidNotificationVisibility.PRIVATE,
-        showBadge: true,
-      });
-      await N.setNotificationChannelAsync(QUIET_CHANNEL_ID, {
-        name: QUIET_CHANNEL_NAME,
-        description: '「仅新消息」模式或提示音关闭时:只更新通知,不响铃',
-        importance: N.AndroidImportance.LOW,
-        sound: null,
-        vibrationPattern: null,
-        enableVibrate: false,
-        lockscreenVisibility: N.AndroidNotificationVisibility.PRIVATE,
-        showBadge: true,
+      // 渠道配置与迁移(删 0.2.107 那条没声音的旧渠道)在 mobile-notify-model.setupAndroidChannels,有测试。
+      await setupAndroidChannels({
+        enums: N as unknown as ChannelEnums,
+        set: (id, input) => N.setNotificationChannelAsync(id, input),
+        del: id => N.deleteNotificationChannelAsync(id),
       });
     }
   })().catch(error => {

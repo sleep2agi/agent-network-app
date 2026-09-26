@@ -13,6 +13,9 @@ export const XIAOMI_GUIDE_TITLE = '小米/HyperOS 后台设置指引';
 export const XIAOMI_GUIDE_INTRO =
   '小米手机默认会在应用切到后台后冻结或清理它。想在不打开应用时也收到 agent 的消息,需要在系统里放开下面几项。';
 
+/** 勿扰模式:应用不绕过它(渠道 bypassDnd=false),只告诉人去哪里加例外。 */
+export const XIAOMI_GUIDE_DND_LINE = '勿扰模式开启时通知不会弹出/响铃，可在「勿扰模式 → 例外应用」中加入 Agent Network。';
+
 export const XIAOMI_GUIDE_STEPS: readonly GuideStep[] = [
   {
     title: '1. 开启「自启动」',
@@ -33,6 +36,10 @@ export const XIAOMI_GUIDE_STEPS: readonly GuideStep[] = [
   {
     title: '5. 打开本页的「后台保持连接」',
     detail: '通知栏会常驻一条低优先级通知「Agent Network 正在保持连接」,这是系统要求的,关掉它就会断开。',
+  },
+  {
+    title: '6. 勿扰模式',
+    detail: XIAOMI_GUIDE_DND_LINE,
   },
 ];
 
