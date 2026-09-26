@@ -67,8 +67,9 @@ import SideThreadDrawer, { type SideThreadLaunch } from './SideThreadDrawer';
 import { nextPlusPanel, plusPanelHeight, plusPanelItems, type PlusItemKey, type PlusPanelEvent } from './composer-plus-panel';
 import { useVoiceInput } from './useVoiceInput';
 import { afterRecognized, insertRecognized, onVoiceDraftCardTap, showVoiceDraftCard, toggleComposerInputMode, type ComposerInputMode, type ComposerModeTransition } from './voice-input-model';
-import { ComposerModeToggle, VoiceDraftCard, VoiceHoldBar, VoiceMicButton, VoiceRecordingOverlay, VoiceSettingsPrompt } from './VoiceInputUI';
-import { COMPOSER_INPUT_BORDER, COMPOSER_LINE_HEIGHT, composerControlSize, composerInputPadY, composerLineCount, composerRightSlot, composerRowAlign, nextFullEditor, shouldShowExpand, type FullEditorEvent } from './composer-row-layout';
+import { ComposerModeToggle, VoiceDraftCard, VoiceFieldMic, VoiceHoldBar, VoiceMicButton, VoiceRecordingOverlay, VoiceSettingsPrompt } from './VoiceInputUI';
+import { beginVoicePress, createSelectionCapture, hostSelection, insertAtSelection, refocusAfterInsert, voiceInsertTarget, withPressStart, type TextSelection, type VoiceSource } from './voice-insert-model';
+import { COMPOSER_INPUT_BORDER, COMPOSER_LINE_HEIGHT, composerControlSize, composerInputPadRightWithMic, composerInputPadY, composerLineCount, composerRightSlot, composerRowAlign, nextFullEditor, shouldShowExpand, type FullEditorEvent } from './composer-row-layout';
 import { ComposerExpandButton, ComposerFullscreenEditor, ComposerRightSlot } from './ComposerRowParts';
 import { loadComposerInputMode, saveComposerInputMode } from './voice-prefs';
 
@@ -263,6 +264,29 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
   const [plusMenuOpen, setPlusMenuOpen] = useState(false);
   const [btwLaunch, setBtwLaunch] = useState<SideThreadLaunch>();
   const mainComposerRef = useRef<TextInput>(null);
+  // 语音插到光标处(voice-insert-model.ts):onSelectionChange 一直喂 track();按下输入框麦克风 / 桌面麦克风
+  // 的第一时间 freeze()(安卓按麦克风可能失焦、再报一次选区 —— 之后到的都不算);松手 take()。
+  const selectionCaptureRef = useRef(createSelectionCapture());
+  const voiceSourceRef = useRef<VoiceSource>('holdBar');
+  // 插完把光标放到插入文字之后:先提交新草稿,下一拍用 selection 受控放光标,再放开(undefined)让用户随便挪。
+  const [forcedSelection, setForcedSelection] = useState<TextSelection | undefined>(undefined);
+  const pendingCursorRef = useRef<number | null>(null);
+  const [cursorRequest, setCursorRequest] = useState(0);
+  const placeCursor = (cursor: number) => { pendingCursorRef.current = cursor; setCursorRequest(n => n + 1); };
+  useEffect(() => {
+    const c = pendingCursorRef.current;
+    if (c === null) return;
+    pendingCursorRef.current = null;
+    const sel = { start: c, end: c };
+    selectionCaptureRef.current.track(sel);
+    setForcedSelection(sel);
+  }, [cursorRequest]);
+  useEffect(() => {
+    if (!forcedSelection) return;
+    const id = setTimeout(() => setForcedSelection(undefined), 120);
+    return () => clearTimeout(id);
+  }, [forcedSelection]);
+  const onComposerSelectionChange = (e: { nativeEvent: { selection: TextSelection } }) => selectionCaptureRef.current.track(e.nativeEvent.selection);
   // app#237 —— 桌面端输入区高度可拖拽:根容器高度决定上界(消息区至少留 200px),
   // 值全局持久化(切会话 / 重启保持)。分隔条在输入区上沿,向上拖变高。
   const [rootHeight, setRootHeight] = useState(0);
@@ -517,25 +541,58 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
   const [inputMode, setInputMode] = useState<ComposerInputMode>('keyboard');
   const focusAfterInsertRef = useRef(false);
   useEffect(() => { void loadComposerInputMode().then(setInputMode).catch(() => {}); }, []);
+  const cursorAtEndAfterFocusRef = useRef(false);
   const applyComposerTransition = (tr: ComposerModeTransition) => {
     if (tr.focusInput) focusAfterInsertRef.current = true;
+    if (tr.cursorAtEnd) cursorAtEndAfterFocusRef.current = true;
     if (tr.mode) setInputMode(tr.mode);
     if (tr.mode && tr.persist) void saveComposerInputMode(tr.mode);
   };
   // 语音输入(按住说话):识别结果接到草稿后面,不自动发送。🔴 松手后留在语音模式、不聚焦输入框
   // (owner:「按住说话之后，别直接把输入法弹出来」):文字进「按住 说话」上方的草稿卡片,右格变「发送」。
-  const voice = useVoiceInput({
-    onInsert: text => {
+  // 输入框麦克风 / 桌面麦克风:插到按下时冻结的光标处(选中了就替换),光标落在插入文字之后,焦点还给输入框
+  // (用户本来就在打字,键盘留着)。
+  const insertVoiceText = (text: string) => {
+    const source = voiceSourceRef.current;
+    const frozen = selectionCaptureRef.current.take();
+    if (!refocusAfterInsert(source)) {
       setDraft(d => insertRecognized(d, text));
       applyComposerTransition(afterRecognized());
+      return;
+    }
+    const r = insertAtSelection(draftRef.current, text, voiceInsertTarget(source, frozen));
+    draftRef.current = r.value;
+    setDraft(r.value);
+    placeCursor(r.cursor);
+    mainComposerRef.current?.focus();
+  };
+  const voice = useVoiceInput({
+    onInsert: text => {
+      insertVoiceText(text);
     },
     onNotice: setComposerNotice,
   });
+  // 每个麦克风包一层:按下第一时间记来源(+ 冻结选区);上一句还在识别时不覆盖。
+  const voiceHandlersFor = (source: VoiceSource) => withPressStart(
+    voice.micHandlers,
+    () => {
+      // 网页 / 桌面 webview:直接读 textarea 的当前选区(选区事件是异步的,程序化改的选区可能根本不报);
+      // 原生上 ref 不是 DOM 节点 → null → 用 onSelectionChange 跟踪到的值。
+      const host = hostSelection(mainComposerRef.current);
+      if (host) selectionCaptureRef.current.track(host);
+      voiceSourceRef.current = beginVoicePress(source, selectionCaptureRef.current);
+    },
+    () => voice.state.phase === 'idle',
+  );
   const voiceMode = !desktop && voice.available && inputMode === 'voice';
+  // 键盘模式输入框里的小麦克风(手机 / 双栏;桌面用工具栏麦克风)。
+  const fieldMic = !desktop && voice.available && !voiceMode;
   // 微信式输入行(composer-row-layout.ts):输入超过 3 行 → 左上角 ⤢ 打开全屏编辑(同一份草稿)。
   const [fullEditorOpen, setFullEditorOpen] = useState(false);
   const fullEditorEvent = (event: FullEditorEvent): boolean => {
     const t = nextFullEditor(fullEditorOpen, event);
+    // 全屏编辑器里改过的草稿,主输入框的选区已不可信 → 当作光标在末尾。
+    if (fullEditorOpen && !t.open) selectionCaptureRef.current.reset();
     setFullEditorOpen(t.open);
     return t.handled;
   };
@@ -557,7 +614,13 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
   useEffect(() => {
     if (voiceMode || !focusAfterInsertRef.current) return;
     focusAfterInsertRef.current = false;
-    const id = setTimeout(() => mainComposerRef.current?.focus(), 30);
+    const atEnd = cursorAtEndAfterFocusRef.current;
+    cursorAtEndAfterFocusRef.current = false;
+    const id = setTimeout(() => {
+      mainComposerRef.current?.focus();
+      // 点草稿卡片进来:光标放草稿末尾(之后用户挪到哪,输入框麦克风就插到哪)。
+      if (atEnd) placeCursor(draftRef.current.length);
+    }, 30);
     return () => clearTimeout(id);
   }, [voiceMode]);
   const toggleInputMode = () => {
@@ -2135,6 +2198,8 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
             placeholderTextColor={colors.textMuted}
             value={draft}
             onChangeText={setDraft}
+            onSelectionChange={onComposerSelectionChange}
+            selection={forcedSelection}
             onKeyPress={(event) => {
               const key = event.nativeEvent as typeof event.nativeEvent & { ctrlKey?: boolean; metaKey?: boolean; shiftKey?: boolean; isComposing?: boolean; keyCode?: number; which?: number };
               if (!shouldSendOnEnter(key)) return;
@@ -2161,7 +2226,7 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
                 </Pressable>
               ) : null}
               <Text style={styles.shortcutHint}>Enter 发送 · Shift/Ctrl/⌘+Enter 换行</Text>
-              {voice.available ? <VoiceMicButton voice={voice} size={20} /> : null}
+              {voice.available ? <VoiceMicButton voice={voice} size={20} handlers={voiceHandlersFor('desktopMic')} /> : null}
               <Pressable
                 style={({ pressed }) => [styles.desktopSend, !canSend(draft, attached.length > 0, sending) && styles.desktopSendDisabled, pressed && { opacity: 0.7 }]}
                 onPress={() => void submit()}
@@ -2215,12 +2280,14 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
             <Text style={[styles.mobilePriorityText, sendPriority === 'high' && styles.priorityButtonTextActive]}>⚡</Text>
           </Pressable>
         ) : null}
-        {/* 语音模式:整条输入框换成「按住 说话」;键盘模式:输入框(不再有框内的小麦克风)。 */}
+        {/* 语音模式:整条输入框换成「按住 说话」(接草稿末尾);键盘模式:输入框 + 框内右侧的小麦克风
+            (按住说话,插到光标处)。 */}
         <View style={styles.inputWrap}>
-        {voiceMode ? <VoiceHoldBar voice={voice} /> : (
+        {voiceMode ? <VoiceHoldBar voice={voice} handlers={voiceHandlersFor('holdBar')} /> : (
+        <>
         <TextInput
           ref={mainComposerRef}
-          style={[styles.input, styles.inputInWrap, Platform.OS === 'web' && { height: webComposerInputHeight(inputLines), flexBasis: 'auto' }]}
+          style={[styles.input, styles.inputInWrap, fieldMic && styles.inputWithFieldMic, Platform.OS === 'web' && { height: webComposerInputHeight(inputLines), flexBasis: 'auto' }]}
           // Web only: a textarea without rows is 2 lines tall, not 1 (native TextInput starts at
           // one line). rows=1 + the explicit height above make the web export lay out like the
           // phone, so the Playwright alignment check measures the real geometry.
@@ -2229,6 +2296,8 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
           placeholderTextColor={colors.textMuted}
           value={draft}
           onChangeText={setDraft}
+          onSelectionChange={onComposerSelectionChange}
+          selection={forcedSelection}
           onContentSizeChange={event => onInputContentSize(event.nativeEvent.contentSize.height)}
           onFocus={() => plusEvent('inputFocus')}
           onKeyPress={(event) => {
@@ -2247,6 +2316,8 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
           }}
           multiline
         />
+        {fieldMic ? <VoiceFieldMic voice={voice} handlers={voiceHandlersFor('fieldMic')} /> : null}
+        </>
         )}
         </View>
         <ComposerRightSlot
@@ -2640,6 +2711,8 @@ const makeStyles = () =>
   inputWrap: { flex: 1, justifyContent: 'flex-end' },
   // flex 归零:输入框在列方向的 inputWrap 里,flexBasis 0 会被压扁。
   inputInWrap: { flex: 0, alignSelf: 'stretch' },
+  // Room for the in-field mic (VoiceFieldMic) so text never runs under it.
+  inputWithFieldMic: { paddingRight: composerInputPadRightWithMic(composerControlSize(uiScale().densityFactor)) },
   sendTextDisabled: { color: colors.textMuted },
 });
 
