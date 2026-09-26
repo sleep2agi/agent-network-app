@@ -119,6 +119,10 @@ jobs:
           releaseBody: |-
             Signed and notarized stable update for macOS (Apple Silicon) and Windows (x64).
 
+            What's new in 0.2.121:
+            - 长按节点弹出菜单：标为已读/未读、置顶、免打扰、节点详情、不显示该对话（电脑版右键同一菜单）。
+            - 修复多个页面和弹窗的顶部留白：节点信息页不再多出空白，弹窗不再压到状态栏。
+
             What's new in 0.2.120:
             - 定时任务选择执行节点改成可搜索列表（支持拼音、最近使用、按团队分组），修复弹窗顶部按钮压到状态栏。
 
