@@ -119,6 +119,9 @@ jobs:
           releaseBody: |-
             Signed and notarized stable update for macOS (Apple Silicon) and Windows (x64).
 
+            What's new in 0.2.123:
+            - 语音可以插入到光标位置：键盘模式下输入框里的小麦克风，按住说话，文字插到光标处或替换选中文字；语音/键盘切换按钮改成微信同款图标。
+
             What's new in 0.2.122:
             - 简化更新：去掉 app 里的『下载线路』选项，自动选择最快的下载来源。
 
