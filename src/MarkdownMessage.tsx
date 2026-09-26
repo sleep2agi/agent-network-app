@@ -1,5 +1,6 @@
 import { Fragment, useState, type ReactNode } from 'react';
-import { Linking, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Linking, Platform, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { Text } from './ui-text';
 import { openUrl } from '@tauri-apps/plugin-opener';
 import { colors, onThemeChange, spacing } from './theme';
 import { isSafeMarkdownUrl, parseInline, parseMarkdownBlocks, type InlineNode } from './markdown-model';

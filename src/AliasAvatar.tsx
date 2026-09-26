@@ -1,7 +1,9 @@
 import { useEffect, useState } from 'react';
-import { Image, Text, View } from 'react-native';
+import { Image, View } from 'react-native';
+import { Text } from './ui-text';
 
 import { getAvatarSource, useAvatarsVersion } from './lib/avatars';
+import { ds } from './ui-scale';
 
 // Port of the dashboard's AliasAvatar (same hash, same palette): the
 // same alias renders the same color on web and mobile (#220 round 27,
@@ -63,7 +65,10 @@ export const aliasInitial = (alias?: string): string => {
   }
 };
 
-export default function AliasAvatar({ alias, size = 32 }: { alias: string; size?: number }) {
+export default function AliasAvatar({ alias, size: baseSize = 32 }: { alias: string; size?: number }) {
+  // 界面密度 (src/ui-scale.ts): every avatar scales here, so callers keep passing the design size.
+  // A container sized to the avatar must use ds() on the same number (AgentsScreen rowStyles.avatar).
+  const size = ds(baseSize);
   const c = aliasAvatarColors(alias);
   // Subscribe to hub-avatar hydration so a cross-device avatar change (or its
   // arrival after the first paint) re-resolves this avatar. Re-render on bump.
@@ -93,7 +98,7 @@ export default function AliasAvatar({ alias, size = 32 }: { alias: string; size?
         overflow: 'hidden',
       }}
     >
-      <Text style={{ color: c.text, fontSize: Math.max(10, Math.round(size * 0.42)), fontWeight: '600' }}>
+      <Text fixedSize style={{ color: c.text, fontSize: Math.max(10, Math.round(size * 0.42)), fontWeight: '600' }}>
         {aliasInitial(alias)}
       </Text>
       {showImage ? (

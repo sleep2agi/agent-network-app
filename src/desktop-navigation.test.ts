@@ -26,8 +26,8 @@ check(
 );
 check(
   'rail brand mark is oversized inside the 36px slot so it matches the nav icons',
-  /railBrandMark:\s*\{[^}]*width:\s*54[^}]*height:\s*54/.test(source) &&
-    /railBrand:\s*\{[^}]*width:\s*36[^}]*height:\s*36/.test(source),
+  /railBrandMark:\s*\{[^}]*width:\s*ds\(54\)[^}]*height:\s*ds\(54\)/.test(source) &&
+    /railBrand:\s*\{[^}]*width:\s*ds\(36\)[^}]*height:\s*ds\(36\)/.test(source),
 );
 check('chat header settings opens read-only info for the current node', source.includes("onOpenNodeSettings={() => setScreen({ name: 'nodeInfo', alias: screen.alias })}"));
 const detachedStart = source.indexOf('if (dedicatedChatWindow && cfg');
@@ -43,7 +43,7 @@ const src = source.replace(/\r\n?/g, '\n');
 check('rail active state is an accent-tinted pill token', src.includes('railButtonActive: { backgroundColor: colors.railActiveBg }'));
 check('rail hover/focus state has its own surface', src.includes('railButtonHover: { backgroundColor: colors.railHover }') && src.includes("surface === 'hover' && styles.railButtonHover"));
 check('rail buttons go through the shared RailButton with hover tooltip', src.includes('function RailButton(') && src.includes('railTooltipVisible(hovered ? tab.key : null, tab.key, true)'));
-check('rail is 64 wide with a hairline divider', src.includes('rail: { width: 64, backgroundColor: colors.railBg, borderRightWidth: StyleSheet.hairlineWidth'));
+check('rail is 64 wide (× 界面密度) with a hairline divider', src.includes('rail: { width: ds(64), backgroundColor: colors.railBg, borderRightWidth: StyleSheet.hairlineWidth'));
 check('rail badge is a pill not inline text', src.includes("railBadge: { position: 'absolute'"));
 check('server workspace has a dedicated sidebar', source.includes('<ServerSidebar cfg={cfg}') && source.includes('serverSectionForScreen(screen)'));
 check('server workspace exposes node inventory', source.includes("screen.name === 'serverNodes'") && source.includes("name: 'serverNodeDetail'"));

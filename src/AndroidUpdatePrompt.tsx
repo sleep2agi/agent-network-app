@@ -1,5 +1,6 @@
 import { useSyncExternalStore } from 'react';
-import { ActivityIndicator, Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Modal, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { Text } from './ui-text';
 import { androidPromptVisible, INSTALL_PERMISSION_HINT } from './android-update-core';
 import {
   androidUpdatePromptDismissed,

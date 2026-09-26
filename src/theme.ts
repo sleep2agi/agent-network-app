@@ -155,6 +155,15 @@ export const onThemeChange = (l: (m: ThemeMode) => void): (() => void) => {
   };
 };
 
+/**
+ * Re-run every onThemeChange listener without a palette change. ui-scale.ts calls this when the
+ * 字体大小 / 界面密度 changes: the listeners are what rebuild module-level `makeStyles()`, and
+ * the density lives in `spacing`, which those styles read. (Listeners receive the unchanged mode.)
+ */
+export const restyleAll = (): void => {
+  listeners.forEach(l => l(mode));
+};
+
 /** 偏好或系统读数变了(生效主题不一定变)。设置页靠它刷新「跟随系统(当前:…)」。 */
 export const onThemePreferenceChange = (l: () => void): (() => void) => {
   preferenceListeners.push(l);
@@ -188,7 +197,11 @@ export const statusColor = (status: string, online: boolean): string => {
   }
 };
 
-export const spacing = { xs: 4, sm: 8, md: 12, lg: 16, xl: 24 };
+/** Unscaled spacing scale. `spacing` below is this × the 界面密度 factor (src/ui-scale.ts). */
+export const SPACING_BASE = { xs: 4, sm: 8, md: 12, lg: 16, xl: 24 } as const;
+// Mutable like `colors`: ui-scale.ts rewrites it IN PLACE when the density changes and then
+// runs restyleAll(), so every module-level makeStyles() picks up the new values.
+export const spacing: { xs: number; sm: number; md: number; lg: number; xl: number } = { ...SPACING_BASE };
 
 // 极简(2026-09-24):圆角、字号、字重各收成一套刻度。原来源码里散着 14 种圆角、14 种字号、
 // 51 处 700 粗体——视觉上的「乱」主要来自这里,不是颜色。新代码只用这三组值。

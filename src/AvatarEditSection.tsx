@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import { Image, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
+import { Image, Pressable, ScrollView, View } from 'react-native';
+import { Text, TextInput } from './ui-text';
 
 import AliasAvatar from './AliasAvatar';
 import { fetchHubNodes, HubConfig, putNodeAvatar } from './api';

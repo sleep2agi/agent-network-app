@@ -13,7 +13,8 @@
 // 事件),点「忽略全部」→ `tray_dismiss_all` → 主窗口用它已有的 agent 级 ack 去清。
 // 面板只负责画和转述。
 import { useCallback, useEffect, useState, useSyncExternalStore } from 'react';
-import { Platform, Pressable, ScrollView, Text, View } from 'react-native';
+import { Platform, Pressable, ScrollView, View } from 'react-native';
+import { Text } from './ui-text';
 import AliasAvatar from './AliasAvatar';
 import { colors, onThemeChange, parseStoredThemePreference, setThemePreference, themeMode } from './theme';
 import { onDesktopThemeStorageChange } from './desktop-theme-storage';

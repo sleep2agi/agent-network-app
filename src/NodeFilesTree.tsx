@@ -6,9 +6,10 @@
 //  - drawer:窄窗 / 安卓双栏右栏里,工具条上一个「目录」按钮,点开从右侧滑出一层抽屉。
 // 键盘(web):↑/↓ 移动,→ 展开 / 进子项,← 收起 / 回父目录,Enter 打开文件或展开收起目录。
 
-import { Ionicons } from '@expo/vector-icons';
+import { Ionicons } from './icons';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Modal, Platform, Pressable, ScrollView, Text, View, useWindowDimensions } from 'react-native';
+import { ActivityIndicator, Modal, Platform, Pressable, ScrollView, View, useWindowDimensions } from 'react-native';
+import { Text } from './ui-text';
 
 import { entryIcon } from './node-files';
 import { arrowIntent, clampTreeWidth, FILES_TREE_DEFAULT_WIDTH, moveFocus, type TreeRow } from './node-files-tree';

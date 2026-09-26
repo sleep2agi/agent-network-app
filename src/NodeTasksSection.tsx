@@ -9,7 +9,8 @@
 // 数据来自 /api/tasks?to_name=<alias>(与聊天时间线同一张表);分组是纯函数 node-task-groups.ts
 // (运行中/队列仍由 node-tasks.ts 的 partitionNodeTasks( 决定)。这里只管取数、轮询、三种状态与刷新。
 import { useCallback, useEffect, useState } from 'react';
-import { ActivityIndicator, Pressable, Text, View } from 'react-native';
+import { ActivityIndicator, Pressable, View } from 'react-native';
+import { Text } from './ui-text';
 import { fetchTasks, type HubConfig } from './api';
 import AliasAvatar from './AliasAvatar';
 import MarkdownMessage, { WRAP_ANYWHERE } from './MarkdownMessage';

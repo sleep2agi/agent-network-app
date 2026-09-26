@@ -6,12 +6,14 @@
 //
 // The decision of *when* this shows lives in src/nav-chrome.ts (pure + tested).
 import { useEffect, useMemo, useState } from 'react';
-import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+import { Image, Pressable, StyleSheet, View } from 'react-native';
+import { Text } from './ui-text';
+import { Ionicons } from './icons';
 import { colors } from './theme';
 import { APP_VERSION } from './version';
 import { railBadgeText, railIconFor } from './rail-nav';
-import { MOBILE_RAIL_ITEM, MOBILE_RAIL_WIDTH, railUnreadTotal } from './nav-chrome';
+import { mobileRailItem, mobileRailWidth, railUnreadTotal } from './nav-chrome';
+import { ds, uiScale } from './ui-scale';
 import { getUnreadSnapshot, subscribeUnread } from './unread-store';
 import { agentUnreadCounts } from './agent-unread-counts';
 
@@ -41,7 +43,7 @@ function useAgentsUnreadTotal(): number {
 }
 
 export default function MobileNavRail({ tabs, active, onSelect, insetLeft, insetBottom, showBrand }: Props) {
-  // AppRoot is keyed by theme, so this remounts on a theme switch and rebuilds its styles.
+  // AppRoot is keyed by theme + 界面密度 (uiScaleKey), so this remounts on either change and rebuilds its styles.
   const s = useMemo(makeStyles, []);
   const unread = useAgentsUnreadTotal();
   const main = tabs.filter(tab => tab.key !== 'settings');
@@ -65,21 +67,21 @@ export default function MobileNavRail({ tabs, active, onSelect, insetLeft, inset
         <View style={[s.indicator, selected && s.indicatorActive]}>
           <Ionicons
             name={railIconFor(tab, active) as keyof typeof Ionicons.glyphMap}
-            size={24}
+            size={24 /* density-scaled by ./icons */}
             color={selected ? colors.accent : colors.textSecondary}
           />
           {badge ? (
-            <View style={s.badge} testID={`nav-rail-badge-${tab.key}`}><Text style={s.badgeText}>{badge}</Text></View>
+            <View style={s.badge} testID={`nav-rail-badge-${tab.key}`}><Text dense style={s.badgeText}>{badge}</Text></View>
           ) : null}
         </View>
-        <Text style={[s.label, selected && s.labelActive]} numberOfLines={1}>{tab.label}</Text>
+        <Text dense style={[s.label, selected && s.labelActive]} numberOfLines={1}>{tab.label}</Text>
       </Pressable>
     );
   };
 
   return (
     <View
-      style={[s.rail, { width: MOBILE_RAIL_WIDTH + insetLeft, paddingLeft: insetLeft, paddingBottom: 8 + insetBottom }]}
+      style={[s.rail, { width: mobileRailWidth(uiScale().densityFactor) + insetLeft, paddingLeft: insetLeft, paddingBottom: 8 + insetBottom }]}
       testID="mobile-nav-rail"
       accessibilityRole="tablist"
     >
@@ -99,18 +101,19 @@ export default function MobileNavRail({ tabs, active, onSelect, insetLeft, inset
 const makeStyles = () => StyleSheet.create({
   rail: {
     alignItems: 'center',
-    paddingTop: 12,
+    paddingTop: ds(12),
     backgroundColor: colors.railBg,
     borderRightWidth: StyleSheet.hairlineWidth,
     borderRightColor: colors.border,
   },
-  brand: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
-  brandMark: { width: 58, height: 58 },
-  tabs: { flex: 1, paddingTop: 14, gap: 6, alignItems: 'center' },
+  brand: { width: ds(40), height: ds(40), alignItems: 'center', justifyContent: 'center' },
+  brandMark: { width: ds(58), height: ds(58) },
+  tabs: { flex: 1, paddingTop: ds(14), gap: ds(6), alignItems: 'center' },
   tabsCompact: { paddingTop: 0 },
   item: {
-    width: MOBILE_RAIL_ITEM.width,
-    height: MOBILE_RAIL_ITEM.height,
+    // 界面密度: 64×56 at 标准, 54×48 at 紧凑 (never under 48 — mobileRailItem).
+    width: mobileRailItem(uiScale().densityFactor).width,
+    height: mobileRailItem(uiScale().densityFactor).height,
     alignItems: 'center',
     justifyContent: 'center',
     gap: 3,
@@ -118,9 +121,9 @@ const makeStyles = () => StyleSheet.create({
   },
   itemPressed: { backgroundColor: colors.railHover },
   // Material 3 style active indicator: a pill behind the icon, label underneath.
-  indicator: { width: 52, height: 30, borderRadius: 15, alignItems: 'center', justifyContent: 'center' },
+  indicator: { width: ds(52), height: ds(30), borderRadius: ds(15), alignItems: 'center', justifyContent: 'center' },
   indicatorActive: { backgroundColor: colors.railActiveBg },
-  label: { color: colors.textSecondary, fontSize: 11, fontWeight: '500', maxWidth: MOBILE_RAIL_ITEM.width },
+  label: { color: colors.textSecondary, fontSize: 11, fontWeight: '500', maxWidth: mobileRailItem(uiScale().densityFactor).width },
   labelActive: { color: colors.accent, fontWeight: '600' },
   badge: {
     position: 'absolute', top: -3, right: 4, minWidth: 18, height: 18, borderRadius: 9, paddingHorizontal: 4,

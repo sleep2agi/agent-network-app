@@ -1,7 +1,8 @@
 import { useEffect, useRef } from 'react';
-import { Animated, Easing, Pressable, StyleSheet, Text } from 'react-native';
+import { Animated, Easing, Pressable, StyleSheet } from 'react-native';
+import { Text } from './ui-text';
 import { ACTUAL_NOTICE_A11Y, NOTICE_AUTO_DISMISS_MS, noticePalette, type SendNotice } from './actual-recipient';
-import { spacing, themeMode } from './theme';
+import { onThemeChange, spacing, themeMode } from './theme';
 
 /**
  * 一条自动消失的居中提示,只在**值得打断**的时候出现(排队 / Hub 改投了别的
@@ -50,7 +51,8 @@ export default function ActualRecipientNotice({
   );
 }
 
-const styles = StyleSheet.create({
+// Rebuilt on restyle (theme or 界面密度): reads density-scaled `spacing`.
+const makeStyles = () => StyleSheet.create({
   toast: {
     alignSelf: 'center',
     maxWidth: 420,
@@ -68,3 +70,5 @@ const styles = StyleSheet.create({
   title: { fontSize: 12, fontWeight: '600', marginRight: spacing.sm },
   detail: { fontSize: 12, flexShrink: 1 },
 });
+let styles = makeStyles();
+onThemeChange(() => { styles = makeStyles(); });

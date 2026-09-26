@@ -5,7 +5,8 @@
 // 样式约定同 NodeDetailScreen:`styles` 用 live binding、不解构;卡片
 // colors.card / 12 圆角 / spacing.lg;按钮沿用 retryBtn。
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Pressable, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, Pressable, View } from 'react-native';
+import { Text, TextInput } from './ui-text';
 
 import { fetchNodeConfig, updateNodeConfig, type HubConfig, type HubNode, type NodeConfigRead } from './api';
 import { styles } from './app-styles';

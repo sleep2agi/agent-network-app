@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
-import { ActivityIndicator, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View, type LayoutChangeEvent } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+import { ActivityIndicator, Pressable, RefreshControl, ScrollView, StyleSheet, View, type LayoutChangeEvent } from 'react-native';
+import { Text } from './ui-text';
+import { Ionicons } from './icons';
 import * as Clipboard from 'expo-clipboard';
 import { fetchServerVersion, fetchStatus, HubConfig, Session } from './api';
 import { pingHealth } from './server-ping';

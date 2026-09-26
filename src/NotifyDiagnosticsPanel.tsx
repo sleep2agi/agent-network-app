@@ -2,7 +2,8 @@
 // 这里把运行时的真实状态摊开,并能一键复制给维护者。行的内容来自 notify-diagnostics.diagnosticsRows,
 // 与「复制诊断信息」同一份。
 import { useEffect, useState, useSyncExternalStore } from 'react';
-import { Platform, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Platform, Pressable, StyleSheet, View } from 'react-native';
+import { Text } from './ui-text';
 import * as Clipboard from 'expo-clipboard';
 import { colors, onThemeChange, spacing } from './theme';
 import { APP_VERSION } from './version';

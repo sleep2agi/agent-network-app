@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
-import { Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Modal, Platform, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { Text, TextInput } from './ui-text';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Ionicons } from '@expo/vector-icons';
+import { Ionicons } from './icons';
 import { colors, onThemeChange, spacing } from './theme';
 import { selectableTextOf, selectTextSurface, type SelectTextMode } from './message-plain-text';
 

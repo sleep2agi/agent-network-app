@@ -4,7 +4,8 @@
 // 输入框永远是空的,状态行只显示「已配置 ✓ …a1b2」。密钥栏留空点保存 = 不改。
 
 import { useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, Pressable, StyleSheet, View } from 'react-native';
+import { Text, TextInput } from './ui-text';
 import { colors, onThemeChange, radius, spacing } from './theme';
 import { clearVoiceCredentials, loadVoiceCredentials, saveVoiceCredentials, voiceStorageKind } from './voice-credentials';
 import { initialForm, mergeOnSave, statusLabel, voiceConfigStatus, type VoiceCredentials, type VoiceForm } from './voice-credentials-model';

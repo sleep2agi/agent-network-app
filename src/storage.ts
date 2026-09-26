@@ -1,8 +1,9 @@
 import * as SecureStore from 'expo-secure-store';
 import * as FileSystem from 'expo-file-system/legacy';
 import { HubConfig, Session } from './api';
-import { loadDesktopThemeMode, saveDesktopThemeMode } from './desktop-theme-storage';
-export { onDesktopThemeStorageChange } from './desktop-theme-storage';
+import { loadDesktopThemeMode, loadDesktopUiScale, saveDesktopThemeMode, saveDesktopUiScale } from './desktop-theme-storage';
+export { onDesktopThemeStorageChange, onDesktopUiScaleStorageChange } from './desktop-theme-storage';
+import { UI_SCALE_STORAGE_KEY, parseStoredUiScale, serializeUiScale, type UiScalePrefs } from './ui-scale';
 
 // Token + server persist in the platform keystore (Android Keystore /
 // iOS Keychain) so login survives app restarts. Vincent tg 683 known
@@ -191,6 +192,28 @@ export const loadThemeMode = async (): Promise<string | null> => {
     return await SecureStore.getItemAsync(THEME_KEY);
   } catch {
     return null;
+  }
+};
+
+// 字体大小 / 界面密度 — per device, next to the theme (localStorage on desktop, SecureStore on mobile).
+// Nothing stored (every install before this setting) parses to "never chosen" → defaults.
+export const saveUiScalePrefs = async (prefs: UiScalePrefs): Promise<void> => {
+  const raw = serializeUiScale(prefs);
+  try {
+    if (saveDesktopUiScale(raw)) return;
+    await SecureStore.setItemAsync(UI_SCALE_STORAGE_KEY, raw);
+  } catch {
+    /* best-effort, like the theme */
+  }
+};
+
+export const loadUiScalePrefs = async (): Promise<UiScalePrefs> => {
+  try {
+    const desktop = loadDesktopUiScale();
+    if (desktop !== undefined) return parseStoredUiScale(desktop);
+    return parseStoredUiScale(await SecureStore.getItemAsync(UI_SCALE_STORAGE_KEY));
+  } catch {
+    return parseStoredUiScale(null);
   }
 };
 

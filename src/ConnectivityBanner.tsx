@@ -1,5 +1,6 @@
 import { useSyncExternalStore } from 'react';
-import { Text, View } from 'react-native';
+import { View } from 'react-native';
+import { Text } from './ui-text';
 
 import { bannerText, connectivityState, connectivityVersion, subscribeConnectivity } from './connectivity';
 

@@ -64,6 +64,9 @@ export const SETTINGS_CATEGORIES: readonly SettingsCategory[] = [
     icon: 'color-palette-outline',
     rows: [
       { key: 'theme', label: '主题', keywords: ['深色', '浅色', '暗色', '跟随系统', '系统', '自动', 'dark', 'light', 'system', 'auto', 'theme'] },
+      // 字体大小 / 界面密度(src/ui-scale.ts)。「图标大小」是 Vincent 的原话,归在界面密度里。
+      { key: 'fontSize', label: '字体大小', keywords: ['字号', '文字大小', '字体', '大字', 'font', 'font size', 'text size'] },
+      { key: 'density', label: '界面密度', keywords: ['图标大小', '图标', '紧凑', '宽松', '间距', '行高', '头像大小', 'density', 'icon', 'compact', 'spacing'] },
     ],
   },
   {

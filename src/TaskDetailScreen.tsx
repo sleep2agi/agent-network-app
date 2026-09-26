@@ -1,13 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
-import {
-  ActivityIndicator,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Text,
-  View,
-} from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+import { ActivityIndicator, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { Text } from './ui-text';
+import { Ionicons } from './icons';
 import AliasAvatar from './AliasAvatar';
 import {
   fetchTaskDetail,

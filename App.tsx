@@ -1,21 +1,7 @@
-import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
-import {
-  ActivityIndicator,
-  BackHandler,
-  Image,
-  KeyboardAvoidingView,
-  Platform,
-  Pressable,
-  SafeAreaView,
-  ScrollView,
-  StatusBar,
-  StyleSheet,
-  Text,
-  TextInput,
-  useWindowDimensions,
-  View,
-} from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
+import { ActivityIndicator, BackHandler, Image, KeyboardAvoidingView, Platform, Pressable, SafeAreaView, ScrollView, StatusBar, StyleSheet, useWindowDimensions, View } from 'react-native';
+import { Text, TextInput } from './src/ui-text';
+import { Ionicons } from './src/icons';
 import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { purgeLegacyAttachmentCache } from './src/AuthedThumb';
 import { prefetchStatus, login, fetchHubNodes, HubConfig } from './src/api';
@@ -39,11 +25,13 @@ import LogsScreen from './src/LogsScreen';
 import ScheduledTasksScreen from './src/ScheduledTasksScreen';
 import ConnectivityBanner from './src/ConnectivityBanner';
 import type { HostSupervisorDaemon } from './src/api';
-import { clearConfig, listHubProfiles, loadConfig, loadHubProfile, loadLocalAvatars, loadOutbox, loadForwardOperations, saveForwardOperations, loadThemeMode, markHubProfileRequiresReauth, onDesktopThemeStorageChange, removeHubProfile, saveConfig, saveLocalAvatars, saveOutbox, switchHubProfile, type HubProfile } from './src/storage';
+import { clearConfig, listHubProfiles, loadConfig, loadHubProfile, loadLocalAvatars, loadOutbox, loadForwardOperations, saveForwardOperations, loadThemeMode, loadUiScalePrefs, markHubProfileRequiresReauth, onDesktopThemeStorageChange, onDesktopUiScaleStorageChange, removeHubProfile, saveConfig, saveLocalAvatars, saveOutbox, switchHubProfile, type HubProfile } from './src/storage';
 import { clearProfileUnauthorized, onProfileUnauthorized } from './src/profile-auth-state';
 import { initOutbox } from './src/outbox';
 import { createForwardPersistence, initForwardController } from './src/forward-controller';
 import { loadDesktopThemeMode } from './src/desktop-theme-storage';
+import { loadDesktopUiScale } from './src/desktop-theme-storage';
+import { onUiScaleChange, parseStoredUiScale, parseUiScaleSim, setOsFontScale, setUiScaleLayoutWide, setUiScaleLegacySim, setUiScalePrefs, ds, uiScale, uiScaleKey } from './src/ui-scale';
 import { colors, onThemeChange, parseStoredThemePreference, setThemeMode, setThemePreference, spacing, themeMode } from './src/theme';
 import { installSystemThemeFollower } from './src/system-color-scheme';
 import { installWebScrollbarTheme } from './src/web-scrollbar';
@@ -74,7 +62,7 @@ import TwoPaneDivider from './src/TwoPaneDivider';
 import { loadListPaneWidth, saveListPaneWidth } from './src/agent-list-prefs';
 import { bumpLayoutGeneration } from './src/layout-handoff';
 import MobileNavRail from './src/MobileNavRail';
-import { contentWidthBesideRail, navActiveKey, navChromeFor, railShowsBrand, screenForNavPress } from './src/nav-chrome';
+import { contentWidthBesideRail, mobileRailWidth, navActiveKey, navChromeFor, railShowsBrand, screenForNavPress } from './src/nav-chrome';
 
 type Screen =
   | { name: 'login' }
@@ -135,6 +123,9 @@ export default function App() {
   {
     const early = loadDesktopThemeMode();
     if (early !== undefined) setThemePreference(parseStoredThemePreference(early));
+    // 字体大小 / 界面密度: same sync read on desktop, so the first frame is already at the saved scale.
+    const earlyScale = loadDesktopUiScale();
+    if (earlyScale !== undefined) setUiScalePrefs(parseStoredUiScale(earlyScale));
   }
 
   // One-time cleanup of attachment caches written before the download fix.
@@ -230,6 +221,9 @@ function AppRoot() {
   // Keyed remount on theme switch: module-level styles were already
   // rebuilt by the onThemeChange listeners, the new key re-renders the tree.
   const [theme, setTheme] = useState(themeMode());
+  // 字体大小 / 界面密度 (src/ui-scale.ts): part of the same keyed remount. The module-level styles were
+  // already rebuilt by ui-scale's restyleAll() when this key changes.
+  const scaleKey = useSyncExternalStore(onUiScaleChange, uiScaleKey, uiScaleKey);
   useEffect(() => {
     // 0.2.83:窗口自己的底色也跟主题走——Overlay 标题栏区域和 webview 未画出的那一帧露出来的是它,
     // 默认是白的(Vincent 2026-09-22 macOS 深色主题顶部白条)。失败不抛,底色只是保底。
@@ -244,10 +238,18 @@ function AppRoot() {
   useEffect(() => onDesktopThemeStorageChange(mode => {
     setThemePreference(parseStoredThemePreference(mode));
   }), []);
+  useEffect(() => onDesktopUiScaleStorageChange(raw => setUiScalePrefs(parseStoredUiScale(raw))), []);
+  // Mobile has no sync store: load the saved scale once (desktop already did it above, before the first frame).
+  useEffect(() => {
+    if (loadDesktopUiScale() !== undefined) return;
+    let live = true;
+    void loadUiScalePrefs().then(p => { if (live) setUiScalePrefs(p); });
+    return () => { live = false; };
+  }, []);
   // RN's SafeAreaView only covers iOS; Android edge-to-edge draws the
   // tab bar under the gesture bar (Vincent tg 802) — pad by the real inset.
   const insets = useSafeAreaInsets();
-  const { width, height } = useWindowDimensions();
+  const { width, height, fontScale } = useWindowDimensions();
   const tauriDesktop = Platform.OS === 'web' && !!(globalThis as any).__TAURI_INTERNALS__;
   // Layout choice lives in src/wide-layout.ts (pure + tested). Desktop is still exactly
   // `tauriDesktop && width >= 860`; Android at ≥ 700 dp (unfolded foldables, tablets)
@@ -269,6 +271,22 @@ function AppRoot() {
     if (lastLayout.current === 'twoPane' || layout === 'twoPane') bumpLayoutGeneration();
     lastLayout.current = layout;
   }
+  // 字体大小 / 界面密度 inputs: the wide two-pane defaults to 紧凑, and the OS font scale is composed
+  // (capped) with the in-app choice. Layout effect → the re-keyed render happens before paint.
+  // Web only: `?osFontScale=1.3` / `?uiScaleSim=legacy` simulate a device font scale for screenshots.
+  const scaleSim = useMemo(() => (Platform.OS === 'web' ? parseUiScaleSim(String((globalThis as any).location?.search ?? '')) : parseUiScaleSim('')), []);
+  useLayoutEffect(() => {
+    setUiScaleLegacySim(scaleSim.legacy);
+    setOsFontScale(scaleSim.osFontScale ?? fontScale ?? 1);
+    setUiScaleLayoutWide(layout === 'twoPane');
+  }, [layout, fontScale, scaleSim]);
+  // A scale change remounts the whole tree (the key below). Carry the open chat's draft / node tab over
+  // it exactly like a fold/unfold does (src/layout-handoff.ts): bump in the render that changes the key.
+  const lastScaleKey = useRef(scaleKey);
+  if (lastScaleKey.current !== scaleKey) {
+    bumpLayoutGeneration();
+    lastScaleKey.current = scaleKey;
+  }
   const twoPaneSelection = layout === 'twoPane' ? paneSelectionFor(screen) : null;
   // Navigation chrome (src/nav-chrome.ts): the two-pane gets a left rail like the desktop
   // app (Vincent 0.2.100: 「下面那一栏放在左边会好一点」); the phone keeps its bottom tabs.
@@ -276,7 +294,7 @@ function AppRoot() {
   const navActive = navActiveKey(screen.name);
   const railShown = navChrome === 'rail';
   // Width to the right of the rail; the two panes split this, not the whole window.
-  const paneAreaWidth = railShown ? contentWidthBesideRail(width, insets.left, insets.right) : width;
+  const paneAreaWidth = railShown ? contentWidthBesideRail(width, insets.left, insets.right, mobileRailWidth(uiScale().densityFactor)) : width;
   // 0.2.106: fixed 320 dp by default, dragged by the user (TwoPaneDivider), remembered per
   // device. listPaneWidth is the saved preference; twoPaneListWidth clamps it to 260–420 and
   // to what the current area leaves for the chat.
@@ -304,7 +322,7 @@ function AppRoot() {
     );
   }, [cfg?.profileId, cfg?.serverUrl, trayWindow]);
   const tabBarInset = Platform.OS === 'android' ? insets.bottom : 0;
-  const workspaceKey = `${theme}:${cfg?.profileId ?? cfg?.serverUrl ?? 'login'}`;
+  const workspaceKey = `${theme}:${scaleKey}:${cfg?.profileId ?? cfg?.serverUrl ?? 'login'}`;
 
   const hydrateProfileLocalState = async (profileCfg: HubConfig | null) => {
     const profileId = profileCfg?.profileId;
@@ -1021,21 +1039,21 @@ const makeDesktopStyles = () => StyleSheet.create({
   shell: { flex: 1, flexDirection: 'row', backgroundColor: colors.bg },
   // 微信/飞书式 rail:64 宽、比列表深一档的底、右侧发丝线;按钮 40×40 等距 12;
   // 激活 = 10 圆角淡 accent 底;悬停/聚焦 = 浅底;提示条挂在右侧。
-  rail: { width: 64, backgroundColor: colors.railBg, borderRightWidth: StyleSheet.hairlineWidth, borderRightColor: colors.border, alignItems: 'center', paddingTop: 14, paddingBottom: 10, zIndex: 10, overflow: 'visible' },
-  railBrand: { width: 36, height: 36, alignItems: 'center', justifyContent: 'center' },
-  railBrandMark: { width: 54, height: 54 },
-  railTabs: { flex: 1, paddingTop: 18, gap: 12, alignItems: 'center' },
-  railSlot: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
-  railButton: { width: 40, height: 40, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
+  rail: { width: ds(64), backgroundColor: colors.railBg, borderRightWidth: StyleSheet.hairlineWidth, borderRightColor: colors.border, alignItems: 'center', paddingTop: ds(14), paddingBottom: ds(10), zIndex: 10, overflow: 'visible' },
+  railBrand: { width: ds(36), height: ds(36), alignItems: 'center', justifyContent: 'center' },
+  railBrandMark: { width: ds(54), height: ds(54) },
+  railTabs: { flex: 1, paddingTop: ds(18), gap: ds(12), alignItems: 'center' },
+  railSlot: { width: ds(40), height: ds(40), alignItems: 'center', justifyContent: 'center' },
+  railButton: { width: ds(40), height: ds(40), borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
   railButtonActive: { backgroundColor: colors.railActiveBg },
   railButtonHover: { backgroundColor: colors.railHover },
   railBadge: { position: 'absolute', top: 3, right: 3, minWidth: 16, height: 16, borderRadius: 8, paddingHorizontal: 4, backgroundColor: colors.failed, alignItems: 'center', justifyContent: 'center' },
   railBadgeText: { color: '#fff', fontSize: 9, fontWeight: '600', lineHeight: 12 },
-  railTooltip: { position: 'absolute', left: 48, top: 8, paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6, backgroundColor: colors.railTooltipBg, zIndex: 20 },
+  railTooltip: { position: 'absolute', left: ds(48), top: 8, paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6, backgroundColor: colors.railTooltipBg, zIndex: 20 },
   railTooltipText: { color: colors.railTooltipText, fontSize: 12, fontWeight: '500' },
   railSettings: { marginBottom: 0 },
   railVersion: { color: colors.textMuted, fontSize: 10, marginTop: 8, textAlign: 'center' },
-  conversations: { width: 310, borderRightWidth: 1, borderRightColor: colors.border, backgroundColor: themeMode() === 'light' ? '#fafafb' : colors.bg },
+  conversations: { width: ds(310), borderRightWidth: 1, borderRightColor: colors.border, backgroundColor: themeMode() === 'light' ? '#fafafb' : colors.bg },
   content: { flex: 1, minWidth: 0, backgroundColor: themeMode() === 'light' ? '#f2f4f7' : colors.bg },
   empty: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: spacing.sm },
   emptyTitle: { color: colors.textSecondary, fontSize: 16, fontWeight: '600' },

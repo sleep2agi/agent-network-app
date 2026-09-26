@@ -13,7 +13,8 @@
 //
 // 只在 Tauri 桌面壳 + Windows 渲染;macOS/网页/移动端返回 null。
 import { useEffect, useState, useSyncExternalStore } from 'react';
-import { Platform, Pressable, Text, View } from 'react-native';
+import { Platform, Pressable, View } from 'react-native';
+import { Text } from './ui-text';
 import { colors, onThemeChange, themeMode } from './theme';
 import { WINDOWS_TITLE_BAR_HEIGHT, isWindowsTauriShell } from './window-shell';
 

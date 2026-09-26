@@ -16,7 +16,8 @@
 // 纯逻辑(偏移、绕回、替换、跨节点切分、模式切换对应)在 rules-find.ts,有自执行测试。
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Platform, Pressable, Text, TextInput, View } from 'react-native';
+import { Platform, Pressable, View } from 'react-native';
+import { Text, TextInput } from './ui-text';
 
 import { colors, spacing, themeMode } from './theme';
 import type { RulesViewMode } from './node-rules-view';

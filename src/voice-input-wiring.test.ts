@@ -23,7 +23,7 @@ const wrapAt = chat.indexOf('<View style={styles.inputWrap}>');
 const mobileRow = chat.slice(wrapAt, chat.indexOf('</View>', wrapAt));
 ck('手机:麦克风在输入框包裹层里(输入框右侧)', mobileRow.includes('<VoiceMicButton voice={voice} style={styles.inputMic} />'));
 ck('手机:行仍是 ＋ / 输入框 / 发送(没有新增一个独立按钮位)', mobileRow.includes('<TextInput') && !mobileRow.includes('<Pressable'));
-ck('手机:有麦克风时输入框右侧留位', /inputWithMic: \{[^}]*paddingRight: 44/.test(chat));
+ck('手机:有麦克风时输入框右侧留位', /inputWithMic: \{[^}]*paddingRight: ds\(44\)/.test(chat));
 const desktopBar = chat.slice(chat.indexOf('<View style={styles.desktopToolbarRight}>'), chat.indexOf('styles.desktopSend,'));
 ck('桌面:麦克风在工具栏、发送左边', desktopBar.includes('<VoiceMicButton voice={voice} size={20} />'));
 ck('只在 voice.available 时画麦克风(纯网页不画)', (chat.match(/voice\.available \? <VoiceMicButton/g) ?? []).length === 2);

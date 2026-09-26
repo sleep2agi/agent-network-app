@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Platform, Pressable, StyleSheet } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+import { Ionicons } from './icons';
 import { colors } from './theme';
 import { applyStoredPinState, pinStorageKey, togglePinState } from './desktop-window-pin';
 
