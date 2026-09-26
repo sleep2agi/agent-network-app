@@ -1,0 +1,17 @@
+desktop v0.2.112 — 语音输入(豆包语音,按住说话)
+================================================================================
+
+A. 本版内容(0.2.111 版本号提交 #409 之后 main 上合入的 PR + 本 PR)
+--------------------------------------------------------------------------------
+  #410 语音输入:聊天框按住说话、松开转文字(豆包语音,凭据填在「设置 → 语音输入」,只存本机)。
+       新增原生依赖 expo-audio ~56.0.13(安卓 RECORD_AUDIO);Tauri 三个钥匙串命令;
+       macOS Info.plist 麦克风用途说明 + hardened runtime entitlement com.apple.security.device.audio-input。
+  本 PR(版本号)
+       版本号 8 个文件 → 0.2.112,android.versionCode 2111 → 2112;Cargo.lock 只改根包一段。
+       release-desktop-auto-update.yml 加 What's new in 0.2.112。
+
+B. 验证边界(如实)
+--------------------------------------------------------------------------------
+  本 PR 只改版本号与说明;功能验证见 #410。
+  发版时核对:macOS 签名/公证在新 entitlement 下通过;APK versionCode 2112、签名证书、
+  前台服务 remoteMessaging、清单含 RECORD_AUDIO、expo-audio 原生模块已编进 APK。
