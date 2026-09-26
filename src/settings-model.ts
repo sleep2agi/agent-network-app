@@ -14,7 +14,12 @@ export type SettingsRow = {
   readonly label: string;
   /** 额外可搜的词(同义词 / 英文),不显示。 */
   readonly keywords?: readonly string[];
+  /** 只在这些运行平台上出现(不写 = 全平台)。0.2.107:安卓的「后台保持连接」等。 */
+  readonly platforms?: readonly SettingsPlatform[];
 };
+
+/** desktop = Tauri 桌面壳;web = 浏览器里的网页版。 */
+export type SettingsPlatform = 'android' | 'ios' | 'desktop' | 'web';
 
 export type SettingsCategory = {
   readonly key: SettingsCategoryKey;
@@ -66,8 +71,15 @@ export const SETTINGS_CATEGORIES: readonly SettingsCategory[] = [
     label: '通知',
     icon: 'notifications-outline',
     rows: [
+      // 0.2.107 手机系统通知(安卓优先):总开关、提醒方式、按 agent 免打扰、后台保持连接、小米指引、测试。
+      { key: 'enabled', label: '新消息通知', keywords: ['系统通知', '通知权限', '推送', 'notification', 'push', 'permission'] },
+      { key: 'mode', label: '提醒方式', keywords: ['仅新消息', '每条消息', '频率', 'mode'], platforms: ['android', 'ios'] },
       { key: 'sound', label: '消息提示音', keywords: ['声音', '铃声', 'sound', 'chime'] },
       { key: 'quiet', label: '免打扰时段', keywords: ['勿扰', '静音', 'quiet', 'dnd'] },
+      { key: 'muted', label: '消息免打扰的 agent', keywords: ['屏蔽', '不提醒', 'mute'] },
+      { key: 'keepAlive', label: '后台保持连接', keywords: ['后台', '保活', '常驻', '前台服务', 'keep alive', 'background'], platforms: ['android'] },
+      { key: 'xiaomiGuide', label: '小米/HyperOS 后台设置指引', keywords: ['小米', '澎湃', 'miui', 'hyperos', 'xiaomi', '自启动', '省电', '电池'], platforms: ['android'] },
+      { key: 'test', label: '发送测试通知', keywords: ['测试', 'test'], platforms: ['android', 'ios'] },
     ],
   },
   {
@@ -82,6 +94,18 @@ export const SETTINGS_CATEGORIES: readonly SettingsCategory[] = [
 ];
 
 const normalize = (s: string) => s.trim().toLowerCase();
+
+/** 不传 platform = 不按平台筛(测试/旧调用方)。 */
+export function rowOnPlatform(row: SettingsRow, platform: SettingsPlatform | undefined): boolean {
+  if (!platform || !row.platforms) return true;
+  return row.platforms.includes(platform);
+}
+
+/** Platform.OS + 是否在 Tauri 壳里 → 设置页的平台。 */
+export function settingsPlatform(os: string, tauri: boolean): SettingsPlatform {
+  if (os === 'android' || os === 'ios') return os;
+  return tauri ? 'desktop' : 'web';
+}
 
 export function rowMatches(row: SettingsRow, query: string): boolean {
   const q = normalize(query);
@@ -98,11 +122,12 @@ export function filterSettings(
   query: string,
   available: Partial<Record<SettingsCategoryKey, boolean>> = {},
   categories: readonly SettingsCategory[] = SETTINGS_CATEGORIES,
+  platform?: SettingsPlatform,
 ): SettingsCategory[] {
   const out: SettingsCategory[] = [];
   for (const cat of categories) {
     if (cat.conditional && available[cat.key] !== true) continue;
-    const rows = cat.rows.filter((r) => rowMatches(r, query));
+    const rows = cat.rows.filter((r) => rowOnPlatform(r, platform) && rowMatches(r, query));
     if (rows.length) out.push({ ...cat, rows });
   }
   return out;

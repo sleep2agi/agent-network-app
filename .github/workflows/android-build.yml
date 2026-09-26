@@ -88,6 +88,24 @@ jobs:
           unresizable=$(grep -E ':resizeableActivity\(0x[0-9a-f]+\)=(false|0)' <<<"$tree" || true)
           if [ -n "$unresizable" ]; then echo "::error::APK sets resizeableActivity=false: $unresizable"; exit 1; fi
           echo "orientation: no screenOrientation lock, resizeableActivity not false"
+          # 0.2.107 message notifications: Android 13+ needs POST_NOTIFICATIONS declared (or the runtime
+          # prompt never shows), and the 「后台保持连接」 foreground service must carry its
+          # foregroundServiceType in the manifest plus the matching permission — on Android 14+ a
+          # startForeground() whose type is not declared throws and the app crashes.
+          for perm in POST_NOTIFICATIONS FOREGROUND_SERVICE FOREGROUND_SERVICE_REMOTE_MESSAGING; do
+            if ! grep -Fq "uses-permission: name='android.permission.$perm'" <<<"$badging"; then
+              echo "::error::APK lacks android.permission.$perm"; exit 1
+            fi
+          done
+          svc=$(grep -n 'expo.modules.anetkeepalive.AnetKeepAliveService' <<<"$tree" || true)
+          if [ -z "$svc" ]; then echo "::error::APK manifest has no AnetKeepAliveService"; exit 1; fi
+          # remoteMessaging = 0x200. Read the attribute that follows the service element, not any one.
+          svc_line=${svc%%:*}
+          svc_type=$(tail -n "+$svc_line" <<<"$tree" | grep -m1 -E ':foregroundServiceType\(0x[0-9a-f]+\)=' || true)
+          case "$svc_type" in
+            *'=0x200'|*'=512'|*'=(type 0x11)0x200') echo "keep-alive service: foregroundServiceType remoteMessaging ($svc_type)";;
+            *) echo "::error::AnetKeepAliveService foregroundServiceType is not remoteMessaging: '$svc_type'"; exit 1;;
+          esac
           certs=$("$BT/apksigner" verify --print-certs "$APK")
           printf '%s\n' "$certs"
           # apksigner prints `Signer #1 certificate …` when a v1 signature is present and

@@ -39,6 +39,11 @@ let snapshot: UnreadStoreSnapshot = {
   replyProfileId: undefined,
 };
 const listeners = new Set<() => void>();
+/** 最近一次把 hub 的消息(任一半)送进来的时刻;手机通知的轮询据此避免和 Agent 列表的轮询重复拉。 */
+let lastIngestAt = 0;
+export function unreadLastIngestAt(): number {
+  return lastIngestAt;
+}
 
 function emit() {
   for (const listener of listeners) listener();
@@ -67,6 +72,7 @@ export function ingestUserMessagesBody(body: unknown): void {
     : [];
   const ingested = ingestUserMessages(snapshot.ledger, messages, snapshot.seenIds);
   snapshot = { ...snapshot, ledger: ingested.ledger, serverBody: body, seenIds: ingested.seenIds };
+  lastIngestAt = Date.now();
   emit();
 }
 
@@ -76,6 +82,7 @@ export function ingestInboxMessagesBody(body: unknown, username: string | undefi
     ? ((body as { messages: HubMessage[] }).messages ?? [])
     : [];
   snapshot = { ...snapshot, replyRows: rows, replyUsername: username ?? '' };
+  lastIngestAt = Date.now();
   emit();
 }
 

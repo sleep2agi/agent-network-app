@@ -55,6 +55,8 @@ export default function AgentsScreen({
   pinnedAliases = [],
   onTogglePin,
   onOpenChatWindow,
+  mutedAliases = [],
+  onToggleMute,
   preview,
 }: {
   cfg: HubConfig;
@@ -70,6 +72,10 @@ export default function AgentsScreen({
   pinnedAliases?: string[];
   onTogglePin?: (alias: string) => void;
   onOpenChatWindow?: (alias: string) => void;
+  /** 0.2.107:本账号下「消息免打扰」的 agent —— 行上画一个静音铃铛。 */
+  mutedAliases?: readonly string[];
+  /** 桌面右键菜单里的「消息免打扰」开关(手机在会话页右上角)。 */
+  onToggleMute?: (alias: string) => void;
   /** GUI 夹具：跳过 Hub 拉取，用同一套行渲染钉死徽标。 */
   preview?: { sessions: Session[]; ledger: UnreadState; serverBody: unknown };
 }) {
@@ -314,6 +320,7 @@ export default function AgentsScreen({
         <Text selectable={false} style={[styles.alias, compact && { fontSize: 13, fontWeight: '600' }]} numberOfLines={1}>
           {pinnedAliases.includes(item.alias) ? '📌 ' : ''}
           {item.alias}
+          {mutedAliases.includes(item.alias) ? ' 🔕' : ''}
         </Text>
         {item.task ? (
           <Text selectable={false} style={[styles.task, compact && { fontSize: 11 }]} numberOfLines={1}>
@@ -362,6 +369,7 @@ export default function AgentsScreen({
               {item.alias}
             </Text>
             {pinned ? <Ionicons name="pin" size={12} color={colors.textMuted} accessibilityLabel="已置顶" style={rowStyles.pin} /> : null}
+            {mutedAliases.includes(item.alias) ? <Ionicons name="notifications-off-outline" size={12} color={colors.textMuted} accessibilityLabel="消息免打扰" style={rowStyles.pin} testID={`agent-muted-${item.alias}`} /> : null}
             <Text selectable={false} numberOfLines={1} style={[rowStyles.time, { color: colors.textMuted }]}>{model.time}</Text>
           </View>
           {/* No second line when there is nothing to say (and no badge): the name then centres. */}
@@ -495,6 +503,11 @@ export default function AgentsScreen({
           <Pressable accessibilityLabel={pinnedAliases.includes(contextMenu.alias) ? '取消置顶会话' : '置顶会话'} style={{ paddingHorizontal: 14, paddingVertical: 11 }} onPress={() => { onTogglePin?.(contextMenu.alias); setContextMenu(null); }}>
             <Text style={{ color: colors.text, fontSize: 13 }}>{pinnedAliases.includes(contextMenu.alias) ? '取消置顶会话' : '置顶会话'}</Text>
           </Pressable>
+          {onToggleMute ? (
+            <Pressable accessibilityLabel={mutedAliases.includes(contextMenu.alias) ? '取消消息免打扰' : '消息免打扰'} style={{ paddingHorizontal: 14, paddingVertical: 11 }} onPress={() => { onToggleMute(contextMenu.alias); setContextMenu(null); }}>
+              <Text style={{ color: colors.text, fontSize: 13 }}>{mutedAliases.includes(contextMenu.alias) ? '取消消息免打扰' : '消息免打扰'}</Text>
+            </Pressable>
+          ) : null}
           <Pressable accessibilityLabel="在新窗口打开" style={{ paddingHorizontal: 14, paddingVertical: 11 }} onPress={() => { onOpenChatWindow?.(contextMenu.alias); setContextMenu(null); }}>
             <Text style={{ color: colors.text, fontSize: 13 }}>在新窗口打开</Text>
           </Pressable>

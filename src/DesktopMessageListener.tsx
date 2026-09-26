@@ -7,6 +7,7 @@ import {
 } from './desktop-message-consume';
 import DesktopMessageNotice from './DesktopMessageNotice';
 import { canOpenUserEventStream, openUserEventStream } from './user-events-sse';
+import { requestNotifierRefresh } from './notifier-bus';
 
 const SEEN_CAP = 200;
 
@@ -27,6 +28,8 @@ export default function DesktopMessageListener({ cfg }: { cfg: HubConfig }) {
         if (result.status !== 'present') return;
         if (seen.current.has(result.notice.messageId)) return;
         seen.current.add(result.notice.messageId);
+        // 手机端:agent 的 desktop_message 已经落进 user_inbox —— 让通知那边立刻拉一次,不等下一拍轮询。
+        requestNotifierRefresh();
         if (seen.current.size > SEEN_CAP) {
           const first = seen.current.values().next().value;
           if (first) seen.current.delete(first);

@@ -19,6 +19,7 @@
     "expo-file-system": "~56.0.8",
     "expo-image-picker": "~56.0.17",
     "expo-intent-launcher": "~56.0.4",
+    "expo-notifications": "~56.0.25",
     "expo-secure-store": "~56.0.4",
     "expo-sharing": "~56.0.17",
     "expo-status-bar": "~56.0.4",

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import {
   ActivityIndicator,
   BackHandler,
@@ -56,6 +56,8 @@ import DesktopUpdatePrompt from './src/DesktopUpdatePrompt';
 import AndroidUpdatePrompt from './src/AndroidUpdatePrompt';
 import DesktopMessageListener from './src/DesktopMessageListener';
 import DesktopNotifier from './src/DesktopNotifier';
+import MobileNotifier from './src/MobileNotifier';
+import { loadNotifySettings, mutedAgents, notifyProfileKey, saveNotifySettings, subscribeNotifySettings, toggleAgentMuted } from './src/notify-settings';
 import { bindDesktopTray, dismissAllForConfig } from './src/desktop-tray';
 import TrayPanel, { readTrayPanelRoute } from './src/TrayPanel';
 import { loadPinnedChats, requestedChatAlias, requestedChatProfileId, requestedWorkspaceProfileId, savePinnedChats } from './src/desktop-chat-menu';
@@ -64,6 +66,7 @@ import { bindUnreadProfile } from './src/unread-store';
 import { openRememberedChatWindow } from './src/desktop-chat-windows';
 import { activateHubProfile, LOCAL_HUB_PROFILE_ID, localHubStatus, startLocalHub } from './src/local-hub';
 import UnreadBadgeFixtureScreen, { readWebFixture } from './src/UnreadBadgeFixtureScreen';
+import NotifySettingsFixtureScreen, { readNotifyFixture } from './src/NotifySettingsFixtureScreen';
 import { chooseAppLayout, LIST_PANE_DEFAULT_WIDTH, paneSelectionFor, twoPaneListWidth } from './src/wide-layout';
 import TwoPaneDivider from './src/TwoPaneDivider';
 import { loadListPaneWidth, saveListPaneWidth } from './src/agent-list-prefs';
@@ -151,6 +154,15 @@ export default function App() {
     );
   }
 
+  const notifyFixture = readNotifyFixture();
+  if (notifyFixture) {
+    return (
+      <SafeAreaProvider>
+        <NotifySettingsFixtureScreen fixture={notifyFixture} />
+      </SafeAreaProvider>
+    );
+  }
+
   const fixture = readWebFixture();
   if (fixture) {
     // Before the first paint. useEffect was too late: the first frame stayed
@@ -197,6 +209,11 @@ function AppRoot() {
     void saveChatPins(next, cfg).catch(error => { console.warn('save chat pins failed', error); setMobilePins(mobilePins); });
   };
   const [screen, setScreen] = useState<Screen>({ name: 'login' });
+  // 0.2.107 按 agent 的「消息免打扰」(系统通知不弹;消息照收)。按账号存,桌面和手机共用一份判据。
+  const notifySettings = useSyncExternalStore(subscribeNotifySettings, loadNotifySettings, loadNotifySettings);
+  const notifyKey = notifyProfileKey(cfg);
+  const mutedAliases = mutedAgents(notifySettings, notifyKey);
+  const toggleMute = (alias: string) => { saveNotifySettings(toggleAgentMuted(loadNotifySettings(), notifyKey, alias)); };
   const [booting, setBooting] = useState(true);
   const [reauthProfile, setReauthProfile] = useState<Pick<HubProfile, 'profileId' | 'serverUrl' | 'username' | 'displayName'> | null>(null);
   const [showRemoteLogin, setShowRemoteLogin] = useState(false);
@@ -492,7 +509,7 @@ function AppRoot() {
         <ConnectivityBanner />
         <DesktopWorkspace cfg={cfg} screen={screen} setScreen={setScreen} onLogout={removeActiveProfile} onLocalDataDeleted={finishLocalDataDeletion} onAddAccount={() => { setReauthProfile(null); setScreen({ name: 'login' }); }} onSwitchProfile={activateProfile} onReauthProfile={requestProfileReauth} />
         <DesktopMessageListener cfg={cfg} />
-        {trayWindow ? <DesktopNotifier onOpenChat={alias => setScreen({ name: 'chat', alias })} /> : null}
+        {trayWindow ? <DesktopNotifier onOpenChat={alias => setScreen({ name: 'chat', alias })} profileKey={notifyProfileKey(cfg)} /> : null}
         <DesktopWindowPin />
       </SafeAreaView>
     );
@@ -508,6 +525,8 @@ function AppRoot() {
           诚实的"截至"时间(最后一次成功,非尝试)。登录页不挂(还没有 hub 可言)。 */}
       {screen.name !== 'login' && cfg ? <ConnectivityBanner /> : null}
       {screen.name !== 'login' && cfg ? <DesktopMessageListener cfg={cfg} /> : null}
+      {/* 0.2.107 手机系统通知:登出(cfg=null)也要挂着,好让运行时停掉轮询和前台服务。 */}
+      {Platform.OS === 'android' || Platform.OS === 'ios' ? <MobileNotifier cfg={cfg} onOpenChat={alias => setScreen({ name: 'chat', alias })} /> : null}
       {screen.name === 'login' || !cfg ? (
         tauriDesktop && !reauthProfile && !showRemoteLogin ? (
           <FirstRunScreen
@@ -591,6 +610,7 @@ function AppRoot() {
                       onOpenNodeDetail={alias => setScreen({ name: 'nodeDetail', alias })}
                       pinnedAliases={mobilePins}
                       onTogglePin={toggleMobilePin}
+                      mutedAliases={mutedAliases}
                     />
                   </View>
                   <View style={styles.twoPaneDetail} testID="two-pane-detail">
@@ -604,6 +624,8 @@ function AppRoot() {
                         onOpenNodeSettings={() => setScreen({ name: 'nodeInfo', alias: screen.alias })}
                         pinned={mobilePins.includes(screen.alias)}
                         onTogglePin={() => toggleMobilePin(screen.alias)}
+                        muted={mutedAliases.includes(screen.alias)}
+                        onToggleMute={() => toggleMute(screen.alias)}
                       />
                     ) : screen.name === 'nodeInfo' ? (
                       <NodeDetailScreen key={`nodeInfo:${screen.alias}`} cfg={cfg} alias={screen.alias} onBack={() => setScreen({ name: 'chat', alias: screen.alias })} readOnly layoutWidth={paneAreaWidth - paneListWidth} touch />
@@ -628,6 +650,8 @@ function AppRoot() {
                   onOpenNodeSettings={() => setScreen({ name: 'nodeInfo', alias: screen.alias })}
                   pinned={mobilePins.includes(screen.alias)}
                   onTogglePin={() => toggleMobilePin(screen.alias)}
+                  muted={mutedAliases.includes(screen.alias)}
+                  onToggleMute={() => toggleMute(screen.alias)}
                 />
               ) : screen.name === 'nodeInfo' ? (
                 <NodeDetailScreen cfg={cfg} alias={screen.alias} onBack={() => setScreen({ name: 'chat', alias: screen.alias })} readOnly />
@@ -712,6 +736,7 @@ function AppRoot() {
                       onOpenNodeDetail={alias => setScreen({ name: 'nodeDetail', alias })}
                       pinnedAliases={mobilePins}
                       onTogglePin={toggleMobilePin}
+                      mutedAliases={mutedAliases}
                     />
                   )}
                 </View>
@@ -824,6 +849,11 @@ function DesktopWorkspace({ cfg, screen, setScreen, onLogout, onLocalDataDeleted
     savePinnedChats(next, cfg.profileId);
     return next;
   });
+  // 0.2.107:列表右键菜单里的「消息免打扰」(和手机会话页右上角的铃铛是同一份设置)。
+  const notifySettings = useSyncExternalStore(subscribeNotifySettings, loadNotifySettings, loadNotifySettings);
+  const notifyKey = notifyProfileKey(cfg);
+  const mutedAliases = mutedAgents(notifySettings, notifyKey);
+  const toggleMute = (alias: string) => { saveNotifySettings(toggleAgentMuted(loadNotifySettings(), notifyKey, alias)); };
   const serverWorkspace = ['server', 'serverNodes', 'serverNodeDetail', 'logs', 'picker', 'wizard'].includes(screen.name);
   const active = serverWorkspace ? 'server' : ['chat', 'nodeDetail', 'nodeInfo'].includes(screen.name) ? 'agents' : screen.name;
   const content = screen.name === 'chat' ? (
@@ -909,7 +939,7 @@ function DesktopWorkspace({ cfg, screen, setScreen, onLogout, onLocalDataDeleted
             else setScreen({ name: 'logs' });
           }} />
         ) : (
-          <AgentsScreen cfg={cfg} compact selectedAlias={screen.name === 'chat' || screen.name === 'nodeInfo' ? screen.alias : undefined} pinnedAliases={pinnedAliases} onTogglePin={togglePin} onOpenChatWindow={alias => { void openRememberedChatWindow(alias, cfg.profileId, cfg.username || cfg.serverUrl); }} onOpenChat={alias => setScreen({ name: 'chat', alias })} onOpenPicker={() => setScreen({ name: 'picker' })} onOpenNodeDetail={alias => setScreen({ name: 'nodeDetail', alias })} />
+          <AgentsScreen cfg={cfg} compact selectedAlias={screen.name === 'chat' || screen.name === 'nodeInfo' ? screen.alias : undefined} pinnedAliases={pinnedAliases} onTogglePin={togglePin} mutedAliases={mutedAliases} onToggleMute={toggleMute} onOpenChatWindow={alias => { void openRememberedChatWindow(alias, cfg.profileId, cfg.username || cfg.serverUrl); }} onOpenChat={alias => setScreen({ name: 'chat', alias })} onOpenPicker={() => setScreen({ name: 'picker' })} onOpenNodeDetail={alias => setScreen({ name: 'nodeDetail', alias })} />
         )}
       </View>
       <View style={desktopStyles.content}>{content}</View>
