@@ -79,6 +79,9 @@ import { SHOW_BOLT_ENTRY, SHOW_BTW_ENTRY } from './chat-entry-flags';
 import { layoutGeneration, releaseOnUnmount, takeHandoff } from './layout-handoff';
 import SideThreadDrawer, { type SideThreadLaunch } from './SideThreadDrawer';
 import { nextPlusPanel, plusPanelHeight, plusPanelItems, type PlusItemKey, type PlusPanelEvent } from './composer-plus-panel';
+import { useVoiceInput } from './useVoiceInput';
+import { insertRecognized } from './voice-input-model';
+import { VoiceMicButton, VoiceRecordingOverlay, VoiceSettingsPrompt } from './VoiceInputUI';
 
 // Chat with one agent. Mirrors dashboard M4: open with the newest PAGE
 // messages, grow the window when the user scrolls toward older history.
@@ -225,6 +228,8 @@ interface Props {
   onToggleMute?: () => void;
   /** Android two-pane: the conversation sits next to the list, so no back chevron. */
   hideBack?: boolean;
+  /** 语音输入未配置时「去设置」跳到 设置 → 语音输入。不传(独立聊天窗口)就只提示位置。 */
+  onOpenVoiceSettings?: () => void;
 }
 
 // Module level on purpose: the cache has to outlive a screen unmount, or
@@ -235,7 +240,7 @@ export const clearChatConversationCache = (profileId?: string, serverUrl = ''): 
   conversations.clearScope(conversationScope(profileId, serverUrl));
 };
 
-export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpenNodeSettings, pinned = false, onTogglePin, muted = false, onToggleMute, hideBack = false }: Props) {
+export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpenNodeSettings, pinned = false, onTogglePin, muted = false, onToggleMute, hideBack = false, onOpenVoiceSettings }: Props) {
   // Android edge-to-edge draws the composer under the gesture bar (same
   // class of bug as the tg 802 tab bar) — pad by the real bottom inset.
   const insets = useSafeAreaInsets();
@@ -513,6 +518,11 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
     const timer = setTimeout(() => setComposerNotice(null), 2500);
     return () => clearTimeout(timer);
   }, [composerNotice]);
+  // 语音输入(按住说话):识别结果接到草稿后面,不自动发送,用户可以改完再发。
+  const voice = useVoiceInput({
+    onInsert: text => setDraft(d => insertRecognized(d, text)),
+    onNotice: setComposerNotice,
+  });
   const attachedRef = useRef<PickedImage[]>([]);
   attachedRef.current = attached;
   // 选择顺序即发送顺序:addToDraft 只追加、不排序;超出 9 张图 / 20 个附件的部分被拒并提示。
@@ -1895,6 +1905,7 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
           <Text style={styles.composerNoticeText}>{composerNotice}</Text>
         </View>
       ) : null}
+      <VoiceSettingsPrompt voice={voice} onOpenSettings={onOpenVoiceSettings} />
       {sendNotice ? (
         <ActualRecipientNotice notice={sendNotice} onDismiss={() => setSendConfirmation(null)} />
       ) : null}
@@ -2073,6 +2084,7 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
                 </Pressable>
               ) : null}
               <Text style={styles.shortcutHint}>Enter 发送 · Shift/Ctrl/⌘+Enter 换行</Text>
+              {voice.available ? <VoiceMicButton voice={voice} size={20} /> : null}
               <Pressable
                 style={({ pressed }) => [styles.desktopSend, !canSend(draft, attached.length > 0, sending) && styles.desktopSendDisabled, pressed && { opacity: 0.7 }]}
                 onPress={() => void submit()}
@@ -2117,9 +2129,11 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
             <Text style={[styles.mobilePriorityText, sendPriority === 'high' && styles.priorityButtonTextActive]}>⚡</Text>
           </Pressable>
         ) : null}
+        {/* 语音输入:麦克风在输入框里的右侧(按住说话),行仍是 ＋ / 输入框 / 发送 三件。 */}
+        <View style={styles.inputWrap}>
         <TextInput
           ref={mainComposerRef}
-          style={styles.input}
+          style={[styles.input, voice.available && styles.inputWithMic]}
           placeholder={`Message ${alias}…`}
           placeholderTextColor={colors.textMuted}
           value={draft}
@@ -2141,6 +2155,8 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
           }}
           multiline
         />
+        {voice.available ? <VoiceMicButton voice={voice} style={styles.inputMic} /> : null}
+        </View>
         <Pressable
           style={({ pressed }) => [
             styles.send,
@@ -2181,6 +2197,7 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
       ) : null}
       </>
       )}
+      <VoiceRecordingOverlay voice={voice} bottom={desktop ? composerHeight + 24 : 88 + composerInset} />
       <SideThreadDrawer
         cfg={cfg}
         alias={alias}
@@ -2525,6 +2542,10 @@ const makeStyles = () =>
     fontSize: 14,
     maxHeight: 120,
   },
+  inputWrap: { flex: 1, justifyContent: 'flex-end' },
+  // 在输入框里给麦克风留出右侧位置;flex 归零,否则在列方向的 inputWrap 里 flexBasis 0 会被压扁。
+  inputWithMic: { flex: 0, alignSelf: 'stretch', paddingRight: 44 },
+  inputMic: { position: 'absolute', right: 4, bottom: 5 },
   send: {
     backgroundColor: colors.accent,
     width: 36,

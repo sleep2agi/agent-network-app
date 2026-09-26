@@ -30,6 +30,7 @@ import ServerSidebar, { type ServerSection } from './src/ServerSidebar';
 import HostSupervisorPickerScreen from './src/HostSupervisorPickerScreen';
 import CreateNodeWizardScreen from './src/CreateNodeWizardScreen';
 import SettingsScreen from './src/SettingsScreen';
+import { rememberSettingsCategory } from './src/settings-model';
 import AgentsScreen from './src/AgentsScreen';
 import TasksScreen from './src/TasksScreen';
 import TaskDetailScreen from './src/TaskDetailScreen';
@@ -624,6 +625,7 @@ function AppRoot() {
                         onBack={() => setScreen({ name: 'agents' })}
                         hideBack
                         onOpenNodeSettings={() => setScreen({ name: 'nodeInfo', alias: screen.alias })}
+                        onOpenVoiceSettings={() => { rememberSettingsCategory('voice'); setScreen({ name: 'settings' }); }}
                         pinned={mobilePins.includes(screen.alias)}
                         onTogglePin={() => toggleMobilePin(screen.alias)}
                         muted={mutedAliases.includes(screen.alias)}
@@ -650,6 +652,7 @@ function AppRoot() {
                   alias={screen.alias}
                   onBack={() => setScreen({ name: 'agents' })}
                   onOpenNodeSettings={() => setScreen({ name: 'nodeInfo', alias: screen.alias })}
+                  onOpenVoiceSettings={() => { rememberSettingsCategory('voice'); setScreen({ name: 'settings' }); }}
                   pinned={mobilePins.includes(screen.alias)}
                   onTogglePin={() => toggleMobilePin(screen.alias)}
                   muted={mutedAliases.includes(screen.alias)}
@@ -869,6 +872,7 @@ function DesktopWorkspace({ cfg, screen, setScreen, onLogout, onLocalDataDeleted
       alias={screen.alias}
       onBack={() => setScreen({ name: 'agents' })}
       onOpenNodeSettings={() => setScreen({ name: 'nodeInfo', alias: screen.alias })}
+      onOpenVoiceSettings={() => { rememberSettingsCategory('voice'); setScreen({ name: 'settings' }); }}
       desktop
     />
   ) : screen.name === 'tasks' ? (

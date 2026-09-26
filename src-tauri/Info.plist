@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <!-- 语音输入(按住说话):WKWebView 的 getUserMedia 要系统麦克风授权,没有这一条 macOS 直接拒绝。
+       Tauri CLI 会把 src-tauri/Info.plist 合并进生成的 Info.plist。 -->
+  <key>NSMicrophoneUsageDescription</key>
+  <string>按住说话时录音,转成文字填进输入框(语音输入)</string>
+</dict>
+</plist>

@@ -6,7 +6,7 @@
 // 🔴 只登记**真实存在**的设置。不要为了让左栏好看往里编分类。
 // 纯逻辑,不 import react-native。
 
-export type SettingsCategoryKey = 'account' | 'localHub' | 'appearance' | 'notifications' | 'about';
+export type SettingsCategoryKey = 'account' | 'localHub' | 'appearance' | 'notifications' | 'voice' | 'about';
 
 export type SettingsRow = {
   readonly key: string;
@@ -83,6 +83,16 @@ export const SETTINGS_CATEGORIES: readonly SettingsCategory[] = [
       { key: 'test', label: '发送测试通知', keywords: ['测试', 'test'], platforms: ['android', 'ios'] },
       // 0.2.109:所有平台都有(安卓最有用);正式包里也显示,不是 dev-only。
       { key: 'diagnostics', label: '通知诊断', keywords: ['诊断', '排查', '复制', '不弹', '收不到', 'debug', 'diagnostics'] },
+    ],
+  },
+  {
+    // 语音输入(豆包语音 ASR):凭据只存本机(SecureStore / 系统钥匙串),纯网页没有安全存储 → 不出现。
+    key: 'voice',
+    label: '语音输入',
+    icon: 'mic-outline',
+    rows: [
+      { key: 'credentials', label: '豆包语音凭据', keywords: ['语音', '语音识别', '豆包', '火山', '火山引擎', 'asr', 'voice', 'app id', 'access token', 'secret key', 'api key', '麦克风', '按住说话'], platforms: ['android', 'ios', 'desktop'] },
+      { key: 'test', label: '测试语音识别', keywords: ['测试', '录音', 'test', 'mic'], platforms: ['android', 'ios', 'desktop'] },
     ],
   },
   {
