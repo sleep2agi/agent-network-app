@@ -119,6 +119,9 @@ jobs:
           releaseBody: |-
             Signed and notarized stable update for macOS (Apple Silicon) and Windows (x64).
 
+            What's new in 0.2.122:
+            - 简化更新：去掉 app 里的『下载线路』选项，自动选择最快的下载来源。
+
             What's new in 0.2.121:
             - 长按节点弹出菜单：标为已读/未读、置顶、免打扰、节点详情、不显示该对话（电脑版右键同一菜单）。
             - 修复多个页面和弹窗的顶部留白：节点信息页不再多出空白，弹窗不再压到状态栏。
