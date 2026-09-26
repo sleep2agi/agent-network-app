@@ -15,7 +15,7 @@
 // (网关可能把凭据回显在响应体里)。
 
 import type { VoiceCredentials } from './voice-credentials-model';
-import { DOUBAO_DEFAULT_ENDPOINT, authMode, checkEndpoint } from './voice-credentials-model';
+import { DOUBAO_DEFAULT_ENDPOINT, authMode, checkEndpoint, type VoiceAuthMode } from './voice-credentials-model';
 import { bytesToBase64 } from './voice-wav';
 
 export const DOUBAO_RESOURCE_ID = 'volc.bigasr.auc_turbo';
@@ -29,7 +29,10 @@ export const REQUEST_TIMEOUT_MS = 20_000;
 
 export type AsrErrorCode =
   | 'not_configured'
+  /** HTTP 401:密钥不对。 */
   | 'auth_failed'
+  /** HTTP 403:密钥对,但这个资源(极速版)没开通 ——「requested resource not granted」。 */
+  | 'not_enabled'
   | 'too_long'
   | 'too_short'
   | 'bad_audio'
@@ -47,17 +50,36 @@ export class AsrError extends Error {
   }
 }
 
-/** 给用户看的一句话。 */
-export function asrErrorMessage(code: AsrErrorCode, upstream?: string): string {
+/** 鉴权失败的一句话:按控制台版本点名是哪个字段不对。 */
+export function authFailedMessage(mode?: VoiceAuthMode): string {
+  if (mode === 'app-token') return '鉴权失败：App ID 或 Access Token 不对';
+  return '鉴权失败：API Key 不对';
+}
+
+/** 服务未开通的一句话:点名控制台里的服务名和资源 ID。 */
+export function notEnabledMessage(service: string, resourceId: string): string {
+  return `服务未开通：请在开通管理里开通 ${service}（资源 ID ${resourceId}）`;
+}
+
+export const FLASH_SERVICE_NAME = '录音文件识别大模型-极速版';
+
+/**
+ * 给用户看的一句话。
+ * 401 / 403 的区分:文档错误码表(docs 6561/1631584、6561/1354869)只列了 2000xxxx / 4500xxxx /
+ * 5500xxxx 业务码,没有鉴权码;鉴权在网关层按 HTTP 状态回 —— 403 的响应体是
+ * `[resource_id=…] requested resource not granted`(密钥有效、资源没开通),401 是密钥本身无效。
+ */
+export function asrErrorMessage(code: AsrErrorCode, upstream?: string, mode?: VoiceAuthMode): string {
   switch (code) {
     case 'not_configured': return '未配置语音识别';
-    case 'auth_failed': return '语音识别鉴权失败:检查 App ID / Access Token,并确认已开通「录音文件识别大模型-极速版」';
+    case 'auth_failed': return authFailedMessage(mode);
+    case 'not_enabled': return notEnabledMessage(FLASH_SERVICE_NAME, DOUBAO_RESOURCE_ID);
     case 'too_long': return `一次最多说 ${MAX_UTTERANCE_SECONDS} 秒`;
     case 'too_short': return '说话时间太短';
     case 'bad_audio': return '音频格式不被接受';
     case 'rate_limited': return '语音识别请求太频繁,稍后再试';
-    case 'timeout': return '语音识别超时,请重试';
-    case 'network': return '连不上语音识别服务,检查网络';
+    case 'timeout': return '网络失败：语音识别超时，请重试';
+    case 'network': return '网络失败：连不上语音识别服务，检查网络';
     case 'bad_endpoint': return '语音识别接口地址无效';
     default: return upstream ? `语音识别失败(${upstream})` : '语音识别失败';
   }
@@ -99,7 +121,8 @@ const digits = (s: string | null | undefined): string | undefined => {
  */
 export function interpretFlashResponse(httpStatus: number, apiStatus: string | null | undefined, body: unknown): { text: string } | { error: AsrErrorCode; upstream?: string } {
   const code = digits(apiStatus);
-  if (httpStatus === 401 || httpStatus === 403) return { error: 'auth_failed', upstream: String(httpStatus) };
+  if (httpStatus === 401) return { error: 'auth_failed', upstream: '401' };
+  if (httpStatus === 403) return { error: 'not_enabled', upstream: '403' };
   if (httpStatus === 429) return { error: 'rate_limited', upstream: '429' };
   if (code === '20000003' || code === '45000002') return { text: '' };
   if (code === '45000151') return { error: 'bad_audio', upstream: code };

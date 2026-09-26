@@ -17,6 +17,9 @@ import { float32ToInt16, levelOf, TARGET_SAMPLE_RATE } from './voice-wav';
 
 export type Captured = { chunks: Int16Array[]; sampleRate: number; channels: number };
 
+/** 录音中每段 PCM 的实时回调(流式识别用)。整段录音照样攒在 chunks 里,供回退极速版。 */
+export type ChunkListener = (pcm: Int16Array, sampleRate: number, channels: number) => void;
+
 export type StartResult =
   | { ok: true }
   /** 刚弹过系统授权框(按住的手势已被打断):授权成功也要用户再按一次。 */
@@ -32,6 +35,8 @@ export type VoiceRecorder = {
   discard(): void;
   /** 0..1,约 10 次/秒刷新,只在录音中有意义。 */
   level: number;
+  /** 设置 / 清除实时分段回调。null = 不要。 */
+  setChunkListener(listener: ChunkListener | null): void;
 };
 
 const isNative = Platform.OS === 'android' || Platform.OS === 'ios';
@@ -53,6 +58,12 @@ export function useVoiceRecorder(): VoiceRecorder {
   const webRef = useRef<WebSession | null>(null);
   const [level, setLevel] = useState(0);
   const levelAtRef = useRef(0);
+  const chunkListenerRef = useRef<ChunkListener | null>(null);
+  const emitChunk = (pcm: Int16Array, rate: number, ch: number) => {
+    const l = chunkListenerRef.current;
+    if (!l) return;
+    try { l(pcm, rate, ch); } catch { /* 流式出错不能影响录音本身 */ }
+  };
 
   const pushLevel = (l: number) => {
     const now = Date.now();
@@ -73,6 +84,7 @@ export function useVoiceRecorder(): VoiceRecorder {
       channelsRef.current = buf.channels || channelsRef.current;
       chunksRef.current.push(copy);
       pushLevel(levelOf(copy));
+      emitChunk(copy, rateRef.current, channelsRef.current);
     },
   });
 
@@ -137,6 +149,7 @@ export function useVoiceRecorder(): VoiceRecorder {
         const pcm = float32ToInt16(new Float32Array(e.inputBuffer.getChannelData(0)));
         chunksRef.current.push(pcm);
         pushLevel(levelOf(pcm));
+        emitChunk(pcm, rateRef.current, 1);
       };
       source.connect(node);
       node.connect(ctx.destination); // ScriptProcessor 不接到 destination 在部分引擎里不回调;输出是静音
@@ -167,5 +180,7 @@ export function useVoiceRecorder(): VoiceRecorder {
     chunksRef.current = [];
   }, [nativeStream]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  return { supported: isNative ? !!nativeStream : webSupported(), start, stop, discard, level };
+  const setChunkListener = useCallback((listener: ChunkListener | null) => { chunkListenerRef.current = listener; }, []);
+
+  return { supported: isNative ? !!nativeStream : webSupported(), start, stop, discard, level, setChunkListener };
 }
