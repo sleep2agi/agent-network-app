@@ -69,7 +69,7 @@ check(!chat.includes("'发送附件'"), 'the second-level 「发送附件」 Ale
 check(!/Alert\.alert\([^)]*\[\s*\{\s*text:\s*'图片'/.test(chat), 'no 图片/文件 Alert chooser left');
 {
   const run = chat.slice(chat.indexOf('const runPlusItem'), chat.indexOf('const plusItems ='));
-  check(run.includes("key === 'album') pickInto(pickImage)"), '相册 calls pickImage directly');
+  check(/key === 'album'\) \{[\s\S]*?pickImages\(slots, sendOriginal\)[\s\S]*?\.then\(appendAttachments\)/.test(run), '相册 multi-selects (pickImages with the remaining slots) straight into the draft');
   check(run.includes("key === 'file') pickInto(pickDocument)"), '文件 calls pickDocument directly');
   check(run.includes("key === 'camera') pickInto(pickCameraPhoto)"), '拍照 calls pickCameraPhoto directly');
   check(run.includes('appendAttachment(item)'), 'picked items land in the main composer draft');

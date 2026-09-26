@@ -173,6 +173,7 @@ export default function AuthedThumb({
   serverUrl,
   token,
   onPress,
+  compact = false,
 }: {
   fileId: string;
   name: string;
@@ -180,6 +181,8 @@ export default function AuthedThumb({
   serverUrl: string;
   token: string;
   onPress: (localUri: string) => void;
+  /** 多图气泡的方格(84×84,cover,无外边距)。 */
+  compact?: boolean;
 }) {
   const [uri, setUri] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -204,28 +207,28 @@ export default function AuthedThumb({
       <Pressable
         accessibilityRole="button"
         accessibilityLabel={`${name} 加载失败，点击重试`}
-        style={styles.failedThumb}
+        style={compact ? styles.compactFailed : styles.failedThumb}
         onPress={() => {
           setError(null);
           setAttempt(value => value + 1);
         }}
       >
         <Text style={styles.failedIcon}>↻</Text>
-        <Text style={styles.failedTitle} numberOfLines={1}>{name}</Text>
-        <Text style={styles.failedHint}>{error} · 点击重试</Text>
+        {compact ? null : <Text style={styles.failedTitle} numberOfLines={1}>{name}</Text>}
+        <Text style={styles.failedHint} numberOfLines={compact ? 2 : undefined}>{compact ? '点击重试' : `${error} · 点击重试`}</Text>
       </Pressable>
     );
   }
   if (!uri) {
     return (
-      <View style={[styles.thumb, styles.loading]}>
+      <View style={[compact ? styles.compactThumb : styles.thumb, styles.loading]}>
         <ActivityIndicator size="small" color={colors.textMuted} />
       </View>
     );
   }
   return (
-    <Pressable onPress={() => onPress(uri)}>
-      <Image source={{ uri }} style={styles.thumb} resizeMode="contain" />
+    <Pressable onPress={() => onPress(uri)} accessibilityLabel={`预览 ${name}`}>
+      <Image source={{ uri }} style={compact ? styles.compactThumb : styles.thumb} resizeMode={compact ? 'cover' : 'contain'} />
     </Pressable>
   );
 }
@@ -240,6 +243,8 @@ const makeStyles = () =>
     backgroundColor: colors.inputBg,
   },
   loading: { alignItems: 'center', justifyContent: 'center' },
+  compactThumb: { width: 84, height: 84, backgroundColor: colors.inputBg },
+  compactFailed: { width: 84, height: 84, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.inputBg },
   failedThumb: {
     width: 180,
     height: 112,

@@ -25,7 +25,8 @@ import * as Clipboard from 'expo-clipboard';
 import AliasAvatar from './AliasAvatar';
 import AttachmentFileDesktop from './AttachmentFileDesktop';
 import AuthedThumb, { AttachmentFile, AuthedVideo, mimeFromName } from './AuthedThumb';
-import AuthedWebThumb from './AuthedWebThumb';
+import AuthedWebThumb, { saveObjectUrlOriginal } from './AuthedWebThumb';
+import { displayDownloadPath } from './desktop-download';
 import { ackAgentMessages, ackUserMessages, createDashboardRequestId, dashboardRequestIdForLocalId, fetchStatus, fetchTasks, fetchUserMessages, sendTask, HubConfig, HubTask, Session, TaskAttachment, TaskPriority } from './api';
 import { proactiveItemsForAgent } from './proactive-messages';
 import { replyQuoteFor } from './reply-quote';
@@ -41,12 +42,16 @@ import {
   attachmentTextHint,
   pickCameraPhoto,
   pickDocument,
-  pickImage,
+  pickImages,
+  prepareForUpload,
   uploadImage,
   toTaskAttachment,
   PickedImage,
 } from './attach';
-import { appendAttachmentQueue, attachmentFromClipboard, isTauriDesktop, releaseClipboardAttachment } from './clipboard-attachment';
+import { attachmentFromClipboard, isTauriDesktop, releaseClipboardAttachment } from './clipboard-attachment';
+import { addToDraft, draftCountLabel, draftImageCount, isDraftImage, MAX_DRAFT_IMAGES, oversizeMessage, remainingImageSlots, removeFromDraft, sendBlocker } from './image-draft';
+import { createUploadMemo, removeAttachmentAt, runUploadQueue, UPLOAD_CONCURRENCY, uploadFailureSummary, withUploadState, type UploadState } from './upload-queue';
+import type { UploadedFile } from './attach';
 import { colors, onThemeChange, radius, spacing } from './theme';
 import { formatChatHeader, shouldShowTimeHeader } from './time';
 import { chooseHeaderLayout, NAME_MIN_WIDTH, type HeaderActionKey } from './chat-header-layout';
@@ -63,7 +68,7 @@ import { appFetch } from './app-fetch';
 import MarkdownMessage from './MarkdownMessage';
 import SelectTextSheet from './SelectTextSheet';
 import { selectedTextWithin } from './message-plain-text';
-import { cleanAttachmentDebugText, parseAttachmentRefs, parseMetaAttachmentRefs, parseMetaReplyAttachmentRefs } from './attachment-display';
+import { cleanAttachmentDebugText, hideGridImageLines, parseAttachmentRefs, parseMetaAttachmentRefs, parseMetaReplyAttachmentRefs } from './attachment-display';
 import { attachmentCacheScope } from './attach-download';
 import ActualRecipientNotice from './ActualRecipientNotice';
 import { sendConfirmationFromResponse, sendNoticeFor, type SendConfirmation } from './actual-recipient';
@@ -91,6 +96,12 @@ type ChatItem = HubTask & {
   _failed?: boolean;
   _img?: PickedImage;
   _imgs?: PickedImage[];
+  /** 多图发送:与 _imgs 同序的逐张上传状态(queued/uploading/done/failed)。 */
+  _uploads?: UploadState[];
+  /** 有附件没传上时的汇总;此时整条不发,等用户重试或移除失败的那几张。 */
+  _uploadError?: string;
+  /** 发送时的「原图」开关;重试沿用它。 */
+  _original?: boolean;
   /** PR3 review①:恢复自 outbox 且原带图片——说明文案走这个标志单独渲染,
    *  🔴 绝不拼进 content:content 是「要发出去的字」,注解是「给用户看的字」,
    *  共用一个字段迟早串(重试会把注解原样发给对方 agent)。 */
@@ -120,7 +131,12 @@ interface AttachmentView {
   needsAuth?: boolean;
   mime?: string;
   size?: number;
+  /** Local echo only: index into the item's _imgs (upload state lookup). */
+  localIndex?: number;
 }
+
+// 重试不重传:已传上去的那几张按 (hub, uri, 原图档) 记住。
+const uploadMemo = createUploadMemo<{ img: PickedImage; up: UploadedFile }>();
 
 const isImageLike = (name?: string, mime?: string) =>
   (mime ?? '').startsWith('image/') || /\.(png|jpe?g|gif|webp|heic)$/i.test(name ?? '');
@@ -159,7 +175,8 @@ const pushTextRefs = (text: string, push: (id: string, name: string, mime?: stri
 const sentAttachmentViews = (item: ChatItem, serverUrl: string): AttachmentView[] => {
   const localAttachments = item._imgs ?? (item._img ? [item._img] : []);
   if (localAttachments.length) {
-    return localAttachments.map(img => ({
+    return localAttachments.map((img, localIndex) => ({
+      localIndex,
       key: img.uri,
       name: img.fileName,
       isImage: isImageLike(img.fileName, img.mimeType),
@@ -486,22 +503,48 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
   };
 
   const [attached, setAttached] = useState<PickedImage[]>([]);
-  const appendAttachment = useCallback((next: PickedImage) => {
-    setAttached(previous => {
-      if (previous.length >= 20) {
-        releaseClipboardAttachment(next);
-        return previous;
-      }
-      return appendAttachmentQueue(previous, next);
-    });
+  // 「原图」开关(微信式,默认关)。web/桌面在发送前按它压缩;原生端在选图时按它决定 picker quality。
+  const [sendOriginal, setSendOriginal] = useState(false);
+  // 草稿区的轻提示(超过 9 张、超过 12MB…),2.5s 自动消失。
+  const [composerNotice, setComposerNotice] = useState<string | null>(null);
+  useEffect(() => {
+    if (!composerNotice) return;
+    const timer = setTimeout(() => setComposerNotice(null), 2500);
+    return () => clearTimeout(timer);
+  }, [composerNotice]);
+  const attachedRef = useRef<PickedImage[]>([]);
+  attachedRef.current = attached;
+  // 选择顺序即发送顺序:addToDraft 只追加、不排序;超出 9 张图 / 20 个附件的部分被拒并提示。
+  const appendAttachments = useCallback((incoming: PickedImage[]) => {
+    if (!incoming.length) return;
+    const result = addToDraft(attachedRef.current, incoming);
+    result.rejected.forEach(releaseClipboardAttachment);
+    attachedRef.current = result.next;
+    setAttached(result.next);
+    const tooBig = result.accepted.map(oversizeMessage).filter(Boolean);
+    const notice = [result.notice, ...(Platform.OS === 'web' ? [] : tooBig)].filter(Boolean).join('；');
+    if (notice) setComposerNotice(notice);
   }, []);
+  const appendAttachment = useCallback((next: PickedImage) => appendAttachments([next]), [appendAttachments]);
   const removeAttachment = useCallback((uri: string) => {
-    setAttached(previous => {
-      const removed = previous.find(item => item.uri === uri);
-      releaseClipboardAttachment(removed ?? null);
-      return previous.filter(item => item.uri !== uri);
-    });
+    const { next, removed } = removeFromDraft(attachedRef.current, uri);
+    releaseClipboardAttachment(removed);
+    attachedRef.current = next;
+    setAttached(next);
   }, []);
+  // web/桌面:原图关闭的图在上传前才压缩,这里不按原始体积拦它。
+  const willCompressLater = useCallback(
+    (img: PickedImage) => Platform.OS === 'web' && !sendOriginal && !!img.webFile && isDraftImage(img) && !/gif|svg/i.test(img.mimeType),
+    [sendOriginal],
+  );
+  const toggleSendOriginal = () => {
+    const next = !sendOriginal;
+    setSendOriginal(next);
+    // 原生端的压缩发生在选图那一刻:已经选进来的图保持选图时的档位,这里说清楚,不假装改了它们。
+    if (Platform.OS !== 'web' && attached.some(img => img.pickedOriginal !== undefined && img.pickedOriginal !== next)) {
+      setComposerNotice(next ? '原图对之后选择的图片生效；已选的图片已压缩' : '已选的原图不会再压缩；之后选择的图片会压缩');
+    }
+  };
 
   // React Native Web does not expose clipboard files through TextInput's
   // onChangeText. Listen at the window while this chat is mounted so Ctrl+V
@@ -519,12 +562,21 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
     return () => window.removeEventListener('paste', onPaste);
   }, [appendAttachment]);
   const [viewerUri, setViewerUri] = useState<string | null>(null);
+  // 多图方格没有「下载原图」行:从方格点开的预览层带上它。
+  const [viewerSave, setViewerSave] = useState<{ name: string; fileId?: string; mime?: string } | null>(null);
+  const [viewerSaveNote, setViewerSaveNote] = useState<string | null>(null);
+  const openViewer = (uri: string, save: { name: string; fileId?: string; mime?: string } | null = null) => {
+    setViewerSave(save);
+    setViewerSaveNote(null);
+    setViewerUri(uri);
+  };
   const attachmentViewerScope = `${conversationKeyFor}::${attachmentCacheScope(cfg.serverUrl, cfg.token)}`;
   // A blob: URL (Tauri web) and a file: URI (native) both identify bytes that
   // were fetched under the previous credentials. Closing the parent modal is
   // part of the auth boundary; resetting only the child thumbnail would leave
   // those already-open bytes visible after a profile/Hub/conversation switch.
   useEffect(() => setViewerUri(null), [attachmentViewerScope]);
+  useEffect(() => setViewerSave(null), [attachmentViewerScope]);
   // 更像微信·round-2: 长按气泡的动作菜单(引用/删除)。null = 未打开。
   const [menuFor, setMenuFor] = useState<MessageSelection | null>(null);
   // 0.2.78 Vincent:「右键的效果和微信对齐」—— 桌面端菜单落在光标处(微信桌面端就是这样),
@@ -971,11 +1023,79 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
       </Text>
     );
 
+  // 多图(≥2 张能画缩略图的图)= 微信式 3 列方格;单图/文件/视频仍走 renderAttachment,不改原样子。
+  const gridRenderable = (a: AttachmentView) =>
+    a.isImage && !!a.uri && (!a.needsAuth || Platform.OS !== 'web' || !!(globalThis as any).__TAURI_INTERNALS__);
+  const renderGridCell = (a: AttachmentView, item?: ChatItem) => {
+    const state = a.localIndex !== undefined ? item?._uploads?.[a.localIndex] : undefined;
+    const failed = state?.status === 'failed';
+    const cellKey = `${attachmentCacheScope(cfg.serverUrl, cfg.token)}-${a.key}`;
+    const inner = !a.needsAuth ? (
+      <Pressable onPress={() => setViewerUri(a.uri!)} accessibilityLabel={`预览 ${a.name}`}>
+        <Image source={{ uri: a.uri }} style={styles.gridImage} resizeMode="cover" />
+      </Pressable>
+    ) : Platform.OS === 'web' ? (
+      <AuthedWebThumb uri={a.uri!} name={a.name} mime={a.mime} token={cfg.token} compact onPress={objectUrl => openViewer(objectUrl, { name: a.name })} />
+    ) : (
+      <AuthedThumb fileId={a.key} name={a.name} mime={a.mime} serverUrl={cfg.serverUrl} token={cfg.token} compact onPress={localUri => openViewer(localUri, { name: a.name, fileId: a.key, mime: a.mime })} />
+    );
+    return (
+      <View key={cellKey} style={[styles.gridCell, failed && styles.gridCellFailed]} testID="chat-image-grid-cell">
+        {inner}
+        {state && state.status !== 'done' ? (
+          <View style={[styles.gridOverlay, failed && styles.gridOverlayFailed]} pointerEvents={failed ? 'box-none' : 'none'}>
+            {state.status === 'uploading' ? <ActivityIndicator size="small" color="#fff" /> : null}
+            <Text style={styles.gridOverlayText} numberOfLines={2}>
+              {state.status === 'queued' ? '等待上传' : state.status === 'uploading' ? '上传中' : '上传失败'}
+            </Text>
+          </View>
+        ) : null}
+        {failed && item?._failed && a.localIndex !== undefined ? (
+          <Pressable
+            accessibilityLabel={`移除 ${a.name}`}
+            hitSlop={8}
+            style={styles.gridRemove}
+            onPress={() => removeFailedAttachment(item, a.localIndex!)}
+          >
+            <Text style={styles.gridRemoveText}>✕</Text>
+          </Pressable>
+        ) : null}
+      </View>
+    );
+  };
+  const renderAttachments = (views: AttachmentView[], item?: ChatItem) => {
+    const gridViews = views.filter(gridRenderable);
+    if (gridViews.length < 2) {
+      return views.map(a => {
+        const state = a.localIndex !== undefined ? item?._uploads?.[a.localIndex] : undefined;
+        if (!state || state.status === 'done') return renderAttachment(a);
+        return (
+          <View key={`state-${a.key}`}>
+            {renderAttachment(a)}
+            <Text style={[styles.attachmentLine, state.status === 'failed' && { color: colors.failed }]}>
+              {state.status === 'failed' ? `上传失败：${state.error ?? ''}` : state.status === 'uploading' ? '上传中…' : '等待上传'}
+            </Text>
+          </View>
+        );
+      });
+    }
+    const rest = views.filter(a => !gridRenderable(a));
+    return (
+      <>
+        <View style={styles.imageGrid} testID="chat-image-grid">
+          {gridViews.map(a => renderGridCell(a, item))}
+        </View>
+        {rest.map(renderAttachment)}
+      </>
+    );
+  };
+
   const doSend = async (
     content: string,
     localId: string,
     imgs: PickedImage[] = [],
     priority: TaskPriority = 'normal',
+    original = false,
   ) => {
     const startedConversationKey = conversationKeyFor;
     const startedAlias = alias;
@@ -995,7 +1115,32 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
       let attachments: TaskAttachment[] | undefined;
       let outgoing = content;
       if (imgs.length) {
-        const uploaded = await Promise.all(imgs.map(async img => ({ img, up: await uploadImage(cfg, img) })));
+        // 并发 ≤ 3、按选择顺序;逐张状态画在回显气泡的缩略图上。
+        const setState = (index: number, state: UploadState) => {
+          if (!mayTouchVisibleState()) return;
+          setMessages(prev => prev.map(t => (t._localId === localId ? { ...t, _uploads: withUploadState(t._uploads, imgs.length, index, state) } : t)));
+        };
+        const run = await runUploadQueue(imgs, async img => {
+          const hit = uploadMemo.get(cfg.serverUrl, img.uri, original);
+          if (hit) return hit;
+          const prepared = await prepareForUpload(img, original);
+          const tooBig = oversizeMessage(prepared);
+          if (tooBig) throw new Error(tooBig);
+          const done = { img: prepared, up: await uploadImage(cfg, prepared) };
+          uploadMemo.set(cfg.serverUrl, img.uri, original, done);
+          return done;
+        }, { concurrency: UPLOAD_CONCURRENCY, onState: setState });
+        if (run.failed.length) {
+          // 🔴 一张没传上就整条不发:绝不静默发出缺图的半条消息。sendTask 根本没调用,
+          // 不存在「hub 其实收到了」的歧义,直接标未送达,让用户重试(已传的不重传)或移除失败的那几张。
+          const summary = uploadFailureSummary(imgs.map(img => img.fileName), run.errors) ?? '附件上传失败';
+          outboxMarkFailed(localId);
+          if (mayTouchVisibleState()) {
+            setMessages(prev => prev.map(t => (t._localId === localId ? { ...t, _pending: false, _failed: true, _uploadError: summary } : t)));
+          }
+          return;
+        }
+        const uploaded = run.results as { img: PickedImage; up: UploadedFile }[];
         attachments = uploaded.map(({ img, up }) => toTaskAttachment(img, up));
         outgoing = `${content}${uploaded.map(({ img, up }) => attachmentTextHint(img, up)).join('')}`;
       }
@@ -1065,13 +1210,21 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
     }
     const body = parsed.content.trim() || (attached.length ? `[附件] ${attached.map(item => item.fileName).join('、')}` : '');
     if ((!body && !attached.length) || sending) return;
+    const blocked = sendBlocker(attached, willCompressLater);
+    if (blocked) {
+      setComposerNotice(blocked); // 草稿原样保留,用户移除超限的那张再发
+      return;
+    }
     // 引用条在前、正文在后;agent 端看到的是「@作者: 被引用内容」+ 正文,客户端渲染时再拆开。
     const content = quote ? buildQuote(quote.text, 40, quote.author) + body : body;
     const imgs = attached;
     const priority = sendPriority;
+    const original = sendOriginal;
     setDraft('');
     setQuote(null);
+    attachedRef.current = [];
     setAttached([]);
+    setSendOriginal(false);
     setSendPriority('normal');
     // Optimistic echo: render the message instantly tagged with a
     // client-only _localId (NOT the server task id, which we don't have
@@ -1084,10 +1237,10 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
     const localId = createDashboardRequestId();
     outboxAdd({ id: localId, alias, content, createdAt: Date.now(), state: 'pending', hadImage: imgs.length > 0, priority });
     setMessages(prev => [
-      { content, created_at: new Date().toISOString(), _localId: localId, _pending: true, _imgs: imgs, _priority: priority },
+      { content, created_at: new Date().toISOString(), _localId: localId, _pending: true, _imgs: imgs, _priority: priority, _original: original },
       ...prev,
     ]);
-    doSend(content, localId, imgs, priority);
+    doSend(content, localId, imgs, priority, original);
   };
 
   const retry = (item: ChatItem) => {
@@ -1096,12 +1249,24 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
     outboxMarkPending(item._localId, retriedAt); // 重试中被杀照样恢复(仍在盘上)
     setMessages(prev =>
       mergeMessagesNewestFirst(
-        prev.map(t => (t._localId === item._localId ? { ...t, created_at: new Date(retriedAt).toISOString(), _pending: true, _failed: false } : t)),
+        prev.map(t => (t._localId === item._localId ? { ...t, created_at: new Date(retriedAt).toISOString(), _pending: true, _failed: false, _uploadError: undefined } : t)),
         [],
       ),
     );
     const priority = item._priority ?? outboxForAlias(alias).find(e => e.id === item._localId)?.priority ?? 'normal';
-    doSend(item.content, item._localId, item._imgs ?? (item._img ? [item._img] : []), priority);
+    doSend(item.content, item._localId, item._imgs ?? (item._img ? [item._img] : []), priority, !!item._original);
+  };
+
+  // 失败消息里移除一张没传上的附件(微信:「重发」或「删掉这张」)。只在 _failed 时可用。
+  const removeFailedAttachment = (item: ChatItem, index: number) => {
+    if (!item._localId || !item._failed) return;
+    setMessages(prev => prev.map(t => {
+      if (t._localId !== item._localId) return t;
+      const current = t._imgs ?? (t._img ? [t._img] : []);
+      const { imgs, states } = removeAttachmentAt(current, t._uploads, index);
+      const stillFailing = (states ?? []).some(s => s.status === 'failed');
+      return { ...t, _img: undefined, _imgs: imgs, _uploads: states, _uploadError: stillFailing ? t._uploadError : undefined };
+    }));
   };
 
   // Header subtitle, Telegram-style (Vincent tg 739-741): show 正在处理…
@@ -1156,7 +1321,16 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
       pick()
         .then(item => { if (item) appendAttachment(item); })
         .catch(error => Alert.alert('无法打开', error instanceof Error ? error.message : String(error)));
-    if (key === 'album') pickInto(pickImage);
+    if (key === 'album') {
+      const slots = remainingImageSlots(attachedRef.current);
+      if (slots <= 0) {
+        setComposerNotice(`最多选择 ${MAX_DRAFT_IMAGES} 张图片`);
+        return;
+      }
+      pickImages(slots, sendOriginal)
+        .then(appendAttachments)
+        .catch(error => Alert.alert('无法打开', error instanceof Error ? error.message : String(error)));
+    }
     else if (key === 'file') pickInto(pickDocument);
     else if (key === 'camera') pickInto(pickCameraPhoto);
     else setBtwLaunch(current => ({ id: (current?.id ?? 0) + 1 }));
@@ -1500,6 +1674,7 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
             const sender = resolveSender(item, currentUsername);
             // 微信式引用条:开头的「@作者: 文本」不进气泡,渲染成气泡下方的灰条
             const sentQuoted = parseQuoted(item.content);
+            const sentGridNames = sentAttachmentViews(item, cfg.serverUrl).filter(gridRenderable).map(a => a.name);
             const replyQuoted = parseQuoted(item.result ?? item.reply ?? '');
             // 2026-09-17 Vincent:「Agent 节点回复人类也要这个引用啊」—— 回复没自带引用行时,
             // 挂一条指向它所回的那条请求的引用条,点击定位原文。
@@ -1536,8 +1711,8 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
                             <Ionicons name="copy-outline" size={14} color={colors.textMuted} />
                           </Pressable>
                         ) : null}
-                        <MarkdownMessage>{cleanAttachmentDebugText(sentQuoted.body || (sentQuoted.quote ? '' : '—'))}</MarkdownMessage>
-                        {sentAttachmentViews(item, cfg.serverUrl).map(renderAttachment)}
+                        <MarkdownMessage>{hideGridImageLines(cleanAttachmentDebugText(sentQuoted.body || (sentQuoted.quote ? '' : '—')), sentGridNames) || (sentQuoted.quote ? '' : '—')}</MarkdownMessage>
+                        {renderAttachments(sentAttachmentViews(item, cfg.serverUrl), item)}
                       </View>
                       {sentQuoted.quote ? (
                         <View style={[styles.quoteChip, styles.quoteChipSent]} accessibilityLabel="引用">
@@ -1569,8 +1744,8 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
                             <Ionicons name="copy-outline" size={14} color={colors.textMuted} />
                           </Pressable>
                         ) : null}
-                        <MarkdownMessage>{cleanAttachmentDebugText(sentQuoted.body || (sentQuoted.quote ? '' : '—'))}</MarkdownMessage>
-                        {sentAttachmentViews(item, cfg.serverUrl).map(renderAttachment)}
+                        <MarkdownMessage>{hideGridImageLines(cleanAttachmentDebugText(sentQuoted.body || (sentQuoted.quote ? '' : '—')), sentGridNames) || (sentQuoted.quote ? '' : '—')}</MarkdownMessage>
+                        {renderAttachments(sentAttachmentViews(item, cfg.serverUrl), item)}
                       </View>
                       {sentQuoted.quote ? (
                         <View style={[styles.quoteChip, styles.quoteChipReply]} accessibilityLabel="引用">
@@ -1600,7 +1775,7 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
                             </Pressable>
                           ) : null}
                           <MarkdownMessage>{cleanAttachmentDebugText(replyQuoted.body)}</MarkdownMessage>
-                          {replyAttachmentViews(item, cfg.serverUrl).map(renderAttachment)}
+                          {renderAttachments(replyAttachmentViews(item, cfg.serverUrl))}
                         </View>
                         {replyQuoted.quote ? (
                           <View style={[styles.quoteChip, styles.quoteChipReply]} accessibilityLabel="引用">
@@ -1624,6 +1799,7 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
                   <Text style={styles.pendingMark}>发送中…</Text>
                 ) : item._failed ? (
                   <Pressable onPress={() => retry(item)} hitSlop={8}>
+                    {item._uploadError ? <Text style={styles.uploadErrorText}>{item._uploadError}</Text> : null}
                     <Text style={styles.failedMark}>未送达 · 点击重试</Text>
                   </Pressable>
                 ) : sender.isCurrentUser && !(item.result ?? item.reply) ? (
@@ -1673,25 +1849,84 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
       ) : null}
 
       {attached.length ? (
-        <View style={styles.attachPreviewList}>
-          {attached.map((item, index) => (
-            <View key={item.uri} style={styles.attachPreview}>
-              <Text style={styles.attachName} numberOfLines={1}>📎 {item.fileName}</Text>
-              <Text style={styles.attachIndex}>{index + 1}</Text>
-              <Pressable onPress={() => removeAttachment(item.uri)} hitSlop={10}>
-                <Text style={styles.attachRemove}>✕</Text>
+        <View style={styles.draftStrip} testID="composer-draft-strip">
+          <View style={styles.draftStripHeader}>
+            <Text style={styles.draftCount} testID="composer-draft-count">{draftCountLabel(attached)}</Text>
+            {draftImageCount(attached) ? (
+              <Pressable
+                accessibilityRole="checkbox"
+                accessibilityState={{ checked: sendOriginal }}
+                aria-checked={sendOriginal}
+                accessibilityLabel="原图"
+                hitSlop={8}
+                onPress={toggleSendOriginal}
+                style={styles.originalToggle}
+                testID="composer-original-toggle"
+              >
+                <View style={[styles.originalBox, sendOriginal && styles.originalBoxOn]}>
+                  {sendOriginal ? <Ionicons name="checkmark" size={11} color={colors.onAccent} /> : null}
+                </View>
+                <Text style={styles.originalLabel}>原图</Text>
               </Pressable>
-            </View>
-          ))}
+            ) : null}
+          </View>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.draftStripRow}>
+            {attached.map((item, index) => {
+              const tooBig = !willCompressLater(item) && !!oversizeMessage(item);
+              return isDraftImage(item) ? (
+                <View key={item.uri} style={[styles.draftThumbWrap, tooBig && styles.draftThumbTooBig]} testID="composer-draft-thumb">
+                  <Pressable onPress={() => setViewerUri(item.uri)} accessibilityLabel={`预览 ${item.fileName}`}>
+                    <Image source={{ uri: item.uri }} style={styles.draftThumb} resizeMode="cover" />
+                  </Pressable>
+                  <View style={styles.draftIndex} pointerEvents="none"><Text style={styles.draftIndexText}>{index + 1}</Text></View>
+                  {tooBig ? <View style={styles.draftTooBigTag} pointerEvents="none"><Text style={styles.draftTooBigText}>超 12MB</Text></View> : null}
+                  <Pressable onPress={() => removeAttachment(item.uri)} hitSlop={8} style={styles.draftRemove} accessibilityLabel={`移除 ${item.fileName}`}>
+                    <Text style={styles.draftRemoveText}>✕</Text>
+                  </Pressable>
+                </View>
+              ) : (
+                <View key={item.uri} style={[styles.draftFileChip, tooBig && styles.draftThumbTooBig]}>
+                  <Text style={styles.attachName} numberOfLines={2}>📎 {item.fileName}</Text>
+                  <Pressable onPress={() => removeAttachment(item.uri)} hitSlop={8} style={styles.draftRemove} accessibilityLabel={`移除 ${item.fileName}`}>
+                    <Text style={styles.draftRemoveText}>✕</Text>
+                  </Pressable>
+                </View>
+              );
+            })}
+          </ScrollView>
+        </View>
+      ) : null}
+      {composerNotice ? (
+        <View style={styles.composerNotice} pointerEvents="none" accessibilityLiveRegion="polite" testID="composer-notice">
+          <Text style={styles.composerNoticeText}>{composerNotice}</Text>
         </View>
       ) : null}
       {sendNotice ? (
         <ActualRecipientNotice notice={sendNotice} onDismiss={() => setSendConfirmation(null)} />
       ) : null}
       <Modal visible={!!viewerUri} transparent animationType="fade">
-        <Pressable style={styles.viewerBackdrop} onPress={() => setViewerUri(null)}>
+        <Pressable style={styles.viewerBackdrop} onPress={() => { setViewerUri(null); setViewerSave(null); }}>
           {viewerUri ? (
             <Image source={{ uri: viewerUri }} style={styles.viewerImage} resizeMode="contain" />
+          ) : null}
+          {viewerUri && viewerSave ? (
+            Platform.OS === 'web' ? (
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={`下载 ${viewerSave.name}`}
+                hitSlop={8}
+                onPress={(e: any) => {
+                  e?.stopPropagation?.();
+                  saveObjectUrlOriginal(viewerUri, viewerSave.name, !!(e?.nativeEvent?.altKey ?? e?.altKey))
+                    .then(path => setViewerSaveNote(path ? `✓ 已保存到 ${displayDownloadPath(path)}` : null))
+                    .catch(reason => setViewerSaveNote(`保存失败(${reason instanceof Error ? reason.message : String(reason)})`));
+                }}
+              >
+                <Text style={styles.viewerSave}>{viewerSaveNote ?? '↓ 下载原图'}</Text>
+              </Pressable>
+            ) : viewerSave.fileId ? (
+              <AttachmentFile fileId={viewerSave.fileId} name={viewerSave.name} mime={viewerSave.mime} serverUrl={cfg.serverUrl} token={cfg.token} label="下载原图" />
+            ) : null
           ) : null}
         </Pressable>
       </Modal>
@@ -2113,6 +2348,7 @@ const makeStyles = () =>
     justifyContent: 'center',
   },
   viewerImage: { width: '100%', height: '80%' },
+  viewerSave: { color: '#fff', fontSize: 13, marginTop: spacing.md, paddingVertical: 6, paddingHorizontal: 14, borderRadius: 14, borderWidth: 1, borderColor: 'rgba(255,255,255,0.5)' },
   // round-2 长按动作菜单(底部 action sheet)
   menuBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.45)', justifyContent: 'flex-end' },
   actionSheet: {
@@ -2208,6 +2444,38 @@ const makeStyles = () =>
   copiedToast: { position: 'absolute', alignSelf: 'center', bottom: 96, flexDirection: 'row', alignItems: 'center', gap: 6, paddingVertical: 6, paddingHorizontal: 12, borderRadius: 14, backgroundColor: colors.card, borderWidth: 1, borderColor: colors.border },
   copiedToastText: { color: colors.text, fontSize: 12 },
   attachPreviewList: { maxHeight: 112, paddingVertical: spacing.xs },
+  // 多图草稿条(微信式):计数 + 原图开关一行,下面横向缩略图,每张右上 ✕、左下序号。
+  draftStrip: { paddingTop: spacing.xs, paddingHorizontal: spacing.md, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border },
+  draftStripHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 },
+  draftCount: { color: colors.textSecondary, fontSize: 12 },
+  originalToggle: { flexDirection: 'row', alignItems: 'center', gap: 5 },
+  originalBox: { width: 15, height: 15, borderRadius: 8, borderWidth: 1, borderColor: colors.textMuted, alignItems: 'center', justifyContent: 'center' },
+  originalBoxOn: { backgroundColor: colors.accent, borderColor: colors.accent },
+  originalLabel: { color: colors.text, fontSize: 12 },
+  draftStripRow: { gap: 8, paddingTop: 6, paddingBottom: spacing.xs, paddingRight: 6 },
+  draftThumbWrap: { width: 64, height: 64, borderRadius: 6, overflow: 'visible' },
+  draftThumbTooBig: { borderWidth: 2, borderColor: colors.failed, borderRadius: 8 },
+  draftThumb: { width: 64, height: 64, borderRadius: 6, backgroundColor: colors.inputBg },
+  draftIndex: { position: 'absolute', left: 3, bottom: 3, minWidth: 16, height: 16, borderRadius: 8, paddingHorizontal: 3, backgroundColor: colors.accent, alignItems: 'center', justifyContent: 'center' },
+  draftIndexText: { color: colors.onAccent, fontSize: 10, fontWeight: '600' },
+  draftTooBigTag: { position: 'absolute', left: 0, right: 0, top: 22, alignItems: 'center' },
+  draftTooBigText: { color: '#fff', backgroundColor: colors.failed, fontSize: 10, paddingHorizontal: 3, borderRadius: 3, overflow: 'hidden' },
+  draftRemove: { position: 'absolute', top: -6, right: -6, width: 18, height: 18, borderRadius: 9, backgroundColor: 'rgba(0,0,0,0.65)', alignItems: 'center', justifyContent: 'center' },
+  draftRemoveText: { color: '#fff', fontSize: 10, lineHeight: 12 },
+  draftFileChip: { width: 120, height: 64, borderRadius: 6, padding: 6, justifyContent: 'center', backgroundColor: colors.inputBg, borderWidth: 1, borderColor: colors.border },
+  composerNotice: { alignSelf: 'center', marginVertical: 4, paddingVertical: 5, paddingHorizontal: 12, borderRadius: 12, backgroundColor: colors.card, borderWidth: 1, borderColor: colors.border, maxWidth: '92%' },
+  composerNoticeText: { color: colors.text, fontSize: 12 },
+  // 多图气泡:3 列方格(微信式),每格 84,间距 4
+  imageGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 4, marginTop: spacing.sm, maxWidth: 3 * 84 + 2 * 4 },
+  gridCell: { width: 84, height: 84, borderRadius: 6, overflow: 'hidden', backgroundColor: colors.inputBg },
+  gridCellFailed: { borderWidth: 2, borderColor: colors.failed },
+  gridImage: { width: 84, height: 84 },
+  gridOverlay: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.45)', alignItems: 'center', justifyContent: 'center', gap: 2 },
+  gridOverlayFailed: { backgroundColor: 'rgba(160,20,20,0.55)' },
+  gridOverlayText: { color: '#fff', fontSize: 10, textAlign: 'center' },
+  gridRemove: { position: 'absolute', top: 2, right: 2, width: 18, height: 18, borderRadius: 9, backgroundColor: 'rgba(0,0,0,0.7)', alignItems: 'center', justifyContent: 'center' },
+  gridRemoveText: { color: '#fff', fontSize: 10, lineHeight: 12 },
+  uploadErrorText: { color: colors.failed, fontSize: 11, textAlign: 'right', marginBottom: 2 },
   attachPreview: {
     flexDirection: 'row',
     alignItems: 'center',

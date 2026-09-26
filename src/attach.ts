@@ -3,6 +3,7 @@ import * as FileSystem from 'expo-file-system/legacy';
 import * as ImagePicker from 'expo-image-picker';
 import { Platform } from 'react-native';
 import { appFetch } from './app-fetch';
+import { compressedFileName, isDraftImage, pickerQualityFor, planCompression } from './image-draft';
 
 // Image/file attachments (#220 roadmap ③) — fully wired end to end:
 // pick → upload → attach (see uploadImage below). The hub's
@@ -18,6 +19,12 @@ export interface PickedImage {
   fileName: string;
   mimeType: string;
   fileSize?: number;
+  /** Pixel size when the picker reports it (multi-image compression decision). */
+  width?: number;
+  height?: number;
+  /** Native only: picked with quality 1 (原图, original bytes) vs 0.8 (re-encoded).
+   *  undefined on web, where compression happens at send time instead. */
+  pickedOriginal?: boolean;
   /** Browser/Tauri clipboard and picker payload. Keeping the original Blob
    * lets FormData upload the bytes instead of serializing a blob: URL. */
   webFile?: Blob;
@@ -38,24 +45,83 @@ export const pickDocument = async (): Promise<PickedImage | null> => {
   };
 };
 
-/** Ask for media-library permission and let the user pick one image. */
-export const pickImage = async (): Promise<PickedImage | null> => {
+/** 「相册」多选(Vincent 2026-09-26「像微信一样支持选择多张图片」)。
+ *  - Android:expo-image-picker 56 走 androidx PickMultipleVisualMedia(系统 Photo Picker),
+ *    `selectionLimit` 生效;`orderedSelection` 在 Android 版本里同样透传给
+ *    PickVisualMediaRequest.setOrderedSelection(类型注释只写了 ios 15+,但 Kotlin 端读它),
+ *    Photo Picker 支持时显示 1、2、3… 序号徽标并按点选顺序返回。
+ *  - iOS 14+:PHPicker,selectionLimit 生效,orderedSelection 需 iOS 15+。
+ *  - web/桌面:<input type=file multiple>;浏览器不认 selectionLimit,多出的在 addToDraft 截掉。
+ *  `limit` = 本次还能选几张(9 减去草稿里已有的图)。原生端按 `original` 选 quality:
+ *  1 = 原字节(Android RawImageExporter),0.8 = JPEG 重编码(见 image-draft.pickerQualityFor)。 */
+export const pickImages = async (limit: number, original: boolean): Promise<PickedImage[]> => {
+  if (limit <= 0) return [];
   const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
-  if (!perm.granted) return null;
+  if (!perm.granted) return [];
   const result = await ImagePicker.launchImageLibraryAsync({
     mediaTypes: ['images'],
-    quality: 0.85,
+    allowsMultipleSelection: true,
+    selectionLimit: limit,
+    orderedSelection: true,
+    quality: pickerQualityFor(original),
     allowsEditing: false,
   });
-  if (result.canceled || !result.assets?.length) return null;
-  const a = result.assets[0];
-  return {
+  if (result.canceled || !result.assets?.length) return [];
+  // 顺序 = 选择顺序;不排序、不去重。不在这里截断:web 不认 selectionLimit,多出来的交给
+  // addToDraft 拒收并弹「最多选择 9 张」—— 在这里 slice 会静默丢图,用户不知道少了哪张。
+  return result.assets.map((a, index) => ({
     uri: a.uri,
-    fileName: a.fileName ?? 'image.jpg',
+    fileName: a.fileName ?? `image-${index + 1}.jpg`,
     mimeType: a.mimeType ?? 'image/jpeg',
     fileSize: a.fileSize,
+    width: a.width,
+    height: a.height,
+    pickedOriginal: Platform.OS === 'web' ? undefined : original,
     webFile: (a as any).file,
-  };
+  }));
+};
+
+/** web/桌面端发送前按原图开关压缩(canvas 重采样,最长边 2048、JPEG 0.8)。
+ *  原生端的压缩已在选图时由 picker 的 quality 完成,这里原样返回。
+ *  压缩失败或压完反而更大:退回原文件(之后的 12MB 检查照常把关)。 */
+export const prepareForUpload = async (img: PickedImage, original: boolean): Promise<PickedImage> => {
+  if (Platform.OS !== 'web' || original || !img.webFile || !isDraftImage(img)) return img;
+  try {
+    const g: any = globalThis as any;
+    if (typeof g.createImageBitmap !== 'function' || typeof g.document === 'undefined') return img;
+    const bitmap = await g.createImageBitmap(img.webFile, { imageOrientation: 'from-image' });
+    const plan = planCompression({
+      original,
+      mimeType: img.mimeType,
+      fileName: img.fileName,
+      fileSize: img.fileSize ?? img.webFile.size,
+      width: bitmap.width,
+      height: bitmap.height,
+    });
+    if (plan.kind !== 'resize') { bitmap.close?.(); return img; }
+    const canvas = g.document.createElement('canvas');
+    canvas.width = plan.width;
+    canvas.height = plan.height;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) { bitmap.close?.(); return img; }
+    ctx.fillStyle = '#fff'; // JPEG 没有透明通道:透明 PNG 铺白底,别变成黑底
+    ctx.fillRect(0, 0, plan.width, plan.height);
+    ctx.drawImage(bitmap, 0, 0, plan.width, plan.height);
+    bitmap.close?.();
+    const blob: Blob | null = await new Promise(resolve => canvas.toBlob(resolve, plan.mimeType, plan.quality));
+    if (!blob || blob.size >= (img.fileSize ?? img.webFile.size)) return img;
+    return {
+      ...img,
+      fileName: compressedFileName(img.fileName),
+      mimeType: plan.mimeType,
+      fileSize: blob.size,
+      width: plan.width,
+      height: plan.height,
+      webFile: blob,
+    };
+  } catch {
+    return img;
+  }
 };
 
 /** 「＋」 panel 拍照: take one photo with the system camera. Same PickedImage shape
