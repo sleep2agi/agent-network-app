@@ -10,7 +10,7 @@
 
 import * as SecureStore from 'expo-secure-store';
 import { Platform } from 'react-native';
-import { parseVoiceCredentials, type VoiceCredentials } from './voice-credentials-model';
+import { needsScrub, parseVoiceCredentials, type VoiceCredentials } from './voice-credentials-model';
 
 const KEY = 'voice_asr_v1';
 
@@ -49,6 +49,8 @@ export async function loadVoiceCredentials(): Promise<VoiceCredentials | null> {
     raw = null; // 读失败 = 当作未配置;不把异常(可能含路径)透给界面
   }
   cache = parseVoiceCredentials(raw);
+  // 0.2.112 存过 Secret Key(两个接口都用不到):静默重写一次,把它从安全存储里去掉。
+  if (cache && needsScrub(raw)) void saveVoiceCredentials(cache).catch(() => { /* 下次再试 */ });
   return cache;
 }
 

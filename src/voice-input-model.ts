@@ -110,10 +110,10 @@ export function voiceStep(state: VoiceState, ev: VoiceEvent, limits: Limits = DE
 
 /** 录音中覆盖层的文案。 */
 export function overlayHint(phase: VoicePhase): string {
-  if (phase === 'cancelArmed') return '松开手指,取消发送';
+  if (phase === 'cancelArmed') return '松开手指,取消';
   if (phase === 'transcribing') return '正在识别…';
   if (phase === 'starting') return '准备录音…';
-  return '松开 识别 · 上滑 取消';
+  return '松开 转文字 · 上滑 取消';
 }
 
 /**
@@ -132,4 +132,59 @@ export function insertRecognized(draft: string, text: string): string {
 export function formatElapsed(ms: number): string {
   const s = Math.max(0, Math.floor(ms / 1000));
   return `${String(Math.floor(s / 60)).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`;
+}
+
+// ── 微信式输入区(手机 / 双栏):左边 🎤/⌨ 切换,语音模式下输入框整条变成「按住 说话」 ──
+
+export type ComposerInputMode = 'keyboard' | 'voice';
+
+/** 存储里读出来的值;没存过 / 读坏了 = 键盘。 */
+export function parseComposerInputMode(raw: string | null | undefined): ComposerInputMode {
+  return raw === 'voice' ? 'voice' : 'keyboard';
+}
+
+export function toggleComposerInputMode(m: ComposerInputMode): ComposerInputMode {
+  return m === 'voice' ? 'keyboard' : 'voice';
+}
+
+/**
+ * 切换按钮显示的是「点了会切到哪」:键盘模式下显示麦克风,语音模式下显示键盘(微信同款)。
+ */
+export function toggleButtonShows(m: ComposerInputMode): 'mic' | 'keyboard' {
+  return m === 'voice' ? 'keyboard' : 'mic';
+}
+
+export type HoldBarTone = 'idle' | 'pressed' | 'cancel' | 'busy';
+
+/**
+ * 「按住 说话」条的文字。松手**不发送**:识别结果进输入框给用户改(#410 定的),
+ * 所以按住时写「松开 转文字」而不是微信的「松开 发送」—— 文案不能承诺一个不会发生的动作。
+ */
+export function holdBarLabel(phase: VoicePhase): string {
+  switch (phase) {
+    case 'starting':
+    case 'recording': return '松开 转文字';
+    case 'cancelArmed': return '松开 取消';
+    case 'transcribing': return '识别中…';
+    default: return '按住 说话';
+  }
+}
+
+export function holdBarTone(phase: VoicePhase): HoldBarTone {
+  if (phase === 'cancelArmed') return 'cancel';
+  if (phase === 'starting' || phase === 'recording') return 'pressed';
+  if (phase === 'transcribing') return 'busy';
+  return 'idle';
+}
+
+/** 录音浮层底部的取消区:手指要上滑多少才算进去(和状态机的阈值是同一个数)。 */
+export function cancelZoneLabel(phase: VoicePhase): string {
+  return phase === 'cancelArmed' ? '松开手指，取消' : '上滑到这里取消';
+}
+
+/** 状态转移时要不要震一下:按下开始录音 = 轻触;滑进取消区 = 提醒(微信也是这两下)。 */
+export function hapticFor(prev: VoicePhase, next: VoicePhase): 'press' | 'cancelArmed' | null {
+  if (prev === 'idle' && next === 'starting') return 'press';
+  if (prev !== 'cancelArmed' && next === 'cancelArmed') return 'cancelArmed';
+  return null;
 }

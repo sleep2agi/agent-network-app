@@ -94,7 +94,8 @@ export const SETTINGS_CATEGORIES: readonly SettingsCategory[] = [
     label: '语音输入',
     icon: 'mic-outline',
     rows: [
-      { key: 'credentials', label: '豆包语音凭据', keywords: ['语音', '语音识别', '豆包', '火山', '火山引擎', 'asr', 'voice', 'app id', 'access token', 'secret key', 'api key', '麦克风', '按住说话'], platforms: ['android', 'ios', 'desktop'] },
+      { key: 'mode', label: '识别模型', keywords: ['流式', '边说边出字', '实时', '极速版', '录音文件', '识别模型', '识别模式', 'streaming', 'stream', 'flash', '语音'], platforms: ['android', 'ios', 'desktop'] },
+      { key: 'credentials', label: '豆包语音 API Key', keywords: ['语音', '语音识别', '豆包', '火山', '火山引擎', 'asr', 'voice', 'api key', 'app id', 'access token', '旧版控制台', '开通', '麦克风', '按住说话'], platforms: ['android', 'ios', 'desktop'] },
       { key: 'test', label: '测试语音识别', keywords: ['测试', '录音', 'test', 'mic'], platforms: ['android', 'ios', 'desktop'] },
     ],
   },

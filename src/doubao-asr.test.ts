@@ -7,9 +7,9 @@ let p = 0, t = 0;
 const ck = (name: string, cond: boolean) => { t++; if (cond) { p++; console.log(`✅ ${name}`); } else console.log(`❌ ${name}`); };
 
 const TOKEN = 'tok-SECRET-9f8e7d6c5b4a';
-const SECRET_KEY = 'sk-SECRET-0011223344';
-const OLD: VoiceCredentials = { appId: '1234567890', accessToken: TOKEN, secretKey: SECRET_KEY, endpoint: '' };
-const NEW: VoiceCredentials = { appId: '', accessToken: TOKEN, secretKey: '', endpoint: '' };
+const SECRET_KEY = 'sk-SECRET-0011223344'; // 0.2.112 存档里可能还有;请求里绝不能出现
+const OLD: VoiceCredentials = { appId: '1234567890', accessToken: TOKEN, endpoint: '' };
+const NEW: VoiceCredentials = { appId: '', accessToken: TOKEN, endpoint: '' };
 const wav = encodeWav(new Int16Array(1600), 16000);
 
 // ── 请求形状 ──
@@ -21,7 +21,8 @@ const wav = encodeWav(new Int16Array(1600), 16000);
   ck('X-Api-Sequence = -1、Request-Id 透传', r.headers['X-Api-Sequence'] === '-1' && r.headers['X-Api-Request-Id'] === 'req-1');
   const body = JSON.parse(r.body);
   ck('body:audio.data=base64、format=wav、model_name=bigmodel', body.audio.data === 'QUJD' && body.audio.format === 'wav' && body.request.model_name === 'bigmodel');
-  ck('Secret Key 不进请求(极速版用不到)', !r.body.includes(SECRET_KEY) && !Object.values(r.headers).includes(SECRET_KEY));
+  const legacy = buildFlashRequest({ ...OLD, secretKey: SECRET_KEY } as VoiceCredentials, 'QUJD', 'req-1');
+  ck('Secret Key 不进请求(极速版用不到)', !legacy.body.includes(SECRET_KEY) && !Object.values(legacy.headers).includes(SECRET_KEY));
   ck('user.uid 不是凭据', body.user.uid === 'agent-network-app');
   const n = buildFlashRequest(NEW, 'QUJD', 'req-2');
   ck('新版控制台(App ID 空):只发 X-Api-Key', n.headers['X-Api-Key'] === TOKEN && !('X-Api-App-Key' in n.headers) && !('X-Api-Access-Key' in n.headers));
@@ -40,8 +41,8 @@ const wav = encodeWav(new Int16Array(1600), 16000);
   ck('45000002 空音频 → 空串', JSON.stringify(interpretFlashResponse(200, '45000002', null)) === '{"text":""}');
   const e401 = interpretFlashResponse(401, null, { message: 'Invalid X-Api-Key ' + TOKEN });
   ck('HTTP 401 → auth_failed', 'error' in e401 && e401.error === 'auth_failed');
-  const e403 = interpretFlashResponse(403, null, null);
-  ck('HTTP 403(资源未开通)→ auth_failed', 'error' in e403 && e403.error === 'auth_failed');
+  const e403 = interpretFlashResponse(403, null, { error: '[resource_id=volc.bigasr.auc_turbo] requested resource not granted' });
+  ck('HTTP 403(requested resource not granted)→ not_enabled,不是 auth_failed', 'error' in e403 && e403.error === 'not_enabled' && e403.upstream === '403');
   const e151 = interpretFlashResponse(200, '45000151', null);
   ck('45000151 → bad_audio', 'error' in e151 && e151.error === 'bad_audio');
   const busy = interpretFlashResponse(200, '55000031', null);
@@ -79,6 +80,7 @@ const expectCode = async (name: string, run: () => Promise<unknown>, code: strin
 await expectCode('未配置 → not_configured(不发请求)', () => transcribeWav(null, wav, { fetchImpl: async () => { throw new Error('must not call'); } }), 'not_configured');
 await expectCode('空 token → not_configured', () => transcribeWav({ ...OLD, accessToken: '' }, wav, { fetchImpl: okFetch }), 'not_configured');
 await expectCode('超过大小上限 → too_long(不发请求)', () => transcribeWav(OLD, new Uint8Array(MAX_WAV_BYTES + 1), { fetchImpl: async () => { throw new Error('must not call'); } }), 'too_long');
+await expectCode('403 → not_enabled', () => transcribeWav(NEW, wav, { fetchImpl: async () => res(403, null, { error: 'requested resource not granted' }) }), 'not_enabled');
 await expectCode('401(响应体回显 token)→ auth_failed,错误里无 token', () => transcribeWav(OLD, wav, { fetchImpl: async () => res(401, null, { message: `Invalid ${TOKEN}` }) }), 'auth_failed');
 await expectCode('网络异常(message 含 URL/token)→ network,不透传', () => transcribeWav(OLD, wav, { fetchImpl: async () => { throw new Error(`connect failed https://x?token=${TOKEN}`); } }), 'network');
 let aborted = false;
@@ -89,7 +91,10 @@ ck('静音 → 空串(不是错误)', (await transcribeWav(OLD, wav, { fetchImpl
 ck('body 不是 JSON 且成功码 → upstream_error', await transcribeWav(OLD, wav, { fetchImpl: async () => ({ status: 200, headers: { get: () => '20000000' }, json: async () => { throw new SyntaxError('bad'); } }) }).then(() => false, e => e.code === 'upstream_error'));
 
 // ── 给用户看的文案 ──
-ck('auth_failed 文案点名开通极速版', asrErrorMessage('auth_failed').includes('极速版'));
+ck('auth_failed(新版)→「鉴权失败：API Key 不对」', asrErrorMessage('auth_failed', '401', 'api-key') === '鉴权失败：API Key 不对');
+ck('auth_failed(旧版)→ 点名 App ID / Access Token', asrErrorMessage('auth_failed', '401', 'app-token') === '鉴权失败：App ID 或 Access Token 不对');
+ck('not_enabled → 「服务未开通：请在开通管理里开通 录音文件识别大模型-极速版（资源 ID volc.bigasr.auc_turbo）」', asrErrorMessage('not_enabled', '403') === '服务未开通：请在开通管理里开通 录音文件识别大模型-极速版（资源 ID volc.bigasr.auc_turbo）');
+ck('network / timeout → 「网络失败」开头', asrErrorMessage('network').startsWith('网络失败') && asrErrorMessage('timeout').startsWith('网络失败'));
 ck('upstream_error 文案带数字码', asrErrorMessage('upstream_error', '55000999').includes('55000999'));
 ck('not_configured 文案', asrErrorMessage('not_configured') === '未配置语音识别');
 

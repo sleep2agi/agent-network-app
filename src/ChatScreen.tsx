@@ -63,8 +63,9 @@ import { layoutGeneration, releaseOnUnmount, takeHandoff } from './layout-handof
 import SideThreadDrawer, { type SideThreadLaunch } from './SideThreadDrawer';
 import { nextPlusPanel, plusPanelHeight, plusPanelItems, type PlusItemKey, type PlusPanelEvent } from './composer-plus-panel';
 import { useVoiceInput } from './useVoiceInput';
-import { insertRecognized } from './voice-input-model';
-import { VoiceMicButton, VoiceRecordingOverlay, VoiceSettingsPrompt } from './VoiceInputUI';
+import { insertRecognized, toggleComposerInputMode, type ComposerInputMode } from './voice-input-model';
+import { ComposerModeToggle, VoiceHoldBar, VoiceMicButton, VoiceRecordingOverlay, VoiceSettingsPrompt } from './VoiceInputUI';
+import { loadComposerInputMode, saveComposerInputMode } from './voice-prefs';
 
 // Chat with one agent. Mirrors dashboard M4: open with the newest PAGE
 // messages, grow the window when the user scrolls toward older history.
@@ -501,11 +502,40 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
     const timer = setTimeout(() => setComposerNotice(null), 2500);
     return () => clearTimeout(timer);
   }, [composerNotice]);
-  // 语音输入(按住说话):识别结果接到草稿后面,不自动发送,用户可以改完再发。
+  // 手机 / 双栏的输入方式(微信式):键盘,或整条「按住 说话」。每台设备记住用户**点切换**选的那个;
+  // 识别完回到键盘是这一句的临时状态(文字要给人改),不写回偏好 —— 下次进来还是用户选的语音模式。
+  const [inputMode, setInputMode] = useState<ComposerInputMode>('keyboard');
+  const focusAfterInsertRef = useRef(false);
+  useEffect(() => { void loadComposerInputMode().then(setInputMode).catch(() => {}); }, []);
+  // 语音输入(按住说话):识别结果接到草稿后面,不自动发送,切回键盘让用户改完再发。
   const voice = useVoiceInput({
-    onInsert: text => setDraft(d => insertRecognized(d, text)),
+    onInsert: text => {
+      setDraft(d => insertRecognized(d, text));
+      if (!desktop) { focusAfterInsertRef.current = true; setInputMode('keyboard'); }
+    },
     onNotice: setComposerNotice,
   });
+  const voiceMode = !desktop && voice.available && inputMode === 'voice';
+  const voiceBusy = voice.state.phase !== 'idle';
+  // 识别完切回键盘:TextInput 这一帧才重新挂上,挂上之后再 focus。
+  useEffect(() => {
+    if (voiceMode || !focusAfterInsertRef.current) return;
+    focusAfterInsertRef.current = false;
+    const id = setTimeout(() => mainComposerRef.current?.focus(), 30);
+    return () => clearTimeout(id);
+  }, [voiceMode]);
+  const toggleInputMode = () => {
+    const next = toggleComposerInputMode(inputMode);
+    setInputMode(next);
+    void saveComposerInputMode(next);
+    if (next === 'voice') {
+      if (plusOpenRef.current) plusEvent('toggle'); // ＋ 面板收起
+      mainComposerRef.current?.blur();
+      Keyboard.dismiss();
+    } else {
+      focusAfterInsertRef.current = true;
+    }
+  };
   const attachedRef = useRef<PickedImage[]>([]);
   attachedRef.current = attached;
   // 选择顺序即发送顺序:addToDraft 只追加、不排序;超出 9 张图 / 20 个附件的部分被拒并提示。
@@ -2091,6 +2121,8 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
         </View>
       ) : null}
       <View style={[styles.inputRow, { paddingBottom: spacing.md + (plusMenuOpen ? 0 : composerInset) }]}>
+        {/* 微信式:最左边 🎤/⌨ 切换;＋ 留在原位(第二个),不挪动用户已经按惯的按钮。 */}
+        {voice.available ? <ComposerModeToggle mode={inputMode} onToggle={toggleInputMode} disabled={voiceBusy} /> : null}
         <Pressable
           accessibilityLabel={plusMenuOpen ? '收起更多发送方式' : '更多发送方式'}
           accessibilityState={{ expanded: plusMenuOpen }}
@@ -2112,11 +2144,12 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
             <Text style={[styles.mobilePriorityText, sendPriority === 'high' && styles.priorityButtonTextActive]}>⚡</Text>
           </Pressable>
         ) : null}
-        {/* 语音输入:麦克风在输入框里的右侧(按住说话),行仍是 ＋ / 输入框 / 发送 三件。 */}
+        {/* 语音模式:整条输入框换成「按住 说话」;键盘模式:输入框(不再有框内的小麦克风)。 */}
         <View style={styles.inputWrap}>
+        {voiceMode ? <VoiceHoldBar voice={voice} /> : (
         <TextInput
           ref={mainComposerRef}
-          style={[styles.input, voice.available && styles.inputWithMic]}
+          style={[styles.input, styles.inputInWrap]}
           placeholder={`Message ${alias}…`}
           placeholderTextColor={colors.textMuted}
           value={draft}
@@ -2138,8 +2171,9 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
           }}
           multiline
         />
-        {voice.available ? <VoiceMicButton voice={voice} style={styles.inputMic} /> : null}
+        )}
         </View>
+        {voiceMode ? null : (
         <Pressable
           style={({ pressed }) => [
             styles.send,
@@ -2151,6 +2185,7 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
         >
           <Text style={[styles.sendText, !canSend(draft, attached.length > 0, sending) && styles.sendTextDisabled]}>↑</Text>
         </Pressable>
+        )}
       </View>
       {plusMenuOpen ? (
         // Inline, in the chat pane only (two-pane: never over the agent list). It is a
@@ -2528,9 +2563,8 @@ const makeStyles = () =>
     maxHeight: 120,
   },
   inputWrap: { flex: 1, justifyContent: 'flex-end' },
-  // 在输入框里给麦克风留出右侧位置;flex 归零,否则在列方向的 inputWrap 里 flexBasis 0 会被压扁。
-  inputWithMic: { flex: 0, alignSelf: 'stretch', paddingRight: ds(44) },
-  inputMic: { position: 'absolute', right: 4, bottom: 5 },
+  // flex 归零:输入框在列方向的 inputWrap 里,flexBasis 0 会被压扁。
+  inputInWrap: { flex: 0, alignSelf: 'stretch' },
   send: {
     backgroundColor: colors.accent,
     width: ds(36),
