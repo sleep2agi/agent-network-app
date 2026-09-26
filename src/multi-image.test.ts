@@ -228,7 +228,7 @@ const chat = readFileSync(new URL('./ChatScreen.tsx', import.meta.url), 'utf8').
   check(/addToDraft\(attachedRef\.current, incoming\)/.test(chat), 'every add (album, paste, file, camera) goes through addToDraft');
   check(/remainingImageSlots\(attachedRef\.current\)/.test(chat), '相册 asks only for the remaining slots');
   check(chat.includes('testID="composer-draft-strip"') && chat.includes('testID="composer-original-toggle"') && chat.includes('accessibilityLabel="原图"'), 'draft strip with a 原图 toggle');
-  check(/onPress=\{\(\) => setViewerUri\(item\.uri\)\}/.test(chat), 'tapping a draft thumbnail previews it');
+  check(/onPress=\{\(\) => openViewer\(attached\.filter\(isDraftImage\)\.map\([^\n]*\), item\.uri\)\}/.test(chat), 'tapping a draft thumbnail previews it (swipe through the draft images)');
   check(/onPress=\{\(\) => removeAttachment\(item\.uri\)\}/.test(chat), 'draft thumbnails have ✕');
   check(/if \(gridViews\.length < 2\)/.test(chat) && chat.includes('testID="chat-image-grid"'), '≥2 images render as a grid; single image path unchanged');
   check((chat.match(/renderAttachments\(sentAttachmentViews\(item, cfg\.serverUrl\), item\)/g) ?? []).length === 2, 'both sent-bubble variants use the grid renderer');

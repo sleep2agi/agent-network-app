@@ -67,15 +67,16 @@ const viewerScope = chatSource.match(
   /const attachmentViewerScope = `\$\{conversationKeyFor\}::\$\{attachmentCacheScope\(cfg\.serverUrl, cfg\.token\)\}`;/,
 );
 const viewerReset = chatSource.match(
-  /useEffect\(\(\) => setViewerUri\(null\), \[attachmentViewerScope\]\);/,
+  /useEffect\(\(\) => setViewer\(null\), \[attachmentViewerScope\]\);/,
 );
-if (!viewerScope || !viewerReset) {
+// Every preview path goes through the one scoped `viewer` state (ImageViewer.tsx).
+if (!viewerScope || !viewerReset || chatSource.includes('setViewerUri')) {
   throw new Error('the image viewer is closed when conversation or authenticated scope changes');
 }
-if (!/AuthedWebThumb[\s\S]*?onPress=\{objectUrl => setViewerUri\(objectUrl\)\}/.test(chatSource)) {
+if (!/AuthedWebThumb[\s\S]*?onPress=\{objectUrl => openViewer\(gallery, a\.key, objectUrl\)\}/.test(chatSource)) {
   throw new Error('the scoped viewer guard does not cover Tauri blob previews');
 }
-if (!/AuthedThumb[\s\S]*?onPress=\{localUri => setViewerUri\(localUri\)\}/.test(chatSource)) {
+if (!/AuthedThumb[\s\S]*?onPress=\{localUri => openViewer\(gallery, a\.key, localUri\)\}/.test(chatSource)) {
   throw new Error('the scoped viewer guard does not cover native file previews');
 }
 

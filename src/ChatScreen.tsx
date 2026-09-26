@@ -25,8 +25,7 @@ import * as Clipboard from 'expo-clipboard';
 import AliasAvatar from './AliasAvatar';
 import AttachmentFileDesktop from './AttachmentFileDesktop';
 import AuthedThumb, { AttachmentFile, AuthedVideo, mimeFromName } from './AuthedThumb';
-import AuthedWebThumb, { saveObjectUrlOriginal } from './AuthedWebThumb';
-import { displayDownloadPath } from './desktop-download';
+import AuthedWebThumb from './AuthedWebThumb';
 import { ackAgentMessages, ackUserMessages, createDashboardRequestId, dashboardRequestIdForLocalId, fetchStatus, fetchTasks, fetchUserMessages, sendTask, HubConfig, HubTask, Session, TaskAttachment, TaskPriority } from './api';
 import { proactiveItemsForAgent } from './proactive-messages';
 import { replyQuoteFor } from './reply-quote';
@@ -67,6 +66,8 @@ import { ackAgentUnread } from './agent-ack';
 import { appFetch } from './app-fetch';
 import MarkdownMessage from './MarkdownMessage';
 import SelectTextSheet from './SelectTextSheet';
+import ImageViewer from './ImageViewer';
+import { openGallery, viewerImageFor, type ViewerImage, type ViewerState } from './image-viewer-model';
 import { selectedTextWithin } from './message-plain-text';
 import { cleanAttachmentDebugText, hideGridImageLines, parseAttachmentRefs, parseMetaAttachmentRefs, parseMetaReplyAttachmentRefs } from './attachment-display';
 import { attachmentCacheScope } from './attach-download';
@@ -554,22 +555,20 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
     window.addEventListener('paste', onPaste);
     return () => window.removeEventListener('paste', onPaste);
   }, [appendAttachment]);
-  const [viewerUri, setViewerUri] = useState<string | null>(null);
-  // 多图方格没有「下载原图」行:从方格点开的预览层带上它。
-  const [viewerSave, setViewerSave] = useState<{ name: string; fileId?: string; mime?: string } | null>(null);
-  const [viewerSaveNote, setViewerSaveNote] = useState<string | null>(null);
-  const openViewer = (uri: string, save: { name: string; fileId?: string; mime?: string } | null = null) => {
-    setViewerSave(save);
-    setViewerSaveNote(null);
-    setViewerUri(uri);
-  };
+  // 图片预览(ImageViewer.tsx):同一条消息的全部图片 + 当前第几张。null = 未打开。
+  // 预览层带「下载原图」(多图方格里放不下那一行)。
+  const [viewer, setViewer] = useState<ViewerState | null>(null);
+  const openViewer = (gallery: ViewerImage[], key: string, resolvedUri?: string) =>
+    setViewer(openGallery(gallery, key, resolvedUri));
+  const viewerEnv = { os: Platform.OS, tauri: !!(globalThis as any).__TAURI_INTERNALS__ };
+  const galleryOf = (views: AttachmentView[]): ViewerImage[] =>
+    views.map(a => viewerImageFor(a, viewerEnv)).filter((v): v is ViewerImage => !!v);
   const attachmentViewerScope = `${conversationKeyFor}::${attachmentCacheScope(cfg.serverUrl, cfg.token)}`;
   // A blob: URL (Tauri web) and a file: URI (native) both identify bytes that
   // were fetched under the previous credentials. Closing the parent modal is
   // part of the auth boundary; resetting only the child thumbnail would leave
   // those already-open bytes visible after a profile/Hub/conversation switch.
-  useEffect(() => setViewerUri(null), [attachmentViewerScope]);
-  useEffect(() => setViewerSave(null), [attachmentViewerScope]);
+  useEffect(() => setViewer(null), [attachmentViewerScope]);
   // 更像微信·round-2: 长按气泡的动作菜单(引用/删除)。null = 未打开。
   const [menuFor, setMenuFor] = useState<MessageSelection | null>(null);
   // 0.2.78 Vincent:「右键的效果和微信对齐」—— 桌面端菜单落在光标处(微信桌面端就是这样),
@@ -949,9 +948,9 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
   }, [alias, conversationReady, showJump]);
 
   // shared by the sent bubble and the reply bubble (tg 771)
-  const renderAttachment = (a: AttachmentView) =>
+  const renderAttachment = (a: AttachmentView, gallery: ViewerImage[] = galleryOf([a])) =>
     a.isImage && a.uri && !a.needsAuth ? (
-      <Pressable key={a.key} onPress={() => setViewerUri(a.uri!)}>
+      <Pressable key={a.key} onPress={() => openViewer(gallery, a.key, a.uri)}>
         <Image source={{ uri: a.uri }} style={styles.thumb} resizeMode="contain" />
       </Pressable>
     ) : a.isImage && a.needsAuth && Platform.OS === 'web' && !!(globalThis as any).__TAURI_INTERNALS__ ? (
@@ -961,7 +960,7 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
         name={a.name}
         mime={a.mime}
         token={cfg.token}
-        onPress={objectUrl => setViewerUri(objectUrl)}
+        onPress={objectUrl => openViewer(gallery, a.key, objectUrl)}
       />
     ) : a.isImage && a.needsAuth && Platform.OS !== 'web' ? (
       <View key={`${attachmentCacheScope(cfg.serverUrl, cfg.token)}-${a.key}`} style={styles.attachmentImage}>
@@ -971,7 +970,7 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
           mime={a.mime}
           serverUrl={cfg.serverUrl}
           token={cfg.token}
-          onPress={localUri => setViewerUri(localUri)}
+          onPress={localUri => openViewer(gallery, a.key, localUri)}
         />
         <AttachmentFile
           fileId={a.key}
@@ -1019,18 +1018,18 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
   // 多图(≥2 张能画缩略图的图)= 微信式 3 列方格;单图/文件/视频仍走 renderAttachment,不改原样子。
   const gridRenderable = (a: AttachmentView) =>
     a.isImage && !!a.uri && (!a.needsAuth || Platform.OS !== 'web' || !!(globalThis as any).__TAURI_INTERNALS__);
-  const renderGridCell = (a: AttachmentView, item?: ChatItem) => {
+  const renderGridCell = (a: AttachmentView, item: ChatItem | undefined, gallery: ViewerImage[]) => {
     const state = a.localIndex !== undefined ? item?._uploads?.[a.localIndex] : undefined;
     const failed = state?.status === 'failed';
     const cellKey = `${attachmentCacheScope(cfg.serverUrl, cfg.token)}-${a.key}`;
     const inner = !a.needsAuth ? (
-      <Pressable onPress={() => setViewerUri(a.uri!)} accessibilityLabel={`预览 ${a.name}`}>
+      <Pressable onPress={() => openViewer(gallery, a.key, a.uri)} accessibilityLabel={`预览 ${a.name}`}>
         <Image source={{ uri: a.uri }} style={styles.gridImage} resizeMode="cover" />
       </Pressable>
     ) : Platform.OS === 'web' ? (
-      <AuthedWebThumb uri={a.uri!} name={a.name} mime={a.mime} token={cfg.token} compact onPress={objectUrl => openViewer(objectUrl, { name: a.name })} />
+      <AuthedWebThumb uri={a.uri!} name={a.name} mime={a.mime} token={cfg.token} compact onPress={objectUrl => openViewer(gallery, a.key, objectUrl)} />
     ) : (
-      <AuthedThumb fileId={a.key} name={a.name} mime={a.mime} serverUrl={cfg.serverUrl} token={cfg.token} compact onPress={localUri => openViewer(localUri, { name: a.name, fileId: a.key, mime: a.mime })} />
+      <AuthedThumb fileId={a.key} name={a.name} mime={a.mime} serverUrl={cfg.serverUrl} token={cfg.token} compact onPress={localUri => openViewer(gallery, a.key, localUri)} />
     );
     return (
       <View key={cellKey} style={[styles.gridCell, failed && styles.gridCellFailed]} testID="chat-image-grid-cell">
@@ -1058,13 +1057,15 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
   };
   const renderAttachments = (views: AttachmentView[], item?: ChatItem) => {
     const gridViews = views.filter(gridRenderable);
+    // 预览里左右滑 = 这条消息的全部图片(方格 + 单图同一套)。
+    const gallery = galleryOf(views);
     if (gridViews.length < 2) {
       return views.map(a => {
         const state = a.localIndex !== undefined ? item?._uploads?.[a.localIndex] : undefined;
-        if (!state || state.status === 'done') return renderAttachment(a);
+        if (!state || state.status === 'done') return renderAttachment(a, gallery);
         return (
           <View key={`state-${a.key}`}>
-            {renderAttachment(a)}
+            {renderAttachment(a, gallery)}
             <Text style={[styles.attachmentLine, state.status === 'failed' && { color: colors.failed }]}>
               {state.status === 'failed' ? `上传失败：${state.error ?? ''}` : state.status === 'uploading' ? '上传中…' : '等待上传'}
             </Text>
@@ -1076,9 +1077,9 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
     return (
       <>
         <View style={styles.imageGrid} testID="chat-image-grid">
-          {gridViews.map(a => renderGridCell(a, item))}
+          {gridViews.map(a => renderGridCell(a, item, gallery))}
         </View>
-        {rest.map(renderAttachment)}
+        {rest.map(a => renderAttachment(a, gallery))}
       </>
     );
   };
@@ -1868,7 +1869,7 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
               const tooBig = !willCompressLater(item) && !!oversizeMessage(item);
               return isDraftImage(item) ? (
                 <View key={item.uri} style={[styles.draftThumbWrap, tooBig && styles.draftThumbTooBig]} testID="composer-draft-thumb">
-                  <Pressable onPress={() => setViewerUri(item.uri)} accessibilityLabel={`预览 ${item.fileName}`}>
+                  <Pressable onPress={() => openViewer(attached.filter(isDraftImage).map(d => ({ key: d.uri, name: d.fileName, uri: d.uri })), item.uri)} accessibilityLabel={`预览 ${item.fileName}`}>
                     <Image source={{ uri: item.uri }} style={styles.draftThumb} resizeMode="cover" />
                   </Pressable>
                   <View style={styles.draftIndex} pointerEvents="none"><Text style={styles.draftIndexText}>{index + 1}</Text></View>
@@ -1897,32 +1898,8 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
       {sendNotice ? (
         <ActualRecipientNotice notice={sendNotice} onDismiss={() => setSendConfirmation(null)} />
       ) : null}
-      <Modal visible={!!viewerUri} transparent animationType="fade">
-        <Pressable style={styles.viewerBackdrop} onPress={() => { setViewerUri(null); setViewerSave(null); }}>
-          {viewerUri ? (
-            <Image source={{ uri: viewerUri }} style={styles.viewerImage} resizeMode="contain" />
-          ) : null}
-          {viewerUri && viewerSave ? (
-            Platform.OS === 'web' ? (
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel={`下载 ${viewerSave.name}`}
-                hitSlop={8}
-                onPress={(e: any) => {
-                  e?.stopPropagation?.();
-                  saveObjectUrlOriginal(viewerUri, viewerSave.name, !!(e?.nativeEvent?.altKey ?? e?.altKey))
-                    .then(path => setViewerSaveNote(path ? `✓ 已保存到 ${displayDownloadPath(path)}` : null))
-                    .catch(reason => setViewerSaveNote(`保存失败(${reason instanceof Error ? reason.message : String(reason)})`));
-                }}
-              >
-                <Text style={styles.viewerSave}>{viewerSaveNote ?? '↓ 下载原图'}</Text>
-              </Pressable>
-            ) : viewerSave.fileId ? (
-              <AttachmentFile fileId={viewerSave.fileId} name={viewerSave.name} mime={viewerSave.mime} serverUrl={cfg.serverUrl} token={cfg.token} label="下载原图" />
-            ) : null
-          ) : null}
-        </Pressable>
-      </Modal>
+      {/* Android 返回手势 / 桌面 Esc 都走 Modal 的 onRequestClose(见 ImageViewer.tsx)。 */}
+      <ImageViewer state={viewer} onClose={() => setViewer(null)} serverUrl={cfg.serverUrl} token={cfg.token} />
 
       {/* 0.2.78 Vincent:和微信对齐 —— 分组 + 分隔线,删除单独一组,没有「取消」行(Esc/点空白关)。
           桌面端落在光标处;触摸端仍是底部 action sheet。 */}
@@ -2334,14 +2311,6 @@ const makeStyles = () =>
     marginTop: spacing.sm,
     backgroundColor: colors.inputBg,
   },
-  viewerBackdrop: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.92)',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  viewerImage: { width: '100%', height: '80%' },
-  viewerSave: { color: '#fff', fontSize: 13, marginTop: spacing.md, paddingVertical: 6, paddingHorizontal: 14, borderRadius: 14, borderWidth: 1, borderColor: 'rgba(255,255,255,0.5)' },
   // round-2 长按动作菜单(底部 action sheet)
   menuBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.45)', justifyContent: 'flex-end' },
   actionSheet: {
