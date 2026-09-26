@@ -14,12 +14,104 @@
 
 import type { NotifyMode } from './notify-settings';
 
-/** 有声/横幅的消息渠道。安卓渠道一旦建好,重要性只能由用户在系统设置里改。 */
-export const MESSAGE_CHANNEL_ID = 'agent-messages';
+/**
+ * 有声/横幅的消息渠道。🔴 安卓渠道一旦建好,声音和重要性就只能由用户在系统设置里改 —— 应用再调
+ * setNotificationChannelAsync 也改不动。0.2.107 用 'agent-messages' 建这条渠道时没写 sound
+ * (expo-notifications 不带 sound 键就不调 setSound,全靠系统默认),小米/HyperOS 上建出来是
+ * 「声音:无」。已装的机器上那条渠道改不回来,所以换新 id,并删掉旧的(LEGACY_CHANNEL_IDS)。
+ * 🔴 以后再改这条渠道的声音/重要性,同样只能换 id(-v3…)并把旧 id 加进 LEGACY_CHANNEL_IDS。
+ */
+export const MESSAGE_CHANNEL_ID = 'agent-messages-v2';
 export const MESSAGE_CHANNEL_NAME = 'Agent 消息';
 /** 「仅新消息」模式下,同一个 agent 后续消息走这个渠道:只更新通知,不响铃不弹横幅。 */
 export const QUIET_CHANNEL_ID = 'agent-messages-quiet';
 export const QUIET_CHANNEL_NAME = 'Agent 消息(同一会话的后续消息)';
+/**
+ * 旧版本建过、现在要删掉的渠道 id。🔴 删掉的 id 永远不能再用来建渠道:安卓对「删了又用同一个 id
+ * 重建」会原样恢复被删时的设置(包括没有声音)。
+ */
+export const LEGACY_CHANNEL_IDS: readonly string[] = ['agent-messages'];
+
+/** 渠道配置(纯数据;expo 的枚举在 toExpoChannelInput 里按名字换成数值)。 */
+export type ChannelSpec = {
+  readonly id: string;
+  readonly name: string;
+  readonly description: string;
+  readonly importance: 'HIGH' | 'MAX' | 'DEFAULT' | 'LOW';
+  /** 'default' = 系统默认提示音(必须显式写上);null = 静音。 */
+  readonly sound: 'default' | null;
+  readonly enableVibrate: boolean;
+  readonly vibrationPattern: readonly number[] | null;
+  readonly lockscreenVisibility: 'PUBLIC' | 'PRIVATE';
+  readonly showBadge: boolean;
+};
+
+export const MESSAGE_CHANNEL: ChannelSpec = {
+  id: MESSAGE_CHANNEL_ID,
+  name: MESSAGE_CHANNEL_NAME,
+  description: 'agent 发来新消息时提醒',
+  importance: 'HIGH', // HIGH = 悬浮横幅 + 声音
+  sound: 'default',
+  enableVibrate: true,
+  vibrationPattern: [0, 200, 120, 200],
+  lockscreenVisibility: 'PRIVATE', // 与 0.2.107 相同:锁屏上显示「有通知」,不露正文
+  showBadge: true,
+};
+
+export const QUIET_CHANNEL: ChannelSpec = {
+  id: QUIET_CHANNEL_ID,
+  name: QUIET_CHANNEL_NAME,
+  description: '「仅新消息」模式或提示音关闭时:只更新通知,不响铃',
+  importance: 'LOW', // LOW = 通知栏里看得到,不响不弹
+  sound: null,
+  enableVibrate: false,
+  vibrationPattern: null,
+  lockscreenVisibility: 'PRIVATE',
+  showBadge: true,
+};
+
+/** ensureNotificationSetup 在安卓上建的全部渠道(前台服务那条在原生里建,不在这里)。 */
+export const NOTIFICATION_CHANNELS: readonly ChannelSpec[] = [MESSAGE_CHANNEL, QUIET_CHANNEL];
+
+type EnumLike = Readonly<Record<string, number | string>>;
+export type ChannelEnums = {
+  readonly AndroidImportance: EnumLike;
+  readonly AndroidNotificationVisibility: EnumLike;
+  readonly AndroidAudioUsage: EnumLike;
+  readonly AndroidAudioContentType: EnumLike;
+};
+
+/** ChannelSpec → setNotificationChannelAsync 的入参。有声渠道显式带 sound + audioAttributes。 */
+export function toExpoChannelInput(spec: ChannelSpec, e: ChannelEnums): Record<string, unknown> {
+  const input: Record<string, unknown> = {
+    name: spec.name,
+    description: spec.description,
+    importance: e.AndroidImportance[spec.importance],
+    sound: spec.sound,
+    enableVibrate: spec.enableVibrate,
+    vibrationPattern: spec.vibrationPattern ? [...spec.vibrationPattern] : null,
+    lockscreenVisibility: e.AndroidNotificationVisibility[spec.lockscreenVisibility],
+    showBadge: spec.showBadge,
+    bypassDnd: false, // 勿扰模式不绕过:要在勿扰时收到,由用户把本应用加进「例外应用」
+  };
+  if (spec.sound) {
+    input.audioAttributes = { usage: e.AndroidAudioUsage.NOTIFICATION, contentType: e.AndroidAudioContentType.SONIFICATION };
+  }
+  return input;
+}
+
+/** 建全部渠道,再删掉旧版本的渠道。先建后删:删失败(老系统 / 已被用户删)不影响新渠道。 */
+export async function setupAndroidChannels(api: {
+  enums: ChannelEnums;
+  set: (id: string, input: any) => Promise<unknown>;
+  del: (id: string) => Promise<unknown>;
+}): Promise<void> {
+  for (const spec of NOTIFICATION_CHANNELS) await api.set(spec.id, toExpoChannelInput(spec, api.enums));
+  for (const id of LEGACY_CHANNEL_IDS) {
+    if (NOTIFICATION_CHANNELS.some(c => c.id === id)) continue;
+    try { await api.del(id); } catch { /* 没有这条渠道 / 删不掉:不影响新渠道 */ }
+  }
+}
 /** 前台服务那条常驻通知的渠道 —— 在原生 Service 里建(见 modules/anet-keepalive)。 */
 export const KEEPALIVE_CHANNEL_ID = 'anet-keepalive';
 export const KEEPALIVE_NOTIFICATION_TEXT = 'Agent Network 正在保持连接';
