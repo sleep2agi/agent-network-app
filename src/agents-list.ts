@@ -55,7 +55,21 @@ export type SortContext = {
   pinned?: (alias: string) => boolean;
   /** R29 语义的迟滞:60s 内出现过在线即视为在线。默认只看当前 status。 */
   recentlyOnline?: (alias: string) => boolean;
+  /**
+   * 组内第三级(recency)改用行上显示的那个活动时间(agent-row-model.ts rowActivity:
+   * 最后一条消息 / 当前任务的派发时间),而不是 session.updated_at(心跳每次都会顶它)。
+   * 只有 sortByActivity 为 true 且给了 activityAt 时才生效;组间顺序不受影响。
+   */
+  sortByActivity?: boolean;
+  /** 行的活动时间(ms);0 = 没有活动数据,排在有活动的行之后。 */
+  activityAt?: (alias: string) => number;
 };
+
+/**
+ * 按活动时间排序的开关 —— 默认关(0.2.114:行上先显示时间,排序由 owner 再定)。
+ * 打开只需改这一行:AgentsScreen 把它传给 SortContext.sortByActivity。
+ */
+export const SORT_BY_ACTIVITY = false;
 
 const ts = (s: Session): number => {
   const t = Date.parse(s.updated_at ?? '');
@@ -67,10 +81,13 @@ export function compareInTeam(a: Session, b: Session, ctx: SortContext = {}): nu
   const pin = (s: Session) => (ctx.pinned?.(s.alias) ? 1 : 0);
   const on = (s: Session) =>
     ctx.recentlyOnline ? (ctx.recentlyOnline(s.alias) ? 1 : 0) : (isOffline(s) ? 0 : 1);
+  const recency = ctx.sortByActivity && ctx.activityAt
+    ? (s: Session) => ctx.activityAt!(s.alias) || 0
+    : ts;
   return (
     pin(b) - pin(a) ||
     on(b) - on(a) ||
-    ts(b) - ts(a) ||
+    recency(b) - recency(a) ||
     a.alias.localeCompare(b.alias)
   );
 }

@@ -13,6 +13,7 @@ import AliasAvatar from './AliasAvatar';
 import { isAgentOnline } from './chat-actions';
 import { fetchStatus, fetchUserMessages, takeStatusPrefetch, type HubConfig, type Session,
   fetchMessages,
+  fetchTasks,
   replyUnreadSince,
 } from './api';
 import { loadSessionsCache, saveSessionsCache } from './storage';
@@ -32,8 +33,9 @@ import {
   subscribeUnread,
 } from './unread-store';
 import { styles } from './app-styles';
-import { applyCollapsed, buildSections, countShown, holdWhileActive, toggleCollapsed } from './agents-list';
-import { AGENT_ROW_AVATAR, AGENT_ROW_DOT, AGENT_ROW_GAP, AGENT_ROW_HEIGHT, AGENT_ROW_PAD_X, AGENT_ROW_SEPARATOR_INSET, agentRowModel, latestMessageByAgent } from './agent-row-model';
+import { applyCollapsed, buildSections, countShown, holdWhileActive, SORT_BY_ACTIVITY, toggleCollapsed } from './agents-list';
+import { AGENT_ROW_AVATAR, AGENT_ROW_DOT, AGENT_ROW_GAP, AGENT_ROW_HEIGHT, AGENT_ROW_PAD_X, AGENT_ROW_SEPARATOR_INSET, agentRowModel, latestMessageByAgent, rowActivity } from './agent-row-model';
+import { TaskTimeResolver } from './agent-task-time';
 import { loadCollapsedGroups, saveCollapsedGroups } from './agent-list-prefs';
 import { agentUnreadCounts, latestMessageAtByAgent } from './agent-unread-counts';
 import { pinyinMatch } from './lib/pinyin';
@@ -103,6 +105,27 @@ export default function AgentsScreen({
   const latestByAgent = useMemo(() => latestMessageByAgent(preview
     ? { serverBody: preview.serverBody, replyRows: [], replyUsername: '' }
     : unreadSnap), [preview, unreadSnap]);
+  // Rows whose second line is the task text get the time of the task that text came from
+  // (agent-task-time.ts). One resolver per hub + network; a heartbeat never triggers a read.
+  const taskTimes = useMemo(() => new TaskTimeResolver(async alias =>
+    (await fetchTasks(cfg, { to_name: alias, limit: 1, skipStats: true })).tasks ?? []),
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  [cfg.serverUrl, cfg.token, cfg.networkId]);
+  const [taskTimesTick, setTaskTimesTick] = useState(0);
+  useEffect(() => taskTimes.subscribe(() => setTaskTimesTick(n => n + 1)), [taskTimes]);
+  useEffect(() => {
+    if (preview) return;
+    void taskTimes.request(sessions
+      .filter(s => s.task && !latestByAgent[s.alias]?.text)
+      .map(s => ({ alias: s.alias, text: s.task ?? '', online: isAgentOnline(s.status) })));
+  }, [preview, sessions, latestByAgent, taskTimes]);
+  // Row activity time per alias — what `sortByActivity` orders by (off by default: SORT_BY_ACTIVITY).
+  const activityByAlias = useMemo(() => {
+    const out = new Map<string, number>();
+    for (const s of sessions) out.set(s.alias, rowActivity(s, latestByAgent[s.alias], taskTimes.timeFor(s.alias, s.task)).at);
+    return out;
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sessions, latestByAgent, taskTimes, taskTimesTick]);
   // Folded group headers, remembered per device (agent-list-prefs.ts).
   const [collapsed, setCollapsed] = useState<string[]>([]);
   useEffect(() => {
@@ -231,10 +254,14 @@ export default function AgentsScreen({
   const sections = useMemo(
     () => buildSections(applyAgentFilter(sessions, activeFilter), query, {
       match: pinyinMatch,
-      sort: { pinned: alias => pinnedAliases.includes(alias) },
+      sort: {
+        pinned: alias => pinnedAliases.includes(alias),
+        sortByActivity: SORT_BY_ACTIVITY,
+        activityAt: alias => activityByAlias.get(alias) ?? 0,
+      },
       unread: { count: alias => floatInput.counts[alias] ?? 0, lastMessageAt: alias => floatInput.lastAt[alias] ?? 0 },
     }),
-    [sessions, activeFilter, query, pinnedAliases, floatInput],
+    [sessions, activeFilter, query, pinnedAliases, floatInput, activityByAlias],
   );
   const shownCount = countShown(sections);
   const shownSections = useMemo(() => applyCollapsed(sections, collapsed, query), [sections, collapsed, query]);
@@ -338,7 +365,7 @@ export default function AgentsScreen({
   // Model (status → dot / label, time format): agent-row-model.ts.
   const renderPhoneRow = (item: Session) => {
     const pinned = pinnedAliases.includes(item.alias);
-    const model = agentRowModel(item, { latest: latestByAgent[item.alias], pinned, nowMs });
+    const model = agentRowModel(item, { latest: latestByAgent[item.alias], taskAt: taskTimes.timeFor(item.alias, item.task), pinned, nowMs });
     const selected = selectedAlias === item.alias;
     const rowBg = selected ? colors.rowActive : colors.bg;
     const badge = rowBadge(item.alias);

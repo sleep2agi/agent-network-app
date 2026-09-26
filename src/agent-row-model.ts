@@ -116,26 +116,53 @@ export interface AgentRowModel {
   status: RowStatus;
   /** Second line: the last message, else what the agent reports it is doing, else ''. */
   preview: string;
-  /** Right column, top. */
+  /** Right column, top. Always the time of the event the preview line shows. */
   time: string;
+  /** Which event `preview` / `time` describe (null ⇒ no activity data; no time). */
+  source: ActivitySource;
+  /** ms of that event (0 when unknown) — the value `sortByActivity` orders by. */
+  activityAt: number;
   pinned: boolean;
 }
 
+export type ActivitySource = 'message' | 'task' | null;
+
 /**
- * 🔴 The time is the last *message* time, never `session.updated_at`: the hub bumps
- * updated_at on every heartbeat (its stale sweeper marks a session offline when it stops
- * moving), so it would print "刚刚" on every online row.
+ * The row's activity: the preview text and the time of the SAME event.
+ *   - a last message with text → that message, at its time;
+ *   - else the session's task text → that text, at the time of the task row it came from
+ *     (`taskAt`, agent-task-time.ts; 0 ⇒ the hub has no row for that text ⇒ no time);
+ *   - else a last message with no text → no preview, the message time.
+ */
+export function rowActivity(
+  session: Pick<Session, 'task'>,
+  latest?: LatestMessage,
+  taskAt = 0,
+): { preview: string; source: ActivitySource; at: number } {
+  if (latest?.text) return { preview: latest.text, source: 'message', at: latest.at };
+  const task = previewText(session.task);
+  if (task) return { preview: task, source: taskAt > 0 ? 'task' : null, at: taskAt > 0 ? taskAt : 0 };
+  if (latest) return { preview: '', source: 'message', at: latest.at };
+  return { preview: '', source: null, at: 0 };
+}
+
+/**
+ * 🔴 The time is never `session.updated_at`: the hub bumps updated_at on every heartbeat (its
+ * stale sweeper marks a session offline when it stops moving), so it would print "刚刚" on every
+ * online row. It is the time of whatever the preview line shows (rowActivity).
  */
 export function agentRowModel(
   session: Pick<Session, 'alias' | 'status' | 'task'>,
-  opts: { latest?: LatestMessage; pinned?: boolean; nowMs?: number } = {},
+  opts: { latest?: LatestMessage; taskAt?: number; pinned?: boolean; nowMs?: number } = {},
 ): AgentRowModel {
-  const latest = opts.latest;
+  const act = rowActivity(session, opts.latest, opts.taskAt);
   return {
     alias: session.alias,
     status: rowStatus(session.status),
-    preview: (latest?.text || previewText(session.task)) ?? '',
-    time: latest ? formatRowTime(latest.at, opts.nowMs) : '',
+    preview: act.preview,
+    time: act.at ? formatRowTime(act.at, opts.nowMs) : '',
+    source: act.source,
+    activityAt: act.at,
     pinned: !!opts.pinned,
   };
 }
