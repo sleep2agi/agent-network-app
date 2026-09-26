@@ -28,7 +28,11 @@ const count = (needle: string) => chat.split(needle).length - 1;
 
 // Every entry-point JSX is behind its flag (source contract).
 {
-  const header = chat.slice(chat.indexOf('<View style={styles.header}>'), chat.indexOf('<View style={styles.header}>') + 6000);
+  // Anchor on the header's testID: since the phone-width header fix the row's
+  // style is an array (compact padding/gap), so `<View style={styles.header}>` is gone.
+  const headerAt = chat.indexOf('testID="chat-header"');
+  check(headerAt > 0, 'chat header found');
+  const header = chat.slice(headerAt, headerAt + 6000);
   const btwAt = header.indexOf('accessibilityLabel="打开 BTW 旁路线程"');
   check(btwAt > 0, 'header BTW button still in source (for the flag)');
   check(header.lastIndexOf('{SHOW_BTW_ENTRY ? (', btwAt) > header.lastIndexOf(') : null}', btwAt), 'header BTW button is wrapped in SHOW_BTW_ENTRY');
