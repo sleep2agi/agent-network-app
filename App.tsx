@@ -2,7 +2,8 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalS
 import { ActivityIndicator, BackHandler, Image, KeyboardAvoidingView, Platform, Pressable, SafeAreaView, ScrollView, StatusBar, StyleSheet, useWindowDimensions, View } from 'react-native';
 import { Text, TextInput } from './src/ui-text';
 import { Ionicons } from './src/icons';
-import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
+import { SafeAreaInsetsContext, SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
+import { SAFE_AREA_SIM, layoutOs } from './src/safe-area-runtime';
 import { purgeLegacyAttachmentCache } from './src/AuthedThumb';
 import { prefetchStatus, login, fetchHubNodes, HubConfig } from './src/api';
 import { LOGIN_FAILURE_COPY, normalizeServerUrl, type LoginFailureKind } from './src/login-flow';
@@ -186,15 +187,24 @@ export default function App() {
   const dedicatedChatWindow = Platform.OS === 'web' && !!(globalThis as any).__TAURI_INTERNALS__ && (!!requestedChatAlias() || !!requestedWorkspaceProfileId());
   return (
     <SafeAreaProvider>
-      <View style={{ flex: 1 }}>
-        <MacTitleStrip />
-        <WinTitleBar />
-        <AppRoot />
-      </View>
-      {dedicatedChatWindow ? null : <DesktopUpdatePrompt />}
-      {Platform.OS === 'android' ? <AndroidUpdatePrompt /> : null}
+      <SimulatedSafeArea>
+        <View style={{ flex: 1 }}>
+          <MacTitleStrip />
+          <WinTitleBar />
+          <AppRoot />
+        </View>
+        {dedicatedChatWindow ? null : <DesktopUpdatePrompt />}
+        {Platform.OS === 'android' ? <AndroidUpdatePrompt /> : null}
+      </SimulatedSafeArea>
     </SafeAreaProvider>
   );
+}
+
+// Web layout sweep only (src/safe-area-sim.ts): `?safeAreaSim=…` feeds simulated insets to every
+// useSafeAreaInsets() below. On a device SAFE_AREA_SIM is null and this renders its children as-is.
+function SimulatedSafeArea({ children }: { children: React.ReactNode }) {
+  if (!SAFE_AREA_SIM) return <>{children}</>;
+  return <SafeAreaInsetsContext.Provider value={SAFE_AREA_SIM}>{children}</SafeAreaInsetsContext.Provider>;
 }
 
 function AppRoot() {
@@ -333,7 +343,14 @@ function AppRoot() {
       () => { void dismissAllForConfig(cfg); },
     );
   }, [cfg?.profileId, cfg?.serverUrl, trayWindow]);
-  const tabBarInset = Platform.OS === 'android' ? insets.bottom : 0;
+  const tabBarInset = layoutOs() === 'android' ? insets.bottom : 0;
+  // Web layout sweep only: lets tests/test-layout-sweep/run.mjs open screens the phone has no
+  // tab for (tasks, taskDetail, logs, wizard). Never set on a device (SAFE_AREA_SIM is web-only).
+  useEffect(() => {
+    if (!SAFE_AREA_SIM) return;
+    (globalThis as any).__anetLayoutSweep = { setScreen: (next: Screen) => setScreen(next) };
+    return () => { delete (globalThis as any).__anetLayoutSweep; };
+  }, []);
   const workspaceKey = `${theme}:${scaleKey}:${cfg?.profileId ?? cfg?.serverUrl ?? 'login'}`;
 
   const hydrateProfileLocalState = async (profileCfg: HubConfig | null) => {

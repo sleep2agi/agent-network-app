@@ -2,6 +2,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import { PanResponder, ActivityIndicator, Alert, BackHandler, FlatList, Image, Keyboard, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StatusBar, StyleSheet, useWindowDimensions, View } from 'react-native';
 import { Text, TextInput } from './ui-text';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { layoutOs } from './safe-area-runtime';
 import { Ionicons } from './icons';
 import * as Clipboard from 'expo-clipboard';
 import AliasAvatar from './AliasAvatar';
@@ -231,7 +232,7 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
   // Android edge-to-edge draws the composer under the gesture bar (same
   // class of bug as the tg 802 tab bar) — pad by the real bottom inset.
   const insets = useSafeAreaInsets();
-  const composerInset = Platform.OS === 'android' ? insets.bottom : 0;
+  const composerInset = layoutOs() === 'android' ? insets.bottom : 0;
   const [messages, setMessages] = useState<ChatItem[]>([]);
   // 回复引用条要按 task_id 找到被回的那条(主动消息的 in_reply_to)
   const byTaskId = useMemo(() => new Map(messages.map(m => [msgKey(m), m] as const)), [messages]);

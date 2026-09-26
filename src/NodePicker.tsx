@@ -6,8 +6,7 @@
 //     (列表页的在线点压在头像右下角,这里放进行内 —— 角上那颗点的中心不在行的中线上);
 //   - 标题行 / 搜索框 / 行 / 组头左右内边距都是同一个 PAD_X。
 import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
-import { Animated, Modal, PanResponder, Platform, Pressable, SectionList, StatusBar, StyleSheet, View, useWindowDimensions } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { Animated, Modal, PanResponder, Platform, Pressable, SectionList, StyleSheet, View, useWindowDimensions } from 'react-native';
 import { Text, TextInput } from './ui-text';
 import { Ionicons } from './icons';
 import AliasAvatar from './AliasAvatar';
@@ -15,7 +14,7 @@ import { colors, onThemeChange, radius, spacing, type as fontSize, weight } from
 import { ds } from './ui-scale';
 import { rowStatus } from './agent-row-model';
 import { pinyinMatch } from './lib/pinyin';
-import { modalSafePadding } from './modal-safe-area';
+import { useModalSafePadding } from './safe-area-runtime';
 import {
   buildPickerSections,
   countPickerRows,
@@ -94,7 +93,7 @@ export default function NodePickerSheet({ visible, nodes, selectedId, recents, p
   const s = useMemo(makeStyles, [tv]);
   const { width, height } = useWindowDimensions();
   const mode = pickerPresentation(width);
-  const safe = modalSafePadding(Platform.OS, 'overlay', useSafeAreaInsets(), StatusBar.currentHeight);
+  const safe = useModalSafePadding('overlay');
   const [query, setQuery] = useState('');
   // 300+ 行 × 拼音:输入框立刻更新,列表用延后的值重算,打字不卡。
   const deferred = useDeferredValue(query);

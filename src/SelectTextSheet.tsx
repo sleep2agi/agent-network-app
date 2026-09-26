@@ -29,7 +29,7 @@ export default function SelectTextSheet({ text, author, onClose, onCopyAll }: {
   return (
     <Modal visible={text !== null} animationType="slide" onRequestClose={onClose} presentationStyle="fullScreen">
       <View style={[styles.root, { paddingTop: insets.top, paddingBottom: insets.bottom }]} accessibilityLabel="选择文本">
-        <View style={styles.header}>
+        <View style={styles.header} testID="screen-header">
           <Pressable accessibilityLabel="关闭选择文本" hitSlop={10} onPress={onClose}>
             <Ionicons name="close" size={22} color={colors.text} />
           </Pressable>

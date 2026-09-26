@@ -266,7 +266,7 @@ function handleNext(d: HostSupervisorDaemon, onPicked?: (d: HostSupervisorDaemon
 
 function Header({ onBack, title }: { onBack: () => void; title: string }) {
   return (
-    <View style={styles.header}>
+    <View style={styles.header} testID="screen-header">
       <Pressable
         style={({ pressed }) => [styles.headerBack, pressed && { opacity: 0.6 }]}
         onPress={onBack}

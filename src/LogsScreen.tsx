@@ -141,6 +141,7 @@ export default function LogsScreen({
     <View style={appStyles.root}>
       {/* Header */}
       <View
+        testID="screen-header"
         style={{
           flexDirection: 'row',
           alignItems: 'center',

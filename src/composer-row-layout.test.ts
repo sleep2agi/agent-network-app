@@ -121,7 +121,7 @@ check(new RegExp(`lineHeight: ${COMPOSER_LINE_HEIGHT},`).test(chat.slice(chat.in
   check(/testID="composer-fullscreen-collapse"[\s\S]{0,80}onPress=\{onClose\}/.test(parts), 'collapse control calls onClose');
   check(/testID="composer-fullscreen-send"[\s\S]{0,200}onPress=\{onSend\}/.test(parts), 'editor has its own 发送');
   check(/value=\{draft\}\s*onChangeText=\{onChangeDraft\}/.test(parts), 'editor input is bound to the draft');
-  check(parts.includes('rulesFullscreenPadding(Platform.OS, useSafeAreaInsets(), StatusBar.currentHeight)'), 'editor pads for status bar / cutout like the rules fullscreen');
+  check(parts.includes("useModalSafePadding('fullScreen')"), 'editor pads for status bar / cutout like the rules fullscreen (useModalSafePadding)');
 }
 
 // ComposerRightSlot rendering

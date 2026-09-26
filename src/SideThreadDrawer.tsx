@@ -347,7 +347,7 @@ export default function SideThreadDrawer({ cfg, alias, desktop, launch, scope, r
           ]}
           onPress={() => {}}
         >
-          <View style={styles.header}>
+          <View style={styles.header} testID="screen-header">
             <View style={styles.headerCopy}>
               <Text style={styles.title}>BTW · 旁路线程</Text>
               <Text style={styles.subtitle} numberOfLines={1}>{alias} · 不打断、不写入主会话</Text>

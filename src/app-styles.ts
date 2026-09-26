@@ -9,6 +9,7 @@
 
 import { Platform, StatusBar, StyleSheet } from 'react-native';
 import { colors, onThemeChange, spacing } from './theme';
+import { layoutOs, statusBarHeight } from './safe-area-runtime';
 
 const makeStyles = () =>
   StyleSheet.create({
@@ -18,7 +19,7 @@ const makeStyles = () =>
     // RN's SafeAreaView is iOS-only; Android edge-to-edge draws content
     // under the status bar (Vincent tg 729: clock overlapped the chat
     // header). Pad the root by the real status-bar height instead.
-    paddingTop: Platform.OS === 'android' ? StatusBar.currentHeight ?? 0 : 0,
+    paddingTop: layoutOs() === 'android' ? statusBarHeight() ?? 0 : 0,
   },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: spacing.sm },
   errorTitle: { color: colors.text, fontSize: 17, fontWeight: '700' },

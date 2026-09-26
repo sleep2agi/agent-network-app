@@ -249,6 +249,7 @@ export default function NodeDetailScreen({
 
   const header = (
     <View
+      testID="screen-header"
       style={{
         flexDirection: 'row',
         alignItems: 'center',

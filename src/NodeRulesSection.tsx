@@ -10,9 +10,9 @@
 // agent-node 旧、读失败），每种都有一句话说明为什么和怎么办。
 
 import { forwardRef, useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
-import { ActivityIndicator, Modal, Platform, Pressable, ScrollView, StatusBar, View, useWindowDimensions } from 'react-native';
+import { ActivityIndicator, Modal, Platform, Pressable, ScrollView, View, useWindowDimensions } from 'react-native';
 import { Text, TextInput } from './ui-text';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useModalSafePadding } from './safe-area-runtime';
 
 import { readNodeRulesFile, waitForRulesFileResult, writeNodeRulesFile, type HubConfig, type RulesTarget, type Session } from './api';
 import { hasUnsavedChanges, isTerminal, nextPollDelayMs, predictedRulesFileName, requestIdToFollow, rulesErrorMessage, rulesMaxWaitMessage, rulesReadOutcome, rulesStatusMessage, rulesSupport, rulesUnsupportedMessage, RULES_MAX_WAIT_MS } from './node-rules';
@@ -25,7 +25,7 @@ import MacTitleStrip from './mac-title-strip';
 import WinTitleBar from './win-title-bar';
 import { RulesFindBar, useRulesFind } from './RulesFind';
 import { contentKey } from './rules-find';
-import { editorLineHeightPx, editorScrollTopForLine, rulesFullscreenPadding, RULES_EDITOR_FONT_SIZE, RULES_EDITOR_LINE_HEIGHT } from './rules-fullscreen-layout';
+import { editorLineHeightPx, editorScrollTopForLine, RULES_EDITOR_FONT_SIZE, RULES_EDITOR_LINE_HEIGHT } from './rules-fullscreen-layout';
 
 type Phase = 'loading' | 'ready' | 'saving' | 'unavailable';
 
@@ -488,7 +488,7 @@ function RulesFullscreen({ onClose, toolbar, source, bodyProps }: {
   const scrollRef = useRef<any>(null);
   const closeRef = useRef<any>(null);
   // Android edge-to-edge 下 Modal 恒画到状态栏 / 挖孔底下(见 rules-fullscreen-layout.ts ①):四边按安全区垫。
-  const safe = rulesFullscreenPadding(Platform.OS, useSafeAreaInsets(), StatusBar.currentHeight);
+  const safe = useModalSafePadding('fullScreen');
   useEffect(() => {
     const doc = (globalThis as any).document;
     if (!doc?.addEventListener) return;
@@ -509,7 +509,7 @@ function RulesFullscreen({ onClose, toolbar, source, bodyProps }: {
             同样再挂一次;它自己只在 Tauri+Windows 渲染。两者平台互斥,任何平台最多出一条。 */}
         <MacTitleStrip />
         <WinTitleBar />
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingHorizontal: spacing.lg, paddingVertical: spacing.md, borderBottomWidth: 1, borderBottomColor: colors.border }}>
+        <View testID="screen-header" style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingHorizontal: spacing.lg, paddingVertical: spacing.md, borderBottomWidth: 1, borderBottomColor: colors.border }}>
           <View style={{ flex: 1 }}>{toolbar}</View>
           <FocusRing ref={closeRef} onPress={onClose} accessibilityLabel="退出全屏(Esc)" style={{ paddingHorizontal: spacing.md, paddingVertical: 5, borderRadius: 6, borderWidth: 1, borderColor: colors.border }}>
             <Text style={{ color: colors.textSecondary, fontSize: 12 }}>{WEB ? '退出全屏 Esc' : '退出全屏'}</Text>

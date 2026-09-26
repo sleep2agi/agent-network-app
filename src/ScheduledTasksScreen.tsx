@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
-import { ActivityIndicator, Alert, BackHandler, Modal, Platform, Pressable, RefreshControl, ScrollView, StatusBar, StyleSheet, Switch, View, useWindowDimensions } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { ActivityIndicator, Alert, BackHandler, Modal, Pressable, RefreshControl, ScrollView, StyleSheet, Switch, View, useWindowDimensions } from 'react-native';
 import { Text, TextInput } from './ui-text';
 import {
   cancelScheduledTask,
@@ -34,7 +33,7 @@ import MacTitleStrip from './mac-title-strip';
 import WinTitleBar from './win-title-bar';
 import NodePickerSheet, { NodePickerField } from './NodePicker';
 import { pickerNodes } from './node-picker-model';
-import { modalSafePadding } from './modal-safe-area';
+import { useModalSafePadding } from './safe-area-runtime';
 import { loadChatPins } from './chat-pins';
 import { loadScheduleTargetRecents, rememberScheduleTarget } from './schedule-target-recents';
 import { colors, onThemeChange, radius, spacing, type as fontSize, weight } from './theme';
@@ -333,7 +332,7 @@ export default function ScheduledTasksScreen({ cfg }: { cfg: HubConfig }) {
   return (
     <View style={styles.root} onLayout={e => setMeasuredWidth(e.nativeEvent.layout.width)}>
       {!wide && selected ? detail : <>
-        <View style={styles.header}>
+        <View style={styles.header} testID="screen-header">
           <Text style={styles.title} numberOfLines={1}>定时任务</Text>
           <View style={styles.tabs}>
             {(['hub', 'node'] as const).map(value => (
@@ -583,7 +582,7 @@ function ScheduleFormModal({ cfg, nodes, visible, editing, onClose, onSaved, onC
   const [sessions, setSessions] = useState<Session[]>([]);
   const [pins, setPins] = useState<string[]>([]);
   const [recents, setRecents] = useState<string[]>([]);
-  const safe = modalSafePadding(Platform.OS, 'pageSheet', useSafeAreaInsets(), StatusBar.currentHeight);
+  const safe = useModalSafePadding('pageSheet');
   useEffect(() => {
     if (!visible) { setPickerOpen(false); return; }
     let live = true;
@@ -707,12 +706,12 @@ function CronEditModal({ value, busy, onClose, onSubmit }: {
   const [cron, setCron] = useState('');
   useEffect(() => { setCron(''); }, [value?.schedule.id]);
   const valid = looksLikeCron(cron);
-  const safe = modalSafePadding(Platform.OS, 'pageSheet', useSafeAreaInsets(), StatusBar.currentHeight);
+  const safe = useModalSafePadding('pageSheet');
   return <Modal visible={!!value} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
     <View style={[s.modalRoot, safe]}>
       <MacTitleStrip />
       <WinTitleBar />
-      <View style={s.modalHeader}>
+      <View style={s.modalHeader} testID="screen-header">
         <Pressable onPress={onClose} style={s.headerSide}><Text style={s.link}>取消</Text></Pressable>
         <Text style={s.modalTitle} numberOfLines={1}>改执行时间</Text>
         <Pressable disabled={busy || !valid} onPress={() => onSubmit(cron.trim().split(/ +/).join(' '))} style={[s.headerSide, s.headerSideEnd]}><Text style={[s.link, (busy || !valid) && s.linkDisabled]}>提交</Text></Pressable>
@@ -732,12 +731,12 @@ function CronEditModal({ value, busy, onClose, onSubmit }: {
 
 function IntentsModal({ value, onClose }: { value: { title: string; edits: HubExternalScheduleEditIntent[] } | null; onClose: () => void }) {
   const s = useMemo(makeStyles, [value]);
-  const safe = modalSafePadding(Platform.OS, 'pageSheet', useSafeAreaInsets(), StatusBar.currentHeight);
+  const safe = useModalSafePadding('pageSheet');
   return <Modal visible={!!value} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
     <View style={[s.modalRoot, safe]}>
       <MacTitleStrip />
       <WinTitleBar />
-      <View style={s.modalHeader}><Pressable onPress={onClose} style={s.headerSide}><Text style={s.link}>关闭</Text></Pressable><Text style={s.modalTitle} numberOfLines={1}>{value?.title || '意向记录'}</Text><View style={s.headerSide} /></View>
+      <View style={s.modalHeader} testID="screen-header"><Pressable onPress={onClose} style={s.headerSide}><Text style={s.link}>关闭</Text></Pressable><Text style={s.modalTitle} numberOfLines={1}>{value?.title || '意向记录'}</Text><View style={s.headerSide} /></View>
       <ScrollView contentContainerStyle={s.form}>
         {value?.edits.length ? value.edits.map(edit => (
           <View key={edit.intent_id} style={s.run}>

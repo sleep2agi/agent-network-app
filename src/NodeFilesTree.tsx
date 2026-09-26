@@ -223,7 +223,7 @@ export function NodeFilesTreeDrawer(props: NodeFilesTreeProps & { visible: boole
 
 function TreeHeader({ onClose }: { onClose?: () => void }) {
   return (
-    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: spacing.sm + 2, paddingBottom: 6, marginBottom: 2, borderBottomWidth: 1, borderBottomColor: colors.border, minHeight: 28 }}>
+    <View testID="screen-header" style={{ flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: spacing.sm + 2, paddingBottom: 6, marginBottom: 2, borderBottomWidth: 1, borderBottomColor: colors.border, minHeight: 28 }}>
       <Text style={{ flex: 1, color: colors.textSecondary, fontSize: type.small - 1, fontWeight: '600', letterSpacing: 0.3 }}>目录</Text>
       {onClose ? (
         <Pressable accessibilityRole="button" accessibilityLabel="关闭" onPress={onClose} hitSlop={8}
