@@ -119,6 +119,9 @@ jobs:
           releaseBody: |-
             Signed and notarized stable update for macOS (Apple Silicon) and Windows (x64).
 
+            What's new in 0.2.113:
+            - 设置 → 外观 新增字体大小（小/标准/大/特大）和界面密度（紧凑/标准/宽松）；折叠屏展开时默认更紧凑；限制系统字体放大对列表和导航栏的影响。
+
             What's new in 0.2.112:
             - 语音输入：聊天框里按住说话、松开转文字（豆包语音，需在『设置 → 语音输入』填写你自己的火山引擎凭据，密钥只存在本机）。
 
