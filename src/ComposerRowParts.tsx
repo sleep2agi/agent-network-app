@@ -7,14 +7,13 @@
 //     collapse control; Android back / Esc close it through Modal onRequestClose.
 
 import { useEffect, useRef, useState } from 'react';
-import { AccessibilityInfo, Animated, Modal, Platform, Pressable, StatusBar, StyleSheet, View } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { AccessibilityInfo, Animated, Modal, Platform, Pressable, StyleSheet, View } from 'react-native';
+import { useModalSafePadding } from './safe-area-runtime';
 import { Text, TextInput } from './ui-text';
 import { Ionicons } from './icons';
 import { colors, onThemeChange, radius, spacing } from './theme';
 import { ds, uiScale } from './ui-scale';
 import { composerControlSize, slotSwapAnimation, type ComposerRightSlot as Slot } from './composer-row-layout';
-import { rulesFullscreenPadding } from './rules-fullscreen-layout';
 
 function useReduceMotion(): boolean {
   const [reduce, setReduce] = useState(false);
@@ -106,12 +105,12 @@ export function ComposerFullscreenEditor({ visible, alias, draft, onChangeDraft,
   onSend: () => void;
   onClose: () => void;
 }) {
-  const safe = rulesFullscreenPadding(Platform.OS, useSafeAreaInsets(), StatusBar.currentHeight);
+  const safe = useModalSafePadding('fullScreen');
   const reduceMotion = useReduceMotion();
   return (
     <Modal visible={visible} transparent={false} animationType={reduceMotion ? 'none' : 'slide'} onRequestClose={onClose}>
       <View style={[styles.editorRoot, safe]} accessibilityViewIsModal testID="composer-fullscreen-editor">
-        <View style={styles.editorBar}>
+        <View style={styles.editorBar} testID="screen-header">
           <Pressable
             accessibilityRole="button"
             accessibilityLabel="收起全屏编辑"

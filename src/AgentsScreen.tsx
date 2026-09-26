@@ -513,7 +513,7 @@ export default function AgentsScreen({
       {/* Everything above the list (head + filter bar): its height is where the first group header starts. */}
       <View onLayout={alignFirstRow ? e => { listYRef.current = e.nativeEvent.layout.y + e.nativeEvent.layout.height; publishFirstRowTop(); } : undefined}>
       {compact ? (
-        <View style={{ paddingHorizontal: compact ? spacing.sm : spacing.lg, paddingTop: compact ? spacing.sm : spacing.lg, backgroundColor: compact ? colors.listBg : colors.bg }}>
+        <View testID="agents-list-head" style={{ paddingHorizontal: compact ? spacing.sm : spacing.lg, paddingTop: compact ? spacing.sm : spacing.lg, backgroundColor: compact ? colors.listBg : colors.bg }}>
         <View style={styles.listHeaderRow}>
           <Text style={styles.listHeader}>
             {q ? `${shownCount} / ${sessions.length} agents` : `${sessions.length} agents`}
@@ -527,7 +527,7 @@ export default function AgentsScreen({
         ) : null}
       </View>
       ) : (
-        <View style={[rowStyles.head, { backgroundColor: colors.bg }]}>
+        <View testID="agents-list-head" style={[rowStyles.head, { backgroundColor: colors.bg }]}>
           <View style={rowStyles.headRow}>
             {sessions.length > 10 ? (
               <View style={[rowStyles.searchBox, { backgroundColor: colors.subtleFill }]}>

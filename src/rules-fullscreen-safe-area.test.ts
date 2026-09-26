@@ -38,7 +38,8 @@ const src = readFileSync(new URL('./NodeRulesSection.tsx', import.meta.url), 'ut
 const code = src.replace(/\{\/\*[\s\S]*?\*\/\}/g, '').replace(/^\s*\/\/.*$/gm, '');
 const fsStart = code.indexOf('function RulesFullscreen(');
 const fs = fsStart >= 0 ? code.slice(fsStart) : '';
-ck('全屏:用 useSafeAreaInsets(与 ChatScreen / App 同一个库)', /from 'react-native-safe-area-context'/.test(src) && /rulesFullscreenPadding\(Platform\.OS, useSafeAreaInsets\(\), StatusBar\.currentHeight\)/.test(fs));
+// 2026-09-26 起所有 Modal 都走同一个入口 useModalSafePadding(safe-area-runtime.ts → modal-safe-area.ts → 本表)。
+ck('全屏:经 useModalSafePadding(\'fullScreen\') 取安全区(同一张表 / 同一个库)', /from '\.\/safe-area-runtime'/.test(src) && /const safe = useModalSafePadding\('fullScreen'\)/.test(fs));
 const iModal = fs.indexOf('<Modal');
 const iRoot = fs.indexOf('<View style={[{ flex: 1, backgroundColor: colors.bg }, safe]}');
 const iToolbar = fs.indexOf('{toolbar}');

@@ -5,6 +5,8 @@ import { checkDesktopUpdate, desktopUpdateSnapshot, installDesktopUpdate, latest
 import { colors, onThemeChange, spacing, themeMode } from './theme';
 import { desktopPromptView } from './update-prompt-model';
 import { APP_VERSION } from './version';
+import { useModalSafePadding } from './safe-area-runtime';
+import { withBasePadding } from './modal-safe-area';
 
 export default function DesktopUpdatePrompt() {
   const update = useSyncExternalStore(subscribeDesktopUpdates, desktopUpdateSnapshot, desktopUpdateSnapshot);
@@ -20,9 +22,10 @@ export default function DesktopUpdatePrompt() {
   const visible = update.kind === 'available' || update.kind === 'downloading';
   // 当前版本 → 新版本、更新来源(清单地址的主机:线路一 ModelScope / 线路二 GitHub)、下载进度与大小。
   const view = desktopPromptView(update, APP_VERSION);
+  const safe = useModalSafePadding('fullScreen'); // 0 on desktop; the rule is uniform (modal-safe-area.ts)
   return (
     <Modal visible={visible} transparent animationType="fade">
-      <View style={styles.backdrop}>
+      <View style={[styles.backdrop, withBasePadding(safe, 24)]}>
         <View style={styles.card}>
           <Text style={styles.title}>发现新版本</Text>
           <View style={styles.versions} testID="desktop-update-versions">

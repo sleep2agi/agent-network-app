@@ -2,7 +2,9 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalS
 import { ActivityIndicator, BackHandler, Image, KeyboardAvoidingView, Platform, Pressable, SafeAreaView, ScrollView, StatusBar, StyleSheet, useWindowDimensions, View } from 'react-native';
 import { Text, TextInput } from './src/ui-text';
 import { Ionicons } from './src/icons';
-import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
+import { SafeAreaInsetsContext, SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
+import { SAFE_AREA_SIM, layoutOs, statusBarHeight } from './src/safe-area-runtime';
+import { mainWindowTopPadding } from './src/modal-safe-area';
 import { purgeLegacyAttachmentCache } from './src/AuthedThumb';
 import { prefetchStatus, login, fetchHubNodes, HubConfig } from './src/api';
 import { LOGIN_FAILURE_COPY, normalizeServerUrl, type LoginFailureKind } from './src/login-flow';
@@ -186,15 +188,24 @@ export default function App() {
   const dedicatedChatWindow = Platform.OS === 'web' && !!(globalThis as any).__TAURI_INTERNALS__ && (!!requestedChatAlias() || !!requestedWorkspaceProfileId());
   return (
     <SafeAreaProvider>
-      <View style={{ flex: 1 }}>
-        <MacTitleStrip />
-        <WinTitleBar />
-        <AppRoot />
-      </View>
-      {dedicatedChatWindow ? null : <DesktopUpdatePrompt />}
-      {Platform.OS === 'android' ? <AndroidUpdatePrompt /> : null}
+      <SimulatedSafeArea>
+        <View style={{ flex: 1 }}>
+          <MacTitleStrip />
+          <WinTitleBar />
+          <AppRoot />
+        </View>
+        {dedicatedChatWindow ? null : <DesktopUpdatePrompt />}
+        {Platform.OS === 'android' ? <AndroidUpdatePrompt /> : null}
+      </SimulatedSafeArea>
     </SafeAreaProvider>
   );
+}
+
+// Web layout sweep only (src/safe-area-sim.ts): `?safeAreaSim=…` feeds simulated insets to every
+// useSafeAreaInsets() below. On a device SAFE_AREA_SIM is null and this renders its children as-is.
+function SimulatedSafeArea({ children }: { children: React.ReactNode }) {
+  if (!SAFE_AREA_SIM) return <>{children}</>;
+  return <SafeAreaInsetsContext.Provider value={SAFE_AREA_SIM}>{children}</SafeAreaInsetsContext.Provider>;
 }
 
 function AppRoot() {
@@ -261,6 +272,9 @@ function AppRoot() {
   // RN's SafeAreaView only covers iOS; Android edge-to-edge draws the
   // tab bar under the gesture bar (Vincent tg 802) — pad by the real inset.
   const insets = useSafeAreaInsets();
+  // Safe-area rule 1 (src/modal-safe-area.ts): the main window's top inset is applied HERE, once.
+  // Nothing rendered inside (screens, panes) pads the status bar again.
+  const rootInset = { paddingTop: mainWindowTopPadding(layoutOs(), insets, statusBarHeight()) };
   const { width, height, fontScale } = useWindowDimensions();
   const tauriDesktop = Platform.OS === 'web' && !!(globalThis as any).__TAURI_INTERNALS__;
   // Layout choice lives in src/wide-layout.ts (pure + tested). Desktop is still exactly
@@ -333,7 +347,18 @@ function AppRoot() {
       () => { void dismissAllForConfig(cfg); },
     );
   }, [cfg?.profileId, cfg?.serverUrl, trayWindow]);
-  const tabBarInset = Platform.OS === 'android' ? insets.bottom : 0;
+  const tabBarInset = layoutOs() === 'android' ? insets.bottom : 0;
+  // Bottom inset owner (rule 1): the tab bar when it shows; the chat composer pads itself
+  // (ChatScreen composerInset) and so does the two-pane (panes below); any other full-screen
+  // leaf gets it from navContent, so its last row is not under the gesture bar.
+  const contentBottomInset = navChromeFor(layout, screen.name) === 'none' && screen.name !== 'chat' && screen.name !== 'login' ? tabBarInset : 0;
+  // Web layout sweep only: lets tests/test-layout-sweep/run.mjs open screens the phone has no
+  // tab for (tasks, taskDetail, logs, wizard). Never set on a device (SAFE_AREA_SIM is web-only).
+  useEffect(() => {
+    if (!SAFE_AREA_SIM) return;
+    (globalThis as any).__anetLayoutSweep = { setScreen: (next: Screen) => setScreen(next) };
+    return () => { delete (globalThis as any).__anetLayoutSweep; };
+  }, []);
   const workspaceKey = `${theme}:${scaleKey}:${cfg?.profileId ?? cfg?.serverUrl ?? 'login'}`;
 
   const hydrateProfileLocalState = async (profileCfg: HubConfig | null) => {
@@ -496,7 +521,7 @@ function AppRoot() {
 
   if (booting) {
     return (
-      <SafeAreaView style={[styles.root, styles.center, bootStyles.root]}>
+      <SafeAreaView style={[styles.root, rootInset, styles.center, bootStyles.root]}>
         <Image source={require('./assets/splash-icon.png')} style={bootStyles.logo} resizeMode="contain" />
         <Text style={bootStyles.title}>Agent Network</Text>
         <ActivityIndicator color={colors.accent} />
@@ -510,7 +535,7 @@ function AppRoot() {
   if (dedicatedChatWindow && cfg && (screen.name === 'chat' || screen.name === 'nodeInfo')) {
     const detachedAlias = screen.alias;
     return (
-      <SafeAreaView key={workspaceKey} style={styles.root} testID="dedicated-chat-window">
+      <SafeAreaView key={workspaceKey} style={[styles.root, rootInset]} testID="dedicated-chat-window">
         <StatusBar barStyle={theme === 'light' ? 'dark-content' : 'light-content'} backgroundColor={colors.bg} />
         {screen.name === 'chat' ? (
           <ChatScreen
@@ -536,7 +561,7 @@ function AppRoot() {
 
   if (desktop && cfg && screen.name !== 'login') {
     return (
-      <SafeAreaView key={workspaceKey} style={styles.root}>
+      <SafeAreaView key={workspaceKey} style={[styles.root, rootInset]}>
         <StatusBar barStyle={theme === 'light' ? 'dark-content' : 'light-content'} backgroundColor={colors.bg} />
         <ConnectivityBanner />
         <DesktopWorkspace cfg={cfg} screen={screen} setScreen={setScreen} onLogout={removeActiveProfile} onLocalDataDeleted={finishLocalDataDeletion} onAddAccount={() => { setReauthProfile(null); setScreen({ name: 'login' }); }} onSwitchProfile={activateProfile} onReauthProfile={requestProfileReauth} />
@@ -548,7 +573,7 @@ function AppRoot() {
   }
 
   return (
-    <SafeAreaView key={workspaceKey} style={styles.root}>
+    <SafeAreaView key={workspaceKey} style={[styles.root, rootInset]}>
       <StatusBar
         barStyle={theme === 'light' ? 'dark-content' : 'light-content'}
         backgroundColor={colors.bg}
@@ -626,14 +651,14 @@ function AppRoot() {
                 showBrand={railShowsBrand(height)}
               />
             ) : null}
-            <View style={[styles.navContent, railShown && { paddingRight: insets.right }]}>
+            <View style={[styles.navContent, railShown ? { paddingRight: insets.right } : { paddingLeft: insets.left, paddingRight: insets.right }, { paddingBottom: contentBottomInset }]}>
               {twoPaneSelection ? (
                 // Android wide (unfolded foldable / tablet): phone-sized list on the left,
                 // the same phone screens on the right. Navigation state is the same
                 // `screen` value the phone stack uses, so folding back just re-reads it.
                 // Safe-area insets: the rail takes the left one, navContent the right one.
                 <View style={styles.twoPane} testID="android-two-pane">
-                  <View style={[styles.twoPaneList, { width: paneListWidth }]} testID="two-pane-list">
+                  <View style={[styles.twoPaneList, { width: paneListWidth, paddingBottom: tabBarInset }]} testID="two-pane-list">
                     <AgentsScreen
                       cfg={cfg}
                       filter={screen.name === 'agents' ? screen.filter : undefined}
@@ -647,7 +672,7 @@ function AppRoot() {
                       onToggleMute={toggleMute}
                     />
                   </View>
-                  <View style={styles.twoPaneDetail} testID="two-pane-detail">
+                  <View style={[styles.twoPaneDetail, screen.name !== 'chat' && { paddingBottom: tabBarInset }]} testID="two-pane-detail">
                     {screen.name === 'chat' ? (
                       <ChatScreen
                         key={`chat:${screen.alias}`}

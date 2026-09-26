@@ -41,7 +41,7 @@ check('controller 是唯一动作 dispatch owner', !/client\.(cancel|retry|archi
 check('controller hydration 接回 drawer state', drawer.includes('actionController.reconcile(cards)') && drawer.includes('updateCards: update => setCards(update)'));
 check('/btw 附件上传后显式传 SideThread 并清 composer', chat.includes('attachments = uploaded.map(item => ({ fileId: item.file_id }))') && chat.includes('setAttached([])') && chat.includes('attachments }));'));
 check('行为 controller 无 React Native 依赖', !actionController.includes("from 'react-native'") && !actionController.includes("from 'react'"));
-check('Modal focus/restore/keyboard/safe-area 已接入', drawer.includes('questionInputRef.current?.focus()') && drawer.includes('restoreFocusRef?.current?.focus()') && drawer.includes('<KeyboardAvoidingView') && drawer.includes('insets.bottom'));
+check('Modal focus/restore/keyboard/safe-area 已接入', drawer.includes('questionInputRef.current?.focus()') && drawer.includes('restoreFocusRef?.current?.focus()') && drawer.includes('<KeyboardAvoidingView') && drawer.includes("useModalSafePadding('overlay')") && drawer.includes('safe.paddingBottom'));
 check('dialog/state/live region 无障碍语义已接入', drawer.includes('role="dialog"') && drawer.includes('accessibilityState={{ busy:') && drawer.includes('accessibilityLiveRegion="polite"') && drawer.includes('accessibilityLiveRegion="assertive"'));
 
 console.log(`\n${passed}/${total} passed`);

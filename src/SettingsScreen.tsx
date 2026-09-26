@@ -28,6 +28,8 @@ import UiScaleSettings from './UiScaleSettings';
 import { ds } from './ui-scale';
 import { playChime } from './chime';
 import { SETTINGS_CATEGORIES, activeCategoryKey, filterSettings, rememberSettingsCategory, rememberSettingsScroll, rememberedSettingsView, settingsPlatform, visibleRowKeys, type SettingsCategoryKey, type SettingsPlatform } from './settings-model';
+import { useModalSafePadding } from './safe-area-runtime';
+import { withBasePadding } from './modal-safe-area';
 
 // Settings (Vincent tg 720): who am I, where am I connected, which network, which build —
 // and the destructive actions live here instead of cluttering the agents list header.
@@ -139,6 +141,7 @@ export default function SettingsScreen({
     if (scrollY > 0) requestAnimationFrame(() => paneScrollRef.current?.scrollTo({ y: scrollY, animated: false }));
   }, []);
   const { width } = useWindowDimensions();
+  const dialogSafe = useModalSafePadding('fullScreen'); // the two confirm dialogs (safe-area rule 2)
   const compact = width < 640;
 
   useEffect(() => {
@@ -753,7 +756,7 @@ export default function SettingsScreen({
       {/* 两个确认弹窗是 ScrollView 的兄弟不是子节点:Modal 套进滚动容器里会继承它的
           触摸处理,背板也不再铺满窗口。 */}
       <Modal visible={!!removeTarget} transparent animationType="fade" onRequestClose={() => setRemoveTarget(null)}>
-        <View style={styles.modalBackdrop}>
+        <View style={[styles.modalBackdrop, withBasePadding(dialogSafe, spacing.xl)]}>
           <View style={styles.modalCard}>
             <Text style={styles.modalTitle}>移除这个账号？</Text>
             <Text style={styles.modalBody}>{removeTarget ? `${removeTarget.serverUrl} · ${removeTarget.username}` : ''}\n只删除这个 profile 的系统凭据和本地目录，不影响其他 Hub。</Text>
@@ -772,7 +775,7 @@ export default function SettingsScreen({
       </Modal>
 
       <Modal visible={localDeleteVisible} transparent animationType="fade" onRequestClose={() => setLocalDeleteVisible(false)}>
-        <View style={styles.modalBackdrop}>
+        <View style={[styles.modalBackdrop, withBasePadding(dialogSafe, spacing.xl)]}>
           <View style={styles.modalCard}>
             <Text style={styles.modalTitle}>删除本地工作区？</Text>
             <Text style={styles.modalBody}>应用会先在 ~/.anet/app/backups 创建完整备份，再删除本地 Hub 数据和系统凭据。远程 Hub 账号不受影响。请输入“删除本地数据”继续。</Text>

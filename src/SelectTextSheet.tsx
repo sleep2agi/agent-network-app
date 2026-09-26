@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Modal, Platform, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { Text, TextInput } from './ui-text';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useModalSafePadding } from './safe-area-runtime';
 import { Ionicons } from './icons';
 import { colors, onThemeChange, spacing } from './theme';
 import { selectableTextOf, selectTextSurface, type SelectTextMode } from './message-plain-text';
@@ -20,7 +20,7 @@ export default function SelectTextSheet({ text, author, onClose, onCopyAll }: {
   onClose: () => void;
   onCopyAll: (value: string) => void;
 }) {
-  const insets = useSafeAreaInsets();
+  const safe = useModalSafePadding('fullScreen'); // own window (safe-area rule 2)
   const [mode, setMode] = useState<SelectTextMode>('plain');
   // 每次打开都从「纯文本」开始 —— 上一条消息切到了原文,不该带到下一条。
   useEffect(() => { if (text !== null) setMode('plain'); }, [text]);
@@ -28,8 +28,8 @@ export default function SelectTextSheet({ text, author, onClose, onCopyAll }: {
   const surface = selectTextSurface(Platform.OS);
   return (
     <Modal visible={text !== null} animationType="slide" onRequestClose={onClose} presentationStyle="fullScreen">
-      <View style={[styles.root, { paddingTop: insets.top, paddingBottom: insets.bottom }]} accessibilityLabel="选择文本">
-        <View style={styles.header}>
+      <View style={[styles.root, safe]} accessibilityLabel="选择文本">
+        <View style={styles.header} testID="screen-header">
           <Pressable accessibilityLabel="关闭选择文本" hitSlop={10} onPress={onClose}>
             <Ionicons name="close" size={22} color={colors.text} />
           </Pressable>

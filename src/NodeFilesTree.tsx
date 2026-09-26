@@ -14,6 +14,7 @@ import { Text } from './ui-text';
 import { entryIcon } from './node-files';
 import { arrowIntent, clampTreeWidth, FILES_TREE_DEFAULT_WIDTH, moveFocus, type TreeRow } from './node-files-tree';
 import { colors, radius, spacing, type } from './theme';
+import { useModalSafePadding } from './safe-area-runtime';
 
 const MONO = Platform.OS === 'ios' ? 'Menlo' : 'monospace';
 const WEB = Platform.OS === 'web';
@@ -205,12 +206,15 @@ export function NodeFilesTreeButton({ open, onPress }: { open: boolean; onPress:
 /** 窄窗:从右侧滑出的抽屉。点文件打开后自动收起;点遮罩 / Esc / × 关闭。 */
 export function NodeFilesTreeDrawer(props: NodeFilesTreeProps & { visible: boolean; onClose: () => void }) {
   const { width } = useWindowDimensions();
-  const w = Math.min(320, Math.round(width * 0.86));
+  // Own window (safe-area rule 2): the scrim dims the whole screen, the full-height panel pads the
+  // status bar / gesture bar / right cutout — its × was under the clock before.
+  const safe = useModalSafePadding('fullScreen');
+  const w = Math.min(320, Math.round(width * 0.86)) + safe.paddingRight;
   return (
     <Modal transparent visible={props.visible} onRequestClose={props.onClose} animationType="fade">
       <View style={{ flex: 1, flexDirection: 'row' }}>
         <Pressable accessibilityLabel="关闭目录树" onPress={props.onClose} style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.35)' }} />
-        <View testID="node-files-tree-drawer" style={{ width: w, backgroundColor: colors.card, borderLeftWidth: 1, borderLeftColor: colors.border, paddingVertical: spacing.sm }}>
+        <View testID="node-files-tree-drawer" style={{ width: w, backgroundColor: colors.card, borderLeftWidth: 1, borderLeftColor: colors.border, paddingTop: safe.paddingTop + spacing.sm, paddingBottom: safe.paddingBottom + spacing.sm, paddingRight: safe.paddingRight }}>
           <TreeHeader onClose={props.onClose} />
           <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingHorizontal: spacing.xs, paddingBottom: spacing.lg }}>
             <TreeBody {...props} afterOpen={props.onClose} />
@@ -223,7 +227,7 @@ export function NodeFilesTreeDrawer(props: NodeFilesTreeProps & { visible: boole
 
 function TreeHeader({ onClose }: { onClose?: () => void }) {
   return (
-    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: spacing.sm + 2, paddingBottom: 6, marginBottom: 2, borderBottomWidth: 1, borderBottomColor: colors.border, minHeight: 28 }}>
+    <View testID="screen-header" style={{ flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: spacing.sm + 2, paddingBottom: 6, marginBottom: 2, borderBottomWidth: 1, borderBottomColor: colors.border, minHeight: 28 }}>
       <Text style={{ flex: 1, color: colors.textSecondary, fontSize: type.small - 1, fontWeight: '600', letterSpacing: 0.3 }}>目录</Text>
       {onClose ? (
         <Pressable accessibilityRole="button" accessibilityLabel="关闭" onPress={onClose} hitSlop={8}

@@ -1,7 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Animated, Image, Modal, PanResponder, Platform, Pressable, StyleSheet, View, type GestureResponderEvent, type PanResponderGestureState } from 'react-native';
 import { Text } from './ui-text';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useModalSafePadding } from './safe-area-runtime';
 import { Ionicons } from './icons';
 import { AttachmentFile, downloadAttachment } from './AuthedThumb';
 import { saveObjectUrlOriginal } from './AuthedWebThumb';
@@ -53,7 +53,9 @@ export default function ImageViewer({ state, onClose, serverUrl, token }: {
   const [viewport, setViewport] = useState<Size>({ width: 0, height: 0 });
   const [resolved, setResolved] = useState<Record<string, string>>({});
   const [saveNote, setSaveNote] = useState<string | null>(null);
-  const insets = useSafeAreaInsets();
+  // Full-bleed viewer: the photo deliberately runs under the system bars (statusBarTranslucent),
+  // so the inset is applied to the floating controls, not the root (safe-area rule 2).
+  const safe = useModalSafePadding('fullScreen');
 
   useEffect(() => {
     setIndex(state?.index ?? 0);
@@ -285,7 +287,7 @@ export default function ImageViewer({ state, onClose, serverUrl, token }: {
           </Animated.View>
         </View>
 
-        <View style={[styles.topBar, { top: insets.top + 8 }]} pointerEvents="box-none">
+        <View style={[styles.topBar, { top: safe.paddingTop + 8, left: 16 + safe.paddingLeft, right: 16 + safe.paddingRight }]} pointerEvents="box-none">
           {label ? <Text style={styles.index} testID="image-viewer-index" accessibilityLiveRegion="polite">{label}</Text> : <View />}
           <Pressable accessibilityRole="button" accessibilityLabel="关闭图片预览" hitSlop={10} onPress={onClose} style={styles.close}>
             <Ionicons name="close" size={22} color="#fff" />
@@ -308,7 +310,7 @@ export default function ImageViewer({ state, onClose, serverUrl, token }: {
         ) : null}
 
         {current?.save ? (
-          <View style={[styles.bottomBar, { bottom: insets.bottom + 20 }]} pointerEvents="box-none">
+          <View style={[styles.bottomBar, { bottom: safe.paddingBottom + 20 }]} pointerEvents="box-none">
             {Platform.OS === 'web' ? (
               currentUri ? (
                 <Pressable

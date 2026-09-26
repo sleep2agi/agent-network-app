@@ -291,7 +291,7 @@ export default function CreateNodeWizardScreen({ cfg, daemon, onBack, onExit }: 
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
     >
       {/* Header */}
-      <View style={styles.header}>
+      <View style={styles.header} testID="screen-header">
         <Pressable
           style={({ pressed }) => [styles.headerBtn, pressed && { opacity: 0.6 }]}
           onPress={busy ? () => { /* ignore back mid-create */ } : onBack}

@@ -2,6 +2,8 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import { PanResponder, ActivityIndicator, Alert, BackHandler, FlatList, Image, Keyboard, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StatusBar, StyleSheet, useWindowDimensions, View } from 'react-native';
 import { Text, TextInput } from './ui-text';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { layoutOs, useModalSafePadding } from './safe-area-runtime';
+import { withBasePadding } from './modal-safe-area';
 import { Ionicons } from './icons';
 import * as Clipboard from 'expo-clipboard';
 import AliasAvatar from './AliasAvatar';
@@ -231,7 +233,12 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
   // Android edge-to-edge draws the composer under the gesture bar (same
   // class of bug as the tg 802 tab bar) — pad by the real bottom inset.
   const insets = useSafeAreaInsets();
-  const composerInset = Platform.OS === 'android' ? insets.bottom : 0;
+  const composerInset = layoutOs() === 'android' ? insets.bottom : 0;
+  // The menus / dialogs below are Modals = their own window (safe-area rule, modal-safe-area.ts):
+  // bottom action sheets pad sides + bottom inside the sheet, centred panels pad all four.
+  const sheetSafe = useModalSafePadding('overlay');
+  const dialogSafe = useModalSafePadding('fullScreen');
+  const sheetPad = { paddingBottom: spacing.xl + sheetSafe.paddingBottom, paddingLeft: sheetSafe.paddingLeft, paddingRight: sheetSafe.paddingRight };
   const [messages, setMessages] = useState<ChatItem[]>([]);
   // 回复引用条要按 task_id 找到被回的那条(主动消息的 in_reply_to)
   const byTaskId = useMemo(() => new Map(messages.map(m => [msgKey(m), m] as const)), [messages]);
@@ -1526,7 +1533,7 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
       {/* Narrow headers park pin / mute here; same action-sheet shape as the long-press menu. */}
       <Modal visible={headerMoreOpen && headerLayout.overflow.length > 0} transparent animationType="fade" onRequestClose={() => setHeaderMoreOpen(false)}>
         <Pressable style={styles.menuBackdrop} onPress={() => setHeaderMoreOpen(false)}>
-          <View style={styles.actionSheet}>
+          <View style={[styles.actionSheet, sheetPad]}>
             {headerLayout.overflow.map((key, index) => {
               const label = key === 'pin'
                 ? (pinned ? '取消置顶会话' : '置顶会话')
@@ -1978,7 +1985,7 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
           <View
             style={desktop && menuAt
               ? [styles.actionMenuDesktop, { left: Math.max(8, Math.min(menuAt.x, menuWindowWidth - 188)), top: Math.max(8, Math.min(menuAt.y, menuWindowHeight - 300)) }]
-              : styles.actionSheet}
+              : [styles.actionSheet, sheetPad]}
           >
             {menuGroups.map((group, groupIndex) => (
               <View key={`menu-group-${groupIndex}`}>
@@ -2006,7 +2013,7 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
 
       {/* 放大阅读:单条消息的全屏视图。气泡里读不完的长代码块用这个。 */}
       <Modal visible={!!expandFor} transparent animationType="fade" onRequestClose={() => setExpandFor(null)}>
-        <Pressable style={styles.expandBackdrop} onPress={() => setExpandFor(null)}>
+        <Pressable style={[styles.expandBackdrop, withBasePadding(dialogSafe, spacing.lg)]} onPress={() => setExpandFor(null)}>
           <Pressable style={styles.expandPanel} onPress={() => {}} accessibilityLabel="放大阅读">
             <View style={styles.expandHeader}>
               <Text style={styles.expandTitle} numberOfLines={1}>{expandFor?.author ?? ''}</Text>
@@ -2037,7 +2044,7 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
       />
 
       <Modal visible={!!forwardFor && forwardUiOwner === conversationKeyFor} transparent animationType="fade" onRequestClose={() => setForwardFor(null)}>
-        <Pressable style={styles.forwardBackdrop} onPress={() => setForwardFor(null)}>
+        <Pressable style={[styles.forwardBackdrop, withBasePadding(dialogSafe, spacing.xl)]} onPress={() => setForwardFor(null)}>
           <Pressable style={styles.forwardPanel} onPress={() => {}}>
             <Text style={styles.forwardTitle}>{forwardBatch ? `转发给（${forwardBatch.length} 条）` : '转发给'}</Text>
             {forwardProgress ? <Text style={styles.forwardEmpty}>{forwardProgress}</Text> : null}
@@ -2078,7 +2085,7 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
       />
 
       <Modal visible={desktop && plusMenuOpen} transparent animationType="fade" onRequestClose={() => setPlusMenuOpen(false)}>
-        <Pressable style={styles.plusMenuBackdrop} onPress={() => setPlusMenuOpen(false)}>
+        <Pressable style={[styles.plusMenuBackdrop, sheetSafe]} onPress={() => setPlusMenuOpen(false)}>
           <Pressable style={[styles.plusMenu, styles.plusMenuDesktop]} onPress={() => {}}>
             {plusItems.map(item => (
               <Pressable

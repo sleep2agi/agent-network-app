@@ -97,7 +97,7 @@ export default function TaskDetailScreen({
       style={styles.root}
       testID={`task-detail-screen-poll-detail-ms-${POLL_DETAIL_MS}`}
     >
-      <View style={styles.header}>
+      <View style={styles.header} testID="screen-header">
         <Pressable onPress={onBack} style={styles.backBtn} testID="task-detail-back">
           <Ionicons name="chevron-back" size={22} color={colors.text} />
           <Text style={styles.backText}>任务</Text>

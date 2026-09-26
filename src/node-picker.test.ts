@@ -165,14 +165,14 @@ ck('form: picker gets the joined nodes, the selection, recents and pins', /<Node
 ck('form: select ⇒ set target, remember as recent, close the sheet', /onSelect=\{n => \{ setTarget\(n\.node_id\); setRecents\(rememberScheduleTarget\(cfg, recents, n\.node_id\)\); setPickerOpen\(false\); \}\}/.test(form));
 ck('form: the picker only shows while the form does', /visible=\{visible && pickerOpen\}/.test(form));
 ck('form: statuses + pins + recents are loaded when the form opens', /fetchStatus\(cfg\)/.test(form) && /loadChatPins\(cfg\)/.test(form) && /loadScheduleTargetRecents\(cfg\)/.test(form));
-ck('form: root View carries the safe-area padding (#387 approach)', /const safe = modalSafePadding\(Platform\.OS, 'pageSheet', useSafeAreaInsets\(\), StatusBar\.currentHeight\)/.test(form) && /<View testID="schedule-form" style=\{\[styles\.modalRoot, safe\]\}>/.test(form));
+ck('form: root View carries the safe-area padding (#387 approach, via useModalSafePadding)', /const safe = useModalSafePadding\('pageSheet'\)/.test(form) && /<View testID="schedule-form" style=\{\[styles\.modalRoot, safe\]\}>/.test(form));
 ck('form: header lives inside the padded root', form.indexOf('style={[styles.modalRoot, safe]}') < form.indexOf('testID="schedule-form-header"'));
 ck('form: Tauri title strips re-mounted inside the Modal (it covers the window)', /<MacTitleStrip \/>\s*<WinTitleBar \/>\s*<View testID="schedule-form-header"/.test(form));
 ck('form: 取消 and 保存 get equal-width sides so the title is truly centred', /headerSide: \{ minWidth: 56/.test(screen) && /modalTitle: \{ flex: 1, textAlign: 'center'/.test(screen));
 for (const name of ['CronEditModal', 'IntentsModal']) {
   const start = screen.indexOf(`function ${name}(`);
   const body = screen.slice(start, screen.indexOf('\nfunction ', start + 10));
-  ck(`${name}: full-screen sheet gets the same safe-area padding`, start >= 0 && /modalSafePadding\(Platform\.OS, 'pageSheet'/.test(body) && /style=\{\[s\.modalRoot, safe\]\}/.test(body));
+  ck(`${name}: full-screen sheet gets the same safe-area padding`, start >= 0 && /useModalSafePadding\('pageSheet'\)/.test(body) && /style=\{\[s\.modalRoot, safe\]\}/.test(body));
 }
 ck('picker: SectionList (virtualized) with a bounded render window', /<SectionList/.test(picker) && /initialNumToRender=\{\d+\}/.test(picker) && /windowSize=\{\d+\}/.test(picker));
 ck('picker: typing is deferred (useDeferredValue) and the sections use the deferred query', /const deferred = useDeferredValue\(query\)/.test(picker) && /buildPickerSections\(nodes, \{ query: deferred/.test(picker));

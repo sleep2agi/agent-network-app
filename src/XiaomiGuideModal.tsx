@@ -3,13 +3,16 @@ import { Text } from './ui-text';
 import { colors, spacing } from './theme';
 import { XIAOMI_GUIDE_FOOTNOTE, XIAOMI_GUIDE_INTRO, XIAOMI_GUIDE_STEPS, XIAOMI_GUIDE_TITLE } from './xiaomi-guide';
 import { openAppDetailsSettings, openXiaomiAutostartSettings } from './mobile-notifications';
+import { useModalSafePadding } from './safe-area-runtime';
+import { withBasePadding } from './modal-safe-area';
 
 /** 设置 → 通知 →「小米/HyperOS 后台设置指引」。文案在 xiaomi-guide.ts。 */
 export default function XiaomiGuideModal({ onClose }: { onClose: () => void }) {
   const styles = makeStyles();
+  const safe = useModalSafePadding('fullScreen');
   return (
     <Modal visible transparent animationType="fade" onRequestClose={onClose}>
-      <View style={styles.backdrop}>
+      <View style={[styles.backdrop, withBasePadding(safe, spacing.lg)]}>
         <View style={styles.card} testID="xiaomi-guide">
           <Text style={styles.title}>{XIAOMI_GUIDE_TITLE}</Text>
           <ScrollView style={styles.scroll} contentContainerStyle={styles.scrollContent}>
