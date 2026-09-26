@@ -5,13 +5,15 @@
 // 🔴 样式必须从 ./app-styles 引入,不能在本文件复制一份 —— 那是 let 变量,
 // 主题切换时整体重新赋值,复制的那份不会跟着变(见 app-styles.ts 头注释)。
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, Pressable, RefreshControl, SectionList, StyleSheet, View } from 'react-native';
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
+import { ActivityIndicator, Platform, Pressable, RefreshControl, SectionList, StyleSheet, View } from 'react-native';
 import { Text, TextInput } from './ui-text';
 import { Ionicons } from './icons';
 import AliasAvatar from './AliasAvatar';
 import { isAgentOnline } from './chat-actions';
 import { fetchStatus, fetchUserMessages, takeStatusPrefetch, type HubConfig, type Session,
+  ackAgentMessages,
+  ackUserMessages,
   fetchMessages,
   fetchTasks,
   replyUnreadSince,
@@ -28,7 +30,11 @@ import { unreadCountForAgentRow } from './unread-badge';
 import {
   bindUnreadAppState,
   getUnreadSnapshot,
+  hubHasAgentUnread,
   ingestInboxMessagesBody,
+  markAgentReadLocally,
+  markAgentServerUnreadCleared,
+  unackedIdsForAgent,
   ingestUserMessagesBody,
   replyUnreadCounts,
   subscribeUnread,
@@ -40,6 +46,22 @@ import { TaskTimeResolver } from './agent-task-time';
 import { loadCollapsedGroups, saveCollapsedGroups } from './agent-list-prefs';
 import { agentUnreadCounts, latestMessageAtByAgent } from './agent-unread-counts';
 import { pinyinMatch } from './lib/pinyin';
+import { ackAgentUnread } from './agent-ack';
+import AgentRowMenu, { type AgentRowMenuTarget } from './AgentRowMenu';
+import {
+  agentRowMenuItems,
+  clearManualUnread,
+  hideConversation,
+  isConversationHidden,
+  markManualUnread,
+  partitionHidden,
+  pruneRevivedHidden,
+  restoreConversation,
+  rowBadgeWithManual,
+  rowIsUnread,
+  type AgentRowMenuKey,
+} from './agent-row-menu';
+import { bindConversationFlags, getConversationFlags, subscribeConversationFlags, updateConversationFlags } from './conversation-flags';
 import { applyAgentFilter, filterLabel, isFilterActive, STATUS_FILTER_LABEL, type AgentListFilter, type AgentStatusFilter } from './server-stats';
 
 export default function AgentsScreen({
@@ -61,9 +83,9 @@ export default function AgentsScreen({
   onOpenChat: (alias: string) => void;
   /** #338 — top-right `+` opens the host_supervisor picker modal. */
   onOpenPicker: () => void;
-  /** issue #8 row 4 (V1) — long-press a row opens the per-node detail
-   *  screen. `onPress` remains the high-frequency path to chat and is
-   *  NOT changed (通信龙 red-line 71ee862d). */
+  /** 会话行菜单里的「节点详情」(2026-09-26 起长按改成弹菜单,以前长按直接进这里)。
+   *  没有 onTogglePin 的列表(桌面「服务器 → 节点」)没有菜单,长按仍直接进节点详情。
+   *  `onPress` remains the high-frequency path to chat and is NOT changed (通信龙 red-line 71ee862d). */
   onOpenNodeDetail: (alias: string) => void;
   compact?: boolean;
   selectedAlias?: string;
@@ -88,7 +110,14 @@ export default function AgentsScreen({
   const [activeFilter, setActiveFilter] = useState<AgentListFilter | null>(filter ?? null);
   useEffect(() => { if (filter) setActiveFilter(filter); }, [filter]);
   const filtering = isFilterActive(activeFilter);
-  const [contextMenu, setContextMenu] = useState<{ alias: string; x: number; y: number } | null>(null);
+  // 会话行菜单(长按 / 右键,AgentRowMenu):对着哪一行、按在哪。只有会话列表有菜单 —— 能置顶的列表才是会话列表。
+  const rowMenu = !!onTogglePin;
+  const [menuFor, setMenuFor] = useState<AgentRowMenuTarget | null>(null);
+  const openRowMenu = useCallback((alias: string, x: number, y: number) => setMenuFor({ alias, x, y }), []);
+  // 本机的「不显示该对话」「标为未读」(conversation-flags.ts),按账号分。
+  useEffect(() => { bindConversationFlags(cfg); }, [cfg.profileId, cfg.serverUrl, cfg.username]);
+  const convFlags = useSyncExternalStore(subscribeConversationFlags, getConversationFlags, getConversationFlags);
+  const [showHidden, setShowHidden] = useState(false);
   const [hoveredAlias, setHoveredAlias] = useState<string | null>(null);
   const [unreadSnap, setUnreadSnap] = useState(getUnreadSnapshot);
   useEffect(() => subscribeUnread(() => setUnreadSnap(getUnreadSnapshot())), []);
@@ -158,9 +187,10 @@ export default function AgentsScreen({
   // RN Web's bubbling onContextMenu can run after WKWebView has already
   // decided to show its native "Reload" menu. Intercept in the capture phase
   // at document level so desktop agent rows only ever show our own menu.
+  // 手机布局的 web 导出(安卓 UA 的浏览器)行上也挂了 data-agent-alias,右键同样出这份菜单。
   useEffect(() => {
     const doc = (globalThis as any).document;
-    if (!compact || !doc?.addEventListener) return;
+    if (!rowMenu || Platform.OS !== 'web' || !doc?.addEventListener) return;
     const handleContextMenu = (event: any) => {
       const row = event.target?.closest?.('[data-agent-alias]');
       const alias = row?.getAttribute?.('data-agent-alias');
@@ -168,17 +198,12 @@ export default function AgentsScreen({
       event.preventDefault?.();
       event.stopPropagation?.();
       event.stopImmediatePropagation?.();
-      const pageX = event.pageX ?? 180;
-      const pageY = event.pageY ?? 180;
-      setContextMenu({
-        alias,
-        x: Math.max(8, Math.min(pageX, ((globalThis as any).innerWidth ?? 1000) - 194)),
-        y: Math.max(8, Math.min(pageY, ((globalThis as any).innerHeight ?? 700) - 112)),
-      });
+      // 夹进窗口由 anchorRowMenu 做(菜单高度随项数变,这里不猜)。
+      openRowMenu(alias, event.clientX ?? event.pageX ?? 180, event.clientY ?? event.pageY ?? 180);
     };
     doc.addEventListener('contextmenu', handleContextMenu, true);
     return () => doc.removeEventListener('contextmenu', handleContextMenu, true);
-  }, [compact]);
+  }, [rowMenu, openRowMenu]);
 
   const load = useCallback(async () => {
     if (preview) {
@@ -252,8 +277,16 @@ export default function AgentsScreen({
   // NOTE: 这个 useMemo 必须留在下面的 early return 之上 —— hook 出现在条件
   // 返回之后会改变 hook 顺序并崩溃(v0.1.28 launch-crash,Vincent tg 1098)。
   const q = query.trim();
+  // 「不显示该对话」的行不进分组,收在列表底部「已隐藏的对话」里;来了更新的消息自动回来(agent-row-menu.ts)。
+  const { visible: visibleSessions, hidden: hiddenSessions } = useMemo(
+    () => partitionHidden(sessions, convFlags, alias => liveUnread.lastAt[alias] ?? 0, !!q),
+    [sessions, convFlags, liveUnread, q],
+  );
+  useEffect(() => {
+    updateConversationFlags(f => pruneRevivedHidden(f, liveUnread.lastAt));
+  }, [liveUnread]);
   const sections = useMemo(
-    () => buildSections(applyAgentFilter(sessions, activeFilter), query, {
+    () => buildSections(applyAgentFilter(visibleSessions, activeFilter), query, {
       match: pinyinMatch,
       sort: {
         pinned: alias => pinnedAliases.includes(alias),
@@ -262,7 +295,7 @@ export default function AgentsScreen({
       },
       unread: { count: alias => floatInput.counts[alias] ?? 0, lastMessageAt: alias => floatInput.lastAt[alias] ?? 0 },
     }),
-    [sessions, activeFilter, query, pinnedAliases, floatInput, activityByAlias],
+    [visibleSessions, activeFilter, query, pinnedAliases, floatInput, activityByAlias],
   );
   const shownCount = countShown(sections);
   const shownSections = useMemo(() => applyCollapsed(sections, collapsed, query), [sections, collapsed, query]);
@@ -307,18 +340,66 @@ export default function AgentsScreen({
   }
 
   // Unread badge for one row — the same computation for the desktop row and the phone row.
-  const rowBadge = (alias: string) => formatUnreadBadge(unreadCountForAgentRow(
+  const rowUnreadCount = (alias: string) => unreadCountForAgentRow(
     preview?.serverBody ?? unreadSnap.serverBody,
     preview?.ledger ?? unreadSnap.ledger,
     alias,
     preview ? undefined : replyUnreadCounts(unreadSnap),
-  ));
+  );
+  // 手动「标为未读」且没有真实未读时:一个不带数字的红点(微信同款),打开会话即消失。
+  const rowBadge = (alias: string) => rowBadgeWithManual(formatUnreadBadge(rowUnreadCount(alias)), convFlags.manualUnread.includes(alias));
+
+  const menuItems = menuFor ? agentRowMenuItems({
+    unread: rowIsUnread(rowUnreadCount(menuFor.alias), convFlags.manualUnread.includes(menuFor.alias)),
+    pinned: pinnedAliases.includes(menuFor.alias),
+    muted: mutedAliases.includes(menuFor.alias),
+    hidden: isConversationHidden(convFlags, menuFor.alias, liveUnread.lastAt[menuFor.alias] ?? 0),
+    canPin: !!onTogglePin,
+    canMute: !!onToggleMute,
+    canOpenWindow: !!onOpenChatWindow,
+  }) : [];
+  const onRowMenu = (key: AgentRowMenuKey, alias: string) => {
+    switch (key) {
+      case 'read':
+        if (rowIsUnread(rowUnreadCount(alias), convFlags.manualUnread.includes(alias))) {
+          // 标为已读:手动红点去掉 + 真实未读按「会话渲染到底」同一套清法清掉(本地 + hub ack)。
+          updateConversationFlags(f => clearManualUnread(f, alias));
+          if (preview) return;
+          markAgentReadLocally(alias);
+          if (hubHasAgentUnread()) {
+            void ackAgentUnread(alias, {
+              ackAgent: agent => ackAgentMessages(cfg, agent),
+              ackIds: ids => ackUserMessages(cfg, ids),
+              idsFor: agent => unackedIdsForAgent(agent),
+              clearServerUnread: agent => markAgentServerUnreadCleared(agent),
+              warn: (message, error) => console.warn(message, error),
+            });
+          }
+        } else {
+          updateConversationFlags(f => markManualUnread(f, alias));
+        }
+        return;
+      case 'pin': onTogglePin?.(alias); return;
+      case 'mute': onToggleMute?.(alias); return;
+      case 'openWindow': onOpenChatWindow?.(alias); return;
+      case 'detail': onOpenNodeDetail(alias); return;
+      case 'hide':
+        if (isConversationHidden(convFlags, alias, liveUnread.lastAt[alias] ?? 0)) updateConversationFlags(f => restoreConversation(f, alias));
+        else updateConversationFlags(f => hideConversation(f, alias, liveUnread.lastAt[alias] ?? 0));
+        return;
+    }
+  };
+  // 点开一条隐藏的会话 = 把它找回来(和微信从搜索里点开隐藏会话一样)。
+  const openChat = (alias: string) => {
+    if (alias in convFlags.hidden) updateConversationFlags(f => restoreConversation(f, alias));
+    onOpenChat(alias);
+  };
 
   // Desktop (Tauri) sidebar row — unchanged by the 0.2.106 phone / two-pane redesign.
   const renderCompactRow = (item: Session) => {
     return (
     <Pressable
-      {...(compact ? ({ dataSet: { agentAlias: item.alias } } as any) : {})}
+      {...(compact && rowMenu ? ({ dataSet: { agentAlias: item.alias } } as any) : {})}
       onHoverIn={compact ? () => { setHoveredAlias(item.alias); markListActive(); } : undefined}
       onHoverOut={compact ? () => setHoveredAlias(current => current === item.alias ? null : current) : undefined}
       style={({ pressed }) => [
@@ -339,7 +420,7 @@ export default function AgentsScreen({
         item.status === 'offline' && styles.cardOffline,
         pressed && { opacity: 0.7 },
       ]}
-      onPress={() => onOpenChat(item.alias)}
+      onPress={() => openChat(item.alias)}
       onLongPress={compact ? undefined : () => onOpenNodeDetail(item.alias)}
       delayLongPress={400}
     >
@@ -383,14 +464,17 @@ export default function AgentsScreen({
     return (
       <Pressable
         testID={`agent-row-${item.alias}`}
+        {...(rowMenu ? ({ dataSet: { agentAlias: item.alias } } as any) : {})}
         accessibilityRole="button"
         accessibilityState={{ selected }}
+        accessibilityHint={rowMenu ? '长按打开会话菜单' : undefined}
         style={({ pressed }) => [
           rowStyles.row,
-          { backgroundColor: selected ? colors.rowActive : pressed ? colors.rowHover : colors.bg },
+          // 菜单开着时,被按住的那一行保持按下态的底色(微信同款:看得出菜单是对哪一行的)。
+          { backgroundColor: selected ? colors.rowActive : pressed || menuFor?.alias === item.alias ? colors.rowHover : colors.bg },
         ]}
-        onPress={() => onOpenChat(item.alias)}
-        onLongPress={() => onOpenNodeDetail(item.alias)}
+        onPress={() => openChat(item.alias)}
+        onLongPress={rowMenu ? e => openRowMenu(item.alias, e.nativeEvent.pageX, e.nativeEvent.pageY) : () => onOpenNodeDetail(item.alias)}
         delayLongPress={400}
       >
         <View style={rowStyles.avatar}>
@@ -571,23 +655,30 @@ export default function AgentsScreen({
         </View>
       }
       renderItem={({ item }) => (compact ? renderCompactRow(item) : renderPhoneRow(item))}
-      />
-      {contextMenu ? (<>
-        <Pressable accessibilityLabel="关闭会话菜单" onPress={() => setContextMenu(null)} style={{ position: 'fixed' as any, inset: 0, zIndex: 999 } as any} />
-        <View style={{ position: 'fixed' as any, left: contextMenu.x, top: contextMenu.y, zIndex: 1000, minWidth: 178, paddingVertical: 6, borderRadius: 10, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.card, boxShadow: '0 8px 28px rgba(0,0,0,0.24)' as any }}>
-          <Pressable accessibilityLabel={pinnedAliases.includes(contextMenu.alias) ? '取消置顶会话' : '置顶会话'} style={{ paddingHorizontal: 14, paddingVertical: 11 }} onPress={() => { onTogglePin?.(contextMenu.alias); setContextMenu(null); }}>
-            <Text style={{ color: colors.text, fontSize: 13 }}>{pinnedAliases.includes(contextMenu.alias) ? '取消置顶会话' : '置顶会话'}</Text>
+      ListFooterComponent={hiddenSessions.length ? (
+        // 「不显示该对话」收在这里:列表最底下一行入口,点开就地展开,每行长按 → 恢复显示(点开会话也会恢复)。
+        <View testID="agent-hidden-footer">
+          <Pressable
+            testID="agent-hidden-toggle"
+            accessibilityRole="button"
+            accessibilityState={{ expanded: showHidden }}
+            accessibilityLabel={`已隐藏的对话 ${hiddenSessions.length} 个,${showHidden ? '已展开' : '已折叠'}`}
+            onPress={() => setShowHidden(v => !v)}
+            style={[rowStyles.group, compact ? rowStyles.groupCompact : null, { backgroundColor: compact ? colors.listBg : colors.bg }]}
+          >
+            <Ionicons name={showHidden ? 'chevron-down' : 'chevron-forward'} size={12} color={colors.textMuted} />
+            <Text selectable={false} numberOfLines={1} style={[rowStyles.groupTitle, { color: colors.textMuted }]}>已隐藏的对话</Text>
+            <Text selectable={false} style={[rowStyles.groupCount, { color: colors.textMuted }]}>{hiddenSessions.length}</Text>
           </Pressable>
-          {onToggleMute ? (
-            <Pressable accessibilityLabel={mutedAliases.includes(contextMenu.alias) ? '取消消息免打扰' : '消息免打扰'} style={{ paddingHorizontal: 14, paddingVertical: 11 }} onPress={() => { onToggleMute(contextMenu.alias); setContextMenu(null); }}>
-              <Text style={{ color: colors.text, fontSize: 13 }}>{mutedAliases.includes(contextMenu.alias) ? '取消消息免打扰' : '消息免打扰'}</Text>
-            </Pressable>
-          ) : null}
-          <Pressable accessibilityLabel="在新窗口打开" style={{ paddingHorizontal: 14, paddingVertical: 11 }} onPress={() => { onOpenChatWindow?.(contextMenu.alias); setContextMenu(null); }}>
-            <Text style={{ color: colors.text, fontSize: 13 }}>在新窗口打开</Text>
-          </Pressable>
+          {showHidden ? hiddenSessions.map(item => (
+            <View key={item.alias}>{compact ? renderCompactRow(item) : renderPhoneRow(item)}</View>
+          )) : null}
         </View>
-      </>) : null}
+      ) : null}
+      />
+      {rowMenu ? (
+        <AgentRowMenu target={menuFor} items={menuItems} touch={!compact} onSelect={onRowMenu} onClose={() => setMenuFor(null)} />
+      ) : null}
     </View>
   );
 }

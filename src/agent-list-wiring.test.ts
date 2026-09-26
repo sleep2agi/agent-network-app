@@ -58,7 +58,7 @@ ck('label only when the model gives one, in its tone', phoneRow.includes('model.
 ck('time + inline unread badge on the right', phoneRow.includes('{model.time}') && phoneRow.includes('const badge = rowBadge(item.alias);') && phoneRow.includes('<AgentUnreadBadge inline badge={badge}'));
 ck('pinned indicator kept', phoneRow.includes('pinned ? <Ionicons name="pin"'));
 ck('selected row highlighted with rowActive', phoneRow.includes('selected ? colors.rowActive'));
-ck('tap opens chat, long-press opens node detail', phoneRow.includes('onPress={() => onOpenChat(item.alias)}') && phoneRow.includes('onLongPress={() => onOpenNodeDetail(item.alias)}'));
+ck('tap opens chat; long-press opens the row menu at the press point (node detail only where there is no menu)', phoneRow.includes('onPress={() => openChat(item.alias)}') && phoneRow.includes('onLongPress={rowMenu ? e => openRowMenu(item.alias, e.nativeEvent.pageX, e.nativeEvent.pageY) : () => onOpenNodeDetail(item.alias)}'));
 ck('rows are flat: no card style / border in the phone row', !phoneRow.includes('styles.card') && !/borderWidth/.test(phoneRow));
 ck('hairline separators between phone rows only', /ItemSeparatorComponent=\{compact \? undefined : \(\) => \(/.test(agents) && agents.includes('separator: { height: StyleSheet.hairlineWidth, marginLeft: rowGeom().padX + rowGeom().avatar + rowGeom().gap,'));
 ck('rows are full-bleed on the phone (no list side padding)', agents.includes('contentContainerStyle={compact ? { paddingHorizontal: spacing.sm, paddingBottom: spacing.sm } : { paddingBottom: spacing.sm }}'));
@@ -76,7 +76,7 @@ ck('header shows online/total', agents.includes('{section.online}/{section.total
 // ── search / + / sorting kept ──
 ck('search input still bound to query', (agents.match(/value=\{query\}/g) ?? []).length === 2 && (agents.match(/onChangeText=\{setQuery\}/g) ?? []).length === 2);
 ck('+ still opens the picker in both headers', (agents.match(/onPress=\{onOpenPicker\}/g) ?? []).length === 2);
-ck('sorting / pins / 新消息 still from buildSections', agents.includes('buildSections(applyAgentFilter(sessions, activeFilter), query, {') && agents.includes('pinned: alias => pinnedAliases.includes(alias),'));
+ck('sorting / pins / 新消息 still from buildSections', agents.includes('buildSections(applyAgentFilter(visibleSessions, activeFilter), query, {') && agents.includes('pinned: alias => pinnedAliases.includes(alias),'));
 
 // ── desktop (Tauri) sidebar row unchanged ──
 const deskRow = agents.slice(agents.indexOf('const renderCompactRow = (item: Session) => {'), agents.indexOf('const renderPhoneRow'));

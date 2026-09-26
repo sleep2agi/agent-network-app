@@ -110,6 +110,16 @@ export function markAgentRepliesSeen(agent: string): void {
 }
 
 /**
+ * 列表行菜单「标为已读」的本地那一半:ledger 清零 + 回复水位线推到最新(与会话渲染到底同一套清法)。
+ * hub 上的权威数由调用方另外 ack(ackAgentUnread,与 ChatScreen / 托盘「忽略全部」同一条路)。
+ */
+export function markAgentReadLocally(agent: string): void {
+  if (!agent) return;
+  dispatchUnread({ kind: 'marked_read', agent });
+  markAgentRepliesSeen(agent);
+}
+
+/**
  * app#275:切到(或以工作区窗口借用)某个账号时,把回复水位线换成那个账号自己的一份,
  * 上一个账号的 inbox 行也清掉 —— 两个账号窗口各算各的。同一账号重复绑定是 no-op。
  */

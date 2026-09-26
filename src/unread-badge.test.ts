@@ -84,7 +84,7 @@ check('徽标组件在 null 时 return null', badge.includes('if (!badge) return
 check('ChatScreen 打开会话走 conversation_opened', chat.includes("kind: 'conversation_opened'"));
 check('ChatScreen 展示到最新走 rendered_to_latest', chat.includes("kind: 'rendered_to_latest'"));
 check('列表 onPress 只打开会话，不在行上清零',
-  agents.includes('onPress={() => onOpenChat(item.alias)}') && !agents.includes("rendered_to_latest"));
+  agents.includes('onPress={() => openChat(item.alias)}') && /const openChat = \(alias: string\) => \{[\s\S]*?onOpenChat\(alias\);\n  \};/.test(agents) && !agents.includes("rendered_to_latest"));
 check('web 夹具不连生产 hub',
   app.includes('readWebFixture') && app.includes('UnreadBadgeFixtureScreen'));
 
