@@ -71,7 +71,7 @@ const walk = (dir: string): string[] => readdirSync(dir).flatMap(e => {
   return e.endsWith('.tsx') ? [p] : [];
 });
 const files = walk(srcDir);
-const rel = (p: string) => p.slice(srcDir.length);
+const rel = (p: string) => p.slice(srcDir.length).replace(/\\/g, '/'); // POSIX, so Windows checkouts match the same keys
 const tagsByFile = new Map<string, string[]>();
 for (const f of files) {
   const tags = modalTags(readFileSync(f, 'utf8'));
@@ -79,7 +79,7 @@ for (const f of files) {
 }
 const total = [...tagsByFile.values()].reduce((n, t) => n + t.length, 0);
 check(total >= 15, `collect: found ${total} <Modal> tags (a scope regression would make this pass at 0)`);
-for (const f of ['ChatScreen.tsx', 'ImageViewer.tsx', 'SelectTextSheet.tsx', 'SideThreadDrawer.tsx', 'NodeRulesSection.tsx']) {
+for (const f of ['ChatScreen.tsx', 'ImageViewer.tsx', 'SelectTextSheet.tsx', 'SideThreadDrawer.tsx', 'NodeRulesSection.tsx', 'ComposerRowParts.tsx']) {
   check(tagsByFile.has(f), `collect: chat overlay file ${f} is in the scanned set`);
 }
 
@@ -130,6 +130,11 @@ const drawer = read('SideThreadDrawer.tsx');
 const drawerTags = modalTags(drawer);
 check(drawerTags.length === 1 && closeHandler(drawerTags[0]) === 'closeDrawer', 'side drawer: onRequestClose={closeDrawer}');
 check(/const closeDrawer = useCallback\(\(\) => \{\s*setVisible\(false\)/.test(drawer), 'closeDrawer hides the drawer');
+
+// ⤢ fullscreen message editor (composer-row-layout.ts): back closes it, the draft stays.
+const editorTags = modalTags(read('ComposerRowParts.tsx'));
+check(editorTags.length === 1 && closeHandler(editorTags[0]) === 'onClose', 'fullscreen message editor: onRequestClose={onClose}');
+check(/<ComposerFullscreenEditor[\s\S]*?onClose=\{\(\) => fullEditorEvent\('back'\)\}/.test(chat), 'ChatScreen: editor onClose → fullEditorEvent(back) (closes it)');
 
 // Fullscreen rules editor.
 const rulesTags = modalTags(read('NodeRulesSection.tsx'));

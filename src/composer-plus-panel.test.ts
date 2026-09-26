@@ -84,7 +84,8 @@ check(!/Alert\.alert\([^)]*\[\s*\{\s*text:\s*'图片'/.test(chat), 'no 图片/�
   check(rowAt > 0 && panelAt > rowAt, 'inline panel renders in the mobile branch, AFTER the input row');
   check(!/<Modal[^>]*visible=\{plusMenuOpen\}/.test(chat), 'mobile no longer uses a full-screen Modal for +');
   check(chat.includes('<Modal visible={desktop && plusMenuOpen}'), 'the popover Modal is desktop-only');
-  check(mobile.includes("onPress={() => plusEvent('toggle')}"), 'mobile + toggles');
+  // WeChat layout (composer-row-layout.ts): ＋ lives in the right slot (ComposerRightSlot).
+  check(mobile.includes("onPlus={() => plusEvent('toggle')}"), 'mobile + (right slot) toggles');
   check(mobile.includes("onFocus={() => plusEvent('inputFocus')}"), 'input focus closes the panel');
   check(mobile.includes('plusPanelHeight(plusWindowHeight'), 'panel has the fixed height');
   check(mobile.includes('(plusMenuOpen ? 0 : composerInset)'), 'bottom inset moves from the input row to the panel');
