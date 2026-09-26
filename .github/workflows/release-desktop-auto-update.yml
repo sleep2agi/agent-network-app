@@ -119,6 +119,10 @@ jobs:
           releaseBody: |-
             Signed and notarized stable update for macOS (Apple Silicon) and Windows (x64).
 
+            What's new in 0.2.115:
+            - 折叠屏展开时左侧列表更紧凑（新增『更紧凑』档位，头像和列表字号更小），聊天文字不变。
+            - 修复：发送途中切换对话后，消息一直显示『发送中…』并出现重复的问题。
+
             What's new in 0.2.114:
             - Agent 列表按最近活跃排序（组内最近活跃在前，置顶不变），每一行显示最后活动时间。
 
