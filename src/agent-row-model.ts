@@ -26,6 +26,54 @@ export const AGENT_ROW_GAP = 12;
 export const AGENT_ROW_PAD_Y = 8;
 /** No row is ever shorter than this, whatever the density or font (touch target). */
 export const AGENT_ROW_TOUCH_MIN = 44;
+
+/** Every size of one list row + its group header, in dp (already density-resolved). */
+export interface AgentRowGeometry {
+  height: number; // row minHeight
+  avatar: number;
+  dot: number;
+  padX: number;
+  padY: number;
+  gap: number; // avatar ↔ text
+  bodyGap: number; // name line ↔ preview line
+  lineMin: number;
+  groupPadTop: number;
+  groupPadBottom: number;
+  /** The separator overlaps the row above instead of adding height, so the row pitch is exactly the row height. */
+  separatorOverlap: boolean;
+}
+
+/**
+ * 更紧凑 (the Android wide default) in the nav rail's scale family (0.2.116): a 28 dp avatar next to
+ * the rail's 18 dp icon in a 39×23 pill, a 44 dp row = the touch minimum, tight padding. Two lines
+ * of 14/18 + 12/16 text + 2 dp + 2 × 4 dp = 44 dp at OS font 1.0, so text and touch target agree.
+ */
+export const AGENT_ROW_DENSER: Omit<AgentRowGeometry, 'separatorOverlap'> = {
+  height: AGENT_ROW_TOUCH_MIN, avatar: 28, dot: 9, padX: 12, padY: 4, gap: 10, bodyGap: 2, lineMin: 16, groupPadTop: 6, groupPadBottom: 2,
+};
+
+/**
+ * 紧凑 / 标准 / 宽松: the design sizes × the density factor, rounded exactly like ui-scale's ds()
+ * and scaledSpacing() — i.e. what those levels rendered before 更紧凑 got its own table.
+ */
+export function agentRowGeometry(dense: boolean, factor: number): AgentRowGeometry {
+  if (dense) return { ...AGENT_ROW_DENSER, separatorOverlap: true };
+  const f = Number.isFinite(factor) && factor > 0 ? factor : 1;
+  const d = (n: number, floor = 0) => Math.max(floor, Math.round(n * f));
+  return {
+    height: d(AGENT_ROW_HEIGHT, AGENT_ROW_TOUCH_MIN),
+    avatar: d(AGENT_ROW_AVATAR),
+    dot: d(AGENT_ROW_DOT),
+    padX: d(AGENT_ROW_PAD_X),
+    padY: d(AGENT_ROW_PAD_Y),
+    gap: d(AGENT_ROW_GAP),
+    bodyGap: d(3),
+    lineMin: d(20),
+    groupPadTop: d(12, 1), // spacing.md
+    groupPadBottom: d(4, 1), // spacing.xs
+    separatorOverlap: false,
+  };
+}
 /** Hairline separators start under the text, not under the avatar (WeChat). */
 export const AGENT_ROW_SEPARATOR_INSET = AGENT_ROW_PAD_X + AGENT_ROW_AVATAR + AGENT_ROW_GAP;
 

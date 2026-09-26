@@ -12,8 +12,10 @@ import {
   ds,
   fontMultiplier,
   fs,
-  listFont,
-  listFontStep,
+  LIST_TEXT_DENSER,
+  LIST_TEXT_REGULAR,
+  listText,
+  listTextFor,
   onUiScaleChange,
   parseStoredUiScale,
   parseUiScaleSim,
@@ -58,7 +60,10 @@ ck('dense == normal when nothing is capped', fontMultiplier('standard', 1.1, tru
 ck('density factors 0.75 / 0.85 / 1 / 1.15', densityFactor('denser') === 0.75 && densityFactor('compact') === 0.85 && densityFactor('standard') === 1 && densityFactor('comfortable') === 1.15);
 ck('default density: phone/desktop 标准, Android wide 更紧凑', defaultDensity(false) === 'standard' && defaultDensity(true) === 'denser');
 ck('4 density options in order 更紧凑 / 紧凑 / 标准 / 宽松', DENSITY_OPTIONS.map(o => o.label).join('/') === '更紧凑/紧凑/标准/宽松' && DENSITY_OPTIONS.every(o => o.factor === densityFactor(o.key)));
-ck('list text steps down one step only at 更紧凑', listFontStep('denser') === -1 && listFontStep('compact') === 0 && listFontStep('standard') === 0 && listFontStep('comfortable') === 0);
+ck('list text: 紧凑 / 标准 / 宽松 keep 16 / 14 / 12 / 11 / rail 11', (['compact', 'standard', 'comfortable'] as const).every(d => listTextFor(d, 'name').fontSize === 16 && listTextFor(d, 'preview').fontSize === 14 && listTextFor(d, 'meta').fontSize === 12 && listTextFor(d, 'count').fontSize === 11 && listTextFor(d, 'railLabel').fontSize === 11 && listTextFor(d, 'name').lineHeight === undefined));
+ck('list text: 更紧凑 = name 14/18, preview 12/16', JSON.stringify(listTextFor('denser', 'name')) === '{"fontSize":14,"lineHeight":18}' && JSON.stringify(listTextFor('denser', 'preview')) === '{"fontSize":12,"lineHeight":16}');
+ck('list text: 更紧凑 time / group header = the rail label size (10)', listTextFor('denser', 'meta').fontSize === listTextFor('denser', 'railLabel').fontSize && listTextFor('denser', 'count').fontSize === listTextFor('denser', 'railLabel').fontSize && listTextFor('denser', 'railLabel').fontSize === 10);
+ck('list text: returned styles are copies (callers cannot mutate the table)', (() => { const x = listTextFor('denser', 'name'); x.fontSize = 99; return LIST_TEXT_DENSER.name.fontSize === 14 && LIST_TEXT_REGULAR.name.fontSize === 16; })());
 ck('scaled spacing at 0.75 (4,8,12,16,24 → 3,6,9,12,18)', JSON.stringify(scaledSpacing(0.75)) === JSON.stringify({ xs: 3, sm: 6, md: 9, lg: 12, xl: 18 }), JSON.stringify(scaledSpacing(0.75)));
 ck('rail: 更紧凑 56 / 48×48 (touch floor)', mobileRailWidth(0.75) === 56 && mobileRailItem(0.75).width === 48 && mobileRailItem(0.75).height === 48, JSON.stringify([mobileRailWidth(0.75), mobileRailItem(0.75)]));
 ck('default font: 标准', DEFAULT_FONT_SIZE === 'standard');
@@ -107,17 +112,17 @@ ck('wide with nothing stored → 更紧凑 default', uiScale().density === 'dens
 ck('spacing mutated in place (same object, md 12 → 9)', spacing === spacingRef && spacing.md === 9, String(spacing.md));
 ck('ds() follows (44 → 33, row 68 → 51)', ds(44) === 33 && ds(68) === 51);
 ck('ds() floor keeps touch targets (48 → max(36, 44))', ds(48, 44) === 44);
-ck('listFont steps list text down (16 → 15, 14 → 13, 12 → 11)', listFont(16) === 15 && listFont(14) === 13 && listFont(12) === 11 && uiScale().listFontStep === -1);
+ck('live list text at the 更紧凑 default: 14 / 12 / 10', listText('name').fontSize === 14 && listText('preview').fontSize === 12 && listText('meta').fontSize === 10 && uiScale().listDense);
 ck('restyle + change listeners fired once', restyles === 1 && changes === 1, `${restyles}/${changes}`);
 ck('key changed', uiScaleKey() !== k0);
 setUiScaleLayoutWide(true);
 ck('same input again → no restyle, no change', restyles === 1 && changes === 1);
 setUiScaleLayoutWide(false);
-ck('fold back to phone with nothing stored → 标准 again', uiScale().density === 'standard' && spacing.md === 12 && listFont(16) === 16);
+ck('fold back to phone with nothing stored → 标准 again', uiScale().density === 'standard' && spacing.md === 12 && listText('name').fontSize === 16 && !uiScale().listDense);
 setUiScalePrefs({ density: 'compact' });
 setUiScaleLayoutWide(true); setUiScaleLayoutWide(false);
 ck('an explicit choice survives fold/unfold', uiScale().density === 'compact' && !uiScale().densityIsDefault);
-ck('紧凑 keeps the list text size (only 更紧凑 steps it)', listFont(16) === 16 && ds(44) === 37);
+ck('紧凑 keeps the list text size (only 更紧凑 changes it)', listText('name').fontSize === 16 && listText('meta').fontSize === 12 && ds(44) === 37 && !uiScale().listDense);
 setUiScalePrefs({ font: 'xlarge' });
 ck('font choice: multiplier 1.3, fs(10) = 13', uiScale().fontMultiplier === 1.3 && fs(10) === 13);
 setUiScalePrefs({ font: null, density: null });

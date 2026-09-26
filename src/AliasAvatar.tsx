@@ -65,10 +65,11 @@ export const aliasInitial = (alias?: string): string => {
   }
 };
 
-export default function AliasAvatar({ alias, size: baseSize = 32 }: { alias: string; size?: number }) {
+export default function AliasAvatar({ alias, size: baseSize = 32, fixedSize = false }: { alias: string; size?: number; fixedSize?: boolean }) {
   // 界面密度 (src/ui-scale.ts): every avatar scales here, so callers keep passing the design size.
-  // A container sized to the avatar must use ds() on the same number (AgentsScreen rowStyles.avatar).
-  const size = ds(baseSize);
+  // A container sized to the avatar must use ds() on the same number — or pass an already resolved
+  // size with `fixedSize` (the agent list rows: agentRowGeometry has its own 更紧凑 table).
+  const size = fixedSize ? baseSize : ds(baseSize);
   const c = aliasAvatarColors(alias);
   // Subscribe to hub-avatar hydration so a cross-device avatar change (or its
   // arrival after the first paint) re-resolves this avatar. Re-render on bump.

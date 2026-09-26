@@ -100,23 +100,28 @@ ck('Text wrapper disables RN\'s own OS scaling (we compose it, capped)', (uiText
 ck('allowFontScaling={false} comes after {...rest} (callers cannot re-enable it)', /\{\.\.\.rest\} allowFontScaling=\{false\}/.test(uiText));
 const icons = read('src/icons.tsx');
 ck('icon wrapper scales size with ds()', icons.includes('size={ds('));
-ck('AliasAvatar scales its size with ds()', read('src/AliasAvatar.tsx').includes('const size = ds(baseSize);'));
+ck('AliasAvatar scales its size with ds() unless given a resolved fixedSize', read('src/AliasAvatar.tsx').includes('const size = fixedSize ? baseSize : ds(baseSize);'));
 ck('AliasAvatar initial is fixedSize (follows the box, not the font)', read('src/AliasAvatar.tsx').includes('<Text fixedSize'));
 
 // ── key surfaces ──
 const agents = read('src/AgentsScreen.tsx');
-ck('agent row: height/avatar/padding via ds()', ['minHeight: ds(AGENT_ROW_HEIGHT, AGENT_ROW_TOUCH_MIN)', 'paddingVertical: ds(AGENT_ROW_PAD_Y)', 'paddingHorizontal: ds(AGENT_ROW_PAD_X)', 'avatar: { width: ds(AGENT_ROW_AVATAR), height: ds(AGENT_ROW_AVATAR) }'].every(s => agents.includes(s)));
-ck('agent row: name / preview / time / label use listFont (one step down at 更紧凑)', ['name: { flexShrink: 1, fontSize: listFont(type.title)', 'preview: { flex: 1, minWidth: 0, fontSize: listFont(type.body) }', "time: { marginLeft: 'auto', fontSize: listFont(type.small)", 'label: { fontSize: listFont(type.small)'].every(s => agents.includes(s)));
-ck('agent groups: header text uses listFont', agents.includes('groupTitle: { flexShrink: 1, fontSize: listFont(type.small)') && agents.includes('groupCount: { fontSize: listFont(type.caption)'));
+ck('agent row: geometry from agentRowGeometry(listDense, densityFactor)', ['const rowGeom = () => agentRowGeometry(uiScale().listDense, uiScale().densityFactor);', '{ minHeight: rowGeom().height }', 'paddingVertical: rowGeom().padY', 'paddingHorizontal: rowGeom().padX', 'avatar: { width: rowGeom().avatar, height: rowGeom().avatar }'].every(s => agents.includes(s)));
+ck('agent row: 更紧凑 rows are exactly the shared pitch (denserRowPitch)', agents.includes('...(uiScale().listDense ? { height: denserRowPitch(uiScale().denseFontMultiplier) } : { minHeight: rowGeom().height }),'));
+ck('agent row: 更紧凑 separator overlaps instead of adding pitch', agents.includes('...(rowGeom().separatorOverlap ? { marginTop: -StyleSheet.hairlineWidth } : null)'));
+ck('agent row: name / preview / time / label use listText roles', ['name: { flexShrink: 1, ...listText(\'name\')', 'preview: { flex: 1, minWidth: 0, ...listText(\'preview\') }', "time: { marginLeft: 'auto', ...listText('meta')", "label: { ...listText('meta')"].every(s => agents.includes(s)));
+ck('agent groups: header text = listText meta/count, padding from the geometry', agents.includes("groupTitle: { flexShrink: 1, ...listText('meta')") && agents.includes("groupCount: { ...listText('count')") && agents.includes('paddingTop: rowGeom().groupPadTop, paddingBottom: rowGeom().groupPadBottom'));
+ck('agent list publishes the first row top (head + filter bar block + first group header)', agents.includes('listYRef.current = e.nativeEvent.layout.y + e.nativeEvent.layout.height; publishFirstRowTop();') && agents.includes('onLayout={alignFirstRow && section === shownSections[0] ? e => { firstHeaderHRef.current = e.nativeEvent.layout.height; publishFirstRowTop(); } : undefined}') && agents.includes('publishListFirstRowTop(listYRef.current + firstHeaderHRef.current);'));
 ck('agent row: rebuilt on restyle', agents.includes('onThemeChange(() => { rowStyles = makeRowStyles(); });'));
 ck('agent row: name / preview / time are dense text', ['style={[rowStyles.name,', 'style={[rowStyles.preview,', 'style={[rowStyles.time,'].every(s => agents.includes(`<Text dense selectable={false} numberOfLines={1} ${s}`)));
 const rail = read('src/MobileNavRail.tsx');
 ck('nav rail: width + items from density', rail.includes('mobileRailWidth(uiScale().densityFactor) + insetLeft') && rail.includes('height: mobileRailItem(uiScale().densityFactor).height'));
 ck('nav rail: labels are dense text', rail.includes('<Text dense style={[s.label, selected && s.labelActive]}'));
-ck('nav rail: label steps down with the list (listFont(11))', rail.includes("label: { color: colors.textSecondary, fontSize: listFont(11),"));
+ck('nav rail: label = listText railLabel', rail.includes("label: { color: colors.textSecondary, ...listText('railLabel'),"));
+ck('nav rail: 更紧凑 aligns items to the list (same pitch function, brand block above)', rail.includes('const align = uiScale().listDense ? alignedRailLayout(firstRowTop, denserRowPitch(uiScale().denseFontMultiplier), ds(12) + (showBrand ? ds(40) : 0)) : null;') && rail.includes('align && { height: align.itemHeight }') && rail.includes('align && { paddingTop: align.tabsPaddingTop, gap: align.gap }'));
+ck('nav rail: the brand block numbers match its styles (paddingTop ds(12), brand ds(40))', rail.includes('paddingTop: ds(12),') && rail.includes('brand: { width: ds(40), height: ds(40),'));
 const chat = read('src/ChatScreen.tsx');
 // Density (incl. 更紧凑's one-step list text) must never reach message text: only 字体大小 does.
-ck('chat content is independent of density: no listFont in ChatScreen / MarkdownMessage', !chat.includes('listFont(') && !read('src/MarkdownMessage.tsx').includes('listFont('));
+ck('chat content is independent of density: no list text / row geometry in ChatScreen / MarkdownMessage', ['listText(', 'agentRowGeometry(', 'denserRowPitch('].every(k => !chat.includes(k) && !read('src/MarkdownMessage.tsx').includes(k)));
 ck('chat header: action heights via ds()', chat.includes('height: ds(34),') && chat.includes('headerActionCompact: { width: 36, height: ds(34),'));
 ck('composer: send button via ds()', /send: \{\n\s+backgroundColor: colors\.accent,\n\s+width: ds\(36\),\n\s+height: ds\(36\),/.test(chat));
 const node = read('src/NodeDetailScreen.tsx');

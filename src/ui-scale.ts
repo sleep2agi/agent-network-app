@@ -68,18 +68,45 @@ export const DEFAULT_FONT_SIZE: FontSizePref = 'standard';
  * 更紧凑 on that 891 × 630 dp window (web harness, OS font 1.0): 33 dp avatar, 15 / 13 list
  * text, 51 dp rows (touch target ≥ 44 at any OS scale: 57 dp at OS 1.15), 56 dp rail with
  * 48 × 48 items — 10 rows fit instead of 8 (OS 1.15: 9 instead of 7).
+ * 0.2.116: the owner on 0.2.115 (2364×1672 px; 120 px rail = 56 dp ⇒ 2.14 px/dp ⇒ 1104 × 781 dp;
+ * 120 px rows ≈ 56 dp, i.e. our 57 dp rows at OS font ≈ 1.15) wanted the list in the rail's scale
+ * (「跟左边那个 agent、定时任务那些东西对齐一下」). 更紧凑 now has its own row table
+ * (agent-row-model.ts AGENT_ROW_DENSER: 28 dp avatar, 44 dp rows, 14 / 12 / 10 text) and the rail
+ * lines up with the rows (list-rail-align.ts). On 1104 × 781: 13 → 16 rows at OS 1.0, 12 → 14 at 1.15.
  * It follows the layout live: fold the phone and it goes back to 标准, unfold and it is
  * 更紧凑 again — until the user picks one.
  */
 export const defaultDensity = (wide: boolean): DensityPref => (wide ? 'denser' : 'standard');
 
 /**
- * 更紧凑 also steps the *list chrome* text down one step (agent-row name 16 → 15, preview
- * 14 → 13, time / group header 12 → 11, rail label 11 → 10). Only the surfaces that call
- * listFont(): chat bubbles, the composer and every other screen keep their size — the
- * message text only shrinks when the user picks 字体大小「小」.
+ * List-chrome text (agent rows, group headers, the nav rail label) by role. 紧凑 / 标准 / 宽松 keep
+ * the sizes they always had; 更紧凑 puts the list in the rail's scale family (0.2.116, the owner on
+ * 0.2.115: 「这里面的各个节点，你是不是可以跟左边那个 agent、定时任务那些东西对齐一下」):
+ *   - `meta` (row time, 工作中 label, group header) and `railLabel` are the same 10 — the rail's
+ *     label size, so the small text on both sides of the divider is one size;
+ *   - name 14 / preview 12 with explicit line heights, so two lines fit a 44 dp row.
+ * These are *base* sizes: src/ui-text.tsx still multiplies them by 字体大小 × the OS scale. Chat
+ * bubbles, the composer and every other screen never call this — message text only changes
+ * with 字体大小.
  */
-export const listFontStep = (pref: DensityPref): number => (pref === 'denser' ? -1 : 0);
+export type ListTextRole = 'name' | 'preview' | 'meta' | 'count' | 'railLabel';
+export type ListTextStyle = { fontSize: number; lineHeight?: number };
+export const LIST_TEXT_REGULAR: Readonly<Record<ListTextRole, ListTextStyle>> = {
+  name: { fontSize: 16 },
+  preview: { fontSize: 14 },
+  meta: { fontSize: 12 },
+  count: { fontSize: 11 },
+  railLabel: { fontSize: 11 },
+};
+export const LIST_TEXT_DENSER: Readonly<Record<ListTextRole, ListTextStyle>> = {
+  name: { fontSize: 14, lineHeight: 18 },
+  preview: { fontSize: 12, lineHeight: 16 },
+  meta: { fontSize: 10, lineHeight: 13 },
+  count: { fontSize: 10, lineHeight: 13 },
+  railLabel: { fontSize: 10, lineHeight: 13 },
+};
+export const listTextFor = (pref: DensityPref, role: ListTextRole): ListTextStyle =>
+  ({ ...(pref === 'denser' ? LIST_TEXT_DENSER : LIST_TEXT_REGULAR)[role] });
 
 // ── OS font scale composition ──
 
@@ -183,8 +210,8 @@ export interface ResolvedUiScale {
   fontMultiplier: number;
   denseFontMultiplier: number;
   densityFactor: number;
-  /** One-step size change for the list chrome text (listFont); -1 at 更紧凑, else 0. */
-  listFontStep: number;
+  /** 更紧凑: list rows / rail use their own geometry and text table (agentRowGeometry, listText). */
+  listDense: boolean;
   /** The raw OS font scale that went in (before clamping) — the settings hint shows it. */
   osFontScale: number;
 }
@@ -195,7 +222,7 @@ export function resolveUiScale(s: Pick<State, 'prefs' | 'osFontScale' | 'wide' |
   if (s.legacy) {
     // Pre-setting behaviour: RN multiplied every Text by the raw OS scale; nothing else scaled.
     const os = finiteOr(s.osFontScale, 1);
-    return { font, density: 'standard', fontIsDefault: true, densityIsDefault: true, fontMultiplier: os, denseFontMultiplier: os, densityFactor: 1, listFontStep: 0, osFontScale: os };
+    return { font, density: 'standard', fontIsDefault: true, densityIsDefault: true, fontMultiplier: os, denseFontMultiplier: os, densityFactor: 1, listDense: false, osFontScale: os };
   }
   return {
     font,
@@ -205,7 +232,7 @@ export function resolveUiScale(s: Pick<State, 'prefs' | 'osFontScale' | 'wide' |
     fontMultiplier: fontMultiplier(font, s.osFontScale),
     denseFontMultiplier: fontMultiplier(font, s.osFontScale, true),
     densityFactor: densityFactor(density),
-    listFontStep: listFontStep(density),
+    listDense: density === 'denser',
     osFontScale: finiteOr(s.osFontScale, 1),
   };
 }
@@ -216,7 +243,7 @@ export const uiScale = (): ResolvedUiScale => resolved;
 export const uiScalePrefs = (): UiScalePrefs => ({ ...state.prefs });
 
 /** Stable string for App's keyed remount; changes exactly when something rendered would change. */
-export const uiScaleKey = (): string => `f${resolved.fontMultiplier}/${resolved.denseFontMultiplier}-d${resolved.densityFactor}-l${resolved.listFontStep}`;
+export const uiScaleKey = (): string => `f${resolved.fontMultiplier}/${resolved.denseFontMultiplier}-d${resolved.densityFactor}-l${resolved.listDense ? 1 : 0}`;
 
 /** Scaled spacing tokens for a density factor (rounded to whole dp; never below 1 for a non-zero base). */
 export function scaledSpacing(factor: number): Record<keyof typeof SPACING_BASE, number> {
@@ -331,12 +358,8 @@ export const fs = (n: number, dense = false): number =>
 /** Density helper: icon sizes, avatars, row heights, paddings, rail. `floor` keeps touch targets usable. */
 export const ds = (n: number, floor = 0): number => Math.max(floor, Math.round(n * resolved.densityFactor));
 
-/**
- * List-chrome text size: the base size, one step smaller at 更紧凑 (listFontStep). Returns a
- * fontSize / lineHeight *base* — src/ui-text.tsx still multiplies it by the font setting, so
- * write `fontSize: listFont(16)` (never `fs(listFont(…))`).
- */
-export const listFont = (n: number): number => Math.max(9, n + resolved.listFontStep);
+/** List-chrome text for the current density — spread it into a style: `{ ...listText('name'), … }`. */
+export const listText = (role: ListTextRole): ListTextStyle => listTextFor(resolved.listDense ? 'denser' : 'standard', role);
 
 /** Test-only reset. */
 export function __resetUiScale(): void {

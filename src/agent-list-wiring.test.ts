@@ -53,14 +53,14 @@ ck('the screen never derives a row time from updated_at', !/updated_at/.test(age
 ck('sort-by-activity is wired through the flag (one-line switch), not hard-coded', agents.includes('sortByActivity: SORT_BY_ACTIVITY,') && agents.includes('activityAt: alias => activityByAlias.get(alias) ?? 0,'));
 ck('sort-by-activity flag is ON (owner 2026-09-26)', /export const SORT_BY_ACTIVITY = true;/.test(read('./agents-list.ts')));
 ck('no 「在线」 status word in the phone row', !phoneRow.includes('agentStatusLabel') && !phoneRow.includes("'在线'"));
-ck('44 dp avatar + dot coloured by the model', phoneRow.includes('size={AGENT_ROW_AVATAR}') && phoneRow.includes('colors[model.status.dot]'));
+ck('avatar sized by agentRowGeometry (44 dp at 标准, 28 at 更紧凑) + dot coloured by the model', phoneRow.includes('size={rowGeom().avatar} fixedSize') && phoneRow.includes('colors[model.status.dot]'));
 ck('label only when the model gives one, in its tone', phoneRow.includes('model.status.label && model.status.labelTone ?') && phoneRow.includes('colors[model.status.labelTone]'));
 ck('time + inline unread badge on the right', phoneRow.includes('{model.time}') && phoneRow.includes('const badge = rowBadge(item.alias);') && phoneRow.includes('<AgentUnreadBadge inline badge={badge}'));
 ck('pinned indicator kept', phoneRow.includes('pinned ? <Ionicons name="pin"'));
 ck('selected row highlighted with rowActive', phoneRow.includes('selected ? colors.rowActive'));
 ck('tap opens chat, long-press opens node detail', phoneRow.includes('onPress={() => onOpenChat(item.alias)}') && phoneRow.includes('onLongPress={() => onOpenNodeDetail(item.alias)}'));
 ck('rows are flat: no card style / border in the phone row', !phoneRow.includes('styles.card') && !/borderWidth/.test(phoneRow));
-ck('hairline separators between phone rows only', /ItemSeparatorComponent=\{compact \? undefined : \(\) => \(/.test(agents) && /separator: \{ height: StyleSheet\.hairlineWidth, marginLeft: ds\(AGENT_ROW_PAD_X\) \+ ds\(AGENT_ROW_AVATAR\) \+ ds\(AGENT_ROW_GAP\) \}/.test(agents));
+ck('hairline separators between phone rows only', /ItemSeparatorComponent=\{compact \? undefined : \(\) => \(/.test(agents) && agents.includes('separator: { height: StyleSheet.hairlineWidth, marginLeft: rowGeom().padX + rowGeom().avatar + rowGeom().gap,'));
 ck('rows are full-bleed on the phone (no list side padding)', agents.includes('contentContainerStyle={compact ? { paddingHorizontal: spacing.sm, paddingBottom: spacing.sm } : { paddingBottom: spacing.sm }}'));
 ck('renderItem picks the desktop or phone row', agents.includes('renderItem={({ item }) => (compact ? renderCompactRow(item) : renderPhoneRow(item))}'));
 ck('rowStyles hold no theme colours', agents.includes('const makeRowStyles = () => ({') && !/colors\./.test(agents.slice(agents.indexOf('const makeRowStyles = () => ({'))));
