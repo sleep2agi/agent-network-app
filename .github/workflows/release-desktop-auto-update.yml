@@ -119,6 +119,10 @@ jobs:
           releaseBody: |-
             Signed and notarized stable update for macOS (Apple Silicon) and Windows (x64).
 
+            What's new in 0.2.107:
+            - 安卓消息通知：agent 发来新消息时弹系统通知（按 agent 合并、点击直达聊天、可对单个 agent 免打扰）。
+            - 设置 → 通知：可选『后台保持连接』，app 在后台也能收到消息；附小米/HyperOS 后台设置指引。
+
             What's new in 0.2.106:
             - 长按消息新增「选择文本」，可以拖动选择任意一段复制；电脑端右键可复制选中内容。
             - 定时任务页重新设计：按状态筛选、紧凑列表、宽屏左右分栏、一键暂停/恢复。

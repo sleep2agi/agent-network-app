@@ -1,0 +1,19 @@
+desktop v0.2.107 — 安卓消息通知(第一阶段)
+================================================================================
+
+A. 本版内容(0.2.106 版本号提交 #394 之后 main 上合入的 PR + 本 PR)
+--------------------------------------------------------------------------------
+  #396 安卓消息通知第一阶段:expo-notifications 本地通知(按 agent 合并、点击直达聊天、单 agent 免打扰);
+       可选前台服务「后台保持连接」(本地 Expo 模块 modules/anet-keepalive,
+       foregroundServiceType=remoteMessaging);新增权限 POST_NOTIFICATIONS / FOREGROUND_SERVICE /
+       FOREGROUND_SERVICE_REMOTE_MESSAGING / WAKE_LOCK;android-build 校验步骤同步检查这些。
+       设置 → 通知 附小米/HyperOS 后台设置指引。
+  本 PR(版本号)
+       版本号 8 个文件 → 0.2.107,android.versionCode 2106 → 2107;Cargo.lock 只改根包一段。
+       release-desktop-auto-update.yml 加 What's new in 0.2.107。
+
+B. 验证边界(如实)
+--------------------------------------------------------------------------------
+  本 PR 只改版本号与说明;功能验证见 #396。
+  发版时另在构建出的 APK 上核对清单:四个权限 + 前台服务 foregroundServiceType=remoteMessaging(0x200)。
+  发布后镜像 dispatch + 匿名下载 sha 比对是安卓用户看到更新的前提(#385 读镜像 VERSION)。
