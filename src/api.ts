@@ -454,12 +454,14 @@ export const takeStatusPrefetch = (cfg: HubConfig): Promise<{ sessions: Session[
 // created_at — the same alias in two networks reads as one thread.
 export const fetchTasks = (
   cfg: HubConfig,
-  params: { to_name?: string; from_name?: string; limit?: number },
+  params: { to_name?: string; from_name?: string; limit?: number; skipStats?: boolean },
 ) => {
   const q = new URLSearchParams();
   if (params.to_name) q.set('to_name', params.to_name);
   if (params.from_name) q.set('from_name', params.from_name);
   q.set('limit', String(params.limit ?? 20));
+  // hub #248:不要全表 GROUP BY 的 stats(通知每 10–20 s 拉一次,用不到它)。老 hub 忽略这个参数。
+  if (params.skipStats) q.set('skip_stats', '1');
   if (cfg.networkId) q.set('network_id', cfg.networkId);
   return get<{ tasks: HubTask[] }>(cfg, `/api/tasks?${q}`);
 };

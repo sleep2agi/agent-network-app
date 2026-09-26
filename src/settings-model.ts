@@ -78,8 +78,11 @@ export const SETTINGS_CATEGORIES: readonly SettingsCategory[] = [
       { key: 'quiet', label: '免打扰时段', keywords: ['勿扰', '静音', 'quiet', 'dnd'] },
       { key: 'muted', label: '消息免打扰的 agent', keywords: ['屏蔽', '不提醒', 'mute'] },
       { key: 'keepAlive', label: '后台保持连接', keywords: ['后台', '保活', '常驻', '前台服务', 'keep alive', 'background'], platforms: ['android'] },
+      { key: 'dndBypass', label: '免打扰时仍然提醒', keywords: ['勿扰', '免打扰', 'dnd', 'do not disturb', '静音'], platforms: ['android'] },
       { key: 'xiaomiGuide', label: '小米/HyperOS 后台设置指引', keywords: ['小米', '澎湃', 'miui', 'hyperos', 'xiaomi', '自启动', '省电', '电池'], platforms: ['android'] },
       { key: 'test', label: '发送测试通知', keywords: ['测试', 'test'], platforms: ['android', 'ios'] },
+      // 0.2.109:所有平台都有(安卓最有用);正式包里也显示,不是 dev-only。
+      { key: 'diagnostics', label: '通知诊断', keywords: ['诊断', '排查', '复制', '不弹', '收不到', 'debug', 'diagnostics'] },
     ],
   },
   {

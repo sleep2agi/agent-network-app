@@ -1,5 +1,7 @@
 package expo.modules.anetkeepalive
 
+import android.app.NotificationManager
+import android.content.Context
 import android.content.Intent
 import androidx.core.content.ContextCompat
 import expo.modules.kotlin.modules.Module
@@ -33,6 +35,24 @@ class AnetKeepAliveModule : Module() {
 
     Function("isRunning") {
       AnetKeepAliveService.running
+    }
+
+    // 0.2.109「免打扰时仍然提醒」: a channel's bypassDnd only sticks once the user has granted this
+    // app notification-policy (DND) access. null = unknown (no context).
+    Function("isNotificationPolicyAccessGranted") {
+      val context = appContext.reactContext ?: return@Function null
+      val manager = context.getSystemService(Context.NOTIFICATION_SERVICE) as? NotificationManager
+        ?: return@Function null
+      manager.isNotificationPolicyAccessGranted
+    }
+
+    // NotificationManager.getCurrentInterruptionFilter(): 1 = all (DND off), 2 = priority,
+    // 3 = none, 4 = alarms, 0 = unknown. Diagnostics only.
+    Function("currentInterruptionFilter") {
+      val context = appContext.reactContext ?: return@Function null
+      val manager = context.getSystemService(Context.NOTIFICATION_SERVICE) as? NotificationManager
+        ?: return@Function null
+      manager.currentInterruptionFilter
     }
   }
 }

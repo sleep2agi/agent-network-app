@@ -27,6 +27,11 @@ export type NotifySettings = {
   mutedByProfile: Readonly<Record<string, readonly string[]>>;
   keepAlive: boolean;
   permissionPrompted: boolean;
+  /**
+   * 0.2.109「免打扰时仍然提醒」(安卓):消息渠道 bypassDnd。默认开 —— Vincent 要在勿扰开着时也收到;
+   * 但它只有在用户授予「勿扰权限」(ACCESS_NOTIFICATION_POLICY)后才真的生效,没授权时等于没开。
+   */
+  dndBypass: boolean;
 };
 
 export const DEFAULT_NOTIFY_SETTINGS: NotifySettings = {
@@ -37,6 +42,7 @@ export const DEFAULT_NOTIFY_SETTINGS: NotifySettings = {
   mutedByProfile: {},
   keepAlive: false,
   permissionPrompted: false,
+  dndBypass: true,
 };
 
 const desktopStorage = (): Storage | null => {
@@ -72,6 +78,7 @@ export function parseNotifySettings(raw: string | null | undefined): NotifySetti
       mutedByProfile: parseMuted((parsed as any).mutedByProfile),
       keepAlive: (parsed as any).keepAlive === true,
       permissionPrompted: (parsed as any).permissionPrompted === true,
+      dndBypass: (parsed as any).dndBypass !== false,
     };
   } catch {
     return DEFAULT_NOTIFY_SETTINGS;

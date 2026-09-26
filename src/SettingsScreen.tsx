@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
-import { ActivityIndicator, Modal, Platform, Pressable, ScrollView, StyleSheet, Switch, Text, TextInput, View, useWindowDimensions } from 'react-native';
+import { ActivityIndicator, AppState, Modal, Platform, Pressable, ScrollView, StyleSheet, Switch, Text, TextInput, View, useWindowDimensions } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { HubConfig } from './api';
 import { DesktopStorageDiagnostics, HubProfile, getDesktopStorageDiagnostics, listHubProfiles, removeHubProfile, saveThemeMode } from './storage';
@@ -14,9 +14,11 @@ import { backupLocalHubData, deleteLocalHubData, LOCAL_HUB_PROFILE_ID, localHubS
 import { openWorkspaceWindow } from './desktop-chat-menu';
 import { loadNotifySettings, mutedAgents, notifyProfileKey, saveNotifySettings, subscribeNotifySettings, toggleAgentMuted, type NotifySettings } from './notify-settings';
 import { permissionOnUserAction, type PermissionStatus } from './mobile-notify-model';
-import { mobileNotificationsSupported, notificationPermission, openAppNotificationSettings, requestNotificationPermission } from './mobile-notifications';
+import { dndAccessGranted, mobileNotificationsSupported, notificationPermission, openAppNotificationSettings, openDndAccessSettings, requestNotificationPermission } from './mobile-notifications';
+import NotifyDiagnosticsPanel from './NotifyDiagnosticsPanel';
+import { getNotifyDiagnostics, subscribeNotifyDiagnostics } from './notify-diagnostics';
 import { keepAliveAvailable, keepAliveLastError, keepAliveRunning, subscribeKeepAlive } from './keep-alive';
-import { sendTestNotification } from './notifier-runtime';
+import { refreshNotifyDiagnostics, sendTestNotification } from './notifier-runtime';
 import XiaomiGuideModal from './XiaomiGuideModal';
 import { playChime } from './chime';
 import { SETTINGS_CATEGORIES, activeCategoryKey, filterSettings, rememberSettingsCategory, rememberSettingsScroll, rememberedSettingsView, settingsPlatform, visibleRowKeys, type SettingsCategoryKey, type SettingsPlatform } from './settings-model';
@@ -96,6 +98,15 @@ export default function SettingsScreen({
   const [guideVisible, setGuideVisible] = useState(!!notifyPreview?.guideOpen);
   const [testMessage, setTestMessage] = useState('');
   const saveNotify = (next: NotifySettings) => { saveNotifySettings(next); };
+  // 0.2.109「免打扰时仍然提醒」:勿扰权限的真实读数(从系统页回来要重读)。
+  const notifyDiag = useSyncExternalStore(subscribeNotifyDiagnostics, getNotifyDiagnostics, getNotifyDiagnostics);
+  useEffect(() => {
+    if (!isAndroid || notifyPreview) return;
+    void refreshNotifyDiagnostics().catch(() => {});
+    const sub = AppState.addEventListener('change', st => { if (st === 'active') void refreshNotifyDiagnostics().catch(() => {}); });
+    return () => sub.remove();
+  }, [isAndroid, notifyPreview]);
+  const dndAccess = notifyPreview ? null : notifyDiag.dndAccess;
   const ensurePermission = async (): Promise<boolean> => {
     if (!nativeNotify) return true;
     const current = await notificationPermission();
@@ -562,6 +573,35 @@ export default function SettingsScreen({
                   </View>
                 </>
               ) : null}
+              {show('notifications', 'dndBypass') ? (
+                <>
+                  <Divider />
+                  <View style={styles.row} testID="notify-dnd-row">
+                    <View style={styles.rowCopy}>
+                      <Text style={styles.rowLabel}>免打扰时仍然提醒</Text>
+                      <Text style={styles.rowHint}>系统勿扰模式开着时,agent 的消息照样弹出并响铃。需要在系统里给本应用「勿扰权限」。</Text>
+                      {notify.dndBypass && dndAccess === false ? (
+                        <Pressable accessibilityRole="button" onPress={() => { void openDndAccessSettings(); }} testID="notify-dnd-grant">
+                          <Text style={[styles.rowHint, { color: colors.failed }]}>还没有勿扰权限,勿扰时仍会被静音 · 点此去授权</Text>
+                        </Pressable>
+                      ) : notify.dndBypass && dndAccess === true ? (
+                        <Text style={styles.rowHint}>已授权。</Text>
+                      ) : null}
+                    </View>
+                    <Switch
+                      accessibilityLabel="免打扰时仍然提醒"
+                      value={notify.dndBypass}
+                      disabled={!notify.enabled}
+                      onValueChange={value => {
+                        saveNotify({ ...notify, dndBypass: value });
+                        if (value && dndAccessGranted() === false) void openDndAccessSettings();
+                      }}
+                      trackColor={{ true: colors.accent, false: colors.border }}
+                      thumbColor={colors.card}
+                    />
+                  </View>
+                </>
+              ) : null}
               {show('notifications', 'xiaomiGuide') ? (
                 <>
                   <Divider />
@@ -597,6 +637,18 @@ export default function SettingsScreen({
                       <Text style={styles.actionButtonText}>发送</Text>
                     </Pressable>
                   </View>
+                </>
+              ) : null}
+              {show('notifications', 'diagnostics') ? (
+                <>
+                  <Divider />
+                  <View style={styles.row}>
+                    <View style={styles.rowCopy}>
+                      <Text style={styles.rowLabel}>通知诊断</Text>
+                      <Text style={styles.rowHint}>没收到通知时,把下面的信息复制给维护者。</Text>
+                    </View>
+                  </View>
+                  {notifyPreview ? null : <NotifyDiagnosticsPanel />}
                 </>
               ) : null}
               {!searching ? <><Divider /><Text style={styles.footHint}>{nativeNotify ? '你正开着的会话不提示;在应用里看着别的会话时照常提示。' : '新消息会在系统栏和系统通知里提示;你正开着的会话不提示。'}</Text></> : null}

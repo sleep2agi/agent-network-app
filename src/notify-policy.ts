@@ -74,15 +74,16 @@ export function pickNew(
   seen: SeenState,
   incoming: readonly Incoming[],
   nowMs: number,
-): { seen: SeenState; toNotify: Incoming[] } {
+): { seen: SeenState; toNotify: Incoming[]; stale: Incoming[] } {
   const ids = new Set(seen.ids);
   const toNotify: Incoming[] = [];
+  const stale: Incoming[] = [];
   for (const row of incoming) {
     if (ids.has(row.id)) continue;
     ids.add(row.id);
     if (!seen.seeded) continue;
     const ms = hubTsToMs(row.createdAt);
-    if (ms !== null && nowMs - ms > FRESH_WINDOW_MS) continue;
+    if (ms !== null && nowMs - ms > FRESH_WINDOW_MS) { stale.push(row); continue; }
     toNotify.push(row);
   }
   if (ids.size > SEEN_CAP) {
@@ -90,7 +91,7 @@ export function pickNew(
     let i = 0;
     for (const id of ids) { if (i++ >= drop) break; ids.delete(id); }
   }
-  return { seen: { seeded: true, ids }, toNotify };
+  return { seen: { seeded: true, ids }, toNotify, stale };
 }
 
 export type Presence = { windowFocused: boolean; openConversation: string | null };
@@ -117,11 +118,23 @@ export function decide(
   settings: { soundEnabled: boolean; quiet: QuietHours; enabled?: boolean; muted?: readonly string[] },
   nowMinutes: number,
 ): NotifyDecision {
-  if (settings.enabled === false) return { notify: false, sound: false };
-  if (suppressedByPresence(agent, presence)) return { notify: false, sound: false };
-  if (settings.muted?.includes(agent)) return { notify: false, sound: false };
-  if (inQuietHours(settings.quiet, nowMinutes)) return { notify: false, sound: false };
-  return { notify: true, sound: settings.soundEnabled };
+  const d = decideWithReason(agent, presence, settings, nowMinutes);
+  return { notify: d.notify, sound: d.sound };
+}
+
+/** 判定结果 + 原因(诊断面板显示「上一次为什么没弹」)。与 decide 同一条判据,decide 只是丢掉原因。 */
+export type DecisionReason = 'notify' | 'master_off' | 'viewing' | 'muted' | 'quiet_hours';
+export function decideWithReason(
+  agent: string,
+  presence: Presence,
+  settings: { soundEnabled: boolean; quiet: QuietHours; enabled?: boolean; muted?: readonly string[] },
+  nowMinutes: number,
+): NotifyDecision & { reason: DecisionReason } {
+  if (settings.enabled === false) return { notify: false, sound: false, reason: 'master_off' };
+  if (suppressedByPresence(agent, presence)) return { notify: false, sound: false, reason: 'viewing' };
+  if (settings.muted?.includes(agent)) return { notify: false, sound: false, reason: 'muted' };
+  if (inQuietHours(settings.quiet, nowMinutes)) return { notify: false, sound: false, reason: 'quiet_hours' };
+  return { notify: true, sound: settings.soundEnabled, reason: 'notify' };
 }
 
 /** unread-store 快照 → 候选行(user_inbox 那半 + 发给我的 inbox 回复那半)。桌面/手机通知共用。 */

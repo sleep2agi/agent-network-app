@@ -44,6 +44,16 @@ let lastIngestAt = 0;
 export function unreadLastIngestAt(): number {
   return lastIngestAt;
 }
+/**
+ * 两半(scope=user 的 user_inbox / alias 分支的 inbox)各自有没有送进来过。
+ * 手机通知的「首份快照只登记不提醒」要等**两半都到**再登记 —— 只到一半就登记,
+ * 另一半随后整批到达时会被当成「新消息」(0.2.107:冷启动把 10 分钟内的旧回复又弹一遍)。
+ */
+let userHalfIngested = false;
+let inboxHalfIngested = false;
+export function unreadHalvesIngested(): { user: boolean; inbox: boolean } {
+  return { user: userHalfIngested, inbox: inboxHalfIngested };
+}
 
 function emit() {
   for (const listener of listeners) listener();
@@ -73,6 +83,7 @@ export function ingestUserMessagesBody(body: unknown): void {
   const ingested = ingestUserMessages(snapshot.ledger, messages, snapshot.seenIds);
   snapshot = { ...snapshot, ledger: ingested.ledger, serverBody: body, seenIds: ingested.seenIds };
   lastIngestAt = Date.now();
+  userHalfIngested = true;
   emit();
 }
 
@@ -83,6 +94,7 @@ export function ingestInboxMessagesBody(body: unknown, username: string | undefi
     : [];
   snapshot = { ...snapshot, replyRows: rows, replyUsername: username ?? '' };
   lastIngestAt = Date.now();
+  inboxHalfIngested = true;
   emit();
 }
 
@@ -104,6 +116,7 @@ export function markAgentRepliesSeen(agent: string): void {
 export function bindUnreadProfile(profileId: string | undefined): void {
   if (profileId === snapshot.replyProfileId && (profileId !== undefined || snapshot.replyRows.length === 0)) return;
   snapshot = { ...snapshot, replyProfileId: profileId, replyWatermarks: loadReplyWatermarks(profileId), replyRows: [] };
+  inboxHalfIngested = false;
   emit();
 }
 
@@ -154,6 +167,8 @@ export function replyUnreadCounts(snap: UnreadStoreSnapshot = snapshot): Record<
 
 export function replaceUnreadSnapshot(next: UnreadStoreSnapshot): void {
   snapshot = next;
+  if (next.serverBody == null) userHalfIngested = false;
+  if (!next.replyRows.length) inboxHalfIngested = false;
   emit();
 }
 
