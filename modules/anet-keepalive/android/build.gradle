@@ -1,0 +1,28 @@
+plugins {
+  id 'com.android.library'
+  id 'expo-module-gradle-plugin'
+}
+
+group = 'top.vansin.agentnetwork'
+version = '0.1.0'
+
+expoModule {
+  // Local module, built from source with the app; never published as an AAR.
+  canBePublished false
+}
+
+android {
+  namespace "expo.modules.anetkeepalive"
+  defaultConfig {
+    versionCode 1
+    versionName '0.1.0'
+  }
+}
+
+dependencies {
+  // HeadlessJsTaskService / HeadlessJsTaskConfig live in react-android; expo-modules-core only
+  // exposes it as an implementation dependency, so the module has to ask for it itself
+  // (same as expo, expo-file-system, expo-video).
+  implementation 'com.facebook.react:react-android'
+  implementation 'androidx.core:core-ktx:1.17.0'
+}

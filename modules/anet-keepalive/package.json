@@ -1,0 +1,7 @@
+{
+  "name": "anet-keepalive",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Android foreground service that keeps the Agent Network JS runtime (hub polling + SSE) alive in the background. Local Expo module.",
+  "main": "index.ts"
+}

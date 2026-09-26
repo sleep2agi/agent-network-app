@@ -80,7 +80,7 @@ const app = norm('../App.tsx'), settings = norm('SettingsScreen.tsx'), notifier 
 // 0.2.82:托盘下拉换成自绘面板,bindDesktopTray 多了「忽略全部」回调 ⇒ 调用形状变了,契约跟着变。
 ck('App:只有主窗口接托盘,点行打开会话', app.includes('const trayWindow = tauriDesktop && !initialChat && !initialWorkspaceProfile;') && app.includes("alias => setScreen({ name: 'chat', alias }),"));
 // 0.2.81:通知要能点进会话 ⇒ 通知组件接上和托盘同一条 onOpenChat 路。
-ck('App:通知组件只在主窗口挂', app.includes("{trayWindow ? <DesktopNotifier onOpenChat={alias => setScreen({ name: 'chat', alias })} /> : null}"));
+ck('App:通知组件只在主窗口挂', app.includes("{trayWindow ? <DesktopNotifier onOpenChat={alias => setScreen({ name: 'chat', alias })} profileKey={notifyProfileKey(cfg)} /> : null}"));
 ck('通知组件订阅 unread-store,合并后一轮只响一次', notifier.includes('subscribeUnread(onSnapshot)') && notifier.includes('if (ring) playChime();'));
 ck('通知组件等 user_inbox 拉到后才登记首份快照(登录不弹历史)', notifier.includes('if (!seen.current.seeded && !snap.serverBody) return;'));
 // 0.2.95:函数体搬到 agent-unread-counts.ts(节点列表「新消息」组也用它),托盘只委托 ⇒ 契约跟着搬。

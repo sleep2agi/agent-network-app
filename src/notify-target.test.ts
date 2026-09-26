@@ -60,7 +60,7 @@ ck('激活时查目标并带上正开着的会话', notifier.includes("targetOnF
 ck('focus 与 visibilitychange 两条激活信号都接了', notifier.includes("window.addEventListener('focus', onActivate)") && notifier.includes("document.addEventListener('visibilitychange', onVisible)"));
 ck('拿到目标就调 onOpenChat', notifier.includes('openChat.current?.(picked.agent)'));
 const app = norm('../App.tsx');
-ck('App 把 DesktopNotifier 接到和托盘同一条打开会话的路', app.includes("<DesktopNotifier onOpenChat={alias => setScreen({ name: 'chat', alias })} />"));
+ck('App 把 DesktopNotifier 接到和托盘同一条打开会话的路', app.includes("<DesktopNotifier onOpenChat={alias => setScreen({ name: 'chat', alias })} profileKey={notifyProfileKey(cfg)} />"));
 // 🔴 插件桌面端不回发点击:不许有假装能收点击的接线
 ck('没有挂 onAction(桌面端永远不触发,挂了就是假修)', !notifier.includes('onAction'));
 // 🔴 0.2.81 那条把用户最想要的情形排除掉的前置,不许再回来

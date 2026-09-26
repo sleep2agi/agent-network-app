@@ -1,0 +1,18 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+  <!-- Android 9+: any foreground service. -->
+  <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+  <!-- Android 14+: one permission per foregroundServiceType. remoteMessaging = "continue
+       transferring text messages from one device to another", which is what this service does
+       (hub → phone). Unlike dataSync it has no 6 h / 24 h cap on Android 15. -->
+  <uses-permission android:name="android.permission.FOREGROUND_SERVICE_REMOTE_MESSAGING" />
+  <!-- The service holds a partial wake lock while the headless JS task runs (HeadlessJsTaskService). -->
+  <uses-permission android:name="android.permission.WAKE_LOCK" />
+  <application>
+    <!-- foregroundServiceType MUST be declared here on Android 14+ or startForeground() throws
+         MissingForegroundServiceTypeException and the app crashes. -->
+    <service
+      android:name="expo.modules.anetkeepalive.AnetKeepAliveService"
+      android:exported="false"
+      android:foregroundServiceType="remoteMessaging" />
+  </application>
+</manifest>

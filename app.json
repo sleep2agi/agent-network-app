@@ -36,7 +36,15 @@
           "cameraPermission": "允许使用相机拍照发送给 agent"
         }
       ],
-      "expo-sharing"
+      "expo-sharing",
+      "./plugins/with-no-aps-environment",
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/notification-icon.png",
+          "color": "#4cc3d6"
+        }
+      ]
     ],
     "android": {
       "adaptiveIcon": {
@@ -49,7 +57,11 @@
       "package": "com.anonymous.agentnetworkapp",
       "versionCode": 2106,
       "permissions": [
-        "android.permission.REQUEST_INSTALL_PACKAGES"
+        "android.permission.REQUEST_INSTALL_PACKAGES",
+        "android.permission.POST_NOTIFICATIONS",
+        "android.permission.FOREGROUND_SERVICE",
+        "android.permission.FOREGROUND_SERVICE_REMOTE_MESSAGING",
+        "android.permission.WAKE_LOCK"
       ]
     }
   }

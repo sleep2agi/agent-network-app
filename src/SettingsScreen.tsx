@@ -12,9 +12,14 @@ import { androidUpdateLastCheckedAt, androidUpdateSnapshot, checkAndroidUpdate, 
 import { describeAndroidUpdateRow } from './android-update-core';
 import { backupLocalHubData, deleteLocalHubData, LOCAL_HUB_PROFILE_ID, localHubStatus, openLocalHubLogs, restartLocalHub, stopLocalHub, type LocalHubResult } from './local-hub';
 import { openWorkspaceWindow } from './desktop-chat-menu';
-import { loadNotifySettings, saveNotifySettings, subscribeNotifySettings } from './notify-settings';
+import { loadNotifySettings, mutedAgents, notifyProfileKey, saveNotifySettings, subscribeNotifySettings, toggleAgentMuted, type NotifySettings } from './notify-settings';
+import { permissionOnUserAction, type PermissionStatus } from './mobile-notify-model';
+import { mobileNotificationsSupported, notificationPermission, openAppNotificationSettings, requestNotificationPermission } from './mobile-notifications';
+import { keepAliveAvailable, keepAliveLastError, keepAliveRunning, subscribeKeepAlive } from './keep-alive';
+import { sendTestNotification } from './notifier-runtime';
+import XiaomiGuideModal from './XiaomiGuideModal';
 import { playChime } from './chime';
-import { SETTINGS_CATEGORIES, activeCategoryKey, filterSettings, rememberSettingsCategory, rememberSettingsScroll, rememberedSettingsView, visibleRowKeys, type SettingsCategoryKey } from './settings-model';
+import { SETTINGS_CATEGORIES, activeCategoryKey, filterSettings, rememberSettingsCategory, rememberSettingsScroll, rememberedSettingsView, settingsPlatform, visibleRowKeys, type SettingsCategoryKey, type SettingsPlatform } from './settings-model';
 
 // Settings (Vincent tg 720): who am I, where am I connected, which network, which build —
 // and the destructive actions live here instead of cluttering the agents list header.
@@ -39,6 +44,7 @@ export default function SettingsScreen({
   onAddAccount,
   onSwitchProfile,
   onReauthProfile,
+  notifyPreview,
 }: {
   cfg: HubConfig;
   /** 桌面端:左上角关闭按钮。不传就不画(手机端设置是一个 tab,没有「关闭」)。 */
@@ -48,6 +54,8 @@ export default function SettingsScreen({
   onAddAccount: () => void;
   onSwitchProfile: (profileId: string) => void | Promise<void>;
   onReauthProfile: (profile: Pick<HubProfile, 'profileId' | 'serverUrl' | 'username' | 'displayName'>) => void;
+  /** 只给 web 验收夹具用(NotifySettingsFixtureScreen):在浏览器里按手机平台渲染通知设置。 */
+  notifyPreview?: NotifySettingsPreview;
 }) {
   const [me, setMe] = useState<Me>({});
   const [profiles, setProfiles] = useState<HubProfile[]>([]);
@@ -71,6 +79,33 @@ export default function SettingsScreen({
     const [pref, mode] = themeKey.split('|') as [ThemePreference, 'light' | 'dark'];
     return { pref, mode };
   }, [themeKey]);
+  // 0.2.107 手机系统通知:权限状态、「后台保持连接」的真实状态(不是设置值)、小米指引弹窗、测试通知结果。
+  const nativeNotify = notifyPreview ? true : mobileNotificationsSupported();
+  const notifyKey = notifyProfileKey(cfg);
+  const muted = mutedAgents(notify, notifyKey);
+  const [permission, setPermission] = useState<{ status: PermissionStatus; canAskAgain: boolean } | null>(null);
+  const refreshPermission = () => {
+    if (notifyPreview) { setPermission(notifyPreview.permission); return; }
+    if (nativeNotify) void notificationPermission().then(setPermission).catch(() => {});
+  };
+  useEffect(refreshPermission, [nativeNotify]);
+  const liveKeepAlive = useSyncExternalStore(subscribeKeepAlive, keepAliveSnapshot, keepAliveSnapshot);
+  const keepAliveState = notifyPreview?.keepAlive ?? liveKeepAlive;
+  // 起服务是异步的(onStartCommand 稍后才跑):开关拨动后 1.5 s 再读一次真实状态。
+  const [, bumpKeepAlive] = useState(0);
+  const [guideVisible, setGuideVisible] = useState(!!notifyPreview?.guideOpen);
+  const [testMessage, setTestMessage] = useState('');
+  const saveNotify = (next: NotifySettings) => { saveNotifySettings(next); };
+  const ensurePermission = async (): Promise<boolean> => {
+    if (!nativeNotify) return true;
+    const current = await notificationPermission();
+    const action = permissionOnUserAction(current.status, current.canAskAgain);
+    if (action === 'none') { setPermission(current); return true; }
+    if (action === 'open-settings') { await openAppNotificationSettings(); refreshPermission(); return false; }
+    const status = await requestNotificationPermission();
+    refreshPermission();
+    return status === 'granted';
+  };
   const [quietStart, setQuietStart] = useState(notify.quiet.start);
   const [quietEnd, setQuietEnd] = useState(notify.quiet.end);
   const [query, setQuery] = useState('');
@@ -118,11 +153,14 @@ export default function SettingsScreen({
   }, [cfg]);
 
   const tauriDesktop = !!(globalThis as any).__TAURI_INTERNALS__;
-  const filtered = useMemo(() => filterSettings(query, { localHub: !!localHub }), [query, localHub]);
+  const platform = notifyPreview?.platform ?? settingsPlatform(Platform.OS, tauriDesktop);
+  const filtered = useMemo(() => filterSettings(query, { localHub: !!localHub }, undefined, platform), [query, localHub, platform]);
   const searching = query.trim().length > 0;
   const visible = useMemo(() => visibleRowKeys(query, filtered), [query, filtered]);
   const active = activeCategoryKey(category, filtered);
-  const show = (cat: SettingsCategoryKey, row: string) => visible === null || visible.has(`${cat}.${row}`);
+  // 行要同时满足:在本平台存在(filtered 已按平台筛掉安卓专属行)且命中搜索(visible 为 null = 不在搜索)。
+  const onPlatform = useMemo(() => new Set(filterSettings('', { localHub: true }, undefined, platform).flatMap(c => c.rows.map(r => `${c.key}.${r.key}`))), [platform]);
+  const show = (cat: SettingsCategoryKey, row: string) => onPlatform.has(`${cat}.${row}`) && (visible === null || visible.has(`${cat}.${row}`));
   // 不在搜索:只画选中的那一类;搜索中:把所有命中的类都画出来(各带小标题)。
   const sectionsToRender = searching ? filtered.map(c => c.key) : [active];
   const paneTitle = searching ? '搜索结果' : (SETTINGS_CATEGORIES.find(c => c.key === active)?.label ?? '设置');
@@ -367,6 +405,58 @@ export default function SettingsScreen({
           {sectionsToRender.includes('notifications') ? (
             <View style={styles.section} testID="notify-settings-card">
               {heading('notifications')}
+              {show('notifications', 'enabled') ? (
+                <>
+                  <View style={styles.row} testID="notify-enabled-row">
+                    <View style={styles.rowCopy}>
+                      <Text style={styles.rowLabel}>新消息通知</Text>
+                      <Text style={styles.rowHint}>agent 发来消息、而你没在看那个会话时,发一条系统通知(点通知直接进会话)。</Text>
+                      {nativeNotify && notify.enabled && permission && permission.status !== 'granted' ? (
+                        <Pressable accessibilityRole="button" onPress={() => { void ensurePermission(); }} testID="notify-permission-fix">
+                          <Text style={[styles.rowHint, { color: colors.failed }]}>系统通知权限未开启 · 点此开启</Text>
+                        </Pressable>
+                      ) : null}
+                    </View>
+                    <Switch
+                      accessibilityLabel="新消息通知"
+                      value={notify.enabled}
+                      onValueChange={value => {
+                        saveNotify({ ...notify, enabled: value });
+                        if (value) void ensurePermission();
+                      }}
+                      trackColor={{ true: colors.accent, false: colors.border }}
+                      thumbColor={colors.card}
+                    />
+                  </View>
+                  <Divider />
+                </>
+              ) : null}
+              {show('notifications', 'mode') ? (
+                <>
+                  <View style={[styles.row, styles.themeRow, !notify.enabled && styles.disabled]} testID="notify-mode-row">
+                    <View style={[styles.rowCopy, styles.themeRowCopy]}>
+                      <Text style={styles.rowLabel}>提醒方式</Text>
+                      <Text style={styles.rowHint}>{notify.mode === 'new' ? '同一个 agent 有未看的通知时,后续消息只更新条数,不再响铃。' : '每条新消息都响铃并弹出横幅。'}</Text>
+                    </View>
+                    <View style={styles.segmented} accessibilityRole="radiogroup">
+                      {([['all', '每条消息'], ['new', '仅新消息']] as const).map(([mode, label]) => (
+                        <Pressable
+                          key={mode}
+                          accessibilityRole="radio"
+                          accessibilityState={{ selected: notify.mode === mode, disabled: !notify.enabled }}
+                          disabled={!notify.enabled}
+                          onPress={() => saveNotify({ ...notify, mode })}
+                          style={[styles.segment, notify.mode === mode && styles.segmentSelected]}
+                          testID={`notify-mode-${mode}`}
+                        >
+                          <Text style={[styles.segmentText, notify.mode === mode && styles.segmentTextSelected]}>{label}</Text>
+                        </Pressable>
+                      ))}
+                    </View>
+                  </View>
+                  <Divider />
+                </>
+              ) : null}
               {show('notifications', 'sound') ? (
                 <View style={styles.row}>
                   <View style={styles.rowCopy}>
@@ -428,7 +518,88 @@ export default function SettingsScreen({
                   ) : null}
                 </>
               ) : null}
-              {!searching ? <><Divider /><Text style={styles.footHint}>新消息会在系统栏和系统通知里提示;你正开着的会话不提示。</Text></> : null}
+              {show('notifications', 'muted') ? (
+                <>
+                  <Divider />
+                  <View style={[styles.row, { alignItems: 'flex-start' }]} testID="notify-muted-row">
+                    <View style={styles.rowCopy}>
+                      <Text style={styles.rowLabel}>消息免打扰的 agent</Text>
+                      <Text style={styles.rowHint}>{muted.length ? '这些 agent 的消息照常收,只是不发系统通知。' : (nativeNotify ? '在会话右上角点铃铛,可以对单个 agent 免打扰。' : '在 agent 列表里右键 →「消息免打扰」。')}</Text>
+                      {muted.map(alias => (
+                        <View key={alias} style={styles.mutedItem}>
+                          <Text style={styles.rowValue} numberOfLines={1}>{alias}</Text>
+                          <Pressable accessibilityRole="button" accessibilityLabel={`取消 ${alias} 的免打扰`} onPress={() => saveNotify(toggleAgentMuted(notify, notifyKey, alias))} hitSlop={6}>
+                            <Text style={styles.accentText}>取消</Text>
+                          </Pressable>
+                        </View>
+                      ))}
+                    </View>
+                  </View>
+                </>
+              ) : null}
+              {show('notifications', 'keepAlive') ? (
+                <>
+                  <Divider />
+                  <View style={styles.row} testID="notify-keepalive-row">
+                    <View style={styles.rowCopy}>
+                      <Text style={styles.rowLabel}>后台保持连接</Text>
+                      <Text style={styles.rowHint}>应用切到后台后继续接收消息。会常驻一条低优先级通知「Agent Network 正在保持连接」,耗电会多一些。</Text>
+                      {keepAliveStatusText(notify, keepAliveState) ? (
+                        <Text style={[styles.rowHint, keepAliveState.error ? { color: colors.failed } : null]} testID="notify-keepalive-status">{keepAliveStatusText(notify, keepAliveState)}</Text>
+                      ) : null}
+                    </View>
+                    <Switch
+                      accessibilityLabel="后台保持连接"
+                      value={notify.keepAlive}
+                      disabled={!notify.enabled || !keepAliveState.available}
+                      onValueChange={value => {
+                        saveNotify({ ...notify, keepAlive: value });
+                        setTimeout(() => bumpKeepAlive(n => n + 1), 1500);
+                      }}
+                      trackColor={{ true: colors.accent, false: colors.border }}
+                      thumbColor={colors.card}
+                    />
+                  </View>
+                </>
+              ) : null}
+              {show('notifications', 'xiaomiGuide') ? (
+                <>
+                  <Divider />
+                  <Pressable style={({ pressed }) => [styles.row, pressed && { opacity: 0.6 }]} onPress={() => setGuideVisible(true)} accessibilityRole="button" testID="notify-xiaomi-guide">
+                    <View style={styles.rowCopy}>
+                      <Text style={styles.rowLabel}>小米/HyperOS 后台设置指引</Text>
+                      <Text style={styles.rowHint}>自启动、省电策略「无限制」—— 不设的话小米会在后台关掉连接。</Text>
+                    </View>
+                    <Ionicons name="chevron-forward" size={16} color={colors.textMuted} />
+                  </Pressable>
+                </>
+              ) : null}
+              {show('notifications', 'test') ? (
+                <>
+                  <Divider />
+                  <View style={styles.row} testID="notify-test-row">
+                    <View style={styles.rowCopy}>
+                      <Text style={styles.rowLabel}>发送测试通知</Text>
+                      <Text style={styles.rowHint}>{testMessage || '立即发一条通知,确认系统通知能弹出来。'}</Text>
+                    </View>
+                    <Pressable
+                      accessibilityRole="button"
+                      accessibilityLabel="发送测试通知"
+                      onPress={() => {
+                        void (async () => {
+                          if (!(await ensurePermission())) { setTestMessage('没有通知权限:请在系统设置里允许通知后再试。'); return; }
+                          try { await sendTestNotification(); setTestMessage('已发送。没看到的话,检查系统通知设置里的「Agent 消息」类别。'); }
+                          catch (e) { setTestMessage(`发送失败:${String((e as Error)?.message ?? e)}`); }
+                        })();
+                      }}
+                      style={({ pressed }) => [styles.actionButton, pressed && { opacity: 0.6 }]}
+                    >
+                      <Text style={styles.actionButtonText}>发送</Text>
+                    </Pressable>
+                  </View>
+                </>
+              ) : null}
+              {!searching ? <><Divider /><Text style={styles.footHint}>{nativeNotify ? '你正开着的会话不提示;在应用里看着别的会话时照常提示。' : '新消息会在系统栏和系统通知里提示;你正开着的会话不提示。'}</Text></> : null}
             </View>
           ) : null}
 
@@ -526,8 +697,32 @@ export default function SettingsScreen({
           </View>
         </View>
       </Modal>
+      {guideVisible ? <XiaomiGuideModal onClose={() => setGuideVisible(false)} /> : null}
     </View>
   );
+}
+
+type KeepAliveSnapshot = { available: boolean; running: boolean; error: string | null };
+export type NotifySettingsPreview = {
+  platform: SettingsPlatform;
+  permission: { status: PermissionStatus; canAskAgain: boolean };
+  keepAlive: KeepAliveSnapshot;
+  guideOpen?: boolean;
+};
+let keepAliveCache: KeepAliveSnapshot = { available: false, running: false, error: null };
+/** useSyncExternalStore 要同一个对象才算「没变」。 */
+function keepAliveSnapshot(): KeepAliveSnapshot {
+  const next = { available: keepAliveAvailable(), running: keepAliveRunning(), error: keepAliveLastError() };
+  if (next.available !== keepAliveCache.available || next.running !== keepAliveCache.running || next.error !== keepAliveCache.error) keepAliveCache = next;
+  return keepAliveCache;
+}
+
+function keepAliveStatusText(notify: NotifySettings, state: KeepAliveSnapshot): string {
+  if (!state.available) return '当前安装包不含后台服务(需要重新安装 0.2.107 或更新的安卓版)。';
+  if (state.error) return `启动失败:${state.error}`;
+  if (!notify.keepAlive) return '';
+  if (!notify.enabled) return '「新消息通知」关着时不保持连接。';
+  return state.running ? '正在保持连接。' : '正在启动…';
 }
 
 /** 标签在左、只读值在右。 */
@@ -613,6 +808,7 @@ const makeStyles = () =>
   segmentText: { color: colors.textSecondary, fontSize: 13 },
   segmentTextSelected: { color: colors.text, fontWeight: '600' },
   quietRow: { justifyContent: 'flex-start', gap: spacing.sm },
+  mutedItem: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.md, paddingTop: spacing.sm },
   quietInput: { color: colors.text, fontSize: 14, borderWidth: 1, borderColor: colors.border, borderRadius: 6, paddingHorizontal: 8, paddingVertical: 4, minWidth: 64, textAlign: 'center', backgroundColor: colors.inputBg },
   profileRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingHorizontal: spacing.md, paddingVertical: spacing.md },
   profileCopy: { flex: 1, minWidth: 0 },

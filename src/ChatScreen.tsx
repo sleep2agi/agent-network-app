@@ -201,6 +201,9 @@ interface Props {
   /** app#168(手机端):会话置顶开关;桌面端用窗口置顶 + 列表长按,不传。 */
   pinned?: boolean;
   onTogglePin?: () => void;
+  /** 0.2.107(手机端):这个 agent 的「消息免打扰」—— 不弹系统通知,消息照收。 */
+  muted?: boolean;
+  onToggleMute?: () => void;
   /** Android two-pane: the conversation sits next to the list, so no back chevron. */
   hideBack?: boolean;
 }
@@ -213,7 +216,7 @@ export const clearChatConversationCache = (profileId?: string, serverUrl = ''): 
   conversations.clearScope(conversationScope(profileId, serverUrl));
 };
 
-export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpenNodeSettings, pinned = false, onTogglePin, hideBack = false }: Props) {
+export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpenNodeSettings, pinned = false, onTogglePin, muted = false, onToggleMute, hideBack = false }: Props) {
   // Android edge-to-edge draws the composer under the gesture bar (same
   // class of bug as the tg 802 tab bar) — pad by the real bottom inset.
   const insets = useSafeAreaInsets();
@@ -1206,6 +1209,19 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
             style={({ pressed }) => [styles.btwHeaderButton, pressed && { opacity: 0.6 }]}
           >
             <Text style={styles.btwHeaderText}>BTW</Text>
+          </Pressable>
+        ) : null}
+        {onToggleMute ? (
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={muted ? '取消消息免打扰' : '消息免打扰'}
+            accessibilityState={{ selected: muted }}
+            onPress={onToggleMute}
+            hitSlop={10}
+            style={({ pressed }) => [styles.headerAction, pressed && { opacity: 0.6 }]}
+            testID="chat-mute-toggle"
+          >
+            <Ionicons name={muted ? 'notifications-off' : 'notifications-outline'} size={20} color={muted ? colors.accent : colors.textSecondary} />
           </Pressable>
         ) : null}
         {onTogglePin ? (

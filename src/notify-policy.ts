@@ -102,15 +102,33 @@ export function suppressedByPresence(agent: string, presence: Presence): boolean
 
 export type NotifyDecision = { notify: boolean; sound: boolean };
 
+/**
+ * 0.2.107:桌面端和手机端共用这一个判据(手机端 presence.windowFocused = AppState 为 active)。
+ * `enabled`(总开关)和 `muted`(本账号下免打扰的 agent)是可选的 —— 不传 = 开、无人免打扰,
+ * 行为与 0.2.76–0.2.106 完全一样。
+ *
+ * 🔴 不要在这里加「窗口/应用必须不在前台才提醒」一类前置:最常见的场景恰恰是人正开着应用、
+ *    在看 A 的会话,B 来了消息 —— 这时必须提醒(0.2.81 的通知跳转就是被这样一条前置废掉的,
+ *    见 notify-target.ts 文件头)。唯一按「在不在看」抑制的,是**正开着的就是这个会话**。
+ */
 export function decide(
   agent: string,
   presence: Presence,
-  settings: { soundEnabled: boolean; quiet: QuietHours },
+  settings: { soundEnabled: boolean; quiet: QuietHours; enabled?: boolean; muted?: readonly string[] },
   nowMinutes: number,
 ): NotifyDecision {
+  if (settings.enabled === false) return { notify: false, sound: false };
   if (suppressedByPresence(agent, presence)) return { notify: false, sound: false };
+  if (settings.muted?.includes(agent)) return { notify: false, sound: false };
   if (inQuietHours(settings.quiet, nowMinutes)) return { notify: false, sound: false };
   return { notify: true, sound: settings.soundEnabled };
+}
+
+/** unread-store 快照 → 候选行(user_inbox 那半 + 发给我的 inbox 回复那半)。桌面/手机通知共用。 */
+export function incomingFromSnapshot(snap: { serverBody: unknown; replyRows: readonly HubMessage[]; replyUsername: string }): Incoming[] {
+  const body = snap.serverBody as { messages?: unknown } | null;
+  const messages = body && Array.isArray(body.messages) ? (body.messages as HubUserMessage[]) : [];
+  return [...fromUserMessages(messages), ...fromInboxRows(snap.replyRows, snap.replyUsername)];
 }
 
 /** 同一轮多条新消息只响一次铃、按 agent 合并成一条通知(飞书也是按会话合并)。 */

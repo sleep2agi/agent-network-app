@@ -6,12 +6,11 @@
 
 import { useEffect, useRef } from 'react';
 import { playChime } from './chime';
-import { loadNotifySettings } from './notify-settings';
+import { loadNotifySettings, mutedAgents } from './notify-settings';
 import {
   decide,
-  fromInboxRows,
-  fromUserMessages,
   groupByAgent,
+  incomingFromSnapshot,
   initialSeen,
   notificationTitle,
   pickNew,
@@ -49,7 +48,9 @@ async function sendSystemNotification(title: string, body: string): Promise<void
   new N(title, { body });
 }
 
-export default function DesktopNotifier({ onOpenChat }: { onOpenChat?: (alias: string) => void } = {}) {
+export default function DesktopNotifier({ onOpenChat, profileKey = '' }: { onOpenChat?: (alias: string) => void; profileKey?: string } = {}) {
+  const notifyProfileKeyRef = useRef(profileKey);
+  notifyProfileKeyRef.current = profileKey;
   const seen = useRef<SeenState>(initialSeen());
   const target = useRef<NotifyTargetState>(initialNotifyTarget());
   const openChat = useRef(onOpenChat);
@@ -80,15 +81,13 @@ export default function DesktopNotifier({ onOpenChat }: { onOpenChat?: (alias: s
       // 登录后第一份快照可能还没拉到 user_inbox(serverBody 为空)——那时登记会把随后到达的
       // 历史行当成「新消息」弹一屏;等 serverBody 有了再登记首份。
       if (!seen.current.seeded && !snap.serverBody) return;
-      const body = snap.serverBody as { messages?: any[] } | null;
-      const incoming = [
-        ...fromUserMessages(Array.isArray(body?.messages) ? body!.messages : []),
-        ...fromInboxRows(snap.replyRows, snap.replyUsername),
-      ];
+      const incoming = incomingFromSnapshot(snap);
       const picked = pickNew(seen.current, incoming, Date.now());
       seen.current = picked.seen;
       if (!picked.toNotify.length) return;
-      const settings = loadNotifySettings();
+      const stored = loadNotifySettings();
+      // 0.2.107:总开关 + 本账号的「消息免打扰」和手机端同一份判据(decide)。
+      const settings = { ...stored, muted: mutedAgents(stored, notifyProfileKeyRef.current) };
       const presence = presenceOf(snap);
       const minutes = localMinutes();
       let ring = false;
