@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
-import { ActivityIndicator, Alert, BackHandler, Modal, Pressable, RefreshControl, ScrollView, StyleSheet, Switch, View, useWindowDimensions } from 'react-native';
+import { ActivityIndicator, Alert, BackHandler, Modal, Platform, Pressable, RefreshControl, ScrollView, StatusBar, StyleSheet, Switch, View, useWindowDimensions } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Text, TextInput } from './ui-text';
 import {
   cancelScheduledTask,
@@ -9,6 +10,7 @@ import {
   fetchExternalScheduleEdits,
   fetchExternalSchedules,
   fetchHubNodes,
+  fetchStatus,
   fetchScheduledRuns,
   fetchScheduledTasks,
   HubConfig,
@@ -20,6 +22,7 @@ import {
   HubScheduledTask,
   HubMisfirePolicy,
   HubScheduleSpec,
+  Session,
   ScheduledTaskError,
   runScheduledTaskNow,
   selectOpenIntents,
@@ -27,6 +30,13 @@ import {
   updateScheduledTask,
 } from './api';
 import AliasAvatar from './AliasAvatar';
+import MacTitleStrip from './mac-title-strip';
+import WinTitleBar from './win-title-bar';
+import NodePickerSheet, { NodePickerField } from './NodePicker';
+import { pickerNodes } from './node-picker-model';
+import { modalSafePadding } from './modal-safe-area';
+import { loadChatPins } from './chat-pins';
+import { loadScheduleTargetRecents, rememberScheduleTarget } from './schedule-target-recents';
 import { colors, onThemeChange, radius, spacing, type as fontSize, weight } from './theme';
 import { scheduledTaskActions } from './scheduled-task-actions';
 import {
@@ -568,6 +578,23 @@ function ScheduleFormModal({ cfg, nodes, visible, editing, onClose, onSaved, onC
   const [priority, setPriority] = useState<'high' | 'normal' | 'low'>('normal');
   const detectedTimezone = useMemo(() => Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC', []);
   const [timezone, setTimezone] = useState(detectedTimezone);
+  // 执行节点选择器(NodePicker.tsx):状态点来自会话表,置顶与节点列表同一份,最近使用按本设备 + Hub 账号。
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const [sessions, setSessions] = useState<Session[]>([]);
+  const [pins, setPins] = useState<string[]>([]);
+  const [recents, setRecents] = useState<string[]>([]);
+  const safe = modalSafePadding(Platform.OS, 'pageSheet', useSafeAreaInsets(), StatusBar.currentHeight);
+  useEffect(() => {
+    if (!visible) { setPickerOpen(false); return; }
+    let live = true;
+    fetchStatus(cfg).then(d => { if (live) setSessions(d.sessions ?? []); }).catch(() => { /* 没有状态就全画成离线,仍可选 */ });
+    loadChatPins(cfg).then(p => { if (live) setPins(p); }).catch(() => {});
+    loadScheduleTargetRecents(cfg).then(r => { if (live) setRecents(r); }).catch(() => {});
+    return () => { live = false; };
+  }, [visible, cfg]);
+  const choices = useMemo(() => pickerNodes(nodes, sessions), [nodes, sessions]);
+  const chosen = choices.find(n => n.node_id === target) ?? null;
+  const fallbackAlias = editing && editing.target_node_id === target ? editing.target_alias : null;
 
   useEffect(() => {
     if (!visible) return;
@@ -613,12 +640,17 @@ function ScheduleFormModal({ cfg, nodes, visible, editing, onClose, onSaved, onC
     }
     finally { setBusy(false); }
   };
+  const cannotSave = busy || !name.trim() || !task.trim() || !target || !timezone.trim() || invalidSchedule;
+  // Android edge-to-edge:Modal 画到状态栏 / 挖孔底下,根 View 按安全区垫(modal-safe-area.ts,#387 同一张表)。
   return <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
-    <View style={styles.modalRoot}><View style={styles.modalHeader}><Pressable onPress={onClose}><Text style={styles.link}>取消</Text></Pressable><Text style={styles.modalTitle}>{editing ? '编辑定时任务' : '新建定时任务'}</Text><Pressable disabled={busy || !name.trim() || !task.trim() || !target || !timezone.trim() || invalidSchedule} onPress={submit}><Text style={styles.link}>保存</Text></Pressable></View>
+    <View testID="schedule-form" style={[styles.modalRoot, safe]}>
+      <MacTitleStrip />
+      <WinTitleBar />
+      <View testID="schedule-form-header" style={styles.modalHeader}><Pressable testID="schedule-form-cancel" onPress={onClose} style={styles.headerSide}><Text style={styles.link}>取消</Text></Pressable><Text testID="schedule-form-title" style={styles.modalTitle} numberOfLines={1}>{editing ? '编辑定时任务' : '新建定时任务'}</Text><Pressable testID="schedule-form-save" disabled={cannotSave} onPress={submit} style={[styles.headerSide, styles.headerSideEnd]}><Text style={[styles.link, cannotSave && styles.linkDisabled]}>保存</Text></Pressable></View>
       <ScrollView contentContainerStyle={styles.form} keyboardShouldPersistTaps="handled">
         {error ? <Text style={styles.error}>{error}</Text> : null}
         <Label text="名称"><TextInput style={styles.input} value={name} onChangeText={setName} placeholder="每日巡检" placeholderTextColor={colors.textMuted} /></Label>
-        <Label text="执行节点"><View style={styles.nodePicker}>{nodes.map(n => <Pressable key={n.node_id} onPress={() => setTarget(n.node_id)} style={[styles.nodeChoice, target === n.node_id && styles.nodeChoiceActive]}><Text style={target === n.node_id ? styles.nodeChoiceTextActive : styles.actionText}>{n.alias}</Text></Pressable>)}</View></Label>
+        <Label text="执行节点"><NodePickerField node={chosen} fallbackAlias={fallbackAlias} onPress={() => setPickerOpen(true)} /></Label>
         <Label text="任务内容"><TextInput style={[styles.input, styles.textarea]} multiline value={task} onChangeText={setTask} placeholder="节点收到的任务" placeholderTextColor={colors.textMuted} /></Label>
         <Label text="优先级"><View style={styles.segment}>{(['high','normal','low'] as const).map((value) => <Pressable key={value} onPress={() => setPriority(value)} style={[styles.segmentItem, priority === value && styles.segmentActive]}><Text style={priority === value ? styles.segmentTextActive : styles.segmentText}>{value === 'high' ? '高' : value === 'low' ? '低' : '普通'}</Text></Pressable>)}</View></Label>
         <Label text="类型"><View style={styles.segment}>{(['once','interval','daily','weekly'] as const).map((x, i) => <Pressable key={x} onPress={() => setKind(x)} style={[styles.segmentItem, kind === x && styles.segmentActive]}><Text style={kind === x ? styles.segmentTextActive : styles.segmentText}>{['单次','间隔','每天','每周'][i]}</Text></Pressable>)}</View></Label>
@@ -629,6 +661,15 @@ function ScheduleFormModal({ cfg, nodes, visible, editing, onClose, onSaved, onC
         {(kind === 'daily' || kind === 'weekly') && <Label text="时间"><TextInput style={styles.input} value={clock} onChangeText={setClock} placeholder="09:00" placeholderTextColor={colors.textMuted} /></Label>}
         {kind === 'weekly' && <View style={styles.weekdays}>{DAYS.map((d, i) => <Pressable key={d} onPress={() => setWeekdays(v => v.includes(i) ? v.filter(x => x !== i) : [...v, i].sort())} style={[styles.day, weekdays.includes(i) && styles.dayActive]}><Text style={weekdays.includes(i) ? styles.dayTextActive : styles.segmentText}>{d}</Text></Pressable>)}</View>}
       </ScrollView>
+      <NodePickerSheet
+        visible={visible && pickerOpen}
+        nodes={choices}
+        selectedId={target}
+        recents={recents}
+        pinned={pins}
+        onClose={() => setPickerOpen(false)}
+        onSelect={n => { setTarget(n.node_id); setRecents(rememberScheduleTarget(cfg, recents, n.node_id)); setPickerOpen(false); }}
+      />
     </View>
   </Modal>;
 }
@@ -666,12 +707,15 @@ function CronEditModal({ value, busy, onClose, onSubmit }: {
   const [cron, setCron] = useState('');
   useEffect(() => { setCron(''); }, [value?.schedule.id]);
   const valid = looksLikeCron(cron);
+  const safe = modalSafePadding(Platform.OS, 'pageSheet', useSafeAreaInsets(), StatusBar.currentHeight);
   return <Modal visible={!!value} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
-    <View style={s.modalRoot}>
+    <View style={[s.modalRoot, safe]}>
+      <MacTitleStrip />
+      <WinTitleBar />
       <View style={s.modalHeader}>
-        <Pressable onPress={onClose}><Text style={s.link}>取消</Text></Pressable>
-        <Text style={s.modalTitle}>改执行时间</Text>
-        <Pressable disabled={busy || !valid} onPress={() => onSubmit(cron.trim().split(/ +/).join(' '))}><Text style={[s.link, (busy || !valid) && s.linkDisabled]}>提交</Text></Pressable>
+        <Pressable onPress={onClose} style={s.headerSide}><Text style={s.link}>取消</Text></Pressable>
+        <Text style={s.modalTitle} numberOfLines={1}>改执行时间</Text>
+        <Pressable disabled={busy || !valid} onPress={() => onSubmit(cron.trim().split(/ +/).join(' '))} style={[s.headerSide, s.headerSideEnd]}><Text style={[s.link, (busy || !valid) && s.linkDisabled]}>提交</Text></Pressable>
       </View>
       <ScrollView contentContainerStyle={s.form} keyboardShouldPersistTaps="handled">
         <Text style={s.meta}>{value?.node.alias} · {value?.schedule.name}</Text>
@@ -688,9 +732,12 @@ function CronEditModal({ value, busy, onClose, onSubmit }: {
 
 function IntentsModal({ value, onClose }: { value: { title: string; edits: HubExternalScheduleEditIntent[] } | null; onClose: () => void }) {
   const s = useMemo(makeStyles, [value]);
+  const safe = modalSafePadding(Platform.OS, 'pageSheet', useSafeAreaInsets(), StatusBar.currentHeight);
   return <Modal visible={!!value} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
-    <View style={s.modalRoot}>
-      <View style={s.modalHeader}><Pressable onPress={onClose}><Text style={s.link}>关闭</Text></Pressable><Text style={s.modalTitle}>{value?.title || '意向记录'}</Text><View style={{ width: 40 }} /></View>
+    <View style={[s.modalRoot, safe]}>
+      <MacTitleStrip />
+      <WinTitleBar />
+      <View style={s.modalHeader}><Pressable onPress={onClose} style={s.headerSide}><Text style={s.link}>关闭</Text></Pressable><Text style={s.modalTitle} numberOfLines={1}>{value?.title || '意向记录'}</Text><View style={s.headerSide} /></View>
       <ScrollView contentContainerStyle={s.form}>
         {value?.edits.length ? value.edits.map(edit => (
           <View key={edit.intent_id} style={s.run}>
@@ -762,8 +809,8 @@ function makeStyles() { return StyleSheet.create({
   card: { backgroundColor: colors.card, borderColor: colors.border, borderWidth: 1, borderRadius: 13, padding: spacing.md, marginBottom: spacing.md }, cardTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }, cardTitle: { color: colors.text, fontWeight: '600', fontSize: 15, flex: 1 }, badge: { fontSize: 11, overflow: 'hidden', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 10 }, badgeActive: { color: colors.running, backgroundColor: `${colors.running}20` }, badgeIdle: { color: colors.textMuted, backgroundColor: colors.bg },
   meta: { color: colors.textMuted, fontSize: 11, marginTop: spacing.xs }, actions: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm, marginTop: spacing.md }, action: { borderWidth: 1, borderColor: colors.border, borderRadius: radius.md, paddingHorizontal: 14, paddingVertical: 8, alignItems: 'center' }, actionText: { color: colors.textSecondary, fontSize: fontSize.body }, danger: { borderColor: `${colors.failed}50` }, dangerText: { color: colors.failed, fontSize: fontSize.body },
   error: { color: colors.failed, marginHorizontal: spacing.lg, marginBottom: spacing.md, fontSize: 13 }, empty: { paddingVertical: 64, paddingHorizontal: spacing.xl, alignItems: 'center' }, emptyTitle: { color: colors.text, fontSize: fontSize.title, fontWeight: weight.strong, marginBottom: spacing.sm }, emptyBody: { color: colors.textMuted, fontSize: 13, textAlign: 'center', lineHeight: 19, maxWidth: 300 }, muted: { color: colors.textMuted, fontSize: 13 },
-  modalRoot: { flex: 1, backgroundColor: colors.bg }, modalHeader: { minHeight: 58, paddingHorizontal: spacing.lg, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderBottomWidth: 1, borderBottomColor: colors.border }, modalTitle: { color: colors.text, fontWeight: '600', fontSize: 16 }, link: { color: colors.accent, minWidth: 40 }, form: { padding: spacing.lg, paddingBottom: 60 }, field: { marginBottom: spacing.lg }, label: { color: colors.textMuted, fontSize: 12, marginBottom: spacing.sm }, input: { color: colors.text, backgroundColor: colors.card, borderColor: colors.border, borderWidth: 1, borderRadius: 9, paddingHorizontal: spacing.md, paddingVertical: 11 }, textarea: { minHeight: 100, textAlignVertical: 'top' },
-  nodePicker: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm }, nodeChoice: { borderRadius: 18, borderWidth: 1, borderColor: colors.border, paddingHorizontal: 12, paddingVertical: 8 }, nodeChoiceActive: { backgroundColor: colors.accent, borderColor: colors.accent }, nodeChoiceTextActive: { color: colors.onAccent, fontSize: 12, fontWeight: '600' }, segment: { flexDirection: 'row', borderWidth: 1, borderColor: colors.border, borderRadius: 9, overflow: 'hidden' }, segmentItem: { flex: 1, alignItems: 'center', paddingVertical: 10, backgroundColor: colors.card }, segmentActive: { backgroundColor: colors.accent }, segmentText: { color: colors.textMuted, fontSize: 12 }, segmentTextActive: { color: colors.onAccent, fontSize: 12, fontWeight: '600' }, weekdays: { flexDirection: 'row', justifyContent: 'space-between' }, day: { width: 38, height: 38, borderRadius: 19, borderWidth: 1, borderColor: colors.border, alignItems: 'center', justifyContent: 'center' }, dayActive: { backgroundColor: colors.accent, borderColor: colors.accent }, dayTextActive: { color: colors.onAccent, fontWeight: '600' },
+  modalRoot: { flex: 1, backgroundColor: colors.bg }, modalHeader: { minHeight: 58, paddingHorizontal: spacing.lg, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderBottomWidth: 1, borderBottomColor: colors.border }, modalTitle: { flex: 1, textAlign: 'center', color: colors.text, fontWeight: '600', fontSize: 16 }, link: { color: colors.accent, fontSize: 15 }, headerSide: { minWidth: 56, minHeight: 44, justifyContent: 'center' }, headerSideEnd: { alignItems: 'flex-end' }, form: { padding: spacing.lg, paddingBottom: 60 }, field: { marginBottom: spacing.lg }, label: { color: colors.textMuted, fontSize: 12, marginBottom: spacing.sm }, input: { color: colors.text, backgroundColor: colors.card, borderColor: colors.border, borderWidth: 1, borderRadius: 9, paddingHorizontal: spacing.md, paddingVertical: 11 }, textarea: { minHeight: 100, textAlignVertical: 'top' },
+  segment: { flexDirection: 'row', borderWidth: 1, borderColor: colors.border, borderRadius: 9, overflow: 'hidden' }, segmentItem: { flex: 1, alignItems: 'center', paddingVertical: 10, backgroundColor: colors.card }, segmentActive: { backgroundColor: colors.accent }, segmentText: { color: colors.textMuted, fontSize: 12 }, segmentTextActive: { color: colors.onAccent, fontSize: 12, fontWeight: '600' }, weekdays: { flexDirection: 'row', justifyContent: 'space-between' }, day: { width: 38, height: 38, borderRadius: 19, borderWidth: 1, borderColor: colors.border, alignItems: 'center', justifyContent: 'center' }, dayActive: { backgroundColor: colors.accent, borderColor: colors.accent }, dayTextActive: { color: colors.onAccent, fontWeight: '600' },
   run: { paddingVertical: spacing.md, borderBottomWidth: 1, borderBottomColor: colors.border, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   extRow: { borderTopWidth: 1, borderTopColor: colors.border, marginTop: spacing.md, paddingTop: spacing.md },
   extError: { color: colors.failed, fontSize: 11, marginTop: spacing.xs },
