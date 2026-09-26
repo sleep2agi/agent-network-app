@@ -430,6 +430,21 @@ higher version is published.
 The upload token is the repository secret `MODELSCOPE_API_TOKEN`; it is read
 from the environment only and never printed.
 
+### Download page on anet.sh (agent-network repo)
+
+After the mirror run for the new version has finished (`desktop/<ver>/` exists on
+ModelScope), bump `docs-site/docs/index.md` and `docs-site/docs/en/index.md` in
+`sleep2agi/agent-network` by find-and-replace of the previous version. Each page
+has **21** occurrences of the bare version string: the two section eyebrows,
+three platform cards with 5 each (card title `v<ver>`, 线路一 ModelScope
+`desktop/<ver>/Agent.Network_<ver>_…`, 线路二 GitHub
+`desktop-v<ver>/Agent.Network_<ver>_…`), two release-notes links, the product
+card and the final call to action. Update the card sizes from the release
+assets, rebuild `docs-site/docs/public/desktop/update/fallback.json`, and check
+every new link with `curl -sIL` (both routes must answer 200 with the same
+`Content-Length`) before opening the PR. Do not edit the page before the
+mirror has the version: the 线路一 buttons would 404.
+
 ---
 
 ## Appendix A: Tauri constraints that still apply
