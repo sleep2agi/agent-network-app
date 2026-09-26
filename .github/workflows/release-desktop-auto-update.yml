@@ -119,6 +119,12 @@ jobs:
           releaseBody: |-
             Signed and notarized stable update for macOS (Apple Silicon) and Windows (x64).
 
+            What's new in 0.2.109:
+            - 通知：免打扰时也能提醒（需授权一次）、任务完成/失败通知、设置里新增通知诊断。
+            - 修复冷启动时重复通知、以及服务器接口异常时回复不提醒的问题。
+            - 手机聊天顶部不再挤掉 agent 名字。
+            - 微信式多图选择（最多 9 张、原图开关、九宫格显示），手机端发送前自动压缩。
+
             What's new in 0.2.108:
             - 修复安卓通知没有提示音的问题；小米指引补充勿扰模式说明。
 
