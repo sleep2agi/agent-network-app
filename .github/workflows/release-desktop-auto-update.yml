@@ -119,6 +119,9 @@ jobs:
           releaseBody: |-
             Signed and notarized stable update for macOS (Apple Silicon) and Windows (x64).
 
+            What's new in 0.2.111:
+            - 聊天大图预览：安卓返回手势可以关闭；支持双指/双击缩放、左右滑动切换同一条消息里的图片、下滑关闭。
+
             What's new in 0.2.110:
             - 服务器页重新设计：在线/工作中/异常/离线状态卡（点击直达筛选）、分组在线比例、连接延迟；修复把总数当成在线数的问题。
 
