@@ -3,6 +3,8 @@ import { ActivityIndicator, Modal, Pressable, ScrollView, StyleSheet, View } fro
 import { Text } from './ui-text';
 import { checkDesktopUpdate, desktopUpdateSnapshot, installDesktopUpdate, latestReleaseNotes, subscribeDesktopUpdates } from './desktop-updater';
 import { colors, onThemeChange, spacing, themeMode } from './theme';
+import { desktopPromptView } from './update-prompt-model';
+import { APP_VERSION } from './version';
 
 export default function DesktopUpdatePrompt() {
   const update = useSyncExternalStore(subscribeDesktopUpdates, desktopUpdateSnapshot, desktopUpdateSnapshot);
@@ -16,12 +18,29 @@ export default function DesktopUpdatePrompt() {
   }, []);
 
   const visible = update.kind === 'available' || update.kind === 'downloading';
+  // 当前版本 → 新版本、更新来源(清单地址的主机:线路一 ModelScope / 线路二 GitHub)、下载进度与大小。
+  const view = desktopPromptView(update, APP_VERSION);
   return (
     <Modal visible={visible} transparent animationType="fade">
       <View style={styles.backdrop}>
         <View style={styles.card}>
           <Text style={styles.title}>发现新版本</Text>
-          <Text style={styles.version}>v{'version' in update ? update.version : ''}</Text>
+          <View style={styles.versions} testID="desktop-update-versions">
+            {view?.versions.current ? (
+              <>
+                <View style={styles.versionCol}>
+                  <Text style={styles.versionCaption}>当前版本</Text>
+                  <Text style={styles.versionOld}>{view.versions.current}</Text>
+                </View>
+                <Text style={styles.arrow}>→</Text>
+              </>
+            ) : null}
+            <View style={styles.versionCol}>
+              <Text style={styles.versionCaption}>新版本</Text>
+              <Text style={styles.versionNew}>{view?.versions.next ?? ''}</Text>
+            </View>
+          </View>
+          {view?.sourceLine ? <Text style={styles.meta} testID="desktop-update-source">{view.sourceLine}</Text> : null}
           {update.kind === 'available' ? (
             // 只放本版那一段,限高可滚动;按钮在滚动区外面,永远看得见。
             <ScrollView style={styles.notesScroll} contentContainerStyle={styles.notesContent} testID="desktop-update-notes">
@@ -29,7 +48,10 @@ export default function DesktopUpdatePrompt() {
             </ScrollView>
           ) : null}
           {update.kind === 'downloading' ? (
-            <View style={styles.progress}><ActivityIndicator color={colors.accent} /><Text style={styles.notes}>正在下载安装…{update.percent == null ? '' : ` ${update.percent}%`}</Text></View>
+            <View style={styles.progressBlock}>
+              <View style={styles.progress}><ActivityIndicator color={colors.accent} size="small" /><Text style={styles.progressText}>{view?.progressLine}</Text></View>
+              <View style={styles.bar}><View style={[styles.barFill, { width: `${update.percent ?? 0}%` }]} /></View>
+            </View>
           ) : (
             <Pressable style={styles.button} onPress={() => { void installDesktopUpdate(); }}>
               <Text style={styles.buttonText}>立即更新并重启</Text>
@@ -49,10 +71,21 @@ const makeStyles = () =>
   notesScroll: { maxHeight: 240, marginTop: spacing.md, borderRadius: 10, backgroundColor: colors.bg, borderWidth: 1, borderColor: colors.border },
   notesContent: { paddingHorizontal: spacing.md, paddingBottom: spacing.md },
   title: { color: colors.text, fontSize: 18, fontWeight: '600' },
-  version: { color: colors.accent, fontSize: 14, marginTop: spacing.xs },
+  versions: { flexDirection: 'row', alignItems: 'flex-end', gap: spacing.md, marginTop: spacing.md },
+  versionCol: { gap: 2 },
+  versionCaption: { color: colors.textMuted, fontSize: 11 },
+  versionOld: { color: colors.textSecondary, fontSize: 17, lineHeight: 26, fontWeight: '500' },
+  versionNew: { color: colors.accent, fontSize: 20, lineHeight: 26, fontWeight: '600' },
+  // 两列数值同一行高(26)→ 标题行、数值行、箭头各自同一条中线。
+    arrow: { color: colors.textMuted, fontSize: 17, lineHeight: 26 },
+  meta: { color: colors.textSecondary, fontSize: 12, marginTop: spacing.xs },
+  progressBlock: { marginTop: spacing.lg },
+  progressText: { color: colors.textSecondary, fontSize: 13, flexShrink: 1 },
+  bar: { height: 6, borderRadius: 3, backgroundColor: colors.border, marginTop: spacing.sm, overflow: 'hidden' },
+  barFill: { height: 6, backgroundColor: colors.accent },
   notes: { color: colors.textSecondary, fontSize: 13, lineHeight: 19, marginTop: spacing.md },
   progress: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
-  button: { marginTop: spacing.lg, backgroundColor: colors.accent, borderRadius: 10, paddingVertical: 12, alignItems: 'center' },
+  button: { marginTop: spacing.lg, height: 44, backgroundColor: colors.accent, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
   buttonText: { color: '#fff', fontSize: 14, fontWeight: '600' },
   hint: { color: colors.textMuted, fontSize: 10, lineHeight: 15, marginTop: spacing.md },
 });

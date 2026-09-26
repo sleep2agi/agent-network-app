@@ -38,11 +38,14 @@ import {
   type AndroidReleaseVerdict,
   type AndroidUpdateState,
   type ApkAsset,
+  type RouteAttempt,
 } from './android-update-core';
 import { sha256Chunked } from './sha256';
+import { apkUrlFor, apkUrlForAsset, checkOrder, createRoutePrefsStore, memoryRouteStorage, routeOrder, type RoutePrefsStore, type UpdateRoute } from './update-route';
+import { routePrefs } from './update-route-prefs';
 export type { AndroidUpdateState } from './android-update-core';
 
-type Release = { version: string; notes: string; apk: ApkAsset; releaseUrl: string };
+type Release = { version: string; notes: string; apk: ApkAsset; releaseUrl: string; checkRoute?: UpdateRoute };
 
 let state: AndroidUpdateState = { kind: 'idle' };
 let lastCheckedAt: number | undefined;
@@ -50,9 +53,14 @@ let checkInFlight: Promise<AndroidUpdateState> | undefined;
 let resumable: any;
 let resumableVersion: string | undefined;
 let resumableUrl: string | undefined;
-/** 本版本下一次从第几个来源开始下(0 = 镜像,1 = GitHub)。停滞续传时保持不变;全部失败后回到 0。 */
+/** 本版本下一次从线路顺序里的第几条开始下(0 = 首选)。停滞续传时保持不变;全部失败后回到 0。 */
 let sourceIndex = 0;
-let sourceVersion: string | undefined;
+/** 版本 + 首选线路;任一变了(新版本 / 用户换了线路)就从首选重新来。 */
+let sourceKey: string | undefined;
+/** 用户在弹窗里点选的线路,只对这一次更新有效(换版本清掉);持久的偏好在设置里。 */
+let chosenRoute: UpdateRoute | undefined;
+let chosenForVersion: string | undefined;
+let prefs: RoutePrefsStore = routePrefs;
 /** DownloadResumable 的进度回调在创建时就定死了;续传时要换成新一轮的处理函数(停滞计时器在里面)。 */
 let progressRef: ((p: { totalBytesWritten: number; totalBytesExpectedToWrite: number }) => void) | undefined;
 let dismissed = false;
@@ -113,7 +121,29 @@ export const subscribeAndroidUpdates = (listener: () => void) => {
 };
 
 const releaseOf = (s: AndroidUpdateState): Release | undefined =>
-  'apk' in s ? { version: s.version, notes: s.notes, apk: s.apk, releaseUrl: s.releaseUrl } : undefined;
+  'apk' in s ? { version: s.version, notes: s.notes, apk: s.apk, releaseUrl: s.releaseUrl, checkRoute: s.checkRoute } : undefined;
+
+/** 这次下载依次要走的线路(总是两条,首选在前)。弹窗里的分段选择就显示第一条。 */
+export function androidDownloadRoutes(): [UpdateRoute, UpdateRoute] {
+  const rel = releaseOf(state);
+  const { pref, lastGood } = prefs.snapshot();
+  const chosen = rel && chosenForVersion === rel.version ? chosenRoute : undefined;
+  return routeOrder(pref, lastGood, chosen, rel?.checkRoute ?? rel?.apk.source ?? null);
+}
+/** useSyncExternalStore 用:首选线路(字符串,引用稳定)。 */
+export const androidPreferredRoute = (): UpdateRoute => androidDownloadRoutes()[0];
+
+/** 弹窗里点「线路一 / 线路二」。下载中不能换(弹窗那时不给点)。 */
+export function chooseAndroidUpdateRoute(route: UpdateRoute) {
+  const rel = releaseOf(state);
+  if (!rel || state.kind === 'downloading') return;
+  chosenRoute = route;
+  chosenForVersion = rel.version;
+  listeners.forEach(listener => listener());
+}
+
+/** 线路偏好/上次成功线路变了(设置页改的)→ 弹窗的分段选择跟着变。 */
+prefs.subscribe(() => listeners.forEach(listener => listener()));
 
 /** 关掉弹窗(稍后再说)。下载中关不掉 —— 那时弹窗上没有这个按钮。 */
 export function dismissAndroidUpdate() {
@@ -186,23 +216,47 @@ async function checkGithub(fetchImpl: typeof fetch, currentVersion: string): Pro
   return evaluateAndroidRelease(await withTimeout(res.json(), timeouts.github), currentVersion);
 }
 
-/** 镜像优先,GitHub 兜底。规则见文件头。 */
-async function resolveUpdate(fetchImpl: typeof fetch, currentVersion: string): Promise<AndroidReleaseVerdict> {
+type Resolved = { verdict: AndroidReleaseVerdict; route?: UpdateRoute };
+
+/**
+ * 默认镜像优先,GitHub 兜底(规则见文件头)。设置里明确选了「线路二」时反过来:先问 GitHub,失败再问镜像。
+ * 返回值带上是哪条线路给出的结论(设置页显示「刚刚检查 · 线路一」)。
+ */
+async function resolveUpdate(fetchImpl: typeof fetch, currentVersion: string): Promise<Resolved> {
+  if (checkOrder(prefs.snapshot().pref)[0] === 'github') {
+    let ghError: unknown;
+    try {
+      const gh = await checkGithub(fetchImpl, currentVersion);
+      if (gh.kind !== 'error') return { verdict: gh, route: 'github' };
+      ghError = new Error(gh.message);
+    } catch (error) {
+      ghError = error;
+      console.warn('[android-update] GitHub check failed, asking the mirror', (error as any)?.message || error);
+    }
+    let mirror: MirrorResult;
+    try {
+      mirror = await checkMirror(fetchImpl, currentVersion);
+    } catch {
+      throw ghError;
+    }
+    if (mirror.kind !== 'incomplete') return { verdict: mirror, route: 'mirror' };
+    return { verdict: { kind: 'error', message: `新版本 v${mirror.version} 的安卓安装包正在同步到国内镜像,请几分钟后再试` } };
+  }
   let mirror: MirrorResult | undefined;
   try {
     mirror = await checkMirror(fetchImpl, currentVersion);
   } catch (error) {
     console.warn('[android-update] mirror check failed, asking GitHub', (error as any)?.message || error);
   }
-  if (mirror && mirror.kind !== 'incomplete') return mirror;
+  if (mirror && mirror.kind !== 'incomplete') return { verdict: mirror, route: 'mirror' };
   try {
     const gh = await checkGithub(fetchImpl, currentVersion);
-    if (!mirror || gh.kind === 'available') return gh;
+    if (!mirror || gh.kind === 'available') return { verdict: gh, route: 'github' };
   } catch (error) {
     if (!mirror) throw error;
   }
   // 镜像已经知道有新版本、GitHub 这次没给出可装的包(限流/失败/还没挂 APK):告诉用户在同步,而不是「已是最新」。
-  return { kind: 'error', message: `新版本 v${mirror.version} 的安卓安装包正在同步到国内镜像,请几分钟后再试` };
+  return { verdict: { kind: 'error', message: `新版本 v${mirror.version} 的安卓安装包正在同步到国内镜像,请几分钟后再试` } };
 }
 
 /** 点「软件更新」那一行。结果一定落到一个看得见的状态上(同桌面端 #341 的约定)。 */
@@ -220,15 +274,17 @@ export async function checkAndroidUpdate(
   checkInFlight = (async () => {
     publish({ kind: 'checking' });
     try {
-      const verdict = await atLeast(resolveUpdate(opts.fetchImpl ?? fetch, currentVersion), opts.minVisibleMs ?? 700, {
+      await prefs.hydrate().catch(() => undefined);
+      const { verdict, route } = await atLeast(resolveUpdate(opts.fetchImpl ?? fetch, currentVersion), opts.minVisibleMs ?? 700, {
         now: () => Date.now(),
         sleep: opts.sleep ?? (ms => new Promise(resolve => setTimeout(resolve, ms))),
       });
       lastCheckedAt = Date.now();
       if (verdict.kind === 'available') dismissed = false;
-      return publish(verdict.kind === 'available'
-        ? { kind: 'available', version: verdict.version, notes: verdict.notes, apk: verdict.apk, releaseUrl: verdict.releaseUrl }
-        : verdict);
+      if (verdict.kind === 'available') {
+        return publish({ kind: 'available', version: verdict.version, notes: verdict.notes, apk: verdict.apk, releaseUrl: verdict.releaseUrl, checkRoute: route });
+      }
+      return publish(verdict.kind === 'up-to-date' ? { ...verdict, route } : verdict);
     } catch (error: any) {
       lastCheckedAt = Date.now();
       return publish({ kind: 'error', message: error?.message || String(error), rateLimitResetAt: error?.rateLimitResetAt });
@@ -240,13 +296,16 @@ export async function checkAndroidUpdate(
 }
 
 /**
- * 下载安装包。失败后再调一次 = 停滞的从断点续传(同一次运行、同一来源);硬失败的已经在这一次里换过来源了。
- * 装之前一定校验 sha256:镜像来源对 SHA256SUMS,GitHub 来源对资产 digest。没有期望值 / 算不出 / 不一致 → 不装。
+ * 下载安装包。线路顺序见 androidDownloadRoutes()(首选 + 另一条自动兜底);下载成功的线路记为本机「上次成功线路」。
+ * 失败后再调一次 = 停滞的从断点续传(同一次运行、同一线路);硬失败的已经在这一次里换过线路了。
+ * 装之前一定校验 sha256:镜像来源对 SHA256SUMS,GitHub 来源对资产 digest(两条线路字节相同,同一个值)。
+ * 没有期望值 / 算不出 / 不一致 → 不装。
  */
 export async function downloadAndroidUpdate(): Promise<void> {
   const rel = releaseOf(state);
   if (!rel || state.kind === 'downloading') return;
   const { FileSystem, hashFile } = await deps();
+  await prefs.hydrate().catch(() => undefined);
   const expectedSha = rel.apk.sha256;
   if (!expectedSha) {
     publish({ ...rel, kind: 'download-error', message: downloadErrorReason('no sha256') });
@@ -254,11 +313,16 @@ export async function downloadAndroidUpdate(): Promise<void> {
   }
   const dir = `${FileSystem.cacheDirectory}updates/`;
   const fileUri = `${dir}${apkCacheFileName(rel.version)}`;
-  const sources = [rel.apk.url, rel.apk.fallbackUrl].filter((u): u is string => !!u);
-  if (sourceVersion !== rel.version) { sourceVersion = rel.version; sourceIndex = 0; }
+  const order = androidDownloadRoutes();
+  const sources = order
+    .map(route => ({ route, url: apkUrlForAsset(route, rel.version, rel.apk) }))
+    .filter((x): x is { route: UpdateRoute; url: string } => !!x.url);
+  const key = `${rel.version}|${order[0]}`;
+  if (sourceKey !== key) { sourceKey = key; sourceIndex = 0; }
+  let progress: DownloadExtra = { route: sources[sourceIndex]?.route };
 
   const verify = async (): Promise<boolean> => {
-    publish({ ...rel, kind: 'downloading', percent: 100, verifying: true });
+    publish({ ...rel, ...progress, kind: 'downloading', percent: 100, verifying: true });
     try {
       return (await hashFile(fileUri, rel.apk.size)) === expectedSha;
     } catch (error: any) {
@@ -285,15 +349,23 @@ export async function downloadAndroidUpdate(): Promise<void> {
   }
 
   let firstError: string | undefined;
+  const attempts: RouteAttempt[] = [];
+  const fail = (raw: string, route: UpdateRoute) => {
+    firstError ??= raw;
+    attempts.push({ route, reason: downloadErrorReason(raw) });
+  };
   for (let i = sourceIndex; i < sources.length; i++) {
     sourceIndex = i;
-    const outcome = await downloadFrom(sources[i], fileUri, rel);
+    const { route, url } = sources[i];
+    // 从第二条起 = 首选失败后自动切换:弹窗写明「线路一下载失败(原因),已自动切换到线路二」。
+    progress = { route, fallbackFrom: attempts.length ? attempts[attempts.length - 1] : undefined };
+    const outcome = await downloadFrom(url, fileUri, rel, progress);
     if (outcome.kind === 'stalled') {
-      publish({ ...rel, kind: 'download-error', message: downloadErrorReason('stalled') });
+      publish({ ...rel, kind: 'download-error', message: downloadErrorReason('stalled'), attempts: [...attempts, { route, reason: downloadErrorReason('stalled') }] });
       return;
     }
     if (outcome.kind === 'failed') {
-      firstError ??= outcome.message;
+      fail(outcome.message, route);
       continue;
     }
     let ok = false;
@@ -308,21 +380,24 @@ export async function downloadAndroidUpdate(): Promise<void> {
     }
     if (ok) {
       sourceIndex = 0;
-      publish({ ...rel, kind: 'ready', fileUri, installAttempted: false });
+      await prefs.recordSuccess(route).catch(() => undefined);
+      publish({ ...rel, kind: 'ready', fileUri, installAttempted: false, route });
       await installAndroidUpdate();
       return;
     }
     await FileSystem.deleteAsync(fileUri, { idempotent: true }).catch(() => undefined);
-    firstError ??= 'sha256 mismatch';
+    fail('sha256 mismatch', route);
   }
-  sourceIndex = 0; // 下次重试从镜像重新来
-  publish({ ...rel, kind: 'download-error', message: downloadErrorReason(firstError) });
+  sourceIndex = 0; // 下次重试从首选线路重新来
+  publish({ ...rel, kind: 'download-error', message: downloadErrorReason(firstError), attempts });
 }
+
+type DownloadExtra = { route?: UpdateRoute; fallbackFrom?: RouteAttempt };
 
 type DownloadOutcome = { kind: 'done' } | { kind: 'stalled' } | { kind: 'failed'; message: string };
 
 /** 从一个地址下到 fileUri。停滞 → 保留断点;其他失败 → 丢掉断点、删掉半截文件(下一个来源从头下)。 */
-async function downloadFrom(url: string, fileUri: string, rel: Release): Promise<DownloadOutcome> {
+async function downloadFrom(url: string, fileUri: string, rel: Release, extra: DownloadExtra): Promise<DownloadOutcome> {
   const { FileSystem } = await deps();
   let stallTimer: ReturnType<typeof setTimeout> | undefined;
   let stalled = false;
@@ -339,12 +414,15 @@ async function downloadFrom(url: string, fileUri: string, rel: Release): Promise
     await FileSystem.deleteAsync(fileUri, { idempotent: true }).catch(() => undefined);
   };
   try {
-    publish({ ...rel, kind: 'downloading', percent: 0 });
+    publish({ ...rel, ...extra, kind: 'downloading', percent: 0, written: 0, total: rel.apk.size });
     const onProgress = (p: { totalBytesWritten: number; totalBytesExpectedToWrite: number }) => {
       armStall();
       const expected = p.totalBytesExpectedToWrite > 0 ? p.totalBytesExpectedToWrite : rel.apk.size;
       const percent = downloadPercent(p.totalBytesWritten, expected);
-      if (state.kind === 'downloading' && state.percent !== percent) publish({ ...rel, kind: 'downloading', percent });
+      // 只在百分比变了时重画(77 MB 的回调很密);已下字节随之更新。
+      if (state.kind === 'downloading' && state.percent !== percent) {
+        publish({ ...rel, ...extra, kind: 'downloading', percent, written: p.totalBytesWritten, total: expected });
+      }
     };
     progressRef = onProgress;
     armStall();
@@ -422,15 +500,30 @@ export async function openUnknownSourcesSettings(): Promise<void> {
   }
 }
 
-/** 「在浏览器中下载」:本版的首选直链(镜像来源时是 ModelScope 带版本号的地址);没有就镜像 latest 那份。 */
-export async function openApkInBrowser(): Promise<void> {
+/**
+ * 「在浏览器中下载」:指定线路上**带版本号**的直链(ModelScope / GitHub),经 Linking 打开
+ * (地址里有下划线,不能当 Markdown 显示,会被吃成斜体)。不传线路 = 当前首选线路;没有版本信息时退回镜像 latest。
+ */
+export async function openApkInBrowser(route?: UpdateRoute): Promise<void> {
   const rel = releaseOf(state);
   const { openURL } = await deps();
-  await openURL(rel?.apk.url || MIRROR_LATEST_APK_URL);
+  if (!rel) { await openURL(MIRROR_LATEST_APK_URL); return; }
+  const r = route ?? androidDownloadRoutes()[0];
+  await openURL(apkUrlForAsset(r, rel.version, rel.apk) ?? apkUrlFor(r, rel.version));
+}
+
+/** web 验收夹具用(UpdatePromptFixtureScreen):直接摆出一个状态来截图。生产代码不调用。 */
+export function __showAndroidUpdateForFixture(next: AndroidUpdateState, opts: { lastCheckedAt?: number } = {}) {
+  lastCheckedAt = opts.lastCheckedAt;
+  dismissed = false;
+  publish(next);
 }
 
 /** 测试用:把模块状态复位。 */
-export function __resetAndroidUpdaterForTest(injected?: Deps, opts: { stallMs?: number; timeouts?: Partial<typeof DEFAULT_TIMEOUTS> } = {}) {
+export function __resetAndroidUpdaterForTest(
+  injected?: Deps,
+  opts: { stallMs?: number; timeouts?: Partial<typeof DEFAULT_TIMEOUTS>; routeStore?: RoutePrefsStore } = {},
+) {
   testDeps = injected;
   stallMs = opts.stallMs ?? 45_000;
   timeouts = { ...DEFAULT_TIMEOUTS, ...opts.timeouts };
@@ -441,6 +534,11 @@ export function __resetAndroidUpdaterForTest(injected?: Deps, opts: { stallMs?: 
   resumableVersion = undefined;
   resumableUrl = undefined;
   sourceIndex = 0;
-  sourceVersion = undefined;
+  sourceKey = undefined;
+  chosenRoute = undefined;
+  chosenForVersion = undefined;
+  // 每个用例一个干净的内存 store(否则上一个用例记下的「上次成功线路」会改变下一个用例的线路顺序)。
+  prefs = opts.routeStore ?? createRoutePrefsStore(memoryRouteStorage());
+  prefs.subscribe(() => listeners.forEach(listener => listener()));
   dismissed = false;
 }

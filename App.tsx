@@ -57,6 +57,7 @@ import { openRememberedChatWindow } from './src/desktop-chat-windows';
 import { activateHubProfile, LOCAL_HUB_PROFILE_ID, localHubStatus, startLocalHub } from './src/local-hub';
 import UnreadBadgeFixtureScreen, { readWebFixture } from './src/UnreadBadgeFixtureScreen';
 import NotifySettingsFixtureScreen, { readNotifyFixture } from './src/NotifySettingsFixtureScreen';
+import UpdatePromptFixtureScreen, { readUpdatePromptFixture } from './src/UpdatePromptFixtureScreen';
 import { chooseAppLayout, LIST_PANE_DEFAULT_WIDTH, paneSelectionFor, twoPaneListWidth } from './src/wide-layout';
 import TwoPaneDivider from './src/TwoPaneDivider';
 import { loadListPaneWidth, saveListPaneWidth } from './src/agent-list-prefs';
@@ -152,6 +153,16 @@ export default function App() {
     return (
       <SafeAreaProvider>
         <NotifySettingsFixtureScreen fixture={notifyFixture} />
+      </SafeAreaProvider>
+    );
+  }
+
+  const updateFixture = readUpdatePromptFixture();
+  if (updateFixture) {
+    if (themeMode() !== updateFixture.theme) setThemeMode(updateFixture.theme);
+    return (
+      <SafeAreaProvider>
+        <UpdatePromptFixtureScreen fixture={updateFixture} />
       </SafeAreaProvider>
     );
   }

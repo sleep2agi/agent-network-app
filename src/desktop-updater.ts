@@ -1,6 +1,30 @@
 import { stopLocalHub } from './local-hub';
-import { atLeast, type DesktopUpdateState } from './update-check-state';
+import { atLeast, type DesktopUpdateSource, type DesktopUpdateState } from './update-check-state';
 export type { DesktopUpdateState } from './update-check-state';
+
+/**
+ * 这次更新包走哪条线路。Tauri updater 按 tauri.conf.json 的 endpoints 顺序取清单(anet.sh → ModelScope),
+ * 插件的 JS `check()` 不能改 endpoints,所以桌面端**不做**强制线路,只把实际来源写出来:
+ *   anet.sh 的 latest.json 平台地址指向 github.com/…/releases/download → 线路二(GitHub);
+ *   ModelScope 的 latest.json 被 modelscope-mirror 改写成 modelscope.cn/…/desktop/<ver>/… → 线路一。
+ * 看的是**本机平台**用到的那些地址:全是同一主机才下结论,混着或认不出 → undefined(不猜)。
+ */
+export function desktopUpdateSource(rawJson: unknown): DesktopUpdateSource | undefined {
+  const platforms = (rawJson as { platforms?: unknown } | null | undefined)?.platforms;
+  if (!platforms || typeof platforms !== 'object') return undefined;
+  const hosts = new Set<DesktopUpdateSource | 'other'>();
+  for (const entry of Object.values(platforms as Record<string, { url?: unknown }>)) {
+    const url = typeof entry?.url === 'string' ? entry.url : '';
+    let host = '';
+    try { host = new URL(url).hostname.toLowerCase(); } catch { hosts.add('other'); continue; }
+    if (host === 'modelscope.cn' || host.endsWith('.modelscope.cn')) hosts.add('mirror');
+    else if (host === 'github.com' || host.endsWith('.github.com') || host === 'objects.githubusercontent.com') hosts.add('github');
+    else hosts.add('other');
+  }
+  if (hosts.size !== 1) return undefined;
+  const [only] = [...hosts];
+  return only === 'other' ? undefined : only;
+}
 
 /**
  * 更新提示只展示**本次**新版本那一段(Vincent 2026-09-06 截图:发布说明是累计的,8 个版本全铺在
@@ -71,6 +95,8 @@ export async function checkDesktopUpdate(
         kind: 'available',
         version: pendingUpdate.version,
         notes: pendingUpdate.body || '此版本包含功能改进和问题修复。',
+        currentVersion: typeof pendingUpdate.currentVersion === 'string' ? pendingUpdate.currentVersion : undefined,
+        source: desktopUpdateSource(pendingUpdate.rawJson),
       });
     } catch (error: any) {
       lastCheckedAt = Date.now();
@@ -85,6 +111,7 @@ export async function checkDesktopUpdate(
 export async function installDesktopUpdate(): Promise<void> {
   if (!pendingUpdate) throw new Error('没有待安装的更新');
   const version = pendingUpdate.version as string;
+  const from = state.kind === 'available' ? { currentVersion: state.currentVersion, source: state.source } : {};
   let downloaded = 0;
   let total: number | undefined;
   try {
@@ -94,7 +121,10 @@ export async function installDesktopUpdate(): Promise<void> {
       publish({
         kind: 'downloading',
         version,
+        ...from,
         percent: total ? Math.min(100, Math.round(downloaded * 100 / total)) : undefined,
+        downloaded,
+        total,
       });
     });
     // app#246:重启前先停掉本 app 托管的本地 Hub,否则旧版 sidecar 会以孤儿身份继续占着端口和
@@ -106,4 +136,9 @@ export async function installDesktopUpdate(): Promise<void> {
     publish({ kind: 'error', message: error?.message || String(error) });
     throw error;
   }
+}
+
+/** web 验收夹具用(UpdatePromptFixtureScreen):直接摆出一个状态来截图。生产代码不调用。 */
+export function __showDesktopUpdateForFixture(next: DesktopUpdateState) {
+  publish(next);
 }
