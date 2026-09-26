@@ -6,8 +6,9 @@
 //   [ ⤢ ]  ← top-left of the row, only when the input is taller than 3 lines
 //
 // The right slot is ONE place that shows either ＋ (opens the #386 panel) or a labelled
-// 「发送」 button — never both, never an arrow. Voice mode always shows ＋ there (the
-// hold bar takes the middle; nothing typed can be sent from voice mode).
+// 「发送」 button — never both, never an arrow. Voice mode follows the same rule: after
+// hold-to-talk the recognized text sits in a draft card above the bar (the keyboard is NOT
+// opened), so the slot turns into 「发送」 and sends it straight from voice mode.
 //
 // The 😊 button from the screenshots is deliberately left out: the system keyboard
 // already has an emoji key, and a second emoji panel would fight the ＋ panel for the
@@ -28,8 +29,9 @@ export interface RightSlotInput {
 }
 
 /** Which button sits in the right slot. Text that is only whitespace does not count. */
-export function composerRightSlot({ draft, attachmentCount, voiceMode }: RightSlotInput): ComposerRightSlot {
-  if (voiceMode) return 'plus';
+export function composerRightSlot({ draft, attachmentCount }: RightSlotInput): ComposerRightSlot {
+  // voiceMode no longer short-circuits to ＋: the voice draft card shows the text, and 发送
+  // must be reachable without opening the keyboard (owner:「别直接把输入法弹出来」).
   if ((draft || '').trim().length > 0) return 'send';
   if (attachmentCount > 0) return 'send';
   return 'plus';

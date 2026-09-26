@@ -19,7 +19,7 @@ const lib = read('src-tauri/src/lib.rs');
 // ── 聊天页 ──
 ck('ChatScreen 用 useVoiceInput', chat.includes("import { useVoiceInput } from './useVoiceInput'") && /const voice = useVoiceInput\(/.test(chat));
 ck('识别结果经 insertRecognized 进草稿(setDraft),不走 submit', /onInsert: text => \{\s*setDraft\(d => insertRecognized\(d, text\)\);/.test(chat) && !/onInsert:[^}]*submit/.test(chat));
-ck('识别完(手机)切回键盘并聚焦输入框,不写回偏好', /if \(!desktop\) \{ focusAfterInsertRef\.current = true; setInputMode\('keyboard'\); \}/.test(chat) && chat.includes('mainComposerRef.current?.focus()'));
+ck('识别完留在语音模式、不聚焦(afterRecognized),详见 voice-draft-card.test.ts', /onInsert: text => \{\s*setDraft\(d => insertRecognized\(d, text\)\);\s*applyComposerTransition\(afterRecognized\(\)\);\s*\}/.test(chat));
 const rowAt = chat.indexOf('<View style={[styles.inputRow,');
 const mobileRow = chat.slice(rowAt, chat.indexOf('{plusMenuOpen ? (', rowAt));
 const toggleAt = mobileRow.indexOf('<ComposerModeToggle');

@@ -188,3 +188,42 @@ export function hapticFor(prev: VoicePhase, next: VoicePhase): 'press' | 'cancel
   if (prev !== 'cancelArmed' && next === 'cancelArmed') return 'cancelArmed';
   return null;
 }
+
+// ── 语音模式下的草稿卡片(owner:「按住说话之后，别直接把输入法弹出来」,微信同款) ──
+//
+// 松手识别完:**留在语音模式、不聚焦输入框**(聚焦 = 安卓软键盘弹出)。识别文字接进草稿,
+// 在「按住 说话」条上方的一张小卡片里显示;右格因为有草稿而变「发送」,点它直接发、全程不弹键盘。
+// 点卡片 = 唯一一条会弹键盘的路:切到键盘模式并聚焦(临时状态,不写回偏好,记住的仍是语音)。
+// 再按住说话 → 接在已有草稿后面(insertRecognized);上滑取消 → 草稿原样不动。
+
+export type ComposerModeTransition = {
+  /** 切到哪个输入方式(null = 不变)。 */
+  mode: ComposerInputMode | null;
+  /** 要不要在输入框挂上后 focus()(= 弹软键盘)。 */
+  focusInput: boolean;
+  /** 要不要写回每设备偏好。 */
+  persist: boolean;
+};
+
+const STAY: ComposerModeTransition = { mode: null, focusInput: false, persist: false };
+
+/**
+ * 识别结果进草稿之后输入区怎么动。手机 / 双栏:什么都不动(留在语音模式、不 focus)。
+ * 桌面没有语音模式(工具栏麦克风),同样不动。
+ */
+export function afterRecognized(): ComposerModeTransition {
+  return STAY;
+}
+
+/** 点语音草稿卡片:切到键盘并聚焦,不写偏好。 */
+export function onVoiceDraftCardTap(): ComposerModeTransition {
+  return { mode: 'keyboard', focusInput: true, persist: false };
+}
+
+/** 语音模式下草稿卡片要不要画:有非空白草稿才画。 */
+export function showVoiceDraftCard(voiceMode: boolean, draft: string): boolean {
+  return voiceMode && (draft || '').trim().length > 0;
+}
+
+/** 卡片最多直接显示几行,再多就在卡片里滚动。 */
+export const VOICE_DRAFT_CARD_MAX_LINES = 4;
