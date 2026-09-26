@@ -2,7 +2,7 @@
 // text). Each criterion is first fed a known-bad snippet (it must go red), then run on the repo.
 // ck style: self-executing, exit 1 on any failure.
 import { readdirSync, readFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { join, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 let pass = 0;
@@ -75,8 +75,13 @@ ck('criterion: factory + onThemeChange rebuild is clean', frozenScaleValues("con
 ck('criterion: plain-object factory (rowStyles) rebuild is clean', frozenScaleValues("const makeRowStyles = () => ({\n  row: { minHeight: ds(68) },\n} as const);\nlet rowStyles = makeRowStyles();\nonThemeChange(() => { rowStyles = makeRowStyles(); });\n").length === 0);
 
 // ── collection ──
-const files = ['App.tsx', ...readdirSync(join(root, 'src')).filter(f => /\.tsx?$/.test(f) && !f.includes('.test.')).map(f => join('src', f))];
+// Collected paths are normalised to POSIX here, once: `join` gives `src\icons.tsx` on Windows, and every
+// comparison below (exclusions, key surfaces, failure listings) is written with '/'. `read()` joins
+// them back onto `root`, which accepts '/' on every platform.
+export const toPosix = (p: string): string => p.split(sep).join('/');
+const files = ['App.tsx', ...readdirSync(join(root, 'src')).filter(f => /\.tsx?$/.test(f) && !f.includes('.test.')).map(f => toPosix(join('src', f)))];
 ck(`collection: ${files.length} source files (≥ 150)`, files.length >= 150);
+ck('collection: every path is POSIX (no platform separator leaks into comparisons)', files.every(f => !f.includes('\\')), files.filter(f => f.includes('\\')).slice(0, 3).join(', '));
 ck('collection includes the key surfaces', ['src/AgentsScreen.tsx', 'src/MobileNavRail.tsx', 'src/ChatScreen.tsx', 'src/SettingsScreen.tsx'].every(f => files.includes(f)));
 
 // ── repo scan ──
