@@ -148,11 +148,16 @@ export function toggleComposerInputMode(m: ComposerInputMode): ComposerInputMode
 }
 
 /**
- * 切换按钮显示的是「点了会切到哪」:键盘模式下显示麦克风,语音模式下显示键盘(微信同款)。
+ * 切换按钮显示的是「点了会切到哪」:键盘模式下显示语音(🔊 声波,微信同款),语音模式下显示键盘。
+ * 键盘模式下**不再用麦克风**:麦克风留给输入框里那个「按住说话,插到光标处」的小按钮,
+ * 一行里只有一个麦克风(协调者按微信对齐规则定,#436)。
  */
-export function toggleButtonShows(m: ComposerInputMode): 'mic' | 'keyboard' {
-  return m === 'voice' ? 'keyboard' : 'mic';
+export function toggleButtonShows(m: ComposerInputMode): 'voice' | 'keyboard' {
+  return m === 'voice' ? 'keyboard' : 'voice';
 }
+
+/** 键盘模式下切换按钮的图标(Ionicons 音量 / 声波族;外面的圆圈是按钮自己的描边)。 */
+export const VOICE_TOGGLE_ICON = 'volume-high-outline';
 
 export type HoldBarTone = 'idle' | 'pressed' | 'cancel' | 'busy';
 

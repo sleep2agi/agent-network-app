@@ -12,7 +12,7 @@ import { Ionicons } from './icons';
 import { colors, onThemeChange, spacing } from './theme';
 import { ds, uiScale } from './ui-scale';
 import { composerControlSize, composerFieldMicSize, FIELD_MIC_INSET } from './composer-row-layout';
-import { cancelZoneLabel, formatElapsed, holdBarLabel, holdBarTone, overlayHint, toggleButtonShows, VOICE_DRAFT_CARD_MAX_LINES, type ComposerInputMode } from './voice-input-model';
+import { cancelZoneLabel, formatElapsed, holdBarLabel, holdBarTone, overlayHint, toggleButtonShows, VOICE_DRAFT_CARD_MAX_LINES, VOICE_TOGGLE_ICON, type ComposerInputMode } from './voice-input-model';
 import type { VoiceInput } from './useVoiceInput';
 
 type MicHandlers = VoiceInput['micHandlers'];
@@ -85,21 +85,21 @@ function KeyboardGlyph({ color }: { color: string }) {
   );
 }
 
-/** 输入行最左边的切换按钮:键盘模式显示 🎤(点了进语音),语音模式显示 ⌨(点了回键盘)。 */
+/** 输入行最左边的切换按钮:键盘模式显示 🔊(圆圈里的声波,点了进语音),语音模式显示 ⌨(点了回键盘)。 */
 export function ComposerModeToggle({ mode, onToggle, disabled }: { mode: ComposerInputMode; onToggle: () => void; disabled?: boolean }) {
   const shows = toggleButtonShows(mode);
   return (
     <Pressable
       accessibilityRole="button"
-      accessibilityLabel={shows === 'mic' ? '切换到按住说话' : '切换到键盘输入'}
+      accessibilityLabel={shows === 'voice' ? '切换到按住说话' : '切换到键盘输入'}
       disabled={disabled}
       onPress={onToggle}
       hitSlop={6}
       testID="composer-mode-toggle"
       style={({ pressed }) => [styles.toggle, pressed && { opacity: 0.6 }, disabled && { opacity: 0.4 }]}
     >
-      {shows === 'mic'
-        ? <Ionicons name="mic-outline" size={20} color={colors.text} />
+      {shows === 'voice'
+        ? <Ionicons name={VOICE_TOGGLE_ICON} size={20} color={colors.text} />
         : <KeyboardGlyph color={colors.text} />}
     </Pressable>
   );
