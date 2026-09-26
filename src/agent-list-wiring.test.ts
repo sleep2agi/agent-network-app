@@ -69,7 +69,7 @@ ck('header shows online/total', agents.includes('{section.online}/{section.total
 // ── search / + / sorting kept ──
 ck('search input still bound to query', (agents.match(/value=\{query\}/g) ?? []).length === 2 && (agents.match(/onChangeText=\{setQuery\}/g) ?? []).length === 2);
 ck('+ still opens the picker in both headers', (agents.match(/onPress=\{onOpenPicker\}/g) ?? []).length === 2);
-ck('sorting / pins / 新消息 still from buildSections', agents.includes('buildSections(sessions, query, {') && agents.includes('sort: { pinned: alias => pinnedAliases.includes(alias) }'));
+ck('sorting / pins / 新消息 still from buildSections', agents.includes('buildSections(applyAgentFilter(sessions, activeFilter), query, {') && agents.includes('sort: { pinned: alias => pinnedAliases.includes(alias) }'));
 
 // ── desktop (Tauri) sidebar row unchanged ──
 const deskRow = agents.slice(agents.indexOf('const renderCompactRow = (item: Session) => {'), agents.indexOf('const renderPhoneRow'));

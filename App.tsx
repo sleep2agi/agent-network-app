@@ -25,6 +25,7 @@ import { usePoll } from './src/usePoll'; // R1 avatar 30s hydrate poll (main's A
 import ChatScreen, { clearChatConversationCache } from './src/ChatScreen';
 import MessagesScreen from './src/MessagesScreen';
 import ServerScreen from './src/ServerScreen';
+import { agentListScreen, type AgentListFilter } from './src/server-stats';
 import ServerSidebar, { type ServerSection } from './src/ServerSidebar';
 import HostSupervisorPickerScreen from './src/HostSupervisorPickerScreen';
 import CreateNodeWizardScreen from './src/CreateNodeWizardScreen';
@@ -76,12 +77,12 @@ import { contentWidthBesideRail, navActiveKey, navChromeFor, railShowsBrand, scr
 
 type Screen =
   | { name: 'login' }
-  | { name: 'agents' }
+  | { name: 'agents'; filter?: AgentListFilter }  // filter: 服务器页的状态卡片 / 分组行带过来的
   | { name: 'tasks' }
   | { name: 'scheduled' }
   | { name: 'messages' }
   | { name: 'server' }
-  | { name: 'serverNodes' }
+  | { name: 'serverNodes'; filter?: AgentListFilter }
   | { name: 'serverNodeDetail'; alias: string }
   | { name: 'settings' }
   | { name: 'chat'; alias: string }
@@ -604,6 +605,7 @@ function AppRoot() {
                   <View style={[styles.twoPaneList, { width: paneListWidth }]} testID="two-pane-list">
                     <AgentsScreen
                       cfg={cfg}
+                      filter={screen.name === 'agents' ? screen.filter : undefined}
                       selectedAlias={twoPaneSelection.selectedAlias}
                       onOpenChat={alias => setScreen({ name: 'chat', alias })}
                       onOpenPicker={() => setScreen({ name: 'picker' })}
@@ -717,6 +719,10 @@ function AppRoot() {
                     <ServerScreen
                       cfg={cfg}
                       onOpenLogs={() => setScreen({ name: 'logs' })}
+                      onOpenAgents={filter => setScreen(agentListScreen(filter, 'mobile') as Screen)}
+                      onOpenNodes={() => setScreen({ name: 'agents' })}
+                      onCreateNode={() => setScreen({ name: 'picker' })}
+                      onOpenScheduled={() => setScreen({ name: 'scheduled' })}
                     />
                   ) : screen.name === 'settings' ? (
                     <SettingsScreen
@@ -731,6 +737,7 @@ function AppRoot() {
                   ) : (
                     <AgentsScreen
                       cfg={cfg}
+                      filter={screen.name === 'agents' ? screen.filter : undefined}
                       onOpenChat={alias => setScreen({ name: 'chat', alias })}
                       onOpenPicker={() => setScreen({ name: 'picker' })}
                       onOpenNodeDetail={alias => setScreen({ name: 'nodeDetail', alias })}
@@ -868,8 +875,19 @@ function DesktopWorkspace({ cfg, screen, setScreen, onLogout, onLocalDataDeleted
     <TasksScreen cfg={cfg} onOpenTask={taskId => setScreen({ name: 'taskDetail', taskId })} />
   ) : screen.name === 'scheduled' ? <ScheduledTasksScreen cfg={cfg} />
   : screen.name === 'messages' ? <MessagesScreen cfg={cfg} />
-  : screen.name === 'server' ? <ServerScreen cfg={cfg} onOpenLogs={() => setScreen({ name: 'logs' })} />
-  : screen.name === 'serverNodes' ? <AgentsScreen cfg={cfg} onOpenChat={alias => setScreen({ name: 'serverNodeDetail', alias })} onOpenPicker={() => setScreen({ name: 'picker' })} onOpenNodeDetail={alias => setScreen({ name: 'serverNodeDetail', alias })} />
+  : screen.name === 'server' ? (
+    <ServerScreen
+      cfg={cfg}
+      onOpenLogs={() => setScreen({ name: 'logs' })}
+      onOpenAgents={filter => setScreen(agentListScreen(filter, 'desktop') as Screen)}
+      onOpenNodes={() => setScreen({ name: 'serverNodes' })}
+      onCreateNode={() => setScreen({ name: 'picker' })}
+      onOpenScheduled={() => setScreen({ name: 'scheduled' })}
+      onSwitchProfile={onSwitchProfile}
+      onAddServer={onAddAccount}
+    />
+  )
+  : screen.name === 'serverNodes' ? <AgentsScreen cfg={cfg} filter={screen.filter} onOpenChat={alias => setScreen({ name: 'serverNodeDetail', alias })} onOpenPicker={() => setScreen({ name: 'picker' })} onOpenNodeDetail={alias => setScreen({ name: 'serverNodeDetail', alias })} />
   : screen.name === 'serverNodeDetail' ? <NodeDetailScreen cfg={cfg} alias={screen.alias} onBack={() => setScreen({ name: 'serverNodes' })} />
   : screen.name === 'settings' ? <SettingsScreen cfg={cfg} onLogout={onLogout} onLocalDataDeleted={onLocalDataDeleted} onAddAccount={onAddAccount} onSwitchProfile={onSwitchProfile} onReauthProfile={onReauthProfile} />
   : screen.name === 'taskDetail' ? <TaskDetailScreen cfg={cfg} taskId={screen.taskId} onBack={() => setScreen({ name: 'tasks' })} />

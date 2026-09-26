@@ -44,6 +44,7 @@ import { AGENT_ROW_AVATAR, AGENT_ROW_DOT, AGENT_ROW_GAP, AGENT_ROW_HEIGHT, AGENT
 import { loadCollapsedGroups, saveCollapsedGroups } from './agent-list-prefs';
 import { agentUnreadCounts, latestMessageAtByAgent } from './agent-unread-counts';
 import { pinyinMatch } from './lib/pinyin';
+import { applyAgentFilter, filterLabel, isFilterActive, STATUS_FILTER_LABEL, type AgentListFilter, type AgentStatusFilter } from './server-stats';
 
 export default function AgentsScreen({
   cfg,
@@ -58,6 +59,7 @@ export default function AgentsScreen({
   mutedAliases = [],
   onToggleMute,
   preview,
+  filter,
 }: {
   cfg: HubConfig;
   onOpenChat: (alias: string) => void;
@@ -78,12 +80,18 @@ export default function AgentsScreen({
   onToggleMute?: (alias: string) => void;
   /** GUI 夹具：跳过 Hub 拉取，用同一套行渲染钉死徽标。 */
   preview?: { sessions: Session[]; ledger: UnreadState; serverBody: unknown };
+  /** 从服务器页的状态卡片 / 分组行进来时带的筛选(server-stats.ts)。每次导航是一个新对象;
+   *  undefined 不清除已有筛选 —— 双栏里点开会话时列表不该丢掉筛选。 */
+  filter?: AgentListFilter | null;
 }) {
   const [sessions, setSessions] = useState<Session[]>(preview?.sessions ?? []);
   const [loading, setLoading] = useState(!preview);
   const [refreshing, setRefreshing] = useState(false);
   const [failed, setFailed] = useState(false);
   const [query, setQuery] = useState('');
+  const [activeFilter, setActiveFilter] = useState<AgentListFilter | null>(filter ?? null);
+  useEffect(() => { if (filter) setActiveFilter(filter); }, [filter]);
+  const filtering = isFilterActive(activeFilter);
   const [contextMenu, setContextMenu] = useState<{ alias: string; x: number; y: number } | null>(null);
   const [hoveredAlias, setHoveredAlias] = useState<string | null>(null);
   const [unreadSnap, setUnreadSnap] = useState(getUnreadSnapshot);
@@ -228,12 +236,12 @@ export default function AgentsScreen({
   // 返回之后会改变 hook 顺序并崩溃(v0.1.28 launch-crash,Vincent tg 1098)。
   const q = query.trim();
   const sections = useMemo(
-    () => buildSections(sessions, query, {
+    () => buildSections(applyAgentFilter(sessions, activeFilter), query, {
       match: pinyinMatch,
       sort: { pinned: alias => pinnedAliases.includes(alias) },
       unread: { count: alias => floatInput.counts[alias] ?? 0, lastMessageAt: alias => floatInput.lastAt[alias] ?? 0 },
     }),
-    [sessions, query, pinnedAliases, floatInput],
+    [sessions, activeFilter, query, pinnedAliases, floatInput],
   );
   const shownCount = countShown(sections);
   const shownSections = useMemo(() => applyCollapsed(sections, collapsed, query), [sections, collapsed, query]);
@@ -427,6 +435,34 @@ export default function AgentsScreen({
           {q ? <Text style={[styles.listHeader, rowStyles.searchCount]}>{`${shownCount} / ${sessions.length} agents`}</Text> : null}
         </View>
       )}
+      {filtering ? (
+        <View testID="agent-filter-bar" style={[rowStyles.filterBar, { backgroundColor: compact ? colors.listBg : colors.bg }]}>
+          {(['all', 'online', 'working', 'error', 'offline'] as const).map(k => {
+            const on = k === 'all' ? !activeFilter?.status : activeFilter?.status === k;
+            return (
+              <Pressable
+                key={k}
+                testID={`agent-filter-${k}`}
+                accessibilityRole="button"
+                accessibilityState={{ selected: on }}
+                onPress={() => setActiveFilter(f => ({ ...f, status: k === 'all' ? undefined : (k as AgentStatusFilter) }))}
+                style={[rowStyles.filterChip, { backgroundColor: on ? colors.railActiveBg : colors.subtleFill }]}
+              >
+                <Text style={[rowStyles.filterChipText, { color: on ? colors.accent : colors.textSecondary }]}>{k === 'all' ? '全部' : STATUS_FILTER_LABEL[k]}</Text>
+              </Pressable>
+            );
+          })}
+          {activeFilter?.group ? (
+            <View style={[rowStyles.filterChip, { backgroundColor: colors.railActiveBg }]}>
+              <Text style={[rowStyles.filterChipText, { color: colors.accent }]}>{`分组 ${activeFilter.group}`}</Text>
+            </View>
+          ) : null}
+          <Pressable testID="agent-filter-clear" accessibilityRole="button" accessibilityLabel="清除筛选" hitSlop={8} onPress={() => setActiveFilter(null)} style={rowStyles.filterClear}>
+            <Text style={[rowStyles.filterChipText, { color: colors.textMuted }]}>{`${shownCount} 个`}</Text>
+            <Ionicons name="close-circle" size={16} color={colors.textMuted} />
+          </Pressable>
+        </View>
+      ) : null}
       <SectionList
       sections={shownSections}
       keyExtractor={s => s.alias}
@@ -481,7 +517,7 @@ export default function AgentsScreen({
         // early return 里已经各自有屏,走到这里必然是"数据到了但没有匹配"。
         <View style={styles.center}>
           <Text style={styles.errorTitle}>
-            {q ? `没有匹配「${q}」的 agent` : '还没有 agent'}
+            {q ? `没有匹配「${q}」的 agent` : filtering ? `没有「${filterLabel(activeFilter!)}」的 agent` : '还没有 agent'}
           </Text>
           <Text style={styles.errorHint}>
             {q
@@ -491,6 +527,10 @@ export default function AgentsScreen({
           {q ? (
             <Pressable style={styles.retryBtn} onPress={() => setQuery('')}>
               <Text style={styles.retryBtnText}>清空搜索</Text>
+            </Pressable>
+          ) : filtering ? (
+            <Pressable style={styles.retryBtn} onPress={() => setActiveFilter(null)}>
+              <Text style={styles.retryBtnText}>清除筛选</Text>
             </Pressable>
           ) : null}
         </View>
@@ -526,6 +566,11 @@ const rowStyles = {
   searchBox: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 6, height: 36, borderRadius: radius.md, paddingHorizontal: 10 },
   searchInput: { flex: 1, minWidth: 0, fontSize: type.body, paddingVertical: 0, height: 36 },
   searchCount: { marginTop: spacing.xs },
+  // 服务器页带来的筛选:一行小胶囊,只在有筛选时出现(平时列表不变)。
+  filterBar: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 6, paddingHorizontal: AGENT_ROW_PAD_X, paddingVertical: spacing.xs },
+  filterChip: { height: 26, borderRadius: radius.pill, paddingHorizontal: 10, alignItems: 'center', justifyContent: 'center' },
+  filterChipText: { fontSize: type.small, fontWeight: weight.medium },
+  filterClear: { flexDirection: 'row', alignItems: 'center', gap: 4, marginLeft: 'auto' },
   group: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: AGENT_ROW_PAD_X, paddingTop: spacing.md, paddingBottom: spacing.xs },
   groupCompact: { paddingHorizontal: spacing.md, paddingTop: spacing.sm },
   groupTitle: { flexShrink: 1, fontSize: type.small, fontWeight: weight.medium, letterSpacing: 0.4 },
