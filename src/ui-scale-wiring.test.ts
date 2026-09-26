@@ -105,13 +105,18 @@ ck('AliasAvatar initial is fixedSize (follows the box, not the font)', read('src
 
 // ── key surfaces ──
 const agents = read('src/AgentsScreen.tsx');
-ck('agent row: height/avatar/padding via ds()', ['minHeight: ds(AGENT_ROW_HEIGHT)', 'paddingHorizontal: ds(AGENT_ROW_PAD_X)', 'avatar: { width: ds(AGENT_ROW_AVATAR), height: ds(AGENT_ROW_AVATAR) }'].every(s => agents.includes(s)));
+ck('agent row: height/avatar/padding via ds()', ['minHeight: ds(AGENT_ROW_HEIGHT, AGENT_ROW_TOUCH_MIN)', 'paddingVertical: ds(AGENT_ROW_PAD_Y)', 'paddingHorizontal: ds(AGENT_ROW_PAD_X)', 'avatar: { width: ds(AGENT_ROW_AVATAR), height: ds(AGENT_ROW_AVATAR) }'].every(s => agents.includes(s)));
+ck('agent row: name / preview / time / label use listFont (one step down at 更紧凑)', ['name: { flexShrink: 1, fontSize: listFont(type.title)', 'preview: { flex: 1, minWidth: 0, fontSize: listFont(type.body) }', "time: { marginLeft: 'auto', fontSize: listFont(type.small)", 'label: { fontSize: listFont(type.small)'].every(s => agents.includes(s)));
+ck('agent groups: header text uses listFont', agents.includes('groupTitle: { flexShrink: 1, fontSize: listFont(type.small)') && agents.includes('groupCount: { fontSize: listFont(type.caption)'));
 ck('agent row: rebuilt on restyle', agents.includes('onThemeChange(() => { rowStyles = makeRowStyles(); });'));
 ck('agent row: name / preview / time are dense text', ['style={[rowStyles.name,', 'style={[rowStyles.preview,', 'style={[rowStyles.time,'].every(s => agents.includes(`<Text dense selectable={false} numberOfLines={1} ${s}`)));
 const rail = read('src/MobileNavRail.tsx');
 ck('nav rail: width + items from density', rail.includes('mobileRailWidth(uiScale().densityFactor) + insetLeft') && rail.includes('height: mobileRailItem(uiScale().densityFactor).height'));
 ck('nav rail: labels are dense text', rail.includes('<Text dense style={[s.label, selected && s.labelActive]}'));
+ck('nav rail: label steps down with the list (listFont(11))', rail.includes("label: { color: colors.textSecondary, fontSize: listFont(11),"));
 const chat = read('src/ChatScreen.tsx');
+// Density (incl. 更紧凑's one-step list text) must never reach message text: only 字体大小 does.
+ck('chat content is independent of density: no listFont in ChatScreen / MarkdownMessage', !chat.includes('listFont(') && !read('src/MarkdownMessage.tsx').includes('listFont('));
 ck('chat header: action heights via ds()', chat.includes('height: ds(34),') && chat.includes('headerActionCompact: { width: 36, height: ds(34),'));
 ck('composer: send button via ds()', /send: \{\n\s+backgroundColor: colors\.accent,\n\s+width: ds\(36\),\n\s+height: ds\(36\),/.test(chat));
 const node = read('src/NodeDetailScreen.tsx');

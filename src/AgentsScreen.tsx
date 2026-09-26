@@ -18,7 +18,7 @@ import { fetchStatus, fetchUserMessages, takeStatusPrefetch, type HubConfig, typ
 } from './api';
 import { loadSessionsCache, saveSessionsCache } from './storage';
 import { colors, onThemeChange, radius, spacing, statusColor, type, weight } from './theme';
-import { ds, fs } from './ui-scale';
+import { ds, fs, listFont } from './ui-scale';
 import { usePoll } from './usePoll';
 import { retryUnreadPersistFromPoll } from './conversation-unread-persist';
 import AgentUnreadBadge from './AgentUnreadBadge';
@@ -34,7 +34,7 @@ import {
 } from './unread-store';
 import { styles } from './app-styles';
 import { applyCollapsed, buildSections, countShown, holdWhileActive, SORT_BY_ACTIVITY, toggleCollapsed } from './agents-list';
-import { AGENT_ROW_AVATAR, AGENT_ROW_DOT, AGENT_ROW_GAP, AGENT_ROW_HEIGHT, AGENT_ROW_PAD_X, AGENT_ROW_SEPARATOR_INSET, agentRowModel, latestMessageByAgent, rowActivity } from './agent-row-model';
+import { AGENT_ROW_AVATAR, AGENT_ROW_DOT, AGENT_ROW_GAP, AGENT_ROW_HEIGHT, AGENT_ROW_PAD_X, AGENT_ROW_PAD_Y, AGENT_ROW_SEPARATOR_INSET, AGENT_ROW_TOUCH_MIN, agentRowModel, latestMessageByAgent, rowActivity } from './agent-row-model';
 import { TaskTimeResolver } from './agent-task-time';
 import { loadCollapsedGroups, saveCollapsedGroups } from './agent-list-prefs';
 import { agentUnreadCounts, latestMessageAtByAgent } from './agent-unread-counts';
@@ -593,16 +593,18 @@ const makeRowStyles = () => ({
   filterClear: { flexDirection: 'row', alignItems: 'center', gap: 4, marginLeft: 'auto' },
   group: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: ds(AGENT_ROW_PAD_X), paddingTop: spacing.md, paddingBottom: spacing.xs },
   groupCompact: { paddingHorizontal: spacing.md, paddingTop: spacing.sm },
-  groupTitle: { flexShrink: 1, fontSize: type.small, fontWeight: weight.medium, letterSpacing: 0.4 },
-  groupCount: { fontSize: type.caption, marginLeft: 2 },
+  groupTitle: { flexShrink: 1, fontSize: listFont(type.small), fontWeight: weight.medium, letterSpacing: 0.4 },
+  groupCount: { fontSize: listFont(type.caption), marginLeft: 2 },
   row: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: ds(AGENT_ROW_GAP),
-    // 标准 68 dp / 44 dp avatar; 紧凑 (the Android wide default) 58 / 37; 宽松 78 / 51.
-    minHeight: ds(AGENT_ROW_HEIGHT),
+    // 标准 68 dp / 44 dp avatar; 紧凑 58 / 37; 更紧凑 (the Android wide default) 51 / 33 with
+    // 15 / 13 text ⇒ 51 dp rows (57 at OS font 1.15); 宽松 78 / 51. Two text lines + 2 × AGENT_ROW_PAD_Y can make a
+    // row taller than minHeight (OS font 1.15), never shorter than the 44 dp touch floor.
+    minHeight: ds(AGENT_ROW_HEIGHT, AGENT_ROW_TOUCH_MIN),
     paddingHorizontal: ds(AGENT_ROW_PAD_X),
-    paddingVertical: (ds(AGENT_ROW_HEIGHT) - ds(AGENT_ROW_AVATAR)) / 2,
+    paddingVertical: ds(AGENT_ROW_PAD_Y),
   },
   // Same ds() as AliasAvatar applies to its own size, so the dot sits on the avatar's corner.
   avatar: { width: ds(AGENT_ROW_AVATAR), height: ds(AGENT_ROW_AVATAR) },
@@ -616,13 +618,14 @@ const makeRowStyles = () => ({
     borderRadius: ds(AGENT_ROW_DOT) / 2,
     borderWidth: 2,
   },
-  body: { flex: 1, minWidth: 0, gap: 3 },
+  body: { flex: 1, minWidth: 0, gap: ds(3) },
   line: { flexDirection: 'row', alignItems: 'center', gap: ds(6), minHeight: ds(20) },
-  name: { flexShrink: 1, fontSize: type.title, fontWeight: weight.medium },
+  // listFont(): one step smaller at 更紧凑 (16 → 15 / 14 → 13 / 12 → 11); unchanged otherwise.
+  name: { flexShrink: 1, fontSize: listFont(type.title), fontWeight: weight.medium },
   pin: { marginLeft: -2 },
-  time: { marginLeft: 'auto', fontSize: type.small, paddingLeft: spacing.sm },
-  label: { fontSize: type.small, fontWeight: weight.medium },
-  preview: { flex: 1, minWidth: 0, fontSize: type.body },
+  time: { marginLeft: 'auto', fontSize: listFont(type.small), paddingLeft: spacing.sm },
+  label: { fontSize: listFont(type.small), fontWeight: weight.medium },
+  preview: { flex: 1, minWidth: 0, fontSize: listFont(type.body) },
   separator: { height: StyleSheet.hairlineWidth, marginLeft: ds(AGENT_ROW_PAD_X) + ds(AGENT_ROW_AVATAR) + ds(AGENT_ROW_GAP) },
 } as const);
 let rowStyles = makeRowStyles();

@@ -13,7 +13,7 @@ import { colors } from './theme';
 import { APP_VERSION } from './version';
 import { railBadgeText, railIconFor } from './rail-nav';
 import { mobileRailItem, mobileRailWidth, railUnreadTotal } from './nav-chrome';
-import { ds, uiScale } from './ui-scale';
+import { ds, listFont, uiScale } from './ui-scale';
 import { getUnreadSnapshot, subscribeUnread } from './unread-store';
 import { agentUnreadCounts } from './agent-unread-counts';
 
@@ -111,7 +111,7 @@ const makeStyles = () => StyleSheet.create({
   tabs: { flex: 1, paddingTop: ds(14), gap: ds(6), alignItems: 'center' },
   tabsCompact: { paddingTop: 0 },
   item: {
-    // 界面密度: 64×56 at 标准, 54×48 at 紧凑 (never under 48 — mobileRailItem).
+    // 界面密度: 64×56 at 标准, 54×48 at 紧凑, 48×48 at 更紧凑 (never under 48 — mobileRailItem).
     width: mobileRailItem(uiScale().densityFactor).width,
     height: mobileRailItem(uiScale().densityFactor).height,
     alignItems: 'center',
@@ -123,7 +123,8 @@ const makeStyles = () => StyleSheet.create({
   // Material 3 style active indicator: a pill behind the icon, label underneath.
   indicator: { width: ds(52), height: ds(30), borderRadius: ds(15), alignItems: 'center', justifyContent: 'center' },
   indicatorActive: { backgroundColor: colors.railActiveBg },
-  label: { color: colors.textSecondary, fontSize: 11, fontWeight: '500', maxWidth: mobileRailItem(uiScale().densityFactor).width },
+  // listFont: 10 at 更紧凑 (one step down with the list), 11 otherwise.
+  label: { color: colors.textSecondary, fontSize: listFont(11), fontWeight: '500', maxWidth: mobileRailItem(uiScale().densityFactor).width },
   labelActive: { color: colors.accent, fontWeight: '600' },
   badge: {
     position: 'absolute', top: -3, right: 4, minWidth: 18, height: 18, borderRadius: 9, paddingHorizontal: 4,

@@ -2,7 +2,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { nextPollDelay } from './poll-delay';
-import { echoSupersededByFetched } from './chat-echo';
+import { clientRequestIdOfRow, echoSupersededByFetched } from './chat-echo';
 let p = 0, t = 0; const ck = (n: string, c: boolean) => { t++; if (c) { p++; console.log('✅', n); } else console.log('❌', n); };
 
 ck('fast link keeps the nominal interval', nextPollDelay(10000, 300) === 10000);
@@ -18,6 +18,17 @@ ck('no id: same content within 6 min yields', echoSupersededByFetched({ _localId
 ck('no id: same content 10 min apart stays', echoSupersededByFetched({ _localId: 'l1', content: '你好', created_at: '2026-09-16T08:12:00Z' }, fetched) === false);
 ck('no id: different content stays', echoSupersededByFetched({ _localId: 'l1', content: '再见', created_at: '2026-09-16T08:00:30Z' }, fetched) === false);
 
+// 2026-09-26: the hub row's meta.client_request_id is the echo's id (send-echo-remount.test.ts).
+ck('meta parsing: meta_json string / meta object / garbage / null / missing',
+  clientRequestIdOfRow({ meta_json: '{"client_request_id":"dreq_x"}' }) === 'dreq_x'
+  && clientRequestIdOfRow({ meta: { client_request_id: 'dreq_y' } }) === 'dreq_y'
+  && clientRequestIdOfRow({ meta_json: '{not json' }) === null
+  && clientRequestIdOfRow({ meta_json: null }) === null
+  && clientRequestIdOfRow({ meta_json: '{"client_request_id":42}' }) === null
+  && clientRequestIdOfRow({}) === null);
+const rid = 'dreq_0123456789abcdef0123456789abcdef';
+ck('pending echo yields to the row that carries its own request id', echoSupersededByFetched({ _localId: rid, _pending: true }, [{ task_id: 'T2', meta_json: JSON.stringify({ client_request_id: rid }) }]) === true);
+ck('delivered echo: a same-text row with another request id is another send', echoSupersededByFetched({ _localId: rid, content: '你好', created_at: '2026-09-16T08:00:30Z' }, [{ task_id: 'T3', content: '你好', created_at: '2026-09-16T08:00:00Z', meta_json: '{"client_request_id":"dreq_other"}' }]) === false);
 const chat = fs.readFileSync(path.join(__dirname, 'ChatScreen.tsx'), 'utf8');
 ck('send success marks the echo delivered instead of removing it', chat.includes("{ ...t, _pending: false, _confirmedTaskId: confirmedTaskId }") && !chat.includes("prev.filter(t => t._localId !== localId)"));
 ck('load() drops echoes only once superseded by a fetched row', chat.includes('!echoSupersededByFetched(t, fetched)'));
