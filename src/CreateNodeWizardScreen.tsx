@@ -7,7 +7,7 @@ import { createRequestVerdict, timeoutMessage, type CreateRequestVerdict } from 
 import { colors, onThemeChange, spacing } from './theme';
 import { advancedExpanded, advancedRuntimesOf, primaryRuntimes, runtimeDisplayLabel, showsAdvancedToggle, type WizardRuntime } from './wizard-runtime-groups';
 import { PANE_BACK_TEST_ID, paneShowsBack } from './pane-header';
-import { defaultWorkdir, describeWorkdirError, workdirError, workdirForRequest, workdirRootOf } from './create-node-workdir';
+import { defaultWorkdir, describeWorkdirError, randomHex6, workdirError, workdirForRequest, workdirRootOf, workdirSlug } from './create-node-workdir';
 
 // #338 RFC-026 §3.1 — mobile create-node wizard rest (Plan B).
 // 5 post-picker steps: ① name ② runtime ③ model ④ flags ⑤ confirm.
@@ -115,6 +115,8 @@ export default function CreateNodeWizardScreen({ cfg, daemon, onBack, onExit, de
   // 工作目录:null = 没改过,跟着名字走(<root>/<name>);改过之后固定为用户填的值。
   const [workdirEdited, setWorkdirEdited] = useState<string | null>(null);
   const [workdirOpen, setWorkdirOpen] = useState(false);
+  // 名字转不出 ASCII 时的兜底目录名;整个向导里固定一个,不随重渲染变。
+  const [workdirFallback] = useState(() => `node-${randomHex6()}`);
   const [phase, setPhase] = useState<Phase>('form');
   const [msg, setMsg] = useState('');
 
@@ -208,7 +210,7 @@ export default function CreateNodeWizardScreen({ cfg, daemon, onBack, onExit, de
   const busy = phase === 'creating' || phase === 'awaiting_register';
   // 老 daemon/hub 不带 default_workdir_root → null → 整行隐藏、请求不带 workdir。
   const workdirRoot = workdirRootOf(daemon);
-  const workdir = workdirEdited ?? (workdirRoot ? defaultWorkdir(workdirRoot, name.trim()) : '');
+  const workdir = workdirEdited ?? (workdirRoot ? defaultWorkdir(workdirRoot, workdirSlug(name, workdirFallback)) : '');
   const workdirErr = workdirRoot ? workdirError(workdir, workdirRoot) : null;
   const canSubmit = !workdirErr;
 
@@ -567,7 +569,7 @@ export default function CreateNodeWizardScreen({ cfg, daemon, onBack, onExit, de
                             autoFocus
                             value={workdir}
                             onChangeText={setWorkdirEdited}
-                            placeholder={defaultWorkdir(workdirRoot, name.trim() || 'my-agent-1')}
+                            placeholder={defaultWorkdir(workdirRoot, workdirSlug(name, 'my-agent-1'))}
                             placeholderTextColor={colors.textMuted}
                             style={styles.input}
                             autoCapitalize="none"

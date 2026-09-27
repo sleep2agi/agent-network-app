@@ -85,3 +85,19 @@ export function pinyinMatch(text: string, filter: string): boolean {
   }
   return entry[0].includes(f) || entry[1].includes(f);
 }
+
+/**
+ * 整串转成全拼(小写、无声调、无分隔;非汉字原样保留)。字典加载失败返回 null。
+ * 给「新建节点」的 ASCII 目录名用(src/create-node-workdir.ts workdirSlug)—— 与搜索共用
+ * 同一个惰性加载的字典和缓存,不再引第二份拼音实现。
+ */
+export function toPinyin(text: string): string | null {
+  const p = ensureProvider();
+  if (!p) return null;
+  let entry = cache.get(text);
+  if (!entry) {
+    entry = p(text);
+    cache.set(text, entry);
+  }
+  return entry[0];
+}
