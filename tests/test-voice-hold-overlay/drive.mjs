@@ -342,6 +342,34 @@ for (const scheme of ['light', 'dark']) {
     await c3.close();
   }
 }
+// ── 桌面:微信式浮层永远不画(另有桌面自己的录音 UI)。窄桌面窗口会落回 phone 布局、也有「按住 说话」条 ——
+// 那里同样不能画手机浮层。宽桌面(1200×850)只有工具栏麦克风。无安卓 UA、无 safeAreaSim = Tauri 桌面。
+for (const vp of [{ width: 390, height: 844, name: 'desktop-narrow-390x844' }, { width: 1200, height: 850, name: 'desktop-1200x850' }]) {
+  const tag = vp.name;
+  const ctx = await browser.newContext({ viewport: { width: vp.width, height: vp.height }, colorScheme: 'light', permissions: ['microphone'] });
+  const page = await ctx.newPage();
+  page.on('pageerror', e => console.log('PAGEERROR', e.message.split('\n')[0]));
+  await page.addInitScript(initScript, { theme: 'light', denyMic: false });
+  await page.goto(WEB_URL);
+  await page.getByText(ALIAS, { exact: true }).first().click({ timeout: 20000 });
+  await page.waitForTimeout(800);
+  const target = (await page.locator('[data-testid="voice-hold-bar"]').count()) ? 'voice-hold-bar' : 'voice-mic';
+  const b = await box(page, target);
+  if (!b) { ck(tag, '找到语音入口', false, target); await ctx.close(); continue; }
+  await page.mouse.move(b.cx, b.cy);
+  await page.mouse.down();
+  // 宽桌面的 🎤 是点一下开始(#463),松开也不结束;窄窗口的大条是按住。
+  if (target === 'voice-mic') await page.mouse.up();
+  await page.waitForSelector('[data-testid="voice-overlay"], [data-testid="voice-bar"]', { timeout: 5000 }).catch(() => {});
+  await page.waitForTimeout(600);
+  const s = await page.evaluate(() => ({ voiceBar: !!document.querySelector('[data-testid="voice-bar"]'), card: !!document.querySelector('[data-testid="voice-overlay-card"]'), bubble: !!document.querySelector('[data-testid="voice-hold-bubble"]'), arc: !!document.querySelector('[data-testid="voice-hold-arc"]'), overlay: !!document.querySelector('[data-testid="voice-overlay"]') }));
+  // 宽桌面走 #463 的行内录音条(不是任何浮层);窄桌面窗口仍是 #463 留下的卡片。两者都不能出现手机的气泡 / 弧形面板。
+  ck(tag, `桌面(${target}):不画手机浮层(无气泡 / 弧形面板)`, !s.bubble && !s.arc && (target === 'voice-hold-bar' ? s.card : s.voiceBar && !s.overlay), JSON.stringify(s));
+  const f = `${OUT}/holdoverlay-${tag}.png`; await page.screenshot({ path: f }); shots.push(f);
+  if (target === 'voice-hold-bar') await page.mouse.up();
+  else await page.keyboard.press('Escape');
+  await ctx.close();
+}
 await browser.close(); web.close();
 
 const cols = ['scheme', 'state', 'overlayW', 'overlayCx', 'bubbleCx', 'dBubble', 'cancelCx', 'textCx', 'symL', 'symR', 'dCircleCy', 'arcX', 'arcW', 'arcBottom', 'arcContentBottom', 'safeBottom'];

@@ -16,6 +16,7 @@ export const PREDICATE_IDS = [
   'pointerUi\\([^)]*\\)',
   "Platform\\.OS\\s*[!=]==\\s*'\\w+'",
   "voiceSurface\\(desktop\\)\\s*===\\s*'phoneOverlay'", // desktop-voice-bar-model.ts(#463):录音浮层只挂手机
+  'holdOverlayOn', // voice-hold-overlay-model.ts holdOverlayApplies():微信式按住浮层只在安卓 / iOS(非 desktop)
 ] as const;
 const PRED = `(?:${PREDICATE_IDS.join('|')})`;
 
@@ -54,6 +55,15 @@ export const PHONE_ONLY_SITES: readonly PhoneOnlySite[] = [
     minSites: 1,
     why: '手指按住、上滑取消是触摸手势;桌面点 🎤 应该是就地的录音条,不是屏幕中间一张卡 + 底部取消区。',
     debt: { files: ['src/ChatScreen.tsx'], owner: 'voice-shortcuts', reason: '桌面改为行内录音条的 PR 正在进行,那里会把这个浮层收回手机' },
+  },
+  {
+    name: 'VoiceHoldOverlay(微信式按住说话浮层:✕ / 文 滑动手势)',
+    site: /<VoiceHoldOverlay\b/,
+    window: 'tag',
+    gate: renderGate('VoiceHoldOverlay'),
+    definedIn: 'src/VoiceInputUI.tsx',
+    minSites: 1,
+    why: '按住、滑到 ✕ / 文 是手指的手势;桌面是行内录音条(#463),窄桌面窗口也不画。',
   },
   {
     name: 'SelectTextSheet(全屏「选择文本」)',

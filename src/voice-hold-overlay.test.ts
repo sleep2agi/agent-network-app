@@ -6,7 +6,7 @@ import {
   hapticFor, IDLE, NEUTRAL_RELEASE, releaseOutcome, TOO_SHORT_NOTICE, voiceStep, ZONE_RELEASE, zoneOfPhase,
   type VoiceEvent, type VoicePhase, type VoiceState, type VoiceZone,
 } from './voice-input-model';
-import { barScale, HOLD_OVERLAY, holdOverlayLabel, holdOverlayLayout, holdOverlayTone, pushLevel, zoneAt } from './voice-hold-overlay-model';
+import { barScale, HOLD_OVERLAY, holdOverlayApplies, holdOverlayLabel, holdOverlayLayout, holdOverlayTone, pushLevel, zoneAt } from './voice-hold-overlay-model';
 import { installVoiceSim, parseVoiceSim } from './voice-sim';
 
 let p = 0, t = 0;
@@ -147,6 +147,16 @@ ck('zoneOfPhase 往返', zoneOfPhase('cancelArmed') === 'cancel' && zoneOfPhase(
   ck('barScale:两边比中间矮', barScale(0.5, 0) < barScale(0.5, (HOLD_OVERLAY.bars - 1) / 2));
 }
 
+// ── 只在手机画 ──
+{
+  const AUA = 'Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 Chrome/140.0 Safari/537.36';
+  const MAC = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 14_0) AppleWebKit/605.1.15';
+  ck('安卓 / iOS / 折叠屏双栏(非 desktop)→ 画', holdOverlayApplies({ desktop: false, os: 'android' }) && holdOverlayApplies({ desktop: false, os: 'ios' }));
+  ck('桌面(desktop 布局)→ 永远不画,哪怕 UA 像安卓', !holdOverlayApplies({ desktop: true, os: 'web', userAgent: AUA }) && !holdOverlayApplies({ desktop: true, os: 'android' }));
+  ck('窄到 phone 布局的桌面窗口(web + 非安卓 UA)→ 不画', !holdOverlayApplies({ desktop: false, os: 'web', userAgent: MAC }) && !holdOverlayApplies({ desktop: false, os: 'web' }) && !holdOverlayApplies({ desktop: false, os: 'windows' }));
+  ck('网页导出 + 安卓 UA(测试模拟手机)→ 画', holdOverlayApplies({ desktop: false, os: 'web', userAgent: AUA }));
+}
+
 // ── 网页模拟开关 ──
 ck('voiceSim 只认 ?voiceSim=1', parseVoiceSim('?voiceSim=1') && !parseVoiceSim('?voiceSim=0') && !parseVoiceSim('') && !parseVoiceSim(null));
 ck('voiceSim 在设备上恒不开(os ≠ web)', !installVoiceSim('android') && !installVoiceSim('ios'));
@@ -163,7 +173,9 @@ ck('voiceSim 在设备上恒不开(os ≠ web)', !installVoiceSim('android') && 
   ck(`气泡缩放淡入 ${HOLD_OVERLAY.scaleInMs}ms`, HOLD_OVERLAY.scaleInMs === 150 && ov.includes('duration: HOLD_OVERLAY.scaleInMs'));
   ck('浮层不接收触摸(手势留在大条上)', /<View pointerEvents="none" style=\{styles\.holdWrap\}/.test(ov));
   ck('流式文字 ≤3 行,再多在气泡里滚到最新', HOLD_OVERLAY.interimMaxLines === 3 && ov.includes('maxHeight: HOLD_OVERLAY.interimLineHeight * HOLD_OVERLAY.interimMaxLines') && ov.includes('scrollToEnd'));
-  ck('只在手机挂微信式浮层,桌面仍是原来的卡片', /\{desktop\s*\? <VoiceRecordingOverlay voice=\{voice\} bottom=\{composerHeight \+ 24\} \/>\s*: <VoiceHoldOverlay voice=\{voice\} layout=\{holdLayout\} \/>\}/.test(chat) && chat.includes('const holdLayout = !desktop &&'));
+  ck('只在手机挂微信式浮层(holdOverlayOn);#463 的卡片在手机上被 hidden,只留给窄桌面窗口', chat.includes('{holdOverlayOn ? <VoiceHoldOverlay voice={voice} layout={holdLayout} /> : null}') && chat.includes("{voiceSurface(desktop) === 'phoneOverlay' ? <VoiceRecordingOverlay voice={voice} bottom={88 + composerInset} hidden={holdOverlayOn} /> : null}") && ui.includes("if (hidden || phase === 'idle') return null;") && chat.includes('const holdOverlayOn = holdOverlayApplies({ desktop, os: Platform.OS,') && chat.includes('const holdLayout = holdOverlayOn && paneWidth > 0'));
+  ck('phone-only 门认得 holdOverlayOn、登记了 VoiceHoldOverlay', read('src', 'phone-only-registry.ts').includes("'holdOverlayOn',") && read('src', 'phone-only-registry.ts').includes('site: /<VoiceHoldOverlay\\b/,'));
+  ck('VoiceHoldOverlay 只有一处挂载(在 holdOverlayOn 分支里)', (chat.match(/<VoiceHoldOverlay\b/g) ?? []).length === 1);
   ck('命中判定和浮层用同一份 layout(holdLayoutRef)', /zoneAt: \(pageX, pageY, prev\) => \{\s*const l = holdLayoutRef\.current;/.test(chat) && chat.includes('holdZoneAt({ x: pageX - rootOriginRef.current.x, y: pageY - rootOriginRef.current.y }, l, prev)'));
   ck('底部安全区走 ChatScreen 已有的 composerInset(不另读 insets)', chat.includes('holdOverlayLayout(paneWidth, rootHeight, composerInset, holdCoverTop)'));
   ck('面板盖过草稿卡片能长到的最高处', chat.includes('inputRowTop - (showVoiceDraftCard(voiceMode, draft) ? VOICE_DRAFT_CARD_BLOCK_MAX : 0)') && ui.includes('export const VOICE_DRAFT_CARD_BLOCK_MAX = spacing.xs + 8 * 2 + 2 + DRAFT_CARD_LINE_HEIGHT * VOICE_DRAFT_CARD_MAX_LINES;'));

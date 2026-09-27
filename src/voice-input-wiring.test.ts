@@ -50,8 +50,8 @@ ck('切到语音:收 ＋ 面板、收键盘', /if \(next === 'voice'\) \{\s*if \
 const desktopBar = chat.slice(chat.indexOf('<View style={styles.desktopToolbarRight}>'), chat.indexOf('styles.desktopSend,'));
 ck('桌面:麦克风仍在工具栏、发送左边(点一下开始,desktop-voice-bar-model.ts)', desktopBar.includes('<DesktopMicButton voice={voice} onPress={desktopMicClick} />'));
 ck('桌面:麦克风只在 voice.available 时画', (chat.match(/voice\.available \? <DesktopMicButton/g) ?? []).length === 1 && !chat.includes('<VoiceMicButton'));
-ck('录音浮层(手机微信式;#463 的旧卡片只剩非手机的回退)+ 「去设置」提示条都挂上了', chat.includes('<VoiceHoldOverlay voice={voice} layout={holdLayout} />') && chat.includes('<VoiceRecordingOverlay voice={voice}') && chat.includes('<VoiceSettingsPrompt voice={voice} onOpenSettings={onOpenVoiceSettings} />'));
-ck('提示走现有 composerNotice(手机的「说话时间太短」改由按住浮层居中提示)', chat.includes("onNotice: text => { if (!desktop && text === TOO_SHORT_NOTICE) return; setComposerNotice(text); },"));
+ck('录音浮层:手机 = 微信式(holdOverlayOn);#463 的卡片只在非手机的 phoneOverlay 布局(窄桌面窗口)出现;「去设置」提示条挂上了', chat.includes('{holdOverlayOn ? <VoiceHoldOverlay voice={voice} layout={holdLayout} /> : null}') && chat.includes("{voiceSurface(desktop) === 'phoneOverlay' ? <VoiceRecordingOverlay voice={voice} bottom={88 + composerInset} hidden={holdOverlayOn} /> : null}") && chat.includes('<VoiceSettingsPrompt voice={voice} onOpenSettings={onOpenVoiceSettings} />'));
+ck('提示走现有 composerNotice(手机的「说话时间太短」改由按住浮层居中提示)', chat.includes("onNotice: text => { if (holdLayoutRef.current && text === TOO_SHORT_NOTICE) return; setComposerNotice(text); },"));
 
 // ── 「去设置」路由 ──
 const routes = app.match(/onOpenVoiceSettings=\{\(\) => \{ rememberSettingsCategory\('voice'\); setScreen\(\{ name: 'settings' \}\); \}\}/g) ?? [];

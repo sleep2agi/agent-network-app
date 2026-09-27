@@ -16,8 +16,18 @@
 // 坐标系 = 浮层宿主(聊天页根视图)的本地坐标;宿主在窗口里的原点由 ChatScreen 量出来再减掉。
 
 import { holdBarLabel, isLivePhase, zoneOfPhase, type VoicePhase, type VoiceZone } from './voice-input-model';
+import { isAndroidLike } from './wide-layout';
 
 export type Point = { x: number; y: number };
+
+/**
+ * 这个浮层只属于手机(安卓 / iOS,含安卓折叠屏双栏;网页导出 + 安卓 UA 用来模拟它)。桌面永远不画 ——
+ * 包括窄到落回「phone」布局的桌面窗口(Tauri 桌面 < 860 宽,chooseAppLayout):那里沿用桌面自己的录音 UI。
+ */
+export function holdOverlayApplies(p: { desktop: boolean; os: string; userAgent?: string }): boolean {
+  if (p.desktop) return false;
+  return p.os === 'ios' || isAndroidLike(p.os, p.userAgent ?? '');
+}
 
 export type HoldOverlayLayout = {
   width: number;

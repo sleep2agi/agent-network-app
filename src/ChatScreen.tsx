@@ -82,7 +82,7 @@ import { afterRecognized, showVoiceDraftCard, toggleComposerInputMode, type Comp
 import { ComposerModeToggle, VOICE_DRAFT_CARD_BLOCK_MAX, VoiceDraftCard, VoiceHoldBar, VoiceHoldOverlay, VoiceRecordingOverlay, VoiceSettingsPrompt } from './VoiceInputUI';
 import { DesktopMicButton, DesktopVoiceBar } from './DesktopVoiceBar';
 import { DESKTOP_CLICK_EVENT, desktopVoiceNotice, micClickAction, showVoiceBar, voiceSurface } from './desktop-voice-bar-model';
-import { holdOverlayLayout, zoneAt as holdZoneAt, type HoldOverlayLayout } from './voice-hold-overlay-model';
+import { holdOverlayApplies, holdOverlayLayout, zoneAt as holdZoneAt, type HoldOverlayLayout } from './voice-hold-overlay-model';
 import { TOO_SHORT_NOTICE } from './voice-input-model';
 import { beginVoicePress, createSelectionCapture, hostSelection, insertAtSelection, previewAtSelection, refocusAfterInsert, selectionAcrossModeSwitch, voiceInsertTarget, withPressStart, type TextSelection, type VoiceSource } from './voice-insert-model';
 import { COMPOSER_INPUT_BORDER, COMPOSER_LINE_HEIGHT, composerControlSize, composerInputPadY, composerLineCount, composerRightSlot, composerRowAlign, nextFullEditor, shouldShowExpand, type FullEditorEvent } from './composer-row-layout';
@@ -590,7 +590,7 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
       insertVoiceText(text);
     },
     // 手机:「说话时间太短」由浮层在屏幕中间提示(微信式),不再在输入区上方重复一条。
-    onNotice: text => { if (!desktop && text === TOO_SHORT_NOTICE) return; setComposerNotice(text); },
+    onNotice: text => { if (holdLayoutRef.current && text === TOO_SHORT_NOTICE) return; setComposerNotice(text); },
     zoneAt: (pageX, pageY, prev) => {
       const l = holdLayoutRef.current;
       if (!l) return null;
@@ -622,7 +622,9 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
   const voiceMode = !desktop && voice.available && inputMode === 'voice';
   // 面板盖住输入行 + 草稿卡片能长到的最高处(卡片在按住期间会显示光标处预览,不能从面板上方露出来)。
   const holdCoverTop = inputRowTop > 0 ? inputRowTop - (showVoiceDraftCard(voiceMode, draft) ? VOICE_DRAFT_CARD_BLOCK_MAX : 0) : undefined;
-  const holdLayout = !desktop && paneWidth > 0 && rootHeight > 0 ? holdOverlayLayout(paneWidth, rootHeight, composerInset, holdCoverTop) : null;
+  // 只在手机(安卓 / iOS / 折叠屏双栏)画;桌面(含窄到 phone 布局的桌面窗口)永远不画,见 holdOverlayApplies。
+  const holdOverlayOn = holdOverlayApplies({ desktop, os: Platform.OS, userAgent: Platform.OS === 'web' ? String((globalThis as any).navigator?.userAgent ?? '') : '' });
+  const holdLayout = holdOverlayOn && paneWidth > 0 && rootHeight > 0 ? holdOverlayLayout(paneWidth, rootHeight, composerInset, holdCoverTop) : null;
   holdLayoutRef.current = holdLayout;
   // 微信式输入行(composer-row-layout.ts):输入超过 3 行 → 左上角 ⤢ 打开全屏编辑(同一份草稿)。
   const [fullEditorOpen, setFullEditorOpen] = useState(false);
@@ -2480,8 +2482,8 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
       ) : null}
       </>
       )}
-      {voiceSurface(desktop) === 'phoneOverlay' ? <VoiceRecordingOverlay voice={voice} bottom={88 + composerInset} /> : null}
-      {!desktop ? <VoiceHoldOverlay voice={voice} layout={holdLayout} /> : null}
+      {voiceSurface(desktop) === 'phoneOverlay' ? <VoiceRecordingOverlay voice={voice} bottom={88 + composerInset} hidden={holdOverlayOn} /> : null}
+      {holdOverlayOn ? <VoiceHoldOverlay voice={voice} layout={holdLayout} /> : null}
       <View ref={originProbeRef} collapsable={false} pointerEvents="none" style={styles.originProbe} />
       <SideThreadDrawer
         cfg={cfg}

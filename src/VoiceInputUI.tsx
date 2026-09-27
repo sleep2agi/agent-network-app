@@ -108,9 +108,10 @@ const BARS = 9;
  * 按住期间的浮层(不接收触摸,手势留在按钮上):屏幕中间一张大卡片 —— 流式中间结果(边说边出字)、
  * 电平条、计时;底部一个取消区(上滑进去变红,松手即取消)。`bottom` = 输入区顶端到屏幕底的距离。
  */
-export function VoiceRecordingOverlay({ voice, bottom }: { voice: VoiceInput; bottom: number }) {
+export function VoiceRecordingOverlay({ voice, bottom, hidden }: { voice: VoiceInput; bottom: number; hidden?: boolean }) {
   const { phase } = voice.state;
-  if (phase === 'idle') return null;
+  // hidden:手机上由微信式 VoiceHoldOverlay 接管(holdOverlayApplies),这张卡只留给非手机的回退(窄桌面窗口)。
+  if (hidden || phase === 'idle') return null;
   const cancel = phase === 'cancelArmed';
   const level = voice.level;
   const live = isLivePhase(phase);
