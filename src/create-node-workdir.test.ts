@@ -1,5 +1,5 @@
 import { readFileSync } from 'node:fs';
-import { defaultWorkdir, describeWorkdirError, workdirError, workdirForRequest, workdirRootOf } from './create-node-workdir';
+import { defaultWorkdir, describeWorkdirError, hasNonAsciiBelowRoot, randomHex6, workdirError, workdirForRequest, workdirRootOf, workdirSlug } from './create-node-workdir';
 import { createRequestVerdict } from './create-request-status';
 
 let passed = 0, total = 0;
@@ -17,7 +17,29 @@ check('root with trailing slash is not doubled', defaultWorkdir('/home/alice/', 
 check('Windows-shaped root joins with backslash', defaultWorkdir('C:\\Users\\alice', 'x') === 'C:\\Users\\alice\\x');
 check('Windows root with trailing backslash is not doubled', defaultWorkdir('C:\\Users\\alice\\', 'x') === 'C:\\Users\\alice\\x');
 
+// ── ASCII slug(owner 规则:工作目录一律英文/ASCII) ──
+const fakePy = (t: string) => ({ '吉他大师': 'jitadashi', 'N站牛': 'nzhanniu', '🎸': '🎸' } as Record<string, string>)[t] ?? null;
+check('ASCII name: lowercase, other chars → -', workdirSlug('My_Agent 1', 'node-000000', fakePy) === 'my-agent-1');
+check('already-safe name is unchanged', workdirSlug('my-agent-1', 'node-000000', fakePy) === 'my-agent-1');
+check('🔴 吉他大师 → jitadashi (pinyin)', workdirSlug('吉他大师', 'node-000000', fakePy) === 'jitadashi');
+check('mixed CJK/ASCII → pinyin keeps the ASCII part', workdirSlug('N站牛', 'node-000000', fakePy) === 'nzhanniu');
+check('nothing usable (emoji) → fallback', workdirSlug('🎸', 'node-1a2b3c', fakePy) === 'node-1a2b3c');
+check('dictionary unavailable → fallback, never the raw CJK', workdirSlug('吉他大师', 'node-1a2b3c', () => null) === 'node-1a2b3c');
+check('empty / only separators → fallback', workdirSlug('  ', 'node-1a2b3c', fakePy) === 'node-1a2b3c' && workdirSlug('__--', 'node-1a2b3c', fakePy) === 'node-1a2b3c');
+check('leading/trailing separators trimmed', workdirSlug('-x-', 'f', fakePy) === 'x');
+check('slug capped at 64 chars without a trailing dash', (() => { const s = workdirSlug('a'.repeat(63) + '-bbbb', 'f', fakePy); return s.length <= 64 && !s.endsWith('-'); })());
+check('every slug is [a-z0-9-]', ['My_Agent 1', '吉他大师', 'N站牛', '🎸', 'A.B.C'].every(n => /^[a-z0-9-]+$/.test(workdirSlug(n, 'node-abcdef', fakePy))));
+check('randomHex6 is 6 lowercase hex', /^[0-9a-f]{6}$/.test(randomHex6()) && randomHex6(() => 0.999) === 'ffffff');
+check('real pinyin-pro dictionary: 吉他大师 → jitadashi', workdirSlug('吉他大师', 'node-000000') === 'jitadashi');
+check('real pinyin-pro dictionary: N站牛 → nzhanniu', workdirSlug('N站牛', 'node-000000') === 'nzhanniu');
+check('default path for 吉他大师 is ASCII', defaultWorkdir('/home/alice', workdirSlug('吉他大师', 'f', fakePy)) === '/home/alice/jitadashi');
+
 // ── 客户端轻校验(daemon 才是最终裁决) ──
+check('🔴 edited CJK dir under the root is rejected client-side', workdirError('/home/alice/吉他大师', '/home/alice') !== null
+  && workdirError('~/吉他大师', '/home/alice') !== null && workdirError('/srv/节点', '/home/alice') !== null);
+check('non-ASCII root itself is not held against the user', !hasNonAsciiBelowRoot('/home/张三/proj', '/home/张三')
+  && workdirError('/home/张三/proj', '/home/张三') === null);
+check('workdir_not_ascii from the daemon is mapped', (describeWorkdirError('validate: workdir_not_ascii') ?? '').includes('ASCII'));
 const R = '/home/alice';
 check('default path passes', workdirError('/home/alice/my-agent-1', R) === null);
 check('~/sub passes (expanded daemon-side)', workdirError('~/proj', R) === null);
@@ -48,7 +70,8 @@ const wiz = readFileSync(new URL('./CreateNodeWizardScreen.tsx', import.meta.url
 check('wizard only renders the row when the daemon advertises a root', wiz.includes('{workdirRoot ? (') && wiz.includes('testID="create-workdir-row"'));
 check('wizard sends workdir through workdirForRequest (omitted for old daemons)', wiz.includes('...workdirForRequest(workdirRoot, workdir),'));
 check('submit is disabled while the workdir is invalid', wiz.includes('disabled={!canSubmit}') && wiz.includes('const canSubmit = !workdirErr;'));
-check('unedited workdir follows the name', wiz.includes('workdirEdited ?? (workdirRoot ? defaultWorkdir(workdirRoot, name.trim())'));
+check('unedited workdir follows the name through the ASCII slug', wiz.includes('workdirEdited ?? (workdirRoot ? defaultWorkdir(workdirRoot, workdirSlug(name, workdirFallback))'));
+check('fallback is fixed once per wizard (useState initialiser, not per render)', wiz.includes('const [workdirFallback] = useState(() => `node-${randomHex6()}`);'));
 check('row reuses the shared summaryRow layout', /testID="create-workdir-row"/.test(wiz) && wiz.includes('<View style={styles.summaryRow} testID="create-workdir-row">'));
 const api = readFileSync(new URL('./api.ts', import.meta.url), 'utf8');
 check('api types carry default_workdir_root and node_spec.workdir', api.includes('default_workdir_root?: string;') && api.includes('workdir?: string;'));

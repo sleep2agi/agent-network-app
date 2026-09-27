@@ -37,7 +37,7 @@ async function openConfirm(page, daemon) {
   // 先切到别的页,保证向导重新挂载、从第一步开始
   await page.evaluate(() => window.__anetLayoutSweep.setScreen({ name: 'agents' }));
   await page.evaluate((d) => window.__anetLayoutSweep.setScreen({ name: 'wizard', daemon: d }), daemon);
-  await page.getByPlaceholder('例如 my-agent-1').fill('demo-agent');
+  await page.getByPlaceholder('例如 my-agent-1').fill('demo_agent');
   for (let i = 0; i < 4; i++) await page.getByText('下一步', { exact: true }).click();
   await page.getByText('确认', { exact: true }).first().waitFor({ timeout: 5000 });
 }
@@ -52,7 +52,7 @@ for (const vp of VIEWPORTS) {
     const row = page.locator('[data-testid="create-workdir-row"]');
     await row.waitFor({ timeout: 5000 });
     const val = await page.locator('[data-testid="create-workdir-value"]').textContent();
-    ck(`${vp.name}: default = <root>/<name>`, val === '/home/alice/demo-agent', val);
+    ck(`${vp.name}: default = <root>/<ASCII slug of name> (demo_agent → demo-agent)`, val === '/home/alice/demo-agent', val);
 
     // 其余确认行:与新行同一个 summaryRow 样式;按 key 文字定位
     const cardLoc = row.locator('xpath=..');
@@ -96,6 +96,11 @@ for (const vp of VIEWPORTS) {
       (await page.getByText('不能直接用家目录，请用它下面的子目录').count()) === 1
       && (await page.locator('[data-testid="create-node-submit"]').getAttribute('aria-disabled')) === 'true');
     if (OUT) await page.screenshot({ path: `${OUT}/${vp.name}-edit-error.png` });
+    await input.fill('/home/alice/吉他大师');
+    ck(`${vp.name}: CJK dir name → inline ASCII error + submit disabled`,
+      (await page.getByText('目录名只能用英文字母、数字等 ASCII 字符（中文请用拼音）').count()) === 1
+      && (await page.locator('[data-testid="create-node-submit"]').getAttribute('aria-disabled')) === 'true');
+    if (OUT) await page.screenshot({ path: `${OUT}/${vp.name}-edit-ascii-error.png` });
     await input.fill('/home/alice/projects/demo');
     ck(`${vp.name}: custom path → value row follows, submit enabled`,
       (await page.locator('[data-testid="create-workdir-value"]').textContent()) === '/home/alice/projects/demo'

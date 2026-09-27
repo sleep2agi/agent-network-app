@@ -10,6 +10,7 @@
 // daemon 是最终裁决者(是否为 $HOME / 系统目录 / 已有别的节点 都在 daemon 侧判);这里只挡明显的形状错误。
 
 import type { HostSupervisorDaemon } from './api';
+import { toPinyin } from './lib/pinyin';
 
 /** daemon 是否支持指定工作目录;支持时返回它的默认根目录。 */
 export function workdirRootOf(daemon: Pick<HostSupervisorDaemon, 'default_workdir_root'>): string | null {
@@ -19,7 +20,38 @@ export function workdirRootOf(daemon: Pick<HostSupervisorDaemon, 'default_workdi
 
 const WIN_DRIVE = /^[A-Za-z]:[\\/]/;
 
-/** 默认工作目录:<root>/<name>。Windows 形状的根(含反斜杠)用反斜杠拼。 */
+// 🔴 节点工作目录一律 ASCII(owner 定:别再出现 `~/吉他大师`)。默认目录名 = 节点名的 slug:
+//    `[a-z0-9-]`,中文先转拼音(吉他大师 → jitadashi),什么都剩不下时用 `node-<6 位十六进制>`。
+//    算好的完整路径**显式**作为 node_spec.workdir 发出去,app 显示的就是 daemon 建的。
+//    daemon 侧对 $HOME 以下含非 ASCII 的路径回 `workdir_not_ascii`(agent-network #2060)。
+const SLUG_MAX = 64;
+
+/** 6 位十六进制随机串,slug 兜底用。可注入以便测试。 */
+export function randomHex6(rand: () => number = Math.random): string {
+  let s = '';
+  for (let i = 0; i < 6; i++) s += Math.floor(rand() * 16).toString(16);
+  return s;
+}
+
+/** 节点名 → ASCII 目录名。`fallback` 在名字转不出任何 [a-z0-9] 时使用(如 `node-1a2b3c`)。 */
+export function workdirSlug(name: string, fallback: string, pinyin: (t: string) => string | null = toPinyin): string {
+  let s = name.trim();
+  if (/[^\x00-\x7f]/.test(s)) s = pinyin(s) ?? '';
+  const slug = s.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+/, '').slice(0, SLUG_MAX).replace(/-+$/, '');
+  return slug || fallback;
+}
+
+/** 路径里「用户在这里选的那一段」含非 ASCII 吗?根(daemon 的家目录)本身不算 —— 它不归用户选。 */
+export function hasNonAsciiBelowRoot(value: string, root: string): boolean {
+  const v = value.trim();
+  let rest = v;
+  if (v === '~' || v.startsWith('~/') || v.startsWith('~\\')) rest = v.slice(1);
+  else if (v.startsWith(root)) rest = v.slice(root.length);
+  return /[^\x00-\x7f]/.test(rest);
+}
+
+/** 默认工作目录:<root>/<name>。Windows 形状的根(含反斜杠)用反斜杠拼。
+ *  调用方传进来的 name 应当已经是 workdirSlug 的结果。 */
 export function defaultWorkdir(root: string, name: string): string {
   const sep = root.includes('\\') && !root.includes('/') ? '\\' : '/';
   const base = root.endsWith('/') || root.endsWith('\\') ? root.slice(0, -1) : root;
@@ -43,6 +75,9 @@ export function workdirError(value: string, root: string): string | null {
   if (v === '~' || trimTrailingSep(v) === trimTrailingSep(root)) {
     return '不能直接用家目录，请用它下面的子目录';
   }
+  if (hasNonAsciiBelowRoot(v, root)) {
+    return '目录名只能用英文字母、数字等 ASCII 字符（中文请用拼音）';
+  }
   return null;
 }
 
@@ -65,6 +100,7 @@ export function describeWorkdirError(error: string | null | undefined): string |
     case 'workdir_create_failed': return '无法创建工作目录（权限不足？）';
     case 'workdir_not_supported_by_daemon': return '该 daemon 版本不支持指定工作目录，请升级 daemon';
     case 'workdir_invalid': return '工作目录格式不对（需要绝对路径）';
+    case 'workdir_not_ascii': return '目录名只能用英文字母、数字等 ASCII 字符（中文请用拼音）';
     default: return `工作目录不可用（${code}）`;
   }
 }
