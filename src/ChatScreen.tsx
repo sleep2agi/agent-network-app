@@ -40,7 +40,11 @@ import type { UploadedFile } from './attach';
 import { colors, onThemeChange, radius, spacing } from './theme';
 import { ds, uiScale } from './ui-scale';
 import { formatChatHeader, shouldShowTimeHeader } from './time';
-import { chooseHeaderLayout, NAME_MIN_WIDTH, type HeaderActionKey } from './chat-header-layout';
+import { chatInfoGroups, chatInfoPresentation, isChatFindKey, type ChatInfoRow } from './chat-info-model';
+import ChatInfoPanel from './ChatInfoPanel';
+import { useDesktopWindowPin } from './DesktopWindowPin';
+import { nodeInfoSectionKey, requestNodeSection } from './node-section-request';
+import { isAgentNodeSession } from './node-rules';
 import { echoSupersededByFetched } from './chat-echo';
 import { messageMenuGroups, selectionBarActions, type MessageMenuKey } from './message-menu-model';
 import { agentStatusLabel, buildQuote, compactQuoteText, confirmedOutboxIds, copyTextOf, copiedToastVisible, COPIED_TOAST_MS, parseQuoted, quoteLabel, type QuoteRef, mergeMessagesNewestFirst, msgKey, removeMessage, shouldShowJumpPill, nextUnread, jumpPillLabel, canSend, shouldSendOnEnter, composerShortcutHint } from './chat-actions';
@@ -341,27 +345,14 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
     plusEvent('conversationChanged');
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [alias]);
-  const { height: plusWindowHeight, width: headerWindowWidth } = useWindowDimensions();
-  // Chat header: the name gets priority over the actions (0.2.107 folded
-  // Xiaomi showed 「···」 for the name). Sized from the header's own width —
-  // the two-pane / desktop detail pane is narrower than the window.
-  const [headerWidth, setHeaderWidth] = useState(0);
-  const [headerMoreOpen, setHeaderMoreOpen] = useState(false);
-  const headerActionKeys: HeaderActionKey[] = [
-    'search',
-    ...(SHOW_BTW_ENTRY ? (['btw'] as const) : []),
-    ...(onToggleMute ? (['mute'] as const) : []),
-    ...(onTogglePin ? (['pin'] as const) : []),
-    ...(onOpenNodeSettings ? (['settings'] as const) : []),
-  ];
-  const headerLayout = chooseHeaderLayout({
-    width: headerWidth || headerWindowWidth,
-    hasBack: !desktop && !hideBack,
-    desktop,
-    actions: headerActionKeys,
-  });
-  const headerShows = (key: HeaderActionKey) => headerLayout.inline.includes(key);
-  const headerActionStyle = headerLayout.mode === 'full' ? styles.headerAction : styles.headerActionCompact;
+  const { height: plusWindowHeight } = useWindowDimensions();
+  // 聊天信息(chat-info-model.ts):页头右侧只剩「⋯」,搜索 / 置顶 / 免打扰 / 窗口置顶 / 节点设置都在里面。
+  const [infoOpen, setInfoOpen] = useState(false);
+  const [paneWidth, setPaneWidth] = useState(0);
+  const [headerHeight, setHeaderHeight] = useState(0);
+  const windowPin = useDesktopWindowPin();
+  // Switching conversation (two-pane sidebar) never carries the panel over.
+  useEffect(() => { setInfoOpen(false); }, [alias]);
   const rootHeightRef = useRef(0);
   const [composerHeightRaw, setComposerHeightRaw] = useState<number>(() => loadComposerHeight() ?? COMPOSER_HEIGHT_DEFAULT);
   const composerHeight = clampComposerHeight(composerHeightRaw, rootHeight || undefined);
@@ -901,6 +892,23 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
     return () => sub.remove();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchOpen]);
+  // 桌面 Ctrl/⌘+F:直接打开「查找聊天内容」(已开就把光标放回搜索框)。登记在 设置 → 快捷键
+  // (shortcuts-model.ts FIXED_SHORTCUTS 'chatFind')。只在会话页挂着时生效(节点页的规则文件有自己的 Ctrl/⌘+F)。
+  const openSearchRef = useRef(openSearch);
+  openSearchRef.current = openSearch;
+  useEffect(() => {
+    const doc = (globalThis as any).document;
+    if (!(desktop || isTauriDesktop()) || !doc?.addEventListener) return;
+    const mac = isMacKeyboard();
+    const onKey = (e: KeyboardEvent) => {
+      if (e.defaultPrevented || !isChatFindKey(e, mac)) return;
+      e.preventDefault();
+      setInfoOpen(false);
+      openSearchRef.current();
+    };
+    doc.addEventListener('keydown', onKey);
+    return () => doc.removeEventListener('keydown', onKey);
+  }, [desktop]);
   const searchState = chatSearchState({ query: searchQuery, loading: searchLoading, hits: searchHits.length, failed: searchFailed });
   void highlightTick;
 
@@ -1462,6 +1470,8 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
   // while a recent task has no result yet, otherwise the session status
   // so he can tell whether the agent is even online.
   const [sessionStatus, setSessionStatus] = useState('');
+  // 聊天信息里「规则文件」「技能」出不出现,口径同节点信息页(visibleNodeSections)。
+  const [sessionCaps, setSessionCaps] = useState({ rules: false, skills: false });
   // Deliberately a slower, separate poll than the 5s message poll above:
   // an agent's online/offline state changes far less often than messages
   // do, so 30s keeps the status badge fresh without doubling the chat's
@@ -1472,7 +1482,12 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
       try {
         const data = await fetchStatus(cfg);
         const s = (data.sessions ?? []).find(x => x.alias === alias);
-        if (live) setSessionStatus(s?.status ?? 'offline');
+        if (live) {
+          setSessionStatus(s?.status ?? 'offline');
+          const rules = !!s && (isAgentNodeSession(s) || s.rules_file_capable === true);
+          const skills = (s as (Session & { skills_capable?: boolean }) | undefined)?.skills_capable === true;
+          setSessionCaps(c => (c.rules === rules && c.skills === skills ? c : { rules, skills }));
+        }
       } catch {
         /* keep last */
       }
@@ -1544,6 +1559,31 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
     }
     : undefined;
 
+  const infoGroups = chatInfoGroups({
+    alias,
+    canOpenNode: !!onOpenNodeSettings,
+    pin: onTogglePin ? { value: pinned } : null,
+    mute: onToggleMute ? { value: muted } : null,
+    windowPin: desktop && windowPin.available ? { value: windowPin.pinned } : null,
+    btw: SHOW_BTW_ENTRY,
+    hasRulesTarget: sessionCaps.rules,
+    skillsCapable: sessionCaps.skills,
+  });
+  const onInfoRow = (row: ChatInfoRow) => {
+    switch (row.key) {
+      case 'pin': onTogglePin?.(); return;
+      case 'mute': onToggleMute?.(); return;
+      case 'windowPin': windowPin.toggle(); return;
+      case 'search': setInfoOpen(false); openSearch(); return;
+      case 'btw': setInfoOpen(false); runPlusItem('btw'); return;
+      default:
+        // 头像行(概览)和各分区行:打开节点信息页的那个分区。
+        setInfoOpen(false);
+        if (row.section) requestNodeSection(nodeInfoSectionKey(cfg.profileId ?? cfg.serverUrl, alias), row.section);
+        onOpenNodeSettings?.();
+    }
+  };
+
   return (
     <KeyboardAvoidingView
       style={styles.root}
@@ -1557,28 +1597,22 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
       // under the composer after dismissing (Vincent, 0.2.102 foldable). Only
       // let it pad while the keyboard is actually up. See keyboard-visibility.ts.
       enabled={keyboardAvoidEnabled(Platform.OS, keyboardVisible)}
-      onLayout={(event) => { const h = event.nativeEvent.layout.height; rootHeightRef.current = h; setRootHeight(h); }}
+      onLayout={(event) => { const { height: h, width: w } = event.nativeEvent.layout; rootHeightRef.current = h; setRootHeight(h); setPaneWidth(w); }}
       keyboardVerticalOffset={Platform.OS === 'android' ? (StatusBar.currentHeight ?? 0) : 0}
     >
       <View
-        style={[styles.header, { paddingHorizontal: headerLayout.paddingHorizontal, gap: headerLayout.gap }]}
-        onLayout={(event) => {
-          const w = Math.round(event.nativeEvent.layout.width);
-          setHeaderWidth(current => (current === w ? current : w));
-        }}
+        style={styles.header}
+        onLayout={(event) => { const h = Math.round(event.nativeEvent.layout.height); setHeaderHeight(c => (c === h ? c : h)); }}
         testID="chat-header"
-        {...({ dataSet: { headerMode: headerLayout.mode } } as any)}
       >
         {!desktop && !hideBack ? (
-          <Pressable onPress={onBack} hitSlop={12} accessibilityRole="button" accessibilityLabel="返回">
+          <Pressable onPress={onBack} hitSlop={12} accessibilityRole="button" accessibilityLabel="返回" testID="chat-header-back">
             <Text style={styles.back}>‹</Text>
           </Pressable>
         ) : null}
         <AliasAvatar alias={alias} size={32} />
-        {/* Name first: the column keeps up to NAME_MIN_WIDTH (≈6 CJK glyphs + …)
-            before anything else; actions never shrink, so the layout picks
-            fewer/smaller actions instead (chat-header-layout.ts). */}
-        <View style={[styles.headerTitleCol, { minWidth: Math.min(NAME_MIN_WIDTH, headerLayout.nameWidth) }]}>
+        {/* The name column is the only flexible child; the ⋯ is the header's single action. */}
+        <View style={styles.headerTitleCol} testID="chat-header-title">
           <Text style={styles.title} numberOfLines={1}>
             {alias}
           </Text>
@@ -1597,108 +1631,16 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
         </View>
         <Pressable
           accessibilityRole="button"
-          accessibilityLabel="搜索聊天记录"
-          accessibilityHint="只搜当前会话的消息"
-          onPress={searchOpen ? closeSearch : openSearch}
+          accessibilityLabel="聊天信息"
+          accessibilityHint="查找聊天内容、置顶、免打扰、节点设置"
+          onPress={() => setInfoOpen(true)}
           hitSlop={10}
-          style={({ pressed }) => [headerActionStyle, pressed && { opacity: 0.6 }]}
+          style={({ pressed }) => [styles.headerMore, pressed && { opacity: 0.6 }]}
+          testID="chat-header-more"
         >
-          <Ionicons name={searchOpen ? 'close-outline' : 'search-outline'} size={20} color={searchOpen ? colors.accent : colors.textSecondary} />
+          <Ionicons name="ellipsis-horizontal" size={20} color={colors.textSecondary} testID="chat-header-more-icon" />
         </Pressable>
-        {/* Hidden since 0.2.105 (chat-entry-flags.ts); `/btw <问题>` still opens the drawer. */}
-        {SHOW_BTW_ENTRY ? (
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="打开 BTW 旁路线程"
-            onPress={() => runPlusItem('btw')}
-            hitSlop={8}
-            style={({ pressed }) => [styles.btwHeaderButton, pressed && { opacity: 0.6 }]}
-          >
-            <Text style={styles.btwHeaderText}>BTW</Text>
-          </Pressable>
-        ) : null}
-        {onToggleMute && headerShows('mute') ? (
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel={muted ? '取消消息免打扰' : '消息免打扰'}
-            accessibilityState={{ selected: muted }}
-            onPress={onToggleMute}
-            hitSlop={10}
-            style={({ pressed }) => [headerActionStyle, pressed && { opacity: 0.6 }]}
-            testID="chat-mute-toggle"
-          >
-            <Ionicons name={muted ? 'notifications-off' : 'notifications-outline'} size={20} color={muted ? colors.accent : colors.textSecondary} />
-          </Pressable>
-        ) : null}
-        {onTogglePin && headerShows('pin') ? (
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel={pinned ? '取消置顶会话' : '置顶会话'}
-            accessibilityState={{ selected: pinned }}
-            onPress={onTogglePin}
-            hitSlop={10}
-            style={({ pressed }) => [headerActionStyle, pressed && { opacity: 0.6 }]}
-          >
-            <Ionicons name={pinned ? 'pin' : 'pin-outline'} size={20} color={pinned ? colors.accent : colors.textSecondary} />
-            {headerLayout.labels ? (
-              <Text style={[styles.headerActionText, pinned && { color: colors.accent }]}>{pinned ? '已置顶' : '置顶'}</Text>
-            ) : null}
-          </Pressable>
-        ) : null}
-        {headerLayout.overflow.length > 0 ? (
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="更多操作"
-            onPress={() => setHeaderMoreOpen(true)}
-            hitSlop={10}
-            style={({ pressed }) => [headerActionStyle, pressed && { opacity: 0.6 }]}
-            testID="chat-header-more"
-          >
-            <Ionicons name="ellipsis-horizontal" size={20} color={(pinned || muted) ? colors.accent : colors.textSecondary} />
-          </Pressable>
-        ) : null}
-        {onOpenNodeSettings ? (
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="查看节点信息"
-            accessibilityHint="打开当前节点的只读详细信息"
-            onPress={onOpenNodeSettings}
-            hitSlop={10}
-            style={({ pressed }) => [headerActionStyle, desktop && styles.headerActionWithWindowPin, pressed && { opacity: 0.6 }]}
-          >
-            <Ionicons name="settings-outline" size={20} color={colors.textSecondary} />
-            {headerLayout.labels ? <Text style={styles.headerActionText}>设置</Text> : null}
-          </Pressable>
-        ) : null}
       </View>
-
-      {/* Narrow headers park pin / mute here; same action-sheet shape as the long-press menu. */}
-      <Modal visible={headerMoreOpen && headerLayout.overflow.length > 0} transparent animationType="fade" onRequestClose={() => setHeaderMoreOpen(false)}>
-        <Pressable style={styles.menuBackdrop} onPress={() => setHeaderMoreOpen(false)}>
-          <View style={[styles.actionSheet, sheetPad]}>
-            {headerLayout.overflow.map((key, index) => {
-              const label = key === 'pin'
-                ? (pinned ? '取消置顶会话' : '置顶会话')
-                : (muted ? '取消消息免打扰' : '消息免打扰');
-              const run = key === 'pin' ? onTogglePin : onToggleMute;
-              return (
-                <View key={key}>
-                  {index > 0 ? <View style={styles.actionSep} /> : null}
-                  <Pressable
-                    accessibilityRole="button"
-                    accessibilityLabel={label}
-                    style={({ pressed }) => [styles.actionItem, pressed && styles.actionItemPressed]}
-                    onPress={() => { setHeaderMoreOpen(false); run?.(); }}
-                    testID={`chat-header-more-${key}`}
-                  >
-                    <Text style={styles.actionText}>{label}</Text>
-                  </Pressable>
-                </View>
-              );
-            })}
-          </View>
-        </Pressable>
-      </Modal>
 
       {searchOpen ? (
 
@@ -2427,6 +2369,17 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
           <Text style={styles.dropOverlayText}>松开即可添加到输入框</Text>
         </View>
       ) : null}
+      <ChatInfoPanel
+        visible={infoOpen}
+        presentation={chatInfoPresentation({ desktop, hideBack })}
+        groups={infoGroups}
+        alias={alias}
+        subtitle={subtitle}
+        paneWidth={paneWidth}
+        headerHeight={headerHeight}
+        onClose={() => setInfoOpen(false)}
+        onRow={onInfoRow}
+      />
     </KeyboardAvoidingView>
   );
 }
@@ -2456,28 +2409,10 @@ const makeStyles = () =>
   back: { color: colors.accent, fontSize: 28, lineHeight: 30, paddingRight: spacing.sm },
   title: { color: colors.text, fontSize: 16, fontWeight: '600' },
   subtitle: { color: colors.running, fontSize: 11, marginTop: 1 },
-  // 界面密度: heights follow ds(); widths stay what chat-header-layout.ts budgets for (it decides
-  // which actions fit), so a denser header never overflows its own layout plan.
-  headerAction: {
-    minWidth: 58,
-    height: ds(34),
-    paddingHorizontal: spacing.sm,
-    flexDirection: 'row',
-    gap: 4,
-    borderRadius: 9,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  headerActionText: { color: colors.textSecondary, fontSize: 12 },
-  // Phone widths: icon-only square target (chat-header-layout ICON_BUTTON = 36).
-  headerActionCompact: { width: 36, height: ds(34), borderRadius: 9, alignItems: 'center', justifyContent: 'center' },
-  // Only flexible child of the header; minWidth is set inline from the layout.
-  headerTitleCol: { flex: 1 },
-  // DesktopWindowPin owns the top-right 34px. Reserve a separate hit target
-  // instead of letting its absolute z-index cover this action.
-  headerActionWithWindowPin: { marginRight: 42 },
-  btwHeaderButton: { height: 28, minWidth: 42, paddingHorizontal: spacing.sm, borderRadius: radius.sm, alignItems: 'center', justifyContent: 'center' },
-  btwHeaderText: { color: colors.textSecondary, fontSize: 11, fontWeight: '600', letterSpacing: 0.4 },
+  // The single ⋯: a 36 dp target flush with the right padding. Icon buttons are measured by their box
+  // (tests/test-layout-sweep: the box is the symmetric thing), so left and right padding match.
+  headerMore: { width: 36, height: ds(34), borderRadius: 9, alignItems: 'center', justifyContent: 'center' },
+  headerTitleCol: { flex: 1, minWidth: 0 },
   beginning: {
     color: colors.textMuted,
     fontSize: 11,

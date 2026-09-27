@@ -28,14 +28,10 @@ const count = (needle: string) => chat.split(needle).length - 1;
 
 // Every entry-point JSX is behind its flag (source contract).
 {
-  // Anchor on the header's testID: since the phone-width header fix the row's
-  // style is an array (compact padding/gap), so `<View style={styles.header}>` is gone.
-  const headerAt = chat.indexOf('testID="chat-header"');
-  check(headerAt > 0, 'chat header found');
-  const header = chat.slice(headerAt, headerAt + 6000);
-  const btwAt = header.indexOf('accessibilityLabel="打开 BTW 旁路线程"');
-  check(btwAt > 0, 'header BTW button still in source (for the flag)');
-  check(header.lastIndexOf('{SHOW_BTW_ENTRY ? (', btwAt) > header.lastIndexOf(') : null}', btwAt), 'header BTW button is wrapped in SHOW_BTW_ENTRY');
+  // Since 聊天信息 (chat-info-model.ts) the header has a single ⋯; the BTW entry is a panel row
+  // that exists only when the flag says so.
+  check(/btw: SHOW_BTW_ENTRY,/.test(chat), 'the 聊天信息 BTW row is fed by SHOW_BTW_ENTRY');
+  check(!chat.includes('accessibilityLabel="打开 BTW 旁路线程"'), 'no BTW button left in the chat header');
 }
 check(count('{SHOW_BOLT_ENTRY ? (') === 2, 'both ⚡ buttons (desktop toolbar chip + mobile composer row) are gated');
 for (const glyph of ['>⚡ 优先</Text>', '>⚡</Text>']) {
@@ -43,7 +39,7 @@ for (const glyph of ['>⚡ 优先</Text>', '>⚡</Text>']) {
   check(at > 0 && chat.lastIndexOf('{SHOW_BOLT_ENTRY ? (', at) > chat.lastIndexOf(') : null}', at), `${glyph} sits inside a SHOW_BOLT_ENTRY block`);
 }
 check(count("onPress={() => setSendPriority(value => value === 'high' ? 'normal' : 'high')}") === 2, 'no other ⚡ toggle outside the gated blocks');
-check(count('打开 BTW 旁路线程') === 1, 'no other BTW header entry');
+check(count('打开 BTW 旁路线程') === 0 && count("case 'btw': setInfoOpen(false); runPlusItem('btw'); return;") === 1, 'BTW is reachable only through the flag-gated 聊天信息 row');
 
 // Hiding the toggle must not break sending: priority still defaults to normal and flows to sendTask.
 check(chat.includes("useState<'high' | 'normal'>('normal')"), 'send priority defaults to normal');

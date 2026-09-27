@@ -47,6 +47,7 @@
 
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { layoutGeneration, releaseOnUnmount, takeHandoff } from './layout-handoff';
+import { takeNodeSectionRequest } from './node-section-request';
 import { ActivityIndicator, BackHandler, Keyboard, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StatusBar, StyleSheet, View, useWindowDimensions } from 'react-native';
 import { Text, TextInput } from './ui-text';
 import { Ionicons } from './icons';
@@ -183,7 +184,9 @@ export default function NodeDetailScreen({
   useLayoutEffect(() => {
     const mountedGeneration = layoutGeneration();
     const handed = takeHandoff<NodeSectionKey>(sectionHandoffKey);
-    if (handed) setActiveSection(handed);
+    // 聊天信息里点的是某个分区(node-section-request.ts):优先于折叠屏交接。
+    const requested = readOnly ? takeNodeSectionRequest(sectionHandoffKey) : undefined;
+    if (requested || handed) setActiveSection((requested || handed)!);
     return () => releaseOnUnmount(sectionHandoffKey, activeSectionRef.current, mountedGeneration);
   }, [sectionHandoffKey]);
   const [showMoreFacts, setShowMoreFacts] = useState(false);

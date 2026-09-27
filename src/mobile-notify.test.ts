@@ -190,7 +190,7 @@ ck('运行时用与桌面同一条判据(decideWithReason)+ incomingFromSnapshot
 ck('用户 SSE 来 desktop_message → 立刻拉一次', listener.includes('requestNotifierRefresh();'));
 // 截图抓到过:不在搜索时 show() 只看 visible===null,安卓专属行在桌面上照样渲染。行必须同时按平台筛。
 ck('设置页渲染行时按平台筛(不只在搜索时)', settingsSrc.includes("const show = (cat: SettingsCategoryKey, row: string) => onPlatform.has(`${cat}.${row}`) && (visible === null || visible.has(`${cat}.${row}`));"));
-ck('会话页有免打扰铃铛;设置页有小米指引与测试通知', chat.includes('testID="chat-mute-toggle"') && settingsSrc.includes('testID="notify-xiaomi-guide"') && settingsSrc.includes('sendTestNotification()'));
+ck('会话页「聊天信息」有消息免打扰开关;设置页有小米指引与测试通知', chat.includes('mute: onToggleMute ? { value: muted } : null,') && chat.includes("case 'mute': onToggleMute?.(); return;") && settingsSrc.includes('testID="notify-xiaomi-guide"') && settingsSrc.includes('sendTestNotification()'));
 const manifest = norm('../modules/anet-keepalive/android/src/main/AndroidManifest.xml');
 const service = norm('../modules/anet-keepalive/android/src/main/java/expo/modules/anetkeepalive/AnetKeepAliveService.kt');
 const appJson = JSON.parse(norm('../app.json'));

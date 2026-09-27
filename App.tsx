@@ -557,7 +557,8 @@ function AppRoot() {
           />
         )}
         <DesktopMessageListener cfg={cfg} />
-        <DesktopWindowPin />
+        {/* On a chat the pin toggle is 聊天信息 → 窗口置顶; the header keeps a single ⋯. */}
+        <DesktopWindowPin hidden={screen.name === 'chat'} />
       </SafeAreaView>
     );
   }
@@ -964,6 +965,10 @@ function DesktopWorkspace({ cfg, screen, setScreen, onLogout, onLocalDataDeleted
       onOpenNodeSettings={() => setScreen({ name: 'nodeInfo', alias: screen.alias })}
       onOpenVoiceSettings={() => { rememberSettingsCategory('voice'); setScreen({ name: 'settings' }); }}
       focusTaskId={screen.focusTaskId}
+      pinned={pinnedAliases.includes(screen.alias)}
+      onTogglePin={() => togglePin(screen.alias)}
+      muted={mutedAliases.includes(screen.alias)}
+      onToggleMute={() => toggleMute(screen.alias)}
       desktop
     />
   ) : screen.name === 'tasks' ? (
