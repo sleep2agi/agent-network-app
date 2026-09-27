@@ -119,6 +119,10 @@ jobs:
           releaseBody: |-
             Signed and notarized stable update for macOS (Apple Silicon) and Windows (x64).
 
+            What's new in 0.2.128:
+            - 手机设置的二级页面统一成微信风格：分组白卡片、单选打勾、API Key 单独一页，进入二级页隐藏底部导航。
+            - 新建节点的默认工作目录一律用英文/拼音（中文节点名自动转拼音），可修改。
+
             What's new in 0.2.127:
             - 聊天顶栏只留一个「⋯」：搜索、置顶、免打扰、节点设置都收进「聊天信息」；桌面端 Ctrl/⌘+F 直接搜索。
             - 节点信息新增「定时任务」：列出这个节点会执行的计划，可暂停/恢复、点开看详情、一键新建。
