@@ -69,7 +69,13 @@ ck('state is re-read from ASC after each grant write', (grant.match(/\n\s+read_g
 ck('read-back reads the group itself and its builds relationship', run.includes('asc_get "betaGroups/$group_id" >') && run.includes('betaGroups/$group_id/relationships/builds?limit=200'));
 ck('group and tester writes are not in the grant block', !/betaTesters|asc_write POST betaGroups /.test(grant));
 ck('summary reports internalBuildState from buildBetaDetails', run.includes("internalBuildState // \"UNKNOWN\"") && run.includes('internalBuildState:         $internal_state'));
-ck('grant-builds fails the job unless the read-back confirms both', run.includes(`if [ "$MODE" = 'grant-builds' ] && { [ "$all_builds" != 'yes' ] || [ "$build_listed" != 'yes' ]; }; then`));
+ck('grant-builds fails the job unless the build is listed and access is all-builds or proven not updatable', run.includes(`if [ "$MODE" = 'grant-builds' ] && { [ "$build_listed" != 'yes' ] || { [ "$all_builds" != 'yes' ] && [ "$grant_not_updatable" != 'yes' ]; }; }; then`));
+ck('only the exact 409 ATTRIBUTE.NOT_ALLOWED lets grant continue past a failed PATCH', run.includes(`if [ "$status" = '409' ] && jq -e 'any(.errors[]?; (.code // "") == "ENTITY_ERROR.ATTRIBUTE.NOT_ALLOWED")' "$RUNNER_TEMP/grant-out.json" > /dev/null; then`) && run.includes('grant_not_updatable=yes'));
+ck('any other PATCH failure still stops the job', /\n\s+else\n\s+case "\$status" in 2\?\?\) echo "PATCH accepted \(HTTP \$status\)\." ;; \*\) explain_error "\$status" "\$RUNNER_TEMP\/grant-out\.json"; exit 1 ;; esac\n/.test(run));
+ck('the ASC-user hint is only shown for tester writes', run.includes(`if [ "$context" = 'tester' ] && jq -e`) && (run.match(/explain_error [^\n]* tester;/g) || []).length === 1);
+ck('group_name input, default Internal, non-empty', /\n      group_name:\n[\s\S]*?default: "Internal"\n/.test(wf) && run.includes('group_name must not be empty'));
+ck('add selects the internal group by exact name only (so a new name creates a new group)', run.includes(`[.data[] | select(.attributes.isInternalGroup == true and .attributes.name == $name)] | .[0].id // empty`));
+ck('group names never come from the email', !/INTERNAL_GROUP_NAME=\$\(?[^\n]*EMAIL/.test(run));
 
 console.log(`ios TestFlight internal tester: ${p}/${t} checks passed`);
 process.exit(p === t ? 0 : 1);
