@@ -24,9 +24,9 @@ on:
   workflow_dispatch:
     inputs:
       mode:
-        description: "list = read-only counts; add = add the email below as an internal tester; grant-builds = give the internal group all builds (and attach build_number if still missing); invite = invite the email to the App Store Connect team as Developer"
+        description: "list = read-only counts; add = add the email below as an internal tester; grant-builds = give the internal group all builds (and attach build_number if still missing); invite = invite the email to the App Store Connect team as Developer; invite-status = read-only: is the email a team user / invited, and when does the invitation expire"
         type: choice
-        options: [list, add, grant-builds, invite]
+        options: [list, add, grant-builds, invite, invite-status]
         default: list
       email:
         description: "Apple ID email of an App Store Connect user on the team (add mode, or to check membership in list mode). Masked in the log."
@@ -71,10 +71,10 @@ jobs:
           EMAIL=$(jq -r '.inputs.email // ""' "$GITHUB_EVENT_PATH" | tr -d '[:space:]'); if [ -n "$EMAIL" ]; then echo "::add-mask::$EMAIL"; fi
           set -euo pipefail
 
-          case "$MODE" in list|add|grant-builds|invite) ;; *) echo "::error::mode must be list, add, grant-builds or invite"; exit 1 ;; esac
+          case "$MODE" in list|add|grant-builds|invite|invite-status) ;; *) echo "::error::mode must be list, add, grant-builds, invite or invite-status"; exit 1 ;; esac
           case "$BUILD_NUMBER" in ''|*[!0-9]*) echo "::error::build_number must be numeric"; exit 1 ;; esac
           if [ -z "$INTERNAL_GROUP_NAME" ]; then echo "::error::group_name must not be empty"; exit 1; fi
-          if { [ "$MODE" = 'add' ] || [ "$MODE" = 'invite' ]; } && [ -z "$EMAIL" ]; then
+          if { [ "$MODE" = 'add' ] || [ "$MODE" = 'invite' ] || [ "$MODE" = 'invite-status' ]; } && [ -z "$EMAIL" ]; then
             echo "::error::$MODE mode needs the email input"
             exit 1
           fi
@@ -157,7 +157,7 @@ jobs:
           # invite: add the email to the App Store Connect team as a Developer, so it can
           # later be an internal tester. Checks for an existing user / pending invitation
           # first. Reports already-member / already-invited / invited, never the email.
-          if [ "$MODE" = 'invite' ]; then
+          if [ "$MODE" = 'invite' ] || [ "$MODE" = 'invite-status' ]; then
             asc_read() {  # like asc_get but returns the HTTP status and keeps the body
               local out="$1" endpoint="$2"; shift 2
               curl --silent --show-error --get --output "$out" --write-out '%{http_code}' \
@@ -167,25 +167,64 @@ jobs:
             no_permission() {
               echo "::error::The App Store Connect API key is not allowed to $1 (HTTP 403). Invite this Apple ID from the App Store Connect web UI instead: Users and Access → + → role Developer."
             }
-            users_status=$(asc_read "$RUNNER_TEMP/users.json" users --data-urlencode "filter[username]=$EMAIL" --data-urlencode 'limit=2')
-            invites_status=$(asc_read "$RUNNER_TEMP/invites.json" userInvitations --data-urlencode "filter[email]=$EMAIL" --data-urlencode 'limit=2')
+            # Pre-check by listing every page and matching the address inside jq (case-insensitive).
+            # Do not rely on filter[username]/filter[email]: on 2026-09-27 a filtered read-back
+            # returned no rows for an invitation that POST had just created (HTTP 201).
+            read_all() {  # read_all <out> <endpoint-with-query>; prints the HTTP status of the first failing page, or 200
+              local out="$1" url="$api/$2" page="$RUNNER_TEMP/page.json" code
+              echo '{"data":[]}' > "$out"
+              while [ -n "$url" ] && [ "$url" != 'null' ]; do
+                code=$(curl --silent --show-error --output "$page" --write-out '%{http_code}' \
+                  -H "Authorization: Bearer $jwt" -H 'Accept: application/json' "$url")
+                [ "$code" = '200' ] || { echo "$code"; return 0; }
+                jq -s '{data: (.[0].data + .[1].data)}' "$out" "$page" > "$out.tmp" && mv "$out.tmp" "$out"
+                url=$(jq -r '.links.next // empty' "$page")
+              done
+              echo 200
+            }
+            pick() {  # pick <file> <attribute>: the first row whose attribute equals the email (case-insensitive)
+              jq --arg e "$email_lc" --arg attr "$2" '[.data[] | select(((.attributes[$attr] // "") | ascii_downcase) == $e)] | .[0] // empty' "$1"
+            }
+            users_status=$(read_all "$RUNNER_TEMP/users.json" 'users?limit=200')
+            invites_status=$(read_all "$RUNNER_TEMP/invites.json" 'userInvitations?limit=200')
             state=''
             case "$users_status" in
-              200) jq -e '(.data | length) > 0' "$RUNNER_TEMP/users.json" > /dev/null && state=already-member ;;
+              200) pick "$RUNNER_TEMP/users.json" username > "$RUNNER_TEMP/user-row.json"; [ -s "$RUNNER_TEMP/user-row.json" ] && state=already-member ;;
               403) echo "::warning::The API key cannot read team users (HTTP 403); cannot pre-check membership, trying the invitation anyway." ;;
-              *) explain_error "$users_status" "$RUNNER_TEMP/users.json"; exit 1 ;;
+              *) echo "::error::reading team users failed (HTTP $users_status)"; exit 1 ;;
             esac
             if [ -z "$state" ]; then
               case "$invites_status" in
-                200) jq -e '(.data | length) > 0' "$RUNNER_TEMP/invites.json" > /dev/null && state=already-invited ;;
+                200) pick "$RUNNER_TEMP/invites.json" email > "$RUNNER_TEMP/invite-row.json"; [ -s "$RUNNER_TEMP/invite-row.json" ] && state=already-invited ;;
                 403) echo "::warning::The API key cannot read user invitations (HTTP 403); cannot pre-check pending invitations, trying the invitation anyway." ;;
-                *) explain_error "$invites_status" "$RUNNER_TEMP/invites.json"; exit 1 ;;
+                *) echo "::error::reading user invitations failed (HTTP $invites_status)"; exit 1 ;;
               esac
             fi
+            describe_invite() {  # describe_invite <row file>
+              echo "roles: $(jq -r '.attributes.roles // [] | join(",")' "$1"); allAppsVisible: $(jq -r '.attributes.allAppsVisible' "$1"); provisioningAllowed: $(jq -r '.attributes.provisioningAllowed' "$1"); expires: $(jq -r '.attributes.expirationDate // "unknown"' "$1")"
+            }
+            if [ "$MODE" = 'invite-status' ]; then
+              # Read-only diagnosis of the filtered lookups the first invite run relied on.
+              f_users=$(asc_read "$RUNNER_TEMP/f-users.json" users --data-urlencode "filter[username]=$EMAIL" --data-urlencode 'limit=200')
+              f_inv=$(asc_read "$RUNNER_TEMP/f-inv.json" userInvitations --data-urlencode "filter[email]=$EMAIL" --data-urlencode 'limit=200')
+              echo "Unfiltered: $(jq '.data | length' "$RUNNER_TEMP/users.json") users, $(jq '.data | length' "$RUNNER_TEMP/invites.json") pending invitations on the team."
+              echo "filter[username] lookup: HTTP $f_users, $(jq '.data | length' "$RUNNER_TEMP/f-users.json" 2>/dev/null || echo '?') rows. filter[email] lookup: HTTP $f_inv, $(jq '.data | length' "$RUNNER_TEMP/f-inv.json" 2>/dev/null || echo '?') rows."
+              if [ -s "$RUNNER_TEMP/invite-row.json" ]; then
+                if jq -e --arg e "$EMAIL" '.attributes.email == $e' "$RUNNER_TEMP/invite-row.json" > /dev/null; then same_case=yes; else same_case=no; fi
+                echo "Stored invitation address equals the given one exactly (same case): $same_case"
+              fi
+              case "$state" in
+                already-member) echo "Invitation state: already-member (roles: $(jq -r '.attributes.roles // [] | join(",")' "$RUNNER_TEMP/user-row.json"))." ;;
+                already-invited) echo "Invitation state: already-invited ($(describe_invite "$RUNNER_TEMP/invite-row.json"))." ;;
+                *) echo "Invitation state: none (not a team user and no pending invitation)." ;;
+              esac
+              rm -f "$jwt_file" "$RUNNER_TEMP/users.json" "$RUNNER_TEMP/invites.json" "$RUNNER_TEMP/f-users.json" "$RUNNER_TEMP/f-inv.json" "$RUNNER_TEMP/user-row.json" "$RUNNER_TEMP/invite-row.json"
+              exit 0
+            fi
             if [ "$state" = 'already-member' ]; then
-              echo "Invitation state: already-member (roles: $(jq -r '.data[0].attributes.roles // [] | join(",")' "$RUNNER_TEMP/users.json"))."
+              echo "Invitation state: already-member (roles: $(jq -r '.attributes.roles // [] | join(",")' "$RUNNER_TEMP/user-row.json"))."
             elif [ "$state" = 'already-invited' ]; then
-              echo "Invitation state: already-invited (roles: $(jq -r '.data[0].attributes.roles // [] | join(",")' "$RUNNER_TEMP/invites.json"); expires: $(jq -r '.data[0].attributes.expirationDate // "unknown"' "$RUNNER_TEMP/invites.json"))."
+              echo "Invitation state: already-invited ($(describe_invite "$RUNNER_TEMP/invite-row.json"))."
             else
               jq -n --arg email "$EMAIL" --arg first "$FIRST_NAME" --arg last "$LAST_NAME" \
                 '{data:{type:"userInvitations",attributes:{email:$email,firstName:$first,lastName:$last,roles:["DEVELOPER"],allAppsVisible:true,provisioningAllowed:false}}}' \
@@ -197,16 +236,23 @@ jobs:
                 403) no_permission 'invite users'; exit 1 ;;
                 *) explain_error "$status" "$RUNNER_TEMP/invite-out.json"; exit 1 ;;
               esac
-              # Read back from ASC rather than trusting the write response.
-              invites_status=$(asc_read "$RUNNER_TEMP/invites.json" userInvitations --data-urlencode "filter[email]=$EMAIL" --data-urlencode 'limit=2')
-              if [ "$invites_status" = '200' ] && jq -e '(.data | length) > 0' "$RUNNER_TEMP/invites.json" > /dev/null; then
-                echo "Invitation state: invited (roles: $(jq -r '.data[0].attributes.roles // [] | join(",")' "$RUNNER_TEMP/invites.json"); allAppsVisible: $(jq -r '.data[0].attributes.allAppsVisible' "$RUNNER_TEMP/invites.json"); provisioningAllowed: $(jq -r '.data[0].attributes.provisioningAllowed' "$RUNNER_TEMP/invites.json"); expires: $(jq -r '.data[0].attributes.expirationDate // "unknown"' "$RUNNER_TEMP/invites.json"))."
+              # Read back from ASC by the new invitation's id rather than trusting the write response.
+              invite_id=$(jq -r '.data.id // empty' "$RUNNER_TEMP/invite-out.json")
+              read_back=''
+              for attempt in 1 2 3 4 5 6; do
+                if [ -n "$invite_id" ] && [ "$(asc_read "$RUNNER_TEMP/invite-now.json" "userInvitations/$invite_id")" = '200' ]; then
+                  jq '.data' "$RUNNER_TEMP/invite-now.json" > "$RUNNER_TEMP/invite-row.json"; read_back=yes; break
+                fi
+                sleep 5
+              done
+              if [ "$read_back" = 'yes' ]; then
+                echo "Invitation state: invited ($(describe_invite "$RUNNER_TEMP/invite-row.json"))."
               else
-                echo "::error::POST userInvitations returned HTTP $status but the invitation is not listed on read-back (HTTP $invites_status)."
+                echo "::error::POST userInvitations returned HTTP $status but GET userInvitations/<id> did not return it."
                 exit 1
               fi
             fi
-            rm -f "$jwt_file" "$RUNNER_TEMP/users.json" "$RUNNER_TEMP/invites.json" "$RUNNER_TEMP/invite-out.json"
+            rm -f "$jwt_file" "$RUNNER_TEMP/users.json" "$RUNNER_TEMP/invites.json" "$RUNNER_TEMP/invite-out.json" "$RUNNER_TEMP/invite-now.json" "$RUNNER_TEMP/user-row.json" "$RUNNER_TEMP/invite-row.json"
             exit 0
           fi
 
