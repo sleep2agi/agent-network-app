@@ -946,7 +946,7 @@ const makeStyles = () =>
   phoneGroupTitle: { color: colors.textMuted, fontSize: 13, paddingHorizontal: spacing.lg, paddingTop: spacing.lg, paddingBottom: spacing.xs + 2 },
   phoneGroupGap: { height: spacing.sm },
   phoneBlock: { backgroundColor: colors.groupedRow },
-  phoneRow: { flexDirection: 'row', alignItems: 'center', minHeight: Math.max(48, ds(52)), paddingLeft: spacing.lg, paddingRight: spacing.md, gap: spacing.sm, backgroundColor: colors.groupedRow },
+  phoneRow: { flexDirection: 'row', alignItems: 'center', minHeight: Math.max(48, ds(52)), paddingHorizontal: spacing.lg, gap: spacing.sm, backgroundColor: colors.groupedRow },
   phoneRowPressed: { backgroundColor: colors.groupedRowPressed },
   phoneRowLabel: { color: colors.text, fontSize: 16, flexShrink: 0 },
   phoneRowValue: { flex: 1, minWidth: 0, color: colors.textMuted, fontSize: 14, textAlign: 'right' },
