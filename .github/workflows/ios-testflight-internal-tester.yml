@@ -1,0 +1,245 @@
+# TestFlight internal testers: list (read-only) or add one tester by email.
+#
+# Internal testers get every processed build immediately, without Beta App Review.
+# Apple only accepts App Store Connect users of team 446BLT75JZ as internal
+# testers, so `add` fails with a clear message for any other address.
+#
+# 🔴 The email is personal data and this repository is public.
+#    * It is read from the event payload file, never through `${{ inputs.email }}`
+#      or `${{ github.event.inputs.email }}`. Expressions are substituted into the
+#      script text and job env, and the Actions log prints both BEFORE any
+#      `::add-mask::` can run.
+#    * The first thing the step does is `::add-mask::` it. After that the runner
+#      replaces it with *** in every later log line, including ASC error bodies.
+#    * It is never echoed, never written to $GITHUB_STEP_SUMMARY and never
+#      written to any file other than the temporary request body in $RUNNER_TEMP.
+#    * `list` never prints tester emails, only counts and yes/no.
+#
+# Uses the App Store Connect API key from the protected `macos-signing`
+# environment, the same credentials as ios-build and ios-testflight-status.
+
+name: ios TestFlight internal tester
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "list = read-only counts; add = add the email below as an internal tester"
+        type: choice
+        options: [list, add]
+        default: list
+      email:
+        description: "Apple ID email of an App Store Connect user on the team (add mode, or to check membership in list mode). Masked in the log."
+        required: false
+        default: ""
+      build_number:
+        description: "CFBundleVersion to report availability for"
+        required: true
+        default: "28"
+
+permissions:
+  contents: read
+
+jobs:
+  internal-tester:
+    runs-on: ubuntu-latest
+    environment: macos-signing
+    steps:
+      - name: Manage TestFlight internal testers without exposing the email
+        env:
+          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+          APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
+          APPLE_API_KEY_BASE64: ${{ secrets.APPLE_API_KEY_BASE64 }}
+          MODE: ${{ inputs.mode }}
+          BUILD_NUMBER: ${{ inputs.build_number }}
+          BUNDLE_ID: top.vansin.agentnetwork
+          INTERNAL_GROUP_NAME: Internal
+        shell: bash
+        run: |
+          EMAIL=$(jq -r '.inputs.email // ""' "$GITHUB_EVENT_PATH" | tr -d '[:space:]'); if [ -n "$EMAIL" ]; then echo "::add-mask::$EMAIL"; fi
+          set -euo pipefail
+
+          case "$MODE" in list|add) ;; *) echo "::error::mode must be list or add"; exit 1 ;; esac
+          case "$BUILD_NUMBER" in ''|*[!0-9]*) echo "::error::build_number must be numeric"; exit 1 ;; esac
+          if [ "$MODE" = 'add' ] && [ -z "$EMAIL" ]; then
+            echo "::error::add mode needs the email input"
+            exit 1
+          fi
+          email_lc=$(printf '%s' "$EMAIL" | tr '[:upper:]' '[:lower:]')
+          if [ -n "$email_lc" ] && [ "$email_lc" != "$EMAIL" ]; then echo "::add-mask::$email_lc"; fi
+
+          jwt_file="$RUNNER_TEMP/app-store-connect.jwt"
+          node <<'NODE' > "$jwt_file"
+          const crypto = require('node:crypto');
+          const b64url = (value) => Buffer.from(value).toString('base64url');
+          const now = Math.floor(Date.now() / 1000);
+          const header = b64url(JSON.stringify({ alg: 'ES256', kid: process.env.APPLE_API_KEY, typ: 'JWT' }));
+          const payload = b64url(JSON.stringify({
+            iss: process.env.APPLE_API_ISSUER,
+            iat: now,
+            exp: now + 900,
+            aud: 'appstoreconnect-v1',
+          }));
+          const unsigned = `${header}.${payload}`;
+          const key = Buffer.from(process.env.APPLE_API_KEY_BASE64, 'base64').toString('utf8');
+          const signature = crypto.sign('sha256', Buffer.from(unsigned), {
+            key,
+            dsaEncoding: 'ieee-p1363',
+          }).toString('base64url');
+          process.stdout.write(`${unsigned}.${signature}`);
+          NODE
+          chmod 600 "$jwt_file"
+          jwt=$(<"$jwt_file")
+          api=https://api.appstoreconnect.apple.com/v1
+
+          asc_get() {
+            local endpoint="$1"
+            shift
+            curl --fail-with-body --silent --show-error --get \
+              -H "Authorization: Bearer $jwt" \
+              -H 'Accept: application/json' \
+              "$api/$endpoint" "$@"
+          }
+
+          # Writes send the JSON in file $3, print the HTTP status on stdout and leave the response body in $4,
+          # so a rejection can be explained instead of just failing.
+          asc_write() {
+            local method="$1" endpoint="$2" body_file="$3" out_file="$4"
+            curl --silent --show-error --output "$out_file" --write-out '%{http_code}' \
+              --request "$method" \
+              -H "Authorization: Bearer $jwt" \
+              -H 'Accept: application/json' \
+              -H 'Content-Type: application/json' \
+              --data @"$body_file" \
+              "$api/$endpoint"
+          }
+
+          # Every page of a collection, merged into one {"data":[...]} document.
+          asc_all() {
+            local url="$api/$1" out="$2" page="$RUNNER_TEMP/page.json"
+            echo '{"data":[]}' > "$out"
+            while [ -n "$url" ] && [ "$url" != 'null' ]; do
+              curl --fail-with-body --silent --show-error \
+                -H "Authorization: Bearer $jwt" -H 'Accept: application/json' "$url" > "$page"
+              jq -s '{data: (.[0].data + .[1].data)}' "$out" "$page" > "$out.tmp" && mv "$out.tmp" "$out"
+              url=$(jq -r '.links.next // empty' "$page")
+            done
+          }
+
+          explain_error() {
+            local status="$1" body="$2"
+            echo "::error::App Store Connect answered HTTP $status"
+            jq -r '.errors[]? | "  - \(.status // "") \(.code // "") \(.title // ""): \(.detail // "")"' "$body" 2>/dev/null || true
+            if jq -e '[.errors[]? | ((.code // "") + " " + (.detail // "") + " " + (.title // ""))] | join(" ") | test("(?i)internal|user|not.*member|STATE_ERROR|ENTITY_ERROR")' "$body" > /dev/null 2>&1; then
+              echo "::error::Internal TestFlight testers must be App Store Connect users on team 446BLT75JZ. Invite this Apple ID under Users and Access first (any role), accept the invite, then run this workflow again."
+            fi
+          }
+
+          app_json="$RUNNER_TEMP/app.json"
+          asc_get apps --data-urlencode "filter[bundleId]=$BUNDLE_ID" --data-urlencode 'limit=2' > "$app_json"
+          app_id=$(jq -r '.data[0].id // empty' "$app_json")
+          if [ -z "$app_id" ]; then
+            echo "::error::no App Store Connect app found for $BUNDLE_ID"
+            exit 1
+          fi
+
+          # 1. Internal group(s). `add` creates "Internal" when none exists; `list` never writes.
+          groups_json="$RUNNER_TEMP/groups.json"
+          asc_all "betaGroups?filter%5Bapp%5D=$app_id&limit=200" "$groups_json"
+          internal_count=$(jq '[.data[] | select(.attributes.isInternalGroup == true)] | length' "$groups_json")
+          group_id=$(jq -r --arg name "$INTERNAL_GROUP_NAME" '
+            [.data[] | select(.attributes.isInternalGroup == true)]
+            | (map(select(.attributes.name == $name)) + .) | .[0].id // empty' "$groups_json")
+          echo "Internal beta groups on the app: $internal_count"
+          if [ -z "$group_id" ]; then
+            if [ "$MODE" = 'list' ]; then
+              echo "No internal beta group exists yet (list mode does not create one)."
+            else
+              echo "Creating internal beta group \"$INTERNAL_GROUP_NAME\" (all builds available)."
+              jq -n --arg app "$app_id" --arg name "$INTERNAL_GROUP_NAME" \
+                '{data:{type:"betaGroups",attributes:{name:$name,isInternalGroup:true,hasAccessToAllBuilds:true},relationships:{app:{data:{type:"apps",id:$app}}}}}' \
+                > "$RUNNER_TEMP/group-body.json"
+              status=$(asc_write POST betaGroups "$RUNNER_TEMP/group-body.json" "$RUNNER_TEMP/group-out.json")
+              case "$status" in 2??) ;; *) explain_error "$status" "$RUNNER_TEMP/group-out.json"; exit 1 ;; esac
+              group_id=$(jq -r '.data.id' "$RUNNER_TEMP/group-out.json")
+            fi
+          fi
+
+          testers_json="$RUNNER_TEMP/testers.json"
+          in_group=no
+          if [ -n "$group_id" ]; then
+            asc_all "betaGroups/$group_id/betaTesters?limit=200&fields%5BbetaTesters%5D=email" "$testers_json"
+            if [ -n "$email_lc" ] && jq -e --arg e "$email_lc" 'any(.data[]; ((.attributes.email // "") | ascii_downcase) == $e)' "$testers_json" > /dev/null; then
+              in_group=yes
+            fi
+          else
+            echo '{"data":[]}' > "$testers_json"
+          fi
+
+          # 2./3. Add, unless already there.
+          if [ "$MODE" = 'add' ]; then
+            if [ "$in_group" = 'yes' ]; then
+              echo "The given Apple ID is already an internal tester in \"$INTERNAL_GROUP_NAME\"; nothing to do."
+            else
+              existing_json="$RUNNER_TEMP/existing-tester.json"
+              asc_get betaTesters --data-urlencode "filter[email]=$EMAIL" --data-urlencode 'limit=2' > "$existing_json"
+              tester_id=$(jq -r '.data[0].id // empty' "$existing_json")
+              if [ -n "$tester_id" ]; then
+                echo "A beta tester with this Apple ID already exists on the account; adding it to the internal group."
+                jq -n --arg id "$tester_id" '{data:[{type:"betaTesters",id:$id}]}' > "$RUNNER_TEMP/add-body.json"
+                status=$(asc_write POST "betaGroups/$group_id/relationships/betaTesters" "$RUNNER_TEMP/add-body.json" "$RUNNER_TEMP/add-out.json")
+              else
+                echo "Creating the beta tester in the internal group."
+                jq -n --arg email "$EMAIL" --arg group "$group_id" \
+                  '{data:{type:"betaTesters",attributes:{email:$email},relationships:{betaGroups:{data:[{type:"betaGroups",id:$group}]}}}}' \
+                  > "$RUNNER_TEMP/add-body.json"
+                status=$(asc_write POST betaTesters "$RUNNER_TEMP/add-body.json" "$RUNNER_TEMP/add-out.json")
+              fi
+              rm -f "$RUNNER_TEMP/add-body.json"
+              case "$status" in
+                2??) echo "Added (HTTP $status)." ;;
+                *) explain_error "$status" "$RUNNER_TEMP/add-out.json"; exit 1 ;;
+              esac
+              asc_all "betaGroups/$group_id/betaTesters?limit=200&fields%5BbetaTesters%5D=email" "$testers_json"
+              if jq -e --arg e "$email_lc" 'any(.data[]; ((.attributes.email // "") | ascii_downcase) == $e)' "$testers_json" > /dev/null; then
+                in_group=yes
+              else
+                echo "::error::ASC accepted the request but the tester is not listed in the internal group yet; re-run in list mode in a minute."
+                in_group=no
+              fi
+            fi
+          fi
+
+          # 5. Read-only summary. Counts and yes/no only, never emails.
+          build_json="$RUNNER_TEMP/build.json"
+          asc_get builds --data-urlencode "filter[app]=$app_id" --data-urlencode "filter[version]=$BUILD_NUMBER" --data-urlencode 'limit=2' > "$build_json"
+          build_id=$(jq -r '.data[0].id // empty' "$build_json")
+          build_available=no
+          build_state=not-found
+          if [ -n "$build_id" ]; then
+            build_state=$(jq -r '.data[0].attributes.processingState // "UNKNOWN"' "$build_json")
+            if [ -n "$group_id" ]; then
+              all_builds=$(jq -r --arg id "$group_id" '.data[] | select(.id == $id) | .attributes.hasAccessToAllBuilds // false' "$groups_json")
+              [ -z "$all_builds" ] && all_builds=true   # a group created in this run has access to all builds
+              if [ "$all_builds" = 'true' ]; then
+                build_available=yes
+              else
+                asc_all "betaGroups/$group_id/relationships/builds?limit=200" "$RUNNER_TEMP/group-builds.json"
+                jq -e --arg b "$build_id" 'any(.data[]; .id == $b)' "$RUNNER_TEMP/group-builds.json" > /dev/null && build_available=yes
+              fi
+            fi
+          fi
+
+          echo "TestFlight internal testers (emails intentionally omitted):"
+          echo "  mode:                                  $MODE"
+          echo "  internal groups:                       $internal_count"
+          echo "  internal group \"$INTERNAL_GROUP_NAME\" present:      $([ -n "$group_id" ] && echo yes || echo no)"
+          echo "  testers in that group:                 $(jq '.data | length' "$testers_json")"
+          echo "  build $BUILD_NUMBER processingState:            $build_state"
+          echo "  build $BUILD_NUMBER available to the group:     $build_available"
+          if [ -n "$EMAIL" ]; then
+            echo "  given Apple ID is an internal tester:  $in_group"
+          else
+            echo "  given Apple ID is an internal tester:  (no email given)"
+          fi
+          rm -f "$jwt_file" "$testers_json" "$RUNNER_TEMP/existing-tester.json"
