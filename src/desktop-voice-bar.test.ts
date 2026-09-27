@@ -44,7 +44,7 @@ ck('录音中的提示:Enter 完成 · Esc 取消', B.barHint('recording') === '
   const overlayMounts = chat.match(/<VoiceRecordingOverlay\b[^\n]*/g) ?? [];
   ck('手机浮层只挂一处,且挂在 voiceSurface(desktop) === \'phoneOverlay\' 下', overlayMounts.length === 1 && /\{voiceSurface\(desktop\) === 'phoneOverlay' \? <VoiceRecordingOverlay\b/.test(chat), overlayMounts.join(' | '));
   ck('浮层不再用桌面的 composerHeight 算位置(桌面不挂)', !chat.includes('composerHeight + 24'));
-  ck('桌面:录音中工具栏整行换成录音条', /voiceSurface\(desktop\) === 'inlineBar' && showVoiceBar\(voice\.state\.phase\) \? \(\s*<DesktopVoiceBar voice=\{voice\} onDone=\{desktopVoiceDone\} onCancel=\{desktopVoiceCancel\} \/>\s*\) : \(\s*<View style=\{styles\.desktopToolbar\}>/.test(chat));
+  ck('桌面:录音中工具栏整行换成录音条', /voiceSurface\(desktop\) === 'inlineBar' && showVoiceBar\(voice\.state\.phase\) \? \(\s*<DesktopVoiceBar voice=\{voice\} onDone=\{desktopVoiceDone\} onCancel=\{desktopVoiceCancel\}[^\n]*\/>\s*\) : \(\s*<View style=\{styles\.desktopToolbar\}>/.test(chat));
   const desktopComposer = chat.slice(chat.indexOf('<View style={[styles.desktopComposer'), chat.indexOf('styles.desktopSendText'));
   ck('录音条挂在桌面输入框的盒子里(desktopComposer 内)', desktopComposer.includes('<DesktopVoiceBar'));
   ck('🎤 点击:开始走麦克风同一套处理(冻结光标处选区)、完成 / 取消走 release / terminate',

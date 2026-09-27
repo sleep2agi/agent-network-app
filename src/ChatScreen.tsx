@@ -48,7 +48,9 @@ import { isAgentNodeSession } from './node-rules';
 import { echoSupersededByFetched } from './chat-echo';
 import { messageMenuGroups, selectionBarActions, type MessageMenuKey } from './message-menu-model';
 import { agentStatusLabel, buildQuote, compactQuoteText, confirmedOutboxIds, copyTextOf, copiedToastVisible, COPIED_TOAST_MS, parseQuoted, quoteLabel, type QuoteRef, mergeMessagesNewestFirst, msgKey, removeMessage, shouldShowJumpPill, nextUnread, jumpPillLabel, canSend, shouldSendOnEnter, composerShortcutHint } from './chat-actions';
-import { isMacKeyboard, sendKeyPref, subscribeShortcuts } from './shortcuts-store';
+import { isMacKeyboard, sendKeyPref, shortcutBindings, shortcutCaptureActive, subscribeShortcuts } from './shortcuts-store';
+import { comboChips, comboFromEvent, shortcutForCombo } from './shortcuts-model';
+import { KBD_IDLE, kbdVoiceBlur, kbdVoiceHint, kbdVoiceKeyDown, kbdVoiceKeyUp, kbdVoiceSync, type KbdVoiceMode, type KbdVoiceState, type KbdVoiceStep } from './voice-shortcut-model';
 import type { GestureResponderEvent, NativeSyntheticEvent, NativeScrollEvent } from 'react-native';
 import { usePoll } from './usePoll';
 import { chatSearchState, isHighlighted, isStaleSearch, matchCountLabel, searchItems, shouldLoadOlderForSearch, stepHit, type SearchHit } from './chat-search';
@@ -919,7 +921,62 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
     doc.addEventListener('keydown', onKey);
     return () => doc.removeEventListener('keydown', onKey);
   }, [desktop]);
-  const searchState = chatSearchState({ query: searchQuery, loading: searchLoading, hits: searchHits.length, failed: searchFailed });
+  // 桌面语音快捷键(设置 → 快捷键 → 输入:按住说话 / 语音输入开关,voice-shortcut-model.ts):走和工具栏麦克风
+  // 同一套处理(按下冻结光标处选区、松开识别后插到光标处)。挂在 window 的捕获阶段 —— 先于 DesktopWorkspace 的
+  // document 捕获监听:这里接住的它就不再管;这里没挂(没有会话)时它提示「先打开一个会话」。
+  const [kbdVoice, setKbdVoice] = useState<{ mode: KbdVoiceMode; combo: string } | null>(null);
+  const kbdStateRef = useRef<KbdVoiceState>(KBD_IDLE);
+  // 动作就是录音条的三个动作(desktop-voice-bar-model.ts):开始 = 点 🎤,松开 = 完成,Esc = 取消。
+  const kbdVoiceRef = useRef({ voice, start: desktopMicClick, done: desktopVoiceDone, cancel: desktopVoiceCancel });
+  kbdVoiceRef.current = { voice, start: desktopMicClick, done: desktopVoiceDone, cancel: desktopVoiceCancel };
+  useEffect(() => {
+    const win = (globalThis as any).window;
+    const doc = (globalThis as any).document;
+    if (!desktop || !win?.addEventListener) return;
+    const mac = isMacKeyboard();
+    const run = (r: KbdVoiceStep, event?: Event) => {
+      kbdStateRef.current = r.state;
+      if (r.consume) { event?.preventDefault(); event?.stopPropagation(); }
+      const { voice: v, start, done, cancel } = kbdVoiceRef.current;
+      if (r.effect === 'press') {
+        if (!v.available) { setComposerNotice('当前环境不支持语音输入'); kbdStateRef.current = KBD_IDLE; return; }
+        start();
+        // 未配置:麦克风那条路弹「去设置」提示、不开录 —— 键盘这边不进入录音态(否则开关模式要多按一次)。
+        if (!v.configured) kbdStateRef.current = KBD_IDLE;
+        else if (r.state.mode !== 'idle') setKbdVoice({ mode: r.state.mode, combo: r.state.combo });
+      } else if (r.effect === 'release') done();
+      else if (r.effect === 'cancel') cancel();
+    };
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.isComposing || shortcutCaptureActive()) return;
+      const combo = comboFromEvent(e, mac);
+      const id = shortcutForCombo(shortcutBindings(), combo);
+      const shortcut = id === 'input.voiceHold' ? 'hold' : id === 'input.voiceToggle' ? 'toggle' : null;
+      const escape = e.key === 'Escape' || e.key === 'Esc';
+      if (!shortcut && !escape) return;
+      run(kbdVoiceKeyDown(kbdStateRef.current, { shortcut, combo, repeat: e.repeat, escape }, { composer: true, voiceIdle: kbdVoiceRef.current.voice.state.phase === 'idle' }), e);
+    };
+    const onKeyUp = (e: KeyboardEvent) => run(kbdVoiceKeyUp(kbdStateRef.current, e, mac), e);
+    const onBlur = () => run(kbdVoiceBlur(kbdStateRef.current));
+    const onVisibility = () => { if (doc?.visibilityState === 'hidden') onBlur(); };
+    win.addEventListener('keydown', onKeyDown, true);
+    win.addEventListener('keyup', onKeyUp, true);
+    win.addEventListener('blur', onBlur);
+    doc?.addEventListener?.('visibilitychange', onVisibility);
+    return () => {
+      win.removeEventListener('keydown', onKeyDown, true);
+      win.removeEventListener('keyup', onKeyUp, true);
+      win.removeEventListener('blur', onBlur);
+      doc?.removeEventListener?.('visibilitychange', onVisibility);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [desktop]);
+  // 录音自己结束了(60 s 上限 / 太短 / 开麦失败 / 未配置):键盘这边也回 idle;整句结束后录音条换回普通提示。
+  useEffect(() => {
+    kbdStateRef.current = kbdVoiceSync(kbdStateRef.current, voice.state.phase);
+    if (voice.state.phase === 'idle') setKbdVoice(null);
+  }, [voice.state.phase]);
+  const searchState =chatSearchState({ query: searchQuery, loading: searchLoading, hits: searchHits.length, failed: searchFailed });
   void highlightTick;
 
   useEffect(() => {
@@ -2218,7 +2275,7 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
           />
           {/* 桌面语音(desktop-voice-bar-model.ts):录音中这一行整行换成录音条,不用手机的按住说话浮层。 */}
           {voiceSurface(desktop) === 'inlineBar' && showVoiceBar(voice.state.phase) ? (
-            <DesktopVoiceBar voice={voice} onDone={desktopVoiceDone} onCancel={desktopVoiceCancel} />
+            <DesktopVoiceBar voice={voice} onDone={desktopVoiceDone} onCancel={desktopVoiceCancel} hint={kbdVoice ? kbdVoiceHint(kbdVoice.mode, comboChips(kbdVoice.combo, isMacKeyboard()), isMacKeyboard(), voice.state.phase) : undefined} />
           ) : (
           <View style={styles.desktopToolbar}>
             <Pressable accessibilityLabel="添加文件" testID="composer-desktop-plus" style={({ pressed }) => [styles.desktopToolButton, pressed && { opacity: 0.6 }]} onPress={onPlusPress} hitSlop={6}>

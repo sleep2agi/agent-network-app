@@ -1,0 +1,320 @@
+// 键盘语音输入(设置 → 快捷键 → 输入:按住说话 / 语音输入开关)—— 真应用(expo web 导出 + Tauri 桥桩)里按真键。
+// 不进 CI:要 Playwright + Chromium。Hub 数据是 tests/test-layout-sweep/harness.mjs 的页内假数据(示例-A …),
+// 不起 hub 进程、不占端口、不碰 HOME。麦克风 = Chromium 假设备(--use-fake-device-for-media-stream,一段正弦音),
+// 识别 = 桩:plugin:http 发往 https://mock-asr.invalid 的请求在页内直接回 { result: { text } },并计数。
+//
+//   WEB_DIR=<expo export 目录> [OUT=<截图目录>] [PLAYWRIGHT_MODULE=<…/playwright/index.mjs>] \
+//   node tests/test-voice-shortcuts/drive.mjs
+//
+// 检查(1200×800 桌面工作区;Linux 上 Mod = Ctrl,另开一个 navigator.platform=MacIntel 的上下文跑 ⌘):
+//   page     快捷键页:输入组有「按住说话」「语音输入开关」,默认 Ctrl Shift Space / Ctrl Shift M;导航标签全中文;
+//            新行与原有行:标签左边缘、键帽右边缘、键帽垂直中心、行高 ≤1px(打印测量表);截图
+//   rebind   按住说话 改 Ctrl+Shift+M → 与「语音输入开关」冲突提示;改 F8 保存;恢复默认
+//   nochat   没有打开的会话时按 Ctrl+Shift+Space →「先打开一个会话」;按住不放(自动重复)不重复提示、不录音
+//   hold     「明天|去公司开会」按住 Ctrl+Shift+Space(另补 3 次自动重复)说「上午」→ 插到光标处,光标 = 4;
+//            按住期间:输入框里的录音条(#463,电平 / 计时 / 提示 / 取消 / 完成)出现、没有手机浮层、输入框没被打进空格、焦点不丢;
+//            识别只请求 1 次(重复没有重开录音)
+//   esc      按住中 Esc → 取消:草稿不变、0 次识别、松开组合键不再插入
+//   blur     按住中窗口失焦 → 当作松开:停止并插入;之后松开按键不再插入第二次
+//   toggle   Ctrl+Shift+M 开始 → 松开不停 → 再按结束并插入
+//   f8       改绑成 F8 后按住 F8 → 插入;旧组合不再录音
+//   mac      ⌘⇧Space 按住 → 先松开 ⌘(mac 上按着 ⌘ 时松开 Space 没有 keyup)→ 插入
+// 任何一条没跑到 = FAIL(不是 skip)。
+import { mkdirSync } from 'node:fs';
+import { serveExport, initScript, findChromium } from '../test-layout-sweep/harness.mjs';
+
+const { chromium } = await import(process.env.PLAYWRIGHT_MODULE || 'playwright');
+const WEB = process.env.WEB_DIR;
+if (!WEB) throw new Error('need WEB_DIR (expo web export)');
+const OUT = process.env.OUT || '';
+if (OUT) mkdirSync(OUT, { recursive: true });
+
+let pass = 0; const failures = [];
+const ck = (name, ok, extra = '') => { if (ok) pass++; else failures.push(name); console.log(`${ok ? 'PASS' : 'FAIL'}: ${name}${extra ? ` (${extra})` : ''}`); };
+
+// harness 的桩外面再包一层:语音凭据 + 假识别(只认 mock-asr.invalid,其余照旧交给 harness)。
+const asrScript = ({ mac }) => {
+  if (mac) Object.defineProperty(Navigator.prototype, 'platform', { get: () => 'MacIntel' });
+  window.__asr = { calls: 0, next: '' };
+  const inner = window.__TAURI_INTERNALS__;
+  const invoke = inner.invoke;
+  const mine = new Map(); let rid = 1e6;
+  inner.invoke = async (cmd, args) => {
+    if (cmd === 'load_voice_credentials') return JSON.stringify({ appId: '', accessToken: 'placeholder-api-key-0000', endpoint: 'https://mock-asr.invalid/flash' });
+    if (cmd === 'plugin:http|fetch' && String(args?.clientConfig?.url ?? '').startsWith('https://mock-asr.invalid')) {
+      const id = ++rid; mine.set(id, { req: true }); window.__asr.calls++; return id;
+    }
+    if (cmd === 'plugin:http|fetch_send' && mine.has(args?.rid)) {
+      const id = ++rid;
+      mine.set(id, { buf: new TextEncoder().encode(JSON.stringify({ result: { text: window.__asr.next } })), sent: false });
+      return { status: 200, statusText: 'OK', url: 'https://mock-asr.invalid/flash', headers: [['content-type', 'application/json'], ['x-api-status-code', '20000000']], rid: id };
+    }
+    if (cmd === 'plugin:http|fetch_read_body' && mine.has(args?.rid)) {
+      const b = mine.get(args.rid);
+      if (!b.sent) { b.sent = true; return [...b.buf, 0]; }
+      return [1];
+    }
+    return invoke(cmd, args);
+  };
+};
+
+const web = await serveExport(WEB);
+const browser = await chromium.launch({ executablePath: findChromium(), args: ['--use-fake-ui-for-media-stream', '--use-fake-device-for-media-stream'] });
+
+async function openApp({ mac = false } = {}) {
+  const ctx = await browser.newContext({ viewport: { width: 1200, height: 800 }, deviceScaleFactor: 1, permissions: ['microphone'] });
+  const page = await ctx.newPage();
+  const errors = [];
+  page.on('pageerror', e => errors.push(String(e).split('\n')[0]));
+  await page.addInitScript(initScript, { theme: 'light' });
+  await page.addInitScript(asrScript, { mac });
+  await page.goto(`${web.url}?safeAreaSim=0,0,0,0`);
+  await page.locator('[data-testid="desktop-rail"]').waitFor({ timeout: 20000 });
+  return { ctx, page, errors };
+}
+
+const norm = (s) => s.replace(/\s+/g, ' ').trim();
+
+{
+  const { ctx, page, errors } = await openApp();
+  const shot = async (name) => { if (OUT) await page.screenshot({ path: `${OUT}/${name}.png` }); };
+  const openShortcuts = async () => {
+    await page.getByRole('tab', { name: '设置', exact: true }).click();
+    await page.getByRole('button', { name: '设置分类 快捷键' }).click();
+    await page.locator('[data-testid="shortcuts-settings"]').waitFor({ timeout: 10000 });
+  };
+  try {
+    // ── page ─────────────────────────────────────────────────────────────────
+    await openShortcuts();
+    await shot('shortcuts-1200x800-top');
+    const labels = await page.locator('[data-testid^="shortcut-label-nav.tab."]').allInnerTexts();
+    ck('page: 导航标签全中文', JSON.stringify(labels) === JSON.stringify(['切换到 会话', '切换到 任务', '切换到 定时任务', '切换到 消息', '切换到 服务器']), labels.join(','));
+    const allLabels = await page.locator('[data-testid^="shortcut-label-"]').allInnerTexts();
+    const english = allLabels.filter(l => /[A-Za-z]{2,}/.test(l));
+    ck('page: 页面上所有行标签没有英文单词', english.length === 0, english.join(' | '));
+    ck('page: 按住说话 = Ctrl Shift Space', norm(await page.locator('[data-testid="shortcut-chips-input.voiceHold"]').innerText()) === 'Ctrl Shift Space');
+    ck('page: 语音输入开关 = Ctrl Shift M', norm(await page.locator('[data-testid="shortcut-chips-input.voiceToggle"]').innerText()) === 'Ctrl Shift M');
+    await page.locator('[data-testid="shortcut-row-input.voiceHold"]').scrollIntoViewIfNeeded();
+    await shot('shortcuts-1200x800-input-group');
+    const rowIds = await page.locator('[data-testid^="shortcut-row-"]').evaluateAll(els => els.map(e => e.getAttribute('data-testid').replace('shortcut-row-', '')));
+    const rows = [];
+    for (const id of rowIds) {
+      const row = await page.locator(`[data-testid="shortcut-row-${id}"]`).boundingBox();
+      const label = await page.locator(`[data-testid="shortcut-label-${id}"]`).boundingBox();
+      const right = id === 'send' ? await page.locator('[role="radiogroup"][aria-label="发送消息"]').boundingBox() : await page.locator(`[data-testid="shortcut-chips-${id}"]`).boundingBox();
+      rows.push({ id, rowH: row.height, labelX: label.x, rowMid: row.y + row.height / 2, rightMid: right.y + right.height / 2, rightEnd: right.x + right.width });
+    }
+    console.log('\n| row | row h | label x | chips right | chips mid − row mid |');
+    console.log('|---|---:|---:|---:|---:|');
+    for (const r of rows) console.log(`| ${r.id} | ${r.rowH.toFixed(1)} | ${r.labelX.toFixed(1)} | ${r.rightEnd.toFixed(1)} | ${(r.rightMid - r.rowMid).toFixed(2)} |`);
+    console.log('');
+    const fresh = rows.filter(r => r.id.startsWith('input.voice'));
+    const old = rows.filter(r => !r.id.startsWith('input.voice'));
+    ck('page: 两条新行都在', fresh.length === 2, String(fresh.length));
+    const span = (xs) => Math.max(...xs) - Math.min(...xs);
+    ck('page: 键帽右边缘所有行一致 ±1px', span(rows.map(r => r.rightEnd)) <= 1, `span=${span(rows.map(r => r.rightEnd)).toFixed(2)}`);
+    ck('page: 新行标签左边缘 = 原有行 ±1px', fresh.every(f => Math.abs(f.labelX - old[0].labelX) <= 1) && span(old.map(r => r.labelX)) <= 1);
+    const navH = rows.find(r => r.id === 'nav.search').rowH;
+    ck('page: 新行行高 = 原有可改行 ±1px', fresh.every(f => Math.abs(f.rowH - navH) <= 1), fresh.map(f => f.rowH).join(','));
+    ck('page: 新行键帽垂直居中于行 ≤1px', fresh.every(f => Math.abs(f.rightMid - f.rowMid) <= 1));
+
+    // ── rebind ───────────────────────────────────────────────────────────────
+    await page.locator('[data-testid="shortcut-row-input.voiceHold"]').click();
+    ck('rebind: 点行进入录入', await page.locator('[data-testid="shortcut-capturing-input.voiceHold"]').isVisible());
+    await page.keyboard.press('Control+Shift+KeyM');
+    const warn = await page.locator('[data-testid="shortcut-warning-input.voiceHold"]').innerText();
+    ck('rebind: Ctrl+Shift+M → 与「语音输入开关」冲突', warn.includes('语音输入开关'), warn);
+    await page.keyboard.press('Control+Space');
+    const warn2 = await page.locator('[data-testid="shortcut-warning-input.voiceHold"]').innerText();
+    ck('rebind: Ctrl+Space → 系统输入法切换,拒绝', warn2.includes('输入法'), warn2);
+    await shot('shortcuts-voice-conflict');
+    await page.keyboard.press('F8');
+    ck('rebind: F8 保存并显示', norm(await page.locator('[data-testid="shortcut-chips-input.voiceHold"]').innerText()) === 'F8');
+    ck('rebind: 改过出现「恢复默认」', await page.locator('[data-testid="shortcut-reset-input.voiceHold"]').isVisible());
+    await shot('shortcuts-voice-rebound-f8');
+
+    // ── nochat(设置页上,没有输入框)──────────────────────────────────────────
+    await page.keyboard.down('F8');
+    for (let i = 0; i < 3; i++) await page.keyboard.down('F8'); // 自动重复
+    await page.keyboard.up('F8');
+    const toast = page.locator('[data-testid="shortcut-toast"]');
+    ck('nochat: 设置页按住说话 →「先打开一个会话」', await toast.waitFor({ timeout: 3000 }).then(() => true, () => false) && (await toast.innerText()) === '先打开一个会话');
+    ck('nochat: 自动重复不叠提示(只有 1 个)', (await toast.count()) === 1);
+    await shot('nochat-toast');
+    ck('nochat: 没有录音、没有识别请求', (await page.evaluate(() => window.__asr.calls)) === 0 && !(await page.locator('[data-testid="voice-bar"]').count()));
+
+    // ── f8(改绑后的组合)与旧组合 ──────────────────────────────────────────────
+    await page.evaluate(() => window.__anetLayoutSweep.setScreen({ name: 'chat', alias: '示例-A' }));
+    const input = page.locator('textarea[placeholder^="Message 示例-A"]').first();
+    await input.waitFor({ timeout: 10000 });
+    await page.locator('[data-testid="voice-mic"]').waitFor({ timeout: 10000 });
+    await page.waitForTimeout(400);
+    const state = () => input.evaluate(el => ({ value: el.value, start: el.selectionStart, end: el.selectionEnd, focused: el === document.activeElement }));
+    const caretTo = async (i) => { await input.click(); await input.evaluate((el, a) => el.setSelectionRange(a, a), i); await page.waitForTimeout(100); };
+    const settle = async () => {
+      await page.waitForFunction(() => !document.querySelector('[data-testid="voice-bar"]'), null, { timeout: 10000 }).catch(() => {});
+      await page.waitForTimeout(250);
+    };
+    const asrCalls = () => page.evaluate(() => window.__asr.calls);
+    const say = (text) => page.evaluate(t => { window.__asr.next = t; }, text);
+
+    await input.fill('明天去公司开会');
+    await caretTo(2);
+    await say('早上');
+    let calls0 = await asrCalls();
+    await page.keyboard.down('F8');
+    await page.waitForTimeout(1300);
+    await page.keyboard.up('F8');
+    await settle();
+    let s = await state();
+    ck('f8: 改绑后按住 F8 → 插到光标处', s.value === '明天早上去公司开会' && s.start === 4, `${s.value} @${s.start}`);
+    ck('f8: 识别 1 次', (await asrCalls()) - calls0 === 1);
+    calls0 = await asrCalls();
+    await page.keyboard.down('Control'); await page.keyboard.down('Shift'); await page.keyboard.down('Space');
+    await page.waitForTimeout(800);
+    const oldCombo = await page.locator('[data-testid="voice-bar"]').count();
+    await page.keyboard.up('Space'); await page.keyboard.up('Shift'); await page.keyboard.up('Control');
+    await settle();
+    ck('f8: 旧组合 Ctrl+Shift+Space 不再录音', oldCombo === 0 && (await asrCalls()) === calls0);
+    // 恢复默认
+    await page.keyboard.press('Control+Comma');
+    await page.getByRole('button', { name: '设置分类 快捷键' }).click();
+    await page.locator('[data-testid="shortcut-reset-input.voiceHold"]').click();
+    ck('rebind: 恢复默认 → Ctrl Shift Space', norm(await page.locator('[data-testid="shortcut-chips-input.voiceHold"]').innerText()) === 'Ctrl Shift Space');
+    await page.evaluate(() => window.__anetLayoutSweep.setScreen({ name: 'chat', alias: '示例-A' }));
+    await input.waitFor({ timeout: 10000 });
+    await page.waitForTimeout(400);
+
+    // ── hold ─────────────────────────────────────────────────────────────────
+    await input.fill('明天去公司开会');
+    await caretTo(2);
+    await say('上午');
+    calls0 = await asrCalls();
+    await page.keyboard.down('Control'); await page.keyboard.down('Shift'); await page.keyboard.down('Space');
+    for (let i = 0; i < 3; i++) { await page.waitForTimeout(150); await page.keyboard.down('Space'); } // 自动重复(repeat=true)
+    await page.waitForTimeout(900);
+    const ind = page.locator('[data-testid="voice-bar"]');
+    ck('hold: 按住期间输入框底部换成录音条', await ind.isVisible());
+    const elapsed = await page.locator('[data-testid="voice-bar-elapsed"]').innerText().catch(() => '');
+    ck('hold: 录音条有计时', /^00:0[1-9]$/.test(elapsed), elapsed);
+    const bars = await page.locator('[data-testid="voice-bar-level"] > div').evaluateAll(els => els.map(e => e.getBoundingClientRect().height));
+    ck('hold: 录音条有电平条(假麦克风有声音 → 不全是最低)', bars.length === 7 && Math.max(...bars) > 4, bars.join(','));
+    const hint = await page.locator('[data-testid="voice-bar-hint"]').innerText();
+    ck('hold: 提示「松开 Ctrl+Shift+Space 完成 · Esc 取消」', hint === '松开 Ctrl+Shift+Space 完成 · Esc 取消', hint);
+    ck('hold: 麦克风那张大浮层不出现', !(await page.locator('[data-testid="voice-overlay"]').count()));
+    ck('hold: 发送键提示暂时让位', !(await page.locator('[data-testid="composer-shortcut-hint"]').count()));
+    const during = await state();
+    ck('hold: 按住期间输入框没被打进空格、焦点不丢', during.value === '明天去公司开会' && during.focused, JSON.stringify(during));
+    const indBox = await ind.boundingBox();
+    const boxOf = await input.locator('xpath=..').boundingBox();
+    ck('hold: 快捷键录音用的是输入框里那条录音条(在输入框盒子里、＋/发送让位)', indBox.y >= boxOf.y - 0.5 && indBox.y + indBox.height <= boxOf.y + boxOf.height + 0.5 && !(await page.locator('[data-testid="composer-desktop-plus"]').count()), `bar=${JSON.stringify(indBox)} composer=${JSON.stringify(boxOf)}`);
+    await shot('hold-recording-indicator');
+    await page.keyboard.up('Space');
+    await settle();
+    await page.keyboard.up('Shift'); await page.keyboard.up('Control');
+    await page.waitForTimeout(200);
+    s = await state();
+    ck('hold: 松开 → 「明天|去公司开会」+「上午」插到光标处', s.value === '明天上午去公司开会', s.value);
+    ck('hold: 光标紧跟插入文字(4)、焦点在输入框', s.start === 4 && s.end === 4 && s.focused, `${s.start},${s.end} focused=${s.focused}`);
+    ck('hold: 识别只请求 1 次(自动重复没有重开录音;先松 Space 再松 Ctrl/Shift 没有第二次)', (await asrCalls()) - calls0 === 1, String((await asrCalls()) - calls0));
+    await shot('hold-inserted');
+    await page.keyboard.type('9');
+    s = await state();
+    ck('hold: 接着打字落在光标处', s.value === '明天上午9去公司开会', s.value);
+
+    // ── esc ──────────────────────────────────────────────────────────────────
+    await input.fill('明天去公司开会');
+    await caretTo(2);
+    await say('不该出现');
+    calls0 = await asrCalls();
+    await page.keyboard.down('Control'); await page.keyboard.down('Shift'); await page.keyboard.down('Space');
+    await page.waitForTimeout(1000);
+    await page.keyboard.press('Escape');
+    await page.waitForTimeout(200);
+    const cancelledNotice = await page.getByText('已取消', { exact: true }).isVisible().catch(() => false);
+    await page.keyboard.up('Space'); await page.keyboard.up('Shift'); await page.keyboard.up('Control');
+    await settle();
+    s = await state();
+    ck('esc: 按住中 Esc → 取消,草稿不变、没有识别', s.value === '明天去公司开会' && (await asrCalls()) === calls0, `${s.value} calls+${(await asrCalls()) - calls0}`);
+    ck('esc: 提示「已取消」', cancelledNotice);
+
+    // ── blur ─────────────────────────────────────────────────────────────────
+    await input.fill('明天去公司开会');
+    await caretTo(5);
+    await say('三楼');
+    calls0 = await asrCalls();
+    await page.keyboard.down('Control'); await page.keyboard.down('Shift'); await page.keyboard.down('Space');
+    await page.waitForTimeout(1200);
+    await page.evaluate(() => window.dispatchEvent(new Event('blur')));
+    await settle();
+    s = await state();
+    ck('blur: 按住中窗口失焦 → 当作松开,插入', s.value === '明天去公司三楼开会', s.value);
+    await page.keyboard.up('Space'); await page.keyboard.up('Shift'); await page.keyboard.up('Control');
+    await page.waitForTimeout(600);
+    s = await state();
+    ck('blur: 之后松开按键不再插第二次', s.value === '明天去公司三楼开会' && (await asrCalls()) - calls0 === 1, `${s.value} calls+${(await asrCalls()) - calls0}`);
+
+    // ── toggle ───────────────────────────────────────────────────────────────
+    await input.fill('hello world');
+    await caretTo(5);
+    await say('big');
+    calls0 = await asrCalls();
+    await page.keyboard.press('Control+Shift+KeyM');
+    await page.waitForTimeout(1300);
+    ck('toggle: 按一下开始、松开后仍在录', await ind.isVisible());
+    const thint = await page.locator('[data-testid="voice-bar-hint"]').innerText();
+    ck('toggle: 提示「再按 Ctrl+Shift+M 完成 · Esc 取消」', thint === '再按 Ctrl+Shift+M 完成 · Esc 取消', thint);
+    await shot('toggle-recording-indicator');
+    await page.keyboard.press('Control+Shift+KeyM');
+    await settle();
+    s = await state();
+    ck('toggle: 再按一下 → 结束并插到光标处(拉丁补空格)', s.value === 'hello big world' && s.start === 9, `${JSON.stringify(s.value)} @${s.start}`);
+    ck('toggle: 识别 1 次', (await asrCalls()) - calls0 === 1);
+    ck('toggle: 输入框里没有被打进 M', !/[Mm]$/.test(s.value.slice(0, s.start)));
+  } catch (e) {
+    ck(`driver threw: ${String(e?.message ?? e).split('\n')[0]}`, false);
+  }
+  ck('no page errors', errors.length === 0, errors.join(' | '));
+  await ctx.close();
+}
+
+// ── mac:⌘⇧Space,先松 ⌘ ───────────────────────────────────────────────────────
+{
+  const { ctx, page, errors } = await openApp({ mac: true });
+  try {
+    await page.getByRole('tab', { name: '设置', exact: true }).click();
+    await page.getByRole('button', { name: '设置分类 快捷键' }).click();
+    ck('mac: 默认显示 ⌘ ⇧ Space / ⌘ ⇧ M', norm(await page.locator('[data-testid="shortcut-chips-input.voiceHold"]').innerText()) === '⌘ ⇧ Space' && norm(await page.locator('[data-testid="shortcut-chips-input.voiceToggle"]').innerText()) === '⌘ ⇧ M');
+    if (OUT) { await page.locator('[data-testid="shortcut-row-input.voiceHold"]').scrollIntoViewIfNeeded(); await page.screenshot({ path: `${OUT}/shortcuts-1200x800-mac-input-group.png` }); }
+    await page.evaluate(() => window.__anetLayoutSweep.setScreen({ name: 'chat', alias: '示例-A' }));
+    const input = page.locator('textarea[placeholder^="Message 示例-A"]').first();
+    await input.waitFor({ timeout: 10000 });
+    await page.locator('[data-testid="voice-mic"]').waitFor({ timeout: 10000 });
+    await page.waitForTimeout(400);
+    await input.fill('明天去公司开会');
+    await input.click();
+    await input.evaluate(el => el.setSelectionRange(2, 2));
+    await page.evaluate(() => { window.__asr.next = '上午'; });
+    await page.keyboard.down('Meta'); await page.keyboard.down('Shift'); await page.keyboard.down('Space');
+    await page.waitForTimeout(1300);
+    const hint = await page.locator('[data-testid="voice-bar-hint"]').innerText().catch(() => '');
+    ck('mac: 提示「松开 ⌘⇧Space 完成 · Esc 取消」', hint === '松开 ⌘⇧Space 完成 · Esc 取消', hint);
+    await page.keyboard.up('Meta'); // 先松 ⌘:真 mac 上此时 Space 的 keyup 不会来
+    await page.waitForFunction(() => !document.querySelector('[data-testid="voice-bar"]'), null, { timeout: 10000 }).catch(() => {});
+    await page.waitForTimeout(250);
+    const s = await input.evaluate(el => ({ value: el.value, start: el.selectionStart }));
+    ck('mac: 松开 ⌘ 就结束并插入', s.value === '明天上午去公司开会' && s.start === 4, `${s.value} @${s.start}`);
+    await page.keyboard.up('Space'); await page.keyboard.up('Shift');
+    await page.waitForTimeout(400);
+    ck('mac: 之后松开 Space / Shift 不再插第二次', (await input.inputValue()) === '明天上午去公司开会' && (await page.evaluate(() => window.__asr.calls)) === 1);
+  } catch (e) {
+    ck(`mac driver threw: ${String(e?.message ?? e).split('\n')[0]}`, false);
+  }
+  ck('mac: no page errors', errors.length === 0, errors.join(' | '));
+  await ctx.close();
+}
+
+await browser.close();
+web.close();
+console.log(`\n${pass} passed, ${failures.length} failed`);
+if (failures.length) { console.log('FAILED:\n  ' + failures.join('\n  ')); process.exit(1); }
