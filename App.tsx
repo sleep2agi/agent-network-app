@@ -80,7 +80,7 @@ type Screen =
   | { name: 'serverNodes'; filter?: AgentListFilter }
   | { name: 'serverNodeDetail'; alias: string }
   | { name: 'settings' }
-  | { name: 'chat'; alias: string }
+  | { name: 'chat'; alias: string; focusTaskId?: string }  // focusTaskId: 定时任务「去会话」要定位的那条任务
   | { name: 'nodeInfo'; alias: string }
   | { name: 'taskDetail'; taskId: string }   // full-screen (no tab bar) — hardware back returns to /tasks list
   | { name: 'nodeDetail'; alias: string }  // issue #8 row 4 (V1) — 会话行菜单「节点详情」(以前是直接长按); back returns to agents
@@ -684,6 +684,7 @@ function AppRoot() {
                         hideBack
                         onOpenNodeSettings={() => setScreen({ name: 'nodeInfo', alias: screen.alias })}
                         onOpenVoiceSettings={() => { rememberSettingsCategory('voice'); setScreen({ name: 'settings' }); }}
+                        focusTaskId={screen.focusTaskId}
                         pinned={mobilePins.includes(screen.alias)}
                         onTogglePin={() => toggleMobilePin(screen.alias)}
                         muted={mutedAliases.includes(screen.alias)}
@@ -711,6 +712,7 @@ function AppRoot() {
                   onBack={() => setScreen({ name: 'agents' })}
                   onOpenNodeSettings={() => setScreen({ name: 'nodeInfo', alias: screen.alias })}
                   onOpenVoiceSettings={() => { rememberSettingsCategory('voice'); setScreen({ name: 'settings' }); }}
+                  focusTaskId={screen.focusTaskId}
                   pinned={mobilePins.includes(screen.alias)}
                   onTogglePin={() => toggleMobilePin(screen.alias)}
                   muted={mutedAliases.includes(screen.alias)}
@@ -773,7 +775,7 @@ function AppRoot() {
                       onOpenTask={taskId => setScreen({ name: 'taskDetail', taskId })}
                     />
                   ) : screen.name === 'scheduled' ? (
-                    <ScheduledTasksScreen cfg={cfg} />
+                    <ScheduledTasksScreen cfg={cfg} onOpenChat={(alias, focusTaskId) => setScreen({ name: 'chat', alias, focusTaskId })} />
                   ) : screen.name === 'messages' ? (
                     <MessagesScreen cfg={cfg} />
                   ) : screen.name === 'server' ? (
@@ -958,11 +960,12 @@ function DesktopWorkspace({ cfg, screen, setScreen, onLogout, onLocalDataDeleted
       onBack={() => setScreen({ name: 'agents' })}
       onOpenNodeSettings={() => setScreen({ name: 'nodeInfo', alias: screen.alias })}
       onOpenVoiceSettings={() => { rememberSettingsCategory('voice'); setScreen({ name: 'settings' }); }}
+      focusTaskId={screen.focusTaskId}
       desktop
     />
   ) : screen.name === 'tasks' ? (
     <TasksScreen cfg={cfg} onOpenTask={taskId => setScreen({ name: 'taskDetail', taskId })} />
-  ) : screen.name === 'scheduled' ? <ScheduledTasksScreen cfg={cfg} />
+  ) : screen.name === 'scheduled' ? <ScheduledTasksScreen cfg={cfg} onOpenChat={(alias, focusTaskId) => setScreen({ name: 'chat', alias, focusTaskId })} />
   : screen.name === 'messages' ? <MessagesScreen cfg={cfg} />
   : screen.name === 'server' ? (
     <ServerScreen

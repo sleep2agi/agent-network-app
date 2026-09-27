@@ -214,6 +214,8 @@ export interface HubScheduledRun {
   error_code?: string | null;
   error_message?: string | null;
   created_at: string;
+  /** 终态时刻(Hub 镜像自任务的 completed_at);还没结束为 null。 */
+  completed_at?: string | null;
 }
 
 const networkQuery = (cfg: HubConfig) => cfg.networkId

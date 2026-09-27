@@ -223,6 +223,8 @@ interface Props {
   hideBack?: boolean;
   /** 语音输入未配置时「去设置」跳到 设置 → 语音输入。不传(独立聊天窗口)就只提示位置。 */
   onOpenVoiceSettings?: () => void;
+  /** 定时任务「去会话」:打开后定位到这条任务(在已加载的那一页里才定位得到,找不到就停在最新)。 */
+  focusTaskId?: string;
 }
 
 // Module level on purpose: the cache has to outlive a screen unmount, or
@@ -233,7 +235,7 @@ export const clearChatConversationCache = (profileId?: string, serverUrl = ''): 
   conversations.clearScope(conversationScope(profileId, serverUrl));
 };
 
-export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpenNodeSettings, pinned = false, onTogglePin, muted = false, onToggleMute, hideBack = false, onOpenVoiceSettings }: Props) {
+export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpenNodeSettings, pinned = false, onTogglePin, muted = false, onToggleMute, hideBack = false, onOpenVoiceSettings, focusTaskId }: Props) {
   // Android edge-to-edge draws the composer under the gesture bar (same
   // class of bug as the tg 802 tab bar) — pad by the real bottom inset.
   const insets = useSafeAreaInsets();
@@ -1098,6 +1100,16 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
     }
     newestKeyRef.current = k;
   }, [messages, showJump]);
+
+  // 定时任务「去会话」带来的 task_id:会话就绪后定位一次(与搜索/引用同一个 locateKey)。
+  const focusedRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!focusTaskId || !conversationReady || focusedRef.current === focusTaskId) return;
+    if (!messages.some(m => msgKey(m) === focusTaskId)) return;
+    focusedRef.current = focusTaskId;
+    setTimeout(() => locateKey(focusTaskId), 0);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [focusTaskId, conversationReady, messages]);
 
   // #161 列表徽标：打开会话不清零；只有消息真正展示到最新才清。
   useEffect(() => {
