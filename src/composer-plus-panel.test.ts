@@ -83,7 +83,9 @@ check(!/Alert\.alert\([^)]*\[\s*\{\s*text:\s*'图片'/.test(chat), 'no 图片/�
   const panelAt = mobile.indexOf('accessibilityLabel="更多发送方式面板"');
   check(rowAt > 0 && panelAt > rowAt, 'inline panel renders in the mobile branch, AFTER the input row');
   check(!/<Modal[^>]*visible=\{plusMenuOpen\}/.test(chat), 'mobile no longer uses a full-screen Modal for +');
-  check(chat.includes('<Modal visible={desktop && plusMenuOpen}'), 'the popover Modal is desktop-only');
+  // 0.2.123 owner:桌面没有「相册 / 文件」面板了 ——「＋」直接开系统文件选择器(desktop-file-intake.ts)。
+  check(!/<Modal[^>]*plusMenuOpen/.test(chat), 'desktop has no + popover Modal any more');
+  check(chat.includes('onPress={onPlusPress}') && chat.includes("plusPressAction({ desktop, attachEnabled: ATTACH_ENABLED }) === 'panel'"), 'desktop + opens the file picker via plusPressAction');
   // WeChat layout (composer-row-layout.ts): ＋ lives in the right slot (ComposerRightSlot).
   check(mobile.includes("onPlus={() => plusEvent('toggle')}"), 'mobile + (right slot) toggles');
   check(mobile.includes("onFocus={() => plusEvent('inputFocus')}"), 'input focus closes the panel');

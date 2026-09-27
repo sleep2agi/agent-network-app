@@ -110,7 +110,7 @@ check(/setHeaderMoreOpen\(false\)/.test(handlerFor('headerMoreOpen')), 'header �
 check(/setMenuFor\(null\)/.test(handlerFor('!!menuFor')), 'long-press menu: back closes it');
 check(/setExpandFor\(null\)/.test(handlerFor('!!expandFor')), '放大阅读: back closes it');
 check(/setForwardFor\(null\)/.test(handlerFor('!!forwardFor')), '转发 picker: back closes it');
-check(/setPlusMenuOpen\(false\)/.test(handlerFor('plusMenuOpen')), 'desktop + popover: back/Esc closes it');
+// (desktop + popover removed in 0.2.124: desktop ＋ opens the system file picker directly — nothing to close.)
 
 // Image preview — the reported bug.
 const viewer = read('ImageViewer.tsx');

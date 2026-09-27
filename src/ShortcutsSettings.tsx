@@ -19,6 +19,7 @@ import {
   newlineCombo,
   sendCombo,
   withBinding,
+  type FixedShortcut,
   type SendKey,
   type ShortcutGroupKey,
   type ShortcutId,
@@ -130,27 +131,7 @@ export default function ShortcutsSettings({ s, showNav = true, showChat = true, 
       {showChat ? (
         <>
           {groupTitle('chat')}
-          {FIXED_SHORTCUTS.filter(f => f.group === 'chat').map((f, i) => (
-            <View key={f.key}>
-              {i ? <View style={s.divider} /> : null}
-              <View style={[s.row, styles.row]} testID={`shortcut-row-${f.key}`}>
-                <View style={s.rowCopy}>
-                  <Text style={s.rowLabel} testID={`shortcut-label-${f.key}`}>{f.label}</Text>
-                </View>
-                <View style={styles.right}>
-                  <View style={styles.chipAlternatives} testID={`shortcut-chips-${f.key}`}>
-                    {f.combos.map((c, j) => (
-                      <View key={c} style={styles.chipAlternatives}>
-                        {j ? <Text style={styles.chipSeparator}>/</Text> : null}
-                        <Chips combo={c} mac={mac} />
-                      </View>
-                    ))}
-                  </View>
-                  <View style={styles.trail}><Text style={styles.fixedTag}>固定</Text></View>
-                </View>
-              </View>
-            </View>
-          ))}
+          {FIXED_SHORTCUTS.filter(f => f.group === 'chat').map((f, i) => <FixedRow key={f.key} f={f} first={i === 0} s={s} mac={mac} />)}
         </>
       ) : null}
 
@@ -193,12 +174,13 @@ export default function ShortcutsSettings({ s, showNav = true, showChat = true, 
               <View style={styles.trail}><Text style={styles.fixedTag}>随发送键</Text></View>
             </View>
           </View>
+          {FIXED_SHORTCUTS.filter(f => f.group === 'input').map(f => <FixedRow key={f.key} f={f} first={false} s={s} mac={mac} />)}
         </>
       ) : null}
 
       {showNav && showChat && showSend ? (
         <View style={styles.footer}>
-          <Text style={[s.rowHint, styles.footerHint]}>快捷键只在主窗口生效;录入新组合时需要带 {mac ? '⌘' : 'Ctrl'}。</Text>
+          <Text style={[s.rowHint, styles.footerHint]}>导航快捷键只在主窗口生效;录入新组合时需要带 {mac ? '⌘' : 'Ctrl'}。文件也可以直接拖进聊天区。</Text>
           <Pressable
             accessibilityRole="button"
             accessibilityLabel="全部恢复默认"
@@ -211,6 +193,30 @@ export default function ShortcutsSettings({ s, showNav = true, showChat = true, 
           </Pressable>
         </View>
       ) : null}
+    </View>
+  );
+}
+
+function FixedRow({ f, first, s, mac }: { f: FixedShortcut; first: boolean; s: SharedStyles; mac: boolean }) {
+  return (
+    <View>
+      {first ? null : <View style={s.divider} />}
+      <View style={[s.row, styles.row]} testID={`shortcut-row-${f.key}`}>
+        <View style={s.rowCopy}>
+          <Text style={s.rowLabel} testID={`shortcut-label-${f.key}`}>{f.label}</Text>
+        </View>
+        <View style={styles.right}>
+          <View style={styles.chipAlternatives} testID={`shortcut-chips-${f.key}`}>
+            {f.combos.map((c, j) => (
+              <View key={c} style={styles.chipAlternatives}>
+                {j ? <Text style={styles.chipSeparator}>/</Text> : null}
+                <Chips combo={c} mac={mac} />
+              </View>
+            ))}
+          </View>
+          <View style={styles.trail}><Text style={styles.fixedTag}>固定</Text></View>
+        </View>
+      </View>
     </View>
   );
 }

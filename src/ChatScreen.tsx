@@ -25,13 +25,15 @@ import {
   attachmentTextHint,
   pickCameraPhoto,
   pickDocument,
+  pickFiles,
   pickImages,
   prepareForUpload,
   uploadImage,
   toTaskAttachment,
   PickedImage,
 } from './attach';
-import { attachmentFromClipboard, isTauriDesktop, releaseClipboardAttachment } from './clipboard-attachment';
+import { attachmentsFromClipboard, isTauriDesktop, releaseClipboardAttachment } from './clipboard-attachment';
+import { attachmentsFromFiles, filesFromTransfer, plusPressAction, transferHasFiles } from './desktop-file-intake';
 import { addToDraft, draftCountLabel, draftImageCount, isDraftImage, MAX_DRAFT_IMAGES, oversizeMessage, remainingImageSlots, removeFromDraft, sendBlocker, willCompressBeforeUpload } from './image-draft';
 import { createUploadMemo, removeAttachmentAt, runUploadQueue, UPLOAD_CONCURRENCY, uploadFailureSummary, withUploadState, type UploadState } from './upload-queue';
 import type { UploadedFile } from './attach';
@@ -669,17 +671,51 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
   // onChangeText. Listen at the window while this chat is mounted so Ctrl+V
   // (Windows/Linux) and Cmd+V (macOS) can reuse the normal attachment flow.
   // Text-only pastes are deliberately untouched.
+  // 剪贴板里有几个文件就收几个(desktop-file-intake.ts,与「＋」和拖放同一个出口)。
   useEffect(() => {
-    if (!isTauriDesktop() || typeof window === 'undefined') return;
+    if (!(desktop || isTauriDesktop()) || typeof window === 'undefined') return;
     const onPaste = (event: ClipboardEvent) => {
-      const pasted = attachmentFromClipboard(event.clipboardData?.items);
-      if (!pasted) return;
+      const pasted = attachmentsFromClipboard(event.clipboardData?.items);
+      if (!pasted.length) return;
       event.preventDefault();
-      appendAttachment(pasted);
+      appendAttachments(pasted);
     };
     window.addEventListener('paste', onPaste);
     return () => window.removeEventListener('paste', onPaste);
-  }, [appendAttachment]);
+  }, [appendAttachments, desktop]);
+  // 桌面:把文件拖进聊天区(整个会话窗格,不只是输入框)= 加进草稿。拖的是文字 / 链接不接。
+  // Tauri 窗口要关掉原生拖放(tauri.conf.json / desktop-chat-menu.ts 的 dragDropEnabled: false),
+  // 否则系统拖进来的文件被 Tauri 截走,网页里收不到 drop。
+  const [dropActive, setDropActive] = useState(false);
+  useEffect(() => {
+    const doc = (globalThis as any).document;
+    if (!desktop || !doc?.addEventListener) return;
+    let clear: ReturnType<typeof setTimeout> | null = null;
+    const inPane = (event: DragEvent) => !!(event.target as Element | null)?.closest?.('[data-testid="chat-pane"]');
+    const onOver = (event: DragEvent) => {
+      if (!transferHasFiles(event.dataTransfer) || !inPane(event)) return;
+      event.preventDefault();
+      if (event.dataTransfer) event.dataTransfer.dropEffect = 'copy';
+      setDropActive(true);
+      if (clear) clearTimeout(clear);
+      clear = setTimeout(() => setDropActive(false), 200);
+    };
+    const onDrop = (event: DragEvent) => {
+      if (!inPane(event)) return;
+      const files = filesFromTransfer(event.dataTransfer);
+      if (!files.length) return;
+      event.preventDefault();
+      setDropActive(false);
+      appendAttachments(attachmentsFromFiles(files));
+    };
+    doc.addEventListener('dragover', onOver);
+    doc.addEventListener('drop', onDrop);
+    return () => {
+      if (clear) clearTimeout(clear);
+      doc.removeEventListener('dragover', onOver);
+      doc.removeEventListener('drop', onDrop);
+    };
+  }, [appendAttachments, desktop]);
   // 图片预览(ImageViewer.tsx):同一条消息的全部图片 + 当前第几张。null = 未打开。
   // 预览层带「下载原图」(多图方格里放不下那一行)。
   const [viewer, setViewer] = useState<ViewerState | null>(null);
@@ -1457,6 +1493,13 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
     else setBtwLaunch(current => ({ id: (current?.id ?? 0) + 1 }));
   };
   const plusItems = plusPanelItems({ os: Platform.OS, desktop, attachEnabled: ATTACH_ENABLED });
+  // 桌面「＋」= 系统文件选择器(多选、任意类型),没有中间面板;手机 = 微信式 相册 / 文件 面板。
+  const onPlusPress = () => {
+    if (plusPressAction({ desktop, attachEnabled: ATTACH_ENABLED }) === 'panel') { plusEvent('toggle'); return; }
+    pickFiles()
+      .then(appendAttachments)
+      .catch(error => Alert.alert('无法打开', error instanceof Error ? error.message : String(error)));
+  };
   // Mobile row right slot: ＋ when there is nothing to send, 「发送」 once there is.
   const rightSlot = composerRightSlot({ draft, attachmentCount: attached.length, voiceMode });
   const showExpand = !desktop && shouldShowExpand(inputLines, voiceMode);
@@ -1472,6 +1515,7 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
   return (
     <KeyboardAvoidingView
       style={styles.root}
+      testID="chat-pane"
       // Edge-to-edge Android ignores adjustResize, so behavior=undefined
       // left the keyboard covering the input (Vincent tg 738). 'padding'
       // works on both platforms under edge-to-edge.
@@ -2009,7 +2053,7 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
                   </Pressable>
                 </View>
               ) : (
-                <View key={item.uri} style={[styles.draftFileChip, tooBig && styles.draftThumbTooBig]}>
+                <View key={item.uri} style={[styles.draftFileChip, tooBig && styles.draftThumbTooBig]} testID="composer-draft-file">
                   <Text style={styles.attachName} numberOfLines={2}>📎 {item.fileName}</Text>
                   <Pressable onPress={() => removeAttachment(item.uri)} hitSlop={8} style={styles.draftRemove} accessibilityLabel={`移除 ${item.fileName}`}>
                     <Text style={styles.draftRemoveText}>✕</Text>
@@ -2150,29 +2194,6 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
         onClose={() => fullEditorEvent('back')}
       />
 
-      <Modal visible={desktop && plusMenuOpen} transparent animationType="fade" onRequestClose={() => setPlusMenuOpen(false)}>
-        <Pressable style={[styles.plusMenuBackdrop, sheetSafe]} onPress={() => setPlusMenuOpen(false)}>
-          <Pressable style={[styles.plusMenu, styles.plusMenuDesktop]} onPress={() => {}}>
-            {plusItems.map(item => (
-              <Pressable
-                key={item.key}
-                accessibilityRole="button"
-                accessibilityLabel={item.a11y}
-                style={({ pressed }) => [styles.plusMenuItem, pressed && styles.actionItemPressed]}
-                onPress={() => runPlusItem(item.key)}
-              >
-                <View style={styles.plusMenuIcon}>
-                  {item.icon ? <Ionicons name={item.icon as any} size={20} color={colors.textSecondary} /> : <Text style={styles.plusMenuBtw}>BTW</Text>}
-                </View>
-                <View style={styles.plusMenuCopy}>
-                  <Text style={styles.plusMenuTitle}>{item.label}</Text>
-                  {item.key === 'btw' ? <Text style={styles.plusMenuHint}>不打断、不 steer 当前主任务</Text> : null}
-                </View>
-              </Pressable>
-            ))}
-          </Pressable>
-        </Pressable>
-      </Modal>
 
       {desktop ? (
         <>
@@ -2212,7 +2233,7 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
             multiline
           />
           <View style={styles.desktopToolbar}>
-            <Pressable accessibilityLabel="更多发送方式" style={({ pressed }) => [styles.desktopToolButton, pressed && { opacity: 0.6 }]} onPress={() => plusEvent('toggle')} hitSlop={6}>
+            <Pressable accessibilityLabel="添加文件" testID="composer-desktop-plus" style={({ pressed }) => [styles.desktopToolButton, pressed && { opacity: 0.6 }]} onPress={onPlusPress} hitSlop={6}>
                 <Ionicons name="add-circle-outline" size={24} color={colors.textSecondary} />
             </Pressable>
             <View style={styles.desktopToolbarRight}>
@@ -2368,6 +2389,12 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
         scope={sideThreadScope}
         restoreFocusRef={mainComposerRef}
       />
+      {desktop && dropActive ? (
+        <View pointerEvents="none" style={styles.dropOverlay} testID="chat-drop-overlay">
+          <Ionicons name="cloud-upload-outline" size={28} color={colors.accent} />
+          <Text style={styles.dropOverlayText}>松开即可添加到输入框</Text>
+        </View>
+      ) : null}
     </KeyboardAvoidingView>
   );
 }
@@ -2550,21 +2577,12 @@ const makeStyles = () =>
   selectionActions: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', gap: spacing.md },
   selectionAction: { paddingVertical: spacing.xs, paddingHorizontal: spacing.sm, borderRadius: 8 },
   selectionHint: { color: colors.textMuted, fontSize: 12 },
-  plusMenuBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.38)', justifyContent: 'flex-end' },
-  plusMenu: { backgroundColor: colors.card, borderColor: colors.border, borderWidth: 1, overflow: 'hidden' },
-  plusMenuDesktop: { width: 320, marginLeft: spacing.lg, marginBottom: 164, borderRadius: 12 },
   plusPanel: { backgroundColor: colors.inputBg, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border },
   plusGrid: { flexDirection: 'row', flexWrap: 'wrap', paddingHorizontal: spacing.md, paddingTop: spacing.lg },
   plusCell: { width: '25%', maxWidth: 104, alignItems: 'center', marginBottom: spacing.lg },
   plusCellIcon: { width: 60, height: 60, borderRadius: 16, backgroundColor: colors.card, borderWidth: StyleSheet.hairlineWidth, borderColor: colors.border, alignItems: 'center', justifyContent: 'center' },
   plusCellBtw: { color: colors.accent, fontSize: 13, fontWeight: '600' },
   plusCellLabel: { color: colors.textSecondary, fontSize: 12, marginTop: 6 },
-  plusMenuItem: { minHeight: 68, flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingHorizontal: spacing.lg, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.border },
-  plusMenuIcon: { width: 36, height: 36, borderRadius: 10, backgroundColor: colors.inputBg, alignItems: 'center', justifyContent: 'center' },
-  plusMenuBtw: { color: colors.accent, fontSize: 9, fontWeight: '600' },
-  plusMenuCopy: { flex: 1, minWidth: 0 },
-  plusMenuTitle: { color: colors.text, fontSize: 14, fontWeight: '600' },
-  plusMenuHint: { color: colors.textMuted, fontSize: 11, marginTop: 2 },
   forwardBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.38)', alignItems: 'center', justifyContent: 'center', padding: spacing.xl },
   forwardPanel: { width: 360, maxWidth: '92%', maxHeight: 520, borderRadius: 14, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.card, padding: spacing.lg },
   forwardTitle: { color: colors.text, fontSize: 17, fontWeight: '600', marginBottom: spacing.md },
@@ -2575,6 +2593,9 @@ const makeStyles = () =>
   forwardEmpty: { color: colors.textMuted, textAlign: 'center', paddingVertical: spacing.xl },
   actionSep: { height: 1, backgroundColor: colors.border },
   // round-3 回到最新 pill
+  // 拖文件进聊天区时整格一层虚线框 + 提示(不拦事件,drop 由 document 上的监听处理)。
+  dropOverlay: { position: 'absolute', top: spacing.sm, left: spacing.sm, right: spacing.sm, bottom: spacing.sm, borderWidth: 2, borderStyle: 'dashed', borderColor: colors.accent, borderRadius: 12, backgroundColor: colors.bg + 'E6', alignItems: 'center', justifyContent: 'center', gap: spacing.sm },
+  dropOverlayText: { color: colors.accent, fontSize: 14, fontWeight: '600' },
   jumpPill: {
     position: 'absolute',
     right: spacing.lg,

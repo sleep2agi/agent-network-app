@@ -13,9 +13,14 @@
 //   capture 点行 → 「按下新组合…」→ Ctrl+Shift+P 保存;冲突 / 保留 / 无修饰键 有提示;Esc 取消;恢复默认
 //   run     Ctrl+2 切到 Tasks、Ctrl+, 回设置、Ctrl+K 聚焦 agent 搜索框;改绑后旧组合失效、新组合生效
 //   send    发送键改成 Ctrl+Enter:Enter 换行不发送,Ctrl+Enter 发送;提示文案跟着变
+//   attach  桌面 ＋ = 系统文件选择器(多选、*/*、不出面板);拖进聊天区 / 粘贴图片进草稿;拖到区外不接
+//   phone   390×844 安卓 UA:＋ 仍是微信式 相册 / 文件 面板
 // 任何一条没跑到 = FAIL(不是 skip)。
 import { mkdirSync } from 'node:fs';
-import { serveExport, initScript, findChromium } from '../test-layout-sweep/harness.mjs';
+import { serveExport, initScript, findChromium, ANDROID_UA } from '../test-layout-sweep/harness.mjs';
+
+// 1×1 透明 PNG
+const PNG = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==', 'base64');
 
 const { chromium } = await import(process.env.PLAYWRIGHT_MODULE || 'playwright');
 const WEB = process.env.WEB_DIR;
@@ -95,7 +100,7 @@ try {
   }
   console.log('\nid                    rowTop  rowH  labelX  rowMid  labelMid  chipsMid  Δchips  chipsRight');
   for (const r of rows) console.log(`${r.id.padEnd(20)} ${r.rowTop.toFixed(1).padStart(7)} ${r.rowH.toFixed(1).padStart(5)} ${r.labelX.toFixed(1).padStart(7)} ${r.rowMid.toFixed(1).padStart(7)} ${r.labelMid.toFixed(1).padStart(9)} ${r.rightMid.toFixed(1).padStart(9)} ${(r.rightMid - r.rowMid).toFixed(2).padStart(7)} ${r.rightEnd.toFixed(1).padStart(10)}`);
-  ck(`layout: ${rows.length} 行(导航 7 + 会话 3 + 输入 2)`, rows.length === 12, String(rows.length));
+  ck(`layout: ${rows.length} 行(导航 7 + 会话 3 + 输入 3)`, rows.length === 13, String(rows.length));
   const xs = rows.map(r => r.labelX);
   ck('layout: 所有标签左边缘相等 ±1px', Math.max(...xs) - Math.min(...xs) <= 1, `${Math.min(...xs)}..${Math.max(...xs)}`);
   const worst = rows.reduce((m, r) => Math.max(m, Math.abs(r.rightMid - r.rowMid)), 0);
@@ -195,10 +200,89 @@ try {
     const newlineAfter = (await page.locator('[data-testid="shortcut-chips-newline"]').innerText()).replace(/\s+/g, ' ').trim();
     ck('send: 全部恢复默认 → 发送键回到 Enter(换行回到 Shift+Enter)', stored === '{"overrides":{},"sendKey":"enter"}' && newlineAfter === 'Shift Enter', `${stored} / ${newlineAfter}`);
   }
+
+  // ── attach(桌面)──────────────────────────────────────────────────────────
+  await page.evaluate(() => window.__anetLayoutSweep.setScreen({ name: 'chat', alias: '示例-B' }));
+  const plus = page.locator('[data-testid="composer-desktop-plus"]');
+  await plus.waitFor({ timeout: 10000 });
+  const thumbs = page.locator('[data-testid="composer-draft-thumb"]');
+  const fileChips = page.locator('[data-testid="composer-draft-file"]');
+  const draft = async () => `${await thumbs.count()}img+${await fileChips.count()}file`;
+  const chooserP = page.waitForEvent('filechooser', { timeout: 5000 }).catch(() => null);
+  await plus.click();
+  const chooser = await chooserP;
+  ck('attach: 桌面点 ＋ → 系统文件选择器(filechooser 事件)', !!chooser);
+  ck('attach: 选择器允许多选', !!chooser && chooser.isMultiple());
+  const accept = await page.evaluate(() => [...document.querySelectorAll('input[type=file]')].map(i => i.getAttribute('accept')).join(','));
+  ck('attach: 选择器接受任意类型', accept === '*/*', accept);
+  ck('attach: 没有渲染中间面板 / 弹层', !(await page.locator('[aria-label="更多发送方式面板"]').count()) && !(await page.locator('[aria-modal="true"]').count()) && !(await page.getByText('相册', { exact: true }).count()));
+  if (chooser) await chooser.setFiles([{ name: 'picked.png', mimeType: 'image/png', buffer: PNG }, { name: 'notes.txt', mimeType: 'text/plain', buffer: Buffer.from('hello') }]);
+  await page.waitForTimeout(500);
+  ck('attach: 选中的 2 个文件进了草稿:PNG 走图片缩略图、txt 走文件附件', await draft() === '1img+1file', await draft());
+  await shot('desktop-plus-picked');
+  // 拖放:在聊天窗格里 dispatch 带 File 的 dragover + drop
+  const dropInto = async (sel, name) => page.evaluate(({ sel, name, b64 }) => {
+    const bytes = Uint8Array.from(atob(b64), c => c.charCodeAt(0));
+    const dt = new DataTransfer();
+    dt.items.add(new File([bytes], name, { type: 'image/png' }));
+    const el = document.querySelector(sel);
+    el.dispatchEvent(new DragEvent('dragover', { bubbles: true, cancelable: true, dataTransfer: dt }));
+    const overlay = !!document.querySelector('[data-testid="chat-drop-overlay"]');
+    return new Promise(r => setTimeout(() => {
+      const shown = overlay || !!document.querySelector('[data-testid="chat-drop-overlay"]');
+      const ev = new DragEvent('drop', { bubbles: true, cancelable: true, dataTransfer: dt });
+      el.dispatchEvent(ev);
+      r({ shown, prevented: ev.defaultPrevented });
+    }, 50));
+  }, { sel, name, b64: PNG.toString('base64') });
+  const dropped = await dropInto('[data-testid="chat-header"]', 'dropped.png');
+  await page.waitForTimeout(300);
+  ck('attach: 拖进聊天区 → 出现「松开即可添加」提示', dropped.shown);
+  ck('attach: drop 被接住(preventDefault)且附件缩略图出现', dropped.prevented && await draft() === '2img+1file', `${JSON.stringify(dropped)} ${await draft()}`);
+  const outside = await dropInto('[data-testid="desktop-rail"]', 'outside.png');
+  await page.waitForTimeout(200);
+  ck('attach: 拖到聊天区外(导航栏)不接', !outside.prevented && await draft() === '2img+1file', await draft());
+  // 粘贴:Ctrl/⌘+V 的 paste 事件带图片
+  await page.locator('textarea[placeholder^="Message 示例-B"]').first().click();
+  const pastePrevented = await page.evaluate(b64 => {
+    const bytes = Uint8Array.from(atob(b64), c => c.charCodeAt(0));
+    const dt = new DataTransfer();
+    dt.items.add(new File([bytes], 'clip.png', { type: 'image/png' }));
+    const ev = new ClipboardEvent('paste', { bubbles: true, cancelable: true, clipboardData: dt });
+    document.activeElement.dispatchEvent(ev);
+    return ev.defaultPrevented;
+  }, PNG.toString('base64'));
+  await page.waitForTimeout(300);
+  ck('attach: 粘贴图片 → 进草稿', pastePrevented && await draft() === '3img+1file', await draft());
+  await shot('desktop-drop-paste');
 } catch (e) {
   ck(`driver threw: ${String(e?.message ?? e).split('\n')[0]}`, false);
 }
 ck('no page errors', errors.length === 0, errors.join(' | '));
+
+// ── 手机 390×844:「＋」仍是微信式 相册 / 文件 面板 ─────────────────────────────
+{
+  const phone = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 1, userAgent: ANDROID_UA });
+  const pp = await phone.newPage();
+  try {
+    await pp.addInitScript(initScript, { theme: 'light' });
+    await pp.goto(`${web.url}?safeAreaSim=0,0,0,0`);
+    await pp.waitForFunction(() => !!window.__anetLayoutSweep, null, { timeout: 20000 });
+    await pp.evaluate(() => window.__anetLayoutSweep.setScreen({ name: 'chat', alias: '示例-A' }));
+    await pp.locator('[data-testid="chat-header"]').waitFor({ timeout: 10000 });
+    let chooserFired = false;
+    pp.on('filechooser', () => { chooserFired = true; });
+    await pp.locator('[aria-label="更多发送方式"]').first().click();
+    const panel = pp.locator('[aria-label="更多发送方式面板"]');
+    ck('phone: ＋ 打开微信式面板', await panel.waitFor({ timeout: 5000 }).then(() => true, () => false));
+    ck('phone: 面板里有 相册 / 文件', await pp.getByText('相册', { exact: true }).isVisible() && await pp.getByText('文件', { exact: true }).isVisible());
+    ck('phone: 点 ＋ 不直接弹文件选择器', !chooserFired);
+    if (OUT) await pp.screenshot({ path: `${OUT}/phone-plus-panel.png` });
+  } catch (e) {
+    ck(`phone driver threw: ${String(e?.message ?? e).split('\n')[0]}`, false);
+  }
+  await phone.close();
+}
 
 await browser.close();
 web.close();

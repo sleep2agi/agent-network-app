@@ -68,6 +68,8 @@ export async function openChatWindow(alias: string, profileId?: string, context?
     // macOS:和主窗一样隐藏原生标题栏(2026-09-16);Windows 忽略这两个键
     titleBarStyle: 'overlay',
     hiddenTitle: true,
+    // 让网页收到系统拖进来的文件(聊天区拖放加附件);开着的话 Tauri 自己截走 drop 事件。
+    dragDropEnabled: false,
   });
 }
 
@@ -118,5 +120,7 @@ export async function openWorkspaceWindow(profile: { profileId: string; displayN
     focus: true,
     titleBarStyle: 'overlay',
     hiddenTitle: true,
+    // 让网页收到系统拖进来的文件(聊天区拖放加附件);开着的话 Tauri 自己截走 drop 事件。
+    dragDropEnabled: false,
   });
 }

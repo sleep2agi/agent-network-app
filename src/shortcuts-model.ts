@@ -55,6 +55,8 @@ export const FIXED_SHORTCUTS: readonly FixedShortcut[] = [
   { key: 'closeOverlay', group: 'chat', label: '关闭弹窗 / 图片预览', combos: ['Escape'] },
   { key: 'viewerPrevNext', group: 'chat', label: '图片预览:上一张 / 下一张', combos: ['ArrowLeft', 'ArrowRight'] },
   { key: 'rulesFind', group: 'chat', label: '规则文件内查找', combos: ['Mod+F'] },
+  // 桌面聊天:剪贴板里的图片 / 文件直接进草稿(ChatScreen 的 paste 监听,desktop-file-intake.ts)。
+  { key: 'pasteFiles', group: 'input', label: '粘贴图片 / 文件到输入框', combos: ['Mod+V'] },
 ];
 
 // ── 发送键 ─────────────────────────────────────────────────────────────────────

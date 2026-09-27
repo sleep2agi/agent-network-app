@@ -1,4 +1,5 @@
 import type { PickedImage } from './attach';
+import { attachmentsFromFiles, filesFromTransfer } from './desktop-file-intake';
 
 type ClipboardFileItem = {
   kind?: string;
@@ -12,23 +13,13 @@ export const isTauriDesktop = (): boolean =>
  * attachment model. Text-only content returns null, preserving native paste. */
 export const attachmentFromClipboard = (
   items: ArrayLike<ClipboardFileItem> | null | undefined,
-): PickedImage | null => {
-  if (!items) return null;
-  for (let i = 0; i < items.length; i++) {
-    const item = items[i];
-    if (item?.kind !== 'file') continue;
-    const file = item.getAsFile?.();
-    if (!file) continue;
-    return {
-      uri: URL.createObjectURL(file),
-      fileName: file.name || (file.type.startsWith('image/') ? 'pasted-image.png' : 'pasted-file'),
-      mimeType: file.type || 'application/octet-stream',
-      fileSize: file.size,
-      webFile: file,
-    };
-  }
-  return null;
-};
+): PickedImage | null => attachmentsFromClipboard(items)[0] ?? null;
+
+/** Every file on the clipboard (several copied files / screenshots), same
+ * conversion as the ＋ picker and drag-and-drop (desktop-file-intake.ts). */
+export const attachmentsFromClipboard = (
+  items: ArrayLike<ClipboardFileItem> | null | undefined,
+): PickedImage[] => attachmentsFromFiles(filesFromTransfer({ items }));
 
 export const releaseClipboardAttachment = (attachment: PickedImage | null) => {
   if (attachment?.webFile && attachment.uri.startsWith('blob:')) URL.revokeObjectURL(attachment.uri);
