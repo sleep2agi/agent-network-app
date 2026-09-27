@@ -67,6 +67,8 @@ const CASES = [
   { name: 'picker', layouts: ['phone', 'twoPane'], open: go({ name: 'picker' }), scope: 'main', header: '[data-testid="screen-header"]' },
   { name: 'wizard', layouts: ['phone', 'twoPane'], open: go({ name: 'wizard', daemon: { daemon_node_id: 'd_sweep_1', alias: '示例-守护', online: true, runtimes_supported: ['claude-code'], can_create_nodes: true } }), scope: 'main', header: '[data-testid="screen-header"]' },
   { name: 'settings', layouts: ['phone', 'twoPane'], open: go({ name: 'settings' }), scope: 'main', header: null },
+  // 手机设置子页(settings-kit):顶栏返回箭头 / 标题同一中线,tab 栏收起。
+  { name: 'settings:voice', layouts: ['phone'], open: async (page) => { await go({ name: 'settings' })(page); await page.locator('[data-testid="settings-row-voice"]').click(); }, scope: 'main', header: '[data-testid="settings-subpage-header"]' },
   { name: 'tasks', layouts: ['phone'], open: go({ name: 'tasks' }), scope: 'main', header: null },
   { name: 'messages', layouts: ['phone'], open: go({ name: 'messages' }), scope: 'main', header: null },
   // ── modals (separate native windows under edge-to-edge) ──

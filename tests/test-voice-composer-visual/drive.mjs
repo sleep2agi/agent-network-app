@@ -129,7 +129,8 @@ for (const [w, h, name, ua] of [[390, 844, 'phone', undefined], [1200, 850, 'two
     await ctx.close();
   }
 }
-// 设置 → 语音输入(识别模型 + 单个 API Key;高级 / 旧版控制台展开后)
+// 设置 → 语音输入(识别模型 + 「API Key ›」行;API Key 与 高级 / 旧版控制台 是点进去的三级页,
+// 见 tests/test-settings-subpages/drive.mjs)
 for (const scheme of ['light', 'dark']) {
   const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, colorScheme: scheme });
   const page = await ctx.newPage();
@@ -138,21 +139,26 @@ for (const scheme of ['light', 'dark']) {
   await page.getByText(ALIAS, { exact: true }).first().waitFor({ timeout: 20000 });
   await page.getByText('设置', { exact: true }).last().click();
   await page.getByText('语音输入', { exact: true }).first().click();
+  await page.locator('[data-testid="voice-api-key-row"]').waitFor({ timeout: 8000 });
+  const modes = await page.locator('[data-testid^="voice-mode-"][role="radio"]').allInnerTexts();
+  await page.screenshot({ path: `${OUT}/settings-390x844-${scheme}-1.png`, fullPage: true });
+  await page.locator('[data-testid="voice-api-key-row"]').click();
   await page.locator('[data-testid="voice-api-key"]').waitFor({ timeout: 8000 });
   const rec = {
     tag: `settings-390-${scheme}`,
     apiKeyFields: await page.locator('[data-testid="voice-api-key"]').count(),
     appIdVisibleBeforeAdvanced: await page.locator('[data-testid="voice-app-id"]').count(),
     secretKeyTextOnPage: await page.getByText('Secret Key').count(),
-    modes: await page.locator('[data-testid^="voice-mode-"]').allInnerTexts(),
+    modes,
   };
-  await page.screenshot({ path: `${OUT}/settings-390x844-${scheme}-1.png`, fullPage: true });
-  // 桩里的凭据带了自定义极速版地址(本地假服务)→「高级」默认就是展开的
-  if (!(await page.locator('[data-testid="voice-advanced"]').count())) await page.locator('[data-testid="voice-advanced-toggle"]').click();
+  await page.locator('[data-testid="settings-back"]').click();
+  await page.locator('[data-testid="voice-advanced-toggle"]').click();
   await page.locator('[data-testid="voice-console-old"]').click();
   rec.appIdVisibleAfterOld = await page.locator('[data-testid="voice-app-id"]').count();
-  rec.apiKeyHiddenAfterOld = (await page.locator('[data-testid="voice-api-key"]').count()) === 0;
   await page.screenshot({ path: `${OUT}/settings-390x844-${scheme}-2-advanced-old.png`, fullPage: true });
+  await page.locator('[data-testid="settings-back"]').click();
+  await page.locator('[data-testid="voice-api-key-row"]').click();
+  rec.apiKeyHiddenAfterOld = (await page.locator('[data-testid="voice-api-key"]').count()) === 0;
   console.log(JSON.stringify(rec));
   await ctx.close();
 }

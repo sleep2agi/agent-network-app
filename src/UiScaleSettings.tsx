@@ -31,7 +31,8 @@ type SharedStyles = {
   actionButton: object; actionButtonText: object;
 };
 
-const persist = (next: Partial<UiScalePrefs>) => {
+/** 存盘 + 生效。手机子页(SettingsPhonePages.tsx)的单选行也用它。 */
+export const persistUiScale = (next: Partial<UiScalePrefs>) => {
   setUiScalePrefs(next);
   void saveUiScalePrefs(uiScalePrefs());
 };
@@ -86,7 +87,7 @@ export default function UiScaleSettings({ s, showFont, showDensity }: { s: Share
             <Text style={s.rowHint} testID="settings-font-size-summary">{summary.font}</Text>
             {summary.osNote ? <Text style={s.rowHint} testID="settings-font-size-os">{summary.osNote}</Text> : null}
           </View>
-          <Segmented label="字体大小" options={FONT_SIZE_OPTIONS} selectedKey={r.font} isDefault={r.fontIsDefault} s={s} testPrefix="settings-font-size" onPick={font => persist({ font })} />
+          <Segmented label="字体大小" options={FONT_SIZE_OPTIONS} selectedKey={r.font} isDefault={r.fontIsDefault} s={s} testPrefix="settings-font-size" onPick={font => persistUiScale({ font })} />
         </View>
       ) : null}
       {showDensity ? (
@@ -96,7 +97,7 @@ export default function UiScaleSettings({ s, showFont, showDensity }: { s: Share
             <Text style={s.rowHint} testID="settings-density-summary">{summary.density}</Text>
             <Text style={s.rowHint}>图标、头像、行高和间距</Text>
           </View>
-          <Segmented label="界面密度" options={DENSITY_OPTIONS} selectedKey={r.density} isDefault={r.densityIsDefault} s={s} testPrefix="settings-density" onPick={density => persist({ density })} />
+          <Segmented label="界面密度" options={DENSITY_OPTIONS} selectedKey={r.density} isDefault={r.densityIsDefault} s={s} testPrefix="settings-density" onPick={density => persistUiScale({ density })} />
         </View>
       ) : null}
       <UiScalePreview />
@@ -106,7 +107,7 @@ export default function UiScaleSettings({ s, showFont, showDensity }: { s: Share
           accessibilityLabel="恢复默认字体大小和界面密度"
           testID="settings-ui-scale-reset"
           disabled={!anyStored}
-          onPress={() => persist({ font: null, density: null })}
+          onPress={() => persistUiScale({ font: null, density: null })}
           style={({ pressed }) => [s.actionButton, !anyStored && { opacity: 0.45 }, pressed && { opacity: 0.6 }]}
         >
           <Text style={s.actionButtonText}>恢复默认</Text>

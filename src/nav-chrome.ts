@@ -29,12 +29,21 @@ export const PHONE_LEAF_SCREENS: readonly string[] = [
  *   on every signed-in screen, like the desktop rail. Leaves keep it too: they now render
  *   next to it instead of hiding the navigation, and each still has its own back button.
  * - phone: bottom tabs on the tab-level screens only, exactly as before.
+ *
+ * `inPageLeaf`: a tab-level screen has pushed its own second-level page (设置 → 语音输入;
+ * Vincent 2026-09-27 「设置界面有点体验太差」— WeChat hides the tab bar there). On the phone
+ * that page is a leaf like chat: back arrow top-left, no tab bar.
  */
-export function navChromeFor(layout: AppLayout, screenName: string): NavChrome {
+export function navChromeFor(layout: AppLayout, screenName: string, inPageLeaf = false): NavChrome {
   if (layout === 'desktop' || screenName === 'login') return 'none';
   if (layout === 'twoPane') return 'rail';
-  return PHONE_LEAF_SCREENS.includes(screenName) ? 'none' : 'bottomTabs';
+  return PHONE_LEAF_SCREENS.includes(screenName) || inPageLeaf ? 'none' : 'bottomTabs';
 }
+
+/** Tab-level screens that can push an in-page second-level page (and report it to App). */
+export const PHONE_IN_PAGE_LEAF_SCREENS: readonly string[] = ['settings'];
+export const phoneInPageLeaf = (screenName: string, subPageOpen: boolean): boolean =>
+  subPageOpen && PHONE_IN_PAGE_LEAF_SCREENS.includes(screenName);
 
 /**
  * The destination a screen belongs to, i.e. which rail/tab item lights up. A chat or

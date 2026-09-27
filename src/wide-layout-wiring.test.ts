@@ -56,7 +56,7 @@ ck('NodeDetailScreen hands the tab off on unmount', node.includes('releaseOnUnmo
 ck('NodeDetailScreen falls back to window width', node.includes('const width = layoutWidth ?? windowWidth;'));
 
 // ── nav chrome: rail on the two-pane, bottom tabs on the phone, one shell for both ──
-ck('App decides chrome via navChromeFor(layout, screen.name)', app.includes('const navChrome = navChromeFor(layout, screen.name);'));
+ck('App decides chrome via navChromeFor(layout, screen.name, inPageLeaf)', app.includes('const navChrome = navChromeFor(layout, screen.name, inPageLeaf);'));
 ck('rail renders only when navChrome is rail', app.includes("const railShown = navChrome === 'rail';") && /\{railShown \? \(\s*<MobileNavRail/.test(app));
 ck('bottom tab bar renders only when navChrome is bottomTabs (exactly one call site)', (app.match(/mobileTabBar\(/g) ?? []).length === 1 && app.includes("{navChrome === 'bottomTabs' ? mobileTabBar(navActive) : null}"));
 ck('rail uses the same destinations as the phone tabs', /<MobileNavRail[\s\S]*?tabs=\{MOBILE_TABS\}/.test(app));
