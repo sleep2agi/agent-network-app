@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import { Ionicons } from './icons';
 import { ActivityIndicator, Alert, BackHandler, Modal, Pressable, RefreshControl, ScrollView, StyleSheet, Switch, View, useWindowDimensions } from 'react-native';
@@ -41,10 +41,14 @@ import { loadChatPins } from './chat-pins';
 import { loadScheduleTargetRecents, rememberScheduleTarget } from './schedule-target-recents';
 import { colors, onThemeChange, radius, spacing, type as fontSize, weight } from './theme';
 import { scheduledTaskActions } from './scheduled-task-actions';
+import type { ScheduleOpenRequest } from './node-schedules';
 import ScheduleRunResult, { type RunTaskState } from './ScheduleRunResult';
 import { runDisplay, runDurationText, runFailureText, runIsOpen } from './schedule-run-result';
 import {
   DEFAULT_SCHEDULE_FILTER,
+  EXTERNAL_KIND_LABEL,
+  EXTERNAL_STATUS_LABEL,
+  INTENT_STATUS_LABEL,
   countByStatus,
   describeMisfire,
   describeSchedule,
@@ -69,15 +73,6 @@ const fmt = (value?: string | null) => {
   return Number.isFinite(d.getTime()) ? d.toLocaleString() : value;
 };
 
-const EXTERNAL_KIND_LABEL: Record<HubExternalSchedule['kind'], string> = {
-  cron: 'crontab', systemd: 'systemd', tmux: 'tmux', playwright: 'playwright', custom: '自定义',
-};
-const EXTERNAL_STATUS_LABEL: Record<HubExternalSchedule['last_status'], string> = {
-  success: '成功', failed: '失败', running: '运行中', unknown: '未知',
-};
-const INTENT_STATUS_LABEL: Record<HubExternalScheduleEditIntent['status'], string> = {
-  pending: '待节点领取', delivered: '节点已领取', applied: '已应用', rejected: '被节点拒绝', expired: '已过期',
-};
 
 /** 与 Hub 端 parseManagedCronExpression 同一形状预检（五段、字符白名单），
  *  只为把明显敲错的输入挡在本地；权威校验仍在 Hub。 */
@@ -91,7 +86,7 @@ const describeIntentPatch = (patch: HubExternalScheduleEditIntent['patch']) => [
   patch.cron ? `cron → ${patch.cron}` : null,
 ].filter(Boolean).join('，') || '—';
 
-const editIntentErrorText = (e: unknown): string => {
+export const editIntentErrorText = (e: unknown): string => {
   if (e instanceof ScheduledTaskError) {
     if (e.code === 'revision_conflict') return '计划在节点侧已变化，列表已刷新，请重新操作。';
     if (e.code === 'edit_in_flight') return '已有一条待应用的编辑意向，等节点确认后再试。';
@@ -127,10 +122,12 @@ const toneColor = (tone: StatusTone) =>
 
 type ScheduleAction = 'toggle' | 'run' | 'cancel';
 
-export default function ScheduledTasksScreen({ cfg, onOpenChat }: {
+export default function ScheduledTasksScreen({ cfg, onOpenChat, open }: {
   cfg: HubConfig;
   /** 「去会话」:打开与该节点的会话,并尽量定位到这次执行的那条任务。 */
   onOpenChat?: (alias: string, taskId?: string) => void;
+  /** 从节点页「定时任务」分区来:落在那一条(Hub 计划选中并显示详情;节点计划滚到并高亮),或直接打开预填了该节点的新建表单。 */
+  open?: ScheduleOpenRequest;
 }) {
   const [themeVersion, setThemeVersion] = useState(0);
   useEffect(() => onThemeChange(() => setThemeVersion(v => v + 1)), []);
@@ -156,6 +153,12 @@ export default function ScheduledTasksScreen({ cfg, onOpenChat }: {
   const [cronEdit, setCronEdit] = useState<{ node: HubNodeExternalSchedules; schedule: HubExternalSchedule } | null>(null);
   const [intents, setIntents] = useState<{ title: string; edits: HubExternalScheduleEditIntent[] } | null>(null);
   const [openIntents, setOpenIntents] = useState<Record<string, HubExternalScheduleEditIntent>>({});
+  // 节点页带过来的落点:Hub 计划等列表到了再选中(要先把筛选切到它的状态);节点计划记下键,渲染时高亮 + 滚到。
+  const [pendingHubFocus, setPendingHubFocus] = useState<string | null>(null);
+  const [focusedExternal, setFocusedExternal] = useState<string | null>(null);
+  const [createTarget, setCreateTarget] = useState<string | undefined>(undefined);
+  const nodeListRef = useRef<ScrollView>(null);
+  const externalOffsets = useRef<{ cards: Record<string, number>; rows: Record<string, number> }>({ cards: {}, rows: {} });
   // 双栏按本屏实际宽度判断(Android 展开时本屏在导航栏右侧,不是整窗宽)。
   const { width: windowWidth } = useWindowDimensions();
   const [measuredWidth, setMeasuredWidth] = useState<number | null>(null);
@@ -201,6 +204,31 @@ export default function ScheduledTasksScreen({ cfg, onOpenChat }: {
     const timer = setInterval(tick, 10_000);
     return () => clearInterval(timer);
   }, [tab, load, loadExternal]);
+
+  useEffect(() => {
+    if (!open) return;
+    if (open.kind === 'create') { setTab('hub'); setEditing(null); setCreateTarget(open.nodeId); setShowForm(true); return; }
+    if (open.kind === 'hub') { setTab('hub'); setPendingHubFocus(open.scheduleId); return; }
+    setTab('node'); setFocusedExternal(`${open.nodeId}:${open.scheduleId}`);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open?.seq]);
+
+  useEffect(() => {
+    if (!pendingHubFocus || loading) return;
+    const row = items.find(item => item.schedule_id === pendingHubFocus);
+    if (row) { setFilter(row.status); setSelectedId(row.schedule_id); }
+    setPendingHubFocus(null);
+  }, [pendingHubFocus, loading, items]);
+
+  // 节点计划的落点:卡片在列表里的 y + 行在卡片里的 y,两个都量到了才滚(只滚一次)。
+  const scrollToFocusedExternal = () => {
+    if (!focusedExternal) return;
+    const nodeId = focusedExternal.slice(0, focusedExternal.indexOf(':'));
+    const cardY = externalOffsets.current.cards[nodeId];
+    const rowY = externalOffsets.current.rows[focusedExternal];
+    if (cardY === undefined || rowY === undefined) return;
+    nodeListRef.current?.scrollTo({ y: Math.max(0, cardY + rowY - spacing.lg), animated: false });
+  };
 
   const counts = useMemo(() => countByStatus(items), [items]);
   const visible = useMemo(() => visibleSchedules(items, filter), [items, filter]);
@@ -299,7 +327,7 @@ export default function ScheduledTasksScreen({ cfg, onOpenChat }: {
     finally { setBusy(false); }
   };
 
-  const openCreate = () => { setEditing(null); setShowForm(true); };
+  const openCreate = () => { setEditing(null); setCreateTarget(undefined); setShowForm(true); };
 
   const detail = selected ? (
     <ScheduleDetail
@@ -394,6 +422,7 @@ export default function ScheduledTasksScreen({ cfg, onOpenChat }: {
         {tab === 'node' ? (
           !externalLoaded ? <View style={styles.center}><ActivityIndicator color={colors.accent} /></View> : (
             <ScrollView
+              ref={nodeListRef}
               contentContainerStyle={styles.list}
               refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => loadExternal(true)} tintColor={colors.accent} />}
             >
@@ -401,14 +430,20 @@ export default function ScheduledTasksScreen({ cfg, onOpenChat }: {
               {external.length === 0 ? (
                 <View style={styles.empty}><Text style={styles.emptyTitle}>暂无节点计划</Text><Text style={styles.emptyBody}>节点升级后会自动上报本机 crontab 等计划。</Text></View>
               ) : external.map(node => (
-                <View key={node.node_id} style={styles.card}>
+                <View key={node.node_id} style={styles.card} onLayout={e => { externalOffsets.current.cards[node.node_id] = e.nativeEvent.layout.y; scrollToFocusedExternal(); }}>
                   <View style={styles.cardTop}>
                     <Text style={styles.cardTitle}>{node.alias}</Text>
                     <Pressable disabled={busy} style={styles.action} onPress={() => void showIntents(node)}><Text style={styles.actionText}>意向记录</Text></Pressable>
                   </View>
                   <Text style={styles.meta}>快照：{fmt(node.observed_at)}{node.error ? ` · 上报异常（${node.error}）` : ''}</Text>
                   {node.schedules.length === 0 ? <Text style={[styles.muted, { marginTop: spacing.sm }]}>该节点未上报计划</Text> : node.schedules.map(sch => (
-                    <View key={sch.id} style={styles.extRow}>
+                    <View
+                      key={sch.id}
+                      style={[styles.extRow, focusedExternal === `${node.node_id}:${sch.id}` && styles.extRowFocused]}
+                      testID={`external-schedule-${node.node_id}-${sch.id}`}
+                      aria-selected={focusedExternal === `${node.node_id}:${sch.id}`}
+                      onLayout={e => { externalOffsets.current.rows[`${node.node_id}:${sch.id}`] = e.nativeEvent.layout.y; scrollToFocusedExternal(); }}
+                    >
                       <View style={styles.cardTop}>
                         <Text style={styles.cardTitle}>{sch.name}</Text>
                         <Text style={[styles.badge, sch.enabled ? styles.badgeActive : styles.badgeIdle]}>{sch.enabled ? '启用' : '停用'}</Text>
@@ -439,6 +474,7 @@ export default function ScheduledTasksScreen({ cfg, onOpenChat }: {
         nodes={nodes}
         visible={showForm}
         editing={editing}
+        initialTarget={createTarget}
         onClose={() => { setShowForm(false); setEditing(null); }}
         onSaved={async () => { setShowForm(false); setEditing(null); await load(); }}
         onConflict={async () => {
@@ -637,11 +673,13 @@ function Fact({ label, value, hint, last }: { label: string; value: string; hint
   );
 }
 
-function ScheduleFormModal({ cfg, nodes, visible, editing, onClose, onSaved, onConflict }: {
+function ScheduleFormModal({ cfg, nodes, visible, editing, initialTarget, onClose, onSaved, onConflict }: {
   cfg: HubConfig;
   nodes: HubNode[];
   visible: boolean;
   editing: HubScheduledTask | null;
+  /** 新建时预选的执行节点 node_id(节点页「＋ 新建」带过来)。 */
+  initialTarget?: string;
   onClose: () => void;
   onSaved: () => void;
   onConflict: () => void;
@@ -677,7 +715,7 @@ function ScheduleFormModal({ cfg, nodes, visible, editing, onClose, onSaved, onC
     if (!visible) return;
     setError('');
     if (!editing) {
-      setName(''); setTask(''); setTarget(''); setKind('once'); setWhen(''); setEvery('1'); setUnit('hours');
+      setName(''); setTask(''); setTarget(initialTarget ?? ''); setKind('once'); setWhen(''); setEvery('1'); setUnit('hours');
       setClock('09:00'); setWeekdays([1]); setMisfirePolicy('catch_up_once'); setPriority('normal'); setTimezone(detectedTimezone);
       return;
     }
@@ -691,7 +729,7 @@ function ScheduleFormModal({ cfg, nodes, visible, editing, onClose, onSaved, onC
     }
     if (editing.schedule.type === 'daily') setClock(editing.schedule.time);
     if (editing.schedule.type === 'weekly') { setClock(editing.schedule.time); setWeekdays(editing.schedule.weekdays); }
-  }, [visible, editing, detectedTimezone]);
+  }, [visible, editing, detectedTimezone, initialTarget]);
 
   const invalidSchedule = (kind === 'once' && !when) ||
     (kind === 'interval' && (!Number.isInteger(Number(every)) || Number(every) < (unit === 'seconds' ? 60 : 1))) ||
@@ -895,6 +933,7 @@ function makeStyles() { return StyleSheet.create({
   segment: { flexDirection: 'row', borderWidth: 1, borderColor: colors.border, borderRadius: 9, overflow: 'hidden' }, segmentItem: { flex: 1, alignItems: 'center', paddingVertical: 10, backgroundColor: colors.card }, segmentActive: { backgroundColor: colors.accent }, segmentText: { color: colors.textMuted, fontSize: 12 }, segmentTextActive: { color: colors.onAccent, fontSize: 12, fontWeight: '600' }, weekdays: { flexDirection: 'row', justifyContent: 'space-between' }, day: { width: 38, height: 38, borderRadius: 19, borderWidth: 1, borderColor: colors.border, alignItems: 'center', justifyContent: 'center' }, dayActive: { backgroundColor: colors.accent, borderColor: colors.accent }, dayTextActive: { color: colors.onAccent, fontWeight: '600' },
   run: { paddingVertical: spacing.md, borderBottomWidth: 1, borderBottomColor: colors.border, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   extRow: { borderTopWidth: 1, borderTopColor: colors.border, marginTop: spacing.md, paddingTop: spacing.md },
+  extRowFocused: { backgroundColor: colors.rowActive, marginHorizontal: -spacing.md, paddingHorizontal: spacing.md, paddingBottom: spacing.md },
   extError: { color: colors.failed, fontSize: 11, marginTop: spacing.xs },
   linkDisabled: { opacity: 0.4 },
   intentBadge: { color: colors.accent, fontSize: 11, marginTop: spacing.sm },

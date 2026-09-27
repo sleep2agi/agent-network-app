@@ -132,7 +132,7 @@ ck('ui-text: result view takes Text from the wrapper, not react-native',
 ck('ui-text: screen takes Text from the wrapper',
   screen.includes("from './ui-text'") && !/import \{[^}]*\bText\b[^}]*\} from 'react-native'/.test(screen));
 ck('app: both schedule mounts wire 去会话 into a focused chat',
-  app.split("<ScheduledTasksScreen cfg={cfg} onOpenChat={(alias, focusTaskId) => setScreen({ name: 'chat', alias, focusTaskId })} />").length - 1 === 2);
+  app.split("cfg={cfg} open={screen.open} onOpenChat={(alias, focusTaskId) => setScreen({ name: 'chat', alias, focusTaskId })} />").length - 1 === 2);
 ck('app: every workspace chat mount forwards focusTaskId', app.split('focusTaskId={screen.focusTaskId}').length - 1 === 3);
 has('chat locates the focused task once ready', chat, 'setTimeout(() => locateKey(focusTaskId), 0)');
 

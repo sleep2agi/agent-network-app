@@ -225,8 +225,9 @@ const networkQuery = (cfg: HubConfig) => cfg.networkId
 export const fetchScheduledTasks = (cfg: HubConfig) =>
   get<{ ok: true; schedules: HubScheduledTask[] }>(cfg, `/api/scheduled-tasks${networkQuery(cfg)}`);
 
-export const fetchScheduledRuns = (cfg: HubConfig, scheduleId: string) => {
-  const q = new URLSearchParams({ limit: '50' });
+/** limit:Hub 夹在 1–200(server/src/scheduled-tasks.ts);节点页只要最近一次,传 1。 */
+export const fetchScheduledRuns = (cfg: HubConfig, scheduleId: string, limit = 50) => {
+  const q = new URLSearchParams({ limit: String(limit) });
   if (cfg.networkId) q.set('network_id', cfg.networkId);
   return get<{ ok: true; runs: HubScheduledRun[] }>(cfg, `/api/scheduled-tasks/${encodeURIComponent(scheduleId)}/runs?${q}`);
 };

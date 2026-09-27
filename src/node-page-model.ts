@@ -4,7 +4,7 @@
 // 纯逻辑,不 import react-native。
 import type { NodeInfoFact } from './node-info';
 
-export type NodeSectionKey = 'overview' | 'model' | 'rules' | 'skills' | 'files' | 'tasks' | 'danger';
+export type NodeSectionKey = 'overview' | 'model' | 'rules' | 'skills' | 'files' | 'tasks' | 'schedules' | 'danger';
 
 export interface NodeSection {
   readonly key: NodeSectionKey;
@@ -21,6 +21,8 @@ export const NODE_SECTIONS: readonly NodeSection[] = [
   // 项目文件夹(只读):始终出现 —— 节点没上报 files_capable 时分区里直接说要升级什么(node-files.ts filesSupport)。
   { key: 'files', label: '项目文件夹', icon: 'folder-open-outline' },
   { key: 'tasks', label: '任务', icon: 'list-outline' },
+  // 这个节点要执行的定时任务(Hub 计划 + 节点计划,按 node_id 认):始终出现,只读页也在(开关与定时任务页同权限)。
+  { key: 'schedules', label: '定时任务', icon: 'alarm-outline' },
   { key: 'danger', label: '危险操作', icon: 'warning-outline' },
 ];
 
