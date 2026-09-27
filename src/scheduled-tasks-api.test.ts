@@ -172,8 +172,9 @@ ck('mobile screen gates edit actions on editable cron rows with a numeric revisi
   screen2.includes("sch.editable === true && sch.kind === 'cron' && typeof sch.revision === 'number'"));
 ck('mobile cron input pre-validates the five-field shape and never sends commands',
   screen2.includes('looksLikeCron') && screen2.includes('分 时 日 月 周') && screen2.includes('绝不下发命令'));
+// 文案表在 scheduled-view-model.ts(节点页「定时任务」分区共用),屏幕从那里 import。
 ck('mobile surfaces intent lifecycle wording for every terminal state',
-  ['待节点领取', '节点已领取', '已应用', '被节点拒绝', '已过期'].every(value => screen2.includes(value)));
+  screen2.includes('INTENT_STATUS_LABEL[') && ['待节点领取', '节点已领取', '已应用', '被节点拒绝', '已过期'].every(value => viewModel.includes(value)));
 
 // ── 在途意向筛选（selectOpenIntents 纯函数）────────────────────────────
 

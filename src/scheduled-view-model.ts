@@ -4,7 +4,7 @@
 // 真正在跑的计划被埋在下面。这里把「显示什么、按什么顺序、叫什么名字」全部收成
 // 纯函数,屏幕只负责摆放 —— 这样筛选/计数/排序/中文文案/相对时间都能脱离设备测。
 
-import type { HubMisfirePolicy, HubScheduledRun, HubScheduledTask, HubScheduleSpec } from './api';
+import type { HubExternalSchedule, HubExternalScheduleEditIntent, HubMisfirePolicy, HubScheduledRun, HubScheduledTask, HubScheduleSpec } from './api';
 import { parseHubTime } from './time';
 
 export type ScheduleStatus = HubScheduledTask['status'];
@@ -81,6 +81,18 @@ export function sortSchedules<T extends Pick<HubScheduledTask, 'name' | 'next_ru
 export function visibleSchedules<T extends HubScheduledTask>(items: readonly T[], filter: ScheduleStatus): T[] {
   return sortSchedules(items.filter(item => item.status === filter));
 }
+
+// ── 节点计划(RFC-036)的中文 —— 定时任务页和节点页「定时任务」分区共用 ──────────
+
+export const EXTERNAL_KIND_LABEL: Record<HubExternalSchedule['kind'], string> = {
+  cron: 'crontab', systemd: 'systemd', tmux: 'tmux', playwright: 'playwright', custom: '自定义',
+};
+export const EXTERNAL_STATUS_LABEL: Record<HubExternalSchedule['last_status'], string> = {
+  success: '成功', failed: '失败', running: '运行中', unknown: '未知',
+};
+export const INTENT_STATUS_LABEL: Record<HubExternalScheduleEditIntent['status'], string> = {
+  pending: '待节点领取', delivered: '节点已领取', applied: '已应用', rejected: '被节点拒绝', expired: '已过期',
+};
 
 // ── 计划 → 中文 ────────────────────────────────────────────────────────
 

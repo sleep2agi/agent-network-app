@@ -45,7 +45,7 @@
 // "field absent" apart from "screen broken" (lead 71ee862d
 // verification bullet).
 
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import { layoutGeneration, releaseOnUnmount, takeHandoff } from './layout-handoff';
 import { takeNodeSectionRequest } from './node-section-request';
 import { ActivityIndicator, BackHandler, Keyboard, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StatusBar, StyleSheet, View, useWindowDimensions } from 'react-native';
@@ -70,6 +70,8 @@ import { rulesFileTarget } from './node-rules';
 import NodeModelSection from './NodeModelSection';
 import NodeSkillsSection from './NodeSkillsSection';
 import NodeFilesSection from './NodeFilesSection';
+import NodeSchedulesSection from './NodeSchedulesSection';
+import type { ScheduleOpenRequest } from './node-schedules';
 import { keyboardAvoidEnabled, useKeyboardVisible } from './keyboard-visibility';
 import { filesTreeMode, nodePageColumnMaxWidth } from './node-files-tree';
 import { NODE_PAGE_COMPACT_WIDTH, NODE_SECTIONS, factText, headerChips, leaveNeedsConfirm, nodePageChrome, nodePageContentWidth, nodePageScrolls, overviewFactColumns, resolveActiveSection, splitOverviewFacts, visibleNodeSections, type NodeSectionKey } from './node-page-model';
@@ -131,11 +133,15 @@ function FactCell({ fact, columns }: { fact: NodeInfoFact; columns: number }) {
   );
 }
 
-/** 分区标题 + 一句说明;分区之间不画框,靠留白和标题分层(0.2.85 极简语言)。 */
-function SectionTitle({ title, hint }: { title: string; hint?: string }) {
+/** 分区标题 + 一句说明;分区之间不画框,靠留白和标题分层(0.2.85 极简语言)。
+ *  action:标题行右端的一个按钮(定时任务的「＋ 新建」);标题本身的位置不因它而变。 */
+function SectionTitle({ title, hint, action }: { title: string; hint?: string; action?: ReactNode }) {
   return (
     <View style={{ marginBottom: spacing.md, gap: 4 }}>
-      <Text style={{ color: colors.text, fontSize: typeScale.title, fontWeight: weight.strong }}>{title}</Text>
+      <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.md }}>
+        <Text style={{ color: colors.text, fontSize: typeScale.title, fontWeight: weight.strong }} testID="node-section-title">{title}</Text>
+        {action}
+      </View>
       {hint ? <Text style={{ color: colors.textMuted, fontSize: typeScale.small, lineHeight: 18 }}>{hint}</Text> : null}
     </View>
   );
@@ -155,6 +161,7 @@ export default function NodeDetailScreen({
   layoutWidth,
   touch = false,
   desktop = false,
+  onOpenScheduled,
 }: {
   cfg: HubConfig;
   alias: string;
@@ -167,6 +174,9 @@ export default function NodeDetailScreen({
   touch?: boolean;
   /** Tauri desktop workspace: the rail / sidebar / list select this page — no phone back (pane-header.ts). */
   desktop?: boolean;
+  /** 「定时任务」分区:点一行 / 「＋ 新建」→ 定时任务页落在那一条 / 打开预填了这个节点的新建表单。
+   *  没有(独立聊天窗口)时分区只读:行不可点,不画新建。 */
+  onOpenScheduled?: (request: ScheduleOpenRequest) => void;
 }) {
   const [state, setState] = useState<LoadState>({ kind: 'loading' });
   const [node, setNode] = useState<HubNode | null>(null);
@@ -500,6 +510,37 @@ export default function NodeDetailScreen({
         <NodeFilesSection cfg={cfg} alias={alias} node={rulesTarget} session={s} treeMode={filesTree} />
       </View>
     );
+    if (section === 'schedules') {
+      // 执行节点按 node_id 认:nodes 行的权威 id 优先,没有再用会话上报的(节点计划的快照挂在会话上)。
+      const scheduleNodeId = node?.node_id ?? s.node_id ?? null;
+      const create = onOpenScheduled && scheduleNodeId ? () => onOpenScheduled({ kind: 'create', nodeId: scheduleNodeId, seq: Date.now() }) : undefined;
+      return (
+        <View>
+          <SectionTitle
+            title="定时任务"
+            hint="这个节点要执行的计划:Hub 计划由 Hub 按时派发,节点计划是节点上报的本机计划。点一行看详情和执行记录。"
+            action={create ? (
+              <Pressable onPress={create} accessibilityRole="button" accessibilityLabel="新建定时任务" testID="node-schedules-create" hitSlop={6}
+                style={({ pressed }) => [localStyles.headerAction, { backgroundColor: colors.accent }, pressed && { opacity: 0.8 }]}>
+                <Text style={{ color: colors.onAccent, fontSize: typeScale.small, lineHeight: 17, fontWeight: weight.strong }}>＋ 新建</Text>
+              </Pressable>
+            ) : undefined}
+          />
+          {nodeListState === 'loading' && !scheduleNodeId ? (
+            <ActivityIndicator color={colors.textMuted} style={{ alignSelf: 'flex-start' }} />
+          ) : (
+            <NodeSchedulesSection
+              cfg={cfg}
+              nodeId={scheduleNodeId}
+              onCreate={create}
+              onOpen={onOpenScheduled ? row => onOpenScheduled(row.source === 'hub'
+                ? { kind: 'hub', scheduleId: row.scheduleId, seq: Date.now() }
+                : { kind: 'node', nodeId: scheduleNodeId!, scheduleId: row.scheduleId, seq: Date.now() }) : undefined}
+            />
+          )}
+        </View>
+      );
+    }
     if (section === 'tasks') return (
       <View>
         <SectionTitle title="任务" hint="发给这个节点的任务。自己发给自己的定时提醒单独一组,不算运行中。" />
@@ -673,6 +714,12 @@ const makeLocalStyles = () => StyleSheet.create({
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.xs + 2,
     borderRadius: 10,
+  },
+  // 不高于分区标题那一行(≈ 21px):否则标题行被撑高,「定时任务」标题会比其它分区的标题低几像素。
+  headerAction: {
+    borderRadius: radius.md,
+    paddingHorizontal: spacing.md,
+    paddingVertical: 2,
   },
   dangerZone: {
     borderWidth: 1,
