@@ -7,6 +7,8 @@ import { railBadgeText } from './rail-nav';
 import { colors, onThemeChange, spacing } from './theme';
 import { usePoll } from './usePoll';
 import { summarize } from './server-stats';
+import { badgeOffsetCentered, labelClearanceMargin } from './badge-anchor';
+import { ds } from './ui-scale';
 
 export type ServerSection = 'overview' | 'nodes' | 'create' | 'logs';
 
@@ -67,10 +69,10 @@ export default function ServerSidebar({ cfg, active, onSelect }: {
             onPress={() => onSelect(item.key)}
             style={({ pressed }) => [styles.item, active === item.key && styles.itemActive, pressed && { opacity: 0.65 }]}
           >
-            <View style={styles.itemIcon}>
-              <Ionicons name={item.icon} size={18} color={active === item.key ? colors.accent : colors.textSecondary} />
+            <View style={styles.itemIcon} testID={`server-nav-icon-${item.key}`}>
+              <Ionicons name={item.icon} size={ITEM_ICON_GLYPH} color={active === item.key ? colors.accent : colors.textSecondary} />
               {item.key === 'nodes' && railBadgeText(counts?.online ?? null) ? (
-                <View style={styles.badge}><Text style={styles.badgeText}>{railBadgeText(counts?.online ?? null)}</Text></View>
+                <View style={styles.badge} testID="server-nav-badge-nodes"><Text dense style={styles.badgeText}>{railBadgeText(counts?.online ?? null)}</Text></View>
               ) : null}
             </View>
             <Text style={[styles.itemText, active === item.key && styles.itemTextActive]}>{item.label}</Text>
@@ -84,6 +86,12 @@ export default function ServerSidebar({ cfg, active, onSelect }: {
     </View>
   );
 }
+
+const ITEM_ICON_BOX = 24;
+const ITEM_ICON_GLYPH = 18;
+const ITEM_BADGE_H = 16;
+/** 「99+」 at 9 px with 4 px padding (measured 28.1 px in the web build). */
+const ITEM_BADGE_MAX_W = 29;
 
 const makeStyles = () =>
   StyleSheet.create({
@@ -103,11 +111,16 @@ const makeStyles = () =>
   item: { height: 42, borderRadius: 8, paddingHorizontal: spacing.md, flexDirection: 'row', alignItems: 'center', gap: spacing.md },
   // 极简:二级导航的选中态用中性 rowActive(与会话列表一致);强调色只留给最左侧 rail。
   itemActive: { backgroundColor: colors.rowActive },
-  itemIcon: { width: 24, height: 24, alignItems: 'center', justifyContent: 'center' },
+  // The badge grows outward, toward the label: keep the label clear of the widest badge.
+  itemIcon: {
+    width: ITEM_ICON_BOX, height: ITEM_ICON_BOX, alignItems: 'center', justifyContent: 'center',
+    marginRight: labelClearanceMargin(badgeOffsetCentered(ITEM_ICON_BOX, ITEM_ICON_BOX, ds(ITEM_ICON_GLYPH), ITEM_BADGE_H).left, ITEM_BADGE_MAX_W, ITEM_ICON_BOX, spacing.md),
+  },
   itemText: { color: colors.textSecondary, fontSize: 13, fontWeight: '500' },
   itemTextActive: { color: colors.text, fontWeight: '600' },
-  // 角标:图标右上角的小圆标(与桌面 rail 同款),不再是行尾灰字。
-  badge: { position: 'absolute', top: -6, right: -8, minWidth: 16, height: 16, borderRadius: 8, paddingHorizontal: 4, backgroundColor: colors.accent, alignItems: 'center', justifyContent: 'center' },
+  // 角标:图标右上角的小圆标(与桌面 rail 同款),不再是行尾灰字。左缘锚在图标右上角内侧一点
+  // (badge-anchor.ts),「99+」变宽时向外长,不再盖住图标。
+  badge: { position: 'absolute', ...badgeOffsetCentered(ITEM_ICON_BOX, ITEM_ICON_BOX, ds(ITEM_ICON_GLYPH), ITEM_BADGE_H), minWidth: ITEM_BADGE_H, height: ITEM_BADGE_H, borderRadius: ITEM_BADGE_H / 2, paddingHorizontal: 4, backgroundColor: colors.accent, alignItems: 'center', justifyContent: 'center' },
   badgeText: { color: colors.onAccent, fontSize: 9, fontWeight: '600', lineHeight: 12 },
   footer: { marginTop: 'auto', borderTopWidth: 1, borderTopColor: colors.border, padding: spacing.lg },
   footerLabel: { color: colors.textMuted, fontSize: 10 },

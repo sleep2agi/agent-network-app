@@ -44,6 +44,7 @@ import DesktopWindowPin from './src/DesktopWindowPin';
 import { styles } from './src/app-styles';
 import { APP_VERSION } from './src/version';
 import { railBadgeText, railIconFor, railSurface, railTooltipVisible } from './src/rail-nav';
+import { badgeOffsetCentered } from './src/badge-anchor';
 import DesktopUpdatePrompt from './src/DesktopUpdatePrompt';
 import AndroidUpdatePrompt from './src/AndroidUpdatePrompt';
 import DesktopMessageListener from './src/DesktopMessageListener';
@@ -569,7 +570,6 @@ function AppRoot() {
         <DesktopWorkspace cfg={cfg} screen={screen} setScreen={setScreen} onLogout={removeActiveProfile} onLocalDataDeleted={finishLocalDataDeletion} onAddAccount={() => { setReauthProfile(null); setScreen({ name: 'login' }); }} onSwitchProfile={activateProfile} onReauthProfile={requestProfileReauth} />
         <DesktopMessageListener cfg={cfg} />
         {trayWindow ? <DesktopNotifier onOpenChat={alias => setScreen({ name: 'chat', alias })} profileKey={notifyProfileKey(cfg)} /> : null}
-        <DesktopWindowPin />
       </SafeAreaView>
     );
   }
@@ -766,6 +766,8 @@ function AppRoot() {
                 <LogsScreen
                   cfg={cfg}
                   onBack={() => setScreen({ name: 'server' })}
+                  onOpenChat={alias => setScreen({ name: 'chat', alias })}
+                  onOpenTask={taskId => setScreen({ name: 'taskDetail', taskId })}
                 />
               ) : (
                 <View style={{ flex: 1 }}>
@@ -952,7 +954,8 @@ function DesktopWorkspace({ cfg, screen, setScreen, onLogout, onLocalDataDeleted
     doc.addEventListener('keydown', onKey, true);
     return () => doc.removeEventListener('keydown', onKey, true);
   }, [setScreen]);
-  const active = serverWorkspace ? 'server' : ['chat', 'nodeDetail', 'nodeInfo'].includes(screen.name) ? 'agents' : screen.name;
+  // With no back header on desktop, the rail must light up the page a detail belongs to (任务详情 → 任务).
+  const active = serverWorkspace ? 'server' : ['chat', 'nodeDetail', 'nodeInfo'].includes(screen.name) ? 'agents' : screen.name === 'taskDetail' ? 'tasks' : screen.name;
   const content = screen.name === 'chat' ? (
     <ChatScreen
       cfg={cfg}
@@ -980,14 +983,14 @@ function DesktopWorkspace({ cfg, screen, setScreen, onLogout, onLocalDataDeleted
     />
   )
   : screen.name === 'serverNodes' ? <AgentsScreen cfg={cfg} filter={screen.filter} onOpenChat={alias => setScreen({ name: 'serverNodeDetail', alias })} onOpenPicker={() => setScreen({ name: 'picker' })} onOpenNodeDetail={alias => setScreen({ name: 'serverNodeDetail', alias })} />
-  : screen.name === 'serverNodeDetail' ? <NodeDetailScreen cfg={cfg} alias={screen.alias} onBack={() => setScreen({ name: 'serverNodes' })} />
+  : screen.name === 'serverNodeDetail' ? <NodeDetailScreen cfg={cfg} alias={screen.alias} onBack={() => setScreen({ name: 'serverNodes' })} desktop />
   : screen.name === 'settings' ? <SettingsScreen cfg={cfg} onLogout={onLogout} onLocalDataDeleted={onLocalDataDeleted} onAddAccount={onAddAccount} onSwitchProfile={onSwitchProfile} onReauthProfile={onReauthProfile} />
-  : screen.name === 'taskDetail' ? <TaskDetailScreen cfg={cfg} taskId={screen.taskId} onBack={() => setScreen({ name: 'tasks' })} />
-  : screen.name === 'nodeDetail' ? <NodeDetailScreen cfg={cfg} alias={screen.alias} onBack={() => setScreen({ name: 'agents' })} />
-  : screen.name === 'nodeInfo' ? <NodeDetailScreen cfg={cfg} alias={screen.alias} onBack={() => setScreen({ name: 'chat', alias: screen.alias })} readOnly />
-  : screen.name === 'logs' ? <LogsScreen cfg={cfg} onBack={() => setScreen({ name: 'server' })} />
-  : screen.name === 'picker' ? <HostSupervisorPickerScreen cfg={cfg} onBack={() => setScreen({ name: 'server' })} onPicked={d => setScreen({ name: 'wizard', daemon: d })} />
-  : screen.name === 'wizard' ? <CreateNodeWizardScreen cfg={cfg} daemon={screen.daemon} onBack={() => setScreen({ name: 'picker' })} onExit={() => setScreen({ name: 'serverNodes' })} />
+  : screen.name === 'taskDetail' ? <TaskDetailScreen cfg={cfg} taskId={screen.taskId} onBack={() => setScreen({ name: 'tasks' })} desktop />
+  : screen.name === 'nodeDetail' ? <NodeDetailScreen cfg={cfg} alias={screen.alias} onBack={() => setScreen({ name: 'agents' })} desktop />
+  : screen.name === 'nodeInfo' ? <NodeDetailScreen cfg={cfg} alias={screen.alias} onBack={() => setScreen({ name: 'chat', alias: screen.alias })} readOnly desktop />
+  : screen.name === 'logs' ? <LogsScreen cfg={cfg} onBack={() => setScreen({ name: 'server' })} onOpenChat={alias => setScreen({ name: 'chat', alias })} onOpenTask={taskId => setScreen({ name: 'taskDetail', taskId })} desktop />
+  : screen.name === 'picker' ? <HostSupervisorPickerScreen cfg={cfg} onBack={() => setScreen({ name: 'server' })} onPicked={d => setScreen({ name: 'wizard', daemon: d })} desktop />
+  : screen.name === 'wizard' ? <CreateNodeWizardScreen cfg={cfg} daemon={screen.daemon} onBack={() => setScreen({ name: 'picker' })} onExit={() => setScreen({ name: 'serverNodes' })} desktop />
   : (
     <View style={desktopStyles.empty}>
       <Ionicons name="chatbubbles-outline" size={52} color={colors.textMuted} />
@@ -1029,6 +1032,8 @@ function DesktopWorkspace({ cfg, screen, setScreen, onLogout, onLocalDataDeleted
             />
           ))}
         </View>
+        {/* 窗口置顶 lives in the rail (real layout space), not floating over the right pane's header. */}
+        <DesktopWindowPin placement="rail" />
         <RailButton
           tab={DESKTOP_SETTINGS_TAB}
           active={active === DESKTOP_SETTINGS_TAB.key}
@@ -1117,7 +1122,8 @@ const makeDesktopStyles = () => StyleSheet.create({
   railButton: { width: ds(40), height: ds(40), borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
   railButtonActive: { backgroundColor: colors.railActiveBg },
   railButtonHover: { backgroundColor: colors.railHover },
-  railBadge: { position: 'absolute', top: 3, right: 3, minWidth: 16, height: 16, borderRadius: 8, paddingHorizontal: 4, backgroundColor: colors.failed, alignItems: 'center', justifyContent: 'center' },
+  // 角标左缘锚在图标右上角内侧(badge-anchor.ts):数字变宽时向外长,不盖图标。
+  railBadge: { position: 'absolute', ...badgeOffsetCentered(ds(40), ds(40), ds(22), 16), minWidth: 16, height: 16, borderRadius: 8, paddingHorizontal: 4, backgroundColor: colors.failed, alignItems: 'center', justifyContent: 'center' },
   railBadgeText: { color: '#fff', fontSize: 9, fontWeight: '600', lineHeight: 12 },
   railTooltip: { position: 'absolute', left: ds(48), top: 8, paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6, backgroundColor: colors.railTooltipBg, zIndex: 20 },
   railTooltipText: { color: colors.railTooltipText, fontSize: 12, fontWeight: '500' },

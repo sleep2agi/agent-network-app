@@ -15,6 +15,7 @@ import { LOCAL_HUB_PROFILE_ID } from './local-hub';
 import { isTauriDesktop } from './clipboard-attachment';
 import { colors, onThemeChange, spacing } from './theme';
 import { usePoll } from './usePoll';
+import { PANE_BACK_TEST_ID, paneShowsBack } from './pane-header';
 
 // RFC-026 §9.4 / #338 mobile picker — design locked by 通信龙 + Vincent UX.
 // 3 states, mirroring dashboard PR4 but with RN primitives:
@@ -35,6 +36,8 @@ export interface HostSupervisorPickerScreenProps {
   onBack: () => void;
   /** Called when the user confirms a selection with 下一步. Wizard not in this PR. */
   onPicked?: (daemon: HostSupervisorDaemon) => void;
+  /** Tauri desktop workspace: the server sidebar selects this page — no phone back (pane-header.ts). */
+  desktop?: boolean;
 }
 
 type ViewMode = 'auto' | 'list';
@@ -43,6 +46,7 @@ export default function HostSupervisorPickerScreen({
   cfg,
   onBack,
   onPicked,
+  desktop = false,
 }: HostSupervisorPickerScreenProps) {
   const [result, setResult] = useState<HostSupervisorListResult | null>(null);
   const [refreshing, setRefreshing] = useState(false);
@@ -74,7 +78,7 @@ export default function HostSupervisorPickerScreen({
   if (!result) {
     return (
       <View style={styles.root}>
-        <Header onBack={onBack} title="选服务器" />
+        <Header onBack={onBack} showBack={paneShowsBack(desktop)} title="选服务器" />
         <View style={styles.center}>
           <ActivityIndicator color={colors.accent} />
           <Text style={styles.loadingText}>正在查询…</Text>
@@ -89,7 +93,7 @@ export default function HostSupervisorPickerScreen({
   if (!result.ok && result.unconfirmed) {
     return (
       <View style={styles.root}>
-        <Header onBack={onBack} title="选服务器" />
+        <Header onBack={onBack} showBack={paneShowsBack(desktop)} title="选服务器" />
         <ScrollView contentContainerStyle={styles.contentPad}>
           <View style={styles.warnCard}>
             <Text style={styles.warnTitle}>⚠  服务器未升级</Text>
@@ -107,7 +111,7 @@ export default function HostSupervisorPickerScreen({
   if (!result.ok) {
     return (
       <View style={styles.root}>
-        <Header onBack={onBack} title="选服务器" />
+        <Header onBack={onBack} showBack={paneShowsBack(desktop)} title="选服务器" />
         <View style={styles.center}>
           <Text style={styles.errorTitle}>查询失败</Text>
           <Text style={styles.errorHint}>{result.error}</Text>
@@ -128,7 +132,7 @@ export default function HostSupervisorPickerScreen({
   if (count === 0) {
     return (
       <View style={styles.root}>
-        <Header onBack={onBack} title="选服务器" />
+        <Header onBack={onBack} showBack={paneShowsBack(desktop)} title="选服务器" />
         <ScrollView
           contentContainerStyle={styles.contentPad}
           refreshControl={
@@ -166,7 +170,7 @@ export default function HostSupervisorPickerScreen({
     const d = daemons[0];
     return (
       <View style={styles.root}>
-        <Header onBack={onBack} title="选服务器" />
+        <Header onBack={onBack} showBack={paneShowsBack(desktop)} title="选服务器" />
         <ScrollView
           contentContainerStyle={styles.contentPad}
           refreshControl={
@@ -210,7 +214,7 @@ export default function HostSupervisorPickerScreen({
   // count≥2 (or count=1 in forced list view) → picker list
   return (
     <View style={styles.root}>
-      <Header onBack={onBack} title="选服务器" />
+      <Header onBack={onBack} showBack={paneShowsBack(desktop)} title="选服务器" />
       <View style={styles.contentPad}>
         <Text style={styles.listHeader}>
           选择一台 host_supervisor 节点 ({count})
@@ -264,10 +268,20 @@ function handleNext(d: HostSupervisorDaemon, onPicked?: (d: HostSupervisorDaemon
   );
 }
 
-function Header({ onBack, title }: { onBack: () => void; title: string }) {
+function Header({ onBack, showBack, title }: { onBack: () => void; showBack: boolean; title: string }) {
+  // Desktop: no back, and the title starts on the content's left edge (a centred phone title
+  // between two empty 40 px slots reads as a stray label in a wide pane).
+  if (!showBack) {
+    return (
+      <View style={[styles.header, styles.headerWide]} testID="screen-header">
+        <Text style={[styles.headerTitle, styles.headerTitleWide]}>{title}</Text>
+      </View>
+    );
+  }
   return (
     <View style={styles.header} testID="screen-header">
       <Pressable
+        testID={PANE_BACK_TEST_ID}
         style={({ pressed }) => [styles.headerBack, pressed && { opacity: 0.6 }]}
         onPress={onBack}
         hitSlop={8}
@@ -460,6 +474,8 @@ const makeStyles = () => StyleSheet.create({
   },
   headerTitle: { color: colors.text, fontSize: 17, fontWeight: '600', flex: 1, textAlign: 'center' },
   headerSpacer: { width: 40 },
+  headerWide: { paddingHorizontal: spacing.lg, minHeight: 57 },
+  headerTitleWide: { textAlign: 'left' },
 
   // count=0 onboarding
   onboardingCard: {
