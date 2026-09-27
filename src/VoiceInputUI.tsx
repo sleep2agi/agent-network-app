@@ -1,17 +1,17 @@
 // 语音输入的界面:
 //   · 手机 / 双栏(微信式):输入行最左边 🎤/⌨ 切换按钮;语音模式下输入框整条变成「按住 说话」大按钮。
-//   · 手机 / 双栏键盘模式:输入框右侧里的小麦克风(按住说话),识别结果插到按下时的光标处。
 //   · 桌面:工具栏里的麦克风按钮(按住说话),同样插到光标处。
 //   · 录音浮层:屏幕中间的大卡片(流式中间结果 + 电平 + 计时),底部一个明确的「取消区」。
 //   · 未配置时的「去设置」提示条。
 // 状态与手势全在 useVoiceInput;这里只画。
 
-import { ActivityIndicator, Platform, Pressable, ScrollView, StyleSheet, View } from 'react-native';
-import { Text } from './ui-text';
+import { useState, type Ref } from 'react';
+import { ActivityIndicator, Platform, Pressable, StyleSheet, View, type TextInput as RNTextInput } from 'react-native';
+import { Text, TextInput } from './ui-text';
 import { Ionicons } from './icons';
 import { colors, onThemeChange, spacing } from './theme';
 import { ds, uiScale } from './ui-scale';
-import { composerControlSize, composerFieldMicSize, FIELD_MIC_INSET } from './composer-row-layout';
+import { composerControlSize } from './composer-row-layout';
 import { cancelZoneLabel, formatElapsed, holdBarLabel, holdBarTone, overlayHint, toggleButtonShows, VOICE_DRAFT_CARD_MAX_LINES, VOICE_TOGGLE_ICON, type ComposerInputMode } from './voice-input-model';
 import type { VoiceInput } from './useVoiceInput';
 
@@ -23,7 +23,7 @@ type MicHandlers = VoiceInput['micHandlers'];
  */
 const keepInputFocus = Platform.OS === 'web' ? { onMouseDown: (e: { preventDefault(): void }) => e.preventDefault() } : null;
 
-/** 桌面工具栏里的麦克风按钮(按住说话)。手机键盘模式用 VoiceFieldMic(框内),语音模式用「按住 说话」条。 */
+/** 桌面工具栏里的麦克风按钮(按住说话)。手机 / 双栏没有麦克风按钮:语音只走左边 🔊 切换出来的「按住 说话」条。 */
 export function VoiceMicButton({ voice, size = 20, style, handlers }: { voice: VoiceInput; size?: number; style?: object; handlers?: MicHandlers }) {
   const busy = voice.state.phase === 'transcribing';
   const live = voice.state.phase === 'recording' || voice.state.phase === 'cancelArmed' || voice.state.phase === 'starting';
@@ -42,33 +42,6 @@ export function VoiceMicButton({ voice, size = 20, style, handlers }: { voice: V
       {busy
         ? <ActivityIndicator size="small" color={colors.textMuted} />
         : <Ionicons name={live ? 'mic' : 'mic-outline'} size={size} color={live ? colors.bg : voice.configured ? colors.textSecondary : colors.textMuted} />}
-    </View>
-  );
-}
-
-/**
- * 键盘模式输入框右侧里的小麦克风(owner:「…选择光标在哪个地方继续输入」)。按住说话,松手把识别文字插到
- * 按下那一刻的光标处(选中了就替换);浮层、取消区、未配置提示和大条完全一样(同一个 useVoiceInput)。
- * 尺寸 = 行高 − 2×4(composer-row-layout.ts composerFieldMicSize):不改行高、圆心就是单行输入框的中线(#424)。
- */
-export function VoiceFieldMic({ voice, handlers }: { voice: VoiceInput; handlers: MicHandlers }) {
-  const busy = voice.state.phase === 'transcribing';
-  const live = voice.state.phase === 'recording' || voice.state.phase === 'cancelArmed' || voice.state.phase === 'starting';
-  return (
-    <View
-      {...handlers}
-      {...keepInputFocus}
-      accessible
-      accessibilityRole="button"
-      accessibilityLabel={voice.configured ? '按住说话,插到光标处' : '语音输入(未配置)'}
-      accessibilityHint={voice.configured ? '按住录音,松开把文字插到光标处,上滑取消' : '需要先在 设置 → 语音输入 里配置'}
-      accessibilityState={{ busy, disabled: busy }}
-      testID="voice-field-mic"
-      style={[styles.fieldMic, live && styles.micLive]}
-    >
-      {busy
-        ? <ActivityIndicator size="small" color={colors.textMuted} />
-        : <Ionicons name={live ? 'mic' : 'mic-outline'} size={ds(18)} color={live ? colors.bg : voice.configured ? colors.textSecondary : colors.textMuted} />}
     </View>
   );
 }
@@ -112,6 +85,7 @@ export function VoiceHoldBar({ voice, handlers }: { voice: VoiceInput; handlers?
   return (
     <View
       {...(handlers ?? voice.micHandlers)}
+      {...keepInputFocus}
       accessible
       accessibilityRole="button"
       accessibilityLabel={holdBarLabel(phase)}
@@ -204,26 +178,42 @@ export function VoiceSettingsPrompt({ voice, onOpenSettings }: { voice: VoiceInp
 const DRAFT_CARD_LINE_HEIGHT = 20;
 
 /**
- * 语音模式下的草稿卡片(「按住 说话」上方):显示识别出来的草稿,最多 4 行,再多在卡片里滚。
- * 点文字 = 切到键盘并聚焦(唯一会弹软键盘的路);✕ = 清空草稿。只画,状态在 ChatScreen。
+ * 语音模式下的草稿卡片(「按住 说话」上方):显示草稿,最多 4 行,再多在卡片里滚。
+ * 卡片是一个**不弹软键盘**的输入框(owner:键盘模式的麦克风太小不好按,要在语音模式里就能选插入位置):
+ * 点一下放光标、长按 / 拖动选中,「按住 说话」的识别结果插到这里的选区;✕ = 清空草稿。只画,状态在 ChatScreen。
+ * 软键盘:安卓 / iOS 用 showSoftInputOnFocus={false};网页 inputmode="none"。
  */
-export function VoiceDraftCard({ text, onPress, onClear, disabled }: { text: string; onPress: () => void; onClear: () => void; disabled?: boolean }) {
+export function VoiceDraftCard({ value, selection, onChangeText, onSelectionChange, onClear, busy, inputRef }: {
+  value: string;
+  selection?: { start: number; end: number };
+  onChangeText: (text: string) => void;
+  onSelectionChange?: (e: { nativeEvent: { selection: { start: number; end: number } } }) => void;
+  onClear: () => void;
+  busy?: boolean;
+  inputRef?: Ref<RNTextInput>;
+}) {
+  // 网页的 textarea 不会随内容长高(原生多行输入框会):按内容高度给,最多 4 行。
+  const [webHeight, setWebHeight] = useState<number | undefined>(undefined);
   return (
     <View style={styles.draftCardWrap} testID="voice-draft-card">
       <View style={styles.draftCard}>
-        <ScrollView style={{ flex: 1, maxHeight: DRAFT_CARD_LINE_HEIGHT * VOICE_DRAFT_CARD_MAX_LINES }} nestedScrollEnabled keyboardShouldPersistTaps="handled">
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="编辑语音草稿"
-            accessibilityHint="切换到键盘输入并编辑这段文字"
-            disabled={disabled}
-            onPress={onPress}
-            testID="voice-draft-card-text"
-          >
-            <Text style={styles.draftCardText}>{text}</Text>
-          </Pressable>
-        </ScrollView>
-        <Pressable accessibilityRole="button" accessibilityLabel="清空语音草稿" disabled={disabled} onPress={onClear} hitSlop={8} style={styles.draftCardClear} testID="voice-draft-card-clear">
+        <TextInput
+          ref={inputRef}
+          value={value}
+          selection={selection}
+          onChangeText={onChangeText}
+          onSelectionChange={onSelectionChange}
+          multiline
+          scrollEnabled
+          showSoftInputOnFocus={false}
+          {...(Platform.OS === 'web' ? { inputMode: 'none' as const, rows: 1 } : null)}
+          onContentSizeChange={Platform.OS === 'web' ? e => setWebHeight(e.nativeEvent.contentSize.height) : undefined}
+          accessibilityLabel="语音草稿"
+          accessibilityHint="点一下放光标,长按选中;按住下面的「按住 说话」,文字插到光标处"
+          testID="voice-draft-card-text"
+          style={[styles.draftCardText, styles.draftCardInput, Platform.OS === 'web' && webHeight ? { height: Math.min(webHeight, DRAFT_CARD_LINE_HEIGHT * VOICE_DRAFT_CARD_MAX_LINES) } : null]}
+        />
+        <Pressable accessibilityRole="button" accessibilityLabel="清空语音草稿" disabled={busy} onPress={onClear} hitSlop={8} style={styles.draftCardClear} testID="voice-draft-card-clear">
           <Ionicons name="close" size={14} color={colors.textMuted} />
         </Pressable>
       </View>
@@ -234,19 +224,6 @@ export function VoiceDraftCard({ text, onPress, onClear, disabled }: { text: str
 const makeStyles = () => StyleSheet.create({
   mic: { width: 32, height: 32, borderRadius: 16, alignItems: 'center', justifyContent: 'center' },
   micLive: { backgroundColor: colors.accent },
-  // Absolute in the input's column wrapper (ChatScreen styles.inputWrap), pinned to the input's
-  // bottom-right: one-line input → same centre line as the row; multi-line → by the last line.
-  fieldMic: {
-    position: 'absolute',
-    right: FIELD_MIC_INSET,
-    bottom: FIELD_MIC_INSET,
-    width: composerFieldMicSize(composerControlSize(uiScale().densityFactor)),
-    height: composerFieldMicSize(composerControlSize(uiScale().densityFactor)),
-    borderRadius: composerFieldMicSize(composerControlSize(uiScale().densityFactor)) / 2,
-    alignItems: 'center',
-    justifyContent: 'center',
-    userSelect: 'none',
-  } as any,
   // Same height as the 「按住 说话」 bar and the ＋ / 发送 slot (composer-row-layout.ts composerControlSize).
   toggle: { width: composerControlSize(uiScale().densityFactor), height: composerControlSize(uiScale().densityFactor), borderRadius: composerControlSize(uiScale().densityFactor) / 2, borderWidth: 1.5, borderColor: colors.text, alignItems: 'center', justifyContent: 'center' },
   kbd: { width: ds(20), height: ds(15), borderWidth: 1.5, borderRadius: 3, alignItems: 'center', justifyContent: 'space-evenly', paddingVertical: 1 },
@@ -298,6 +275,8 @@ const makeStyles = () => StyleSheet.create({
   draftCardWrap: { paddingHorizontal: spacing.md, paddingTop: spacing.xs },
   draftCard: { flexDirection: 'row', alignItems: 'flex-start', gap: 6, paddingVertical: 8, paddingLeft: 12, paddingRight: 8, borderRadius: 10, backgroundColor: colors.inputBg, borderWidth: StyleSheet.hairlineWidth, borderColor: colors.border },
   draftCardText: { color: colors.text, fontSize: 15, lineHeight: DRAFT_CARD_LINE_HEIGHT },
+  // 输入框的默认内边距 / 外框去掉,看起来和原来的纯文字卡片一样;高度随内容,最多 4 行后在框内滚。
+  draftCardInput: { flex: 1, maxHeight: DRAFT_CARD_LINE_HEIGHT * VOICE_DRAFT_CARD_MAX_LINES, padding: 0, margin: 0, textAlignVertical: 'top', borderWidth: 0, outlineStyle: 'none' } as any,
   draftCardClear: { width: 20, height: 20, borderRadius: 10, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.border },
 });
 

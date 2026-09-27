@@ -21,7 +21,7 @@ ck('ChatScreen 用 useVoiceInput', chat.includes("import { useVoiceInput } from 
 const ivtAt = chat.indexOf('const insertVoiceText = (text: string) => {');
 const ivt = chat.slice(ivtAt, chat.indexOf('\n  };', ivtAt));
 ck('识别结果经 insertVoiceText 进草稿(setDraft),不走 submit', /onInsert: text => \{\s*insertVoiceText\(text\);\s*\}/.test(chat) && ivtAt > 0 && !ivt.includes('submit('));
-ck('大条:insertRecognized 接末尾 + afterRecognized(不聚焦),详见 voice-draft-card.test.ts', /if \(!refocusAfterInsert\(source\)\) \{\s*setDraft\(d => insertRecognized\(d, text\)\);\s*applyComposerTransition\(afterRecognized\(\)\);\s*return;\s*\}/.test(ivt));
+ck('大条:插到草稿卡片的选区 + afterRecognized(不聚焦),详见 voice-draft-cursor.test.ts', /if \(!refocusAfterInsert\(source\)\) \{\s*draftRef\.current = r\.value;\s*setDraft\(r\.value\);\s*placeCursor\(r\.cursor\);\s*applyComposerTransition\(afterRecognized\(\)\);\s*return;\s*\}/.test(ivt));
 ck('输入框麦克风 / 桌面麦克风:insertAtSelection 插到冻结的选区,详见 voice-insert-at-cursor.test.ts', ivt.includes('insertAtSelection(draftRef.current, text, voiceInsertTarget(source, frozen))'));
 const rowAt = chat.indexOf('<View style={[styles.inputRow,');
 const mobileRow = chat.slice(rowAt, chat.indexOf('{plusMenuOpen ? (', rowAt));
@@ -29,10 +29,21 @@ const toggleAt = mobileRow.indexOf('<ComposerModeToggle');
 const plusAt = mobileRow.indexOf("plusEvent('toggle')");
 ck('手机:切换按钮在输入行最左边(＋ 之前)', toggleAt > 0 && plusAt > toggleAt);
 ck('手机:切换按钮只在 voice.available 时画', /\{voice\.available \? <ComposerModeToggle mode=\{inputMode\} onToggle=\{toggleInputMode\} disabled=\{voiceBusy\} \/> : null\}/.test(mobileRow));
-ck('手机:语音模式 = 整条「按住 说话」代替输入框', /\{voiceMode \? <VoiceHoldBar voice=\{voice\} handlers=\{voiceHandlersFor\('holdBar'\)\} \/> : \(\s*<>\s*<TextInput/.test(mobileRow));
+ck('手机:语音模式 = 整条「按住 说话」代替输入框', /\{voiceMode \? <VoiceHoldBar voice=\{voice\} handlers=\{voiceHandlersFor\('holdBar'\)\} \/> : \(\s*<TextInput/.test(mobileRow));
 // 微信式(composer-row-layout.ts):右侧一格在语音模式下显示 ＋,不是发送键 —— 判定本身在 composer-row-layout.test.ts。
 ck('手机:语音模式下右侧不是发送键(右格判定带 voiceMode)', chat.includes('composerRightSlot({ draft, attachmentCount: attached.length, voiceMode })') && mobileRow.includes('slot={rightSlot}'));
-ck('手机:输入框里不是桌面那个 VoiceMicButton(框内是 VoiceFieldMic,只在键盘模式)', !mobileRow.includes('<VoiceMicButton') && !chat.includes('inputWithMic') && !chat.includes('styles.inputMic'));
+ck('手机:输入框里没有任何麦克风(桌面 VoiceMicButton / 已去掉的框内小麦克风都不在)', !mobileRow.includes('<VoiceMicButton') && !chat.includes('VoiceFieldMic') && !chat.includes('inputWithFieldMic') && !chat.includes('inputWithMic') && !chat.includes('styles.inputMic'));
+{
+  // owner:键盘模式左边 🔊 切换 + 框内 🎤 重复,微信只有左边那个 —— 手机输入行里语音入口恰好一个。
+  const entries = [
+    (mobileRow.match(/<ComposerModeToggle\b/g) ?? []).length,
+    (mobileRow.match(/<VoiceMicButton\b/g) ?? []).length,
+    (mobileRow.match(/<VoiceFieldMic\b/g) ?? []).length,
+    (mobileRow.match(/voiceHandlersFor\('(?!holdBar)/g) ?? []).length,
+  ];
+  ck(`手机输入行恰好一个语音入口(左边 🔊/⌨ 切换;大条是它切出来的,不另算):${entries.join('/')}`, entries[0] === 1 && entries[1] === 0 && entries[2] === 0 && entries[3] === 0);
+  ck('手机输入行里 voiceHandlersFor 只挂在大条上', (mobileRow.match(/voiceHandlersFor\(/g) ?? []).length === 1 && mobileRow.includes("voiceHandlersFor('holdBar')"));
+}
 ck('voiceMode 只在非桌面 + available + 用户选了语音时成立', chat.includes("const voiceMode = !desktop && voice.available && inputMode === 'voice';"));
 ck('切换写入每设备偏好;启动时读回', chat.includes('void saveComposerInputMode(next);') && chat.includes('void loadComposerInputMode().then(setInputMode)'));
 ck('切到语音:收 ＋ 面板、收键盘', /if \(next === 'voice'\) \{\s*if \(plusOpenRef\.current\) plusEvent\('toggle'\);[\s\S]{0,120}Keyboard\.dismiss\(\);/.test(chat));

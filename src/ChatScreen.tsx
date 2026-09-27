@@ -69,10 +69,10 @@ import { layoutGeneration, releaseOnUnmount, takeHandoff } from './layout-handof
 import SideThreadDrawer, { type SideThreadLaunch } from './SideThreadDrawer';
 import { nextPlusPanel, plusPanelHeight, plusPanelItems, type PlusItemKey, type PlusPanelEvent } from './composer-plus-panel';
 import { useVoiceInput } from './useVoiceInput';
-import { afterRecognized, insertRecognized, onVoiceDraftCardTap, showVoiceDraftCard, toggleComposerInputMode, type ComposerInputMode, type ComposerModeTransition } from './voice-input-model';
-import { ComposerModeToggle, VoiceDraftCard, VoiceFieldMic, VoiceHoldBar, VoiceMicButton, VoiceRecordingOverlay, VoiceSettingsPrompt } from './VoiceInputUI';
-import { beginVoicePress, createSelectionCapture, hostSelection, insertAtSelection, refocusAfterInsert, voiceInsertTarget, withPressStart, type TextSelection, type VoiceSource } from './voice-insert-model';
-import { COMPOSER_INPUT_BORDER, COMPOSER_LINE_HEIGHT, composerControlSize, composerInputPadRightWithMic, composerInputPadY, composerLineCount, composerRightSlot, composerRowAlign, nextFullEditor, shouldShowExpand, type FullEditorEvent } from './composer-row-layout';
+import { afterRecognized, showVoiceDraftCard, toggleComposerInputMode, type ComposerInputMode, type ComposerModeTransition } from './voice-input-model';
+import { ComposerModeToggle, VoiceDraftCard, VoiceHoldBar, VoiceMicButton, VoiceRecordingOverlay, VoiceSettingsPrompt } from './VoiceInputUI';
+import { beginVoicePress, createSelectionCapture, hostSelection, insertAtSelection, previewAtSelection, refocusAfterInsert, selectionAcrossModeSwitch, voiceInsertTarget, withPressStart, type TextSelection, type VoiceSource } from './voice-insert-model';
+import { COMPOSER_INPUT_BORDER, COMPOSER_LINE_HEIGHT, composerControlSize, composerInputPadY, composerLineCount, composerRightSlot, composerRowAlign, nextFullEditor, shouldShowExpand, type FullEditorEvent } from './composer-row-layout';
 import { ComposerExpandButton, ComposerFullscreenEditor, ComposerRightSlot } from './ComposerRowParts';
 import { loadComposerInputMode, saveComposerInputMode } from './voice-prefs';
 
@@ -269,20 +269,22 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
   const [plusMenuOpen, setPlusMenuOpen] = useState(false);
   const [btwLaunch, setBtwLaunch] = useState<SideThreadLaunch>();
   const mainComposerRef = useRef<TextInput>(null);
-  // 语音插到光标处(voice-insert-model.ts):onSelectionChange 一直喂 track();按下输入框麦克风 / 桌面麦克风
+  // 语音模式的草稿卡片(不弹软键盘的输入框):大条的识别结果插到它的选区。和输入框不会同时挂着。
+  const draftCardRef = useRef<TextInput>(null);
+  // 语音插到光标处(voice-insert-model.ts):onSelectionChange 一直喂 track();按下大条 / 桌面麦克风
   // 的第一时间 freeze()(安卓按麦克风可能失焦、再报一次选区 —— 之后到的都不算);松手 take()。
   const selectionCaptureRef = useRef(createSelectionCapture());
   const voiceSourceRef = useRef<VoiceSource>('holdBar');
   // 插完把光标放到插入文字之后:先提交新草稿,下一拍用 selection 受控放光标,再放开(undefined)让用户随便挪。
   const [forcedSelection, setForcedSelection] = useState<TextSelection | undefined>(undefined);
-  const pendingCursorRef = useRef<number | null>(null);
+  const pendingSelectionRef = useRef<TextSelection | null>(null);
   const [cursorRequest, setCursorRequest] = useState(0);
-  const placeCursor = (cursor: number) => { pendingCursorRef.current = cursor; setCursorRequest(n => n + 1); };
+  const placeSelection = (sel: TextSelection) => { pendingSelectionRef.current = sel; setCursorRequest(n => n + 1); };
+  const placeCursor = (cursor: number) => placeSelection({ start: cursor, end: cursor });
   useEffect(() => {
-    const c = pendingCursorRef.current;
-    if (c === null) return;
-    pendingCursorRef.current = null;
-    const sel = { start: c, end: c };
+    const sel = pendingSelectionRef.current;
+    if (sel === null) return;
+    pendingSelectionRef.current = null;
     selectionCaptureRef.current.track(sel);
     setForcedSelection(sel);
   }, [cursorRequest]);
@@ -546,26 +548,28 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
   const [inputMode, setInputMode] = useState<ComposerInputMode>('keyboard');
   const focusAfterInsertRef = useRef(false);
   useEffect(() => { void loadComposerInputMode().then(setInputMode).catch(() => {}); }, []);
-  const cursorAtEndAfterFocusRef = useRef(false);
+  // 点 ⌨ 切回键盘:切换那一刻拍下的选区,输入框挂上、focus 之后放回去(语音 → 键盘选区不丢)。
+  const selectionAfterFocusRef = useRef<TextSelection | null>(null);
   const applyComposerTransition = (tr: ComposerModeTransition) => {
     if (tr.focusInput) focusAfterInsertRef.current = true;
-    if (tr.cursorAtEnd) cursorAtEndAfterFocusRef.current = true;
     if (tr.mode) setInputMode(tr.mode);
     if (tr.mode && tr.persist) void saveComposerInputMode(tr.mode);
   };
-  // 语音输入(按住说话):识别结果接到草稿后面,不自动发送。🔴 松手后留在语音模式、不聚焦输入框
-  // (owner:「按住说话之后，别直接把输入法弹出来」):文字进「按住 说话」上方的草稿卡片,右格变「发送」。
-  // 输入框麦克风 / 桌面麦克风:插到按下时冻结的光标处(选中了就替换),光标落在插入文字之后,焦点还给输入框
-  // (用户本来就在打字,键盘留着)。
+  // 语音输入(按住说话):识别结果进草稿,不自动发送。🔴 大条松手后留在语音模式、不聚焦输入框
+  // (owner:「按住说话之后，别直接把输入法弹出来」):文字插到「按住 说话」上方草稿卡片的选区(没点过卡片 =
+  // 末尾),光标落在插入文字之后 → 连着按依次往后接;右格变「发送」。
+  // 桌面麦克风:插到按下时冻结的光标处(选中了就替换),光标落在插入文字之后,焦点还给输入框。
   const insertVoiceText = (text: string) => {
     const source = voiceSourceRef.current;
     const frozen = selectionCaptureRef.current.take();
+    const r = insertAtSelection(draftRef.current, text, voiceInsertTarget(source, frozen));
     if (!refocusAfterInsert(source)) {
-      setDraft(d => insertRecognized(d, text));
+      draftRef.current = r.value;
+      setDraft(r.value);
+      placeCursor(r.cursor);
       applyComposerTransition(afterRecognized());
       return;
     }
-    const r = insertAtSelection(draftRef.current, text, voiceInsertTarget(source, frozen));
     draftRef.current = r.value;
     setDraft(r.value);
     placeCursor(r.cursor);
@@ -583,15 +587,14 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
     () => {
       // 网页 / 桌面 webview:直接读 textarea 的当前选区(选区事件是异步的,程序化改的选区可能根本不报);
       // 原生上 ref 不是 DOM 节点 → null → 用 onSelectionChange 跟踪到的值。
-      const host = hostSelection(mainComposerRef.current);
+      // 语音模式挂着的是草稿卡片(大条插到它的选区),键盘模式 / 桌面是输入框。
+      const host = hostSelection(source === 'holdBar' ? draftCardRef.current : mainComposerRef.current);
       if (host) selectionCaptureRef.current.track(host);
       voiceSourceRef.current = beginVoicePress(source, selectionCaptureRef.current);
     },
     () => voice.state.phase === 'idle',
   );
   const voiceMode = !desktop && voice.available && inputMode === 'voice';
-  // 键盘模式输入框里的小麦克风(手机 / 双栏;桌面用工具栏麦克风)。
-  const fieldMic = !desktop && voice.available && !voiceMode;
   // 微信式输入行(composer-row-layout.ts):输入超过 3 行 → 左上角 ⤢ 打开全屏编辑(同一份草稿)。
   const [fullEditorOpen, setFullEditorOpen] = useState(false);
   const fullEditorEvent = (event: FullEditorEvent): boolean => {
@@ -615,28 +618,45 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [alias]);
   const voiceBusy = voice.state.phase !== 'idle';
-  // 点草稿卡片 / 点 ⌨ 切回键盘:TextInput 这一帧才重新挂上,挂上之后再 focus。
+  // 按住大条期间:流式中间结果在草稿卡片的光标处预览(只画,不进草稿;终稿松手后替换它)。
+  // 预览期间卡片的选区受控跟着预览走,卡片报上来的选区不记(那是预览文字里的位置,不是草稿里的)。
+  const draftCardPreview = voiceMode && voiceBusy && voiceSourceRef.current === 'holdBar'
+    ? previewAtSelection(draft, voice.interim, selectionCaptureRef.current.peek().frozen)
+    : null;
+  // 一句结束(插入 / 取消 / 失败):卡片回到草稿,选区放回跟踪到的那个(插入了 = 插入文字之后,见 placeCursor)。
+  const wasVoiceBusyRef = useRef(false);
+  useEffect(() => {
+    const was = wasVoiceBusyRef.current;
+    wasVoiceBusyRef.current = voiceBusy;
+    if (!was || voiceBusy || !voiceMode) return;
+    placeSelection(selectionAcrossModeSwitch(selectionCaptureRef.current.peek().live, draftRef.current));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [voiceBusy]);
+  // 点 ⌨ 切回键盘:TextInput 这一帧才重新挂上,挂上之后再 focus,再把切换时的选区放回去。
   useEffect(() => {
     if (voiceMode || !focusAfterInsertRef.current) return;
     focusAfterInsertRef.current = false;
-    const atEnd = cursorAtEndAfterFocusRef.current;
-    cursorAtEndAfterFocusRef.current = false;
+    const keep = selectionAfterFocusRef.current;
+    selectionAfterFocusRef.current = null;
     const id = setTimeout(() => {
       mainComposerRef.current?.focus();
-      // 点草稿卡片进来:光标放草稿末尾(之后用户挪到哪,输入框麦克风就插到哪)。
-      if (atEnd) placeCursor(draftRef.current.length);
+      if (keep) placeSelection(keep);
     }, 30);
     return () => clearTimeout(id);
   }, [voiceMode]);
   const toggleInputMode = () => {
     const next = toggleComposerInputMode(inputMode);
+    // 切换的那一刻拍下选区:草稿卡片 ↔ 输入框是同一份草稿,选区原样带过去(新挂上的那个先报的默认选区不算)。
+    const keep = selectionAcrossModeSwitch(selectionCaptureRef.current.peek().live, draftRef.current);
     setInputMode(next);
     void saveComposerInputMode(next);
+    placeSelection(keep);
     if (next === 'voice') {
       if (plusOpenRef.current) plusEvent('toggle'); // ＋ 面板收起
       mainComposerRef.current?.blur();
       Keyboard.dismiss();
     } else {
+      selectionAfterFocusRef.current = keep;
       focusAfterInsertRef.current = true;
     }
   };
@@ -2273,14 +2293,17 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
           </Pressable>
         </View>
       ) : null}
-      {/* 语音模式的草稿卡片:识别文字在这里显示(不弹键盘)。点卡片 = 切键盘并聚焦;✕ 清空草稿。
-          叠放顺序:图片草稿条(#402)→ 引用条 → 这张卡片 →「按住 说话」行。 */}
+      {/* 语音模式的草稿卡片:不弹软键盘的输入框 —— 点着放光标、长按 / 拖动选中,「按住 说话」插到这里的选区;
+          ✕ 清空草稿;要打字点左边 ⌨(选区带过去)。叠放顺序:图片草稿条(#402)→ 引用条 → 这张卡片 →「按住 说话」行。 */}
       {showVoiceDraftCard(voiceMode, draft) ? (
         <VoiceDraftCard
-          text={draft}
-          disabled={voiceBusy}
-          onPress={() => applyComposerTransition(onVoiceDraftCardTap())}
-          onClear={() => setDraft('')}
+          inputRef={draftCardRef}
+          value={draftCardPreview ? draftCardPreview.value : draft}
+          selection={draftCardPreview ? draftCardPreview.selection : forcedSelection}
+          onChangeText={text => { if (!voiceBusy) setDraft(text); }}
+          onSelectionChange={voiceBusy ? undefined : onComposerSelectionChange}
+          busy={voiceBusy}
+          onClear={() => { setDraft(''); selectionCaptureRef.current.reset(); }}
         />
       ) : null}
       <View style={[styles.inputRow, { alignItems: composerRowAlign(inputLines, voiceMode), paddingBottom: spacing.md + (plusMenuOpen ? 0 : composerInset) }]}>
@@ -2304,14 +2327,13 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
             <Text style={[styles.mobilePriorityText, sendPriority === 'high' && styles.priorityButtonTextActive]}>⚡</Text>
           </Pressable>
         ) : null}
-        {/* 语音模式:整条输入框换成「按住 说话」(接草稿末尾);键盘模式:输入框 + 框内右侧的小麦克风
-            (按住说话,插到光标处)。 */}
+        {/* 语音模式:整条输入框换成「按住 说话」(插到草稿卡片的光标处);键盘模式:只有输入框 —— 语音的入口
+            只有左边的 🔊/⌨ 切换(微信同款;框内小麦克风已去掉,owner:和左边的切换重复)。 */}
         <View style={styles.inputWrap}>
         {voiceMode ? <VoiceHoldBar voice={voice} handlers={voiceHandlersFor('holdBar')} /> : (
-        <>
         <TextInput
           ref={mainComposerRef}
-          style={[styles.input, styles.inputInWrap, fieldMic && styles.inputWithFieldMic, Platform.OS === 'web' && { height: webComposerInputHeight(inputLines), flexBasis: 'auto' }]}
+          style={[styles.input, styles.inputInWrap, Platform.OS === 'web' && { height: webComposerInputHeight(inputLines), flexBasis: 'auto' }]}
           // Web only: a textarea without rows is 2 lines tall, not 1 (native TextInput starts at
           // one line). rows=1 + the explicit height above make the web export lay out like the
           // phone, so the Playwright alignment check measures the real geometry.
@@ -2340,8 +2362,6 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
           }}
           multiline
         />
-        {fieldMic ? <VoiceFieldMic voice={voice} handlers={voiceHandlersFor('fieldMic')} /> : null}
-        </>
         )}
         </View>
         <ComposerRightSlot
@@ -2735,8 +2755,6 @@ const makeStyles = () =>
   inputWrap: { flex: 1, justifyContent: 'flex-end' },
   // flex 归零:输入框在列方向的 inputWrap 里,flexBasis 0 会被压扁。
   inputInWrap: { flex: 0, alignSelf: 'stretch' },
-  // Room for the in-field mic (VoiceFieldMic) so text never runs under it.
-  inputWithFieldMic: { paddingRight: composerInputPadRightWithMic(composerControlSize(uiScale().densityFactor)) },
   sendTextDisabled: { color: colors.textMuted },
 });
 

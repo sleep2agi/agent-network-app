@@ -16,9 +16,10 @@
 //   |h(mid) − h(left)| ≤ 1, |h(right) − h(left)| ≤ 1 (one control height)
 // and for the multi-line keyboard state: the input has grown and the buttons are bottom-aligned
 // with it (WeChat), ≤ 1.
-// Keyboard states also measure the in-field mic (voice insert at cursor): present, inside the
-// input box, |centerY(mic) − centerY(input)| ≤ 1 on one line, equal bottom/right inset (±1) on
-// several lines. Voice states: the in-field mic is absent.
+// The phone has ONE voice entry point, the left 🔊/⌨ toggle (the in-field mic was removed as a
+// duplicate, WeChat-style): every state asserts no in-field mic, and keyboard states assert the
+// input reserves no right padding for one (|input paddingLeft − paddingRight| ≤ 1), i.e. the text
+// field spans all the way to the ＋ / 发送 slot.
 // Exit code 1 when any assertion fails. Screenshots get a 1px red line at the middle element's
 // vertical centre.
 import { createServer } from 'node:http';
@@ -102,7 +103,8 @@ async function measure(page, midSel, rightSel) {
     const b = (el) => { const r = el.getBoundingClientRect(); return { x: r.x, y: r.y, w: r.width, h: r.height, r: r.right, b: r.bottom, cy: r.y + r.height / 2 }; };
     const R = b(row);
     // content box of the row (outer padding measured from the row's border box edges)
-    return { left: b(left), mid: b(mid), right: b(right), mic: fieldMic ? b(fieldMic) : null, row: R, rowAlign: cs.alignItems, rowPadL: cs.paddingLeft, rowPadR: cs.paddingRight };
+    const ms = getComputedStyle(mid);
+    return { left: b(left), mid: b(mid), right: b(right), mic: fieldMic ? b(fieldMic) : null, row: R, rowAlign: cs.alignItems, rowPadL: cs.paddingLeft, rowPadR: cs.paddingRight, midPadL: parseFloat(ms.paddingLeft), midPadR: parseFloat(ms.paddingRight) };
   }, [midSel, rightSel]);
 }
 
@@ -120,19 +122,12 @@ async function record(page, vp, scheme, state, midSel, rightSel, { multiline = f
     ? { bottomAligned: Math.abs(dBL) <= 1 && Math.abs(dBR) <= 1, grew: m.mid.h > m.left.h + 10 }
     // single line: one centre line AND one height (a collapsed bar can share the centre line too)
     : { centreLine: Math.abs(dL) <= 1 && Math.abs(dR) <= 1, sameHeight: Math.abs(m.mid.h - m.left.h) <= 1 && Math.abs(m.right.h - m.left.h) <= 1 };
-  // Keyboard mode: the in-field mic (voice insert at cursor) must exist, sit INSIDE the input's
-  // box, and share its centre line on one line / its bottom on several lines. Voice mode: absent.
+  // One voice entry point (the left toggle): no in-field mic in any state; in keyboard mode the
+  // input keeps no right padding reserved for one, so the field spans to the ＋ / 发送 slot.
   const keyboard = state.startsWith('keyboard');
   const mic = m.mic;
-  const dCyMic = mic ? mic.cy - m.mid.cy : NaN;
-  const insetB = mic ? m.mid.b - mic.b : NaN, insetR = mic ? m.mid.r - mic.r : NaN;
-  if (keyboard) {
-    checks.micPresent = !!mic;
-    checks.micInside = !!mic && mic.x >= m.mid.x && mic.r <= m.mid.r + 0.5 && mic.y >= m.mid.y - 0.5 && mic.b <= m.mid.b + 0.5;
-    checks.micLine = !!mic && (multiline ? Math.abs(insetB - insetR) <= 1 : Math.abs(dCyMic) <= 1);
-  } else {
-    checks.micAbsent = !mic;
-  }
+  checks.micAbsent = !mic;
+  if (keyboard) checks.inputPadSym = Math.abs(m.midPadL - m.midPadR) <= 1;
   checks.pads = Math.abs(leftPad - rightPad) <= 1;
   checks.gaps = Math.abs(gapL - gapR) <= 1;
   const ok = Object.values(checks).every(Boolean);
@@ -142,7 +137,7 @@ async function record(page, vp, scheme, state, midSel, rightSel, { multiline = f
     hL: r1(m.left.h), hMid: r1(m.mid.h), hR: r1(m.right.h),
     cyL: r1(m.left.cy), cyMid: r1(m.mid.cy), cyR: r1(m.right.cy),
     dCyL: r1(dL), dCyR: r1(dR), dBotL: r1(dBL), dBotR: r1(dBR),
-    hMic: mic ? r1(mic.h) : '-', dCyMic: mic ? r1(dCyMic) : '-', micInsetB: mic ? r1(insetB) : '-', micInsetR: mic ? r1(insetR) : '-',
+    mic: mic ? 'PRESENT' : '-', inPadL: keyboard ? r1(m.midPadL) : '-', inPadR: keyboard ? r1(m.midPadR) : '-', fieldToRight: r1(gapR),
     padL: r1(leftPad), padR: r1(rightPad), gapL: r1(gapL), gapR: r1(gapR),
     align: m.rowAlign, ok, failed: Object.keys(checks).filter(k => !checks[k]).join(',') || '-',
   };
@@ -200,7 +195,7 @@ for (const [w, h, ua] of [[390, 844, ANDROID_UA], [1200, 850, ANDROID_UA]]) {
 }
 await browser.close(); web.close();
 
-const cols = ['vp', 'scheme', 'state', 'hL', 'hMid', 'hR', 'hMic', 'dCyL', 'dCyR', 'dCyMic', 'micInsetB', 'micInsetR', 'dBotL', 'dBotR', 'padL', 'padR', 'gapL', 'gapR', 'align', 'ok', 'failed'];
+const cols = ['vp', 'scheme', 'state', 'hL', 'hMid', 'hR', 'mic', 'dCyL', 'dCyR', 'dBotL', 'dBotR', 'padL', 'padR', 'gapL', 'gapR', 'inPadL', 'inPadR', 'align', 'ok', 'failed'];
 console.log(`\n| ${cols.join(' | ')} |\n|${cols.map(() => '---').join('|')}|`);
 for (const r of rows) console.log(`| ${cols.map(c => r[c]).join(' | ')} |`);
 console.log(`\n${TAG}: ${rows.length} states measured, ${failures} failing`);
