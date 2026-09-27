@@ -1,4 +1,5 @@
-// 设置 → 语音输入:识别模型(流式 / 极速版)+ 豆包语音(火山引擎)API Key + 「测试」。
+// 设置 → 语音输入:识别模型(流式 / 极速版)+ 豆包语音(火山引擎)API Key + 麦克风(桌面,MicDeviceSetting)
+// + 「测试」。
 //
 // 默认只有**一个**「API Key」栏(新版控制台只有 API Key —— Vincent 09-26「用新版本的话会好一点」)。
 // 旧版控制台的 App ID + Access Token 收在折叠的「高级 / 旧版控制台」里,和接口地址放在一起。
@@ -8,7 +9,7 @@
 // 状态行只显示「已配置 ✓ …a1b2」。密钥栏留空点保存 = 不改。
 
 import { useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Pressable, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, Platform, Pressable, StyleSheet, View } from 'react-native';
 import { Text, TextInput } from './ui-text';
 import { colors, onThemeChange, radius, spacing } from './theme';
 import { clearVoiceCredentials, loadVoiceCredentials, saveVoiceCredentials, voiceStorageKind } from './voice-credentials';
@@ -17,6 +18,7 @@ import { AsrError, asrErrorMessage } from './doubao-asr';
 import { openExternal } from './open-external';
 import { finishUtteranceWith, newUtterance } from './useVoiceInput';
 import { useVoiceRecorder } from './useVoiceRecorder';
+import MicDeviceSetting from './MicDeviceSetting';
 import { STREAM_DEFAULT_RESOURCE_ID, STREAM_RESOURCE_IDS } from './doubao-stream-protocol';
 import { MODE_LABELS, STREAM_UNAVAILABLE_HINT, streamingSupported, testFallbackNote, type VoiceMode, type VoicePlatform } from './voice-stream-policy';
 import { clearStreamUnavailable, currentVoiceMode, loadVoiceMode, saveVoiceMode, streamUnavailable, subscribeVoicePrefs, voicePlatform } from './voice-prefs';
@@ -42,7 +44,7 @@ export function advancedInitiallyOpen(c: VoiceCredentials | null): boolean {
   return !!c && (!!c.appId || !!c.endpoint || !!c.streamEndpoint || !!c.streamResourceId);
 }
 
-export default function VoiceSettingsSection({ showCredentials = true, showTest = true, showMode = true }: { showCredentials?: boolean; showTest?: boolean; showMode?: boolean }) {
+export default function VoiceSettingsSection({ showCredentials = true, showTest = true, showMode = true, showMic = true }: { showCredentials?: boolean; showTest?: boolean; showMode?: boolean; showMic?: boolean }) {
   const storage = voiceStorageKind();
   const platform = voicePlatform();
   const [mode, setMode] = useState<VoiceMode>(currentVoiceMode());
@@ -326,6 +328,9 @@ export default function VoiceSettingsSection({ showCredentials = true, showTest 
           </Text>
         </View>
       ) : null}
+
+      {/* 麦克风选择只在 webview 里有(getUserMedia);手机走原生录音,没有这一栏。 */}
+      {showMic && Platform.OS === 'web' ? <MicDeviceSetting /> : null}
 
       {showTest ? (
         <View style={styles.block}>

@@ -764,7 +764,7 @@ export default function SettingsScreen({
           {sectionsToRender.includes('voice') ? (
             <View style={sectionStyle} testID="settings-section-voice">
               {heading('voice')}
-              <VoiceSettingsSection showMode={show('voice', 'mode')} showCredentials={show('voice', 'credentials')} showTest={show('voice', 'test')} />
+              <VoiceSettingsSection showMode={show('voice', 'mode')} showCredentials={show('voice', 'credentials')} showMic={show('voice', 'mic')} showTest={show('voice', 'test')} />
             </View>
           ) : null}
 

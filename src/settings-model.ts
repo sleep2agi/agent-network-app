@@ -96,6 +96,8 @@ export const SETTINGS_CATEGORIES: readonly SettingsCategory[] = [
     rows: [
       { key: 'mode', label: '识别模型', keywords: ['流式', '边说边出字', '实时', '极速版', '录音文件', '识别模型', '识别模式', 'streaming', 'stream', 'flash', '语音'], platforms: ['android', 'ios', 'desktop'] },
       { key: 'credentials', label: '豆包语音 API Key', keywords: ['语音', '语音识别', '豆包', '火山', '火山引擎', 'asr', 'voice', 'api key', 'app id', 'access token', '旧版控制台', '开通', '麦克风', '按住说话'], platforms: ['android', 'ios', 'desktop'] },
+      // 麦克风选择(MicDeviceSetting):桌面 webview 才有 getUserMedia 设备;手机原生录音不给选。
+      { key: 'mic', label: '麦克风', keywords: ['麦克风', '输入设备', '录音设备', '话筒', '耳机', '电平', '音量', 'microphone', 'mic', 'input device', 'device', 'audio input'], platforms: ['desktop'] },
       { key: 'test', label: '测试语音识别', keywords: ['测试', '录音', 'test', 'mic'], platforms: ['android', 'ios', 'desktop'] },
     ],
   },
