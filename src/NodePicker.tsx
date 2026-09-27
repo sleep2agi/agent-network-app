@@ -55,7 +55,7 @@ export function NodePickerField({ node, fallbackAlias, onPress }: {
     <Pressable
       testID="schedule-target-field"
       accessibilityRole="button"
-      accessibilityLabel={m.placeholder ? '选择执行节点' : `执行节点 ${m.title}${m.online ? ',在线' : ',离线'},点按更换`}
+      accessibilityLabel={m.placeholder ? '选择执行节点' : `执行节点 ${m.title}${m.online ? ',在线' : ',离线'},可更换`}
       onPress={onPress}
       style={({ pressed }) => [s.field, pressed && { backgroundColor: colors.rowHover }]}
     >

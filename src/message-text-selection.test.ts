@@ -61,7 +61,7 @@ eq('没有气泡 → 空', selectedTextWithin(null, sel(inside, inside, 'x')), '
 // ── 接线(源码契约)────────────────────────────────────────────────────
 const chat = fs.readFileSync(path.join(__dirname, 'ChatScreen.tsx'), 'utf8');
 const sheet = fs.readFileSync(path.join(__dirname, 'SelectTextSheet.tsx'), 'utf8');
-ck('菜单按平台传 touch', chat.includes('touch: !desktop, selectedText: menuFor?.selectedText'));
+ck('菜单按平台传 touch', chat.includes('touch: !pointer, selectedText: menuFor?.selectedText') && chat.includes('const pointer = pointerUi(desktop);'));
 ck('「选择文本」打开选择视图', chat.includes("if (key === 'selectText') { setMenuFor(null); setSelectTextFor(selection); return; }"));
 ck('「复制选中内容」原样复制选区(不过 copyTextOf)', chat.includes("if (key === 'copySelection') { setMenuFor(null); void copyValue(selection.selectedText ?? ''); return; }"));
 ck('右键时从气泡取选区', chat.includes("selectedTextWithin(bubble, (globalThis as any).getSelection?.())") && chat.includes('setMenuFor({ item, text, author, selectedText })'));

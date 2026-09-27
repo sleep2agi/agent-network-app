@@ -64,6 +64,7 @@ import {
 } from './agent-row-menu';
 import { bindConversationFlags, getConversationFlags, subscribeConversationFlags, updateConversationFlags } from './conversation-flags';
 import { applyAgentFilter, filterLabel, isFilterActive, STATUS_FILTER_LABEL, type AgentListFilter, type AgentStatusFilter } from './server-stats';
+import { pointerUi } from './pointer-ui';
 
 export default function AgentsScreen({
   cfg,
@@ -137,6 +138,8 @@ export default function AgentsScreen({
   const filtering = isFilterActive(activeFilter);
   // 会话行菜单(长按 / 右键,AgentRowMenu):对着哪一行、按在哪。只有会话列表有菜单 —— 能置顶的列表才是会话列表。
   const rowMenu = !!onTogglePin;
+  // 鼠标 + 键盘(pointer-ui.ts,Tauri 壳任何宽度):右键开菜单,不挂长按。
+  const pointer = pointerUi();
   const [menuFor, setMenuFor] = useState<AgentRowMenuTarget | null>(null);
   const openRowMenu = useCallback((alias: string, x: number, y: number) => setMenuFor({ alias, x, y }), []);
   // 本机的「不显示该对话」「标为未读」(conversation-flags.ts),按账号分。
@@ -446,7 +449,7 @@ export default function AgentsScreen({
         pressed && { opacity: 0.7 },
       ]}
       onPress={() => openChat(item.alias)}
-      onLongPress={compact ? undefined : () => onOpenNodeDetail(item.alias)}
+      onLongPress={pointer ? undefined : () => onOpenNodeDetail(item.alias)}
       delayLongPress={400}
     >
       <View style={styles.avatarWrap}>
@@ -492,14 +495,14 @@ export default function AgentsScreen({
         {...(rowMenu ? ({ dataSet: { agentAlias: item.alias } } as any) : {})}
         accessibilityRole="button"
         accessibilityState={{ selected }}
-        accessibilityHint={rowMenu ? '长按打开会话菜单' : undefined}
+        accessibilityHint={rowMenu ? (pointer ? '右键打开会话菜单' : '长按打开会话菜单') : undefined}
         style={({ pressed }) => [
           rowStyles.row,
           // 菜单开着时,被按住的那一行保持按下态的底色(微信同款:看得出菜单是对哪一行的)。
           { backgroundColor: selected ? colors.rowActive : pressed || menuFor?.alias === item.alias ? colors.rowHover : colors.bg },
         ]}
         onPress={() => openChat(item.alias)}
-        onLongPress={rowMenu ? e => openRowMenu(item.alias, e.nativeEvent.pageX, e.nativeEvent.pageY) : () => onOpenNodeDetail(item.alias)}
+        onLongPress={pointer ? undefined : rowMenu ? e => openRowMenu(item.alias, e.nativeEvent.pageX, e.nativeEvent.pageY) : () => onOpenNodeDetail(item.alias)}
         delayLongPress={400}
       >
         <View style={rowStyles.avatar}>
@@ -702,7 +705,7 @@ export default function AgentsScreen({
       ) : null}
       />
       {rowMenu ? (
-        <AgentRowMenu target={menuFor} items={menuItems} touch={!compact} onSelect={onRowMenu} onClose={() => setMenuFor(null)} />
+        <AgentRowMenu target={menuFor} items={menuItems} touch={!pointer} onSelect={onRowMenu} onClose={() => setMenuFor(null)} />
       ) : null}
     </View>
   );

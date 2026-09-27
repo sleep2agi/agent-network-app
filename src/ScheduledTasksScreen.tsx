@@ -36,6 +36,7 @@ import WinTitleBar from './win-title-bar';
 import NodePickerSheet, { NodePickerField } from './NodePicker';
 import { pickerNodes } from './node-picker-model';
 import { useModalSafePadding } from './safe-area-runtime';
+import { pointerUi } from './pointer-ui';
 import { withBasePadding } from './modal-safe-area';
 import { loadChatPins } from './chat-pins';
 import { loadScheduleTargetRecents, rememberScheduleTarget } from './schedule-target-recents';
@@ -698,7 +699,6 @@ function ScheduleFormModal({ cfg, nodes, visible, editing, initialTarget, onClos
   const [sessions, setSessions] = useState<Session[]>([]);
   const [pins, setPins] = useState<string[]>([]);
   const [recents, setRecents] = useState<string[]>([]);
-  const safe = useModalSafePadding('pageSheet');
   useEffect(() => {
     if (!visible) { setPickerOpen(false); return; }
     let live = true;
@@ -756,12 +756,7 @@ function ScheduleFormModal({ cfg, nodes, visible, editing, initialTarget, onClos
     finally { setBusy(false); }
   };
   const cannotSave = busy || !name.trim() || !task.trim() || !target || !timezone.trim() || invalidSchedule;
-  // Android edge-to-edge:Modal 画到状态栏 / 挖孔底下,根 View 按安全区垫(modal-safe-area.ts,#387 同一张表)。
-  return <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
-    <View testID="schedule-form" style={[styles.modalRoot, safe]}>
-      <MacTitleStrip />
-      <WinTitleBar />
-      <View testID="schedule-form-header" style={styles.modalHeader}><Pressable testID="schedule-form-cancel" onPress={onClose} style={styles.headerSide}><Text style={styles.link}>取消</Text></Pressable><Text testID="schedule-form-title" style={styles.modalTitle} numberOfLines={1}>{editing ? '编辑定时任务' : '新建定时任务'}</Text><Pressable testID="schedule-form-save" disabled={cannotSave} onPress={submit} style={[styles.headerSide, styles.headerSideEnd]}><Text style={[styles.link, cannotSave && styles.linkDisabled]}>保存</Text></Pressable></View>
+  return <ScheduleModal visible={visible} onClose={onClose} testID="schedule-form" title={editing ? '编辑定时任务' : '新建定时任务'} primary={{ label: '保存', disabled: cannotSave, onPress: submit }}>
       <ScrollView contentContainerStyle={styles.form} keyboardShouldPersistTaps="handled">
         {error ? <Text style={styles.error}>{error}</Text> : null}
         <Label text="名称"><TextInput style={styles.input} value={name} onChangeText={setName} placeholder="每日巡检" placeholderTextColor={colors.textMuted} /></Label>
@@ -785,8 +780,69 @@ function ScheduleFormModal({ cfg, nodes, visible, editing, initialTarget, onClos
         onClose={() => setPickerOpen(false)}
         onSelect={n => { setTarget(n.node_id); setRecents(rememberScheduleTarget(cfg, recents, n.node_id)); setPickerOpen(false); }}
       />
+  </ScheduleModal>;
+}
+
+/**
+ * 表单 / 改时间 / 意向记录的外壳。手机:整屏 pageSheet,顶栏「取消 · 标题 · 保存」(iOS 导航栏的形状)。
+ * 桌面(pointer-ui.ts,Tauri 壳任何宽度):居中对话框 —— 标题左对齐 + ✕,底部右侧「取消」「保存」,
+ * 列表页留在后面(淡遮罩),不再整窗滑上来盖住侧栏和标题栏(Owner 2026-09-27:桌面和安卓不该一样)。
+ * testID 两边相同:`${testID}` 是面板,`-header` / `-title` / `-cancel` / `-save` 各是那一格。
+ */
+function ScheduleModal({ visible, onClose, testID = 'schedule-modal', title, primary, cancelLabel = '取消', children }: {
+  visible: boolean;
+  onClose: () => void;
+  testID?: string;
+  title: string;
+  /** 右侧主按钮(保存 / 提交);没有 = 只读页,只给「关闭」。 */
+  primary?: { label: string; disabled: boolean; onPress: () => void };
+  cancelLabel?: string;
+  children: ReactNode;
+}) {
+  const s = useMemo(makeStyles, [visible]);
+  // Android edge-to-edge:Modal 画到状态栏 / 挖孔底下,根 View 按安全区垫(modal-safe-area.ts,#387 同一张表)。
+  const safe = useModalSafePadding('pageSheet');
+  const { width, height } = useWindowDimensions();
+  if (pointerUi()) {
+    const size = scheduleDialogSize(width, height);
+    return <Modal transparent visible={visible} animationType="fade" onRequestClose={onClose}>
+      <View style={[s.dialogOverlay, withBasePadding(safe, spacing.lg)]}>
+        <Pressable testID={`${testID}-backdrop`} accessibilityLabel="关闭" focusable={false} onPress={onClose} style={[StyleSheet.absoluteFill, s.dialogBackdrop]} />
+        <View testID={testID} style={[s.modalRoot, s.dialogPanel, size]}>
+          <View testID={`${testID}-header`} style={s.dialogHeader}>
+            <Text testID={`${testID}-title`} style={s.dialogTitle} numberOfLines={1}>{title}</Text>
+            <Pressable accessibilityRole="button" accessibilityLabel={`关闭${title}`} testID={`${testID}-close`} hitSlop={8} onPress={onClose} style={({ hovered }: any) => [s.dialogClose, hovered && s.dialogBtnHover]}>
+              <Ionicons name="close" size={18} color={colors.textMuted} />
+            </Pressable>
+          </View>
+          {children}
+          <View testID={`${testID}-footer`} style={s.dialogFooter}>
+            <Pressable accessibilityRole="button" testID={`${testID}-cancel`} onPress={onClose} style={({ hovered }: any) => [s.dialogBtn, hovered && s.dialogBtnHover]}>
+              <Text style={s.dialogBtnText}>{primary ? cancelLabel : '关闭'}</Text>
+            </Pressable>
+            {primary ? (
+              <Pressable accessibilityRole="button" testID={`${testID}-save`} disabled={primary.disabled} onPress={primary.onPress} style={[s.dialogBtn, s.dialogPrimary, primary.disabled && s.actionDisabled]}>
+                <Text style={s.dialogPrimaryText}>{primary.label}</Text>
+              </Pressable>
+            ) : null}
+          </View>
+        </View>
+      </View>
+    </Modal>;
+  }
+  return <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
+    <View testID={testID} style={[s.modalRoot, safe]}>
+      <MacTitleStrip />
+      <WinTitleBar />
+      <View testID={`${testID}-header`} style={s.modalHeader}><Pressable testID={`${testID}-cancel`} onPress={onClose} style={s.headerSide}><Text style={s.link}>{primary ? cancelLabel : '关闭'}</Text></Pressable><Text testID={`${testID}-title`} style={s.modalTitle} numberOfLines={1}>{title}</Text>{primary ? <Pressable testID={`${testID}-save`} disabled={primary.disabled} onPress={primary.onPress} style={[s.headerSide, s.headerSideEnd]}><Text style={[s.link, primary.disabled && s.linkDisabled]}>{primary.label}</Text></Pressable> : <View style={s.headerSide} />}</View>
+      {children}
     </View>
   </Modal>;
+}
+
+/** 桌面对话框:560 × 至多 720,窗口放不下时四周各留 24。 */
+export function scheduleDialogSize(windowWidth: number, windowHeight: number): { width: number; height: number } {
+  return { width: Math.max(0, Math.min(560, windowWidth - 48)), height: Math.max(0, Math.min(720, windowHeight - 48)) };
 }
 
 function Label({ text, children }: { text: string; children: ReactNode }) { const s = useMemo(makeStyles, []); return <View style={s.field}><Text style={s.label}>{text}</Text>{children}</View>; }
@@ -823,16 +879,7 @@ function CronEditModal({ value, busy, onClose, onSubmit }: {
   const [cron, setCron] = useState('');
   useEffect(() => { setCron(''); }, [value?.schedule.id]);
   const valid = looksLikeCron(cron);
-  const safe = useModalSafePadding('pageSheet');
-  return <Modal visible={!!value} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
-    <View style={[s.modalRoot, safe]}>
-      <MacTitleStrip />
-      <WinTitleBar />
-      <View style={s.modalHeader} testID="screen-header">
-        <Pressable onPress={onClose} style={s.headerSide}><Text style={s.link}>取消</Text></Pressable>
-        <Text style={s.modalTitle} numberOfLines={1}>改执行时间</Text>
-        <Pressable disabled={busy || !valid} onPress={() => onSubmit(cron.trim().split(/ +/).join(' '))} style={[s.headerSide, s.headerSideEnd]}><Text style={[s.link, (busy || !valid) && s.linkDisabled]}>提交</Text></Pressable>
-      </View>
+  return <ScheduleModal visible={!!value} onClose={onClose} testID="cron-edit" title="改执行时间" primary={{ label: '提交', disabled: busy || !valid, onPress: () => onSubmit(cron.trim().split(/ +/).join(' ')) }}>
       <ScrollView contentContainerStyle={s.form} keyboardShouldPersistTaps="handled">
         <Text style={s.meta}>{value?.node.alias} · {value?.schedule.name}</Text>
         <Text style={[s.meta, { marginBottom: spacing.md }]}>当前：{value?.schedule.frequency}</Text>
@@ -842,18 +889,12 @@ function CronEditModal({ value, busy, onClose, onSubmit }: {
         {cron && !valid ? <Text style={s.error}>需要五段，只能含数字和 * / , -（不含命令）。</Text> : null}
         <Text style={s.muted}>提交后生成编辑意向，由节点自行应用；只改时间与启停，绝不下发命令。</Text>
       </ScrollView>
-    </View>
-  </Modal>;
+  </ScheduleModal>;
 }
 
 function IntentsModal({ value, onClose }: { value: { title: string; edits: HubExternalScheduleEditIntent[] } | null; onClose: () => void }) {
   const s = useMemo(makeStyles, [value]);
-  const safe = useModalSafePadding('pageSheet');
-  return <Modal visible={!!value} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
-    <View style={[s.modalRoot, safe]}>
-      <MacTitleStrip />
-      <WinTitleBar />
-      <View style={s.modalHeader} testID="screen-header"><Pressable onPress={onClose} style={s.headerSide}><Text style={s.link}>关闭</Text></Pressable><Text style={s.modalTitle} numberOfLines={1}>{value?.title || '意向记录'}</Text><View style={s.headerSide} /></View>
+  return <ScheduleModal visible={!!value} onClose={onClose} testID="intents" title={value?.title || '意向记录'}>
       <ScrollView contentContainerStyle={s.form}>
         {value?.edits.length ? value.edits.map(edit => (
           <View key={edit.intent_id} style={s.run}>
@@ -865,8 +906,7 @@ function IntentsModal({ value, onClose }: { value: { title: string; edits: HubEx
           </View>
         )) : <Text style={s.muted}>还没有编辑意向</Text>}
       </ScrollView>
-    </View>
-  </Modal>;
+  </ScheduleModal>;
 }
 
 function makeStyles() { return StyleSheet.create({
@@ -938,6 +978,20 @@ function makeStyles() { return StyleSheet.create({
   linkDisabled: { opacity: 0.4 },
   intentBadge: { color: colors.accent, fontSize: 11, marginTop: spacing.sm },
   actionDisabled: { opacity: 0.4 },
+  // 桌面对话框(ScheduleModal):居中卡片,标题左对齐 + ✕,底部右对齐「取消」「保存」,按钮 32 高。
+  dialogOverlay: { flex: 1, alignItems: 'center', justifyContent: 'center' },
+  dialogBackdrop: { backgroundColor: 'rgba(0,0,0,0.38)' },
+  // modalRoot 的 flex: 1 在 RN-web 里是 flex-basis 0%,会压过 height(列方向):这里改回按 height 定高。
+  dialogPanel: { flexGrow: 0, flexShrink: 1, flexBasis: 'auto', borderRadius: 12, borderWidth: StyleSheet.hairlineWidth, borderColor: colors.border, overflow: 'hidden', boxShadow: '0 12px 40px rgba(0,0,0,0.28)' } as any,
+  dialogHeader: { minHeight: 52, paddingLeft: spacing.lg, paddingRight: spacing.md, flexDirection: 'row', alignItems: 'center', gap: spacing.sm, borderBottomWidth: 1, borderBottomColor: colors.border },
+  dialogTitle: { flex: 1, color: colors.text, fontWeight: '600', fontSize: 15 },
+  dialogClose: { width: 28, height: 28, borderRadius: 6, alignItems: 'center', justifyContent: 'center' },
+  dialogFooter: { flexDirection: 'row', justifyContent: 'flex-end', alignItems: 'center', gap: spacing.sm, paddingHorizontal: spacing.lg, paddingVertical: spacing.md, borderTopWidth: 1, borderTopColor: colors.border },
+  dialogBtn: { height: 32, minWidth: 72, paddingHorizontal: spacing.md, borderRadius: 7, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: colors.border },
+  dialogBtnHover: { backgroundColor: colors.rowHover },
+  dialogBtnText: { color: colors.text, fontSize: 13 },
+  dialogPrimary: { backgroundColor: colors.accent, borderColor: colors.accent },
+  dialogPrimaryText: { color: colors.onAccent, fontSize: 13, fontWeight: '600' },
   confirmOverlay: { flex: 1, backgroundColor: '#00000099', alignItems: 'center', justifyContent: 'center', padding: spacing.xl },
   confirmCard: { width: '100%', maxWidth: 420, backgroundColor: colors.card, borderColor: colors.border, borderWidth: 1, borderRadius: 14, padding: spacing.xl },
   confirmTitle: { color: colors.text, fontSize: 18, fontWeight: '600' },
