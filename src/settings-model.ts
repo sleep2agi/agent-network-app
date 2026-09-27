@@ -226,7 +226,7 @@ export type PhoneSettingsGroup = { readonly title: string | null; readonly keys:
 export const PHONE_SETTINGS_GROUPS: readonly PhoneSettingsGroup[] = [
   { title: null, keys: ['account'] },
   { title: '通用', keys: ['notifications', 'appearance', 'localHub'] },
-  { title: '功能', keys: ['voice'] },
+  { title: '功能', keys: ['voice', 'shortcuts'] },
   { title: '帮助与关于', keys: ['about'] },
 ];
 
