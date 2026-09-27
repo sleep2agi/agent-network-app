@@ -6,8 +6,12 @@
 //   WEB_DIR=<expo export dir> OUT=<png dir> HUB_URL=http://127.0.0.1:9297 HUB_TOKEN=<utok_…> \
 //   HUB_NETWORK=<net_…> PLAYWRIGHT_MODULE=<…/playwright/index.mjs> node tests/test-node-schedules/measure.mjs
 //
-// For 1200×800 (desktop shell) and 390×844 (Android UA ⇒ phone), reached the way a user does
-// (agent row → chat → 查看节点信息 → 定时任务):
+// For 1200×800 (desktop shell: left rail), 1000×700 (Android UA ⇒ unfolded-foldable two-pane: the node page
+// sits beside the list and its sections are a horizontal tab row) and 390×844 (Android UA ⇒ phone), reached
+// the way a user does (agent row → chat → 查看节点信息 → 定时任务):
+//   nav      : 定时任务 comes right after 任务; its active pill has the same background / height / radius / font
+//              weight as the active 任务 pill; in a tab row that overflows, the row scrolls horizontally and the
+//              selected 定时任务 tab is fully inside the row's visible box
 //   filter   : exactly demo-node-a's 3 Hub plans + 2 node plans; nothing of demo-node-b (incl. the plan whose
 //              stored alias collides with demo-node-a)
 //   rows     : source label / name left edges equal across rows (±1px); the switch centred on its row (±1px);
@@ -126,8 +130,26 @@ const openSchedulesSection = async (page) => {
 
 const cases = [
   { w: 1200, h: 800, phone: false },
+  { w: 1000, h: 700, phone: true },
   { w: 390, h: 844, phone: true },
 ];
+
+// The nav item for a label + its active-pill look, and the tab row's scroll geometry.
+const navItem = (page, label) => page.evaluate((l) => {
+  const nav = document.querySelector('[data-testid="node-section-nav"]');
+  const items = [...nav.querySelectorAll('[aria-label]')].filter(e => e.getAttribute('role') === 'tab');
+  const el = items.find(e => e.getAttribute('aria-label') === l);
+  if (!el) return null;
+  const b = el.getBoundingClientRect(); const cs = getComputedStyle(el);
+  const text = [...el.querySelectorAll('div,span')].find(t => t.childElementCount === 0 && t.textContent === l);
+  const scroller = [...nav.querySelectorAll('div')].find(d => d.scrollWidth > d.clientWidth + 1 || /auto|scroll/.test(getComputedStyle(d).overflowX)) || nav;
+  const nb = nav.getBoundingClientRect();
+  return {
+    order: items.map(e => e.getAttribute('aria-label')), x: b.x, right: b.right, y: b.y, h: b.height, bg: cs.backgroundColor, radius: cs.borderTopLeftRadius,
+    weight: text ? getComputedStyle(text).fontWeight : '', horizontal: nb.width > nb.height,
+    navLeft: nb.left, navRight: nb.right, overflow: scroller.scrollWidth > scroller.clientWidth + 1, overflowX: getComputedStyle(scroller).overflowX,
+  };
+}, label);
 for (const { w, h, phone } of cases) {
   const vp = `${w}x${h}`;
   const ctx = await browser.newContext({ viewport: { width: w, height: h }, colorScheme: 'light', deviceScaleFactor: 2, ...(phone ? { userAgent: ANDROID_UA, hasTouch: true } : {}) });
@@ -141,7 +163,17 @@ for (const { w, h, phone } of cases) {
   await page.locator(`${tid('node-section-nav')} [aria-label="任务"]`).first().click();
   await page.waitForTimeout(600);
   const tasksTitle = await box(page, tid('node-section-title'));
+  const tasksTab = await navItem(page, '任务');
   await openSchedulesSection(page);
+  const schedTab = await navItem(page, '定时任务');
+  const order = schedTab?.order ?? [];
+  record(vp, 'nav: 定时任务 tab / rail item', {
+    afterTasks: order.indexOf('定时任务') === order.indexOf('任务') + 1,
+    samePill: !!schedTab && schedTab.bg === tasksTab.bg && Math.abs(schedTab.h - tasksTab.h) <= 1 && schedTab.radius === tasksTab.radius && schedTab.weight === tasksTab.weight,
+    sameRow: !!schedTab && (schedTab.horizontal ? Math.abs(schedTab.y - tasksTab.y) <= 1 : true),
+    reachable: !!schedTab && (!schedTab.horizontal || !schedTab.overflow || /auto|scroll/.test(schedTab.overflowX)),
+    inView: !!schedTab && schedTab.x >= schedTab.navLeft - 1 && schedTab.right <= schedTab.navRight + 1,
+  }, { shape: schedTab?.horizontal ? 'tab row' : 'rail', order: order.join('/'), pillBg: schedTab?.bg, tasksBg: tasksTab?.bg, pillH: r1(schedTab?.h ?? -1), tasksH: r1(tasksTab?.h ?? -1), overflow: schedTab ? `${schedTab.overflow} (${schedTab.overflowX})` : '-' });
   const schedTitle = await box(page, tid('node-section-title'));
   const createBtn = await box(page, tid('node-schedules-create'));
   record(vp, 'section header vs 任务 header', {
@@ -276,7 +308,7 @@ await browser.close(); web.close();
 // Leave the seed as found: the cron intent is pending on the hub (the node never claims it); the Hub plan was resumed.
 await hubPatch('sched_demo_a_daily', { revision: (await hubSchedule('sched_demo_a_daily')).revision, status: 'active' }).catch(() => {});
 
-const cols = ['vp', 'what', 'src', 'srcX', 'nameX', 'rowCy', 'switchCy', 'dCy', 'last', 'tasksX', 'schedX', 'tasksY', 'schedY', 'titleCy', 'createCy', 'ok', 'failed'];
+const cols = ['vp', 'what', 'shape', 'order', 'pillBg', 'tasksBg', 'pillH', 'tasksH', 'overflow', 'src', 'srcX', 'nameX', 'rowCy', 'switchCy', 'dCy', 'last', 'tasksX', 'schedX', 'tasksY', 'schedY', 'titleCy', 'createCy', 'ok', 'failed'];
 console.log(`\n| ${cols.join(' | ')} |\n|${cols.map(() => '---').join('|')}|`);
 for (const r of rows) console.log(`| ${cols.map(c => r[c] ?? '').join(' | ')} |`);
 console.log(`\n${rows.length} measurements, ${failures} failing`);

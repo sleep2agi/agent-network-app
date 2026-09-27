@@ -31,8 +31,9 @@ const external = {
 };
 for (const n of nodes) {
   db.run(`INSERT INTO nodes (node_id,node_name,alias,runtime,created_at,updated_at,network_id,lifecycle_state,owner_user_id) VALUES (?,?,?,?,datetime('now'),datetime('now'),?,'active',?)`, [n.id, n.alias, n.alias, "claude-code", net, uid]);
-  db.run(`INSERT INTO sessions (resume_id,alias,status,network_id,registered_at,updated_at,node_id,last_seen_at,agent,external_schedules) VALUES (?,?,?,?,datetime('now'),datetime('now'),?,datetime('now'),'claude-code',?)`,
-    [`res_${n.id}`, n.alias, "idle", net, n.id, external[n.id] ? JSON.stringify(external[n.id]) : null]);
+  // demo-node-a reports rules/skills capability so its node page shows all seven sections (the tab row's widest case).
+  db.run(`INSERT INTO sessions (resume_id,alias,status,network_id,registered_at,updated_at,node_id,last_seen_at,agent,external_schedules,rules_file_capable,skills_capable) VALUES (?,?,?,?,datetime('now'),datetime('now'),?,datetime('now'),'claude-code',?,?,?)`,
+    [`res_${n.id}`, n.alias, "idle", net, n.id, external[n.id] ? JSON.stringify(external[n.id]) : null, n.id === "node_demo_a" ? 1 : 0, n.id === "node_demo_a" ? 1 : 0]);
 }
 
 const plans = [
