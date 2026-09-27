@@ -28,6 +28,6 @@ check('mobile agents list gets pinnedAliases + onTogglePin', app.includes('pinne
 check('pins reload when the profile/server changes', app.includes('[cfg?.profileId, cfg?.serverUrl, cfg?.username]'));
 check('a failed save rolls the UI back instead of lying', app.includes("console.warn('save chat pins failed', error); setMobilePins(mobilePins);"));
 const chat = readFileSync(new URL('./ChatScreen.tsx', import.meta.url), 'utf8');
-check('ChatScreen header exposes 置顶/取消置顶 with state', chat.includes("accessibilityLabel={pinned ? '取消置顶会话' : '置顶会话'}") && chat.includes("name={pinned ? 'pin' : 'pin-outline'}"));
+check('ChatScreen 聊天信息 exposes 置顶聊天 with state', chat.includes('pin: onTogglePin ? { value: pinned } : null,') && chat.includes("case 'pin': onTogglePin?.(); return;"));
 console.log(`chat pins: ${passed}/${total} checks passed`);
 if (passed !== total) process.exit(1);

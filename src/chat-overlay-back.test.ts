@@ -106,7 +106,14 @@ const handlerFor = (visibleNeedle: string) => {
   assert.ok(tag, `ChatScreen Modal with ${visibleNeedle} exists`);
   return closeHandler(tag!) ?? '';
 };
-check(/setHeaderMoreOpen\(false\)/.test(handlerFor('headerMoreOpen')), 'header ··· sheet: back closes it');
+// 聊天信息 (ChatInfoPanel.tsx): phone page is a Modal closed by back; the drawer is inline and
+// answers Android back (two-pane) / Esc itself while open.
+const infoPanel = read('ChatInfoPanel.tsx');
+const infoTags = modalTags(infoPanel);
+check(infoTags.length === 1 && closeHandler(infoTags[0]) === 'onClose', '聊天信息 page: onRequestClose={onClose}');
+check(/<ChatInfoPanel[\s\S]*?onClose=\{\(\) => setInfoOpen\(false\)\}/.test(chat), 'ChatScreen: 聊天信息 onClose clears infoOpen');
+check(/if \(!visible \|\| !drawer\) return;\s*if \(Platform\.OS === 'android'\) \{\s*const sub = BackHandler\.addEventListener\('hardwareBackPress', \(\) => \{ onCloseRef\.current\(\); return true; \}\);\s*return \(\) => sub\.remove\(\);/.test(infoPanel), '聊天信息 drawer (inline): Android back closes it first, unsubscribes on close');
+check(/e\.key === 'Escape'\) \{ e\.preventDefault\(\); onCloseRef\.current\(\);/.test(infoPanel), '聊天信息 drawer: Esc closes it');
 check(/setMenuFor\(null\)/.test(handlerFor('!!menuFor')), 'long-press menu: back closes it');
 check(/setExpandFor\(null\)/.test(handlerFor('!!expandFor')), '放大阅读: back closes it');
 check(/setForwardFor\(null\)/.test(handlerFor('!!forwardFor')), '转发 picker: back closes it');

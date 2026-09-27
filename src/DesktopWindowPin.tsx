@@ -1,9 +1,48 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useSyncExternalStore } from 'react';
 import { Platform, Pressable, StyleSheet } from 'react-native';
 import { Ionicons } from './icons';
 import { colors } from './theme';
 import { ds } from './ui-scale';
 import { applyStoredPinState, pinStorageKey, togglePinState } from './desktop-window-pin';
+
+// One state per JS context (= per Tauri window): the 📌 button (rail or floating) and the 聊天信息 row
+// 「窗口置顶」 (ChatInfoPanel) read and flip the same value.
+let state = { pinned: false, busy: false, restored: false };
+const listeners = new Set<() => void>();
+const set = (patch: Partial<typeof state>) => { state = { ...state, ...patch }; for (const l of listeners) l(); };
+const subscribe = (l: () => void) => { listeners.add(l); return () => { listeners.delete(l); }; };
+const snapshot = () => state;
+const isTauri = () => Platform.OS === 'web' && !!(globalThis as any).__TAURI_INTERNALS__;
+
+function restoreOnce() {
+  if (state.restored || !isTauri()) return;
+  set({ restored: true });
+  void import('@tauri-apps/api/window').then(async ({ getCurrentWindow }) => {
+    const win = getCurrentWindow();
+    const key = pinStorageKey(win.label);
+    const value = await applyStoredPinState(localStorage, key, next => win.setAlwaysOnTop(next));
+    set({ pinned: value });
+  }).catch(error => console.error('Failed to restore window pin state', error));
+}
+
+function toggleWindowPin() {
+  if (state.busy) return;
+  set({ busy: true });
+  void import('@tauri-apps/api/window').then(async ({ getCurrentWindow }) => {
+    const win = getCurrentWindow();
+    const next = await togglePinState(state.pinned, localStorage, pinStorageKey(win.label), value => win.setAlwaysOnTop(value));
+    set({ pinned: next });
+  }).catch(error => console.error('Failed to change window pin state', error))
+    .finally(() => set({ busy: false }));
+}
+
+/** Tauri 窗口置顶(always-on-top)。available=false:不是桌面壳(手机 / 纯 web)。 */
+export function useDesktopWindowPin(): { available: boolean; pinned: boolean; busy: boolean; toggle: () => void } {
+  const tauri = isTauri();
+  const s = useSyncExternalStore(subscribe, snapshot, snapshot);
+  useEffect(() => { if (tauri) restoreOnce(); }, [tauri]);
+  return { available: tauri, pinned: s.pinned, busy: s.busy, toggle: toggleWindowPin };
+}
 
 /**
  * `floating` (the detached chat window, which has no rail): pinned to the window's top-right corner.
@@ -13,10 +52,12 @@ import { applyStoredPinState, pinStorageKey, togglePinState } from './desktop-wi
  */
 export type WindowPinPlacement = 'floating' | 'rail';
 
-export default function DesktopWindowPin({ placement = 'floating' }: { placement?: WindowPinPlacement }) {
-  const tauri = Platform.OS === 'web' && !!(globalThis as any).__TAURI_INTERNALS__;
-  const [pinned, setPinned] = useState(false);
-  const [busy, setBusy] = useState(false);
+/**
+ * `hidden` while a chat is on screen (floating only): there the toggle lives in the 聊天信息 panel
+ * (「窗口置顶」), so the chat header keeps a single ⋯ on its right.
+ */
+export default function DesktopWindowPin({ placement = 'floating', hidden = false }: { placement?: WindowPinPlacement; hidden?: boolean }) {
+  const { available, pinned, busy, toggle } = useDesktopWindowPin();
   const styles = useMemo(() => StyleSheet.create({
     button: placement === 'rail' ? {
       width: ds(40), height: ds(40), borderRadius: 10, marginBottom: ds(12),
@@ -33,19 +74,7 @@ export default function DesktopWindowPin({ placement = 'floating' }: { placement
     },
   }), [busy, pinned, placement]);
 
-  useEffect(() => {
-    if (!tauri) return;
-    let alive = true;
-    void import('@tauri-apps/api/window').then(async ({ getCurrentWindow }) => {
-      const win = getCurrentWindow();
-      const key = pinStorageKey(win.label);
-      const value = await applyStoredPinState(localStorage, key, next => win.setAlwaysOnTop(next));
-      if (alive) setPinned(value);
-    }).catch(error => console.error('Failed to restore window pin state', error));
-    return () => { alive = false; };
-  }, [tauri]);
-
-  if (!tauri) return null;
+  if (!available || hidden) return null;
   return (
     <Pressable
       accessibilityRole="button"
@@ -54,15 +83,7 @@ export default function DesktopWindowPin({ placement = 'floating' }: { placement
       disabled={busy}
       style={styles.button}
       testID={`window-pin-${placement}`}
-      onPress={() => {
-        setBusy(true);
-        void import('@tauri-apps/api/window').then(async ({ getCurrentWindow }) => {
-          const win = getCurrentWindow();
-          const next = await togglePinState(pinned, localStorage, pinStorageKey(win.label), value => win.setAlwaysOnTop(value));
-          setPinned(next);
-        }).catch(error => console.error('Failed to change window pin state', error))
-          .finally(() => setBusy(false));
-      }}
+      onPress={toggle}
     >
       <Ionicons name={pinned ? 'pin' : 'pin-outline'} size={placement === 'rail' ? 20 : 17} color={pinned ? colors.accent : colors.textSecondary} />
     </Pressable>

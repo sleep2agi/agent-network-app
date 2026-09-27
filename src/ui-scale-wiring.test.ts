@@ -122,7 +122,7 @@ ck('nav rail: the brand block numbers match its styles (paddingTop ds(12), brand
 const chat = read('src/ChatScreen.tsx');
 // Density (incl. 更紧凑's one-step list text) must never reach message text: only 字体大小 does.
 ck('chat content is independent of density: no list text / row geometry in ChatScreen / MarkdownMessage', ['listText(', 'agentRowGeometry(', 'denserRowPitch('].every(k => !chat.includes(k) && !read('src/MarkdownMessage.tsx').includes(k)));
-ck('chat header: action heights via ds()', chat.includes('height: ds(34),') && chat.includes('headerActionCompact: { width: 36, height: ds(34),'));
+ck('chat header: ⋯ height via ds()', chat.includes("headerMore: { width: 36, height: ds(34),"));
 // Mobile send / ＋ moved into ComposerRowParts.tsx (WeChat row, composer-row-layout.ts).
 {
   const rowParts = read('src/ComposerRowParts.tsx');
