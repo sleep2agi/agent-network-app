@@ -119,6 +119,11 @@ jobs:
           releaseBody: |-
             Signed and notarized stable update for macOS (Apple Silicon) and Windows (x64).
 
+            What's new in 0.2.125:
+            - 语音模式下草稿可以直接点位置/选中一段，按住说话插入到光标处；手机端去掉输入框里重复的小麦克风。
+            - 定时任务执行记录显示真实状态和用时，点开看执行结果全文，一键「去会话」。
+            - 手机端设置改成微信式分组列表，二级页支持返回手势。
+
             What's new in 0.2.124:
             - 外部链接在桌面端可正常点开（统一走系统浏览器）。
             - 设置新增「快捷键」页（桌面端，可自定义、冲突提示、恢复默认）。
