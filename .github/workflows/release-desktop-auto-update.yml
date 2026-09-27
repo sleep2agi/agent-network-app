@@ -119,6 +119,10 @@ jobs:
           releaseBody: |-
             Signed and notarized stable update for macOS (Apple Silicon) and Windows (x64).
 
+            What's new in 0.2.130:
+            - 桌面端语音输入快捷键：按住说话 Ctrl+Shift+Space（Mac ⌘⇧Space，按住录、松开插入、Esc 取消）；语音输入开关 Ctrl+Shift+M（Mac ⌘⇧M）；都可在「设置 → 快捷键」里改。
+            - 快捷键页文案统一为中文。
+
             What's new in 0.2.129:
             - 桌面端（Windows/Mac）点 🎤 改成输入框内的录音条：录音点、音量、计时、实时文字，「完成」插入光标处、「取消」丢弃（回车/Esc），不再弹手机浮层。
             - 桌面端点聊天图片在独立的「图片预览」窗口打开：滚轮缩放、拖动、←→ 切换、Ctrl+C 复制、另存为。
