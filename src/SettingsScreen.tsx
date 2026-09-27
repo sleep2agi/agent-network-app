@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
-import { ActivityIndicator, AppState, Modal, Platform, Pressable, ScrollView, StyleSheet, Switch, View, useWindowDimensions } from 'react-native';
+import { ActivityIndicator, AppState, BackHandler, Modal, Platform, Pressable, ScrollView, StyleSheet, Switch, View, useWindowDimensions } from 'react-native';
 import { Text, TextInput } from './ui-text';
 import { Ionicons } from './icons';
 import { HubConfig } from './api';
@@ -26,7 +26,7 @@ import UiScaleSettings from './UiScaleSettings';
 import ShortcutsSettings from './ShortcutsSettings';
 import { ds } from './ui-scale';
 import { playChime } from './chime';
-import { SETTINGS_CATEGORIES, activeCategoryKey, filterSettings, rememberSettingsCategory, rememberSettingsScroll, rememberedSettingsView, settingsPlatform, visibleRowKeys, type SettingsCategoryKey, type SettingsPlatform } from './settings-model';
+import { SETTINGS_CATEGORIES, activeCategoryKey, closeSettingsPage, filterSettings, phoneRowLabel, phoneSettingsGroups, rememberSettingsCategory, rememberSettingsScroll, rememberedSettingsView, settingsPlatform, visibleRowKeys, type SettingsCategoryKey, type SettingsPlatform } from './settings-model';
 import { useModalSafePadding } from './safe-area-runtime';
 import { withBasePadding } from './modal-safe-area';
 
@@ -38,6 +38,11 @@ import { withBasePadding } from './modal-safe-area';
 //   的行,需要说明的行下面一句灰字;段与段之间细线。搜索按行标签跨分类筛。
 //   分类与可搜行的**模型**在 settings-model.ts(纯逻辑、有测试);这里只负责把真实状态渲染进去。
 //   0.2.80 的滚动修复保留:右栏是 ScrollView,padding 在 contentContainer 上。
+//
+// 手机窄屏(Vincent 2026-09-27「手机设置照微信的设置做」):不画左栏,改成单列分组列表 ——
+//   浅灰地面上的白色行(标签 + 右侧值 + ›),小灰字组标题 通用 / 功能 / 帮助与关于,底部整宽「退出登录」。
+//   点一行推入该分类的子页(左上返回箭头);安卓系统返回 / 网页 Esc 回到列表。
+//   分组在 settings-model.ts 的 PHONE_SETTINGS_GROUPS;子页内容就是宽屏右栏的同一段渲染。
 
 interface Me {
   username?: string;
@@ -131,6 +136,11 @@ export default function SettingsScreen({
   // 切主题会整棵重挂(App.tsx key={theme}),分类与滚动位置从模块级记忆恢复,不回到「账号」。
   const [category, setCategoryState] = useState<SettingsCategoryKey>(() => rememberedSettingsView().category);
   const setCategory = (key: SettingsCategoryKey) => { rememberSettingsCategory(key); setCategoryState(key); };
+  // 手机:当前推入的子页(null = 在分组列表上)。同样走模块级记忆 —— 在「外观」子页里切主题整棵重挂后仍停在外观。
+  const [page, setPage] = useState<SettingsCategoryKey | null>(() => rememberedSettingsView().page);
+  const openPage = (key: SettingsCategoryKey) => { setCategory(key); setPage(key); };
+  const closePage = () => { closeSettingsPage(); setPage(null); };
+  const [logoutConfirm, setLogoutConfirm] = useState(false);
   const paneScrollRef = useRef<ScrollView>(null);
   useEffect(() => {
     const { scrollY } = rememberedSettingsView();
@@ -139,6 +149,20 @@ export default function SettingsScreen({
   const { width } = useWindowDimensions();
   const dialogSafe = useModalSafePadding('fullScreen'); // the two confirm dialogs (safe-area rule 2)
   const compact = width < 640;
+  const subPage = compact ? page : null;
+  // 子页的返回:安卓系统返回键/手势走 BackHandler(比 App.tsx 的返回处理晚注册 ⇒ 先被调用,
+  // 同 ScheduledTasksScreen 的窄屏详情);网页(验收用的 web 导出)没有返回键,听 Esc。
+  // 弹窗开着时让弹窗自己的 onRequestClose 处理(安卓的 Modal 会先吞掉返回键;网页的 Esc 两边都会收到)。
+  const dialogOpen = !!removeTarget || localDeleteVisible || guideVisible || logoutConfirm;
+  useEffect(() => {
+    if (!subPage || dialogOpen) return;
+    const sub = BackHandler.addEventListener('hardwareBackPress', () => { closePage(); return true; });
+    const win = Platform.OS === 'web' && typeof window !== 'undefined' ? window : null;
+    const onKey = (event: KeyboardEvent) => { if (event.key === 'Escape') { event.preventDefault(); closePage(); } };
+    win?.addEventListener('keydown', onKey);
+    return () => { sub.remove(); win?.removeEventListener('keydown', onKey); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [subPage, dialogOpen]);
 
   useEffect(() => {
     void Promise.all([listHubProfiles(), getDesktopStorageDiagnostics()]).then(([registry, diagnostics]) => {
@@ -234,20 +258,91 @@ export default function SettingsScreen({
     </View>
   );
 
+  // ── 手机:分组列表 + 子页顶栏 ──────────────────────────────────────────────────────────────
+  const phoneValue = (key: SettingsCategoryKey): string => {
+    if (key === 'account') return me.username ?? cfg.username ?? '';
+    if (key === 'about') return `版本 ${APP_VERSION}`;
+    return '';
+  };
+  const canLogout = cfg.profileId !== LOCAL_HUB_PROFILE_ID;
+  const phoneList = (
+    <ScrollView style={styles.phoneScroll} contentContainerStyle={styles.phoneListContent} testID="settings-phone-list">
+      {phoneSettingsGroups(filtered).map((group, gi) => (
+        <View key={group.title ?? `g${gi}`} testID={`settings-group-${gi}`}>
+          {group.title ? <Text style={styles.phoneGroupTitle} testID="settings-group-title">{group.title}</Text> : <View style={styles.phoneGroupGap} />}
+          <View style={styles.phoneBlock}>
+            {group.rows.map((cat, ri) => {
+              const value = phoneValue(cat.key);
+              return (
+                <View key={cat.key}>
+                  {ri ? <View style={styles.phoneDivider} /> : null}
+                  <Pressable
+                    testID={`settings-row-${cat.key}`}
+                    accessibilityRole="button"
+                    accessibilityLabel={phoneRowLabel(cat)}
+                    onPress={() => openPage(cat.key)}
+                    style={({ pressed }) => [styles.phoneRow, pressed && styles.phoneRowPressed]}
+                  >
+                    <Text style={styles.phoneRowLabel} numberOfLines={1} testID={`settings-row-label-${cat.key}`}>{phoneRowLabel(cat)}</Text>
+                    {value ? <Text style={styles.phoneRowValue} numberOfLines={1}>{value}</Text> : <View style={styles.phoneRowSpacer} />}
+                    <View style={styles.phoneChevron} testID={`settings-row-chevron-${cat.key}`}>
+                      <Ionicons name="chevron-forward" size={18} color={colors.textMuted} />
+                    </View>
+                  </Pressable>
+                </View>
+              );
+            })}
+          </View>
+        </View>
+      ))}
+      {canLogout ? (
+        <Pressable
+          testID="settings-logout-block"
+          accessibilityRole="button"
+          accessibilityLabel="退出登录"
+          onPress={() => setLogoutConfirm(true)}
+          style={({ pressed }) => [styles.phoneBlock, styles.phoneLogout, pressed && styles.phoneRowPressed]}
+        >
+          <Text style={styles.phoneLogoutText}>退出登录</Text>
+        </Pressable>
+      ) : null}
+    </ScrollView>
+  );
+  // 顶栏(列表与子页同一高度、同一底色 = 状态栏那条的底色,和微信一样看不出接缝;标题位置切页不跳)。
+  const listHeader = (
+    <View style={styles.phoneHeader} testID="settings-list-header">
+      <View style={styles.phoneHeaderSide} />
+      <Text style={styles.phoneHeaderTitle} numberOfLines={1}>设置</Text>
+      <View style={styles.phoneHeaderSide} />
+    </View>
+  );
+  const subPageCat = subPage ? SETTINGS_CATEGORIES.find(c => c.key === active) : undefined;
+  const phoneHeader = (
+    <View style={styles.phoneHeader} testID="settings-subpage-header">
+      <Pressable testID="settings-back" accessibilityRole="button" accessibilityLabel="返回" onPress={closePage} hitSlop={8} style={({ pressed }) => [styles.phoneHeaderSide, pressed && { opacity: 0.6 }]}>
+        <Ionicons name="chevron-back" size={24} color={colors.text} />
+      </Pressable>
+      <Text style={styles.phoneHeaderTitle} numberOfLines={1}>{subPageCat ? phoneRowLabel(subPageCat) : '设置'}</Text>
+      <View style={styles.phoneHeaderSide} />
+    </View>
+  );
+  const sectionStyle = compact ? [styles.section, styles.phoneSection] : styles.section;
+
   const heading = (cat: SettingsCategoryKey) => searching
     ? <Text style={styles.groupTitle}>{SETTINGS_CATEGORIES.find(c => c.key === cat)?.label}</Text>
     : null;
 
   return (
-    <View style={[styles.root, !compact && styles.rootWide]}>
-      {sidebar}
+    <View style={[styles.root, !compact && styles.rootWide, compact && styles.rootPhone]}>
+      {compact ? (subPage ? phoneHeader : listHeader) : sidebar}
+      {compact && !subPage ? phoneList : (
       <View style={styles.pane} testID="settings-pane">
-        <Text style={styles.paneTitle}>{paneTitle}</Text>
+        {compact ? null : <Text style={styles.paneTitle}>{paneTitle}</Text>}
         {/* 0.2.80(Vincent 2026-09-19「设置页面往下面滑动不了」):右栏是 ScrollView,padding 在
             contentContainer 上——留在滚动根上的话它在可滚区域之外,最后一行照样贴着窗口底边。 */}
         <ScrollView
           ref={paneScrollRef}
-          contentContainerStyle={styles.content}
+          contentContainerStyle={[styles.content, compact && styles.contentPhone]}
           showsVerticalScrollIndicator
           onScroll={e => rememberSettingsScroll(e.nativeEvent.contentOffset.y)}
           scrollEventThrottle={100}
@@ -258,7 +353,7 @@ export default function SettingsScreen({
           ) : null}
 
           {sectionsToRender.includes('account') ? (
-            <View style={styles.section} testID="settings-section-account">
+            <View style={sectionStyle} testID="settings-section-account">
               {heading('account')}
               {show('account', 'profiles') ? (
                 <>
@@ -319,7 +414,7 @@ export default function SettingsScreen({
                   </Pressable>
                 </>
               ) : null}
-              {show('account', 'logout') && cfg.profileId !== LOCAL_HUB_PROFILE_ID ? (
+              {show('account', 'logout') && canLogout && !compact ? (
                 <>
                   <Divider />
                   <Pressable style={({ pressed }) => [styles.row, pressed && { opacity: 0.6 }]} onPress={onLogout} accessibilityRole="button">
@@ -334,7 +429,7 @@ export default function SettingsScreen({
           ) : null}
 
           {sectionsToRender.includes('localHub') && localHub ? (
-            <View style={styles.section} testID="local-hub-settings-card">
+            <View style={sectionStyle} testID="local-hub-settings-card">
               {heading('localHub')}
               {show('localHub', 'status') ? <ValueRow label="状态" value={localHub.state === 'running' || localHub.state === 'running_external' ? '运行中' : localHub.state === 'error' ? '异常' : '已停止'} /> : null}
               {show('localHub', 'endpoint') ? <><Divider /><ValueRow label="地址" value={localHub.endpoint} /></> : null}
@@ -386,7 +481,7 @@ export default function SettingsScreen({
           ) : null}
 
           {sectionsToRender.includes('appearance') ? (
-            <View style={styles.section}>
+            <View style={sectionStyle}>
               {heading('appearance')}
               {show('appearance', 'theme') ? (
                 // 0.2.101:三选一分段控件(浅色 / 深色 / 跟随系统)。说明行写明当前生效的主题。
@@ -425,7 +520,7 @@ export default function SettingsScreen({
           ) : null}
 
           {sectionsToRender.includes('notifications') ? (
-            <View style={styles.section} testID="notify-settings-card">
+            <View style={sectionStyle} testID="notify-settings-card">
               {heading('notifications')}
               {show('notifications', 'enabled') ? (
                 <>
@@ -667,7 +762,7 @@ export default function SettingsScreen({
           ) : null}
 
           {sectionsToRender.includes('voice') ? (
-            <View style={styles.section} testID="settings-section-voice">
+            <View style={sectionStyle} testID="settings-section-voice">
               {heading('voice')}
               <VoiceSettingsSection showMode={show('voice', 'mode')} showCredentials={show('voice', 'credentials')} showTest={show('voice', 'test')} />
             </View>
@@ -681,7 +776,7 @@ export default function SettingsScreen({
           ) : null}
 
           {sectionsToRender.includes('about') ? (
-            <View style={styles.section}>
+            <View style={sectionStyle}>
               {heading('about')}
               {show('about', 'version') ? <ValueRow label="版本" value={`v${APP_VERSION}`} /> : null}
               {show('about', 'update') ? (
@@ -725,6 +820,7 @@ export default function SettingsScreen({
           ) : null}
         </ScrollView>
       </View>
+      )}
 
       {/* 两个确认弹窗是 ScrollView 的兄弟不是子节点:Modal 套进滚动容器里会继承它的
           触摸处理,背板也不再铺满窗口。 */}
@@ -770,6 +866,21 @@ export default function SettingsScreen({
                   await onLocalDataDeleted();
                 }).catch(error => setProfileError(String(error))).finally(() => setLocalHubBusy(false));
               }}><Text style={styles.dangerText}>备份并删除</Text></Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
+      <Modal visible={logoutConfirm} transparent animationType="fade" onRequestClose={() => setLogoutConfirm(false)}>
+        <View style={[styles.modalBackdrop, withBasePadding(dialogSafe, spacing.xl)]}>
+          <View style={styles.modalCard}>
+            <Text style={styles.modalTitle}>退出登录？</Text>
+            <Text style={styles.modalBody}>{`${cfg.serverUrl} · ${me.username ?? cfg.username ?? ''}`}\n只删除这个 profile 的凭据和本地目录，不影响其他 Hub。</Text>
+            <View style={styles.modalActions}>
+              <Pressable style={styles.modalButton} onPress={() => setLogoutConfirm(false)}><Text style={styles.rowValue}>返回</Text></Pressable>
+              <Pressable testID="settings-logout-confirm" style={[styles.modalButton, styles.modalDanger]} onPress={() => {
+                setLogoutConfirm(false);
+                void Promise.resolve(onLogout()).catch(error => setProfileError(String(error)));
+              }}><Text style={styles.dangerText}>退出登录</Text></Pressable>
             </View>
           </View>
         </View>
@@ -836,6 +947,28 @@ const makeStyles = () =>
   StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.bg },
   rootWide: { flexDirection: 'row' },
+  // 手机分组列表(照微信「设置」):灰地面、白行、组标题小灰字;行高下限 48。
+  rootPhone: { backgroundColor: colors.groupedBg },
+  phoneScroll: { flex: 1 },
+  phoneListContent: { paddingBottom: spacing.xl * 2 },
+  phoneGroupTitle: { color: colors.textMuted, fontSize: 13, paddingHorizontal: spacing.lg, paddingTop: spacing.lg, paddingBottom: spacing.xs + 2 },
+  phoneGroupGap: { height: spacing.sm },
+  phoneBlock: { backgroundColor: colors.groupedRow },
+  phoneRow: { flexDirection: 'row', alignItems: 'center', minHeight: Math.max(48, ds(52)), paddingHorizontal: spacing.lg, gap: spacing.sm, backgroundColor: colors.groupedRow },
+  phoneRowPressed: { backgroundColor: colors.groupedRowPressed },
+  phoneRowLabel: { color: colors.text, fontSize: 16, flexShrink: 0 },
+  phoneRowValue: { flex: 1, minWidth: 0, color: colors.textMuted, fontSize: 14, textAlign: 'right' },
+  phoneRowSpacer: { flex: 1 },
+  phoneChevron: { width: 18, height: 18, alignItems: 'center', justifyContent: 'center' },
+  phoneDivider: { height: StyleSheet.hairlineWidth, backgroundColor: colors.border, marginLeft: spacing.lg },
+  phoneLogout: { marginTop: spacing.sm * 2, minHeight: Math.max(48, ds(52)), alignItems: 'center', justifyContent: 'center' },
+  phoneLogoutText: { color: colors.text, fontSize: 16 },
+  phoneHeader: { flexDirection: 'row', alignItems: 'center', minHeight: 48, paddingHorizontal: spacing.xs, backgroundColor: colors.bg },
+  phoneHeaderSide: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
+  phoneHeaderTitle: { flex: 1, color: colors.text, fontSize: 17, fontWeight: '600', textAlign: 'center' },
+  // 子页:同一段行渲染,放进整宽白块(左右不留页边,像微信)。
+  contentPhone: { paddingHorizontal: 0, paddingTop: spacing.sm },
+  phoneSection: { backgroundColor: colors.groupedRow, paddingHorizontal: spacing.xs, paddingBottom: 0 },
   // 左栏:与导航栏同一色系,细线分隔;宽屏固定宽,窄屏变成顶部一条横向分类。
   sidebar: { width: 232, backgroundColor: colors.railBg, borderRightWidth: 1, borderRightColor: colors.border, paddingTop: spacing.lg },
   sidebarCompact: { width: '100%', borderRightWidth: 0, borderBottomWidth: 1, borderBottomColor: colors.border, paddingBottom: spacing.sm },

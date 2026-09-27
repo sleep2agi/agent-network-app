@@ -22,7 +22,8 @@ check(
 );
 check(
   'settings body is wrapped in a ScrollView with a content container',
-  /<ScrollView[\s\S]{0,200}contentContainerStyle=\{styles\.content\}/.test(source),
+  // (the phone sub-page adds `styles.contentPhone` on top: `{[styles.content, compact && …]}`)
+  /<ScrollView[\s\S]{0,200}contentContainerStyle=\{\[?styles\.content\b/.test(source),
 );
 
 // Padding has to sit on the content container, not the scroll root: on a scroll
