@@ -50,8 +50,8 @@ ck('切到语音:收 ＋ 面板、收键盘', /if \(next === 'voice'\) \{\s*if \
 const desktopBar = chat.slice(chat.indexOf('<View style={styles.desktopToolbarRight}>'), chat.indexOf('styles.desktopSend,'));
 ck('桌面:麦克风仍在工具栏、发送左边(点一下开始,desktop-voice-bar-model.ts)', desktopBar.includes('<DesktopMicButton voice={voice} onPress={desktopMicClick} />'));
 ck('桌面:麦克风只在 voice.available 时画', (chat.match(/voice\.available \? <DesktopMicButton/g) ?? []).length === 1 && !chat.includes('<VoiceMicButton'));
-ck('录音浮层 + 「去设置」提示条都挂上了', chat.includes('<VoiceRecordingOverlay voice={voice}') && chat.includes('<VoiceSettingsPrompt voice={voice} onOpenSettings={onOpenVoiceSettings} />'));
-ck('提示走现有 composerNotice', chat.includes('onNotice: setComposerNotice'));
+ck('录音浮层(手机微信式;#463 的旧卡片只剩非手机的回退)+ 「去设置」提示条都挂上了', chat.includes('<VoiceHoldOverlay voice={voice} layout={holdLayout} />') && chat.includes('<VoiceRecordingOverlay voice={voice}') && chat.includes('<VoiceSettingsPrompt voice={voice} onOpenSettings={onOpenVoiceSettings} />'));
+ck('提示走现有 composerNotice(手机的「说话时间太短」改由按住浮层居中提示)', chat.includes("onNotice: text => { if (!desktop && text === TOO_SHORT_NOTICE) return; setComposerNotice(text); },"));
 
 // ── 「去设置」路由 ──
 const routes = app.match(/onOpenVoiceSettings=\{\(\) => \{ rememberSettingsCategory\('voice'\); setScreen\(\{ name: 'settings' \}\); \}\}/g) ?? [];
@@ -134,7 +134,8 @@ ck('设置页不把 creds.accessToken / secretKey 渲染出来', !/\{creds\??\.(
   ck('录音两条路(原生 onBuffer / Web Audio)都把分段交给 emitChunk', (recorder.match(/\bemitChunk\(/g) ?? []).length === 2);
   ck('录音浮层画中间结果', read('src/VoiceInputUI.tsx').includes('testID="voice-interim"'));
   ck('流式被记住不可用时,聊天页提示一次', hook.includes('if (r.rememberedNow) optsRef.current.onNotice(STREAM_UNAVAILABLE_HINT);'));
-  ck('按下 / 进取消区有触感(只在原生)', /hapticFor\(stateRef\.current\.phase, next\.phase\)/.test(hook) && hook.includes("(Platform.OS === 'android' || Platform.OS === 'ios')"));
+  ck('按下 / 进出区有触感(只在原生)', /hapticFor\(stateRef\.current\.phase, next\.phase\)/.test(hook) && hook.includes("(Platform.OS === 'android' || Platform.OS === 'ios')"));
+  ck('触感:按下 = impact Light,进出区 = selection 刻度(复用 expo-haptics)', hook.includes("buzz === 'press' ? Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light) : Haptics.selectionAsync()"));
   ck('expo-haptics 钉在 SDK 56(~56.x)', /^~56\./.test(pkg.dependencies['expo-haptics'] ?? ''));
 }
 
