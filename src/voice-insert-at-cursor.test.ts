@@ -151,7 +151,7 @@ ck('放光标后放开控制(undefined),用户可以随便挪', /setTimeout\(\(\
 ck('放光标时同步更新跟踪器(下一句从这里接)', /pendingSelectionRef\.current = null;\s*selectionCaptureRef\.current\.track\(sel\);/.test(chat));
 const selCount = (chat.match(/onSelectionChange=\{onComposerSelectionChange\}\s*selection=\{forcedSelection\}/g) ?? []).length;
 ck('手机输入框 + 桌面输入框都跟踪选区、都接受受控光标', selCount === 2);
-ck('两个麦克风各自带来源:大条 holdBar / 桌面 desktopMic;没有框内 fieldMic', chat.includes("handlers={voiceHandlersFor('holdBar')}") && chat.includes("handlers={voiceHandlersFor('desktopMic')}") && !chat.includes("'fieldMic'"));
+ck('两个麦克风各自带来源:大条 holdBar / 桌面 desktopMic;没有框内 fieldMic', chat.includes("handlers={voiceHandlersFor('holdBar')}") && chat.includes("voiceHandlersFor('desktopMic').onResponderGrant(DESKTOP_CLICK_EVENT as unknown as GestureResponderEvent)") && !chat.includes("'fieldMic'"));
 const vhAt = chat.indexOf('const voiceHandlersFor = (source: VoiceSource) => withPressStart(');
 const vh = chat.slice(vhAt, chat.indexOf('\n  );', vhAt));
 ck('voiceHandlersFor:按下时先读宿主选区,再 beginVoicePress,且只在 idle 时', vhAt > 0

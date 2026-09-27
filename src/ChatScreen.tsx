@@ -49,7 +49,7 @@ import { echoSupersededByFetched } from './chat-echo';
 import { messageMenuGroups, selectionBarActions, type MessageMenuKey } from './message-menu-model';
 import { agentStatusLabel, buildQuote, compactQuoteText, confirmedOutboxIds, copyTextOf, copiedToastVisible, COPIED_TOAST_MS, parseQuoted, quoteLabel, type QuoteRef, mergeMessagesNewestFirst, msgKey, removeMessage, shouldShowJumpPill, nextUnread, jumpPillLabel, canSend, shouldSendOnEnter, composerShortcutHint } from './chat-actions';
 import { isMacKeyboard, sendKeyPref, subscribeShortcuts } from './shortcuts-store';
-import type { NativeSyntheticEvent, NativeScrollEvent } from 'react-native';
+import type { GestureResponderEvent, NativeSyntheticEvent, NativeScrollEvent } from 'react-native';
 import { usePoll } from './usePoll';
 import { chatSearchState, isHighlighted, isStaleSearch, matchCountLabel, searchItems, shouldLoadOlderForSearch, stepHit, type SearchHit } from './chat-search';
 import { retryUnreadPersistFromPoll } from './conversation-unread-persist';
@@ -74,7 +74,9 @@ import SideThreadDrawer, { type SideThreadLaunch } from './SideThreadDrawer';
 import { nextPlusPanel, plusPanelHeight, plusPanelItems, type PlusItemKey, type PlusPanelEvent } from './composer-plus-panel';
 import { useVoiceInput } from './useVoiceInput';
 import { afterRecognized, showVoiceDraftCard, toggleComposerInputMode, type ComposerInputMode, type ComposerModeTransition } from './voice-input-model';
-import { ComposerModeToggle, VoiceDraftCard, VoiceHoldBar, VoiceMicButton, VoiceRecordingOverlay, VoiceSettingsPrompt } from './VoiceInputUI';
+import { ComposerModeToggle, VoiceDraftCard, VoiceHoldBar, VoiceRecordingOverlay, VoiceSettingsPrompt } from './VoiceInputUI';
+import { DesktopMicButton, DesktopVoiceBar } from './DesktopVoiceBar';
+import { DESKTOP_CLICK_EVENT, desktopVoiceNotice, micClickAction, showVoiceBar, voiceSurface } from './desktop-voice-bar-model';
 import { beginVoicePress, createSelectionCapture, hostSelection, insertAtSelection, previewAtSelection, refocusAfterInsert, selectionAcrossModeSwitch, voiceInsertTarget, withPressStart, type TextSelection, type VoiceSource } from './voice-insert-model';
 import { COMPOSER_INPUT_BORDER, COMPOSER_LINE_HEIGHT, composerControlSize, composerInputPadY, composerLineCount, composerRightSlot, composerRowAlign, nextFullEditor, shouldShowExpand, type FullEditorEvent } from './composer-row-layout';
 import { ComposerExpandButton, ComposerFullscreenEditor, ComposerRightSlot } from './ComposerRowParts';
@@ -587,6 +589,14 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
     },
     () => voice.state.phase === 'idle',
   );
+  // 桌面:点 🎤 开始 / 完成 ✓(Enter)/ 取消 ✕(Esc),走同一套麦克风处理(按下冻结光标处选区 → 插到光标处)。
+  const desktopMicClick = () => {
+    const a = micClickAction(voice.state.phase);
+    if (a === 'start') voiceHandlersFor('desktopMic').onResponderGrant(DESKTOP_CLICK_EVENT as unknown as GestureResponderEvent);
+    else if (a === 'done') desktopVoiceDone();
+  };
+  const desktopVoiceDone = () => voice.micHandlers.onResponderRelease(DESKTOP_CLICK_EVENT as unknown as GestureResponderEvent);
+  const desktopVoiceCancel = () => voice.micHandlers.onResponderTerminate();
   const voiceMode = !desktop && voice.available && inputMode === 'voice';
   // 微信式输入行(composer-row-layout.ts):输入超过 3 行 → 左上角 ⤢ 打开全屏编辑(同一份草稿)。
   const [fullEditorOpen, setFullEditorOpen] = useState(false);
@@ -2052,7 +2062,7 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
       ) : null}
       {composerNotice ? (
         <View style={styles.composerNotice} pointerEvents="none" accessibilityLiveRegion="polite" testID="composer-notice">
-          <Text style={styles.composerNoticeText}>{composerNotice}</Text>
+          <Text style={styles.composerNoticeText}>{desktop ? desktopVoiceNotice(composerNotice) : composerNotice}</Text>
         </View>
       ) : null}
       <VoiceSettingsPrompt voice={voice} onOpenSettings={onOpenVoiceSettings} />
@@ -2206,6 +2216,10 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
             }}
             multiline
           />
+          {/* 桌面语音(desktop-voice-bar-model.ts):录音中这一行整行换成录音条,不用手机的按住说话浮层。 */}
+          {voiceSurface(desktop) === 'inlineBar' && showVoiceBar(voice.state.phase) ? (
+            <DesktopVoiceBar voice={voice} onDone={desktopVoiceDone} onCancel={desktopVoiceCancel} />
+          ) : (
           <View style={styles.desktopToolbar}>
             <Pressable accessibilityLabel="添加文件" testID="composer-desktop-plus" style={({ pressed }) => [styles.desktopToolButton, pressed && { opacity: 0.6 }]} onPress={onPlusPress} hitSlop={6}>
                 <Ionicons name="add-circle-outline" size={24} color={colors.textSecondary} />
@@ -2224,7 +2238,7 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
                 </Pressable>
               ) : null}
               <Text style={styles.shortcutHint} testID="composer-shortcut-hint">{composerShortcutHint(sendKey, isMacKeyboard())}</Text>
-              {voice.available ? <VoiceMicButton voice={voice} size={20} handlers={voiceHandlersFor('desktopMic')} /> : null}
+              {voice.available ? <DesktopMicButton voice={voice} onPress={desktopMicClick} /> : null}
               <Pressable
                 style={({ pressed }) => [styles.desktopSend, !canSend(draft, attached.length > 0, sending) && styles.desktopSendDisabled, pressed && { opacity: 0.7 }]}
                 onPress={() => void submit()}
@@ -2234,6 +2248,7 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
               </Pressable>
             </View>
           </View>
+          )}
         </View>
         </>
       ) : (
@@ -2354,7 +2369,7 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
       ) : null}
       </>
       )}
-      <VoiceRecordingOverlay voice={voice} bottom={desktop ? composerHeight + 24 : 88 + composerInset} />
+      {voiceSurface(desktop) === 'phoneOverlay' ? <VoiceRecordingOverlay voice={voice} bottom={88 + composerInset} /> : null}
       <SideThreadDrawer
         cfg={cfg}
         alias={alias}

@@ -48,8 +48,8 @@ ck('voiceMode 只在非桌面 + available + 用户选了语音时成立', chat.i
 ck('切换写入每设备偏好;启动时读回', chat.includes('void saveComposerInputMode(next);') && chat.includes('void loadComposerInputMode().then(setInputMode)'));
 ck('切到语音:收 ＋ 面板、收键盘', /if \(next === 'voice'\) \{\s*if \(plusOpenRef\.current\) plusEvent\('toggle'\);[\s\S]{0,120}Keyboard\.dismiss\(\);/.test(chat));
 const desktopBar = chat.slice(chat.indexOf('<View style={styles.desktopToolbarRight}>'), chat.indexOf('styles.desktopSend,'));
-ck('桌面:麦克风仍在工具栏、发送左边', desktopBar.includes("<VoiceMicButton voice={voice} size={20} handlers={voiceHandlersFor('desktopMic')} />"));
-ck('桌面:麦克风只在 voice.available 时画', (chat.match(/voice\.available \? <VoiceMicButton/g) ?? []).length === 1);
+ck('桌面:麦克风仍在工具栏、发送左边(点一下开始,desktop-voice-bar-model.ts)', desktopBar.includes('<DesktopMicButton voice={voice} onPress={desktopMicClick} />'));
+ck('桌面:麦克风只在 voice.available 时画', (chat.match(/voice\.available \? <DesktopMicButton/g) ?? []).length === 1 && !chat.includes('<VoiceMicButton'));
 ck('录音浮层 + 「去设置」提示条都挂上了', chat.includes('<VoiceRecordingOverlay voice={voice}') && chat.includes('<VoiceSettingsPrompt voice={voice} onOpenSettings={onOpenVoiceSettings} />'));
 ck('提示走现有 composerNotice', chat.includes('onNotice: setComposerNotice'));
 
