@@ -13,7 +13,7 @@ const wf = fs.readFileSync(path, 'utf8').replace(/\r\n?/g, '\n');
 const code = wf.split('\n').filter((l) => !/^\s*#/.test(l)).join('\n');
 
 ck('workflow_dispatch only', /\non:\n  workflow_dispatch:\n/.test(wf) && !/\n  (push|pull_request|schedule|release):/.test(wf));
-ck('mode is a list/add/grant-builds choice, default list', /\n      mode:\n[\s\S]*?type: choice\n\s+options: \[list, add, grant-builds\]\n\s+default: list\n/.test(wf));
+ck('mode is a list/add/grant-builds/invite choice, default list', /\n      mode:\n[\s\S]*?type: choice\n\s+options: \[list, add, grant-builds, invite\]\n\s+default: list\n/.test(wf));
 ck('email input is optional with an empty default', /\n      email:\n[\s\S]*?required: false\n\s+default: ""\n/.test(wf));
 ck('runs in the protected macos-signing environment', /\n    environment: macos-signing\n/.test(wf));
 ck('read-only repository token', /\npermissions:\n  contents: read\n/.test(wf));
@@ -40,7 +40,7 @@ ck('request body with the email is deleted after use', run.includes('rm -f "$RUN
 
 // list never writes.
 const writes = run.split('\n').map((l, i) => ({ l, i })).filter(({ l }) => /asc_write (POST|PATCH|DELETE)/.test(l));
-ck('writes are exactly: create group, link tester, create tester, PATCH group, attach build', writes.length === 5);
+ck('writes are exactly: invite, create group, link tester, create tester, PATCH group, attach build', writes.length === 6);
 const listGuard = run.indexOf(`if [ "$MODE" != 'add' ]; then`);
 const addGuard = run.indexOf(`if [ "$MODE" = 'add' ]; then\n            if [ "$in_group" = 'yes' ]`);
 const groupCreate = run.indexOf('asc_write POST betaGroups ');
@@ -76,6 +76,22 @@ ck('the ASC-user hint is only shown for tester writes', run.includes(`if [ "$con
 ck('group_name input, default Internal, non-empty', /\n      group_name:\n[\s\S]*?default: "Internal"\n/.test(wf) && run.includes('group_name must not be empty'));
 ck('add selects the internal group by exact name only (so a new name creates a new group)', run.includes(`[.data[] | select(.attributes.isInternalGroup == true and .attributes.name == $name)] | .[0].id // empty`));
 ck('group names never come from the email', !/INTERNAL_GROUP_NAME=\$\(?[^\n]*EMAIL/.test(run));
+
+// invite: team invitation as Developer, checked first, read back, 403 explained, then exit.
+const invStart = run.indexOf(`if [ "$MODE" = 'invite' ]; then\n            asc_read()`);
+const invEnd = run.indexOf('app_json="$RUNNER_TEMP/app.json"');
+const inv = run.slice(invStart, invEnd);
+ck('invite block exists before any app/group work', invStart > 0 && invEnd > invStart);
+ck('invite POSTs userInvitations as DEVELOPER, all apps visible, no provisioning', inv.includes('asc_write POST userInvitations') && inv.includes('roles:["DEVELOPER"],allAppsVisible:true,provisioningAllowed:false'));
+ck('invite checks existing users and pending invitations before POSTing', inv.indexOf('asc_read "$RUNNER_TEMP/users.json" users --data-urlencode "filter[username]=$EMAIL"') > 0 && inv.indexOf('userInvitations --data-urlencode "filter[email]=$EMAIL"') > 0 && inv.indexOf('asc_write POST userInvitations') > inv.indexOf('filter[email]=$EMAIL'));
+ck('invite reports already-member / already-invited / invited', ['Invitation state: already-member', 'Invitation state: already-invited', 'Invitation state: invited'].every((x) => inv.includes(x)));
+ck('invite reports the expiry', (inv.match(/expirationDate/g) || []).length >= 2);
+ck('a 403 on the invite is reported plainly (web UI fallback); a 403 on the pre-checks only warns', (inv.match(/403\) no_permission/g) || []).length === 1 && inv.includes(`403) no_permission 'invite users'; exit 1 ;;`) && (inv.match(/403\) echo "::warning::/g) || []).length === 2 && inv.includes('Invite this Apple ID from the App Store Connect web UI instead'));
+ck('invite reads the invitation back after POSTing', inv.lastIndexOf('userInvitations --data-urlencode "filter[email]=$EMAIL"') > inv.indexOf('asc_write POST userInvitations'));
+ck('invite request body is deleted after use', inv.includes('rm -f "$RUNNER_TEMP/invite-body.json"'));
+ck('invite exits before touching groups or testers', inv.includes('exit 0') && !/betaGroups|betaTesters/.test(inv));
+ck('names come from the event file, not expressions', run.includes(`FIRST_NAME=$(jq -r '.inputs.first_name // ""' "$GITHUB_EVENT_PATH")`) && !/inputs\.(first|last)_name\s*\}\}/.test(code));
+ck('invite requires the email and both names', run.includes(`if { [ "$MODE" = 'add' ] || [ "$MODE" = 'invite' ]; } && [ -z "$EMAIL" ]; then`) && run.includes('invite mode needs first_name and last_name'));
 
 console.log(`ios TestFlight internal tester: ${p}/${t} checks passed`);
 process.exit(p === t ? 0 : 1);
