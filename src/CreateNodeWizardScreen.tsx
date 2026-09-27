@@ -7,6 +7,7 @@ import { createRequestVerdict, timeoutMessage, type CreateRequestVerdict } from 
 import { colors, onThemeChange, spacing } from './theme';
 import { advancedExpanded, advancedRuntimesOf, primaryRuntimes, runtimeDisplayLabel, showsAdvancedToggle, type WizardRuntime } from './wizard-runtime-groups';
 import { PANE_BACK_TEST_ID, paneShowsBack } from './pane-header';
+import { defaultWorkdir, describeWorkdirError, workdirError, workdirForRequest, workdirRootOf } from './create-node-workdir';
 
 // #338 RFC-026 §3.1 — mobile create-node wizard rest (Plan B).
 // 5 post-picker steps: ① name ② runtime ③ model ④ flags ⑤ confirm.
@@ -111,6 +112,9 @@ export default function CreateNodeWizardScreen({ cfg, daemon, onBack, onExit, de
   const [maxTurns, setMaxTurns] = useState('');
   const [budget, setBudget] = useState('');
   const [timeoutMs, setTimeoutMs] = useState('');
+  // 工作目录:null = 没改过,跟着名字走(<root>/<name>);改过之后固定为用户填的值。
+  const [workdirEdited, setWorkdirEdited] = useState<string | null>(null);
+  const [workdirOpen, setWorkdirOpen] = useState(false);
   const [phase, setPhase] = useState<Phase>('form');
   const [msg, setMsg] = useState('');
 
@@ -202,6 +206,11 @@ export default function CreateNodeWizardScreen({ cfg, daemon, onBack, onExit, de
       (step >= 2 && step < STEPS.length)
     );
   const busy = phase === 'creating' || phase === 'awaiting_register';
+  // 老 daemon/hub 不带 default_workdir_root → null → 整行隐藏、请求不带 workdir。
+  const workdirRoot = workdirRootOf(daemon);
+  const workdir = workdirEdited ?? (workdirRoot ? defaultWorkdir(workdirRoot, name.trim()) : '');
+  const workdirErr = workdirRoot ? workdirError(workdir, workdirRoot) : null;
+  const canSubmit = !workdirErr;
 
   // ── handlers (no hooks below this line) ────────────────────────────
   // One runtime choice row. `nested` = it lives inside a 「高级」 disclosure:
@@ -269,6 +278,7 @@ export default function CreateNodeWizardScreen({ cfg, daemon, onBack, onExit, de
         ...(numOrUndef(budget) !== undefined ? { budget: numOrUndef(budget) } : {}),
         ...(numOrUndef(timeoutMs) !== undefined ? { timeout: numOrUndef(timeoutMs) } : {}),
       },
+      ...workdirForRequest(workdirRoot, workdir),
     };
     const res = await createNode(cfg, {
       daemon_node_id: daemon.daemon_node_id,
@@ -284,7 +294,7 @@ export default function CreateNodeWizardScreen({ cfg, daemon, onBack, onExit, de
       setMsg(`服务器未就绪：${res.error}`);
     } else {
       setPhase('error');
-      setMsg(`创建失败：${res.error}`);
+      setMsg(`创建失败：${describeWorkdirError(res.error) ?? res.error}`);
     }
   };
 
@@ -532,6 +542,46 @@ export default function CreateNodeWizardScreen({ cfg, daemon, onBack, onExit, de
                     k="maxTurns / budget / timeout"
                     v={`${maxTurns || '—'} / ${budget || '—'} / ${timeoutMs || '—'}`}
                   />
+                  {workdirRoot ? (
+                    <>
+                      <Divider />
+                      <View style={styles.summaryRow} testID="create-workdir-row">
+                        <Text style={styles.summaryKey}>工作目录</Text>
+                        <View style={styles.summaryValWithAction}>
+                        <Text style={styles.summaryVal} numberOfLines={2} testID="create-workdir-value">{workdir}</Text>
+                        <Pressable
+                          testID="create-workdir-edit"
+                          onPress={() => setWorkdirOpen(o => !o)}
+                          hitSlop={8}
+                          accessibilityLabel={workdirOpen ? '收起工作目录编辑' : '修改工作目录'}
+                          style={({ pressed }) => [styles.summaryEdit, pressed && { opacity: 0.6 }]}
+                        >
+                          <Text style={styles.summaryEditText}>{workdirOpen ? '收起' : '改'}</Text>
+                        </Pressable>
+                        </View>
+                      </View>
+                      {workdirOpen ? (
+                        <View style={styles.summaryEditor}>
+                          <TextInput
+                            testID="create-workdir-input"
+                            autoFocus
+                            value={workdir}
+                            onChangeText={setWorkdirEdited}
+                            placeholder={defaultWorkdir(workdirRoot, name.trim() || 'my-agent-1')}
+                            placeholderTextColor={colors.textMuted}
+                            style={styles.input}
+                            autoCapitalize="none"
+                            autoCorrect={false}
+                          />
+                          <Text style={[styles.hint, !!workdirErr && styles.hintErr]}>
+                            {workdirErr ?? '每个节点一个独立目录；不存在会自动创建。'}
+                          </Text>
+                        </View>
+                      ) : workdirErr ? (
+                        <Text style={[styles.hint, styles.hintErr, styles.summaryEditor]}>{workdirErr}</Text>
+                      ) : null}
+                    </>
+                  ) : null}
                 </View>
               </View>
             )}
@@ -565,10 +615,16 @@ export default function CreateNodeWizardScreen({ cfg, daemon, onBack, onExit, de
               </Pressable>
             ) : (
               <Pressable
+                testID="create-node-submit"
+                disabled={!canSubmit}
                 onPress={handleSubmit}
-                style={({ pressed }) => [styles.primaryBtn, pressed && { opacity: 0.8 }]}
+                style={({ pressed }) => [
+                  styles.primaryBtn,
+                  !canSubmit && styles.primaryBtnDisabled,
+                  pressed && canSubmit && { opacity: 0.8 },
+                ]}
               >
-                <Text style={styles.primaryBtnText}>创建节点</Text>
+                <Text style={[styles.primaryBtnText, !canSubmit && styles.primaryBtnTextDisabled]}>创建节点</Text>
               </Pressable>
             )}
           </>
@@ -713,6 +769,12 @@ const makeStyles = () => StyleSheet.create({
   },
   summaryKey: { color: colors.textMuted, fontSize: 12, flexShrink: 0 },
   summaryVal: { color: colors.text, fontSize: 13, textAlign: 'right', flex: 1 },
+  // 「改」:值列右侧一个紧凑的文字按钮;行的左右内边距与其他确认行一致(同一个 summaryRow)。
+  // 值 +「改」共一条中线(「改」是 CJK 字形,行盒比 ASCII 路径高,顶对齐会差 1–2px)。
+  summaryValWithAction: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: spacing.md },
+  summaryEdit: { flexShrink: 0 },
+  summaryEditText: { color: colors.accent, fontSize: 13, fontWeight: '600' },
+  summaryEditor: { gap: spacing.xs, paddingHorizontal: spacing.lg, paddingBottom: spacing.md },
   divider: { height: 1, backgroundColor: colors.border, marginLeft: spacing.lg },
 
   statusBlock: { alignItems: 'center', gap: spacing.md, paddingVertical: spacing.xl },

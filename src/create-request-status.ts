@@ -1,6 +1,7 @@
 // 桌面向导:create_node 下发后,除了等「子节点注册」,还读 hub 的 GET /api/node-create-requests?request_id=
 // (commhub-server ≥ 含该接口的版本;老 hub 404 → 当作「不知道」,行为退回只等注册)。
 // 纯函数:把 daemon 回的 status/error 变成向导该显示的话。
+import { describeWorkdirError } from './create-node-workdir';
 
 export type CreateRequestStatus = 'pending' | 'delivered' | 'started' | 'failed' | 'rejected' | 'runtime_capability_check_failed' | string;
 
@@ -27,6 +28,9 @@ export function createRequestVerdict(row: CreateRequestRow | null | undefined): 
     const head = status === 'runtime_capability_check_failed'
       ? `daemon 说它不支持 ${row.runtime ?? '这个'} runtime`
       : status === 'rejected' ? 'daemon 拒绝了这次创建' : 'daemon 启动子节点失败';
+    // 工作目录被 daemon 拒(是家目录 / 系统目录 / 已有别的节点…):给一句人话,原始码留在括号里便于排查。
+    const wd = describeWorkdirError(why);
+    if (wd) return { kind: 'failed', text: `${head}:${wd}(${why})` };
     return { kind: 'failed', text: why ? `${head}:${why}` : head };
   }
   if (status === 'started') return { kind: 'waiting', text: 'daemon 已启动子进程,等待它向 Hub 注册…' };
