@@ -12,6 +12,7 @@ import { Ionicons } from './icons';
 import { colors } from './theme';
 import { APP_VERSION } from './version';
 import { railBadgeText, railIconFor } from './rail-nav';
+import { badgeOffsetCentered } from './badge-anchor';
 import { mobileRailItem, mobileRailWidth, railUnreadTotal } from './nav-chrome';
 import { ds, listText, uiScale } from './ui-scale';
 import { alignedRailLayout, denserRowPitch, listFirstRowTop, onListFirstRowTopChange } from './list-rail-align';
@@ -132,7 +133,8 @@ const makeStyles = () => StyleSheet.create({
   label: { color: colors.textSecondary, ...listText('railLabel'), fontWeight: '500', maxWidth: mobileRailItem(uiScale().densityFactor).width },
   labelActive: { color: colors.accent, fontWeight: '600' },
   badge: {
-    position: 'absolute', top: -3, right: 4, minWidth: 18, height: 18, borderRadius: 9, paddingHorizontal: 4,
+    // Left edge tucked just inside the glyph's top-right corner (badge-anchor.ts): 「99+」 grows outward.
+    position: 'absolute', ...badgeOffsetCentered(ds(52), ds(30), ds(24), 18), minWidth: 18, height: 18, borderRadius: 9, paddingHorizontal: 4,
     backgroundColor: colors.failed, borderWidth: 2, borderColor: colors.railBg, alignItems: 'center', justifyContent: 'center',
   },
   badgeText: { color: '#fff', fontSize: 10, fontWeight: '600', lineHeight: 12 },

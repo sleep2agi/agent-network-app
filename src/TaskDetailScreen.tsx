@@ -20,6 +20,7 @@ import {
 import { colors, onThemeChange, spacing } from './theme';
 import { formatTime } from './time';
 import { usePoll } from './usePoll';
+import { PANE_BACK_TEST_ID, paneShowsBack } from './pane-header';
 
 // Detail screen for one task. Mirrors the dashboard `/tasks` detail
 // pane's four blocks (timeline, info, content, result), pared down for
@@ -54,10 +55,13 @@ export default function TaskDetailScreen({
   cfg,
   taskId,
   onBack,
+  desktop = false,
 }: {
   cfg: HubConfig;
   taskId: string;
   onBack: () => void;
+  /** Tauri desktop workspace: the rail's 任务 is the way back — no phone back (pane-header.ts). */
+  desktop?: boolean;
 }) {
   const [task, setTask] = useState<HubTask | null>(null);
   const [taskLoaded, setTaskLoaded] = useState(false);
@@ -98,10 +102,14 @@ export default function TaskDetailScreen({
       testID={`task-detail-screen-poll-detail-ms-${POLL_DETAIL_MS}`}
     >
       <View style={styles.header} testID="screen-header">
-        <Pressable onPress={onBack} style={styles.backBtn} testID="task-detail-back">
-          <Ionicons name="chevron-back" size={22} color={colors.text} />
-          <Text style={styles.backText}>任务</Text>
-        </Pressable>
+        {paneShowsBack(desktop) ? (
+          <Pressable onPress={onBack} style={styles.backBtn} testID={PANE_BACK_TEST_ID}>
+            <Ionicons name="chevron-back" size={22} color={colors.text} />
+            <Text style={styles.backText}>任务</Text>
+          </Pressable>
+        ) : (
+          <Text style={styles.paneTitle}>任务详情</Text>
+        )}
         <Text style={styles.taskIdChip} numberOfLines={1}>
           {taskId}
         </Text>
@@ -356,6 +364,7 @@ const makeStyles = () =>
     },
     backBtn: { flexDirection: 'row', alignItems: 'center', paddingVertical: spacing.xs },
     backText: { color: colors.text, fontSize: 15 },
+    paneTitle: { color: colors.text, fontSize: 17, fontWeight: '600', paddingVertical: spacing.xs },
     taskIdChip: {
       flex: 1,
       color: colors.textMuted,

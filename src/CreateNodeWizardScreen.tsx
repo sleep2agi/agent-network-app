@@ -6,6 +6,7 @@ import { createNode, CreateNodeRequest, fetchStatus, HostSupervisorDaemon, HubCo
 import { createRequestVerdict, timeoutMessage, type CreateRequestVerdict } from './create-request-status';
 import { colors, onThemeChange, spacing } from './theme';
 import { advancedExpanded, advancedRuntimesOf, primaryRuntimes, runtimeDisplayLabel, showsAdvancedToggle, type WizardRuntime } from './wizard-runtime-groups';
+import { PANE_BACK_TEST_ID, paneShowsBack } from './pane-header';
 
 // #338 RFC-026 §3.1 — mobile create-node wizard rest (Plan B).
 // 5 post-picker steps: ① name ② runtime ③ model ④ flags ⑤ confirm.
@@ -71,9 +72,12 @@ export interface CreateNodeWizardScreenProps {
   daemon: HostSupervisorDaemon;
   onBack: () => void;       // back to picker
   onExit: () => void;       // close wizard entirely (after done or cancel)
+  /** Tauri desktop workspace: the server sidebar selects this page — no phone back in the header
+   *  (pane-header.ts). The footer's 「返回服务器」 step button stays: it is part of the flow. */
+  desktop?: boolean;
 }
 
-export default function CreateNodeWizardScreen({ cfg, daemon, onBack, onExit }: CreateNodeWizardScreenProps) {
+export default function CreateNodeWizardScreen({ cfg, daemon, onBack, onExit, desktop = false }: CreateNodeWizardScreenProps) {
   // ── All hooks FIRST (no conditional-hook regressions) ──────────────
   const [step, setStep] = useState(0);
   const [name, setName] = useState('');
@@ -291,18 +295,25 @@ export default function CreateNodeWizardScreen({ cfg, daemon, onBack, onExit }: 
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
     >
       {/* Header */}
-      <View style={styles.header} testID="screen-header">
-        <Pressable
-          style={({ pressed }) => [styles.headerBtn, pressed && { opacity: 0.6 }]}
-          onPress={busy ? () => { /* ignore back mid-create */ } : onBack}
-          hitSlop={8}
-          accessibilityLabel="返回服务器选择"
-        >
-          <Ionicons name="chevron-back" size={26} color={busy ? colors.textMuted : colors.text} />
-        </Pressable>
-        <Text style={styles.headerTitle}>新建节点</Text>
-        <View style={styles.headerBtn} />
-      </View>
+      {paneShowsBack(desktop) ? (
+        <View style={styles.header} testID="screen-header">
+          <Pressable
+            testID={PANE_BACK_TEST_ID}
+            style={({ pressed }) => [styles.headerBtn, pressed && { opacity: 0.6 }]}
+            onPress={busy ? () => { /* ignore back mid-create */ } : onBack}
+            hitSlop={8}
+            accessibilityLabel="返回服务器选择"
+          >
+            <Ionicons name="chevron-back" size={26} color={busy ? colors.textMuted : colors.text} />
+          </Pressable>
+          <Text style={styles.headerTitle}>新建节点</Text>
+          <View style={styles.headerBtn} />
+        </View>
+      ) : (
+        <View style={[styles.header, styles.headerWide]} testID="screen-header">
+          <Text style={[styles.headerTitle, styles.headerTitleWide]}>新建节点</Text>
+        </View>
+      )}
 
       {/* Daemon summary line — reminds user where this child lands */}
       <View style={styles.daemonStrip}>
@@ -619,6 +630,9 @@ const makeStyles = () => StyleSheet.create({
   },
   headerBtn: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
   headerTitle: { color: colors.text, fontSize: 17, fontWeight: '600', flex: 1, textAlign: 'center' },
+  // Desktop: title on the content's left edge, same header height as the phone one (40 + 2×8 + 1).
+  headerWide: { paddingHorizontal: spacing.lg, minHeight: 57 },
+  headerTitleWide: { textAlign: 'left' },
 
   daemonStrip: {
     flexDirection: 'row',

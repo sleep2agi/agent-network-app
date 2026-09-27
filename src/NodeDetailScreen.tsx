@@ -74,6 +74,7 @@ import { filesTreeMode, nodePageColumnMaxWidth } from './node-files-tree';
 import { NODE_PAGE_COMPACT_WIDTH, NODE_SECTIONS, factText, headerChips, leaveNeedsConfirm, nodePageChrome, nodePageContentWidth, nodePageScrolls, overviewFactColumns, resolveActiveSection, splitOverviewFacts, visibleNodeSections, type NodeSectionKey } from './node-page-model';
 import { useModalSafePadding } from './safe-area-runtime';
 import { withBasePadding } from './modal-safe-area';
+import { PANE_BACK_TEST_ID, paneShowsBack } from './pane-header';
 
 const POLL_MS = 10_000; // same cadence as AgentsScreen — hub-friendly, felt-live
 
@@ -152,6 +153,7 @@ export default function NodeDetailScreen({
   readOnly = false,
   layoutWidth,
   touch = false,
+  desktop = false,
 }: {
   cfg: HubConfig;
   alias: string;
@@ -162,6 +164,8 @@ export default function NodeDetailScreen({
   layoutWidth?: number;
   /** Android two-pane: finger-sized section rail rows (≥ 48 dp) when the rail shows. */
   touch?: boolean;
+  /** Tauri desktop workspace: the rail / sidebar / list select this page — no phone back (pane-header.ts). */
+  desktop?: boolean;
 }) {
   const [state, setState] = useState<LoadState>({ kind: 'loading' });
   const [node, setNode] = useState<HubNode | null>(null);
@@ -265,9 +269,11 @@ export default function NodeDetailScreen({
         gap: spacing.md,
       }}
     >
-      <Pressable onPress={guardedBack} hitSlop={12} accessibilityRole="button" accessibilityLabel="返回">
-        <Text style={{ color: colors.accent, fontSize: 28 }}>‹</Text>
-      </Pressable>
+      {paneShowsBack(desktop) ? (
+        <Pressable onPress={guardedBack} testID={PANE_BACK_TEST_ID} hitSlop={12} accessibilityRole="button" accessibilityLabel="返回">
+          <Text style={{ color: colors.accent, fontSize: 28 }}>‹</Text>
+        </Pressable>
+      ) : null}
       <Text style={{ color: colors.text, fontSize: 17, fontWeight: '600' }}>{readOnly ? '节点信息' : '节点详情'}</Text>
     </View>
   );

@@ -1,45 +1,49 @@
-// Full-screen leaf reached from the Server tab's "查看事件流" button.
-// Row 6 parity — network-wide event stream via SSE.
+// 服务器 → 事件与日志 (desktop right pane) / the Server tab's "查看事件流" leaf (phone).
+// Network-wide task flow, newest first: recent tasks preloaded from the hub, live SSE events on top.
 //
-// 🔴 UI TRUTH (通信龙 07-31 catch): this screen surfaces the
-// `/events/network/{netId}` payload, which is ROUTING METADATA ONLY
-// (task_id / from / to / status / priority / message_id). It does
-// NOT contain message content. The subtitle SAYS that — a screen
-// labeled just "日志" would let users think they can read the actual
-// message bodies, then realize they can't and file a "broken" bug.
-// The interface must promise what it actually delivers. Same rule
-// applied on /messages (empty vs not-wired must look different).
+// 🔴 UI TRUTH (通信龙 07-31 catch): this screen surfaces ROUTING METADATA ONLY
+// (task_id / from / to / status / priority). It does NOT show message content. The subtitle SAYS
+// that — a screen labeled just "日志" would let users think they can read the actual message
+// bodies, then realize they can't and file a "broken" bug. The preload reads `/api/tasks` rows,
+// which do carry content; event-feed-model.ts copies only the routing fields out of them, so the
+// content never reaches this screen's state.
+//
+// 0.2.124 (owner screenshot, 1200×800): the pane showed a phone 「‹ Server」 back row, 「1 / 500」,
+// and one raw `connected` chip — the SSE's own hello frame, because the stream only carries what
+// happens after it opens. Now: no back on desktop (pane-header.ts), recent history on open, each
+// row reads 「发起 → 接收 · 状态 · 相对时间」, and transport frames fold into the status line.
 //
 // Style discipline:
-//   - Shared shell (root / center / errorTitle / errorHint / retryBtn)
-//     via `import { styles } from './app-styles'` — do NOT destructure
-//     or copy (live-binding contract, see app-styles.ts header).
-//   - Screen-specific chrome (event rows, chips, sticky bottom pill)
-//     via inline `style={{ ... colors.xyz ... }}` so theme colors are
-//     read at render time on remount (App wraps in `key={theme}`).
-// Same pattern as NodeDetailScreen.
+//   - Shared shell (root / center) via `import { styles } from './app-styles'` — do NOT
+//     destructure or copy (live-binding contract, see app-styles.ts header).
+//   - Screen-specific chrome inline so theme colors are read at render time on remount
+//     (App wraps in `key={theme}`). Same pattern as NodeDetailScreen.
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { FlatList, Pressable, View, ActivityIndicator } from 'react-native';
 import { Text } from './ui-text';
 import { Ionicons } from './icons';
 import AliasAvatar from './AliasAvatar';
-import { HubConfig } from './api';
-import {
-  pushLog,
-  deriveLogsState,
-  typeBucket,
-  shouldPauseAutoscroll,
-  formatEventTime,
-  LOGS_MAX,
-  AUTOSCROLL_PAUSE_THRESHOLD_PX,
-  type LogEvent,
-  type ConnState,
-  type TypeBucket,
-} from './logs-buffer';
+import { fetchTasks, type HubConfig } from './api';
+import { LOGS_MAX, type ConnState } from './logs-buffer';
 import { openNetworkEventStream } from './logs-sse';
+import {
+  FEED_EMPTY_TITLE,
+  clickTarget,
+  feedRowModel,
+  historyFromTasks,
+  liveFrameToFeedEvent,
+  mergeHistory,
+  streamStatusLine,
+  type FeedEvent,
+  type FeedTone,
+} from './event-feed-model';
+import { PANE_BACK_TEST_ID, paneShowsBack } from './pane-header';
 import { colors, spacing } from './theme';
 import { styles as appStyles } from './app-styles';
+
+/** How many recent tasks the screen preloads (hub caps /api/tasks at 200). */
+const HISTORY_LIMIT = 50;
 
 const CONN_LABEL: Record<ConnState, string> = {
   connecting: '连接中',
@@ -47,36 +51,52 @@ const CONN_LABEL: Record<ConnState, string> = {
   disconnected: '断开',
 };
 
-const CONN_COLOR: Record<ConnState, string> = {
-  connecting: colors.blocked,     // amber = transient
-  connected: colors.running,      // green = live
-  disconnected: colors.failed,    // red = down
-};
-
-const BUCKET_COLOR: Record<TypeBucket, string> = {
-  task: colors.accent,
-  broadcast: colors.blocked,     // amber = attention
-  lifecycle: colors.textSecondary,
-  unknown: colors.rest,          // 🔴 gray so a new hub type is VISIBLE
-                                 // rather than remapped into a known bucket
-};
+const toneColor = (tone: FeedTone): string => ({
+  running: colors.running,
+  blocked: colors.blocked,
+  failed: colors.failed,
+  accent: colors.accent,
+  rest: colors.textSecondary,
+})[tone];
 
 export default function LogsScreen({
   cfg,
   onBack,
+  onOpenChat,
+  onOpenTask,
+  desktop = false,
 }: {
   cfg: HubConfig;
   onBack: () => void;
+  onOpenChat?: (alias: string) => void;
+  onOpenTask?: (taskId: string) => void;
+  /** Tauri desktop workspace: the server sidebar selects this page — no phone back (pane-header.ts). */
+  desktop?: boolean;
 }) {
-  const [events, setEvents] = useState<LogEvent[]>([]);
+  const [history, setHistory] = useState<FeedEvent[] | null>(null);
+  const [historyError, setHistoryError] = useState<string | null>(null);
+  const [live, setLive] = useState<FeedEvent[]>([]);
   const [conn, setConn] = useState<ConnState>('connecting');
   const [connErr, setConnErr] = useState<string | undefined>();
-  const [droppedTotal, setDroppedTotal] = useState(0);
-  const [paused, setPaused] = useState(false);
-  const distanceFromBottomRef = useRef(0);
-  const listRef = useRef<FlatList<LogEvent> | null>(null);
+  const [now, setNow] = useState(() => Date.now());
+  const seqRef = useRef(0);
 
   const netId = cfg.networkId;
+
+  // Recent history: the same network-scoped /api/tasks read the 任务 page makes.
+  useEffect(() => {
+    let alive = true;
+    setHistory(null);
+    setHistoryError(null);
+    fetchTasks(cfg, { limit: HISTORY_LIMIT, skipStats: true })
+      .then(body => { if (alive) setHistory(historyFromTasks(body.tasks)); })
+      .catch(error => {
+        if (!alive) return;
+        setHistory([]);
+        setHistoryError(error instanceof Error ? error.message : String(error));
+      });
+    return () => { alive = false; };
+  }, [cfg]);
 
   useEffect(() => {
     if (!netId) {
@@ -85,18 +105,16 @@ export default function LogsScreen({
       setConnErr('当前 hub 配置无 network_id — 无法订阅网络事件流');
       return;
     }
-    setEvents([]);
-    setDroppedTotal(0);
+    setLive([]);
     setConn('connecting');
     setConnErr(undefined);
 
     const close = openNetworkEventStream(cfg, netId, {
-      onEvent: (ev) => {
-        setEvents((prev) => {
-          const { entries, dropped } = pushLog(prev, ev, LOGS_MAX);
-          if (dropped > 0) setDroppedTotal((n) => n + dropped);
-          return entries;
-        });
+      onEvent: (frame) => {
+        const at = typeof frame._at === 'number' ? frame._at : Date.now();
+        const ev = liveFrameToFeedEvent(frame, at, ++seqRef.current);
+        if (!ev) return; // transport frame (`connected` …) — the status line says it instead
+        setLive(prev => (prev.length >= LOGS_MAX ? [...prev.slice(prev.length - LOGS_MAX + 1), ev] : [...prev, ev]));
       },
       onState: (s, err) => {
         setConn(s);
@@ -106,61 +124,51 @@ export default function LogsScreen({
     return close;
   }, [cfg, netId]);
 
-  // Auto-scroll to bottom on new events UNLESS the user has scrolled
-  // up past the pause threshold — otherwise their reading row gets
-  // yanked away every time a new event arrives.
+  // Relative times ("3 分钟前") age while the screen is open.
   useEffect(() => {
-    if (paused) return;
-    if (events.length === 0) return;
-    // requestAnimationFrame gives the list a beat to insert the row
-    // before we scroll.
-    const id = requestAnimationFrame(() => {
-      listRef.current?.scrollToEnd({ animated: false });
-    });
-    return () => cancelAnimationFrame(id);
-  }, [events.length, paused]);
-
-  const onScroll = useCallback((e: { nativeEvent: { contentSize: { height: number }; layoutMeasurement: { height: number }; contentOffset: { y: number } } }) => {
-    const { contentSize, layoutMeasurement, contentOffset } = e.nativeEvent;
-    const distance = contentSize.height - layoutMeasurement.height - contentOffset.y;
-    distanceFromBottomRef.current = distance;
-    const nextPaused = shouldPauseAutoscroll(distance);
-    // Only setState when the boolean actually flips — avoids a re-render
-    // per scroll event.
-    setPaused((prev) => (prev === nextPaused ? prev : nextPaused));
+    const id = setInterval(() => setNow(Date.now()), 30_000);
+    return () => clearInterval(id);
   }, []);
 
-  const jumpToBottom = () => {
-    listRef.current?.scrollToEnd({ animated: true });
-    setPaused(false);
+  // Newest first, like the dashboard's feeds: the first thing on screen is what just happened, and a
+  // new event never has to scroll the list (the old bottom-follow logic raced the preload's layout
+  // and left the list parked mid-way with 「已暂停自动滚」 showing).
+  const events = useMemo(() => mergeHistory(history ?? [], live, LOGS_MAX).reverse(), [history, live]);
+
+  const openEvent = (ev: FeedEvent) => {
+    const target = clickTarget(ev, cfg.username);
+    if (target?.kind === 'chat' && onOpenChat) onOpenChat(target.alias);
+    else if (target?.kind === 'task' && onOpenTask) onOpenTask(target.taskId);
   };
 
-  const state = deriveLogsState({ conn, events, error: connErr });
+  const connColor = conn === 'connected' ? colors.running : conn === 'connecting' ? colors.blocked : colors.failed;
+  const showBack = paneShowsBack(desktop);
+  const statusLine = streamStatusLine({ conn, historyCount: history?.length ?? 0, liveCount: live.length, historyError });
+  const loading = history === null && events.length === 0;
+  const hardFailure = events.length === 0 && history !== null && !!historyError && conn === 'disconnected';
 
   return (
     <View style={appStyles.root}>
-      {/* Header */}
       <View
         testID="screen-header"
         style={{
           flexDirection: 'row',
           alignItems: 'center',
-          paddingHorizontal: spacing.md,
+          minHeight: 57,
+          paddingLeft: showBack ? spacing.md : spacing.lg,
+          paddingRight: spacing.lg,
           paddingVertical: spacing.sm,
           borderBottomWidth: 1,
           borderBottomColor: colors.border,
           gap: spacing.sm,
         }}
       >
-        <Pressable
-          onPress={onBack}
-          style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: spacing.xs }}
-          testID="logs-back"
-        >
-          <Ionicons name="chevron-back" size={22} color={colors.text} />
-          <Text style={{ color: colors.text, fontSize: 15 }}>Server</Text>
-        </Pressable>
-        <View style={{ flex: 1 }} />
+        {showBack ? (
+          <Pressable onPress={onBack} hitSlop={8} accessibilityRole="button" accessibilityLabel="返回服务器" testID={PANE_BACK_TEST_ID}>
+            <Ionicons name="chevron-back" size={24} color={colors.text} />
+          </Pressable>
+        ) : null}
+        <Text testID="logs-title" style={{ flex: 1, color: colors.text, fontSize: 17, fontWeight: '600' }} numberOfLines={1}>事件流</Text>
         {/* Connection state pill — 3 states, distinct visually */}
         <View
           testID={`logs-conn-${conn}`}
@@ -171,200 +179,130 @@ export default function LogsScreen({
             paddingHorizontal: spacing.sm,
             paddingVertical: 4,
             borderRadius: 999,
-            backgroundColor: CONN_COLOR[conn] + '22',
-            borderColor: CONN_COLOR[conn],
+            backgroundColor: connColor + '22',
+            borderColor: connColor,
             borderWidth: 1,
           }}
         >
-          <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: CONN_COLOR[conn] }} />
-          <Text style={{ color: CONN_COLOR[conn], fontSize: 11, fontWeight: '600' }}>
-            {CONN_LABEL[conn]}
-          </Text>
+          <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: connColor }} />
+          <Text style={{ color: connColor, fontSize: 11, fontWeight: '600' }}>{CONN_LABEL[conn]}</Text>
         </View>
       </View>
 
-      {/* Title + subtitle — the "UI truth" line */}
-      <View style={{ paddingHorizontal: spacing.lg, paddingTop: spacing.md, paddingBottom: spacing.sm }}>
-        <Text style={{ color: colors.text, fontSize: 18, fontWeight: '600' }}>事件流</Text>
-        <Text style={{ color: colors.textMuted, fontSize: 12, marginTop: 2, lineHeight: 17 }}>
-          显示网络任务流转（task_id / 发起 → 接收 / 状态 / 优先级），
+      {/* Subtitle — the "UI truth" line — and the stream's own status (was a `connected` row). */}
+      <View testID="logs-intro" style={{ paddingHorizontal: spacing.lg, paddingTop: spacing.md, paddingBottom: spacing.sm, gap: 4 }}>
+        <Text style={{ color: colors.textMuted, fontSize: 12, lineHeight: 17 }}>
+          显示网络任务流转（发起 → 接收 / 状态 / task_id），
           <Text style={{ fontWeight: '600' }}>不含消息内容</Text> — 看内容请到对应会话
         </Text>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm }}>
+          <Text testID="logs-status-line" style={{ flex: 1, color: colors.textMuted, fontSize: 11 }} numberOfLines={1}>{statusLine}</Text>
+        </View>
       </View>
 
-      {/* Counter */}
-      {state.kind === 'ready' ? (
-        <View
-          testID="logs-count"
-          style={{
-            paddingHorizontal: spacing.lg,
-            paddingBottom: spacing.sm,
-            flexDirection: 'row',
-            justifyContent: 'space-between',
-          }}
-        >
-          <Text style={{ color: colors.textMuted, fontSize: 11 }}>
-            {events.length} / {LOGS_MAX}
-            {droppedTotal > 0 ? `（已丢弃 ${droppedTotal}）` : ''}
-          </Text>
-          {paused ? (
-            <Text style={{ color: colors.accent, fontSize: 11 }}>已暂停自动滚</Text>
-          ) : null}
-        </View>
-      ) : null}
-
-      {/* Body */}
-      {state.kind === 'connecting' ? (
+      {loading ? (
         <View style={appStyles.center} testID="logs-connecting">
           <ActivityIndicator color={colors.accent} />
-          <Text style={{ color: colors.textMuted, fontSize: 12, marginTop: spacing.sm }}>
-            正在连接事件流…
-          </Text>
+          <Text style={{ color: colors.textMuted, fontSize: 12, marginTop: spacing.sm }}>正在加载最近的任务…</Text>
         </View>
-      ) : state.kind === 'disconnected' && events.length === 0 ? (
+      ) : hardFailure ? (
         <View style={appStyles.center} testID="logs-disconnected">
           <Text style={{ color: colors.failed, fontSize: 15, fontWeight: '600' }}>连接失败</Text>
           <Text style={{ color: colors.textSecondary, fontSize: 12, textAlign: 'center', marginTop: spacing.sm, paddingHorizontal: spacing.xl }}>
-            {connErr || '未知错误'}
+            {connErr || historyError || '未知错误'}
           </Text>
-          <Text style={{ color: colors.textMuted, fontSize: 11, marginTop: spacing.md }}>
-            正在自动重连…
-          </Text>
+          <Text style={{ color: colors.textMuted, fontSize: 11, marginTop: spacing.md }}>正在自动重连…</Text>
         </View>
-      ) : state.kind === 'empty-connected' ? (
-        <View style={appStyles.center} testID="logs-empty-connected">
-          <Text style={{ color: colors.textSecondary, fontSize: 14, fontWeight: '600' }}>
-            连接已建立，暂无事件
-          </Text>
-          <Text style={{ color: colors.textMuted, fontSize: 12, marginTop: spacing.sm }}>
-            这个网络当前很安静 — 事件到达后会自动追加到底部
-          </Text>
+      ) : events.length === 0 ? (
+        <View style={appStyles.center} testID="logs-empty">
+          <Ionicons name="pulse-outline" size={36} color={colors.textMuted} />
+          <Text style={{ color: colors.textSecondary, fontSize: 14, fontWeight: '600', marginTop: spacing.sm }}>{FEED_EMPTY_TITLE}</Text>
+          <Text style={{ color: colors.textMuted, fontSize: 12, marginTop: spacing.xs }}>有新的任务派发或回复时会实时出现在这里</Text>
         </View>
       ) : (
         <View style={{ flex: 1 }}>
-          <FlatList
-            ref={listRef}
-            data={events}
-            keyExtractor={(_, i) => `ev-${i}`}
-            contentContainerStyle={{ padding: spacing.lg, gap: spacing.sm }}
-            onScroll={onScroll}
-            scrollEventThrottle={16}
-            testID="logs-list"
-            renderItem={({ item }) => <EventRow ev={item} now={Date.now()} />}
-          />
-          {paused ? (
-            <Pressable
-              onPress={jumpToBottom}
-              testID="logs-jump-bottom"
-              style={{
-                position: 'absolute',
-                bottom: spacing.xl,
-                alignSelf: 'center',
-                paddingHorizontal: spacing.lg,
-                paddingVertical: spacing.sm,
-                borderRadius: 999,
-                backgroundColor: colors.accent,
-              }}
-            >
-              <Text style={{ color: colors.bg, fontSize: 13, fontWeight: '600' }}>
-                ↓ 跳到底
-              </Text>
-            </Pressable>
-          ) : null}
-          {/* Transient disconnected banner (when we DO have prior events —
-              keep them visible; overlay the state) */}
-          {state.kind === 'disconnected' && events.length > 0 ? (
+          {conn === 'disconnected' ? (
             <View
               testID="logs-disconnected-banner"
               style={{
-                position: 'absolute',
-                top: 0,
-                left: 0,
-                right: 0,
                 backgroundColor: colors.failed + '22',
-                borderBottomColor: colors.failed,
-                borderBottomWidth: 1,
-                paddingHorizontal: spacing.lg,
+                borderRadius: 8,
+                marginHorizontal: spacing.lg,
+                marginBottom: spacing.sm,
+                paddingHorizontal: spacing.md,
                 paddingVertical: spacing.sm,
               }}
             >
               <Text style={{ color: colors.failed, fontSize: 12, fontWeight: '600' }}>
-                连接已断，正在重连… {connErr ? `(${connErr})` : ''}
+                实时流已断开，正在重连… {connErr ? `(${connErr})` : ''}
               </Text>
             </View>
           ) : null}
+          <FlatList
+            data={events}
+            keyExtractor={item => item.key}
+            contentContainerStyle={{ paddingHorizontal: spacing.lg, paddingBottom: spacing.lg, gap: spacing.sm }}
+            testID="logs-list"
+            renderItem={({ item }) => (
+              <EventRow ev={item} now={now} onPress={clickTarget(item, cfg.username) ? () => openEvent(item) : undefined} />
+            )}
+          />
         </View>
       )}
     </View>
   );
 }
 
-function EventRow({ ev, now }: { ev: LogEvent; now: number }) {
-  const rawType = typeof ev.type === 'string' ? ev.type : '(unknown)';
-  const bucket = typeBucket(ev.type);
-  const bucketColor = BUCKET_COLOR[bucket];
-  const from = typeof ev.from === 'string' ? ev.from : '';
-  const to = typeof ev.to === 'string' ? ev.to : '';
-  const taskId = typeof ev.task_id === 'string' ? ev.task_id : '';
-  const priority = typeof ev.priority === 'string' ? ev.priority : '';
-  const status = typeof ev.status === 'string' ? ev.status : '';
-  const at = typeof ev._at === 'number' ? ev._at : now;
-  const time = formatEventTime(at, now);
-
+function EventRow({ ev, now, onPress }: { ev: FeedEvent; now: number; onPress?: () => void }) {
+  const m = feedRowModel(ev, now);
+  const chipColor = toneColor(m.chip.tone);
   return (
-    <View
-      style={{
-        backgroundColor: colors.card,
-        borderColor: colors.border,
-        borderWidth: 1,
-        borderRadius: 10,
-        padding: spacing.md,
-        gap: spacing.xs,
+    <Pressable
+      onPress={onPress}
+      disabled={!onPress}
+      accessibilityRole={onPress ? 'button' : undefined}
+      accessibilityLabel={m.a11y}
+      testID="logs-row"
+      style={state => {
+        const hovered = (state as { hovered?: boolean }).hovered;
+        return {
+          backgroundColor: onPress && (hovered || state.pressed) ? colors.rowHover : colors.card,
+          borderColor: colors.border,
+          borderWidth: 1,
+          borderRadius: 10,
+          paddingHorizontal: spacing.md,
+          paddingVertical: spacing.sm,
+          gap: 4,
+        };
       }}
     >
-      <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm }}>
-        {/* Type chip — colored by bucket; unknown types keep their raw
-            text so a new hub type doesn't get silently remapped */}
+      {/* 发起 → 接收 · 状态 · 时间. Names shrink (truncate) first; the arrow, chip and time never
+          shrink or wrap, so a phone-width row stays one line. */}
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.xs }}>
+        <AliasAvatar alias={m.from} size={18} />
+        <Text style={{ color: colors.text, fontSize: 13, fontWeight: '600', flexShrink: 1, minWidth: 0 }} numberOfLines={1}>{m.from}</Text>
+        <Text style={{ color: colors.textMuted, fontSize: 12, flexShrink: 0 }}>→</Text>
+        <AliasAvatar alias={m.to} size={18} />
+        <Text style={{ color: colors.text, fontSize: 13, fontWeight: '600', flexShrink: 1, minWidth: 0 }} numberOfLines={1}>{m.to}</Text>
         <View
-          testID={`logs-row-type-${bucket}`}
-          style={{
-            paddingHorizontal: spacing.sm,
-            paddingVertical: 2,
-            borderRadius: 6,
-            backgroundColor: bucketColor + '22',
-            borderColor: bucketColor,
-            borderWidth: 1,
-          }}
+          testID="logs-row-status"
+          style={{ flexShrink: 0, marginLeft: spacing.xs, paddingHorizontal: 6, paddingVertical: 1, borderRadius: 6, backgroundColor: chipColor + '22' }}
         >
-          <Text style={{ color: bucketColor, fontSize: 10, fontWeight: '600' }}>{rawType}</Text>
+          <Text style={{ color: chipColor, fontSize: 11, fontWeight: '600' }} numberOfLines={1}>{m.chip.label}</Text>
         </View>
-        {status ? (
-          <Text style={{ color: colors.textSecondary, fontSize: 11 }}>{status}</Text>
-        ) : null}
-        {priority === 'high' ? (
-          <Text style={{ color: colors.failed, fontSize: 10, fontWeight: '600' }}>HIGH</Text>
-        ) : null}
-        <View style={{ flex: 1 }} />
-        <Text style={{ color: colors.textMuted, fontSize: 10 }}>{time}</Text>
+        <View style={{ flex: 1, minWidth: spacing.xs }} />
+        <Text style={{ color: colors.textMuted, fontSize: 11, flexShrink: 0 }} numberOfLines={1}>{m.time}</Text>
       </View>
-      {(from || to) ? (
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.xs }}>
-          {from ? <AliasAvatar alias={from} size={18} /> : null}
-          {from ? <Text style={{ color: colors.text, fontSize: 12 }} numberOfLines={1}>{from}</Text> : null}
-          <Text style={{ color: colors.textMuted, fontSize: 12 }}>→</Text>
-          {to ? <AliasAvatar alias={to} size={18} /> : null}
-          <Text style={{ color: colors.text, fontSize: 12 }} numberOfLines={1}>{to || '(未指定)'}</Text>
+      {m.taskId || m.high ? (
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm }}>
+          {m.high ? <Text style={{ color: colors.failed, fontSize: 10, fontWeight: '600', flexShrink: 0 }}>高优先</Text> : null}
+          {m.taskId ? (
+            <Text selectable style={{ flexShrink: 1, color: colors.textMuted, fontFamily: 'monospace', fontSize: 10, lineHeight: 14 }} numberOfLines={1}>
+              {m.taskId}
+            </Text>
+          ) : null}
         </View>
       ) : null}
-      {taskId ? (
-        <Text
-          selectable
-          style={{ color: colors.textMuted, fontFamily: 'monospace', fontSize: 10 }}
-          numberOfLines={1}
-        >
-          {taskId}
-        </Text>
-      ) : null}
-    </View>
+    </Pressable>
   );
 }
