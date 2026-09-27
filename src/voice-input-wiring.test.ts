@@ -88,7 +88,8 @@ ck('纯网页不退回 localStorage 存密钥', !/localStorage\s*[.[]/.test(stor
 
 // ── 录音:两条路 ──
 ck('手机:expo-audio AudioStream 16 kHz int16', /useAudioStream\(\{\s*sampleRate: TARGET_SAMPLE_RATE,\s*channels: 1,\s*encoding: 'int16'/.test(recorder));
-ck('桌面/网页:getUserMedia + Web Audio', recorder.includes('navigator.mediaDevices.getUserMedia') && recorder.includes('createScriptProcessor'));
+// 开流统一走 mic-device.ts(设置里选的麦克风;唯一 getUserMedia 调用点由 mic-device.test.ts 守)。
+ck('桌面/网页:openMicStream(所选麦克风)+ Web Audio', /await openMicStream\(\)/.test(recorder) && read('src/mic-device.ts').includes('md.getUserMedia(') && recorder.includes('createScriptProcessor'));
 ck('首次授权弹框打断手势 → 让用户再按一次', recorder.includes('permissionJustGranted: true'));
 ck('录音计时器只依赖 recording(电平刷新不会把它一直重建成永不触发)', /dispatchRef\.current\(\{ type: 'tick', now: t \}\); \}, 200\);\s*return \(\) => clearInterval\(id\);\s*\}, \[recording\]\);/.test(hook));
 ck('按住期间不让滚动容器抢手势', /onResponderTerminationRequest: \(\) => false/.test(hook));

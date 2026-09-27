@@ -3,8 +3,8 @@
 //   安卓 / iOS:expo-audio 的 AudioStream(原生 AudioRecord / AVAudioEngine),请求 16 kHz
 //              单声道 int16;设备给不了 16 kHz 时会回落到别的采样率,buffer 里带着实际值,
 //              voice-wav.ts 统一重采样。
-//   桌面(Tauri webview)/ 网页:getUserMedia + Web Audio(ScriptProcessor,WKWebView /
-//              WebView2 / Chromium 都有),float32 → int16。macOS 要 Info.plist 的
+//   桌面(Tauri webview)/ 网页:mic-device.ts 开流(设置里选的麦克风,那台没了回落系统默认)
+//              + Web Audio(ScriptProcessor,WKWebView / WebView2 / Chromium 都有),float32 → int16。macOS 要 Info.plist 的
 //              NSMicrophoneUsageDescription + hardened runtime 的 audio-input entitlement
 //              (src-tauri/Info.plist、Entitlements.plist),wry 自己会 grant 媒体权限请求。
 //
@@ -14,6 +14,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { Platform } from 'react-native';
 import { getRecordingPermissionsAsync, requestRecordingPermissionsAsync, setAudioModeAsync, useAudioStream } from 'expo-audio';
 import { float32ToInt16, levelOf, TARGET_SAMPLE_RATE } from './voice-wav';
+import { micApiAvailable, openMicStream } from './mic-device';
 
 export type Captured = { chunks: Int16Array[]; sampleRate: number; channels: number };
 
@@ -44,10 +45,9 @@ const isNative = Platform.OS === 'android' || Platform.OS === 'ios';
 type WebSession = { stream: MediaStream; ctx: AudioContext; node: ScriptProcessorNode; source: MediaStreamAudioSourceNode };
 
 const webSupported = (): boolean => {
-  const nav = (globalThis as { navigator?: Navigator }).navigator;
   const AC = (globalThis as { AudioContext?: unknown; webkitAudioContext?: unknown }).AudioContext
     ?? (globalThis as { webkitAudioContext?: unknown }).webkitAudioContext;
-  return !!nav?.mediaDevices?.getUserMedia && !!AC;
+  return micApiAvailable() && !!AC;
 };
 
 export function useVoiceRecorder(): VoiceRecorder {
@@ -137,7 +137,7 @@ export function useVoiceRecorder(): VoiceRecorder {
     }
     if (!webSupported()) return { ok: false, reason: '当前环境不支持录音' };
     try {
-      const media = await navigator.mediaDevices.getUserMedia({ audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true } });
+      const { stream: media } = await openMicStream();
       const AC = (globalThis as any).AudioContext ?? (globalThis as any).webkitAudioContext;
       const ctx: AudioContext = new AC();
       const source = ctx.createMediaStreamSource(media);
