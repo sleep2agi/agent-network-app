@@ -38,8 +38,59 @@ ck('默认:⌘K 搜索 / ⌘, 设置 / ⌘1..5 切 tab', defs['nav.search'] === 
 ck('默认组合互不重复', new Set(Object.values(defs)).size === M.SHORTCUTS.length);
 ck('默认组合都能通过自己的录入校验', M.SHORTCUTS.every(s => M.judgeCapture(s.id, s.defaultCombo, defs, true).ok));
 ck('默认组合不碰保留 / 固定', M.SHORTCUTS.every(s => !M.RESERVED_COMBOS[s.defaultCombo] && !M.FIXED_SHORTCUTS.some(f => f.combos.includes(s.defaultCombo))));
-ck('每个 id 都有动作', M.SHORTCUTS.every(s => { const a = M.shortcutAction(s.id); return a.kind === 'agentSearch' || !!a.screen; }));
+ck('每个 id 都有动作', M.SHORTCUTS.every(s => { const a = M.shortcutAction(s.id); return a.kind === 'agentSearch' || a.kind === 'voice' || !!a.screen; }));
 ck('动作:⌘K=搜索、⌘,=设置、⌘3=定时', M.shortcutAction('nav.search').kind === 'agentSearch' && JSON.stringify(M.shortcutAction('nav.settings')) === '{"kind":"screen","screen":"settings"}' && JSON.stringify(M.shortcutAction('nav.tab.scheduled')) === '{"kind":"screen","screen":"scheduled"}');
+
+// ── 语音两条(输入组)──
+{
+  const hold = M.SHORTCUTS.find(s => s.id === 'input.voiceHold');
+  const toggle = M.SHORTCUTS.find(s => s.id === 'input.voiceToggle');
+  ck('输入组有「按键说话」「语音输入开关」两条可改快捷键', hold?.group === 'input' && hold.label === '按键说话' && toggle?.group === 'input' && toggle.label === '语音输入开关');
+  ck('默认:按住说话 = Mod+Shift+Space,开关 = Mod+Shift+M', defs['input.voiceHold'] === 'Mod+Shift+Space' && defs['input.voiceToggle'] === 'Mod+Shift+M');
+  ck('按 OS 的默认:Windows / Linux 显示 Ctrl Shift Space · Ctrl Shift M', JSON.stringify(M.comboChips(defs['input.voiceHold'], false)) === '["Ctrl","Shift","Space"]' && JSON.stringify(M.comboChips(defs['input.voiceToggle'], false)) === '["Ctrl","Shift","M"]');
+  ck('按 OS 的默认:mac 显示 ⌘ ⇧ Space · ⌘ ⇧ M', JSON.stringify(M.comboChips(defs['input.voiceHold'], true)) === '["⌘","⇧","Space"]' && JSON.stringify(M.comboChips(defs['input.voiceToggle'], true)) === '["⌘","⇧","M"]');
+  ck('键盘事件 → 默认组合:Windows Ctrl+Shift+Space / mac ⌘⇧Space 都认成 Mod+Shift+Space',
+    M.comboFromEvent({ key: ' ', code: 'Space', ctrlKey: true, shiftKey: true }, false) === 'Mod+Shift+Space'
+    && M.comboFromEvent({ key: ' ', code: 'Space', metaKey: true, shiftKey: true }, true) === 'Mod+Shift+Space'
+    && M.shortcutForCombo(defs, 'Mod+Shift+Space') === 'input.voiceHold' && M.shortcutForCombo(defs, 'Mod+Shift+M') === 'input.voiceToggle');
+  ck('动作:两条都是 voice(hold / toggle)', JSON.stringify(M.shortcutAction('input.voiceHold')) === '{"kind":"voice","mode":"hold"}' && JSON.stringify(M.shortcutAction('input.voiceToggle')) === '{"kind":"voice","mode":"toggle"}');
+  // 不选 Ctrl+Space / ⌥Space 的理由写成断言:它们在录入时就会被拒。
+  const winCtrlSpace = M.judgeCapture('input.voiceHold', 'Mod+Space', defs, false);
+  ck('Windows / Linux:Ctrl+Space 是输入法中 / 英切换,拒绝', !winCtrlSpace.ok && winCtrlSpace.reason === 'reserved' && winCtrlSpace.message.includes('输入法'), JSON.stringify(winCtrlSpace));
+  const macCmdSpace = M.judgeCapture('input.voiceHold', 'Mod+Space', defs, true);
+  ck('mac:⌘Space 是 Spotlight,拒绝', !macCmdSpace.ok && macCmdSpace.message.includes('Spotlight'));
+  const macCtrlSpace = M.judgeCapture('input.voiceHold', 'Ctrl+Space', defs, true);
+  ck('mac:⌃Space 是切换输入法,拒绝', !macCtrlSpace.ok && macCtrlSpace.message.includes('输入法'));
+  ck('mac:⌥Space(只带 ⌥)按录入规则拒绝', (() => { const v = M.judgeCapture('input.voiceHold', 'Alt+Space', defs, true); return !v.ok && v.reason === 'needsModifier'; })());
+  ck('默认组合在两个平台上都不碰系统保留', M.SHORTCUTS.every(s => !M.OS_RESERVED_COMBOS.mac[s.defaultCombo] && !M.OS_RESERVED_COMBOS.other[s.defaultCombo]));
+  ck('默认组合在两个平台上都能通过录入校验', M.SHORTCUTS.every(s => M.judgeCapture(s.id, s.defaultCombo, defs, true).ok && M.judgeCapture(s.id, s.defaultCombo, defs, false).ok));
+  const clash = M.judgeCapture('nav.search', 'Mod+Shift+Space', defs, false);
+  ck('冲突检测:把搜索改成 Ctrl+Shift+Space → 与「按键说话」冲突', !clash.ok && clash.reason === 'conflict' && clash.conflictWith === 'input.voiceHold' && clash.message.includes('按键说话'));
+  const clash2 = M.judgeCapture('input.voiceHold', 'Mod+Shift+M', defs, false);
+  ck('冲突检测:按住说话改成开关的组合 → 点名「语音输入开关」', !clash2.ok && clash2.conflictWith === 'input.voiceToggle');
+  ck('冲突检测:按住说话改成 Ctrl+2 → 与「切换到 任务」冲突', (() => { const v = M.judgeCapture('input.voiceHold', 'Mod+2', defs, false); return !v.ok && v.message.includes('切换到 任务'); })());
+  ck('可以改成 F8(F 键不必带修饰)', M.judgeCapture('input.voiceHold', 'F8', defs, false).ok);
+  const moved = M.withBinding(M.EMPTY_PREFS, 'input.voiceHold', 'F8');
+  ck('改绑 + 恢复默认', M.resolveBindings(moved)['input.voiceHold'] === 'F8' && M.isCustomized(moved, 'input.voiceHold') && !M.isCustomized(M.withBinding(moved, 'input.voiceHold', null), 'input.voiceHold'));
+  const stored = M.parseShortcutPrefs(M.serializeShortcutPrefs({ overrides: { 'input.voiceToggle': 'Mod+Alt+V' }, sendKey: 'enter' }));
+  ck('语音快捷键的覆盖能存能读', stored.overrides['input.voiceToggle'] === 'Mod+Alt+V');
+}
+
+// ── 标签:一律中文,不中英混排(owner 09-27 截图:「切换到 Tasks」「切换到 Messages」)──
+{
+  const tabLabels = M.SHORTCUTS.filter(s => s.id.startsWith('nav.tab.')).map(s => s.label);
+  ck('导航 tab 标签 = 切换到 会话 / 任务 / 定时任务 / 消息 / 服务器', JSON.stringify(tabLabels) === JSON.stringify(['切换到 会话', '切换到 任务', '切换到 定时任务', '切换到 消息', '切换到 服务器']), tabLabels.join(','));
+  const english = /[A-Za-z]{2,}/;
+  const all = [...M.SHORTCUTS.map(s => s.label), ...M.FIXED_SHORTCUTS.map(f => f.label), ...M.SHORTCUT_GROUPS.map(g => g.label)];
+  const bad = all.filter(l => english.test(l));
+  ck('快捷键页所有行标签 / 分组名里没有英文单词', bad.length === 0, bad.join(' | '));
+  // 页面上写死的文案(发送消息 / 换行 / 随发送键 / 固定 / 页脚)也扫一遍;键帽(Ctrl / Shift / Space / Enter / Esc)是键名,不算。
+  const page = read('src/ShortcutsSettings.tsx');
+  const texts = [...page.matchAll(/>([^<>{}\n]*[\u4e00-\u9fff][^<>{}\n]*)</g)].map(m => m[1].trim());
+  const KEY_NAMES = /\b(?:Esc|Ctrl|Shift|Space|Enter|Alt|Tab)\b/g;
+  const badText = texts.filter(t => english.test(t.replace(KEY_NAMES, '')));
+  ck('快捷键页写死的中文文案里没有夹英文', texts.length >= 5 && badText.length === 0, `${texts.length} texts; ${badText.join(' | ')}`);
+}
 
 // tab 快捷键和桌面导航栏真实顺序一致(App.tsx DESKTOP_TABS,去掉设置)。
 {
@@ -118,6 +169,16 @@ ck('动作:⌘K=搜索、⌘,=设置、⌘3=定时', M.shortcutAction('nav.searc
   const ws = app.slice(app.indexOf('function DesktopWorkspace('));
   ck('DesktopWorkspace 在捕获阶段挂全局 keydown(RN-web TextInput 会 stopPropagation)并按存储里的绑定执行', ws.includes("doc.addEventListener('keydown', onKey, true)") && ws.includes('shortcutForCombo(shortcutBindings(), comboFromEvent(event, mac))'));
   ck('录入中 / 输入法组词中不执行', ws.includes('shortcutCaptureActive()') && ws.includes('event.isComposing'));
+  ck('语音快捷键落到 DesktopWorkspace = 没有会话 → 提示「先打开一个会话」(按住不放不重复提示)', ws.includes("action.kind === 'voice'") && ws.includes('if (!event.repeat) setShortcutToast(NEED_COMPOSER_NOTICE)') && ws.includes('<ShortcutToast text={shortcutToast} />'));
+  const chat = read('src/ChatScreen.tsx');
+  ck('ChatScreen:语音快捷键在 window 捕获阶段(先于 DesktopWorkspace 的 document 捕获)接 keydown / keyup,失焦 / 隐藏也喂进去',
+    chat.includes("win.addEventListener('keydown', onKeyDown, true)") && chat.includes("win.addEventListener('keyup', onKeyUp, true)") && chat.includes("win.addEventListener('blur', onBlur)") && chat.includes("addEventListener?.('visibilitychange', onVisibility)"));
+  ck('ChatScreen:按下 / 松开 / 取消 = 录音条的 开始(点 🎤)/ 完成 / 取消(同一条插到光标处的路)',
+    chat.includes('kbdVoiceRef.current = { voice, start: desktopMicClick, done: desktopVoiceDone, cancel: desktopVoiceCancel };') && /effect === 'release'\) done\(\);\s*else if \(r\.effect === 'cancel'\) cancel\(\);/.test(chat));
+  ck('ChatScreen:录音中 / 输入法组词中 / 设置页录入中不处理', chat.includes('if (e.isComposing || shortcutCaptureActive()) return;'));
+  ck('ChatScreen:快捷键录音用输入框里的同一条录音条,提示换成快捷键的说法', chat.includes('<DesktopVoiceBar voice={voice} onDone={desktopVoiceDone} onCancel={desktopVoiceCancel} hint={kbdVoice ? kbdVoiceHint(') && !chat.includes('VoiceShortcutIndicator'));
+  const page = read('src/ShortcutsSettings.tsx');
+  ck('设置页:输入组渲染语音两条可改行(与导航同一个 BindableRow:录入 / 冲突提示 / 恢复默认)', page.includes("SHORTCUTS.filter(d => d.group === 'input').map(d => <BindableRow") && page.includes("SHORTCUTS.filter(d => d.group === 'nav').map((d, i) => <BindableRow"));
   const agents = read('src/AgentsScreen.tsx');
   ck('Agents 列表接 ⌘K:露出并聚焦搜索框', agents.includes('subscribeAgentSearchFocus(take)') && agents.includes('sessions.length > 10 || searchOpen || query') && agents.includes('ref={searchRef}'));
   const settings = read('src/SettingsScreen.tsx');

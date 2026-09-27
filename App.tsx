@@ -61,6 +61,8 @@ import { loadChatPins, saveChatPins, togglePinned } from './src/chat-pins';
 import { ROW_MENU_EMPTY_HINT } from './src/agent-row-menu';
 import { bindUnreadProfile } from './src/unread-store';
 import { openRememberedChatWindow } from './src/desktop-chat-windows';
+import { NEED_COMPOSER_NOTICE } from './src/voice-shortcut-model';
+import { ShortcutToast } from './src/ShortcutToast';
 import { activateHubProfile, LOCAL_HUB_PROFILE_ID, localHubStatus, startLocalHub } from './src/local-hub';
 import UnreadBadgeFixtureScreen, { readWebFixture } from './src/UnreadBadgeFixtureScreen';
 import NotifySettingsFixtureScreen, { readNotifyFixture } from './src/NotifySettingsFixtureScreen';
@@ -954,6 +956,12 @@ function DesktopWorkspace({ cfg, screen, setScreen, onLogout, onLocalDataDeleted
   const serverWorkspace = ['server', 'serverNodes', 'serverNodeDetail', 'logs', 'picker', 'wizard'].includes(screen.name);
   // 设置 → 快捷键(src/shortcuts-model.ts):主窗口的全局键盘快捷键。组合可改,读的是最新存储;
   // 设置页正在录入新组合时不执行。⌘K:列表栏是服务器侧栏时先切回 Agents,再请求聚焦搜索框。
+  const [shortcutToast, setShortcutToast] = useState<string | null>(null);
+  useEffect(() => {
+    if (!shortcutToast) return;
+    const id = setTimeout(() => setShortcutToast(null), 2000);
+    return () => clearTimeout(id);
+  }, [shortcutToast]);
   const serverWorkspaceRef = useRef(serverWorkspace);
   serverWorkspaceRef.current = serverWorkspace;
   useEffect(() => {
@@ -966,6 +974,11 @@ function DesktopWorkspace({ cfg, screen, setScreen, onLogout, onLocalDataDeleted
       if (!id) return;
       event.preventDefault();
       const action = shortcutAction(id);
+      // 语音快捷键:会话页开着时 ChatScreen 在 window 捕获阶段已经接走(到不了这里);到了这里 = 没有输入框。
+      if (action.kind === 'voice') {
+        if (!event.repeat) setShortcutToast(NEED_COMPOSER_NOTICE);
+        return;
+      }
       if (action.kind === 'agentSearch') {
         if (serverWorkspaceRef.current) setScreen({ name: 'agents' });
         requestAgentSearchFocus();
@@ -1085,7 +1098,7 @@ function DesktopWorkspace({ cfg, screen, setScreen, onLogout, onLocalDataDeleted
           <AgentsScreen cfg={cfg} compact selectedAlias={screen.name === 'chat' || screen.name === 'nodeInfo' ? screen.alias : undefined} pinnedAliases={pinnedAliases} onTogglePin={togglePin} mutedAliases={mutedAliases} onToggleMute={toggleMute} onOpenChatWindow={alias => { void openRememberedChatWindow(alias, cfg.profileId, cfg.username || cfg.serverUrl); }} onOpenChat={alias => setScreen({ name: 'chat', alias })} onOpenPicker={() => setScreen({ name: 'picker' })} onOpenNodeDetail={alias => setScreen({ name: 'nodeDetail', alias })} />
         )}
       </View>
-      <View style={desktopStyles.content}>{content}</View>
+      <View style={desktopStyles.content}>{content}<ShortcutToast text={shortcutToast} /></View>
     </View>
   );
 }

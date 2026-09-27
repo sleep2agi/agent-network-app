@@ -100,7 +100,7 @@ try {
   }
   console.log('\nid                    rowTop  rowH  labelX  rowMid  labelMid  chipsMid  Δchips  chipsRight');
   for (const r of rows) console.log(`${r.id.padEnd(20)} ${r.rowTop.toFixed(1).padStart(7)} ${r.rowH.toFixed(1).padStart(5)} ${r.labelX.toFixed(1).padStart(7)} ${r.rowMid.toFixed(1).padStart(7)} ${r.labelMid.toFixed(1).padStart(9)} ${r.rightMid.toFixed(1).padStart(9)} ${(r.rightMid - r.rowMid).toFixed(2).padStart(7)} ${r.rightEnd.toFixed(1).padStart(10)}`);
-  ck(`layout: ${rows.length} 行(导航 7 + 会话 4 + 输入 3)`, rows.length === 14, String(rows.length));
+  ck(`layout: ${rows.length} 行(导航 7 + 会话 4 + 输入 5)`, rows.length === 16, String(rows.length));
   const xs = rows.map(r => r.labelX);
   ck('layout: 所有标签左边缘相等 ±1px', Math.max(...xs) - Math.min(...xs) <= 1, `${Math.min(...xs)}..${Math.max(...xs)}`);
   const worst = rows.reduce((m, r) => Math.max(m, Math.abs(r.rightMid - r.rowMid)), 0);
