@@ -819,6 +819,10 @@ export interface HostSupervisorDaemon {
    *  绝对年龄 = (now - last_seen_at) + 本值 —— daemon 只给时长,
    *  绝对时间由 hub/本地的钟出,它自己的钟偏移污染不到这个数。 */
   create_capability_observed_ms_ago?: number;
+  /** 新建节点的默认工作目录根(daemon 所在机器上的绝对路径)。只有 hub 与 daemon 都支持
+   *  node_spec.workdir、且调用者是 admin/owner 时才出现;缺席 = 不支持,向导隐藏「工作目录」行。
+   *  见 src/create-node-workdir.ts。 */
+  default_workdir_root?: string;
 }
 export type HostSupervisorListResult =
   | { ok: true; count: number; daemons: HostSupervisorDaemon[] }
@@ -894,6 +898,8 @@ export interface CreateNodeRequest {
     runtime: string;
     model?: string;
     flags?: Record<string, unknown>;
+    /** 只在 daemon 带 default_workdir_root 时发送(老 daemon 会忽略它,节点落在别处)。 */
+    workdir?: string;
   };
 }
 import type { CreateRequestRow } from './create-request-status';
