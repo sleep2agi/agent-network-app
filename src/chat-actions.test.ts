@@ -45,6 +45,14 @@ ck('旧 WebView 输入法 keyCode=229 不发送', shouldSendOnEnter({ key: 'Ente
 ck('旧 WebView 输入法 which=229 不发送', shouldSendOnEnter({ key: 'Enter', which: 229 }) === false);
 ck('输入法 Process 键不发送', shouldSendOnEnter({ key: 'Process' }) === false);
 ck('其它按键不发送', shouldSendOnEnter({ key: 'a' }) === false);
+// 设置 → 快捷键:发送改成 Ctrl/⌘+Enter
+ck('modEnter:Ctrl+Enter 发送', shouldSendOnEnter({ key: 'Enter', ctrlKey: true }, 'modEnter') === true);
+ck('modEnter:⌘+Enter 发送', shouldSendOnEnter({ key: 'Enter', metaKey: true }, 'modEnter') === true);
+ck('modEnter:裸 Enter 换行', shouldSendOnEnter({ key: 'Enter' }, 'modEnter') === false);
+ck('modEnter:Shift+Enter 换行', shouldSendOnEnter({ key: 'Enter', shiftKey: true }, 'modEnter') === false);
+ck('modEnter:Ctrl+Shift+Enter 不发送', shouldSendOnEnter({ key: 'Enter', ctrlKey: true, shiftKey: true }, 'modEnter') === false);
+ck('modEnter:输入法组词中不发送', shouldSendOnEnter({ key: 'Enter', ctrlKey: true, isComposing: true }, 'modEnter') === false && shouldSendOnEnter({ key: 'Enter', metaKey: true, keyCode: 229 }, 'modEnter') === false);
+ck('默认参数 = enter 模式', shouldSendOnEnter({ key: 'Enter' }) === shouldSendOnEnter({ key: 'Enter' }, 'enter'));
 const base = Date.parse('2026-08-23T08:00:00.000Z');
 ck('Hub 出现同内容近时消息后确认并清除未送达副本', confirmedOutboxIds(
   [{ id: 'retry-1', content: 'hello', createdAt: base }],
@@ -93,7 +101,9 @@ ck('#178 无 _localId 的本地项仍被丢弃',
 
 const chatSource = fs.readFileSync(path.join(process.cwd(), 'src/ChatScreen.tsx'), 'utf8');
 ck('桌面输入区使用独立微信式 composer', chatSource.includes('styles.desktopComposer'));
-ck('桌面输入区显示快捷键提示', chatSource.includes('Enter 发送 · Shift/Ctrl/⌘+Enter 换行'));
+ck('桌面输入区显示快捷键提示', chatSource.includes('composerShortcutHint(sendKey, isMacKeyboard())') && chatActions.composerShortcutHint('enter', false) === 'Enter 发送 · Shift/Ctrl/⌘+Enter 换行');
+ck('快捷键提示跟随发送键:Ctrl/⌘+Enter 模式', chatActions.composerShortcutHint('modEnter', true) === '⌘+Enter 发送 · Enter 换行' && chatActions.composerShortcutHint('modEnter', false) === 'Ctrl+Enter 发送 · Enter 换行');
+ck('两处桌面输入框都按设置的发送键判定', (chatSource.match(/shouldSendOnEnter\(key, sendKey\)/g) ?? []).length === 2 && !/shouldSendOnEnter\(key\)/.test(chatSource));
 // ---- 2026-09-15 微信式引用条(Vincent:抄微信的引用设计) ----
 {
   const { parseQuoted, quoteLabel, compactQuoteText } = chatActions;

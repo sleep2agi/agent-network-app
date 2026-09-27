@@ -10,6 +10,7 @@ import { ActivityIndicator, Platform, Pressable, RefreshControl, SectionList, St
 import { Text, TextInput } from './ui-text';
 import { Ionicons } from './icons';
 import AliasAvatar from './AliasAvatar';
+import { consumeAgentSearchFocus, subscribeAgentSearchFocus } from './shortcuts-store';
 import { isAgentOnline } from './chat-actions';
 import { fetchStatus, fetchUserMessages, takeStatusPrefetch, type HubConfig, type Session,
   ackAgentMessages,
@@ -107,6 +108,30 @@ export default function AgentsScreen({
   const [refreshing, setRefreshing] = useState(false);
   const [failed, setFailed] = useState(false);
   const [query, setQuery] = useState('');
+  // 设置 → 快捷键 的「搜索 agent」(默认 ⌘/Ctrl+K,App.tsx DesktopWorkspace 发起):只有桌面列表栏
+  // (compact)接。搜索框平时 > 10 个 agent 才出现;按了快捷键就算 agent 少也临时露出来并聚焦。
+  // 从别的页切回来时列表刚挂上、会话还在加载,搜索框可能还没渲染:记下「要聚焦」,等它出现的那次渲染后再聚焦。
+  const searchRef = useRef<any>(null);
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [, setSearchFocusTick] = useState(0);
+  const wantSearchFocus = useRef(false);
+  useEffect(() => {
+    if (!compact) return;
+    const take = () => {
+      if (!consumeAgentSearchFocus()) return;
+      wantSearchFocus.current = true;
+      setSearchOpen(true);
+      setSearchFocusTick(n => n + 1);
+    };
+    take();
+    return subscribeAgentSearchFocus(take);
+  }, [compact]);
+  useEffect(() => {
+    if (!wantSearchFocus.current || !searchRef.current) return;
+    wantSearchFocus.current = false;
+    searchRef.current.focus?.();
+    searchRef.current.select?.();
+  });
   const [activeFilter, setActiveFilter] = useState<AgentListFilter | null>(filter ?? null);
   useEffect(() => { if (filter) setActiveFilter(filter); }, [filter]);
   const filtering = isFilterActive(activeFilter);
@@ -522,8 +547,8 @@ export default function AgentsScreen({
             <Ionicons name="add" size={24} color={colors.accent} />
           </Pressable>
         </View>
-        {sessions.length > 10 ? (
-          <TextInput style={[styles.search, compact && { backgroundColor: colors.subtleFill, borderWidth: 0, borderRadius: radius.sm }]} placeholder="搜索 agent…" placeholderTextColor={colors.textMuted} autoCapitalize="none" autoCorrect={false} value={query} onChangeText={setQuery} />
+        {sessions.length > 10 || searchOpen || query ? (
+          <TextInput ref={searchRef} testID="agents-search" style={[styles.search, compact && { backgroundColor: colors.subtleFill, borderWidth: 0, borderRadius: radius.sm }]} placeholder="搜索 agent…" placeholderTextColor={colors.textMuted} autoCapitalize="none" autoCorrect={false} value={query} onChangeText={setQuery} onBlur={() => { if (!query) setSearchOpen(false); }} />
         ) : null}
       </View>
       ) : (

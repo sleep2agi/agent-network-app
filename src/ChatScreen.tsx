@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { PanResponder, ActivityIndicator, Alert, BackHandler, FlatList, Image, Keyboard, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StatusBar, StyleSheet, useWindowDimensions, View } from 'react-native';
 import { Text, TextInput } from './ui-text';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -41,7 +41,8 @@ import { formatChatHeader, shouldShowTimeHeader } from './time';
 import { chooseHeaderLayout, NAME_MIN_WIDTH, type HeaderActionKey } from './chat-header-layout';
 import { echoSupersededByFetched } from './chat-echo';
 import { messageMenuGroups, selectionBarActions, type MessageMenuKey } from './message-menu-model';
-import { agentStatusLabel, buildQuote, compactQuoteText, confirmedOutboxIds, copyTextOf, copiedToastVisible, COPIED_TOAST_MS, parseQuoted, quoteLabel, type QuoteRef, mergeMessagesNewestFirst, msgKey, removeMessage, shouldShowJumpPill, nextUnread, jumpPillLabel, canSend, shouldSendOnEnter } from './chat-actions';
+import { agentStatusLabel, buildQuote, compactQuoteText, confirmedOutboxIds, copyTextOf, copiedToastVisible, COPIED_TOAST_MS, parseQuoted, quoteLabel, type QuoteRef, mergeMessagesNewestFirst, msgKey, removeMessage, shouldShowJumpPill, nextUnread, jumpPillLabel, canSend, shouldSendOnEnter, composerShortcutHint } from './chat-actions';
+import { isMacKeyboard, sendKeyPref, subscribeShortcuts } from './shortcuts-store';
 import type { NativeSyntheticEvent, NativeScrollEvent } from 'react-native';
 import { usePoll } from './usePoll';
 import { chatSearchState, isHighlighted, isStaleSearch, matchCountLabel, searchItems, shouldLoadOlderForSearch, stepHit, type SearchHit } from './chat-search';
@@ -249,6 +250,8 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
   const [hasOlder, setHasOlder] = useState(true);
   const [loadingOlder, setLoadingOlder] = useState(false);
   const [draft, setDraft] = useState('');
+  // 设置 → 快捷键:Enter 发送(默认)还是 Ctrl/⌘+Enter 发送。
+  const sendKey = useSyncExternalStore(subscribeShortcuts, sendKeyPref, sendKeyPref);
   // Fold/unfold remounts this screen (phone stack ⇄ two-pane); carry the unsent
   // draft across that remount only. Ordinary back/leave still drops it, as before.
   const draftHandoffKey = `chatDraft:${cfg.profileId ?? cfg.serverUrl}:${alias}`;
@@ -2202,7 +2205,7 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
             selection={forcedSelection}
             onKeyPress={(event) => {
               const key = event.nativeEvent as typeof event.nativeEvent & { ctrlKey?: boolean; metaKey?: boolean; shiftKey?: boolean; isComposing?: boolean; keyCode?: number; which?: number };
-              if (!shouldSendOnEnter(key)) return;
+              if (!shouldSendOnEnter(key, sendKey)) return;
               event.preventDefault?.();
               void submit();
             }}
@@ -2225,7 +2228,7 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
                   <Text style={[styles.priorityButtonText, sendPriority === 'high' && styles.priorityButtonTextActive]}>⚡ 优先</Text>
                 </Pressable>
               ) : null}
-              <Text style={styles.shortcutHint}>Enter 发送 · Shift/Ctrl/⌘+Enter 换行</Text>
+              <Text style={styles.shortcutHint} testID="composer-shortcut-hint">{composerShortcutHint(sendKey, isMacKeyboard())}</Text>
               {voice.available ? <VoiceMicButton voice={voice} size={20} handlers={voiceHandlersFor('desktopMic')} /> : null}
               <Pressable
                 style={({ pressed }) => [styles.desktopSend, !canSend(draft, attached.length > 0, sending) && styles.desktopSendDisabled, pressed && { opacity: 0.7 }]}
@@ -2310,7 +2313,7 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
               keyCode?: number;
               which?: number;
             };
-            if (!shouldSendOnEnter(key)) return;
+            if (!shouldSendOnEnter(key, sendKey)) return;
             event.preventDefault?.();
             void submit();
           }}

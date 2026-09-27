@@ -23,6 +23,7 @@ import { refreshNotifyDiagnostics, sendTestNotification } from './notifier-runti
 import XiaomiGuideModal from './XiaomiGuideModal';
 import VoiceSettingsSection from './VoiceSettingsSection';
 import UiScaleSettings from './UiScaleSettings';
+import ShortcutsSettings from './ShortcutsSettings';
 import { ds } from './ui-scale';
 import { playChime } from './chime';
 import { SETTINGS_CATEGORIES, activeCategoryKey, filterSettings, rememberSettingsCategory, rememberSettingsScroll, rememberedSettingsView, settingsPlatform, visibleRowKeys, type SettingsCategoryKey, type SettingsPlatform } from './settings-model';
@@ -669,6 +670,13 @@ export default function SettingsScreen({
             <View style={styles.section} testID="settings-section-voice">
               {heading('voice')}
               <VoiceSettingsSection showMode={show('voice', 'mode')} showCredentials={show('voice', 'credentials')} showTest={show('voice', 'test')} />
+            </View>
+          ) : null}
+
+          {sectionsToRender.includes('shortcuts') ? (
+            <View style={styles.section} testID="settings-section-shortcuts">
+              {heading('shortcuts')}
+              <ShortcutsSettings s={styles} showNav={show('shortcuts', 'nav')} showChat={show('shortcuts', 'chat')} showSend={show('shortcuts', 'send')} />
             </View>
           ) : null}
 

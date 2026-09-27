@@ -66,6 +66,8 @@ import TwoPaneDivider from './src/TwoPaneDivider';
 import { loadListPaneWidth, saveListPaneWidth } from './src/agent-list-prefs';
 import { bumpLayoutGeneration } from './src/layout-handoff';
 import MobileNavRail from './src/MobileNavRail';
+import { comboFromEvent, shortcutAction, shortcutForCombo } from './src/shortcuts-model';
+import { isMacKeyboard, requestAgentSearchFocus, shortcutBindings, shortcutCaptureActive } from './src/shortcuts-store';
 import { contentWidthBesideRail, mobileRailWidth, navActiveKey, navChromeFor, railShowsBrand, screenForNavPress } from './src/nav-chrome';
 
 type Screen =
@@ -922,6 +924,32 @@ function DesktopWorkspace({ cfg, screen, setScreen, onLogout, onLocalDataDeleted
   const mutedAliases = mutedAgents(notifySettings, notifyKey);
   const toggleMute = (alias: string) => { saveNotifySettings(toggleAgentMuted(loadNotifySettings(), notifyKey, alias)); };
   const serverWorkspace = ['server', 'serverNodes', 'serverNodeDetail', 'logs', 'picker', 'wizard'].includes(screen.name);
+  // 设置 → 快捷键(src/shortcuts-model.ts):主窗口的全局键盘快捷键。组合可改,读的是最新存储;
+  // 设置页正在录入新组合时不执行。⌘K:列表栏是服务器侧栏时先切回 Agents,再请求聚焦搜索框。
+  const serverWorkspaceRef = useRef(serverWorkspace);
+  serverWorkspaceRef.current = serverWorkspace;
+  useEffect(() => {
+    const doc = (globalThis as any).document;
+    if (!doc?.addEventListener) return;
+    const mac = isMacKeyboard();
+    const onKey = (event: KeyboardEvent) => {
+      if (event.defaultPrevented || event.isComposing || shortcutCaptureActive()) return;
+      const id = shortcutForCombo(shortcutBindings(), comboFromEvent(event, mac));
+      if (!id) return;
+      event.preventDefault();
+      const action = shortcutAction(id);
+      if (action.kind === 'agentSearch') {
+        if (serverWorkspaceRef.current) setScreen({ name: 'agents' });
+        requestAgentSearchFocus();
+        return;
+      }
+      setScreen({ name: action.screen } as Screen);
+    };
+    // 捕获阶段:RN-web 的 TextInput 在自己的 keydown 里 stopPropagation,冒泡阶段的监听在焦点落在
+    // 任何输入框(聊天输入框、agent 搜索框…)时一个键都收不到 —— 实测过:焦点在搜索框里按 Ctrl+2 不切页。
+    doc.addEventListener('keydown', onKey, true);
+    return () => doc.removeEventListener('keydown', onKey, true);
+  }, [setScreen]);
   const active = serverWorkspace ? 'server' : ['chat', 'nodeDetail', 'nodeInfo'].includes(screen.name) ? 'agents' : screen.name;
   const content = screen.name === 'chat' ? (
     <ChatScreen
