@@ -200,7 +200,7 @@ ck('wiring: prompt has no route picker and exactly one browser button', !/choose
 ck('wiring: prompt text comes from androidPromptView', prompt.includes('androidPromptView(update, { currentVersion })'));
 ck('wiring: prompt hydrates the store on mount (deletes the legacy pref at startup)', /useEffect\(\(\) => \{ void routePrefs\.hydrate\(\)/.test(prompt));
 ck('wiring: updater orders downloads via routeOrder and records success', updater.includes('routeOrder(prefs.snapshot().lastGood') && updater.includes('prefs.recordSuccess(route)'));
-ck('wiring: browser download goes through deps.openURL (Linking), not Markdown', updater.includes("Linking.openURL(url)") && !prompt.includes('MarkdownMessage'));
+ck('wiring: browser download goes through deps.openURL (open-external), not Markdown', updater.includes("openURL: url => openExternal(url)") && !prompt.includes('MarkdownMessage'));
 ck('wiring: settings has no 下载线路 row / route preference', !/updateRoute|settings-update-route|setPreference|routePreferenceSummary/.test(settings));
 ck('wiring: desktop prompt shows versions via desktopPromptView, no source line', desktopPrompt.includes('desktopPromptView(update, APP_VERSION)') && !desktopPrompt.includes('sourceLine'));
 // APK 直链只允许经 android-update-core 的构造函数拼出来(下划线文件名手拼过一次就会漏版本号/拼错)。

@@ -13,9 +13,9 @@ ck('仅允许 http/https 链接', isSafeMarkdownUrl('https://example.com') && !i
 ck('原始 HTML 只作为普通文本', parseMarkdownBlocks('<script>alert(1)</script>')[0]?.kind === 'paragraph');
 
 const messageSource = fs.readFileSync(path.join(process.cwd(), 'src/MarkdownMessage.tsx'), 'utf8');
-ck('Tauri Markdown 链接静态加载系统 opener', messageSource.includes("import { openUrl } from '@tauri-apps/plugin-opener'"));
+ck('Markdown 链接走统一外链出口 open-external', messageSource.includes("import { openExternal } from './open-external'") && messageSource.includes('await openExternal(url)'));
 ck('Markdown 链接点击不被外层气泡吞掉', messageSource.includes('event.stopPropagation()'));
-ck('非 Tauri Markdown 链接保留 Linking fallback', messageSource.includes('await Linking.openURL(url)'));
+ck('Markdown 链接不再自己分平台(Tauri/Linking 分支在 open-external.ts)', !messageSource.includes('Linking.openURL') && !messageSource.includes('@tauri-apps/plugin-opener'));
 // ── 行内:裸链接 + 词内 `_`(0.2.100,Vincent 安卓截图)──────────────────────────
 const J = (nodes: InlineNode[]) => JSON.stringify(nodes);
 const autolinks = (nodes: InlineNode[]): string[] => nodes.flatMap(n =>

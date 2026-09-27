@@ -1,19 +1,15 @@
 import { Fragment, useState, type ReactNode } from 'react';
-import { Linking, Platform, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { Platform, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { Text } from './ui-text';
-import { openUrl } from '@tauri-apps/plugin-opener';
 import { colors, onThemeChange, spacing } from './theme';
 import { isSafeMarkdownUrl, parseInline, parseMarkdownBlocks, type InlineNode } from './markdown-model';
 import { foldCode, foldLabel } from './markdown-code-fold';
+import { openExternal } from './open-external';
 import { stackedRows, tableLayoutFor } from './table-layout';
 
 export async function openMarkdownUrl(url: string) {
   if (!isSafeMarkdownUrl(url)) return;
-  if ((globalThis as any).__TAURI_INTERNALS__) {
-    await openUrl(url);
-    return;
-  }
-  await Linking.openURL(url);
+  await openExternal(url);
 }
 
 // 行内解析在 markdown-model.ts 的 parseInline(纯函数、有测试):裸链接 / 行内代码 / [文字](链接) 是原子段,

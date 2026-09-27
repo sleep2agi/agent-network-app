@@ -79,8 +79,8 @@ async function deps(): Promise<Deps> {
   if (testDeps) return testDeps;
   const FileSystem = await import('expo-file-system/legacy');
   const IntentLauncher = await import('expo-intent-launcher');
-  const { Linking } = await import('react-native');
-  return { FileSystem, IntentLauncher, openURL: url => Linking.openURL(url), hashFile: (uri, size) => hashApkFile(FileSystem, uri, size) };
+  const { openExternal } = await import('./open-external');
+  return { FileSystem, IntentLauncher, openURL: url => openExternal(url), hashFile: (uri, size) => hashApkFile(FileSystem, uri, size) };
 }
 
 /**
@@ -478,7 +478,7 @@ export function androidBrowserApkUrl(): string {
   return mirrorUrl ?? apkUrlForAsset('github', rel.version, rel.apk) ?? apkUrlFor('github', rel.version);
 }
 
-/** 「在浏览器中下载」:经 Linking 打开(地址里有下划线,不能当 Markdown 显示,会被吃成斜体)。 */
+/** 「在浏览器中下载」:经 open-external 打开(地址里有下划线,不能当 Markdown 显示,会被吃成斜体)。 */
 export async function openApkInBrowser(): Promise<void> {
   const { openURL } = await deps();
   await openURL(androidBrowserApkUrl());
