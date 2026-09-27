@@ -24,9 +24,9 @@ on:
   workflow_dispatch:
     inputs:
       mode:
-        description: "list = read-only counts; add = add the email below as an internal tester"
+        description: "list = read-only counts; add = add the email below as an internal tester; grant-builds = give the internal group all builds (and attach build_number if still missing)"
         type: choice
-        options: [list, add]
+        options: [list, add, grant-builds]
         default: list
       email:
         description: "Apple ID email of an App Store Connect user on the team (add mode, or to check membership in list mode). Masked in the log."
@@ -59,7 +59,7 @@ jobs:
           EMAIL=$(jq -r '.inputs.email // ""' "$GITHUB_EVENT_PATH" | tr -d '[:space:]'); if [ -n "$EMAIL" ]; then echo "::add-mask::$EMAIL"; fi
           set -euo pipefail
 
-          case "$MODE" in list|add) ;; *) echo "::error::mode must be list or add"; exit 1 ;; esac
+          case "$MODE" in list|add|grant-builds) ;; *) echo "::error::mode must be list, add or grant-builds"; exit 1 ;; esac
           case "$BUILD_NUMBER" in ''|*[!0-9]*) echo "::error::build_number must be numeric"; exit 1 ;; esac
           if [ "$MODE" = 'add' ] && [ -z "$EMAIL" ]; then
             echo "::error::add mode needs the email input"
@@ -152,8 +152,9 @@ jobs:
             | (map(select(.attributes.name == $name)) + .) | .[0].id // empty' "$groups_json")
           echo "Internal beta groups on the app: $internal_count"
           if [ -z "$group_id" ]; then
-            if [ "$MODE" = 'list' ]; then
-              echo "No internal beta group exists yet (list mode does not create one)."
+            if [ "$MODE" != 'add' ]; then
+              echo "No internal beta group exists yet ($MODE mode does not create one)."
+              [ "$MODE" = 'grant-builds' ] && { echo "::error::grant-builds needs an existing internal group"; exit 1; }
             else
               echo "Creating internal beta group \"$INTERNAL_GROUP_NAME\" (all builds available)."
               jq -n --arg app "$app_id" --arg name "$INTERNAL_GROUP_NAME" \
@@ -210,32 +211,73 @@ jobs:
             fi
           fi
 
-          # 5. Read-only summary. Counts and yes/no only, never emails.
           build_json="$RUNNER_TEMP/build.json"
           asc_get builds --data-urlencode "filter[app]=$app_id" --data-urlencode "filter[version]=$BUILD_NUMBER" --data-urlencode 'limit=2' > "$build_json"
           build_id=$(jq -r '.data[0].id // empty' "$build_json")
-          build_available=no
-          build_state=not-found
-          if [ -n "$build_id" ]; then
-            build_state=$(jq -r '.data[0].attributes.processingState // "UNKNOWN"' "$build_json")
-            if [ -n "$group_id" ]; then
-              all_builds=$(jq -r --arg id "$group_id" '.data[] | select(.id == $id) | .attributes.hasAccessToAllBuilds // false' "$groups_json")
-              [ -z "$all_builds" ] && all_builds=true   # a group created in this run has access to all builds
-              if [ "$all_builds" = 'true' ]; then
-                build_available=yes
-              else
-                asc_all "betaGroups/$group_id/relationships/builds?limit=200" "$RUNNER_TEMP/group-builds.json"
-                jq -e --arg b "$build_id" 'any(.data[]; .id == $b)' "$RUNNER_TEMP/group-builds.json" > /dev/null && build_available=yes
-              fi
+
+          # Read back from ASC (never trust a write response): the group's
+          # hasAccessToAllBuilds and whether the build is listed in its builds.
+          read_group_state() {
+            all_builds=no
+            build_listed=no
+            [ -n "$group_id" ] || return 0
+            asc_get "betaGroups/$group_id" > "$RUNNER_TEMP/group-now.json"
+            [ "$(jq -r '.data.attributes.hasAccessToAllBuilds // false' "$RUNNER_TEMP/group-now.json")" = 'true' ] && all_builds=yes
+            if [ -n "$build_id" ]; then
+              asc_all "betaGroups/$group_id/relationships/builds?limit=200" "$RUNNER_TEMP/group-builds.json"
+              jq -e --arg b "$build_id" 'any(.data[]; .id == $b)' "$RUNNER_TEMP/group-builds.json" > /dev/null && build_listed=yes
+            fi
+            return 0
+          }
+          read_group_state
+
+          # grant-builds: (1) hasAccessToAllBuilds=true on the internal group;
+          # (2) only if the build is still not listed afterwards, attach it explicitly.
+          if [ "$MODE" = 'grant-builds' ]; then
+            if [ "$all_builds" = 'yes' ]; then
+              echo "The internal group already has access to all builds."
+            else
+              echo "Setting hasAccessToAllBuilds=true on the internal group."
+              jq -n --arg id "$group_id" '{data:{type:"betaGroups",id:$id,attributes:{hasAccessToAllBuilds:true}}}' > "$RUNNER_TEMP/grant-body.json"
+              status=$(asc_write PATCH "betaGroups/$group_id" "$RUNNER_TEMP/grant-body.json" "$RUNNER_TEMP/grant-out.json")
+              case "$status" in 2??) echo "PATCH accepted (HTTP $status)." ;; *) explain_error "$status" "$RUNNER_TEMP/grant-out.json"; exit 1 ;; esac
+              read_group_state
+            fi
+            if [ -z "$build_id" ]; then
+              echo "::error::build $BUILD_NUMBER was not found on App Store Connect"
+              exit 1
+            fi
+            if [ "$build_listed" = 'yes' ]; then
+              echo "Build $BUILD_NUMBER is listed in the internal group's builds; no explicit attach needed."
+            else
+              echo "Build $BUILD_NUMBER is not listed in the group's builds after step 1; attaching it explicitly."
+              jq -n --arg id "$build_id" '{data:[{type:"builds",id:$id}]}' > "$RUNNER_TEMP/attach-body.json"
+              status=$(asc_write POST "betaGroups/$group_id/relationships/builds" "$RUNNER_TEMP/attach-body.json" "$RUNNER_TEMP/attach-out.json")
+              case "$status" in 2??) echo "Attach accepted (HTTP $status)." ;; *) explain_error "$status" "$RUNNER_TEMP/attach-out.json"; exit 1 ;; esac
+              read_group_state
             fi
           fi
+
+          # 5. Read-only summary (read back from ASC). Counts and yes/no only, never emails.
+          build_state=not-found
+          internal_state=not-found
+          if [ -n "$build_id" ]; then
+            build_state=$(jq -r '.data[0].attributes.processingState // "UNKNOWN"' "$build_json")
+            asc_get buildBetaDetails --data-urlencode "filter[build]=$build_id" --data-urlencode 'limit=2' > "$RUNNER_TEMP/build-beta.json"
+            internal_state=$(jq -r '.data[0].attributes.internalBuildState // "UNKNOWN"' "$RUNNER_TEMP/build-beta.json")
+          fi
+          build_available=no
+          if [ -n "$build_id" ] && { [ "$all_builds" = 'yes' ] || [ "$build_listed" = 'yes' ]; }; then build_available=yes; fi
 
           echo "TestFlight internal testers (emails intentionally omitted):"
           echo "  mode:                                  $MODE"
           echo "  internal groups:                       $internal_count"
           echo "  internal group \"$INTERNAL_GROUP_NAME\" present:      $([ -n "$group_id" ] && echo yes || echo no)"
           echo "  testers in that group:                 $(jq '.data | length' "$testers_json")"
+          echo "  group hasAccessToAllBuilds:            $all_builds"
+          echo "  build $BUILD_NUMBER listed in group builds:     $build_listed"
           echo "  build $BUILD_NUMBER processingState:            $build_state"
+          echo "  build $BUILD_NUMBER internalBuildState:         $internal_state"
           echo "  build $BUILD_NUMBER available to the group:     $build_available"
           if [ -n "$EMAIL" ]; then
             echo "  given Apple ID is an internal tester:  $in_group"
@@ -243,3 +285,7 @@ jobs:
             echo "  given Apple ID is an internal tester:  (no email given)"
           fi
           rm -f "$jwt_file" "$testers_json" "$RUNNER_TEMP/existing-tester.json"
+          if [ "$MODE" = 'grant-builds' ] && { [ "$all_builds" != 'yes' ] || [ "$build_listed" != 'yes' ]; }; then
+            echo "::error::after grant-builds the read-back shows hasAccessToAllBuilds=$all_builds, build listed=$build_listed"
+            exit 1
+          fi

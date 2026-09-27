@@ -13,7 +13,7 @@ const wf = fs.readFileSync(path, 'utf8').replace(/\r\n?/g, '\n');
 const code = wf.split('\n').filter((l) => !/^\s*#/.test(l)).join('\n');
 
 ck('workflow_dispatch only', /\non:\n  workflow_dispatch:\n/.test(wf) && !/\n  (push|pull_request|schedule|release):/.test(wf));
-ck('mode is a list/add choice, default list', /\n      mode:\n[\s\S]*?type: choice\n\s+options: \[list, add\]\n\s+default: list\n/.test(wf));
+ck('mode is a list/add/grant-builds choice, default list', /\n      mode:\n[\s\S]*?type: choice\n\s+options: \[list, add, grant-builds\]\n\s+default: list\n/.test(wf));
 ck('email input is optional with an empty default', /\n      email:\n[\s\S]*?required: false\n\s+default: ""\n/.test(wf));
 ck('runs in the protected macos-signing environment', /\n    environment: macos-signing\n/.test(wf));
 ck('read-only repository token', /\npermissions:\n  contents: read\n/.test(wf));
@@ -40,11 +40,11 @@ ck('request body with the email is deleted after use', run.includes('rm -f "$RUN
 
 // list never writes.
 const writes = run.split('\n').map((l, i) => ({ l, i })).filter(({ l }) => /asc_write (POST|PATCH|DELETE)/.test(l));
-ck('there are exactly two kinds of writes (create group, add tester)', writes.length === 3);
-const listGuard = run.indexOf(`if [ "$MODE" = 'list' ]; then`);
+ck('writes are exactly: create group, link tester, create tester, PATCH group, attach build', writes.length === 5);
+const listGuard = run.indexOf(`if [ "$MODE" != 'add' ]; then`);
 const addGuard = run.indexOf(`if [ "$MODE" = 'add' ]; then\n            if [ "$in_group" = 'yes' ]`);
 const groupCreate = run.indexOf('asc_write POST betaGroups ');
-ck('group creation sits in the else of a list-mode guard', listGuard > 0 && groupCreate > listGuard && run.slice(listGuard, groupCreate).includes('\n            else\n'));
+ck('group creation sits in the else of a not-add guard (list and grant-builds never create)', listGuard > 0 && groupCreate > listGuard && run.slice(listGuard, groupCreate).includes('\n            else\n'));
 ck('tester writes sit inside the add-mode block', addGuard > 0 && writes.filter(({ l }) => l.includes('betaTesters')).every(({ l }) => run.indexOf(l) > addGuard));
 ck('already-in-group short-circuits before any tester write', run.indexOf(`if [ "$in_group" = 'yes' ]; then`) < run.indexOf('asc_write POST "betaGroups/$group_id/relationships/betaTesters"'));
 
@@ -54,6 +54,22 @@ ck('new tester is created with the group relationship', run.includes('relationsh
 ck('created group is internal with all builds', run.includes('isInternalGroup:true,hasAccessToAllBuilds:true'));
 ck('rejection explains the App Store Connect user requirement', run.includes('Internal TestFlight testers must be App Store Connect users on team 446BLT75JZ'));
 ck('tester lists follow pagination', run.includes(`url=$(jq -r '.links.next // empty' "$page")`));
+
+// grant-builds: (1) hasAccessToAllBuilds, (2) attach only if still missing, both read back from ASC.
+const grantStart = run.indexOf(`if [ "$MODE" = 'grant-builds' ]; then\n            if [ "$all_builds" = 'yes' ]`);
+const grantEnd = run.indexOf('build_state=not-found');
+const grant = run.slice(grantStart, grantEnd);
+ck('grant-builds block exists before the summary', grantStart > 0 && grantEnd > grantStart);
+ck('grant PATCHes only hasAccessToAllBuilds:true on the group', grant.includes('attributes:{hasAccessToAllBuilds:true}') && grant.includes('asc_write PATCH "betaGroups/$group_id"'));
+ck('PATCH only when the read-back says the group lacks it', grant.indexOf(`if [ "$all_builds" = 'yes' ]; then`) >= 0 && grant.indexOf(`if [ "$all_builds" = 'yes' ]; then`) < grant.indexOf('asc_write PATCH'));
+const listedIf = grant.indexOf(`if [ "$build_listed" = 'yes' ]; then`);
+const attach = grant.indexOf('asc_write POST "betaGroups/$group_id/relationships/builds"');
+ck('explicit attach only in the else of "build listed after step 1"', listedIf > 0 && attach > listedIf && grant.slice(listedIf, attach).includes('\n            else\n') && grant.indexOf('asc_write PATCH') < listedIf);
+ck('state is re-read from ASC after each grant write', (grant.match(/\n\s+read_group_state\n/g) || []).length === 2);
+ck('read-back reads the group itself and its builds relationship', run.includes('asc_get "betaGroups/$group_id" >') && run.includes('betaGroups/$group_id/relationships/builds?limit=200'));
+ck('group and tester writes are not in the grant block', !/betaTesters|asc_write POST betaGroups /.test(grant));
+ck('summary reports internalBuildState from buildBetaDetails', run.includes("internalBuildState // \"UNKNOWN\"") && run.includes('internalBuildState:         $internal_state'));
+ck('grant-builds fails the job unless the read-back confirms both', run.includes(`if [ "$MODE" = 'grant-builds' ] && { [ "$all_builds" != 'yes' ] || [ "$build_listed" != 'yes' ]; }; then`));
 
 console.log(`ios TestFlight internal tester: ${p}/${t} checks passed`);
 process.exit(p === t ? 0 : 1);
