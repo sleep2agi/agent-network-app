@@ -8,12 +8,13 @@
 // 状态行只显示「已配置 ✓ …a1b2」。密钥栏留空点保存 = 不改。
 
 import { useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Linking, Pressable, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, Pressable, StyleSheet, View } from 'react-native';
 import { Text, TextInput } from './ui-text';
 import { colors, onThemeChange, radius, spacing } from './theme';
 import { clearVoiceCredentials, loadVoiceCredentials, saveVoiceCredentials, voiceStorageKind } from './voice-credentials';
 import { authMode, CONSOLE_LABELS, initialForm, mergeOnSave, statusLabel, voiceConfigStatus, VOLC_CONSOLE_URL, type VoiceConsole, type VoiceCredentials, type VoiceForm } from './voice-credentials-model';
 import { AsrError, asrErrorMessage } from './doubao-asr';
+import { openExternal } from './open-external';
 import { finishUtteranceWith, newUtterance } from './useVoiceInput';
 import { useVoiceRecorder } from './useVoiceRecorder';
 import { STREAM_DEFAULT_RESOURCE_ID, STREAM_RESOURCE_IDS } from './doubao-stream-protocol';
@@ -219,7 +220,7 @@ export default function VoiceSettingsSection({ showCredentials = true, showTest 
             </>
           ) : null}
           <Text style={styles.hint} testID="voice-console-help">
-            <Text style={styles.link} onPress={() => void Linking.openURL(VOLC_CONSOLE_URL)} accessibilityRole="link">火山引擎控制台</Text>
+            <Text style={styles.link} onPress={() => { void openExternal(VOLC_CONSOLE_URL).catch(() => {}); }} accessibilityRole="link" testID="voice-console-link">火山引擎控制台</Text>
             {` ${CONSOLE_HELP}`}
           </Text>
 

@@ -6,7 +6,7 @@
 // 🔴 只登记**真实存在**的设置。不要为了让左栏好看往里编分类。
 // 纯逻辑,不 import react-native。
 
-export type SettingsCategoryKey = 'account' | 'localHub' | 'appearance' | 'notifications' | 'voice' | 'about';
+export type SettingsCategoryKey = 'account' | 'localHub' | 'appearance' | 'notifications' | 'voice' | 'shortcuts' | 'about';
 
 export type SettingsRow = {
   readonly key: string;
@@ -97,6 +97,19 @@ export const SETTINGS_CATEGORIES: readonly SettingsCategory[] = [
       { key: 'mode', label: '识别模型', keywords: ['流式', '边说边出字', '实时', '极速版', '录音文件', '识别模型', '识别模式', 'streaming', 'stream', 'flash', '语音'], platforms: ['android', 'ios', 'desktop'] },
       { key: 'credentials', label: '豆包语音 API Key', keywords: ['语音', '语音识别', '豆包', '火山', '火山引擎', 'asr', 'voice', 'api key', 'app id', 'access token', '旧版控制台', '开通', '麦克风', '按住说话'], platforms: ['android', 'ios', 'desktop'] },
       { key: 'test', label: '测试语音识别', keywords: ['测试', '录音', 'test', 'mic'], platforms: ['android', 'ios', 'desktop'] },
+    ],
+  },
+  {
+    // 快捷键(shortcuts-model.ts):只在桌面端。网页版在浏览器里走手机布局(wide-layout.ts:
+    // 只有 Tauri 壳才是桌面工作区),导航快捷键没有地方执行 —— 不列不生效的东西。
+    // Ionicons 没有键盘图标(只有 keypad),用 keypad-outline。
+    key: 'shortcuts',
+    label: '快捷键',
+    icon: 'keypad-outline',
+    rows: [
+      { key: 'nav', label: '导航快捷键', keywords: ['快捷键', '键盘', '搜索', '设置', '切换', 'shortcut', 'keyboard', 'hotkey', 'ctrl', 'cmd', '⌘'], platforms: ['desktop'] },
+      { key: 'chat', label: '会话快捷键', keywords: ['快捷键', 'esc', '关闭', '图片预览', '查找', 'shortcut'], platforms: ['desktop'] },
+      { key: 'send', label: '发送键', keywords: ['发送', '换行', '粘贴', '拖放', '附件', 'enter', 'ctrl+enter', '回车', 'send', 'newline'], platforms: ['desktop'] },
     ],
   },
   {

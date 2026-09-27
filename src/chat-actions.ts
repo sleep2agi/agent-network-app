@@ -79,6 +79,8 @@ export const agentStatusLabel = (status?: string): string => {
 // WeChat-style desktop composer contract: bare Enter sends, while a modifier
 // plus Enter inserts a newline. Composition must win so confirming
 // Chinese/Japanese input never sends early.
+// 设置 → 快捷键 可以把发送改成 Ctrl/⌘+Enter(sendKey = 'modEnter'):那时 Ctrl/⌘+Enter 发送,
+// Enter / Shift+Enter 都交给输入框自己换行。
 export const shouldSendOnEnter = (event: {
   key?: string;
   ctrlKey?: boolean;
@@ -87,13 +89,17 @@ export const shouldSendOnEnter = (event: {
   isComposing?: boolean;
   keyCode?: number;
   which?: number;
-}): boolean => event.key === 'Enter'
-  && !event.ctrlKey
-  && !event.metaKey
-  && !event.shiftKey
-  && !event.isComposing
-  && event.keyCode !== 229
-  && event.which !== 229;
+}, sendKey: 'enter' | 'modEnter' = 'enter'): boolean => {
+  if (event.key !== 'Enter' || event.isComposing || event.keyCode === 229 || event.which === 229) return false;
+  if (sendKey === 'modEnter') return !event.shiftKey && (!!event.ctrlKey || !!event.metaKey);
+  return !event.ctrlKey && !event.metaKey && !event.shiftKey;
+};
+
+/** 桌面输入框下方那行提示。 */
+export const composerShortcutHint = (sendKey: 'enter' | 'modEnter', mac: boolean): string =>
+  sendKey === 'modEnter'
+    ? `${mac ? '⌘' : 'Ctrl'}+Enter 发送 · Enter 换行`
+    : 'Enter 发送 · Shift/Ctrl/⌘+Enter 换行';
 
 type TimedMessage = { content?: string; created_at?: string; _localId?: string; meta_json?: string | null; meta?: unknown };
 type TimedOutbox = { id: string; content: string; createdAt: number };

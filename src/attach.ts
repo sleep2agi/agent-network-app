@@ -6,6 +6,7 @@ import { appFetch } from './app-fetch';
 import { ImageManipulator, SaveFormat, type ImageRef } from 'expo-image-manipulator';
 import { compressedFileName, isDraftImage, PICKER_QUALITY, planCompression } from './image-draft';
 import { resizeForUpload } from './native-resize';
+import { attachmentFromFile } from './desktop-file-intake';
 
 // Image/file attachments (#220 roadmap ③) — fully wired end to end:
 // pick → upload → attach (see uploadImage below). The hub's
@@ -42,6 +43,18 @@ export const pickDocument = async (): Promise<PickedImage | null> => {
     fileSize: a.size ?? undefined,
     webFile: (a as any).file,
   };
+};
+
+/** 桌面「＋」:系统文件选择器,多选、任意类型(图片也在里面)。不读 base64(大文件不白读一遍);
+ *  web / Tauri 上每个结果带原始 File,转成草稿走 desktop-file-intake 同一个出口(拖放、粘贴也用它)。 */
+export const pickFiles = async (): Promise<PickedImage[]> => {
+  const result = await DocumentPicker.getDocumentAsync({ type: '*/*', multiple: true, copyToCacheDirectory: true, base64: false });
+  if (result.canceled || !result.assets?.length) return [];
+  return result.assets.map(a => {
+    const file = (a as any).file as File | undefined;
+    if (file) return attachmentFromFile(file);
+    return { uri: a.uri, fileName: a.name ?? 'file.bin', mimeType: a.mimeType ?? 'application/octet-stream', fileSize: a.size ?? undefined };
+  });
 };
 
 /** 「相册」多选(Vincent 2026-09-26「像微信一样支持选择多张图片」)。
