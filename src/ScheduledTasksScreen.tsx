@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
+import { Ionicons } from './icons';
 import { ActivityIndicator, Alert, BackHandler, Modal, Pressable, RefreshControl, ScrollView, StyleSheet, Switch, View, useWindowDimensions } from 'react-native';
 import { Text, TextInput } from './ui-text';
 import {
@@ -11,6 +12,7 @@ import {
   fetchHubNodes,
   fetchStatus,
   fetchScheduledRuns,
+  fetchTaskDetail,
   fetchScheduledTasks,
   HubConfig,
   HubExternalSchedule,
@@ -39,6 +41,8 @@ import { loadChatPins } from './chat-pins';
 import { loadScheduleTargetRecents, rememberScheduleTarget } from './schedule-target-recents';
 import { colors, onThemeChange, radius, spacing, type as fontSize, weight } from './theme';
 import { scheduledTaskActions } from './scheduled-task-actions';
+import ScheduleRunResult, { type RunTaskState } from './ScheduleRunResult';
+import { runDisplay, runDurationText, runFailureText, runIsOpen } from './schedule-run-result';
 import {
   DEFAULT_SCHEDULE_FILTER,
   countByStatus,
@@ -51,8 +55,6 @@ import {
   isMasterDetail,
   masterListWidth,
   reconcileSelection,
-  runErrorText,
-  runStatusMeta,
   scheduleRowModel,
   scheduleStatusMeta,
   visibleSchedules,
@@ -125,7 +127,11 @@ const toneColor = (tone: StatusTone) =>
 
 type ScheduleAction = 'toggle' | 'run' | 'cancel';
 
-export default function ScheduledTasksScreen({ cfg }: { cfg: HubConfig }) {
+export default function ScheduledTasksScreen({ cfg, onOpenChat }: {
+  cfg: HubConfig;
+  /** 「去会话」:打开与该节点的会话,并尽量定位到这次执行的那条任务。 */
+  onOpenChat?: (alias: string, taskId?: string) => void;
+}) {
   const [themeVersion, setThemeVersion] = useState(0);
   useEffect(() => onThemeChange(() => setThemeVersion(v => v + 1)), []);
   const styles = useMemo(makeStyles, [themeVersion]);
@@ -142,6 +148,9 @@ export default function ScheduledTasksScreen({ cfg }: { cfg: HubConfig }) {
   const [filter, setFilter] = useState<ScheduleStatus>(DEFAULT_SCHEDULE_FILTER);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [runs, setRuns] = useState<{ id: string; runs: HubScheduledRun[]; error: string } | null>(null);
+  // 执行记录展开的那一行 + 每条执行绑定任务的读取结果(按 task_id;只读展开的和还没结束的)。
+  const [expandedRun, setExpandedRun] = useState<string | null>(null);
+  const [runTasks, setRunTasks] = useState<Record<string, RunTaskState>>({});
   const [external, setExternal] = useState<HubNodeExternalSchedules[]>([]);
   const [externalLoaded, setExternalLoaded] = useState(false);
   const [cronEdit, setCronEdit] = useState<{ node: HubNodeExternalSchedules; schedule: HubExternalSchedule } | null>(null);
@@ -200,14 +209,29 @@ export default function ScheduledTasksScreen({ cfg }: { cfg: HubConfig }) {
   const selected = visible.find(row => row.schedule_id === activeId) ?? null;
   const now = Date.now();
 
+  // GET /api/tasks?task_id=…&network_id=… —— 与执行记录同一个 network 作用域,不多要任何权限。
+  const loadRunTask = useCallback(async (taskId: string) => {
+    setRunTasks(prev => ({ ...prev, [taskId]: { loading: true, task: prev[taskId]?.task ?? null, error: '' } }));
+    try {
+      const task = await fetchTaskDetail(cfg, taskId);
+      setRunTasks(prev => ({ ...prev, [taskId]: { loading: false, task, error: '' } }));
+    } catch (e) {
+      setRunTasks(prev => ({ ...prev, [taskId]: { loading: false, task: prev[taskId]?.task ?? null, error: e instanceof Error ? e.message : String(e) } }));
+    }
+  }, [cfg]);
+
   const loadRuns = useCallback(async (scheduleId: string) => {
     try {
       const data = await fetchScheduledRuns(cfg, scheduleId);
-      setRuns({ id: scheduleId, runs: data.runs || [], error: '' });
+      const list = data.runs || [];
+      setRuns({ id: scheduleId, runs: list, error: '' });
+      // run 行在终态前一直是「已送达」;要分出「执行中」只能读任务。只读还没结束的(通常 0–1 条),
+      // 已结束的等展开再读 —— 桌面端经中继访问 Hub 很慢,不为 50 行全文预取。
+      for (const run of list) if (runIsOpen(run)) void loadRunTask(run.task_id!);
     } catch (e) {
       setRuns({ id: scheduleId, runs: [], error: e instanceof Error ? e.message : String(e) });
     }
-  }, [cfg]);
+  }, [cfg, loadRunTask]);
 
   // 执行记录跟着选中项走;计划被执行过(last_run_at/revision 变了)再拉一次。
   const runsKey = selected ? `${selected.schedule_id}:${selected.last_run_at ?? ''}:${selected.revision}` : '';
@@ -216,6 +240,21 @@ export default function ScheduledTasksScreen({ cfg }: { cfg: HubConfig }) {
     void loadRuns(selected.schedule_id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [runsKey, loadRuns]);
+
+  // 有还没结束的执行时,15 秒重读一次执行记录(送达 → 执行中 → 已完成 要能在页面上走完)。
+  const hasOpenRun = !!selected && runs?.id === selected.schedule_id && runs.runs.some(runIsOpen);
+  useEffect(() => {
+    if (!hasOpenRun || !selected) return;
+    const id = selected.schedule_id;
+    const timer = setInterval(() => void loadRuns(id), 15_000);
+    return () => clearInterval(timer);
+  }, [hasOpenRun, selected?.schedule_id, loadRuns]);
+
+  const toggleRun = (run: HubScheduledRun) => {
+    const next = expandedRun === run.run_id ? null : run.run_id;
+    setExpandedRun(next);
+    if (next && run.task_id && (!runTasks[run.task_id] || runIsOpen(run) || runTasks[run.task_id].error)) void loadRunTask(run.task_id);
+  };
 
   // 窄屏详情:系统返回键回到列表(后注册的监听先被调用,盖过 App 的返回处理)。
   useEffect(() => {
@@ -268,6 +307,12 @@ export default function ScheduledTasksScreen({ cfg }: { cfg: HubConfig }) {
       now={now}
       busy={busy}
       runs={runs?.id === selected.schedule_id ? runs : null}
+      cfg={cfg}
+      expandedRun={expandedRun}
+      runTasks={runTasks}
+      onToggleRun={toggleRun}
+      onRetryRun={run => { if (run.task_id) void loadRunTask(run.task_id); }}
+      onOpenChat={onOpenChat ? run => onOpenChat(selected.target_alias, run.task_id ?? undefined) : undefined}
       onBack={wide ? undefined : () => setSelectedId(null)}
       onEdit={row => { setEditing(row); setShowForm(true); }}
       onAction={(row, action) => void act(row, action)}
@@ -422,10 +467,10 @@ export default function ScheduledTasksScreen({ cfg }: { cfg: HubConfig }) {
   );
 }
 
-function StatusPill({ label, tone }: { label: string; tone: StatusTone }) {
+function StatusPill({ label, tone, testID }: { label: string; tone: StatusTone; testID?: string }) {
   const s = useMemo(makeStyles, [label, tone]);
   const c = toneColor(tone);
-  return <Text style={[s.pill, { color: c, backgroundColor: `${c}1f` }]}>{label}</Text>;
+  return <Text style={[s.pill, { color: c, backgroundColor: `${c}1f` }]} testID={testID}>{label}</Text>;
 }
 
 /** 列表行:56–72dp。头像 = 执行节点;没有下次也没有上次时不画时间(不出「—」)。 */
@@ -469,11 +514,17 @@ function ScheduleRow({ row, now, busy, selected, onOpen, onToggle }: {
   );
 }
 
-function ScheduleDetail({ row, now, busy, runs, onBack, onEdit, onAction, onCancel }: {
+function ScheduleDetail({ row, now, busy, runs, cfg, expandedRun, runTasks, onToggleRun, onRetryRun, onOpenChat, onBack, onEdit, onAction, onCancel }: {
   row: HubScheduledTask;
   now: number;
   busy: boolean;
   runs: { runs: HubScheduledRun[]; error: string } | null;
+  cfg: HubConfig;
+  expandedRun: string | null;
+  runTasks: Record<string, RunTaskState>;
+  onToggleRun: (run: HubScheduledRun) => void;
+  onRetryRun: (run: HubScheduledRun) => void;
+  onOpenChat?: (run: HubScheduledRun) => void;
   onBack?: () => void;
   onEdit: (row: HubScheduledTask) => void;
   onAction: (row: HubScheduledTask, action: ScheduleAction) => void;
@@ -530,15 +581,41 @@ function ScheduleDetail({ row, now, busy, runs, onBack, onEdit, onAction, onCanc
           : runs.error ? <Text style={s.error}>{runs.error}</Text>
           : runs.runs.length === 0 ? <Text style={s.muted}>还没有执行记录</Text>
           : <View style={s.facts}>{runs.runs.map((run, i) => {
-            const meta = runStatusMeta(run.status);
-            const err = runErrorText(run);
+            const task = run.task_id ? runTasks[run.task_id]?.task : null;
+            const meta = runDisplay(run, task);
+            const err = runFailureText(run, task);
+            const duration = runDurationText(run, task);
+            const expanded = expandedRun === run.run_id;
+            const time = formatAbsolute(run.scheduled_for, now) || run.scheduled_for;
             return (
-              <View key={run.run_id} style={[s.runRow, i === runs.runs.length - 1 && s.lastFact]}>
-                <View style={s.flex}>
-                  <Text style={s.runTime}>{formatAbsolute(run.scheduled_for, now) || run.scheduled_for}</Text>
-                  {err ? <Text style={s.runError}>{err}</Text> : null}
-                </View>
-                <StatusPill label={meta.label} tone={meta.tone} />
+              <View key={run.run_id} style={[s.runRow, i === runs.runs.length - 1 && s.lastFact]} testID={`schedule-run-${run.run_id}`}>
+                <Pressable
+                  style={s.runHead}
+                  onPress={() => onToggleRun(run)}
+                  accessibilityRole="button"
+                  accessibilityState={{ expanded }}
+                  accessibilityLabel={`${time}，${meta.label}${duration ? `，${duration}` : ''}`}
+                  testID={`schedule-run-toggle-${run.run_id}`}
+                >
+                  <View style={s.runText}>
+                    <View style={s.runLine}>
+                      <Text style={s.runTime} numberOfLines={1} testID={`schedule-run-time-${run.run_id}`}>{time}</Text>
+                      {duration ? <Text style={s.runDuration} numberOfLines={1} testID={`schedule-run-duration-${run.run_id}`}>{duration}</Text> : null}
+                    </View>
+                    {err && !expanded ? <Text style={s.runError} numberOfLines={1}>{err}</Text> : null}
+                  </View>
+                  <StatusPill label={meta.label} tone={meta.tone} testID={`schedule-run-status-${run.run_id}`} />
+                  <Ionicons name={expanded ? 'chevron-up' : 'chevron-down'} size={14} color={colors.textMuted} testID={`schedule-run-chevron-${run.run_id}`} />
+                </Pressable>
+                {expanded ? (
+                  <ScheduleRunResult
+                    cfg={cfg}
+                    run={run}
+                    state={run.task_id ? runTasks[run.task_id] : undefined}
+                    onRetry={() => onRetryRun(run)}
+                    onOpenChat={onOpenChat ? () => onOpenChat(run) : undefined}
+                  />
+                ) : null}
               </View>
             );
           })}</View>}
@@ -804,8 +881,12 @@ function makeStyles() { return StyleSheet.create({
   factLabel: { width: 72, color: colors.textMuted, fontSize: fontSize.small, paddingTop: 1 },
   factValue: { color: colors.text, fontSize: fontSize.body },
   factHint: { color: colors.textMuted, fontSize: fontSize.small, marginTop: 2, lineHeight: 17 },
-  runRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingVertical: 10, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.border },
-  runTime: { color: colors.text, fontSize: fontSize.body },
+  runRow: { borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.border },
+  runHead: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingVertical: 10, minHeight: 44 },
+  runText: { flex: 1, minWidth: 0 },
+  runLine: { flexDirection: 'row', alignItems: 'baseline', gap: spacing.sm, minWidth: 0 },
+  runTime: { flexShrink: 0, color: colors.text, fontSize: fontSize.body },
+  runDuration: { flexShrink: 1, color: colors.textMuted, fontSize: fontSize.small },
   runError: { color: colors.textMuted, fontSize: fontSize.small, marginTop: 2 },
   card: { backgroundColor: colors.card, borderColor: colors.border, borderWidth: 1, borderRadius: 13, padding: spacing.md, marginBottom: spacing.md }, cardTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }, cardTitle: { color: colors.text, fontWeight: '600', fontSize: 15, flex: 1 }, badge: { fontSize: 11, overflow: 'hidden', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 10 }, badgeActive: { color: colors.running, backgroundColor: `${colors.running}20` }, badgeIdle: { color: colors.textMuted, backgroundColor: colors.bg },
   meta: { color: colors.textMuted, fontSize: 11, marginTop: spacing.xs }, actions: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm, marginTop: spacing.md }, action: { borderWidth: 1, borderColor: colors.border, borderRadius: radius.md, paddingHorizontal: 14, paddingVertical: 8, alignItems: 'center' }, actionText: { color: colors.textSecondary, fontSize: fontSize.body }, danger: { borderColor: `${colors.failed}50` }, dangerText: { color: colors.failed, fontSize: fontSize.body },
