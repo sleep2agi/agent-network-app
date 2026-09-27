@@ -32,6 +32,10 @@ on:
         description: "Apple ID email of an App Store Connect user on the team (add mode, or to check membership in list mode). Masked in the log."
         required: false
         default: ""
+      group_name:
+        description: "Internal group to use. add creates it (with access to all builds) if no internal group has this exact name; list/grant-builds fall back to the first internal group."
+        required: true
+        default: "Internal"
       build_number:
         description: "CFBundleVersion to report availability for"
         required: true
@@ -53,7 +57,7 @@ jobs:
           MODE: ${{ inputs.mode }}
           BUILD_NUMBER: ${{ inputs.build_number }}
           BUNDLE_ID: top.vansin.agentnetwork
-          INTERNAL_GROUP_NAME: Internal
+          INTERNAL_GROUP_NAME: ${{ inputs.group_name }}
         shell: bash
         run: |
           EMAIL=$(jq -r '.inputs.email // ""' "$GITHUB_EVENT_PATH" | tr -d '[:space:]'); if [ -n "$EMAIL" ]; then echo "::add-mask::$EMAIL"; fi
@@ -61,6 +65,7 @@ jobs:
 
           case "$MODE" in list|add|grant-builds) ;; *) echo "::error::mode must be list, add or grant-builds"; exit 1 ;; esac
           case "$BUILD_NUMBER" in ''|*[!0-9]*) echo "::error::build_number must be numeric"; exit 1 ;; esac
+          if [ -z "$INTERNAL_GROUP_NAME" ]; then echo "::error::group_name must not be empty"; exit 1; fi
           if [ "$MODE" = 'add' ] && [ -z "$EMAIL" ]; then
             echo "::error::add mode needs the email input"
             exit 1
@@ -127,10 +132,10 @@ jobs:
           }
 
           explain_error() {
-            local status="$1" body="$2"
+            local status="$1" body="$2" context="${3:-}"
             echo "::error::App Store Connect answered HTTP $status"
             jq -r '.errors[]? | "  - \(.status // "") \(.code // "") \(.title // ""): \(.detail // "")"' "$body" 2>/dev/null || true
-            if jq -e '[.errors[]? | ((.code // "") + " " + (.detail // "") + " " + (.title // ""))] | join(" ") | test("(?i)internal|user|not.*member|STATE_ERROR|ENTITY_ERROR")' "$body" > /dev/null 2>&1; then
+            if [ "$context" = 'tester' ] && jq -e '[.errors[]? | ((.code // "") + " " + (.detail // "") + " " + (.title // ""))] | join(" ") | test("(?i)internal|user|not.*member|STATE_ERROR|ENTITY_ERROR")' "$body" > /dev/null 2>&1; then
               echo "::error::Internal TestFlight testers must be App Store Connect users on team 446BLT75JZ. Invite this Apple ID under Users and Access first (any role), accept the invite, then run this workflow again."
             fi
           }
@@ -147,13 +152,23 @@ jobs:
           groups_json="$RUNNER_TEMP/groups.json"
           asc_all "betaGroups?filter%5Bapp%5D=$app_id&limit=200" "$groups_json"
           internal_count=$(jq '[.data[] | select(.attributes.isInternalGroup == true)] | length' "$groups_json")
-          group_id=$(jq -r --arg name "$INTERNAL_GROUP_NAME" '
-            [.data[] | select(.attributes.isInternalGroup == true)]
-            | (map(select(.attributes.name == $name)) + .) | .[0].id // empty' "$groups_json")
+          # add: exact name only (a missing name means "create it"); list/grant-builds: exact name, else the first internal group.
+          if [ "$MODE" = 'add' ]; then
+            group_id=$(jq -r --arg name "$INTERNAL_GROUP_NAME" '
+              [.data[] | select(.attributes.isInternalGroup == true and .attributes.name == $name)] | .[0].id // empty' "$groups_json")
+          else
+            group_id=$(jq -r --arg name "$INTERNAL_GROUP_NAME" '
+              [.data[] | select(.attributes.isInternalGroup == true)]
+              | (map(select(.attributes.name == $name)) + .) | .[0].id // empty' "$groups_json")
+          fi
+          if [ -n "$group_id" ]; then
+            INTERNAL_GROUP_NAME=$(jq -r --arg id "$group_id" '.data[] | select(.id == $id) | .attributes.name' "$groups_json")
+            echo "Using internal group \"$INTERNAL_GROUP_NAME\"."
+          fi
           echo "Internal beta groups on the app: $internal_count"
           if [ -z "$group_id" ]; then
             if [ "$MODE" != 'add' ]; then
-              echo "No internal beta group exists yet ($MODE mode does not create one)."
+              echo "No internal beta group matches ($MODE mode does not create one)."
               [ "$MODE" = 'grant-builds' ] && { echo "::error::grant-builds needs an existing internal group"; exit 1; }
             else
               echo "Creating internal beta group \"$INTERNAL_GROUP_NAME\" (all builds available)."
@@ -199,7 +214,7 @@ jobs:
               rm -f "$RUNNER_TEMP/add-body.json"
               case "$status" in
                 2??) echo "Added (HTTP $status)." ;;
-                *) explain_error "$status" "$RUNNER_TEMP/add-out.json"; exit 1 ;;
+                *) explain_error "$status" "$RUNNER_TEMP/add-out.json" tester; exit 1 ;;
               esac
               asc_all "betaGroups/$group_id/betaTesters?limit=200&fields%5BbetaTesters%5D=email" "$testers_json"
               if jq -e --arg e "$email_lc" 'any(.data[]; ((.attributes.email // "") | ascii_downcase) == $e)' "$testers_json" > /dev/null; then
@@ -231,6 +246,7 @@ jobs:
           }
           read_group_state
 
+          grant_not_updatable=no
           # grant-builds: (1) hasAccessToAllBuilds=true on the internal group;
           # (2) only if the build is still not listed afterwards, attach it explicitly.
           if [ "$MODE" = 'grant-builds' ]; then
@@ -240,7 +256,14 @@ jobs:
               echo "Setting hasAccessToAllBuilds=true on the internal group."
               jq -n --arg id "$group_id" '{data:{type:"betaGroups",id:$id,attributes:{hasAccessToAllBuilds:true}}}' > "$RUNNER_TEMP/grant-body.json"
               status=$(asc_write PATCH "betaGroups/$group_id" "$RUNNER_TEMP/grant-body.json" "$RUNNER_TEMP/grant-out.json")
-              case "$status" in 2??) echo "PATCH accepted (HTTP $status)." ;; *) explain_error "$status" "$RUNNER_TEMP/grant-out.json"; exit 1 ;; esac
+              if [ "$status" = '409' ] && jq -e 'any(.errors[]?; (.code // "") == "ENTITY_ERROR.ATTRIBUTE.NOT_ALLOWED")' "$RUNNER_TEMP/grant-out.json" > /dev/null; then
+                # Seen 2026-09-27: "The attribute 'hasAccessToAllBuilds' can not be included in a 'UPDATE' operation".
+                # ASC only accepts it when a group is created; fall through to the explicit attach.
+                echo "::warning::App Store Connect does not allow changing hasAccessToAllBuilds on an existing group (409 ENTITY_ERROR.ATTRIBUTE.NOT_ALLOWED); attaching the build explicitly instead."
+                grant_not_updatable=yes
+              else
+                case "$status" in 2??) echo "PATCH accepted (HTTP $status)." ;; *) explain_error "$status" "$RUNNER_TEMP/grant-out.json"; exit 1 ;; esac
+              fi
               read_group_state
             fi
             if [ -z "$build_id" ]; then
@@ -274,7 +297,7 @@ jobs:
           echo "  internal groups:                       $internal_count"
           echo "  internal group \"$INTERNAL_GROUP_NAME\" present:      $([ -n "$group_id" ] && echo yes || echo no)"
           echo "  testers in that group:                 $(jq '.data | length' "$testers_json")"
-          echo "  group hasAccessToAllBuilds:            $all_builds"
+          echo "  group hasAccessToAllBuilds:            $all_builds$([ "$grant_not_updatable" = yes ] && echo ' (ASC does not allow changing it on an existing group)')"
           echo "  build $BUILD_NUMBER listed in group builds:     $build_listed"
           echo "  build $BUILD_NUMBER processingState:            $build_state"
           echo "  build $BUILD_NUMBER internalBuildState:         $internal_state"
@@ -285,7 +308,7 @@ jobs:
             echo "  given Apple ID is an internal tester:  (no email given)"
           fi
           rm -f "$jwt_file" "$testers_json" "$RUNNER_TEMP/existing-tester.json"
-          if [ "$MODE" = 'grant-builds' ] && { [ "$all_builds" != 'yes' ] || [ "$build_listed" != 'yes' ]; }; then
+          if [ "$MODE" = 'grant-builds' ] && { [ "$build_listed" != 'yes' ] || { [ "$all_builds" != 'yes' ] && [ "$grant_not_updatable" != 'yes' ]; }; }; then
             echo "::error::after grant-builds the read-back shows hasAccessToAllBuilds=$all_builds, build listed=$build_listed"
             exit 1
           fi
