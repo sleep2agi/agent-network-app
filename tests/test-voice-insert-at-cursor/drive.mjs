@@ -15,7 +15,7 @@
 //   4 替换选区   选中「公司」说「办公室」→ 替换,光标在「办公室」之后
 //   5 失焦后按   程序化挪光标(不报选区事件)再让输入框失焦,然后按麦克风 → 仍插在失焦前的光标处
 //   6 拉丁空格   「hello|world」说「big」→「hello big world」
-//   7 草稿卡片   (手机 / 双栏)语音模式有草稿 → 点卡片 → 键盘模式、光标在末尾
+//   7 模式切换   (手机 / 双栏)键盘里放好光标 → 切语音:卡片拿到同一光标;点卡片不切键盘(test-voice-draft-cursor 细测)
 // 退出码 1 = 任何一条失败。
 import { createServer } from 'node:http';
 import { readFileSync, existsSync, mkdirSync, statSync } from 'node:fs';
@@ -205,19 +205,21 @@ for (const L of LAYOUTS) {
   s = await state();
   ck(tag, '拉丁:「hello|world」+「big」→「hello big world」', s.value === 'hello big world', JSON.stringify(s.value));
 
-  // 7 草稿卡片 → 键盘模式,光标在末尾(手机 / 双栏)
+  // 7 切到语音:卡片拿到键盘模式里的光标;点卡片留在语音模式(手机 / 双栏)
   if (L.name !== 'desktop') {
     await input.fill('帮我看一下今天的构建为什么失败了');
     await caretTo(0);
     await page.locator('[data-testid="composer-mode-toggle"]').click();
     await page.locator('[data-testid="voice-draft-card"]').waitFor({ timeout: 3000 });
     ck(tag, '语音模式下没有框内麦克风', (await page.locator('[data-testid="voice-field-mic"]').count()) === 0);
-    await page.locator('[data-testid="voice-draft-card-text"]').click();
-    await input.waitFor({ timeout: 3000 });
     await page.waitForTimeout(400);
-    s = await state();
-    ck(tag, '点草稿卡片 → 键盘模式、聚焦、光标在末尾', s.focused && s.start === s.value.length && s.end === s.value.length, `${s.start}/${s.value.length}`);
-    await page.screenshot({ path: `${OUT}/voiceinsert-${tag}-4-card-tap-cursor-end.png` });
+    const card = page.locator('[data-testid="voice-draft-card-text"]');
+    const c = await card.evaluate(el => ({ start: el.selectionStart, end: el.selectionEnd }));
+    ck(tag, '切到语音 → 卡片光标 = 键盘模式里的光标(0)', c.start === 0 && c.end === 0, `${c.start},${c.end}`);
+    await card.click();
+    await page.waitForTimeout(400);
+    ck(tag, '点草稿卡片 → 仍是语音模式(不切键盘)', (await input.count()) === 0 && (await page.locator('[data-testid="voice-hold-bar"]').count()) === 1);
+    await page.screenshot({ path: `${OUT}/voiceinsert-${tag}-4-card-tap-stays-voice.png` });
   }
   await ctx.close();
 }

@@ -1,10 +1,11 @@
 // ck-style (self-executing; run by scripts/run-tests.mjs). 按住说话松手之后(owner:「按住说话之后，
 // 别直接把输入法弹出来」,微信同款):留在语音模式、不 focus → 识别文字进「按住 说话」上方的草稿卡片,
-// 右格变「发送」直接发;点卡片才切键盘并聚焦;再按住接着往后拼;上滑取消不动草稿。
+// 右格变「发送」直接发;卡片可点着放光标但不弹键盘(选区 / 插入详见 voice-draft-cursor.test.ts);
+// 再按住接着往后拼;上滑取消不动草稿。
 import { readFileSync } from 'node:fs';
 import { posix, sep } from 'node:path';
 import {
-  afterRecognized, IDLE, insertRecognized, onVoiceDraftCardTap, parseComposerInputMode, showVoiceDraftCard,
+  afterRecognized, IDLE, insertRecognized, parseComposerInputMode, showVoiceDraftCard,
   VOICE_DRAFT_CARD_MAX_LINES, voiceStep, type ComposerInputMode, type ComposerModeTransition, type VoiceEvent, type VoiceState,
 } from './voice-input-model';
 import { composerRightSlot } from './composer-row-layout';
@@ -55,16 +56,8 @@ const start: Composer = { mode: parseComposerInputMode('voice'), draft: '', focu
   const tr = afterRecognized();
   ck('afterRecognized:不换模式、不 focus、不写偏好', tr.mode === null && tr.focusInput === false && tr.persist === false);
 }
-// ── 点卡片 ──
-{
-  const c = apply(hold(start, 'hello'), onVoiceDraftCardTap());
-  ck('点卡片 → 键盘模式', c.mode === 'keyboard');
-  ck('点卡片 → focus 一次(唯一会弹键盘的路)', c.focusCalls === 1);
-  ck('点卡片 → 草稿原样带进输入框', c.draft === 'hello');
-  ck('点卡片 → 不写回偏好(记住的仍是语音)', c.saved === 'voice' && onVoiceDraftCardTap().persist === false);
-  ck('点卡片 → 光标放草稿末尾(cursorAtEnd)', onVoiceDraftCardTap().cursorAtEnd === true && afterRecognized().cursorAtEnd === false);
-  ck('键盘模式下不画卡片(文字在输入框里)', !showVoiceDraftCard(c.mode === 'voice', c.draft));
-}
+// ── 键盘模式 ──
+ck('键盘模式下不画卡片(文字在输入框里)', !showVoiceDraftCard(false, 'hello'));
 // ── 卡片可见性 ──
 ck('空 / 全空白草稿不画卡片', !showVoiceDraftCard(true, '') && !showVoiceDraftCard(true, '  \n '));
 ck('卡片最多直接显示 4 行', VOICE_DRAFT_CARD_MAX_LINES === 4);
@@ -102,7 +95,7 @@ const ivt = chat.slice(ivtAt, chat.indexOf('\n  };', ivtAt));
 const holdBarBranch = ivt.slice(ivt.indexOf('if (!refocusAfterInsert(source)) {'), ivt.indexOf('return;'));
 ck('找到大条分支', ivtAt > 0 && holdBarBranch.length > 0);
 const onInsert = holdBarBranch;
-ck('大条分支接末尾(insertRecognized)', onInsert.includes('setDraft(d => insertRecognized(d, text));'));
+ck('大条分支:插到选区(没点过卡片 = 末尾,规则同 insertRecognized),插完 placeCursor', onInsert.includes('setDraft(r.value);') && onInsert.includes('placeCursor(r.cursor);'));
 ck('松手路径里没有 focus()', !/\.focus\(\)/.test(onInsert) && !onInsert.includes('focusAfterInsertRef'));
 ck("松手路径里不切 setInputMode('keyboard')", !onInsert.includes("setInputMode('keyboard')") && !ivt.includes("setInputMode('keyboard')"));
 ck('松手路径走 afterRecognized()', onInsert.includes('applyComposerTransition(afterRecognized());'));
@@ -117,10 +110,10 @@ const quoteAt = chat.indexOf('<View style={styles.quoteStrip}');
 ck('卡片只在 showVoiceDraftCard(voiceMode, draft) 时画', /\{showVoiceDraftCard\(voiceMode, draft\) \? \(\s*<VoiceDraftCard/.test(chat));
 ck('叠放:图片草稿条 → 引用条 → 卡片 → 按住说话行', stripAt > 0 && quoteAt > stripAt && cardAt > quoteAt && rowAt > cardAt);
 const card = chat.slice(cardAt, chat.indexOf('/>', cardAt));
-ck('点卡片走 onVoiceDraftCardTap', card.includes('onPress={() => applyComposerTransition(onVoiceDraftCardTap())}'));
-ck('✕ 清空草稿', card.includes("onClear={() => setDraft('')}"));
-ck('识别/录音中卡片不可点', card.includes('disabled={voiceBusy}'));
-ck('卡片在 ScrollView 里、最多 4 行高', /<ScrollView style=\{\{ flex: 1, maxHeight: DRAFT_CARD_LINE_HEIGHT \* VOICE_DRAFT_CARD_MAX_LINES \}\}/.test(ui));
+ck('点卡片不再切键盘模式(没有 onPress / 模式转移)', !card.includes('onPress') && !card.includes('applyComposerTransition'));
+ck('✕ 清空草稿,选区作废', card.includes("onClear={() => { setDraft(''); selectionCaptureRef.current.reset(); }}"));
+ck('识别/录音中 ✕ 不可点(busy)', card.includes('busy={voiceBusy}') && /accessibilityLabel="清空语音草稿" disabled=\{busy\}/.test(ui));
+ck('卡片最多 4 行高,再多在框内滚', /draftCardInput: \{ flex: 1, maxHeight: DRAFT_CARD_LINE_HEIGHT \* VOICE_DRAFT_CARD_MAX_LINES,/.test(ui) && /<TextInput[\s\S]{0,300}multiline\s*scrollEnabled/.test(ui));
 const submitAt = chat.indexOf('const submit = async () => {');
 const submitFn = chat.slice(submitAt, chat.indexOf('\n  };', submitAt));
 ck('submit 不 focus、不切模式(语音模式发送不弹键盘)', submitAt > 0 && !/\.focus\(\)/.test(submitFn) && !submitFn.includes('setInputMode'));

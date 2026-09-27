@@ -21,7 +21,7 @@ ck('ChatScreen 用 useVoiceInput', chat.includes("import { useVoiceInput } from 
 const ivtAt = chat.indexOf('const insertVoiceText = (text: string) => {');
 const ivt = chat.slice(ivtAt, chat.indexOf('\n  };', ivtAt));
 ck('识别结果经 insertVoiceText 进草稿(setDraft),不走 submit', /onInsert: text => \{\s*insertVoiceText\(text\);\s*\}/.test(chat) && ivtAt > 0 && !ivt.includes('submit('));
-ck('大条:insertRecognized 接末尾 + afterRecognized(不聚焦),详见 voice-draft-card.test.ts', /if \(!refocusAfterInsert\(source\)\) \{\s*setDraft\(d => insertRecognized\(d, text\)\);\s*applyComposerTransition\(afterRecognized\(\)\);\s*return;\s*\}/.test(ivt));
+ck('大条:插到草稿卡片的选区 + afterRecognized(不聚焦),详见 voice-draft-cursor.test.ts', /if \(!refocusAfterInsert\(source\)\) \{\s*draftRef\.current = r\.value;\s*setDraft\(r\.value\);\s*placeCursor\(r\.cursor\);\s*applyComposerTransition\(afterRecognized\(\)\);\s*return;\s*\}/.test(ivt));
 ck('输入框麦克风 / 桌面麦克风:insertAtSelection 插到冻结的选区,详见 voice-insert-at-cursor.test.ts', ivt.includes('insertAtSelection(draftRef.current, text, voiceInsertTarget(source, frozen))'));
 const rowAt = chat.indexOf('<View style={[styles.inputRow,');
 const mobileRow = chat.slice(rowAt, chat.indexOf('{plusMenuOpen ? (', rowAt));

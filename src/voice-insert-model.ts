@@ -2,7 +2,9 @@
 //
 //   · 键盘模式的输入框里有一个小麦克风(手机 / 双栏),桌面是工具栏的麦克风:按住说话,松手把
 //     识别文字插到**按下那一刻**的光标处;选中了一段就替换那一段。插完光标落在插入文字之后。
-//   · 语音模式的「按住 说话」大条不变:接在草稿末尾(#422)。
+//   · 语音模式的「按住 说话」大条:插到**草稿卡片**里的选区(owner:「在语音模式下也能选插入位置，
+//     键盘模式的麦克风太小不好按」)。卡片可以点着放光标、长按 / 拖动选中,但不弹软键盘;没点过卡片 =
+//     末尾,插完光标落在插入文字之后 → 连着按就是依次往后接(#422 的「接着说」不变)。
 //
 // 为什么要在「按下那一刻」冻结选区:安卓上按麦克风可能让输入框失焦,失焦 / 键盘收起时还可能
 // 再报一次 onSelectionChange;网页上 mousedown 会把焦点挪走。录音期间之后到的选区事件一律不算数。
@@ -84,15 +86,17 @@ export function createSelectionCapture(): SelectionCapture {
 }
 
 /**
- * 识别结果插到哪:大条 = 末尾(#422 不变);输入框麦克风 / 桌面麦克风 = 按下时冻结的选区
- * (没有快照 = 从没点过输入框 → 末尾)。返回 null 表示末尾。
+ * 识别结果插到哪:三个麦克风都插到按下时冻结的选区(大条 = 草稿卡片的选区,另两个 = 输入框的选区);
+ * 没有快照(从没点过卡片 / 输入框)= 末尾。返回 null 表示末尾。
  */
-export function voiceInsertTarget(source: VoiceSource, frozen: TextSelection | null): TextSelection | null {
-  if (source === 'holdBar') return null;
+export function voiceInsertTarget(_source: VoiceSource, frozen: TextSelection | null): TextSelection | null {
   return frozen;
 }
 
-/** 插完之后要不要把焦点还给输入框:输入框麦克风 / 桌面麦克风要(用户本来就在打字);大条不要(#422:不弹键盘)。 */
+/**
+ * 插完之后要不要把焦点还给输入框:输入框麦克风 / 桌面麦克风要(用户本来就在打字);大条不要(#422:不弹键盘 ——
+ * 光标由草稿卡片自己显示,卡片不弹软键盘)。
+ */
 export function refocusAfterInsert(source: VoiceSource): boolean {
   return source !== 'holdBar';
 }
@@ -112,9 +116,9 @@ export function withPressStart<H extends { onResponderGrant: (e: any) => void }>
   };
 }
 
-/** 按下麦克风的第一时间:输入框麦克风 / 桌面麦克风冻结当前选区;大条不需要(它永远接末尾)。返回本次来源。 */
+/** 按下麦克风的第一时间冻结当前选区(三个麦克风都是;大条冻结的是草稿卡片的选区)。返回本次来源。 */
 export function beginVoicePress(source: VoiceSource, capture: SelectionCapture): VoiceSource {
-  if (source !== 'holdBar') capture.freeze();
+  capture.freeze();
   return source;
 }
 
@@ -126,4 +130,24 @@ export function hostSelection(el: unknown): TextSelection | null {
   const n = el as { selectionStart?: unknown; selectionEnd?: unknown } | null | undefined;
   if (!n || typeof n.selectionStart !== 'number' || typeof n.selectionEnd !== 'number') return null;
   return { start: n.selectionStart, end: n.selectionEnd };
+}
+
+/**
+ * 语音模式按住期间,流式中间结果在草稿卡片的光标处预览:只画、不进草稿(上滑取消时草稿不用回滚;终稿常改写
+ * 中间结果,松手后终稿替换预览)。返回卡片上显示的文字和选区:有中间结果 = 预览插在冻结的选区处(选中的那段
+ * 先被预览顶掉,终稿也会替换它),光标跟在预览之后;还没出字 = 草稿原样、选区原样。
+ */
+export function previewAtSelection(draft: string, interim: string, frozen: TextSelection | null | undefined): { value: string; selection: TextSelection } {
+  const base = draft || '';
+  if (!(interim || '').trim()) return { value: base, selection: clampSelection(frozen, base) };
+  const r = insertAtSelection(base, interim, frozen);
+  return { value: r.value, selection: { start: r.cursor, end: r.cursor } };
+}
+
+/**
+ * 点 ⌨ / 🔊 切换键盘 ↔ 语音:选区原样带到另一边(草稿卡片 ↔ 输入框是同一份草稿、同一个选区)。
+ * 切换的那一刻就拍下来 —— 新挂上的输入框 / 卡片可能先报一次自己的默认选区,那一次不能算数。
+ */
+export function selectionAcrossModeSwitch(live: TextSelection | null | undefined, draft: string): TextSelection {
+  return clampSelection(live, draft || '');
 }

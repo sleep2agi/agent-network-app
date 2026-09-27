@@ -6,8 +6,9 @@
 //   · 未配置时的「去设置」提示条。
 // 状态与手势全在 useVoiceInput;这里只画。
 
-import { ActivityIndicator, Platform, Pressable, ScrollView, StyleSheet, View } from 'react-native';
-import { Text } from './ui-text';
+import { useState, type Ref } from 'react';
+import { ActivityIndicator, Platform, Pressable, StyleSheet, View, type TextInput as RNTextInput } from 'react-native';
+import { Text, TextInput } from './ui-text';
 import { Ionicons } from './icons';
 import { colors, onThemeChange, spacing } from './theme';
 import { ds, uiScale } from './ui-scale';
@@ -112,6 +113,7 @@ export function VoiceHoldBar({ voice, handlers }: { voice: VoiceInput; handlers?
   return (
     <View
       {...(handlers ?? voice.micHandlers)}
+      {...keepInputFocus}
       accessible
       accessibilityRole="button"
       accessibilityLabel={holdBarLabel(phase)}
@@ -204,26 +206,42 @@ export function VoiceSettingsPrompt({ voice, onOpenSettings }: { voice: VoiceInp
 const DRAFT_CARD_LINE_HEIGHT = 20;
 
 /**
- * 语音模式下的草稿卡片(「按住 说话」上方):显示识别出来的草稿,最多 4 行,再多在卡片里滚。
- * 点文字 = 切到键盘并聚焦(唯一会弹软键盘的路);✕ = 清空草稿。只画,状态在 ChatScreen。
+ * 语音模式下的草稿卡片(「按住 说话」上方):显示草稿,最多 4 行,再多在卡片里滚。
+ * 卡片是一个**不弹软键盘**的输入框(owner:键盘模式的麦克风太小不好按,要在语音模式里就能选插入位置):
+ * 点一下放光标、长按 / 拖动选中,「按住 说话」的识别结果插到这里的选区;✕ = 清空草稿。只画,状态在 ChatScreen。
+ * 软键盘:安卓 / iOS 用 showSoftInputOnFocus={false};网页 inputmode="none"。
  */
-export function VoiceDraftCard({ text, onPress, onClear, disabled }: { text: string; onPress: () => void; onClear: () => void; disabled?: boolean }) {
+export function VoiceDraftCard({ value, selection, onChangeText, onSelectionChange, onClear, busy, inputRef }: {
+  value: string;
+  selection?: { start: number; end: number };
+  onChangeText: (text: string) => void;
+  onSelectionChange?: (e: { nativeEvent: { selection: { start: number; end: number } } }) => void;
+  onClear: () => void;
+  busy?: boolean;
+  inputRef?: Ref<RNTextInput>;
+}) {
+  // 网页的 textarea 不会随内容长高(原生多行输入框会):按内容高度给,最多 4 行。
+  const [webHeight, setWebHeight] = useState<number | undefined>(undefined);
   return (
     <View style={styles.draftCardWrap} testID="voice-draft-card">
       <View style={styles.draftCard}>
-        <ScrollView style={{ flex: 1, maxHeight: DRAFT_CARD_LINE_HEIGHT * VOICE_DRAFT_CARD_MAX_LINES }} nestedScrollEnabled keyboardShouldPersistTaps="handled">
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="编辑语音草稿"
-            accessibilityHint="切换到键盘输入并编辑这段文字"
-            disabled={disabled}
-            onPress={onPress}
-            testID="voice-draft-card-text"
-          >
-            <Text style={styles.draftCardText}>{text}</Text>
-          </Pressable>
-        </ScrollView>
-        <Pressable accessibilityRole="button" accessibilityLabel="清空语音草稿" disabled={disabled} onPress={onClear} hitSlop={8} style={styles.draftCardClear} testID="voice-draft-card-clear">
+        <TextInput
+          ref={inputRef}
+          value={value}
+          selection={selection}
+          onChangeText={onChangeText}
+          onSelectionChange={onSelectionChange}
+          multiline
+          scrollEnabled
+          showSoftInputOnFocus={false}
+          {...(Platform.OS === 'web' ? { inputMode: 'none' as const, rows: 1 } : null)}
+          onContentSizeChange={Platform.OS === 'web' ? e => setWebHeight(e.nativeEvent.contentSize.height) : undefined}
+          accessibilityLabel="语音草稿"
+          accessibilityHint="点一下放光标,长按选中;按住下面的「按住 说话」,文字插到光标处"
+          testID="voice-draft-card-text"
+          style={[styles.draftCardText, styles.draftCardInput, Platform.OS === 'web' && webHeight ? { height: Math.min(webHeight, DRAFT_CARD_LINE_HEIGHT * VOICE_DRAFT_CARD_MAX_LINES) } : null]}
+        />
+        <Pressable accessibilityRole="button" accessibilityLabel="清空语音草稿" disabled={busy} onPress={onClear} hitSlop={8} style={styles.draftCardClear} testID="voice-draft-card-clear">
           <Ionicons name="close" size={14} color={colors.textMuted} />
         </Pressable>
       </View>
@@ -298,6 +316,8 @@ const makeStyles = () => StyleSheet.create({
   draftCardWrap: { paddingHorizontal: spacing.md, paddingTop: spacing.xs },
   draftCard: { flexDirection: 'row', alignItems: 'flex-start', gap: 6, paddingVertical: 8, paddingLeft: 12, paddingRight: 8, borderRadius: 10, backgroundColor: colors.inputBg, borderWidth: StyleSheet.hairlineWidth, borderColor: colors.border },
   draftCardText: { color: colors.text, fontSize: 15, lineHeight: DRAFT_CARD_LINE_HEIGHT },
+  // 输入框的默认内边距 / 外框去掉,看起来和原来的纯文字卡片一样;高度随内容,最多 4 行后在框内滚。
+  draftCardInput: { flex: 1, maxHeight: DRAFT_CARD_LINE_HEIGHT * VOICE_DRAFT_CARD_MAX_LINES, padding: 0, margin: 0, textAlignVertical: 'top', borderWidth: 0, outlineStyle: 'none' } as any,
   draftCardClear: { width: 20, height: 20, borderRadius: 10, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.border },
 });
 
