@@ -4,9 +4,9 @@
 //   PLAYWRIGHT_MODULE=<…/playwright/index.mjs> node tests/test-voice-insert-at-cursor/drive.mjs
 //
 // 同 test-voice-composer-visual:桌面壳分支(有安全存储 → 有语音输入),Chromium 假麦克风,识别走极速版到本地
-// 假 HTTP 服务 —— 这里的假服务按调用顺序返回 RESULTS 里的句子。布局:390×844 + 安卓 UA = 手机单栏,
-// 1200×850 + 安卓 UA = 双栏(两者都是键盘模式输入框里的小麦克风);1200×850 桌面 UA = 桌面(工具栏麦克风)。
-// 手机 / 双栏带 ?safeAreaSim(底部 24)量麦克风没压进底部安全区(#432)。
+// 假 HTTP 服务。布局:1200×850 桌面 UA = 桌面(工具栏麦克风)。手机 / 双栏的键盘模式框内小麦克风已去掉
+// (和左边 🔊 切换重复),那边的「插到光标处」走语音模式的草稿卡片,见 tests/test-voice-draft-cursor/drive.mjs;
+// 这里只断言手机 / 双栏键盘模式里没有任何麦克风。
 //
 // 每个布局断言:
 //   1 中间插入   「明天|去公司开会」按住框内麦克风说「上午」→「明天上午去公司开会」,光标 = 4,焦点仍在输入框
@@ -15,7 +15,7 @@
 //   4 替换选区   选中「公司」说「办公室」→ 替换,光标在「办公室」之后
 //   5 失焦后按   程序化挪光标(不报选区事件)再让输入框失焦,然后按麦克风 → 仍插在失焦前的光标处
 //   6 拉丁空格   「hello|world」说「big」→「hello big world」
-//   7 模式切换   (手机 / 双栏)键盘里放好光标 → 切语音:卡片拿到同一光标;点卡片不切键盘(test-voice-draft-cursor 细测)
+//   7 手机 / 双栏 键盘模式里没有麦克风(唯一语音入口 = 左边切换)
 // 退出码 1 = 任何一条失败。
 import { createServer } from 'node:http';
 import { readFileSync, existsSync, mkdirSync, statSync } from 'node:fs';
@@ -102,10 +102,28 @@ const ck = (tag, name, cond, detail = '') => {
 };
 
 const LAYOUTS = [
-  { name: 'phone', w: 390, h: 844, ua: ANDROID_UA, mic: '[data-testid="voice-field-mic"]', insets: [32, 0, 24, 0] },
-  { name: 'twopane', w: 1200, h: 850, ua: ANDROID_UA, mic: '[data-testid="voice-field-mic"]', insets: [32, 0, 24, 40] },
-  { name: 'desktop', w: 1200, h: 850, ua: undefined, mic: '[data-testid="voice-mic"]', insets: null },
+  { name: 'desktop', w: 1200, h: 850, ua: undefined, mic: '[data-testid="voice-mic"]' },
 ];
+
+// 7 手机 / 双栏:键盘模式里没有任何麦克风(框内小麦克风已去掉),语音入口只有左边的切换。
+for (const [name, w, h] of [['phone', 390, 844], ['twopane', 1200, 850]]) {
+  const tag = `${name}-${w}x${h}`;
+  const ctx = await browser.newContext({ viewport: { width: w, height: h }, colorScheme: 'light', userAgent: ANDROID_UA, permissions: ['microphone'], deviceScaleFactor: 2 });
+  const page = await ctx.newPage();
+  await page.addInitScript(initScript, { hubUrl: HUB_URL, token: TOKEN, flashUrl: FLASH_URL, theme: 'light' });
+  await page.goto(WEB_URL);
+  await page.getByText(ALIAS, { exact: true }).first().click({ timeout: 20000 });
+  await page.locator(`textarea[placeholder="Message ${ALIAS}…"]`).waitFor({ timeout: 15000 });
+  await page.waitForTimeout(300);
+  const counts = await page.evaluate(() => ({
+    fieldMic: document.querySelectorAll('[data-testid="voice-field-mic"]').length,
+    mic: document.querySelectorAll('[data-testid="voice-mic"]').length,
+    toggle: document.querySelectorAll('[data-testid="composer-mode-toggle"]').length,
+  }));
+  ck(tag, '键盘模式:没有框内 / 工具栏麦克风,只有左边切换', counts.fieldMic === 0 && counts.mic === 0 && counts.toggle === 1, JSON.stringify(counts));
+  await page.screenshot({ path: `${OUT}/voiceinsert-${tag}-keyboard-no-mic.png` });
+  await ctx.close();
+}
 
 for (const L of LAYOUTS) {
   const tag = `${L.name}-${L.w}x${L.h}`;
@@ -113,7 +131,7 @@ for (const L of LAYOUTS) {
   const page = await ctx.newPage();
   page.on('pageerror', e => console.log('PAGEERROR', e.message.split('\n')[0]));
   await page.addInitScript(initScript, { hubUrl: HUB_URL, token: TOKEN, flashUrl: FLASH_URL, theme: 'light' });
-  await page.goto(L.insets ? `${WEB_URL}?safeAreaSim=${L.insets.join(',')}` : WEB_URL);
+  await page.goto(WEB_URL);
   await page.getByText(ALIAS, { exact: true }).first().click({ timeout: 20000 });
   const input = page.locator(`textarea[placeholder="Message ${ALIAS}…"]`);
   await input.waitFor({ timeout: 15000 });
@@ -147,19 +165,6 @@ for (const L of LAYOUTS) {
     await page.waitForTimeout(300);
     return during;
   };
-
-  // 麦克风几何:在输入框里、与输入框同一中线;手机 / 双栏不压进底部安全区。
-  {
-    const m = await mic.boundingBox(), i = await input.boundingBox();
-    const dCy = (m.y + m.height / 2) - (i.y + i.height / 2);
-    if (L.name !== 'desktop') {
-      ck(tag, `框内麦克风在输入框里、同一中线(dCy=${dCy.toFixed(1)}, mic ${m.height}px, input ${i.height}px)`, m.x >= i.x && m.x + m.width <= i.x + i.width + 0.5 && Math.abs(dCy) <= 1);
-      ck(tag, `麦克风底边在底部安全区之上(bottom=${(m.y + m.height).toFixed(1)} ≤ ${L.h - L.insets[2]})`, m.y + m.height <= L.h - L.insets[2]);
-      // 判据自检(正控):同一判据喂一个下移 2px 的麦克风必须报红,否则上面那条「中线」是空断言。
-      const shifted = await mic.evaluate(el => { el.style.transform = 'translateY(2px)'; const r = el.getBoundingClientRect(); el.style.transform = ''; return r.y + r.height / 2; });
-      ck(tag, '正控:麦克风下移 2px 时中线判据会报红', Math.abs(shifted - (i.y + i.height / 2)) > 1);
-    }
-  }
 
   // 1 中间插入 + 3 录音中不失焦
   await input.fill('明天去公司开会');
@@ -205,22 +210,6 @@ for (const L of LAYOUTS) {
   s = await state();
   ck(tag, '拉丁:「hello|world」+「big」→「hello big world」', s.value === 'hello big world', JSON.stringify(s.value));
 
-  // 7 切到语音:卡片拿到键盘模式里的光标;点卡片留在语音模式(手机 / 双栏)
-  if (L.name !== 'desktop') {
-    await input.fill('帮我看一下今天的构建为什么失败了');
-    await caretTo(0);
-    await page.locator('[data-testid="composer-mode-toggle"]').click();
-    await page.locator('[data-testid="voice-draft-card"]').waitFor({ timeout: 3000 });
-    ck(tag, '语音模式下没有框内麦克风', (await page.locator('[data-testid="voice-field-mic"]').count()) === 0);
-    await page.waitForTimeout(400);
-    const card = page.locator('[data-testid="voice-draft-card-text"]');
-    const c = await card.evaluate(el => ({ start: el.selectionStart, end: el.selectionEnd }));
-    ck(tag, '切到语音 → 卡片光标 = 键盘模式里的光标(0)', c.start === 0 && c.end === 0, `${c.start},${c.end}`);
-    await card.click();
-    await page.waitForTimeout(400);
-    ck(tag, '点草稿卡片 → 仍是语音模式(不切键盘)', (await input.count()) === 0 && (await page.locator('[data-testid="voice-hold-bar"]').count()) === 1);
-    await page.screenshot({ path: `${OUT}/voiceinsert-${tag}-4-card-tap-stays-voice.png` });
-  }
   await ctx.close();
 }
 await browser.close(); web.close(); flash.close();

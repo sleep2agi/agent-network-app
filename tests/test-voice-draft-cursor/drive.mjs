@@ -14,7 +14,7 @@
 //   3 连着按:说「是」→ 接在新光标处
 //   4 选中一段 → 替换,光标在替换文字之后
 //   5 程序化挪光标(不报选区事件)再按 → 插在那里(按下时读宿主选区)
-//   6 ⌨ 切到键盘:输入框拿到同一个选区;再切回语音:卡片拿到同一个选区
+//   6 ⌨ 切到键盘:输入框拿到同一个选区、键盘模式里没有麦克风(唯一入口 = 左边切换);再切回语音:卡片拿到同一个选区
 //   7 ✕ 清空 → 卡片消失;发送 → 草稿清空、消息出现在会话里
 //   8 输入行几何(卡片聚焦时):⌨ / 大条 / 发送 同一中线 ≤1px、同高、左右内边距相等、两侧间距相等(#424)
 // 退出码 1 = 任何一条失败。
@@ -217,6 +217,8 @@ for (const scheme of ['light', 'dark']) {
   await page.waitForTimeout(400);
   const kb = await mainInput.evaluate(el => ({ value: el.value, start: el.selectionStart, end: el.selectionEnd, focused: el === document.activeElement }));
   ck(tag, '⌨ 切到键盘:输入框同一份草稿、同一个选区(4,6)、已聚焦', kb.value === '请问什么到底是什么情况?' && kb.start === 4 && kb.end === 6 && kb.focused, JSON.stringify(kb));
+  const entries = await page.evaluate(() => ({ fieldMic: document.querySelectorAll('[data-testid="voice-field-mic"]').length, mic: document.querySelectorAll('[data-testid="voice-mic"]').length, toggle: document.querySelectorAll('[data-testid="composer-mode-toggle"]').length }));
+  ck(tag, '键盘模式:语音入口只有左边切换(没有框内 / 工具栏麦克风)', entries.fieldMic === 0 && entries.mic === 0 && entries.toggle === 1, JSON.stringify(entries));
   await page.screenshot({ path: `${OUT}/draftcursor-${tag}-4-keyboard-keeps-selection.png` });
   await mainInput.evaluate(el => el.setSelectionRange(2, 2));
   await page.keyboard.press('ArrowRight');   // 用户在键盘模式挪光标(报选区事件)→ 3

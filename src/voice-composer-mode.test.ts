@@ -25,7 +25,7 @@ ck('键盘模式切换图标 = Ionicons 音量族(微信 🔊),不是麦克风',
   const ui = read('src/VoiceInputUI.tsx');
   const toggle = ui.slice(ui.indexOf('export function ComposerModeToggle'), ui.indexOf('/** 语音模式下代替输入框的整条'));
   ck('切换按钮用 VOICE_TOGGLE_ICON,切换按钮里没有麦克风图标', toggle.includes('<Ionicons name={VOICE_TOGGLE_ICON}') && !/mic/.test(toggle.replace(/\/\*\*[\s\S]*?\*\//g, '')));
-  ck('键盘模式一行里只有一个麦克风:mic 图标只出现在 VoiceMicButton(桌面)和 VoiceFieldMic(框内)', (ui.match(/'mic-outline'/g) ?? []).length === 2);
+  ck('mic 图标只剩桌面工具栏的 VoiceMicButton 一处(手机框内小麦克风已去掉)', (ui.match(/'mic-outline'/g) ?? []).length === 1 && !ui.includes('VoiceFieldMic'));
 }
 
 // ── 按住说话条:一次完整按压的文字 / 颜色 ──

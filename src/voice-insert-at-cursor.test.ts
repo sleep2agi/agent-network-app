@@ -1,6 +1,6 @@
 // ck-style (self-executing; run by scripts/run-tests.mjs). 语音插到光标处(owner:「语音输入只能从无到有…
-// 我选择光标在哪个地方继续输入，这个功能有问题」):键盘模式输入框里的小麦克风 / 桌面工具栏麦克风,
-// 松手把识别文字插到**按下那一刻**的光标处(选中就替换),光标落在插入文字之后,焦点留在输入框。
+// 我选择光标在哪个地方继续输入，这个功能有问题」):桌面工具栏麦克风松手把识别文字插到**按下那一刻**的光标处
+// (选中就替换),光标落在插入文字之后,焦点留在输入框。手机键盘模式框内的小麦克风已去掉(和左边 🔊 切换重复)。
 // 语音模式的大条插到草稿卡片的选区(没点过卡片 = 末尾),详见 voice-draft-cursor.test.ts。
 import { readFileSync } from 'node:fs';
 import { posix, sep } from 'node:path';
@@ -9,7 +9,6 @@ import {
   voiceInsertTarget, withPressStart, type TextSelection,
 } from './voice-insert-model';
 import { insertRecognized } from './voice-input-model';
-import { COMPOSER_CONTROL_BASE, COMPOSER_CONTROL_MIN, composerControlSize, composerFieldMicSize, composerInputPadRightWithMic, FIELD_MIC_INSET } from './composer-row-layout';
 
 let p = 0, t = 0;
 const ck = (name: string, cond: boolean) => { t++; if (cond) { p++; console.log(`✅ ${name}`); } else console.log(`❌ ${name}`); };
@@ -93,11 +92,11 @@ const ins = (d: string, x: string, s: TextSelection | null) => insertAtSelection
   ck('按下时冻结的选区不被录音期间的选区事件覆盖', frozen?.start === 2 && frozen?.end === 2);
   ck('快照只取一次', cap.take() === null);
   ck('live 仍然跟着最新事件走', cap.peek().live?.start === 5);
-  const r = ins('明天去公司', '上午', voiceInsertTarget('fieldMic', frozen));
+  const r = ins('明天去公司', '上午', voiceInsertTarget('desktopMic', frozen));
   ck('端到端:失焦报 0 之后,文字仍插在按下时的位置', r.value === '明天上午去公司');
   const c2 = createSelectionCapture();
   c2.freeze();
-  ck('从没报过选区 → 快照为空 → 末尾', c2.take() === null && ins('ab', 'c', voiceInsertTarget('fieldMic', null)).value === 'ab c');
+  ck('从没报过选区 → 快照为空 → 末尾', c2.take() === null && ins('ab', 'c', voiceInsertTarget('desktopMic', null)).value === 'ab c');
   const c3 = createSelectionCapture();
   c3.track(at(1)); c3.reset(); c3.freeze();
   ck('reset()(全屏编辑器改过草稿)→ 当作末尾', c3.take() === null);
@@ -119,9 +118,7 @@ const ins = (d: string, x: string, s: TextSelection | null) => insertAtSelection
   ck('上一句还在识别(非 idle)→ 不覆盖快照,但按下仍交给状态机', log.join(',') === 'grant');
   const cap = createSelectionCapture();
   cap.track(at(4));
-  ck('输入框麦克风:beginVoicePress 冻结选区', beginVoicePress('fieldMic', cap) === 'fieldMic' && cap.take()?.start === 4);
-  cap.track(at(1));
-  ck('桌面麦克风:同样冻结', beginVoicePress('desktopMic', cap) === 'desktopMic' && cap.take()?.start === 1);
+  ck('桌面麦克风:beginVoicePress 冻结选区', beginVoicePress('desktopMic', cap) === 'desktopMic' && cap.take()?.start === 4);
   cap.track(at(2));
   ck('大条:同样冻结(草稿卡片的选区)', beginVoicePress('holdBar', cap) === 'holdBar' && cap.take()?.start === 2);
 }
@@ -133,21 +130,13 @@ const ins = (d: string, x: string, s: TextSelection | null) => insertAtSelection
   cap.track(at(7));                                   // 最后一次报上来的事件(过期)
   const host = hostSelection({ selectionStart: 2, selectionEnd: 2 });
   if (host) cap.track(host);                          // 按下时读到的真实选区
-  beginVoicePress('fieldMic', cap);
+  beginVoicePress('desktopMic', cap);
   ck('按下时宿主选区优先于过期的事件值', cap.take()?.start === 2);
 }
 // ── 来源 → 插哪 / 要不要还焦点 ──
 ck('大条:用快照(草稿卡片的选区);没有快照 = 末尾', voiceInsertTarget('holdBar', at(1))?.start === 1 && voiceInsertTarget('holdBar', null) === null);
-ck('输入框麦克风 / 桌面麦克风:用快照', voiceInsertTarget('fieldMic', at(1))?.start === 1 && voiceInsertTarget('desktopMic', at(3))?.start === 3);
-ck('大条插完不还焦点(#422 不弹键盘);另两个还', !refocusAfterInsert('holdBar') && refocusAfterInsert('fieldMic') && refocusAfterInsert('desktopMic'));
-
-// ── 麦克风几何(#424:不改行高、不离开中线) ──
-{
-  const c40 = composerControlSize(1), c36 = composerControlSize(0.5);
-  ck('行高 40 → 麦克风 32;行高下限 36 → 28', c40 === COMPOSER_CONTROL_BASE && composerFieldMicSize(c40) === 32 && c36 === COMPOSER_CONTROL_MIN && composerFieldMicSize(c36) === 28);
-  ck('单行时圆心 = 输入框中线(bottom inset + 半径 = 行高一半)', [c40, c36, composerControlSize(1.3)].every(c => FIELD_MIC_INSET + composerFieldMicSize(c) / 2 === c / 2));
-  ck('输入框右内边距让出整个麦克风', [c40, c36].every(c => composerInputPadRightWithMic(c) >= composerFieldMicSize(c) + FIELD_MIC_INSET));
-}
+ck('桌面麦克风:用快照', voiceInsertTarget('desktopMic', at(3))?.start === 3);
+ck('大条插完不还焦点(#422 不弹键盘);桌面麦克风还', !refocusAfterInsert('holdBar') && refocusAfterInsert('desktopMic'));
 
 // ── 接线(源码层) ──
 const chat = read('src/ChatScreen.tsx');
@@ -162,20 +151,15 @@ ck('放光标后放开控制(undefined),用户可以随便挪', /setTimeout\(\(\
 ck('放光标时同步更新跟踪器(下一句从这里接)', /pendingSelectionRef\.current = null;\s*selectionCaptureRef\.current\.track\(sel\);/.test(chat));
 const selCount = (chat.match(/onSelectionChange=\{onComposerSelectionChange\}\s*selection=\{forcedSelection\}/g) ?? []).length;
 ck('手机输入框 + 桌面输入框都跟踪选区、都接受受控光标', selCount === 2);
-ck('三个麦克风各自带来源:大条 holdBar / 框内 fieldMic / 桌面 desktopMic', chat.includes("handlers={voiceHandlersFor('holdBar')}") && chat.includes("handlers={voiceHandlersFor('fieldMic')}") && chat.includes("handlers={voiceHandlersFor('desktopMic')}"));
+ck('两个麦克风各自带来源:大条 holdBar / 桌面 desktopMic;没有框内 fieldMic', chat.includes("handlers={voiceHandlersFor('holdBar')}") && chat.includes("handlers={voiceHandlersFor('desktopMic')}") && !chat.includes("'fieldMic'"));
 const vhAt = chat.indexOf('const voiceHandlersFor = (source: VoiceSource) => withPressStart(');
 const vh = chat.slice(vhAt, chat.indexOf('\n  );', vhAt));
 ck('voiceHandlersFor:按下时先读宿主选区,再 beginVoicePress,且只在 idle 时', vhAt > 0
   && /const host = hostSelection\(source === 'holdBar' \? draftCardRef\.current : mainComposerRef\.current\);\s*if \(host\) selectionCaptureRef\.current\.track\(host\);\s*voiceSourceRef\.current = beginVoicePress\(source, selectionCaptureRef\.current\);/.test(vh)
   && /\(\) => voice\.state\.phase === 'idle',\s*$/.test(vh));
-ck('框内麦克风只在键盘模式(手机 / 双栏,非桌面,available)', chat.includes('const fieldMic = !desktop && voice.available && !voiceMode;') && chat.includes("{fieldMic ? <VoiceFieldMic voice={voice} handlers={voiceHandlersFor('fieldMic')} /> : null}"));
-ck('有框内麦克风时输入框让出右内边距', chat.includes('fieldMic && styles.inputWithFieldMic') && /inputWithFieldMic: \{ paddingRight: composerInputPadRightWithMic\(/.test(chat));
 ck('全屏编辑器关闭 → 选区作废', chat.includes('if (fullEditorOpen && !t.open) selectionCaptureRef.current.reset();'));
-ck('网页 / 桌面 webview:麦克风 mousedown 不抢输入框焦点', /const keepInputFocus = Platform\.OS === 'web' \? \{ onMouseDown: \(e: \{ preventDefault\(\): void \}\) => e\.preventDefault\(\) \} : null;/.test(ui) && (ui.match(/\{\.\.\.keepInputFocus\}/g) ?? []).length === 3);
-const fm = ui.slice(ui.indexOf('export function VoiceFieldMic'), ui.indexOf('/** Ionicons 没有键盘图标'));
-ck('VoiceFieldMic 用传进来的 handlers(不是裸 voice.micHandlers)', fm.includes('{...handlers}') && !fm.includes('voice.micHandlers'));
-ck('VoiceFieldMic 未配置时同样可按(走「去设置」),识别中 busy', fm.includes("voice.configured ? '按住说话,插到光标处' : '语音输入(未配置)'") && fm.includes('accessibilityState={{ busy, disabled: busy }}'));
-ck('框内麦克风钉在输入框右下角 inset 处', /fieldMic: \{\s*position: 'absolute',\s*right: FIELD_MIC_INSET,\s*bottom: FIELD_MIC_INSET,/.test(ui));
+ck('网页 / 桌面 webview:麦克风 mousedown 不抢输入框焦点', /const keepInputFocus = Platform\.OS === 'web' \? \{ onMouseDown: \(e: \{ preventDefault\(\): void \}\) => e\.preventDefault\(\) \} : null;/.test(ui) && (ui.match(/\{\.\.\.keepInputFocus\}/g) ?? []).length === 2);
 
+ck('框内小麦克风整个去掉:组件 / 样式 / 布局常量都不在', !ui.includes('VoiceFieldMic') && !ui.includes('fieldMic:') && !/FIELD_MIC_INSET|composerFieldMicSize|composerInputPadRightWithMic/.test(read('src/composer-row-layout.ts') + chat + ui));
 console.log(`voice insert at cursor: ${p}/${t} checks passed`);
 process.exit(p === t ? 0 : 1);
