@@ -175,15 +175,25 @@ export function activeCategoryKey(
 // 重算;SettingsScreen 的 useState 随之重置,分类回到默认「账号」。这里用**模块级**记忆
 // 保存「当前分类 + 右栏滚动位置」——模块不随重挂重载,所以切主题后能原样恢复。
 // 纯逻辑,不 import react-native。
-let viewMemory: { category: SettingsCategoryKey; scrollY: number } = { category: 'account', scrollY: 0 };
+// 手机窄屏(微信「设置」式单列分组列表)额外记一项 page:当前推入的子页(null = 在列表上)。
+// 选分类 = 在手机上推入那一页,所以 rememberSettingsCategory 同时写 page;从聊天里「去设置语音」
+// (App.tsx rememberSettingsCategory('voice'))在手机上就直接落在语音子页,返回回到列表。
+export type SettingsViewMemory = { category: SettingsCategoryKey; scrollY: number; page: SettingsCategoryKey | null };
+let viewMemory: SettingsViewMemory = { category: 'account', scrollY: 0, page: null };
 
-export function rememberedSettingsView(): { category: SettingsCategoryKey; scrollY: number } {
+export function rememberedSettingsView(): SettingsViewMemory {
   return { ...viewMemory };
 }
 
 /** 切分类时记下新分类;换了分类就把滚动位置归零(新分类从顶部看起)。 */
 export function rememberSettingsCategory(key: SettingsCategoryKey): void {
-  if (viewMemory.category !== key) viewMemory = { category: key, scrollY: 0 };
+  if (viewMemory.category !== key) viewMemory = { category: key, scrollY: 0, page: key };
+  else viewMemory = { ...viewMemory, page: key };
+}
+
+/** 手机子页返回列表。分类保留(桌面宽屏仍停在它上面),滚动位置归零。 */
+export function closeSettingsPage(): void {
+  viewMemory = { ...viewMemory, scrollY: 0, page: null };
 }
 
 export function rememberSettingsScroll(y: number): void {
@@ -192,5 +202,35 @@ export function rememberSettingsScroll(y: number): void {
 
 /** 测试用。 */
 export function resetSettingsViewMemory(): void {
-  viewMemory = { category: 'account', scrollY: 0 };
+  viewMemory = { category: 'account', scrollY: 0, page: null };
+}
+
+// ── 手机窄屏的分组(Vincent 2026-09-27「手机设置照微信的设置做」)────────────────────────────
+// 顶部一块「账号」,然后 通用 / 功能 / 帮助与关于 三组小灰字标题,最底下单独一块「退出登录」。
+// 每个分类必须恰好落在一组里(settings-model.test.ts 断言)——新增分类忘了登记就红,不会在手机上消失。
+export type PhoneSettingsGroup = { readonly title: string | null; readonly keys: readonly SettingsCategoryKey[] };
+
+export const PHONE_SETTINGS_GROUPS: readonly PhoneSettingsGroup[] = [
+  { title: null, keys: ['account'] },
+  { title: '通用', keys: ['notifications', 'appearance', 'localHub'] },
+  { title: '功能', keys: ['voice'] },
+  { title: '帮助与关于', keys: ['about'] },
+];
+
+/** 列表行与子页标题用的名字;没写就用分类名。 */
+export const PHONE_ROW_LABEL: Partial<Record<SettingsCategoryKey, string>> = { about: '关于 Agent Network' };
+export const phoneRowLabel = (cat: Pick<SettingsCategory, 'key' | 'label'>): string => PHONE_ROW_LABEL[cat.key] ?? cat.label;
+
+/**
+ * 按当前可见的分类(filterSettings 的结果:已按平台与本地 Hub 是否存在筛过)排出手机分组;
+ * 本平台没有的分类不出行,整组都没有就连标题一起不出。
+ */
+export function phoneSettingsGroups(available: readonly Pick<SettingsCategory, 'key' | 'label'>[]): { title: string | null; rows: Pick<SettingsCategory, 'key' | 'label'>[] }[] {
+  const byKey = new Map(available.map((c) => [c.key, c] as const));
+  const out: { title: string | null; rows: Pick<SettingsCategory, 'key' | 'label'>[] }[] = [];
+  for (const g of PHONE_SETTINGS_GROUPS) {
+    const rows = g.keys.map((k) => byKey.get(k)).filter((c): c is Pick<SettingsCategory, 'key' | 'label'> => !!c);
+    if (rows.length) out.push({ title: g.title, rows });
+  }
+  return out;
 }

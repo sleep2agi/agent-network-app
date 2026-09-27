@@ -30,6 +30,10 @@ const DARK = {
   railActiveBg: '#15282c',
   railTooltipBg: '#27272a',
   railTooltipText: '#f4f4f5',
+  // 手机「设置」分组列表(照微信):地面一档、行一档、按下再一档。深色是同一结构的深色版,不是反色。
+  groupedBg: '#111113',
+  groupedRow: '#1c1c1f',
+  groupedRowPressed: '#242428',
 };
 
 // 白色主题 (Vincent tg 811/812) — same restraint on white surfaces;
@@ -60,6 +64,9 @@ const LIGHT: typeof DARK = {
   railActiveBg: '#dcedf0',
   railTooltipBg: '#20242a',
   railTooltipText: '#f4f4f5',
+  groupedBg: '#ededf0',
+  groupedRow: '#ffffff',
+  groupedRowPressed: '#e9eaee',
 };
 
 export type ThemeMode = 'dark' | 'light';
