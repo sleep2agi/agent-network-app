@@ -159,7 +159,7 @@ export default function MicDeviceSetting() {
       ) : null}
       {permError ? <Text style={[styles.hint, styles.error]} testID="voice-mic-error">{permError}</Text> : null}
       {notice ? <Text style={[styles.hint, styles.warn]} testID="voice-mic-notice">{notice}</Text> : null}
-      <Text style={styles.hint}>按住说话和「测试语音识别」都用这里选的麦克风;选的设备拔掉时自动改用系统默认。</Text>
+      <Text style={styles.hint}>语音输入和「测试语音识别」都用这里选的麦克风;选的设备拔掉时自动改用系统默认。</Text>
     </View>
   );
 }

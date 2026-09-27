@@ -33,6 +33,7 @@ import {
   PickedImage,
 } from './attach';
 import { attachmentsFromClipboard, isTauriDesktop, releaseClipboardAttachment } from './clipboard-attachment';
+import { pointerUi } from './pointer-ui';
 import { attachmentsFromFiles, filesFromTransfer, plusPressAction, transferHasFiles } from './desktop-file-intake';
 import { addToDraft, draftCountLabel, draftImageCount, isDraftImage, MAX_DRAFT_IMAGES, oversizeMessage, remainingImageSlots, removeFromDraft, sendBlocker, willCompressBeforeUpload } from './image-draft';
 import { createUploadMemo, removeAttachmentAt, runUploadQueue, UPLOAD_CONCURRENCY, uploadFailureSummary, withUploadState, type UploadState } from './upload-queue';
@@ -788,6 +789,9 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
   // 0.2.78 Vincent:「右键的效果和微信对齐」—— 桌面端菜单落在光标处(微信桌面端就是这样),
   // 触摸端仍是底部 action sheet。null = 用底部 sheet。
   const [menuAt, setMenuAt] = useState<{ x: number; y: number } | null>(null);
+  // 鼠标 + 键盘(pointer-ui.ts):Tauri 壳里任何窗口宽度都是。右键 / 悬停「⋯」开锚定菜单,
+  // 不挂长按 —— 桌面上按住鼠标是在拖选文字,不该冒出手机的底部 action sheet。
+  const pointer = pointerUi(desktop);
   // 放大阅读:单条消息的全屏可选中视图(我们的代码块很长,气泡里读不完)。
   const [expandFor, setExpandFor] = useState<MessageSelection | null>(null);
   // 选择文本(2026-09-26 Vincent 安卓折叠屏:「只能复制整个的消息…想划选部分段落或句子」):
@@ -804,7 +808,11 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
   // 复制消息(Vincent 2026-09-16):动作菜单里的「复制」+ 桌面端悬停气泡时右上角的复制按钮。
   // 复制成功后底部居中出一个「已复制」小 pill,1.4s 自动消失。
   const [copiedAt, setCopiedAt] = useState<number | null>(null);
+  // 悬停只认 DOM 的 mouseenter / mouseleave(移到子元素上不算离开)。RN-web Pressable 的 onHoverOut 不行:
+  // 它带 contain,指针一进气泡里的「复制 / ⋯」这两个嵌套 Pressable 就判外层「离开」→ 按钮被卸掉,永远点不到。
   const [hoverKey, setHoverKey] = useState<string | null>(null);
+  // 悬停「⋯」:菜单落在给定点(和右键同一个锚定菜单)。
+  const openMenuAt = (at: { x: number; y: number }, selection: MessageSelection) => { setMenuAt(at); setMenuFor(selection); };
   const copyMessage = (text: string) => copyValue(copyTextOf(text));
   // 原样复制(选中内容 / 选择视图的全文):不再过 copyTextOf,那会把以「」开头的选区当引用行剥掉。
   const copyValue = async (value: string) => {
@@ -954,7 +962,7 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
 
   useEffect(() => {
     const doc = (globalThis as any).document;
-    if (!desktop || !doc?.addEventListener) return;
+    if (!pointer || !doc?.addEventListener) return;
     const handleMessageContextMenu = (event: any) => {
       const bubble = event.target?.closest?.('[data-message-key]');
       const key = bubble?.getAttribute?.('data-message-key');
@@ -977,12 +985,12 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
     };
     doc.addEventListener('contextmenu', handleMessageContextMenu, true);
     return () => doc.removeEventListener('contextmenu', handleMessageContextMenu, true);
-  }, [desktop, messages]);
+  }, [pointer, messages]);
 
   // 菜单/放大阅读:Esc 关闭(桌面端)。微信桌面端也没有「取消」那一行。
   useEffect(() => {
     const doc = (globalThis as any).document;
-    if (!desktop || !doc?.addEventListener) return;
+    if (!pointer || !doc?.addEventListener) return;
     if (!menuFor && !expandFor) return;
     const onKeyDown = (event: any) => {
       if (event.key !== 'Escape') return;
@@ -992,7 +1000,7 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
     };
     doc.addEventListener('keydown', onKeyDown);
     return () => doc.removeEventListener('keydown', onKeyDown);
-  }, [desktop, menuFor, expandFor]);
+  }, [pointer, menuFor, expandFor]);
 
   const openForwardPicker = async (selection: MessageSelection, batch?: MessageSelection[]) => {
     setMenuFor(null);
@@ -1069,8 +1077,8 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
 
   // ── 菜单动作(0.2.78) ────────────────────────────────────────────────────
   const menuGroups = useMemo(
-    () => messageMenuGroups({ hasText: !!menuFor?.text, selectionMode, canForward: true, touch: !desktop, selectedText: menuFor?.selectedText }),
-    [menuFor, selectionMode, desktop],
+    () => messageMenuGroups({ hasText: !!menuFor?.text, selectionMode, canForward: true, touch: !pointer, selectedText: menuFor?.selectedText }),
+    [menuFor, selectionMode, pointer],
   );
   const onMenuAction = (key: MessageMenuKey) => {
     const selection = menuFor;
@@ -1774,7 +1782,7 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
 
           ) : searchState === 'empty' ? (
 
-            <Text style={styles.searchHint}>{hasOlder && searchPagesRef.current >= SEARCH_MAX_OLDER_PAGES ? `最近 ${limitRef.current} 条里没有找到;更早的历史请继续上滑后再搜` : '没有找到'}</Text>
+            <Text style={styles.searchHint}>{hasOlder && searchPagesRef.current >= SEARCH_MAX_OLDER_PAGES ? `最近 ${limitRef.current} 条里没有找到;更早的历史请继续${pointer ? '向上滚动' : '上滑'}后再搜` : '没有找到'}</Text>
 
           ) : (
 
@@ -1882,16 +1890,14 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
                       {sender.alias}{item.created_at ? ` · ${formatChatHeader(item.created_at)}` : ''}
                     </Text>
                     <Pressable
-                      {...(desktop ? ({ dataSet: { messageKey: msgKey(item), messagePart: 'sent' }, onHoverIn: () => setHoverKey(`${msgKey(item)}:sent`), onHoverOut: () => setHoverKey(null), onMouseEnter: () => setHoverKey(`${msgKey(item)}:sent`), onMouseLeave: () => setHoverKey(null) } as any) : {})}
-                      onLongPress={() => setMenuFor({ item, text: item.content ?? '', author: sender.alias })}
+                      {...(pointer ? ({ dataSet: { messageKey: msgKey(item), messagePart: 'sent' }, onMouseEnter: () => setHoverKey(`${msgKey(item)}:sent`), onMouseLeave: () => setHoverKey(null) } as any) : {})}
+                      onLongPress={pointer ? undefined : () => setMenuFor({ item, text: item.content ?? '', author: sender.alias })}
                       delayLongPress={300}
                       style={({ pressed }) => [styles.bubblePressable, pressed && { opacity: 0.7 }]}
                     >
                       <View style={styles.bubble}>
-                        {desktop && hoverKey === `${msgKey(item)}:sent` && item.content ? (
-                          <Pressable accessibilityLabel="复制消息" hitSlop={6} onPress={() => void copyMessage(item.content ?? '')} style={({ pressed }) => [styles.copyHover, styles.copyHoverSent, pressed && { opacity: 0.6 }]}>
-                            <Ionicons name="copy-outline" size={14} color={colors.textMuted} />
-                          </Pressable>
+                        {pointer && hoverKey === `${msgKey(item)}:sent` && item.content ? (
+                          <MessageHoverActions side="sent" styles={styles} onCopy={() => void copyMessage(item.content ?? '')} onMore={at => openMenuAt(at, { item, text: item.content ?? '', author: sender.alias })} />
                         ) : null}
                         <MarkdownMessage>{hideGridImageLines(cleanAttachmentDebugText(sentQuoted.body || (sentQuoted.quote ? '' : '—')), sentGridNames) || (sentQuoted.quote ? '' : '—')}</MarkdownMessage>
                         {renderAttachments(sentAttachmentViews(item, cfg.serverUrl), item)}
@@ -1915,16 +1921,14 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
                       {`${sender.alias} → ${alias}`}{item.created_at ? ` · ${formatChatHeader(item.created_at)}` : ''}
                     </Text>
                     <Pressable
-                      {...(desktop ? ({ dataSet: { messageKey: msgKey(item), messagePart: 'sent' }, onHoverIn: () => setHoverKey(`${msgKey(item)}:sent`), onHoverOut: () => setHoverKey(null), onMouseEnter: () => setHoverKey(`${msgKey(item)}:sent`), onMouseLeave: () => setHoverKey(null) } as any) : {})}
-                      onLongPress={() => setMenuFor({ item, text: item.content ?? '', author: sender.alias })}
+                      {...(pointer ? ({ dataSet: { messageKey: msgKey(item), messagePart: 'sent' }, onMouseEnter: () => setHoverKey(`${msgKey(item)}:sent`), onMouseLeave: () => setHoverKey(null) } as any) : {})}
+                      onLongPress={pointer ? undefined : () => setMenuFor({ item, text: item.content ?? '', author: sender.alias })}
                       delayLongPress={300}
                       style={styles.replyPressable}
                     >
                       <View style={[styles.bubble, styles.replyBubble]}>
-                        {desktop && hoverKey === `${msgKey(item)}:sent` && item.content ? (
-                          <Pressable accessibilityLabel="复制消息" hitSlop={6} onPress={() => void copyMessage(item.content ?? '')} style={({ pressed }) => [styles.copyHover, styles.copyHoverReply, pressed && { opacity: 0.6 }]}>
-                            <Ionicons name="copy-outline" size={14} color={colors.textMuted} />
-                          </Pressable>
+                        {pointer && hoverKey === `${msgKey(item)}:sent` && item.content ? (
+                          <MessageHoverActions side="reply" styles={styles} onCopy={() => void copyMessage(item.content ?? '')} onMore={at => openMenuAt(at, { item, text: item.content ?? '', author: sender.alias })} />
                         ) : null}
                         <MarkdownMessage>{hideGridImageLines(cleanAttachmentDebugText(sentQuoted.body || (sentQuoted.quote ? '' : '—')), sentGridNames) || (sentQuoted.quote ? '' : '—')}</MarkdownMessage>
                         {renderAttachments(sentAttachmentViews(item, cfg.serverUrl), item)}
@@ -1945,16 +1949,14 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
                       {/* 2026-09-16 Vincent:「每条消息都展示下时间吧」—— 回复用完成时刻,没有就用创建时刻 */}
                       <Text style={styles.messageAuthor} numberOfLines={1}>{alias}{item._proactive ? ' · 主动汇报' : ''}{(item.completed_at ?? item.created_at) ? ` · ${formatChatHeader(item.completed_at ?? item.created_at)}` : ''}</Text>
                       <Pressable
-                        {...(desktop ? ({ dataSet: { messageKey: msgKey(item), messagePart: 'reply' }, onHoverIn: () => setHoverKey(`${msgKey(item)}:reply`), onHoverOut: () => setHoverKey(null), onMouseEnter: () => setHoverKey(`${msgKey(item)}:reply`), onMouseLeave: () => setHoverKey(null) } as any) : {})}
-                        onLongPress={() => setMenuFor({ item, text: item.result ?? item.reply ?? '', author: alias })}
+                        {...(pointer ? ({ dataSet: { messageKey: msgKey(item), messagePart: 'reply' }, onMouseEnter: () => setHoverKey(`${msgKey(item)}:reply`), onMouseLeave: () => setHoverKey(null) } as any) : {})}
+                        onLongPress={pointer ? undefined : () => setMenuFor({ item, text: item.result ?? item.reply ?? '', author: alias })}
                         delayLongPress={300}
                         style={styles.replyPressable}
                       >
                         <View style={[styles.bubble, styles.replyBubble]}>
-                          {desktop && hoverKey === `${msgKey(item)}:reply` ? (
-                            <Pressable accessibilityLabel="复制消息" hitSlop={6} onPress={() => void copyMessage(item.result ?? item.reply ?? '')} style={({ pressed }) => [styles.copyHover, styles.copyHoverReply, pressed && { opacity: 0.6 }]}>
-                              <Ionicons name="copy-outline" size={14} color={colors.textMuted} />
-                            </Pressable>
+                          {pointer && hoverKey === `${msgKey(item)}:reply` ? (
+                            <MessageHoverActions side="reply" styles={styles} onCopy={() => void copyMessage(item.result ?? item.reply ?? '')} onMore={at => openMenuAt(at, { item, text: item.result ?? item.reply ?? '', author: alias })} />
                           ) : null}
                           <MarkdownMessage>{cleanAttachmentDebugText(replyQuoted.body)}</MarkdownMessage>
                           {renderAttachments(replyAttachmentViews(item, cfg.serverUrl))}
@@ -2105,9 +2107,9 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
       {/* 0.2.78 Vincent:和微信对齐 —— 分组 + 分隔线,删除单独一组,没有「取消」行(Esc/点空白关)。
           桌面端落在光标处;触摸端仍是底部 action sheet。 */}
       <Modal visible={!!menuFor} transparent animationType="fade" onRequestClose={() => setMenuFor(null)}>
-        <Pressable style={desktop && menuAt ? styles.menuBackdropAnchored : styles.menuBackdrop} onPress={() => setMenuFor(null)}>
+        <Pressable style={pointer && menuAt ? styles.menuBackdropAnchored : styles.menuBackdrop} onPress={() => setMenuFor(null)}>
           <View
-            style={desktop && menuAt
+            style={pointer && menuAt
               ? [styles.actionMenuDesktop, { left: Math.max(8, Math.min(menuAt.x, menuWindowWidth - 188)), top: Math.max(8, Math.min(menuAt.y, menuWindowHeight - 300)) }]
               : [styles.actionSheet, sheetPad]}
           >
@@ -2120,7 +2122,7 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
                     <Pressable
                       accessibilityLabel={item.key === 'copy' ? '复制消息' : item.label}
                       style={({ pressed }) => [
-                        desktop && menuAt ? styles.actionItemDesktop : styles.actionItem,
+                        pointer && menuAt ? styles.actionItemDesktop : styles.actionItem,
                         pressed && styles.actionItemPressed,
                       ]}
                       onPress={() => onMenuAction(item.key)}
@@ -2160,12 +2162,13 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
         </Pressable>
       </Modal>
 
-      <SelectTextSheet
+      {/* 触摸端才有「选择文本」(message-menu-model.ts):鼠标直接在气泡里拖选,不需要全屏选区页。 */}
+      {pointer ? null : <SelectTextSheet
         text={selectTextFor ? selectTextFor.text : null}
         author={selectTextFor?.author}
         onClose={() => setSelectTextFor(null)}
         onCopyAll={(value) => { void copyValue(value); }}
-      />
+      />}
 
       <Modal visible={!!forwardFor && forwardUiOwner === conversationKeyFor} transparent animationType="fade" onRequestClose={() => setForwardFor(null)}>
         <Pressable style={[styles.forwardBackdrop, withBasePadding(dialogSafe, spacing.xl)]} onPress={() => setForwardFor(null)}>
@@ -2429,6 +2432,33 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
   );
 }
 
+/**
+ * 桌面端悬停气泡时的一对小按钮:复制 +「⋯ 更多操作」。「⋯」打开的就是右键那份锚定菜单,落在按钮正下方 ——
+ * 右键不是唯一入口(触控板用户、不知道能右键的人都找得到)。`side` 决定贴气泡哪一边(与头像相反的那边)。
+ */
+function MessageHoverActions({ side, styles, onCopy, onMore }: {
+  side: 'sent' | 'reply';
+  styles: ReturnType<typeof makeStyles>;
+  onCopy: () => void;
+  onMore: (at: { x: number; y: number }) => void;
+}) {
+  const moreRef = useRef<any>(null);
+  const more = () => {
+    const r = moreRef.current?.getBoundingClientRect?.();
+    onMore(r ? { x: r.left, y: r.bottom + 4 } : { x: 0, y: 0 });
+  };
+  return (
+    <View style={[styles.hoverActions, side === 'sent' ? styles.copyHoverSent : styles.copyHoverReply]} testID="message-hover-actions">
+      <Pressable accessibilityLabel="复制消息" hitSlop={6} onPress={onCopy} style={({ pressed }) => [styles.copyHover, pressed && { opacity: 0.6 }]}>
+        <Ionicons name="copy-outline" size={14} color={colors.textMuted} />
+      </Pressable>
+      <Pressable ref={moreRef} accessibilityLabel="更多操作" testID="message-hover-more" hitSlop={6} onPress={more} style={({ pressed }) => [styles.copyHover, pressed && { opacity: 0.6 }]}>
+        <Ionicons name="ellipsis-horizontal" size={14} color={colors.textMuted} />
+      </Pressable>
+    </View>
+  );
+}
+
 /** Web export only: the textarea's height for `lines` lines (native TextInput sizes itself). */
 function webComposerInputHeight(lines: number): number {
   const control = composerControlSize(uiScale().densityFactor);
@@ -2622,7 +2652,9 @@ const makeStyles = () =>
   jumpPillText: { color: colors.accent, fontSize: 13, fontWeight: '600' },
   // 复制消息:桌面端悬停气泡时的右上角小按钮 + 底部「已复制」提示
   replyPressable: { maxWidth: '100%', alignSelf: 'flex-start' },
-  copyHover: { position: 'absolute', top: -10, zIndex: 2, width: 24, height: 24, borderRadius: 12, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.card, borderWidth: 1, borderColor: colors.border },
+  // 复制 + ⋯ 两个 24px 圆钮排成一行,整行挂在气泡上沿外侧(MessageHoverActions)。
+  hoverActions: { position: 'absolute', top: -10, zIndex: 2, flexDirection: 'row', gap: 4 },
+  copyHover: { width: 24, height: 24, borderRadius: 12, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.card, borderWidth: 1, borderColor: colors.border },
   copyHoverSent: { left: -12 },
   copyHoverReply: { right: -12 },
   copiedToast: { position: 'absolute', alignSelf: 'center', bottom: 96, flexDirection: 'row', alignItems: 'center', gap: 6, paddingVertical: 6, paddingHorizontal: 12, borderRadius: 14, backgroundColor: colors.card, borderWidth: 1, borderColor: colors.border },

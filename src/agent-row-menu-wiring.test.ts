@@ -69,18 +69,19 @@ ck('desktop list also gets 在新窗口打开', listMounts.filter(m => /\bonOpen
 // ── AgentsScreen:长按 / 右键都打开同一份菜单 ─────────────────────────────
 ck('menu exists only on chat lists (the ones that can pin)', agents.includes('const rowMenu = !!onTogglePin;'));
 const phoneRow = agents.slice(agents.indexOf('const renderPhoneRow = (item: Session) => {'), agents.indexOf('  return (\n    <View style={{ flex: 1'));
-ck('phone row: long-press opens the menu at the press point', phoneRow.includes('onLongPress={rowMenu ? e => openRowMenu(item.alias, e.nativeEvent.pageX, e.nativeEvent.pageY) : () => onOpenNodeDetail(item.alias)}'));
+// 鼠标 + 键盘(pointer-ui.ts:Tauri 壳任何宽度)不挂长按 —— 右键 / 菜单键开同一份菜单。
+ck('phone row: long-press (touch only) opens the menu at the press point', phoneRow.includes('onLongPress={pointer ? undefined : rowMenu ? e => openRowMenu(item.alias, e.nativeEvent.pageX, e.nativeEvent.pageY) : () => onOpenNodeDetail(item.alias)}') && agents.includes('const pointer = pointerUi();'));
 ck('phone row: tap still opens the chat', phoneRow.includes('onPress={() => openChat(item.alias)}'));
 ck('phone row: web right-click target (data-agent-alias) only when there is a menu', phoneRow.includes('{...(rowMenu ? ({ dataSet: { agentAlias: item.alias } } as any) : {})}'));
 ck('phone row: the pressed row keeps its pressed tint while its menu is open', phoneRow.includes('pressed || menuFor?.alias === item.alias ? colors.rowHover : colors.bg'));
 const deskRow = agents.slice(agents.indexOf('const renderCompactRow = (item: Session) => {'), agents.indexOf('const renderPhoneRow'));
-ck('desktop row: still no long-press (mouse), right-click target kept', deskRow.includes('onLongPress={compact ? undefined') && deskRow.includes('dataSet: { agentAlias: item.alias }'));
+ck('desktop row: still no long-press (mouse), right-click target kept', deskRow.includes('onLongPress={pointer ? undefined') && deskRow.includes('dataSet: { agentAlias: item.alias }'));
 const ctxStart = agents.indexOf('const handleContextMenu = (event: any) => {');
 const ctx = agents.slice(ctxStart, agents.indexOf('}, [rowMenu, openRowMenu]);', ctxStart));
 ck('right-click (capture phase) opens the same menu at the cursor', ctx.includes('openRowMenu(alias, event.clientX ?? event.pageX ?? 180, event.clientY ?? event.pageY ?? 180);') && ctx.includes('event.preventDefault?.();'));
 ck('right-click handler is bound on web whenever there is a menu (desktop and web phone layout)', agents.includes("if (!rowMenu || Platform.OS !== 'web' || !doc?.addEventListener) return;"));
 ck('the old inline desktop context menu is gone (one menu, not two)', !agents.includes('setContextMenu') && !agents.includes("'置顶会话'") && !agents.includes('在新窗口打开'));
-ck('one <AgentRowMenu> mounted, closed by clearing menuFor', (agents.match(/<AgentRowMenu\b/g) ?? []).length === 1 && agents.includes('<AgentRowMenu target={menuFor} items={menuItems} touch={!compact} onSelect={onRowMenu} onClose={() => setMenuFor(null)} />'));
+ck('one <AgentRowMenu> mounted, closed by clearing menuFor', (agents.match(/<AgentRowMenu\b/g) ?? []).length === 1 && agents.includes('<AgentRowMenu target={menuFor} items={menuItems} touch={!pointer} onSelect={onRowMenu} onClose={() => setMenuFor(null)} />'));
 ck('items come from agentRowMenuItems with each action gated on its callback', /agentRowMenuItems\(\{[\s\S]*?canPin: !!onTogglePin,\s*canMute: !!onToggleMute,\s*canOpenWindow: !!onOpenChatWindow,/.test(agents));
 ck('item states: unread = real count or manual mark; pinned / muted / hidden from the same sources as the row',
   agents.includes('unread: rowIsUnread(rowUnreadCount(menuFor.alias), convFlags.manualUnread.includes(menuFor.alias)),')

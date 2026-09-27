@@ -16,6 +16,7 @@ import { isTauriDesktop } from './clipboard-attachment';
 import { colors, onThemeChange, spacing } from './theme';
 import { usePoll } from './usePoll';
 import { PANE_BACK_TEST_ID, paneShowsBack } from './pane-header';
+import { pointerUi } from './pointer-ui';
 
 // RFC-026 §9.4 / #338 mobile picker — design locked by 通信龙 + Vincent UX.
 // 3 states, mirroring dashboard PR4 but with RN primitives:
@@ -72,13 +73,18 @@ export default function HostSupervisorPickerScreen({
   // by the shared hook so a backgrounded modal doesn't burn battery.
   usePoll(load, 10000, [load]);
 
+  // 下拉刷新只有手指拉得动(RN-web 的 RefreshControl 什么都不画):鼠标 + 键盘(pointer-ui.ts)在标题栏右侧给一个「刷新」。
+  const pointer = pointerUi(desktop);
+  const refresh = () => { setRefreshing(true); void load(); };
+  const headerRefresh = pointer ? { onRefresh: refresh, refreshing } : {};
+
   // ── render branches ──────────────────────────────────────────────
 
   // loading (initial)
   if (!result) {
     return (
       <View style={styles.root}>
-        <Header onBack={onBack} showBack={paneShowsBack(desktop)} title="选服务器" />
+        <Header onBack={onBack} showBack={paneShowsBack(desktop)} title="选服务器" {...headerRefresh} />
         <View style={styles.center}>
           <ActivityIndicator color={colors.accent} />
           <Text style={styles.loadingText}>正在查询…</Text>
@@ -93,7 +99,7 @@ export default function HostSupervisorPickerScreen({
   if (!result.ok && result.unconfirmed) {
     return (
       <View style={styles.root}>
-        <Header onBack={onBack} showBack={paneShowsBack(desktop)} title="选服务器" />
+        <Header onBack={onBack} showBack={paneShowsBack(desktop)} title="选服务器" {...headerRefresh} />
         <ScrollView contentContainerStyle={styles.contentPad}>
           <View style={styles.warnCard}>
             <Text style={styles.warnTitle}>⚠  服务器未升级</Text>
@@ -111,7 +117,7 @@ export default function HostSupervisorPickerScreen({
   if (!result.ok) {
     return (
       <View style={styles.root}>
-        <Header onBack={onBack} showBack={paneShowsBack(desktop)} title="选服务器" />
+        <Header onBack={onBack} showBack={paneShowsBack(desktop)} title="选服务器" {...headerRefresh} />
         <View style={styles.center}>
           <Text style={styles.errorTitle}>查询失败</Text>
           <Text style={styles.errorHint}>{result.error}</Text>
@@ -132,7 +138,7 @@ export default function HostSupervisorPickerScreen({
   if (count === 0) {
     return (
       <View style={styles.root}>
-        <Header onBack={onBack} showBack={paneShowsBack(desktop)} title="选服务器" />
+        <Header onBack={onBack} showBack={paneShowsBack(desktop)} title="选服务器" {...headerRefresh} />
         <ScrollView
           contentContainerStyle={styles.contentPad}
           refreshControl={
@@ -170,7 +176,7 @@ export default function HostSupervisorPickerScreen({
     const d = daemons[0];
     return (
       <View style={styles.root}>
-        <Header onBack={onBack} showBack={paneShowsBack(desktop)} title="选服务器" />
+        <Header onBack={onBack} showBack={paneShowsBack(desktop)} title="选服务器" {...headerRefresh} />
         <ScrollView
           contentContainerStyle={styles.contentPad}
           refreshControl={
@@ -198,7 +204,7 @@ export default function HostSupervisorPickerScreen({
               让他知道 + 让他能试,而不是替他下结论。 */}
           {describeDaemonCapability(d, Date.now()).kind === 'blocked' ? (
             <Text style={styles.autoPickBlocked}>
-              ⚠ 这台现在报告「建不了节点」——照上面的原因修好再试，或下拉刷新。
+              {`⚠ 这台现在报告「建不了节点」——照上面的原因修好再试，或${pointer ? '点右上角「刷新」' : '下拉刷新'}。`}
             </Text>
           ) : null}
         </ScrollView>
@@ -214,7 +220,7 @@ export default function HostSupervisorPickerScreen({
   // count≥2 (or count=1 in forced list view) → picker list
   return (
     <View style={styles.root}>
-      <Header onBack={onBack} showBack={paneShowsBack(desktop)} title="选服务器" />
+      <Header onBack={onBack} showBack={paneShowsBack(desktop)} title="选服务器" {...headerRefresh} />
       <View style={styles.contentPad}>
         <Text style={styles.listHeader}>
           选择一台 host_supervisor 节点 ({count})
@@ -268,17 +274,11 @@ function handleNext(d: HostSupervisorDaemon, onPicked?: (d: HostSupervisorDaemon
   );
 }
 
-function Header({ onBack, showBack, title }: { onBack: () => void; showBack: boolean; title: string }) {
+function Header({ onBack, showBack, title, onRefresh, refreshing = false }: { onBack: () => void; showBack: boolean; title: string; onRefresh?: () => void; refreshing?: boolean }) {
+  const refreshBtn = onRefresh ? <HeaderRefresh onRefresh={onRefresh} refreshing={refreshing} /> : null;
   // Desktop: no back, and the title starts on the content's left edge (a centred phone title
   // between two empty 40 px slots reads as a stray label in a wide pane).
-  if (!showBack) {
-    return (
-      <View style={[styles.header, styles.headerWide]} testID="screen-header">
-        <Text style={[styles.headerTitle, styles.headerTitleWide]}>{title}</Text>
-      </View>
-    );
-  }
-  return (
+  return showBack ? (
     <View style={styles.header} testID="screen-header">
       <Pressable
         testID={PANE_BACK_TEST_ID}
@@ -289,8 +289,29 @@ function Header({ onBack, showBack, title }: { onBack: () => void; showBack: boo
         <Ionicons name="chevron-back" size={26} color={colors.text} />
       </Pressable>
       <Text style={styles.headerTitle}>{title}</Text>
-      <View style={styles.headerSpacer} />
+      {refreshBtn ?? <View style={styles.headerSpacer} />}
     </View>
+  ) : (
+    <View style={[styles.header, styles.headerWide]} testID="screen-header">
+      <Text style={[styles.headerTitle, styles.headerTitleWide]}>{title}</Text>
+      {refreshBtn}
+    </View>
+  );
+}
+
+function HeaderRefresh({ onRefresh, refreshing }: { onRefresh: () => void; refreshing: boolean }) {
+  return (
+    <Pressable
+      testID="picker-refresh"
+      accessibilityRole="button"
+      accessibilityLabel="刷新"
+      disabled={refreshing}
+      onPress={onRefresh}
+      style={({ pressed, hovered }: any) => [styles.headerRefresh, hovered && styles.headerRefreshHover, pressed && { opacity: 0.6 }]}
+    >
+      {refreshing ? <ActivityIndicator size="small" color={colors.textMuted} /> : <Ionicons name="refresh-outline" size={16} color={colors.textSecondary} />}
+      <Text style={styles.headerRefreshText}>刷新</Text>
+    </Pressable>
   );
 }
 
@@ -476,6 +497,10 @@ const makeStyles = () => StyleSheet.create({
   headerSpacer: { width: 40 },
   headerWide: { paddingHorizontal: spacing.lg, minHeight: 57 },
   headerTitleWide: { textAlign: 'left' },
+  // 桌面「刷新」:与标题同一行、垂直居中;32 高,图标 + 字,悬停一档中性底。
+  headerRefresh: { flexDirection: 'row', alignItems: 'center', gap: 4, height: 32, paddingHorizontal: spacing.sm, borderRadius: 6 },
+  headerRefreshHover: { backgroundColor: colors.rowHover },
+  headerRefreshText: { color: colors.textSecondary, fontSize: 13 },
 
   // count=0 onboarding
   onboardingCard: {

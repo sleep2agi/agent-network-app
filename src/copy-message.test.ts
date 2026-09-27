@@ -20,8 +20,12 @@ ck('复制项带无障碍名', src.includes("item.key === 'copy' ? '复制消息
 ck('复制走 expo-clipboard,失败退回 navigator.clipboard', src.includes("import * as Clipboard from 'expo-clipboard';") && src.includes('await Clipboard.setStringAsync(value);') && src.includes('navigator?.clipboard?.writeText?.(value)'));
 ck('复制的是 copyTextOf(去引用块)', src.includes('const copyMessage = (text: string) => copyValue(copyTextOf(text));'));
 // 0.2.72:第三种气泡(别的节点派来的任务,收到侧)也带复制按钮 → 3 处
-ck('桌面端三种气泡悬停都有复制按钮', src.split('accessibilityLabel="复制消息"').length === 5 && src.includes('hoverKey === `${msgKey(item)}:sent`') && src.includes('hoverKey === `${msgKey(item)}:reply`'));
-ck('悬停按钮只在桌面端', src.includes('desktop && hoverKey ==='));
+// 2026-09-27:三处悬停按钮收进 MessageHoverActions(复制 + ⋯ 更多操作),各气泡各挂一次。
+ck('桌面端三种气泡悬停都有复制按钮', (src.match(/<MessageHoverActions side=/g) ?? []).length === 3 && src.split('accessibilityLabel="复制消息"').length === 3 && src.includes('hoverKey === `${msgKey(item)}:sent`') && src.includes('hoverKey === `${msgKey(item)}:reply`'));
+ck('悬停按钮只在鼠标端(pointer-ui.ts)', (src.match(/pointer && hoverKey ===/g) ?? []).length === 3 && !src.includes('desktop && hoverKey ==='));
+// RN-web Pressable 的 hover 带 contain:指针进到嵌套的按钮上,外层先收到 onHoverOut → 按钮卸载、点不到(2026-09-27 实测)。
+ck('气泡悬停只用 mouseenter / mouseleave,不用会被嵌套按钮打断的 onHoverOut', !src.includes('onHoverOut: () => setHoverKey(null)') && (src.match(/onMouseLeave: \(\) => setHoverKey\(null\)/g) ?? []).length === 3);
+ck('悬停「⋯」打开锚定菜单(与右键同一份)', src.includes('accessibilityLabel="更多操作"') && src.includes('const openMenuAt = (at: { x: number; y: number }, selection: MessageSelection) => { setMenuAt(at); setMenuFor(selection); };'));
 ck('「已复制」提示到点自动清', src.includes('setTimeout(() => setCopiedAt(null), COPIED_TOAST_MS)') && src.includes('copiedToastVisible(copiedAt, Date.now())'));
 
 console.log(`\n${p}/${t} passed`); process.exit(p === t ? 0 : 1);
