@@ -26,7 +26,9 @@ import UiScaleSettings from './UiScaleSettings';
 import ShortcutsSettings from './ShortcutsSettings';
 import { ds } from './ui-scale';
 import { playChime } from './chime';
-import { SETTINGS_CATEGORIES, activeCategoryKey, closeSettingsPage, filterSettings, phoneRowLabel, phoneSettingsGroups, rememberSettingsCategory, rememberSettingsScroll, rememberedSettingsView, settingsPlatform, visibleRowKeys, type SettingsCategoryKey, type SettingsPlatform } from './settings-model';
+import { SETTINGS_CATEGORIES, SETTINGS_DETAIL_TITLE, activeCategoryKey, closeSettingsPage, filterSettings, phoneRowLabel, phoneSettingsGroups, rememberSettingsCategory, rememberSettingsScroll, rememberedSettingsView, settingsBackTarget, settingsPlatform, visibleRowKeys, type SettingsCategoryKey, type SettingsDetailKey, type SettingsPlatform } from './settings-model';
+import SettingsPhonePage, { type PhonePagesCtx } from './SettingsPhonePages';
+import { settingsPageContentStyle } from './settings-kit';
 import { useModalSafePadding } from './safe-area-runtime';
 import { withBasePadding } from './modal-safe-area';
 
@@ -42,7 +44,10 @@ import { withBasePadding } from './modal-safe-area';
 // 手机窄屏(Vincent 2026-09-27「手机设置照微信的设置做」):不画左栏,改成单列分组列表 ——
 //   浅灰地面上的白色行(标签 + 右侧值 + ›),小灰字组标题 通用 / 功能 / 帮助与关于,底部整宽「退出登录」。
 //   点一行推入该分类的子页(左上返回箭头);安卓系统返回 / 网页 Esc 回到列表。
-//   分组在 settings-model.ts 的 PHONE_SETTINGS_GROUPS;子页内容就是宽屏右栏的同一段渲染。
+//   分组在 settings-model.ts 的 PHONE_SETTINGS_GROUPS。
+//   子页(Vincent 2026-09-27「设置界面有点体验太差」)不再复用宽屏右栏的密排表单,改由
+//   SettingsPhonePages.tsx 用 settings-kit 的卡片 / 行 / ✓ 单选 / 开关 / 整宽按钮画;要输入的东西在
+//   三级编辑页(SettingsEditPages.tsx)。子页开着时 App 收起底部 tab 栏(onPhoneSubPageChange)。
 
 interface Me {
   username?: string;
@@ -59,6 +64,7 @@ export default function SettingsScreen({
   onSwitchProfile,
   onReauthProfile,
   notifyPreview,
+  onPhoneSubPageChange,
 }: {
   cfg: HubConfig;
   /** 桌面端:左上角关闭按钮。不传就不画(手机端设置是一个 tab,没有「关闭」)。 */
@@ -70,6 +76,8 @@ export default function SettingsScreen({
   onReauthProfile: (profile: Pick<HubProfile, 'profileId' | 'serverUrl' | 'username' | 'displayName'>) => void;
   /** 只给 web 验收夹具用(NotifySettingsFixtureScreen):在浏览器里按手机平台渲染通知设置。 */
   notifyPreview?: NotifySettingsPreview;
+  /** 手机:推入 / 退出子页时通知 App —— 子页是二级页,像微信一样不显示底部 tab 栏。 */
+  onPhoneSubPageChange?: (open: boolean) => void;
 }) {
   const [me, setMe] = useState<Me>({});
   const [profiles, setProfiles] = useState<HubProfile[]>([]);
@@ -139,7 +147,13 @@ export default function SettingsScreen({
   // 手机:当前推入的子页(null = 在分组列表上)。同样走模块级记忆 —— 在「外观」子页里切主题整棵重挂后仍停在外观。
   const [page, setPage] = useState<SettingsCategoryKey | null>(() => rememberedSettingsView().page);
   const openPage = (key: SettingsCategoryKey) => { setCategory(key); setPage(key); };
-  const closePage = () => { closeSettingsPage(); setPage(null); };
+  // 手机三级页(API Key、高级 / 旧版控制台、免打扰时段、管理账号)。
+  const [detail, setDetail] = useState<SettingsDetailKey | null>(null);
+  const closePage = () => { closeSettingsPage(); setPage(null); setDetail(null); };
+  const openDetail = (key: SettingsDetailKey) => { setDetail(key); paneScrollRef.current?.scrollTo({ y: 0, animated: false }); };
+  const closeDetail = () => { setDetail(null); paneScrollRef.current?.scrollTo({ y: 0, animated: false }); };
+  // 返回箭头 / 安卓返回键 / 网页 Esc 都走这里:先退三级页,再退子页。
+  const goBack = () => { if (settingsBackTarget(page, detail) === 'detail') closeDetail(); else closePage(); };
   const [logoutConfirm, setLogoutConfirm] = useState(false);
   const paneScrollRef = useRef<ScrollView>(null);
   useEffect(() => {
@@ -150,19 +164,26 @@ export default function SettingsScreen({
   const dialogSafe = useModalSafePadding('fullScreen'); // the two confirm dialogs (safe-area rule 2)
   const compact = width < 640;
   const subPage = compact ? page : null;
+  useEffect(() => {
+    onPhoneSubPageChange?.(!!subPage);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [subPage]);
+  // 离开设置(比如点通知进了会话)时把 tab 栏还回去。
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => () => onPhoneSubPageChange?.(false), []);
   // 子页的返回:安卓系统返回键/手势走 BackHandler(比 App.tsx 的返回处理晚注册 ⇒ 先被调用,
   // 同 ScheduledTasksScreen 的窄屏详情);网页(验收用的 web 导出)没有返回键,听 Esc。
   // 弹窗开着时让弹窗自己的 onRequestClose 处理(安卓的 Modal 会先吞掉返回键;网页的 Esc 两边都会收到)。
   const dialogOpen = !!removeTarget || localDeleteVisible || guideVisible || logoutConfirm;
   useEffect(() => {
     if (!subPage || dialogOpen) return;
-    const sub = BackHandler.addEventListener('hardwareBackPress', () => { closePage(); return true; });
+    const sub = BackHandler.addEventListener('hardwareBackPress', () => { goBack(); return true; });
     const win = Platform.OS === 'web' && typeof window !== 'undefined' ? window : null;
-    const onKey = (event: KeyboardEvent) => { if (event.key === 'Escape') { event.preventDefault(); closePage(); } };
+    const onKey = (event: KeyboardEvent) => { if (event.key === 'Escape') { event.preventDefault(); goBack(); } };
     win?.addEventListener('keydown', onKey);
     return () => { sub.remove(); win?.removeEventListener('keydown', onKey); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [subPage, dialogOpen]);
+  }, [subPage, dialogOpen, detail]);
 
   useEffect(() => {
     void Promise.all([listHubProfiles(), getDesktopStorageDiagnostics()]).then(([registry, diagnostics]) => {
@@ -317,16 +338,107 @@ export default function SettingsScreen({
     </View>
   );
   const subPageCat = subPage ? SETTINGS_CATEGORIES.find(c => c.key === active) : undefined;
+  const openDetailKey = subPage && settingsBackTarget(subPage, detail) === 'detail' ? detail : null;
   const phoneHeader = (
     <View style={styles.phoneHeader} testID="settings-subpage-header">
-      <Pressable testID="settings-back" accessibilityRole="button" accessibilityLabel="返回" onPress={closePage} hitSlop={8} style={({ pressed }) => [styles.phoneHeaderSide, pressed && { opacity: 0.6 }]}>
+      <Pressable testID="settings-back" accessibilityRole="button" accessibilityLabel="返回" onPress={goBack} hitSlop={8} style={({ pressed }) => [styles.phoneHeaderSide, pressed && { opacity: 0.6 }]}>
         <Ionicons name="chevron-back" size={24} color={colors.text} />
       </Pressable>
-      <Text style={styles.phoneHeaderTitle} numberOfLines={1}>{subPageCat ? phoneRowLabel(subPageCat) : '设置'}</Text>
+      <Text style={styles.phoneHeaderTitle} numberOfLines={1} testID="settings-subpage-title">{openDetailKey ? SETTINGS_DETAIL_TITLE[openDetailKey] : subPageCat ? phoneRowLabel(subPageCat) : '设置'}</Text>
       <View style={styles.phoneHeaderSide} />
     </View>
   );
-  const sectionStyle = compact ? [styles.section, styles.phoneSection] : styles.section;
+  const sectionStyle = styles.section;
+
+  // 手机子页:状态与动作和宽屏右栏同一份,只换 settings-kit 的画法(SettingsPhonePages.tsx)。
+  const reportError = (error: unknown) => setProfileError(String(error));
+  const runLocalHub = (work: () => Promise<unknown>) => {
+    setLocalHubBusy(true);
+    void work().catch(reportError).finally(() => setLocalHubBusy(false));
+  };
+  const phoneCtx: PhonePagesCtx = {
+    cfg,
+    show,
+    detail: openDetailKey,
+    openDetail,
+    closeDetail,
+    profiles,
+    me,
+    profileError,
+    storageDiagnostics,
+    tauriDesktop,
+    onPickProfile: profile => {
+      if (profile.requiresReauth) return onReauthProfile(profile);
+      if (profile.profileId !== cfg.profileId) void Promise.resolve(onSwitchProfile(profile.profileId)).catch(reportError);
+    },
+    onOpenProfileWindow: profile => { void openWorkspaceWindow(profile).catch(reportError); },
+    onRemoveProfile: profile => setRemoveTarget(profile),
+    onAddAccount,
+    localHub,
+    localHubBusy,
+    localBackupMessage,
+    localHubActions: {
+      upgrade: () => { setProfileError(''); runLocalHub(() => restartLocalHub().then(setLocalHub)); },
+      restart: () => runLocalHub(() => restartLocalHub().then(setLocalHub)),
+      stop: () => runLocalHub(() => stopLocalHub().then(() => localHubStatus()).then(setLocalHub)),
+      logs: () => { void openLocalHubLogs().catch(reportError); },
+      backup: () => { setLocalBackupMessage(''); runLocalHub(() => backupLocalHubData().then(result => setLocalBackupMessage(`备份已保存：${result.path}`))); },
+      openDelete: () => { setLocalDeleteText(''); setLocalDeleteVisible(true); },
+    },
+    themePref: themeSnap.pref,
+    themeModeNow: themeSnap.mode,
+    notify,
+    saveNotify,
+    nativeNotify,
+    permission,
+    ensurePermission,
+    muted,
+    unmute: alias => saveNotify(toggleAgentMuted(notify, notifyKey, alias)),
+    keepAliveState,
+    keepAliveStatus: keepAliveStatusText(notify, keepAliveState),
+    onKeepAliveChange: value => { saveNotify({ ...notify, keepAlive: value }); setTimeout(() => bumpKeepAlive(n => n + 1), 1500); },
+    dndAccess,
+    onDndBypassChange: value => { saveNotify({ ...notify, dndBypass: value }); if (value && dndAccessGranted() === false) void openDndAccessSettings(); },
+    openDndAccess: () => { void openDndAccessSettings(); },
+    openXiaomiGuide: () => setGuideVisible(true),
+    testMessage,
+    sendTest: () => {
+      void (async () => {
+        if (!(await ensurePermission())) { setTestMessage('没有通知权限:请在系统设置里允许通知后再试。'); return; }
+        try { await sendTestNotification(); setTestMessage('已发送。没看到的话,检查系统通知设置里的「Agent 消息」类别。'); }
+        catch (e) { setTestMessage(`发送失败:${String((e as Error)?.message ?? e)}`); }
+      })();
+    },
+    onSoundChange: value => { saveNotifySettings({ ...notify, soundEnabled: value }); if (value) playChime(); },
+    notifyPreview: !!notifyPreview,
+    quietStart,
+    quietEnd,
+    setQuietStart,
+    setQuietEnd,
+    renderShortcuts: () => <ShortcutsSettings s={styles} showNav={show('shortcuts', 'nav')} showChat={show('shortcuts', 'chat')} showSend={show('shortcuts', 'send')} />,
+    updateView: isAndroid
+      ? describeAndroidUpdateRow(androidUpdate, { currentVersion: APP_VERSION, lastCheckedAt: androidUpdateLastCheckedAt(), now: Date.now() })
+      : describeUpdateRow(update, { currentVersion: APP_VERSION, lastCheckedAt: desktopUpdateLastCheckedAt(), now: Date.now() }),
+    onCheckUpdate: () => {
+      if (isAndroid) void checkAndroidUpdate(APP_VERSION);
+      else void checkDesktopUpdate(undefined, { manual: true });
+    },
+  };
+  const phoneSubPage = subPage ? (
+    <ScrollView
+      ref={paneScrollRef}
+      style={styles.phoneScroll}
+      contentContainerStyle={settingsPageContentStyle()}
+      onScroll={e => rememberSettingsScroll(e.nativeEvent.contentOffset.y)}
+      scrollEventThrottle={100}
+      keyboardShouldPersistTaps="handled"
+      testID="settings-scroll"
+    >
+      <View testID={`settings-subpage-${subPage}`}>
+        <SettingsPhonePage page={subPage} ctx={phoneCtx} />
+      </View>
+    </ScrollView>
+  ) : null;
 
   const heading = (cat: SettingsCategoryKey) => searching
     ? <Text style={styles.groupTitle}>{SETTINGS_CATEGORIES.find(c => c.key === cat)?.label}</Text>
@@ -335,14 +447,14 @@ export default function SettingsScreen({
   return (
     <View style={[styles.root, !compact && styles.rootWide, compact && styles.rootPhone]}>
       {compact ? (subPage ? phoneHeader : listHeader) : sidebar}
-      {compact && !subPage ? phoneList : (
+      {compact ? (subPage ? phoneSubPage : phoneList) : (
       <View style={styles.pane} testID="settings-pane">
-        {compact ? null : <Text style={styles.paneTitle}>{paneTitle}</Text>}
+        <Text style={styles.paneTitle}>{paneTitle}</Text>
         {/* 0.2.80(Vincent 2026-09-19「设置页面往下面滑动不了」):右栏是 ScrollView,padding 在
             contentContainer 上——留在滚动根上的话它在可滚区域之外,最后一行照样贴着窗口底边。 */}
         <ScrollView
           ref={paneScrollRef}
-          contentContainerStyle={[styles.content, compact && styles.contentPhone]}
+          contentContainerStyle={styles.content}
           showsVerticalScrollIndicator
           onScroll={e => rememberSettingsScroll(e.nativeEvent.contentOffset.y)}
           scrollEventThrottle={100}
@@ -947,13 +1059,15 @@ const makeStyles = () =>
   StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.bg },
   rootWide: { flexDirection: 'row' },
-  // 手机分组列表(照微信「设置」):灰地面、白行、组标题小灰字;行高下限 48。
-  rootPhone: { backgroundColor: colors.groupedBg },
+  // 手机分组列表(照微信「设置」):浅地面、白行、组标题小灰字;行高下限 48。
+  // 地面 = 顶栏 / 状态栏那条的同一色(colors.bg):09-27 截图里顶栏下面那道灰带就是
+  // 「白顶栏 + groupedBg 地面」的接缝。白块靠细线描边和地面分开。
+  rootPhone: { backgroundColor: colors.bg },
   phoneScroll: { flex: 1 },
   phoneListContent: { paddingBottom: spacing.xl * 2 },
   phoneGroupTitle: { color: colors.textMuted, fontSize: 13, paddingHorizontal: spacing.lg, paddingTop: spacing.lg, paddingBottom: spacing.xs + 2 },
   phoneGroupGap: { height: spacing.sm },
-  phoneBlock: { backgroundColor: colors.groupedRow },
+  phoneBlock: { backgroundColor: colors.groupedRow, borderTopWidth: StyleSheet.hairlineWidth, borderBottomWidth: StyleSheet.hairlineWidth, borderColor: colors.border },
   phoneRow: { flexDirection: 'row', alignItems: 'center', minHeight: Math.max(48, ds(52)), paddingHorizontal: spacing.lg, gap: spacing.sm, backgroundColor: colors.groupedRow },
   phoneRowPressed: { backgroundColor: colors.groupedRowPressed },
   phoneRowLabel: { color: colors.text, fontSize: 16, flexShrink: 0 },
@@ -966,9 +1080,6 @@ const makeStyles = () =>
   phoneHeader: { flexDirection: 'row', alignItems: 'center', minHeight: 48, paddingHorizontal: spacing.xs, backgroundColor: colors.bg },
   phoneHeaderSide: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
   phoneHeaderTitle: { flex: 1, color: colors.text, fontSize: 17, fontWeight: '600', textAlign: 'center' },
-  // 子页:同一段行渲染,放进整宽白块(左右不留页边,像微信)。
-  contentPhone: { paddingHorizontal: 0, paddingTop: spacing.sm },
-  phoneSection: { backgroundColor: colors.groupedRow, paddingHorizontal: spacing.xs, paddingBottom: 0 },
   // 左栏:与导航栏同一色系,细线分隔;宽屏固定宽,窄屏变成顶部一条横向分类。
   sidebar: { width: 232, backgroundColor: colors.railBg, borderRightWidth: 1, borderRightColor: colors.border, paddingTop: spacing.lg },
   sidebarCompact: { width: '100%', borderRightWidth: 0, borderBottomWidth: 1, borderBottomColor: colors.border, paddingBottom: spacing.sm },

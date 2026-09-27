@@ -70,7 +70,7 @@ import { bumpLayoutGeneration } from './src/layout-handoff';
 import MobileNavRail from './src/MobileNavRail';
 import { comboFromEvent, shortcutAction, shortcutForCombo } from './src/shortcuts-model';
 import { isMacKeyboard, requestAgentSearchFocus, shortcutBindings, shortcutCaptureActive } from './src/shortcuts-store';
-import { contentWidthBesideRail, mobileRailWidth, navActiveKey, navChromeFor, railShowsBrand, screenForNavPress } from './src/nav-chrome';
+import { contentWidthBesideRail, mobileRailWidth, navActiveKey, navChromeFor, phoneInPageLeaf, railShowsBrand, screenForNavPress } from './src/nav-chrome';
 
 type Screen =
   | { name: 'login' }
@@ -320,7 +320,10 @@ function AppRoot() {
   const twoPaneSelection = layout === 'twoPane' ? paneSelectionFor(screen) : null;
   // Navigation chrome (src/nav-chrome.ts): the two-pane gets a left rail like the desktop
   // app (Vincent 0.2.100: 「下面那一栏放在左边会好一点」); the phone keeps its bottom tabs.
-  const navChrome = navChromeFor(layout, screen.name);
+  // 设置的子页(手机)是二级页:收起底部 tab 栏(SettingsScreen onPhoneSubPageChange 报上来)。
+  const [settingsSubPage, setSettingsSubPage] = useState(false);
+  const inPageLeaf = phoneInPageLeaf(screen.name, settingsSubPage);
+  const navChrome = navChromeFor(layout, screen.name, inPageLeaf);
   const navActive = navActiveKey(screen.name);
   const railShown = navChrome === 'rail';
   // Width to the right of the rail; the two panes split this, not the whole window.
@@ -355,7 +358,7 @@ function AppRoot() {
   // Bottom inset owner (rule 1): the tab bar when it shows; the chat composer pads itself
   // (ChatScreen composerInset) and so does the two-pane (panes below); any other full-screen
   // leaf gets it from navContent, so its last row is not under the gesture bar.
-  const contentBottomInset = navChromeFor(layout, screen.name) === 'none' && screen.name !== 'chat' && screen.name !== 'login' ? tabBarInset : 0;
+  const contentBottomInset = navChromeFor(layout, screen.name, inPageLeaf) === 'none' && screen.name !== 'chat' && screen.name !== 'login' ? tabBarInset : 0;
   // Web layout sweep only: lets tests/test-layout-sweep/run.mjs open screens the phone has no
   // tab for (tasks, taskDetail, logs, wizard). Never set on a device (SAFE_AREA_SIM is web-only).
   useEffect(() => {
@@ -508,7 +511,7 @@ function AppRoot() {
 
   // Phone bottom tab bar. The Android two-pane shows MobileNavRail instead (navChrome).
   const mobileTabBar = (activeName: string) => (
-    <View style={[styles.tabBar, { paddingBottom: tabBarInset }]}>
+    <View style={[styles.tabBar, { paddingBottom: tabBarInset }]} testID="mobile-tab-bar">
       {MOBILE_TABS.map(tab => (
         <Pressable
           key={tab.key}
@@ -806,6 +809,7 @@ function AppRoot() {
                       onSwitchProfile={activateProfile}
                       onReauthProfile={requestProfileReauth}
                       onLocalDataDeleted={finishLocalDataDeletion}
+                      onPhoneSubPageChange={setSettingsSubPage}
                     />
                   ) : (
                     <AgentsScreen

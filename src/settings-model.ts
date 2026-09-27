@@ -249,3 +249,33 @@ export function phoneSettingsGroups(available: readonly Pick<SettingsCategory, '
   }
   return out;
 }
+
+// ── 手机子页里的三级页(Vincent 2026-09-27「设置界面有点体验太差」)───────────────────────────
+// 子页只放行(标签 · 值 · ›);要输入的东西(API Key、接口地址、免打扰时段)点进三级编辑页再改,
+// 和微信 设置 → 个人信息 → 名字 一样。返回键 / Esc 先退三级页,再退子页。
+export type SettingsDetailKey = 'voiceApiKey' | 'voiceAdvanced' | 'quietHours' | 'manageAccounts';
+
+export const SETTINGS_DETAIL_TITLE: Record<SettingsDetailKey, string> = {
+  voiceApiKey: 'API Key',
+  voiceAdvanced: '高级 / 旧版控制台',
+  quietHours: '免打扰时段',
+  manageAccounts: '管理账号',
+};
+
+/** 三级页属于哪个子页(返回时回到它;子页换了就不该还停在别人的三级页上)。 */
+export const SETTINGS_DETAIL_PARENT: Record<SettingsDetailKey, SettingsCategoryKey> = {
+  voiceApiKey: 'voice',
+  voiceAdvanced: 'voice',
+  quietHours: 'notifications',
+  manageAccounts: 'account',
+};
+
+/**
+ * 手机顶栏的返回:三级页开着 → 退回子页;否则 → 退回列表。
+ * 纯函数,SettingsScreen 的返回箭头、安卓返回键、网页 Esc 都走它。
+ */
+export function settingsBackTarget(page: SettingsCategoryKey | null, detail: SettingsDetailKey | null): 'detail' | 'page' | 'none' {
+  if (!page) return 'none';
+  if (detail && SETTINGS_DETAIL_PARENT[detail] === page) return 'detail';
+  return 'page';
+}

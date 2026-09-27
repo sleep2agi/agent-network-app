@@ -44,7 +44,11 @@ export function advancedInitiallyOpen(c: VoiceCredentials | null): boolean {
   return !!c && (!!c.appId || !!c.endpoint || !!c.streamEndpoint || !!c.streamResourceId);
 }
 
-export default function VoiceSettingsSection({ showCredentials = true, showTest = true, showMode = true, showMic = true }: { showCredentials?: boolean; showTest?: boolean; showMode?: boolean; showMic?: boolean }) {
+/**
+ * 语音设置的全部状态与动作(凭据表单、保存/清除、识别模型、测试录音)。宽屏的 VoiceSettingsSection 和
+ * 手机子页(SettingsPhonePages.tsx 的 VoicePhonePage)共用这一份 —— 两边只是画法不同,行为一处。
+ */
+export function useVoiceSettings() {
   const storage = voiceStorageKind();
   const platform = voicePlatform();
   const [mode, setMode] = useState<VoiceMode>(currentVoiceMode());
@@ -74,14 +78,6 @@ export default function VoiceSettingsSection({ showCredentials = true, showTest 
     const id = setInterval(() => forceTick(n => n + 1), 200);
     return () => clearInterval(id);
   }, [test.kind]);
-
-  if (storage === 'unsupported') {
-    return (
-      <View style={styles.block} testID="voice-settings-unsupported">
-        <Text style={styles.hint}>网页版不支持语音输入:浏览器里没有安全存储,不能保存语音识别的密钥。请使用桌面版或手机 App。</Text>
-      </View>
-    );
-  }
 
   const status = voiceConfigStatus(creds);
   const credMode = creds ? authMode(creds) : undefined;
@@ -152,6 +148,23 @@ export default function VoiceSettingsSection({ showCredentials = true, showTest 
 
   const testBusy = test.kind === 'recording' || test.kind === 'transcribing';
   const secondsLeft = test.kind === 'recording' ? Math.max(0, Math.ceil((test.until - Date.now()) / 1000)) : 0;
+
+  return { storage, platform, mode, unavailable, interim, creds, loaded, form, setForm, advanced, setAdvanced, saveMsg, busy, test, status, onSave, onClear, onTest, onPickMode, choices, setConsole, savedIs, testBusy, secondsLeft };
+}
+
+export const VOICE_UNSUPPORTED_TEXT = '网页版不支持语音输入:浏览器里没有安全存储,不能保存语音识别的密钥。请使用桌面版或手机 App。';
+export const voiceStorageLabel = (storage: string) => storage === 'keychain' ? '系统钥匙串' : '系统安全存储';
+
+export default function VoiceSettingsSection({ showCredentials = true, showTest = true, showMode = true, showMic = true }: { showCredentials?: boolean; showTest?: boolean; showMode?: boolean; showMic?: boolean }) {
+  const { storage, platform, mode, unavailable, interim, loaded, form, setForm, advanced, setAdvanced, saveMsg, busy, test, status, onSave, onClear, onTest, onPickMode, choices, setConsole, savedIs, testBusy, secondsLeft } = useVoiceSettings();
+
+  if (storage === 'unsupported') {
+    return (
+      <View style={styles.block} testID="voice-settings-unsupported">
+        <Text style={styles.hint}>{VOICE_UNSUPPORTED_TEXT}</Text>
+      </View>
+    );
+  }
 
   return (
     <View testID="voice-settings">
@@ -324,7 +337,7 @@ export default function VoiceSettingsSection({ showCredentials = true, showTest 
             {saveMsg ? <Text style={[styles.hint, !saveMsg.ok && styles.error]} testID="voice-save-msg">{saveMsg.text}</Text> : null}
           </View>
           <Text style={styles.hint}>
-            凭据只保存在本机({storage === 'keychain' ? '系统钥匙串' : '系统安全存储'}),不会上传到 Hub;语音直接发给豆包识别,不经过 Hub。
+            凭据只保存在本机({voiceStorageLabel(storage)}),不会上传到 Hub;语音直接发给豆包识别,不经过 Hub。
           </Text>
         </View>
       ) : null}

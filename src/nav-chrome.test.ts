@@ -3,8 +3,8 @@
 import { readFileSync } from 'node:fs';
 import { chooseAppLayout } from './wide-layout';
 import {
-  MOBILE_RAIL_ITEM, MOBILE_RAIL_WIDTH, PHONE_LEAF_SCREENS, RAIL_BRAND_MIN_HEIGHT,
-  contentWidthBesideRail, navActiveKey, navChromeFor, railShowsBrand, railUnreadTotal, screenForNavPress,
+  MOBILE_RAIL_ITEM, MOBILE_RAIL_WIDTH, PHONE_IN_PAGE_LEAF_SCREENS, PHONE_LEAF_SCREENS, RAIL_BRAND_MIN_HEIGHT,
+  contentWidthBesideRail, navActiveKey, navChromeFor, phoneInPageLeaf, railShowsBrand, railUnreadTotal, screenForNavPress,
 } from './nav-chrome';
 
 let p = 0, t = 0;
@@ -50,6 +50,17 @@ for (const w of [390, 834, 1024, 1366]) {
 for (const w of [860, 1280, 1920]) for (const s of ALL_SCREENS) ck(`tauri @${w} ${s} → none`, chrome('web', w, s, { tauri: true, ua: MAC_UA }) === 'none');
 // narrow Tauri window falls back to the phone stack, as before
 ck('tauri @800 agents → bottomTabs (narrow desktop window = phone stack, unchanged)', chrome('web', 800, 'agents', { tauri: true, ua: MAC_UA }) === 'bottomTabs');
+
+// ── in-page second-level pages (设置 → 语音输入 …): no tab bar on the phone, like WeChat ──
+{
+  const phone = chooseAppLayout({ os: 'android', tauri: false, userAgent: '', width: 390 });
+  const wide = chooseAppLayout({ os: 'android', tauri: false, userAgent: '', width: 900 });
+  ck('phone settings list → bottomTabs', navChromeFor(phone, 'settings', phoneInPageLeaf('settings', false)) === 'bottomTabs');
+  ck('phone settings sub-page → none (tab bar hidden)', navChromeFor(phone, 'settings', phoneInPageLeaf('settings', true)) === 'none');
+  ck('two-pane settings sub-page keeps the rail', navChromeFor(wide, 'settings', phoneInPageLeaf('settings', true)) === 'rail');
+  ck('a stale sub-page flag never hides tabs on another tab screen', navChromeFor(phone, 'agents', phoneInPageLeaf('agents', true)) === 'bottomTabs');
+  ck('in-page leaf screens = settings', JSON.stringify(PHONE_IN_PAGE_LEAF_SCREENS) === JSON.stringify(['settings']));
+}
 
 // ── phone leaves = exactly the screens App rendered without mobileTabBar before ──
 ck('phone leaf set', JSON.stringify([...PHONE_LEAF_SCREENS].sort()) === JSON.stringify(['chat', 'login', 'logs', 'nodeDetail', 'nodeInfo', 'picker', 'taskDetail', 'wizard']));
