@@ -119,6 +119,11 @@ jobs:
           releaseBody: |-
             Signed and notarized stable update for macOS (Apple Silicon) and Windows (x64).
 
+            What's new in 0.2.124:
+            - 外部链接在桌面端可正常点开（统一走系统浏览器）。
+            - 设置新增「快捷键」页（桌面端，可自定义、冲突提示、恢复默认）。
+            - 桌面端「＋」直接打开文件选择（多选、图片文件同时选），支持拖拽文件到聊天区、Ctrl/⌘+V 粘贴截图。
+
             What's new in 0.2.123:
             - 语音可以插入到光标位置：键盘模式下输入框里的小麦克风，按住说话，文字插到光标处或替换选中文字；语音/键盘切换按钮改成微信同款图标。
 
