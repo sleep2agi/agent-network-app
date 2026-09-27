@@ -13,7 +13,7 @@ const wf = fs.readFileSync(path, 'utf8').replace(/\r\n?/g, '\n');
 const code = wf.split('\n').filter((l) => !/^\s*#/.test(l)).join('\n');
 
 ck('workflow_dispatch only', /\non:\n  workflow_dispatch:\n/.test(wf) && !/\n  (push|pull_request|schedule|release):/.test(wf));
-ck('mode is a list/add/grant-builds/invite choice, default list', /\n      mode:\n[\s\S]*?type: choice\n\s+options: \[list, add, grant-builds, invite\]\n\s+default: list\n/.test(wf));
+ck('mode is a list/add/grant-builds/invite/invite-status choice, default list', /\n      mode:\n[\s\S]*?type: choice\n\s+options: \[list, add, grant-builds, invite, invite-status\]\n\s+default: list\n/.test(wf));
 ck('email input is optional with an empty default', /\n      email:\n[\s\S]*?required: false\n\s+default: ""\n/.test(wf));
 ck('runs in the protected macos-signing environment', /\n    environment: macos-signing\n/.test(wf));
 ck('read-only repository token', /\npermissions:\n  contents: read\n/.test(wf));
@@ -78,21 +78,25 @@ ck('add selects the internal group by exact name only (so a new name creates a n
 ck('group names never come from the email', !/INTERNAL_GROUP_NAME=\$\(?[^\n]*EMAIL/.test(run));
 
 // invite: team invitation as Developer, checked first, read back, 403 explained, then exit.
-const invStart = run.indexOf(`if [ "$MODE" = 'invite' ]; then\n            asc_read()`);
+const invStart = run.indexOf(`if [ "$MODE" = 'invite' ] || [ "$MODE" = 'invite-status' ]; then\n            asc_read()`);
 const invEnd = run.indexOf('app_json="$RUNNER_TEMP/app.json"');
 const inv = run.slice(invStart, invEnd);
 ck('invite block exists before any app/group work', invStart > 0 && invEnd > invStart);
 ck('invite POSTs userInvitations as DEVELOPER, all apps visible, no provisioning', inv.includes('asc_write POST userInvitations') && inv.includes('roles:["DEVELOPER"],allAppsVisible:true,provisioningAllowed:false'));
 ck('invite pre-checks all users and all pending invitations (paged, matched in jq) before POSTing', inv.includes(`users_status=$(read_all "$RUNNER_TEMP/users.json" 'users?limit=200')`) && inv.includes(`invites_status=$(read_all "$RUNNER_TEMP/invites.json" 'userInvitations?limit=200')`) && inv.includes('ascii_downcase) == $e') && inv.indexOf('asc_write POST userInvitations') > inv.indexOf('invites_status=$(read_all'));
-ck('invite does not rely on filter[email]/filter[username] (returned no rows for a fresh invitation)', !/filter\[(email|username)\]/.test(inv));
+const statusStart = inv.indexOf(`if [ "$MODE" = 'invite-status' ]; then`);
+const statusBlock = inv.slice(statusStart, inv.indexOf('exit 0', statusStart));
+ck('invite decisions do not rely on filter[email]/filter[username] (they returned no rows for a fresh invitation)', !/filter\[(email|username)\]/.test(inv.slice(0, statusStart) + inv.slice(statusStart + statusBlock.length)));
+ck('invite-status is read-only and exits before any write', statusStart > 0 && !/asc_write/.test(statusBlock) && inv.indexOf('asc_write POST userInvitations') > statusStart + statusBlock.length);
+ck('invite-status reports the filtered vs unfiltered lookups for diagnosis', statusBlock.includes('filter[username] lookup') && statusBlock.includes('filter[email] lookup'));
 ck('invite reports already-member / already-invited / invited', ['Invitation state: already-member', 'Invitation state: already-invited', 'Invitation state: invited'].every((x) => inv.includes(x)));
-ck('invite reports the expiry', inv.includes(`expires: $(jq -r '.attributes.expirationDate // "unknown"' "$1")`) && (inv.match(/describe_invite "\$RUNNER_TEMP\/invite-row\.json"/g) || []).length === 2);
+ck('invite reports the expiry', inv.includes(`expires: $(jq -r '.attributes.expirationDate // "unknown"' "$1")`) && (inv.match(/describe_invite "\$RUNNER_TEMP\/invite-row\.json"/g) || []).length >= 2);
 ck('a 403 on the invite is reported plainly (web UI fallback); a 403 on the pre-checks only warns', (inv.match(/403\) no_permission/g) || []).length === 1 && inv.includes(`403) no_permission 'invite users'; exit 1 ;;`) && (inv.match(/403\) echo "::warning::/g) || []).length === 2 && inv.includes('Invite this Apple ID from the App Store Connect web UI instead'));
 ck('invite reads the new invitation back by id after POSTing, with retries', inv.includes('invite_id=$(jq -r \'.data.id // empty\' "$RUNNER_TEMP/invite-out.json")') && inv.includes('asc_read "$RUNNER_TEMP/invite-now.json" "userInvitations/$invite_id"') && inv.includes('for attempt in 1 2 3 4 5 6; do'));
 ck('invite request body is deleted after use', inv.includes('rm -f "$RUNNER_TEMP/invite-body.json"'));
 ck('invite exits before touching groups or testers', inv.includes('exit 0') && !/betaGroups|betaTesters/.test(inv));
 ck('names come from the event file, not expressions', run.includes(`FIRST_NAME=$(jq -r '.inputs.first_name // ""' "$GITHUB_EVENT_PATH")`) && !/inputs\.(first|last)_name\s*\}\}/.test(code));
-ck('invite requires the email and both names', run.includes(`if { [ "$MODE" = 'add' ] || [ "$MODE" = 'invite' ]; } && [ -z "$EMAIL" ]; then`) && run.includes('invite mode needs first_name and last_name'));
+ck('invite requires the email and both names', run.includes(`if { [ "$MODE" = 'add' ] || [ "$MODE" = 'invite' ] || [ "$MODE" = 'invite-status' ]; } && [ -z "$EMAIL" ]; then`) && run.includes('invite mode needs first_name and last_name'));
 
 console.log(`ios TestFlight internal tester: ${p}/${t} checks passed`);
 process.exit(p === t ? 0 : 1);

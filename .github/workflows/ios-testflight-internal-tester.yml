@@ -24,9 +24,9 @@ on:
   workflow_dispatch:
     inputs:
       mode:
-        description: "list = read-only counts; add = add the email below as an internal tester; grant-builds = give the internal group all builds (and attach build_number if still missing); invite = invite the email to the App Store Connect team as Developer"
+        description: "list = read-only counts; add = add the email below as an internal tester; grant-builds = give the internal group all builds (and attach build_number if still missing); invite = invite the email to the App Store Connect team as Developer; invite-status = read-only: is the email a team user / invited, and when does the invitation expire"
         type: choice
-        options: [list, add, grant-builds, invite]
+        options: [list, add, grant-builds, invite, invite-status]
         default: list
       email:
         description: "Apple ID email of an App Store Connect user on the team (add mode, or to check membership in list mode). Masked in the log."
@@ -71,10 +71,10 @@ jobs:
           EMAIL=$(jq -r '.inputs.email // ""' "$GITHUB_EVENT_PATH" | tr -d '[:space:]'); if [ -n "$EMAIL" ]; then echo "::add-mask::$EMAIL"; fi
           set -euo pipefail
 
-          case "$MODE" in list|add|grant-builds|invite) ;; *) echo "::error::mode must be list, add, grant-builds or invite"; exit 1 ;; esac
+          case "$MODE" in list|add|grant-builds|invite|invite-status) ;; *) echo "::error::mode must be list, add, grant-builds, invite or invite-status"; exit 1 ;; esac
           case "$BUILD_NUMBER" in ''|*[!0-9]*) echo "::error::build_number must be numeric"; exit 1 ;; esac
           if [ -z "$INTERNAL_GROUP_NAME" ]; then echo "::error::group_name must not be empty"; exit 1; fi
-          if { [ "$MODE" = 'add' ] || [ "$MODE" = 'invite' ]; } && [ -z "$EMAIL" ]; then
+          if { [ "$MODE" = 'add' ] || [ "$MODE" = 'invite' ] || [ "$MODE" = 'invite-status' ]; } && [ -z "$EMAIL" ]; then
             echo "::error::$MODE mode needs the email input"
             exit 1
           fi
@@ -157,7 +157,7 @@ jobs:
           # invite: add the email to the App Store Connect team as a Developer, so it can
           # later be an internal tester. Checks for an existing user / pending invitation
           # first. Reports already-member / already-invited / invited, never the email.
-          if [ "$MODE" = 'invite' ]; then
+          if [ "$MODE" = 'invite' ] || [ "$MODE" = 'invite-status' ]; then
             asc_read() {  # like asc_get but returns the HTTP status and keeps the body
               local out="$1" endpoint="$2"; shift 2
               curl --silent --show-error --get --output "$out" --write-out '%{http_code}' \
@@ -203,6 +203,24 @@ jobs:
             describe_invite() {  # describe_invite <row file>
               echo "roles: $(jq -r '.attributes.roles // [] | join(",")' "$1"); allAppsVisible: $(jq -r '.attributes.allAppsVisible' "$1"); provisioningAllowed: $(jq -r '.attributes.provisioningAllowed' "$1"); expires: $(jq -r '.attributes.expirationDate // "unknown"' "$1")"
             }
+            if [ "$MODE" = 'invite-status' ]; then
+              # Read-only diagnosis of the filtered lookups the first invite run relied on.
+              f_users=$(asc_read "$RUNNER_TEMP/f-users.json" users --data-urlencode "filter[username]=$EMAIL" --data-urlencode 'limit=200')
+              f_inv=$(asc_read "$RUNNER_TEMP/f-inv.json" userInvitations --data-urlencode "filter[email]=$EMAIL" --data-urlencode 'limit=200')
+              echo "Unfiltered: $(jq '.data | length' "$RUNNER_TEMP/users.json") users, $(jq '.data | length' "$RUNNER_TEMP/invites.json") pending invitations on the team."
+              echo "filter[username] lookup: HTTP $f_users, $(jq '.data | length' "$RUNNER_TEMP/f-users.json" 2>/dev/null || echo '?') rows. filter[email] lookup: HTTP $f_inv, $(jq '.data | length' "$RUNNER_TEMP/f-inv.json" 2>/dev/null || echo '?') rows."
+              if [ -s "$RUNNER_TEMP/invite-row.json" ]; then
+                if jq -e --arg e "$EMAIL" '.attributes.email == $e' "$RUNNER_TEMP/invite-row.json" > /dev/null; then same_case=yes; else same_case=no; fi
+                echo "Stored invitation address equals the given one exactly (same case): $same_case"
+              fi
+              case "$state" in
+                already-member) echo "Invitation state: already-member (roles: $(jq -r '.attributes.roles // [] | join(",")' "$RUNNER_TEMP/user-row.json"))." ;;
+                already-invited) echo "Invitation state: already-invited ($(describe_invite "$RUNNER_TEMP/invite-row.json"))." ;;
+                *) echo "Invitation state: none (not a team user and no pending invitation)." ;;
+              esac
+              rm -f "$jwt_file" "$RUNNER_TEMP/users.json" "$RUNNER_TEMP/invites.json" "$RUNNER_TEMP/f-users.json" "$RUNNER_TEMP/f-inv.json" "$RUNNER_TEMP/user-row.json" "$RUNNER_TEMP/invite-row.json"
+              exit 0
+            fi
             if [ "$state" = 'already-member' ]; then
               echo "Invitation state: already-member (roles: $(jq -r '.attributes.roles // [] | join(",")' "$RUNNER_TEMP/user-row.json"))."
             elif [ "$state" = 'already-invited' ]; then
