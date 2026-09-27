@@ -109,7 +109,7 @@ export default function AgentsScreen({
   const [refreshing, setRefreshing] = useState(false);
   const [failed, setFailed] = useState(false);
   const [query, setQuery] = useState('');
-  // 设置 → 快捷键 的「搜索 agent」(默认 ⌘/Ctrl+K,App.tsx DesktopWorkspace 发起):只有桌面列表栏
+  // 设置 → 快捷键 的「搜索会话」(默认 ⌘/Ctrl+K,App.tsx DesktopWorkspace 发起):只有桌面列表栏
   // (compact)接。搜索框平时 > 10 个 agent 才出现;按了快捷键就算 agent 少也临时露出来并聚焦。
   // 从别的页切回来时列表刚挂上、会话还在加载,搜索框可能还没渲染:记下「要聚焦」,等它出现的那次渲染后再聚焦。
   const searchRef = useRef<any>(null);

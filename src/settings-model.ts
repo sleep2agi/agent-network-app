@@ -111,7 +111,7 @@ export const SETTINGS_CATEGORIES: readonly SettingsCategory[] = [
     rows: [
       { key: 'nav', label: '导航快捷键', keywords: ['快捷键', '键盘', '搜索', '设置', '切换', 'shortcut', 'keyboard', 'hotkey', 'ctrl', 'cmd', '⌘'], platforms: ['desktop'] },
       { key: 'chat', label: '会话快捷键', keywords: ['快捷键', 'esc', '关闭', '图片预览', '查找', 'shortcut'], platforms: ['desktop'] },
-      { key: 'send', label: '发送键', keywords: ['发送', '换行', '粘贴', '拖放', '附件', 'enter', 'ctrl+enter', '回车', 'send', 'newline'], platforms: ['desktop'] },
+      { key: 'send', label: '发送键', keywords: ['发送', '换行', '粘贴', '拖放', '附件', 'enter', 'ctrl+enter', '回车', 'send', 'newline', '语音', '按键说话', '按住说话', '录音', 'voice'], platforms: ['desktop'] },
     ],
   },
   {

@@ -35,7 +35,8 @@ export function DesktopMicButton({ voice, onPress }: { voice: VoiceInput; onPres
 
 const BARS = 7;
 
-export function DesktopVoiceBar({ voice, onDone, onCancel }: { voice: VoiceInput; onDone: () => void; onCancel: () => void }) {
+/** hint:用键盘快捷键录音时换成快捷键自己的结束 / 取消说法(voice-shortcut-model.ts kbdVoiceHint)。 */
+export function DesktopVoiceBar({ voice, onDone, onCancel, hint }: { voice: VoiceInput; onDone: () => void; onCancel: () => void; hint?: string }) {
   const { phase } = voice.state;
   const recording = isRecordingPhase(phase);
   const live = phase === 'recording' || phase === 'cancelArmed';
@@ -75,7 +76,7 @@ export function DesktopVoiceBar({ voice, onDone, onCancel }: { voice: VoiceInput
           </View>
         )}
         <Text style={styles.elapsed} testID="voice-bar-elapsed">{formatElapsed(voice.elapsedMs)}</Text>
-        <Text style={styles.hint} numberOfLines={1} testID="voice-bar-hint">{barHint(phase)}</Text>
+        <Text style={styles.hint} numberOfLines={1} testID="voice-bar-hint">{hint ?? barHint(phase)}</Text>
         <Pressable
           {...keepInputFocus}
           accessibilityRole="button"

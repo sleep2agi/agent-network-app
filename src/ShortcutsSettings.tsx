@@ -1,4 +1,5 @@
-// 设置 → 快捷键(桌面端)。分组列出:导航(可改)/ 会话(固定,别处写死的按键)/ 输入(发送键二选一)。
+// 设置 → 快捷键(桌面端)。分组列出:导航(可改)/ 会话(固定,别处写死的按键)/ 输入(发送键二选一 +
+// 语音两条可改:按住说话 / 语音输入开关)。
 // 可改的行:点一下 → 「按下新组合…」→ 按下即保存;Esc 取消;冲突 / 保留组合 / 没带 ⌘·Ctrl 就在行下
 // 提示、继续等下一个组合。每行「恢复默认」+ 底部「全部恢复默认」。
 // 模型在 shortcuts-model.ts,存储与「录入中」信号在 shortcuts-store.ts,执行在 App.tsx DesktopWorkspace。
@@ -20,6 +21,7 @@ import {
   sendCombo,
   withBinding,
   type FixedShortcut,
+  type ShortcutDef,
   type SendKey,
   type ShortcutGroupKey,
   type ShortcutId,
@@ -76,6 +78,16 @@ export default function ShortcutsSettings({ s, showNav = true, showChat = true, 
   };
   const setSendKey = (sendKey: SendKey) => saveShortcutPrefs({ ...shortcutPrefs(), sendKey });
 
+  const rowProps = (d: ShortcutDef) => ({
+    d, s, mac,
+    combo: bindings[d.id],
+    active: capturing === d.id,
+    customized: isCustomized(prefs, d.id),
+    warn: warning?.id === d.id ? warning.message : '',
+    onToggle: () => toggleCapture(d.id),
+    onReset: () => resetOne(d.id),
+  });
+
   const groupTitle = (g: ShortcutGroupKey) => <Text style={styles.groupTitle} testID={`shortcut-group-${g}`}>{GROUP_LABEL[g]}</Text>;
 
   return (
@@ -83,48 +95,7 @@ export default function ShortcutsSettings({ s, showNav = true, showChat = true, 
       {showNav ? (
         <>
           {groupTitle('nav')}
-          {SHORTCUTS.filter(d => d.group === 'nav').map((d, i) => {
-            const active = capturing === d.id;
-            const customized = isCustomized(prefs, d.id);
-            const warn = warning?.id === d.id ? warning.message : '';
-            return (
-              <View key={d.id}>
-                {i ? <View style={s.divider} /> : null}
-                <Pressable
-                  accessibilityRole="button"
-                  accessibilityLabel={`修改快捷键 ${d.label}`}
-                  accessibilityState={{ selected: active }}
-                  onPress={() => toggleCapture(d.id)}
-                  style={({ hovered, pressed }: any) => [s.row, styles.row, (hovered || pressed) && styles.rowHover, active && styles.rowCapturing]}
-                  testID={`shortcut-row-${d.id}`}
-                >
-                  <View style={s.rowCopy}>
-                    <Text style={s.rowLabel} testID={`shortcut-label-${d.id}`}>{d.label}</Text>
-                    {warn ? <Text style={[s.rowHint, { color: colors.failed }]} testID={`shortcut-warning-${d.id}`}>{warn}</Text> : null}
-                  </View>
-                  <View style={styles.right}>
-                    {active
-                      ? <Text style={styles.capturing} testID={`shortcut-capturing-${d.id}`}>按下新组合… · Esc 取消</Text>
-                      : <Chips combo={bindings[d.id]} mac={mac} testID={`shortcut-chips-${d.id}`} />}
-                    <View style={styles.trail}>
-                    {customized && !active ? (
-                      <Pressable
-                        accessibilityRole="button"
-                        accessibilityLabel={`${d.label} 恢复默认`}
-                        onPress={e => { e.stopPropagation(); resetOne(d.id); }}
-                        hitSlop={6}
-                        style={({ hovered }: any) => [styles.resetButton, hovered && styles.resetButtonHover]}
-                        testID={`shortcut-reset-${d.id}`}
-                      >
-                        <Ionicons name="refresh" size={14} color={colors.textSecondary} />
-                      </Pressable>
-                    ) : null}
-                    </View>
-                  </View>
-                </Pressable>
-              </View>
-            );
-          })}
+          {SHORTCUTS.filter(d => d.group === 'nav').map((d, i) => <BindableRow key={d.id} {...rowProps(d)} first={i === 0} />)}
         </>
       ) : null}
 
@@ -174,13 +145,14 @@ export default function ShortcutsSettings({ s, showNav = true, showChat = true, 
               <View style={styles.trail}><Text style={styles.fixedTag}>随发送键</Text></View>
             </View>
           </View>
+          {SHORTCUTS.filter(d => d.group === 'input').map(d => <BindableRow key={d.id} {...rowProps(d)} first={false} />)}
           {FIXED_SHORTCUTS.filter(f => f.group === 'input').map(f => <FixedRow key={f.key} f={f} first={false} s={s} mac={mac} />)}
         </>
       ) : null}
 
       {showNav && showChat && showSend ? (
         <View style={styles.footer}>
-          <Text style={[s.rowHint, styles.footerHint]}>导航快捷键只在主窗口生效;录入新组合时需要带 {mac ? '⌘' : 'Ctrl'}。文件也可以直接拖进聊天区。</Text>
+          <Text style={[s.rowHint, styles.footerHint]}>快捷键只在主窗口里生效(切到别的应用时不响应);语音快捷键要先打开一个会话,识别结果插到光标处、不自动发送;录入新组合时需要带 {mac ? '⌘' : 'Ctrl'}。文件也可以直接拖进聊天区。</Text>
           <Pressable
             accessibilityRole="button"
             accessibilityLabel="全部恢复默认"
@@ -193,6 +165,53 @@ export default function ShortcutsSettings({ s, showNav = true, showChat = true, 
           </Pressable>
         </View>
       ) : null}
+    </View>
+  );
+}
+
+type BindableRowProps = {
+  d: ShortcutDef; first: boolean; s: SharedStyles; mac: boolean; combo: string;
+  active: boolean; customized: boolean; warn: string;
+  onToggle: () => void; onReset: () => void;
+};
+
+/** 可改的一行:点一下进入录入;改过的出现「恢复默认」。导航组和输入组的语音两条共用。 */
+function BindableRow({ d, first, s, mac, combo, active, customized, warn, onToggle, onReset }: BindableRowProps) {
+  return (
+    <View>
+      {first ? null : <View style={s.divider} />}
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={`修改快捷键 ${d.label}`}
+        accessibilityState={{ selected: active }}
+        onPress={onToggle}
+        style={({ hovered, pressed }: any) => [s.row, styles.row, (hovered || pressed) && styles.rowHover, active && styles.rowCapturing]}
+        testID={`shortcut-row-${d.id}`}
+      >
+        <View style={s.rowCopy}>
+          <Text style={s.rowLabel} testID={`shortcut-label-${d.id}`}>{d.label}</Text>
+          {warn ? <Text style={[s.rowHint, { color: colors.failed }]} testID={`shortcut-warning-${d.id}`}>{warn}</Text> : null}
+        </View>
+        <View style={styles.right}>
+          {active
+            ? <Text style={styles.capturing} testID={`shortcut-capturing-${d.id}`}>按下新组合… · Esc 取消</Text>
+            : <Chips combo={combo} mac={mac} testID={`shortcut-chips-${d.id}`} />}
+          <View style={styles.trail}>
+          {customized && !active ? (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={`${d.label} 恢复默认`}
+              onPress={e => { e.stopPropagation(); onReset(); }}
+              hitSlop={6}
+              style={({ hovered }: any) => [styles.resetButton, hovered && styles.resetButtonHover]}
+              testID={`shortcut-reset-${d.id}`}
+            >
+              <Ionicons name="refresh" size={14} color={colors.textSecondary} />
+            </Pressable>
+          ) : null}
+          </View>
+        </View>
+      </Pressable>
     </View>
   );
 }
