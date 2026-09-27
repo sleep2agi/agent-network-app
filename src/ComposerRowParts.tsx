@@ -1,7 +1,6 @@
 // Mobile composer row pieces (WeChat layout, see composer-row-layout.ts):
-//   · ComposerRightSlot — the right-hand slot: ＋ when there is nothing to send, a labelled
-//     「发送」 button once there is. The swap is a short crossfade + scale (none under
-//     reduced motion).
+//   · ComposerRightSlot — right of the input: ＋ always; a labelled 「发送」 slides in to the
+//     right of ＋ once there is something to send (width + opacity, none under reduced motion).
 //   · ComposerExpandButton — ⤢ at the top-left of the row once the input passes 3 lines.
 //   · ComposerFullscreenEditor — the long-message editor ⤢ opens. Same draft; 发送 and a
 //     collapse control; Android back / Esc close it through Modal onRequestClose.
@@ -13,7 +12,7 @@ import { Text, TextInput } from './ui-text';
 import { Ionicons } from './icons';
 import { colors, onThemeChange, radius, spacing } from './theme';
 import { ds, uiScale } from './ui-scale';
-import { composerControlSize, slotSwapAnimation, type ComposerRightSlot as Slot } from './composer-row-layout';
+import { composerControlSize, sendRevealAnimation, type ComposerRightSlot as Slot } from './composer-row-layout';
 
 function useReduceMotion(): boolean {
   const [reduce, setReduce] = useState(false);
@@ -26,6 +25,14 @@ function useReduceMotion(): boolean {
   return reduce;
 }
 
+/**
+ * Right of the input: ＋ always, then 「发送」 when there is something to send (slot === 'send').
+ * 发送 is revealed by animating its wrapper's width from 0 to gap + pill width (and its opacity),
+ * so the input narrows smoothly instead of jumping. The pill is absolutely positioned at the
+ * wrapper's right edge, so its own width is measured independently of the animated wrapper.
+ * The gap before 发送 is the row gap (ChatScreen styles.inputRow.gap = spacing.sm), so
+ * field → ＋ and ＋ → 发送 are the same distance.
+ */
 export function ComposerRightSlot({ slot, sendDisabled, plusOpen, onSend, onPlus }: {
   slot: Slot;
   sendDisabled: boolean;
@@ -34,50 +41,54 @@ export function ComposerRightSlot({ slot, sendDisabled, plusOpen, onSend, onPlus
   onPlus: () => void;
 }) {
   const reduceMotion = useReduceMotion();
-  const opacity = useRef(new Animated.Value(1)).current;
-  const scale = useRef(new Animated.Value(1)).current;
-  const first = useRef(true);
+  const show = slot === 'send';
+  const gap = spacing.sm;
+  const [pillWidth, setPillWidth] = useState(ds(56));
+  const reveal = useRef(new Animated.Value(show ? 1 : 0)).current;
+  // Keep 发送 mounted while it animates out; unmount once hidden (no focusable 0-width button).
+  const [mounted, setMounted] = useState(show);
   useEffect(() => {
-    if (first.current) { first.current = false; return; }
-    const a = slotSwapAnimation(reduceMotion);
-    opacity.setValue(a.fromOpacity);
-    scale.setValue(a.fromScale);
-    if (a.duration === 0) return;
-    const useNativeDriver = Platform.OS !== 'web';
-    Animated.parallel([
-      Animated.timing(opacity, { toValue: 1, duration: a.duration, useNativeDriver }),
-      Animated.timing(scale, { toValue: 1, duration: a.duration, useNativeDriver }),
-    ]).start();
-  }, [slot, reduceMotion, opacity, scale]);
+    if (show) setMounted(true);
+    const { duration } = sendRevealAnimation(reduceMotion);
+    if (duration === 0) { reveal.setValue(show ? 1 : 0); if (!show) setMounted(false); return; }
+    const anim = Animated.timing(reveal, { toValue: show ? 1 : 0, duration, useNativeDriver: false });
+    anim.start(({ finished }) => { if (finished && !show) setMounted(false); });
+    return () => anim.stop();
+  }, [show, reduceMotion, reveal]);
 
   return (
-    <Animated.View style={{ opacity, transform: [{ scale }] }} testID="composer-right-slot">
-      {slot === 'send' ? (
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="发送"
-          accessibilityState={{ disabled: sendDisabled }}
-          testID="composer-send"
-          style={({ pressed }) => [styles.sendPill, sendDisabled && styles.sendPillDisabled, pressed && { opacity: 0.7 }]}
-          onPress={onSend}
-          disabled={sendDisabled}
+    <View style={styles.rightSlot} testID="composer-right-slot">
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={plusOpen ? '收起更多发送方式' : '更多发送方式'}
+        accessibilityState={{ expanded: plusOpen }}
+        testID="composer-plus"
+        style={({ pressed }) => [styles.plusBtn, plusOpen && styles.plusBtnActive, pressed && { opacity: 0.6 }]}
+        onPress={onPlus}
+        hitSlop={6}
+      >
+        <Text style={[styles.plusBtnText, plusOpen && styles.plusBtnTextActive]}>＋</Text>
+      </Pressable>
+      {mounted ? (
+        <Animated.View
+          testID="composer-send-reveal"
+          style={[styles.sendReveal, { width: reveal.interpolate({ inputRange: [0, 1], outputRange: [0, gap + pillWidth] }), opacity: reveal }]}
         >
-          <Text style={styles.sendPillText}>发送</Text>
-        </Pressable>
-      ) : (
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel={plusOpen ? '收起更多发送方式' : '更多发送方式'}
-          accessibilityState={{ expanded: plusOpen }}
-          testID="composer-plus"
-          style={({ pressed }) => [styles.plusBtn, plusOpen && styles.plusBtnActive, pressed && { opacity: 0.6 }]}
-          onPress={onPlus}
-          hitSlop={6}
-        >
-          <Text style={[styles.plusBtnText, plusOpen && styles.plusBtnTextActive]}>＋</Text>
-        </Pressable>
-      )}
-    </Animated.View>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="发送"
+            accessibilityState={{ disabled: sendDisabled }}
+            testID="composer-send"
+            onLayout={e => { const w = Math.ceil(e.nativeEvent.layout.width); if (w > 0 && w !== pillWidth) setPillWidth(w); }}
+            style={({ pressed }) => [styles.sendPill, styles.sendPillPinned, sendDisabled && styles.sendPillDisabled, pressed && { opacity: 0.7 }]}
+            onPress={onSend}
+            disabled={sendDisabled || !show}
+          >
+            <Text style={styles.sendPillText}>发送</Text>
+          </Pressable>
+        </Animated.View>
+      ) : null}
+    </View>
   );
 }
 
@@ -161,6 +172,10 @@ const makeStyles = () => StyleSheet.create({
     justifyContent: 'center',
     backgroundColor: colors.accent,
   },
+  rightSlot: { flexDirection: 'row', alignItems: 'center' },
+  // Wrapper whose width animates 0 → gap + pill; the pill sits pinned to its right edge.
+  sendReveal: { height: composerControlSize(uiScale().densityFactor), overflow: 'hidden' },
+  sendPillPinned: { position: 'absolute', right: 0, top: 0 },
   // Still the accent pill while a send is in flight — just dimmed, so it does not flash grey.
   sendPillDisabled: { opacity: 0.45 },
   sendPillText: { color: colors.onAccent, fontSize: 15, fontWeight: '600' },

@@ -2,13 +2,16 @@
 // two WeChat screenshots: empty = 🔊 | input | 😊 | ⊕; typed = 🔊 | input | 😊 | 「发送」, plus a
 // ⤢ expand button top-left once the input is multi-line).
 //
-//   [🎤/⌨] [ input  or  按住 说话 ] [＋ ⇄ 发送]
+//   [🎤/⌨] [ input  or  按住 说话 ] [＋] [发送]
 //   [ ⤢ ]  ← top-left of the row, only when the input is taller than 3 lines
 //
-// The right slot is ONE place that shows either ＋ (opens the #386 panel) or a labelled
-// 「发送」 button — never both, never an arrow. Voice mode follows the same rule: after
-// hold-to-talk the recognized text sits in a draft card above the bar (the keyboard is NOT
-// opened), so the slot turns into 「发送」 and sends it straight from voice mode.
+// ＋ (opens the #386 panel) is ALWAYS there. A labelled 「发送」 button (never an arrow) slides in
+// to the right of ＋ once there is something to send, and slides out again when there isn't.
+// Until 0.2.126 发送 REPLACED ＋ (#419): with any text typed the owner could no longer add an
+// image or a file, so a message with both text and images was impossible (owner, 2026-09-27,
+// major bug). Voice mode follows the same rule: after hold-to-talk the recognized text sits in a
+// draft card above the bar (the keyboard is NOT opened), so 发送 appears and sends it straight
+// from voice mode.
 //
 // The 😊 button from the screenshots is deliberately left out: the system keyboard
 // already has an emoji key, and a second emoji panel would fight the ＋ panel for the
@@ -18,6 +21,7 @@
 //
 // Pure (no react-native import) so the ck test can drive it.
 
+/** 'plus' = ＋ alone; 'send' = ＋ and 发送 side by side (＋ never disappears). */
 export type ComposerRightSlot = 'plus' | 'send';
 
 export interface RightSlotInput {
@@ -28,7 +32,7 @@ export interface RightSlotInput {
   voiceMode: boolean;
 }
 
-/** Which button sits in the right slot. Text that is only whitespace does not count. */
+/** Whether 发送 shows next to ＋. Text that is only whitespace does not count. */
 export function composerRightSlot({ draft, attachmentCount }: RightSlotInput): ComposerRightSlot {
   // voiceMode no longer short-circuits to ＋: the voice draft card shows the text, and 发送
   // must be reachable without opening the keyboard (owner:「别直接把输入法弹出来」).
@@ -125,16 +129,19 @@ export function nextFullEditor(open: boolean, event: FullEditorEvent): FullEdito
   }
 }
 
-// ── ＋ ⇄ 发送 swap animation ──────────────────────────────────────────────
-export interface SlotSwapAnimation {
-  duration: number;
-  fromOpacity: number;
-  fromScale: number;
+/** The buttons right of the input, left to right. ＋ is unconditional. */
+export function composerRightButtons(input: RightSlotInput): ('plus' | 'send')[] {
+  return composerRightSlot(input) === 'send' ? ['plus', 'send'] : ['plus'];
 }
 
-/** A short crossfade + scale-in; nothing at all when the OS asks for reduced motion. */
-export function slotSwapAnimation(reduceMotion: boolean): SlotSwapAnimation {
-  return reduceMotion
-    ? { duration: 0, fromOpacity: 1, fromScale: 1 }
-    : { duration: 140, fromOpacity: 0, fromScale: 0.8 };
+// ── 发送 reveal animation ─────────────────────────────────────────────────
+// 发送 grows from width 0 (with its leading gap) to its full width and fades in, so the input
+// narrows smoothly instead of jumping; the reverse when it goes away. Width is a layout prop, so
+// this runs on the JS driver (it is 150 ms, once per empty ⇄ non-empty change).
+export interface SendRevealAnimation {
+  duration: number;
+}
+
+export function sendRevealAnimation(reduceMotion: boolean): SendRevealAnimation {
+  return { duration: reduceMotion ? 0 : 150 };
 }

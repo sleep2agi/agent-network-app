@@ -1673,7 +1673,7 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
       .then(appendAttachments)
       .catch(error => Alert.alert('无法打开', error instanceof Error ? error.message : String(error)));
   };
-  // Mobile row right slot: ＋ when there is nothing to send, 「发送」 once there is.
+  // Mobile row, right of the input: ＋ always; 「发送」 next to it once there is something to send.
   const rightSlot = composerRightSlot({ draft, attachmentCount: attached.length, voiceMode });
   const showExpand = !desktop && shouldShowExpand(inputLines, voiceMode);
 
