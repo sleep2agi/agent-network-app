@@ -15,6 +15,7 @@ export const PREDICATE_IDS = [
   'desktop', // 桌面工作区布局(App.tsx 传进各屏)
   'pointerUi\\([^)]*\\)',
   "Platform\\.OS\\s*[!=]==\\s*'\\w+'",
+  "voiceSurface\\(desktop\\)\\s*===\\s*'phoneOverlay'", // desktop-voice-bar-model.ts(#463):录音浮层只挂手机
 ] as const;
 const PRED = `(?:${PREDICATE_IDS.join('|')})`;
 
@@ -37,8 +38,8 @@ export interface PhoneOnlySite {
   minSites: number;
   why: string;
   /**
-   * 已知欠账:这些文件里的命中暂不算违规,但每次都打印出来。条目过期(那里已经带了判定)也算红 ——
-   * 名单要跟代码一起改,不然它会一直替一个已经不存在的例外开脱。
+   * 已知欠账:这些文件里的命中暂不算违规,但每次都打印出来。条目过期(那里已经带了判定)打印 RESOLVED
+   * 提醒删掉,不判红 —— 修欠账的 PR 和本门谁先合都不该互相卡住(#463 与 #465)。
    */
   debt?: { files: readonly string[]; owner: string; reason: string };
 }

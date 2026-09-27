@@ -87,7 +87,8 @@ export function judgeSites(files: Map<string, string>, sites: readonly PhoneOnly
     counts.set(s.name, n);
     if (n < s.minSites) findings.push({ kind: 'collect', file: '-', line: 0, detail: `${s.name}: found ${n} site(s), registry expects ≥ ${s.minSites} (renamed or moved? update phone-only-registry.ts)` });
     for (const f of s.debt?.files ?? []) {
-      if (!debtHits.has(f)) findings.push({ kind: 'stale', file: f, line: 0, detail: `${s.name}: debt entry for ${f} no longer matches an ungated site — delete it from phone-only-registry.ts` });
+      // 欠账已还(那里带上了判定):打印提醒删条目,不判红 —— 修欠账的 PR 不该因为先合而被本门卡住。
+      if (!debtHits.has(f)) findings.push({ kind: 'stale', file: f, line: 0, detail: `${s.name}: debt entry for ${f} no longer matches an ungated site — delete it from phone-only-registry.ts`, debt: 'RESOLVED' });
     }
   }
   return { findings, counts };
@@ -155,7 +156,9 @@ ck('judge copy: an exception whose text is gone is stale', judgeCopy(one('src/X.
 ck('judge refresh: RefreshControl with no poll / button is flagged', judgeRefreshAndSwipe(one('src/Y.tsx', `<RefreshControl onRefresh={x} />`)).some(f => f.kind === 'refresh'));
 ck('judge refresh: a poll next to it passes', !judgeRefreshAndSwipe(one('src/Y.tsx', `usePoll(load, 1000);\n<RefreshControl onRefresh={x} />`)).some(f => f.kind === 'refresh'));
 ck('judge swipe: an unregistered PanResponder file is flagged', judgeRefreshAndSwipe(one('src/NewSwipe.tsx', `PanResponder.create({})`)).some(f => f.kind === 'swipe' && f.file === 'src/NewSwipe.tsx'));
-ck('judge debt: a debt entry whose site got gated is stale', judgeSites(one('src/ChatScreen.tsx', `{pointer ? null : <VoiceRecordingOverlay voice={v} />}`), PHONE_ONLY_SITES.filter(s => s.name.startsWith('VoiceRecordingOverlay'))).findings.some(f => f.kind === 'stale'));
+ck('judge debt: a debt entry whose site got gated is reported RESOLVED (printed, not red)', judgeSites(one('src/ChatScreen.tsx', `{pointer ? null : <VoiceRecordingOverlay voice={v} />}`), PHONE_ONLY_SITES.filter(s => s.name.startsWith('VoiceRecordingOverlay'))).findings.every(f => f.kind === 'stale' && f.debt === 'RESOLVED'));
+// #463 的门:{voiceSurface(desktop) === 'phoneOverlay' ? <VoiceRecordingOverlay … /> : null}
+ck('judge: #463\'s voiceSurface(desktop) === \'phoneOverlay\' gate is recognised', sel(`{voiceSurface(desktop) === 'phoneOverlay' ? <SelectTextSheet text={t} /> : null}`) === 0 && judgeSites(one('src/ChatScreen.tsx', `{voiceSurface(desktop) === 'phoneOverlay' ? <VoiceRecordingOverlay voice={voice} bottom={88 + composerInset} /> : null}`), PHONE_ONLY_SITES.filter(s => s.name.startsWith('VoiceRecordingOverlay'))).findings.every(f => f.debt === 'RESOLVED'));
 
 // ── 2. 取集自检(子目录、CRLF、分隔符) ──────────────────────────────────────────────────────────
 const tmp = mkdtempSync(join(tmpdir(), 'phone-only-'));
