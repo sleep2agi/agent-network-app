@@ -61,6 +61,8 @@ import MarkdownMessage from './MarkdownMessage';
 import SelectTextSheet from './SelectTextSheet';
 import ImageViewer from './ImageViewer';
 import { openGallery, viewerImageFor, type ViewerImage, type ViewerState } from './image-viewer-model';
+import { conversationGallery, imagePreviewSurface, imageWindowPayload } from './image-window-model';
+import { closeImageWindowFor, openImageWindow } from './image-window';
 import { selectedTextWithin } from './message-plain-text';
 import { cleanAttachmentDebugText, hideGridImageLines, parseAttachmentRefs, parseMetaAttachmentRefs, parseMetaReplyAttachmentRefs } from './attachment-display';
 import { attachmentCacheScope } from './attach-download';
@@ -742,17 +744,45 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
   // 图片预览(ImageViewer.tsx):同一条消息的全部图片 + 当前第几张。null = 未打开。
   // 预览层带「下载原图」(多图方格里放不下那一行)。
   const [viewer, setViewer] = useState<ViewerState | null>(null);
-  const openViewer = (gallery: ViewerImage[], key: string, resolvedUri?: string) =>
-    setViewer(openGallery(gallery, key, resolvedUri));
   const viewerEnv = { os: Platform.OS, tauri: !!(globalThis as any).__TAURI_INTERNALS__ };
   const galleryOf = (views: AttachmentView[]): ViewerImage[] =>
     views.map(a => viewerImageFor(a, viewerEnv)).filter((v): v is ViewerImage => !!v);
+  // 2026-09-27 Vincent:桌面端点图不再盖住整个主窗口,开独立的「图片预览」窗口(image-window.ts),
+  // ←/→ 走整个会话的图片;手机端和纯网页仍是上面的全屏 ImageViewer。开窗失败 → 退回 ImageViewer。
+  const openViewer = (gallery: ViewerImage[], key: string, resolvedUri?: string) => {
+    const inApp = openGallery(gallery, key, resolvedUri);
+    if (imagePreviewSurface(viewerEnv) !== 'window') { setViewer(inApp); return; }
+    const payload = imageWindowPayload({
+      // messages 是倒序(最新在前);会话图库按从旧到新、每条先发出的气泡再回复气泡。
+      conversation: conversationGallery([...messages].reverse().map(item => galleryOf([
+        ...(item._proactive ? [] : sentAttachmentViews(item, cfg.serverUrl)),
+        ...replyAttachmentViews(item, cfg.serverUrl),
+      ]))),
+      message: gallery,
+      tappedKey: key,
+      profileId: cfg.profileId,
+      serverUrl: cfg.serverUrl,
+      title: alias,
+      now: Date.now(),
+    });
+    if (!payload) { setViewer(inApp); return; }
+    void openImageWindow(payload, { measureUri: resolvedUri }).then(ok => { if (!ok) setViewer(inApp); });
+  };
   const attachmentViewerScope = `${conversationKeyFor}::${attachmentCacheScope(cfg.serverUrl, cfg.token)}`;
   // A blob: URL (Tauri web) and a file: URI (native) both identify bytes that
   // were fetched under the previous credentials. Closing the parent modal is
   // part of the auth boundary; resetting only the child thumbnail would leave
   // those already-open bytes visible after a profile/Hub/conversation switch.
   useEffect(() => setViewer(null), [attachmentViewerScope]);
+  // 独立的图片预览窗口同理:本窗口的账号/Hub/凭据一变,它拿那个账号取来的图就不能再挂着。
+  const credentialScope = attachmentCacheScope(cfg.serverUrl, cfg.token);
+  const shownAccount = useRef({ scope: credentialScope, profileId: cfg.profileId, serverUrl: cfg.serverUrl });
+  useEffect(() => {
+    const previous = shownAccount.current;
+    if (previous.scope === credentialScope) return;
+    shownAccount.current = { scope: credentialScope, profileId: cfg.profileId, serverUrl: cfg.serverUrl };
+    void closeImageWindowFor(previous);
+  }, [credentialScope]);
   // 更像微信·round-2: 长按气泡的动作菜单(引用/删除)。null = 未打开。
   const [menuFor, setMenuFor] = useState<MessageSelection | null>(null);
   // 0.2.78 Vincent:「右键的效果和微信对齐」—— 桌面端菜单落在光标处(微信桌面端就是这样),

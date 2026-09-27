@@ -6,7 +6,8 @@
     "main",
     "chat-*",
     "workspace-*",
-    "tray-panel"
+    "tray-panel",
+    "image-viewer"
   ],
   "permissions": [
     "core:default",
@@ -60,6 +61,8 @@
     "core:window:allow-close",
     "core:window:allow-is-maximized",
     "core:window:allow-set-decorations",
-    "core:window:allow-set-background-color"
+    "core:window:allow-set-background-color",
+    "core:window:allow-set-title",
+    "clipboard-manager:allow-write-image"
   ]
 }

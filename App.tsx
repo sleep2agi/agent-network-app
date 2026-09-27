@@ -54,6 +54,8 @@ import MobileNotifier from './src/MobileNotifier';
 import { loadNotifySettings, mutedAgents, notifyProfileKey, saveNotifySettings, subscribeNotifySettings, toggleAgentMuted } from './src/notify-settings';
 import { bindDesktopTray, dismissAllForConfig } from './src/desktop-tray';
 import TrayPanel, { readTrayPanelRoute } from './src/TrayPanel';
+import ImageViewerWindow from './src/ImageViewerWindow';
+import { readImageWindowRoute } from './src/image-window-model';
 import { loadPinnedChats, requestedChatAlias, requestedChatProfileId, requestedWorkspaceProfileId, savePinnedChats } from './src/desktop-chat-menu';
 import { loadChatPins, saveChatPins, togglePinned } from './src/chat-pins';
 import { ROW_MENU_EMPTY_HINT } from './src/agent-row-menu';
@@ -151,6 +153,16 @@ export default function App() {
     return (
       <SafeAreaProvider>
         <TrayPanel />
+      </SafeAreaProvider>
+    );
+  }
+
+  // `?imageViewer=1` 的窗口是「图片预览」独立窗口(桌面端点聊天里的图片打开)—— 只画看图页,
+  // 不挂主界面/更新提示。图片列表经 Tauri 事件送来,URL 里没有图片也没有凭据(见 image-window-model.ts)。
+  if (Platform.OS === 'web' && !!(globalThis as any).__TAURI_INTERNALS__ && readImageWindowRoute(String((globalThis as any).location?.search ?? ''))) {
+    return (
+      <SafeAreaProvider>
+        <ImageViewerWindow />
       </SafeAreaProvider>
     );
   }
