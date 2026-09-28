@@ -80,6 +80,34 @@ export async function createRequirementOnHub(cfg: HubConfig, input: { name: stri
   return row;
 }
 
+/** 只提交改过的名称、优先级、期限。不从这里改负责人。 */
+export function requirementEditPatch(
+  current: Pick<Requirement, 'name' | 'priority' | 'due'>,
+  next: { name: string; priority: ReqPriority; due: string },
+): { name?: string; priority?: ReqPriority; due?: string } | null {
+  const patch: { name?: string; priority?: ReqPriority; due?: string } = {};
+  if (next.name !== current.name) patch.name = next.name;
+  if (next.priority !== current.priority) patch.priority = next.priority;
+  if (next.due !== current.due) patch.due = next.due;
+  return Object.keys(patch).length ? patch : null;
+}
+
+export async function updateRequirementOnHub(cfg: HubConfig, id: string, patch: { name?: string; priority?: ReqPriority; due?: string }): Promise<Requirement> {
+  const res = await appFetch(`${cfg.serverUrl}${scoped(cfg, `/api/requirements/${encodeURIComponent(id)}`)}`, {
+    method: 'PATCH',
+    headers: { Authorization: `Bearer ${cfg.token}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify(patch),
+  });
+  const data = await res.json().catch(() => null) as { requirement?: unknown; error?: string } | null;
+  if (res.status === 403) throw new RequirementsHubError('你没有修改这条需求的权限', 403);
+  if (res.status === 400 && data?.error === 'empty_patch') throw new RequirementsHubError('这个 Hub 还不能修改已有需求的内容', 400);
+  if (res.status === 404) throw new RequirementsHubError('这条需求已不存在', 404);
+  if (!res.ok) throw new RequirementsHubError('修改没有保存，请重试', res.status);
+  const row = requirementFromHub(data?.requirement);
+  if (!row) throw new RequirementsHubError('Hub 没有返回这条需求', 502);
+  return row;
+}
+
 export async function moveRequirementOnHub(cfg: HubConfig, id: string, column: ReqColumn): Promise<Requirement> {
   const data = await call(cfg, `/api/requirements/${encodeURIComponent(id)}`, {
     method: 'PATCH',

@@ -1,5 +1,5 @@
 import { readFileSync } from 'node:fs';
-import { filterAssigneeChoices, migrateLocalRequirements, requirementFromHub, RequirementsHubError } from './requirements-hub';
+import { filterAssigneeChoices, migrateLocalRequirements, requirementEditPatch, requirementFromHub, RequirementsHubError } from './requirements-hub';
 import type { Requirement } from './requirements-model';
 
 let p = 0, t = 0;
@@ -56,6 +56,10 @@ ck('不再说不进 Hub', !board.includes('不进 Hub'));
 ck('读写走 Hub 接口', board.includes('migrateLocalRequirements(') && board.includes('createRequirementOnHub(') && board.includes('moveRequirementOnHub('));
 ck('不再只在 Hub 为空时才迁', !board.includes('list.length === 0'));
 ck('新建负责人复用稳定身份选择器', board.includes('<RequirementPeoplePicker') && board.includes('选择负责人（人类或 Agent），可空') && !board.includes('fetchHubNodes('));
+ck('详情里能改名称、优先级和期限', board.includes('testID="req-edit-name"') && board.includes('testID="req-edit-due"') && board.includes('testID="req-edit-save"') && board.includes('updateRequirementOnHub(') && board.includes('保存修改'));
+const current = { name: '旧', priority: 'low' as const, due: '2026-10-01' };
+ck('没改就不提交', requirementEditPatch(current, { ...current }) === null);
+ck('只提交改过的名称', JSON.stringify(requirementEditPatch(current, { ...current, name: '新' })) === '{"name":"新"}');
 
 console.log(`${p}/${t} passed`);
 process.exit(p === t ? 0 : 1);
