@@ -15,7 +15,7 @@ import {
 import { colors, onThemeChange, radius, spacing } from './theme';
 import { formatTime } from './time';
 import { usePoll } from './usePoll';
-import TaskBoard from './TaskBoard';
+import RequirementBoard from './RequirementBoard';
 
 // Tasks tab — a scoped list of hub tasks with a top segmented control
 // for the three states the brief pinned (running / failed / replied) +
@@ -123,8 +123,8 @@ export default function TasksScreen({
           <Text style={[styles.chipText, section === 'board' && styles.chipTextActive]}>看板</Text>
         </Pressable>
       </View>
-      {section === 'board' && state.kind === 'ready' ? (
-        <TaskBoard tasks={state.tasks} onOpenTask={onOpenTask} />
+      {section === 'board' ? (
+        <RequirementBoard profileId={cfg.profileId || cfg.username || 'local'} />
       ) : (
       <>
       {/* Segmented filter — horizontal scroll for narrow phones */}

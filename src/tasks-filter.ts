@@ -103,26 +103,3 @@ export function statusBucket(status?: string): StatusBucket {
       return 'unknown';
   }
 }
-
-export const BOARD_COLUMNS: StatusBucket[] = ['pending', 'running', 'replied', 'failed', 'unknown'];
-
-export const BOARD_COLUMN_LABEL: Record<StatusBucket, string> = {
-  pending: '待处理',
-  running: '进行中',
-  replied: '已回复',
-  failed: '失败',
-  unknown: '其他',
-};
-
-/** 看板列。空列也留下，这样和 GitHub Project 一样能看见还没有卡片的状态。unknown 没有卡片时不占一列。 */
-export function groupTasksByBucket(tasks: readonly HubTask[]): { bucket: StatusBucket; tasks: HubTask[] }[] {
-  const buckets = new Map<StatusBucket, HubTask[]>();
-  for (const col of BOARD_COLUMNS) buckets.set(col, []);
-  for (const task of tasks) {
-    const bucket = statusBucket(task.status);
-    buckets.get(bucket)!.push(task);
-  }
-  return BOARD_COLUMNS
-    .filter(bucket => bucket !== 'unknown' || (buckets.get(bucket)?.length ?? 0) > 0)
-    .map(bucket => ({ bucket, tasks: buckets.get(bucket)! }));
-}

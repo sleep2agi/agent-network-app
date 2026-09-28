@@ -1,0 +1,93 @@
+// 需求池。长期卡片，人新建，不跟 Hub 那条正在跑的消息混在一起。
+export const REQ_PRIORITIES = ['high', 'normal', 'low'] as const;
+export type ReqPriority = (typeof REQ_PRIORITIES)[number];
+export const REQ_COLUMNS = ['pool', 'doing', 'done'] as const;
+export type ReqColumn = (typeof REQ_COLUMNS)[number];
+
+export const REQ_PRIORITY_LABEL: Record<ReqPriority, string> = { high: '高', normal: '普通', low: '低' };
+export const REQ_COLUMN_LABEL: Record<ReqColumn, string> = { pool: '需求池', doing: '进行中', done: '完成' };
+
+export interface Requirement {
+  id: string;
+  name: string;
+  priority: ReqPriority;
+  assignee: string;
+  due: string;
+  column: ReqColumn;
+  createdAt: string;
+}
+
+const DUE = /^\d{4}-\d{2}-\d{2}$/;
+export function dueOk(due: string): boolean {
+  if (!due) return true;
+  if (!DUE.test(due)) return false;
+  const [y, m, d] = due.split('-').map(Number);
+  const dt = new Date(Date.UTC(y, m - 1, d));
+  return dt.getUTCFullYear() === y && dt.getUTCMonth() === m - 1 && dt.getUTCDate() === d;
+}
+
+export function createRequirement(input: {
+  name: string; priority?: ReqPriority; assignee?: string; due?: string; now?: string; id?: string;
+}): Requirement | null {
+  const name = input.name.trim();
+  if (!name || name.length > 80) return null;
+  const due = (input.due ?? '').trim();
+  if (!dueOk(due)) return null;
+  return {
+    id: input.id || `r_${Math.random().toString(36).slice(2, 10)}`,
+    name,
+    priority: REQ_PRIORITIES.includes(input.priority as ReqPriority) ? input.priority as ReqPriority : 'normal',
+    assignee: (input.assignee ?? '').trim().slice(0, 80),
+    due,
+    column: 'pool',
+    createdAt: input.now || new Date().toISOString(),
+  };
+}
+
+export function nextColumn(column: ReqColumn): ReqColumn {
+  if (column === 'pool') return 'doing';
+  if (column === 'doing') return 'done';
+  return 'pool';
+}
+
+const PR: Record<ReqPriority, number> = { high: 0, normal: 1, low: 2 };
+export function sortColumn(items: readonly Requirement[]): Requirement[] {
+  return [...items].sort((a, b) => {
+    const byP = PR[a.priority] - PR[b.priority];
+    if (byP) return byP;
+    if (a.due !== b.due) {
+      if (!a.due) return 1;
+      if (!b.due) return -1;
+      return a.due < b.due ? -1 : 1;
+    }
+    return a.createdAt < b.createdAt ? 1 : -1;
+  });
+}
+
+export function columnsOf(items: readonly Requirement[]): { column: ReqColumn; items: Requirement[] }[] {
+  return REQ_COLUMNS.map(column => ({ column, items: sortColumn(items.filter(i => i.column === column)) }));
+}
+
+export function parseRequirements(raw: string | null | undefined): Requirement[] {
+  if (!raw) return [];
+  let data: unknown;
+  try { data = JSON.parse(raw); } catch { return []; }
+  if (!Array.isArray(data)) return [];
+  const out: Requirement[] = [];
+  for (const row of data) {
+    if (!row || typeof row !== 'object') continue;
+    const r = row as Record<string, unknown>;
+    if (typeof r.id !== 'string' || typeof r.name !== 'string' || !r.name.trim()) continue;
+    const due = typeof r.due === 'string' && dueOk(r.due.trim()) ? r.due.trim() : '';
+    out.push({
+      id: r.id,
+      name: r.name.trim().slice(0, 80),
+      priority: REQ_PRIORITIES.includes(r.priority as ReqPriority) ? r.priority as ReqPriority : 'normal',
+      assignee: typeof r.assignee === 'string' ? r.assignee.trim().slice(0, 80) : '',
+      due,
+      column: REQ_COLUMNS.includes(r.column as ReqColumn) ? r.column as ReqColumn : 'pool',
+      createdAt: typeof r.createdAt === 'string' ? r.createdAt : '',
+    });
+  }
+  return out;
+}
