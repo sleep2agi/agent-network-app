@@ -1074,12 +1074,12 @@ function DesktopWorkspace({ cfg, screen, setScreen, onLogout, onLocalDataDeleted
       alias={screen.alias}
       onBack={() => setScreen({ name: 'agents' })}
       onOpenNodeSettings={() => setScreen({ name: 'nodeInfo', alias: screen.alias })}
+      onOpenVoiceSettings={() => { rememberSettingsCategory('voice'); void openSettingsWindow('voice').then(opened => { if (!opened) setScreen({ name: 'settings' }); }); }}
       focusTaskId={screen.focusTaskId}
       pinned={pinnedAliases.includes(screen.alias)}
       onTogglePin={() => togglePin(screen.alias)}
       muted={mutedAliases.includes(screen.alias)}
       onToggleMute={() => toggleMute(screen.alias)}
-      onOpenVoiceSettings={() => { rememberSettingsCategory('voice'); void openSettingsWindow('voice').then(opened => { if (!opened) setScreen({ name: 'settings' }); }); }}
       desktop
     />
   ) : screen.name === 'tasks' ? (
