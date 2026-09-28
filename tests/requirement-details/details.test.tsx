@@ -14,12 +14,13 @@ mock.module('./src/theme', () => ({ colors: {}, onThemeChange: () => () => {}, r
 mock.module('./src/requirements-store', () => ({ requirementsKey: (s: string) => s, readRequirements: () => [], writeRequirements: () => {} }));
 
 const card = { id: 'r1', name: '验证需求详情', assignee: '负责人甲', priority: 'normal', due: '', column: 'pool', createdAt: '' };
+let typedCards = false;
 let requests: any[] = [];
 let reply: (value: any) => void;
 let reject: (error: Error) => void;
 class HubError extends Error { constructor(public status: number) { super('HTTP ' + status); } }
 mock.module('./src/requirements-hub', () => ({
-  listRequirements: async () => [{ ...card }, { ...card, id: 'r2', name: '另一个需求' }], migrateLocalRequirements: async () => {}, createRequirementOnHub: async () => card,
+  listRequirements: async () => [{ ...card, ...(typedCards ? { owner: null, participants: [] } : {}) }, { ...card, id: 'r2', name: '另一个需求' }], migrateLocalRequirements: async () => {}, createRequirementOnHub: async () => card,
   RequirementsHubError: HubError,
   moveRequirementOnHub: (cfg: any, id: string, column: string) => {
     requests.push({ network: cfg.networkId, id, column });
@@ -42,7 +43,7 @@ const cfg = { serverUrl: 'http://isolated.test', token: 'test', networkId: 'a' }
 let renderer: ReactTestRenderer;
 const byId = (id: string) => renderer.root.findByProps({ testID: id });
 async function mount() { requests = []; await act(async () => { renderer = create(<Board cfg={cfg} />); }); }
-afterEach(async () => { if (renderer) await act(async () => renderer.unmount()); });
+afterEach(async () => { typedCards = false; if (renderer) await act(async () => renderer.unmount()); });
 
 test('opening and closing details never writes; explicit move waits for Hub and prevents duplicates', async () => {
   await mount();
@@ -176,4 +177,18 @@ test('old Hub cards show unsupported instead of a working assignment editor', as
   await act(async () => { renderer = create(<AssignmentsEditor cfg={cfg} item={{ ...card, priority: 'normal', column: 'pool' }} onSaved={() => { throw new Error('must not save'); }} />); });
   expect(byId('assignments-unsupported')).toBeTruthy();
   expect(renderer.root.findAllByProps({ testID: 'edit-owner' })).toHaveLength(0);
+});
+
+test('saving after closing details updates typed owner on board and reopened detail', async () => {
+  typedCards = true;
+  await mount();
+  await act(async () => byId('req-card-r1').props.onPress());
+  await act(async () => byId('edit-owner').props.onPress());
+  await act(async () => byId('person-user:u').props.onPress());
+  await act(async () => byId('people-confirm').props.onPress());
+  await act(async () => byId('req-detail-close').props.onPress());
+  await act(async () => saveAssignment({ owner: { kind: 'user', id: 'u' }, participants: [] }));
+  expect(JSON.stringify(byId('req-card-r1').findAllByType('Text').map(node => node.props.children))).toContain('成员（人类）');
+  await act(async () => byId('req-card-r1').props.onPress());
+  expect(JSON.stringify(byId('req-detail').findAllByType('Text').map(node => node.props.children))).toContain('成员（人类）');
 });

@@ -19,6 +19,8 @@ import { colors, radius, spacing } from './theme';
 import { useModalSafePadding } from './safe-area-runtime';
 import { withBasePadding } from './modal-safe-area';
 import RequirementAssignmentsEditor from './RequirementAssignmentsEditor';
+import { listRequirementPeople } from './requirement-people-api';
+import { personKey, type RequirementPerson } from './requirement-people';
 
 const NOTE = '存在 Hub 上，手机和电脑是同一份。';
 const UNSUPPORTED = '这个 Hub 还没有需求池。升级 Hub 之后，手机和电脑才能看到同一份。';
@@ -31,6 +33,16 @@ function ScopedRequirementBoard({ cfg }: { cfg: HubConfig }) {
   const safe = useModalSafePadding('overlay');
   const localKey = requirementsKey(cfg.profileId || cfg.username || 'local');
   const [items, setItems] = useState<Requirement[]>([]);
+  const [people, setPeople] = useState<RequirementPerson[]>([]);
+  const hasAssignments = items.some(item => item.owner !== undefined);
+  useEffect(() => {
+    if (!hasAssignments) return;
+    let dead = false;
+    listRequirementPeople(cfg).then(rows => { if (!dead) setPeople(rows); }).catch(() => {});
+    return () => { dead = true; };
+  }, [cfg.serverUrl, cfg.token, cfg.networkId, hasAssignments]);
+  const ownerLabel = (item: Requirement) => item.owner === undefined ? item.assignee || '未分配'
+    : item.owner ? `${people.find(person => personKey(person) === personKey(item.owner!))?.name || item.owner.id}（${item.owner.kind === 'user' ? '人类' : 'Agent'}）` : '未分配';
   const [phase, setPhase] = useState<'loading' | 'ready' | 'unsupported' | 'error'>('loading');
   const [hubError, setHubError] = useState('');
   const [name, setName] = useState('');
@@ -165,7 +177,7 @@ function ScopedRequirementBoard({ cfg }: { cfg: HubConfig }) {
               {col.items.map(item => (
                 <Pressable key={item.id} style={styles.card} accessibilityRole="button" accessibilityLabel={`查看需求：${item.name}`} testID={`req-card-${item.id}`} onPress={() => { setSelectedId(item.id); }}>
                   <Text style={styles.title}>{item.name}</Text>
-                  <Text style={styles.meta}>{REQ_PRIORITY_LABEL[item.priority]} · {item.assignee || '未分配'} · {item.due || '未定期限'}</Text>
+                  <Text style={styles.meta}>{REQ_PRIORITY_LABEL[item.priority]} · {ownerLabel(item)} · {item.due || '未定期限'}</Text>
                   <Text style={styles.addText}>查看详情</Text>
                 </Pressable>
               ))}

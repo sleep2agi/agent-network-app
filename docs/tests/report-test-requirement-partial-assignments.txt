@@ -10,3 +10,8 @@ Commands: bun test details.test.tsx && bun src/requirement-people-api.test.ts
 Result: 12 component tests passed, 33 expectations, 0 failures; API script passed.
 API assertions verify owner-only and participants-only PATCH bodies.
 No production services or data accessed. Not a native-device acceptance report.
+
+Review follow-up: parent board now receives successful saves after detail unmount;
+cards render typed owner names rather than stale legacy assignee text. Scoped
+board remounts still isolate different networks/accounts. Docker component rerun:
+13 pass, 0 fail, 35 expectations, including close-before-ack then reopen flow.
