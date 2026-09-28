@@ -1,0 +1,23 @@
+2026-09-28 — release main ancestry regression
+
+Failed signed run: 36411239990; both platforms failed before build.
+Requested SHA 2945f837721fa0297339b01169ca961ff646f4b3 is an ancestor
+of current main 400a4a1. checkout fetched full history, but the next
+git fetch origin main --depth=1 made main a shallow boundary, so
+git merge-base --is-ancestor falsely rejected the already merged SHA.
+
+Change: preserve full history during fetch. Keep exact 40-character SHA,
+HEAD equality and main ancestry checks. No gate bypass.
+Also prepend the reviewed 0.2.136 release notes to the workflow body.
+
+Docker command:
+sg docker -c 'docker run --pull=never --rm --read-only --tmpfs /tmp:exec,size=64m -v /dev/shm/anet-release-main-history/tests/release-main-history:/test:ro node:22.23.0-bookworm bash /test/run.sh'
+
+Exit 0:
+PASS: reproduced old false rejection after main advanced
+PASS: full-history fetch accepts merged release ancestor
+PASS: unmerged commit remains rejected
+
+No production changes. Signed build must use the fix after it reaches main.
+The failed run produced no signed release; check tag/draft occupancy before
+dispatching its replacement. Do not publish unsigned test artifacts.
