@@ -121,6 +121,11 @@ jobs:
           releaseBody: |-
             Signed and notarized stable update for macOS (Apple Silicon) and Windows (x64).
 
+            What's new in 0.2.138:
+            - 新建任务即可选择人类或 Agent 负责人，使用稳定身份保存并在卡片回显，不必再进入详情重复绑定。
+            - 连续添加时保留可见的负责人选择，也可以清空为不指定。
+            - 绑定 Agent 不会自动派单；本次不自动升级远端 Hub，也不包含 Android/iOS 发布。
+
             What's new in 0.2.137:
             - 修正内置 Hub 版本校验，避免新版 Hub 被客户端误拒而无法启动。
             - 包含下列任务管理更新；0.2.136 未通过安装包验收，未公开发布。
@@ -129,7 +134,7 @@ jobs:
             - 任务卡片支持详情、状态移动，以及人类/Agent 负责人和参与人绑定。
             - 内置 Hub 升至 0.9.0-preview.64，包含网络隔离的需求池、issue 关联和人员接口。
             - 绑定 Agent 不会自动派单；新建时的 alias 仍需在详情里绑定为稳定负责人。
-            - 多网络管理员人员列表仍待修正；本次不自动升级远端 Hub，也不包含 Android/iOS 发布。
+            - 本次不自动升级远端 Hub，也不包含 Android/iOS 发布。
 
             What's new in 0.2.135:
             - 新建需求时，负责节点从节点列表里点，不用手填。
