@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { peopleInNetwork, personKey, togglePerson } from './requirement-people';
+import { peopleInNetwork, personKey, togglePerson, uniquePeople } from './requirement-people';
 const user = { kind: 'user' as const, id: 'same', name: '同名成员', networkId: 'a' };
 const node = { ...user, kind: 'node' as const };
 const foreign = { ...user, id: 'foreign', networkId: 'b' };
@@ -11,5 +11,7 @@ assert.equal(peopleInNetwork([user], 'a', 'same').length, 1);
 assert.deepEqual(togglePerson([user], node, 'owner'), [{ kind: 'node', id: 'same' }]);
 assert.deepEqual(togglePerson([user], user, 'owner'), []);
 assert.equal(togglePerson([user], node, 'participants').length, 2);
-assert.deepEqual(togglePerson([user, node], user, 'participants'), [node]);
-console.log('requirement people: 9/9 assertions passed');
+assert.deepEqual(togglePerson([user, node], user, 'participants'), [{ kind: 'node', id: 'same' }]);
+assert.deepEqual(uniquePeople([user, user, node]), [{ kind: 'user', id: 'same' }, { kind: 'node', id: 'same' }]);
+assert.deepEqual(togglePerson([user, user], node, 'participants'), [{ kind: 'user', id: 'same' }, { kind: 'node', id: 'same' }]);
+console.log('requirement people: 11/11 assertions passed');

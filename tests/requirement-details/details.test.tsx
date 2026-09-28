@@ -109,6 +109,14 @@ test('removed members cannot be silently saved', async () => {
   expect(saved).toBe(0);
 });
 
+test('duplicate initial participants are confirmed once and include only identity fields', async () => {
+  const person = { kind: 'user' as const, id: 'u', name: '成员', networkId: 'a' };
+  const saved: any[] = [];
+  await act(async () => { renderer = create(<PeoplePicker networkId="a" mode="participants" people={[person]} selected={[person, person]} onConfirm={value => saved.push(value)} onClose={() => {}} />); });
+  await act(async () => byId('people-confirm').props.onPress());
+  expect(saved).toEqual([[{ kind: 'user', id: 'u' }]]);
+});
+
 test('member removed while picker is open immediately blocks confirmation', async () => {
   const person = { kind: 'user' as const, id: 'u', name: '成员', networkId: 'a' };
   const props = { networkId: 'a', mode: 'participants' as const, selected: [], onConfirm: () => {}, onClose: () => {} };

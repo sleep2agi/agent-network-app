@@ -4,6 +4,10 @@ export type RequirementPerson = RequirementPersonRef & { networkId: string; name
 
 export const personKey = (person: RequirementPersonRef) => `${person.kind}:${person.id}`;
 
+export function uniquePeople(selected: readonly RequirementPersonRef[]): RequirementPersonRef[] {
+  return [...new Map(selected.map(person => [personKey(person), { kind: person.kind, id: person.id }])).values()];
+}
+
 export function peopleInNetwork(people: readonly RequirementPerson[], networkId: string, query = ''): RequirementPerson[] {
   const seen = new Set<string>();
   const needle = query.trim().toLocaleLowerCase();
@@ -17,8 +21,9 @@ export function peopleInNetwork(people: readonly RequirementPerson[], networkId:
 }
 
 export function togglePerson(selected: readonly RequirementPersonRef[], person: RequirementPersonRef, mode: 'owner' | 'participants'): RequirementPersonRef[] {
+  const current = uniquePeople(selected);
   const key = personKey(person);
-  const exists = selected.some(row => personKey(row) === key);
+  const exists = current.some(row => personKey(row) === key);
   if (mode === 'owner') return exists ? [] : [{ kind: person.kind, id: person.id }];
-  return exists ? selected.filter(row => personKey(row) !== key) : [...selected, { kind: person.kind, id: person.id }];
+  return exists ? current.filter(row => personKey(row) !== key) : [...current, { kind: person.kind, id: person.id }];
 }

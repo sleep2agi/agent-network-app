@@ -4,7 +4,7 @@ import { Text, TextInput } from './ui-text';
 import { colors, onThemeChange, radius, spacing } from './theme';
 import { useModalSafePadding } from './safe-area-runtime';
 import { withBasePadding } from './modal-safe-area';
-import { peopleInNetwork, personKey, togglePerson, type RequirementPerson, type RequirementPersonRef } from './requirement-people';
+import { peopleInNetwork, personKey, togglePerson, uniquePeople, type RequirementPerson, type RequirementPersonRef } from './requirement-people';
 
 type Props = {
   networkId: string;
@@ -23,7 +23,7 @@ export default function RequirementPeoplePicker(props: Props) {
 function Picker({ networkId, mode, people, selected, onConfirm, onClose }: Props) {
   const safe = useModalSafePadding('overlay');
   const [query, setQuery] = useState('');
-  const [draft, setDraft] = useState<RequirementPersonRef[]>(() => [...selected]);
+  const [draft, setDraft] = useState<RequirementPersonRef[]>(() => uniquePeople(selected));
   const [themeVersion, setThemeVersion] = useState(0);
   useEffect(() => onThemeChange(() => setThemeVersion(n => n + 1)), []);
   const candidates = peopleInNetwork(people, networkId);
