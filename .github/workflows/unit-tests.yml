@@ -27,6 +27,14 @@ on:
     branches: ['**']
 
 jobs:
+  requirement-details:
+    name: requirement details (Docker)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - run: docker build -f tests/requirement-details/Dockerfile -t requirement-details .
+      - run: docker run --rm --network none requirement-details
   tests:
     name: unit-tests (${{ matrix.os }})
     strategy:

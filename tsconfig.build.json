@@ -2,6 +2,7 @@
   "extends": "./tsconfig.json",
   "exclude": [
     "**/*.test.ts",
+    "**/*.test.tsx",
     "node_modules",
     "src-tauri/target",
     "src/test-support/**"
