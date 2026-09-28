@@ -8,7 +8,9 @@ const desktopWorkflow = fs.readFileSync(new URL('../.github/workflows/desktop-ta
 const releaseWorkflow = fs.readFileSync(new URL('../.github/workflows/release-desktop-auto-update.yml', import.meta.url), 'utf8');
 
 const pinned = '0.9.0-preview.64';
+const supervisorSource = fs.readFileSync(new URL('../src-tauri/src/local_hub.rs', import.meta.url), 'utf8');
 const checks: Array<[string, boolean]> = [
+  ['native supervisor expects the bundled Hub version', supervisorSource.includes(`const EXPECTED_HUB_VERSION: &str = "${pinned}";`)],
   ['CommHub dependency is exact', packageJson.dependencies['@sleep2agi/commhub-server'] === pinned],
   ['lock resolves exact CommHub', packageLock.packages['node_modules/@sleep2agi/commhub-server'].version === pinned],
   ['lock records npm integrity', packageLock.packages['node_modules/@sleep2agi/commhub-server'].integrity.startsWith('sha512-')],
