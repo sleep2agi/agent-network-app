@@ -19,7 +19,7 @@ let reply: (value: any) => void;
 let reject: (error: Error) => void;
 class HubError extends Error { constructor(public status: number) { super('HTTP ' + status); } }
 mock.module('./src/requirements-hub', () => ({
-  listRequirements: async () => [{ ...card }], migrateLocalRequirements: async () => {}, createRequirementOnHub: async () => card,
+  listRequirements: async () => [{ ...card }, { ...card, id: 'r2', name: '另一个需求' }], migrateLocalRequirements: async () => {}, createRequirementOnHub: async () => card,
   RequirementsHubError: HubError,
   moveRequirementOnHub: (cfg: any, id: string, column: string) => {
     requests.push({ network: cfg.networkId, id, column });
@@ -69,4 +69,17 @@ test('switching network closes old details and ignores its late mutation respons
   expect(renderer.root.findAllByProps({ testID: 'req-detail' })).toHaveLength(0);
   await act(async () => reply({ ...card, name: '旧网络回复', column: 'done' }));
   expect(JSON.stringify(renderer.toJSON())).not.toContain('旧网络回复');
+});
+
+test('late failure belongs to the original card, not newly opened details', async () => {
+  await mount();
+  await act(async () => byId('req-card-r1').props.onPress());
+  await act(async () => byId('req-move-doing').props.onPress());
+  await act(async () => byId('req-detail-close').props.onPress());
+  await act(async () => byId('req-card-r2').props.onPress());
+  await act(async () => reject(new HubError(403)));
+  expect(JSON.stringify(renderer.toJSON())).not.toContain('你没有修改这条需求的权限');
+  await act(async () => byId('req-detail-close').props.onPress());
+  await act(async () => byId('req-card-r1').props.onPress());
+  expect(JSON.stringify(renderer.toJSON())).toContain('你没有修改这条需求的权限');
 });
