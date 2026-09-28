@@ -23,3 +23,20 @@ Disk became full during verification. One interrupted config write was restored.
 Only this run's test image and its removable build cache were deleted.
 Source moved to a standalone RAM-backed repository so it can be pushed durably.
 Visual validation and clean CI are required before removing draft status.
+
+Follow-up verification:
+- Clean GitHub CI installation passed app typecheck on the initial head.
+- Aggregate tests caught the missing modal safe-area hook (210/211 files).
+  Fixed by using useModalSafePadding('overlay') + withBasePadding.
+- Docker safe-area-rule.test.ts after fix: 29/29 passed.
+- Docker Chromium (Playwright 1.58.2) with actual React Native Web rendering:
+  desktop 1280x800 and mobile 390x844 both PASS. Opens without writing,
+  dialog fits viewport, explicit move persists in stub HTTP, close works.
+  HTTP is intercepted and web safe-area insets are zero; this does not prove
+  native Android/iOS behavior or real production Hub integration.
+- Reproduction: bundle tests/requirement-details/build-visual.cjs with
+  esbuild 0.25.10 using the app dependencies at /work/node_modules; run
+  visual-check.cjs with playwright 1.58.2 and Chromium. Both scripts expect
+  /output for bundle and screenshots. Run inside the Playwright Docker image
+  mcr.microsoft.com/playwright:v1.58.2-noble, source mounted at /work.
+- New CI run still required for the safe-area fix; PR remains draft.

@@ -3,6 +3,7 @@
   "exclude": [
     "**/*.test.ts",
     "**/*.test.tsx",
+    "tests/requirement-details/**",
     "node_modules",
     "src-tauri/target",
     "src/test-support/**"

@@ -16,6 +16,8 @@ import {
 import { readRequirements, requirementsKey, writeRequirements } from './requirements-store';
 import { createRequirementOnHub, listRequirements, migrateLocalRequirements, moveRequirementOnHub, RequirementsHubError } from './requirements-hub';
 import { colors, radius, spacing } from './theme';
+import { useModalSafePadding } from './safe-area-runtime';
+import { withBasePadding } from './modal-safe-area';
 
 const NOTE = '存在 Hub 上，手机和电脑是同一份。';
 const UNSUPPORTED = '这个 Hub 还没有需求池。升级 Hub 之后，手机和电脑才能看到同一份。';
@@ -25,6 +27,7 @@ export default function RequirementBoard({ cfg }: { cfg: HubConfig }) {
 }
 
 function ScopedRequirementBoard({ cfg }: { cfg: HubConfig }) {
+  const safe = useModalSafePadding('overlay');
   const localKey = requirementsKey(cfg.profileId || cfg.username || 'local');
   const [items, setItems] = useState<Requirement[]>([]);
   const [phase, setPhase] = useState<'loading' | 'ready' | 'unsupported' | 'error'>('loading');
@@ -170,7 +173,7 @@ function ScopedRequirementBoard({ cfg }: { cfg: HubConfig }) {
         </ScrollView>
       ) : null}
       <Modal visible={!!selected} transparent animationType="fade" onRequestClose={() => setSelectedId(null)}>
-        <View style={styles.overlay}>
+        <View style={[styles.overlay, withBasePadding(safe, spacing.lg)]}>
           {selected ? <View style={styles.detail} accessibilityViewIsModal testID="req-detail">
             <View style={styles.head}>
               <Text style={styles.headText}>需求详情</Text>

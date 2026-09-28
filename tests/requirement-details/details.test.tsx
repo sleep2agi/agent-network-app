@@ -9,6 +9,7 @@ mock.module('react-native', () => ({
   StyleSheet: { create: (styles: any) => styles },
 }));
 mock.module('./src/ui-text', () => ({ Text: 'Text', TextInput: 'TextInput' }));
+mock.module('./src/safe-area-runtime', () => ({ useModalSafePadding: () => ({ paddingTop: 0, paddingBottom: 0, paddingLeft: 0, paddingRight: 0 }) }));
 mock.module('./src/theme', () => ({ colors: {}, radius: { sm: 4, md: 8 }, spacing: { xs: 4, sm: 8, md: 12, lg: 16 } }));
 mock.module('./src/requirements-store', () => ({ requirementsKey: (s: string) => s, readRequirements: () => [], writeRequirements: () => {} }));
 
