@@ -40,7 +40,9 @@ jobs:
           requested='${{ inputs.commit }}'
           resolved="$(git rev-parse HEAD)"
           [[ "$requested" =~ ^[0-9a-f]{40}$ && "$resolved" == "$requested" ]]
-          git fetch origin main --depth=1
+          # checkout above has full history. Do not re-shallow main: a release
+          # SHA can legitimately precede the current tip while awaiting approval.
+          git fetch origin main
           git merge-base --is-ancestor "$resolved" origin/main
 
       - uses: actions/setup-node@v4
@@ -118,6 +120,12 @@ jobs:
           releaseName: Agent Network Desktop v__VERSION__
           releaseBody: |-
             Signed and notarized stable update for macOS (Apple Silicon) and Windows (x64).
+
+            What's new in 0.2.136:
+            - 任务卡片支持详情、状态移动，以及人类/Agent 负责人和参与人绑定。
+            - 内置 Hub 升至 0.9.0-preview.64，包含网络隔离的需求池、issue 关联和人员接口。
+            - 绑定 Agent 不会自动派单；新建时的 alias 仍需在详情里绑定为稳定负责人。
+            - 多网络管理员人员列表仍待修正；本次不自动升级远端 Hub，也不包含 Android/iOS 发布。
 
             What's new in 0.2.135:
             - 新建需求时，负责节点从节点列表里点，不用手填。
