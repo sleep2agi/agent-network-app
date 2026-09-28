@@ -49,3 +49,10 @@ Updated its expected exact version to preview.64 (no assertion removed).
 Docker bun run src/local-hub-sidecar.test.ts: all 13 assertions PASS.
 Rust CI failed before compilation at npm ci sidecar tarball HTTP 404,
 not at cargo check. Wait for download availability before retrying that gate.
+
+Registry blocker RESOLVED (2026-09-28 10:34 UTC):
+Tarball download returned HTTP 200. Fresh Docker install from npm succeeded:
+sg docker -c 'docker run --pull=never --rm --read-only --tmpfs /tmp:exec,size=256m -w /tmp/qa oven/bun:1.3.14 sh -c "bun add @sleep2agi/commhub-server@0.9.0-preview.64 && cd node_modules/@sleep2agi/commhub-server && bun test src/requirements-http.test.ts"'
+Result: 10 pass, 0 fail, 47 assertions, exit 0.
+The earlier 404 entries above are historical observations, no longer blockers.
+Native installer build/release remains pending; production remains unchanged.
