@@ -1,0 +1,12 @@
+Source: feat/projects-try, browser run of the web export (Playwright, Chromium).
+Not a phone install. Not the shipped 0.2.131 build.
+
+What was checked
+----------------
+- Task list still shows the live hub task (示例任务). The board does not replace it.
+- Board has three columns: 需求池, 进行中, 完成. The note says the cards stay on this computer and do not enter Hub.
+- Adding with an empty name is rejected.
+- A named card with a date lands in 需求池. Tapping it moves it to 进行中.
+- After reload the card is still in 进行中.
+
+9/9 requirements-model checks passed (bun src/requirements-model.test.ts).
