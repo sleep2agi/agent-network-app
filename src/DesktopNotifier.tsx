@@ -31,7 +31,7 @@ export function presenceOf(snap: UnreadStoreSnapshot): Presence {
   return { windowFocused: focused, openConversation: snap.ledger.open };
 }
 
-async function sendSystemNotification(alias: string, title: string, body: string): Promise<boolean> {
+async function sendSystemNotification(alias: string, title: string, body: string, onClick?: (alias: string) => void): Promise<boolean> {
   if (isTauri()) {
     try {
       const { invoke } = await import('@tauri-apps/api/core');
@@ -48,12 +48,12 @@ async function sendSystemNotification(alias: string, title: string, body: string
     return false;
   }
   const N = (globalThis as any).Notification as (new (t: string, o?: { body?: string }) => unknown) & { permission?: string; requestPermission?: () => Promise<string> } | undefined;
-  if (typeof N !== 'function') return;
+  if (typeof N !== 'function') return false;
   let permission = N.permission;
   if (permission === 'default' && N.requestPermission) permission = await N.requestPermission();
   if (permission !== 'granted') return false;
   const shown = new N(title, { body }) as { onclick?: () => void };
-  shown.onclick = () => openChat.current?.(alias);
+  shown.onclick = () => onClick?.(alias);
   return true;
 }
 
@@ -109,6 +109,7 @@ export default function DesktopNotifier({ onOpenChat, profileKey = '' }: { onOpe
           group.agent,
           notificationTitle(group.agent, group.count),
           plainTextForNotification(group.body),
+          openChat.current,
         ).then(routed => {
           if (!routed) target.current = recordNotified(target.current, group.agent, Date.now());
         }).catch(() => { /* 权限被拒/平台不支持 */ });
