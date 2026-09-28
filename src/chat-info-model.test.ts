@@ -117,7 +117,7 @@ check(/const mac = isMacKeyboard\(\);/.test(chat) && /if \(e\.defaultPrevented \
 check(/<ChatScreen[\s\S]*?pinned=\{pinnedAliases\.includes\(screen\.alias\)\}\s*onTogglePin=\{\(\) => togglePin\(screen\.alias\)\}\s*muted=\{mutedAliases\.includes\(screen\.alias\)\}\s*onToggleMute=\{\(\) => toggleMute\(screen\.alias\)\}\s*desktop/.test(app), 'desktop ChatScreen is wired to the list menu\'s pin + mute');
 // Main window: the pin is a rail slot (#447), never over the chat header. Detached chat window: the
 // floating pin steps aside while a chat is shown (its toggle is 聊天信息 → 窗口置顶).
-check((app.match(/<DesktopWindowPin hidden=\{screen\.name === 'chat'\} \/>/g) ?? []).length === 1 && (app.match(/<DesktopWindowPin placement="rail" \/>/g) ?? []).length === 1 && !/<DesktopWindowPin \/>/.test(app), 'window pin: rail in the main window, floating (hidden on chat) in the detached window');
+check((app.match(/<DesktopWindowPin hidden=\{screen\.name === 'chat'\} \/>/g) ?? []).length === 1 && (app.match(/<DesktopWindowPin placement="rail" \/>/g) ?? []).length === 0 && !/<DesktopWindowPin \/>/.test(app), 'window pin: not on the main rail; floating (hidden on chat) only in the detached window');
 // Panel: grouped list, ≥ 48 rows, tokens, safe area.
 check(/const ROW_MIN = Math\.max\(48, ds\(48\)\);/.test(panel) && /row: \{\s*minHeight: ROW_MIN,/.test(panel), 'rows ≥ 48 dp');
 check(!/['"]#[0-9a-fA-F]{3,8}['"]/.test(panel), 'panel colours come from theme tokens only');

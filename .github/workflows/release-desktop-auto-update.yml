@@ -119,6 +119,9 @@ jobs:
           releaseBody: |-
             Signed and notarized stable update for macOS (Apple Silicon) and Windows (x64).
 
+            What's new in 0.2.131:
+            - 桌面左侧栏去掉窗口置顶图钉。窗口置顶仍在聊天信息里。
+
             What's new in 0.2.130:
             - 桌面端语音输入快捷键：按住说话 Ctrl+Shift+Space（Mac ⌘⇧Space，按住录、松开插入、Esc 取消）；语音输入开关 Ctrl+Shift+M（Mac ⌘⇧M）；都可在「设置 → 快捷键」里改。
             - 快捷键页文案统一为中文。
