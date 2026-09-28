@@ -27,3 +27,10 @@ Duplicate-input follow-up: selected references are deduplicated by kind + id
 when opening and toggling. Confirmation carries only kind/id, not display or
 network fields copied from candidates. Docker model 11/11; component suite
 10/10 with 27 assertions. Integration remains pending the Hub contract.
+
+Proposed transport contract (not enabled in UI): GET /api/requirements/people
+and PATCH /api/requirements/:id with owner/participants. Docker stub-HTTP API
+tests: 12 assertions passed. Missing fields fail as unsupported; malformed or
+cross-network candidates fail; clearing sends explicit null/[]; denied writes
+surface 403. This contract is a draft pending the Hub implementer's reply;
+no claim is made that these endpoints currently support assignments.
