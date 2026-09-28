@@ -1,4 +1,4 @@
-// 需求池。长期卡片，人新建，不跟 Hub 那条正在跑的消息混在一起。
+// 需求池。长期卡片，人新建，存在 Hub 上。不跟 Hub 里正在跑的那条消息混在一起。
 export const REQ_PRIORITIES = ['high', 'normal', 'low'] as const;
 export type ReqPriority = (typeof REQ_PRIORITIES)[number];
 export const REQ_COLUMNS = ['pool', 'doing', 'done'] as const;

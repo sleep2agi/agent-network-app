@@ -124,7 +124,7 @@ export default function TasksScreen({
         </Pressable>
       </View>
       {section === 'board' ? (
-        <RequirementBoard profileId={cfg.profileId || cfg.username || 'local'} />
+        <RequirementBoard cfg={cfg} />
       ) : (
       <>
       {/* Segmented filter — horizontal scroll for narrow phones */}
