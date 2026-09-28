@@ -6,7 +6,7 @@
 // 🔴 只登记**真实存在**的设置。不要为了让左栏好看往里编分类。
 // 纯逻辑,不 import react-native。
 
-export type SettingsCategoryKey = 'account' | 'localHub' | 'appearance' | 'notifications' | 'voice' | 'shortcuts' | 'about';
+export type SettingsCategoryKey = 'account' | 'localHub' | 'appearance' | 'notifications' | 'voice' | 'shortcuts' | 'about' | 'skillPlaza';
 
 export type SettingsRow = {
   readonly key: string;
@@ -123,6 +123,15 @@ export const SETTINGS_CATEGORIES: readonly SettingsCategory[] = [
       { key: 'update', label: '软件更新', keywords: ['升级', '检查更新', 'update', 'upgrade'] },
     ],
   },
+  {
+    // 公开 SkillHub 目录。节点页「技能」是那个节点已经能加载的,不是这里,这里也不能安装。
+    key: 'skillPlaza',
+    label: '技能广场',
+    icon: 'storefront-outline',
+    rows: [
+      { key: 'catalog', label: '技能目录', keywords: ['技能广场', '技能', 'skill', 'skills', 'skillhub', '广场', '目录'] },
+    ],
+  },
 ];
 
 const normalize = (s: string) => s.trim().toLowerCase();
@@ -220,6 +229,19 @@ export function resetSettingsViewMemory(): void {
   viewMemory = { category: 'account', scrollY: 0, page: null };
 }
 
+// 技能广场打开一篇正文时,手机返回先回到目录,再退出设置子页。
+// 回调返回 true 表示这次返回已经被吃掉。
+let nestedBack: (() => boolean) | null = null;
+
+export function setSettingsNestedBack(fn: (() => boolean) | null): void {
+  nestedBack = fn;
+}
+
+/** 有嵌套页就先交给它。返回 true = 这次返回已经处理完,调用方不要再退子页。 */
+export function consumeSettingsNestedBack(): boolean {
+  return nestedBack?.() ?? false;
+}
+
 // ── 手机窄屏的分组(Vincent 2026-09-27「手机设置照微信的设置做」)────────────────────────────
 // 顶部一块「账号」,然后 通用 / 功能 / 帮助与关于 三组小灰字标题,最底下单独一块「退出登录」。
 // 每个分类必须恰好落在一组里(settings-model.test.ts 断言)——新增分类忘了登记就红,不会在手机上消失。
@@ -229,7 +251,7 @@ export const PHONE_SETTINGS_GROUPS: readonly PhoneSettingsGroup[] = [
   { title: null, keys: ['account'] },
   { title: '通用', keys: ['notifications', 'appearance', 'localHub'] },
   { title: '功能', keys: ['voice', 'shortcuts'] },
-  { title: '帮助与关于', keys: ['about'] },
+  { title: '帮助与关于', keys: ['about', 'skillPlaza'] },
 ];
 
 /** 列表行与子页标题用的名字;没写就用分类名。 */

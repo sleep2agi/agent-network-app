@@ -210,7 +210,7 @@ if (!DESKTOP_ONLY) for (const theme of ['light', 'dark']) {
   await page.goto(`${web.url}?safeAreaSim=0,0,0,0`);
   await page.locator('[data-testid="desktop-rail"]').waitFor({ timeout: 20000 });
   await page.getByRole('tab', { name: '设置', exact: true }).click();
-  for (const label of ['账号', '本地 Hub', '外观', '通知', '语音输入', '快捷键', '关于']) {
+  for (const label of ['账号', '本地 Hub', '外观', '通知', '语音输入', '快捷键', '关于', '技能广场']) {
     try {
       await page.getByRole('button', { name: `设置分类 ${label}` }).click();
       await page.waitForTimeout(600);

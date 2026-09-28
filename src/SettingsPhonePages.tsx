@@ -82,6 +82,7 @@ export type PhonePagesCtx = {
   setQuietEnd: (v: string) => void;
   // 快捷键(只在窄的桌面窗口里会进到这一页):沿用宽屏那段渲染,放进一张卡片里。
   renderShortcuts: () => ReactNode;
+  renderSkillPlaza: () => ReactNode;
   // 关于
   updateView: { label: string; detail?: string; tone: string; busy: boolean; actionable: boolean };
   onCheckUpdate: () => void;
@@ -96,6 +97,7 @@ export default function SettingsPhonePage({ page, ctx }: { page: SettingsCategor
     case 'voice': return <VoicePhonePage ctx={ctx} />;
     case 'shortcuts': return <ShortcutsPage ctx={ctx} />;
     case 'about': return <AboutPage ctx={ctx} />;
+    case 'skillPlaza': return <SkillPlazaPage ctx={ctx} />;
     default: return null;
   }
 }
@@ -402,6 +404,11 @@ function ShortcutsPage({ ctx }: { ctx: PhonePagesCtx }) {
 }
 
 // ── 关于 ─────────────────────────────────────────────────────────────────────────────────────
+function SkillPlazaPage({ ctx }: { ctx: PhonePagesCtx }) {
+  if (!ctx.show('skillPlaza', 'catalog')) return null;
+  return <>{ctx.renderSkillPlaza()}</>;
+}
+
 function AboutPage({ ctx }: { ctx: PhonePagesCtx }) {
   const view = ctx.updateView;
   const tone: SettingsTone | undefined = view.tone === 'danger' ? 'danger' : view.tone === 'accent' ? 'accent' : undefined;
