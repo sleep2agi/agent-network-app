@@ -14,7 +14,7 @@ import {
   type Requirement,
 } from './requirements-model';
 import { readRequirements, requirementsKey, writeRequirements } from './requirements-store';
-import { createRequirementOnHub, filterAssigneeChoices, listRequirements, migrateLocalRequirements, moveRequirementOnHub, RequirementsHubError } from './requirements-hub';
+import { createRequirementOnHub, filterAssigneeChoices, listRequirements, migrateLocalRequirements, moveRequirementOnHub, requirementEditPatch, updateRequirementOnHub, RequirementsHubError } from './requirements-hub';
 import { fetchHubNodes } from './api';
 import { colors, radius, spacing } from './theme';
 import { useModalSafePadding } from './safe-area-runtime';
@@ -59,7 +59,14 @@ function ScopedRequirementBoard({ cfg }: { cfg: HubConfig }) {
   const [moving, setMoving] = useState(false);
   const movePending = useRef(false);
   const [moveError, setMoveError] = useState<{ id: string; message: string } | null>(null);
+  const [draft, setDraft] = useState<{ name: string; due: string; priority: ReqPriority; assignee: string } | null>(null);
+  const [editPickerOpen, setEditPickerOpen] = useState(false);
+  const [editNodeQuery, setEditNodeQuery] = useState('');
+  const [savingEdit, setSavingEdit] = useState(false);
+  const [editError, setEditError] = useState('');
   const selected = items.find(item => item.id === selectedId);
+  const edited = draft ? createRequirement({ name: draft.name, priority: draft.priority, assignee: draft.assignee, due: draft.due, id: selected?.id || 'draft' }) : null;
+  const editPatch = selected && edited ? requirementEditPatch(selected, edited) : null;
   const styles = useMemo(() => StyleSheet.create({
     root: { flex: 1 },
     note: { color: colors.textMuted, fontSize: 12, paddingHorizontal: spacing.lg, paddingBottom: spacing.sm },
@@ -74,6 +81,7 @@ function ScopedRequirementBoard({ cfg }: { cfg: HubConfig }) {
     chipTextOn: { color: colors.text, fontWeight: '600' },
     addText: { color: colors.accent, fontSize: 14, fontWeight: '600' },
     err: { color: colors.failed, fontSize: 12, paddingHorizontal: spacing.lg, paddingTop: spacing.xs },
+    detailErr: { color: colors.failed, fontSize: 12, paddingTop: spacing.xs },
     row: { flexDirection: 'row', alignItems: 'flex-start', padding: spacing.md, gap: spacing.md },
     col: { width: 260, backgroundColor: colors.card, borderRadius: radius.md, padding: spacing.sm },
     head: { flexDirection: 'row', justifyContent: 'space-between', padding: spacing.sm },
@@ -89,6 +97,8 @@ function ScopedRequirementBoard({ cfg }: { cfg: HubConfig }) {
     detailBody: { gap: spacing.md, paddingVertical: spacing.sm },
     actions: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
     action: { minHeight: 44, justifyContent: 'center', paddingHorizontal: spacing.md, borderRadius: radius.sm, borderWidth: 1, borderColor: colors.border },
+    save: { minHeight: 44, justifyContent: 'center', alignItems: 'center', borderRadius: radius.sm, backgroundColor: colors.accent },
+    saveText: { color: colors.onAccent, fontSize: 14, fontWeight: '600' },
     disabled: { opacity: 0.5 },
   }), []);
 
@@ -151,6 +161,32 @@ function ScopedRequirementBoard({ cfg }: { cfg: HubConfig }) {
     } finally {
       movePending.current = false;
       setMoving(false);
+    }
+  };
+  useEffect(() => {
+    if (!selected) { setDraft(null); return; }
+    setDraft({ name: selected.name, due: selected.due, priority: selected.priority, assignee: selected.assignee });
+    setEditPickerOpen(false);
+    setEditNodeQuery('');
+    setEditError('');
+  }, [selected?.id]);
+  const saveEdit = async () => {
+    if (!selected || !draft || savingEdit) return;
+    if (!edited) {
+      setEditError(draft.name.trim() ? '预计完成要写成 2026-10-01，或留空' : '先写需求');
+      return;
+    }
+    if (!editPatch) return;
+    setSavingEdit(true);
+    setEditError('');
+    try {
+      const updated = await updateRequirementOnHub(cfg, selected.id, editPatch);
+      setItems(prev => prev.map(row => row.id === selected.id ? { ...row, ...updated } : row));
+      setDraft({ name: updated.name, due: updated.due, priority: updated.priority, assignee: updated.assignee });
+    } catch (e) {
+      setEditError(e instanceof Error ? e.message : '修改没有保存，请重试');
+    } finally {
+      setSavingEdit(false);
     }
   };
   const columns = columnsOf(items);
@@ -224,13 +260,44 @@ function ScopedRequirementBoard({ cfg }: { cfg: HubConfig }) {
               <Text style={styles.headText}>需求详情</Text>
               <Pressable accessibilityRole="button" accessibilityLabel="关闭需求详情" style={styles.action} onPress={() => setSelectedId(null)} testID="req-detail-close"><Text style={styles.addText}>关闭</Text></Pressable>
             </View>
-            <ScrollView contentContainerStyle={styles.detailBody}>
-              <Text style={styles.detailTitle}>{selected.name}</Text>
+            <ScrollView contentContainerStyle={styles.detailBody} keyboardShouldPersistTaps="handled">
               <Text style={styles.meta}>状态 · {REQ_COLUMN_LABEL[selected.column]}</Text>
-              {selected.owner === undefined ? <Text style={styles.meta}>负责人 · {selected.assignee || '未分配'}</Text> : null}
+              {draft ? <TextInput value={draft.name} onChangeText={name => setDraft(prev => prev ? { ...prev, name } : prev)} placeholder="需求" placeholderTextColor={colors.textMuted} style={[styles.input, styles.detailTitle]} testID="req-edit-name" /> : null}
+              {selected.owner === undefined && draft ? (
+                <>
+                  <Pressable testID="req-edit-assignee" onPress={() => setEditPickerOpen(open => !open)} style={styles.input}>
+                    <Text style={draft.assignee ? styles.title : styles.meta}>{draft.assignee || '选择负责节点，可空'}</Text>
+                  </Pressable>
+                  {editPickerOpen ? (
+                    <View testID="req-edit-assignee-list">
+                      <TextInput value={editNodeQuery} onChangeText={setEditNodeQuery} placeholder="搜索节点" placeholderTextColor={colors.textMuted} style={styles.input} testID="req-edit-assignee-search" />
+                      <ScrollView style={styles.picker} keyboardShouldPersistTaps="handled">
+                        <Pressable testID="req-edit-node-clear" onPress={() => { setDraft(prev => prev ? { ...prev, assignee: '' } : prev); setEditPickerOpen(false); setEditNodeQuery(''); }} style={styles.pickRow}>
+                          <Text style={styles.meta}>不指定</Text>
+                        </Pressable>
+                        {filterAssigneeChoices(nodes, editNodeQuery).map(alias => (
+                          <Pressable key={alias} testID={`req-edit-node-${alias}`} onPress={() => { setDraft(prev => prev ? { ...prev, assignee: alias } : prev); setEditPickerOpen(false); setEditNodeQuery(''); }} style={styles.pickRow}>
+                            <Text style={styles.title}>{alias}</Text>
+                          </Pressable>
+                        ))}
+                      </ScrollView>
+                    </View>
+                  ) : null}
+                </>
+              ) : null}
               <RequirementAssignmentsEditor key={selected.id} cfg={cfg} item={selected} onSaved={assignments => setItems(prev => prev.map(row => row.id === selected.id ? { ...row, ...assignments } : row))} />
-              <Text style={styles.meta}>优先级 · {REQ_PRIORITY_LABEL[selected.priority]}</Text>
-              <Text style={styles.meta}>预计完成 · {selected.due || '未定期限'}</Text>
+              <View style={styles.chips}>
+                {REQ_PRIORITIES.map(p => (
+                  <Pressable key={p} onPress={() => setDraft(prev => prev ? { ...prev, priority: p } : prev)} style={[styles.chip, draft?.priority === p && styles.chipOn]} testID={`req-edit-priority-${p}`}>
+                    <Text style={[styles.chipText, draft?.priority === p && styles.chipTextOn]}>{REQ_PRIORITY_LABEL[p]}</Text>
+                  </Pressable>
+                ))}
+              </View>
+              {draft ? <TextInput value={draft.due} onChangeText={due => setDraft(prev => prev ? { ...prev, due } : prev)} placeholder="预计完成，如 2026-10-01，可空" placeholderTextColor={colors.textMuted} style={styles.input} testID="req-edit-due" /> : null}
+              <Pressable accessibilityRole="button" accessibilityState={{ disabled: savingEdit || (!!edited && !editPatch) }} disabled={savingEdit || (!!edited && !editPatch)} style={[styles.save, (savingEdit || (!!edited && !editPatch)) && styles.disabled]} testID="req-edit-save" onPress={() => { void saveEdit(); }}>
+                <Text style={styles.saveText}>{savingEdit ? '正在保存…' : '保存修改'}</Text>
+              </Pressable>
+              {editError ? <Text style={styles.detailErr} testID="req-edit-error" accessibilityRole="alert">{editError}</Text> : null}
               <Text style={styles.headText}>更改状态</Text>
               <View style={styles.actions}>
                 {REQ_COLUMNS.map(column => <Pressable key={column} accessibilityRole="button" accessibilityState={{ disabled: moving || column === selected.column, selected: column === selected.column }} disabled={moving || column === selected.column} style={[styles.action, column === selected.column && styles.chipOn, moving && styles.disabled]} testID={`req-move-${column}`} onPress={() => { void move(selected, column); }}>
@@ -238,7 +305,7 @@ function ScopedRequirementBoard({ cfg }: { cfg: HubConfig }) {
                 </Pressable>)}
               </View>
               {moving ? <Text style={styles.meta} accessibilityLiveRegion="polite">正在保存状态…</Text> : null}
-              {moveError?.id === selected.id ? <Text style={styles.err} accessibilityRole="alert">{moveError.message}</Text> : null}
+              {moveError?.id === selected.id ? <Text style={styles.detailErr} accessibilityRole="alert">{moveError.message}</Text> : null}
             </ScrollView>
           </View> : null}
         </View>

@@ -1,5 +1,5 @@
 import { readFileSync } from 'node:fs';
-import { filterAssigneeChoices, migrateLocalRequirements, requirementFromHub, RequirementsHubError } from './requirements-hub';
+import { filterAssigneeChoices, migrateLocalRequirements, requirementEditPatch, requirementFromHub, RequirementsHubError } from './requirements-hub';
 import type { Requirement } from './requirements-model';
 
 let p = 0, t = 0;
@@ -56,6 +56,12 @@ ck('不再说不进 Hub', !board.includes('不进 Hub'));
 ck('读写走 Hub 接口', board.includes('migrateLocalRequirements(') && board.includes('createRequirementOnHub(') && board.includes('moveRequirementOnHub('));
 ck('不再只在 Hub 为空时才迁', !board.includes('list.length === 0'));
 ck('负责节点不是手填', !board.includes('onChangeText={setAssignee}') && board.includes('选择负责节点，可空') && board.includes('fetchHubNodes('));
+ck('详情里能改名称、优先级和期限', board.includes('testID="req-edit-name"') && board.includes('testID="req-edit-due"') && board.includes('testID="req-edit-save"') && board.includes('updateRequirementOnHub('));
+ck('已有负责人时详情不改旧的负责节点文本', board.includes('selected.owner === undefined') && board.includes('testID="req-edit-assignee"'));
+const current = { name: '旧', priority: 'low' as const, assignee: 'node-a', due: '2026-10-01', owner: undefined };
+ck('没改就不提交', requirementEditPatch(current, { ...current }) === null);
+ck('只提交改过的名称', JSON.stringify(requirementEditPatch(current, { ...current, name: '新' })) === '{"name":"新"}');
+ck('已有负责人时不把 assignee 写进修改', requirementEditPatch({ ...current, owner: { kind: 'node', id: 'n1' } }, { ...current, assignee: 'other' }) === null);
 
 console.log(`${p}/${t} passed`);
 process.exit(p === t ? 0 : 1);
