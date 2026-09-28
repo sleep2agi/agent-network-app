@@ -1073,8 +1073,6 @@ function DesktopWorkspace({ cfg, screen, setScreen, onLogout, onLocalDataDeleted
             />
           ))}
         </View>
-        {/* 窗口置顶 lives in the rail (real layout space), not floating over the right pane's header. */}
-        <DesktopWindowPin placement="rail" />
         <RailButton
           tab={DESKTOP_SETTINGS_TAB}
           active={active === DESKTOP_SETTINGS_TAB.key}

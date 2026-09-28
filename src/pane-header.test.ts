@@ -107,7 +107,7 @@ const mainStart = app.indexOf('if (desktop && cfg && screen.name !== \'login\')'
 const mainReturn = mainStart >= 0 ? app.slice(mainStart, app.indexOf('\n  }\n', mainStart)) : '';
 ck('pin: main desktop window branch found', mainReturn.length > 100);
 ck('pin: main desktop window does not render the floating pin', !/<DesktopWindowPin\s*\/>|<DesktopWindowPin(?![^>]*placement="rail")[^>]*\/>/.test(mainReturn));
-ck('pin: the rail renders it (placement="rail")', /<DesktopWindowPin[^>]*placement="rail"[^>]*\/>/.test(workspace));
+ck('pin: the rail does not render it', !/<DesktopWindowPin[^>]*placement="rail"[^>]*\/>/.test(workspace));
 const pin = read('src/DesktopWindowPin.tsx');
 ck('pin: rail placement has no absolute positioning', /placement === 'rail' \? \{(?![^}]*position: 'absolute')[^}]*\}/.test(pin));
 
