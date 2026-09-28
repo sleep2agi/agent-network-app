@@ -26,7 +26,8 @@ import UiScaleSettings from './UiScaleSettings';
 import ShortcutsSettings from './ShortcutsSettings';
 import { ds } from './ui-scale';
 import { playChime } from './chime';
-import { SETTINGS_CATEGORIES, SETTINGS_DETAIL_TITLE, activeCategoryKey, closeSettingsPage, filterSettings, phoneRowLabel, phoneSettingsGroups, rememberSettingsCategory, rememberSettingsScroll, rememberedSettingsView, settingsBackTarget, settingsPlatform, visibleRowKeys, type SettingsCategoryKey, type SettingsDetailKey, type SettingsPlatform } from './settings-model';
+import { SETTINGS_CATEGORIES, SETTINGS_DETAIL_TITLE, activeCategoryKey, closeSettingsPage, consumeSettingsNestedBack, filterSettings, phoneRowLabel, phoneSettingsGroups, rememberSettingsCategory, rememberSettingsScroll, rememberedSettingsView, settingsBackTarget, settingsPlatform, visibleRowKeys, type SettingsCategoryKey, type SettingsDetailKey, type SettingsPlatform } from './settings-model';
+import SkillPlazaSection from './SkillPlazaSection';
 import SettingsPhonePage, { type PhonePagesCtx } from './SettingsPhonePages';
 import { settingsPageContentStyle } from './settings-kit';
 import { useModalSafePadding } from './safe-area-runtime';
@@ -153,7 +154,7 @@ export default function SettingsScreen({
   const openDetail = (key: SettingsDetailKey) => { setDetail(key); paneScrollRef.current?.scrollTo({ y: 0, animated: false }); };
   const closeDetail = () => { setDetail(null); paneScrollRef.current?.scrollTo({ y: 0, animated: false }); };
   // 返回箭头 / 安卓返回键 / 网页 Esc 都走这里:先退三级页,再退子页。
-  const goBack = () => { if (settingsBackTarget(page, detail) === 'detail') closeDetail(); else closePage(); };
+  const goBack = () => { if (consumeSettingsNestedBack()) return; if (settingsBackTarget(page, detail) === 'detail') closeDetail(); else closePage(); };
   const [logoutConfirm, setLogoutConfirm] = useState(false);
   const paneScrollRef = useRef<ScrollView>(null);
   useEffect(() => {
@@ -416,6 +417,7 @@ export default function SettingsScreen({
     setQuietStart,
     setQuietEnd,
     renderShortcuts: () => <ShortcutsSettings s={styles} showNav={show('shortcuts', 'nav')} showChat={show('shortcuts', 'chat')} showSend={show('shortcuts', 'send')} />,
+    renderSkillPlaza: () => <SkillPlazaSection layout="phone" />,
     updateView: isAndroid
       ? describeAndroidUpdateRow(androidUpdate, { currentVersion: APP_VERSION, lastCheckedAt: androidUpdateLastCheckedAt(), now: Date.now() })
       : describeUpdateRow(update, { currentVersion: APP_VERSION, lastCheckedAt: desktopUpdateLastCheckedAt(), now: Date.now() }),
@@ -887,6 +889,7 @@ export default function SettingsScreen({
             </View>
           ) : null}
 
+
           {sectionsToRender.includes('about') ? (
             <View style={sectionStyle}>
               {heading('about')}
@@ -928,6 +931,13 @@ export default function SettingsScreen({
                   })()}
                 </>
               ) : null}
+            </View>
+          ) : null}
+
+          {sectionsToRender.includes('skillPlaza') ? (
+            <View style={styles.section} testID="settings-section-skill-plaza">
+              {heading('skillPlaza')}
+              {show('skillPlaza', 'catalog') ? <SkillPlazaSection layout="desktop" /> : null}
             </View>
           ) : null}
         </ScrollView>

@@ -40,7 +40,7 @@ const norm = (f: string) => readFileSync(new URL(f, import.meta.url), 'utf-8').r
 {
   const android = phoneSettingsGroups(filterSettings('', { localHub: false }, undefined, 'android'));
   const keys = android.flatMap((g) => g.rows.map((r) => r.key));
-  ck('安卓(无本地 Hub):账号 通知 外观 语音输入 关于', JSON.stringify(keys) === JSON.stringify(['account', 'notifications', 'appearance', 'voice', 'about']));
+  ck('安卓(无本地 Hub):账号 通知 外观 语音输入 关于 技能广场', JSON.stringify(keys) === JSON.stringify(['account', 'notifications', 'appearance', 'voice', 'about', 'skillPlaza']));
   const withLocal = phoneSettingsGroups(filterSettings('', { localHub: true }, undefined, 'desktop')).flatMap((g) => g.rows.map((r) => r.key));
   ck('装了本地 Hub → 本地 Hub 行出现在「通用」里', withLocal.includes('localHub'));
   const web = phoneSettingsGroups(filterSettings('', {}, undefined, 'web'));
@@ -69,7 +69,7 @@ const norm = (f: string) => readFileSync(new URL(f, import.meta.url), 'utf-8').r
   ck('子页状态从模块级记忆初始化(切主题重挂后仍在子页)', src.includes('useState<SettingsCategoryKey | null>(() => rememberedSettingsView().page)'));
   ck('安卓返回键:BackHandler 返回(先三级页再子页)并消费事件', /BackHandler\.addEventListener\('hardwareBackPress', \(\) => \{ goBack\(\); return true; \}\)/.test(src));
   ck('网页:Esc 返回', /event\.key === 'Escape'\) \{ event\.preventDefault\(\); goBack\(\); \}/.test(src));
-  ck('goBack:三级页开着先退三级页,否则关子页', src.includes("const goBack = () => { if (settingsBackTarget(page, detail) === 'detail') closeDetail(); else closePage(); };"));
+  ck('goBack:正文这类嵌套页先退,然后三级页,再退子页', src.includes("const goBack = () => { if (consumeSettingsNestedBack()) return; if (settingsBackTarget(page, detail) === 'detail') closeDetail(); else closePage(); };"));
   ck('弹窗开着时不抢返回(让给弹窗的 onRequestClose)', /if \(!subPage \|\| dialogOpen\) return;/.test(src)
     && /const dialogOpen = !!removeTarget \|\| localDeleteVisible \|\| guideVisible \|\| logoutConfirm;/.test(src));
   ck('子页顶栏左上有返回箭头', src.includes('testID="settings-back"') && src.includes('name="chevron-back"'));
