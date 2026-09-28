@@ -1,0 +1,19 @@
+Requirement people picker increment — 2026-09-28
+Stack base: b8ff5d58a80180c9417cb9c23147aaae69e7ca3d (PR #474).
+
+Implemented: isolated owner/participant selector, typed user/node stable IDs,
+network-filtered candidates, search, staged selection, cancel, unavailable member
+handling, theme subscription, modal safe-area padding.
+
+Docker oven/bun:1.3.1:
+- src/requirement-people.test.ts: 9/9 assertions passed.
+- src/safe-area-rule.test.ts: 29/29 passed, now detects 25 Modals.
+- tests/requirement-details/details.test.tsx: 6 pass, 0 fail, 22 assertions.
+  Uses react and react-test-renderer 19.2.3, mocks native elements and transport.
+  Three tests are the previous card-details regression; three exercise picker
+  selection/confirmation, owner replacement/cancel, invalid member fail-closed.
+
+NOT COMPLETE: selector is not yet mounted from RequirementBoard; server candidate
+listing, persisted owner/participants, server permission checks and full real-Hub
+E2E remain necessary. Client filtering is UX, never an authorization boundary.
+No merge, release or production mutation performed.
