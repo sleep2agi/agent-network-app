@@ -1,0 +1,16 @@
+2026-09-28 release preparation 0.2.138
+Base main: 3c136a5dea3ce2488059eacba3e1c042cfbceee2 (#484).
+Changes: eight version files, Android versionCode 2138, user release notes.
+Cargo.lock changes only agent-network-desktop root version.
+Sidecar dependency and native guard remain 0.9.0-preview.64.
+Docker oven/bun:1.3.14, --pull=never --read-only, source mounted read-only:
+  bun src/version-consistency.test.ts: PASS (14 checks)
+  bun src/release-notes-hygiene.test.ts: PASS (8 checks)
+  bun src/local-hub-sidecar.test.ts: PASS (14 checks)
+All three executed sequentially with && and returned 0.
+git diff --check: clean.
+Functional Docker evidence is report-test-requirement-create-owner.txt.
+No signed build or public release claimed. Build only after merge, using full
+main SHA. Draft requires two-platform package gates and review before publishing.
+Corrected prior release note's unsubstantiated multi-network people limitation:
+reviewer verified network_id is resolved before the route; no Hub code change.
