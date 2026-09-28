@@ -15,7 +15,7 @@ import {
 import { colors, onThemeChange, radius, spacing } from './theme';
 import { formatTime } from './time';
 import { usePoll } from './usePoll';
-import ProjectsPanel from './ProjectsPanel';
+import TaskBoard from './TaskBoard';
 
 // Tasks tab — a scoped list of hub tasks with a top segmented control
 // for the three states the brief pinned (running / failed / replied) +
@@ -55,7 +55,7 @@ export default function TasksScreen({
   const [loaded, setLoaded] = useState(false);
   const [lastError, setLastError] = useState<string | null>(null);
   const [filter, setFilter] = useState<TaskFilter>('all');
-  const [section, setSection] = useState<'tasks' | 'projects'>('tasks');
+  const [section, setSection] = useState<'list' | 'board'>('list');
   const [hasOlder, setHasOlder] = useState(true);
   const [loadingOlder, setLoadingOlder] = useState(false);
   const limitRef = useRef(PAGE);
@@ -109,22 +109,22 @@ export default function TasksScreen({
     <View style={styles.root} testID={`tasks-screen-poll-list-ms-${POLL_LIST_MS}`}>
       <View style={styles.filterRow} testID="tasks-module-switch">
         <Pressable
-          onPress={() => setSection('tasks')}
-          style={[styles.chip, section === 'tasks' && styles.chipActive]}
-          testID="tasks-module-tasks"
+          onPress={() => setSection('list')}
+          style={[styles.chip, section === 'list' && styles.chipActive]}
+          testID="tasks-view-list"
         >
-          <Text style={[styles.chipText, section === 'tasks' && styles.chipTextActive]}>任务</Text>
+          <Text style={[styles.chipText, section === 'list' && styles.chipTextActive]}>列表</Text>
         </Pressable>
         <Pressable
-          onPress={() => setSection('projects')}
-          style={[styles.chip, section === 'projects' && styles.chipActive]}
-          testID="tasks-module-projects"
+          onPress={() => setSection('board')}
+          style={[styles.chip, section === 'board' && styles.chipActive]}
+          testID="tasks-view-board"
         >
-          <Text style={[styles.chipText, section === 'projects' && styles.chipTextActive]}>项目</Text>
+          <Text style={[styles.chipText, section === 'board' && styles.chipTextActive]}>看板</Text>
         </Pressable>
       </View>
-      {section === 'projects' ? (
-        <ProjectsPanel profileId={cfg.profileId || cfg.username || 'local'} />
+      {section === 'board' && state.kind === 'ready' ? (
+        <TaskBoard tasks={state.tasks} onOpenTask={onOpenTask} />
       ) : (
       <>
       {/* Segmented filter — horizontal scroll for narrow phones */}
