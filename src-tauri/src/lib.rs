@@ -3,6 +3,7 @@
 // CORS and the hub sets no CORS headers, so requests go through Rust.
 const SESSION_SERVICE: &str = "top.vansin.agentnetwork.desktop";
 const SESSION_ACCOUNT: &str = "active-hub-session";
+mod chat_notify;
 mod tray;
 mod local_credentials;
 mod local_daemon;
@@ -990,6 +991,7 @@ pub fn run() {
             tray::tray_open_chat,
             tray::tray_dismiss_all,
             tray::tray_panel_hide,
+            chat_notify::show_chat_notification,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

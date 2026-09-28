@@ -31,21 +31,30 @@ export function presenceOf(snap: UnreadStoreSnapshot): Presence {
   return { windowFocused: focused, openConversation: snap.ledger.open };
 }
 
-async function sendSystemNotification(title: string, body: string): Promise<void> {
+async function sendSystemNotification(alias: string, title: string, body: string): Promise<boolean> {
   if (isTauri()) {
+    try {
+      const { invoke } = await import('@tauri-apps/api/core');
+      await invoke('show_chat_notification', { alias, title, body });
+      return true;
+    } catch {
+      // 旧壳没有这条命令,退回插件。插件点了不会回报,只能靠下面的焦点推断。
+    }
     const n = await import('@tauri-apps/plugin-notification');
     let granted = await n.isPermissionGranted();
     if (!granted) granted = (await n.requestPermission()) === 'granted';
-    if (!granted) return;
+    if (!granted) return false;
     n.sendNotification({ title, body });
-    return;
+    return false;
   }
   const N = (globalThis as any).Notification as (new (t: string, o?: { body?: string }) => unknown) & { permission?: string; requestPermission?: () => Promise<string> } | undefined;
   if (typeof N !== 'function') return;
   let permission = N.permission;
   if (permission === 'default' && N.requestPermission) permission = await N.requestPermission();
-  if (permission !== 'granted') return;
-  new N(title, { body });
+  if (permission !== 'granted') return false;
+  const shown = new N(title, { body }) as { onclick?: () => void };
+  shown.onclick = () => openChat.current?.(alias);
+  return true;
 }
 
 export default function DesktopNotifier({ onOpenChat, profileKey = '' }: { onOpenChat?: (alias: string) => void; profileKey?: string } = {}) {
@@ -97,10 +106,12 @@ export default function DesktopNotifier({ onOpenChat, profileKey = '' }: { onOpe
         ring = ring || d.sound;
         // 正文里可能是 Markdown(链接语法 + 绝对路径),toast 只读得下一两行 → 压成纯文本。
         void sendSystemNotification(
+          group.agent,
           notificationTitle(group.agent, group.count),
           plainTextForNotification(group.body),
-        ).catch(() => { /* 权限被拒/平台不支持 */ });
-        target.current = recordNotified(target.current, group.agent, Date.now());
+        ).then(routed => {
+          if (!routed) target.current = recordNotified(target.current, group.agent, Date.now());
+        }).catch(() => { /* 权限被拒/平台不支持 */ });
       }
       if (ring) playChime();
     };

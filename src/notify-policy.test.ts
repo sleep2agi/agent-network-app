@@ -95,5 +95,8 @@ ck('Rust:托盘 macOS 用 template 图标(@2x),菜单点行 emit tray-open-chat'
 ck('Rust:tray_update 已注册,notification 插件已挂', lib.includes('tray::tray_update,') && lib.includes('.plugin(tauri_plugin_notification::init())'));
 ck('Cargo:tray-icon + image-png 特性,notification 插件', cargo.includes('"tray-icon", "image-png"') && cargo.includes('tauri-plugin-notification = "2"'));
 ck('capability:notification:default + 聚焦窗口权限', cap.includes('"notification:default"') && cap.includes('"core:window:allow-set-focus"'));
+const chatNotify = norm('../src-tauri/src/chat_notify.rs');
+ck('点通知走命令,成功就不再靠焦点猜', notifier.includes("invoke('show_chat_notification'") && notifier.includes('if (!routed) target.current = recordNotified'));
+ck('Rust:点正文打开托盘那条会话', chatNotify.includes('notification.action("default", "打开")') && chatNotify.includes('app.emit("tray-open-chat", alias)') && lib.includes('chat_notify::show_chat_notification'));
 
 console.log(`\n${p}/${t} passed`); process.exit(p === t ? 0 : 1);
