@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { ActivityIndicator, Modal, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { Text, TextInput } from './ui-text';
 import type { HubConfig } from './api';
 import {
@@ -9,7 +9,7 @@ import {
   REQ_PRIORITY_LABEL,
   columnsOf,
   createRequirement,
-  nextColumn,
+  type ReqColumn,
   type ReqPriority,
   type Requirement,
 } from './requirements-model';
@@ -17,11 +17,18 @@ import { readRequirements, requirementsKey, writeRequirements } from './requirem
 import { createRequirementOnHub, filterAssigneeChoices, listRequirements, migrateLocalRequirements, moveRequirementOnHub, RequirementsHubError } from './requirements-hub';
 import { fetchHubNodes } from './api';
 import { colors, radius, spacing } from './theme';
+import { useModalSafePadding } from './safe-area-runtime';
+import { withBasePadding } from './modal-safe-area';
 
 const NOTE = '存在 Hub 上，手机和电脑是同一份。';
 const UNSUPPORTED = '这个 Hub 还没有需求池。升级 Hub 之后，手机和电脑才能看到同一份。';
 
 export default function RequirementBoard({ cfg }: { cfg: HubConfig }) {
+  return <ScopedRequirementBoard key={JSON.stringify([cfg.serverUrl, cfg.token, cfg.networkId, cfg.profileId, cfg.username])} cfg={cfg} />;
+}
+
+function ScopedRequirementBoard({ cfg }: { cfg: HubConfig }) {
+  const safe = useModalSafePadding('overlay');
   const localKey = requirementsKey(cfg.profileId || cfg.username || 'local');
   const [items, setItems] = useState<Requirement[]>([]);
   const [phase, setPhase] = useState<'loading' | 'ready' | 'unsupported' | 'error'>('loading');
@@ -35,6 +42,11 @@ export default function RequirementBoard({ cfg }: { cfg: HubConfig }) {
   const [priority, setPriority] = useState<ReqPriority>('normal');
   const [error, setError] = useState('');
   const [reloadKey, setReloadKey] = useState(0);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [moving, setMoving] = useState(false);
+  const movePending = useRef(false);
+  const [moveError, setMoveError] = useState<{ id: string; message: string } | null>(null);
+  const selected = items.find(item => item.id === selectedId);
   const styles = useMemo(() => StyleSheet.create({
     root: { flex: 1 },
     note: { color: colors.textMuted, fontSize: 12, paddingHorizontal: spacing.lg, paddingBottom: spacing.sm },
@@ -58,6 +70,13 @@ export default function RequirementBoard({ cfg }: { cfg: HubConfig }) {
     title: { color: colors.text, fontSize: 14, fontWeight: '600' },
     meta: { color: colors.textMuted, fontSize: 12 },
     empty: { color: colors.textMuted, fontSize: 12, padding: spacing.sm },
+    overlay: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: spacing.lg, backgroundColor: 'rgba(0,0,0,0.45)' },
+    detail: { width: '100%', maxWidth: 560, maxHeight: '90%', backgroundColor: colors.card, borderRadius: radius.md, padding: spacing.lg, gap: spacing.md },
+    detailTitle: { color: colors.text, fontSize: 22, fontWeight: '600' },
+    detailBody: { gap: spacing.md, paddingVertical: spacing.sm },
+    actions: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
+    action: { minHeight: 44, justifyContent: 'center', paddingHorizontal: spacing.md, borderRadius: radius.sm, borderWidth: 1, borderColor: colors.border },
+    disabled: { opacity: 0.5 },
   }), []);
 
   useEffect(() => {
@@ -106,13 +125,19 @@ export default function RequirementBoard({ cfg }: { cfg: HubConfig }) {
       setError(e instanceof Error ? e.message : '没有存到 Hub');
     }
   };
-  const move = async (item: Requirement) => {
-    const column = nextColumn(item.column);
+  const move = async (item: Requirement, column: ReqColumn) => {
+    if (movePending.current || item.column === column) return;
+    movePending.current = true;
+    setMoving(true);
+    setMoveError(null);
     try {
       const updated = await moveRequirementOnHub(cfg, item.id, column);
       setItems(prev => prev.map(row => row.id === item.id ? updated : row));
     } catch (e) {
-      setError(e instanceof Error ? e.message : '没有存到 Hub');
+      setMoveError({ id: item.id, message: e instanceof RequirementsHubError && e.status === 403 ? '你没有修改这条需求的权限' : '状态未保存，请重试' });
+    } finally {
+      movePending.current = false;
+      setMoving(false);
     }
   };
   const columns = columnsOf(items);
@@ -169,16 +194,41 @@ export default function RequirementBoard({ cfg }: { cfg: HubConfig }) {
               </View>
               {col.items.length === 0 ? <Text style={styles.empty}>没有</Text> : null}
               {col.items.map(item => (
-                <Pressable key={item.id} style={styles.card} testID={`req-card-${item.id}`} onPress={() => { void move(item); }}>
+                <Pressable key={item.id} style={styles.card} accessibilityRole="button" accessibilityLabel={`查看需求：${item.name}`} testID={`req-card-${item.id}`} onPress={() => { setSelectedId(item.id); }}>
                   <Text style={styles.title}>{item.name}</Text>
                   <Text style={styles.meta}>{REQ_PRIORITY_LABEL[item.priority]} · {item.assignee || '未分配'} · {item.due || '未定期限'}</Text>
-                  <Text style={styles.addText}>移到{REQ_COLUMN_LABEL[nextColumn(item.column)]}</Text>
+                  <Text style={styles.addText}>查看详情</Text>
                 </Pressable>
               ))}
             </View>
           ))}
         </ScrollView>
       ) : null}
+      <Modal visible={!!selected} transparent animationType="fade" onRequestClose={() => setSelectedId(null)}>
+        <View style={[styles.overlay, withBasePadding(safe, spacing.lg)]}>
+          {selected ? <View style={styles.detail} accessibilityViewIsModal testID="req-detail">
+            <View style={styles.head}>
+              <Text style={styles.headText}>需求详情</Text>
+              <Pressable accessibilityRole="button" accessibilityLabel="关闭需求详情" style={styles.action} onPress={() => setSelectedId(null)} testID="req-detail-close"><Text style={styles.addText}>关闭</Text></Pressable>
+            </View>
+            <ScrollView contentContainerStyle={styles.detailBody}>
+              <Text style={styles.detailTitle}>{selected.name}</Text>
+              <Text style={styles.meta}>状态 · {REQ_COLUMN_LABEL[selected.column]}</Text>
+              <Text style={styles.meta}>负责人 · {selected.assignee || '未分配'}</Text>
+              <Text style={styles.meta}>优先级 · {REQ_PRIORITY_LABEL[selected.priority]}</Text>
+              <Text style={styles.meta}>预计完成 · {selected.due || '未定期限'}</Text>
+              <Text style={styles.headText}>更改状态</Text>
+              <View style={styles.actions}>
+                {REQ_COLUMNS.map(column => <Pressable key={column} accessibilityRole="button" accessibilityState={{ disabled: moving || column === selected.column, selected: column === selected.column }} disabled={moving || column === selected.column} style={[styles.action, column === selected.column && styles.chipOn, moving && styles.disabled]} testID={`req-move-${column}`} onPress={() => { void move(selected, column); }}>
+                  <Text style={styles.addText}>{column === selected.column ? `当前：${REQ_COLUMN_LABEL[column]}` : `移到${REQ_COLUMN_LABEL[column]}`}</Text>
+                </Pressable>)}
+              </View>
+              {moving ? <Text style={styles.meta} accessibilityLiveRegion="polite">正在保存状态…</Text> : null}
+              {moveError?.id === selected.id ? <Text style={styles.err} accessibilityRole="alert">{moveError.message}</Text> : null}
+            </ScrollView>
+          </View> : null}
+        </View>
+      </Modal>
     </View>
   );
 }

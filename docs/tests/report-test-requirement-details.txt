@@ -1,0 +1,48 @@
+Requirement details incremental release — 2026-09-28
+Base: 54c77865a926b888b4d02dac599d45cc14c9b2f5
+
+Docker component behavior suite:
+  docker build -f tests/requirement-details/Dockerfile -t anet-requirement-details-review .
+  docker run --rm --network none anet-requirement-details-review
+Result: 3 pass, 0 fail, 13 assertions.
+React hooks and component handlers execute through react-test-renderer 19.2.3;
+native primitives and Hub responses are mocked. Covers opening without mutation,
+explicit target selection, in-flight duplicate guard, failure retaining state,
+retry, and ignoring late mutation results after changing network.
+This is NOT rendered mobile/desktop validation or real Hub E2E.
+
+Existing requirements-hub.test.ts in oven/bun:1.3.1: 10/10 passed.
+
+Full typecheck attempted in node:22.23.0-bookworm with existing read-only host
+dependencies: failed on missing Expo/Tauri modules in that dependency tree.
+New TSX test was initially included in the application typecheck; added the same
+test exclusion already used for *.test.ts. Clean npm ci + typecheck in CI still
+required; no full typecheck pass claimed.
+
+Disk became full during verification. One interrupted config write was restored.
+Only this run's test image and its removable build cache were deleted.
+Source moved to a standalone RAM-backed repository so it can be pushed durably.
+Visual validation and clean CI are required before removing draft status.
+
+Follow-up verification:
+- Clean GitHub CI installation passed app typecheck on the initial head.
+- Aggregate tests caught the missing modal safe-area hook (210/211 files).
+  Fixed by using useModalSafePadding('overlay') + withBasePadding.
+- Docker safe-area-rule.test.ts after fix: 29/29 passed.
+- Docker Chromium (Playwright 1.58.2) with actual React Native Web rendering:
+  desktop 1280x800 and mobile 390x844 both PASS. Opens without writing,
+  dialog fits viewport, explicit move persists in stub HTTP, close works.
+  HTTP is intercepted and web safe-area insets are zero; this does not prove
+  native Android/iOS behavior or real production Hub integration.
+- Reproduction: bundle tests/requirement-details/build-visual.cjs with
+  esbuild 0.25.10 using the app dependencies at /work/node_modules; run
+  visual-check.cjs with playwright 1.58.2 and Chromium. Both scripts expect
+  /output for bundle and screenshots. Run inside the Playwright Docker image
+  mcr.microsoft.com/playwright:v1.58.2-noble, source mounted at /work.
+- New CI run still required for the safe-area fix; PR remains draft.
+
+Review follow-up: CI for b8ff5d5 passed 8/8 and PR became ready. Automated review
+found a late failure on card A could display in newly opened card B. Error state
+now carries its originating card ID. Docker component suite after fix: 4/4 pass,
+15 assertions, including switching A -> B before rejection and reopening A.
+The follow-up commit requires its own CI; earlier green is not reused as proof.
