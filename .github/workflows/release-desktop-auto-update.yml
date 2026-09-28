@@ -119,6 +119,9 @@ jobs:
           releaseBody: |-
             Signed and notarized stable update for macOS (Apple Silicon) and Windows (x64).
 
+            What's new in 0.2.132:
+            - 任务页增加看板：可以自己新建需求，分成需求池、进行中、完成。这些卡片只留在这台电脑上，不进 Hub。原来的任务列表不变。
+
             What's new in 0.2.131:
             - 桌面左侧栏去掉窗口置顶图钉。窗口置顶仍在聊天信息里。
 
