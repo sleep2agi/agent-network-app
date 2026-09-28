@@ -2,6 +2,7 @@
 import { appFetch } from './app-fetch';
 import type { HubConfig } from './api';
 import { assignmentsFromHub } from './requirement-people-api';
+import type { RequirementPersonRef } from './requirement-people';
 import {
   dueOk,
   REQ_COLUMNS,
@@ -60,7 +61,7 @@ export async function listRequirements(cfg: HubConfig): Promise<Requirement[]> {
   return rows.map(requirementFromHub).filter((row): row is Requirement => !!row);
 }
 
-export async function createRequirementOnHub(cfg: HubConfig, input: { name: string; priority: ReqPriority; assignee: string; due: string; column?: ReqColumn; clientId?: string }): Promise<Requirement> {
+export async function createRequirementOnHub(cfg: HubConfig, input: { name: string; priority: ReqPriority; assignee: string; due: string; column?: ReqColumn; clientId?: string; owner?: RequirementPersonRef }): Promise<Requirement> {
   const data = await call(cfg, '/api/requirements', {
     method: 'POST',
     body: JSON.stringify({
@@ -71,6 +72,7 @@ export async function createRequirementOnHub(cfg: HubConfig, input: { name: stri
       column: input.column,
       client_id: input.clientId,
       network_id: cfg.networkId,
+      owner: input.owner ? { kind: input.owner.kind, id: input.owner.id } : undefined,
     }),
   }) as { requirement?: unknown };
   const row = requirementFromHub(data.requirement);
