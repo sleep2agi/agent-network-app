@@ -29,13 +29,15 @@ pub fn show_chat_notification<R: Runtime>(app: AppHandle<R>, alias: String, titl
         let Ok(handle) = notification.show() else {
             return;
         };
+        // 回调必须对任意生命周期都成立。先把「点中没有」收成 bool,再在外面打开会话。
+        let (tx, rx) = std::sync::mpsc::channel();
         let _ = handle.wait_for_response(move |response| {
-            if !opens_chat(response) {
-                return;
-            }
+            let _ = tx.send(opens_chat(response));
+        });
+        if rx.recv().unwrap_or(false) {
             crate::tray::focus_main(&app);
             let _ = app.emit("tray-open-chat", alias);
-        });
+        }
     });
 }
 
