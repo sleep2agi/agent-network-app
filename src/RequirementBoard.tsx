@@ -1,10 +1,12 @@
 import { useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { Text, TextInput } from './ui-text';
+import { Ionicons } from './icons';
+import AliasAvatar from './AliasAvatar';
 import type { HubConfig } from './api';
+import { fetchHubNodes } from './api';
 import {
   REQ_COLUMN_LABEL,
-  REQ_COLUMNS,
   REQ_PRIORITIES,
   REQ_PRIORITY_LABEL,
   columnsOf,
@@ -15,7 +17,6 @@ import {
 } from './requirements-model';
 import { readRequirements, requirementsKey, writeRequirements } from './requirements-store';
 import { createRequirementOnHub, filterAssigneeChoices, listRequirements, migrateLocalRequirements, moveRequirementOnHub, RequirementsHubError } from './requirements-hub';
-import { fetchHubNodes } from './api';
 import { colors, radius, spacing } from './theme';
 
 const NOTE = '存在 Hub 上，手机和电脑是同一份。';
@@ -38,26 +39,40 @@ export default function RequirementBoard({ cfg }: { cfg: HubConfig }) {
   const styles = useMemo(() => StyleSheet.create({
     root: { flex: 1 },
     note: { color: colors.textMuted, fontSize: 12, paddingHorizontal: spacing.lg, paddingBottom: spacing.sm },
-    form: { paddingHorizontal: spacing.lg, gap: spacing.sm },
-    input: { borderWidth: 1, borderColor: colors.border, borderRadius: radius.sm, paddingHorizontal: spacing.md, paddingVertical: spacing.sm, color: colors.text, fontSize: 14 },
-    picker: { maxHeight: 220, borderWidth: 1, borderColor: colors.border, borderRadius: radius.sm },
-    pickRow: { paddingHorizontal: spacing.md, paddingVertical: spacing.sm + 4, borderBottomWidth: 1, borderBottomColor: colors.border },
-    chips: { flexDirection: 'row', gap: spacing.sm, alignItems: 'center' },
+    formWrap: { paddingHorizontal: spacing.lg, paddingBottom: spacing.md },
+    composer: { backgroundColor: colors.card, borderRadius: radius.md, padding: spacing.lg, gap: spacing.md },
+    name: { color: colors.text, fontSize: 15, padding: 0 },
+    row: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, minHeight: 36 },
+    rowLabel: { color: colors.textSecondary, fontSize: 13, width: 72 },
+    rowValue: { color: colors.text, fontSize: 13, flex: 1 },
+    rowMuted: { color: colors.textMuted, fontSize: 13, flex: 1 },
+    dueInput: { flex: 1, color: colors.text, fontSize: 13, padding: 0, textAlign: 'right' },
+    chips: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
     chip: { paddingHorizontal: spacing.md, paddingVertical: spacing.xs + 2, borderRadius: radius.sm },
     chipOn: { backgroundColor: colors.rowActive },
-    chipText: { color: colors.textSecondary, fontSize: 12 },
+    chipText: { color: colors.textSecondary, fontSize: 12, fontWeight: '500' },
     chipTextOn: { color: colors.text, fontWeight: '600' },
-    addText: { color: colors.accent, fontSize: 14, fontWeight: '600' },
-    err: { color: colors.failed, fontSize: 12, paddingHorizontal: spacing.lg, paddingTop: spacing.xs },
-    row: { flexDirection: 'row', alignItems: 'flex-start', padding: spacing.md, gap: spacing.md },
-    col: { width: 260, backgroundColor: colors.card, borderRadius: radius.md, padding: spacing.sm },
-    head: { flexDirection: 'row', justifyContent: 'space-between', padding: spacing.sm },
+    add: { marginLeft: 'auto', backgroundColor: colors.rowActive, borderRadius: radius.sm, paddingHorizontal: spacing.md, paddingVertical: spacing.xs + 2 },
+    addText: { color: colors.text, fontSize: 13, fontWeight: '600' },
+    search: { color: colors.text, fontSize: 13, paddingVertical: spacing.sm, paddingHorizontal: 0 },
+    pickList: { maxHeight: 240 },
+    pickRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, minHeight: 44 },
+    err: { color: colors.failed, fontSize: 12, paddingHorizontal: spacing.lg, paddingBottom: spacing.sm },
+    board: { flexGrow: 0 },
+    boardRow: { flexDirection: 'row', alignItems: 'flex-start', paddingHorizontal: spacing.lg, gap: spacing.md, paddingBottom: spacing.lg },
+    col: { width: 280 },
+    head: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingBottom: spacing.sm, minHeight: 28 },
     headText: { color: colors.text, fontSize: 13, fontWeight: '600' },
     count: { color: colors.textMuted, fontSize: 12 },
-    card: { padding: spacing.sm, borderRadius: radius.sm, marginBottom: spacing.sm, backgroundColor: colors.bg, gap: 4 },
-    title: { color: colors.text, fontSize: 14, fontWeight: '600' },
-    meta: { color: colors.textMuted, fontSize: 12 },
-    empty: { color: colors.textMuted, fontSize: 12, padding: spacing.sm },
+    card: { backgroundColor: colors.card, borderRadius: radius.md, padding: spacing.lg, marginBottom: spacing.sm, gap: spacing.xs },
+    cardTop: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+    cardTitle: { color: colors.text, fontSize: 14, fontWeight: '600' },
+    high: { color: colors.failed, fontSize: 10, fontWeight: '600' },
+    due: { marginLeft: 'auto', color: colors.textMuted, fontSize: 11 },
+    who: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs + 2 },
+    whoText: { color: colors.textSecondary, fontSize: 13, flexShrink: 1 },
+    move: { color: colors.textMuted, fontSize: 12 },
+    empty: { color: colors.textMuted, fontSize: 12, paddingVertical: spacing.md },
   }), []);
 
   useEffect(() => {
@@ -68,7 +83,7 @@ export default function RequirementBoard({ cfg }: { cfg: HubConfig }) {
         await migrateLocalRequirements(
           cfg,
           () => readRequirements(localKey),
-          (items) => writeRequirements(localKey, items),
+          (next) => writeRequirements(localKey, next),
         );
         const list = await listRequirements(cfg);
         if (!dead) { setItems(list); setPhase('ready'); setHubError(''); }
@@ -115,7 +130,13 @@ export default function RequirementBoard({ cfg }: { cfg: HubConfig }) {
       setError(e instanceof Error ? e.message : '没有存到 Hub');
     }
   };
+  const choose = (alias: string) => {
+    setAssignee(alias);
+    setPickerOpen(false);
+    setNodeQuery('');
+  };
   const columns = columnsOf(items);
+  const choices = filterAssigneeChoices(nodes, nodeQuery);
 
   return (
     <View style={styles.root} testID="requirement-board">
@@ -127,52 +148,68 @@ export default function RequirementBoard({ cfg }: { cfg: HubConfig }) {
         </Pressable>
       ) : null}
       {phase === 'ready' ? (
-        <View style={styles.form}>
-          <TextInput value={name} onChangeText={setName} placeholder="新建一条需求" placeholderTextColor={colors.textMuted} style={styles.input} testID="req-name" />
-          <Pressable testID="req-assignee" onPress={() => setPickerOpen(open => !open)} style={styles.input}>
-            <Text style={assignee ? styles.title : styles.meta}>{assignee || '选择负责节点，可空'}</Text>
-          </Pressable>
-          {pickerOpen ? (
-            <View testID="req-assignee-list">
-              <TextInput value={nodeQuery} onChangeText={setNodeQuery} placeholder="搜索节点" placeholderTextColor={colors.textMuted} style={styles.input} testID="req-assignee-search" />
-              <ScrollView style={styles.picker} keyboardShouldPersistTaps="handled">
-                <Pressable testID="req-node-clear" onPress={() => { setAssignee(''); setPickerOpen(false); setNodeQuery(''); }} style={styles.pickRow}>
-                  <Text style={styles.meta}>不指定</Text>
-                </Pressable>
-                {filterAssigneeChoices(nodes, nodeQuery).map(alias => (
-                  <Pressable key={alias} testID={`req-node-${alias}`} onPress={() => { setAssignee(alias); setPickerOpen(false); setNodeQuery(''); }} style={styles.pickRow}>
-                    <Text style={styles.title}>{alias}</Text>
+        <View style={styles.formWrap}>
+          <View style={styles.composer}>
+            <TextInput value={name} onChangeText={setName} placeholder="新建一条需求" placeholderTextColor={colors.textMuted} style={styles.name} testID="req-name" />
+            <Pressable testID="req-assignee" onPress={() => setPickerOpen(open => !open)} style={styles.row}>
+              <Text style={styles.rowLabel}>负责节点</Text>
+              {assignee ? <AliasAvatar alias={assignee} size={22} /> : null}
+              <Text style={assignee ? styles.rowValue : styles.rowMuted} numberOfLines={1}>{assignee || '选择负责节点，可空'}</Text>
+              <Ionicons name={pickerOpen ? 'chevron-up' : 'chevron-down'} size={16} color={colors.textMuted} />
+            </Pressable>
+            {pickerOpen ? (
+              <View testID="req-assignee-list">
+                <TextInput value={nodeQuery} onChangeText={setNodeQuery} placeholder="搜索节点" placeholderTextColor={colors.textMuted} style={styles.search} testID="req-assignee-search" />
+                <ScrollView style={styles.pickList} keyboardShouldPersistTaps="handled">
+                  <Pressable testID="req-node-clear" onPress={() => choose('')} style={styles.pickRow}>
+                    <Text style={styles.rowMuted}>不指定</Text>
                   </Pressable>
-                ))}
-              </ScrollView>
+                  {choices.map(alias => (
+                    <Pressable key={alias} testID={`req-node-${alias}`} onPress={() => choose(alias)} style={styles.pickRow}>
+                      <AliasAvatar alias={alias} size={22} />
+                      <Text style={styles.rowValue} numberOfLines={1}>{alias}</Text>
+                    </Pressable>
+                  ))}
+                </ScrollView>
+              </View>
+            ) : null}
+            <View style={styles.row}>
+              <Text style={styles.rowLabel}>预计完成</Text>
+              <TextInput value={due} onChangeText={setDue} placeholder="可空，如 2026-10-01" placeholderTextColor={colors.textMuted} style={styles.dueInput} testID="req-due" />
             </View>
-          ) : null}
-          <TextInput value={due} onChangeText={setDue} placeholder="预计完成，如 2026-10-01，可空" placeholderTextColor={colors.textMuted} style={styles.input} testID="req-due" />
-          <View style={styles.chips}>
-            {REQ_PRIORITIES.map(p => (
-              <Pressable key={p} onPress={() => setPriority(p)} style={[styles.chip, priority === p && styles.chipOn]} testID={`req-priority-${p}`}>
-                <Text style={[styles.chipText, priority === p && styles.chipTextOn]}>{REQ_PRIORITY_LABEL[p]}</Text>
-              </Pressable>
-            ))}
-            <Pressable onPress={() => { void add(); }} testID="req-add"><Text style={styles.addText}>添加</Text></Pressable>
+            <View style={styles.chips}>
+              {REQ_PRIORITIES.map(p => (
+                <Pressable key={p} onPress={() => setPriority(p)} style={[styles.chip, priority === p && styles.chipOn]} testID={`req-priority-${p}`}>
+                  <Text style={[styles.chipText, priority === p && styles.chipTextOn]}>{REQ_PRIORITY_LABEL[p]}</Text>
+                </Pressable>
+              ))}
+              <Pressable onPress={() => { void add(); }} style={styles.add} testID="req-add"><Text style={styles.addText}>添加</Text></Pressable>
+            </View>
           </View>
         </View>
       ) : null}
       {error ? <Text style={styles.err} testID="req-error">{error}</Text> : null}
       {phase === 'ready' ? (
-        <ScrollView horizontal contentContainerStyle={styles.row}>
+        <ScrollView horizontal style={styles.board} contentContainerStyle={styles.boardRow}>
           {columns.map(col => (
             <View key={col.column} style={styles.col} testID={`req-col-${col.column}`}>
               <View style={styles.head}>
                 <Text style={styles.headText}>{REQ_COLUMN_LABEL[col.column]}</Text>
                 <Text style={styles.count}>{col.items.length}</Text>
               </View>
-              {col.items.length === 0 ? <Text style={styles.empty}>没有</Text> : null}
+              {col.items.length === 0 ? <Text style={styles.empty}>还没有</Text> : null}
               {col.items.map(item => (
                 <Pressable key={item.id} style={styles.card} testID={`req-card-${item.id}`} onPress={() => { void move(item); }}>
-                  <Text style={styles.title}>{item.name}</Text>
-                  <Text style={styles.meta}>{REQ_PRIORITY_LABEL[item.priority]} · {item.assignee || '未分配'} · {item.due || '未定期限'}</Text>
-                  <Text style={styles.addText}>移到{REQ_COLUMN_LABEL[nextColumn(item.column)]}</Text>
+                  <View style={styles.cardTop}>
+                    {item.priority === 'high' ? <Text style={styles.high}>高</Text> : null}
+                    <Text style={styles.due}>{item.due || '未定期限'}</Text>
+                  </View>
+                  <Text style={styles.cardTitle}>{item.name}</Text>
+                  <View style={styles.who}>
+                    {item.assignee ? <AliasAvatar alias={item.assignee} size={22} /> : null}
+                    <Text style={styles.whoText} numberOfLines={1}>{item.assignee || '未指定'}</Text>
+                  </View>
+                  <Text style={styles.move}>移到{REQ_COLUMN_LABEL[nextColumn(item.column)]}</Text>
                 </Pressable>
               ))}
             </View>
