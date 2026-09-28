@@ -17,3 +17,8 @@ NOT COMPLETE: selector is not yet mounted from RequirementBoard; server candidat
 listing, persisted owner/participants, server permission checks and full real-Hub
 E2E remain necessary. Client filtering is UX, never an authorization boundary.
 No merge, release or production mutation performed.
+
+Follow-up: Docker component tests 8/8, 24 assertions; includes member removed
+while open and network change discarding draft selection. Chromium desktop and
+mobile fixture checks pass for search, selecting same-ID user + node together,
+and explicit confirmation. Screenshots inspected; server writes remain untested.

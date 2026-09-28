@@ -39,6 +39,16 @@ const server = createServer((req, res) => {
       await page.getByTestId('req-detail-close').click();
       await page.getByTestId('req-detail').waitFor({ state: 'hidden' });
       console.log(`PASS ${name}: open without write, dialog fits, explicit move, close`);
+      await page.goto('http://127.0.0.1:8080/?people=1');
+      await page.getByTestId('person-user:alex').click();
+      await page.getByTestId('person-node:alex').click();
+      await page.getByTestId('people-search').fill('alex');
+      assert.equal(await page.getByTestId('person-node:review').count(), 0);
+      await page.waitForTimeout(350);
+      await page.screenshot({ path: `/output/${name}-people.png` });
+      await page.getByTestId('people-confirm').click();
+      assert.deepEqual(JSON.parse(await page.getByTestId('people-result').textContent()), [{ kind: 'user', id: 'alex' }, { kind: 'node', id: 'alex' }]);
+      console.log(`PASS ${name}: people search, mixed identities, explicit confirmation`);
       await page.close();
     }
   } finally { await browser.close(); server.close(); }

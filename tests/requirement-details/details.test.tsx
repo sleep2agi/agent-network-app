@@ -108,3 +108,21 @@ test('removed members cannot be silently saved', async () => {
   await act(async () => byId('people-confirm').props.onPress());
   expect(saved).toBe(0);
 });
+
+test('member removed while picker is open immediately blocks confirmation', async () => {
+  const person = { kind: 'user' as const, id: 'u', name: '成员', networkId: 'a' };
+  const props = { networkId: 'a', mode: 'participants' as const, selected: [], onConfirm: () => {}, onClose: () => {} };
+  await act(async () => { renderer = create(<PeoplePicker {...props} people={[person]} />); });
+  await act(async () => byId('person-user:u').props.onPress());
+  await act(async () => renderer.update(<PeoplePicker {...props} people={[]} />));
+  expect(byId('people-confirm').props.disabled).toBe(true);
+});
+
+test('changing network discards unconfirmed people selection', async () => {
+  const person = { kind: 'node' as const, id: 'n', name: 'Agent', networkId: 'a' };
+  const props = { mode: 'participants' as const, selected: [], onConfirm: () => {}, onClose: () => {} };
+  await act(async () => { renderer = create(<PeoplePicker {...props} networkId="a" people={[person]} />); });
+  await act(async () => byId('person-node:n').props.onPress());
+  await act(async () => renderer.update(<PeoplePicker {...props} networkId="b" people={[{ ...person, networkId: 'b' }]} />));
+  expect(byId('person-node:n').props.accessibilityState.checked).toBe(false);
+});
