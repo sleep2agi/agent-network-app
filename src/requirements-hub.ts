@@ -110,3 +110,19 @@ export async function migrateLocalRequirements(
   }
   return { migrated, left: read().length };
 }
+
+/** 负责节点从 Hub 的节点列表里点，不手填。空名丢掉，同名只留一个，按名字排。 */
+export function filterAssigneeChoices(aliases: readonly string[], query: string): string[] {
+  const q = query.trim().toLowerCase();
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const raw of aliases) {
+    const alias = raw.trim();
+    if (!alias || seen.has(alias)) continue;
+    if (q && !alias.toLowerCase().includes(q)) continue;
+    seen.add(alias);
+    out.push(alias);
+  }
+  out.sort((a, b) => a.localeCompare(b, 'zh'));
+  return out;
+}

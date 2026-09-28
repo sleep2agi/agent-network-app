@@ -15,3 +15,8 @@ Review follow-up: parent board now receives successful saves after detail unmoun
 cards render typed owner names rather than stale legacy assignee text. Scoped
 board remounts still isolate different networks/accounts. Docker component rerun:
 13 pass, 0 fail, 35 expectations, including close-before-ack then reopen flow.
+
+After #474 merged, integrated current main and retained its notification/version
+and legacy-assignee autocomplete changes. Component fixtures now stub the new
+autocomplete dependency; assignment/detail assertions unchanged. Docker rerun:
+13 pass, 0 fail, 35 expectations. Full updated-main CI is still required.

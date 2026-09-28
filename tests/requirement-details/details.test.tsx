@@ -12,6 +12,7 @@ mock.module('./src/ui-text', () => ({ Text: 'Text', TextInput: 'TextInput' }));
 mock.module('./src/safe-area-runtime', () => ({ useModalSafePadding: () => ({ paddingTop: 0, paddingBottom: 0, paddingLeft: 0, paddingRight: 0 }) }));
 mock.module('./src/theme', () => ({ colors: {}, onThemeChange: () => () => {}, radius: { sm: 4, md: 8 }, spacing: { xs: 4, sm: 8, md: 12, lg: 16 } }));
 mock.module('./src/requirements-store', () => ({ requirementsKey: (s: string) => s, readRequirements: () => [], writeRequirements: () => {} }));
+mock.module('./src/api', () => ({ fetchHubNodes: async () => ({ nodes: [] }) }));
 
 const card = { id: 'r1', name: '验证需求详情', assignee: '负责人甲', priority: 'normal', due: '', column: 'pool', createdAt: '' };
 let typedCards = false;
@@ -20,6 +21,7 @@ let reply: (value: any) => void;
 let reject: (error: Error) => void;
 class HubError extends Error { constructor(public status: number) { super('HTTP ' + status); } }
 mock.module('./src/requirements-hub', () => ({
+  filterAssigneeChoices: () => [],
   listRequirements: async () => [{ ...card, ...(typedCards ? { owner: null, participants: [] } : {}) }, { ...card, id: 'r2', name: '另一个需求' }], migrateLocalRequirements: async () => {}, createRequirementOnHub: async () => card,
   RequirementsHubError: HubError,
   moveRequirementOnHub: (cfg: any, id: string, column: string) => {
