@@ -13,6 +13,17 @@ pub(crate) fn opens_chat(response: &notify_rust::NotificationResponse) -> bool {
     }
 }
 
+/// 闭包推不出「对任意生命周期」的 FnOnce,改成 trait 实现。
+struct ClickReport {
+    tx: std::sync::mpsc::Sender<bool>,
+}
+
+impl notify_rust::ResponseHandler for ClickReport {
+    fn call(self, response: &notify_rust::NotificationResponse) {
+        let _ = self.tx.send(opens_chat(response));
+    }
+}
+
 #[tauri::command]
 pub fn show_chat_notification<R: Runtime>(app: AppHandle<R>, alias: String, title: String, body: String) {
     let alias = alias.trim().to_string();
@@ -31,9 +42,7 @@ pub fn show_chat_notification<R: Runtime>(app: AppHandle<R>, alias: String, titl
         };
         // 回调必须对任意生命周期都成立。先把「点中没有」收成 bool,再在外面打开会话。
         let (tx, rx) = std::sync::mpsc::channel();
-        let _ = handle.wait_for_response(move |response| {
-            let _ = tx.send(opens_chat(response));
-        });
+        let _ = handle.wait_for_response(ClickReport { tx });
         if rx.recv().unwrap_or(false) {
             crate::tray::focus_main(&app);
             let _ = app.emit("tray-open-chat", alias);
