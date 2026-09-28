@@ -1,0 +1,19 @@
+2026-09-28: packaged release 0.2.136 withheld
+
+Run 36421799552, source main 484cd5b33844e920f8dcac36bd17f38351ec11f1.
+Both macOS and Windows built signed artifacts but failed packaged smoke:
+local Hub version mismatch: expected 0.9.0-preview.53, got 0.9.0-preview.64.
+The Rust supervisor's EXPECTED_HUB_VERSION was omitted from the sidecar bump.
+Draft desktop-v0.2.136 must remain unpublished.
+
+Fix: align Rust EXPECTED_HUB_VERSION with the pinned published package .64.
+Extend existing sidecar consistency test to include the native supervisor.
+Use version 0.2.137 / Android 2137 to avoid mixing artifacts in .136 draft.
+No new Hub publication; no production Hub/TM changes.
+
+Docker checks (oven/bun:1.3.14, read-only repository):
+bun run src/local-hub-sidecar.test.ts — 14 PASS, exit 0.
+bun run src/version-consistency.test.ts — 14 PASS, exit 0.
+git diff --check — clean.
+Native packaged smoke must still pass on BOTH platforms before release;
+these source checks do not claim installed application acceptance.
