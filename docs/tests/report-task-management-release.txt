@@ -42,3 +42,10 @@ Updated sidecar package.json and npm-generated lockfile; no transitive changes.
 However two clean Docker "bun add @sleep2agi/commhub-server@0.9.0-preview.64"
 attempts failed on the tarball URL with HTTP 404. Metadata visibility is NOT
 installation success. Keep changes unmerged until the npm install path works.
+
+CI follow-up:
+App unit tests exposed the sidecar test's hardcoded old preview.53 fixture.
+Updated its expected exact version to preview.64 (no assertion removed).
+Docker bun run src/local-hub-sidecar.test.ts: all 13 assertions PASS.
+Rust CI failed before compilation at npm ci sidecar tarball HTTP 404,
+not at cargo check. Wait for download availability before retrying that gate.
