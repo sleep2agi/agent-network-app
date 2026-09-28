@@ -28,6 +28,7 @@ mock.module('./src/requirements-hub', () => ({
     requests.push({ network: cfg.networkId, id, column });
     return new Promise((resolve, fail) => { reply = resolve; reject = fail; });
   },
+  patchRequirementOnHub: async (_cfg: any, id: string, patch: any) => ({ ...card, id, ...patch }),
 }));
 const { default: Board } = await import('./src/RequirementBoard');
 const { default: PeoplePicker } = await import('./src/RequirementPeoplePicker');
@@ -194,3 +195,15 @@ test('saving after closing details updates typed owner on board and reopened det
   await act(async () => byId('req-card-r1').props.onPress());
   expect(JSON.stringify(byId('req-detail').findAllByType('Text').map(node => node.props.children))).toContain('成员（人类）');
 });
+
+test('existing card details can edit title priority due and save to Hub', async () => {
+  await mount();
+  await act(async () => byId('req-card-r1').props.onPress());
+  expect(byId('req-edit-name').props.value).toBe('验证需求详情');
+  await act(async () => byId('req-edit-name').props.onChangeText('改过的标题'));
+  await act(async () => byId('req-edit-priority-high').props.onPress());
+  await act(async () => byId('req-edit-due').props.onChangeText('2026-12-01'));
+  await act(async () => byId('req-edit-save').props.onPress());
+  expect(JSON.stringify(byId('req-card-r1').findAllByType('Text').map(node => node.props.children))).toContain('改过的标题');
+});
+

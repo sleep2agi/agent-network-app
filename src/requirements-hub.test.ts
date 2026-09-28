@@ -53,8 +53,9 @@ const board = norm('./RequirementBoard.tsx');
 
 ck('说明改成存在 Hub 上', board.includes('存在 Hub 上，手机和电脑是同一份。'));
 ck('不再说不进 Hub', !board.includes('不进 Hub'));
-ck('读写走 Hub 接口', board.includes('migrateLocalRequirements(') && board.includes('createRequirementOnHub(') && board.includes('moveRequirementOnHub('));
+ck('读写走 Hub 接口', board.includes('migrateLocalRequirements(') && board.includes('createRequirementOnHub(') && board.includes('moveRequirementOnHub(') && board.includes('patchRequirementOnHub('));
 ck('不再只在 Hub 为空时才迁', !board.includes('list.length === 0'));
+ck('详情可改标题优先级期限', board.includes('req-edit-name') && board.includes('req-edit-save') && board.includes('保存修改'));
 ck('负责节点不是手填', !board.includes('onChangeText={setAssignee}') && board.includes('选择负责节点，可空') && board.includes('fetchHubNodes('));
 
 console.log(`${p}/${t} passed`);

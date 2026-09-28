@@ -88,6 +88,16 @@ export async function moveRequirementOnHub(cfg: HubConfig, id: string, column: R
   return row;
 }
 
+export async function patchRequirementOnHub(cfg: HubConfig, id: string, patch: { name?: string; priority?: ReqPriority; assignee?: string; due?: string }): Promise<Requirement> {
+  const data = await call(cfg, `/api/requirements/${encodeURIComponent(id)}`, {
+    method: 'PATCH',
+    body: JSON.stringify(patch),
+  }) as { requirement?: unknown };
+  const row = requirementFromHub(data.requirement);
+  if (!row) throw new RequirementsHubError('Hub 没有返回这条需求', 502);
+  return row;
+}
+
 /** 本机旧卡片逐条迁到 Hub。Hub 里已经有别的卡片也要迁。一张成功就从本机删掉一张，中途失败留下剩下的，下次接着迁。clientId 用本机 id，Hub 再收到同一条就返回原卡片。 */
 export async function migrateLocalRequirements(
   cfg: HubConfig,
