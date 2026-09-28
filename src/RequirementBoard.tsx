@@ -41,7 +41,7 @@ function ScopedRequirementBoard({ cfg }: { cfg: HubConfig }) {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [moving, setMoving] = useState(false);
   const movePending = useRef(false);
-  const [moveError, setMoveError] = useState('');
+  const [moveError, setMoveError] = useState<{ id: string; message: string } | null>(null);
   const selected = items.find(item => item.id === selectedId);
   const styles = useMemo(() => StyleSheet.create({
     root: { flex: 1 },
@@ -114,12 +114,12 @@ function ScopedRequirementBoard({ cfg }: { cfg: HubConfig }) {
     if (movePending.current || item.column === column) return;
     movePending.current = true;
     setMoving(true);
-    setMoveError('');
+    setMoveError(null);
     try {
       const updated = await moveRequirementOnHub(cfg, item.id, column);
       setItems(prev => prev.map(row => row.id === item.id ? updated : row));
     } catch (e) {
-      setMoveError(e instanceof RequirementsHubError && e.status === 403 ? '你没有修改这条需求的权限' : '状态未保存，请重试');
+      setMoveError({ id: item.id, message: e instanceof RequirementsHubError && e.status === 403 ? '你没有修改这条需求的权限' : '状态未保存，请重试' });
     } finally {
       movePending.current = false;
       setMoving(false);
@@ -162,7 +162,7 @@ function ScopedRequirementBoard({ cfg }: { cfg: HubConfig }) {
               </View>
               {col.items.length === 0 ? <Text style={styles.empty}>没有</Text> : null}
               {col.items.map(item => (
-                <Pressable key={item.id} style={styles.card} accessibilityRole="button" accessibilityLabel={`查看需求：${item.name}`} testID={`req-card-${item.id}`} onPress={() => { setMoveError(''); setSelectedId(item.id); }}>
+                <Pressable key={item.id} style={styles.card} accessibilityRole="button" accessibilityLabel={`查看需求：${item.name}`} testID={`req-card-${item.id}`} onPress={() => { setSelectedId(item.id); }}>
                   <Text style={styles.title}>{item.name}</Text>
                   <Text style={styles.meta}>{REQ_PRIORITY_LABEL[item.priority]} · {item.assignee || '未分配'} · {item.due || '未定期限'}</Text>
                   <Text style={styles.addText}>查看详情</Text>
@@ -192,7 +192,7 @@ function ScopedRequirementBoard({ cfg }: { cfg: HubConfig }) {
                 </Pressable>)}
               </View>
               {moving ? <Text style={styles.meta} accessibilityLiveRegion="polite">正在保存状态…</Text> : null}
-              {moveError ? <Text style={styles.err} accessibilityRole="alert">{moveError}</Text> : null}
+              {moveError?.id === selected.id ? <Text style={styles.err} accessibilityRole="alert">{moveError.message}</Text> : null}
             </ScrollView>
           </View> : null}
         </View>

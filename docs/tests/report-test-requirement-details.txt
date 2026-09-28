@@ -40,3 +40,9 @@ Follow-up verification:
   /output for bundle and screenshots. Run inside the Playwright Docker image
   mcr.microsoft.com/playwright:v1.58.2-noble, source mounted at /work.
 - New CI run still required for the safe-area fix; PR remains draft.
+
+Review follow-up: CI for b8ff5d5 passed 8/8 and PR became ready. Automated review
+found a late failure on card A could display in newly opened card B. Error state
+now carries its originating card ID. Docker component suite after fix: 4/4 pass,
+15 assertions, including switching A -> B before rejection and reopening A.
+The follow-up commit requires its own CI; earlier green is not reused as proof.
