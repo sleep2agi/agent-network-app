@@ -1,0 +1,8 @@
+FROM oven/bun:1.3.1@sha256:9c5d3c92b234b4708198577d2f39aab7397a242a40da7c2f059e51b9dc62b408
+# Supply an exact Hub checkout with --build-context hub=/path/to/hub-snapshot.
+COPY --from=hub /server /tmp/qa/server
+WORKDIR /tmp/qa/server
+RUN bun install --frozen-lockfile
+COPY src /app/src
+COPY tests/requirement-details/hub-integration.ts /app/tests/requirement-details/hub-integration.ts
+CMD ["bun", "/app/tests/requirement-details/hub-integration.ts"]

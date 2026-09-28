@@ -1,0 +1,31 @@
+Requirements App transport -> real isolated Hub — 2026-09-28
+Hub: ca3c41ff7dedd222cba2568f3440f0b23428af24 (PR #2064).
+App transport: ed9b827 (PR #475; transport unchanged from #474).
+Runner: oven/bun:1.3.1, read-only root, tmpfs /tmp, no production mounts.
+Hub server tree obtained by git archive at exact SHA. Dependencies installed
+inside container using bun install --frozen-lockfile and server package lock.
+Database: newly created /tmp/requirements-integration-*/hub.db in container.
+
+Actual output:
+PASS create through App transport and independent client read
+PASS move persists and second client observes it
+PASS migration into nonempty Hub and retry idempotency
+PASS viewer write denied without state change and foreign network cannot read
+REAL HUB INTEGRATION PASS
+
+Test calls production App transport helpers over real HTTP to bootServer; no
+mock transport, mocked database, production token or production Hub endpoint.
+The two clients are separate calls/config objects, not two rendered devices.
+Owner is non-admin (a separate bootstrap admin is registered first).
+
+Reproduce with isolated snapshots:
+docker build -f tests/requirement-details/Dockerfile.hub \
+  --build-context hub=/path/to/exact-hub-snapshot -t requirements-real-hub .
+docker run --rm --network none requirements-real-hub
+Use sg docker -c for both commands on the shared development host.
+The Dockerfile packages the same source layout used in the executed mounted
+container recipe. This cross-repo suite is currently manually run, not CI.
+
+Scope: existing name/assignee-text/column transport and migration only.
+Does NOT prove typed owner/participants integration, Agent authorization,
+native mobile rendering, production deployment or complete project lifecycle.
