@@ -1,0 +1,12 @@
+Requirement assignment partial-write regression — 2026-09-28
+
+Scope: editing owner must not write the cached participants; editing participants
+must not write the cached owner. Same-field concurrent writes remain last-write-wins.
+
+Isolated Docker: oven/bun:1.3.14, read-only source mount, /tmp tmpfs.
+Copied src and tests/requirement-details/details.test.tsx into temporary container.
+Installed exact react@19.2.3 and react-test-renderer@19.2.3.
+Commands: bun test details.test.tsx && bun src/requirement-people-api.test.ts
+Result: 12 component tests passed, 33 expectations, 0 failures; API script passed.
+API assertions verify owner-only and participants-only PATCH bodies.
+No production services or data accessed. Not a native-device acceptance report.

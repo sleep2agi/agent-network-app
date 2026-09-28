@@ -43,10 +43,9 @@ export default function RequirementAssignmentsEditor({ cfg, item, onSaved }: {
     setError('');
     setMode(null);
     try {
-      const saved = await saveRequirementAssignments(cfg, item.id, {
-        owner: mode === 'owner' ? selected[0] ?? null : item.owner!,
-        participants: mode === 'participants' ? selected : item.participants!,
-      });
+      const saved = await saveRequirementAssignments(cfg, item.id, mode === 'owner'
+        ? { owner: selected[0] ?? null }
+        : { participants: selected });
       if (alive.current) onSaved(saved);
     } catch (e) { if (alive.current) setError(e instanceof Error ? e.message : '人员绑定未保存'); }
     finally { pending.current = false; if (alive.current) setSaving(false); }

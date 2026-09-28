@@ -31,5 +31,11 @@ try {
   const before = requests.length;
   await assert.rejects(listRequirementPeople({ ...cfg, networkId: undefined }));
   assert.equal(requests.length, before);
-  console.log('requirement people API: 12 assertions passed');
+  status = 200;
+  response = { requirement: { owner: refs[0], participants: refs } };
+  await saveRequirementAssignments(cfg, 'r1', { owner: null });
+  assert.deepEqual(requests.at(-1)!.body, { owner: null });
+  await saveRequirementAssignments(cfg, 'r1', { participants: [] });
+  assert.deepEqual(requests.at(-1)!.body, { participants: [] });
+  console.log('requirement people API: partial field writes passed');
 } finally { globalThis.fetch = original; }

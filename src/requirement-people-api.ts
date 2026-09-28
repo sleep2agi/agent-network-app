@@ -2,8 +2,7 @@ import { appFetch } from './app-fetch';
 import type { HubConfig } from './api';
 import { uniquePeople, type RequirementPerson, type RequirementPersonRef } from './requirement-people';
 
-// Proposed contract for the next Hub increment. The editor requires explicit
-// owner/participants fields; keep this increment draft until real Hub verification.
+// Responses include both fields; writes contain only the edited fields.
 export type RequirementAssignments = { owner: RequirementPersonRef | null; participants: RequirementPersonRef[] };
 export class RequirementPeopleError extends Error {
   constructor(message: string, public status: number) { super(message); }
@@ -47,8 +46,11 @@ export async function listRequirementPeople(cfg: HubConfig): Promise<Requirement
   });
 }
 
-export async function saveRequirementAssignments(cfg: HubConfig, id: string, assignments: RequirementAssignments): Promise<RequirementAssignments> {
-  const payload = assignmentsFromHub(assignments);
+export async function saveRequirementAssignments(cfg: HubConfig, id: string, assignments: Partial<RequirementAssignments>): Promise<RequirementAssignments> {
+  const payload: Partial<RequirementAssignments> = {};
+  if (assignments.owner !== undefined) payload.owner = assignments.owner === null ? null : reference(assignments.owner);
+  if (assignments.participants !== undefined) payload.participants = uniquePeople(assignments.participants.map(reference));
+  if (!Object.keys(payload).length) throw new RequirementPeopleError('没有需要保存的人员变更', 400);
   const data = await call(cfg, `/api/requirements/${encodeURIComponent(id)}`, { method: 'PATCH', body: JSON.stringify(payload) });
   return assignmentsFromHub(data?.requirement);
 }

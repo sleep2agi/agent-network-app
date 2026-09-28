@@ -166,7 +166,7 @@ test('assignment editor only reports saved bindings after Hub acknowledgement', 
   await act(async () => byId('person-user:u').props.onPress());
   await act(async () => byId('people-confirm').props.onPress());
   expect(saved).toHaveLength(0);
-  expect(assignmentWrites).toEqual([{ id: 'r1', value: { owner: { kind: 'user', id: 'u' }, participants: [] } }]);
+  expect(assignmentWrites).toEqual([{ id: 'r1', value: { owner: { kind: 'user', id: 'u' } } }]);
   expect(byId('edit-participants').props.disabled).toBe(true);
   await act(async () => saveAssignment({ owner: { kind: 'user', id: 'u' }, participants: [] }));
   expect(saved).toHaveLength(1);
