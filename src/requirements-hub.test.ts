@@ -1,5 +1,5 @@
 import { readFileSync } from 'node:fs';
-import { filterAssigneeChoices, migrateLocalRequirements, requirementFromHub, RequirementsHubError } from './requirements-hub';
+import { filterAssigneeChoices, migrateLocalRequirements, parseIssueRef, requirementFromHub, RequirementsHubError } from './requirements-hub';
 import type { Requirement } from './requirements-model';
 
 let p = 0, t = 0;
@@ -46,6 +46,8 @@ const cfg = { serverUrl: 'http://hub.local', token: 't', username: 'u', networkI
   ck('重试把剩下的迁完', posted.join(',') === 'b,c' && store.length === 0);
 }
 
+ck('github issue 链接和短写法都能认', parseIssueRef('https://github.com/sleep2agi/agent-network-app/issues/472')?.number === 472 && parseIssueRef('sleep2agi/agent-network#8')?.repo === 'sleep2agi/agent-network');
+ck('不是 github issue 的地址丢掉', parseIssueRef('https://evil.example/issues/1') === null && parseIssueRef('javascript:alert(1)') === null);
 ck('负责节点从列表里点，同名只留一个', filterAssigneeChoices([' node-b ', 'node-a', 'node-b', ''], 'node').join(',') === 'node-a,node-b');
 ck('搜索对不上就没有', filterAssigneeChoices(['node-a'], 'zzz').length === 0);
 const board = norm('./RequirementBoard.tsx');
@@ -56,6 +58,7 @@ ck('不再说不进 Hub', !board.includes('不进 Hub'));
 ck('读写走 Hub 接口', board.includes('migrateLocalRequirements(') && board.includes('createRequirementOnHub(') && board.includes('moveRequirementOnHub('));
 ck('不再只在 Hub 为空时才迁', !board.includes('list.length === 0'));
 ck('负责节点不是手填', !board.includes('onChangeText={setAssignee}') && board.includes('选择负责节点，可空') && board.includes('fetchHubNodes('));
+ck('需求可以绑定 issue', board.includes('相关 issue') && board.includes('searchGithubIssues(') && board.includes('setRequirementIssues('));
 
 console.log(`${p}/${t} passed`);
 process.exit(p === t ? 0 : 1);

@@ -120,7 +120,7 @@ jobs:
             Signed and notarized stable update for macOS (Apple Silicon) and Windows (x64).
 
             What's new in 0.2.136:
-            - 需求看板改成和任务列表一样的卡片。负责节点从头像列表里点。
+            - 需求看板改成和任务列表一样的卡片。负责节点从头像列表里点。可以绑定 GitHub issue。
 
             What's new in 0.2.135:
             - 新建需求时，负责节点从节点列表里点，不用手填。

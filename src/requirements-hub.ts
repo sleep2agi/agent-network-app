@@ -8,6 +8,7 @@ import {
   type ReqColumn,
   type ReqPriority,
   type Requirement,
+  type RequirementIssue,
 } from './requirements-model';
 
 export class RequirementsHubError extends Error {
@@ -33,7 +34,66 @@ export function requirementFromHub(row: unknown): Requirement | null {
     due,
     column,
     createdAt: typeof r.createdAt === 'string' ? r.createdAt : '',
+    issues: parseIssueList(r.issues),
   };
+}
+
+const ISSUE_URL = /^https:\/\/github\.com\/([A-Za-z0-9_.-]+)\/([A-Za-z0-9_.-]+)\/issues\/(\d+)\/?$/;
+const ISSUE_SHORT = /^([A-Za-z0-9_.-]+)\/([A-Za-z0-9_.-]+)#(\d+)$/;
+
+export function parseIssueRef(text: string): { repo: string; number: number } | null {
+  const raw = text.trim();
+  const url = ISSUE_URL.exec(raw);
+  if (url) return { repo: `${url[1]}/${url[2]}`, number: Number(url[3]) };
+  const short = ISSUE_SHORT.exec(raw);
+  if (short) return { repo: `${short[1]}/${short[2]}`, number: Number(short[3]) };
+  return null;
+}
+
+export function issueUrl(issue: { repo: string; number: number }): string {
+  return `https://github.com/${issue.repo}/issues/${issue.number}`;
+}
+
+function parseIssueList(raw: unknown): RequirementIssue[] {
+  if (!Array.isArray(raw)) return [];
+  const out: RequirementIssue[] = [];
+  const seen = new Set<string>();
+  for (const item of raw) {
+    if (!item || typeof item !== 'object') continue;
+    const row = item as Record<string, unknown>;
+    const repo = typeof row.repo === 'string' ? row.repo.trim() : '';
+    const number = typeof row.number === 'number' ? row.number : Number(row.number);
+    const ref = parseIssueRef(`${repo}#${number}`);
+    if (!ref || seen.has(`${ref.repo}#${ref.number}`)) continue;
+    seen.add(`${ref.repo}#${ref.number}`);
+    out.push({
+      repo: ref.repo,
+      number: ref.number,
+      title: typeof row.title === 'string' ? row.title.trim().slice(0, 120) : '',
+    });
+    if (out.length >= 8) break;
+  }
+  return out;
+}
+
+export async function searchGithubIssues(query: string): Promise<RequirementIssue[]> {
+  const q = query.trim();
+  const direct = parseIssueRef(q);
+  if (direct) return [{ repo: direct.repo, number: direct.number, title: '' }];
+  if (q.length < 2) return [];
+  const search = `is:issue (repo:sleep2agi/agent-network OR repo:sleep2agi/agent-network-app) ${q} in:title`;
+  const res = await appFetch(`https://api.github.com/search/issues?per_page=8&q=${encodeURIComponent(search)}`, {
+    headers: { Accept: 'application/vnd.github+json' },
+  });
+  if (!res.ok) return [];
+  const data = await res.json() as { items?: unknown };
+  return parseIssueList((Array.isArray(data.items) ? data.items : []).map(item => {
+    if (!item || typeof item !== 'object') return null;
+    const row = item as Record<string, unknown>;
+    const repoUrl = typeof row.repository_url === 'string' ? row.repository_url : '';
+    const repo = repoUrl.split('/repos/')[1] || '';
+    return { repo, number: row.number, title: row.title };
+  }));
 }
 
 async function call(cfg: HubConfig, path: string, init?: RequestInit): Promise<unknown> {
@@ -58,7 +118,7 @@ export async function listRequirements(cfg: HubConfig): Promise<Requirement[]> {
   return rows.map(requirementFromHub).filter((row): row is Requirement => !!row);
 }
 
-export async function createRequirementOnHub(cfg: HubConfig, input: { name: string; priority: ReqPriority; assignee: string; due: string; column?: ReqColumn; clientId?: string }): Promise<Requirement> {
+export async function createRequirementOnHub(cfg: HubConfig, input: { name: string; priority: ReqPriority; assignee: string; due: string; column?: ReqColumn; clientId?: string; issues?: RequirementIssue[] }): Promise<Requirement> {
   const data = await call(cfg, '/api/requirements', {
     method: 'POST',
     body: JSON.stringify({
@@ -68,6 +128,7 @@ export async function createRequirementOnHub(cfg: HubConfig, input: { name: stri
       due: input.due,
       column: input.column,
       client_id: input.clientId,
+      issues: input.issues ?? [],
       network_id: cfg.networkId,
     }),
   }) as { requirement?: unknown };
@@ -80,6 +141,16 @@ export async function moveRequirementOnHub(cfg: HubConfig, id: string, column: R
   const data = await call(cfg, `/api/requirements/${encodeURIComponent(id)}`, {
     method: 'PATCH',
     body: JSON.stringify({ column }),
+  }) as { requirement?: unknown };
+  const row = requirementFromHub(data.requirement);
+  if (!row) throw new RequirementsHubError('Hub 没有返回这条需求', 502);
+  return row;
+}
+
+export async function setRequirementIssues(cfg: HubConfig, id: string, issues: RequirementIssue[]): Promise<Requirement> {
+  const data = await call(cfg, `/api/requirements/${encodeURIComponent(id)}`, {
+    method: 'PATCH',
+    body: JSON.stringify({ issues }),
   }) as { requirement?: unknown };
   const row = requirementFromHub(data.requirement);
   if (!row) throw new RequirementsHubError('Hub 没有返回这条需求', 502);

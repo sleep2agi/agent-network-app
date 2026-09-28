@@ -7,6 +7,12 @@ export type ReqColumn = (typeof REQ_COLUMNS)[number];
 export const REQ_PRIORITY_LABEL: Record<ReqPriority, string> = { high: '高', normal: '普通', low: '低' };
 export const REQ_COLUMN_LABEL: Record<ReqColumn, string> = { pool: '需求池', doing: '进行中', done: '完成' };
 
+export interface RequirementIssue {
+  repo: string;
+  number: number;
+  title: string;
+}
+
 export interface Requirement {
   id: string;
   name: string;
@@ -15,6 +21,7 @@ export interface Requirement {
   due: string;
   column: ReqColumn;
   createdAt: string;
+  issues: RequirementIssue[];
 }
 
 const DUE = /^\d{4}-\d{2}-\d{2}$/;
@@ -41,6 +48,7 @@ export function createRequirement(input: {
     due,
     column: 'pool',
     createdAt: input.now || new Date().toISOString(),
+    issues: [],
   };
 }
 

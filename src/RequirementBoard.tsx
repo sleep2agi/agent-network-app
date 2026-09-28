@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, Linking, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { Text, TextInput } from './ui-text';
 import { Ionicons } from './icons';
 import AliasAvatar from './AliasAvatar';
@@ -14,9 +14,10 @@ import {
   nextColumn,
   type ReqPriority,
   type Requirement,
+  type RequirementIssue,
 } from './requirements-model';
 import { readRequirements, requirementsKey, writeRequirements } from './requirements-store';
-import { createRequirementOnHub, filterAssigneeChoices, listRequirements, migrateLocalRequirements, moveRequirementOnHub, RequirementsHubError } from './requirements-hub';
+import { createRequirementOnHub, filterAssigneeChoices, issueUrl, listRequirements, migrateLocalRequirements, moveRequirementOnHub, searchGithubIssues, setRequirementIssues, RequirementsHubError } from './requirements-hub';
 import { colors, radius, spacing } from './theme';
 
 const NOTE = '存在 Hub 上，手机和电脑是同一份。';
@@ -33,6 +34,10 @@ export default function RequirementBoard({ cfg }: { cfg: HubConfig }) {
   const [pickerOpen, setPickerOpen] = useState(false);
   const [nodeQuery, setNodeQuery] = useState('');
   const [due, setDue] = useState('');
+  const [issues, setIssues] = useState<RequirementIssue[]>([]);
+  const [issueQuery, setIssueQuery] = useState('');
+  const [issueHits, setIssueHits] = useState<RequirementIssue[]>([]);
+  const [issueFor, setIssueFor] = useState<string | null>(null);
   const [priority, setPriority] = useState<ReqPriority>('normal');
   const [error, setError] = useState('');
   const [reloadKey, setReloadKey] = useState(0);
@@ -72,6 +77,9 @@ export default function RequirementBoard({ cfg }: { cfg: HubConfig }) {
     who: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs + 2 },
     whoText: { color: colors.textSecondary, fontSize: 13, flexShrink: 1 },
     move: { color: colors.textMuted, fontSize: 12 },
+    issueRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm, alignItems: 'center' },
+    issueChip: { backgroundColor: colors.rowActive, borderRadius: radius.sm, paddingHorizontal: spacing.sm, paddingVertical: spacing.xs },
+    issueText: { color: colors.textSecondary, fontSize: 12 },
     empty: { color: colors.textMuted, fontSize: 12, paddingVertical: spacing.md },
   }), []);
 
@@ -114,8 +122,8 @@ export default function RequirementBoard({ cfg }: { cfg: HubConfig }) {
     if (!item) { setError(name.trim() ? '预计完成要写成 2026-10-01，或留空' : '先写需求'); return; }
     setError('');
     try {
-      const created = await createRequirementOnHub(cfg, { name: item.name, priority: item.priority, assignee: item.assignee, due: item.due });
-      setName(''); setDue('');
+      const created = await createRequirementOnHub(cfg, { name: item.name, priority: item.priority, assignee: item.assignee, due: item.due, issues });
+      setName(''); setDue(''); setIssues([]); setIssueFor(null);
       setItems(prev => [created, ...prev.filter(row => row.id !== created.id)]);
     } catch (e) {
       setError(e instanceof Error ? e.message : '没有存到 Hub');
@@ -134,6 +142,28 @@ export default function RequirementBoard({ cfg }: { cfg: HubConfig }) {
     setAssignee(alias);
     setPickerOpen(false);
     setNodeQuery('');
+  };
+  const bindIssue = async (issue: RequirementIssue) => {
+    const key = `${issue.repo}#${issue.number}`;
+    if (issueFor && issueFor !== 'new') {
+      const card = items.find(row => row.id === issueFor);
+      if (!card) return;
+      const next = card.issues.some(row => `${row.repo}#${row.number}` === key) ? card.issues : [...card.issues, issue].slice(0, 8);
+      try {
+        const updated = await setRequirementIssues(cfg, card.id, next);
+        setItems(prev => prev.map(row => row.id === card.id ? updated : row));
+        setIssueFor(null); setIssueQuery(''); setIssueHits([]);
+      } catch (e) {
+        setError(e instanceof Error ? e.message : '没有绑上');
+      }
+      return;
+    }
+    setIssues(prev => prev.some(row => `${row.repo}#${row.number}` === key) ? prev : [...prev, issue].slice(0, 8));
+    setIssueFor(null); setIssueQuery(''); setIssueHits([]);
+  };
+  const lookUpIssues = async (query: string) => {
+    setIssueQuery(query);
+    try { setIssueHits(await searchGithubIssues(query)); } catch { setIssueHits([]); }
   };
   const columns = columnsOf(items);
   const choices = filterAssigneeChoices(nodes, nodeQuery);
@@ -168,6 +198,23 @@ export default function RequirementBoard({ cfg }: { cfg: HubConfig }) {
                     <Pressable key={alias} testID={`req-node-${alias}`} onPress={() => choose(alias)} style={styles.pickRow}>
                       <AliasAvatar alias={alias} size={22} />
                       <Text style={styles.rowValue} numberOfLines={1}>{alias}</Text>
+                    </Pressable>
+                  ))}
+                </ScrollView>
+              </View>
+            ) : null}
+            <Pressable testID="req-issues" onPress={() => setIssueFor(issueFor === 'new' ? null : 'new')} style={styles.row}>
+              <Text style={styles.rowLabel}>相关 issue</Text>
+              <Text style={issues.length ? styles.rowValue : styles.rowMuted}>{issues.length ? issues.map(issue => `#${issue.number}`).join(' ') : '从 GitHub 里点'}</Text>
+              <Ionicons name={issueFor === 'new' ? 'chevron-up' : 'chevron-down'} size={16} color={colors.textMuted} />
+            </Pressable>
+            {issueFor === 'new' ? (
+              <View testID="req-issue-list">
+                <TextInput value={issueQuery} onChangeText={text => { void lookUpIssues(text); }} placeholder="搜标题，或粘贴 issue 链接" placeholderTextColor={colors.textMuted} style={styles.search} testID="req-issue-search" />
+                <ScrollView style={styles.pickList} keyboardShouldPersistTaps="handled">
+                  {issueHits.map(issue => (
+                    <Pressable key={`${issue.repo}#${issue.number}`} testID={`req-issue-${issue.number}`} onPress={() => { void bindIssue(issue); }} style={styles.pickRow}>
+                      <Text style={styles.rowValue} numberOfLines={1}>#{issue.number} {issue.title || issue.repo}</Text>
                     </Pressable>
                   ))}
                 </ScrollView>
@@ -209,6 +256,26 @@ export default function RequirementBoard({ cfg }: { cfg: HubConfig }) {
                     {item.assignee ? <AliasAvatar alias={item.assignee} size={22} /> : null}
                     <Text style={styles.whoText} numberOfLines={1}>{item.assignee || '未指定'}</Text>
                   </View>
+                  {item.issues.length ? (
+                    <View style={styles.issueRow}>
+                      {item.issues.map(issue => (
+                        <Pressable key={`${issue.repo}#${issue.number}`} style={styles.issueChip} onPress={() => { void Linking.openURL(issueUrl(issue)); }}>
+                          <Text style={styles.issueText}>#{issue.number}</Text>
+                        </Pressable>
+                      ))}
+                    </View>
+                  ) : null}
+                  <Pressable onPress={() => setIssueFor(issueFor === item.id ? null : item.id)}><Text style={styles.move}>{issueFor === item.id ? '收起' : '绑定 issue'}</Text></Pressable>
+                  {issueFor === item.id ? (
+                    <View>
+                      <TextInput value={issueQuery} onChangeText={text => { void lookUpIssues(text); }} placeholder="搜标题，或粘贴 issue 链接" placeholderTextColor={colors.textMuted} style={styles.search} />
+                      {issueHits.map(issue => (
+                        <Pressable key={`${issue.repo}#${issue.number}`} onPress={() => { void bindIssue(issue); }} style={styles.pickRow}>
+                          <Text style={styles.rowValue} numberOfLines={1}>#{issue.number} {issue.title || issue.repo}</Text>
+                        </Pressable>
+                      ))}
+                    </View>
+                  ) : null}
                   <Text style={styles.move}>移到{REQ_COLUMN_LABEL[nextColumn(item.column)]}</Text>
                 </Pressable>
               ))}
