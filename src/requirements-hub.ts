@@ -1,6 +1,7 @@
 // 需求池走 Hub。手机和电脑读同一份。Hub 还没有这个接口时不要退回本机列表。
 import { appFetch } from './app-fetch';
 import type { HubConfig } from './api';
+import { assignmentsFromHub } from './requirement-people-api';
 import {
   dueOk,
   REQ_COLUMNS,
@@ -26,6 +27,7 @@ export function requirementFromHub(row: unknown): Requirement | null {
   const priority = REQ_PRIORITIES.includes(r.priority as ReqPriority) ? r.priority as ReqPriority : 'normal';
   const column = REQ_COLUMNS.includes(r.column as ReqColumn) ? r.column as ReqColumn : 'pool';
   return {
+    ...(('owner' in r || 'participants' in r) ? assignmentsFromHub(r) : {}),
     id: r.id,
     name: r.name.trim().slice(0, 80),
     priority,

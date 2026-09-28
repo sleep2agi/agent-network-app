@@ -34,3 +34,10 @@ tests: 12 assertions passed. Missing fields fail as unsupported; malformed or
 cross-network candidates fail; clearing sends explicit null/[]; denied writes
 surface 403. This contract is a draft pending the Hub implementer's reply;
 no claim is made that these endpoints currently support assignments.
+
+Capability-gated detail integration: RequirementBoard now mounts the assignment
+editor. Old responses without owner/participants show an upgrade message and
+cannot enter editing. Supported-shaped responses allow candidate selection and
+update local display only after a successful Hub acknowledgement. Docker API
+tests 12 assertions; component tests 12/12, 33 assertions. Server contract still
+unconfirmed, and this increment remains draft pending real assignment HTTP E2E.

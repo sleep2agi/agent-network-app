@@ -28,6 +28,16 @@ mock.module('./src/requirements-hub', () => ({
 }));
 const { default: Board } = await import('./src/RequirementBoard');
 const { default: PeoplePicker } = await import('./src/RequirementPeoplePicker');
+let saveAssignment: (result: any) => void;
+const assignmentWrites: any[] = [];
+mock.module('./src/requirement-people-api', () => ({
+  listRequirementPeople: async () => [{ kind: 'user', id: 'u', name: '成员', networkId: 'a' }],
+  saveRequirementAssignments: (_cfg: unknown, id: string, value: unknown) => {
+    assignmentWrites.push({ id, value });
+    return new Promise(resolve => { saveAssignment = resolve; });
+  },
+}));
+const { default: AssignmentsEditor } = await import('./src/RequirementAssignmentsEditor');
 const cfg = { serverUrl: 'http://isolated.test', token: 'test', networkId: 'a' };
 let renderer: ReactTestRenderer;
 const byId = (id: string) => renderer.root.findByProps({ testID: id });
@@ -146,4 +156,24 @@ test('late failure belongs to the original card, not newly opened details', asyn
   await act(async () => byId('req-detail-close').props.onPress());
   await act(async () => byId('req-card-r1').props.onPress());
   expect(JSON.stringify(renderer.toJSON())).toContain('你没有修改这条需求的权限');
+});
+
+test('assignment editor only reports saved bindings after Hub acknowledgement', async () => {
+  const saved: any[] = [];
+  assignmentWrites.length = 0;
+  await act(async () => { renderer = create(<AssignmentsEditor cfg={cfg} item={{ ...card, priority: 'normal', column: 'pool', owner: null, participants: [] }} onSaved={value => saved.push(value)} />); });
+  await act(async () => byId('edit-owner').props.onPress());
+  await act(async () => byId('person-user:u').props.onPress());
+  await act(async () => byId('people-confirm').props.onPress());
+  expect(saved).toHaveLength(0);
+  expect(assignmentWrites).toEqual([{ id: 'r1', value: { owner: { kind: 'user', id: 'u' }, participants: [] } }]);
+  expect(byId('edit-participants').props.disabled).toBe(true);
+  await act(async () => saveAssignment({ owner: { kind: 'user', id: 'u' }, participants: [] }));
+  expect(saved).toHaveLength(1);
+});
+
+test('old Hub cards show unsupported instead of a working assignment editor', async () => {
+  await act(async () => { renderer = create(<AssignmentsEditor cfg={cfg} item={{ ...card, priority: 'normal', column: 'pool' }} onSaved={() => { throw new Error('must not save'); }} />); });
+  expect(byId('assignments-unsupported')).toBeTruthy();
+  expect(renderer.root.findAllByProps({ testID: 'edit-owner' })).toHaveLength(0);
 });

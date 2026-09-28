@@ -18,6 +18,7 @@ import { createRequirementOnHub, listRequirements, migrateLocalRequirements, mov
 import { colors, radius, spacing } from './theme';
 import { useModalSafePadding } from './safe-area-runtime';
 import { withBasePadding } from './modal-safe-area';
+import RequirementAssignmentsEditor from './RequirementAssignmentsEditor';
 
 const NOTE = '存在 Hub 上，手机和电脑是同一份。';
 const UNSUPPORTED = '这个 Hub 还没有需求池。升级 Hub 之后，手机和电脑才能看到同一份。';
@@ -182,7 +183,8 @@ function ScopedRequirementBoard({ cfg }: { cfg: HubConfig }) {
             <ScrollView contentContainerStyle={styles.detailBody}>
               <Text style={styles.detailTitle}>{selected.name}</Text>
               <Text style={styles.meta}>状态 · {REQ_COLUMN_LABEL[selected.column]}</Text>
-              <Text style={styles.meta}>负责人 · {selected.assignee || '未分配'}</Text>
+              {selected.owner === undefined ? <Text style={styles.meta}>负责人 · {selected.assignee || '未分配'}</Text> : null}
+              <RequirementAssignmentsEditor key={selected.id} cfg={cfg} item={selected} onSaved={assignments => setItems(prev => prev.map(row => row.id === selected.id ? { ...row, ...assignments } : row))} />
               <Text style={styles.meta}>优先级 · {REQ_PRIORITY_LABEL[selected.priority]}</Text>
               <Text style={styles.meta}>预计完成 · {selected.due || '未定期限'}</Text>
               <Text style={styles.headText}>更改状态</Text>

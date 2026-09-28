@@ -2,8 +2,8 @@ import { appFetch } from './app-fetch';
 import type { HubConfig } from './api';
 import { uniquePeople, type RequirementPerson, type RequirementPersonRef } from './requirement-people';
 
-// Proposed contract for the next Hub increment. Not enabled in RequirementBoard
-// until server implementation and real HTTP integration are verified.
+// Proposed contract for the next Hub increment. The editor requires explicit
+// owner/participants fields; keep this increment draft until real Hub verification.
 export type RequirementAssignments = { owner: RequirementPersonRef | null; participants: RequirementPersonRef[] };
 export class RequirementPeopleError extends Error {
   constructor(message: string, public status: number) { super(message); }
