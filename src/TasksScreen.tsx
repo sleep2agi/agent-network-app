@@ -15,6 +15,7 @@ import {
 import { colors, onThemeChange, radius, spacing } from './theme';
 import { formatTime } from './time';
 import { usePoll } from './usePoll';
+import ProjectsPanel from './ProjectsPanel';
 
 // Tasks tab — a scoped list of hub tasks with a top segmented control
 // for the three states the brief pinned (running / failed / replied) +
@@ -54,6 +55,7 @@ export default function TasksScreen({
   const [loaded, setLoaded] = useState(false);
   const [lastError, setLastError] = useState<string | null>(null);
   const [filter, setFilter] = useState<TaskFilter>('all');
+  const [section, setSection] = useState<'tasks' | 'projects'>('tasks');
   const [hasOlder, setHasOlder] = useState(true);
   const [loadingOlder, setLoadingOlder] = useState(false);
   const limitRef = useRef(PAGE);
@@ -105,6 +107,26 @@ export default function TasksScreen({
     // the assertion. See tasks-filter.test.ts + POLL_LIST_MS in
     // tasks-filter.ts (single source of truth).
     <View style={styles.root} testID={`tasks-screen-poll-list-ms-${POLL_LIST_MS}`}>
+      <View style={styles.filterRow} testID="tasks-module-switch">
+        <Pressable
+          onPress={() => setSection('tasks')}
+          style={[styles.chip, section === 'tasks' && styles.chipActive]}
+          testID="tasks-module-tasks"
+        >
+          <Text style={[styles.chipText, section === 'tasks' && styles.chipTextActive]}>任务</Text>
+        </Pressable>
+        <Pressable
+          onPress={() => setSection('projects')}
+          style={[styles.chip, section === 'projects' && styles.chipActive]}
+          testID="tasks-module-projects"
+        >
+          <Text style={[styles.chipText, section === 'projects' && styles.chipTextActive]}>项目</Text>
+        </Pressable>
+      </View>
+      {section === 'projects' ? (
+        <ProjectsPanel profileId={cfg.profileId || cfg.username || 'local'} />
+      ) : (
+      <>
       {/* Segmented filter — horizontal scroll for narrow phones */}
       <ScrollView
         horizontal
@@ -237,6 +259,8 @@ export default function TasksScreen({
             );
           }}
         />
+      )}
+      </>
       )}
     </View>
   );
