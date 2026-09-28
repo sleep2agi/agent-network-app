@@ -154,7 +154,7 @@ fn build_menu<R: Runtime>(app: &AppHandle<R>, items: &[TrayItem]) -> tauri::Resu
     Ok(menu)
 }
 
-fn focus_main<R: Runtime>(app: &AppHandle<R>) {
+pub(crate) fn focus_main<R: Runtime>(app: &AppHandle<R>) {
     if let Some(window) = app.get_webview_window("main") {
         let _ = window.show();
         let _ = window.unminimize();

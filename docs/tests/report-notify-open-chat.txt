@@ -1,0 +1,6 @@
+Clicking a desktop notification did not open the chat. The notification plugin drops the click, and the fallback only jumps when the window later gains focus. If the window is already focused, nothing happens.
+
+The desktop shell now shows the notification itself. Clicking the body emits the same tray-open-chat event the tray menu uses, with that notification's alias.
+
+Checked: bun src/notify-policy.test.ts 39/39, bun src/version-consistency.test.ts, bun src/release-notes-hygiene.test.ts.
+The Rust click predicate was not compiled on this machine (pkg-config is missing). CI compiles it.
