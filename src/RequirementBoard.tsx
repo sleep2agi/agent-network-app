@@ -14,7 +14,8 @@ import {
   type Requirement,
 } from './requirements-model';
 import { readRequirements, requirementsKey, writeRequirements } from './requirements-store';
-import { createRequirementOnHub, listRequirements, migrateLocalRequirements, moveRequirementOnHub, RequirementsHubError } from './requirements-hub';
+import { createRequirementOnHub, filterAssigneeChoices, listRequirements, migrateLocalRequirements, moveRequirementOnHub, RequirementsHubError } from './requirements-hub';
+import { fetchHubNodes } from './api';
 import { colors, radius, spacing } from './theme';
 
 const NOTE = '存在 Hub 上，手机和电脑是同一份。';
@@ -27,6 +28,9 @@ export default function RequirementBoard({ cfg }: { cfg: HubConfig }) {
   const [hubError, setHubError] = useState('');
   const [name, setName] = useState('');
   const [assignee, setAssignee] = useState('');
+  const [nodes, setNodes] = useState<string[]>([]);
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const [nodeQuery, setNodeQuery] = useState('');
   const [due, setDue] = useState('');
   const [priority, setPriority] = useState<ReqPriority>('normal');
   const [error, setError] = useState('');
@@ -36,6 +40,8 @@ export default function RequirementBoard({ cfg }: { cfg: HubConfig }) {
     note: { color: colors.textMuted, fontSize: 12, paddingHorizontal: spacing.lg, paddingBottom: spacing.sm },
     form: { paddingHorizontal: spacing.lg, gap: spacing.sm },
     input: { borderWidth: 1, borderColor: colors.border, borderRadius: radius.sm, paddingHorizontal: spacing.md, paddingVertical: spacing.sm, color: colors.text, fontSize: 14 },
+    picker: { maxHeight: 220, borderWidth: 1, borderColor: colors.border, borderRadius: radius.sm },
+    pickRow: { paddingHorizontal: spacing.md, paddingVertical: spacing.sm + 4, borderBottomWidth: 1, borderBottomColor: colors.border },
     chips: { flexDirection: 'row', gap: spacing.sm, alignItems: 'center' },
     chip: { paddingHorizontal: spacing.md, paddingVertical: spacing.xs + 2, borderRadius: radius.sm },
     chipOn: { backgroundColor: colors.rowActive },
@@ -79,6 +85,15 @@ export default function RequirementBoard({ cfg }: { cfg: HubConfig }) {
     return () => { dead = true; };
   }, [cfg.serverUrl, cfg.token, cfg.networkId, localKey, reloadKey]);
 
+  useEffect(() => {
+    if (phase !== 'ready') return;
+    let dead = false;
+    void fetchHubNodes(cfg).then(res => {
+      if (!dead) setNodes((res.nodes || []).map(node => node.alias || '').filter(Boolean));
+    }).catch(() => { if (!dead) setNodes([]); });
+    return () => { dead = true; };
+  }, [phase, cfg.serverUrl, cfg.token, cfg.networkId]);
+
   const add = async () => {
     const item = createRequirement({ name, priority, assignee, due });
     if (!item) { setError(name.trim() ? '预计完成要写成 2026-10-01，或留空' : '先写需求'); return; }
@@ -114,7 +129,24 @@ export default function RequirementBoard({ cfg }: { cfg: HubConfig }) {
       {phase === 'ready' ? (
         <View style={styles.form}>
           <TextInput value={name} onChangeText={setName} placeholder="新建一条需求" placeholderTextColor={colors.textMuted} style={styles.input} testID="req-name" />
-          <TextInput value={assignee} onChangeText={setAssignee} placeholder="负责节点，可空" placeholderTextColor={colors.textMuted} style={styles.input} testID="req-assignee" />
+          <Pressable testID="req-assignee" onPress={() => setPickerOpen(open => !open)} style={styles.input}>
+            <Text style={assignee ? styles.title : styles.meta}>{assignee || '选择负责节点，可空'}</Text>
+          </Pressable>
+          {pickerOpen ? (
+            <View testID="req-assignee-list">
+              <TextInput value={nodeQuery} onChangeText={setNodeQuery} placeholder="搜索节点" placeholderTextColor={colors.textMuted} style={styles.input} testID="req-assignee-search" />
+              <ScrollView style={styles.picker} keyboardShouldPersistTaps="handled">
+                <Pressable testID="req-node-clear" onPress={() => { setAssignee(''); setPickerOpen(false); setNodeQuery(''); }} style={styles.pickRow}>
+                  <Text style={styles.meta}>不指定</Text>
+                </Pressable>
+                {filterAssigneeChoices(nodes, nodeQuery).map(alias => (
+                  <Pressable key={alias} testID={`req-node-${alias}`} onPress={() => { setAssignee(alias); setPickerOpen(false); setNodeQuery(''); }} style={styles.pickRow}>
+                    <Text style={styles.title}>{alias}</Text>
+                  </Pressable>
+                ))}
+              </ScrollView>
+            </View>
+          ) : null}
           <TextInput value={due} onChangeText={setDue} placeholder="预计完成，如 2026-10-01，可空" placeholderTextColor={colors.textMuted} style={styles.input} testID="req-due" />
           <View style={styles.chips}>
             {REQ_PRIORITIES.map(p => (
