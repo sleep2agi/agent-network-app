@@ -58,10 +58,18 @@ export async function listRequirements(cfg: HubConfig): Promise<Requirement[]> {
   return rows.map(requirementFromHub).filter((row): row is Requirement => !!row);
 }
 
-export async function createRequirementOnHub(cfg: HubConfig, input: { name: string; priority: ReqPriority; assignee: string; due: string }): Promise<Requirement> {
+export async function createRequirementOnHub(cfg: HubConfig, input: { name: string; priority: ReqPriority; assignee: string; due: string; column?: ReqColumn; clientId?: string }): Promise<Requirement> {
   const data = await call(cfg, '/api/requirements', {
     method: 'POST',
-    body: JSON.stringify({ ...input, network_id: cfg.networkId }),
+    body: JSON.stringify({
+      name: input.name,
+      priority: input.priority,
+      assignee: input.assignee,
+      due: input.due,
+      column: input.column,
+      client_id: input.clientId,
+      network_id: cfg.networkId,
+    }),
   }) as { requirement?: unknown };
   const row = requirementFromHub(data.requirement);
   if (!row) throw new RequirementsHubError('Hub 没有返回这条需求', 502);
@@ -76,4 +84,27 @@ export async function moveRequirementOnHub(cfg: HubConfig, id: string, column: R
   const row = requirementFromHub(data.requirement);
   if (!row) throw new RequirementsHubError('Hub 没有返回这条需求', 502);
   return row;
+}
+
+/** 本机旧卡片逐条迁到 Hub。Hub 里已经有别的卡片也要迁。一张成功就从本机删掉一张，中途失败留下剩下的，下次接着迁。clientId 用本机 id，Hub 再收到同一条就返回原卡片。 */
+export async function migrateLocalRequirements(
+  cfg: HubConfig,
+  read: () => Requirement[],
+  write: (items: Requirement[]) => void,
+  create: typeof createRequirementOnHub = createRequirementOnHub,
+): Promise<{ migrated: number; left: number }> {
+  let migrated = 0;
+  for (const item of read()) {
+    await create(cfg, {
+      name: item.name,
+      priority: item.priority,
+      assignee: item.assignee,
+      due: item.due,
+      column: item.column,
+      clientId: item.id,
+    });
+    write(read().filter(row => row.id !== item.id));
+    migrated += 1;
+  }
+  return { migrated, left: read().length };
 }

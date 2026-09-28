@@ -14,7 +14,7 @@ import {
   type Requirement,
 } from './requirements-model';
 import { readRequirements, requirementsKey, writeRequirements } from './requirements-store';
-import { createRequirementOnHub, listRequirements, moveRequirementOnHub, RequirementsHubError } from './requirements-hub';
+import { createRequirementOnHub, listRequirements, migrateLocalRequirements, moveRequirementOnHub, RequirementsHubError } from './requirements-hub';
 import { colors, radius, spacing } from './theme';
 
 const NOTE = '存在 Hub 上，手机和电脑是同一份。';
@@ -59,17 +59,12 @@ export default function RequirementBoard({ cfg }: { cfg: HubConfig }) {
     setPhase('loading');
     (async () => {
       try {
-        let list = await listRequirements(cfg);
-        if (list.length === 0) {
-          const local = readRequirements(localKey);
-          for (const item of local) {
-            await createRequirementOnHub(cfg, { name: item.name, priority: item.priority, assignee: item.assignee, due: item.due });
-          }
-          if (local.length) {
-            writeRequirements(localKey, []);
-            list = await listRequirements(cfg);
-          }
-        }
+        await migrateLocalRequirements(
+          cfg,
+          () => readRequirements(localKey),
+          (items) => writeRequirements(localKey, items),
+        );
+        const list = await listRequirements(cfg);
         if (!dead) { setItems(list); setPhase('ready'); setHubError(''); }
       } catch (e) {
         if (dead) return;
