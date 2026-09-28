@@ -21,6 +21,7 @@ const facts = nodeInfoFacts({
 
 check('explicit OS user is displayed', value(facts, '系统用户') === 'runner');
 check('project path is displayed independently', value(facts, '工作路径') === '/home/alice/project');
+check('codex node shows codex_home after the work path, unset until reported', facts.findIndex(f => f.label === 'codex_home') === facts.findIndex(f => f.label === '工作路径') + 1 && value(facts, 'codex_home') === '未上报');
 check('server/hostname/IP are all retained', value(facts, '服务器') === 'edge-a' && value(facts, 'Hostname') === 'host-a' && value(facts, 'IP') === '10.0.0.8');
 check('runtime/agent/node type remain distinct', value(facts, 'Runtime') === 'codex' && value(facts, 'Agent') === 'codex-sdk' && value(facts, '节点类型') === 'worker');
 check('model/version/status are visible', value(facts, '模型') === 'gpt-5' && value(facts, '版本') === '2.5.0' && value(facts, '状态') === 'working');
@@ -30,6 +31,22 @@ const legacy = nodeInfoFacts({
   ...( { token: 'atok_secret', config_secret: 'do-not-render' } as any),
 }, null, 'https://hub.example');
 check('missing OS user is honest and never inferred from project_dir', value(legacy, '系统用户') === '未上报');
+check('non-codex node has no codex_home row', value(legacy, 'codex_home') === undefined);
+const reported = nodeInfoFacts({
+  alias: 'codex-node', status: 'idle', agent: 'agent-node:codex-app-server',
+  project_dir: '/data/workspaces/app', codex_home: '/data/nodes/codex-home',
+}, { node_id: 'n_1', alias: 'codex-node', runtime: 'codex-app-server-sdk' }, 'https://hub.example');
+check('reported codex_home is shown and is not the work path', value(reported, 'codex_home') === '/data/nodes/codex-home' && value(reported, '工作路径') === '/data/workspaces/app');
+const unsafe = nodeInfoFacts({
+  alias: 'codex-node', status: 'idle', runtime: 'codex',
+  codex_home: '/tmp/ntok_secret',
+}, null, 'https://hub.example');
+check('token-shaped codex_home is not rendered', value(unsafe, 'codex_home') === '未上报' && !JSON.stringify(unsafe).includes('ntok_secret'));
+const windowsHome = nodeInfoFacts({
+  alias: 'codex-win', status: 'idle', agent: 'agent-node:codex',
+  codex_home: 'C:\\nodes\\codex-home',
+}, null, 'https://hub.example');
+check('windows codex_home is shown', value(windowsHome, 'codex_home') === 'C:\\nodes\\codex-home');
 check('safe projection allowlists labels and excludes arbitrary secrets', !legacy.some(f => /token|secret|config/i.test(f.label)) && !JSON.stringify(legacy).includes('atok_secret'));
 check('server URL is a truthful fallback', value(legacy, '服务器') === 'https://hub.example');
 check('credential-bearing server URL is reduced to its safe origin', safeServerLabel('https://user:secret@hub.example/base?q=token#private') === 'https://hub.example');
