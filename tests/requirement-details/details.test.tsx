@@ -27,6 +27,13 @@ mock.module('./src/requirements-hub', () => ({
   listRequirements: async () => [{ ...card, ...(typedCards ? { owner: null, participants: [] } : {}) }, { ...card, id: 'r2', name: '另一个需求' }], migrateLocalRequirements: async () => {},
   createRequirementOnHub: async (_cfg: any, input: any) => { creates.push(input); return { ...card, ...input, id: 'new', owner: input.owner || null, participants: [] }; },
   RequirementsHubError: HubError,
+  requirementEditPatch: (current: { name: string; priority: string; due: string }, next: { name: string; priority: string; due: string }) => {
+    const patch: { name?: string; priority?: string; due?: string } = {};
+    if (next.name !== current.name) patch.name = next.name;
+    if (next.priority !== current.priority) patch.priority = next.priority;
+    if (next.due !== current.due) patch.due = next.due;
+    return Object.keys(patch).length ? patch : null;
+  },
   updateRequirementOnHub: async (_cfg: any, id: string, patch: any) => { edits.push({ id, patch }); return { ...card, id, ...patch, owner: null, participants: [] }; },
   moveRequirementOnHub: (cfg: any, id: string, column: string) => {
     requests.push({ network: cfg.networkId, id, column });
