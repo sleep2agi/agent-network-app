@@ -55,7 +55,8 @@ ck('提示走现有 composerNotice(手机的「说话时间太短」改由按住
 
 // ── 「去设置」路由 ──
 const routes = app.match(/onOpenVoiceSettings=\{\(\) => \{ rememberSettingsCategory\('voice'\); setScreen\(\{ name: 'settings' \}\); \}\}/g) ?? [];
-ck('App.tsx 三处聊天(手机单栏/双栏/桌面)都传 onOpenVoiceSettings → 设置·语音输入', routes.length === 3);
+ck('手机单栏/双栏仍在当前窗口打开设置·语音输入', routes.length === 2);
+ck('桌面「去设置」把语音分类交给独立设置窗口', app.includes("void openSettingsWindow('voice')"));
 const detached = app.slice(app.indexOf('testID="dedicated-chat-window"'), app.indexOf('<DesktopMessageListener cfg={cfg} />'));
 ck('独立聊天窗口不传(那里没有设置页,提示条改为说明位置)', !detached.includes('onOpenVoiceSettings'));
 

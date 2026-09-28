@@ -57,6 +57,7 @@ import TrayPanel, { readTrayPanelRoute } from './src/TrayPanel';
 import ImageViewerWindow from './src/ImageViewerWindow';
 import { readImageWindowRoute } from './src/image-window-model';
 import { loadPinnedChats, requestedChatAlias, requestedChatProfileId, requestedWorkspaceProfileId, savePinnedChats } from './src/desktop-chat-menu';
+import { SETTINGS_CATEGORY_EVENT, SETTINGS_SESSION_EVENT, closeSettingsWindow, notifySessionChanged, openSettingsWindow, requestedSettingsCategory, requestedSettingsWindow, settingsCategoryFromQuery } from './src/desktop-settings-window';
 import { loadChatPins, saveChatPins, togglePinned } from './src/chat-pins';
 import { ROW_MENU_EMPTY_HINT } from './src/agent-row-menu';
 import { bindUnreadProfile } from './src/unread-store';
@@ -203,7 +204,7 @@ export default function App() {
   // 更新提示只在主窗口弹;分离出来的聊天窗(?chat=<alias>)不弹 —— 否则每个窗各弹一次
   // (Vincent 2026-09-06 截图:两个分离窗同时被同一份更新说明盖住)。
   // 应用多开的工作区窗口(?workspace=<profileId>)同理只让主窗口弹。
-  const dedicatedChatWindow = Platform.OS === 'web' && !!(globalThis as any).__TAURI_INTERNALS__ && (!!requestedChatAlias() || !!requestedWorkspaceProfileId());
+  const dedicatedChatWindow = Platform.OS === 'web' && !!(globalThis as any).__TAURI_INTERNALS__ && (!!requestedChatAlias() || !!requestedWorkspaceProfileId() || requestedSettingsWindow());
   return (
     <SafeAreaProvider>
       <SimulatedSafeArea>
@@ -358,9 +359,18 @@ function AppRoot() {
     if (next) setScreen(next as Screen);
   };
   const dedicatedChatWindow = tauriDesktop && !!initialChat;
-  // 0.2.76 系统栏托盘:只有主窗口接(分离聊天窗/工作区窗不接,否则一个 app 三个托盘项)。
+  // Mac / Windows：设置是单独的窗口，不嵌进主窗口的三栏。
+  const settingsWindow = tauriDesktop && requestedSettingsWindow();
+  const settingsCategoryBooted = useRef(false);
+  if (settingsWindow && !settingsCategoryBooted.current) {
+    settingsCategoryBooted.current = true;
+    const category = requestedSettingsCategory();
+    if (category) rememberSettingsCategory(category);
+  }
+  const [settingsViewKey, setSettingsViewKey] = useState(0);
+  // 0.2.76 系统栏托盘:只有主窗口接(分离聊天窗/工作区窗/设置窗不接,否则一个 app 多个托盘项)。
   // 托盘点某个 agent → 打开那个会话。
-  const trayWindow = tauriDesktop && !initialChat && !initialWorkspaceProfile;
+  const trayWindow = tauriDesktop && !initialChat && !initialWorkspaceProfile && !settingsWindow;
   useEffect(() => {
     if (!cfg || !trayWindow) return;
     return bindDesktopTray(
@@ -368,6 +378,42 @@ function AppRoot() {
       () => { void dismissAllForConfig(cfg); },
     );
   }, [cfg?.profileId, cfg?.serverUrl, trayWindow]);
+  const reloadMainSession = useRef<() => Promise<void>>(async () => {});
+  reloadMainSession.current = async () => {
+    const next = await loadConfig();
+    await hydrateProfileLocalState(next);
+    setCfg(next);
+    setShowRemoteLogin(false);
+    setReauthProfile(null);
+    setScreen(next ? { name: 'agents' } : { name: 'login' });
+  };
+  useEffect(() => {
+    if (!trayWindow) return;
+    let dead = false;
+    let unlisten: (() => void) | undefined;
+    void import('@tauri-apps/api/event').then(async ({ listen }) => {
+      const stop = await listen(SETTINGS_SESSION_EVENT, () => { void reloadMainSession.current(); });
+      if (dead) stop();
+      else unlisten = stop;
+    }).catch(() => {});
+    return () => { dead = true; unlisten?.(); };
+  }, [trayWindow]);
+  useEffect(() => {
+    if (!settingsWindow) return;
+    let dead = false;
+    let unlisten: (() => void) | undefined;
+    void import('@tauri-apps/api/event').then(async ({ listen }) => {
+      const stop = await listen<{ category?: string }>(SETTINGS_CATEGORY_EVENT, (event) => {
+        const category = settingsCategoryFromQuery(event.payload?.category ?? null);
+        if (!category) return;
+        rememberSettingsCategory(category);
+        setSettingsViewKey(n => n + 1);
+      });
+      if (dead) stop();
+      else unlisten = stop;
+    }).catch(() => {});
+    return () => { dead = true; unlisten?.(); };
+  }, [settingsWindow]);
   const tabBarInset = layoutOs() === 'android' ? insets.bottom : 0;
   // Bottom inset owner (rule 1): the tab bar when it shows; the chat composer pads itself
   // (ChatScreen composerInset) and so does the two-pane (panes below); any other full-screen
@@ -400,6 +446,10 @@ function AppRoot() {
     await hydrateProfileLocalState(next);
     setCfg(next);
     setScreen(next ? { name: 'agents' } : { name: 'login' });
+    if (settingsWindow) {
+      await notifySessionChanged();
+      if (!next) await closeSettingsWindow();
+    }
   };
 
   const finishLocalDataDeletion = async () => {
@@ -408,6 +458,7 @@ function AppRoot() {
     setCfg(next);
     setShowRemoteLogin(false);
     setScreen(next ? { name: 'agents' } : { name: 'login' });
+    if (settingsWindow) await notifySessionChanged();
   };
 
   const activateProfile = async (profileId: string) => {
@@ -418,6 +469,7 @@ function AppRoot() {
     setCfg(next);
     setScreen({ name: 'agents' });
     prefetchStatus(next);
+    if (settingsWindow) await notifySessionChanged();
   };
 
   const requestProfileReauth = (profile: Pick<HubProfile, 'profileId' | 'serverUrl' | 'username' | 'displayName'>) => {
@@ -586,6 +638,24 @@ function AppRoot() {
     );
   }
 
+  if (settingsWindow && cfg && screen.name !== 'login') {
+    return (
+      <SafeAreaView key={workspaceKey} style={[styles.root, rootInset]} testID="dedicated-settings-window">
+        <StatusBar barStyle={theme === 'light' ? 'dark-content' : 'light-content'} backgroundColor={colors.bg} />
+        <SettingsScreen
+          key={settingsViewKey}
+          cfg={cfg}
+          onClose={() => { void closeSettingsWindow(); }}
+          onLogout={removeActiveProfile}
+          onLocalDataDeleted={finishLocalDataDeletion}
+          onAddAccount={() => { setReauthProfile(null); setScreen({ name: 'login' }); }}
+          onSwitchProfile={activateProfile}
+          onReauthProfile={requestProfileReauth}
+        />
+      </SafeAreaView>
+    );
+  }
+
   if (desktop && cfg && screen.name !== 'login') {
     return (
       <SafeAreaView key={workspaceKey} style={[styles.root, rootInset]}>
@@ -657,6 +727,7 @@ function AppRoot() {
             await hydrateProfileLocalState(saved);
             setCfg(saved);
             setScreen(initialChat ? { name: 'chat', alias: initialChat } : { name: 'agents' });
+            if (requestedSettingsWindow()) void notifySessionChanged();
           }}
         />
         )
@@ -984,6 +1055,10 @@ function DesktopWorkspace({ cfg, screen, setScreen, onLogout, onLocalDataDeleted
         requestAgentSearchFocus();
         return;
       }
+      if (action.kind === 'screen' && action.screen === 'settings') {
+        void openSettingsWindow().then(opened => { if (!opened) setScreen({ name: 'settings' }); });
+        return;
+      }
       setScreen({ name: action.screen } as Screen);
     };
     // 捕获阶段:RN-web 的 TextInput 在自己的 keydown 里 stopPropagation,冒泡阶段的监听在焦点落在
@@ -999,12 +1074,12 @@ function DesktopWorkspace({ cfg, screen, setScreen, onLogout, onLocalDataDeleted
       alias={screen.alias}
       onBack={() => setScreen({ name: 'agents' })}
       onOpenNodeSettings={() => setScreen({ name: 'nodeInfo', alias: screen.alias })}
-      onOpenVoiceSettings={() => { rememberSettingsCategory('voice'); setScreen({ name: 'settings' }); }}
       focusTaskId={screen.focusTaskId}
       pinned={pinnedAliases.includes(screen.alias)}
       onTogglePin={() => togglePin(screen.alias)}
       muted={mutedAliases.includes(screen.alias)}
       onToggleMute={() => toggleMute(screen.alias)}
+      onOpenVoiceSettings={() => { rememberSettingsCategory('voice'); void openSettingsWindow('voice').then(opened => { if (!opened) setScreen({ name: 'settings' }); }); }}
       desktop
     />
   ) : screen.name === 'tasks' ? (
@@ -1078,7 +1153,7 @@ function DesktopWorkspace({ cfg, screen, setScreen, onLogout, onLocalDataDeleted
           active={active === DESKTOP_SETTINGS_TAB.key}
           hovered={railHover === DESKTOP_SETTINGS_TAB.key}
           onHover={setRailHover}
-          onPress={() => setScreen({ name: DESKTOP_SETTINGS_TAB.key })}
+          onPress={() => { void openSettingsWindow().then(opened => { if (!opened) setScreen({ name: 'settings' }); }); }}
           styles={desktopStyles}
           extraStyle={desktopStyles.railSettings}
         />
