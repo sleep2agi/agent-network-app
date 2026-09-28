@@ -1,7 +1,8 @@
 // 按住说话(微信式)的状态机。纯逻辑:ChatScreen / VoiceMicButton 只把手势和录音
 // 回调翻译成事件喂进来,再按返回的 state + effect 去启动/停止录音、发识别、插文本。
 //
-//   idle ──press──▶ starting ──started──▶ recording ⇄ cancelArmed(上滑超过阈值)
+//   idle ──press──▶ starting ──started──▶ recording ⇄ cancelArmed(桌面:上滑超过阈值;手机:手指在 ✕ 圈上)
+//                                              recording ⇄ toTextArmed(只有手机:手指在「文」圈上,见 voice-hold-overlay-model.ts)
 //     ▲               │ release/startFailed        │ release(够长)→ transcribing ──done──▶ idle(插入文本)
 //     │               ▼                            │ release(太短)→ idle「说话时间太短」
 //     └──────────── idle ◀─────── cancelArmed + release = 取消(不识别)
@@ -14,7 +15,37 @@ import { insertAtSelection } from './voice-insert-model';
 
 export const CANCEL_SLIDE_PX = 60;
 
-export type VoicePhase = 'idle' | 'starting' | 'recording' | 'cancelArmed' | 'transcribing';
+export type VoicePhase = 'idle' | 'starting' | 'recording' | 'cancelArmed' | 'toTextArmed' | 'transcribing';
+
+/** 手机按住浮层里手指所在的区:中间 / ✕ 取消圈 / 「文」圈。 */
+export type VoiceZone = 'neutral' | 'cancel' | 'toText';
+
+/** 正在录(含停在某个区上)。 */
+export const isLivePhase = (phase: VoicePhase): boolean => phase === 'recording' || phase === 'cancelArmed' || phase === 'toTextArmed';
+
+export function zoneOfPhase(phase: VoicePhase): VoiceZone {
+  return phase === 'cancelArmed' ? 'cancel' : phase === 'toTextArmed' ? 'toText' : 'neutral';
+}
+const PHASE_OF_ZONE: Record<VoiceZone, VoicePhase> = { neutral: 'recording', cancel: 'cancelArmed', toText: 'toTextArmed' };
+
+/**
+ * 松手之后做什么。**中间区 = 现状**:识别结果进草稿卡片的光标处、不发送(#410 / #440 定的,见 holdBarLabel);
+ * 「文」圈 = 同一条路(进草稿、不发送);✕ = 丢弃。所以今天中间区和「文」圈结果相同 ——
+ * 以后要让中间区「松开 发送」,只改 NEUTRAL_RELEASE 这一处(和它的文案)。
+ */
+export type ReleaseAction = 'insertDraft' | 'discard';
+export const NEUTRAL_RELEASE: ReleaseAction = 'insertDraft';
+export const ZONE_RELEASE: Record<VoiceZone, ReleaseAction> = { neutral: NEUTRAL_RELEASE, cancel: 'discard', toText: 'insertDraft' };
+
+/**
+ * 在某区松手的结果(纯函数,voiceStep 的 release 就用它):
+ *   cancel → discard(取消优先,不看时长);其余 → 不够 minSeconds 为 tooShort,否则 ZONE_RELEASE。
+ */
+export function releaseOutcome(zone: VoiceZone, heldSeconds: number, minSeconds: number): ReleaseAction | 'tooShort' {
+  if (ZONE_RELEASE[zone] === 'discard') return 'discard';
+  if (heldSeconds < minSeconds) return 'tooShort';
+  return ZONE_RELEASE[zone];
+}
 
 export type VoiceState = {
   phase: VoicePhase;
@@ -29,6 +60,8 @@ export type VoiceEvent =
   | { type: 'started'; now: number }
   | { type: 'startFailed'; reason: string }
   | { type: 'move'; dy: number }
+  /** 手机:手指进 / 出某个区(命中判定 + 滞回在 voice-hold-overlay-model.ts zoneAt)。 */
+  | { type: 'zone'; zone: VoiceZone }
   | { type: 'release'; now: number }
   | { type: 'terminate' }
   | { type: 'tick'; now: number }
@@ -44,6 +77,9 @@ export type VoiceEffect =
   | { kind: 'stopAndTranscribe' }
   | { kind: 'insertText'; text: string }
   | { kind: 'routeToSettings' };
+
+/** 按住不够 minSeconds 就松手(微信同款文案)。 */
+export const TOO_SHORT_NOTICE = '说话时间太短';
 
 export const IDLE: VoiceState = { phase: 'idle', startedAt: 0, notice: null };
 
@@ -75,24 +111,29 @@ export function voiceStep(state: VoiceState, ev: VoiceEvent, limits: Limits = DE
       return phase === state.phase ? { state, effect: none } : { state: { ...state, phase }, effect: none };
     }
 
-    case 'release':
+    case 'zone': {
+      if (!isLivePhase(state.phase)) return { state, effect: none };
+      const phase = PHASE_OF_ZONE[ev.zone];
+      return phase === state.phase ? { state, effect: none } : { state: { ...state, phase }, effect: none };
+    }
+
+    case 'release': {
       if (state.phase === 'starting') return { state: { ...IDLE }, effect: none };
-      if (state.phase === 'cancelArmed') return { state: { ...IDLE, notice: '已取消' }, effect: { kind: 'discardRecording' } };
-      if (state.phase === 'recording') {
-        const secs = (ev.now - state.startedAt) / 1000;
-        if (secs < limits.minSeconds) return { state: { ...IDLE, notice: '说话时间太短' }, effect: { kind: 'discardRecording' } };
-        return { state: { ...state, phase: 'transcribing' }, effect: { kind: 'stopAndTranscribe' } };
-      }
-      return { state, effect: none };
+      if (!isLivePhase(state.phase)) return { state, effect: none };
+      const outcome = releaseOutcome(zoneOfPhase(state.phase), (ev.now - state.startedAt) / 1000, limits.minSeconds);
+      if (outcome === 'discard') return { state: { ...IDLE, notice: '已取消' }, effect: { kind: 'discardRecording' } };
+      if (outcome === 'tooShort') return { state: { ...IDLE, notice: TOO_SHORT_NOTICE }, effect: { kind: 'discardRecording' } };
+      return { state: { ...state, phase: 'transcribing' }, effect: { kind: 'stopAndTranscribe' } };
+    }
 
     // 手势被系统夺走(来电、滚动容器抢了 responder):按取消处理,绝不偷偷发出去。
     case 'terminate':
-      if (state.phase === 'recording' || state.phase === 'cancelArmed') return { state: { ...IDLE, notice: '已取消' }, effect: { kind: 'discardRecording' } };
+      if (isLivePhase(state.phase)) return { state: { ...IDLE, notice: '已取消' }, effect: { kind: 'discardRecording' } };
       if (state.phase === 'starting') return { state: { ...IDLE }, effect: none };
       return { state, effect: none };
 
     case 'tick':
-      if ((state.phase === 'recording' || state.phase === 'cancelArmed') && (ev.now - state.startedAt) / 1000 >= limits.maxSeconds) {
+      if (isLivePhase(state.phase) && (ev.now - state.startedAt) / 1000 >= limits.maxSeconds) {
         // 满 60 s 时手指停在「取消」区 = 用户已经表态要取消,尊重它。
         if (state.phase === 'cancelArmed') return { state: { ...IDLE, notice: '已取消' }, effect: { kind: 'discardRecording' } };
         return { state: { ...state, phase: 'transcribing', notice: `已达 ${limits.maxSeconds} 秒上限` }, effect: { kind: 'stopAndTranscribe' } };
@@ -168,7 +209,8 @@ export type HoldBarTone = 'idle' | 'pressed' | 'cancel' | 'busy';
 export function holdBarLabel(phase: VoicePhase): string {
   switch (phase) {
     case 'starting':
-    case 'recording': return '松开 转文字';
+    case 'recording':
+    case 'toTextArmed': return '松开 转文字';
     case 'cancelArmed': return '松开 取消';
     case 'transcribing': return '识别中…';
     default: return '按住 说话';
@@ -177,7 +219,7 @@ export function holdBarLabel(phase: VoicePhase): string {
 
 export function holdBarTone(phase: VoicePhase): HoldBarTone {
   if (phase === 'cancelArmed') return 'cancel';
-  if (phase === 'starting' || phase === 'recording') return 'pressed';
+  if (phase === 'starting' || phase === 'recording' || phase === 'toTextArmed') return 'pressed';
   if (phase === 'transcribing') return 'busy';
   return 'idle';
 }
@@ -187,10 +229,13 @@ export function cancelZoneLabel(phase: VoicePhase): string {
   return phase === 'cancelArmed' ? '松开手指，取消' : '上滑到这里取消';
 }
 
-/** 状态转移时要不要震一下:按下开始录音 = 轻触;滑进取消区 = 提醒(微信也是这两下)。 */
-export function hapticFor(prev: VoicePhase, next: VoicePhase): 'press' | 'cancelArmed' | null {
+/**
+ * 状态转移时要不要震一下:按下开始录音 = 轻触(impact Light);进 / 出 ✕ 或「文」区 = 选择刻度(selection)。
+ * 松手、识别完、取消后回到 idle 都不震(那是结果,不是手指的反馈)。
+ */
+export function hapticFor(prev: VoicePhase, next: VoicePhase): 'press' | 'zone' | null {
   if (prev === 'idle' && next === 'starting') return 'press';
-  if (prev !== 'cancelArmed' && next === 'cancelArmed') return 'cancelArmed';
+  if (isLivePhase(prev) && isLivePhase(next) && zoneOfPhase(prev) !== zoneOfPhase(next)) return 'zone';
   return null;
 }
 

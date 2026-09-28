@@ -79,9 +79,11 @@ import SideThreadDrawer, { type SideThreadLaunch } from './SideThreadDrawer';
 import { nextPlusPanel, plusPanelHeight, plusPanelItems, type PlusItemKey, type PlusPanelEvent } from './composer-plus-panel';
 import { useVoiceInput } from './useVoiceInput';
 import { afterRecognized, showVoiceDraftCard, toggleComposerInputMode, type ComposerInputMode, type ComposerModeTransition } from './voice-input-model';
-import { ComposerModeToggle, VoiceDraftCard, VoiceHoldBar, VoiceRecordingOverlay, VoiceSettingsPrompt } from './VoiceInputUI';
+import { ComposerModeToggle, VOICE_DRAFT_CARD_BLOCK_MAX, VoiceDraftCard, VoiceHoldBar, VoiceHoldOverlay, VoiceRecordingOverlay, VoiceSettingsPrompt } from './VoiceInputUI';
 import { DesktopMicButton, DesktopVoiceBar } from './DesktopVoiceBar';
 import { DESKTOP_CLICK_EVENT, desktopVoiceNotice, micClickAction, showVoiceBar, voiceSurface } from './desktop-voice-bar-model';
+import { holdOverlayApplies, holdOverlayLayout, zoneAt as holdZoneAt, type HoldOverlayLayout } from './voice-hold-overlay-model';
+import { TOO_SHORT_NOTICE } from './voice-input-model';
 import { beginVoicePress, createSelectionCapture, hostSelection, insertAtSelection, previewAtSelection, refocusAfterInsert, selectionAcrossModeSwitch, voiceInsertTarget, withPressStart, type TextSelection, type VoiceSource } from './voice-insert-model';
 import { COMPOSER_INPUT_BORDER, COMPOSER_LINE_HEIGHT, composerControlSize, composerInputPadY, composerLineCount, composerRightSlot, composerRowAlign, nextFullEditor, shouldShowExpand, type FullEditorEvent } from './composer-row-layout';
 import { ComposerExpandButton, ComposerFullscreenEditor, ComposerRightSlot } from './ComposerRowParts';
@@ -310,6 +312,7 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
   // app#237 —— 桌面端输入区高度可拖拽:根容器高度决定上界(消息区至少留 200px),
   // 值全局持久化(切会话 / 重启保持)。分隔条在输入区上沿,向上拖变高。
   const [rootHeight, setRootHeight] = useState(0);
+  const [inputRowTop, setInputRowTop] = useState(0);
   const keyboardVisible = useKeyboardVisible(Keyboard, Platform.OS);
   // 「＋」 panel (composer-plus-panel.ts). Mobile: inline panel under the input row,
   // sharing the keyboard's slot. Desktop: the small popover Modal. One level either way.
@@ -575,11 +578,24 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
     placeCursor(r.cursor);
     mainComposerRef.current?.focus();
   };
+  // 手机「按住 说话」浮层(微信式,VoiceHoldOverlay):铺满聊天页根视图;✕ / 文 两个圈的命中判定用浮层同一份几何。
+  // 手指坐标是窗口坐标 → 减去根视图在窗口里的原点(按下时量一次,originProbe 是根视图左上角的 0×0 视图)。
+  // (layout 本身在 voiceMode 算出来之后填,见下面 holdLayout。)
+  const holdLayoutRef = useRef<HoldOverlayLayout | null>(null);
+  const originProbeRef = useRef<View>(null);
+  const rootOriginRef = useRef({ x: 0, y: 0 });
+  const measureRootOrigin = () => originProbeRef.current?.measureInWindow((x, y) => { rootOriginRef.current = { x, y }; });
   const voice = useVoiceInput({
     onInsert: text => {
       insertVoiceText(text);
     },
-    onNotice: setComposerNotice,
+    // 手机:「说话时间太短」由浮层在屏幕中间提示(微信式),不再在输入区上方重复一条。
+    onNotice: text => { if (holdLayoutRef.current && text === TOO_SHORT_NOTICE) return; setComposerNotice(text); },
+    zoneAt: (pageX, pageY, prev) => {
+      const l = holdLayoutRef.current;
+      if (!l) return null;
+      return holdZoneAt({ x: pageX - rootOriginRef.current.x, y: pageY - rootOriginRef.current.y }, l, prev);
+    },
   });
   // 每个麦克风包一层:按下第一时间记来源(+ 冻结选区);上一句还在识别时不覆盖。
   const voiceHandlersFor = (source: VoiceSource) => withPressStart(
@@ -588,6 +604,7 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
       // 网页 / 桌面 webview:直接读 textarea 的当前选区(选区事件是异步的,程序化改的选区可能根本不报);
       // 原生上 ref 不是 DOM 节点 → null → 用 onSelectionChange 跟踪到的值。
       // 语音模式挂着的是草稿卡片(大条插到它的选区),键盘模式 / 桌面是输入框。
+      if (source === 'holdBar') measureRootOrigin();
       const host = hostSelection(source === 'holdBar' ? draftCardRef.current : mainComposerRef.current);
       if (host) selectionCaptureRef.current.track(host);
       voiceSourceRef.current = beginVoicePress(source, selectionCaptureRef.current);
@@ -603,6 +620,12 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
   const desktopVoiceDone = () => voice.micHandlers.onResponderRelease(DESKTOP_CLICK_EVENT as unknown as GestureResponderEvent);
   const desktopVoiceCancel = () => voice.micHandlers.onResponderTerminate();
   const voiceMode = !desktop && voice.available && inputMode === 'voice';
+  // 面板盖住输入行 + 草稿卡片能长到的最高处(卡片在按住期间会显示光标处预览,不能从面板上方露出来)。
+  const holdCoverTop = inputRowTop > 0 ? inputRowTop - (showVoiceDraftCard(voiceMode, draft) ? VOICE_DRAFT_CARD_BLOCK_MAX : 0) : undefined;
+  // 只在手机(安卓 / iOS / 折叠屏双栏)画;桌面(含窄到 phone 布局的桌面窗口)永远不画,见 holdOverlayApplies。
+  const holdOverlayOn = holdOverlayApplies({ desktop, os: Platform.OS, userAgent: Platform.OS === 'web' ? String((globalThis as any).navigator?.userAgent ?? '') : '' });
+  const holdLayout = holdOverlayOn && paneWidth > 0 && rootHeight > 0 ? holdOverlayLayout(paneWidth, rootHeight, composerInset, holdCoverTop) : null;
+  holdLayoutRef.current = holdLayout;
   // 微信式输入行(composer-row-layout.ts):输入超过 3 行 → 左上角 ⤢ 打开全屏编辑(同一份草稿)。
   const [fullEditorOpen, setFullEditorOpen] = useState(false);
   const fullEditorEvent = (event: FullEditorEvent): boolean => {
@@ -1652,7 +1675,7 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
       .then(appendAttachments)
       .catch(error => Alert.alert('无法打开', error instanceof Error ? error.message : String(error)));
   };
-  // Mobile row right slot: ＋ when there is nothing to send, 「发送」 once there is.
+  // Mobile row, right of the input: ＋ always; 「发送」 next to it once there is something to send.
   const rightSlot = composerRightSlot({ draft, attachmentCount: attached.length, voiceMode });
   const showExpand = !desktop && shouldShowExpand(inputLines, voiceMode);
 
@@ -2365,7 +2388,7 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
           onClear={() => { setDraft(''); selectionCaptureRef.current.reset(); }}
         />
       ) : null}
-      <View style={[styles.inputRow, { alignItems: composerRowAlign(inputLines, voiceMode), paddingBottom: spacing.md + (plusMenuOpen ? 0 : composerInset) }]}>
+      <View style={[styles.inputRow, { alignItems: composerRowAlign(inputLines, voiceMode), paddingBottom: spacing.md + (plusMenuOpen ? 0 : composerInset) }]} onLayout={event => setInputRowTop(event.nativeEvent.layout.y)}>
         {/* 微信式(composer-row-layout.ts):左 🎤/⌨ 切换 | 中 输入框或「按住 说话」 | 右 ＋ ⇄「发送」。
             ⤢ 在左列顶上,只在输入超过 3 行时出现(左列靠 stretch 撑满整行高度,不压输入框)。 */}
         {voice.available || showExpand ? (
@@ -2459,7 +2482,9 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
       ) : null}
       </>
       )}
-      {voiceSurface(desktop) === 'phoneOverlay' ? <VoiceRecordingOverlay voice={voice} bottom={88 + composerInset} /> : null}
+      {voiceSurface(desktop) === 'phoneOverlay' ? <VoiceRecordingOverlay voice={voice} bottom={88 + composerInset} hidden={holdOverlayOn} /> : null}
+      {holdOverlayOn ? <VoiceHoldOverlay voice={voice} layout={holdLayout} /> : null}
+      <View ref={originProbeRef} collapsable={false} pointerEvents="none" style={styles.originProbe} />
       <SideThreadDrawer
         cfg={cfg}
         alias={alias}
@@ -2736,6 +2761,7 @@ const makeStyles = () =>
   draftRemove: { position: 'absolute', top: -6, right: -6, width: 18, height: 18, borderRadius: 9, backgroundColor: 'rgba(0,0,0,0.65)', alignItems: 'center', justifyContent: 'center' },
   draftRemoveText: { color: '#fff', fontSize: 10, lineHeight: 12 },
   draftFileChip: { width: 120, height: 64, borderRadius: 6, padding: 6, justifyContent: 'center', backgroundColor: colors.inputBg, borderWidth: 1, borderColor: colors.border },
+  originProbe: { position: 'absolute', left: 0, top: 0, width: 0, height: 0 },
   composerNotice: { alignSelf: 'center', marginVertical: 4, paddingVertical: 5, paddingHorizontal: 12, borderRadius: 12, backgroundColor: colors.card, borderWidth: 1, borderColor: colors.border, maxWidth: '92%' },
   composerNoticeText: { color: colors.text, fontSize: 12 },
   // 多图气泡:3 列方格(微信式),每格 84,间距 4

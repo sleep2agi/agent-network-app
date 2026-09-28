@@ -55,7 +55,7 @@ const drive = (events: VoiceEvent[]) => {
   ck(`上滑 ${CANCEL_SLIDE_PX}px:进取消区 →「松开 取消」+ 红色`, tr[3].phase === 'cancelArmed' && tr[3].label === '松开 取消' && tr[3].tone === 'cancel');
   ck('滑回来:退出取消区', tr[4].phase === 'recording' && tr[4].tone === 'pressed');
   ck('松手:「识别中…」+ busy', tr[5].phase === 'transcribing' && tr[5].label === '识别中…' && tr[5].tone === 'busy');
-  ck('触感:按下一次、进取消区一次,其余不震', tr.map(x => x.haptic ?? '-').join(',') === 'press,-,-,cancelArmed,-,-');
+  ck('触感:按下一次(轻触)、进 / 出取消区各一次刻度,其余不震', tr.map(x => x.haptic ?? '-').join(',') === 'press,-,-,zone,zone,-');
 }
 {
   const tr = drive([

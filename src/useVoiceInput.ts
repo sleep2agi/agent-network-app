@@ -12,7 +12,8 @@ import type { GestureResponderEvent } from 'react-native';
 import { appFetch } from './app-fetch';
 import { AsrError, asrErrorMessage, MAX_UTTERANCE_SECONDS, MIN_UTTERANCE_SECONDS, transcribeWav, type FetchLike } from './doubao-asr';
 import { loadVoiceCredentials, subscribeVoiceCredentials, voiceStorageKind } from './voice-credentials';
-import { hapticFor, IDLE, voiceStep, type VoiceEvent, type VoiceState } from './voice-input-model';
+import { hapticFor, IDLE, isLivePhase, voiceStep, zoneOfPhase, type VoiceEvent, type VoiceState, type VoiceZone } from './voice-input-model';
+import { installVoiceSim, voiceSimStore } from './voice-sim';
 import * as Haptics from 'expo-haptics';
 import { Platform } from 'react-native';
 import { useVoiceRecorder, type Captured } from './useVoiceRecorder';
@@ -107,8 +108,20 @@ export type VoiceInput = {
   };
 };
 
-export function useVoiceInput(opts: { onInsert: (text: string) => void; onNotice: (text: string) => void }): VoiceInput {
+// 网页导出 + ?voiceSim=1:电平 / 流式中间结果由测试脚本喂(voice-sim.ts);设备上恒为 false。
+const VOICE_SIM = installVoiceSim(Platform.OS);
+const noSim = () => () => {};
+const simSnapshot = () => voiceSimStore.get();
+
+/**
+ * 手机按住浮层的命中判定(ChatScreen 用浮层同一份几何做,见 voice-hold-overlay-model.ts zoneAt)。
+ * 返回 null = 不按区判定(桌面:沿用上滑 dy 取消)。
+ */
+export type VoiceZoneAt = (pageX: number, pageY: number, prev: VoiceZone) => VoiceZone | null;
+
+export function useVoiceInput(opts: { onInsert: (text: string) => void; onNotice: (text: string) => void; zoneAt?: VoiceZoneAt }): VoiceInput {
   const recorder = useVoiceRecorder();
+  const sim = useSyncExternalStore(VOICE_SIM ? voiceSimStore.subscribe : noSim, simSnapshot, simSnapshot);
   const configured = useSyncExternalStore(subscribeConfigured, getConfigured, getConfigured);
   const [state, setState] = useState<VoiceState>(IDLE);
   const stateRef = useRef<VoiceState>(IDLE);
@@ -124,7 +137,7 @@ export function useVoiceInput(opts: { onInsert: (text: string) => void; onNotice
     const { state: next, effect } = voiceStep(stateRef.current, ev, LIMITS);
     const buzz = hapticFor(stateRef.current.phase, next.phase);
     if (buzz && (Platform.OS === 'android' || Platform.OS === 'ios')) {
-      void (buzz === 'press' ? Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium) : Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning)).catch(() => {});
+      void (buzz === 'press' ? Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light) : Haptics.selectionAsync()).catch(() => {});
     }
     const noticeChanged = next.notice && next.notice !== stateRef.current.notice;
     stateRef.current = next;
@@ -134,6 +147,7 @@ export function useVoiceInput(opts: { onInsert: (text: string) => void; onNotice
       case 'startRecording': {
         utteranceRef.current?.cancel();
         setInterim('');
+        if (VOICE_SIM) voiceSimStore.reset();
         const u = newUtterance(currentRoute(), text => { if (utteranceRef.current === u) setInterim(text); });
         utteranceRef.current = u;
         u.start(); // 流式:建连和开麦并行
@@ -185,7 +199,7 @@ export function useVoiceInput(opts: { onInsert: (text: string) => void; onNotice
   dispatchRef.current = dispatch;
 
   // 录音中:计时 + 60 s 上限。
-  const recording = state.phase === 'recording' || state.phase === 'cancelArmed';
+  const recording = isLivePhase(state.phase);
   useEffect(() => {
     if (!recording) return;
     // 🔴 只依赖 recording:recorder 每次渲染都是新对象 → dispatch 每次渲染都变;电平 10 次/秒触发渲染,
@@ -212,9 +226,9 @@ export function useVoiceInput(opts: { onInsert: (text: string) => void; onNotice
     available,
     configured,
     state,
-    level: recorder.level,
+    level: VOICE_SIM && sim.level !== null ? sim.level : recorder.level,
     elapsedMs: recording ? Math.max(0, now - state.startedAt) : 0,
-    interim,
+    interim: VOICE_SIM && sim.partial !== null && recording ? sim.partial : interim,
     settingsPrompt,
     dismissSettingsPrompt: () => setSettingsPrompt(false),
     micHandlers: {
@@ -227,7 +241,11 @@ export function useVoiceInput(opts: { onInsert: (text: string) => void; onNotice
         setSettingsPrompt(false);
         dispatch({ type: 'press', configured: getConfigured(), now: Date.now() });
       },
-      onResponderMove: (e) => dispatch({ type: 'move', dy: e.nativeEvent.pageY - startYRef.current }),
+      onResponderMove: (e) => {
+        const zone = optsRef.current.zoneAt?.(e.nativeEvent.pageX, e.nativeEvent.pageY, zoneOfPhase(stateRef.current.phase)) ?? null;
+        if (zone) dispatch({ type: 'zone', zone });
+        else dispatch({ type: 'move', dy: e.nativeEvent.pageY - startYRef.current });
+      },
       onResponderRelease: () => dispatch({ type: 'release', now: Date.now() }),
       onResponderTerminate: () => dispatch({ type: 'terminate' }),
     },

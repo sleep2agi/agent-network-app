@@ -1,18 +1,18 @@
 // ck-style (self-executing; run by scripts/run-tests.mjs). WeChat-layout mobile composer row:
-//   🎤/⌨ | input or 按住说话 | ＋ ⇄ 「发送」,  ⤢ top-left past 3 lines → fullscreen editor.
+//   🎤/⌨ | input or 按住说话 | ＋ | 「发送」(only with something to send),  ⤢ top-left past 3 lines → fullscreen editor.
 // Model (composer-row-layout.ts) first, then the ChatScreen / ComposerRowParts wiring.
 import { strict as assert } from 'node:assert';
 import { readFileSync } from 'node:fs';
 
 const {
-  composerRightSlot, composerLineCount, shouldShowExpand, nextFullEditor, slotSwapAnimation,
+  composerRightSlot, composerRightButtons, composerLineCount, shouldShowExpand, nextFullEditor, sendRevealAnimation,
   EXPAND_AFTER_LINES, COMPOSER_LINE_HEIGHT,
 } = await import('./composer-row-layout');
 
 let ck = 0;
 const check = (cond: boolean, msg: string) => { assert.ok(cond, msg); ck++; };
 
-// ── right slot: ＋ ⇄ 发送 ──────────────────────────────────────────────────
+// ── right of the input: ＋ always, 发送 when there is something to send ──────
 const slot = (draft: string, attachmentCount = 0, voiceMode = false) => composerRightSlot({ draft, attachmentCount, voiceMode });
 check(slot('') === 'plus', 'empty draft → ＋');
 check(slot('hi') === 'send', 'text → 发送');
@@ -25,6 +25,19 @@ check(slot('  \n', 0, true) === 'plus', 'voice mode, whitespace-only draft → �
 check(slot('识别出来的文字', 0, true) === 'send', 'voice mode with a recognized draft → 发送 (sent without opening the keyboard)');
 check(slot('', 2, true) === 'send', 'voice mode with attachments → 发送 (same rule as keyboard mode)');
 check(slot(undefined as unknown as string) === 'plus', 'undefined draft does not throw → ＋');
+{
+  // Owner 2026-09-27 (major bug): with text typed, ＋ used to be REPLACED by 发送, so an image could
+  // not be added to a message that already had text. ＋ now never goes away.
+  const btns = (draft: string, attachmentCount = 0, voiceMode = false) => composerRightButtons({ draft, attachmentCount, voiceMode }).join('+');
+  check(btns('') === 'plus', 'visibility: empty → ＋ only (unchanged look)');
+  check(btns('hi') === 'plus+send', 'visibility: text only → ＋ then 发送');
+  check(btns('', 1) === 'plus+send', 'visibility: attachments only → ＋ then 发送');
+  check(btns('hi', 2) === 'plus+send', 'visibility: text + attachments → ＋ then 发送');
+  check(btns('  \n ', 0) === 'plus', 'visibility: whitespace only → ＋ only');
+  check(btns('识别', 0, true) === 'plus+send' && btns('', 0, true) === 'plus', 'visibility: voice mode follows the same rule');
+  const all = [['', 0], ['x', 0], ['', 1], ['x', 1], [' ', 0], [' ', 3]] as const;
+  check(all.every(([d, n]) => composerRightButtons({ draft: d, attachmentCount: n, voiceMode: false })[0] === 'plus'), '＋ is present and first in every state');
+}
 
 // ── line count / ⤢ threshold ──────────────────────────────────────────────
 check(EXPAND_AFTER_LINES === 3, 'threshold: more than 3 lines');
@@ -60,12 +73,11 @@ check(!shouldShowExpand(1, false), '1 line → no ⤢');
   check(nextFullEditor(true, 'expand').open === true, 'expand while open stays open');
 }
 
-// ── swap animation ─────────────────────────────────────────────────────────
+// ── 发送 reveal animation ─────────────────────────────────────────────────
 {
-  const on = slotSwapAnimation(false);
-  check(on.duration > 0 && on.duration <= 200 && on.fromOpacity < 1 && on.fromScale < 1, 'normal: short crossfade + scale-in (≤200ms)');
-  const off = slotSwapAnimation(true);
-  check(off.duration === 0 && off.fromOpacity === 1 && off.fromScale === 1, 'reduced motion: no animation at all');
+  const on = sendRevealAnimation(false);
+  check(on.duration > 0 && on.duration <= 200, 'normal: short width + opacity reveal (≤200ms)');
+  check(sendRevealAnimation(true).duration === 0, 'reduced motion: no animation at all');
 }
 
 // ── wiring ─────────────────────────────────────────────────────────────────
@@ -86,6 +98,7 @@ check(rowAt > 0 && mobileRow.length > 200, 'found the mobile input row');
   check(slotAt > inputAt && slotAt > middleAt, 'order: right slot after the input / hold bar');
   check(mobileRow.slice(0, inputAt).indexOf("plusEvent('toggle')") === -1, '＋ is no longer left of the input');
   check((mobileRow.match(/plusEvent\('toggle'\)/g) ?? []).length === 1, 'exactly one ＋ in the row (in the right slot)');
+  check(/inputRow: \{\s*flexDirection: 'row',\s*alignItems: 'center',\s*gap: spacing\.sm,/.test(chat), 'row gap is spacing.sm — the same gap ComposerRightSlot puts before 发送');
   check(mobileRow.includes("onPlus={() => plusEvent('toggle')}") && mobileRow.includes('onSend={() => void submit()}'), 'right slot: ＋ → panel toggle, 发送 → submit');
   check(mobileRow.includes('slot={rightSlot}') && mobileRow.includes('plusOpen={plusMenuOpen}'), 'right slot gets the decided slot and panel state');
   check(mobileRow.includes('sendDisabled={!canSend(draft, attached.length > 0, sending)}'), '发送 disabled while sending / nothing sendable (same canSend as before)');
@@ -126,14 +139,19 @@ check(new RegExp(`lineHeight: ${COMPOSER_LINE_HEIGHT},`).test(chat.slice(chat.in
 
 // ComposerRightSlot rendering
 {
-  check(/slot === 'send' \? \(/.test(parts), 'right slot renders by the decided slot');
+  const slotFn = parts.slice(parts.indexOf('export function ComposerRightSlot'), parts.indexOf('export function ComposerExpandButton'));
+  check(slotFn.includes("const show = slot === 'send';") && slotFn.indexOf('testID="composer-plus"') < slotFn.indexOf('testID="composer-send"'), 'right slot: ＋ first, then 发送 (by the decided slot)');
+  check(!/slot === 'send' \? \(/.test(slotFn) && !/\{show \?[\s\S]{0,40}composer-plus/.test(slotFn), '＋ is not conditional (never swapped out for 发送)');
+  check(slotFn.includes('const gap = spacing.sm;') && slotFn.includes('outputRange: [0, gap + pillWidth]'), '发送 reveal: width 0 → row gap + measured pill width');
+  check(slotFn.includes('sendRevealAnimation(reduceMotion)') && slotFn.includes('opacity: reveal'), '发送 reveal also fades, and honours reduced motion');
+  check(slotFn.includes('disabled={sendDisabled || !show}'), '发送 cannot be pressed while animating out');
   const sendAt = parts.indexOf('testID="composer-send"');
   const sendBtn = parts.slice(sendAt, parts.indexOf('</Pressable>', sendAt));
   check(sendAt > 0 && sendBtn.includes('<Text style={styles.sendPillText}>发送</Text>') && !sendBtn.includes('↑'), '发送 is a labelled button, not an arrow');
   check(/sendPill: \{[\s\S]*?backgroundColor: colors\.accent/.test(parts), '发送 uses the accent colour');
   check(/sendPill: \{[\s\S]*?borderRadius: radius\.sm/.test(parts), '发送 is rounded');
   check(parts.includes("accessibilityLabel={plusOpen ? '收起更多发送方式' : '更多发送方式'}"), '＋ keeps its a11y labels');
-  check(parts.includes('slotSwapAnimation(reduceMotion)') && parts.includes('AccessibilityInfo.isReduceMotionEnabled') && parts.includes("'reduceMotionChanged'"), 'swap animation honours reduced motion (initial + live changes)');
+  check(parts.includes('sendRevealAnimation(reduceMotion)') && parts.includes('AccessibilityInfo.isReduceMotionEnabled') && parts.includes("'reduceMotionChanged'"), 'reveal animation honours reduced motion (initial + live changes)');
   check(parts.includes("animationType={reduceMotion ? 'none' : 'slide'}"), 'editor open animation honours reduced motion');
   check(!/😊|emoji/i.test(parts) && !/emoji/i.test(mobileRow), 'no emoji button (deliberately left out — the system keyboard has one)');
   check(/deliberately left out/.test(model), 'the emoji decision is recorded in the model header');

@@ -34,6 +34,13 @@ const DARK = {
   groupedBg: '#111113',
   groupedRow: '#1c1c1f',
   groupedRowPressed: '#242428',
+  // 手机「按住 说话」浮层(微信式):绿色语音气泡 + 底部弧形面板。深色用降一档亮度的绿(微信深色同理),字始终深色。
+  voiceBubble: '#3eb575',
+  onVoiceBubble: '#0b0b0d',
+  voiceArc: '#2c2c30',
+  // 手指离开中间区(在 ✕ / 文 上)时面板暗一档 —— 实色,不能用透明度(会透出下面的大条)。
+  voiceArcDim: '#1c1c1f',
+  voiceArcText: '#ededef',
 };
 
 // 白色主题 (Vincent tg 811/812) — same restraint on white surfaces;
@@ -67,6 +74,11 @@ const LIGHT: typeof DARK = {
   groupedBg: '#ededf0',
   groupedRow: '#ffffff',
   groupedRowPressed: '#e9eaee',
+  voiceBubble: '#95ec69',
+  onVoiceBubble: '#111111',
+  voiceArc: '#f2f2f4',
+  voiceArcDim: '#d4d4d8',
+  voiceArcText: '#1d2026',
 };
 
 export type ThemeMode = 'dark' | 'light';
