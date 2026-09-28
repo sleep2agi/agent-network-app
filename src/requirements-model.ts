@@ -7,7 +7,11 @@ export type ReqColumn = (typeof REQ_COLUMNS)[number];
 export const REQ_PRIORITY_LABEL: Record<ReqPriority, string> = { high: '高', normal: '普通', low: '低' };
 export const REQ_COLUMN_LABEL: Record<ReqColumn, string> = { pool: '需求池', doing: '进行中', done: '完成' };
 
+import type { RequirementPersonRef } from './requirement-people';
+
 export interface Requirement {
+  owner?: RequirementPersonRef | null;
+  participants?: RequirementPersonRef[];
   id: string;
   name: string;
   priority: ReqPriority;

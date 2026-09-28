@@ -1,0 +1,43 @@
+Requirement people picker increment — 2026-09-28
+Stack base: b8ff5d58a80180c9417cb9c23147aaae69e7ca3d (PR #474).
+
+Implemented: isolated owner/participant selector, typed user/node stable IDs,
+network-filtered candidates, search, staged selection, cancel, unavailable member
+handling, theme subscription, modal safe-area padding.
+
+Docker oven/bun:1.3.1:
+- src/requirement-people.test.ts: 9/9 assertions passed.
+- src/safe-area-rule.test.ts: 29/29 passed, now detects 25 Modals.
+- tests/requirement-details/details.test.tsx: 6 pass, 0 fail, 22 assertions.
+  Uses react and react-test-renderer 19.2.3, mocks native elements and transport.
+  Three tests are the previous card-details regression; three exercise picker
+  selection/confirmation, owner replacement/cancel, invalid member fail-closed.
+
+NOT COMPLETE: selector is not yet mounted from RequirementBoard; server candidate
+listing, persisted owner/participants, server permission checks and full real-Hub
+E2E remain necessary. Client filtering is UX, never an authorization boundary.
+No merge, release or production mutation performed.
+
+Follow-up: Docker component tests 8/8, 24 assertions; includes member removed
+while open and network change discarding draft selection. Chromium desktop and
+mobile fixture checks pass for search, selecting same-ID user + node together,
+and explicit confirmation. Screenshots inspected; server writes remain untested.
+
+Duplicate-input follow-up: selected references are deduplicated by kind + id
+when opening and toggling. Confirmation carries only kind/id, not display or
+network fields copied from candidates. Docker model 11/11; component suite
+10/10 with 27 assertions. Integration remains pending the Hub contract.
+
+Proposed transport contract (not enabled in UI): GET /api/requirements/people
+and PATCH /api/requirements/:id with owner/participants. Docker stub-HTTP API
+tests: 12 assertions passed. Missing fields fail as unsupported; malformed or
+cross-network candidates fail; clearing sends explicit null/[]; denied writes
+surface 403. This contract is a draft pending the Hub implementer's reply;
+no claim is made that these endpoints currently support assignments.
+
+Capability-gated detail integration: RequirementBoard now mounts the assignment
+editor. Old responses without owner/participants show an upgrade message and
+cannot enter editing. Supported-shaped responses allow candidate selection and
+update local display only after a successful Hub acknowledgement. Docker API
+tests 12 assertions; component tests 12/12, 33 assertions. Server contract still
+unconfirmed, and this increment remains draft pending real assignment HTTP E2E.

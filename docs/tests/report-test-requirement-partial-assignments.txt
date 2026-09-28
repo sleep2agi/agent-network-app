@@ -1,0 +1,22 @@
+Requirement assignment partial-write regression — 2026-09-28
+
+Scope: editing owner must not write the cached participants; editing participants
+must not write the cached owner. Same-field concurrent writes remain last-write-wins.
+
+Isolated Docker: oven/bun:1.3.14, read-only source mount, /tmp tmpfs.
+Copied src and tests/requirement-details/details.test.tsx into temporary container.
+Installed exact react@19.2.3 and react-test-renderer@19.2.3.
+Commands: bun test details.test.tsx && bun src/requirement-people-api.test.ts
+Result: 12 component tests passed, 33 expectations, 0 failures; API script passed.
+API assertions verify owner-only and participants-only PATCH bodies.
+No production services or data accessed. Not a native-device acceptance report.
+
+Review follow-up: parent board now receives successful saves after detail unmount;
+cards render typed owner names rather than stale legacy assignee text. Scoped
+board remounts still isolate different networks/accounts. Docker component rerun:
+13 pass, 0 fail, 35 expectations, including close-before-ack then reopen flow.
+
+After #474 merged, integrated current main and retained its notification/version
+and legacy-assignee autocomplete changes. Component fixtures now stub the new
+autocomplete dependency; assignment/detail assertions unchanged. Docker rerun:
+13 pass, 0 fail, 35 expectations. Full updated-main CI is still required.
