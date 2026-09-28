@@ -95,6 +95,7 @@ export function parseRequirements(raw: string | null | undefined): Requirement[]
       due,
       column: REQ_COLUMNS.includes(r.column as ReqColumn) ? r.column as ReqColumn : 'pool',
       createdAt: typeof r.createdAt === 'string' ? r.createdAt : '',
+      issues: [],
     });
   }
   return out;
