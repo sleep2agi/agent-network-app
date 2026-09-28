@@ -17,12 +17,14 @@ mock.module('./src/api', () => ({ fetchHubNodes: async () => ({ nodes: [] }) }))
 const card = { id: 'r1', name: '验证需求详情', assignee: '负责人甲', priority: 'normal', due: '', column: 'pool', createdAt: '' };
 let typedCards = false;
 let requests: any[] = [];
+let creates: any[] = [];
 let reply: (value: any) => void;
 let reject: (error: Error) => void;
 class HubError extends Error { constructor(public status: number) { super('HTTP ' + status); } }
 mock.module('./src/requirements-hub', () => ({
   filterAssigneeChoices: () => [],
-  listRequirements: async () => [{ ...card, ...(typedCards ? { owner: null, participants: [] } : {}) }, { ...card, id: 'r2', name: '另一个需求' }], migrateLocalRequirements: async () => {}, createRequirementOnHub: async () => card,
+  listRequirements: async () => [{ ...card, ...(typedCards ? { owner: null, participants: [] } : {}) }, { ...card, id: 'r2', name: '另一个需求' }], migrateLocalRequirements: async () => {},
+  createRequirementOnHub: async (_cfg: any, input: any) => { creates.push(input); return { ...card, ...input, id: 'new', owner: input.owner || null, participants: [] }; },
   RequirementsHubError: HubError,
   moveRequirementOnHub: (cfg: any, id: string, column: string) => {
     requests.push({ network: cfg.networkId, id, column });
@@ -44,8 +46,21 @@ const { default: AssignmentsEditor } = await import('./src/RequirementAssignment
 const cfg = { serverUrl: 'http://isolated.test', token: 'test', networkId: 'a' };
 let renderer: ReactTestRenderer;
 const byId = (id: string) => renderer.root.findByProps({ testID: id });
-async function mount() { requests = []; await act(async () => { renderer = create(<Board cfg={cfg} />); }); }
+async function mount() { requests = []; creates = []; await act(async () => { renderer = create(<Board cfg={cfg} />); }); }
 afterEach(async () => { typedCards = false; if (renderer) await act(async () => renderer.unmount()); });
+
+test('new card binds stable owner and displays the acknowledged human name', async () => {
+  await mount();
+  await act(async () => byId('req-name').props.onChangeText('新需求'));
+  await act(async () => byId('req-assignee').props.onPress());
+  await act(async () => byId('person-user:u').props.onPress());
+  await act(async () => byId('people-confirm').props.onPress());
+  expect(creates).toHaveLength(0);
+  await act(async () => byId('req-add').props.onPress());
+  expect(creates[0].owner).toEqual({ kind: 'user', id: 'u' });
+  expect(creates[0].assignee).toBe('');
+  expect(JSON.stringify(byId('req-card-new').findAllByType('Text').map(node => node.props.children))).toContain('成员（人类）');
+});
 
 test('opening and closing details never writes; explicit move waits for Hub and prevents duplicates', async () => {
   await mount();

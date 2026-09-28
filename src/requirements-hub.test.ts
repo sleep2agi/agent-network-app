@@ -55,7 +55,7 @@ ck('说明改成存在 Hub 上', board.includes('存在 Hub 上，手机和电�
 ck('不再说不进 Hub', !board.includes('不进 Hub'));
 ck('读写走 Hub 接口', board.includes('migrateLocalRequirements(') && board.includes('createRequirementOnHub(') && board.includes('moveRequirementOnHub('));
 ck('不再只在 Hub 为空时才迁', !board.includes('list.length === 0'));
-ck('负责节点不是手填', !board.includes('onChangeText={setAssignee}') && board.includes('选择负责节点，可空') && board.includes('fetchHubNodes('));
+ck('新建负责人复用稳定身份选择器', board.includes('<RequirementPeoplePicker') && board.includes('选择负责人（人类或 Agent），可空') && !board.includes('fetchHubNodes('));
 
 console.log(`${p}/${t} passed`);
 process.exit(p === t ? 0 : 1);

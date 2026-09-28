@@ -1,0 +1,29 @@
+2026-09-28 — New requirement stable owner
+
+Scope: App creation reuses the existing people picker and submits owner.kind/id.
+No Hub implementation, deployment, automatic Agent dispatch or release change.
+App base: decb6f5acce457d844410e8fa0f37e03455095c5.
+Hub fixture: 405540fa9e2834ef5d5b3472d22586023e7a5935 (merged #2065).
+
+Docker: oven/bun:1.3.14, --pull=never, --read-only, tmpfs /tmp,
+read-only App/Hub source mounts; temporary DB only. No production credentials.
+Layer 1: bun src/requirements-hub.test.ts — 13/13 passed.
+Layer 2: bun test details.test.tsx — 14 pass, 0 fail, 39 expectations.
+Includes selecting a human at creation, no write before Add, stable owner input,
+and acknowledged name displayed on card. Existing picker user/node separation,
+cancel, member removal, detail editing and network switching checks also pass.
+Layer 3: tests/requirement-details/hub-integration.ts — exit 0:
+PASS create through App transport and independent client read
+PASS move persists and second client observes it
+PASS create with stable owner, independent readback and foreign owner rejection
+PASS real candidate query, assignment save/read, deduplication and clearing
+PASS migration into nonempty Hub and retry idempotency
+PASS viewer write denied without state change and foreign network cannot read
+REAL HUB INTEGRATION PASS
+
+Recipes: existing tests/requirement-details/Dockerfile and Dockerfile.hub.
+Executed equivalent read-only mounted layout with cached Bun 1.3.14 instead of
+pulling recipe Bun 1.3.1 because host disk is nearly full; installs stay in tmpfs.
+Hub dependencies: bun install --frozen-lockfile (migrates package-lock.json).
+Component dependencies: react/react-test-renderer exactly 19.2.3.
+No native device UI, signed installer or public release is claimed by this test.

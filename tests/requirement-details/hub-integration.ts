@@ -33,6 +33,13 @@ try {
   const person = candidates.find(row => row.kind === 'user' && row.id === owner.user.user_id)!;
   assert(person, 'owner must be a selectable network member');
   const ref = { kind: person.kind, id: person.id };
+  const directlyAssigned = await createRequirementOnHub(cfg, { name: '新建即绑定', priority: 'normal', assignee: '', due: '', owner: ref });
+  assert.deepEqual(directlyAssigned.owner, ref);
+  const reread = (await listRequirements({ ...cfg })).find(row => row.id === directlyAssigned.id)!;
+  assert.deepEqual(reread.owner, ref);
+  assert.equal(reread.assignee, '');
+  await assert.rejects(createRequirementOnHub(cfg, { name: '跨网络负责人', priority: 'normal', assignee: '', due: '', owner: { kind: 'user', id: stranger.user.user_id } }), (error: unknown) => error instanceof RequirementsHubError && error.status === 400);
+  console.log('PASS create with stable owner, independent readback and foreign owner rejection');
   await saveRequirementAssignments(cfg, created.id, { owner: ref, participants: [ref, ref] });
   const assigned = (await listRequirements({ ...cfg })).find(row => row.id === created.id)!;
   assert.deepEqual(assigned.owner, ref);

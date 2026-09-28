@@ -14,14 +14,14 @@ import {
   type Requirement,
 } from './requirements-model';
 import { readRequirements, requirementsKey, writeRequirements } from './requirements-store';
-import { createRequirementOnHub, filterAssigneeChoices, listRequirements, migrateLocalRequirements, moveRequirementOnHub, RequirementsHubError } from './requirements-hub';
-import { fetchHubNodes } from './api';
+import { createRequirementOnHub, listRequirements, migrateLocalRequirements, moveRequirementOnHub, RequirementsHubError } from './requirements-hub';
 import { colors, radius, spacing } from './theme';
 import { useModalSafePadding } from './safe-area-runtime';
 import { withBasePadding } from './modal-safe-area';
 import RequirementAssignmentsEditor from './RequirementAssignmentsEditor';
 import { listRequirementPeople } from './requirement-people-api';
-import { personKey, type RequirementPerson } from './requirement-people';
+import RequirementPeoplePicker from './RequirementPeoplePicker';
+import { personKey, type RequirementPerson, type RequirementPersonRef } from './requirement-people';
 
 const NOTE = '存在 Hub 上，手机和电脑是同一份。';
 const UNSUPPORTED = '这个 Hub 还没有需求池。升级 Hub 之后，手机和电脑才能看到同一份。';
@@ -47,10 +47,10 @@ function ScopedRequirementBoard({ cfg }: { cfg: HubConfig }) {
   const [phase, setPhase] = useState<'loading' | 'ready' | 'unsupported' | 'error'>('loading');
   const [hubError, setHubError] = useState('');
   const [name, setName] = useState('');
-  const [assignee, setAssignee] = useState('');
-  const [nodes, setNodes] = useState<string[]>([]);
+  const [owner, setOwner] = useState<RequirementPersonRef | null>(null);
+  const [peopleLoading, setPeopleLoading] = useState(false);
+  const [peopleError, setPeopleError] = useState('');
   const [pickerOpen, setPickerOpen] = useState(false);
-  const [nodeQuery, setNodeQuery] = useState('');
   const [due, setDue] = useState('');
   const [priority, setPriority] = useState<ReqPriority>('normal');
   const [error, setError] = useState('');
@@ -65,8 +65,6 @@ function ScopedRequirementBoard({ cfg }: { cfg: HubConfig }) {
     note: { color: colors.textMuted, fontSize: 12, paddingHorizontal: spacing.lg, paddingBottom: spacing.sm },
     form: { paddingHorizontal: spacing.lg, gap: spacing.sm },
     input: { borderWidth: 1, borderColor: colors.border, borderRadius: radius.sm, paddingHorizontal: spacing.md, paddingVertical: spacing.sm, color: colors.text, fontSize: 14 },
-    picker: { maxHeight: 220, borderWidth: 1, borderColor: colors.border, borderRadius: radius.sm },
-    pickRow: { paddingHorizontal: spacing.md, paddingVertical: spacing.sm + 4, borderBottomWidth: 1, borderBottomColor: colors.border },
     chips: { flexDirection: 'row', gap: spacing.sm, alignItems: 'center' },
     chip: { paddingHorizontal: spacing.md, paddingVertical: spacing.xs + 2, borderRadius: radius.sm },
     chipOn: { backgroundColor: colors.rowActive },
@@ -117,21 +115,26 @@ function ScopedRequirementBoard({ cfg }: { cfg: HubConfig }) {
     return () => { dead = true; };
   }, [cfg.serverUrl, cfg.token, cfg.networkId, localKey, reloadKey]);
 
-  useEffect(() => {
-    if (phase !== 'ready') return;
-    let dead = false;
-    void fetchHubNodes(cfg).then(res => {
-      if (!dead) setNodes((res.nodes || []).map(node => node.alias || '').filter(Boolean));
-    }).catch(() => { if (!dead) setNodes([]); });
-    return () => { dead = true; };
-  }, [phase, cfg.serverUrl, cfg.token, cfg.networkId]);
+  const openOwnerPicker = async () => {
+    if (peopleLoading) return;
+    setPeopleLoading(true);
+    setPeopleError('');
+    try {
+      setPeople(await listRequirementPeople(cfg));
+      setPickerOpen(true);
+    } catch (e) {
+      setPeopleError(e instanceof Error ? e.message : '人员列表加载失败，请重试');
+    } finally {
+      setPeopleLoading(false);
+    }
+  };
 
   const add = async () => {
-    const item = createRequirement({ name, priority, assignee, due });
+    const item = createRequirement({ name, priority, assignee: '', due });
     if (!item) { setError(name.trim() ? '预计完成要写成 2026-10-01，或留空' : '先写需求'); return; }
     setError('');
     try {
-      const created = await createRequirementOnHub(cfg, { name: item.name, priority: item.priority, assignee: item.assignee, due: item.due });
+      const created = await createRequirementOnHub(cfg, { name: item.name, priority: item.priority, assignee: '', due: item.due, owner: owner || undefined });
       setName(''); setDue('');
       setItems(prev => [created, ...prev.filter(row => row.id !== created.id)]);
     } catch (e) {
@@ -167,24 +170,11 @@ function ScopedRequirementBoard({ cfg }: { cfg: HubConfig }) {
       {phase === 'ready' ? (
         <View style={styles.form}>
           <TextInput value={name} onChangeText={setName} placeholder="新建一条需求" placeholderTextColor={colors.textMuted} style={styles.input} testID="req-name" />
-          <Pressable testID="req-assignee" onPress={() => setPickerOpen(open => !open)} style={styles.input}>
-            <Text style={assignee ? styles.title : styles.meta}>{assignee || '选择负责节点，可空'}</Text>
+          <Pressable testID="req-assignee" accessibilityRole="button" disabled={peopleLoading} onPress={() => { void openOwnerPicker(); }} style={styles.input}>
+            <Text style={owner ? styles.title : styles.meta}>{peopleLoading ? '加载人员…' : owner ? `${people.find(person => personKey(person) === personKey(owner))?.name || owner.id}（${owner.kind === 'user' ? '人类' : 'Agent'}）` : '选择负责人（人类或 Agent），可空'}</Text>
           </Pressable>
-          {pickerOpen ? (
-            <View testID="req-assignee-list">
-              <TextInput value={nodeQuery} onChangeText={setNodeQuery} placeholder="搜索节点" placeholderTextColor={colors.textMuted} style={styles.input} testID="req-assignee-search" />
-              <ScrollView style={styles.picker} keyboardShouldPersistTaps="handled">
-                <Pressable testID="req-node-clear" onPress={() => { setAssignee(''); setPickerOpen(false); setNodeQuery(''); }} style={styles.pickRow}>
-                  <Text style={styles.meta}>不指定</Text>
-                </Pressable>
-                {filterAssigneeChoices(nodes, nodeQuery).map(alias => (
-                  <Pressable key={alias} testID={`req-node-${alias}`} onPress={() => { setAssignee(alias); setPickerOpen(false); setNodeQuery(''); }} style={styles.pickRow}>
-                    <Text style={styles.title}>{alias}</Text>
-                  </Pressable>
-                ))}
-              </ScrollView>
-            </View>
-          ) : null}
+          {peopleError ? <Text style={styles.err} testID="req-people-error">{peopleError}，点负责人重试</Text> : null}
+          {pickerOpen ? <RequirementPeoplePicker networkId={cfg.networkId || ''} mode="owner" people={people} selected={owner ? [owner] : []} onClose={() => setPickerOpen(false)} onConfirm={selected => { setOwner(selected[0] || null); setPickerOpen(false); }} /> : null}
           <TextInput value={due} onChangeText={setDue} placeholder="预计完成，如 2026-10-01，可空" placeholderTextColor={colors.textMuted} style={styles.input} testID="req-due" />
           <View style={styles.chips}>
             {REQ_PRIORITIES.map(p => (
