@@ -3,6 +3,7 @@ import { mkdtempSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { createRequirementOnHub, listRequirements, migrateLocalRequirements, moveRequirementOnHub, RequirementsHubError } from '../../src/requirements-hub';
+import { listRequirementPeople, saveRequirementAssignments } from '../../src/requirement-people-api';
 
 // Only run in the isolated Docker recipe documented alongside this file.
 const dir = mkdtempSync(join(tmpdir(), 'requirements-integration-'));
@@ -28,6 +29,19 @@ try {
   await moveRequirementOnHub(cfg, created.id, 'doing');
   assert.equal((await listRequirements({ ...cfg })).find(row => row.id === created.id)?.column, 'doing');
   console.log('PASS move persists and second client observes it');
+  const candidates = await listRequirementPeople(cfg);
+  const person = candidates.find(row => row.kind === 'user' && row.id === owner.user.user_id)!;
+  assert(person, 'owner must be a selectable network member');
+  const ref = { kind: person.kind, id: person.id };
+  await saveRequirementAssignments(cfg, created.id, { owner: ref, participants: [ref, ref] });
+  const assigned = (await listRequirements({ ...cfg })).find(row => row.id === created.id)!;
+  assert.deepEqual(assigned.owner, ref);
+  assert.deepEqual(assigned.participants, [ref]);
+  await saveRequirementAssignments(cfg, created.id, { owner: null, participants: [] });
+  const cleared = (await listRequirements({ ...cfg })).find(row => row.id === created.id)!;
+  assert.equal(cleared.owner, null);
+  assert.deepEqual(cleared.participants, []);
+  console.log('PASS real candidate query, assignment save/read, deduplication and clearing');
   const local = [{ ...created, id: 'legacy-local-card', name: '本地旧任务', column: 'done' as const }];
   await migrateLocalRequirements(cfg, () => [...local], rows => { local.splice(0, local.length, ...rows as typeof local); });
   assert.equal(local.length, 0);
