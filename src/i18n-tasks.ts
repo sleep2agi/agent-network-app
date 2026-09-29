@@ -242,6 +242,7 @@ export const taskCopy = [
  ['需求池','Backlog'],
  ['标题最多 80 个字','Title must be 80 characters or fewer'],
  ['日期写成 2026-10-01,或留空','Use a date such as 2026-10-01, or leave blank'],
+ ['极低','Lowest'],
 ] as const;
 export const taskTranslations = Object.fromEntries(taskCopy.map((pair,i)=>[`tasks.copy.${i}`, pair]));
 registerTranslations(taskTranslations);
@@ -344,8 +345,9 @@ registerTranslations({
   'detail.more': ['更多', 'More'],
   'detail.moreA11y': ['展开更多字段', 'Show more fields'],
   'detail.lessA11y': ['收起更多字段', 'Hide more fields'],
-  'detail.sumHigh': ['高优先级', 'High priority'],
-  'detail.sumLow': ['低优先级', 'Low priority'],
+  'detail.sumHigh': ['P0 最高', 'P0 Highest'],
+  'detail.sumLow': ['P2 低', 'P2 Low'],
+  'detail.sumLowest': ['P3 极低', 'P3 Lowest'],
   'detail.sumParent': ['母任务 {name}', 'Parent: {name}'],
   'detail.sumParentUnknown': ['有母任务', 'Has a parent'],
   'detail.sumChildren': ['{n} 子任务', '{n} subtasks'],

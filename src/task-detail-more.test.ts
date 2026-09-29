@@ -16,13 +16,14 @@ console.log('# 摘要');
   const parent = R('p', { name: '登录页' });
   const item = R('a', { priority: 'high', parentId: 'p', checklist: [{ id: '1', text: 'x', done: true }, { id: '2', text: 'y', done: false }, { id: '3', text: 'z', done: false }], participants: [{ kind: 'user', id: 'u' }, { kind: 'node', id: 'n' }] as any, issues: [{ url: 'https://github.com/a/b/issues/1' }] as any, tags: ['前端', '紧急'] });
   const kid = R('k', { parentId: 'a' });
-  ck('全有 = 按「更多」里的顺序一行说完', say(item, { priority: 'high', parentId: 'p' }, [parent, item, kid]) === '高优先级 · 母任务 登录页 · 1 子任务 · 1/3 检查项 · 2 参与人 · 1 个 Issue · 2 个标签');
+  ck('全有 = 按「更多」里的顺序一行说完', say(item, { priority: 'high', parentId: 'p' }, [parent, item, kid]) === 'P0 最高 · 母任务 登录页 · 1 子任务 · 1/3 检查项 · 2 参与人 · 1 个 Issue · 2 个标签');
   ck('普通优先级、什么都没设 = 不说(「更多」后面空着)', moreSummary(R('b'), { priority: 'normal', parentId: null }, []).length === 0);
-  ck('按草稿说(改了还没保存也算)', say(R('b'), { priority: 'low', parentId: null }, []) === '低优先级');
+  ck('按草稿说(改了还没保存也算)', say(R('b'), { priority: 'low', parentId: null }, []) === 'P2 低');
+  ck('P3 极低也说出来', say(R('b'), { priority: 'lowest', parentId: null }, []) === 'P3 极低');
   ck('母任务不在列表里 = 「有母任务」,不显示 id', say(R('b', { parentId: 'gone' }), { priority: 'normal', parentId: 'gone' }, []) === '有母任务');
   ck('Hub 给了 children 计数就用它', say(R('b', { children: { total: 4, done: 1 } } as any), { priority: 'normal', parentId: null }, []) === '4 子任务');
   setLanguagePreference('en');
-  ck('English', say(item, { priority: 'high', parentId: 'p' }, [parent, item, kid]) === 'High priority · Parent: 登录页 · 1 subtasks · 1/3 checklist · 2 participants · 1 issues · 2 tags');
+  ck('English', say(item, { priority: 'high', parentId: 'p' }, [parent, item, kid]) === 'P0 Highest · Parent: 登录页 · 1 subtasks · 1/3 checklist · 2 participants · 1 issues · 2 tags');
   setLanguagePreference('zh');
 }
 

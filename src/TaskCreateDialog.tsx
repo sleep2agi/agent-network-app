@@ -15,7 +15,8 @@ import TaskDuePicker from './TaskDuePicker';
 import { useModalSafePadding } from './safe-area-runtime';
 import { withBasePadding } from './modal-safe-area';
 import { colors, radius, spacing, themeMode, type as typeScale, weight } from './theme';
-import { REQ_COLUMN_LABEL, REQ_PRIORITIES, REQ_PRIORITY_LABEL, type ReqPriority, type RequirementProject } from './requirements-model';
+import { REQ_COLUMN_LABEL, type ReqPriority, type RequirementProject } from './requirements-model';
+import { priorityLabel } from './task-priority';
 import type { RequirementPerson, RequirementPersonRef } from './requirement-people';
 import { activeProjects, checkDraft, createInput, roleKinds, type CreateDraft } from './task-board-model';
 import { BOARD_RADIUS, CONTROL_H, liftedShadow, PriorityDot, useTaskStyles, a11yState } from './TaskBoardParts';
@@ -23,17 +24,18 @@ import { ProjectSelect } from './TaskFieldPickers';
 
 export { dueShortcuts } from './due-time';
 
-export function PriorityPicker({ value, onChange, testPrefix }: { value: ReqPriority; onChange: (p: ReqPriority) => void; testPrefix: string }) {
+/** choices:Hub 收得下的几档(task-priority.ts priorityChoices);旧 Hub 没有 P3。 */
+export function PriorityPicker({ value, onChange, testPrefix, choices }: { value: ReqPriority; onChange: (p: ReqPriority) => void; testPrefix: string; choices: readonly ReqPriority[] }) {
   useTranslation();
   const s = useTaskStyles();
   return (
-    <View style={[s.segment, { alignSelf: 'flex-start' }]} accessibilityRole="radiogroup">
-      {REQ_PRIORITIES.map(p => {
+    <View style={[s.segment, { alignSelf: 'flex-start', flexWrap: 'wrap' }]} accessibilityRole="radiogroup">
+      {choices.map(p => {
         const on = p === value;
         return (
           <Pressable key={p} accessibilityRole="radio" {...a11yState({ checked: on })} onPress={() => onChange(p)} style={[s.segmentItem, { flexDirection: 'row', gap: 6 }, on && s.segmentItemOn]} testID={`${testPrefix}-${p}`}>
             <PriorityDot p={p} s={s} />
-            <Text style={[s.segmentText, on && s.segmentTextOn]}>{taskText(REQ_PRIORITY_LABEL[p])}</Text>
+            <Text style={[s.segmentText, on && s.segmentTextOn]} numberOfLines={1}>{priorityLabel(p)}</Text>
           </Pressable>
         );
       })}
@@ -133,7 +135,7 @@ export function RoleFields({ twoRoles, owner, agentOwner, people, peopleLoading,
   );
 }
 
-export default function TaskCreateDialog({ draft, sheet, twoRoles, parentName, projects, dueDatetime, pointer, networkId, people, peopleLoading, peopleError, onLoadPeople, onChange, onSubmit, onClose }: {
+export default function TaskCreateDialog({ draft, sheet, twoRoles, parentName, projects, dueDatetime, priorities, pointer, networkId, people, peopleLoading, peopleError, onLoadPeople, onChange, onSubmit, onClose }: {
   draft: CreateDraft | null;
   /** Hub 分不分「负责人(人类)/ 负责 Agent」。不分就是旧的单一负责人。 */
   twoRoles: boolean;
@@ -143,6 +145,8 @@ export default function TaskCreateDialog({ draft, sheet, twoRoles, parentName, p
   parentName?: string | null;
   /** Hub 能把预计完成存到秒(capabilities.due_datetime)。 */
   dueDatetime: boolean;
+  /** Hub 收得下的优先级(旧 Hub 没有 P3)。 */
+  priorities: readonly ReqPriority[];
   pointer: boolean;
   /** true = 手机底部面板;false = 居中对话框。 */
   sheet: boolean;
@@ -230,7 +234,7 @@ export default function TaskCreateDialog({ draft, sheet, twoRoles, parentName, p
               {projects ? <ProjectSelect value={draft.projectId} projects={projects} onChange={projectId => set({ projectId })} touch={!pointer} idBase="req-project" /> : null}
               <View style={{ gap: spacing.sm }}>
                 <Text style={f.label}>{tr('tasks.copy.32')}</Text>
-                <PriorityPicker value={draft.priority} onChange={priority => set({ priority })} testPrefix="req-priority" />
+                <PriorityPicker value={draft.priority} onChange={priority => set({ priority })} testPrefix="req-priority" choices={priorities} />
               </View>
               <View style={{ gap: spacing.sm }}>
                 <Text style={f.label}>{tr('tasks.copy.119')}</Text>

@@ -172,7 +172,7 @@ for (const theme of ['light', 'dark']) {
         const inner = { l: Math.min(...kids.map(k => k.left)), t: Math.min(...kids.map(k => k.top)), r: Math.max(...kids.map(k => k.right)), b: Math.max(...kids.map(k => k.bottom)) };
         return { id: card.dataset.testid, left: inner.l - cb.left, top: inner.t - cb.top, right: cb.right - inner.r, bottom: cb.bottom - inner.b };
       });
-      const prioH = Math.max(0, ...[...document.querySelectorAll('[data-testid="task-prio-label"]')].map(e => e.getBoundingClientRect().height));
+      const prioH = Math.max(0, ...[...document.querySelectorAll('[data-testid="task-prio-badge"]')].map(e => e.getBoundingClientRect().height));
       const dueH = Math.max(0, ...[...document.querySelectorAll('[data-testid="task-due"]')].map(e => e.getBoundingClientRect().height));
       const side = rect(q('[data-testid="task-sidebar"]'));
       const sideTitle = q('[data-testid="task-sidebar-title"]');

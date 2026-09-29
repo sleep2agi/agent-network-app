@@ -1,11 +1,11 @@
 import { dueInstant, dueValid } from './due-time';
 // 需求池。长期卡片，人新建，存在 Hub 上。不跟 Hub 里正在跑的那条消息混在一起。
-export const REQ_PRIORITIES = ['high', 'normal', 'low'] as const;
+export const REQ_PRIORITIES = ['high', 'normal', 'low', 'lowest'] as const;
 export type ReqPriority = (typeof REQ_PRIORITIES)[number];
 export const REQ_COLUMNS = ['pool', 'doing', 'done'] as const;
 export type ReqColumn = (typeof REQ_COLUMNS)[number];
 
-export const REQ_PRIORITY_LABEL: Record<ReqPriority, string> = { high: '高', normal: '普通', low: '低' };
+export const REQ_PRIORITY_LABEL: Record<ReqPriority, string> = { high: '高', normal: '普通', low: '低', lowest: '极低' };
 export const REQ_COLUMN_LABEL: Record<ReqColumn, string> = { pool: '需求池', doing: '进行中', done: '完成' };
 
 import type { RequirementPersonRef } from './requirement-people';
@@ -79,7 +79,7 @@ export function nextColumn(column: ReqColumn): ReqColumn {
   return 'pool';
 }
 
-const PR: Record<ReqPriority, number> = { high: 0, normal: 1, low: 2 };
+const PR: Record<ReqPriority, number> = { high: 0, normal: 1, low: 2, lowest: 3 };
 export function sortColumn(items: readonly Requirement[]): Requirement[] {
   return [...items].sort((a, b) => {
     const byP = PR[a.priority] - PR[b.priority];

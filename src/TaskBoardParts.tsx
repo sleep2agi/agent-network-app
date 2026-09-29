@@ -3,7 +3,6 @@ import { t as tr } from './i18n';
 import { TaskIssueCount } from './TaskIssueBindings';
 import { TaskTagChips } from './TaskTags';
 import { useTranslation } from './i18n-react';
-import { taskText } from './i18n-tasks';
 // 任务看板的共用小件与样式:卡片、优先级点、期限胶囊、负责人、分段控件、筛选胶囊、主按钮。
 // 圆角 / 阴影:卡片与列 16、输入与按钮 12、胶囊 999、柔和阴影 —— 都取自全局 token
 // (theme.ts radius / elevation.ts);BOARD_RADIUS / softShadow / liftedShadow 只是看板里的别名。
@@ -14,7 +13,8 @@ import { Ionicons } from './icons';
 import AliasAvatar from './AliasAvatar';
 import { colors, onThemeChange, radius, spacing, themeMode, type as typeScale, weight } from './theme';
 import { shadowOnly } from './elevation';
-import { REQ_PRIORITY_LABEL, type ReqPriority, type Requirement, type RequirementProject } from './requirements-model';
+import type { ReqPriority, Requirement, RequirementProject } from './requirements-model';
+import { PRIORITY_CODE, priorityLabel } from './task-priority';
 import type { RequirementPerson } from './requirement-people';
 import { checklistProgress, type DueTone } from './task-board-model';
 
@@ -52,7 +52,7 @@ export const liftedShadow = () => shadowOnly('floating');
 export const columnBg = () => (themeMode() === 'dark' ? colors.card : colors.subtleFill);
 export const cardBg = () => (themeMode() === 'dark' ? colors.rowActive : colors.card);
 
-export const priorityColor = (p: ReqPriority): string => (p === 'high' ? colors.failed : p === 'normal' ? colors.textSecondary : colors.rest);
+export const priorityColor = (p: ReqPriority): string => (p === 'high' ? colors.failed : p === 'normal' ? colors.textSecondary : p === 'low' ? colors.rest : colors.textMuted);
 export const dueColor = (tone: DueTone): string => (tone === 'overdue' ? colors.failed : tone === 'today' ? colors.blocked : colors.textSecondary);
 
 export const makeTaskStyles = () => StyleSheet.create({
@@ -115,6 +115,9 @@ export const makeTaskStyles = () => StyleSheet.create({
   metaText: { color: colors.textSecondary, fontSize: typeScale.small, flexShrink: 1 },
   metaMuted: { color: colors.textMuted, fontSize: typeScale.small },
   prioDot: { width: 8, height: 8, borderRadius: radius.pill },
+  // 卡片 / 列表里的「P0」徽标:高 20,和期限胶囊同高,一行里中线对齐。
+  prioBadge: { height: 20, minWidth: 26, paddingHorizontal: 6, borderRadius: BOARD_RADIUS.pill, borderWidth: 1, alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
+  prioBadgeText: { fontSize: typeScale.caption, fontWeight: weight.strong, lineHeight: 14 },
   owner: { flexDirection: 'row', alignItems: 'center', gap: 6, flexShrink: 1, minWidth: 0 },
   due: { marginLeft: 'auto', flexDirection: 'row', alignItems: 'center', gap: 4, height: 20, paddingHorizontal: 7, borderRadius: BOARD_RADIUS.pill },
   dueText: { fontSize: typeScale.caption, fontWeight: weight.medium },
@@ -159,9 +162,24 @@ export function useTaskStyles(): TaskStyles {
 
 export function PriorityDot({ p, s }: { p: ReqPriority; s: TaskStyles }) {
   useTranslation();
-  // 低优先级画空心圈:三种灰度之外再用形状区分,色弱也分得清。
-  const low = p === 'low';
-  return <View accessible={false} style={[s.prioDot, low ? { borderWidth: 1.5, borderColor: priorityColor(p) } : { backgroundColor: priorityColor(p) }]} />;
+  // 低 / 极低画空心圈:灰度之外再用形状区分,色弱也分得清;极低再淡一档。
+  const hollow = p === 'low' || p === 'lowest';
+  return <View accessible={false} style={[s.prioDot, hollow ? { borderWidth: 1.5, borderColor: priorityColor(p) } : { backgroundColor: priorityColor(p) }, p === 'lowest' && { opacity: 0.6 }]} />;
+}
+
+/** 卡片 / 列表里的紧凑徽标「P0」…「P3」。P0 实底红、P1 灰底、P2 描边、P3 虚线描边 + 最淡的字。 */
+export function PriorityBadge({ p, s, testID = 'task-prio-badge' }: { p: ReqPriority; s: TaskStyles; testID?: string }) {
+  useTranslation();
+  const c = priorityColor(p);
+  const tone = p === 'high' ? { backgroundColor: c + '1a', borderColor: 'transparent' }
+    : p === 'normal' ? { backgroundColor: colors.subtleFill, borderColor: 'transparent' }
+    : p === 'low' ? { borderColor: c }
+    : { borderColor: c, borderStyle: 'dashed' as const };
+  return (
+    <View style={[s.prioBadge, tone]} accessibilityLabel={tr('tasks.copy.84', { v0: priorityLabel(p) })} testID={testID}>
+      <Text style={[s.prioBadgeText, { color: c }]} numberOfLines={1}>{PRIORITY_CODE[p]}</Text>
+    </View>
+  );
 }
 
 export function DueChip({ item, today, s }: { item: Pick<Requirement, 'due' | 'column'>; today: string; s: TaskStyles }) {
@@ -207,11 +225,8 @@ export function CardMeta({ item, people, today, s, compact = false }: { item: Re
   useTranslation();
   return (
     <View style={{ gap: 6 }}><View style={s.meta}>
-      {/* 优先级不缩:窄列(桌面 1000 宽 ≈ 212px)里让负责人名字去截断,别把「普通」挤成竖排。 */}
-      <View style={[s.owner, { flexShrink: 0 }]} accessibilityLabel={tr('tasks.copy.84', { v0: taskText(REQ_PRIORITY_LABEL[item.priority]) })}>
-        <PriorityDot p={item.priority} s={s} />
-        <Text style={[s.metaText, { flexShrink: 0 }]} numberOfLines={1} testID="task-prio-label">{taskText(REQ_PRIORITY_LABEL[item.priority])}</Text>
-      </View>
+      {/* 优先级徽标不缩(prioBadge flexShrink 0):窄列里让负责人名字去截断。 */}
+      <PriorityBadge p={item.priority} s={s} />
       <OwnerBadge item={item} people={people} s={s} avatarOnly={compact} />
       <DueChip item={item} today={today} s={s} />
       <TaskIssueCount item={item} />
