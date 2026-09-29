@@ -191,14 +191,17 @@ export async function updateRequirementOnHub(cfg: HubConfig, id: string, patch: 
  * requirement_not_found;旧 Hub 不认识这个字段,回 400 empty_patch。探针什么都不写。
  */
 export async function probeAgentOwnerSupport(cfg: HubConfig): Promise<boolean> {
+  // 在看板首次加载的路径上:卡住就当旧 Hub(false),不能让它把任务页挂在转圈上。
   try {
-    const res = await appFetch(`${cfg.serverUrl}${scoped(cfg, '/api/requirements/__capability_probe__')}`, {
-      method: 'PATCH',
-      headers: { Authorization: `Bearer ${cfg.token}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ agent_owner: null }),
-    });
-    const data = await res.json().catch(() => null) as { error?: string } | null;
-    return res.status === 404 && data?.error === 'requirement_not_found';
+    return await withDeadline((async () => {
+      const res = await appFetch(`${cfg.serverUrl}${scoped(cfg, '/api/requirements/__capability_probe__')}`, {
+        method: 'PATCH',
+        headers: { Authorization: `Bearer ${cfg.token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ agent_owner: null }),
+      });
+      const data = await res.json().catch(() => null) as { error?: string } | null;
+      return res.status === 404 && data?.error === 'requirement_not_found';
+    })(), deadlineMs, () => false);
   } catch {
     return false;
   }
@@ -306,11 +309,16 @@ function projectFromHub(value: unknown): RequirementProject | null {
 }
 
 async function projectCall(cfg: HubConfig, path: string, init?: RequestInit): Promise<{ status: number; data: any }> {
-  const res = await appFetch(`${cfg.serverUrl}${scoped(cfg, path)}`, {
-    ...init,
-    headers: { Authorization: `Bearer ${cfg.token}`, 'Content-Type': 'application/json' },
-  });
-  return { status: res.status, data: await res.json().catch(() => null) };
+  // listProjects 在看板首次加载的路径上:同样要有上限。
+  const got = await withDeadline((async () => {
+    const res = await appFetch(`${cfg.serverUrl}${scoped(cfg, path)}`, {
+      ...init,
+      headers: { Authorization: `Bearer ${cfg.token}`, 'Content-Type': 'application/json' },
+    });
+    return { status: res.status, data: await res.json().catch(() => null) };
+  })(), deadlineMs, () => null);
+  if (!got) throw new RequirementsHubError(REQUIREMENTS_TIMEOUT_TEXT, 0);
+  return got;
 }
 
 const projectError = (status: number, error?: string): RequirementsHubError =>

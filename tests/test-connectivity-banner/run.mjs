@@ -39,6 +39,7 @@ const body = (path) => {
   if (path.startsWith('/api/nodes')) return { ok: true, nodes: [], count: 0 };
   if (path.startsWith('/api/tasks')) return { tasks: [] };
   if (path.startsWith('/api/messages')) return { messages: [] };
+  if (path.startsWith('/api/requirements/projects')) return { projects: [] };
   if (path.startsWith('/api/requirements')) return { requirements: cards };
   if (path.startsWith('/api/auth/me')) return { user: { user_id: 'u_demo' } };
   if (path.startsWith('/api/scheduled-tasks')) return { ok: true, schedules: [] };

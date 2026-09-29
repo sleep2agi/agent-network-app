@@ -5,7 +5,7 @@
 import { readFileSync } from 'node:fs';
 import { __setReadDeadlineForTest, fetchHubNodes } from './api';
 import { __resetConnectivityForTest, connectivityState } from './connectivity';
-import { __setRequirementsDeadlineForTest, listRequirements, RequirementsHubError, REQUIREMENTS_TIMEOUT_TEXT } from './requirements-hub';
+import { __setRequirementsDeadlineForTest, listProjects, listRequirements, probeAgentOwnerSupport, RequirementsHubError, REQUIREMENTS_TIMEOUT_TEXT } from './requirements-hub';
 
 let p = 0, t = 0;
 const ck = (n: string, c: boolean, extra = '') => { t++; if (c) { p++; console.log('✅', n); } else console.log('❌', n, extra); };
@@ -70,6 +70,13 @@ respond(200, never);
 {
   const r = await settle(listRequirements(cfg));
   ck('需求池响应体卡住:同样到点失败', !r.ok && r.ms < 1_000, `${r.ms}ms`);
+}
+g.fetch = never;
+{
+  const probe = await settle(probeAgentOwnerSupport(cfg));
+  ck('🔴 首次加载路径上的能力探针卡住:到点按旧 Hub 处理(false),不挂住看板', probe.ok && probe.value === false && probe.ms < 1_000, `${probe.ms}ms`);
+  const projects = await settle(listProjects(cfg));
+  ck('🔴 首次加载路径上的项目列表卡住:到点失败(看板那边 .catch 成没有项目)', !projects.ok && projects.ms < 1_000, `${projects.ms}ms`);
 }
 respond(200, async () => ({ requirements: [{ id: 'r1', name: '甲' }] }));
 __resetConnectivityForTest();
