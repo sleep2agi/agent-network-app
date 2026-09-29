@@ -7,7 +7,7 @@ import { Text } from './ui-text';
 import { colors, spacing, radius } from './theme';
 import { elevated } from './elevation';
 
-export default function InfoTip({ label, text }: { label: string; text: string }) {
+export default function InfoTip({ label, text, hitSlop }: { label: string; text: string; /** 手机上扩大触控区(圆本身 22px)。 */ hitSlop?: number }) {
   const [open, setOpen] = useState(false);
   useEffect(() => {
     if (!open || Platform.OS !== 'web') return;
@@ -23,6 +23,7 @@ export default function InfoTip({ label, text }: { label: string; text: string }
         accessibilityLabel={label}
         accessibilityState={{ expanded: open }}
         onPress={() => setOpen(v => !v)}
+        hitSlop={hitSlop}
         style={(state: any) => [
           { width: 22, height: 22, borderRadius: radius.pill, borderWidth: 1, borderColor: colors.border, alignItems: 'center', justifyContent: 'center' },
           state.focused ? { outlineStyle: 'solid', outlineWidth: 2, outlineColor: colors.accent, outlineOffset: 1 } as any : null,

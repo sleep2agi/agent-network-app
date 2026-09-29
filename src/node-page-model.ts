@@ -4,7 +4,7 @@
 // 纯逻辑,不 import react-native。
 import type { NodeInfoFact } from './node-info';
 
-export type NodeSectionKey = 'overview' | 'model' | 'rules' | 'skills' | 'files' | 'tasks' | 'schedules' | 'danger';
+export type NodeSectionKey = 'overview' | 'model' | 'rules' | 'skills' | 'files' | 'tasks' | 'schedules' | 'logs' | 'danger';
 
 export interface NodeSection {
   readonly key: NodeSectionKey;
@@ -23,6 +23,9 @@ export const NODE_SECTIONS: readonly NodeSection[] = [
   { key: 'tasks', label: '任务', icon: 'list-outline' },
   // 这个节点要执行的定时任务(Hub 计划 + 节点计划,按 node_id 认):始终出现,只读页也在(开关与定时任务页同权限)。
   { key: 'schedules', label: '定时任务', icon: 'alarm-outline' },
+  // 节点自己的 agent-node 运行日志(只读,节点上脱敏):始终出现 —— 节点没上报 logs_capable 时分区里直接说
+  // 「节点版本过旧，升级后可查看日志」(node-logs.ts logsSupport)。
+  { key: 'logs', label: '运行日志', icon: 'document-text-outline' },
   { key: 'danger', label: '危险操作', icon: 'warning-outline' },
 ];
 
@@ -51,7 +54,8 @@ export const NODE_RULES_EDITOR_MIN_HEIGHT = 120;
  * 工具条(阅读/编辑、保存)钉在上面永远看得见;嵌套滚动在 Android 上外层抢手势。
  */
 export function nodePageScrolls(section: NodeSectionKey): boolean {
-  return section !== 'rules';
+  // 运行日志同理:工具条(筛选 / 搜索 / 跟随)钉住,日志区自己滚。
+  return section !== 'rules' && section !== 'logs';
 }
 
 /**

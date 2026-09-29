@@ -71,6 +71,8 @@ import NodeModelSection from './NodeModelSection';
 import NodeSkillsSection from './NodeSkillsSection';
 import NodeFilesSection from './NodeFilesSection';
 import NodeSchedulesSection from './NodeSchedulesSection';
+import NodeLogsSection from './NodeLogsSection';
+import { pointerUi } from './pointer-ui';
 import type { ScheduleOpenRequest } from './node-schedules';
 import { keyboardAvoidEnabled, useKeyboardVisible } from './keyboard-visibility';
 import { filesTreeMode, nodePageColumnMaxWidth } from './node-files-tree';
@@ -542,6 +544,13 @@ export default function NodeDetailScreen({
         </View>
       );
     }
+    if (section === 'logs') return (
+      <View style={{ flex: 1, minHeight: 0 }}>
+        <SectionTitle title="运行日志" />
+        {/* 节点自己的 agent-node 运行日志末尾(只读;节点上脱敏、hub 读后即删)。有 nodes 行按 node_id 发,否则按 alias。 */}
+        <NodeLogsSection cfg={cfg} alias={alias} node={rulesTarget} session={s} pointer={pointerUi(desktop)} />
+      </View>
+    );
     if (section === 'tasks') return (
       <View>
         <SectionTitle title="任务" hint="发给这个节点的任务。自己发给自己的定时提醒单独一组,不算运行中。" />
@@ -581,7 +590,9 @@ export default function NodeDetailScreen({
   })();
 
   const column = (
-    <View style={{ flexGrow: 1, width: '100%', maxWidth: nodePageColumnMaxWidth(section, filesTree), alignSelf: 'center' }} testID="node-page-content">
+    // 运行日志:列的高度按可用空间定(flexBasis 0 + minHeight 0),不按内容撑开 —— 否则 2000 行日志把列撑到几万像素,
+    // 日志区自己的 ScrollView 永远不滚、打开时也停不到最新一行。
+    <View style={{ flexGrow: 1, width: '100%', maxWidth: nodePageColumnMaxWidth(section, filesTree), alignSelf: 'center', ...(section === 'logs' ? { flexBasis: 0, minHeight: 0 } : null) }} testID="node-page-content">
       {content}
     </View>
   );

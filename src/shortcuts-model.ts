@@ -74,6 +74,8 @@ export const FIXED_SHORTCUTS: readonly FixedShortcut[] = [
   // 会话页:直接打开「查找聊天内容」(ChatScreen 的 keydown 监听,chat-info-model.ts isChatFindKey)。
   // 与上一条同一组合、不同页面(规则文件在节点页),两处不会同时挂着。
   { key: 'chatFind', group: 'chat', label: '查找聊天内容', combos: ['Mod+F'] },
+  // 节点页「运行日志」:聚焦日志搜索框(NodeLogsSection 的 keydown 监听,只在那个分区挂着)。
+  { key: 'logsFind', group: 'chat', label: '运行日志内搜索', combos: ['Mod+F'] },
   // 桌面聊天:剪贴板里的图片 / 文件直接进草稿(ChatScreen 的 paste 监听,desktop-file-intake.ts)。
   { key: 'pasteFiles', group: 'input', label: '粘贴图片 / 文件到输入框', combos: ['Mod+V'] },
 ];
