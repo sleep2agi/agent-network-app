@@ -13,6 +13,9 @@ mock.module('./src/safe-area-runtime', () => ({ useModalSafePadding: () => ({ pa
 mock.module('./src/theme', () => ({ colors: {}, onThemeChange: () => () => {}, radius: { sm: 4, md: 8 }, spacing: { xs: 4, sm: 8, md: 12, lg: 16 } }));
 mock.module('./src/requirements-store', () => ({ requirementsKey: (s: string) => s, readRequirements: () => [], writeRequirements: () => {} }));
 mock.module('./src/api', () => ({ fetchHubNodes: async () => ({ nodes: [] }) }));
+// The picker renders AliasAvatar. The real module pulls image assets and ui-scale,
+// which this isolated theme mock does not provide.
+mock.module('./src/AliasAvatar', () => ({ default: () => null }));
 
 const card = { id: 'r1', name: '验证需求详情', assignee: '负责人甲', priority: 'normal', due: '', column: 'pool', createdAt: '' };
 let typedCards = false;

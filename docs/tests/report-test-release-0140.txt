@@ -1,0 +1,5 @@
+2026-09-29 release preparation 0.2.140
+Base main: 379caffb224a7b94b7f60068213ba1034d2aefe1 (0.2.139 left rail).
+Change: the owner and participant picker shows each person's avatar instead of an empty circle. A check appears on the right when selected.
+Version: eight version files plus Android versionCode 2140. Cargo.lock changes only the agent-network-desktop root version.
+No signed build and no public release in this note. Android package is built from the merged main SHA.

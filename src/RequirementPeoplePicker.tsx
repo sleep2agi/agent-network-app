@@ -4,6 +4,7 @@ import { Text, TextInput } from './ui-text';
 import { colors, onThemeChange, radius, spacing } from './theme';
 import { useModalSafePadding } from './safe-area-runtime';
 import { withBasePadding } from './modal-safe-area';
+import AliasAvatar from './AliasAvatar';
 import { peopleInNetwork, personKey, togglePerson, uniquePeople, type RequirementPerson, type RequirementPersonRef } from './requirement-people';
 
 type Props = {
@@ -44,6 +45,7 @@ function Picker({ networkId, mode, people, selected, onConfirm, onClose }: Props
     actions: { flexDirection: 'row', justifyContent: 'flex-end', gap: spacing.md },
     button: { minHeight: 44, justifyContent: 'center', paddingHorizontal: spacing.md },
     action: { color: colors.accent, fontSize: 14 },
+    checkOff: { opacity: 0 },
     disabled: { opacity: 0.5 },
   }), [themeVersion]);
 
@@ -58,8 +60,9 @@ function Picker({ networkId, mode, people, selected, onConfirm, onClose }: Props
             <Text style={styles.muted}>已失效 · {personKey(person)} · 点击移除</Text>
           </Pressable>)}
           {rows.map(person => <Pressable key={personKey(person)} testID={`person-${personKey(person)}`} accessibilityRole="checkbox" accessibilityState={{ checked: chosen.has(personKey(person)), disabled: !!person.unavailable && !chosen.has(personKey(person)) }} disabled={!!person.unavailable && !chosen.has(personKey(person))} onPress={() => setDraft(prev => togglePerson(prev, person, mode))} style={[styles.row, chosen.has(personKey(person)) && styles.selected]}>
-            <Text style={styles.action}>{chosen.has(personKey(person)) ? '✓' : '○'}</Text>
+            <AliasAvatar alias={person.name || person.id} size={36} />
             <View style={styles.flex}><Text style={styles.name}>{person.name || person.id}</Text><Text style={styles.muted}>{person.kind === 'user' ? '人类' : 'Agent'} · {person.id}{person.unavailable ? ' · 已失效' : ''}</Text></View>
+            <Text accessible={false} importantForAccessibility="no" style={[styles.action, !chosen.has(personKey(person)) && styles.checkOff]}>✓</Text>
           </Pressable>)}
           {!rows.length ? <Text style={styles.muted}>{query ? '没有匹配的人类或 Agent' : '这个网络还没有可选成员'}</Text> : null}
         </ScrollView>
