@@ -1,0 +1,20 @@
+desktop v0.2.144 — 中英文切换、子需求、GitHub 链接、内置本地 Hub 升至 preview.66
+================================================================================
+
+A. 本版内容(0.2.143 版本号提交 #504 之后 main 上合入的 PR + 本 PR)
+--------------------------------------------------------------------------------
+  #507 语言切换:设置 → 外观「跟随系统 / 中文 / English」,即时生效;覆盖导航、设置、快捷键、语音设置、聊天(任务页下一版)。
+  #506 子需求 UI(新建子需求、列表与进度、「属于:父需求」跳转、卡片进度、全部/只看顶层);同步自 GitHub 的任务显示「在 GitHub 打开」。
+       子需求与 GitHub 链接需要 Hub 支持(sleep2agi/agent-network#2081),生产 Hub 尚未升级,升级前这些部分隐藏。
+  #505 桌面内置本地 Hub 从 0.9.0-preview.64 升至 0.9.0-preview.66(Rust 常量、sidecar package/lock、sidecar 测试四处同步)。
+  本 PR(版本号)
+       版本号 8 个文件 0.2.143 → 0.2.144,android.versionCode 2143 → 2144;Cargo.lock 只改根包一段。
+       release-desktop-auto-update.yml 加 What's new in 0.2.144。
+
+B. 验证边界(如实)
+--------------------------------------------------------------------------------
+  本 PR 只改版本号与说明;功能验证见上述各 PR。
+  发版时重点看:macOS/Windows 的 cargo 构建、sidecar 构建,以及用上一版(0.2.143,内置 .64)Hub 数据做种子的
+  迁移冒烟(.64 → .66)。
+  发版时在构建出的 APK 上核对:versionCode 2144、签名证书、前台服务 remoteMessaging。
+  同一 sha 手动 dispatch ios-build(CFBundleVersion = run number),回读确认该 build 出现在「Internal · all builds」组。
