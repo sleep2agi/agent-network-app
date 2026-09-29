@@ -15,6 +15,11 @@ type Props = {
   selected: readonly RequirementPersonRef[];
   onConfirm: (selected: RequirementPersonRef[]) => void;
   onClose: () => void;
+  /** 只列这些种类(负责人 = ['user'],负责 Agent = ['node'])。省略 = 人类和 Agent 都列。 */
+  kinds?: readonly ('user' | 'node')[];
+  /** 标题 / 说明覆盖(负责 Agent 用)。 */
+  title?: string;
+  hint?: string;
 };
 
 /** Mount when opened. Cancel discards the draft; only Confirm invokes the caller. */
@@ -22,7 +27,8 @@ export default function RequirementPeoplePicker(props: Props) {
   return <Picker key={`${props.networkId}:${props.mode}`} {...props} />;
 }
 
-function Picker({ networkId, mode, people, selected, onConfirm, onClose }: Props) {
+function Picker({ networkId, mode, people: allPeople, selected, onConfirm, onClose, kinds, title, hint }: Props) {
+  const people = kinds ? allPeople.filter(person => kinds.includes(person.kind)) : allPeople;
   const safe = useModalSafePadding('overlay');
   const [query, setQuery] = useState('');
   const [draft, setDraft] = useState<RequirementPersonRef[]>(() => uniquePeople(selected));
@@ -53,8 +59,8 @@ function Picker({ networkId, mode, people, selected, onConfirm, onClose }: Props
   return <Modal visible transparent animationType="fade" onRequestClose={onClose}>
     <View style={[styles.backdrop, withBasePadding(safe, spacing.lg)]}>
       <View style={styles.panel} accessibilityViewIsModal>
-        <Text style={styles.title}>{mode === 'owner' ? '选择负责人' : '选择参与人'}</Text>
-        <Text style={styles.muted}>{mode === 'owner' ? '选择一名人类或 Agent，也可以暂不分配' : `已选 ${draft.length} 人，可同时选择人类和 Agent`}</Text>
+        <Text style={styles.title}>{title || (mode === 'owner' ? '选择负责人' : '选择参与人')}</Text>
+        <Text style={styles.muted}>{hint || (mode === 'owner' ? '选择一名人类或 Agent，也可以暂不分配' : `已选 ${draft.length} 人，可同时选择人类和 Agent`)}</Text>
         <TextInput accessibilityLabel="搜索人类或 Agent" placeholder="搜索姓名或 ID" placeholderTextColor={colors.textMuted} value={query} onChangeText={setQuery} style={styles.input} testID="people-search" />
         <ScrollView keyboardShouldPersistTaps="handled">
           {missing.map(person => <Pressable key={personKey(person)} accessibilityRole="button" onPress={() => setDraft(prev => prev.filter(row => personKey(row) !== personKey(person)))} style={styles.row}>
@@ -65,7 +71,7 @@ function Picker({ networkId, mode, people, selected, onConfirm, onClose }: Props
             <View style={styles.flex}><Text style={styles.name}>{person.name || person.id}</Text><Text style={styles.muted}>{person.kind === 'user' ? '人类' : 'Agent'} · {person.id}{person.unavailable ? ' · 已失效' : ''}</Text></View>
             <Text accessible={false} importantForAccessibility="no" style={[styles.action, !chosen.has(personKey(person)) && styles.checkOff]}>✓</Text>
           </Pressable>)}
-          {!rows.length ? <Text style={styles.muted}>{query ? '没有匹配的人类或 Agent' : '这个网络还没有可选成员'}</Text> : null}
+          {!rows.length ? <Text style={styles.muted}>{query ? '没有匹配的人类或 Agent' : kinds?.length === 1 ? (kinds[0] === 'node' ? '这个网络还没有 Agent' : '这个网络还没有成员') : '这个网络还没有可选成员'}</Text> : null}
         </ScrollView>
         {invalid ? <Text style={styles.muted} accessibilityRole="alert">请移除已失效的选择后再保存</Text> : null}
         <View style={styles.actions}>

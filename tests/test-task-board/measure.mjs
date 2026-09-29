@@ -31,6 +31,11 @@ import { join, extname } from 'node:path';
 const { chromium } = await import(process.env.PLAYWRIGHT_MODULE || 'playwright');
 const { WEB_DIR: WEB, OUT, HUB_URL, HUB_TOKEN, HUB_NETWORK } = process.env;
 const MODE = process.env.MODE || 'after';
+// ROLES=two: the hub has agent_owner (负责人 = human, 负责 Agent = node). ROLES=single: an older hub —
+// the app must fall back to one 负责人 (human or agent). HUB_ME = the tester's user_id (for 我负责的).
+const ROLES = process.env.ROLES || 'two';
+const HUB_ME = process.env.HUB_ME || '';
+if (ROLES === 'two' && !HUB_ME) throw new Error('ROLES=two needs HUB_ME=<tester user_id>');
 if (!WEB || !OUT || !HUB_URL || !HUB_TOKEN || !HUB_NETWORK) throw new Error('need WEB_DIR OUT HUB_URL HUB_TOKEN HUB_NETWORK');
 if (/:9200\b/.test(HUB_URL)) throw new Error('refusing :9200 — that is the production hub port; start a throwaway hub');
 mkdirSync(OUT, { recursive: true });
@@ -142,7 +147,7 @@ for (const theme of ['light', 'dark']) {
   for (const v of VIEWPORTS) {
     const vp = `${v.kind} ${v.w}x${v.h} ${theme}`;
     const touch = v.kind !== 'desktop';
-    const ctx = await browser.newContext({ viewport: { width: v.w, height: v.h }, colorScheme: theme, deviceScaleFactor: 2, ...(touch ? { userAgent: ANDROID_UA, hasTouch: true } : {}) });
+    const ctx = await browser.newContext({ viewport: { width: v.w, height: v.h }, colorScheme: theme, deviceScaleFactor: 2, timezoneId: 'Asia/Shanghai', ...(touch ? { userAgent: ANDROID_UA, hasTouch: true } : {}) });
     const page = await ctx.newPage();
     page.on('pageerror', e => console.log('PAGEERROR', e.message.split('\n')[0]));
     await open(page, v.kind, theme);
@@ -243,9 +248,26 @@ async function desktopFlows(page, vp) {
   await page.locator(tid('req-create')).waitFor();
   const focused = await page.evaluate(() => document.activeElement?.getAttribute('data-testid'));
   await page.keyboard.type('新建的任务:检查拖动');
-  await page.locator(tid('req-assignee')).click();
-  await page.locator(tid('person-node:node_demo_c')).click();
-  await page.locator(tid('people-confirm')).click();
+  let pickerKinds = '';
+  if (ROLES === 'two') {
+    // 负责人 = 人类,负责 Agent = 节点;两个选择器各自只列一种
+    await page.locator(tid('req-assignee')).click();
+    await page.locator(tid(`person-user:${HUB_ME}`)).waitFor();
+    const ownerNodes = await page.locator('[data-testid^="person-node:"]').count();
+    await page.locator(tid(`person-user:${HUB_ME}`)).click();
+    await page.locator(tid('people-confirm')).click();
+    await page.locator(tid('req-assignee-agent')).click();
+    await page.locator(tid('person-node:node_demo_c')).waitFor();
+    const agentUsers = await page.locator('[data-testid^="person-user:"]').count();
+    await page.locator(tid('person-node:node_demo_c')).click();
+    await page.locator(tid('people-confirm')).click();
+    pickerKinds = `${ownerNodes}/${agentUsers}`;
+  } else {
+    await page.locator(tid('req-assignee')).click();
+    await page.locator(tid('person-node:node_demo_c')).click();
+    await page.locator(tid('people-confirm')).click();
+    pickerKinds = (await page.locator(tid('req-assignee-agent')).count()) === 0 ? '0/0' : 'agent-picker-shown';
+  }
   await page.locator(tid('req-priority-high')).click();
   await shot(page, 'flow-create-dialog');
   await page.locator(tid('req-add')).click();
@@ -253,10 +275,23 @@ async function desktopFlows(page, vp) {
   const created = await hubRow('新建的任务:检查拖动');
   record(vp, 'flow: create via dialog', {
     autofocus: focused === 'req-name', onHub: !!created,
-    ownerIdentity: JSON.stringify(created?.owner) === '{"kind":"node","id":"node_demo_c"}',
+    ownerIdentity: ROLES === 'two'
+      ? JSON.stringify(created?.owner) === JSON.stringify({ kind: 'user', id: HUB_ME }) && JSON.stringify(created?.agent_owner) === '{"kind":"node","id":"node_demo_c"}'
+      : JSON.stringify(created?.owner) === '{"kind":"node","id":"node_demo_c"}' && created?.agent_owner === undefined,
+    pickersFilterKinds: pickerKinds === '0/0',
     assigneeEmpty: created?.assignee === '', priority: created?.priority === 'high',
     onBoard: await cardByName(page, '新建的任务:检查拖动').count() === 1,
-  }, { owner: JSON.stringify(created?.owner) });
+  }, { owner: JSON.stringify(created?.owner), agent: JSON.stringify(created?.agent_owner), pickerKinds });
+
+  // cards: two avatars, human then agent (ROLES=two); a card with both roles on the seed
+  if (ROLES === 'two') {
+    const av = await page.evaluate(() => {
+      const card = [...document.querySelectorAll('[data-testid^="req-card-"]')].find(c => c.textContent.includes('登录页支持扫码登录'));
+      const x = (id) => { const e = card?.querySelector(`[data-testid="${id}"]`); return e ? e.getBoundingClientRect().x : null; };
+      return { owner: x('task-avatar-owner'), agent: x('task-avatar-agent') };
+    });
+    record(vp, 'cards: 负责人 avatar then 负责 Agent avatar', { both: av.owner !== null && av.agent !== null, humanFirst: av.owner < av.agent }, { ownerX: av.owner && r1(av.owner), agentX: av.agent && r1(av.agent) });
+  }
 
   // drag 需求池 → 进行中
   const name = '看板卡片支持拖动换列';
@@ -270,6 +305,237 @@ async function desktopFlows(page, vp) {
     noDetailOpened: await page.locator(tid('req-detail')).count() === 0,
   }, { hub: moved?.column });
 
+  // checklist progress on the card (seed: 登录页支持扫码登录 has 3/7)
+  const prog = await page.evaluate(() => {
+    const card = [...document.querySelectorAll('[data-testid^="req-card-"]')].find(c => c.textContent.includes('登录页支持扫码登录'));
+    const p = card?.querySelector('[data-testid="task-checklist-progress"]');
+    const bar = card?.querySelector('[data-testid="task-checklist-bar"]');
+    return { text: p?.textContent ?? null, barW: bar ? bar.getBoundingClientRect().width : 0, trackW: bar ? bar.parentElement.getBoundingClientRect().width : 0 };
+  });
+  if (ROLES === 'two') {
+    record(vp, 'cards: checklist progress 3/7 + bar', { text: !!prog.text && prog.text.includes('3/7'), bar: Math.abs(prog.barW / prog.trackW - 3 / 7) < 0.02 }, { text: prog.text, ratio: prog.trackW ? r1(prog.barW / prog.trackW * 100) + '%' : '-' });
+
+    // detail: description preview/edit + checklist toggle / add / drag reorder / delete, each read back from the hub
+    const cName = '登录页支持扫码登录';
+    await cardByName(page, cName).click();
+    await page.locator(tid('req-detail')).waitFor();
+    await page.waitForTimeout(400);
+    const previewShown = await page.locator(tid('req-description-preview')).count();
+    await page.locator(tid('req-checklist-item-s3')).click();
+    await page.waitForTimeout(600);
+    const afterToggle = (await hubRow(cName)).checklist;
+    await page.locator(tid('req-checklist-input')).fill('补一条子任务');
+    await page.keyboard.press('Enter');
+    await page.waitForTimeout(600);
+    const afterAdd = (await hubRow(cName)).checklist;
+    // drag the first item's handle below the third
+    const h = await box(page, tid('req-checklist-handle-s0'));
+    const t = await box(page, tid('req-checklist-item-s2'));
+    await page.locator(tid('req-checklist-item-s0')).hover();
+    await page.mouse.move(h.x + h.w / 2, h.y + h.h / 2);
+    await page.mouse.down();
+    await page.mouse.move(h.x + h.w / 2, t.y + t.h * 0.8, { steps: 8 });
+    const dropShown = await page.locator(tid('req-checklist-drop')).count();
+    await shot(page, 'flow-checklist-drag');
+    await page.mouse.up();
+    await page.waitForTimeout(700);
+    const afterMove = (await hubRow(cName)).checklist;
+    await page.locator(tid('req-checklist-item-s5')).hover();
+    await page.locator(tid('req-checklist-delete-s5')).click();
+    await page.waitForTimeout(600);
+    const afterDelete = (await hubRow(cName)).checklist;
+    await page.locator(tid('req-description-mode-edit')).click();
+    await page.locator(tid('req-description-input')).fill('## 目标\n扫码登录\n\n**验收**:三端都能扫');
+    await page.locator(tid('req-description-mode-preview')).click();
+    const rendered = await page.locator(`${tid('req-description-preview')}`).textContent();
+    await page.locator(tid('req-edit-save')).click();
+    await page.waitForTimeout(700);
+    await shot(page, 'flow-description-checklist');
+    const afterDesc = await hubRow(cName);
+    record(vp, 'detail: description + checklist round-trip', {
+      previewFirst: previewShown === 1,
+      toggleOneItem: afterToggle.map(i => i.done).join() === 'true,true,true,true,false,false,false',
+      add: afterAdd.length === 8 && afterAdd[7].text === '补一条子任务',
+      dragIndicator: dropShown === 1,
+      reorder: afterMove.slice(0, 3).map(i => i.id).join() === 's1,s2,s0',
+      delete: afterDelete.length === 7 && !afterDelete.some(i => i.id === 's5'),
+      descriptionSaved: afterDesc.description === '## 目标\n扫码登录\n\n**验收**:三端都能扫',
+      previewRendersMarkdown: !!rendered && !rendered.includes('**'),
+    }, { order: afterMove.slice(0, 3).map(i => i.id).join() });
+    await page.locator(tid('req-detail-close')).click();
+  } else {
+    await cardByName(page, '登录页支持扫码登录').click();
+    await page.locator(tid('req-detail')).waitFor();
+    record(vp, 'old hub: no description/checklist, upgrade hint', {
+      hint: await page.locator(tid('req-details-unsupported')).count() === 1,
+      noChecklist: await page.locator(tid('req-checklist')).count() === 0,
+      noProgressOnCards: await page.locator(tid('task-checklist-progress')).count() === 0,
+    });
+    await page.locator(tid('req-detail-close')).click();
+  }
+
+  // sidebar: only nodes with tasks; the 40 idle ones behind 「更多节点」 with a search
+  {
+    const side = await page.evaluate(() => [...document.querySelectorAll('[data-testid^="task-side-node:"]')].map(e => ({ id: e.dataset.testid, count: Number((e.lastElementChild?.textContent || '').trim()) })));
+    const moreBtn = await page.locator(tid('task-side-more-nodes')).count();
+    const moreText = moreBtn ? await page.locator(tid('task-side-more-nodes')).textContent() : '';
+    await page.locator(tid('task-side-more-nodes')).click();
+    await page.locator(tid('task-side-more-search')).fill('idle-node-1');
+    await page.waitForTimeout(300);
+    const found = await page.evaluate(() => [...document.querySelectorAll('[data-testid^="task-side-node:node_idle_"]')].length);
+    await shot(page, 'flow-sidebar-more-nodes');
+    await page.locator(tid('task-side-more-nodes')).click();
+    record(vp, 'sidebar: nodes with tasks only; idle ones folded + searchable', {
+      noZeroRows: side.length > 0 && side.every(r => r.count >= 1),
+      folded: moreBtn === 1 && Number((moreText || '').replace(/\D+/g, '')) >= 40,
+      search: found === 10,
+    }, { shown: side.length, more: (moreText || '').replace(/\D+/g, ''), searchHits: found });
+  }
+
+  if (ROLES === 'two') {
+    // projects: sidebar filter + counts, chips on cards, default in create, manager (create / rename / recolour / archive)
+    const hubAll = await hubList();
+    const projectsOnHub = (await (await fetch(`${HUB_URL}/api/requirements/projects?network_id=${HUB_NETWORK}`, { headers: { authorization: `Bearer ${HUB_TOKEN}` } })).json()).projects;
+    const tmai = projectsOnHub.find(p => p.name === 'TMAI');
+    const chips = await page.locator(tid('task-project-chip')).count();
+    await page.locator(tid(`task-side-project-${tmai.id}`)).click();
+    await page.waitForTimeout(400);
+    const shownT = await page.locator('[data-testid^="req-card-"]').count();
+    const sideCount = (await page.locator(tid(`task-side-project-${tmai.id}`)).textContent()).replace(/\D+/g, '');
+    await shot(page, 'flow-project-filter-tmai');
+    await page.locator(tid('req-new')).click();
+    await page.locator(tid('req-create')).waitFor();
+    const defaultOn = await page.evaluate((id) => { const e = document.querySelector(`[data-testid="req-project-${id}"]`); return e?.getAttribute('aria-checked') ?? e?.getAttribute('aria-selected') ?? 'missing'; }, tmai.id);
+    await page.keyboard.type('TMAI 里新建的任务');
+    await page.locator(tid('req-add')).click();
+    await page.locator(tid('req-create')).waitFor({ state: 'detached' });
+    const createdT = await hubRow('TMAI 里新建的任务');
+    record(vp, 'projects: sidebar filter, chips, create default', {
+      chipsOnCards: chips >= 5,
+      filtered: shownT === hubAll.filter(r => r.project_id === tmai.id).length,
+      countMatches: Number(sideCount) === shownT,
+      defaultProject: defaultOn === 'true' && createdT?.project_id === tmai.id,
+    }, { shown: shownT, side: sideCount, created: createdT?.project_id === tmai.id, defaultOn });
+    await page.locator(tid('task-side-project-all')).click();
+    await page.waitForTimeout(300);
+
+    await page.locator(tid('task-side-manage-projects')).click();
+    await page.locator(tid('project-manager')).waitFor();
+    await page.locator(tid('project-new-name')).fill('测试项目');
+    await page.locator(tid('project-new-add')).click();
+    await page.waitForTimeout(600);
+    let list = (await (await fetch(`${HUB_URL}/api/requirements/projects?network_id=${HUB_NETWORK}`, { headers: { authorization: `Bearer ${HUB_TOKEN}` } })).json()).projects;
+    const test = list.find(p => p.name === '测试项目');
+    await page.locator(tid(`project-name-${test.id}`)).click();
+    await page.locator(tid(`project-name-input-${test.id}`)).fill('测试项目二');
+    await page.keyboard.press('Enter');
+    await page.waitForTimeout(500);
+    await page.locator(tid(`project-color-${test.id}`)).click();
+    await page.waitForTimeout(500);
+    await shot(page, 'flow-project-manager');
+    await page.locator(tid(`project-archive-${test.id}`)).click();
+    await page.waitForTimeout(600);
+    list = (await (await fetch(`${HUB_URL}/api/requirements/projects?network_id=${HUB_NETWORK}`, { headers: { authorization: `Bearer ${HUB_TOKEN}` } })).json()).projects;
+    const after = list.find(p => p.id === test.id);
+    await page.locator(tid('project-manager-close')).click();
+    const sideHasArchived = await page.locator(tid(`task-side-project-${test.id}`)).count();
+    record(vp, 'projects: manager create / rename / recolour / archive', {
+      created: !!test, renamed: after?.name === '测试项目二', recoloured: after && after.color !== test.color, archived: after?.archived === true, hiddenFromSidebar: sideHasArchived === 0,
+    });
+
+    // list view sorted by project
+    await page.locator(tid('tasks-view-list')).click();
+    await page.locator(tid('req-sort-project')).click();
+    await page.waitForTimeout(300);
+    const firstRows = await page.locator('[data-testid^="req-row-"] [data-testid="task-project-chip"]').allTextContents();
+    await shot(page, 'flow-list-sorted-by-project');
+    record(vp, 'list: sort by project', { projectFirst: firstRows.length > 0 && firstRows[0].includes('军团项目') }, { first: firstRows[0] });
+    await page.locator(tid('tasks-view-board')).click();
+    await page.waitForTimeout(300);
+  } else {
+    record(vp, 'old hub: projects hidden', {
+      noSidebarGroup: await page.locator(tid('task-side-manage-projects')).count() === 0,
+      noChip: await page.locator(tid('task-filter-project')).count() === 0,
+      noCardChips: await page.locator(tid('task-project-chip')).count() === 0,
+    });
+  }
+
+  // participants: 3 avatars + 「+1」 on the seeded card, one row, same centre line
+  if (ROLES === 'two') {
+    const pst = await page.evaluate(() => {
+      const card = [...document.querySelectorAll('[data-testid^="req-card-"]')].find(c => c.textContent.includes('登录页支持扫码登录'));
+      const av = [...(card?.querySelectorAll('[data-testid="task-participant-avatar"]') ?? [])].map(e => e.getBoundingClientRect());
+      const more = card?.querySelector('[data-testid="task-participants-more"]');
+      const title = card?.querySelector('[data-testid="task-participants"]')?.getAttribute('title') ?? '';
+      return { n: av.length, cys: av.map(r => r.y + r.height / 2), xs: av.map(r => r.x), w: av[0]?.width ?? 0, more: more?.textContent ?? '', moreCy: more ? more.getBoundingClientRect().y + more.getBoundingClientRect().height / 2 : 0, title };
+    });
+    record(vp, 'cards: participants stack', {
+      three: pst.n === 3, plusOne: pst.more.includes('+1'),
+      oneCentreLine: Math.max(...pst.cys, pst.moreCy) - Math.min(...pst.cys, pst.moreCy) <= 1,
+      overlap: pst.xs.length === 3 && pst.xs[1] - pst.xs[0] < pst.w && pst.xs[2] - pst.xs[1] === pst.xs[1] - pst.xs[0],
+      hoverListsAll: pst.title.includes('成员乙') && pst.title.includes('demo-node-b') && !/\bu_[0-9a-f]{12}\b/.test(pst.title),
+    }, { cys: pst.cys.map(r1).join('/'), moreCy: r1(pst.moreCy) });
+  }
+
+  // due picker in the drawer: anchored under the field, equal cells, header / time rows on one line,
+  // keyboard to pick, HH:MM:SS (split hub) → hub stores UTC; card shows 「MM-DD HH:mm」, title has seconds
+  {
+    const pName = '看板卡片支持拖动换列';
+    await cardByName(page, pName).click();
+    await page.locator(tid('req-detail')).waitFor();
+    await page.locator(tid('req-edit-due')).scrollIntoViewIfNeeded();
+    await page.locator(tid('req-edit-due')).click();
+    await page.locator(tid('req-edit-due-panel')).waitFor();
+    await page.waitForTimeout(300);
+    const geo2 = await page.evaluate(() => {
+      const r = (sel) => { const e = document.querySelector(sel); if (!e) return null; const b = e.getBoundingClientRect(); return { x: b.x, y: b.y, w: b.width, h: b.height, cy: b.y + b.height / 2, b: b.bottom }; };
+      const cells = [...document.querySelectorAll('[data-testid^="req-edit-due-day-"]')].map(e => e.getBoundingClientRect());
+      const time = ['hh', 'mm', 'ss'].map(k => r(`[data-testid="req-edit-due-${k}"]`)).filter(Boolean);
+      return { field: r('[data-testid="req-edit-due"]'), panel: r('[data-testid="req-edit-due-panel"]'), prev: r('[data-testid="req-edit-due-prev"]'), month: r('[data-testid="req-edit-due-month"]'), next: r('[data-testid="req-edit-due-next"]'),
+        cellWs: cells.map(c => c.width), rowYs: [...new Set(cells.map(c => Math.round(c.y)))].length, cells: cells.length, time, allday: r('[data-testid="req-edit-due-allday"]') };
+    });
+    // keyboard: → then ↓ from today = today + 8 days
+    await page.keyboard.press('ArrowRight');
+    await page.keyboard.press('ArrowDown');
+    let expectDate = await page.evaluate(() => { const d = new Date(); d.setDate(d.getDate() + 8); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; });
+    const selected = await page.evaluate(() => [...document.querySelectorAll('[data-testid^="req-edit-due-day-"]')].find(e => e.getAttribute('aria-selected') === 'true')?.dataset.testid);
+    if (ROLES === 'two') {
+      await page.locator(tid('req-edit-due-allday')).click();
+      await page.locator(tid('req-edit-due-hh')).fill('18');
+      await page.locator(tid('req-edit-due-mm')).fill('30');
+      await page.locator(tid('req-edit-due-ss')).fill('45');
+    }
+    await shot(page, 'flow-due-picker');
+    await page.locator(tid('req-edit-due-ok')).click();
+    await page.locator(tid('req-edit-save')).click();
+    await page.waitForTimeout(700);
+    const saved = (await hubRow(pName))?.due;
+    // 东八区 18:30:45 = UTC 10:30:45
+    const want = ROLES === 'two' ? `${expectDate}T10:30:45Z` : expectDate;
+    await page.locator(tid('req-detail-close')).click();
+    await page.waitForTimeout(300);
+    const chip = await page.evaluate((n) => {
+      const card = [...document.querySelectorAll('[data-testid^="req-card-"]')].find(c => c.textContent.includes(n));
+      const d = card?.querySelector('[data-testid="task-due"]');
+      return { text: d?.textContent ?? '', title: d?.getAttribute('title') ?? '' };
+    }, pName);
+    const cw = geo2.cellWs;
+    const heads = [geo2.prev, geo2.month, geo2.next].filter(Boolean).map(x => x.cy);
+    const timeCys = [...geo2.time.map(x => x.cy), ...(geo2.allday ? [geo2.allday.cy] : [])];
+    record(vp, 'due picker: geometry + keyboard + stored value', {
+      anchoredLeft: Math.abs(geo2.panel.x - geo2.field.x) <= 1,
+      anchoredBelow: Math.abs(geo2.panel.y - (geo2.field.b + 6)) <= 1 || geo2.panel.b <= geo2.field.y,
+      grid42: geo2.cells === 42 && geo2.rowYs === 6,
+      equalCells: Math.max(...cw) - Math.min(...cw) <= 0.5,
+      headerLine: Math.max(...heads) - Math.min(...heads) <= 1,
+      timeRow: ROLES !== 'two' ? geo2.time.length === 0 : (geo2.time.length === 3 && Math.max(...timeCys) - Math.min(...timeCys) <= 1),
+      keyboard: selected === `req-edit-due-day-${expectDate}`,
+      hubValue: saved === want,
+      cardLabel: ROLES === 'two' ? chip.text.includes('18:30') && !chip.text.includes(':45') : true,
+      titleSeconds: ROLES === 'two' ? chip.title.includes('18:30:45') : chip.title.includes('全天'),
+    }, { saved, want, chip: chip.text, title: chip.title, panelX: r1(geo2.panel.x), fieldX: r1(geo2.field.x), panelY: r1(geo2.panel.y), fieldBottom: r1(geo2.field.b), cell: r1(cw[0]) });
+  }
+
   // drawer edit
   await cardByName(page, '设置页拆分子页面').click();
   await page.locator(tid('req-detail')).waitFor();
@@ -280,6 +546,11 @@ async function desktopFlows(page, vp) {
   await page.locator(tid('req-edit-name')).fill('设置页拆分子页面(已编辑)');
   await page.locator(tid('req-edit-priority-high')).click();
   await page.locator(tid('req-edit-due-tomorrow')).click();
+  if (ROLES === 'two') {
+    await page.locator(tid('req-edit-owner-agent')).click();
+    await page.locator(tid('person-node:node_demo_b')).click();
+    await page.locator(tid('people-confirm')).click();
+  }
   await shot(page, 'flow-drawer-edit');
   await page.locator(tid('req-edit-save')).click();
   await page.waitForTimeout(800);
@@ -287,18 +558,33 @@ async function desktopFlows(page, vp) {
   record(vp, 'flow: edit in drawer', {
     drawerTopOnHeaderBottom: Math.abs(drawer.y - header.b) <= 1, drawerRightOnContentRight: Math.abs(drawer.r - root.r) <= 1,
     hubTitle: !!edited, hubPriority: edited?.priority === 'high', hubDue: !!edited?.due,
+    hubAgent: ROLES !== 'two' || edited?.agent_owner?.id === 'node_demo_b',
   }, { drawerTop: r1(drawer.y), headerBottom: r1(header.b), drawerRight: r1(drawer.r), contentRight: r1(root.r) });
   await page.locator(tid('req-detail-close')).click();
 
   // filter by owner from the sidebar
+  // 没任务的节点折在「更多节点」里:先展开、搜到再点
+  if (!(await page.locator(tid('task-side-node:node_demo_a')).count())) {
+    await page.locator(tid('task-side-more-nodes')).click();
+    await page.locator(tid('task-side-more-search')).fill('demo-node-a');
+  }
   await page.locator(tid('task-side-node:node_demo_a')).click();
   await page.waitForTimeout(400);
   const shown = await page.locator('[data-testid^="req-card-"]').allTextContents();
   const all = await hubList();
-  const expectA = all.filter(r => r.owner?.id === 'node_demo_a').length;
+  const expectA = all.filter(r => (ROLES === 'two' ? r.agent_owner?.id : r.owner?.id) === 'node_demo_a').length;
   const chip = (await page.locator(tid('task-filter-owner')).textContent()) || '';
   await shot(page, 'flow-filter-node-a');
   record(vp, 'flow: filter by owner (sidebar)', { onlyA: shown.length === expectA, chipReads: chip.includes('demo-node-a') }, { shown: shown.length, expect: expectA });
+  if (ROLES === 'two') {
+    await page.locator(tid('task-side-mine')).click();
+    await page.waitForTimeout(400);
+    const mine = await page.locator('[data-testid^="req-card-"]').count();
+    const expectMine = all.filter(r => r.owner?.kind === 'user' && r.owner.id === HUB_ME).length;
+    const label = (await page.locator('[data-testid="task-sidebar"]').textContent()) || '';
+    await shot(page, 'flow-filter-mine');
+    record(vp, 'flow: 我负责的 = 负责人 is me; sidebar says 按 Agent', { mine: mine === expectMine && mine > 0, agentSection: label.includes('按 Agent') }, { shown: mine, expect: expectMine });
+  }
   await page.locator(tid('task-side-all')).click();
   await page.waitForTimeout(300);
 
@@ -373,6 +659,15 @@ async function phoneFlows(page, vp) {
   const sheet = await box(page, tid('req-create'));
   await shot(page, 'flow-phone-create-sheet');
   record(vp, 'phone: create is a bottom sheet', { atBottom: Math.abs(sheet.b - 844) <= 1, fullWidth: Math.abs(sheet.w - 390) <= 1 }, { bottom: r1(sheet.b), w: r1(sheet.w) });
+  // calendar in the create sheet is itself a bottom sheet
+  await page.locator(tid('req-due')).click();
+  await page.locator(tid('req-due-panel')).waitFor();
+  await page.waitForTimeout(500);
+  const cal = await box(page, tid('req-due-panel'));
+  await shot(page, 'flow-phone-due-sheet');
+  record(vp, 'phone: calendar is a bottom sheet', { atBottom: Math.abs(cal.b - 844) <= 1, fullWidth: Math.abs(cal.w - 390) <= 1 }, { bottom: r1(cal.b), w: r1(cal.w) });
+  await page.locator(tid('req-due-cancel')).click();
+  await page.waitForTimeout(300);
   await page.locator(tid('req-create-close')).click();
   // grouped list
   await page.locator(tid('tasks-view-list')).click();

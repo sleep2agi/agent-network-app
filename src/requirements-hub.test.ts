@@ -10,6 +10,24 @@ const row = requirementFromHub({ id: 'req_1', name: '多端', priority: 'high', 
 ck('Hub 行能变成卡片', !!row && row.column === 'doing' && row.name === '多端' && row.due === '2026-10-01');
 ck('坏日期丢掉，缺名字丢掉', requirementFromHub({ id: 'x', name: 'a', due: 'nope' })?.due === '' && requirementFromHub({ id: 'x' }) === null);
 
+{
+  const both = requirementFromHub({ id: 'r', name: '两个角色', owner: { kind: 'user', id: 'u' }, participants: [], agent_owner: { kind: 'node', id: 'n' } });
+  ck('Hub 行带 agent_owner → agentOwner {node}', JSON.stringify(both?.agentOwner) === '{"kind":"node","id":"n"}' && JSON.stringify(both?.owner) === '{"kind":"user","id":"u"}');
+  ck('agent_owner: null → 支持但未分配', requirementFromHub({ id: 'r', name: 'x', owner: null, participants: [], agent_owner: null })?.agentOwner === null);
+  ck('旧 Hub 行没有 agent_owner 字段 → undefined(退回单一负责人)', requirementFromHub({ id: 'r', name: 'x', owner: null, participants: [] })?.agentOwner === undefined);
+  ck('agent_owner 种类不对当未分配,卡片不丢', requirementFromHub({ id: 'r', name: 'x', owner: null, participants: [], agent_owner: { kind: 'user', id: 'u' } })?.agentOwner === null);
+}
+
+{
+  const row = requirementFromHub({ id: 'r', name: 'x', description: '# 标题', checklist: [{ id: 'a', text: '一', done: true }, { id: '', text: '坏' }, 'junk', { id: 'b', text: '二' }] });
+  ck('描述 / 子任务读进来,坏项丢掉', row?.description === '# 标题' && JSON.stringify(row?.checklist) === '[{"id":"a","text":"一","done":true},{"id":"b","text":"二","done":false}]');
+  ck('旧 Hub 没有这两个字段 → undefined', requirementFromHub({ id: 'r', name: 'x' })?.description === undefined && requirementFromHub({ id: 'r', name: 'x' })?.checklist === undefined);
+}
+
+{
+  ck('project_id 读进来;null / 缺省区分', requirementFromHub({ id: 'r', name: 'x', project_id: 'proj_1' })?.projectId === 'proj_1' && requirementFromHub({ id: 'r', name: 'x', project_id: null })?.projectId === null && requirementFromHub({ id: 'r', name: 'x' })?.projectId === undefined);
+}
+
 function card(id: string, name: string, column: Requirement['column'] = 'pool'): Requirement {
   return { id, name, priority: 'normal', assignee: '', due: '', column, createdAt: '2026-09-28T00:00:00.000Z' };
 }

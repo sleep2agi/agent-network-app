@@ -30,9 +30,17 @@ mock.module('./src/api', () => ({ fetchHubNodes: async () => ({ nodes: [] }) }))
 // The picker renders AliasAvatar. The real module pulls image assets and ui-scale,
 // which this isolated theme mock does not provide.
 mock.module('./src/AliasAvatar', () => ({ default: () => null }));
+// The detail's description preview renders MarkdownMessage (image assets, native text selection…).
+mock.module('./src/MarkdownMessage', () => ({ default: ({ children }: any) => React.createElement('Text', { testID: 'markdown' }, children) }));
 
 const card = { id: 'r1', name: '验证需求详情', assignee: '负责人甲', priority: 'normal', due: '', column: 'pool', createdAt: '' };
 let typedCards = false;
+let roleCards = false;
+let detailCards = false;
+let projectsMock: any[] | null = null;
+let dueCaps = false;
+let participantCards = false;
+let itemWrites: any[] = [];
 let requests: any[] = [];
 let creates: any[] = [];
 let edits: any[] = [];
@@ -40,15 +48,35 @@ let editReply: ((v: any) => any) | null = null;
 let reply: (value: any) => void;
 let reject: (error: Error) => void;
 class HubError extends Error { constructor(public status: number, message = 'HTTP ' + status) { super(message); } }
+const listRows = async () => [
+    { ...card, ...(typedCards || roleCards ? { owner: null, participants: [] } : {}),
+      ...(participantCards ? { owner: { kind: 'user', id: 'u' }, participants: [{ kind: 'user', id: 'u' }, { kind: 'node', id: 'n1' }, { kind: 'user', id: 'u_a4944afaa30b' }, { kind: 'node', id: 'n_e06d936d' }] } : {}), ...(roleCards ? { agentOwner: null } : {}),
+      ...(projectsMock ? { projectId: 'p1' } : {}),
+      ...(detailCards ? { description: '## 目标', checklist: [{ id: 'a', text: '写接口', done: false }, { id: 'b', text: '写测试', done: true }] } : {}) },
+    { ...card, id: 'r2', name: '另一个需求', ...(roleCards ? { owner: null, participants: [], agentOwner: null } : {}) },
+  ];
 mock.module('./src/requirements-hub', () => ({
-  listRequirements: async () => [{ ...card, ...(typedCards ? { owner: null, participants: [] } : {}) }, { ...card, id: 'r2', name: '另一个需求' }], migrateLocalRequirements: async () => {},
-  createRequirementOnHub: async (_cfg: any, input: any) => { creates.push(input); return { ...card, ...input, id: 'new', owner: input.owner || null, participants: [] }; },
+  listRequirements: async () => listRows(),
+  migrateLocalRequirements: async () => {},
+  probeAgentOwnerSupport: async () => roleCards,
+  listProjects: async () => projectsMock,
+  listRequirementsFull: async () => ({ rows: await listRows(), capabilities: dueCaps ? ['due_datetime'] : [] }),
+  createProject: async () => { throw new Error('not used'); },
+  updateProject: async () => { throw new Error('not used'); },
+  createRequirementOnHub: async (_cfg: any, input: any) => { creates.push(input); return { ...card, ...input, id: 'new', owner: input.owner || null, participants: [], ...(roleCards ? { agentOwner: input.agentOwner || null } : {}) }; },
   updateRequirementOnHub: async (_cfg: any, id: string, patch: any) => {
     edits.push({ id, patch });
     if (editReply) return editReply(patch);
-    return { ...card, id, ...patch, owner: patch.owner === undefined ? null : patch.owner, participants: [] };
+    const { agent_owner, ...rest } = patch;
+    if (detailCards) return { ...card, id, description: '## 目标', checklist: [], ...rest };
+    if (projectsMock) { const { project_id, ...others } = rest; return { ...card, id, ...others, owner: null, participants: [], projectId: project_id === undefined ? 'p1' : project_id }; }
+    return { ...card, id, ...rest, owner: patch.owner === undefined ? null : patch.owner, participants: [], ...(roleCards ? { agentOwner: agent_owner === undefined ? null : agent_owner } : {}) };
   },
   fetchMyUserId: async () => 'u',
+  setChecklistItemOnHub: async (_cfg: any, id: string, itemId: string, done: boolean) => {
+    itemWrites.push({ id, itemId, done });
+    return { ...card, id, description: '## 目标', checklist: [{ id: 'a', text: '写接口', done: itemId === 'a' ? done : false }, { id: 'b', text: '写测试', done: itemId === 'b' ? done : true }] };
+  },
   RequirementsHubError: HubError,
   moveRequirementOnHub: (cfg: any, id: string, column: string) => {
     requests.push({ network: cfg.networkId, id, column });
@@ -58,7 +86,7 @@ mock.module('./src/requirements-hub', () => ({
 let saveAssignment: (result: any) => void;
 const assignmentWrites: any[] = [];
 mock.module('./src/requirement-people-api', () => ({
-  listRequirementPeople: async () => [{ kind: 'user', id: 'u', name: '成员', networkId: 'a' }],
+  listRequirementPeople: async () => [{ kind: 'user', id: 'u', name: '成员', networkId: 'a' }, { kind: 'node', id: 'n1', name: '执行节点', networkId: 'a' }],
   saveRequirementAssignments: (_cfg: unknown, id: string, value: unknown) => {
     assignmentWrites.push({ id, value });
     return new Promise(resolve => { saveAssignment = resolve; });
@@ -68,6 +96,7 @@ const { default: Board } = await import('./src/RequirementBoard');
 const { default: PeoplePicker } = await import('./src/RequirementPeoplePicker');
 const { default: AssignmentsEditor } = await import('./src/RequirementAssignmentsEditor');
 const { setTaskSection } = await import('./src/task-board-store');
+const { addDays, dueFromLocal, localDateOf } = await import('./src/due-time');
 // 每个用例一个新 token ⇒ 新的看板作用域(共享 store 不串用例)。
 let seq = 0;
 let cfg = { serverUrl: 'http://isolated.test', token: 'test', networkId: 'a' };
@@ -80,7 +109,7 @@ async function mount() {
   setTaskSection('board');
   await act(async () => { renderer = create(<Board cfg={cfg} />); });
 }
-afterEach(async () => { typedCards = false; if (renderer) await act(async () => renderer.unmount()); });
+afterEach(async () => { dueCaps = false; participantCards = false; typedCards = false; roleCards = false; detailCards = false; itemWrites = []; projectsMock = null; if (renderer) await act(async () => renderer.unmount()); });
 
 test('header has no permanent inputs or dev note; 新建 opens the dialog', async () => {
   await mount();
@@ -107,17 +136,45 @@ test('new card binds stable owner {kind,id}, keeps assignee empty and shows the 
   expect(texts('req-card-new')).toContain('成员');
 });
 
-test('create dialog validates title and date before any write', async () => {
+test('create dialog validates the title before any write; the calendar picks a date (all day)', async () => {
   await mount();
   await act(async () => byId('req-new').props.onPress());
   await act(async () => byId('req-add').props.onPress());
   expect(creates).toHaveLength(0);
   expect(JSON.stringify(renderer.toJSON())).toContain('先写任务标题');
   await act(async () => byId('req-name').props.onChangeText('甲'));
-  await act(async () => byId('req-due').props.onChangeText('2026-02-30'));
+  // 月历:打开 → 下个月 → 点 15 号 → 确定
+  await act(async () => byId('req-due').props.onPress());
+  expect(byId('req-due-calendar')).toBeTruthy();
+  await act(async () => byId('req-due-next').props.onPress());
+  const month = String(byId('req-due-month').props.children.join(''));
+  const [y, m] = month.replace('月', '').split('年').map(Number);
+  const day = `${y}-${String(m).padStart(2, '0')}-15`;
+  await act(async () => byId(`req-due-day-${day}`).props.onPress());
+  // 旧 Hub(没有 due_datetime 能力):没有时刻那一栏,存的是全天
+  expect(renderer.root.findAllByProps({ testID: 'req-due-time' })).toHaveLength(0);
+  await act(async () => byId('req-due-ok').props.onPress());
   await act(async () => byId('req-add').props.onPress());
-  expect(creates).toHaveLength(0);
-  expect(JSON.stringify(renderer.toJSON())).toContain('日期写成 2026-10-01');
+  expect(creates[0].due).toBe(day);
+});
+
+test('hub with due_datetime: the calendar has 全天 + HH:MM:SS and stores UTC to the second', async () => {
+  dueCaps = true;
+  await mount();
+  await act(async () => byId('req-new').props.onPress());
+  await act(async () => byId('req-name').props.onChangeText('带时刻'));
+  await act(async () => byId('req-due').props.onPress());
+  expect(byId('req-due-time')).toBeTruthy();
+  const today = localDateOf(Date.now());
+  await act(async () => byId(`req-due-day-${today}`).props.onPress());
+  await act(async () => byId('req-due-allday').props.onPress());
+  await act(async () => byId('req-due-hh').props.onChangeText('18'));
+  await act(async () => byId('req-due-mm').props.onChangeText('30'));
+  await act(async () => byId('req-due-ss').props.onChangeText('45'));
+  await act(async () => byId('req-due-ok').props.onPress());
+  await act(async () => byId('req-add').props.onPress());
+  expect(creates[0].due).toBe(dueFromLocal(today, { hh: 18, mm: 30, ss: 45 }));
+  expect(creates[0].due).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/);
 });
 
 test('column quick-add creates in that column (touch: through the dialog)', async () => {
@@ -189,10 +246,10 @@ test('existing card can change title, priority and due; nothing is written befor
   expect(byId('req-edit-save').props.disabled).toBe(true);
   await act(async () => byId('req-edit-name').props.onChangeText('改过的标题'));
   await act(async () => byId('req-edit-priority-high').props.onPress());
-  await act(async () => byId('req-edit-due').props.onChangeText('2026-12-01'));
+  await act(async () => byId('req-edit-due-tomorrow').props.onPress());
   expect(edits).toHaveLength(0);
   await act(async () => byId('req-edit-save').props.onPress());
-  expect(edits).toEqual([{ id: 'r1', patch: { name: '改过的标题', priority: 'high', due: '2026-12-01' } }]);
+  expect(edits).toEqual([{ id: 'r1', patch: { name: '改过的标题', priority: 'high', due: addDays(localDateOf(Date.now()), 1) } }]);
   expect(texts('req-card-r1')).toContain('改过的标题');
 });
 
@@ -221,6 +278,126 @@ test('owner changed in details is saved as {kind,id} with 保存修改 and shows
   expect(edits).toEqual([{ id: 'r1', patch: { owner: { kind: 'user', id: 'u' } } }]);
   await act(async () => byId('req-detail-close').props.onPress());
   expect(texts('req-card-r1')).toContain('成员');
+});
+
+test('two-role hub: 负责人 lists only humans, 负责 Agent only agents; both go out as {kind,id}', async () => {
+  roleCards = true;
+  await mount();
+  await act(async () => byId('req-new').props.onPress());
+  await act(async () => byId('req-name').props.onChangeText('分两个角色'));
+  await act(async () => byId('req-assignee').props.onPress());
+  expect(renderer.root.findAllByProps({ testID: 'person-node:n1' })).toHaveLength(0);
+  await act(async () => byId('person-user:u').props.onPress());
+  await act(async () => byId('people-confirm').props.onPress());
+  await act(async () => byId('req-assignee-agent').props.onPress());
+  expect(renderer.root.findAllByProps({ testID: 'person-user:u' })).toHaveLength(0);
+  await act(async () => byId('person-node:n1').props.onPress());
+  await act(async () => byId('people-confirm').props.onPress());
+  await act(async () => byId('req-add').props.onPress());
+  expect(creates[0].owner).toEqual({ kind: 'user', id: 'u' });
+  expect(creates[0].agentOwner).toEqual({ kind: 'node', id: 'n1' });
+  expect(creates[0].assignee).toBe('');
+  const avatars = byId('req-card-new').findAll(n => typeof n.props.testID === 'string' && n.props.testID.startsWith('task-avatar-')).map(n => n.props.testID);
+  expect([...new Set(avatars)]).toEqual(['task-avatar-owner', 'task-avatar-agent']);
+});
+
+test('two-role hub: detail changes 负责 Agent alone with 保存修改', async () => {
+  roleCards = true;
+  await mount();
+  await act(async () => byId('req-card-r1').props.onPress());
+  await act(async () => byId('req-edit-owner-agent').props.onPress());
+  await act(async () => byId('person-node:n1').props.onPress());
+  await act(async () => byId('people-confirm').props.onPress());
+  expect(edits).toHaveLength(0);
+  await act(async () => byId('req-edit-save').props.onPress());
+  expect(edits).toEqual([{ id: 'r1', patch: { agent_owner: { kind: 'node', id: 'n1' } } }]);
+});
+
+test('hub without agent_owner keeps the single 负责人 picker (humans and agents)', async () => {
+  typedCards = true;
+  await mount();
+  await act(async () => byId('req-new').props.onPress());
+  expect(renderer.root.findAllByProps({ testID: 'req-assignee-agent' })).toHaveLength(0);
+  await act(async () => byId('req-assignee').props.onPress());
+  expect(byId('person-node:n1')).toBeTruthy();
+  expect(byId('person-user:u')).toBeTruthy();
+});
+
+test('description and checklist: card progress, per-item toggle, add/delete replace the list, description saves with 保存修改', async () => {
+  detailCards = true;
+  await mount();
+  expect(texts('req-card-r1')).toContain('1');
+  expect(byId('req-card-r1').findAll(n => n.props.testID === 'task-checklist-progress').length).toBeGreaterThan(0);
+  await act(async () => byId('req-card-r1').props.onPress());
+  expect(byId('req-description')).toBeTruthy();
+  expect(JSON.stringify(byId('req-description-preview').findAllByType('Text').map(n => n.props.children))).toContain('## 目标');
+  // 勾一项:单项接口,只带那一项
+  await act(async () => byId('req-checklist-item-a').props.onPress());
+  expect(itemWrites).toEqual([{ id: 'r1', itemId: 'a', done: true }]);
+  expect(edits).toHaveLength(0);
+  // 加一项:整张清单
+  await act(async () => byId('req-checklist-input').props.onChangeText('发版'));
+  await act(async () => byId('req-checklist-add').props.onPress());
+  expect(edits[0].patch.checklist.map((i: any) => i.text)).toEqual(['写接口', '写测试', '发版']);
+  expect(edits[0].patch.checklist[2].id).toMatch(/^ck_[0-9a-f]{16}$/);
+  // 删一项(手机:删除按钮常驻)
+  await act(async () => byId('req-checklist-delete-b').props.onPress());
+  expect(edits[1].patch.checklist.map((i: any) => i.id)).not.toContain('b');
+  // 描述:编辑后跟「保存修改」一起发
+  await act(async () => byId('req-description-mode-edit').props.onPress());
+  await act(async () => byId('req-description-input').props.onChangeText('## 目标\n- 新的验收标准'));
+  await act(async () => byId('req-edit-save').props.onPress());
+  expect(edits[2].patch).toEqual({ description: '## 目标\n- 新的验收标准' });
+});
+
+test('hub without description/checklist hides both sections and says to upgrade', async () => {
+  await mount();
+  await act(async () => byId('req-card-r1').props.onPress());
+  expect(byId('req-details-unsupported')).toBeTruthy();
+  expect(renderer.root.findAllByProps({ testID: 'req-checklist' })).toHaveLength(0);
+  expect(renderer.root.findAllByProps({ testID: 'req-description' })).toHaveLength(0);
+});
+
+test('projects: create defaults to the selected project; detail moves a card to another project', async () => {
+  projectsMock = [{ id: 'p1', name: '军团项目', color: '#2563eb', sort: 0, archived: false }, { id: 'p2', name: 'TMAI', color: '#7c3aed', sort: 1, archived: false }, { id: 'p3', name: '旧', color: '#4b5563', sort: 2, archived: true }];
+  const { setTaskFilter } = await import('./src/task-board-store');
+  await mount();
+  await act(async () => setTaskFilter({ owners: [], priorities: [], project: 'p2' }));
+  await act(async () => byId('req-new').props.onPress());
+  expect(byId('req-project-p2').props.accessibilityState.checked).toBe(true);
+  expect(renderer.root.findAllByProps({ testID: 'req-project-p3' })).toHaveLength(0);
+  await act(async () => byId('req-name').props.onChangeText('TMAI 的任务'));
+  await act(async () => byId('req-add').props.onPress());
+  expect(creates[0].projectId).toBe('p2');
+  await act(async () => setTaskFilter({ owners: [], priorities: [], project: '' }));
+  await act(async () => byId('req-card-r1').props.onPress());
+  expect(byId('req-edit-project-p1').props.accessibilityState.checked).toBe(true);
+  await act(async () => byId('req-edit-project-p2').props.onPress());
+  await act(async () => byId('req-edit-save').props.onPress());
+  expect(edits).toEqual([{ id: 'r1', patch: { project_id: 'p2' } }]);
+});
+
+test('hub without projects: no project picker, no project chip filter', async () => {
+  await mount();
+  expect(renderer.root.findAllByProps({ testID: 'task-filter-project' })).toHaveLength(0);
+  await act(async () => byId('req-new').props.onPress());
+  expect(renderer.root.findAllByProps({ testID: 'req-project-none' })).toHaveLength(0);
+});
+
+test('participants: avatar chips in detail, stack of 3 + 「+N」 on cards, unknown members never show a raw id', async () => {
+  participantCards = true;
+  await mount();
+  const stack = byId('req-card-r1').findAll(n => n.props.testID === 'task-participant-avatar');
+  expect(stack.length).toBe(3);
+  expect(JSON.stringify(byId('req-card-r1').findAll(n => n.props.testID === 'task-participants-more').map(n => n.props.children))).toContain('1');
+  await act(async () => byId('req-card-r1').props.onPress());
+  const chips = JSON.stringify(byId('participants-chips').findAllByType('Text').map(n => n.props.children));
+  expect(chips).toContain('成员');
+  expect(chips).toContain('执行节点');
+  expect(chips).toContain('未知成员（faa30b）');
+  expect(chips).not.toContain('u_a4944afaa30b');
+  expect(chips).not.toContain('n_e06d936d');
+  expect(renderer.root.findAllByType('ActivityIndicator').filter(n => n.props.testID === undefined)).toHaveLength(0);
 });
 
 test('people picker separates identical user/node names, stages selection, and confirms stable references', async () => {

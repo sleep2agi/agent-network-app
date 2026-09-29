@@ -13,11 +13,11 @@ import { Text, TextInput } from './ui-text';
 import { Ionicons } from './icons';
 import AliasAvatar from './AliasAvatar';
 import type { HubConfig } from './api';
-import { REQ_COLUMN_LABEL, REQ_COLUMNS, REQ_PRIORITIES, REQ_PRIORITY_LABEL, type ReqColumn, type Requirement } from './requirements-model';
+import { REQ_COLUMN_LABEL, REQ_COLUMNS, REQ_PRIORITIES, REQ_PRIORITY_LABEL, type ChecklistItem, type ReqColumn, type Requirement, type RequirementProject } from './requirements-model';
 import { readRequirements, requirementsKey, writeRequirements } from './requirements-store';
-import { createRequirementOnHub, fetchMyUserId, listRequirements, migrateLocalRequirements, moveRequirementOnHub, RequirementsHubError, updateRequirementOnHub } from './requirements-hub';
+import { createProject, createRequirementOnHub, fetchMyUserId, listProjects, listRequirementsFull, setChecklistItemOnHub, updateProject, listRequirements, migrateLocalRequirements, moveRequirementOnHub, probeAgentOwnerSupport, RequirementsHubError, updateRequirementOnHub } from './requirements-hub';
 import { listRequirementPeople } from './requirement-people-api';
-import { personKey } from './requirement-people';
+import { personKey, type RequirementPerson } from './requirement-people';
 import { colors, radius, spacing } from './theme';
 import { elevated } from './elevation';
 import { pointerUi } from './pointer-ui';
@@ -25,14 +25,16 @@ import { useModalSafePadding } from './safe-area-runtime';
 import { usePoll } from './usePoll';
 import {
   applyFilter, applyMove, boardColumns, createInput, DEFAULT_SORT, DRAG_IDLE, dragReduce, dropIndex, emptyDraft,
-  filterActive, localToday, neighbourColumn, nextSort, ownerCounts, ownerLabel, revertMove, sortRows, toggleIn, UNASSIGNED,
+  activeProjects, defaultProjectFor, NO_PROJECT, projectCounts,
+  filterActive, hasRoles, localToday, addChecklistItem, moveChecklistItem, removeChecklistItem, setChecklistDone, neighbourColumn, nextSort, ownerCounts, ownerLabel, revertMove, sortRows, toggleIn, UNASSIGNED,
   type CreateDraft, type DragEvent, type DragState, type EditPatch, type SortKey, type SortSpec,
 } from './task-board-model';
-import { enterTaskScope, patchTaskBoard, setTaskFilter, setTaskSection, taskScopeKey, updateTaskItems, useTaskBoard, type TaskSection } from './task-board-store';
-import { CardMeta, Chip, DueChip, OwnerBadge, PriorityDot, Segmented, STATUS_TONE, useTaskStyles, type TaskStyles } from './TaskBoardParts';
+import { enterTaskScope, patchTaskBoard, setManagingProjects, setTaskFilter, setTaskSection, taskScopeKey, updateTaskItems, useTaskBoard, type TaskSection } from './task-board-store';
+import { CardMeta, ChecklistProgress, Chip, ParticipantStack, ProjectChip, DueChip, OwnerBadge, PriorityDot, Segmented, STATUS_TONE, useTaskStyles, type TaskStyles, a11yState } from './TaskBoardParts';
 import TaskCreateDialog from './TaskCreateDialog';
 import TaskDetailPanel from './TaskDetailPanel';
 import TaskCardMenu, { type TaskMenuTarget } from './TaskCardMenu';
+import TaskProjectManager from './TaskProjectManager';
 import { setDraggingCursor, useTaskCardDom } from './task-board-dom';
 
 const UNSUPPORTED = '这个 Hub 还没有需求池。升级 Hub 之后，手机和电脑才能看到同一份。';
@@ -41,6 +43,10 @@ const POLL_MS = 15_000;
 /** 内容区窄于这个宽度:看板改成横向一列一屏,详情改成推入页。 */
 const NARROW = 700;
 const DRAWER_MIN = 860;
+
+/** 筛选键(user:… / node:…)对应的名字:没有卡片的人不在 ownerCounts 里,从成员表取。 */
+const keyName = (key: string, people: readonly { kind: string; id: string; name: string }[]) =>
+  people.find(p => `${p.kind}:${p.id}` === key)?.name || key.split(':').slice(1).join(':') || '负责人';
 
 const moveErrorText = (e: unknown) => (e instanceof RequirementsHubError && e.status === 403 ? '你没有修改这条需求的权限' : '状态未保存，请重试');
 
@@ -58,6 +64,10 @@ function ScopedRequirementBoard({ cfg, desktop, dispatch }: { cfg: HubConfig; de
   const storePeople = useTaskBoard(st => st.people);
   const meId = useTaskBoard(st => (st.scope === scope ? st.meId : null));
   const section = useTaskBoard(st => st.section);
+  const twoRoles = useTaskBoard(st => (st.scope === scope ? st.twoRoles === true : false));
+  const projects = useTaskBoard(st => (st.scope === scope ? st.projects : null));
+  const managingProjects = useTaskBoard(st => st.managingProjects);
+  const dueDatetime = useTaskBoard(st => st.scope === scope && st.capabilities.includes('due_datetime'));
   const filter = useTaskBoard(st => st.filter);
   const items = mine ? storeItems : [];
   const people = mine ? storePeople : [];
@@ -80,7 +90,7 @@ function ScopedRequirementBoard({ cfg, desktop, dispatch }: { cfg: HubConfig; de
   const [banner, setBanner] = useState('');
   const [menu, setMenu] = useState<TaskMenuTarget | null>(null);
   const [sort, setSort] = useState<SortSpec>(DEFAULT_SORT);
-  const [filterMenu, setFilterMenu] = useState<{ kind: 'owner' | 'priority'; x: number; y: number } | null>(null);
+  const [filterMenu, setFilterMenu] = useState<{ kind: 'owner' | 'priority' | 'project'; x: number; y: number } | null>(null);
   const [quickAdd, setQuickAdd] = useState<{ column: ReqColumn; name: string } | null>(null);
   const [announce, setAnnounce] = useState('');
   const pendingMoves = useRef(new Set<string>());
@@ -96,9 +106,15 @@ function ScopedRequirementBoard({ cfg, desktop, dispatch }: { cfg: HubConfig; de
     (async () => {
       try {
         await migrateLocalRequirements(cfg, () => readRequirements(localKey), rows => writeRequirements(localKey, rows));
-        const list = await listRequirements(cfg);
+        const { rows: list, capabilities } = await listRequirementsFull(cfg);
         if (dead) return;
-        patchTaskBoard(scope, { items: list, loaded: true });
+        // 分不分两个角色:有卡片就看行里带没带 agent_owner;一张都没有才去探 Hub。
+        const roles = list.length ? list.some(hasRoles) : await probeAgentOwnerSupport(cfg);
+        if (dead) return;
+        // 项目:旧 Hub 没有这个路由 → null,界面把项目整个藏起来;读失败也按没有处理,不挡看板。
+        const projectList = await listProjects(cfg).catch(() => null);
+        if (dead) return;
+        patchTaskBoard(scope, { items: list, loaded: true, twoRoles: roles, projects: projectList, capabilities });
         setPhase('ready');
         setHubError('');
       } catch (e) {
@@ -113,7 +129,7 @@ function ScopedRequirementBoard({ cfg, desktop, dispatch }: { cfg: HubConfig; de
   }, [cfg.serverUrl, cfg.token, cfg.networkId, localKey, reloadKey, scope]);
 
   // 有卡片带稳定负责人时读一次成员(卡片上的名字 / 头像、筛选里的人都从这里来)。
-  const hasOwners = items.some(item => item.owner);
+  const hasOwners = items.some(item => item.owner || item.agentOwner || item.participants?.length);
   useEffect(() => {
     if (!hasOwners || !cfg.networkId) return;
     let dead = false;
@@ -177,7 +193,7 @@ function ScopedRequirementBoard({ cfg, desktop, dispatch }: { cfg: HubConfig; de
   };
 
   const create = async (d: CreateDraft): Promise<string | null> => {
-    const input = createInput(d);
+    const input = createInput(d, twoRoles);
     if (!input) return '先写任务标题';
     try {
       const created = await track(() => createRequirementOnHub(cfg, input));
@@ -186,6 +202,36 @@ function ScopedRequirementBoard({ cfg, desktop, dispatch }: { cfg: HubConfig; de
       return null;
     } catch (e) {
       return e instanceof Error ? e.message : '没有存到 Hub';
+    }
+  };
+
+  // ── 子任务:勾选只改那一项(单项接口),增删排序改整张清单;都先乐观更新,失败退回 ──
+  const [checklistErrors, setChecklistErrors] = useState<Record<string, string>>({});
+  const setChecklistLocal = (id: string, next: ChecklistItem[]) => updateTaskItems(scope, rows => rows.map(row => (row.id === id ? { ...row, checklist: next } : row)));
+  const replaceChecklist = async (id: string, next: ChecklistItem[]) => {
+    const prev = items.find(row => row.id === id)?.checklist;
+    if (!prev) return;
+    setChecklistErrors(({ [id]: _, ...rest }) => rest);
+    setChecklistLocal(id, next);
+    try {
+      const updated = await track(() => updateRequirementOnHub(cfg, id, { checklist: next }));
+      setChecklistLocal(id, updated.checklist ?? next);
+    } catch (e) {
+      setChecklistLocal(id, prev);
+      setChecklistErrors(errs => ({ ...errs, [id]: e instanceof Error ? e.message : '子任务没有保存，请重试' }));
+    }
+  };
+  const toggleChecklist = async (id: string, itemId: string, done: boolean) => {
+    const list = items.find(row => row.id === id)?.checklist;
+    if (!list) return;
+    setChecklistErrors(({ [id]: _, ...rest }) => rest);
+    updateTaskItems(scope, rows => rows.map(row => (row.id === id && row.checklist ? { ...row, checklist: setChecklistDone(row.checklist, itemId, done) } : row)));
+    try {
+      const updated = await track(() => setChecklistItemOnHub(cfg, id, itemId, done));
+      if (updated.checklist) setChecklistLocal(id, updated.checklist);
+    } catch (e) {
+      updateTaskItems(scope, rows => rows.map(row => (row.id === id && row.checklist ? { ...row, checklist: setChecklistDone(row.checklist, itemId, !done) } : row)));
+      setChecklistErrors(errs => ({ ...errs, [id]: e instanceof Error ? e.message : '子任务没有保存，请重试' }));
     }
   };
 
@@ -205,9 +251,13 @@ function ScopedRequirementBoard({ cfg, desktop, dispatch }: { cfg: HubConfig; de
     const only = filter.owners.length === 1 ? filter.owners[0] : null;
     if (only && only !== UNASSIGNED) {
       const [kind, ...rest] = only.split(':');
-      if (kind === 'user' || kind === 'node') d.owner = { kind, id: rest.join(':') };
+      const ref = { kind, id: rest.join(':') } as const;
+      // 在某个 Agent 下建:分两个角色的 Hub 上它是负责 Agent;旧 Hub 上是唯一的负责人。
+      if (kind === 'node' && twoRoles) d.agentOwner = { kind: 'node', id: ref.id };
+      else if (kind === 'user' || kind === 'node') d.owner = { kind, id: ref.id };
     }
     if (filter.priorities.length === 1) d.priority = filter.priorities[0];
+    if (projects) d.projectId = defaultProjectFor(filter, projects);
     return d;
   };
 
@@ -261,11 +311,15 @@ function ScopedRequirementBoard({ cfg, desktop, dispatch }: { cfg: HubConfig; de
     ...(desktop ? [] : [{ key: 'dispatch' as const, label: '派发记录' }]),
   ];
   const ownerChipLabel = filter.owners.length === 0 ? '负责人'
-    : filter.owners.length === 1 ? (owners.find(o => o.key === filter.owners[0])?.name || (filter.owners[0] === UNASSIGNED ? '未分配' : '负责人'))
+    : filter.owners.length === 1 ? (owners.find(o => o.key === filter.owners[0])?.name || (filter.owners[0] === UNASSIGNED ? '未分配' : keyName(filter.owners[0], people)))
       : `负责人 · ${filter.owners.length}`;
+  const projectById = new Map((projects ?? []).map(p => [p.id, p]));
+  const selectedProject = filter.project && filter.project !== NO_PROJECT ? projectById.get(filter.project) : undefined;
+  const projectChipLabel = !filter.project ? '项目' : filter.project === NO_PROJECT ? '无项目' : selectedProject?.name || '项目';
+  const counts = useMemo(() => projectCounts(items, filter), [items, filter]);
   const priorityChipLabel = filter.priorities.length === 0 ? '优先级' : filter.priorities.map(p => REQ_PRIORITY_LABEL[p]).join('、');
   const chipRefs = useRef<Record<string, any>>({});
-  const openFilter = (kind: 'owner' | 'priority') => {
+  const openFilter = (kind: 'owner' | 'priority' | 'project') => {
     const el = chipRefs.current[kind];
     const done = (x: number, y: number, h: number) => setFilterMenu({ kind, x, y: y + h + 4 });
     if (el?.measureInWindow) el.measureInWindow((x: number, y: number, _w: number, h: number) => done(x, y, h));
@@ -295,8 +349,21 @@ function ScopedRequirementBoard({ cfg, desktop, dispatch }: { cfg: HubConfig; de
           leading={filter.priorities.length === 1 ? <PriorityDot p={filter.priorities[0]} s={s} /> : <Ionicons name="flag-outline" size={14} color={colors.textMuted} />}
         />
       </View>
+      {projects ? (
+        <View ref={(r: any) => { chipRefs.current.project = r; }} collapsable={false}>
+          <Chip
+            s={s}
+            label={projectChipLabel}
+            on={!!filter.project}
+            onPress={() => openFilter('project')}
+            testID="task-filter-project"
+            accessibilityLabel={`按项目筛选，当前：${filter.project ? projectChipLabel : '全部'}`}
+            leading={selectedProject ? <View style={{ width: 8, height: 8, borderRadius: radius.pill, backgroundColor: selectedProject.color }} /> : <Ionicons name="folder-outline" size={14} color={colors.textMuted} />}
+          />
+        </View>
+      ) : null}
       {filterActive(filter) ? (
-        <Pressable accessibilityRole="button" onPress={() => setTaskFilter({ owners: [], priorities: [] })} style={[s.iconButton, { width: undefined, paddingHorizontal: spacing.sm }]} testID="task-filter-clear">
+        <Pressable accessibilityRole="button" onPress={() => setTaskFilter({ owners: [], priorities: [], project: '' })} style={[s.iconButton, { width: undefined, paddingHorizontal: spacing.sm }]} testID="task-filter-clear">
           <Text style={s.link}>清除筛选</Text>
         </Pressable>
       ) : null}
@@ -354,8 +421,10 @@ function ScopedRequirementBoard({ cfg, desktop, dispatch }: { cfg: HubConfig; de
         style={state => [s.card, ((state as { hovered?: boolean }).hovered || state.pressed) && s.cardHover, isDragged && s.cardDragging, pointer && ({ cursor: 'grab' } as object)]}
         {...({ dataSet: { taskCard: item.id, taskFrom: item.column } } as object)}
       >
+        {projects && item.projectId ? <ProjectChip project={projectById.get(item.projectId)} s={s} small /> : null}
         <Text style={[s.cardTitle, item.column === 'done' && s.cardDone]} numberOfLines={2}>{item.name}</Text>
         <CardMeta item={item} people={people} today={today} s={s} compact={compactCards} />
+        <CardFooter item={item} people={people} s={s} touch={!pointer} />
         {moveErrors[item.id] ? <Text style={s.err} numberOfLines={1}>{moveErrors[item.id]}</Text> : null}
       </Pressable>
     );
@@ -471,8 +540,10 @@ function ScopedRequirementBoard({ cfg, desktop, dispatch }: { cfg: HubConfig; de
                       onLongPress={pointer ? undefined : e => openMenuAt(item, e.nativeEvent.pageX, e.nativeEvent.pageY)}
                       style={state => [s.phoneRow, i === col.items.length - 1 && { borderBottomWidth: 0 }, state.pressed && { backgroundColor: colors.rowHover }]}
                     >
+                      {projects && item.projectId ? <ProjectChip project={projectById.get(item.projectId)} s={s} small /> : null}
                       <Text style={[s.cardTitle, item.column === 'done' && s.cardDone]} numberOfLines={2}>{item.name}</Text>
                       <CardMeta item={item} people={people} today={today} s={s} />
+                      <CardFooter item={item} people={people} s={s} touch={!pointer} />
                     </Pressable>
                   ))}
                 </View>
@@ -482,11 +553,11 @@ function ScopedRequirementBoard({ cfg, desktop, dispatch }: { cfg: HubConfig; de
         </ScrollView>
       );
     }
-    const rows = sortRows(visible, sort, people);
+    const rows = sortRows(visible, sort, people, projects ?? []);
     const th = (key: SortKey, label: string, style?: object) => {
       const on = sort.key === key;
       return (
-        <Pressable accessibilityRole="button" accessibilityLabel={`按${label}排序`} accessibilityState={{ selected: on }} onPress={() => setSort(cur => nextSort(cur, key))} style={[s.th, style]} testID={`req-sort-${key}`}>
+        <Pressable accessibilityRole="button" accessibilityLabel={`按${label}排序`} {...a11yState({ selected: on })} onPress={() => setSort(cur => nextSort(cur, key))} style={[s.th, style]} testID={`req-sort-${key}`}>
           <Text style={[s.thText, on && s.thTextOn]}>{label}</Text>
           {on ? <Ionicons name={sort.dir === 'asc' ? 'arrow-up' : 'arrow-down'} size={11} color={colors.text} /> : null}
         </Pressable>
@@ -499,6 +570,8 @@ function ScopedRequirementBoard({ cfg, desktop, dispatch }: { cfg: HubConfig; de
           {th('owner', '负责人', s.colOwner)}
           {th('priority', '优先级', s.colPriority)}
           {th('due', '期限', s.colDue)}
+          <View style={s.colParticipants}><Text style={s.thText}>参与人</Text></View>
+          {projects ? th('project', '项目', s.colProject) : null}
           {th('status', '状态', s.colStatus)}
         </View>
         <ScrollView style={{ flex: 1 }}>
@@ -518,6 +591,8 @@ function ScopedRequirementBoard({ cfg, desktop, dispatch }: { cfg: HubConfig; de
               <View style={s.colOwner}><OwnerBadge item={item} people={people} s={s} /></View>
               <View style={[s.colPriority, s.owner]}><PriorityDot p={item.priority} s={s} /><Text style={s.metaText}>{REQ_PRIORITY_LABEL[item.priority]}</Text></View>
               <View style={[s.colDue, { flexDirection: 'row' }]}>{item.due ? <DueChip item={item} today={today} s={s} /> : <Text style={s.metaMuted}>—</Text>}</View>
+              <View style={s.colParticipants}><ParticipantStack item={item} people={people} s={s} touch={!pointer} size={18} /></View>
+              {projects ? <View style={s.colProject}>{item.projectId ? <ProjectChip project={projectById.get(item.projectId)} s={s} small /> : <Text style={s.metaMuted}>—</Text>}</View> : null}
               <View style={s.colStatus}>
                 <View style={[s.statusPill, { backgroundColor: STATUS_TONE[item.column]() + '1f' }]}>
                   <View style={[s.prioDot, { width: 6, height: 6, backgroundColor: STATUS_TONE[item.column]() }]} />
@@ -569,6 +644,8 @@ function ScopedRequirementBoard({ cfg, desktop, dispatch }: { cfg: HubConfig; de
         <TaskDetailPanel
           cfg={cfg}
           item={selected}
+          projects={projects}
+          dueDatetime={dueDatetime}
           mode={drawer ? 'drawer' : 'page'}
           top={headerBottom}
           people={people}
@@ -580,10 +657,29 @@ function ScopedRequirementBoard({ cfg, desktop, dispatch }: { cfg: HubConfig; de
           onSave={patch => saveEdit(selected.id, patch)}
           onAssignmentsSaved={a => updateTaskItems(scope, rows => rows.map(row => (row.id === selected.id ? { ...row, ...a } : row)))}
           onClose={() => setSelectedId(null)}
+          pointer={pointer}
+          checklistError={checklistErrors[selected.id] || ''}
+          onChecklistToggle={(itemId, done) => { void toggleChecklist(selected.id, itemId, done); }}
+          onChecklistAdd={text => {
+            const next = addChecklistItem(selected.checklist ?? [], text);
+            if (!next) return false;
+            void replaceChecklist(selected.id, next);
+            return true;
+          }}
+          onChecklistDelete={itemId => { void replaceChecklist(selected.id, removeChecklistItem(selected.checklist ?? [], itemId)); }}
+          onChecklistMove={(from, to) => {
+            const list = selected.checklist ?? [];
+            const next = moveChecklistItem(list, from, to);
+            if (next !== list) void replaceChecklist(selected.id, [...next]);
+          }}
         />
       ) : null}
       <TaskCreateDialog
         draft={draft}
+        twoRoles={twoRoles}
+        projects={projects}
+        dueDatetime={dueDatetime}
+        pointer={pointer}
         sheet={!pointer && narrow}
         networkId={cfg.networkId || ''}
         people={people}
@@ -599,6 +695,31 @@ function ScopedRequirementBoard({ cfg, desktop, dispatch }: { cfg: HubConfig; de
         }}
         onClose={() => setDraft(null)}
       />
+      {projects ? (
+        <TaskProjectManager
+          open={managingProjects}
+          sheet={!pointer && narrow}
+          projects={projects}
+          counts={new Map(Array.from(items.reduce((m, it) => (it.projectId ? m.set(it.projectId, (m.get(it.projectId) ?? 0) + 1) : m), new Map<string, number>())))}
+          onCreate={async (name, color) => {
+            try {
+              const created = await createProject(cfg, { name, color });
+              patchTaskBoard(scope, { projects: [...(projects ?? []), created] });
+              return null;
+            } catch (e) { return e instanceof Error ? e.message : '项目没有保存，请重试'; }
+          }}
+          onUpdate={async (id, patch) => {
+            try {
+              const updated = await updateProject(cfg, id, patch);
+              patchTaskBoard(scope, { projects: (projects ?? []).map(p => (p.id === id ? updated : p)) });
+              // 归档了正在筛的项目:退回「全部项目」
+              if (updated.archived && filter.project === id) setTaskFilter({ ...filter, project: '' });
+              return null;
+            } catch (e) { return e instanceof Error ? e.message : '项目没有保存，请重试'; }
+          }}
+          onClose={() => setManagingProjects(false)}
+        />
+      ) : null}
       <TaskCardMenu
         target={menu}
         touch={!pointer}
@@ -616,9 +737,26 @@ function ScopedRequirementBoard({ cfg, desktop, dispatch }: { cfg: HubConfig; de
         meId={meId}
         onToggleOwner={key => setTaskFilter({ ...filter, owners: toggleIn(filter.owners, key) })}
         onTogglePriority={p => setTaskFilter({ ...filter, priorities: toggleIn(filter.priorities, p) })}
-        onClear={kind => setTaskFilter(kind === 'owner' ? { ...filter, owners: [] } : { ...filter, priorities: [] })}
+        onClear={kind => setTaskFilter(kind === 'owner' ? { ...filter, owners: [] } : kind === 'project' ? { ...filter, project: '' } : { ...filter, priorities: [] })}
+        projects={projects ?? []}
+        projectCounts={counts}
+        selectedProject={filter.project || ''}
+        onPickProject={id => setTaskFilter({ ...filter, project: id })}
         onClose={() => setFilterMenu(null)}
       />
+    </View>
+  );
+}
+
+/** 卡片最下一行:子任务进度(左,可没有)+ 参与人头像(右,可没有)。都没有就不占位置。 */
+function CardFooter({ item, people, s, touch }: { item: Requirement; people: readonly RequirementPerson[]; s: TaskStyles; touch: boolean }) {
+  const hasList = !!item.checklist?.length;
+  const hasPeople = !!item.participants?.length;
+  if (!hasList && !hasPeople) return null;
+  return (
+    <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm }} testID="task-card-footer">
+      <View style={{ flex: 1 }}>{hasList ? <ChecklistProgress item={item} s={s} /> : null}</View>
+      {hasPeople ? <ParticipantStack item={item} people={people} s={s} touch={touch} /> : null}
     </View>
   );
 }
@@ -640,8 +778,8 @@ function AvatarStack({ keys, owners }: { keys: readonly string[]; owners: Return
 }
 
 /** 头部筛选的弹层:负责人(头像 + 名字 + 数目,多选)或优先级(多选)。 */
-function FilterMenu({ open, touch, owners, selectedOwners, selectedPriorities, meId, onToggleOwner, onTogglePriority, onClear, onClose }: {
-  open: { kind: 'owner' | 'priority'; x: number; y: number } | null;
+function FilterMenu({ open, touch, owners, selectedOwners, selectedPriorities, meId, onToggleOwner, onTogglePriority, onClear, onClose, projects, projectCounts, selectedProject, onPickProject }: {
+  open: { kind: 'owner' | 'priority' | 'project'; x: number; y: number } | null;
   touch: boolean;
   owners: ReturnType<typeof ownerCounts>;
   selectedOwners: readonly string[];
@@ -649,15 +787,19 @@ function FilterMenu({ open, touch, owners, selectedOwners, selectedPriorities, m
   meId: string | null;
   onToggleOwner: (key: string) => void;
   onTogglePriority: (p: (typeof REQ_PRIORITIES)[number]) => void;
-  onClear: (kind: 'owner' | 'priority') => void;
+  onClear: (kind: 'owner' | 'priority' | 'project') => void;
   onClose: () => void;
+  projects: readonly RequirementProject[];
+  projectCounts: ReadonlyMap<string, number>;
+  selectedProject: string;
+  onPickProject: (id: string) => void;
 }) {
   const s = useTaskStyles();
   // 锚定的浮层:遮罩铺满窗口,安全区只用来夹住弹层的位置(同 TaskCardMenu / AgentRowMenu)。
   const safe = useModalSafePadding('fullScreen');
   const rowH = touch ? 44 : 36;
   const row = (key: string, on: boolean, onPress: () => void, lead: ReactNode, label: string, count?: number) => (
-    <Pressable key={key} testID={`task-filter-opt-${key}`} accessibilityRole="checkbox" accessibilityState={{ checked: on }} onPress={onPress}
+    <Pressable key={key} testID={`task-filter-opt-${key}`} accessibilityRole="checkbox" {...a11yState({ checked: on })} onPress={onPress}
       style={state => ({ height: rowH, flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: spacing.md, borderRadius: radius.item, backgroundColor: (state as { hovered?: boolean }).hovered || state.pressed ? colors.rowHover : 'transparent' })}>
       {lead}
       <Text style={{ flex: 1, color: colors.text, fontSize: 13 }} numberOfLines={1}>{label}</Text>
@@ -672,7 +814,13 @@ function FilterMenu({ open, touch, owners, selectedOwners, selectedPriorities, m
       {open ? (
         <View style={{ position: 'absolute', left: Math.max(8 + safe.paddingLeft, open.x), top: Math.max(open.y, safe.paddingTop + 8), width: 260, maxHeight: 360, padding: 6, borderRadius: radius.control, backgroundColor: colors.card, ...elevated('floating') }} testID={`task-filter-menu-${open.kind}`} accessibilityRole="menu">
           <ScrollView style={{ flexGrow: 0 }}>
-            {open.kind === 'owner'
+            {open.kind === 'project'
+              ? [...activeProjects(projects).map(p => ({ id: p.id, name: p.name, color: p.color as string | null })), { id: NO_PROJECT, name: '无项目', color: null }].map(p => row(
+                p.id, selectedProject === p.id, () => { onPickProject(selectedProject === p.id ? '' : p.id); onClose(); },
+                p.color ? <View style={{ width: 10, height: 10, borderRadius: radius.pill, backgroundColor: p.color }} /> : <Ionicons name="remove-circle-outline" size={14} color={colors.textMuted} />,
+                p.name, projectCounts.get(p.id) ?? 0,
+              ))
+              : open.kind === 'owner'
               ? owners.filter(o => o.count > 0 || selectedOwners.includes(o.key)).map(o => row(
                 o.key, selectedOwners.includes(o.key), () => onToggleOwner(o.key),
                 o.ref ? <AliasAvatar alias={o.name} size={22} /> : <Ionicons name="person-circle-outline" size={22} color={colors.textMuted} />,
@@ -680,9 +828,17 @@ function FilterMenu({ open, touch, owners, selectedOwners, selectedPriorities, m
               ))
               : REQ_PRIORITIES.map(p => row(p, selectedPriorities.includes(p), () => onTogglePriority(p), <PriorityDot p={p} s={s} />, REQ_PRIORITY_LABEL[p]))}
           </ScrollView>
-          <Pressable onPress={() => { onClear(open.kind); onClose(); }} style={{ height: 36, justifyContent: 'center', paddingHorizontal: spacing.md }} testID="task-filter-reset" accessibilityRole="button">
-            <Text style={s.link}>显示全部</Text>
-          </Pressable>
+          <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+            <Pressable onPress={() => { onClear(open.kind); onClose(); }} style={{ height: 36, justifyContent: 'center', paddingHorizontal: spacing.md }} testID="task-filter-reset" accessibilityRole="button">
+              <Text style={s.link}>显示全部</Text>
+            </Pressable>
+            {/* 手机 / 双栏没有左栏:「管理项目」放在项目筛选弹层里。 */}
+            {open.kind === 'project' ? (
+              <Pressable onPress={() => { onClose(); setManagingProjects(true); }} style={{ height: 36, justifyContent: 'center', paddingHorizontal: spacing.md }} testID="task-filter-manage-projects" accessibilityRole="button">
+                <Text style={s.link}>管理项目</Text>
+              </Pressable>
+            ) : null}
+          </View>
         </View>
       ) : null}
     </Modal>

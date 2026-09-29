@@ -5,6 +5,9 @@ import {
   applyFilter, applyMove, boardColumns, checkDraft, createInput, DRAG_IDLE, dragReduce, dropIndex, dueInfo, editDraftOf,
   editPatch, emptyDraft, localToday, neighbourColumn, nextSort, ownerCounts, ownerKeyOf, ownerLabel, ownersForScope,
   patchApplied, revertMove, scopeOf, sortRows, statusPatch, toggleIn, UNASSIGNED, type DragState,
+  hasRoles, roleAvatars, roleKeysOf, roleKinds, participantStack, personDisplay,
+  activeProjects, checkProjectName, defaultProjectFor, filterActive, NO_PROJECT, nextProjectColor, projectCounts, splitByCount, PROJECT_COLORS,
+  addChecklistItem, checklistDropIndex, checklistProgress, hasDetails, moveChecklistItem, newChecklistId, removeChecklistItem, setChecklistDone,
 } from './task-board-model';
 import { createRequirementBody } from './requirements-hub';
 import type { Requirement } from './requirements-model';
@@ -50,7 +53,7 @@ console.log('# 分组 / 筛选');
   const counts = ownerCounts(items, people);
   const shape = counts.map(c => `${c.name}:${c.count}`).join();
   ck('负责人列表:数目降序,同数按名字(zh 排序),未分配在最后', shape === 'demo-node-a:2,测试者:1,demo-node-b:1,未分配:1', shape);
-  ck('名字取不到就用 id', ownerLabel(R('x', { owner: { kind: 'node', id: 'node_gone' } }), people) === 'node_gone');
+  ck('名字取不到:「未知成员(末 6 位)」,不显示裸 id', ownerLabel(R('x', { owner: { kind: 'node', id: 'n_e06d936d' } }), people) === '未知成员（6d936d）');
   ck('旧 Hub 显示旧的 assignee 文本', ownerLabel({ owner: undefined, assignee: '旧节点' }, people) === '旧节点');
 }
 
@@ -80,7 +83,8 @@ console.log('# 列表排序');
 
 console.log('# 期限');
 {
-  ck('逾期(红)', JSON.stringify(dueInfo('2026-09-20', '2026-09-29')) === JSON.stringify({ label: '逾期 9 天', tone: 'overdue' }));
+  const od = dueInfo('2026-09-20', '2026-09-29');
+  ck('逾期(红)', od.label === '逾期 9 天' && od.tone === 'overdue' && od.full === '2026-09-20 全天');
   ck('今天 / 明天', dueInfo('2026-09-29', '2026-09-29').label === '今天' && dueInfo('2026-09-30', '2026-09-29').label === '明天');
   ck('同年只写月日,跨年带年', dueInfo('2026-10-05', '2026-09-29').label === '10月5日' && dueInfo('2027-01-02', '2026-09-29').label === '2027年1月2日');
   ck('已完成不算逾期', dueInfo('2026-09-20', '2026-09-29', 'done').tone === 'normal');
@@ -159,6 +163,127 @@ console.log('# 详情编辑(#488 + 负责人)');
   ck('旧 Hub 不提交负责人', editPatch(legacy, { ...editDraftOf(legacy), owner: NODE_A }) === null);
   ck('Hub 带回了改动 = 生效', patchApplied({ ...item, name: '新' }, { name: '新' }));
   ck('Hub 忽略了字段 = 没生效(老 Hub 回 200)', !patchApplied(item, { name: '新' }) && !patchApplied(item, { owner: NODE_B }));
+}
+
+
+console.log('# 负责人(人类)/ 负责 Agent 两个角色');
+{
+  const two = [
+    R('p', { owner: ME, agentOwner: NODE_A }),
+    R('q', { owner: null, agentOwner: NODE_B }),
+    R('r', { owner: ME, agentOwner: null }),
+    R('s', { owner: null, agentOwner: null }),
+  ];
+  ck('行里有 agent_owner 字段 = 分两个角色', hasRoles(two[0]) && !hasRoles(R('legacy', { agentOwner: undefined })));
+  ck('卡片头像:人类在前、Agent 在后', roleAvatars(two[0], people).map(a => `${a.role}:${a.name}`).join() === 'owner:测试者,agent:demo-node-a');
+  ck('只有 Agent 时只画 Agent', roleAvatars(two[1], people).map(a => a.role).join() === 'agent');
+  ck('两个角色都没有 = 未分配', roleKeysOf(two[3]).join() === UNASSIGNED && roleKeysOf(two[0]).join() === 'user:u_me,node:node_demo_a');
+  ck('「我负责的」只看负责人', applyFilter(two, { owners: ['user:u_me'], priorities: [] }).map(i => i.id).join() === 'p,r');
+  ck('「按 Agent」只看负责 Agent', applyFilter(two, { owners: ['node:node_demo_a'], priorities: [] }).map(i => i.id).join() === 'p');
+  ck('未分配 = 两个都空', applyFilter(two, { owners: [UNASSIGNED], priorities: [] }).map(i => i.id).join() === 's');
+  const c = ownerCounts(two, people);
+  ck('计数:一张卡同时算进负责人和负责 Agent', c.find(x => x.key === 'user:u_me')?.count === 2 && c.find(x => x.key === 'node:node_demo_a')?.count === 1 && c.find(x => x.key === UNASSIGNED)?.count === 1);
+  ck('文字:负责人 · 负责 Agent', ownerLabel(two[0], people) === '测试者 · demo-node-a');
+  ck('选择器种类:负责人只列人类,负责 Agent 只列节点,旧 Hub 两种都列', roleKinds('owner', true).join() === 'user' && roleKinds('agent', true).join() === 'node' && roleKinds('owner', false).join() === 'user,node');
+  const d = { ...emptyDraft(), name: '两个角色', owner: ME, agentOwner: NODE_A };
+  const both = createInput(d, true)!;
+  ck('新建:owner {user}、agentOwner {node} 都只带 {kind,id}', JSON.stringify(both.owner) === '{"kind":"user","id":"u_me"}' && JSON.stringify(both.agentOwner) === '{"kind":"node","id":"node_demo_a"}');
+  ck('新建:两个角色的 Hub 上节点不能当负责人(不发)', !('owner' in createInput({ ...d, owner: NODE_B }, true)!));
+  ck('新建:旧 Hub 不发负责 Agent,单一负责人照旧', !('agentOwner' in createInput(d, false)!) && JSON.stringify(createInput({ ...d, owner: NODE_B }, false)!.owner) === '{"kind":"node","id":"node_demo_b"}');
+  const body = createRequirementBody({ serverUrl: 'http://hub.test', token: 't', networkId: 'n' }, both);
+  ck('POST 请求体带 agent_owner {kind,id}', JSON.stringify(body.agent_owner) === '{"kind":"node","id":"node_demo_a"}' && JSON.stringify(body.owner) === '{"kind":"user","id":"u_me"}');
+  ck('POST 请求体:没选负责 Agent 就没有这个字段', createRequirementBody({ serverUrl: 'x', token: 't' }, createInput({ ...d, agentOwner: null }, true)!).agent_owner === undefined);
+  const item = two[0];
+  ck('详情:只改负责 Agent → {agent_owner}', JSON.stringify(editPatch(item, { ...editDraftOf(item), agentOwner: NODE_B })) === '{"agent_owner":{"kind":"node","id":"node_demo_b"}}');
+  ck('详情:清空负责 Agent = null', JSON.stringify(editPatch(item, { ...editDraftOf(item), agentOwner: null })) === '{"agent_owner":null}');
+  const legacy = R('old', { owner: NODE_A, agentOwner: undefined });
+  ck('详情:旧 Hub 不发 agent_owner', editPatch(legacy, { ...editDraftOf(legacy), agentOwner: NODE_B }) === null);
+  ck('Hub 忽略了 agent_owner = 没生效', !patchApplied(item, { agent_owner: NODE_B }) && patchApplied({ ...item, agentOwner: NODE_B }, { agent_owner: NODE_B }));
+}
+
+
+console.log('# 描述 / 子任务');
+{
+  const list = [{ id: 'a', text: '一', done: true }, { id: 'b', text: '二', done: false }, { id: 'c', text: '三', done: false }];
+  ck('进度 1/3', JSON.stringify(checklistProgress(list)) === JSON.stringify({ done: 1, total: 3, ratio: 1 / 3 }));
+  ck('没有子任务 = 0/0,不画', checklistProgress(undefined).total === 0 && checklistProgress([]).ratio === 0);
+  ck('Hub 带两个字段才算支持', hasDetails({ description: '', checklist: [] }) && !hasDetails({ description: undefined, checklist: undefined }));
+  const added = addChecklistItem(list, '  四\n行  ', 'd')!;
+  ck('添加:折成一行、去空白、默认未完成', JSON.stringify(added[3]) === '{"id":"d","text":"四 行","done":false}');
+  ck('添加:空文字 / 超长 / 满 100 项被拒', addChecklistItem(list, '  ') === null && addChecklistItem(list, 'x'.repeat(501)) === null && addChecklistItem(Array.from({ length: 100 }, (_, i) => ({ id: `i${i}`, text: 't', done: false })), 'x') === null);
+  ck('生成的 id 满足 Hub 的格式', /^ck_[0-9a-f]{16}$/.test(newChecklistId()));
+  ck('勾选只动那一项', setChecklistDone(list, 'b', true).map(i => i.done).join() === 'true,true,false');
+  ck('删除', removeChecklistItem(list, 'b').map(i => i.id).join() === 'a,c');
+  ck('排序:把第一项挪到最后', moveChecklistItem(list, 0, 2).map(i => i.id).join() === 'b,c,a');
+  ck('排序:越界 / 不动返回同一个数组', moveChecklistItem(list, 0, 0) === list && moveChecklistItem(list, 0, 9) === list);
+  const rows = [{ top: 0, bottom: 36 }, { top: 36, bottom: 72 }, { top: 72, bottom: 108 }];
+  ck('拖动落点:拖第一项到第三行下半 → 2', checklistDropIndex(rows, 100, 0) === 2);
+  ck('拖动落点:拖第三项到第一行上半 → 0', checklistDropIndex(rows, 5, 2) === 0);
+  ck('拖动落点:在自己那一行里不动', checklistDropIndex(rows, 50, 1) === 1);
+  const item = R('m', { description: '旧描述', checklist: list });
+  ck('描述跟「保存修改」一起走,只发改过的', JSON.stringify(editPatch(item, { ...editDraftOf(item), description: '新\r\n描述' })) === '{"description":"新\\n描述"}');
+  ck('旧 Hub 不发描述', editPatch(R('n'), { ...editDraftOf(R('n')), description: 'x' }) === null);
+  ck('Hub 带回描述 = 生效', patchApplied({ ...item, description: '新' }, { description: '新' }) && !patchApplied(item, { description: '新' }));
+  ck('清单替换:Hub 回来的顺序对得上 = 生效', patchApplied({ ...item, checklist: [list[2], list[0], list[1]] }, { checklist: [list[2], list[0], list[1]] }) && !patchApplied(item, { checklist: [list[2], list[0], list[1]] }));
+}
+
+
+console.log('# 项目');
+{
+  const projects = [
+    { id: 'p2', name: 'TMAI', color: '#7c3aed', sort: 1, archived: false },
+    { id: 'p1', name: '军团项目', color: '#2563eb', sort: 0, archived: false },
+    { id: 'p3', name: '旧项目', color: '#4b5563', sort: 2, archived: true },
+  ];
+  const cards = [
+    R('a', { projectId: 'p1', priority: 'high' }), R('b', { projectId: 'p2' }), R('c', { projectId: 'p1', owner: ME }),
+    R('d', { projectId: null }), R('e', { projectId: 'p3' }), R('legacy', { projectId: undefined }),
+  ];
+  ck('可选项目:去掉归档,按 sort 排', activeProjects(projects).map(p => p.name).join() === '军团项目,TMAI');
+  ck('按项目筛', applyFilter(cards, { owners: [], priorities: [], project: 'p1' }).map(i => i.id).join() === 'a,c');
+  ck('「无项目」= 没挂项目(含旧 Hub 的卡)', applyFilter(cards, { owners: [], priorities: [], project: NO_PROJECT }).map(i => i.id).join() === 'd,legacy');
+  ck('项目 × 负责人是「且」', applyFilter(cards, { owners: ['user:u_me'], priorities: [], project: 'p1' }).map(i => i.id).join() === 'c');
+  ck('项目筛选算「有筛选」', filterActive({ owners: [], priorities: [], project: 'p1' }) && !filterActive({ owners: [], priorities: [], project: '' }));
+  const pc = projectCounts(cards, { owners: [], priorities: ['high'], project: 'p2' });
+  ck('项目计数:按除项目以外的筛选算', pc.get('p1') === 1 && !pc.has('p2'));
+  ck('新建默认项目 = 正选着的未归档项目', defaultProjectFor({ owners: [], priorities: [], project: 'p2' }, projects) === 'p2' && defaultProjectFor({ owners: [], priorities: [], project: 'p3' }, projects) === null && defaultProjectFor({ owners: [], priorities: [], project: NO_PROJECT }, projects) === null);
+  const sorted = sortRows(cards, { key: 'project', dir: 'asc' }, [], projects).map(i => i.id).join();
+  ck('列表按项目排:按项目顺序,归档的在后,没项目的最后', sorted.startsWith('a,c,b,e,') && ['legacy,d', 'd,legacy'].includes(sorted.slice(8)), sorted);
+  const desc = sortRows(cards, { key: 'project', dir: 'desc' }, [], projects).map(i => i.id);
+  ck('按项目降序:没项目的仍在最后', desc.slice(-2).sort().join() === 'd,legacy' && desc[0] === 'e', desc.join());
+  ck('项目名:空 / 超长 / 重名被拒,归档的名字可以再用', !checkProjectName(' ', projects).ok && !checkProjectName('x'.repeat(41), projects).ok && !checkProjectName('TMAI', projects).ok && checkProjectName('旧项目', projects).ok && checkProjectName(' TMAI ', projects, 'p2').ok);
+  ck('换颜色在调色板里轮转', nextProjectColor(PROJECT_COLORS[0]) === PROJECT_COLORS[1] && nextProjectColor(PROJECT_COLORS[PROJECT_COLORS.length - 1]) === PROJECT_COLORS[0] && nextProjectColor('#123456') === PROJECT_COLORS[0]);
+  const d = { ...emptyDraft(), name: '有项目', projectId: 'p1' };
+  ck('新建带 projectId;没选就不带', createInput(d)!.projectId === 'p1' && !('projectId' in createInput({ ...d, projectId: null })!));
+  ck('POST 请求体 project_id', createRequirementBody({ serverUrl: 'x', token: 't' }, createInput(d)!).project_id === 'p1');
+  const item = cards[0];
+  ck('详情改项目 → {project_id}', JSON.stringify(editPatch(item, { ...editDraftOf(item), projectId: 'p2' })) === '{"project_id":"p2"}');
+  ck('详情清空项目 → null', JSON.stringify(editPatch(item, { ...editDraftOf(item), projectId: null })) === '{"project_id":null}');
+  ck('旧 Hub 不发 project_id', editPatch(cards[5], { ...editDraftOf(cards[5]), projectId: 'p1' }) === null);
+  ck('Hub 忽略了 project_id = 没生效', !patchApplied(item, { project_id: 'p2' }) && patchApplied({ ...item, projectId: 'p2' }, { project_id: 'p2' }));
+}
+
+console.log('# 左栏:只放有任务的节点,其余收起可搜');
+{
+  const rows = [
+    ...Array.from({ length: 300 }, (_, i) => ({ name: `node-${String(i).padStart(3, '0')}`, count: 0 })),
+    { name: 'busy-b', count: 2 }, { name: 'busy-a', count: 5 },
+  ];
+  const sp = splitByCount(rows);
+  ck('上面只有有任务的,按数目降序', sp.shown.map(r => r.name).join() === 'busy-a,busy-b');
+  ck('其余 300 个收进「更多」', sp.more.length === 300);
+  ck('「更多」可搜', splitByCount(rows, 'NODE-12').more.map(r => r.name).join() === 'node-120,node-121,node-122,node-123,node-124,node-125,node-126,node-127,node-128,node-129');
+}
+
+console.log('# 参与人 / 未知成员');
+{
+  const refs = [ME, NODE_A, { kind: 'user' as const, id: 'u_a4944afaa30b' }, NODE_B, { kind: 'node' as const, id: 'n_e06d936d' }];
+  const st = participantStack(refs, people);
+  ck('最多 3 个头像 + 「+N」', st.shown.length === 3 && st.more === 2);
+  ck('认不出的成员:未知成员 + 短 id,不是裸 id', st.shown[2].name === '未知成员（faa30b）' && !st.shown[2].known && !st.all.includes('u_a4944afaa30b'));
+  ck('悬停名单写全(含种类)', st.all.startsWith('测试者（人类）、demo-node-a（Agent）'));
+  ck('没有参与人 = 空', participantStack(undefined, people).shown.length === 0);
+  ck('认得的成员 known', personDisplay(ME, people).known && personDisplay(ME, people).name === '测试者');
 }
 
 console.log('# 界面接线(源码)');

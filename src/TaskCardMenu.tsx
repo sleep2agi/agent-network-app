@@ -3,6 +3,7 @@
 // 放不下就翻边、夹进屏幕。Modal 是为了安卓返回键(onRequestClose)与 web 的 Esc。
 import { useState } from 'react';
 import { Modal, Pressable, View, useWindowDimensions } from 'react-native';
+import { a11yState } from './TaskBoardParts';
 import { Text } from './ui-text';
 import { Ionicons } from './icons';
 import { colors, radius, themeMode } from './theme';
@@ -42,7 +43,7 @@ export default function TaskCardMenu({ target, touch, busy, onOpen, onMove, onCl
       testID={`task-menu-${key}`}
       accessibilityRole="menuitem"
       accessibilityLabel={label}
-      accessibilityState={{ disabled: !!opts.disabled, checked: opts.checked }}
+      {...a11yState({ disabled: !!opts.disabled, checked: opts.checked })}
       disabled={opts.disabled}
       onPress={onPress}
       style={state => ({

@@ -8,9 +8,24 @@ import { Ionicons } from './icons';
 import AliasAvatar from './AliasAvatar';
 import { colors, onThemeChange, radius, spacing, themeMode, type as typeScale, weight } from './theme';
 import { shadowOnly } from './elevation';
-import { REQ_PRIORITY_LABEL, type ReqPriority, type Requirement } from './requirements-model';
+import { REQ_PRIORITY_LABEL, type ReqPriority, type Requirement, type RequirementProject } from './requirements-model';
 import type { RequirementPerson } from './requirement-people';
-import { dueInfo, ownerLabel, type DueTone } from './task-board-model';
+import { checklistProgress, dueInfo, ownerLabel, participantStack, personDisplay, roleAvatars, type DueTone } from './task-board-model';
+
+/**
+ * accessibilityState + 同样的 aria-* 属性。react-native-web 0.21 已经**不读** accessibilityState
+ * (只认 aria-checked / aria-selected …),桌面端(Tauri 里的 web)读屏和浏览器就拿不到选中 / 勾选状态;
+ * 原生两个都认。任务页的控件都走这里。
+ */
+export function a11yState(st: { selected?: boolean; checked?: boolean; disabled?: boolean; expanded?: boolean }): object {
+  return {
+    accessibilityState: st,
+    ...(st.selected !== undefined ? { 'aria-selected': st.selected } : {}),
+    ...(st.checked !== undefined ? { 'aria-checked': st.checked } : {}),
+    ...(st.disabled !== undefined ? { 'aria-disabled': st.disabled } : {}),
+    ...(st.expanded !== undefined ? { 'aria-expanded': st.expanded } : {}),
+  };
+}
 
 export const BOARD_RADIUS = {
   card: radius.surface, control: radius.control, pill: radius.pill,
@@ -99,6 +114,8 @@ export const makeTaskStyles = () => StyleSheet.create({
   colPriority: { width: 76 },
   colDue: { width: 104 },
   colStatus: { width: 84 },
+  colProject: { width: 116 },
+  colParticipants: { width: 76, flexDirection: 'row', justifyContent: 'flex-start' },
   statusPill: { alignSelf: 'flex-start', height: 22, paddingHorizontal: 9, borderRadius: BOARD_RADIUS.pill, flexDirection: 'row', alignItems: 'center', gap: 5 },
   statusPillText: { fontSize: typeScale.caption, fontWeight: weight.strong },
   // 列表(手机分组)
@@ -133,7 +150,13 @@ export function DueChip({ item, today, s }: { item: Pick<Requirement, 'due' | 'c
   if (d.tone === 'none') return null;
   const c = dueColor(d.tone);
   return (
-    <View style={[s.due, { flexShrink: 0 }, { backgroundColor: d.tone === 'overdue' ? colors.failed + '1a' : d.tone === 'today' ? colors.blocked + '1a' : colors.subtleFill }]} testID="task-due">
+    <View
+      // 悬停提示完整的本地时刻(到秒):web 上直接写 DOM 的 title(RN-web 不转发 title 属性)。
+      ref={(el: any) => { if (el && typeof el.setAttribute === 'function') el.setAttribute('title', d.full); }}
+      accessibilityLabel={`预计完成 ${d.full}`}
+      style={[s.due, { flexShrink: 0 }, { backgroundColor: d.tone === 'overdue' ? colors.failed + '1a' : d.tone === 'today' ? colors.blocked + '1a' : colors.subtleFill }]}
+      testID="task-due"
+    >
       <Ionicons name={d.tone === 'overdue' ? 'alert-circle-outline' : 'calendar-outline'} size={11} color={c} />
       <Text style={[s.dueText, { color: c }]} numberOfLines={1}>{d.label}</Text>
     </View>
@@ -142,16 +165,22 @@ export function DueChip({ item, today, s }: { item: Pick<Requirement, 'due' | 'c
 
 export function OwnerBadge({ item, people, s, size = 18, avatarOnly = false }: { item: Requirement; people: readonly RequirementPerson[]; s: TaskStyles; size?: number; avatarOnly?: boolean }) {
   const label = ownerLabel(item, people);
-  const assigned = item.owner ? true : item.owner === undefined && !!item.assignee;
+  // 分两个角色时:人类负责人在前、负责 Agent 在后,两个头像;旧 Hub 只有一个负责人。
+  const avatars = roleAvatars(item, people);
+  const legacyText = item.owner === undefined && !!item.assignee;
+  const a11y = avatars.length ? avatars.map(a => `${a.role === 'agent' ? '负责 Agent' : '负责人'} ${a.name}`).join('，') : `负责人 ${label}`;
   return (
-    <View style={s.owner} accessibilityLabel={`负责人 ${label}`}>
-      {assigned ? <AliasAvatar alias={label} size={size} /> : <Ionicons name="person-circle-outline" size={size} color={colors.textMuted} />}
-      {avatarOnly && assigned ? null : <Text style={assigned ? s.metaText : s.metaMuted} numberOfLines={1}>{label}</Text>}
+    <View style={s.owner} accessibilityLabel={a11y} testID="task-owner">
+      {avatars.length ? (
+        <View style={{ flexDirection: 'row', gap: 3 }}>
+          {avatars.map(a => <View key={a.role} testID={`task-avatar-${a.role}`}><AliasAvatar alias={a.name} size={size} /></View>)}
+        </View>
+      ) : legacyText ? <AliasAvatar alias={label} size={size} /> : <Ionicons name="person-circle-outline" size={size} color={colors.textMuted} />}
+      {avatarOnly && (avatars.length || legacyText) ? null : <Text style={avatars.length || legacyText ? s.metaText : s.metaMuted} numberOfLines={1}>{label}</Text>}
     </View>
   );
 }
 
-/** 卡片的一行元信息:优先级点 + 文字 · 负责人 · 期限(靠右)。 */
 /** compact:列窄(< 260)时负责人只显示头像 —— 名字截成「d..」比不显示更难读。 */
 export function CardMeta({ item, people, today, s, compact = false }: { item: Requirement; people: readonly RequirementPerson[]; today: string; s: TaskStyles; compact?: boolean }) {
   return (
@@ -175,7 +204,7 @@ export function Segmented<K extends string>({ items, value, onChange, s, testID 
       {items.map(it => {
         const on = it.key === value;
         return (
-          <Pressable key={it.key} accessibilityRole="tab" accessibilityState={{ selected: on }} onPress={() => onChange(it.key)} style={[s.segmentItem, on && s.segmentItemOn]} testID={`${testID}-${it.key}`}>
+          <Pressable key={it.key} accessibilityRole="tab" {...a11yState({ selected: on })} onPress={() => onChange(it.key)} style={[s.segmentItem, on && s.segmentItemOn]} testID={`${testID}-${it.key}`}>
             <Text style={[s.segmentText, on && s.segmentTextOn]}>{it.label}</Text>
           </Pressable>
         );
@@ -188,11 +217,86 @@ export function Chip({ label, on, onPress, s, testID, leading, accessibilityLabe
   label: string; on: boolean; onPress: () => void; s: TaskStyles; testID?: string; leading?: ReactNode; accessibilityLabel?: string;
 }) {
   return (
-    <Pressable accessibilityRole="button" accessibilityLabel={accessibilityLabel || label} accessibilityState={{ selected: on }} onPress={onPress} style={[s.chip, on && s.chipOn]} testID={testID}>
+    <Pressable accessibilityRole="button" accessibilityLabel={accessibilityLabel || label} {...a11yState({ selected: on })} onPress={onPress} style={[s.chip, on && s.chipOn]} testID={testID}>
       {leading}
       <Text style={[s.chipText, on && s.chipTextOn]} numberOfLines={1}>{label}</Text>
       <Ionicons name="chevron-down" size={12} color={on ? colors.accent : colors.textMuted} />
     </Pressable>
+  );
+}
+
+/** 卡片上的子任务进度:「✓ 3/7」+ 一条细进度条。没有子任务就不画。 */
+export function ChecklistProgress({ item, s }: { item: Pick<Requirement, 'checklist'>; s: TaskStyles }) {
+  const p = checklistProgress(item.checklist);
+  if (!p.total) return null;
+  const complete = p.done === p.total;
+  return (
+    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }} testID="task-checklist-progress" accessibilityLabel={`子任务 ${p.done}/${p.total}`}>
+      <Ionicons name={complete ? 'checkmark-circle' : 'checkbox-outline'} size={13} color={complete ? colors.running : colors.textMuted} />
+      <Text style={[s.metaMuted, { fontSize: 11 }]}>{p.done}/{p.total}</Text>
+      <View style={{ flex: 1, height: 3, borderRadius: radius.pill, backgroundColor: colors.subtleFill, overflow: 'hidden' }}>
+        <View style={{ width: `${Math.round(p.ratio * 100)}%`, height: 3, backgroundColor: complete ? colors.running : colors.accent }} testID="task-checklist-bar" />
+      </View>
+    </View>
+  );
+}
+
+/** 项目标签:彩色圆点 + 名字,底色是项目色的淡色。归档的项目名字变灰。 */
+export function ProjectChip({ project, s, small = false }: { project: RequirementProject | undefined; s: TaskStyles; small?: boolean }) {
+  if (!project) return null;
+  return (
+    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5, alignSelf: 'flex-start', maxWidth: '100%', height: small ? 18 : 22, paddingHorizontal: small ? 6 : 8, borderRadius: radius.pill, backgroundColor: project.color + '1f' }} testID="task-project-chip" accessibilityLabel={`项目 ${project.name}`}>
+      <View style={{ width: 7, height: 7, borderRadius: radius.pill, backgroundColor: project.color }} />
+      <Text style={[s.metaText, { fontSize: small ? 11 : 12, color: project.archived ? colors.textMuted : colors.text }]} numberOfLines={1}>{project.name}</Text>
+    </View>
+  );
+}
+
+/**
+ * 参与人头像叠放:最多 3 个 + 「+N」。桌面悬停出全部名单(DOM title),手机长按展开名单。
+ * 认不出的成员画占位头像,不显示裸 id。
+ */
+export function ParticipantStack({ item, people, s, touch, size = 20 }: { item: Pick<Requirement, 'participants'>; people: readonly RequirementPerson[]; s: TaskStyles; touch: boolean; size?: number }) {
+  const [open, setOpen] = useState(false);
+  const st = participantStack(item.participants, people);
+  if (!st.shown.length) return null;
+  return (
+    <View style={{ alignItems: 'flex-end', gap: 4 }}>
+      <Pressable
+        onLongPress={touch ? () => setOpen(v => !v) : undefined}
+        accessibilityLabel={`参与人：${st.all}`}
+        ref={(el: any) => { if (el && typeof el.setAttribute === 'function') el.setAttribute('title', `参与人：${st.all}`); }}
+        style={{ flexDirection: 'row', alignItems: 'center' }}
+        testID="task-participants"
+      >
+        {st.shown.map((p, i) => (
+          <View key={p.key} style={{ marginLeft: i ? -6 : 0, borderRadius: radius.pill, borderWidth: 1.5, borderColor: cardBg() }} testID="task-participant-avatar">
+            {p.known ? <AliasAvatar alias={p.name} size={size} /> : <View style={{ width: size, height: size, borderRadius: radius.pill, backgroundColor: colors.subtleFill, alignItems: 'center', justifyContent: 'center' }}><Ionicons name="help" size={size * 0.6} color={colors.textMuted} /></View>}
+          </View>
+        ))}
+        {st.more ? <Text style={[s.metaMuted, { marginLeft: 4, fontSize: 11 }]} testID="task-participants-more">+{st.more}</Text> : null}
+      </Pressable>
+      {open ? <Text style={[s.metaMuted, { fontSize: 11 }]} testID="task-participants-all">{st.all}</Text> : null}
+    </View>
+  );
+}
+
+/** 详情里的参与人:头像 + 名字的胶囊,人类和 Agent 一样;认不出的是占位头像 +「未知成员」。 */
+export function PersonChips({ refs, people, s, testID }: { refs: readonly { kind: 'user' | 'node'; id: string }[]; people: readonly RequirementPerson[]; s: TaskStyles; testID?: string }) {
+  if (!refs.length) return <Text style={s.muted} testID={testID}>暂无</Text>;
+  return (
+    <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }} testID={testID}>
+      {refs.map(r => {
+        const d = personDisplay(r, people);
+        return (
+          <View key={`${r.kind}:${r.id}`} style={{ flexDirection: 'row', alignItems: 'center', gap: 6, height: 28, paddingLeft: 3, paddingRight: 10, borderRadius: radius.pill, backgroundColor: colors.subtleFill }} testID="person-chip">
+            {d.known ? <AliasAvatar alias={d.name} size={22} /> : <View style={{ width: 22, height: 22, borderRadius: radius.pill, backgroundColor: colors.border, alignItems: 'center', justifyContent: 'center' }}><Ionicons name="help" size={13} color={colors.textMuted} /></View>}
+            <Text style={{ color: d.known ? colors.text : colors.textMuted, fontSize: 13 }} numberOfLines={1}>{d.name}</Text>
+            <Text style={s.metaMuted}>{r.kind === 'user' ? '人类' : 'Agent'}</Text>
+          </View>
+        );
+      })}
+    </View>
   );
 }
 

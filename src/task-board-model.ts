@@ -4,7 +4,10 @@
 // Owner 2026-09-29:「这个任务列表也他妈太难看了」。重做参照 Linear / TickTick:
 // 头部一行(标题 · 列表/看板 · 负责人/优先级筛选 · ＋ 新建),三列等宽铺满,卡片整张可点,
 // 桌面拖动换列、手机长按菜单。Hub 数据模型不变(标题/状态/优先级/期限/负责人/参与人)。
+import { dueInstant, dueToLocal, formatDueFull, formatTime, isDateTime, systemClock, type Clock } from './due-time';
 import {
+  type ChecklistItem,
+  type RequirementProject,
   columnsOf,
   dueOk,
   REQ_COLUMNS,
@@ -23,21 +26,93 @@ export const UNASSIGNED = 'none';
 /** 一张卡片在负责人筛选里的键。旧 Hub 没有稳定负责人(owner undefined)时按未分配算。 */
 export const ownerKeyOf = (item: Pick<Requirement, 'owner'>): string => (item.owner ? personKey(item.owner) : UNASSIGNED);
 
+/**
+ * 卡片在筛选里能被哪些人认领:负责人(人类)和负责 Agent 各算一个。两个都没有 = 未分配。
+ * 「我负责的」= user:<我> 命中负责人;「按 Agent」= node:<id> 命中负责 Agent(旧 Hub 上命中单一负责人)。
+ */
+export function roleKeysOf(item: Pick<Requirement, 'owner' | 'agentOwner'>): string[] {
+  const keys: string[] = [];
+  if (item.owner) keys.push(personKey(item.owner));
+  if (item.agentOwner) keys.push(personKey(item.agentOwner));
+  return keys.length ? keys : [UNASSIGNED];
+}
+
+/** 这张卡所在的 Hub 分不分两个角色(行里带 agent_owner 字段)。 */
+export const hasRoles = (item: Pick<Requirement, 'agentOwner'>): boolean => item.agentOwner !== undefined;
+
 export interface BoardFilter {
   /** 负责人键(personKey 或 UNASSIGNED)。空 = 不按负责人筛。 */
   owners: string[];
   /** 空 = 不按优先级筛。 */
   priorities: ReqPriority[];
+  /** 项目 id;NO_PROJECT = 不属于任何项目;省略 / '' = 全部项目。 */
+  project?: string;
 }
+
+export const NO_PROJECT = '__none__';
 
 export const EMPTY_FILTER: BoardFilter = { owners: [], priorities: [] };
 
-export const filterActive = (f: BoardFilter): boolean => f.owners.length > 0 || f.priorities.length > 0;
+export const filterActive = (f: BoardFilter): boolean => f.owners.length > 0 || f.priorities.length > 0 || !!f.project;
 
 export function matchesFilter(item: Requirement, f: BoardFilter): boolean {
-  if (f.owners.length && !f.owners.includes(ownerKeyOf(item))) return false;
+  if (f.owners.length && !roleKeysOf(item).some(k => f.owners.includes(k))) return false;
   if (f.priorities.length && !f.priorities.includes(item.priority)) return false;
+  if (f.project) {
+    if (f.project === NO_PROJECT ? !!item.projectId : item.projectId !== f.project) return false;
+  }
   return true;
+}
+
+// ── 项目 ─────────────────────────────────────────────────────────────────
+
+/** 可选的项目(未归档),按 sort、名字排。 */
+export const activeProjects = (projects: readonly RequirementProject[]): RequirementProject[] =>
+  projects.filter(p => !p.archived).sort((a, b) => a.sort - b.sort || a.name.localeCompare(b.name, 'zh'));
+
+/** 各项目的卡片数(按当前除项目以外的筛选算,左栏的数字才和点进去看到的一致)。 */
+export function projectCounts(items: readonly Requirement[], f: BoardFilter): Map<string, number> {
+  const counts = new Map<string, number>();
+  for (const item of applyFilter(items, { ...f, project: '' })) {
+    const key = item.projectId || NO_PROJECT;
+    counts.set(key, (counts.get(key) ?? 0) + 1);
+  }
+  return counts;
+}
+
+/** 新建时默认的项目:左栏 / 头部正选着一个(未归档的)项目就用它。 */
+export function defaultProjectFor(f: BoardFilter, projects: readonly RequirementProject[]): string | null {
+  if (!f.project || f.project === NO_PROJECT) return null;
+  return projects.some(p => p.id === f.project && !p.archived) ? f.project : null;
+}
+
+export const PROJECT_COLORS = ['#2563eb', '#16a34a', '#d97706', '#dc2626', '#7c3aed', '#0891b2', '#db2777', '#4b5563'] as const;
+
+/** 改色:在调色板里轮到下一个。 */
+export const nextProjectColor = (color: string): string => {
+  const i = PROJECT_COLORS.indexOf(color as (typeof PROJECT_COLORS)[number]);
+  return PROJECT_COLORS[(i + 1) % PROJECT_COLORS.length];
+};
+
+export function checkProjectName(name: string, projects: readonly RequirementProject[], except?: string): { ok: true; name: string } | { ok: false; message: string } {
+  const n = name.replace(/\s+/g, ' ').trim();
+  if (!n) return { ok: false, message: '先写项目名' };
+  if (n.length > 40) return { ok: false, message: '项目名最多 40 个字' };
+  if (projects.some(p => !p.archived && p.name === n && p.id !== except)) return { ok: false, message: '已经有同名的项目' };
+  return { ok: true, name: n };
+}
+
+// ── 左栏:按节点 / 按 Agent 的收起 ─────────────────────────────────────────
+
+/**
+ * 网络里可能有几百个节点,几乎都没有任务(owner 0.2.141 截图:~300 行 0)。左栏只把有任务的放出来
+ * (按数目降序),其余收进「更多节点」,展开后可以搜。
+ */
+export function splitByCount<T extends { name: string; count: number }>(rows: readonly T[], query = ''): { shown: T[]; more: T[] } {
+  const shown = rows.filter(r => r.count > 0).sort((a, b) => b.count - a.count || a.name.localeCompare(b.name, 'zh'));
+  const q = query.trim().toLocaleLowerCase();
+  const more = rows.filter(r => r.count === 0 && (!q || r.name.toLocaleLowerCase().includes(q))).sort((a, b) => a.name.localeCompare(b.name, 'zh'));
+  return { shown, more };
 }
 
 export const applyFilter = (items: readonly Requirement[], f: BoardFilter): Requirement[] => items.filter(item => matchesFilter(item, f));
@@ -83,29 +158,60 @@ export function ownerCounts(items: readonly Requirement[], people: readonly Requ
   const counts = new Map<string, OwnerCount>();
   let none = 0;
   for (const item of items) {
-    if (!item.owner) { none += 1; continue; }
-    const key = personKey(item.owner);
-    const row = counts.get(key);
-    if (row) row.count += 1;
-    else counts.set(key, { key, ref: { kind: item.owner.kind, id: item.owner.id }, name: personName(item.owner, people), count: 1 });
+    const refs = [item.owner, item.agentOwner].filter((r): r is RequirementPersonRef => !!r);
+    if (!refs.length) { none += 1; continue; }
+    for (const ref of refs) {
+      const key = personKey(ref);
+      const row = counts.get(key);
+      if (row) row.count += 1;
+      else counts.set(key, { key, ref: { kind: ref.kind, id: ref.id }, name: personName(ref, people), count: 1 });
+    }
   }
   const rows = [...counts.values()].sort((a, b) => b.count - a.count || a.name.localeCompare(b.name, 'zh'));
   return [...rows, { key: UNASSIGNED, ref: null, name: '未分配', count: none }];
 }
 
-export function personName(ref: RequirementPersonRef, people: readonly RequirementPerson[]): string {
-  return people.find(p => personKey(p) === personKey(ref))?.name || ref.id;
+/** 短 id(未知成员时附在后面,方便认):取最后 6 位。 */
+export const shortId = (id: string): string => (id.length > 6 ? id.slice(-6) : id);
+
+/**
+ * 人 / 节点的显示名。成员表里找不到(已退出、成员表没读到…)时是「未知成员（…末 6 位）」——
+ * 永远不把裸 id(n_e06d936d / u_a4944afaa30b)当名字显示(owner 0.2.141 截图)。
+ */
+export function personDisplay(ref: RequirementPersonRef, people: readonly RequirementPerson[]): { name: string; known: boolean } {
+  const hit = people.find(p => personKey(p) === personKey(ref));
+  if (hit?.name) return { name: hit.name, known: true };
+  return { name: `未知成员（${shortId(ref.id)}）`, known: false };
 }
 
-/** 卡片 / 列表上的负责人文字。旧 Hub(owner undefined)显示旧的 assignee 文本。 */
-export function ownerLabel(item: Pick<Requirement, 'owner' | 'assignee'>, people: readonly RequirementPerson[]): string {
+export function personName(ref: RequirementPersonRef, people: readonly RequirementPerson[]): string {
+  return personDisplay(ref, people).name;
+}
+
+/** 卡片 / 列表上的参与人头像:最多 3 个,其余「+N」。 */
+export function participantStack(refs: readonly RequirementPersonRef[] | undefined, people: readonly RequirementPerson[], max = 3): { shown: { key: string; name: string; known: boolean; kind: 'user' | 'node' }[]; more: number; all: string } {
+  const list = (refs ?? []).map(r => ({ key: personKey(r), kind: r.kind, ...personDisplay(r, people) }));
+  return { shown: list.slice(0, max), more: Math.max(0, list.length - max), all: list.map(p => `${p.name}（${p.kind === 'user' ? '人类' : 'Agent'}）`).join('、') };
+}
+
+/** 卡片 / 列表上的负责人文字:负责人在前、负责 Agent 在后。旧 Hub(owner undefined)显示旧的 assignee 文本。 */
+export function ownerLabel(item: Pick<Requirement, 'owner' | 'assignee' | 'agentOwner'>, people: readonly RequirementPerson[]): string {
   if (item.owner === undefined) return item.assignee || '未分配';
-  return item.owner ? personName(item.owner, people) : '未分配';
+  const names = [item.owner, item.agentOwner].filter((r): r is RequirementPersonRef => !!r).map(r => personName(r, people));
+  return names.length ? names.join(' · ') : '未分配';
+}
+
+/** 卡片上的头像:人类在前、Agent 在后(没有的那个不画)。 */
+export function roleAvatars(item: Pick<Requirement, 'owner' | 'agentOwner'>, people: readonly RequirementPerson[]): { role: 'owner' | 'agent'; ref: RequirementPersonRef; name: string }[] {
+  const out: { role: 'owner' | 'agent'; ref: RequirementPersonRef; name: string }[] = [];
+  if (item.owner) out.push({ role: 'owner', ref: item.owner, name: personName(item.owner, people) });
+  if (item.agentOwner) out.push({ role: 'agent', ref: item.agentOwner, name: personName(item.agentOwner, people) });
+  return out;
 }
 
 // ── 列表视图排序 ─────────────────────────────────────────────────────────
 
-export type SortKey = 'title' | 'owner' | 'priority' | 'due' | 'status';
+export type SortKey = 'title' | 'owner' | 'priority' | 'due' | 'status' | 'project';
 export interface SortSpec { key: SortKey; dir: 'asc' | 'desc' }
 export const DEFAULT_SORT: SortSpec = { key: 'status', dir: 'asc' };
 
@@ -120,31 +226,43 @@ export const nextSort = (cur: SortSpec, key: SortKey): SortSpec =>
  * 列表排序。空期限永远在最后(不论升降序);同值按看板里的顺序(优先级 → 期限 → 新建时间)兜底,
  * 所以排序稳定、刷新不跳行。
  */
-export function sortRows(items: readonly Requirement[], sort: SortSpec, people: readonly RequirementPerson[] = []): Requirement[] {
+export function sortRows(items: readonly Requirement[], sort: SortSpec, people: readonly RequirementPerson[] = [], projects: readonly RequirementProject[] = []): Requirement[] {
+  const projectRank = (id: string | null | undefined): number => {
+    if (!id) return Number.MAX_SAFE_INTEGER;
+    const i = activeProjects(projects).findIndex(p => p.id === id);
+    return i < 0 ? Number.MAX_SAFE_INTEGER - 1 : i;
+  };
   const sign = sort.dir === 'asc' ? 1 : -1;
   const base = (a: Requirement, b: Requirement) =>
     PRIORITY_RANK[a.priority] - PRIORITY_RANK[b.priority]
-    || (a.due === b.due ? 0 : !a.due ? 1 : !b.due ? -1 : a.due < b.due ? -1 : 1)
+    || dueCmp(a.due, b.due)
     || (a.createdAt === b.createdAt ? 0 : a.createdAt < b.createdAt ? 1 : -1)
     || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
   const primary = (a: Requirement, b: Requirement): number => {
     switch (sort.key) {
       case 'title': return a.name.localeCompare(b.name, 'zh') * sign;
       case 'owner': {
-        const an = a.owner || (a.owner === undefined && a.assignee) ? ownerLabel(a, people) : '';
-        const bn = b.owner || (b.owner === undefined && b.assignee) ? ownerLabel(b, people) : '';
+        const an = a.owner || a.agentOwner || (a.owner === undefined && a.assignee) ? ownerLabel(a, people) : '';
+        const bn = b.owner || b.agentOwner || (b.owner === undefined && b.assignee) ? ownerLabel(b, people) : '';
         if (an === bn) return 0;
         if (!an) return 1;
         if (!bn) return -1;
         return an.localeCompare(bn, 'zh') * sign;
       }
       case 'priority': return (PRIORITY_RANK[a.priority] - PRIORITY_RANK[b.priority]) * sign;
-      case 'due':
-        if (a.due === b.due) return 0;
-        if (!a.due) return 1;
-        if (!b.due) return -1;
-        return (a.due < b.due ? -1 : 1) * sign;
+      case 'due': {
+        if (!a.due || !b.due) return a.due === b.due ? 0 : !a.due ? 1 : -1;
+        return dueCmp(a.due, b.due) * sign;
+      }
       case 'status': return (COLUMN_RANK[a.column] - COLUMN_RANK[b.column]) * sign;
+      case 'project': {
+        const ra = projectRank(a.projectId), rb = projectRank(b.projectId);
+        if (ra === rb) return 0;
+        // 没有项目的永远在最后(同空期限)
+        if (!a.projectId) return 1;
+        if (!b.projectId) return -1;
+        return (ra - rb) * sign;
+      }
     }
   };
   return [...items].sort((a, b) => primary(a, b) || base(a, b));
@@ -165,9 +283,41 @@ const dayNumber = (ymd: string): number => {
 
 export type DueTone = 'none' | 'overdue' | 'today' | 'normal';
 
-/** 期限的显示:文字 + 色调。已完成的卡片不算逾期(做完了就不再催)。 */
-export function dueInfo(due: string, today: string, column: ReqColumn = 'pool'): { label: string; tone: DueTone } {
-  if (!due || !dueOk(due)) return { label: '', tone: 'none' };
+/** 两个期限比先后:全天 = 本地那天结束,时刻按真实时刻;空的永远在后。 */
+export function dueCmp(a: string, b: string, clock: Clock = systemClock): number {
+  const ka = dueInstant(a, clock) ?? Number.POSITIVE_INFINITY;
+  const kb = dueInstant(b, clock) ?? Number.POSITIVE_INFINITY;
+  return ka === kb ? 0 : ka < kb ? -1 : 1;
+}
+
+/**
+ * 期限的显示:文字 + 色调 + 完整值(悬停提示)。已完成的卡片不算逾期(做完了就不再催)。
+ * 全天:今天 / 明天 / 10月5日 / 逾期 N 天(按本地日期)。
+ * 时刻:今天 18:30 / 明天 09:00 / 10-01 18:30;逾期按真实时刻(逾期 N 天 / N 小时 / N 分钟)。
+ */
+export function dueInfo(due: string, today: string, column: ReqColumn = 'pool', now: number = Date.now(), clock: Clock = systemClock): { label: string; tone: DueTone; full: string } {
+  if (!due || !dueOk(due)) return { label: '', tone: 'none', full: '' };
+  const full = formatDueFull(due, clock);
+  if (isDateTime(due)) {
+    const local = dueToLocal(due, clock)!;
+    const [y, m, d] = local.date.split('-').map(Number);
+    const hm = formatTime(local.time!);
+    const dayDiff = dayNumber(local.date) - dayNumber(today);
+    const short = dayDiff === 0 ? `今天 ${hm}` : dayDiff === 1 ? `明天 ${hm}`
+      : y === Number(today.slice(0, 4)) ? `${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')} ${hm}` : `${local.date} ${hm}`;
+    if (column === 'done') return { label: short, tone: 'normal', full };
+    const late = now - Date.parse(due);
+    if (late > 0) {
+      const mins = Math.floor(late / 60_000);
+      const label = mins >= 1440 ? `逾期 ${Math.floor(mins / 1440)} 天` : mins >= 60 ? `逾期 ${Math.floor(mins / 60)} 小时` : `逾期 ${Math.max(1, mins)} 分钟`;
+      return { label, tone: 'overdue', full };
+    }
+    return { label: short, tone: dayDiff === 0 ? 'today' : 'normal', full };
+  }
+  return { ...dateOnlyInfo(due, today, column), full };
+}
+
+function dateOnlyInfo(due: string, today: string, column: ReqColumn): { label: string; tone: DueTone } {
   const diff = dayNumber(due) - dayNumber(today);
   const [y, m, d] = due.split('-').map(Number);
   const sameYear = y === Number(today.slice(0, 4));
@@ -262,11 +412,20 @@ export interface CreateDraft {
   name: string;
   priority: ReqPriority;
   due: string;
+  /** 负责人。分两个角色的 Hub 上只能是人类;旧 Hub 上是唯一的负责人(人类或 Agent)。 */
   owner: RequirementPersonRef | null;
+  /** 负责 Agent(只在分两个角色的 Hub 上有)。 */
+  agentOwner: RequirementPersonRef | null;
+  /** 项目(只在有项目的 Hub 上发)。 */
+  projectId: string | null;
   column: ReqColumn;
 }
 
-export const emptyDraft = (column: ReqColumn = 'pool'): CreateDraft => ({ name: '', priority: 'normal', due: '', owner: null, column });
+export const emptyDraft = (column: ReqColumn = 'pool'): CreateDraft => ({ name: '', priority: 'normal', due: '', owner: null, agentOwner: null, projectId: null, column });
+
+/** 两个角色各自能选哪一种人:负责人 = 人类,负责 Agent = 节点;旧 Hub 的单一负责人两种都行。 */
+export const roleKinds = (role: 'owner' | 'agent', twoRoles: boolean): ('user' | 'node')[] =>
+  !twoRoles ? ['user', 'node'] : role === 'owner' ? ['user'] : ['node'];
 
 export type DraftCheck =
   | { ok: true; name: string; due: string }
@@ -285,31 +444,40 @@ export function checkDraft(d: Pick<CreateDraft, 'name' | 'due'>): DraftCheck {
  * 发给 POST /api/requirements 的字段。负责人只带稳定身份 {kind,id}(#484):显示名不是身份,
  * 旧的 assignee 文本永远是空串。
  */
-export function createInput(d: CreateDraft): { name: string; priority: ReqPriority; assignee: ''; due: string; column: ReqColumn; owner?: RequirementPersonRef } | null {
+export function createInput(d: CreateDraft, twoRoles = false): { name: string; priority: ReqPriority; assignee: ''; due: string; column: ReqColumn; owner?: RequirementPersonRef; agentOwner?: RequirementPersonRef; projectId?: string } | null {
   const c = checkDraft(d);
   if (!c.ok) return null;
+  // 分两个角色的 Hub 上,种类不对的一侧不发(Hub 会 400);旧 Hub 没有负责 Agent。
+  const owner = d.owner && (!twoRoles || d.owner.kind === 'user') ? d.owner : null;
+  const agent = twoRoles && d.agentOwner && d.agentOwner.kind === 'node' ? d.agentOwner : null;
   return {
     name: c.name,
     priority: REQ_PRIORITIES.includes(d.priority) ? d.priority : 'normal',
     assignee: '',
     due: c.due,
     column: d.column,
-    ...(d.owner ? { owner: { kind: d.owner.kind, id: d.owner.id } } : {}),
+    ...(owner ? { owner: { kind: owner.kind, id: owner.id } } : {}),
+    ...(agent ? { agentOwner: { kind: agent.kind, id: agent.id } } : {}),
+    ...(d.projectId ? { projectId: d.projectId } : {}),
   };
 }
 
 // ── 详情编辑 ─────────────────────────────────────────────────────────────
 
-export interface EditDraft { name: string; priority: ReqPriority; due: string; owner: RequirementPersonRef | null }
+export interface EditDraft { name: string; priority: ReqPriority; due: string; owner: RequirementPersonRef | null; agentOwner: RequirementPersonRef | null; description: string; projectId: string | null }
 
 export const editDraftOf = (item: Requirement): EditDraft => ({
   name: item.name,
   priority: item.priority,
   due: item.due,
   owner: item.owner ? { kind: item.owner.kind, id: item.owner.id } : null,
+  agentOwner: item.agentOwner ? { kind: item.agentOwner.kind, id: item.agentOwner.id } : null,
+  description: item.description ?? '',
+  projectId: item.projectId ?? null,
 });
 
-export type EditPatch = { name?: string; priority?: ReqPriority; due?: string; owner?: RequirementPersonRef | null };
+/** PATCH 请求体(字段名就是线上的名字)。 */
+export type EditPatch = { name?: string; priority?: ReqPriority; due?: string; owner?: RequirementPersonRef | null; agent_owner?: RequirementPersonRef | null; description?: string; checklist?: ChecklistItem[]; project_id?: string | null };
 
 /**
  * 只提交改过的字段;没改返回 null(保存按钮不可用)。旧 Hub(owner undefined)不提交负责人 ——
@@ -327,6 +495,14 @@ export function editPatch(item: Requirement, d: EditDraft): EditPatch | null {
     const after = d.owner ? personKey(d.owner) : '';
     if (before !== after) patch.owner = d.owner ? { kind: d.owner.kind, id: d.owner.id } : null;
   }
+  if (item.agentOwner !== undefined) {
+    const before = item.agentOwner ? personKey(item.agentOwner) : '';
+    const after = d.agentOwner ? personKey(d.agentOwner) : '';
+    if (before !== after) patch.agent_owner = d.agentOwner ? { kind: d.agentOwner.kind, id: d.agentOwner.id } : null;
+  }
+  // 描述跟标题一起走「保存修改」;旧 Hub(没有 description 字段)不发。
+  if (item.description !== undefined && d.description.replace(/\r\n?/g, '\n') !== item.description) patch.description = d.description.replace(/\r\n?/g, '\n');
+  if (item.projectId !== undefined && (d.projectId ?? null) !== (item.projectId ?? null)) patch.project_id = d.projectId ?? null;
   return Object.keys(patch).length ? patch : null;
 }
 
@@ -343,5 +519,64 @@ export function patchApplied(row: Requirement, patch: EditPatch): boolean {
     const got = row.owner ? personKey(row.owner) : '';
     if (want !== got) return false;
   }
+  if (patch.agent_owner !== undefined) {
+    const want = patch.agent_owner ? personKey(patch.agent_owner) : '';
+    const got = row.agentOwner ? personKey(row.agentOwner) : '';
+    if (want !== got) return false;
+  }
+  if (patch.description !== undefined && row.description !== patch.description) return false;
+  if (patch.project_id !== undefined && (row.projectId ?? null) !== patch.project_id) return false;
+  if (patch.checklist !== undefined && JSON.stringify(row.checklist?.map(i => i.id)) !== JSON.stringify(patch.checklist.map(i => i.id))) return false;
   return true;
+}
+
+// ── 子任务 ───────────────────────────────────────────────────────────────
+// 勾选走单项接口(setChecklistItemOnHub);增、删、排序改整张清单(PATCH {checklist})。
+// 上限与 Hub 一致:最多 100 项,每项 1–500 字。
+
+export const CHECKLIST_MAX_ITEMS = 100;
+export const CHECKLIST_TEXT_MAX = 500;
+export const DESCRIPTION_MAX = 20_000;
+
+/** 这个 Hub 有没有描述 / 子任务(行里带这两个字段)。 */
+export const hasDetails = (item: Pick<Requirement, 'description' | 'checklist'>): boolean => item.description !== undefined && item.checklist !== undefined;
+
+export function checklistProgress(list: readonly ChecklistItem[] | undefined): { done: number; total: number; ratio: number } {
+  const total = list?.length ?? 0;
+  const done = list?.filter(i => i.done).length ?? 0;
+  return { done, total, ratio: total ? done / total : 0 };
+}
+
+export const newChecklistId = (rand: () => number = Math.random): string =>
+  `ck_${Array.from({ length: 16 }, () => Math.floor(rand() * 16).toString(16)).join('')}`;
+
+/** 加一项(文字折成一行、去空白);空文字、超长、满 100 项 → null。 */
+export function addChecklistItem(list: readonly ChecklistItem[], text: string, id: string = newChecklistId()): ChecklistItem[] | null {
+  const t = text.replace(/[\r\n]+/g, ' ').trim();
+  if (!t || t.length > CHECKLIST_TEXT_MAX || list.length >= CHECKLIST_MAX_ITEMS) return null;
+  return [...list, { id, text: t, done: false }];
+}
+
+export const setChecklistDone = (list: readonly ChecklistItem[], id: string, done: boolean): ChecklistItem[] =>
+  list.map(i => (i.id === id ? { ...i, done } : i));
+
+export const removeChecklistItem = (list: readonly ChecklistItem[], id: string): ChecklistItem[] => list.filter(i => i.id !== id);
+
+/** 把 from 位置的项挪到 to(拖动排序 / Alt+↑↓)。越界或不动 → 原样返回同一个数组。 */
+export function moveChecklistItem(list: readonly ChecklistItem[], from: number, to: number): readonly ChecklistItem[] {
+  if (from === to || from < 0 || from >= list.length || to < 0 || to >= list.length) return list;
+  const next = [...list];
+  const [item] = next.splice(from, 1);
+  next.splice(to, 0, item);
+  return next;
+}
+
+/** 拖动排序:指针在第几行的上半 / 下半 → 落到第几个位置(按各行的上下沿算)。 */
+export function checklistDropIndex(rows: readonly { top: number; bottom: number }[], y: number, from: number): number {
+  let to = rows.length - 1;
+  for (let i = 0; i < rows.length; i++) {
+    const mid = (rows[i].top + rows[i].bottom) / 2;
+    if (y < mid) { to = i > from ? i - 1 : i; return Math.max(0, Math.min(rows.length - 1, to)); }
+  }
+  return to;
 }
