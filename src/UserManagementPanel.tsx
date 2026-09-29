@@ -17,11 +17,11 @@ import { SettingsButton, SettingsGroup, SettingsRow } from './settings-kit';
 import { useModalSafePadding } from './safe-area-runtime';
 import { withBasePadding } from './modal-safe-area';
 import {
-  aliasOnlyGrants, canManageUsers, currentNetworkRow, filterPickable, grantsChanged, grantsEditable, grantsPayload,
+  aliasOnlyGrants, canAddAdminsIn, canManageUsers, manageableNetworks, currentNetworkRow, filterPickable, grantsChanged, grantsEditable, grantsPayload,
   memberAccessSummary, selectionFromGrants, setCanMessage, toggleAgent, validateNewUser,
-  type AgentGrant, type AuthMe, type MemberRole, type NetworkMember, type PickableAgent,
+  type AgentGrant, type AuthMe, type MemberRole, type NetworkChoice, type NetworkMember, type PickableAgent,
 } from './user-admin';
-import { createHubUser, fetchAgentGrants, fetchNetworkMembers, saveAgentGrants } from './user-admin-api';
+import { createHubUser, fetchAgentGrants, fetchNetworkMembers, fetchNetworks, saveAgentGrants } from './user-admin-api';
 
 const ROLE_KEY: Record<string, string> = { owner: 'users.role.owner', admin: 'users.role.admin', member: 'users.role.member', viewer: 'users.role.viewer' };
 const roleLabel = (role: MemberRole) => (ROLE_KEY[role] ? tr(ROLE_KEY[role]) : String(role));
@@ -35,8 +35,13 @@ export default function UserManagementPanel({ cfg, me, networkId }: { cfg: HubCo
   const [editing, setEditing] = useState<NetworkMember | null>(null);
   const allowed = canManageUsers(me, networkId);
   const myId = me?.user?.user_id;
-  const netName = currentNetworkRow(me, networkId)?.network_name ?? networkId ?? '';
-  const canAddAdmins = me?.user?.role === 'admin' || currentNetworkRow(me, networkId)?.member_role === 'owner';
+  // 新建用户能选的网络:Hub 管理员 = 全部网络;否则 = 我管的(owner / admin)。当前网络排第一、默认选中。
+  const [allNetworks, setAllNetworks] = useState<Array<{ network_id: string; network_name?: string | null; name?: string | null }> | null>(null);
+  useEffect(() => {
+    if (!allowed || me?.user?.role !== 'admin') return;
+    void fetchNetworks(cfg).then(setAllNetworks).catch(() => setAllNetworks(null));
+  }, [cfg, allowed, me?.user?.role]);
+  const networkChoices = useMemo(() => manageableNetworks(me, networkId, allNetworks), [me, networkId, allNetworks]);
 
   const load = useCallback(() => {
     if (!networkId || !allowed) return;
@@ -79,11 +84,11 @@ export default function UserManagementPanel({ cfg, me, networkId }: { cfg: HubCo
       {creating ? (
         <NewUserDialog
           cfg={cfg}
+          me={me}
           networkId={networkId}
-          networkName={netName}
-          canAddAdmins={canAddAdmins}
+          networks={networkChoices.length ? networkChoices : [{ network_id: networkId, name: currentNetworkRow(me, networkId)?.network_name ?? networkId }]}
           onClose={() => setCreating(false)}
-          onCreated={name => { setCreating(false); setNotice(tr('users.created', { name })); load(); }}
+          onCreated={(name, net) => { setCreating(false); setNotice(net === networkId ? tr('users.created', { name }) : tr('users.createdElsewhere', { name, network: networkChoices.find(n => n.network_id === net)?.name ?? net })); load(); }}
         />
       ) : null}
       {editing ? (
@@ -149,9 +154,11 @@ function Actions({ onCancel, onConfirm, confirmLabel, disabled, busy, testID }: 
   );
 }
 
-function NewUserDialog({ cfg, networkId, networkName, canAddAdmins, onClose, onCreated }: {
-  cfg: HubConfig; networkId: string; networkName: string; canAddAdmins: boolean; onClose: () => void; onCreated: (name: string) => void;
+function NewUserDialog({ cfg, me, networkId, networks, onClose, onCreated }: {
+  cfg: HubConfig; me: AuthMe | null; networkId: string; networks: NetworkChoice[]; onClose: () => void; onCreated: (name: string, networkId: string) => void;
 }) {
+  const [targetNet, setTargetNet] = useState(networkId);
+  const canAddAdmins = canAddAdminsIn(me, targetNet);
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [displayName, setDisplayName] = useState('');
@@ -161,11 +168,12 @@ function NewUserDialog({ cfg, networkId, networkName, canAddAdmins, onClose, onC
   const problem = validateNewUser({ username, password });
   const touched = username.length > 0 || password.length > 0;
   const roles: MemberRole[] = canAddAdmins ? ['member', 'viewer', 'admin'] : ['member', 'viewer'];
+  useEffect(() => { if (!canAddAdmins && role === 'admin') setRole('member'); }, [canAddAdmins, role]);
   const submit = () => {
     if (problem) return;
     setBusy(true); setError('');
-    void createHubUser(cfg, { username: username.trim(), password, ...(displayName.trim() ? { display_name: displayName.trim() } : {}), network_id: networkId, role })
-      .then(() => onCreated(username.trim()))
+    void createHubUser(cfg, { username: username.trim(), password, ...(displayName.trim() ? { display_name: displayName.trim() } : {}), network_id: targetNet, role })
+      .then(() => onCreated(username.trim(), targetNet))
       .catch(e => setError(String((e as Error)?.message ?? e)))
       .finally(() => setBusy(false));
   };
@@ -176,7 +184,17 @@ function NewUserDialog({ cfg, networkId, networkName, canAddAdmins, onClose, onC
       <Field label={tr('users.displayName')} hint={tr('users.optional')} value={displayName} onChangeText={setDisplayName} testID="new-user-display-name" />
       <View style={styles.field}>
         <Text style={styles.fieldLabel}>{tr('users.network')}</Text>
-        <Text style={styles.readonly} numberOfLines={1} testID="new-user-network">{networkName}</Text>
+        {networks.length > 1 ? (
+          <View style={styles.netChips} accessibilityRole="radiogroup" testID="new-user-network">
+            {networks.map(n => (
+              <Pressable key={n.network_id} accessibilityRole="radio" accessibilityState={{ selected: targetNet === n.network_id, checked: targetNet === n.network_id }} onPress={() => setTargetNet(n.network_id)} style={[styles.netChip, targetNet === n.network_id && styles.segmentOn]} testID={`new-user-network-${n.network_id}`}>
+                <Text style={[styles.segmentText, targetNet === n.network_id && styles.segmentTextOn]} numberOfLines={1}>{n.name}</Text>
+              </Pressable>
+            ))}
+          </View>
+        ) : (
+          <Text style={styles.readonly} numberOfLines={1} testID="new-user-network">{networks[0]?.name ?? networkId}</Text>
+        )}
       </View>
       <View style={styles.field}>
         <Text style={styles.fieldLabel}>{tr('users.role')}</Text>
@@ -276,6 +294,8 @@ const makeStyles = () => StyleSheet.create({
   fieldHint: { color: colors.textMuted, fontSize: 12, fontWeight: '400' },
   input: { minHeight: 42, paddingHorizontal: spacing.md, borderRadius: radius.control, backgroundColor: colors.inputBg, borderWidth: 1, borderColor: colors.border, color: colors.text, fontSize: 14, ...(Platform.OS === 'web' ? ({ outlineStyle: 'none' } as any) : {}) },
   readonly: { color: colors.text, fontSize: 14, paddingVertical: 4 },
+  netChips: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.xs },
+  netChip: { maxWidth: '100%', paddingHorizontal: spacing.md, paddingVertical: 7, borderRadius: radius.control, borderWidth: 1, borderColor: colors.border },
   segmented: { flexDirection: 'row', borderRadius: radius.control, borderWidth: 1, borderColor: colors.border, overflow: 'hidden' },
   segment: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingVertical: 9 },
   segmentOn: { backgroundColor: colors.accent },

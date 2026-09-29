@@ -150,3 +150,31 @@ export function agentsEmptyKind(opts: { query: string; filtering: boolean; restr
   if (opts.filtering) return 'filter';
   return opts.restricted ? 'restricted' : 'none';
 }
+
+/** 新建用户时能选的网络:Hub 管理员 = 全部网络(GET /api/networks);否则 = 我是 owner / admin 的那些。当前网络排第一。 */
+export type NetworkChoice = { network_id: string; name: string };
+export function manageableNetworks(
+  me: AuthMe | null | undefined,
+  currentNetworkId: string | undefined,
+  allNetworks?: ReadonlyArray<{ network_id?: string; network_name?: string | null; name?: string | null }> | null,
+): NetworkChoice[] {
+  const hubAdmin = me?.user?.role === 'admin';
+  const source = hubAdmin && allNetworks?.length
+    ? allNetworks
+    : (me?.networks ?? []).filter(n => n.member_role === 'owner' || n.member_role === 'admin');
+  const out: NetworkChoice[] = [];
+  const seen = new Set<string>();
+  for (const n of source) {
+    const id = n?.network_id;
+    if (typeof id !== 'string' || !id || seen.has(id)) continue;
+    seen.add(id);
+    const name = (('name' in n ? n.name : null) || n.network_name || id) as string;
+    out.push({ network_id: id, name });
+  }
+  return out.sort((a, b) => (a.network_id === currentNetworkId ? -1 : b.network_id === currentNetworkId ? 1 : a.name.localeCompare(b.name)));
+}
+
+/** 在选中的网络里能不能建 admin:Hub 管理员,或我是那个网络的 owner。 */
+export function canAddAdminsIn(me: AuthMe | null | undefined, networkId: string | undefined): boolean {
+  return me?.user?.role === 'admin' || currentNetworkRow(me, networkId)?.member_role === 'owner';
+}

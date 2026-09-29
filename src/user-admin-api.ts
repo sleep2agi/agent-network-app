@@ -49,3 +49,7 @@ export const saveAgentGrants = (cfg: HubConfig, networkId: string, userId: strin
 /** POST /api/auth/register(公开)。成功返回用户令牌,调用方按登录同一条路径继续。 */
 export const registerHubAccount = (serverUrl: string, body: { username: string; password: string; display_name?: string }) =>
   call<{ token?: string; user?: { username?: string } }>(serverUrl, null, '/api/auth/register', { method: 'POST', body });
+
+/** GET /api/networks —— Hub 管理员拿到全部网络(新建用户时选网络用)。 */
+export const fetchNetworks = (cfg: HubConfig) =>
+  call<{ networks: Array<{ network_id: string; network_name?: string | null; name?: string | null }> }>(cfg.serverUrl, cfg.token, '/api/networks').then(d => d.networks ?? []);

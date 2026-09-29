@@ -69,6 +69,7 @@ for (const e of els.filter(e => /\bonBack=/.test(e.props))) {
 // PANE_SCREENS_WITH_BACK (judged above) or be an exemption whose own gate is checked here.
 const EXEMPT: Record<string, { gate: RegExp; why: string }> = {
   ChatScreen: { gate: /\{!desktop && !hideBack \? \(/, why: 'back already hidden when `desktop`' },
+  DmChatScreen: { gate: /\{!desktop && !hideBack \? \(/, why: 'same header rule as ChatScreen: back hidden when `desktop`' },
   SettingsScreen: { gate: /\{compact \? \(subPage \? phoneHeader : listHeader\) : sidebar\}/, why: 'phone header only in the compact (< 640 dp) branch; desktop is ≥ 860' },
   ScheduledTasksScreen: { gate: /onBack=\{wide \? undefined :/, why: 'detail back only in the narrow master/detail branch' },
   // Phone 设置 → 服务器 (Vincent 2026-09-29): back only when onBack is passed; the workspace never passes it

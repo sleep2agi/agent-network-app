@@ -112,7 +112,7 @@ export function parseStoredListWidth(raw: string | null | undefined): number | n
 // functions are that reading, and each is the other's inverse on the screens that
 // split (tested both ways).
 
-export type DetailKind = 'chat' | 'nodeDetail' | 'nodeInfo';
+export type DetailKind = 'chat' | 'dm' | 'nodeDetail' | 'nodeInfo';
 export interface PaneSelection {
   /** Highlighted row in the left list (undefined = nothing selected). */
   selectedAlias?: string;
@@ -122,7 +122,7 @@ export interface PaneSelection {
 
 type ScreenLike = { name: string; alias?: string };
 
-const DETAIL_KINDS: readonly string[] = ['chat', 'nodeDetail', 'nodeInfo'];
+const DETAIL_KINDS: readonly string[] = ['chat', 'dm', 'nodeDetail', 'nodeInfo'];
 
 /**
  * Screens that render as list + detail in the two-pane layout. Every other screen

@@ -16,6 +16,9 @@ import './i18n-chat';
 import './i18n-users';
 import { agentsEmptyKind, isRestrictedIn } from './user-admin';
 import { fetchAuthMe } from './user-admin-api';
+import { noteHumanUsernames, peopleRows, type Human, type PersonRow } from './human-dm';
+import { fetchDmThreads, fetchHumans } from './human-dm-api';
+import { subscribeHumanDm } from './human-dm-bus';
 import { isAgentOnline } from './chat-actions';
 import { fetchStatus, fetchUserMessages, takeStatusPrefetch, type HubConfig, type Session,
   ackAgentMessages,
@@ -79,6 +82,8 @@ export default function AgentsScreen({
   onOpenChat,
   onOpenPicker,
   onOpenNodeDetail,
+  onOpenPerson,
+  selectedPerson,
   compact = false,
   selectedAlias,
   pinnedAliases = [],
@@ -97,6 +102,10 @@ export default function AgentsScreen({
    *  没有 onTogglePin 的列表(桌面「服务器 → 节点」)没有菜单,长按仍直接进节点详情。
    *  `onPress` remains the high-frequency path to chat and is NOT changed (通信龙 red-line 71ee862d). */
   onOpenNodeDetail: (alias: string) => void;
+  /** 人员区块(同网络的其他人,私信)。不传 = 不画(比如「服务器 → 节点」那个列表)。 */
+  onOpenPerson?: (person: Human) => void;
+  /** 当前打开的私信对象(用户名),行高亮。 */
+  selectedPerson?: string;
   compact?: boolean;
   selectedAlias?: string;
   pinnedAliases?: string[];
@@ -120,12 +129,26 @@ export default function AgentsScreen({
   const [query, setQuery] = useState('');
   // 多用户 Agent 权限:当前网络里我是不是受限成员(只看管理员分配的 Agent)。决定空列表说什么。
   const [restricted, setRestricted] = useState(false);
+  const [selfUserId, setSelfUserId] = useState<string | undefined>(undefined);
   useEffect(() => {
     if (preview) return;
     let live = true;
-    void fetchAuthMe(cfg).then(me => { if (live) setRestricted(isRestrictedIn(me, cfg.networkId)); }).catch(() => {});
+    void fetchAuthMe(cfg).then(me => { if (!live) return; setRestricted(isRestrictedIn(me, cfg.networkId)); setSelfUserId(me?.user?.user_id ?? undefined); }).catch(() => {});
     return () => { live = false; };
   }, [cfg.serverUrl, cfg.token, cfg.networkId, preview]);
+  // 人员(hub#2086):同网络的其他人 + 各自私信未读。旧 hub 没有这些接口 → 空,区块不出现。
+  const [people, setPeople] = useState<PersonRow[]>([]);
+  const loadPeople = useCallback(async () => {
+    if (!onOpenPerson || !cfg.networkId || preview || !selfUserId) return;
+    try {
+      const humans = await fetchHumans(cfg, cfg.networkId);
+      noteHumanUsernames(humans.map(h => h.username));
+      const threads = await fetchDmThreads(cfg, cfg.networkId).catch(() => []);
+      setPeople(peopleRows(humans, threads, selfUserId));
+    } catch { setPeople([]); }
+  }, [cfg.serverUrl, cfg.token, cfg.networkId, !!onOpenPerson, preview, selfUserId]);
+  usePoll(loadPeople, 15000, [loadPeople]);
+  useEffect(() => subscribeHumanDm(() => { void loadPeople(); }), [loadPeople]);
   // 设置 → 快捷键 的「搜索会话」(默认 ⌘/Ctrl+K,App.tsx DesktopWorkspace 发起):只有桌面列表栏
   // (compact)接。搜索框平时 > 10 个 agent 才出现;按了快捷键就算 agent 少也临时露出来并聚焦。
   // 从别的页切回来时列表刚挂上、会话还在加载,搜索框可能还没渲染:记下「要聚焦」,等它出现的那次渲染后再聚焦。
@@ -444,6 +467,7 @@ export default function AgentsScreen({
   const renderCompactRow = (item: Session) => {
     return (
     <Pressable
+      testID={`agent-row-${item.alias}`}
       {...(compact && rowMenu ? ({ dataSet: { agentAlias: item.alias } } as any) : {})}
       onHoverIn={compact ? () => { setHoveredAlias(item.alias); markListActive(); } : undefined}
       onHoverOut={compact ? () => setHoveredAlias(current => current === item.alias ? null : current) : undefined}
@@ -494,6 +518,62 @@ export default function AgentsScreen({
         ) : null}
       </View>
     </Pressable>
+    );
+  };
+
+  // 人员行:与 agent 行同一套几何(桌面侧栏 = renderCompactRow 的平铺行;手机 / 双栏 = renderPhoneRow 的 68 dp 行),
+  // 头像 · 名字(· 用户名)· 未读角标。没有在线点、没有任务预览 —— 那是 agent 才有的状态。
+  const renderPersonRow = (p: PersonRow) => {
+    const selected = selectedPerson === p.username;
+    const badge = formatUnreadBadge(p.unread);
+    if (compact) {
+      return (
+        <Pressable
+          testID={`person-row-${p.username}`}
+          accessibilityRole="button"
+          accessibilityLabel={t('people.a11y', { name: p.name })}
+          onPress={() => onOpenPerson?.(p)}
+          style={({ pressed }) => [
+            styles.card,
+            { userSelect: 'none', cursor: 'default' } as any,
+            { borderWidth: 0, borderBottomWidth: 0, borderRadius: radius.control, paddingHorizontal: spacing.md, paddingVertical: 10, marginBottom: 2, backgroundColor: 'transparent' },
+            selected && { backgroundColor: colors.rowActive },
+            pressed && { opacity: 0.7 },
+          ]}
+        >
+          <View style={styles.avatarWrap}>
+            <AliasAvatar alias={p.username} size={34} />
+            <AgentUnreadBadge badge={badge} testID={`person-unread-${p.username}`} />
+          </View>
+          <View style={{ flex: 1, minWidth: 0 }}>
+            <Text dense selectable={false} style={[styles.alias, { fontSize: 13, fontWeight: '600' }]} numberOfLines={1}>{p.name}</Text>
+            {p.name !== p.username ? <Text dense selectable={false} style={[styles.task, { fontSize: 11 }]} numberOfLines={1}>{p.username}</Text> : null}
+          </View>
+        </Pressable>
+      );
+    }
+    return (
+      <Pressable
+        testID={`person-row-${p.username}`}
+        accessibilityRole="button"
+        accessibilityState={{ selected }}
+        accessibilityLabel={t('people.a11y', { name: p.name })}
+        onPress={() => onOpenPerson?.(p)}
+        style={({ pressed }) => [rowStyles.row, { backgroundColor: selected ? colors.rowActive : pressed ? colors.rowHover : colors.bg }]}
+      >
+        <View style={rowStyles.avatar}>
+          <AliasAvatar alias={p.username} size={rowGeom().avatar} fixedSize />
+        </View>
+        <View style={rowStyles.body}>
+          <View style={rowStyles.line}>
+            <Text dense selectable={false} numberOfLines={1} style={[rowStyles.name, { color: colors.text }]}>{p.name}</Text>
+          </View>
+          {p.name !== p.username || badge ? <View style={rowStyles.line}>
+            <Text dense selectable={false} numberOfLines={1} style={[rowStyles.preview, { color: colors.textMuted }]}>{p.name !== p.username ? p.username : ''}</Text>
+            <AgentUnreadBadge inline badge={badge} testID={`person-unread-${p.username}`} />
+          </View> : null}
+        </View>
+      </Pressable>
     );
   };
 
@@ -700,7 +780,21 @@ export default function AgentsScreen({
         </View>
       }
       renderItem={({ item }) => (compact ? renderCompactRow(item) : renderPhoneRow(item))}
-      ListFooterComponent={hiddenSessions.length ? (
+      ListFooterComponent={<>{people.length && onOpenPerson && !q ? (
+        // 人员:同网络的其他人,点开是私信。放在 agent 分组之后(不动第一行的位置 —— 更紧凑时导航栏按它对齐)。
+        <View testID="people-section">
+          <View style={[rowStyles.group, compact ? rowStyles.groupCompact : null, { backgroundColor: compact ? colors.listBg : colors.bg }]} testID="people-header" accessibilityRole="header">
+            <Text selectable={false} numberOfLines={1} style={[rowStyles.groupTitle, { color: colors.textMuted }]}>{t('people.title')}</Text>
+            <Text selectable={false} style={[rowStyles.groupCount, { color: colors.textMuted }]}>{people.length}</Text>
+          </View>
+          {people.map((p, i) => (
+            <View key={p.user_id}>
+              {i && !compact ? <View style={[rowStyles.separator, { backgroundColor: colors.border }]} /> : null}
+              {renderPersonRow(p)}
+            </View>
+          ))}
+        </View>
+      ) : null}{hiddenSessions.length ? (
         // 「不显示该对话」收在这里:列表最底下一行入口,点开就地展开,每行长按 → 恢复显示(点开会话也会恢复)。
         <View testID="agent-hidden-footer">
           <Pressable
@@ -719,7 +813,7 @@ export default function AgentsScreen({
             <View key={item.alias}>{compact ? renderCompactRow(item) : renderPhoneRow(item)}</View>
           )) : null}
         </View>
-      ) : null}
+      ) : null}</>}
       />
       {rowMenu ? (
         <AgentRowMenu target={menuFor} items={menuItems} touch={!pointer} onSelect={onRowMenu} onClose={() => setMenuFor(null)} />
