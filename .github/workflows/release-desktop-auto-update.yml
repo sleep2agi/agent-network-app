@@ -121,6 +121,10 @@ jobs:
           releaseBody: |-
             Signed and notarized stable update for macOS (Apple Silicon) and Windows (x64).
 
+            What's new in 0.2.145:
+            - 桌面端（Mac / Windows）「设置」在独立的新窗口打开，不再占用主窗口。
+            - 任务可以绑定 GitHub Issue：详情里贴链接或 owner/repo#123，可绑多个，点一下在浏览器打开；卡片和列表显示 Issue 数量。
+
             What's new in 0.2.144:
             - 语言切换：设置 → 外观可选「跟随系统 / 中文 / English」，即时生效；导航、设置、聊天、任务页全部支持。
             - 子需求：详情里「＋ 新建子需求」、子需求列表和进度、「属于：父需求」跳转；卡片显示子需求进度；「全部 / 只看顶层」切换（需要 Hub 升级后可用）。
