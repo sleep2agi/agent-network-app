@@ -1,6 +1,8 @@
 import * as SecureStore from 'expo-secure-store';
 import * as FileSystem from 'expo-file-system/legacy';
+import { Platform } from 'react-native';
 import { HubConfig, Session } from './api';
+import { LEGACY_SESSION_ID, accountScopedFile as scopedFile, createSessionStore, type SessionKv } from './session-registry';
 import { loadDesktopThemeMode, loadDesktopUiScale, saveDesktopThemeMode, saveDesktopUiScale } from './desktop-theme-storage';
 export { onDesktopThemeStorageChange, onDesktopUiScaleStorageChange } from './desktop-theme-storage';
 import { UI_SCALE_STORAGE_KEY, parseStoredUiScale, serializeUiScale, type UiScalePrefs } from './ui-scale';
@@ -8,8 +10,7 @@ import { UI_SCALE_STORAGE_KEY, parseStoredUiScale, serializeUiScale, type UiScal
 // Token + server persist in the platform keystore (Android Keystore /
 // iOS Keychain) so login survives app restarts. Vincent tg 683 known
 // gap: v0.1.1 lost the session on kill — this closes it.
-
-const KEY = 'hub_config_v1';
+// Several accounts since 2026-09-29: the account index and per-account keys are in src/session-registry.ts.
 
 export interface HubProfile {
   profileId: string;
@@ -66,13 +67,26 @@ const parseConfig = (raw: string | null): HubConfig | null => {
     : null;
 };
 
+// 手机 / 网页的多账号(src/session-registry.ts):原生落 SecureStore(钥匙串 / Keystore),
+// 网页(不是 Tauri 桌面壳)落 localStorage —— expo-secure-store 在 web 上是空实现,调用即抛。
+const webStorage = (): Storage | null => {
+  if (Platform.OS !== 'web') return null;
+  try { return globalThis.localStorage ?? null; } catch { return null; }
+};
+const sessionKv: SessionKv = {
+  get: async key => { const web = webStorage(); return web ? web.getItem(key) : SecureStore.getItemAsync(key); },
+  set: async (key, value) => { const web = webStorage(); if (web) web.setItem(key, value); else await SecureStore.setItemAsync(key, value); },
+  del: async key => { const web = webStorage(); if (web) web.removeItem(key); else await SecureStore.deleteItemAsync(key); },
+};
+const mobileSessions = createSessionStore(sessionKv);
+
 export const saveConfig = async (cfg: HubConfig): Promise<HubConfig> => {
   if (isTauriDesktop()) {
     const { invoke } = await import('@tauri-apps/api/core');
     return parseConfig(await invoke<string>('save_desktop_profile', { sessionJson: JSON.stringify(cfg) })) ?? cfg;
   }
-  await SecureStore.setItemAsync(KEY, JSON.stringify(cfg));
-  return cfg;
+  // 新增或更新一个账号并设为当前;其他账号的登录状态原样保留。
+  return mobileSessions.save(cfg);
 };
 
 export const loadConfig = async (): Promise<HubConfig | null> => {
@@ -81,33 +95,44 @@ export const loadConfig = async (): Promise<HubConfig | null> => {
     return parseConfig(await invoke<string | null>('load_active_desktop_profile'));
   }
   try {
-    return parseConfig(await SecureStore.getItemAsync(KEY));
+    return await mobileSessions.activeConfig();
   } catch {
     return null;
   }
 };
 
+/** 退出登录 = 只移除当前账号;还有别的账号时当前账号换成剩下的第一个(下一次 loadConfig 读到它)。 */
 export const clearConfig = async (): Promise<void> => {
   if (isTauriDesktop()) {
     const cfg = await loadConfig();
     if (cfg?.profileId) await removeHubProfile(cfg.profileId);
     return;
   }
-  await SecureStore.deleteItemAsync(KEY);
+  const index = await mobileSessions.loadIndex();
+  if (index.active) await removeHubProfile(index.active);
 };
+
+/** 手机 / 网页:迁移过来的账号在 HubConfig 上不带 profileId,在列表里的 id 是 LEGACY_SESSION_ID。 */
+export const sessionIdOf = (cfg: Pick<HubConfig, 'profileId'> | null | undefined): string | undefined =>
+  cfg ? cfg.profileId ?? (isTauriDesktop() ? undefined : LEGACY_SESSION_ID) : undefined;
 
 export const listHubProfiles = async (): Promise<HubProfileRegistry> => {
   if (!isTauriDesktop()) {
-    const cfg = await loadConfig();
-    return { schema_version: 1, active_profile_id: cfg?.profileId, profiles: cfg?.profileId ? [{
-      profileId: cfg.profileId,
-      serverUrl: cfg.serverUrl,
-      username: cfg.username ?? '',
-      networkId: cfg.networkId,
-      displayName: cfg.displayName,
-      createdAt: 0,
-      updatedAt: 0,
-    }] : [] };
+    const index = await mobileSessions.loadIndex();
+    return {
+      schema_version: 2,
+      active_profile_id: index.active,
+      profiles: index.sessions.map(s => ({
+        profileId: s.id,
+        serverUrl: s.serverUrl,
+        username: s.username,
+        networkId: s.networkId,
+        displayName: s.displayName,
+        requiresReauth: s.requiresReauth,
+        createdAt: s.createdAt,
+        updatedAt: s.updatedAt,
+      })),
+    };
   }
   const { invoke } = await import('@tauri-apps/api/core');
   const raw = JSON.parse(await invoke<string>('list_desktop_profiles'));
@@ -119,7 +144,7 @@ export const listHubProfiles = async (): Promise<HubProfileRegistry> => {
 };
 
 export const switchHubProfile = async (profileId: string): Promise<HubConfig> => {
-  if (!isTauriDesktop()) throw new Error('profile switching is currently available on desktop');
+  if (!isTauriDesktop()) return mobileSessions.switchTo(profileId);
   const { invoke } = await import('@tauri-apps/api/core');
   const cfg = parseConfig(await invoke<string>('switch_desktop_profile', { profileId }));
   if (!cfg) throw new Error('saved profile is invalid');
@@ -137,8 +162,11 @@ export const loadHubProfile = async (profileId: string): Promise<HubConfig> => {
 
 export const removeHubProfile = async (profileId: string): Promise<void> => {
   if (!isTauriDesktop()) {
-    const cfg = await loadConfig();
-    if (cfg?.profileId === profileId) await clearConfig();
+    await mobileSessions.remove(profileId);
+    // 这个账号的本地文件(Agent 列表缓存、未送达、转发、头像)一起删;best-effort,和桌面端删 profile 目录对应。
+    const scope = profileId === LEGACY_SESSION_ID ? undefined : profileId;
+    await Promise.all([SESSIONS_CACHE, AVATAR_LOCAL, OUTBOX_FILE, FORWARD_FILE].map(base =>
+      FileSystem.deleteAsync(scopedFile(base, scope), { idempotent: true }).catch(() => {})));
     return;
   }
   const { invoke } = await import('@tauri-apps/api/core');
@@ -146,7 +174,7 @@ export const removeHubProfile = async (profileId: string): Promise<void> => {
 };
 
 export const markHubProfileRequiresReauth = async (profileId: string, required = true): Promise<void> => {
-  if (!isTauriDesktop()) return;
+  if (!isTauriDesktop()) { await mobileSessions.markReauth(profileId, required); return; }
   const { invoke } = await import('@tauri-apps/api/core');
   await invoke('mark_desktop_profile_requires_reauth', { profileId, required });
 };
@@ -230,7 +258,7 @@ const SESSIONS_CACHE = `${FileSystem.cacheDirectory}sessions_cache_v1.json`;
 export const saveSessionsCache = async (sessions: Session[], profileId?: string): Promise<void> => {
   try {
     if (await writeDesktopProfileJson(profileId, 'cache/sessions.json', sessions)) return;
-    await FileSystem.writeAsStringAsync(SESSIONS_CACHE, JSON.stringify(sessions));
+    await FileSystem.writeAsStringAsync(scopedFile(SESSIONS_CACHE, profileId), JSON.stringify(sessions));
   } catch {
     /* best-effort — never fail the live path on a cache write */
   }
@@ -240,9 +268,9 @@ export const loadSessionsCache = async (profileId?: string): Promise<Session[] |
   try {
     const desktop = await readDesktopProfileJson<unknown>(profileId, 'cache/sessions.json');
     if (desktop !== undefined) return Array.isArray(desktop) ? desktop as Session[] : null;
-    const info = await FileSystem.getInfoAsync(SESSIONS_CACHE);
+    const info = await FileSystem.getInfoAsync(scopedFile(SESSIONS_CACHE, profileId));
     if (!info.exists) return null;
-    const parsed = JSON.parse(await FileSystem.readAsStringAsync(SESSIONS_CACHE));
+    const parsed = JSON.parse(await FileSystem.readAsStringAsync(scopedFile(SESSIONS_CACHE, profileId)));
     return Array.isArray(parsed) ? (parsed as Session[]) : null;
   } catch {
     return null;
@@ -259,7 +287,7 @@ const AVATAR_LOCAL = `${FileSystem.documentDirectory}avatar_local_v1.json`;
 export const saveLocalAvatars = async (map: Record<string, string>, profileId?: string): Promise<void> => {
   try {
     if (await writeDesktopProfileJson(profileId, 'preferences/avatars.json', map)) return;
-    await FileSystem.writeAsStringAsync(AVATAR_LOCAL, JSON.stringify(map));
+    await FileSystem.writeAsStringAsync(scopedFile(AVATAR_LOCAL, profileId), JSON.stringify(map));
   } catch {
     /* best-effort — never fail the UI on a preference write */
   }
@@ -269,9 +297,9 @@ export const loadLocalAvatars = async (profileId?: string): Promise<Record<strin
   try {
     const desktop = await readDesktopProfileJson<unknown>(profileId, 'preferences/avatars.json');
     if (desktop !== undefined) return desktop && typeof desktop === 'object' && !Array.isArray(desktop) ? desktop as Record<string, string> : {};
-    const info = await FileSystem.getInfoAsync(AVATAR_LOCAL);
+    const info = await FileSystem.getInfoAsync(scopedFile(AVATAR_LOCAL, profileId));
     if (!info.exists) return {};
-    const parsed = JSON.parse(await FileSystem.readAsStringAsync(AVATAR_LOCAL));
+    const parsed = JSON.parse(await FileSystem.readAsStringAsync(scopedFile(AVATAR_LOCAL, profileId)));
     return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {};
   } catch {
     return {};
@@ -286,7 +314,7 @@ const OUTBOX_FILE = `${FileSystem.documentDirectory}outbox_v1.json`;
 export const saveOutbox = async (all: OutboxEntry[], profileId?: string): Promise<void> => {
   try {
     if (await writeDesktopProfileJson(profileId, 'outbox.json', all)) return;
-    await FileSystem.writeAsStringAsync(OUTBOX_FILE, JSON.stringify(all));
+    await FileSystem.writeAsStringAsync(scopedFile(OUTBOX_FILE, profileId), JSON.stringify(all));
   } catch {
     /* best-effort — 落盘失败不阻塞发送 UI;下次 flush 再试 */
   }
@@ -296,9 +324,9 @@ export const loadOutbox = async (profileId?: string): Promise<OutboxEntry[]> => 
   try {
     const desktop = await readDesktopProfileJson<unknown>(profileId, 'outbox.json');
     if (desktop !== undefined) return Array.isArray(desktop) ? desktop as OutboxEntry[] : [];
-    const info = await FileSystem.getInfoAsync(OUTBOX_FILE);
+    const info = await FileSystem.getInfoAsync(scopedFile(OUTBOX_FILE, profileId));
     if (!info.exists) return [];
-    const parsed = JSON.parse(await FileSystem.readAsStringAsync(OUTBOX_FILE));
+    const parsed = JSON.parse(await FileSystem.readAsStringAsync(scopedFile(OUTBOX_FILE, profileId)));
     return Array.isArray(parsed) ? parsed : [];
   } catch {
     return [];
@@ -319,8 +347,8 @@ export async function saveUnreadPersistSnapshot(snapshot: unknown, profileId?: s
 
 export const saveForwardOperations = async (all: ForwardOperation[], profileId?: string): Promise<void> => {
   if (await writeDesktopProfileJson(profileId, 'forward-operations.json', all)) return;
-  await FileSystem.writeAsStringAsync(FORWARD_FILE, JSON.stringify(all));
+  await FileSystem.writeAsStringAsync(scopedFile(FORWARD_FILE, profileId), JSON.stringify(all));
 };
 export const loadForwardOperations = async (profileId?: string): Promise<ForwardOperation[]> => {
-  try { const desktop=await readDesktopProfileJson<unknown>(profileId,'forward-operations.json'); if(desktop!==undefined)return Array.isArray(desktop)?desktop as ForwardOperation[]:[]; const info=await FileSystem.getInfoAsync(FORWARD_FILE); if(!info.exists)return []; const v=JSON.parse(await FileSystem.readAsStringAsync(FORWARD_FILE)); return Array.isArray(v)?v:[]; } catch { return []; }
+  try { const desktop=await readDesktopProfileJson<unknown>(profileId,'forward-operations.json'); if(desktop!==undefined)return Array.isArray(desktop)?desktop as ForwardOperation[]:[]; const info=await FileSystem.getInfoAsync(scopedFile(FORWARD_FILE, profileId)); if(!info.exists)return []; const v=JSON.parse(await FileSystem.readAsStringAsync(scopedFile(FORWARD_FILE, profileId))); return Array.isArray(v)?v:[]; } catch { return []; }
 };

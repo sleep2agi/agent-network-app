@@ -1,6 +1,7 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { useTranslation } from './src/i18n-react';
 import { installLanguageRuntime } from './src/i18n-runtime';
+import './src/i18n-accounts';
 import { ActivityIndicator, BackHandler, Image, KeyboardAvoidingView, Platform, Pressable, SafeAreaView, ScrollView, StatusBar, StyleSheet, useWindowDimensions, View } from 'react-native';
 import { Text, TextInput } from './src/ui-text';
 import { Ionicons } from './src/icons';
@@ -769,6 +770,8 @@ function AppRoot() {
             setReauthProfile(null);
             await activateProfile(fallback.profileId);
           } : undefined}
+          // 「添加账号」:当前账号还登录着(cfg 在)→ 可以取消,回到设置;登录成功时 saveConfig 新增账号、不动当前这个。
+          onCancelAdd={cfg && !reauthProfile ? () => setScreen({ name: 'settings' }) : undefined}
           onLogin={async c => {
             const saved = await saveConfig(reauthProfile ? { ...c, profileId: reauthProfile.profileId, displayName: reauthProfile.displayName } : c);
             clearProfileUnauthorized(saved.profileId);
@@ -1311,7 +1314,14 @@ const makeDesktopStyles = () => StyleSheet.create({
   emptyHint: { color: colors.textMuted, fontSize: 12 },
 });
 
-export function LoginScreen({ onLogin, initialProfile, onCancelReauth }: { onLogin: (cfg: HubConfig) => Promise<void>; initialProfile?: Pick<HubProfile, 'profileId' | 'serverUrl' | 'username'> | null; onCancelReauth?: () => Promise<void> }) {
+export function LoginScreen({ onLogin, initialProfile, onCancelReauth, onCancelAdd }: {
+  onLogin: (cfg: HubConfig) => Promise<void>;
+  initialProfile?: Pick<HubProfile, 'profileId' | 'serverUrl' | 'username'> | null;
+  onCancelReauth?: () => Promise<void>;
+  /** 切换账号 →「添加账号」:已经登录着一个账号时打开的登录页。给了就是添加模式,带一个返回当前账号的按钮。 */
+  onCancelAdd?: () => void;
+}) {
+  const { t } = useTranslation();
   const [serverUrl, setServerUrl] = useState(initialProfile?.serverUrl ?? '');
   const [username, setUsername] = useState(initialProfile?.username ?? '');
   const [password, setPassword] = useState('');
@@ -1353,8 +1363,8 @@ export function LoginScreen({ onLogin, initialProfile, onCancelReauth }: { onLog
       <View style={[entryStyles.card, loginStyles.card, compact && entryStyles.cardCompact]}>
         <Image source={require('./assets/splash-icon.png')} style={entryStyles.logo} resizeMode="contain" />
         <View style={loginStyles.heading}>
-          <Text style={entryStyles.title}>{initialProfile ? '重新验证账号' : '连接你的工作区'}</Text>
-          <Text style={entryStyles.copy}>{initialProfile ? '登录状态已失效。重新验证只会更新这个账号，其他工作区不会受到影响。' : '输入服务器和账号信息，继续与你的 Agent 协作。'}</Text>
+          <Text style={entryStyles.title} testID={onCancelAdd && !initialProfile ? 'login-add-account-title' : undefined}>{initialProfile ? '重新验证账号' : onCancelAdd ? t('accounts.addTitle') : '连接你的工作区'}</Text>
+          <Text style={entryStyles.copy}>{initialProfile ? '登录状态已失效。重新验证只会更新这个账号，其他工作区不会受到影响。' : onCancelAdd ? t('accounts.addCopy') : '输入服务器和账号信息，继续与你的 Agent 协作。'}</Text>
         </View>
         <View style={loginStyles.form}>
           <View style={loginStyles.field}>
@@ -1450,6 +1460,10 @@ export function LoginScreen({ onLogin, initialProfile, onCancelReauth }: { onLog
       {onCancelReauth ? (
         <Pressable style={entryStyles.secondary} onPress={() => { void onCancelReauth().catch(cancelError => setError(String(cancelError))); }}>
           <Text style={entryStyles.secondaryText}>暂不处理，切换其他账号</Text>
+        </Pressable>
+      ) : onCancelAdd ? (
+        <Pressable testID="login-cancel-add" style={entryStyles.secondary} onPress={onCancelAdd}>
+          <Text style={entryStyles.secondaryText}>{t('accounts.cancelAdd')}</Text>
         </Pressable>
       ) : null}
       {/* Version on the login page so device screenshots are
