@@ -122,7 +122,7 @@ jobs:
             Signed and notarized stable update for macOS (Apple Silicon) and Windows (x64).
 
             What's new in 0.2.144:
-            - 语言切换：设置 → 外观可选「跟随系统 / 中文 / English」，即时生效；已覆盖导航、设置、快捷键、语音设置和聊天，任务页下一版。
+            - 语言切换：设置 → 外观可选「跟随系统 / 中文 / English」，即时生效；导航、设置、聊天、任务页全部支持。
             - 子需求：详情里「＋ 新建子需求」、子需求列表和进度、「属于：父需求」跳转；卡片显示子需求进度；「全部 / 只看顶层」切换（需要 Hub 升级后可用）。
             - 同步自 GitHub 的任务显示「在 GitHub 打开」。
             - 桌面内置本地 Hub 升级到 preview.66，本地 Hub 也支持新的任务功能。
