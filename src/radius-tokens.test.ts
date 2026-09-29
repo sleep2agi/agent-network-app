@@ -12,11 +12,13 @@
 // 例外只能进下面的 ALLOW:文件 + 那一行值的原文 + 一句理由。
 import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { join, relative, sep } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 let p = 0, t = 0;
 const ck = (name: string, ok: boolean) => { t++; if (ok) p++; console.log(`${ok ? '✓' : '✗'} ${name}`); };
 
-const ROOT = new URL('..', import.meta.url).pathname.replace(/\/$/, '');
+// fileURLToPath, not URL.pathname: on Windows .pathname is '/D:/…' (CI windows-latest ENOENT).
+const ROOT = fileURLToPath(new URL('..', import.meta.url)).replace(/[\\/]$/, '');
 const TOKEN_FILE = 'src/theme.ts';
 
 /** 显式例外。key = `<posix 路径>|<值原文>`。 */
