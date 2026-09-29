@@ -14,6 +14,10 @@
 //   picker row: avatar / name / dot / ✓ centres within 1px (the selected row)
 //   picker   : left inset == right inset (search box inside the panel) ±1; row padding equal ±1
 //   sheet    : phone height ≈ 85% of the window; dialog 520×640 centred
+//   unassignable (2026-09-29): online sessions with no node row are listed greyed with a reason —
+//              avatar / name / dot / reason centres within 1px, reason's right inset == a normal row's
+//              runtime hint, avatar dimmed, tap does nothing; the placeholder count == listed rows;
+//              offline sessions with no node row are named in the list footer.
 // Exit 1 when any assertion fails.
 import { createServer } from 'node:http';
 import { readFileSync, existsSync, mkdirSync, statSync } from 'node:fs';
@@ -44,6 +48,14 @@ groups.forEach((name, g) => {
     sessions.push({ alias, node_id, status, runtime: RUNTIMES[(g + i) % 4], updated_at: new Date().toISOString() });
   }
 });
+// Production shape (2026-09-29): sessions with no /api/nodes row. Two online (old claude-code-cli
+// channel servers that never reported node_id) ⇒ greyed rows; three offline probes ⇒ footer only.
+// Like /api/status?light=1, these carry no node_id.
+const UNASSIGNABLE = ['旧版甲', '旧版乙'];
+sessions.push({ alias: UNASSIGNABLE[0], status: 'idle', runtime: 'claude-code-cli', agent: 'claude-code', updated_at: new Date().toISOString() });
+sessions.push({ alias: UNASSIGNABLE[1], status: 'working', runtime: 'claude-code-cli', agent: 'claude-code', updated_at: new Date().toISOString() });
+for (const a of ['probe-01', 'probe-02', 'probe-03']) sessions.push({ alias: a, status: 'offline', runtime: 'codex-sdk', updated_at: new Date().toISOString() });
+const LISTED = nodes.length + UNASSIGNABLE.length;
 const json = (body) => ({ status: 200, contentType: 'application/json', body: JSON.stringify(body) });
 const answer = (url) => {
   const p = new URL(url).pathname;
@@ -179,6 +191,53 @@ for (const [w, h] of [[390, 844], [1200, 850]]) {
     record(vp, scheme, 'picker row padding', { pads: Math.abs((ra.x - rb.x) - (rb.r - slotR)) <= 1 && Math.abs((ra.x - rb.x) - padL) <= 1 },
       { padL: r1(ra.x - rb.x), padR: r1(rb.r - slotR), searchPad: r1(padL) });
     await page.screenshot({ path: `${OUT}/nodepicker-${tag}-picker-open.png` });
+
+    // header count == listed rows (60 registered + 2 unassignable), not the session count (65)
+    const placeholder = await page.locator('[data-testid="node-picker-input"]').getAttribute('placeholder');
+    record(vp, scheme, 'search placeholder counts listed rows', { count: placeholder === `搜索 ${LISTED} 个节点(支持拼音)` }, { text: placeholder });
+    // footer: scroll the list to the end
+    await page.locator('[data-testid="node-picker-list"]').first().evaluate(el => { const sc = [el, ...el.querySelectorAll('*')].find(e => e.scrollHeight > e.clientHeight + 4); if (sc) sc.scrollTop = sc.scrollHeight; });
+    await page.waitForTimeout(700);
+    const footer = await page.locator('[data-testid="node-picker-hidden-offline"]').textContent().catch(() => '');
+    // text left edge (a Range, not the element box: the padding is inside the element)
+    const glyphX = await page.locator('[data-testid="node-picker-hidden-offline"]').first().evaluate(el => { const r = document.createRange(); r.selectNodeContents(el); return r.getBoundingClientRect().left; }).catch(() => null);
+    const footInset = glyphX == null ? -1 : glyphX - panel.x - border[0];
+    record(vp, scheme, 'footer names hidden offline sessions', { text: footer === '另有 3 个离线会话没有登记节点，无法指派', inset: glyphX != null && Math.abs(footInset - padL) <= 1 },
+      { text: footer, padL: r1(footInset), searchPad: r1(padL) });
+    await page.screenshot({ path: `${OUT}/nodepicker-${tag}-footer.png` });
+
+    // unassignable rows: search the group, measure the centre line and the reason column
+    await page.locator('[data-testid="node-picker-input"]').fill('旧版');
+    await page.waitForTimeout(500);
+    const uid = `picker-row-unassignable-${UNASSIGNABLE[0]}`;
+    const [ub, ua, un, ud, ur] = [await box(page, `[data-testid="${uid}"]`), await box(page, `[data-testid="${uid}-avatar"]`), await box(page, `[data-testid="${uid}-name"]`), await box(page, `[data-testid="${uid}-dot"]`), await box(page, `[data-testid="${uid}-reason"]`)];
+    const ub4 = [ua, un, ud, ur].filter(Boolean);
+    const reasonText = await page.locator(`[data-testid="${uid}-reason"]`).textContent().catch(() => '');
+    const reasonFits = await page.locator(`[data-testid="${uid}-reason"]`).evaluate(el => el.scrollWidth <= el.clientWidth + 1).catch(() => false);
+    const dim = await page.locator(`[data-testid="${uid}-avatar"]`).evaluate(el => getComputedStyle(el).opacity).catch(() => '');
+    const disabled = await page.locator(`[data-testid="${uid}"]`).getAttribute('aria-disabled');
+    const both = await page.locator('[data-testid^="picker-row-unassignable-"][data-testid$="-reason"]').count();
+    record(vp, scheme, 'unassignable row avatar/name/dot/reason', { rows: both === 2, centre: ub4.length === 4 && spread(ub4) <= 1, text: reasonText === '节点版本过旧，无法指派，升级后可选', fits: reasonFits, dim: dim === '0.45', disabled: disabled === 'true' },
+      { cyAvatar: r1(ua?.cy ?? -1), cyName: r1(un?.cy ?? -1), cyDot: r1(ud?.cy ?? -1), cyHint: r1(ur?.cy ?? -1), spread: ub4.length ? spread(ub4) : -1, text: reasonText, fits: reasonFits, opacity: dim });
+    // reason's right inset == a normal row's runtime hint right inset (same column)
+    await page.locator('[data-testid="node-picker-input"]').fill('测试甲');
+    await page.waitForTimeout(500);
+    const nid = await page.locator('[data-testid^="picker-row-"][data-testid$="-name"]').first().getAttribute('data-testid');
+    const nrow = nid.replace(/-name$/, '');
+    const hintR = await page.evaluate((id) => { const el = document.querySelector(`[data-testid="${id}"]`); const kids = [...el.children]; const h = kids[kids.length - 2].getBoundingClientRect(); return { r: h.right, row: el.getBoundingClientRect().right }; }, nrow);
+    record(vp, scheme, 'reason column == runtime hint column', { column: !!ur && !!ub && Math.abs((ub.r - ur.r) - (hintR.row - hintR.r)) <= 1 },
+      { padR: r1(ub && ur ? ub.r - ur.r : -1), padL: r1(hintR.row - hintR.r) });
+    // tap does nothing: picker stays open, field stays empty
+    await page.locator('[data-testid="node-picker-input"]').fill('旧版');
+    await page.waitForTimeout(500);
+    await page.screenshot({ path: `${OUT}/nodepicker-${tag}-unassignable.png` });
+    await page.locator(`[data-testid="${uid}"]`).click({ force: true });
+    await page.waitForTimeout(500);
+    const stillOpen = (await page.locator('[data-testid="node-picker"]').count()) === 1;
+    const noCheck = (await page.locator(`[data-testid="${uid}-check"]`).count()) === 0;
+    record(vp, scheme, 'tap on unassignable row is ignored', { stillOpen, noCheck }, {});
+    await page.locator('[data-testid="node-picker-input"]').fill('');
+    await page.waitForTimeout(400);
 
     // search 'tm'
     await page.locator('[data-testid="node-picker-input"]').fill('tm');

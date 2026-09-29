@@ -158,6 +158,8 @@ export interface HubNode {
    *  错误仍会在提交时由 hub 拒绝并显示）。 */
   lifecycle_controllable?: boolean;
   lifecycle_daemon_node_id?: string | null;
+  /** 行最近一次被写的时间(hub `datetime('now')`,UTC)。同一别名有多行时,选择器挑最新的那行。 */
+  updated_at?: string | null;
   config_revision?: number | null;
   config_snapshot?: {
     model?: string | null;
