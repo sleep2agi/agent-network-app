@@ -56,6 +56,9 @@ ck('不再说不进 Hub', !board.includes('不进 Hub'));
 ck('读写走 Hub 接口', board.includes('migrateLocalRequirements(') && board.includes('createRequirementOnHub(') && board.includes('moveRequirementOnHub('));
 ck('不再只在 Hub 为空时才迁', !board.includes('list.length === 0'));
 ck('新建负责人复用稳定身份选择器', board.includes('<RequirementPeoplePicker') && board.includes('选择负责人（人类或 Agent），可空') && !board.includes('fetchHubNodes('));
+const picker = norm('./RequirementPeoplePicker.tsx');
+ck('负责人列表用本人头像，不再用空心圆', picker.includes('<AliasAvatar alias={person.name || person.id} size={36} />') && !picker.includes('○'));
+ck('没选中时勾不占读屏', picker.includes('accessible={false}') && picker.includes('styles.checkOff'));
 
 console.log(`${p}/${t} passed`);
 process.exit(p === t ? 0 : 1);
