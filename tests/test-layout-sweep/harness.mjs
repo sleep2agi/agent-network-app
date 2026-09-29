@@ -38,7 +38,8 @@ export const initScript = ({ theme }) => {
   ];
   const schedules = [{ schedule_id: 's_sweep_1', network_id: 'net-sweep', name: '示例定时任务', target_node_id: 'n_sweep_a', target_alias: '示例-A', task_content: '每天早上汇报', priority: 'normal', schedule: { type: 'daily', time: '09:00' }, timezone: 'Asia/Shanghai', misfire_policy: 'skip', status: 'active', next_run_at: iso(-600), last_run_at: iso(840), revision: 1 }];
   const daemons = [{ daemon_node_id: 'd_sweep_1', alias: '示例-守护', hostname: 'host-d', online: true, last_seen_at: iso(0), runtimes_supported: ['claude-code', 'codex'], can_create_nodes: true, create_capability_observed_ms_ago: 1000 }];
-  const RULES = '# 示例规则\n\n占位内容,只用于布局测量。\n\n## 第二节\n\n- 一\n- 二\n';
+  // A drive can hand in its own synthetic rules file (window.__rulesFixture, set by an earlier init script).
+  const RULES = window.__rulesFixture || '# 示例规则\n\n占位内容,只用于布局测量。\n\n## 第二节\n\n- 一\n- 二\n';
   const LISTING = JSON.stringify({ path: '', total: 3, truncated: false, entries: [{ name: 'src', type: 'dir' }, { name: 'README.md', type: 'file', size: 120 }, { name: 'package.json', type: 'file', size: 64 }] });
   const mcp = (name, args) => {
     if (name === 'read_node_rules_file' || name === 'write_node_rules_file') return { ok: true, request_id: 'r_sweep', op: 'read' };

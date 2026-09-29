@@ -9,8 +9,8 @@
 // 三种可见状态分开：读取中 / 就绪（可编辑）/ 不可用（hub 旧、节点离线或
 // agent-node 旧、读失败），每种都有一句话说明为什么和怎么办。
 
-import { forwardRef, useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
-import { ActivityIndicator, Modal, Platform, Pressable, ScrollView, View, useWindowDimensions } from 'react-native';
+import { forwardRef, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { ActivityIndicator, Modal, PanResponder, Platform, Pressable, ScrollView, View, useWindowDimensions } from 'react-native';
 import { Text, TextInput } from './ui-text';
 import { useModalSafePadding } from './safe-area-runtime';
 
@@ -19,13 +19,16 @@ import { hasUnsavedChanges, isTerminal, nextPollDelayMs, predictedRulesFileName,
 import { NODE_RULES_EDITOR_MIN_HEIGHT } from './node-page-model';
 import { colors, spacing } from './theme';
 import MarkdownMessage, { type MarkdownBlockLayout } from './MarkdownMessage';
-import { blockAtY, blockLineForCaret, buildRulesOutline, isDoubleTap, isTap, jumpText, lineAtOffset, resolveBlockRects, RULES_DEFAULT_MODE, rulesInfoText, rulesReadKey, rulesToolbarLayout, rulesViewState, saveButtonLabel, showRulesOutline, sourceRangeFromDataset, sourceSelection, statusAutoHideMs, type BlockLayout, type RulesViewMode, type SourceLineRange, type Tap } from './node-rules-view';
+import { blockAtY, blockLineForCaret, buildRulesOutline, isDoubleTap, isTap, jumpText, lineAtOffset, lineStartOffset, resolveBlockRects, rulesInfoText, rulesReadKey, rulesToolbarLayout, rulesViewState, saveButtonLabel, showRulesOutline, sourceRangeFromDataset, sourceSelection, statusAutoHideMs, type BlockLayout, type OutlineEntry, type RulesViewMode, type SourceLineRange, type Tap } from './node-rules-view';
 import InfoTip from './InfoTip';
 import MacTitleStrip from './mac-title-strip';
 import WinTitleBar from './win-title-bar';
 import { RulesFindBar, useRulesFind } from './RulesFind';
 import { contentKey } from './rules-find';
-import { editorLineHeightPx, editorScrollTopForLine, RULES_EDITOR_FONT_SIZE, RULES_EDITOR_LINE_HEIGHT } from './rules-fullscreen-layout';
+import { editorLineHeightPx, editorScrollTopForLine, RULES_EDITOR_FONT_SIZE, RULES_EDITOR_LINE_HEIGHT, RULES_READ_MAX_WIDTH } from './rules-fullscreen-layout';
+import { effectiveRulesMode, findModeFor, initialRulesMode, RULES_MODE_LABEL, rulesModeTabs, rulesSplitAvailable, rulesWideLayout, SPLIT_DIVIDER_HIT, SPLIT_PREVIEW_DEBOUNCE_MS, SPLIT_RATIO_DEFAULT, SPLIT_RATIO_STEP, clampSplitRatio, splitDividerHandlers, splitPaneWidths, syncedScrollTop, type SyncAnchor } from './rules-split';
+import { loadRulesEditorPrefs, saveRulesMode, saveRulesOutlineOpen, saveRulesScrollSync, saveRulesSplitRatio } from './rules-editor-prefs';
+import { lockDocumentSelection } from './composer-resize';
 
 type Phase = 'loading' | 'ready' | 'saving' | 'unavailable';
 
@@ -40,7 +43,38 @@ export default function NodeRulesSection({ cfg, node, session, onDirtyChange }: 
   const [editor, setEditor] = useState('');
   const [message, setMessage] = useState('');
   const [messageTone, setMessageTone] = useState<'muted' | 'ok' | 'error'>('muted');
-  const [mode, setMode] = useState<RulesViewMode>(RULES_DEFAULT_MODE);
+  // 模式:用户选过的(本机偏好)优先;没选过按布局给默认 —— 宽布局「左右」,手机「阅读」(rules-split.ts)。
+  // 选过「左右」但此刻放不下(窗口缩窄、折叠屏合上)时画「编辑」,偏好不动。
+  const { width: windowWidth } = useWindowDimensions();
+  const wide = rulesWideLayout({
+    os: Platform.OS,
+    tauri: Platform.OS === 'web' && !!(globalThis as any).__TAURI_INTERNALS__,
+    userAgent: Platform.OS === 'web' ? String((globalThis as any).navigator?.userAgent ?? '') : '',
+    width: windowWidth,
+  });
+  const [bodyWidth, setBodyWidth] = useState(0);
+  const splitOk = rulesSplitAvailable(wide, bodyWidth);
+  const [chosen, setChosen] = useState<RulesViewMode | null>(null);
+  // 没选过:放得下左右就左右,放不下(手机、被挤窄的卡片)就阅读 —— 不是编辑,没人要求过改。
+  const mode = effectiveRulesMode(chosen ?? initialRulesMode(null, splitOk), splitOk);
+  const [ratio, setRatio] = useState(SPLIT_RATIO_DEFAULT);
+  const [scrollSync, setScrollSync] = useState(true);
+  const [outlineOpen, setOutlineOpen] = useState(true);
+  // 偏好异步读回来;用户在读回来之前已经点过模式,就不拿旧值盖掉他刚点的。
+  const touchedMode = useRef(false);
+  useEffect(() => {
+    let alive = true;
+    void loadRulesEditorPrefs().then((p) => {
+      if (!alive) return;
+      if (p.mode && !touchedMode.current) setChosen(p.mode);
+      if (p.ratio != null) setRatio(p.ratio);
+      if (p.scrollSync != null) setScrollSync(p.scrollSync);
+      if (p.outlineOpen != null) setOutlineOpen(p.outlineOpen);
+    });
+    return () => { alive = false; };
+  }, []);
+  // 目录跳转时两栏各自滚到标题:这段时间里源码的滚动不再带动预览(不然两边会抢)。
+  const syncHold = useRef(0);
   // 双击跳源码:jump = 切到编辑后要选中的原文行;anchorLine = 编辑切回阅读时滚回光标所在块。
   const [jump, setJump] = useState<SourceLineRange | null>(null);
   const [anchorLine, setAnchorLine] = useState<number | null>(null);
@@ -169,19 +203,28 @@ export default function NodeRulesSection({ cfg, node, session, onDirtyChange }: 
 
   const changeMode = (next: RulesViewMode) => {
     if (next === mode) return;
-    if (mode === 'edit' && next === 'read') {
+    touchedMode.current = true;
+    setChosen(next);
+    void saveRulesMode(next);
+    if (mode !== 'read' && next === 'read') {
       const ta = editorRef.current;
       const caret = typeof ta?.selectionStart === 'number' ? ta.selectionStart : caretRef.current;
       setAnchorLine(typeof caret === 'number' ? lineAtOffset(jumpText(ta?.value, editor), caret) : null);
     }
-    setMode(next);
   };
-  const jumpToSource = (range: SourceLineRange) => { setJump(range); setMode('edit'); };
+  // 双击跳源码:阅读里切到编辑(这一下不记成偏好);左右里源码就在旁边,不换模式。
+  const jumpToSource = (range: SourceLineRange) => {
+    setJump(range);
+    if (mode === 'read') { touchedMode.current = true; setChosen('edit'); }
+  };
+  const toggleSync = () => setScrollSync((on) => { void saveRulesScrollSync(!on); return !on; });
+  const toggleOutline = () => setOutlineOpen((on) => { void saveRulesOutlineOpen(!on); return !on; });
 
   // Ctrl/⌘+F 查找 / 替换(RulesFind.tsx):阅读区、编辑框、全屏共用一份查找状态。
   const sectionRef = useRef<any>(null);
   const find = useRulesFind({
-    mode, draft: editor, setDraft: setEditor, editable: phase === 'ready', hasContent, full, editorRef, sectionRef,
+    // 左右模式里查的是左边的源码(和编辑模式同一条路径)。
+    mode: findModeFor(mode), draft: editor, setDraft: setEditor, editable: phase === 'ready', hasContent, full, editorRef, sectionRef,
     jumpLine: jump ? jump.start : null, onRequestEdit: () => changeMode('edit'),
   });
 
@@ -201,10 +244,12 @@ export default function NodeRulesSection({ cfg, node, session, onDirtyChange }: 
   ) : null;
   const toolbar = (inFull: boolean) => (
     <View onLayout={inFull ? undefined : (e) => setBarWidth(e.nativeEvent.layout.width)} style={{ flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: spacing.sm, zIndex: 10 }}>
-      <ModeToggle mode={mode} onChange={changeMode} />
+      <ModeToggle mode={mode} tabs={rulesModeTabs(splitOk)} onChange={changeMode} />
       <Text style={{ color: colors.text, fontSize: 13, fontFamily: MONO, flexShrink: 1 }} selectable numberOfLines={1}>{fileName}</Text>
       <InfoTip label="规则文件说明" text={rulesInfoText(fileName, true)} />
       {view.unsaved ? <UnsavedMark /> : null}
+      {/* 滚动同步只在 web(桌面)做得到:原生编辑框量不到每一行的 y。 */}
+      {mode === 'split' && WEB ? <SyncToggle on={scrollSync} onPress={toggleSync} /> : null}
       {busy ? <ActivityIndicator size="small" color={colors.accent} /> : null}
       {find.open && inFull === full ? <RulesFindBar find={find} /> : null}
       {/* 查找栏开着时状态句让位(minWidth 0、不显示双击提示),免得把右边按钮挤到下一行。
@@ -226,6 +271,9 @@ export default function NodeRulesSection({ cfg, node, session, onDirtyChange }: 
     mode, draft: editor, onDraft: setEditor, editable: phase === 'ready', dirty, fileName,
     onJump: jumpToSource, jump, clearJump: () => setJump(null), anchorLine, clearAnchor: () => setAnchorLine(null), editorRef, findReadRef: find.readRef,
     onCaret: (offset) => { caretRef.current = offset; },
+    onBodyWidth: setBodyWidth, ratio, onRatio: setRatio,
+    onRatioCommit: (r) => { const c = clampSplitRatio(r); setRatio(c); void saveRulesSplitRatio(c); },
+    scrollSync: scrollSync && WEB, syncHold,
   };
 
   // 编辑框/阅读区吃满节点页剩余高度(flex: 1,最矮 NODE_RULES_EDITOR_MIN_HEIGHT);按钮在内容**上方**
@@ -237,7 +285,7 @@ export default function NodeRulesSection({ cfg, node, session, onDirtyChange }: 
         {hasContent && !full ? <RulesBody {...bodyProps} /> : null}
       </View>
       {full ? (
-        <RulesFullscreen onClose={closeFull} toolbar={toolbar(true)} source={view.renderSource} bodyProps={bodyProps} />
+        <RulesFullscreen onClose={closeFull} toolbar={toolbar(true)} source={view.renderSource} bodyProps={bodyProps} outlineOpen={outlineOpen} onToggleOutline={toggleOutline} />
       ) : null}
     </View>
   );
@@ -296,18 +344,150 @@ const SmallBtn = forwardRef<any, { label: string; onPress: () => void; disabled?
     );
   });
 
-function ModeToggle({ mode, onChange }: { mode: RulesViewMode; onChange: (m: RulesViewMode) => void }) {
+function ModeToggle({ mode, tabs, onChange }: { mode: RulesViewMode; tabs: readonly RulesViewMode[]; onChange: (m: RulesViewMode) => void }) {
   return (
     <View accessibilityRole="tablist" style={{ flexDirection: 'row', borderWidth: 1, borderColor: colors.border, borderRadius: 7, padding: 2, gap: 2 }}>
-      {(['read', 'edit'] as const).map((m) => (
-        <FocusRing key={m} accessibilityRole="tab" accessibilityState={{ selected: mode === m }} onPress={() => onChange(m)}
+      {tabs.map((m) => (
+        // aria-selected:react-native-web 不把 accessibilityState.selected 写进 DOM,读屏(和测试)看不出选中的是哪个。
+        <FocusRing key={m} accessibilityRole="tab" accessibilityState={{ selected: mode === m }} aria-selected={mode === m} onPress={() => onChange(m)}
           hitSlop={WEB ? undefined : 4}
           style={{ paddingHorizontal: spacing.md, paddingVertical: WEB ? 3 : 7, borderRadius: 5, backgroundColor: mode === m ? colors.subtleFill : 'transparent' }}>
-          <Text style={{ fontSize: 12, color: mode === m ? colors.text : colors.textMuted, fontWeight: mode === m ? '600' : '400' }}>{m === 'read' ? '阅读' : '编辑'}</Text>
+          <Text style={{ fontSize: 12, color: mode === m ? colors.text : colors.textMuted, fontWeight: mode === m ? '600' : '400' }}>{RULES_MODE_LABEL[m]}</Text>
         </FocusRing>
       ))}
     </View>
   );
+}
+
+// 左右模式的「🔗 滚动同步」开关:开 = 滚左边源码,右边预览跟到对应的块。
+function SyncToggle({ on, onPress }: { on: boolean; onPress: () => void }) {
+  return (
+    <FocusRing testID="rules-scroll-sync" onPress={onPress} accessibilityRole="switch" accessibilityState={{ checked: on }} aria-checked={on} accessibilityLabel="滚动同步"
+      style={{ height: TOUCH_BTN_HEIGHT, paddingHorizontal: spacing.sm, borderRadius: 6, borderWidth: 1, borderColor: on ? colors.accent : colors.border, flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+      <Text style={{ fontSize: 12, opacity: on ? 1 : 0.45 }}>🔗</Text>
+      <Text style={{ fontSize: 12, color: on ? colors.text : colors.textMuted }}>{on ? '同步滚动' : '不同步'}</Text>
+    </FocusRing>
+  );
+}
+
+// 左右之间的分隔条:1px 的线是左栏的右边框;这里是跨在线上的 SPLIT_DIVIDER_HIT 宽热区。
+// 拖 = 实时改比例、松手存盘;双击 = 回到 50/50(rules-split.ts splitDividerHandlers)。
+function RulesSplitDivider({ left, width, ratio, onRatio, onCommit }: {
+  left: number; width: number; ratio: number; onRatio: (r: number) => void; onCommit: (r: number) => void;
+}) {
+  const [dragging, setDragging] = useState(false);
+  const ratioRef = useRef(ratio); ratioRef.current = ratio;
+  const widthRef = useRef(width); widthRef.current = width;
+  const onRatioRef = useRef(onRatio); onRatioRef.current = onRatio;
+  const onCommitRef = useRef(onCommit); onCommitRef.current = onCommit;
+  // 🔴 只建一次(空依赖):拖到一半重建 PanResponder,dx 会从 0 重算。
+  const pan = useMemo(() => PanResponder.create(splitDividerHandlers({
+    getRatio: () => ratioRef.current,
+    getWidth: () => widthRef.current,
+    setRatio: (r) => { setDragging(true); onRatioRef.current(r); },
+    commit: (r) => { setDragging(false); onCommitRef.current(r); },
+    reset: () => { setDragging(false); onCommitRef.current(SPLIT_RATIO_DEFAULT); },
+    lockSelection: WEB ? () => lockDocumentSelection() : undefined,
+  }) as any), []);
+  const pct = Math.round(ratio * 100);
+  return (
+    <View
+      testID="rules-split-divider"
+      {...pan.panHandlers}
+      accessible
+      accessibilityRole="adjustable"
+      accessibilityLabel="拖动调整左右比例，双击恢复各一半"
+      accessibilityValue={{ min: 25, max: 75, now: pct, text: `源码 ${pct}%` }}
+      accessibilityActions={[{ name: 'increment' }, { name: 'decrement' }]}
+      onAccessibilityAction={(e) => {
+        const a = e.nativeEvent.actionName;
+        if (a === 'increment' || a === 'decrement') onCommit(clampSplitRatio(ratio + (a === 'increment' ? SPLIT_RATIO_STEP : -SPLIT_RATIO_STEP)));
+      }}
+      {...({ dataSet: { ratio: ratio.toFixed(4), dragging: dragging ? '1' : '0' } } as object)}
+      style={[
+        { position: 'absolute', top: 0, bottom: 0, left: left - SPLIT_DIVIDER_HIT / 2, width: SPLIT_DIVIDER_HIT, zIndex: 5, alignItems: 'center', justifyContent: 'center' },
+        WEB ? ({ cursor: 'col-resize', touchAction: 'none', userSelect: 'none' } as object) : null,
+      ]}
+    >
+      {dragging ? <View style={{ position: 'absolute', top: 0, bottom: 0, width: 2, backgroundColor: colors.accent }} /> : null}
+      <View style={{ width: 4, height: 36, borderRadius: 2, backgroundColor: dragging ? colors.accent : colors.textMuted, opacity: dragging ? 1 : 0.35 }} />
+    </View>
+  );
+}
+
+/** 停手 ms 毫秒后才跟上的值(左右模式的实时预览:边打字边重排 48 KB 会卡键盘)。 */
+function useDebounced<T>(value: T, ms: number): T {
+  const [v, setV] = useState(value);
+  useEffect(() => {
+    if (ms <= 0) { setV(value); return; }
+    const t = setTimeout(() => setV(value), ms);
+    return () => clearTimeout(t);
+  }, [value, ms]);
+  return ms <= 0 ? value : v;
+}
+
+// 编辑框里一批行的行首 y(相对 textarea 内容顶部,含上内边距)。和 caretTopInTextarea 同一个镜像 div,
+// 一次排版量完所有行 —— 左右同步的锚点每块一行,逐行建镜像会是 O(块数 × 全文)。只在 web 用。
+function lineTopsInTextarea(ta: any, lines: readonly number[]): Map<number, number> {
+  const out = new Map<number, number>();
+  const doc = (globalThis as any).document;
+  const win = globalThis as any;
+  if (!doc?.createElement || !win.getComputedStyle || !ta) return out;
+  const cs = win.getComputedStyle(ta);
+  const div = doc.createElement('div');
+  for (const k of ['fontFamily', 'fontSize', 'fontWeight', 'lineHeight', 'letterSpacing', 'tabSize', 'paddingTop', 'paddingRight', 'paddingBottom', 'paddingLeft']) div.style[k] = cs[k];
+  Object.assign(div.style, { position: 'absolute', visibility: 'hidden', top: '0', left: '-99999px', boxSizing: 'border-box', width: `${ta.clientWidth}px`, whiteSpace: 'pre-wrap', overflowWrap: 'break-word', wordBreak: 'break-word', border: '0' });
+  const value = String(ta.value ?? '');
+  const marks: [number, any][] = [];
+  let prev = 0;
+  for (const line of [...new Set(lines)].sort((a, b) => a - b)) {
+    const off = lineStartOffset(value, line);
+    div.appendChild(doc.createTextNode(value.slice(prev, off)));
+    const mark = doc.createElement('span');
+    mark.textContent = '\u200b';
+    div.appendChild(mark);
+    marks.push([line, mark]);
+    prev = off;
+  }
+  div.appendChild(doc.createTextNode(value.slice(prev)));
+  doc.body.appendChild(div);
+  for (const [line, mark] of marks) out.set(line, mark.offsetTop);
+  div.remove();
+  return out;
+}
+
+// 左右同步的锚点:预览里每个带行号的元素 ⇒ (它的源码行在编辑框里的 y, 它在预览里的 y)。
+function measureSyncAnchors(ta: any, previewRoot: any, scroller: any): SyncAnchor[] {
+  const win = globalThis as any;
+  if (!previewRoot?.querySelectorAll || !scroller?.getBoundingClientRect) return [];
+  const origin = scroller.getBoundingClientRect().top - scroller.scrollTop;
+  const dstByLine = new Map<number, number>();
+  for (const el of Array.from(previewRoot.querySelectorAll('[data-md-line]')) as any[]) {
+    const line = Number(el.dataset.mdLine);
+    if (!Number.isInteger(line)) continue;
+    const y = el.getBoundingClientRect().top - origin;
+    const had = dstByLine.get(line);
+    if (had == null || y < had) dstByLine.set(line, y);
+  }
+  const srcTops = lineTopsInTextarea(ta, [...dstByLine.keys()]);
+  const padTop = parseFloat(win.getComputedStyle?.(ta)?.paddingTop) || 0;
+  const out: SyncAnchor[] = [];
+  for (const [line, dst] of dstByLine) {
+    const src = srcTops.get(line);
+    if (src != null) out.push({ src: src - padTop, dst: dst - spacing.lg });
+  }
+  return out;
+}
+
+/** 目录跳转:把源码编辑框滚到第 line 行(行首顶到框上沿附近),光标放到行首。 */
+function scrollEditorToLine(ta: any, draft: string, line: number) {
+  if (!ta) return;
+  if (!WEB) { const off = lineStartOffset(draft, line); ta.setSelection?.(off, off); return; }
+  const value = jumpText(ta.value, draft);
+  const off = lineStartOffset(value, line);
+  ta.setSelectionRange?.(off, off);
+  const top = caretTopInTextarea(ta, off);
+  if (top != null) ta.scrollTop = Math.max(0, top - spacing.md);
 }
 
 function UnsavedMark() {
@@ -318,7 +498,7 @@ function UnsavedMark() {
   );
 }
 
-function RulesBody({ mode, draft, onDraft, editable, dirty, fileName, onHeadingLayout, scrollRef, onJump, jump, clearJump, anchorLine, clearAnchor, editorRef, findReadRef, onCaret }: RulesBodyProps & {
+function RulesBody({ mode, draft, onDraft, editable, dirty, fileName, onHeadingLayout, scrollRef, onJump, jump, clearJump, anchorLine, clearAnchor, editorRef, findReadRef, onCaret, onBodyWidth, ratio, onRatio, onRatioCommit, scrollSync, syncHold }: RulesBodyProps & {
   onHeadingLayout?: (index: number, y: number) => void; scrollRef?: any;
 }) {
   const frame = { flex: 1, minHeight: NODE_RULES_EDITOR_MIN_HEIGHT, borderWidth: 1, borderColor: dirty ? colors.accent : colors.border, borderRadius: 8 } as const;
@@ -328,6 +508,12 @@ function RulesBody({ mode, draft, onDraft, editable, dirty, fileName, onHeadingL
   onJumpRef.current = onJump;
   const ownScroll = useRef<any>(null);
   const readScroll = scrollRef ?? ownScroll;
+  // 区块宽度往上报(工具条据此决定给不给「左右」);左右模式自己也要它算两栏宽。
+  const [width, setWidth] = useState(0);
+  const reportWidth = (e: any) => { const w = e.nativeEvent.layout.width; setWidth(w); onBodyWidth?.(w); };
+  const split = mode === 'split';
+  // 左右模式的预览:停手 150 ms 才重排(SPLIT_PREVIEW_DEBOUNCE_MS);其余模式直接用草稿。
+  const preview = useDebounced(draft, split ? SPLIT_PREVIEW_DEBOUNCE_MS : 0);
 
   // 原生端(没有 DOM):MarkdownMessage 逐块报布局,双击按手指的 y 找块(node-rules-view.ts blockAtY)。
   // 条目带上是哪份文字报的(docKey),草稿变了以后旧文档残留的块不参与命中。
@@ -363,7 +549,7 @@ function RulesBody({ mode, draft, onDraft, editable, dirty, fileName, onHeadingL
   // 阅读区:双击任意带行号的块 → 跳到编辑框里对应的原文行。原生双击会选中一个词,这里只在规则阅读区里接管。
   useEffect(() => {
     const el = readRef.current;
-    if (mode !== 'read' || !el?.addEventListener) return;
+    if (mode === 'edit' || !el?.addEventListener) return;
     const onDbl = (event: any) => {
       const hit = event.target?.closest?.('[data-md-line]');
       const range = hit ? sourceRangeFromDataset(hit.dataset) : null;
@@ -374,11 +560,11 @@ function RulesBody({ mode, draft, onDraft, editable, dirty, fileName, onHeadingL
     };
     el.addEventListener('dblclick', onDbl);
     return () => el.removeEventListener('dblclick', onDbl);
-  }, [mode, draft.trim() === '']);
+  }, [mode, (split ? preview : draft).trim() === '']);
 
   // 编辑框:刚从双击切过来 ⇒ 选中那几行、滚到框中间。等 textarea 挂上再做。
   useEffect(() => {
-    if (mode !== 'edit' || !jump) return;
+    if (mode === 'read' || !jump) return;
     const t = setTimeout(() => {
       const ta = editorRef.current;
       if (!ta) return;
@@ -429,22 +615,25 @@ function RulesBody({ mode, draft, onDraft, editable, dirty, fileName, onHeadingL
     return () => clearTimeout(t);
   }, [mode, anchorLine]);
 
-  if (mode === 'read') {
-    // 阅读区要和编辑框一样「吃满剩余高度、内部滚动」。直接给 ScrollView flex:1 不行:节点页外层是
-    // 高度不定的滚动容器,48 KB 的文档会把它撑到一万多像素高、整页一起滚。外层 View 占位(flex:1,
-    // 不贡献内容高度),ScrollView 绝对定位铺满它,滚动只发生在框内。
-    return (
-      <View style={frame}>
-        {/* nestedScrollEnabled:Android 上它万一又被放进可滚的父级里,手势也归它而不是被外层抢走。 */}
-        <ScrollView ref={readScroll} nestedScrollEnabled style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }} contentContainerStyle={{ padding: spacing.lg }}>
-          {draft.trim()
-            ? <View ref={setReadEl} {...nativeTouch}><MarkdownMessage onHeadingLayout={onHeadingLayout} key={docKey} sourceLines={WEB} onBlockLayout={WEB ? undefined : onBlockLayout}>{draft}</MarkdownMessage></View>
-            : <Text style={{ color: colors.textMuted, fontSize: 13 }}>{fileName} 还没有内容。切到「编辑」写点规则再保存。</Text>}
-        </ScrollView>
-      </View>
-    );
-  }
-  return (
+  // 左右同步(只 web):滚左边源码 ⇒ 右边预览按锚点插值跟过去(rules-split.ts syncedScrollTop)。
+  // 锚点量一次缓存着,内容 / 宽度 / 比例一变就作废,下次滚动再量。
+  const anchors = useRef<SyncAnchor[] | null>(null);
+  useEffect(() => { anchors.current = null; }, [preview, draft, width, ratio, mode]);
+  useEffect(() => {
+    if (!WEB || !split || !scrollSync) return;
+    const ta = editorRef.current;
+    const node = readScroll.current?.getScrollableNode?.() ?? null;
+    if (!ta?.addEventListener || !node) return;
+    const onScroll = () => {
+      if (Date.now() < (syncHold?.current ?? 0)) return;
+      if (!anchors.current) anchors.current = measureSyncAnchors(ta, readRef.current, node);
+      node.scrollTop = syncedScrollTop(anchors.current, ta.scrollTop, ta.scrollHeight - ta.clientHeight, node.scrollHeight - node.clientHeight);
+    };
+    ta.addEventListener('scroll', onScroll, { passive: true });
+    return () => ta.removeEventListener('scroll', onScroll);
+  }, [split, scrollSync]);
+
+  const editorInput = (style: object) => (
     <TextInput
       ref={editorRef}
       value={draft}
@@ -459,9 +648,53 @@ function RulesBody({ mode, draft, onDraft, editable, dirty, fileName, onHeadingL
       placeholder={`# ${fileName}\n\n（还没有内容，写点规则再保存）`}
       placeholderTextColor={colors.textMuted}
       textAlignVertical="top"
-      style={{ ...frame, color: colors.text, padding: spacing.md, fontSize: RULES_EDITOR_FONT_SIZE, lineHeight: RULES_EDITOR_LINE_HEIGHT, fontFamily: MONO }}
+      onLayout={split ? undefined : reportWidth}
+      style={{ ...style, color: colors.text, padding: spacing.md, fontSize: RULES_EDITOR_FONT_SIZE, lineHeight: RULES_EDITOR_LINE_HEIGHT, fontFamily: MONO }}
     />
   );
+  // 渲染出来的正文:阅读和左右预览共用。宽屏上正文列最宽 RULES_READ_MAX_WIDTH(约 100 个字符),
+  // 滚动框本身铺满 —— 滚动条贴右边,不是中间一条窄框。
+  const rendered = (text: string, keyed: boolean) => (
+    <View style={{ width: '100%', maxWidth: RULES_READ_MAX_WIDTH, alignSelf: 'center' }}>
+      {text.trim()
+        ? <View ref={setReadEl} {...nativeTouch}><MarkdownMessage onHeadingLayout={onHeadingLayout} key={keyed ? docKey : undefined} sourceLines={WEB} onBlockLayout={WEB ? undefined : onBlockLayout}>{text}</MarkdownMessage></View>
+        : <Text style={{ color: colors.textMuted, fontSize: 13 }}>{fileName} 还没有内容。{split ? '在左边写点规则再保存。' : '切到「编辑」写点规则再保存。'}</Text>}
+    </View>
+  );
+
+  if (split) {
+    // 左右:同一个外框,左 = 源码(整栏宽),右 = 预览。宽度先按 50% 占位,量到以后按比例分。
+    const inner = Math.max(0, width - 2);
+    const { left } = splitPaneWidths(inner, ratio);
+    return (
+      <View testID="rules-split" style={[frame, { flexDirection: 'row', overflow: 'hidden' }]} onLayout={reportWidth}>
+        <View testID="rules-split-source" style={{ width: inner ? left : '50%', borderRightWidth: 1, borderRightColor: colors.border }}>
+          {editorInput({ flex: 1, minHeight: NODE_RULES_EDITOR_MIN_HEIGHT - 2 })}
+        </View>
+        <View testID="rules-split-preview" style={{ flex: 1 }}>
+          <ScrollView ref={readScroll} nestedScrollEnabled style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }} contentContainerStyle={{ padding: spacing.lg }}>
+            {rendered(preview, false)}
+          </ScrollView>
+        </View>
+        {inner ? <RulesSplitDivider left={left} width={inner} ratio={ratio} onRatio={onRatio} onCommit={onRatioCommit} /> : null}
+      </View>
+    );
+  }
+
+  if (mode === 'read') {
+    // 阅读区要和编辑框一样「吃满剩余高度、内部滚动」。直接给 ScrollView flex:1 不行:节点页外层是
+    // 高度不定的滚动容器,48 KB 的文档会把它撑到一万多像素高、整页一起滚。外层 View 占位(flex:1,
+    // 不贡献内容高度),ScrollView 绝对定位铺满它,滚动只发生在框内。
+    return (
+      <View style={frame} onLayout={reportWidth}>
+        {/* nestedScrollEnabled:Android 上它万一又被放进可滚的父级里,手势也归它而不是被外层抢走。 */}
+        <ScrollView ref={readScroll} nestedScrollEnabled style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }} contentContainerStyle={{ padding: spacing.lg }}>
+          {rendered(draft, true)}
+        </ScrollView>
+      </View>
+    );
+  }
+  return editorInput(frame);
 }
 
 // 全屏:盖住整个应用窗口(不是系统全屏)。左边目录(h1–h3),右边同一份内容 + 同一条工具条。
@@ -474,16 +707,25 @@ type RulesBodyProps = {
   findReadRef?: (el: any) => void;
   /** 编辑框光标位置(原生端读不到 selectionStart,靠这个记)。 */
   onCaret?: (offset: number) => void;
+  /** 区块量到的宽(给不给「左右」看它)。 */
+  onBodyWidth?: (width: number) => void;
+  /** 左右:左栏比例;拖动中实时改 / 松手定下并存盘。 */
+  ratio: number; onRatio: (ratio: number) => void; onRatioCommit: (ratio: number) => void;
+  /** 左右:滚源码时预览跟不跟。 */
+  scrollSync: boolean;
+  /** 到这个时间点(ms)之前源码滚动不带动预览(目录跳转两栏各自滚)。 */
+  syncHold: { current: number };
 };
 
-function RulesFullscreen({ onClose, toolbar, source, bodyProps }: {
-  onClose: () => void; toolbar: ReactNode; source: string; bodyProps: RulesBodyProps;
+function RulesFullscreen({ onClose, toolbar, source, bodyProps, outlineOpen, onToggleOutline }: {
+  onClose: () => void; toolbar: ReactNode; source: string; bodyProps: RulesBodyProps; outlineOpen: boolean; onToggleOutline: () => void;
 }) {
   const mode = bodyProps.mode;
   const outline = buildRulesOutline(source);
   // 手机竖屏放不下 260 宽的目录:窄窗只留正文。
   const { width: windowWidth } = useWindowDimensions();
-  const withOutline = showRulesOutline(windowWidth, outline.length);
+  const canOutline = showRulesOutline(windowWidth, outline.length);
+  const withOutline = canOutline && outlineOpen;
   const ys = useRef<Record<number, number>>({});
   const scrollRef = useRef<any>(null);
   const closeRef = useRef<any>(null);
@@ -498,6 +740,17 @@ function RulesFullscreen({ onClose, toolbar, source, bodyProps }: {
     return () => { doc.removeEventListener('keydown', onKey); clearTimeout(t); };
   }, [onClose]);
   // 标题的 y 相对 MarkdownMessage 顶部;阅读区的内容容器还有一圈 padding,滚动时要加回去。
+  // 点目录:阅读 / 左右的预览滚到那个标题;编辑 / 左右的源码滚到标题那一行。左右两栏各自滚,
+  // 期间不让源码的滚动再带动预览(syncHold)。
+  const jumpTo = (h: OutlineEntry) => {
+    const animated = !prefersReducedMotion();
+    if (mode !== 'read') {
+      bodyProps.syncHold.current = Date.now() + 600;
+      scrollEditorToLine(bodyProps.editorRef.current, bodyProps.draft, h.line);
+    }
+    const y = ys.current[h.index];
+    if (mode !== 'edit' && y != null) scrollRef.current?.scrollTo?.({ y: Math.max(0, y - 8), animated: mode === 'read' && animated });
+  };
   const content = <RulesBody {...bodyProps} onHeadingLayout={(i, y) => { ys.current[i] = y + spacing.lg; }} scrollRef={scrollRef} />;
   return (
     <Modal transparent={false} visible onRequestClose={onClose} animationType={prefersReducedMotion() ? 'none' : 'fade'}>
@@ -517,19 +770,30 @@ function RulesFullscreen({ onClose, toolbar, source, bodyProps }: {
         </View>
         <View style={{ flex: 1, flexDirection: 'row' }}>
           {withOutline ? (
-            <ScrollView style={{ width: 260, flexGrow: 0, borderRightWidth: 1, borderRightColor: colors.border }} contentContainerStyle={{ padding: spacing.md, gap: 2 }}>
-              <Text style={{ color: colors.textMuted, fontSize: 11, letterSpacing: 0.5, marginBottom: spacing.xs }}>目录</Text>
+            <ScrollView testID="rules-outline" style={{ width: 260, flexGrow: 0, borderRightWidth: 1, borderRightColor: colors.border }} contentContainerStyle={{ padding: spacing.md, gap: 2 }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: spacing.xs }}>
+                <Text style={{ color: colors.textMuted, fontSize: 11, letterSpacing: 0.5 }}>目录</Text>
+                <FocusRing testID="rules-outline-toggle" onPress={onToggleOutline} accessibilityLabel="收起目录" style={{ paddingHorizontal: 6, paddingVertical: 2, borderRadius: 5 }}>
+                  <Text style={{ color: colors.textMuted, fontSize: 12 }}>‹ 收起</Text>
+                </FocusRing>
+              </View>
               {outline.map((h) => (
-                <FocusRing key={h.index} disabled={mode !== 'read'} onPress={() => { const y = ys.current[h.index]; if (y != null) scrollRef.current?.scrollTo?.({ y: Math.max(0, y - 8), animated: !prefersReducedMotion() }); }}
-                  style={{ paddingVertical: 4, paddingRight: spacing.sm, paddingLeft: spacing.sm + (h.level - 1) * 12, borderRadius: 5, opacity: mode === 'read' ? 1 : 0.5 }}>
+                <FocusRing key={h.index} onPress={() => jumpTo(h)}
+                  style={{ paddingVertical: 4, paddingRight: spacing.sm, paddingLeft: spacing.sm + (h.level - 1) * 12, borderRadius: 5 }}>
                   <Text numberOfLines={2} style={{ fontSize: h.level === 1 ? 13 : 12, color: h.level === 1 ? colors.text : colors.textSecondary, fontWeight: h.level === 1 ? '600' : '400' }}>{h.text}</Text>
                 </FocusRing>
               ))}
             </ScrollView>
+          ) : canOutline ? (
+            <View style={{ width: 36, alignItems: 'center', paddingTop: spacing.md, borderRightWidth: 1, borderRightColor: colors.border }}>
+              <FocusRing testID="rules-outline-toggle" onPress={onToggleOutline} accessibilityLabel="展开目录" style={{ paddingHorizontal: 6, paddingVertical: 4, borderRadius: 5 }}>
+                <Text style={{ color: colors.textMuted, fontSize: 14 }}>☰</Text>
+              </FocusRing>
+            </View>
           ) : null}
-          <View style={{ flex: 1, padding: withOutline ? spacing.lg : spacing.sm, alignItems: 'center' }}>
-            <View style={{ flex: 1, width: '100%', maxWidth: 1080 }}>{content}</View>
-          </View>
+          {/* 编辑 / 左右铺满剩下的宽(以前 maxWidth 1080 居中,2048 宽的窗口两边各空 350)。
+              阅读的正文列自己限宽(RulesBody rendered),框本身也铺满。 */}
+          <View style={{ flex: 1, padding: canOutline ? spacing.lg : spacing.sm }}>{content}</View>
         </View>
       </View>
     </Modal>
