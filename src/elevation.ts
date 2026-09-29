@@ -25,8 +25,15 @@ export function elevated(level: ElevationLevel = 'floating', edge: 'all' | 'top'
     : edge === 'left' ? { borderLeftWidth: 1, borderLeftColor: c }
     : { borderWidth: 1, borderColor: c };
   if (themeMode() === 'dark') return { ...border, ...(level === 'floating' ? { backgroundColor: colors.floatingBg } : null) };
-  if (Platform.OS === 'web') return { ...border, boxShadow: e.web };
-  return { ...border, shadowColor: '#101828', shadowOpacity: e.opacity, shadowRadius: e.blur, shadowOffset: { width: 0, height: e.y }, elevation: e.android };
+  return { ...border, ...shadowOnly(level) };
+}
+
+/** 只要阴影、边框由调用处自己管(拖动中的卡片、已有自己边框的面板)。深色下为空:阴影看不见。 */
+export function shadowOnly(level: ElevationLevel = 'floating'): Record<string, unknown> {
+  const e = ELEVATION[level];
+  if (themeMode() === 'dark') return {};
+  if (Platform.OS === 'web') return { boxShadow: e.web };
+  return { shadowColor: '#101828', shadowOpacity: e.opacity, shadowRadius: e.blur, shadowOffset: { width: 0, height: e.y }, elevation: e.android };
 }
 
 /** 按钮高度:手机 40、桌面壳 36(与 #424 输入栏控件同高)。 */

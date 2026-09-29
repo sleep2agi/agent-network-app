@@ -24,7 +24,7 @@ mock.module('./src/theme', () => ({
   type: { caption: 11, small: 12, body: 14, title: 16, heading: 20 }, weight: { regular: '400', medium: '500', strong: '600' },
 }));
 // elevation.ts reads tokens this isolated theme mock does not carry (ELEVATION, CONTROL_HEIGHT, …).
-mock.module('./src/elevation', () => ({ elevated: () => ({}), buttonStyle: () => ({}), buttonTextStyle: () => ({}), controlHeight: () => 40 }));
+mock.module('./src/elevation', () => ({ elevated: () => ({}), shadowOnly: () => ({}), buttonStyle: () => ({}), buttonTextStyle: () => ({}), controlHeight: () => 40 }));
 mock.module('./src/requirements-store', () => ({ requirementsKey: (s: string) => s, readRequirements: () => [], writeRequirements: () => {} }));
 mock.module('./src/api', () => ({ fetchHubNodes: async () => ({ nodes: [] }) }));
 // The picker renders AliasAvatar. The real module pulls image assets and ui-scale,

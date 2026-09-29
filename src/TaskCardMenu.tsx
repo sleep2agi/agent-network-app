@@ -5,12 +5,12 @@ import { useState } from 'react';
 import { Modal, Pressable, View, useWindowDimensions } from 'react-native';
 import { Text } from './ui-text';
 import { Ionicons } from './icons';
-import { colors, themeMode } from './theme';
+import { colors, radius, themeMode } from './theme';
+import { elevated } from './elevation';
 import { uiScale } from './ui-scale';
 import { useModalSafePadding } from './safe-area-runtime';
 import { anchorRowMenu, rowMenuHeight, rowMenuMetrics } from './agent-row-menu';
 import { REQ_COLUMN_LABEL, REQ_COLUMNS, type ReqColumn } from './requirements-model';
-import { liftedShadow } from './TaskBoardParts';
 
 export interface TaskMenuTarget { id: string; title: string; column: ReqColumn; x: number; y: number }
 
@@ -73,8 +73,8 @@ export default function TaskCardMenu({ target, touch, busy, onOpen, onMove, onCl
             accessibilityLabel={`${target.title} 的菜单`}
             style={{
               position: 'absolute', left: pos.left, top: pos.top, width: m.width, paddingVertical: m.padY,
-              borderRadius: 12, backgroundColor: colors.card, overflow: 'hidden',
-              borderWidth: themeMode() === 'dark' ? 1 : 0, borderColor: colors.border, ...liftedShadow(),
+              borderRadius: radius.control, backgroundColor: colors.card, overflow: 'hidden',
+              ...elevated('floating'),
             }}
           >
             {item('open', '查看详情', () => { onClose(); onOpen(target.id); }, { icon: 'open-outline' })}

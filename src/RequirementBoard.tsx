@@ -18,7 +18,8 @@ import { readRequirements, requirementsKey, writeRequirements } from './requirem
 import { createRequirementOnHub, fetchMyUserId, listRequirements, migrateLocalRequirements, moveRequirementOnHub, RequirementsHubError, updateRequirementOnHub } from './requirements-hub';
 import { listRequirementPeople } from './requirement-people-api';
 import { personKey } from './requirement-people';
-import { colors, spacing } from './theme';
+import { colors, radius, spacing } from './theme';
+import { elevated } from './elevation';
 import { pointerUi } from './pointer-ui';
 import { useModalSafePadding } from './safe-area-runtime';
 import { usePoll } from './usePoll';
@@ -629,7 +630,7 @@ function AvatarStack({ keys, owners }: { keys: readonly string[]; owners: Return
       {shown.map((key, i) => {
         const o = owners.find(row => row.key === key);
         return (
-          <View key={key} style={{ marginLeft: i ? -6 : 0, borderRadius: 999, borderWidth: 1.5, borderColor: colors.card }}>
+          <View key={key} style={{ marginLeft: i ? -6 : 0, borderRadius: radius.pill, borderWidth: 1.5, borderColor: colors.card }}>
             {key === UNASSIGNED ? <Ionicons name="person-circle-outline" size={18} color={colors.textMuted} /> : <AliasAvatar alias={o?.name || key.split(':').slice(1).join(':')} size={18} />}
           </View>
         );
@@ -657,7 +658,7 @@ function FilterMenu({ open, touch, owners, selectedOwners, selectedPriorities, m
   const rowH = touch ? 44 : 36;
   const row = (key: string, on: boolean, onPress: () => void, lead: ReactNode, label: string, count?: number) => (
     <Pressable key={key} testID={`task-filter-opt-${key}`} accessibilityRole="checkbox" accessibilityState={{ checked: on }} onPress={onPress}
-      style={state => ({ height: rowH, flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: spacing.md, borderRadius: 8, backgroundColor: (state as { hovered?: boolean }).hovered || state.pressed ? colors.rowHover : 'transparent' })}>
+      style={state => ({ height: rowH, flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: spacing.md, borderRadius: radius.item, backgroundColor: (state as { hovered?: boolean }).hovered || state.pressed ? colors.rowHover : 'transparent' })}>
       {lead}
       <Text style={{ flex: 1, color: colors.text, fontSize: 13 }} numberOfLines={1}>{label}</Text>
       {count !== undefined ? <Text style={s.metaMuted}>{count}</Text> : null}
@@ -669,7 +670,7 @@ function FilterMenu({ open, touch, owners, selectedOwners, selectedPriorities, m
     <Modal visible={!!open} transparent animationType="fade" onRequestClose={onClose}>
       <Pressable style={{ position: 'absolute', left: 0, top: 0, right: 0, bottom: 0, backgroundColor: touch ? 'rgba(0,0,0,0.18)' : 'transparent' }} onPress={onClose} testID="task-filter-scrim" accessibilityLabel="关闭筛选" />
       {open ? (
-        <View style={{ position: 'absolute', left: Math.max(8 + safe.paddingLeft, open.x), top: Math.max(open.y, safe.paddingTop + 8), width: 260, maxHeight: 360, padding: 6, borderRadius: 12, backgroundColor: colors.card, borderWidth: 1, borderColor: colors.border, shadowColor: 'rgba(16,24,40,1)', shadowOpacity: 0.16, shadowRadius: 24, shadowOffset: { width: 0, height: 10 }, elevation: 8 }} testID={`task-filter-menu-${open.kind}`} accessibilityRole="menu">
+        <View style={{ position: 'absolute', left: Math.max(8 + safe.paddingLeft, open.x), top: Math.max(open.y, safe.paddingTop + 8), width: 260, maxHeight: 360, padding: 6, borderRadius: radius.control, backgroundColor: colors.card, ...elevated('floating') }} testID={`task-filter-menu-${open.kind}`} accessibilityRole="menu">
           <ScrollView style={{ flexGrow: 0 }}>
             {open.kind === 'owner'
               ? owners.filter(o => o.count > 0 || selectedOwners.includes(o.key)).map(o => row(
