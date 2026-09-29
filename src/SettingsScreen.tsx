@@ -28,6 +28,7 @@ import { ds } from './ui-scale';
 import { playChime } from './chime';
 import { SETTINGS_CATEGORIES, SETTINGS_DETAIL_TITLE, activeCategoryKey, closeSettingsPage, filterSettings, phoneRowLabel, phoneSettingsGroups, rememberSettingsCategory, rememberSettingsScroll, rememberedSettingsView, settingsBackTarget, settingsPlatform, visibleRowKeys, type SettingsCategoryKey, type SettingsDetailKey, type SettingsPlatform } from './settings-model';
 import SettingsPhonePage, { type PhonePagesCtx } from './SettingsPhonePages';
+import { PHONE_SETTINGS_SERVER_ENTRY } from './nav-chrome';
 import { settingsPageContentStyle } from './settings-kit';
 import { useModalSafePadding } from './safe-area-runtime';
 import { withBasePadding } from './modal-safe-area';
@@ -66,6 +67,7 @@ export default function SettingsScreen({
   onReauthProfile,
   notifyPreview,
   onPhoneSubPageChange,
+  onOpenServer,
 }: {
   cfg: HubConfig;
   /** 桌面端:左上角关闭按钮。不传就不画(手机端设置是一个 tab,没有「关闭」)。 */
@@ -79,6 +81,8 @@ export default function SettingsScreen({
   notifyPreview?: NotifySettingsPreview;
   /** 手机:推入 / 退出子页时通知 App —— 子页是二级页,像微信一样不显示底部 tab 栏。 */
   onPhoneSubPageChange?: (open: boolean) => void;
+  /** 手机:列表顶部的「服务器」行推进服务器页(底部 tab 的 服务器 换成了 任务,Vincent 2026-09-29)。不传就没有这一行。 */
+  onOpenServer?: () => void;
 }) {
   const [me, setMe] = useState<Me>({});
   const [profiles, setProfiles] = useState<HubProfile[]>([]);
@@ -289,6 +293,26 @@ export default function SettingsScreen({
   const canLogout = cfg.profileId !== LOCAL_HUB_PROFILE_ID;
   const phoneList = (
     <ScrollView style={styles.phoneScroll} contentContainerStyle={styles.phoneListContent} testID="settings-phone-list">
+      {onOpenServer ? (
+        <View testID="settings-group-server">
+          <View style={styles.phoneGroupGap} />
+          <View style={styles.phoneBlock}>
+            <Pressable
+              testID={`settings-row-${PHONE_SETTINGS_SERVER_ENTRY.key}`}
+              accessibilityRole="button"
+              accessibilityLabel={PHONE_SETTINGS_SERVER_ENTRY.label}
+              onPress={onOpenServer}
+              style={({ pressed }) => [styles.phoneRow, pressed && styles.phoneRowPressed]}
+            >
+              <Text style={styles.phoneRowLabel} numberOfLines={1}>{PHONE_SETTINGS_SERVER_ENTRY.label}</Text>
+              <Text style={styles.phoneRowValue} numberOfLines={1}>{cfg.serverUrl.replace(/^https?:\/\//, '').replace(/\/$/, '')}</Text>
+              <View style={styles.phoneChevron}>
+                <Ionicons name="chevron-forward" size={18} color={colors.textMuted} />
+              </View>
+            </Pressable>
+          </View>
+        </View>
+      ) : null}
       {phoneSettingsGroups(filtered).map((group, gi) => (
         <View key={group.title ?? `g${gi}`} testID={`settings-group-${gi}`}>
           {group.title ? <Text style={styles.phoneGroupTitle} testID="settings-group-title">{group.title}</Text> : <View style={styles.phoneGroupGap} />}

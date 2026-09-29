@@ -75,7 +75,7 @@ import { bumpLayoutGeneration } from './src/layout-handoff';
 import MobileNavRail from './src/MobileNavRail';
 import { comboFromEvent, shortcutAction, shortcutForCombo } from './src/shortcuts-model';
 import { isMacKeyboard, requestAgentSearchFocus, shortcutBindings, shortcutCaptureActive } from './src/shortcuts-store';
-import { contentWidthBesideRail, mobileRailWidth, navActiveKey, navChromeFor, phoneInPageLeaf, railShowsBrand, screenForNavPress } from './src/nav-chrome';
+import { contentWidthBesideRail, mobileRailWidth, navActiveKey, navChromeFor, phoneInPageLeaf, phoneSettingsBackTarget, railShowsBrand, screenForNavPress } from './src/nav-chrome';
 import { elevated, buttonStyle, buttonTextStyle } from './src/elevation';
 
 type Screen =
@@ -107,19 +107,24 @@ const DESKTOP_TABS = [
   { key: 'settings', label: '设置', icon: 'settings-outline', iconActive: 'settings' },
 ] as const;
 
+// Vincent 2026-09-29 (Android phone): 「底部 tab 的 服务器 换成 任务」. #159 had hidden Tasks
+// from the phone; the owner reversed that. 任务 sits next to Agent because dispatching and
+// checking tasks happens every day while schedules are set up once in a while, and it keeps
+// the same order as the unfolded rail below. 服务器 moves to a row at the top of 设置
+// (PHONE_SETTINGS_SERVER_ENTRY in src/nav-chrome.ts), pushed as a leaf page with a back button.
 const MOBILE_TABS = [
   { key: 'agents', label: 'Agent', icon: 'people-outline', iconActive: 'people' },
+  { key: 'tasks', label: '任务', icon: 'list-outline', iconActive: 'list' },
   { key: 'scheduled', label: '定时任务', icon: 'time-outline', iconActive: 'time' },
-  { key: 'server', label: '服务器', icon: 'server-outline', iconActive: 'server' },
   { key: 'settings', label: '设置', icon: 'settings-outline', iconActive: 'settings' },
 ] as const;
 
-// Vincent 2026-09-29 「左侧加回去」: the unfolded left rail gets 任务 back
-// (list + board). The phone bottom bar stays the four tabs from #159.
+// Vincent 2026-09-29 「左侧加回去」: the unfolded left rail has 任务 (list + board). It has room
+// for 服务器 too, so the rail keeps it; only the phone bottom bar dropped it.
 const MOBILE_RAIL_TABS = [
-  MOBILE_TABS[0],
-  { key: 'tasks', label: '任务', icon: 'list-outline', iconActive: 'list' },
-  ...MOBILE_TABS.slice(1),
+  ...MOBILE_TABS.slice(0, 3),
+  { key: 'server', label: '服务器', icon: 'server-outline', iconActive: 'server' },
+  MOBILE_TABS[3],
 ] as const;
 
 const DESKTOP_MAIN_TABS = DESKTOP_TABS.filter(tab => tab.key !== 'settings');
@@ -384,7 +389,7 @@ function AppRoot() {
   // leaf gets it from navContent, so its last row is not under the gesture bar.
   const contentBottomInset = navChromeFor(layout, screen.name, inPageLeaf) === 'none' && screen.name !== 'chat' && screen.name !== 'login' ? tabBarInset : 0;
   // Web layout sweep only: lets tests/test-layout-sweep/run.mjs open screens the phone has no
-  // tab for (tasks, taskDetail, logs, wizard). Never set on a device (SAFE_AREA_SIM is web-only).
+  // tab for (taskDetail, logs, wizard). Never set on a device (SAFE_AREA_SIM is web-only).
   useEffect(() => {
     if (!SAFE_AREA_SIM) return;
     (globalThis as any).__anetLayoutSweep = { setScreen: (next: Screen) => setScreen(next) };
@@ -519,6 +524,11 @@ function AppRoot() {
         setScreen({ name: 'chat', alias: screen.alias });
         return true;
       }
+      // Phone: 服务器 is pushed from 设置 (no bottom tab any more) — back returns there.
+      if (phoneSettingsBackTarget(layout, screen.name)) {
+        setScreen({ name: 'settings' });
+        return true;
+      }
       // 从节点页的「定时任务」分区点进来的:返回回到那个节点页,而不是跳回 Agents。
       if (screen.name === 'scheduled' && screen.back) {
         setScreen(screen.back);
@@ -531,7 +541,7 @@ function AppRoot() {
       return false;
     });
     return () => sub.remove();
-  }, [screen]);
+  }, [screen, layout]);
 
   // Phone bottom tab bar. The Android two-pane shows MobileNavRail instead (navChrome).
   const mobileTabBar = (activeName: string) => (
@@ -541,6 +551,7 @@ function AppRoot() {
           key={tab.key}
           style={styles.tab}
           onPress={() => onNavPress(tab.key)}
+          testID={`mobile-tab-${tab.key}`}
         >
           <Ionicons
             name={activeName === tab.key ? tab.iconActive : tab.icon}
@@ -823,6 +834,7 @@ function AppRoot() {
                       onOpenNodes={() => setScreen({ name: 'agents' })}
                       onCreateNode={() => setScreen({ name: 'picker' })}
                       onOpenScheduled={() => setScreen({ name: 'scheduled' })}
+                      onBack={phoneSettingsBackTarget(layout, screen.name) ? () => setScreen({ name: 'settings' }) : undefined}
                     />
                   ) : screen.name === 'settings' ? (
                     <SettingsScreen
@@ -834,6 +846,7 @@ function AppRoot() {
                       onReauthProfile={requestProfileReauth}
                       onLocalDataDeleted={finishLocalDataDeletion}
                       onPhoneSubPageChange={setSettingsSubPage}
+                      onOpenServer={layout === 'phone' ? () => setScreen({ name: 'server' }) : undefined}
                     />
                   ) : (
                     <AgentsScreen

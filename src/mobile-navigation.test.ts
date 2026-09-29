@@ -12,16 +12,22 @@ const keys = [...block.matchAll(/key: '([^']+)'/g)].map(match => match[1]);
 const labels = [...block.matchAll(/label: '([^']+)'/g)].map(match => match[1]);
 
 check(block.length > 0, 'the mobile tab definition exists');
-check(JSON.stringify(keys) === JSON.stringify(['agents', 'scheduled', 'server', 'settings']), 'phone bottom bar stays four destinations in the requested order');
-check(JSON.stringify(labels) === JSON.stringify(['Agent', '定时任务', '服务器', '设置']), 'phone bottom bar uses the requested labels');
-check(!block.includes("key: 'tasks'"), 'Tasks stays off the phone bottom bar');
+// Vincent 2026-09-29 (Android phone): 「底部 tab 的 服务器 换成 任务」. This reverses #159, which
+// had hidden Tasks from mobile primary navigation. 任务 is second (used daily, same order as the rail);
+// 设置 stays last; 服务器 is reachable from 设置 (see the settings-entry checks in nav-chrome.test.ts).
+check(JSON.stringify(keys) === JSON.stringify(['agents', 'tasks', 'scheduled', 'settings']), 'phone bottom bar is Agent / 任务 / 定时任务 / 设置');
+check(JSON.stringify(labels) === JSON.stringify(['Agent', '任务', '定时任务', '设置']), 'phone bottom bar uses the requested labels');
+check(!block.includes("key: 'server'"), '服务器 is off the phone bottom bar (it is a row in 设置)');
 check(!block.includes("key: 'messages'"), 'Messages stays off the phone bottom bar');
 const railBlock = app.match(/const MOBILE_RAIL_TABS = \[([\s\S]*?)\] as const;/)?.[1] ?? '';
-const railKeys = [...railBlock.matchAll(/key: '([^']+)'/g)].map(match => match[1]);
 check(railBlock.length > 0, 'the left rail tab definition exists');
-check(JSON.stringify(railKeys) === JSON.stringify(['tasks']), 'left rail adds 任务 and otherwise reuses the phone tabs');
-check(railBlock.includes("label: '任务'"), 'left rail labels the added destination 任务');
-check(railBlock.includes('MOBILE_TABS[0]') && railBlock.includes('...MOBILE_TABS.slice(1)'), 'left rail keeps Agent first and the other phone tabs after 任务');
+// The rail is unchanged by the phone swap: Agent / 任务 / 定时任务 / 服务器 / 设置 (#489).
+check(railBlock.includes('...MOBILE_TABS.slice(0, 3)') && railBlock.includes('MOBILE_TABS[3]'), 'left rail reuses Agent / 任务 / 定时任务 and 设置 from the phone tabs');
+check(railBlock.indexOf('...MOBILE_TABS.slice(0, 3)') < railBlock.indexOf("key: 'server'") && railBlock.indexOf("key: 'server'") < railBlock.indexOf('MOBILE_TABS[3]'), 'left rail keeps 服务器 between 定时任务 and 设置');
+check(/key: 'server', label: '服务器', icon: 'server-outline', iconActive: 'server'/.test(railBlock), 'left rail 服务器 keeps its label and icon');
+const phoneTasks = block.match(/\{ key: 'tasks'[^}]*\}/)?.[0] ?? '';
+check(/icon: 'list-outline', iconActive: 'list'/.test(phoneTasks), 'phone 任务 uses the same list icon as the rail 任务 and the desktop Tasks tab');
+check(app.includes("{ key: 'tasks', label: 'Tasks', icon: 'list-outline', iconActive: 'list' }"), 'desktop Tasks tab keeps the list icon the phone tab mirrors');
 check(app.includes('tabs={MOBILE_RAIL_TABS}'), 'the left rail renders the rail destinations');
 check(app.includes('{MOBILE_TABS.map(tab => ('), 'the phone tab bar renders the compact navigation');
 check(!app.includes('tabs={MOBILE_TABS}'), 'the left rail does not drop back to the four phone tabs');

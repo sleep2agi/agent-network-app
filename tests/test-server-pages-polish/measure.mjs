@@ -321,7 +321,9 @@ await ctx.close();
 // ── phone 390×844 (Android UA ⇒ phone stack) ──
 {
   const { ctx: pctx, page: p } = await newPage({ width: 390, height: 844 }, true);
-  await p.getByText('服务器', { exact: true }).last().click();
+  // Phone: 服务器 is a row in 设置 since the bottom tab became 任务 (Vincent 2026-09-29).
+  await p.getByText('设置', { exact: true }).last().click();
+  await p.locator('[data-testid="settings-row-server"]').click();
   await p.waitForTimeout(900);
   await p.locator('[data-testid="server-action-logs"]').click();
   await p.waitForTimeout(2500);

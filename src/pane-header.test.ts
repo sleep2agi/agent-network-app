@@ -71,6 +71,9 @@ const EXEMPT: Record<string, { gate: RegExp; why: string }> = {
   ChatScreen: { gate: /\{!desktop && !hideBack \? \(/, why: 'back already hidden when `desktop`' },
   SettingsScreen: { gate: /\{compact \? \(subPage \? phoneHeader : listHeader\) : sidebar\}/, why: 'phone header only in the compact (< 640 dp) branch; desktop is ≥ 860' },
   ScheduledTasksScreen: { gate: /onBack=\{wide \? undefined :/, why: 'detail back only in the narrow master/detail branch' },
+  // Phone 设置 → 服务器 (Vincent 2026-09-29): back only when onBack is passed; the workspace never passes it
+  // (phone-server-entry.test.ts checks that side).
+  ServerScreen: { gate: /\{onBack \? \(\s*<Pressable onPress=\{onBack\}/, why: 'back only when App passes onBack (phone, pushed from 设置)' },
 };
 function collect(block: string, fileOf: (name: string) => string | null): { name: string; verdict: string }[] {
   const out: { name: string; verdict: string }[] = [];
