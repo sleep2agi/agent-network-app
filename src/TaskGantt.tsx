@@ -13,7 +13,7 @@ import { ownerLabel, personName } from './i18n-task-presentation';
 //   按周列表把「这周要交什么」放在第一眼,名字完整,跨度用「开始 → 期限」文字 + 七格条表达。
 //
 // 🔴 没设开始(或 Hub 还没有开始字段)时,开始 = 创建时间,工具栏上写明。
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { Text } from './ui-text';
 import AliasAvatar from './AliasAvatar';
@@ -22,8 +22,8 @@ import type { Requirement, RequirementProject } from './requirements-model';
 import type { RequirementPerson } from './requirement-people';
 import { PriorityDot, ProjectChip, Segmented, STATUS_TONE, a11yState, cardBg, softShadow, type TaskStyles } from './TaskBoardParts';
 import {
-  GANTT_DAY_PX, barGeometry, clampDragDays, dragDays, shiftedDue, barOverdue, dayDiff, firstCurrentWeek, ganttGroups, ganttRange, ganttTicks, ganttWeeks, plusDays, todayX, weekStrip,
-  type GanttBar, type GanttGroup, type GanttGroupBy, type GanttScale,
+  GANTT_DAY_PX, pinnedMonth, barGeometry, clampDragDays, dragDays, shiftedDue, barOverdue, dayDiff, firstCurrentWeek, ganttGroups, ganttRange, ganttTicks, ganttWeeks, plusDays, todayX, weekStrip,
+  type GanttBar, type GanttGroup, type GanttRange, type GanttGroupBy, type GanttScale,
 } from './task-gantt-model';
 
 const NAME_W = 260;
@@ -124,10 +124,14 @@ function GanttChart({ items, projects, people, today, s, onOpen, selectedId, sta
   const bodyRef = useRef<ScrollView>(null);
   const [viewW, setViewW] = useState(0);
   const scrollX = useRef(0);
+  // 钉住的月份只让它自己重画(PinnedMonth 订阅滚动),不因为滚动重画整张图。
+  const scrollSubs = useRef(new Set<(x: number) => void>());
+  const emitScroll = (x: number) => { scrollX.current = x; scrollSubs.current.forEach(f => f(x)); };
+  const subscribeScroll = useCallback((f: (x: number) => void) => { scrollSubs.current.add(f); f(scrollX.current); return () => { scrollSubs.current.delete(f); }; }, []);
   const goToday = (animated: boolean) => {
     if (tx === null) return;
     const x = Math.max(0, Math.min(totalW - viewW, tx - viewW * 0.3));
-    scrollX.current = x;
+    emitScroll(x);
     bodyRef.current?.scrollTo({ x, animated });
     headRef.current?.scrollTo({ x, animated });
   };
@@ -158,16 +162,20 @@ function GanttChart({ items, projects, people, today, s, onOpen, selectedId, sta
       <View style={[g.nameCell, g.headName]}>
         <Text style={g.headText}>{tr('tasks.copy.41')}</Text>
         <View style={s.countPill}><Text style={s.countText}>{bars.length}</Text></View>
+        {/* 图上画的数 + 没画的(未设期限),和左栏的总数对得上。 */}
+        {undated.length ? <Text style={s.muted} numberOfLines={1} testID="gantt-head-undated">{tr('gantt.undatedCount', { n: undated.length })}</Text> : null}
       </View>
+      <View style={{ flex: 1, overflow: 'hidden' }}>
       <ScrollView ref={headRef} horizontal scrollEnabled={false} showsHorizontalScrollIndicator={false} style={{ flex: 1 }}>
         <View style={{ width: totalW, height: HEAD_H }}>
-          {ticks.filter(t => t.monthStart).map(t => (
+          {/* 每月 1 日写一次月份;最左边那个月由 PinnedMonth 钉住。 */}
+          {ticks.filter(t => t.monthStart && t.x > 0).map(t => (
             <Text key={`m-${t.date}`} style={[g.month, { left: t.x + 6 }]} numberOfLines={1}>{tr('gantt.month', { y: t.year, m: t.month })}</Text>
           ))}
           {ticks.map(t => {
             const isToday = scale === 'day' ? t.date === today : dayDiff(t.date, today) >= 0 && dayDiff(t.date, today) < 7;
             return (
-              <View key={t.date} style={[g.tick, { left: t.x, width: scale === 'day' ? px : px * 7 }, scale === 'week' && g.tickWeek]}>
+              <View key={t.date} testID={`gantt-tick-${t.date}`} style={[g.tick, { left: t.x, width: scale === 'day' ? px : px * 7 }, scale === 'week' && g.tickWeek]}>
                 <Text style={[g.tickText, t.weekend && scale === 'day' && { color: colors.textMuted }, isToday && g.tickToday]} numberOfLines={1}>
                   {scale === 'day' ? String(t.day) : monthDay(t.date)}
                 </Text>
@@ -176,6 +184,8 @@ function GanttChart({ items, projects, people, today, s, onOpen, selectedId, sta
           })}
         </View>
       </ScrollView>
+      <PinnedMonth subscribe={subscribeScroll} range={range} px={px} g={g} />
+      </View>
     </View>
   );
 
@@ -210,7 +220,7 @@ function GanttChart({ items, projects, people, today, s, onOpen, selectedId, sta
       horizontal
       style={{ flex: 1 }}
       onLayout={e => setViewW(e.nativeEvent.layout.width)}
-      onScroll={e => { scrollX.current = e.nativeEvent.contentOffset.x; headRef.current?.scrollTo({ x: scrollX.current, animated: false }); }}
+      onScroll={e => { emitScroll(e.nativeEvent.contentOffset.x); headRef.current?.scrollTo({ x: scrollX.current, animated: false }); }}
       scrollEventThrottle={16}
       testID="gantt-timeline"
     >
@@ -291,6 +301,21 @@ function GanttChart({ items, projects, people, today, s, onOpen, selectedId, sta
           {undated.length ? <UndatedList items={undated} projects={projects} people={people} s={s} g={g} onOpen={onOpen} selectedId={selectedId} /> : null}
         </ScrollView>
       </View>
+    </View>
+  );
+}
+
+const MONTH_LABEL_W = 100;
+function PinnedMonth({ subscribe, range, px, g }: { subscribe: (f: (x: number) => void) => () => void; range: GanttRange; px: number; g: GanttStyles }) {
+  useTranslation();
+  const [x, setX] = useState(0);
+  useEffect(() => subscribe(setX), [subscribe]);
+  const m = pinnedMonth(range, x, px);
+  // 下个月的标签(写在 1 日格上,左边留 6)快到左边时,把钉住的这个往左推出去。
+  const left = Math.min(0, m.nextIn - MONTH_LABEL_W);
+  return (
+    <View pointerEvents="none" style={[g.pinnedMonth, { left }]} testID="gantt-pinned-month">
+      <Text style={g.monthText} numberOfLines={1}>{tr('gantt.month', { y: m.year, m: m.month })}</Text>
     </View>
   );
 }
@@ -420,6 +445,8 @@ const makeGanttStyles = () => StyleSheet.create({
   nameCell: { width: NAME_W, paddingHorizontal: spacing.lg, borderRightWidth: StyleSheet.hairlineWidth, borderRightColor: colors.border },
   headName: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, height: HEAD_H },
   headText: { color: colors.textMuted, fontSize: typeScale.caption, fontWeight: weight.strong },
+  pinnedMonth: { position: 'absolute', top: 2, width: MONTH_LABEL_W, height: 22, paddingLeft: 6, justifyContent: 'center', backgroundColor: cardBg() },
+  monthText: { color: colors.textSecondary, fontSize: typeScale.caption, fontWeight: weight.strong },
   month: { position: 'absolute', top: 5, color: colors.textSecondary, fontSize: typeScale.caption, fontWeight: weight.strong },
   tick: { position: 'absolute', top: 24, height: 20, alignItems: 'center', justifyContent: 'center' },
   tickWeek: { alignItems: 'flex-start', paddingLeft: 6, borderLeftWidth: StyleSheet.hairlineWidth, borderLeftColor: colors.border },

@@ -162,6 +162,40 @@ for (const theme of ['light', 'dark']) {
         createdTodayStartsThere: !!g2 && Math.abs(g2.x - 1 + 16 - (tl.x + 1)) <= 1,
       }, { lineX: r1(tl?.x ?? -1), tickCx: r1(todayTick?.cx ?? -1), g2x: r1(g2?.x ?? -1) });
 
+      // month header: the leftmost visible day's month is pinned; the header count adds the undated ones
+      const monthGeo = async () => page.evaluate(() => {
+        const view = document.querySelector('[data-testid="gantt-timeline"]').getBoundingClientRect();
+        const ticks = [...document.querySelectorAll('[data-testid^="gantt-tick-"]')].map(e => ({ date: e.dataset.testid.slice(11), b: e.getBoundingClientRect() }));
+        const first = ticks.find(t => t.b.right > view.x + 1);
+        const pin = document.querySelector('[data-testid="gantt-pinned-month"]');
+        const pb = pin.getBoundingClientRect();
+        const labels = [...document.querySelectorAll('[data-testid="gantt-head"] div')].filter(e => e !== pin && e.children.length === 0 && /年\d+月$/.test(e.textContent) && !pin.contains(e))
+          .map(e => { const b = e.getBoundingClientRect(); return { text: e.textContent, x: b.x, r: b.right, cy: b.y + b.height / 2 }; }).filter(l => l.x >= view.x && l.x < view.right);
+        const [y, m] = first.date.split('-').map(Number);
+        return { expect: `${y}年${m}月`, pin: pin.textContent, pinX: pb.x, pinR: pb.right, pinCy: pb.y + pb.height / 2, viewX: view.x, labels };
+      });
+      const mg = await monthGeo();
+      record(vp, 'pinned month = leftmost visible day', {
+        text: mg.pin === mg.expect, atLeft: Math.abs(mg.pinX - mg.viewX) <= 1,
+        sameLine: mg.labels.every(l => Math.abs(l.cy - mg.pinCy) <= 1), noOverlap: mg.labels.every(l => l.x >= mg.pinR - 0.5),
+      }, { pin: mg.pin, expect: mg.expect, others: mg.labels.map(l => l.text).join('/') });
+      // scroll so the next month's 1st sits 40px from the left edge: the pinned label is pushed out, not drawn over it
+      await page.evaluate(() => {
+        const sc = document.querySelector('[data-testid="gantt-timeline"]');
+        const view = sc.getBoundingClientRect();
+        const t = [...document.querySelectorAll('[data-testid^="gantt-tick-"]')].find(e => e.dataset.testid.endsWith('-01') && e.getBoundingClientRect().x > view.x + 60);
+        sc.scrollLeft += t.getBoundingClientRect().x - view.x - 40;
+      });
+      await page.waitForTimeout(250);
+      const mg2 = await monthGeo();
+      record(vp, 'pinned month pushed at a month boundary', { noOverlap: mg2.labels.every(l => l.x >= mg2.pinR - 0.5), pushed: mg2.pinX < mg2.viewX - 1 }, { pin: mg2.pin, pinX: r1(mg2.pinX - mg2.viewX), next: mg2.labels[0]?.text });
+      await shot('month-boundary');
+      await page.locator(tid('gantt-today')).click();
+      await page.waitForTimeout(500);
+      const cnt = await page.evaluate(() => ({ head: document.querySelector('[data-testid="gantt-head"]').firstElementChild.textContent, bars: document.querySelectorAll('[data-testid^="gantt-bar-"]').length, undated: document.querySelectorAll('[data-testid^="gantt-undated-"]').length }));
+      const side = await page.evaluate(() => { const el = [...document.querySelectorAll('[data-testid="task-sidebar"] div')].find(d => d.children.length === 0 && d.textContent === '全部任务'); return el ? Number(el.parentElement.parentElement.textContent.replace(/\D+/g, ' ').trim().split(' ').pop()) : null; });
+      record(vp, 'header count adds up to the sidebar', { undatedShown: cnt.head === `任务${cnt.bars}· 未设期限 ${cnt.undated}`, sum: side !== null && cnt.bars + cnt.undated === side }, { head: cnt.head, sidebar: side });
+
       const widths = {};
       for (const id of Object.keys(DAYS)) widths[id] = (await box(page, tid(`gantt-bar-${id}`)))?.w ?? -1;
       record(vp, 'bar width = days × 32 − 2 (day)', Object.fromEntries(Object.entries(DAYS).map(([id, n]) => [id, Math.abs(widths[id] - (n * 32 - 2)) <= 1])), { widths: Object.entries(widths).map(([k, w]) => `${k}:${r1(w)}`).join(' ') });

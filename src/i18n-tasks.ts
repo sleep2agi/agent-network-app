@@ -345,6 +345,7 @@ registerTranslations({
   'gantt.dragTo': ['→ {date}', '→ {date}'],
   'gantt.noAgent': ['无负责 Agent', 'No Agent'],
   'gantt.undated': ['未设期限', 'No due date'],
+  'gantt.undatedCount': ['· 未设期限 {n}', '· {n} without due date'],
   'gantt.undatedHint': ['设了预计完成后会画到图上', 'Set a due date to place it on the chart'],
   'gantt.empty': ['没有设了期限的任务', 'No tasks with a due date'],
   'gantt.barA11y': ['{name},{start} 到 {end}', '{name}, {start} to {end}'],

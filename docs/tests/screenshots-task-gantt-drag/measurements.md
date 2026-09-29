@@ -4,6 +4,9 @@
 | desktop 1320x754 light | toolbar centre line | PASS | cy=76/76/76/76 |
 | desktop 1320x754 light | bar rows == name rows | PASS | bars=23 maxDelta=0 |
 | desktop 1320x754 light | today line | PASS | lineX=785 tickCx=786 g2x=771 |
+| desktop 1320x754 light | pinned month = leftmost visible day | PASS | pin=2026年9月 expect=2026年9月 others=2026年10月 |
+| desktop 1320x754 light | pinned month pushed at a month boundary | PASS | pin=2026年9月 pinX=-60 next=2026年10月 |
+| desktop 1320x754 light | header count adds up to the sidebar | PASS | head=任务23· 未设期限 2 sidebar=25 |
 | desktop 1320x754 light | bar width = days × 32 − 2 (day) | PASS | widths=g1:766 g2:30 g3:414 g4:414 g5:222 g8:30 g9:222 |
 | desktop 1320x754 light | header scrolls with timeline | PASS | line=240 tick=240 |
 | desktop 1320x754 light | date header stays on top | PASS | headY=104→104 |
@@ -20,6 +23,9 @@
 | desktop 1000x700 light | toolbar centre line | PASS | cy=76/76/76/76 |
 | desktop 1000x700 light | bar rows == name rows | PASS | bars=23 maxDelta=0 |
 | desktop 1000x700 light | today line | PASS | lineX=689 tickCx=690 g2x=675 |
+| desktop 1000x700 light | pinned month = leftmost visible day | PASS | pin=2026年9月 expect=2026年9月 others=2026年10月 |
+| desktop 1000x700 light | pinned month pushed at a month boundary | PASS | pin=2026年9月 pinX=-60 next=2026年10月 |
+| desktop 1000x700 light | header count adds up to the sidebar | PASS | head=任务23· 未设期限 2 sidebar=25 |
 | desktop 1000x700 light | bar width = days × 32 − 2 (day) | PASS | widths=g1:766 g2:30 g3:414 g4:414 g5:222 g8:30 g9:222 |
 | desktop 1000x700 light | header scrolls with timeline | PASS | line=240 tick=240 |
 | desktop 1000x700 light | date header stays on top | PASS | headY=104→104 |
@@ -44,6 +50,9 @@
 | desktop 1320x754 dark | toolbar centre line | PASS | cy=76/76/76/76 |
 | desktop 1320x754 dark | bar rows == name rows | PASS | bars=23 maxDelta=0 |
 | desktop 1320x754 dark | today line | PASS | lineX=786 tickCx=787 g2x=772 |
+| desktop 1320x754 dark | pinned month = leftmost visible day | PASS | pin=2026年9月 expect=2026年9月 others=2026年10月 |
+| desktop 1320x754 dark | pinned month pushed at a month boundary | PASS | pin=2026年9月 pinX=-60 next=2026年10月 |
+| desktop 1320x754 dark | header count adds up to the sidebar | PASS | head=任务23· 未设期限 2 sidebar=25 |
 | desktop 1320x754 dark | bar width = days × 32 − 2 (day) | PASS | widths=g1:766 g2:30 g3:414 g4:414 g5:222 g8:30 g9:222 |
 | desktop 1320x754 dark | header scrolls with timeline | PASS | line=240 tick=240 |
 | desktop 1320x754 dark | date header stays on top | PASS | headY=105→105 |
@@ -60,6 +69,9 @@
 | desktop 1000x700 dark | toolbar centre line | PASS | cy=76/76/76/76 |
 | desktop 1000x700 dark | bar rows == name rows | PASS | bars=23 maxDelta=0 |
 | desktop 1000x700 dark | today line | PASS | lineX=690 tickCx=691 g2x=676 |
+| desktop 1000x700 dark | pinned month = leftmost visible day | PASS | pin=2026年9月 expect=2026年9月 others=2026年10月 |
+| desktop 1000x700 dark | pinned month pushed at a month boundary | PASS | pin=2026年9月 pinX=-60 next=2026年10月 |
+| desktop 1000x700 dark | header count adds up to the sidebar | PASS | head=任务23· 未设期限 2 sidebar=25 |
 | desktop 1000x700 dark | bar width = days × 32 − 2 (day) | PASS | widths=g1:766 g2:30 g3:414 g4:414 g5:222 g8:30 g9:222 |
 | desktop 1000x700 dark | header scrolls with timeline | PASS | line=240 tick=240 |
 | desktop 1000x700 dark | date header stays on top | PASS | headY=105→105 |
@@ -81,4 +93,4 @@
 | phone 390x844 dark | touch: no drag handles | PASS |  |
 | phone 390x844 dark | tap row opens detail | PASS | name=示例:今天新建今天交 |
 
-80/80 checks passed
+92/92 checks passed

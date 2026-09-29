@@ -183,6 +183,19 @@ export function ganttTicks(range: GanttRange, scale: GanttScale): GanttTick[] {
   return out;
 }
 
+/**
+ * 日期头最左边钉住的月份:滚动偏移 x(px)处那一天所在的月,以及下个月 1 日离可视区左边还有多远(px)——
+ * 下个月的标签快到左边时把钉住的这个推出去,两个不叠在一起。
+ * (Owner 09-30:月份只在 1 日上写,左边 9 月 24–29 日头上只看得到「2026年10月」。)
+ */
+export function pinnedMonth(range: GanttRange, x: number, dayPx: number): { year: number; month: number; nextIn: number } {
+  const i = Math.min(range.days - 1, Math.max(0, Math.floor((Number.isFinite(x) ? x : 0) / dayPx)));
+  const date = plusDays(range.start, i);
+  const [year, month] = date.split('-').map(Number);
+  const next = month === 12 ? `${year + 1}-01-01` : `${year}-${pad(month + 1)}-01`;
+  return { year, month, nextIn: dayDiff(range.start, next) * dayPx - x };
+}
+
 // ── 手机:按周分组的列表 ──
 
 export interface GanttWeek {
