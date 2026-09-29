@@ -1,6 +1,8 @@
 // 需求池走 Hub。手机和电脑读同一份。Hub 还没有这个接口时不要退回本机列表。
 import { appFetch } from './app-fetch';
 import type { HubConfig } from './api';
+import { readStatusCountsAsFailure, reportReadFailure, reportReadSuccess } from './connectivity';
+import { withDeadline } from './deadline';
 import { assignmentsFromHub } from './requirement-people-api';
 import type { RequirementPersonRef } from './requirement-people';
 import { patchApplied, statusPatch, type EditPatch } from './task-board-model';
@@ -65,14 +67,47 @@ function checklistFromHub(rows: unknown[]): ChecklistItem[] {
   return out;
 }
 
+/** 需求池每个请求(含响应体)的硬上限。原来没有任何超时:手机链路上一个卡住的连接会让任务页
+ *  首次加载永远停在转圈(2026-09-29 Vincent 折叠屏截图),而 refresh 只在 ready 时才跑,没有东西能把它救回来。 */
+export const REQUIREMENTS_DEADLINE_MS = 20_000;
+export const REQUIREMENTS_TIMEOUT_TEXT = `服务器 ${REQUIREMENTS_DEADLINE_MS / 1000} 秒内没有响应`;
+let deadlineMs = REQUIREMENTS_DEADLINE_MS;
+/** Test-only: shorten the deadline so a hanging-request test doesn't wait 20 s. */
+export function __setRequirementsDeadlineForTest(ms: number = REQUIREMENTS_DEADLINE_MS): void { deadlineMs = ms; }
+
 async function call(cfg: HubConfig, path: string, init?: RequestInit): Promise<unknown> {
-  const res = await appFetch(`${cfg.serverUrl}${path}`, {
-    ...init,
-    headers: { Authorization: `Bearer ${cfg.token}`, 'Content-Type': 'application/json' },
-  });
-  if (res.status === 404) throw new RequirementsHubError('这个 Hub 还没有需求池', 404);
-  if (!res.ok) throw new RequirementsHubError(`HTTP ${res.status}`, res.status);
-  return res.json();
+  // 读(GET)和 api.ts 的轮询读一样上报连接横幅:任务页上轮询的主要就是这一路,不报的话横幅只能靠
+  // 30 秒一次的头像轮询判断连没连上,「截至」时刻也会比屏上看板的实际数据更旧。写有自己的失败提示。
+  const isRead = !init?.method || init.method === 'GET';
+  const started = Date.now();
+  const ctrl = new AbortController();
+  let status = 0;
+  try {
+    const got = await withDeadline(
+      (async () => {
+        const res = await appFetch(`${cfg.serverUrl}${path}`, {
+          ...init,
+          headers: { Authorization: `Bearer ${cfg.token}`, 'Content-Type': 'application/json' },
+          signal: ctrl.signal,
+        });
+        status = res.status;
+        if (res.status === 404) throw new RequirementsHubError('这个 Hub 还没有需求池', 404);
+        if (!res.ok) throw new RequirementsHubError(`HTTP ${res.status}`, res.status);
+        return { body: await res.json() as unknown };
+      })(),
+      deadlineMs,
+      () => null,
+    );
+    if (!got) {
+      ctrl.abort();
+      throw new RequirementsHubError(REQUIREMENTS_TIMEOUT_TEXT, 0);
+    }
+    if (isRead) reportReadSuccess(Date.now(), Date.now() - started);
+    return got.body;
+  } catch (e) {
+    if (isRead && (status === 0 || status === 200 || readStatusCountsAsFailure(status))) reportReadFailure();
+    throw e;
+  }
 }
 
 function scoped(cfg: HubConfig, path: string): string {
@@ -194,9 +229,11 @@ export const HUB_CANNOT_EDIT = '这个 Hub 还不能修改已有需求的内容�
 /** 当前登录用户的 user_id(「我负责的」用)。拿不到就是 null,左栏那一项不可用。 */
 export async function fetchMyUserId(cfg: HubConfig): Promise<string | null> {
   try {
-    const res = await appFetch(`${cfg.serverUrl}/api/auth/me`, { headers: { Authorization: `Bearer ${cfg.token}` } });
-    if (!res.ok) return null;
-    const data = await res.json() as { user?: { user_id?: unknown } };
+    const data = await withDeadline((async () => {
+      const res = await appFetch(`${cfg.serverUrl}/api/auth/me`, { headers: { Authorization: `Bearer ${cfg.token}` } });
+      if (!res.ok) return null;
+      return await res.json() as { user?: { user_id?: unknown } };
+    })(), deadlineMs, () => null);
     return typeof data?.user?.user_id === 'string' && data.user.user_id ? data.user.user_id : null;
   } catch {
     return null;

@@ -10,53 +10,90 @@
 //
 // 覆盖面:api.ts 的 get() 共享助手 = 全部轮询读路径(status/nodes/scheduled/tasks/
 // messages)。写路径(sendTask 等)不在此横幅口径内——横幅声明的是"数据新鲜度",
-// 写失败有各自的显式 UI(如聊天的「未送达·点击重试」)。
+// 写失败有各自的显式 UI(如聊天的「未送达·点击重试」)。SSE(事件流页)也不在口径内。
 //
-// 🔴 两跳阈值(2026-08-24):原实现是"最近一次完成的读失败了就报"。实测下来这条规则
-// 把**单次抖动**播报成了"服务器挂了":app 每轮拉 ~620KB(其中 /api/status 一个就
-// 388KB),超时是 12s,而隧道在最轻的 /health 上都量到过 5.6s 尖峰。一次越线 → 横幅
-// → 用户报"commhub 挂了"(一天五次),下一次轮询成功横幅又自己消失,所以事后去量
-// 必然全绿、零分辨力。
-// 现在:**有缓存数据在屏上时**才容忍一次失败(第一次记为 reconnecting,第二次才
-// offline);**冷启动从未成功过时**仍然一次失败就报——那时屏幕上什么都没有,沉默比
-// 误报更糟。阈值只影响"何时改口径",不影响诚实契约:lastSuccessAt 依旧只在成功时动。
+// 🔴 两跳阈值(2026-08-24):原实现是"最近一次完成的读失败了就报",单次抖动被播报成
+// "服务器挂了"。改成连续 2 次失败才报。
+//
+// 🔴 按「轮」计,且要持续一段时间(2026-09-29,Vincent 折叠屏 0.2.142 截图「无法连接
+// 服务器 · 显示缓存数据（截至 12:15）」,截图时刻也是 12:15):两跳阈值数的是**请求**,
+// 而 app 一轮会并发发出 4–6 个读(列表/消息/任务/通知的三路/头像)。手机链路一次卡顿
+// (切后台回来、基站切换、跨太平洋 260ms RTT 上丢包)会让同一轮里的几个请求一起失败 →
+// 计数瞬间到 2 → 横幅在上次成功的同一分钟里就出来了。现在:
+//   - 彼此相隔 < FAILURE_ROUND_MS 的失败算同一轮(一次卡顿只算一次);
+//   - 有缓存时,失败已持续 ≥ OFFLINE_AFTER_MS(中间没有任何一次成功,因此至少两轮)才说
+//     「无法连接」;没到 10 秒的第 2 轮起说「连接较慢 · 正在重试」,第 1 轮不出横幅。
+//     (试过「≥3 轮 且 ≥10 s」:任务页只有 15 s / 30 s 两路轮询,加上退避,真断连要 74 s 才报。)
+//   - 最近 SLOW_AFTER_READS 次成功都慢于 SLOW_READ_MS → 「连接较慢」(数据是到了,只是慢,
+//     这和「连不上」是两件事,用户该知道是哪一件);
+//   - 任何一次成功立即回到在线,并广播一次「立即重试」让其他轮询马上刷新。
+// 冷启动(从未成功过)仍然一次失败就报——那时屏幕上什么都没有,沉默比误报更糟。
+// 阈值只影响"何时改口径",不影响诚实契约:lastSuccessAt 依旧只在成功时动。
 
 let lastSuccessAt: number | null = null;
 let lastFailureAt: number | null = null;
 let consecutiveFailures = 0;
+let failureRounds = 0;
+let streakStartedAt: number | null = null;
+let roundStartedAt: number | null = null;
+let recentReadMs: number[] = [];
 
-/** 有缓存数据可显示时,连续失败达到这个数才改口径为"连不上"。 */
-export const OFFLINE_AFTER_FAILURES = 2;
+/** 距本轮第一次失败不到这么久的失败算同一轮(同一轮轮询里并发的几个读一起失败只算一次)。 */
+export const FAILURE_ROUND_MS = 3_000;
+/** 有缓存数据可显示时,第一次失败到最近一次失败已过去这么久(中间没有任何成功),才改口径为"连不上"。
+ *  比 FAILURE_ROUND_MS 长,所以隐含「至少两轮」——一轮再多并发失败也到不了。 */
+export const OFFLINE_AFTER_MS = 10_000;
+/** 连续失败到第几轮开始说「连接较慢 · 正在重试」(第 1 轮不出横幅)。 */
+export const RETRYING_AFTER_ROUNDS = 2;
+/** 一次读(含响应体)慢于这个值算慢。 */
+export const SLOW_READ_MS = 6_000;
+/** 最近这么多次成功读全都慢,才说「连接较慢」(单次慢不出横幅)。 */
+export const SLOW_AFTER_READS = 3;
+/** 失败时轮询退避的上限。 */
+export const MAX_BACKOFF_MS = 60_000;
+
+/** 横幅口径:在线(不显示)/ 连接较慢 / 无法连接。 */
+export type ConnectivityLevel = 'online' | 'slow' | 'offline';
 
 export interface ConnectivityState {
-  /** true = 已判定连不上(冷启动 1 次失败,或有缓存时连续 2 次) */
+  level: ConnectivityLevel;
+  /** true = 已判定连不上(冷启动 1 次失败,或有缓存时失败已持续 OFFLINE_AFTER_MS) */
   offline: boolean;
-  /** true = 刚失败一次但屏上还有数据——不喊"挂了",只说在重试 */
+  /** true = 正在失败但还没到"连不上"——屏上仍是刚拿到的数据,只是在重试 */
   reconnecting: boolean;
+  /** true = 最近几次读都成功但都很慢 */
+  slowReads: boolean;
   /** 最后一次**成功**拿到数据的时刻;null = 本次启动还没成功过 */
   lastSuccessAt: number | null;
-  /** 自上次成功以来的连续失败次数(成功即归零) */
+  /** 自上次成功以来的连续失败请求数(成功即归零) */
   consecutiveFailures: number;
+  /** 自上次成功以来的失败轮数(同一轮并发失败只算一次) */
+  failureRounds: number;
 }
 
 export function connectivityState(): ConnectivityState {
+  const cold = lastSuccessAt === null;
+  const streakMs = streakStartedAt !== null && lastFailureAt !== null ? lastFailureAt - streakStartedAt : 0;
   // 冷启动(从未成功过)不设宽限:屏幕上没有任何数据,沉默会被读成"卡住了"。
-  const threshold = lastSuccessAt === null ? 1 : OFFLINE_AFTER_FAILURES;
-  const offline = consecutiveFailures >= threshold;
-  return {
-    offline,
-    reconnecting: !offline && consecutiveFailures > 0,
-    lastSuccessAt,
-    consecutiveFailures,
-  };
+  const offline = cold
+    ? failureRounds >= 1
+    : streakMs >= OFFLINE_AFTER_MS;
+  const reconnecting = !offline && failureRounds > 0;
+  const slowReads = failureRounds === 0
+    && recentReadMs.length >= SLOW_AFTER_READS
+    && recentReadMs.every(ms => ms >= SLOW_READ_MS);
+  const level: ConnectivityLevel = offline ? 'offline'
+    : (reconnecting && failureRounds >= RETRYING_AFTER_ROUNDS) || slowReads ? 'slow'
+      : 'online';
+  return { level, offline, reconnecting, slowReads, lastSuccessAt, consecutiveFailures, failureRounds };
 }
 
-// ── 订阅(只在 offline 翻转时通知——在线时每次轮询成功都 emit 会白刷 UI) ────────
+// ── 订阅(只在横幅口径翻转时通知——在线时每次轮询成功都 emit 会白刷 UI) ────────
 const LISTENERS = new Set<() => void>();
 let version = 0;
 function snapshot(): string {
   const s = connectivityState();
-  return `${s.offline}|${s.reconnecting}`;
+  return `${s.level}|${s.reconnecting}`;
 }
 function maybeEmit(prev: string): void {
   if (snapshot() !== prev) {
@@ -65,18 +102,42 @@ function maybeEmit(prev: string): void {
   }
 }
 
-export function reportReadSuccess(at: number = Date.now()): void {
+/** 一次读拿到并解析出了数据。`durationMs` = 这次读从发出到读完响应体的耗时(用于判慢)。 */
+export function reportReadSuccess(at: number = Date.now(), durationMs?: number): void {
   const prev = snapshot();
+  const wasFailing = failureRounds > 0;
   lastSuccessAt = at;
   consecutiveFailures = 0;
+  failureRounds = 0;
+  streakStartedAt = null;
+  roundStartedAt = null;
+  if (typeof durationMs === 'number' && Number.isFinite(durationMs)) {
+    recentReadMs = [...recentReadMs, durationMs].slice(-SLOW_AFTER_READS);
+  }
   maybeEmit(prev);
+  // 链路回来了:让还在退避里的其他轮询立刻刷新,而不是各自再等最长一分钟。
+  if (wasFailing) requestReconnect();
 }
 
+/** 一次读失败了(网络错 / 超时 / 网关 5xx / 解析错)——数据没到,屏上是陈旧的。 */
 export function reportReadFailure(at: number = Date.now()): void {
   const prev = snapshot();
+  // 按本轮起点算,不按上一次失败:否则一串相隔 2 秒的失败会被链成永远的「一轮」。
+  const newRound = roundStartedAt === null || failureRounds === 0 || at - roundStartedAt >= FAILURE_ROUND_MS;
+  if (streakStartedAt === null) streakStartedAt = at;
+  if (newRound) { failureRounds += 1; roundStartedAt = at; }
   lastFailureAt = at;
   consecutiveFailures += 1;
   maybeEmit(prev);
+}
+
+/**
+ * 非 2xx 响应算不算"连不上"。502/503/504 是入口层(Caddy/frp/代理)在说"后面的 hub 够不着";
+ * 其余(401/403/404/500…)是 hub 自己答的——链路是通的,只是这一个接口有问题,不该让全局横幅
+ * 说"无法连接服务器"(否则一个旧 hub 上 404 的接口就能和一次超时凑成"连续两次失败")。
+ */
+export function readStatusCountsAsFailure(status: number): boolean {
+  return status === 502 || status === 503 || status === 504;
 }
 
 export function subscribeConnectivity(cb: () => void): () => void {
@@ -85,16 +146,41 @@ export function subscribeConnectivity(cb: () => void): () => void {
 }
 export function connectivityVersion(): number { return version; }
 
-/** 横幅文案(纯函数便于测试)。在线 → null(不显示)。 */
-export function bannerText(s: ConnectivityState): string | null {
-  // 抖动档:屏上仍是刚拿到的数据,不要说"连不上"——那正是误报的来源。
-  if (s.reconnecting) return '网络不稳定 · 正在重试';
-  if (!s.offline) return null;
-  if (s.lastSuccessAt === null) return '无法连接服务器 · 尚未获取到数据';
-  const d = new Date(s.lastSuccessAt);
+// ── 立即重试(横幅点按 / 链路恢复时广播;usePoll 收到就马上跑一轮) ──────────────
+const RECONNECT_LISTENERS = new Set<() => void>();
+export function requestReconnect(): void {
+  RECONNECT_LISTENERS.forEach((l) => l());
+}
+export function subscribeReconnect(cb: () => void): () => void {
+  RECONNECT_LISTENERS.add(cb);
+  return () => { RECONNECT_LISTENERS.delete(cb); };
+}
+
+/**
+ * 失败时的轮询间隔:指数退避。在线 → intervalMs;失败 n 轮 → intervalMs × 2^n,封顶 MAX_BACKOFF_MS
+ * (本来就比上限长的间隔不缩短)。连不上的时候每 5 秒打一次只会把慢链路再堵一遍、白耗电。
+ */
+export function pollBackoffMs(intervalMs: number, rounds: number = failureRounds): number {
+  if (rounds <= 0) return intervalMs;
+  return Math.max(intervalMs, Math.min(intervalMs * 2 ** rounds, MAX_BACKOFF_MS));
+}
+
+function hhmm(at: number, now: number): string {
+  const d = new Date(at);
   const hh = String(d.getHours()).padStart(2, '0');
   const mm = String(d.getMinutes()).padStart(2, '0');
-  return `无法连接服务器 · 显示缓存数据（截至 ${hh}:${mm}）`;
+  const n = new Date(now);
+  const sameDay = d.getFullYear() === n.getFullYear() && d.getMonth() === n.getMonth() && d.getDate() === n.getDate();
+  // 跨天还只写 HH:MM,「截至 12:15」会被读成今天的 12:15。
+  return sameDay ? `${hh}:${mm}` : `${d.getMonth() + 1}月${d.getDate()}日 ${hh}:${mm}`;
+}
+
+/** 横幅文案(纯函数便于测试)。在线 → null(不显示)。 */
+export function bannerText(s: ConnectivityState, now: number = Date.now()): string | null {
+  if (s.level === 'online') return null;
+  if (s.level === 'slow') return s.reconnecting ? '连接较慢 · 正在重试' : '连接较慢 · 数据可能稍有延迟';
+  if (s.lastSuccessAt === null) return '无法连接服务器 · 尚未获取到数据';
+  return `无法连接服务器 · 显示缓存数据（截至 ${hhmm(s.lastSuccessAt, now)}）`;
 }
 
 /** Test-only: reset between cases. */
@@ -102,5 +188,10 @@ export function __resetConnectivityForTest(): void {
   lastSuccessAt = null;
   lastFailureAt = null;
   consecutiveFailures = 0;
+  failureRounds = 0;
+  streakStartedAt = null;
+  roundStartedAt = null;
+  recentReadMs = [];
   version = 0;
+  RECONNECT_LISTENERS.clear();
 }
