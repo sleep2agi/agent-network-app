@@ -1,5 +1,5 @@
 // 多用户账号与 Agent 权限 —— Hub REST 调用(agent-network#2084)。
-// 只调这几条:auth/me、networks/:id/members、admin/users、members/:uid/agent-grants、auth/register。
+// 只调这几条:auth/me、networks/:id/members(列表 / 改角色 / 移出)、admin/users、members/:uid/agent-grants、auth/register。
 import { appFetch } from './app-fetch';
 import type { HubConfig } from './api';
 import type { AgentGrant, AuthMe, MemberRole, NetworkMember } from './user-admin';
@@ -43,7 +43,7 @@ export const createHubUser = (cfg: HubConfig, body: { username: string; password
 export const fetchAgentGrants = (cfg: HubConfig, networkId: string, userId: string) =>
   call<{ agent_access: 'all' | 'granted' | null; grants: AgentGrant[] }>(cfg.serverUrl, cfg.token, `/api/networks/${net(networkId)}/members/${net(userId)}/agent-grants`);
 
-export const saveAgentGrants = (cfg: HubConfig, networkId: string, userId: string, body: { grants: Array<{ node_id?: string; alias?: string; can_message: boolean }> }) =>
+export const saveAgentGrants = (cfg: HubConfig, networkId: string, userId: string, body: { agent_access: 'all' | 'granted'; grants: Array<{ node_id?: string; alias?: string; can_message: boolean }> }) =>
   call<{ agent_access: 'all' | 'granted'; grants: AgentGrant[] }>(cfg.serverUrl, cfg.token, `/api/networks/${net(networkId)}/members/${net(userId)}/agent-grants`, { method: 'PUT', body });
 
 /** POST /api/auth/register(公开)。成功返回用户令牌,调用方按登录同一条路径继续。 */
@@ -53,3 +53,11 @@ export const registerHubAccount = (serverUrl: string, body: { username: string; 
 /** GET /api/networks —— Hub 管理员拿到全部网络(新建用户时选网络用)。 */
 export const fetchNetworks = (cfg: HubConfig) =>
   call<{ networks: Array<{ network_id: string; network_name?: string | null; name?: string | null }> }>(cfg.serverUrl, cfg.token, '/api/networks').then(d => d.networks ?? []);
+
+/** PUT /api/networks/:id/members/:uid {role} —— hub 只认网络 owner。 */
+export const updateMemberRole = (cfg: HubConfig, networkId: string, userId: string, role: MemberRole) =>
+  call<{ ok: true }>(cfg.serverUrl, cfg.token, `/api/networks/${net(networkId)}/members/${net(userId)}`, { method: 'PUT', body: { role } });
+
+/** DELETE /api/networks/:id/members/:uid —— 网络 owner / admin;hub 同时清掉授权、断开此人的实时流。 */
+export const removeNetworkMember = (cfg: HubConfig, networkId: string, userId: string) =>
+  call<{ ok: true }>(cfg.serverUrl, cfg.token, `/api/networks/${net(networkId)}/members/${net(userId)}`, { method: 'DELETE' });

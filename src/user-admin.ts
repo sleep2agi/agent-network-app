@@ -100,11 +100,82 @@ export function aliasOnlyGrants(grants: readonly AgentGrant[]): AgentGrant[] {
   return grants.filter(g => !g.node_id && !!g.alias);
 }
 
-/** PUT …/agent-grants 的 body(整体替换)。按 node_id 排序,方便比较与测试。 */
-export function grantsPayload(sel: GrantSelection, keepAliasGrants: readonly AgentGrant[] = []): { grants: Array<{ node_id?: string; alias?: string; can_message: boolean }> } {
-  const byNode = [...sel.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([node_id, can_message]) => ({ node_id, can_message }));
-  const byAlias = keepAliasGrants.map(g => ({ alias: g.alias as string, can_message: g.can_message }));
-  return { grants: [...byNode, ...byAlias] };
+/**
+ * PUT …/agent-grants 的 body(整体替换)。按 node_id 排序,方便比较与测试。
+ *
+ * 🔴 一律带 agent_access。只发 grants 时 hub 不改模式:升级前就在网络里的成员是 'all',
+ * 勾了节点保存后授权行写进去了、人却仍然看得见全部 —— 管理员以为限制了,其实没有(RFC-038 G1)。
+ * mode='all' 时也把当前勾选带上:hub 照存,以后切回「仅指定」不用重勾。
+ * viewer 在 hub 上恒不能派活(canRestWriteNetworkAsHuman),所以 viewer 的授权一律按只读发(G2)。
+ */
+export function grantsPayload(
+  sel: GrantSelection,
+  keepAliasGrants: readonly AgentGrant[] = [],
+  opts: { mode?: AgentAccess; role?: MemberRole } = {},
+): { agent_access: AgentAccess; grants: Array<{ node_id?: string; alias?: string; can_message: boolean }> } {
+  const readOnly = opts.role === 'viewer';
+  const byNode = [...sel.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([node_id, can_message]) => ({ node_id, can_message: readOnly ? false : can_message }));
+  const byAlias = keepAliasGrants.map(g => ({ alias: g.alias as string, can_message: readOnly ? false : g.can_message }));
+  return { agent_access: opts.mode ?? 'granted', grants: [...byNode, ...byAlias] };
+}
+
+/** GET …/agent-grants 的 agent_access → 对话框初始模式。旧 Hub / 缺字段按「仅指定」(与 hub 的 fail-closed 同向)。 */
+export function initialAccessMode(agentAccess: AgentAccess | null | undefined): AgentAccess {
+  return agentAccess === 'all' ? 'all' : 'granted';
+}
+
+/**
+ * 从「全部 Agent」切到「仅指定」:还一个都没勾时,预填这个人**此刻看得见**的全部 Agent(='all' 时就是网络里全部),
+ * 免得一点保存就把人清成零节点。已经勾过的(以前存下的授权)原样保留。viewer 预填为只读。
+ */
+export function prefillOnRestrict(sel: GrantSelection, agents: readonly PickableAgent[], role?: MemberRole): Map<string, boolean> {
+  if (sel.size) return new Map(sel);
+  const out = new Map<string, boolean>();
+  for (const a of filterPickable(agents, '')) out.set(a.node_id, role !== 'viewer');
+  return out;
+}
+
+/** 这一行能不能出「可对话」开关:viewer 不能派活,只显示「只读」。 */
+export function showsCanMessage(role: MemberRole | undefined): boolean {
+  return role !== 'viewer';
+}
+
+/** 当前网络里我的成员角色。 */
+export function myNetworkRole(me: AuthMe | null | undefined, networkId: string | undefined): MemberRole | undefined {
+  return currentNetworkRow(me, networkId)?.member_role;
+}
+
+/**
+ * 对某个成员我能做什么(与 hub 路由逐条对齐,UI 不给出 hub 会拒的操作):
+ *   editAccess —— 授权:目标是 member / viewer(owner/admin 恒为全部);面板本身只给 owner/admin/Hub 管理员。
+ *   editRole   —— PUT /members/:uid 只认网络 **owner**(Hub 管理员不算);不改 owner、不改自己。
+ *   remove     —— DELETE /members/:uid 认网络 owner / admin;owner 移不走、不移自己。
+ */
+export function memberActions(me: AuthMe | null | undefined, networkId: string | undefined, m: Pick<NetworkMember, 'user_id' | 'role'>): { editAccess: boolean; editRole: boolean; remove: boolean } {
+  const mine = myNetworkRole(me, networkId);
+  const self = !!me?.user?.user_id && me.user.user_id === m.user_id;
+  const target = m.role !== 'owner' && !self;
+  return {
+    editAccess: grantsEditable(m),
+    editRole: target && mine === 'owner',
+    remove: target && (mine === 'owner' || mine === 'admin'),
+  };
+}
+
+/** 改角色能选的:成员 / 只读成员 / 管理员(只有 owner 能改角色,所以管理员总在)。 */
+export const ASSIGNABLE_ROLES: readonly MemberRole[] = ['member', 'viewer', 'admin'];
+
+/** 保存时要发哪几个请求(按顺序):先改角色,再按**新**角色决定要不要写授权。 */
+export function memberSavePlan(input: {
+  role: MemberRole; nextRole: MemberRole;
+  mode: AgentAccess; nextMode: AgentAccess;
+  before: GrantSelection; after: GrantSelection;
+}): { role: boolean; grants: boolean } {
+  const role = input.nextRole !== input.role;
+  if (!grantsEditable({ role: input.nextRole })) return { role, grants: false };
+  const becameViewer = role && input.nextRole === 'viewer';
+  const grants = input.mode !== input.nextMode || grantsChanged(input.before, input.after) || becameViewer;
+  return { role, grants };
 }
 
 /** 编辑后和原来有没有差别(没差别就不用「保存」)。 */

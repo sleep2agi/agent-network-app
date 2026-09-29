@@ -487,7 +487,7 @@ export default function SettingsScreen({
     quietEnd,
     setQuietStart,
     setQuietEnd,
-    renderUsers: () => <UserManagementPanel cfg={cfg} me={authMe} networkId={me.networkId} />,
+    renderUsers: memberOpen => <UserManagementPanel cfg={cfg} me={authMe} networkId={me.networkId} phone={{ memberOpen, openMember: () => openDetail('userMember'), closeMember: closeDetail }} />,
     renderShortcuts: () => <ShortcutsSettings s={styles} showNav={show('shortcuts', 'nav')} showChat={show('shortcuts', 'chat')} showSend={show('shortcuts', 'send')} />,
     updateView: isAndroid
       ? describeAndroidUpdateRow(androidUpdate, { currentVersion: APP_VERSION, lastCheckedAt: androidUpdateLastCheckedAt(), now: Date.now() })
