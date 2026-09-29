@@ -276,6 +276,7 @@ const copy = [
   ['用户管理', 'User management'],
   ['成员与可访问的 Agent', 'Members and accessible agents'],
   ['新建用户', 'New user'],
+  ['登录设备', 'Signed-in devices'],
 ] as const;
 export const settingsTranslations = Object.fromEntries(copy.map((pair, index) => [`settings.copy.${index}`, pair]));
 registerTranslations(settingsTranslations);

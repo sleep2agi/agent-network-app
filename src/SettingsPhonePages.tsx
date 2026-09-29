@@ -35,6 +35,8 @@ import { MODE_LABELS, STREAM_UNAVAILABLE_HINT, streamingSupported } from './voic
 import { VOLC_CONSOLE_URL } from './voice-credentials-model';
 import { openExternal } from './open-external';
 import type { SettingsCategoryKey, SettingsDetailKey } from './settings-model';
+import type { LoginSessionsState } from './useLoginSessions';
+import { describeDevice, sessionSubtitle, visibleSessions, SESSIONS_VISIBLE_DEFAULT } from './login-sessions';
 
 type KeepAliveSnapshot = { available: boolean; running: boolean; error: string | null };
 
@@ -59,6 +61,8 @@ export type PhonePagesCtx = {
   onOpenProfileWindow: (profile: HubProfile) => void;
   onRemoveProfile: (profile: HubProfile) => void;
   onAddAccount: () => void;
+  /** 登录设备(hub 的登录会话列表);旧 hub 没有接口时 available=false,入口不出现。 */
+  sessions: LoginSessionsState;
   // 本地 Hub
   localHub: LocalHubResult | null;
   localHubBusy: boolean;
@@ -100,7 +104,7 @@ export type PhonePagesCtx = {
 export default function SettingsPhonePage({ page, ctx }: { page: SettingsCategoryKey; ctx: PhonePagesCtx }) {
   useTranslation();
   switch (page) {
-    case 'account': return ctx.detail === 'manageAccounts' ? <ManageAccountsPage ctx={ctx} /> : <AccountPage ctx={ctx} />;
+    case 'account': return ctx.detail === 'manageAccounts' ? <ManageAccountsPage ctx={ctx} /> : ctx.detail === 'loginDevices' ? <LoginDevicesPage ctx={ctx} /> : <AccountPage ctx={ctx} />;
     case 'users': return <>{ctx.renderUsers()}</>;
     case 'localHub': return <LocalHubPage ctx={ctx} />;
     case 'appearance': return <AppearancePage ctx={ctx} />;
@@ -119,6 +123,7 @@ function AccountPage({ ctx }: { ctx: PhonePagesCtx }) {
   useTranslation();
   const { cfg, profiles, show } = ctx;
   const manageable = profiles.some(p => p.profileId !== LOCAL_HUB_PROFILE_ID) || ctx.tauriDesktop;
+  const devices = show('account', 'devices') && ctx.sessions.available;
   return (
     <>
       {show('account', 'profiles') ? (
@@ -153,6 +158,16 @@ function AccountPage({ ctx }: { ctx: PhonePagesCtx }) {
           {manageable && profiles.length ? <SettingsRow label={tr('settings.copy.94')} onPress={() => ctx.openDetail('manageAccounts')} testID="settings-manage-accounts" /> : null}
         </SettingsGroup>
       ) : null}
+      {devices ? (
+        <SettingsGroup>
+          <SettingsRow
+            label={tr('sessions.title')}
+            value={ctx.sessions.sessions.length ? tr('sessions.count', { n: ctx.sessions.sessions.length }) : undefined}
+            onPress={() => ctx.openDetail('loginDevices')}
+            testID="settings-login-devices"
+          />
+        </SettingsGroup>
+      ) : null}
     </>
   );
 }
@@ -174,6 +189,57 @@ function ManageAccountsPage({ ctx }: { ctx: PhonePagesCtx }) {
         );
       })}
       <SettingsGroup footer={tr('settings.copy.96')} />
+    </>
+  );
+}
+
+/**
+ * 三级页:登录设备。每台设备一行(名字 · 最近使用 · 右侧「退出」红字;本机写「本机」、不能在这里退出),
+ * 底下整宽的「退出其他所有设备」。确认弹窗在 SettingsScreen(和宽屏共用一个)。
+ */
+function LoginDevicesPage({ ctx }: { ctx: PhonePagesCtx }) {
+  useTranslation();
+  const s = ctx.sessions;
+  const now = Date.now();
+  const shown = visibleSessions(s.sessions, s.showAll);
+  const footer = s.message?.text ?? (s.idleDays ? tr('sessions.idleFooter', { n: s.idleDays }) : undefined);
+  if (s.error) {
+    return (
+      <>
+        <SettingsGroup footer={tr('sessions.loadFailed', { msg: s.error })} footerTone="danger" />
+        <SettingsButton variant="plain" label={tr('sessions.retry')} onPress={() => void s.refresh()} testID="login-devices-retry" />
+      </>
+    );
+  }
+  return (
+    <>
+      <SettingsGroup testID="login-devices-list" footer={footer} footerTone={s.message ? (s.message.ok ? 'accent' : 'danger') : undefined}>
+        {shown.map(session => {
+          const device = describeDevice(session);
+          return (
+            <SettingsRow
+              key={session.token_id}
+              testID={session.is_current ? 'login-device-current' : `login-device-${session.token_id}`}
+              label={device.label}
+              subtitle={sessionSubtitle(session, now)}
+              value={session.is_current ? tr('sessions.thisDevice') : tr('sessions.signOut')}
+              valueTone={session.is_current ? 'muted' : 'danger'}
+              chevron={false}
+              busy={s.busy === session.token_id}
+              onPress={session.is_current ? undefined : () => s.askRevokeOne(session, device.label)}
+              accessibilityLabel={session.is_current ? `${device.label} · ${tr('sessions.thisDevice')}` : tr('sessions.signOutLabel', { name: device.label })}
+            />
+          );
+        })}
+        {!s.showAll && s.sessions.length > SESSIONS_VISIBLE_DEFAULT ? (
+          <SettingsRow label={tr('sessions.showAll', { n: s.sessions.length })} tone="accent" chevron={false} onPress={() => s.setShowAll(true)} testID="login-devices-show-all" />
+        ) : null}
+      </SettingsGroup>
+      {s.others > 0 ? (
+        <SettingsButton variant="destructive" label={tr('sessions.signOutOthers')} busy={s.busy === 'others'} onPress={s.askRevokeOthers} testID="login-devices-revoke-others" />
+      ) : s.sessions.length ? (
+        <SettingsGroup footer={tr('sessions.onlyThis')} />
+      ) : null}
     </>
   );
 }

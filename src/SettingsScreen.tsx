@@ -42,6 +42,9 @@ import { withBasePadding } from './modal-safe-area';
 import { elevated, buttonStyle, buttonTextStyle } from './elevation';
 import UserManagementPanel from './UserManagementPanel';
 import { canManageUsers, type AuthMe } from './user-admin';
+import { useLoginSessions } from './useLoginSessions';
+import { describeDevice, sessionSubtitle, visibleSessions, SESSIONS_VISIBLE_DEFAULT, type DeviceKind } from './login-sessions';
+import { probeSavedSessions } from './saved-session-probe';
 
 // Settings (Vincent tg 720): who am I, where am I connected, which network, which build —
 // and the destructive actions live here instead of cluttering the agents list header.
@@ -160,7 +163,7 @@ export default function SettingsScreen({
   const [query, setQuery] = useState('');
   // 切主题会整棵重挂(App.tsx key={theme}),分类与滚动位置从模块级记忆恢复,不回到「账号」。
   const [category, setCategoryState] = useState<SettingsCategoryKey>(() => rememberedSettingsView().category);
-  const setCategory = (key: SettingsCategoryKey) => { rememberSettingsCategory(key); setCategoryState(key); };
+  const setCategory = (key: SettingsCategoryKey) => { rememberSettingsCategory(key); setCategoryState(key); setWideDevices(false); };
   // 手机:当前推入的子页(null = 在分组列表上)。同样走模块级记忆 —— 在「外观」子页里切主题整棵重挂后仍停在外观。
   const [page, setPage] = useState<SettingsCategoryKey | null>(() => rememberedSettingsView().page);
   const openPage = (key: SettingsCategoryKey) => { setCategory(key); setPage(key); };
@@ -174,6 +177,9 @@ export default function SettingsScreen({
   const [logoutConfirm, setLogoutConfirm] = useState(false);
   // 切换账号面板(手机底部面板 / 宽屏对话框)。
   const [switcherOpen, setSwitcherOpen] = useState(false);
+  // 登录设备:手机是账号子页里的三级页(detail = loginDevices);宽屏是账号右栏里推进去的一页。
+  const sessions = useLoginSessions(cfg);
+  const [wideDevices, setWideDevices] = useState(false);
   const paneScrollRef = useRef<ScrollView>(null);
   useEffect(() => {
     const { scrollY } = rememberedSettingsView();
@@ -193,7 +199,7 @@ export default function SettingsScreen({
   // 子页的返回:安卓系统返回键/手势走 BackHandler(比 App.tsx 的返回处理晚注册 ⇒ 先被调用,
   // 同 ScheduledTasksScreen 的窄屏详情);网页(验收用的 web 导出)没有返回键,听 Esc。
   // 弹窗开着时让弹窗自己的 onRequestClose 处理(安卓的 Modal 会先吞掉返回键;网页的 Esc 两边都会收到)。
-  const dialogOpen = !!removeTarget || localDeleteVisible || guideVisible || logoutConfirm || switcherOpen;
+  const dialogOpen = !!removeTarget || localDeleteVisible || guideVisible || logoutConfirm || switcherOpen || !!sessions.confirm;
   useEffect(() => {
     if (!subPage || dialogOpen) return;
     const sub = BackHandler.addEventListener('hardwareBackPress', () => { goBack(); return true; });
@@ -208,6 +214,13 @@ export default function SettingsScreen({
     void Promise.all([listHubProfiles(), getDesktopStorageDiagnostics()]).then(([registry, diagnostics]) => {
       setProfiles(registry.profiles);
       setStorageDiagnostics(diagnostics);
+      // 切换账号面板打开时顺手验一下别的已保存账号:登录已过期 / 被「退出其他设备」踢掉的,
+      // 在面板里就显示「需要重新登录」,而不是点过去才发现是坏的。
+      if (switcherOpen) {
+        void probeSavedSessions(registry.profiles, sessionIdOf(cfg)).then(changed => {
+          if (changed) void listHubProfiles().then(next => setProfiles(next.profiles)).catch(() => {});
+        });
+      }
     }).catch(error => setProfileError(String(error)));
   }, [cfg.profileId, cfg.serverUrl, cfg.username, switcherOpen]);
 
@@ -250,6 +263,8 @@ export default function SettingsScreen({
   // 不在搜索:只画选中的那一类;搜索中:把所有命中的类都画出来(各带小标题)。
   const sectionsToRender = searching ? filtered.map(c => c.key) : [active];
   const paneTitle = searching ? tr('settings.copy.0') : (SETTINGS_CATEGORIES.find(c => c.key === active)?.label ?? tr('settings.copy.1'));
+  // 宽屏「登录设备」页:只在账号分类、不在搜索时推进来;搜索或换分类就回到账号。
+  const showWideDevices = wideDevices && !compact && !searching && active === 'account' && sessions.available;
 
   const sidebar = (
     <View style={[styles.sidebar, compact && styles.sidebarCompact]} testID="settings-sidebar">
@@ -429,6 +444,7 @@ export default function SettingsScreen({
     onOpenProfileWindow: profile => { void openWorkspaceWindow(profile).catch(reportError); },
     onRemoveProfile: profile => setRemoveTarget(profile),
     onAddAccount,
+    sessions,
     localHub,
     localHubBusy,
     localBackupMessage,
@@ -496,6 +512,79 @@ export default function SettingsScreen({
     </ScrollView>
   ) : null;
 
+  // 宽屏「登录设备」:每台设备一行(图标 · 名字 [本机] · 最近使用 · 右侧「退出」),底下「退出其他所有设备」。
+  const renderWideDevices = () => {
+    const now = Date.now();
+    const shown = visibleSessions(sessions.sessions, sessions.showAll);
+    return (
+      <View style={sectionStyle} testID="settings-section-devices">
+        {sessions.error ? (
+          <>
+            <Text style={styles.errorText}>{tr('sessions.loadFailed', { msg: sessions.error })}</Text>
+            <Pressable testID="login-devices-retry" style={({ pressed }) => [styles.row, pressed && { opacity: 0.6 }]} onPress={() => void sessions.refresh()} accessibilityRole="button">
+              <Text style={styles.accentText}>{tr('sessions.retry')}</Text>
+            </Pressable>
+          </>
+        ) : null}
+        {shown.map((session, index) => {
+          const device = describeDevice(session);
+          return (
+            <View key={session.token_id}>
+              {index ? <Divider /> : null}
+              <View style={styles.deviceRow} testID={session.is_current ? 'login-device-current' : `login-device-${session.token_id}`}>
+                <View style={styles.deviceIcon}>
+                  <Ionicons name={DEVICE_ICON[device.kind] as any} size={18} color={colors.textSecondary} />
+                </View>
+                <View style={styles.rowCopy}>
+                  <View style={styles.deviceTitleLine}>
+                    <Text style={styles.rowLabelStrong} numberOfLines={1} testID={`${session.is_current ? 'login-device-current' : `login-device-${session.token_id}`}-label`}>{device.label}</Text>
+                    {session.is_current ? <View style={styles.currentBadge} testID="login-device-current-badge"><Text style={styles.currentBadgeText}>{tr('sessions.thisDevice')}</Text></View> : null}
+                  </View>
+                  <Text style={styles.rowHint} numberOfLines={1}>{sessionSubtitle(session, now)}</Text>
+                </View>
+                {session.is_current ? null : (
+                  <Pressable
+                    testID={`login-device-${session.token_id}-signout`}
+                    accessibilityRole="button"
+                    accessibilityLabel={tr('sessions.signOutLabel', { name: device.label })}
+                    disabled={!!sessions.busy}
+                    onPress={() => sessions.askRevokeOne(session, device.label)}
+                    hitSlop={8}
+                    style={({ pressed, hovered }: any) => [styles.deviceSignOut, (pressed || hovered) && styles.deviceSignOutHover, !!sessions.busy && styles.disabled]}
+                  >
+                    {sessions.busy === session.token_id ? <ActivityIndicator size="small" color={colors.failed} /> : <Text style={styles.dangerText}>{tr('sessions.signOut')}</Text>}
+                  </Pressable>
+                )}
+              </View>
+            </View>
+          );
+        })}
+        {!sessions.showAll && sessions.sessions.length > SESSIONS_VISIBLE_DEFAULT ? (
+          <>
+            <Divider />
+            <Pressable testID="login-devices-show-all" style={({ pressed }) => [styles.row, pressed && { opacity: 0.6 }]} onPress={() => sessions.setShowAll(true)} accessibilityRole="button">
+              <Text style={styles.accentText}>{tr('sessions.showAll', { n: sessions.sessions.length })}</Text>
+            </Pressable>
+          </>
+        ) : null}
+        {sessions.others > 0 ? (
+          <>
+            <Divider />
+            <Pressable testID="login-devices-revoke-others" disabled={!!sessions.busy} style={({ pressed }) => [styles.row, pressed && { opacity: 0.6 }, !!sessions.busy && styles.disabled]} onPress={sessions.askRevokeOthers} accessibilityRole="button">
+              <View style={styles.rowCopy}>
+                <Text style={styles.dangerText}>{tr('sessions.signOutOthers')}</Text>
+                <Text style={styles.rowHint}>{tr('sessions.confirmOthersBody', { n: sessions.others })}</Text>
+              </View>
+              {sessions.busy === 'others' ? <ActivityIndicator size="small" color={colors.failed} /> : null}
+            </Pressable>
+          </>
+        ) : sessions.sessions.length ? <Text style={styles.footHint}>{tr('sessions.onlyThis')}</Text> : null}
+        {sessions.message ? <Text style={[styles.footHint, { color: sessions.message.ok ? colors.accent : colors.failed }]} testID="login-devices-message">{sessions.message.text}</Text> : null}
+        {sessions.idleDays ? <Text style={styles.footHint} testID="login-devices-idle">{tr('sessions.idleFooter', { n: sessions.idleDays })}</Text> : null}
+      </View>
+    );
+  };
+
   const heading = (cat: SettingsCategoryKey) => searching
     ? <Text style={styles.groupTitle}>{settingsText(SETTINGS_CATEGORIES.find(c => c.key === cat)?.label ?? '')}</Text>
     : null;
@@ -505,7 +594,17 @@ export default function SettingsScreen({
       {compact ? (subPage ? phoneHeader : listHeader) : sidebar}
       {compact ? (subPage ? phoneSubPage : phoneList) : (
       <View style={styles.pane} testID="settings-pane">
-        <Text style={styles.paneTitle}>{settingsText(paneTitle)}</Text>
+        {showWideDevices ? (
+          <View style={styles.paneTitleRow} testID="settings-devices-header">
+            <Pressable testID="settings-devices-back" accessibilityRole="button" accessibilityLabel={tr('settings.copy.7')} onPress={() => setWideDevices(false)} hitSlop={8} style={({ pressed, hovered }: any) => [styles.paneBack, (pressed || hovered) && styles.categoryItemHover]}>
+              <Ionicons name="chevron-back" size={18} color={colors.textSecondary} />
+              <Text style={styles.paneBackText}>{settingsText(SETTINGS_CATEGORIES.find(c => c.key === 'account')?.label ?? '')}</Text>
+            </Pressable>
+            <Text style={styles.paneTitleText} numberOfLines={1}>{tr('sessions.title')}</Text>
+          </View>
+        ) : (
+          <Text style={styles.paneTitle}>{settingsText(paneTitle)}</Text>
+        )}
         {/* 0.2.80(Vincent 2026-09-19「设置页面往下面滑动不了」):右栏是 ScrollView,padding 在
             contentContainer 上——留在滚动根上的话它在可滚区域之外,最后一行照样贴着窗口底边。 */}
         <ScrollView
@@ -520,7 +619,8 @@ export default function SettingsScreen({
             <Text style={styles.emptyPane}>{tr('settings.copy.10')}{query.trim()}{tr('settings.copy.11')}</Text>
           ) : null}
 
-          {sectionsToRender.includes('account') ? (
+          {showWideDevices ? renderWideDevices() : null}
+          {sectionsToRender.includes('account') && !showWideDevices ? (
             <View style={sectionStyle} testID="settings-section-account">
               {heading('account')}
               {show('account', 'profiles') ? (
@@ -578,6 +678,19 @@ export default function SettingsScreen({
                   <Divider />
                   <Pressable testID="settings-add-account-row" style={({ pressed }) => [styles.row, pressed && { opacity: 0.6 }]} onPress={onAddAccount} accessibilityRole="button">
                     <Text style={styles.accentText}>{tr('settings.copy.21')}</Text>
+                    <Ionicons name="chevron-forward" size={16} color={colors.textMuted} />
+                  </Pressable>
+                </>
+              ) : null}
+              {show('account', 'devices') && sessions.available && !compact ? (
+                <>
+                  <Divider />
+                  <Pressable testID="settings-login-devices-row" style={({ pressed }) => [styles.row, pressed && { opacity: 0.6 }]} onPress={() => { setWideDevices(true); if (searching) setQuery(''); paneScrollRef.current?.scrollTo({ y: 0, animated: false }); }} accessibilityRole="button" accessibilityLabel={tr('sessions.title')}>
+                    <View style={styles.rowCopy}>
+                      <Text style={styles.rowLabel}>{tr('sessions.title')}</Text>
+                      <Text style={styles.rowHint}>{tr('sessions.rowHint')}</Text>
+                    </View>
+                    {sessions.sessions.length ? <Text style={styles.rowValue}>{tr('sessions.count', { n: sessions.sessions.length })}</Text> : null}
                     <Ionicons name="chevron-forward" size={16} color={colors.textMuted} />
                   </Pressable>
                 </>
@@ -1073,6 +1186,18 @@ export default function SettingsScreen({
           </View>
         </View>
       </Modal>
+      <Modal visible={!!sessions.confirm} transparent animationType="fade" onRequestClose={sessions.cancelConfirm}>
+        <View style={[styles.modalBackdrop, withBasePadding(dialogSafe, spacing.xl)]}>
+          <View style={styles.modalCard} testID="login-devices-confirm">
+            <Text style={styles.modalTitle}>{sessions.confirm?.kind === 'others' ? tr('sessions.confirmOthersTitle') : tr('sessions.confirmOneTitle')}</Text>
+            <Text style={styles.modalBody}>{sessions.confirm?.kind === 'others' ? tr('sessions.confirmOthersBody', { n: sessions.confirm.count }) : sessions.confirm ? tr('sessions.confirmOneBody', { name: sessions.confirm.name }) : ''}</Text>
+            <View style={styles.modalActions}>
+              <Pressable testID="login-devices-confirm-cancel" style={styles.modalButton} onPress={sessions.cancelConfirm}><Text style={styles.rowValue}>{tr('sessions.cancel')}</Text></Pressable>
+              <Pressable testID="login-devices-confirm-ok" style={[styles.modalButton, styles.modalDanger]} onPress={sessions.runConfirm}><Text style={styles.dangerText}>{tr('sessions.confirm')}</Text></Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
       <AccountSwitcher
         visible={switcherOpen}
         variant={compact ? 'sheet' : 'dialog'}
@@ -1139,6 +1264,14 @@ function ActionRow({ label, hint, busy, disabled, onPress }: { label: string; hi
   );
 }
 
+const DEVICE_ICON: Record<DeviceKind, string> = {
+  phone: 'phone-portrait-outline',
+  desktop: 'desktop-outline',
+  browser: 'globe-outline',
+  terminal: 'terminal-outline',
+  unknown: 'help-circle-outline',
+};
+
 function Divider() {
   useTranslation();
   return <View style={styles.divider} />;
@@ -1188,6 +1321,18 @@ const makeStyles = () =>
   // 右栏
   pane: { flex: 1, minWidth: 0 },
   paneTitle: { color: colors.text, fontSize: 20, fontWeight: '600', paddingHorizontal: spacing.xl, paddingTop: spacing.xl, paddingBottom: spacing.md, borderBottomWidth: 1, borderBottomColor: colors.border, marginHorizontal: spacing.lg },
+  // 「登录设备」页的标题行:‹ 账号 + 标题。标题的字号 / 基线、底边线的位置和普通 paneTitle 相同(drive.mjs 量)。
+  paneTitleRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, paddingLeft: spacing.xl - spacing.sm, paddingRight: spacing.xl, paddingTop: spacing.xl, paddingBottom: spacing.md, borderBottomWidth: 1, borderBottomColor: colors.border, marginHorizontal: spacing.lg },
+  paneTitleText: { color: colors.text, fontSize: 20, fontWeight: '600', flexShrink: 1 },
+  paneBack: { flexDirection: 'row', alignItems: 'center', gap: 2, paddingHorizontal: spacing.xs, paddingVertical: 2, borderRadius: radius.control },
+  paneBackText: { color: colors.textSecondary, fontSize: 14 },
+  deviceRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingHorizontal: spacing.md, paddingVertical: spacing.md },
+  deviceIcon: { width: 36, height: 36, borderRadius: radius.item, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.subtleFill },
+  deviceTitleLine: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, minWidth: 0 },
+  currentBadge: { paddingHorizontal: 6, paddingVertical: 1, borderRadius: radius.pill, backgroundColor: colors.tonalBg },
+  currentBadgeText: { color: colors.accent, fontSize: 11, fontWeight: '600' },
+  deviceSignOut: { paddingHorizontal: spacing.sm, paddingVertical: spacing.xs, borderRadius: radius.control },
+  deviceSignOutHover: { backgroundColor: colors.subtleFill },
   // 底部多留一个 spacing.xl:最后一行要能完全离开窗口下沿,而不是刚好贴上去——贴上去看起来就和「滚不动」一样。
   content: { padding: spacing.lg, paddingBottom: spacing.xl * 2 },
   section: { paddingHorizontal: spacing.md, paddingBottom: spacing.md },

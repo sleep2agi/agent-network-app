@@ -100,6 +100,12 @@ const withTimeout = (run: (signal: AbortSignal) => Promise<Response>): Promise<R
 // 只挂在 get()(全部轮询读)上;写路径有各自显式失败 UI,不进此口径。
 import { readStatusCountsAsFailure, reportReadFailure, reportReadSuccess } from './connectivity';
 import { classifyLoginFailure, type LoginFailureKind } from './login-flow';
+import { isTokenExpiredBody } from './login-sessions';
+import { LEGACY_SESSION_ID } from './session-registry';
+
+/** 401 上报用的账号 id:手机 / 网页上迁移过来的账号 cfg 不带 profileId,它在账号列表里的 id 是 legacy
+ *  (storage.sessionIdOf 同一规则;桌面端的 cfg 总带 profileId)。 */
+export const authProfileId = (cfg: Pick<HubConfig, 'profileId'>): string => cfg.profileId ?? LEGACY_SESSION_ID;
 import { userMessagesPath } from './user-unread';
 import { pickDefaultNetworkId } from './user-admin';
 import { stripHumanDms } from './human-dm';
@@ -120,7 +126,9 @@ async function get<T>(cfg: HubConfig, path: string): Promise<T> {
     const got = await withDeadline(
       (async () => {
         const res = await appFetch(`${cfg.serverUrl}${path}`, { headers: headers(cfg), signal: ctrl.signal });
-        reportProfileAuthResponse(res.status, cfg.profileId);
+        // 401 的正文区分「登录已过期」(hub 闲置过期,error=token_expired)和别的失效。
+        const expired = res.status === 401 && isTokenExpiredBody(await res.json().catch(() => null));
+        reportProfileAuthResponse(res.status, authProfileId(cfg), expired ? 'token_expired' : undefined);
         return { res, data: res.ok ? ((await res.json()) as T) : undefined };
       })(),
       readDeadlineMs,
@@ -1466,6 +1474,8 @@ export const login = async (
   serverUrl: string,
   username: string,
   password: string,
+  /** 这台设备在 hub「登录设备」里的名字(login-sessions.ts clientLabelForLogin);旧 hub 忽略。 */
+  clientLabel?: string,
 ): Promise<{ ok: true; cfg: HubConfig } | { ok: false; error: string; kind: LoginFailureKind }> => {
   try {
     const res = await withTimeout(signal =>
@@ -1473,7 +1483,7 @@ export const login = async (
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         signal,
-        body: JSON.stringify({ username, password }),
+        body: JSON.stringify({ username, password, ...(clientLabel ? { client_label: clientLabel } : {}) }),
       }),
     );
     // Vincent hit this against a half-open port: connection succeeds but

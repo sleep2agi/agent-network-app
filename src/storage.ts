@@ -160,6 +160,12 @@ export const loadHubProfile = async (profileId: string): Promise<HubConfig> => {
   return cfg;
 };
 
+/** 读一个已保存账号的凭据但不切过去(切换账号面板验证它还能不能用)。桌面走 Rust 的 profile,手机 / 网页走 session-registry。 */
+export const loadSavedProfileConfig = async (profileId: string): Promise<HubConfig | null> => {
+  if (isTauriDesktop()) return loadHubProfile(profileId);
+  return mobileSessions.loadSession(profileId);
+};
+
 export const removeHubProfile = async (profileId: string): Promise<void> => {
   if (!isTauriDesktop()) {
     await mobileSessions.remove(profileId);
