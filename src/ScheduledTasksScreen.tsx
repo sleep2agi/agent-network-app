@@ -66,6 +66,9 @@ import {
 } from './scheduled-view-model';
 import type { ScheduleStatus, StatusTone } from './scheduled-view-model';
 import { elevated } from './elevation';
+import { t } from './i18n';
+import './i18n-schedules';
+import { fieldsOf, mergeDraft, planConflict, type ScheduleEditFields, type ScheduleEditKey } from './schedule-edit-merge';
 
 const DAYS = ['日', '一', '二', '三', '四', '五', '六'];
 
@@ -479,10 +482,6 @@ export default function ScheduledTasksScreen({ cfg, onOpenChat, open }: {
         initialTarget={createTarget}
         onClose={() => { setShowForm(false); setEditing(null); }}
         onSaved={async () => { setShowForm(false); setEditing(null); await load(); }}
-        onConflict={async () => {
-          setShowForm(false); setEditing(null); await load();
-          setError('计划已在其他设备更新，已刷新最新内容，请重新编辑。');
-        }}
       />
       <CancelScheduleModal
         value={cancelCandidate}
@@ -675,7 +674,7 @@ function Fact({ label, value, hint, last }: { label: string; value: string; hint
   );
 }
 
-function ScheduleFormModal({ cfg, nodes, visible, editing, initialTarget, onClose, onSaved, onConflict }: {
+function ScheduleFormModal({ cfg, nodes, visible, editing, initialTarget, onClose, onSaved }: {
   cfg: HubConfig;
   nodes: HubNode[];
   visible: boolean;
@@ -684,7 +683,6 @@ function ScheduleFormModal({ cfg, nodes, visible, editing, initialTarget, onClos
   initialTarget?: string;
   onClose: () => void;
   onSaved: () => void;
-  onConflict: () => void;
 }) {
   const styles = useMemo(makeStyles, [visible]);
   const [name, setName] = useState(''); const [task, setTask] = useState('');
@@ -710,56 +708,124 @@ function ScheduleFormModal({ cfg, nodes, visible, editing, initialTarget, onClos
   }, [visible, cfg]);
   const choices = useMemo(() => pickerChoices(nodes, sessions), [nodes, sessions]);
   const chosen = choices.nodes.find(n => n.assignable && n.node_id === target) ?? null;
-  const fallbackAlias = editing && editing.target_node_id === target ? editing.target_alias : null;
+  // 409 时不丢草稿(schedule-edit-merge.ts):base = 这份草稿是基于哪一版改的;冲突后换成重新读到的那版。
+  // 只在打开 / 换编辑对象时从 editing 同步 —— 列表 10 秒轮询换的是 items,不会碰到打开着的表单。
+  const [base, setBase] = useState<HubScheduledTask | null>(editing);
+  const [conflict, setConflict] = useState<{ latest: HubScheduledTask; keys: ScheduleEditKey[] } | null>(null);
+  const fallbackAlias = base && base.target_node_id === target ? base.target_alias : null;
+
+  const fillForm = (f: ScheduleEditFields) => {
+    setName(f.name); setTask(f.task); setTarget(f.target_node_id);
+    setKind(f.schedule.type); setMisfirePolicy(f.misfire_policy || 'catch_up_once');
+    setPriority(f.priority); setTimezone(f.timezone);
+    if (f.schedule.type === 'once') setWhen(toLocalDateTimeInput(f.schedule.run_at));
+    if (f.schedule.type === 'interval') {
+      const value = intervalFormValue(f.schedule.every_seconds);
+      setEvery(value.every); setUnit(value.unit);
+    }
+    if (f.schedule.type === 'daily') setClock(f.schedule.time);
+    if (f.schedule.type === 'weekly') { setClock(f.schedule.time); setWeekdays(f.schedule.weekdays); }
+  };
 
   useEffect(() => {
     if (!visible) return;
-    setError('');
+    setError(''); setConflict(null); setBase(editing);
     if (!editing) {
       setName(''); setTask(''); setTarget(initialTarget ?? ''); setKind('once'); setWhen(''); setEvery('1'); setUnit('hours');
       setClock('09:00'); setWeekdays([1]); setMisfirePolicy('catch_up_once'); setPriority('normal'); setTimezone(detectedTimezone);
       return;
     }
-    setName(editing.name); setTask(editing.task_content); setTarget(editing.target_node_id);
-    setKind(editing.schedule.type); setMisfirePolicy(editing.misfire_policy || 'catch_up_once');
-    setPriority(editing.priority); setTimezone(editing.timezone);
-    if (editing.schedule.type === 'once') setWhen(toLocalDateTimeInput(editing.schedule.run_at));
-    if (editing.schedule.type === 'interval') {
-      const value = intervalFormValue(editing.schedule.every_seconds);
-      setEvery(value.every); setUnit(value.unit);
-    }
-    if (editing.schedule.type === 'daily') setClock(editing.schedule.time);
-    if (editing.schedule.type === 'weekly') { setClock(editing.schedule.time); setWeekdays(editing.schedule.weekdays); }
+    fillForm(fieldsOf(editing));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [visible, editing, detectedTimezone, initialTarget]);
 
   const invalidSchedule = (kind === 'once' && !when) ||
     (kind === 'interval' && (!Number.isInteger(Number(every)) || Number(every) < (unit === 'seconds' ? 60 : 1))) ||
     (kind === 'weekly' && weekdays.length === 0);
-  const submit = async () => {
-    setBusy(true); setError('');
+  const draftInput = (): ScheduleEditFields => {
+    let schedule: HubScheduleSpec;
+    if (kind === 'once') schedule = { type: 'once', run_at: new Date(when).toISOString() };
+    else if (kind === 'interval') {
+      const multiplier = unit === 'seconds' ? 1 : unit === 'minutes' ? 60 : unit === 'hours' ? 3600 : 86400;
+      schedule = { type: 'interval', every_seconds: Number(every) * multiplier };
+    }
+    else if (kind === 'daily') schedule = { type: 'daily', time: clock };
+    else schedule = { type: 'weekly', time: clock, weekdays };
+    return { name: name.trim(), target_node_id: target, task: task.trim(), priority, timezone: timezone.trim(), schedule, misfire_policy: misfirePolicy };
+  };
+  // 409 revision_conflict:重新读 → 没有同字段冲突就合并后自动重试一次;有就停在冲突视图。草稿任何分支都不丢。
+  const save = async (row: HubScheduledTask, input: ScheduleEditFields, retried: boolean): Promise<void> => {
     try {
-      let schedule: HubScheduleSpec;
-      if (kind === 'once') schedule = { type: 'once', run_at: new Date(when).toISOString() };
-      else if (kind === 'interval') {
-        const multiplier = unit === 'seconds' ? 1 : unit === 'minutes' ? 60 : unit === 'hours' ? 3600 : 86400;
-        schedule = { type: 'interval', every_seconds: Number(every) * multiplier };
-      }
-      else if (kind === 'daily') schedule = { type: 'daily', time: clock };
-      else schedule = { type: 'weekly', time: clock, weekdays };
-      const input = { name: name.trim(), target_node_id: target, task: task.trim(), priority, timezone: timezone.trim(), schedule, misfire_policy: misfirePolicy };
-      if (editing) await updateScheduledTask(cfg, editing, input);
-      else await createScheduledTask(cfg, input);
+      await updateScheduledTask(cfg, row, input);
       onSaved();
     } catch (e) {
-      if (e instanceof ScheduledTaskError && e.status === 409 && e.code === 'revision_conflict') { onConflict(); return; }
+      if (!(e instanceof ScheduledTaskError && e.status === 409 && e.code === 'revision_conflict')) throw e;
+      let latest: HubScheduledTask | undefined;
+      try { latest = (await fetchScheduledTasks(cfg)).schedules?.find(x => x.schedule_id === row.schedule_id); }
+      catch (err) { setError(t('schedules.conflict.refetchFailed', { message: err instanceof Error ? err.message : String(err) })); return; }
+      const plan = planConflict(row, latest, input);
+      if (plan.kind === 'gone') { setError(t('schedules.conflict.gone')); return; }
+      if (plan.kind === 'conflict') { setConflict({ latest: plan.base, keys: plan.keys }); return; }
+      setBase(plan.base); fillForm(plan.input);
+      if (retried) { setError(t('schedules.conflict.retryAgain')); return; }
+      await save(plan.base, plan.input, true);
+    }
+  };
+  const submit = async () => {
+    setBusy(true); setError(''); setConflict(null);
+    try {
+      const input = draftInput();
+      if (base) await save(base, input, false);
+      else { await createScheduledTask(cfg, input); onSaved(); }
+    } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     }
     finally { setBusy(false); }
   };
+  const resolveConflict = async (choice: 'mine' | 'theirs' | 'edit') => {
+    if (!conflict || !base) return;
+    const { latest } = conflict;
+    const draft = draftInput();
+    setConflict(null);
+    if (choice === 'edit') { setBase(latest); return; }
+    const merged = mergeDraft(base, latest, draft, choice);
+    setBase(latest); fillForm(merged);
+    if (choice === 'theirs') return;
+    setBusy(true); setError('');
+    try { await save(latest, merged, true); }
+    catch (e) { setError(e instanceof Error ? e.message : String(e)); }
+    finally { setBusy(false); }
+  };
+  const describeField = (key: ScheduleEditKey, f: ScheduleEditFields): string => {
+    if (key === 'schedule') return describeSchedule(f.schedule, f.timezone, DEVICE_TIMEZONE);
+    if (key === 'misfire_policy') return describeMisfire(f.misfire_policy).short;
+    if (key === 'priority') return t(`schedules.priority.${f.priority}`);
+    if (key === 'target_node_id') return nodes.find(n => n.node_id === f.target_node_id)?.alias ?? f.target_node_id;
+    return String(f[key]);
+  };
   const cannotSave = busy || !name.trim() || !task.trim() || !target || !timezone.trim() || invalidSchedule;
-  return <ScheduleModal visible={visible} onClose={onClose} testID="schedule-form" title={editing ? '编辑定时任务' : '新建定时任务'} primary={{ label: '保存', disabled: cannotSave, onPress: submit }}>
+  return <ScheduleModal visible={visible} onClose={onClose} testID="schedule-form" title={editing ? '编辑定时任务' : '新建定时任务'} primary={{ label: '保存', disabled: cannotSave || !!conflict, onPress: submit }}>
       <ScrollView contentContainerStyle={styles.form} keyboardShouldPersistTaps="handled">
-        {error ? <Text style={styles.error}>{error}</Text> : null}
+        {error ? <Text testID="schedule-form-error" style={styles.error}>{error}</Text> : null}
+        {conflict && base ? (() => {
+          const mine = draftInput(), theirs = fieldsOf(conflict.latest);
+          return <View testID="schedule-conflict" style={styles.conflict}>
+            <Text style={styles.conflictTitle}>{t('schedules.conflict.title')}</Text>
+            <Text style={styles.meta}>{t('schedules.conflict.body')}</Text>
+            {conflict.keys.map(key => <View key={key} testID={`schedule-conflict-${key}`} style={styles.conflictField}>
+              <Text style={styles.label}>{t(`schedules.field.${key}`)}</Text>
+              <Text style={styles.conflictSide}>{t('schedules.conflict.mine')}</Text>
+              <Text testID={`schedule-conflict-${key}-mine`} style={styles.conflictValue} selectable>{describeField(key, mine)}</Text>
+              <Text style={styles.conflictSide}>{t('schedules.conflict.theirs')}</Text>
+              <Text testID={`schedule-conflict-${key}-theirs`} style={styles.conflictValue} selectable>{describeField(key, theirs)}</Text>
+            </View>)}
+            <View style={styles.actions}>
+              <Pressable testID="schedule-conflict-mine" disabled={busy} style={styles.action} onPress={() => void resolveConflict('mine')}><Text style={styles.actionText}>{t('schedules.conflict.useMine')}</Text></Pressable>
+              <Pressable testID="schedule-conflict-theirs" disabled={busy} style={styles.action} onPress={() => void resolveConflict('theirs')}><Text style={styles.actionText}>{t('schedules.conflict.useTheirs')}</Text></Pressable>
+              <Pressable testID="schedule-conflict-edit" disabled={busy} style={styles.action} onPress={() => void resolveConflict('edit')}><Text style={styles.actionText}>{t('schedules.conflict.keepEditing')}</Text></Pressable>
+            </View>
+          </View>;
+        })() : null}
         <Label text="名称"><TextInput style={styles.input} value={name} onChangeText={setName} placeholder="每日巡检" placeholderTextColor={colors.textMuted} /></Label>
         <Label text="执行节点"><NodePickerField node={chosen} fallbackAlias={fallbackAlias} onPress={() => setPickerOpen(true)} /></Label>
         <Label text="任务内容"><TextInput style={[styles.input, styles.textarea]} multiline value={task} onChangeText={setTask} placeholder="节点收到的任务" placeholderTextColor={colors.textMuted} /></Label>
@@ -970,7 +1036,12 @@ function makeStyles() { return StyleSheet.create({
   runError: { color: colors.textMuted, fontSize: fontSize.small, marginTop: 2 },
   card: { backgroundColor: colors.card, borderRadius: radius.surface, padding: spacing.md, marginBottom: spacing.md, ...elevated('raised') }, cardTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }, cardTitle: { color: colors.text, fontWeight: '600', fontSize: 15, flex: 1 }, badge: { fontSize: 11, overflow: 'hidden', paddingHorizontal: 8, paddingVertical: 3, borderRadius: radius.pill }, badgeActive: { color: colors.running, backgroundColor: `${colors.running}20` }, badgeIdle: { color: colors.textMuted, backgroundColor: colors.bg },
   meta: { color: colors.textMuted, fontSize: 11, marginTop: spacing.xs }, actions: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm, marginTop: spacing.md }, action: { borderWidth: 1, borderColor: colors.border, borderRadius: radius.control, paddingHorizontal: 14, paddingVertical: 8, alignItems: 'center' }, actionText: { color: colors.textSecondary, fontSize: fontSize.body }, danger: { borderColor: `${colors.failed}50` }, dangerText: { color: colors.failed, fontSize: fontSize.body },
-  error: { color: colors.failed, marginHorizontal: spacing.lg, marginBottom: spacing.md, fontSize: 13 }, empty: { paddingVertical: 64, paddingHorizontal: spacing.xl, alignItems: 'center' }, emptyTitle: { color: colors.text, fontSize: fontSize.title, fontWeight: weight.strong, marginBottom: spacing.sm }, emptyBody: { color: colors.textMuted, fontSize: 13, textAlign: 'center', lineHeight: 19, maxWidth: 300 }, muted: { color: colors.textMuted, fontSize: 13 },
+  error: { color: colors.failed, marginHorizontal: spacing.lg, marginBottom: spacing.md, fontSize: 13 },
+  conflict: { borderWidth: 1, borderColor: `${colors.blocked}80`, borderRadius: radius.control, padding: spacing.md, marginBottom: spacing.md, gap: spacing.xs },
+  conflictTitle: { color: colors.text, fontSize: fontSize.body, fontWeight: weight.strong },
+  conflictField: { marginTop: spacing.sm },
+  conflictSide: { color: colors.textMuted, fontSize: 11, marginTop: spacing.xs },
+  conflictValue: { color: colors.text, fontSize: 13 }, empty: { paddingVertical: 64, paddingHorizontal: spacing.xl, alignItems: 'center' }, emptyTitle: { color: colors.text, fontSize: fontSize.title, fontWeight: weight.strong, marginBottom: spacing.sm }, emptyBody: { color: colors.textMuted, fontSize: 13, textAlign: 'center', lineHeight: 19, maxWidth: 300 }, muted: { color: colors.textMuted, fontSize: 13 },
   modalRoot: { flex: 1, backgroundColor: colors.bg }, modalHeader: { minHeight: 58, paddingHorizontal: spacing.lg, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderBottomWidth: 1, borderBottomColor: colors.border }, modalTitle: { flex: 1, textAlign: 'center', color: colors.text, fontWeight: '600', fontSize: 16 }, link: { color: colors.accent, fontSize: 15 }, headerSide: { minWidth: 56, minHeight: 44, justifyContent: 'center' }, headerSideEnd: { alignItems: 'flex-end' }, form: { padding: spacing.lg, paddingBottom: 60 }, field: { marginBottom: spacing.lg }, label: { color: colors.textMuted, fontSize: 12, marginBottom: spacing.sm }, input: { color: colors.text, backgroundColor: colors.card, borderColor: colors.border, borderWidth: 1, borderRadius: radius.control, paddingHorizontal: spacing.md, paddingVertical: 11 }, textarea: { minHeight: 100, textAlignVertical: 'top' },
   segment: { flexDirection: 'row', borderWidth: 1, borderColor: colors.border, borderRadius: radius.control, overflow: 'hidden' }, segmentItem: { flex: 1, alignItems: 'center', paddingVertical: 10, backgroundColor: colors.card }, segmentActive: { backgroundColor: colors.accent }, segmentText: { color: colors.textMuted, fontSize: 12 }, segmentTextActive: { color: colors.onAccent, fontSize: 12, fontWeight: '600' }, weekdays: { flexDirection: 'row', justifyContent: 'space-between' }, day: { width: 38, height: 38, borderRadius: radius.pill, borderWidth: 1, borderColor: colors.border, alignItems: 'center', justifyContent: 'center' }, dayActive: { backgroundColor: colors.accent, borderColor: colors.accent }, dayTextActive: { color: colors.onAccent, fontWeight: '600' },
   run: { paddingVertical: spacing.md, borderBottomWidth: 1, borderBottomColor: colors.border, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
