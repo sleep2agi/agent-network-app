@@ -39,10 +39,10 @@ console.log('# 接线(源码)');
   const more = at('testID="req-more"');
   const always = ['testID="req-edit-name"', "<Field label={tr('tasks.copy.54')}>", '<RoleFields', '<ProjectSelect', "<Field label={tr('tasks.copy.119')}>", '<TaskDescriptionEditor'].map(at);
   ck('常显:标题 · 状态 · 负责人/负责 Agent · 项目 · 预计完成 · 描述,按这个顺序,都在「更多」之前', always.every(i => i > 0 && i < more) && always.every((v, i) => i === 0 || v > always[i - 1]));
-  const inside = ["<Field label={tr('tasks.copy.32')}>", '<ParentSelect', '<SubRequirements', '<TaskChecklist', "<Field label={tr('tasks.copy.53')}>", '<TaskIssueBindings', '<TaskTags', '<ExternalLink', 'item.createdAt ?'].map(at);
-  ck('「更多」里:优先级 · 母任务 · 子任务 · 检查项 · 参与人 · GitHub Issue · 标签 · 同步来源 · 创建于', inside.every(i => i > more) && inside.every((v, i) => i === 0 || v > inside[i - 1]));
+  const inside = ["<Field label={tr('detail.start')}>", "<Field label={tr('tasks.copy.32')}>", '<ParentSelect', '<SubRequirements', '<TaskChecklist', "<Field label={tr('tasks.copy.53')}>", '<TaskIssueBindings', '<TaskTags', '<ExternalLink', 'item.createdAt ?'].map(at);
+  ck('「更多」里:开始 · 优先级 · 母任务 · 子任务 · 检查项 · 参与人 · GitHub Issue · 标签 · 同步来源 · 创建于', inside.every(i => i > more) && inside.every((v, i) => i === 0 || v > inside[i - 1]));
   ck('默认收起,本机记住', panel.includes('const [moreOpen, setMoreOpen] = useState(false);') && panel.includes('saveDetailMoreOpen(!v)') && panel.includes('loadDetailMoreOpen()'));
-  ck('「更多」里有错误(母任务被拒、检查项没存上)时自动展开', panel.includes("const moreShown = moreOpen || error?.field === 'parent' || !!checklistError;"));
+  ck('「更多」里有错误(母任务被拒、开始日期不对、检查项没存上)时自动展开', panel.includes("const moreShown = moreOpen || error?.field === 'parent' || error?.field === 'start' || !!checklistError;"));
   ck('收起时一行摘要', body.includes("{!moreShown && summary.length ? <Text") && body.includes('testID="req-more-summary"'));
 }
 

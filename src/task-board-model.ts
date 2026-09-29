@@ -499,6 +499,9 @@ export function checkDraft(d: Pick<CreateDraft, 'name' | 'due'>): DraftCheck {
   return { ok: true, name, due };
 }
 
+/** 开始日期的校验(同期限的形状);合法或留空 = null。 */
+export const startError = (start: string): string | null => (dueOk(start.trim()) ? null : '日期写成 2026-10-01,或留空');
+
 /**
  * 发给 POST /api/requirements 的字段。负责人只带稳定身份 {kind,id}(#484):显示名不是身份,
  * 旧的 assignee 文本永远是空串。
@@ -524,12 +527,13 @@ export function createInput(d: CreateDraft, twoRoles = false): { name: string; p
 
 // ── 详情编辑 ─────────────────────────────────────────────────────────────
 
-export interface EditDraft { name: string; priority: ReqPriority; due: string; owner: RequirementPersonRef | null; agentOwner: RequirementPersonRef | null; description: string; projectId: string | null; parentId: string | null }
+export interface EditDraft { name: string; priority: ReqPriority; due: string; start: string; owner: RequirementPersonRef | null; agentOwner: RequirementPersonRef | null; description: string; projectId: string | null; parentId: string | null }
 
 export const editDraftOf = (item: Requirement): EditDraft => ({
   name: item.name,
   priority: item.priority,
   due: item.due,
+  start: item.start ?? '',
   owner: item.owner ? { kind: item.owner.kind, id: item.owner.id } : null,
   agentOwner: item.agentOwner ? { kind: item.agentOwner.kind, id: item.agentOwner.id } : null,
   description: item.description ?? '',
@@ -538,7 +542,7 @@ export const editDraftOf = (item: Requirement): EditDraft => ({
 });
 
 /** PATCH 请求体(字段名就是线上的名字)。 */
-export type EditPatch = { tags?: string[]; issues?: { url: string; title?: string }[]; name?: string; priority?: ReqPriority; due?: string; owner?: RequirementPersonRef | null; agent_owner?: RequirementPersonRef | null; description?: string; checklist?: ChecklistItem[]; project_id?: string | null; parent_id?: string | null };
+export type EditPatch = { tags?: string[]; issues?: { url: string; title?: string }[]; name?: string; priority?: ReqPriority; due?: string; start?: string; owner?: RequirementPersonRef | null; agent_owner?: RequirementPersonRef | null; description?: string; checklist?: ChecklistItem[]; project_id?: string | null; parent_id?: string | null };
 
 /**
  * 只提交改过的字段;没改返回 null(保存按钮不可用)。旧 Hub(owner undefined)不提交负责人 ——
@@ -551,6 +555,8 @@ export function editPatch(item: Requirement, d: EditDraft): EditPatch | null {
   if (d.priority !== item.priority) patch.priority = d.priority;
   const due = d.due.trim();
   if (due !== item.due) patch.due = due;
+  // 开始(甘特图):只有带 start 字段的 Hub(capability start_date)才发;旧 Hub 行里没有这个字段。
+  if (item.start !== undefined && d.start.trim() !== item.start) patch.start = d.start.trim();
   if (item.owner !== undefined) {
     const before = item.owner ? personKey(item.owner) : '';
     const after = d.owner ? personKey(d.owner) : '';
@@ -579,6 +585,7 @@ export function patchApplied(row: Requirement, patch: EditPatch): boolean {
   if (patch.name !== undefined && row.name !== patch.name) return false;
   if (patch.priority !== undefined && row.priority !== patch.priority) return false;
   if (patch.due !== undefined && row.due !== patch.due) return false;
+  if (patch.start !== undefined && row.start !== patch.start) return false;
   if (patch.owner !== undefined) {
     const want = patch.owner ? personKey(patch.owner) : '';
     const got = row.owner ? personKey(row.owner) : '';

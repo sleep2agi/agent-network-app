@@ -16,7 +16,7 @@ import type { HubConfig } from './api';
 import { REQ_COLUMN_LABEL, REQ_COLUMNS, type ReqColumn, type Requirement, type RequirementProject } from './requirements-model';
 import type { RequirementPerson } from './requirement-people';
 import type { RequirementAssignments } from './requirement-people-api';
-import { checkDraft, editDraftOf, editPatch, hasDetails, hasRoles, type EditDraft, type EditPatch } from './task-board-model';
+import { checkDraft, startError, editDraftOf, editPatch, hasDetails, hasRoles, type EditDraft, type EditPatch } from './task-board-model';
 import TaskChecklist from './TaskChecklist';
 import TaskIssueBindings from './TaskIssueBindings';
 import TaskTags from './TaskTags';
@@ -76,7 +76,7 @@ export default function TaskDetailPanel({ cfg, item, items, onOpenRequirement, o
   const styles = makePanelStyles();
   const safe = useModalSafePadding('fullScreen');
   const [draft, setDraft] = useState<EditDraft>(() => editDraftOf(item));
-  const [error, setError] = useState<{ field: 'name' | 'due' | 'submit' | 'parent'; message: string } | null>(null);
+  const [error, setError] = useState<{ field: 'name' | 'due' | 'start' | 'submit' | 'parent'; message: string } | null>(null);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   // 换了一张卡片就换草稿;同一张卡片被 Hub 刷新(别处改了)时,没改过的字段跟着刷新。
@@ -92,6 +92,7 @@ export default function TaskDetailPanel({ cfg, item, items, onOpenRequirement, o
         name: d.name === base.name ? next.name : d.name,
         priority: d.priority === base.priority ? next.priority : d.priority,
         due: d.due === base.due ? next.due : d.due,
+        start: d.start === base.start ? next.start : d.start,
         owner: JSON.stringify(d.owner) === JSON.stringify(base.owner) ? next.owner : d.owner,
         agentOwner: JSON.stringify(d.agentOwner) === JSON.stringify(base.agentOwner) ? next.agentOwner : d.agentOwner,
         description: d.description === base.description ? next.description : d.description,
@@ -106,6 +107,8 @@ export default function TaskDetailPanel({ cfg, item, items, onOpenRequirement, o
     if (!patch || saving) return;
     const c = checkDraft(draft);
     if (!c.ok) { setError({ field: c.field, message: validationText(c.message) }); return; }
+    const badStart = patch.start !== undefined ? startError(patch.start) : null;
+    if (badStart) { setError({ field: 'start', message: validationText(badStart) }); return; }
     setSaving(true);
     const failed = await onSave(patch);
     setSaving(false);
@@ -129,7 +132,7 @@ export default function TaskDetailPanel({ cfg, item, items, onOpenRequirement, o
   // 更多收起时,里面有值的字段在「更多」那一行上用一行字说出来(task-detail-more.ts),不悄悄藏掉。
   const summary = moreSummary(item, draft, items);
   // 母任务被 Hub 拒绝、检查项没存上:错误在「更多」里,自动展开,不能藏着。
-  const moreShown = moreOpen || error?.field === 'parent' || !!checklistError;
+  const moreShown = moreOpen || error?.field === 'parent' || error?.field === 'start' || !!checklistError;
   const body: ReactNode = (
     <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: spacing.xl, gap: spacing.lg }} keyboardShouldPersistTaps="handled">
       <ParentBreadcrumb item={item} items={items} onOpen={onOpenRequirement} />
@@ -208,6 +211,12 @@ export default function TaskDetailPanel({ cfg, item, items, onOpenRequirement, o
       </Pressable>
       {moreShown ? (
         <View style={{ gap: spacing.lg }} testID="req-more">
+          {/* 开始(甘特图的条从这里画):只有带 start 字段的 Hub(capability start_date)才有;只到日。 */}
+          {item.start !== undefined ? (
+            <Field label={tr('detail.start')}>
+              <DueField value={draft.start} onChange={start => set({ start })} error={error?.field === 'start' ? error.message : undefined} idBase="req-edit-start" pointer={pointer} sheet={mode === 'page'} />
+            </Field>
+          ) : null}
           <Field label={tr('tasks.copy.32')}>
             <PriorityPicker value={draft.priority} onChange={priority => set({ priority })} testPrefix="req-edit-priority" choices={priorityChoices(lowestPriority, item.priority)} />
           </Field>

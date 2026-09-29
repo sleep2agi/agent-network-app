@@ -372,6 +372,8 @@ registerTranslations({
   'detail.moreA11y': ['展开更多字段', 'Show more fields'],
   'detail.lessA11y': ['收起更多字段', 'Hide more fields'],
   'detail.sumHigh': ['P0 最高', 'P0 Highest'],
+  'detail.start': ['开始', 'Start'],
+  'detail.sumStart': ['{m}月{d}日开始', 'Starts {m}/{d}'],
   'detail.sumLow': ['P2 低', 'P2 Low'],
   'detail.sumLowest': ['P3 极低', 'P3 Lowest'],
   'detail.sumParent': ['母任务 {name}', 'Parent: {name}'],
