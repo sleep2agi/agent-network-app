@@ -101,7 +101,7 @@ ck('#178 无 _localId 的本地项仍被丢弃',
 
 const chatSource = fs.readFileSync(path.join(process.cwd(), 'src/ChatScreen.tsx'), 'utf8');
 ck('桌面输入区使用独立微信式 composer', chatSource.includes('styles.desktopComposer'));
-ck('桌面输入区显示快捷键提示', chatSource.includes('composerShortcutHint(sendKey, isMacKeyboard())') && chatActions.composerShortcutHint('enter', false) === 'Enter 发送 · Shift/Ctrl/⌘+Enter 换行');
+ck('桌面输入区显示翻译的快捷键提示', chatSource.includes("t(sendKey === 'modEnter' ? 'chat.shortcutMod' : 'chat.shortcutEnter'") && chatActions.composerShortcutHint('enter', false) === 'Enter 发送 · Shift/Ctrl/⌘+Enter 换行');
 ck('快捷键提示跟随发送键:Ctrl/⌘+Enter 模式', chatActions.composerShortcutHint('modEnter', true) === '⌘+Enter 发送 · Enter 换行' && chatActions.composerShortcutHint('modEnter', false) === 'Ctrl+Enter 发送 · Enter 换行');
 ck('两处桌面输入框都按设置的发送键判定', (chatSource.match(/shouldSendOnEnter\(key, sendKey\)/g) ?? []).length === 2 && !/shouldSendOnEnter\(key\)/.test(chatSource));
 // ---- 2026-09-15 微信式引用条(Vincent:抄微信的引用设计) ----
@@ -124,7 +124,7 @@ ck('两处桌面输入框都按设置的发送键判定', (chatSource.match(/sho
   ck('发送时把引用拼在正文前', src.includes('const content = quote ? buildQuote(quote.text, 40, quote.author) + body : body;'));
   ck('发出/回复两种气泡都渲染引用条', src.includes('styles.quoteChipSent') && src.includes('styles.quoteChipReply') && src.includes('quoteLabel(sentQuoted.quote)') && src.includes('quoteLabel(replyQuoted.quote)'));
   ck('气泡正文用去掉引用后的 body', src.includes('cleanAttachmentDebugText(replyQuoted.body)') && src.includes("cleanAttachmentDebugText(sentQuoted.body || (sentQuoted.quote ? '' : '—'))"));
-  ck('桌面和手机输入框上方都有引用条', src.split('accessibilityLabel="正在引用"').length === 3);
+  ck('桌面和手机输入框上方都有引用条', src.split("accessibilityLabel={t('chat.quoting')}").length === 3);
   ck('右键/长按选中都带作者', src.includes("author: sender.alias })") && src.includes("author: alias })") && src.includes('resolveSender(item, currentUsername).alias;'));
 }
 

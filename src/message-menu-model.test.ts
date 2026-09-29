@@ -44,8 +44,8 @@ ck('组之间渲染分隔(actionGroupGap)', src.includes('styles.actionGroupGap'
 ck('菜单不再有取消行(样式与旧间隔都删干净)', !src.includes('actionCancel') && !src.includes('actionSepGap'));
 ck('删除项带 danger 样式', src.includes('item.danger && styles.actionDanger'));
 ck('桌面端 Esc 关菜单', src.includes("'Escape'") && src.includes("addEventListener('keydown'") && src.includes('setMenuFor(null)'));
-ck('放大阅读有独立 Modal', src.includes('expandFor') && src.includes('accessibilityLabel="放大阅读"'));
-ck('多选模式有底栏和复选框', src.includes('selectionMode') && src.includes('selectionBarActions(') && src.includes('accessibilityLabel="选中"'));
-ck('多选转发逐条 beginForward(失败即停)', src.includes('forwardBatch') && src.includes('已转发'));
+ck('放大阅读有独立 Modal', src.includes('expandFor') && src.includes("accessibilityLabel={t('chat.expand')}"));
+ck('多选模式有底栏和复选框', src.includes('selectionMode') && src.includes('selectionBarActions(') && src.includes("accessibilityLabel={t('chat.select')}"));
+ck('多选转发逐条 beginForward(失败即停)', src.includes('forwardBatch') && src.includes("t('chat.forwardPartial'"));
 
 console.log(`\n${p}/${t} passed`); process.exit(p === t ? 0 : 1);

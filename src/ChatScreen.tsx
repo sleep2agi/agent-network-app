@@ -1,4 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
+import { t } from './i18n';
+import { useTranslation } from './i18n-react';
+import './i18n-chat';
 import { PanResponder, ActivityIndicator, Alert, BackHandler, FlatList, Image, Keyboard, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StatusBar, StyleSheet, useWindowDimensions, View } from 'react-native';
 import { Text, TextInput } from './ui-text';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -40,7 +43,8 @@ import { createUploadMemo, removeAttachmentAt, runUploadQueue, UPLOAD_CONCURRENC
 import type { UploadedFile } from './attach';
 import { colors, onThemeChange, radius, spacing } from './theme';
 import { ds, uiScale } from './ui-scale';
-import { formatChatHeader, shouldShowTimeHeader } from './time';
+import { shouldShowTimeHeader } from './time';
+import { localizedChatHeader as formatChatHeader } from './i18n-chat-time';
 import { chatInfoCaps, chatInfoGroups, chatInfoPresentation, isChatFindKey, type ChatInfoCaps, type ChatInfoRow } from './chat-info-model';
 import ChatInfoPanel from './ChatInfoPanel';
 import { useDesktopWindowPin } from './DesktopWindowPin';
@@ -50,7 +54,7 @@ import { messageMenuGroups, selectionBarActions, type MessageMenuKey } from './m
 import { agentStatusLabel, buildQuote, compactQuoteText, confirmedOutboxIds, copyTextOf, copiedToastVisible, COPIED_TOAST_MS, parseQuoted, quoteLabel, type QuoteRef, mergeMessagesNewestFirst, msgKey, removeMessage, shouldShowJumpPill, nextUnread, jumpPillLabel, canSend, shouldSendOnEnter, composerShortcutHint } from './chat-actions';
 import { isMacKeyboard, sendKeyPref, shortcutBindings, shortcutCaptureActive, subscribeShortcuts } from './shortcuts-store';
 import { comboChips, comboFromEvent, shortcutForCombo } from './shortcuts-model';
-import { KBD_IDLE, kbdVoiceBlur, kbdVoiceHint, kbdVoiceKeyDown, kbdVoiceKeyUp, kbdVoiceSync, type KbdVoiceMode, type KbdVoiceState, type KbdVoiceStep } from './voice-shortcut-model';
+import { KBD_IDLE, kbdVoiceBlur, kbdVoiceKeyDown, kbdVoiceKeyUp, kbdVoiceSync, type KbdVoiceMode, type KbdVoiceState, type KbdVoiceStep } from './voice-shortcut-model';
 import type { GestureResponderEvent, NativeSyntheticEvent, NativeScrollEvent } from 'react-native';
 import { usePoll } from './usePoll';
 import { chatSearchState, isHighlighted, isStaleSearch, matchCountLabel, searchItems, shouldLoadOlderForSearch, stepHit, type SearchHit } from './chat-search';
@@ -252,6 +256,7 @@ export const clearChatConversationCache = (profileId?: string, serverUrl = ''): 
 };
 
 export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpenNodeSettings, pinned = false, onTogglePin, muted = false, onToggleMute, hideBack = false, onOpenVoiceSettings, focusTaskId }: Props) {
+  useTranslation();
   // Android edge-to-edge draws the composer under the gesture bar (same
   // class of bug as the tg 802 tab bar) — pad by the real bottom inset.
   const insets = useSafeAreaInsets();
@@ -264,6 +269,7 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
   const [messages, setMessages] = useState<ChatItem[]>([]);
   // 回复引用条要按 task_id 找到被回的那条(主动消息的 in_reply_to)
   const byTaskId = useMemo(() => new Map(messages.map(m => [msgKey(m), m] as const)), [messages]);
+  // i18n-allow: legacy sender fallback participates in quote/forward identity, not translatable UI.
   const [currentUsername, setCurrentUsername] = useState('我');
   const [loaded, setLoaded] = useState(false);
   const [conversationReady, setConversationReady] = useState(false);
@@ -1008,7 +1014,7 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
       if (r.consume) { event?.preventDefault(); event?.stopPropagation(); }
       const { voice: v, start, done, cancel } = kbdVoiceRef.current;
       if (r.effect === 'press') {
-        if (!v.available) { setComposerNotice('当前环境不支持语音输入'); kbdStateRef.current = KBD_IDLE; return; }
+        if (!v.available) { setComposerNotice(t('chat.voiceUnavailable')); kbdStateRef.current = KBD_IDLE; return; }
         start();
         // 未配置:麦克风那条路弹「去设置」提示、不开录 —— 键盘这边不进入录音态(否则开关模式要多按一次)。
         if (!v.configured) kbdStateRef.current = KBD_IDLE;
@@ -1125,7 +1131,7 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
           // 这条已经有一个未完成的转发操作(pending/ambiguous):不重发,停在这里。
           if (mayWrite()) {
             setForwardAmbiguous(true);
-            setForwardProgress(queue.length > 1 ? `已转发 ${sent}/${queue.length}，其余未发送` : null);
+            setForwardProgress(queue.length > 1 ? t('chat.forwardPartial', { sent, total: queue.length }) : null);
           }
           return;
         }
@@ -1139,12 +1145,12 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
           markForwardAmbiguous(begun.operation.key);
           if (mayWrite()) {
             setForwardAmbiguous(true);
-            setForwardProgress(queue.length > 1 ? `已转发 ${sent}/${queue.length}，其余未发送` : null);
+            setForwardProgress(queue.length > 1 ? t('chat.forwardPartial', { sent, total: queue.length }) : null);
             Alert.alert(
-              '转发结果待确认',
+              t('chat.forwardUncertain'),
               queue.length > 1
-                ? `已转发 ${sent}/${queue.length} 条，这一条可能已经送达。为避免重复转发，请先在目标会话确认。`
-                : '可能已经送达。为避免重复转发，请先在目标会话确认。',
+                ? t('chat.forwardPartialUncertain', { sent, total: queue.length })
+                : t('chat.checkDestination'),
             );
           }
           return;
@@ -1317,7 +1323,7 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
           mime={a.mime}
           serverUrl={cfg.serverUrl}
           token={cfg.token}
-          label="下载原图"
+          label={t('chat.downloadOriginal')}
         />
       </View>
     ) : a.isVideo && a.needsAuth && Platform.OS !== 'web' ? (
@@ -1362,7 +1368,7 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
     const failed = state?.status === 'failed';
     const cellKey = `${attachmentCacheScope(cfg.serverUrl, cfg.token)}-${a.key}`;
     const inner = !a.needsAuth ? (
-      <Pressable onPress={() => openViewer(gallery, a.key, a.uri)} accessibilityLabel={`预览 ${a.name}`}>
+      <Pressable onPress={() => openViewer(gallery, a.key, a.uri)} accessibilityLabel={t('chat.previewName', { name: a.name })}>
         <Image source={{ uri: a.uri }} style={styles.gridImage} resizeMode="cover" />
       </Pressable>
     ) : Platform.OS === 'web' ? (
@@ -1377,13 +1383,13 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
           <View style={[styles.gridOverlay, failed && styles.gridOverlayFailed]} pointerEvents={failed ? 'box-none' : 'none'}>
             {state.status === 'uploading' ? <ActivityIndicator size="small" color="#fff" /> : null}
             <Text style={styles.gridOverlayText} numberOfLines={2}>
-              {state.status === 'queued' ? '等待上传' : state.status === 'uploading' ? '上传中' : '上传失败'}
+              {state.status === 'queued' ? t('chat.uploadQueued') : state.status === 'uploading' ? t('chat.uploading') : t('chat.uploadFailed')}
             </Text>
           </View>
         ) : null}
         {failed && item?._failed && a.localIndex !== undefined ? (
           <Pressable
-            accessibilityLabel={`移除 ${a.name}`}
+            accessibilityLabel={t('chat.removeName', { name: a.name })}
             hitSlop={8}
             style={styles.gridRemove}
             onPress={() => removeFailedAttachment(item, a.localIndex!)}
@@ -1406,7 +1412,7 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
           <View key={`state-${a.key}`}>
             {renderAttachment(a, gallery)}
             <Text style={[styles.attachmentLine, state.status === 'failed' && { color: colors.failed }]}>
-              {state.status === 'failed' ? `上传失败：${state.error ?? ''}` : state.status === 'uploading' ? '上传中…' : '等待上传'}
+              {state.status === 'failed' ? t('chat.uploadError', { error: state.error ?? '' }) : state.status === 'uploading' ? t('chat.uploadProgress') : t('chat.uploadQueued')}
             </Text>
           </View>
         );
@@ -1466,7 +1472,7 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
         if (run.failed.length) {
           // 🔴 一张没传上就整条不发:绝不静默发出缺图的半条消息。sendTask 根本没调用,
           // 不存在「hub 其实收到了」的歧义,直接标未送达,让用户重试(已传的不重传)或移除失败的那几张。
-          const summary = uploadFailureSummary(imgs.map(img => img.fileName), run.errors) ?? '附件上传失败';
+          const summary = uploadFailureSummary(imgs.map(img => img.fileName), run.errors) ?? t('chat.attachmentFailed');
           outboxMarkFailed(localId);
           if (mayTouchVisibleState()) {
             setMessages(prev => prev.map(t => (t._localId === localId ? { ...t, _pending: false, _failed: true, _uploadError: summary } : t)));
@@ -1520,7 +1526,7 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
   const submit = async () => {
     const parsed = parseBtwFirstToken(draft);
     if (parsed.kind === 'invalid') {
-      Alert.alert('BTW 需要一个问题', parsed.message);
+      Alert.alert(t('chat.btwQuestion'), parsed.message);
       setBtwLaunch(current => ({ id: (current?.id ?? 0) + 1 }));
       return;
     }
@@ -1537,10 +1543,11 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
         setSendPriority('normal');
         setBtwLaunch(current => ({ id: (current?.id ?? 0) + 1, prompt: parsed.prompt, attachments }));
       } catch (error) {
-        Alert.alert('BTW 附件上传失败', error instanceof Error ? error.message : '附件未上传，草稿已保留');
+        Alert.alert(t('chat.btwUpload'), error instanceof Error ? error.message : t('chat.draftKept'));
       }
       return;
     }
+    // i18n-allow: outgoing attachment fallback is message content, not interface copy.
     const body = parsed.content.trim() || (attached.length ? `[附件] ${attached.map(item => item.fileName).join('、')}` : '');
     if ((!body && !attached.length) || sending) return;
     const blocked = sendBlocker(attached, willCompressLater);
@@ -1670,7 +1677,7 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
       m.created_at &&
       Date.now() - new Date(`${m.created_at.replace(' ', 'T')}Z`).getTime() < 10 * 60 * 1000,
   );
-  const subtitle = processing ? '••• 正在处理…' : sessionStatus ? agentStatusLabel(sessionStatus) : '';
+  const subtitle = processing ? t('chat.processing') : sessionStatus ? t(sessionStatus === 'working' || sessionStatus === 'running' ? 'chat.statusWorking' : sessionStatus === 'offline' ? 'chat.statusOffline' : 'chat.statusOnline') : '';
 
   // One tap = one action (no intermediate 「发送附件」 Alert any more). Picked items go
   // to the main composer draft, exactly as the old 图片/文件 Alert buttons did.
@@ -1679,16 +1686,16 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
     const pickInto = (pick: () => Promise<PickedImage | null>) =>
       pick()
         .then(item => { if (item) appendAttachment(item); })
-        .catch(error => Alert.alert('无法打开', error instanceof Error ? error.message : String(error)));
+        .catch(error => Alert.alert(t('chat.cannotOpen'), error instanceof Error ? error.message : String(error)));
     if (key === 'album') {
       const slots = remainingImageSlots(attachedRef.current);
       if (slots <= 0) {
-        setComposerNotice(`最多选择 ${MAX_DRAFT_IMAGES} 张图片`);
+        setComposerNotice(t('chat.maxImages', { count: MAX_DRAFT_IMAGES }));
         return;
       }
       pickImages(slots)
         .then(appendAttachments)
-        .catch(error => Alert.alert('无法打开', error instanceof Error ? error.message : String(error)));
+        .catch(error => Alert.alert(t('chat.cannotOpen'), error instanceof Error ? error.message : String(error)));
     }
     else if (key === 'file') pickInto(pickDocument);
     else if (key === 'camera') pickInto(pickCameraPhoto);
@@ -1700,7 +1707,7 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
     if (plusPressAction({ desktop, attachEnabled: ATTACH_ENABLED }) === 'panel') { plusEvent('toggle'); return; }
     pickFiles()
       .then(appendAttachments)
-      .catch(error => Alert.alert('无法打开', error instanceof Error ? error.message : String(error)));
+      .catch(error => Alert.alert(t('chat.cannotOpen'), error instanceof Error ? error.message : String(error)));
   };
   // Mobile row, right of the input: ＋ always; 「发送」 next to it once there is something to send.
   const rightSlot = composerRightSlot({ draft, attachmentCount: attached.length, voiceMode });
@@ -1761,7 +1768,7 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
         testID="chat-header"
       >
         {!desktop && !hideBack ? (
-          <Pressable onPress={onBack} hitSlop={12} accessibilityRole="button" accessibilityLabel="返回" testID="chat-header-back">
+          <Pressable onPress={onBack} hitSlop={12} accessibilityRole="button" accessibilityLabel={t('chat.back')} testID="chat-header-back">
             <Text style={styles.back}>‹</Text>
           </Pressable>
         ) : null}
@@ -1786,8 +1793,8 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
         </View>
         <Pressable
           accessibilityRole="button"
-          accessibilityLabel="聊天信息"
-          accessibilityHint="查找聊天内容、置顶、免打扰、节点设置"
+          accessibilityLabel={t('chat.info')}
+          accessibilityHint={t('chat.infoHint')}
           onPress={() => setInfoOpen(true)}
           hitSlop={10}
           style={({ pressed }) => [styles.headerMore, pressed && { opacity: 0.6 }]}
@@ -1813,7 +1820,7 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
 
               onChangeText={setSearchQuery}
 
-              placeholder="搜索当前会话"
+              placeholder={t('chat.search')}
 
               placeholderTextColor={colors.textMuted}
 
@@ -1837,27 +1844,27 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
 
               }}
 
-              accessibilityLabel="搜索聊天记录输入框"
+              accessibilityLabel={t('chat.searchInput')}
 
             />
 
-            <Text style={styles.searchCount}>{matchCountLabel(searchCurrent, searchHits.length)}</Text>
+            <Text style={styles.searchCount}>{searchHits.length ? matchCountLabel(searchCurrent, searchHits.length) : t('chat.noMatchesCount')}</Text>
 
-            <Pressable onPress={() => stepSearch('newer')} hitSlop={8} accessibilityLabel="上一条(更新)" disabled={searchHits.length === 0} style={({ pressed }) => [styles.searchNav, pressed && { opacity: 0.6 }]}>
+            <Pressable onPress={() => stepSearch('newer')} hitSlop={8} accessibilityLabel={t('chat.newer')} disabled={searchHits.length === 0} style={({ pressed }) => [styles.searchNav, pressed && { opacity: 0.6 }]}>
 
               <Ionicons name="chevron-down-outline" size={18} color={searchHits.length ? colors.text : colors.textMuted} />
 
             </Pressable>
 
-            <Pressable onPress={() => stepSearch('older')} hitSlop={8} accessibilityLabel="下一条(更早)" disabled={searchHits.length === 0} style={({ pressed }) => [styles.searchNav, pressed && { opacity: 0.6 }]}>
+            <Pressable onPress={() => stepSearch('older')} hitSlop={8} accessibilityLabel={t('chat.older')} disabled={searchHits.length === 0} style={({ pressed }) => [styles.searchNav, pressed && { opacity: 0.6 }]}>
 
               <Ionicons name="chevron-up-outline" size={18} color={searchHits.length ? colors.text : colors.textMuted} />
 
             </Pressable>
 
-            <Pressable onPress={closeSearch} hitSlop={8} accessibilityLabel="关闭搜索" style={({ pressed }) => [styles.searchNav, pressed && { opacity: 0.6 }]}>
+            <Pressable onPress={closeSearch} hitSlop={8} accessibilityLabel={t('chat.closeSearch')} style={({ pressed }) => [styles.searchNav, pressed && { opacity: 0.6 }]}>
 
-              <Text style={styles.searchClose}>取消</Text>
+              <Text style={styles.searchClose}>{t('chat.cancel')}</Text>
 
             </Pressable>
 
@@ -1865,15 +1872,15 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
 
           {searchState === 'idle' ? (
 
-            <Text style={styles.searchHint}>输入关键词,只搜「{alias}」这个会话。Enter 下一条,Shift+Enter 上一条,Esc 关闭。</Text>
+            <Text style={styles.searchHint}>{t('chat.searchHint', { alias })}</Text>
 
           ) : searchState === 'failed' ? (
 
             <View style={styles.searchStateRow}>
 
-              <Text style={styles.searchHint}>拉取更早的历史失败</Text>
+              <Text style={styles.searchHint}>{t('chat.historyFailed')}</Text>
 
-              <Pressable onPress={retrySearchOlder} hitSlop={8}><Text style={styles.searchAction}>重试</Text></Pressable>
+              <Pressable onPress={retrySearchOlder} hitSlop={8}><Text style={styles.searchAction}>{t('chat.retry')}</Text></Pressable>
 
             </View>
 
@@ -1883,13 +1890,13 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
 
               <ActivityIndicator color={colors.textMuted} />
 
-              <Text style={styles.searchHint}>已加载的消息里没有,正在往更早的历史里找…</Text>
+              <Text style={styles.searchHint}>{t('chat.searchOlder')}</Text>
 
             </View>
 
           ) : searchState === 'empty' ? (
 
-            <Text style={styles.searchHint}>{hasOlder && searchPagesRef.current >= SEARCH_MAX_OLDER_PAGES ? `最近 ${limitRef.current} 条里没有找到;更早的历史请继续${pointer ? '向上滚动' : '上滑'}后再搜` : '没有找到'}</Text>
+            <Text style={styles.searchHint}>{hasOlder && searchPagesRef.current >= SEARCH_MAX_OLDER_PAGES ? t('chat.searchLimit', { count: limitRef.current, gesture: pointer ? t('chat.scrollUp') : t('chat.swipeUp') }) : t('chat.notFound')}</Text>
 
           ) : (
 
@@ -1915,9 +1922,9 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
 
                   </View>
 
-                  <Pressable onPress={() => locateHit(i)} hitSlop={8} accessibilityLabel="定位到聊天">
+                  <Pressable onPress={() => locateHit(i)} hitSlop={8} accessibilityLabel={t('chat.locateChat')}>
 
-                    <Text style={styles.searchAction}>定位</Text>
+                    <Text style={styles.searchAction}>{t('chat.locate')}</Text>
 
                   </Pressable>
 
@@ -1958,7 +1965,7 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
             loadingOlder ? (
               <ActivityIndicator color={colors.textMuted} style={{ marginVertical: spacing.md }} />
             ) : !hasOlder && messages.length > 0 ? (
-              <Text style={styles.beginning}>— beginning of history —</Text>
+              <Text style={styles.beginning}>{t('chat.historyStart')}</Text>
             ) : null
           }
           renderItem={({ item, index }) => {
@@ -1983,7 +1990,7 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
                 ) : null}
                 <View style={selectionMode ? styles.selectRow : undefined}>
                 {selectionMode ? (
-                  <Pressable accessibilityLabel="选中" hitSlop={8} onPress={() => toggleSelected(msgKey(item))} style={styles.selectBoxWrap}>
+                  <Pressable accessibilityLabel={t('chat.select')} hitSlop={8} onPress={() => toggleSelected(msgKey(item))} style={styles.selectBoxWrap}>
                     <View style={[styles.selectBox, selectedKeys.includes(msgKey(item)) && styles.selectBoxOn]}>
                       {selectedKeys.includes(msgKey(item)) ? <Ionicons name="checkmark" size={12} color={colors.onAccent} /> : null}
                     </View>
@@ -2010,7 +2017,7 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
                         {renderAttachments(sentAttachmentViews(item, cfg.serverUrl), item)}
                       </View>
                       {sentQuoted.quote ? (
-                        <View style={[styles.quoteChip, styles.quoteChipSent]} accessibilityLabel="引用">
+                        <View style={[styles.quoteChip, styles.quoteChipSent]} accessibilityLabel={t('chat.quote')}>
                           <Text style={styles.quoteChipText} numberOfLines={1}>{quoteLabel(sentQuoted.quote)}</Text>
                         </View>
                       ) : null}
@@ -2041,7 +2048,7 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
                         {renderAttachments(sentAttachmentViews(item, cfg.serverUrl), item)}
                       </View>
                       {sentQuoted.quote ? (
-                        <View style={[styles.quoteChip, styles.quoteChipReply]} accessibilityLabel="引用">
+                        <View style={[styles.quoteChip, styles.quoteChipReply]} accessibilityLabel={t('chat.quote')}>
                           <Text style={styles.quoteChipText} numberOfLines={1}>{quoteLabel(sentQuoted.quote)}</Text>
                         </View>
                       ) : null}
@@ -2054,7 +2061,7 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
                     <AliasAvatar alias={alias} size={36} />
                     <View style={[styles.messageContent, bubbleCap]}>
                       {/* 2026-09-16 Vincent:「每条消息都展示下时间吧」—— 回复用完成时刻,没有就用创建时刻 */}
-                      <Text style={styles.messageAuthor} numberOfLines={1}>{alias}{item._proactive ? ' · 主动汇报' : ''}{(item.completed_at ?? item.created_at) ? ` · ${formatChatHeader(item.completed_at ?? item.created_at)}` : ''}</Text>
+                      <Text style={styles.messageAuthor} numberOfLines={1}>{alias}{item._proactive ? t('chat.proactive') : ''}{(item.completed_at ?? item.created_at) ? ` · ${formatChatHeader(item.completed_at ?? item.created_at)}` : ''}</Text>
                       <Pressable
                         {...(pointer ? ({ dataSet: { messageKey: msgKey(item), messagePart: 'reply' }, onMouseEnter: () => setHoverKey(`${msgKey(item)}:reply`), onMouseLeave: () => setHoverKey(null) } as any) : {})}
                         onLongPress={pointer ? undefined : () => setMenuFor({ item, text: item.result ?? item.reply ?? '', author: alias })}
@@ -2069,11 +2076,11 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
                           {renderAttachments(replyAttachmentViews(item, cfg.serverUrl))}
                         </View>
                         {replyQuoted.quote ? (
-                          <View style={[styles.quoteChip, styles.quoteChipReply]} accessibilityLabel="引用">
+                          <View style={[styles.quoteChip, styles.quoteChipReply]} accessibilityLabel={t('chat.quote')}>
                             <Text style={styles.quoteChipText} numberOfLines={1}>{quoteLabel(replyQuoted.quote)}</Text>
                           </View>
                         ) : replyQuote ? (
-                          <Pressable accessibilityLabel="引用" accessibilityRole="button" hitSlop={4} onPress={() => locateKey(replyQuote.targetKey)} style={({ pressed }) => [styles.quoteChip, styles.quoteChipReply, pressed && { opacity: 0.6 }]}>
+                          <Pressable accessibilityLabel={t('chat.quote')} accessibilityRole="button" hitSlop={4} onPress={() => locateKey(replyQuote.targetKey)} style={({ pressed }) => [styles.quoteChip, styles.quoteChipReply, pressed && { opacity: 0.6 }]}>
                             <Text style={styles.quoteChipText} numberOfLines={1}>{quoteLabel(replyQuote)}</Text>
                           </Pressable>
                         ) : null}
@@ -2084,20 +2091,20 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
                 </View>
                 </View>
                 {item._restoredNoImage ? (
-                  <Text style={styles.restoredNote}>（图片附件未保存·重试仅发文本）</Text>
+                  <Text style={styles.restoredNote}>{t('chat.restoredTextOnly')}</Text>
                 ) : null}
                 {item._pending ? (
-                  <Text style={styles.pendingMark}>发送中…</Text>
+                  <Text style={styles.pendingMark}>{t('chat.sending')}</Text>
                 ) : item._failed ? (
                   <Pressable onPress={() => retry(item)} hitSlop={8}>
                     {item._uploadError ? <Text style={styles.uploadErrorText}>{item._uploadError}</Text> : null}
-                    <Text style={styles.failedMark}>未送达 · 点击重试</Text>
+                    <Text style={styles.failedMark}>{t('chat.notDelivered')}</Text>
                   </Pressable>
                 ) : sender.isCurrentUser && !(item.result ?? item.reply) ? (
                   // PR3 要求2:「送达了但对方没回」≠「未送达」——前者灰勾不可点(不用重试),
                   // 后者红字带重试。服务器行(无 _localId 标志)= hub 已收 = 已送达。
                   // 只对自己发出的消息成立:别人派来的任务标「已送达」等于说这条是你发的。
-                  <Text style={styles.deliveredMark}>已送达 ✓</Text>
+                  <Text style={styles.deliveredMark}>{t('chat.delivered')}</Text>
                 ) : null}
               </View>
             );
@@ -2107,21 +2114,21 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
 
       {selectionMode ? (
         <View style={styles.selectionBar}>
-          <Pressable accessibilityLabel="退出多选" hitSlop={8} onPress={exitSelectionMode} style={({ pressed }) => [styles.selectionCancel, pressed && { opacity: 0.6 }]}>
-            <Text style={styles.selectionCancelText}>取消</Text>
+          <Pressable accessibilityLabel={t('chat.exitSelection')} hitSlop={8} onPress={exitSelectionMode} style={({ pressed }) => [styles.selectionCancel, pressed && { opacity: 0.6 }]}>
+            <Text style={styles.selectionCancelText}>{t('chat.cancel')}</Text>
           </Pressable>
           <View style={styles.selectionActions}>
             {selectionBarActions(selectedKeys.length, true).map(action => (
               <Pressable
                 key={action.key}
-                accessibilityLabel={action.label}
+                accessibilityLabel={t(`chat.selection.${action.key}`, { count: selectedKeys.length })}
                 onPress={() => onSelectionAction(action.key)}
                 style={({ pressed }) => [styles.selectionAction, pressed && styles.actionItemPressed]}
               >
-                <Text style={[styles.actionText, action.danger && styles.actionDanger]}>{action.label}</Text>
+                <Text style={[styles.actionText, action.danger && styles.actionDanger]}>{t(`chat.selection.${action.key}`, { count: selectedKeys.length })}</Text>
               </Pressable>
             ))}
-            {selectedKeys.length === 0 ? <Text style={styles.selectionHint}>选择要转发或删除的消息</Text> : null}
+            {selectedKeys.length === 0 ? <Text style={styles.selectionHint}>{t('chat.selectMessages')}</Text> : null}
           </View>
         </View>
       ) : null}
@@ -2129,13 +2136,13 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
       {copiedToastVisible(copiedAt, Date.now()) ? (
         <View style={styles.copiedToast} pointerEvents="none" accessibilityLiveRegion="polite">
           <Ionicons name="checkmark-circle" size={14} color={colors.accent} />
-          <Text style={styles.copiedToastText}>已复制</Text>
+          <Text style={styles.copiedToastText}>{t('chat.copied')}</Text>
         </View>
       ) : null}
       {/* 更像微信·round-3: 滚离底部时的「回到最新 / N 条新消息」pill */}
       {showJump ? (
         <Pressable style={styles.jumpPill} onPress={jumpToLatest} hitSlop={8}>
-          <Text style={styles.jumpPillText}>{jumpPillLabel(unread)} ↓</Text>
+          <Text style={styles.jumpPillText}>{unread > 0 ? t('chat.newMessages', { count: unread }) : t('chat.latest')} ↓</Text>
         </Pressable>
       ) : null}
 
@@ -2148,7 +2155,7 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
                 accessibilityRole="checkbox"
                 accessibilityState={{ checked: sendOriginal }}
                 aria-checked={sendOriginal}
-                accessibilityLabel="原图"
+                accessibilityLabel={t('chat.original')}
                 hitSlop={8}
                 onPress={toggleSendOriginal}
                 style={styles.originalToggle}
@@ -2157,7 +2164,7 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
                 <View style={[styles.originalBox, sendOriginal && styles.originalBoxOn]}>
                   {sendOriginal ? <Ionicons name="checkmark" size={11} color={colors.onAccent} /> : null}
                 </View>
-                <Text style={styles.originalLabel}>原图</Text>
+                <Text style={styles.originalLabel}>{t('chat.original')}</Text>
               </Pressable>
             ) : null}
           </View>
@@ -2166,19 +2173,19 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
               const tooBig = !willCompressLater(item) && !!oversizeMessage(item);
               return isDraftImage(item) ? (
                 <View key={item.uri} style={[styles.draftThumbWrap, tooBig && styles.draftThumbTooBig]} testID="composer-draft-thumb">
-                  <Pressable onPress={() => openViewer(attached.filter(isDraftImage).map(d => ({ key: d.uri, name: d.fileName, uri: d.uri })), item.uri)} accessibilityLabel={`预览 ${item.fileName}`}>
+                  <Pressable onPress={() => openViewer(attached.filter(isDraftImage).map(d => ({ key: d.uri, name: d.fileName, uri: d.uri })), item.uri)} accessibilityLabel={t('chat.previewName', { name: item.fileName })}>
                     <Image source={{ uri: item.uri }} style={styles.draftThumb} resizeMode="cover" />
                   </Pressable>
                   <View style={styles.draftIndex} pointerEvents="none"><Text style={styles.draftIndexText}>{index + 1}</Text></View>
-                  {tooBig ? <View style={styles.draftTooBigTag} pointerEvents="none"><Text style={styles.draftTooBigText}>超 12MB</Text></View> : null}
-                  <Pressable onPress={() => removeAttachment(item.uri)} hitSlop={8} style={styles.draftRemove} accessibilityLabel={`移除 ${item.fileName}`}>
+                  {tooBig ? <View style={styles.draftTooBigTag} pointerEvents="none"><Text style={styles.draftTooBigText}>{t('chat.tooLarge')}</Text></View> : null}
+                  <Pressable onPress={() => removeAttachment(item.uri)} hitSlop={8} style={styles.draftRemove} accessibilityLabel={t('chat.removeName', { name: item.fileName })}>
                     <Text style={styles.draftRemoveText}>✕</Text>
                   </Pressable>
                 </View>
               ) : (
                 <View key={item.uri} style={[styles.draftFileChip, tooBig && styles.draftThumbTooBig]} testID="composer-draft-file">
                   <Text style={styles.attachName} numberOfLines={2}>📎 {item.fileName}</Text>
-                  <Pressable onPress={() => removeAttachment(item.uri)} hitSlop={8} style={styles.draftRemove} accessibilityLabel={`移除 ${item.fileName}`}>
+                  <Pressable onPress={() => removeAttachment(item.uri)} hitSlop={8} style={styles.draftRemove} accessibilityLabel={t('chat.removeName', { name: item.fileName })}>
                     <Text style={styles.draftRemoveText}>✕</Text>
                   </Pressable>
                 </View>
@@ -2188,7 +2195,7 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
             {!desktop && ATTACH_ENABLED && remainingImageSlots(attached) > 0 ? (
               <Pressable
                 accessibilityRole="button"
-                accessibilityLabel="继续添加"
+                accessibilityLabel={t('chat.addMore')}
                 testID="composer-draft-add"
                 onPress={() => plusEvent('toggle')}
                 style={({ pressed }) => [styles.draftAddTile, pressed && { opacity: 0.6 }]}
@@ -2227,14 +2234,14 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
                   <View key={item.key}>
                     {itemIndex > 0 ? <View style={styles.actionSep} /> : null}
                     <Pressable
-                      accessibilityLabel={item.key === 'copy' ? '复制消息' : item.label}
+                      accessibilityLabel={t(`chat.menu.${item.key}`)}
                       style={({ pressed }) => [
                         pointer && menuAt ? styles.actionItemDesktop : styles.actionItem,
                         pressed && styles.actionItemPressed,
                       ]}
                       onPress={() => onMenuAction(item.key)}
                     >
-                      <Text style={[styles.actionText, item.danger && styles.actionDanger]}>{item.label}</Text>
+                      <Text style={[styles.actionText, item.danger && styles.actionDanger]}>{t(`chat.menu.${item.key}`)}</Text>
                     </Pressable>
                   </View>
                 ))}
@@ -2247,10 +2254,10 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
       {/* 放大阅读:单条消息的全屏视图。气泡里读不完的长代码块用这个。 */}
       <Modal visible={!!expandFor} transparent animationType="fade" onRequestClose={() => setExpandFor(null)}>
         <Pressable style={[styles.expandBackdrop, withBasePadding(dialogSafe, spacing.lg)]} onPress={() => setExpandFor(null)}>
-          <Pressable style={styles.expandPanel} onPress={() => {}} accessibilityLabel="放大阅读">
+          <Pressable style={styles.expandPanel} onPress={() => {}} accessibilityLabel={t('chat.expand')}>
             <View style={styles.expandHeader}>
               <Text style={styles.expandTitle} numberOfLines={1}>{expandFor?.author ?? ''}</Text>
-              <Pressable accessibilityLabel="关闭放大阅读" hitSlop={8} onPress={() => setExpandFor(null)}>
+              <Pressable accessibilityLabel={t('chat.closeExpand')} hitSlop={8} onPress={() => setExpandFor(null)}>
                 <Ionicons name="close" size={20} color={colors.textMuted} />
               </Pressable>
             </View>
@@ -2258,12 +2265,12 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
               <MarkdownMessage>{cleanAttachmentDebugText(parseQuoted(expandFor?.text ?? '').body || (expandFor?.text ?? ''))}</MarkdownMessage>
             </ScrollView>
             <Pressable
-              accessibilityLabel="复制消息"
+              accessibilityLabel={t('chat.copy')}
               style={({ pressed }) => [styles.expandCopy, pressed && styles.actionItemPressed]}
               onPress={() => void copyMessage(expandFor?.text ?? '')}
             >
               <Ionicons name="copy-outline" size={15} color={colors.textSecondary} />
-              <Text style={styles.expandCopyText}>复制全文</Text>
+              <Text style={styles.expandCopyText}>{t('chat.copyAll')}</Text>
             </Pressable>
           </Pressable>
         </Pressable>
@@ -2280,16 +2287,16 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
       <Modal visible={!!forwardFor && forwardUiOwner === conversationKeyFor} transparent animationType="fade" onRequestClose={() => setForwardFor(null)}>
         <Pressable style={[styles.forwardBackdrop, withBasePadding(dialogSafe, spacing.xl)]} onPress={() => setForwardFor(null)}>
           <Pressable style={styles.forwardPanel} onPress={() => {}}>
-            <Text style={styles.forwardTitle}>{forwardBatch ? `转发给（${forwardBatch.length} 条）` : '转发给'}</Text>
+            <Text style={styles.forwardTitle}>{forwardBatch ? t('chat.forwardCount', { count: forwardBatch.length }) : t('chat.forwardTo')}</Text>
             {forwardProgress ? <Text style={styles.forwardEmpty}>{forwardProgress}</Text> : null}
-            {forwardAmbiguous ? <Text style={styles.forwardEmpty}>结果待确认，请勿重复转发</Text> : null}
+            {forwardAmbiguous ? <Text style={styles.forwardEmpty}>{t('chat.noRepeat')}</Text> : null}
             {forwardAmbiguous && forwardOperationKeyRef.current ? (
-              <Pressable onPress={() => Alert.alert('清除待确认状态？', '这不会重新转发，也不代表消息未送达。', [
-                { text: '取消', style: 'cancel' },
-                { text: '仅清除状态', onPress: () => { resetForwardWithoutResend(forwardOperationKeyRef.current!); setForwardAmbiguous(false); } },
-              ])}><Text style={styles.forwardEmpty}>仅清除待确认状态（不会重发）</Text></Pressable>
+              <Pressable onPress={() => Alert.alert(t('chat.clearUncertain'), t('chat.clearHint'), [
+                { text: t('chat.cancel'), style: 'cancel' },
+                { text: t('chat.clearOnly'), onPress: () => { resetForwardWithoutResend(forwardOperationKeyRef.current!); setForwardAmbiguous(false); } },
+              ])}><Text style={styles.forwardEmpty}>{t('chat.clearNoResend')}</Text></Pressable>
             ) : null}
-            <TextInput value={forwardQuery} onChangeText={setForwardQuery} placeholder="搜索 agent…" placeholderTextColor={colors.textMuted} style={styles.forwardSearch} />
+            <TextInput value={forwardQuery} onChangeText={setForwardQuery} placeholder={t('chat.searchAgent')} placeholderTextColor={colors.textMuted} style={styles.forwardSearch} />
             <FlatList
               style={styles.forwardList}
               data={forwardTargets.filter(target => target.alias.toLowerCase().includes(forwardQuery.trim().toLowerCase()))}
@@ -2301,7 +2308,7 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
                   {forwardingTo === target.alias ? <ActivityIndicator size="small" color={colors.accent} /> : null}
                 </Pressable>
               )}
-              ListEmptyComponent={<Text style={styles.forwardEmpty}>没有匹配的 agent</Text>}
+              ListEmptyComponent={<Text style={styles.forwardEmpty}>{t('chat.noAgent')}</Text>}
             />
           </Pressable>
         </Pressable>
@@ -2324,16 +2331,16 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
         <View
           {...composerPan.panHandlers}
           accessibilityRole="adjustable"
-          accessibilityLabel="拖动调整输入框高度"
+          accessibilityLabel={t('chat.resize')}
           style={styles.composerDivider}
         >
           <View style={styles.composerDividerGrip} />
         </View>
 {quote ? (
-          <View style={styles.quoteStrip} accessibilityLabel="正在引用">
+          <View style={styles.quoteStrip} accessibilityLabel={t('chat.quoting')}>
             <View style={styles.quoteStripBar} />
             <Text style={styles.quoteStripText} numberOfLines={1}>{quoteLabel(quote)}</Text>
-            <Pressable accessibilityLabel="取消引用" onPress={() => setQuote(null)} hitSlop={8} style={styles.quoteStripClose}>
+            <Pressable accessibilityLabel={t('chat.cancelQuote')} onPress={() => setQuote(null)} hitSlop={8} style={styles.quoteStripClose}>
               <Ionicons name="close" size={16} color={colors.textMuted} />
             </Pressable>
           </View>
@@ -2354,7 +2361,7 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
           <TextInput
             ref={mainComposerRef}
             style={[styles.desktopInput, { maxHeight: inputMaxHeight(composerHeight) }]}
-            placeholder={`Message ${alias}…`}
+            placeholder={t('chat.messagePlaceholder', { alias })}
             placeholderTextColor={colors.textMuted}
             value={draft}
             onChangeText={setDraft}
@@ -2370,10 +2377,10 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
           />
           {/* 桌面语音(desktop-voice-bar-model.ts):录音中这一行整行换成录音条,不用手机的按住说话浮层。 */}
           {voiceSurface(desktop) === 'inlineBar' && showVoiceBar(voice.state.phase) ? (
-            <DesktopVoiceBar voice={voice} onDone={desktopVoiceDone} onCancel={desktopVoiceCancel} hint={kbdVoice ? kbdVoiceHint(kbdVoice.mode, comboChips(kbdVoice.combo, isMacKeyboard()), isMacKeyboard(), voice.state.phase) : undefined} />
+            <DesktopVoiceBar voice={voice} onDone={desktopVoiceDone} onCancel={desktopVoiceCancel} hint={kbdVoice ? t(voice.state.phase === 'transcribing' ? 'voice.transcribing' : voice.state.phase === 'starting' ? 'voice.preparing' : kbdVoice.mode === 'hold' ? 'voice.releaseKeys' : 'voice.pressKeys', { keys: comboChips(kbdVoice.combo, isMacKeyboard()).join(isMacKeyboard() ? '' : '+') }) : undefined} />
           ) : (
           <View style={styles.desktopToolbar}>
-            <Pressable accessibilityLabel="添加文件" testID="composer-desktop-plus" style={({ pressed }) => [styles.desktopToolButton, pressed && { opacity: 0.6 }]} onPress={onPlusPress} hitSlop={6}>
+            <Pressable accessibilityLabel={t('chat.addFile')} testID="composer-desktop-plus" style={({ pressed }) => [styles.desktopToolButton, pressed && { opacity: 0.6 }]} onPress={onPlusPress} hitSlop={6}>
                 <Ionicons name="add-circle-outline" size={24} color={colors.textSecondary} />
             </Pressable>
             <View style={styles.desktopToolbarRight}>
@@ -2381,22 +2388,24 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
               {SHOW_BOLT_ENTRY ? (
                 <Pressable
                   accessibilityRole="button"
-                  accessibilityLabel={sendPriority === 'high' ? '取消优先发送' : '设为优先发送'}
+                  accessibilityLabel={sendPriority === 'high' ? t('chat.cancelPriority') : t('chat.setPriority')}
                   accessibilityState={{ selected: sendPriority === 'high' }}
                   onPress={() => setSendPriority(value => value === 'high' ? 'normal' : 'high')}
                   style={({ pressed }) => [styles.priorityButton, sendPriority === 'high' && styles.priorityButtonActive, pressed && { opacity: 0.7 }]}
                 >
-                  <Text style={[styles.priorityButtonText, sendPriority === 'high' && styles.priorityButtonTextActive]}>⚡ 优先</Text>
+                  <Text style={[styles.priorityButtonText, sendPriority === 'high' && styles.priorityButtonTextActive]}>{t('chat.priority')}</Text>
                 </Pressable>
               ) : null}
-              <Text style={styles.shortcutHint} testID="composer-shortcut-hint">{composerShortcutHint(sendKey, isMacKeyboard())}</Text>
+              <Text style={styles.shortcutHint} testID="composer-shortcut-hint">{t(sendKey === 'modEnter' ? 'chat.shortcutMod' : 'chat.shortcutEnter', { modifier: isMacKeyboard() ? '⌘' : 'Ctrl' })}</Text>
               {voice.available ? <DesktopMicButton voice={voice} onPress={desktopMicClick} /> : null}
               <Pressable
                 style={({ pressed }) => [styles.desktopSend, !canSend(draft, attached.length > 0, sending) && styles.desktopSendDisabled, pressed && { opacity: 0.7 }]}
+                accessibilityRole="button"
+                accessibilityLabel={t('chat.send')}
                 onPress={() => void submit()}
                 disabled={!canSend(draft, attached.length > 0, sending)}
               >
-                <Text style={[styles.desktopSendText, !canSend(draft, attached.length > 0, sending) && styles.sendTextDisabled]}>发送</Text>
+                <Text style={[styles.desktopSendText, !canSend(draft, attached.length > 0, sending) && styles.sendTextDisabled]}>{t('chat.send')}</Text>
               </Pressable>
             </View>
           </View>
@@ -2407,10 +2416,10 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
       ) : (
       <>
       {quote ? (
-        <View style={styles.quoteStrip} accessibilityLabel="正在引用">
+        <View style={styles.quoteStrip} accessibilityLabel={t('chat.quoting')}>
           <View style={styles.quoteStripBar} />
           <Text style={styles.quoteStripText} numberOfLines={1}>{quoteLabel(quote)}</Text>
-          <Pressable accessibilityLabel="取消引用" onPress={() => setQuote(null)} hitSlop={8} style={styles.quoteStripClose}>
+          <Pressable accessibilityLabel={t('chat.cancelQuote')} onPress={() => setQuote(null)} hitSlop={8} style={styles.quoteStripClose}>
             <Ionicons name="close" size={16} color={colors.textMuted} />
           </Pressable>
         </View>
@@ -2441,7 +2450,7 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
         {SHOW_BOLT_ENTRY ? (
           <Pressable
             accessibilityRole="button"
-            accessibilityLabel={sendPriority === 'high' ? '取消优先发送' : '设为优先发送'}
+            accessibilityLabel={sendPriority === 'high' ? t('chat.cancelPriority') : t('chat.setPriority')}
             accessibilityState={{ selected: sendPriority === 'high' }}
             onPress={() => setSendPriority(value => value === 'high' ? 'normal' : 'high')}
             style={({ pressed }) => [styles.mobilePriorityButton, sendPriority === 'high' && styles.priorityButtonActive, pressed && { opacity: 0.6 }]}
@@ -2460,7 +2469,7 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
           // one line). rows=1 + the explicit height above make the web export lay out like the
           // phone, so the Playwright alignment check measures the real geometry.
           {...(Platform.OS === 'web' ? { rows: 1 } : null)}
-          placeholder={`Message ${alias}…`}
+          placeholder={t('chat.messagePlaceholder', { alias })}
           placeholderTextColor={colors.textMuted}
           value={draft}
           onChangeText={setDraft}
@@ -2499,7 +2508,7 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
         // sibling after the input row inside the root column, so the inverted message
         // list (flex:1) shrinks by the panel height and the newest message stays visible.
         <View
-          accessibilityLabel="更多发送方式面板"
+          accessibilityLabel={t('chat.moreSend')}
           style={[styles.plusPanel, { height: plusPanelHeight(plusWindowHeight, lastKeyboardHeightRef.current) + composerInset, paddingBottom: composerInset }]}
         >
           <View style={styles.plusGrid}>
@@ -2507,14 +2516,14 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
               <Pressable
                 key={item.key}
                 accessibilityRole="button"
-                accessibilityLabel={item.a11y}
+                accessibilityLabel={t(`chat.plusHint.${item.key}`)}
                 style={({ pressed }) => [styles.plusCell, pressed && { opacity: 0.6 }]}
                 onPress={() => runPlusItem(item.key)}
               >
                 <View style={styles.plusCellIcon}>
                   {item.icon ? <Ionicons name={item.icon as any} size={28} color={colors.text} /> : <Text style={styles.plusCellBtw}>BTW</Text>}
                 </View>
-                <Text style={styles.plusCellLabel} numberOfLines={1}>{item.label}</Text>
+                <Text style={styles.plusCellLabel} numberOfLines={1}>{t(`chat.plus.${item.key}`)}</Text>
               </Pressable>
             ))}
           </View>
@@ -2536,7 +2545,7 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
       {desktop && dropActive ? (
         <View pointerEvents="none" style={styles.dropOverlay} testID="chat-drop-overlay">
           <Ionicons name="cloud-upload-outline" size={28} color={colors.accent} />
-          <Text style={styles.dropOverlayText}>松开即可添加到输入框</Text>
+          <Text style={styles.dropOverlayText}>{t('chat.drop')}</Text>
         </View>
       ) : null}
       <ChatInfoPanel
@@ -2571,10 +2580,10 @@ function MessageHoverActions({ side, styles, onCopy, onMore }: {
   };
   return (
     <View style={[styles.hoverActions, side === 'sent' ? styles.copyHoverSent : styles.copyHoverReply]} testID="message-hover-actions">
-      <Pressable accessibilityLabel="复制消息" hitSlop={6} onPress={onCopy} style={({ pressed }) => [styles.copyHover, pressed && { opacity: 0.6 }]}>
+      <Pressable accessibilityLabel={t('chat.copy')} hitSlop={6} onPress={onCopy} style={({ pressed }) => [styles.copyHover, pressed && { opacity: 0.6 }]}>
         <Ionicons name="copy-outline" size={14} color={colors.textMuted} />
       </Pressable>
-      <Pressable ref={moreRef} accessibilityLabel="更多操作" testID="message-hover-more" hitSlop={6} onPress={more} style={({ pressed }) => [styles.copyHover, pressed && { opacity: 0.6 }]}>
+      <Pressable ref={moreRef} accessibilityLabel={t('chat.more')} testID="message-hover-more" hitSlop={6} onPress={more} style={({ pressed }) => [styles.copyHover, pressed && { opacity: 0.6 }]}>
         <Ionicons name="ellipsis-horizontal" size={14} color={colors.textMuted} />
       </Pressable>
     </View>

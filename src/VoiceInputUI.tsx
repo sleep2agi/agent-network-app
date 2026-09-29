@@ -1,3 +1,6 @@
+import { t } from './i18n';
+import { useTranslation } from './i18n-react';
+import './i18n-chat';
 // 语音输入的界面:
 //   · 手机 / 双栏(微信式):输入行最左边 🎤/⌨ 切换按钮;语音模式下输入框整条变成「按住 说话」大按钮。
 //   · 桌面:工具栏里的麦克风按钮(按住说话),同样插到光标处。
@@ -13,12 +16,17 @@ import { Ionicons } from './icons';
 import { colors, onThemeChange, spacing, radius } from './theme';
 import { ds, uiScale } from './ui-scale';
 import { composerControlSize } from './composer-row-layout';
-import { cancelZoneLabel, formatElapsed, holdBarLabel, holdBarTone, isLivePhase, overlayHint, toggleButtonShows, TOO_SHORT_NOTICE, VOICE_DRAFT_CARD_MAX_LINES, VOICE_TOGGLE_ICON, type ComposerInputMode } from './voice-input-model';
-import { barScale, HOLD_OVERLAY, holdOverlayLabel, holdOverlayTone, pushLevel, type HoldOverlayLayout } from './voice-hold-overlay-model';
+import { formatElapsed, holdBarTone, isLivePhase, toggleButtonShows, TOO_SHORT_NOTICE, VOICE_DRAFT_CARD_MAX_LINES, VOICE_TOGGLE_ICON, type ComposerInputMode, type VoicePhase } from './voice-input-model';
+import { barScale, HOLD_OVERLAY, holdOverlayTone, pushLevel, type HoldOverlayLayout } from './voice-hold-overlay-model';
 import type { VoiceInput } from './useVoiceInput';
 import { elevated } from './elevation';
 
 type MicHandlers = VoiceInput['micHandlers'];
+
+const holdBarLabel = (phase: VoicePhase) => t(phase === 'cancelArmed' ? 'voice.releaseCancel' : phase === 'transcribing' ? 'voice.transcribing' : ['starting', 'recording', 'toTextArmed'].includes(phase) ? 'voice.releaseText' : 'voice.holdSpaced');
+const cancelZoneLabel = (phase: VoicePhase) => t(phase === 'cancelArmed' ? 'voice.releaseCancel' : 'voice.slideCancel');
+const overlayHint = (phase: VoicePhase) => t(phase === 'cancelArmed' ? 'voice.releaseCancel' : phase === 'transcribing' ? 'voice.transcribing' : phase === 'starting' ? 'voice.preparing' : 'voice.releaseHint');
+const holdOverlayLabel = (phase: VoicePhase) => phase === 'toTextArmed' ? t('voice.releaseDraft') : holdBarLabel(phase === 'idle' ? 'recording' : phase);
 
 /**
  * 网页 / 桌面 webview:mousedown 的默认动作会把焦点从输入框挪到按钮上(textarea 失焦)。
@@ -28,6 +36,7 @@ const keepInputFocus = Platform.OS === 'web' ? { onMouseDown: (e: { preventDefau
 
 /** 桌面工具栏里的麦克风按钮(按住说话)。手机 / 双栏没有麦克风按钮:语音只走左边 🔊 切换出来的「按住 说话」条。 */
 export function VoiceMicButton({ voice, size = 20, style, handlers }: { voice: VoiceInput; size?: number; style?: object; handlers?: MicHandlers }) {
+  useTranslation();
   const busy = voice.state.phase === 'transcribing';
   const live = isLivePhase(voice.state.phase) || voice.state.phase === 'starting';
   return (
@@ -36,8 +45,8 @@ export function VoiceMicButton({ voice, size = 20, style, handlers }: { voice: V
       {...keepInputFocus}
       accessible
       accessibilityRole="button"
-      accessibilityLabel={voice.configured ? '按住说话' : '语音输入(未配置)'}
-      accessibilityHint={voice.configured ? '按住录音,松开识别成文字,上滑取消' : '需要先在 设置 → 语音输入 里配置'}
+      accessibilityLabel={voice.configured ? t('voice.hold') : t('voice.unconfigured')}
+      accessibilityHint={voice.configured ? t('voice.holdHint') : t('voice.setupHint')}
       accessibilityState={{ busy, disabled: busy }}
       testID="voice-mic"
       style={[styles.mic, live && styles.micLive, style]}
@@ -51,6 +60,7 @@ export function VoiceMicButton({ voice, size = 20, style, handlers }: { voice: V
 
 /** Ionicons 没有键盘图标:用几个方块画一个(外框 + 两排键 + 空格键)。 */
 function KeyboardGlyph({ color }: { color: string }) {
+  useTranslation();
   const key = { width: ds(3), height: ds(3), borderRadius: 1, backgroundColor: color };
   return (
     <View style={[styles.kbd, { borderColor: color }]}>
@@ -63,11 +73,12 @@ function KeyboardGlyph({ color }: { color: string }) {
 
 /** 输入行最左边的切换按钮:键盘模式显示 🔊(圆圈里的声波,点了进语音),语音模式显示 ⌨(点了回键盘)。 */
 export function ComposerModeToggle({ mode, onToggle, disabled }: { mode: ComposerInputMode; onToggle: () => void; disabled?: boolean }) {
+  useTranslation();
   const shows = toggleButtonShows(mode);
   return (
     <Pressable
       accessibilityRole="button"
-      accessibilityLabel={shows === 'voice' ? '切换到按住说话' : '切换到键盘输入'}
+      accessibilityLabel={shows === 'voice' ? t('voice.switchVoice') : t('voice.switchKeyboard')}
       disabled={disabled}
       onPress={onToggle}
       hitSlop={6}
@@ -83,6 +94,7 @@ export function ComposerModeToggle({ mode, onToggle, disabled }: { mode: Compose
 
 /** 语音模式下代替输入框的整条「按住 说话」。高 = 行内按钮高(composerControlSize),亮 / 暗主题都用正文色 + 实心底,不再是灰色小图标。 */
 export function VoiceHoldBar({ voice, handlers }: { voice: VoiceInput; handlers?: MicHandlers }) {
+  useTranslation();
   const { phase } = voice.state;
   const tone = holdBarTone(phase);
   return (
@@ -92,7 +104,7 @@ export function VoiceHoldBar({ voice, handlers }: { voice: VoiceInput; handlers?
       accessible
       accessibilityRole="button"
       accessibilityLabel={holdBarLabel(phase)}
-      accessibilityHint={voice.configured ? '按住录音,松开把文字放进输入框,上滑取消' : '需要先在 设置 → 语音输入 里配置'}
+      accessibilityHint={voice.configured ? t('voice.holdInsertHint') : t('voice.setupHint')}
       accessibilityState={{ busy: tone === 'busy', disabled: tone === 'busy' }}
       testID="voice-hold-bar"
       style={[styles.holdBar, tone === 'pressed' && styles.holdBarPressed, tone === 'cancel' && styles.holdBarCancel, tone === 'busy' && styles.holdBarBusy]}
@@ -110,6 +122,7 @@ const BARS = 9;
  * 电平条、计时;底部一个取消区(上滑进去变红,松手即取消)。`bottom` = 输入区顶端到屏幕底的距离。
  */
 export function VoiceRecordingOverlay({ voice, bottom, hidden }: { voice: VoiceInput; bottom: number; hidden?: boolean }) {
+  useTranslation();
   const { phase } = voice.state;
   // hidden:手机上由微信式 VoiceHoldOverlay 接管(holdOverlayApplies),这张卡只留给非手机的回退(窄桌面窗口)。
   if (hidden || phase === 'idle') return null;
@@ -123,7 +136,7 @@ export function VoiceRecordingOverlay({ voice, bottom, hidden }: { voice: VoiceI
           // 流式中间结果:只显示最后几行(长句时看的是正在说的那截),终稿松手后才进输入框。
           <Text style={[styles.interim, cancel && styles.interimCancel]} numberOfLines={5} ellipsizeMode="head" testID="voice-interim">{voice.interim}</Text>
         ) : (
-          <Text style={styles.interimPlaceholder}>{phase === 'transcribing' ? '正在识别…' : '请说话…'}</Text>
+          <Text style={styles.interimPlaceholder}>{phase === 'transcribing' ? t('voice.transcribing') : t('voice.speak')}</Text>
         )}
         {phase === 'transcribing' ? (
           <ActivityIndicator color="#fff" style={{ marginTop: 10 }} />
@@ -171,6 +184,7 @@ const NATIVE_DRIVER = Platform.OS !== 'web';
 
 /** 气泡里的波形:最近 N 次电平从左往右滚,每根条在两次电平之间由动画补到 60fps(scaleY,原生驱动)。 */
 function HoldWaveform({ level, live, reduceMotion, color }: { level: number; live: boolean; reduceMotion: boolean; color: string }) {
+  useTranslation();
   const n = HOLD_OVERLAY.bars;
   const scales = useRef(Array.from({ length: n }, () => new Animated.Value(barScale(0, 0, n)))).current;
   const historyRef = useRef<number[]>([]);
@@ -196,6 +210,7 @@ function HoldWaveform({ level, live, reduceMotion, color }: { level: number; liv
  * `layout` 来自 voice-hold-overlay-model.ts holdOverlayLayout(宿主宽高 + 底部安全区)。
  */
 export function VoiceHoldOverlay({ voice, layout }: { voice: VoiceInput; layout: HoldOverlayLayout | null }) {
+  useTranslation();
   const { phase, notice } = voice.state;
   const reduceMotion = useReduceMotion();
   const [toast, setToast] = useState(false);
@@ -246,7 +261,7 @@ export function VoiceHoldOverlay({ voice, layout }: { voice: VoiceInput; layout:
       <View pointerEvents="none" style={styles.holdToastWrap} testID="voice-hold-toast">
         <View style={styles.holdToast} accessibilityLiveRegion="polite">
           <Ionicons name="alert-circle-outline" size={34} color="#ffffff" />
-          <Text style={styles.holdToastText}>{TOO_SHORT_NOTICE}</Text>
+          <Text style={styles.holdToastText}>{t('voice.tooShort')}</Text>
         </View>
       </View>
     );
@@ -285,7 +300,7 @@ export function VoiceHoldOverlay({ voice, layout }: { voice: VoiceInput; layout:
             <Ionicons name="close" size={28} color={cancel ? '#ffffff' : '#e5e7eb'} />
           </Animated.View>
           <Animated.View testID="voice-hold-totext" style={[styles.holdCircle, circleBox(layout.textX), tone === 'toText' && styles.holdCircleOn, { transform: [{ scale: circleScale.toText }] }]}>
-            <Text style={[styles.holdCircleGlyph, tone === 'toText' && { color: colors.onVoiceBubble }]}>文</Text>
+            <Text style={[styles.holdCircleGlyph, tone === 'toText' && { color: colors.onVoiceBubble }]}>{t('voice.textGlyph')}</Text>
           </Animated.View>
           <Text style={[styles.holdLabel, { top: layout.labelCenterY - 11 }]} testID="voice-hold-label">{holdOverlayLabel(phase)}</Text>
           <View style={[styles.holdArcWrap, { top: layout.arcTop }]} testID="voice-hold-arc">
@@ -302,23 +317,24 @@ export function VoiceHoldOverlay({ voice, layout }: { voice: VoiceInput; layout:
 
 /** 未配置时按麦克风 → 「未配置语音识别，去设置」;没有设置入口(独立聊天窗口)时只提示位置。 */
 export function VoiceSettingsPrompt({ voice, onOpenSettings }: { voice: VoiceInput; onOpenSettings?: () => void }) {
+  useTranslation();
   if (!voice.settingsPrompt) return null;
   return (
     <View style={styles.promptWrap} testID="voice-settings-prompt">
       {onOpenSettings ? (
         <Pressable
           accessibilityRole="link"
-          accessibilityLabel="未配置语音识别，去设置"
+          accessibilityLabel={t('voice.setup')}
           onPress={() => { voice.dismissSettingsPrompt(); onOpenSettings(); }}
           style={({ pressed }) => [styles.prompt, pressed && { opacity: 0.7 }]}
         >
           <Ionicons name="mic-off-outline" size={14} color={colors.textSecondary} />
-          <Text style={styles.promptText}>未配置语音识别，<Text style={styles.promptLink}>去设置 ›</Text></Text>
+          <Text style={styles.promptText}>{t('voice.setupPrefix')}<Text style={styles.promptLink}>{t('voice.settingsLink')}</Text></Text>
         </Pressable>
       ) : (
         <View style={styles.prompt}>
           <Ionicons name="mic-off-outline" size={14} color={colors.textSecondary} />
-          <Text style={styles.promptText}>未配置语音识别:在主窗口 设置 → 语音输入 里配置</Text>
+          <Text style={styles.promptText}>{t('voice.setupMainWindow')}</Text>
         </View>
       )}
     </View>
@@ -344,6 +360,7 @@ export function VoiceDraftCard({ value, selection, onChangeText, onSelectionChan
   busy?: boolean;
   inputRef?: Ref<RNTextInput>;
 }) {
+  useTranslation();
   // 网页的 textarea 不会随内容长高(原生多行输入框会):按内容高度给,最多 4 行。
   const [webHeight, setWebHeight] = useState<number | undefined>(undefined);
   return (
@@ -360,12 +377,12 @@ export function VoiceDraftCard({ value, selection, onChangeText, onSelectionChan
           showSoftInputOnFocus={false}
           {...(Platform.OS === 'web' ? { inputMode: 'none' as const, rows: 1 } : null)}
           onContentSizeChange={Platform.OS === 'web' ? e => setWebHeight(e.nativeEvent.contentSize.height) : undefined}
-          accessibilityLabel="语音草稿"
-          accessibilityHint="点一下放光标,长按选中;按住下面的「按住 说话」,文字插到光标处"
+          accessibilityLabel={t('voice.draft')}
+          accessibilityHint={t('voice.draftHint')}
           testID="voice-draft-card-text"
           style={[styles.draftCardText, styles.draftCardInput, Platform.OS === 'web' && webHeight ? { height: Math.min(webHeight, DRAFT_CARD_LINE_HEIGHT * VOICE_DRAFT_CARD_MAX_LINES) } : null]}
         />
-        <Pressable accessibilityRole="button" accessibilityLabel="清空语音草稿" disabled={busy} onPress={onClear} hitSlop={8} style={styles.draftCardClear} testID="voice-draft-card-clear">
+        <Pressable accessibilityRole="button" accessibilityLabel={t('voice.clearDraft')} disabled={busy} onPress={onClear} hitSlop={8} style={styles.draftCardClear} testID="voice-draft-card-clear">
           <Ionicons name="close" size={14} color={colors.textMuted} />
         </Pressable>
       </View>

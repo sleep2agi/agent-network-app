@@ -100,7 +100,7 @@ const panel = read('ChatInfoPanel.tsx');
   const header = chat.slice(open, end);
   const pressables = header.match(/<Pressable\b/g)?.length ?? 0;
   check(pressables === 2, `header has back + ⋯ only (${pressables} Pressables; back is phone-only)`);
-  check(/accessibilityLabel="聊天信息"[\s\S]*?onPress=\{\(\) => setInfoOpen\(true\)\}[\s\S]*?testID="chat-header-more"/.test(header), '⋯ opens 聊天信息');
+  check(/accessibilityLabel=\{t\('chat.info'\)\}[\s\S]*?onPress=\{\(\) => setInfoOpen\(true\)\}[\s\S]*?testID="chat-header-more"/.test(header), '⋯ opens translated 聊天信息');
   check(/name="ellipsis-horizontal"/.test(header), '⋯ uses ellipsis-horizontal');
   for (const gone of ['搜索聊天记录', 'chat-mute-toggle', '置顶会话', '查看节点信息', 'settings-outline', 'notifications-outline', 'pin-outline']) {
     check(!header.includes(gone), `old header control gone: ${gone}`);

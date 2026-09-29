@@ -34,7 +34,7 @@ const count = (needle: string) => chat.split(needle).length - 1;
   check(!chat.includes('accessibilityLabel="打开 BTW 旁路线程"'), 'no BTW button left in the chat header');
 }
 check(count('{SHOW_BOLT_ENTRY ? (') === 2, 'both ⚡ buttons (desktop toolbar chip + mobile composer row) are gated');
-for (const glyph of ['>⚡ 优先</Text>', '>⚡</Text>']) {
+for (const glyph of [">{t('chat.priority')}</Text>", '>⚡</Text>']) {
   const at = chat.indexOf(glyph);
   check(at > 0 && chat.lastIndexOf('{SHOW_BOLT_ENTRY ? (', at) > chat.lastIndexOf(') : null}', at), `${glyph} sits inside a SHOW_BOLT_ENTRY block`);
 }

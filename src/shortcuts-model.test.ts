@@ -176,7 +176,7 @@ ck('动作:⌘K=搜索、⌘,=设置、⌘3=定时', M.shortcutAction('nav.searc
   ck('ChatScreen:按下 / 松开 / 取消 = 录音条的 开始(点 🎤)/ 完成 / 取消(同一条插到光标处的路)',
     chat.includes('kbdVoiceRef.current = { voice, start: desktopMicClick, done: desktopVoiceDone, cancel: desktopVoiceCancel };') && /effect === 'release'\) done\(\);\s*else if \(r\.effect === 'cancel'\) cancel\(\);/.test(chat));
   ck('ChatScreen:录音中 / 输入法组词中 / 设置页录入中不处理', chat.includes('if (e.isComposing || shortcutCaptureActive()) return;'));
-  ck('ChatScreen:快捷键录音用输入框里的同一条录音条,提示换成快捷键的说法', chat.includes('<DesktopVoiceBar voice={voice} onDone={desktopVoiceDone} onCancel={desktopVoiceCancel} hint={kbdVoice ? kbdVoiceHint(') && !chat.includes('VoiceShortcutIndicator'));
+  ck('ChatScreen:快捷键录音用输入框里的同一条录音条,提示换成翻译的快捷键说法', chat.includes('<DesktopVoiceBar voice={voice} onDone={desktopVoiceDone} onCancel={desktopVoiceCancel} hint={kbdVoice ? t(') && chat.includes("'voice.releaseKeys' : 'voice.pressKeys'") && !chat.includes('VoiceShortcutIndicator'));
   const page = read('src/ShortcutsSettings.tsx');
   ck('设置页:输入组渲染语音两条可改行(与导航同一个 BindableRow:录入 / 冲突提示 / 恢复默认)', page.includes("SHORTCUTS.filter(d => d.group === 'input').map(d => <BindableRow") && page.includes("SHORTCUTS.filter(d => d.group === 'nav').map((d, i) => <BindableRow"));
   const agents = read('src/AgentsScreen.tsx');

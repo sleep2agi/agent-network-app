@@ -18,6 +18,7 @@ import { ds, listText, uiScale } from './ui-scale';
 import { alignedRailLayout, denserRowPitch, listFirstRowTop, onListFirstRowTopChange } from './list-rail-align';
 import { getUnreadSnapshot, subscribeUnread } from './unread-store';
 import { agentUnreadCounts } from './agent-unread-counts';
+import { useTranslation } from './i18n-react';
 
 export interface MobileNavTab {
   key: string;
@@ -45,6 +46,7 @@ function useAgentsUnreadTotal(): number {
 }
 
 export default function MobileNavRail({ tabs, active, onSelect, insetLeft, insetBottom, showBrand }: Props) {
+  const { t } = useTranslation();
   // AppRoot is keyed by theme + 界面密度 (uiScaleKey), so this remounts on either change and rebuilds its styles.
   const s = useMemo(makeStyles, []);
   const unread = useAgentsUnreadTotal();
@@ -63,7 +65,7 @@ export default function MobileNavRail({ tabs, active, onSelect, insetLeft, inset
         key={tab.key}
         testID={`nav-rail-${tab.key}`}
         accessibilityRole="tab"
-        accessibilityLabel={badge ? `${tab.label}，${badge} 条未读` : tab.label}
+        accessibilityLabel={badge ? t('nav.unread', { label: t(tab.label), count: badge }) : t(tab.label)}
         accessibilityState={{ selected }}
         aria-selected={selected}
         onPress={() => onSelect(tab.key)}
@@ -80,7 +82,7 @@ export default function MobileNavRail({ tabs, active, onSelect, insetLeft, inset
             <View style={s.badge} testID={`nav-rail-badge-${tab.key}`}><Text dense style={s.badgeText}>{badge}</Text></View>
           ) : null}
         </View>
-        <Text dense style={[s.label, selected && s.labelActive]} numberOfLines={1}>{tab.label}</Text>
+        <Text dense style={[s.label, selected && s.labelActive]} numberOfLines={1}>{t(tab.label)}</Text>
       </Pressable>
     );
   };

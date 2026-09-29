@@ -147,10 +147,10 @@ check(new RegExp(`lineHeight: ${COMPOSER_LINE_HEIGHT},`).test(chat.slice(chat.in
   check(slotFn.includes('disabled={sendDisabled || !show}'), '发送 cannot be pressed while animating out');
   const sendAt = parts.indexOf('testID="composer-send"');
   const sendBtn = parts.slice(sendAt, parts.indexOf('</Pressable>', sendAt));
-  check(sendAt > 0 && sendBtn.includes('<Text style={styles.sendPillText}>发送</Text>') && !sendBtn.includes('↑'), '发送 is a labelled button, not an arrow');
+  check(sendAt > 0 && sendBtn.includes("<Text style={styles.sendPillText}>{t('chat.send')}</Text>") && !sendBtn.includes('↑'), '发送 is a translated labelled button, not an arrow');
   check(/sendPill: \{[\s\S]*?backgroundColor: colors\.accent/.test(parts), '发送 uses the accent colour');
   check(/sendPill: \{[\s\S]*?borderRadius: radius\.control/.test(parts), '发送 is rounded (control token, same as the input)');
-  check(parts.includes("accessibilityLabel={plusOpen ? '收起更多发送方式' : '更多发送方式'}"), '＋ keeps its a11y labels');
+  check(parts.includes("accessibilityLabel={plusOpen ? t('chat.collapsePlus') : t('chat.openPlus')}"), '＋ keeps translated a11y labels');
   check(parts.includes('sendRevealAnimation(reduceMotion)') && parts.includes('AccessibilityInfo.isReduceMotionEnabled') && parts.includes("'reduceMotionChanged'"), 'reveal animation honours reduced motion (initial + live changes)');
   check(parts.includes("animationType={reduceMotion ? 'none' : 'slide'}"), 'editor open animation honours reduced motion');
   check(!/😊|emoji/i.test(parts) && !/emoji/i.test(mobileRow), 'no emoji button (deliberately left out — the system keyboard has one)');
