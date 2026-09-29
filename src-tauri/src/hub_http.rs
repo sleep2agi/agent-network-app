@@ -34,6 +34,25 @@ static CLIENT: LazyLock<Result<reqwest_pool::Client, String>> = LazyLock::new(||
         .map_err(|error| error.to_string())
 });
 
+// Every error says whether the request can have reached the server, so the JS side knows when
+// retrying through the plugin is safe: `not_sent` → always; `maybe_sent` → only idempotent methods
+// (a POST that may have landed must not be sent twice).
+const NOT_SENT: &str = "pooled_fetch/not_sent: ";
+const MAYBE_SENT: &str = "pooled_fetch/maybe_sent: ";
+
+fn not_sent(message: impl std::fmt::Display) -> String {
+    format!("{NOT_SENT}{message}")
+}
+
+pub fn send_error(error: &reqwest_pool::Error) -> String {
+    // Connect / builder errors fail before a single request byte is written.
+    if error.is_connect() || error.is_builder() {
+        not_sent(error)
+    } else {
+        format!("{MAYBE_SENT}{error}")
+    }
+}
+
 #[derive(Deserialize)]
 pub struct HubFetchRequest {
     method: String,
@@ -61,13 +80,13 @@ pub fn frame(meta: &[u8], body: &[u8]) -> Vec<u8> {
 
 #[tauri::command]
 pub async fn pooled_fetch(request: HubFetchRequest) -> Result<tauri::ipc::Response, String> {
-    let client = CLIENT.as_ref().map_err(|error| error.clone())?;
-    let url = reqwest_pool::Url::parse(&request.url).map_err(|_| "invalid URL".to_string())?;
+    let client = CLIENT.as_ref().map_err(not_sent)?;
+    let url = reqwest_pool::Url::parse(&request.url).map_err(|_| not_sent("invalid URL"))?;
     if !matches!(url.scheme(), "http" | "https") {
-        return Err("URL must use http or https".into());
+        return Err(not_sent("URL must use http or https"));
     }
     let method = reqwest_pool::Method::from_bytes(request.method.as_bytes())
-        .map_err(|_| "invalid method".to_string())?;
+        .map_err(|_| not_sent("invalid method"))?;
     let mut builder = client.request(method.clone(), url);
     for (name, value) in &request.headers {
         // reqwest owns these on a pooled connection; a caller's copy would conflict.
@@ -84,7 +103,7 @@ pub async fn pooled_fetch(request: HubFetchRequest) -> Result<tauri::ipc::Respon
         }
         None => {}
     }
-    let response = builder.send().await.map_err(|error| error.to_string())?;
+    let response = builder.send().await.map_err(|error| send_error(&error))?;
     let status = response.status();
     let meta = ResponseMeta {
         status: status.as_u16(),
@@ -96,14 +115,14 @@ pub async fn pooled_fetch(request: HubFetchRequest) -> Result<tauri::ipc::Respon
             .filter_map(|(name, value)| value.to_str().ok().map(|v| (name.to_string(), v.to_string())))
             .collect(),
     };
-    let body = response.bytes().await.map_err(|error| error.to_string())?;
-    let meta = serde_json::to_vec(&meta).map_err(|error| error.to_string())?;
+    let body = response.bytes().await.map_err(|error| format!("{MAYBE_SENT}{error}"))?;
+    let meta = serde_json::to_vec(&meta).map_err(|error| format!("{MAYBE_SENT}{error}"))?;
     Ok(tauri::ipc::Response::new(frame(&meta, &body)))
 }
 
 #[cfg(test)]
 mod tests {
-    use super::frame;
+    use super::{frame, send_error, MAYBE_SENT, NOT_SENT};
 
     #[test]
     fn pooled_fetch_frame_is_length_prefixed_meta_then_body() {
@@ -111,5 +130,15 @@ mod tests {
         assert_eq!(&out[..4], &14u32.to_be_bytes());
         assert_eq!(&out[4..18], b"{\"status\":200}");
         assert_eq!(&out[18..], b"hello");
+    }
+
+    #[test]
+    fn pooled_fetch_connect_failure_is_marked_not_sent() {
+        // Nothing listens on port 9 (discard) of loopback in CI; the connect fails before sending.
+        let error = tauri::async_runtime::block_on(reqwest_pool::Client::new().get("http://127.0.0.1:9/").send())
+            .unwrap_err();
+        let message = send_error(&error);
+        assert!(message.starts_with(NOT_SENT), "{message}");
+        assert!(!message.starts_with(MAYBE_SENT));
     }
 }

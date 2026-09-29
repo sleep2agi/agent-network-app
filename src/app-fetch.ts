@@ -20,12 +20,51 @@
  */
 export async function appFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
   if ((globalThis as { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__) {
-    const pooled = await pooledFetch(input, init);
-    if (pooled) return pooled;
+    if (pooledHttpEnabled()) {
+      const pooled = await pooledFetch(input, init);
+      if (pooled) return pooled;
+    }
     const { fetch: tauriFetch } = await import('@tauri-apps/plugin-http');
     return tauriFetch(input, init);
   }
   return globalThis.fetch(input, init);
+}
+
+/**
+ * Kill switch (设置 → 关于 → 连接复用): off = every request goes through the plugin, the
+ * behaviour before pooled_fetch. Per device, no release needed. Default on; unreadable storage
+ * counts as on.
+ */
+export const POOLED_HTTP_OFF_KEY = 'anet.pooledHttp.off';
+export function pooledHttpEnabled(): boolean {
+  try { return globalThis.localStorage?.getItem(POOLED_HTTP_OFF_KEY) !== '1'; } catch { return true; }
+}
+export function setPooledHttpEnabled(on: boolean): void {
+  try {
+    if (on) globalThis.localStorage?.removeItem(POOLED_HTTP_OFF_KEY);
+    else globalThis.localStorage?.setItem(POOLED_HTTP_OFF_KEY, '1');
+  } catch { /* no storage: stays on */ }
+}
+
+const NOT_SENT = 'pooled_fetch/not_sent: ';
+const MAYBE_SENT = 'pooled_fetch/maybe_sent: ';
+const IDEMPOTENT = new Set(['GET', 'HEAD', 'OPTIONS']);
+
+/**
+ * A pooled_fetch failure falls back to the plugin for that request whenever that is safe:
+ * the request never left (connect / builder error), or it is idempotent. A POST that may have
+ * reached the hub is NOT replayed — sending a task twice is worse than one visible error. The
+ * error then carries the plain reqwest message, as the plugin's would.
+ */
+export function pooledErrorAction(error: unknown, method: string): { fallback: true } | { fallback: false; error: unknown } {
+  const text = typeof error === 'string' ? error : error instanceof Error ? error.message : '';
+  if (text.startsWith(NOT_SENT)) return { fallback: true };
+  if (text.startsWith(MAYBE_SENT)) {
+    return IDEMPOTENT.has(method.toUpperCase()) ? { fallback: true } : { fallback: false, error: text.slice(MAYBE_SENT.length) };
+  }
+  // Anything else (IPC failure, an unknown command in an older shell) happened before Rust sent
+  // anything.
+  return { fallback: true };
 }
 
 /** Same message the plugin rejects with, so callers see one abort shape on either path. */
@@ -46,7 +85,8 @@ export function decodePooledResponse(raw: ArrayBuffer | Uint8Array): Response {
   return res;
 }
 
-/** null ⇒ this shell has no `pooled_fetch` (answered with a non-binary value); use the plugin. */
+/** null ⇒ use the plugin for this request: the shell has no `pooled_fetch` (answered with a
+ *  non-binary value), or it failed in a way that is safe to retry (pooledErrorAction). */
 async function pooledFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response | null> {
   const signal = init?.signal;
   if (signal?.aborted) throw new Error(ERROR_REQUEST_CANCELLED);
@@ -64,7 +104,11 @@ async function pooledFetch(input: RequestInfo | URL, init?: RequestInit): Promis
   };
   const { invoke } = await import('@tauri-apps/api/core');
   if (signal?.aborted) throw new Error(ERROR_REQUEST_CANCELLED);
-  const sent = invoke<ArrayBuffer | Uint8Array | null>('pooled_fetch', { request });
+  const sent = invoke<ArrayBuffer | Uint8Array | null>('pooled_fetch', { request }).catch((error: unknown) => {
+    const action = pooledErrorAction(error, req.method);
+    if (action.fallback) return null;
+    throw action.error;
+  });
   const raw = signal
     ? await new Promise<ArrayBuffer | Uint8Array | null>((resolve, reject) => {
       const onAbort = () => reject(new Error(ERROR_REQUEST_CANCELLED));

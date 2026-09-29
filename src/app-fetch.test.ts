@@ -1,7 +1,7 @@
 // @ts-nocheck -- repository test scripts run directly under Bun; the app
 // tsconfig intentionally excludes Node ambient types.
 import { readFileSync } from 'node:fs';
-import { appFetch, decodePooledResponse } from './app-fetch';
+import { appFetch, decodePooledResponse, pooledErrorAction, pooledHttpEnabled, setPooledHttpEnabled, POOLED_HTTP_OFF_KEY } from './app-fetch';
 
 let passed = 0;
 let total = 0;
@@ -48,6 +48,18 @@ const poolDep = cargoToml.match(/reqwest_pool = \{[^\n]*\}/)?.[0] ?? '';
 // Same TLS / proxy / gzip as tauri-plugin-http's defaults + our gzip, so only the pooling changes.
 ck('pooled client uses the plugin\'s reqwest line and features', /version = "0\.12"/.test(poolDep) && ['rustls-tls', 'http2', 'charset', 'macos-system-configuration', 'gzip'].every(f => poolDep.includes(`"${f}"`)));
 
+const settingsModel = readFileSync(new URL('./settings-model.ts', import.meta.url), 'utf8');
+const settingsScreen = readFileSync(new URL('./SettingsScreen.tsx', import.meta.url), 'utf8');
+ck('kill switch is a desktop-only row in 设置 → 关于', /\{ key: 'pooledHttp', label: '连接复用',[^\n]*platforms: \['desktop'\] \}/.test(settingsModel));
+{
+  // The screen may only use copy keys (i18n-copy-guard); a row inserted into the copy table
+  // above ours shifts every index, so pin that the keys this row uses still name its own text.
+  const { settingsTranslations } = await import('./i18n-settings');
+  const keysUsed = [...settingsScreen.slice(settingsScreen.indexOf("show('about', 'pooledHttp')")).matchAll(/tr\('(settings\.copy\.\d+)'\)/g)].slice(0, 2).map(m => m[1]);
+  ck('kill switch row shows its own label and hint (copy indices not shifted)', settingsTranslations[keysUsed[0]]?.[0] === '连接复用' && settingsTranslations[keysUsed[1]]?.[0]?.startsWith('复用到 Hub 的连接'));
+}
+ck('kill switch row toggles the stored flag', /show\('about', 'pooledHttp'\)[\s\S]{0,900}onValueChange=\{value => \{ setPooledHttpEnabled\(value\); setPooledHttp\(value\); \}\}/.test(settingsScreen));
+
 const frame = (meta: object, body: string | Uint8Array) => {
   const m = new TextEncoder().encode(JSON.stringify(meta));
   const b = typeof body === 'string' ? new TextEncoder().encode(body) : body;
@@ -86,14 +98,62 @@ try {
   const bodyless = await appFetch('http://h/api/status');
   ck('GET without a body sends data: null', calls[0]?.args?.request?.data === null && bodyless.ok);
 
-  // A network error from Rust must surface as the error — never retried through the plugin,
-  // which would send a POST twice.
+  // Errors: fall back to the plugin when that cannot double-send; a POST that may have landed
+  // surfaces its error instead of being replayed.
+  const pluginAnswer = (cmd: string) => {
+    if (cmd === 'plugin:http|fetch') return 101;
+    if (cmd === 'plugin:http|fetch_send') return { status: 200, statusText: 'OK', url: 'http://h/x', headers: [['content-type', 'application/json']], rid: 102 };
+    if (cmd === 'plugin:http|fetch_read_body') { const first = calls.filter(c => c.cmd === cmd).length === 1; return first ? [...new TextEncoder().encode('{"via":"plugin"}'), 0] : [1]; }
+    return null;
+  };
+  const failWith = (msg: string) => (cmd: string) => { if (cmd === 'pooled_fetch') throw msg; return pluginAnswer(cmd); };
+
   calls.length = 0;
-  answer = (cmd) => { if (cmd === 'pooled_fetch') throw 'error sending request for url (http://h/api/task)'; return null; };
+  answer = failWith('pooled_fetch/maybe_sent: error sending request for url (http://h/api/task)');
   let err: unknown = null;
   try { await appFetch('http://h/api/task', { method: 'POST', body: '{}' }); } catch (e) { err = e; }
-  ck('Rust-side failure rejects with its message', String(err).includes('error sending request'));
-  ck('Rust-side failure is not replayed through the plugin', !calls.some(c => c.cmd.startsWith('plugin:http|')));
+  ck('POST that may have been sent rejects with the plain reqwest message', err === 'error sending request for url (http://h/api/task)');
+  ck('POST that may have been sent is not replayed through the plugin', !calls.some(c => c.cmd.startsWith('plugin:http|')));
+
+  calls.length = 0;
+  answer = failWith('pooled_fetch/maybe_sent: error decoding response body');
+  const getRetry = await appFetch('http://h/api/status');
+  ck('GET that failed mid-flight falls back to the plugin for that request', (await getRetry.json()).via === 'plugin');
+
+  calls.length = 0;
+  answer = failWith('pooled_fetch/not_sent: error trying to connect');
+  const postRetry = await appFetch('http://h/api/task', { method: 'POST', body: '{"a":1}' });
+  const replay = calls.find(c => c.cmd === 'plugin:http|fetch')?.args?.clientConfig;
+  ck('POST that never left (connect error) falls back to the plugin with the same body',
+    (await postRetry.json()).via === 'plugin' && replay?.method === 'POST' && new TextDecoder().decode(new Uint8Array(replay.data)) === '{"a":1}');
+
+  calls.length = 0;
+  answer = failWith('command pooled_fetch not found');
+  ck('an unmarked (IPC) failure falls back to the plugin', (await (await appFetch('http://h/x', { method: 'POST', body: '{}' })).json()).via === 'plugin');
+
+  ck('error classifier: maybe_sent HEAD/OPTIONS are retryable', pooledErrorAction('pooled_fetch/maybe_sent: x', 'head').fallback === true && pooledErrorAction('pooled_fetch/maybe_sent: x', 'OPTIONS').fallback === true);
+  ck('error classifier: maybe_sent PUT/PATCH/DELETE are not', ['PUT', 'PATCH', 'DELETE'].every(m => pooledErrorAction('pooled_fetch/maybe_sent: x', m).fallback === false));
+
+  // Kill switch: off → plugin only, pooled_fetch never invoked.
+  const store = new Map<string, string>();
+  const hadLs = 'localStorage' in g; const origLs = g.localStorage;
+  g.localStorage = { getItem: (k: string) => store.get(k) ?? null, setItem: (k: string, v: string) => { store.set(k, v); }, removeItem: (k: string) => { store.delete(k); } };
+  try {
+    ck('kill switch defaults to on', pooledHttpEnabled() === true);
+    setPooledHttpEnabled(false);
+    ck('turning it off persists one key', store.get(POOLED_HTTP_OFF_KEY) === '1' && pooledHttpEnabled() === false);
+    calls.length = 0;
+    answer = (cmd) => cmd === 'pooled_fetch' ? frame({ status: 200, statusText: 'OK', url: 'http://h/x', headers: [] }, '{"via":"pooled"}') : pluginAnswer(cmd);
+    const off = await appFetch('http://h/x');
+    ck('switch off: request goes through the plugin and pooled_fetch is never called', (await off.json()).via === 'plugin' && !calls.some(c => c.cmd === 'pooled_fetch'));
+    setPooledHttpEnabled(true);
+    calls.length = 0;
+    ck('switch back on: pooled again', (await (await appFetch('http://h/x')).json()).via === 'pooled' && !store.has(POOLED_HTTP_OFF_KEY));
+    g.localStorage = { getItem: () => { throw new Error('denied'); }, setItem: () => { throw new Error('denied'); }, removeItem: () => { throw new Error('denied'); } };
+    ck('unreadable storage counts as on (and setting it never throws)', pooledHttpEnabled() === true && (setPooledHttpEnabled(false), true));
+  } finally {
+    if (hadLs) g.localStorage = origLs; else delete g.localStorage;
+  }
 
   // Abort: rejects with the plugin's own message so callers see one shape.
   answer = (cmd) => cmd === 'pooled_fetch' ? new Promise(() => {}) : null;
