@@ -372,8 +372,8 @@ const makeGanttStyles = () => StyleSheet.create({
   weekLine: { position: 'absolute', top: 0, bottom: 0, width: StyleSheet.hairlineWidth, backgroundColor: colors.border },
   bar: { position: 'absolute', height: BAR_H, borderRadius: radius.pill },
   barOverdue: { borderWidth: 2, borderColor: colors.failed },
-  // 开始早于左边界:左端不圆,读作「从更早接过来」。
-  barClipped: { borderTopLeftRadius: 0, borderBottomLeftRadius: 0 },
+  // 开始早于左边界:左端几乎是方的,读作「从更早接过来」。
+  barClipped: { borderTopLeftRadius: radius.inline, borderBottomLeftRadius: radius.inline },
   barHover: { opacity: 0.8 },
   barSelected: { outlineStyle: 'solid', outlineWidth: 2, outlineColor: colors.text, outlineOffset: 1 } as object,
   todayLine: { position: 'absolute', top: 0, bottom: 0, width: 2, backgroundColor: colors.failed },
