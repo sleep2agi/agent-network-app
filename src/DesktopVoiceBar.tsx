@@ -110,7 +110,8 @@ const makeStyles = () => StyleSheet.create({
   mic: { width: ds(32), height: ds(32), borderRadius: radius.pill, alignItems: 'center', justifyContent: 'center' },
   micHover: { backgroundColor: colors.rowHover },
   // 与工具栏同高、同一个 paddingTop:换上来时输入框不跳。
-  bar: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, paddingTop: spacing.sm, minHeight: ds(34) + spacing.sm },
+  // 2026-09-29 卡片化输入区:工具栏是 paddingTop 4 + 34 = 38 高(ChatScreen desktopToolbar),这里一致。
+  bar: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, paddingTop: 4, height: 38 },
   dot: { width: 8, height: 8, borderRadius: radius.pill, backgroundColor: colors.failed },
   dotIdle: { backgroundColor: colors.textMuted },
   levels: { flexDirection: 'row', alignItems: 'center', gap: 2, height: 18 },

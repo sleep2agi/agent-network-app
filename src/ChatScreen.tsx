@@ -19,7 +19,7 @@ import { conversationKey, conversationScope, createConversationRequestGate, crea
 import { resolveSender } from './chat-sender';
 import { keyboardAvoidEnabled, useKeyboardVisible } from './keyboard-visibility';
 import { nextIdentityRetryDelay } from './identity-retry';
-import { COMPOSER_HEIGHT_DEFAULT, clampComposerHeight, composerDragHandlers, inputMaxHeight, loadComposerHeight, lockDocumentSelection, saveComposerHeight } from './composer-resize';
+import { COMPOSER_CARD_INSET, COMPOSER_HEIGHT_DEFAULT, composerCardHeight, composerDragHandlers, inputMaxHeight, loadComposerHeight, lockDocumentSelection, saveComposerHeight } from './composer-resize';
 import {
   ATTACH_ENABLED,
   attachmentTextHint,
@@ -124,6 +124,9 @@ type ChatItem = HubTask & {
    *  task_id,等轮询把同 id 的服务器行拉回来再让位;没拿到 id 时按内容+时间对账(confirmedOutboxIds)。 */
   _confirmedTaskId?: string;
 };
+
+/** 桌面聊天气泡的最大宽度(px)。 */
+const DESKTOP_BUBBLE_MAX = 640;
 
 // selectedText:桌面端右键时气泡里已有的鼠标选区(只在这个气泡内才算),菜单据此给「复制选中内容」。
 type MessageSelection = { item: ChatItem; text: string; author?: string; selectedText?: string };
@@ -365,9 +368,12 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
   useEffect(() => { setInfoOpen(false); }, [alias]);
   const rootHeightRef = useRef(0);
   const [composerHeightRaw, setComposerHeightRaw] = useState<number>(() => loadComposerHeight() ?? COMPOSER_HEIGHT_DEFAULT);
-  const composerHeight = clampComposerHeight(composerHeightRaw, rootHeight || undefined);
-  const composerHeightRawRef = useRef(composerHeightRaw);
-  composerHeightRawRef.current = composerHeightRaw;
+  // 卡片高度 = 拖出来的高度(下限)与内容高度(自动长高,到窗格 40% 为止)取大 —— composer-resize.ts。
+  const [composerContentHeight, setComposerContentHeight] = useState(0);
+  const composerHeight = composerCardHeight(composerHeightRaw, composerContentHeight, rootHeight || undefined);
+  // 拖拽从**当前看到的**高度起算(自动长高后再拖,不能先跳回拖过的旧值)。
+  const composerHeightRawRef = useRef(composerHeight);
+  composerHeightRawRef.current = composerHeight;
   // 🔴 只创建一次(空依赖):每次高度变化重建 PanResponder 会让 react-native-web 在拖拽中途
   // 换 responder config,新 gestureState 的 dy 从 0 重新累计 → 拖不动(见 composer-resize.ts)。
   // 会变的值全部经 ref 现读。
@@ -378,6 +384,8 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
     save: saveComposerHeight,
     lockSelection: Platform.OS === 'web' ? lockDocumentSelection : undefined,
   })), []);
+  // 桌面气泡最大宽度:窗格的 85%,但不超过 DESKTOP_BUBBLE_MAX(宽窗口里一行字不拉满)。手机不变。
+  const bubbleCap = desktop && paneWidth > 0 ? { maxWidth: Math.min(DESKTOP_BUBBLE_MAX, Math.floor(paneWidth * 0.85)) } : null;
   const sending = false; // optimistic echo frees the input immediately
   const limitRef = useRef(PAGE);
 
@@ -1984,7 +1992,7 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
                 <View style={selectionMode ? styles.selectBody : undefined} pointerEvents={selectionMode ? 'none' : 'auto'}>
                 {!item._proactive ? sender.isCurrentUser ? (
                 <View style={[styles.messageRow, styles.sentRow]}>
-                  <View style={[styles.messageContent, styles.sentContent]}>
+                  <View style={[styles.messageContent, styles.sentContent, bubbleCap]}>
                     <Text style={[styles.messageAuthor, styles.sentAuthor]} numberOfLines={1}>
                       {sender.alias}{item.created_at ? ` · ${formatChatHeader(item.created_at)}` : ''}
                     </Text>
@@ -2015,7 +2023,7 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
                 // 放在收到侧,头像用发送方,作者行写「发送方 → 本 agent」。
                 <View style={[styles.messageRow, styles.foreignRow]}>
                   <AliasAvatar alias={sender.alias} size={36} />
-                  <View style={styles.messageContent}>
+                  <View style={[styles.messageContent, bubbleCap]}>
                     <Text style={styles.messageAuthor} numberOfLines={1}>
                       {`${sender.alias} → ${alias}`}{item.created_at ? ` · ${formatChatHeader(item.created_at)}` : ''}
                     </Text>
@@ -2025,7 +2033,7 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
                       delayLongPress={300}
                       style={styles.replyPressable}
                     >
-                      <View style={[styles.bubble, styles.replyBubble]}>
+                      <View style={[styles.bubble, styles.replyBubble, desktop && styles.replyBubbleDesktop]}>
                         {pointer && hoverKey === `${msgKey(item)}:sent` && item.content ? (
                           <MessageHoverActions side="reply" styles={styles} onCopy={() => void copyMessage(item.content ?? '')} onMore={at => openMenuAt(at, { item, text: item.content ?? '', author: sender.alias })} />
                         ) : null}
@@ -2044,7 +2052,7 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
                 {item.result || item.reply ? (
                   <View style={[styles.messageRow, styles.replyRow]}>
                     <AliasAvatar alias={alias} size={36} />
-                    <View style={styles.messageContent}>
+                    <View style={[styles.messageContent, bubbleCap]}>
                       {/* 2026-09-16 Vincent:「每条消息都展示下时间吧」—— 回复用完成时刻,没有就用创建时刻 */}
                       <Text style={styles.messageAuthor} numberOfLines={1}>{alias}{item._proactive ? ' · 主动汇报' : ''}{(item.completed_at ?? item.created_at) ? ` · ${formatChatHeader(item.completed_at ?? item.created_at)}` : ''}</Text>
                       <Pressable
@@ -2053,7 +2061,7 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
                         delayLongPress={300}
                         style={styles.replyPressable}
                       >
-                        <View style={[styles.bubble, styles.replyBubble]}>
+                        <View style={[styles.bubble, styles.replyBubble, desktop && styles.replyBubbleDesktop]}>
                           {pointer && hoverKey === `${msgKey(item)}:reply` ? (
                             <MessageHoverActions side="reply" styles={styles} onCopy={() => void copyMessage(item.result ?? item.reply ?? '')} onMore={at => openMenuAt(at, { item, text: item.result ?? item.reply ?? '', author: alias })} />
                           ) : null}
@@ -2330,7 +2338,19 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
             </Pressable>
           </View>
         ) : null}
-        <View style={[styles.desktopComposer, { height: composerHeight, minHeight: undefined, maxHeight: undefined }]}>
+        <View style={styles.desktopComposerWrap}>
+        <View style={[styles.desktopComposer, { height: composerHeight, minHeight: undefined, maxHeight: undefined }]} testID="desktop-composer-card">
+          {/* 内容高度量尺:同宽、同字号行高的隐形文字。不用 TextInput 的 onContentSizeChange —— web 上那是
+              textarea.scrollHeight,永远 ≥ 自身高度,卡片只会长不会缩(删掉文字后回不去)。 */}
+          <Text
+            style={styles.desktopInputMeasure}
+            aria-hidden
+            accessibilityElementsHidden
+            importantForAccessibility="no-hide-descendants"
+            onLayout={event => setComposerContentHeight(event.nativeEvent.layout.height)}
+          >
+            {`${draft}${draft.endsWith('\n') || !draft ? '\u200b' : ''}`}
+          </Text>
           <TextInput
             ref={mainComposerRef}
             style={[styles.desktopInput, { maxHeight: inputMaxHeight(composerHeight) }]}
@@ -2381,6 +2401,7 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
             </View>
           </View>
           )}
+        </View>
         </View>
         </>
       ) : (
@@ -2629,6 +2650,12 @@ const makeStyles = () =>
     textAlign: 'center',
     marginTop: spacing.md,
     marginBottom: spacing.sm,
+    // 2026-09-29:日期 / 时间分隔做成一枚小胶囊,不再是一行裸字。
+    backgroundColor: colors.subtleFill,
+    borderRadius: radius.pill,
+    overflow: 'hidden',
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 2,
   },
   // 极简:气泡不描边。发出的用中性的 rowActive 一档底色,回复用卡片色——靠底色区分,不靠边框。
   bubble: {
@@ -2640,6 +2667,8 @@ const makeStyles = () =>
     paddingVertical: spacing.md,
   },
   replyBubble: { alignSelf: 'flex-start', maxWidth: '85%', flexShrink: 1, backgroundColor: colors.card },
+  // 桌面:发出与回复同一个最大宽度(bubbleCap),回复不再是 85% 里再 85%。
+  replyBubbleDesktop: { maxWidth: '100%' },
   bubbleText: { color: colors.text, fontSize: 14, lineHeight: 20 },
   // 微信式引用:气泡下方一条灰底小字「作者: 内容」(单行省略)
   quoteChip: { marginTop: 4, maxWidth: '100%', borderLeftWidth: 2, borderLeftColor: colors.border, paddingLeft: spacing.sm, paddingVertical: 1 },
@@ -2826,20 +2855,26 @@ const makeStyles = () =>
     userSelect: 'none',
   } as any,
   composerDividerGrip: { width: 36, height: 3, borderRadius: radius.pill, backgroundColor: colors.border },
+  // 2026-09-29 Vincent 截图(0.2.137 Windows):输入区原是一整块贴边白板。现在是悬浮圆角卡片 ——
+  // 左右下三边等距 COMPOSER_CARD_INSET,工具栏在卡片里;高度随内容长(composer-resize.ts)。
+  desktopComposerWrap: { paddingHorizontal: COMPOSER_CARD_INSET, paddingBottom: COMPOSER_CARD_INSET, backgroundColor: colors.bg },
   desktopComposer: {
-    minHeight: 148,
-    maxHeight: 220,
     backgroundColor: colors.card,
-    borderTopWidth: 1,
-    borderTopColor: colors.border,
-    paddingHorizontal: spacing.lg,
-    paddingTop: spacing.md,
-    paddingBottom: spacing.md,
+    borderRadius: radius.surface,
+    paddingHorizontal: 14,
+    paddingTop: 12,
+    paddingBottom: 8,
+    overflow: 'hidden',
+    ...elevated('raised'),
   },
+  desktopInputMeasure: {
+    position: 'absolute', left: 14, right: 14, top: 0, opacity: 0, pointerEvents: 'none',
+    fontSize: 14, lineHeight: 21,
+    whiteSpace: 'pre-wrap', wordBreak: 'break-word',
+  } as any,
   desktopInput: {
     flex: 1,
-    minHeight: 76,
-    maxHeight: 150,
+    minHeight: 21,
     color: colors.text,
     fontSize: 14,
     lineHeight: 21,
@@ -2847,8 +2882,8 @@ const makeStyles = () =>
     textAlignVertical: 'top',
     outlineStyle: 'none',
   } as any,
-  desktopToolbar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingTop: spacing.sm },
-  desktopToolButton: { width: ds(34), height: ds(34), alignItems: 'center', justifyContent: 'center' },
+  desktopToolbar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingTop: 4, height: 38 },
+  desktopToolButton: { width: 34, height: 34, borderRadius: radius.item, alignItems: 'center', justifyContent: 'center', marginLeft: -6 },
   desktopToolbarRight: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
   priorityButton: { height: 28, borderRadius: radius.item, borderWidth: 1, borderColor: 'transparent', paddingHorizontal: spacing.sm, alignItems: 'center', justifyContent: 'center' },
   priorityButtonActive: { borderColor: colors.failed, backgroundColor: colors.inputBg },

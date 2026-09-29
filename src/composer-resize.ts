@@ -7,18 +7,27 @@
 //      (向上拖 dy<0 → 变高),松手 saveComposerHeight;
 //   3. desktopComposer 用固定 height,内部 TextInput 的 maxHeight = inputMaxHeight(height)。
 //
-// 边界(验收判据 2):最小 = 原来的 minHeight 148(至少一行 + 工具栏),最大 = 根高度减去给
+// 边界(验收判据 2):最小 = 一行 + 工具栏(COMPOSER_HEIGHT_MIN,2026-09-29 起卡片化后是 81),最大 = 根高度减去给
 // 消息区保留的 LIST_RESERVE,再不能小于最小值(窗口很矮时退化成"不可调")。
 // 持久化(验收判据 3):全局一把 key,与会话无关 —— issue 要求"切换会话后保持"。
 
-export const COMPOSER_HEIGHT_MIN = 148;
-export const COMPOSER_HEIGHT_DEFAULT = 148;
+// 2026-09-29(Vincent 发来 0.2.137 Windows 桌面聊天截图:「输入区一大块白板」)—— 输入区改成悬浮的
+// 圆角卡片,随内容自动长高;这里的高度都指**卡片**高度(不含卡片外的 12px 边距)。
+// 最小 = 一行字 + 工具栏;默认就是最小(空草稿时是一条紧凑的输入卡片,不再是 148 高的白板)。
+/** 卡片里除 TextInput 之外的固定开销:上下边框 1+1、上内边距 12、工具栏 paddingTop 4 + 按钮 34、下内边距 8。 */
+export const COMPOSER_CHROME = 60;
+/** 一行字的行高(desktopInput.lineHeight)。 */
+export const COMPOSER_LINE = 21;
+export const COMPOSER_HEIGHT_MIN = COMPOSER_CHROME + COMPOSER_LINE;
+export const COMPOSER_HEIGHT_DEFAULT = COMPOSER_HEIGHT_MIN;
+/** 自动长高的上限:聊天窗格高度的 40%;再多就在输入框里滚动。拖过的高度比它大时以拖的为准。 */
+export const COMPOSER_AUTO_MAX_RATIO = 0.4;
 /** 消息列表至少保留这么高(px),输入区不能把它挤没。 */
 export const COMPOSER_LIST_RESERVE = 200;
-/** 输入区里除 TextInput 之外的固定开销:上下 padding(12+12)+ 工具栏 paddingTop 8 + 工具栏按钮 34。 */
-export const COMPOSER_CHROME = 66;
 /** 分隔条高度(px);同时是鼠标可命中的热区。 */
 export const COMPOSER_DIVIDER_HEIGHT = 6;
+/** 卡片到聊天窗格左、右、下边的距离(三边相等)。 */
+export const COMPOSER_CARD_INSET = 12;
 
 export const COMPOSER_HEIGHT_KEY = 'chat_composer_height_v1';
 
@@ -44,7 +53,21 @@ export function composerHeightFromDrag(startHeight: number, dy: number, rootHeig
 
 /** TextInput 的可用高度;至少留一行(21px)。 */
 export function inputMaxHeight(composerHeight: number): number {
-  return Math.max(21, composerHeight - COMPOSER_CHROME);
+  return Math.max(COMPOSER_LINE, composerHeight - COMPOSER_CHROME);
+}
+
+/**
+ * 卡片实际高度。userHeight = 拖出来的(或存下来的)高度,是**下限**:拖高了就一直那么高;
+ * 内容更多时自动长高,直到 max(userHeight, 窗格 40%),再多在输入框里滚动。
+ * contentHeight = TextInput 的内容高度(onContentSizeChange);不知道时当一行。
+ */
+export function composerCardHeight(userHeight: number, contentHeight: number | null | undefined, rootHeight: number | null | undefined): number {
+  const user = clampComposerHeight(userHeight, rootHeight);
+  const content = Number.isFinite(contentHeight as number) && (contentHeight as number) > 0 ? Math.ceil(contentHeight as number) : COMPOSER_LINE;
+  const auto = COMPOSER_CHROME + Math.max(COMPOSER_LINE, content);
+  const ratioCap = rootHeight && Number.isFinite(rootHeight) && rootHeight > 0 ? Math.floor(rootHeight * COMPOSER_AUTO_MAX_RATIO) : auto;
+  const cap = Math.max(user, ratioCap);
+  return clampComposerHeight(Math.max(user, Math.min(auto, cap)), rootHeight);
 }
 
 const storage = (): Storage | null => {
