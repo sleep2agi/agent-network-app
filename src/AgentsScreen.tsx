@@ -281,10 +281,18 @@ export default function AgentsScreen({
       setRefreshing(false);
       return;
     }
+    // First load consumes the boot prefetch if it's still in-flight/fresh;
+    // polls and later loads fall through to a normal fetch.
+    const statusRead = takeStatusPrefetch(cfg) ?? fetchStatus(cfg);
+    // The two unread reads don't depend on the status read: start all three together. Chained,
+    // the badges landed three round trips after launch (~2.3 s China → US on desktop) instead of
+    // one. They are still applied in the same order as before.
+    const userMessagesRead = fetchUserMessages(cfg, 50);
+    const inboxRead = fetchMessages(cfg, 300, replyUnreadSince());
+    userMessagesRead.catch(() => {});
+    inboxRead.catch(() => {});
     try {
-      // First load consumes the boot prefetch if it's still in-flight/fresh;
-      // polls and later loads fall through to a normal fetch.
-      const data = await (takeStatusPrefetch(cfg) ?? fetchStatus(cfg));
+      const data = await statusRead;
       const next = data.sessions ?? [];
       setSessions(next);
       setFailed(false);
@@ -299,13 +307,13 @@ export default function AgentsScreen({
       void retryUnreadPersistFromPoll();
     }
     try {
-      ingestUserMessagesBody(await fetchUserMessages(cfg, 50));
+      ingestUserMessagesBody(await userMessagesRead);
     } catch {
       /* 列表照常显示；服务端未读拿不到时 unreadCountForAgentRow 退回 ledger */
     }
     try {
       // agent 回给用户的消息在 inbox 表(alias 分支),不在 user_inbox —— 红点的另一半(reply-unread.ts)
-      ingestInboxMessagesBody(await fetchMessages(cfg, 300, replyUnreadSince()), cfg.username);
+      ingestInboxMessagesBody(await inboxRead, cfg.username);
     } catch {
       /* 拿不到就沿用上一份 replyRows */
     }

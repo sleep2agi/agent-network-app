@@ -131,6 +131,8 @@ function ScopedRequirementBoard({ cfg, desktop, dispatch, onOpenVoiceSettings, s
   const pendingMoves = useRef(new Set<string>());
   const mutations = useRef(0);
   const inFlight = useRef(0);
+  /** 上一次整张表读成功的时刻(首屏或轮询)。 */
+  const lastListAt = useRef(0);
   const today = localToday();
   const selected = items.find(item => item.id === selectedId) || null;
 
@@ -140,6 +142,9 @@ function ScopedRequirementBoard({ cfg, desktop, dispatch, onOpenVoiceSettings, s
     // 失败后重试时停在错误页(按钮换成「正在重试…」),不要在错误页和转圈之间来回闪。
     setPhase(p => (p === 'error' ? p : 'loading'));
     setRetrying(true);
+    // 项目和卡片互不依赖:一起发。串着等是首屏多一个跨太平洋往返(桌面冷连接 ~0.7 s)。
+    // 旧 Hub 没有这个路由 → null,界面把项目整个藏起来;读失败也按没有处理,不挡看板。
+    const projectsRead = listProjects(cfg).catch(() => null);
     (async () => {
       try {
         await migrateLocalRequirements(cfg, () => readRequirements(localKey), rows => writeRequirements(localKey, rows));
@@ -148,9 +153,9 @@ function ScopedRequirementBoard({ cfg, desktop, dispatch, onOpenVoiceSettings, s
         // 分不分两个角色:有卡片就看行里带没带 agent_owner;一张都没有才去探 Hub。
         const roles = list.length ? list.some(hasRoles) : await probeAgentOwnerSupport(cfg);
         if (dead) return;
-        // 项目:旧 Hub 没有这个路由 → null,界面把项目整个藏起来;读失败也按没有处理,不挡看板。
-        const projectList = await listProjects(cfg).catch(() => null);
+        const projectList = await projectsRead;
         if (dead) return;
+        lastListAt.current = Date.now();
         patchTaskBoard(scope, { items: list, loaded: true, twoRoles: roles, projects: projectList, capabilities });
         setPhase('ready');
         setHubError('');
@@ -176,13 +181,17 @@ function ScopedRequirementBoard({ cfg, desktop, dispatch, onOpenVoiceSettings, s
     return () => { dead = true; };
   }, [cfg.serverUrl, cfg.token, cfg.networkId, hasOwners, scope]);
 
-  const refresh = useCallback(async () => {
+  const refresh = useCallback(async (force?: boolean) => {
     // 首次加载失败(连不上 / 超时)后不能只靠用户点「重试」:跟着轮询(失败时自动退避)再试一次首次加载。
     if (phase === 'error') { setReloadKey(n => n + 1); return; }
     if (phase !== 'ready' || inFlight.current > 0 || drag.current.phase !== 'idle') return;
+    // phase 变成 ready 时 refresh 换了身份,usePoll 会立刻再跑一次 —— 首屏刚拉完的整张表(生产 500 行
+    // ≈163 KB gzip)又拉一遍。刚拉过就等下一轮;别的窗口改了任务(task-changed)照常立刻刷。
+    if (!force && Date.now() - lastListAt.current < POLL_MS / 2) return;
     const gen = mutations.current;
     try {
       const list = await listRequirements(cfg);
+      lastListAt.current = Date.now();
       if (gen === mutations.current && inFlight.current === 0) patchTaskBoard(scope, { items: list });
     } catch { /* 下一轮再试;看板保留上次的 */ }
   }, [cfg, phase, scope]);
@@ -196,7 +205,7 @@ function ScopedRequirementBoard({ cfg, desktop, dispatch, onOpenVoiceSettings, s
       const label = await currentWindowLabel();
       const u = await listenTaskChanged(raw => {
         const change = parseTaskChanged(raw);
-        if (change && changeConcernsMe(change, { label, profileId: cfg.profileId, serverUrl: cfg.serverUrl, networkId: cfg.networkId })) void refreshRef.current();
+        if (change && changeConcernsMe(change, { label, profileId: cfg.profileId, serverUrl: cfg.serverUrl, networkId: cfg.networkId })) void refreshRef.current(true);
       });
       if (alive) off = u; else u();
     })().catch(() => {});

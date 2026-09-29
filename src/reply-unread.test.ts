@@ -45,7 +45,7 @@ check(saveReplyWatermarks(w1) === false && Object.keys(loadReplyWatermarks()).le
 
 // 接线契约
 const agents = readFileSync(new URL('./AgentsScreen.tsx', import.meta.url), 'utf8');
-check(agents.includes('ingestInboxMessagesBody(await fetchMessages(cfg, 300, replyUnreadSince()), cfg.username)'), 'agents list polls the alias-branch messages (7-day window, not the hub default 1h) into the store');
+check(agents.includes('const inboxRead = fetchMessages(cfg, 300, replyUnreadSince());') && agents.includes('ingestInboxMessagesBody(await inboxRead, cfg.username)'), 'agents list polls the alias-branch messages (7-day window, not the hub default 1h) into the store');
 const { replyUnreadSince } = await import('./api');
 check(replyUnreadSince(new Date('2026-09-06T04:00:00Z')) === '2026-08-30 04:00:00', 'since window = 7 days in hub timestamp format');
 const api = readFileSync(new URL('./api.ts', import.meta.url), 'utf8');

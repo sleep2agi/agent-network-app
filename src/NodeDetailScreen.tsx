@@ -243,14 +243,15 @@ export default function NodeDetailScreen({
   useEffect(() => onThemeChange(() => setThemeTick(t => t + 1)), []);
 
   const load = useCallback(async () => {
+    // 节点行和状态行互不依赖:一起发,别等状态回来再发节点(跨太平洋多一个往返)。
+    // 拉取失败时**保留上一次的 node**:否则一次超时就让操作区/规则区整块消失,
+    // 文案还会说「没有权威节点 ID」,和上面显示的 ID 自相矛盾(Vincent 09-03 截图)。
+    void fetchHubNodes(cfg)
+      .then(result => { setNode((result.nodes ?? []).find(candidate => candidate.alias === alias) ?? null); setNodeListState('loaded'); })
+      .catch(() => setNodeListState('failed'));
     try {
       const data = await fetchNodeStatus(cfg);
       const found = (data.sessions ?? []).find(s => s.alias === alias);
-      // 拉取失败时**保留上一次的 node**:否则一次超时就让操作区/规则区整块消失,
-      // 文案还会说「没有权威节点 ID」,和上面显示的 ID 自相矛盾(Vincent 09-03 截图)。
-      void fetchHubNodes(cfg)
-        .then(result => { setNode((result.nodes ?? []).find(candidate => candidate.alias === alias) ?? null); setNodeListState('loaded'); })
-        .catch(() => setNodeListState('failed'));
       if (found) setState({ kind: 'ready', session: found });
       else setState(prev => (prev.kind === 'ready' ? prev : { kind: 'not_found' }));
       // If we previously had the session and it's now gone, we keep the
@@ -264,12 +265,9 @@ export default function NodeDetailScreen({
     }
   }, [cfg, alias]);
 
-  useEffect(() => {
-    void load();
-  }, [load]);
-
   // Foreground-only 10s polling. usePoll pauses in background and
-  // instant-refreshes on resume — same hook AgentsScreen uses.
+  // instant-refreshes on resume — same hook AgentsScreen uses. It also runs
+  // once at mount, so no separate mount effect (that one fetched everything twice).
   usePoll(load, POLL_MS, [load]);
 
   const header = (
