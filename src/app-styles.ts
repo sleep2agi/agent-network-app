@@ -8,7 +8,8 @@
 // 所有 import 方拿到的都是新对象。改动这里前先确认这一点仍成立。
 
 import { StyleSheet } from 'react-native';
-import { colors, onThemeChange, spacing } from './theme';
+import { colors, onThemeChange, spacing, radius } from './theme';
+import { buttonStyle, buttonTextStyle } from './elevation';
 
 const makeStyles = () =>
   StyleSheet.create({
@@ -23,14 +24,8 @@ const makeStyles = () =>
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: spacing.sm },
   errorTitle: { color: colors.text, fontSize: 17, fontWeight: '700' },
   errorHint: { color: colors.textMuted, fontSize: 13 },
-  retryBtn: {
-    backgroundColor: colors.accent,
-    borderRadius: 10,
-    paddingVertical: spacing.md,
-    paddingHorizontal: spacing.xl,
-    marginTop: spacing.md,
-  },
-  retryBtnText: { color: colors.bg, fontSize: 15, fontWeight: '700' },
+  retryBtn: { ...buttonStyle('primary'), marginTop: spacing.md },
+  retryBtnText: { ...buttonTextStyle('primary') },
   loginWrap: { flex: 1, justifyContent: 'center', padding: spacing.xl, gap: spacing.md },
   brand: { color: colors.text, fontSize: 28, fontWeight: '700', textAlign: 'center' },
   brandSub: {
@@ -43,20 +38,14 @@ const makeStyles = () =>
     backgroundColor: colors.inputBg,
     borderColor: colors.border,
     borderWidth: 1,
-    borderRadius: 10,
+    borderRadius: radius.control,
     paddingHorizontal: spacing.lg,
     paddingVertical: spacing.md,
     color: colors.text,
     fontSize: 15,
   },
-  button: {
-    backgroundColor: colors.accent,
-    borderRadius: 10,
-    paddingVertical: spacing.md + 2,
-    alignItems: 'center',
-    marginTop: spacing.sm,
-  },
-  buttonText: { color: colors.bg, fontSize: 16, fontWeight: '700' },
+  button: { ...buttonStyle('primary'), marginTop: spacing.sm },
+  buttonText: { ...buttonTextStyle('primary') },
   error: { color: colors.failed, fontSize: 13 },
   version: { color: colors.textMuted, fontSize: 11, textAlign: 'center', marginTop: spacing.md },
   listHeader: { color: colors.textMuted, fontSize: 12 },
@@ -92,7 +81,7 @@ const makeStyles = () =>
     backgroundColor: colors.inputBg,
     borderColor: colors.border,
     borderWidth: 1,
-    borderRadius: 10,
+    borderRadius: radius.control,
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm,
     color: colors.text,
@@ -124,13 +113,14 @@ const makeStyles = () =>
     alignItems: 'center',
     gap: spacing.md,
     backgroundColor: colors.card,
-    borderColor: colors.border,
-    borderWidth: 1,
-    borderRadius: 12,
+    borderRadius: radius.surface,
     padding: spacing.lg,
     marginBottom: spacing.sm,
+    // 这是会话列表的行(手机平铺 / 桌面 compact 覆盖),不是浮起的卡片 —— 不加阴影。
+    borderColor: colors.border,
+    borderWidth: 1,
   },
-  dot: { width: 8, height: 8, borderRadius: 4 },
+  dot: { width: 8, height: 8, borderRadius: radius.pill },
   // 下线的灰色调，别都亮着 (Vincent tg 753)
   cardOffline: { opacity: 0.45 },
   avatarWrap: { position: 'relative' },
@@ -140,7 +130,7 @@ const makeStyles = () =>
     bottom: -1,
     width: 11,
     height: 11,
-    borderRadius: 6,
+    borderRadius: radius.pill,
     borderWidth: 2,
     borderColor: colors.card, // 描边环:让圆点从头像上"浮"出来(微信式)
   },
@@ -153,7 +143,7 @@ const makeStyles = () =>
     minWidth: 18,
     height: 18,
     paddingHorizontal: 5,
-    borderRadius: 9,
+    borderRadius: radius.pill,
     backgroundColor: colors.failed,
     borderWidth: 2,
     borderColor: colors.card,
@@ -164,7 +154,7 @@ const makeStyles = () =>
   // 0.2.106 phone / two-pane rows: the badge sits in the row's right column (WeChat), no ring.
   unreadBadgeInline: { position: 'relative', top: 0, right: 0, borderWidth: 0, flexShrink: 0 },
   // 手动「标为未读」:同色小圆点,不带数字(头像角上的那种保留描边环)。
-  unreadDot: { minWidth: 10, width: 10, height: 10, borderRadius: 5, paddingHorizontal: 0 },
+  unreadDot: { minWidth: 10, width: 10, height: 10, borderRadius: radius.pill, paddingHorizontal: 0 },
   unreadBadgeText: {
     color: '#ffffff',
     fontSize: 10,

@@ -11,8 +11,9 @@ import { Children, Fragment, isValidElement, type ReactNode } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Switch, View, type TextInputProps } from 'react-native';
 import { Text, TextInput } from './ui-text';
 import { Ionicons } from './icons';
-import { colors, onThemeChange, spacing } from './theme';
+import { colors, onThemeChange, spacing, radius } from './theme';
 import { ds } from './ui-scale';
+import { elevated } from './elevation';
 
 /** 卡片左右边距 与 行内左右内边距(标签左边缘 = 卡片左边缘 + ROW_PAD_X)。 */
 export const SETTINGS_GUTTER = 16;
@@ -249,11 +250,10 @@ const makeStyles = () => StyleSheet.create({
   groupTitle: { color: colors.textMuted, fontSize: 13, paddingHorizontal: SETTINGS_GUTTER + SETTINGS_ROW_PAD_X, paddingBottom: spacing.xs + 2 },
   card: {
     marginHorizontal: SETTINGS_GUTTER,
-    borderRadius: 10,
+    borderRadius: radius.surface,
     backgroundColor: colors.groupedRow,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.border,
     overflow: 'hidden',
+    ...elevated('raised'),
   },
   cardContent: { padding: SETTINGS_ROW_PAD_X },
   footer: { fontSize: 13, lineHeight: 18, paddingHorizontal: SETTINGS_GUTTER + SETTINGS_ROW_PAD_X, paddingTop: spacing.xs + 2 },
@@ -268,7 +268,7 @@ const makeStyles = () => StyleSheet.create({
   switch: { marginLeft: 'auto' },
   fieldLabel: { color: colors.text, fontSize: 16, width: 124 },
   fieldInput: { flex: 1, minWidth: 0, color: colors.text, fontSize: 16, paddingVertical: spacing.sm, outlineStyle: 'none' } as any,
-  button: { flexDirection: 'row', gap: spacing.sm, marginHorizontal: SETTINGS_GUTTER, marginTop: spacing.lg, borderRadius: 10, alignItems: 'center', justifyContent: 'center', paddingHorizontal: SETTINGS_ROW_PAD_X },
+  button: { flexDirection: 'row', gap: spacing.sm, marginHorizontal: SETTINGS_GUTTER, marginTop: spacing.lg, borderRadius: radius.control, alignItems: 'center', justifyContent: 'center', paddingHorizontal: SETTINGS_ROW_PAD_X },
   buttonPrimary: { backgroundColor: colors.accent },
   buttonCard: { backgroundColor: colors.groupedRow, borderWidth: StyleSheet.hairlineWidth, borderColor: colors.border },
   buttonText: { fontSize: 16, fontWeight: '600' },

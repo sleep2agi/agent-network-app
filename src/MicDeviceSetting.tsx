@@ -16,6 +16,7 @@ import { colors, onThemeChange, radius, spacing } from './theme';
 import { uiScale } from './ui-scale';
 import { MIC_REMOVED_NOTICE, micListView, rmsLevel, type RawMediaDevice } from './mic-device-model';
 import { listMediaDevices, loadMicDeviceId, onMediaDevicesChange, openMicStream, requestMicPermission, saveMicDeviceId, stopStream } from './mic-device';
+import { buttonStyle, buttonTextStyle } from './elevation';
 
 const METER_INTERVAL_MS = 80;
 
@@ -130,7 +131,7 @@ export default function MicDeviceSetting() {
             onChange={e => onPick(e.target.value)}
             style={{
               width: '100%', height: 34, boxSizing: 'border-box', margin: 0, paddingLeft: spacing.md, paddingRight: spacing.md,
-              borderWidth: 1, borderStyle: 'solid', borderColor: colors.border, borderRadius: radius.sm,
+              borderWidth: 1, borderStyle: 'solid', borderColor: colors.border, borderRadius: radius.control,
               backgroundColor: colors.inputBg, color: colors.text, fontSize, fontFamily: 'inherit', outline: 'none', cursor: 'pointer',
             }}
           >
@@ -169,11 +170,11 @@ const makeStyles = () => StyleSheet.create({
   label: { color: colors.text, fontSize: 14 },
   row: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
   selectWrap: { flex: 1, minWidth: 0 },
-  meter: { width: 96, height: 8, borderRadius: 4, backgroundColor: colors.border, overflow: 'hidden' },
+  meter: { width: 96, height: 8, borderRadius: radius.pill, backgroundColor: colors.border, overflow: 'hidden' },
   meterFill: { height: '100%', backgroundColor: colors.accent },
   permRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, flexWrap: 'wrap' },
-  secondary: { borderWidth: 1, borderColor: colors.border, borderRadius: radius.sm, paddingHorizontal: spacing.lg, height: 32, alignItems: 'center', justifyContent: 'center' },
-  secondaryText: { color: colors.text, fontSize: 13 },
+  secondary: { ...buttonStyle('secondary') },
+  secondaryText: { ...buttonTextStyle('secondary') },
   disabled: { opacity: 0.45 },
   hint: { color: colors.textMuted, fontSize: 12, lineHeight: 18 },
   error: { color: colors.failed },

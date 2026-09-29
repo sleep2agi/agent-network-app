@@ -9,7 +9,7 @@ import { useEffect, useMemo, useState, useSyncExternalStore } from 'react';
 import { Image, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { Text } from './ui-text';
 import { Ionicons } from './icons';
-import { colors } from './theme';
+import { colors, radius } from './theme';
 import { APP_VERSION } from './version';
 import { railBadgeText, railIconFor } from './rail-nav';
 import { badgeOffsetCentered } from './badge-anchor';
@@ -131,18 +131,18 @@ const makeStyles = () => StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: 3,
-    borderRadius: 12,
+    borderRadius: radius.control,
   },
   itemPressed: { backgroundColor: colors.railHover },
   // Material 3 style active indicator: a pill behind the icon, label underneath.
-  indicator: { width: ds(52), height: ds(30), borderRadius: ds(15), alignItems: 'center', justifyContent: 'center' },
+  indicator: { width: ds(52), height: ds(30), borderRadius: radius.pill, alignItems: 'center', justifyContent: 'center' },
   indicatorActive: { backgroundColor: colors.railActiveBg },
   // listText('railLabel'): 10 at 更紧凑 — the same size as the list's row time and group header; 11 otherwise.
   label: { color: colors.textSecondary, ...listText('railLabel'), fontWeight: '500', maxWidth: mobileRailItem(uiScale().densityFactor).width },
   labelActive: { color: colors.accent, fontWeight: '600' },
   badge: {
     // Left edge tucked just inside the glyph's top-right corner (badge-anchor.ts): 「99+」 grows outward.
-    position: 'absolute', ...badgeOffsetCentered(ds(52), ds(30), ds(24), 18), minWidth: 18, height: 18, borderRadius: 9, paddingHorizontal: 4,
+    position: 'absolute', ...badgeOffsetCentered(ds(52), ds(30), ds(24), 18), minWidth: 18, height: 18, borderRadius: radius.pill, paddingHorizontal: 4,
     backgroundColor: colors.failed, borderWidth: 2, borderColor: colors.railBg, alignItems: 'center', justifyContent: 'center',
   },
   badgeText: { color: '#fff', fontSize: 10, fontWeight: '600', lineHeight: 12 },

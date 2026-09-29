@@ -13,6 +13,7 @@ import { useModalSafePadding } from './safe-area-runtime';
 import { colors, spacing } from './theme';
 import { ds } from './ui-scale';
 import { chatInfoDrawerWidth, type ChatInfoPresentation, type ChatInfoRow, type ChatInfoRowKey } from './chat-info-model';
+import { elevated } from './elevation';
 
 /** 行高下限:手指目标 48 dp,界面密度调大时跟着变高。 */
 const ROW_MIN = Math.max(48, ds(48));
@@ -200,8 +201,7 @@ const makeStyles = () => StyleSheet.create({
   drawer: {
     height: '100%',
     backgroundColor: colors.bg,
-    borderLeftWidth: StyleSheet.hairlineWidth,
-    borderLeftColor: colors.border,
+    ...elevated('floating', 'left'),
   },
   page: { flex: 1, backgroundColor: colors.bg },
   header: {

@@ -78,6 +78,7 @@ import { NODE_PAGE_COMPACT_WIDTH, NODE_SECTIONS, factText, headerChips, leaveNee
 import { useModalSafePadding } from './safe-area-runtime';
 import { withBasePadding } from './modal-safe-area';
 import { PANE_BACK_TEST_ID, paneShowsBack } from './pane-header';
+import { elevated } from './elevation';
 
 const POLL_MS = 10_000; // same cadence as AgentsScreen — hub-friendly, felt-live
 
@@ -391,7 +392,7 @@ export default function NodeDetailScreen({
             {s.alias}
           </Text>
           <View style={[localStyles.statusPill, { borderColor: colors.border }]}>
-            <View style={{ width: 7, height: 7, borderRadius: 4, backgroundColor: chipColor }} />
+            <View style={{ width: 7, height: 7, borderRadius: radius.pill, backgroundColor: chipColor }} />
             <Text style={{ color: colors.textSecondary, fontSize: typeScale.small }}>{online ? s.status : 'offline'}</Text>
           </View>
         </View>
@@ -440,7 +441,7 @@ export default function NodeDetailScreen({
     </View>
   );
 
-  const card = { backgroundColor: colors.card, borderRadius: radius.lg, paddingHorizontal: spacing.lg, paddingVertical: spacing.sm } as const;
+  const card = { backgroundColor: colors.card, borderRadius: radius.surface, paddingHorizontal: spacing.lg, paddingVertical: spacing.sm } as const;
 
   const content = (() => {
     if (section === 'overview') return (
@@ -617,7 +618,7 @@ export default function NodeDetailScreen({
       {/* 规则文件有没保存的草稿,又要切分区 / 返回。 */}
       <Modal transparent visible={!!pendingLeave} onRequestClose={() => setPendingLeave(null)} animationType="fade">
         <View style={[{ flex: 1, backgroundColor: 'rgba(0,0,0,0.55)', alignItems: 'center', justifyContent: 'center' }, withBasePadding(dialogSafe, spacing.xl)]}>
-          <View style={{ width: '100%', maxWidth: 420, borderRadius: 14, backgroundColor: colors.card, padding: spacing.xl, gap: spacing.md }} accessibilityViewIsModal>
+          <View style={{ width: '100%', maxWidth: 420, borderRadius: radius.surface, backgroundColor: colors.card, padding: spacing.xl, gap: spacing.md, ...elevated('floating') }} accessibilityViewIsModal>
             <Text style={{ color: colors.text, fontSize: 17, fontWeight: '600' }}>放弃未保存的修改？</Text>
             <Text style={{ color: colors.textSecondary, fontSize: 13, lineHeight: 19 }}>规则文件的改动还没有保存到节点。离开后这些改动会丢失。</Text>
             <View style={{ flexDirection: 'row', justifyContent: 'flex-end', gap: spacing.sm, flexWrap: 'wrap' }}>
@@ -636,7 +637,7 @@ export default function NodeDetailScreen({
 
       <Modal transparent visible={!readOnly && !!pendingAction} onRequestClose={() => setPendingAction(null)} animationType="fade">
         <View style={[{ flex: 1, backgroundColor: 'rgba(0,0,0,0.55)', alignItems: 'center', justifyContent: 'center' }, withBasePadding(dialogSafe, spacing.xl)]}>
-          <View style={{ width: '100%', maxWidth: 420, borderRadius: 14, backgroundColor: colors.card, padding: spacing.xl, gap: spacing.md }}>
+          <View style={{ width: '100%', maxWidth: 420, borderRadius: radius.surface, backgroundColor: colors.card, padding: spacing.xl, gap: spacing.md, ...elevated('floating') }}>
             <Text style={{ color: colors.text, fontSize: 17, fontWeight: '600' }}>
               {pendingAction === 'restart_node' ? '重启节点？' : pendingAction === 'stop_node' ? '停止节点？' : '删除节点？'}
             </Text>
@@ -644,7 +645,7 @@ export default function NodeDetailScreen({
               {pendingAction === 'delete_node' ? `删除会撤销节点身份。请输入别名“${alias}”确认；节点配置默认备份保留。` : `目标：${alias}。请求提交后请等待节点状态刷新。`}
             </Text>
             {pendingAction === 'delete_node' ? (
-              <TextInput value={confirmAlias} onChangeText={setConfirmAlias} autoCapitalize="none" placeholder={alias} placeholderTextColor={colors.textMuted} style={{ color: colors.text, borderWidth: 1, borderColor: colors.border, borderRadius: 8, padding: spacing.md }} />
+              <TextInput value={confirmAlias} onChangeText={setConfirmAlias} autoCapitalize="none" placeholder={alias} placeholderTextColor={colors.textMuted} style={{ color: colors.text, borderWidth: 1, borderColor: colors.border, borderRadius: radius.control, padding: spacing.md }} />
             ) : null}
             <View style={{ flexDirection: 'row', justifyContent: 'flex-end', gap: spacing.sm }}>
               <Pressable style={styles.retryBtn} onPress={() => { setPendingAction(null); setConfirmAlias(''); }}><Text style={styles.retryBtnText}>返回</Text></Pressable>
@@ -678,12 +679,12 @@ const makeLocalStyles = () => StyleSheet.create({
     alignItems: 'center',
     gap: 6,
     borderWidth: 1,
-    borderRadius: 999,
+    borderRadius: radius.pill,
     paddingHorizontal: spacing.sm,
     paddingVertical: 2,
   },
   chip: {
-    borderRadius: 6,
+    borderRadius: radius.pill,
     paddingHorizontal: spacing.sm,
     paddingVertical: 3,
     maxWidth: 260,
@@ -700,7 +701,7 @@ const makeLocalStyles = () => StyleSheet.create({
     gap: spacing.sm,
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm + 2,
-    borderRadius: 10,
+    borderRadius: radius.item,
   },
   // Android two-pane (touch): Material's 48 dp minimum for the rail, 40 dp for the chip row.
   railItemTouch: { minHeight: ds(48, 44) },
@@ -713,17 +714,17 @@ const makeLocalStyles = () => StyleSheet.create({
   tab: {
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.xs + 2,
-    borderRadius: 10,
+    borderRadius: radius.pill,
   },
   // 不高于分区标题那一行(≈ 21px):否则标题行被撑高,「定时任务」标题会比其它分区的标题低几像素。
   headerAction: {
-    borderRadius: radius.md,
+    borderRadius: radius.item,
     paddingHorizontal: spacing.md,
     paddingVertical: 2,
   },
   dangerZone: {
     borderWidth: 1,
-    borderRadius: 14,
+    borderRadius: radius.surface,
     padding: spacing.lg,
   },
   actionRow: {
@@ -735,7 +736,7 @@ const makeLocalStyles = () => StyleSheet.create({
   actionButton: {
     minWidth: ds(92),
     height: ds(34),
-    borderRadius: 7,
+    borderRadius: radius.control,
     borderWidth: 1,
     paddingHorizontal: spacing.md,
     alignItems: 'center',

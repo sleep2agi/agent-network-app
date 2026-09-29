@@ -228,7 +228,7 @@ function FilesBrowser({ cfg, target, treeMode }: { cfg: HubConfig; target: Rules
           <View key={c.path || '/'} style={{ flexDirection: 'row', alignItems: 'center' }}>
             {i > 0 ? <Text style={{ color: colors.textMuted, fontSize: 13, marginHorizontal: 4 }}>/</Text> : null}
             <Pressable accessibilityRole="link" disabled={last} onPress={() => void loadDir(c.path)}
-              style={(st: any) => [{ borderRadius: 4, paddingHorizontal: 3, paddingVertical: 1 }, st.hovered && !last ? { backgroundColor: colors.rowHover } : null]}>
+              style={(st: any) => [{ borderRadius: radius.mark, paddingHorizontal: 3, paddingVertical: 1 }, st.hovered && !last ? { backgroundColor: colors.rowHover } : null]}>
               <Text numberOfLines={1} style={{ fontSize: 13, fontFamily: i === 0 ? undefined : MONO, color: last ? colors.text : colors.accent, fontWeight: last ? '600' : '400' }}>{c.label}</Text>
             </Pressable>
           </View>
@@ -368,7 +368,7 @@ function FileViewer({ file, phase, message, name, onBack }: { file: NodeFileCont
     return (
       <View style={{ gap: spacing.sm }} testID="node-files-notice">
         {header}
-        <View style={{ alignItems: 'center', gap: spacing.sm, paddingVertical: spacing.xl, backgroundColor: colors.inputBg, borderRadius: radius.md }}>
+        <View style={{ alignItems: 'center', gap: spacing.sm, paddingVertical: spacing.xl, backgroundColor: colors.inputBg, borderRadius: radius.control }}>
           <Ionicons name={icon as any} size={26} color={colors.textMuted} />
           <Text style={{ color: colors.textSecondary, fontSize: 13 }}>{file.kind === 'secret' ? SECRET_FILE_MESSAGE : notice}</Text>
         </View>
@@ -380,13 +380,13 @@ function FileViewer({ file, phase, message, name, onBack }: { file: NodeFileCont
     <View style={{ gap: spacing.sm }} testID={`node-files-viewer-${mode}`}>
       {header}
       {mode === 'markdown' ? (
-        <View style={{ backgroundColor: colors.inputBg, borderWidth: 1, borderColor: colors.border, borderRadius: radius.md, padding: spacing.md }}>
+        <View style={{ backgroundColor: colors.inputBg, borderWidth: 1, borderColor: colors.border, borderRadius: radius.control, padding: spacing.md }}>
           <MarkdownMessage>{file.content}</MarkdownMessage>
         </View>
       ) : mode === 'code' ? (
         <CodeView text={file.content} />
       ) : (
-        <View style={{ backgroundColor: colors.inputBg, borderRadius: 8, padding: spacing.md }}>
+        <View style={{ backgroundColor: colors.inputBg, borderRadius: radius.item, padding: spacing.md }}>
           <Text selectable style={[{ color: colors.text, fontFamily: MONO, fontSize: 12, lineHeight: 18 }, WEB ? ({ whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' } as any) : null]}>{file.content}</Text>
         </View>
       )}
@@ -401,7 +401,7 @@ function CodeView({ text }: { text: string }) {
   const body = text.endsWith('\n') ? text.slice(0, -1) : text;
   const mono = { fontFamily: MONO, fontSize: 12, lineHeight: 18 } as const;
   return (
-    <View style={{ flexDirection: 'row', backgroundColor: colors.inputBg, borderRadius: 8, overflow: 'hidden' }} testID="node-files-code">
+    <View style={{ flexDirection: 'row', backgroundColor: colors.inputBg, borderRadius: radius.item, overflow: 'hidden' }} testID="node-files-code">
       <Text style={[mono, { color: colors.textMuted, textAlign: 'right', paddingVertical: spacing.md, paddingLeft: spacing.md, paddingRight: spacing.sm, borderRightWidth: 1, borderRightColor: colors.border, opacity: 0.75 }, WEB ? ({ whiteSpace: 'pre', userSelect: 'none' } as any) : null]}>{gutter}</Text>
       <ScrollView horizontal style={{ flex: 1 }} contentContainerStyle={{ paddingVertical: spacing.md, paddingHorizontal: spacing.md }}>
         <Text selectable style={[mono, { color: colors.text }, WEB ? ({ whiteSpace: 'pre' } as any) : null]}>{body}</Text>
@@ -411,7 +411,7 @@ function CodeView({ text }: { text: string }) {
 }
 
 function Card({ children, testID }: { children: ReactNode; testID?: string }) {
-  return <View testID={testID} style={{ backgroundColor: colors.card, borderRadius: radius.lg, padding: spacing.md, gap: spacing.sm }}>{children}</View>;
+  return <View testID={testID} style={{ backgroundColor: colors.card, borderRadius: radius.surface, padding: spacing.md, gap: spacing.sm }}>{children}</View>;
 }
 
 // 与规则 / 技能区同一种紧凑工具条(app#355):一行,左面包屑,右计数 + ⓘ + 小按钮。
@@ -428,7 +428,7 @@ function Toolbar({ crumbs, right }: { crumbs: ReactNode; right?: ReactNode }) {
 function SmallBtn({ label, onPress, disabled }: { label: string; onPress: () => void; disabled?: boolean }) {
   return (
     <Pressable accessibilityRole="button" accessibilityLabel={label} onPress={onPress} disabled={disabled}
-      style={(st: any) => [{ height: 30, justifyContent: 'center', paddingHorizontal: spacing.md, borderRadius: 6, borderWidth: 1, borderColor: colors.border, opacity: disabled ? 0.4 : 1 },
+      style={(st: any) => [{ height: 30, justifyContent: 'center', paddingHorizontal: spacing.md, borderRadius: radius.item, borderWidth: 1, borderColor: colors.border, opacity: disabled ? 0.4 : 1 },
         st.hovered ? { backgroundColor: colors.rowHover } : null,
         st.focused ? ({ outlineStyle: 'solid', outlineWidth: 2, outlineColor: colors.accent, outlineOffset: 1 } as any) : null]}>
       <Text style={{ color: colors.textSecondary, fontSize: 12 }}>{label}</Text>

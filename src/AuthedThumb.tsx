@@ -12,7 +12,7 @@ import { VideoView, useVideoPlayer } from 'expo-video';
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, Image, Pressable, StyleSheet, View } from 'react-native';
 import { Text } from './ui-text';
-import { colors, onThemeChange, spacing } from './theme';
+import { colors, onThemeChange, spacing, radius } from './theme';
 
 // Server-side attachment thumbnails were black boxes on device (Vincent
 // tg 756): the hub serves /api/files with nosniff + octet-stream +
@@ -239,7 +239,7 @@ const makeStyles = () =>
   thumb: {
     width: 180,
     height: 180,
-    borderRadius: 10,
+    borderRadius: radius.thumb, overflow: 'hidden',
     marginTop: spacing.sm,
     backgroundColor: colors.inputBg,
   },
@@ -249,7 +249,7 @@ const makeStyles = () =>
   failedThumb: {
     width: 180,
     height: 112,
-    borderRadius: 10,
+    borderRadius: radius.thumb,
     marginTop: spacing.sm,
     padding: spacing.sm,
     alignItems: 'center',
@@ -265,14 +265,14 @@ const makeStyles = () =>
   video: {
     width: 220,
     height: 150,
-    borderRadius: 10,
+    borderRadius: radius.thumb, overflow: 'hidden',
     marginTop: spacing.sm,
     backgroundColor: colors.inputBg,
   },
   videoPlaceholder: {
     width: 220,
     minHeight: 78,
-    borderRadius: 10,
+    borderRadius: radius.thumb,
     marginTop: spacing.sm,
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm,

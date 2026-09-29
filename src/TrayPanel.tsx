@@ -16,7 +16,7 @@ import { useCallback, useEffect, useState, useSyncExternalStore } from 'react';
 import { Platform, Pressable, ScrollView, View } from 'react-native';
 import { Text } from './ui-text';
 import AliasAvatar from './AliasAvatar';
-import { colors, onThemeChange, parseStoredThemePreference, setThemePreference, themeMode } from './theme';
+import { colors, onThemeChange, parseStoredThemePreference, setThemePreference, themeMode, radius } from './theme';
 import { onDesktopThemeStorageChange } from './desktop-theme-storage';
 import { trayPanelModelFrom, type TrayPanelModel } from './tray-panel-model';
 import type { TrayItem } from './tray-menu-model';
@@ -180,7 +180,7 @@ function makePanelStyles() {
     paddingBottom: 8,
   },
   brand: { color: colors.text, fontSize: 14, fontWeight: '600' as const, flexShrink: 1 },
-  dismiss: { paddingHorizontal: 6, paddingVertical: 2, borderRadius: 6 },
+  dismiss: { paddingHorizontal: 6, paddingVertical: 2, borderRadius: radius.item },
   dismissPressed: { opacity: 0.6 },
   dismissText: { color: colors.accent, fontSize: 12 },
   dismissTextBusy: { color: colors.textMuted },
@@ -198,7 +198,7 @@ function makePanelStyles() {
   badge: {
     minWidth: 18,
     height: 18,
-    borderRadius: 9,
+    borderRadius: radius.pill,
     paddingHorizontal: 5,
     alignItems: 'center' as const,
     justifyContent: 'center' as const,

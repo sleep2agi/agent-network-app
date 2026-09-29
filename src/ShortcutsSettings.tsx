@@ -7,7 +7,7 @@ import { useEffect, useState, useSyncExternalStore } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 import { Text } from './ui-text';
 import { Ionicons } from './icons';
-import { colors, onThemeChange, spacing } from './theme';
+import { colors, onThemeChange, spacing, radius } from './theme';
 import { ds } from './ui-scale';
 import {
   FIXED_SHORTCUTS,
@@ -255,20 +255,20 @@ function Chips({ combo, mac, testID }: { combo: string; mac: boolean; testID?: s
 const makeStyles = () => StyleSheet.create({
   groupTitle: { color: colors.textMuted, fontSize: 12, fontWeight: '600', paddingHorizontal: spacing.md, marginTop: spacing.lg, marginBottom: spacing.xs },
   // 行高固定:键帽、「按下新组合…」、分段控件三种右侧内容切换时整列不跳。
-  row: { minHeight: ds(48), paddingVertical: spacing.sm, borderRadius: 8 },
+  row: { minHeight: ds(48), paddingVertical: spacing.sm, borderRadius: radius.item },
   rowHover: { backgroundColor: colors.rowHover },
   rowCapturing: { backgroundColor: colors.rowActive },
   right: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, flexShrink: 0 },
   chips: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   chipAlternatives: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   chipSeparator: { color: colors.textMuted, fontSize: 12 },
-  chip: { minWidth: ds(24), height: ds(24), paddingHorizontal: 6, borderRadius: 5, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.subtleFill, alignItems: 'center', justifyContent: 'center' },
+  chip: { minWidth: ds(24), height: ds(24), paddingHorizontal: 6, borderRadius: radius.mark, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.subtleFill, alignItems: 'center', justifyContent: 'center' },
   chipText: { color: colors.text, fontSize: 12, fontWeight: '500' },
   capturing: { color: colors.accent, fontSize: 13, fontWeight: '600' },
   // 右侧末尾一格定宽:「恢复默认」按钮 / 「固定」标签 / 空,三种行的键帽右边缘对齐成一列。
   trail: { width: ds(52), alignItems: 'flex-end', justifyContent: 'center' },
   fixedTag: { color: colors.textMuted, fontSize: 11 },
-  resetButton: { width: ds(24), height: ds(24), borderRadius: 6, alignItems: 'center', justifyContent: 'center' },
+  resetButton: { width: ds(24), height: ds(24), borderRadius: radius.item, alignItems: 'center', justifyContent: 'center' },
   resetButtonHover: { backgroundColor: colors.rowActive },
   footer: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.lg, paddingHorizontal: spacing.md, marginTop: spacing.lg },
   footerHint: { flex: 1 },

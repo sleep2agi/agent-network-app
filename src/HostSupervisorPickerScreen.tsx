@@ -13,10 +13,11 @@ import { describeDaemonCapability } from './daemon-capability';
 import LocalDaemonSetupCard from './LocalDaemonSetupCard';
 import { LOCAL_HUB_PROFILE_ID } from './local-hub';
 import { isTauriDesktop } from './clipboard-attachment';
-import { colors, onThemeChange, spacing } from './theme';
+import { colors, onThemeChange, spacing, radius } from './theme';
 import { usePoll } from './usePoll';
 import { PANE_BACK_TEST_ID, paneShowsBack } from './pane-header';
 import { pointerUi } from './pointer-ui';
+import { buttonStyle, buttonTextStyle } from './elevation';
 
 // RFC-026 §9.4 / #338 mobile picker — design locked by 通信龙 + Vincent UX.
 // 3 states, mirroring dashboard PR4 but with RN primitives:
@@ -498,14 +499,14 @@ const makeStyles = () => StyleSheet.create({
   headerWide: { paddingHorizontal: spacing.lg, minHeight: 57 },
   headerTitleWide: { textAlign: 'left' },
   // 桌面「刷新」:与标题同一行、垂直居中;32 高,图标 + 字,悬停一档中性底。
-  headerRefresh: { flexDirection: 'row', alignItems: 'center', gap: 4, height: 32, paddingHorizontal: spacing.sm, borderRadius: 6 },
+  headerRefresh: { flexDirection: 'row', alignItems: 'center', gap: 4, height: 32, paddingHorizontal: spacing.sm, borderRadius: radius.item },
   headerRefreshHover: { backgroundColor: colors.rowHover },
   headerRefreshText: { color: colors.textSecondary, fontSize: 13 },
 
   // count=0 onboarding
   onboardingCard: {
     backgroundColor: colors.card,
-    borderRadius: 12,
+    borderRadius: radius.surface,
     padding: spacing.lg,
   },
   onboardingTitle: { color: colors.text, fontSize: 15, fontWeight: '600', marginBottom: spacing.sm },
@@ -519,7 +520,7 @@ const makeStyles = () => StyleSheet.create({
     justifyContent: 'space-between',
     gap: spacing.sm,
     backgroundColor: colors.inputBg,
-    borderRadius: 8,
+    borderRadius: radius.item,
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm,
   },
@@ -541,7 +542,7 @@ const makeStyles = () => StyleSheet.create({
   // Daemon card (shared between count=1 + count≥2 + forced-list)
   card: {
     backgroundColor: colors.card,
-    borderRadius: 12,
+    borderRadius: radius.surface,
     padding: spacing.md + 2,
   },
   cardSelected: { borderColor: colors.accent },
@@ -551,7 +552,7 @@ const makeStyles = () => StyleSheet.create({
     gap: spacing.sm,
     marginBottom: spacing.xs,
   },
-  dot: { width: 10, height: 10, borderRadius: 5 },
+  dot: { width: 10, height: 10, borderRadius: radius.pill },
   cardTitle: { color: colors.text, fontSize: 15, fontWeight: '600', flex: 1 },
   cardSubtitle: { color: colors.textMuted, fontSize: 12, marginBottom: spacing.xs },
   rightActionText: { color: colors.accent, fontSize: 13, fontWeight: '600' },
@@ -560,20 +561,20 @@ const makeStyles = () => StyleSheet.create({
   radio: {
     width: 20,
     height: 20,
-    borderRadius: 10,
+    borderRadius: radius.pill,
     borderColor: colors.border,
     borderWidth: 1.5,
     alignItems: 'center',
     justifyContent: 'center',
   },
   radioSelected: { borderColor: colors.accent },
-  radioInner: { width: 10, height: 10, borderRadius: 5, backgroundColor: colors.accent },
+  radioInner: { width: 10, height: 10, borderRadius: radius.pill, backgroundColor: colors.accent },
 
   // Chips + telemetry
   chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.xs, marginTop: spacing.xs },
   chip: {
     backgroundColor: colors.inputBg,
-    borderRadius: 6,
+    borderRadius: radius.pill,
     paddingHorizontal: spacing.sm,
     paddingVertical: 2,
   },
@@ -587,14 +588,9 @@ const makeStyles = () => StyleSheet.create({
     borderTopColor: colors.border,
     borderTopWidth: 1,
   },
-  primaryBtn: {
-    backgroundColor: colors.accent,
-    paddingVertical: spacing.md,
-    borderRadius: 10,
-    alignItems: 'center',
-  },
+  primaryBtn: { ...buttonStyle('primary') },
   primaryBtnDisabled: { backgroundColor: colors.border },
-  primaryBtnText: { color: colors.onAccent, fontSize: 15, fontWeight: '600' },
+  primaryBtnText: { ...buttonTextStyle('primary') },
   primaryBtnTextDisabled: { color: colors.textMuted },
 
   // 501 degrade
@@ -602,7 +598,7 @@ const makeStyles = () => StyleSheet.create({
     backgroundColor: colors.card,
     borderColor: colors.blocked,
     borderWidth: 1,
-    borderRadius: 12,
+    borderRadius: radius.surface,
     padding: spacing.lg,
   },
   warnTitle: { color: colors.blocked, fontSize: 15, fontWeight: '600', marginBottom: spacing.sm },
@@ -612,13 +608,8 @@ const makeStyles = () => StyleSheet.create({
   // Generic error
   errorTitle: { color: colors.failed, fontSize: 17, fontWeight: '600', marginBottom: spacing.sm },
   errorHint: { color: colors.textSecondary, fontSize: 14, marginBottom: spacing.lg, textAlign: 'center' },
-  retryBtn: {
-    backgroundColor: colors.accent,
-    paddingHorizontal: spacing.xl,
-    paddingVertical: spacing.md,
-    borderRadius: 10,
-  },
-  retryBtnText: { color: colors.onAccent, fontSize: 14, fontWeight: '600' },
+  retryBtn: { ...buttonStyle('primary') },
+  retryBtnText: { ...buttonTextStyle('primary') },
 });
 
 let styles = makeStyles();

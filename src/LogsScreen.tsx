@@ -39,7 +39,7 @@ import {
   type FeedTone,
 } from './event-feed-model';
 import { PANE_BACK_TEST_ID, paneShowsBack } from './pane-header';
-import { colors, spacing } from './theme';
+import { colors, spacing, radius } from './theme';
 import { styles as appStyles } from './app-styles';
 
 /** How many recent tasks the screen preloads (hub caps /api/tasks at 200). */
@@ -178,13 +178,13 @@ export default function LogsScreen({
             gap: 6,
             paddingHorizontal: spacing.sm,
             paddingVertical: 4,
-            borderRadius: 999,
+            borderRadius: radius.pill,
             backgroundColor: connColor + '22',
             borderColor: connColor,
             borderWidth: 1,
           }}
         >
-          <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: connColor }} />
+          <View style={{ width: 6, height: 6, borderRadius: radius.pill, backgroundColor: connColor }} />
           <Text style={{ color: connColor, fontSize: 11, fontWeight: '600' }}>{CONN_LABEL[conn]}</Text>
         </View>
       </View>
@@ -226,7 +226,7 @@ export default function LogsScreen({
               testID="logs-disconnected-banner"
               style={{
                 backgroundColor: colors.failed + '22',
-                borderRadius: 8,
+                borderRadius: radius.control,
                 marginHorizontal: spacing.lg,
                 marginBottom: spacing.sm,
                 paddingHorizontal: spacing.md,
@@ -269,7 +269,7 @@ function EventRow({ ev, now, onPress }: { ev: FeedEvent; now: number; onPress?: 
           backgroundColor: onPress && (hovered || state.pressed) ? colors.rowHover : colors.card,
           borderColor: colors.border,
           borderWidth: 1,
-          borderRadius: 10,
+          borderRadius: radius.control,
           paddingHorizontal: spacing.md,
           paddingVertical: spacing.sm,
           gap: 4,
@@ -286,7 +286,7 @@ function EventRow({ ev, now, onPress }: { ev: FeedEvent; now: number; onPress?: 
         <Text style={{ color: colors.text, fontSize: 13, fontWeight: '600', flexShrink: 1, minWidth: 0 }} numberOfLines={1}>{m.to}</Text>
         <View
           testID="logs-row-status"
-          style={{ flexShrink: 0, marginLeft: spacing.xs, paddingHorizontal: 6, paddingVertical: 1, borderRadius: 6, backgroundColor: chipColor + '22' }}
+          style={{ flexShrink: 0, marginLeft: spacing.xs, paddingHorizontal: 6, paddingVertical: 1, borderRadius: radius.pill, backgroundColor: chipColor + '22' }}
         >
           <Text style={{ color: chipColor, fontSize: 11, fontWeight: '600' }} numberOfLines={1}>{m.chip.label}</Text>
         </View>

@@ -17,10 +17,11 @@ import {
   POLL_DETAIL_MS,
   type StatusBucket,
 } from './tasks-filter';
-import { colors, onThemeChange, spacing } from './theme';
+import { colors, onThemeChange, spacing, radius } from './theme';
 import { formatTime } from './time';
 import { usePoll } from './usePoll';
 import { PANE_BACK_TEST_ID, paneShowsBack } from './pane-header';
+import { elevated, buttonStyle, buttonTextStyle } from './elevation';
 
 // Detail screen for one task. Mirrors the dashboard `/tasks` detail
 // pane's four blocks (timeline, info, content, result), pared down for
@@ -374,17 +375,16 @@ const makeStyles = () =>
     },
     section: {
       backgroundColor: colors.card,
-      borderColor: colors.border,
-      borderWidth: 1,
-      borderRadius: 12,
+      borderRadius: radius.surface,
       padding: spacing.lg,
       gap: spacing.sm,
+      ...elevated('raised'),
     },
     sectionTitle: { color: colors.textSecondary, fontSize: 11, fontWeight: '600', letterSpacing: 0.4, textTransform: 'uppercase' },
     sectionBody: { gap: spacing.sm },
     timelineRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' },
     timelineStep: { flex: 1, alignItems: 'center', gap: 4, position: 'relative' },
-    timelineDot: { width: 10, height: 10, borderRadius: 5 },
+    timelineDot: { width: 10, height: 10, borderRadius: radius.pill },
     timelineLabel: { color: colors.textSecondary, fontSize: 11 },
     timelineTime: { color: colors.textMuted, fontSize: 10, textAlign: 'center' },
     timelineBar: {
@@ -401,7 +401,7 @@ const makeStyles = () =>
     infoVal: { color: colors.text, fontSize: 13, flexShrink: 1 },
     mono: { fontFamily: 'monospace', fontSize: 11 },
     statusInline: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-    statusDot: { width: 8, height: 8, borderRadius: 4 },
+    statusDot: { width: 8, height: 8, borderRadius: radius.pill },
     aliasInline: { flexDirection: 'row', alignItems: 'center', gap: 6 },
     bodyText: { color: colors.text, fontSize: 14, lineHeight: 20 },
     bodyMuted: { color: colors.textMuted, fontStyle: 'italic' },
@@ -410,7 +410,7 @@ const makeStyles = () =>
       backgroundColor: colors.blocked + '15',
       borderColor: colors.blocked,
       borderWidth: 1,
-      borderRadius: 8,
+      borderRadius: radius.control,
       gap: spacing.xs,
     },
     notWiredTitle: { color: colors.blocked, fontSize: 13, fontWeight: '600' },
@@ -421,7 +421,7 @@ const makeStyles = () =>
       backgroundColor: colors.failed + '15',
       borderColor: colors.failed,
       borderWidth: 1,
-      borderRadius: 8,
+      borderRadius: radius.control,
       gap: 4,
     },
     errorTitleSm: { color: colors.failed, fontSize: 12, fontWeight: '600' },
@@ -432,21 +432,13 @@ const makeStyles = () =>
       gap: spacing.sm,
       paddingVertical: spacing.xs + 2,
     },
-    eventBullet: { width: 6, height: 6, borderRadius: 3, backgroundColor: colors.accent, marginTop: 6 },
+    eventBullet: { width: 6, height: 6, borderRadius: radius.pill, backgroundColor: colors.accent, marginTop: 6 },
     eventTitle: { color: colors.text, fontSize: 12, fontWeight: '600' },
     eventTransition: { color: colors.textMuted, fontWeight: '400' },
     eventDetail: { color: colors.textSecondary, fontSize: 11, marginTop: 2 },
     eventTime: { color: colors.textMuted, fontSize: 10, marginTop: 2 },
-    retryBtn: {
-      paddingHorizontal: spacing.lg,
-      paddingVertical: spacing.sm,
-      borderRadius: 8,
-      backgroundColor: colors.accent + '22',
-      borderColor: colors.accent,
-      borderWidth: 1,
-      marginTop: spacing.md,
-    },
-    retryText: { color: colors.accent, fontSize: 13, fontWeight: '600' },
+    retryBtn: { ...buttonStyle('secondary'), marginTop: spacing.md },
+    retryText: { ...buttonTextStyle('secondary') },
     errTitle: { color: colors.failed, fontSize: 14, fontWeight: '600', marginBottom: spacing.sm },
     errBody: { color: colors.textSecondary, fontSize: 12, textAlign: 'center' },
     transientError: {

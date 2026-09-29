@@ -10,12 +10,13 @@ import { useEffect, useRef, useState, type Ref } from 'react';
 import { AccessibilityInfo, ActivityIndicator, Animated, Platform, Pressable, ScrollView, StyleSheet, View, type TextInput as RNTextInput } from 'react-native';
 import { Text, TextInput } from './ui-text';
 import { Ionicons } from './icons';
-import { colors, onThemeChange, spacing } from './theme';
+import { colors, onThemeChange, spacing, radius } from './theme';
 import { ds, uiScale } from './ui-scale';
 import { composerControlSize } from './composer-row-layout';
 import { cancelZoneLabel, formatElapsed, holdBarLabel, holdBarTone, isLivePhase, overlayHint, toggleButtonShows, TOO_SHORT_NOTICE, VOICE_DRAFT_CARD_MAX_LINES, VOICE_TOGGLE_ICON, type ComposerInputMode } from './voice-input-model';
 import { barScale, HOLD_OVERLAY, holdOverlayLabel, holdOverlayTone, pushLevel, type HoldOverlayLayout } from './voice-hold-overlay-model';
 import type { VoiceInput } from './useVoiceInput';
+import { elevated } from './elevation';
 
 type MicHandlers = VoiceInput['micHandlers'];
 
@@ -288,7 +289,7 @@ export function VoiceHoldOverlay({ voice, layout }: { voice: VoiceInput; layout:
           </Animated.View>
           <Text style={[styles.holdLabel, { top: layout.labelCenterY - 11 }]} testID="voice-hold-label">{holdOverlayLabel(phase)}</Text>
           <View style={[styles.holdArcWrap, { top: layout.arcTop }]} testID="voice-hold-arc">
-            <View style={[styles.holdArc, { width: layout.arcDiameter, height: layout.arcDiameter, borderRadius: layout.arcDiameter / 2, left: (W - layout.arcDiameter) / 2 }, tone !== 'neutral' && styles.holdArcDim]} />
+            <View style={[styles.holdArc, { width: layout.arcDiameter, height: layout.arcDiameter, borderRadius: radius.pill, left: (W - layout.arcDiameter) / 2 }, tone !== 'neutral' && styles.holdArcDim]} />
             <View style={[styles.holdArcContent, { bottom: layout.bottomInset, top: layout.arcSag }]} testID="voice-hold-arc-content">
               <Ionicons name="mic" size={30} color={tone !== 'neutral' ? colors.textMuted : colors.voiceArcText} />
             </View>
@@ -373,13 +374,13 @@ export function VoiceDraftCard({ value, selection, onChangeText, onSelectionChan
 }
 
 const makeStyles = () => StyleSheet.create({
-  mic: { width: 32, height: 32, borderRadius: 16, alignItems: 'center', justifyContent: 'center' },
+  mic: { width: 32, height: 32, borderRadius: radius.pill, alignItems: 'center', justifyContent: 'center' },
   micLive: { backgroundColor: colors.accent },
   // Same height as the 「按住 说话」 bar and the ＋ / 发送 slot (composer-row-layout.ts composerControlSize).
-  toggle: { width: composerControlSize(uiScale().densityFactor), height: composerControlSize(uiScale().densityFactor), borderRadius: composerControlSize(uiScale().densityFactor) / 2, borderWidth: 1.5, borderColor: colors.text, alignItems: 'center', justifyContent: 'center' },
-  kbd: { width: ds(20), height: ds(15), borderWidth: 1.5, borderRadius: 3, alignItems: 'center', justifyContent: 'space-evenly', paddingVertical: 1 },
+  toggle: { width: composerControlSize(uiScale().densityFactor), height: composerControlSize(uiScale().densityFactor), borderRadius: radius.pill, borderWidth: 1.5, borderColor: colors.text, alignItems: 'center', justifyContent: 'center' },
+  kbd: { width: ds(20), height: ds(15), borderWidth: 1.5, borderRadius: radius.mark, alignItems: 'center', justifyContent: 'space-evenly', paddingVertical: 1 },
   kbdRow: { flexDirection: 'row', gap: ds(1.5) },
-  kbdSpace: { width: ds(9), height: 1.5, borderRadius: 1 },
+  kbdSpace: { width: ds(9), height: 1.5, borderRadius: radius.pill },
   holdBar: {
     // Inside the column-direction inputWrap: stretch across, fixed height. (flex:1 here is a
     // VERTICAL flex with basis 0 — the web export collapsed the bar to its text height.)
@@ -387,7 +388,7 @@ const makeStyles = () => StyleSheet.create({
     // Exactly the row control height (was a 44dp floor while the circles were ds(36) → the bar
     // stood taller than the buttons and off their centre line).
     height: composerControlSize(uiScale().densityFactor),
-    borderRadius: 10,
+    borderRadius: radius.control,
     borderWidth: 1,
     borderColor: colors.border,
     backgroundColor: colors.inputBg,
@@ -403,33 +404,33 @@ const makeStyles = () => StyleSheet.create({
   holdBarText: { color: colors.text, fontSize: 16, fontWeight: '600', letterSpacing: 1 },
   holdBarTextOn: { color: colors.onAccent },
   overlayWrap: { position: 'absolute', left: 0, right: 0, top: 0, alignItems: 'center', justifyContent: 'center', zIndex: 20, backgroundColor: 'rgba(0,0,0,0.28)' },
-  card: { width: 300, maxWidth: '86%', minHeight: 170, paddingVertical: spacing.lg, paddingHorizontal: spacing.lg, borderRadius: 18, backgroundColor: 'rgba(20,20,24,0.92)', alignItems: 'center', justifyContent: 'center', gap: 10 },
+  card: { width: 300, maxWidth: '86%', minHeight: 170, paddingVertical: spacing.lg, paddingHorizontal: spacing.lg, borderRadius: radius.surface, backgroundColor: 'rgba(20,20,24,0.92)', alignItems: 'center', justifyContent: 'center', gap: 10 },
   cardCancel: { backgroundColor: 'rgba(185,28,28,0.94)' },
   interim: { color: '#fff', fontSize: 18, lineHeight: 26, textAlign: 'center', alignSelf: 'stretch' },
   interimCancel: { opacity: 0.65, textDecorationLine: 'line-through' },
   interimPlaceholder: { color: '#9ca3af', fontSize: 15 },
   bars: { flexDirection: 'row', alignItems: 'center', gap: 5, height: 42 },
-  bar: { width: 5, borderRadius: 3, backgroundColor: '#7ee0ee' },
+  bar: { width: 5, borderRadius: radius.pill, backgroundColor: '#7ee0ee' },
   barCancel: { backgroundColor: '#fecaca' },
   cardFoot: { alignItems: 'center', gap: 2 },
   elapsed: { color: '#fff', fontSize: 14, fontVariant: ['tabular-nums'] },
   hint: { color: '#e5e7eb', fontSize: 12 },
   cancelZoneWrap: { position: 'absolute', bottom: 16, alignItems: 'center', gap: 6 },
-  cancelZone: { width: 64, height: 64, borderRadius: 32, borderWidth: 2, borderColor: 'rgba(255,255,255,0.7)', backgroundColor: 'rgba(20,20,24,0.85)', alignItems: 'center', justifyContent: 'center' },
-  cancelZoneOn: { width: 76, height: 76, borderRadius: 38, borderColor: '#fff', backgroundColor: '#dc2626' },
+  cancelZone: { width: 64, height: 64, borderRadius: radius.pill, borderWidth: 2, borderColor: 'rgba(255,255,255,0.7)', backgroundColor: 'rgba(20,20,24,0.85)', alignItems: 'center', justifyContent: 'center' },
+  cancelZoneOn: { width: 76, height: 76, borderRadius: radius.pill, borderColor: '#fff', backgroundColor: '#dc2626' },
   cancelZoneText: { color: '#f3f4f6', fontSize: 12, fontWeight: '600', textShadowColor: 'rgba(0,0,0,0.6)', textShadowRadius: 3 },
   cancelZoneTextOn: { color: '#fff' },
   holdWrap: { position: 'absolute', left: 0, right: 0, top: 0, bottom: 0, zIndex: 30, backgroundColor: 'rgba(0,0,0,0.5)', overflow: 'hidden' },
   holdBubbleBox: { position: 'absolute', alignItems: 'center' },
-  holdBubble: { alignSelf: 'stretch', borderRadius: 14, paddingVertical: 12, paddingHorizontal: 14, gap: 8, minHeight: 64, justifyContent: 'center' },
+  holdBubble: { alignSelf: 'stretch', borderRadius: radius.bubble, paddingVertical: 12, paddingHorizontal: 14, gap: 8, minHeight: 64, justifyContent: 'center' },
   holdBubbleHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10 },
   holdBars: { flexDirection: 'row', alignItems: 'center', gap: 3, height: 28 },
-  holdBar1: { width: 3, height: 28, borderRadius: 1.5 },
+  holdBar1: { width: 3, height: 28, borderRadius: radius.pill },
   holdElapsed: { fontSize: 14, fontWeight: '600', fontVariant: ['tabular-nums'] },
   holdInterim: { fontSize: 16, lineHeight: HOLD_OVERLAY.interimLineHeight },
   // 尾巴:转 45° 的小方块,一半藏在气泡下面。
   holdTail: { width: HOLD_OVERLAY.bubbleTail * 2, height: HOLD_OVERLAY.bubbleTail * 2, marginTop: -HOLD_OVERLAY.bubbleTail, transform: [{ rotate: '45deg' }], borderRadius: 2 },
-  holdCircle: { position: 'absolute', width: HOLD_OVERLAY.circleSize, height: HOLD_OVERLAY.circleSize, borderRadius: HOLD_OVERLAY.circleSize / 2, backgroundColor: 'rgba(60,60,64,0.92)', alignItems: 'center', justifyContent: 'center' },
+  holdCircle: { position: 'absolute', width: HOLD_OVERLAY.circleSize, height: HOLD_OVERLAY.circleSize, borderRadius: radius.pill, backgroundColor: 'rgba(60,60,64,0.92)', alignItems: 'center', justifyContent: 'center' },
   holdCircleCancel: { backgroundColor: '#e5484d' },
   holdCircleOn: { backgroundColor: colors.voiceBubble },
   holdCircleGlyph: { color: '#e5e7eb', fontSize: 22, fontWeight: '600' },
@@ -439,18 +440,18 @@ const makeStyles = () => StyleSheet.create({
   holdArcDim: { backgroundColor: colors.voiceArcDim },
   holdArcContent: { position: 'absolute', left: 0, right: 0, alignItems: 'center', justifyContent: 'center' },
   holdToastWrap: { position: 'absolute', left: 0, right: 0, top: 0, bottom: 0, zIndex: 30, alignItems: 'center', justifyContent: 'center' },
-  holdToast: { width: 140, paddingVertical: 18, borderRadius: 12, backgroundColor: 'rgba(20,20,24,0.88)', alignItems: 'center', gap: 8 },
+  holdToast: { width: 140, paddingVertical: 18, borderRadius: radius.control, backgroundColor: 'rgba(20,20,24,0.88)', alignItems: 'center', gap: 8 },
   holdToastText: { color: '#ffffff', fontSize: 14 },
   promptWrap: { alignItems: 'center', marginVertical: 4 },
-  prompt: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingVertical: 6, paddingHorizontal: 12, borderRadius: 12, backgroundColor: colors.card, borderWidth: 1, borderColor: colors.border, maxWidth: '92%' },
+  prompt: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingVertical: 6, paddingHorizontal: 12, borderRadius: radius.pill, backgroundColor: colors.card, maxWidth: '92%', ...elevated('floating') },
   promptText: { color: colors.text, fontSize: 12 },
   promptLink: { color: colors.accent, fontWeight: '600' },
   draftCardWrap: { paddingHorizontal: spacing.md, paddingTop: spacing.xs },
-  draftCard: { flexDirection: 'row', alignItems: 'flex-start', gap: 6, paddingVertical: 8, paddingLeft: 12, paddingRight: 8, borderRadius: 10, backgroundColor: colors.inputBg, borderWidth: StyleSheet.hairlineWidth, borderColor: colors.border },
+  draftCard: { flexDirection: 'row', alignItems: 'flex-start', gap: 6, paddingVertical: 8, paddingLeft: 12, paddingRight: 8, borderRadius: radius.control, backgroundColor: colors.inputBg, borderWidth: StyleSheet.hairlineWidth, borderColor: colors.border },
   draftCardText: { color: colors.text, fontSize: 15, lineHeight: DRAFT_CARD_LINE_HEIGHT },
   // 输入框的默认内边距 / 外框去掉,看起来和原来的纯文字卡片一样;高度随内容,最多 4 行后在框内滚。
   draftCardInput: { flex: 1, maxHeight: DRAFT_CARD_LINE_HEIGHT * VOICE_DRAFT_CARD_MAX_LINES, padding: 0, margin: 0, textAlignVertical: 'top', borderWidth: 0, outlineStyle: 'none' } as any,
-  draftCardClear: { width: 20, height: 20, borderRadius: 10, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.border },
+  draftCardClear: { width: 20, height: 20, borderRadius: radius.pill, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.border },
 });
 
 let styles = makeStyles();

@@ -31,6 +31,7 @@ import {
   type WindowImage,
 } from './image-window-model';
 import { closeCurrentWindow, setCurrentWindowTitle, subscribeImageWindow, trackWindowBounds } from './image-window';
+import { radius } from './theme';
 
 /**
  * The 「图片预览」 window's page (`/?imageViewer=1`, desktop Tauri only — see image-window-model.ts
@@ -370,20 +371,20 @@ const styles = StyleSheet.create({
   stage: { flex: 1, overflow: 'hidden', backgroundColor: BG, userSelect: 'none' } as any,
   center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   message: { color: '#c8c8cc', fontSize: 13 },
-  note: { position: 'absolute', bottom: 12, alignSelf: 'center', color: '#fff', fontSize: 13, paddingVertical: 6, paddingHorizontal: 14, borderRadius: 14, backgroundColor: 'rgba(0,0,0,0.6)', overflow: 'hidden' },
+  note: { position: 'absolute', bottom: 12, alignSelf: 'center', color: '#fff', fontSize: 13, paddingVertical: 6, paddingHorizontal: 14, borderRadius: radius.pill, backgroundColor: 'rgba(0,0,0,0.6)', overflow: 'hidden' },
   toolbar: {
     height: IMAGE_WINDOW_TOOLBAR, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, gap: 12,
     backgroundColor: '#1b1b1e', borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: '#2c2c30',
   },
   group: { flexDirection: 'row', alignItems: 'center', gap: 4 },
-  button: { width: CONTROL, height: CONTROL, borderRadius: 6, alignItems: 'center', justifyContent: 'center' },
+  button: { width: CONTROL, height: CONTROL, borderRadius: radius.item, alignItems: 'center', justifyContent: 'center' },
   buttonHover: { backgroundColor: 'rgba(255,255,255,0.1)' },
   disabled: { opacity: 0.35 },
   index: { minWidth: 48, height: CONTROL, lineHeight: CONTROL, textAlign: 'center', color: '#e8e8ea', fontSize: 13, fontVariant: ['tabular-nums'] },
   name: { flex: 1, minWidth: 0, height: CONTROL, lineHeight: CONTROL, color: '#a8a8ae', fontSize: 13, textAlign: 'center' },
-  zoomPill: { minWidth: 56, height: CONTROL, borderRadius: 6, alignItems: 'center', justifyContent: 'center' },
+  zoomPill: { minWidth: 56, height: CONTROL, borderRadius: radius.item, alignItems: 'center', justifyContent: 'center' },
   zoomText: { color: '#e8e8ea', fontSize: 13, fontVariant: ['tabular-nums'] },
   divider: { width: StyleSheet.hairlineWidth, height: 18, marginHorizontal: 4, backgroundColor: '#3a3a40' },
-  textButton: { height: CONTROL, paddingHorizontal: 10, borderRadius: 6, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: '#3a3a40' },
+  textButton: { height: CONTROL, paddingHorizontal: 10, borderRadius: radius.item, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: '#3a3a40' },
   textButtonLabel: { color: '#e8e8ea', fontSize: 13 },
 });

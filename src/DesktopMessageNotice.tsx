@@ -2,7 +2,7 @@ import { useEffect, useRef } from 'react';
 import { Animated, Easing, Pressable, StyleSheet } from 'react-native';
 import { Text } from './ui-text';
 import type { DesktopMessageNotice as Notice } from './desktop-message-consume';
-import { colors, onThemeChange, spacing, themeMode } from './theme';
+import { colors, onThemeChange, spacing, themeMode, radius } from './theme';
 
 const AUTO_DISMISS_MS = 8000;
 
@@ -64,7 +64,7 @@ const makeStyles = () =>
     alignSelf: 'center',
     maxWidth: 440,
     marginBottom: spacing.xs,
-    borderRadius: 14,
+    borderRadius: radius.surface,
     borderWidth: 1,
   },
   body: {
@@ -73,7 +73,7 @@ const makeStyles = () =>
     paddingHorizontal: spacing.md,
     paddingVertical: 8,
   },
-  dot: { width: 6, height: 6, borderRadius: 3, marginRight: spacing.sm },
+  dot: { width: 6, height: 6, borderRadius: radius.pill, marginRight: spacing.sm },
   title: { fontSize: 12, fontWeight: '600', marginRight: spacing.sm, maxWidth: 120 },
   detail: { fontSize: 12, flexShrink: 1 },
 });

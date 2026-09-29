@@ -27,6 +27,7 @@ import { NODE_SCHEDULES_EMPTY, externalSchedulesForNode, hubSchedulesForNode, la
 import type { StatusTone } from './scheduled-view-model';
 import { colors, onThemeChange, radius, spacing, type as typeScale, weight } from './theme';
 import { usePoll } from './usePoll';
+import { buttonStyle, buttonTextStyle } from './elevation';
 
 const POLL_MS = 10_000;
 
@@ -270,23 +271,23 @@ function ScheduleRow({ row, last, busy, onOpen, onToggle }: {
 
 // Rebuilt on theme change (colors are read at StyleSheet.create time).
 const makeStyles = () => StyleSheet.create({
-  card: { backgroundColor: colors.card, borderRadius: radius.lg, overflow: 'hidden' },
+  card: { backgroundColor: colors.card, borderRadius: radius.surface, overflow: 'hidden' },
   padded: { padding: spacing.lg },
   inline: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   muted: { color: colors.textMuted, fontSize: typeScale.body },
   error: { color: colors.failed, fontSize: typeScale.small },
-  retry: { borderWidth: 1, borderColor: colors.border, borderRadius: radius.md, paddingHorizontal: spacing.md, paddingVertical: 5 },
-  retryText: { color: colors.accent, fontSize: typeScale.small, fontWeight: weight.strong },
+  retry: { ...buttonStyle('secondary') },
+  retryText: { ...buttonTextStyle('secondary') },
   empty: { alignItems: 'center', paddingVertical: spacing.xl * 1.5, paddingHorizontal: spacing.lg, gap: spacing.md },
   emptyTitle: { color: colors.textSecondary, fontSize: typeScale.body },
-  primary: { backgroundColor: colors.accent, borderRadius: radius.md, paddingHorizontal: 14, paddingVertical: 7 },
-  primaryText: { color: colors.onAccent, fontSize: typeScale.body, fontWeight: weight.strong },
+  primary: { ...buttonStyle('primary') },
+  primaryText: { ...buttonTextStyle('primary') },
   row: { flexDirection: 'row', alignItems: 'center', minHeight: 64 },
   rowDivider: { borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.border },
   rowMain: { flex: 1, minWidth: 0, gap: 4, paddingLeft: spacing.lg, paddingRight: spacing.sm, paddingVertical: 10 },
   line: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, minWidth: 0 },
   wrap: { flexWrap: 'wrap', rowGap: 4 },
-  source: { flexShrink: 0, color: colors.textSecondary, fontSize: typeScale.caption, backgroundColor: colors.subtleFill, borderRadius: radius.sm, paddingHorizontal: 6, paddingVertical: 1, overflow: 'hidden' },
+  source: { flexShrink: 0, color: colors.textSecondary, fontSize: typeScale.caption, backgroundColor: colors.subtleFill, borderRadius: radius.pill, paddingHorizontal: 6, paddingVertical: 1, overflow: 'hidden' },
   name: { color: colors.text, fontSize: typeScale.body, fontWeight: weight.strong },
   meta: { flexShrink: 1, color: colors.textSecondary, fontSize: typeScale.small },
   metaMuted: { flexShrink: 1, color: colors.textMuted, fontSize: typeScale.small },

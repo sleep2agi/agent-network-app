@@ -15,10 +15,11 @@ import {
 import { latestReleaseNotes } from './desktop-updater';
 import { androidPromptView } from './update-prompt-model';
 import { routePrefs } from './update-route-prefs';
-import { colors, onThemeChange, spacing, themeMode } from './theme';
+import { colors, onThemeChange, spacing, themeMode, radius } from './theme';
 import { APP_VERSION } from './version';
 import { useModalSafePadding } from './safe-area-runtime';
 import { withBasePadding } from './modal-safe-area';
+import { elevated, buttonStyle, buttonTextStyle } from './elevation';
 
 /**
  * 安卓更新弹窗。只在用户点了「软件更新」之后出现(安卓不做启动时自动检查)。
@@ -125,7 +126,7 @@ export default function AndroidUpdatePrompt({ currentVersion = APP_VERSION }: { 
 const makeStyles = () =>
   StyleSheet.create({
     backdrop: { flex: 1, backgroundColor: '#0009', alignItems: 'center', justifyContent: 'center', padding: 20 },
-    card: { width: '100%', maxWidth: 440, maxHeight: '92%', borderRadius: 16, backgroundColor: colors.card, borderWidth: 1, borderColor: colors.border, overflow: 'hidden' },
+    card: { width: '100%', maxWidth: 440, maxHeight: '92%', borderRadius: radius.surface, backgroundColor: colors.card, overflow: 'hidden', ...elevated('floating') },
     body: { flexGrow: 0 },
     bodyContent: { padding: 20 },
     title: { color: colors.text, fontSize: 18, fontWeight: '600' },
@@ -138,25 +139,25 @@ const makeStyles = () =>
     arrow: { color: colors.textMuted, fontSize: 17, lineHeight: 26 },
     meta: { color: colors.textSecondary, fontSize: 12, marginTop: spacing.xs },
     sectionLabel: { color: colors.textMuted, fontSize: 12, marginTop: spacing.md, marginBottom: spacing.xs },
-    notesScroll: { maxHeight: 150, borderRadius: 10, backgroundColor: colors.bg, borderWidth: 1, borderColor: colors.border },
+    notesScroll: { maxHeight: 150, borderRadius: radius.control, backgroundColor: colors.bg, borderWidth: 1, borderColor: colors.border },
     notesContent: { padding: spacing.md },
     notes: { color: colors.textSecondary, fontSize: 13, lineHeight: 19 },
     progressBlock: { marginTop: spacing.md },
     progressRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
     progressText: { color: colors.textSecondary, fontSize: 13, flexShrink: 1 },
-    bar: { height: 6, borderRadius: 3, backgroundColor: colors.border, marginTop: spacing.sm, overflow: 'hidden' },
+    bar: { height: 6, borderRadius: radius.pill, backgroundColor: colors.border, marginTop: spacing.sm, overflow: 'hidden' },
     barFill: { height: 6, backgroundColor: colors.accent },
     error: { color: colors.failed, fontSize: 13, lineHeight: 19, marginTop: spacing.md },
     errorLine: { color: colors.failed, fontSize: 12, lineHeight: 18 },
     hintBlock: { color: colors.textSecondary, fontSize: 12, lineHeight: 18, marginTop: spacing.sm },
     // 主按钮 / 次按钮 / 在浏览器中下载 / 稍后 同宽(撑满卡片内容宽)、同一条中线。
-    button: { marginTop: spacing.lg, height: 44, backgroundColor: colors.accent, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
-    buttonText: { color: '#fff', fontSize: 15, fontWeight: '600' },
-    secondary: { marginTop: spacing.sm, height: 44, borderRadius: 10, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: colors.accent },
-    secondaryText: { color: colors.accent, fontSize: 14, fontWeight: '600' },
-    browserButton: { marginTop: spacing.sm, height: 40, borderRadius: 10, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: colors.border },
-    browserText: { color: colors.accent, fontSize: 13 },
-    later: { marginTop: spacing.sm, height: 40, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
+    button: { ...buttonStyle('primary'), marginTop: spacing.lg },
+    buttonText: { ...buttonTextStyle('primary') },
+    secondary: { ...buttonStyle('secondary'), marginTop: spacing.sm },
+    secondaryText: { ...buttonTextStyle('secondary') },
+    browserButton: { ...buttonStyle('secondary'), marginTop: spacing.sm },
+    browserText: { ...buttonTextStyle('secondary') },
+    later: { marginTop: spacing.sm, height: 40, borderRadius: radius.control, alignItems: 'center', justifyContent: 'center' },
     laterText: { color: colors.textSecondary, fontSize: 14 },
     hint: { color: colors.textMuted, fontSize: 10, lineHeight: 15, marginTop: spacing.xs },
   });

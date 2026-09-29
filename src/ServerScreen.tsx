@@ -20,6 +20,7 @@ import {
 import { listHubProfiles, type HubProfile } from './storage';
 import { colors, onThemeChange, radius, spacing, type, weight } from './theme';
 import { usePoll } from './usePoll';
+import { elevated, buttonStyle, buttonTextStyle } from './elevation';
 
 // 服务器页(手机 / 安卓折叠屏 / 桌面「服务器管理 → 概览」共用)。
 //
@@ -434,7 +435,7 @@ const makeStyles = () =>
     title: { color: colors.text, fontSize: type.heading, fontWeight: weight.strong },
     subtitle: { color: colors.textMuted, fontSize: type.small, marginTop: 2 },
     pill: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 10, height: 28, borderRadius: radius.pill },
-    dot: { width: 8, height: 8, borderRadius: 4 },
+    dot: { width: 8, height: 8, borderRadius: radius.pill },
     pillText: { fontSize: type.small, fontWeight: weight.medium },
 
     columns: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.xl },
@@ -445,24 +446,23 @@ const makeStyles = () =>
     sectionHead: { flexDirection: 'row', alignItems: 'baseline', gap: spacing.sm, marginBottom: spacing.sm },
     sectionTitle: { color: colors.textSecondary, fontSize: type.small, fontWeight: weight.medium },
     sectionMeta: { color: colors.textMuted, fontSize: type.caption, marginLeft: 'auto' },
-    panel: { backgroundColor: colors.card, borderRadius: radius.md, borderWidth: 1, borderColor: colors.border, overflow: 'hidden' },
+    panel: { backgroundColor: colors.card, borderRadius: radius.surface, overflow: 'hidden', ...elevated('raised') },
 
     cardGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
     statCard: {
       backgroundColor: colors.card,
-      borderRadius: radius.md,
-      borderWidth: 1,
-      borderColor: colors.border,
+      borderRadius: radius.surface,
       paddingHorizontal: spacing.md,
       paddingVertical: spacing.md,
       minHeight: 84,
       justifyContent: 'space-between',
+      ...elevated('raised'),
     },
     // 手机 2×2;宽屏一行 4 张。gap 是 8,所以 2 列各让出 4。
     statCardPhone: { flexBasis: '48%', flexGrow: 1 },
     statCardWide: { flexBasis: 0, flexGrow: 1, minWidth: 120 },
     statHead: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-    statDot: { width: 7, height: 7, borderRadius: 4 },
+    statDot: { width: 7, height: 7, borderRadius: radius.pill },
     statLabel: { color: colors.textSecondary, fontSize: type.small },
     statChevron: { marginLeft: 'auto' },
     statValueLine: { marginTop: spacing.sm },
@@ -479,8 +479,8 @@ const makeStyles = () =>
     },
     groupRowBorder: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border },
     groupName: { color: colors.text, fontSize: type.body, width: 88 },
-    groupTrack: { flex: 1, height: 6, borderRadius: 3, backgroundColor: colors.subtleFill, overflow: 'hidden' },
-    groupFill: { height: 6, borderRadius: 3 },
+    groupTrack: { flex: 1, height: 6, borderRadius: radius.pill, backgroundColor: colors.subtleFill, overflow: 'hidden' },
+    groupFill: { height: 6, borderRadius: radius.pill },
     groupCount: { color: colors.textMuted, fontSize: type.small, minWidth: 52, textAlign: 'right', fontVariant: ['tabular-nums'] },
     groupOnline: { color: colors.text, fontWeight: weight.medium },
     groupMore: { justifyContent: 'center' },
@@ -504,8 +504,8 @@ const makeStyles = () =>
     failTitle: { color: colors.failed, fontSize: type.body, fontWeight: weight.strong },
     failReason: { color: colors.text, fontSize: type.small, marginTop: 2 },
     failHint: { color: colors.textMuted, fontSize: type.caption, marginTop: 2 },
-    retryBtn: { backgroundColor: colors.accent, borderRadius: radius.sm, paddingHorizontal: spacing.md, height: 32, minWidth: 56, alignItems: 'center', justifyContent: 'center' },
-    retryText: { color: colors.onAccent, fontSize: type.small, fontWeight: weight.strong },
+    retryBtn: { ...buttonStyle('primary'), minWidth: 56 },
+    retryText: { ...buttonTextStyle('primary') },
 
     actionGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
     actionTile: {
@@ -515,13 +515,12 @@ const makeStyles = () =>
       alignItems: 'center',
       gap: spacing.sm,
       backgroundColor: colors.card,
-      borderRadius: radius.md,
-      borderWidth: 1,
-      borderColor: colors.border,
+      borderRadius: radius.surface,
       paddingHorizontal: spacing.md,
       minHeight: 52,
+      ...elevated('raised'),
     },
-    actionIcon: { width: 30, height: 30, borderRadius: radius.sm, backgroundColor: colors.subtleFill, alignItems: 'center', justifyContent: 'center' },
+    actionIcon: { width: 30, height: 30, borderRadius: radius.item, backgroundColor: colors.subtleFill, alignItems: 'center', justifyContent: 'center' },
     actionLabel: { flexShrink: 1, color: colors.text, fontSize: type.body, fontWeight: weight.medium },
 
     profileHost: { color: colors.text, fontSize: type.body },

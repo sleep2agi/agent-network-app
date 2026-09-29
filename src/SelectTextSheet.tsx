@@ -3,7 +3,7 @@ import { Modal, Platform, Pressable, ScrollView, StyleSheet, View } from 'react-
 import { Text, TextInput } from './ui-text';
 import { useModalSafePadding } from './safe-area-runtime';
 import { Ionicons } from './icons';
-import { colors, onThemeChange, spacing } from './theme';
+import { colors, onThemeChange, spacing, radius } from './theme';
 import { selectableTextOf, selectTextSurface, type SelectTextMode } from './message-plain-text';
 
 /**
@@ -79,7 +79,7 @@ const makeStyles = () => StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.card },
   header: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingHorizontal: spacing.lg, paddingVertical: spacing.md, borderBottomWidth: 1, borderBottomColor: colors.border },
   title: { flex: 1, minWidth: 0, color: colors.text, fontSize: 16, fontWeight: '600' },
-  modeBtn: { paddingHorizontal: spacing.md, paddingVertical: 4, borderRadius: 12, borderWidth: 1, borderColor: colors.border },
+  modeBtn: { paddingHorizontal: spacing.md, paddingVertical: 4, borderRadius: radius.pill, borderWidth: 1, borderColor: colors.border },
   modeText: { color: colors.textSecondary, fontSize: 13 },
   hint: { color: colors.textMuted, fontSize: 12, paddingHorizontal: spacing.lg, paddingTop: spacing.sm, width: '100%', maxWidth: 760, alignSelf: 'center' },
   // 折叠屏展开/平板上别铺满整宽:一行太长选区手柄难拖,阅读也累。

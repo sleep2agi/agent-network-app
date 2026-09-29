@@ -9,6 +9,7 @@ import * as Haptics from 'expo-haptics';
 import { useModalSafePadding } from './safe-area-runtime';
 import { Text } from './ui-text';
 import { colors, themeMode } from './theme';
+import { elevated } from './elevation';
 import { uiScale } from './ui-scale';
 import { anchorRowMenu, rowMenuHeight, rowMenuMetrics, type AgentRowMenuItem, type AgentRowMenuKey } from './agent-row-menu';
 
@@ -111,14 +112,8 @@ export default function AgentRowMenu({
               paddingVertical: m.padY,
               borderRadius: m.radius,
               backgroundColor: colors.card,
-              borderWidth: themeMode() === 'dark' ? 1 : 0,
-              borderColor: colors.border,
-              shadowColor: '#000',
-              shadowOpacity: 0.18,
-              shadowRadius: 16,
-              shadowOffset: { width: 0, height: 6 },
-              elevation: 8,
               overflow: 'hidden',
+              ...elevated('floating'),
             }}
           >
             {items.map(item => (

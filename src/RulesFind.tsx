@@ -19,7 +19,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { Platform, Pressable, View } from 'react-native';
 import { Text, TextInput } from './ui-text';
 
-import { colors, spacing, themeMode } from './theme';
+import { colors, spacing, themeMode, radius } from './theme';
 import type { RulesViewMode } from './node-rules-view';
 import { lineStartOffset, sourceRangeFromDataset } from './node-rules-view';
 import {
@@ -212,7 +212,7 @@ function paintOverlay(ov: Overlay, text: string, matches: readonly FindMatch[], 
     if (m.start > cursor) frag.appendChild(doc.createTextNode(text.slice(cursor, m.start)));
     const mark = doc.createElement('mark');
     mark.textContent = text.slice(m.start, m.end);
-    Object.assign(mark.style, { color: 'transparent', borderRadius: '2px', padding: '0', background: i === current ? p.overlayCurrent : p.all });
+    Object.assign(mark.style, { color: 'transparent', borderRadius: `${radius.inline}px`, padding: '0', background: i === current ? p.overlayCurrent : p.all });
     if (i === current) mark.setAttribute('data-current', '');
     frag.appendChild(mark);
     marks.push(mark);
@@ -422,8 +422,8 @@ export function useRulesFind(args: UseRulesFindArgs): RulesFindController {
         mark.setAttribute('data-rules-find', piece.hit === idx ? 'current' : '');
         mark.textContent = value.slice(piece.start, piece.end);
         Object.assign(mark.style, piece.hit === idx
-          ? { background: p.current, color: p.currentText, borderRadius: '2px' }
-          : { background: p.all, color: 'inherit', borderRadius: '2px' });
+          ? { background: p.current, color: p.currentText, borderRadius: `${radius.inline}px` }
+          : { background: p.all, color: 'inherit', borderRadius: `${radius.inline}px` });
         inserted.push(mark);
         cursor = piece.end;
       }
@@ -579,7 +579,7 @@ function BarBtn({ label, onPress, accessibilityLabel, active, disabled, wide }: 
       accessibilityLabel={accessibilityLabel}
       accessibilityState={{ disabled: !!disabled, selected: !!active }}
       style={(state: any) => [
-        { height: 24, minWidth: 24, paddingHorizontal: wide ? spacing.sm : 4, borderRadius: 5, alignItems: 'center', justifyContent: 'center' },
+        { height: 24, minWidth: 24, paddingHorizontal: wide ? spacing.sm : 4, borderRadius: radius.item, alignItems: 'center', justifyContent: 'center' },
         active ? { backgroundColor: colors.subtleFill, borderWidth: 1, borderColor: colors.accent } : null,
         state.hovered && !disabled ? { backgroundColor: colors.rowHover } : null,
         state.focused ? { outlineStyle: 'solid', outlineWidth: 2, outlineColor: colors.accent, outlineOffset: 0 } as any : null,
@@ -593,7 +593,7 @@ function BarBtn({ label, onPress, accessibilityLabel, active, disabled, wide }: 
 
 const inputStyle = () => ({
   height: 24, paddingHorizontal: 6, fontSize: 12, color: colors.text, backgroundColor: colors.card,
-  borderRadius: 5, borderWidth: 1, borderColor: colors.border, outlineStyle: 'none',
+  borderRadius: radius.item, borderWidth: 1, borderColor: colors.border, outlineStyle: 'none',
 } as any);
 
 export function RulesFindBar({ find }: { find: RulesFindController }) {
@@ -650,7 +650,7 @@ export function RulesFindBar({ find }: { find: RulesFindController }) {
   const none = !!find.query && find.count === 0;
   const canReplace = find.mode === 'edit' && find.editable && find.count > 0;
   return (
-    <View accessibilityRole={'search' as any} style={{ borderWidth: 1, borderColor: colors.border, borderRadius: 7, padding: 2, gap: 2, backgroundColor: colors.inputBg }}>
+    <View accessibilityRole={'search' as any} style={{ borderWidth: 1, borderColor: colors.border, borderRadius: radius.control, padding: 2, gap: 2, backgroundColor: colors.inputBg }}>
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 2 }}>
         <TextInput
           ref={findEl}

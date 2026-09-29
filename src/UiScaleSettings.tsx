@@ -156,25 +156,25 @@ export function UiScalePreview() {
 
 // Built per render (cheap, a handful of entries): it must follow both the theme and the scale.
 const makePreviewStyles = () => { const g = agentRowGeometry(uiScale().listDense, uiScale().densityFactor); return StyleSheet.create({
-  frame: { marginHorizontal: spacing.md, marginTop: spacing.sm, borderWidth: 1, borderColor: colors.border, borderRadius: radius.md, backgroundColor: colors.card, overflow: 'hidden' },
+  frame: { marginHorizontal: spacing.md, marginTop: spacing.sm, borderWidth: 1, borderColor: colors.border, borderRadius: radius.surface, backgroundColor: colors.card, overflow: 'hidden' },
   caption: { color: colors.textMuted, fontSize: 11, paddingHorizontal: spacing.md, paddingTop: spacing.sm },
   // Same geometry and list text as AgentsScreen's phone row (makeRowStyles / agentRowGeometry).
   row: { flexDirection: 'row', alignItems: 'center', gap: g.gap, minHeight: g.height, paddingHorizontal: g.padX, paddingVertical: g.padY },
   avatar: { width: g.avatar, height: g.avatar },
-  dot: { position: 'absolute', right: -1, bottom: -1, width: g.dot, height: g.dot, borderRadius: g.dot / 2, borderWidth: 2 },
+  dot: { position: 'absolute', right: -1, bottom: -1, width: g.dot, height: g.dot, borderRadius: radius.pill, borderWidth: 2 },
   body: { flex: 1, minWidth: 0, gap: g.bodyGap },
   line: { flexDirection: 'row', alignItems: 'center', gap: ds(6), minHeight: g.lineMin },
   name: { flexShrink: 1, color: colors.text, ...listText('name'), fontWeight: '500' },
   time: { marginLeft: 'auto', color: colors.textMuted, ...listText('meta') },
   preview: { flex: 1, minWidth: 0, color: colors.textMuted, ...listText('preview') },
-  badge: { minWidth: 18, height: 18, paddingHorizontal: 5, borderRadius: 9, backgroundColor: colors.failed, alignItems: 'center', justifyContent: 'center' },
+  badge: { minWidth: 18, height: 18, paddingHorizontal: 5, borderRadius: radius.pill, backgroundColor: colors.failed, alignItems: 'center', justifyContent: 'center' },
   badgeText: { color: '#ffffff', fontSize: 10, fontWeight: '600', lineHeight: 12 },
   chat: { gap: spacing.sm, paddingHorizontal: spacing.md, paddingVertical: spacing.sm, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border, backgroundColor: colors.bg },
-  bubble: { maxWidth: '80%', borderRadius: 12, paddingHorizontal: spacing.md, paddingVertical: spacing.sm },
+  bubble: { maxWidth: '80%', borderRadius: radius.bubble, paddingHorizontal: spacing.md, paddingVertical: spacing.sm },
   bubbleThem: { alignSelf: 'flex-start', backgroundColor: colors.card, borderWidth: 1, borderColor: colors.border },
   bubbleMe: { alignSelf: 'flex-end', backgroundColor: colors.accent },
   bubbleText: { color: colors.text, fontSize: 14, lineHeight: 20 },
   buttons: { flexDirection: 'row', justifyContent: 'flex-end', padding: spacing.md, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border },
-  button: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs, height: ds(36), paddingHorizontal: spacing.lg, borderRadius: radius.sm, backgroundColor: colors.accent },
+  button: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs, height: ds(36), paddingHorizontal: spacing.lg, borderRadius: radius.control, backgroundColor: colors.accent },
   buttonText: { color: colors.onAccent, fontSize: 13, fontWeight: '600' },
 }); };

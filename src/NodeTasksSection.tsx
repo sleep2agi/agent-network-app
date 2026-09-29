@@ -56,7 +56,7 @@ function TaskRow({ row, index, kind, now }: { row: NodeTaskRow; index: number; k
       accessibilityState={{ expanded }}
       accessibilityLabel={`${kind === 'queue' ? `排队第 ${index + 1} 条,` : ''}来自 ${row.from}:${preview}`}
       style={(state: { pressed: boolean; hovered?: boolean }) => [
-        { flexDirection: 'row', gap: spacing.md, paddingVertical: spacing.sm, paddingHorizontal: spacing.sm, marginHorizontal: -spacing.sm, borderRadius: radius.md },
+        { flexDirection: 'row', gap: spacing.md, paddingVertical: spacing.sm, paddingHorizontal: spacing.sm, marginHorizontal: -spacing.sm, borderRadius: radius.control },
         (state.hovered || expanded) && { backgroundColor: colors.rowHover },
         state.pressed && { opacity: 0.8 },
       ]}
@@ -90,8 +90,8 @@ function Group({ title, count, children, collapsible, defaultOpen = true, hint, 
   const [open, setOpen] = useState(defaultOpen);
   // quiet:只描边不填底,给「可能卡住」这类次要分组,视觉上退后一层。
   const card = quiet
-    ? { borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, paddingHorizontal: spacing.lg, paddingVertical: spacing.md }
-    : { backgroundColor: colors.card, borderRadius: radius.lg, paddingHorizontal: spacing.lg, paddingVertical: spacing.md };
+    ? { borderRadius: radius.surface, borderWidth: 1, borderColor: colors.border, paddingHorizontal: spacing.lg, paddingVertical: spacing.md }
+    : { backgroundColor: colors.card, borderRadius: radius.surface, paddingHorizontal: spacing.lg, paddingVertical: spacing.md };
   return (
     <View style={card}>
       <Pressable
@@ -146,7 +146,7 @@ export default function NodeTasksSection({ cfg, alias, embedded = false }: { cfg
         </Pressable>
       </View>
       {state.kind === 'loading' ? (
-        <View style={{ backgroundColor: colors.card, borderRadius: radius.lg, padding: spacing.lg, flexDirection: 'row', alignItems: 'center', gap: spacing.sm }}>
+        <View style={{ backgroundColor: colors.card, borderRadius: radius.surface, padding: spacing.lg, flexDirection: 'row', alignItems: 'center', gap: spacing.sm }}>
           <ActivityIndicator color={colors.textMuted} />
           <Text style={{ color: colors.textMuted, fontSize: typeScale.body }}>正在读取这个节点的任务…</Text>
         </View>

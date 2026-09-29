@@ -4,7 +4,7 @@ import { Text } from './ui-text';
 import { Ionicons } from './icons';
 import { fetchStatus, type HubConfig } from './api';
 import { railBadgeText } from './rail-nav';
-import { colors, onThemeChange, spacing } from './theme';
+import { colors, onThemeChange, spacing, radius } from './theme';
 import { usePoll } from './usePoll';
 import { summarize } from './server-stats';
 import { badgeOffsetCentered, labelClearanceMargin } from './badge-anchor';
@@ -98,17 +98,17 @@ const makeStyles = () =>
   root: { flex: 1, backgroundColor: colors.bg },
   header: { padding: spacing.lg, borderBottomWidth: 1, borderBottomColor: colors.border },
   titleRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
-  serverIcon: { width: 36, height: 36, borderRadius: 10, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.accent },
+  serverIcon: { width: 36, height: 36, borderRadius: radius.control, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.accent },
   serverIconFailed: { backgroundColor: colors.failed },
   title: { color: colors.text, fontSize: 14, fontWeight: '600' },
   host: { color: colors.textMuted, fontSize: 11, marginTop: 2 },
   statusRow: { flexDirection: 'row', alignItems: 'center', marginTop: spacing.md, gap: 7 },
-  dot: { width: 7, height: 7, borderRadius: 4 },
+  dot: { width: 7, height: 7, borderRadius: radius.pill },
   status: { color: colors.textSecondary, fontSize: 11 },
   count: { color: colors.textMuted, fontSize: 11, marginLeft: 'auto' },
   sectionLabel: { color: colors.textMuted, fontSize: 11, paddingHorizontal: spacing.lg, paddingTop: spacing.lg, paddingBottom: spacing.sm },
   items: { paddingHorizontal: spacing.sm, gap: 3 },
-  item: { height: 42, borderRadius: 8, paddingHorizontal: spacing.md, flexDirection: 'row', alignItems: 'center', gap: spacing.md },
+  item: { height: 42, borderRadius: radius.item, paddingHorizontal: spacing.md, flexDirection: 'row', alignItems: 'center', gap: spacing.md },
   // 极简:二级导航的选中态用中性 rowActive(与会话列表一致);强调色只留给最左侧 rail。
   itemActive: { backgroundColor: colors.rowActive },
   // The badge grows outward, toward the label: keep the label clear of the widest badge.
@@ -120,7 +120,7 @@ const makeStyles = () =>
   itemTextActive: { color: colors.text, fontWeight: '600' },
   // 角标:图标右上角的小圆标(与桌面 rail 同款),不再是行尾灰字。左缘锚在图标右上角内侧一点
   // (badge-anchor.ts),「99+」变宽时向外长,不再盖住图标。
-  badge: { position: 'absolute', ...badgeOffsetCentered(ITEM_ICON_BOX, ITEM_ICON_BOX, ds(ITEM_ICON_GLYPH), ITEM_BADGE_H), minWidth: ITEM_BADGE_H, height: ITEM_BADGE_H, borderRadius: ITEM_BADGE_H / 2, paddingHorizontal: 4, backgroundColor: colors.accent, alignItems: 'center', justifyContent: 'center' },
+  badge: { position: 'absolute', ...badgeOffsetCentered(ITEM_ICON_BOX, ITEM_ICON_BOX, ds(ITEM_ICON_GLYPH), ITEM_BADGE_H), minWidth: ITEM_BADGE_H, height: ITEM_BADGE_H, borderRadius: radius.pill, paddingHorizontal: 4, backgroundColor: colors.accent, alignItems: 'center', justifyContent: 'center' },
   badgeText: { color: colors.onAccent, fontSize: 9, fontWeight: '600', lineHeight: 12 },
   footer: { marginTop: 'auto', borderTopWidth: 1, borderTopColor: colors.border, padding: spacing.lg },
   footerLabel: { color: colors.textMuted, fontSize: 10 },

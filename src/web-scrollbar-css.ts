@@ -5,6 +5,7 @@
 export { STYLE_ELEMENT_ID } from './web-scrollbar-dom';
 import { STYLE_ELEMENT_ID as _id } from './web-scrollbar-dom';
 void _id;
+import { radius } from './theme';
 
 /** The subset of the palette the scrollbar needs. */
 export interface ScrollbarPalette {
@@ -86,7 +87,7 @@ export const scrollbarCss = (palette: ScrollbarPalette, desktopShell = false): s
     background-color: var(${THUMB_VAR});
     border: 1px solid transparent;
     background-clip: padding-box;
-    border-radius: 999px;
+    border-radius: ${radius.pill}px;
   }
   ::-webkit-scrollbar-thumb:hover {
     background-color: ${palette.textSecondary};

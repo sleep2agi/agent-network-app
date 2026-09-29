@@ -4,6 +4,7 @@ import { Text } from './ui-text';
 
 import { getAvatarSource, useAvatarsVersion } from './lib/avatars';
 import { ds } from './ui-scale';
+import { avatarRadius } from './theme';
 
 // Port of the dashboard's AliasAvatar (same hash, same palette): the
 // same alias renders the same color on web and mobile (#220 round 27,
@@ -90,7 +91,7 @@ export default function AliasAvatar({ alias, size: baseSize = 32, fixedSize = fa
       style={{
         width: size,
         height: size,
-        borderRadius: size / 2,
+        borderRadius: avatarRadius(size),
         backgroundColor: c.bg,
         borderColor: c.ring,
         borderWidth: 1,
@@ -112,7 +113,7 @@ export default function AliasAvatar({ alias, size: baseSize = 32, fixedSize = fa
             left: 0,
             width: size,
             height: size,
-            borderRadius: size / 2,
+            borderRadius: avatarRadius(size),
           }}
         />
       ) : null}

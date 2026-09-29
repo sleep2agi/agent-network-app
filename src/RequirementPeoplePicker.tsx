@@ -6,6 +6,7 @@ import { useModalSafePadding } from './safe-area-runtime';
 import { withBasePadding } from './modal-safe-area';
 import AliasAvatar from './AliasAvatar';
 import { peopleInNetwork, personKey, togglePerson, uniquePeople, type RequirementPerson, type RequirementPersonRef } from './requirement-people';
+import { elevated } from './elevation';
 
 type Props = {
   networkId: string;
@@ -34,11 +35,11 @@ function Picker({ networkId, mode, people, selected, onConfirm, onClose }: Props
   const invalid = !networkId || missing.length > 0 || (mode === 'owner' && draft.length > 1) || draft.some(person => candidates.some(candidate => personKey(candidate) === personKey(person) && candidate.unavailable));
   const styles = useMemo(() => StyleSheet.create({
     backdrop: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: 'rgba(0,0,0,0.45)' },
-    panel: { width: '100%', maxWidth: 520, maxHeight: '85%', borderRadius: radius.md, padding: spacing.lg, backgroundColor: colors.card, gap: spacing.md },
+    panel: { width: '100%', maxWidth: 520, maxHeight: '85%', borderRadius: radius.surface, padding: spacing.lg, backgroundColor: colors.card, gap: spacing.md, ...elevated('floating') },
     title: { fontSize: 20, fontWeight: '600', color: colors.text },
     muted: { color: colors.textMuted, fontSize: 13 },
-    input: { padding: spacing.md, borderWidth: 1, borderColor: colors.border, borderRadius: radius.sm, color: colors.text, fontSize: 14 },
-    row: { minHeight: 52, padding: spacing.sm, flexDirection: 'row', alignItems: 'center', gap: spacing.sm, borderRadius: radius.sm },
+    input: { padding: spacing.md, borderWidth: 1, borderColor: colors.border, borderRadius: radius.control, color: colors.text, fontSize: 14 },
+    row: { minHeight: 52, padding: spacing.sm, flexDirection: 'row', alignItems: 'center', gap: spacing.sm, borderRadius: radius.item },
     selected: { backgroundColor: colors.rowActive },
     name: { color: colors.text, fontSize: 14 },
     flex: { flex: 1 },

@@ -1,7 +1,7 @@
 import { Fragment, useState, type ReactNode } from 'react';
 import { Platform, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { Text } from './ui-text';
-import { colors, onThemeChange, spacing } from './theme';
+import { colors, onThemeChange, spacing, radius } from './theme';
 import { isSafeMarkdownUrl, parseInline, parseMarkdownBlocks, type InlineNode } from './markdown-model';
 import { foldCode, foldLabel } from './markdown-code-fold';
 import { openExternal } from './open-external';
@@ -155,10 +155,10 @@ const makeStyles = () => StyleSheet.create({
   marker: { color: colors.textSecondary, fontSize: 14, lineHeight: 21, minWidth: 16, textAlign: 'right' },
   listText: { flexShrink: 1, flexGrow: 1, flexBasis: 0, minWidth: 0 },
   quote: { borderLeftWidth: 3, borderLeftColor: colors.textMuted, paddingLeft: spacing.md, opacity: 0.9, minWidth: 0 },
-  code: { maxWidth: '100%', backgroundColor: colors.inputBg, borderRadius: 8, padding: spacing.md },
+  code: { maxWidth: '100%', backgroundColor: colors.inputBg, borderRadius: radius.item, padding: spacing.md },
   codeText: { color: colors.text, fontFamily: 'monospace', fontSize: 12, lineHeight: 18 },
   foldToggle: { color: colors.accent, fontSize: 12, marginTop: spacing.xs },
-  table: { maxWidth: '100%', borderWidth: 1, borderColor: colors.border, borderRadius: 6 },
+  table: { maxWidth: '100%', borderWidth: 1, borderColor: colors.border, borderRadius: radius.item, overflow: 'hidden' },
   tableRow: { flexDirection: 'row' },
   tableHead: { backgroundColor: colors.inputBg },
   tableCell: { width: 150, paddingHorizontal: spacing.sm, paddingVertical: spacing.xs, borderRightWidth: 1, borderBottomWidth: 1, borderColor: colors.border },
@@ -166,7 +166,7 @@ const makeStyles = () => StyleSheet.create({
   tableCellFlex: { flex: 1, minWidth: 0, paddingHorizontal: spacing.sm, paddingVertical: spacing.xs, borderRightWidth: 1, borderBottomWidth: 1, borderColor: colors.border },
   // 原生 ≥3 列:每行一张卡,「表头: 值」逐行
   tableStack: { gap: spacing.sm },
-  tableCard: { borderWidth: 1, borderColor: colors.border, borderRadius: 8, paddingHorizontal: spacing.md, paddingVertical: spacing.sm, backgroundColor: colors.inputBg + '55', gap: 2 },
+  tableCard: { borderWidth: 1, borderColor: colors.border, borderRadius: radius.item, paddingHorizontal: spacing.md, paddingVertical: spacing.sm, backgroundColor: colors.inputBg + '55', gap: 2 },
   tableCardLine: { flexDirection: 'row', gap: spacing.sm, alignItems: 'flex-start' },
   tableCardLabel: { color: colors.textMuted, fontSize: 12, lineHeight: 20, minWidth: 64, maxWidth: '40%', flexShrink: 0 },
   tableCardValue: { flex: 1, minWidth: 0 },

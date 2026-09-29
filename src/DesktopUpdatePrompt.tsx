@@ -2,11 +2,12 @@ import { useEffect, useSyncExternalStore } from 'react';
 import { ActivityIndicator, Modal, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { Text } from './ui-text';
 import { checkDesktopUpdate, desktopUpdateSnapshot, installDesktopUpdate, latestReleaseNotes, subscribeDesktopUpdates } from './desktop-updater';
-import { colors, onThemeChange, spacing, themeMode } from './theme';
+import { colors, onThemeChange, spacing, themeMode, radius } from './theme';
 import { desktopPromptView } from './update-prompt-model';
 import { APP_VERSION } from './version';
 import { useModalSafePadding } from './safe-area-runtime';
 import { withBasePadding } from './modal-safe-area';
+import { elevated, buttonStyle, buttonTextStyle } from './elevation';
 
 export default function DesktopUpdatePrompt() {
   const update = useSyncExternalStore(subscribeDesktopUpdates, desktopUpdateSnapshot, desktopUpdateSnapshot);
@@ -69,8 +70,8 @@ export default function DesktopUpdatePrompt() {
 const makeStyles = () =>
   StyleSheet.create({
   backdrop: { flex: 1, backgroundColor: '#0009', alignItems: 'center', justifyContent: 'center', padding: 24 },
-  card: { width: '100%', maxWidth: 440, maxHeight: '85%', borderRadius: 16, padding: 22, backgroundColor: colors.card, borderWidth: 1, borderColor: colors.border },
-  notesScroll: { maxHeight: 240, marginTop: spacing.md, borderRadius: 10, backgroundColor: colors.bg, borderWidth: 1, borderColor: colors.border },
+  card: { width: '100%', maxWidth: 440, maxHeight: '85%', borderRadius: radius.surface, padding: 22, backgroundColor: colors.card, ...elevated('floating') },
+  notesScroll: { maxHeight: 240, marginTop: spacing.md, borderRadius: radius.control, backgroundColor: colors.bg, borderWidth: 1, borderColor: colors.border },
   notesContent: { paddingHorizontal: spacing.md, paddingBottom: spacing.md },
   title: { color: colors.text, fontSize: 18, fontWeight: '600' },
   versions: { flexDirection: 'row', alignItems: 'flex-end', gap: spacing.md, marginTop: spacing.md },
@@ -83,12 +84,12 @@ const makeStyles = () =>
   meta: { color: colors.textSecondary, fontSize: 12, marginTop: spacing.xs },
   progressBlock: { marginTop: spacing.lg },
   progressText: { color: colors.textSecondary, fontSize: 13, flexShrink: 1 },
-  bar: { height: 6, borderRadius: 3, backgroundColor: colors.border, marginTop: spacing.sm, overflow: 'hidden' },
+  bar: { height: 6, borderRadius: radius.pill, backgroundColor: colors.border, marginTop: spacing.sm, overflow: 'hidden' },
   barFill: { height: 6, backgroundColor: colors.accent },
   notes: { color: colors.textSecondary, fontSize: 13, lineHeight: 19, marginTop: spacing.md },
   progress: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
-  button: { marginTop: spacing.lg, height: 44, backgroundColor: colors.accent, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
-  buttonText: { color: '#fff', fontSize: 14, fontWeight: '600' },
+  button: { ...buttonStyle('primary'), marginTop: spacing.lg },
+  buttonText: { ...buttonTextStyle('primary') },
   hint: { color: colors.textMuted, fontSize: 10, lineHeight: 15, marginTop: spacing.md },
 });
 
