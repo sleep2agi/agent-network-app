@@ -251,7 +251,7 @@ function LogsViewer({ cfg: cfgProp, target: targetProp, alias, pointer }: { cfg:
         return (
           <Pressable key={c.key} accessibilityRole="radio" accessibilityState={{ selected: on }} accessibilityLabel={`只看${c.label}`}
             onPress={() => { if (!on) setLevel(c.key); }} testID={`node-logs-level-${c.key}`}
-            style={(st: any) => [{ height: chipH, minWidth: pointer ? 0 : 48, paddingHorizontal: pointer ? spacing.sm : spacing.md, borderRadius: chipH / 2, justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: on ? colors.accent : colors.border, backgroundColor: on ? colors.railActiveBg : 'transparent' },
+            style={(st: any) => [{ height: chipH, minWidth: pointer ? 0 : 48, paddingHorizontal: pointer ? spacing.sm : spacing.md, borderRadius: radius.pill, justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: on ? colors.accent : colors.border, backgroundColor: on ? colors.railActiveBg : 'transparent' },
               pointer && st.hovered && !on ? { backgroundColor: colors.rowHover } : null,
               st.pressed ? { opacity: 0.75 } : null,
               st.focused ? ({ outlineStyle: 'solid', outlineWidth: 2, outlineColor: colors.accent, outlineOffset: 1 } as any) : null]}>
@@ -263,7 +263,7 @@ function LogsViewer({ cfg: cfgProp, target: targetProp, alias, pointer }: { cfg:
   );
 
   const searchBox = (
-    <View testID="node-logs-searchbox" style={{ flexDirection: 'row', alignItems: 'center', height: chipH, flexGrow: 1, flexShrink: 1, minWidth: pointer ? 100 : 120, flexBasis: 100, /* 换行按 100 算,不按输入框的默认宽度算 */ paddingHorizontal: spacing.sm, gap: 6, borderRadius: 6, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.inputBg }}>
+    <View testID="node-logs-searchbox" style={{ flexDirection: 'row', alignItems: 'center', height: chipH, flexGrow: 1, flexShrink: 1, minWidth: pointer ? 100 : 120, flexBasis: 100, /* 换行按 100 算,不按输入框的默认宽度算 */ paddingHorizontal: spacing.sm, gap: 6, borderRadius: radius.item, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.inputBg }}>
       <Ionicons name="search-outline" size={14} color={colors.textMuted} />
       <TextInput ref={searchRef} value={search} onChangeText={setSearch} testID="node-logs-search"
         placeholder={pointer ? `搜索（${isMacKeyboard() ? '⌘F' : 'Ctrl+F'}）` : '搜索日志'} placeholderTextColor={colors.textMuted}
@@ -370,7 +370,7 @@ function Card({ children, testID }: { children: ReactNode; testID?: string }) {
 function SmallBtn({ label, onPress, disabled, height, pointer, testID }: { label: string; onPress: () => void; disabled?: boolean; height: number; pointer: boolean; testID?: string }) {
   return (
     <Pressable accessibilityRole="button" accessibilityLabel={label} onPress={onPress} disabled={disabled} testID={testID}
-      style={(st: any) => [{ height, justifyContent: 'center', paddingHorizontal: spacing.sm + 2, borderRadius: 6, borderWidth: 1, borderColor: colors.border, opacity: disabled ? 0.4 : 1 },
+      style={(st: any) => [{ height, justifyContent: 'center', paddingHorizontal: spacing.sm + 2, borderRadius: radius.item, borderWidth: 1, borderColor: colors.border, opacity: disabled ? 0.4 : 1 },
         pointer && st.hovered ? { backgroundColor: colors.rowHover } : null,
         st.pressed ? { opacity: 0.75 } : null,
         st.focused ? ({ outlineStyle: 'solid', outlineWidth: 2, outlineColor: colors.accent, outlineOffset: 1 } as any) : null]}>
@@ -382,7 +382,7 @@ function SmallBtn({ label, onPress, disabled, height, pointer, testID }: { label
 function IconBtn({ icon, label, onPress, disabled, size, testID }: { icon: string; label: string; onPress: () => void; disabled?: boolean; size: number; testID?: string }) {
   return (
     <Pressable accessibilityRole="button" accessibilityLabel={label} onPress={onPress} disabled={disabled} testID={testID}
-      style={(st: any) => [{ width: size, height: size, alignItems: 'center', justifyContent: 'center', borderRadius: 6, borderWidth: 1, borderColor: colors.border, opacity: disabled ? 0.4 : 1 },
+      style={(st: any) => [{ width: size, height: size, alignItems: 'center', justifyContent: 'center', borderRadius: radius.item, borderWidth: 1, borderColor: colors.border, opacity: disabled ? 0.4 : 1 },
         st.pressed ? { backgroundColor: colors.rowActive } : null]}>
       <Ionicons name={icon as any} size={16} color={colors.textSecondary} />
     </Pressable>
@@ -392,12 +392,12 @@ function IconBtn({ icon, label, onPress, disabled, size, testID }: { icon: strin
 function ToggleBtn({ label, on, onPress, height, pointer, testID }: { label: string; on: boolean; onPress: () => void; height: number; pointer: boolean; testID?: string }) {
   return (
     <Pressable accessibilityRole="switch" accessibilityState={{ checked: on }} accessibilityLabel={label} onPress={onPress} testID={testID}
-      style={(st: any) => [{ height, flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: spacing.sm + 2, borderRadius: 6, borderWidth: 1, borderColor: on ? colors.accent : colors.border, backgroundColor: on ? colors.railActiveBg : 'transparent' },
+      style={(st: any) => [{ height, flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: spacing.sm + 2, borderRadius: radius.item, borderWidth: 1, borderColor: on ? colors.accent : colors.border, backgroundColor: on ? colors.railActiveBg : 'transparent' },
         pointer && st.hovered && !on ? { backgroundColor: colors.rowHover } : null,
         st.pressed ? { opacity: 0.75 } : null,
         st.focused ? ({ outlineStyle: 'solid', outlineWidth: 2, outlineColor: colors.accent, outlineOffset: 1 } as any) : null]}>
       {/* 手机上多一个状态点(没有悬停,开 / 关要一眼看出);桌面靠描边和底色,省下宽度让工具条一行放下。 */}
-      {!pointer ? <View style={{ width: 7, height: 7, borderRadius: 4, backgroundColor: on ? colors.running : colors.textMuted }} /> : null}
+      {!pointer ? <View style={{ width: 7, height: 7, borderRadius: radius.pill, backgroundColor: on ? colors.running : colors.textMuted }} /> : null}
       <Text style={{ color: on ? colors.accent : colors.textSecondary, fontSize: 12, lineHeight: 16 }}>{label}</Text>
     </Pressable>
   );
