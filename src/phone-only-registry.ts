@@ -125,6 +125,7 @@ export const SWIPE_FILES: Readonly<Record<string, { alternative: RegExp | null; 
   'src/NodePicker.tsx': { alternative: /testID="node-picker-backdrop"[^>]*onPress=\{onClose\}/, why: '拖把手关闭只在手机 sheet;点遮罩 / Esc 关闭,宽窗口是居中对话框' },
   'src/TwoPaneDivider.tsx': { alternative: null, why: '只在安卓双栏渲染;拖分隔条在鼠标上也是拖' },
   'src/ChatScreen.tsx': { alternative: null, why: '桌面输入框上沿的拖高把手 —— 鼠标拖动本来就是桌面手势' },
+  'src/NodeRulesSection.tsx': { alternative: /accessibilityRole="adjustable"[\s\S]*onAccessibilityAction=/, why: '规则文件左右分栏的分隔条:鼠标拖动本来就是桌面手势;读屏 / 键盘按步调比例,双击回 50/50' },
 };
 
 /** 手势词:出现在界面文案里就是在叫用户用手指。「点按钮」「节点按…」不是手势词,其余照字面。 */

@@ -482,8 +482,10 @@ export function useRulesFind(args: UseRulesFindArgs): RulesFindController {
       setOpen(true);
       setFocusTick((t) => t + 1);
     };
-    doc.addEventListener('keydown', onKey);
-    return () => doc.removeEventListener('keydown', onKey);
+    // 捕获阶段(同 App.tsx 的快捷键表):react-native-web 的 TextInput 在自己的 keydown 里 stopPropagation,
+    // 冒泡阶段的监听在光标落在编辑框里时收不到 Ctrl+F —— 编辑 / 左右模式里恰恰是最常按它的时候。
+    doc.addEventListener('keydown', onKey, true);
+    return () => doc.removeEventListener('keydown', onKey, true);
   }, [open]);
 
   const setQuery = useCallback((q: string) => { setQueryState(q); setNote(''); pendingNav.current = { kind: 'incremental' }; }, []);

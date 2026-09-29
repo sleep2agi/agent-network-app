@@ -4,9 +4,10 @@
 // 纯逻辑,不 import react-native。
 import { parseMarkdownBlocks } from './markdown-model';
 
-export type RulesViewMode = 'read' | 'edit';
+/** 'split' = 左源码右预览(rules-split.ts,只在宽布局给)。 */
+export type RulesViewMode = 'read' | 'edit' | 'split';
 
-/** 打开规则文件时默认的模式:读得多、改得少,先给能读的样子。 */
+/** 窄处(手机)打开规则文件时默认的模式:读得多、改得少,先给能读的样子。宽布局默认「左右」,见 rules-split.ts initialRulesMode。 */
 export const RULES_DEFAULT_MODE: RulesViewMode = 'read';
 
 export interface RulesViewState {
@@ -29,6 +30,8 @@ export interface OutlineEntry {
   readonly index: number;
   readonly level: number;
   readonly text: string;
+  /** 标题在原文里的行号(0 起):编辑 / 左右模式下点目录,源码滚到这一行。 */
+  readonly line: number;
 }
 
 /** 目录只收 h1–h3,再深就不是目录是全文了。 */
@@ -54,7 +57,7 @@ export function buildRulesOutline(source: string): OutlineEntry[] {
   let index = 0;
   for (const block of parseMarkdownBlocks(source)) {
     if (block.kind !== 'heading') continue;
-    if (block.level <= OUTLINE_MAX_LEVEL) out.push({ index, level: block.level, text: outlineText(block.text) });
+    if (block.level <= OUTLINE_MAX_LEVEL) out.push({ index, level: block.level, text: outlineText(block.text), line: block.line ?? 0 });
     index++;
   }
   return out;

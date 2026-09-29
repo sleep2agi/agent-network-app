@@ -42,3 +42,9 @@ export function editorLineHeightPx(computed: unknown): number {
 export function editorScrollTopForLine(caretTop: number, clientHeight: number, lineHeight: number): number {
   return Math.max(0, caretTop - clientHeight / 2 + lineHeight / 2);
 }
+
+/**
+ * 阅读(和左右的预览)正文列最宽多少(px):约 100 个等宽字符 —— 正文 14px,100ch ≈ 840,再加两侧 lg 内边距。
+ * 只限正文列,不限外框:框和滚动条铺满可用宽度,宽屏上不再是中间一条窄框(2026-09-28 Vincent 2048×807 截图)。
+ */
+export const RULES_READ_MAX_WIDTH = 880;
