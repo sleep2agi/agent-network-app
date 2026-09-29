@@ -21,4 +21,9 @@ registerTranslations({
   'schedules.priority.high': ['高', 'High'],
   'schedules.priority.normal': ['普通', 'Normal'],
   'schedules.priority.low': ['低', 'Low'],
+  // 复制计划(schedule-copy.ts):源计划预填新建表单。
+  'schedules.copy.action': ['复制', 'Copy'],
+  'schedules.copy.suffix': [' 副本', ' copy'],
+  'schedules.copy.adjusted': ['原定时间 {from} 已过，已顺延到 {to}，请确认。', 'The original time {from} has passed; moved to {to}. Please confirm.'],
+  'schedules.once.past': ['执行时间已过去，保存后 Hub 会立即执行一次。', 'This time is in the past; the hub will run it immediately after saving.'],
 });

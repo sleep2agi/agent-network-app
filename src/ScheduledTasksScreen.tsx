@@ -71,6 +71,7 @@ import { elevated } from './elevation';
 import { t } from './i18n';
 import './i18n-schedules';
 import { fieldsOf, mergeDraft, planConflict, type ScheduleEditFields, type ScheduleEditKey } from './schedule-edit-merge';
+import { scheduleCopyDraft } from './schedule-copy';
 
 const DAYS = ['日', '一', '二', '三', '四', '五', '六'];
 
@@ -147,6 +148,8 @@ export default function ScheduledTasksScreen({ cfg, onOpenChat, open }: {
   const [error, setError] = useState('');
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState<HubScheduledTask | null>(null);
+  // 「复制」:用这条预填**新建**表单(不是编辑表单),保存走 POST,源计划不动。
+  const [copySource, setCopySource] = useState<HubScheduledTask | null>(null);
   const [cancelCandidate, setCancelCandidate] = useState<HubScheduledTask | null>(null);
   const [tab, setTab] = useState<'hub' | 'node'>('hub');
   const [filter, setFilter] = useState<ScheduleStatus>(DEFAULT_SCHEDULE_FILTER);
@@ -214,7 +217,7 @@ export default function ScheduledTasksScreen({ cfg, onOpenChat, open }: {
 
   useEffect(() => {
     if (!open) return;
-    if (open.kind === 'create') { setTab('hub'); setEditing(null); setCreateTarget(open.nodeId); setShowForm(true); return; }
+    if (open.kind === 'create') { setTab('hub'); setEditing(null); setCopySource(null); setCreateTarget(open.nodeId); setShowForm(true); return; }
     if (open.kind === 'hub') { setTab('hub'); setPendingHubFocus(open.scheduleId); return; }
     setTab('node'); setFocusedExternal(`${open.nodeId}:${open.scheduleId}`);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -334,7 +337,8 @@ export default function ScheduledTasksScreen({ cfg, onOpenChat, open }: {
     finally { setBusy(false); }
   };
 
-  const openCreate = () => { setEditing(null); setCreateTarget(undefined); setShowForm(true); };
+  const openCreate = () => { setEditing(null); setCopySource(null); setCreateTarget(undefined); setShowForm(true); };
+  const openCopy = (row: HubScheduledTask) => { setEditing(null); setCreateTarget(undefined); setCopySource(row); setShowForm(true); };
 
   const detail = selected ? (
     <ScheduleDetail
@@ -350,6 +354,7 @@ export default function ScheduledTasksScreen({ cfg, onOpenChat, open }: {
       onOpenChat={onOpenChat ? run => onOpenChat(selected.target_alias, run.task_id ?? undefined) : undefined}
       onBack={wide ? undefined : () => setSelectedId(null)}
       onEdit={row => { setEditing(row); setShowForm(true); }}
+      onCopy={openCopy}
       onAction={(row, action) => void act(row, action)}
       onCancel={row => setCancelCandidate(row)}
     />
@@ -482,8 +487,9 @@ export default function ScheduledTasksScreen({ cfg, onOpenChat, open }: {
         visible={showForm}
         editing={editing}
         initialTarget={createTarget}
-        onClose={() => { setShowForm(false); setEditing(null); }}
-        onSaved={async () => { setShowForm(false); setEditing(null); await load(); }}
+        copyFrom={copySource}
+        onClose={() => { setShowForm(false); setEditing(null); setCopySource(null); }}
+        onSaved={async () => { setShowForm(false); setEditing(null); setCopySource(null); await load(); }}
       />
       <CancelScheduleModal
         value={cancelCandidate}
@@ -553,7 +559,7 @@ function ScheduleRow({ row, now, busy, selected, onOpen, onToggle }: {
   );
 }
 
-function ScheduleDetail({ row, now, busy, runs, cfg, expandedRun, runTasks, onToggleRun, onRetryRun, onOpenChat, onBack, onEdit, onAction, onCancel }: {
+function ScheduleDetail({ row, now, busy, runs, cfg, expandedRun, runTasks, onToggleRun, onRetryRun, onOpenChat, onBack, onEdit, onCopy, onAction, onCancel }: {
   row: HubScheduledTask;
   now: number;
   busy: boolean;
@@ -566,6 +572,7 @@ function ScheduleDetail({ row, now, busy, runs, cfg, expandedRun, runTasks, onTo
   onOpenChat?: (run: HubScheduledRun) => void;
   onBack?: () => void;
   onEdit: (row: HubScheduledTask) => void;
+  onCopy: (row: HubScheduledTask) => void;
   onAction: (row: HubScheduledTask, action: ScheduleAction) => void;
   onCancel: (row: HubScheduledTask) => void;
 }) {
@@ -587,6 +594,11 @@ function ScheduleDetail({ row, now, busy, runs, cfg, expandedRun, runTasks, onTo
           <Pressable onPress={onBack} accessibilityRole="button" accessibilityLabel="返回定时任务" style={s.backButton}>
             <Text style={s.backText}>‹ 定时任务</Text>
           </Pressable>
+          {availableActions.includes('copy') ? (
+            <Pressable testID="schedule-copy" disabled={busy} onPress={() => onCopy(row)} accessibilityRole="button" style={[s.backButton, busy && s.actionDisabled]}>
+              <Text style={s.backText}>{t('schedules.copy.action')}</Text>
+            </Pressable>
+          ) : null}
         </View>
       ) : null}
       <ScrollView contentContainerStyle={s.detailContent}>
@@ -599,10 +611,12 @@ function ScheduleDetail({ row, now, busy, runs, cfg, expandedRun, runTasks, onTo
           <Text style={s.detailTarget}>{row.target_alias}</Text>
           {row.priority !== 'normal' ? <Text style={s.metaInline}>{row.priority === 'high' ? '高优先级' : '低优先级'}</Text> : null}
         </View>
-        {availableActions.some(a => a !== 'history') ? <View style={s.actionsRow}>
+        {availableActions.some(a => a !== 'history' && !(a === 'copy' && onBack)) ? <View style={s.actionsRow}>
           {availableActions.includes('run') && <Pressable disabled={busy} style={[s.primarySmall, busy && s.actionDisabled]} onPress={() => onAction(row, 'run')}><Text style={s.primaryText}>立即执行</Text></Pressable>}
           {availableActions.includes('toggle') && <Pressable disabled={busy} style={[s.action, busy && s.actionDisabled]} onPress={() => onAction(row, 'toggle')}><Text style={s.actionText}>{row.status === 'active' ? '暂停' : '恢复'}</Text></Pressable>}
           {availableActions.includes('edit') && <Pressable disabled={busy} style={[s.action, busy && s.actionDisabled]} onPress={() => onEdit(row)}><Text style={s.actionText}>编辑</Text></Pressable>}
+          {/* 手机单栏:五个按钮在 390 宽里折行(实测 376 > 342),「复制」放到顶栏右侧,这一行保持四个。 */}
+          {availableActions.includes('copy') && !onBack && <Pressable testID="schedule-copy" disabled={busy} style={[s.action, busy && s.actionDisabled]} onPress={() => onCopy(row)}><Text style={s.actionText}>{t('schedules.copy.action')}</Text></Pressable>}
           {availableActions.includes('cancel') && <Pressable disabled={busy} style={[s.action, s.danger, busy && s.actionDisabled]} onPress={() => onCancel(row)}><Text style={s.dangerText}>取消计划</Text></Pressable>}
         </View> : null}
 
@@ -725,13 +739,15 @@ function Fact({ label, value, hint, last }: { label: string; value: string; hint
   );
 }
 
-function ScheduleFormModal({ cfg, nodes, visible, editing, initialTarget, onClose, onSaved }: {
+function ScheduleFormModal({ cfg, nodes, visible, editing, initialTarget, copyFrom, onClose, onSaved }: {
   cfg: HubConfig;
   nodes: HubNode[];
   visible: boolean;
   editing: HubScheduledTask | null;
   /** 新建时预选的执行节点 node_id(节点页「＋ 新建」带过来)。 */
   initialTarget?: string;
+  /** 「复制」的源计划:新建表单按它预填(schedule-copy.ts),源计划不动。 */
+  copyFrom?: HubScheduledTask | null;
   onClose: () => void;
   onSaved: () => void;
 }) {
@@ -763,7 +779,10 @@ function ScheduleFormModal({ cfg, nodes, visible, editing, initialTarget, onClos
   // 只在打开 / 换编辑对象时从 editing 同步 —— 列表 10 秒轮询换的是 items,不会碰到打开着的表单。
   const [base, setBase] = useState<HubScheduledTask | null>(editing);
   const [conflict, setConflict] = useState<{ latest: HubScheduledTask; keys: ScheduleEditKey[] } | null>(null);
-  const fallbackAlias = base && base.target_node_id === target ? base.target_alias : null;
+  // 单次计划复制时原时间已过、被顺延:记下原时间给提示用;用户一改时间就不再提。
+  const [adjustedFrom, setAdjustedFrom] = useState<string | null>(null);
+  const source = base ?? (editing ? null : copyFrom ?? null);
+  const fallbackAlias = source && source.target_node_id === target ? source.target_alias : null;
 
   const fillForm = (f: ScheduleEditFields) => {
     setName(f.name); setTask(f.task); setTarget(f.target_node_id);
@@ -780,15 +799,19 @@ function ScheduleFormModal({ cfg, nodes, visible, editing, initialTarget, onClos
 
   useEffect(() => {
     if (!visible) return;
-    setError(''); setConflict(null); setBase(editing);
+    setError(''); setConflict(null); setBase(editing); setAdjustedFrom(null);
     if (!editing) {
       setName(''); setTask(''); setTarget(initialTarget ?? ''); setKind('once'); setWhen(''); setEvery('1'); setUnit('hours');
       setClock('09:00'); setWeekdays([1]); setMisfirePolicy('catch_up_once'); setPriority('normal'); setTimezone(detectedTimezone);
+      if (copyFrom) {
+        const copy = scheduleCopyDraft(copyFrom, Date.now(), t('schedules.copy.suffix'));
+        fillForm(copy.fields); setAdjustedFrom(copy.adjustedFrom);
+      }
       return;
     }
     fillForm(fieldsOf(editing));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [visible, editing, detectedTimezone, initialTarget]);
+  }, [visible, editing, detectedTimezone, initialTarget, copyFrom]);
 
   const invalidSchedule = (kind === 'once' && !when) ||
     (kind === 'interval' && (!Number.isInteger(Number(every)) || Number(every) < (unit === 'seconds' ? 60 : 1))) ||
@@ -854,6 +877,10 @@ function ScheduleFormModal({ cfg, nodes, visible, editing, initialTarget, onClos
     if (key === 'target_node_id') return nodes.find(n => n.node_id === f.target_node_id)?.alias ?? f.target_node_id;
     return String(f[key]);
   };
+  const whenMs = kind === 'once' && when ? new Date(when).getTime() : NaN;
+  const timeHint = kind !== 'once' ? null
+    : adjustedFrom && Number.isFinite(whenMs) ? t('schedules.copy.adjusted', { from: fmt(adjustedFrom), to: fmt(new Date(whenMs).toISOString()) })
+    : Number.isFinite(whenMs) && whenMs < Date.now() ? t('schedules.once.past') : null;
   const cannotSave = busy || !name.trim() || !task.trim() || !target || !timezone.trim() || invalidSchedule;
   return <ScheduleModal visible={visible} onClose={onClose} testID="schedule-form" title={editing ? '编辑定时任务' : '新建定时任务'} primary={{ label: '保存', disabled: cannotSave || !!conflict, onPress: submit }}>
       <ScrollView contentContainerStyle={styles.form} keyboardShouldPersistTaps="handled">
@@ -883,7 +910,7 @@ function ScheduleFormModal({ cfg, nodes, visible, editing, initialTarget, onClos
         <Label text="优先级"><View style={styles.segment}>{(['high','normal','low'] as const).map((value) => <Pressable key={value} onPress={() => setPriority(value)} style={[styles.segmentItem, priority === value && styles.segmentActive]}><Text style={priority === value ? styles.segmentTextActive : styles.segmentText}>{value === 'high' ? '高' : value === 'low' ? '低' : '普通'}</Text></Pressable>)}</View></Label>
         <Label text="类型"><View style={styles.segment}>{(['once','interval','daily','weekly'] as const).map((x, i) => <Pressable key={x} onPress={() => setKind(x)} style={[styles.segmentItem, kind === x && styles.segmentActive]}><Text style={kind === x ? styles.segmentTextActive : styles.segmentText}>{['单次','间隔','每天','每周'][i]}</Text></Pressable>)}</View></Label>
         <Label text="错过执行"><View style={styles.segment}>{(['catch_up_once','skip'] as const).map((policy) => <Pressable key={policy} onPress={() => setMisfirePolicy(policy)} style={[styles.segmentItem, misfirePolicy === policy && styles.segmentActive]}><Text style={misfirePolicy === policy ? styles.segmentTextActive : styles.segmentText}>{policy === 'catch_up_once' ? '补跑一次' : '跳过本次'}</Text></Pressable>)}</View><Text style={styles.meta}>{misfirePolicy === 'catch_up_once' ? '适合新闻抓取；恢复后最多补跑一次' : '错过后等待下一周期'}</Text></Label>
-        {kind === 'once' && <Label text="执行时间（ISO 或 YYYY-MM-DDTHH:mm）"><TextInput style={styles.input} autoCapitalize="none" value={when} onChangeText={setWhen} placeholder="2026-08-10T09:00" placeholderTextColor={colors.textMuted} /></Label>}
+        {kind === 'once' && <Label text="执行时间（ISO 或 YYYY-MM-DDTHH:mm）"><TextInput style={styles.input} autoCapitalize="none" value={when} onChangeText={v => { setWhen(v); setAdjustedFrom(null); }} placeholder="2026-08-10T09:00" placeholderTextColor={colors.textMuted} />{timeHint ? <Text testID="schedule-form-time-hint" style={styles.timeHint}>{timeHint}</Text> : null}</Label>}
         <Label text="时区（IANA）"><TextInput style={styles.input} autoCapitalize="none" value={timezone} onChangeText={setTimezone} placeholder="Asia/Shanghai" placeholderTextColor={colors.textMuted} /></Label>
         {kind === 'interval' && <Label text="固定间隔"><TextInput style={styles.input} keyboardType="number-pad" value={every} onChangeText={setEvery} /><View style={[styles.segment, { marginTop: spacing.sm }]}>{(['seconds','minutes','hours','days'] as const).map((value, index) => <Pressable key={value} onPress={() => setUnit(value)} style={[styles.segmentItem, unit === value && styles.segmentActive]}><Text style={unit === value ? styles.segmentTextActive : styles.segmentText}>{['秒','分钟','小时','天'][index]}</Text></Pressable>)}</View></Label>}
         {(kind === 'daily' || kind === 'weekly') && <Label text="时间"><TextInput style={styles.input} value={clock} onChangeText={setClock} placeholder="09:00" placeholderTextColor={colors.textMuted} /></Label>}
@@ -1062,14 +1089,15 @@ function makeStyles() { return StyleSheet.create({
   scheduleChip: { flexShrink: 0, color: colors.textSecondary, fontSize: fontSize.caption, backgroundColor: colors.subtleFill, borderRadius: radius.pill, paddingHorizontal: 6, paddingVertical: 2, overflow: 'hidden' },
   rowWhen: { flexShrink: 1, color: colors.textMuted, fontSize: fontSize.caption },
   pill: { flexShrink: 0, fontSize: fontSize.caption, fontWeight: weight.medium, overflow: 'hidden', paddingHorizontal: 8, paddingVertical: 2, borderRadius: radius.pill },
-  detailBar: { minHeight: 48, justifyContent: 'center', paddingHorizontal: spacing.sm, borderBottomWidth: 1, borderBottomColor: colors.border },
-  backButton: { paddingHorizontal: spacing.sm, paddingVertical: spacing.sm, alignSelf: 'flex-start' },
+  detailBar: { minHeight: 48, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: spacing.sm, borderBottomWidth: 1, borderBottomColor: colors.border },
+  backButton: { paddingHorizontal: spacing.sm, paddingVertical: spacing.sm },
   backText: { color: colors.accent, fontSize: fontSize.title },
   detailContent: { padding: spacing.xl, paddingBottom: 60, maxWidth: 760 },
   detailTitle: { flexShrink: 1, color: colors.text, fontSize: fontSize.heading, fontWeight: weight.strong },
   detailTarget: { color: colors.textSecondary, fontSize: fontSize.body },
   metaInline: { color: colors.textMuted, fontSize: fontSize.small },
   actionsRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm, marginTop: spacing.lg },
+  timeHint: { color: colors.blocked, fontSize: 11, marginTop: spacing.xs },
   sectionLabel: { color: colors.textMuted, fontSize: fontSize.small, fontWeight: weight.medium, marginTop: spacing.xl, marginBottom: spacing.sm },
   prompt: { color: colors.text, fontSize: fontSize.body, lineHeight: 21, backgroundColor: colors.card, borderColor: colors.border, borderWidth: 1, borderRadius: radius.control, padding: spacing.md },
   facts: { backgroundColor: colors.card, borderColor: colors.border, borderWidth: 1, borderRadius: radius.control, paddingHorizontal: spacing.md },
