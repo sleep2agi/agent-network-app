@@ -19,3 +19,14 @@ are independently covered by the companion Hub HTTP suite. No port 9200, no
 production writes, no version change, no publishing.
 First browser run compared chips belonging to different cards; corrected the
 measurement selector to compare children of the same card, then 14/14.
+
+Rebase after #526 (2026-09-29): base 776a3bbb7964ee6e2613cff3ad4e0f38faa3447a.
+Resolved filterActive with BOTH statuses?.length and tag. Preserved main's
+TaskListTable useRef import alongside TaskTagChips. Added three ck assertions:
+status alone active; nonmatching status excludes matching tag; both match.
+Docker full fresh build tests/test-task-tags/Dockerfile:
+tags 18/18; copy guard42/42; typecheck PASS; npm test238/238 files PASS.
+Docker requirement-details components34/34,140 assertions PASS.
+An earlier mounted-src run reused an old package-lock and failed the version
+guard; discarded that mixed-context result and rebuilt the complete worktree.
+The original schedule-edit-merge red is resolved by main #524, not this PR.
