@@ -68,6 +68,7 @@ function ScopedRequirementBoard({ cfg, desktop, dispatch }: { cfg: HubConfig; de
   const projects = useTaskBoard(st => (st.scope === scope ? st.projects : null));
   const managingProjects = useTaskBoard(st => st.managingProjects);
   const dueDatetime = useTaskBoard(st => st.scope === scope && st.capabilities.includes('due_datetime'));
+  const subCaps = useTaskBoard(st => st.scope === scope && st.capabilities.includes('sub_requirements'));
   const filter = useTaskBoard(st => st.filter);
   const items = mine ? storeItems : [];
   /** 这块看板本次启动里从 Hub 读成功过(哪怕是空的)——连不上时照常显示那份,而不是整页报错。 */
@@ -358,6 +359,10 @@ function ScopedRequirementBoard({ cfg, desktop, dispatch }: { cfg: HubConfig; de
           leading={filter.priorities.length === 1 ? <PriorityDot p={filter.priorities[0]} s={s} /> : <Ionicons name="flag-outline" size={14} color={colors.textMuted} />}
         />
       </View>
+      {subCaps ? (
+        // 只看顶层 / 全部:列表和看板一起生效。
+        <Segmented s={s} items={[{ key: 'all', label: '全部' }, { key: 'top', label: '只看顶层' }]} value={filter.topLevel ? 'top' : 'all'} onChange={k => setTaskFilter({ ...filter, topLevel: k === 'top' })} testID="task-scope" />
+      ) : null}
       {projects ? (
         <View ref={(r: any) => { chipRefs.current.project = r; }} collapsable={false}>
           <Chip
@@ -372,7 +377,7 @@ function ScopedRequirementBoard({ cfg, desktop, dispatch }: { cfg: HubConfig; de
         </View>
       ) : null}
       {filterActive(filter) ? (
-        <Pressable accessibilityRole="button" onPress={() => setTaskFilter({ owners: [], priorities: [], project: '' })} style={[s.iconButton, { width: undefined, paddingHorizontal: spacing.sm }]} testID="task-filter-clear">
+        <Pressable accessibilityRole="button" onPress={() => setTaskFilter({ owners: [], priorities: [], project: '', topLevel: filter.topLevel })} style={[s.iconButton, { width: undefined, paddingHorizontal: spacing.sm }]} testID="task-filter-clear">
           <Text style={s.link}>清除筛选</Text>
         </Pressable>
       ) : null}
@@ -405,11 +410,13 @@ function ScopedRequirementBoard({ cfg, desktop, dispatch }: { cfg: HubConfig; de
     </View>
   ) : (
     <View style={s.header} testID="task-header" onLayout={e => setHeaderBottom(e.nativeEvent.layout.y + e.nativeEvent.layout.height)}>
-      <Text style={s.pageTitle} accessibilityRole="header">任务</Text>
-      <Segmented s={s} items={sections} value={section} onChange={setTaskSection} testID="tasks-view" />
-      {filters}
-      <View style={s.spacer} />
-      {newButton}
+      <Text style={[s.pageTitle, { flexShrink: 0 }]} numberOfLines={1} accessibilityRole="header">任务</Text>
+      <View style={{ flexShrink: 0 }}><Segmented s={s} items={sections} value={section} onChange={setTaskSection} testID="tasks-view" /></View>
+      {/* 筛选一行放不下(桌面窄窗口:1000 宽时内容区只有 ~716)就在这一格里横向滚动,不把标题挤成两行、不把「新建」挤出去。 */}
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ flex: 1, minWidth: 0 }} contentContainerStyle={{ flexDirection: 'row', alignItems: 'center', gap: spacing.md }} testID="task-header-filters">
+        {filters}
+      </ScrollView>
+      <View style={{ flexShrink: 0 }}>{newButton}</View>
     </View>
   );
 
@@ -656,6 +663,9 @@ function ScopedRequirementBoard({ cfg, desktop, dispatch }: { cfg: HubConfig; de
         <TaskDetailPanel
           cfg={cfg}
           item={selected}
+          items={items}
+          onOpenRequirement={id => setSelectedId(id)}
+          onCreateChild={parent => setDraft({ ...draftFor('pool'), parentId: parent.id, projectId: parent.projectId ?? (projects ? defaultProjectFor(filter, projects) : null) })}
           projects={projects}
           dueDatetime={dueDatetime}
           mode={drawer ? 'drawer' : 'page'}
@@ -689,6 +699,7 @@ function ScopedRequirementBoard({ cfg, desktop, dispatch }: { cfg: HubConfig; de
       <TaskCreateDialog
         draft={draft}
         twoRoles={twoRoles}
+        parentName={draft?.parentId ? items.find(i => i.id === draft.parentId)?.name ?? null : null}
         projects={projects}
         dueDatetime={dueDatetime}
         pointer={pointer}
@@ -764,10 +775,19 @@ function ScopedRequirementBoard({ cfg, desktop, dispatch }: { cfg: HubConfig; de
 function CardFooter({ item, people, s, touch }: { item: Requirement; people: readonly RequirementPerson[]; s: TaskStyles; touch: boolean }) {
   const hasList = !!item.checklist?.length;
   const hasPeople = !!item.participants?.length;
-  if (!hasList && !hasPeople) return null;
+  const subs = item.children?.total ? item.children : null;
+  if (!hasList && !hasPeople && !subs) return null;
   return (
-    <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm }} testID="task-card-footer">
-      <View style={{ flex: 1 }}>{hasList ? <ChecklistProgress item={item} s={s} /> : null}</View>
+    // 窄列放不下三样(子需求 · 子任务进度 · 参与人)时换行,不把「4/7」挤成「4/」。
+    <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm, flexWrap: 'wrap', rowGap: 6 }} testID="task-card-footer">
+      {/* 子需求进度(分支图标 + 「2/5」)和子任务进度(勾选框 + 细条)是两件事,样子也分开。 */}
+      {subs ? (
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, height: 20, paddingHorizontal: 7, borderRadius: radius.pill, backgroundColor: colors.subtleFill }} testID="task-subreq-progress" accessibilityLabel={`子需求 ${subs.done}/${subs.total} 完成`}>
+          <Ionicons name="git-branch-outline" size={11} color={subs.done === subs.total ? colors.running : colors.textSecondary} />
+          <Text style={[s.metaMuted, { fontSize: 11 }]}>{subs.done}/{subs.total}</Text>
+        </View>
+      ) : null}
+      <View style={{ flex: 1, minWidth: hasList ? 96 : 0 }}>{hasList ? <ChecklistProgress item={item} s={s} /> : null}</View>
       {hasPeople ? <ParticipantStack item={item} people={people} s={s} touch={touch} /> : null}
     </View>
   );

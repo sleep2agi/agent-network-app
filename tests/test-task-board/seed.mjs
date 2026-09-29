@@ -64,5 +64,14 @@ for (const r of rows) {
   const { requirement } = await call("/api/requirements", { method: "POST", body: JSON.stringify({ name: r.name, priority: r.priority, due: r.due, assignee: "", network_id: net, ...(r.description ? { description: r.description } : {}), ...(r.checklist ? { checklist: r.checklist } : {}), ...(projects[projectOf[r.name]] ? { project_id: projects[projectOf[r.name]] } : {}), ...(participantsOf[r.name] ? { participants: participantsOf[r.name] } : {}), ...(r.owner ? { owner: r.owner } : {}), ...(r.agent ? { agent_owner: r.agent } : {}) }) });
   if (r.column !== "pool") await call(`/api/requirements/${requirement.id}?network_id=${net}`, { method: "PATCH", body: JSON.stringify({ column: r.column }) });
 }
+// Sub-requirements + a synced GitHub issue (a hub without #2081 ignores parent_id / external_* → fallback run).
+{
+  const list = (await call(`/api/requirements?network_id=${net}`)).requirements;
+  const parent = list.find(r => r.name === "登录页支持扫码登录");
+  for (const [name, column] of [["扫码登录:出码接口", "done"], ["扫码登录:手机扫码页", "doing"]]) {
+    await call("/api/requirements", { method: "POST", body: JSON.stringify({ name, column, network_id: net, parent_id: parent.id }) });
+  }
+  await call(`/api/requirements/${parent.id}?network_id=${net}`, { method: "PATCH", body: JSON.stringify({ external_ref: "github:example-org/example-repo#42", external_url: "https://github.com/example-org/example-repo/issues/42" }) }).catch(() => null);
+}
 const { requirements } = await call(`/api/requirements?network_id=${net}`);
 console.log(`seeded ${requirements.length} requirements`);

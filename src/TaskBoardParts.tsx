@@ -233,8 +233,8 @@ export function ChecklistProgress({ item, s }: { item: Pick<Requirement, 'checkl
   return (
     <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }} testID="task-checklist-progress" accessibilityLabel={`子任务 ${p.done}/${p.total}`}>
       <Ionicons name={complete ? 'checkmark-circle' : 'checkbox-outline'} size={13} color={complete ? colors.running : colors.textMuted} />
-      <Text style={[s.metaMuted, { fontSize: 11 }]}>{p.done}/{p.total}</Text>
-      <View style={{ flex: 1, height: 3, borderRadius: radius.pill, backgroundColor: colors.subtleFill, overflow: 'hidden' }}>
+      <Text style={[s.metaMuted, { fontSize: 11, flexShrink: 0 }]}>{p.done}/{p.total}</Text>
+      <View style={{ flex: 1, minWidth: 16, height: 3, borderRadius: radius.pill, backgroundColor: colors.subtleFill, overflow: 'hidden' }}>
         <View style={{ width: `${Math.round(p.ratio * 100)}%`, height: 3, backgroundColor: complete ? colors.running : colors.accent }} testID="task-checklist-bar" />
       </View>
     </View>

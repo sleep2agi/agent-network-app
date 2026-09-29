@@ -38,6 +38,11 @@ export function requirementFromHub(row: unknown): Requirement | null {
     ...(typeof r.description === 'string' ? { description: r.description } : {}),
     ...(Array.isArray(r.checklist) ? { checklist: checklistFromHub(r.checklist) } : {}),
     ...('project_id' in r ? { projectId: typeof r.project_id === 'string' && r.project_id ? r.project_id : null } : {}),
+    ...('parent_id' in r ? { parentId: typeof r.parent_id === 'string' && r.parent_id ? r.parent_id : null } : {}),
+    ...(r.children && typeof r.children === 'object' ? { children: childCounts(r.children) } : {}),
+    ...('external_ref' in r ? { externalRef: typeof r.external_ref === 'string' && r.external_ref ? r.external_ref : null } : {}),
+    // 只收 http(s):界面会把它做成可点的链接。
+    ...('external_url' in r ? { externalUrl: typeof r.external_url === 'string' && /^https?:\/\//i.test(r.external_url) ? r.external_url : null } : {}),
     id: r.id,
     name: r.name.trim().slice(0, 80),
     priority,
@@ -53,6 +58,13 @@ function agentOwnerFromHub(value: unknown): RequirementPersonRef | null {
   if (!value || typeof value !== 'object') return null;
   const v = value as Record<string, unknown>;
   return v.kind === 'node' && typeof v.id === 'string' && v.id ? { kind: 'node', id: v.id } : null;
+}
+
+function childCounts(value: unknown): { total: number; done: number } {
+  const v = value as Record<string, unknown>;
+  const total = typeof v.total === 'number' && v.total >= 0 ? Math.floor(v.total) : 0;
+  const done = typeof v.done === 'number' && v.done >= 0 ? Math.min(Math.floor(v.done), total) : 0;
+  return { total, done };
 }
 
 /** 子任务:坏的项丢掉,不让一张卡因为它整张丢掉。 */
@@ -128,7 +140,7 @@ export async function listRequirementsFull(cfg: HubConfig): Promise<{ rows: Requ
   return { rows: rows.map(requirementFromHub).filter((row): row is Requirement => !!row), capabilities };
 }
 
-type CreateInput = { name: string; priority: ReqPriority; assignee: string; due: string; column?: ReqColumn; clientId?: string; owner?: RequirementPersonRef; agentOwner?: RequirementPersonRef; projectId?: string };
+type CreateInput = { name: string; priority: ReqPriority; assignee: string; due: string; column?: ReqColumn; clientId?: string; owner?: RequirementPersonRef; agentOwner?: RequirementPersonRef; projectId?: string; parentId?: string };
 
 /** POST 的请求体。负责人只带稳定身份 {kind,id},多余字段(显示名、networkId…)一律不发。 */
 export function createRequirementBody(cfg: HubConfig, input: CreateInput): Record<string, unknown> {
@@ -143,6 +155,7 @@ export function createRequirementBody(cfg: HubConfig, input: CreateInput): Recor
     owner: input.owner ? { kind: input.owner.kind, id: input.owner.id } : undefined,
     agent_owner: input.agentOwner ? { kind: input.agentOwner.kind, id: input.agentOwner.id } : undefined,
     project_id: input.projectId || undefined,
+    parent_id: input.parentId || undefined,
   };
 }
 
@@ -174,6 +187,8 @@ export async function updateRequirementOnHub(cfg: HubConfig, id: string, patch: 
   if (res.status === 400 && data?.error === 'owner_must_be_human') throw new RequirementsHubError('负责人只能是人类;Agent 请放在「负责 Agent」', 400);
   if (res.status === 400 && data?.error === 'project_archived') throw new RequirementsHubError('这个项目已归档，换一个项目', 400);
   if (res.status === 400 && data?.error === 'project_not_in_network') throw new RequirementsHubError('这个项目不在当前网络', 400);
+  if (res.status === 400 && data?.error === 'parent_too_deep') throw new RequirementsHubError('子需求最多 5 层', 400);
+  if (res.status === 400 && (data?.error === 'parent_cycle' || data?.error === 'parent_not_found')) throw new RequirementsHubError('不能挂到这个父需求下', 400);
   if (res.status === 400 && data?.error === 'invalid_description') throw new RequirementsHubError('描述太长了(最多 20000 字)', 400);
   if (res.status === 400 && data?.error === 'invalid_checklist') throw new RequirementsHubError('子任务不合法(最多 100 项,每项 1–500 字)', 400);
   if (res.status === 400 && data?.error === 'agent_owner_must_be_agent') throw new RequirementsHubError('负责 Agent 只能是 Agent 节点', 400);

@@ -26,6 +26,13 @@ export interface Requirement {
   checklist?: ChecklistItem[];
   /** 项目 id。null = 不属于任何项目;undefined = 这个 Hub 还没有项目。 */
   projectId?: string | null;
+  /** 父需求 id(子需求);null = 顶层;undefined = 这个 Hub 还没有子需求。 */
+  parentId?: string | null;
+  /** 子需求进度(未归档的子需求数 / 其中完成的)。 */
+  children?: { total: number; done: number };
+  /** 同步来源(如 github:owner/repo#123)和它的链接。 */
+  externalRef?: string | null;
+  externalUrl?: string | null;
   participants?: RequirementPersonRef[];
   id: string;
   name: string;

@@ -151,12 +151,14 @@ export function ProjectPicker({ value, projects, onChange, idBase }: { value: st
   );
 }
 
-export default function TaskCreateDialog({ draft, sheet, twoRoles, projects, dueDatetime, pointer, networkId, people, peopleLoading, peopleError, onLoadPeople, onChange, onSubmit, onClose }: {
+export default function TaskCreateDialog({ draft, sheet, twoRoles, parentName, projects, dueDatetime, pointer, networkId, people, peopleLoading, peopleError, onLoadPeople, onChange, onSubmit, onClose }: {
   draft: CreateDraft | null;
   /** Hub 分不分「负责人(人类)/ 负责 Agent」。不分就是旧的单一负责人。 */
   twoRoles: boolean;
   /** 项目列表;null = Hub 没有项目,不显示。 */
   projects: readonly RequirementProject[] | null;
+  /** 建子需求时父需求的名字(显示「属于:…」)。 */
+  parentName?: string | null;
   /** Hub 能把预计完成存到秒(capabilities.due_datetime)。 */
   dueDatetime: boolean;
   pointer: boolean;
@@ -205,12 +207,18 @@ export default function TaskCreateDialog({ draft, sheet, twoRoles, projects, due
           <Pressable accessibilityLabel="关闭新建" onPress={onClose} style={StyleSheet.absoluteFill} testID="req-create-backdrop" />
           <View style={panel} accessibilityViewIsModal testID="req-create">
             <View style={[f.row, { justifyContent: 'space-between' }]}>
-              <Text style={{ color: colors.text, fontSize: typeScale.title + 1, fontWeight: weight.strong }}>新建任务</Text>
+              <Text style={{ color: colors.text, fontSize: typeScale.title + 1, fontWeight: weight.strong }}>{draft.parentId ? '新建子需求' : '新建任务'}</Text>
               <Pressable accessibilityRole="button" accessibilityLabel="关闭" onPress={onClose} style={s.iconButton} testID="req-create-close">
                 <Ionicons name="close" size={18} color={colors.textSecondary} />
               </Pressable>
             </View>
             <ScrollView keyboardShouldPersistTaps="handled" style={{ flexGrow: 0 }} contentContainerStyle={{ gap: spacing.lg }}>
+              {draft.parentId ? (
+                <View style={[f.row, { gap: 6 }]} testID="req-create-parent">
+                  <Ionicons name="git-branch-outline" size={13} color={colors.textMuted} />
+                  <Text style={s.muted} numberOfLines={1}>属于：{parentName || '父需求'}</Text>
+                </View>
+              ) : null}
               <TextInput
                 autoFocus
                 value={draft.name}
