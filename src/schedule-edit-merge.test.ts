@@ -76,6 +76,8 @@ ck('missing latest ⇒ gone', planConflict(base, undefined, draftOf()).kind === 
   const { readFileSync } = await import('node:fs');
   const { t: tr } = await import('./i18n');
   await import('./i18n-schedules');
+  // The screen also renders skip-group rows (#521), whose strings register in schedule-run-groups.
+  await import('./schedule-run-groups');
   const src = readFileSync(new URL('./ScheduledTasksScreen.tsx', import.meta.url), 'utf8');
   const keys = [...src.matchAll(/\bt\('([\w.]+)'/g)].map(m => m[1]);
   const dynamic = ['name', 'target_node_id', 'task', 'priority', 'timezone', 'schedule', 'misfire_policy'].map(k => `schedules.field.${k}`)
