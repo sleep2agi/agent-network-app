@@ -7,7 +7,7 @@
 // 纯逻辑,不 import react-native。
 
 import { settingsPair } from './i18n-settings';
-export type SettingsCategoryKey = 'account' | 'localHub' | 'appearance' | 'notifications' | 'voice' | 'shortcuts' | 'about';
+export type SettingsCategoryKey = 'account' | 'users' | 'localHub' | 'appearance' | 'notifications' | 'voice' | 'shortcuts' | 'about';
 
 export type SettingsRow = {
   readonly key: string;
@@ -42,6 +42,17 @@ export const SETTINGS_CATEGORIES: readonly SettingsCategory[] = [
       { key: 'addAccount', label: '添加 Hub / 账号', keywords: ['添加', '登录', 'add'] },
       { key: 'switchAccount', label: '切换账号', keywords: ['切换', '服务器', '多账号', 'switch', 'account', 'server'] },
       { key: 'logout', label: '移除当前账号', keywords: ['退出', '登出', 'logout'] },
+    ],
+  },
+  {
+    // 多用户账号与 Agent 权限(hub agent-network#2084):只给 Hub 管理员 / 当前网络的 owner、admin。
+    key: 'users',
+    label: '用户管理',
+    icon: 'people-outline',
+    conditional: true,
+    rows: [
+      { key: 'members', label: '成员与可访问的 Agent', keywords: ['用户', '成员', '权限', '授权', '分配', 'agent', 'user', 'member', 'permission', 'access', 'grant'] },
+      { key: 'newUser', label: '新建用户', keywords: ['添加用户', '创建用户', '注册', 'create user', 'new user', 'add user'] },
     ],
   },
   {
@@ -238,7 +249,7 @@ export type PhoneSettingsGroup = { readonly title: string | null; readonly keys:
 
 export const PHONE_SETTINGS_GROUPS: readonly PhoneSettingsGroup[] = [
   { title: null, keys: ['account'] },
-  { title: '通用', keys: ['notifications', 'appearance', 'localHub'] },
+  { title: '通用', keys: ['users', 'notifications', 'appearance', 'localHub'] },
   { title: '功能', keys: ['voice', 'shortcuts'] },
   { title: '帮助与关于', keys: ['about'] },
 ];

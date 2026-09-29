@@ -101,6 +101,8 @@ const withTimeout = (run: (signal: AbortSignal) => Promise<Response>): Promise<R
 import { readStatusCountsAsFailure, reportReadFailure, reportReadSuccess } from './connectivity';
 import { classifyLoginFailure, type LoginFailureKind } from './login-flow';
 import { userMessagesPath } from './user-unread';
+import { pickDefaultNetworkId } from './user-admin';
+import { stripHumanDms } from './human-dm';
 
 /** 一次轮询读的硬上限:从发出到**读完响应体**。withTimeout 只管到响应头,响应体卡在半开的隧道
  *  连接上时 `res.json()` 永远不返回 —— 那个轮询就永远 running、再也不刷新(2026-09-29)。
@@ -632,8 +634,9 @@ export interface UserMessagesResponse {
   unread_by_agent?: Record<string, number>;
   unread_total?: number;
 }
+// 私信(kind='human_dm')也在 user_inbox 里:在这个唯一的取数口摘掉,agent 的会话 / 角标 / 通知都看不到它(human-dm.ts)。
 export const fetchUserMessages = (cfg: HubConfig, limit: number) =>
-  get<UserMessagesResponse>(cfg, userMessagesPath(limit, cfg.networkId));
+  get<UserMessagesResponse>(cfg, userMessagesPath(limit, cfg.networkId)).then(body => stripHumanDms(body));
 
 /** #1828:把看过的消息在 hub 上标已读(user_inbox 行 + inbox 里发给自己用户名的回复行);hub 只改自己的行。 */
 export const ackUserMessages = async (cfg: HubConfig, messageIds: string[]): Promise<number> => {
@@ -682,8 +685,8 @@ const fetchAuthIdentity = async (cfg: HubConfig): Promise<{ networkId?: string; 
       );
       return res.json();
     })(), HUB_TOOL_DEADLINE_MS, () => null);
-    const cur = d?.current_network;
-    const networkId = (typeof cur === 'string' ? cur : cur?.network_id) ?? d?.networks?.[0]?.network_id;
+    // 默认网络:current_network,否则 networks[0];多用户(hub#2084)下被管理员建进某网络的受限成员落在那个网络。
+    const networkId = pickDefaultNetworkId(d);
     const username = d?.user?.username ?? d?.username;
     return {
       ...(typeof networkId === 'string' && networkId.trim() ? { networkId } : {}),

@@ -8,6 +8,8 @@ import {
 import DesktopMessageNotice from './DesktopMessageNotice';
 import { canOpenUserEventStream, openUserEventStream } from './user-events-sse';
 import { requestNotifierRefresh } from './notifier-bus';
+import { isHumanDmNotice } from './human-dm';
+import { activeDmPeer, emitHumanDm } from './human-dm-bus';
 
 const SEEN_CAP = 200;
 
@@ -33,6 +35,11 @@ export default function DesktopMessageListener({ cfg }: { cfg: HubConfig }) {
         if (seen.current.size > SEEN_CAP) {
           const first = seen.current.values().next().value;
           if (first) seen.current.delete(first);
+        }
+        // 人与人私信:人员列表 / 开着的会话去拉新的;正在和这个人聊时不再弹顶部提示。
+        if (isHumanDmNotice(result.notice)) {
+          emitHumanDm(result.notice.from ?? null);
+          if (result.notice.from && result.notice.from === activeDmPeer()) return;
         }
         setNotice(result.notice);
       },
