@@ -6,12 +6,13 @@ import { ownerLabel, personName } from './i18n-task-presentation';
 // 桌面(内容宽 ≥ NARROW):左边冻结的一列任务名,右边横向滚动的时间轴;时间轴的日期头吸顶,
 //   和下面的条同步横向滚动。按项目 / 负责 Agent 分组,日 / 周两种刻度,一条竖线标今天,
 //   点条或名字 = 打开现有的任务详情。没有期限的放在图下面的「未设期限」。
+//   拖条的右端(鼠标)= 改预计完成:请求里只有 due,描述等别的字段不发;失败退回原位(RequirementBoard.setDue)。
 // 手机(< NARROW):不画横向时间轴,改成按期限所在周分组的列表,每行一条七格小条标出这一周里占了哪几天。
 //   理由:390 宽减掉名字列只剩 ~150px,日刻度一屏不到五天、名字只能截成三四个字;横向拖动时间轴和竖向滚列表
 //   在触屏上是同一个手势方向的两个轴,容易拖错;这里的任务多数是几周长的条,一屏五天看到的大多是「整行都满」。
 //   按周列表把「这周要交什么」放在第一眼,名字完整,跨度用「开始 → 期限」文字 + 七格条表达。
 //
-// 🔴 开始 = 创建时间(Hub 还没有开始字段),工具栏上写明。
+// 🔴 没设开始(或 Hub 还没有开始字段)时,开始 = 创建时间,工具栏上写明。
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { Text } from './ui-text';
@@ -21,7 +22,7 @@ import type { Requirement, RequirementProject } from './requirements-model';
 import type { RequirementPerson } from './requirement-people';
 import { PriorityDot, ProjectChip, Segmented, STATUS_TONE, a11yState, cardBg, softShadow, type TaskStyles } from './TaskBoardParts';
 import {
-  GANTT_DAY_PX, barGeometry, barOverdue, dayDiff, firstCurrentWeek, ganttGroups, ganttRange, ganttTicks, ganttWeeks, plusDays, todayX, weekStrip,
+  GANTT_DAY_PX, barGeometry, clampDragDays, dragDays, shiftedDue, barOverdue, dayDiff, firstCurrentWeek, ganttGroups, ganttRange, ganttTicks, ganttWeeks, plusDays, todayX, weekStrip,
   type GanttBar, type GanttGroup, type GanttGroupBy, type GanttScale,
 } from './task-gantt-model';
 
@@ -30,6 +31,7 @@ const HEAD_H = 48;
 const GROUP_H = 34;
 const ROW_H = 36;
 const BAR_H = 20;
+const HANDLE_W = 12;
 
 // 切到别的视图再回来,分组和刻度保持(本次启动内)。
 let lastGroupBy: GanttGroupBy | null = null;
@@ -45,6 +47,10 @@ type Props = {
   s: TaskStyles;
   onOpen: (id: string) => void;
   selectedId?: string | null;
+  /** Hub 有开始字段(capabilities 含 start_date):说明文字换成「没设开始的从创建时间画起」。 */
+  startCapable?: boolean;
+  /** 鼠标拖条的右端改期限;不传 = 只读(手机 / 触屏)。 */
+  onDue?: (id: string, due: string) => void;
 };
 
 export default function TaskGantt(props: Props & { phone: boolean }) {
@@ -52,7 +58,7 @@ export default function TaskGantt(props: Props & { phone: boolean }) {
   return props.phone ? <GanttWeekList {...props} /> : <GanttChart {...props} />;
 }
 
-function GanttChart({ items, projects, people, today, s, onOpen, selectedId }: Props) {
+function GanttChart({ items, projects, people, today, s, onOpen, selectedId, startCapable, onDue }: Props) {
   useTranslation();
   const g = useGanttStyles();
   const [groupBy, setGroupByState] = useState<GanttGroupBy>(lastGroupBy ?? (projects ? 'project' : 'agent'));
@@ -75,6 +81,44 @@ function GanttChart({ items, projects, people, today, s, onOpen, selectedId }: P
   const tx = todayX(range, today, px);
   const lines = useMemo(() => groups.flatMap(gr => [{ kind: 'group' as const, group: gr }, ...gr.bars.map(bar => ({ kind: 'bar' as const, bar }))]), [groups]);
   const bodyH = lines.reduce((h, l) => h + (l.kind === 'group' ? GROUP_H : ROW_H), 0);
+
+  // ── 拖右端改期限 ──
+  const [drag, setDrag] = useState<{ id: string; x0: number; days: number } | null>(null);
+  const dragRef = useRef(drag);
+  dragRef.current = drag;
+  const barsRef = useRef(bars);
+  barsRef.current = bars;
+  const dragging = drag !== null;
+  useEffect(() => {
+    const doc = (globalThis as { document?: any }).document;
+    if (!dragging || !doc?.addEventListener) return undefined;
+    const barOf = (id: string) => barsRef.current.find(b => b.item.id === id);
+    const move = (e: any) => {
+      const cur = dragRef.current; const bar = cur && barOf(cur.id);
+      if (!cur || !bar) return;
+      const days = clampDragDays(bar, dragDays(e.clientX - cur.x0, px));
+      if (days !== cur.days) setDrag({ ...cur, days });
+    };
+    const up = () => {
+      const cur = dragRef.current; const bar = cur && barOf(cur.id);
+      setDrag(null);
+      const next = cur && bar ? shiftedDue(bar.item.due, cur.days) : null;
+      if (cur && next && onDue) onDue(cur.id, next);
+    };
+    const body = doc.body?.style;
+    const before = body ? { cursor: body.cursor, userSelect: body.userSelect } : null;
+    if (body) { body.cursor = 'ew-resize'; body.userSelect = 'none'; }
+    doc.addEventListener('pointermove', move);
+    doc.addEventListener('pointerup', up);
+    doc.addEventListener('pointercancel', up);
+    return () => {
+      doc.removeEventListener('pointermove', move);
+      doc.removeEventListener('pointerup', up);
+      doc.removeEventListener('pointercancel', up);
+      if (body && before) { body.cursor = before.cursor; body.userSelect = before.userSelect; }
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dragging, px]);
 
   const headRef = useRef<ScrollView>(null);
   const bodyRef = useRef<ScrollView>(null);
@@ -105,7 +149,7 @@ function GanttChart({ items, projects, people, today, s, onOpen, selectedId }: P
         <Text style={s.chipText}>{tr('gantt.jumpToday')}</Text>
       </Pressable>
       <View style={{ flex: 1, minWidth: spacing.md }} />
-      <Text style={s.muted} numberOfLines={1} testID="gantt-start-note">{tr('gantt.startNote')}</Text>
+      <Text style={s.muted} numberOfLines={1} testID="gantt-start-note">{tr(startCapable ? 'gantt.startNoteFallback' : 'gantt.startNote')}</Text>
     </View>
   );
 
@@ -184,16 +228,19 @@ function GanttChart({ items, projects, people, today, s, onOpen, selectedId }: P
             const bar: GanttBar = l.bar;
             const geo = barGeometry(bar, range, px);
             const overdue = barOverdue(bar, today);
+            const moving = drag?.id === bar.item.id ? drag.days : 0;
+            const w = geo.w + moving * px;
+            const endX = geo.x + w;
             return (
+              <View key={`b-${bar.item.id}`}>
               <Pressable
-                key={`b-${bar.item.id}`}
                 accessibilityRole="button"
                 accessibilityLabel={tr('gantt.barA11y', { name: bar.item.name, start: monthDay(bar.start), end: monthDay(bar.end) })}
                 {...a11yState({ selected: selectedId === bar.item.id })}
                 onPress={() => onOpen(bar.item.id)}
                 style={state => [
                   g.bar,
-                  { left: geo.x + 1, width: geo.w - 2, top: top + (ROW_H - BAR_H) / 2, backgroundColor: STATUS_TONE[bar.item.column]() },
+                  { left: geo.x + 1, width: w - 2, top: top + (ROW_H - BAR_H) / 2, backgroundColor: STATUS_TONE[bar.item.column]() },
                   bar.item.column === 'done' && { opacity: 0.45 },
                   overdue && g.barOverdue,
                   geo.clippedLeft && g.barClipped,
@@ -202,6 +249,23 @@ function GanttChart({ items, projects, people, today, s, onOpen, selectedId }: P
                 ]}
                 testID={`gantt-bar-${bar.item.id}`}
               />
+              {onDue ? (
+                // 右端把手:和条是兄弟节点(不是子节点),拖完松手不会被当成点条打开详情。
+                <View
+                  accessibilityLabel={tr('gantt.dragDue', { name: bar.item.name })}
+                  {...({ onPointerDown: (e: any) => { e.preventDefault?.(); setDrag({ id: bar.item.id, x0: e.nativeEvent?.clientX ?? e.clientX, days: 0 }); } } as object)}
+                  style={[g.handle, { left: endX - HANDLE_W + 1, top: top + (ROW_H - BAR_H) / 2 }, { cursor: 'ew-resize' } as object]}
+                  testID={`gantt-handle-${bar.item.id}`}
+                >
+                  <View style={g.grip} />
+                </View>
+              ) : null}
+              {moving ? (
+                <View pointerEvents="none" style={[g.dragLabel, { left: endX + 6, top: top + (ROW_H - 22) / 2 }]} testID="gantt-drag-label">
+                  <Text style={g.dragLabelText} numberOfLines={1}>{tr('gantt.dragTo', { date: monthDay(plusDays(bar.end, moving)) })}</Text>
+                </View>
+              ) : null}
+              </View>
             );
           });
         })()}
@@ -376,6 +440,10 @@ const makeGanttStyles = () => StyleSheet.create({
   barClipped: { borderTopLeftRadius: radius.inline, borderBottomLeftRadius: radius.inline },
   barHover: { opacity: 0.8 },
   barSelected: { outlineStyle: 'solid', outlineWidth: 2, outlineColor: colors.text, outlineOffset: 1 } as object,
+  handle: { position: 'absolute', width: HANDLE_W, height: BAR_H, alignItems: 'center', justifyContent: 'center' },
+  grip: { width: 3, height: BAR_H - 8, borderRadius: radius.pill, backgroundColor: '#ffffffb3' },
+  dragLabel: { position: 'absolute', height: 22, paddingHorizontal: spacing.sm, borderRadius: radius.pill, backgroundColor: colors.text, justifyContent: 'center', zIndex: 5 },
+  dragLabelText: { color: colors.bg, fontSize: typeScale.caption, fontWeight: weight.strong },
   todayLine: { position: 'absolute', top: 0, bottom: 0, width: 2, backgroundColor: colors.failed },
   empty: { alignItems: 'center', justifyContent: 'center', paddingVertical: spacing.xl * 2 },
   undatedHead: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, height: GROUP_H + 6, paddingHorizontal: spacing.lg, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border, backgroundColor: bandBg() },

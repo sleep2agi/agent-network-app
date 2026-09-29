@@ -3,19 +3,18 @@
 // Owner 2026-09-30:「支持个甘特图显示，优先级 低」。时间条从开始画到预计完成(due),按项目或负责 Agent 分组,
 // 竖线标今天。
 //
-// 🔴 开始时间:Hub 的需求目前**没有开始字段**(server/src/requirements.ts 只有 due_on / created_at)。
-// 这一版的开始 = 创建时间(createdAt),界面上写明「开始 = 创建时间」。Hub 加了可选的开始字段以后,
-// 只改 ganttStart 这一处。
+// 开始时间:Hub 有可选的开始字段(capabilities 含 start_date)且这张卡设了,就用它;
+// 否则(旧 Hub,或没设)退回创建时间(createdAt),界面上写明。
 //
 // 日期一律是查看者本地的 'YYYY-MM-DD';天数差用 UTC 日历算(不受夏令时影响)。
-import { dueToLocal, localDateOf, systemClock, type Clock } from './due-time';
+import { dueFromLocal, dueToLocal, localDateOf, normalizeDue, systemClock, type Clock } from './due-time';
 import type { Requirement, RequirementProject } from './requirements-model';
 import type { RequirementPersonRef } from './requirement-people';
 
 export type GanttGroupBy = 'project' | 'agent';
 export type GanttScale = 'day' | 'week';
 
-/** 这一版的开始时间从哪里来(界面上照着它写说明)。 */
+/** 没设开始(或 Hub 没有开始字段)时,开始从哪里来(界面上照着它写说明)。 */
 export const GANTT_START_SOURCE = 'createdAt' as const;
 
 /** 每天多宽(px):日刻度能写下日期数字,周刻度一屏大约三个月。 */
@@ -38,8 +37,10 @@ export const plusDays = (ymd: string, n: number): string => ymdOf(utc(ymd) + n *
 export const weekdayOf = (ymd: string): number => (new Date(utc(ymd)).getUTCDay() + 6) % 7;
 export const mondayOf = (ymd: string): string => plusDays(ymd, -weekdayOf(ymd));
 
-/** 开始(本地日期)。STEP 1:没有开始字段,取创建时间。读不出来 = null。 */
+/** 开始(本地日期):设了开始就用它,否则取创建时间。都读不出来 = null。 */
 export function ganttStart(item: Requirement, clock: Clock = systemClock): string | null {
+  const own = item.start ? dueToLocal(item.start, clock)?.date : null;
+  if (own) return own;
   const ms = Date.parse(item.createdAt || '');
   return Number.isFinite(ms) ? localDateOf(ms, clock) : null;
 }
@@ -223,3 +224,26 @@ export function firstCurrentWeek(weeks: readonly GanttWeek[]): number {
 
 /** 逾期:期限那天已经过了,而且还没完成。 */
 export const barOverdue = (bar: GanttBar, today: string): boolean => bar.end < today && bar.item.column !== 'done';
+
+// ── 拖动改期限(桌面) ──
+
+/** 横向拖了 dx 像素 = 挪几天(四舍五入)。 */
+export const dragDays = (dx: number, dayPx: number): number => (dayPx > 0 && Number.isFinite(dx) ? Math.round(dx / dayPx) : 0);
+
+/** 拖右端:期限挪几天,但不早于开始那天(没有真实开始的「只画一天」的条不限)。 */
+export function clampDragDays(bar: GanttBar, days: number): number {
+  if (bar.collapsed) return days;
+  return Math.max(days, -dayDiff(bar.start, bar.end));
+}
+
+/**
+ * 期限挪 days 天之后要存的值:全天的还是全天;带时刻的保留查看者本地的时刻,只换日期
+ * (输出和 Hub 的规范形状一致,保存后的核对 patchApplied 才对得上)。挪 0 天或读不懂 = null(不发请求)。
+ */
+export function shiftedDue(due: string, days: number, clock: Clock = systemClock): string | null {
+  if (!days) return null;
+  const local = dueToLocal(due, clock);
+  if (!local) return null;
+  const date = plusDays(local.date, days);
+  return normalizeDue(dueFromLocal(date, local.time, clock));
+}

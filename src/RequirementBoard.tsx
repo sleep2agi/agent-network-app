@@ -82,6 +82,7 @@ function ScopedRequirementBoard({ cfg, desktop, dispatch, onOpenVoiceSettings, s
   const managingProjects = useTaskBoard(st => st.managingProjects);
   const dueDatetime = useTaskBoard(st => st.scope === scope && st.capabilities.includes('due_datetime'));
   const subCaps = useTaskBoard(st => st.scope === scope && st.capabilities.includes('sub_requirements'));
+  const startCapable = useTaskBoard(st => st.scope === scope && st.capabilities.includes('start_date'));
   const lowestPriority = useTaskBoard(st => st.scope === scope && supportsLowest(st.capabilities));
   const priorityOptions = useMemo(() => priorityChoices(lowestPriority), [lowestPriority]);
   const filter = useTaskBoard(st => st.filter);
@@ -303,6 +304,18 @@ function ScopedRequirementBoard({ cfg, desktop, dispatch, onOpenVoiceSettings, s
       return null;
     } catch (e) {
       return e instanceof Error ? e.message : tr('tasks.copy.25');
+    }
+  };
+
+  // 甘特图拖动改期限:只发 due(描述等别的字段不动),先乐观更新,失败退回并提示。
+  const setDue = async (id: string, due: string) => {
+    const prev = items.find(row => row.id === id);
+    if (!prev || prev.due === due) return;
+    updateTaskItems(scope, rows => rows.map(row => (row.id === id ? { ...row, due } : row)));
+    const failed = await saveEdit(id, { due });
+    if (failed) {
+      updateTaskItems(scope, rows => rows.map(row => (row.id === id ? { ...row, due: prev.due } : row)));
+      setBanner(`「${prev.name}」${failed}`);
     }
   };
 
@@ -744,7 +757,7 @@ function ScopedRequirementBoard({ cfg, desktop, dispatch, onOpenVoiceSettings, s
               : <Pressable onPress={() => setReloadKey(n => n + 1)} testID="req-retry" accessibilityRole="button"><Text style={s.link}>{tr('tasks.copy.57')}</Text></Pressable>}
           </View>
         ) : section === 'list' ? list()
-          : section === 'gantt' ? <TaskGantt items={visible} projects={projects} people={people} today={today} s={s} onOpen={openDetail} selectedId={selectedId} phone={narrow} />
+          : section === 'gantt' ? <TaskGantt items={visible} projects={projects} people={people} today={today} s={s} onOpen={openDetail} selectedId={selectedId} phone={narrow} startCapable={startCapable} onDue={pointer ? (id, due) => { void setDue(id, due); } : undefined} />
             : kanban();
 
   const ghost = pointer && draggingItem && dragView.phase === 'dragging' ? (

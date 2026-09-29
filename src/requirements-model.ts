@@ -44,6 +44,8 @@ export interface Requirement {
   due: string;
   column: ReqColumn;
   createdAt: string;
+  /** 开始(甘特图用),形状同 due。undefined = 这个 Hub 还没有开始字段;'' = 没设。 */
+  start?: string;
   /** Missing means the connected Hub did not expose update metadata. */
   updatedAt?: string | null;
   updatedBy?: RequirementPersonRef | null;
