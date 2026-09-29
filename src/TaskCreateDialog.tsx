@@ -6,29 +6,16 @@ import { Text, TextInput } from './ui-text';
 import { Ionicons } from './icons';
 import AliasAvatar from './AliasAvatar';
 import RequirementPeoplePicker from './RequirementPeoplePicker';
+import TaskDuePicker from './TaskDuePicker';
 import { useModalSafePadding } from './safe-area-runtime';
 import { withBasePadding } from './modal-safe-area';
 import { colors, radius, spacing, themeMode, type as typeScale, weight } from './theme';
 import { REQ_COLUMN_LABEL, REQ_PRIORITIES, REQ_PRIORITY_LABEL, type ReqPriority, type RequirementProject } from './requirements-model';
 import type { RequirementPerson, RequirementPersonRef } from './requirement-people';
-import { activeProjects, checkDraft, createInput, localToday, personName, roleKinds, type CreateDraft } from './task-board-model';
+import { activeProjects, checkDraft, createInput, personName, roleKinds, type CreateDraft } from './task-board-model';
 import { BOARD_RADIUS, CONTROL_H, liftedShadow, PriorityDot, useTaskStyles, a11yState } from './TaskBoardParts';
 
-/** 期限的快捷项:今天 / 明天 / 下周一 / 清除。日期框仍可手写 2026-10-01。 */
-export function dueShortcuts(today: string): { key: string; label: string; value: string }[] {
-  const [y, m, d] = today.split('-').map(Number);
-  const at = (days: number) => {
-    const dt = new Date(Date.UTC(y, m - 1, d + days));
-    return dt.toISOString().slice(0, 10);
-  };
-  const weekday = new Date(Date.UTC(y, m - 1, d)).getUTCDay();
-  const toMonday = ((8 - weekday) % 7) || 7;
-  return [
-    { key: 'today', label: '今天', value: today },
-    { key: 'tomorrow', label: '明天', value: at(1) },
-    { key: 'nextweek', label: '下周一', value: at(toMonday) },
-  ];
-}
+export { dueShortcuts } from './due-time';
 
 export function PriorityPicker({ value, onChange, testPrefix }: { value: ReqPriority; onChange: (p: ReqPriority) => void; testPrefix: string }) {
   const s = useTaskStyles();
@@ -47,28 +34,11 @@ export function PriorityPicker({ value, onChange, testPrefix }: { value: ReqPrio
   );
 }
 
-export function DueField({ value, onChange, error, idBase }: { value: string; onChange: (v: string) => void; error?: string; idBase: string }) {
-  const testID = idBase;
-  const s = useTaskStyles();
-  const today = localToday();
-  return (
-    <View style={{ gap: spacing.sm }}>
-      <TextInput value={value} onChangeText={onChange} placeholder="可空,如 2026-10-01" placeholderTextColor={colors.textMuted} style={[fieldStyles().input, error ? { borderColor: colors.failed } : null]} testID={testID} accessibilityLabel="预计完成" autoCapitalize="none" autoCorrect={false} />
-      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm }}>
-        {dueShortcuts(today).map(o => (
-          <Pressable key={o.key} onPress={() => onChange(o.value)} style={[s.chip, { height: 28 }, value === o.value && s.chipOn]} testID={`${testID}-${o.key}`} accessibilityRole="button">
-            <Text style={[s.chipText, value === o.value && s.chipTextOn]}>{o.label}</Text>
-          </Pressable>
-        ))}
-        {value ? (
-          <Pressable onPress={() => onChange('')} style={[s.chip, { height: 28 }]} testID={`${testID}-clear`} accessibilityRole="button">
-            <Text style={s.chipText}>清除</Text>
-          </Pressable>
-        ) : null}
-      </View>
-      {error ? <Text style={s.err} accessibilityRole="alert">{error}</Text> : null}
-    </View>
-  );
+/** 预计完成:月历选择器(桌面弹层 / 手机底部面板)+ 快捷项。allowTime = Hub 能存到秒。 */
+export function DueField({ value, onChange, error, idBase, allowTime = false, pointer = false, sheet = false }: {
+  value: string; onChange: (v: string) => void; error?: string; idBase: string; allowTime?: boolean; pointer?: boolean; sheet?: boolean;
+}) {
+  return <TaskDuePicker value={value} onChange={onChange} error={error} idBase={idBase} allowTime={allowTime} pointer={pointer} sheet={sheet} />;
 }
 
 export function OwnerField({ value, people, onPress, disabled, loading, idBase, role = 'any' }: {
@@ -181,12 +151,15 @@ export function ProjectPicker({ value, projects, onChange, idBase }: { value: st
   );
 }
 
-export default function TaskCreateDialog({ draft, sheet, twoRoles, projects, networkId, people, peopleLoading, peopleError, onLoadPeople, onChange, onSubmit, onClose }: {
+export default function TaskCreateDialog({ draft, sheet, twoRoles, projects, dueDatetime, pointer, networkId, people, peopleLoading, peopleError, onLoadPeople, onChange, onSubmit, onClose }: {
   draft: CreateDraft | null;
   /** Hub 分不分「负责人(人类)/ 负责 Agent」。不分就是旧的单一负责人。 */
   twoRoles: boolean;
   /** 项目列表;null = Hub 没有项目,不显示。 */
   projects: readonly RequirementProject[] | null;
+  /** Hub 能把预计完成存到秒(capabilities.due_datetime)。 */
+  dueDatetime: boolean;
+  pointer: boolean;
   /** true = 手机底部面板;false = 居中对话框。 */
   sheet: boolean;
   networkId: string;
@@ -270,7 +243,7 @@ export default function TaskCreateDialog({ draft, sheet, twoRoles, projects, net
               </View>
               <View style={{ gap: spacing.sm }}>
                 <Text style={f.label}>预计完成</Text>
-                <DueField value={draft.due} onChange={due => set({ due })} error={error?.field === 'due' ? error.message : undefined} idBase="req-due" />
+                <DueField value={draft.due} onChange={due => set({ due })} error={error?.field === 'due' ? error.message : undefined} idBase="req-due" allowTime={dueDatetime} pointer={pointer} sheet={sheet} />
               </View>
             </ScrollView>
             {error?.field === 'submit' ? <Text style={s.err} accessibilityRole="alert" testID="req-error">{error.message}</Text> : null}

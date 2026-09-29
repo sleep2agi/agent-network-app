@@ -147,7 +147,7 @@ for (const theme of ['light', 'dark']) {
   for (const v of VIEWPORTS) {
     const vp = `${v.kind} ${v.w}x${v.h} ${theme}`;
     const touch = v.kind !== 'desktop';
-    const ctx = await browser.newContext({ viewport: { width: v.w, height: v.h }, colorScheme: theme, deviceScaleFactor: 2, ...(touch ? { userAgent: ANDROID_UA, hasTouch: true } : {}) });
+    const ctx = await browser.newContext({ viewport: { width: v.w, height: v.h }, colorScheme: theme, deviceScaleFactor: 2, timezoneId: 'Asia/Shanghai', ...(touch ? { userAgent: ANDROID_UA, hasTouch: true } : {}) });
     const page = await ctx.newPage();
     page.on('pageerror', e => console.log('PAGEERROR', e.message.split('\n')[0]));
     await open(page, v.kind, theme);
@@ -460,6 +460,82 @@ async function desktopFlows(page, vp) {
     });
   }
 
+  // participants: 3 avatars + 「+1」 on the seeded card, one row, same centre line
+  if (ROLES === 'two') {
+    const pst = await page.evaluate(() => {
+      const card = [...document.querySelectorAll('[data-testid^="req-card-"]')].find(c => c.textContent.includes('登录页支持扫码登录'));
+      const av = [...(card?.querySelectorAll('[data-testid="task-participant-avatar"]') ?? [])].map(e => e.getBoundingClientRect());
+      const more = card?.querySelector('[data-testid="task-participants-more"]');
+      const title = card?.querySelector('[data-testid="task-participants"]')?.getAttribute('title') ?? '';
+      return { n: av.length, cys: av.map(r => r.y + r.height / 2), xs: av.map(r => r.x), w: av[0]?.width ?? 0, more: more?.textContent ?? '', moreCy: more ? more.getBoundingClientRect().y + more.getBoundingClientRect().height / 2 : 0, title };
+    });
+    record(vp, 'cards: participants stack', {
+      three: pst.n === 3, plusOne: pst.more.includes('+1'),
+      oneCentreLine: Math.max(...pst.cys, pst.moreCy) - Math.min(...pst.cys, pst.moreCy) <= 1,
+      overlap: pst.xs.length === 3 && pst.xs[1] - pst.xs[0] < pst.w && pst.xs[2] - pst.xs[1] === pst.xs[1] - pst.xs[0],
+      hoverListsAll: pst.title.includes('成员乙') && pst.title.includes('demo-node-b') && !/\bu_[0-9a-f]{12}\b/.test(pst.title),
+    }, { cys: pst.cys.map(r1).join('/'), moreCy: r1(pst.moreCy) });
+  }
+
+  // due picker in the drawer: anchored under the field, equal cells, header / time rows on one line,
+  // keyboard to pick, HH:MM:SS (split hub) → hub stores UTC; card shows 「MM-DD HH:mm」, title has seconds
+  {
+    const pName = '看板卡片支持拖动换列';
+    await cardByName(page, pName).click();
+    await page.locator(tid('req-detail')).waitFor();
+    await page.locator(tid('req-edit-due')).scrollIntoViewIfNeeded();
+    await page.locator(tid('req-edit-due')).click();
+    await page.locator(tid('req-edit-due-panel')).waitFor();
+    await page.waitForTimeout(300);
+    const geo2 = await page.evaluate(() => {
+      const r = (sel) => { const e = document.querySelector(sel); if (!e) return null; const b = e.getBoundingClientRect(); return { x: b.x, y: b.y, w: b.width, h: b.height, cy: b.y + b.height / 2, b: b.bottom }; };
+      const cells = [...document.querySelectorAll('[data-testid^="req-edit-due-day-"]')].map(e => e.getBoundingClientRect());
+      const time = ['hh', 'mm', 'ss'].map(k => r(`[data-testid="req-edit-due-${k}"]`)).filter(Boolean);
+      return { field: r('[data-testid="req-edit-due"]'), panel: r('[data-testid="req-edit-due-panel"]'), prev: r('[data-testid="req-edit-due-prev"]'), month: r('[data-testid="req-edit-due-month"]'), next: r('[data-testid="req-edit-due-next"]'),
+        cellWs: cells.map(c => c.width), rowYs: [...new Set(cells.map(c => Math.round(c.y)))].length, cells: cells.length, time, allday: r('[data-testid="req-edit-due-allday"]') };
+    });
+    // keyboard: → then ↓ from today = today + 8 days
+    await page.keyboard.press('ArrowRight');
+    await page.keyboard.press('ArrowDown');
+    let expectDate = await page.evaluate(() => { const d = new Date(); d.setDate(d.getDate() + 8); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; });
+    const selected = await page.evaluate(() => [...document.querySelectorAll('[data-testid^="req-edit-due-day-"]')].find(e => e.getAttribute('aria-selected') === 'true')?.dataset.testid);
+    if (ROLES === 'two') {
+      await page.locator(tid('req-edit-due-allday')).click();
+      await page.locator(tid('req-edit-due-hh')).fill('18');
+      await page.locator(tid('req-edit-due-mm')).fill('30');
+      await page.locator(tid('req-edit-due-ss')).fill('45');
+    }
+    await shot(page, 'flow-due-picker');
+    await page.locator(tid('req-edit-due-ok')).click();
+    await page.locator(tid('req-edit-save')).click();
+    await page.waitForTimeout(700);
+    const saved = (await hubRow(pName))?.due;
+    // 东八区 18:30:45 = UTC 10:30:45
+    const want = ROLES === 'two' ? `${expectDate}T10:30:45Z` : expectDate;
+    await page.locator(tid('req-detail-close')).click();
+    await page.waitForTimeout(300);
+    const chip = await page.evaluate((n) => {
+      const card = [...document.querySelectorAll('[data-testid^="req-card-"]')].find(c => c.textContent.includes(n));
+      const d = card?.querySelector('[data-testid="task-due"]');
+      return { text: d?.textContent ?? '', title: d?.getAttribute('title') ?? '' };
+    }, pName);
+    const cw = geo2.cellWs;
+    const heads = [geo2.prev, geo2.month, geo2.next].filter(Boolean).map(x => x.cy);
+    const timeCys = [...geo2.time.map(x => x.cy), ...(geo2.allday ? [geo2.allday.cy] : [])];
+    record(vp, 'due picker: geometry + keyboard + stored value', {
+      anchoredLeft: Math.abs(geo2.panel.x - geo2.field.x) <= 1,
+      anchoredBelow: Math.abs(geo2.panel.y - (geo2.field.b + 6)) <= 1 || geo2.panel.b <= geo2.field.y,
+      grid42: geo2.cells === 42 && geo2.rowYs === 6,
+      equalCells: Math.max(...cw) - Math.min(...cw) <= 0.5,
+      headerLine: Math.max(...heads) - Math.min(...heads) <= 1,
+      timeRow: ROLES !== 'two' ? geo2.time.length === 0 : (geo2.time.length === 3 && Math.max(...timeCys) - Math.min(...timeCys) <= 1),
+      keyboard: selected === `req-edit-due-day-${expectDate}`,
+      hubValue: saved === want,
+      cardLabel: ROLES === 'two' ? chip.text.includes('18:30') && !chip.text.includes(':45') : true,
+      titleSeconds: ROLES === 'two' ? chip.title.includes('18:30:45') : chip.title.includes('全天'),
+    }, { saved, want, chip: chip.text, title: chip.title, panelX: r1(geo2.panel.x), fieldX: r1(geo2.field.x), panelY: r1(geo2.panel.y), fieldBottom: r1(geo2.field.b), cell: r1(cw[0]) });
+  }
+
   // drawer edit
   await cardByName(page, '设置页拆分子页面').click();
   await page.locator(tid('req-detail')).waitFor();
@@ -583,6 +659,15 @@ async function phoneFlows(page, vp) {
   const sheet = await box(page, tid('req-create'));
   await shot(page, 'flow-phone-create-sheet');
   record(vp, 'phone: create is a bottom sheet', { atBottom: Math.abs(sheet.b - 844) <= 1, fullWidth: Math.abs(sheet.w - 390) <= 1 }, { bottom: r1(sheet.b), w: r1(sheet.w) });
+  // calendar in the create sheet is itself a bottom sheet
+  await page.locator(tid('req-due')).click();
+  await page.locator(tid('req-due-panel')).waitFor();
+  await page.waitForTimeout(500);
+  const cal = await box(page, tid('req-due-panel'));
+  await shot(page, 'flow-phone-due-sheet');
+  record(vp, 'phone: calendar is a bottom sheet', { atBottom: Math.abs(cal.b - 844) <= 1, fullWidth: Math.abs(cal.w - 390) <= 1 }, { bottom: r1(cal.b), w: r1(cal.w) });
+  await page.locator(tid('req-due-cancel')).click();
+  await page.waitForTimeout(300);
   await page.locator(tid('req-create-close')).click();
   // grouped list
   await page.locator(tid('tasks-view-list')).click();

@@ -20,11 +20,12 @@ import { DueField, fieldStyles, PriorityPicker, ProjectPicker, RoleFields } from
 
 export const DRAWER_WIDTH = 420;
 
-export default function TaskDetailPanel({ cfg, item, projects, mode, top, people, peopleLoading, onLoadPeople, moving, moveError, onMove, onSave, onAssignmentsSaved, onClose, pointer, checklistError, onChecklistToggle, onChecklistAdd, onChecklistDelete, onChecklistMove }: {
+export default function TaskDetailPanel({ cfg, item, projects, dueDatetime, mode, top, people, peopleLoading, onLoadPeople, moving, moveError, onMove, onSave, onAssignmentsSaved, onClose, pointer, checklistError, onChecklistToggle, onChecklistAdd, onChecklistDelete, onChecklistMove }: {
   cfg: HubConfig;
   item: Requirement;
   /** 项目列表;null = Hub 没有项目。 */
   projects: readonly RequirementProject[] | null;
+  dueDatetime: boolean;
   mode: 'drawer' | 'page';
   /** 抽屉的上沿 = 页面头部的下沿(对齐)。 */
   top: number;
@@ -146,7 +147,7 @@ export default function TaskDetailPanel({ cfg, item, projects, mode, top, people
         <PriorityPicker value={draft.priority} onChange={priority => set({ priority })} testPrefix="req-edit-priority" />
       </Field>
       <Field label="预计完成">
-        <DueField value={draft.due} onChange={due => set({ due })} error={error?.field === 'due' ? error.message : undefined} idBase="req-edit-due" />
+        <DueField value={draft.due} onChange={due => set({ due })} error={error?.field === 'due' ? error.message : undefined} idBase="req-edit-due" allowTime={dueDatetime} pointer={pointer} sheet={mode === 'page'} />
       </Field>
       {hasDetails(item) ? (
         <>

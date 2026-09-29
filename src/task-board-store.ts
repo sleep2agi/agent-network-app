@@ -19,13 +19,15 @@ export interface TaskBoardState {
   twoRoles: boolean | null;
   /** 项目列表(含归档);null = 这个 Hub 没有项目(或还没读到),界面把项目整个藏起来。 */
   projects: RequirementProject[] | null;
+  /** Hub 的 capabilities(GET /api/requirements 带回);due_datetime = 预计完成能存到秒。 */
+  capabilities: string[];
   /** 管理项目的对话框开着没有(左栏的「管理项目」和看板共用)。 */
   managingProjects: boolean;
   loaded: boolean;
 }
 
 const fresh = (scope: string, section: TaskSection = 'board'): TaskBoardState => ({
-  scope, section, filter: EMPTY_FILTER, items: [], people: [], meId: null, twoRoles: null, projects: null, managingProjects: false, loaded: false,
+  scope, section, filter: EMPTY_FILTER, items: [], people: [], meId: null, twoRoles: null, projects: null, capabilities: [], managingProjects: false, loaded: false,
 });
 
 let state: TaskBoardState = fresh('');

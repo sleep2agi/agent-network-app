@@ -15,9 +15,9 @@ import AliasAvatar from './AliasAvatar';
 import type { HubConfig } from './api';
 import { REQ_COLUMN_LABEL, REQ_COLUMNS, REQ_PRIORITIES, REQ_PRIORITY_LABEL, type ChecklistItem, type ReqColumn, type Requirement, type RequirementProject } from './requirements-model';
 import { readRequirements, requirementsKey, writeRequirements } from './requirements-store';
-import { createProject, createRequirementOnHub, fetchMyUserId, listProjects, setChecklistItemOnHub, updateProject, listRequirements, migrateLocalRequirements, moveRequirementOnHub, probeAgentOwnerSupport, RequirementsHubError, updateRequirementOnHub } from './requirements-hub';
+import { createProject, createRequirementOnHub, fetchMyUserId, listProjects, listRequirementsFull, setChecklistItemOnHub, updateProject, listRequirements, migrateLocalRequirements, moveRequirementOnHub, probeAgentOwnerSupport, RequirementsHubError, updateRequirementOnHub } from './requirements-hub';
 import { listRequirementPeople } from './requirement-people-api';
-import { personKey } from './requirement-people';
+import { personKey, type RequirementPerson } from './requirement-people';
 import { colors, radius, spacing } from './theme';
 import { elevated } from './elevation';
 import { pointerUi } from './pointer-ui';
@@ -30,7 +30,7 @@ import {
   type CreateDraft, type DragEvent, type DragState, type EditPatch, type SortKey, type SortSpec,
 } from './task-board-model';
 import { enterTaskScope, patchTaskBoard, setManagingProjects, setTaskFilter, setTaskSection, taskScopeKey, updateTaskItems, useTaskBoard, type TaskSection } from './task-board-store';
-import { CardMeta, ChecklistProgress, Chip, ProjectChip, DueChip, OwnerBadge, PriorityDot, Segmented, STATUS_TONE, useTaskStyles, type TaskStyles, a11yState } from './TaskBoardParts';
+import { CardMeta, ChecklistProgress, Chip, ParticipantStack, ProjectChip, DueChip, OwnerBadge, PriorityDot, Segmented, STATUS_TONE, useTaskStyles, type TaskStyles, a11yState } from './TaskBoardParts';
 import TaskCreateDialog from './TaskCreateDialog';
 import TaskDetailPanel from './TaskDetailPanel';
 import TaskCardMenu, { type TaskMenuTarget } from './TaskCardMenu';
@@ -67,6 +67,7 @@ function ScopedRequirementBoard({ cfg, desktop, dispatch }: { cfg: HubConfig; de
   const twoRoles = useTaskBoard(st => (st.scope === scope ? st.twoRoles === true : false));
   const projects = useTaskBoard(st => (st.scope === scope ? st.projects : null));
   const managingProjects = useTaskBoard(st => st.managingProjects);
+  const dueDatetime = useTaskBoard(st => st.scope === scope && st.capabilities.includes('due_datetime'));
   const filter = useTaskBoard(st => st.filter);
   const items = mine ? storeItems : [];
   const people = mine ? storePeople : [];
@@ -105,7 +106,7 @@ function ScopedRequirementBoard({ cfg, desktop, dispatch }: { cfg: HubConfig; de
     (async () => {
       try {
         await migrateLocalRequirements(cfg, () => readRequirements(localKey), rows => writeRequirements(localKey, rows));
-        const list = await listRequirements(cfg);
+        const { rows: list, capabilities } = await listRequirementsFull(cfg);
         if (dead) return;
         // 分不分两个角色:有卡片就看行里带没带 agent_owner;一张都没有才去探 Hub。
         const roles = list.length ? list.some(hasRoles) : await probeAgentOwnerSupport(cfg);
@@ -113,7 +114,7 @@ function ScopedRequirementBoard({ cfg, desktop, dispatch }: { cfg: HubConfig; de
         // 项目:旧 Hub 没有这个路由 → null,界面把项目整个藏起来;读失败也按没有处理,不挡看板。
         const projectList = await listProjects(cfg).catch(() => null);
         if (dead) return;
-        patchTaskBoard(scope, { items: list, loaded: true, twoRoles: roles, projects: projectList });
+        patchTaskBoard(scope, { items: list, loaded: true, twoRoles: roles, projects: projectList, capabilities });
         setPhase('ready');
         setHubError('');
       } catch (e) {
@@ -128,7 +129,7 @@ function ScopedRequirementBoard({ cfg, desktop, dispatch }: { cfg: HubConfig; de
   }, [cfg.serverUrl, cfg.token, cfg.networkId, localKey, reloadKey, scope]);
 
   // 有卡片带稳定负责人时读一次成员(卡片上的名字 / 头像、筛选里的人都从这里来)。
-  const hasOwners = items.some(item => item.owner || item.agentOwner);
+  const hasOwners = items.some(item => item.owner || item.agentOwner || item.participants?.length);
   useEffect(() => {
     if (!hasOwners || !cfg.networkId) return;
     let dead = false;
@@ -423,7 +424,7 @@ function ScopedRequirementBoard({ cfg, desktop, dispatch }: { cfg: HubConfig; de
         {projects && item.projectId ? <ProjectChip project={projectById.get(item.projectId)} s={s} small /> : null}
         <Text style={[s.cardTitle, item.column === 'done' && s.cardDone]} numberOfLines={2}>{item.name}</Text>
         <CardMeta item={item} people={people} today={today} s={s} compact={compactCards} />
-        <ChecklistProgress item={item} s={s} />
+        <CardFooter item={item} people={people} s={s} touch={!pointer} />
         {moveErrors[item.id] ? <Text style={s.err} numberOfLines={1}>{moveErrors[item.id]}</Text> : null}
       </Pressable>
     );
@@ -542,7 +543,7 @@ function ScopedRequirementBoard({ cfg, desktop, dispatch }: { cfg: HubConfig; de
                       {projects && item.projectId ? <ProjectChip project={projectById.get(item.projectId)} s={s} small /> : null}
                       <Text style={[s.cardTitle, item.column === 'done' && s.cardDone]} numberOfLines={2}>{item.name}</Text>
                       <CardMeta item={item} people={people} today={today} s={s} />
-                      <ChecklistProgress item={item} s={s} />
+                      <CardFooter item={item} people={people} s={s} touch={!pointer} />
                     </Pressable>
                   ))}
                 </View>
@@ -569,6 +570,7 @@ function ScopedRequirementBoard({ cfg, desktop, dispatch }: { cfg: HubConfig; de
           {th('owner', '负责人', s.colOwner)}
           {th('priority', '优先级', s.colPriority)}
           {th('due', '期限', s.colDue)}
+          <View style={s.colParticipants}><Text style={s.thText}>参与人</Text></View>
           {projects ? th('project', '项目', s.colProject) : null}
           {th('status', '状态', s.colStatus)}
         </View>
@@ -589,6 +591,7 @@ function ScopedRequirementBoard({ cfg, desktop, dispatch }: { cfg: HubConfig; de
               <View style={s.colOwner}><OwnerBadge item={item} people={people} s={s} /></View>
               <View style={[s.colPriority, s.owner]}><PriorityDot p={item.priority} s={s} /><Text style={s.metaText}>{REQ_PRIORITY_LABEL[item.priority]}</Text></View>
               <View style={[s.colDue, { flexDirection: 'row' }]}>{item.due ? <DueChip item={item} today={today} s={s} /> : <Text style={s.metaMuted}>—</Text>}</View>
+              <View style={s.colParticipants}><ParticipantStack item={item} people={people} s={s} touch={!pointer} size={18} /></View>
               {projects ? <View style={s.colProject}>{item.projectId ? <ProjectChip project={projectById.get(item.projectId)} s={s} small /> : <Text style={s.metaMuted}>—</Text>}</View> : null}
               <View style={s.colStatus}>
                 <View style={[s.statusPill, { backgroundColor: STATUS_TONE[item.column]() + '1f' }]}>
@@ -642,6 +645,7 @@ function ScopedRequirementBoard({ cfg, desktop, dispatch }: { cfg: HubConfig; de
           cfg={cfg}
           item={selected}
           projects={projects}
+          dueDatetime={dueDatetime}
           mode={drawer ? 'drawer' : 'page'}
           top={headerBottom}
           people={people}
@@ -674,6 +678,8 @@ function ScopedRequirementBoard({ cfg, desktop, dispatch }: { cfg: HubConfig; de
         draft={draft}
         twoRoles={twoRoles}
         projects={projects}
+        dueDatetime={dueDatetime}
+        pointer={pointer}
         sheet={!pointer && narrow}
         networkId={cfg.networkId || ''}
         people={people}
@@ -738,6 +744,19 @@ function ScopedRequirementBoard({ cfg, desktop, dispatch }: { cfg: HubConfig; de
         onPickProject={id => setTaskFilter({ ...filter, project: id })}
         onClose={() => setFilterMenu(null)}
       />
+    </View>
+  );
+}
+
+/** 卡片最下一行:子任务进度(左,可没有)+ 参与人头像(右,可没有)。都没有就不占位置。 */
+function CardFooter({ item, people, s, touch }: { item: Requirement; people: readonly RequirementPerson[]; s: TaskStyles; touch: boolean }) {
+  const hasList = !!item.checklist?.length;
+  const hasPeople = !!item.participants?.length;
+  if (!hasList && !hasPeople) return null;
+  return (
+    <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm }} testID="task-card-footer">
+      <View style={{ flex: 1 }}>{hasList ? <ChecklistProgress item={item} s={s} /> : null}</View>
+      {hasPeople ? <ParticipantStack item={item} people={people} s={s} touch={touch} /> : null}
     </View>
   );
 }

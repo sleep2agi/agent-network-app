@@ -4,6 +4,7 @@
 // Owner 2026-09-29:「这个任务列表也他妈太难看了」。重做参照 Linear / TickTick:
 // 头部一行(标题 · 列表/看板 · 负责人/优先级筛选 · ＋ 新建),三列等宽铺满,卡片整张可点,
 // 桌面拖动换列、手机长按菜单。Hub 数据模型不变(标题/状态/优先级/期限/负责人/参与人)。
+import { dueInstant, dueToLocal, formatDueFull, formatTime, isDateTime, systemClock, type Clock } from './due-time';
 import {
   type ChecklistItem,
   type RequirementProject,
@@ -170,8 +171,27 @@ export function ownerCounts(items: readonly Requirement[], people: readonly Requ
   return [...rows, { key: UNASSIGNED, ref: null, name: '未分配', count: none }];
 }
 
+/** 短 id(未知成员时附在后面,方便认):取最后 6 位。 */
+export const shortId = (id: string): string => (id.length > 6 ? id.slice(-6) : id);
+
+/**
+ * 人 / 节点的显示名。成员表里找不到(已退出、成员表没读到…)时是「未知成员（…末 6 位）」——
+ * 永远不把裸 id(n_e06d936d / u_a4944afaa30b)当名字显示(owner 0.2.141 截图)。
+ */
+export function personDisplay(ref: RequirementPersonRef, people: readonly RequirementPerson[]): { name: string; known: boolean } {
+  const hit = people.find(p => personKey(p) === personKey(ref));
+  if (hit?.name) return { name: hit.name, known: true };
+  return { name: `未知成员（${shortId(ref.id)}）`, known: false };
+}
+
 export function personName(ref: RequirementPersonRef, people: readonly RequirementPerson[]): string {
-  return people.find(p => personKey(p) === personKey(ref))?.name || ref.id;
+  return personDisplay(ref, people).name;
+}
+
+/** 卡片 / 列表上的参与人头像:最多 3 个,其余「+N」。 */
+export function participantStack(refs: readonly RequirementPersonRef[] | undefined, people: readonly RequirementPerson[], max = 3): { shown: { key: string; name: string; known: boolean; kind: 'user' | 'node' }[]; more: number; all: string } {
+  const list = (refs ?? []).map(r => ({ key: personKey(r), kind: r.kind, ...personDisplay(r, people) }));
+  return { shown: list.slice(0, max), more: Math.max(0, list.length - max), all: list.map(p => `${p.name}（${p.kind === 'user' ? '人类' : 'Agent'}）`).join('、') };
 }
 
 /** 卡片 / 列表上的负责人文字:负责人在前、负责 Agent 在后。旧 Hub(owner undefined)显示旧的 assignee 文本。 */
@@ -215,7 +235,7 @@ export function sortRows(items: readonly Requirement[], sort: SortSpec, people: 
   const sign = sort.dir === 'asc' ? 1 : -1;
   const base = (a: Requirement, b: Requirement) =>
     PRIORITY_RANK[a.priority] - PRIORITY_RANK[b.priority]
-    || (a.due === b.due ? 0 : !a.due ? 1 : !b.due ? -1 : a.due < b.due ? -1 : 1)
+    || dueCmp(a.due, b.due)
     || (a.createdAt === b.createdAt ? 0 : a.createdAt < b.createdAt ? 1 : -1)
     || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
   const primary = (a: Requirement, b: Requirement): number => {
@@ -230,11 +250,10 @@ export function sortRows(items: readonly Requirement[], sort: SortSpec, people: 
         return an.localeCompare(bn, 'zh') * sign;
       }
       case 'priority': return (PRIORITY_RANK[a.priority] - PRIORITY_RANK[b.priority]) * sign;
-      case 'due':
-        if (a.due === b.due) return 0;
-        if (!a.due) return 1;
-        if (!b.due) return -1;
-        return (a.due < b.due ? -1 : 1) * sign;
+      case 'due': {
+        if (!a.due || !b.due) return a.due === b.due ? 0 : !a.due ? 1 : -1;
+        return dueCmp(a.due, b.due) * sign;
+      }
       case 'status': return (COLUMN_RANK[a.column] - COLUMN_RANK[b.column]) * sign;
       case 'project': {
         const ra = projectRank(a.projectId), rb = projectRank(b.projectId);
@@ -264,9 +283,41 @@ const dayNumber = (ymd: string): number => {
 
 export type DueTone = 'none' | 'overdue' | 'today' | 'normal';
 
-/** 期限的显示:文字 + 色调。已完成的卡片不算逾期(做完了就不再催)。 */
-export function dueInfo(due: string, today: string, column: ReqColumn = 'pool'): { label: string; tone: DueTone } {
-  if (!due || !dueOk(due)) return { label: '', tone: 'none' };
+/** 两个期限比先后:全天 = 本地那天结束,时刻按真实时刻;空的永远在后。 */
+export function dueCmp(a: string, b: string, clock: Clock = systemClock): number {
+  const ka = dueInstant(a, clock) ?? Number.POSITIVE_INFINITY;
+  const kb = dueInstant(b, clock) ?? Number.POSITIVE_INFINITY;
+  return ka === kb ? 0 : ka < kb ? -1 : 1;
+}
+
+/**
+ * 期限的显示:文字 + 色调 + 完整值(悬停提示)。已完成的卡片不算逾期(做完了就不再催)。
+ * 全天:今天 / 明天 / 10月5日 / 逾期 N 天(按本地日期)。
+ * 时刻:今天 18:30 / 明天 09:00 / 10-01 18:30;逾期按真实时刻(逾期 N 天 / N 小时 / N 分钟)。
+ */
+export function dueInfo(due: string, today: string, column: ReqColumn = 'pool', now: number = Date.now(), clock: Clock = systemClock): { label: string; tone: DueTone; full: string } {
+  if (!due || !dueOk(due)) return { label: '', tone: 'none', full: '' };
+  const full = formatDueFull(due, clock);
+  if (isDateTime(due)) {
+    const local = dueToLocal(due, clock)!;
+    const [y, m, d] = local.date.split('-').map(Number);
+    const hm = formatTime(local.time!);
+    const dayDiff = dayNumber(local.date) - dayNumber(today);
+    const short = dayDiff === 0 ? `今天 ${hm}` : dayDiff === 1 ? `明天 ${hm}`
+      : y === Number(today.slice(0, 4)) ? `${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')} ${hm}` : `${local.date} ${hm}`;
+    if (column === 'done') return { label: short, tone: 'normal', full };
+    const late = now - Date.parse(due);
+    if (late > 0) {
+      const mins = Math.floor(late / 60_000);
+      const label = mins >= 1440 ? `逾期 ${Math.floor(mins / 1440)} 天` : mins >= 60 ? `逾期 ${Math.floor(mins / 60)} 小时` : `逾期 ${Math.max(1, mins)} 分钟`;
+      return { label, tone: 'overdue', full };
+    }
+    return { label: short, tone: dayDiff === 0 ? 'today' : 'normal', full };
+  }
+  return { ...dateOnlyInfo(due, today, column), full };
+}
+
+function dateOnlyInfo(due: string, today: string, column: ReqColumn): { label: string; tone: DueTone } {
   const diff = dayNumber(due) - dayNumber(today);
   const [y, m, d] = due.split('-').map(Number);
   const sameYear = y === Number(today.slice(0, 4));

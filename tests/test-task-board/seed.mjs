@@ -57,9 +57,11 @@ const projects = {};
     projects.tmai = (await call(`/api/requirements/projects?network_id=${net}`, { method: "POST", body: JSON.stringify({ name: "TMAI", color: "#7c3aed" }) })).project.id;
   }
 }
+// 参与人:一张卡 4 个人(卡片上 3 个头像 +1)
+const participantsOf = { "登录页支持扫码登录": [ME, M2, A, B] };
 const projectOf = { "登录页支持扫码登录": "legion", "整理 9 月的发版说明,补上安卓和桌面端的差异": "legion", "修复通知在后台不弹": "tmai", "设置页拆分子页面": "legion", "节点日志查看器": "tmai" };
 for (const r of rows) {
-  const { requirement } = await call("/api/requirements", { method: "POST", body: JSON.stringify({ name: r.name, priority: r.priority, due: r.due, assignee: "", network_id: net, ...(r.description ? { description: r.description } : {}), ...(r.checklist ? { checklist: r.checklist } : {}), ...(projects[projectOf[r.name]] ? { project_id: projects[projectOf[r.name]] } : {}), ...(r.owner ? { owner: r.owner } : {}), ...(r.agent ? { agent_owner: r.agent } : {}) }) });
+  const { requirement } = await call("/api/requirements", { method: "POST", body: JSON.stringify({ name: r.name, priority: r.priority, due: r.due, assignee: "", network_id: net, ...(r.description ? { description: r.description } : {}), ...(r.checklist ? { checklist: r.checklist } : {}), ...(projects[projectOf[r.name]] ? { project_id: projects[projectOf[r.name]] } : {}), ...(participantsOf[r.name] ? { participants: participantsOf[r.name] } : {}), ...(r.owner ? { owner: r.owner } : {}), ...(r.agent ? { agent_owner: r.agent } : {}) }) });
   if (r.column !== "pool") await call(`/api/requirements/${requirement.id}?network_id=${net}`, { method: "PATCH", body: JSON.stringify({ column: r.column }) });
 }
 const { requirements } = await call(`/api/requirements?network_id=${net}`);

@@ -1,3 +1,4 @@
+import { dueInstant, dueValid } from './due-time';
 // 需求池。长期卡片，人新建，存在 Hub 上。不跟 Hub 里正在跑的那条消息混在一起。
 export const REQ_PRIORITIES = ['high', 'normal', 'low'] as const;
 export type ReqPriority = (typeof REQ_PRIORITIES)[number];
@@ -35,14 +36,11 @@ export interface Requirement {
   createdAt: string;
 }
 
-const DUE = /^\d{4}-\d{2}-\d{2}$/;
-export function dueOk(due: string): boolean {
-  if (!due) return true;
-  if (!DUE.test(due)) return false;
-  const [y, m, d] = due.split('-').map(Number);
-  const dt = new Date(Date.UTC(y, m - 1, d));
-  return dt.getUTCFullYear() === y && dt.getUTCMonth() === m - 1 && dt.getUTCDate() === d;
-}
+/** 空、全天 'YYYY-MM-DD'、带时区的时刻(Hub #2076 存成 UTC 到秒)都合法。见 due-time.ts。 */
+export const dueOk = (due: string): boolean => dueValid(due);
+
+/** 排序键:全天 = 本地那天结束,时刻 = 本身;空 = 最后。 */
+const dueKey = (due: string): number => dueInstant(due) ?? Number.POSITIVE_INFINITY;
 
 export function createRequirement(input: {
   name: string; priority?: ReqPriority; assignee?: string; due?: string; now?: string; id?: string;
@@ -73,11 +71,8 @@ export function sortColumn(items: readonly Requirement[]): Requirement[] {
   return [...items].sort((a, b) => {
     const byP = PR[a.priority] - PR[b.priority];
     if (byP) return byP;
-    if (a.due !== b.due) {
-      if (!a.due) return 1;
-      if (!b.due) return -1;
-      return a.due < b.due ? -1 : 1;
-    }
+    const ka = dueKey(a.due), kb = dueKey(b.due);
+    if (ka !== kb) return ka < kb ? -1 : 1;
     return a.createdAt < b.createdAt ? 1 : -1;
   });
 }

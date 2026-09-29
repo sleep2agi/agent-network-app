@@ -5,7 +5,7 @@ import {
   applyFilter, applyMove, boardColumns, checkDraft, createInput, DRAG_IDLE, dragReduce, dropIndex, dueInfo, editDraftOf,
   editPatch, emptyDraft, localToday, neighbourColumn, nextSort, ownerCounts, ownerKeyOf, ownerLabel, ownersForScope,
   patchApplied, revertMove, scopeOf, sortRows, statusPatch, toggleIn, UNASSIGNED, type DragState,
-  hasRoles, roleAvatars, roleKeysOf, roleKinds,
+  hasRoles, roleAvatars, roleKeysOf, roleKinds, participantStack, personDisplay,
   activeProjects, checkProjectName, defaultProjectFor, filterActive, NO_PROJECT, nextProjectColor, projectCounts, splitByCount, PROJECT_COLORS,
   addChecklistItem, checklistDropIndex, checklistProgress, hasDetails, moveChecklistItem, newChecklistId, removeChecklistItem, setChecklistDone,
 } from './task-board-model';
@@ -53,7 +53,7 @@ console.log('# 分组 / 筛选');
   const counts = ownerCounts(items, people);
   const shape = counts.map(c => `${c.name}:${c.count}`).join();
   ck('负责人列表:数目降序,同数按名字(zh 排序),未分配在最后', shape === 'demo-node-a:2,测试者:1,demo-node-b:1,未分配:1', shape);
-  ck('名字取不到就用 id', ownerLabel(R('x', { owner: { kind: 'node', id: 'node_gone' } }), people) === 'node_gone');
+  ck('名字取不到:「未知成员(末 6 位)」,不显示裸 id', ownerLabel(R('x', { owner: { kind: 'node', id: 'n_e06d936d' } }), people) === '未知成员（6d936d）');
   ck('旧 Hub 显示旧的 assignee 文本', ownerLabel({ owner: undefined, assignee: '旧节点' }, people) === '旧节点');
 }
 
@@ -83,7 +83,8 @@ console.log('# 列表排序');
 
 console.log('# 期限');
 {
-  ck('逾期(红)', JSON.stringify(dueInfo('2026-09-20', '2026-09-29')) === JSON.stringify({ label: '逾期 9 天', tone: 'overdue' }));
+  const od = dueInfo('2026-09-20', '2026-09-29');
+  ck('逾期(红)', od.label === '逾期 9 天' && od.tone === 'overdue' && od.full === '2026-09-20 全天');
   ck('今天 / 明天', dueInfo('2026-09-29', '2026-09-29').label === '今天' && dueInfo('2026-09-30', '2026-09-29').label === '明天');
   ck('同年只写月日,跨年带年', dueInfo('2026-10-05', '2026-09-29').label === '10月5日' && dueInfo('2027-01-02', '2026-09-29').label === '2027年1月2日');
   ck('已完成不算逾期', dueInfo('2026-09-20', '2026-09-29', 'done').tone === 'normal');
@@ -272,6 +273,17 @@ console.log('# 左栏:只放有任务的节点,其余收起可搜');
   ck('上面只有有任务的,按数目降序', sp.shown.map(r => r.name).join() === 'busy-a,busy-b');
   ck('其余 300 个收进「更多」', sp.more.length === 300);
   ck('「更多」可搜', splitByCount(rows, 'NODE-12').more.map(r => r.name).join() === 'node-120,node-121,node-122,node-123,node-124,node-125,node-126,node-127,node-128,node-129');
+}
+
+console.log('# 参与人 / 未知成员');
+{
+  const refs = [ME, NODE_A, { kind: 'user' as const, id: 'u_a4944afaa30b' }, NODE_B, { kind: 'node' as const, id: 'n_e06d936d' }];
+  const st = participantStack(refs, people);
+  ck('最多 3 个头像 + 「+N」', st.shown.length === 3 && st.more === 2);
+  ck('认不出的成员:未知成员 + 短 id,不是裸 id', st.shown[2].name === '未知成员（faa30b）' && !st.shown[2].known && !st.all.includes('u_a4944afaa30b'));
+  ck('悬停名单写全(含种类)', st.all.startsWith('测试者（人类）、demo-node-a（Agent）'));
+  ck('没有参与人 = 空', participantStack(undefined, people).shown.length === 0);
+  ck('认得的成员 known', personDisplay(ME, people).known && personDisplay(ME, people).name === '测试者');
 }
 
 console.log('# 界面接线(源码)');

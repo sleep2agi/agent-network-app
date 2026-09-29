@@ -82,9 +82,15 @@ function scoped(cfg: HubConfig, path: string): string {
 }
 
 export async function listRequirements(cfg: HubConfig): Promise<Requirement[]> {
-  const data = await call(cfg, scoped(cfg, '/api/requirements')) as { requirements?: unknown };
+  return (await listRequirementsFull(cfg)).rows;
+}
+
+/** 连同 Hub 的 capabilities(#2076 起:agent_owner / description / checklist / projects / due_datetime;旧 Hub = [])。 */
+export async function listRequirementsFull(cfg: HubConfig): Promise<{ rows: Requirement[]; capabilities: string[] }> {
+  const data = await call(cfg, scoped(cfg, '/api/requirements')) as { requirements?: unknown; capabilities?: unknown };
   const rows = Array.isArray(data.requirements) ? data.requirements : [];
-  return rows.map(requirementFromHub).filter((row): row is Requirement => !!row);
+  const capabilities = Array.isArray(data.capabilities) ? data.capabilities.filter((c): c is string => typeof c === 'string') : [];
+  return { rows: rows.map(requirementFromHub).filter((row): row is Requirement => !!row), capabilities };
 }
 
 type CreateInput = { name: string; priority: ReqPriority; assignee: string; due: string; column?: ReqColumn; clientId?: string; owner?: RequirementPersonRef; agentOwner?: RequirementPersonRef; projectId?: string };
