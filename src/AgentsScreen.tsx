@@ -11,6 +11,8 @@ import { Text, TextInput } from './ui-text';
 import { Ionicons } from './icons';
 import AliasAvatar from './AliasAvatar';
 import { consumeAgentSearchFocus, subscribeAgentSearchFocus } from './shortcuts-store';
+import { useTranslation } from './i18n-react';
+import './i18n-chat';
 import { isAgentOnline } from './chat-actions';
 import { fetchStatus, fetchUserMessages, takeStatusPrefetch, type HubConfig, type Session,
   ackAgentMessages,
@@ -104,6 +106,7 @@ export default function AgentsScreen({
    *  undefined 不清除已有筛选 —— 双栏里点开会话时列表不该丢掉筛选。 */
   filter?: AgentListFilter | null;
 }) {
+  const { t } = useTranslation();
   const [sessions, setSessions] = useState<Session[]>(preview?.sessions ?? []);
   const [loading, setLoading] = useState(!preview);
   const [refreshing, setRefreshing] = useState(false);
@@ -551,7 +554,7 @@ export default function AgentsScreen({
           </Pressable>
         </View>
         {sessions.length > 10 || searchOpen || query ? (
-          <TextInput ref={searchRef} testID="agents-search" style={[styles.search, compact && { backgroundColor: colors.subtleFill, borderWidth: 0, borderRadius: radius.control }]} placeholder="搜索 agent…" placeholderTextColor={colors.textMuted} autoCapitalize="none" autoCorrect={false} value={query} onChangeText={setQuery} onBlur={() => { if (!query) setSearchOpen(false); }} />
+          <TextInput ref={searchRef} testID="agents-search" style={[styles.search, compact && { backgroundColor: colors.subtleFill, borderWidth: 0, borderRadius: radius.control }]} placeholder={t('chat.searchAgent')} placeholderTextColor={colors.textMuted} autoCapitalize="none" autoCorrect={false} value={query} onChangeText={setQuery} onBlur={() => { if (!query) setSearchOpen(false); }} />
         ) : null}
       </View>
       ) : (

@@ -159,5 +159,5 @@ export const COPY_EXCEPTIONS: readonly CopyException[] = [
   { file: 'src/i18n-chat.ts', text: "'voice.hold':", why: 'Translated legacy VoiceMicButton name', debt: { owner: 'voice-shortcuts', reason: 'Legacy hold-to-record fallback; desktop uses DesktopMicButton' } },
   { file: 'src/i18n-chat.ts', text: "'voice.holdHint':", why: 'Translated legacy VoiceMicButton hint', debt: { owner: 'voice-shortcuts', reason: 'Same legacy fallback' } },
   { file: 'src/useVoiceRecorder.ts', text: '请再次按住说话', why: '首次授权后的提示,桌面也会出现', debt: { owner: 'voice-shortcuts', reason: '桌面改为点击录音后改成「请再点一次」' } },
-  { file: 'src/VoiceSettingsSection.tsx', text: '按住说话时文字实时出现在录音浮层里', why: '设置 → 语音输入 的说明,桌面也显示', debt: { owner: 'voice-shortcuts', reason: '说明跟着桌面录音方式改;该文件也在 #459 里' } },
+  { file: 'src/i18n-settings.ts', text: '按住说话时文字实时出现在录音浮层里', why: '设置 → 语音输入 的原说明迁入翻译表,平台行为未变', debt: { owner: 'voice-shortcuts', reason: '原设置说明的手机手势文案债务,不是新增录音行为' } },
 ];

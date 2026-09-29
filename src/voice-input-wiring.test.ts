@@ -116,14 +116,14 @@ ck('设置页不把 creds.accessToken / secretKey 渲染出来', !/\{creds\??\.(
   const appIdAt = section.indexOf('testID="voice-app-id"');
   const tokenAt = section.indexOf('testID="voice-access-token"');
   ck('默认只有一个 API Key 栏(在「高级」之前)', apiKeyAt > 0 && apiKeyAt < advAt);
-  ck('App ID / Access Token 只在「高级 / 旧版控制台」里', appIdAt > advAt && tokenAt > advAt && section.includes("'高级 / 旧版控制台 ›'"));
+  ck('App ID / Access Token 只在「高级 / 旧版控制台」里', appIdAt > advAt && tokenAt > advAt && section.includes("tr('settings.copy.236')") && read('src/i18n-settings.ts').includes('高级 / 旧版控制台 ›'));
     const sectionCode = section.split('\n').filter(l => !/^\s*\/\//.test(l)).join('\n'); // 去掉整行注释(注释里说明了为什么去掉)
   ck('界面上不再有 Secret Key', !/Secret Key|secretKey/.test(sectionCode));
-  ck('一行帮助:控制台链接 + 开通管理提示', section.includes('openExternal(VOLC_CONSOLE_URL)') && !section.includes('Linking.openURL') && read('src/voice-credentials-model.ts').includes("VOLC_CONSOLE_URL = 'https://console.volcengine.com/speech/app'") && section.includes("'在『开通管理』里开通：录音文件识别大模型-极速版 +（可选）流式语音识别大模型'"));
+  ck('一行帮助:控制台链接 + 开通管理提示', section.includes('openExternal(VOLC_CONSOLE_URL)') && !section.includes('Linking.openURL') && read('src/voice-credentials-model.ts').includes("VOLC_CONSOLE_URL = 'https://console.volcengine.com/speech/app'") && section.includes('tr(CONSOLE_HELP)') && read('src/i18n-settings.ts').includes('在『开通管理』里开通：录音文件识别大模型-极速版 +（可选）流式语音识别大模型'));
   ck('保存新凭据后清掉「流式不可用」记忆', /await saveVoiceCredentials\(r\.creds\);\s*clearStreamUnavailable\(\);/.test(section));
   ck('「测试」按所选识别模型走,流式时实时显示中间结果', section.includes("const route: VoiceMode = mode === 'stream' && streamingSupported(platform) ? 'stream' : 'flash';") && section.includes('newUtterance(route, setInterim)') && section.includes('testID="voice-test-interim"'));
   ck('「测试」回退时说明流式为什么失败', section.includes('note: testFallbackNote(route, r,'));
-  ck('「流式未开通，已使用极速版」提示挂在设置里', section.includes('testID="voice-stream-unavailable"') && section.includes('{STREAM_UNAVAILABLE_HINT}'));
+  ck('「流式未开通，已使用极速版」提示挂在设置里', section.includes('testID="voice-stream-unavailable"') && section.includes('{settingsText(STREAM_UNAVAILABLE_HINT)}'));
   ck('测试报错按控制台版本点名字段(传 credMode)', section.includes('asrErrorMessage(err.code, err.upstream, credMode)'));
 }
 {

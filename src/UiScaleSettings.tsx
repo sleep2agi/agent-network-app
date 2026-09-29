@@ -1,3 +1,7 @@
+import { t as tr } from './i18n';
+import { useTranslation } from './i18n-react';
+import { settingsText } from './i18n-settings';
+import { localizedScaleSummary } from './i18n-settings-presentation';
 // 设置 → 外观:字体大小 + 界面密度 两个分段控件、实时预览、恢复默认。
 // The model (options, defaults, OS-scale composition, storage) is src/ui-scale.ts. Choosing an
 // option re-keys the whole tree (App.tsx), so the preview below — built from the same Text /
@@ -46,6 +50,7 @@ function Segmented<K extends string>({ label, options, selectedKey, isDefault, o
   s: SharedStyles;
   testPrefix: string;
 }) {
+  useTranslation();
   return (
     <View style={s.segmented} accessibilityRole="radiogroup" accessibilityLabel={label}>
       {options.map(o => {
@@ -55,14 +60,14 @@ function Segmented<K extends string>({ label, options, selectedKey, isDefault, o
             key={o.key}
             accessibilityRole="radio"
             accessibilityState={{ selected, checked: selected }}
-            accessibilityLabel={o.label}
+            accessibilityLabel={settingsText(o.label)}
             testID={`${testPrefix}-${o.key}`}
             style={({ pressed }) => [s.segment, selected && s.segmentSelected, pressed && !selected && { opacity: 0.6 }]}
             // Picking the option that is only the *default* stores it explicitly (so unfolding /
             // folding no longer changes it); picking the already-stored one is a no-op.
             onPress={() => { if (!selected || isDefault) onPick(o.key); }}
           >
-            <Text style={[s.segmentText, selected && s.segmentTextSelected]} numberOfLines={1}>{o.label}</Text>
+            <Text style={[s.segmentText, selected && s.segmentTextSelected]} numberOfLines={1}>{settingsText(o.label)}</Text>
           </Pressable>
         );
       })}
@@ -71,11 +76,12 @@ function Segmented<K extends string>({ label, options, selectedKey, isDefault, o
 }
 
 export default function UiScaleSettings({ s, showFont, showDensity }: { s: SharedStyles; showFont: boolean; showDensity: boolean }) {
+  useTranslation();
   // Re-render on a preference change even when nothing visible changes (「默认」 label).
   useSyncExternalStore(onUiScalePrefsChange, uiScalePrefsKey, uiScalePrefsKey);
   const r = uiScale();
   const wide = uiScaleLayoutWide();
-  const summary = uiScaleSummary(r, wide);
+  const summary = localizedScaleSummary(r, wide);
   const anyStored = !r.fontIsDefault || !r.densityIsDefault;
   if (!showFont && !showDensity) return null;
   return (
@@ -83,34 +89,34 @@ export default function UiScaleSettings({ s, showFont, showDensity }: { s: Share
       {showFont ? (
         <View style={[s.row, s.themeRow]} testID="settings-font-size-row">
           <View style={[s.rowCopy, s.themeRowCopy]}>
-            <Text style={s.rowLabel}>字体大小</Text>
+            <Text style={s.rowLabel}>{tr('settings.copy.99')}</Text>
             <Text style={s.rowHint} testID="settings-font-size-summary">{summary.font}</Text>
             {summary.osNote ? <Text style={s.rowHint} testID="settings-font-size-os">{summary.osNote}</Text> : null}
           </View>
-          <Segmented label="字体大小" options={FONT_SIZE_OPTIONS} selectedKey={r.font} isDefault={r.fontIsDefault} s={s} testPrefix="settings-font-size" onPick={font => persistUiScale({ font })} />
+          <Segmented label={tr('settings.copy.99')} options={FONT_SIZE_OPTIONS} selectedKey={r.font} isDefault={r.fontIsDefault} s={s} testPrefix="settings-font-size" onPick={font => persistUiScale({ font })} />
         </View>
       ) : null}
       {showDensity ? (
         <View style={[s.row, s.themeRow]} testID="settings-density-row">
           <View style={[s.rowCopy, s.themeRowCopy]}>
-            <Text style={s.rowLabel}>界面密度</Text>
+            <Text style={s.rowLabel}>{tr('settings.copy.100')}</Text>
             <Text style={s.rowHint} testID="settings-density-summary">{summary.density}</Text>
-            <Text style={s.rowHint}>图标、头像、行高和间距</Text>
+            <Text style={s.rowHint}>{tr('settings.copy.155')}</Text>
           </View>
-          <Segmented label="界面密度" options={DENSITY_OPTIONS} selectedKey={r.density} isDefault={r.densityIsDefault} s={s} testPrefix="settings-density" onPick={density => persistUiScale({ density })} />
+          <Segmented label={tr('settings.copy.100')} options={DENSITY_OPTIONS} selectedKey={r.density} isDefault={r.densityIsDefault} s={s} testPrefix="settings-density" onPick={density => persistUiScale({ density })} />
         </View>
       ) : null}
       <UiScalePreview />
       <View style={[s.row, { justifyContent: 'flex-end' }]}>
         <Pressable
           accessibilityRole="button"
-          accessibilityLabel="恢复默认字体大小和界面密度"
+          accessibilityLabel={tr('settings.copy.103')}
           testID="settings-ui-scale-reset"
           disabled={!anyStored}
           onPress={() => persistUiScale({ font: null, density: null })}
           style={({ pressed }) => [s.actionButton, !anyStored && { opacity: 0.45 }, pressed && { opacity: 0.6 }]}
         >
-          <Text style={s.actionButtonText}>恢复默认</Text>
+          <Text style={s.actionButtonText}>{tr('settings.copy.102')}</Text>
         </Pressable>
       </View>
     </View>
@@ -119,35 +125,36 @@ export default function UiScaleSettings({ s, showFont, showDensity }: { s: Share
 
 /** A sample agent row + a chat bubble pair + a button, built from the real primitives. */
 export function UiScalePreview() {
+  useTranslation();
   const st = makePreviewStyles();
   return (
-    <View style={st.frame} testID="settings-ui-scale-preview" accessibilityLabel="预览">
-      <Text style={st.caption}>预览</Text>
+    <View style={st.frame} testID="settings-ui-scale-preview" accessibilityLabel={tr('settings.copy.101')}>
+      <Text style={st.caption}>{tr('settings.copy.101')}</Text>
       <View style={st.row}>
         <View style={st.avatar}>
-          <AliasAvatar alias="预览助手" size={agentRowGeometry(uiScale().listDense, uiScale().densityFactor).avatar} fixedSize />
+          <AliasAvatar alias={tr('settings.copy.156')} size={agentRowGeometry(uiScale().listDense, uiScale().densityFactor).avatar} fixedSize />
           <View style={[st.dot, { backgroundColor: colors.running, borderColor: colors.card }]} />
         </View>
         <View style={st.body}>
           <View style={st.line}>
-            <Text dense numberOfLines={1} style={st.name}>预览助手</Text>
+            <Text dense numberOfLines={1} style={st.name}>{tr('settings.copy.156')}</Text>
             <Ionicons name="pin" size={12} color={colors.textMuted} />
             <Text dense style={st.time}>10:24</Text>
           </View>
           <View style={st.line}>
-            <Text dense numberOfLines={1} style={st.preview}>好的，我来整理今天的任务清单</Text>
+            <Text dense numberOfLines={1} style={st.preview}>{tr('settings.copy.157')}</Text>
             <View style={st.badge}><Text dense style={st.badgeText}>2</Text></View>
           </View>
         </View>
       </View>
       <View style={st.chat}>
-        <View style={[st.bubble, st.bubbleThem]}><Text style={st.bubbleText}>这周的构建都通过了吗？</Text></View>
-        <View style={[st.bubble, st.bubbleMe]}><Text style={[st.bubbleText, { color: colors.onAccent }]}>都通过了，报告已发到群里。</Text></View>
+        <View style={[st.bubble, st.bubbleThem]}><Text style={st.bubbleText}>{tr('settings.copy.158')}</Text></View>
+        <View style={[st.bubble, st.bubbleMe]}><Text style={[st.bubbleText, { color: colors.onAccent }]}>{tr('settings.copy.159')}</Text></View>
       </View>
       <View style={st.buttons}>
         <View style={st.button}>
           <Ionicons name="send" size={16} color={colors.onAccent} />
-          <Text style={st.buttonText}>发送</Text>
+          <Text style={st.buttonText}>{tr('settings.copy.72')}</Text>
         </View>
       </View>
     </View>

@@ -1,5 +1,6 @@
 import { acceptLanguageStorage, currentLanguage, hydrateLanguage, languagePreference, parseLanguagePreference, refreshSystemLanguage, registerTranslations, resolveLanguage, setLanguagePreference, subscribeLanguage, t } from './i18n';
 import { chatTranslations } from './i18n-chat';
+import { settingsTranslations } from './i18n-settings';
 let p = 0, n = 0;
 const ck = (name: string, ok: boolean) => { n++; if (ok) p++; console.log(`${ok ? 'PASS' : 'FAIL'}: ${name}`); };
 ck('unknown stored preference follows system', parseLanguagePreference('bad') === 'system');
@@ -10,6 +11,8 @@ let changes = 0;
 const stop = subscribeLanguage(() => changes++);
 setLanguagePreference('en');
 ck('instant translated text', t('language.label') === 'Language' && changes === 1);
+ck('language choices use system label and language self-names', t('settings.language.system') === 'Follow system' && t('settings.language.zh') === '中文' && t('settings.language.en') === 'English');
+ck('settings translations preserve interpolation fields', Object.values(settingsTranslations).every(([zh, en]) => zh.length > 0 && en.length > 0 && JSON.stringify([...zh.matchAll(/\{(\w+)\}/g)].map(m => m[1]).sort()) === JSON.stringify([...en.matchAll(/\{(\w+)\}/g)].map(m => m[1]).sort())));
 registerTranslations({ 'test.literal': ['你好 {name}', 'Hello {name}'] });
 ck('user values remain verbatim', t('test.literal', { name: '用户 $& {other}' }) === 'Hello 用户 $& {other}');
 ck('chat translations have both languages and matching interpolation fields', Object.values(chatTranslations).every(([zh, en]) => zh.length > 0 && en.length > 0 && JSON.stringify([...zh.matchAll(/\{(\w+)\}/g)].map(m => m[1]).sort()) === JSON.stringify([...en.matchAll(/\{(\w+)\}/g)].map(m => m[1]).sort())));

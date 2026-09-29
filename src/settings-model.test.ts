@@ -59,9 +59,9 @@ const norm = (f: string) => readFileSync(new URL(f, import.meta.url), 'utf-8').r
   ck('SettingsScreen 从模型取分类与筛选', src.includes("from './settings-model'") && src.includes('filterSettings('));
   ck('左栏(分类列表)', src.includes('testID="settings-sidebar"'));
   ck('右栏(内容面板)', src.includes('testID="settings-pane"'));
-  ck('搜索框', src.includes('accessibilityLabel="搜索设置"'));
-  ck('关闭按钮(仅传了 onClose 时)', src.includes('accessibilityLabel="关闭设置"'));
-  ck('分类按钮按模型渲染', src.includes('accessibilityLabel={`设置分类 ${cat.label}`}'));
+  ck('搜索框', src.includes("accessibilityLabel={tr('settings.copy.3')}"));
+  ck('关闭按钮(仅传了 onClose 时)', src.includes("accessibilityLabel={tr('settings.copy.2')}"));
+  ck('分类按钮按模型渲染并翻译', src.includes("accessibilityLabel={tr('settings.copy.178', { v0: settingsText(cat.label) })}"));
   ck('右栏标题 = 当前分类名', src.includes('<Text style={styles.paneTitle}>'));
   ck('删除本地工作区放在单独的危险区', src.includes('testID="settings-danger-zone"'));
   ck('提示音 / 免打扰用真正的开关', src.includes('<Switch'));

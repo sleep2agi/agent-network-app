@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import * as M from './shortcuts-model';
+import { settingsTranslations } from './i18n-settings';
 
 let p = 0, t = 0;
 const ck = (n: string, c: boolean, extra = '') => { t++; if (c) { p++; console.log('✅', n); } else console.log('❌', n, extra); };
@@ -86,10 +87,10 @@ ck('动作:⌘K=搜索、⌘,=设置、⌘3=定时', M.shortcutAction('nav.searc
   ck('快捷键页所有行标签 / 分组名里没有英文单词', bad.length === 0, bad.join(' | '));
   // 页面上写死的文案(发送消息 / 换行 / 随发送键 / 固定 / 页脚)也扫一遍;键帽(Ctrl / Shift / Space / Enter / Esc)是键名,不算。
   const page = read('src/ShortcutsSettings.tsx');
-  const texts = [...page.matchAll(/>([^<>{}\n]*[\u4e00-\u9fff][^<>{}\n]*)</g)].map(m => m[1].trim());
+  const texts = [...page.matchAll(/tr\('(settings\.copy\.\d+)'/g)].map(m => settingsTranslations[m[1]]?.[0] ?? 'MISSING');
   const KEY_NAMES = /\b(?:Esc|Ctrl|Shift|Space|Enter|Alt|Tab)\b/g;
   const badText = texts.filter(t => english.test(t.replace(KEY_NAMES, '')));
-  ck('快捷键页写死的中文文案里没有夹英文', texts.length >= 5 && badText.length === 0, `${texts.length} texts; ${badText.join(' | ')}`);
+  ck('快捷键页翻译表的中文文案里没有夹英文', texts.length >= 5 && badText.length === 0, `${texts.length} texts; ${badText.join(' | ')}`);
 }
 
 // tab 快捷键和桌面导航栏真实顺序一致(App.tsx DESKTOP_TABS,去掉设置)。

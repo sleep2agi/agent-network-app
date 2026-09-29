@@ -15,7 +15,7 @@ check(settings.includes('testID="local-hub-upgrade"'), 'settings renders the upg
 check(settings.includes("localHub.requiresMigration || (localHub.error ?? '').includes('version mismatch')"), 'upgrade button shows on requiresMigration or version-mismatch error');
 const button = settings.slice(settings.indexOf('testID="local-hub-upgrade"'), settings.indexOf('testID="local-hub-upgrade"') + 700);
 check(button.includes('restartLocalHub()'), 'upgrade button restarts the local Hub (stale takeover lives in start_local_hub)');
-check(button.includes('升级本地 Hub 到 ${localHub.expectedHubVersion'), 'button label names the bundled Hub version');
+check(button.includes("tr('settings.copy.186', { v0: localHub.expectedHubVersion"), 'translated button label names the bundled Hub version');
 check(rust.includes('fn stop_stale_process(pid: u32, port: u16)') && rust.includes('stale_owner_taken_over = true;'), 'start_local_hub takes over a stale owned sidecar on version mismatch');
 check(rust.includes('pub fn packaged_stale_hub_takeover_smoke()'), 'packaged stale-takeover smoke exists');
 const workflow = readFileSync(new URL('../.github/workflows/release-desktop-auto-update.yml', import.meta.url), 'utf8');

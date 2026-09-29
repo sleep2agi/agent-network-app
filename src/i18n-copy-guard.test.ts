@@ -1,11 +1,14 @@
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import ts from 'typescript';
+import { t as translate } from './i18n';
+import './i18n-chat';
+import './i18n-settings';
 
 let p = 0, t = 0;
 const ck = (name: string, ok: boolean) => { t++; if (ok) p++; console.log(`${ok ? 'PASS' : 'FAIL'}: ${name}`); };
 // Expand this explicit migration boundary as additional surfaces are translated.
-const migrated = ['src/MobileNavRail.tsx', 'src/ServerSidebar.tsx', 'src/ChatScreen.tsx', 'src/ChatInfoPanel.tsx', 'src/ComposerRowParts.tsx', 'src/VoiceInputUI.tsx', 'src/DesktopVoiceBar.tsx'];
+const migrated = ['src/MobileNavRail.tsx', 'src/ServerSidebar.tsx', 'src/ChatScreen.tsx', 'src/ChatInfoPanel.tsx', 'src/ComposerRowParts.tsx', 'src/VoiceInputUI.tsx', 'src/DesktopVoiceBar.tsx', 'src/LanguageSettings.tsx', 'src/SettingsScreen.tsx', 'src/SettingsPhonePages.tsx', 'src/SettingsEditPages.tsx', 'src/UiScaleSettings.tsx', 'src/ShortcutsSettings.tsx', 'src/VoiceSettingsSection.tsx'];
 function untranslated(file: string, raw: string): string[] {
   const source = raw.replace(/\r\n?/g, '\n');
   const tree = ts.createSourceFile(file, source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
@@ -40,5 +43,19 @@ for (const file of migrated) {
 const app = readFileSync(new URL('../App.tsx', import.meta.url), 'utf8').replace(/\r\n?/g, '\n');
 const navigation = [...app.matchAll(/const (?:DESKTOP_TABS|MOBILE_TABS|MOBILE_RAIL_TABS) = \[([\s\S]*?)\] as const;/g)];
 ck('all three App navigation definitions are guarded', navigation.length === 3 && navigation.every(match => untranslated('App.tsx', match[0]).length === 0));
+const missing: string[] = [];
+for (const file of migrated) {
+  const source = readFileSync(new URL(`../${file}`, import.meta.url), 'utf8').replace(/\r\n?/g, '\n');
+  const tree = ts.createSourceFile(file, source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+  const visit = (node: ts.Node) => {
+    if (ts.isCallExpression(node) && ts.isIdentifier(node.expression) && ['t', 'tr'].includes(node.expression.text)) {
+      const key = node.arguments[0];
+      if (key && ts.isStringLiteral(key) && translate(key.text) === key.text) missing.push(`${file}: ${key.text}`);
+    }
+    ts.forEachChild(node, visit);
+  };
+  visit(tree);
+}
+ck(`all literal translation keys exist${missing.length ? '\n' + missing.join('\n') : ''}`, missing.length === 0);
 console.log(`${p}/${t} passed`);
 process.exit(p === t ? 0 : 1);
