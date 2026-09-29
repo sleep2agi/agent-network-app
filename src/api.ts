@@ -163,15 +163,22 @@ export const fetchStatus = (cfg: HubConfig) =>
 
 /** Full, authenticated status projection for the one-node details screen.
  * List/chat polling stays on `?light=1`; this opt-in read is where legacy
- * Hubs may omit newer nullable facts such as `os_user`. */
-export function nodeStatusPath(networkId?: string): string {
+ * Hubs may omit newer nullable facts such as `os_user`.
+ *
+ * `alias` asks the hub for that one agent's rows (`/api/status?alias=`): the
+ * full projection of a whole network is ~533 KB (94 KB gzip) on the
+ * production hub, fetched per chat open and per 10 s node-page poll to read
+ * one row. Hubs that predate the parameter ignore it and return every row, so
+ * callers still pick their row by alias. */
+export function nodeStatusPath(networkId?: string, alias?: string): string {
   const scoped = networkId?.trim();
   if (!scoped) throw new Error('network_id is required for node details');
-  return `/api/status?network_id=${encodeURIComponent(scoped)}`;
+  const one = alias?.trim();
+  return `/api/status?network_id=${encodeURIComponent(scoped)}${one ? `&alias=${encodeURIComponent(one)}` : ''}`;
 }
 
-export const fetchNodeStatus = (cfg: HubConfig) =>
-  get<{ sessions: Session[] }>(cfg, nodeStatusPath(cfg.networkId));
+export const fetchNodeStatus = (cfg: HubConfig, alias?: string) =>
+  get<{ sessions: Session[] }>(cfg, nodeStatusPath(cfg.networkId, alias));
 
 /** A registered node row (subset we consume). The hub's GET /api/nodes
  *  returns `{ ok, nodes, count }`; hub #462 added `avatar_url` to the

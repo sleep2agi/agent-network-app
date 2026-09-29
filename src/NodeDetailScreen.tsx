@@ -250,7 +250,7 @@ export default function NodeDetailScreen({
       .then(result => { setNode((result.nodes ?? []).find(candidate => candidate.alias === alias) ?? null); setNodeListState('loaded'); })
       .catch(() => setNodeListState('failed'));
     try {
-      const data = await fetchNodeStatus(cfg);
+      const data = await fetchNodeStatus(cfg, alias);
       const found = (data.sessions ?? []).find(s => s.alias === alias);
       if (found) setState({ kind: 'ready', session: found });
       else setState(prev => (prev.kind === 'ready' ? prev : { kind: 'not_found' }));

@@ -32,7 +32,7 @@ ck('a task-changed event from another window still refreshes at once', /refreshR
 // ── node detail: nodes + status together, loaded once at mount ──
 const detail = src('NodeDetailScreen.tsx');
 const dLoad = detail.slice(detail.indexOf('const load = useCallback(async () => {'), detail.indexOf('}, [cfg, alias]);'));
-ck('node detail starts the nodes read before awaiting the status read', before(dLoad, 'fetchHubNodes(cfg)', 'await fetchNodeStatus(cfg)'));
+ck('node detail starts the nodes read before awaiting the status read', before(dLoad, 'fetchHubNodes(cfg)', 'await fetchNodeStatus(cfg, alias)'));
 ck('node detail has no mount effect duplicating usePoll\'s first run', !/useEffect\(\(\) => \{\s*void load\(\);\s*\}, \[load\]\);/.test(detail) && /usePoll\(load, POLL_MS, \[load\]\)/.test(detail));
 
 console.log(`\n${p}/${t} passed`);

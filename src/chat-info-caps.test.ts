@@ -69,14 +69,14 @@ const strip = (s: string) => s.replace(/\{\/\*[\s\S]*?\*\/\}/g, '').replace(/^\s
 const chat = strip(read('ChatScreen.tsx'));
 const detail = strip(read('NodeDetailScreen.tsx'));
 const api = strip(read('api.ts'));
-ck('api: fetchStatus is the light projection, fetchNodeStatus the full one', /fetchStatus = \(cfg: HubConfig\) =>\s*get<[^>]+>\(cfg, '\/api\/status\?light=1'\)/.test(api) && /fetchNodeStatus = \(cfg: HubConfig\) =>\s*get<[^>]+>\(cfg, nodeStatusPath\(cfg\.networkId\)\)/.test(api));
-ck('chat: caps come from the full status (fetchNodeStatus → chatInfoCaps → setFullCaps)', /fetchNodeStatus\(cfg\)[\s\S]{0,400}chatInfoCaps\(s\)[\s\S]{0,200}setFullCaps\(/.test(chat));
+ck('api: fetchStatus is the light projection, fetchNodeStatus the full one', /fetchStatus = \(cfg: HubConfig\) =>\s*get<[^>]+>\(cfg, '\/api\/status\?light=1'\)/.test(api) && /fetchNodeStatus = \(cfg: HubConfig, alias\?: string\) =>\s*get<[^>]+>\(cfg, nodeStatusPath\(cfg\.networkId, alias\)\)/.test(api));
+ck('chat: caps come from the full status (fetchNodeStatus → chatInfoCaps → setFullCaps)', /fetchNodeStatus\(cfg, alias\)[\s\S]{0,400}chatInfoCaps\(s\)[\s\S]{0,200}setFullCaps\(/.test(chat));
 ck('chat: the full read re-runs when the info panel opens', /\}, \[cfg, alias, infoOpen\]\);/.test(chat));
 ck('chat: full caps win, light only as fallback', /const sessionCaps = fullCaps \?\? lightCaps;/.test(chat));
 ck('chat: switching chats clears the previous caps', /useEffect\(\(\) => \{ setFullCaps\(null\); \}, \[cfg, alias\]\);/.test(chat));
 ck('chat: no inline caps judgement left (one rule, in chat-info-model)', !/rules_file_capable === true/.test(chat) && !/skills_capable === true/.test(chat));
 ck('chat: info groups fed from sessionCaps', /hasRulesTarget: sessionCaps\.rules,\s*skillsCapable: sessionCaps\.skills,/.test(chat));
-ck('node page: reads the full status by alias (no node_id join)', /const data = await fetchNodeStatus\(cfg\);\s*const found = \(data\.sessions \?\? \[\]\)\.find\(s => s\.alias === alias\);/.test(detail));
+ck('node page: reads the full status by alias (no node_id join)', /const data = await fetchNodeStatus\(cfg, alias\);\s*const found = \(data\.sessions \?\? \[\]\)\.find\(s => s\.alias === alias\);/.test(detail));
 ck('node page: rules target + skills gate from the full session', /rulesFileTarget\(\{ readOnly, node, session: s \}\)/.test(detail) && /skills_capable === true/.test(detail));
 
 console.log(`\n${p}/${t} passed`);
