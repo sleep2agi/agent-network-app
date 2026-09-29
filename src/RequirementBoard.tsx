@@ -19,7 +19,7 @@ import { Text, TextInput } from './ui-text';
 import { Ionicons } from './icons';
 import AliasAvatar from './AliasAvatar';
 import type { HubConfig } from './api';
-import { REQ_COLUMN_LABEL, REQ_COLUMNS, REQ_PRIORITIES, REQ_PRIORITY_LABEL, type ChecklistItem, type ReqColumn, type Requirement, type RequirementProject } from './requirements-model';
+import { REQ_COLUMN_LABEL, REQ_COLUMNS, REQ_PRIORITIES, type ChecklistItem, type ReqColumn, type Requirement, type RequirementProject } from './requirements-model';
 import { readRequirements, requirementsKey, writeRequirements } from './requirements-store';
 import { createProject, createRequirementOnHub, fetchMyUserId, listProjects, listRequirementsFull, setChecklistItemOnHub, updateProject, listRequirements, migrateLocalRequirements, moveRequirementOnHub, probeAgentOwnerSupport, RequirementsHubError, updateRequirementOnHub } from './requirements-hub';
 import { listRequirementPeople } from './requirement-people-api';
@@ -31,6 +31,7 @@ import { useModalSafePadding } from './safe-area-runtime';
 import { usePoll } from './usePoll';
 import { applyFilter, applyMove, boardColumns, createInput, DEFAULT_SORT, DRAG_IDLE, dragReduce, dropIndex, emptyDraft, activeProjects, defaultProjectFor, NO_PROJECT, projectCounts, filterActive, hasRoles, localToday, addChecklistItem, moveChecklistItem, removeChecklistItem, setChecklistDone, neighbourColumn, nextSort, revertMove, sortRows, toggleIn, hidesDone, toggleHideDone, UNASSIGNED, type CreateDraft, type DragEvent, type DragState, type EditPatch, type SortKey, type SortSpec } from './task-board-model';
 import { enterTaskScope, patchTaskBoard, setManagingProjects, setTaskFilter, setTaskSection, taskScopeKey, updateTaskItems, useTaskBoard, type TaskSection } from './task-board-store';
+import { PRIORITY_CODE, priorityChoices, priorityLabel, supportsLowest } from './task-priority';
 import { CardMeta, ChecklistProgress, Chip, ParticipantStack, ProjectChip, DueChip, OwnerBadge, PriorityDot, Segmented, STATUS_TONE, useTaskStyles, type TaskStyles, a11yState } from './TaskBoardParts';
 import TaskCreateDialog from './TaskCreateDialog';
 import TaskDetailPanel, { DRAWER_WIDTH } from './TaskDetailPanel';
@@ -80,6 +81,8 @@ function ScopedRequirementBoard({ cfg, desktop, dispatch, onOpenVoiceSettings, s
   const managingProjects = useTaskBoard(st => st.managingProjects);
   const dueDatetime = useTaskBoard(st => st.scope === scope && st.capabilities.includes('due_datetime'));
   const subCaps = useTaskBoard(st => st.scope === scope && st.capabilities.includes('sub_requirements'));
+  const lowestPriority = useTaskBoard(st => st.scope === scope && supportsLowest(st.capabilities));
+  const priorityOptions = useMemo(() => priorityChoices(lowestPriority), [lowestPriority]);
   const filter = useTaskBoard(st => st.filter);
   const items = mine ? storeItems : [];
   /** 这块看板本次启动里从 Hub 读成功过(哪怕是空的)——连不上时照常显示那份,而不是整页报错。 */
@@ -313,7 +316,8 @@ function ScopedRequirementBoard({ cfg, desktop, dispatch, onOpenVoiceSettings, s
       if (kind === 'node' && twoRoles) d.agentOwner = { kind: 'node', id: ref.id };
       else if (kind === 'user' || kind === 'node') d.owner = { kind, id: ref.id };
     }
-    if (filter.priorities.length === 1) d.priority = filter.priorities[0];
+    // 筛着某一档就用那一档建;旧 Hub 不收 P3,筛着 P3 也按默认 P1 建。
+    if (filter.priorities.length === 1 && priorityOptions.includes(filter.priorities[0])) d.priority = filter.priorities[0];
     if (projects) d.projectId = defaultProjectFor(filter, projects);
     return d;
   };
@@ -432,7 +436,7 @@ function ScopedRequirementBoard({ cfg, desktop, dispatch, onOpenVoiceSettings, s
   const selectedProject = filter.project && filter.project !== NO_PROJECT ? projectById.get(filter.project) : undefined;
   const projectChipLabel = !filter.project ? tr('tasks.copy.30') : filter.project === NO_PROJECT ? tr('tasks.copy.31') : selectedProject?.name || tr('tasks.copy.30');
   const counts = useMemo(() => projectCounts(items, filter), [items, filter]);
-  const priorityChipLabel = filter.priorities.length === 0 ? tr('tasks.copy.32') : filter.priorities.map(p => taskText(REQ_PRIORITY_LABEL[p])).join('、');
+  const priorityChipLabel = filter.priorities.length === 0 ? tr('tasks.copy.32') : REQ_PRIORITIES.filter(p => filter.priorities.includes(p)).map(p => filter.priorities.length === 1 ? priorityLabel(p) : PRIORITY_CODE[p]).join('、');
   const statuses = filter.statuses ?? [];
   const statusChipLabel = statuses.length === 0 ? tr('tasks.filterStatus') : REQ_COLUMNS.filter(c => statuses.includes(c)).map(c => taskText(REQ_COLUMN_LABEL[c])).join('、');
   const chipRefs = useRef<Record<string, any>>({});
@@ -548,7 +552,7 @@ function ScopedRequirementBoard({ cfg, desktop, dispatch, onOpenVoiceSettings, s
         key={item.id}
         testID={`req-card-${item.id}`}
         accessibilityRole="button"
-        accessibilityLabel={tr('tasks.copy.42', { v0: item.name, v1: taskText(REQ_PRIORITY_LABEL[item.priority]), v2: ownerLabel(item, people) })}
+        accessibilityLabel={tr('tasks.copy.42', { v0: item.name, v1: priorityLabel(item.priority), v2: ownerLabel(item, people) })}
         accessibilityHint={pointer ? tr('tasks.copy.43') : tr('tasks.copy.44')}
         {...a11yState({ selected: sel.ids.includes(item.id) })}
         onPress={e => onCardPress(item.id, e)}
@@ -760,6 +764,7 @@ function ScopedRequirementBoard({ cfg, desktop, dispatch, onOpenVoiceSettings, s
           onCreateChild={parent => setDraft({ ...draftFor('pool'), parentId: parent.id, projectId: parent.projectId ?? (projects ? defaultProjectFor(filter, projects) : null) })}
           projects={projects}
           dueDatetime={dueDatetime}
+          lowestPriority={lowestPriority}
           mode={mode}
           top={headerBottom}
           people={people}
@@ -797,6 +802,7 @@ function ScopedRequirementBoard({ cfg, desktop, dispatch, onOpenVoiceSettings, s
         parentName={draft?.parentId ? items.find(i => i.id === draft.parentId)?.name ?? null : null}
         projects={projects}
         dueDatetime={dueDatetime}
+        priorities={priorityOptions}
         pointer={pointer}
         sheet={!pointer && narrow}
         networkId={cfg.networkId || ''}
@@ -906,6 +912,7 @@ function ScopedRequirementBoard({ cfg, desktop, dispatch, onOpenVoiceSettings, s
         touch={!pointer}
         owners={owners}
         selectedOwners={filter.owners}
+        priorities={priorityChoices(lowestPriority || filter.priorities.includes('lowest'))}
         selectedPriorities={filter.priorities}
         meId={meId}
         onToggleOwner={key => setTaskFilter({ ...filter, owners: toggleIn(filter.owners, key) })}
@@ -1028,7 +1035,7 @@ function AvatarStack({ keys, owners }: { keys: readonly string[]; owners: Return
 type FilterKind = 'owner' | 'priority' | 'project' | 'status';
 
 /** 头部筛选的弹层:负责人(头像 + 名字 + 数目,多选)、优先级 / 状态(多选)或项目(单选)。 */
-function FilterMenu({ open, touch, owners, selectedOwners, selectedPriorities, selectedStatuses, meId, onToggleOwner, onTogglePriority, onToggleStatus, onToggleHideDone, onClear, onClose, projects, projectCounts, selectedProject, onPickProject }: {
+function FilterMenu({ open, touch, owners, selectedOwners, priorities, selectedPriorities, selectedStatuses, meId, onToggleOwner, onTogglePriority, onToggleStatus, onToggleHideDone, onClear, onClose, projects, projectCounts, selectedProject, onPickProject }: {
   open: { kind: FilterKind; x: number; y: number } | null;
   touch: boolean;
   owners: ReturnType<typeof ownerCounts>;
@@ -1037,6 +1044,8 @@ function FilterMenu({ open, touch, owners, selectedOwners, selectedPriorities, s
   meId: string | null;
   onToggleOwner: (key: string) => void;
   onTogglePriority: (p: (typeof REQ_PRIORITIES)[number]) => void;
+  /** 给哪几档(旧 Hub 没有 P3;已勾上的 P3 仍列出来,好取消)。 */
+  priorities: readonly (typeof REQ_PRIORITIES)[number][];
   selectedStatuses: readonly ReqColumn[];
   onToggleStatus: (c: ReqColumn) => void;
   onToggleHideDone: () => void;
@@ -1088,7 +1097,7 @@ function FilterMenu({ open, touch, owners, selectedOwners, selectedPriorities, s
                 <View key="status-sep" style={{ height: 1, marginVertical: 4, backgroundColor: colors.border }} />,
                 row('status-hide-done', hidesDone(selectedStatuses), onToggleHideDone, <Ionicons name="eye-off-outline" size={14} color={colors.textMuted} />, tr('tasks.hideDone')),
               ]
-              : REQ_PRIORITIES.map(p => row(p, selectedPriorities.includes(p), () => onTogglePriority(p), <PriorityDot p={p} s={s} />, taskText(REQ_PRIORITY_LABEL[p])))}
+              : priorities.map(p => row(p, selectedPriorities.includes(p), () => onTogglePriority(p), <PriorityDot p={p} s={s} />, priorityLabel(p)))}
           </ScrollView>
           <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
             <Pressable onPress={() => { onClear(open.kind); onClose(); }} style={{ height: 36, justifyContent: 'center', paddingHorizontal: spacing.md }} testID="task-filter-reset" accessibilityRole="button">

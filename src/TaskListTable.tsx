@@ -9,10 +9,10 @@ import { useTranslation } from './i18n-react';
 import { taskText } from './i18n-tasks';
 import './i18n-task-fields';
 import { TaskIssueCount } from './TaskIssueBindings';
-import { REQ_COLUMN_LABEL, REQ_PRIORITY_LABEL, type Requirement, type RequirementProject } from './requirements-model';
+import { REQ_COLUMN_LABEL, type Requirement, type RequirementProject } from './requirements-model';
 import type { RequirementPerson } from './requirement-people';
 import { nextSort, type SortKey, type SortSpec } from './task-board-model';
-import { DueChip, OwnerBadge, ParticipantStack, PriorityDot, ProjectChip, STATUS_TONE, a11yState, type TaskStyles } from './TaskBoardParts';
+import { DueChip, OwnerBadge, ParticipantStack, PriorityBadge, ProjectChip, STATUS_TONE, a11yState, type TaskStyles } from './TaskBoardParts';
 import TaskListFields from './TaskListFields';
 import TaskTimeCell from './TaskTimeCell';
 import { fieldWidth, loadFields, resetFieldWidth, saveFields, setFieldWidth, type FieldId, type FieldPref } from './task-list-fields';
@@ -82,7 +82,7 @@ export default function TaskListTable({ rows, people, projects, sort, setSort, s
       }
       case 'title': return <View style={{ flex: 1, minWidth: 0, gap: 4 }}><Text style={[s.tdTitle, item.column === 'done' && s.cardDone]} numberOfLines={1}>{item.name}</Text>{items ? <ParentLine item={item} items={items} /> : null}<TaskTagChips tags={item.tags} /></View>;
       case 'owner': return <OwnerBadge item={item} people={people} s={s} />;
-      case 'priority': return <View style={s.owner}><PriorityDot p={item.priority} s={s} /><Text style={s.metaText}>{taskText(REQ_PRIORITY_LABEL[item.priority])}</Text></View>;
+      case 'priority': return <View style={s.owner}><PriorityBadge p={item.priority} s={s} /></View>;
       case 'due': return item.due ? <DueChip item={item} today={today} s={s} /> : <Text style={s.metaMuted}>—</Text>;
       case 'participants': return <ParticipantStack item={item} people={people} s={s} touch={touch} size={18} />;
       case 'project':

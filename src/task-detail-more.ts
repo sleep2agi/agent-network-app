@@ -10,6 +10,7 @@ export function moreSummary(item: Requirement, draft: Pick<EditDraft, 'priority'
   const out: SummaryPart[] = [];
   if (draft.priority === 'high') out.push({ key: 'detail.sumHigh' });
   else if (draft.priority === 'low') out.push({ key: 'detail.sumLow' });
+  else if (draft.priority === 'lowest') out.push({ key: 'detail.sumLowest' });
   if (draft.parentId) {
     const parent = items.find(i => i.id === draft.parentId);
     out.push(parent ? { key: 'detail.sumParent', values: { name: parent.name } } : { key: 'detail.sumParentUnknown' });

@@ -27,12 +27,13 @@ import { BOARD_RADIUS, cardBg, liftedShadow, STATUS_TONE, useTaskStyles, a11ySta
 import { DueField, fieldStyles, PriorityPicker, RoleFields } from './TaskCreateDialog';
 import { ParentSelect, ProjectSelect } from './TaskFieldPickers';
 import { moreSummary } from './task-detail-more';
+import { priorityChoices } from './task-priority';
 import { loadDetailMoreOpen, saveDetailMoreOpen } from './task-detail-prefs';
 import { PARENT_REJECTED, PARENT_TOO_DEEP } from './requirements-hub';
 
 export const DRAWER_WIDTH = 420;
 
-export default function TaskDetailPanel({ cfg, item, items, onOpenRequirement, onCreateChild, projects, dueDatetime, mode, top, people, peopleLoading, onLoadPeople, moving, moveError, onMove, onSave, onAssignmentsSaved, onClose, pointer, checklistError, onChecklistToggle, onChecklistAdd, onChecklistDelete, onChecklistMove, onOpenVoiceSettings, onOpenWindow }: {
+export default function TaskDetailPanel({ cfg, item, items, onOpenRequirement, onCreateChild, projects, dueDatetime, lowestPriority, mode, top, people, peopleLoading, onLoadPeople, moving, moveError, onMove, onSave, onAssignmentsSaved, onClose, pointer, checklistError, onChecklistToggle, onChecklistAdd, onChecklistDelete, onChecklistMove, onOpenVoiceSettings, onOpenWindow }: {
   cfg: HubConfig;
   item: Requirement;
   /** 全部卡片(找父需求 / 子需求用)。 */
@@ -42,6 +43,8 @@ export default function TaskDetailPanel({ cfg, item, items, onOpenRequirement, o
   /** 项目列表;null = Hub 没有项目。 */
   projects: readonly RequirementProject[] | null;
   dueDatetime: boolean;
+  /** Hub 收 P3 极低(capabilities.priority_lowest);旧 Hub 不给选。 */
+  lowestPriority: boolean;
   /** window = 「在新窗口打开」的任务窗口:整窗铺满,没有 ✕(关窗口用系统的)。 */
   mode: 'drawer' | 'page' | 'window';
   /** 抽屉的上沿 = 页面头部的下沿(对齐)。 */
@@ -206,7 +209,7 @@ export default function TaskDetailPanel({ cfg, item, items, onOpenRequirement, o
       {moreShown ? (
         <View style={{ gap: spacing.lg }} testID="req-more">
           <Field label={tr('tasks.copy.32')}>
-            <PriorityPicker value={draft.priority} onChange={priority => set({ priority })} testPrefix="req-edit-priority" />
+            <PriorityPicker value={draft.priority} onChange={priority => set({ priority })} testPrefix="req-edit-priority" choices={priorityChoices(lowestPriority, item.priority)} />
           </Field>
           <ParentSelect item={item} items={items} value={draft.parentId} onChange={parentId => set({ parentId })} touch={!pointer} idBase="req-edit-parent" error={error?.field === 'parent' ? error.message : undefined} />
           <SubRequirements item={item} items={items} onOpen={onOpenRequirement} onCreateChild={onCreateChild} canAddLevel={levelIn(items, item) < 5} />

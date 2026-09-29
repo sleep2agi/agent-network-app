@@ -266,7 +266,7 @@ export type SortKey = 'title' | 'owner' | 'priority' | 'due' | 'status' | 'proje
 export interface SortSpec { key: SortKey; dir: 'asc' | 'desc' }
 export const DEFAULT_SORT: SortSpec = { key: 'status', dir: 'asc' };
 
-const PRIORITY_RANK: Record<ReqPriority, number> = { high: 0, normal: 1, low: 2 };
+const PRIORITY_RANK: Record<ReqPriority, number> = { high: 0, normal: 1, low: 2, lowest: 3 };
 const COLUMN_RANK: Record<ReqColumn, number> = { pool: 0, doing: 1, done: 2 };
 
 /** 点表头:同一列再点一次反向,换列从升序开始。 */
