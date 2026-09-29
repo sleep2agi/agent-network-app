@@ -58,6 +58,11 @@ export const initScript = ({ theme }) => {
       try { params = JSON.parse(bodyText || '{}')?.params ?? {}; } catch {}
       return { jsonrpc: '2.0', id: 1, result: { content: [{ type: 'text', text: JSON.stringify(mcp(params.name ?? '', params.arguments ?? {})) }] } };
     }
+    // A drive can hand in a task board (window.__tasksFixture = { requirements, projects, people, capabilities }).
+    const TASKS = window.__tasksFixture;
+    if (TASKS && p === '/api/requirements/projects') return { ok: true, projects: TASKS.projects ?? [] };
+    if (TASKS && p === '/api/requirements/people') return { ok: true, people: TASKS.people ?? [] };
+    if (TASKS && p === '/api/requirements') return { ok: true, requirements: TASKS.requirements ?? [], capabilities: TASKS.capabilities ?? [] };
     if (p === '/api/auth/me') return { ok: true, user: { username: 'tester' }, current_network: 'net-sweep', networks: [{ network_id: 'net-sweep', name: 'sweep' }] };
     // `?light=1` is the hub's narrow projection (server/src/server.ts): exactly these 8 fields, no
     // node_id, no capability bits. Answering it with full rows hid a real bug (2026-09-29: chat info
