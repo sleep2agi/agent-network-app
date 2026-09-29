@@ -5,8 +5,9 @@ import { fixedOffsetClock } from './due-time';
 import {
   GANTT_DAY_PX, GANTT_MAX_BACK_DAYS, GANTT_START_SOURCE, NO_AGENT_GROUP, NO_PROJECT_GROUP,
   agentOf, barGeometry, barOverdue, dayDiff, firstCurrentWeek, ganttBar, ganttEnd, ganttGroups, ganttRange, ganttStart, ganttTicks, ganttWeeks,
-  mondayOf, plusDays, todayX, weekStrip, weekdayOf,
+  mondayOf, plusDays, todayX, weekStrip, weekdayOf, clampDragDays, dragDays, shiftedDue, pinnedMonth,
 } from './task-gantt-model';
+import { requirementFromHub } from './requirements-hub';
 import type { Requirement, RequirementProject } from './requirements-model';
 import { t, setLanguagePreference } from './i18n';
 import './i18n-tasks';
@@ -95,6 +96,15 @@ const weeks = ganttTicks(range, 'week');
 ck('周刻度:每个周一一格,x 间隔 7 × 10', weeks.length === range.days / 7 && weeks.every(t => weekdayOf(t.date) === 0) && weeks[1].x - weeks[0].x === 70);
 ck('周刻度:换月的那一周标月份(且只有它)', weeks.every((t, i) => t.monthStart === (i === 0 || weeks[i - 1].month !== t.month)) && weeks.some((t, i) => i > 0 && t.monthStart));
 
+console.log('\n钉住的月份(Owner:左边 9 月的日子头上只看得到 10 月)');
+const r3 = { start: '2026-08-31', days: 70 };
+const pm0 = pinnedMonth(r3, 0, 32);
+ck('最左边是 8 月 31 日 → 8 月,9 月 1 日在 32px 之后', pm0.month === 8 && pm0.year === 2026 && pm0.nextIn === 32);
+const pm1 = pinnedMonth(r3, 24 * 32 + 10, 32);
+ck('滚到 9 月 24 日 → 9 月;10 月 1 日还有 7 天 − 10px', pm1.month === 9 && pm1.nextIn === 7 * 32 - 10);
+ck('跨年:12 月 → 下个月是次年 1 月', pinnedMonth({ start: '2026-12-28', days: 14 }, 0, 10).nextIn === 4 * 10);
+ck('偏移超出范围夹在两端', pinnedMonth(r3, -50, 32).month === 8 && pinnedMonth(r3, 1e9, 32).month === 11);
+
 console.log('\n逾期');
 ck('期限已过且没完成 = 逾期', barOverdue(ganttBar(R('o', { due: '2026-09-29' }), cst)!, today));
 ck('期限是今天不算逾期', !barOverdue(ganttBar(R('o', { due: today }), cst)!, today));
@@ -117,6 +127,23 @@ const d = wk.weeks[1].bars[0];
 ck('七格小条:周日开始、周一结束 → 只亮周一', weekStrip(d, '2026-09-28').map(Number).join('') === '1000000');
 ck('七格小条:跨整周 → 全亮', weekStrip(ganttBar(R('x', { due: '2026-10-20' }), cst)!, '2026-09-28').every(Boolean));
 
+console.log('\n开始字段(Hub start_date)');
+ck('设了开始就用开始,不用创建时间', ganttStart(R('s', { start: '2026-09-25', createdAt: '2026-09-01T00:00:00Z' }), cst) === '2026-09-25');
+ck('开始是时刻:按本地日期', ganttStart(R('s', { start: '2026-09-24T17:00:00Z' }), cst) === '2026-09-25');
+ck('开始为空(没设)退回创建时间', ganttStart(R('s', { start: '', createdAt: '2026-09-01T00:00:00Z' }), cst) === '2026-09-01');
+const fromHub = requirementFromHub({ id: 'h', name: 'x', start: '2026-09-25', due: '2026-10-01', createdAt: '2026-09-01T00:00:00Z' });
+const badStart = requirementFromHub({ id: 'h', name: 'x', start: 'nope' });
+const oldHub2 = requirementFromHub({ id: 'h', name: 'x' });
+ck('从 Hub 读 start;坏值当没设;旧 Hub 没这个字段 = undefined', fromHub?.start === '2026-09-25' && badStart?.start === '' && oldHub2 !== null && !('start' in oldHub2));
+
+console.log('\n拖动改期限');
+ck('拖动像素 → 天数(四舍五入)', dragDays(47, 32) === 1 && dragDays(-96, 32) === -3 && dragDays(-81, 32) === -3 && dragDays(15, 32) === 0 && dragDays(NaN, 32) === 0);
+ck('往左拖不早于开始那天', clampDragDays(normal, -30) === -11 && clampDragDays(normal, -3) === -3);
+ck('只画一天的条(没有真实开始)不限', clampDragDays(late, -5) === -5);
+ck('全天期限挪几天还是全天', shiftedDue('2026-10-01', 3, cst) === '2026-10-04' && shiftedDue('2026-10-01', -1, cst) === '2026-09-30');
+ck('带时刻的期限保留本地时刻,输出 Hub 的规范形状', shiftedDue('2026-09-30T10:30:00Z', 2, cst) === '2026-10-02T10:30:00Z');
+ck('挪 0 天或读不懂 = 不发请求', shiftedDue('2026-10-01', 0, cst) === null && shiftedDue('', 2, cst) === null);
+
 console.log('\n接线');
 const board = src('./RequirementBoard.tsx');
 const store = src('./task-board-store.ts');
@@ -124,8 +151,13 @@ ck('任务页分段有第三项「甘特图」,紧跟看板', /key: 'board'[^\n]
 ck('TaskSection 有 gantt', /TaskSection = [^;]*'gantt'/.test(store));
 ck('甘特图吃筛选后的 visible、点条打开现有详情、手机走 narrow', /<TaskGantt items=\{visible\}[^>]*onOpen=\{openDetail\}[^>]*phone=\{narrow\}/.test(board));
 const gantt = src('./TaskGantt.tsx');
-ck('只读:甘特图里没有写 Hub 的调用', !/updateRequirementOnHub|moveRequirementOnHub|PATCH/.test(gantt));
+ck('甘特图自己不写 Hub:改期限交给 RequirementBoard.setDue', !/updateRequirementOnHub|moveRequirementOnHub|PATCH/.test(gantt));
+ck('setDue 只发 { due }(描述等别的字段不动),失败退回原值', /const setDue = async[\s\S]*?saveEdit\(id, \{ due \}\)[\s\S]*?due: prev\.due/.test(board));
+ck('只有鼠标(pointer)才能拖;手机 / 触屏不传 onDue', /onDue=\{pointer \? /.test(board) && !/GanttWeekList[^\n]*onDue/.test(gantt));
+ck('把手是条的兄弟节点(松手不会被当成点条)', /testID=\{`gantt-bar-\$\{bar\.item\.id\}`\}\s*\/>\s*\{onDue \?/.test(gantt));
 ck('工具栏写明开始 = 创建时间', /gantt\.startNote/.test(gantt));
+ck('日期头:任务数旁边写出没画的(未设期限)条数', /gantt\.undatedCount', \{ n: undated\.length \}/.test(gantt));
+ck('日期头:最左边的月份钉住(PinnedMonth)', /<PinnedMonth subscribe=/.test(gantt));
 for (const lang of ['zh', 'en'] as const) {
   setLanguagePreference(lang);
   ck(`${lang}:甘特图文案都有翻译`, ['gantt.view', 'gantt.startNote', 'gantt.undated', 'gantt.byProject', 'gantt.byAgent', 'gantt.thisWeek'].every(k => t(k) !== k));

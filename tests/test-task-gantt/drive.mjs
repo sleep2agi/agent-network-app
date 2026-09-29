@@ -15,10 +15,15 @@
 //   group      : 按负责 Agent → agent groups; 按项目 → project groups (project order, 无项目 last)
 //   undated    : tasks without a due date are listed under 未设期限, not drawn
 //   open       : clicking a bar opens the existing task detail (req-edit-name shows that task's title)
+//   drag       : dragging a bar's right end 96px → exactly one PATCH whose body is { due } (+3 days), preview + label while
+//                dragging, bar keeps the new width, no detail opens; dragging far left clamps at the start day;
+//                a rejected PATCH puts the bar back and shows a banner
+//   start      : a task with the hub's start field (capability start_date) starts there, not at createdAt
 //   overflow   : no horizontal page scroll
 // Phone 390×844 (Android UA, touch), light + dark:
 //   segments fit inside the 16px gutters; the week list opens on 本周; rows sit on the 16px gutters;
-//   the seven strip cells are equal ±0.5 and today's cell is marked; tapping a row opens the pushed detail; no page overflow.
+//   the seven strip cells are equal ±0.5 and today's cell is marked; tapping a row opens the pushed detail; no page overflow;
+//   no drag handles on touch.
 // Exit 1 when any check fails or a viewport could not be opened.
 import { mkdirSync } from 'node:fs';
 import { join } from 'node:path';
@@ -48,6 +53,7 @@ const fixture = () => {
     R('g6', '示例:很久以前建的', { project_id: 'p_b', createdAt: at(-200).toISOString(), due: ymd(6) }),
     R('g7', '示例:没有项目', { agent_owner: A, createdAt: at(-7).toISOString(), due: ymd(12), priority: 'low' }),
     R('g8', '示例:期限改到创建之前', { agent_owner: B, createdAt: at(-1).toISOString(), due: ymd(-3) }),
+    R('g9', '示例:设了开始', { project_id: 'p_b', agent_owner: A, createdAt: at(-30).toISOString(), start: ymd(-2), due: ymd(4) }),
     R('u1', '示例:还没定期限', { project_id: 'p_a', agent_owner: A }),
     R('u2', '示例:也没定期限', { agent_owner: B }),
     ...Array.from({ length: 14 }, (_, i) => R(`f${i}`, `示例:填充任务 ${i + 1}`, { project_id: i % 2 ? 'p_a' : 'p_b', agent_owner: i % 3 ? A : B, createdAt: at(-8 + i).toISOString(), due: ymd(2 + i), column: i % 4 === 0 ? 'done' : 'pool' })),
@@ -60,10 +66,10 @@ const fixture = () => {
       { kind: 'node', id: 'n_sweep_a', networkId: 'net-sweep', name: '示例-A' },
       { kind: 'node', id: 'n_sweep_b', networkId: 'net-sweep', name: '示例-B' },
     ],
-    capabilities: ['agent_owner', 'description', 'checklist', 'projects', 'due_datetime', 'priority_lowest'],
+    capabilities: ['agent_owner', 'description', 'checklist', 'projects', 'due_datetime', 'priority_lowest', 'start_date'],
   };
 };
-const DAYS = { g1: 24, g2: 1, g3: 13, g4: 13, g5: 7, g8: 1 }; // inclusive day spans (start = created day)
+const DAYS = { g1: 24, g2: 1, g3: 13, g4: 13, g5: 7, g8: 1, g9: 7 }; // inclusive day spans (start = created day; g9 has its own start)
 
 const rows = [];
 let failures = 0;
@@ -140,7 +146,7 @@ for (const theme of ['light', 'dark']) {
         const bb = b.getBoundingClientRect(), nb = n?.getBoundingClientRect();
         return { id, d: nb ? Math.abs((bb.y + bb.height / 2) - (nb.y + nb.height / 2)) : 99 };
       }));
-      record(vp, 'bar rows == name rows', { some: align.length >= 20, aligned: align.every(a => a.d <= 1) }, { bars: align.length, maxDelta: r1(Math.max(...align.map(a => a.d))) });
+      record(vp, 'bar rows == name rows', { some: align.length >= 21, aligned: align.every(a => a.d <= 1) }, { bars: align.length, maxDelta: r1(Math.max(...align.map(a => a.d))) });
 
       const tl = await box(page, tid('gantt-today-line'));
       const view = await box(page, tid('gantt-timeline'));
@@ -155,6 +161,40 @@ for (const theme of ['light', 'dark']) {
         tickCentred: !!todayTick && Math.abs(todayTick.cx - (tl.x + 1)) <= 1,
         createdTodayStartsThere: !!g2 && Math.abs(g2.x - 1 + 16 - (tl.x + 1)) <= 1,
       }, { lineX: r1(tl?.x ?? -1), tickCx: r1(todayTick?.cx ?? -1), g2x: r1(g2?.x ?? -1) });
+
+      // month header: the leftmost visible day's month is pinned; the header count adds the undated ones
+      const monthGeo = async () => page.evaluate(() => {
+        const view = document.querySelector('[data-testid="gantt-timeline"]').getBoundingClientRect();
+        const ticks = [...document.querySelectorAll('[data-testid^="gantt-tick-"]')].map(e => ({ date: e.dataset.testid.slice(11), b: e.getBoundingClientRect() }));
+        const first = ticks.find(t => t.b.right > view.x + 1);
+        const pin = document.querySelector('[data-testid="gantt-pinned-month"]');
+        const pb = pin.getBoundingClientRect();
+        const labels = [...document.querySelectorAll('[data-testid="gantt-head"] div')].filter(e => e !== pin && e.children.length === 0 && /年\d+月$/.test(e.textContent) && !pin.contains(e))
+          .map(e => { const b = e.getBoundingClientRect(); return { text: e.textContent, x: b.x, r: b.right, cy: b.y + b.height / 2 }; }).filter(l => l.x >= view.x && l.x < view.right);
+        const [y, m] = first.date.split('-').map(Number);
+        return { expect: `${y}年${m}月`, pin: pin.textContent, pinX: pb.x, pinR: pb.right, pinCy: pb.y + pb.height / 2, viewX: view.x, labels };
+      });
+      const mg = await monthGeo();
+      record(vp, 'pinned month = leftmost visible day', {
+        text: mg.pin === mg.expect, atLeft: Math.abs(mg.pinX - mg.viewX) <= 1,
+        sameLine: mg.labels.every(l => Math.abs(l.cy - mg.pinCy) <= 1), noOverlap: mg.labels.every(l => l.x >= mg.pinR - 0.5),
+      }, { pin: mg.pin, expect: mg.expect, others: mg.labels.map(l => l.text).join('/') });
+      // scroll so the next month's 1st sits 40px from the left edge: the pinned label is pushed out, not drawn over it
+      await page.evaluate(() => {
+        const sc = document.querySelector('[data-testid="gantt-timeline"]');
+        const view = sc.getBoundingClientRect();
+        const t = [...document.querySelectorAll('[data-testid^="gantt-tick-"]')].find(e => e.dataset.testid.endsWith('-01') && e.getBoundingClientRect().x > view.x + 60);
+        sc.scrollLeft += t.getBoundingClientRect().x - view.x - 40;
+      });
+      await page.waitForTimeout(250);
+      const mg2 = await monthGeo();
+      record(vp, 'pinned month pushed at a month boundary', { noOverlap: mg2.labels.every(l => l.x >= mg2.pinR - 0.5), pushed: mg2.pinX < mg2.viewX - 1 }, { pin: mg2.pin, pinX: r1(mg2.pinX - mg2.viewX), next: mg2.labels[0]?.text });
+      await shot('month-boundary');
+      await page.locator(tid('gantt-today')).click();
+      await page.waitForTimeout(500);
+      const cnt = await page.evaluate(() => ({ head: document.querySelector('[data-testid="gantt-head"]').firstElementChild.textContent, bars: document.querySelectorAll('[data-testid^="gantt-bar-"]').length, undated: document.querySelectorAll('[data-testid^="gantt-undated-"]').length }));
+      const side = await page.evaluate(() => { const el = [...document.querySelectorAll('[data-testid="task-sidebar"] div')].find(d => d.children.length === 0 && d.textContent === '全部任务'); return el ? Number(el.parentElement.parentElement.textContent.replace(/\D+/g, ' ').trim().split(' ').pop()) : null; });
+      record(vp, 'header count adds up to the sidebar', { undatedShown: cnt.head === `任务${cnt.bars}· 未设期限 ${cnt.undated}`, sum: side !== null && cnt.bars + cnt.undated === side }, { head: cnt.head, sidebar: side });
 
       const widths = {};
       for (const id of Object.keys(DAYS)) widths[id] = (await box(page, tid(`gantt-bar-${id}`)))?.w ?? -1;
@@ -208,6 +248,61 @@ for (const theme of ['light', 'dark']) {
 
       record(vp, 'no horizontal page overflow', { none: (await overflow(page)) <= 0 });
 
+      // ── drag the right end to change the due date (only { due } is sent) ──
+      const due4 = await page.evaluate(() => window.__tasksFixture.requirements.find(r => r.id === 'g4').due);
+      await page.locator(tid('gantt-handle-g4')).scrollIntoViewIfNeeded();
+      await page.waitForTimeout(200);
+      const w4 = (await box(page, tid('gantt-bar-g4'))).w;
+      const h4 = await box(page, tid('gantt-handle-g4'));
+      await page.mouse.move(h4.cx, h4.cy);
+      await page.mouse.down();
+      for (let i = 1; i <= 8; i++) await page.mouse.move(h4.cx + i * 12, h4.cy);
+      await page.waitForTimeout(150);
+      const label = await box(page, tid('gantt-drag-label'));
+      const wDuring = (await box(page, tid('gantt-bar-g4'))).w;
+      await shot('dragging');
+      await page.mouse.up();
+      await page.waitForTimeout(600);
+      const patches = await page.evaluate(() => window.__tasksPatches || []);
+      const expectDue = await page.evaluate((d) => { const [y, m, dd] = d.split('-').map(Number); const t = new Date(Date.UTC(y, m - 1, dd + 3)); return t.toISOString().slice(0, 10); }, due4);
+      const wAfter = (await box(page, tid('gantt-bar-g4'))).w;
+      const detailOpen = !!(await box(page, tid('req-edit-name')));
+      record(vp, 'drag end → due +3 days', {
+        label: !!label && label.x > h4.x, previewGrows: Math.abs(wDuring - (w4 + 96)) <= 1,
+        onePatch: patches.length === 1, dueOnly: patches.length === 1 && Object.keys(patches[0]).join() === 'due', value: patches[0]?.due === expectDue,
+        barAfter: Math.abs(wAfter - (w4 + 96)) <= 1, noDetail: !detailOpen,
+      }, { patch: JSON.stringify(patches[0] ?? null), label: label?.text, w: `${r1(w4)}→${r1(wAfter)}` });
+
+      // far left: clamped at the start day
+      const h4b = await box(page, tid('gantt-handle-g4'));
+      await page.mouse.move(h4b.cx, h4b.cy); await page.mouse.down();
+      for (let i = 1; i <= 10; i++) await page.mouse.move(h4b.cx - i * 60, h4b.cy);
+      await page.mouse.up();
+      await page.waitForTimeout(600);
+      const p2 = await page.evaluate(() => window.__tasksPatches || []);
+      const created4 = await page.evaluate(() => { const t = new Date(window.__tasksFixture.requirements.find(r => r.id === 'g4').createdAt); return `${t.getFullYear()}-${String(t.getMonth() + 1).padStart(2, '0')}-${String(t.getDate()).padStart(2, '0')}`; });
+      const w4c = (await box(page, tid('gantt-bar-g4'))).w;
+      record(vp, 'drag left clamps at start', { clamped: p2[1]?.due === created4, oneDay: Math.abs(w4c - 30) <= 1 }, { due: p2[1]?.due, start: created4 });
+
+      // failure: the hub rejects → the bar goes back, a banner says why
+      await page.evaluate(() => { window.__tasksFailPatch = true; });
+      await page.locator(tid('gantt-handle-g1')).scrollIntoViewIfNeeded();
+      await page.waitForTimeout(200);
+      const w5 = (await box(page, tid('gantt-bar-g1'))).w;
+      const h5 = await box(page, tid('gantt-handle-g1'));
+      await page.mouse.move(h5.cx, h5.cy); await page.mouse.down();
+      for (let i = 1; i <= 4; i++) await page.mouse.move(h5.cx + i * 16, h5.cy);
+      await page.mouse.up();
+      await page.waitForTimeout(800);
+      const w5b = (await box(page, tid('gantt-bar-g1'))).w;
+      const banner = await page.evaluate(() => [...document.querySelectorAll('div')].some(d => d.children.length === 0 && /示例:官网首页改版/.test(d.textContent) && /不存在|没有保存/.test(d.textContent)));
+      record(vp, 'rejected drag reverts', { reverted: Math.abs(w5b - w5) <= 1, banner }, { w: `${r1(w5)}→${r1(w5b)}` });
+      await page.evaluate(() => { window.__tasksFailPatch = false; });
+
+      const g9 = await box(page, tid('gantt-bar-g9'));
+      const note = await box(page, tid('gantt-start-note'));
+      record(vp, 'hub start field', { ownStart: !!g9 && Math.abs(g9.w - (7 * 32 - 2)) <= 1, note: note?.text === '没设开始的从创建时间画起' }, { g9: r1(g9?.w ?? -1) });
+
       await page.locator(tid('gantt-bar-g4')).click();
       await page.locator(tid('req-edit-name')).first().waitFor({ timeout: 10000 }).catch(() => {});
       const name = await page.evaluate(() => document.querySelector('[data-testid="req-edit-name"]')?.value ?? null);
@@ -234,6 +329,7 @@ for (const theme of ['light', 'dark']) {
       record(vp, 'no horizontal page overflow', { none: (await overflow(page)) <= 0 });
       const und = await box(page, tid('gantt-undated'));
       record(vp, 'undated section', { present: !!und });
+      record(vp, 'touch: no drag handles', { none: (await page.locator('[data-testid^="gantt-handle-"]').count()) === 0 });
 
       await page.locator(tid('gantt-week-row-g2')).tap();
       await page.locator(tid('req-edit-name')).first().waitFor({ timeout: 10000 }).catch(() => {});

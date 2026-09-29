@@ -62,6 +62,18 @@ export const initScript = ({ theme }) => {
     const TASKS = window.__tasksFixture;
     if (TASKS && p === '/api/requirements/projects') return { ok: true, projects: TASKS.projects ?? [] };
     if (TASKS && p === '/api/requirements/people') return { ok: true, people: TASKS.people ?? [] };
+    // PATCH /api/requirements/<id> (the only requirement call with a body): merge, record the body for the drive to
+    // assert on (window.__tasksPatches); window.__tasksFailPatch = true answers 404 so the drive can watch a revert.
+    const one = TASKS && /^\/api\/requirements\/([^/]+)$/.exec(p);
+    if (one && bodyText) {
+      const patch = JSON.parse(bodyText);
+      (window.__tasksPatches ||= []).push(patch);
+      if (window.__tasksFailPatch) return null;
+      const row = TASKS.requirements.find(r => r.id === decodeURIComponent(one[1]));
+      if (!row) return null;
+      Object.assign(row, patch, { updatedAt: new Date().toISOString() });
+      return { ok: true, requirement: row };
+    }
     if (TASKS && p === '/api/requirements') return { ok: true, requirements: TASKS.requirements ?? [], capabilities: TASKS.capabilities ?? [] };
     if (p === '/api/auth/me') return { ok: true, user: { username: 'tester' }, current_network: 'net-sweep', networks: [{ network_id: 'net-sweep', name: 'sweep' }] };
     // `?light=1` is the hub's narrow projection (server/src/server.ts): exactly these 8 fields, no

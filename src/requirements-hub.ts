@@ -42,6 +42,8 @@ export function requirementFromHub(row: unknown): Requirement | null {
     ...(('owner' in r || 'participants' in r) ? assignmentsFromHub(r) : {}),
     ...('agent_owner' in r ? { agentOwner: agentOwnerFromHub(r.agent_owner) } : {}),
     ...(typeof r.description === 'string' ? { description: r.description } : {}),
+    // 开始(Hub 的 start_date 能力):读不懂的值当没设,不让一张卡因为它整张丢掉。
+    ...('start' in r ? { start: typeof r.start === 'string' && dueOk(r.start.trim()) ? r.start.trim() : '' } : {}),
     ...(Array.isArray(r.checklist) ? { checklist: checklistFromHub(r.checklist) } : {}),
     ...('project_id' in r ? { projectId: typeof r.project_id === 'string' && r.project_id ? r.project_id : null } : {}),
     ...('parent_id' in r ? { parentId: typeof r.parent_id === 'string' && r.parent_id ? r.parent_id : null } : {}),
