@@ -64,7 +64,8 @@ for (const file of [...walk('src'), 'App.tsx']) {
       const decl = [...before.matchAll(/const label = (\w+)\(/g)].pop();
       labelExpr = decl ? `${decl[1]}()` : 'label';
     }
-    sites.push({ file, labelExpr, options: src.slice(i, end + 1) });
+    // 🔴 Windows 上 join() 给的是反斜杠,清单键统一用 /
+    sites.push({ file: file.replace(/\\/g, '/'), labelExpr, options: src.slice(i, end + 1) });
   }
 }
 
