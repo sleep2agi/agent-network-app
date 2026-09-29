@@ -32,7 +32,8 @@ import { pointerUi } from './pointer-ui';
 import { useModalSafePadding } from './safe-area-runtime';
 import { usePoll } from './usePoll';
 import { applyFilter, applyMove, boardColumns, createInput, DEFAULT_SORT, DRAG_IDLE, dragReduce, dropIndex, emptyDraft, activeProjects, defaultProjectFor, NO_PROJECT, projectCounts, filterActive, hasRoles, localToday, addChecklistItem, moveChecklistItem, removeChecklistItem, setChecklistDone, neighbourColumn, nextSort, revertMove, sortRows, toggleIn, hidesDone, toggleHideDone, UNASSIGNED, type CreateDraft, type DragEvent, type DragState, type EditPatch, type SortKey, type SortSpec } from './task-board-model';
-import { enterTaskScope, patchTaskBoard, setManagingProjects, setTaskFilter, setTaskSearch, setTaskSection, taskScopeKey, updateTaskItems, useTaskBoard, type TaskSection } from './task-board-store';
+import { enterTaskScope, patchTaskBoard, setManagingProjects, setTaskFilter, setTaskSearch, setTaskSection, taskBoardState, taskScopeKey, updateTaskItems, useTaskBoard, type TaskSection } from './task-board-store';
+import { recallBoard, rememberBoard } from './swr-cache';
 import { PRIORITY_CODE, priorityChoices, priorityLabel, supportsLowest } from './task-priority';
 import { CONTROL_H, CardMeta, ChecklistProgress, Chip, ParticipantStack, ProjectChip, DueChip, OwnerBadge, PriorityDot, Segmented, STATUS_TONE, useTaskStyles, type TaskStyles, a11yState } from './TaskBoardParts';
 import TaskCreateDialog from './TaskCreateDialog';
@@ -194,6 +195,15 @@ function ScopedRequirementBoard({ cfg, desktop, dispatch, onOpenVoiceSettings, s
     // 项目和卡片互不依赖:一起发。串着等是首屏多一个跨太平洋往返(桌面冷连接 ~0.7 s)。
     // 旧 Hub 没有这个路由 → null,界面把项目整个藏起来;读失败也按没有处理,不挡看板。
     const projectsRead = listProjects(cfg).catch(() => null);
+    // 冷启动先画上次的看板(swr-cache.ts,按账号 + 网络);Hub 一回来整张替换。只在这块看板本次启动里
+    // 还没读到过任何东西时才用,已有的(哪怕是空的)永远不被磁盘上的旧数据盖掉。
+    if (!taskBoardState().loaded && !taskBoardState().items.length) {
+      void recallBoard(cfg.profileId, cfg.networkId).then(snap => {
+        const st = taskBoardState();
+        if (dead || !snap || st.scope !== scope || st.loaded || st.items.length) return;
+        patchTaskBoard(scope, { items: snap.items as Requirement[], projects: snap.projects as RequirementProject[] | null, twoRoles: snap.twoRoles, capabilities: snap.capabilities });
+      });
+    }
     (async () => {
       try {
         await migrateLocalRequirements(cfg, () => readRequirements(localKey), rows => writeRequirements(localKey, rows));
@@ -206,6 +216,7 @@ function ScopedRequirementBoard({ cfg, desktop, dispatch, onOpenVoiceSettings, s
         if (dead) return;
         lastListAt.current = Date.now();
         patchTaskBoard(scope, { items: list, loaded: true, twoRoles: roles, projects: projectList, capabilities, truncated: cut });
+        if (cfg.networkId) rememberBoard(cfg.profileId, { networkId: cfg.networkId, items: list, projects: projectList, twoRoles: roles, capabilities });
         setPhase('ready');
         setHubError('');
       } catch (e) {
@@ -241,7 +252,11 @@ function ScopedRequirementBoard({ cfg, desktop, dispatch, onOpenVoiceSettings, s
     try {
       const { rows: list, truncated: cut } = await listRequirementsFull(cfg);
       lastListAt.current = Date.now();
-      if (gen === mutations.current && inFlight.current === 0) patchTaskBoard(scope, { items: list, truncated: cut });
+      if (gen === mutations.current && inFlight.current === 0) {
+        patchTaskBoard(scope, { items: list, truncated: cut });
+        const st = taskBoardState();
+        if (cfg.networkId && st.scope === scope) rememberBoard(cfg.profileId, { networkId: cfg.networkId, items: list, projects: st.projects, twoRoles: st.twoRoles, capabilities: st.capabilities });
+      }
     } catch { /* 下一轮再试;看板保留上次的 */ }
   }, [cfg, phase, scope]);
   usePoll(refresh, POLL_MS, [refresh]);

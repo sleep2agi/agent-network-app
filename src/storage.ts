@@ -171,7 +171,7 @@ export const removeHubProfile = async (profileId: string): Promise<void> => {
     await mobileSessions.remove(profileId);
     // 这个账号的本地文件(Agent 列表缓存、未送达、转发、头像)一起删;best-effort,和桌面端删 profile 目录对应。
     const scope = profileId === LEGACY_SESSION_ID ? undefined : profileId;
-    await Promise.all([SESSIONS_CACHE, AVATAR_LOCAL, OUTBOX_FILE, FORWARD_FILE].map(base =>
+    await Promise.all([SESSIONS_CACHE, BOARD_CACHE, HISTORY_CACHE, AVATAR_LOCAL, OUTBOX_FILE, FORWARD_FILE].map(base =>
       FileSystem.deleteAsync(scopedFile(base, scope), { idempotent: true }).catch(() => {})));
     return;
   }
@@ -282,6 +282,39 @@ export const loadSessionsCache = async (profileId?: string): Promise<Session[] |
     return null;
   }
 };
+
+// Stale-while-revalidate caches for the 任务 board and recent chat history (perf, 2026-09-30:
+// from China every first read of a screen is a trans-Pacific round trip plus the payload; the
+// board list alone is 163 KB gzip). Same rules as the sessions cache above: cache directory,
+// per account, best-effort both ways, never blocks or fails the live read.
+const BOARD_CACHE = `${FileSystem.cacheDirectory}requirements_cache_v1.json`;
+const HISTORY_CACHE = `${FileSystem.cacheDirectory}chat_history_cache_v1.json`;
+
+const saveCacheJson = async (base: string, desktopPath: string, profileId: string | undefined, value: unknown): Promise<void> => {
+  try {
+    if (await writeDesktopProfileJson(profileId, desktopPath, value)) return;
+    await FileSystem.writeAsStringAsync(scopedFile(base, profileId), JSON.stringify(value));
+  } catch {
+    /* best-effort */
+  }
+};
+
+const loadCacheJson = async (base: string, desktopPath: string, profileId: string | undefined): Promise<unknown> => {
+  try {
+    const desktop = await readDesktopProfileJson<unknown>(profileId, desktopPath);
+    if (desktop !== undefined) return desktop;
+    const info = await FileSystem.getInfoAsync(scopedFile(base, profileId));
+    if (!info.exists) return undefined;
+    return JSON.parse(await FileSystem.readAsStringAsync(scopedFile(base, profileId)));
+  } catch {
+    return undefined;
+  }
+};
+
+export const saveBoardCache = (value: unknown, profileId?: string) => saveCacheJson(BOARD_CACHE, 'cache/requirements.json', profileId, value);
+export const loadBoardCache = (profileId?: string) => loadCacheJson(BOARD_CACHE, 'cache/requirements.json', profileId);
+export const saveChatHistoryCache = (value: unknown, profileId?: string) => saveCacheJson(HISTORY_CACHE, 'cache/chat-history.json', profileId, value);
+export const loadChatHistoryCache = (profileId?: string) => loadCacheJson(HISTORY_CACHE, 'cache/chat-history.json', profileId);
 
 // R2 avatar: per-device local echo of user-set avatars (alias → avatar_url).
 // For session-only aliases (no hub nodes row) this is the ONLY store, so it must
