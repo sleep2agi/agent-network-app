@@ -5,9 +5,10 @@
 // nav-chrome.test.ts; App.tsx renders whatever it returns.
 //
 // Vincent 0.2.100 on an unfolded foldable in landscape: 「我感觉可以改成和电脑一样的样式…
-// 下面那一栏放在左边会好一点」. So when the wide two-pane layout is active the four phone
+// 下面那一栏放在左边会好一点」. So when the wide two-pane layout is active the phone
 // destinations move from a full-width bottom bar into a left rail, the same place the
-// desktop app keeps its rail. The phone and the Tauri desktop workspace do not change.
+// desktop app keeps its rail. The rail also has 任务 (Vincent 2026-09-29 「左侧加回去」);
+// the phone bottom bar stays four tabs. The Tauri desktop workspace does not change.
 
 import type { AppLayout } from './wide-layout';
 
@@ -48,8 +49,8 @@ export const phoneInPageLeaf = (screenName: string, subPageOpen: boolean): boole
 /**
  * The destination a screen belongs to, i.e. which rail/tab item lights up. A chat or
  * node page (and the create-node flow opened from the agents list's "+") belong to
- * Agent; the event stream and server pages belong to 服务器. Screens with no mobile
- * destination (tasks / messages) return their own name, so nothing lights up.
+ * Agent; the event stream and server pages belong to 服务器. taskDetail lights the
+ * left rail's 任务. Messages still has no mobile destination, so nothing lights up.
  */
 export function navActiveKey(screenName: string): string {
   switch (screenName) {
