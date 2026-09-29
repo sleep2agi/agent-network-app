@@ -30,6 +30,7 @@ function blockToLine(block: MarkdownBlock): string {
     const head = block.rows[0]?.map(stripInlineMarkdown).filter(Boolean) ?? [];
     return head.length ? `［表格：${head.join(' / ')}］` : '［表格］';
   }
+  if (block.kind === 'image') return '［图片］';
   return stripInlineMarkdown(block.text);
 }
 

@@ -12,10 +12,10 @@ import type { HubConfig } from './api';
 import { REQ_COLUMN_LABEL, REQ_COLUMNS, type ReqColumn, type Requirement, type RequirementProject } from './requirements-model';
 import type { RequirementPerson } from './requirement-people';
 import type { RequirementAssignments } from './requirement-people-api';
-import { checkDraft, DESCRIPTION_MAX, editDraftOf, editPatch, hasDetails, hasRoles, type EditDraft, type EditPatch } from './task-board-model';
+import { checkDraft, editDraftOf, editPatch, hasDetails, hasRoles, type EditDraft, type EditPatch } from './task-board-model';
 import TaskChecklist from './TaskChecklist';
-import MarkdownMessage from './MarkdownMessage';
-import { BOARD_RADIUS, cardBg, liftedShadow, Segmented, STATUS_TONE, useTaskStyles, a11yState } from './TaskBoardParts';
+import TaskDescriptionEditor from './TaskDescriptionEditor';
+import { BOARD_RADIUS, cardBg, liftedShadow, STATUS_TONE, useTaskStyles, a11yState } from './TaskBoardParts';
 import { DueField, fieldStyles, PriorityPicker, ProjectPicker, RoleFields } from './TaskCreateDialog';
 
 export const DRAWER_WIDTH = 420;
@@ -151,7 +151,7 @@ export default function TaskDetailPanel({ cfg, item, projects, dueDatetime, mode
       </Field>
       {hasDetails(item) ? (
         <>
-          <DescriptionField value={draft.description} onChange={description => set({ description })} />
+          <TaskDescriptionEditor cfg={cfg} value={draft.description} onChange={description => set({ description })} pointer={pointer} title={item.name} />
           <TaskChecklist
             items={item.checklist ?? []}
             pointer={pointer}
@@ -231,41 +231,6 @@ export default function TaskDetailPanel({ cfg, item, projects, dueDatetime, mode
         {footer}
       </View>
     </Modal>
-  );
-}
-
-/** 描述:markdown 原文,编辑 / 预览两档(预览用聊天里同一个 MarkdownMessage 渲染)。跟标题一起「保存修改」。 */
-function DescriptionField({ value, onChange }: { value: string; onChange: (v: string) => void }) {
-  const s = useTaskStyles();
-  const f = fieldStyles();
-  const [mode, setMode] = useState<'edit' | 'preview'>(value.trim() ? 'preview' : 'edit');
-  return (
-    <View style={{ gap: spacing.sm }} testID="req-description">
-      <View style={[f.row, { justifyContent: 'space-between' }]}>
-        <Text style={f.label}>描述</Text>
-        <Segmented s={s} items={[{ key: 'edit', label: '编辑' }, { key: 'preview', label: '预览' }]} value={mode} onChange={setMode} testID="req-description-mode" />
-      </View>
-      {mode === 'edit' ? (
-        <>
-          <TextInput
-            value={value}
-            onChangeText={onChange}
-            multiline
-            maxLength={DESCRIPTION_MAX}
-            placeholder="支持 Markdown:目标、背景、验收标准…"
-            placeholderTextColor={colors.textMuted}
-            style={[f.input, { minHeight: 140, textAlignVertical: 'top' }]}
-            testID="req-description-input"
-            accessibilityLabel="描述(Markdown)"
-          />
-          {value.length > DESCRIPTION_MAX * 0.9 ? <Text style={s.muted}>{value.length} / {DESCRIPTION_MAX}</Text> : null}
-        </>
-      ) : (
-        <Pressable onPress={() => setMode('edit')} accessibilityRole="button" accessibilityLabel="编辑描述" style={[f.input, { minHeight: 60, backgroundColor: 'transparent' }]} testID="req-description-preview">
-          {value.trim() ? <MarkdownMessage>{value}</MarkdownMessage> : <Text style={s.muted}>还没有描述,点这里编辑</Text>}
-        </Pressable>
-      )}
-    </View>
   );
 }
 

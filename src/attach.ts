@@ -203,7 +203,10 @@ const UPLOAD_ERROR_HINTS: Record<string, string> = {
   unauthorized: '登录已失效，请重新登录',
 };
 
-export const uploadImage = async (cfg: HubConfig, img: PickedImage): Promise<UploadedFile> => {
+export const uploadImage = async (cfg: HubConfig, img: PickedImage, opts: { networkId?: string } = {}): Promise<UploadedFile> => {
+  // network_id:文件归到这个网络(Hub 的 /api/files 按网络成员放行,查看任务的同网成员都能看到)。
+  // 多网络账号不带会 400 network_id_required。聊天沿用旧行为(不带)。
+  const uploadUrl = `${cfg.serverUrl}/api/upload${opts.networkId ? `?network_id=${encodeURIComponent(opts.networkId)}` : ''}`;
   // The hub REQUIRES a Content-Length header (411 otherwise, per #221).
   // RN's fetch streams FormData chunked on Android — Vincent's first
   // image send died on exactly that (tg 737) — so native goes through
@@ -214,7 +217,7 @@ export const uploadImage = async (cfg: HubConfig, img: PickedImage): Promise<Upl
     const form = new FormData();
     if (img.webFile) form.append('file', img.webFile, img.fileName);
     else form.append('file', { uri: img.uri, name: img.fileName, type: img.mimeType } as any);
-    const res = await appFetch(`${cfg.serverUrl}/api/upload`, {
+    const res = await appFetch(uploadUrl, {
       method: 'POST',
       headers: { Authorization: `Bearer ${cfg.token}` },
       body: form,
@@ -222,7 +225,7 @@ export const uploadImage = async (cfg: HubConfig, img: PickedImage): Promise<Upl
     status = res.status;
     data = await res.json().catch(() => null);
   } else {
-    const res = await FileSystem.uploadAsync(`${cfg.serverUrl}/api/upload`, img.uri, {
+    const res = await FileSystem.uploadAsync(uploadUrl, img.uri, {
       httpMethod: 'POST',
       uploadType: FileSystem.FileSystemUploadType.MULTIPART,
       fieldName: 'file',

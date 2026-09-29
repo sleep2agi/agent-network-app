@@ -536,6 +536,59 @@ async function desktopFlows(page, vp) {
     }, { saved, want, chip: chip.text, title: chip.title, panelX: r1(geo2.panel.x), fieldX: r1(geo2.field.x), panelY: r1(geo2.panel.y), fieldBottom: r1(geo2.field.b), cell: r1(cw[0]) });
   }
 
+  // description images (split hub only): paste + drop into the editor → uploaded with network_id →
+  // `![name](/api/files/<id>)` saved; preview downloads with an Authorization header (no token in any URL);
+  // another member of the network can fetch the file, an outsider cannot.
+  if (ROLES === 'two') {
+    const dName = '看板卡片支持拖动换列';
+    await cardByName(page, dName).click();
+    await page.locator(tid('req-detail')).waitFor();
+    await page.locator(tid('req-description')).scrollIntoViewIfNeeded();
+    if (await page.locator(tid('req-description-mode-edit')).count()) await page.locator(tid('req-description-mode-edit')).click();
+    const input = page.locator(tid('req-description-input'));
+    await input.fill('## 验收');
+    // a 2×2 PNG made in the page
+    const makeFile = `(async (name) => { const c = document.createElement('canvas'); c.width = 40; c.height = 30; const g = c.getContext('2d'); g.fillStyle = '#e11d48'; g.fillRect(0, 0, 40, 30); const b = await new Promise(r => c.toBlob(r, 'image/png')); return new File([b], name, { type: 'image/png' }); })`;
+    await page.evaluate(async (mk) => {
+      const file = await (0, eval)(mk)('粘贴的截图.png');
+      const dt = new DataTransfer(); dt.items.add(file);
+      const el = document.querySelector('[data-testid="req-description-input"]');
+      el.focus(); el.setSelectionRange(el.value.length, el.value.length);
+      el.dispatchEvent(new ClipboardEvent('paste', { clipboardData: dt, bubbles: true, cancelable: true }));
+    }, makeFile);
+    await page.waitForTimeout(1200);
+    await page.evaluate(async (mk) => {
+      const file = await (0, eval)(mk)('拖进来的图.png');
+      const dt = new DataTransfer(); dt.items.add(file);
+      const box = document.querySelector('[data-testid="req-description-input"]').parentElement;
+      box.dispatchEvent(new DragEvent('dragover', { dataTransfer: dt, bubbles: true, cancelable: true }));
+      box.dispatchEvent(new DragEvent('drop', { dataTransfer: dt, bubbles: true, cancelable: true }));
+    }, makeFile);
+    await page.waitForTimeout(1200);
+    const text = await input.inputValue();
+    await page.locator(tid('req-edit-save')).click();
+    await page.waitForTimeout(700);
+    const saved = (await hubRow(dName))?.description ?? '';
+    const ids = [...saved.matchAll(/!\[[^\]]*\]\(\/api\/files\/([A-Za-z0-9_-]+)\)/g)].map(m => m[1]);
+    await page.locator(tid('req-description-mode-preview')).click();
+    await page.waitForTimeout(1500);
+    const imgs = await page.evaluate(() => [...document.querySelectorAll('[data-testid^="req-description-image-"] img')].map(i => ({ src: i.getAttribute('src') || '', w: i.naturalWidth })));
+    await shot(page, 'flow-description-images');
+    const get = (token) => fetch(`${HUB_URL}/api/files/${ids[0]}`, { headers: { authorization: `Bearer ${token}` } }).then(r => r.status);
+    const memberStatus = process.env.HUB_TOKEN_MEMBER ? await get(process.env.HUB_TOKEN_MEMBER) : 0;
+    const outsiderStatus = process.env.HUB_TOKEN_OUTSIDER ? await get(process.env.HUB_TOKEN_OUTSIDER) : 0;
+    record(vp, 'description images: paste + drop → saved, previewed with auth, network ACL', {
+      twoImages: ids.length === 2 && text.includes('粘贴的截图.png') && text.includes('拖进来的图.png'),
+      ownLines: saved.split('\n').filter(l => l.startsWith('![')).length === 2,
+      previewLoaded: imgs.length === 2 && imgs.every(i => i.w > 0),
+      noTokenInUrl: imgs.every(i => !/token=/i.test(i.src)) && !/token=/i.test(saved),
+      memberCanFetch: memberStatus === 200,
+      outsiderDenied: outsiderStatus === 404,
+    }, { ids: ids.length, imgs: imgs.map(i => i.w).join('/'), member: memberStatus, outsider: outsiderStatus, src: imgs[0]?.src.slice(0, 12) });
+    await page.locator(tid('req-detail-close')).click();
+    await page.waitForTimeout(300);
+  }
+
   // drawer edit
   await cardByName(page, '设置页拆分子页面').click();
   await page.locator(tid('req-detail')).waitFor();

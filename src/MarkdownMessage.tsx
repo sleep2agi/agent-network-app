@@ -108,8 +108,10 @@ function CodeBlock({ text, srcProps }: { text: string; srcProps?: object }) {
 // 带行号;列表项的 y 相对所在列表(parent)。node-rules-view.ts resolveBlockRects / blockAtY 用它按手指位置找块。
 // 都不传就和以前一样,聊天里不多挂 onLayout、不多挂属性。
 export type MarkdownBlockLayout = { id: string; parent?: string; start: number; end: number; y: number; height: number };
-export default function MarkdownMessage({ children, onHeadingLayout, sourceLines, onBlockLayout }: {
+export default function MarkdownMessage({ children, onHeadingLayout, sourceLines, onBlockLayout, renderImage }: {
   children: string; onHeadingLayout?: (index: number, y: number) => void; sourceLines?: boolean; onBlockLayout?: (layout: MarkdownBlockLayout) => void;
+  /** 任务描述:独占一行的 `![名字](/api/files/<id>)` 交给调用方画(带鉴权下载、点开看大图)。不传 = 和聊天一样当文字。 */
+  renderImage?: (image: { alt: string; fileId: string; url: string }, key: number) => ReactNode;
 }) {
   let headingIndex = 0;
   const src = sourceLines ? WITH_SRC : NO_SRC;
@@ -119,8 +121,9 @@ export default function MarkdownMessage({ children, onHeadingLayout, sourceLines
     : {});
   return (
     <View style={styles.root}>
-      {parseMarkdownBlocks(children).map((block, index) => {
+      {parseMarkdownBlocks(children, { hubImages: !!renderImage }).map((block, index) => {
         const id = `b${index}`;
+        if (block.kind === 'image') return renderImage ? renderImage(block, index) : null;
         if (block.kind === 'heading') {
           const nth = headingIndex++;
           const report = lay(id, block.line, block.endLine) as { onLayout?: (event: any) => void };
