@@ -121,6 +121,9 @@ jobs:
           releaseBody: |-
             Signed and notarized stable update for macOS (Apple Silicon) and Windows (x64).
 
+            What's new in 0.2.149:
+            - 修复：桌面端设置窗口里点「发现新版本」后没有弹出更新提示。
+
             What's new in 0.2.147:
             - 修复：手机「任务 → 看板」三列被挤成细线；现在一屏一列、左右滑动切换，顶部有列切换。
 
