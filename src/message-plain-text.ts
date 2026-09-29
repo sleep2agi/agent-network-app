@@ -36,6 +36,7 @@ export const markdownToPlainText = (source: string): string =>
       case 'list': return block.items.map((item, i) => `${block.ordered ? `${i + 1}.` : '•'} ${inline(item)}`).join('\n');
       case 'quote': return inline(block.text);
       case 'table': return block.rows.map((row) => row.map(inline).join(' | ')).join('\n');
+      case 'image': return `[图片] ${block.alt}`;
       default: return inline(block.text);
     }
   }).join('\n\n');

@@ -9,6 +9,8 @@ export type MarkdownBlock = SourceSpan & (
   | { kind: 'quote'; text: string }
   | { kind: 'code'; language?: string; text: string }
   | { kind: 'table'; rows: string[][]; rowLines?: number[] }
+  /** 独占一行的 Hub 图片 `![名字](/api/files/<id>)`(任务描述里的图)。只在 parse 时显式打开 hubImages 才出现 —— 聊天不受影响。 */
+  | { kind: 'image'; alt: string; fileId: string; url: string }
 );
 
 const tableCells = (line: string) =>
@@ -19,7 +21,10 @@ const isTableDivider = (line: string) => {
   return cells.length > 0 && cells.every(cell => /^:?-{3,}:?$/.test(cell));
 };
 
-export const parseMarkdownBlocks = (source: string): MarkdownBlock[] => {
+/** 一行正好是一张 Hub 图片:`![alt](/api/files/<file_id>)`。只认本 Hub 的相对地址(不拉外网图片)。 */
+export const HUB_IMAGE_LINE = /^\s*!\[([^\]\n]*)\]\(\/api\/files\/([A-Za-z0-9_-]{1,80})\)\s*$/;
+
+export const parseMarkdownBlocks = (source: string, opts: { hubImages?: boolean } = {}): MarkdownBlock[] => {
   const lines = (source || '').replace(/\r\n?/g, '\n').split('\n');
   const blocks: MarkdownBlock[] = [];
   let i = 0;
@@ -28,6 +33,12 @@ export const parseMarkdownBlocks = (source: string): MarkdownBlock[] => {
     if (!line.trim()) { i++; continue; }
 
     const start = i;
+    const img = opts.hubImages ? HUB_IMAGE_LINE.exec(line) : null;
+    if (img) {
+      blocks.push({ kind: 'image', alt: img[1], fileId: img[2], url: `/api/files/${img[2]}`, line: start, endLine: start });
+      i++;
+      continue;
+    }
     const fence = line.match(/^\s*```\s*([^\s`]*)\s*$/);
     if (fence) {
       const body: string[] = [];
@@ -88,6 +99,7 @@ export const parseMarkdownBlocks = (source: string): MarkdownBlock[] => {
     while (
       i < lines.length && lines[i].trim() &&
       !/^\s*(?:```|#{1,6}\s|>|[-+*]\s|\d+\.\s)/.test(lines[i]) &&
+      !(opts.hubImages && HUB_IMAGE_LINE.test(lines[i])) &&
       !(i + 1 < lines.length && lines[i].includes('|') && isTableDivider(lines[i + 1]))
     ) paragraph.push(lines[i++]);
     blocks.push({ kind: 'paragraph', text: paragraph.join('\n'), line: start, endLine: i - 1 });

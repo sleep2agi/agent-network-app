@@ -30,6 +30,17 @@ mock.module('./src/api', () => ({ fetchHubNodes: async () => ({ nodes: [] }) }))
 // The picker renders AliasAvatar. The real module pulls image assets and ui-scale,
 // which this isolated theme mock does not provide.
 mock.module('./src/AliasAvatar', () => ({ default: () => null }));
+// Description images: picking / uploading and the authed thumbnails are platform code; stub them.
+let picked: any[] = [];
+let uploads: any[] = [];
+mock.module('./src/attach', () => ({
+  pickImages: async () => picked,
+  uploadImage: async (_cfg: any, img: any, opts: any) => { uploads.push({ name: img.fileName, networkId: opts?.networkId }); return { file_id: `f_${uploads.length}`, path: '/x', url: `/api/files/f_${uploads.length}`, size: 1, mime: 'image/png' }; },
+}));
+mock.module('./src/AuthedThumb', () => ({ default: () => null }));
+mock.module('./src/AuthedWebThumb', () => ({ default: () => null }));
+mock.module('./src/ImageViewer', () => ({ default: () => null }));
+mock.module('./src/image-window', () => ({ openImageWindow: async () => false }));
 // The detail's description preview renders MarkdownMessage (image assets, native text selection…).
 mock.module('./src/MarkdownMessage', () => ({ default: ({ children }: any) => React.createElement('Text', { testID: 'markdown' }, children) }));
 
@@ -398,6 +409,22 @@ test('participants: avatar chips in detail, stack of 3 + 「+N」 on cards, unkn
   expect(chips).not.toContain('u_a4944afaa30b');
   expect(chips).not.toContain('n_e06d936d');
   expect(renderer.root.findAllByType('ActivityIndicator').filter(n => n.props.testID === undefined)).toHaveLength(0);
+});
+
+test('description images: 🖼 uploads with network_id and inserts ![name](/api/files/<id>) on its own line; oversize shows inline error', async () => {
+  detailCards = true;
+  await mount();
+  await act(async () => byId('req-card-r1').props.onPress());
+  await act(async () => byId('req-description-mode-edit').props.onPress());
+  await act(async () => byId('req-description-input').props.onSelectionChange({ nativeEvent: { selection: { start: 5, end: 5 } } }));
+  picked = [{ uri: 'blob:1', fileName: '截图.png', mimeType: 'image/png', fileSize: 1000 }, { uri: 'blob:2', fileName: '大图.png', mimeType: 'image/png', fileSize: 13 * 1024 * 1024 }];
+  uploads = [];
+  await act(async () => { await byId('req-description-image-button').props.onPress(); });
+  expect(uploads).toEqual([{ name: '截图.png', networkId: 'a' }]);
+  expect(byId('req-description-input').props.value).toBe('## 目标\n![截图.png](/api/files/f_1)');
+  expect(JSON.stringify(renderer.toJSON())).toContain('超过 12MB 上限');
+  await act(async () => byId('req-edit-save').props.onPress());
+  expect(edits[0].patch).toEqual({ description: '## 目标\n![截图.png](/api/files/f_1)' });
 });
 
 test('people picker separates identical user/node names, stages selection, and confirms stable references', async () => {
