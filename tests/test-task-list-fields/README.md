@@ -25,6 +25,14 @@ erase that column's saved position/visibility. Unknown future IDs are discarded,
 new known columns append with defaults. This is replaceable device preference,
 not Hub task data and not a cross-device synchronization feature.
 
+Wide touch displays retain the table and field settings: only narrow content
+uses grouped cards. A dedicated fixture does not force desktop=true on Android.
+1000×700 Android UA + hasTouch validates pointer=false, table, popover, real taps
+on 44×44 up/down reorder controls, boundaries, visibility and detail opening.
+Mouse retains native drag and keyboard reorder; touch has explicit up/down
+buttons and no automatic search autofocus/keyboard. This is browser emulation,
+not a claim of testing on a physical Xiaomi foldable.
+
 Creation and update columns default visible, including on upgrade from a saved
 preference without these IDs. Hub #2081 actually exposes `updatedAt` and
 `updated_by`; the adapter also accepts `updated_at`. Missing metadata stays

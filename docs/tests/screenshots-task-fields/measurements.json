@@ -1,6 +1,6 @@
 {
-  "passed": 27,
-  "total": 27,
+  "passed": 34,
+  "total": 34,
   "results": [
     {
       "name": "secondary fields hidden",
@@ -206,6 +206,48 @@
     },
     {
       "name": "preferences never write Hub",
+      "ok": true
+    },
+    {
+      "name": "fold fixture is genuinely non-pointer",
+      "ok": true
+    },
+    {
+      "name": "1000x700 Android retains table and fields",
+      "ok": true
+    },
+    {
+      "name": "touch down button reorders",
+      "ok": true
+    },
+    {
+      "name": "touch up button reorders and first boundary disabled",
+      "ok": true
+    },
+    {
+      "name": "fold popover fits and reorder targets44px",
+      "ok": true,
+      "detail": {
+        "fp": {
+          "x": 672,
+          "y": 102,
+          "width": 304,
+          "height": 586
+        },
+        "up": {
+          "x": 833,
+          "y": 259,
+          "width": 44,
+          "height": 44
+        }
+      }
+    },
+    {
+      "name": "fold visible columns respond",
+      "ok": true
+    },
+    {
+      "name": "fold table still opens detail",
       "ok": true
     }
   ]

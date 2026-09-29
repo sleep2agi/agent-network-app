@@ -1,4 +1,5 @@
 import { defaultFields, FIELD_IDS, FIELDS_KEY, loadFields, moveField, parseFields, saveFields, toggleField } from './task-list-fields';
+import { readFileSync } from 'node:fs';
 let p = 0, t = 0;
 const ck = (name: string, ok: boolean) => { t++; if (ok) p++; console.log(`${ok ? 'PASS' : 'FAIL'}: ${name}`); };
 ck('complete catalog', defaultFields().length === FIELD_IDS.length);
@@ -23,4 +24,9 @@ ck('session snapshot', JSON.stringify(loadFields()) === stored);
 Object.defineProperty(globalThis, 'localStorage', { configurable: true, get: () => { throw new Error('denied'); } });
 saveFields(defaultFields());
 ck('denied storage preserves usable preference', loadFields()[1].id === 'owner');
+const board = readFileSync(new URL('./RequirementBoard.tsx', import.meta.url), 'utf8').replace(/\r\n?/g, '\n');
+const list = board.slice(board.indexOf('const list = () =>'), board.indexOf('const body ='));
+ck('list layout branches on width only, not pointer', /if \(narrow\)/.test(list) && !/if \([^)]*!pointer/.test(list));
+const ui = readFileSync(new URL('./TaskListFields.tsx', import.meta.url), 'utf8').replace(/\r\n?/g, '\n');
+ck('touch gets named up/down controls and no keyboard autofocus', ui.includes("'fields.up' : 'fields.down'") && ui.includes('autoFocus={!touch}'));
 console.log(`${p}/${t} passed`); if (p !== t) process.exit(1);

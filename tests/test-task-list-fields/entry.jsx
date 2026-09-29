@@ -1,0 +1,12 @@
+import React from 'react';
+import { createRoot } from 'react-dom/client';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
+import Board from '../../src/RequirementBoard';
+import TaskFilterSidebar from '../../src/TaskFilterSidebar';
+import { setLanguagePreference } from '../../src/i18n';
+import { setThemePreference } from '../../src/theme';
+import { pointerUi } from '../../src/pointer-ui';
+const desktop = innerWidth > 700 && !/Android/i.test(navigator.userAgent);
+setThemePreference('light');setLanguagePreference('en');
+Object.assign(window, { switchLanguage: setLanguagePreference, fixturePointer: pointerUi(desktop) });
+createRoot(document.getElementById('root')).render(<SafeAreaProvider>{desktop ? <div style={{display:'flex',width:240,flexShrink:0}}><TaskFilterSidebar /></div> : null}<Board desktop={desktop} cfg={{serverUrl:location.origin,token:'fixture',networkId:'fixture-network'}} /></SafeAreaProvider>);

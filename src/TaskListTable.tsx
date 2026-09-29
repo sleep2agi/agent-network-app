@@ -17,10 +17,11 @@ import TaskTimeCell from './TaskTimeCell';
 import { loadFields, saveFields, type FieldId } from './task-list-fields';
 
 const widths: Record<FieldId, number> = { title: 220, owner: 150, priority: 90, due: 110, participants: 115, project: 116, status: 110, created: 150, updated: 150, issues: 108 };
-export default function TaskListTable({ rows, people, projects, sort, setSort, s, today, selectedId, onOpen, filtered, needsUpdateUpgrade }: {
+export default function TaskListTable({ rows, people, projects, sort, setSort, s, today, selectedId, onOpen, filtered, needsUpdateUpgrade, touch, onMenu }: {
   rows: Requirement[]; people: RequirementPerson[]; projects: RequirementProject[] | null;
   sort: SortSpec; setSort: (next: SortSpec) => void; s: TaskStyles; today: string;
   selectedId: string | null; onOpen: (id: string) => void; filtered: boolean; needsUpdateUpgrade: boolean;
+  touch: boolean; onMenu: (item: Requirement, x: number, y: number) => void;
 }) {
   useTranslation();
   const [fields, setFields] = useState(loadFields);
@@ -38,14 +39,14 @@ export default function TaskListTable({ rows, people, projects, sort, setSort, s
       case 'owner': return <OwnerBadge item={item} people={people} s={s} />;
       case 'priority': return <View style={s.owner}><PriorityDot p={item.priority} s={s} /><Text style={s.metaText}>{taskText(REQ_PRIORITY_LABEL[item.priority])}</Text></View>;
       case 'due': return item.due ? <DueChip item={item} today={today} s={s} /> : <Text style={s.metaMuted}>—</Text>;
-      case 'participants': return <ParticipantStack item={item} people={people} s={s} touch={false} size={18} />;
+      case 'participants': return <ParticipantStack item={item} people={people} s={s} touch={touch} size={18} />;
       case 'project': return item.projectId ? <ProjectChip project={projects?.find(p => p.id === item.projectId)} s={s} small /> : <Text style={s.metaMuted}>—</Text>;
       case 'issues': return <TaskIssueCount item={item} />;
       case 'status': return <View style={[s.statusPill, { backgroundColor: STATUS_TONE[item.column]() + '1f' }]}><View style={[s.prioDot, { width: 6, height: 6, backgroundColor: STATUS_TONE[item.column]() }]} /><Text style={[s.statusPillText, { color: STATUS_TONE[item.column]() }]}>{taskText(REQ_COLUMN_LABEL[item.column])}</Text></View>;
     }
   };
   return <View style={{ flex: 1 }}>
-    <View style={{ flexDirection: 'row', justifyContent: 'flex-end', paddingHorizontal: spacing.xl, paddingBottom: 10 }}><TaskListFields fields={fields} projects={projects !== null} needsUpdateUpgrade={needsUpdateUpgrade} onChange={next => { saveFields(next); setFields(next); }} /></View>
+    <View style={{ flexDirection: 'row', justifyContent: 'flex-end', paddingHorizontal: spacing.xl, paddingBottom: 10 }}><TaskListFields fields={fields} touch={touch} projects={projects !== null} needsUpdateUpgrade={needsUpdateUpgrade} onChange={next => { saveFields(next); setFields(next); }} /></View>
     <View style={s.table} testID="req-list">
       <ScrollView horizontal contentContainerStyle={{ minWidth: '100%', flexGrow: 1 }}>
         <View style={{ flex: 1, minWidth: visible.reduce((n, f) => n + widths[f.id], 0) + spacing.md * (visible.length - 1) + spacing.lg * 2 }}>
@@ -58,7 +59,7 @@ export default function TaskListTable({ rows, people, projects, sort, setSort, s
           </View>
           <ScrollView style={{ flex: 1 }}>
             {!rows.length ? <View style={[s.center, { paddingVertical: spacing.xl * 2 }]}><Text style={s.muted}>{t(filtered ? 'tasks.copy.46' : 'tasks.copy.55')}</Text></View> : null}
-            {rows.map(item => <Pressable key={item.id} testID={`req-row-${item.id}`} accessibilityRole="button" accessibilityLabel={item.name} onPress={() => onOpen(item.id)} style={state => [s.tr, ((state as { hovered?: boolean }).hovered || state.pressed || item.id === selectedId) && s.trHover]} {...({ dataSet: { taskCard: item.id, taskFrom: item.column } } as object)}>
+            {rows.map(item => <Pressable key={item.id} testID={`req-row-${item.id}`} accessibilityRole="button" accessibilityLabel={item.name} onPress={() => onOpen(item.id)} onLongPress={touch ? e => onMenu(item, e.nativeEvent.pageX, e.nativeEvent.pageY) : undefined} style={state => [s.tr, ((state as { hovered?: boolean }).hovered || state.pressed || item.id === selectedId) && s.trHover]} {...({ dataSet: { taskCard: item.id, taskFrom: item.column } } as object)}>
               {visible.map(({ id }) => <View key={id} testID={`task-cell-${item.id}-${id}`} style={[cellStyle(id), { flexDirection: 'row', alignItems: 'center' }]}>{content(item, id)}</View>)}
             </Pressable>)}
           </ScrollView>

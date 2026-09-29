@@ -1,5 +1,7 @@
 import { registerTranslations } from './i18n';
 registerTranslations({
+  'fields.up': ['上移 {name}', 'Move {name} up'],
+  'fields.down': ['下移 {name}', 'Move {name} down'],
   'fields.created': ['创建时间', 'Created'],
   'fields.updated': ['更新时间', 'Updated'],
   'fields.upgrade': ['需升级 Hub', 'Upgrade Hub'],

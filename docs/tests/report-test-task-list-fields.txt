@@ -52,3 +52,17 @@ Phone390x844 remains unchanged; browser fixture Hub writes=0.
 Additional witnessed failure: phone-only gate rejected ungated long-press;
 now pointerUi-gated, gate41/41. Initial browser24/25 caught RN Web filtering
 title; DOM title set on the timestamp ref and browser27/27 passed afterwards.
+
+Wide-touch correction (supersedes the initial non-pointer grouping decision):
+Only narrow content uses grouped cards. Wide content renders the table regardless
+of pointer modality, including Android foldables. Touch popover adds44x44 up/down
+buttons with disabled end boundaries; opening does not autofocus the keyboard.
+Original touch row long-press menu and touch participant behavior are preserved.
+Dedicated fixture rejects Android desktop override (fixturePointer=false).
+1000x700 Android UA + hasTouch, actual taps: table and Fields present, up/down
+reorders, visibility changes, row opens detail. Popover x672 y102 w304 h586;
+up control x833 y259 w44 h44. Screenshot fold-fields-1000x700.png.
+Browser34/34 PASS (retains desktop1200x800 and phone390x844 checks).
+Fields ck21/21, phone-only gate41/41, typecheckPASS.
+Full source test rerun on this correction:230/230 PASS.
+This is isolated Chromium browser emulation, not physical-device/APK acceptance.

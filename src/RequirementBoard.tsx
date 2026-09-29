@@ -535,7 +535,7 @@ function ScopedRequirementBoard({ cfg, desktop, dispatch }: { cfg: HubConfig; de
   };
 
   const list = () => {
-    if (narrow || !pointer) {
+    if (narrow) {
       // 手机:按状态分组的列表。
       return (
         <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: spacing.xl }} testID="req-list">
@@ -572,7 +572,7 @@ function ScopedRequirementBoard({ cfg, desktop, dispatch }: { cfg: HubConfig; de
       );
     }
     const rows = sortRows(visible, sort, people, projects ?? []);
-    return <TaskListTable rows={rows} people={people} projects={projects} sort={sort} setSort={setSort} s={s} today={today} selectedId={selectedId} onOpen={openDetail} filtered={filterActive(filter)} needsUpdateUpgrade={items.some(item => item.updatedAt === undefined)} />;
+    return <TaskListTable rows={rows} people={people} projects={projects} sort={sort} setSort={setSort} s={s} today={today} selectedId={selectedId} onOpen={openDetail} touch={!pointer} onMenu={openMenuAt} filtered={filterActive(filter)} needsUpdateUpgrade={items.some(item => item.updatedAt === undefined)} />;
   };
 
   const body = section === 'dispatch' ? dispatch ?? null

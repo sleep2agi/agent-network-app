@@ -105,5 +105,25 @@ try {
  ck('phone grouped cards no field settings',await phone.getByTestId('task-fields-button').count()===0&&await phone.getByTestId('req-group-pool').count()===1);
  ck('preferences never write Hub',writes===0);
  await phone.close();
+ const fold=await browser.newPage({viewport:{width:1000,height:700},hasTouch:true,isMobile:true,userAgent:'Mozilla/5.0 (Linux; Android 15; Xiaomi MIX Fold) AppleWebKit/537.36 Chrome/130.0.0.0 Mobile Safari/537.36'});
+ await fold.goto(url);await fold.getByTestId('tasks-view-list').tap();await fold.getByTestId('req-row-r1').waitFor();
+ ck('fold fixture is genuinely non-pointer',await fold.evaluate(()=>window.fixturePointer===false&&/Android/.test(navigator.userAgent)));
+ ck('1000x700 Android retains table and fields',await fold.getByTestId('task-column-title').count()===1&&await fold.getByTestId('task-fields-button').count()===1&&await fold.getByTestId('req-group-pool').count()===0);
+ await fold.getByTestId('task-fields-button').tap();
+ await fold.getByTestId('task-field-down-title').tap();
+ let foldPrefs=await fold.evaluate(()=>JSON.parse(localStorage.getItem('task_list_fields_v1')));
+ ck('touch down button reorders',foldPrefs[1].id==='title');
+ await fold.getByTestId('task-field-up-title').tap();
+ foldPrefs=await fold.evaluate(()=>JSON.parse(localStorage.getItem('task_list_fields_v1')));
+ ck('touch up button reorders and first boundary disabled',foldPrefs[0].id==='title'&&await fold.getByTestId('task-field-up-title').isDisabled());
+ await fold.getByTestId('task-field-toggle-participants').tap();
+ const fp=await fold.getByTestId('task-fields-popover').boundingBox(),up=await fold.getByTestId('task-field-up-owner').boundingBox();
+ ck('fold popover fits and reorder targets44px',fp.x>=0&&fp.x+fp.width<=1000&&fp.y+fp.height<=700&&up.width>=44&&up.height>=44,{fp,up});
+ await fold.screenshot({path:out+'/fold-fields-1000x700.png'});
+ await fold.getByLabel('Close field settings',{exact:true}).last().tap();
+ ck('fold visible columns respond',await fold.getByTestId('task-column-participants').count()===1);
+ await fold.getByTestId('req-row-r1').tap();
+ ck('fold table still opens detail',await fold.getByTestId('req-detail').count()===1);
+ await fold.close();
 }finally{await browser.close();server.close();writeFileSync(out+'/measurements.json',JSON.stringify({passed:p,total:t,results},null,2));}
 console.log(`${p}/${t} passed`);process.exit(p===t?0:1);

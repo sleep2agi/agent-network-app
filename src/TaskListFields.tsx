@@ -10,7 +10,7 @@ import { useTranslation } from './i18n-react';
 import './i18n-task-fields';
 import { defaultFields, moveField, toggleField, type FieldId, type FieldPref } from './task-list-fields';
 
-export default function TaskListFields({ fields, onChange, projects, needsUpdateUpgrade }: { fields: FieldPref[]; onChange: (next: FieldPref[]) => void; projects: boolean; needsUpdateUpgrade: boolean }) {
+export default function TaskListFields({ fields, onChange, projects, needsUpdateUpgrade, touch }: { fields: FieldPref[]; onChange: (next: FieldPref[]) => void; projects: boolean; needsUpdateUpgrade: boolean; touch: boolean }) {
   useTranslation();
   const safe = useModalSafePadding('overlay');
   const anchor = useRef<View>(null);
@@ -57,12 +57,16 @@ export default function TaskListFields({ fields, onChange, projects, needsUpdate
       <Pressable testID="task-fields-backdrop" accessibilityLabel={t('fields.close')} style={{ position: 'absolute', inset: 0 }} onPress={close} />
       <View ref={panel} testID="task-fields-popover" style={{ position: 'absolute', left: position?.x ?? 0, top: position?.y ?? 0, width: 304, maxHeight: Math.max(120, height - (position?.y ?? 0) - 12), backgroundColor: colors.card, borderWidth: 1, borderColor: colors.border, borderRadius: radius.control, ...withBasePadding(safe, 12), gap: 8 }}>
         <View style={{ flexDirection: 'row', alignItems: 'center' }}><Text style={{ color: colors.text, fontWeight: '600', flex: 1 }}>{t('fields.configure')}</Text><Pressable accessibilityLabel={t('fields.close')} onPress={close} style={button}><Ionicons name="close" size={18} color={colors.textMuted} /></Pressable></View>
-        <TextInput autoFocus testID="task-fields-search" value={query} onChangeText={setQuery} placeholder={t('fields.search')} accessibilityLabel={t('fields.search')} style={{ minHeight: 40, paddingHorizontal: 10, color: colors.text, borderWidth: 1, borderColor: colors.border, borderRadius: radius.item }} />
+        <TextInput autoFocus={!touch} testID="task-fields-search" value={query} onChangeText={setQuery} placeholder={t('fields.search')} accessibilityLabel={t('fields.search')} style={{ minHeight: 40, paddingHorizontal: 10, color: colors.text, borderWidth: 1, borderColor: colors.border, borderRadius: radius.item }} />
         <ScrollView style={{ flexShrink: 1 }}>
           {!rows.length ? <Text style={{ color: colors.textMuted, padding: 12 }}>{t('fields.empty')}</Text> : null}
           {rows.map(f => <View key={f.id} testID={`task-field-${f.id}`} {...({ dataSet: { fieldRow: f.id } } as object)} style={{ minHeight: 44, flexDirection: 'row', alignItems: 'center', borderTopWidth: 2, borderTopColor: target === f.id ? colors.accent : 'transparent' }}>
             <Pressable testID={`task-field-drag-${f.id}`} {...({ draggable: true } as object)} accessibilityRole="button" accessibilityLabel={t('fields.reorder', { name: t(`fields.${f.id}`) })}  style={{ padding: 10 }}><Ionicons name="reorder-two" size={18} color={colors.textMuted} /></Pressable>
             <View style={{ flex: 1 }}><Text style={{ color: colors.text }}>{t(`fields.${f.id}`)}</Text>{f.id === 'updated' && needsUpdateUpgrade ? <Text testID="task-fields-upgrade" style={{ color: colors.textMuted, fontSize: 11 }}>{t('fields.upgrade')}</Text> : null}</View>
+            {touch ? ([-1, 1] as const).map(delta => {
+              const neighbour = available[available.findIndex(v => v.id === f.id) + delta];
+              return <Pressable key={delta} testID={`task-field-${delta < 0 ? 'up' : 'down'}-${f.id}`} accessibilityRole="button" accessibilityLabel={t(delta < 0 ? 'fields.up' : 'fields.down', { name: t(`fields.${f.id}`) })} disabled={!neighbour} onPress={() => { if (neighbour) onChange(moveField(fields, f.id, neighbour.id)); }} style={{ width: 44, height: 44, alignItems: 'center', justifyContent: 'center', opacity: neighbour ? 1 : 0.3 }}><Ionicons name={delta < 0 ? 'chevron-up' : 'chevron-down'} size={16} color={colors.text} /></Pressable>;
+            }) : null}
             <Pressable testID={`task-field-toggle-${f.id}`} accessibilityRole="button" disabled={f.id === 'title'} accessibilityLabel={f.id === 'title' ? t('fields.locked') : t(f.visible ? 'fields.hide' : 'fields.show', { name: t(`fields.${f.id}`) })} onPress={() => onChange(toggleField(fields, f.id))} style={{ padding: 12 }}><Ionicons name={f.id === 'title' ? 'lock-closed-outline' : f.visible ? 'eye-outline' : 'eye-off-outline'} size={18} color={f.visible ? colors.accent : colors.textMuted} /></Pressable>
           </View>)}
         </ScrollView>
