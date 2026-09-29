@@ -27,7 +27,8 @@ const day = (offset) => { const d = new Date(); d.setDate(d.getDate() + offset);
 const A = { kind: "node", id: "node_demo_a" }, B = { kind: "node", id: "node_demo_b" }, ME = { kind: "user", id: uid }, M2 = { kind: "user", id: member };
 // owner = 负责人 (human), agent = 负责 Agent (node). A hub without agent_owner ignores the field (single-owner fallback run).
 const rows = [
-  { name: "登录页支持扫码登录", priority: "high", due: day(-3), owner: ME, agent: A, column: "pool" },            // overdue
+  { name: "登录页支持扫码登录", priority: "high", due: day(-3), owner: ME, agent: A, column: "pool",            // overdue
+    description: "## 目标\n扫码即可登录,不用输密码。\n\n- 手机端扫码\n- 桌面端出码", checklist: ["出码接口", "手机扫码页", "轮询登录状态", "过期刷新", "埋点", "文档", "回归"].map((text, i) => ({ id: `s${i}`, text, done: i < 3 })) },
   { name: "整理 9 月的发版说明,补上安卓和桌面端的差异", priority: "normal", due: day(5), owner: ME, agent: null, column: "pool" },
   { name: "看板卡片支持拖动换列", priority: "normal", due: "", owner: null, agent: null, column: "pool" },
   { name: "修复通知在后台不弹", priority: "high", due: day(0), owner: M2, agent: B, column: "doing" },          // today
@@ -43,7 +44,7 @@ const call = async (path, init) => {
   return body;
 };
 for (const r of rows) {
-  const { requirement } = await call("/api/requirements", { method: "POST", body: JSON.stringify({ name: r.name, priority: r.priority, due: r.due, assignee: "", network_id: net, ...(r.owner ? { owner: r.owner } : {}), ...(r.agent ? { agent_owner: r.agent } : {}) }) });
+  const { requirement } = await call("/api/requirements", { method: "POST", body: JSON.stringify({ name: r.name, priority: r.priority, due: r.due, assignee: "", network_id: net, ...(r.description ? { description: r.description } : {}), ...(r.checklist ? { checklist: r.checklist } : {}), ...(r.owner ? { owner: r.owner } : {}), ...(r.agent ? { agent_owner: r.agent } : {}) }) });
   if (r.column !== "pool") await call(`/api/requirements/${requirement.id}?network_id=${net}`, { method: "PATCH", body: JSON.stringify({ column: r.column }) });
 }
 const { requirements } = await call(`/api/requirements?network_id=${net}`);

@@ -30,10 +30,14 @@ mock.module('./src/api', () => ({ fetchHubNodes: async () => ({ nodes: [] }) }))
 // The picker renders AliasAvatar. The real module pulls image assets and ui-scale,
 // which this isolated theme mock does not provide.
 mock.module('./src/AliasAvatar', () => ({ default: () => null }));
+// The detail's description preview renders MarkdownMessage (image assets, native text selection…).
+mock.module('./src/MarkdownMessage', () => ({ default: ({ children }: any) => React.createElement('Text', { testID: 'markdown' }, children) }));
 
 const card = { id: 'r1', name: '验证需求详情', assignee: '负责人甲', priority: 'normal', due: '', column: 'pool', createdAt: '' };
 let typedCards = false;
 let roleCards = false;
+let detailCards = false;
+let itemWrites: any[] = [];
 let requests: any[] = [];
 let creates: any[] = [];
 let edits: any[] = [];
@@ -43,7 +47,8 @@ let reject: (error: Error) => void;
 class HubError extends Error { constructor(public status: number, message = 'HTTP ' + status) { super(message); } }
 mock.module('./src/requirements-hub', () => ({
   listRequirements: async () => [
-    { ...card, ...(typedCards || roleCards ? { owner: null, participants: [] } : {}), ...(roleCards ? { agentOwner: null } : {}) },
+    { ...card, ...(typedCards || roleCards ? { owner: null, participants: [] } : {}), ...(roleCards ? { agentOwner: null } : {}),
+      ...(detailCards ? { description: '## 目标', checklist: [{ id: 'a', text: '写接口', done: false }, { id: 'b', text: '写测试', done: true }] } : {}) },
     { ...card, id: 'r2', name: '另一个需求', ...(roleCards ? { owner: null, participants: [], agentOwner: null } : {}) },
   ], migrateLocalRequirements: async () => {},
   probeAgentOwnerSupport: async () => roleCards,
@@ -52,9 +57,14 @@ mock.module('./src/requirements-hub', () => ({
     edits.push({ id, patch });
     if (editReply) return editReply(patch);
     const { agent_owner, ...rest } = patch;
+    if (detailCards) return { ...card, id, description: '## 目标', checklist: [], ...rest };
     return { ...card, id, ...rest, owner: patch.owner === undefined ? null : patch.owner, participants: [], ...(roleCards ? { agentOwner: agent_owner === undefined ? null : agent_owner } : {}) };
   },
   fetchMyUserId: async () => 'u',
+  setChecklistItemOnHub: async (_cfg: any, id: string, itemId: string, done: boolean) => {
+    itemWrites.push({ id, itemId, done });
+    return { ...card, id, description: '## 目标', checklist: [{ id: 'a', text: '写接口', done: itemId === 'a' ? done : false }, { id: 'b', text: '写测试', done: itemId === 'b' ? done : true }] };
+  },
   RequirementsHubError: HubError,
   moveRequirementOnHub: (cfg: any, id: string, column: string) => {
     requests.push({ network: cfg.networkId, id, column });
@@ -86,7 +96,7 @@ async function mount() {
   setTaskSection('board');
   await act(async () => { renderer = create(<Board cfg={cfg} />); });
 }
-afterEach(async () => { typedCards = false; roleCards = false; if (renderer) await act(async () => renderer.unmount()); });
+afterEach(async () => { typedCards = false; roleCards = false; detailCards = false; itemWrites = []; if (renderer) await act(async () => renderer.unmount()); });
 
 test('header has no permanent inputs or dev note; 新建 opens the dialog', async () => {
   await mount();
@@ -270,6 +280,41 @@ test('hub without agent_owner keeps the single 负责人 picker (humans and agen
   await act(async () => byId('req-assignee').props.onPress());
   expect(byId('person-node:n1')).toBeTruthy();
   expect(byId('person-user:u')).toBeTruthy();
+});
+
+test('description and checklist: card progress, per-item toggle, add/delete replace the list, description saves with 保存修改', async () => {
+  detailCards = true;
+  await mount();
+  expect(texts('req-card-r1')).toContain('1');
+  expect(byId('req-card-r1').findAll(n => n.props.testID === 'task-checklist-progress').length).toBeGreaterThan(0);
+  await act(async () => byId('req-card-r1').props.onPress());
+  expect(byId('req-description')).toBeTruthy();
+  expect(JSON.stringify(byId('req-description-preview').findAllByType('Text').map(n => n.props.children))).toContain('## 目标');
+  // 勾一项:单项接口,只带那一项
+  await act(async () => byId('req-checklist-item-a').props.onPress());
+  expect(itemWrites).toEqual([{ id: 'r1', itemId: 'a', done: true }]);
+  expect(edits).toHaveLength(0);
+  // 加一项:整张清单
+  await act(async () => byId('req-checklist-input').props.onChangeText('发版'));
+  await act(async () => byId('req-checklist-add').props.onPress());
+  expect(edits[0].patch.checklist.map((i: any) => i.text)).toEqual(['写接口', '写测试', '发版']);
+  expect(edits[0].patch.checklist[2].id).toMatch(/^ck_[0-9a-f]{16}$/);
+  // 删一项(手机:删除按钮常驻)
+  await act(async () => byId('req-checklist-delete-b').props.onPress());
+  expect(edits[1].patch.checklist.map((i: any) => i.id)).not.toContain('b');
+  // 描述:编辑后跟「保存修改」一起发
+  await act(async () => byId('req-description-mode-edit').props.onPress());
+  await act(async () => byId('req-description-input').props.onChangeText('## 目标\n- 新的验收标准'));
+  await act(async () => byId('req-edit-save').props.onPress());
+  expect(edits[2].patch).toEqual({ description: '## 目标\n- 新的验收标准' });
+});
+
+test('hub without description/checklist hides both sections and says to upgrade', async () => {
+  await mount();
+  await act(async () => byId('req-card-r1').props.onPress());
+  expect(byId('req-details-unsupported')).toBeTruthy();
+  expect(renderer.root.findAllByProps({ testID: 'req-checklist' })).toHaveLength(0);
+  expect(renderer.root.findAllByProps({ testID: 'req-description' })).toHaveLength(0);
 });
 
 test('people picker separates identical user/node names, stages selection, and confirms stable references', async () => {

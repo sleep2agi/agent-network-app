@@ -10,7 +10,7 @@ import { colors, onThemeChange, radius, spacing, themeMode, type as typeScale, w
 import { shadowOnly } from './elevation';
 import { REQ_PRIORITY_LABEL, type ReqPriority, type Requirement } from './requirements-model';
 import type { RequirementPerson } from './requirement-people';
-import { dueInfo, ownerLabel, roleAvatars, type DueTone } from './task-board-model';
+import { checklistProgress, dueInfo, ownerLabel, roleAvatars, type DueTone } from './task-board-model';
 
 export const BOARD_RADIUS = {
   card: radius.surface, control: radius.control, pill: radius.pill,
@@ -199,6 +199,22 @@ export function Chip({ label, on, onPress, s, testID, leading, accessibilityLabe
       <Text style={[s.chipText, on && s.chipTextOn]} numberOfLines={1}>{label}</Text>
       <Ionicons name="chevron-down" size={12} color={on ? colors.accent : colors.textMuted} />
     </Pressable>
+  );
+}
+
+/** 卡片上的子任务进度:「✓ 3/7」+ 一条细进度条。没有子任务就不画。 */
+export function ChecklistProgress({ item, s }: { item: Pick<Requirement, 'checklist'>; s: TaskStyles }) {
+  const p = checklistProgress(item.checklist);
+  if (!p.total) return null;
+  const complete = p.done === p.total;
+  return (
+    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }} testID="task-checklist-progress" accessibilityLabel={`子任务 ${p.done}/${p.total}`}>
+      <Ionicons name={complete ? 'checkmark-circle' : 'checkbox-outline'} size={13} color={complete ? colors.running : colors.textMuted} />
+      <Text style={[s.metaMuted, { fontSize: 11 }]}>{p.done}/{p.total}</Text>
+      <View style={{ flex: 1, height: 3, borderRadius: radius.pill, backgroundColor: colors.subtleFill, overflow: 'hidden' }}>
+        <View style={{ width: `${Math.round(p.ratio * 100)}%`, height: 3, backgroundColor: complete ? colors.running : colors.accent }} testID="task-checklist-bar" />
+      </View>
+    </View>
   );
 }
 

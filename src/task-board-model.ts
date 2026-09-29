@@ -5,6 +5,7 @@
 // 头部一行(标题 · 列表/看板 · 负责人/优先级筛选 · ＋ 新建),三列等宽铺满,卡片整张可点,
 // 桌面拖动换列、手机长按菜单。Hub 数据模型不变(标题/状态/优先级/期限/负责人/参与人)。
 import {
+  type ChecklistItem,
   columnsOf,
   dueOk,
   REQ_COLUMNS,
@@ -337,7 +338,7 @@ export function createInput(d: CreateDraft, twoRoles = false): { name: string; p
 
 // ── 详情编辑 ─────────────────────────────────────────────────────────────
 
-export interface EditDraft { name: string; priority: ReqPriority; due: string; owner: RequirementPersonRef | null; agentOwner: RequirementPersonRef | null }
+export interface EditDraft { name: string; priority: ReqPriority; due: string; owner: RequirementPersonRef | null; agentOwner: RequirementPersonRef | null; description: string }
 
 export const editDraftOf = (item: Requirement): EditDraft => ({
   name: item.name,
@@ -345,10 +346,11 @@ export const editDraftOf = (item: Requirement): EditDraft => ({
   due: item.due,
   owner: item.owner ? { kind: item.owner.kind, id: item.owner.id } : null,
   agentOwner: item.agentOwner ? { kind: item.agentOwner.kind, id: item.agentOwner.id } : null,
+  description: item.description ?? '',
 });
 
 /** PATCH 请求体(字段名就是线上的名字)。 */
-export type EditPatch = { name?: string; priority?: ReqPriority; due?: string; owner?: RequirementPersonRef | null; agent_owner?: RequirementPersonRef | null };
+export type EditPatch = { name?: string; priority?: ReqPriority; due?: string; owner?: RequirementPersonRef | null; agent_owner?: RequirementPersonRef | null; description?: string; checklist?: ChecklistItem[] };
 
 /**
  * 只提交改过的字段;没改返回 null(保存按钮不可用)。旧 Hub(owner undefined)不提交负责人 ——
@@ -371,6 +373,8 @@ export function editPatch(item: Requirement, d: EditDraft): EditPatch | null {
     const after = d.agentOwner ? personKey(d.agentOwner) : '';
     if (before !== after) patch.agent_owner = d.agentOwner ? { kind: d.agentOwner.kind, id: d.agentOwner.id } : null;
   }
+  // 描述跟标题一起走「保存修改」;旧 Hub(没有 description 字段)不发。
+  if (item.description !== undefined && d.description.replace(/\r\n?/g, '\n') !== item.description) patch.description = d.description.replace(/\r\n?/g, '\n');
   return Object.keys(patch).length ? patch : null;
 }
 
@@ -392,5 +396,58 @@ export function patchApplied(row: Requirement, patch: EditPatch): boolean {
     const got = row.agentOwner ? personKey(row.agentOwner) : '';
     if (want !== got) return false;
   }
+  if (patch.description !== undefined && row.description !== patch.description) return false;
+  if (patch.checklist !== undefined && JSON.stringify(row.checklist?.map(i => i.id)) !== JSON.stringify(patch.checklist.map(i => i.id))) return false;
   return true;
+}
+
+// ── 子任务 ───────────────────────────────────────────────────────────────
+// 勾选走单项接口(setChecklistItemOnHub);增、删、排序改整张清单(PATCH {checklist})。
+// 上限与 Hub 一致:最多 100 项,每项 1–500 字。
+
+export const CHECKLIST_MAX_ITEMS = 100;
+export const CHECKLIST_TEXT_MAX = 500;
+export const DESCRIPTION_MAX = 20_000;
+
+/** 这个 Hub 有没有描述 / 子任务(行里带这两个字段)。 */
+export const hasDetails = (item: Pick<Requirement, 'description' | 'checklist'>): boolean => item.description !== undefined && item.checklist !== undefined;
+
+export function checklistProgress(list: readonly ChecklistItem[] | undefined): { done: number; total: number; ratio: number } {
+  const total = list?.length ?? 0;
+  const done = list?.filter(i => i.done).length ?? 0;
+  return { done, total, ratio: total ? done / total : 0 };
+}
+
+export const newChecklistId = (rand: () => number = Math.random): string =>
+  `ck_${Array.from({ length: 16 }, () => Math.floor(rand() * 16).toString(16)).join('')}`;
+
+/** 加一项(文字折成一行、去空白);空文字、超长、满 100 项 → null。 */
+export function addChecklistItem(list: readonly ChecklistItem[], text: string, id: string = newChecklistId()): ChecklistItem[] | null {
+  const t = text.replace(/[\r\n]+/g, ' ').trim();
+  if (!t || t.length > CHECKLIST_TEXT_MAX || list.length >= CHECKLIST_MAX_ITEMS) return null;
+  return [...list, { id, text: t, done: false }];
+}
+
+export const setChecklistDone = (list: readonly ChecklistItem[], id: string, done: boolean): ChecklistItem[] =>
+  list.map(i => (i.id === id ? { ...i, done } : i));
+
+export const removeChecklistItem = (list: readonly ChecklistItem[], id: string): ChecklistItem[] => list.filter(i => i.id !== id);
+
+/** 把 from 位置的项挪到 to(拖动排序 / Alt+↑↓)。越界或不动 → 原样返回同一个数组。 */
+export function moveChecklistItem(list: readonly ChecklistItem[], from: number, to: number): readonly ChecklistItem[] {
+  if (from === to || from < 0 || from >= list.length || to < 0 || to >= list.length) return list;
+  const next = [...list];
+  const [item] = next.splice(from, 1);
+  next.splice(to, 0, item);
+  return next;
+}
+
+/** 拖动排序:指针在第几行的上半 / 下半 → 落到第几个位置(按各行的上下沿算)。 */
+export function checklistDropIndex(rows: readonly { top: number; bottom: number }[], y: number, from: number): number {
+  let to = rows.length - 1;
+  for (let i = 0; i < rows.length; i++) {
+    const mid = (rows[i].top + rows[i].bottom) / 2;
+    if (y < mid) { to = i > from ? i - 1 : i; return Math.max(0, Math.min(rows.length - 1, to)); }
+  }
+  return to;
 }

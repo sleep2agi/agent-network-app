@@ -13,9 +13,9 @@ import { Text, TextInput } from './ui-text';
 import { Ionicons } from './icons';
 import AliasAvatar from './AliasAvatar';
 import type { HubConfig } from './api';
-import { REQ_COLUMN_LABEL, REQ_COLUMNS, REQ_PRIORITIES, REQ_PRIORITY_LABEL, type ReqColumn, type Requirement } from './requirements-model';
+import { REQ_COLUMN_LABEL, REQ_COLUMNS, REQ_PRIORITIES, REQ_PRIORITY_LABEL, type ChecklistItem, type ReqColumn, type Requirement } from './requirements-model';
 import { readRequirements, requirementsKey, writeRequirements } from './requirements-store';
-import { createRequirementOnHub, fetchMyUserId, listRequirements, migrateLocalRequirements, moveRequirementOnHub, probeAgentOwnerSupport, RequirementsHubError, updateRequirementOnHub } from './requirements-hub';
+import { createRequirementOnHub, fetchMyUserId, setChecklistItemOnHub, listRequirements, migrateLocalRequirements, moveRequirementOnHub, probeAgentOwnerSupport, RequirementsHubError, updateRequirementOnHub } from './requirements-hub';
 import { listRequirementPeople } from './requirement-people-api';
 import { personKey } from './requirement-people';
 import { colors, radius, spacing } from './theme';
@@ -25,11 +25,11 @@ import { useModalSafePadding } from './safe-area-runtime';
 import { usePoll } from './usePoll';
 import {
   applyFilter, applyMove, boardColumns, createInput, DEFAULT_SORT, DRAG_IDLE, dragReduce, dropIndex, emptyDraft,
-  filterActive, hasRoles, localToday, neighbourColumn, nextSort, ownerCounts, ownerLabel, revertMove, sortRows, toggleIn, UNASSIGNED,
+  filterActive, hasRoles, localToday, addChecklistItem, moveChecklistItem, removeChecklistItem, setChecklistDone, neighbourColumn, nextSort, ownerCounts, ownerLabel, revertMove, sortRows, toggleIn, UNASSIGNED,
   type CreateDraft, type DragEvent, type DragState, type EditPatch, type SortKey, type SortSpec,
 } from './task-board-model';
 import { enterTaskScope, patchTaskBoard, setTaskFilter, setTaskSection, taskScopeKey, updateTaskItems, useTaskBoard, type TaskSection } from './task-board-store';
-import { CardMeta, Chip, DueChip, OwnerBadge, PriorityDot, Segmented, STATUS_TONE, useTaskStyles, type TaskStyles } from './TaskBoardParts';
+import { CardMeta, ChecklistProgress, Chip, DueChip, OwnerBadge, PriorityDot, Segmented, STATUS_TONE, useTaskStyles, type TaskStyles } from './TaskBoardParts';
 import TaskCreateDialog from './TaskCreateDialog';
 import TaskDetailPanel from './TaskDetailPanel';
 import TaskCardMenu, { type TaskMenuTarget } from './TaskCardMenu';
@@ -194,6 +194,36 @@ function ScopedRequirementBoard({ cfg, desktop, dispatch }: { cfg: HubConfig; de
       return null;
     } catch (e) {
       return e instanceof Error ? e.message : '没有存到 Hub';
+    }
+  };
+
+  // ── 子任务:勾选只改那一项(单项接口),增删排序改整张清单;都先乐观更新,失败退回 ──
+  const [checklistErrors, setChecklistErrors] = useState<Record<string, string>>({});
+  const setChecklistLocal = (id: string, next: ChecklistItem[]) => updateTaskItems(scope, rows => rows.map(row => (row.id === id ? { ...row, checklist: next } : row)));
+  const replaceChecklist = async (id: string, next: ChecklistItem[]) => {
+    const prev = items.find(row => row.id === id)?.checklist;
+    if (!prev) return;
+    setChecklistErrors(({ [id]: _, ...rest }) => rest);
+    setChecklistLocal(id, next);
+    try {
+      const updated = await track(() => updateRequirementOnHub(cfg, id, { checklist: next }));
+      setChecklistLocal(id, updated.checklist ?? next);
+    } catch (e) {
+      setChecklistLocal(id, prev);
+      setChecklistErrors(errs => ({ ...errs, [id]: e instanceof Error ? e.message : '子任务没有保存，请重试' }));
+    }
+  };
+  const toggleChecklist = async (id: string, itemId: string, done: boolean) => {
+    const list = items.find(row => row.id === id)?.checklist;
+    if (!list) return;
+    setChecklistErrors(({ [id]: _, ...rest }) => rest);
+    updateTaskItems(scope, rows => rows.map(row => (row.id === id && row.checklist ? { ...row, checklist: setChecklistDone(row.checklist, itemId, done) } : row)));
+    try {
+      const updated = await track(() => setChecklistItemOnHub(cfg, id, itemId, done));
+      if (updated.checklist) setChecklistLocal(id, updated.checklist);
+    } catch (e) {
+      updateTaskItems(scope, rows => rows.map(row => (row.id === id && row.checklist ? { ...row, checklist: setChecklistDone(row.checklist, itemId, !done) } : row)));
+      setChecklistErrors(errs => ({ ...errs, [id]: e instanceof Error ? e.message : '子任务没有保存，请重试' }));
     }
   };
 
@@ -367,6 +397,7 @@ function ScopedRequirementBoard({ cfg, desktop, dispatch }: { cfg: HubConfig; de
       >
         <Text style={[s.cardTitle, item.column === 'done' && s.cardDone]} numberOfLines={2}>{item.name}</Text>
         <CardMeta item={item} people={people} today={today} s={s} compact={compactCards} />
+        <ChecklistProgress item={item} s={s} />
         {moveErrors[item.id] ? <Text style={s.err} numberOfLines={1}>{moveErrors[item.id]}</Text> : null}
       </Pressable>
     );
@@ -484,6 +515,7 @@ function ScopedRequirementBoard({ cfg, desktop, dispatch }: { cfg: HubConfig; de
                     >
                       <Text style={[s.cardTitle, item.column === 'done' && s.cardDone]} numberOfLines={2}>{item.name}</Text>
                       <CardMeta item={item} people={people} today={today} s={s} />
+                      <ChecklistProgress item={item} s={s} />
                     </Pressable>
                   ))}
                 </View>
@@ -591,6 +623,21 @@ function ScopedRequirementBoard({ cfg, desktop, dispatch }: { cfg: HubConfig; de
           onSave={patch => saveEdit(selected.id, patch)}
           onAssignmentsSaved={a => updateTaskItems(scope, rows => rows.map(row => (row.id === selected.id ? { ...row, ...a } : row)))}
           onClose={() => setSelectedId(null)}
+          pointer={pointer}
+          checklistError={checklistErrors[selected.id] || ''}
+          onChecklistToggle={(itemId, done) => { void toggleChecklist(selected.id, itemId, done); }}
+          onChecklistAdd={text => {
+            const next = addChecklistItem(selected.checklist ?? [], text);
+            if (!next) return false;
+            void replaceChecklist(selected.id, next);
+            return true;
+          }}
+          onChecklistDelete={itemId => { void replaceChecklist(selected.id, removeChecklistItem(selected.checklist ?? [], itemId)); }}
+          onChecklistMove={(from, to) => {
+            const list = selected.checklist ?? [];
+            const next = moveChecklistItem(list, from, to);
+            if (next !== list) void replaceChecklist(selected.id, [...next]);
+          }}
         />
       ) : null}
       <TaskCreateDialog

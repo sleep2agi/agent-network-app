@@ -9,6 +9,7 @@ import {
   REQ_COLUMNS,
   REQ_PRIORITIES,
   type ReqColumn,
+  type ChecklistItem,
   type ReqPriority,
   type Requirement,
 } from './requirements-model';
@@ -31,6 +32,8 @@ export function requirementFromHub(row: unknown): Requirement | null {
   return {
     ...(('owner' in r || 'participants' in r) ? assignmentsFromHub(r) : {}),
     ...('agent_owner' in r ? { agentOwner: agentOwnerFromHub(r.agent_owner) } : {}),
+    ...(typeof r.description === 'string' ? { description: r.description } : {}),
+    ...(Array.isArray(r.checklist) ? { checklist: checklistFromHub(r.checklist) } : {}),
     id: r.id,
     name: r.name.trim().slice(0, 80),
     priority,
@@ -46,6 +49,18 @@ function agentOwnerFromHub(value: unknown): RequirementPersonRef | null {
   if (!value || typeof value !== 'object') return null;
   const v = value as Record<string, unknown>;
   return v.kind === 'node' && typeof v.id === 'string' && v.id ? { kind: 'node', id: v.id } : null;
+}
+
+/** 子任务:坏的项丢掉,不让一张卡因为它整张丢掉。 */
+function checklistFromHub(rows: unknown[]): ChecklistItem[] {
+  const out: ChecklistItem[] = [];
+  for (const row of rows) {
+    if (!row || typeof row !== 'object') continue;
+    const v = row as Record<string, unknown>;
+    if (typeof v.id !== 'string' || !v.id || typeof v.text !== 'string') continue;
+    out.push({ id: v.id, text: v.text, done: v.done === true });
+  }
+  return out;
 }
 
 async function call(cfg: HubConfig, path: string, init?: RequestInit): Promise<unknown> {
@@ -113,6 +128,8 @@ export async function updateRequirementOnHub(cfg: HubConfig, id: string, patch: 
   if (res.status === 400 && data?.error === 'empty_patch') throw new RequirementsHubError(HUB_CANNOT_EDIT, 400);
   if (res.status === 400 && (data?.error === 'person_not_in_network' || data?.error === 'invalid_person')) throw new RequirementsHubError('这个负责人已不在当前网络', 400);
   if (res.status === 400 && data?.error === 'owner_must_be_human') throw new RequirementsHubError('负责人只能是人类;Agent 请放在「负责 Agent」', 400);
+  if (res.status === 400 && data?.error === 'invalid_description') throw new RequirementsHubError('描述太长了(最多 20000 字)', 400);
+  if (res.status === 400 && data?.error === 'invalid_checklist') throw new RequirementsHubError('子任务不合法(最多 100 项,每项 1–500 字)', 400);
   if (res.status === 400 && data?.error === 'agent_owner_must_be_agent') throw new RequirementsHubError('负责 Agent 只能是 Agent 节点', 400);
   if (res.status === 404) throw new RequirementsHubError('这条需求已不存在', 404);
   if (!res.ok) throw new RequirementsHubError('修改没有保存，请重试', res.status);
@@ -139,6 +156,26 @@ export async function probeAgentOwnerSupport(cfg: HubConfig): Promise<boolean> {
   } catch {
     return false;
   }
+}
+
+/**
+ * 勾一个子任务:PATCH /api/requirements/{id}/checklist/{itemId} {done}。只改那一项(Agent 同时在勾别的项不会被盖掉)。
+ * done 是显式值,重复请求结果一样。
+ */
+export async function setChecklistItemOnHub(cfg: HubConfig, id: string, itemId: string, done: boolean): Promise<Requirement> {
+  const res = await appFetch(`${cfg.serverUrl}${scoped(cfg, `/api/requirements/${encodeURIComponent(id)}/checklist/${encodeURIComponent(itemId)}`)}`, {
+    method: 'PATCH',
+    headers: { Authorization: `Bearer ${cfg.token}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ done }),
+  });
+  const data = await res.json().catch(() => null) as { requirement?: unknown; error?: string } | null;
+  if (res.status === 403) throw new RequirementsHubError('你没有修改这条需求的权限', 403);
+  if (res.status === 404 && data?.error === 'checklist_item_not_found') throw new RequirementsHubError('这个子任务已被删除，请刷新', 404);
+  if (res.status === 404) throw new RequirementsHubError(HUB_CANNOT_EDIT, 404);
+  if (!res.ok) throw new RequirementsHubError('子任务没有保存，请重试', res.status);
+  const row = requirementFromHub(data?.requirement);
+  if (!row) throw new RequirementsHubError('Hub 没有返回这条需求', 502);
+  return row;
 }
 
 export const HUB_CANNOT_EDIT = '这个 Hub 还不能修改已有需求的内容，升级 Hub 后再试';

@@ -305,6 +305,75 @@ async function desktopFlows(page, vp) {
     noDetailOpened: await page.locator(tid('req-detail')).count() === 0,
   }, { hub: moved?.column });
 
+  // checklist progress on the card (seed: 登录页支持扫码登录 has 3/7)
+  const prog = await page.evaluate(() => {
+    const card = [...document.querySelectorAll('[data-testid^="req-card-"]')].find(c => c.textContent.includes('登录页支持扫码登录'));
+    const p = card?.querySelector('[data-testid="task-checklist-progress"]');
+    const bar = card?.querySelector('[data-testid="task-checklist-bar"]');
+    return { text: p?.textContent ?? null, barW: bar ? bar.getBoundingClientRect().width : 0, trackW: bar ? bar.parentElement.getBoundingClientRect().width : 0 };
+  });
+  if (ROLES === 'two') {
+    record(vp, 'cards: checklist progress 3/7 + bar', { text: !!prog.text && prog.text.includes('3/7'), bar: Math.abs(prog.barW / prog.trackW - 3 / 7) < 0.02 }, { text: prog.text, ratio: prog.trackW ? r1(prog.barW / prog.trackW * 100) + '%' : '-' });
+
+    // detail: description preview/edit + checklist toggle / add / drag reorder / delete, each read back from the hub
+    const cName = '登录页支持扫码登录';
+    await cardByName(page, cName).click();
+    await page.locator(tid('req-detail')).waitFor();
+    await page.waitForTimeout(400);
+    const previewShown = await page.locator(tid('req-description-preview')).count();
+    await page.locator(tid('req-checklist-item-s3')).click();
+    await page.waitForTimeout(600);
+    const afterToggle = (await hubRow(cName)).checklist;
+    await page.locator(tid('req-checklist-input')).fill('补一条子任务');
+    await page.keyboard.press('Enter');
+    await page.waitForTimeout(600);
+    const afterAdd = (await hubRow(cName)).checklist;
+    // drag the first item's handle below the third
+    const h = await box(page, tid('req-checklist-handle-s0'));
+    const t = await box(page, tid('req-checklist-item-s2'));
+    await page.locator(tid('req-checklist-item-s0')).hover();
+    await page.mouse.move(h.x + h.w / 2, h.y + h.h / 2);
+    await page.mouse.down();
+    await page.mouse.move(h.x + h.w / 2, t.y + t.h * 0.8, { steps: 8 });
+    const dropShown = await page.locator(tid('req-checklist-drop')).count();
+    await shot(page, 'flow-checklist-drag');
+    await page.mouse.up();
+    await page.waitForTimeout(700);
+    const afterMove = (await hubRow(cName)).checklist;
+    await page.locator(tid('req-checklist-item-s5')).hover();
+    await page.locator(tid('req-checklist-delete-s5')).click();
+    await page.waitForTimeout(600);
+    const afterDelete = (await hubRow(cName)).checklist;
+    await page.locator(tid('req-description-mode-edit')).click();
+    await page.locator(tid('req-description-input')).fill('## 目标\n扫码登录\n\n**验收**:三端都能扫');
+    await page.locator(tid('req-description-mode-preview')).click();
+    const rendered = await page.locator(`${tid('req-description-preview')}`).textContent();
+    await page.locator(tid('req-edit-save')).click();
+    await page.waitForTimeout(700);
+    await shot(page, 'flow-description-checklist');
+    const afterDesc = await hubRow(cName);
+    record(vp, 'detail: description + checklist round-trip', {
+      previewFirst: previewShown === 1,
+      toggleOneItem: afterToggle.map(i => i.done).join() === 'true,true,true,true,false,false,false',
+      add: afterAdd.length === 8 && afterAdd[7].text === '补一条子任务',
+      dragIndicator: dropShown === 1,
+      reorder: afterMove.slice(0, 3).map(i => i.id).join() === 's1,s2,s0',
+      delete: afterDelete.length === 7 && !afterDelete.some(i => i.id === 's5'),
+      descriptionSaved: afterDesc.description === '## 目标\n扫码登录\n\n**验收**:三端都能扫',
+      previewRendersMarkdown: !!rendered && !rendered.includes('**'),
+    }, { order: afterMove.slice(0, 3).map(i => i.id).join() });
+    await page.locator(tid('req-detail-close')).click();
+  } else {
+    await cardByName(page, '登录页支持扫码登录').click();
+    await page.locator(tid('req-detail')).waitFor();
+    record(vp, 'old hub: no description/checklist, upgrade hint', {
+      hint: await page.locator(tid('req-details-unsupported')).count() === 1,
+      noChecklist: await page.locator(tid('req-checklist')).count() === 0,
+      noProgressOnCards: await page.locator(tid('task-checklist-progress')).count() === 0,
+    });
+    await page.locator(tid('req-detail-close')).click();
+  }
+
   // drawer edit
   await cardByName(page, '设置页拆分子页面').click();
   await page.locator(tid('req-detail')).waitFor();

@@ -18,6 +18,12 @@ ck('坏日期丢掉，缺名字丢掉', requirementFromHub({ id: 'x', name: 'a',
   ck('agent_owner 种类不对当未分配,卡片不丢', requirementFromHub({ id: 'r', name: 'x', owner: null, participants: [], agent_owner: { kind: 'user', id: 'u' } })?.agentOwner === null);
 }
 
+{
+  const row = requirementFromHub({ id: 'r', name: 'x', description: '# 标题', checklist: [{ id: 'a', text: '一', done: true }, { id: '', text: '坏' }, 'junk', { id: 'b', text: '二' }] });
+  ck('描述 / 子任务读进来,坏项丢掉', row?.description === '# 标题' && JSON.stringify(row?.checklist) === '[{"id":"a","text":"一","done":true},{"id":"b","text":"二","done":false}]');
+  ck('旧 Hub 没有这两个字段 → undefined', requirementFromHub({ id: 'r', name: 'x' })?.description === undefined && requirementFromHub({ id: 'r', name: 'x' })?.checklist === undefined);
+}
+
 function card(id: string, name: string, column: Requirement['column'] = 'pool'): Requirement {
   return { id, name, priority: 'normal', assignee: '', due: '', column, createdAt: '2026-09-28T00:00:00.000Z' };
 }

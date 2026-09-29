@@ -9,11 +9,17 @@ export const REQ_COLUMN_LABEL: Record<ReqColumn, string> = { pool: '需求池', 
 
 import type { RequirementPersonRef } from './requirement-people';
 
+export interface ChecklistItem { id: string; text: string; done: boolean }
+
 export interface Requirement {
   /** 负责人。两个角色的 Hub 上只会是人类;旧 Hub 上可以是人类或 Agent(单一负责人)。 */
   owner?: RequirementPersonRef | null;
   /** 负责 Agent(执行者,节点)。undefined = 这个 Hub 还不分两个角色。 */
   agentOwner?: RequirementPersonRef | null;
+  /** 描述(markdown)。undefined = 这个 Hub 还没有描述 / 子任务。 */
+  description?: string;
+  /** 子任务(有序)。undefined = 这个 Hub 还没有。 */
+  checklist?: ChecklistItem[];
   participants?: RequirementPersonRef[];
   id: string;
   name: string;

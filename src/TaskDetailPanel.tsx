@@ -12,13 +12,15 @@ import type { HubConfig } from './api';
 import { REQ_COLUMN_LABEL, REQ_COLUMNS, type ReqColumn, type Requirement } from './requirements-model';
 import type { RequirementPerson } from './requirement-people';
 import type { RequirementAssignments } from './requirement-people-api';
-import { checkDraft, editDraftOf, editPatch, hasRoles, type EditDraft, type EditPatch } from './task-board-model';
-import { BOARD_RADIUS, cardBg, liftedShadow, STATUS_TONE, useTaskStyles } from './TaskBoardParts';
+import { checkDraft, DESCRIPTION_MAX, editDraftOf, editPatch, hasDetails, hasRoles, type EditDraft, type EditPatch } from './task-board-model';
+import TaskChecklist from './TaskChecklist';
+import MarkdownMessage from './MarkdownMessage';
+import { BOARD_RADIUS, cardBg, liftedShadow, Segmented, STATUS_TONE, useTaskStyles } from './TaskBoardParts';
 import { DueField, fieldStyles, PriorityPicker, RoleFields } from './TaskCreateDialog';
 
 export const DRAWER_WIDTH = 420;
 
-export default function TaskDetailPanel({ cfg, item, mode, top, people, peopleLoading, onLoadPeople, moving, moveError, onMove, onSave, onAssignmentsSaved, onClose }: {
+export default function TaskDetailPanel({ cfg, item, mode, top, people, peopleLoading, onLoadPeople, moving, moveError, onMove, onSave, onAssignmentsSaved, onClose, pointer, checklistError, onChecklistToggle, onChecklistAdd, onChecklistDelete, onChecklistMove }: {
   cfg: HubConfig;
   item: Requirement;
   mode: 'drawer' | 'page';
@@ -33,6 +35,13 @@ export default function TaskDetailPanel({ cfg, item, mode, top, people, peopleLo
   onSave: (patch: EditPatch) => Promise<string | null>;
   onAssignmentsSaved: (a: RequirementAssignments) => void;
   onClose: () => void;
+  /** 鼠标界面:子任务可拖动排序。 */
+  pointer: boolean;
+  checklistError: string;
+  onChecklistToggle: (id: string, done: boolean) => void;
+  onChecklistAdd: (text: string) => boolean;
+  onChecklistDelete: (id: string) => void;
+  onChecklistMove: (from: number, to: number) => void;
 }) {
   const s = useTaskStyles();
   const f = fieldStyles();
@@ -57,6 +66,7 @@ export default function TaskDetailPanel({ cfg, item, mode, top, people, peopleLo
         due: d.due === base.due ? next.due : d.due,
         owner: JSON.stringify(d.owner) === JSON.stringify(base.owner) ? next.owner : d.owner,
         agentOwner: JSON.stringify(d.agentOwner) === JSON.stringify(base.agentOwner) ? next.agentOwner : d.agentOwner,
+        description: d.description === base.description ? next.description : d.description,
       };
     });
   }, [item]);
@@ -134,6 +144,22 @@ export default function TaskDetailPanel({ cfg, item, mode, top, people, peopleLo
       <Field label="预计完成">
         <DueField value={draft.due} onChange={due => set({ due })} error={error?.field === 'due' ? error.message : undefined} idBase="req-edit-due" />
       </Field>
+      {hasDetails(item) ? (
+        <>
+          <DescriptionField value={draft.description} onChange={description => set({ description })} />
+          <TaskChecklist
+            items={item.checklist ?? []}
+            pointer={pointer}
+            onToggle={onChecklistToggle}
+            onAdd={onChecklistAdd}
+            onDelete={onChecklistDelete}
+            onMove={onChecklistMove}
+            error={checklistError}
+          />
+        </>
+      ) : (
+        <Text style={s.muted} testID="req-details-unsupported">升级 Hub 后可写描述(markdown)和子任务</Text>
+      )}
       {!legacy ? (
         <Field label="参与人">
           <RequirementAssignmentsEditor key={item.id} cfg={cfg} item={item} fields="participants" onSaved={onAssignmentsSaved} />
@@ -200,6 +226,41 @@ export default function TaskDetailPanel({ cfg, item, mode, top, people, peopleLo
         {footer}
       </View>
     </Modal>
+  );
+}
+
+/** 描述:markdown 原文,编辑 / 预览两档(预览用聊天里同一个 MarkdownMessage 渲染)。跟标题一起「保存修改」。 */
+function DescriptionField({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  const s = useTaskStyles();
+  const f = fieldStyles();
+  const [mode, setMode] = useState<'edit' | 'preview'>(value.trim() ? 'preview' : 'edit');
+  return (
+    <View style={{ gap: spacing.sm }} testID="req-description">
+      <View style={[f.row, { justifyContent: 'space-between' }]}>
+        <Text style={f.label}>描述</Text>
+        <Segmented s={s} items={[{ key: 'edit', label: '编辑' }, { key: 'preview', label: '预览' }]} value={mode} onChange={setMode} testID="req-description-mode" />
+      </View>
+      {mode === 'edit' ? (
+        <>
+          <TextInput
+            value={value}
+            onChangeText={onChange}
+            multiline
+            maxLength={DESCRIPTION_MAX}
+            placeholder="支持 Markdown:目标、背景、验收标准…"
+            placeholderTextColor={colors.textMuted}
+            style={[f.input, { minHeight: 140, textAlignVertical: 'top' }]}
+            testID="req-description-input"
+            accessibilityLabel="描述(Markdown)"
+          />
+          {value.length > DESCRIPTION_MAX * 0.9 ? <Text style={s.muted}>{value.length} / {DESCRIPTION_MAX}</Text> : null}
+        </>
+      ) : (
+        <Pressable onPress={() => setMode('edit')} accessibilityRole="button" accessibilityLabel="编辑描述" style={[f.input, { minHeight: 60, backgroundColor: 'transparent' }]} testID="req-description-preview">
+          {value.trim() ? <MarkdownMessage>{value}</MarkdownMessage> : <Text style={s.muted}>还没有描述,点这里编辑</Text>}
+        </Pressable>
+      )}
+    </View>
   );
 }
 

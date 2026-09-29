@@ -6,6 +6,7 @@ import {
   editPatch, emptyDraft, localToday, neighbourColumn, nextSort, ownerCounts, ownerKeyOf, ownerLabel, ownersForScope,
   patchApplied, revertMove, scopeOf, sortRows, statusPatch, toggleIn, UNASSIGNED, type DragState,
   hasRoles, roleAvatars, roleKeysOf, roleKinds,
+  addChecklistItem, checklistDropIndex, checklistProgress, hasDetails, moveChecklistItem, newChecklistId, removeChecklistItem, setChecklistDone,
 } from './task-board-model';
 import { createRequirementBody } from './requirements-hub';
 import type { Requirement } from './requirements-model';
@@ -196,6 +197,32 @@ console.log('# 负责人(人类)/ 负责 Agent 两个角色');
   const legacy = R('old', { owner: NODE_A, agentOwner: undefined });
   ck('详情:旧 Hub 不发 agent_owner', editPatch(legacy, { ...editDraftOf(legacy), agentOwner: NODE_B }) === null);
   ck('Hub 忽略了 agent_owner = 没生效', !patchApplied(item, { agent_owner: NODE_B }) && patchApplied({ ...item, agentOwner: NODE_B }, { agent_owner: NODE_B }));
+}
+
+
+console.log('# 描述 / 子任务');
+{
+  const list = [{ id: 'a', text: '一', done: true }, { id: 'b', text: '二', done: false }, { id: 'c', text: '三', done: false }];
+  ck('进度 1/3', JSON.stringify(checklistProgress(list)) === JSON.stringify({ done: 1, total: 3, ratio: 1 / 3 }));
+  ck('没有子任务 = 0/0,不画', checklistProgress(undefined).total === 0 && checklistProgress([]).ratio === 0);
+  ck('Hub 带两个字段才算支持', hasDetails({ description: '', checklist: [] }) && !hasDetails({ description: undefined, checklist: undefined }));
+  const added = addChecklistItem(list, '  四\n行  ', 'd')!;
+  ck('添加:折成一行、去空白、默认未完成', JSON.stringify(added[3]) === '{"id":"d","text":"四 行","done":false}');
+  ck('添加:空文字 / 超长 / 满 100 项被拒', addChecklistItem(list, '  ') === null && addChecklistItem(list, 'x'.repeat(501)) === null && addChecklistItem(Array.from({ length: 100 }, (_, i) => ({ id: `i${i}`, text: 't', done: false })), 'x') === null);
+  ck('生成的 id 满足 Hub 的格式', /^ck_[0-9a-f]{16}$/.test(newChecklistId()));
+  ck('勾选只动那一项', setChecklistDone(list, 'b', true).map(i => i.done).join() === 'true,true,false');
+  ck('删除', removeChecklistItem(list, 'b').map(i => i.id).join() === 'a,c');
+  ck('排序:把第一项挪到最后', moveChecklistItem(list, 0, 2).map(i => i.id).join() === 'b,c,a');
+  ck('排序:越界 / 不动返回同一个数组', moveChecklistItem(list, 0, 0) === list && moveChecklistItem(list, 0, 9) === list);
+  const rows = [{ top: 0, bottom: 36 }, { top: 36, bottom: 72 }, { top: 72, bottom: 108 }];
+  ck('拖动落点:拖第一项到第三行下半 → 2', checklistDropIndex(rows, 100, 0) === 2);
+  ck('拖动落点:拖第三项到第一行上半 → 0', checklistDropIndex(rows, 5, 2) === 0);
+  ck('拖动落点:在自己那一行里不动', checklistDropIndex(rows, 50, 1) === 1);
+  const item = R('m', { description: '旧描述', checklist: list });
+  ck('描述跟「保存修改」一起走,只发改过的', JSON.stringify(editPatch(item, { ...editDraftOf(item), description: '新\r\n描述' })) === '{"description":"新\\n描述"}');
+  ck('旧 Hub 不发描述', editPatch(R('n'), { ...editDraftOf(R('n')), description: 'x' }) === null);
+  ck('Hub 带回描述 = 生效', patchApplied({ ...item, description: '新' }, { description: '新' }) && !patchApplied(item, { description: '新' }));
+  ck('清单替换:Hub 回来的顺序对得上 = 生效', patchApplied({ ...item, checklist: [list[2], list[0], list[1]] }, { checklist: [list[2], list[0], list[1]] }) && !patchApplied(item, { checklist: [list[2], list[0], list[1]] }));
 }
 
 console.log('# 界面接线(源码)');
