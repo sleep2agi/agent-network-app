@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useSyncExternalStore } from 'react';
 import { Platform, Pressable, StyleSheet } from 'react-native';
 import { Ionicons } from './icons';
-import { colors } from './theme';
+import { colors, radius } from './theme';
 import { ds } from './ui-scale';
 import { applyStoredPinState, pinStorageKey, togglePinState } from './desktop-window-pin';
 
@@ -60,13 +60,13 @@ export default function DesktopWindowPin({ placement = 'floating', hidden = fals
   const { available, pinned, busy, toggle } = useDesktopWindowPin();
   const styles = useMemo(() => StyleSheet.create({
     button: placement === 'rail' ? {
-      width: ds(40), height: ds(40), borderRadius: 10, marginBottom: ds(12),
+      width: ds(40), height: ds(40), borderRadius: radius.control, marginBottom: ds(12),
       alignItems: 'center', justifyContent: 'center',
       backgroundColor: pinned ? colors.railActiveBg : 'transparent',
       opacity: busy ? 0.55 : 1,
     } : {
       position: 'absolute', top: 10, right: 10, zIndex: 1000,
-      width: 34, height: 34, borderRadius: 8,
+      width: 34, height: 34, borderRadius: radius.item,
       alignItems: 'center', justifyContent: 'center',
       // 极简:未置顶时是无底无框的图标;置顶时一档中性底色表示「开着」。
       backgroundColor: pinned ? colors.rowActive : 'transparent',

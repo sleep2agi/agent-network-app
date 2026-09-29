@@ -16,6 +16,7 @@ import { colors, onThemeChange, radius, spacing } from './theme';
 import { formatTime } from './time';
 import { usePoll } from './usePoll';
 import RequirementBoard from './RequirementBoard';
+import { buttonStyle, buttonTextStyle } from './elevation';
 
 // Tasks tab. The page itself (header, 列表 / 看板 of the requirement pool) is
 // RequirementBoard; this file owns the 派发记录 section — a scoped list of hub
@@ -278,7 +279,7 @@ const makeStyles = () =>
     chip: {
       paddingHorizontal: spacing.md,
       paddingVertical: spacing.xs + 2,
-      borderRadius: radius.sm,
+      borderRadius: radius.pill,
     },
     chipActive: {
       backgroundColor: colors.rowActive,
@@ -297,7 +298,7 @@ const makeStyles = () =>
     // 极简:任务卡不描边,靠卡片色与地面的一档差区分;圆角进 token。
     card: {
       backgroundColor: colors.card,
-      borderRadius: radius.md,
+      borderRadius: radius.surface,
       padding: spacing.lg,
       marginBottom: spacing.sm,
     },
@@ -307,7 +308,7 @@ const makeStyles = () =>
       gap: spacing.sm,
       marginBottom: spacing.xs,
     },
-    statusDot: { width: 8, height: 8, borderRadius: 4 },
+    statusDot: { width: 8, height: 8, borderRadius: radius.pill },
     status: { color: colors.textSecondary, fontSize: 12, fontWeight: '600', flex: 1 },
     high: { color: colors.failed, fontSize: 10, fontWeight: '600' },
     time: { color: colors.textMuted, fontSize: 10 },
@@ -331,15 +332,8 @@ const makeStyles = () =>
     emptySub: { color: colors.textMuted, fontSize: 12 },
     errorTitle: { color: colors.failed, fontSize: 14, fontWeight: '600', marginBottom: spacing.sm },
     errorBody: { color: colors.textSecondary, fontSize: 12, textAlign: 'center', marginBottom: spacing.md },
-    retryBtn: {
-      paddingHorizontal: spacing.lg,
-      paddingVertical: spacing.sm,
-      borderRadius: 8,
-      backgroundColor: colors.accent + '22',
-      borderColor: colors.accent,
-      borderWidth: 1,
-    },
-    retryText: { color: colors.accent, fontSize: 13, fontWeight: '600' },
+    retryBtn: { ...buttonStyle('secondary') },
+    retryText: { ...buttonTextStyle('secondary') },
   });
 
 let styles = makeStyles();

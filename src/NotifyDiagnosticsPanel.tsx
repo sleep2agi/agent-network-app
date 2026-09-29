@@ -5,7 +5,7 @@ import { useEffect, useState, useSyncExternalStore } from 'react';
 import { Platform, Pressable, StyleSheet, View } from 'react-native';
 import { Text } from './ui-text';
 import * as Clipboard from 'expo-clipboard';
-import { colors, onThemeChange, spacing } from './theme';
+import { colors, onThemeChange, spacing, radius } from './theme';
 import { APP_VERSION } from './version';
 import { diagnosticsRows, formatDiagnostics, getNotifyDiagnostics, subscribeNotifyDiagnostics } from './notify-diagnostics';
 import { refreshNotifyDiagnostics } from './notifier-runtime';
@@ -62,7 +62,7 @@ const makeStyles = () => StyleSheet.create({
   value: { color: colors.text, fontSize: 12, flex: 1, minWidth: 0 },
   hint: { color: colors.textMuted, fontSize: 12 },
   actions: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, marginTop: spacing.sm, flexWrap: 'wrap' },
-  button: { borderWidth: 1, borderColor: colors.border, borderRadius: 8, paddingHorizontal: spacing.md, paddingVertical: spacing.sm, backgroundColor: colors.card },
+  button: { borderWidth: 1, borderColor: colors.border, borderRadius: radius.control, paddingHorizontal: spacing.md, paddingVertical: spacing.sm, backgroundColor: colors.card },
   buttonText: { color: colors.text, fontSize: 13 },
 });
 

@@ -4,7 +4,8 @@ import { useEffect, useState } from 'react';
 import { Platform, Pressable, View } from 'react-native';
 import { Text } from './ui-text';
 
-import { colors, spacing } from './theme';
+import { colors, spacing, radius } from './theme';
+import { elevated } from './elevation';
 
 export default function InfoTip({ label, text }: { label: string; text: string }) {
   const [open, setOpen] = useState(false);
@@ -23,7 +24,7 @@ export default function InfoTip({ label, text }: { label: string; text: string }
         accessibilityState={{ expanded: open }}
         onPress={() => setOpen(v => !v)}
         style={(state: any) => [
-          { width: 22, height: 22, borderRadius: 11, borderWidth: 1, borderColor: colors.border, alignItems: 'center', justifyContent: 'center' },
+          { width: 22, height: 22, borderRadius: radius.pill, borderWidth: 1, borderColor: colors.border, alignItems: 'center', justifyContent: 'center' },
           state.focused ? { outlineStyle: 'solid', outlineWidth: 2, outlineColor: colors.accent, outlineOffset: 1 } as any : null,
           state.hovered || open ? { backgroundColor: colors.rowHover } : null,
         ]}
@@ -33,7 +34,7 @@ export default function InfoTip({ label, text }: { label: string; text: string }
       {open ? (
         <View
           accessibilityRole={'note' as any}
-          style={{ position: 'absolute', top: 28, left: -8, width: 320, maxWidth: 360, backgroundColor: colors.card, borderWidth: 1, borderColor: colors.border, borderRadius: 8, padding: spacing.md, shadowColor: '#000', shadowOpacity: 0.15, shadowRadius: 12, shadowOffset: { width: 0, height: 4 }, elevation: 6 }}
+          style={{ position: 'absolute', top: 28, left: -8, width: 320, maxWidth: 360, backgroundColor: colors.card, borderRadius: radius.control, padding: spacing.md, ...elevated('floating') }}
         >
           <Text style={{ color: colors.textSecondary, fontSize: 12, lineHeight: 18 }}>{text}</Text>
         </View>

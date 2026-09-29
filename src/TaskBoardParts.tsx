@@ -1,29 +1,31 @@
 // 任务看板的共用小件与样式:卡片、优先级点、期限胶囊、负责人、分段控件、筛选胶囊、主按钮。
-// 圆角 / 阴影:卡片与列 16、输入与按钮 12、胶囊 999、柔和阴影(modern-radius-refresh 的全局 token
-// 还没合进 main;合进来后把 BOARD_RADIUS / softShadow 换成 token 即可,别处不用改)。
+// 圆角 / 阴影:卡片与列 16、输入与按钮 12、胶囊 999、柔和阴影 —— 都取自全局 token
+// (theme.ts radius / elevation.ts);BOARD_RADIUS / softShadow / liftedShadow 只是看板里的别名。
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 import { Text } from './ui-text';
 import { Ionicons } from './icons';
 import AliasAvatar from './AliasAvatar';
-import { colors, onThemeChange, spacing, themeMode, type as typeScale, weight } from './theme';
+import { colors, onThemeChange, radius, spacing, themeMode, type as typeScale, weight } from './theme';
+import { shadowOnly } from './elevation';
 import { REQ_PRIORITY_LABEL, type ReqPriority, type Requirement } from './requirements-model';
 import type { RequirementPerson } from './requirement-people';
 import { dueInfo, ownerLabel, type DueTone } from './task-board-model';
 
 export const BOARD_RADIUS = {
-  card: 16, control: 12, pill: 999,
+  card: radius.surface, control: radius.control, pill: radius.pill,
 } as const;
 /** 头部一行里所有控件的高度:同高 + alignItems center ⇒ 一条中线。 */
 export const CONTROL_H = 32;
 export const CARD_PAD = 14;
 
 /** 柔和阴影:浅色主题靠阴影浮起,深色主题阴影看不见,改用一条发丝边。 */
+// 几何与 #495 原版一致:浅色只有阴影(不加边框,分段选中块和卡片尺寸不变),深色一条发丝边。
 export const softShadow = () => (themeMode() === 'dark'
-  ? { borderWidth: StyleSheet.hairlineWidth, borderColor: colors.border }
-  : { shadowColor: 'rgba(16,24,40,1)', shadowOpacity: 0.07, shadowRadius: 6, shadowOffset: { width: 0, height: 2 }, elevation: 1 });
+  ? { borderWidth: StyleSheet.hairlineWidth, borderColor: colors.floatingBorder }
+  : shadowOnly('raised'));
 
-export const liftedShadow = () => ({ shadowColor: 'rgba(16,24,40,1)', shadowOpacity: themeMode() === 'dark' ? 0.5 : 0.16, shadowRadius: 24, shadowOffset: { width: 0, height: 10 }, elevation: 8 });
+export const liftedShadow = () => shadowOnly('floating');
 
 /** 列底色和卡片底色要差一档:浅色 = 灰列白卡;深色 = 深列浅卡。 */
 export const columnBg = () => (themeMode() === 'dark' ? colors.card : colors.subtleFill);
@@ -39,7 +41,7 @@ export const makeTaskStyles = () => StyleSheet.create({
   pageTitle: { color: colors.text, fontSize: typeScale.heading, fontWeight: weight.strong, lineHeight: CONTROL_H },
   spacer: { flex: 1 },
   segment: { flexDirection: 'row', height: CONTROL_H, padding: 3, borderRadius: BOARD_RADIUS.control, backgroundColor: colors.subtleFill, alignItems: 'center' },
-  segmentItem: { height: CONTROL_H - 6, paddingHorizontal: spacing.md, borderRadius: BOARD_RADIUS.control - 3, alignItems: 'center', justifyContent: 'center' },
+  segmentItem: { height: CONTROL_H - 6, paddingHorizontal: spacing.md, borderRadius: radius.item, alignItems: 'center', justifyContent: 'center' },
   segmentItemOn: { backgroundColor: cardBg(), ...softShadow() },
   segmentText: { color: colors.textSecondary, fontSize: typeScale.small, fontWeight: weight.medium },
   segmentTextOn: { color: colors.text, fontWeight: weight.strong },
@@ -58,15 +60,15 @@ export const makeTaskStyles = () => StyleSheet.create({
   column: { flex: 1, flexBasis: 0, minWidth: 0, borderRadius: BOARD_RADIUS.card, backgroundColor: columnBg(), borderWidth: 2, borderColor: 'transparent', overflow: 'hidden' },
   columnOver: { borderColor: colors.accent, backgroundColor: colors.accent + '10' },
   columnHead: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, paddingHorizontal: spacing.md + 2, paddingTop: spacing.md, paddingBottom: spacing.sm },
-  columnDot: { width: 8, height: 8, borderRadius: 4 },
+  columnDot: { width: 8, height: 8, borderRadius: radius.pill },
   columnName: { color: colors.text, fontSize: typeScale.body, fontWeight: weight.strong },
   countPill: { minWidth: 22, height: 20, paddingHorizontal: 7, borderRadius: BOARD_RADIUS.pill, backgroundColor: themeMode() === 'dark' ? colors.rowActive : colors.card, alignItems: 'center', justifyContent: 'center' },
   countText: { color: colors.textSecondary, fontSize: typeScale.caption, fontWeight: weight.strong },
   columnBody: { flex: 1 },
   columnBodyContent: { paddingHorizontal: spacing.sm + 2, paddingBottom: spacing.sm, gap: spacing.sm },
-  columnEmpty: { alignItems: 'center', justifyContent: 'center', paddingVertical: spacing.xl, borderRadius: BOARD_RADIUS.card - 4, borderWidth: 1, borderStyle: 'dashed', borderColor: colors.border },
+  columnEmpty: { alignItems: 'center', justifyContent: 'center', paddingVertical: spacing.xl, borderRadius: radius.control, borderWidth: 1, borderStyle: 'dashed', borderColor: colors.border },
   columnEmptyText: { color: colors.textMuted, fontSize: typeScale.small },
-  dropLine: { height: 3, borderRadius: 2, backgroundColor: colors.accent, marginVertical: -1 },
+  dropLine: { height: 3, borderRadius: radius.pill, backgroundColor: colors.accent, marginVertical: -1 },
   quickAdd: { flexDirection: 'row', alignItems: 'center', gap: 6, height: 36, marginHorizontal: spacing.sm + 2, marginBottom: spacing.sm + 2, paddingHorizontal: spacing.sm, borderRadius: BOARD_RADIUS.control },
   quickAddText: { color: colors.textSecondary, fontSize: typeScale.small + 1, fontWeight: weight.medium },
   quickAddInput: { marginHorizontal: spacing.sm + 2, marginBottom: spacing.sm + 2, minHeight: 40, paddingHorizontal: spacing.md, borderRadius: BOARD_RADIUS.control, backgroundColor: cardBg(), borderWidth: 1, borderColor: colors.accent, color: colors.text, fontSize: typeScale.body },
@@ -79,7 +81,7 @@ export const makeTaskStyles = () => StyleSheet.create({
   meta: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, minHeight: 20 },
   metaText: { color: colors.textSecondary, fontSize: typeScale.small, flexShrink: 1 },
   metaMuted: { color: colors.textMuted, fontSize: typeScale.small },
-  prioDot: { width: 8, height: 8, borderRadius: 4 },
+  prioDot: { width: 8, height: 8, borderRadius: radius.pill },
   owner: { flexDirection: 'row', alignItems: 'center', gap: 6, flexShrink: 1, minWidth: 0 },
   due: { marginLeft: 'auto', flexDirection: 'row', alignItems: 'center', gap: 4, height: 20, paddingHorizontal: 7, borderRadius: BOARD_RADIUS.pill },
   dueText: { fontSize: typeScale.caption, fontWeight: weight.medium },

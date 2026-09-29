@@ -41,6 +41,11 @@ const DARK = {
   // 手指离开中间区(在 ✕ / 文 上)时面板暗一档 —— 实色,不能用透明度(会透出下面的大条)。
   voiceArcDim: '#1c1c1f',
   voiceArcText: '#ededef',
+  // 浮起的面(见 ELEVATION):深色下没有阴影可用,靠「亮一档的面 + 细边」把它从地面上分出来。
+  floatingBg: '#1c1c20',
+  floatingBorder: '#2e2e33',
+  // 次按钮(tonal):强调色的浅底 + 强调色字。
+  tonalBg: '#17313a',
 };
 
 // 白色主题 (Vincent tg 811/812) — same restraint on white surfaces;
@@ -79,6 +84,10 @@ const LIGHT: typeof DARK = {
   voiceArc: '#f2f2f4',
   voiceArcDim: '#d4d4d8',
   voiceArcText: '#1d2026',
+  floatingBg: '#ffffff',
+  // 浅色下浮起的面靠阴影,不画边:透明边只为了与深色同尺寸(不让内容在切主题时挪 1px)。
+  floatingBorder: 'transparent',
+  tonalBg: '#eaf5f6',
 };
 
 export type ThemeMode = 'dark' | 'light';
@@ -224,7 +233,62 @@ export const spacing: { xs: number; sm: number; md: number; lg: number; xl: numb
 
 // 极简(2026-09-24):圆角、字号、字重各收成一套刻度。原来源码里散着 14 种圆角、14 种字号、
 // 51 处 700 粗体——视觉上的「乱」主要来自这里,不是颜色。新代码只用这三组值。
-export const radius = { sm: 6, md: 10, lg: 14, pill: 999 };
+//
+// 圆角(2026-09-29 Vincent「感觉这个 UI 还是有点丑,改的现代一点?四个角圆角一点」):
+// 按「它是什么」取值,不按像素挑。全仓 borderRadius 只许写这里的 token(src/radius-tokens.test.ts 门禁)。
+//   surface  卡片 / 弹窗 / 抽屉 / 底部面板 / 面板 / 浮层              16
+//   control  输入框 / 按钮 / 分段控件 / 搜索框 / 菜单                 12
+//   thumb    聊天里的图片 / 视频缩略图                                12
+//   item     嵌在面或控件**里面**的一格:分段选中块、侧栏/导航项、代码块、
+//            表格、≤ 32 高的小图标按钮                               8
+//   mark     极小件:键帽、≤ 24 的悬停底、细把手                       4
+//   inline   一行文字里的标记(查找命中高亮)                          2
+//   bubble   聊天气泡                                                 18
+//   pill     chip / tag / badge / pill,以及所有圆:圆点、圆形按钮、单选圈。
+//            999 由 RN 与 CSS 夹到短边一半,所以圆不用写 size / 2。     999
+// sm / md / lg 是旧名,值跟着新档走(item / control / surface),留着让还在路上的分支照样编译。
+export const radius = {
+  inline: 2,
+  mark: 4,
+  item: 8,
+  control: 12,
+  thumb: 12,
+  surface: 16,
+  bubble: 18,
+  pill: 999,
+  sm: 8,
+  md: 12,
+  lg: 16,
+} as const;
+
+/**
+ * 头像:圆。全 app(手机列表、桌面列表、聊天、选择器、头像池)同一个形状 —— 它跟 dashboard 的
+ * AliasAvatar 对齐(见 AliasAvatar.tsx 的 circle mask),在线点也是按圆的右下角摆的。
+ * 所以这里不做「圆角方块」:那会让 app 和 dashboard 的同一个头像长得不一样。
+ */
+export const avatarRadius = (_size: number): number => radius.pill;
+
+/** 应用图标(登录页 logo 等):系统图标那种圆角方块,约 23%。 */
+export const appIconRadius = (size: number): number => Math.round(size * 0.23);
+
+// 浮起的面(菜单、浮层、抽屉、弹窗、灰底上的卡片)用一层很淡的阴影代替 1px 硬边框。
+// 深色下阴影看不见 —— 改用比底色亮一档的面 + 一条细边(colors.floatingBorder)。
+// 平台分支(web boxShadow / 原生 shadow* + elevation)在 src/elevation.ts;这里只放数值。
+export const ELEVATION = {
+  /** 灰底上的卡片、分组列表。 */
+  raised: { web: '0 1px 2px rgba(16,24,40,0.05), 0 1px 3px rgba(16,24,40,0.06)', y: 1, blur: 3, opacity: 0.07, android: 1 },
+  /** 菜单、浮层、抽屉、弹窗、toast。 */
+  floating: { web: '0 10px 30px rgba(16,24,40,0.12), 0 2px 8px rgba(16,24,40,0.06)', y: 8, blur: 24, opacity: 0.14, android: 6 },
+} as const;
+export type ElevationLevel = keyof typeof ELEVATION;
+
+/**
+ * 按钮:一种主按钮(强调色实底)、一种次按钮(浅色 tonal 底)。高度随平台:手机 40、桌面 36 ——
+ * 与 #424 的输入栏控件同高(composer-row-layout.ts COMPOSER_CONTROL_BASE = 40);桌面是鼠标,
+ * 36 就够。左右内边距统一 16。平台判断在 src/elevation.ts 的 buttonStyle()。
+ */
+export const CONTROL_HEIGHT = { phone: 40, desktop: 36 } as const;
+export const CONTROL_PAD_X = 16;
 export const type = { caption: 11, small: 12, body: 14, title: 16, heading: 20 };
 /** 最重只到 600:标题/名字用 600,正文 400,次要信息 400 + textSecondary。 */
 export const weight = { regular: '400', medium: '500', strong: '600' } as const;

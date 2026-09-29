@@ -4,7 +4,7 @@ import { Text, TextInput } from './ui-text';
 import { Ionicons } from './icons';
 import { HubConfig } from './api';
 import { DesktopStorageDiagnostics, HubProfile, getDesktopStorageDiagnostics, listHubProfiles, removeHubProfile, saveThemeMode } from './storage';
-import { THEME_PREFERENCES, THEME_PREFERENCE_LABEL, colors, onThemeChange, onThemePreferenceChange, setThemePreference, spacing, themeMode, themePreference, themePreferenceSummary, type ThemePreference } from './theme';
+import { THEME_PREFERENCES, THEME_PREFERENCE_LABEL, colors, onThemeChange, onThemePreferenceChange, setThemePreference, spacing, themeMode, themePreference, themePreferenceSummary, type ThemePreference, radius } from './theme';
 import { APP_VERSION } from './version';
 import { appFetch } from './app-fetch';
 import { checkDesktopUpdate, desktopUpdateLastCheckedAt, desktopUpdateSnapshot, subscribeDesktopUpdates } from './desktop-updater';
@@ -31,6 +31,7 @@ import SettingsPhonePage, { type PhonePagesCtx } from './SettingsPhonePages';
 import { settingsPageContentStyle } from './settings-kit';
 import { useModalSafePadding } from './safe-area-runtime';
 import { withBasePadding } from './modal-safe-area';
+import { elevated, buttonStyle, buttonTextStyle } from './elevation';
 
 // Settings (Vincent tg 720): who am I, where am I connected, which network, which build —
 // and the destructive actions live here instead of cluttering the agents list header.
@@ -1084,12 +1085,12 @@ const makeStyles = () =>
   sidebar: { width: 232, backgroundColor: colors.railBg, borderRightWidth: 1, borderRightColor: colors.border, paddingTop: spacing.lg },
   sidebarCompact: { width: '100%', borderRightWidth: 0, borderBottomWidth: 1, borderBottomColor: colors.border, paddingBottom: spacing.sm },
   sidebarTop: { paddingHorizontal: spacing.md, gap: spacing.md, marginBottom: spacing.md },
-  closeButton: { width: ds(32), height: ds(32), borderRadius: 8, borderWidth: 1, borderColor: colors.border, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.card },
-  searchBox: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, borderWidth: 1, borderColor: colors.border, borderRadius: 10, backgroundColor: colors.inputBg, paddingHorizontal: spacing.md, minHeight: ds(36) },
+  closeButton: { width: ds(32), height: ds(32), borderRadius: radius.item, borderWidth: 1, borderColor: colors.border, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.card },
+  searchBox: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, borderWidth: 1, borderColor: colors.border, borderRadius: radius.control, backgroundColor: colors.inputBg, paddingHorizontal: spacing.md, minHeight: ds(36) },
   searchInput: { flex: 1, color: colors.text, fontSize: 13, padding: 0, outlineStyle: 'none' } as any,
   categoryList: { paddingHorizontal: spacing.sm, gap: 2 },
   categoryRow: { flexDirection: 'row', paddingHorizontal: spacing.md, gap: spacing.sm },
-  categoryItem: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, paddingHorizontal: spacing.md, paddingVertical: spacing.sm + 2, borderRadius: 10 },
+  categoryItem: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, paddingHorizontal: spacing.md, paddingVertical: spacing.sm + 2, borderRadius: radius.item },
   categoryChip: { borderWidth: 1, borderColor: colors.border, paddingVertical: spacing.xs + 2 },
   categoryItemHover: { backgroundColor: colors.rowHover },
   categoryItemActive: { backgroundColor: colors.rowActive },
@@ -1123,14 +1124,14 @@ const makeStyles = () =>
   // 分段控件整体折到下一行 —— 说明文字不被挤成两行半个词。
   themeRow: { flexWrap: 'wrap', rowGap: spacing.sm, columnGap: spacing.md },
   themeRowCopy: { flexGrow: 1, flexShrink: 1, flexBasis: 150, minWidth: 150 },
-  segmented: { flexDirection: 'row', flexShrink: 0, padding: 2, borderRadius: 8, backgroundColor: colors.subtleFill, borderWidth: 1, borderColor: colors.border },
-  segment: { paddingHorizontal: spacing.sm + 2, paddingVertical: ds(6), borderRadius: 6, alignItems: 'center', justifyContent: 'center', minWidth: 44, borderWidth: 1, borderColor: 'transparent' },
+  segmented: { flexDirection: 'row', flexShrink: 0, padding: 2, borderRadius: radius.control, backgroundColor: colors.subtleFill, borderWidth: 1, borderColor: colors.border },
+  segment: { paddingHorizontal: spacing.sm + 2, paddingVertical: ds(6), borderRadius: radius.item, alignItems: 'center', justifyContent: 'center', minWidth: 44, borderWidth: 1, borderColor: 'transparent' },
   segmentSelected: { backgroundColor: colors.card, borderColor: colors.border },
   segmentText: { color: colors.textSecondary, fontSize: 13 },
   segmentTextSelected: { color: colors.text, fontWeight: '600' },
   quietRow: { justifyContent: 'flex-start', gap: spacing.sm },
   mutedItem: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.md, paddingTop: spacing.sm },
-  quietInput: { color: colors.text, fontSize: 14, borderWidth: 1, borderColor: colors.border, borderRadius: 6, paddingHorizontal: 8, paddingVertical: 4, minWidth: 64, textAlign: 'center', backgroundColor: colors.inputBg },
+  quietInput: { color: colors.text, fontSize: 14, borderWidth: 1, borderColor: colors.border, borderRadius: radius.item, paddingHorizontal: 8, paddingVertical: 4, minWidth: 64, textAlign: 'center', backgroundColor: colors.inputBg },
   profileRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingHorizontal: spacing.md, paddingVertical: spacing.md },
   profileCopy: { flex: 1, minWidth: 0 },
   inlineButton: { paddingHorizontal: spacing.xs },
@@ -1138,20 +1139,20 @@ const makeStyles = () =>
   dangerText: { color: colors.failed, fontSize: 14, fontWeight: '600' },
   dangerHint: { color: colors.failed, fontSize: 11 },
   errorText: { color: colors.failed, fontSize: 12, paddingHorizontal: spacing.md, paddingVertical: spacing.sm },
-  actionButton: { borderWidth: 1, borderColor: colors.border, borderRadius: 8, paddingHorizontal: spacing.md, paddingVertical: spacing.sm, backgroundColor: colors.card },
-  actionButtonText: { color: colors.text, fontSize: 13 },
-  dangerZone: { marginTop: spacing.lg, borderWidth: 1, borderColor: colors.failed, borderRadius: 12, overflow: 'hidden' },
+  actionButton: { ...buttonStyle('secondary') },
+  actionButtonText: { ...buttonTextStyle('secondary') },
+  dangerZone: { marginTop: spacing.lg, borderWidth: 1, borderColor: colors.failed, borderRadius: radius.surface, overflow: 'hidden' },
   dangerZoneTitle: { color: colors.failed, fontSize: 12, fontWeight: '600', paddingHorizontal: spacing.md, paddingTop: spacing.sm },
   dangerZoneRow: { paddingTop: spacing.sm },
-  confirmInput: { marginTop: spacing.md, borderWidth: 1, borderColor: colors.border, borderRadius: 8, color: colors.text, backgroundColor: colors.inputBg, paddingHorizontal: spacing.md, paddingVertical: spacing.sm },
+  confirmInput: { marginTop: spacing.md, borderWidth: 1, borderColor: colors.border, borderRadius: radius.control, color: colors.text, backgroundColor: colors.inputBg, paddingHorizontal: spacing.md, paddingVertical: spacing.sm },
   disabled: { opacity: 0.45 },
   divider: { height: 1, backgroundColor: colors.border, marginLeft: spacing.md },
   modalBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.55)', alignItems: 'center', justifyContent: 'center', padding: spacing.xl },
-  modalCard: { width: '100%', maxWidth: 440, backgroundColor: colors.card, borderColor: colors.border, borderWidth: 1, borderRadius: 14, padding: spacing.lg },
+  modalCard: { width: '100%', maxWidth: 440, backgroundColor: colors.card, borderRadius: radius.surface, padding: spacing.lg, ...elevated('floating') },
   modalTitle: { color: colors.text, fontSize: 17, fontWeight: '600' },
   modalBody: { color: colors.textSecondary, fontSize: 13, lineHeight: 20, marginTop: spacing.sm },
   modalActions: { flexDirection: 'row', justifyContent: 'flex-end', gap: spacing.sm, marginTop: spacing.lg },
-  modalButton: { borderColor: colors.border, borderWidth: 1, borderRadius: 9, paddingHorizontal: spacing.lg, paddingVertical: spacing.sm },
+  modalButton: { borderColor: colors.border, borderWidth: 1, borderRadius: radius.control, paddingHorizontal: spacing.lg, paddingVertical: spacing.sm },
   modalDanger: { borderColor: colors.failed },
 });
 

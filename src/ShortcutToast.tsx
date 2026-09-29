@@ -2,7 +2,8 @@
 // 录音本身的界面是输入框里的录音条(DesktopVoiceBar.tsx),这里只有这一条提示。
 import { StyleSheet, View } from 'react-native';
 import { Text } from './ui-text';
-import { colors, onThemeChange, spacing } from './theme';
+import { colors, onThemeChange, spacing, radius } from './theme';
+import { elevated } from './elevation';
 
 export function ShortcutToast({ text }: { text: string | null }) {
   if (!text) return null;
@@ -18,7 +19,7 @@ export function ShortcutToast({ text }: { text: string | null }) {
 const makeStyles = () => StyleSheet.create({
   // 只在没有会话时出现(没有输入框可挡),贴近窗口底部,不压设置页页脚那段说明。
   toastWrap: { position: 'absolute', left: 0, right: 0, bottom: 24, alignItems: 'center' },
-  toast: { paddingVertical: 6, paddingHorizontal: spacing.md, borderRadius: 14, backgroundColor: colors.card, borderWidth: 1, borderColor: colors.border },
+  toast: { paddingVertical: 6, paddingHorizontal: spacing.md, borderRadius: radius.pill, backgroundColor: colors.card, ...elevated('floating') },
   toastText: { color: colors.text, fontSize: 12 },
 });
 

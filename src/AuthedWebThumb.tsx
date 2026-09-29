@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { ActivityIndicator, Image, Pressable, StyleSheet, View } from 'react-native';
 import { Text } from './ui-text';
 import { appFetch } from './app-fetch';
-import { colors, onThemeChange, spacing } from './theme';
+import { colors, onThemeChange, spacing, radius } from './theme';
 import { downloadImageObjectUrl, saveImageObjectUrl } from './web-image-download';
 import { chooseSavePath, isTauriDesktop, revealInFolder, saveToDownloads, displayDownloadPath } from './desktop-download';
 
@@ -122,7 +122,7 @@ const makeStyles = () => StyleSheet.create({
   thumb: {
     width: 180,
     height: 180,
-    borderRadius: 10,
+    borderRadius: radius.thumb, overflow: 'hidden',
     marginTop: spacing.sm,
     backgroundColor: colors.inputBg,
     alignItems: 'center',
@@ -131,7 +131,7 @@ const makeStyles = () => StyleSheet.create({
   failed: {
     width: 180,
     height: 112,
-    borderRadius: 10,
+    borderRadius: radius.thumb,
     marginTop: spacing.sm,
     padding: spacing.sm,
     alignItems: 'center',

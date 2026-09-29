@@ -22,6 +22,7 @@ import MicDeviceSetting from './MicDeviceSetting';
 import { STREAM_DEFAULT_RESOURCE_ID, STREAM_RESOURCE_IDS } from './doubao-stream-protocol';
 import { MODE_LABELS, STREAM_UNAVAILABLE_HINT, streamingSupported, testFallbackNote, type VoiceMode, type VoicePlatform } from './voice-stream-policy';
 import { clearStreamUnavailable, currentVoiceMode, loadVoiceMode, saveVoiceMode, streamUnavailable, subscribeVoicePrefs, voicePlatform } from './voice-prefs';
+import { buttonStyle, buttonTextStyle } from './elevation';
 
 export const TEST_RECORD_MS = 3000;
 
@@ -371,14 +372,14 @@ const makeStyles = () => StyleSheet.create({
   status: { color: colors.textMuted, fontSize: 14 },
   statusOk: { color: colors.accent, fontWeight: '600' },
   fieldLabel: { color: colors.textSecondary, fontSize: 12, marginTop: 6 },
-  input: { borderWidth: 1, borderColor: colors.border, borderRadius: radius.sm, backgroundColor: colors.inputBg, color: colors.text, paddingHorizontal: spacing.md, paddingVertical: 8, fontSize: 14 },
+  input: { borderWidth: 1, borderColor: colors.border, borderRadius: radius.control, backgroundColor: colors.inputBg, color: colors.text, paddingHorizontal: spacing.md, paddingVertical: 8, fontSize: 14 },
   link: { color: colors.accent, fontSize: 12, marginTop: 6 },
   advanced: { gap: 6, paddingLeft: spacing.sm, borderLeftWidth: 2, borderLeftColor: colors.border },
   actions: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, marginTop: spacing.sm, flexWrap: 'wrap' },
-  primary: { backgroundColor: colors.accent, borderRadius: radius.sm, paddingHorizontal: spacing.lg, height: 32, alignItems: 'center', justifyContent: 'center' },
-  primaryText: { color: colors.bg, fontWeight: '600', fontSize: 13 },
-  secondary: { borderWidth: 1, borderColor: colors.border, borderRadius: radius.sm, paddingHorizontal: spacing.lg, height: 32, alignItems: 'center', justifyContent: 'center' },
-  secondaryText: { color: colors.text, fontSize: 13 },
+  primary: { ...buttonStyle('primary') },
+  primaryText: { ...buttonTextStyle('primary') },
+  secondary: { ...buttonStyle('secondary') },
+  secondaryText: { ...buttonTextStyle('secondary') },
   disabled: { opacity: 0.45 },
   hint: { color: colors.textMuted, fontSize: 12, lineHeight: 18 },
   error: { color: colors.failed },
@@ -386,14 +387,14 @@ const makeStyles = () => StyleSheet.create({
   interim: { color: colors.textSecondary },
   warn: { color: colors.accent },
   options: { gap: 6, marginTop: 4 },
-  option: { flexDirection: 'row', alignItems: 'center', gap: 10, borderWidth: 1, borderColor: colors.border, borderRadius: radius.sm, paddingHorizontal: spacing.md, paddingVertical: 10 },
+  option: { flexDirection: 'row', alignItems: 'center', gap: 10, borderWidth: 1, borderColor: colors.border, borderRadius: radius.control, paddingHorizontal: spacing.md, paddingVertical: 10 },
   optionOn: { borderColor: colors.accent },
-  radio: { width: 16, height: 16, borderRadius: 8, borderWidth: 2, borderColor: colors.textMuted },
+  radio: { width: 16, height: 16, borderRadius: radius.pill, borderWidth: 2, borderColor: colors.textMuted },
   radioOn: { borderColor: colors.accent, backgroundColor: colors.accent },
   optionText: { color: colors.text, fontSize: 14, flexShrink: 1 },
   optionTextOn: { fontWeight: '600' },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 4 },
-  chip: { borderWidth: 1, borderColor: colors.border, borderRadius: 16, paddingHorizontal: 12, paddingVertical: 6 },
+  chip: { borderWidth: 1, borderColor: colors.border, borderRadius: radius.pill, paddingHorizontal: 12, paddingVertical: 6 },
   chipOn: { borderColor: colors.accent, backgroundColor: colors.accent },
   chipText: { color: colors.text, fontSize: 13 },
   chipTextOn: { color: colors.bg, fontWeight: '600' },

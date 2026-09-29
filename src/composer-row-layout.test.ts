@@ -149,7 +149,7 @@ check(new RegExp(`lineHeight: ${COMPOSER_LINE_HEIGHT},`).test(chat.slice(chat.in
   const sendBtn = parts.slice(sendAt, parts.indexOf('</Pressable>', sendAt));
   check(sendAt > 0 && sendBtn.includes('<Text style={styles.sendPillText}>发送</Text>') && !sendBtn.includes('↑'), '发送 is a labelled button, not an arrow');
   check(/sendPill: \{[\s\S]*?backgroundColor: colors\.accent/.test(parts), '发送 uses the accent colour');
-  check(/sendPill: \{[\s\S]*?borderRadius: radius\.sm/.test(parts), '发送 is rounded');
+  check(/sendPill: \{[\s\S]*?borderRadius: radius\.control/.test(parts), '发送 is rounded (control token, same as the input)');
   check(parts.includes("accessibilityLabel={plusOpen ? '收起更多发送方式' : '更多发送方式'}"), '＋ keeps its a11y labels');
   check(parts.includes('sendRevealAnimation(reduceMotion)') && parts.includes('AccessibilityInfo.isReduceMotionEnabled') && parts.includes("'reduceMotionChanged'"), 'reveal animation honours reduced motion (initial + live changes)');
   check(parts.includes("animationType={reduceMotion ? 'none' : 'slide'}"), 'editor open animation honours reduced motion');

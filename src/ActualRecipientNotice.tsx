@@ -2,7 +2,7 @@ import { useEffect, useRef } from 'react';
 import { Animated, Easing, Pressable, StyleSheet } from 'react-native';
 import { Text } from './ui-text';
 import { ACTUAL_NOTICE_A11Y, NOTICE_AUTO_DISMISS_MS, noticePalette, type SendNotice } from './actual-recipient';
-import { onThemeChange, spacing, themeMode } from './theme';
+import { onThemeChange, spacing, themeMode, radius } from './theme';
 
 /**
  * 一条自动消失的居中提示,只在**值得打断**的时候出现(排队 / Hub 改投了别的
@@ -57,7 +57,7 @@ const makeStyles = () => StyleSheet.create({
     alignSelf: 'center',
     maxWidth: 420,
     marginBottom: spacing.xs,
-    borderRadius: 999,
+    borderRadius: radius.pill,
     borderWidth: 1,
   },
   body: {
@@ -66,7 +66,7 @@ const makeStyles = () => StyleSheet.create({
     paddingHorizontal: spacing.md,
     paddingVertical: 6,
   },
-  dot: { width: 6, height: 6, borderRadius: 3, marginRight: spacing.sm },
+  dot: { width: 6, height: 6, borderRadius: radius.pill, marginRight: spacing.sm },
   title: { fontSize: 12, fontWeight: '600', marginRight: spacing.sm },
   detail: { fontSize: 12, flexShrink: 1 },
 });

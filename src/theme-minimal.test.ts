@@ -34,10 +34,22 @@ for (const mode of ['dark', 'light'] as const) {
   // 状态面要能被看出来,但不能抢:行悬停/选中与列表底色各差一档。
   ck(`${mode} rowHover differs from listBg`, colors.rowHover !== colors.listBg);
   ck(`${mode} rowActive differs from rowHover`, colors.rowActive !== colors.rowHover);
+  // 次按钮(tonal):强调色字在 tonal 底上 ≥ 4.5:1;tonal 底要能和卡片分开。
+  ck(`${mode} accent text on tonalBg ≥ 4.5:1`, contrast(colors.accent, colors.tonalBg) >= 4.5);
+  ck(`${mode} tonalBg differs from card`, colors.tonalBg !== colors.card);
+  // 浮起的面:深色下没有阴影,面要比地面亮一档、边要看得见;正文在浮起面上仍 ≥ 7:1。
+  ck(`${mode} text on floatingBg ≥ 7:1`, contrast(colors.text, colors.floatingBg) >= 7);
+  if (mode === 'dark') {
+    ck('dark floatingBg is lighter than bg', lum(colors.floatingBg) > lum(colors.bg));
+    ck('dark floatingBorder is visible on floatingBg (≥ 1.2:1)', contrast(colors.floatingBorder, colors.floatingBg) >= 1.2);
+  }
 }
 setThemeMode('dark');
 
-ck('radius scale is 6/10/14/pill', radius.sm === 6 && radius.md === 10 && radius.lg === 14 && radius.pill === 999);
+// 2026-09-29「四个角圆角一点」:按用途的档位(见 theme.ts);sm/md/lg 是旧名,跟着新档走。
+ck('radius tokens: surface 16 / control 12 / thumb 12 / item 8 / mark 4 / inline 2 / bubble 18 / pill 999',
+  radius.surface === 16 && radius.control === 12 && radius.thumb === 12 && radius.item === 8 && radius.mark === 4 && radius.inline === 2 && radius.bubble === 18 && radius.pill === 999);
+ck('legacy radius names follow the new steps (sm=item, md=control, lg=surface)', radius.sm === radius.item && radius.md === radius.control && radius.lg === radius.surface);
 ck('type scale is 11/12/14/16/20', type.caption === 11 && type.small === 12 && type.body === 14 && type.title === 16 && type.heading === 20);
 ck('heaviest weight token is 600', weight.strong === '600' && !Object.values(weight).some(w => Number(w) > 600));
 

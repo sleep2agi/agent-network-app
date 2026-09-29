@@ -1,8 +1,9 @@
 import { useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { Text } from './ui-text';
-import { colors, onThemeChange, spacing } from './theme';
+import { colors, onThemeChange, spacing, radius } from './theme';
 import { fetchHostSupervisors, fetchHubNodes, fetchStatus, type HubConfig } from './api';
+import { buttonStyle, buttonTextStyle } from './elevation';
 import {
   hubDaemonView,
   type HubDaemonView,
@@ -108,12 +109,12 @@ export default function LocalDaemonSetupCard({ cfg, onInstalled }: { cfg: HubCon
 }
 
 const makeStyles = () => StyleSheet.create({
-  card: { backgroundColor: colors.card, borderRadius: 12, borderWidth: 1, borderColor: colors.accent, padding: spacing.lg, marginBottom: spacing.lg, gap: spacing.md },
+  card: { backgroundColor: colors.card, borderRadius: radius.surface, borderWidth: 1, borderColor: colors.accent, padding: spacing.lg, marginBottom: spacing.lg, gap: spacing.md },
   title: { color: colors.text, fontSize: 15, fontWeight: '600' },
   body: { color: colors.textSecondary, fontSize: 13, lineHeight: 20 },
   actions: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
-  button: { backgroundColor: colors.accent, borderRadius: 8, paddingHorizontal: spacing.lg, paddingVertical: spacing.sm },
-  buttonText: { color: colors.onAccent, fontSize: 14, fontWeight: '600' },
+  button: { ...buttonStyle('primary') },
+  buttonText: { ...buttonTextStyle('primary') },
   buttonGhost: { backgroundColor: 'transparent', borderWidth: 1, borderColor: colors.border },
   buttonGhostText: { color: colors.text, fontSize: 14, fontWeight: '600' },
   checklist: { gap: spacing.sm },
@@ -126,7 +127,7 @@ const makeStyles = () => StyleSheet.create({
   blocker: { color: colors.failed, fontSize: 12, lineHeight: 17 },
   progress: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   report: { gap: spacing.sm },
-  log: { maxHeight: 220, backgroundColor: colors.bg, borderRadius: 8, borderWidth: 1, borderColor: colors.border },
+  log: { maxHeight: 220, backgroundColor: colors.bg, borderRadius: radius.item, borderWidth: 1, borderColor: colors.border },
   stepName: { fontSize: 12, fontWeight: '600' },
   stepOutput: { color: colors.textMuted, fontSize: 11, lineHeight: 15, fontFamily: 'Menlo' },
 });

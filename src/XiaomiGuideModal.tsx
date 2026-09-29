@@ -1,10 +1,11 @@
 import { Modal, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { Text } from './ui-text';
-import { colors, spacing } from './theme';
+import { colors, spacing, radius } from './theme';
 import { XIAOMI_GUIDE_FOOTNOTE, XIAOMI_GUIDE_INTRO, XIAOMI_GUIDE_STEPS, XIAOMI_GUIDE_TITLE } from './xiaomi-guide';
 import { openAppDetailsSettings, openXiaomiAutostartSettings } from './mobile-notifications';
 import { useModalSafePadding } from './safe-area-runtime';
 import { withBasePadding } from './modal-safe-area';
+import { elevated, buttonStyle, buttonTextStyle } from './elevation';
 
 /** 设置 → 通知 →「小米/HyperOS 后台设置指引」。文案在 xiaomi-guide.ts。 */
 export default function XiaomiGuideModal({ onClose }: { onClose: () => void }) {
@@ -43,7 +44,7 @@ export default function XiaomiGuideModal({ onClose }: { onClose: () => void }) {
 // 弹窗在主题重挂的树之内(SettingsScreen 里),每次打开时按当前主题建样式即可。
 const makeStyles = () => StyleSheet.create({
   backdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.55)', alignItems: 'center', justifyContent: 'center', padding: spacing.lg },
-  card: { width: '100%', maxWidth: 460, maxHeight: '90%', backgroundColor: colors.card, borderColor: colors.border, borderWidth: 1, borderRadius: 14, padding: spacing.lg },
+  card: { width: '100%', maxWidth: 460, maxHeight: '90%', backgroundColor: colors.card, borderRadius: radius.surface, padding: spacing.lg, ...elevated('floating') },
   title: { color: colors.text, fontSize: 17, fontWeight: '600' },
   scroll: { marginTop: spacing.sm, flexGrow: 0 },
   scrollContent: { paddingBottom: spacing.sm, gap: spacing.md },
@@ -52,10 +53,10 @@ const makeStyles = () => StyleSheet.create({
   stepTitle: { color: colors.text, fontSize: 14, fontWeight: '600' },
   stepDetail: { color: colors.textSecondary, fontSize: 13, lineHeight: 20 },
   footnote: { color: colors.textMuted, fontSize: 12, lineHeight: 18 },
-  primary: { marginTop: spacing.md, backgroundColor: colors.accent, borderRadius: 10, paddingVertical: spacing.sm + 2, alignItems: 'center' },
-  primaryText: { color: colors.onAccent, fontSize: 14, fontWeight: '600' },
-  secondary: { marginTop: spacing.sm, borderWidth: 1, borderColor: colors.border, borderRadius: 10, paddingVertical: spacing.sm + 2, alignItems: 'center' },
-  secondaryText: { color: colors.text, fontSize: 14 },
+  primary: { ...buttonStyle('primary'), marginTop: spacing.md },
+  primaryText: { ...buttonTextStyle('primary') },
+  secondary: { ...buttonStyle('secondary'), marginTop: spacing.sm },
+  secondaryText: { ...buttonTextStyle('secondary') },
   close: { marginTop: spacing.sm, paddingVertical: spacing.sm, alignItems: 'center' },
   closeText: { color: colors.textSecondary, fontSize: 14 },
 });

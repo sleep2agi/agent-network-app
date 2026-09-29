@@ -35,13 +35,15 @@ for (const mode of ['dark', 'light'] as const) {
 const expectedTokens: Record<string, string[]> = {
   'AvatarEditSection.tsx': ['msg.ok ? colors.running : colors.failed'],
   'ChatScreen.tsx': ['desktopSendText: { color: colors.onAccent'],
-  'SideThreadDrawer.tsx': ['askButtonText: { color: colors.onAccent'],
+  // 2026-09-29:主按钮的字统一从 elevation.ts 的 buttonTextStyle('primary') 来(它取 colors.onAccent,下面单独钉)。
+  'SideThreadDrawer.tsx': ["askButtonText: { ...buttonTextStyle('primary')"],
   'MessagesScreen.tsx': ["type === 'broadcast') return colors.broadcast"],
-  'CreateNodeWizardScreen.tsx': ['primaryBtnText: { color: colors.onAccent'],
+  'CreateNodeWizardScreen.tsx': ["primaryBtnText: { ...buttonTextStyle('primary')"],
   'HostSupervisorPickerScreen.tsx': [
-    'primaryBtnText: { color: colors.onAccent',
-    'retryBtnText: { color: colors.onAccent',
+    "primaryBtnText: { ...buttonTextStyle('primary')",
+    "retryBtnText: { ...buttonTextStyle('primary')",
   ],
+  'elevation.ts': ["color: kind === 'primary' ? colors.onAccent : colors.accent"],
 };
 
 for (const [file, needles] of Object.entries(expectedTokens)) {

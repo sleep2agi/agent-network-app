@@ -10,6 +10,9 @@
  * 没有「删除」:agent 是节点,删节点在 节点详情 → 危险操作 里,不放在一个手滑就点到的菜单里。
  */
 
+// 纯数据模块(不 import react-native),与本文件同为 ck 测试可直跑。
+import { radius } from './theme';
+
 export type AgentRowMenuKey = 'read' | 'pin' | 'mute' | 'openWindow' | 'detail' | 'hide';
 
 export interface AgentRowMenuItem {
@@ -69,7 +72,7 @@ export function rowMenuMetrics(touch: boolean, scale = 1, font = 1): RowMenuMetr
   const itemHeight = touch ? Math.max(44, Math.round(44 * scale)) : Math.round(34 * scale);
   const padY = Math.round(6 * scale);
   const width = Math.max(touch ? Math.max(140, Math.round(156 * scale)) : Math.round(150 * scale), fontSize * 6 + padX * 2 + 8);
-  return { width, itemHeight, padY, padX, fontSize, radius: touch ? 8 : 10 };
+  return { width, itemHeight, padY, padX, fontSize, radius: radius.control };
 }
 
 export const rowMenuHeight = (m: RowMenuMetrics, count: number): number => m.padY * 2 + m.itemHeight * count;

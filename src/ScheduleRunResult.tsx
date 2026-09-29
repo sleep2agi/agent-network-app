@@ -110,13 +110,13 @@ export default function ScheduleRunResult({ cfg, run, state, onRetry, onOpenChat
 
 function makeStyles() { return StyleSheet.create({
   root: { paddingBottom: spacing.md, gap: spacing.sm },
-  reply: { backgroundColor: colors.bg, borderColor: colors.border, borderWidth: StyleSheet.hairlineWidth, borderRadius: radius.md, paddingHorizontal: spacing.md, paddingVertical: spacing.sm },
+  reply: { backgroundColor: colors.bg, borderColor: colors.border, borderWidth: StyleSheet.hairlineWidth, borderRadius: radius.control, paddingHorizontal: spacing.md, paddingVertical: spacing.sm },
   loadingRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   muted: { color: colors.textMuted, fontSize: fontSize.small },
   failure: { color: colors.failed, fontSize: fontSize.small, lineHeight: 18 },
   link: { color: colors.accent, fontSize: fontSize.small },
   attachmentImage: { alignItems: 'flex-start' },
   attachmentLine: { color: colors.accent, fontSize: 12, marginTop: spacing.xs },
-  chatButton: { alignSelf: 'flex-start', borderWidth: 1, borderColor: colors.border, borderRadius: radius.md, paddingHorizontal: 12, paddingVertical: 6 },
+  chatButton: { alignSelf: 'flex-start', borderWidth: 1, borderColor: colors.border, borderRadius: radius.control, paddingHorizontal: 12, paddingVertical: 6 },
   chatButtonText: { color: colors.accent, fontSize: fontSize.small, fontWeight: weight.medium },
 }); }

@@ -17,7 +17,7 @@ import { useModalSafePadding } from './safe-area-runtime';
 import { readNodeRulesFile, waitForRulesFileResult, writeNodeRulesFile, type HubConfig, type RulesTarget, type Session } from './api';
 import { hasUnsavedChanges, isTerminal, nextPollDelayMs, predictedRulesFileName, requestIdToFollow, rulesErrorMessage, rulesMaxWaitMessage, rulesReadOutcome, rulesStatusMessage, rulesSupport, rulesUnsupportedMessage, RULES_MAX_WAIT_MS } from './node-rules';
 import { NODE_RULES_EDITOR_MIN_HEIGHT } from './node-page-model';
-import { colors, spacing } from './theme';
+import { colors, spacing, radius } from './theme';
 import MarkdownMessage, { type MarkdownBlockLayout } from './MarkdownMessage';
 import { blockAtY, blockLineForCaret, buildRulesOutline, isDoubleTap, isTap, jumpText, lineAtOffset, lineStartOffset, resolveBlockRects, rulesInfoText, rulesReadKey, rulesToolbarLayout, rulesViewState, saveButtonLabel, showRulesOutline, sourceRangeFromDataset, sourceSelection, statusAutoHideMs, type BlockLayout, type OutlineEntry, type RulesViewMode, type SourceLineRange, type Tap } from './node-rules-view';
 import InfoTip from './InfoTip';
@@ -280,7 +280,7 @@ export default function NodeRulesSection({ cfg, node, session, onDirtyChange }: 
   // 的工具条里 —— 放下面的话矮窗(Vincent 的 2000×650)里要先滚页面才看得到「保存」。
   return (
     <View ref={sectionRef} style={{ flex: 1 }}>
-      <View style={{ flex: 1, backgroundColor: colors.card, borderRadius: 12, padding: spacing.md, gap: spacing.sm }}>
+      <View style={{ flex: 1, backgroundColor: colors.card, borderRadius: radius.surface, padding: spacing.md, gap: spacing.sm }}>
         {toolbar(false)}
         {hasContent && !full ? <RulesBody {...bodyProps} /> : null}
       </View>
@@ -336,7 +336,7 @@ const SmallBtn = forwardRef<any, { label: string; onPress: () => void; disabled?
     return (
       <FocusRing ref={ref} onPress={onPress} disabled={disabled} accessibilityRole="button" accessibilityLabel={accessibilityLabel ?? label} accessibilityState={{ disabled: !!disabled }}
         hitSlop={WEB ? undefined : 6}
-        style={[{ height: TOUCH_BTN_HEIGHT, paddingHorizontal: spacing.md, borderRadius: 6, justifyContent: 'center', alignItems: 'center' },
+        style={[{ height: TOUCH_BTN_HEIGHT, paddingHorizontal: spacing.md, borderRadius: radius.control, justifyContent: 'center', alignItems: 'center' },
           primary ? { backgroundColor: colors.accent } : { borderWidth: 1, borderColor: colors.border },
           disabled ? { opacity: 0.4 } : null]}>
         <Text style={{ fontSize: 12, fontWeight: primary ? '600' : '400', color: primary ? colors.onAccent : colors.textSecondary }}>{label}</Text>
@@ -346,12 +346,12 @@ const SmallBtn = forwardRef<any, { label: string; onPress: () => void; disabled?
 
 function ModeToggle({ mode, tabs, onChange }: { mode: RulesViewMode; tabs: readonly RulesViewMode[]; onChange: (m: RulesViewMode) => void }) {
   return (
-    <View accessibilityRole="tablist" style={{ flexDirection: 'row', borderWidth: 1, borderColor: colors.border, borderRadius: 7, padding: 2, gap: 2 }}>
+    <View accessibilityRole="tablist" style={{ flexDirection: 'row', borderWidth: 1, borderColor: colors.border, borderRadius: radius.control, padding: 2, gap: 2 }}>
       {tabs.map((m) => (
         // aria-selected:react-native-web 不把 accessibilityState.selected 写进 DOM,读屏(和测试)看不出选中的是哪个。
         <FocusRing key={m} accessibilityRole="tab" accessibilityState={{ selected: mode === m }} aria-selected={mode === m} onPress={() => onChange(m)}
           hitSlop={WEB ? undefined : 4}
-          style={{ paddingHorizontal: spacing.md, paddingVertical: WEB ? 3 : 7, borderRadius: 5, backgroundColor: mode === m ? colors.subtleFill : 'transparent' }}>
+          style={{ paddingHorizontal: spacing.md, paddingVertical: WEB ? 3 : 7, borderRadius: radius.item, backgroundColor: mode === m ? colors.subtleFill : 'transparent' }}>
           <Text style={{ fontSize: 12, color: mode === m ? colors.text : colors.textMuted, fontWeight: mode === m ? '600' : '400' }}>{RULES_MODE_LABEL[m]}</Text>
         </FocusRing>
       ))}
@@ -363,7 +363,7 @@ function ModeToggle({ mode, tabs, onChange }: { mode: RulesViewMode; tabs: reado
 function SyncToggle({ on, onPress }: { on: boolean; onPress: () => void }) {
   return (
     <FocusRing testID="rules-scroll-sync" onPress={onPress} accessibilityRole="switch" accessibilityState={{ checked: on }} aria-checked={on} accessibilityLabel="滚动同步"
-      style={{ height: TOUCH_BTN_HEIGHT, paddingHorizontal: spacing.sm, borderRadius: 6, borderWidth: 1, borderColor: on ? colors.accent : colors.border, flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+      style={{ height: TOUCH_BTN_HEIGHT, paddingHorizontal: spacing.sm, borderRadius: radius.control, borderWidth: 1, borderColor: on ? colors.accent : colors.border, flexDirection: 'row', alignItems: 'center', gap: 4 }}>
       <Text style={{ fontSize: 12, opacity: on ? 1 : 0.45 }}>🔗</Text>
       <Text style={{ fontSize: 12, color: on ? colors.text : colors.textMuted }}>{on ? '同步滚动' : '不同步'}</Text>
     </FocusRing>
@@ -410,7 +410,7 @@ function RulesSplitDivider({ left, width, ratio, onRatio, onCommit }: {
       ]}
     >
       {dragging ? <View style={{ position: 'absolute', top: 0, bottom: 0, width: 2, backgroundColor: colors.accent }} /> : null}
-      <View style={{ width: 4, height: 36, borderRadius: 2, backgroundColor: dragging ? colors.accent : colors.textMuted, opacity: dragging ? 1 : 0.35 }} />
+      <View style={{ width: 4, height: 36, borderRadius: radius.pill, backgroundColor: dragging ? colors.accent : colors.textMuted, opacity: dragging ? 1 : 0.35 }} />
     </View>
   );
 }
@@ -492,7 +492,7 @@ function scrollEditorToLine(ta: any, draft: string, line: number) {
 
 function UnsavedMark() {
   return (
-    <View style={{ paddingHorizontal: 6, paddingVertical: 1, borderRadius: 4, borderWidth: 1, borderColor: colors.blocked }}>
+    <View style={{ paddingHorizontal: 6, paddingVertical: 1, borderRadius: radius.pill, borderWidth: 1, borderColor: colors.blocked }}>
       <Text style={{ fontSize: 11, color: colors.blocked }}>未保存</Text>
     </View>
   );
@@ -501,7 +501,7 @@ function UnsavedMark() {
 function RulesBody({ mode, draft, onDraft, editable, dirty, fileName, onHeadingLayout, scrollRef, onJump, jump, clearJump, anchorLine, clearAnchor, editorRef, findReadRef, onCaret, onBodyWidth, ratio, onRatio, onRatioCommit, scrollSync, syncHold }: RulesBodyProps & {
   onHeadingLayout?: (index: number, y: number) => void; scrollRef?: any;
 }) {
-  const frame = { flex: 1, minHeight: NODE_RULES_EDITOR_MIN_HEIGHT, borderWidth: 1, borderColor: dirty ? colors.accent : colors.border, borderRadius: 8 } as const;
+  const frame = { flex: 1, minHeight: NODE_RULES_EDITOR_MIN_HEIGHT, borderWidth: 1, borderColor: dirty ? colors.accent : colors.border, borderRadius: radius.control } as const;
   const readRef = useRef<any>(null);
   const setReadEl = useCallback((el: any) => { readRef.current = el; findReadRef?.(el); }, [findReadRef]);
   const onJumpRef = useRef(onJump);
@@ -764,7 +764,7 @@ function RulesFullscreen({ onClose, toolbar, source, bodyProps, outlineOpen, onT
         <WinTitleBar />
         <View testID="screen-header" style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingHorizontal: spacing.lg, paddingVertical: spacing.md, borderBottomWidth: 1, borderBottomColor: colors.border }}>
           <View style={{ flex: 1 }}>{toolbar}</View>
-          <FocusRing ref={closeRef} onPress={onClose} accessibilityLabel="退出全屏(Esc)" style={{ paddingHorizontal: spacing.md, paddingVertical: 5, borderRadius: 6, borderWidth: 1, borderColor: colors.border }}>
+          <FocusRing ref={closeRef} onPress={onClose} accessibilityLabel="退出全屏(Esc)" style={{ paddingHorizontal: spacing.md, paddingVertical: 5, borderRadius: radius.item, borderWidth: 1, borderColor: colors.border }}>
             <Text style={{ color: colors.textSecondary, fontSize: 12 }}>{WEB ? '退出全屏 Esc' : '退出全屏'}</Text>
           </FocusRing>
         </View>
@@ -773,20 +773,20 @@ function RulesFullscreen({ onClose, toolbar, source, bodyProps, outlineOpen, onT
             <ScrollView testID="rules-outline" style={{ width: 260, flexGrow: 0, borderRightWidth: 1, borderRightColor: colors.border }} contentContainerStyle={{ padding: spacing.md, gap: 2 }}>
               <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: spacing.xs }}>
                 <Text style={{ color: colors.textMuted, fontSize: 11, letterSpacing: 0.5 }}>目录</Text>
-                <FocusRing testID="rules-outline-toggle" onPress={onToggleOutline} accessibilityLabel="收起目录" style={{ paddingHorizontal: 6, paddingVertical: 2, borderRadius: 5 }}>
+                <FocusRing testID="rules-outline-toggle" onPress={onToggleOutline} accessibilityLabel="收起目录" style={{ paddingHorizontal: 6, paddingVertical: 2, borderRadius: radius.item }}>
                   <Text style={{ color: colors.textMuted, fontSize: 12 }}>‹ 收起</Text>
                 </FocusRing>
               </View>
               {outline.map((h) => (
                 <FocusRing key={h.index} onPress={() => jumpTo(h)}
-                  style={{ paddingVertical: 4, paddingRight: spacing.sm, paddingLeft: spacing.sm + (h.level - 1) * 12, borderRadius: 5 }}>
+                  style={{ paddingVertical: 4, paddingRight: spacing.sm, paddingLeft: spacing.sm + (h.level - 1) * 12, borderRadius: radius.item }}>
                   <Text numberOfLines={2} style={{ fontSize: h.level === 1 ? 13 : 12, color: h.level === 1 ? colors.text : colors.textSecondary, fontWeight: h.level === 1 ? '600' : '400' }}>{h.text}</Text>
                 </FocusRing>
               ))}
             </ScrollView>
           ) : canOutline ? (
             <View style={{ width: 36, alignItems: 'center', paddingTop: spacing.md, borderRightWidth: 1, borderRightColor: colors.border }}>
-              <FocusRing testID="rules-outline-toggle" onPress={onToggleOutline} accessibilityLabel="展开目录" style={{ paddingHorizontal: 6, paddingVertical: 4, borderRadius: 5 }}>
+              <FocusRing testID="rules-outline-toggle" onPress={onToggleOutline} accessibilityLabel="展开目录" style={{ paddingHorizontal: 6, paddingVertical: 4, borderRadius: radius.item }}>
                 <Text style={{ color: colors.textMuted, fontSize: 14 }}>☰</Text>
               </FocusRing>
             </View>

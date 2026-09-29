@@ -36,7 +36,7 @@ import { createForwardPersistence, initForwardController } from './src/forward-c
 import { loadDesktopThemeMode } from './src/desktop-theme-storage';
 import { loadDesktopUiScale } from './src/desktop-theme-storage';
 import { onUiScaleChange, parseStoredUiScale, parseUiScaleSim, setOsFontScale, setUiScaleLayoutWide, setUiScaleLegacySim, setUiScalePrefs, ds, uiScale, uiScaleKey } from './src/ui-scale';
-import { colors, onThemeChange, parseStoredThemePreference, setThemeMode, setThemePreference, spacing, themeMode } from './src/theme';
+import { colors, onThemeChange, parseStoredThemePreference, setThemeMode, setThemePreference, spacing, themeMode, appIconRadius, radius } from './src/theme';
 import { installSystemThemeFollower } from './src/system-color-scheme';
 import { installWebScrollbarTheme } from './src/web-scrollbar';
 import MacTitleStrip from './src/mac-title-strip';
@@ -76,6 +76,7 @@ import MobileNavRail from './src/MobileNavRail';
 import { comboFromEvent, shortcutAction, shortcutForCombo } from './src/shortcuts-model';
 import { isMacKeyboard, requestAgentSearchFocus, shortcutBindings, shortcutCaptureActive } from './src/shortcuts-store';
 import { contentWidthBesideRail, mobileRailWidth, navActiveKey, navChromeFor, phoneInPageLeaf, railShowsBrand, screenForNavPress } from './src/nav-chrome';
+import { elevated, buttonStyle, buttonTextStyle } from './src/elevation';
 
 type Screen =
   | { name: 'login' }
@@ -901,23 +902,23 @@ export function FirstRunScreen({ busy, stage, error, onStartLocal, onRemote }: {
 
 const makeEntryStyles = () => StyleSheet.create({
   root: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24, backgroundColor: colors.bg },
-  card: { width: '100%', maxWidth: 440, gap: 14, paddingHorizontal: 32, paddingVertical: 32, borderRadius: 20, backgroundColor: colors.card, borderWidth: 1, borderColor: colors.border, shadowColor: '#000', shadowOffset: { width: 0, height: 20 }, shadowOpacity: themeMode() === 'light' ? 0.12 : 0.35, shadowRadius: 42, elevation: 12 },
-  cardCompact: { paddingHorizontal: 22, paddingVertical: 26, borderRadius: 22 },
-  logo: { width: 72, height: 72, borderRadius: 18, alignSelf: 'center' },
+  card: { width: '100%', maxWidth: 440, gap: 14, paddingHorizontal: 32, paddingVertical: 32, borderRadius: radius.surface, backgroundColor: colors.card, ...elevated('floating') },
+  cardCompact: { paddingHorizontal: 22, paddingVertical: 26, borderRadius: radius.surface },
+  logo: { width: 72, height: 72, borderRadius: appIconRadius(72), alignSelf: 'center' },
   title: { color: colors.text, fontSize: 24, lineHeight: 32, fontWeight: '600', letterSpacing: -0.2, textAlign: 'center' },
   copy: { color: colors.textSecondary, fontSize: 14, lineHeight: 22, textAlign: 'center', maxWidth: 390, alignSelf: 'center' },
-  errorBox: { flexDirection: 'row', alignItems: 'flex-start', gap: 8, padding: 11, borderRadius: 12, backgroundColor: themeMode() === 'light' ? '#fff1f2' : '#291417', borderWidth: 1, borderColor: themeMode() === 'light' ? '#fecdd3' : '#552329' },
+  errorBox: { flexDirection: 'row', alignItems: 'flex-start', gap: 8, padding: 11, borderRadius: radius.control, backgroundColor: themeMode() === 'light' ? '#fff1f2' : '#291417', borderWidth: 1, borderColor: themeMode() === 'light' ? '#fecdd3' : '#552329' },
   error: { flex: 1, color: colors.failed, fontSize: 12, lineHeight: 18 },
-  primary: { height: 48, borderRadius: 12, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.accent },
+  primary: { ...buttonStyle('primary') },
   disabled: { backgroundColor: colors.border },
   pressed: { transform: [{ scale: 0.99 }], opacity: 0.9 },
-  primaryText: { color: colors.onAccent, fontSize: 15, fontWeight: '600' },
+  primaryText: { ...buttonTextStyle('primary') },
   busyRow: { flexDirection: 'row', alignItems: 'center', gap: 9 },
   primaryTextDisabled: { color: colors.textMuted },
   buttonRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  secondary: { height: 46, borderRadius: 13, flexDirection: 'row', gap: 8, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: colors.border, backgroundColor: themeMode() === 'light' ? '#fafbfc' : colors.inputBg },
+  secondary: { ...buttonStyle('secondary'), flexDirection: 'row', gap: 8 },
   secondaryPressed: { backgroundColor: colors.border },
-  secondaryText: { color: colors.textSecondary, fontSize: 14, fontWeight: '600' },
+  secondaryText: { ...buttonTextStyle('secondary') },
 });
 
 const loginStylesShared = StyleSheet.create({
@@ -928,7 +929,7 @@ const loginStylesShared = StyleSheet.create({
 // #193 机制:模块级 StyleSheet 引用主题值必须随主题重建,否则冻在导入时的那套颜色。
 const makeBootStyles = () => StyleSheet.create({
   root: { backgroundColor: colors.bg, gap: 14 },
-  logo: { width: 96, height: 96, borderRadius: 22 },
+  logo: { width: 96, height: 96, borderRadius: appIconRadius(96) },
   title: { color: colors.text, fontSize: 18, fontWeight: '600', letterSpacing: 0.3 },
 });
 let bootStyles = makeBootStyles();
@@ -1172,13 +1173,13 @@ const makeDesktopStyles = () => StyleSheet.create({
   railBrandMark: { width: ds(54), height: ds(54) },
   railTabs: { flex: 1, paddingTop: ds(18), gap: ds(12), alignItems: 'center' },
   railSlot: { width: ds(40), height: ds(40), alignItems: 'center', justifyContent: 'center' },
-  railButton: { width: ds(40), height: ds(40), borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
+  railButton: { width: ds(40), height: ds(40), borderRadius: radius.control, alignItems: 'center', justifyContent: 'center' },
   railButtonActive: { backgroundColor: colors.railActiveBg },
   railButtonHover: { backgroundColor: colors.railHover },
   // 角标左缘锚在图标右上角内侧(badge-anchor.ts):数字变宽时向外长,不盖图标。
-  railBadge: { position: 'absolute', ...badgeOffsetCentered(ds(40), ds(40), ds(22), 16), minWidth: 16, height: 16, borderRadius: 8, paddingHorizontal: 4, backgroundColor: colors.failed, alignItems: 'center', justifyContent: 'center' },
+  railBadge: { position: 'absolute', ...badgeOffsetCentered(ds(40), ds(40), ds(22), 16), minWidth: 16, height: 16, borderRadius: radius.pill, paddingHorizontal: 4, backgroundColor: colors.failed, alignItems: 'center', justifyContent: 'center' },
   railBadgeText: { color: '#fff', fontSize: 9, fontWeight: '600', lineHeight: 12 },
-  railTooltip: { position: 'absolute', left: ds(48), top: 8, paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6, backgroundColor: colors.railTooltipBg, zIndex: 20 },
+  railTooltip: { position: 'absolute', left: ds(48), top: 8, paddingHorizontal: 8, paddingVertical: 4, borderRadius: radius.item, backgroundColor: colors.railTooltipBg, zIndex: 20 },
   railTooltipText: { color: colors.railTooltipText, fontSize: 12, fontWeight: '500' },
   railSettings: { marginBottom: 0 },
   railVersion: { color: colors.textMuted, fontSize: 10, marginTop: 8, textAlign: 'center' },
@@ -1349,11 +1350,11 @@ const makeLoginStyles = () => StyleSheet.create({
   form: { gap: 13, marginTop: 1 },
   field: { gap: 7 },
   label: { color: colors.textSecondary, fontSize: 12, fontWeight: '600', marginLeft: 2 },
-  inputShell: { minHeight: 50, flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 14, borderRadius: 13, backgroundColor: colors.inputBg, borderWidth: 1, borderColor: colors.border },
+  inputShell: { minHeight: 50, flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 14, borderRadius: radius.control, backgroundColor: colors.inputBg, borderWidth: 1, borderColor: colors.border },
   input: { flex: 1, minWidth: 0, color: colors.text, fontSize: 14, paddingVertical: 12, ...(Platform.OS === 'web' ? ({ outlineStyle: 'none' } as any) : {}) },
   eyeButton: { width: 28, height: 34, alignItems: 'center', justifyContent: 'center' },
   inactive: { backgroundColor: colors.border },
-  errorBox: { flexDirection: 'row', alignItems: 'flex-start', gap: 9, padding: 11, borderRadius: 12, backgroundColor: themeMode() === 'light' ? '#fff1f2' : '#291417', borderWidth: 1, borderColor: themeMode() === 'light' ? '#fecdd3' : '#552329' },
+  errorBox: { flexDirection: 'row', alignItems: 'flex-start', gap: 9, padding: 11, borderRadius: radius.control, backgroundColor: themeMode() === 'light' ? '#fff1f2' : '#291417', borderWidth: 1, borderColor: themeMode() === 'light' ? '#fecdd3' : '#552329' },
   errorCopy: { flex: 1 },
   errorTitle: { flex: 1, color: colors.failed, fontSize: 12, lineHeight: 18, fontWeight: '600' },
   errorNext: { color: colors.textSecondary, fontSize: 11, lineHeight: 16, marginTop: 2 },

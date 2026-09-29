@@ -436,7 +436,7 @@ export default function AgentsScreen({
         compact && {
           borderWidth: 0,
           borderBottomWidth: 0,
-          borderRadius: radius.md,
+          borderRadius: radius.control,
           paddingHorizontal: spacing.md,
           paddingVertical: 10,
           marginBottom: 2,
@@ -551,7 +551,7 @@ export default function AgentsScreen({
           </Pressable>
         </View>
         {sessions.length > 10 || searchOpen || query ? (
-          <TextInput ref={searchRef} testID="agents-search" style={[styles.search, compact && { backgroundColor: colors.subtleFill, borderWidth: 0, borderRadius: radius.sm }]} placeholder="搜索 agent…" placeholderTextColor={colors.textMuted} autoCapitalize="none" autoCorrect={false} value={query} onChangeText={setQuery} onBlur={() => { if (!query) setSearchOpen(false); }} />
+          <TextInput ref={searchRef} testID="agents-search" style={[styles.search, compact && { backgroundColor: colors.subtleFill, borderWidth: 0, borderRadius: radius.control }]} placeholder="搜索 agent…" placeholderTextColor={colors.textMuted} autoCapitalize="none" autoCorrect={false} value={query} onChangeText={setQuery} onBlur={() => { if (!query) setSearchOpen(false); }} />
         ) : null}
       </View>
       ) : (
@@ -718,7 +718,7 @@ const rowGeom = () => agentRowGeometry(uiScale().listDense, uiScale().densityFac
 const makeRowStyles = () => ({
   head: { paddingHorizontal: ds(AGENT_ROW_PAD_X), paddingTop: spacing.sm, paddingBottom: spacing.xs },
   headRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, minHeight: ds(36) },
-  searchBox: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: ds(6), minHeight: ds(36), borderRadius: radius.md, paddingHorizontal: ds(10) },
+  searchBox: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: ds(6), minHeight: ds(36), borderRadius: radius.control, paddingHorizontal: ds(10) },
   searchInput: { flex: 1, minWidth: 0, fontSize: type.body, paddingVertical: 0, height: Math.max(ds(36), fs(type.body) + 14) },
   searchCount: { marginTop: spacing.xs },
   // 服务器页带来的筛选:一行小胶囊,只在有筛选时出现(平时列表不变)。
@@ -751,7 +751,7 @@ const makeRowStyles = () => ({
     bottom: -1,
     width: rowGeom().dot,
     height: rowGeom().dot,
-    borderRadius: rowGeom().dot / 2,
+    borderRadius: radius.pill,
     borderWidth: 2,
   },
   body: { flex: 1, minWidth: 0, gap: rowGeom().bodyGap },

@@ -23,7 +23,7 @@ import {
   type ModelChangePhase,
 } from './node-model-change';
 import { suggestedModels } from './runtime-catalog';
-import { colors, spacing } from './theme';
+import { colors, spacing, radius } from './theme';
 
 export default function NodeModelSection({ cfg, node }: { cfg: HubConfig; node: HubNode }) {
   // undefined = 还没读到;null = hub 没有这个接口
@@ -84,7 +84,7 @@ export default function NodeModelSection({ cfg, node }: { cfg: HubConfig; node: 
   return (
     <View style={{ paddingTop: spacing.xl }}>
       <Text style={{ color: colors.textMuted, fontSize: 13, marginBottom: spacing.sm }}>模型</Text>
-      <View style={{ backgroundColor: colors.card, borderRadius: 12, padding: spacing.lg, gap: spacing.md }}>
+      <View style={{ backgroundColor: colors.card, borderRadius: radius.surface, padding: spacing.lg, gap: spacing.md }}>
         <View style={{ flexDirection: 'row', alignItems: 'center' }}>
           <Text style={{ color: colors.textMuted, width: 96, fontSize: 13 }}>当前模型</Text>
           <Text style={{ color: colors.text, flex: 1, fontSize: 14 }} selectable>
@@ -114,7 +114,7 @@ export default function NodeModelSection({ cfg, node }: { cfg: HubConfig; node: 
                       disabled={busy}
                       onPress={() => { setPicked(m); setCustom(''); }}
                       style={({ pressed }) => [
-                        { borderWidth: 1, borderRadius: 6, paddingHorizontal: spacing.md, height: 34, justifyContent: 'center', borderColor: active ? colors.accent : colors.border, backgroundColor: colors.card },
+                        { borderWidth: 1, borderRadius: radius.control, paddingHorizontal: spacing.md, height: 34, justifyContent: 'center', borderColor: active ? colors.accent : colors.border, backgroundColor: colors.card },
                         pressed && { opacity: 0.7 },
                         busy && { opacity: 0.5 },
                       ]}
@@ -135,7 +135,7 @@ export default function NodeModelSection({ cfg, node }: { cfg: HubConfig; node: 
               placeholderTextColor={colors.textMuted}
               autoCapitalize="none"
               autoCorrect={false}
-              style={{ borderWidth: 1, borderColor: colors.border, borderRadius: 6, paddingHorizontal: spacing.md, height: 36, color: colors.text, fontSize: 13 }}
+              style={{ borderWidth: 1, borderColor: colors.border, borderRadius: radius.control, paddingHorizontal: spacing.md, height: 36, color: colors.text, fontSize: 13 }}
             />
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.md }}>
               <Pressable

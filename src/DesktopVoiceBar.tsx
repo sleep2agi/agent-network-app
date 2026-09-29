@@ -107,17 +107,18 @@ export function DesktopVoiceBar({ voice, onDone, onCancel, hint }: { voice: Voic
 }
 
 const makeStyles = () => StyleSheet.create({
-  mic: { width: ds(32), height: ds(32), borderRadius: ds(16), alignItems: 'center', justifyContent: 'center' },
+  mic: { width: ds(32), height: ds(32), borderRadius: radius.pill, alignItems: 'center', justifyContent: 'center' },
   micHover: { backgroundColor: colors.rowHover },
   // 与工具栏同高、同一个 paddingTop:换上来时输入框不跳。
-  bar: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, paddingTop: spacing.sm, minHeight: ds(34) + spacing.sm },
-  dot: { width: 8, height: 8, borderRadius: 4, backgroundColor: colors.failed },
+  // 2026-09-29 卡片化输入区:工具栏是 paddingTop 4 + 34 = 38 高(ChatScreen desktopToolbar),这里一致。
+  bar: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, paddingTop: 4, height: 38 },
+  dot: { width: 8, height: 8, borderRadius: radius.pill, backgroundColor: colors.failed },
   dotIdle: { backgroundColor: colors.textMuted },
   levels: { flexDirection: 'row', alignItems: 'center', gap: 2, height: 18 },
-  level: { width: 3, borderRadius: 1.5, backgroundColor: colors.accent },
+  level: { width: 3, borderRadius: radius.pill, backgroundColor: colors.accent },
   elapsed: { color: colors.text, fontSize: 12, fontVariant: ['tabular-nums'] },
   hint: { flex: 1, color: colors.textMuted, fontSize: 11 },
-  button: { flexDirection: 'row', alignItems: 'center', gap: 4, height: ds(32), paddingHorizontal: spacing.md, borderRadius: radius.sm, borderWidth: 1, borderColor: colors.border },
+  button: { flexDirection: 'row', alignItems: 'center', gap: 4, height: ds(32), paddingHorizontal: spacing.md, borderRadius: radius.control, borderWidth: 1, borderColor: colors.border },
   buttonHover: { backgroundColor: colors.rowHover },
   buttonText: { color: colors.text, fontSize: 13, fontWeight: '600' },
   done: { backgroundColor: colors.accent, borderColor: colors.accent },

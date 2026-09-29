@@ -15,6 +15,7 @@ import { ds } from './ui-scale';
 import { rowStatus } from './agent-row-model';
 import { pinyinMatch } from './lib/pinyin';
 import { useModalSafePadding } from './safe-area-runtime';
+import { elevated } from './elevation';
 import {
   buildPickerSections,
   countPickerRows,
@@ -271,9 +272,9 @@ function makeStyles() {
   return StyleSheet.create({
     flex: { flex: 1 },
     dim: { opacity: 0.45 },
-    dot: { width: ds(DOT), height: ds(DOT), borderRadius: ds(DOT) / 2 },
+    dot: { width: ds(DOT), height: ds(DOT), borderRadius: radius.pill },
     // 表单行:与输入框同一个外框(圆角 9 / 1px 边 / card 底),高度 = 头像 + 2 × 10。
-    field: { flexDirection: 'row', alignItems: 'center', gap: ds(10), minHeight: ds(AVATAR) + 20, paddingHorizontal: spacing.md, backgroundColor: colors.card, borderColor: colors.border, borderWidth: 1, borderRadius: 9 },
+    field: { flexDirection: 'row', alignItems: 'center', gap: ds(10), minHeight: ds(AVATAR) + 20, paddingHorizontal: spacing.md, backgroundColor: colors.card, borderColor: colors.border, borderWidth: 1, borderRadius: radius.control },
     fieldPlaceholder: { color: colors.textMuted, fontSize: fontSize.body },
     fieldName: { flexShrink: 1, color: colors.text, fontSize: fontSize.body, fontWeight: weight.medium },
     fieldHint: { flexShrink: 1, maxWidth: '45%', color: colors.textMuted, fontSize: fontSize.small },
@@ -282,14 +283,14 @@ function makeStyles() {
     rootCenter: { alignItems: 'center', justifyContent: 'center' },
     backdrop: { backgroundColor: '#00000073' },
     panel: { backgroundColor: colors.bg, overflow: 'hidden' },
-    sheet: { width: '100%', borderTopLeftRadius: 14, borderTopRightRadius: 14 },
-    dialog: { borderRadius: 14, borderWidth: StyleSheet.hairlineWidth, borderColor: colors.border, boxShadow: '0 12px 40px rgba(0,0,0,0.28)' } as any,
+    sheet: { width: '100%', borderTopLeftRadius: radius.surface, borderTopRightRadius: radius.surface },
+    dialog: { borderRadius: radius.surface, ...elevated('floating') } as any,
     handleArea: { alignItems: 'center', paddingTop: 8, paddingBottom: 4 },
-    handle: { width: 36, height: 5, borderRadius: 3, backgroundColor: colors.border },
+    handle: { width: 36, height: 5, borderRadius: radius.pill, backgroundColor: colors.border },
     head: { flexDirection: 'row', alignItems: 'center', minHeight: ds(40), paddingHorizontal: padX },
     title: { flex: 1, color: colors.text, fontSize: fontSize.title, fontWeight: weight.strong },
     close: { width: ds(28), height: ds(28), alignItems: 'center', justifyContent: 'center', marginRight: -ds(4) },
-    searchBox: { flexDirection: 'row', alignItems: 'center', gap: ds(6), minHeight: ds(36), marginHorizontal: padX, marginTop: spacing.xs, marginBottom: spacing.sm, borderRadius: radius.md, paddingHorizontal: ds(10), backgroundColor: colors.subtleFill },
+    searchBox: { flexDirection: 'row', alignItems: 'center', gap: ds(6), minHeight: ds(36), marginHorizontal: padX, marginTop: spacing.xs, marginBottom: spacing.sm, borderRadius: radius.control, paddingHorizontal: ds(10), backgroundColor: colors.subtleFill },
     searchInput: { flex: 1, minWidth: 0, color: colors.text, fontSize: fontSize.body, paddingVertical: 0, height: ds(36), outlineStyle: 'none' } as any,
     group: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: padX, paddingTop: spacing.md, paddingBottom: spacing.xs },
     groupTitle: { flexShrink: 1, color: colors.textMuted, fontSize: fontSize.small, fontWeight: weight.medium, letterSpacing: 0.4 },

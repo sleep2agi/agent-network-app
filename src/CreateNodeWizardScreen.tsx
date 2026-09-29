@@ -4,10 +4,11 @@ import { Text, TextInput } from './ui-text';
 import { Ionicons } from './icons';
 import { createNode, CreateNodeRequest, fetchStatus, HostSupervisorDaemon, HubConfig, Session, fetchCreateRequestStatus } from './api';
 import { createRequestVerdict, timeoutMessage, type CreateRequestVerdict } from './create-request-status';
-import { colors, onThemeChange, spacing } from './theme';
+import { colors, onThemeChange, spacing, radius } from './theme';
 import { advancedExpanded, advancedRuntimesOf, primaryRuntimes, runtimeDisplayLabel, showsAdvancedToggle, type WizardRuntime } from './wizard-runtime-groups';
 import { PANE_BACK_TEST_ID, paneShowsBack } from './pane-header';
 import { defaultWorkdir, describeWorkdirError, randomHex6, workdirError, workdirForRequest, workdirRootOf, workdirSlug } from './create-node-workdir';
+import { buttonStyle, buttonTextStyle } from './elevation';
 
 // #338 RFC-026 §3.1 — mobile create-node wizard rest (Plan B).
 // 5 post-picker steps: ① name ② runtime ③ model ④ flags ⑤ confirm.
@@ -705,7 +706,7 @@ const makeStyles = () => StyleSheet.create({
 
   stepRow: { flexDirection: 'row', gap: spacing.xs, paddingHorizontal: spacing.lg, paddingTop: spacing.md },
   stepCell: { flex: 1, alignItems: 'center', gap: 4 },
-  stepBar: { height: 3, width: '100%', borderRadius: 2, backgroundColor: colors.border },
+  stepBar: { height: 3, width: '100%', borderRadius: radius.pill, backgroundColor: colors.border },
   stepBarActive: { backgroundColor: colors.accent },
   stepLabel: { color: colors.textMuted, fontSize: 10 },
   stepLabelActive: { color: colors.accent },
@@ -723,7 +724,7 @@ const makeStyles = () => StyleSheet.create({
     backgroundColor: colors.inputBg,
     borderColor: colors.border,
     borderWidth: 1,
-    borderRadius: 8,
+    borderRadius: radius.control,
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm + 2,
     color: colors.text,
@@ -738,7 +739,7 @@ const makeStyles = () => StyleSheet.create({
     backgroundColor: colors.inputBg,
     borderColor: colors.border,
     borderWidth: 1,
-    borderRadius: 8,
+    borderRadius: radius.control,
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm + 2,
   },
@@ -759,7 +760,7 @@ const makeStyles = () => StyleSheet.create({
 
   summaryCard: {
     backgroundColor: colors.card,
-    borderRadius: 12,
+    borderRadius: radius.surface,
   },
   summaryRow: {
     flexDirection: 'row',
@@ -791,33 +792,19 @@ const makeStyles = () => StyleSheet.create({
     borderTopColor: colors.border,
     borderTopWidth: 1,
   },
-  primaryBtn: {
-    flex: 1,
-    backgroundColor: colors.accent,
-    paddingVertical: spacing.md,
-    borderRadius: 10,
-    alignItems: 'center',
-  },
+  primaryBtn: { ...buttonStyle('primary'), flex: 1 },
   primaryBtnDisabled: { backgroundColor: colors.border },
-  primaryBtnText: { color: colors.onAccent, fontSize: 15, fontWeight: '600' },
+  primaryBtnText: { ...buttonTextStyle('primary') },
   primaryBtnTextDisabled: { color: colors.textMuted },
-  secondaryBtn: {
-    flex: 1,
-    backgroundColor: colors.card,
-    borderColor: colors.border,
-    borderWidth: 1,
-    paddingVertical: spacing.md,
-    borderRadius: 10,
-    alignItems: 'center',
-  },
-  secondaryBtnText: { color: colors.text, fontSize: 15, fontWeight: '500' },
+  secondaryBtn: { ...buttonStyle('secondary'), flex: 1 },
+  secondaryBtnText: { ...buttonTextStyle('secondary') },
 
   // (#3 nit ②) Empty-state warning card for App-doesn't-know-these-runtimes case.
   warnCard: {
     backgroundColor: colors.card,
     borderColor: colors.blocked,
     borderWidth: 1,
-    borderRadius: 12,
+    borderRadius: radius.surface,
     padding: spacing.lg,
   },
   warnTitle: { color: colors.blocked, fontSize: 15, fontWeight: '600', marginBottom: spacing.sm },

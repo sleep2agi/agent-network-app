@@ -9,7 +9,7 @@ const values = new Map<string, string>();
 
 const {
   COMPOSER_HEIGHT_MIN, COMPOSER_LIST_RESERVE, COMPOSER_CHROME, COMPOSER_HEIGHT_KEY,
-  composerHeightBounds, clampComposerHeight, composerHeightFromDrag, inputMaxHeight,
+  composerHeightBounds, composerCardHeight, clampComposerHeight, composerHeightFromDrag, inputMaxHeight,
   parseStoredComposerHeight, loadComposerHeight, saveComposerHeight,
   composerDragHandlers, lockDocumentSelection,
 } = await import('./composer-resize');
@@ -20,9 +20,9 @@ const check = (cond: boolean, msg: string) => { assert.ok(cond, msg); ck++; };
 
 // 边界:根高度 800 → max = 600;根高度未知 → 宽松上界;根高度太矮 → max 退化为 min
 check(composerHeightBounds(800).max === 800 - COMPOSER_LIST_RESERVE, 'max = root - reserve');
-check(composerHeightBounds(800).min === COMPOSER_HEIGHT_MIN, 'min = 148');
+check(composerHeightBounds(800).min === COMPOSER_HEIGHT_MIN, 'min = one line + toolbar');
 check(composerHeightBounds(0).max >= COMPOSER_HEIGHT_MIN, 'unknown root keeps a usable max');
-check(composerHeightBounds(300).max === COMPOSER_HEIGHT_MIN, 'short window: max collapses to min (not below)');
+check(composerHeightBounds(COMPOSER_LIST_RESERVE + COMPOSER_HEIGHT_MIN - 20).max === COMPOSER_HEIGHT_MIN, 'short window: max collapses to min (not below)');
 
 // clamp:上下越界、非数字、四舍五入
 check(clampComposerHeight(50, 800) === COMPOSER_HEIGHT_MIN, 'below min → min');
@@ -38,6 +38,16 @@ check(composerHeightFromDrag(580, -100, 800) === 600, 'drag up past max stops at
 
 // 输入框可用高度
 check(inputMaxHeight(148) === 148 - COMPOSER_CHROME, 'input max = composer - chrome');
+
+// 2026-09-29 卡片自动长高:拖的高度是下限;内容多了长高,到 max(拖的, 窗格 40%) 为止,再多滚动
+check(COMPOSER_HEIGHT_MIN === COMPOSER_CHROME + 21, 'min card = one 21px line + chrome');
+check(composerCardHeight(COMPOSER_HEIGHT_MIN, 21, 800) === COMPOSER_HEIGHT_MIN, 'empty / one line: compact card');
+check(composerCardHeight(COMPOSER_HEIGHT_MIN, 105, 800) === COMPOSER_CHROME + 105, 'five lines: grows with content');
+check(composerCardHeight(COMPOSER_HEIGHT_MIN, 2000, 800) === 320, 'long draft: stops at 40% of the pane (then scrolls)');
+check(composerCardHeight(400, 21, 800) === 400, 'dragged taller: stays that tall with a short draft');
+check(composerCardHeight(400, 2000, 800) === 400, 'dragged taller than 40%: the drag is the cap');
+check(composerCardHeight(COMPOSER_HEIGHT_MIN, undefined, 0) === COMPOSER_HEIGHT_MIN, 'unknown content / pane: one line');
+check(composerCardHeight(COMPOSER_HEIGHT_MIN, 2000, 300) === composerHeightBounds(300).max, 'short pane: never above the list-reserve bound');
 check(inputMaxHeight(10) === 21, 'never below one line');
 
 // 持久化:没存过 → null;存了 → 读回;坏值 → null

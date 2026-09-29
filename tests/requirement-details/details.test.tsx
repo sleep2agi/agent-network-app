@@ -19,9 +19,12 @@ mock.module('./src/ui-scale', () => ({ uiScale: () => ({ densityFactor: 1, dense
 mock.module('./src/safe-area-runtime', () => ({ useModalSafePadding: () => ({ paddingTop: 0, paddingBottom: 0, paddingLeft: 0, paddingRight: 0 }) }));
 mock.module('./src/theme', () => ({
   colors: {}, onThemeChange: () => () => {}, themeMode: () => 'light',
-  radius: { sm: 4, md: 8, lg: 14, pill: 999 }, spacing: { xs: 4, sm: 8, md: 12, lg: 16, xl: 24 },
+  radius: { inline: 2, mark: 4, item: 8, control: 12, thumb: 12, surface: 16, bubble: 18, pill: 999, sm: 8, md: 12, lg: 16 },
+  avatarRadius: () => 999, spacing: { xs: 4, sm: 8, md: 12, lg: 16, xl: 24 },
   type: { caption: 11, small: 12, body: 14, title: 16, heading: 20 }, weight: { regular: '400', medium: '500', strong: '600' },
 }));
+// elevation.ts reads tokens this isolated theme mock does not carry (ELEVATION, CONTROL_HEIGHT, …).
+mock.module('./src/elevation', () => ({ elevated: () => ({}), shadowOnly: () => ({}), buttonStyle: () => ({}), buttonTextStyle: () => ({}), controlHeight: () => 40 }));
 mock.module('./src/requirements-store', () => ({ requirementsKey: (s: string) => s, readRequirements: () => [], writeRequirements: () => {} }));
 mock.module('./src/api', () => ({ fetchHubNodes: async () => ({ nodes: [] }) }));
 // The picker renders AliasAvatar. The real module pulls image assets and ui-scale,

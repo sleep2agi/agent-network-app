@@ -8,6 +8,7 @@ import { saveObjectUrlOriginal } from './AuthedWebThumb';
 import { appFetch } from './app-fetch';
 import { displayDownloadPath } from './desktop-download';
 import { downloadImageObjectUrl } from './web-image-download';
+import { radius } from './theme';
 import {
   dragAxis,
   isDoubleTap,
@@ -390,12 +391,12 @@ const styles = StyleSheet.create({
   center: { flex: 1, alignSelf: 'stretch', alignItems: 'center', justifyContent: 'center' },
   errorText: { color: '#fff', fontSize: 13 },
   topBar: { position: 'absolute', left: 16, right: 16, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  index: { color: '#fff', fontSize: 15, fontWeight: '600', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 12, backgroundColor: 'rgba(0,0,0,0.45)', overflow: 'hidden' },
-  close: { width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(0,0,0,0.45)' },
-  arrow: { position: 'absolute', top: '50%', marginTop: -24, width: 48, height: 48, borderRadius: 24, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(0,0,0,0.45)' },
+  index: { color: '#fff', fontSize: 15, fontWeight: '600', paddingHorizontal: 10, paddingVertical: 4, borderRadius: radius.pill, backgroundColor: 'rgba(0,0,0,0.45)', overflow: 'hidden' },
+  close: { width: 36, height: 36, borderRadius: radius.pill, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(0,0,0,0.45)' },
+  arrow: { position: 'absolute', top: '50%', marginTop: -24, width: 48, height: 48, borderRadius: radius.pill, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(0,0,0,0.45)' },
   arrowLeft: { left: 16 },
   arrowRight: { right: 16 },
   bottomBar: { position: 'absolute', left: 0, right: 0, alignItems: 'center' },
-  save: { color: '#fff', fontSize: 13, paddingVertical: 6, paddingHorizontal: 14, borderRadius: 14, borderWidth: 1, borderColor: 'rgba(255,255,255,0.5)', backgroundColor: 'rgba(0,0,0,0.45)', overflow: 'hidden' },
-  savePill: { paddingVertical: 2, paddingHorizontal: 14, borderRadius: 14, borderWidth: 1, borderColor: 'rgba(255,255,255,0.5)', backgroundColor: 'rgba(0,0,0,0.45)' },
+  save: { color: '#fff', fontSize: 13, paddingVertical: 6, paddingHorizontal: 14, borderRadius: radius.pill, borderWidth: 1, borderColor: 'rgba(255,255,255,0.5)', backgroundColor: 'rgba(0,0,0,0.45)', overflow: 'hidden' },
+  savePill: { paddingVertical: 2, paddingHorizontal: 14, borderRadius: radius.pill, borderWidth: 1, borderColor: 'rgba(255,255,255,0.5)', backgroundColor: 'rgba(0,0,0,0.45)' },
 });

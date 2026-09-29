@@ -166,7 +166,7 @@ const makeStyles = () => StyleSheet.create({
     minWidth: ds(56),
     // Row control height (composer-row-layout.ts) — same as ＋, the toggle and the bar/input.
     height: composerControlSize(uiScale().densityFactor),
-    borderRadius: radius.sm,
+    borderRadius: radius.control,
     paddingHorizontal: spacing.md,
     alignItems: 'center',
     justifyContent: 'center',
@@ -182,7 +182,7 @@ const makeStyles = () => StyleSheet.create({
   plusBtn: {
     width: composerControlSize(uiScale().densityFactor),
     height: composerControlSize(uiScale().densityFactor),
-    borderRadius: composerControlSize(uiScale().densityFactor) / 2,
+    borderRadius: radius.pill,
     borderColor: colors.text,
     borderWidth: 1.5,
     alignItems: 'center',
@@ -194,7 +194,7 @@ const makeStyles = () => StyleSheet.create({
   expandBtn: {
     width: ds(28),
     height: ds(28),
-    borderRadius: radius.sm,
+    borderRadius: radius.item,
     alignItems: 'center',
     justifyContent: 'center',
   },

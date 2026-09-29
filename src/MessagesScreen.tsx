@@ -4,10 +4,11 @@ import { Text } from './ui-text';
 import { fetchMessages, HubConfig, HubMessage } from './api';
 import { connectivityState } from './connectivity';
 import { messagesViewState } from './messages-view-state';
-import { colors, onThemeChange, spacing } from './theme';
+import { colors, onThemeChange, spacing, radius } from './theme';
 import { formatTime } from './time';
 import { usePoll } from './usePoll';
 import { Pressable } from 'react-native';
+import { elevated } from './elevation';
 
 // Network-wide message feed. Same lazy-window discipline as the chat
 // screen (and dashboard M5): open with the newest PAGE, grow the limit
@@ -98,7 +99,7 @@ export default function MessagesScreen({ cfg }: { cfg: HubConfig }) {
         <Pressable
           testID="messages-retry"
           onPress={() => { setLoaded(false); void load(limitRef.current); }}
-          style={{ marginTop: spacing.lg, paddingHorizontal: spacing.xl, paddingVertical: spacing.sm, borderRadius: 8, backgroundColor: colors.accent }}
+          style={{ marginTop: spacing.lg, paddingHorizontal: spacing.xl, paddingVertical: spacing.sm, borderRadius: radius.control, backgroundColor: colors.accent }}
         >
           <Text style={{ color: colors.bg, fontSize: 14, fontWeight: '600' }}>重试</Text>
         </Pressable>
@@ -170,11 +171,10 @@ const makeStyles = () =>
   },
   card: {
     backgroundColor: colors.card,
-    borderColor: colors.border,
-    borderWidth: 1,
-    borderRadius: 12,
+    borderRadius: radius.surface,
     padding: spacing.lg,
     marginBottom: spacing.sm,
+    ...elevated('raised'),
   },
   headerRow: {
     flexDirection: 'row',
@@ -182,7 +182,7 @@ const makeStyles = () =>
     gap: spacing.sm,
     marginBottom: spacing.xs,
   },
-  typeDot: { width: 6, height: 6, borderRadius: 3 },
+  typeDot: { width: 6, height: 6, borderRadius: radius.pill },
   route: { color: colors.textSecondary, fontSize: 12, fontWeight: '600', flex: 1 },
   high: { color: colors.failed, fontSize: 10, fontWeight: '600' },
   time: { color: colors.textMuted, fontSize: 10 },

@@ -6,7 +6,7 @@ import AliasAvatar from './AliasAvatar';
 import { fetchHubNodes, HubConfig, putNodeAvatar } from './api';
 import { POOL_FILENAMES, POOL_RELATIVE_PATHS, validateCustomAvatarUrl } from './lib/avatar-resolve';
 import { hydrateHubAvatars, isNodeBacked, setLocalAvatarEcho, sourceForFile, useAvatarsVersion } from './lib/avatars';
-import { colors, spacing } from './theme';
+import { colors, spacing, avatarRadius, radius } from './theme';
 
 // R2 (通信龙 08-01, B 轮): per-agent avatar editor on NodeDetailScreen. Two ways
 // to set — a pool picker (tap a face → '/avatars/avatar-NN.webp', app-native) and
@@ -88,7 +88,7 @@ export default function AvatarEditSection({ cfg, alias }: { cfg: HubConfig; alia
           >
             <Image
               source={sourceForFile(file)!}
-              style={{ width: 44, height: 44, borderRadius: 22, borderWidth: 1, borderColor: colors.border }}
+              style={{ width: 44, height: 44, borderRadius: avatarRadius(44), borderWidth: 1, borderColor: colors.border }}
             />
           </Pressable>
         ))}
@@ -112,7 +112,7 @@ export default function AvatarEditSection({ cfg, alias }: { cfg: HubConfig; alia
             backgroundColor: colors.card,
             borderColor: colors.border,
             borderWidth: 1,
-            borderRadius: 8,
+            borderRadius: radius.control,
             paddingHorizontal: spacing.sm,
             paddingVertical: spacing.xs,
             fontSize: 13,
@@ -126,7 +126,7 @@ export default function AvatarEditSection({ cfg, alias }: { cfg: HubConfig; alia
           style={{
             paddingHorizontal: spacing.md,
             justifyContent: 'center',
-            borderRadius: 8,
+            borderRadius: radius.control,
             backgroundColor: colors.accent,
             opacity: canSaveUrl ? 1 : 0.4,
           }}

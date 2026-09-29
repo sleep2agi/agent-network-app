@@ -27,8 +27,9 @@ import {
 } from './side-thread-model';
 import { createSideThreadActionController } from './side-thread-action-controller';
 import { keyboardAvoidEnabled, useKeyboardVisible } from './keyboard-visibility';
-import { colors, onThemeChange, spacing } from './theme';
+import { colors, onThemeChange, spacing, radius } from './theme';
 import { createSideThreadScopeGate } from './side-thread-scope-gate';
+import { elevated, buttonStyle, buttonTextStyle } from './elevation';
 
 export interface SideThreadLaunch {
   id: number;
@@ -445,22 +446,22 @@ const makeStyles = () => StyleSheet.create({
   modalRoot: { flex: 1 },
   backdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.48)', justifyContent: 'flex-end' },
   desktopBackdrop: { alignItems: 'flex-end' },
-  panel: { backgroundColor: colors.bg, borderColor: colors.border },
-  desktopPanel: { width: 440, maxWidth: '92%', height: '100%', borderLeftWidth: 1 },
-  mobilePanel: { width: '100%', height: '86%', borderTopWidth: 1, borderTopLeftRadius: 18, borderTopRightRadius: 18 },
+  panel: { backgroundColor: colors.bg },
+  desktopPanel: { width: 440, maxWidth: '92%', height: '100%', ...elevated('floating', 'left') },
+  mobilePanel: { width: '100%', height: '86%', borderTopLeftRadius: radius.surface, borderTopRightRadius: radius.surface, overflow: 'hidden', ...elevated('floating', 'top') },
   header: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, padding: spacing.lg, borderBottomWidth: 1, borderBottomColor: colors.border },
   headerCopy: { flex: 1, minWidth: 0 },
   title: { color: colors.text, fontSize: 17, fontWeight: '600' },
   subtitle: { color: colors.textMuted, fontSize: 11, marginTop: 2 },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: spacing.md, padding: spacing.xl },
-  notice: { margin: spacing.lg, padding: spacing.xl, alignItems: 'center', gap: spacing.md, borderRadius: 12, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.card },
+  notice: { margin: spacing.lg, padding: spacing.xl, alignItems: 'center', gap: spacing.md, borderRadius: radius.surface, backgroundColor: colors.card, ...elevated('raised') },
   noticeTitle: { color: colors.text, fontSize: 16, fontWeight: '600', textAlign: 'center' },
   noticeText: { color: colors.textSecondary, fontSize: 13, lineHeight: 20, textAlign: 'center' },
   failClosed: { color: colors.blocked, fontSize: 12, lineHeight: 18, textAlign: 'center' },
   composer: { flexDirection: 'row', alignItems: 'flex-end', gap: spacing.sm, padding: spacing.lg, paddingBottom: spacing.sm },
-  input: { flex: 1, minHeight: 64, maxHeight: 120, paddingHorizontal: spacing.md, paddingVertical: 10, color: colors.text, backgroundColor: colors.inputBg, borderWidth: 1, borderColor: colors.border, borderRadius: 10, textAlignVertical: 'top' },
-  askButton: { height: 38, paddingHorizontal: spacing.md, alignItems: 'center', justifyContent: 'center', borderRadius: 8, backgroundColor: colors.accent },
-  askButtonText: { color: colors.onAccent, fontSize: 12, fontWeight: '600' },
+  input: { flex: 1, minHeight: 64, maxHeight: 120, paddingHorizontal: spacing.md, paddingVertical: 10, color: colors.text, backgroundColor: colors.inputBg, borderWidth: 1, borderColor: colors.border, borderRadius: radius.control, textAlignVertical: 'top' },
+  askButton: { ...buttonStyle('primary') },
+  askButtonText: { ...buttonTextStyle('primary') },
   buttonDisabled: { backgroundColor: colors.inputBg, borderWidth: 1, borderColor: colors.border },
   buttonTextDisabled: { color: colors.textMuted },
   createError: { color: colors.failed, fontSize: 12, paddingHorizontal: spacing.lg, paddingBottom: spacing.sm },
@@ -469,9 +470,9 @@ const makeStyles = () => StyleSheet.create({
   list: { paddingHorizontal: spacing.lg, paddingBottom: spacing.xl, gap: spacing.md },
   emptyList: { flexGrow: 1, alignItems: 'center', justifyContent: 'center', padding: spacing.xl },
   muted: { color: colors.textMuted, fontSize: 12, textAlign: 'center' },
-  card: { padding: spacing.lg, gap: spacing.sm, backgroundColor: colors.card, borderWidth: 1, borderColor: colors.border, borderRadius: 12 },
+  card: { padding: spacing.lg, gap: spacing.sm, backgroundColor: colors.card, borderRadius: radius.surface, ...elevated('raised') },
   cardHeader: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
-  badge: { color: colors.accent, fontSize: 10, fontWeight: '600', borderWidth: 1, borderColor: colors.accent, borderRadius: 4, paddingHorizontal: 5, paddingVertical: 2 },
+  badge: { color: colors.accent, fontSize: 10, fontWeight: '600', borderWidth: 1, borderColor: colors.accent, borderRadius: radius.pill, paddingHorizontal: 5, paddingVertical: 2 },
   state: { flex: 1, fontSize: 11, fontWeight: '600' },
   prompt: { color: colors.text, fontSize: 14, lineHeight: 20, fontWeight: '600' },
   answer: { paddingTop: spacing.sm, borderTopWidth: 1, borderTopColor: colors.border },

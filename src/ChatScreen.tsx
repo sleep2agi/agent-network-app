@@ -19,7 +19,7 @@ import { conversationKey, conversationScope, createConversationRequestGate, crea
 import { resolveSender } from './chat-sender';
 import { keyboardAvoidEnabled, useKeyboardVisible } from './keyboard-visibility';
 import { nextIdentityRetryDelay } from './identity-retry';
-import { COMPOSER_HEIGHT_DEFAULT, clampComposerHeight, composerDragHandlers, inputMaxHeight, loadComposerHeight, lockDocumentSelection, saveComposerHeight } from './composer-resize';
+import { COMPOSER_CARD_INSET, COMPOSER_HEIGHT_DEFAULT, composerCardHeight, composerDragHandlers, inputMaxHeight, loadComposerHeight, lockDocumentSelection, saveComposerHeight } from './composer-resize';
 import {
   ATTACH_ENABLED,
   attachmentTextHint,
@@ -87,6 +87,7 @@ import { beginVoicePress, createSelectionCapture, hostSelection, insertAtSelecti
 import { COMPOSER_INPUT_BORDER, COMPOSER_LINE_HEIGHT, composerControlSize, composerInputPadY, composerLineCount, composerRightSlot, composerRowAlign, nextFullEditor, shouldShowExpand, type FullEditorEvent } from './composer-row-layout';
 import { ComposerExpandButton, ComposerFullscreenEditor, ComposerRightSlot } from './ComposerRowParts';
 import { loadComposerInputMode, saveComposerInputMode } from './voice-prefs';
+import { elevated } from './elevation';
 
 // Chat with one agent. Mirrors dashboard M4: open with the newest PAGE
 // messages, grow the window when the user scrolls toward older history.
@@ -123,6 +124,9 @@ type ChatItem = HubTask & {
    *  task_id,等轮询把同 id 的服务器行拉回来再让位;没拿到 id 时按内容+时间对账(confirmedOutboxIds)。 */
   _confirmedTaskId?: string;
 };
+
+/** 桌面聊天气泡的最大宽度(px)。 */
+const DESKTOP_BUBBLE_MAX = 640;
 
 // selectedText:桌面端右键时气泡里已有的鼠标选区(只在这个气泡内才算),菜单据此给「复制选中内容」。
 type MessageSelection = { item: ChatItem; text: string; author?: string; selectedText?: string };
@@ -364,9 +368,12 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
   useEffect(() => { setInfoOpen(false); }, [alias]);
   const rootHeightRef = useRef(0);
   const [composerHeightRaw, setComposerHeightRaw] = useState<number>(() => loadComposerHeight() ?? COMPOSER_HEIGHT_DEFAULT);
-  const composerHeight = clampComposerHeight(composerHeightRaw, rootHeight || undefined);
-  const composerHeightRawRef = useRef(composerHeightRaw);
-  composerHeightRawRef.current = composerHeightRaw;
+  // 卡片高度 = 拖出来的高度(下限)与内容高度(自动长高,到窗格 40% 为止)取大 —— composer-resize.ts。
+  const [composerContentHeight, setComposerContentHeight] = useState(0);
+  const composerHeight = composerCardHeight(composerHeightRaw, composerContentHeight, rootHeight || undefined);
+  // 拖拽从**当前看到的**高度起算(自动长高后再拖,不能先跳回拖过的旧值)。
+  const composerHeightRawRef = useRef(composerHeight);
+  composerHeightRawRef.current = composerHeight;
   // 🔴 只创建一次(空依赖):每次高度变化重建 PanResponder 会让 react-native-web 在拖拽中途
   // 换 responder config,新 gestureState 的 dy 从 0 重新累计 → 拖不动(见 composer-resize.ts)。
   // 会变的值全部经 ref 现读。
@@ -377,6 +384,8 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
     save: saveComposerHeight,
     lockSelection: Platform.OS === 'web' ? lockDocumentSelection : undefined,
   })), []);
+  // 桌面气泡最大宽度:窗格的 85%,但不超过 DESKTOP_BUBBLE_MAX(宽窗口里一行字不拉满)。手机不变。
+  const bubbleCap = desktop && paneWidth > 0 ? { maxWidth: Math.min(DESKTOP_BUBBLE_MAX, Math.floor(paneWidth * 0.85)) } : null;
   const sending = false; // optimistic echo frees the input immediately
   const limitRef = useRef(PAGE);
 
@@ -1983,7 +1992,7 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
                 <View style={selectionMode ? styles.selectBody : undefined} pointerEvents={selectionMode ? 'none' : 'auto'}>
                 {!item._proactive ? sender.isCurrentUser ? (
                 <View style={[styles.messageRow, styles.sentRow]}>
-                  <View style={[styles.messageContent, styles.sentContent]}>
+                  <View style={[styles.messageContent, styles.sentContent, bubbleCap]}>
                     <Text style={[styles.messageAuthor, styles.sentAuthor]} numberOfLines={1}>
                       {sender.alias}{item.created_at ? ` · ${formatChatHeader(item.created_at)}` : ''}
                     </Text>
@@ -2014,7 +2023,7 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
                 // 放在收到侧,头像用发送方,作者行写「发送方 → 本 agent」。
                 <View style={[styles.messageRow, styles.foreignRow]}>
                   <AliasAvatar alias={sender.alias} size={36} />
-                  <View style={styles.messageContent}>
+                  <View style={[styles.messageContent, bubbleCap]}>
                     <Text style={styles.messageAuthor} numberOfLines={1}>
                       {`${sender.alias} → ${alias}`}{item.created_at ? ` · ${formatChatHeader(item.created_at)}` : ''}
                     </Text>
@@ -2024,7 +2033,7 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
                       delayLongPress={300}
                       style={styles.replyPressable}
                     >
-                      <View style={[styles.bubble, styles.replyBubble]}>
+                      <View style={[styles.bubble, styles.replyBubble, desktop && styles.replyBubbleDesktop]}>
                         {pointer && hoverKey === `${msgKey(item)}:sent` && item.content ? (
                           <MessageHoverActions side="reply" styles={styles} onCopy={() => void copyMessage(item.content ?? '')} onMore={at => openMenuAt(at, { item, text: item.content ?? '', author: sender.alias })} />
                         ) : null}
@@ -2043,7 +2052,7 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
                 {item.result || item.reply ? (
                   <View style={[styles.messageRow, styles.replyRow]}>
                     <AliasAvatar alias={alias} size={36} />
-                    <View style={styles.messageContent}>
+                    <View style={[styles.messageContent, bubbleCap]}>
                       {/* 2026-09-16 Vincent:「每条消息都展示下时间吧」—— 回复用完成时刻,没有就用创建时刻 */}
                       <Text style={styles.messageAuthor} numberOfLines={1}>{alias}{item._proactive ? ' · 主动汇报' : ''}{(item.completed_at ?? item.created_at) ? ` · ${formatChatHeader(item.completed_at ?? item.created_at)}` : ''}</Text>
                       <Pressable
@@ -2052,7 +2061,7 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
                         delayLongPress={300}
                         style={styles.replyPressable}
                       >
-                        <View style={[styles.bubble, styles.replyBubble]}>
+                        <View style={[styles.bubble, styles.replyBubble, desktop && styles.replyBubbleDesktop]}>
                           {pointer && hoverKey === `${msgKey(item)}:reply` ? (
                             <MessageHoverActions side="reply" styles={styles} onCopy={() => void copyMessage(item.result ?? item.reply ?? '')} onMore={at => openMenuAt(at, { item, text: item.result ?? item.reply ?? '', author: alias })} />
                           ) : null}
@@ -2329,7 +2338,19 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
             </Pressable>
           </View>
         ) : null}
-        <View style={[styles.desktopComposer, { height: composerHeight, minHeight: undefined, maxHeight: undefined }]}>
+        <View style={styles.desktopComposerWrap}>
+        <View style={[styles.desktopComposer, { height: composerHeight, minHeight: undefined, maxHeight: undefined }]} testID="desktop-composer-card">
+          {/* 内容高度量尺:同宽、同字号行高的隐形文字。不用 TextInput 的 onContentSizeChange —— web 上那是
+              textarea.scrollHeight,永远 ≥ 自身高度,卡片只会长不会缩(删掉文字后回不去)。 */}
+          <Text
+            style={styles.desktopInputMeasure}
+            aria-hidden
+            accessibilityElementsHidden
+            importantForAccessibility="no-hide-descendants"
+            onLayout={event => setComposerContentHeight(event.nativeEvent.layout.height)}
+          >
+            {`${draft}${draft.endsWith('\n') || !draft ? '\u200b' : ''}`}
+          </Text>
           <TextInput
             ref={mainComposerRef}
             style={[styles.desktopInput, { maxHeight: inputMaxHeight(composerHeight) }]}
@@ -2380,6 +2401,7 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
             </View>
           </View>
           )}
+        </View>
         </View>
         </>
       ) : (
@@ -2586,7 +2608,7 @@ const makeStyles = () =>
   subtitle: { color: colors.running, fontSize: 11, marginTop: 1 },
   // The single ⋯: a 36 dp target flush with the right padding. Icon buttons are measured by their box
   // (tests/test-layout-sweep: the box is the symmetric thing), so left and right padding match.
-  headerMore: { width: 36, height: ds(34), borderRadius: 9, alignItems: 'center', justifyContent: 'center' },
+  headerMore: { width: 36, height: ds(34), borderRadius: radius.item, alignItems: 'center', justifyContent: 'center' },
   headerTitleCol: { flex: 1, minWidth: 0 },
   beginning: {
     color: colors.textMuted,
@@ -2596,10 +2618,10 @@ const makeStyles = () =>
   },
   bubbleWrap: { marginBottom: spacing.md, gap: spacing.xs },
   // app#166 —— 搜索定位后的临时高亮(2 s)
-  bubbleHighlight: { backgroundColor: colors.accent + '22', borderRadius: 12, marginHorizontal: -spacing.xs, paddingHorizontal: spacing.xs },
+  bubbleHighlight: { backgroundColor: colors.accent + '22', borderRadius: radius.bubble, marginHorizontal: -spacing.xs, paddingHorizontal: spacing.xs },
   searchPanel: { borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.border, backgroundColor: colors.card, maxHeight: 320 },
   searchBar: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, paddingHorizontal: spacing.md, paddingVertical: spacing.sm },
-  searchInput: { flex: 1, color: colors.text, fontSize: 15, paddingVertical: 6, paddingHorizontal: spacing.sm, backgroundColor: colors.bg, borderRadius: 8 },
+  searchInput: { flex: 1, color: colors.text, fontSize: 15, paddingVertical: 6, paddingHorizontal: spacing.sm, backgroundColor: colors.bg, borderRadius: radius.control },
   searchCount: { color: colors.textMuted, fontSize: 12, minWidth: 36, textAlign: 'center' },
   searchNav: { paddingHorizontal: 4, paddingVertical: 4 },
   searchClose: { color: colors.accent, fontSize: 14 },
@@ -2628,17 +2650,25 @@ const makeStyles = () =>
     textAlign: 'center',
     marginTop: spacing.md,
     marginBottom: spacing.sm,
+    // 2026-09-29:日期 / 时间分隔做成一枚小胶囊,不再是一行裸字。
+    backgroundColor: colors.subtleFill,
+    borderRadius: radius.pill,
+    overflow: 'hidden',
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 2,
   },
   // 极简:气泡不描边。发出的用中性的 rowActive 一档底色,回复用卡片色——靠底色区分,不靠边框。
   bubble: {
     alignSelf: 'flex-end',
     maxWidth: '100%',
     backgroundColor: colors.rowActive,
-    borderRadius: radius.lg,
+    borderRadius: radius.bubble,
     paddingHorizontal: spacing.lg,
     paddingVertical: spacing.md,
   },
   replyBubble: { alignSelf: 'flex-start', maxWidth: '85%', flexShrink: 1, backgroundColor: colors.card },
+  // 桌面:发出与回复同一个最大宽度(bubbleCap),回复不再是 85% 里再 85%。
+  replyBubbleDesktop: { maxWidth: '100%' },
   bubbleText: { color: colors.text, fontSize: 14, lineHeight: 20 },
   // 微信式引用:气泡下方一条灰底小字「作者: 内容」(单行省略)
   quoteChip: { marginTop: 4, maxWidth: '100%', borderLeftWidth: 2, borderLeftColor: colors.border, paddingLeft: spacing.sm, paddingVertical: 1 },
@@ -2646,8 +2676,8 @@ const makeStyles = () =>
   quoteChipReply: { alignSelf: 'flex-start' },
   quoteChipText: { color: colors.textMuted, fontSize: 12, lineHeight: 16 },
   // 输入框上方的「正在引用」条
-  quoteStrip: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginHorizontal: spacing.md, marginTop: spacing.sm, paddingHorizontal: spacing.sm, paddingVertical: 6, backgroundColor: colors.border + '55', borderRadius: 8 },
-  quoteStripBar: { width: 3, alignSelf: 'stretch', borderRadius: 2, backgroundColor: colors.accent },
+  quoteStrip: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginHorizontal: spacing.md, marginTop: spacing.sm, paddingHorizontal: spacing.sm, paddingVertical: 6, backgroundColor: colors.border + '55', borderRadius: radius.item },
+  quoteStripBar: { width: 3, alignSelf: 'stretch', borderRadius: radius.pill, backgroundColor: colors.accent },
   quoteStripText: { flex: 1, color: colors.textMuted, fontSize: 12 },
   quoteStripClose: { padding: 2 },
   restoredNote: { color: colors.textMuted, fontSize: 10, marginTop: 2, alignSelf: 'flex-end' },
@@ -2665,7 +2695,7 @@ const makeStyles = () =>
   thumb: {
     width: 180,
     height: 180,
-    borderRadius: 10,
+    borderRadius: radius.thumb, overflow: 'hidden',
     marginTop: spacing.sm,
     backgroundColor: colors.inputBg,
   },
@@ -2673,11 +2703,11 @@ const makeStyles = () =>
   menuBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.45)', justifyContent: 'flex-end' },
   actionSheet: {
     backgroundColor: colors.card,
-    borderTopLeftRadius: 16,
-    borderTopRightRadius: 16,
-    borderTopWidth: 1,
-    borderColor: colors.border,
+    borderTopLeftRadius: radius.surface,
+    borderTopRightRadius: radius.surface,
     paddingBottom: spacing.xl,
+    overflow: 'hidden',
+    ...elevated('floating', 'top'),
   },
   actionItem: { paddingVertical: spacing.lg, alignItems: 'center' },
   actionItemPressed: { backgroundColor: colors.inputBg },
@@ -2689,18 +2719,17 @@ const makeStyles = () =>
     position: 'absolute',
     width: 180,
     backgroundColor: colors.card,
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: colors.border,
+    borderRadius: radius.control,
     paddingVertical: spacing.xs,
     overflow: 'hidden',
+    ...elevated('floating'),
   },
   actionItemDesktop: { paddingVertical: 9, paddingHorizontal: spacing.md, alignItems: 'flex-start' },
   // 组与组之间是一段留白(不是发丝线),危险动作因此够不着常用动作。
   actionGroupGap: { height: spacing.sm, backgroundColor: colors.bg },
   // 放大阅读
   expandBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.55)', alignItems: 'center', justifyContent: 'center', padding: spacing.lg },
-  expandPanel: { width: 760, maxWidth: '96%', height: '86%', borderRadius: 14, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.card, overflow: 'hidden' },
+  expandPanel: { width: 760, maxWidth: '96%', height: '86%', borderRadius: radius.surface, backgroundColor: colors.card, overflow: 'hidden', ...elevated('floating') },
   expandHeader: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingHorizontal: spacing.lg, paddingVertical: spacing.md, borderBottomWidth: 1, borderBottomColor: colors.border },
   expandTitle: { flex: 1, minWidth: 0, color: colors.text, fontSize: 15, fontWeight: '600' },
   expandScroll: { flex: 1 },
@@ -2710,54 +2739,53 @@ const makeStyles = () =>
   // 多选
   selectRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   selectBoxWrap: { paddingLeft: spacing.xs },
-  selectBox: { width: 20, height: 20, borderRadius: 10, borderWidth: 1.5, borderColor: colors.border, alignItems: 'center', justifyContent: 'center' },
+  selectBox: { width: 20, height: 20, borderRadius: radius.pill, borderWidth: 1.5, borderColor: colors.border, alignItems: 'center', justifyContent: 'center' },
   selectBoxOn: { backgroundColor: colors.accent, borderColor: colors.accent },
   selectBody: { flex: 1, minWidth: 0 },
   selectionBar: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingHorizontal: spacing.lg, paddingVertical: spacing.md, borderTopWidth: 1, borderTopColor: colors.border, backgroundColor: colors.card },
   selectionCancel: { paddingVertical: spacing.xs, paddingRight: spacing.sm },
   selectionCancelText: { color: colors.textSecondary, fontSize: 14 },
   selectionActions: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', gap: spacing.md },
-  selectionAction: { paddingVertical: spacing.xs, paddingHorizontal: spacing.sm, borderRadius: 8 },
+  selectionAction: { paddingVertical: spacing.xs, paddingHorizontal: spacing.sm, borderRadius: radius.item },
   selectionHint: { color: colors.textMuted, fontSize: 12 },
   plusPanel: { backgroundColor: colors.inputBg, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border },
   plusGrid: { flexDirection: 'row', flexWrap: 'wrap', paddingHorizontal: spacing.md, paddingTop: spacing.lg },
   plusCell: { width: '25%', maxWidth: 104, alignItems: 'center', marginBottom: spacing.lg },
-  plusCellIcon: { width: 60, height: 60, borderRadius: 16, backgroundColor: colors.card, borderWidth: StyleSheet.hairlineWidth, borderColor: colors.border, alignItems: 'center', justifyContent: 'center' },
+  plusCellIcon: { width: 60, height: 60, borderRadius: radius.surface, backgroundColor: colors.card, borderWidth: StyleSheet.hairlineWidth, borderColor: colors.border, alignItems: 'center', justifyContent: 'center' },
   plusCellBtw: { color: colors.accent, fontSize: 13, fontWeight: '600' },
   plusCellLabel: { color: colors.textSecondary, fontSize: 12, marginTop: 6 },
   forwardBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.38)', alignItems: 'center', justifyContent: 'center', padding: spacing.xl },
-  forwardPanel: { width: 360, maxWidth: '92%', maxHeight: 520, borderRadius: 14, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.card, padding: spacing.lg },
+  forwardPanel: { width: 360, maxWidth: '92%', maxHeight: 520, borderRadius: radius.surface, backgroundColor: colors.card, padding: spacing.lg, ...elevated('floating') },
   forwardTitle: { color: colors.text, fontSize: 17, fontWeight: '600', marginBottom: spacing.md },
-  forwardSearch: { color: colors.text, backgroundColor: colors.inputBg, borderRadius: 9, paddingHorizontal: spacing.md, paddingVertical: 10, marginBottom: spacing.sm },
+  forwardSearch: { color: colors.text, backgroundColor: colors.inputBg, borderRadius: radius.control, paddingHorizontal: spacing.md, paddingVertical: 10, marginBottom: spacing.sm },
   forwardList: { maxHeight: 400 },
-  forwardTarget: { minHeight: 50, flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingHorizontal: spacing.sm, borderRadius: 9 },
+  forwardTarget: { minHeight: 50, flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingHorizontal: spacing.sm, borderRadius: radius.item },
   forwardAlias: { flex: 1, minWidth: 0, color: colors.text, fontSize: 14, fontWeight: '600' },
   forwardEmpty: { color: colors.textMuted, textAlign: 'center', paddingVertical: spacing.xl },
   actionSep: { height: 1, backgroundColor: colors.border },
   // round-3 回到最新 pill
   // 拖文件进聊天区时整格一层虚线框 + 提示(不拦事件,drop 由 document 上的监听处理)。
-  dropOverlay: { position: 'absolute', top: spacing.sm, left: spacing.sm, right: spacing.sm, bottom: spacing.sm, borderWidth: 2, borderStyle: 'dashed', borderColor: colors.accent, borderRadius: 12, backgroundColor: colors.bg + 'E6', alignItems: 'center', justifyContent: 'center', gap: spacing.sm },
+  dropOverlay: { position: 'absolute', top: spacing.sm, left: spacing.sm, right: spacing.sm, bottom: spacing.sm, borderWidth: 2, borderStyle: 'dashed', borderColor: colors.accent, borderRadius: radius.control, backgroundColor: colors.bg + 'E6', alignItems: 'center', justifyContent: 'center', gap: spacing.sm },
   dropOverlayText: { color: colors.accent, fontSize: 14, fontWeight: '600' },
   jumpPill: {
     position: 'absolute',
     right: spacing.lg,
     bottom: 84,
     backgroundColor: colors.card,
-    borderColor: colors.border,
-    borderWidth: 1,
-    borderRadius: 16,
+    borderRadius: radius.pill,
     paddingVertical: spacing.sm,
     paddingHorizontal: spacing.md,
+    ...elevated('floating'),
   },
   jumpPillText: { color: colors.accent, fontSize: 13, fontWeight: '600' },
   // 复制消息:桌面端悬停气泡时的右上角小按钮 + 底部「已复制」提示
   replyPressable: { maxWidth: '100%', alignSelf: 'flex-start' },
   // 复制 + ⋯ 两个 24px 圆钮排成一行,整行挂在气泡上沿外侧(MessageHoverActions)。
   hoverActions: { position: 'absolute', top: -10, zIndex: 2, flexDirection: 'row', gap: 4 },
-  copyHover: { width: 24, height: 24, borderRadius: 12, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.card, borderWidth: 1, borderColor: colors.border },
+  copyHover: { width: 24, height: 24, borderRadius: radius.pill, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.card, borderWidth: 1, borderColor: colors.border },
   copyHoverSent: { left: -12 },
   copyHoverReply: { right: -12 },
-  copiedToast: { position: 'absolute', alignSelf: 'center', bottom: 96, flexDirection: 'row', alignItems: 'center', gap: 6, paddingVertical: 6, paddingHorizontal: 12, borderRadius: 14, backgroundColor: colors.card, borderWidth: 1, borderColor: colors.border },
+  copiedToast: { position: 'absolute', alignSelf: 'center', bottom: 96, flexDirection: 'row', alignItems: 'center', gap: 6, paddingVertical: 6, paddingHorizontal: 12, borderRadius: radius.pill, backgroundColor: colors.card, ...elevated('floating') },
   copiedToastText: { color: colors.text, fontSize: 12 },
   attachPreviewList: { maxHeight: 112, paddingVertical: spacing.xs },
   // 多图草稿条(微信式):计数 + 原图开关一行,下面横向缩略图,每张右上 ✕、左下序号。
@@ -2765,32 +2793,32 @@ const makeStyles = () =>
   draftStripHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 },
   draftCount: { color: colors.textSecondary, fontSize: 12 },
   originalToggle: { flexDirection: 'row', alignItems: 'center', gap: 5 },
-  originalBox: { width: 15, height: 15, borderRadius: 8, borderWidth: 1, borderColor: colors.textMuted, alignItems: 'center', justifyContent: 'center' },
+  originalBox: { width: 15, height: 15, borderRadius: radius.pill, borderWidth: 1, borderColor: colors.textMuted, alignItems: 'center', justifyContent: 'center' },
   originalBoxOn: { backgroundColor: colors.accent, borderColor: colors.accent },
   originalLabel: { color: colors.text, fontSize: 12 },
   draftStripRow: { gap: 8, paddingTop: 6, paddingBottom: spacing.xs, paddingRight: 6 },
-  draftThumbWrap: { width: 64, height: 64, borderRadius: 6, overflow: 'visible' },
-  draftThumbTooBig: { borderWidth: 2, borderColor: colors.failed, borderRadius: 8 },
-  draftThumb: { width: 64, height: 64, borderRadius: 6, backgroundColor: colors.inputBg },
-  draftIndex: { position: 'absolute', left: 3, bottom: 3, minWidth: 16, height: 16, borderRadius: 8, paddingHorizontal: 3, backgroundColor: colors.accent, alignItems: 'center', justifyContent: 'center' },
+  draftThumbWrap: { width: 64, height: 64, borderRadius: radius.thumb, overflow: 'visible' },
+  draftThumbTooBig: { borderWidth: 2, borderColor: colors.failed, borderRadius: radius.thumb },
+  draftThumb: { width: 64, height: 64, borderRadius: radius.thumb, backgroundColor: colors.inputBg },
+  draftIndex: { position: 'absolute', left: 3, bottom: 3, minWidth: 16, height: 16, borderRadius: radius.pill, paddingHorizontal: 3, backgroundColor: colors.accent, alignItems: 'center', justifyContent: 'center' },
   draftIndexText: { color: colors.onAccent, fontSize: 10, fontWeight: '600' },
   draftTooBigTag: { position: 'absolute', left: 0, right: 0, top: 22, alignItems: 'center' },
-  draftTooBigText: { color: '#fff', backgroundColor: colors.failed, fontSize: 10, paddingHorizontal: 3, borderRadius: 3, overflow: 'hidden' },
-  draftRemove: { position: 'absolute', top: -6, right: -6, width: 18, height: 18, borderRadius: 9, backgroundColor: 'rgba(0,0,0,0.65)', alignItems: 'center', justifyContent: 'center' },
+  draftTooBigText: { color: '#fff', backgroundColor: colors.failed, fontSize: 10, paddingHorizontal: 3, borderRadius: radius.mark, overflow: 'hidden' },
+  draftRemove: { position: 'absolute', top: -6, right: -6, width: 18, height: 18, borderRadius: radius.pill, backgroundColor: 'rgba(0,0,0,0.65)', alignItems: 'center', justifyContent: 'center' },
   draftRemoveText: { color: '#fff', fontSize: 10, lineHeight: 12 },
-  draftFileChip: { width: 120, height: 64, borderRadius: 6, padding: 6, justifyContent: 'center', backgroundColor: colors.inputBg, borderWidth: 1, borderColor: colors.border },
+  draftFileChip: { width: 120, height: 64, borderRadius: radius.thumb, padding: 6, justifyContent: 'center', backgroundColor: colors.inputBg, borderWidth: 1, borderColor: colors.border },
   originProbe: { position: 'absolute', left: 0, top: 0, width: 0, height: 0 },
-  composerNotice: { alignSelf: 'center', marginVertical: 4, paddingVertical: 5, paddingHorizontal: 12, borderRadius: 12, backgroundColor: colors.card, borderWidth: 1, borderColor: colors.border, maxWidth: '92%' },
+  composerNotice: { alignSelf: 'center', marginVertical: 4, paddingVertical: 5, paddingHorizontal: 12, borderRadius: radius.pill, backgroundColor: colors.card, maxWidth: '92%', ...elevated('floating') },
   composerNoticeText: { color: colors.text, fontSize: 12 },
   // 多图气泡:3 列方格(微信式),每格 84,间距 4
   imageGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 4, marginTop: spacing.sm, maxWidth: 3 * 84 + 2 * 4 },
-  gridCell: { width: 84, height: 84, borderRadius: 6, overflow: 'hidden', backgroundColor: colors.inputBg },
+  gridCell: { width: 84, height: 84, borderRadius: radius.thumb, overflow: 'hidden', backgroundColor: colors.inputBg },
   gridCellFailed: { borderWidth: 2, borderColor: colors.failed },
   gridImage: { width: 84, height: 84 },
   gridOverlay: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.45)', alignItems: 'center', justifyContent: 'center', gap: 2 },
   gridOverlayFailed: { backgroundColor: 'rgba(160,20,20,0.55)' },
   gridOverlayText: { color: '#fff', fontSize: 10, textAlign: 'center' },
-  gridRemove: { position: 'absolute', top: 2, right: 2, width: 18, height: 18, borderRadius: 9, backgroundColor: 'rgba(0,0,0,0.7)', alignItems: 'center', justifyContent: 'center' },
+  gridRemove: { position: 'absolute', top: 2, right: 2, width: 18, height: 18, borderRadius: radius.pill, backgroundColor: 'rgba(0,0,0,0.7)', alignItems: 'center', justifyContent: 'center' },
   gridRemoveText: { color: '#fff', fontSize: 10, lineHeight: 12 },
   uploadErrorText: { color: colors.failed, fontSize: 11, textAlign: 'right', marginBottom: 2 },
   attachPreview: {
@@ -2806,7 +2834,7 @@ const makeStyles = () =>
   failedMark: { color: colors.failed, fontSize: 11, alignSelf: 'flex-end', fontWeight: '600' },
   // 左列:⤢(顶)+ 🎤/⌨(底);stretch 到整行高度,⤢ 才能落在左上角。
   inputLeftCol: { alignSelf: 'stretch', justifyContent: 'space-between', alignItems: 'center' },
-  draftAddTile: { width: 64, height: 64, borderRadius: 6, borderWidth: 1, borderStyle: 'dashed', borderColor: colors.border, alignItems: 'center', justifyContent: 'center' },
+  draftAddTile: { width: 64, height: 64, borderRadius: radius.thumb, borderWidth: 1, borderStyle: 'dashed', borderColor: colors.border, alignItems: 'center', justifyContent: 'center' },
   // alignItems is set inline from composerRowAlign(): 'center' for one line / voice mode,
   // 'flex-end' (WeChat: buttons stay by the last line) once the input is multi-line.
   inputRow: {
@@ -2826,21 +2854,27 @@ const makeStyles = () =>
     // 分隔条本身不可选(拖拽期间整页禁选由 lockDocumentSelection 负责)。
     userSelect: 'none',
   } as any,
-  composerDividerGrip: { width: 36, height: 3, borderRadius: 2, backgroundColor: colors.border },
+  composerDividerGrip: { width: 36, height: 3, borderRadius: radius.pill, backgroundColor: colors.border },
+  // 2026-09-29 Vincent 截图(0.2.137 Windows):输入区原是一整块贴边白板。现在是悬浮圆角卡片 ——
+  // 左右下三边等距 COMPOSER_CARD_INSET,工具栏在卡片里;高度随内容长(composer-resize.ts)。
+  desktopComposerWrap: { paddingHorizontal: COMPOSER_CARD_INSET, paddingBottom: COMPOSER_CARD_INSET, backgroundColor: colors.bg },
   desktopComposer: {
-    minHeight: 148,
-    maxHeight: 220,
     backgroundColor: colors.card,
-    borderTopWidth: 1,
-    borderTopColor: colors.border,
-    paddingHorizontal: spacing.lg,
-    paddingTop: spacing.md,
-    paddingBottom: spacing.md,
+    borderRadius: radius.surface,
+    paddingHorizontal: 14,
+    paddingTop: 12,
+    paddingBottom: 8,
+    overflow: 'hidden',
+    ...elevated('raised'),
   },
+  desktopInputMeasure: {
+    position: 'absolute', left: 14, right: 14, top: 0, opacity: 0, pointerEvents: 'none',
+    fontSize: 14, lineHeight: 21,
+    whiteSpace: 'pre-wrap', wordBreak: 'break-word',
+  } as any,
   desktopInput: {
     flex: 1,
-    minHeight: 76,
-    maxHeight: 150,
+    minHeight: 21,
     color: colors.text,
     fontSize: 14,
     lineHeight: 21,
@@ -2848,17 +2882,17 @@ const makeStyles = () =>
     textAlignVertical: 'top',
     outlineStyle: 'none',
   } as any,
-  desktopToolbar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingTop: spacing.sm },
-  desktopToolButton: { width: ds(34), height: ds(34), alignItems: 'center', justifyContent: 'center' },
+  desktopToolbar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingTop: 4, height: 38 },
+  desktopToolButton: { width: 34, height: 34, borderRadius: radius.item, alignItems: 'center', justifyContent: 'center', marginLeft: -6 },
   desktopToolbarRight: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
-  priorityButton: { height: 28, borderRadius: radius.sm, borderWidth: 1, borderColor: 'transparent', paddingHorizontal: spacing.sm, alignItems: 'center', justifyContent: 'center' },
+  priorityButton: { height: 28, borderRadius: radius.item, borderWidth: 1, borderColor: 'transparent', paddingHorizontal: spacing.sm, alignItems: 'center', justifyContent: 'center' },
   priorityButtonActive: { borderColor: colors.failed, backgroundColor: colors.inputBg },
   priorityButtonText: { color: colors.textMuted, fontSize: 11, fontWeight: '600' },
   priorityButtonTextActive: { color: colors.failed },
-  mobilePriorityButton: { width: composerControlSize(uiScale().densityFactor), height: composerControlSize(uiScale().densityFactor), borderRadius: composerControlSize(uiScale().densityFactor) / 2, borderWidth: 1, borderColor: colors.border, alignItems: 'center', justifyContent: 'center' },
+  mobilePriorityButton: { width: composerControlSize(uiScale().densityFactor), height: composerControlSize(uiScale().densityFactor), borderRadius: radius.pill, borderWidth: 1, borderColor: colors.border, alignItems: 'center', justifyContent: 'center' },
   mobilePriorityText: { color: colors.textMuted, fontSize: 15 },
   shortcutHint: { color: colors.textMuted, fontSize: 10 },
-  desktopSend: { minWidth: ds(64), height: ds(32), borderRadius: radius.sm, paddingHorizontal: spacing.lg, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.accent },
+  desktopSend: { minWidth: ds(64), height: ds(32), borderRadius: radius.control, paddingHorizontal: spacing.lg, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.accent },
   desktopSendDisabled: { backgroundColor: colors.subtleFill },
   desktopSendText: { color: colors.onAccent, fontSize: 13, fontWeight: '600' },
   input: {
@@ -2866,7 +2900,7 @@ const makeStyles = () =>
     backgroundColor: colors.inputBg,
     borderColor: colors.border,
     borderWidth: COMPOSER_INPUT_BORDER,
-    borderRadius: 18,
+    borderRadius: radius.control,
     paddingHorizontal: spacing.lg,
     // One line is exactly the row control height (the ⌨ / ＋ buttons): border + pad + line + pad + border.
     paddingVertical: composerInputPadY(composerControlSize(uiScale().densityFactor), COMPOSER_LINE_HEIGHT * uiScale().fontMultiplier),

@@ -118,7 +118,7 @@ function TreeBody({ rows, selected, onToggle, onOpen, onNote, onRetry, afterOpen
           <Pressable key={r.path} onPress={() => activate(r)} accessibilityRole={'treeitem' as any}
             accessibilityLabel={r.name} {...({ 'aria-selected': isSel, ...(r.dirLike ? { 'aria-expanded': r.expanded } : {}) } as any)}
             {...({ dataSet: { treePath: r.path } } as any)} {...(WEB ? ({ tabIndex: -1 } as any) : {})}
-            style={(st: any) => [{ height: ROW_H, flexDirection: 'row', alignItems: 'center', gap: 4, paddingLeft: pad, paddingRight: spacing.sm, borderRadius: 5 },
+            style={(st: any) => [{ height: ROW_H, flexDirection: 'row', alignItems: 'center', gap: 4, paddingLeft: pad, paddingRight: spacing.sm, borderRadius: radius.item },
               isSel ? { backgroundColor: colors.railActiveBg } : st.hovered ? { backgroundColor: colors.rowHover } : null,
               isFoc ? ({ outlineStyle: 'solid', outlineWidth: 1, outlineColor: colors.accent, outlineOffset: -1 } as any) : null]}>
             <View style={{ width: 14, alignItems: 'center' }}>
@@ -176,10 +176,10 @@ export function NodeFilesTreeDocked(props: NodeFilesTreeProps & { width: number;
 
   return (
     <View testID="node-files-tree-docked"
-      style={[{ width: props.width, flexShrink: 0, alignSelf: 'flex-start', backgroundColor: colors.card, borderRadius: radius.lg, paddingVertical: spacing.sm },
+      style={[{ width: props.width, flexShrink: 0, alignSelf: 'flex-start', backgroundColor: colors.card, borderRadius: radius.surface, paddingVertical: spacing.sm },
         WEB ? ({ position: 'sticky', top: 0 } as any) : null]}>
       <View ref={handleRef} accessibilityLabel="拖动调整目录树宽度"
-        style={[{ position: 'absolute', left: -9, top: 0, bottom: 0, width: 7, zIndex: 2, borderRadius: 3 },
+        style={[{ position: 'absolute', left: -9, top: 0, bottom: 0, width: 7, zIndex: 2, borderRadius: radius.pill },
           dragging ? { backgroundColor: colors.accent, opacity: 0.35 } : null,
           WEB ? ({ cursor: 'col-resize' } as any) : null]} />
       <TreeHeader />
@@ -194,7 +194,7 @@ export function NodeFilesTreeDocked(props: NodeFilesTreeProps & { width: number;
 export function NodeFilesTreeButton({ open, onPress }: { open: boolean; onPress: () => void }) {
   return (
     <Pressable accessibilityRole="button" accessibilityLabel="目录树" accessibilityState={{ expanded: open }} onPress={onPress} testID="node-files-tree-toggle"
-      style={(st: any) => [{ height: 30, flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: spacing.sm + 2, borderRadius: 6, borderWidth: 1, borderColor: colors.border },
+      style={(st: any) => [{ height: 30, flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: spacing.sm + 2, borderRadius: radius.item, borderWidth: 1, borderColor: colors.border },
         open ? { backgroundColor: colors.railActiveBg } : st.hovered ? { backgroundColor: colors.rowHover } : null,
         st.focused ? ({ outlineStyle: 'solid', outlineWidth: 2, outlineColor: colors.accent, outlineOffset: 1 } as any) : null]}>
       <Ionicons name="git-network-outline" size={14} color={open ? colors.accent : colors.textSecondary} />
@@ -231,7 +231,7 @@ function TreeHeader({ onClose }: { onClose?: () => void }) {
       <Text style={{ flex: 1, color: colors.textSecondary, fontSize: type.small - 1, fontWeight: '600', letterSpacing: 0.3 }}>目录</Text>
       {onClose ? (
         <Pressable accessibilityRole="button" accessibilityLabel="关闭" onPress={onClose} hitSlop={8}
-          style={(st: any) => [{ padding: 3, borderRadius: 5 }, st.hovered ? { backgroundColor: colors.rowHover } : null]}>
+          style={(st: any) => [{ padding: 3, borderRadius: radius.mark }, st.hovered ? { backgroundColor: colors.rowHover } : null]}>
           <Ionicons name="close" size={16} color={colors.textMuted} />
         </Pressable>
       ) : null}

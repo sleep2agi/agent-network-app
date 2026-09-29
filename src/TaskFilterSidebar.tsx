@@ -6,7 +6,7 @@ import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { Text } from './ui-text';
 import { Ionicons } from './icons';
 import AliasAvatar from './AliasAvatar';
-import { colors, spacing, type as typeScale, weight } from './theme';
+import { colors, radius, spacing, type as typeScale, weight } from './theme';
 import { personKey } from './requirement-people';
 import { applyFilter, ownerCounts, ownersForScope, scopeOf, type SidebarScope } from './task-board-model';
 import { setTaskFilter, setTaskSection, useTaskBoard } from './task-board-store';
@@ -79,7 +79,7 @@ const makeSidebarStyles = () => StyleSheet.create({
   head: { height: CONTROL_H + 24, justifyContent: 'center', paddingHorizontal: spacing.lg },
   title: { fontSize: typeScale.title, fontWeight: weight.strong },
   body: { paddingHorizontal: spacing.sm, paddingBottom: spacing.lg, gap: 2 },
-  item: { height: 38, borderRadius: 10, paddingHorizontal: spacing.sm + 2, flexDirection: 'row', alignItems: 'center', gap: spacing.sm + 2 },
+  item: { height: 38, borderRadius: radius.item, paddingHorizontal: spacing.sm + 2, flexDirection: 'row', alignItems: 'center', gap: spacing.sm + 2 },
   icon: { width: 22, alignItems: 'center' },
   itemText: { flex: 1, fontSize: 13 },
   count: { fontSize: typeScale.caption },

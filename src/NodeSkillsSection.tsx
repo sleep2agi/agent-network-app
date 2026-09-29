@@ -90,13 +90,13 @@ function SkillsCard({ cfg, target }: { cfg: HubConfig; target: RulesTarget }) {
   return (
     // 标题由节点页的 SectionTitle「技能」给出(2026-09-24 节点页重做),这里不再重复。
     <View>
-      <View style={{ backgroundColor: colors.card, borderRadius: radius.lg, padding: spacing.lg, gap: spacing.md }}>
+      <View style={{ backgroundColor: colors.card, borderRadius: radius.surface, padding: spacing.lg, gap: spacing.md }}>
         {/* 一行头:数量 + ⓘ(原先分区说明 + 这里的说明两段合进 ⓘ)+ 刷新(原在底部)。09-25 紧凑化。 */}
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm, zIndex: 10 }}>
           <Text style={{ color: colors.textSecondary, fontSize: type.small }}>{phase === 'ready' ? `共 ${skills.length} 个技能` : '技能'}</Text>
           <InfoTip label="技能说明" text="这个节点实际能加载的技能(只读)。SKILL.md 所在目录由节点按自己的运行时决定,这里只能查看,不能修改。" />
           <View style={{ flex: 1 }} />
-          <Pressable accessibilityRole="button" style={{ height: 30, justifyContent: 'center', paddingHorizontal: spacing.md, borderRadius: radius.md, borderWidth: 1, borderColor: colors.border, opacity: phase === 'loading' ? 0.4 : 1 }} disabled={phase === 'loading'} onPress={() => { setOpen(null); setDetail(null); void runList(); }}>
+          <Pressable accessibilityRole="button" style={{ height: 30, justifyContent: 'center', paddingHorizontal: spacing.md, borderRadius: radius.item, borderWidth: 1, borderColor: colors.border, opacity: phase === 'loading' ? 0.4 : 1 }} disabled={phase === 'loading'} onPress={() => { setOpen(null); setDetail(null); void runList(); }}>
             <Text style={{ color: colors.textSecondary, fontSize: type.small }}>刷新</Text>
           </Pressable>
         </View>
@@ -116,7 +116,7 @@ function SkillsCard({ cfg, target }: { cfg: HubConfig; target: RulesTarget }) {
                   accessibilityRole="button"
                   accessibilityState={{ expanded: open === sk.name }}
                   onPress={() => void toggle(sk.name)}
-                  style={({ pressed }) => ({ paddingVertical: spacing.md, gap: 4, backgroundColor: pressed || open === sk.name ? colors.rowHover : 'transparent', paddingHorizontal: spacing.sm, borderRadius: radius.sm })}
+                  style={({ pressed }) => ({ paddingVertical: spacing.md, gap: 4, backgroundColor: pressed || open === sk.name ? colors.rowHover : 'transparent', paddingHorizontal: spacing.sm, borderRadius: radius.item })}
                 >
                   <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm }}>
                     <Text style={{ color: colors.text, fontSize: type.body, fontWeight: weight.strong, fontFamily: mono, flexShrink: 1 }} numberOfLines={1}>{sk.name}</Text>
@@ -132,7 +132,7 @@ function SkillsCard({ cfg, target }: { cfg: HubConfig; target: RulesTarget }) {
                   <View style={{ paddingHorizontal: spacing.sm, paddingBottom: spacing.md, gap: spacing.sm }}>
                     <Text style={{ color: colors.textMuted, fontSize: type.caption, fontFamily: mono }} selectable>{detail?.path_rel ?? sk.path_rel}</Text>
                     {detail ? (
-                      <View style={{ backgroundColor: colors.inputBg, borderWidth: 1, borderColor: colors.border, borderRadius: radius.md, padding: spacing.md }}>
+                      <View style={{ backgroundColor: colors.inputBg, borderWidth: 1, borderColor: colors.border, borderRadius: radius.control, padding: spacing.md }}>
                         <MarkdownMessage>{stripFrontmatter(detail.content)}</MarkdownMessage>
                       </View>
                     ) : (
