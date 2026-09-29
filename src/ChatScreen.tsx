@@ -57,6 +57,7 @@ import { comboChips, comboFromEvent, shortcutForCombo } from './shortcuts-model'
 import { KBD_IDLE, kbdVoiceBlur, kbdVoiceKeyDown, kbdVoiceKeyUp, kbdVoiceSync, type KbdVoiceMode, type KbdVoiceState, type KbdVoiceStep } from './voice-shortcut-model';
 import type { GestureResponderEvent, NativeSyntheticEvent, NativeScrollEvent } from 'react-native';
 import { usePoll } from './usePoll';
+import { onConversationReply } from './reply-wake';
 import { chatSearchState, isHighlighted, isStaleSearch, matchCountLabel, searchItems, shouldLoadOlderForSearch, stepHit, type SearchHit } from './chat-search';
 import { retryUnreadPersistFromPoll } from './conversation-unread-persist';
 import { conversationOpened } from './conversation-flags';
@@ -514,6 +515,11 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
   // Foreground-only message polling: 5s while visible, paused in background,
   // instant refresh on resume (shared hook). Reads the live window via limitRef.
   usePoll(() => load(limitRef.current), 5000, [load]);
+  // 回复推送(reply-wake.ts):hub 的网络事件流一报「这个 agent 回复了」就立刻读,不等下一次 5 s 轮询。
+  // 只是叫醒;内容照旧从同一个 /api/tasks 读。流不在 / 断了 / 漏了,轮询照旧兜底。
+  const shownTaskIds = useRef<Set<string>>(new Set());
+  shownTaskIds.current = new Set(messages.map(m => m.task_id).filter((id): id is string => !!id));
+  useEffect(() => onConversationReply(cfg, alias, () => { void load(limitRef.current); }, { isShownTask: id => shownTaskIds.current.has(id) }), [cfg, alias, load]);
 
   useEffect(() => {
     // 2026-09-17 Vincent:身份只查一次,走 RELAY 隧道那一次失败,整场会话都不知道
