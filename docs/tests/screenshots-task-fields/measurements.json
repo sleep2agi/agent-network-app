@@ -1,6 +1,6 @@
 {
-  "passed": 15,
-  "total": 15,
+  "passed": 27,
+  "total": 27,
   "results": [
     {
       "name": "secondary fields hidden",
@@ -20,12 +20,16 @@
           "x": 872,
           "y": 102,
           "width": 304,
-          "height": 538
+          "height": 630
         }
       }
     },
     {
       "name": "title locked",
+      "ok": true
+    },
+    {
+      "name": "old Hub upgrade label",
       "ok": true
     },
     {
@@ -62,6 +66,14 @@
         },
         {
           "id": "project",
+          "visible": true
+        },
+        {
+          "id": "created",
+          "visible": true
+        },
+        {
+          "id": "updated",
           "visible": true
         },
         {
@@ -114,6 +126,78 @@
     },
     {
       "name": "row still opens detail",
+      "ok": true
+    },
+    {
+      "name": "old Hub update is dash",
+      "ok": true
+    },
+    {
+      "name": "created ascending order",
+      "ok": true
+    },
+    {
+      "name": "created descending order",
+      "ok": true
+    },
+    {
+      "name": "updated ascending order",
+      "ok": true
+    },
+    {
+      "name": "updated descending order",
+      "ok": true
+    },
+    {
+      "name": "hover hint has local seconds and updater",
+      "ok": true
+    },
+    {
+      "name": "relative update",
+      "ok": true
+    },
+    {
+      "name": "created header cell aligned",
+      "ok": true,
+      "detail": {
+        "th": {
+          "x": 848,
+          "y": 105.5,
+          "width": 150,
+          "height": 40
+        },
+        "td": {
+          "x": 848,
+          "y": 153.5,
+          "width": 150,
+          "height": 32
+        }
+      }
+    },
+    {
+      "name": "updated header cell aligned",
+      "ok": true,
+      "detail": {
+        "th": {
+          "x": 1010,
+          "y": 105.5,
+          "width": 150,
+          "height": 40
+        },
+        "td": {
+          "x": 1010,
+          "y": 153.5,
+          "width": 150,
+          "height": 32
+        }
+      }
+    },
+    {
+      "name": "long press exact without opening task",
+      "ok": true
+    },
+    {
+      "name": "modern Hub no upgrade marker",
       "ok": true
     },
     {

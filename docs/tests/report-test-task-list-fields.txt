@@ -28,3 +28,27 @@ Storage: per-device task_list_fields_v1 localStorage, same best-effort conventio
 as existing shortcuts preferences, session fallback if storage denied. Not Hub
 data. No native phone feature or cross-device synchronization claimed.
 Only current columns offered; no phantom tags before a tag data contract exists.
+
+Timestamp addendum (supersedes the counts/geometry above for final delivery):
+Rebased onto main 76c4467 (#512, version0.2.145); no version bump in this PR.
+Default-visible Created and Updated; sort by timestamp instant, empty/invalid
+last for both directions. Relative zh/en, yesterday uses device-local calendar;
+exact hint is YYYY-MM-DD HH:mm:ss local, with updater name/id when available.
+Refresh relative labels every30s. Click or touch long-press opens exact value;
+pointer desktop has hover title (mobile-only long-press is not bound there).
+Actual Hub#2081 response: updatedAt + updated_by. Also accept updated_at.
+Old Hub missing timestamp is dash + Upgrade Hub in field config. No creation
+fallback. Partial present-but-null metadata is not declared an upgrade problem.
+
+Final Docker model19/19 + time/adapter/sort22/22; copy guard41/41; typecheckPASS.
+Full source230/230 PASS on rebased source. Existing components34/34,140expects.
+Final browser27/27 PASS: includes both timestamp headers sorting both directions,
+hover-title seconds + actor, actual touch-style long-press exact (no task-open),
+old/new Hub upgrade notice and default-visible columns. Five screenshots saved.
+Popover x872 y102 w304 h630 within1200x800. Scrolled timestamp alignment:
+Created header/cell x848 w150; Updated header/cell x1010 w150.
+Phone390x844 remains unchanged; browser fixture Hub writes=0.
+
+Additional witnessed failure: phone-only gate rejected ungated long-press;
+now pointerUi-gated, gate41/41. Initial browser24/25 caught RN Web filtering
+title; DOM title set on the timestamp ref and browser27/27 passed afterwards.

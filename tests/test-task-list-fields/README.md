@@ -24,3 +24,13 @@ is available when the Hub supports projects; hiding it for an old Hub does not
 erase that column's saved position/visibility. Unknown future IDs are discarded,
 new known columns append with defaults. This is replaceable device preference,
 not Hub task data and not a cross-device synchronization feature.
+
+Creation and update columns default visible, including on upgrade from a saved
+preference without these IDs. Hub #2081 actually exposes `updatedAt` and
+`updated_by`; the adapter also accepts `updated_at`. Missing metadata stays
+missing (never backfilled from creation). Sorting uses instants, missing/invalid
+values last in both directions. Relative labels refresh every 30 seconds;
+hover gives native title text, click/touch long-press gives local seconds and
+the updater if provided. Pointer platforms do not bind a mobile long-press.
+The fixture covers old/new Hub shape, both sort directions, exact hints and
+timestamp column alignment; no real Hub is contacted.

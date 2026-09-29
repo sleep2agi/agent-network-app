@@ -87,6 +87,10 @@ try {
  const hint=await time.getAttribute('title');
  ck('hover hint has local seconds and updater',/\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}/.test(hint||'')&&(hint||'').includes('用户负责人'));
  ck('relative update',await time.textContent()==='3 min ago');
+ for(const id of ['created','updated']){
+  const th=await page.getByTestId(`task-column-${id}`).boundingBox(),td=await page.getByTestId(`task-cell-r1-${id}`).boundingBox();
+  ck(`${id} header cell aligned`,Math.abs(th.x-td.x)<1&&Math.abs(th.width-td.width)<1,{th,td});
+ }
  await page.mouse.down();await page.waitForTimeout(650);await page.mouse.up();
  ck('long press exact without opening task',await page.getByTestId('task-time-exact').count()===1&&await page.getByTestId('req-detail').count()===0);
  await page.screenshot({path:out+'/desktop-time-exact.png'});
