@@ -1,0 +1,5 @@
+2026-09-29 release preparation 0.2.139
+Base main: c0eb2a5a4425e74ef0ee371552586b7195f04a6e (0.2.138 notes).
+Change: Android unfolded left rail adds 任务 after Agent. Phone bottom bar stays Agent / 定时任务 / 服务器 / 设置.
+Version: eight version files plus Android versionCode 2139. Cargo.lock changes only the agent-network-desktop root version.
+No signed build and no public release in this note. Android package is built from the merged main SHA.

@@ -112,6 +112,14 @@ const MOBILE_TABS = [
   { key: 'settings', label: '设置', icon: 'settings-outline', iconActive: 'settings' },
 ] as const;
 
+// Vincent 2026-09-29 「左侧加回去」: the unfolded left rail gets 任务 back
+// (list + board). The phone bottom bar stays the four tabs from #159.
+const MOBILE_RAIL_TABS = [
+  MOBILE_TABS[0],
+  { key: 'tasks', label: '任务', icon: 'list-outline', iconActive: 'list' },
+  ...MOBILE_TABS.slice(1),
+] as const;
+
 const DESKTOP_MAIN_TABS = DESKTOP_TABS.filter(tab => tab.key !== 'settings');
 const DESKTOP_SETTINGS_TAB = DESKTOP_TABS.find(tab => tab.key === 'settings')!;
 
@@ -669,7 +677,7 @@ function AppRoot() {
           <View style={styles.navShell} testID="nav-shell">
             {railShown ? (
               <MobileNavRail
-                tabs={MOBILE_TABS}
+                tabs={MOBILE_RAIL_TABS}
                 active={navActive}
                 onSelect={onNavPress}
                 insetLeft={insets.left}

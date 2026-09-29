@@ -121,6 +121,9 @@ jobs:
           releaseBody: |-
             Signed and notarized stable update for macOS (Apple Silicon) and Windows (x64).
 
+            What's new in 0.2.139:
+            - 展开后的左侧栏加回「任务」，可以看任务列表和看板。折叠成手机时，底部仍是原来的四项。
+
             What's new in 0.2.138:
             - 新建任务即可选择人类或 Agent 负责人，使用稳定身份保存并在卡片回显，不必再进入详情重复绑定。
             - 连续添加时保留可见的负责人选择，也可以清空为不指定。

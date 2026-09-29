@@ -70,7 +70,7 @@ for (const s of ['agents', 'chat', 'nodeInfo', 'nodeDetail', 'picker', 'wizard']
 for (const s of ['server', 'serverNodes', 'serverNodeDetail', 'logs']) ck(`${s} lights 服务器`, navActiveKey(s) === 'server');
 ck('scheduled lights 定时任务', navActiveKey('scheduled') === 'scheduled');
 ck('settings lights 设置', navActiveKey('settings') === 'settings');
-ck('taskDetail maps to tasks (no mobile destination → nothing lights)', navActiveKey('taskDetail') === 'tasks');
+ck('taskDetail lights the left rail 任务', navActiveKey('taskDetail') === 'tasks');
 ck('phone tab-level screens light themselves (same as the old mobileTabBar(screen.name))', TAB_SCREENS.every(s => navActiveKey(s) === s));
 
 // ── pressing a destination ──
@@ -95,6 +95,7 @@ ck('unfolded landscape (850 tall) shows brand', railShowsBrand(850));
 // Worst case that must fit without the brand: 390 tall − ~30 status − ~48 gesture − 12 top − 8 bottom
 // ≈ 292 dp for 4 items of 56 plus 3 gaps of 6 = 242.
 ck('4 destinations fit a 390-tall landscape phone without scrolling', 4 * MOBILE_RAIL_ITEM.height + 3 * 6 <= 390 - 30 - 48 - 12 - 8);
+ck('5 destinations do not fit that phone, so the rail main column must scroll', 5 * MOBILE_RAIL_ITEM.height + 4 * 6 > 390 - 30 - 48 - 12 - 8);
 
 // ── width beside the rail ──
 ck('content width = window − rail', contentWidthBesideRail(1200) === 1200 - MOBILE_RAIL_WIDTH);
@@ -110,6 +111,7 @@ ck('unread total of nothing is 0', railUnreadTotal({}) === 0);
 const rail = readFileSync(new URL('./MobileNavRail.tsx', import.meta.url), 'utf8').replace(/\r\n/g, '\n');
 ck('rail settings item is rendered after the main destinations (pinned to bottom, like desktop)',
   rail.indexOf("{main.map(item)}") > 0 && rail.indexOf("{main.map(item)}") < rail.indexOf('{settings ? item(settings) : null}'));
+ck('rail main destinations scroll so a fifth item cannot cover 设置', rail.includes('<ScrollView') && rail.includes('showsVerticalScrollIndicator={false}') && rail.indexOf('<ScrollView') < rail.indexOf('{settings ? item(settings) : null}'));
 ck('rail excludes settings from the main list', rail.includes("tabs.filter(tab => tab.key !== 'settings')"));
 ck('rail items are density-scaled hit boxes from mobileRailItem (64×56 at 标准)', rail.includes('width: mobileRailItem(uiScale().densityFactor).width,') && rail.includes('height: mobileRailItem(uiScale().densityFactor).height,'));
 ck('rail items expose tab role + selected state', rail.includes('accessibilityRole="tab"') && rail.includes('accessibilityState={{ selected }}'));

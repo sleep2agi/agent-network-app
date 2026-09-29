@@ -6,7 +6,7 @@
 //
 // The decision of *when* this shows lives in src/nav-chrome.ts (pure + tested).
 import { useEffect, useMemo, useState, useSyncExternalStore } from 'react';
-import { Image, Pressable, StyleSheet, View } from 'react-native';
+import { Image, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { Text } from './ui-text';
 import { Ionicons } from './icons';
 import { colors } from './theme';
@@ -97,7 +97,14 @@ export default function MobileNavRail({ tabs, active, onSelect, insetLeft, inset
           <Image source={require('../assets/android-icon-foreground.png')} style={s.brandMark} resizeMode="contain" />
         </View>
       ) : null}
-      <View style={[s.tabs, !showBrand && s.tabsCompact, align && { paddingTop: align.tabsPaddingTop, gap: align.gap }]} testID="mobile-nav-rail-tabs">{main.map(item)}</View>
+      <ScrollView
+        style={s.tabs}
+        contentContainerStyle={[s.tabsContent, !showBrand && s.tabsCompact, align && { paddingTop: align.tabsPaddingTop, gap: align.gap }]}
+        showsVerticalScrollIndicator={false}
+        testID="mobile-nav-rail-tabs"
+      >
+        {main.map(item)}
+      </ScrollView>
       {settings ? item(settings) : null}
       {showBrand ? <Text style={s.version}>v{APP_VERSION}</Text> : null}
     </View>
@@ -114,7 +121,8 @@ const makeStyles = () => StyleSheet.create({
   },
   brand: { width: ds(40), height: ds(40), alignItems: 'center', justifyContent: 'center' },
   brandMark: { width: ds(58), height: ds(58) },
-  tabs: { flex: 1, paddingTop: ds(14), gap: ds(6), alignItems: 'center' },
+  tabs: { flex: 1, alignSelf: 'stretch' },
+  tabsContent: { paddingTop: ds(14), gap: ds(6), alignItems: 'center' },
   tabsCompact: { paddingTop: 0 },
   item: {
     // 界面密度: 64×56 at 标准, 54×48 at 紧凑, 48×48 at 更紧凑 (never under 48 — mobileRailItem).
