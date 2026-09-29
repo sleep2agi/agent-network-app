@@ -21,7 +21,7 @@ const norm = (f: string) => readFileSync(new URL(f, import.meta.url), 'utf-8').r
 
 // —— 搜索:按标签与关键词,跨分类 ——
 {
-  const all = filterSettings('', { localHub: true });
+  const all = filterSettings('', { localHub: true, users: true });
   ck('空查询 = 全部分类', all.length === SETTINGS_CATEGORIES.length);
   const noLocal = filterSettings('', {});
   ck('本地 Hub 未装 → 该类不出现', !noLocal.some((c) => c.key === 'localHub'));

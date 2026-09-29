@@ -41,6 +41,8 @@ type KeepAliveSnapshot = { available: boolean; running: boolean; error: string |
 /** SettingsScreen 交给子页的全部状态与动作(和宽屏右栏读的是同一份)。 */
 export type PhonePagesCtx = {
   cfg: HubConfig;
+  /** 用户管理子页(宽屏右栏同一个组件)。 */
+  renderUsers: () => ReactNode;
   show: (cat: SettingsCategoryKey, row: string) => boolean;
   detail: SettingsDetailKey | null;
   openDetail: (key: SettingsDetailKey) => void;
@@ -99,6 +101,7 @@ export default function SettingsPhonePage({ page, ctx }: { page: SettingsCategor
   useTranslation();
   switch (page) {
     case 'account': return ctx.detail === 'manageAccounts' ? <ManageAccountsPage ctx={ctx} /> : <AccountPage ctx={ctx} />;
+    case 'users': return <>{ctx.renderUsers()}</>;
     case 'localHub': return <LocalHubPage ctx={ctx} />;
     case 'appearance': return <AppearancePage ctx={ctx} />;
     case 'notifications': return ctx.detail === 'quietHours' ? <QuietHoursEditPage ctx={ctx} /> : <NotificationsPage ctx={ctx} />;

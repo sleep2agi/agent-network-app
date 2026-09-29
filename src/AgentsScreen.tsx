@@ -13,6 +13,9 @@ import AliasAvatar from './AliasAvatar';
 import { consumeAgentSearchFocus, subscribeAgentSearchFocus } from './shortcuts-store';
 import { useTranslation } from './i18n-react';
 import './i18n-chat';
+import './i18n-users';
+import { agentsEmptyKind, isRestrictedIn } from './user-admin';
+import { fetchAuthMe } from './user-admin-api';
 import { isAgentOnline } from './chat-actions';
 import { fetchStatus, fetchUserMessages, takeStatusPrefetch, type HubConfig, type Session,
   ackAgentMessages,
@@ -68,6 +71,9 @@ import { bindConversationFlags, getConversationFlags, subscribeConversationFlags
 import { applyAgentFilter, filterLabel, isFilterActive, STATUS_FILTER_LABEL, type AgentListFilter, type AgentStatusFilter } from './server-stats';
 import { pointerUi } from './pointer-ui';
 
+// 受限成员的空态文案比「还没有 agent」长,窄屏会折行:居中并留出与列表同宽的边距。
+const restrictedEmptyCopy = () => ({ textAlign: 'center' as const, paddingHorizontal: spacing.xl });
+
 export default function AgentsScreen({
   cfg,
   onOpenChat,
@@ -112,6 +118,14 @@ export default function AgentsScreen({
   const [refreshing, setRefreshing] = useState(false);
   const [failed, setFailed] = useState(false);
   const [query, setQuery] = useState('');
+  // 多用户 Agent 权限:当前网络里我是不是受限成员(只看管理员分配的 Agent)。决定空列表说什么。
+  const [restricted, setRestricted] = useState(false);
+  useEffect(() => {
+    if (preview) return;
+    let live = true;
+    void fetchAuthMe(cfg).then(me => { if (live) setRestricted(isRestrictedIn(me, cfg.networkId)); }).catch(() => {});
+    return () => { live = false; };
+  }, [cfg.serverUrl, cfg.token, cfg.networkId, preview]);
   // 设置 → 快捷键 的「搜索会话」(默认 ⌘/Ctrl+K,App.tsx DesktopWorkspace 发起):只有桌面列表栏
   // (compact)接。搜索框平时 > 10 个 agent 才出现;按了快捷键就算 agent 少也临时露出来并聚焦。
   // 从别的页切回来时列表刚挂上、会话还在加载,搜索框可能还没渲染:记下「要聚焦」,等它出现的那次渲染后再聚焦。
@@ -665,14 +679,14 @@ export default function AgentsScreen({
         // 搜不到时必须说出"为什么空",否则用户分不清「搜挂了」和「真没有」
         // ——空白屏是这两种情况唯一相同的表现。加载中/加载失败在上面的
         // early return 里已经各自有屏,走到这里必然是"数据到了但没有匹配"。
-        <View style={styles.center}>
-          <Text style={styles.errorTitle}>
-            {q ? `没有匹配「${q}」的 agent` : filtering ? `没有「${filterLabel(activeFilter!)}」的 agent` : '还没有 agent'}
+        <View style={styles.center} testID={`agents-empty-${agentsEmptyKind({ query: q, filtering, restricted })}`}>
+          <Text style={[styles.errorTitle, !q && !filtering && restricted && restrictedEmptyCopy()]}>
+            {q ? `没有匹配「${q}」的 agent` : filtering ? `没有「${filterLabel(activeFilter!)}」的 agent` : restricted ? t('agents.restrictedEmpty') : '还没有 agent'}
           </Text>
-          <Text style={styles.errorHint}>
+          <Text style={[styles.errorHint, !q && !filtering && restricted && restrictedEmptyCopy()]}>
             {q
               ? `已在 ${sessions.length} 个 agent 里搜过(支持拼音,如 zf → 支付助手)`
-              : '用右上角 + 新建一个'}
+              : restricted && !filtering ? t('agents.restrictedHint') : '用右上角 + 新建一个'}
           </Text>
           {q ? (
             <Pressable style={styles.retryBtn} onPress={() => setQuery('')}>

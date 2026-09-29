@@ -40,6 +40,8 @@ import { settingsPageContentStyle } from './settings-kit';
 import { useModalSafePadding } from './safe-area-runtime';
 import { withBasePadding } from './modal-safe-area';
 import { elevated, buttonStyle, buttonTextStyle } from './elevation';
+import UserManagementPanel from './UserManagementPanel';
+import { canManageUsers, type AuthMe } from './user-admin';
 
 // Settings (Vincent tg 720): who am I, where am I connected, which network, which build —
 // and the destructive actions live here instead of cluttering the agents list header.
@@ -93,6 +95,8 @@ export default function SettingsScreen({
 }) {
   const { language } = useTranslation();
   const [me, setMe] = useState<Me>({});
+  // 多用户:auth/me 原样留一份,判断「用户管理」该不该出现(Hub 管理员 / 当前网络 owner、admin)。
+  const [authMe, setAuthMe] = useState<AuthMe | null>(null);
   const [profiles, setProfiles] = useState<HubProfile[]>([]);
   const [removeTarget, setRemoveTarget] = useState<HubProfile | null>(null);
   const [profileError, setProfileError] = useState('');
@@ -221,6 +225,7 @@ export default function SettingsScreen({
         const d = await res.json();
         const net =
           d?.networks?.find((n: any) => n.network_id === cfg.networkId) ?? d?.networks?.[0];
+        setAuthMe(d ?? null);
         setMe({
           username: d?.user?.username,
           networkName: net?.network_name,
@@ -234,12 +239,13 @@ export default function SettingsScreen({
 
   const tauriDesktop = !!(globalThis as any).__TAURI_INTERNALS__;
   const platform = notifyPreview?.platform ?? settingsPlatform(Platform.OS, tauriDesktop);
-  const filtered = useMemo(() => filterSettings(query, { localHub: !!localHub }, undefined, platform), [query, localHub, platform, language]);
+  const usersAvailable = canManageUsers(authMe, me.networkId);
+  const filtered = useMemo(() => filterSettings(query, { localHub: !!localHub, users: usersAvailable }, undefined, platform), [query, localHub, usersAvailable, platform, language]);
   const searching = query.trim().length > 0;
   const visible = useMemo(() => visibleRowKeys(query, filtered), [query, filtered]);
   const active = activeCategoryKey(category, filtered);
   // 行要同时满足:在本平台存在(filtered 已按平台筛掉安卓专属行)且命中搜索(visible 为 null = 不在搜索)。
-  const onPlatform = useMemo(() => new Set(filterSettings('', { localHub: true }, undefined, platform).flatMap(c => c.rows.map(r => `${c.key}.${r.key}`))), [platform]);
+  const onPlatform = useMemo(() => new Set(filterSettings('', { localHub: true, users: true }, undefined, platform).flatMap(c => c.rows.map(r => `${c.key}.${r.key}`))), [platform]);
   const show = (cat: SettingsCategoryKey, row: string) => onPlatform.has(`${cat}.${row}`) && (visible === null || visible.has(`${cat}.${row}`));
   // 不在搜索:只画选中的那一类;搜索中:把所有命中的类都画出来(各带小标题)。
   const sectionsToRender = searching ? filtered.map(c => c.key) : [active];
@@ -464,6 +470,7 @@ export default function SettingsScreen({
     quietEnd,
     setQuietStart,
     setQuietEnd,
+    renderUsers: () => <UserManagementPanel cfg={cfg} me={authMe} networkId={me.networkId} />,
     renderShortcuts: () => <ShortcutsSettings s={styles} showNav={show('shortcuts', 'nav')} showChat={show('shortcuts', 'chat')} showSend={show('shortcuts', 'send')} />,
     updateView: isAndroid
       ? describeAndroidUpdateRow(androidUpdate, { currentVersion: APP_VERSION, lastCheckedAt: androidUpdateLastCheckedAt(), now: Date.now() })
@@ -598,6 +605,13 @@ export default function SettingsScreen({
                   </Pressable>
                 </>
               ) : null}
+            </View>
+          ) : null}
+
+          {sectionsToRender.includes('users') && usersAvailable ? (
+            <View style={sectionStyle} testID="settings-section-users">
+              {heading('users')}
+              <UserManagementPanel cfg={cfg} me={authMe} networkId={me.networkId} />
             </View>
           ) : null}
 
