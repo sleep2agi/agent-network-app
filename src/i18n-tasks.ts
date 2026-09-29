@@ -259,6 +259,9 @@ registerTranslations({
  'tasks.projectNameEmpty': ['先写项目名', 'Enter a project name first'],
  'tasks.projectNameLong': ['项目名最多 40 个字', 'Project name must be 40 characters or fewer'],
  'tasks.projectNameDuplicate': ['已经有同名的项目', 'A project with that name already exists'],
+ 'tasks.filterStatus': ['状态', 'Status'],
+ 'tasks.filterStatusA11y': ['按状态筛选，当前：{v0}', 'Filter by status; current: {v0}'],
+ 'tasks.hideDone': ['隐藏已完成', 'Hide completed'],
 });
 const keys = new Map<string,string>(taskCopy.map(([zh],i)=>[zh,`tasks.copy.${i}`]));
 /** Only call with known UI/model labels, never user content. */

@@ -50,17 +50,27 @@ export interface BoardFilter {
   project?: string;
   /** 只看顶层(不显示子需求)。 */
   topLevel?: boolean;
+  /** 状态(看板的列)。省略 / 空 = 不按状态筛;看板只画选中的列。 */
+  statuses?: ReqColumn[];
 }
 
 export const NO_PROJECT = '__none__';
 
 export const EMPTY_FILTER: BoardFilter = { owners: [], priorities: [] };
 
-export const filterActive = (f: BoardFilter): boolean => f.owners.length > 0 || f.priorities.length > 0 || !!f.project;
+export const filterActive = (f: BoardFilter): boolean => f.owners.length > 0 || f.priorities.length > 0 || !!f.project || !!f.statuses?.length;
+
+/** 状态筛选里的「隐藏已完成」= 只选需求池 + 进行中。 */
+export const HIDE_DONE: readonly ReqColumn[] = REQ_COLUMNS.filter(c => c !== 'done');
+export const hidesDone = (statuses: readonly ReqColumn[] | undefined): boolean =>
+  !!statuses && statuses.length === HIDE_DONE.length && HIDE_DONE.every(c => statuses.includes(c));
+/** 点「隐藏已完成」:已经是这个组合就清空(回到全部),否则换成它。 */
+export const toggleHideDone = (statuses: readonly ReqColumn[] | undefined): ReqColumn[] => (hidesDone(statuses) ? [] : [...HIDE_DONE]);
 
 export function matchesFilter(item: Requirement, f: BoardFilter): boolean {
   if (f.owners.length && !roleKeysOf(item).some(k => f.owners.includes(k))) return false;
   if (f.priorities.length && !f.priorities.includes(item.priority)) return false;
+  if (f.statuses?.length && !f.statuses.includes(item.column)) return false;
   if (f.project) {
     if (f.project === NO_PROJECT ? !!item.projectId : item.projectId !== f.project) return false;
   }
@@ -160,7 +170,9 @@ export function toggleIn<T>(list: readonly T[], value: T): T[] {
 }
 
 /** 看板三列:先筛再分组,列里的数就是筛过之后的数(与看到的卡片一致)。 */
-export const boardColumns = (items: readonly Requirement[], f: BoardFilter) => columnsOf(applyFilter(items, f));
+/** 看板的列 / 手机列表的分组:按状态筛了就只留选中的列(剩下的列平分宽度)。 */
+export const boardColumns = (items: readonly Requirement[], f: BoardFilter) =>
+  columnsOf(applyFilter(items, f)).filter(col => !f.statuses?.length || f.statuses.includes(col.column));
 
 // ── 桌面左栏:全部 / 我负责的 / 按节点 ─────────────────────────────────────
 
