@@ -13,7 +13,6 @@ import AccountSwitcher from './AccountSwitcher';
 import './i18n-accounts';
 import { THEME_PREFERENCES, THEME_PREFERENCE_LABEL, colors, onThemeChange, onThemePreferenceChange, setThemePreference, spacing, themeMode, themePreference, themePreferenceSummary, type ThemePreference, radius } from './theme';
 import { APP_VERSION } from './version';
-import { appFetch } from './app-fetch';
 import { checkDesktopUpdate, desktopUpdateLastCheckedAt, desktopUpdateSnapshot, subscribeDesktopUpdates } from './desktop-updater';
 import { describeUpdateRow } from './update-check-state';
 import { androidUpdateLastCheckedAt, androidUpdateSnapshot, checkAndroidUpdate, subscribeAndroidUpdates } from './android-updater';
@@ -46,6 +45,7 @@ import { canManageUsers, type AuthMe } from './user-admin';
 import { useLoginSessions } from './useLoginSessions';
 import { describeDevice, sessionSubtitle, visibleSessions, SESSIONS_VISIBLE_DEFAULT, type DeviceKind } from './login-sessions';
 import { probeSavedSessions } from './saved-session-probe';
+import { fetchAuthMe } from './user-admin-api';
 
 // Settings (Vincent tg 720): who am I, where am I connected, which network, which build —
 // and the destructive actions live here instead of cluttering the agents list header.
@@ -233,10 +233,7 @@ export default function SettingsScreen({
   useEffect(() => {
     (async () => {
       try {
-        const res = await appFetch(`${cfg.serverUrl}/api/auth/me`, {
-          headers: { Authorization: `Bearer ${cfg.token}` },
-        });
-        const d = await res.json();
+        const d: any = await fetchAuthMe(cfg);
         const net =
           d?.networks?.find((n: any) => n.network_id === cfg.networkId) ?? d?.networks?.[0];
         setAuthMe(d ?? null);

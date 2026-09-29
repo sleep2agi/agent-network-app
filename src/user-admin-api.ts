@@ -32,7 +32,27 @@ async function call<T>(serverUrl: string, token: string | null, path: string, in
 
 const net = (id: string) => encodeURIComponent(id);
 
-export const fetchAuthMe = (cfg: HubConfig) => call<AuthMe>(cfg.serverUrl, cfg.token, '/api/auth/me');
+/**
+ * GET /api/auth/me, shared. Chat list, every chat, the 任务 board, settings and the send / rules
+ * paths each asked the hub "who am I" on their own — the same answer, one trans-Pacific round
+ * trip each (0.22 s, 0.72 s on a fresh desktop connection). One in-flight request per hub +
+ * token is shared, and a success is reused for AUTH_ME_TTL_MS. Failures are never cached: the
+ * next caller asks again (ChatScreen retries with backoff on purpose).
+ */
+export const AUTH_ME_TTL_MS = 60_000;
+const authMeCache = new Map<string, { at: number; pending: Promise<AuthMe> }>();
+export const fetchAuthMe = (cfg: Pick<HubConfig, 'serverUrl' | 'token'>): Promise<AuthMe> => {
+  const key = `${cfg.serverUrl}\u0000${cfg.token}`;
+  const hit = authMeCache.get(key);
+  if (hit && Date.now() - hit.at < AUTH_ME_TTL_MS) return hit.pending;
+  const entry = { at: Date.now(), pending: call<AuthMe>(cfg.serverUrl, cfg.token, '/api/auth/me') };
+  authMeCache.set(key, entry);
+  // A settled success keeps its slot for the TTL (counted from when it landed); a failure frees it.
+  entry.pending.then(() => { entry.at = Date.now(); }, () => { if (authMeCache.get(key) === entry) authMeCache.delete(key); });
+  return entry.pending;
+};
+/** Drop the shared /api/auth/me answers (test hook; also safe after a role change). */
+export const forgetAuthMe = (): void => { authMeCache.clear(); };
 
 export const fetchNetworkMembers = (cfg: HubConfig, networkId: string) =>
   call<{ members: NetworkMember[] }>(cfg.serverUrl, cfg.token, `/api/networks/${net(networkId)}/members`).then(d => d.members ?? []);

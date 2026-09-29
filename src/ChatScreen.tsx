@@ -59,12 +59,12 @@ import { KBD_IDLE, kbdVoiceBlur, kbdVoiceKeyDown, kbdVoiceKeyUp, kbdVoiceSync, t
 import type { GestureResponderEvent, NativeSyntheticEvent, NativeScrollEvent } from 'react-native';
 import { usePoll } from './usePoll';
 import { onConversationReply } from './reply-wake';
+import { fetchAuthMe } from './user-admin-api';
 import { chatSearchState, isHighlighted, isStaleSearch, matchCountLabel, searchItems, shouldLoadOlderForSearch, stepHit, type SearchHit } from './chat-search';
 import { retryUnreadPersistFromPoll } from './conversation-unread-persist';
 import { conversationOpened } from './conversation-flags';
 import { dispatchUnread, hubHasAgentUnread, markAgentRepliesSeen, markAgentServerUnreadCleared, unackedIdsForAgent } from './unread-store';
 import { ackAgentUnread } from './agent-ack';
-import { appFetch } from './app-fetch';
 import MarkdownMessage from './MarkdownMessage';
 import SelectTextSheet from './SelectTextSheet';
 import ImageViewer from './ImageViewer';
@@ -529,10 +529,7 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
     let attempt = 0;
     let timer: ReturnType<typeof setTimeout> | null = null;
     const lookup = () => {
-      appFetch(`${cfg.serverUrl}/api/auth/me`, {
-        headers: { Authorization: `Bearer ${cfg.token}` },
-      })
-        .then(res => res.json())
+      fetchAuthMe(cfg)
         .then(data => {
           const username = data?.user?.username;
           if (!alive) return;

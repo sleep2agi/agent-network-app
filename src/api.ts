@@ -108,6 +108,7 @@ import { LEGACY_SESSION_ID } from './session-registry';
 export const authProfileId = (cfg: Pick<HubConfig, 'profileId'>): string => cfg.profileId ?? LEGACY_SESSION_ID;
 import { userMessagesPath } from './user-unread';
 import { pickDefaultNetworkId } from './user-admin';
+import { fetchAuthMe } from './user-admin-api';
 import { stripHumanDms } from './human-dm';
 
 /** 一次轮询读的硬上限:从发出到**读完响应体**。withTimeout 只管到响应头,响应体卡在半开的隧道
@@ -687,12 +688,8 @@ export const ackAgentMessages = async (cfg: HubConfig, agent: string): Promise<{
 const fetchAuthIdentity = async (cfg: HubConfig): Promise<{ networkId?: string; username?: string }> => {
   try {
     // 响应体也要有上限:规则文件/技能/项目文件夹的每一次入队和轮询都会先走这里拿 network_id。
-    const d = await withDeadline((async () => {
-      const res = await withTimeout(signal =>
-        appFetch(`${cfg.serverUrl}/api/auth/me`, { headers: headers(cfg), signal }),
-      );
-      return res.json();
-    })(), HUB_TOOL_DEADLINE_MS, () => null);
+    // Shared with every other「我是谁」read (user-admin-api.ts fetchAuthMe): one request per hub + token.
+    const d: any = await withDeadline(fetchAuthMe(cfg).catch(() => null), HUB_TOOL_DEADLINE_MS, () => null);
     // 默认网络:current_network,否则 networks[0];多用户(hub#2084)下被管理员建进某网络的受限成员落在那个网络。
     const networkId = pickDefaultNetworkId(d);
     const username = d?.user?.username ?? d?.username;
