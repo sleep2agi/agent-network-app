@@ -306,11 +306,11 @@ export default function SettingsScreen({
             <Pressable
               testID={`settings-row-${PHONE_SETTINGS_SERVER_ENTRY.key}`}
               accessibilityRole="button"
-              accessibilityLabel={PHONE_SETTINGS_SERVER_ENTRY.label}
+              accessibilityLabel={tr('nav.server')}
               onPress={onOpenServer}
               style={({ pressed }) => [styles.phoneRow, pressed && styles.phoneRowPressed]}
             >
-              <Text style={styles.phoneRowLabel} numberOfLines={1}>{PHONE_SETTINGS_SERVER_ENTRY.label}</Text>
+              <Text style={styles.phoneRowLabel} numberOfLines={1}>{tr('nav.server')}</Text>
               <Text style={styles.phoneRowValue} numberOfLines={1}>{cfg.serverUrl.replace(/^https?:\/\//, '').replace(/\/$/, '')}</Text>
               <View style={styles.phoneChevron}>
                 <Ionicons name="chevron-forward" size={18} color={colors.textMuted} />

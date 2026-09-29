@@ -1,0 +1,52 @@
+Client language switch — bounded first migration
+Date: 2026-09-29
+Fresh full clone base: c3f85c3784f14736de52db878a5fa7958266e74e
+Rebased onto main: d6122e6 (retains #501 phone navigation)
+Branch: feat/client-language-switch
+App version: 0.2.142, unchanged; no dependency changes
+
+Scope:
+- Settings / Appearance: Follow system, 中文, English; changes apply immediately.
+- Preference persists locally, browser cross-window changes update existing UI.
+- Nav/sidebar, main chat/composer/voice controls, settings/shortcuts/voice settings.
+- Original Agent replies, aliases, user input, paths and server errors stay verbatim.
+- Task board/details deferred by the redesign owner; no task logic changed.
+
+Docker layered results:
+1. Core src/i18n.test.ts: 12/12 PASS. System locale resolution, notifications,
+   literal interpolation, bilingual placeholder parity, persistence hydration race.
+2. src/i18n-copy-guard.test.ts: 22/22 PASS. AST literal guard over 14 migrated
+   component files and all three navigation tables; POSIX paths and CRLF handling;
+   reasoned exceptions for data/protocol literals; all literal keys exist.
+   Includes red fixtures proving Chinese UI text and reason-free exemptions fail.
+3. npm run typecheck: PASS.
+4. npm test: 225/225 test files PASS after rebase. Source-copy assertions now
+   check translation keys/catalogue; existing behavior assertions are preserved.
+
+5. Final Expo web export: PASS (910 modules).
+6. Docker Playwright driver: 18/18 PASS, final tree after rebase.
+Browser measurements are recorded alongside all eight screenshots in
+screenshots-language-switch/measurements.json. The driver checks both layouts:
+- 1200x800 desktop and 390x844 Android-UA browser.
+- English chat placeholder; Chinese Agent response remains unchanged.
+- Visible buttons inside viewport; draft and page survive live language changes.
+- Settings language control click changes UI without reload.
+- Three language labels align and fit; system selection resolves en-US.
+- Explicit Chinese selection survives reload.
+Measured language-label left edges: desktop 667/667/667 px; phone 33/33/33 px.
+Maximum English label right edge: desktop 768.36px of 1200; phone 134.36px of 390.
+No label scroll overflow; English settings screenshots visually inspected.
+This is responsive Chromium evidence, NOT native Android/iOS or signed binary testing.
+Login/onboarding, nested management/image tools and runtime errors are not claimed
+translated. No full-screen localization claim is made for deferred task surfaces.
+
+Reproduce (all tests in Docker, isolated fixture Hub):
+sg docker -c 'docker build -f tests/test-language-switch/Dockerfile -t anet-language-switch:review .'
+sg docker -c 'docker run --rm anet-language-switch:review npm test'
+Export the image /web with its default CMD and a writable /output bind mount.
+Run tests/test-language-switch/drive.mjs inside
+mcr.microsoft.com/playwright:v1.58.2-noble with playwright@1.58.2 installed;
+set PLAYWRIGHT_MODULE to that module, WEB_DIR to the export and OUT to artifacts.
+The synthetic Tauri bridge uses placeholder identities and never accesses production.
+
+No merge, release, version reservation, production Hub write or TM operation.

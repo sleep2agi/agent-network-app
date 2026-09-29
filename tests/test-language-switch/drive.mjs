@@ -43,6 +43,9 @@ try {
     else await page.getByRole('button', { name: '设置分类 外观', exact: true }).click();
     await page.getByTestId('settings-language-en').click();
     ck(`${name}: settings control switches immediately without reload`, await page.getByText('Language', { exact: true }).count() > 0 && await page.evaluate(() => window.__languagePageMarker === true));
+    // Playwright scrolls nested containers to the clicked radio row. Capture the
+    // complete appearance page from its top, not an arbitrary auto-scroll offset.
+    await page.evaluate(() => { window.scrollTo(0, 0); document.querySelectorAll('*').forEach(el => { if (el.scrollTop) el.scrollTop = 0; }); });
     const geometry = await page.getByTestId('settings-language').evaluate(el => [...el.querySelectorAll('[data-testid$="-label"]')].map(label => {
       const b = label.getBoundingClientRect();
       return { text: label.textContent, left: b.left, right: b.right, height: b.height, overflow: label.scrollWidth > label.clientWidth + 1 };
@@ -52,6 +55,7 @@ try {
     await page.getByTestId('settings-language-system').click();
     ck(`${name}: Follow system resolves en-US`, await page.evaluate(() => localStorage.getItem('anet.language.v1') === 'system') && await page.getByText('Language', { exact: true }).count() > 0);
     await page.getByTestId('settings-language-zh').click();
+    await page.evaluate(() => { window.scrollTo(0, 0); document.querySelectorAll('*').forEach(el => { if (el.scrollTop) el.scrollTop = 0; }); });
     await page.screenshot({ path: `${out}/${name}-settings-zh.png` });
     await page.reload();
     await page.getByRole('tab', { name: '设置', exact: true }).waitFor();
