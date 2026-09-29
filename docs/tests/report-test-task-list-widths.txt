@@ -1,0 +1,62 @@
+Desktop task list column resize — 2026-09-29
+Base: agent-network-app origin/main 46c3b41 (#524).
+Scope: list table header/cells + width model on the #513 field preference +
+「恢复默认列宽」 in 字段配置. No Hub changes, no version bump, no release.
+
+Design: drag grows the table (option a, like Feishu/Notion). Columns keep their
+own widths and the table scrolls horizontally inside its card; neighbours never
+shrink, so resizing one column never silently truncates another. The title keeps
+its old behaviour (fills spare card width) until it is dragged; the drag starts
+from the rendered width, so a stretched title grows by exactly the drag delta.
+Min width: 标题 160px, others 64px. Double-click a handle resets that column;
+「恢复默认」 resets fields and widths, 「恢复默认列宽」 resets only widths.
+Widths are stored as `width` on each entry of `task_list_fields_v1` (same key,
+same try/catch storage path as #513), so hidden or reordered columns keep them;
+old saved preferences without widths load unchanged. Handles only render for
+pointer UI (touch tables keep native horizontal scrolling).
+
+Docker only, commands in tests/test-task-list-widths/README.md.
+ck src/task-list-widths.test.ts: 28/28 PASS; exit 1 on origin/main (missing
+exports) and exit 1 with only the model applied (4 table assertions FAIL).
+Existing src/task-list-fields.test.ts 21/21, copy guard 41/41, typecheck PASS.
+Full npm test: 236/236 files PASS.
+Browser: 74/74 PASS. Same drive against an origin/main build: fails at once
+(no task-col-resize-title handle).
+
+boundingBox widths (px), header cell; "6 row cells delta" is every row's cell in that column:
+## 1440x900  title handle box={'x': 502, 'y': 105.5, 'width': 8, 'height': 40}
+column      before   after   delta  6 row cells delta              reload  reset
+title          220     420    +200  +200,+200,+200,+200,+200,+200     420    220
+owner          150     150      +0  +0,+0,+0,+0,+0,+0                 150    150
+priority        90      90      +0  +0,+0,+0,+0,+0,+0                  90     90
+due            110     110      +0  +0,+0,+0,+0,+0,+0                 110    110
+project        116     116      +0  +0,+0,+0,+0,+0,+0                 116    116
+status         110     110      +0  +0,+0,+0,+0,+0,+0                 110    110
+created        150     150      +0  +0,+0,+0,+0,+0,+0                 150    150
+updated        150     150      +0  +0,+0,+0,+0,+0,+0                 150    150
+after drag: table scroller scrollWidth=1412 clientWidth=1152 (inside card); page scrollWidth=1440=clientWidth=1440
+
+## 1200x800  title handle box={'x': 502, 'y': 105.5, 'width': 8, 'height': 40}
+column      before   after   delta  6 row cells delta              reload  reset
+title          220     420    +200  +200,+200,+200,+200,+200,+200     420    220
+owner          150     150      +0  +0,+0,+0,+0,+0,+0                 150    150
+priority        90      90      +0  +0,+0,+0,+0,+0,+0                  90     90
+due            110     110      +0  +0,+0,+0,+0,+0,+0                 110    110
+project        116     116      +0  +0,+0,+0,+0,+0,+0                 116    116
+status         110     110      +0  +0,+0,+0,+0,+0,+0                 110    110
+created        150     150      +0  +0,+0,+0,+0,+0,+0                 150    150
+updated        150     150      +0  +0,+0,+0,+0,+0,+0                 150    150
+after drag: table scroller scrollWidth=1412 clientWidth=912 (inside card); page scrollWidth=1200=clientWidth=1200
+
+## 1920x1080  title handle box={'x': 922, 'y': 105.5, 'width': 8, 'height': 40}
+column      before   after   delta  6 row cells delta              reload  reset
+title          640     840    +200  +200,+200,+200,+200,+200,+200     840    640
+owner          150     150      +0  +0,+0,+0,+0,+0,+0                 150    150
+priority        90      90      +0  +0,+0,+0,+0,+0,+0                  90     90
+due            110     110      +0  +0,+0,+0,+0,+0,+0                 110    110
+project        116     116      +0  +0,+0,+0,+0,+0,+0                 116    116
+status         110     110      +0  +0,+0,+0,+0,+0,+0                 110    110
+created        150     150      +0  +0,+0,+0,+0,+0,+0                 150    150
+updated        150     150      +0  +0,+0,+0,+0,+0,+0                 150    150
+after drag: table scroller scrollWidth=1832 clientWidth=1632 (inside card); page scrollWidth=1920=clientWidth=1920
+

@@ -14,6 +14,8 @@ registerTranslations({
   'fields.configure': ['字段配置', 'Fields'],
   'fields.search': ['搜索列名', 'Search fields'],
   'fields.reset': ['恢复默认', 'Reset to default'],
+  'fields.resetWidths': ['恢复默认列宽', 'Reset column widths'],
+  'fields.resize': ['拖动调整 {name} 列宽；双击恢复默认，方向键左右微调', 'Drag to resize {name}; double-click to reset, arrow keys to adjust'],
   'fields.locked': ['标题列不可隐藏', 'Title cannot be hidden'],
   'fields.show': ['显示 {name}', 'Show {name}'],
   'fields.hide': ['隐藏 {name}', 'Hide {name}'],
