@@ -10,7 +10,7 @@ import AliasAvatar from './AliasAvatar';
 import AttachmentFileDesktop from './AttachmentFileDesktop';
 import AuthedThumb, { AttachmentFile, AuthedVideo, mimeFromName } from './AuthedThumb';
 import AuthedWebThumb from './AuthedWebThumb';
-import { ackAgentMessages, ackUserMessages, createDashboardRequestId, dashboardRequestIdForLocalId, fetchStatus, fetchTasks, fetchUserMessages, sendTask, HubConfig, HubTask, Session, TaskAttachment, TaskPriority } from './api';
+import { ackAgentMessages, ackUserMessages, createDashboardRequestId, dashboardRequestIdForLocalId, fetchNodeStatus, fetchStatus, fetchTasks, fetchUserMessages, sendTask, HubConfig, HubTask, Session, TaskAttachment, TaskPriority } from './api';
 import { proactiveItemsForAgent } from './proactive-messages';
 import { replyQuoteFor } from './reply-quote';
 import { outboxAdd, outboxForAlias, outboxMarkFailed, outboxMarkPending, outboxRemove } from './outbox';
@@ -41,11 +41,10 @@ import type { UploadedFile } from './attach';
 import { colors, onThemeChange, radius, spacing } from './theme';
 import { ds, uiScale } from './ui-scale';
 import { formatChatHeader, shouldShowTimeHeader } from './time';
-import { chatInfoGroups, chatInfoPresentation, isChatFindKey, type ChatInfoRow } from './chat-info-model';
+import { chatInfoCaps, chatInfoGroups, chatInfoPresentation, isChatFindKey, type ChatInfoCaps, type ChatInfoRow } from './chat-info-model';
 import ChatInfoPanel from './ChatInfoPanel';
 import { useDesktopWindowPin } from './DesktopWindowPin';
 import { nodeInfoSectionKey, requestNodeSection } from './node-section-request';
-import { isAgentNodeSession } from './node-rules';
 import { echoSupersededByFetched } from './chat-echo';
 import { messageMenuGroups, selectionBarActions, type MessageMenuKey } from './message-menu-model';
 import { agentStatusLabel, buildQuote, compactQuoteText, confirmedOutboxIds, copyTextOf, copiedToastVisible, COPIED_TOAST_MS, parseQuoted, quoteLabel, type QuoteRef, mergeMessagesNewestFirst, msgKey, removeMessage, shouldShowJumpPill, nextUnread, jumpPillLabel, canSend, shouldSendOnEnter, composerShortcutHint } from './chat-actions';
@@ -1599,7 +1598,11 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
   // so he can tell whether the agent is even online.
   const [sessionStatus, setSessionStatus] = useState('');
   // 聊天信息里「规则文件」「技能」出不出现,口径同节点信息页(visibleNodeSections)。
-  const [sessionCaps, setSessionCaps] = useState({ rules: false, skills: false });
+  // 能力位只在全量 /api/status 里有(chat-info-model.ts chatInfoCaps 顶部):下面 30s 的 light 轮询
+  // 只给得出 agent-node 那一半(lightCaps,兜底);全量行在进聊天和每次打开聊天信息时取一次(fullCaps)。
+  const [lightCaps, setLightCaps] = useState<ChatInfoCaps>({ rules: false, skills: false });
+  const [fullCaps, setFullCaps] = useState<ChatInfoCaps | null>(null);
+  const sessionCaps = fullCaps ?? lightCaps;
   // Deliberately a slower, separate poll than the 5s message poll above:
   // an agent's online/offline state changes far less often than messages
   // do, so 30s keeps the status badge fresh without doubling the chat's
@@ -1612,9 +1615,8 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
         const s = (data.sessions ?? []).find(x => x.alias === alias);
         if (live) {
           setSessionStatus(s?.status ?? 'offline');
-          const rules = !!s && (isAgentNodeSession(s) || s.rules_file_capable === true);
-          const skills = (s as (Session & { skills_capable?: boolean }) | undefined)?.skills_capable === true;
-          setSessionCaps(c => (c.rules === rules && c.skills === skills ? c : { rules, skills }));
+          const next = chatInfoCaps(s);
+          setLightCaps(c => (c.rules === next.rules && c.skills === next.skills ? c : next));
         }
       } catch {
         /* keep last */
@@ -1627,6 +1629,22 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
       clearInterval(t);
     };
   }, [cfg, alias]);
+  // 全量行:能力位很少变,不跟 30s 轮询(全量投影比 light 大一个量级)。失败就保留上一次 / 退回 light。
+  // 换了聊天对象先清掉,别让上一个 agent 的能力位挂在这一个的聊天信息里。
+  useEffect(() => { setFullCaps(null); }, [cfg, alias]);
+  useEffect(() => {
+    let live = true;
+    fetchNodeStatus(cfg)
+      .then(data => {
+        if (!live) return;
+        const s = (data.sessions ?? []).find(x => x.alias === alias);
+        if (!s) return;
+        const next = chatInfoCaps(s);
+        setFullCaps(c => (c && c.rules === next.rules && c.skills === next.skills ? c : next));
+      })
+      .catch(() => { /* keep last / light fallback */ });
+    return () => { live = false; };
+  }, [cfg, alias, infoOpen]);
 
   // "正在处理…" only while a real (non-echo) task is still in a pre-result
   // state AND was created within the last 10 min. The 10-min cutoff is a

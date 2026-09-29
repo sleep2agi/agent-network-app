@@ -143,7 +143,7 @@ for (const L of LAYOUTS) {
     }
     const ids = pm.rows.map(r => r.id);
     const expected = ['chat-info-row-node', 'chat-info-row-search', 'chat-info-row-pin', 'chat-info-row-mute', ...(L.name === 'desktop' ? ['chat-info-row-windowPin'] : []),
-      'chat-info-row-section-model', 'chat-info-row-section-rules', 'chat-info-row-section-skills', 'chat-info-row-section-files', 'chat-info-row-section-tasks'];
+      'chat-info-row-section-model', 'chat-info-row-section-rules', 'chat-info-row-section-skills', 'chat-info-row-section-files', 'chat-info-row-section-tasks', 'chat-info-row-section-schedules'];
     check(tag, 'rows in order', JSON.stringify(ids) === JSON.stringify(expected), ids.join(','));
     const heights = pm.rows.map(r => r.box.h);
     check(tag, 'every row ≥ 48px', heights.every(h => h >= 48), heights.map(r1).join(','));
@@ -214,7 +214,7 @@ for (const L of LAYOUTS) {
     await page.waitForTimeout(300);
 
     // 6. node rows → node info page on the matching section, ‹ back to the chat
-    const sectionLabel = { node: '概览', 'section-model': '模型与运行时', 'section-rules': '规则文件', 'section-skills': '技能', 'section-files': '项目文件夹', 'section-tasks': '任务' };
+    const sectionLabel = { node: '概览', 'section-model': '模型与运行时', 'section-rules': '规则文件', 'section-skills': '技能', 'section-files': '项目文件夹', 'section-tasks': '任务', 'section-schedules': '定时任务' };
     for (const [key, label] of Object.entries(sectionLabel)) {
       await openPanel();
       await page.locator(tid(`chat-info-row-${key}`)).click();
