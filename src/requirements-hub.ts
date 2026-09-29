@@ -186,6 +186,10 @@ export async function createRequirementOnHub(cfg: HubConfig, input: CreateInput)
  * 旧 Hub:不认识这些字段时回 400 empty_patch;更老的会忽略字段照样回 200 —— 两种都报「还不能改」,
  * 不把没生效的保存说成成功。
  */
+/** 改母任务被 Hub 拒绝的两种说法(详情把它们显示在「母任务」下面,而不是底部)。 */
+export const PARENT_TOO_DEEP = '子任务最多 5 层';
+export const PARENT_REJECTED = '不能挂到这个母任务下(会形成循环,或它已不存在)';
+
 export async function updateRequirementOnHub(cfg: HubConfig, id: string, patch: EditPatch): Promise<Requirement> {
   const res = await appFetch(`${cfg.serverUrl}${scoped(cfg, `/api/requirements/${encodeURIComponent(id)}`)}`, {
     method: 'PATCH',
@@ -201,10 +205,10 @@ export async function updateRequirementOnHub(cfg: HubConfig, id: string, patch: 
   if (res.status === 400 && data?.error === 'owner_must_be_human') throw new RequirementsHubError('负责人只能是人类;Agent 请放在「负责 Agent」', 400);
   if (res.status === 400 && data?.error === 'project_archived') throw new RequirementsHubError('这个项目已归档，换一个项目', 400);
   if (res.status === 400 && data?.error === 'project_not_in_network') throw new RequirementsHubError('这个项目不在当前网络', 400);
-  if (res.status === 400 && data?.error === 'parent_too_deep') throw new RequirementsHubError('子需求最多 5 层', 400);
-  if (res.status === 400 && (data?.error === 'parent_cycle' || data?.error === 'parent_not_found')) throw new RequirementsHubError('不能挂到这个父需求下', 400);
+  if (res.status === 400 && data?.error === 'parent_too_deep') throw new RequirementsHubError(PARENT_TOO_DEEP, 400);
+  if (res.status === 400 && (data?.error === 'parent_cycle' || data?.error === 'parent_not_found')) throw new RequirementsHubError(PARENT_REJECTED, 400);
   if (res.status === 400 && data?.error === 'invalid_description') throw new RequirementsHubError('描述太长了(最多 20000 字)', 400);
-  if (res.status === 400 && data?.error === 'invalid_checklist') throw new RequirementsHubError('子任务不合法(最多 100 项,每项 1–500 字)', 400);
+  if (res.status === 400 && data?.error === 'invalid_checklist') throw new RequirementsHubError('检查项不合法(最多 100 项,每项 1–500 字)', 400);
   if (res.status === 400 && data?.error === 'agent_owner_must_be_agent') throw new RequirementsHubError('负责 Agent 只能是 Agent 节点', 400);
   if (res.status === 404) throw new RequirementsHubError('这条需求已不存在', 404);
   if (!res.ok) throw new RequirementsHubError('修改没有保存，请重试', res.status);
@@ -248,9 +252,9 @@ export async function setChecklistItemOnHub(cfg: HubConfig, id: string, itemId: 
   });
   const data = await res.json().catch(() => null) as { requirement?: unknown; error?: string } | null;
   if (res.status === 403) throw new RequirementsHubError('你没有修改这条需求的权限', 403);
-  if (res.status === 404 && data?.error === 'checklist_item_not_found') throw new RequirementsHubError('这个子任务已被删除，请刷新', 404);
+  if (res.status === 404 && data?.error === 'checklist_item_not_found') throw new RequirementsHubError('这个检查项已被删除，请刷新', 404);
   if (res.status === 404) throw new RequirementsHubError(HUB_CANNOT_EDIT, 404);
-  if (!res.ok) throw new RequirementsHubError('子任务没有保存，请重试', res.status);
+  if (!res.ok) throw new RequirementsHubError('检查项没有保存，请重试', res.status);
   const row = requirementFromHub(data?.requirement);
   if (!row) throw new RequirementsHubError('Hub 没有返回这条需求', 502);
   return row;

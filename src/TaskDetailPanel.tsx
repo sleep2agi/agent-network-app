@@ -24,11 +24,15 @@ import { parseIssue } from './requirement-issues';
 import { ExternalLink, levelIn, ParentBreadcrumb, SubRequirements } from './TaskRelations';
 import TaskDescriptionEditor from './TaskDescriptionEditor';
 import { BOARD_RADIUS, cardBg, liftedShadow, STATUS_TONE, useTaskStyles, a11yState } from './TaskBoardParts';
-import { DueField, fieldStyles, PriorityPicker, ProjectPicker, RoleFields } from './TaskCreateDialog';
+import { DueField, fieldStyles, PriorityPicker, RoleFields } from './TaskCreateDialog';
+import { ParentSelect, ProjectSelect } from './TaskFieldPickers';
+import { moreSummary } from './task-detail-more';
+import { loadDetailMoreOpen, saveDetailMoreOpen } from './task-detail-prefs';
+import { PARENT_REJECTED, PARENT_TOO_DEEP } from './requirements-hub';
 
 export const DRAWER_WIDTH = 420;
 
-export default function TaskDetailPanel({ cfg, item, items, onOpenRequirement, onCreateChild, projects, dueDatetime, mode, top, people, peopleLoading, onLoadPeople, moving, moveError, onMove, onSave, onAssignmentsSaved, onClose, pointer, checklistError, onChecklistToggle, onChecklistAdd, onChecklistDelete, onChecklistMove }: {
+export default function TaskDetailPanel({ cfg, item, items, onOpenRequirement, onCreateChild, projects, dueDatetime, mode, top, people, peopleLoading, onLoadPeople, moving, moveError, onMove, onSave, onAssignmentsSaved, onClose, pointer, checklistError, onChecklistToggle, onChecklistAdd, onChecklistDelete, onChecklistMove, onOpenVoiceSettings, onOpenWindow }: {
   cfg: HubConfig;
   item: Requirement;
   /** 全部卡片(找父需求 / 子需求用)。 */
@@ -38,7 +42,8 @@ export default function TaskDetailPanel({ cfg, item, items, onOpenRequirement, o
   /** 项目列表;null = Hub 没有项目。 */
   projects: readonly RequirementProject[] | null;
   dueDatetime: boolean;
-  mode: 'drawer' | 'page';
+  /** window = 「在新窗口打开」的任务窗口:整窗铺满,没有 ✕(关窗口用系统的)。 */
+  mode: 'drawer' | 'page' | 'window';
   /** 抽屉的上沿 = 页面头部的下沿(对齐)。 */
   top: number;
   people: readonly RequirementPerson[];
@@ -57,6 +62,10 @@ export default function TaskDetailPanel({ cfg, item, items, onOpenRequirement, o
   onChecklistAdd: (text: string) => boolean;
   onChecklistDelete: (id: string) => void;
   onChecklistMove: (from: number, to: number) => void;
+  /** 描述的语音输入未配置时「去设置」。 */
+  onOpenVoiceSettings?: () => void;
+  /** 桌面(Tauri)抽屉:「⧉ 在新窗口打开」;true = 窗口开了。 */
+  onOpenWindow?: () => Promise<boolean>;
 }) {
   useTranslation();
   const s = useTaskStyles();
@@ -64,7 +73,7 @@ export default function TaskDetailPanel({ cfg, item, items, onOpenRequirement, o
   const styles = makePanelStyles();
   const safe = useModalSafePadding('fullScreen');
   const [draft, setDraft] = useState<EditDraft>(() => editDraftOf(item));
-  const [error, setError] = useState<{ field: 'name' | 'due' | 'submit'; message: string } | null>(null);
+  const [error, setError] = useState<{ field: 'name' | 'due' | 'submit' | 'parent'; message: string } | null>(null);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   // 换了一张卡片就换草稿;同一张卡片被 Hub 刷新(别处改了)时,没改过的字段跟着刷新。
@@ -84,6 +93,7 @@ export default function TaskDetailPanel({ cfg, item, items, onOpenRequirement, o
         agentOwner: JSON.stringify(d.agentOwner) === JSON.stringify(base.agentOwner) ? next.agentOwner : d.agentOwner,
         description: d.description === base.description ? next.description : d.description,
         projectId: d.projectId === base.projectId ? next.projectId : d.projectId,
+        parentId: d.parentId === base.parentId ? next.parentId : d.parentId,
       };
     });
   }, [item]);
@@ -96,11 +106,27 @@ export default function TaskDetailPanel({ cfg, item, items, onOpenRequirement, o
     setSaving(true);
     const failed = await onSave(patch);
     setSaving(false);
-    if (failed) setError({ field: 'submit', message: failed });
+    if (failed) setError({ field: patch.parent_id !== undefined && (failed === PARENT_TOO_DEEP || failed === PARENT_REJECTED) ? 'parent' : 'submit', message: failed });
     else setSaved(true);
   };
   const legacy = item.owner === undefined;
+  // 「更多」展开没有:本机记住(task-detail-prefs.ts);读到之前按收起。
+  const [moreOpen, setMoreOpen] = useState(false);
+  useEffect(() => { let alive = true; void loadDetailMoreOpen().then(v => { if (alive && v !== null) setMoreOpen(v); }); return () => { alive = false; }; }, []);
+  const toggleMore = () => setMoreOpen(v => { void saveDetailMoreOpen(!v); return !v; });
+  // 开了新窗口:抽屉里没有没保存的修改就收起(新窗口从 Hub 读同一份);有的话留着,免得丢。开不了 = 留在抽屉,说一声。
+  const openWindow = async () => {
+    if (!onOpenWindow) return;
+    const ok = await onOpenWindow();
+    if (ok && !patch) onClose();
+    else if (!ok) setError({ field: 'submit', message: tr('taskWin.failed') });
+  };
 
+  // 常显:标题 · 状态 · 负责人 / 负责 Agent · 项目 · 预计完成 · 描述;其余收进「更多」(owner 09-29:详情太长)。
+  // 更多收起时,里面有值的字段在「更多」那一行上用一行字说出来(task-detail-more.ts),不悄悄藏掉。
+  const summary = moreSummary(item, draft, items);
+  // 母任务被 Hub 拒绝、检查项没存上:错误在「更多」里,自动展开,不能藏着。
+  const moreShown = moreOpen || error?.field === 'parent' || !!checklistError;
   const body: ReactNode = (
     <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: spacing.xl, gap: spacing.lg }} keyboardShouldPersistTaps="handled">
       <ParentBreadcrumb item={item} items={items} onOpen={onOpenRequirement} />
@@ -156,39 +182,58 @@ export default function TaskDetailPanel({ cfg, item, items, onOpenRequirement, o
           </>
         ) : undefined}
       />
-      {projects && item.projectId !== undefined ? <ProjectPicker value={draft.projectId} projects={projects} onChange={projectId => set({ projectId })} idBase="req-edit-project" /> : null}
-      <Field label={tr('tasks.copy.32')}>
-        <PriorityPicker value={draft.priority} onChange={priority => set({ priority })} testPrefix="req-edit-priority" />
-      </Field>
+      {projects && item.projectId !== undefined ? <ProjectSelect value={draft.projectId} projects={projects} onChange={projectId => set({ projectId })} touch={!pointer} idBase="req-edit-project" /> : null}
       <Field label={tr('tasks.copy.119')}>
         <DueField value={draft.due} onChange={due => set({ due })} error={error?.field === 'due' ? error.message : undefined} idBase="req-edit-due" allowTime={dueDatetime} pointer={pointer} sheet={mode === 'page'} />
       </Field>
-      <TaskIssueBindings key={item.id} item={item} onSave={onSave} />
-      <TaskTags key={`tags:${item.id}`} cfg={cfg} item={item} onSave={onSave} />
-      {!item.externalUrl || !parseIssue(item.externalUrl, false) ? <ExternalLink item={item} /> : null}
-      <SubRequirements item={item} items={items} onOpen={onOpenRequirement} onCreateChild={onCreateChild} canAddLevel={levelIn(items, item) < 5} />
       {hasDetails(item) ? (
-        <>
-          <TaskDescriptionEditor cfg={cfg} value={draft.description} onChange={description => set({ description })} pointer={pointer} title={item.name} />
-          <TaskChecklist
-            items={item.checklist ?? []}
-            pointer={pointer}
-            onToggle={onChecklistToggle}
-            onAdd={onChecklistAdd}
-            onDelete={onChecklistDelete}
-            onMove={onChecklistMove}
-            error={checklistError}
-          />
-        </>
+        <TaskDescriptionEditor cfg={cfg} value={draft.description} onChange={description => set({ description })} pointer={pointer} title={item.name} dirty={!!patch} onOpenVoiceSettings={onOpenVoiceSettings} />
       ) : (
         <Text style={s.muted} testID="req-details-unsupported">{tr('tasks.copy.138')}</Text>
       )}
-      {!legacy ? (
-        <Field label={tr('tasks.copy.53')}>
-          <RequirementAssignmentsEditor key={item.id} cfg={cfg} item={item} fields="participants" onSaved={onAssignmentsSaved} />
-        </Field>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={moreShown ? tr('detail.lessA11y') : tr('detail.moreA11y')}
+        {...a11yState({ expanded: moreShown })}
+        onPress={toggleMore}
+        style={state => [{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm, minHeight: 36, marginHorizontal: -spacing.sm, paddingHorizontal: spacing.sm, borderRadius: BOARD_RADIUS.control }, ((state as { hovered?: boolean }).hovered || state.pressed) && { backgroundColor: colors.rowHover }]}
+        testID="req-more-toggle"
+      >
+        <Text style={{ color: colors.textSecondary, fontSize: typeScale.small, fontWeight: weight.medium, flexShrink: 0 }} testID="req-more-label">{tr('detail.more')}</Text>
+        <Ionicons name={moreShown ? 'chevron-up' : 'chevron-down'} size={14} color={colors.textMuted} />
+        {!moreShown && summary.length ? <Text style={[s.muted, { flex: 1 }]} numberOfLines={1} testID="req-more-summary">{summary.map(x => tr(x.key, x.values)).join(' · ')}</Text> : null}
+      </Pressable>
+      {moreShown ? (
+        <View style={{ gap: spacing.lg }} testID="req-more">
+          <Field label={tr('tasks.copy.32')}>
+            <PriorityPicker value={draft.priority} onChange={priority => set({ priority })} testPrefix="req-edit-priority" />
+          </Field>
+          <ParentSelect item={item} items={items} value={draft.parentId} onChange={parentId => set({ parentId })} touch={!pointer} idBase="req-edit-parent" error={error?.field === 'parent' ? error.message : undefined} />
+          <SubRequirements item={item} items={items} onOpen={onOpenRequirement} onCreateChild={onCreateChild} canAddLevel={levelIn(items, item) < 5} />
+          {hasDetails(item) ? (
+            <>
+              <TaskChecklist
+                items={item.checklist ?? []}
+                pointer={pointer}
+                onToggle={onChecklistToggle}
+                onAdd={onChecklistAdd}
+                onDelete={onChecklistDelete}
+                onMove={onChecklistMove}
+                error={checklistError}
+              />
+            </>
+          ) : null}
+          {!legacy ? (
+            <Field label={tr('tasks.copy.53')}>
+              <RequirementAssignmentsEditor key={item.id} cfg={cfg} item={item} fields="participants" onSaved={onAssignmentsSaved} />
+            </Field>
+          ) : null}
+          <TaskIssueBindings key={item.id} item={item} onSave={onSave} />
+          <TaskTags key={`tags:${item.id}`} cfg={cfg} item={item} onSave={onSave} />
+          {!item.externalUrl || !parseIssue(item.externalUrl, false) ? <ExternalLink item={item} /> : null}
+          {item.createdAt ? <Text style={s.muted}>{tr('tasks.copy.139')}{item.createdAt.slice(0, 10)}</Text> : null}
+        </View>
       ) : null}
-      {item.createdAt ? <Text style={s.muted}>{tr('tasks.copy.139')}{item.createdAt.slice(0, 10)}</Text> : null}
     </ScrollView>
   );
 
@@ -218,6 +263,18 @@ export default function TaskDetailPanel({ cfg, item, items, onOpenRequirement, o
       ) : null}
       <Text style={{ flex: 1, color: colors.text, fontSize: typeScale.title, fontWeight: weight.strong }}>{tr('tasks.copy.145')}</Text>
       {saving || moving ? <ActivityIndicator size="small" color={colors.textMuted} /> : null}
+      {mode === 'drawer' && onOpenWindow ? (
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={tr('taskWin.open')}
+          {...({ title: tr('taskWin.open') } as object)}
+          onPress={() => { void openWindow(); }}
+          style={state => [s.iconButton, ((state as { hovered?: boolean }).hovered || state.pressed) && { backgroundColor: colors.rowHover }]}
+          testID="req-detail-open-window"
+        >
+          <Ionicons name="open-outline" size={17} color={colors.textSecondary} />
+        </Pressable>
+      ) : null}
       {mode === 'drawer' ? (
         <Pressable accessibilityRole="button" accessibilityLabel={tr('tasks.copy.146')} onPress={onClose} style={s.iconButton} testID="req-detail-close">
           <Ionicons name="close" size={18} color={colors.textSecondary} />
@@ -227,6 +284,15 @@ export default function TaskDetailPanel({ cfg, item, items, onOpenRequirement, o
   );
 
 
+  if (mode === 'window') {
+    return (
+      <View style={{ flex: 1, backgroundColor: colors.bg }} testID="req-detail" accessibilityLabel={tr('tasks.copy.145')}>
+        {head}
+        {body}
+        {footer}
+      </View>
+    );
+  }
   if (mode === 'drawer') {
     return (
       <View

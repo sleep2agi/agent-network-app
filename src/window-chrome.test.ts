@@ -11,6 +11,7 @@ import * as shell from './window-shell';
 import { SETTINGS_WINDOW_LABEL } from './desktop-settings-window';
 import { IMAGE_WINDOW_LABEL } from './image-window-model';
 import { chatWindowLabel, workspaceWindowLabel } from './desktop-chat-menu';
+import { taskWindowLabel } from './task-window-model';
 
 let p = 0, t = 0;
 const ck = (name: string, cond: boolean, extra = '') => { t++; if (cond) { p++; console.log(`PASS: ${name}`); } else console.log(`FAIL: ${name}${extra ? ` (${extra})` : ''}`); };
@@ -75,12 +76,13 @@ const REGISTRY: Record<string, { name: string; label: string }> = {
   'src/image-window.ts IMAGE_WINDOW_LABEL': { name: '看图窗(#464)', label: IMAGE_WINDOW_LABEL },
   'src/desktop-chat-menu.ts chatWindowLabel()': { name: '分离聊天窗', label: chatWindowLabel('示例', 'p1') },
   'src/desktop-chat-menu.ts workspaceWindowLabel()': { name: '工作区窗', label: workspaceWindowLabel('p1') },
+  'src/task-window.ts taskWindowLabel()': { name: '任务窗(在新窗口打开)', label: taskWindowLabel('p1', 'req_demo_1') },
 };
 const keys = sites.map(s => `${s.file} ${s.labelExpr}`);
 ck('取集非空(扫到 ≥4 个 new WebviewWindow)', sites.length >= 4, String(sites.length));
 ck('每个窗口创建点都在清单里(新开窗口要来登记)', keys.every(k => k in REGISTRY), keys.filter(k => !(k in REGISTRY)).join(', '));
 ck('清单里的每个窗口都还扫得到(没有过期条目)', Object.keys(REGISTRY).every(k => keys.includes(k)), Object.keys(REGISTRY).filter(k => !keys.includes(k)).join(', '));
-for (const name of ['设置窗(#483)', '看图窗(#464)', '分离聊天窗']) {
+for (const name of ['设置窗(#483)', '看图窗(#464)', '分离聊天窗', '任务窗(在新窗口打开)']) {
   ck(`清单包含 ${name}`, Object.values(REGISTRY).some(r => r.name === name));
 }
 

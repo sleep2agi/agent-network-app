@@ -1,5 +1,6 @@
 import { formatDueFull } from './i18n-task-presentation';
 import { t as tr } from './i18n';
+import { duePanelPlacement } from './task-select-model';
 import { validationText } from './i18n-task-presentation';
 import { useTranslation } from './i18n-react';
 import { taskText } from './i18n-tasks';
@@ -185,10 +186,12 @@ export default function TaskDuePicker({ value, onChange, allowTime, pointer, she
   );
 
   // 桌面:贴着字段下沿;放不下就翻到上面;左边和字段左边对齐,右边夹进窗口。
+  // 上下都放不下(矮窗口,字段在中间 —— 详情里项目 / 母任务挪到标题下以后更常见):放到字段左边、竖直居中,
+  // 不再夹到窗口顶上把字段本身盖住。
   const panelH = allowTime ? 452 : 404;
-  const left = anchor ? Math.max(8, Math.min(anchor.x, win.width - DUE_PANEL_WIDTH - 8)) : (win.width - DUE_PANEL_WIDTH) / 2;
-  const below = anchor ? anchor.y + anchor.h + 6 : (win.height - panelH) / 2;
-  const top = anchor && below + panelH > win.height - 8 ? Math.max(8, anchor.y - panelH - 6) : below;
+  const place = duePanelPlacement(anchor, { width: win.width, height: win.height }, { width: DUE_PANEL_WIDTH, height: panelH });
+  const left = place.left;
+  const top = place.top;
 
   return (
     <View style={{ gap: spacing.sm }}>
@@ -250,3 +253,4 @@ const makePickerStyles = () => StyleSheet.create({
   timeBox: { width: 40, height: 32, borderWidth: 1, borderRadius: radius.item, textAlign: 'center', fontSize: 14, padding: 0 },
   footBtn: { height: 32, justifyContent: 'center' },
 });
+

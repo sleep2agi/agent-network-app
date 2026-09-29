@@ -105,6 +105,8 @@ export const makeTaskStyles = () => StyleSheet.create({
   quickAddInput: { marginHorizontal: spacing.sm + 2, marginBottom: spacing.sm + 2, minHeight: 40, paddingHorizontal: spacing.md, borderRadius: BOARD_RADIUS.control, backgroundColor: cardBg(), borderWidth: 1, borderColor: colors.accent, color: colors.text, fontSize: typeScale.body },
   // 卡片
   card: { padding: CARD_PAD, borderRadius: BOARD_RADIUS.card, backgroundColor: cardBg(), gap: 10, ...softShadow() },
+  // 桌面多选:描边画在盒子里面(outlineOffset 负值),不改盒子尺寸、不挤内边距。
+  cardSelected: { outlineStyle: 'solid', outlineWidth: 2, outlineColor: colors.accent, outlineOffset: -2, backgroundColor: colors.accent + '0f' } as object,
   cardHover: { backgroundColor: themeMode() === 'dark' ? colors.groupedRowPressed : colors.rowHover },
   cardDragging: { opacity: 0.35 },
   cardTitle: { color: colors.text, fontSize: typeScale.body, fontWeight: weight.medium, lineHeight: 20 },

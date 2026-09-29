@@ -524,7 +524,7 @@ export function createInput(d: CreateDraft, twoRoles = false): { name: string; p
 
 // ── 详情编辑 ─────────────────────────────────────────────────────────────
 
-export interface EditDraft { name: string; priority: ReqPriority; due: string; owner: RequirementPersonRef | null; agentOwner: RequirementPersonRef | null; description: string; projectId: string | null }
+export interface EditDraft { name: string; priority: ReqPriority; due: string; owner: RequirementPersonRef | null; agentOwner: RequirementPersonRef | null; description: string; projectId: string | null; parentId: string | null }
 
 export const editDraftOf = (item: Requirement): EditDraft => ({
   name: item.name,
@@ -534,10 +534,11 @@ export const editDraftOf = (item: Requirement): EditDraft => ({
   agentOwner: item.agentOwner ? { kind: item.agentOwner.kind, id: item.agentOwner.id } : null,
   description: item.description ?? '',
   projectId: item.projectId ?? null,
+  parentId: item.parentId ?? null,
 });
 
 /** PATCH 请求体(字段名就是线上的名字)。 */
-export type EditPatch = { tags?: string[]; issues?: { url: string; title?: string }[]; name?: string; priority?: ReqPriority; due?: string; owner?: RequirementPersonRef | null; agent_owner?: RequirementPersonRef | null; description?: string; checklist?: ChecklistItem[]; project_id?: string | null };
+export type EditPatch = { tags?: string[]; issues?: { url: string; title?: string }[]; name?: string; priority?: ReqPriority; due?: string; owner?: RequirementPersonRef | null; agent_owner?: RequirementPersonRef | null; description?: string; checklist?: ChecklistItem[]; project_id?: string | null; parent_id?: string | null };
 
 /**
  * 只提交改过的字段;没改返回 null(保存按钮不可用)。旧 Hub(owner undefined)不提交负责人 ——
@@ -563,6 +564,8 @@ export function editPatch(item: Requirement, d: EditDraft): EditPatch | null {
   // 描述跟标题一起走「保存修改」;旧 Hub(没有 description 字段)不发。
   if (item.description !== undefined && d.description.replace(/\r\n?/g, '\n') !== item.description) patch.description = d.description.replace(/\r\n?/g, '\n');
   if (item.projectId !== undefined && (d.projectId ?? null) !== (item.projectId ?? null)) patch.project_id = d.projectId ?? null;
+  // 母任务:旧 Hub(行里没有 parent_id)不发。
+  if (item.parentId !== undefined && (d.parentId ?? null) !== (item.parentId ?? null)) patch.parent_id = d.parentId ?? null;
   return Object.keys(patch).length ? patch : null;
 }
 
@@ -588,6 +591,7 @@ export function patchApplied(row: Requirement, patch: EditPatch): boolean {
   }
   if (patch.description !== undefined && row.description !== patch.description) return false;
   if (patch.project_id !== undefined && (row.projectId ?? null) !== patch.project_id) return false;
+  if (patch.parent_id !== undefined && (row.parentId ?? null) !== patch.parent_id) return false;
   if (patch.checklist !== undefined && JSON.stringify(row.checklist?.map(i => i.id)) !== JSON.stringify(patch.checklist.map(i => i.id))) return false;
   return true;
 }

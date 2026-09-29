@@ -33,11 +33,16 @@ import { applyFilter, applyMove, boardColumns, createInput, DEFAULT_SORT, DRAG_I
 import { enterTaskScope, patchTaskBoard, setManagingProjects, setTaskFilter, setTaskSection, taskScopeKey, updateTaskItems, useTaskBoard, type TaskSection } from './task-board-store';
 import { CardMeta, ChecklistProgress, Chip, ParticipantStack, ProjectChip, DueChip, OwnerBadge, PriorityDot, Segmented, STATUS_TONE, useTaskStyles, type TaskStyles, a11yState } from './TaskBoardParts';
 import TaskCreateDialog from './TaskCreateDialog';
-import TaskDetailPanel from './TaskDetailPanel';
+import TaskDetailPanel, { DRAWER_WIDTH } from './TaskDetailPanel';
 import TaskCardMenu, { type TaskMenuTarget } from './TaskCardMenu';
 import TaskProjectManager from './TaskProjectManager';
 import { setDraggingCursor, useTaskCardDom } from './task-board-dom';
 import { boardLayout, pageAt } from './task-board-layout';
+import { ParentLine, ProjectSelect, projectOptions } from './TaskFieldPickers';
+import { SelectMenu } from './TaskSelectMenu';
+import { changeConcernsMe, parseTaskChanged } from './task-window-model';
+import { currentWindowLabel, emitTaskChanged, listenTaskChanged, openTaskWindow } from './task-window';
+import { isSelectClick, NO_SELECTION, pruneSelection, runBulk, selectClick, toggleSelected, type BulkProgress, type SelectAnchor, type Selection } from './task-select-model';
 
 const UNSUPPORTED = 'tasks.copy.14';
 /** 别的设备改了也要看得到;有未完成的写入时跳过这一轮(不拿旧数据盖掉乐观更新)。 */
@@ -51,13 +56,16 @@ const keyName = (key: string, people: readonly { kind: string; id: string; name:
 
 const moveErrorText = (e: unknown) => (e instanceof RequirementsHubError && e.status === 403 ? tr('tasks.copy.16') : tr('tasks.copy.17'));
 
-export default function RequirementBoard(props: { cfg: HubConfig; desktop?: boolean; dispatch?: ReactNode }) {
+/** 「在新窗口打开」的任务窗口:只画这一个任务的详情(整窗),关掉 = 关窗口(TaskWindow.tsx)。 */
+export type SingleTask = { taskId: string; onClose: () => void; onTitle?: (name: string) => void };
+
+export default function RequirementBoard(props: { cfg: HubConfig; desktop?: boolean; dispatch?: ReactNode; onOpenVoiceSettings?: () => void; single?: SingleTask }) {
   useTranslation();
   const { cfg } = props;
   return <ScopedRequirementBoard key={taskScopeKey(cfg)} {...props} />;
 }
 
-function ScopedRequirementBoard({ cfg, desktop, dispatch }: { cfg: HubConfig; desktop?: boolean; dispatch?: ReactNode }) {
+function ScopedRequirementBoard({ cfg, desktop, dispatch, onOpenVoiceSettings, single }: { cfg: HubConfig; desktop?: boolean; dispatch?: ReactNode; onOpenVoiceSettings?: () => void; single?: SingleTask }) {
   const { language } = useTranslation();
   const s = useTaskStyles();
   const scope = taskScopeKey(cfg);
@@ -101,7 +109,7 @@ function ScopedRequirementBoard({ cfg, desktop, dispatch }: { cfg: HubConfig; de
   const [peopleLoading, setPeopleLoading] = useState(false);
   const [peopleError, setPeopleError] = useState('');
   const [draft, setDraft] = useState<CreateDraft | null>(null);
-  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [selectedId, setSelectedId] = useState<string | null>(single?.taskId ?? null);
   const [movingIds, setMovingIds] = useState<string[]>([]);
   const [moveErrors, setMoveErrors] = useState<Record<string, string>>({});
   const [banner, setBanner] = useState('');
@@ -110,6 +118,12 @@ function ScopedRequirementBoard({ cfg, desktop, dispatch }: { cfg: HubConfig; de
   const [filterMenu, setFilterMenu] = useState<{ kind: FilterKind; x: number; y: number } | null>(null);
   const [quickAdd, setQuickAdd] = useState<{ column: ReqColumn; name: string } | null>(null);
   const [announce, setAnnounce] = useState('');
+  // ── 桌面多选 + 批量改(task-select-model.ts):Ctrl/⌘ 单击、Shift 单击、列表行首勾选框 ──
+  const [sel, setSel] = useState<Selection>(NO_SELECTION);
+  const [bulk, setBulk] = useState<BulkProgress | null>(null);
+  const [bulkMenu, setBulkMenu] = useState<{ kind: 'project' | 'status' | 'agent'; anchor: SelectAnchor } | null>(null);
+  const lastBulk = useRef<{ kind: 'project' | 'status' | 'agent'; value: string | null } | null>(null);
+  const bulkRefs = useRef<Record<string, any>>({});
   const pendingMoves = useRef(new Set<string>());
   const mutations = useRef(0);
   const inFlight = useRef(0);
@@ -169,6 +183,21 @@ function ScopedRequirementBoard({ cfg, desktop, dispatch }: { cfg: HubConfig; de
     } catch { /* 下一轮再试;看板保留上次的 */ }
   }, [cfg, phase, scope]);
   usePoll(refresh, POLL_MS, [refresh]);
+  const refreshRef = useRef(refresh);
+  refreshRef.current = refresh;
+  useEffect(() => {
+    let off: (() => void) | undefined;
+    let alive = true;
+    void (async () => {
+      const label = await currentWindowLabel();
+      const u = await listenTaskChanged(raw => {
+        const change = parseTaskChanged(raw);
+        if (change && changeConcernsMe(change, { label, profileId: cfg.profileId, serverUrl: cfg.serverUrl, networkId: cfg.networkId })) void refreshRef.current();
+      });
+      if (alive) off = u; else u();
+    })().catch(() => {});
+    return () => { alive = false; off?.(); };
+  }, [cfg.profileId, cfg.serverUrl, cfg.networkId]);
 
   const loadPeople = async (): Promise<boolean> => {
     if (peopleLoading) return false;
@@ -189,7 +218,12 @@ function ScopedRequirementBoard({ cfg, desktop, dispatch }: { cfg: HubConfig; de
   const track = async <T,>(fn: () => Promise<T>): Promise<T> => {
     mutations.current += 1;
     inFlight.current += 1;
-    try { return await fn(); } finally { inFlight.current -= 1; }
+    try {
+      const out = await fn();
+      // 别的窗口(主窗口的看板 / 「在新窗口打开」的任务窗口)里同一块看板马上重读,不等 15 秒的轮询。
+      void emitTaskChanged({ profileId: cfg.profileId, serverUrl: cfg.serverUrl, networkId: cfg.networkId });
+      return out;
+    } finally { inFlight.current -= 1; }
   };
 
   const move = async (id: string, to: ReqColumn) => {
@@ -329,6 +363,61 @@ function ScopedRequirementBoard({ cfg, desktop, dispatch }: { cfg: HubConfig; de
   useEffect(() => { const last = Math.max(0, columns.length - 1); if (page > last) { setPage(last); pagerRef.current?.scrollTo({ x: last * pageWidth, animated: false }); } }, [columns.length]);
   const owners = useMemo(() => ownerCounts(items, people), [items, people, language]);
   const draggingItem = dragView.phase === 'dragging' ? items.find(row => row.id === dragView.id) || null : null;
+  const listRows = useMemo(() => sortRows(visible, sort, people, projects ?? []), [visible, sort, people, projects]);
+  // Shift 单击连选按「当前显示的顺序」:列表按排序后的行,看板按 需求池 → 进行中 → 完成 各列从上到下。
+  const order = useMemo(() => (section === 'list' ? listRows.map(r => r.id) : columns.flatMap(c => c.items.map(i => i.id))), [section, listRows, columns]);
+  useEffect(() => { setSel(cur => pruneSelection(cur, items.map(i => i.id))); }, [items]);
+  useEffect(() => { setSel(NO_SELECTION); }, [section, scope]);
+  const onCardPress = (id: string, e?: { nativeEvent?: any }) => {
+    const n = e?.nativeEvent ?? {};
+    const m = { toggle: !!(n.ctrlKey || n.metaKey), range: !!n.shiftKey };
+    if (pointer && isSelectClick(m)) { setSel(cur => selectClick(cur, id, m, order)); return; }
+    openDetail(id);
+  };
+  const setProject = async (id: string, projectId: string | null) => {
+    const failed = await saveEdit(id, { project_id: projectId });
+    if (failed) setBanner(failed);
+  };
+  const applyBulk = async (kind: 'project' | 'status' | 'agent', value: string | null, ids: readonly string[] = sel.ids) => {
+    lastBulk.current = { kind, value };
+    const targets = ids.map(id => items.find(i => i.id === id)).filter((i): i is Requirement => !!i).map(i => ({ id: i.id, name: i.name }));
+    const result = await runBulk(targets, async id => {
+      const cur = items.find(i => i.id === id);
+      if (kind === 'status') {
+        if (!cur || cur.column === value) return;
+        const updated = await track(() => moveRequirementOnHub(cfg, id, value as ReqColumn));
+        updateTaskItems(scope, rows => rows.map(row => (row.id === id ? updated : row)));
+        return;
+      }
+      if (kind === 'project' && cur && (cur.projectId ?? null) === value) return;
+      const patch: EditPatch = kind === 'project' ? { project_id: value } : { agent_owner: value ? { kind: 'node', id: value } : null };
+      const updated = await track(() => updateRequirementOnHub(cfg, id, patch));
+      updateTaskItems(scope, rows => rows.map(row => (row.id === id ? updated : row)));
+    }, setBulk);
+    // 没改成的留在选择里(可以直接「重试」);都成了就清掉选择。
+    setSel(result.failed.length ? { ids: result.failed.map(f => f.id), anchor: null } : NO_SELECTION);
+    setAnnounce(tr('bulk.done', { n: result.total - result.failed.length }));
+  };
+  useEffect(() => {
+    if (!bulk || bulk.running || bulk.failed.length) return;
+    const t = setTimeout(() => setBulk(null), 2500);
+    return () => clearTimeout(t);
+  }, [bulk]);
+  // Esc 取消选择(没有打开详情 / 菜单时)。
+  useEffect(() => {
+    const doc = (globalThis as any).document;
+    if (!pointer || !sel.ids.length || !doc?.addEventListener) return;
+    const onKey = (e: any) => { if (e.key === 'Escape' && !selectedId && !bulkMenu && !menu && !draft) { setSel(NO_SELECTION); setBulk(b => (b?.running ? b : null)); } };
+    doc.addEventListener('keydown', onKey);
+    return () => doc.removeEventListener('keydown', onKey);
+  }, [pointer, sel.ids.length, selectedId, bulkMenu, menu, draft]);
+  const openBulkMenu = async (kind: 'project' | 'status' | 'agent') => {
+    if (kind === 'agent' && !(await loadPeople()) && !people.length) return;
+    const el = bulkRefs.current[kind];
+    const done = (x: number, y: number, w: number, h: number) => setBulkMenu({ kind, anchor: { x, y, w, h } });
+    if (el?.measureInWindow) el.measureInWindow(done);
+    else done(spacing.xl, 400, 200, 32);
+  };
 
   const sections: { key: TaskSection; label: string }[] = [
     { key: 'list', label: tr('tasks.copy.26') },
@@ -407,8 +496,8 @@ function ScopedRequirementBoard({ cfg, desktop, dispatch }: { cfg: HubConfig; de
         />
       </View>
       {filterActive(filter) ? (
-        <Pressable accessibilityRole="button" onPress={() => setTaskFilter({ owners: [], priorities: [], project: '', statuses: [], topLevel: filter.topLevel })} style={[s.iconButton, { width: 'auto', paddingHorizontal: spacing.sm }]} testID="task-filter-clear">
-          <Text style={s.link}>{tr('tasks.copy.38')}</Text>
+        <Pressable accessibilityRole="button" onPress={() => setTaskFilter({ owners: [], priorities: [], project: '', statuses: [], topLevel: filter.topLevel })} style={[s.iconButton, { width: 'auto', flexShrink: 0, paddingHorizontal: spacing.sm }]} testID="task-filter-clear">
+          <Text style={s.link} numberOfLines={1}>{tr('tasks.copy.38')}</Text>
         </Pressable>
       ) : null}
     </>
@@ -461,14 +550,16 @@ function ScopedRequirementBoard({ cfg, desktop, dispatch }: { cfg: HubConfig; de
         accessibilityRole="button"
         accessibilityLabel={tr('tasks.copy.42', { v0: item.name, v1: taskText(REQ_PRIORITY_LABEL[item.priority]), v2: ownerLabel(item, people) })}
         accessibilityHint={pointer ? tr('tasks.copy.43') : tr('tasks.copy.44')}
-        onPress={() => openDetail(item.id)}
+        {...a11yState({ selected: sel.ids.includes(item.id) })}
+        onPress={e => onCardPress(item.id, e)}
         onLongPress={pointer ? undefined : e => openMenuAt(item, e.nativeEvent.pageX, e.nativeEvent.pageY)}
         delayLongPress={350}
-        style={state => [s.card, ((state as { hovered?: boolean }).hovered || state.pressed) && s.cardHover, isDragged && s.cardDragging, pointer && ({ cursor: 'grab' } as object)]}
+        style={state => [s.card, ((state as { hovered?: boolean }).hovered || state.pressed) && s.cardHover, isDragged && s.cardDragging, sel.ids.includes(item.id) && s.cardSelected, pointer && ({ cursor: 'grab' } as object)]}
         {...({ dataSet: { taskCard: item.id, taskFrom: item.column } } as object)}
       >
         {projects && item.projectId ? <ProjectChip project={projectById.get(item.projectId)} s={s} small /> : null}
         <Text style={[s.cardTitle, item.column === 'done' && s.cardDone]} numberOfLines={2}>{item.name}</Text>
+        <ParentLine item={item} items={items} />
         <CardMeta item={item} people={people} today={today} s={s} compact={compactCards} />
         <CardFooter item={item} people={people} s={s} touch={!pointer} />
         {moveErrors[item.id] ? <Text style={s.err} numberOfLines={1}>{moveErrors[item.id]}</Text> : null}
@@ -616,6 +707,7 @@ function ScopedRequirementBoard({ cfg, desktop, dispatch }: { cfg: HubConfig; de
                     >
                       {projects && item.projectId ? <ProjectChip project={projectById.get(item.projectId)} s={s} small /> : null}
                       <Text style={[s.cardTitle, item.column === 'done' && s.cardDone]} numberOfLines={2}>{item.name}</Text>
+                      <ParentLine item={item} items={items} />
                       <CardMeta item={item} people={people} today={today} s={s} />
                       <CardFooter item={item} people={people} s={s} touch={!pointer} />
                     </Pressable>
@@ -627,8 +719,10 @@ function ScopedRequirementBoard({ cfg, desktop, dispatch }: { cfg: HubConfig; de
         </ScrollView>
       );
     }
-    const rows = sortRows(visible, sort, people, projects ?? []);
-    return <TaskListTable rows={rows} people={people} projects={projects} sort={sort} setSort={setSort} s={s} today={today} selectedId={selectedId} onOpen={openDetail} touch={!pointer} onMenu={openMenuAt} filtered={filterActive(filter)} needsUpdateUpgrade={items.some(item => item.updatedAt === undefined)} />;
+    const rows = listRows;
+    return <TaskListTable rows={rows} people={people} projects={projects} sort={sort} setSort={setSort} s={s} today={today} selectedId={selectedId} onOpen={openDetail} touch={!pointer} onMenu={openMenuAt} filtered={filterActive(filter)} needsUpdateUpgrade={items.some(item => item.updatedAt === undefined)} items={items}
+      selection={pointer ? { ids: sel.ids, onToggle: id => setSel(cur => toggleSelected(cur, id)), onPress: (id, e) => onCardPress(id, e as { nativeEvent?: any }) } : undefined}
+      onProject={(id, pid) => { void setProject(id, pid); }} />;
   };
 
   const body = section === 'dispatch' ? dispatch ?? null
@@ -655,29 +749,18 @@ function ScopedRequirementBoard({ cfg, desktop, dispatch }: { cfg: HubConfig; de
     </View>
   ) : null;
 
-  return (
-    <View style={{ flex: 1 }} testID="requirement-board" onLayout={e => setMeasured(e.nativeEvent.layout.width)}>
-      {header}
-      {banner ? (
-        <View style={[s.banner, narrow && { marginHorizontal: spacing.lg }]} accessibilityRole="alert" testID="req-banner">
-          <Ionicons name="alert-circle-outline" size={14} color={colors.failed} />
-          <Text style={[s.err, { flex: 1 }]}>{banner}</Text>
-          <Pressable onPress={() => setBanner('')} accessibilityRole="button" accessibilityLabel={tr('tasks.copy.58')}><Ionicons name="close" size={14} color={colors.textMuted} /></Pressable>
-        </View>
-      ) : null}
-      {body}
-      <Text style={{ position: 'absolute', width: 1, height: 1, opacity: 0 }} accessibilityLiveRegion="polite">{announce}</Text>
-      {ghost}
-      {selected && section !== 'dispatch' ? (
+  const tauriShell = Platform.OS === 'web' && !!(globalThis as { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__;
+  // 详情:抽屉 / 推入页 / 「在新窗口打开」的整窗(single)。
+  const detail = (mode: 'drawer' | 'page' | 'window') => (selected ? (
         <TaskDetailPanel
           cfg={cfg}
           item={selected}
           items={items}
-          onOpenRequirement={id => setSelectedId(id)}
+          onOpenRequirement={id => { setSelectedId(id); const next = items.find(i => i.id === id); if (single && next) single.onTitle?.(next.name); }}
           onCreateChild={parent => setDraft({ ...draftFor('pool'), parentId: parent.id, projectId: parent.projectId ?? (projects ? defaultProjectFor(filter, projects) : null) })}
           projects={projects}
           dueDatetime={dueDatetime}
-          mode={drawer ? 'drawer' : 'page'}
+          mode={mode}
           top={headerBottom}
           people={people}
           peopleLoading={peopleLoading}
@@ -687,8 +770,10 @@ function ScopedRequirementBoard({ cfg, desktop, dispatch }: { cfg: HubConfig; de
           onMove={to => { void move(selected.id, to); }}
           onSave={patch => saveEdit(selected.id, patch)}
           onAssignmentsSaved={a => updateTaskItems(scope, rows => rows.map(row => (row.id === selected.id ? { ...row, ...a } : row)))}
-          onClose={() => setSelectedId(null)}
+          onClose={() => (single ? single.onClose() : setSelectedId(null))}
+          onOpenWindow={tauriShell && pointer && !single ? () => openTaskWindow({ taskId: selected.id, profileId: cfg.profileId, serverUrl: cfg.serverUrl, networkId: cfg.networkId, title: selected.name, at: Date.now() }) : undefined}
           pointer={pointer}
+          onOpenVoiceSettings={onOpenVoiceSettings}
           checklistError={checklistErrors[selected.id] || ''}
           onChecklistToggle={(itemId, done) => { void toggleChecklist(selected.id, itemId, done); }}
           onChecklistAdd={text => {
@@ -704,7 +789,8 @@ function ScopedRequirementBoard({ cfg, desktop, dispatch }: { cfg: HubConfig; de
             if (next !== list) void replaceChecklist(selected.id, [...next]);
           }}
         />
-      ) : null}
+  ) : null);
+  const createDialog = (
       <TaskCreateDialog
         draft={draft}
         twoRoles={twoRoles}
@@ -727,6 +813,34 @@ function ScopedRequirementBoard({ cfg, desktop, dispatch }: { cfg: HubConfig; de
         }}
         onClose={() => setDraft(null)}
       />
+  );
+
+  if (single) {
+    return (
+      <View style={{ flex: 1 }} testID="requirement-board-single" onLayout={e => setMeasured(e.nativeEvent.layout.width)}>
+        {selected ? detail('window')
+          : phase === 'loading' ? <View style={s.center}><ActivityIndicator color={colors.accent} /></View>
+            : <View style={s.center}><Text style={s.muted} testID="task-window-missing">{phase === 'error' ? hubError : tr('taskWin.missing')}</Text></View>}
+        {createDialog}
+      </View>
+    );
+  }
+
+  return (
+    <View style={{ flex: 1 }} testID="requirement-board" onLayout={e => setMeasured(e.nativeEvent.layout.width)}>
+      {header}
+      {banner ? (
+        <View style={[s.banner, narrow && { marginHorizontal: spacing.lg }]} accessibilityRole="alert" testID="req-banner">
+          <Ionicons name="alert-circle-outline" size={14} color={colors.failed} />
+          <Text style={[s.err, { flex: 1 }]}>{banner}</Text>
+          <Pressable onPress={() => setBanner('')} accessibilityRole="button" accessibilityLabel={tr('tasks.copy.58')}><Ionicons name="close" size={14} color={colors.textMuted} /></Pressable>
+        </View>
+      ) : null}
+      {body}
+      <Text style={{ position: 'absolute', width: 1, height: 1, opacity: 0 }} accessibilityLiveRegion="polite">{announce}</Text>
+      {ghost}
+      {selected && section !== 'dispatch' ? detail(drawer ? 'drawer' : 'page') : null}
+      {createDialog}
       {projects ? (
         <TaskProjectManager
           open={managingProjects}
@@ -752,6 +866,33 @@ function ScopedRequirementBoard({ cfg, desktop, dispatch }: { cfg: HubConfig; de
           onClose={() => setManagingProjects(false)}
         />
       ) : null}
+      {pointer && section !== 'dispatch' && (sel.ids.length || bulk) ? (
+        <BulkBar
+          count={sel.ids.length}
+          bulk={bulk}
+          canProject={!!projects}
+          canAgent={twoRoles}
+          right={selected && drawer ? DRAWER_WIDTH : 0}
+          setRef={(kind, r) => { bulkRefs.current[kind] = r; }}
+          onOpen={kind => { void openBulkMenu(kind); }}
+          onRetry={() => { const last = lastBulk.current; if (last && bulk) void applyBulk(last.kind, last.value, bulk.failed.map(f => f.id)); }}
+          onClear={() => { setSel(NO_SELECTION); setBulk(null); }}
+        />
+      ) : null}
+      <SelectMenu
+        anchor={bulkMenu?.anchor ?? null}
+        touch={!pointer}
+        title={bulkMenu?.kind === 'project' ? tr('bulk.project') : bulkMenu?.kind === 'agent' ? tr('bulk.agent') : tr('bulk.status')}
+        options={bulkMenu?.kind === 'project' ? projectOptions(projects ?? [], null)
+          : bulkMenu?.kind === 'agent' ? people.filter(p => p.kind === 'node').map(p => ({ id: p.id, label: p.name, lead: <AliasAvatar alias={p.name} size={18} /> }))
+            : REQ_COLUMNS.map(col => ({ id: col, label: taskText(REQ_COLUMN_LABEL[col]), color: STATUS_TONE[col]() }))}
+        noneLabel={bulkMenu?.kind === 'project' ? tr('tasks.copy.31') : bulkMenu?.kind === 'agent' ? tr('bulk.agentNone') : undefined}
+        selected={null}
+        searchable={bulkMenu?.kind === 'agent'}
+        onPick={value => { const kind = bulkMenu?.kind; setBulkMenu(null); if (kind) void applyBulk(kind, value); }}
+        onClose={() => setBulkMenu(null)}
+        testID={`task-bulk-menu-${bulkMenu?.kind ?? 'none'}`}
+      />
       <TaskCardMenu
         target={menu}
         touch={!pointer}
@@ -779,6 +920,67 @@ function ScopedRequirementBoard({ cfg, desktop, dispatch }: { cfg: HubConfig; de
         onPickProject={id => setTaskFilter({ ...filter, project: id })}
         onClose={() => setFilterMenu(null)}
       />
+    </View>
+  );
+}
+
+/** 桌面多选的底部操作条:已选几个 · 移到项目… · 改状态… · 负责 Agent… · 取消选择;改的过程中显示进度,失败的列出来可以重试。 */
+function BulkBar({ count, bulk, canProject, canAgent, right, setRef, onOpen, onRetry, onClear }: {
+  count: number;
+  bulk: BulkProgress | null;
+  canProject: boolean;
+  canAgent: boolean;
+  /** 右边被详情抽屉占掉的宽度(条在剩下的区域里居中)。 */
+  right: number;
+  setRef: (kind: 'project' | 'status' | 'agent', r: any) => void;
+  onOpen: (kind: 'project' | 'status' | 'agent') => void;
+  onRetry: () => void;
+  onClear: () => void;
+}) {
+  useTranslation();
+  const s = useTaskStyles();
+  const running = !!bulk?.running;
+  const btn = (kind: 'project' | 'status' | 'agent', label: string, icon: string) => (
+    <View key={kind} ref={r => setRef(kind, r)} collapsable={false}>
+      <Pressable
+        accessibilityRole="button"
+        {...a11yState({ disabled: running })}
+        disabled={running}
+        onPress={() => onOpen(kind)}
+        style={state => [{ flexDirection: 'row', alignItems: 'center', gap: 6, height: 32, paddingHorizontal: spacing.md, borderRadius: radius.control, flexShrink: 0 }, ((state as { hovered?: boolean }).hovered || state.pressed) && { backgroundColor: colors.rowHover }, running && { opacity: 0.45 }]}
+        testID={`task-bulk-${kind}`}
+      >
+        <Ionicons name={icon as never} size={15} color={colors.textSecondary} />
+        <Text style={{ color: colors.text, fontSize: 13 }} numberOfLines={1}>{label}</Text>
+      </Pressable>
+    </View>
+  );
+  const status = running ? tr('bulk.running', { done: bulk!.done, total: bulk!.total })
+    : count ? tr('bulk.selected', { n: count })
+      : bulk && !bulk.failed.length ? tr('bulk.done', { n: bulk.total }) : '';
+  return (
+    <View pointerEvents="box-none" style={{ position: 'absolute', left: 0, right, bottom: spacing.xl, alignItems: 'center', gap: spacing.sm, zIndex: 15 }}>
+      {bulk && !bulk.running && bulk.failed.length ? (
+        <View style={{ maxWidth: 520, padding: spacing.md, gap: 4, borderRadius: radius.control, backgroundColor: colors.card, ...elevated('floating') }} testID="task-bulk-failed" accessibilityRole="alert">
+          <Text style={s.err}>{tr('bulk.failed', { n: bulk.failed.length })}</Text>
+          {bulk.failed.slice(0, 5).map(f => <Text key={f.id} style={s.muted} numberOfLines={1}>「{f.name}」{f.message}</Text>)}
+          <Pressable accessibilityRole="button" onPress={onRetry} testID="task-bulk-retry"><Text style={s.link}>{tr('bulk.retry')}</Text></Pressable>
+        </View>
+      ) : null}
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, height: 44, paddingLeft: spacing.lg, paddingRight: 6, borderRadius: radius.pill, backgroundColor: colors.card, ...elevated('floating') }} testID="task-bulk-bar">
+        <Text style={{ color: colors.text, fontSize: 13, fontWeight: '600', marginRight: spacing.sm, flexShrink: 0 }} numberOfLines={1} testID="task-bulk-count" accessibilityLiveRegion="polite">{status}</Text>
+        {running ? <ActivityIndicator size="small" color={colors.textMuted} /> : null}
+        {count ? (
+          <>
+            {canProject ? btn('project', tr('bulk.project'), 'folder-outline') : null}
+            {btn('status', tr('bulk.status'), 'swap-horizontal-outline')}
+            {canAgent ? btn('agent', tr('bulk.agent'), 'hardware-chip-outline') : null}
+          </>
+        ) : null}
+        <Pressable accessibilityRole="button" accessibilityLabel={tr('bulk.clear')} onPress={onClear} disabled={running} style={state => [{ width: 32, height: 32, borderRadius: radius.pill, alignItems: 'center', justifyContent: 'center' }, ((state as { hovered?: boolean }).hovered || state.pressed) && { backgroundColor: colors.rowHover }]} testID="task-bulk-clear">
+          <Ionicons name="close" size={16} color={colors.textSecondary} />
+        </Pressable>
+      </View>
     </View>
   );
 }

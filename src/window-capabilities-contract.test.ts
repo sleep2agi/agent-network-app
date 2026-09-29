@@ -14,6 +14,7 @@ import { join, relative, sep } from 'node:path';
 import { chatWindowLabel, workspaceWindowLabel } from './desktop-chat-menu';
 import { SETTINGS_WINDOW_LABEL } from './desktop-settings-window';
 import { IMAGE_WINDOW_LABEL } from './image-window-model';
+import { taskWindowLabel } from './task-window-model';
 
 let p = 0, t = 0;
 const ck = (name: string, cond: boolean, detail = '') => { t++; if (cond) { p++; console.log(`PASS: ${name}`); } else console.log(`FAIL: ${name}${detail ? ` — ${detail}` : ''}`); };
@@ -37,6 +38,8 @@ const KNOWN: Record<string, string[]> = {
   'src/desktop-chat-menu.ts': [chatWindowLabel('示例-A', 'p-1'), workspaceWindowLabel('p-1')],
   'src/image-window.ts': [IMAGE_WINDOW_LABEL],
   'src/desktop-settings-window.ts': [SETTINGS_WINDOW_LABEL],
+  // 「在新窗口打开」任务:每个任务一个标签(task-<hash>),两个不同的账号 / 任务各取一个样本。
+  'src/task-window.ts': [taskWindowLabel('p-1', 'req_demo_1'), taskWindowLabel(undefined, 'req-with:odd/chars')],
   'src-tauri/src/tray.rs': ['tray-panel'],
 };
 
@@ -52,6 +55,7 @@ for (const f of rsFiles) { const n = countSites(read(f), /WebviewWindowBuilder::
 ck('collection sees src/desktop-chat-menu.ts (2 sites: chat + workspace)', sites.get('src/desktop-chat-menu.ts') === 2, JSON.stringify([...sites]));
 ck('collection sees src/image-window.ts', (sites.get('src/image-window.ts') ?? 0) >= 1, JSON.stringify([...sites]));
 ck('collection sees src/desktop-settings-window.ts', (sites.get('src/desktop-settings-window.ts') ?? 0) >= 1, JSON.stringify([...sites]));
+ck('collection sees src/task-window.ts', (sites.get('src/task-window.ts') ?? 0) === 1, JSON.stringify([...sites]));
 ck('collection sees src-tauri/src/tray.rs', (sites.get('src-tauri/src/tray.rs') ?? 0) >= 1, JSON.stringify([...sites]));
 ck('collection recurses into subdirectories (src/lib/avatars.ts is collected)', tsFiles.map(posix).includes('src/lib/avatars.ts'));
 const unknown = [...sites.keys()].filter(f => !KNOWN[f]);
@@ -114,6 +118,16 @@ ck('App routes ?imageViewer=1 to the viewer page (Tauri only)', app.includes('re
 // no credential crosses the event bus
 const opener = read('src/image-window.ts');
 ck('opener module never touches a token', !/token/i.test(opener.replace(/\/\/.*$/gm, '')));
+// ── 「在新窗口打开」任务 ──
+const taskWin = read('src/task-window.ts');
+ck('task-window.ts creates the window with the per-task label (not a literal)', /const label = taskWindowLabel\(payload\.profileId, payload\.taskId\);[\s\S]*new WebviewWindow\(label,/.test(taskWin));
+ck('task window labels stay inside the task-* pattern and the Tauri label charset', [taskWindowLabel('p-1', 'req_demo_1'), taskWindowLabel(undefined, 'x/y:z 中文')].every(l => /^task-[0-9a-f]+$/.test(l)));
+ck('task window: same task + account → same label (focus instead of a second window)', taskWindowLabel('p-1', 'r') === taskWindowLabel('p-1', 'r') && taskWindowLabel('p-1', 'r') !== taskWindowLabel('p-2', 'r'));
+ck('task window module never touches a token', !/token/i.test(taskWin.replace(/\/\/.*$/gm, '')));
+ck('task window URL carries no task / account / credential', read('src/task-window-model.ts').includes("export const TASK_WINDOW_URL = '/?taskWindow=1';"));
+ck('task window: drag-drop left to the page (images drop into the description)', /dragDropEnabled: false/.test(taskWin));
+ck('App routes ?taskWindow=1 to the task page (Tauri only)', app.includes('readTaskWindowRoute(') && app.includes('<TaskWindow />'));
+ck('drawer falls back: window failed → stays in the drawer with a note', read('src/TaskDetailPanel.tsx').includes("else if (!ok) setError({ field: 'submit', message: tr('taskWin.failed') });"));
 
 console.log(`\nwindow-capabilities-contract: ${p}/${t} passed`);
 if (p !== t) process.exit(1);

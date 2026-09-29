@@ -47,6 +47,34 @@ mock.module('./src/image-window', () => ({ openImageWindow: async () => false })
 mock.module('./src/open-external', () => ({ openExternal: async (url: string) => { opened.push(url); return true; } }));
 // The detail's description preview renders MarkdownMessage (image assets, native text selection…).
 mock.module('./src/MarkdownMessage', () => ({ default: ({ children }: any) => React.createElement('Text', { testID: 'markdown' }, children) }));
+// Description voice input: recording / ASR are platform code. The stub records the insert callback so a test can
+// play a recognition result; `voiceAvailable` switches the platform support on and off.
+let voiceAvailable = false;
+let voiceInsert: ((text: string) => void) | null = null;
+let voicePresses = 0;
+mock.module('./src/useVoiceInput', () => ({
+  useVoiceInput: (opts: any) => {
+    voiceInsert = opts.onInsert;
+    return {
+      available: voiceAvailable, configured: true, state: { phase: 'idle' }, level: 0, elapsedMs: 0, interim: '', settingsPrompt: false, dismissSettingsPrompt() {},
+      micHandlers: { onStartShouldSetResponder: () => true, onMoveShouldSetResponder: () => false, onResponderTerminationRequest: () => false, onResponderGrant: () => { voicePresses++; }, onResponderMove() {}, onResponderRelease() {}, onResponderTerminate() {} },
+    };
+  },
+}));
+mock.module('./src/VoiceInputUI', () => ({
+  VoiceHoldBar: ({ handlers }: any) => React.createElement('View', { testID: 'voice-hold-bar', ...handlers }),
+  VoiceHoldOverlay: () => null,
+  VoiceSettingsPrompt: () => null,
+}));
+mock.module('./src/DesktopVoiceBar', () => ({ DesktopMicButton: () => React.createElement('View', { testID: 'voice-mic' }), DesktopVoiceBar: () => null }));
+mock.module('./src/SplitEditorParts', () => ({ FocusRing: 'Pressable', ModeToggle: () => null, SplitDivider: () => null, useDebounced: (v: any) => v, prefersReducedMotion: () => false }));
+// 「更多」展开状态(本机偏好,expo-file-system):默认按「上次展开过」,老用例照旧能点到里面的字段;
+// 渐进展开的用例把它设成没存过(null = 收起)。
+let moreStored: boolean | null = true;
+const moreSaves: boolean[] = [];
+mock.module('./src/task-detail-prefs', () => ({ loadDetailMoreOpen: async () => moreStored, saveDetailMoreOpen: async (v: boolean) => { moreSaves.push(v); } }));
+mock.module('./src/mac-title-strip', () => ({ default: () => null }));
+mock.module('./src/win-title-bar', () => ({ default: () => null }));
 
 const card = { id: 'r1', name: '验证需求详情', assignee: '负责人甲', priority: 'normal', due: '', column: 'pool', createdAt: '' };
 let typedCards = false;
@@ -99,6 +127,8 @@ mock.module('./src/requirements-hub', () => ({
     return { ...card, id, description: '## 目标', checklist: [{ id: 'a', text: '写接口', done: itemId === 'a' ? done : false }, { id: 'b', text: '写测试', done: itemId === 'b' ? done : true }] };
   },
   RequirementsHubError: HubError,
+  PARENT_TOO_DEEP: '子任务最多 5 层',
+  PARENT_REJECTED: '不能挂到这个母任务下(会形成循环,或它已不存在)',
   moveRequirementOnHub: (cfg: any, id: string, column: string) => {
     requests.push({ network: cfg.networkId, id, column });
     return new Promise((resolve, fail) => { reply = resolve; reject = fail; });
@@ -124,6 +154,8 @@ let seq = 0;
 let cfg = { serverUrl: 'http://isolated.test', token: 'test', networkId: 'a' };
 let renderer: ReactTestRenderer;
 const byId = (id: string) => renderer.root.findByProps({ testID: id });
+// The pressable host under a component that forwards the same testID (SelectField → Pressable).
+const pressable = (id: string) => renderer.root.findAll(n => n.props.testID === id && typeof n.props.onPress === 'function')[0];
 const texts = (id: string) => JSON.stringify(byId(id).findAllByType('Text').map(node => node.props.children));
 async function mount() {
   requests = []; creates = []; edits = []; editReply = null;
@@ -131,7 +163,7 @@ async function mount() {
   setTaskSection('board');
   await act(async () => { renderer = create(<Board cfg={cfg} />); });
 }
-afterEach(async () => { dueCaps = false; participantCards = false; subCards = false; opened = []; typedCards = false; roleCards = false; detailCards = false; itemWrites = []; projectsMock = null; if (renderer) await act(async () => renderer.unmount()); });
+afterEach(async () => { moreStored = true; moreSaves.length = 0; voiceAvailable = false; voiceInsert = null; voicePresses = 0; dueCaps = false; participantCards = false; subCards = false; opened = []; typedCards = false; roleCards = false; detailCards = false; itemWrites = []; projectsMock = null; if (renderer) await act(async () => renderer.unmount()); });
 
 test('issue links: canonical PATCH only, duplicate click lock, rejection stays local, source read-only', async () => {
   const writes: any[]=[];
@@ -425,15 +457,21 @@ test('projects: create defaults to the selected project; detail moves a card to 
   await mount();
   await act(async () => setTaskFilter({ owners: [], priorities: [], project: 'p2' }));
   await act(async () => byId('req-new').props.onPress());
-  expect(byId('req-project-p2').props.accessibilityState.checked).toBe(true);
-  expect(renderer.root.findAllByProps({ testID: 'req-project-p3' })).toHaveLength(0);
+  // 项目是下拉:当前值显示在按钮上;列表里没有已归档的 p3
+  expect(byId('req-project-value').props.children).toBe('TMAI');
+  await act(async () => pressable('req-project').props.onPress());
+  expect(renderer.root.findAllByProps({ testID: 'req-project-menu-opt-p3' })).toHaveLength(0);
+  expect(byId('req-project-menu-opt-p1')).toBeTruthy();
+  await act(async () => byId('req-project-menu-scrim').props.onPress());
   await act(async () => byId('req-name').props.onChangeText('TMAI 的任务'));
   await act(async () => byId('req-add').props.onPress());
   expect(creates[0].projectId).toBe('p2');
   await act(async () => setTaskFilter({ owners: [], priorities: [], project: '' }));
   await act(async () => byId('req-card-r1').props.onPress());
-  expect(byId('req-edit-project-p1').props.accessibilityState.checked).toBe(true);
-  await act(async () => byId('req-edit-project-p2').props.onPress());
+  expect(byId('req-edit-project-value').props.children).toBe('军团项目');
+  await act(async () => pressable('req-edit-project').props.onPress());
+  await act(async () => byId('req-edit-project-menu-opt-p2').props.onPress());
+  expect(byId('req-edit-project-value').props.children).toBe('TMAI');
   await act(async () => byId('req-edit-save').props.onPress());
   expect(edits).toEqual([{ id: 'r1', patch: { project_id: 'p2' } }]);
 });
@@ -442,7 +480,50 @@ test('hub without projects: no project picker, no project chip filter', async ()
   await mount();
   expect(renderer.root.findAllByProps({ testID: 'task-filter-project' })).toHaveLength(0);
   await act(async () => byId('req-new').props.onPress());
-  expect(renderer.root.findAllByProps({ testID: 'req-project-none' })).toHaveLength(0);
+  expect(renderer.root.findAllByProps({ testID: 'req-project' })).toHaveLength(0);
+});
+
+test('母任务: pick a parent (not itself or its descendants), saved as parent_id with 保存修改; hub rejection shows under the field', async () => {
+  subCards = true;
+  await mount();
+  await act(async () => byId('req-card-r2').props.onPress());
+  expect(byId('req-edit-parent-value').props.children).toBe('验证需求详情');
+  await act(async () => pressable('req-edit-parent').props.onPress());
+  // r2 自己不在;r1(现在的母任务)、r3 在;「无」在
+  expect(renderer.root.findAllByProps({ testID: 'req-edit-parent-menu-opt-r2' })).toHaveLength(0);
+  expect(byId('req-edit-parent-menu-opt-r3')).toBeTruthy();
+  expect(byId('req-edit-parent-menu-opt-none')).toBeTruthy();
+  await act(async () => byId('req-edit-parent-menu-opt-r3').props.onPress());
+  editReply = () => { throw new HubError(400, '不能挂到这个母任务下(会形成循环,或它已不存在)'); };
+  await act(async () => byId('req-edit-save').props.onPress());
+  expect(edits[0].patch).toEqual({ parent_id: 'r3' });
+  expect(byId('req-edit-parent-error').props.children).toBe('不能挂到这个母任务下(会形成循环,或它已不存在)');
+  expect(renderer.root.findAllByProps({ testID: 'req-edit-error' })).toHaveLength(0);
+  editReply = null;
+  // 清成顶层
+  await act(async () => pressable('req-edit-parent').props.onPress());
+  await act(async () => byId('req-edit-parent-menu-opt-none').props.onPress());
+  await act(async () => byId('req-edit-save').props.onPress());
+  expect(edits[1].patch).toEqual({ parent_id: null });
+});
+
+test('母任务 on a parent: its own child is not offered (no cycles); cards show 「↳ 母任务」', async () => {
+  subCards = true;
+  await mount();
+  expect(JSON.stringify(byId('req-card-r3').findAll(n => n.props.testID === 'task-card-parent').map(n => n.props.children))).toContain('验证需求详情');
+  expect(byId('req-card-r1').findAll(n => n.props.testID === 'task-card-parent')).toHaveLength(0);
+  await act(async () => byId('req-card-r1').props.onPress());
+  await act(async () => pressable('req-edit-parent').props.onPress());
+  expect(renderer.root.findAllByProps({ testID: 'req-edit-parent-menu-opt-r2' })).toHaveLength(0);
+  expect(renderer.root.findAllByProps({ testID: 'req-edit-parent-menu-opt-r3' })).toHaveLength(0);
+});
+
+test('old hub without parent_id: 母任务 says 升级 Hub 后可用 and sends nothing', async () => {
+  detailCards = true;
+  await mount();
+  await act(async () => byId('req-card-r1').props.onPress());
+  expect(byId('req-edit-parent-upgrade')).toBeTruthy();
+  expect(renderer.root.findAllByProps({ testID: 'req-edit-parent' })).toHaveLength(0);
 });
 
 test('participants: avatar chips in detail, stack of 3 + 「+N」 on cards, unknown members never show a raw id', async () => {
@@ -477,10 +558,76 @@ test('description images: 🖼 uploads with network_id and inserts ![name](/api/
   expect(edits[0].patch).toEqual({ description: '## 目标\n![截图.png](/api/files/f_1)' });
 });
 
+test('description full screen (phone): ⤢ opens a page with ‹, 编辑/预览 and 🖼; 按住说话 inserts at the caret and keeps going from there', async () => {
+  detailCards = true;
+  voiceAvailable = true;
+  await mount();
+  await act(async () => byId('req-card-r1').props.onPress());
+  await act(async () => byId('req-description-mode-edit').props.onPress());
+  // The small editor inside the detail page has no mic on a phone: voice lives on the full-screen page.
+  expect(renderer.root.findAllByProps({ testID: 'voice-mic' })).toHaveLength(0);
+  expect(renderer.root.findAllByProps({ testID: 'voice-hold-bar' })).toHaveLength(0);
+  await act(async () => byId('req-description-fullscreen').props.onPress());
+  expect(byId('req-description-page')).toBeTruthy();
+  expect(byId('req-description-page-back')).toBeTruthy();
+  expect(byId('req-description-page-image')).toBeTruthy();
+  const input = () => byId('req-description-page-input');
+  expect(input().props.value).toBe('## 目标');
+  await act(async () => input().props.onSelectionChange({ nativeEvent: { selection: { start: 3, end: 3 } } }));
+  await act(async () => byId('voice-hold-bar').props.onResponderGrant({ nativeEvent: { pageX: 0, pageY: 0 } }));
+  await act(async () => voiceInsert!('新'));
+  expect(input().props.value).toBe('## 新目标');
+  // The next utterance continues right after the inserted text (not at the end).
+  await act(async () => byId('voice-hold-bar').props.onResponderGrant({ nativeEvent: { pageX: 0, pageY: 0 } }));
+  await act(async () => voiceInsert!('的'));
+  expect(input().props.value).toBe('## 新的目标');
+  expect(voicePresses).toBe(2);
+  expect(byId('req-description-page-dirty')).toBeTruthy();
+  // Preview: no hold bar, no 🖼.
+  await act(async () => byId('req-description-page-mode-preview').props.onPress());
+  expect(renderer.root.findAllByProps({ testID: 'voice-hold-bar' })).toHaveLength(0);
+  expect(renderer.root.findAllByProps({ testID: 'req-description-page-image' })).toHaveLength(0);
+  // ‹ closes the page; the draft is kept and 保存修改 sends it.
+  await act(async () => byId('req-description-page-back').props.onPress());
+  expect(renderer.root.findAllByProps({ testID: 'req-description-page' })).toHaveLength(0);
+  await act(async () => byId('req-edit-save').props.onPress());
+  expect(edits[0].patch).toEqual({ description: '## 新的目标' });
+});
+
+test('description full screen (phone) without voice support: no hold bar, 🖼 still there', async () => {
+  detailCards = true;
+  await mount();
+  await act(async () => byId('req-card-r1').props.onPress());
+  await act(async () => byId('req-description-fullscreen').props.onPress());
+  await act(async () => byId('req-description-page-mode-edit').props.onPress());
+  expect(byId('req-description-page-image')).toBeTruthy();
+  expect(renderer.root.findAllByProps({ testID: 'voice-hold-bar' })).toHaveLength(0);
+});
+
+test('详情渐进展开: 常显字段在前,其余收进「更多」(默认收起),收起时一行摘要,展开状态本机记住', async () => {
+  moreStored = null;
+  subCards = true;
+  await mount();
+  await act(async () => byId('req-card-r1').props.onPress());
+  // 收起:优先级 / 母任务 / 子任务 看不到;摘要说「1 子任务」(r1 的 children.total = 2)
+  expect(renderer.root.findAllByProps({ testID: 'req-more' })).toHaveLength(0);
+  expect(renderer.root.findAllByProps({ testID: 'req-edit-priority-high' })).toHaveLength(0);
+  expect(renderer.root.findAllByProps({ testID: 'req-subrequirements' })).toHaveLength(0);
+  expect(byId('req-more-summary').props.children).toBe('2 子任务');
+  expect(byId('req-edit-due')).toBeTruthy();
+  await act(async () => byId('req-more-toggle').props.onPress());
+  expect(byId('req-more')).toBeTruthy();
+  expect(byId('req-subrequirements')).toBeTruthy();
+  expect(renderer.root.findAllByProps({ testID: 'req-more-summary' })).toHaveLength(0);
+  expect(moreSaves).toEqual([true]);
+  await act(async () => byId('req-more-toggle').props.onPress());
+  expect(moreSaves).toEqual([true, false]);
+});
+
 test('sub-requirements: progress chip on the parent card, children in detail, breadcrumb to the parent, 新建子需求 prefilled, GitHub link', async () => {
   subCards = true;
   await mount();
-  expect(JSON.stringify(byId('req-card-r1').findAll(n => n.props.testID === 'task-subreq-progress').map(n => n.props.accessibilityLabel))).toContain('子需求 1/2 完成');
+  expect(JSON.stringify(byId('req-card-r1').findAll(n => n.props.testID === 'task-subreq-progress').map(n => n.props.accessibilityLabel))).toContain('子任务 1/2 完成');
   await act(async () => byId('req-card-r1').props.onPress());
   expect(byId('req-subrequirements')).toBeTruthy();
   expect(byId('req-child-r3')).toBeTruthy();

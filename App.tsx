@@ -60,6 +60,8 @@ import { bindDesktopTray, dismissAllForConfig } from './src/desktop-tray';
 import TrayPanel, { readTrayPanelRoute } from './src/TrayPanel';
 import ImageViewerWindow from './src/ImageViewerWindow';
 import { readImageWindowRoute } from './src/image-window-model';
+import TaskWindow from './src/TaskWindow';
+import { readTaskWindowRoute } from './src/task-window-model';
 import { loadPinnedChats, requestedChatAlias, requestedChatProfileId, requestedWorkspaceProfileId, savePinnedChats } from './src/desktop-chat-menu';
 import { SETTINGS_CATEGORY_EVENT, SETTINGS_SESSION_EVENT, closeSettingsWindow, notifySessionChanged, openSettingsWindow, requestedSettingsCategory, requestedSettingsWindow, settingsCategoryFromQuery } from './src/desktop-settings-window';
 import { loadChatPins, saveChatPins, togglePinned } from './src/chat-pins';
@@ -185,6 +187,16 @@ export default function App() {
     return (
       <SafeAreaProvider>
         <ImageViewerWindow />
+      </SafeAreaProvider>
+    );
+  }
+
+  // `?taskWindow=1` 的窗口是「在新窗口打开」的任务详情(桌面抽屉的 ⧉)—— 只画那一个任务,不挂主界面/更新提示。
+  // 任务和账号经 Tauri 事件送来,URL 里没有任务也没有凭据(见 task-window-model.ts)。
+  if (Platform.OS === 'web' && !!(globalThis as any).__TAURI_INTERNALS__ && readTaskWindowRoute(String((globalThis as any).location?.search ?? ''))) {
+    return (
+      <SafeAreaProvider>
+        <TaskWindow />
       </SafeAreaProvider>
     );
   }
@@ -908,6 +920,7 @@ function AppRoot() {
                     <TasksScreen
                       cfg={cfg}
                       onOpenTask={taskId => setScreen({ name: 'taskDetail', taskId })}
+                      onOpenVoiceSettings={() => { rememberSettingsCategory('voice'); setScreen({ name: 'settings' }); }}
                     />
                   ) : screen.name === 'scheduled' ? (
                     <ScheduledTasksScreen key={screen.open ? `scheduled:${screen.open.seq}` : 'scheduled'} cfg={cfg} open={screen.open} onOpenChat={(alias, focusTaskId) => setScreen({ name: 'chat', alias, focusTaskId })} />
@@ -1125,7 +1138,7 @@ function DesktopWorkspace({ cfg, screen, setScreen, onLogout, onLocalDataDeleted
       desktop
     />
   ) : screen.name === 'tasks' ? (
-    <TasksScreen cfg={cfg} desktop onOpenTask={taskId => setScreen({ name: 'taskDetail', taskId })} />
+    <TasksScreen cfg={cfg} desktop onOpenTask={taskId => setScreen({ name: 'taskDetail', taskId })} onOpenVoiceSettings={() => { rememberSettingsCategory('voice'); void openSettingsWindow('voice').then(opened => { if (!opened) setScreen({ name: 'settings' }); }); }} />
   ) : screen.name === 'scheduled' ? <ScheduledTasksScreen key={screen.open ? `scheduled:${screen.open.seq}` : 'scheduled'} cfg={cfg} open={screen.open} onOpenChat={(alias, focusTaskId) => setScreen({ name: 'chat', alias, focusTaskId })} />
   : screen.name === 'messages' ? <MessagesScreen cfg={cfg} />
   : screen.name === 'server' ? (

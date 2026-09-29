@@ -315,8 +315,11 @@ export function VoiceHoldOverlay({ voice, layout }: { voice: VoiceInput; layout:
   );
 }
 
-/** 未配置时按麦克风 → 「未配置语音识别，去设置」;没有设置入口(独立聊天窗口)时只提示位置。 */
-export function VoiceSettingsPrompt({ voice, onOpenSettings }: { voice: VoiceInput; onOpenSettings?: () => void }) {
+/**
+ * 未配置时按麦克风 → 「未配置语音识别，去设置」;没有设置入口(独立聊天窗口)时只提示位置。
+ * note:没有入口时换一句说法(任务描述有没保存的修改时:先保存再去设置)。
+ */
+export function VoiceSettingsPrompt({ voice, onOpenSettings, note }: { voice: VoiceInput; onOpenSettings?: () => void; note?: string }) {
   useTranslation();
   if (!voice.settingsPrompt) return null;
   return (
@@ -334,7 +337,7 @@ export function VoiceSettingsPrompt({ voice, onOpenSettings }: { voice: VoiceInp
       ) : (
         <View style={styles.prompt}>
           <Ionicons name="mic-off-outline" size={14} color={colors.textSecondary} />
-          <Text style={styles.promptText}>{t('voice.setupMainWindow')}</Text>
+          <Text style={styles.promptText}>{note ?? t('voice.setupMainWindow')}</Text>
         </View>
       )}
     </View>

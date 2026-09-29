@@ -86,6 +86,8 @@ const initScript = ({ hubUrl, token, networkId, theme }) => {
     },
   };
   try { localStorage.setItem('theme_mode_v1', theme); } catch {}
+  // 这些流程要点「更多」里的字段(优先级 / 检查项 / 母任务 …):按「上次展开过」起步。渐进展开本身在 test-task-organize 量。
+  try { if (localStorage.getItem('task_detail_more_open_v1') === null) localStorage.setItem('task_detail_more_open_v1', '1'); } catch {}
 };
 
 const findExe = () => {
@@ -118,7 +120,7 @@ async function open(page, kind, theme) {
   await page.addInitScript(initScript, { hubUrl: HUB_URL, token: HUB_TOKEN, networkId: HUB_NETWORK, theme });
   if (kind === 'desktop') {
     await page.goto(WEB_URL);
-    await page.locator('[data-testid="desktop-rail"] [aria-label="Tasks"]').first().click({ timeout: 30000 });
+    await page.locator('[data-testid="desktop-rail"] [aria-label="任务"], [data-testid="desktop-rail"] [aria-label="Tasks"]').first().click({ timeout: 30000 });
   } else {
     await page.goto(`${WEB_URL}?safeAreaSim=0,0,0,0`);
     await page.waitForFunction(() => !!window.__anetLayoutSweep, null, { timeout: 30000 });
@@ -147,7 +149,7 @@ for (const theme of ['light', 'dark']) {
   for (const v of VIEWPORTS) {
     const vp = `${v.kind} ${v.w}x${v.h} ${theme}`;
     const touch = v.kind !== 'desktop';
-    const ctx = await browser.newContext({ viewport: { width: v.w, height: v.h }, colorScheme: theme, deviceScaleFactor: 2, timezoneId: 'Asia/Shanghai', ...(touch ? { userAgent: ANDROID_UA, hasTouch: true } : {}) });
+    const ctx = await browser.newContext({ viewport: { width: v.w, height: v.h }, colorScheme: theme, deviceScaleFactor: 2, timezoneId: 'Asia/Shanghai', locale: 'zh-CN', ...(touch ? { userAgent: ANDROID_UA, hasTouch: true } : {}) });
     const page = await ctx.newPage();
     page.on('pageerror', e => console.log('PAGEERROR', e.message.split('\n')[0]));
     await open(page, v.kind, theme);
@@ -417,7 +419,8 @@ async function desktopFlows(page, vp) {
     await shot(page, 'flow-project-filter-tmai');
     await page.locator(tid('req-new')).click();
     await page.locator(tid('req-create')).waitFor();
-    const defaultOn = await page.evaluate((id) => { const e = document.querySelector(`[data-testid="req-project-${id}"]`); return e?.getAttribute('aria-checked') ?? e?.getAttribute('aria-selected') ?? 'missing'; }, tmai.id);
+    // 项目是下拉(TaskFieldPickers):按钮上显示的就是当前项目。
+    const defaultOn = (await page.locator(tid('req-project-value')).first().textContent()) === tmai.name ? 'true' : 'false';
     await page.keyboard.type('TMAI 里新建的任务');
     await page.locator(tid('req-add')).click();
     await page.locator(tid('req-create')).waitFor({ state: 'detached' });
@@ -459,7 +462,8 @@ async function desktopFlows(page, vp) {
     await page.locator(tid('tasks-view-list')).click();
     await page.locator(tid('req-sort-project')).click();
     await page.waitForTimeout(300);
-    const firstRows = await page.locator('[data-testid^="req-row-"] [data-testid="task-project-chip"]').allTextContents();
+    // the 项目 cell is an inline picker now (TaskFieldPickers ProjectSelect compact): its value text
+    const firstRows = await page.locator('[data-testid^="req-row-project-"][data-testid$="-value"]').allTextContents();
     await shot(page, 'flow-list-sorted-by-project');
     record(vp, 'list: sort by project', { projectFirst: firstRows.length > 0 && firstRows[0].includes('军团项目') }, { first: firstRows[0] });
     await page.locator(tid('tasks-view-board')).click();
@@ -500,7 +504,7 @@ async function desktopFlows(page, vp) {
     await page.locator(tid('req-edit-due-panel')).waitFor();
     await page.waitForTimeout(300);
     const geo2 = await page.evaluate(() => {
-      const r = (sel) => { const e = document.querySelector(sel); if (!e) return null; const b = e.getBoundingClientRect(); return { x: b.x, y: b.y, w: b.width, h: b.height, cy: b.y + b.height / 2, b: b.bottom }; };
+      const r = (sel) => { const e = document.querySelector(sel); if (!e) return null; const b = e.getBoundingClientRect(); return { x: b.x, y: b.y, w: b.width, h: b.height, cy: b.y + b.height / 2, b: b.bottom, r: b.right }; };
       const cells = [...document.querySelectorAll('[data-testid^="req-edit-due-day-"]')].map(e => e.getBoundingClientRect());
       const time = ['hh', 'mm', 'ss'].map(k => r(`[data-testid="req-edit-due-${k}"]`)).filter(Boolean);
       return { field: r('[data-testid="req-edit-due"]'), panel: r('[data-testid="req-edit-due-panel"]'), prev: r('[data-testid="req-edit-due-prev"]'), month: r('[data-testid="req-edit-due-month"]'), next: r('[data-testid="req-edit-due-next"]'),
@@ -535,8 +539,9 @@ async function desktopFlows(page, vp) {
     const heads = [geo2.prev, geo2.month, geo2.next].filter(Boolean).map(x => x.cy);
     const timeCys = [...geo2.time.map(x => x.cy), ...(geo2.allday ? [geo2.allday.cy] : [])];
     record(vp, 'due picker: geometry + keyboard + stored value', {
-      anchoredLeft: Math.abs(geo2.panel.x - geo2.field.x) <= 1,
-      anchoredBelow: Math.abs(geo2.panel.y - (geo2.field.b + 6)) <= 1 || geo2.panel.b <= geo2.field.y,
+      // below / above: left edges aligned; too little room either way: beside the field on its left (never covering it)
+      anchoredLeft: Math.abs(geo2.panel.x - geo2.field.x) <= 1 || Math.abs(geo2.panel.r - (geo2.field.x - 8)) <= 1,
+      anchoredBelow: Math.abs(geo2.panel.y - (geo2.field.b + 6)) <= 1 || geo2.panel.b <= geo2.field.y || geo2.panel.r <= geo2.field.x,
       grid42: geo2.cells === 42 && geo2.rowYs === 6,
       equalCells: Math.max(...cw) - Math.min(...cw) <= 0.5,
       headerLine: Math.max(...heads) - Math.min(...heads) <= 1,
@@ -620,7 +625,8 @@ async function desktopFlows(page, vp) {
     await page.locator('[data-testid^="req-card-"]', { hasText: pName }).filter({ hasNotText: '扫码登录:' }).first().click();
     await page.locator(tid('req-subrequirements')).waitFor();
     const kids = await page.locator('[data-testid^="req-child-"]').count();
-    const gh = await page.locator(tid('req-external-link')).textContent().catch(() => '');
+    // #511: a GitHub-issue sync source is shown by TaskIssueBindings as 同步来源 (owner/repo#n), not by ExternalLink.
+    const gh = (await page.locator(tid('req-external-link')).textContent({ timeout: 1500 }).catch(() => '')) || (await page.locator(tid('req-issue-source')).textContent({ timeout: 1500 }).catch(() => ''));
     await page.locator(tid('req-new-child')).scrollIntoViewIfNeeded();
     await page.locator(tid('req-new-child')).click();
     await page.locator(tid('req-create-parent')).waitFor();
@@ -640,7 +646,7 @@ async function desktopFlows(page, vp) {
     record(vp, 'sub-requirements: chip, top-level toggle, children, create child, breadcrumb, GitHub link', {
       parentChip: chip.includes('1/2'), togglesHideChildren: childrenShown === 2 && childrenTop === 0,
       detailChildren: kids === 2, createChild: hubChild?.parent_id === hubParent?.id, breadcrumbBack: backName === pName,
-      githubLink: (gh || '').includes('GitHub'),
+      githubLink: /GitHub|example-org\/example-repo#42/.test(gh || ''),
     }, { chip, childrenShown, childrenTop, kids });
   }
 
