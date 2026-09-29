@@ -1,5 +1,14 @@
 import { registerTranslations } from './i18n';
 registerTranslations({
+  'fields.created': ['创建时间', 'Created'],
+  'fields.updated': ['更新时间', 'Updated'],
+  'fields.upgrade': ['需升级 Hub', 'Upgrade Hub'],
+  'fields.time.now': ['刚刚', 'Just now'],
+  'fields.time.minutes': ['{count} 分钟前', '{count} min ago'],
+  'fields.time.hours': ['{count} 小时前', '{count} hr ago'],
+  'fields.time.yesterday': ['昨天 {time}', 'Yesterday {time}'],
+  'fields.time.by': ['更新者：{name}', 'Updated by: {name}'],
+  'fields.time.close': ['关闭时间详情', 'Close timestamp'],
   'fields.configure': ['字段配置', 'Fields'],
   'fields.search': ['搜索列名', 'Search fields'],
   'fields.reset': ['恢复默认', 'Reset to default'],

@@ -15,6 +15,7 @@ const migrated = ['src/MobileNavRail.tsx', 'src/ServerSidebar.tsx', 'src/ChatScr
 migrated.push(...['TasksScreen', 'RequirementBoard', 'TaskBoardParts', 'TaskCardMenu', 'TaskChecklist', 'TaskCreateDialog', 'TaskDescriptionEditor', 'TaskDetailPanel', 'TaskDetailScreen', 'TaskDuePicker', 'TaskFilterSidebar', 'TaskProjectManager', 'TaskRelations', 'RequirementPeoplePicker', 'RequirementAssignmentsEditor'].map(name => `src/${name}.tsx`));
 migrated.push('src/TaskIssueBindings.tsx');
 migrated.push('src/TaskListFields.tsx', 'src/TaskListTable.tsx');
+migrated.push('src/TaskTimeCell.tsx');
 function untranslated(file: string, raw: string): string[] {
   const source = raw.replace(/\r\n?/g, '\n');
   const tree = ts.createSourceFile(file, source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);

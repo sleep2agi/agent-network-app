@@ -3,7 +3,7 @@ import { readFileSync, mkdirSync, writeFileSync } from 'node:fs';
 const { chromium } = await import(process.env.PLAYWRIGHT_MODULE || 'playwright');
 const out=process.env.OUT||'/output';mkdirSync(out,{recursive:true});
 const base={priority:'normal',assignee:'',due:'2026-10-01',column:'pool',createdAt:'2026-09-29',owner:{kind:'user',id:'u1'},agent_owner:{kind:'node',id:'n1'},participants:[],description:'用户描述：不要翻译。',checklist:[{id:'c1',text:'用户清单：核验',done:false}],project_id:'p1',parent_id:null,children:{total:0,done:0}};
-let writes=0;
+let writes=0, modernHub=false;
 const rows=[{...base,id:'r1',name:'用户任务标题：不要翻译',children:{total:1,done:0}},{...base,id:'r2',name:'用户子需求标题',parent_id:'r1',external_ref:'github:demo/repo#1',external_url:'https://github.com/demo/repo/issues/1'}];
 const server=createServer(async(req,res)=>{
  const path=new URL(req.url,'http://fixture').pathname;
@@ -13,6 +13,7 @@ const server=createServer(async(req,res)=>{
   const body=path.endsWith('/projects')?{projects:[{id:'p1',name:'用户项目名',color:'#167d8d',archived:false}]}:
    path.endsWith('/people')?{people:[{kind:'user',id:'u1',name:'用户负责人',networkId:'fixture-network'},{kind:'node',id:'n1',name:'用户Agent',networkId:'fixture-network'}]}:
    path==='/api/auth/me'?{user:{id:'u1'}}:{requirements:rows,capabilities:['agent_owner','description','checklist','projects','due_datetime','sub_requirements']};
+  if (body.requirements) body.requirements = body.requirements.map((r,i)=>({...r,createdAt:new Date(Date.now()-(i+1)*86400000).toISOString(),...(modernHub?{updatedAt:new Date(Date.now()-(i+1)*180000).toISOString(),updated_by:{kind:'user',id:'u1'}}:{})}));
   res.end(JSON.stringify(body));return;
  }
  res.setHeader('Content-Type',path==='/app.js'?'text/javascript':'text/html');
@@ -37,6 +38,7 @@ try {
  const pop=await page.getByTestId('task-fields-popover').boundingBox();
  ck('anchored and inside viewport',pop.x>=0&&pop.x+pop.width<=1200&&pop.y+pop.height<=800&&Math.abs(pop.y-button.y-button.height-6)<2,{button,pop});
  ck('title locked',await page.getByTestId('task-field-toggle-title').isDisabled());
+ ck('old Hub upgrade label',await page.getByTestId('task-fields-upgrade').count()===1);
  await page.screenshot({path:out+'/desktop-fields-en.png'});
  await page.getByTestId('task-fields-search').fill('Part');
  ck('search column names',await page.getByTestId('task-field-participants').count()===1&&await page.getByTestId('task-field-owner').count()===0);
@@ -69,6 +71,30 @@ try {
  ck('escape closes popover',await page.getByTestId('task-fields-popover').count()===0);
  await page.getByTestId('req-row-r1').click();
  ck('row still opens detail',await page.getByTestId('req-detail').count()===1);
+ await page.getByTestId('req-detail-close').click();
+ await page.getByTestId('task-time-r1-updated').scrollIntoViewIfNeeded();
+ ck('old Hub update is dash',await page.getByTestId('task-time-r1-updated').textContent()==='—');
+ await page.getByTestId('req-sort-created').click();
+ ck('created ascending order',await page.locator('[data-testid^="req-row-"]').first().getAttribute('data-testid')==='req-row-r2');
+ await page.getByTestId('req-sort-created').click();
+ ck('created descending order',await page.locator('[data-testid^="req-row-"]').first().getAttribute('data-testid')==='req-row-r1');
+ modernHub=true;await page.reload();await list();
+ await page.getByTestId('req-sort-updated').click();
+ ck('updated ascending order',await page.locator('[data-testid^="req-row-"]').first().getAttribute('data-testid')==='req-row-r2');
+ await page.getByTestId('req-sort-updated').click();
+ ck('updated descending order',await page.locator('[data-testid^="req-row-"]').first().getAttribute('data-testid')==='req-row-r1');
+ const time=page.getByTestId('task-time-r1-updated');await time.scrollIntoViewIfNeeded();await time.hover();
+ const hint=await time.getAttribute('title');
+ ck('hover hint has local seconds and updater',/\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}/.test(hint||'')&&(hint||'').includes('用户负责人'));
+ ck('relative update',await time.textContent()==='3 min ago');
+ await page.mouse.down();await page.waitForTimeout(650);await page.mouse.up();
+ ck('long press exact without opening task',await page.getByTestId('task-time-exact').count()===1&&await page.getByTestId('req-detail').count()===0);
+ await page.screenshot({path:out+'/desktop-time-exact.png'});
+ await page.getByLabel('Close timestamp',{exact:true}).click();
+ await page.getByTestId('task-fields-button').click();
+ ck('modern Hub no upgrade marker',await page.getByTestId('task-fields-upgrade').count()===0);
+ await page.getByLabel('Close field settings',{exact:true}).last().click();
+ await page.screenshot({path:out+'/desktop-time-columns.png'});
  await page.close();
  const phone=await browser.newPage({viewport:{width:390,height:844}});
  await phone.goto(url);await phone.getByTestId('tasks-view-list').click();await phone.getByTestId('req-row-r1').waitFor();

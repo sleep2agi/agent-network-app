@@ -5,7 +5,7 @@ RUN npm install --global bun@1.3.1
 COPY package.json package-lock.json ./
 RUN npm ci --ignore-scripts --no-audit --no-fund
 COPY . .
-RUN bun src/task-list-fields.test.ts && bun src/i18n-copy-guard.test.ts && npm run typecheck
+RUN bun src/task-list-fields.test.ts && bun src/task-time.test.ts && bun src/i18n-copy-guard.test.ts && npm run typecheck
 RUN npm install --prefix /qa-tools --no-save --no-audit --no-fund esbuild@0.25.5
 RUN NODE_PATH=/qa-tools/node_modules node tests/test-task-language/build.cjs
 CMD ["sh", "-c", "cp /task-language.js /output/task-language.js"]

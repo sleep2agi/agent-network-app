@@ -10,7 +10,7 @@ import { useTranslation } from './i18n-react';
 import './i18n-task-fields';
 import { defaultFields, moveField, toggleField, type FieldId, type FieldPref } from './task-list-fields';
 
-export default function TaskListFields({ fields, onChange, projects }: { fields: FieldPref[]; onChange: (next: FieldPref[]) => void; projects: boolean }) {
+export default function TaskListFields({ fields, onChange, projects, needsUpdateUpgrade }: { fields: FieldPref[]; onChange: (next: FieldPref[]) => void; projects: boolean; needsUpdateUpgrade: boolean }) {
   useTranslation();
   const safe = useModalSafePadding('overlay');
   const anchor = useRef<View>(null);
@@ -62,7 +62,7 @@ export default function TaskListFields({ fields, onChange, projects }: { fields:
           {!rows.length ? <Text style={{ color: colors.textMuted, padding: 12 }}>{t('fields.empty')}</Text> : null}
           {rows.map(f => <View key={f.id} testID={`task-field-${f.id}`} {...({ dataSet: { fieldRow: f.id } } as object)} style={{ minHeight: 44, flexDirection: 'row', alignItems: 'center', borderTopWidth: 2, borderTopColor: target === f.id ? colors.accent : 'transparent' }}>
             <Pressable testID={`task-field-drag-${f.id}`} {...({ draggable: true } as object)} accessibilityRole="button" accessibilityLabel={t('fields.reorder', { name: t(`fields.${f.id}`) })}  style={{ padding: 10 }}><Ionicons name="reorder-two" size={18} color={colors.textMuted} /></Pressable>
-            <Text style={{ flex: 1, color: colors.text }}>{t(`fields.${f.id}`)}</Text>
+            <View style={{ flex: 1 }}><Text style={{ color: colors.text }}>{t(`fields.${f.id}`)}</Text>{f.id === 'updated' && needsUpdateUpgrade ? <Text testID="task-fields-upgrade" style={{ color: colors.textMuted, fontSize: 11 }}>{t('fields.upgrade')}</Text> : null}</View>
             <Pressable testID={`task-field-toggle-${f.id}`} accessibilityRole="button" disabled={f.id === 'title'} accessibilityLabel={f.id === 'title' ? t('fields.locked') : t(f.visible ? 'fields.hide' : 'fields.show', { name: t(`fields.${f.id}`) })} onPress={() => onChange(toggleField(fields, f.id))} style={{ padding: 12 }}><Ionicons name={f.id === 'title' ? 'lock-closed-outline' : f.visible ? 'eye-outline' : 'eye-off-outline'} size={18} color={f.visible ? colors.accent : colors.textMuted} /></Pressable>
           </View>)}
         </ScrollView>

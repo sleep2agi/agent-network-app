@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Pressable, ScrollView, View } from 'react-native';
 import { Text } from './ui-text';
 import { Ionicons } from './icons';
@@ -13,20 +13,27 @@ import type { RequirementPerson } from './requirement-people';
 import { nextSort, type SortKey, type SortSpec } from './task-board-model';
 import { DueChip, OwnerBadge, ParticipantStack, PriorityDot, ProjectChip, STATUS_TONE, a11yState, type TaskStyles } from './TaskBoardParts';
 import TaskListFields from './TaskListFields';
+import TaskTimeCell from './TaskTimeCell';
 import { loadFields, saveFields, type FieldId } from './task-list-fields';
 
-const widths: Record<FieldId, number> = { title: 220, owner: 150, priority: 90, due: 110, participants: 115, project: 116, status: 110, issues: 108 };
-export default function TaskListTable({ rows, people, projects, sort, setSort, s, today, selectedId, onOpen, filtered }: {
+const widths: Record<FieldId, number> = { title: 220, owner: 150, priority: 90, due: 110, participants: 115, project: 116, status: 110, created: 150, updated: 150, issues: 108 };
+export default function TaskListTable({ rows, people, projects, sort, setSort, s, today, selectedId, onOpen, filtered, needsUpdateUpgrade }: {
   rows: Requirement[]; people: RequirementPerson[]; projects: RequirementProject[] | null;
   sort: SortSpec; setSort: (next: SortSpec) => void; s: TaskStyles; today: string;
-  selectedId: string | null; onOpen: (id: string) => void; filtered: boolean;
+  selectedId: string | null; onOpen: (id: string) => void; filtered: boolean; needsUpdateUpgrade: boolean;
 }) {
   useTranslation();
   const [fields, setFields] = useState(loadFields);
+  const [now, setNow] = useState(Date.now);
+  useEffect(() => { const timer = setInterval(() => setNow(Date.now()), 30000); return () => clearInterval(timer); }, []);
   const visible = fields.filter(f => f.visible && (projects || f.id !== 'project'));
   const cellStyle = (id: FieldId) => ({ width: widths[id], minWidth: widths[id], flexShrink: 0, ...(id === 'title' ? { flexGrow: 1 } : {}) });
   const content = (item: Requirement, id: FieldId) => {
     switch (id) {
+      case 'created': case 'updated': {
+        const by = id === 'updated' && item.updatedBy ? people.find(p => p.kind === item.updatedBy!.kind && p.id === item.updatedBy!.id)?.name ?? item.updatedBy.id : undefined;
+        return <TaskTimeCell id={`task-time-${item.id}-${id}`} raw={id === 'created' ? item.createdAt : item.updatedAt} now={now} by={by} />;
+      }
       case 'title': return <Text style={[s.tdTitle, item.column === 'done' && s.cardDone]} numberOfLines={1}>{item.name}</Text>;
       case 'owner': return <OwnerBadge item={item} people={people} s={s} />;
       case 'priority': return <View style={s.owner}><PriorityDot p={item.priority} s={s} /><Text style={s.metaText}>{taskText(REQ_PRIORITY_LABEL[item.priority])}</Text></View>;
@@ -38,7 +45,7 @@ export default function TaskListTable({ rows, people, projects, sort, setSort, s
     }
   };
   return <View style={{ flex: 1 }}>
-    <View style={{ flexDirection: 'row', justifyContent: 'flex-end', paddingHorizontal: spacing.xl, paddingBottom: 10 }}><TaskListFields fields={fields} projects={projects !== null} onChange={next => { saveFields(next); setFields(next); }} /></View>
+    <View style={{ flexDirection: 'row', justifyContent: 'flex-end', paddingHorizontal: spacing.xl, paddingBottom: 10 }}><TaskListFields fields={fields} projects={projects !== null} needsUpdateUpgrade={needsUpdateUpgrade} onChange={next => { saveFields(next); setFields(next); }} /></View>
     <View style={s.table} testID="req-list">
       <ScrollView horizontal contentContainerStyle={{ minWidth: '100%', flexGrow: 1 }}>
         <View style={{ flex: 1, minWidth: visible.reduce((n, f) => n + widths[f.id], 0) + spacing.md * (visible.length - 1) + spacing.lg * 2 }}>

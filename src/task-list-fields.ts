@@ -1,4 +1,4 @@
-export const FIELD_IDS = ['title', 'owner', 'priority', 'due', 'participants', 'project', 'status', 'issues'] as const;
+export const FIELD_IDS = ['title', 'owner', 'priority', 'due', 'participants', 'project', 'status', 'created', 'updated', 'issues'] as const;
 export type FieldId = typeof FIELD_IDS[number];
 export type FieldPref = { id: FieldId; visible: boolean };
 export const FIELDS_KEY = 'task_list_fields_v1';
