@@ -125,7 +125,17 @@ export function markAgentReadLocally(agent: string): void {
  */
 export function bindUnreadProfile(profileId: string | undefined): void {
   if (profileId === snapshot.replyProfileId && (profileId !== undefined || snapshot.replyRows.length === 0)) return;
-  snapshot = { ...snapshot, replyProfileId: profileId, replyWatermarks: loadReplyWatermarks(profileId), replyRows: [] };
+  // 切换账号(Vincent 2026-09-29「切换账号」):上一个账号的未读、user_inbox 响应和已见 id 也清掉 ——
+  // 否则切过去的第一轮轮询之前,角标 / 托盘 / 通知基线显示的还是上一个账号的数。
+  const switched = profileId !== snapshot.replyProfileId;
+  snapshot = {
+    ...snapshot,
+    ...(switched ? { ledger: initialUnreadState(), serverBody: null, seenIds: new Set<string>() } : {}),
+    replyProfileId: profileId,
+    replyWatermarks: loadReplyWatermarks(profileId),
+    replyRows: [],
+  };
+  if (switched) userHalfIngested = false;
   inboxHalfIngested = false;
   emit();
 }

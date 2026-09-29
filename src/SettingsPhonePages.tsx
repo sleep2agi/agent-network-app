@@ -51,6 +51,8 @@ export type PhonePagesCtx = {
   profileError: string;
   storageDiagnostics: DesktopStorageDiagnostics | null;
   tauriDesktop: boolean;
+  /** 列表里当前账号的 id(手机上迁移过来的账号 cfg 没有 profileId,它的 id 是 legacy)。 */
+  currentProfileId: string | undefined;
   onPickProfile: (profile: HubProfile) => void;
   onOpenProfileWindow: (profile: HubProfile) => void;
   onRemoveProfile: (profile: HubProfile) => void;
@@ -133,7 +135,7 @@ function AccountPage({ ctx }: { ctx: PhonePagesCtx }) {
               label={profileName(profile)}
               subtitle={profile.requiresReauth ? tr('settings.copy.15') : `${profile.serverUrl} · ${profile.username || tr('settings.copy.14')}`}
               subtitleTone={profile.requiresReauth ? 'danger' : undefined}
-              selected={profile.profileId === cfg.profileId}
+              selected={profile.profileId === ctx.currentProfileId}
               onPress={() => ctx.onPickProfile(profile)}
             />
           )) : [
@@ -162,7 +164,7 @@ function ManageAccountsPage({ ctx }: { ctx: PhonePagesCtx }) {
         const canRemove = profile.profileId !== LOCAL_HUB_PROFILE_ID;
         if (!canOpen && !canRemove) return null;
         return (
-          <SettingsGroup key={profile.profileId} title={`${profileName(profile)}${profile.profileId === ctx.cfg.profileId ? tr('settings.copy.13') : ''}`} footer={`${profile.serverUrl}${profile.networkId ? ` · ${profile.networkId}` : ''}`}>
+          <SettingsGroup key={profile.profileId} title={`${profileName(profile)}${profile.profileId === ctx.currentProfileId ? tr('settings.copy.13') : ''}`} footer={`${profile.serverUrl}${profile.networkId ? ` · ${profile.networkId}` : ''}`}>
             {canOpen ? <SettingsRow label={tr('settings.copy.95')} onPress={() => ctx.onOpenProfileWindow(profile)} accessibilityLabel={tr('settings.copy.183', { v0: profile.displayName || profile.username || profile.serverUrl })} /> : null}
             {canRemove ? <SettingsRow label={tr('settings.copy.81')} tone="danger" chevron={false} onPress={() => ctx.onRemoveProfile(profile)} accessibilityLabel={tr('settings.copy.184', { v0: profile.username || profile.serverUrl })} testID={`settings-remove-${profile.profileId}`} /> : null}
           </SettingsGroup>

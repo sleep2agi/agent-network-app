@@ -7,7 +7,9 @@ import { ActivityIndicator, AppState, BackHandler, Modal, Platform, Pressable, S
 import { Text, TextInput } from './ui-text';
 import { Ionicons } from './icons';
 import { HubConfig } from './api';
-import { DesktopStorageDiagnostics, HubProfile, getDesktopStorageDiagnostics, listHubProfiles, removeHubProfile, saveThemeMode } from './storage';
+import { DesktopStorageDiagnostics, HubProfile, getDesktopStorageDiagnostics, listHubProfiles, removeHubProfile, saveThemeMode, sessionIdOf } from './storage';
+import AccountSwitcher from './AccountSwitcher';
+import './i18n-accounts';
 import { THEME_PREFERENCES, THEME_PREFERENCE_LABEL, colors, onThemeChange, onThemePreferenceChange, setThemePreference, spacing, themeMode, themePreference, themePreferenceSummary, type ThemePreference, radius } from './theme';
 import { APP_VERSION } from './version';
 import { appFetch } from './app-fetch';
@@ -166,6 +168,8 @@ export default function SettingsScreen({
   // 返回箭头 / 安卓返回键 / 网页 Esc 都走这里:先退三级页,再退子页。
   const goBack = () => { if (settingsBackTarget(page, detail) === 'detail') closeDetail(); else closePage(); };
   const [logoutConfirm, setLogoutConfirm] = useState(false);
+  // 切换账号面板(手机底部面板 / 宽屏对话框)。
+  const [switcherOpen, setSwitcherOpen] = useState(false);
   const paneScrollRef = useRef<ScrollView>(null);
   useEffect(() => {
     const { scrollY } = rememberedSettingsView();
@@ -185,7 +189,7 @@ export default function SettingsScreen({
   // 子页的返回:安卓系统返回键/手势走 BackHandler(比 App.tsx 的返回处理晚注册 ⇒ 先被调用,
   // 同 ScheduledTasksScreen 的窄屏详情);网页(验收用的 web 导出)没有返回键,听 Esc。
   // 弹窗开着时让弹窗自己的 onRequestClose 处理(安卓的 Modal 会先吞掉返回键;网页的 Esc 两边都会收到)。
-  const dialogOpen = !!removeTarget || localDeleteVisible || guideVisible || logoutConfirm;
+  const dialogOpen = !!removeTarget || localDeleteVisible || guideVisible || logoutConfirm || switcherOpen;
   useEffect(() => {
     if (!subPage || dialogOpen) return;
     const sub = BackHandler.addEventListener('hardwareBackPress', () => { goBack(); return true; });
@@ -201,7 +205,7 @@ export default function SettingsScreen({
       setProfiles(registry.profiles);
       setStorageDiagnostics(diagnostics);
     }).catch(error => setProfileError(String(error)));
-  }, [cfg.profileId]);
+  }, [cfg.profileId, cfg.serverUrl, cfg.username, switcherOpen]);
 
   useEffect(() => {
     if (cfg.profileId !== LOCAL_HUB_PROFILE_ID && !profiles.some(profile => profile.profileId === LOCAL_HUB_PROFILE_ID)) return;
@@ -297,6 +301,12 @@ export default function SettingsScreen({
     return '';
   };
   const canLogout = cfg.profileId !== LOCAL_HUB_PROFILE_ID;
+  // 手机 / 网页上迁移过来的账号在 cfg 上没有 profileId,列表里它的 id 是 legacy(storage.sessionIdOf)。
+  const currentId = sessionIdOf(cfg);
+  const pickProfile = (profile: Pick<HubProfile, 'profileId' | 'serverUrl' | 'username' | 'displayName' | 'requiresReauth'>) => {
+    if (profile.requiresReauth) return onReauthProfile(profile);
+    if (profile.profileId !== currentId) void Promise.resolve(onSwitchProfile(profile.profileId)).catch(reportError);
+  };
   const phoneList = (
     <ScrollView style={styles.phoneScroll} contentContainerStyle={styles.phoneListContent} testID="settings-phone-list">
       {onOpenServer ? (
@@ -347,6 +357,16 @@ export default function SettingsScreen({
           </View>
         </View>
       ))}
+      {/* 切换账号(Vincent 2026-09-29):单独一块,紧挨在「退出登录」上面,和它同宽同高(照微信)。 */}
+      <Pressable
+        testID="settings-switch-account-block"
+        accessibilityRole="button"
+        accessibilityLabel={tr('accounts.switch')}
+        onPress={() => setSwitcherOpen(true)}
+        style={({ pressed }) => [styles.phoneBlock, styles.phoneLogout, pressed && styles.phoneRowPressed]}
+      >
+        <Text style={styles.phoneLogoutText}>{tr('accounts.switch')}</Text>
+      </Pressable>
       {canLogout ? (
         <Pressable
           testID="settings-logout-block"
@@ -398,10 +418,8 @@ export default function SettingsScreen({
     profileError,
     storageDiagnostics,
     tauriDesktop,
-    onPickProfile: profile => {
-      if (profile.requiresReauth) return onReauthProfile(profile);
-      if (profile.profileId !== cfg.profileId) void Promise.resolve(onSwitchProfile(profile.profileId)).catch(reportError);
-    },
+    currentProfileId: currentId,
+    onPickProfile: pickProfile,
     onOpenProfileWindow: profile => { void openWorkspaceWindow(profile).catch(reportError); },
     onRemoveProfile: profile => setRemoveTarget(profile),
     onAddAccount,
@@ -501,7 +519,7 @@ export default function SettingsScreen({
               {show('account', 'profiles') ? (
                 <>
                   {profiles.length ? profiles.map((profile, index) => {
-                    const isCurrent = profile.profileId === cfg.profileId;
+                    const isCurrent = profile.profileId === currentId;
                     return (
                       <View key={profile.profileId}>
                         {index ? <Divider /> : null}
@@ -551,8 +569,20 @@ export default function SettingsScreen({
               {show('account', 'addAccount') ? (
                 <>
                   <Divider />
-                  <Pressable style={({ pressed }) => [styles.row, pressed && { opacity: 0.6 }]} onPress={onAddAccount} accessibilityRole="button">
+                  <Pressable testID="settings-add-account-row" style={({ pressed }) => [styles.row, pressed && { opacity: 0.6 }]} onPress={onAddAccount} accessibilityRole="button">
                     <Text style={styles.accentText}>{tr('settings.copy.21')}</Text>
+                    <Ionicons name="chevron-forward" size={16} color={colors.textMuted} />
+                  </Pressable>
+                </>
+              ) : null}
+              {show('account', 'switchAccount') && !compact ? (
+                <>
+                  <Divider />
+                  <Pressable testID="settings-switch-account-row" style={({ pressed }) => [styles.row, pressed && { opacity: 0.6 }]} onPress={() => setSwitcherOpen(true)} accessibilityRole="button" accessibilityLabel={tr('accounts.switch')}>
+                    <View style={styles.rowCopy}>
+                      <Text style={styles.rowLabel}>{tr('accounts.switch')}</Text>
+                      <Text style={styles.rowHint}>{tr('accounts.switchHint')}</Text>
+                    </View>
                     <Ionicons name="chevron-forward" size={16} color={colors.textMuted} />
                   </Pressable>
                 </>
@@ -560,7 +590,7 @@ export default function SettingsScreen({
               {show('account', 'logout') && canLogout && !compact ? (
                 <>
                   <Divider />
-                  <Pressable style={({ pressed }) => [styles.row, pressed && { opacity: 0.6 }]} onPress={onLogout} accessibilityRole="button">
+                  <Pressable testID="settings-logout-row" style={({ pressed }) => [styles.row, pressed && { opacity: 0.6 }]} onPress={onLogout} accessibilityRole="button">
                     <View style={styles.rowCopy}>
                       <Text style={styles.dangerText}>{tr('settings.copy.22')}</Text>
                       <Text style={styles.rowHint}>{tr('settings.copy.23')}</Text>
@@ -979,7 +1009,7 @@ export default function SettingsScreen({
                 const target = removeTarget;
                 setRemoveTarget(null);
                 if (!target) return;
-                if (target.profileId === cfg.profileId) void Promise.resolve(onLogout()).catch(error => setProfileError(String(error)));
+                if (target.profileId === currentId) void Promise.resolve(onLogout()).catch(error => setProfileError(String(error)));
                 else void removeHubProfile(target.profileId).then(() => setProfiles(current => current.filter(item => item.profileId !== target.profileId))).catch(error => setProfileError(String(error)));
               }}><Text style={styles.dangerText}>{tr('settings.copy.81')}</Text></Pressable>
             </View>
@@ -1029,6 +1059,16 @@ export default function SettingsScreen({
           </View>
         </View>
       </Modal>
+      <AccountSwitcher
+        visible={switcherOpen}
+        variant={compact ? 'sheet' : 'dialog'}
+        profiles={profiles}
+        currentId={currentId}
+        onPick={pickProfile}
+        onAdd={onAddAccount}
+        onRemove={profile => setRemoveTarget(profiles.find(p => p.profileId === profile.profileId) ?? null)}
+        onClose={() => setSwitcherOpen(false)}
+      />
       {guideVisible ? <XiaomiGuideModal onClose={() => setGuideVisible(false)} /> : null}
     </View>
   );

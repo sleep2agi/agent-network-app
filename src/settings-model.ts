@@ -40,6 +40,7 @@ export const SETTINGS_CATEGORIES: readonly SettingsCategory[] = [
     rows: [
       { key: 'profiles', label: '账号与 Hub', keywords: ['登录', '服务器', 'profile', 'hub', 'account'] },
       { key: 'addAccount', label: '添加 Hub / 账号', keywords: ['添加', '登录', 'add'] },
+      { key: 'switchAccount', label: '切换账号', keywords: ['切换', '服务器', '多账号', 'switch', 'account', 'server'] },
       { key: 'logout', label: '移除当前账号', keywords: ['退出', '登出', 'logout'] },
     ],
   },

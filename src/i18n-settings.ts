@@ -272,6 +272,7 @@ const copy = [
   ['已保存 {v0},留空不改', 'Saved {v0}; leave blank to keep'],
   ['恢复「{v0}」的默认快捷键', 'Reset the shortcut for {v0}'],
   ['修改快捷键 {v0}', 'Change shortcut for {v0}'],
+  ['切换账号', 'Switch account'],
 ] as const;
 export const settingsTranslations = Object.fromEntries(copy.map((pair, index) => [`settings.copy.${index}`, pair]));
 registerTranslations(settingsTranslations);
