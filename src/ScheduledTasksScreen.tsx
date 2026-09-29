@@ -641,7 +641,10 @@ function ScheduleDetail({ row, now, busy, runs, cfg, expandedRun, runTasks, onTo
                   >
                     <View style={s.runText}>
                       <Text style={s.runTime} numberOfLines={1}>{text.summary}</Text>
-                      <Text style={s.runError} numberOfLines={open ? undefined : 2} testID={`schedule-skip-group-detail-${item.key}`}>{text.detail}</Text>
+                      <View style={s.skipDetail} testID={`schedule-skip-group-detail-${item.key}`}>
+                        <Text style={[s.runError, s.skipWho]} numberOfLines={open ? undefined : 1}>{text.wait ? `${text.who}${t('schedule.skipGroup.sep')}` : text.who}</Text>
+                        {text.wait ? <Text style={[s.runError, s.skipWait]} numberOfLines={1} testID={`schedule-skip-group-wait-${item.key}`}>{text.wait}</Text> : null}
+                      </View>
                     </View>
                     <StatusPill label={t('schedule.skipGroup.status')} tone="rest" />
                     <Ionicons name={open ? 'chevron-up' : 'chevron-down'} size={14} color={colors.textMuted} />
@@ -1016,6 +1019,10 @@ function makeStyles() { return StyleSheet.create({
   runTime: { flexShrink: 0, color: colors.text, fontSize: fontSize.body },
   runDuration: { flexShrink: 1, color: colors.textMuted, fontSize: fontSize.small },
   runError: { color: colors.textMuted, fontSize: fontSize.small, marginTop: 2 },
+  // 「在等谁」可以省略号截断;「已等 N 分钟」是一个整体,放不下就整段换到下一行。
+  skipDetail: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'baseline' },
+  skipWho: { flexShrink: 1 },
+  skipWait: { flexShrink: 0 },
   skipTimes: { paddingBottom: 10, gap: spacing.xs },
   skipTimesLabel: { color: colors.textMuted, fontSize: fontSize.small, marginTop: spacing.xs },
   skipTimesList: { color: colors.text, fontSize: fontSize.small, lineHeight: 19 },

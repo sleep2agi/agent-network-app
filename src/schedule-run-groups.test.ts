@@ -93,11 +93,13 @@ const groupAt = (items: RunListItem[], n = 0) => items.filter((i): i is Extract<
   eq('under a minute', formatWait(59_000), '不到 1 分钟');
   eq('minutes', formatWait(36 * MIN), '36 分钟');
   eq('hours', formatWait(120 * MIN), '2 小时');
-  eq('hours + minutes', formatWait(125 * MIN), '2 小时 5 分');
+  eq('hours + minutes', formatWait(125 * MIN), '2 小时 5 分钟');
+  eq('59 min stays minutes, 60 min switches to hours', [formatWait(59 * MIN), formatWait(61 * MIN)], ['59 分钟', '1 小时 1 分钟']);
   eq('days + hours', formatWait((49 * 60 + 10) * MIN), '2 天 1 小时');
 
   const text = skipGroupText(live, '通信狗', now);
   eq('zh summary: count and range', text.summary, `已跳过 3 次（${clockOf(iso(14))}–${clockOf(iso(16))}）`);
+  eq('zh wait is its own unbreakable piece', [text.who, text.wait], [`在等 通信狗 回复 ${clockOf(iso(0))} 那次`, '已等 1 小时']);
   eq('zh detail: who, which run, how long', text.detail, `在等 通信狗 回复 ${clockOf(iso(0))} 那次，已等 1 小时`);
   eq('zh detail when it already finished', skipGroupText(done, '通信狗', now).detail, `当时在等 通信狗 回复 ${clockOf(iso(0))} 那次，等了 36 分钟`);
   eq('zh detail when the run is off the page', skipGroupText(off, '通信狗', now).detail, '在等 通信狗 回复更早的一次（不在最近这页记录里）');
@@ -124,6 +126,7 @@ const groupAt = (items: RunListItem[], n = 0) => items.filter((i): i is Extract<
   ck('screen renders the grouped list', /groupScheduleRuns\(runs\.runs\)/.test(src));
   const groupRow = src.slice(src.indexOf('schedule-skip-group-'), src.indexOf('schedule-skip-group-toggle-'));
   ck('collapsed row reuses runRow/runHead (same padding as normal rows)', groupRow.includes('s.runRow') && src.includes('style={s.runHead}'));
+  ck('wait clause renders in its own one-line, non-shrinking Text', /numberOfLines=\{1\} testID=\{`schedule-skip-group-wait-/.test(src) && /skipWait: \{ flexShrink: 0 \}/.test(src));
   ck('collapsed row links to the waited-on run', /onToggleRun\(blocker\)/.test(src));
 }
 

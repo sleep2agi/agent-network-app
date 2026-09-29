@@ -84,10 +84,13 @@ export function skipGroupWait(group: Extract<RunListItem, { kind: 'skipGroup' }>
 registerTranslations({
   'schedule.skipGroup.status': ['已跳过', 'Skipped'],
   'schedule.skipGroup.summary': ['已跳过 {n} 次（{from}–{to}）', 'Skipped {n} times ({from}–{to})'],
-  'schedule.skipGroup.waiting': ['在等 {alias} 回复 {at} 那次，已等 {wait}', 'Waiting for {alias} to answer the {at} run · {wait} so far'],
-  'schedule.skipGroup.waitingNoTime': ['在等 {alias} 回复 {at} 那次', 'Waiting for {alias} to answer the {at} run'],
-  'schedule.skipGroup.waited': ['当时在等 {alias} 回复 {at} 那次，等了 {wait}', 'Was waiting for {alias} to answer the {at} run · {wait}'],
-  'schedule.skipGroup.waitedNoTime': ['当时在等 {alias} 回复 {at} 那次', 'Was waiting for {alias} to answer the {at} run'],
+  // 「在等谁」和「等了多久」分成两段:屏幕把等待时长单独放一个不换行的 Text,窄屏整段挪到下一行,
+  // 不会把「分钟」拆成「分」/「钟」。
+  'schedule.skipGroup.waitingWho': ['在等 {alias} 回复 {at} 那次', 'Waiting for {alias} to answer the {at} run'],
+  'schedule.skipGroup.waitedWho': ['当时在等 {alias} 回复 {at} 那次', 'Was waiting for {alias} to answer the {at} run'],
+  'schedule.skipGroup.waitingFor': ['已等 {wait}', '{wait} so far'],
+  'schedule.skipGroup.waitedFor': ['等了 {wait}', 'waited {wait}'],
+  'schedule.skipGroup.sep': ['，', ' · '],
   'schedule.skipGroup.earlier': ['在等 {alias} 回复更早的一次（不在最近这页记录里）', 'Waiting for {alias} to answer an earlier run (not on this page)'],
   'schedule.skipGroup.why': ['上一次还没结束，这几次都跳过了', 'The previous run had not finished, so these were skipped'],
   'schedule.skipGroup.times': ['跳过的时间', 'Skipped at'],
@@ -96,7 +99,7 @@ registerTranslations({
   'schedule.wait.underMinute': ['不到 1 分钟', 'under a minute'],
   'schedule.wait.minutes': ['{m} 分钟', '{m} min'],
   'schedule.wait.hours': ['{h} 小时', '{h} h'],
-  'schedule.wait.hoursMinutes': ['{h} 小时 {m} 分', '{h} h {m} min'],
+  'schedule.wait.hoursMinutes': ['{h} 小时 {m} 分钟', '{h} h {m} min'],
   'schedule.wait.days': ['{d} 天', '{d} d'],
   'schedule.wait.daysHours': ['{d} 天 {h} 小时', '{d} d {h} h'],
 });
@@ -138,22 +141,29 @@ export function skipGroupTimes(runs: readonly Pick<HubScheduledRun, 'scheduled_f
 
 export interface SkipGroupText {
   summary: string;
+  /** 「在等谁、哪一次」。 */
+  who: string;
+  /** 「已等 36 分钟」;推不出时长为 ''。屏幕把它当一个不可拆的整体渲染。 */
+  wait: string;
+  /** who + 分隔 + wait,读屏和测试用。 */
   detail: string;
   /** 被等那次的时刻(与它自己那行显示的 scheduled_for 一致),没有为 ''。 */
   blockerAt: string;
 }
 
-/** 折叠行的两行文案。alias 是计划的执行节点(skipped 行本身不带节点)。 */
+/** 折叠行的文案。alias 是计划的执行节点(skipped 行本身不带节点)。 */
 export function skipGroupText(group: Extract<RunListItem, { kind: 'skipGroup' }>, alias: string, nowMs: number): SkipGroupText {
   const oldest = group.runs[group.runs.length - 1];
   const latest = group.runs[0];
   const summary = t('schedule.skipGroup.summary', { n: group.runs.length, from: clockOf(oldest.scheduled_for), to: clockOf(latest.scheduled_for) });
-  if (!group.blocker) return { summary, detail: t('schedule.skipGroup.earlier', { alias }), blockerAt: '' };
+  if (!group.blocker) {
+    const who = t('schedule.skipGroup.earlier', { alias });
+    return { summary, who, wait: '', detail: who, blockerAt: '' };
+  }
   const at = clockOf(group.blocker.scheduled_for);
   const { ongoing, waitedMs } = skipGroupWait(group, nowMs);
-  const key = ongoing ? 'waiting' : 'waited';
-  const detail = waitedMs === null
-    ? t(`schedule.skipGroup.${key}NoTime`, { alias, at })
-    : t(`schedule.skipGroup.${key}`, { alias, at, wait: formatWait(waitedMs) });
-  return { summary, detail, blockerAt: at };
+  const who = t(ongoing ? 'schedule.skipGroup.waitingWho' : 'schedule.skipGroup.waitedWho', { alias, at });
+  const wait = waitedMs === null ? '' : t(ongoing ? 'schedule.skipGroup.waitingFor' : 'schedule.skipGroup.waitedFor', { wait: formatWait(waitedMs) });
+  const detail = wait ? `${who}${t('schedule.skipGroup.sep')}${wait}` : who;
+  return { summary, who, wait, detail, blockerAt: at };
 }
