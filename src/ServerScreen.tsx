@@ -5,6 +5,7 @@ import { Ionicons } from './icons';
 import * as Clipboard from 'expo-clipboard';
 import { fetchServerVersion, fetchStatus, HubConfig, Session } from './api';
 import { pingHealth } from './server-ping';
+import { PANE_BACK_TEST_ID } from './pane-header';
 import {
   compactId,
   describeFailure,
@@ -50,6 +51,7 @@ export default function ServerScreen({
   onOpenScheduled,
   onSwitchProfile,
   onAddServer,
+  onBack,
 }: {
   cfg: HubConfig;
   /** 事件与日志。 */
@@ -63,6 +65,8 @@ export default function ServerScreen({
   /** 有多个已保存的服务器时显示「切换服务器」(目前只有桌面端会存多个)。 */
   onSwitchProfile?: (profileId: string) => void | Promise<void>;
   onAddServer?: () => void;
+  /** 手机:从 设置 → 服务器 推进来的二级页,左上角「‹」回设置(Vincent 2026-09-29 底部 tab 换成 任务)。宽屏 / 桌面不传。 */
+  onBack?: () => void;
 }) {
   const [sessions, setSessions] = useState<Session[]>([]);
   const [version, setVersion] = useState<string | undefined>();
@@ -345,6 +349,11 @@ export default function ServerScreen({
       }
     >
       <View style={styles.header} testID="server-header">
+        {onBack ? (
+          <Pressable onPress={onBack} hitSlop={8} accessibilityRole="button" accessibilityLabel="返回设置" testID={PANE_BACK_TEST_ID} style={({ pressed }) => pressed && styles.pressed}>
+            <Ionicons name="chevron-back" size={24} color={colors.text} />
+          </Pressable>
+        ) : null}
         <View style={{ flex: 1, minWidth: 0 }}>
           <Text style={styles.title}>服务器</Text>
           <Text style={styles.subtitle} numberOfLines={1}>{host}</Text>

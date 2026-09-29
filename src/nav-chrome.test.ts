@@ -18,8 +18,9 @@ const MAC_UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 14_5) AppleWebKit/605.1.1
 const chrome = (os: string, width: number, screen = 'agents', opts: { tauri?: boolean; ua?: string } = {}) =>
   navChromeFor(chooseAppLayout({ os, tauri: !!opts.tauri, userAgent: opts.ua ?? '', width }), screen);
 
-const TAB_SCREENS = ['agents', 'scheduled', 'server', 'settings', 'tasks', 'messages'];
-const ALL_SCREENS = [...TAB_SCREENS, 'chat', 'nodeInfo', 'nodeDetail', 'picker', 'wizard', 'taskDetail', 'logs', 'serverNodes', 'serverNodeDetail'];
+// 'server' is no longer a phone tab (Vincent 2026-09-29 「服务器 换成 任务」): it is pushed from 设置.
+const TAB_SCREENS = ['agents', 'scheduled', 'settings', 'tasks', 'messages'];
+const ALL_SCREENS = [...TAB_SCREENS, 'server', 'chat', 'nodeInfo', 'nodeDetail', 'picker', 'wizard', 'taskDetail', 'logs', 'serverNodes', 'serverNodeDetail'];
 
 // ── Android wide (unfolded / tablet / landscape): rail everywhere once signed in ──
 for (const w of [700, 800, 850, 880, 1200, 1280]) {
@@ -34,6 +35,7 @@ for (const w of [360, 390, 392, 480, 600, 699]) {
   for (const s of ['chat', 'nodeInfo', 'nodeDetail', 'picker', 'wizard', 'taskDetail', 'logs']) {
     ck(`android @${w} leaf ${s} → none`, chrome('android', w, s) === 'none');
   }
+  ck(`android @${w} server (pushed from 设置) → none`, chrome('android', w, 'server') === 'none');
 }
 ck('threshold edge: 699.9 → bottomTabs, 700 → rail', chrome('android', 699.9) === 'bottomTabs' && chrome('android', 700) === 'rail');
 
