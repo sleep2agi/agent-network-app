@@ -336,4 +336,5 @@ registerTranslations({
   'detail.sumChecklist': ['{done}/{n} 检查项', '{done}/{n} checklist'],
   'detail.sumParticipants': ['{n} 参与人', '{n} participants'],
   'detail.sumIssues': ['{n} 个 Issue', '{n} issues'],
+  'detail.sumTags': ['{n} 个标签', '{n} tags'],
 });
