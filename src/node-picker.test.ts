@@ -38,12 +38,13 @@ const sessions: Session[] = [
   S('样例一', 'error', 'n4'),
   S('tm-alpha', 'idle', 'n6'), S('TM-beta', 'offline', 'n7'),
   // n5 / n8 / n9 没有会话 ⇒ 离线
-  S('孤儿会话', 'idle', 'nX'), // 有会话没注册的节点:不是合法目标
+  S('孤儿会话', 'idle', 'nX'), // 有会话没注册的节点:不是合法目标(列成不可指派的一行,见 node-picker-unassignable.test.ts)
 ];
-const items = pickerNodes(nodes, sessions);
+const items = pickerNodes(nodes, sessions).filter(i => i.assignable);
 
 // ① join ─────────────────────────────────────────────────────────────────────
-ck('join: one item per registered node (a session without a node is not a target)', items.length === nodes.length && !items.some(i => i.alias === '孤儿会话'));
+ck('join: one assignable item per registered node (a session without a node is not a target)', items.length === nodes.length && !items.some(i => i.alias === '孤儿会话'));
+ck('join: the unregistered online session is listed but not assignable', (() => { const o = pickerNodes(nodes, sessions).find(i => i.alias === '孤儿会话'); return !!o && !o.assignable && o.node_id === ''; })());
 const by = (a: string) => items.find(i => i.alias === a)!;
 ck('join: status by node_id', by('测试乙').status === 'working' && by('测试乙').online);
 ck('join: session without node_id falls back to alias', by('测试丙').status === 'idle' && by('测试丙').online);
@@ -161,8 +162,8 @@ const picker = strip(read('NodePicker.tsx'));
 const form = screen.slice(screen.indexOf('function ScheduleFormModal('), screen.indexOf('function Label('));
 ck('form: the chip wall is gone (no nodes.map in the form)', form.length > 0 && !/nodes\.map\(/.test(form) && !/nodeChoice/.test(screen));
 ck('form: 执行节点 is one NodePickerField row that opens the picker', /<Label text="执行节点"><NodePickerField node=\{chosen\} fallbackAlias=\{fallbackAlias\} onPress=\{\(\) => setPickerOpen\(true\)\} \/><\/Label>/.test(form));
-ck('form: picker gets the joined nodes, the selection, recents and pins', /<NodePickerSheet[\s\S]*?nodes=\{choices\}[\s\S]*?selectedId=\{target\}[\s\S]*?recents=\{recents\}[\s\S]*?pinned=\{pins\}/.test(form) && /const choices = useMemo\(\(\) => pickerNodes\(nodes, sessions\)/.test(form));
-ck('form: select ⇒ set target, remember as recent, close the sheet', /onSelect=\{n => \{ setTarget\(n\.node_id\); setRecents\(rememberScheduleTarget\(cfg, recents, n\.node_id\)\); setPickerOpen\(false\); \}\}/.test(form));
+ck('form: picker gets the joined nodes, the selection, recents and pins', /<NodePickerSheet[\s\S]*?nodes=\{choices\.nodes\}[\s\S]*?hiddenOffline=\{choices\.hiddenOffline\}[\s\S]*?selectedId=\{target\}[\s\S]*?recents=\{recents\}[\s\S]*?pinned=\{pins\}/.test(form) && /const choices = useMemo\(\(\) => pickerChoices\(nodes, sessions\)/.test(form));
+ck('form: select ⇒ set target, remember as recent, close the sheet', /onSelect=\{n => \{ if \(!n\.assignable\) return; setTarget\(n\.node_id\); setRecents\(rememberScheduleTarget\(cfg, recents, n\.node_id\)\); setPickerOpen\(false\); \}\}/.test(form));
 ck('form: the picker only shows while the form does', /visible=\{visible && pickerOpen\}/.test(form));
 ck('form: statuses + pins + recents are loaded when the form opens', /fetchStatus\(cfg\)/.test(form) && /loadChatPins\(cfg\)/.test(form) && /loadScheduleTargetRecents\(cfg\)/.test(form));
 // 2026-09-27:表单 / 改时间 / 意向记录共用 ScheduleModal —— 手机整屏 pageSheet(下面三条管它),
@@ -188,7 +189,7 @@ ck('picker: auto-focus only through pickerAutoFocus (the TextInput prop is that 
 ck('picker: phone sheet vs dialog decided by pickerPresentation', /const mode = pickerPresentation\(width\)/.test(picker));
 ck('picker: sheet height is PICKER_SHEET_RATIO of the window', /height: Math\.round\(height \* PICKER_SHEET_RATIO\)/.test(picker));
 ck('picker: selected row draws a ✓', /selected \? <Ionicons[^>]*name="checkmark"/.test(picker));
-ck('picker: offline rows are dimmed', /style=\{!st\.online \? s\.dim : null\}/.test(picker) && /dim: \{ opacity: 0\.45 \}/.test(picker));
+ck('picker: offline (and unassignable) rows are dimmed', /style=\{!st\.online \|\| !assignable \? s\.dim : null\}/.test(picker) && /dim: \{ opacity: 0\.45 \}/.test(picker));
 ck('picker: empty search shows emptySearchText', /emptySearchText\(deferred\)/.test(picker));
 ck('picker: backdrop tap closes it', /testID="node-picker-backdrop"[^>]*onPress=\{onClose\}/.test(picker));
 

@@ -20,10 +20,12 @@ import {
   countPickerRows,
   emptySearchText,
   fieldModel,
+  hiddenOfflineText,
   pickerAutoFocus,
   pickerDialogSize,
   pickerPresentation,
   PICKER_SHEET_RATIO,
+  searchPlaceholder,
   toggleFolded,
   type PickerNode,
   type PickerSection,
@@ -80,9 +82,11 @@ const coarsePointer = (): boolean => {
   try { return !!(globalThis as any).matchMedia?.('(pointer: coarse)')?.matches; } catch { return false; }
 };
 
-export default function NodePickerSheet({ visible, nodes, selectedId, recents, pinned, onSelect, onClose }: {
+export default function NodePickerSheet({ visible, nodes, hiddenOffline = 0, selectedId, recents, pinned, onSelect, onClose }: {
   visible: boolean;
   nodes: readonly PickerNode[];
+  /** 没有节点登记的离线会话数(不列,底部说一句)。 */
+  hiddenOffline?: number;
   selectedId: string;
   recents: readonly string[];
   pinned: readonly string[];
@@ -132,7 +136,8 @@ export default function NodePickerSheet({ visible, nodes, selectedId, recents, p
     },
   }), [dragY, onClose]);
 
-  const pick = useCallback((n: PickerNode) => { onSelect(n); }, [onSelect]);
+  // 不可指派的行不可点(Pressable 已 disabled;这里再挡一层,不把空 node_id 交给表单)。
+  const pick = useCallback((n: PickerNode) => { if (n.assignable) onSelect(n); }, [onSelect]);
 
   const renderHeader = ({ section }: { section: PickerSection }) => (
     <Pressable
@@ -152,23 +157,27 @@ export default function NodePickerSheet({ visible, nodes, selectedId, recents, p
 
   const renderRow = ({ item, section }: { item: PickerNode; section: PickerSection }) => {
     const st = rowStatus(item.status);
-    const selected = item.node_id === selectedId;
-    const id = `${section.key === 'recent:最近使用' ? 'recent' : 'row'}-${item.node_id}`;
+    const assignable = item.assignable;
+    // 不可指派的行 node_id 为 '',而没选时 selectedId 也是 '' —— 不先判 assignable 就会给它打 ✓。
+    const selected = assignable && item.node_id === selectedId;
+    const id = `${section.key === 'recent:最近使用' ? 'recent' : 'row'}-${assignable ? item.node_id : `unassignable-${item.alias}`}`;
     return (
       <Pressable
         testID={`picker-${id}`}
         accessibilityRole="button"
-        accessibilityState={{ selected }}
-        accessibilityLabel={`${item.alias}${st.online ? '' : ',离线'}${st.label ? `,${st.label}` : ''}`}
+        disabled={!assignable}
+        accessibilityState={{ selected, disabled: !assignable }}
+        accessibilityLabel={`${item.alias}${st.online ? '' : ',离线'}${st.label ? `,${st.label}` : ''}${item.reason ? `,${item.reason}` : ''}`}
         onPress={() => pick(item)}
-        style={({ pressed }) => [s.row, { backgroundColor: selected ? colors.rowActive : pressed ? colors.rowHover : 'transparent' }]}
+        style={({ pressed }) => [s.row, { backgroundColor: selected ? colors.rowActive : pressed && assignable ? colors.rowHover : 'transparent' }]}
       >
-        <View testID={`picker-${id}-avatar`} style={!st.online ? s.dim : null}><AliasAvatar alias={item.alias} size={AVATAR} /></View>
-        <Text dense testID={`picker-${id}-name`} numberOfLines={1} style={[s.name, { color: st.online ? colors.text : colors.textMuted }]}>{item.alias}</Text>
+        <View testID={`picker-${id}-avatar`} style={!st.online || !assignable ? s.dim : null}><AliasAvatar alias={item.alias} size={AVATAR} /></View>
+        <Text dense testID={`picker-${id}-name`} numberOfLines={1} style={[s.name, { color: st.online && assignable ? colors.text : colors.textMuted }]}>{item.alias}</Text>
         <View testID={`picker-${id}-dot`} style={[s.dot, { backgroundColor: colors[st.dot] }]} />
-        {st.label && st.labelTone ? <Text dense style={[s.label, { color: colors[st.labelTone] }]}>{st.label}</Text> : null}
+        {assignable && st.label && st.labelTone ? <Text dense style={[s.label, { color: colors[st.labelTone] }]}>{st.label}</Text> : null}
         <View style={s.flex} />
-        {item.runtime ? <Text dense numberOfLines={1} style={s.hint}>{item.runtime}</Text> : null}
+        {!assignable && item.reason ? <Text dense testID={`picker-${id}-reason`} numberOfLines={1} style={s.reason}>{item.reason}</Text>
+          : item.runtime ? <Text dense numberOfLines={1} style={s.hint}>{item.runtime}</Text> : null}
         <View style={s.check}>
           {selected ? <Ionicons testID={`picker-${id}-check`} name="checkmark" size={18} color={colors.accent} /> : null}
         </View>
@@ -208,7 +217,7 @@ export default function NodePickerSheet({ visible, nodes, selectedId, recents, p
           style={s.searchInput}
           value={query}
           onChangeText={setQuery}
-          placeholder={`搜索 ${nodes.length} 个节点(支持拼音)`}
+          placeholder={searchPlaceholder(nodes.length)}
           placeholderTextColor={colors.textMuted}
           autoCapitalize="none"
           autoCorrect={false}
@@ -223,7 +232,7 @@ export default function NodePickerSheet({ visible, nodes, selectedId, recents, p
       <SectionList
         testID="node-picker-list"
         sections={sections}
-        keyExtractor={(n, i) => `${n.node_id}:${i}`}
+        keyExtractor={(n, i) => `${n.node_id || `alias:${n.alias}`}:${i}`}
         renderSectionHeader={renderHeader}
         renderItem={renderRow}
         stickySectionHeadersEnabled={false}
@@ -239,6 +248,9 @@ export default function NodePickerSheet({ visible, nodes, selectedId, recents, p
           <View style={s.empty}><Text testID="node-picker-empty" style={s.emptyText}>{emptySearchText(deferred)}</Text></View>
         ) : nodes.length === 0 ? (
           <View style={s.empty}><Text style={s.emptyText}>还没有可用的节点</Text></View>
+        ) : null}
+        ListFooterComponent={!searching && hiddenOffline > 0 ? (
+          <Text dense testID="node-picker-hidden-offline" style={s.footer}>{hiddenOfflineText(hiddenOffline)}</Text>
         ) : null}
       />
     </Animated.View>
@@ -286,6 +298,9 @@ function makeStyles() {
     name: { flexShrink: 1, fontSize: fontSize.body, fontWeight: weight.medium },
     label: { fontSize: fontSize.small, fontWeight: weight.medium },
     hint: { flexShrink: 1, maxWidth: '35%', color: colors.textMuted, fontSize: fontSize.small },
+    // 原因比 runtime 长(一句话),给它更宽的一格;仍单行截断,不把行撑高。
+    reason: { flexShrink: 1, maxWidth: '60%', color: colors.textMuted, fontSize: fontSize.small },
+    footer: { paddingHorizontal: padX, paddingTop: spacing.md, color: colors.textMuted, fontSize: fontSize.small },
     check: { width: ds(CHECK), alignItems: 'center', justifyContent: 'center' },
     empty: { paddingVertical: 48, paddingHorizontal: padX, alignItems: 'center' },
     emptyText: { color: colors.textMuted, fontSize: fontSize.body },

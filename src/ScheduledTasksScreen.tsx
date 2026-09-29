@@ -34,7 +34,7 @@ import AliasAvatar from './AliasAvatar';
 import MacTitleStrip from './mac-title-strip';
 import WinTitleBar from './win-title-bar';
 import NodePickerSheet, { NodePickerField } from './NodePicker';
-import { pickerNodes } from './node-picker-model';
+import { pickerChoices } from './node-picker-model';
 import { useModalSafePadding } from './safe-area-runtime';
 import { pointerUi } from './pointer-ui';
 import { withBasePadding } from './modal-safe-area';
@@ -707,8 +707,8 @@ function ScheduleFormModal({ cfg, nodes, visible, editing, initialTarget, onClos
     loadScheduleTargetRecents(cfg).then(r => { if (live) setRecents(r); }).catch(() => {});
     return () => { live = false; };
   }, [visible, cfg]);
-  const choices = useMemo(() => pickerNodes(nodes, sessions), [nodes, sessions]);
-  const chosen = choices.find(n => n.node_id === target) ?? null;
+  const choices = useMemo(() => pickerChoices(nodes, sessions), [nodes, sessions]);
+  const chosen = choices.nodes.find(n => n.assignable && n.node_id === target) ?? null;
   const fallbackAlias = editing && editing.target_node_id === target ? editing.target_alias : null;
 
   useEffect(() => {
@@ -773,12 +773,13 @@ function ScheduleFormModal({ cfg, nodes, visible, editing, initialTarget, onClos
       </ScrollView>
       <NodePickerSheet
         visible={visible && pickerOpen}
-        nodes={choices}
+        nodes={choices.nodes}
+        hiddenOffline={choices.hiddenOffline}
         selectedId={target}
         recents={recents}
         pinned={pins}
         onClose={() => setPickerOpen(false)}
-        onSelect={n => { setTarget(n.node_id); setRecents(rememberScheduleTarget(cfg, recents, n.node_id)); setPickerOpen(false); }}
+        onSelect={n => { if (!n.assignable) return; setTarget(n.node_id); setRecents(rememberScheduleTarget(cfg, recents, n.node_id)); setPickerOpen(false); }}
       />
   </ScheduleModal>;
 }
