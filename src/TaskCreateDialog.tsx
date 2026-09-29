@@ -6,7 +6,8 @@ import { taskText } from './i18n-tasks';
 // 新建任务:桌面是居中的小对话框,手机是从底部升起的面板。字段:标题(自动聚焦)、负责人(头像选择器,
 // 复用 RequirementPeoplePicker —— 只存稳定身份 {kind,id})、优先级、预计完成。
 import { useState, type ReactNode } from 'react';
-import { KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { Modal, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import ModalKeyboardAvoider from './ModalKeyboardAvoider';
 import { Text, TextInput } from './ui-text';
 import { Ionicons } from './icons';
 import AliasAvatar from './AliasAvatar';
@@ -182,14 +183,16 @@ export default function TaskCreateDialog({ draft, sheet, twoRoles, parentName, p
     backgroundColor: colors.card,
     gap: spacing.lg,
     padding: spacing.xl,
+    // 弹窗规则(DialogFrame.tsx):面板高度有界,表单在能收缩的 ScrollView 里,按钮行钉在面板底上。
+    // 以前面板没有 maxHeight:短窗口 / 键盘弹起时「添加」掉出屏幕(sheet 则是标题和关闭钮顶出屏幕)。
     ...(sheet
-      ? { borderTopLeftRadius: BOARD_RADIUS.card, borderTopRightRadius: BOARD_RADIUS.card, paddingBottom: spacing.xl + safe.paddingBottom }
-      : { width: '100%' as const, maxWidth: 480, borderRadius: BOARD_RADIUS.card, borderWidth: themeMode() === 'dark' ? 1 : 0, borderColor: colors.border }),
+      ? { maxHeight: '92%' as const, borderTopLeftRadius: BOARD_RADIUS.card, borderTopRightRadius: BOARD_RADIUS.card, paddingBottom: spacing.xl + safe.paddingBottom }
+      : { width: '100%' as const, maxWidth: 480, maxHeight: '100%' as const, borderRadius: BOARD_RADIUS.card, borderWidth: themeMode() === 'dark' ? 1 : 0, borderColor: colors.border }),
     ...liftedShadow(),
   };
   return (
     <Modal visible transparent animationType={sheet ? 'slide' : 'fade'} onRequestClose={onClose}>
-      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }}>
+      <ModalKeyboardAvoider>
         <View style={[{ flex: 1, backgroundColor: 'rgba(0,0,0,0.4)' }, sheet ? { justifyContent: 'flex-end' } : [{ alignItems: 'center', justifyContent: 'center' }, withBasePadding(safe, spacing.lg)]]}>
           <Pressable accessibilityLabel={tr('tasks.copy.112')} onPress={onClose} style={StyleSheet.absoluteFill} testID="req-create-backdrop" />
           <View style={panel} accessibilityViewIsModal testID="req-create">
@@ -199,7 +202,7 @@ export default function TaskCreateDialog({ draft, sheet, twoRoles, parentName, p
                 <Ionicons name="close" size={18} color={colors.textSecondary} />
               </Pressable>
             </View>
-            <ScrollView keyboardShouldPersistTaps="handled" style={{ flexGrow: 0 }} contentContainerStyle={{ gap: spacing.lg }}>
+            <ScrollView keyboardShouldPersistTaps="handled" style={{ flexGrow: 0, flexShrink: 1 }} contentContainerStyle={{ gap: spacing.lg }} testID="req-create-body">
               {draft.parentId ? (
                 <View style={[f.row, { gap: 6 }]} testID="req-create-parent">
                   <Ionicons name="git-branch-outline" size={13} color={colors.textMuted} />
@@ -255,7 +258,7 @@ export default function TaskCreateDialog({ draft, sheet, twoRoles, parentName, p
             </View>
           </View>
         </View>
-      </KeyboardAvoidingView>
+      </ModalKeyboardAvoider>
     </Modal>
   );
 }

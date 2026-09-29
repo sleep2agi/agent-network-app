@@ -1,3 +1,4 @@
+import ModalKeyboardAvoider from './ModalKeyboardAvoider';
 import { t as tr } from './i18n';
 import { useTranslation } from './i18n-react';
 import { taskText } from './i18n-tasks';
@@ -62,6 +63,7 @@ function Picker({ networkId, mode, people: allPeople, selected, onConfirm, onClo
   }), [themeVersion]);
 
   return <Modal visible transparent animationType="fade" onRequestClose={onClose}>
+    <ModalKeyboardAvoider>
     <View style={[styles.backdrop, withBasePadding(safe, spacing.lg)]}>
       <View style={styles.panel} accessibilityViewIsModal>
         <Text style={styles.title}>{title || (mode === 'owner' ? tr('tasks.copy.65') : tr('tasks.copy.66'))}</Text>
@@ -85,5 +87,6 @@ function Picker({ networkId, mode, people: allPeople, selected, onConfirm, onClo
         </View>
       </View>
     </View>
+    </ModalKeyboardAvoider>
   </Modal>;
 }
