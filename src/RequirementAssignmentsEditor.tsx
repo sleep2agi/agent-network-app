@@ -8,8 +8,10 @@ import { personKey, type RequirementPerson, type RequirementPersonRef } from './
 import PeoplePicker from './RequirementPeoplePicker';
 import { colors, spacing } from './theme';
 
-export default function RequirementAssignmentsEditor({ cfg, item, onSaved }: {
+export default function RequirementAssignmentsEditor({ cfg, item, onSaved, fields = 'both' }: {
   cfg: HubConfig; item: Requirement; onSaved: (assignments: RequirementAssignments) => void;
+  /** 任务详情里负责人和标题 / 期限一起在草稿里改(「保存修改」),这里只管参与人。 */
+  fields?: 'both' | 'participants';
 }) {
   const supported = item.owner !== undefined && item.participants !== undefined;
   const [people, setPeople] = useState<RequirementPerson[]>([]);
@@ -53,13 +55,13 @@ export default function RequirementAssignmentsEditor({ cfg, item, onSaved }: {
   };
   if (!supported) return <Text testID="assignments-unsupported" style={{ color: colors.textMuted }}>升级 Hub 后可绑定人类或 Agent 负责人及参与人</Text>;
   return <View style={{ gap: spacing.sm }}>
-    <Text style={{ color: colors.text }}>负责人 · {item.owner ? label(item.owner) : '未分配'}</Text>
-    <Text style={{ color: colors.text }}>参与人 · {item.participants!.length ? item.participants!.map(label).join('、') : '暂无'}</Text>
+    {fields === 'both' ? <Text style={{ color: colors.text }}>负责人 · {item.owner ? label(item.owner) : '未分配'}</Text> : null}
+    <Text style={{ color: colors.text }}>{fields === 'both' ? '参与人 · ' : ''}{item.participants!.length ? item.participants!.map(label).join('、') : '暂无'}</Text>
     {loading ? <ActivityIndicator /> : null}
     {error ? <Text accessibilityRole="alert" style={{ color: colors.failed }}>{error}</Text> : null}
     {error ? <Pressable accessibilityRole="button" disabled={saving} onPress={() => setReload(n => n + 1)}><Text style={{ color: colors.accent }}>重新读取成员</Text></Pressable> : null}
     <View style={{ flexDirection: 'row', gap: spacing.md }}>
-      {(['owner', 'participants'] as const).map(value => <Pressable key={value} testID={`edit-${value}`} accessibilityRole="button" disabled={loading || saving || !!error} onPress={() => setMode(value)} style={{ minHeight: 44, justifyContent: 'center' }}><Text style={{ color: colors.accent }}>{value === 'owner' ? '更换负责人' : '编辑参与人'}</Text></Pressable>)}
+      {(fields === 'both' ? ['owner', 'participants'] as const : ['participants'] as const).map(value => <Pressable key={value} testID={`edit-${value}`} accessibilityRole="button" disabled={loading || saving || !!error} onPress={() => setMode(value)} style={{ minHeight: 44, justifyContent: 'center' }}><Text style={{ color: colors.accent }}>{value === 'owner' ? '更换负责人' : '编辑参与人'}</Text></Pressable>)}
     </View>
     {saving ? <Text accessibilityLiveRegion="polite" style={{ color: colors.textMuted }}>正在保存人员绑定…</Text> : null}
     {mode ? <PeoplePicker networkId={cfg.networkId || ''} mode={mode} people={people} selected={mode === 'owner' ? item.owner ? [item.owner] : [] : item.participants!} onClose={() => setMode(null)} onConfirm={selected => { void confirm(selected); }} /> : null}

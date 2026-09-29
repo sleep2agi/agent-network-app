@@ -1,238 +1,689 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, Modal, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+// 任务页(需求池):头部一行 + 看板 / 列表 + 新建对话框 + 详情(桌面右侧抽屉,手机推入一页)。
+//
+// Owner 2026-09-29(0.2.137 截图):「这个任务列表也他妈太难看了…你自己搞搞吧」—— 三个常驻的整行输入框、
+// 一行开发者说明、三列白框挤在左边右边一大片空、卡片上一个「查看详情」蓝字链接。现在参照 Linear / TickTick:
+//   · 头部:任务 · 列表/看板 · 负责人 / 优先级筛选 · ＋ 新建(新建是对话框 / 手机底部面板,不再常驻)
+//   · 看板:三列等分整个内容宽,列头名字 + 数目胶囊,列尾「＋ 添加」直接建在这一列
+//   · 卡片:标题(最多两行)+ 优先级点 · 负责人头像 · 期限胶囊(逾期红),整张可点
+//   · 换状态:桌面拖动(落点指示线)/ 右键菜单 / Shift+←→;手机长按菜单或详情里的状态,没有拖动
+// 数据仍是 Hub 的 requirements(GET / POST / PATCH),负责人只存稳定身份 {kind,id}(#484),assignee 永远空。
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { ActivityIndicator, Modal, Platform, Pressable, ScrollView, View } from 'react-native';
 import { Text, TextInput } from './ui-text';
+import { Ionicons } from './icons';
+import AliasAvatar from './AliasAvatar';
 import type { HubConfig } from './api';
-import {
-  REQ_COLUMN_LABEL,
-  REQ_COLUMNS,
-  REQ_PRIORITIES,
-  REQ_PRIORITY_LABEL,
-  columnsOf,
-  createRequirement,
-  type ReqColumn,
-  type ReqPriority,
-  type Requirement,
-} from './requirements-model';
+import { REQ_COLUMN_LABEL, REQ_COLUMNS, REQ_PRIORITIES, REQ_PRIORITY_LABEL, type ReqColumn, type Requirement } from './requirements-model';
 import { readRequirements, requirementsKey, writeRequirements } from './requirements-store';
-import { createRequirementOnHub, listRequirements, migrateLocalRequirements, moveRequirementOnHub, RequirementsHubError } from './requirements-hub';
-import { colors, radius, spacing } from './theme';
-import { useModalSafePadding } from './safe-area-runtime';
-import { withBasePadding } from './modal-safe-area';
-import RequirementAssignmentsEditor from './RequirementAssignmentsEditor';
+import { createRequirementOnHub, fetchMyUserId, listRequirements, migrateLocalRequirements, moveRequirementOnHub, RequirementsHubError, updateRequirementOnHub } from './requirements-hub';
 import { listRequirementPeople } from './requirement-people-api';
-import RequirementPeoplePicker from './RequirementPeoplePicker';
-import { personKey, type RequirementPerson, type RequirementPersonRef } from './requirement-people';
+import { personKey } from './requirement-people';
+import { colors, spacing } from './theme';
+import { pointerUi } from './pointer-ui';
+import { useModalSafePadding } from './safe-area-runtime';
+import { usePoll } from './usePoll';
+import {
+  applyFilter, applyMove, boardColumns, createInput, DEFAULT_SORT, DRAG_IDLE, dragReduce, dropIndex, emptyDraft,
+  filterActive, localToday, neighbourColumn, nextSort, ownerCounts, ownerLabel, revertMove, sortRows, toggleIn, UNASSIGNED,
+  type CreateDraft, type DragEvent, type DragState, type EditPatch, type SortKey, type SortSpec,
+} from './task-board-model';
+import { enterTaskScope, patchTaskBoard, setTaskFilter, setTaskSection, taskScopeKey, updateTaskItems, useTaskBoard, type TaskSection } from './task-board-store';
+import { CardMeta, Chip, DueChip, OwnerBadge, PriorityDot, Segmented, STATUS_TONE, useTaskStyles, type TaskStyles } from './TaskBoardParts';
+import TaskCreateDialog from './TaskCreateDialog';
+import TaskDetailPanel from './TaskDetailPanel';
+import TaskCardMenu, { type TaskMenuTarget } from './TaskCardMenu';
+import { setDraggingCursor, useTaskCardDom } from './task-board-dom';
 
-const NOTE = '存在 Hub 上，手机和电脑是同一份。';
 const UNSUPPORTED = '这个 Hub 还没有需求池。升级 Hub 之后，手机和电脑才能看到同一份。';
+/** 别的设备改了也要看得到;有未完成的写入时跳过这一轮(不拿旧数据盖掉乐观更新)。 */
+const POLL_MS = 15_000;
+/** 内容区窄于这个宽度:看板改成横向一列一屏,详情改成推入页。 */
+const NARROW = 700;
+const DRAWER_MIN = 860;
 
-export default function RequirementBoard({ cfg }: { cfg: HubConfig }) {
-  return <ScopedRequirementBoard key={JSON.stringify([cfg.serverUrl, cfg.token, cfg.networkId, cfg.profileId, cfg.username])} cfg={cfg} />;
+const moveErrorText = (e: unknown) => (e instanceof RequirementsHubError && e.status === 403 ? '你没有修改这条需求的权限' : '状态未保存，请重试');
+
+export default function RequirementBoard(props: { cfg: HubConfig; desktop?: boolean; dispatch?: ReactNode }) {
+  const { cfg } = props;
+  return <ScopedRequirementBoard key={taskScopeKey(cfg)} {...props} />;
 }
 
-function ScopedRequirementBoard({ cfg }: { cfg: HubConfig }) {
-  const safe = useModalSafePadding('overlay');
+function ScopedRequirementBoard({ cfg, desktop, dispatch }: { cfg: HubConfig; desktop?: boolean; dispatch?: ReactNode }) {
+  const s = useTaskStyles();
+  const scope = taskScopeKey(cfg);
+  useLayoutEffect(() => { enterTaskScope(scope); }, [scope]);
+  const mine = useTaskBoard(st => st.scope === scope);
+  const storeItems = useTaskBoard(st => st.items);
+  const storePeople = useTaskBoard(st => st.people);
+  const meId = useTaskBoard(st => (st.scope === scope ? st.meId : null));
+  const section = useTaskBoard(st => st.section);
+  const filter = useTaskBoard(st => st.filter);
+  const items = mine ? storeItems : [];
+  const people = mine ? storePeople : [];
+  const pointer = pointerUi(desktop);
   const localKey = requirementsKey(cfg.profileId || cfg.username || 'local');
-  const [items, setItems] = useState<Requirement[]>([]);
-  const [people, setPeople] = useState<RequirementPerson[]>([]);
-  const hasAssignments = items.some(item => item.owner !== undefined);
-  useEffect(() => {
-    if (!hasAssignments) return;
-    let dead = false;
-    listRequirementPeople(cfg).then(rows => { if (!dead) setPeople(rows); }).catch(() => {});
-    return () => { dead = true; };
-  }, [cfg.serverUrl, cfg.token, cfg.networkId, hasAssignments]);
-  const ownerLabel = (item: Requirement) => item.owner === undefined ? item.assignee || '未分配'
-    : item.owner ? `${people.find(person => personKey(person) === personKey(item.owner!))?.name || item.owner.id}（${item.owner.kind === 'user' ? '人类' : 'Agent'}）` : '未分配';
+
+  const [width, setWidth] = useState(0);
+  const narrow = width > 0 && width < NARROW;
+  const drawer = width >= DRAWER_MIN;
+  const [headerBottom, setHeaderBottom] = useState(0);
   const [phase, setPhase] = useState<'loading' | 'ready' | 'unsupported' | 'error'>('loading');
   const [hubError, setHubError] = useState('');
-  const [name, setName] = useState('');
-  const [owner, setOwner] = useState<RequirementPersonRef | null>(null);
+  const [reloadKey, setReloadKey] = useState(0);
   const [peopleLoading, setPeopleLoading] = useState(false);
   const [peopleError, setPeopleError] = useState('');
-  const [pickerOpen, setPickerOpen] = useState(false);
-  const [due, setDue] = useState('');
-  const [priority, setPriority] = useState<ReqPriority>('normal');
-  const [error, setError] = useState('');
-  const [reloadKey, setReloadKey] = useState(0);
+  const [draft, setDraft] = useState<CreateDraft | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [moving, setMoving] = useState(false);
-  const movePending = useRef(false);
-  const [moveError, setMoveError] = useState<{ id: string; message: string } | null>(null);
-  const selected = items.find(item => item.id === selectedId);
-  const styles = useMemo(() => StyleSheet.create({
-    root: { flex: 1 },
-    note: { color: colors.textMuted, fontSize: 12, paddingHorizontal: spacing.lg, paddingBottom: spacing.sm },
-    form: { paddingHorizontal: spacing.lg, gap: spacing.sm },
-    input: { borderWidth: 1, borderColor: colors.border, borderRadius: radius.sm, paddingHorizontal: spacing.md, paddingVertical: spacing.sm, color: colors.text, fontSize: 14 },
-    chips: { flexDirection: 'row', gap: spacing.sm, alignItems: 'center' },
-    chip: { paddingHorizontal: spacing.md, paddingVertical: spacing.xs + 2, borderRadius: radius.sm },
-    chipOn: { backgroundColor: colors.rowActive },
-    chipText: { color: colors.textSecondary, fontSize: 12 },
-    chipTextOn: { color: colors.text, fontWeight: '600' },
-    addText: { color: colors.accent, fontSize: 14, fontWeight: '600' },
-    err: { color: colors.failed, fontSize: 12, paddingHorizontal: spacing.lg, paddingTop: spacing.xs },
-    row: { flexDirection: 'row', alignItems: 'flex-start', padding: spacing.md, gap: spacing.md },
-    col: { width: 260, backgroundColor: colors.card, borderRadius: radius.md, padding: spacing.sm },
-    head: { flexDirection: 'row', justifyContent: 'space-between', padding: spacing.sm },
-    headText: { color: colors.text, fontSize: 13, fontWeight: '600' },
-    count: { color: colors.textMuted, fontSize: 12 },
-    card: { padding: spacing.sm, borderRadius: radius.sm, marginBottom: spacing.sm, backgroundColor: colors.bg, gap: 4 },
-    title: { color: colors.text, fontSize: 14, fontWeight: '600' },
-    meta: { color: colors.textMuted, fontSize: 12 },
-    empty: { color: colors.textMuted, fontSize: 12, padding: spacing.sm },
-    overlay: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: spacing.lg, backgroundColor: 'rgba(0,0,0,0.45)' },
-    detail: { width: '100%', maxWidth: 560, maxHeight: '90%', backgroundColor: colors.card, borderRadius: radius.md, padding: spacing.lg, gap: spacing.md },
-    detailTitle: { color: colors.text, fontSize: 22, fontWeight: '600' },
-    detailBody: { gap: spacing.md, paddingVertical: spacing.sm },
-    actions: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
-    action: { minHeight: 44, justifyContent: 'center', paddingHorizontal: spacing.md, borderRadius: radius.sm, borderWidth: 1, borderColor: colors.border },
-    disabled: { opacity: 0.5 },
-  }), []);
+  const [movingIds, setMovingIds] = useState<string[]>([]);
+  const [moveErrors, setMoveErrors] = useState<Record<string, string>>({});
+  const [banner, setBanner] = useState('');
+  const [menu, setMenu] = useState<TaskMenuTarget | null>(null);
+  const [sort, setSort] = useState<SortSpec>(DEFAULT_SORT);
+  const [filterMenu, setFilterMenu] = useState<{ kind: 'owner' | 'priority'; x: number; y: number } | null>(null);
+  const [quickAdd, setQuickAdd] = useState<{ column: ReqColumn; name: string } | null>(null);
+  const [announce, setAnnounce] = useState('');
+  const pendingMoves = useRef(new Set<string>());
+  const mutations = useRef(0);
+  const inFlight = useRef(0);
+  const today = localToday();
+  const selected = items.find(item => item.id === selectedId) || null;
 
+  // ── 读 Hub ──
   useEffect(() => {
     let dead = false;
     setPhase('loading');
     (async () => {
       try {
-        await migrateLocalRequirements(
-          cfg,
-          () => readRequirements(localKey),
-          (items) => writeRequirements(localKey, items),
-        );
+        await migrateLocalRequirements(cfg, () => readRequirements(localKey), rows => writeRequirements(localKey, rows));
         const list = await listRequirements(cfg);
-        if (!dead) { setItems(list); setPhase('ready'); setHubError(''); }
+        if (dead) return;
+        patchTaskBoard(scope, { items: list, loaded: true });
+        setPhase('ready');
+        setHubError('');
       } catch (e) {
         if (dead) return;
-        if (e instanceof RequirementsHubError && e.status === 404) {
-          setPhase('unsupported');
-          return;
-        }
+        if (e instanceof RequirementsHubError && e.status === 404) { setPhase('unsupported'); return; }
         setPhase('error');
         setHubError(e instanceof Error ? e.message : '需求池打不开');
       }
     })();
+    void fetchMyUserId(cfg).then(id => { if (!dead) patchTaskBoard(scope, { meId: id }); });
     return () => { dead = true; };
-  }, [cfg.serverUrl, cfg.token, cfg.networkId, localKey, reloadKey]);
+  }, [cfg.serverUrl, cfg.token, cfg.networkId, localKey, reloadKey, scope]);
 
-  const openOwnerPicker = async () => {
-    if (peopleLoading) return;
+  // 有卡片带稳定负责人时读一次成员(卡片上的名字 / 头像、筛选里的人都从这里来)。
+  const hasOwners = items.some(item => item.owner);
+  useEffect(() => {
+    if (!hasOwners || !cfg.networkId) return;
+    let dead = false;
+    listRequirementPeople(cfg).then(rows => { if (!dead) patchTaskBoard(scope, { people: rows }); }).catch(() => {});
+    return () => { dead = true; };
+  }, [cfg.serverUrl, cfg.token, cfg.networkId, hasOwners, scope]);
+
+  const refresh = useCallback(async () => {
+    if (phase !== 'ready' || inFlight.current > 0 || drag.current.phase !== 'idle') return;
+    const gen = mutations.current;
+    try {
+      const list = await listRequirements(cfg);
+      if (gen === mutations.current && inFlight.current === 0) patchTaskBoard(scope, { items: list });
+    } catch { /* 下一轮再试;看板保留上次的 */ }
+  }, [cfg, phase, scope]);
+  usePoll(refresh, POLL_MS, [refresh]);
+
+  const loadPeople = async (): Promise<boolean> => {
+    if (peopleLoading) return false;
     setPeopleLoading(true);
     setPeopleError('');
     try {
-      setPeople(await listRequirementPeople(cfg));
-      setPickerOpen(true);
+      patchTaskBoard(scope, { people: await listRequirementPeople(cfg) });
+      return true;
     } catch (e) {
       setPeopleError(e instanceof Error ? e.message : '人员列表加载失败，请重试');
+      return false;
     } finally {
       setPeopleLoading(false);
     }
   };
 
-  const add = async () => {
-    const item = createRequirement({ name, priority, assignee: '', due });
-    if (!item) { setError(name.trim() ? '预计完成要写成 2026-10-01，或留空' : '先写需求'); return; }
-    setError('');
-    try {
-      const created = await createRequirementOnHub(cfg, { name: item.name, priority: item.priority, assignee: '', due: item.due, owner: owner || undefined });
-      setName(''); setDue('');
-      setItems(prev => [created, ...prev.filter(row => row.id !== created.id)]);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : '没有存到 Hub');
-    }
+  // ── 写 Hub ──
+  const track = async <T,>(fn: () => Promise<T>): Promise<T> => {
+    mutations.current += 1;
+    inFlight.current += 1;
+    try { return await fn(); } finally { inFlight.current -= 1; }
   };
-  const move = async (item: Requirement, column: ReqColumn) => {
-    if (movePending.current || item.column === column) return;
-    movePending.current = true;
-    setMoving(true);
-    setMoveError(null);
-    try {
-      const updated = await moveRequirementOnHub(cfg, item.id, column);
-      setItems(prev => prev.map(row => row.id === item.id ? updated : row));
-    } catch (e) {
-      setMoveError({ id: item.id, message: e instanceof RequirementsHubError && e.status === 403 ? '你没有修改这条需求的权限' : '状态未保存，请重试' });
-    } finally {
-      movePending.current = false;
-      setMoving(false);
-    }
-  };
-  const columns = columnsOf(items);
 
-  return (
-    <View style={styles.root} testID="requirement-board">
-      <Text style={styles.note}>{phase === 'unsupported' ? UNSUPPORTED : NOTE}</Text>
-      {phase === 'loading' ? <ActivityIndicator color={colors.accent} /> : null}
-      {phase === 'error' ? (
-        <Pressable onPress={() => setReloadKey(n => n + 1)} testID="req-retry">
-          <Text style={styles.err}>{hubError}，点此重试</Text>
+  const move = async (id: string, to: ReqColumn) => {
+    const item = items.find(row => row.id === id);
+    if (!item || item.column === to || pendingMoves.current.has(id)) return;
+    const from = item.column;
+    pendingMoves.current.add(id);
+    setMovingIds(ids => [...ids, id]);
+    setMoveErrors(({ [id]: _, ...rest }) => rest);
+    updateTaskItems(scope, rows => applyMove(rows, id, to));
+    setAnnounce(`「${item.name}」已移到${REQ_COLUMN_LABEL[to]}`);
+    try {
+      const updated = await track(() => moveRequirementOnHub(cfg, id, to));
+      updateTaskItems(scope, rows => rows.map(row => (row.id === id ? updated : row)));
+    } catch (e) {
+      updateTaskItems(scope, rows => revertMove(rows, id, from, to));
+      const message = moveErrorText(e);
+      setMoveErrors(prev => ({ ...prev, [id]: message }));
+      setBanner(`「${item.name}」${message}`);
+    } finally {
+      pendingMoves.current.delete(id);
+      setMovingIds(ids => ids.filter(x => x !== id));
+    }
+  };
+
+  const create = async (d: CreateDraft): Promise<string | null> => {
+    const input = createInput(d);
+    if (!input) return '先写任务标题';
+    try {
+      const created = await track(() => createRequirementOnHub(cfg, input));
+      updateTaskItems(scope, rows => [created, ...rows.filter(row => row.id !== created.id)]);
+      setAnnounce(`已新建「${created.name}」`);
+      return null;
+    } catch (e) {
+      return e instanceof Error ? e.message : '没有存到 Hub';
+    }
+  };
+
+  const saveEdit = async (id: string, patch: EditPatch): Promise<string | null> => {
+    try {
+      const updated = await track(() => updateRequirementOnHub(cfg, id, patch));
+      updateTaskItems(scope, rows => rows.map(row => (row.id === id ? updated : row)));
+      return null;
+    } catch (e) {
+      return e instanceof Error ? e.message : '修改没有保存，请重试';
+    }
+  };
+
+  // 新建时带上当前筛选:在「我负责的」/ 某个节点下建,负责人默认就是它;只筛了一个优先级也带上。
+  const draftFor = (column: ReqColumn): CreateDraft => {
+    const d = emptyDraft(column);
+    const only = filter.owners.length === 1 ? filter.owners[0] : null;
+    if (only && only !== UNASSIGNED) {
+      const [kind, ...rest] = only.split(':');
+      if (kind === 'user' || kind === 'node') d.owner = { kind, id: rest.join(':') };
+    }
+    if (filter.priorities.length === 1) d.priority = filter.priorities[0];
+    return d;
+  };
+
+  // ── 拖动(只在桌面)──
+  const drag = useRef<DragState>(DRAG_IDLE);
+  const [dragView, setDragView] = useState<DragState>(DRAG_IDLE);
+  const grab = useRef({ dx: 0, dy: 0, w: 240 });
+  const swallow = useRef(false);
+  const onDrag = (ev: DragEvent, g?: { dx: number; dy: number; w: number }) => {
+    if (g) grab.current = g;
+    const before = drag.current;
+    const step = dragReduce(before, ev);
+    drag.current = step.state;
+    if (step.swallowClick) { swallow.current = true; setTimeout(() => { swallow.current = false; }, 0); }
+    if (step.state.phase === 'dragging' || before.phase === 'dragging') setDragView(step.state);
+    if ((step.state.phase === 'dragging') !== (before.phase === 'dragging')) setDraggingCursor(step.state.phase === 'dragging');
+    if (step.commit) void move(step.commit.id, step.commit.to);
+  };
+  useEffect(() => () => setDraggingCursor(false), []);
+  const focusCard = (id: string) => setTimeout(() => {
+    const el = (globalThis as { document?: any }).document?.querySelector?.(`[data-task-card="${id}"]`);
+    el?.focus?.();
+  }, 30);
+  useTaskCardDom(pointer && phase === 'ready' && section !== 'dispatch' && !selectedId && !draft && !menu, {
+    onDrag,
+    dragging: () => drag.current.phase === 'dragging',
+    onContextMenu: (id, x, y) => {
+      const item = items.find(row => row.id === id);
+      if (item) setMenu({ id, title: item.name, column: item.column, x, y });
+    },
+    onKeyMove: (id, dir) => {
+      const item = items.find(row => row.id === id);
+      const to = item && neighbourColumn(item.column, dir);
+      if (item && to) { void move(id, to); focusCard(id); }
+    },
+  });
+
+  const openDetail = (id: string) => { if (!swallow.current) setSelectedId(id); };
+  const openMenuAt = (item: Requirement, x: number, y: number) => setMenu({ id: item.id, title: item.name, column: item.column, x, y });
+
+  // ── 视图 ──
+  const visible = useMemo(() => applyFilter(items, filter), [items, filter]);
+  const columns = useMemo(() => boardColumns(items, filter), [items, filter]);
+  const owners = useMemo(() => ownerCounts(items, people), [items, people]);
+  const draggingItem = dragView.phase === 'dragging' ? items.find(row => row.id === dragView.id) || null : null;
+
+  const sections: { key: TaskSection; label: string }[] = [
+    { key: 'list', label: '列表' },
+    { key: 'board', label: '看板' },
+    // 桌面的派发记录在左栏(TaskFilterSidebar);手机 / 双栏没有左栏,放在分段里。
+    ...(desktop ? [] : [{ key: 'dispatch' as const, label: '派发记录' }]),
+  ];
+  const ownerChipLabel = filter.owners.length === 0 ? '负责人'
+    : filter.owners.length === 1 ? (owners.find(o => o.key === filter.owners[0])?.name || (filter.owners[0] === UNASSIGNED ? '未分配' : '负责人'))
+      : `负责人 · ${filter.owners.length}`;
+  const priorityChipLabel = filter.priorities.length === 0 ? '优先级' : filter.priorities.map(p => REQ_PRIORITY_LABEL[p]).join('、');
+  const chipRefs = useRef<Record<string, any>>({});
+  const openFilter = (kind: 'owner' | 'priority') => {
+    const el = chipRefs.current[kind];
+    const done = (x: number, y: number, h: number) => setFilterMenu({ kind, x, y: y + h + 4 });
+    if (el?.measureInWindow) el.measureInWindow((x: number, y: number, _w: number, h: number) => done(x, y, h));
+    else done(spacing.xl, 64, 0);
+  };
+  const filters = section === 'dispatch' ? null : (
+    <>
+      <View ref={(r: any) => { chipRefs.current.owner = r; }} collapsable={false}>
+        <Chip
+          s={s}
+          label={ownerChipLabel}
+          on={filter.owners.length > 0}
+          onPress={() => openFilter('owner')}
+          testID="task-filter-owner"
+          accessibilityLabel={`按负责人筛选，当前：${filter.owners.length ? ownerChipLabel : '全部'}`}
+          leading={filter.owners.length ? <AvatarStack keys={filter.owners} owners={owners} /> : <Ionicons name="people-outline" size={14} color={colors.textMuted} />}
+        />
+      </View>
+      <View ref={(r: any) => { chipRefs.current.priority = r; }} collapsable={false}>
+        <Chip
+          s={s}
+          label={priorityChipLabel}
+          on={filter.priorities.length > 0}
+          onPress={() => openFilter('priority')}
+          testID="task-filter-priority"
+          accessibilityLabel={`按优先级筛选，当前：${filter.priorities.length ? priorityChipLabel : '全部'}`}
+          leading={filter.priorities.length === 1 ? <PriorityDot p={filter.priorities[0]} s={s} /> : <Ionicons name="flag-outline" size={14} color={colors.textMuted} />}
+        />
+      </View>
+      {filterActive(filter) ? (
+        <Pressable accessibilityRole="button" onPress={() => setTaskFilter({ owners: [], priorities: [] })} style={[s.iconButton, { width: undefined, paddingHorizontal: spacing.sm }]} testID="task-filter-clear">
+          <Text style={s.link}>清除筛选</Text>
         </Pressable>
       ) : null}
-      {phase === 'ready' ? (
-        <View style={styles.form}>
-          <TextInput value={name} onChangeText={setName} placeholder="新建一条需求" placeholderTextColor={colors.textMuted} style={styles.input} testID="req-name" />
-          <Pressable testID="req-assignee" accessibilityRole="button" disabled={peopleLoading} onPress={() => { void openOwnerPicker(); }} style={styles.input}>
-            <Text style={owner ? styles.title : styles.meta}>{peopleLoading ? '加载人员…' : owner ? `${people.find(person => personKey(person) === personKey(owner))?.name || owner.id}（${owner.kind === 'user' ? '人类' : 'Agent'}）` : '选择负责人（人类或 Agent），可空'}</Text>
-          </Pressable>
-          {peopleError ? <Text style={styles.err} testID="req-people-error">{peopleError}，点负责人重试</Text> : null}
-          {pickerOpen ? <RequirementPeoplePicker networkId={cfg.networkId || ''} mode="owner" people={people} selected={owner ? [owner] : []} onClose={() => setPickerOpen(false)} onConfirm={selected => { setOwner(selected[0] || null); setPickerOpen(false); }} /> : null}
-          <TextInput value={due} onChangeText={setDue} placeholder="预计完成，如 2026-10-01，可空" placeholderTextColor={colors.textMuted} style={styles.input} testID="req-due" />
-          <View style={styles.chips}>
-            {REQ_PRIORITIES.map(p => (
-              <Pressable key={p} onPress={() => setPriority(p)} style={[styles.chip, priority === p && styles.chipOn]} testID={`req-priority-${p}`}>
-                <Text style={[styles.chipText, priority === p && styles.chipTextOn]}>{REQ_PRIORITY_LABEL[p]}</Text>
-              </Pressable>
-            ))}
-            <Pressable onPress={() => { void add(); }} testID="req-add"><Text style={styles.addText}>添加</Text></Pressable>
-          </View>
-        </View>
+    </>
+  );
+  const newButton = section === 'dispatch' ? null : narrow ? (
+    <Pressable accessibilityRole="button" accessibilityLabel="新建任务" onPress={() => setDraft(draftFor('pool'))} style={[s.primary, { width: 32, paddingHorizontal: 0, justifyContent: 'center' }]} testID="req-new">
+      <Ionicons name="add" size={20} color={colors.onAccent} />
+    </Pressable>
+  ) : (
+    <Pressable accessibilityRole="button" accessibilityLabel="新建任务" onPress={() => setDraft(draftFor('pool'))} style={s.primary} testID="req-new">
+      <Ionicons name="add" size={16} color={colors.onAccent} />
+      <Text style={s.primaryText}>新建</Text>
+    </Pressable>
+  );
+
+  const header = narrow ? (
+    <View onLayout={e => setHeaderBottom(e.nativeEvent.layout.y + e.nativeEvent.layout.height)}>
+      <View style={[s.header, s.headerPhone]} testID="task-header">
+        <Text style={s.pageTitle} accessibilityRole="header">任务</Text>
+        <View style={s.spacer} />
+        {newButton}
+      </View>
+      <View style={{ paddingHorizontal: spacing.lg, paddingBottom: spacing.sm }}>
+        <Segmented s={s} items={sections} value={section} onChange={setTaskSection} testID="tasks-view" />
+      </View>
+      {filters ? (
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={s.filterRowPhone} contentContainerStyle={s.filterRowPhoneContent}>{filters}</ScrollView>
       ) : null}
-      {error ? <Text style={styles.err} testID="req-error">{error}</Text> : null}
-      {phase === 'ready' ? (
-        <ScrollView horizontal contentContainerStyle={styles.row}>
-          {columns.map(col => (
-            <View key={col.column} style={styles.col} testID={`req-col-${col.column}`}>
-              <View style={styles.head}>
-                <Text style={styles.headText}>{REQ_COLUMN_LABEL[col.column]}</Text>
-                <Text style={styles.count}>{col.items.length}</Text>
+    </View>
+  ) : (
+    <View style={s.header} testID="task-header" onLayout={e => setHeaderBottom(e.nativeEvent.layout.y + e.nativeEvent.layout.height)}>
+      <Text style={s.pageTitle} accessibilityRole="header">任务</Text>
+      <Segmented s={s} items={sections} value={section} onChange={setTaskSection} testID="tasks-view" />
+      {filters}
+      <View style={s.spacer} />
+      {newButton}
+    </View>
+  );
+
+  // 桌面三列的列宽(内容宽 - 两侧 24 - 两个 16 的间隙)/ 3;窄于 260 时卡片上的负责人只显示头像。
+  const compactCards = !narrow && width > 0 && (width - spacing.xl * 2 - spacing.lg * 2) / 3 < 260;
+  const card = (item: Requirement) => {
+    const isDragged = draggingItem?.id === item.id;
+    return (
+      <Pressable
+        key={item.id}
+        testID={`req-card-${item.id}`}
+        accessibilityRole="button"
+        accessibilityLabel={`${item.name}，${REQ_PRIORITY_LABEL[item.priority]}优先级，${ownerLabel(item, people)}`}
+        accessibilityHint={pointer ? '回车打开详情，Shift 加左右方向键换列' : '打开详情'}
+        onPress={() => openDetail(item.id)}
+        onLongPress={pointer ? undefined : e => openMenuAt(item, e.nativeEvent.pageX, e.nativeEvent.pageY)}
+        delayLongPress={350}
+        style={state => [s.card, ((state as { hovered?: boolean }).hovered || state.pressed) && s.cardHover, isDragged && s.cardDragging, pointer && ({ cursor: 'grab' } as object)]}
+        {...({ dataSet: { taskCard: item.id, taskFrom: item.column } } as object)}
+      >
+        <Text style={[s.cardTitle, item.column === 'done' && s.cardDone]} numberOfLines={2}>{item.name}</Text>
+        <CardMeta item={item} people={people} today={today} s={s} compact={compactCards} />
+        {moveErrors[item.id] ? <Text style={s.err} numberOfLines={1}>{moveErrors[item.id]}</Text> : null}
+      </Pressable>
+    );
+  };
+
+  const kanban = () => {
+    const over = dragView.phase === 'dragging' && dragView.over !== dragView.from ? dragView.over : null;
+    const colWidth = narrow ? Math.max(260, width - spacing.lg * 2 - 28) : undefined;
+    const renderColumn = (col: (typeof columns)[number]) => {
+      const isOver = over === col.column;
+      const at = isOver && draggingItem ? dropIndex(col.items, draggingItem, col.column) : -1;
+      const quick = quickAdd?.column === col.column ? quickAdd : null;
+      return (
+        <View
+          key={col.column}
+          style={[s.column, isOver && s.columnOver, colWidth ? { flexGrow: 0, flexShrink: 0, flexBasis: 'auto', width: colWidth } : null]}
+          testID={`req-col-${col.column}`}
+          {...({ dataSet: { taskColumn: col.column } } as object)}
+        >
+          <View style={s.columnHead}>
+            <View style={[s.columnDot, { backgroundColor: STATUS_TONE[col.column]() }]} />
+            <Text style={s.columnName}>{REQ_COLUMN_LABEL[col.column]}</Text>
+            <View style={s.countPill} testID={`req-count-${col.column}`}><Text style={s.countText}>{col.items.length}</Text></View>
+          </View>
+          <ScrollView style={s.columnBody} contentContainerStyle={s.columnBodyContent}>
+            {col.items.length === 0 && at < 0 ? (
+              <View style={s.columnEmpty} testID={`req-empty-${col.column}`}>
+                <Text style={s.columnEmptyText}>{pointer ? '拖到这里' : filterActive(filter) ? '没有符合筛选的任务' : '暂无'}</Text>
               </View>
-              {col.items.length === 0 ? <Text style={styles.empty}>没有</Text> : null}
-              {col.items.map(item => (
-                <Pressable key={item.id} style={styles.card} accessibilityRole="button" accessibilityLabel={`查看需求：${item.name}`} testID={`req-card-${item.id}`} onPress={() => { setSelectedId(item.id); }}>
-                  <Text style={styles.title}>{item.name}</Text>
-                  <Text style={styles.meta}>{REQ_PRIORITY_LABEL[item.priority]} · {ownerLabel(item)} · {item.due || '未定期限'}</Text>
-                  <Text style={styles.addText}>查看详情</Text>
-                </Pressable>
-              ))}
+            ) : null}
+            {col.items.map((item, i) => (
+              <View key={item.id}>
+                {i === at ? <View style={[s.dropLine, { marginBottom: spacing.sm }]} testID="req-drop-indicator" /> : null}
+                {card(item)}
+              </View>
+            ))}
+            {at >= 0 && at >= col.items.length ? <View style={s.dropLine} testID="req-drop-indicator" /> : null}
+          </ScrollView>
+          {quick ? (
+            <TextInput
+              autoFocus
+              value={quick.name}
+              onChangeText={name => setQuickAdd({ column: col.column, name })}
+              onSubmitEditing={() => {
+                const name = quick.name.trim();
+                if (!name) { setQuickAdd(null); return; }
+                const d = { ...draftFor(col.column), name };
+                setQuickAdd({ column: col.column, name: '' });
+                void create(d).then(failed => { if (failed) { setBanner(failed); setQuickAdd({ column: col.column, name }); } });
+              }}
+              onBlur={() => { if (!quick.name.trim()) setQuickAdd(null); }}
+              onKeyPress={e => { if ((e.nativeEvent as { key?: string }).key === 'Escape') setQuickAdd(null); }}
+              placeholder="输入标题，回车添加"
+              placeholderTextColor={colors.textMuted}
+              style={s.quickAddInput}
+              testID={`req-quick-input-${col.column}`}
+              accessibilityLabel={`在${REQ_COLUMN_LABEL[col.column]}添加任务`}
+            />
+          ) : (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={`在${REQ_COLUMN_LABEL[col.column]}添加任务`}
+              onPress={() => (pointer && !narrow ? setQuickAdd({ column: col.column, name: '' }) : setDraft(draftFor(col.column)))}
+              style={state => [s.quickAdd, ((state as { hovered?: boolean }).hovered || state.pressed) && { backgroundColor: colors.rowHover }]}
+              testID={`req-quick-add-${col.column}`}
+            >
+              <Ionicons name="add" size={16} color={colors.textSecondary} />
+              <Text style={s.quickAddText}>添加</Text>
+            </Pressable>
+          )}
+        </View>
+      );
+    };
+    if (narrow) {
+      return (
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          snapToInterval={(colWidth || 0) + spacing.md}
+          decelerationRate="fast"
+          style={{ flex: 1 }}
+          contentContainerStyle={[s.board, s.boardNarrow, { flexGrow: 0, flexShrink: 0, flexBasis: 'auto' }]}
+          testID="req-board"
+        >
+          {columns.map(renderColumn)}
+        </ScrollView>
+      );
+    }
+    return <View style={s.board} testID="req-board">{columns.map(renderColumn)}</View>;
+  };
+
+  const list = () => {
+    if (narrow || !pointer && width < DRAWER_MIN) {
+      // 手机:按状态分组的列表。
+      return (
+        <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: spacing.xl }} testID="req-list">
+          {columns.map(col => (
+            <View key={col.column} testID={`req-group-${col.column}`}>
+              <View style={s.groupHead}>
+                <View style={[s.columnDot, { backgroundColor: STATUS_TONE[col.column]() }]} />
+                <Text style={s.columnName}>{REQ_COLUMN_LABEL[col.column]}</Text>
+                <View style={s.countPill}><Text style={s.countText}>{col.items.length}</Text></View>
+              </View>
+              {col.items.length ? (
+                <View style={s.groupList}>
+                  {col.items.map((item, i) => (
+                    <Pressable
+                      key={item.id}
+                      testID={`req-row-${item.id}`}
+                      accessibilityRole="button"
+                      accessibilityLabel={item.name}
+                      onPress={() => openDetail(item.id)}
+                      onLongPress={pointer ? undefined : e => openMenuAt(item, e.nativeEvent.pageX, e.nativeEvent.pageY)}
+                      style={state => [s.phoneRow, i === col.items.length - 1 && { borderBottomWidth: 0 }, state.pressed && { backgroundColor: colors.rowHover }]}
+                    >
+                      <Text style={[s.cardTitle, item.column === 'done' && s.cardDone]} numberOfLines={2}>{item.name}</Text>
+                      <CardMeta item={item} people={people} today={today} s={s} />
+                    </Pressable>
+                  ))}
+                </View>
+              ) : <Text style={[s.muted, { paddingHorizontal: spacing.lg + spacing.xs }]}>暂无</Text>}
             </View>
           ))}
         </ScrollView>
-      ) : null}
-      <Modal visible={!!selected} transparent animationType="fade" onRequestClose={() => setSelectedId(null)}>
-        <View style={[styles.overlay, withBasePadding(safe, spacing.lg)]}>
-          {selected ? <View style={styles.detail} accessibilityViewIsModal testID="req-detail">
-            <View style={styles.head}>
-              <Text style={styles.headText}>需求详情</Text>
-              <Pressable accessibilityRole="button" accessibilityLabel="关闭需求详情" style={styles.action} onPress={() => setSelectedId(null)} testID="req-detail-close"><Text style={styles.addText}>关闭</Text></Pressable>
-            </View>
-            <ScrollView contentContainerStyle={styles.detailBody}>
-              <Text style={styles.detailTitle}>{selected.name}</Text>
-              <Text style={styles.meta}>状态 · {REQ_COLUMN_LABEL[selected.column]}</Text>
-              {selected.owner === undefined ? <Text style={styles.meta}>负责人 · {selected.assignee || '未分配'}</Text> : null}
-              <RequirementAssignmentsEditor key={selected.id} cfg={cfg} item={selected} onSaved={assignments => setItems(prev => prev.map(row => row.id === selected.id ? { ...row, ...assignments } : row))} />
-              <Text style={styles.meta}>优先级 · {REQ_PRIORITY_LABEL[selected.priority]}</Text>
-              <Text style={styles.meta}>预计完成 · {selected.due || '未定期限'}</Text>
-              <Text style={styles.headText}>更改状态</Text>
-              <View style={styles.actions}>
-                {REQ_COLUMNS.map(column => <Pressable key={column} accessibilityRole="button" accessibilityState={{ disabled: moving || column === selected.column, selected: column === selected.column }} disabled={moving || column === selected.column} style={[styles.action, column === selected.column && styles.chipOn, moving && styles.disabled]} testID={`req-move-${column}`} onPress={() => { void move(selected, column); }}>
-                  <Text style={styles.addText}>{column === selected.column ? `当前：${REQ_COLUMN_LABEL[column]}` : `移到${REQ_COLUMN_LABEL[column]}`}</Text>
-                </Pressable>)}
-              </View>
-              {moving ? <Text style={styles.meta} accessibilityLiveRegion="polite">正在保存状态…</Text> : null}
-              {moveError?.id === selected.id ? <Text style={styles.err} accessibilityRole="alert">{moveError.message}</Text> : null}
-            </ScrollView>
-          </View> : null}
+      );
+    }
+    const rows = sortRows(visible, sort, people);
+    const th = (key: SortKey, label: string, style?: object) => {
+      const on = sort.key === key;
+      return (
+        <Pressable accessibilityRole="button" accessibilityLabel={`按${label}排序`} accessibilityState={{ selected: on }} onPress={() => setSort(cur => nextSort(cur, key))} style={[s.th, style]} testID={`req-sort-${key}`}>
+          <Text style={[s.thText, on && s.thTextOn]}>{label}</Text>
+          {on ? <Ionicons name={sort.dir === 'asc' ? 'arrow-up' : 'arrow-down'} size={11} color={colors.text} /> : null}
+        </Pressable>
+      );
+    };
+    return (
+      <View style={s.table} testID="req-list">
+        <View style={s.tableHead}>
+          {th('title', '标题', { flex: 1 })}
+          {th('owner', '负责人', s.colOwner)}
+          {th('priority', '优先级', s.colPriority)}
+          {th('due', '期限', s.colDue)}
+          {th('status', '状态', s.colStatus)}
         </View>
-      </Modal>
+        <ScrollView style={{ flex: 1 }}>
+          {rows.length === 0 ? <View style={[s.center, { paddingVertical: spacing.xl * 2 }]}><Text style={s.muted}>{filterActive(filter) ? '没有符合筛选的任务' : '还没有任务，点右上角「新建」'}</Text></View> : null}
+          {rows.map(item => (
+            <Pressable
+              key={item.id}
+              testID={`req-row-${item.id}`}
+              accessibilityRole="button"
+              accessibilityLabel={item.name}
+              onPress={() => openDetail(item.id)}
+              onLongPress={pointer ? undefined : e => openMenuAt(item, e.nativeEvent.pageX, e.nativeEvent.pageY)}
+              style={state => [s.tr, ((state as { hovered?: boolean }).hovered || state.pressed || item.id === selectedId) && s.trHover]}
+              {...({ dataSet: { taskCard: item.id, taskFrom: item.column } } as object)}
+            >
+              <Text style={[s.tdTitle, item.column === 'done' && s.cardDone]} numberOfLines={1}>{item.name}</Text>
+              <View style={s.colOwner}><OwnerBadge item={item} people={people} s={s} /></View>
+              <View style={[s.colPriority, s.owner]}><PriorityDot p={item.priority} s={s} /><Text style={s.metaText}>{REQ_PRIORITY_LABEL[item.priority]}</Text></View>
+              <View style={[s.colDue, { flexDirection: 'row' }]}>{item.due ? <DueChip item={item} today={today} s={s} /> : <Text style={s.metaMuted}>—</Text>}</View>
+              <View style={s.colStatus}>
+                <View style={[s.statusPill, { backgroundColor: STATUS_TONE[item.column]() + '1f' }]}>
+                  <View style={[s.prioDot, { width: 6, height: 6, backgroundColor: STATUS_TONE[item.column]() }]} />
+                  <Text style={[s.statusPillText, { color: STATUS_TONE[item.column]() }]}>{REQ_COLUMN_LABEL[item.column]}</Text>
+                </View>
+              </View>
+            </Pressable>
+          ))}
+        </ScrollView>
+      </View>
+    );
+  };
+
+  const body = section === 'dispatch' ? dispatch ?? null
+    : phase === 'loading' && !(mine && items.length) ? <View style={s.center} testID="req-loading"><ActivityIndicator color={colors.accent} /></View>
+      : phase === 'unsupported' ? <View style={s.center}><Text style={s.muted} testID="req-unsupported">{UNSUPPORTED}</Text></View>
+        : phase === 'error' ? (
+          <View style={s.center}>
+            <Text style={s.err}>{hubError}</Text>
+            <Pressable onPress={() => setReloadKey(n => n + 1)} testID="req-retry" accessibilityRole="button"><Text style={s.link}>重试</Text></Pressable>
+          </View>
+        ) : section === 'list' ? list() : kanban();
+
+  const ghost = pointer && draggingItem && dragView.phase === 'dragging' ? (
+    <View
+      pointerEvents="none"
+      style={[s.card, s.ghost, { position: (Platform.OS === 'web' ? 'fixed' : 'absolute') as 'absolute', left: dragView.x - grab.current.dx, top: dragView.y - grab.current.dy, width: grab.current.w, transform: [{ rotate: '1.5deg' }] }]}
+      testID="req-drag-ghost"
+    >
+      <Text style={s.cardTitle} numberOfLines={2}>{draggingItem.name}</Text>
+      <CardMeta item={draggingItem} people={people} today={today} s={s} />
     </View>
+  ) : null;
+
+  return (
+    <View style={{ flex: 1 }} testID="requirement-board" onLayout={e => setWidth(e.nativeEvent.layout.width)}>
+      {header}
+      {banner ? (
+        <View style={[s.banner, narrow && { marginHorizontal: spacing.lg }]} accessibilityRole="alert" testID="req-banner">
+          <Ionicons name="alert-circle-outline" size={14} color={colors.failed} />
+          <Text style={[s.err, { flex: 1 }]}>{banner}</Text>
+          <Pressable onPress={() => setBanner('')} accessibilityRole="button" accessibilityLabel="关闭提示"><Ionicons name="close" size={14} color={colors.textMuted} /></Pressable>
+        </View>
+      ) : null}
+      {body}
+      <Text style={{ position: 'absolute', width: 1, height: 1, opacity: 0 }} accessibilityLiveRegion="polite">{announce}</Text>
+      {ghost}
+      {selected && section !== 'dispatch' ? (
+        <TaskDetailPanel
+          cfg={cfg}
+          item={selected}
+          mode={drawer ? 'drawer' : 'page'}
+          top={headerBottom}
+          people={people}
+          peopleLoading={peopleLoading}
+          onLoadPeople={loadPeople}
+          moving={movingIds.includes(selected.id)}
+          moveError={moveErrors[selected.id] || ''}
+          onMove={to => { void move(selected.id, to); }}
+          onSave={patch => saveEdit(selected.id, patch)}
+          onAssignmentsSaved={a => updateTaskItems(scope, rows => rows.map(row => (row.id === selected.id ? { ...row, ...a } : row)))}
+          onClose={() => setSelectedId(null)}
+        />
+      ) : null}
+      <TaskCreateDialog
+        draft={draft}
+        sheet={!pointer && narrow}
+        networkId={cfg.networkId || ''}
+        people={people}
+        peopleLoading={peopleLoading}
+        peopleError={peopleError}
+        onLoadPeople={loadPeople}
+        onChange={setDraft}
+        onSubmit={async () => {
+          if (!draft) return null;
+          const failed = await create(draft);
+          if (!failed) setDraft(null);
+          return failed;
+        }}
+        onClose={() => setDraft(null)}
+      />
+      <TaskCardMenu
+        target={menu}
+        touch={!pointer}
+        busy={!!menu && movingIds.includes(menu.id)}
+        onOpen={id => setSelectedId(id)}
+        onMove={(id, to) => { void move(id, to); if (pointer) focusCard(id); }}
+        onClose={() => setMenu(null)}
+      />
+      <FilterMenu
+        open={filterMenu}
+        touch={!pointer}
+        owners={owners}
+        selectedOwners={filter.owners}
+        selectedPriorities={filter.priorities}
+        meId={meId}
+        onToggleOwner={key => setTaskFilter({ ...filter, owners: toggleIn(filter.owners, key) })}
+        onTogglePriority={p => setTaskFilter({ ...filter, priorities: toggleIn(filter.priorities, p) })}
+        onClear={kind => setTaskFilter(kind === 'owner' ? { ...filter, owners: [] } : { ...filter, priorities: [] })}
+        onClose={() => setFilterMenu(null)}
+      />
+    </View>
+  );
+}
+
+function AvatarStack({ keys, owners }: { keys: readonly string[]; owners: ReturnType<typeof ownerCounts> }) {
+  const shown = keys.slice(0, 3);
+  return (
+    <View style={{ flexDirection: 'row' }}>
+      {shown.map((key, i) => {
+        const o = owners.find(row => row.key === key);
+        return (
+          <View key={key} style={{ marginLeft: i ? -6 : 0, borderRadius: 999, borderWidth: 1.5, borderColor: colors.card }}>
+            {key === UNASSIGNED ? <Ionicons name="person-circle-outline" size={18} color={colors.textMuted} /> : <AliasAvatar alias={o?.name || key.split(':').slice(1).join(':')} size={18} />}
+          </View>
+        );
+      })}
+    </View>
+  );
+}
+
+/** 头部筛选的弹层:负责人(头像 + 名字 + 数目,多选)或优先级(多选)。 */
+function FilterMenu({ open, touch, owners, selectedOwners, selectedPriorities, meId, onToggleOwner, onTogglePriority, onClear, onClose }: {
+  open: { kind: 'owner' | 'priority'; x: number; y: number } | null;
+  touch: boolean;
+  owners: ReturnType<typeof ownerCounts>;
+  selectedOwners: readonly string[];
+  selectedPriorities: readonly string[];
+  meId: string | null;
+  onToggleOwner: (key: string) => void;
+  onTogglePriority: (p: (typeof REQ_PRIORITIES)[number]) => void;
+  onClear: (kind: 'owner' | 'priority') => void;
+  onClose: () => void;
+}) {
+  const s = useTaskStyles();
+  // 锚定的浮层:遮罩铺满窗口,安全区只用来夹住弹层的位置(同 TaskCardMenu / AgentRowMenu)。
+  const safe = useModalSafePadding('fullScreen');
+  const rowH = touch ? 44 : 36;
+  const row = (key: string, on: boolean, onPress: () => void, lead: ReactNode, label: string, count?: number) => (
+    <Pressable key={key} testID={`task-filter-opt-${key}`} accessibilityRole="checkbox" accessibilityState={{ checked: on }} onPress={onPress}
+      style={state => ({ height: rowH, flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: spacing.md, borderRadius: 8, backgroundColor: (state as { hovered?: boolean }).hovered || state.pressed ? colors.rowHover : 'transparent' })}>
+      {lead}
+      <Text style={{ flex: 1, color: colors.text, fontSize: 13 }} numberOfLines={1}>{label}</Text>
+      {count !== undefined ? <Text style={s.metaMuted}>{count}</Text> : null}
+      <Ionicons name={on ? 'checkbox' : 'square-outline'} size={16} color={on ? colors.accent : colors.textMuted} />
+    </Pressable>
+  );
+  const meKey = meId ? personKey({ kind: 'user', id: meId }) : '';
+  return (
+    <Modal visible={!!open} transparent animationType="fade" onRequestClose={onClose}>
+      <Pressable style={{ position: 'absolute', left: 0, top: 0, right: 0, bottom: 0, backgroundColor: touch ? 'rgba(0,0,0,0.18)' : 'transparent' }} onPress={onClose} testID="task-filter-scrim" accessibilityLabel="关闭筛选" />
+      {open ? (
+        <View style={{ position: 'absolute', left: Math.max(8 + safe.paddingLeft, open.x), top: Math.max(open.y, safe.paddingTop + 8), width: 260, maxHeight: 360, padding: 6, borderRadius: 12, backgroundColor: colors.card, borderWidth: 1, borderColor: colors.border, shadowColor: 'rgba(16,24,40,1)', shadowOpacity: 0.16, shadowRadius: 24, shadowOffset: { width: 0, height: 10 }, elevation: 8 }} testID={`task-filter-menu-${open.kind}`} accessibilityRole="menu">
+          <ScrollView style={{ flexGrow: 0 }}>
+            {open.kind === 'owner'
+              ? owners.filter(o => o.count > 0 || selectedOwners.includes(o.key)).map(o => row(
+                o.key, selectedOwners.includes(o.key), () => onToggleOwner(o.key),
+                o.ref ? <AliasAvatar alias={o.name} size={22} /> : <Ionicons name="person-circle-outline" size={22} color={colors.textMuted} />,
+                o.key === meKey ? `${o.name}（我）` : o.name, o.count,
+              ))
+              : REQ_PRIORITIES.map(p => row(p, selectedPriorities.includes(p), () => onTogglePriority(p), <PriorityDot p={p} s={s} />, REQ_PRIORITY_LABEL[p]))}
+          </ScrollView>
+          <Pressable onPress={() => { onClear(open.kind); onClose(); }} style={{ height: 36, justifyContent: 'center', paddingHorizontal: spacing.md }} testID="task-filter-reset" accessibilityRole="button">
+            <Text style={s.link}>显示全部</Text>
+          </Pressable>
+        </View>
+      ) : null}
+    </Modal>
   );
 }

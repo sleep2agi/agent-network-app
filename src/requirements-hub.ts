@@ -3,6 +3,7 @@ import { appFetch } from './app-fetch';
 import type { HubConfig } from './api';
 import { assignmentsFromHub } from './requirement-people-api';
 import type { RequirementPersonRef } from './requirement-people';
+import { patchApplied, statusPatch, type EditPatch } from './task-board-model';
 import {
   dueOk,
   REQ_COLUMNS,
@@ -61,29 +62,73 @@ export async function listRequirements(cfg: HubConfig): Promise<Requirement[]> {
   return rows.map(requirementFromHub).filter((row): row is Requirement => !!row);
 }
 
-export async function createRequirementOnHub(cfg: HubConfig, input: { name: string; priority: ReqPriority; assignee: string; due: string; column?: ReqColumn; clientId?: string; owner?: RequirementPersonRef }): Promise<Requirement> {
+type CreateInput = { name: string; priority: ReqPriority; assignee: string; due: string; column?: ReqColumn; clientId?: string; owner?: RequirementPersonRef };
+
+/** POST 的请求体。负责人只带稳定身份 {kind,id},多余字段(显示名、networkId…)一律不发。 */
+export function createRequirementBody(cfg: HubConfig, input: CreateInput): Record<string, unknown> {
+  return {
+    name: input.name,
+    priority: input.priority,
+    assignee: input.assignee,
+    due: input.due,
+    column: input.column,
+    client_id: input.clientId,
+    network_id: cfg.networkId,
+    owner: input.owner ? { kind: input.owner.kind, id: input.owner.id } : undefined,
+  };
+}
+
+export async function createRequirementOnHub(cfg: HubConfig, input: CreateInput): Promise<Requirement> {
   const data = await call(cfg, '/api/requirements', {
     method: 'POST',
-    body: JSON.stringify({
-      name: input.name,
-      priority: input.priority,
-      assignee: input.assignee,
-      due: input.due,
-      column: input.column,
-      client_id: input.clientId,
-      network_id: cfg.networkId,
-      owner: input.owner ? { kind: input.owner.kind, id: input.owner.id } : undefined,
-    }),
+    body: JSON.stringify(createRequirementBody(cfg, input)),
   }) as { requirement?: unknown };
   const row = requirementFromHub(data.requirement);
   if (!row) throw new RequirementsHubError('Hub 没有返回这条需求', 502);
   return row;
 }
 
+/**
+ * 改标题 / 优先级 / 期限 / 负责人(Hub #2070 的 PATCH)。只发改过的字段(editPatch)。
+ * 旧 Hub:不认识这些字段时回 400 empty_patch;更老的会忽略字段照样回 200 —— 两种都报「还不能改」,
+ * 不把没生效的保存说成成功。
+ */
+export async function updateRequirementOnHub(cfg: HubConfig, id: string, patch: EditPatch): Promise<Requirement> {
+  const res = await appFetch(`${cfg.serverUrl}${scoped(cfg, `/api/requirements/${encodeURIComponent(id)}`)}`, {
+    method: 'PATCH',
+    headers: { Authorization: `Bearer ${cfg.token}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify(patch),
+  });
+  const data = await res.json().catch(() => null) as { requirement?: unknown; error?: string } | null;
+  if (res.status === 403) throw new RequirementsHubError('你没有修改这条需求的权限', 403);
+  if (res.status === 400 && data?.error === 'empty_patch') throw new RequirementsHubError(HUB_CANNOT_EDIT, 400);
+  if (res.status === 400 && (data?.error === 'person_not_in_network' || data?.error === 'invalid_person')) throw new RequirementsHubError('这个负责人已不在当前网络', 400);
+  if (res.status === 404) throw new RequirementsHubError('这条需求已不存在', 404);
+  if (!res.ok) throw new RequirementsHubError('修改没有保存，请重试', res.status);
+  const row = requirementFromHub(data?.requirement);
+  if (!row) throw new RequirementsHubError('Hub 没有返回这条需求', 502);
+  if (!patchApplied(row, patch)) throw new RequirementsHubError(HUB_CANNOT_EDIT, 501);
+  return row;
+}
+
+export const HUB_CANNOT_EDIT = '这个 Hub 还不能修改已有需求的内容，升级 Hub 后再试';
+
+/** 当前登录用户的 user_id(「我负责的」用)。拿不到就是 null,左栏那一项不可用。 */
+export async function fetchMyUserId(cfg: HubConfig): Promise<string | null> {
+  try {
+    const res = await appFetch(`${cfg.serverUrl}/api/auth/me`, { headers: { Authorization: `Bearer ${cfg.token}` } });
+    if (!res.ok) return null;
+    const data = await res.json() as { user?: { user_id?: unknown } };
+    return typeof data?.user?.user_id === 'string' && data.user.user_id ? data.user.user_id : null;
+  } catch {
+    return null;
+  }
+}
+
 export async function moveRequirementOnHub(cfg: HubConfig, id: string, column: ReqColumn): Promise<Requirement> {
   const data = await call(cfg, `/api/requirements/${encodeURIComponent(id)}`, {
     method: 'PATCH',
-    body: JSON.stringify({ column }),
+    body: JSON.stringify(statusPatch(column)),
   }) as { requirement?: unknown };
   const row = requirementFromHub(data.requirement);
   if (!row) throw new RequirementsHubError('Hub 没有返回这条需求', 502);

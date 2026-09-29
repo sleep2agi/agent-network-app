@@ -17,15 +17,11 @@ import { formatTime } from './time';
 import { usePoll } from './usePoll';
 import RequirementBoard from './RequirementBoard';
 
-// Tasks tab — a scoped list of hub tasks with a top segmented control
-// for the three states the brief pinned (running / failed / replied) +
-// an "all" pass-through. Row press hands off to a detail screen owned
-// by App.tsx routing.
-//
-// Blast radius: this file is self-contained. It does NOT touch App.tsx
-// (that wiring is a separate task; 07-31 通信龙 held it behind 测试马's
-// AgentsScreen extraction). Pure additive — the ⚠️ line below is the
-// hook it exposes.
+// Tasks tab. The page itself (header, 列表 / 看板 of the requirement pool) is
+// RequirementBoard; this file owns the 派发记录 section — a scoped list of hub
+// tasks with a segmented filter for the three states the brief pinned
+// (running / failed / replied) + an "all" pass-through. Row press hands off to
+// a detail screen owned by App.tsx routing.
 
 const PAGE = 30;   // initial + increment for the lazy history window
 
@@ -47,6 +43,21 @@ const BUCKET_COLOR: Record<StatusBucket, string> = {
 export default function TasksScreen({
   cfg,
   onOpenTask,
+  desktop,
+}: {
+  cfg: HubConfig;
+  onOpenTask: (taskId: string) => void;
+  /** 桌面工作区:派发记录在左栏(TaskFilterSidebar),看板可拖动。 */
+  desktop?: boolean;
+}) {
+  // 任务页 = 需求池(列表 / 看板)+ 派发记录。头部、筛选、新建都在 RequirementBoard;
+  // 派发记录(Hub 上派给节点的任务,原来的「列表」)作为它的一个分区渲染在同一个头部下面。
+  return <RequirementBoard cfg={cfg} desktop={desktop} dispatch={<DispatchLog cfg={cfg} onOpenTask={onOpenTask} />} />;
+}
+
+function DispatchLog({
+  cfg,
+  onOpenTask,
 }: {
   cfg: HubConfig;
   onOpenTask: (taskId: string) => void;
@@ -55,7 +66,6 @@ export default function TasksScreen({
   const [loaded, setLoaded] = useState(false);
   const [lastError, setLastError] = useState<string | null>(null);
   const [filter, setFilter] = useState<TaskFilter>('all');
-  const [section, setSection] = useState<'list' | 'board'>('list');
   const [hasOlder, setHasOlder] = useState(true);
   const [loadingOlder, setLoadingOlder] = useState(false);
   const limitRef = useRef(PAGE);
@@ -107,26 +117,6 @@ export default function TasksScreen({
     // the assertion. See tasks-filter.test.ts + POLL_LIST_MS in
     // tasks-filter.ts (single source of truth).
     <View style={styles.root} testID={`tasks-screen-poll-list-ms-${POLL_LIST_MS}`}>
-      <View style={styles.filterRow} testID="tasks-module-switch">
-        <Pressable
-          onPress={() => setSection('list')}
-          style={[styles.chip, section === 'list' && styles.chipActive]}
-          testID="tasks-view-list"
-        >
-          <Text style={[styles.chipText, section === 'list' && styles.chipTextActive]}>列表</Text>
-        </Pressable>
-        <Pressable
-          onPress={() => setSection('board')}
-          style={[styles.chip, section === 'board' && styles.chipActive]}
-          testID="tasks-view-board"
-        >
-          <Text style={[styles.chipText, section === 'board' && styles.chipTextActive]}>看板</Text>
-        </Pressable>
-      </View>
-      {section === 'board' ? (
-        <RequirementBoard cfg={cfg} />
-      ) : (
-      <>
       {/* Segmented filter — horizontal scroll for narrow phones */}
       <ScrollView
         horizontal
@@ -259,8 +249,6 @@ export default function TasksScreen({
             );
           }}
         />
-      )}
-      </>
       )}
     </View>
   );
