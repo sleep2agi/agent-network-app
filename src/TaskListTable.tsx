@@ -16,14 +16,22 @@ import { DueChip, OwnerBadge, ParticipantStack, PriorityDot, ProjectChip, STATUS
 import TaskListFields from './TaskListFields';
 import TaskTimeCell from './TaskTimeCell';
 import { fieldWidth, loadFields, resetFieldWidth, saveFields, setFieldWidth, type FieldId, type FieldPref } from './task-list-fields';
+import { ParentLine, ProjectSelect } from './TaskFieldPickers';
 
+const CHECK_W = 20;
 const HANDLE = 8, KEY_STEP = 16;
 type PointerLike = { nativeEvent: { clientX: number; pointerId: number }; currentTarget: unknown };
-export default function TaskListTable({ rows, people, projects, sort, setSort, s, today, selectedId, onOpen, filtered, needsUpdateUpgrade, touch, onMenu }: {
+export default function TaskListTable({ rows, people, projects, sort, setSort, s, today, selectedId, onOpen, filtered, needsUpdateUpgrade, touch, onMenu, items, selection, onProject }: {
   rows: Requirement[]; people: RequirementPerson[]; projects: RequirementProject[] | null;
   sort: SortSpec; setSort: (next: SortSpec) => void; s: TaskStyles; today: string;
   selectedId: string | null; onOpen: (id: string) => void; filtered: boolean; needsUpdateUpgrade: boolean;
   touch: boolean; onMenu: (item: Requirement, x: number, y: number) => void;
+  /** 全部任务(标题下的「↳ 母任务」找母任务用)。 */
+  items?: readonly Requirement[];
+  /** 桌面多选:行首悬停勾选框 + Ctrl/⌘ / Shift 单击(RequirementBoard 管状态,task-select-model.ts)。 */
+  selection?: { ids: readonly string[]; onToggle: (id: string) => void; onPress: (id: string, e: unknown) => void };
+  /** 项目格就地改(owner 09-29:13 个没项目的任务一张张开详情太慢)。 */
+  onProject?: (id: string, projectId: string | null) => void;
 }) {
   useTranslation();
   const [fields, setFields] = useState(loadFields);
@@ -72,12 +80,14 @@ export default function TaskListTable({ rows, people, projects, sort, setSort, s
         const by = id === 'updated' && item.updatedBy ? people.find(p => p.kind === item.updatedBy!.kind && p.id === item.updatedBy!.id)?.name ?? item.updatedBy.id : undefined;
         return <TaskTimeCell id={`task-time-${item.id}-${id}`} raw={id === 'created' ? item.createdAt : item.updatedAt} now={now} by={by} />;
       }
-      case 'title': return <View style={{ gap: 4 }}><Text style={[s.tdTitle, item.column === 'done' && s.cardDone]} numberOfLines={1}>{item.name}</Text><TaskTagChips tags={item.tags} /></View>;
+      case 'title': return <View style={{ flex: 1, minWidth: 0, gap: 4 }}><Text style={[s.tdTitle, item.column === 'done' && s.cardDone]} numberOfLines={1}>{item.name}</Text>{items ? <ParentLine item={item} items={items} /> : null}<TaskTagChips tags={item.tags} /></View>;
       case 'owner': return <OwnerBadge item={item} people={people} s={s} />;
       case 'priority': return <View style={s.owner}><PriorityDot p={item.priority} s={s} /><Text style={s.metaText}>{taskText(REQ_PRIORITY_LABEL[item.priority])}</Text></View>;
       case 'due': return item.due ? <DueChip item={item} today={today} s={s} /> : <Text style={s.metaMuted}>—</Text>;
       case 'participants': return <ParticipantStack item={item} people={people} s={s} touch={touch} size={18} />;
-      case 'project': return item.projectId ? <ProjectChip project={projects?.find(p => p.id === item.projectId)} s={s} small /> : <Text style={s.metaMuted}>—</Text>;
+      case 'project':
+        if (onProject && projects && item.projectId !== undefined) return <ProjectSelect compact label={false} value={item.projectId ?? null} projects={projects} onChange={pid => onProject(item.id, pid)} touch={touch} idBase={`req-row-project-${item.id}`} />;
+        return item.projectId ? <ProjectChip project={projects?.find(p => p.id === item.projectId)} s={s} small /> : <Text style={s.metaMuted}>—</Text>;
       case 'issues': return <TaskIssueCount item={item} />;
       case 'status': return <View style={[s.statusPill, { backgroundColor: STATUS_TONE[item.column]() + '1f' }]}><View style={[s.prioDot, { width: 6, height: 6, backgroundColor: STATUS_TONE[item.column]() }]} /><Text style={[s.statusPillText, { color: STATUS_TONE[item.column]() }]}>{taskText(REQ_COLUMN_LABEL[item.column])}</Text></View>;
     }
@@ -86,8 +96,9 @@ export default function TaskListTable({ rows, people, projects, sort, setSort, s
     <View style={{ flexDirection: 'row', justifyContent: 'flex-end', paddingHorizontal: spacing.xl, paddingBottom: 10 }}><TaskListFields fields={fields} touch={touch} projects={projects !== null} needsUpdateUpgrade={needsUpdateUpgrade} onChange={commit} /></View>
     <View style={s.table} testID="req-list">
       <ScrollView horizontal contentContainerStyle={{ minWidth: '100%', flexGrow: 1 }}>
-        <View style={{ flex: 1, minWidth: visible.reduce((n, f) => n + fieldWidth(f), 0) + spacing.md * (visible.length - 1) + spacing.lg * 2 }}>
+        <View style={{ flex: 1, minWidth: visible.reduce((n, f) => n + fieldWidth(f), 0) + spacing.md * (visible.length - 1) + spacing.lg * 2 + (selection ? CHECK_W + spacing.md : 0) }}>
           <View style={s.tableHead}>
+            {selection ? <View style={{ width: CHECK_W }} /> : null}
             {visible.map(f => {
               const { id } = f;
               const sortable = id !== 'participants' && id !== 'issues';
@@ -101,9 +112,24 @@ export default function TaskListTable({ rows, people, projects, sort, setSort, s
           </View>
           <ScrollView style={{ flex: 1 }}>
             {!rows.length ? <View style={[s.center, { paddingVertical: spacing.xl * 2 }]}><Text style={s.muted}>{t(filtered ? 'tasks.copy.46' : 'tasks.copy.55')}</Text></View> : null}
-            {rows.map(item => <Pressable key={item.id} testID={`req-row-${item.id}`} accessibilityRole="button" accessibilityLabel={item.name} onPress={() => onOpen(item.id)} onLongPress={touch ? e => onMenu(item, e.nativeEvent.pageX, e.nativeEvent.pageY) : undefined} style={state => [s.tr, ((state as { hovered?: boolean }).hovered || state.pressed || item.id === selectedId) && s.trHover]} {...({ dataSet: { taskCard: item.id, taskFrom: item.column } } as object)}>
-              {visible.map(f => <View key={f.id} testID={`task-cell-${item.id}-${f.id}`} style={[cellStyle(f), { flexDirection: 'row', alignItems: 'center', overflow: 'hidden' }]}>{content(item, f.id)}</View>)}
-            </Pressable>)}
+            {rows.map(item => {
+              const picked = !!selection?.ids.includes(item.id);
+              return <Pressable key={item.id} testID={`req-row-${item.id}`} accessibilityRole="button" accessibilityLabel={item.name} {...a11yState({ selected: picked })} onPress={e => (selection ? selection.onPress(item.id, e) : onOpen(item.id))} onLongPress={touch ? e => onMenu(item, e.nativeEvent.pageX, e.nativeEvent.pageY) : undefined} style={state => [s.tr, ((state as { hovered?: boolean }).hovered || state.pressed || item.id === selectedId) && s.trHover, picked && { backgroundColor: colors.accent + '14' }]} {...({ dataSet: { taskCard: item.id, taskFrom: item.column } } as object)}>
+                {(state: any) => <>
+                  {selection ? (
+                    // 行首勾选框:悬停 / 已选 / 正在多选时出现;一直留出这一格宽,标题不跳。
+                    <View style={{ width: CHECK_W, alignItems: 'center' }}>
+                      {state.hovered || picked || selection.ids.length ? (
+                        <Pressable accessibilityRole="checkbox" accessibilityLabel={t('taskSel.selectRow', { name: item.name })} {...a11yState({ checked: picked })} onPress={() => selection.onToggle(item.id)} hitSlop={6} testID={`req-row-check-${item.id}`}>
+                          <Ionicons name={picked ? 'checkbox' : 'square-outline'} size={16} color={picked ? colors.accent : colors.textMuted} />
+                        </Pressable>
+                      ) : null}
+                    </View>
+                  ) : null}
+                  {visible.map(f => <View key={f.id} testID={`task-cell-${item.id}-${f.id}`} style={[cellStyle(f), { flexDirection: 'row', alignItems: 'center', overflow: 'hidden' }]}>{content(item, f.id)}</View>)}
+                </>}
+              </Pressable>;
+            })}
           </ScrollView>
         </View>
       </ScrollView>

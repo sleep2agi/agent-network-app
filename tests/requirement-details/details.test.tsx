@@ -122,6 +122,8 @@ mock.module('./src/requirements-hub', () => ({
     return { ...card, id, description: '## 目标', checklist: [{ id: 'a', text: '写接口', done: itemId === 'a' ? done : false }, { id: 'b', text: '写测试', done: itemId === 'b' ? done : true }] };
   },
   RequirementsHubError: HubError,
+  PARENT_TOO_DEEP: '子任务最多 5 层',
+  PARENT_REJECTED: '不能挂到这个母任务下(会形成循环,或它已不存在)',
   moveRequirementOnHub: (cfg: any, id: string, column: string) => {
     requests.push({ network: cfg.networkId, id, column });
     return new Promise((resolve, fail) => { reply = resolve; reject = fail; });
@@ -147,6 +149,8 @@ let seq = 0;
 let cfg = { serverUrl: 'http://isolated.test', token: 'test', networkId: 'a' };
 let renderer: ReactTestRenderer;
 const byId = (id: string) => renderer.root.findByProps({ testID: id });
+// The pressable host under a component that forwards the same testID (SelectField → Pressable).
+const pressable = (id: string) => renderer.root.findAll(n => n.props.testID === id && typeof n.props.onPress === 'function')[0];
 const texts = (id: string) => JSON.stringify(byId(id).findAllByType('Text').map(node => node.props.children));
 async function mount() {
   requests = []; creates = []; edits = []; editReply = null;
@@ -448,15 +452,21 @@ test('projects: create defaults to the selected project; detail moves a card to 
   await mount();
   await act(async () => setTaskFilter({ owners: [], priorities: [], project: 'p2' }));
   await act(async () => byId('req-new').props.onPress());
-  expect(byId('req-project-p2').props.accessibilityState.checked).toBe(true);
-  expect(renderer.root.findAllByProps({ testID: 'req-project-p3' })).toHaveLength(0);
+  // 项目是下拉:当前值显示在按钮上;列表里没有已归档的 p3
+  expect(byId('req-project-value').props.children).toBe('TMAI');
+  await act(async () => pressable('req-project').props.onPress());
+  expect(renderer.root.findAllByProps({ testID: 'req-project-menu-opt-p3' })).toHaveLength(0);
+  expect(byId('req-project-menu-opt-p1')).toBeTruthy();
+  await act(async () => byId('req-project-menu-scrim').props.onPress());
   await act(async () => byId('req-name').props.onChangeText('TMAI 的任务'));
   await act(async () => byId('req-add').props.onPress());
   expect(creates[0].projectId).toBe('p2');
   await act(async () => setTaskFilter({ owners: [], priorities: [], project: '' }));
   await act(async () => byId('req-card-r1').props.onPress());
-  expect(byId('req-edit-project-p1').props.accessibilityState.checked).toBe(true);
-  await act(async () => byId('req-edit-project-p2').props.onPress());
+  expect(byId('req-edit-project-value').props.children).toBe('军团项目');
+  await act(async () => pressable('req-edit-project').props.onPress());
+  await act(async () => byId('req-edit-project-menu-opt-p2').props.onPress());
+  expect(byId('req-edit-project-value').props.children).toBe('TMAI');
   await act(async () => byId('req-edit-save').props.onPress());
   expect(edits).toEqual([{ id: 'r1', patch: { project_id: 'p2' } }]);
 });
@@ -465,7 +475,50 @@ test('hub without projects: no project picker, no project chip filter', async ()
   await mount();
   expect(renderer.root.findAllByProps({ testID: 'task-filter-project' })).toHaveLength(0);
   await act(async () => byId('req-new').props.onPress());
-  expect(renderer.root.findAllByProps({ testID: 'req-project-none' })).toHaveLength(0);
+  expect(renderer.root.findAllByProps({ testID: 'req-project' })).toHaveLength(0);
+});
+
+test('母任务: pick a parent (not itself or its descendants), saved as parent_id with 保存修改; hub rejection shows under the field', async () => {
+  subCards = true;
+  await mount();
+  await act(async () => byId('req-card-r2').props.onPress());
+  expect(byId('req-edit-parent-value').props.children).toBe('验证需求详情');
+  await act(async () => pressable('req-edit-parent').props.onPress());
+  // r2 自己不在;r1(现在的母任务)、r3 在;「无」在
+  expect(renderer.root.findAllByProps({ testID: 'req-edit-parent-menu-opt-r2' })).toHaveLength(0);
+  expect(byId('req-edit-parent-menu-opt-r3')).toBeTruthy();
+  expect(byId('req-edit-parent-menu-opt-none')).toBeTruthy();
+  await act(async () => byId('req-edit-parent-menu-opt-r3').props.onPress());
+  editReply = () => { throw new HubError(400, '不能挂到这个母任务下(会形成循环,或它已不存在)'); };
+  await act(async () => byId('req-edit-save').props.onPress());
+  expect(edits[0].patch).toEqual({ parent_id: 'r3' });
+  expect(byId('req-edit-parent-error').props.children).toBe('不能挂到这个母任务下(会形成循环,或它已不存在)');
+  expect(renderer.root.findAllByProps({ testID: 'req-edit-error' })).toHaveLength(0);
+  editReply = null;
+  // 清成顶层
+  await act(async () => pressable('req-edit-parent').props.onPress());
+  await act(async () => byId('req-edit-parent-menu-opt-none').props.onPress());
+  await act(async () => byId('req-edit-save').props.onPress());
+  expect(edits[1].patch).toEqual({ parent_id: null });
+});
+
+test('母任务 on a parent: its own child is not offered (no cycles); cards show 「↳ 母任务」', async () => {
+  subCards = true;
+  await mount();
+  expect(JSON.stringify(byId('req-card-r3').findAll(n => n.props.testID === 'task-card-parent').map(n => n.props.children))).toContain('验证需求详情');
+  expect(byId('req-card-r1').findAll(n => n.props.testID === 'task-card-parent')).toHaveLength(0);
+  await act(async () => byId('req-card-r1').props.onPress());
+  await act(async () => pressable('req-edit-parent').props.onPress());
+  expect(renderer.root.findAllByProps({ testID: 'req-edit-parent-menu-opt-r2' })).toHaveLength(0);
+  expect(renderer.root.findAllByProps({ testID: 'req-edit-parent-menu-opt-r3' })).toHaveLength(0);
+});
+
+test('old hub without parent_id: 母任务 says 升级 Hub 后可用 and sends nothing', async () => {
+  detailCards = true;
+  await mount();
+  await act(async () => byId('req-card-r1').props.onPress());
+  expect(byId('req-edit-parent-upgrade')).toBeTruthy();
+  expect(renderer.root.findAllByProps({ testID: 'req-edit-parent' })).toHaveLength(0);
 });
 
 test('participants: avatar chips in detail, stack of 3 + 「+N」 on cards, unknown members never show a raw id', async () => {
@@ -549,7 +602,7 @@ test('description full screen (phone) without voice support: no hold bar, 🖼 s
 test('sub-requirements: progress chip on the parent card, children in detail, breadcrumb to the parent, 新建子需求 prefilled, GitHub link', async () => {
   subCards = true;
   await mount();
-  expect(JSON.stringify(byId('req-card-r1').findAll(n => n.props.testID === 'task-subreq-progress').map(n => n.props.accessibilityLabel))).toContain('子需求 1/2 完成');
+  expect(JSON.stringify(byId('req-card-r1').findAll(n => n.props.testID === 'task-subreq-progress').map(n => n.props.accessibilityLabel))).toContain('子任务 1/2 完成');
   await act(async () => byId('req-card-r1').props.onPress());
   expect(byId('req-subrequirements')).toBeTruthy();
   expect(byId('req-child-r3')).toBeTruthy();

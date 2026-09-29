@@ -19,6 +19,7 @@ import { REQ_COLUMN_LABEL, REQ_PRIORITIES, REQ_PRIORITY_LABEL, type ReqPriority,
 import type { RequirementPerson, RequirementPersonRef } from './requirement-people';
 import { activeProjects, checkDraft, createInput, roleKinds, type CreateDraft } from './task-board-model';
 import { BOARD_RADIUS, CONTROL_H, liftedShadow, PriorityDot, useTaskStyles, a11yState } from './TaskBoardParts';
+import { ProjectSelect } from './TaskFieldPickers';
 
 export { dueShortcuts } from './due-time';
 
@@ -132,35 +133,6 @@ export function RoleFields({ twoRoles, owner, agentOwner, people, peopleLoading,
   );
 }
 
-/** 项目:无项目 + 各个未归档项目(彩色圆点)。一排可换行的胶囊,单选。 */
-export function ProjectPicker({ value, projects, onChange, idBase }: { value: string | null; projects: readonly RequirementProject[]; onChange: (id: string | null) => void; idBase: string }) {
-  useTranslation();
-  const s = useTaskStyles();
-  const f = fieldStyles();
-  const list = activeProjects(projects);
-  const archivedCurrent = value ? projects.find(p => p.id === value && p.archived) : undefined;
-  const chip = (id: string | null, label: string, color?: string) => {
-    const on = (value ?? null) === id;
-    return (
-      <Pressable key={id ?? 'none'} accessibilityRole="radio" {...a11yState({ checked: on })} onPress={() => onChange(id)} style={[s.chip, { height: 30 }, on && s.chipOn]} testID={`${idBase}-${id ?? 'none'}`}>
-        {color ? <View style={{ width: 8, height: 8, borderRadius: radius.pill, backgroundColor: color }} /> : null}
-        <Text style={[s.chipText, on && s.chipTextOn]} numberOfLines={1}>{label}</Text>
-      </Pressable>
-    );
-  };
-  return (
-    <View style={{ gap: spacing.sm }}>
-      <Text style={f.label}>{tr('tasks.copy.30')}</Text>
-      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm }} accessibilityRole="radiogroup">
-        {chip(null, tr('tasks.copy.31'))}
-        {list.map(p => chip(p.id, p.name, p.color))}
-        {archivedCurrent ? chip(archivedCurrent.id, tr('tasks.copy.110', { v0: archivedCurrent.name }), archivedCurrent.color) : null}
-      </View>
-      {!list.length ? <Text style={s.muted}>{tr('tasks.copy.111')}</Text> : null}
-    </View>
-  );
-}
-
 export default function TaskCreateDialog({ draft, sheet, twoRoles, parentName, projects, dueDatetime, pointer, networkId, people, peopleLoading, peopleError, onLoadPeople, onChange, onSubmit, onClose }: {
   draft: CreateDraft | null;
   /** Hub 分不分「负责人(人类)/ 负责 Agent」。不分就是旧的单一负责人。 */
@@ -255,7 +227,7 @@ export default function TaskCreateDialog({ draft, sheet, twoRoles, parentName, p
                 onChange={set}
                 idBase="req-assignee"
               />
-              {projects ? <ProjectPicker value={draft.projectId} projects={projects} onChange={projectId => set({ projectId })} idBase="req-project" /> : null}
+              {projects ? <ProjectSelect value={draft.projectId} projects={projects} onChange={projectId => set({ projectId })} touch={!pointer} idBase="req-project" /> : null}
               <View style={{ gap: spacing.sm }}>
                 <Text style={f.label}>{tr('tasks.copy.32')}</Text>
                 <PriorityPicker value={draft.priority} onChange={priority => set({ priority })} testPrefix="req-priority" />
