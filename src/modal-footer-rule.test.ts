@@ -15,7 +15,8 @@ import { filterNetworkChoices } from './user-admin';
 
 let p = 0, n = 0;
 const ck = (name: string, ok: boolean) => { n++; if (ok) { p++; console.log(`  ✓ ${name}`); } else console.log(`  ✗ ${name}`); };
-const here = new URL('.', import.meta.url).pathname;
+// import.meta.dir, not new URL(...).pathname: on Windows the latter yields '/D:/…', which readdirSync can't open.
+const here = import.meta.dir;
 const read = (rel: string) => readFileSync(join(here, rel), 'utf8').replace(/\r\n?/g, '\n');
 const MODAL_RE = /<Modal[\s>]/g;
 // 只数代码里的 <Modal:注释里提到的(modal-safe-area.ts 的说明文字)不算。
@@ -76,7 +77,7 @@ function walk(dir: string): string[] {
   return out;
 }
 {
-  const files = walk(here).map(f => ({ rel: f.slice(here.length).replace(/^\//, ''), src: readFileSync(f, 'utf8') }));
+  const files = walk(here).map(f => ({ rel: f.slice(here.length).replace(/\\/g, '/').replace(/^\//, ''), src: readFileSync(f, 'utf8') }));
   const withModals = files.filter(f => countModals(f.src) > 0);
   ck(`取集:扫到了一批含 <Modal 的文件(不是 0 —— 分母为 0 和全合规长得一样)`, withModals.length >= 25);
   ck('取集:递归扫到了子目录(src 的全部 .ts/.tsx)', files.length > 100);
