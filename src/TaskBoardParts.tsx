@@ -78,6 +78,16 @@ export const makeTaskStyles = () => StyleSheet.create({
   board: { flex: 1, flexDirection: 'row', gap: spacing.lg, paddingHorizontal: spacing.xl, paddingBottom: spacing.xl, paddingTop: spacing.xs },
   boardNarrow: { gap: spacing.md, paddingHorizontal: spacing.lg },
   column: { flex: 1, flexBasis: 0, minWidth: 0, borderRadius: BOARD_RADIUS.card, backgroundColor: columnBg(), borderWidth: 2, borderColor: 'transparent', overflow: 'hidden' },
+  // 手机分页看板:一页一列,页宽 / 列宽由 task-board-layout 算成数值。横向 ScrollView 里不写 flex / flexBasis /
+  // 百分比 —— 原生 Yoga 上 flex: 1 + flexBasis: 'auto' 的基准是 0,列会塌成 4px(0.2.143 真机)。
+  // flexGrow 只作用在页内的竖直主轴(撑满页高)。
+  columnPaged: { flexGrow: 1, borderRadius: BOARD_RADIUS.card, backgroundColor: columnBg(), borderWidth: 2, borderColor: 'transparent', overflow: 'hidden' },
+  boardPaged: { flexDirection: 'row', paddingTop: spacing.xs, paddingBottom: spacing.lg },
+  pager: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.xs, paddingHorizontal: spacing.lg, paddingBottom: spacing.xs },
+  pagerTab: { flexDirection: 'row', alignItems: 'center', gap: 6, height: 30, paddingHorizontal: spacing.md, borderRadius: BOARD_RADIUS.pill },
+  pagerTabOn: { backgroundColor: cardBg(), ...softShadow() },
+  pagerText: { color: colors.textSecondary, fontSize: typeScale.small, fontWeight: weight.medium },
+  pagerTextOn: { color: colors.text, fontWeight: weight.strong },
   columnOver: { borderColor: colors.accent, backgroundColor: colors.accent + '10' },
   columnHead: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, paddingHorizontal: spacing.md + 2, paddingTop: spacing.md, paddingBottom: spacing.sm },
   columnDot: { width: 8, height: 8, borderRadius: radius.pill },
