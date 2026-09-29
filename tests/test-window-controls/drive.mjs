@@ -12,6 +12,9 @@
 //                  (正控:证明这个数法数得到自绘控件)
 //   mac  settings  macOS 壳 + label=settings:Overlay 红黄绿灯 ⇒ 0 个自绘控件,有 28px 拖动空带,
 //                  内容不压在红绿灯下面
+//   win  task      Windows 壳 + label=task-*(?taskWindow=1,「在新窗口打开」):decorations:true ⇒ 页面里
+//                  0 个自绘控件、0 个关闭键
+//   win  task/main 同一页面但 label=main(正控:证明任务窗页面里的 WinTitleBar 数得到)
 import { mkdirSync } from 'node:fs';
 import { serveExport, initScript, findChromium } from '../test-layout-sweep/harness.mjs';
 
@@ -70,6 +73,8 @@ const cases = [
   { name: 'win-settings', os: 'win', label: 'settings', query: '?settings=1', ready: '[data-testid="dedicated-settings-window"]' },
   { name: 'win-main', os: 'win', label: 'main', query: '', ready: 'text=示例-A' },
   { name: 'mac-settings', os: 'mac', label: 'settings', query: '?settings=1', ready: '[data-testid="dedicated-settings-window"]' },
+  { name: 'win-task', os: 'win', label: 'task-0a1b2c3d', query: '?taskWindow=1', ready: '[data-testid="task-window"]' },
+  { name: 'win-task-as-main', os: 'win', label: 'main', query: '?taskWindow=1', ready: '[data-testid="task-window"]' },
 ];
 const table = [];
 for (const c of cases) {
@@ -87,6 +92,12 @@ for (const c of cases) {
       ck('win 主窗(正控):恰好 1 条自绘标题栏', m.bars === 1, String(m.bars));
       ck('win 主窗(正控):恰好 1 个关闭键', m.closes.length === 1, JSON.stringify(m.closes));
       ck('win 主窗(正控):3 个自绘窗口控件', m.winControls === 3, String(m.winControls));
+    } else if (c.name === 'win-task') {
+      ck('win 任务窗:页面里 0 条自绘标题栏(原生标题栏已经有 – □ ×)', m.bars === 0, String(m.bars));
+      ck('win 任务窗:页面里 0 个 最小化/最大化/关闭 自绘控件', m.winControls === 0, String(m.winControls));
+      ck('win 任务窗:页面里 0 个关闭键 ⇒ 整窗恰好 1 个 ×(系统的)', m.closes.length === 0, JSON.stringify(m.closes));
+    } else if (c.name === 'win-task-as-main') {
+      ck('win 任务窗页面 label=main(正控):恰好 1 条自绘标题栏', m.bars === 1, String(m.bars));
     } else {
       ck('mac settings 窗:0 个自绘窗口控件(红黄绿灯是系统的)', m.bars === 0 && m.winControls === 0, `${m.bars}/${m.winControls}`);
       ck('mac settings 窗:0 个关闭键,侧栏左上角没有 ✕', m.closes.length === 0 && m.sidebarCloses === 0, JSON.stringify(m.closes));
