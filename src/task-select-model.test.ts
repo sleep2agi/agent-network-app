@@ -103,11 +103,9 @@ console.log('# 接线(源码)');
   const panel = src('./TaskDetailPanel.tsx');
   const board = src('./RequirementBoard.tsx');
   const dialog = src('./TaskCreateDialog.tsx');
-  const title = panel.indexOf('testID="req-edit-name"');
-  const project = panel.indexOf('<ProjectSelect');
-  const parent = panel.indexOf('<ParentSelect');
-  const status = panel.indexOf("<Field label={tr('tasks.copy.54')}>");
-  ck('详情:项目、母任务紧跟在标题下面、状态之前', title > 0 && project > title && parent > project && status > parent);
+  // 顺序以「更多」那一版为准(task-detail-more.test.ts 查全);这里只查项目在常显区、母任务在「更多」里。
+  const more = panel.indexOf('testID="req-more"');
+  ck('详情:项目常显(在「更多」之前),母任务在「更多」里', panel.indexOf('<ProjectSelect') > 0 && panel.indexOf('<ProjectSelect') < more && panel.indexOf('<ParentSelect') > more);
   ck('项目是下拉(和负责人同一种按钮),不再是一排胶囊', !/ProjectPicker/.test(panel + dialog) && dialog.includes('<ProjectSelect'));
   ck('母任务被 Hub 拒绝时显示在母任务下面', panel.includes("field: patch.parent_id !== undefined && (failed === PARENT_TOO_DEEP || failed === PARENT_REJECTED) ? 'parent' : 'submit'"));
   ck('卡片 / 手机行 / 列表行都有「↳ 母任务」', (board.match(/<ParentLine item=\{item\} items=\{items\} \/>/g) ?? []).length === 3);

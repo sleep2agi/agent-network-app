@@ -86,6 +86,8 @@ const initScript = ({ hubUrl, token, networkId, theme }) => {
     },
   };
   try { localStorage.setItem('theme_mode_v1', theme); } catch {}
+  // 这些流程要点「更多」里的字段(优先级 / 检查项 / 母任务 …):按「上次展开过」起步。渐进展开本身在 test-task-organize 量。
+  try { if (localStorage.getItem('task_detail_more_open_v1') === null) localStorage.setItem('task_detail_more_open_v1', '1'); } catch {}
 };
 
 const findExe = () => {

@@ -26,6 +26,8 @@ import TaskDescriptionEditor from './TaskDescriptionEditor';
 import { BOARD_RADIUS, cardBg, liftedShadow, STATUS_TONE, useTaskStyles, a11yState } from './TaskBoardParts';
 import { DueField, fieldStyles, PriorityPicker, RoleFields } from './TaskCreateDialog';
 import { ParentSelect, ProjectSelect } from './TaskFieldPickers';
+import { moreSummary } from './task-detail-more';
+import { loadDetailMoreOpen, saveDetailMoreOpen } from './task-detail-prefs';
 import { PARENT_REJECTED, PARENT_TOO_DEEP } from './requirements-hub';
 
 export const DRAWER_WIDTH = 420;
@@ -108,6 +110,10 @@ export default function TaskDetailPanel({ cfg, item, items, onOpenRequirement, o
     else setSaved(true);
   };
   const legacy = item.owner === undefined;
+  // 「更多」展开没有:本机记住(task-detail-prefs.ts);读到之前按收起。
+  const [moreOpen, setMoreOpen] = useState(false);
+  useEffect(() => { let alive = true; void loadDetailMoreOpen().then(v => { if (alive && v !== null) setMoreOpen(v); }); return () => { alive = false; }; }, []);
+  const toggleMore = () => setMoreOpen(v => { void saveDetailMoreOpen(!v); return !v; });
   // 开了新窗口:抽屉里没有没保存的修改就收起(新窗口从 Hub 读同一份);有的话留着,免得丢。开不了 = 留在抽屉,说一声。
   const openWindow = async () => {
     if (!onOpenWindow) return;
@@ -116,6 +122,11 @@ export default function TaskDetailPanel({ cfg, item, items, onOpenRequirement, o
     else if (!ok) setError({ field: 'submit', message: tr('taskWin.failed') });
   };
 
+  // 常显:标题 · 状态 · 负责人 / 负责 Agent · 项目 · 预计完成 · 描述;其余收进「更多」(owner 09-29:详情太长)。
+  // 更多收起时,里面有值的字段在「更多」那一行上用一行字说出来(task-detail-more.ts),不悄悄藏掉。
+  const summary = moreSummary(item, draft, items);
+  // 母任务被 Hub 拒绝、检查项没存上:错误在「更多」里,自动展开,不能藏着。
+  const moreShown = moreOpen || error?.field === 'parent' || !!checklistError;
   const body: ReactNode = (
     <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: spacing.xl, gap: spacing.lg }} keyboardShouldPersistTaps="handled">
       <ParentBreadcrumb item={item} items={items} onOpen={onOpenRequirement} />
@@ -130,9 +141,6 @@ export default function TaskDetailPanel({ cfg, item, items, onOpenRequirement, o
         accessibilityLabel={tr('tasks.copy.118')}
       />
       {error?.field === 'name' ? <Text style={s.err} accessibilityRole="alert">{error.message}</Text> : null}
-      {/* 项目、母任务紧跟标题(owner 09-29:项目原来是标题下面很远的一排胶囊,像筛选,没看出来能改)。 */}
-      {projects && item.projectId !== undefined ? <ProjectSelect value={draft.projectId} projects={projects} onChange={projectId => set({ projectId })} touch={!pointer} idBase="req-edit-project" /> : null}
-      <ParentSelect item={item} items={items} value={draft.parentId} onChange={parentId => set({ parentId })} touch={!pointer} idBase="req-edit-parent" error={error?.field === 'parent' ? error.message : undefined} />
       <Field label={tr('tasks.copy.54')}>
         <View style={[s.segment, { alignSelf: 'flex-start' }]} accessibilityRole="radiogroup">
           {REQ_COLUMNS.map(col => {
@@ -174,38 +182,58 @@ export default function TaskDetailPanel({ cfg, item, items, onOpenRequirement, o
           </>
         ) : undefined}
       />
-      <Field label={tr('tasks.copy.32')}>
-        <PriorityPicker value={draft.priority} onChange={priority => set({ priority })} testPrefix="req-edit-priority" />
-      </Field>
+      {projects && item.projectId !== undefined ? <ProjectSelect value={draft.projectId} projects={projects} onChange={projectId => set({ projectId })} touch={!pointer} idBase="req-edit-project" /> : null}
       <Field label={tr('tasks.copy.119')}>
         <DueField value={draft.due} onChange={due => set({ due })} error={error?.field === 'due' ? error.message : undefined} idBase="req-edit-due" allowTime={dueDatetime} pointer={pointer} sheet={mode === 'page'} />
       </Field>
-      <TaskIssueBindings key={item.id} item={item} onSave={onSave} />
-      <TaskTags key={`tags:${item.id}`} cfg={cfg} item={item} onSave={onSave} />
-      {!item.externalUrl || !parseIssue(item.externalUrl, false) ? <ExternalLink item={item} /> : null}
-      <SubRequirements item={item} items={items} onOpen={onOpenRequirement} onCreateChild={onCreateChild} canAddLevel={levelIn(items, item) < 5} />
       {hasDetails(item) ? (
-        <>
-          <TaskDescriptionEditor cfg={cfg} value={draft.description} onChange={description => set({ description })} pointer={pointer} title={item.name} dirty={!!patch} onOpenVoiceSettings={onOpenVoiceSettings} />
-          <TaskChecklist
-            items={item.checklist ?? []}
-            pointer={pointer}
-            onToggle={onChecklistToggle}
-            onAdd={onChecklistAdd}
-            onDelete={onChecklistDelete}
-            onMove={onChecklistMove}
-            error={checklistError}
-          />
-        </>
+        <TaskDescriptionEditor cfg={cfg} value={draft.description} onChange={description => set({ description })} pointer={pointer} title={item.name} dirty={!!patch} onOpenVoiceSettings={onOpenVoiceSettings} />
       ) : (
         <Text style={s.muted} testID="req-details-unsupported">{tr('tasks.copy.138')}</Text>
       )}
-      {!legacy ? (
-        <Field label={tr('tasks.copy.53')}>
-          <RequirementAssignmentsEditor key={item.id} cfg={cfg} item={item} fields="participants" onSaved={onAssignmentsSaved} />
-        </Field>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={moreShown ? tr('detail.lessA11y') : tr('detail.moreA11y')}
+        {...a11yState({ expanded: moreShown })}
+        onPress={toggleMore}
+        style={state => [{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm, minHeight: 36, marginHorizontal: -spacing.sm, paddingHorizontal: spacing.sm, borderRadius: BOARD_RADIUS.control }, ((state as { hovered?: boolean }).hovered || state.pressed) && { backgroundColor: colors.rowHover }]}
+        testID="req-more-toggle"
+      >
+        <Text style={{ color: colors.textSecondary, fontSize: typeScale.small, fontWeight: weight.medium, flexShrink: 0 }} testID="req-more-label">{tr('detail.more')}</Text>
+        <Ionicons name={moreShown ? 'chevron-up' : 'chevron-down'} size={14} color={colors.textMuted} />
+        {!moreShown && summary.length ? <Text style={[s.muted, { flex: 1 }]} numberOfLines={1} testID="req-more-summary">{summary.map(x => tr(x.key, x.values)).join(' · ')}</Text> : null}
+      </Pressable>
+      {moreShown ? (
+        <View style={{ gap: spacing.lg }} testID="req-more">
+          <Field label={tr('tasks.copy.32')}>
+            <PriorityPicker value={draft.priority} onChange={priority => set({ priority })} testPrefix="req-edit-priority" />
+          </Field>
+          <ParentSelect item={item} items={items} value={draft.parentId} onChange={parentId => set({ parentId })} touch={!pointer} idBase="req-edit-parent" error={error?.field === 'parent' ? error.message : undefined} />
+          <SubRequirements item={item} items={items} onOpen={onOpenRequirement} onCreateChild={onCreateChild} canAddLevel={levelIn(items, item) < 5} />
+          {hasDetails(item) ? (
+            <>
+              <TaskChecklist
+                items={item.checklist ?? []}
+                pointer={pointer}
+                onToggle={onChecklistToggle}
+                onAdd={onChecklistAdd}
+                onDelete={onChecklistDelete}
+                onMove={onChecklistMove}
+                error={checklistError}
+              />
+            </>
+          ) : null}
+          {!legacy ? (
+            <Field label={tr('tasks.copy.53')}>
+              <RequirementAssignmentsEditor key={item.id} cfg={cfg} item={item} fields="participants" onSaved={onAssignmentsSaved} />
+            </Field>
+          ) : null}
+          <TaskIssueBindings key={item.id} item={item} onSave={onSave} />
+          <TaskTags key={`tags:${item.id}`} cfg={cfg} item={item} onSave={onSave} />
+          {!item.externalUrl || !parseIssue(item.externalUrl, false) ? <ExternalLink item={item} /> : null}
+          {item.createdAt ? <Text style={s.muted}>{tr('tasks.copy.139')}{item.createdAt.slice(0, 10)}</Text> : null}
+        </View>
       ) : null}
-      {item.createdAt ? <Text style={s.muted}>{tr('tasks.copy.139')}{item.createdAt.slice(0, 10)}</Text> : null}
     </ScrollView>
   );
 

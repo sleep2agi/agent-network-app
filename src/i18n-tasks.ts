@@ -322,3 +322,18 @@ registerTranslations({
   'taskWin.accountGone': ['账号已切换或已退出,无法打开这个任务', 'The account was switched or signed out; cannot open this task'],
   'taskWin.accountError': ['无法读取账号({error})', 'Could not read the account ({error})'],
 });
+
+// 详情的「更多」(TaskDetailPanel + task-detail-more.ts)。
+registerTranslations({
+  'detail.more': ['更多', 'More'],
+  'detail.moreA11y': ['展开更多字段', 'Show more fields'],
+  'detail.lessA11y': ['收起更多字段', 'Hide more fields'],
+  'detail.sumHigh': ['高优先级', 'High priority'],
+  'detail.sumLow': ['低优先级', 'Low priority'],
+  'detail.sumParent': ['母任务 {name}', 'Parent: {name}'],
+  'detail.sumParentUnknown': ['有母任务', 'Has a parent'],
+  'detail.sumChildren': ['{n} 子任务', '{n} subtasks'],
+  'detail.sumChecklist': ['{done}/{n} 检查项', '{done}/{n} checklist'],
+  'detail.sumParticipants': ['{n} 参与人', '{n} participants'],
+  'detail.sumIssues': ['{n} 个 Issue', '{n} issues'],
+});

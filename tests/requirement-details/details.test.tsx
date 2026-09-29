@@ -68,6 +68,11 @@ mock.module('./src/VoiceInputUI', () => ({
 }));
 mock.module('./src/DesktopVoiceBar', () => ({ DesktopMicButton: () => React.createElement('View', { testID: 'voice-mic' }), DesktopVoiceBar: () => null }));
 mock.module('./src/SplitEditorParts', () => ({ FocusRing: 'Pressable', ModeToggle: () => null, SplitDivider: () => null, useDebounced: (v: any) => v, prefersReducedMotion: () => false }));
+// 「更多」展开状态(本机偏好,expo-file-system):默认按「上次展开过」,老用例照旧能点到里面的字段;
+// 渐进展开的用例把它设成没存过(null = 收起)。
+let moreStored: boolean | null = true;
+const moreSaves: boolean[] = [];
+mock.module('./src/task-detail-prefs', () => ({ loadDetailMoreOpen: async () => moreStored, saveDetailMoreOpen: async (v: boolean) => { moreSaves.push(v); } }));
 mock.module('./src/mac-title-strip', () => ({ default: () => null }));
 mock.module('./src/win-title-bar', () => ({ default: () => null }));
 
@@ -158,7 +163,7 @@ async function mount() {
   setTaskSection('board');
   await act(async () => { renderer = create(<Board cfg={cfg} />); });
 }
-afterEach(async () => { voiceAvailable = false; voiceInsert = null; voicePresses = 0; dueCaps = false; participantCards = false; subCards = false; opened = []; typedCards = false; roleCards = false; detailCards = false; itemWrites = []; projectsMock = null; if (renderer) await act(async () => renderer.unmount()); });
+afterEach(async () => { moreStored = true; moreSaves.length = 0; voiceAvailable = false; voiceInsert = null; voicePresses = 0; dueCaps = false; participantCards = false; subCards = false; opened = []; typedCards = false; roleCards = false; detailCards = false; itemWrites = []; projectsMock = null; if (renderer) await act(async () => renderer.unmount()); });
 
 test('issue links: canonical PATCH only, duplicate click lock, rejection stays local, source read-only', async () => {
   const writes: any[]=[];
@@ -597,6 +602,26 @@ test('description full screen (phone) without voice support: no hold bar, 🖼 s
   await act(async () => byId('req-description-page-mode-edit').props.onPress());
   expect(byId('req-description-page-image')).toBeTruthy();
   expect(renderer.root.findAllByProps({ testID: 'voice-hold-bar' })).toHaveLength(0);
+});
+
+test('详情渐进展开: 常显字段在前,其余收进「更多」(默认收起),收起时一行摘要,展开状态本机记住', async () => {
+  moreStored = null;
+  subCards = true;
+  await mount();
+  await act(async () => byId('req-card-r1').props.onPress());
+  // 收起:优先级 / 母任务 / 子任务 看不到;摘要说「1 子任务」(r1 的 children.total = 2)
+  expect(renderer.root.findAllByProps({ testID: 'req-more' })).toHaveLength(0);
+  expect(renderer.root.findAllByProps({ testID: 'req-edit-priority-high' })).toHaveLength(0);
+  expect(renderer.root.findAllByProps({ testID: 'req-subrequirements' })).toHaveLength(0);
+  expect(byId('req-more-summary').props.children).toBe('2 子任务');
+  expect(byId('req-edit-due')).toBeTruthy();
+  await act(async () => byId('req-more-toggle').props.onPress());
+  expect(byId('req-more')).toBeTruthy();
+  expect(byId('req-subrequirements')).toBeTruthy();
+  expect(renderer.root.findAllByProps({ testID: 'req-more-summary' })).toHaveLength(0);
+  expect(moreSaves).toEqual([true]);
+  await act(async () => byId('req-more-toggle').props.onPress());
+  expect(moreSaves).toEqual([true, false]);
 });
 
 test('sub-requirements: progress chip on the parent card, children in detail, breadcrumb to the parent, 新建子需求 prefilled, GitHub link', async () => {

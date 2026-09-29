@@ -9,7 +9,7 @@
 // desktop (Tauri stub, mouse), 1000×700 / 1200×800 / 1432×831:
 //   clear      owner + project filter on → 「清除筛选」 is one line, not clipped, on the header centre line ±1px
 // desktop 1432×831:
-//   detail     项目 and 母任务 sit directly under the title (title < 项目 < 母任务 < 状态), same height / left / right as
+//   detail     项目 sits after 负责 Agent and before 预计完成, 母任务 inside 「更多」; both the same height / left / right as
 //              the 负责人 field ±0.5px; pick TMAI from the 项目 menu + a 母任务 → 保存修改 → the hub has both
 //   parent     the 母任务 menu never offers the task itself or its descendants; the child card shows 「↳ 母任务名」
 //   chips      every card with a project shows its coloured chip; 无项目 cards show none
@@ -21,6 +21,8 @@
 //              drawer closes; the window page (/?taskWindow=1) gets the task over the READY → SHOW handshake (no token
 //              in the URL or the payload), edits + saves; the main board re-reads on the CHANGED event (not the poll)
 //   fallback   window creation fails → the drawer stays with a note
+//   更多       (1432 desktop + 390 phone) always-visible order; 「更多」 collapsed by default with a one-line summary of
+//              what is set inside; expands to 优先级 / 母任务 / 子任务 / 检查项; remembered per device across a reload
 // Exit 1 when any assertion fails.
 import { createServer } from 'node:http';
 import { readFileSync, existsSync, mkdirSync, statSync } from 'node:fs';
@@ -51,7 +53,7 @@ const WEB_URL = `http://127.0.0.1:${web.address().port}/`;
 // Desktop-shell stub. plugin:http → the real throwaway hub. Events: listen handlers are kept by event name;
 // emits are recorded in window.__emits (the test relays them between pages); window creation succeeds unless
 // window.__failWindow is set. `taskShow` (window page only) answers the page's READY with that payload.
-const initScript = ({ hubUrl, token, networkId, theme, taskShow, label }) => {
+const initScript = ({ hubUrl, token, networkId, theme, taskShow, label, moreOpen = '1' }) => {
   const profile = { serverUrl: hubUrl, token, username: 'tester', profileId: 'p-task-organize', displayName: 'tester', networkId };
   let rid = 0; const reqs = new Map(); const bodies = new Map();
   window.__emits = []; window.__handlers = {}; window.__created = []; window.__failWindow = false;
@@ -93,6 +95,8 @@ const initScript = ({ hubUrl, token, networkId, theme, taskShow, label }) => {
     },
   };
   try { localStorage.setItem('theme_mode_v1', theme); } catch {}
+  // 「更多」:流程默认按展开过起步;渐进展开那一段传 moreOpen: null(没存过 = 收起),只在第一次加载时写。
+  try { if (moreOpen !== null && localStorage.getItem('task_detail_more_open_v1') === null) localStorage.setItem('task_detail_more_open_v1', moreOpen); } catch {}
 };
 
 const findExe = () => {
@@ -189,11 +193,15 @@ for (const [w, h] of [[1000, 700], [1200, 800], [1432, 831]]) {
   const status = await rect(page, tid('req-move-pool'));
   const owner = await rect(page, tid('req-edit-owner'));
   await shot(page, 'detail-top');
-  record(vp, 'detail: 项目 and 母任务 directly under the title, sized like 负责人', {
-    order: title.b < proj.y && proj.b < par.y && par.b < status.y,
+  const dueF = await rect(page, tid('req-edit-due'));
+  const agentF = await rect(page, tid('req-edit-owner-agent'));
+  const moreT = await rect(page, tid('req-more-toggle'));
+  // 顺序以「渐进展开」为准:常显 标题 · 状态 · 负责人 · 负责 Agent · 项目 · 预计完成;母任务在「更多」里(已展开)。
+  record(vp, 'detail: 项目 after 负责 Agent and before 预计完成; 母任务 inside 更多; both sized like 负责人', {
+    order: title.b < status.y && agentF.b < proj.y && proj.b < dueF.y && moreT.b < par.y,
     sameHeight: Math.abs(proj.h - owner.h) <= 0.5 && Math.abs(par.h - owner.h) <= 0.5,
     sameEdges: Math.abs(proj.x - owner.x) <= 0.5 && Math.abs(proj.r - owner.r) <= 0.5 && Math.abs(par.x - title.x) <= 0.5 && Math.abs(par.r - title.r) <= 0.5,
-  }, { projH: r1(proj.h), ownerH: r1(owner.h), gapTitleProj: r1(proj.y - title.b) });
+  }, { projH: r1(proj.h), ownerH: r1(owner.h), gapAgentProj: r1(proj.y - agentF.b) });
   await page.locator(tid('req-edit-project')).first().click();
   await page.locator(tid('req-edit-project-menu')).waitFor({ timeout: 5000 });
   const pm = await rect(page, tid('req-edit-project-menu'));
@@ -366,6 +374,54 @@ for (const [w, h] of [[1000, 700], [1200, 800], [1432, 831]]) {
   await shot(page, 'drawer-window-failed');
   record(vp, 'fallback: window creation fails → stays in the drawer with a note', { stays, note: /没能打开新窗口/.test(note || '') }, { note });
   record(vp, 'no page errors', { none: errors.length === 0 }, { errors: errors.slice(0, 2).join(' | ') });
+  await ctx.close();
+}
+
+// ── 渐进展开:常显字段顺序、「更多」默认收起 + 一行摘要、展开状态本机记住(桌面 1432 / 手机 390 / 新窗口 880)──
+for (const v of [{ w: 1432, h: 831, kind: 'desktop' }, { w: 390, h: 844, kind: 'phone' }]) {
+  const vp = `${v.kind} ${v.w}x${v.h} (更多)`;
+  const ctx = await browser.newContext({ viewport: { width: v.w, height: v.h }, deviceScaleFactor: 1, locale: 'zh-CN', timezoneId: 'Asia/Shanghai', ...(v.kind === 'phone' ? { userAgent: 'Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0 Mobile Safari/537.36', hasTouch: true } : {}) });
+  const page = await ctx.newPage();
+  await page.addInitScript(initScript, { hubUrl: HUB_URL, token: HUB_TOKEN, networkId: HUB_NETWORK, theme: 'light', moreOpen: null });
+  if (v.kind === 'desktop') await openBoard(page);
+  else {
+    await page.goto(`${WEB_URL}?safeAreaSim=32,0,24,0`);
+    await page.waitForFunction(() => !!window.__anetLayoutSweep, null, { timeout: 30000 });
+    await page.evaluate(() => window.__anetLayoutSweep.setScreen({ name: 'tasks' }));
+    await page.locator(tid('tasks-view-board')).first().click({ timeout: 20000 });
+    await page.locator('[data-testid^="req-card-"]').first().waitFor({ timeout: 20000 });
+  }
+  await cardByName(page, '登录页支持扫码登录').click();
+  await page.locator(tid('req-more-toggle')).waitFor({ timeout: 10000 });
+  await page.waitForTimeout(300);
+  const ys = await page.evaluate(() => ['req-edit-name', 'req-move-pool', 'req-edit-owner', 'req-edit-owner-agent', 'req-edit-project', 'req-edit-due', 'req-description', 'req-more-toggle'].map(id => { const e = [...document.querySelectorAll(`[data-testid="${id}"]`)].find(x => x.getBoundingClientRect().width > 0); return e ? e.getBoundingClientRect().top : null; }));
+  const hidden = await page.evaluate(() => ['req-edit-priority-high', 'req-edit-parent', 'req-subrequirements', 'req-checklist', 'req-issues'].filter(id => !!document.querySelector(`[data-testid="${id}"]`)));
+  const summary = await page.locator(tid('req-more-summary')).textContent().catch(() => '');
+  const row = await page.evaluate(() => ['req-more-label', 'req-more-summary'].map(id => { const e = document.querySelector(`[data-testid="${id}"]`); if (!e) return null; const b = e.getBoundingClientRect(); return { cy: b.y + b.height / 2, h: b.height, sw: e.scrollWidth, cw: e.clientWidth }; }));
+  const toggle = await rect(page, tid('req-more-toggle'));
+  const desc = await rect(page, tid('req-description'));
+  await shot(page, `more-collapsed-${v.kind}`);
+  record(vp, 'always-visible order: 标题 · 状态 · 负责人 · 负责 Agent · 项目 · 预计完成 · 描述 · 更多', { order: ys.every(y => y !== null) && ys.every((y, i) => i === 0 || y > ys[i - 1]) }, { ys: ys.map(y => y && r1(y)).join('/') });
+  record(vp, '更多 collapsed by default; nothing inside is rendered; summary names what is set', {
+    collapsed: hidden.length === 0, summary: /高优先级/.test(summary || '') && /子任务/.test(summary || '') && /检查项/.test(summary || '') && /参与人/.test(summary || ''),
+    oneLine: !!row[0] && !!row[1] && Math.abs(row[0].cy - row[1].cy) <= 1 && row[1].h < 22, afterDescription: !!toggle && !!desc && toggle.y >= desc.b,
+  }, { summary, hidden: hidden.join(',') });
+  await page.locator(tid('req-more-toggle')).click();
+  await page.waitForTimeout(300);
+  const shown = await page.evaluate(() => ['req-edit-priority-high', 'req-edit-parent', 'req-subrequirements', 'req-checklist'].filter(id => !!document.querySelector(`[data-testid="${id}"]`)));
+  await shot(page, `more-open-${v.kind}`);
+  // reload: the device remembers it was opened
+  await page.reload();
+  if (v.kind === 'phone') {
+    await page.waitForFunction(() => !!window.__anetLayoutSweep, null, { timeout: 30000 });
+    await page.evaluate(() => window.__anetLayoutSweep.setScreen({ name: 'tasks' }));
+  } else await page.locator('[data-testid="desktop-rail"] [aria-label="任务"]').first().click({ timeout: 30000 });
+  await page.locator(tid('tasks-view-board')).first().click({ timeout: 20000 });
+  await cardByName(page, '登录页支持扫码登录').click();
+  await page.locator(tid('req-more-toggle')).waitFor({ timeout: 10000 });
+  await page.waitForTimeout(400);
+  const remembered = !!(await rect(page, tid('req-more')));
+  record(vp, '更多 expands to 优先级 / 母任务 / 子任务 / 检查项; the device remembers it after a reload', { shown: shown.length === 4, remembered }, { shown: shown.join(',') });
   await ctx.close();
 }
 
