@@ -5,6 +5,8 @@
 // 这里只决定「出现哪些行、每行是什么、用抽屉还是推一页」,渲染在 ChatInfoPanel.tsx,
 // 接线在 ChatScreen.tsx。纯逻辑,不 import react-native(ck 测试直接 import)。
 import { NODE_SECTIONS, visibleNodeSections, type NodeSectionKey } from './node-page-model';
+import type { Session } from './api';
+import { isAgentNodeSession } from './node-rules';
 import { comboFromEvent, FIXED_SHORTCUTS, type KeyEventLike } from './shortcuts-model';
 
 export type ChatInfoRowKey =
@@ -70,6 +72,24 @@ export function chatInfoGroups(input: ChatInfoInput): ChatInfoRow[][] {
     if (sections.length) groups.push(sections);
   }
   return groups;
+}
+
+export interface ChatInfoCaps { rules: boolean; skills: boolean }
+
+/**
+ * 聊天信息里「规则文件」「技能」两行出不出现(口径同节点信息页只读态)。
+ *
+ * 🔴 能力位只在**全量** /api/status 里有:`?light=1` 的投影只有 alias/status/agent/task/server/
+ *    updated_at/runtime/network_id,rules_file_capable / skills_capable 一律不带。2026-09-29 owner:
+ *    claude-code 节点的聊天信息里没有「规则文件」「技能」—— 这里原来吃的是 light 行,
+ *    所以凡是不走 agent-node 的会话(判据只剩 rules_file_capable)永远是 false,与 node_id 无关。
+ *    调用方必须喂全量行;喂 light 行只能得到 agent-node 那一半(见 ChatScreen 的回退)。
+ */
+export function chatInfoCaps(s: Pick<Session, 'agent' | 'rules_file_capable' | 'skills_capable'> | null | undefined): ChatInfoCaps {
+  return {
+    rules: !!s && (isAgentNodeSession(s) || s.rules_file_capable === true),
+    skills: s?.skills_capable === true,
+  };
 }
 
 /** 宽(桌面 / 安卓双栏):聊天窗格右侧抽屉,Esc 或点外面关;手机单栏:推一页,‹ / 系统返回关。 */

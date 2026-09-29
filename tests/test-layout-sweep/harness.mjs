@@ -59,6 +59,12 @@ export const initScript = ({ theme }) => {
       return { jsonrpc: '2.0', id: 1, result: { content: [{ type: 'text', text: JSON.stringify(mcp(params.name ?? '', params.arguments ?? {})) }] } };
     }
     if (p === '/api/auth/me') return { ok: true, user: { username: 'tester' }, current_network: 'net-sweep', networks: [{ network_id: 'net-sweep', name: 'sweep' }] };
+    // `?light=1` is the hub's narrow projection (server/src/server.ts): exactly these 8 fields, no
+    // node_id, no capability bits. Answering it with full rows hid a real bug (2026-09-29: chat info
+    // read caps from the light rows and dropped 规则文件 / 技能 for every claude-code session).
+    if (p === '/api/status' && u.searchParams.get('light') === '1') {
+      return { ok: true, sessions: sessions.map(s => ({ alias: s.alias, status: s.status, agent: s.agent ?? null, task: s.task ?? null, server: s.server ?? null, updated_at: s.updated_at ?? null, runtime: s.runtime ?? null, network_id: s.network_id ?? null })) };
+    }
     if (p === '/api/status') return { ok: true, sessions, files_capable: true };
     if (p === '/api/nodes') return { ok: true, nodes, count: nodes.length };
     if (p === '/api/tasks') return { ok: true, tasks: tasks.filter(t => !u.searchParams.get('to') || t.to_name === u.searchParams.get('to')) };
