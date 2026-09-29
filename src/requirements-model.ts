@@ -11,6 +11,9 @@ import type { RequirementPersonRef } from './requirement-people';
 
 export interface ChecklistItem { id: string; text: string; done: boolean }
 
+/** 项目(军团项目 / TMAI …)。按网络隔离;归档的不再能选,但旧卡片的引用保留。 */
+export interface RequirementProject { id: string; name: string; color: string; sort: number; archived: boolean }
+
 export interface Requirement {
   /** 负责人。两个角色的 Hub 上只会是人类;旧 Hub 上可以是人类或 Agent(单一负责人)。 */
   owner?: RequirementPersonRef | null;
@@ -20,6 +23,8 @@ export interface Requirement {
   description?: string;
   /** 子任务(有序)。undefined = 这个 Hub 还没有。 */
   checklist?: ChecklistItem[];
+  /** 项目 id。null = 不属于任何项目;undefined = 这个 Hub 还没有项目。 */
+  projectId?: string | null;
   participants?: RequirementPersonRef[];
   id: string;
   name: string;

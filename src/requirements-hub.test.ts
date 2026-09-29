@@ -24,6 +24,10 @@ ck('坏日期丢掉，缺名字丢掉', requirementFromHub({ id: 'x', name: 'a',
   ck('旧 Hub 没有这两个字段 → undefined', requirementFromHub({ id: 'r', name: 'x' })?.description === undefined && requirementFromHub({ id: 'r', name: 'x' })?.checklist === undefined);
 }
 
+{
+  ck('project_id 读进来;null / 缺省区分', requirementFromHub({ id: 'r', name: 'x', project_id: 'proj_1' })?.projectId === 'proj_1' && requirementFromHub({ id: 'r', name: 'x', project_id: null })?.projectId === null && requirementFromHub({ id: 'r', name: 'x' })?.projectId === undefined);
+}
+
 function card(id: string, name: string, column: Requirement['column'] = 'pool'): Requirement {
   return { id, name, priority: 'normal', assignee: '', due: '', column, createdAt: '2026-09-28T00:00:00.000Z' };
 }

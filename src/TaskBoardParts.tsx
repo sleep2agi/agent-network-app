@@ -8,9 +8,24 @@ import { Ionicons } from './icons';
 import AliasAvatar from './AliasAvatar';
 import { colors, onThemeChange, radius, spacing, themeMode, type as typeScale, weight } from './theme';
 import { shadowOnly } from './elevation';
-import { REQ_PRIORITY_LABEL, type ReqPriority, type Requirement } from './requirements-model';
+import { REQ_PRIORITY_LABEL, type ReqPriority, type Requirement, type RequirementProject } from './requirements-model';
 import type { RequirementPerson } from './requirement-people';
 import { checklistProgress, dueInfo, ownerLabel, roleAvatars, type DueTone } from './task-board-model';
+
+/**
+ * accessibilityState + 同样的 aria-* 属性。react-native-web 0.21 已经**不读** accessibilityState
+ * (只认 aria-checked / aria-selected …),桌面端(Tauri 里的 web)读屏和浏览器就拿不到选中 / 勾选状态;
+ * 原生两个都认。任务页的控件都走这里。
+ */
+export function a11yState(st: { selected?: boolean; checked?: boolean; disabled?: boolean; expanded?: boolean }): object {
+  return {
+    accessibilityState: st,
+    ...(st.selected !== undefined ? { 'aria-selected': st.selected } : {}),
+    ...(st.checked !== undefined ? { 'aria-checked': st.checked } : {}),
+    ...(st.disabled !== undefined ? { 'aria-disabled': st.disabled } : {}),
+    ...(st.expanded !== undefined ? { 'aria-expanded': st.expanded } : {}),
+  };
+}
 
 export const BOARD_RADIUS = {
   card: radius.surface, control: radius.control, pill: radius.pill,
@@ -99,6 +114,7 @@ export const makeTaskStyles = () => StyleSheet.create({
   colPriority: { width: 76 },
   colDue: { width: 104 },
   colStatus: { width: 84 },
+  colProject: { width: 116 },
   statusPill: { alignSelf: 'flex-start', height: 22, paddingHorizontal: 9, borderRadius: BOARD_RADIUS.pill, flexDirection: 'row', alignItems: 'center', gap: 5 },
   statusPillText: { fontSize: typeScale.caption, fontWeight: weight.strong },
   // 列表(手机分组)
@@ -181,7 +197,7 @@ export function Segmented<K extends string>({ items, value, onChange, s, testID 
       {items.map(it => {
         const on = it.key === value;
         return (
-          <Pressable key={it.key} accessibilityRole="tab" accessibilityState={{ selected: on }} onPress={() => onChange(it.key)} style={[s.segmentItem, on && s.segmentItemOn]} testID={`${testID}-${it.key}`}>
+          <Pressable key={it.key} accessibilityRole="tab" {...a11yState({ selected: on })} onPress={() => onChange(it.key)} style={[s.segmentItem, on && s.segmentItemOn]} testID={`${testID}-${it.key}`}>
             <Text style={[s.segmentText, on && s.segmentTextOn]}>{it.label}</Text>
           </Pressable>
         );
@@ -194,7 +210,7 @@ export function Chip({ label, on, onPress, s, testID, leading, accessibilityLabe
   label: string; on: boolean; onPress: () => void; s: TaskStyles; testID?: string; leading?: ReactNode; accessibilityLabel?: string;
 }) {
   return (
-    <Pressable accessibilityRole="button" accessibilityLabel={accessibilityLabel || label} accessibilityState={{ selected: on }} onPress={onPress} style={[s.chip, on && s.chipOn]} testID={testID}>
+    <Pressable accessibilityRole="button" accessibilityLabel={accessibilityLabel || label} {...a11yState({ selected: on })} onPress={onPress} style={[s.chip, on && s.chipOn]} testID={testID}>
       {leading}
       <Text style={[s.chipText, on && s.chipTextOn]} numberOfLines={1}>{label}</Text>
       <Ionicons name="chevron-down" size={12} color={on ? colors.accent : colors.textMuted} />
@@ -214,6 +230,17 @@ export function ChecklistProgress({ item, s }: { item: Pick<Requirement, 'checkl
       <View style={{ flex: 1, height: 3, borderRadius: radius.pill, backgroundColor: colors.subtleFill, overflow: 'hidden' }}>
         <View style={{ width: `${Math.round(p.ratio * 100)}%`, height: 3, backgroundColor: complete ? colors.running : colors.accent }} testID="task-checklist-bar" />
       </View>
+    </View>
+  );
+}
+
+/** 项目标签:彩色圆点 + 名字,底色是项目色的淡色。归档的项目名字变灰。 */
+export function ProjectChip({ project, s, small = false }: { project: RequirementProject | undefined; s: TaskStyles; small?: boolean }) {
+  if (!project) return null;
+  return (
+    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5, alignSelf: 'flex-start', maxWidth: '100%', height: small ? 18 : 22, paddingHorizontal: small ? 6 : 8, borderRadius: radius.pill, backgroundColor: project.color + '1f' }} testID="task-project-chip" accessibilityLabel={`项目 ${project.name}`}>
+      <View style={{ width: 7, height: 7, borderRadius: radius.pill, backgroundColor: project.color }} />
+      <Text style={[s.metaText, { fontSize: small ? 11 : 12, color: project.archived ? colors.textMuted : colors.text }]} numberOfLines={1}>{project.name}</Text>
     </View>
   );
 }

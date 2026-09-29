@@ -37,6 +37,7 @@ const card = { id: 'r1', name: '验证需求详情', assignee: '负责人甲', p
 let typedCards = false;
 let roleCards = false;
 let detailCards = false;
+let projectsMock: any[] | null = null;
 let itemWrites: any[] = [];
 let requests: any[] = [];
 let creates: any[] = [];
@@ -48,16 +49,21 @@ class HubError extends Error { constructor(public status: number, message = 'HTT
 mock.module('./src/requirements-hub', () => ({
   listRequirements: async () => [
     { ...card, ...(typedCards || roleCards ? { owner: null, participants: [] } : {}), ...(roleCards ? { agentOwner: null } : {}),
+      ...(projectsMock ? { projectId: 'p1' } : {}),
       ...(detailCards ? { description: '## 目标', checklist: [{ id: 'a', text: '写接口', done: false }, { id: 'b', text: '写测试', done: true }] } : {}) },
     { ...card, id: 'r2', name: '另一个需求', ...(roleCards ? { owner: null, participants: [], agentOwner: null } : {}) },
   ], migrateLocalRequirements: async () => {},
   probeAgentOwnerSupport: async () => roleCards,
+  listProjects: async () => projectsMock,
+  createProject: async () => { throw new Error('not used'); },
+  updateProject: async () => { throw new Error('not used'); },
   createRequirementOnHub: async (_cfg: any, input: any) => { creates.push(input); return { ...card, ...input, id: 'new', owner: input.owner || null, participants: [], ...(roleCards ? { agentOwner: input.agentOwner || null } : {}) }; },
   updateRequirementOnHub: async (_cfg: any, id: string, patch: any) => {
     edits.push({ id, patch });
     if (editReply) return editReply(patch);
     const { agent_owner, ...rest } = patch;
     if (detailCards) return { ...card, id, description: '## 目标', checklist: [], ...rest };
+    if (projectsMock) { const { project_id, ...others } = rest; return { ...card, id, ...others, owner: null, participants: [], projectId: project_id === undefined ? 'p1' : project_id }; }
     return { ...card, id, ...rest, owner: patch.owner === undefined ? null : patch.owner, participants: [], ...(roleCards ? { agentOwner: agent_owner === undefined ? null : agent_owner } : {}) };
   },
   fetchMyUserId: async () => 'u',
@@ -96,7 +102,7 @@ async function mount() {
   setTaskSection('board');
   await act(async () => { renderer = create(<Board cfg={cfg} />); });
 }
-afterEach(async () => { typedCards = false; roleCards = false; detailCards = false; itemWrites = []; if (renderer) await act(async () => renderer.unmount()); });
+afterEach(async () => { typedCards = false; roleCards = false; detailCards = false; itemWrites = []; projectsMock = null; if (renderer) await act(async () => renderer.unmount()); });
 
 test('header has no permanent inputs or dev note; 新建 opens the dialog', async () => {
   await mount();
@@ -315,6 +321,32 @@ test('hub without description/checklist hides both sections and says to upgrade'
   expect(byId('req-details-unsupported')).toBeTruthy();
   expect(renderer.root.findAllByProps({ testID: 'req-checklist' })).toHaveLength(0);
   expect(renderer.root.findAllByProps({ testID: 'req-description' })).toHaveLength(0);
+});
+
+test('projects: create defaults to the selected project; detail moves a card to another project', async () => {
+  projectsMock = [{ id: 'p1', name: '军团项目', color: '#2563eb', sort: 0, archived: false }, { id: 'p2', name: 'TMAI', color: '#7c3aed', sort: 1, archived: false }, { id: 'p3', name: '旧', color: '#4b5563', sort: 2, archived: true }];
+  const { setTaskFilter } = await import('./src/task-board-store');
+  await mount();
+  await act(async () => setTaskFilter({ owners: [], priorities: [], project: 'p2' }));
+  await act(async () => byId('req-new').props.onPress());
+  expect(byId('req-project-p2').props.accessibilityState.checked).toBe(true);
+  expect(renderer.root.findAllByProps({ testID: 'req-project-p3' })).toHaveLength(0);
+  await act(async () => byId('req-name').props.onChangeText('TMAI 的任务'));
+  await act(async () => byId('req-add').props.onPress());
+  expect(creates[0].projectId).toBe('p2');
+  await act(async () => setTaskFilter({ owners: [], priorities: [], project: '' }));
+  await act(async () => byId('req-card-r1').props.onPress());
+  expect(byId('req-edit-project-p1').props.accessibilityState.checked).toBe(true);
+  await act(async () => byId('req-edit-project-p2').props.onPress());
+  await act(async () => byId('req-edit-save').props.onPress());
+  expect(edits).toEqual([{ id: 'r1', patch: { project_id: 'p2' } }]);
+});
+
+test('hub without projects: no project picker, no project chip filter', async () => {
+  await mount();
+  expect(renderer.root.findAllByProps({ testID: 'task-filter-project' })).toHaveLength(0);
+  await act(async () => byId('req-new').props.onPress());
+  expect(renderer.root.findAllByProps({ testID: 'req-project-none' })).toHaveLength(0);
 });
 
 test('people picker separates identical user/node names, stages selection, and confirms stable references', async () => {

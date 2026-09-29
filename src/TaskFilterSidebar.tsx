@@ -1,16 +1,18 @@
 // 桌面工作区在「任务」页时的左栏:原来这里是会话 / Agent 列表(跟任务页无关)。现在是筛选:
-// 全部 / 我负责的(负责人 = 我)/ 未分配 / 按 Agent(负责 Agent,头像 + 数目),最下面是「派发记录」(Hub 派给节点的任务)。
+// 项目(全部 / 各项目 + 管理项目)、全部 / 我负责的(负责人 = 我)/ 未分配 / 按 Agent(负责 Agent,头像 + 数目),
+// 最下面是「派发记录」(Hub 派给节点的任务)。按 Agent / 按节点只列有任务的,其余收进「更多节点」(可搜)——
+// owner 0.2.141 截图里这一栏是 ~300 个 0。
 // 左栏的每一项只是头部「负责人」筛选的快捷方式 —— 同一份状态(task-board-store),两边永远一致。
-import type { ReactNode } from 'react';
+import { useState, type ReactNode } from 'react';
 import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
-import { Text } from './ui-text';
+import { Text, TextInput } from './ui-text';
 import { Ionicons } from './icons';
 import AliasAvatar from './AliasAvatar';
 import { colors, radius, spacing, type as typeScale, weight } from './theme';
 import { personKey } from './requirement-people';
-import { applyFilter, ownerCounts, ownersForScope, scopeOf, type SidebarScope } from './task-board-model';
-import { setTaskFilter, setTaskSection, useTaskBoard } from './task-board-store';
-import { CONTROL_H } from './TaskBoardParts';
+import { activeProjects, applyFilter, NO_PROJECT, ownerCounts, ownersForScope, projectCounts, scopeOf, splitByCount, type SidebarScope } from './task-board-model';
+import { setManagingProjects, setTaskFilter, setTaskSection, useTaskBoard } from './task-board-store';
+import { CONTROL_H, a11yState } from './TaskBoardParts';
 
 /** onNavigate:在「任务详情」(派发记录的一条)上点左栏时回到任务页。 */
 export default function TaskFilterSidebar({ onNavigate }: { onNavigate?: () => void }) {
@@ -21,8 +23,13 @@ export default function TaskFilterSidebar({ onNavigate }: { onNavigate?: () => v
   const filter = useTaskBoard(s => s.filter);
   const section = useTaskBoard(s => s.section);
   const twoRoles = useTaskBoard(s => s.twoRoles === true);
+  const projects = useTaskBoard(s => s.projects);
+  const [moreOpen, setMoreOpen] = useState(false);
+  const [moreQuery, setMoreQuery] = useState('');
   const active = section === 'dispatch' ? null : scopeOf(filter.owners, meId);
-  const counts = ownerCounts(items, people);
+  // 人 / 节点的数字按当前项目算(选了 TMAI,「我负责的」就是我在 TMAI 里的)。
+  const inProject = applyFilter(items, { owners: [], priorities: [], project: filter.project });
+  const counts = ownerCounts(inProject, people);
   const meKey = meId ? personKey({ kind: 'user', id: meId }) : '';
   const countOf = (key: string) => counts.find(c => c.key === key)?.count ?? 0;
   // 按节点:有任务的节点按数目排在前;Hub 成员表里没任务的节点跟在后面(可以先点进去再建)。
@@ -31,6 +38,37 @@ export default function TaskFilterSidebar({ onNavigate }: { onNavigate?: () => v
     ...people.filter(p => p.kind === 'node' && !counts.some(c => c.key === personKey(p))).map(p => ({ key: personKey(p), ref: { kind: p.kind, id: p.id }, name: p.name || p.id, count: 0 })),
   ];
   const others = counts.filter(c => c.ref?.kind === 'user' && c.key !== meKey);
+  const split = splitByCount(nodes, moreQuery);
+  // 选中的节点即使 0 个任务也留在上面(不然点了就「消失」进折叠区)
+  const selectedNode = filter.owners.length === 1 && filter.owners[0].startsWith('node:') ? filter.owners[0] : '';
+  const shownNodes = selectedNode && !split.shown.some(n => n.key === selectedNode) ? [...split.shown, ...nodes.filter(n => n.key === selectedNode)] : split.shown;
+  const moreNodes = split.more.filter(n => n.key !== selectedNode);
+  const moreTotal = nodes.filter(n => n.count === 0 && n.key !== selectedNode).length;
+  const pCounts = projectCounts(items, filter);
+  const pickProject = (id: string) => {
+    setTaskSection(section === 'dispatch' ? 'board' : section);
+    setTaskFilter({ ...filter, project: id });
+    onNavigate?.();
+  };
+  const projectRow = (id: string, label: string, lead: ReactNode, count: number) => {
+    const on = section !== 'dispatch' && (filter.project || '') === id;
+    return (
+      <Pressable
+        key={`p:${id || 'all'}`}
+        testID={`task-side-project-${id || 'all'}`}
+        accessibilityRole="tab"
+        accessibilityLabel={`项目 ${label}`}
+        {...a11yState({ selected: on })}
+        onPress={() => pickProject(id)}
+        style={state => [styles.item, ((state as { hovered?: boolean }).hovered || state.pressed) && { backgroundColor: colors.rowHover }, on && { backgroundColor: colors.rowActive }]}
+      >
+        <View style={styles.icon}>{lead}</View>
+        <Text style={[styles.itemText, { color: on ? colors.text : colors.textSecondary }, on && { fontWeight: weight.strong }]} numberOfLines={1}>{label}</Text>
+        <Text style={[styles.count, { color: colors.textMuted }]}>{count}</Text>
+      </Pressable>
+    );
+  };
+  const dot = (color: string) => <View style={{ width: 10, height: 10, borderRadius: radius.pill, backgroundColor: color }} />;
   const pick = (scope: SidebarScope) => {
     setTaskSection(section === 'dispatch' ? 'board' : section);
     // 只换负责人,优先级筛选保留(与头部「负责人」筛选同一个动作)。
@@ -44,7 +82,7 @@ export default function TaskFilterSidebar({ onNavigate }: { onNavigate?: () => v
         testID={`task-side-${scope}`}
         accessibilityRole="tab"
         accessibilityLabel={label}
-        accessibilityState={{ selected: on, disabled }}
+        {...a11yState({ selected: on, disabled })}
         disabled={disabled}
         onPress={() => { if (scope === 'dispatch') setTaskSection('dispatch'); else pick(scope); onNavigate?.(); }}
         style={state => [styles.item, ((state as { hovered?: boolean }).hovered || state.pressed) && { backgroundColor: colors.rowHover }, on && { backgroundColor: colors.rowActive }, disabled && { opacity: 0.5 }]}
@@ -60,12 +98,40 @@ export default function TaskFilterSidebar({ onNavigate }: { onNavigate?: () => v
     <View style={[styles.root, { backgroundColor: colors.listBg }]} testID="task-sidebar">
       <View style={styles.head}><Text style={[styles.title, { color: colors.text }]} testID="task-sidebar-title">视图</Text></View>
       <ScrollView contentContainerStyle={styles.body}>
-        {row('all', '全部任务', icon('albums-outline'), items.length)}
-        {row('mine', '我负责的', icon('person-outline'), meKey ? applyFilter(items, { owners: [meKey], priorities: [] }).length : null, !meId)}
+        {projects ? (
+          <>
+            <Text style={[styles.section, { color: colors.textMuted, paddingTop: 0 }]}>项目</Text>
+            {projectRow('', '全部项目', icon('folder-open-outline'), Array.from(pCounts.values()).reduce((a, b) => a + b, 0))}
+            {activeProjects(projects).map(p => projectRow(p.id, p.name, dot(p.color), pCounts.get(p.id) ?? 0))}
+            {(pCounts.get(NO_PROJECT) ?? 0) > 0 && activeProjects(projects).length ? projectRow(NO_PROJECT, '无项目', icon('remove-circle-outline'), pCounts.get(NO_PROJECT) ?? 0) : null}
+            <Pressable accessibilityRole="button" onPress={() => setManagingProjects(true)} style={state => [styles.item, ((state as { hovered?: boolean }).hovered || state.pressed) && { backgroundColor: colors.rowHover }]} testID="task-side-manage-projects">
+              <View style={styles.icon}>{icon('settings-outline')}</View>
+              <Text style={[styles.itemText, { color: colors.accent }]}>管理项目</Text>
+            </Pressable>
+            <View style={[styles.divider, { backgroundColor: colors.border }]} />
+          </>
+        ) : null}
+        {row('all', '全部任务', icon('albums-outline'), inProject.length)}
+        {row('mine', '我负责的', icon('person-outline'), meKey ? applyFilter(inProject, { owners: [meKey], priorities: [] }).length : null, !meId)}
         {row('unassigned', '未分配', icon('help-circle-outline'), countOf('none'))}
         {/* 分两个角色的 Hub:这里按「负责 Agent」筛;旧 Hub 上节点就是唯一的负责人。 */}
         {nodes.length ? <Text style={[styles.section, { color: colors.textMuted }]}>{twoRoles ? '按 Agent' : '按节点'}</Text> : null}
-        {nodes.map(n => row(n.key as SidebarScope, n.name, <AliasAvatar alias={n.name} size={22} />, n.count))}
+        {shownNodes.map(n => row(n.key as SidebarScope, n.name, <AliasAvatar alias={n.name} size={22} />, n.count))}
+        {moreTotal ? (
+          <Pressable accessibilityRole="button" {...a11yState({ expanded: moreOpen })} onPress={() => setMoreOpen(o => !o)} style={state => [styles.item, ((state as { hovered?: boolean }).hovered || state.pressed) && { backgroundColor: colors.rowHover }]} testID="task-side-more-nodes">
+            <View style={styles.icon}>{icon(moreOpen ? 'chevron-down' : 'chevron-forward')}</View>
+            <Text style={[styles.itemText, { color: colors.textSecondary }]}>{twoRoles ? '更多 Agent' : '更多节点'}</Text>
+            <Text style={[styles.count, { color: colors.textMuted }]}>{moreTotal}</Text>
+          </Pressable>
+        ) : null}
+        {moreOpen && moreTotal ? (
+          <>
+            <TextInput value={moreQuery} onChangeText={setMoreQuery} placeholder="搜索节点" placeholderTextColor={colors.textMuted} style={[styles.search, { color: colors.text, borderColor: colors.border, backgroundColor: colors.inputBg }]} testID="task-side-more-search" accessibilityLabel="搜索节点" />
+            {moreNodes.slice(0, 50).map(n => row(n.key as SidebarScope, n.name, <AliasAvatar alias={n.name} size={22} />, n.count))}
+            {moreNodes.length > 50 ? <Text style={[styles.section, { color: colors.textMuted, paddingTop: spacing.xs }]}>还有 {moreNodes.length - 50} 个,搜索缩小范围</Text> : null}
+            {!moreNodes.length ? <Text style={[styles.section, { color: colors.textMuted, paddingTop: spacing.xs }]}>没有匹配的节点</Text> : null}
+          </>
+        ) : null}
         {others.length ? <Text style={[styles.section, { color: colors.textMuted }]}>{twoRoles ? '其他负责人' : '其他成员'}</Text> : null}
         {others.map(n => row(n.key as SidebarScope, n.name, <AliasAvatar alias={n.name} size={22} />, n.count))}
         <View style={[styles.divider, { backgroundColor: colors.border }]} />
@@ -86,5 +152,6 @@ const makeSidebarStyles = () => StyleSheet.create({
   itemText: { flex: 1, fontSize: 13 },
   count: { fontSize: typeScale.caption },
   section: { fontSize: typeScale.caption, paddingHorizontal: spacing.sm + 2, paddingTop: spacing.lg, paddingBottom: spacing.xs },
+  search: { height: 32, marginHorizontal: spacing.xs, marginVertical: spacing.xs, paddingHorizontal: spacing.sm, borderWidth: 1, borderRadius: radius.control, fontSize: 13 },
   divider: { height: StyleSheet.hairlineWidth, marginVertical: spacing.md, marginHorizontal: spacing.sm },
 });

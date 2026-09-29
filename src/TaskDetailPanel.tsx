@@ -9,20 +9,22 @@ import RequirementAssignmentsEditor from './RequirementAssignmentsEditor';
 import { useModalSafePadding } from './safe-area-runtime';
 import { colors, spacing, type as typeScale, weight } from './theme';
 import type { HubConfig } from './api';
-import { REQ_COLUMN_LABEL, REQ_COLUMNS, type ReqColumn, type Requirement } from './requirements-model';
+import { REQ_COLUMN_LABEL, REQ_COLUMNS, type ReqColumn, type Requirement, type RequirementProject } from './requirements-model';
 import type { RequirementPerson } from './requirement-people';
 import type { RequirementAssignments } from './requirement-people-api';
 import { checkDraft, DESCRIPTION_MAX, editDraftOf, editPatch, hasDetails, hasRoles, type EditDraft, type EditPatch } from './task-board-model';
 import TaskChecklist from './TaskChecklist';
 import MarkdownMessage from './MarkdownMessage';
-import { BOARD_RADIUS, cardBg, liftedShadow, Segmented, STATUS_TONE, useTaskStyles } from './TaskBoardParts';
-import { DueField, fieldStyles, PriorityPicker, RoleFields } from './TaskCreateDialog';
+import { BOARD_RADIUS, cardBg, liftedShadow, Segmented, STATUS_TONE, useTaskStyles, a11yState } from './TaskBoardParts';
+import { DueField, fieldStyles, PriorityPicker, ProjectPicker, RoleFields } from './TaskCreateDialog';
 
 export const DRAWER_WIDTH = 420;
 
-export default function TaskDetailPanel({ cfg, item, mode, top, people, peopleLoading, onLoadPeople, moving, moveError, onMove, onSave, onAssignmentsSaved, onClose, pointer, checklistError, onChecklistToggle, onChecklistAdd, onChecklistDelete, onChecklistMove }: {
+export default function TaskDetailPanel({ cfg, item, projects, mode, top, people, peopleLoading, onLoadPeople, moving, moveError, onMove, onSave, onAssignmentsSaved, onClose, pointer, checklistError, onChecklistToggle, onChecklistAdd, onChecklistDelete, onChecklistMove }: {
   cfg: HubConfig;
   item: Requirement;
+  /** 项目列表;null = Hub 没有项目。 */
+  projects: readonly RequirementProject[] | null;
   mode: 'drawer' | 'page';
   /** 抽屉的上沿 = 页面头部的下沿(对齐)。 */
   top: number;
@@ -67,6 +69,7 @@ export default function TaskDetailPanel({ cfg, item, mode, top, people, peopleLo
         owner: JSON.stringify(d.owner) === JSON.stringify(base.owner) ? next.owner : d.owner,
         agentOwner: JSON.stringify(d.agentOwner) === JSON.stringify(base.agentOwner) ? next.agentOwner : d.agentOwner,
         description: d.description === base.description ? next.description : d.description,
+        projectId: d.projectId === base.projectId ? next.projectId : d.projectId,
       };
     });
   }, [item]);
@@ -106,7 +109,7 @@ export default function TaskDetailPanel({ cfg, item, mode, top, people, peopleLo
                 key={col}
                 accessibilityRole="radio"
                 accessibilityLabel={on ? `当前：${REQ_COLUMN_LABEL[col]}` : `移到${REQ_COLUMN_LABEL[col]}`}
-                accessibilityState={{ disabled: moving || on, selected: on, checked: on }}
+                {...a11yState({ disabled: moving || on, selected: on, checked: on })}
                 disabled={moving || on}
                 onPress={() => onMove(col)}
                 style={[s.segmentItem, { flexDirection: 'row', gap: 6 }, on && s.segmentItemOn]}
@@ -138,6 +141,7 @@ export default function TaskDetailPanel({ cfg, item, mode, top, people, peopleLo
           </>
         ) : undefined}
       />
+      {projects && item.projectId !== undefined ? <ProjectPicker value={draft.projectId} projects={projects} onChange={projectId => set({ projectId })} idBase="req-edit-project" /> : null}
       <Field label="优先级">
         <PriorityPicker value={draft.priority} onChange={priority => set({ priority })} testPrefix="req-edit-priority" />
       </Field>
@@ -175,7 +179,7 @@ export default function TaskDetailPanel({ cfg, item, mode, top, people, peopleLo
         : <Text style={[s.muted, { flex: 1 }]} accessibilityLiveRegion="polite">{saving ? '正在保存…' : saved ? '已保存' : patch ? '有未保存的修改' : ''}</Text>}
       <Pressable
         accessibilityRole="button"
-        accessibilityState={{ disabled: !patch || saving }}
+        {...a11yState({ disabled: !patch || saving })}
         disabled={!patch || saving}
         onPress={() => { void save(); }}
         style={[s.primary, { height: 36, paddingHorizontal: spacing.lg }, (!patch || saving) && { opacity: 0.45 }]}

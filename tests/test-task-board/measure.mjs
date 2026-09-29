@@ -374,6 +374,92 @@ async function desktopFlows(page, vp) {
     await page.locator(tid('req-detail-close')).click();
   }
 
+  // sidebar: only nodes with tasks; the 40 idle ones behind 「更多节点」 with a search
+  {
+    const side = await page.evaluate(() => [...document.querySelectorAll('[data-testid^="task-side-node:"]')].map(e => ({ id: e.dataset.testid, count: Number((e.lastElementChild?.textContent || '').trim()) })));
+    const moreBtn = await page.locator(tid('task-side-more-nodes')).count();
+    const moreText = moreBtn ? await page.locator(tid('task-side-more-nodes')).textContent() : '';
+    await page.locator(tid('task-side-more-nodes')).click();
+    await page.locator(tid('task-side-more-search')).fill('idle-node-1');
+    await page.waitForTimeout(300);
+    const found = await page.evaluate(() => [...document.querySelectorAll('[data-testid^="task-side-node:node_idle_"]')].length);
+    await shot(page, 'flow-sidebar-more-nodes');
+    await page.locator(tid('task-side-more-nodes')).click();
+    record(vp, 'sidebar: nodes with tasks only; idle ones folded + searchable', {
+      noZeroRows: side.length > 0 && side.every(r => r.count >= 1),
+      folded: moreBtn === 1 && Number((moreText || '').replace(/\D+/g, '')) >= 40,
+      search: found === 10,
+    }, { shown: side.length, more: (moreText || '').replace(/\D+/g, ''), searchHits: found });
+  }
+
+  if (ROLES === 'two') {
+    // projects: sidebar filter + counts, chips on cards, default in create, manager (create / rename / recolour / archive)
+    const hubAll = await hubList();
+    const projectsOnHub = (await (await fetch(`${HUB_URL}/api/requirements/projects?network_id=${HUB_NETWORK}`, { headers: { authorization: `Bearer ${HUB_TOKEN}` } })).json()).projects;
+    const tmai = projectsOnHub.find(p => p.name === 'TMAI');
+    const chips = await page.locator(tid('task-project-chip')).count();
+    await page.locator(tid(`task-side-project-${tmai.id}`)).click();
+    await page.waitForTimeout(400);
+    const shownT = await page.locator('[data-testid^="req-card-"]').count();
+    const sideCount = (await page.locator(tid(`task-side-project-${tmai.id}`)).textContent()).replace(/\D+/g, '');
+    await shot(page, 'flow-project-filter-tmai');
+    await page.locator(tid('req-new')).click();
+    await page.locator(tid('req-create')).waitFor();
+    const defaultOn = await page.evaluate((id) => { const e = document.querySelector(`[data-testid="req-project-${id}"]`); return e?.getAttribute('aria-checked') ?? e?.getAttribute('aria-selected') ?? 'missing'; }, tmai.id);
+    await page.keyboard.type('TMAI 里新建的任务');
+    await page.locator(tid('req-add')).click();
+    await page.locator(tid('req-create')).waitFor({ state: 'detached' });
+    const createdT = await hubRow('TMAI 里新建的任务');
+    record(vp, 'projects: sidebar filter, chips, create default', {
+      chipsOnCards: chips >= 5,
+      filtered: shownT === hubAll.filter(r => r.project_id === tmai.id).length,
+      countMatches: Number(sideCount) === shownT,
+      defaultProject: defaultOn === 'true' && createdT?.project_id === tmai.id,
+    }, { shown: shownT, side: sideCount, created: createdT?.project_id === tmai.id, defaultOn });
+    await page.locator(tid('task-side-project-all')).click();
+    await page.waitForTimeout(300);
+
+    await page.locator(tid('task-side-manage-projects')).click();
+    await page.locator(tid('project-manager')).waitFor();
+    await page.locator(tid('project-new-name')).fill('测试项目');
+    await page.locator(tid('project-new-add')).click();
+    await page.waitForTimeout(600);
+    let list = (await (await fetch(`${HUB_URL}/api/requirements/projects?network_id=${HUB_NETWORK}`, { headers: { authorization: `Bearer ${HUB_TOKEN}` } })).json()).projects;
+    const test = list.find(p => p.name === '测试项目');
+    await page.locator(tid(`project-name-${test.id}`)).click();
+    await page.locator(tid(`project-name-input-${test.id}`)).fill('测试项目二');
+    await page.keyboard.press('Enter');
+    await page.waitForTimeout(500);
+    await page.locator(tid(`project-color-${test.id}`)).click();
+    await page.waitForTimeout(500);
+    await shot(page, 'flow-project-manager');
+    await page.locator(tid(`project-archive-${test.id}`)).click();
+    await page.waitForTimeout(600);
+    list = (await (await fetch(`${HUB_URL}/api/requirements/projects?network_id=${HUB_NETWORK}`, { headers: { authorization: `Bearer ${HUB_TOKEN}` } })).json()).projects;
+    const after = list.find(p => p.id === test.id);
+    await page.locator(tid('project-manager-close')).click();
+    const sideHasArchived = await page.locator(tid(`task-side-project-${test.id}`)).count();
+    record(vp, 'projects: manager create / rename / recolour / archive', {
+      created: !!test, renamed: after?.name === '测试项目二', recoloured: after && after.color !== test.color, archived: after?.archived === true, hiddenFromSidebar: sideHasArchived === 0,
+    });
+
+    // list view sorted by project
+    await page.locator(tid('tasks-view-list')).click();
+    await page.locator(tid('req-sort-project')).click();
+    await page.waitForTimeout(300);
+    const firstRows = await page.locator('[data-testid^="req-row-"] [data-testid="task-project-chip"]').allTextContents();
+    await shot(page, 'flow-list-sorted-by-project');
+    record(vp, 'list: sort by project', { projectFirst: firstRows.length > 0 && firstRows[0].includes('军团项目') }, { first: firstRows[0] });
+    await page.locator(tid('tasks-view-board')).click();
+    await page.waitForTimeout(300);
+  } else {
+    record(vp, 'old hub: projects hidden', {
+      noSidebarGroup: await page.locator(tid('task-side-manage-projects')).count() === 0,
+      noChip: await page.locator(tid('task-filter-project')).count() === 0,
+      noCardChips: await page.locator(tid('task-project-chip')).count() === 0,
+    });
+  }
+
   // drawer edit
   await cardByName(page, '设置页拆分子页面').click();
   await page.locator(tid('req-detail')).waitFor();
@@ -401,6 +487,11 @@ async function desktopFlows(page, vp) {
   await page.locator(tid('req-detail-close')).click();
 
   // filter by owner from the sidebar
+  // 没任务的节点折在「更多节点」里:先展开、搜到再点
+  if (!(await page.locator(tid('task-side-node:node_demo_a')).count())) {
+    await page.locator(tid('task-side-more-nodes')).click();
+    await page.locator(tid('task-side-more-search')).fill('demo-node-a');
+  }
   await page.locator(tid('task-side-node:node_demo_a')).click();
   await page.waitForTimeout(400);
   const shown = await page.locator('[data-testid^="req-card-"]').allTextContents();

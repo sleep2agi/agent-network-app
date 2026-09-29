@@ -9,7 +9,7 @@ import { colors, radius, spacing, type as typeScale } from './theme';
 import type { ChecklistItem } from './requirements-model';
 import { CHECKLIST_MAX_ITEMS, CHECKLIST_TEXT_MAX, checklistDropIndex, checklistProgress } from './task-board-model';
 import { fieldStyles } from './TaskCreateDialog';
-import { useTaskStyles } from './TaskBoardParts';
+import { useTaskStyles, a11yState } from './TaskBoardParts';
 
 export default function TaskChecklist({ items, pointer, onToggle, onAdd, onDelete, onMove, error }: {
   items: readonly ChecklistItem[];
@@ -93,7 +93,7 @@ export default function TaskChecklist({ items, pointer, onToggle, onAdd, onDelet
                 onHoverOut={() => setHover(h => (h === item.id ? null : h))}
                 onPress={() => onToggle(item.id, !item.done)}
                 accessibilityRole="checkbox"
-                accessibilityState={{ checked: item.done }}
+                {...a11yState({ checked: item.done })}
                 accessibilityLabel={item.text}
                 accessibilityHint={pointer ? 'Alt 加上下方向键调整顺序' : undefined}
                 {...({ onKeyDown: (e: any) => {

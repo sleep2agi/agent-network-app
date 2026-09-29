@@ -10,6 +10,7 @@ import {
   REQ_PRIORITIES,
   type ReqColumn,
   type ChecklistItem,
+  type RequirementProject,
   type ReqPriority,
   type Requirement,
 } from './requirements-model';
@@ -34,6 +35,7 @@ export function requirementFromHub(row: unknown): Requirement | null {
     ...('agent_owner' in r ? { agentOwner: agentOwnerFromHub(r.agent_owner) } : {}),
     ...(typeof r.description === 'string' ? { description: r.description } : {}),
     ...(Array.isArray(r.checklist) ? { checklist: checklistFromHub(r.checklist) } : {}),
+    ...('project_id' in r ? { projectId: typeof r.project_id === 'string' && r.project_id ? r.project_id : null } : {}),
     id: r.id,
     name: r.name.trim().slice(0, 80),
     priority,
@@ -85,7 +87,7 @@ export async function listRequirements(cfg: HubConfig): Promise<Requirement[]> {
   return rows.map(requirementFromHub).filter((row): row is Requirement => !!row);
 }
 
-type CreateInput = { name: string; priority: ReqPriority; assignee: string; due: string; column?: ReqColumn; clientId?: string; owner?: RequirementPersonRef; agentOwner?: RequirementPersonRef };
+type CreateInput = { name: string; priority: ReqPriority; assignee: string; due: string; column?: ReqColumn; clientId?: string; owner?: RequirementPersonRef; agentOwner?: RequirementPersonRef; projectId?: string };
 
 /** POST 的请求体。负责人只带稳定身份 {kind,id},多余字段(显示名、networkId…)一律不发。 */
 export function createRequirementBody(cfg: HubConfig, input: CreateInput): Record<string, unknown> {
@@ -99,6 +101,7 @@ export function createRequirementBody(cfg: HubConfig, input: CreateInput): Recor
     network_id: cfg.networkId,
     owner: input.owner ? { kind: input.owner.kind, id: input.owner.id } : undefined,
     agent_owner: input.agentOwner ? { kind: input.agentOwner.kind, id: input.agentOwner.id } : undefined,
+    project_id: input.projectId || undefined,
   };
 }
 
@@ -128,6 +131,8 @@ export async function updateRequirementOnHub(cfg: HubConfig, id: string, patch: 
   if (res.status === 400 && data?.error === 'empty_patch') throw new RequirementsHubError(HUB_CANNOT_EDIT, 400);
   if (res.status === 400 && (data?.error === 'person_not_in_network' || data?.error === 'invalid_person')) throw new RequirementsHubError('这个负责人已不在当前网络', 400);
   if (res.status === 400 && data?.error === 'owner_must_be_human') throw new RequirementsHubError('负责人只能是人类;Agent 请放在「负责 Agent」', 400);
+  if (res.status === 400 && data?.error === 'project_archived') throw new RequirementsHubError('这个项目已归档，换一个项目', 400);
+  if (res.status === 400 && data?.error === 'project_not_in_network') throw new RequirementsHubError('这个项目不在当前网络', 400);
   if (res.status === 400 && data?.error === 'invalid_description') throw new RequirementsHubError('描述太长了(最多 20000 字)', 400);
   if (res.status === 400 && data?.error === 'invalid_checklist') throw new RequirementsHubError('子任务不合法(最多 100 项,每项 1–500 字)', 400);
   if (res.status === 400 && data?.error === 'agent_owner_must_be_agent') throw new RequirementsHubError('负责 Agent 只能是 Agent 节点', 400);
@@ -239,4 +244,59 @@ export function filterAssigneeChoices(aliases: readonly string[], query: string)
   }
   out.sort((a, b) => a.localeCompare(b, 'zh'));
   return out;
+}
+
+// ── 项目 ──
+// GET 在旧 Hub 上是 404(没有这个路由)→ 返回 null:界面把项目整个藏起来。
+
+function projectFromHub(value: unknown): RequirementProject | null {
+  if (!value || typeof value !== 'object') return null;
+  const v = value as Record<string, unknown>;
+  if (typeof v.id !== 'string' || typeof v.name !== 'string' || !v.name.trim()) return null;
+  return {
+    id: v.id,
+    name: v.name,
+    color: typeof v.color === 'string' && /^#[0-9a-fA-F]{6}$/.test(v.color) ? v.color : '#4b5563',
+    sort: typeof v.sort === 'number' ? v.sort : 0,
+    archived: v.archived === true,
+  };
+}
+
+async function projectCall(cfg: HubConfig, path: string, init?: RequestInit): Promise<{ status: number; data: any }> {
+  const res = await appFetch(`${cfg.serverUrl}${scoped(cfg, path)}`, {
+    ...init,
+    headers: { Authorization: `Bearer ${cfg.token}`, 'Content-Type': 'application/json' },
+  });
+  return { status: res.status, data: await res.json().catch(() => null) };
+}
+
+const projectError = (status: number, error?: string): RequirementsHubError =>
+  new RequirementsHubError(
+    error === 'project_name_taken' ? '已经有同名的项目'
+      : error === 'invalid_project_name' ? '项目名 1–40 个字'
+        : status === 403 ? '你没有管理项目的权限'
+          : status === 404 ? '这个 Hub 还没有项目，升级 Hub 后再试' : '项目没有保存，请重试',
+    status,
+  );
+
+/** 项目列表;旧 Hub(没有项目)返回 null。 */
+export async function listProjects(cfg: HubConfig): Promise<RequirementProject[] | null> {
+  const { status, data } = await projectCall(cfg, '/api/requirements/projects');
+  if (status === 404) return null;
+  if (status < 200 || status >= 300 || !Array.isArray(data?.projects)) throw projectError(status, data?.error);
+  return data.projects.map(projectFromHub).filter((p: RequirementProject | null): p is RequirementProject => !!p);
+}
+
+export async function createProject(cfg: HubConfig, input: { name: string; color?: string }): Promise<RequirementProject> {
+  const { status, data } = await projectCall(cfg, '/api/requirements/projects', { method: 'POST', body: JSON.stringify({ ...input, network_id: cfg.networkId }) });
+  const row = projectFromHub(data?.project);
+  if (status !== 201 || !row) throw projectError(status, data?.error);
+  return row;
+}
+
+export async function updateProject(cfg: HubConfig, id: string, patch: { name?: string; color?: string; sort?: number; archived?: boolean }): Promise<RequirementProject> {
+  const { status, data } = await projectCall(cfg, `/api/requirements/projects/${encodeURIComponent(id)}`, { method: 'PATCH', body: JSON.stringify(patch) });
+  const row = projectFromHub(data?.project);
+  if (status !== 200 || !row) throw projectError(status, data?.error);
+  return row;
 }

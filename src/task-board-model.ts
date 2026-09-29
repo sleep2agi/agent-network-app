@@ -6,6 +6,7 @@
 // 桌面拖动换列、手机长按菜单。Hub 数据模型不变(标题/状态/优先级/期限/负责人/参与人)。
 import {
   type ChecklistItem,
+  type RequirementProject,
   columnsOf,
   dueOk,
   REQ_COLUMNS,
@@ -43,16 +44,74 @@ export interface BoardFilter {
   owners: string[];
   /** 空 = 不按优先级筛。 */
   priorities: ReqPriority[];
+  /** 项目 id;NO_PROJECT = 不属于任何项目;省略 / '' = 全部项目。 */
+  project?: string;
 }
+
+export const NO_PROJECT = '__none__';
 
 export const EMPTY_FILTER: BoardFilter = { owners: [], priorities: [] };
 
-export const filterActive = (f: BoardFilter): boolean => f.owners.length > 0 || f.priorities.length > 0;
+export const filterActive = (f: BoardFilter): boolean => f.owners.length > 0 || f.priorities.length > 0 || !!f.project;
 
 export function matchesFilter(item: Requirement, f: BoardFilter): boolean {
   if (f.owners.length && !roleKeysOf(item).some(k => f.owners.includes(k))) return false;
   if (f.priorities.length && !f.priorities.includes(item.priority)) return false;
+  if (f.project) {
+    if (f.project === NO_PROJECT ? !!item.projectId : item.projectId !== f.project) return false;
+  }
   return true;
+}
+
+// ── 项目 ─────────────────────────────────────────────────────────────────
+
+/** 可选的项目(未归档),按 sort、名字排。 */
+export const activeProjects = (projects: readonly RequirementProject[]): RequirementProject[] =>
+  projects.filter(p => !p.archived).sort((a, b) => a.sort - b.sort || a.name.localeCompare(b.name, 'zh'));
+
+/** 各项目的卡片数(按当前除项目以外的筛选算,左栏的数字才和点进去看到的一致)。 */
+export function projectCounts(items: readonly Requirement[], f: BoardFilter): Map<string, number> {
+  const counts = new Map<string, number>();
+  for (const item of applyFilter(items, { ...f, project: '' })) {
+    const key = item.projectId || NO_PROJECT;
+    counts.set(key, (counts.get(key) ?? 0) + 1);
+  }
+  return counts;
+}
+
+/** 新建时默认的项目:左栏 / 头部正选着一个(未归档的)项目就用它。 */
+export function defaultProjectFor(f: BoardFilter, projects: readonly RequirementProject[]): string | null {
+  if (!f.project || f.project === NO_PROJECT) return null;
+  return projects.some(p => p.id === f.project && !p.archived) ? f.project : null;
+}
+
+export const PROJECT_COLORS = ['#2563eb', '#16a34a', '#d97706', '#dc2626', '#7c3aed', '#0891b2', '#db2777', '#4b5563'] as const;
+
+/** 改色:在调色板里轮到下一个。 */
+export const nextProjectColor = (color: string): string => {
+  const i = PROJECT_COLORS.indexOf(color as (typeof PROJECT_COLORS)[number]);
+  return PROJECT_COLORS[(i + 1) % PROJECT_COLORS.length];
+};
+
+export function checkProjectName(name: string, projects: readonly RequirementProject[], except?: string): { ok: true; name: string } | { ok: false; message: string } {
+  const n = name.replace(/\s+/g, ' ').trim();
+  if (!n) return { ok: false, message: '先写项目名' };
+  if (n.length > 40) return { ok: false, message: '项目名最多 40 个字' };
+  if (projects.some(p => !p.archived && p.name === n && p.id !== except)) return { ok: false, message: '已经有同名的项目' };
+  return { ok: true, name: n };
+}
+
+// ── 左栏:按节点 / 按 Agent 的收起 ─────────────────────────────────────────
+
+/**
+ * 网络里可能有几百个节点,几乎都没有任务(owner 0.2.141 截图:~300 行 0)。左栏只把有任务的放出来
+ * (按数目降序),其余收进「更多节点」,展开后可以搜。
+ */
+export function splitByCount<T extends { name: string; count: number }>(rows: readonly T[], query = ''): { shown: T[]; more: T[] } {
+  const shown = rows.filter(r => r.count > 0).sort((a, b) => b.count - a.count || a.name.localeCompare(b.name, 'zh'));
+  const q = query.trim().toLocaleLowerCase();
+  const more = rows.filter(r => r.count === 0 && (!q || r.name.toLocaleLowerCase().includes(q))).sort((a, b) => a.name.localeCompare(b.name, 'zh'));
+  return { shown, more };
 }
 
 export const applyFilter = (items: readonly Requirement[], f: BoardFilter): Requirement[] => items.filter(item => matchesFilter(item, f));
@@ -132,7 +191,7 @@ export function roleAvatars(item: Pick<Requirement, 'owner' | 'agentOwner'>, peo
 
 // ── 列表视图排序 ─────────────────────────────────────────────────────────
 
-export type SortKey = 'title' | 'owner' | 'priority' | 'due' | 'status';
+export type SortKey = 'title' | 'owner' | 'priority' | 'due' | 'status' | 'project';
 export interface SortSpec { key: SortKey; dir: 'asc' | 'desc' }
 export const DEFAULT_SORT: SortSpec = { key: 'status', dir: 'asc' };
 
@@ -147,7 +206,12 @@ export const nextSort = (cur: SortSpec, key: SortKey): SortSpec =>
  * 列表排序。空期限永远在最后(不论升降序);同值按看板里的顺序(优先级 → 期限 → 新建时间)兜底,
  * 所以排序稳定、刷新不跳行。
  */
-export function sortRows(items: readonly Requirement[], sort: SortSpec, people: readonly RequirementPerson[] = []): Requirement[] {
+export function sortRows(items: readonly Requirement[], sort: SortSpec, people: readonly RequirementPerson[] = [], projects: readonly RequirementProject[] = []): Requirement[] {
+  const projectRank = (id: string | null | undefined): number => {
+    if (!id) return Number.MAX_SAFE_INTEGER;
+    const i = activeProjects(projects).findIndex(p => p.id === id);
+    return i < 0 ? Number.MAX_SAFE_INTEGER - 1 : i;
+  };
   const sign = sort.dir === 'asc' ? 1 : -1;
   const base = (a: Requirement, b: Requirement) =>
     PRIORITY_RANK[a.priority] - PRIORITY_RANK[b.priority]
@@ -172,6 +236,14 @@ export function sortRows(items: readonly Requirement[], sort: SortSpec, people: 
         if (!b.due) return -1;
         return (a.due < b.due ? -1 : 1) * sign;
       case 'status': return (COLUMN_RANK[a.column] - COLUMN_RANK[b.column]) * sign;
+      case 'project': {
+        const ra = projectRank(a.projectId), rb = projectRank(b.projectId);
+        if (ra === rb) return 0;
+        // 没有项目的永远在最后(同空期限)
+        if (!a.projectId) return 1;
+        if (!b.projectId) return -1;
+        return (ra - rb) * sign;
+      }
     }
   };
   return [...items].sort((a, b) => primary(a, b) || base(a, b));
@@ -293,10 +365,12 @@ export interface CreateDraft {
   owner: RequirementPersonRef | null;
   /** 负责 Agent(只在分两个角色的 Hub 上有)。 */
   agentOwner: RequirementPersonRef | null;
+  /** 项目(只在有项目的 Hub 上发)。 */
+  projectId: string | null;
   column: ReqColumn;
 }
 
-export const emptyDraft = (column: ReqColumn = 'pool'): CreateDraft => ({ name: '', priority: 'normal', due: '', owner: null, agentOwner: null, column });
+export const emptyDraft = (column: ReqColumn = 'pool'): CreateDraft => ({ name: '', priority: 'normal', due: '', owner: null, agentOwner: null, projectId: null, column });
 
 /** 两个角色各自能选哪一种人:负责人 = 人类,负责 Agent = 节点;旧 Hub 的单一负责人两种都行。 */
 export const roleKinds = (role: 'owner' | 'agent', twoRoles: boolean): ('user' | 'node')[] =>
@@ -319,7 +393,7 @@ export function checkDraft(d: Pick<CreateDraft, 'name' | 'due'>): DraftCheck {
  * 发给 POST /api/requirements 的字段。负责人只带稳定身份 {kind,id}(#484):显示名不是身份,
  * 旧的 assignee 文本永远是空串。
  */
-export function createInput(d: CreateDraft, twoRoles = false): { name: string; priority: ReqPriority; assignee: ''; due: string; column: ReqColumn; owner?: RequirementPersonRef; agentOwner?: RequirementPersonRef } | null {
+export function createInput(d: CreateDraft, twoRoles = false): { name: string; priority: ReqPriority; assignee: ''; due: string; column: ReqColumn; owner?: RequirementPersonRef; agentOwner?: RequirementPersonRef; projectId?: string } | null {
   const c = checkDraft(d);
   if (!c.ok) return null;
   // 分两个角色的 Hub 上,种类不对的一侧不发(Hub 会 400);旧 Hub 没有负责 Agent。
@@ -333,12 +407,13 @@ export function createInput(d: CreateDraft, twoRoles = false): { name: string; p
     column: d.column,
     ...(owner ? { owner: { kind: owner.kind, id: owner.id } } : {}),
     ...(agent ? { agentOwner: { kind: agent.kind, id: agent.id } } : {}),
+    ...(d.projectId ? { projectId: d.projectId } : {}),
   };
 }
 
 // ── 详情编辑 ─────────────────────────────────────────────────────────────
 
-export interface EditDraft { name: string; priority: ReqPriority; due: string; owner: RequirementPersonRef | null; agentOwner: RequirementPersonRef | null; description: string }
+export interface EditDraft { name: string; priority: ReqPriority; due: string; owner: RequirementPersonRef | null; agentOwner: RequirementPersonRef | null; description: string; projectId: string | null }
 
 export const editDraftOf = (item: Requirement): EditDraft => ({
   name: item.name,
@@ -347,10 +422,11 @@ export const editDraftOf = (item: Requirement): EditDraft => ({
   owner: item.owner ? { kind: item.owner.kind, id: item.owner.id } : null,
   agentOwner: item.agentOwner ? { kind: item.agentOwner.kind, id: item.agentOwner.id } : null,
   description: item.description ?? '',
+  projectId: item.projectId ?? null,
 });
 
 /** PATCH 请求体(字段名就是线上的名字)。 */
-export type EditPatch = { name?: string; priority?: ReqPriority; due?: string; owner?: RequirementPersonRef | null; agent_owner?: RequirementPersonRef | null; description?: string; checklist?: ChecklistItem[] };
+export type EditPatch = { name?: string; priority?: ReqPriority; due?: string; owner?: RequirementPersonRef | null; agent_owner?: RequirementPersonRef | null; description?: string; checklist?: ChecklistItem[]; project_id?: string | null };
 
 /**
  * 只提交改过的字段;没改返回 null(保存按钮不可用)。旧 Hub(owner undefined)不提交负责人 ——
@@ -375,6 +451,7 @@ export function editPatch(item: Requirement, d: EditDraft): EditPatch | null {
   }
   // 描述跟标题一起走「保存修改」;旧 Hub(没有 description 字段)不发。
   if (item.description !== undefined && d.description.replace(/\r\n?/g, '\n') !== item.description) patch.description = d.description.replace(/\r\n?/g, '\n');
+  if (item.projectId !== undefined && (d.projectId ?? null) !== (item.projectId ?? null)) patch.project_id = d.projectId ?? null;
   return Object.keys(patch).length ? patch : null;
 }
 
@@ -397,6 +474,7 @@ export function patchApplied(row: Requirement, patch: EditPatch): boolean {
     if (want !== got) return false;
   }
   if (patch.description !== undefined && row.description !== patch.description) return false;
+  if (patch.project_id !== undefined && (row.projectId ?? null) !== patch.project_id) return false;
   if (patch.checklist !== undefined && JSON.stringify(row.checklist?.map(i => i.id)) !== JSON.stringify(patch.checklist.map(i => i.id))) return false;
   return true;
 }

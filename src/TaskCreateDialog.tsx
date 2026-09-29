@@ -8,11 +8,11 @@ import AliasAvatar from './AliasAvatar';
 import RequirementPeoplePicker from './RequirementPeoplePicker';
 import { useModalSafePadding } from './safe-area-runtime';
 import { withBasePadding } from './modal-safe-area';
-import { colors, spacing, themeMode, type as typeScale, weight } from './theme';
-import { REQ_COLUMN_LABEL, REQ_PRIORITIES, REQ_PRIORITY_LABEL, type ReqPriority } from './requirements-model';
+import { colors, radius, spacing, themeMode, type as typeScale, weight } from './theme';
+import { REQ_COLUMN_LABEL, REQ_PRIORITIES, REQ_PRIORITY_LABEL, type ReqPriority, type RequirementProject } from './requirements-model';
 import type { RequirementPerson, RequirementPersonRef } from './requirement-people';
-import { checkDraft, createInput, localToday, personName, roleKinds, type CreateDraft } from './task-board-model';
-import { BOARD_RADIUS, CONTROL_H, liftedShadow, PriorityDot, useTaskStyles } from './TaskBoardParts';
+import { activeProjects, checkDraft, createInput, localToday, personName, roleKinds, type CreateDraft } from './task-board-model';
+import { BOARD_RADIUS, CONTROL_H, liftedShadow, PriorityDot, useTaskStyles, a11yState } from './TaskBoardParts';
 
 /** 期限的快捷项:今天 / 明天 / 下周一 / 清除。日期框仍可手写 2026-10-01。 */
 export function dueShortcuts(today: string): { key: string; label: string; value: string }[] {
@@ -37,7 +37,7 @@ export function PriorityPicker({ value, onChange, testPrefix }: { value: ReqPrio
       {REQ_PRIORITIES.map(p => {
         const on = p === value;
         return (
-          <Pressable key={p} accessibilityRole="radio" accessibilityState={{ checked: on }} onPress={() => onChange(p)} style={[s.segmentItem, { flexDirection: 'row', gap: 6 }, on && s.segmentItemOn]} testID={`${testPrefix}-${p}`}>
+          <Pressable key={p} accessibilityRole="radio" {...a11yState({ checked: on })} onPress={() => onChange(p)} style={[s.segmentItem, { flexDirection: 'row', gap: 6 }, on && s.segmentItemOn]} testID={`${testPrefix}-${p}`}>
             <PriorityDot p={p} s={s} />
             <Text style={[s.segmentText, on && s.segmentTextOn]}>{REQ_PRIORITY_LABEL[p]}</Text>
           </Pressable>
@@ -153,10 +153,40 @@ export function RoleFields({ twoRoles, owner, agentOwner, people, peopleLoading,
   );
 }
 
-export default function TaskCreateDialog({ draft, sheet, twoRoles, networkId, people, peopleLoading, peopleError, onLoadPeople, onChange, onSubmit, onClose }: {
+/** 项目:无项目 + 各个未归档项目(彩色圆点)。一排可换行的胶囊,单选。 */
+export function ProjectPicker({ value, projects, onChange, idBase }: { value: string | null; projects: readonly RequirementProject[]; onChange: (id: string | null) => void; idBase: string }) {
+  const s = useTaskStyles();
+  const f = fieldStyles();
+  const list = activeProjects(projects);
+  const archivedCurrent = value ? projects.find(p => p.id === value && p.archived) : undefined;
+  const chip = (id: string | null, label: string, color?: string) => {
+    const on = (value ?? null) === id;
+    return (
+      <Pressable key={id ?? 'none'} accessibilityRole="radio" {...a11yState({ checked: on })} onPress={() => onChange(id)} style={[s.chip, { height: 30 }, on && s.chipOn]} testID={`${idBase}-${id ?? 'none'}`}>
+        {color ? <View style={{ width: 8, height: 8, borderRadius: radius.pill, backgroundColor: color }} /> : null}
+        <Text style={[s.chipText, on && s.chipTextOn]} numberOfLines={1}>{label}</Text>
+      </Pressable>
+    );
+  };
+  return (
+    <View style={{ gap: spacing.sm }}>
+      <Text style={f.label}>项目</Text>
+      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm }} accessibilityRole="radiogroup">
+        {chip(null, '无项目')}
+        {list.map(p => chip(p.id, p.name, p.color))}
+        {archivedCurrent ? chip(archivedCurrent.id, `${archivedCurrent.name}(已归档)`, archivedCurrent.color) : null}
+      </View>
+      {!list.length ? <Text style={s.muted}>还没有项目,在左栏「管理项目」里建</Text> : null}
+    </View>
+  );
+}
+
+export default function TaskCreateDialog({ draft, sheet, twoRoles, projects, networkId, people, peopleLoading, peopleError, onLoadPeople, onChange, onSubmit, onClose }: {
   draft: CreateDraft | null;
   /** Hub 分不分「负责人(人类)/ 负责 Agent」。不分就是旧的单一负责人。 */
   twoRoles: boolean;
+  /** 项目列表;null = Hub 没有项目,不显示。 */
+  projects: readonly RequirementProject[] | null;
   /** true = 手机底部面板;false = 居中对话框。 */
   sheet: boolean;
   networkId: string;
@@ -233,6 +263,7 @@ export default function TaskCreateDialog({ draft, sheet, twoRoles, networkId, pe
                 onChange={set}
                 idBase="req-assignee"
               />
+              {projects ? <ProjectPicker value={draft.projectId} projects={projects} onChange={projectId => set({ projectId })} idBase="req-project" /> : null}
               <View style={{ gap: spacing.sm }}>
                 <Text style={f.label}>优先级</Text>
                 <PriorityPicker value={draft.priority} onChange={priority => set({ priority })} testPrefix="req-priority" />
@@ -249,7 +280,7 @@ export default function TaskCreateDialog({ draft, sheet, twoRoles, networkId, pe
                 <Pressable accessibilityRole="button" onPress={onClose} style={[s.primary, { backgroundColor: colors.subtleFill }]} testID="req-create-cancel">
                   <Text style={[s.primaryText, { color: colors.text }]}>取消</Text>
                 </Pressable>
-                <Pressable accessibilityRole="button" accessibilityState={{ disabled: saving || !draft.name.trim() }} disabled={saving} onPress={() => { void submit(); }} style={[s.primary, { minWidth: 72, justifyContent: 'center', height: CONTROL_H + 4 }, (saving || !draft.name.trim()) && { opacity: 0.5 }]} testID="req-add">
+                <Pressable accessibilityRole="button" {...a11yState({ disabled: saving || !draft.name.trim() })} disabled={saving} onPress={() => { void submit(); }} style={[s.primary, { minWidth: 72, justifyContent: 'center', height: CONTROL_H + 4 }, (saving || !draft.name.trim()) && { opacity: 0.5 }]} testID="req-add">
                   <Text style={s.primaryText}>{saving ? '创建中…' : '创建'}</Text>
                 </Pressable>
               </View>

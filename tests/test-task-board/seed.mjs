@@ -20,6 +20,11 @@ for (const n of nodes) {
   db.run(`INSERT OR IGNORE INTO nodes (node_id,node_name,alias,runtime,created_at,updated_at,network_id,lifecycle_state,owner_user_id) VALUES (?,?,?,?,datetime('now'),datetime('now'),?,'active',?)`, [n.id, n.alias, n.alias, "claude-code", net, uid]);
   db.run(`INSERT OR IGNORE INTO sessions (resume_id,alias,status,network_id,registered_at,updated_at,node_id,last_seen_at,agent) VALUES (?,?,?,?,datetime('now'),datetime('now'),?,datetime('now'),'claude-code')`, [`res_${n.id}`, n.alias, "idle", net, n.id]);
 }
+// 40 idle placeholder nodes with no tasks: the sidebar must fold them into 「更多节点」 (owner's screenshot had ~300).
+for (let i = 0; i < 40; i++) {
+  const id = `node_idle_${String(i).padStart(2, "0")}`;
+  db.run(`INSERT OR IGNORE INTO nodes (node_id,node_name,alias,runtime,created_at,updated_at,network_id,lifecycle_state,owner_user_id) VALUES (?,?,?,?,datetime('now'),datetime('now'),?,'active',?)`, [id, `idle-node-${String(i).padStart(2, "0")}`, `idle-node-${String(i).padStart(2, "0")}`, "claude-code", net, uid]);
+}
 db.run(`INSERT OR IGNORE INTO network_members (network_id,user_id,role,invited_by) VALUES (?,?,'member',?)`, [net, member, uid]);
 
 const pad = (x) => String(x).padStart(2, "0");
@@ -43,8 +48,18 @@ const call = async (path, init) => {
   if (!res.ok) throw new Error(`${init?.method || "GET"} ${path} → ${res.status} ${JSON.stringify(body)}`);
   return body;
 };
+// Projects (a hub without them answers 404 → the fallback run has none). The hub never seeds; this fixture does.
+const projects = {};
+{
+  const res = await fetch(`${hub}/api/requirements/projects?network_id=${net}`, { method: "POST", headers: { authorization: `Bearer ${token}`, "content-type": "application/json" }, body: JSON.stringify({ name: "军团项目" }) });
+  if (res.status === 201) {
+    projects.legion = (await res.json()).project.id;
+    projects.tmai = (await call(`/api/requirements/projects?network_id=${net}`, { method: "POST", body: JSON.stringify({ name: "TMAI", color: "#7c3aed" }) })).project.id;
+  }
+}
+const projectOf = { "登录页支持扫码登录": "legion", "整理 9 月的发版说明,补上安卓和桌面端的差异": "legion", "修复通知在后台不弹": "tmai", "设置页拆分子页面": "legion", "节点日志查看器": "tmai" };
 for (const r of rows) {
-  const { requirement } = await call("/api/requirements", { method: "POST", body: JSON.stringify({ name: r.name, priority: r.priority, due: r.due, assignee: "", network_id: net, ...(r.description ? { description: r.description } : {}), ...(r.checklist ? { checklist: r.checklist } : {}), ...(r.owner ? { owner: r.owner } : {}), ...(r.agent ? { agent_owner: r.agent } : {}) }) });
+  const { requirement } = await call("/api/requirements", { method: "POST", body: JSON.stringify({ name: r.name, priority: r.priority, due: r.due, assignee: "", network_id: net, ...(r.description ? { description: r.description } : {}), ...(r.checklist ? { checklist: r.checklist } : {}), ...(projects[projectOf[r.name]] ? { project_id: projects[projectOf[r.name]] } : {}), ...(r.owner ? { owner: r.owner } : {}), ...(r.agent ? { agent_owner: r.agent } : {}) }) });
   if (r.column !== "pool") await call(`/api/requirements/${requirement.id}?network_id=${net}`, { method: "PATCH", body: JSON.stringify({ column: r.column }) });
 }
 const { requirements } = await call(`/api/requirements?network_id=${net}`);

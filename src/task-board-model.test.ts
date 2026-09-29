@@ -6,6 +6,7 @@ import {
   editPatch, emptyDraft, localToday, neighbourColumn, nextSort, ownerCounts, ownerKeyOf, ownerLabel, ownersForScope,
   patchApplied, revertMove, scopeOf, sortRows, statusPatch, toggleIn, UNASSIGNED, type DragState,
   hasRoles, roleAvatars, roleKeysOf, roleKinds,
+  activeProjects, checkProjectName, defaultProjectFor, filterActive, NO_PROJECT, nextProjectColor, projectCounts, splitByCount, PROJECT_COLORS,
   addChecklistItem, checklistDropIndex, checklistProgress, hasDetails, moveChecklistItem, newChecklistId, removeChecklistItem, setChecklistDone,
 } from './task-board-model';
 import { createRequirementBody } from './requirements-hub';
@@ -223,6 +224,54 @@ console.log('# 描述 / 子任务');
   ck('旧 Hub 不发描述', editPatch(R('n'), { ...editDraftOf(R('n')), description: 'x' }) === null);
   ck('Hub 带回描述 = 生效', patchApplied({ ...item, description: '新' }, { description: '新' }) && !patchApplied(item, { description: '新' }));
   ck('清单替换:Hub 回来的顺序对得上 = 生效', patchApplied({ ...item, checklist: [list[2], list[0], list[1]] }, { checklist: [list[2], list[0], list[1]] }) && !patchApplied(item, { checklist: [list[2], list[0], list[1]] }));
+}
+
+
+console.log('# 项目');
+{
+  const projects = [
+    { id: 'p2', name: 'TMAI', color: '#7c3aed', sort: 1, archived: false },
+    { id: 'p1', name: '军团项目', color: '#2563eb', sort: 0, archived: false },
+    { id: 'p3', name: '旧项目', color: '#4b5563', sort: 2, archived: true },
+  ];
+  const cards = [
+    R('a', { projectId: 'p1', priority: 'high' }), R('b', { projectId: 'p2' }), R('c', { projectId: 'p1', owner: ME }),
+    R('d', { projectId: null }), R('e', { projectId: 'p3' }), R('legacy', { projectId: undefined }),
+  ];
+  ck('可选项目:去掉归档,按 sort 排', activeProjects(projects).map(p => p.name).join() === '军团项目,TMAI');
+  ck('按项目筛', applyFilter(cards, { owners: [], priorities: [], project: 'p1' }).map(i => i.id).join() === 'a,c');
+  ck('「无项目」= 没挂项目(含旧 Hub 的卡)', applyFilter(cards, { owners: [], priorities: [], project: NO_PROJECT }).map(i => i.id).join() === 'd,legacy');
+  ck('项目 × 负责人是「且」', applyFilter(cards, { owners: ['user:u_me'], priorities: [], project: 'p1' }).map(i => i.id).join() === 'c');
+  ck('项目筛选算「有筛选」', filterActive({ owners: [], priorities: [], project: 'p1' }) && !filterActive({ owners: [], priorities: [], project: '' }));
+  const pc = projectCounts(cards, { owners: [], priorities: ['high'], project: 'p2' });
+  ck('项目计数:按除项目以外的筛选算', pc.get('p1') === 1 && !pc.has('p2'));
+  ck('新建默认项目 = 正选着的未归档项目', defaultProjectFor({ owners: [], priorities: [], project: 'p2' }, projects) === 'p2' && defaultProjectFor({ owners: [], priorities: [], project: 'p3' }, projects) === null && defaultProjectFor({ owners: [], priorities: [], project: NO_PROJECT }, projects) === null);
+  const sorted = sortRows(cards, { key: 'project', dir: 'asc' }, [], projects).map(i => i.id).join();
+  ck('列表按项目排:按项目顺序,归档的在后,没项目的最后', sorted.startsWith('a,c,b,e,') && ['legacy,d', 'd,legacy'].includes(sorted.slice(8)), sorted);
+  const desc = sortRows(cards, { key: 'project', dir: 'desc' }, [], projects).map(i => i.id);
+  ck('按项目降序:没项目的仍在最后', desc.slice(-2).sort().join() === 'd,legacy' && desc[0] === 'e', desc.join());
+  ck('项目名:空 / 超长 / 重名被拒,归档的名字可以再用', !checkProjectName(' ', projects).ok && !checkProjectName('x'.repeat(41), projects).ok && !checkProjectName('TMAI', projects).ok && checkProjectName('旧项目', projects).ok && checkProjectName(' TMAI ', projects, 'p2').ok);
+  ck('换颜色在调色板里轮转', nextProjectColor(PROJECT_COLORS[0]) === PROJECT_COLORS[1] && nextProjectColor(PROJECT_COLORS[PROJECT_COLORS.length - 1]) === PROJECT_COLORS[0] && nextProjectColor('#123456') === PROJECT_COLORS[0]);
+  const d = { ...emptyDraft(), name: '有项目', projectId: 'p1' };
+  ck('新建带 projectId;没选就不带', createInput(d)!.projectId === 'p1' && !('projectId' in createInput({ ...d, projectId: null })!));
+  ck('POST 请求体 project_id', createRequirementBody({ serverUrl: 'x', token: 't' }, createInput(d)!).project_id === 'p1');
+  const item = cards[0];
+  ck('详情改项目 → {project_id}', JSON.stringify(editPatch(item, { ...editDraftOf(item), projectId: 'p2' })) === '{"project_id":"p2"}');
+  ck('详情清空项目 → null', JSON.stringify(editPatch(item, { ...editDraftOf(item), projectId: null })) === '{"project_id":null}');
+  ck('旧 Hub 不发 project_id', editPatch(cards[5], { ...editDraftOf(cards[5]), projectId: 'p1' }) === null);
+  ck('Hub 忽略了 project_id = 没生效', !patchApplied(item, { project_id: 'p2' }) && patchApplied({ ...item, projectId: 'p2' }, { project_id: 'p2' }));
+}
+
+console.log('# 左栏:只放有任务的节点,其余收起可搜');
+{
+  const rows = [
+    ...Array.from({ length: 300 }, (_, i) => ({ name: `node-${String(i).padStart(3, '0')}`, count: 0 })),
+    { name: 'busy-b', count: 2 }, { name: 'busy-a', count: 5 },
+  ];
+  const sp = splitByCount(rows);
+  ck('上面只有有任务的,按数目降序', sp.shown.map(r => r.name).join() === 'busy-a,busy-b');
+  ck('其余 300 个收进「更多」', sp.more.length === 300);
+  ck('「更多」可搜', splitByCount(rows, 'NODE-12').more.map(r => r.name).join() === 'node-120,node-121,node-122,node-123,node-124,node-125,node-126,node-127,node-128,node-129');
 }
 
 console.log('# 界面接线(源码)');
