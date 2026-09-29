@@ -1,5 +1,6 @@
 import { dueInfo, ownerLabel, participantStack, personDisplay, roleAvatars } from './i18n-task-presentation';
 import { t as tr } from './i18n';
+import { TaskIssueCount } from './TaskIssueBindings';
 import { useTranslation } from './i18n-react';
 import { taskText } from './i18n-tasks';
 // 任务看板的共用小件与样式:卡片、优先级点、期限胶囊、负责人、分段控件、筛选胶囊、主按钮。
@@ -200,6 +201,7 @@ export function CardMeta({ item, people, today, s, compact = false }: { item: Re
       </View>
       <OwnerBadge item={item} people={people} s={s} avatarOnly={compact} />
       <DueChip item={item} today={today} s={s} />
+      <TaskIssueCount item={item} />
     </View>
   );
 }
