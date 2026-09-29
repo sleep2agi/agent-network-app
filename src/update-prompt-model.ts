@@ -84,3 +84,25 @@ export function desktopPromptView(state: DesktopUpdateState, fallbackCurrent: st
   }
   return view;
 }
+
+/**
+ * 哪个窗口挂桌面更新弹窗、挂成什么样(owner 0.2.145:设置独立成窗 #483 后,「关于 → 软件更新」
+ * 显示「发现新版本 · 点击查看并安装」,点了没有任何反应 —— 设置窗不挂弹窗,而检查结果只存在于
+ * 设置窗自己的 JS 上下文里,主窗口看不见)。
+ *   'auto'   主窗口(及没有桌面壳的 web):启动 2.5s 后自动检查,有新版本就弹。
+ *   'manual' 设置窗:不自动检查;只在**本窗口里手动点**检查、查到新版本时弹(安装也在这里完成)。
+ *   null     分离聊天窗 / 多开工作区窗:不挂 —— 否则每个窗各弹一次(2026-09-06 截图)。
+ */
+export type DesktopPromptMode = 'auto' | 'manual' | null;
+export function desktopPromptMode(win: { tauri: boolean; chat: boolean; workspace: boolean; settings: boolean }): DesktopPromptMode {
+  if (!win.tauri) return 'auto';
+  if (win.chat || win.workspace) return null;
+  if (win.settings) return 'manual';
+  return 'auto';
+}
+
+/** 弹窗开不开:有新版本/下载中才开;manual 模式另要求这次结果来自用户手动点的检查。 */
+export function desktopPromptVisible(state: DesktopUpdateState, opts: { mode: Exclude<DesktopPromptMode, null>; fromManualCheck: boolean }): boolean {
+  if (state.kind !== 'available' && state.kind !== 'downloading') return false;
+  return opts.mode === 'auto' || opts.fromManualCheck;
+}

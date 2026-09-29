@@ -49,6 +49,9 @@ let state: DesktopUpdateState = { kind: 'idle' };
 let pendingUpdate: any;
 let lastCheckedAt: number | undefined;
 let checkInFlight: Promise<DesktopUpdateState> | undefined;
+// 当前这份结果是不是用户手动点出来的(设置窗的弹窗只认这种,见 update-prompt-model desktopPromptMode)。
+// 手动点击撞上正在跑的自动检查时,那次检查也算手动 —— 用户点了,结果就该看得见。
+let fromManualCheck = false;
 const listeners = new Set<() => void>();
 
 const publish = (next: DesktopUpdateState) => {
@@ -60,6 +63,7 @@ const publish = (next: DesktopUpdateState) => {
 export const desktopUpdateSnapshot = () => state;
 /** 上一次检查**结束**的时间(成功或失败都算);设置页用它显示「刚刚检查 / N 分钟前检查」。 */
 export const desktopUpdateLastCheckedAt = () => lastCheckedAt;
+export const desktopUpdateFromManualCheck = () => fromManualCheck;
 export const subscribeDesktopUpdates = (listener: () => void) => {
   listeners.add(listener);
   return () => listeners.delete(listener);
@@ -76,7 +80,11 @@ export async function checkDesktopUpdate(
   opts: { manual?: boolean; minVisibleMs?: number; sleep?: (ms: number) => Promise<void> } = {},
 ): Promise<DesktopUpdateState> {
   if (!(globalThis as any).__TAURI_INTERNALS__) return publish({ kind: 'unsupported' });
-  if (checkInFlight) return checkInFlight;
+  if (checkInFlight) {
+    if (opts.manual) fromManualCheck = true;
+    return checkInFlight;
+  }
+  fromManualCheck = !!opts.manual;
   checkInFlight = (async () => {
     publish({ kind: 'checking' });
     pendingUpdate = undefined;

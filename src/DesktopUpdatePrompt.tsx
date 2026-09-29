@@ -1,33 +1,34 @@
 import { useEffect, useSyncExternalStore } from 'react';
 import { ActivityIndicator, Modal, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { Text } from './ui-text';
-import { checkDesktopUpdate, desktopUpdateSnapshot, installDesktopUpdate, latestReleaseNotes, subscribeDesktopUpdates } from './desktop-updater';
+import { checkDesktopUpdate, desktopUpdateFromManualCheck, desktopUpdateSnapshot, installDesktopUpdate, latestReleaseNotes, subscribeDesktopUpdates } from './desktop-updater';
 import { colors, onThemeChange, spacing, themeMode, radius } from './theme';
-import { desktopPromptView } from './update-prompt-model';
+import { desktopPromptView, desktopPromptVisible } from './update-prompt-model';
 import { APP_VERSION } from './version';
 import { useModalSafePadding } from './safe-area-runtime';
 import { withBasePadding } from './modal-safe-area';
 import { elevated, buttonStyle, buttonTextStyle } from './elevation';
 
-export default function DesktopUpdatePrompt() {
+/** `manualOnly`:设置窗用 —— 不跑启动自动检查,只为本窗口里手动点出来的结果弹(见 desktopPromptMode)。 */
+export default function DesktopUpdatePrompt({ manualOnly = false }: { manualOnly?: boolean }) {
   const update = useSyncExternalStore(subscribeDesktopUpdates, desktopUpdateSnapshot, desktopUpdateSnapshot);
   // 挂在 AppRoot 的 key={theme} 重挂树外面:弹窗开着时系统配色一变(跟随系统),模块级 styles
   // 已重建,但不订阅就不重画 —— 半边新主题半边旧主题。
   useSyncExternalStore(onThemeChange, themeMode, themeMode);
   useEffect(() => {
-    if (!(globalThis as any).__TAURI_INTERNALS__) return;
+    if (manualOnly || !(globalThis as any).__TAURI_INTERNALS__) return;
     const timer = setTimeout(() => { void checkDesktopUpdate(); }, 2500);
     return () => clearTimeout(timer);
-  }, []);
+  }, [manualOnly]);
 
-  const visible = update.kind === 'available' || update.kind === 'downloading';
+  const visible = desktopPromptVisible(update, { mode: manualOnly ? 'manual' : 'auto', fromManualCheck: desktopUpdateFromManualCheck() });
   // 当前版本 → 新版本、下载进度与大小。
   const view = desktopPromptView(update, APP_VERSION);
   const safe = useModalSafePadding('fullScreen'); // 0 on desktop; the rule is uniform (modal-safe-area.ts)
   return (
     <Modal visible={visible} transparent animationType="fade">
       <View style={[styles.backdrop, withBasePadding(safe, 24)]}>
-        <View style={styles.card}>
+        <View style={styles.card} testID="desktop-update-card">
           <Text style={styles.title}>发现新版本</Text>
           <View style={styles.versions} testID="desktop-update-versions">
             {view?.versions.current ? (
@@ -56,7 +57,7 @@ export default function DesktopUpdatePrompt() {
               <View style={styles.bar}><View style={[styles.barFill, { width: `${update.percent ?? 0}%` }]} /></View>
             </View>
           ) : (
-            <Pressable style={styles.button} onPress={() => { void installDesktopUpdate(); }}>
+            <Pressable style={styles.button} testID="desktop-update-install" onPress={() => { void installDesktopUpdate(); }}>
               <Text style={styles.buttonText}>立即更新并重启</Text>
             </Pressable>
           )}

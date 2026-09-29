@@ -9,8 +9,10 @@ const config = JSON.parse(fs.readFileSync(new URL('../src-tauri/tauri.conf.json'
 const capability = JSON.parse(fs.readFileSync(new URL('../src-tauri/capabilities/default.json', import.meta.url), 'utf8'));
 
 const checks: Array<[string, boolean]> = [
-  ['startup mounts automatic update prompt', app.includes('<DesktopUpdatePrompt />')],
-  ['detached chat windows do not mount the prompt (2026-09-06 screenshot: every window prompted)', app.includes('{dedicatedChatWindow ? null : <DesktopUpdatePrompt />}') && app.includes('!!requestedChatAlias()') && app.includes('requestedSettingsWindow()')],
+  ['startup mounts automatic update prompt', app.includes("<DesktopUpdatePrompt manualOnly={updatePromptMode === 'manual'} />")],
+  // 2026-09-06 截图:每个窗各弹一次 → 分离聊天窗 / 工作区窗不挂;设置窗(0.2.145「点了没反应」)挂成 manual,
+  // 只为本窗口手动点出来的检查弹。细节见 desktop-update-prompt-window.test.ts。
+  ['detached chat windows do not mount the prompt; the settings window mounts it manual-only', app.includes('{updatePromptMode ? <DesktopUpdatePrompt') && app.includes('chat: !!requestedChatAlias()') && app.includes('settings: requestedSettingsWindow()')],
   ['prompt shows only the newest section in a bounded scroll view', prompt.includes('latestReleaseNotes(update.notes)') && prompt.includes('<ScrollView style={styles.notesScroll}') && prompt.includes('maxHeight: 240')],
   ['install button stays outside the scroll view', prompt.indexOf('</ScrollView>') < prompt.indexOf('installDesktopUpdate()')],
   ['startup check is delayed and non-blocking', prompt.includes('setTimeout') && prompt.includes('checkDesktopUpdate')],
