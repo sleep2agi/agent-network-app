@@ -47,7 +47,7 @@ export const saveAgentGrants = (cfg: HubConfig, networkId: string, userId: strin
   call<{ agent_access: 'all' | 'granted'; grants: AgentGrant[] }>(cfg.serverUrl, cfg.token, `/api/networks/${net(networkId)}/members/${net(userId)}/agent-grants`, { method: 'PUT', body });
 
 /** POST /api/auth/register(公开)。成功返回用户令牌,调用方按登录同一条路径继续。 */
-export const registerHubAccount = (serverUrl: string, body: { username: string; password: string; display_name?: string }) =>
+export const registerHubAccount = (serverUrl: string, body: { username: string; password: string; display_name?: string; client_label?: string }) =>
   call<{ token?: string; user?: { username?: string } }>(serverUrl, null, '/api/auth/register', { method: 'POST', body });
 
 /** GET /api/networks —— Hub 管理员拿到全部网络(新建用户时选网络用)。 */

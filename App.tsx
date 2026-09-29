@@ -11,6 +11,8 @@ import { mainWindowTopPadding } from './src/modal-safe-area';
 import { purgeLegacyAttachmentCache } from './src/AuthedThumb';
 import { prefetchStatus, login, fetchHubNodes, fetchNetworkId, HubConfig } from './src/api';
 import { registerHubAccount } from './src/user-admin-api';
+import { clientLabelForLogin } from './src/login-sessions';
+import { tauriShellPlatform } from './src/window-shell';
 import DmChatScreen from './src/DmChatScreen';
 import type { Human } from './src/human-dm';
 import { validateNewUser } from './src/user-admin';
@@ -37,8 +39,8 @@ import ScheduledTasksScreen from './src/ScheduledTasksScreen';
 import type { ScheduleOpenRequest } from './src/node-schedules';
 import ConnectivityBanner from './src/ConnectivityBanner';
 import type { HostSupervisorDaemon } from './src/api';
-import { clearConfig, listHubProfiles, loadConfig, loadHubProfile, loadLocalAvatars, loadOutbox, loadForwardOperations, saveForwardOperations, loadThemeMode, loadUiScalePrefs, markHubProfileRequiresReauth, onDesktopThemeStorageChange, onDesktopUiScaleStorageChange, removeHubProfile, saveConfig, saveLocalAvatars, saveOutbox, switchHubProfile, type HubProfile } from './src/storage';
-import { clearProfileUnauthorized, onProfileUnauthorized } from './src/profile-auth-state';
+import { clearConfig, listHubProfiles, loadConfig, loadHubProfile, loadLocalAvatars, loadOutbox, loadForwardOperations, saveForwardOperations, loadThemeMode, loadUiScalePrefs, markHubProfileRequiresReauth, onDesktopThemeStorageChange, onDesktopUiScaleStorageChange, removeHubProfile, saveConfig, saveLocalAvatars, saveOutbox, sessionIdOf, switchHubProfile, type HubProfile } from './src/storage';
+import { clearProfileUnauthorized, onProfileUnauthorized, profileUnauthorizedReason } from './src/profile-auth-state';
 import { initOutbox } from './src/outbox';
 import { createForwardPersistence, initForwardController } from './src/forward-controller';
 import { loadDesktopThemeMode } from './src/desktop-theme-storage';
@@ -524,8 +526,10 @@ function AppRoot() {
     setScreen({ name: 'login' });
   };
 
+  // 手机 / 网页上迁移过来的账号 cfg 没有 profileId,它的 401 按 legacy 上报(api.ts authProfileId)——
+  // 用 sessionIdOf 比,否则那些账号的登录过期永远没有人接,app 只是一直读失败。
   useEffect(() => onProfileUnauthorized(profileId => {
-    if (profileId !== cfg?.profileId) return;
+    if (!cfg || profileId !== sessionIdOf(cfg)) return;
     void (async () => {
       try {
         await markHubProfileRequiresReauth(profileId);
@@ -780,7 +784,7 @@ function AppRoot() {
           onCancelAdd={cfg && !reauthProfile ? () => setScreen({ name: 'settings' }) : undefined}
           onLogin={async c => {
             const saved = await saveConfig(reauthProfile ? { ...c, profileId: reauthProfile.profileId, displayName: reauthProfile.displayName } : c);
-            clearProfileUnauthorized(saved.profileId);
+            clearProfileUnauthorized(sessionIdOf(saved));
             setReauthProfile(null);
             await hydrateProfileLocalState(saved);
             setCfg(saved);
@@ -1347,6 +1351,9 @@ export function LoginScreen({ onLogin, initialProfile, onCancelReauth, onCancelA
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [passwordVisible, setPasswordVisible] = useState(false);
+  // hub 的登录闲置过期(401 token_expired):标题直接说「登录已过期，请重新登录」,而不是泛泛的「重新验证」。
+  const expired = !!initialProfile && profileUnauthorizedReason(initialProfile.profileId) === 'token_expired';
+  const clientLabel = clientLabelForLogin({ os: Platform.OS, shell: tauriShellPlatform(Platform.OS), version: APP_VERSION });
   // 多用户(hub#2084):登录页可切到「注册」—— POST /api/auth/register,成功后用返回的令牌按登录同一条路径进工作区。
   // 重新验证某个账号时不给注册入口。
   const [mode, setMode] = useState<'login' | 'register'>('login');
@@ -1372,7 +1379,7 @@ export function LoginScreen({ onLogin, initialProfile, onCancelReauth, onCancelA
       if (problem) { setError(t(`users.err.${problem}`)); return; }
       setBusy(true);
       try {
-        const created = await registerHubAccount(norm.url, { username: username.trim(), password, ...(displayName.trim() ? { display_name: displayName.trim() } : {}) });
+        const created = await registerHubAccount(norm.url, { username: username.trim(), password, client_label: clientLabel, ...(displayName.trim() ? { display_name: displayName.trim() } : {}) });
         if (!created.token) throw new Error('register ok but no token in response');
         const cfg: HubConfig = { serverUrl: norm.url, token: created.token, username: username.trim() };
         cfg.networkId = await fetchNetworkId(cfg);
@@ -1384,7 +1391,7 @@ export function LoginScreen({ onLogin, initialProfile, onCancelReauth, onCancelA
       return;
     }
     setBusy(true);
-    const result = await login(norm.url, username.trim(), password);
+    const result = await login(norm.url, username.trim(), password, clientLabel);
     if (result.ok) {
       try {
         await onLogin(result.cfg);
@@ -1403,8 +1410,8 @@ export function LoginScreen({ onLogin, initialProfile, onCancelReauth, onCancelA
       <View style={[entryStyles.card, loginStyles.card, compact && entryStyles.cardCompact]}>
         <Image source={require('./assets/splash-icon.png')} style={entryStyles.logo} resizeMode="contain" />
         <View style={loginStyles.heading}>
-          <Text style={entryStyles.title} testID={onCancelAdd && !initialProfile && !registering ? 'login-add-account-title' : undefined}>{initialProfile ? '重新验证账号' : registering ? t('login.registerTitle') : onCancelAdd ? t('accounts.addTitle') : '连接你的工作区'}</Text>
-          <Text style={entryStyles.copy}>{initialProfile ? '登录状态已失效。重新验证只会更新这个账号，其他工作区不会受到影响。' : registering ? t('login.registerCopy') : onCancelAdd ? t('accounts.addCopy') : '输入服务器和账号信息，继续与你的 Agent 协作。'}</Text>
+          <Text style={entryStyles.title} testID={expired ? 'login-expired-title' : onCancelAdd && !initialProfile && !registering ? 'login-add-account-title' : undefined}>{expired ? t('sessions.expiredTitle') : initialProfile ? '重新验证账号' : registering ? t('login.registerTitle') : onCancelAdd ? t('accounts.addTitle') : '连接你的工作区'}</Text>
+          <Text style={entryStyles.copy}>{expired ? t('sessions.expiredCopy') : initialProfile ? '登录状态已失效。重新验证只会更新这个账号，其他工作区不会受到影响。' : registering ? t('login.registerCopy') : onCancelAdd ? t('accounts.addCopy') : '输入服务器和账号信息，继续与你的 Agent 协作。'}</Text>
         </View>
         <View style={loginStyles.form}>
           <View style={loginStyles.field}>

@@ -40,6 +40,8 @@ export const SETTINGS_CATEGORIES: readonly SettingsCategory[] = [
     rows: [
       { key: 'profiles', label: '账号与 Hub', keywords: ['登录', '服务器', 'profile', 'hub', 'account'] },
       { key: 'addAccount', label: '添加 Hub / 账号', keywords: ['添加', '登录', 'add'] },
+      // 登录设备(安全审计 2026-09-29):hub 上这个账号的登录会话,可退出某台 / 退出其他所有设备。旧 hub 没有接口时不出现。
+      { key: 'devices', label: '登录设备', keywords: ['设备', '会话', '退出其他设备', '登出', '安全', 'devices', 'sessions', 'sign out', 'security'] },
       { key: 'switchAccount', label: '切换账号', keywords: ['切换', '服务器', '多账号', 'switch', 'account', 'server'] },
       { key: 'logout', label: '移除当前账号', keywords: ['退出', '登出', 'logout'] },
     ],
@@ -275,13 +277,14 @@ export function phoneSettingsGroups(available: readonly Pick<SettingsCategory, '
 // ── 手机子页里的三级页(Vincent 2026-09-27「设置界面有点体验太差」)───────────────────────────
 // 子页只放行(标签 · 值 · ›);要输入的东西(API Key、接口地址、免打扰时段)点进三级编辑页再改,
 // 和微信 设置 → 个人信息 → 名字 一样。返回键 / Esc 先退三级页,再退子页。
-export type SettingsDetailKey = 'voiceApiKey' | 'voiceAdvanced' | 'quietHours' | 'manageAccounts';
+export type SettingsDetailKey = 'voiceApiKey' | 'voiceAdvanced' | 'quietHours' | 'manageAccounts' | 'loginDevices';
 
 export const SETTINGS_DETAIL_TITLE: Record<SettingsDetailKey, string> = {
   voiceApiKey: 'API Key',
   voiceAdvanced: '高级 / 旧版控制台',
   quietHours: '免打扰时段',
   manageAccounts: '管理账号',
+  loginDevices: '登录设备',
 };
 
 /** 三级页属于哪个子页(返回时回到它;子页换了就不该还停在别人的三级页上)。 */
@@ -290,6 +293,7 @@ export const SETTINGS_DETAIL_PARENT: Record<SettingsDetailKey, SettingsCategoryK
   voiceAdvanced: 'voice',
   quietHours: 'notifications',
   manageAccounts: 'account',
+  loginDevices: 'account',
 };
 
 /**

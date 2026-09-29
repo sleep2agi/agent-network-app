@@ -10,6 +10,7 @@ import './i18n-task-tags';
 import './i18n-task-fields';
 import './i18n-accounts';
 import './i18n-users';
+import './i18n-sessions';
 
 let p = 0, t = 0;
 const ck = (name: string, ok: boolean) => { t++; if (ok) p++; console.log(`${ok ? 'PASS' : 'FAIL'}: ${name}`); };
