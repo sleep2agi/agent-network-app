@@ -21,6 +21,7 @@ import SettingsScreen from './src/SettingsScreen';
 import { rememberSettingsCategory } from './src/settings-model';
 import AgentsScreen from './src/AgentsScreen';
 import TasksScreen from './src/TasksScreen';
+import TaskFilterSidebar from './src/TaskFilterSidebar';
 import TaskDetailScreen from './src/TaskDetailScreen';
 import NodeDetailScreen from './src/NodeDetailScreen';
 import LogsScreen from './src/LogsScreen';
@@ -962,6 +963,7 @@ function DesktopWorkspace({ cfg, screen, setScreen, onLogout, onLocalDataDeleted
   const mutedAliases = mutedAgents(notifySettings, notifyKey);
   const toggleMute = (alias: string) => { saveNotifySettings(toggleAgentMuted(loadNotifySettings(), notifyKey, alias)); };
   const serverWorkspace = ['server', 'serverNodes', 'serverNodeDetail', 'logs', 'picker', 'wizard'].includes(screen.name);
+  const taskWorkspace = screen.name === 'tasks' || screen.name === 'taskDetail';
   // 设置 → 快捷键(src/shortcuts-model.ts):主窗口的全局键盘快捷键。组合可改,读的是最新存储;
   // 设置页正在录入新组合时不执行。⌘K:列表栏是服务器侧栏时先切回 Agents,再请求聚焦搜索框。
   const [shortcutToast, setShortcutToast] = useState<string | null>(null);
@@ -971,7 +973,8 @@ function DesktopWorkspace({ cfg, screen, setScreen, onLogout, onLocalDataDeleted
     return () => clearTimeout(id);
   }, [shortcutToast]);
   const serverWorkspaceRef = useRef(serverWorkspace);
-  serverWorkspaceRef.current = serverWorkspace;
+  // 任务页的左栏也不是会话列表(TaskFilterSidebar):⌘K 同样先切回 Agents。
+  serverWorkspaceRef.current = serverWorkspace || taskWorkspace;
   useEffect(() => {
     const doc = (globalThis as any).document;
     if (!doc?.addEventListener) return;
@@ -1016,7 +1019,7 @@ function DesktopWorkspace({ cfg, screen, setScreen, onLogout, onLocalDataDeleted
       desktop
     />
   ) : screen.name === 'tasks' ? (
-    <TasksScreen cfg={cfg} onOpenTask={taskId => setScreen({ name: 'taskDetail', taskId })} />
+    <TasksScreen cfg={cfg} desktop onOpenTask={taskId => setScreen({ name: 'taskDetail', taskId })} />
   ) : screen.name === 'scheduled' ? <ScheduledTasksScreen key={screen.open ? `scheduled:${screen.open.seq}` : 'scheduled'} cfg={cfg} open={screen.open} onOpenChat={(alias, focusTaskId) => setScreen({ name: 'chat', alias, focusTaskId })} />
   : screen.name === 'messages' ? <MessagesScreen cfg={cfg} />
   : screen.name === 'server' ? (
@@ -1092,8 +1095,11 @@ function DesktopWorkspace({ cfg, screen, setScreen, onLogout, onLocalDataDeleted
         />
         <Text style={desktopStyles.railVersion}>v{APP_VERSION}</Text>
       </View>
-      <View style={desktopStyles.conversations}>
-        {serverWorkspace ? (
+      <View style={[desktopStyles.conversations, taskWorkspace && desktopStyles.taskSidebar]}>
+        {taskWorkspace ? (
+          // 任务页的左栏是筛选(全部 / 我负责的 / 按节点 / 派发记录),不是会话列表。
+          <TaskFilterSidebar onNavigate={() => { if (screen.name !== 'tasks') setScreen({ name: 'tasks' }); }} />
+        ) : serverWorkspace ? (
           <ServerSidebar cfg={cfg} active={serverSectionForScreen(screen)} onSelect={section => {
             if (section === 'overview') setScreen({ name: 'server' });
             else if (section === 'nodes') setScreen({ name: 'serverNodes' });
@@ -1176,6 +1182,8 @@ const makeDesktopStyles = () => StyleSheet.create({
   railTooltipText: { color: colors.railTooltipText, fontSize: 12, fontWeight: '500' },
   railSettings: { marginBottom: 0 },
   railVersion: { color: colors.textMuted, fontSize: 10, marginTop: 8, textAlign: 'center' },
+  // 任务页左栏只是筛选,不需要会话列表那么宽:窄一些,看板三列拿到更多宽度。
+  taskSidebar: { width: ds(220) },
   conversations: { width: ds(310), borderRightWidth: 1, borderRightColor: colors.border, backgroundColor: themeMode() === 'light' ? '#fafafb' : colors.bg },
   content: { flex: 1, minWidth: 0, backgroundColor: themeMode() === 'light' ? '#f2f4f7' : colors.bg },
   empty: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: spacing.sm },
