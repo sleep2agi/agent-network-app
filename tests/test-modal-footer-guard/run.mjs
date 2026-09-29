@@ -42,6 +42,7 @@ const initScript = () => {
     network_id: `net-${String(i).padStart(2, '0')}`,
     network_name: i === 0 ? 'default' : i % 3 === 0 ? `placeholder_upload_admin_17811549${String(i).padStart(5, '0')}_${100 + i}` : `示例网络-${i}`,
   }));
+  const agents = Array.from({ length: N }, (_, i) => ({ node_id: `n-${i}`, alias: `示例-agent-${i}` }));
   const profile = { serverUrl: HUB, token: 'placeholder-token', username: 'tester', profileId: 'p-guard', displayName: 'tester', networkId: 'net-00' };
   const route = (url) => {
     const p = new URL(url).pathname;
@@ -49,7 +50,8 @@ const initScript = () => {
     if (p === '/api/networks') return { ok: true, networks };
     if (/^\/api\/networks\/[^/]+\/members$/.test(p)) return { ok: true, members: [{ user_id: 'u_tester', username: 'tester', role: 'owner', agent_access: 'all' }, { user_id: 'u_other', username: 'other', role: 'member', agent_access: 'granted', agent_grant_count: 0 }] };
     if (p === '/api/status') return { ok: true, sessions: [] };
-    if (p === '/api/nodes') return { ok: true, nodes: [], count: 0 };
+    if (p === '/api/nodes') return { ok: true, nodes: agents, count: agents.length };
+    if (/\/members\/[^/]+\/agent-grants$/.test(p)) return { ok: true, agent_access: 'granted', grants: [] };
     if (p === '/api/messages') return { ok: true, messages: [], unread: 0, pending_count: 0 };
     if (p.startsWith('/api/events') || p.startsWith('/events')) return null;
     return { ok: true };
@@ -87,6 +89,7 @@ const initScript = () => {
 
 const browser = await chromium.launch({ headless: true, executablePath: findChromium() });
 async function run(vp, viewport, ua) {
+  // C needs the ua to decide phone vs desktop
   const ctx = await browser.newContext({ viewport, userAgent: ua, deviceScaleFactor: 2, locale: 'zh-CN' });
   const page = await ctx.newPage();
   page.on('pageerror', e => console.log('PAGEERROR', e.message.split('\n')[0]));
@@ -131,6 +134,20 @@ async function run(vp, viewport, ua) {
     record(vp, 'B: search narrows the list', { one: rows === 1 }, { rows });
   }
   const chipCount = await page.locator('[data-testid^="new-user-network-net-"]').count();
+  // C: the member dialog (desktop only — the phone opens a settings page, not a modal) with 40 agents.
+  if (!ua.includes('Android') && await page.locator(tid('user-row-other')).count()) {
+    await page.locator(tid('new-user-dialog-close')).click().catch(() => {});
+    await page.locator(tid('new-user-dialog')).waitFor({ state: 'detached', timeout: 5000 }).catch(() => {});
+    await page.locator(tid('user-row-other')).click();
+    await page.locator(tid('grants-dialog')).waitFor({ timeout: 8000 });
+    await page.locator(tid('grants-mode-granted')).click().catch(() => {});
+    await sleep(500);
+    const card = await box(page, tid('grants-dialog'));
+    const save = await box(page, tid('grants-confirm'));
+    const remove = await box(page, tid('member-remove-open'));
+    await page.screenshot({ path: join(OUT, `${vp}-C-member-40-agents.png`) });
+    record(vp, 'C: member dialog with 40 agents — 保存 and 移出网络 inside the viewport and the card', { save: inside(save, viewport.width, viewport.height) && within(save, card), remove: !remove || inside(remove, viewport.width, viewport.height), card: inside(card, viewport.width, viewport.height) }, { card, save, remove });
+  }
   console.log(JSON.stringify({ vp, measures: { A: a }, networkOptionsRendered: chipCount }));
   await ctx.close();
 }
