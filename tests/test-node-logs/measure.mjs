@@ -251,7 +251,7 @@ for (const { w, h, phone } of cases) {
   await page.locator(tid('node-logs-empty')).waitFor({ timeout: 15000 }).catch(() => {});
   const empty = await box(page, tid('node-logs-empty'));
   record(vp, 'empty state', { shown: !!empty && /没有匹配/.test(empty.text) }, { text: empty?.text });
-  if (!phone) await mask(page); await page.screenshot({ path: `${OUT}/node-logs-${vp}-empty.png` });
+  if (!phone) { await mask(page); await page.screenshot({ path: `${OUT}/node-logs-${vp}-empty.png` }); }
   await page.locator(tid('node-logs-search')).fill('');
   await page.waitForTimeout(2500);
 
@@ -291,7 +291,7 @@ for (const { w, h, phone } of cases) {
   await page.locator(tid('node-logs-refresh')).click();
   await page.locator(tid('node-logs-error')).waitFor({ timeout: 15000 }).catch(() => {});
   const err = await box(page, tid('node-logs-error'));
-  if (!phone) await mask(page); await page.screenshot({ path: `${OUT}/node-logs-${vp}-error.png` });
+  if (!phone) { await mask(page); await page.screenshot({ path: `${OUT}/node-logs-${vp}-error.png` }); }
   await page.evaluate(() => { window.__failLogs = false; });
   await page.locator(`${tid('node-logs-error')} [aria-label="重试"]`).click().catch(() => {});
   await page.locator(tid('node-logs-text')).waitFor({ timeout: 20000 }).catch(() => {});
@@ -308,7 +308,7 @@ for (const { w, h, phone } of cases) {
   await waitLogs(page2);
   const un = await box(page2, tid('node-logs-unsupported'));
   record(vp, 'old node → upgrade notice, no request', { shown: un?.text === '节点版本过旧，升级后可查看日志' }, { text: un?.text });
-  if (!phone) await mask(page2); await page2.screenshot({ path: `${OUT}/node-logs-${vp}-old-node.png` });
+  if (!phone) { await mask(page2); await page2.screenshot({ path: `${OUT}/node-logs-${vp}-old-node.png` }); }
   await ctx2.close();
 }
 
