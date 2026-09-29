@@ -21,15 +21,19 @@ import DialogFrame, { useDialogReveal } from './DialogFrame';
 import {
   ASSIGNABLE_ROLES, aliasOnlyGrants, canAddAdminsIn, canManageUsers, manageableNetworks, currentNetworkRow, filterNetworkChoices, filterPickable, grantsEditable, grantsPayload,
   groupAgents, initialAccessMode, memberAccessSummary, selectAgents, selectionState, toggleAgents, memberActions, memberSavePlan, prefillOnRestrict, selectionFromGrants, setCanMessage, showsCanMessage, toggleAgent, validateNewUser,
-  type AgentAccess, type AgentGrant, type AgentGroup, type AuthMe, type GroupBy, type MemberRole, type NetworkChoice, type NetworkMember, type PickableAgent,
+  accessSummaryText, groupEditChanged, groupGrantsPayload, groupSelectionFromGrants, validGroupName,
+  type AgentAccess, type AgentGrant, type AgentGroup, type AuthMe, type GroupBy, type HubAgentGroup, type MemberRole, type NetworkChoice, type NetworkMember, type PickableAgent,
 } from './user-admin';
-import { createHubUser, fetchAgentGrants, fetchNetworkMembers, fetchNetworks, removeNetworkMember, saveAgentGrants, updateMemberRole } from './user-admin-api';
+import {
+  createAgentGroup, createHubUser, deleteAgentGroup, fetchAgentGrants, fetchAgentGroups, fetchNetworkMembers, fetchNetworks, removeNetworkMember,
+  renameAgentGroup, saveAgentGrants, saveAgentGroupMembers, updateMemberRole,
+} from './user-admin-api';
 
 const ROLE_KEY: Record<string, string> = { owner: 'users.role.owner', admin: 'users.role.admin', member: 'users.role.member', viewer: 'users.role.viewer' };
 const roleLabel = (role: MemberRole) => (ROLE_KEY[role] ? tr(ROLE_KEY[role]) : String(role));
 
 /** 手机:点成员 = 推三级页「成员」(SettingsScreen 的 detail 机制,顶栏返回 / 安卓返回键都走它)。 */
-export type PhoneMemberNav = { memberOpen: boolean; openMember: () => void; closeMember: () => void };
+export type PhoneMemberNav = { memberOpen: boolean; groupOpen?: boolean; openMember: () => void; openGroup?: () => void; closeMember: () => void };
 
 export default function UserManagementPanel({ cfg, me, networkId, phone }: { cfg: HubConfig; me: AuthMe | null; networkId: string | undefined; phone?: PhoneMemberNav }) {
   useTranslation();
@@ -38,6 +42,9 @@ export default function UserManagementPanel({ cfg, me, networkId, phone }: { cfg
   const [notice, setNotice] = useState('');
   const [creating, setCreating] = useState(false);
   const [editing, setEditing] = useState<NetworkMember | null>(null);
+  // Agent 分组(RFC-038 §8):undefined = 读取中,null = 这个 Hub 没有分组接口(旧 Hub,整块不显示)。
+  const [agentGroups, setAgentGroups] = useState<HubAgentGroup[] | null | undefined>(undefined);
+  const [editingGroup, setEditingGroup] = useState<HubAgentGroup | 'new' | null>(null);
   const allowed = canManageUsers(me, networkId);
   const myId = me?.user?.user_id;
   // 新建用户能选的网络:Hub 管理员 = 全部网络;否则 = 我管的(owner / admin)。当前网络排第一、默认选中。
@@ -52,6 +59,7 @@ export default function UserManagementPanel({ cfg, me, networkId, phone }: { cfg
     if (!networkId || !allowed) return;
     setLoadError('');
     void fetchNetworkMembers(cfg, networkId).then(setMembers).catch(e => { setMembers(null); setLoadError(String((e as Error)?.message ?? e)); });
+    void fetchAgentGroups(cfg, networkId).then(setAgentGroups).catch(() => setAgentGroups(null));
   }, [cfg, networkId, allowed]);
   useEffect(load, [load]);
   // 三级页被返回键关掉了 → 丢掉编辑中的成员;三级页开着却没有成员(状态丢了)→ 退回列表。
@@ -60,10 +68,18 @@ export default function UserManagementPanel({ cfg, me, networkId, phone }: { cfg
   useEffect(() => { if (phone && memberOpen && !editing) phone.closeMember(); }, [phone, memberOpen, editing]);
   const openMember = (m: NetworkMember) => { setNotice(''); setEditing(m); phone?.openMember(); };
   const doneMember = (message: string) => { setEditing(null); if (phone?.memberOpen) phone.closeMember(); setNotice(message); load(); };
+  const groupOpen = !!phone?.groupOpen;
+  useEffect(() => { if (phone && !groupOpen && editingGroup) setEditingGroup(null); }, [phone, groupOpen, editingGroup]);
+  useEffect(() => { if (phone && groupOpen && !editingGroup) phone.closeMember(); }, [phone, groupOpen, editingGroup]);
+  const openGroup = (g: HubAgentGroup | 'new') => { setNotice(''); setEditingGroup(g); phone?.openGroup?.(); };
+  const doneGroup = (message: string) => { setEditingGroup(null); if (phone?.groupOpen) phone.closeMember(); setNotice(message); load(); };
 
   if (!allowed || !networkId) return null;
   if (phone && memberOpen && editing) {
-    return <MemberPage cfg={cfg} me={me} networkId={networkId} member={editing} onDone={doneMember} />;
+    return <MemberPage cfg={cfg} me={me} networkId={networkId} member={editing} agentGroups={agentGroups ?? null} onDone={doneMember} />;
+  }
+  if (phone && groupOpen && editingGroup) {
+    return <GroupPage cfg={cfg} networkId={networkId} group={editingGroup === 'new' ? null : editingGroup} onDone={doneGroup} />;
   }
   return (
     <View testID="user-management">
@@ -78,8 +94,8 @@ export default function UserManagementPanel({ cfg, me, networkId, phone }: { cfg
         ) : null}
         {loadError ? <SettingsRow label={tr('users.retry')} tone="accent" onPress={load} testID="user-management-retry" /> : null}
         {(members ?? []).map(m => {
-          const summary = memberAccessSummary(m);
-          const value = summary.kind === 'all' ? tr('users.access.all') : summary.count ? tr('users.access.count', { count: summary.count }) : tr('users.access.none');
+          const summary = accessSummaryText(memberAccessSummary(m));
+          const value = tr(summary.key, summary.params);
           const acts = memberActions(me, networkId, m);
           const editable = acts.editAccess || acts.editRole || acts.remove;
           return (
@@ -89,13 +105,23 @@ export default function UserManagementPanel({ cfg, me, networkId, phone }: { cfg
               label={`${m.display_name || m.username}${m.user_id === myId ? tr('users.you') : ''}`}
               subtitle={`${m.username} · ${roleLabel(m.role)}`}
               value={value}
-              valueTone={summary.kind === 'count' && !summary.count ? 'danger' : 'muted'}
+              valueTone={summary.empty ? 'danger' : 'muted'}
               onPress={editable ? () => openMember(m) : undefined}
             />
           );
         })}
       </SettingsGroup>
       <SettingsButton label={tr('users.newUser')} onPress={() => { setNotice(''); setCreating(true); }} testID="user-management-new" />
+      {Array.isArray(agentGroups) ? (
+        <>
+          <SettingsGroup title={tr('users.agentGroups')} footer={tr('users.agentGroupsFooter')} testID="agent-groups">
+            {agentGroups.map(g => (
+              <SettingsRow key={g.group_id} label={g.name} value={tr('users.groupMembers', { count: g.member_count })} onPress={() => openGroup(g)} testID={`agent-group-row-${g.name}`} />
+            ))}
+          </SettingsGroup>
+          <SettingsButton label={tr('users.newGroup')} variant="plain" onPress={() => openGroup('new')} testID="agent-group-new" />
+        </>
+      ) : null}
       {creating ? (
         <NewUserDialog
           cfg={cfg}
@@ -112,9 +138,13 @@ export default function UserManagementPanel({ cfg, me, networkId, phone }: { cfg
           me={me}
           networkId={networkId}
           member={editing}
+          agentGroups={agentGroups ?? null}
           onClose={() => setEditing(null)}
           onDone={doneMember}
         />
+      ) : null}
+      {editingGroup && !phone ? (
+        <GroupDialog cfg={cfg} networkId={networkId} group={editingGroup === 'new' ? null : editingGroup} onClose={() => setEditingGroup(null)} onDone={doneGroup} />
       ) : null}
     </View>
   );
@@ -273,20 +303,165 @@ function TriCheck({ state }: { state: 'all' | 'some' | 'none' }) {
   );
 }
 
+/** 选择器的状态(成员授权与分组编辑共用):搜索、按机器 / 按类型分组、批量勾选。 */
+function useAgentPicker(agents: PickableAgent[] | null, role: MemberRole | undefined) {
+  const [selection, setSelection] = useState<Map<string, boolean>>(new Map());
+  const [query, setQuery] = useState('');
+  const [groupBy, setGroupBy] = useState<GroupBy>('none');
+  const visible = useMemo(() => filterPickable(agents ?? [], query), [agents, query]);
+  const groups = useMemo<AgentGroup[] | null>(() => (groupBy === 'none' ? null : groupAgents(visible, groupBy)), [visible, groupBy]);
+  return {
+    agents, visible, groups, selection, setSelection, query, setQuery, groupBy, setGroupBy,
+    toggleGroup: (list: readonly PickableAgent[]) => setSelection(s => toggleAgents(s, list, role)),
+    selectVisible: () => setSelection(s => selectAgents(s, visible, role)),
+    clearAll: () => setSelection(new Map()),
+  };
+}
+type AgentPickerState = ReturnType<typeof useAgentPicker>;
+
+/** 宽屏的 Agent 清单:搜索 + 分组 / 全选 / 清空 工具条 + 可勾选清单。chat = 已选行带「可对话」开关;否则按 readOnlyTag 显示「只读」。 */
+function DesktopAgentPicker({ p, enabled, chat, readOnlyTag = true, note }: { p: AgentPickerState; enabled: boolean; chat: boolean; readOnlyTag?: boolean; note: string }) {
+  return (
+    <View style={[styles.field, styles.pickerArea, !enabled && styles.inactive]} pointerEvents={enabled ? 'auto' : 'none'} testID="grants-picker">
+      <View style={styles.search}>
+        <Ionicons name="search-outline" size={15} color={colors.textMuted} />
+        <TextInput value={p.query} onChangeText={p.setQuery} editable={enabled} placeholder={tr('users.search')} placeholderTextColor={colors.textMuted} accessibilityLabel={tr('users.search')} autoCapitalize="none" autoCorrect={false} style={styles.searchInput} testID="grants-search" />
+      </View>
+      <View style={styles.toolbar} testID="grants-toolbar">
+        <View style={[styles.segmented, styles.segmentedSmall]} accessibilityRole="radiogroup" testID="grants-group-by">
+          {GROUP_BYS.map(g => (
+            <Pressable key={g} accessibilityRole="radio" accessibilityState={{ selected: p.groupBy === g, checked: p.groupBy === g }} aria-checked={p.groupBy === g} onPress={() => p.setGroupBy(g)} style={[styles.segment, styles.segmentSmall, p.groupBy === g && styles.segmentOn]} testID={`grants-group-by-${g}`}>
+              <Text style={[styles.segmentTextSmall, p.groupBy === g && styles.segmentTextOn]} numberOfLines={1} testID={`grants-group-by-${g}-text`}>{tr(`users.groupBy.${g}`)}</Text>
+            </Pressable>
+          ))}
+        </View>
+        <View style={styles.toolbarLinks}>
+          <Pressable accessibilityRole="button" onPress={p.selectVisible} hitSlop={6} style={({ pressed }) => [styles.linkBtnSmall, pressed && styles.pressed]} testID="grants-select-visible">
+            <Text style={styles.link} numberOfLines={1}>{p.query.trim() ? tr('users.selectResults') : tr('users.selectAll')}</Text>
+          </Pressable>
+          <Pressable accessibilityRole="button" onPress={p.clearAll} hitSlop={6} style={({ pressed }) => [styles.linkBtnSmall, pressed && styles.pressed]} testID="grants-clear">
+            <Text style={styles.link} numberOfLines={1}>{tr('users.clearAll')}</Text>
+          </Pressable>
+        </View>
+      </View>
+      <ScrollView style={styles.list} contentContainerStyle={styles.listContent} testID="grants-list">
+        {p.agents === null ? <ActivityIndicator style={{ marginVertical: spacing.lg }} color={colors.textMuted} /> : null}
+        {p.agents && !p.visible.length ? <Text style={styles.empty}>{p.agents.length ? tr('users.noMatch') : tr('users.noAgents')}</Text> : null}
+        {(p.groups ?? [{ key: '', label: null, agents: p.visible }]).map(g => (
+          <View key={`g-${g.key}`}>
+            {p.groups ? (
+              <Pressable accessibilityRole="checkbox" accessibilityState={{ checked: triChecked(p.selection, g.agents) }} aria-checked={triChecked(p.selection, g.agents)} accessibilityLabel={groupLabel(g, p.groupBy)} disabled={!enabled} onPress={() => p.toggleGroup(g.agents)} style={({ pressed }) => [styles.groupHeader, pressed && styles.pressed]} testID={`grant-group-${g.key || 'unknown'}`}>
+                <TriCheck state={selectionState(p.selection, g.agents)} />
+                <Text style={styles.groupName} numberOfLines={1}>{groupLabel(g, p.groupBy)}</Text>
+                <Text style={styles.groupCount} testID={`grant-group-${g.key || 'unknown'}-count`}>{tr('users.groupCount', { on: g.agents.filter(a => p.selection.has(a.node_id)).length, total: g.agents.length })}</Text>
+              </Pressable>
+            ) : null}
+        {g.agents.map(a => {
+          const on = p.selection.has(a.node_id);
+          return (
+            <View key={a.node_id} style={[styles.agentRow, p.groups && styles.agentRowGrouped]} testID={`grant-row-${a.alias}`}>
+              <Pressable accessibilityRole="checkbox" accessibilityState={{ checked: on, disabled: !enabled }} aria-checked={on} disabled={!enabled} accessibilityLabel={a.alias} onPress={() => p.setSelection(s => toggleAgent(s, a.node_id))} style={styles.agentPick} testID={`grant-toggle-${a.alias}`}>
+                <Ionicons name={on ? 'checkbox' : 'square-outline'} size={20} color={on ? colors.accent : colors.textMuted} />
+                <AliasAvatar alias={a.alias} size={28} />
+                <Text style={styles.agentName} numberOfLines={1}>{a.display_name || a.alias}</Text>
+              </Pressable>
+              {on && chat ? (
+                <View style={styles.canMessage}>
+                  <Text style={styles.canMessageText}>{tr('users.canMessage')}</Text>
+                  <Switch
+                    accessibilityLabel={`${tr('users.canMessage')} ${a.alias}`}
+                    value={p.selection.get(a.node_id) === true}
+                    disabled={!enabled}
+                    onValueChange={v => p.setSelection(s => setCanMessage(s, a.node_id, v))}
+                    trackColor={{ true: colors.accent, false: colors.border }}
+                    thumbColor={colors.card}
+                    testID={`grant-can-message-${a.alias}`}
+                  />
+                </View>
+              ) : on && readOnlyTag ? (
+                <Text style={styles.readOnlyTag} testID={`grant-read-only-${a.alias}`}>{tr('users.readOnly')}</Text>
+              ) : null}
+            </View>
+          );
+        })}
+          </View>
+        ))}
+      </ScrollView>
+      <Text style={styles.hint} testID="grants-count">{tr('users.selected', { count: p.selection.size })}</Text>
+      <Text style={styles.hint} testID="grants-one-time">{note}</Text>
+    </View>
+  );
+}
+
+/** 手机的 Agent 清单:分组方式(单选行)+ 搜索 / 全选 / 清空 卡片 + 按组的卡片(三态行 + ✓ 行)。 */
+function PhoneAgentPicker({ p, note }: { p: AgentPickerState; note: string }) {
+  return (
+    <>
+      <SettingsGroup title={tr('users.groupBy')} testID="member-page-group-by">
+        {GROUP_BYS.map(g => (
+          <SettingsChoiceRow key={g} label={tr(`users.groupBy.${g}`)} selected={p.groupBy === g} onPress={() => p.setGroupBy(g)} testID={`grants-group-by-${g}`} />
+        ))}
+      </SettingsGroup>
+      <SettingsGroup title={tr('users.agents')} footer={note} testID="member-page-agents">
+        <SettingsTextField value={p.query} onChangeText={p.setQuery} placeholder={tr('users.search')} accessibilityLabel={tr('users.search')} testID="grants-search" />
+        <SettingsRow label={p.query.trim() ? tr('users.selectResults') : tr('users.selectAll')} tone="accent" chevron={false} onPress={p.selectVisible} testID="grants-select-visible" />
+        <SettingsRow label={tr('users.clearAll')} value={tr('users.selected', { count: p.selection.size })} tone="accent" chevron={false} onPress={p.clearAll} testID="grants-clear" />
+        {p.agents === null ? <SettingsRow label={tr('users.loading')} busy testID="member-page-loading" /> : null}
+        {p.agents && !p.visible.length ? <SettingsRow label={p.agents.length ? tr('users.noMatch') : tr('users.noAgents')} tone="muted" testID="member-page-empty" /> : null}
+        {!p.groups ? p.visible.map(a => (
+          <SettingsChoiceRow
+            key={a.node_id}
+            label={a.display_name || a.alias}
+            subtitle={a.display_name ? a.alias : undefined}
+            selected={p.selection.has(a.node_id)}
+            onPress={() => p.setSelection(s => toggleAgent(s, a.node_id))}
+            testID={`grant-toggle-${a.alias}`}
+          />
+        )) : null}
+      </SettingsGroup>
+      {(p.groups ?? []).map(g => (
+        <SettingsGroup key={`g-${g.key}`} title={groupLabel(g, p.groupBy)} testID={`member-page-group-${g.key || 'unknown'}`}>
+          <SettingsTriStateRow
+            label={p.groupBy === 'host' ? tr('users.selectHost') : tr('users.selectRuntime')}
+            subtitle={tr('users.groupSelected', { on: g.agents.filter(a => p.selection.has(a.node_id)).length, total: g.agents.length })}
+            state={selectionState(p.selection, g.agents)}
+            onPress={() => p.toggleGroup(g.agents)}
+            testID={`grant-group-${g.key || 'unknown'}`}
+          />
+          {g.agents.map(a => (
+            <SettingsChoiceRow
+              key={a.node_id}
+              label={a.display_name || a.alias}
+              subtitle={a.display_name ? a.alias : undefined}
+              selected={p.selection.has(a.node_id)}
+              onPress={() => p.setSelection(s => toggleAgent(s, a.node_id))}
+              testID={`grant-toggle-${a.alias}`}
+            />
+          ))}
+        </SettingsGroup>
+      ))}
+    </>
+  );
+}
+
 /** 成员编辑的状态与保存/移出(宽屏弹窗与手机三级页共用;两端只换画法)。 */
-function useMemberEditor(cfg: HubConfig, me: AuthMe | null, networkId: string, member: NetworkMember, onDone: (message: string) => void) {
+function useMemberEditor(cfg: HubConfig, me: AuthMe | null, networkId: string, member: NetworkMember, agentGroups: HubAgentGroup[] | null, onDone: (message: string) => void) {
   const acts = memberActions(me, networkId, member);
   const name = member.display_name || member.username;
   const [agents, setAgents] = useState<PickableAgent[] | null>(null);
   const [original, setOriginal] = useState<AgentGrant[]>([]);
   const [mode0, setMode0] = useState<AgentAccess>('granted');
   const [mode, setModeState] = useState<AgentAccess>('granted');
-  const [selection, setSelection] = useState<Map<string, boolean>>(new Map());
   const [role, setRole] = useState<MemberRole>(member.role);
-  const [query, setQuery] = useState('');
+  const picker = useAgentPicker(agents, role);
+  const { selection, setSelection } = picker;
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [confirmRemove, setConfirmRemove] = useState(false);
+  // 组授权(group_id → 可对话)。Hub 没有分组时 agentGroups = null,既不显示也不随保存发送。
+  const groupsSupported = Array.isArray(agentGroups);
+  const [groupsBefore, setGroupsBefore] = useState<Map<string, boolean>>(new Map());
+  const [groupSel, setGroupSel] = useState<Map<string, boolean>>(new Map());
   const needGrants = grantsEditable(member);
   useEffect(() => {
     if (!needGrants) { setAgents([]); return; }
@@ -297,6 +472,8 @@ function useMemberEditor(cfg: HubConfig, me: AuthMe | null, networkId: string, m
         setAgents((nodes.nodes ?? []).map(n => ({ node_id: n.node_id, alias: n.alias, display_name: (n as any).display_name ?? null, role: n.role ?? null, hostname: n.hostname ?? null, runtime: n.runtime ?? null })));
         setOriginal(grants.grants ?? []);
         setSelection(selectionFromGrants(grants.grants ?? []));
+        const gs = groupSelectionFromGrants(grants.group_grants);
+        setGroupsBefore(gs); setGroupSel(new Map(gs));
         const m = initialAccessMode(grants.agent_access);
         setMode0(m); setModeState(m);
       })
@@ -304,23 +481,23 @@ function useMemberEditor(cfg: HubConfig, me: AuthMe | null, networkId: string, m
     return () => { live = false; };
   }, [cfg, networkId, member.user_id, needGrants]);
   const before = useMemo(() => selectionFromGrants(original), [original]);
-  const visible = useMemo(() => filterPickable(agents ?? [], query), [agents, query]);
-  const [groupBy, setGroupBy] = useState<GroupBy>('none');
-  const groups = useMemo<AgentGroup[] | null>(() => (groupBy === 'none' ? null : groupAgents(visible, groupBy)), [visible, groupBy]);
-  const toggleGroup = (list: readonly PickableAgent[]) => setSelection(s => toggleAgents(s, list, role));
-  const selectVisible = () => setSelection(s => selectAgents(s, visible, role));
-  const clearAll = () => setSelection(new Map());
   const setMode = (next: AgentAccess) => {
     if (next === 'granted' && mode === 'all') setSelection(s => prefillOnRestrict(s, agents ?? [], role));
     setModeState(next);
   };
-  const plan = memberSavePlan({ role: member.role, nextRole: role, mode: mode0, nextMode: mode, before, after: selection });
+  const plan = memberSavePlan({ role: member.role, nextRole: role, mode: mode0, nextMode: mode, before, after: selection, ...(groupsSupported ? { beforeGroups: groupsBefore, afterGroups: groupSel } : {}) });
   const accessEditable = acts.editAccess && grantsEditable({ role });
   const save = () => {
     setBusy(true); setError('');
     void (async () => {
       if (plan.role) await updateMemberRole(cfg, networkId, member.user_id, role);
-      if (plan.grants) await saveAgentGrants(cfg, networkId, member.user_id, grantsPayload(selection, aliasOnlyGrants(original), { mode, role }));
+      if (plan.grants) {
+        await saveAgentGrants(cfg, networkId, member.user_id, {
+          ...grantsPayload(selection, aliasOnlyGrants(original), { mode, role }),
+          // 只在 Hub 支持分组时发 group_grants;不发 = Hub 保持原样(旧 Hub 也不认这个字段)。
+          ...(groupsSupported ? { group_grants: groupGrantsPayload(groupSel, role) } : {}),
+        });
+      }
     })()
       .then(() => onDone(tr('users.saved')))
       .catch(e => setError(String((e as Error)?.message ?? e)))
@@ -334,15 +511,15 @@ function useMemberEditor(cfg: HubConfig, me: AuthMe | null, networkId: string, m
       .finally(() => setBusy(false));
   };
   return {
-    acts, name, agents, visible, selection, setSelection, mode, setMode, role, setRole, query, setQuery,
-    groupBy, setGroupBy, groups, toggleGroup, selectVisible, clearAll,
+    acts, name, agents, picker, selection, setSelection, mode, setMode, role, setRole,
+    agentGroups: groupsSupported ? agentGroups! : [], groupSel, setGroupSel,
     busy, error, confirmRemove, setConfirmRemove, accessEditable, changed: plan.role || plan.grants, save, remove,
   };
 }
 
 /** 宽屏:居中弹窗。角色 / 范围用分段控件,清单可搜,「全部 Agent」时清单置灰不可点;「移出网络」在左下角,点了换成确认条。 */
-function MemberDialog({ cfg, me, networkId, member, onClose, onDone }: { cfg: HubConfig; me: AuthMe | null; networkId: string; member: NetworkMember; onClose: () => void; onDone: (message: string) => void }) {
-  const ed = useMemberEditor(cfg, me, networkId, member, onDone);
+function MemberDialog({ cfg, me, networkId, member, agentGroups, onClose, onDone }: { cfg: HubConfig; me: AuthMe | null; networkId: string; member: NetworkMember; agentGroups: HubAgentGroup[] | null; onClose: () => void; onDone: (message: string) => void }) {
+  const ed = useMemberEditor(cfg, me, networkId, member, agentGroups, onDone);
   const restricted = ed.mode === 'granted';
   const chat = showsCanMessage(ed.role);
   return (
@@ -398,74 +575,41 @@ function MemberDialog({ cfg, me, networkId, member, onClose, onDone }: { cfg: Hu
             </View>
             <Text style={styles.hint} testID="grants-mode-hint">{restricted ? (chat ? tr('users.access.grantedHint') : tr('users.viewerHint')) : tr('users.access.allHint')}</Text>
           </View>
-          <View style={[styles.field, styles.pickerArea, !restricted && styles.inactive]} pointerEvents={restricted ? 'auto' : 'none'} testID="grants-picker">
-            <View style={styles.search}>
-              <Ionicons name="search-outline" size={15} color={colors.textMuted} />
-              <TextInput value={ed.query} onChangeText={ed.setQuery} editable={restricted} placeholder={tr('users.search')} placeholderTextColor={colors.textMuted} accessibilityLabel={tr('users.search')} autoCapitalize="none" autoCorrect={false} style={styles.searchInput} testID="grants-search" />
+          {restricted && ed.agentGroups.length ? (
+            <View style={[styles.field, styles.groupGrantArea]} testID="grant-agroups">
+              <Text style={styles.fieldLabel}>{tr('users.grantGroups')}</Text>
+              <ScrollView style={styles.groupGrantList} testID="grant-agroups-list">
+                {ed.agentGroups.map(g => {
+                  const on = ed.groupSel.has(g.group_id);
+                  return (
+                    <View key={g.group_id} style={styles.agentRow} testID={`grant-agroup-row-${g.name}`}>
+                      <Pressable accessibilityRole="checkbox" accessibilityState={{ checked: on }} aria-checked={on} accessibilityLabel={g.name} onPress={() => ed.setGroupSel(s => toggleAgent(s, g.group_id))} style={styles.agentPick} testID={`grant-agroup-${g.name}`}>
+                        <Ionicons name={on ? 'checkbox' : 'square-outline'} size={20} color={on ? colors.accent : colors.textMuted} />
+                        <Ionicons name="albums-outline" size={18} color={colors.textSecondary} />
+                        <Text style={styles.agentName} numberOfLines={1}>{g.name}</Text>
+                        <Text style={styles.groupCount}>{tr('users.groupMembers', { count: g.member_count })}</Text>
+                      </Pressable>
+                      {on && chat ? (
+                        <View style={styles.canMessage}>
+                          <Text style={styles.canMessageText}>{tr('users.canMessage')}</Text>
+                          <Switch
+                            accessibilityLabel={`${tr('users.canMessage')} ${g.name}`}
+                            value={ed.groupSel.get(g.group_id) === true}
+                            onValueChange={v => ed.setGroupSel(s => setCanMessage(s, g.group_id, v))}
+                            trackColor={{ true: colors.accent, false: colors.border }}
+                            thumbColor={colors.card}
+                            testID={`grant-agroup-can-message-${g.name}`}
+                          />
+                        </View>
+                      ) : on ? <Text style={styles.readOnlyTag}>{tr('users.readOnly')}</Text> : null}
+                    </View>
+                  );
+                })}
+              </ScrollView>
+              <Text style={styles.hint} testID="grant-agroups-hint">{tr('users.grantGroupsHint')}</Text>
             </View>
-            <View style={styles.toolbar} testID="grants-toolbar">
-              <View style={[styles.segmented, styles.segmentedSmall]} accessibilityRole="radiogroup" testID="grants-group-by">
-                {GROUP_BYS.map(g => (
-                  <Pressable key={g} accessibilityRole="radio" accessibilityState={{ selected: ed.groupBy === g, checked: ed.groupBy === g }} aria-checked={ed.groupBy === g} onPress={() => ed.setGroupBy(g)} style={[styles.segment, styles.segmentSmall, ed.groupBy === g && styles.segmentOn]} testID={`grants-group-by-${g}`}>
-                    <Text style={[styles.segmentTextSmall, ed.groupBy === g && styles.segmentTextOn]} numberOfLines={1} testID={`grants-group-by-${g}-text`}>{tr(`users.groupBy.${g}`)}</Text>
-                  </Pressable>
-                ))}
-              </View>
-              <View style={styles.toolbarLinks}>
-                <Pressable accessibilityRole="button" onPress={ed.selectVisible} hitSlop={6} style={({ pressed }) => [styles.linkBtnSmall, pressed && styles.pressed]} testID="grants-select-visible">
-                  <Text style={styles.link} numberOfLines={1}>{ed.query.trim() ? tr('users.selectResults') : tr('users.selectAll')}</Text>
-                </Pressable>
-                <Pressable accessibilityRole="button" onPress={ed.clearAll} hitSlop={6} style={({ pressed }) => [styles.linkBtnSmall, pressed && styles.pressed]} testID="grants-clear">
-                  <Text style={styles.link} numberOfLines={1}>{tr('users.clearAll')}</Text>
-                </Pressable>
-              </View>
-            </View>
-            <ScrollView style={styles.list} contentContainerStyle={styles.listContent} testID="grants-list">
-              {ed.agents === null ? <ActivityIndicator style={{ marginVertical: spacing.lg }} color={colors.textMuted} /> : null}
-              {ed.agents && !ed.visible.length ? <Text style={styles.empty}>{ed.agents.length ? tr('users.noMatch') : tr('users.noAgents')}</Text> : null}
-              {(ed.groups ?? [{ key: '', label: null, agents: ed.visible }]).map(g => (
-                <View key={`g-${g.key}`}>
-                  {ed.groups ? (
-                    <Pressable accessibilityRole="checkbox" accessibilityState={{ checked: triChecked(ed.selection, g.agents) }} aria-checked={triChecked(ed.selection, g.agents)} accessibilityLabel={groupLabel(g, ed.groupBy)} disabled={!restricted} onPress={() => ed.toggleGroup(g.agents)} style={({ pressed }) => [styles.groupHeader, pressed && styles.pressed]} testID={`grant-group-${g.key || 'unknown'}`}>
-                      <TriCheck state={selectionState(ed.selection, g.agents)} />
-                      <Text style={styles.groupName} numberOfLines={1}>{groupLabel(g, ed.groupBy)}</Text>
-                      <Text style={styles.groupCount} testID={`grant-group-${g.key || 'unknown'}-count`}>{tr('users.groupCount', { on: g.agents.filter(a => ed.selection.has(a.node_id)).length, total: g.agents.length })}</Text>
-                    </Pressable>
-                  ) : null}
-              {g.agents.map(a => {
-                const on = ed.selection.has(a.node_id);
-                return (
-                  <View key={a.node_id} style={[styles.agentRow, ed.groups && styles.agentRowGrouped]} testID={`grant-row-${a.alias}`}>
-                    <Pressable accessibilityRole="checkbox" accessibilityState={{ checked: on, disabled: !restricted }} aria-checked={on} disabled={!restricted} accessibilityLabel={a.alias} onPress={() => ed.setSelection(s => toggleAgent(s, a.node_id))} style={styles.agentPick} testID={`grant-toggle-${a.alias}`}>
-                      <Ionicons name={on ? 'checkbox' : 'square-outline'} size={20} color={on ? colors.accent : colors.textMuted} />
-                      <AliasAvatar alias={a.alias} size={28} />
-                      <Text style={styles.agentName} numberOfLines={1}>{a.display_name || a.alias}</Text>
-                    </Pressable>
-                    {on && chat ? (
-                      <View style={styles.canMessage}>
-                        <Text style={styles.canMessageText}>{tr('users.canMessage')}</Text>
-                        <Switch
-                          accessibilityLabel={`${tr('users.canMessage')} ${a.alias}`}
-                          value={ed.selection.get(a.node_id) === true}
-                          disabled={!restricted}
-                          onValueChange={v => ed.setSelection(s => setCanMessage(s, a.node_id, v))}
-                          trackColor={{ true: colors.accent, false: colors.border }}
-                          thumbColor={colors.card}
-                          testID={`grant-can-message-${a.alias}`}
-                        />
-                      </View>
-                    ) : on ? (
-                      <Text style={styles.readOnlyTag} testID={`grant-read-only-${a.alias}`}>{tr('users.readOnly')}</Text>
-                    ) : null}
-                  </View>
-                );
-              })}
-                </View>
-              ))}
-            </ScrollView>
-            <Text style={styles.hint} testID="grants-count">{tr('users.selected', { count: ed.selection.size })}</Text>
-            <Text style={styles.hint} testID="grants-one-time">{tr('users.oneTimeNote')}</Text>
-          </View>
+          ) : null}
+          <DesktopAgentPicker p={ed.picker} enabled={restricted} chat={chat} note={tr('users.oneTimeNote')} />
         </>
       ) : null}
       {ed.error ? <Text style={styles.error} testID="grants-error">{ed.error}</Text> : null}
@@ -474,8 +618,8 @@ function MemberDialog({ cfg, me, networkId, member, onClose, onDone }: { cfg: Hu
 }
 
 /** 手机:设置三级页「成员」,只用 settings-kit 的积木(微信式分组)。移出走底部确认单。 */
-function MemberPage({ cfg, me, networkId, member, onDone }: { cfg: HubConfig; me: AuthMe | null; networkId: string; member: NetworkMember; onDone: (message: string) => void }) {
-  const ed = useMemberEditor(cfg, me, networkId, member, onDone);
+function MemberPage({ cfg, me, networkId, member, agentGroups, onDone }: { cfg: HubConfig; me: AuthMe | null; networkId: string; member: NetworkMember; agentGroups: HubAgentGroup[] | null; onDone: (message: string) => void }) {
+  const ed = useMemberEditor(cfg, me, networkId, member, agentGroups, onDone);
   const restricted = ed.mode === 'granted';
   const chat = showsCanMessage(ed.role);
   const picked = (ed.agents ?? []).filter(a => ed.selection.has(a.node_id)).sort((a, b) => a.alias.localeCompare(b.alias));
@@ -499,53 +643,34 @@ function MemberPage({ cfg, me, networkId, member, onDone }: { cfg: HubConfig; me
       ) : null}
       {ed.accessEditable && restricted ? (
         <>
-          <SettingsGroup title={tr('users.groupBy')} testID="member-page-group-by">
-            {GROUP_BYS.map(g => (
-              <SettingsChoiceRow key={g} label={tr(`users.groupBy.${g}`)} selected={ed.groupBy === g} onPress={() => ed.setGroupBy(g)} testID={`grants-group-by-${g}`} />
-            ))}
-          </SettingsGroup>
-          <SettingsGroup title={tr('users.agents')} footer={tr('users.oneTimeNote')} testID="member-page-agents">
-            <SettingsTextField value={ed.query} onChangeText={ed.setQuery} placeholder={tr('users.search')} accessibilityLabel={tr('users.search')} testID="grants-search" />
-            <SettingsRow label={ed.query.trim() ? tr('users.selectResults') : tr('users.selectAll')} tone="accent" chevron={false} onPress={ed.selectVisible} testID="grants-select-visible" />
-            <SettingsRow label={tr('users.clearAll')} value={tr('users.selected', { count: ed.selection.size })} tone="accent" chevron={false} onPress={ed.clearAll} testID="grants-clear" />
-            {ed.agents === null ? <SettingsRow label={tr('users.loading')} busy testID="member-page-loading" /> : null}
-            {ed.agents && !ed.visible.length ? <SettingsRow label={ed.agents.length ? tr('users.noMatch') : tr('users.noAgents')} tone="muted" testID="member-page-empty" /> : null}
-            {!ed.groups ? ed.visible.map(a => (
-              <SettingsChoiceRow
-                key={a.node_id}
-                label={a.display_name || a.alias}
-                subtitle={a.display_name ? a.alias : undefined}
-                selected={ed.selection.has(a.node_id)}
-                onPress={() => ed.setSelection(s => toggleAgent(s, a.node_id))}
-                testID={`grant-toggle-${a.alias}`}
-              />
-            )) : null}
-          </SettingsGroup>
-          {(ed.groups ?? []).map(g => (
-            <SettingsGroup key={`g-${g.key}`} title={groupLabel(g, ed.groupBy)} testID={`member-page-group-${g.key || 'unknown'}`}>
-              <SettingsTriStateRow
-                label={ed.groupBy === 'host' ? tr('users.selectHost') : tr('users.selectRuntime')}
-                subtitle={tr('users.groupSelected', { on: g.agents.filter(a => ed.selection.has(a.node_id)).length, total: g.agents.length })}
-                state={selectionState(ed.selection, g.agents)}
-                onPress={() => ed.toggleGroup(g.agents)}
-                testID={`grant-group-${g.key || 'unknown'}`}
-              />
-              {g.agents.map(a => (
+          {ed.agentGroups.length ? (
+            <SettingsGroup title={tr('users.grantGroups')} footer={tr('users.grantGroupsHint')} testID="grant-agroups">
+              {ed.agentGroups.map(g => (
                 <SettingsChoiceRow
-                  key={a.node_id}
-                  label={a.display_name || a.alias}
-                  subtitle={a.display_name ? a.alias : undefined}
-                  selected={ed.selection.has(a.node_id)}
-                  onPress={() => ed.setSelection(s => toggleAgent(s, a.node_id))}
-                  testID={`grant-toggle-${a.alias}`}
+                  key={g.group_id}
+                  label={g.name}
+                  subtitle={tr('users.groupMembers', { count: g.member_count })}
+                  selected={ed.groupSel.has(g.group_id)}
+                  onPress={() => ed.setGroupSel(s => toggleAgent(s, g.group_id))}
+                  testID={`grant-agroup-${g.name}`}
                 />
               ))}
             </SettingsGroup>
-          ))}
+          ) : null}
+          <PhoneAgentPicker p={ed.picker} note={tr('users.oneTimeNote')} />
         </>
       ) : null}
-      {ed.accessEditable && restricted && chat && picked.length ? (
+      {ed.accessEditable && restricted && chat && (picked.length || ed.groupSel.size) ? (
         <SettingsGroup title={tr('users.canMessageGroup')} footer={tr('users.canMessageFooter')} testID="member-page-chat">
+          {ed.agentGroups.filter(g => ed.groupSel.has(g.group_id)).map(g => (
+            <SettingsSwitchRow
+              key={g.group_id}
+              label={`${g.name} · ${tr('users.groupTag')}`}
+              value={ed.groupSel.get(g.group_id) === true}
+              onValueChange={v => ed.setGroupSel(s => setCanMessage(s, g.group_id, v))}
+              testID={`grant-agroup-can-message-${g.name}`}
+            />
+          ))}
           {picked.map(a => (
             <SettingsSwitchRow
               key={a.node_id}
@@ -565,16 +690,118 @@ function MemberPage({ cfg, me, networkId, member, onDone }: { cfg: HubConfig; me
   );
 }
 
+/** 分组编辑的状态与保存 / 删除(宽屏弹窗与手机三级页共用)。group=null ⇒ 新建。 */
+function useGroupEditor(cfg: HubConfig, networkId: string, group: HubAgentGroup | null, onDone: (message: string) => void) {
+  const [agents, setAgents] = useState<PickableAgent[] | null>(null);
+  const [name, setName] = useState(group?.name ?? '');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const picker = useAgentPicker(agents, undefined);
+  const { setSelection } = picker;
+  useEffect(() => {
+    let live = true;
+    void fetchHubNodes({ ...cfg, networkId })
+      .then(nodes => {
+        if (!live) return;
+        setAgents((nodes.nodes ?? []).map(n => ({ node_id: n.node_id, alias: n.alias, display_name: (n as any).display_name ?? null, role: n.role ?? null, hostname: n.hostname ?? null, runtime: n.runtime ?? null })));
+        setSelection(new Map((group?.node_ids ?? []).map(id => [id, true] as [string, boolean])));
+      })
+      .catch(e => { if (live) { setAgents([]); setError(String((e as Error)?.message ?? e)); } });
+    return () => { live = false; };
+  }, [cfg, networkId, group?.group_id]);
+  const nodeIds = useMemo(() => [...picker.selection.keys()].sort(), [picker.selection]);
+  const nameOk = validGroupName(name);
+  const changed = !group || groupEditChanged({ name: group.name, nodeIds: group.node_ids }, { name, nodeIds });
+  const save = () => {
+    if (!nameOk) { setError(tr('users.err.groupName')); return; }
+    setBusy(true); setError('');
+    void (async () => {
+      if (!group) { await createAgentGroup(cfg, networkId, { name: name.trim(), node_ids: nodeIds }); return; }
+      if (name.trim() !== group.name) await renameAgentGroup(cfg, networkId, group.group_id, name.trim());
+      if (groupEditChanged({ name: '', nodeIds: group.node_ids }, { name: '', nodeIds })) await saveAgentGroupMembers(cfg, networkId, group.group_id, nodeIds);
+    })()
+      .then(() => onDone(tr('users.groupSaved', { name: name.trim() })))
+      .catch(e => setError(String((e as Error)?.message ?? e)))
+      .finally(() => setBusy(false));
+  };
+  const remove = () => {
+    if (!group) return;
+    setBusy(true); setError('');
+    void deleteAgentGroup(cfg, networkId, group.group_id)
+      .then(() => onDone(tr('users.groupDeleted', { name: group.name })))
+      .catch(e => { setConfirmDelete(false); setError(String((e as Error)?.message ?? e)); })
+      .finally(() => setBusy(false));
+  };
+  const deleteMessage = group ? tr('users.deleteGroupConfirm', { name: group.name, count: group.granted_user_count }) : '';
+  return { group, name, setName, nameOk, picker, busy, error, confirmDelete, setConfirmDelete, changed, save, remove, deleteMessage };
+}
+
+/** 宽屏:分组编辑弹窗。名称 + 与成员授权同一套 Agent 清单(不带可对话);已有分组左下角「删除分组」,点了换成确认条。 */
+function GroupDialog({ cfg, networkId, group, onClose, onDone }: { cfg: HubConfig; networkId: string; group: HubAgentGroup | null; onClose: () => void; onDone: (message: string) => void }) {
+  const g = useGroupEditor(cfg, networkId, group, onDone);
+  return (
+    <DialogFrame
+      title={group ? `${tr('users.groupTag')} · ${group.name}` : tr('users.newGroup')}
+      closeLabel={tr('users.close')}
+      onClose={onClose}
+      scroll={false}
+      testID="group-dialog"
+      footer={g.confirmDelete ? (
+        <View style={styles.confirmBox} testID="group-delete-box">
+          <Text style={styles.confirmText}>{g.deleteMessage}</Text>
+          <Actions onCancel={() => g.setConfirmDelete(false)} onConfirm={g.remove} confirmLabel={tr('users.deleteGroupYes')} danger busy={g.busy} testID="group-delete" />
+        </View>
+      ) : (
+        <Actions
+          onCancel={onClose}
+          onConfirm={g.save}
+          confirmLabel={group ? tr('users.save') : tr('users.create')}
+          disabled={!g.changed || !g.nameOk}
+          busy={g.busy}
+          testID="group"
+          left={group ? (
+            <Pressable accessibilityRole="button" onPress={() => g.setConfirmDelete(true)} hitSlop={6} style={({ pressed }) => [styles.linkBtn, pressed && styles.pressed]} testID="group-delete-open">
+              <Text style={styles.linkDanger}>{tr('users.deleteGroup')}</Text>
+            </Pressable>
+          ) : undefined}
+        />
+      )}
+    >
+      <Field label={tr('users.groupName')} value={g.name} onChangeText={g.setName} maxLength={64} testID="group-name" />
+      <DesktopAgentPicker p={g.picker} enabled chat={false} readOnlyTag={false} note={tr('users.groupNote')} />
+      {g.error ? <Text style={styles.error} testID="group-error">{g.error}</Text> : null}
+    </DialogFrame>
+  );
+}
+
+/** 手机:设置三级页「分组」。名称卡片 + 同一套微信式 Agent 清单 + 保存 / 删除(底部确认单)。 */
+function GroupPage({ cfg, networkId, group, onDone }: { cfg: HubConfig; networkId: string; group: HubAgentGroup | null; onDone: (message: string) => void }) {
+  const g = useGroupEditor(cfg, networkId, group, onDone);
+  return (
+    <View testID="group-page">
+      <SettingsGroup title={tr('users.groupName')} testID="group-page-name">
+        <SettingsTextField value={g.name} onChangeText={g.setName} placeholder={tr('users.groupName')} maxLength={64} accessibilityLabel={tr('users.groupName')} testID="group-name" />
+      </SettingsGroup>
+      <PhoneAgentPicker p={g.picker} note={tr('users.groupNote')} />
+      {g.error ? <SettingsGroup footer={g.error} footerTone="danger" testID="group-error" /> : null}
+      <SettingsButton label={group ? tr('users.save') : tr('users.create')} onPress={g.save} disabled={!g.changed || !g.nameOk} busy={g.busy && !g.confirmDelete} testID="group-confirm" />
+      {group ? <SettingsButton label={tr('users.deleteGroup')} variant="destructive" onPress={() => g.setConfirmDelete(true)} testID="group-delete-open" /> : null}
+      {g.confirmDelete && group ? <RemoveSheet name={group.name} message={g.deleteMessage} confirmLabel={tr('users.deleteGroupYes')} busy={g.busy} onCancel={() => g.setConfirmDelete(false)} onConfirm={g.remove} /> : null}
+    </View>
+  );
+}
+
 /** 手机的底部确认单(微信「删除联系人」那种):说明 + 红字确认 + 取消。 */
-function RemoveSheet({ name, busy, onCancel, onConfirm }: { name: string; busy: boolean; onCancel: () => void; onConfirm: () => void }) {
+function RemoveSheet({ name, busy, onCancel, onConfirm, message, confirmLabel }: { name: string; busy: boolean; onCancel: () => void; onConfirm: () => void; message?: string; confirmLabel?: string }) {
   const safe = useModalSafePadding('fullScreen');
   return (
     <Modal visible transparent animationType="slide" onRequestClose={onCancel}>
       <Pressable style={styles.sheetBackdrop} onPress={onCancel} testID="member-remove-backdrop">
         <Pressable style={[styles.sheet, { paddingBottom: Math.max(safe.paddingBottom ?? 0, spacing.sm) }]} onPress={() => {}} testID="member-remove-sheet">
-          <Text style={styles.sheetText}>{tr('users.removeConfirm', { name })}</Text>
+          <Text style={styles.sheetText}>{message ?? tr('users.removeConfirm', { name })}</Text>
           <Pressable accessibilityRole="button" disabled={busy} onPress={onConfirm} style={({ pressed }) => [styles.sheetBtn, styles.sheetDivider, pressed && styles.pressed]} testID="member-remove-confirm">
-            {busy ? <ActivityIndicator size="small" color={colors.failed} /> : <Text style={styles.sheetDanger}>{tr('users.removeYes')}</Text>}
+            {busy ? <ActivityIndicator size="small" color={colors.failed} /> : <Text style={styles.sheetDanger}>{confirmLabel ?? tr('users.removeYes')}</Text>}
           </Pressable>
           <View style={styles.sheetGap} />
           <Pressable accessibilityRole="button" onPress={onCancel} style={({ pressed }) => [styles.sheetBtn, pressed && styles.pressed]} testID="member-remove-cancel">
@@ -600,6 +827,8 @@ const makeStyles = () => StyleSheet.create({
   pickerRowOn: { backgroundColor: colors.subtleFill },
   pickerRowText: { flex: 1, minWidth: 0, color: colors.text, fontSize: 14 },
   pickerArea: { flexShrink: 1, minHeight: 0 },
+  groupGrantArea: { flexShrink: 1, minHeight: 0 },
+  groupGrantList: { maxHeight: 148, flexGrow: 0, flexShrink: 1 },
   toolbar: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   toolbarLinks: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, marginLeft: 'auto' },
   segmentedSmall: { flexShrink: 0 },

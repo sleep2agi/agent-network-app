@@ -1,7 +1,7 @@
 // 多用户账号与 Agent 权限(hub agent-network#2084)—— 客户端纯逻辑。ck 风格,自执行。
 import { readFileSync } from 'node:fs';
 import {
-  ASSIGNABLE_ROLES, agentsEmptyKind, groupAgents, selectAgents, selectionState, toggleAgents, aliasOnlyGrants, canManageUsers, filterPickable, grantsChanged, grantsEditable, grantsPayload,
+  ASSIGNABLE_ROLES, accessSummaryText, agentsEmptyKind, groupEditChanged, groupGrantsPayload, groupSelectionFromGrants, validGroupName, groupAgents, selectAgents, selectionState, toggleAgents, aliasOnlyGrants, canManageUsers, filterPickable, grantsChanged, grantsEditable, grantsPayload,
   initialAccessMode, isRestrictedIn, memberAccessSummary, memberActions, memberSavePlan, pickDefaultNetworkId, prefillOnRestrict,
   selectionFromGrants, setCanMessage, showsCanMessage, toggleAgent, validateNewUser,
   type AuthMe,
@@ -189,6 +189,26 @@ const ck = (name: string, ok: boolean) => { n++; if (ok) { p++; console.log(`  �
   ck('按类型全选后保存 = 逐个节点的授权(一次性展开,没有「组」概念)', JSON.stringify(body) === JSON.stringify({ agent_access: 'granted', grants: [{ node_id: 'n1', can_message: true }, { node_id: 'n3', can_message: true }] }));
 }
 
+// —— Agent 分组(RFC-038 §8,hub #2131):组授权动态生效 ——
+{
+  const gs = groupSelectionFromGrants([{ group_id: 'g2', name: 'B', can_message: false }, { group_id: 'g1', can_message: true }]);
+  ck('组授权 → 选择', gs.size === 2 && gs.get('g2') === false && gs.get('g1') === true);
+  ck('旧 Hub 没有 group_grants → 空', groupSelectionFromGrants(undefined).size === 0);
+  ck('group_grants payload 按 id 排序', JSON.stringify(groupGrantsPayload(gs)) === JSON.stringify([{ group_id: 'g1', can_message: true }, { group_id: 'g2', can_message: false }]));
+  ck('viewer 的组授权一律只读', groupGrantsPayload(gs, 'viewer').every(g => !g.can_message));
+  const e = new Map<string, boolean>();
+  const base = { role: 'member', nextRole: 'member', mode: 'granted' as const, nextMode: 'granted' as const, before: e, after: e };
+  ck('只改组授权 → 要写授权', memberSavePlan({ ...base, beforeGroups: new Map(), afterGroups: new Map([['g1', true]]) }).grants);
+  ck('组授权没变 → 不写', !memberSavePlan({ ...base, beforeGroups: new Map([['g1', true]]), afterGroups: new Map([['g1', true]]) }).grants);
+  ck('Hub 不支持分组(不传)→ 与原来一样', !memberSavePlan(base).grants);
+  ck('分组名 1–64', validGroupName('a') && validGroupName('x'.repeat(64)) && !validGroupName('  ') && !validGroupName('x'.repeat(65)));
+  ck('分组改动:改名 / 成员增删 / 顺序不同算没改', groupEditChanged({ name: 'A', nodeIds: ['n1'] }, { name: 'B', nodeIds: ['n1'] }) && groupEditChanged({ name: 'A', nodeIds: ['n1'] }, { name: 'A', nodeIds: ['n1', 'n2'] }) && !groupEditChanged({ name: 'A', nodeIds: ['n2', 'n1'] }, { name: ' A ', nodeIds: ['n1', 'n2'] }));
+  const t = (m: any) => { const r = accessSummaryText(memberAccessSummary(m)); return `${r.key}:${JSON.stringify(r.params ?? {})}:${r.empty}`; };
+  ck('成员行摘要:直接 + 分组', t({ user_id: 'u', username: 'm', role: 'member', agent_access: 'granted', agent_grant_count: 3, agent_group_count: 2 }) === 'users.access.countGroups:{"count":3,"groups":2}:false');
+  ck('成员行摘要:只有分组也不算「未分配」', t({ user_id: 'u', username: 'm', role: 'member', agent_access: 'granted', agent_grant_count: 0, agent_group_count: 1 }) === 'users.access.groups:{"groups":1}:false');
+  ck('成员行摘要:都没有 → 未分配(红)', t({ user_id: 'u', username: 'm', role: 'member', agent_access: 'granted' }) === 'users.access.none:{}:true');
+}
+
 // —— 选择器过滤 ——
 {
   const nodes = [
@@ -238,13 +258,17 @@ const ck = (name: string, ok: boolean) => { n++; if (ok) { p++; console.log(`  �
   ck('G3 改角色 / 移出真的调了 hub', panel.includes('updateMemberRole(cfg, networkId, member.user_id, role)') && panel.includes('removeNetworkMember(cfg, networkId, member.user_id)'));
   ck('G3 行可点看 memberActions(不再只看 grantsEditable)', panel.includes('memberActions(me, networkId, m)'));
   ck('批量:两端都接了 按机器 / 按类型 / 全选结果 / 清空', panel.includes("GROUP_BYS: readonly GroupBy[] = ['none', 'host', 'runtime']") && (panel.match(/testID="grants-select-visible"/g) ?? []).length === 2 && (panel.match(/testID="grants-clear"/g) ?? []).length === 2);
-  ck('批量:组复选框走 toggleAgents,三态走 selectionState', panel.includes('toggleAgents(s, list, role)') && (panel.match(/selectionState\(ed\.selection, g\.agents\)/g) ?? []).length >= 2);
+  ck('批量:组复选框走 toggleAgents,三态走 selectionState', panel.includes('toggleAgents(s, list, role)') && (panel.match(/selectionState\(p\.selection, g\.agents\)/g) ?? []).length >= 2);
   ck('批量:两端都写明「一次性,以后新建的不会自动加入」', (panel.match(/users\.oneTimeNote/g) ?? []).length === 2);
   ck('批量:节点带上 hostname / runtime(分组依据)', panel.includes('hostname: n.hostname ?? null, runtime: n.runtime ?? null'));
+  ck('分组:保存只在 Hub 支持时带 group_grants', panel.includes("...(groupsSupported ? { group_grants: groupGrantsPayload(groupSel, role) } : {})"));
+  ck('分组:旧 Hub(404)→ agentGroups=null → 整块不显示', panel.includes('{Array.isArray(agentGroups) ? (') && read('./user-admin-api.ts').includes('e.status === 404'));
+  ck('分组:编辑复用同一套选择器(桌面 + 手机)', (panel.match(/<DesktopAgentPicker p=\{g\.picker\}/g) ?? []).length === 1 && (panel.match(/<PhoneAgentPicker p=\{g\.picker\}/g) ?? []).length === 1);
+  ck('分组:接口 GET/POST/PATCH/PUT members/DELETE', ['fetchAgentGroups', 'createAgentGroup', 'renameAgentGroup', 'saveAgentGroupMembers', 'deleteAgentGroup'].every(f => panel.includes(f)));
   const adminApi = read('./user-admin-api.ts');
   ck('G3 API:PUT /members/:uid {role}、DELETE /members/:uid', /members\/\$\{net\(userId\)\}`, \{ method: 'PUT', body: \{ role \} \}/.test(adminApi) && /members\/\$\{net\(userId\)\}`, \{ method: 'DELETE' \}/.test(adminApi));
   const phonePages = read('./SettingsPhonePages.tsx');
-  ck('手机:成员是设置三级页 userMember', phonePages.includes("ctx.renderUsers(ctx.detail === 'userMember')") && settings.includes("openDetail('userMember')"));
+  ck('手机:成员是设置三级页 userMember', phonePages.includes("ctx.detail === 'userMember' ? 'userMember'") && settings.includes("openDetail('userMember')"));
   const app = read('../App.tsx');
   ck('登录页有注册入口并调 /api/auth/register', app.includes('registerHubAccount(') && app.includes('login-mode-toggle'));
 }

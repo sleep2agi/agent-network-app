@@ -24,6 +24,8 @@ export type NetworkMember = {
   /** 生效值:owner/admin/Hub 管理员恒为 all。旧 Hub 没有这个字段。 */
   agent_access?: AgentAccess;
   agent_grant_count?: number;
+  /** RFC-038 §8:被授权的 Agent 分组个数。旧 Hub 没有。 */
+  agent_group_count?: number;
 };
 
 export type AgentGrant = { node_id: string | null; alias: string | null; can_message: boolean };
@@ -81,9 +83,9 @@ export function grantsEditable(m: Pick<NetworkMember, 'role'>): boolean {
 }
 
 /** 成员行右侧的摘要:全部 / N 个。 */
-export function memberAccessSummary(m: NetworkMember): { kind: 'all' } | { kind: 'count'; count: number } {
+export function memberAccessSummary(m: NetworkMember): { kind: 'all' } | { kind: 'count'; count: number; groups: number } {
   if (!grantsEditable(m) || m.agent_access === 'all') return { kind: 'all' };
-  return { kind: 'count', count: m.agent_grant_count ?? 0 };
+  return { kind: 'count', count: m.agent_grant_count ?? 0, groups: m.agent_group_count ?? 0 };
 }
 
 /** 编辑中的选择:node_id → 可对话。 */
@@ -170,11 +172,14 @@ export function memberSavePlan(input: {
   role: MemberRole; nextRole: MemberRole;
   mode: AgentAccess; nextMode: AgentAccess;
   before: GrantSelection; after: GrantSelection;
+  /** 组授权(group_id → 可对话)。Hub 不支持分组时不传。 */
+  beforeGroups?: GrantSelection; afterGroups?: GrantSelection;
 }): { role: boolean; grants: boolean } {
   const role = input.nextRole !== input.role;
   if (!grantsEditable({ role: input.nextRole })) return { role, grants: false };
   const becameViewer = role && input.nextRole === 'viewer';
-  const grants = input.mode !== input.nextMode || grantsChanged(input.before, input.after) || becameViewer;
+  const groupsChanged = !!input.beforeGroups && !!input.afterGroups && grantsChanged(input.beforeGroups, input.afterGroups);
+  const grants = input.mode !== input.nextMode || grantsChanged(input.before, input.after) || groupsChanged || becameViewer;
   return { role, grants };
 }
 
@@ -307,4 +312,47 @@ export function filterNetworkChoices(list: readonly NetworkChoice[], query: stri
 /** 在选中的网络里能不能建 admin:Hub 管理员,或我是那个网络的 owner。 */
 export function canAddAdminsIn(me: AuthMe | null | undefined, networkId: string | undefined): boolean {
   return me?.user?.role === 'admin' || currentNetworkRow(me, networkId)?.member_role === 'owner';
+}
+
+// —— Agent 分组(RFC-038 §8,hub agent-network#2131)——
+// 组是管理员自由定义的一组 Agent;授权给组 ⇒ 组里**以后新加的** Agent 也自动可见(与上面一次性的批量勾选不同)。
+// 旧 Hub 没有分组接口(404)⇒ 客户端整块不显示。
+
+/** GET /api/networks/:id/agent-groups 的一项。 */
+export type HubAgentGroup = { group_id: string; name: string; description?: string | null; node_ids: string[]; member_count: number; granted_user_count: number };
+/** agent-grants 里的一条组授权。 */
+export type GroupGrant = { group_id: string; name?: string; can_message: boolean };
+
+export function groupSelectionFromGrants(grants: readonly GroupGrant[] | null | undefined): Map<string, boolean> {
+  const out = new Map<string, boolean>();
+  for (const g of grants ?? []) if (g.group_id) out.set(g.group_id, g.can_message);
+  return out;
+}
+
+/** PUT agent-grants 的 group_grants(整体替换)。按 group_id 排序;viewer 一律只读。 */
+export function groupGrantsPayload(sel: GrantSelection, role?: MemberRole): Array<{ group_id: string; can_message: boolean }> {
+  return [...sel.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([group_id, can]) => ({ group_id, can_message: role === 'viewer' ? false : can }));
+}
+
+/** 分组名:1–64 个字符(去首尾空格),与 hub 同规则。 */
+export function validGroupName(name: string): boolean {
+  const n = name.trim();
+  return n.length >= 1 && n.length <= 64;
+}
+
+/** 分组编辑有没有改动:名字,或成员集合。 */
+export function groupEditChanged(before: { name: string; nodeIds: readonly string[] }, after: { name: string; nodeIds: readonly string[] }): boolean {
+  if (before.name.trim() !== after.name.trim()) return true;
+  if (before.nodeIds.length !== after.nodeIds.length) return true;
+  const set = new Set(before.nodeIds);
+  return after.nodeIds.some(id => !set.has(id));
+}
+
+/** 成员行右侧的摘要文案 key 与参数(「3 个 Agent · 2 个分组」/「未分配 Agent」)。 */
+export function accessSummaryText(summary: ReturnType<typeof memberAccessSummary>): { key: string; params?: Record<string, number>; empty: boolean } {
+  if (summary.kind === 'all') return { key: 'users.access.all', empty: false };
+  if (summary.count && summary.groups) return { key: 'users.access.countGroups', params: { count: summary.count, groups: summary.groups }, empty: false };
+  if (summary.groups) return { key: 'users.access.groups', params: { groups: summary.groups }, empty: false };
+  if (summary.count) return { key: 'users.access.count', params: { count: summary.count }, empty: false };
+  return { key: 'users.access.none', empty: true };
 }
