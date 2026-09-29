@@ -2,6 +2,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, use
 import { t } from './i18n';
 import { useTranslation } from './i18n-react';
 import './i18n-chat';
+import ModalKeyboardAvoider from './ModalKeyboardAvoider';
 import { PanResponder, ActivityIndicator, Alert, BackHandler, FlatList, Image, Keyboard, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StatusBar, StyleSheet, useWindowDimensions, View } from 'react-native';
 import { Text, TextInput } from './ui-text';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -2224,9 +2225,11 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
         <Pressable style={pointer && menuAt ? styles.menuBackdropAnchored : styles.menuBackdrop} onPress={() => setMenuFor(null)}>
           <View
             style={pointer && menuAt
-              ? [styles.actionMenuDesktop, { left: Math.max(8, Math.min(menuAt.x, menuWindowWidth - 188)), top: Math.max(8, Math.min(menuAt.y, menuWindowHeight - 300)) }]
+              ? [styles.actionMenuDesktop, { left: Math.max(8, Math.min(menuAt.x, menuWindowWidth - 188)), top: Math.max(8, Math.min(menuAt.y, menuWindowHeight - 300)), maxHeight: menuWindowHeight - 16 }]
               : [styles.actionSheet, sheetPad]}
           >
+            {/* 弹窗规则(DialogFrame.tsx):面板有界、会长的内容可收缩地滚。横屏手机 8 行会超出屏幕。 */}
+            <ScrollView style={{ flexGrow: 0, flexShrink: 1 }} bounces={false}>
             {menuGroups.map((group, groupIndex) => (
               <View key={`menu-group-${groupIndex}`}>
                 {groupIndex > 0 ? <View style={styles.actionGroupGap} /> : null}
@@ -2247,6 +2250,7 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
                 ))}
               </View>
             ))}
+            </ScrollView>
           </View>
         </Pressable>
       </Modal>
@@ -2285,6 +2289,7 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
       />}
 
       <Modal visible={!!forwardFor && forwardUiOwner === conversationKeyFor} transparent animationType="fade" onRequestClose={() => setForwardFor(null)}>
+        <ModalKeyboardAvoider>
         <Pressable style={[styles.forwardBackdrop, withBasePadding(dialogSafe, spacing.xl)]} onPress={() => setForwardFor(null)}>
           <Pressable style={styles.forwardPanel} onPress={() => {}}>
             <Text style={styles.forwardTitle}>{forwardBatch ? t('chat.forwardCount', { count: forwardBatch.length }) : t('chat.forwardTo')}</Text>
@@ -2312,6 +2317,7 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
             />
           </Pressable>
         </Pressable>
+        </ModalKeyboardAvoider>
       </Modal>
 
       {/* ⤢ 全屏编辑(手机/双栏):同一份草稿;Android 返回 / Esc 走 onRequestClose 收起,草稿保留。 */}
@@ -2711,6 +2717,7 @@ const makeStyles = () =>
   // round-2 长按动作菜单(底部 action sheet)
   menuBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.45)', justifyContent: 'flex-end' },
   actionSheet: {
+    maxHeight: '85%',
     backgroundColor: colors.card,
     borderTopLeftRadius: radius.surface,
     borderTopRightRadius: radius.surface,
@@ -2764,10 +2771,10 @@ const makeStyles = () =>
   plusCellBtw: { color: colors.accent, fontSize: 13, fontWeight: '600' },
   plusCellLabel: { color: colors.textSecondary, fontSize: 12, marginTop: 6 },
   forwardBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.38)', alignItems: 'center', justifyContent: 'center', padding: spacing.xl },
-  forwardPanel: { width: 360, maxWidth: '92%', maxHeight: 520, borderRadius: radius.surface, backgroundColor: colors.card, padding: spacing.lg, ...elevated('floating') },
+  forwardPanel: { width: 360, maxWidth: '92%', maxHeight: '100%', borderRadius: radius.surface, backgroundColor: colors.card, padding: spacing.lg, ...elevated('floating') },
   forwardTitle: { color: colors.text, fontSize: 17, fontWeight: '600', marginBottom: spacing.md },
   forwardSearch: { color: colors.text, backgroundColor: colors.inputBg, borderRadius: radius.control, paddingHorizontal: spacing.md, paddingVertical: 10, marginBottom: spacing.sm },
-  forwardList: { maxHeight: 400 },
+  forwardList: { maxHeight: 400, flexShrink: 1 },
   forwardTarget: { minHeight: 50, flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingHorizontal: spacing.sm, borderRadius: radius.item },
   forwardAlias: { flex: 1, minWidth: 0, color: colors.text, fontSize: 14, fontWeight: '600' },
   forwardEmpty: { color: colors.textMuted, textAlign: 'center', paddingVertical: spacing.xl },

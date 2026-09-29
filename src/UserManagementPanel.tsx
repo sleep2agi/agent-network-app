@@ -1,23 +1,21 @@
 // 设置 → 用户管理(多用户账号与 Agent 权限,hub agent-network#2084)。
 // 列出当前网络的成员;owner / admin 行恒为「全部 Agent」;其他成员点进「可访问的 Agent」逐个分配,
 // 每个 Agent 一个「可对话」开关。「新建用户」走 POST /api/admin/users。
-// 宽屏右栏与手机子页共用这一份(settings-kit 的卡片 / 行),两个弹窗居中。纯判断在 user-admin.ts。
-import { useCallback, useEffect, useMemo, useState, type ComponentProps, type ReactNode } from 'react';
-import { ActivityIndicator, Modal, Platform, Pressable, ScrollView, StyleSheet, Switch, View } from 'react-native';
+// 宽屏右栏与手机子页共用这一份(settings-kit 的卡片 / 行),两个弹窗走 DialogFrame(正文滚、按钮行钉底)。纯判断在 user-admin.ts。
+import { useCallback, useEffect, useMemo, useState, type ComponentProps } from 'react';
+import { ActivityIndicator, Platform, Pressable, ScrollView, StyleSheet, Switch, View } from 'react-native';
 import { Text, TextInput } from './ui-text';
 import { Ionicons } from './icons';
 import AliasAvatar from './AliasAvatar';
 import { fetchHubNodes, type HubConfig } from './api';
 import { colors, onThemeChange, radius, spacing } from './theme';
-import { elevated } from './elevation';
 import { useTranslation } from './i18n-react';
 import { t as tr } from './i18n';
 import './i18n-users';
 import { SettingsButton, SettingsGroup, SettingsRow } from './settings-kit';
-import { useModalSafePadding } from './safe-area-runtime';
-import { withBasePadding } from './modal-safe-area';
+import DialogFrame, { useDialogReveal } from './DialogFrame';
 import {
-  aliasOnlyGrants, canAddAdminsIn, canManageUsers, manageableNetworks, currentNetworkRow, filterPickable, grantsChanged, grantsEditable, grantsPayload,
+  aliasOnlyGrants, canAddAdminsIn, canManageUsers, manageableNetworks, currentNetworkRow, filterNetworkChoices, filterPickable, grantsChanged, grantsEditable, grantsPayload,
   memberAccessSummary, selectionFromGrants, setCanMessage, toggleAgent, validateNewUser,
   type AgentGrant, type AuthMe, type MemberRole, type NetworkChoice, type NetworkMember, type PickableAgent,
 } from './user-admin';
@@ -104,25 +102,6 @@ export default function UserManagementPanel({ cfg, me, networkId }: { cfg: HubCo
   );
 }
 
-function DialogShell({ title, children, onClose, testID }: { title: string; children: ReactNode; onClose: () => void; testID: string }) {
-  const safe = useModalSafePadding('fullScreen');
-  return (
-    <Modal visible transparent animationType="fade" onRequestClose={onClose}>
-      <View style={[styles.backdrop, withBasePadding(safe, spacing.lg)]} testID={`${testID}-backdrop`}>
-        <View style={styles.card} testID={testID}>
-          <View style={styles.header}>
-            <Text style={styles.title} numberOfLines={1}>{title}</Text>
-            <Pressable accessibilityRole="button" accessibilityLabel={tr('users.close')} onPress={onClose} hitSlop={8} style={styles.closeBtn} testID={`${testID}-close`}>
-              <Ionicons name="close" size={18} color={colors.textSecondary} />
-            </Pressable>
-          </View>
-          {children}
-        </View>
-      </View>
-    </Modal>
-  );
-}
-
 function Field({ label, hint, testID, ...input }: ComponentProps<typeof TextInput> & { label: string; hint?: string; testID: string }) {
   return (
     <View style={styles.field}>
@@ -154,6 +133,54 @@ function Actions({ onCancel, onConfirm, confirmLabel, disabled, busy, testID }: 
   );
 }
 
+/**
+ * 新建用户的「网络」:默认当前网络,收起时是一行(和输入框同高),点开是可搜索的单选清单(内部滚动,最多约 5 行高)。
+ * Hub 管理员能往任何网络建人(26 个网络 = 一墙 chip 把「创建」挤出屏幕,Vincent 2026-09-30)—— 所以不再平铺。
+ */
+function NetworkPicker({ networks, value, onChange, fallbackName }: { networks: NetworkChoice[]; value: string; onChange: (id: string) => void; fallbackName: string }) {
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState('');
+  const reveal = useDialogReveal();
+  const current = networks.find(n => n.network_id === value);
+  const shown = useMemo(() => filterNetworkChoices(networks, query), [networks, query]);
+  if (networks.length <= 1) {
+    return (
+      <View style={styles.field}>
+        <Text style={styles.fieldLabel}>{tr('users.network')}</Text>
+        <Text style={styles.readonly} numberOfLines={1} testID="new-user-network">{networks[0]?.name ?? fallbackName}</Text>
+      </View>
+    );
+  }
+  return (
+    <View style={styles.field}>
+      <Text style={styles.fieldLabel}>{tr('users.network')}</Text>
+      <Pressable accessibilityRole="button" accessibilityLabel={`${tr('users.network')} ${current?.name ?? value}`} accessibilityState={{ expanded: open }} onPress={() => { if (!open) reveal(); setOpen(o => !o); }} style={styles.picker} testID="new-user-network">
+        <Text style={styles.pickerValue} numberOfLines={1} testID="new-user-network-value">{current?.name ?? value}</Text>
+        <Ionicons name={open ? 'chevron-up' : 'chevron-down'} size={16} color={colors.textMuted} />
+      </Pressable>
+      {open ? (
+        <View style={styles.pickerPanel} testID="new-user-network-panel">
+          <View style={styles.pickerSearch}>
+            <Ionicons name="search-outline" size={15} color={colors.textMuted} />
+            <TextInput value={query} onChangeText={setQuery} placeholder={tr('users.searchNetwork')} placeholderTextColor={colors.textMuted} accessibilityLabel={tr('users.searchNetwork')} autoCapitalize="none" autoCorrect={false} style={styles.searchInput} testID="new-user-network-search" />
+          </View>
+          <ScrollView style={styles.pickerList} nestedScrollEnabled keyboardShouldPersistTaps="handled" testID="new-user-network-list">
+            {shown.length ? shown.map(n => {
+              const on = n.network_id === value;
+              return (
+                <Pressable key={n.network_id} accessibilityRole="radio" accessibilityState={{ selected: on, checked: on }} aria-checked={on} onPress={() => { onChange(n.network_id); setOpen(false); setQuery(''); }} style={({ pressed }) => [styles.pickerRow, on && styles.pickerRowOn, pressed && styles.pressed]} testID={`new-user-network-${n.network_id}`}>
+                  <Text style={styles.pickerRowText} numberOfLines={1}>{n.name}</Text>
+                  {on ? <Ionicons name="checkmark" size={16} color={colors.accent} /> : null}
+                </Pressable>
+              );
+            }) : <Text style={styles.empty}>{tr('users.noNetworkMatch')}</Text>}
+          </ScrollView>
+        </View>
+      ) : null}
+    </View>
+  );
+}
+
 function NewUserDialog({ cfg, me, networkId, networks, onClose, onCreated }: {
   cfg: HubConfig; me: AuthMe | null; networkId: string; networks: NetworkChoice[]; onClose: () => void; onCreated: (name: string, networkId: string) => void;
 }) {
@@ -178,24 +205,17 @@ function NewUserDialog({ cfg, me, networkId, networks, onClose, onCreated }: {
       .finally(() => setBusy(false));
   };
   return (
-    <DialogShell title={tr('users.newUser')} onClose={onClose} testID="new-user-dialog">
+    <DialogFrame
+      title={tr('users.newUser')}
+      closeLabel={tr('users.close')}
+      onClose={onClose}
+      testID="new-user-dialog"
+      footer={<Actions onCancel={onClose} onConfirm={submit} confirmLabel={tr('users.create')} disabled={!!problem} busy={busy} testID="new-user" />}
+    >
       <Field label={tr('users.username')} value={username} onChangeText={setUsername} testID="new-user-username" />
       <Field label={tr('users.password')} hint={tr('users.passwordHint')} value={password} onChangeText={setPassword} secureTextEntry testID="new-user-password" />
       <Field label={tr('users.displayName')} hint={tr('users.optional')} value={displayName} onChangeText={setDisplayName} testID="new-user-display-name" />
-      <View style={styles.field}>
-        <Text style={styles.fieldLabel}>{tr('users.network')}</Text>
-        {networks.length > 1 ? (
-          <View style={styles.netChips} accessibilityRole="radiogroup" testID="new-user-network">
-            {networks.map(n => (
-              <Pressable key={n.network_id} accessibilityRole="radio" accessibilityState={{ selected: targetNet === n.network_id, checked: targetNet === n.network_id }} onPress={() => setTargetNet(n.network_id)} style={[styles.netChip, targetNet === n.network_id && styles.segmentOn]} testID={`new-user-network-${n.network_id}`}>
-                <Text style={[styles.segmentText, targetNet === n.network_id && styles.segmentTextOn]} numberOfLines={1}>{n.name}</Text>
-              </Pressable>
-            ))}
-          </View>
-        ) : (
-          <Text style={styles.readonly} numberOfLines={1} testID="new-user-network">{networks[0]?.name ?? networkId}</Text>
-        )}
-      </View>
+      <NetworkPicker networks={networks} value={targetNet} onChange={setTargetNet} fallbackName={networkId} />
       <View style={styles.field}>
         <Text style={styles.fieldLabel}>{tr('users.role')}</Text>
         <View style={styles.segmented} accessibilityRole="radiogroup">
@@ -207,8 +227,7 @@ function NewUserDialog({ cfg, me, networkId, networks, onClose, onCreated }: {
         </View>
       </View>
       {error ? <Text style={styles.error} testID="new-user-error">{error}</Text> : touched && problem ? <Text style={styles.hint} testID="new-user-problem">{tr(`users.err.${problem}`)}</Text> : null}
-      <Actions onCancel={onClose} onConfirm={submit} confirmLabel={tr('users.create')} disabled={!!problem} busy={busy} testID="new-user" />
-    </DialogShell>
+    </DialogFrame>
   );
 }
 
@@ -242,7 +261,14 @@ function GrantsDialog({ cfg, networkId, member, onClose, onSaved }: { cfg: HubCo
       .finally(() => setBusy(false));
   };
   return (
-    <DialogShell title={`${tr('users.agents')} · ${member.display_name || member.username}`} onClose={onClose} testID="grants-dialog">
+    <DialogFrame
+      title={`${tr('users.agents')} · ${member.display_name || member.username}`}
+      closeLabel={tr('users.close')}
+      onClose={onClose}
+      scroll={false}
+      testID="grants-dialog"
+      footer={<Actions onCancel={onClose} onConfirm={save} confirmLabel={tr('users.save')} disabled={!changed} busy={busy} testID="grants" />}
+    >
       <View style={styles.search}>
         <Ionicons name="search-outline" size={15} color={colors.textMuted} />
         <TextInput value={query} onChangeText={setQuery} placeholder={tr('users.search')} placeholderTextColor={colors.textMuted} accessibilityLabel={tr('users.search')} autoCapitalize="none" autoCorrect={false} style={styles.searchInput} testID="grants-search" />
@@ -278,24 +304,24 @@ function GrantsDialog({ cfg, networkId, member, onClose, onSaved }: { cfg: HubCo
       </ScrollView>
       <Text style={styles.hint} testID="grants-count">{tr('users.selected', { count: selection.size })}</Text>
       {error ? <Text style={styles.error} testID="grants-error">{error}</Text> : null}
-      <Actions onCancel={onClose} onConfirm={save} confirmLabel={tr('users.save')} disabled={!changed} busy={busy} testID="grants" />
-    </DialogShell>
+    </DialogFrame>
   );
 }
 
 const makeStyles = () => StyleSheet.create({
-  backdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.55)', alignItems: 'center', justifyContent: 'center' },
-  card: { width: '100%', maxWidth: 460, maxHeight: '100%', backgroundColor: colors.card, borderRadius: radius.surface, padding: spacing.lg, gap: spacing.md, ...elevated('floating') },
-  header: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
-  title: { flex: 1, color: colors.text, fontSize: 17, fontWeight: '600' },
-  closeBtn: { width: 28, height: 28, alignItems: 'center', justifyContent: 'center' },
   field: { gap: 6 },
   fieldLabel: { color: colors.textSecondary, fontSize: 12, fontWeight: '600' },
   fieldHint: { color: colors.textMuted, fontSize: 12, fontWeight: '400' },
   input: { minHeight: 42, paddingHorizontal: spacing.md, borderRadius: radius.control, backgroundColor: colors.inputBg, borderWidth: 1, borderColor: colors.border, color: colors.text, fontSize: 14, ...(Platform.OS === 'web' ? ({ outlineStyle: 'none' } as any) : {}) },
+  picker: { minHeight: 42, flexDirection: 'row', alignItems: 'center', gap: spacing.sm, paddingHorizontal: spacing.md, borderRadius: radius.control, backgroundColor: colors.inputBg, borderWidth: 1, borderColor: colors.border },
+  pickerValue: { flex: 1, minWidth: 0, color: colors.text, fontSize: 14 },
+  pickerPanel: { borderRadius: radius.control, borderWidth: 1, borderColor: colors.border, overflow: 'hidden' },
+  pickerSearch: { flexDirection: 'row', alignItems: 'center', gap: 8, minHeight: 38, paddingHorizontal: spacing.md, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.border },
+  pickerList: { maxHeight: 216, flexGrow: 0 },
+  pickerRow: { minHeight: 40, flexDirection: 'row', alignItems: 'center', gap: spacing.sm, paddingHorizontal: spacing.md },
+  pickerRowOn: { backgroundColor: colors.subtleFill },
+  pickerRowText: { flex: 1, minWidth: 0, color: colors.text, fontSize: 14 },
   readonly: { color: colors.text, fontSize: 14, paddingVertical: 4 },
-  netChips: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.xs },
-  netChip: { maxWidth: '100%', paddingHorizontal: spacing.md, paddingVertical: 7, borderRadius: radius.control, borderWidth: 1, borderColor: colors.border },
   segmented: { flexDirection: 'row', borderRadius: radius.control, borderWidth: 1, borderColor: colors.border, overflow: 'hidden' },
   segment: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingVertical: 9 },
   segmentOn: { backgroundColor: colors.accent },
@@ -313,7 +339,7 @@ const makeStyles = () => StyleSheet.create({
   pressed: { opacity: 0.75 },
   search: { flexDirection: 'row', alignItems: 'center', gap: 8, minHeight: 38, paddingHorizontal: spacing.md, borderRadius: radius.control, backgroundColor: colors.inputBg, borderWidth: 1, borderColor: colors.border },
   searchInput: { flex: 1, minWidth: 0, color: colors.text, fontSize: 14, paddingVertical: 8, ...(Platform.OS === 'web' ? ({ outlineStyle: 'none' } as any) : {}) },
-  list: { maxHeight: 360, flexGrow: 0 },
+  list: { maxHeight: 360, flexGrow: 0, flexShrink: 1 },
   listContent: { gap: 2 },
   empty: { color: colors.textMuted, fontSize: 13, textAlign: 'center', paddingVertical: spacing.lg },
   agentRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, minHeight: 48 },

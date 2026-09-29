@@ -1,3 +1,4 @@
+import ModalKeyboardAvoider from './ModalKeyboardAvoider';
 import { t as tr } from './i18n';
 import { useTranslation } from './i18n-react';
 import { settingsText } from './i18n-settings';
@@ -1145,6 +1146,7 @@ export default function SettingsScreen({
       </Modal>
 
       <Modal visible={localDeleteVisible} transparent animationType="fade" onRequestClose={() => setLocalDeleteVisible(false)}>
+        <ModalKeyboardAvoider>
         <View style={[styles.modalBackdrop, withBasePadding(dialogSafe, spacing.xl)]}>
           <View style={styles.modalCard}>
             <Text style={styles.modalTitle}>{tr('settings.copy.82')}</Text>
@@ -1170,6 +1172,7 @@ export default function SettingsScreen({
             </View>
           </View>
         </View>
+        </ModalKeyboardAvoider>
       </Modal>
       <Modal visible={logoutConfirm} transparent animationType="fade" onRequestClose={() => setLogoutConfirm(false)}>
         <View style={[styles.modalBackdrop, withBasePadding(dialogSafe, spacing.xl)]}>

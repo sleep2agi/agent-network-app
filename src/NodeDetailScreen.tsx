@@ -46,6 +46,7 @@
 // verification bullet).
 
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
+import ModalKeyboardAvoider from './ModalKeyboardAvoider';
 import { layoutGeneration, releaseOnUnmount, takeHandoff } from './layout-handoff';
 import { takeNodeSectionRequest } from './node-section-request';
 import { ActivityIndicator, BackHandler, Keyboard, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StatusBar, StyleSheet, View, useWindowDimensions } from 'react-native';
@@ -647,6 +648,7 @@ export default function NodeDetailScreen({
       </Modal>
 
       <Modal transparent visible={!readOnly && !!pendingAction} onRequestClose={() => setPendingAction(null)} animationType="fade">
+        <ModalKeyboardAvoider>
         <View style={[{ flex: 1, backgroundColor: 'rgba(0,0,0,0.55)', alignItems: 'center', justifyContent: 'center' }, withBasePadding(dialogSafe, spacing.xl)]}>
           <View style={{ width: '100%', maxWidth: 420, borderRadius: radius.surface, backgroundColor: colors.card, padding: spacing.xl, gap: spacing.md, ...elevated('floating') }}>
             <Text style={{ color: colors.text, fontSize: 17, fontWeight: '600' }}>
@@ -670,6 +672,7 @@ export default function NodeDetailScreen({
             </View>
           </View>
         </View>
+        </ModalKeyboardAvoider>
       </Modal>
     </KeyboardAvoidingView>
   );

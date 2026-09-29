@@ -40,6 +40,8 @@ registerTranslations({
   'users.saved': ['已保存', 'Saved'],
   'users.createdElsewhere': ['已在「{network}」创建 {name}。', 'Created {name} in “{network}”.'],
   'users.close': ['关闭', 'Close'],
+  'users.searchNetwork': ['搜索网络', 'Search networks'],
+  'users.noNetworkMatch': ['没有匹配的网络', 'No matching networks'],
   'agents.restrictedEmpty': ['还没有被分配任何 Agent，请联系管理员', 'No agents have been assigned to you yet. Ask an admin.'],
   'agents.restrictedHint': ['管理员分配后，Agent 会出现在这里', 'Assigned agents will appear here'],
   'login.noAccount': ['没有账号？注册', 'No account? Register'],
