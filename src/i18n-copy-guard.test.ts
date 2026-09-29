@@ -4,11 +4,13 @@ import ts from 'typescript';
 import { t as translate } from './i18n';
 import './i18n-chat';
 import './i18n-settings';
+import './i18n-tasks';
 
 let p = 0, t = 0;
 const ck = (name: string, ok: boolean) => { t++; if (ok) p++; console.log(`${ok ? 'PASS' : 'FAIL'}: ${name}`); };
 // Expand this explicit migration boundary as additional surfaces are translated.
 const migrated = ['src/MobileNavRail.tsx', 'src/ServerSidebar.tsx', 'src/ChatScreen.tsx', 'src/ChatInfoPanel.tsx', 'src/ComposerRowParts.tsx', 'src/VoiceInputUI.tsx', 'src/DesktopVoiceBar.tsx', 'src/LanguageSettings.tsx', 'src/SettingsScreen.tsx', 'src/SettingsPhonePages.tsx', 'src/SettingsEditPages.tsx', 'src/UiScaleSettings.tsx', 'src/ShortcutsSettings.tsx', 'src/VoiceSettingsSection.tsx'];
+migrated.push(...['TasksScreen', 'RequirementBoard', 'TaskBoardParts', 'TaskCardMenu', 'TaskChecklist', 'TaskCreateDialog', 'TaskDescriptionEditor', 'TaskDetailPanel', 'TaskDetailScreen', 'TaskDuePicker', 'TaskFilterSidebar', 'TaskProjectManager', 'TaskRelations', 'RequirementPeoplePicker', 'RequirementAssignmentsEditor'].map(name => `src/${name}.tsx`));
 function untranslated(file: string, raw: string): string[] {
   const source = raw.replace(/\r\n?/g, '\n');
   const tree = ts.createSourceFile(file, source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);

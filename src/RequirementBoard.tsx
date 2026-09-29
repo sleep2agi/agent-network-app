@@ -1,3 +1,7 @@
+import { ownerCounts, ownerLabel } from './i18n-task-presentation';
+import { t as tr } from './i18n';
+import { useTranslation } from './i18n-react';
+import { taskText } from './i18n-tasks';
 // 任务页(需求池):头部一行 + 看板 / 列表 + 新建对话框 + 详情(桌面右侧抽屉,手机推入一页)。
 //
 // Owner 2026-09-29(0.2.137 截图):「这个任务列表也他妈太难看了…你自己搞搞吧」—— 三个常驻的整行输入框、
@@ -8,7 +12,7 @@
 //   · 换状态:桌面拖动(落点指示线)/ 右键菜单 / Shift+←→;手机长按菜单或详情里的状态,没有拖动
 // 数据仍是 Hub 的 requirements(GET / POST / PATCH),负责人只存稳定身份 {kind,id}(#484),assignee 永远空。
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { ActivityIndicator, Modal, Platform, Pressable, ScrollView, View } from 'react-native';
+import { ActivityIndicator, Modal, Platform, Pressable, ScrollView, View, useWindowDimensions } from 'react-native';
 import { Text, TextInput } from './ui-text';
 import { Ionicons } from './icons';
 import AliasAvatar from './AliasAvatar';
@@ -23,12 +27,7 @@ import { elevated } from './elevation';
 import { pointerUi } from './pointer-ui';
 import { useModalSafePadding } from './safe-area-runtime';
 import { usePoll } from './usePoll';
-import {
-  applyFilter, applyMove, boardColumns, createInput, DEFAULT_SORT, DRAG_IDLE, dragReduce, dropIndex, emptyDraft,
-  activeProjects, defaultProjectFor, NO_PROJECT, projectCounts,
-  filterActive, hasRoles, localToday, addChecklistItem, moveChecklistItem, removeChecklistItem, setChecklistDone, neighbourColumn, nextSort, ownerCounts, ownerLabel, revertMove, sortRows, toggleIn, UNASSIGNED,
-  type CreateDraft, type DragEvent, type DragState, type EditPatch, type SortKey, type SortSpec,
-} from './task-board-model';
+import { applyFilter, applyMove, boardColumns, createInput, DEFAULT_SORT, DRAG_IDLE, dragReduce, dropIndex, emptyDraft, activeProjects, defaultProjectFor, NO_PROJECT, projectCounts, filterActive, hasRoles, localToday, addChecklistItem, moveChecklistItem, removeChecklistItem, setChecklistDone, neighbourColumn, nextSort, revertMove, sortRows, toggleIn, UNASSIGNED, type CreateDraft, type DragEvent, type DragState, type EditPatch, type SortKey, type SortSpec } from './task-board-model';
 import { enterTaskScope, patchTaskBoard, setManagingProjects, setTaskFilter, setTaskSection, taskScopeKey, updateTaskItems, useTaskBoard, type TaskSection } from './task-board-store';
 import { CardMeta, ChecklistProgress, Chip, ParticipantStack, ProjectChip, DueChip, OwnerBadge, PriorityDot, Segmented, STATUS_TONE, useTaskStyles, type TaskStyles, a11yState } from './TaskBoardParts';
 import TaskCreateDialog from './TaskCreateDialog';
@@ -37,7 +36,7 @@ import TaskCardMenu, { type TaskMenuTarget } from './TaskCardMenu';
 import TaskProjectManager from './TaskProjectManager';
 import { setDraggingCursor, useTaskCardDom } from './task-board-dom';
 
-const UNSUPPORTED = '这个 Hub 还没有需求池。升级 Hub 之后，手机和电脑才能看到同一份。';
+const UNSUPPORTED = 'tasks.copy.14';
 /** 别的设备改了也要看得到;有未完成的写入时跳过这一轮(不拿旧数据盖掉乐观更新)。 */
 const POLL_MS = 15_000;
 /** 内容区窄于这个宽度:看板改成横向一列一屏,详情改成推入页。 */
@@ -46,16 +45,18 @@ const DRAWER_MIN = 860;
 
 /** 筛选键(user:… / node:…)对应的名字:没有卡片的人不在 ownerCounts 里,从成员表取。 */
 const keyName = (key: string, people: readonly { kind: string; id: string; name: string }[]) =>
-  people.find(p => `${p.kind}:${p.id}` === key)?.name || key.split(':').slice(1).join(':') || '负责人';
+  people.find(p => `${p.kind}:${p.id}` === key)?.name || key.split(':').slice(1).join(':') || tr('tasks.copy.15');
 
-const moveErrorText = (e: unknown) => (e instanceof RequirementsHubError && e.status === 403 ? '你没有修改这条需求的权限' : '状态未保存，请重试');
+const moveErrorText = (e: unknown) => (e instanceof RequirementsHubError && e.status === 403 ? tr('tasks.copy.16') : tr('tasks.copy.17'));
 
 export default function RequirementBoard(props: { cfg: HubConfig; desktop?: boolean; dispatch?: ReactNode }) {
+  useTranslation();
   const { cfg } = props;
   return <ScopedRequirementBoard key={taskScopeKey(cfg)} {...props} />;
 }
 
 function ScopedRequirementBoard({ cfg, desktop, dispatch }: { cfg: HubConfig; desktop?: boolean; dispatch?: ReactNode }) {
+  const { language } = useTranslation();
   const s = useTaskStyles();
   const scope = taskScopeKey(cfg);
   useLayoutEffect(() => { enterTaskScope(scope); }, [scope]);
@@ -127,7 +128,7 @@ function ScopedRequirementBoard({ cfg, desktop, dispatch }: { cfg: HubConfig; de
         if (dead) return;
         if (e instanceof RequirementsHubError && e.status === 404) { setPhase('unsupported'); return; }
         setPhase('error');
-        setHubError(e instanceof Error ? e.message : '需求池打不开');
+        setHubError(e instanceof Error ? e.message : tr('tasks.copy.18'));
       } finally {
         if (!dead) setRetrying(false);
       }
@@ -165,7 +166,7 @@ function ScopedRequirementBoard({ cfg, desktop, dispatch }: { cfg: HubConfig; de
       patchTaskBoard(scope, { people: await listRequirementPeople(cfg) });
       return true;
     } catch (e) {
-      setPeopleError(e instanceof Error ? e.message : '人员列表加载失败，请重试');
+      setPeopleError(e instanceof Error ? e.message : tr('tasks.copy.19'));
       return false;
     } finally {
       setPeopleLoading(false);
@@ -187,7 +188,7 @@ function ScopedRequirementBoard({ cfg, desktop, dispatch }: { cfg: HubConfig; de
     setMovingIds(ids => [...ids, id]);
     setMoveErrors(({ [id]: _, ...rest }) => rest);
     updateTaskItems(scope, rows => applyMove(rows, id, to));
-    setAnnounce(`「${item.name}」已移到${REQ_COLUMN_LABEL[to]}`);
+    setAnnounce(tr('tasks.copy.20', { v0: item.name, v1: taskText(REQ_COLUMN_LABEL[to]) }));
     try {
       const updated = await track(() => moveRequirementOnHub(cfg, id, to));
       updateTaskItems(scope, rows => rows.map(row => (row.id === id ? updated : row)));
@@ -204,14 +205,14 @@ function ScopedRequirementBoard({ cfg, desktop, dispatch }: { cfg: HubConfig; de
 
   const create = async (d: CreateDraft): Promise<string | null> => {
     const input = createInput(d, twoRoles);
-    if (!input) return '先写任务标题';
+    if (!input) return tr('tasks.copy.21');
     try {
       const created = await track(() => createRequirementOnHub(cfg, input));
       updateTaskItems(scope, rows => [created, ...rows.filter(row => row.id !== created.id)]);
-      setAnnounce(`已新建「${created.name}」`);
+      setAnnounce(tr('tasks.copy.22', { v0: created.name }));
       return null;
     } catch (e) {
-      return e instanceof Error ? e.message : '没有存到 Hub';
+      return e instanceof Error ? e.message : tr('tasks.copy.23');
     }
   };
 
@@ -228,7 +229,7 @@ function ScopedRequirementBoard({ cfg, desktop, dispatch }: { cfg: HubConfig; de
       setChecklistLocal(id, updated.checklist ?? next);
     } catch (e) {
       setChecklistLocal(id, prev);
-      setChecklistErrors(errs => ({ ...errs, [id]: e instanceof Error ? e.message : '子任务没有保存，请重试' }));
+      setChecklistErrors(errs => ({ ...errs, [id]: e instanceof Error ? e.message : tr('tasks.copy.24') }));
     }
   };
   const toggleChecklist = async (id: string, itemId: string, done: boolean) => {
@@ -241,7 +242,7 @@ function ScopedRequirementBoard({ cfg, desktop, dispatch }: { cfg: HubConfig; de
       if (updated.checklist) setChecklistLocal(id, updated.checklist);
     } catch (e) {
       updateTaskItems(scope, rows => rows.map(row => (row.id === id && row.checklist ? { ...row, checklist: setChecklistDone(row.checklist, itemId, !done) } : row)));
-      setChecklistErrors(errs => ({ ...errs, [id]: e instanceof Error ? e.message : '子任务没有保存，请重试' }));
+      setChecklistErrors(errs => ({ ...errs, [id]: e instanceof Error ? e.message : tr('tasks.copy.24') }));
     }
   };
 
@@ -251,7 +252,7 @@ function ScopedRequirementBoard({ cfg, desktop, dispatch }: { cfg: HubConfig; de
       updateTaskItems(scope, rows => rows.map(row => (row.id === id ? updated : row)));
       return null;
     } catch (e) {
-      return e instanceof Error ? e.message : '修改没有保存，请重试';
+      return e instanceof Error ? e.message : tr('tasks.copy.25');
     }
   };
 
@@ -311,23 +312,23 @@ function ScopedRequirementBoard({ cfg, desktop, dispatch }: { cfg: HubConfig; de
   // ── 视图 ──
   const visible = useMemo(() => applyFilter(items, filter), [items, filter]);
   const columns = useMemo(() => boardColumns(items, filter), [items, filter]);
-  const owners = useMemo(() => ownerCounts(items, people), [items, people]);
+  const owners = useMemo(() => ownerCounts(items, people), [items, people, language]);
   const draggingItem = dragView.phase === 'dragging' ? items.find(row => row.id === dragView.id) || null : null;
 
   const sections: { key: TaskSection; label: string }[] = [
-    { key: 'list', label: '列表' },
-    { key: 'board', label: '看板' },
+    { key: 'list', label: tr('tasks.copy.26') },
+    { key: 'board', label: tr('tasks.copy.27') },
     // 桌面的派发记录在左栏(TaskFilterSidebar);手机 / 双栏没有左栏,放在分段里。
-    ...(desktop ? [] : [{ key: 'dispatch' as const, label: '派发记录' }]),
+    ...(desktop ? [] : [{ key: 'dispatch' as const, label: tr('tasks.copy.28') }]),
   ];
-  const ownerChipLabel = filter.owners.length === 0 ? '负责人'
-    : filter.owners.length === 1 ? (owners.find(o => o.key === filter.owners[0])?.name || (filter.owners[0] === UNASSIGNED ? '未分配' : keyName(filter.owners[0], people)))
-      : `负责人 · ${filter.owners.length}`;
+  const ownerChipLabel = filter.owners.length === 0 ? tr('tasks.copy.15')
+    : filter.owners.length === 1 ? (owners.find(o => o.key === filter.owners[0])?.name || (filter.owners[0] === UNASSIGNED ? tr('tasks.copy.6') : keyName(filter.owners[0], people)))
+      : tr('tasks.copy.29', { v0: filter.owners.length });
   const projectById = new Map((projects ?? []).map(p => [p.id, p]));
   const selectedProject = filter.project && filter.project !== NO_PROJECT ? projectById.get(filter.project) : undefined;
-  const projectChipLabel = !filter.project ? '项目' : filter.project === NO_PROJECT ? '无项目' : selectedProject?.name || '项目';
+  const projectChipLabel = !filter.project ? tr('tasks.copy.30') : filter.project === NO_PROJECT ? tr('tasks.copy.31') : selectedProject?.name || tr('tasks.copy.30');
   const counts = useMemo(() => projectCounts(items, filter), [items, filter]);
-  const priorityChipLabel = filter.priorities.length === 0 ? '优先级' : filter.priorities.map(p => REQ_PRIORITY_LABEL[p]).join('、');
+  const priorityChipLabel = filter.priorities.length === 0 ? tr('tasks.copy.32') : filter.priorities.map(p => taskText(REQ_PRIORITY_LABEL[p])).join('、');
   const chipRefs = useRef<Record<string, any>>({});
   const openFilter = (kind: 'owner' | 'priority' | 'project') => {
     const el = chipRefs.current[kind];
@@ -344,7 +345,7 @@ function ScopedRequirementBoard({ cfg, desktop, dispatch }: { cfg: HubConfig; de
           on={filter.owners.length > 0}
           onPress={() => openFilter('owner')}
           testID="task-filter-owner"
-          accessibilityLabel={`按负责人筛选，当前：${filter.owners.length ? ownerChipLabel : '全部'}`}
+          accessibilityLabel={tr('tasks.copy.33', { v0: filter.owners.length ? ownerChipLabel : tr('tasks.copy.34') })}
           leading={filter.owners.length ? <AvatarStack keys={filter.owners} owners={owners} /> : <Ionicons name="people-outline" size={14} color={colors.textMuted} />}
         />
       </View>
@@ -355,13 +356,13 @@ function ScopedRequirementBoard({ cfg, desktop, dispatch }: { cfg: HubConfig; de
           on={filter.priorities.length > 0}
           onPress={() => openFilter('priority')}
           testID="task-filter-priority"
-          accessibilityLabel={`按优先级筛选，当前：${filter.priorities.length ? priorityChipLabel : '全部'}`}
+          accessibilityLabel={tr('tasks.copy.35', { v0: filter.priorities.length ? priorityChipLabel : tr('tasks.copy.34') })}
           leading={filter.priorities.length === 1 ? <PriorityDot p={filter.priorities[0]} s={s} /> : <Ionicons name="flag-outline" size={14} color={colors.textMuted} />}
         />
       </View>
       {subCaps ? (
         // 只看顶层 / 全部:列表和看板一起生效。
-        <Segmented s={s} items={[{ key: 'all', label: '全部' }, { key: 'top', label: '只看顶层' }]} value={filter.topLevel ? 'top' : 'all'} onChange={k => setTaskFilter({ ...filter, topLevel: k === 'top' })} testID="task-scope" />
+        <Segmented s={s} items={[{ key: 'all', label: tr('tasks.copy.34') }, { key: 'top', label: tr('tasks.copy.36') }]} value={filter.topLevel ? 'top' : 'all'} onChange={k => setTaskFilter({ ...filter, topLevel: k === 'top' })} testID="task-scope" />
       ) : null}
       {projects ? (
         <View ref={(r: any) => { chipRefs.current.project = r; }} collapsable={false}>
@@ -371,33 +372,33 @@ function ScopedRequirementBoard({ cfg, desktop, dispatch }: { cfg: HubConfig; de
             on={!!filter.project}
             onPress={() => openFilter('project')}
             testID="task-filter-project"
-            accessibilityLabel={`按项目筛选，当前：${filter.project ? projectChipLabel : '全部'}`}
+            accessibilityLabel={tr('tasks.copy.37', { v0: filter.project ? projectChipLabel : tr('tasks.copy.34') })}
             leading={selectedProject ? <View style={{ width: 8, height: 8, borderRadius: radius.pill, backgroundColor: selectedProject.color }} /> : <Ionicons name="folder-outline" size={14} color={colors.textMuted} />}
           />
         </View>
       ) : null}
       {filterActive(filter) ? (
         <Pressable accessibilityRole="button" onPress={() => setTaskFilter({ owners: [], priorities: [], project: '', topLevel: filter.topLevel })} style={[s.iconButton, { width: undefined, paddingHorizontal: spacing.sm }]} testID="task-filter-clear">
-          <Text style={s.link}>清除筛选</Text>
+          <Text style={s.link}>{tr('tasks.copy.38')}</Text>
         </Pressable>
       ) : null}
     </>
   );
   const newButton = section === 'dispatch' ? null : narrow ? (
-    <Pressable accessibilityRole="button" accessibilityLabel="新建任务" onPress={() => setDraft(draftFor('pool'))} style={[s.primary, { width: 32, paddingHorizontal: 0, justifyContent: 'center' }]} testID="req-new">
+    <Pressable accessibilityRole="button" accessibilityLabel={tr('tasks.copy.39')} onPress={() => setDraft(draftFor('pool'))} style={[s.primary, { width: 32, paddingHorizontal: 0, justifyContent: 'center' }]} testID="req-new">
       <Ionicons name="add" size={20} color={colors.onAccent} />
     </Pressable>
   ) : (
-    <Pressable accessibilityRole="button" accessibilityLabel="新建任务" onPress={() => setDraft(draftFor('pool'))} style={s.primary} testID="req-new">
+    <Pressable accessibilityRole="button" accessibilityLabel={tr('tasks.copy.39')} onPress={() => setDraft(draftFor('pool'))} style={s.primary} testID="req-new">
       <Ionicons name="add" size={16} color={colors.onAccent} />
-      <Text style={s.primaryText}>新建</Text>
+      <Text style={s.primaryText}>{tr('tasks.copy.40')}</Text>
     </Pressable>
   );
 
   const header = narrow ? (
     <View onLayout={e => setHeaderBottom(e.nativeEvent.layout.y + e.nativeEvent.layout.height)}>
       <View style={[s.header, s.headerPhone]} testID="task-header">
-        <Text style={s.pageTitle} accessibilityRole="header">任务</Text>
+        <Text style={s.pageTitle} accessibilityRole="header">{tr('tasks.copy.41')}</Text>
         <View style={s.spacer} />
         {newButton}
       </View>
@@ -410,7 +411,7 @@ function ScopedRequirementBoard({ cfg, desktop, dispatch }: { cfg: HubConfig; de
     </View>
   ) : (
     <View style={s.header} testID="task-header" onLayout={e => setHeaderBottom(e.nativeEvent.layout.y + e.nativeEvent.layout.height)}>
-      <Text style={[s.pageTitle, { flexShrink: 0 }]} numberOfLines={1} accessibilityRole="header">任务</Text>
+      <Text style={[s.pageTitle, { flexShrink: 0 }]} numberOfLines={1} accessibilityRole="header">{tr('tasks.copy.41')}</Text>
       <View style={{ flexShrink: 0 }}><Segmented s={s} items={sections} value={section} onChange={setTaskSection} testID="tasks-view" /></View>
       {/* 筛选一行放不下(桌面窄窗口:1000 宽时内容区只有 ~716)就在这一格里横向滚动,不把标题挤成两行、不把「新建」挤出去。 */}
       <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ flex: 1, minWidth: 0 }} contentContainerStyle={{ flexDirection: 'row', alignItems: 'center', gap: spacing.md }} testID="task-header-filters">
@@ -429,8 +430,8 @@ function ScopedRequirementBoard({ cfg, desktop, dispatch }: { cfg: HubConfig; de
         key={item.id}
         testID={`req-card-${item.id}`}
         accessibilityRole="button"
-        accessibilityLabel={`${item.name}，${REQ_PRIORITY_LABEL[item.priority]}优先级，${ownerLabel(item, people)}`}
-        accessibilityHint={pointer ? '回车打开详情，Shift 加左右方向键换列' : '打开详情'}
+        accessibilityLabel={tr('tasks.copy.42', { v0: item.name, v1: taskText(REQ_PRIORITY_LABEL[item.priority]), v2: ownerLabel(item, people) })}
+        accessibilityHint={pointer ? tr('tasks.copy.43') : tr('tasks.copy.44')}
         onPress={() => openDetail(item.id)}
         onLongPress={pointer ? undefined : e => openMenuAt(item, e.nativeEvent.pageX, e.nativeEvent.pageY)}
         delayLongPress={350}
@@ -462,13 +463,13 @@ function ScopedRequirementBoard({ cfg, desktop, dispatch }: { cfg: HubConfig; de
         >
           <View style={s.columnHead}>
             <View style={[s.columnDot, { backgroundColor: STATUS_TONE[col.column]() }]} />
-            <Text style={s.columnName}>{REQ_COLUMN_LABEL[col.column]}</Text>
+            <Text style={s.columnName}>{taskText(REQ_COLUMN_LABEL[col.column])}</Text>
             <View style={s.countPill} testID={`req-count-${col.column}`}><Text style={s.countText}>{col.items.length}</Text></View>
           </View>
           <ScrollView style={s.columnBody} contentContainerStyle={s.columnBodyContent}>
             {col.items.length === 0 && at < 0 ? (
               <View style={s.columnEmpty} testID={`req-empty-${col.column}`}>
-                <Text style={s.columnEmptyText}>{pointer ? '拖到这里' : filterActive(filter) ? '没有符合筛选的任务' : '暂无'}</Text>
+                <Text style={s.columnEmptyText}>{pointer ? tr('tasks.copy.45') : filterActive(filter) ? tr('tasks.copy.46') : tr('tasks.copy.8')}</Text>
               </View>
             ) : null}
             {col.items.map((item, i) => (
@@ -493,22 +494,22 @@ function ScopedRequirementBoard({ cfg, desktop, dispatch }: { cfg: HubConfig; de
               }}
               onBlur={() => { if (!quick.name.trim()) setQuickAdd(null); }}
               onKeyPress={e => { if ((e.nativeEvent as { key?: string }).key === 'Escape') setQuickAdd(null); }}
-              placeholder="输入标题，回车添加"
+              placeholder={tr('tasks.copy.47')}
               placeholderTextColor={colors.textMuted}
               style={s.quickAddInput}
               testID={`req-quick-input-${col.column}`}
-              accessibilityLabel={`在${REQ_COLUMN_LABEL[col.column]}添加任务`}
+              accessibilityLabel={tr('tasks.copy.48', { v0: taskText(REQ_COLUMN_LABEL[col.column]) })}
             />
           ) : (
             <Pressable
               accessibilityRole="button"
-              accessibilityLabel={`在${REQ_COLUMN_LABEL[col.column]}添加任务`}
+              accessibilityLabel={tr('tasks.copy.48', { v0: taskText(REQ_COLUMN_LABEL[col.column]) })}
               onPress={() => (pointer && !narrow ? setQuickAdd({ column: col.column, name: '' }) : setDraft(draftFor(col.column)))}
               style={state => [s.quickAdd, ((state as { hovered?: boolean }).hovered || state.pressed) && { backgroundColor: colors.rowHover }]}
               testID={`req-quick-add-${col.column}`}
             >
               <Ionicons name="add" size={16} color={colors.textSecondary} />
-              <Text style={s.quickAddText}>添加</Text>
+              <Text style={s.quickAddText}>{tr('tasks.copy.49')}</Text>
             </Pressable>
           )}
         </View>
@@ -541,7 +542,7 @@ function ScopedRequirementBoard({ cfg, desktop, dispatch }: { cfg: HubConfig; de
             <View key={col.column} testID={`req-group-${col.column}`}>
               <View style={s.groupHead}>
                 <View style={[s.columnDot, { backgroundColor: STATUS_TONE[col.column]() }]} />
-                <Text style={s.columnName}>{REQ_COLUMN_LABEL[col.column]}</Text>
+                <Text style={s.columnName}>{taskText(REQ_COLUMN_LABEL[col.column])}</Text>
                 <View style={s.countPill}><Text style={s.countText}>{col.items.length}</Text></View>
               </View>
               {col.items.length ? (
@@ -563,7 +564,7 @@ function ScopedRequirementBoard({ cfg, desktop, dispatch }: { cfg: HubConfig; de
                     </Pressable>
                   ))}
                 </View>
-              ) : <Text style={[s.muted, { paddingHorizontal: spacing.lg + spacing.xs }]}>暂无</Text>}
+              ) : <Text style={[s.muted, { paddingHorizontal: spacing.lg + spacing.xs }]}>{tr('tasks.copy.8')}</Text>}
             </View>
           ))}
         </ScrollView>
@@ -573,7 +574,7 @@ function ScopedRequirementBoard({ cfg, desktop, dispatch }: { cfg: HubConfig; de
     const th = (key: SortKey, label: string, style?: object) => {
       const on = sort.key === key;
       return (
-        <Pressable accessibilityRole="button" accessibilityLabel={`按${label}排序`} {...a11yState({ selected: on })} onPress={() => setSort(cur => nextSort(cur, key))} style={[s.th, style]} testID={`req-sort-${key}`}>
+        <Pressable accessibilityRole="button" accessibilityLabel={tr('tasks.copy.50', { v0: label })} {...a11yState({ selected: on })} onPress={() => setSort(cur => nextSort(cur, key))} style={[s.th, style]} testID={`req-sort-${key}`}>
           <Text style={[s.thText, on && s.thTextOn]}>{label}</Text>
           {on ? <Ionicons name={sort.dir === 'asc' ? 'arrow-up' : 'arrow-down'} size={11} color={colors.text} /> : null}
         </Pressable>
@@ -582,16 +583,16 @@ function ScopedRequirementBoard({ cfg, desktop, dispatch }: { cfg: HubConfig; de
     return (
       <View style={s.table} testID="req-list">
         <View style={s.tableHead}>
-          {th('title', '标题', { flex: 1 })}
-          {th('owner', '负责人', s.colOwner)}
-          {th('priority', '优先级', s.colPriority)}
-          {th('due', '期限', s.colDue)}
-          <View style={s.colParticipants}><Text style={s.thText}>参与人</Text></View>
-          {projects ? th('project', '项目', s.colProject) : null}
-          {th('status', '状态', s.colStatus)}
+          {th('title', tr('tasks.copy.51'), { flex: 1 })}
+          {th('owner', tr('tasks.copy.15'), s.colOwner)}
+          {th('priority', tr('tasks.copy.32'), s.colPriority)}
+          {th('due', tr('tasks.copy.52'), s.colDue)}
+          <View style={s.colParticipants}><Text style={s.thText}>{tr('tasks.copy.53')}</Text></View>
+          {projects ? th('project', tr('tasks.copy.30'), s.colProject) : null}
+          {th('status', tr('tasks.copy.54'), s.colStatus)}
         </View>
         <ScrollView style={{ flex: 1 }}>
-          {rows.length === 0 ? <View style={[s.center, { paddingVertical: spacing.xl * 2 }]}><Text style={s.muted}>{filterActive(filter) ? '没有符合筛选的任务' : '还没有任务，点右上角「新建」'}</Text></View> : null}
+          {rows.length === 0 ? <View style={[s.center, { paddingVertical: spacing.xl * 2 }]}><Text style={s.muted}>{filterActive(filter) ? tr('tasks.copy.46') : tr('tasks.copy.55')}</Text></View> : null}
           {rows.map(item => (
             <Pressable
               key={item.id}
@@ -605,14 +606,14 @@ function ScopedRequirementBoard({ cfg, desktop, dispatch }: { cfg: HubConfig; de
             >
               <Text style={[s.tdTitle, item.column === 'done' && s.cardDone]} numberOfLines={1}>{item.name}</Text>
               <View style={s.colOwner}><OwnerBadge item={item} people={people} s={s} /></View>
-              <View style={[s.colPriority, s.owner]}><PriorityDot p={item.priority} s={s} /><Text style={s.metaText}>{REQ_PRIORITY_LABEL[item.priority]}</Text></View>
+              <View style={[s.colPriority, s.owner]}><PriorityDot p={item.priority} s={s} /><Text style={s.metaText}>{taskText(REQ_PRIORITY_LABEL[item.priority])}</Text></View>
               <View style={[s.colDue, { flexDirection: 'row' }]}>{item.due ? <DueChip item={item} today={today} s={s} /> : <Text style={s.metaMuted}>—</Text>}</View>
               <View style={s.colParticipants}><ParticipantStack item={item} people={people} s={s} touch={!pointer} size={18} /></View>
               {projects ? <View style={s.colProject}>{item.projectId ? <ProjectChip project={projectById.get(item.projectId)} s={s} small /> : <Text style={s.metaMuted}>—</Text>}</View> : null}
               <View style={s.colStatus}>
                 <View style={[s.statusPill, { backgroundColor: STATUS_TONE[item.column]() + '1f' }]}>
                   <View style={[s.prioDot, { width: 6, height: 6, backgroundColor: STATUS_TONE[item.column]() }]} />
-                  <Text style={[s.statusPillText, { color: STATUS_TONE[item.column]() }]}>{REQ_COLUMN_LABEL[item.column]}</Text>
+                  <Text style={[s.statusPillText, { color: STATUS_TONE[item.column]() }]}>{taskText(REQ_COLUMN_LABEL[item.column])}</Text>
                 </View>
               </View>
             </Pressable>
@@ -624,14 +625,14 @@ function ScopedRequirementBoard({ cfg, desktop, dispatch }: { cfg: HubConfig; de
 
   const body = section === 'dispatch' ? dispatch ?? null
     : phase === 'loading' && !(hasCached || (mine && items.length)) ? <View style={s.center} testID="req-loading"><ActivityIndicator color={colors.accent} /></View>
-      : phase === 'unsupported' ? <View style={s.center}><Text style={s.muted} testID="req-unsupported">{UNSUPPORTED}</Text></View>
+      : phase === 'unsupported' ? <View style={s.center}><Text style={s.muted} testID="req-unsupported">{tr(UNSUPPORTED)}</Text></View>
         // 连不上但本机已有这块看板的上次数据:照常显示,不用一句错误把整页换掉(顶部横幅已说明是缓存)。
         : phase === 'error' && !(hasCached || (mine && items.length)) ? (
           <View style={s.center} testID="req-error">
             <Text style={s.err}>{hubError}</Text>
             {retrying
-              ? <Text style={s.muted} testID="req-retrying">正在重试…</Text>
-              : <Pressable onPress={() => setReloadKey(n => n + 1)} testID="req-retry" accessibilityRole="button"><Text style={s.link}>重试</Text></Pressable>}
+              ? <Text style={s.muted} testID="req-retrying">{tr('tasks.copy.56')}</Text>
+              : <Pressable onPress={() => setReloadKey(n => n + 1)} testID="req-retry" accessibilityRole="button"><Text style={s.link}>{tr('tasks.copy.57')}</Text></Pressable>}
           </View>
         ) : section === 'list' ? list() : kanban();
 
@@ -653,7 +654,7 @@ function ScopedRequirementBoard({ cfg, desktop, dispatch }: { cfg: HubConfig; de
         <View style={[s.banner, narrow && { marginHorizontal: spacing.lg }]} accessibilityRole="alert" testID="req-banner">
           <Ionicons name="alert-circle-outline" size={14} color={colors.failed} />
           <Text style={[s.err, { flex: 1 }]}>{banner}</Text>
-          <Pressable onPress={() => setBanner('')} accessibilityRole="button" accessibilityLabel="关闭提示"><Ionicons name="close" size={14} color={colors.textMuted} /></Pressable>
+          <Pressable onPress={() => setBanner('')} accessibilityRole="button" accessibilityLabel={tr('tasks.copy.58')}><Ionicons name="close" size={14} color={colors.textMuted} /></Pressable>
         </View>
       ) : null}
       {body}
@@ -729,7 +730,7 @@ function ScopedRequirementBoard({ cfg, desktop, dispatch }: { cfg: HubConfig; de
               const created = await createProject(cfg, { name, color });
               patchTaskBoard(scope, { projects: [...(projects ?? []), created] });
               return null;
-            } catch (e) { return e instanceof Error ? e.message : '项目没有保存，请重试'; }
+            } catch (e) { return e instanceof Error ? e.message : tr('tasks.copy.59'); }
           }}
           onUpdate={async (id, patch) => {
             try {
@@ -738,7 +739,7 @@ function ScopedRequirementBoard({ cfg, desktop, dispatch }: { cfg: HubConfig; de
               // 归档了正在筛的项目:退回「全部项目」
               if (updated.archived && filter.project === id) setTaskFilter({ ...filter, project: '' });
               return null;
-            } catch (e) { return e instanceof Error ? e.message : '项目没有保存，请重试'; }
+            } catch (e) { return e instanceof Error ? e.message : tr('tasks.copy.59'); }
           }}
           onClose={() => setManagingProjects(false)}
         />
@@ -773,6 +774,7 @@ function ScopedRequirementBoard({ cfg, desktop, dispatch }: { cfg: HubConfig; de
 
 /** 卡片最下一行:子任务进度(左,可没有)+ 参与人头像(右,可没有)。都没有就不占位置。 */
 function CardFooter({ item, people, s, touch }: { item: Requirement; people: readonly RequirementPerson[]; s: TaskStyles; touch: boolean }) {
+  useTranslation();
   const hasList = !!item.checklist?.length;
   const hasPeople = !!item.participants?.length;
   const subs = item.children?.total ? item.children : null;
@@ -782,7 +784,7 @@ function CardFooter({ item, people, s, touch }: { item: Requirement; people: rea
     <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm, flexWrap: 'wrap', rowGap: 6 }} testID="task-card-footer">
       {/* 子需求进度(分支图标 + 「2/5」)和子任务进度(勾选框 + 细条)是两件事,样子也分开。 */}
       {subs ? (
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, height: 20, paddingHorizontal: 7, borderRadius: radius.pill, backgroundColor: colors.subtleFill }} testID="task-subreq-progress" accessibilityLabel={`子需求 ${subs.done}/${subs.total} 完成`}>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, height: 20, paddingHorizontal: 7, borderRadius: radius.pill, backgroundColor: colors.subtleFill }} testID="task-subreq-progress" accessibilityLabel={tr('tasks.copy.60', { v0: subs.done, v1: subs.total })}>
           <Ionicons name="git-branch-outline" size={11} color={subs.done === subs.total ? colors.running : colors.textSecondary} />
           <Text style={[s.metaMuted, { fontSize: 11 }]}>{subs.done}/{subs.total}</Text>
         </View>
@@ -794,6 +796,7 @@ function CardFooter({ item, people, s, touch }: { item: Requirement; people: rea
 }
 
 function AvatarStack({ keys, owners }: { keys: readonly string[]; owners: ReturnType<typeof ownerCounts> }) {
+  useTranslation();
   const shown = keys.slice(0, 3);
   return (
     <View style={{ flexDirection: 'row' }}>
@@ -826,9 +829,12 @@ function FilterMenu({ open, touch, owners, selectedOwners, selectedPriorities, m
   selectedProject: string;
   onPickProject: (id: string) => void;
 }) {
+  useTranslation();
   const s = useTaskStyles();
   // 锚定的浮层:遮罩铺满窗口,安全区只用来夹住弹层的位置(同 TaskCardMenu / AgentRowMenu)。
   const safe = useModalSafePadding('fullScreen');
+  const viewport = useWindowDimensions();
+  const menuWidth = Math.min(260, viewport.width - safe.paddingLeft - safe.paddingRight - 16);
   const rowH = touch ? 44 : 36;
   const row = (key: string, on: boolean, onPress: () => void, lead: ReactNode, label: string, count?: number) => (
     <Pressable key={key} testID={`task-filter-opt-${key}`} accessibilityRole="checkbox" {...a11yState({ checked: on })} onPress={onPress}
@@ -842,12 +848,12 @@ function FilterMenu({ open, touch, owners, selectedOwners, selectedPriorities, m
   const meKey = meId ? personKey({ kind: 'user', id: meId }) : '';
   return (
     <Modal visible={!!open} transparent animationType="fade" onRequestClose={onClose}>
-      <Pressable style={{ position: 'absolute', left: 0, top: 0, right: 0, bottom: 0, backgroundColor: touch ? 'rgba(0,0,0,0.18)' : 'transparent' }} onPress={onClose} testID="task-filter-scrim" accessibilityLabel="关闭筛选" />
+      <Pressable style={{ position: 'absolute', left: 0, top: 0, right: 0, bottom: 0, backgroundColor: touch ? 'rgba(0,0,0,0.18)' : 'transparent' }} onPress={onClose} testID="task-filter-scrim" accessibilityLabel={tr('tasks.copy.61')} />
       {open ? (
-        <View style={{ position: 'absolute', left: Math.max(8 + safe.paddingLeft, open.x), top: Math.max(open.y, safe.paddingTop + 8), width: 260, maxHeight: 360, padding: 6, borderRadius: radius.control, backgroundColor: colors.card, ...elevated('floating') }} testID={`task-filter-menu-${open.kind}`} accessibilityRole="menu">
+        <View style={{ position: 'absolute', left: Math.max(8 + safe.paddingLeft, Math.min(open.x, viewport.width - safe.paddingRight - menuWidth - 8)), top: Math.max(open.y, safe.paddingTop + 8), width: menuWidth, maxHeight: 360, padding: 6, borderRadius: radius.control, backgroundColor: colors.card, ...elevated('floating') }} testID={`task-filter-menu-${open.kind}`} accessibilityRole="menu">
           <ScrollView style={{ flexGrow: 0 }}>
             {open.kind === 'project'
-              ? [...activeProjects(projects).map(p => ({ id: p.id, name: p.name, color: p.color as string | null })), { id: NO_PROJECT, name: '无项目', color: null }].map(p => row(
+              ? [...activeProjects(projects).map(p => ({ id: p.id, name: p.name, color: p.color as string | null })), { id: NO_PROJECT, name: tr('tasks.copy.31'), color: null }].map(p => row(
                 p.id, selectedProject === p.id, () => { onPickProject(selectedProject === p.id ? '' : p.id); onClose(); },
                 p.color ? <View style={{ width: 10, height: 10, borderRadius: radius.pill, backgroundColor: p.color }} /> : <Ionicons name="remove-circle-outline" size={14} color={colors.textMuted} />,
                 p.name, projectCounts.get(p.id) ?? 0,
@@ -856,18 +862,18 @@ function FilterMenu({ open, touch, owners, selectedOwners, selectedPriorities, m
               ? owners.filter(o => o.count > 0 || selectedOwners.includes(o.key)).map(o => row(
                 o.key, selectedOwners.includes(o.key), () => onToggleOwner(o.key),
                 o.ref ? <AliasAvatar alias={o.name} size={22} /> : <Ionicons name="person-circle-outline" size={22} color={colors.textMuted} />,
-                o.key === meKey ? `${o.name}（我）` : o.name, o.count,
+                o.key === meKey ? tr('tasks.copy.62', { v0: o.name }) : o.name, o.count,
               ))
-              : REQ_PRIORITIES.map(p => row(p, selectedPriorities.includes(p), () => onTogglePriority(p), <PriorityDot p={p} s={s} />, REQ_PRIORITY_LABEL[p]))}
+              : REQ_PRIORITIES.map(p => row(p, selectedPriorities.includes(p), () => onTogglePriority(p), <PriorityDot p={p} s={s} />, taskText(REQ_PRIORITY_LABEL[p])))}
           </ScrollView>
           <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
             <Pressable onPress={() => { onClear(open.kind); onClose(); }} style={{ height: 36, justifyContent: 'center', paddingHorizontal: spacing.md }} testID="task-filter-reset" accessibilityRole="button">
-              <Text style={s.link}>显示全部</Text>
+              <Text style={s.link}>{tr('tasks.copy.63')}</Text>
             </Pressable>
             {/* 手机 / 双栏没有左栏:「管理项目」放在项目筛选弹层里。 */}
             {open.kind === 'project' ? (
               <Pressable onPress={() => { onClose(); setManagingProjects(true); }} style={{ height: 36, justifyContent: 'center', paddingHorizontal: spacing.md }} testID="task-filter-manage-projects" accessibilityRole="button">
-                <Text style={s.link}>管理项目</Text>
+                <Text style={s.link}>{tr('tasks.copy.64')}</Text>
               </Pressable>
             ) : null}
           </View>

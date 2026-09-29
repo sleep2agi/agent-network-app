@@ -1,0 +1,39 @@
+Task-page language migration — 2026-09-29
+Base: origin/main 69947a43265f9cd44f54aed686420f438e76f76d (includes #506/#507)
+Scope: task board, requirement detail, subrequirements, project management,
+dispatch log/detail, people/assignment controls. No API/model/store or version changes.
+
+All execution in Docker (sg docker). No production Hub/TM access.
+Image: tests/test-task-language/Dockerfile; Node20, Bun1.3.1, OpenSSL,
+locked npm dependencies. Build ran language/copy guards then typecheck.
+
+PASS src/i18n-tasks.test.ts: 11/11
+PASS src/i18n-copy-guard.test.ts: 37/37 (29 migrated TSX files + guard contracts)
+PASS npm run typecheck
+PASS npm test: 226/226 test files
+PASS tests/requirement-details: 32 tests, 129 expect calls
+PASS Playwright1.58.2 Chromium: 23/23; 1200x800 and 390x844
+
+Screenshots/coordinates: docs/tests/screenshots-task-language/ (8 PNGs + JSON).
+Desktop column widths: 293.328 / 293.344 / 293.328, top=60.
+Desktop detail x=780 width=420; new button right=1176 (viewport1200).
+Phone columns: width330 top140, intentionally horizontally scrollable.
+Phone detail width390; project menu x122 width260 right382 (viewport390).
+Project manager: desktop x340 width520, phone x0 width390.
+English board/subtask/project labels visible; Chinese user names/titles preserved.
+Live en->zh switch preserved an unsaved Chinese title; HTTP mutation count=0.
+Manually inspected desktop board, phone board/detail/project screenshots.
+
+Observed red before fix: phone project dropdown anchored beyond right viewport;
+Playwright could not click its manage-projects row. Added presentation-only
+viewport/safe-area clamping; same click now passes plus explicit bounds assertion.
+Harness corrections: browser fixture needed process.env substitution; initial
+full-suite image lacked OpenSSL (225/226). Added OpenSSL, final226/226.
+An earlier overlay used the previous version's package.json; discarded that run.
+
+Reproduction: tests/test-task-language/README.md. Component suite uses
+tests/requirement-details/Dockerfile with current source.
+Limits: responsive-web evidence, not Android/iOS native installer acceptance.
+Fixture proves UI read/switch behaviour, not live Hub integration. Existing
+component tests cover writes/identity/network isolation. User/Agent content and
+raw service errors remain verbatim. No release, merge or production update done.

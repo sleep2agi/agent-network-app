@@ -1,3 +1,8 @@
+import { formatDueFull } from './i18n-task-presentation';
+import { t as tr } from './i18n';
+import { validationText } from './i18n-task-presentation';
+import { useTranslation } from './i18n-react';
+import { taskText } from './i18n-tasks';
 // 预计完成:点开是月历(桌面 = 贴着字段的弹层,手机 = 底部面板),可选时刻(时:分:秒,24 小时制)或「全天」。
 // 快捷项(今天 / 明天 / 下周一)保留,点了是全天。Hub 只认日期时(旧 Hub,没有 due_datetime 能力)不显示时刻。
 // 桌面键盘:←→ 一天、↑↓ 一周、PageUp/Down 一个月、回车选中、Esc 关闭。
@@ -8,13 +13,11 @@ import { Ionicons } from './icons';
 import { useModalSafePadding } from './safe-area-runtime';
 import { colors, radius, spacing, themeMode, type as typeScale, weight } from './theme';
 import { elevated } from './elevation';
-import {
-  calendarKey, dueFromLocal, dueShortcuts, dueToLocal, formatDueFull, localDateOf, monthGrid, shiftMonth,
-} from './due-time';
+import { calendarKey, dueFromLocal, dueShortcuts, dueToLocal, localDateOf, monthGrid, shiftMonth } from './due-time';
 import { fieldStyles } from './TaskCreateDialog';
 import { a11yState, useTaskStyles } from './TaskBoardParts';
 
-const WEEK = ['一', '二', '三', '四', '五', '六', '日'];
+const WEEK = ['tasks.copy.167', 'tasks.copy.168', 'tasks.copy.169', 'tasks.copy.170', 'tasks.copy.171', 'tasks.copy.172', 'tasks.copy.173'];
 export const DUE_PANEL_WIDTH = 308;
 
 type Time = { hh: number; mm: number; ss: number };
@@ -31,6 +34,7 @@ export default function TaskDuePicker({ value, onChange, allowTime, pointer, she
   idBase: string;
   error?: string;
 }) {
+  useTranslation();
   const s = useTaskStyles();
   const f = fieldStyles();
   const styles = makePickerStyles();
@@ -105,16 +109,16 @@ export default function TaskDuePicker({ value, onChange, allowTime, pointer, she
   const panelBody = (
     <View style={{ gap: spacing.md }} testID={`${idBase}-calendar`}>
       <View style={styles.monthRow}>
-        <Pressable accessibilityRole="button" accessibilityLabel="上个月" onPress={() => setMonth(shiftMonth(month.y, month.m, -1))} style={s.iconButton} testID={`${idBase}-prev`}>
+        <Pressable accessibilityRole="button" accessibilityLabel={tr('tasks.copy.174')} onPress={() => setMonth(shiftMonth(month.y, month.m, -1))} style={s.iconButton} testID={`${idBase}-prev`}>
           <Ionicons name="chevron-back" size={16} color={colors.textSecondary} />
         </Pressable>
-        <Text style={{ color: colors.text, fontSize: typeScale.body, fontWeight: weight.strong }} testID={`${idBase}-month`}>{month.y}年{month.m}月</Text>
-        <Pressable accessibilityRole="button" accessibilityLabel="下个月" onPress={() => setMonth(shiftMonth(month.y, month.m, 1))} style={s.iconButton} testID={`${idBase}-next`}>
+        <Text style={{ color: colors.text, fontSize: typeScale.body, fontWeight: weight.strong }} testID={`${idBase}-month`}>{month.y}{tr('tasks.copy.175')}{month.m}{tr('tasks.copy.176')}</Text>
+        <Pressable accessibilityRole="button" accessibilityLabel={tr('tasks.copy.177')} onPress={() => setMonth(shiftMonth(month.y, month.m, 1))} style={s.iconButton} testID={`${idBase}-next`}>
           <Ionicons name="chevron-forward" size={16} color={colors.textSecondary} />
         </Pressable>
       </View>
       <View style={styles.week}>
-        {WEEK.map(w => <Text key={w} style={[styles.weekDay, { width: cell, color: colors.textMuted }]}>{w}</Text>)}
+        {WEEK.map(w => <Text key={w} style={[styles.weekDay, { width: cell, color: colors.textMuted }]}>{tr(w)}</Text>)}
       </View>
       <View style={styles.grid} {...({ role: "grid" } as object)}>
         {grid.map(g => {
@@ -124,7 +128,7 @@ export default function TaskDuePicker({ value, onChange, allowTime, pointer, she
             <Pressable
               key={g.date}
               accessibilityRole="button"
-              accessibilityLabel={`${g.date}${isToday ? ' 今天' : ''}`}
+              accessibilityLabel={`${g.date}${isToday ? tr('tasks.copy.178') : ''}`}
               {...a11yState({ selected: on })}
               onPress={() => pick(g.date)}
               style={state => [styles.day, { width: cell, height: cell - 4 },
@@ -142,7 +146,7 @@ export default function TaskDuePicker({ value, onChange, allowTime, pointer, she
         <View style={styles.timeRow} testID={`${idBase}-time`}>
           <Pressable accessibilityRole="checkbox" {...a11yState({ checked: allDay })} onPress={() => setAllDay(a => !a)} style={[f.row, { gap: 6 }]} testID={`${idBase}-allday`}>
             <Ionicons name={allDay ? 'checkbox' : 'square-outline'} size={16} color={allDay ? colors.accent : colors.textMuted} />
-            <Text style={{ color: colors.text, fontSize: typeScale.small + 1 }}>全天</Text>
+            <Text style={{ color: colors.text, fontSize: typeScale.small + 1 }}>{tr('tasks.copy.179')}</Text>
           </Pressable>
           <View style={[f.row, { gap: 4, opacity: allDay ? 0.35 : 1 }]} pointerEvents={allDay ? 'none' : 'auto'}>
             {(['hh', 'mm', 'ss'] as const).map((part, i) => (
@@ -156,7 +160,7 @@ export default function TaskDuePicker({ value, onChange, allowTime, pointer, she
                   maxLength={2}
                   editable={!allDay}
                   style={[styles.timeBox, { color: colors.text, borderColor: colors.border, backgroundColor: colors.inputBg }]}
-                  accessibilityLabel={part === 'hh' ? '时' : part === 'mm' ? '分' : '秒'}
+                  accessibilityLabel={part === 'hh' ? tr('tasks.copy.180') : part === 'mm' ? tr('tasks.copy.181') : tr('tasks.copy.182')}
                   testID={`${idBase}-${part}`}
                 />
               </View>
@@ -166,14 +170,14 @@ export default function TaskDuePicker({ value, onChange, allowTime, pointer, she
       ) : null}
       <View style={[f.row, { justifyContent: 'space-between' }]}>
         <Pressable accessibilityRole="button" onPress={() => { onChange(''); setOpen(false); }} style={styles.footBtn} testID={`${idBase}-picker-clear`}>
-          <Text style={s.link}>清除</Text>
+          <Text style={s.link}>{tr('tasks.copy.183')}</Text>
         </Pressable>
         <View style={[f.row, { gap: spacing.sm }]}>
           <Pressable accessibilityRole="button" onPress={() => setOpen(false)} style={[s.primary, { backgroundColor: colors.subtleFill }]} testID={`${idBase}-cancel`}>
-            <Text style={[s.primaryText, { color: colors.text }]}>取消</Text>
+            <Text style={[s.primaryText, { color: colors.text }]}>{tr('tasks.copy.79')}</Text>
           </Pressable>
           <Pressable accessibilityRole="button" onPress={commit} style={s.primary} testID={`${idBase}-ok`}>
-            <Text style={s.primaryText}>确定</Text>
+            <Text style={s.primaryText}>{tr('tasks.copy.184')}</Text>
           </Pressable>
         </View>
       </View>
@@ -191,15 +195,15 @@ export default function TaskDuePicker({ value, onChange, allowTime, pointer, she
       <View ref={fieldRef} collapsable={false}>
         <Pressable
           accessibilityRole="button"
-          accessibilityLabel={label ? `预计完成 ${label}，更改` : '选择预计完成日期'}
+          accessibilityLabel={label ? tr('tasks.copy.185', { v0: label }) : tr('tasks.copy.186')}
           onPress={begin}
           style={[f.input, f.row, error ? { borderColor: colors.failed } : null]}
           testID={idBase}
         >
           <Ionicons name="calendar-outline" size={16} color={colors.textMuted} />
-          <Text style={{ flex: 1, color: label ? colors.text : colors.textMuted, fontSize: typeScale.body }} numberOfLines={1} testID={`${idBase}-value`}>{label || '选择日期(可空)'}</Text>
+          <Text style={{ flex: 1, color: label ? colors.text : colors.textMuted, fontSize: typeScale.body }} numberOfLines={1} testID={`${idBase}-value`}>{label || tr('tasks.copy.187')}</Text>
           {value ? (
-            <Pressable accessibilityRole="button" accessibilityLabel="清除预计完成" onPress={() => onChange('')} hitSlop={8} testID={`${idBase}-x`}>
+            <Pressable accessibilityRole="button" accessibilityLabel={tr('tasks.copy.188')} onPress={() => onChange('')} hitSlop={8} testID={`${idBase}-x`}>
               <Ionicons name="close-circle" size={16} color={colors.textMuted} />
             </Pressable>
           ) : null}
@@ -208,19 +212,19 @@ export default function TaskDuePicker({ value, onChange, allowTime, pointer, she
       <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm }}>
         {dueShortcuts(today).map(o => (
           <Pressable key={o.key} onPress={() => onChange(o.value)} style={[s.chip, { height: 28 }, value === o.value && s.chipOn]} testID={`${idBase}-${o.key}`} accessibilityRole="button">
-            <Text style={[s.chipText, value === o.value && s.chipTextOn]}>{o.label}</Text>
+            <Text style={[s.chipText, value === o.value && s.chipTextOn]}>{validationText(o.label)}</Text>
           </Pressable>
         ))}
         {value ? (
           <Pressable onPress={() => onChange('')} style={[s.chip, { height: 28 }]} testID={`${idBase}-clear`} accessibilityRole="button">
-            <Text style={s.chipText}>清除</Text>
+            <Text style={s.chipText}>{tr('tasks.copy.183')}</Text>
           </Pressable>
         ) : null}
       </View>
       {error ? <Text style={s.err} accessibilityRole="alert">{error}</Text> : null}
       <Modal visible={open} transparent animationType={sheet ? 'slide' : 'fade'} onRequestClose={() => setOpen(false)}>
         <View style={{ flex: 1, backgroundColor: sheet ? 'rgba(0,0,0,0.4)' : 'transparent', justifyContent: sheet ? 'flex-end' : undefined }}>
-          <Pressable accessibilityLabel="关闭日历" onPress={() => setOpen(false)} style={StyleSheet.absoluteFill} testID={`${idBase}-scrim`} />
+          <Pressable accessibilityLabel={tr('tasks.copy.189')} onPress={() => setOpen(false)} style={StyleSheet.absoluteFill} testID={`${idBase}-scrim`} />
           <View
             style={sheet
               ? { backgroundColor: colors.card, borderTopLeftRadius: radius.surface, borderTopRightRadius: radius.surface, padding: spacing.lg, paddingBottom: spacing.lg + safe.paddingBottom, alignItems: 'center', ...elevated('floating') }
@@ -246,4 +250,3 @@ const makePickerStyles = () => StyleSheet.create({
   timeBox: { width: 40, height: 32, borderWidth: 1, borderRadius: radius.item, textAlign: 'center', fontSize: 14, padding: 0 },
   footBtn: { height: 32, justifyContent: 'center' },
 });
-

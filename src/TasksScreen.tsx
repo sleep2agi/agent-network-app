@@ -1,3 +1,6 @@
+import { t as tr } from './i18n';
+import { useTranslation } from './i18n-react';
+import { taskText } from './i18n-tasks';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, FlatList, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { Text } from './ui-text';
@@ -27,10 +30,10 @@ import { buttonStyle, buttonTextStyle } from './elevation';
 const PAGE = 30;   // initial + increment for the lazy history window
 
 const FILTER_LABEL: Record<TaskFilter, string> = {
-  all: '全部',
-  running: '进行中',
-  failed: '失败',
-  replied: '已回复',
+  all: 'tasks.copy.34',
+  running: 'tasks.copy.223',
+  failed: 'tasks.copy.224',
+  replied: 'tasks.copy.225',
 };
 
 const BUCKET_COLOR: Record<StatusBucket, string> = {
@@ -51,6 +54,7 @@ export default function TasksScreen({
   /** 桌面工作区:派发记录在左栏(TaskFilterSidebar),看板可拖动。 */
   desktop?: boolean;
 }) {
+  useTranslation();
   // 任务页 = 需求池(列表 / 看板)+ 派发记录。头部、筛选、新建都在 RequirementBoard;
   // 派发记录(Hub 上派给节点的任务,原来的「列表」)作为它的一个分区渲染在同一个头部下面。
   return <RequirementBoard cfg={cfg} desktop={desktop} dispatch={<DispatchLog cfg={cfg} onOpenTask={onOpenTask} />} />;
@@ -63,6 +67,7 @@ function DispatchLog({
   cfg: HubConfig;
   onOpenTask: (taskId: string) => void;
 }) {
+  useTranslation();
   const [tasks, setTasks] = useState<HubTask[] | null>(null);
   const [loaded, setLoaded] = useState(false);
   const [lastError, setLastError] = useState<string | null>(null);
@@ -139,7 +144,7 @@ function DispatchLog({
               testID={`tasks-filter-${f}`}
             >
               <Text style={[styles.chipText, active && styles.chipTextActive]}>
-                {FILTER_LABEL[f]}
+                {tr(FILTER_LABEL[f])}
                 {count !== null ? ` (${count})` : ''}
               </Text>
             </Pressable>
@@ -156,12 +161,12 @@ function DispatchLog({
         <View style={styles.countRow} testID="tasks-count">
           <Text style={styles.countText}>
             {filter === 'all'
-              ? `${total} 个任务`
-              : `${visible.length} / ${total}（过滤 ${FILTER_LABEL[filter]}）`}
+              ? tr('tasks.copy.226', { v0: total })
+              : tr('tasks.copy.227', { v0: visible.length, v1: total, v2: tr(FILTER_LABEL[filter]) })}
           </Text>
           {lastError ? (
             <Text style={styles.countError} testID="tasks-transient-error">
-              上次刷新失败: {lastError}
+              {tr('tasks.copy.166')}{lastError}
             </Text>
           ) : null}
         </View>
@@ -176,13 +181,13 @@ function DispatchLog({
         </View>
       ) : state.kind === 'error' ? (
         <View style={styles.center} testID="tasks-error">
-          <Text style={styles.errorTitle}>加载失败</Text>
+          <Text style={styles.errorTitle}>{tr('tasks.copy.228')}</Text>
           <Text style={styles.errorBody}>{state.message}</Text>
           <Pressable
             onPress={() => load(limitRef.current)}
             style={styles.retryBtn}
           >
-            <Text style={styles.retryText}>重试</Text>
+            <Text style={styles.retryText}>{tr('tasks.copy.57')}</Text>
           </Pressable>
         </View>
       ) : (
@@ -196,18 +201,18 @@ function DispatchLog({
             loadingOlder ? (
               <ActivityIndicator color={colors.textMuted} style={{ marginVertical: spacing.md }} />
             ) : !hasOlder && visible.length > 0 ? (
-              <Text style={styles.beginning}>— 已到底 —</Text>
+              <Text style={styles.beginning}>{tr('tasks.copy.229')}</Text>
             ) : null
           }
           ListEmptyComponent={
             <View style={styles.emptyBox} testID="tasks-empty">
               <Text style={styles.emptyTitle}>
-                {filter === 'all' ? '还没有任务' : `没有 ${FILTER_LABEL[filter]} 任务`}
+                {filter === 'all' ? tr('tasks.copy.230') : tr('tasks.copy.231', { v0: tr(FILTER_LABEL[filter]) })}
               </Text>
               <Text style={styles.emptySub}>
                 {filter === 'all'
-                  ? '下派任务后会在这里出现'
-                  : '试试切换到其它筛选或"全部"'}
+                  ? tr('tasks.copy.232')
+                  : tr('tasks.copy.233')}
               </Text>
             </View>
           }
@@ -244,7 +249,7 @@ function DispatchLog({
                   </Text>
                 </View>
                 <Text style={styles.preview} numberOfLines={2}>
-                  {item.content || '（无内容）'}
+                  {item.content || tr('tasks.copy.158')}
                 </Text>
               </Pressable>
             );

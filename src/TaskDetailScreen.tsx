@@ -1,3 +1,6 @@
+import { t as tr } from './i18n';
+import { useTranslation } from './i18n-react';
+import { taskText } from './i18n-tasks';
 import { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { Text } from './ui-text';
@@ -45,10 +48,10 @@ interface TimelineStep {
 
 function buildTimeline(task: HubTask): TimelineStep[] {
   return [
-    { key: 'created',   label: '创建',   at: task.created_at },
-    { key: 'delivered', label: '已送达', at: task.delivered_at },
-    { key: 'started',   label: '开始',   at: task.started_at },
-    { key: 'completed', label: '完成',   at: task.completed_at },
+    { key: 'created',   label: tr('tasks.copy.122'),   at: task.created_at },
+    { key: 'delivered', label: tr('tasks.copy.147'), at: task.delivered_at },
+    { key: 'started',   label: tr('tasks.copy.148'),   at: task.started_at },
+    { key: 'completed', label: tr('tasks.copy.149'),   at: task.completed_at },
   ];
 }
 
@@ -64,6 +67,7 @@ export default function TaskDetailScreen({
   /** Tauri desktop workspace: the rail's 任务 is the way back — no phone back (pane-header.ts). */
   desktop?: boolean;
 }) {
+  useTranslation();
   const [task, setTask] = useState<HubTask | null>(null);
   const [taskLoaded, setTaskLoaded] = useState(false);
   const [taskError, setTaskError] = useState<string | null>(null);
@@ -106,10 +110,10 @@ export default function TaskDetailScreen({
         {paneShowsBack(desktop) ? (
           <Pressable onPress={onBack} style={styles.backBtn} testID={PANE_BACK_TEST_ID}>
             <Ionicons name="chevron-back" size={22} color={colors.text} />
-            <Text style={styles.backText}>任务</Text>
+            <Text style={styles.backText}>{tr('tasks.copy.41')}</Text>
           </Pressable>
         ) : (
-          <Text style={styles.paneTitle}>任务详情</Text>
+          <Text style={styles.paneTitle}>{tr('tasks.copy.145')}</Text>
         )}
         <Text style={styles.taskIdChip} numberOfLines={1}>
           {taskId}
@@ -122,21 +126,21 @@ export default function TaskDetailScreen({
         </View>
       ) : taskError && !task ? (
         <View style={styles.center} testID="task-detail-error">
-          <Text style={styles.errTitle}>加载任务详情失败</Text>
+          <Text style={styles.errTitle}>{tr('tasks.copy.150')}</Text>
           <Text style={styles.errBody}>{taskError}</Text>
           <Pressable onPress={load} style={styles.retryBtn}>
-            <Text style={styles.retryText}>重试</Text>
+            <Text style={styles.retryText}>{tr('tasks.copy.57')}</Text>
           </Pressable>
         </View>
       ) : !task ? (
         <View style={styles.center} testID="task-detail-not-found">
-          <Text style={styles.errTitle}>找不到任务</Text>
+          <Text style={styles.errTitle}>{tr('tasks.copy.151')}</Text>
           <Text style={styles.errBody}>task_id = {taskId}</Text>
         </View>
       ) : (
         <ScrollView contentContainerStyle={{ padding: spacing.lg, gap: spacing.md }}>
           {/* Block 1 — TIMELINE */}
-          <Section title="时间线" testID="task-detail-block-timeline">
+          <Section title={tr('tasks.copy.152')} testID="task-detail-block-timeline">
             <View style={styles.timelineRow}>
               {buildTimeline(task).map((step, i, arr) => (
                 <View key={step.key} style={styles.timelineStep}>
@@ -157,10 +161,10 @@ export default function TaskDetailScreen({
           </Section>
 
           {/* Block 2 — INFO */}
-          <Section title="信息" testID="task-detail-block-info">
+          <Section title={tr('tasks.copy.153')} testID="task-detail-block-info">
             <InfoRow label="task_id" value={task.task_id ?? '—'} monospace />
             <InfoRow
-              label="状态"
+              label={tr('tasks.copy.54')}
               valueNode={
                 <View style={styles.statusInline}>
                   <View
@@ -174,11 +178,11 @@ export default function TaskDetailScreen({
               }
             />
             <InfoRow
-              label="优先级"
+              label={tr('tasks.copy.32')}
               value={task.priority === 'high' ? 'HIGH' : task.priority || 'normal'}
             />
             <InfoRow
-              label="发起"
+              label={tr('tasks.copy.154')}
               valueNode={
                 <View style={styles.aliasInline}>
                   <AliasAvatar alias={task.from_name || '?'} size={20} />
@@ -187,7 +191,7 @@ export default function TaskDetailScreen({
               }
             />
             <InfoRow
-              label="接收"
+              label={tr('tasks.copy.155')}
               valueNode={
                 <View style={styles.aliasInline}>
                   <AliasAvatar alias={task.to_name || '?'} size={20} />
@@ -196,14 +200,14 @@ export default function TaskDetailScreen({
               }
             />
             {task.expires_at ? (
-              <InfoRow label="过期" value={formatTime(task.expires_at)} />
+              <InfoRow label={tr('tasks.copy.156')} value={formatTime(task.expires_at)} />
             ) : null}
           </Section>
 
           {/* Block 3 — CONTENT */}
-          <Section title="内容" testID="task-detail-block-content">
+          <Section title={tr('tasks.copy.157')} testID="task-detail-block-content">
             <Text style={styles.bodyText} selectable>
-              {task.content || '（无内容）'}
+              {task.content || tr('tasks.copy.158')}
             </Text>
           </Section>
 
@@ -212,12 +216,12 @@ export default function TaskDetailScreen({
               a visible "尚未回复" placeholder rather than dropping the block
               silently, per the /messages parity discipline that "empty" and
               "not wired" must look different. */}
-          <Section title="结果" testID="task-detail-block-result">
+          <Section title={tr('tasks.copy.159')} testID="task-detail-block-result">
             <Text
               style={[styles.bodyText, !task.result ? styles.bodyMuted : null]}
               selectable
             >
-              {task.result || '尚未回复'}
+              {task.result || tr('tasks.copy.160')}
             </Text>
           </Section>
 
@@ -226,7 +230,7 @@ export default function TaskDetailScreen({
               from "connection failed" — an unknown UI state has to say what
               it doesn't know AND where the user can look. Each state gets
               its own banner + testID so QA can tell them apart. */}
-          <Section title="事件流" testID="task-detail-block-events">
+          <Section title={tr('tasks.copy.161')} testID="task-detail-block-events">
             {eventsState.kind === 'loading' ? (
               <ActivityIndicator color={colors.textMuted} testID="task-events-loading" />
             ) : eventsState.kind === 'ok' ? (
@@ -235,8 +239,7 @@ export default function TaskDetailScreen({
                   style={[styles.bodyText, styles.bodyMuted]}
                   testID="task-events-ok-empty"
                 >
-                  暂无事件
-                </Text>
+                  {tr('tasks.copy.162')}</Text>
               ) : (
                 <View testID="task-events-ok-list">
                   {eventsState.events.map((ev, i) => (
@@ -246,19 +249,16 @@ export default function TaskDetailScreen({
               )
             ) : eventsState.kind === 'not-wired' ? (
               <View style={styles.notWiredBanner} testID="task-events-not-wired">
-                <Text style={styles.notWiredTitle}>事件流未接入</Text>
+                <Text style={styles.notWiredTitle}>{tr('tasks.copy.163')}</Text>
                 <Text style={styles.notWiredBody}>
-                  当前 hub 未暴露 /api/task_events（下划线路径）。App 只在 hub
-                  升级或该 endpoint 上线后才能显示事件流。想查完整事件请到
-                  dashboard /tasks。
-                </Text>
+                  {tr('tasks.copy.164')}</Text>
                 <Text style={styles.notWiredErr} numberOfLines={2}>
                   {eventsState.error}
                 </Text>
               </View>
             ) : (
               <View style={styles.errorBanner} testID="task-events-error">
-                <Text style={styles.errorTitleSm}>事件流暂时无法刷新</Text>
+                <Text style={styles.errorTitleSm}>{tr('tasks.copy.165')}</Text>
                 <Text style={styles.errorBodySm}>{eventsState.error}</Text>
               </View>
             )}
@@ -271,7 +271,7 @@ export default function TaskDetailScreen({
               style={styles.transientError}
               testID="task-detail-transient-error"
             >
-              上次刷新失败: {taskError}
+              {tr('tasks.copy.166')}{taskError}
             </Text>
           ) : null}
         </ScrollView>
@@ -289,6 +289,7 @@ function Section({
   children: React.ReactNode;
   testID: string;
 }) {
+  useTranslation();
   return (
     <View style={styles.section} testID={testID}>
       <Text style={styles.sectionTitle}>{title}</Text>
@@ -308,6 +309,7 @@ function InfoRow({
   valueNode?: React.ReactNode;
   monospace?: boolean;
 }) {
+  useTranslation();
   return (
     <View style={styles.infoRow}>
       <Text style={styles.infoLbl}>{label}</Text>
@@ -326,6 +328,7 @@ function InfoRow({
 }
 
 function EventRow({ ev }: { ev: HubTaskEvent }) {
+  useTranslation();
   return (
     <View style={styles.eventRow}>
       <View style={styles.eventBullet} />

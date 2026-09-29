@@ -1,3 +1,7 @@
+import { dueInfo, ownerLabel, participantStack, personDisplay, roleAvatars } from './i18n-task-presentation';
+import { t as tr } from './i18n';
+import { useTranslation } from './i18n-react';
+import { taskText } from './i18n-tasks';
 // 任务看板的共用小件与样式:卡片、优先级点、期限胶囊、负责人、分段控件、筛选胶囊、主按钮。
 // 圆角 / 阴影:卡片与列 16、输入与按钮 12、胶囊 999、柔和阴影 —— 都取自全局 token
 // (theme.ts radius / elevation.ts);BOARD_RADIUS / softShadow / liftedShadow 只是看板里的别名。
@@ -10,7 +14,7 @@ import { colors, onThemeChange, radius, spacing, themeMode, type as typeScale, w
 import { shadowOnly } from './elevation';
 import { REQ_PRIORITY_LABEL, type ReqPriority, type Requirement, type RequirementProject } from './requirements-model';
 import type { RequirementPerson } from './requirement-people';
-import { checklistProgress, dueInfo, ownerLabel, participantStack, personDisplay, roleAvatars, type DueTone } from './task-board-model';
+import { checklistProgress, type DueTone } from './task-board-model';
 
 /**
  * accessibilityState + 同样的 aria-* 属性。react-native-web 0.21 已经**不读** accessibilityState
@@ -140,12 +144,14 @@ export function useTaskStyles(): TaskStyles {
 }
 
 export function PriorityDot({ p, s }: { p: ReqPriority; s: TaskStyles }) {
+  useTranslation();
   // 低优先级画空心圈:三种灰度之外再用形状区分,色弱也分得清。
   const low = p === 'low';
   return <View accessible={false} style={[s.prioDot, low ? { borderWidth: 1.5, borderColor: priorityColor(p) } : { backgroundColor: priorityColor(p) }]} />;
 }
 
 export function DueChip({ item, today, s }: { item: Pick<Requirement, 'due' | 'column'>; today: string; s: TaskStyles }) {
+  useTranslation();
   const d = dueInfo(item.due, today, item.column);
   if (d.tone === 'none') return null;
   const c = dueColor(d.tone);
@@ -153,7 +159,7 @@ export function DueChip({ item, today, s }: { item: Pick<Requirement, 'due' | 'c
     <View
       // 悬停提示完整的本地时刻(到秒):web 上直接写 DOM 的 title(RN-web 不转发 title 属性)。
       ref={(el: any) => { if (el && typeof el.setAttribute === 'function') el.setAttribute('title', d.full); }}
-      accessibilityLabel={`预计完成 ${d.full}`}
+      accessibilityLabel={tr('tasks.copy.81', { v0: d.full })}
       style={[s.due, { flexShrink: 0 }, { backgroundColor: d.tone === 'overdue' ? colors.failed + '1a' : d.tone === 'today' ? colors.blocked + '1a' : colors.subtleFill }]}
       testID="task-due"
     >
@@ -164,11 +170,12 @@ export function DueChip({ item, today, s }: { item: Pick<Requirement, 'due' | 'c
 }
 
 export function OwnerBadge({ item, people, s, size = 18, avatarOnly = false }: { item: Requirement; people: readonly RequirementPerson[]; s: TaskStyles; size?: number; avatarOnly?: boolean }) {
+  useTranslation();
   const label = ownerLabel(item, people);
   // 分两个角色时:人类负责人在前、负责 Agent 在后,两个头像;旧 Hub 只有一个负责人。
   const avatars = roleAvatars(item, people);
   const legacyText = item.owner === undefined && !!item.assignee;
-  const a11y = avatars.length ? avatars.map(a => `${a.role === 'agent' ? '负责 Agent' : '负责人'} ${a.name}`).join('，') : `负责人 ${label}`;
+  const a11y = avatars.length ? avatars.map(a => `${a.role === 'agent' ? tr('tasks.copy.82') : tr('tasks.copy.15')} ${a.name}`).join('，') : tr('tasks.copy.83', { v0: label });
   return (
     <View style={s.owner} accessibilityLabel={a11y} testID="task-owner">
       {avatars.length ? (
@@ -183,12 +190,13 @@ export function OwnerBadge({ item, people, s, size = 18, avatarOnly = false }: {
 
 /** compact:列窄(< 260)时负责人只显示头像 —— 名字截成「d..」比不显示更难读。 */
 export function CardMeta({ item, people, today, s, compact = false }: { item: Requirement; people: readonly RequirementPerson[]; today: string; s: TaskStyles; compact?: boolean }) {
+  useTranslation();
   return (
     <View style={s.meta}>
       {/* 优先级不缩:窄列(桌面 1000 宽 ≈ 212px)里让负责人名字去截断,别把「普通」挤成竖排。 */}
-      <View style={[s.owner, { flexShrink: 0 }]} accessibilityLabel={`优先级 ${REQ_PRIORITY_LABEL[item.priority]}`}>
+      <View style={[s.owner, { flexShrink: 0 }]} accessibilityLabel={tr('tasks.copy.84', { v0: taskText(REQ_PRIORITY_LABEL[item.priority]) })}>
         <PriorityDot p={item.priority} s={s} />
-        <Text style={[s.metaText, { flexShrink: 0 }]} numberOfLines={1} testID="task-prio-label">{REQ_PRIORITY_LABEL[item.priority]}</Text>
+        <Text style={[s.metaText, { flexShrink: 0 }]} numberOfLines={1} testID="task-prio-label">{taskText(REQ_PRIORITY_LABEL[item.priority])}</Text>
       </View>
       <OwnerBadge item={item} people={people} s={s} avatarOnly={compact} />
       <DueChip item={item} today={today} s={s} />
@@ -199,6 +207,7 @@ export function CardMeta({ item, people, today, s, compact = false }: { item: Re
 export function Segmented<K extends string>({ items, value, onChange, s, testID }: {
   items: readonly { key: K; label: string }[]; value: K; onChange: (k: K) => void; s: TaskStyles; testID?: string;
 }) {
+  useTranslation();
   return (
     <View style={s.segment} accessibilityRole="tablist" testID={testID}>
       {items.map(it => {
@@ -216,6 +225,7 @@ export function Segmented<K extends string>({ items, value, onChange, s, testID 
 export function Chip({ label, on, onPress, s, testID, leading, accessibilityLabel }: {
   label: string; on: boolean; onPress: () => void; s: TaskStyles; testID?: string; leading?: ReactNode; accessibilityLabel?: string;
 }) {
+  useTranslation();
   return (
     <Pressable accessibilityRole="button" accessibilityLabel={accessibilityLabel || label} {...a11yState({ selected: on })} onPress={onPress} style={[s.chip, on && s.chipOn]} testID={testID}>
       {leading}
@@ -227,11 +237,12 @@ export function Chip({ label, on, onPress, s, testID, leading, accessibilityLabe
 
 /** 卡片上的子任务进度:「✓ 3/7」+ 一条细进度条。没有子任务就不画。 */
 export function ChecklistProgress({ item, s }: { item: Pick<Requirement, 'checklist'>; s: TaskStyles }) {
+  useTranslation();
   const p = checklistProgress(item.checklist);
   if (!p.total) return null;
   const complete = p.done === p.total;
   return (
-    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }} testID="task-checklist-progress" accessibilityLabel={`子任务 ${p.done}/${p.total}`}>
+    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }} testID="task-checklist-progress" accessibilityLabel={tr('tasks.copy.85', { v0: p.done, v1: p.total })}>
       <Ionicons name={complete ? 'checkmark-circle' : 'checkbox-outline'} size={13} color={complete ? colors.running : colors.textMuted} />
       <Text style={[s.metaMuted, { fontSize: 11, flexShrink: 0 }]}>{p.done}/{p.total}</Text>
       <View style={{ flex: 1, minWidth: 16, height: 3, borderRadius: radius.pill, backgroundColor: colors.subtleFill, overflow: 'hidden' }}>
@@ -243,9 +254,10 @@ export function ChecklistProgress({ item, s }: { item: Pick<Requirement, 'checkl
 
 /** 项目标签:彩色圆点 + 名字,底色是项目色的淡色。归档的项目名字变灰。 */
 export function ProjectChip({ project, s, small = false }: { project: RequirementProject | undefined; s: TaskStyles; small?: boolean }) {
+  useTranslation();
   if (!project) return null;
   return (
-    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5, alignSelf: 'flex-start', maxWidth: '100%', height: small ? 18 : 22, paddingHorizontal: small ? 6 : 8, borderRadius: radius.pill, backgroundColor: project.color + '1f' }} testID="task-project-chip" accessibilityLabel={`项目 ${project.name}`}>
+    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5, alignSelf: 'flex-start', maxWidth: '100%', height: small ? 18 : 22, paddingHorizontal: small ? 6 : 8, borderRadius: radius.pill, backgroundColor: project.color + '1f' }} testID="task-project-chip" accessibilityLabel={tr('tasks.copy.86', { v0: project.name })}>
       <View style={{ width: 7, height: 7, borderRadius: radius.pill, backgroundColor: project.color }} />
       <Text style={[s.metaText, { fontSize: small ? 11 : 12, color: project.archived ? colors.textMuted : colors.text }]} numberOfLines={1}>{project.name}</Text>
     </View>
@@ -257,6 +269,7 @@ export function ProjectChip({ project, s, small = false }: { project: Requiremen
  * 认不出的成员画占位头像,不显示裸 id。
  */
 export function ParticipantStack({ item, people, s, touch, size = 20 }: { item: Pick<Requirement, 'participants'>; people: readonly RequirementPerson[]; s: TaskStyles; touch: boolean; size?: number }) {
+  useTranslation();
   const [open, setOpen] = useState(false);
   const st = participantStack(item.participants, people);
   if (!st.shown.length) return null;
@@ -264,8 +277,8 @@ export function ParticipantStack({ item, people, s, touch, size = 20 }: { item: 
     <View style={{ alignItems: 'flex-end', gap: 4 }}>
       <Pressable
         onLongPress={touch ? () => setOpen(v => !v) : undefined}
-        accessibilityLabel={`参与人：${st.all}`}
-        ref={(el: any) => { if (el && typeof el.setAttribute === 'function') el.setAttribute('title', `参与人：${st.all}`); }}
+        accessibilityLabel={tr('tasks.copy.87', { v0: st.all })}
+        ref={(el: any) => { if (el && typeof el.setAttribute === 'function') el.setAttribute('title', tr('tasks.copy.87', { v0: st.all })); }}
         style={{ flexDirection: 'row', alignItems: 'center' }}
         testID="task-participants"
       >
@@ -283,7 +296,8 @@ export function ParticipantStack({ item, people, s, touch, size = 20 }: { item: 
 
 /** 详情里的参与人:头像 + 名字的胶囊,人类和 Agent 一样;认不出的是占位头像 +「未知成员」。 */
 export function PersonChips({ refs, people, s, testID }: { refs: readonly { kind: 'user' | 'node'; id: string }[]; people: readonly RequirementPerson[]; s: TaskStyles; testID?: string }) {
-  if (!refs.length) return <Text style={s.muted} testID={testID}>暂无</Text>;
+  useTranslation();
+  if (!refs.length) return <Text style={s.muted} testID={testID}>{tr('tasks.copy.8')}</Text>;
   return (
     <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }} testID={testID}>
       {refs.map(r => {
@@ -292,7 +306,7 @@ export function PersonChips({ refs, people, s, testID }: { refs: readonly { kind
           <View key={`${r.kind}:${r.id}`} style={{ flexDirection: 'row', alignItems: 'center', gap: 6, height: 28, paddingLeft: 3, paddingRight: 10, borderRadius: radius.pill, backgroundColor: colors.subtleFill }} testID="person-chip">
             {d.known ? <AliasAvatar alias={d.name} size={22} /> : <View style={{ width: 22, height: 22, borderRadius: radius.pill, backgroundColor: colors.border, alignItems: 'center', justifyContent: 'center' }}><Ionicons name="help" size={13} color={colors.textMuted} /></View>}
             <Text style={{ color: d.known ? colors.text : colors.textMuted, fontSize: 13 }} numberOfLines={1}>{d.name}</Text>
-            <Text style={s.metaMuted}>{r.kind === 'user' ? '人类' : 'Agent'}</Text>
+            <Text style={s.metaMuted}>{r.kind === 'user' ? tr('tasks.copy.1') : 'Agent'}</Text>
           </View>
         );
       })}

@@ -1,3 +1,7 @@
+import { t as tr } from './i18n';
+import { validationText } from './i18n-task-presentation';
+import { useTranslation } from './i18n-react';
+import { taskText } from './i18n-tasks';
 // 任务详情:宽屏是右侧抽屉(看板仍在左边可见),手机是推入的一整页(安卓返回键 / 左上 ‹ 关闭)。
 // 可改:标题、优先级、预计完成、负责人(#488 + Hub #2070 的 PATCH,只发改过的字段),点「保存修改」才写 Hub。
 // 状态单独一排,点了立即保存(和看板上拖动 / 菜单是同一个动作)。参与人沿用 RequirementAssignmentsEditor。
@@ -51,6 +55,7 @@ export default function TaskDetailPanel({ cfg, item, items, onOpenRequirement, o
   onChecklistDelete: (id: string) => void;
   onChecklistMove: (from: number, to: number) => void;
 }) {
+  useTranslation();
   const s = useTaskStyles();
   const f = fieldStyles();
   const styles = makePanelStyles();
@@ -84,7 +89,7 @@ export default function TaskDetailPanel({ cfg, item, items, onOpenRequirement, o
   const save = async () => {
     if (!patch || saving) return;
     const c = checkDraft(draft);
-    if (!c.ok) { setError({ field: c.field, message: c.message }); return; }
+    if (!c.ok) { setError({ field: c.field, message: validationText(c.message) }); return; }
     setSaving(true);
     const failed = await onSave(patch);
     setSaving(false);
@@ -99,15 +104,15 @@ export default function TaskDetailPanel({ cfg, item, items, onOpenRequirement, o
       <TextInput
         value={draft.name}
         onChangeText={name => set({ name })}
-        placeholder="任务标题"
+        placeholder={tr('tasks.copy.118')}
         placeholderTextColor={colors.textMuted}
         multiline
         style={[f.input, { fontSize: typeScale.heading - 2, fontWeight: weight.strong, minHeight: 48, backgroundColor: 'transparent', borderColor: error?.field === 'name' ? colors.failed : colors.border }]}
         testID="req-edit-name"
-        accessibilityLabel="任务标题"
+        accessibilityLabel={tr('tasks.copy.118')}
       />
       {error?.field === 'name' ? <Text style={s.err} accessibilityRole="alert">{error.message}</Text> : null}
-      <Field label="状态">
+      <Field label={tr('tasks.copy.54')}>
         <View style={[s.segment, { alignSelf: 'flex-start' }]} accessibilityRole="radiogroup">
           {REQ_COLUMNS.map(col => {
             const on = col === item.column;
@@ -115,7 +120,7 @@ export default function TaskDetailPanel({ cfg, item, items, onOpenRequirement, o
               <Pressable
                 key={col}
                 accessibilityRole="radio"
-                accessibilityLabel={on ? `当前：${REQ_COLUMN_LABEL[col]}` : `移到${REQ_COLUMN_LABEL[col]}`}
+                accessibilityLabel={on ? tr('tasks.copy.91', { v0: taskText(REQ_COLUMN_LABEL[col]) }) : tr('tasks.copy.135', { v0: taskText(REQ_COLUMN_LABEL[col]) })}
                 {...a11yState({ disabled: moving || on, selected: on, checked: on })}
                 disabled={moving || on}
                 onPress={() => onMove(col)}
@@ -123,12 +128,12 @@ export default function TaskDetailPanel({ cfg, item, items, onOpenRequirement, o
                 testID={`req-move-${col}`}
               >
                 <View style={[s.prioDot, { backgroundColor: STATUS_TONE[col]() }]} />
-                <Text style={[s.segmentText, on && s.segmentTextOn]}>{REQ_COLUMN_LABEL[col]}</Text>
+                <Text style={[s.segmentText, on && s.segmentTextOn]}>{taskText(REQ_COLUMN_LABEL[col])}</Text>
               </Pressable>
             );
           })}
         </View>
-        {moving ? <Text style={s.muted} accessibilityLiveRegion="polite">正在保存状态…</Text> : null}
+        {moving ? <Text style={s.muted} accessibilityLiveRegion="polite">{tr('tasks.copy.136')}</Text> : null}
         {moveError ? <Text style={s.err} accessibilityRole="alert">{moveError}</Text> : null}
       </Field>
       <RoleFields
@@ -143,16 +148,16 @@ export default function TaskDetailPanel({ cfg, item, items, onOpenRequirement, o
         idBase="req-edit-owner"
         ownerLocked={legacy ? (
           <>
-            <Text style={{ color: colors.text, fontSize: typeScale.body }}>{item.assignee || '未分配'}</Text>
-            <Text style={s.muted} testID="req-owner-unsupported">升级 Hub 后可绑定人类或 Agent 负责人</Text>
+            <Text style={{ color: colors.text, fontSize: typeScale.body }}>{item.assignee || tr('tasks.copy.6')}</Text>
+            <Text style={s.muted} testID="req-owner-unsupported">{tr('tasks.copy.137')}</Text>
           </>
         ) : undefined}
       />
       {projects && item.projectId !== undefined ? <ProjectPicker value={draft.projectId} projects={projects} onChange={projectId => set({ projectId })} idBase="req-edit-project" /> : null}
-      <Field label="优先级">
+      <Field label={tr('tasks.copy.32')}>
         <PriorityPicker value={draft.priority} onChange={priority => set({ priority })} testPrefix="req-edit-priority" />
       </Field>
-      <Field label="预计完成">
+      <Field label={tr('tasks.copy.119')}>
         <DueField value={draft.due} onChange={due => set({ due })} error={error?.field === 'due' ? error.message : undefined} idBase="req-edit-due" allowTime={dueDatetime} pointer={pointer} sheet={mode === 'page'} />
       </Field>
       <ExternalLink item={item} />
@@ -171,21 +176,21 @@ export default function TaskDetailPanel({ cfg, item, items, onOpenRequirement, o
           />
         </>
       ) : (
-        <Text style={s.muted} testID="req-details-unsupported">升级 Hub 后可写描述(markdown)和子任务</Text>
+        <Text style={s.muted} testID="req-details-unsupported">{tr('tasks.copy.138')}</Text>
       )}
       {!legacy ? (
-        <Field label="参与人">
+        <Field label={tr('tasks.copy.53')}>
           <RequirementAssignmentsEditor key={item.id} cfg={cfg} item={item} fields="participants" onSaved={onAssignmentsSaved} />
         </Field>
       ) : null}
-      {item.createdAt ? <Text style={s.muted}>创建于 {item.createdAt.slice(0, 10)}</Text> : null}
+      {item.createdAt ? <Text style={s.muted}>{tr('tasks.copy.139')}{item.createdAt.slice(0, 10)}</Text> : null}
     </ScrollView>
   );
 
   const footer = (
     <View style={[styles.footer, { borderTopColor: colors.border }, mode === 'page' && { paddingBottom: spacing.md + safe.paddingBottom }]}>
       {error?.field === 'submit' ? <Text style={[s.err, { flex: 1 }]} accessibilityRole="alert" testID="req-edit-error">{error.message}</Text>
-        : <Text style={[s.muted, { flex: 1 }]} accessibilityLiveRegion="polite">{saving ? '正在保存…' : saved ? '已保存' : patch ? '有未保存的修改' : ''}</Text>}
+        : <Text style={[s.muted, { flex: 1 }]} accessibilityLiveRegion="polite">{saving ? tr('tasks.copy.140') : saved ? tr('tasks.copy.141') : patch ? tr('tasks.copy.142') : ''}</Text>}
       <Pressable
         accessibilityRole="button"
         {...a11yState({ disabled: !patch || saving })}
@@ -194,7 +199,7 @@ export default function TaskDetailPanel({ cfg, item, items, onOpenRequirement, o
         style={[s.primary, { height: 36, paddingHorizontal: spacing.lg }, (!patch || saving) && { opacity: 0.45 }]}
         testID="req-edit-save"
       >
-        <Text style={s.primaryText}>保存修改</Text>
+        <Text style={s.primaryText}>{tr('tasks.copy.143')}</Text>
       </Pressable>
     </View>
   );
@@ -202,14 +207,14 @@ export default function TaskDetailPanel({ cfg, item, items, onOpenRequirement, o
   const head = (
     <View style={[styles.head, { borderBottomColor: colors.border }]}>
       {mode === 'page' ? (
-        <Pressable accessibilityRole="button" accessibilityLabel="返回" onPress={onClose} style={[s.iconButton, { marginLeft: -spacing.sm }]} testID="req-detail-close">
+        <Pressable accessibilityRole="button" accessibilityLabel={tr('tasks.copy.144')} onPress={onClose} style={[s.iconButton, { marginLeft: -spacing.sm }]} testID="req-detail-close">
           <Ionicons name="chevron-back" size={22} color={colors.text} />
         </Pressable>
       ) : null}
-      <Text style={{ flex: 1, color: colors.text, fontSize: typeScale.title, fontWeight: weight.strong }}>任务详情</Text>
+      <Text style={{ flex: 1, color: colors.text, fontSize: typeScale.title, fontWeight: weight.strong }}>{tr('tasks.copy.145')}</Text>
       {saving || moving ? <ActivityIndicator size="small" color={colors.textMuted} /> : null}
       {mode === 'drawer' ? (
-        <Pressable accessibilityRole="button" accessibilityLabel="关闭任务详情" onPress={onClose} style={s.iconButton} testID="req-detail-close">
+        <Pressable accessibilityRole="button" accessibilityLabel={tr('tasks.copy.146')} onPress={onClose} style={s.iconButton} testID="req-detail-close">
           <Ionicons name="close" size={18} color={colors.textSecondary} />
         </Pressable>
       ) : null}
@@ -222,7 +227,7 @@ export default function TaskDetailPanel({ cfg, item, items, onOpenRequirement, o
       <View
         style={[styles.drawer, { top, backgroundColor: cardBg(), borderLeftColor: colors.border }, liftedShadow()]}
         accessibilityViewIsModal
-        accessibilityLabel="任务详情"
+        accessibilityLabel={tr('tasks.copy.145')}
         testID="req-detail"
       >
         {head}
@@ -243,6 +248,7 @@ export default function TaskDetailPanel({ cfg, item, items, onOpenRequirement, o
 }
 
 function Field({ label, children }: { label: string; children: ReactNode }) {
+  useTranslation();
   const f = fieldStyles();
   return (
     <View style={{ gap: spacing.sm }}>
