@@ -43,6 +43,9 @@ export interface Requirement {
   due: string;
   column: ReqColumn;
   createdAt: string;
+  /** Missing means the connected Hub did not expose update metadata. */
+  updatedAt?: string | null;
+  updatedBy?: RequirementPersonRef | null;
 }
 
 /** 空、全天 'YYYY-MM-DD'、带时区的时刻(Hub #2076 存成 UTC 到秒)都合法。见 due-time.ts。 */

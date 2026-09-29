@@ -34,6 +34,8 @@ export function requirementFromHub(row: unknown): Requirement | null {
   const priority = REQ_PRIORITIES.includes(r.priority as ReqPriority) ? r.priority as ReqPriority : 'normal';
   const column = REQ_COLUMNS.includes(r.column as ReqColumn) ? r.column as ReqColumn : 'pool';
   return {
+    ...(('updatedAt' in r || 'updated_at' in r) ? { updatedAt: typeof (r.updatedAt ?? r.updated_at) === 'string' ? String(r.updatedAt ?? r.updated_at) : null } : {}),
+    ...('updated_by' in r ? { updatedBy: updateActor(r.updated_by) } : {}),
     ...('issues' in r ? { issues: issuesFromHub(r.issues) } : {}),
     ...(('owner' in r || 'participants' in r) ? assignmentsFromHub(r) : {}),
     ...('agent_owner' in r ? { agentOwner: agentOwnerFromHub(r.agent_owner) } : {}),
@@ -53,6 +55,12 @@ export function requirementFromHub(row: unknown): Requirement | null {
     column,
     createdAt: typeof r.createdAt === 'string' ? r.createdAt : '',
   };
+}
+
+function updateActor(value: unknown): RequirementPersonRef | null {
+  if (!value || typeof value !== 'object') return null;
+  const v = value as Record<string, unknown>;
+  return (v.kind === 'user' || v.kind === 'node') && typeof v.id === 'string' && !!v.id ? { kind: v.kind, id: v.id } : null;
 }
 
 /** 负责 Agent:只认 {kind:'node', id}。读不懂的值当成未分配,不让一张卡因为它整张丢掉。 */

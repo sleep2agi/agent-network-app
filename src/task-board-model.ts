@@ -5,6 +5,7 @@
 // 头部一行(标题 · 列表/看板 · 负责人/优先级筛选 · ＋ 新建),三列等宽铺满,卡片整张可点,
 // 桌面拖动换列、手机长按菜单。Hub 数据模型不变(标题/状态/优先级/期限/负责人/参与人)。
 import { dueInstant, dueToLocal, formatDueFull, formatTime, isDateTime, systemClock, type Clock } from './due-time';
+import { taskTimestamp } from './task-time';
 import {
   type ChecklistItem,
   type RequirementProject,
@@ -247,7 +248,7 @@ export function roleAvatars(item: Pick<Requirement, 'owner' | 'agentOwner'>, peo
 
 // ── 列表视图排序 ─────────────────────────────────────────────────────────
 
-export type SortKey = 'title' | 'owner' | 'priority' | 'due' | 'status' | 'project';
+export type SortKey = 'title' | 'owner' | 'priority' | 'due' | 'status' | 'project' | 'created' | 'updated';
 export interface SortSpec { key: SortKey; dir: 'asc' | 'desc' }
 export const DEFAULT_SORT: SortSpec = { key: 'status', dir: 'asc' };
 
@@ -276,6 +277,12 @@ export function sortRows(items: readonly Requirement[], sort: SortSpec, people: 
     || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
   const primary = (a: Requirement, b: Requirement): number => {
     switch (sort.key) {
+      case 'created': case 'updated': {
+        const av = taskTimestamp(sort.key === 'created' ? a.createdAt : a.updatedAt);
+        const bv = taskTimestamp(sort.key === 'created' ? b.createdAt : b.updatedAt);
+        if (av === null || bv === null) return av === bv ? 0 : av === null ? 1 : -1;
+        return (av - bv) * sign;
+      }
       case 'title': return a.name.localeCompare(b.name, 'zh') * sign;
       case 'owner': {
         const an = a.owner || a.agentOwner || (a.owner === undefined && a.assignee) ? ownerLabel(a, people) : '';

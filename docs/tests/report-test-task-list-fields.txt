@@ -1,0 +1,68 @@
+Desktop task list field preferences — 2026-09-29
+Base: agent-network-app origin/main d57b100 (#511, includes #483).
+Scope: desktop list extraction + new field popover/model/translations. No detail
+logic, Hub changes, version bump, production calls, merges or release.
+
+Docker only, commands in tests/test-task-list-fields/README.md.
+Node20-alpine pinned image, Bun1.3.1, npm lockfile; Chromium Playwright1.58.2.
+Pure ck: 19/19. Copy guard: 40/40. Typecheck: PASS.
+Full source test run (Docker with current src mounted): 229/229 files PASS.
+Existing detail/board component suite: 34/34, 140 expects PASS.
+Browser final: 15/15 PASS, screenshots + measurements adjacent.
+
+1200x800: button x1088.640625 y56 w87.359375 h40;
+popover x872 y102 w304 h538, 6px below button and entirely within viewport.
+After moving Status first: header x280 w110; row cell x280 w110.
+Verified: title cannot hide, participants/Issue hidden by default, column search,
+show/hide, actual handle drag, keyboard reorder, refresh persistence, reset,
+live zh/en, Escape, original task detail opens; 390x844 remains grouped cards
+with no fields button. Zero Hub writes in browser fixture.
+
+Witnessed failures/fixes: initial browser run 12/13 because RN Web filtered
+drag props; scoped native drag events fixed dispatch. Final drag handle also
+keeps draggable in React props so hover rerender cannot reset its DOM attribute.
+Initial full source run 227/229 found radius tokens + modal safe padding;
+fixed using radius tokens and useModalSafePadding/withBasePadding. Re-run229/229.
+
+Storage: per-device task_list_fields_v1 localStorage, same best-effort convention
+as existing shortcuts preferences, session fallback if storage denied. Not Hub
+data. No native phone feature or cross-device synchronization claimed.
+Only current columns offered; no phantom tags before a tag data contract exists.
+
+Timestamp addendum (supersedes the counts/geometry above for final delivery):
+Rebased onto main 76c4467 (#512, version0.2.145); no version bump in this PR.
+Default-visible Created and Updated; sort by timestamp instant, empty/invalid
+last for both directions. Relative zh/en, yesterday uses device-local calendar;
+exact hint is YYYY-MM-DD HH:mm:ss local, with updater name/id when available.
+Refresh relative labels every30s. Click or touch long-press opens exact value;
+pointer desktop has hover title (mobile-only long-press is not bound there).
+Actual Hub#2081 response: updatedAt + updated_by. Also accept updated_at.
+Old Hub missing timestamp is dash + Upgrade Hub in field config. No creation
+fallback. Partial present-but-null metadata is not declared an upgrade problem.
+
+Final Docker model19/19 + time/adapter/sort22/22; copy guard41/41; typecheckPASS.
+Full source230/230 PASS on rebased source. Existing components34/34,140expects.
+Final browser27/27 PASS: includes both timestamp headers sorting both directions,
+hover-title seconds + actor, actual touch-style long-press exact (no task-open),
+old/new Hub upgrade notice and default-visible columns. Five screenshots saved.
+Popover x872 y102 w304 h630 within1200x800. Scrolled timestamp alignment:
+Created header/cell x848 w150; Updated header/cell x1010 w150.
+Phone390x844 remains unchanged; browser fixture Hub writes=0.
+
+Additional witnessed failure: phone-only gate rejected ungated long-press;
+now pointerUi-gated, gate41/41. Initial browser24/25 caught RN Web filtering
+title; DOM title set on the timestamp ref and browser27/27 passed afterwards.
+
+Wide-touch correction (supersedes the initial non-pointer grouping decision):
+Only narrow content uses grouped cards. Wide content renders the table regardless
+of pointer modality, including Android foldables. Touch popover adds44x44 up/down
+buttons with disabled end boundaries; opening does not autofocus the keyboard.
+Original touch row long-press menu and touch participant behavior are preserved.
+Dedicated fixture rejects Android desktop override (fixturePointer=false).
+1000x700 Android UA + hasTouch, actual taps: table and Fields present, up/down
+reorders, visibility changes, row opens detail. Popover x672 y102 w304 h586;
+up control x833 y259 w44 h44. Screenshot fold-fields-1000x700.png.
+Browser34/34 PASS (retains desktop1200x800 and phone390x844 checks).
+Fields ck21/21, phone-only gate41/41, typecheckPASS.
+Full source test rerun on this correction:230/230 PASS.
+This is isolated Chromium browser emulation, not physical-device/APK acceptance.

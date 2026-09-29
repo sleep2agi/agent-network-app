@@ -1,0 +1,38 @@
+import { exactTaskTime, relativeTaskTime, taskTimestamp } from './task-time';
+import { setLanguagePreference } from './i18n';
+import { requirementFromHub } from './requirements-hub';
+import { sortRows } from './task-board-model';
+import { defaultFields, parseFields } from './task-list-fields';
+let p=0,t=0; const ck=(name:string,ok:boolean)=>{t++;if(ok)p++;console.log(`${ok?'PASS':'FAIL'}: ${name}`);};
+const now=new Date(2026,8,29,14,23,0).getTime();
+setLanguagePreference('zh');
+ck('relative minutes zh',relativeTaskTime(new Date(now-180000).toISOString(),now)==='3 分钟前');
+ck('just now',relativeTaskTime(new Date(now-1000).toISOString(),now)==='刚刚');
+const yesterday=new Date(2026,8,28,14,20,15).toISOString();
+ck('yesterday local calendar',relativeTaskTime(yesterday,now)==='昨天 14:20');
+ck('local seconds',exactTaskTime(yesterday)==='2026-09-28 14:20:15');
+ck('SQLite UTC same as ISO',taskTimestamp('2026-09-28 14:20:15')===taskTimestamp('2026-09-28T14:20:15Z'));
+ck('missing and invalid',relativeTaskTime(null)==='—'&&exactTaskTime('bad')==='—');
+setLanguagePreference('en');
+ck('relative minutes en',relativeTaskTime(new Date(now-180000).toISOString(),now)==='3 min ago');
+ck('yesterday en',relativeTaskTime(yesterday,now)==='Yesterday 14:20');
+ck('future never ago',!relativeTaskTime(new Date(now+60000).toISOString(),now).includes('ago'));
+const base={id:'r',name:'Task',createdAt:'2026-09-28T14:20:15Z'};
+const old=requirementFromHub(base)!;
+const modern=requirementFromHub({...base,id:'new',updatedAt:'2026-09-29T14:20:15Z',updated_by:{kind:'node',id:'n1'}})!;
+const snake=requirementFromHub({...base,id:'snake',updated_at:'2026-09-29T15:20:15+01:00',updated_by:{kind:'user',id:'u1'}})!;
+ck('old Hub stays missing, not created time',old.updatedAt===undefined&&old.updatedBy===undefined);
+ck('actual Hub camel key and actor',modern.updatedAt==='2026-09-29T14:20:15Z'&&modern.updatedBy?.kind==='node');
+ck('snake alias and user',snake.updatedAt==='2026-09-29T15:20:15+01:00'&&snake.updatedBy?.id==='u1');
+ck('invalid actor ignored',requirementFromHub({...base,updated_by:{kind:'admin',id:'x'}})!.updatedBy===null);
+for(const dir of ['asc','desc'] as const){
+ ck(`missing updates last ${dir}`,sortRows([old,modern],{key:'updated',dir})[1].id==='r');
+ ck(`invalid updates last ${dir}`,sortRows([{...old,updatedAt:'bad'},modern],{key:'updated',dir})[1].id==='r');
+}
+const newer={...old,id:'later',createdAt:'2026-09-28T15:20:16Z'};
+ck('created asc',sortRows([newer,old],{key:'created',dir:'asc'})[0].id==='r');
+ck('created desc',sortRows([newer,old],{key:'created',dir:'desc'})[0].id==='later');
+ck('updated chronological not lexical',sortRows([modern,{...snake,updatedAt:'2026-09-29T15:20:14+01:00'}],{key:'updated',dir:'asc'})[0].id==='snake');
+ck('new columns default visible',defaultFields().filter(f=>f.id==='created'||f.id==='updated').every(f=>f.visible));
+ck('old saved preference gains both columns',parseFields('[{"id":"title","visible":true}]').filter(f=>f.id==='created'||f.id==='updated').length===2);
+console.log(`${p}/${t} passed`);if(p!==t)process.exit(1);

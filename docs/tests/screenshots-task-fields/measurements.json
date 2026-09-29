@@ -1,0 +1,254 @@
+{
+  "passed": 34,
+  "total": 34,
+  "results": [
+    {
+      "name": "secondary fields hidden",
+      "ok": true
+    },
+    {
+      "name": "anchored and inside viewport",
+      "ok": true,
+      "detail": {
+        "button": {
+          "x": 1088.640625,
+          "y": 56,
+          "width": 87.359375,
+          "height": 40
+        },
+        "pop": {
+          "x": 872,
+          "y": 102,
+          "width": 304,
+          "height": 630
+        }
+      }
+    },
+    {
+      "name": "title locked",
+      "ok": true
+    },
+    {
+      "name": "old Hub upgrade label",
+      "ok": true
+    },
+    {
+      "name": "search column names",
+      "ok": true
+    },
+    {
+      "name": "drag persisted order",
+      "ok": true,
+      "detail": [
+        {
+          "id": "status",
+          "visible": true
+        },
+        {
+          "id": "title",
+          "visible": true
+        },
+        {
+          "id": "owner",
+          "visible": false
+        },
+        {
+          "id": "priority",
+          "visible": true
+        },
+        {
+          "id": "due",
+          "visible": true
+        },
+        {
+          "id": "participants",
+          "visible": true
+        },
+        {
+          "id": "project",
+          "visible": true
+        },
+        {
+          "id": "created",
+          "visible": true
+        },
+        {
+          "id": "updated",
+          "visible": true
+        },
+        {
+          "id": "issues",
+          "visible": false
+        }
+      ]
+    },
+    {
+      "name": "visible fields applied",
+      "ok": true
+    },
+    {
+      "name": "header cell alignment",
+      "ok": true,
+      "detail": {
+        "head": {
+          "x": 280,
+          "y": 105.5,
+          "width": 110,
+          "height": 40
+        },
+        "cell": {
+          "x": 280,
+          "y": 158.5,
+          "width": 110,
+          "height": 22
+        }
+      }
+    },
+    {
+      "name": "reload retains fields",
+      "ok": true
+    },
+    {
+      "name": "reset default order and visibility",
+      "ok": true
+    },
+    {
+      "name": "keyboard reorder",
+      "ok": true
+    },
+    {
+      "name": "live translation",
+      "ok": true
+    },
+    {
+      "name": "escape closes popover",
+      "ok": true
+    },
+    {
+      "name": "row still opens detail",
+      "ok": true
+    },
+    {
+      "name": "old Hub update is dash",
+      "ok": true
+    },
+    {
+      "name": "created ascending order",
+      "ok": true
+    },
+    {
+      "name": "created descending order",
+      "ok": true
+    },
+    {
+      "name": "updated ascending order",
+      "ok": true
+    },
+    {
+      "name": "updated descending order",
+      "ok": true
+    },
+    {
+      "name": "hover hint has local seconds and updater",
+      "ok": true
+    },
+    {
+      "name": "relative update",
+      "ok": true
+    },
+    {
+      "name": "created header cell aligned",
+      "ok": true,
+      "detail": {
+        "th": {
+          "x": 848,
+          "y": 105.5,
+          "width": 150,
+          "height": 40
+        },
+        "td": {
+          "x": 848,
+          "y": 153.5,
+          "width": 150,
+          "height": 32
+        }
+      }
+    },
+    {
+      "name": "updated header cell aligned",
+      "ok": true,
+      "detail": {
+        "th": {
+          "x": 1010,
+          "y": 105.5,
+          "width": 150,
+          "height": 40
+        },
+        "td": {
+          "x": 1010,
+          "y": 153.5,
+          "width": 150,
+          "height": 32
+        }
+      }
+    },
+    {
+      "name": "long press exact without opening task",
+      "ok": true
+    },
+    {
+      "name": "modern Hub no upgrade marker",
+      "ok": true
+    },
+    {
+      "name": "phone grouped cards no field settings",
+      "ok": true
+    },
+    {
+      "name": "preferences never write Hub",
+      "ok": true
+    },
+    {
+      "name": "fold fixture is genuinely non-pointer",
+      "ok": true
+    },
+    {
+      "name": "1000x700 Android retains table and fields",
+      "ok": true
+    },
+    {
+      "name": "touch down button reorders",
+      "ok": true
+    },
+    {
+      "name": "touch up button reorders and first boundary disabled",
+      "ok": true
+    },
+    {
+      "name": "fold popover fits and reorder targets44px",
+      "ok": true,
+      "detail": {
+        "fp": {
+          "x": 672,
+          "y": 102,
+          "width": 304,
+          "height": 586
+        },
+        "up": {
+          "x": 833,
+          "y": 259,
+          "width": 44,
+          "height": 44
+        }
+      }
+    },
+    {
+      "name": "fold visible columns respond",
+      "ok": true
+    },
+    {
+      "name": "fold table still opens detail",
+      "ok": true
+    }
+  ]
+}
