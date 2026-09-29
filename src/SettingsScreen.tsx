@@ -569,7 +569,7 @@ export default function SettingsScreen({
               {show('account', 'addAccount') ? (
                 <>
                   <Divider />
-                  <Pressable style={({ pressed }) => [styles.row, pressed && { opacity: 0.6 }]} onPress={onAddAccount} accessibilityRole="button">
+                  <Pressable testID="settings-add-account-row" style={({ pressed }) => [styles.row, pressed && { opacity: 0.6 }]} onPress={onAddAccount} accessibilityRole="button">
                     <Text style={styles.accentText}>{tr('settings.copy.21')}</Text>
                     <Ionicons name="chevron-forward" size={16} color={colors.textMuted} />
                   </Pressable>
@@ -590,7 +590,7 @@ export default function SettingsScreen({
               {show('account', 'logout') && canLogout && !compact ? (
                 <>
                   <Divider />
-                  <Pressable style={({ pressed }) => [styles.row, pressed && { opacity: 0.6 }]} onPress={onLogout} accessibilityRole="button">
+                  <Pressable testID="settings-logout-row" style={({ pressed }) => [styles.row, pressed && { opacity: 0.6 }]} onPress={onLogout} accessibilityRole="button">
                     <View style={styles.rowCopy}>
                       <Text style={styles.dangerText}>{tr('settings.copy.22')}</Text>
                       <Text style={styles.rowHint}>{tr('settings.copy.23')}</Text>
