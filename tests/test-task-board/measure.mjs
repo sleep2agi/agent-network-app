@@ -623,7 +623,8 @@ async function desktopFlows(page, vp) {
     await page.locator('[data-testid^="req-card-"]', { hasText: pName }).filter({ hasNotText: '扫码登录:' }).first().click();
     await page.locator(tid('req-subrequirements')).waitFor();
     const kids = await page.locator('[data-testid^="req-child-"]').count();
-    const gh = await page.locator(tid('req-external-link')).textContent().catch(() => '');
+    // #511: a GitHub-issue sync source is shown by TaskIssueBindings as 同步来源 (owner/repo#n), not by ExternalLink.
+    const gh = (await page.locator(tid('req-external-link')).textContent({ timeout: 1500 }).catch(() => '')) || (await page.locator(tid('req-issue-source')).textContent({ timeout: 1500 }).catch(() => ''));
     await page.locator(tid('req-new-child')).scrollIntoViewIfNeeded();
     await page.locator(tid('req-new-child')).click();
     await page.locator(tid('req-create-parent')).waitFor();
@@ -643,7 +644,7 @@ async function desktopFlows(page, vp) {
     record(vp, 'sub-requirements: chip, top-level toggle, children, create child, breadcrumb, GitHub link', {
       parentChip: chip.includes('1/2'), togglesHideChildren: childrenShown === 2 && childrenTop === 0,
       detailChildren: kids === 2, createChild: hubChild?.parent_id === hubParent?.id, breadcrumbBack: backName === pName,
-      githubLink: (gh || '').includes('GitHub'),
+      githubLink: /GitHub|example-org\/example-repo#42/.test(gh || ''),
     }, { chip, childrenShown, childrenTop, kids });
   }
 
