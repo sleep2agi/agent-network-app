@@ -65,6 +65,8 @@ export async function openTaskWindow(payload: TaskWindowPayload): Promise<boolea
       center: true,
       resizable: true,
       focus: true,
+      // 原生标题栏(– □ × 是系统的),页面里不画 WinTitleBar —— 见 window-shell.ts windowDrawsOwnTitleBar
+      decorations: true,
       // 和分离聊天窗一样:macOS 隐藏原生标题栏(页面自己挂 MacTitleStrip),Windows 忽略这两个键。
       titleBarStyle: 'overlay',
       hiddenTitle: true,
