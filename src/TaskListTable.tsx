@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { TaskTagChips } from './TaskTags';
 import { Pressable, ScrollView, View } from 'react-native';
 import { Text } from './ui-text';
 import { Ionicons } from './icons';
@@ -71,7 +72,7 @@ export default function TaskListTable({ rows, people, projects, sort, setSort, s
         const by = id === 'updated' && item.updatedBy ? people.find(p => p.kind === item.updatedBy!.kind && p.id === item.updatedBy!.id)?.name ?? item.updatedBy.id : undefined;
         return <TaskTimeCell id={`task-time-${item.id}-${id}`} raw={id === 'created' ? item.createdAt : item.updatedAt} now={now} by={by} />;
       }
-      case 'title': return <Text style={[s.tdTitle, item.column === 'done' && s.cardDone]} numberOfLines={1}>{item.name}</Text>;
+      case 'title': return <View style={{ gap: 4 }}><Text style={[s.tdTitle, item.column === 'done' && s.cardDone]} numberOfLines={1}>{item.name}</Text><TaskTagChips tags={item.tags} /></View>;
       case 'owner': return <OwnerBadge item={item} people={people} s={s} />;
       case 'priority': return <View style={s.owner}><PriorityDot p={item.priority} s={s} /><Text style={s.metaText}>{taskText(REQ_PRIORITY_LABEL[item.priority])}</Text></View>;
       case 'due': return item.due ? <DueChip item={item} today={today} s={s} /> : <Text style={s.metaMuted}>—</Text>;

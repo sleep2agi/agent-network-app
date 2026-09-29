@@ -1,6 +1,7 @@
 import { dueInfo, ownerLabel, participantStack, personDisplay, roleAvatars } from './i18n-task-presentation';
 import { t as tr } from './i18n';
 import { TaskIssueCount } from './TaskIssueBindings';
+import { TaskTagChips } from './TaskTags';
 import { useTranslation } from './i18n-react';
 import { taskText } from './i18n-tasks';
 // 任务看板的共用小件与样式:卡片、优先级点、期限胶囊、负责人、分段控件、筛选胶囊、主按钮。
@@ -203,7 +204,7 @@ export function OwnerBadge({ item, people, s, size = 18, avatarOnly = false }: {
 export function CardMeta({ item, people, today, s, compact = false }: { item: Requirement; people: readonly RequirementPerson[]; today: string; s: TaskStyles; compact?: boolean }) {
   useTranslation();
   return (
-    <View style={s.meta}>
+    <View style={{ gap: 6 }}><View style={s.meta}>
       {/* 优先级不缩:窄列(桌面 1000 宽 ≈ 212px)里让负责人名字去截断,别把「普通」挤成竖排。 */}
       <View style={[s.owner, { flexShrink: 0 }]} accessibilityLabel={tr('tasks.copy.84', { v0: taskText(REQ_PRIORITY_LABEL[item.priority]) })}>
         <PriorityDot p={item.priority} s={s} />
@@ -212,7 +213,7 @@ export function CardMeta({ item, people, today, s, compact = false }: { item: Re
       <OwnerBadge item={item} people={people} s={s} avatarOnly={compact} />
       <DueChip item={item} today={today} s={s} />
       <TaskIssueCount item={item} />
-    </View>
+    </View><TaskTagChips tags={item.tags} /></View>
   );
 }
 

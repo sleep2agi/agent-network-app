@@ -1,6 +1,7 @@
 // 需求池走 Hub。手机和电脑读同一份。Hub 还没有这个接口时不要退回本机列表。
 import { appFetch } from './app-fetch';
 import { issuesFromHub } from './requirement-issues';
+import { normalizeTags } from './requirement-tags';
 import type { HubConfig } from './api';
 import { readStatusCountsAsFailure, reportReadFailure, reportReadSuccess } from './connectivity';
 import { withDeadline } from './deadline';
@@ -37,6 +38,7 @@ export function requirementFromHub(row: unknown): Requirement | null {
     ...(('updatedAt' in r || 'updated_at' in r) ? { updatedAt: typeof (r.updatedAt ?? r.updated_at) === 'string' ? String(r.updatedAt ?? r.updated_at) : null } : {}),
     ...('updated_by' in r ? { updatedBy: updateActor(r.updated_by) } : {}),
     ...('issues' in r ? { issues: issuesFromHub(r.issues) } : {}),
+    ...('tags' in r ? { tags: normalizeTags(r.tags) ?? [] } : {}),
     ...(('owner' in r || 'participants' in r) ? assignmentsFromHub(r) : {}),
     ...('agent_owner' in r ? { agentOwner: agentOwnerFromHub(r.agent_owner) } : {}),
     ...(typeof r.description === 'string' ? { description: r.description } : {}),
@@ -193,6 +195,7 @@ export async function updateRequirementOnHub(cfg: HubConfig, id: string, patch: 
   const data = await res.json().catch(() => null) as { requirement?: unknown; error?: string } | null;
   if (res.status === 403) throw new RequirementsHubError('你没有修改这条需求的权限', 403);
   if (res.status === 400 && data?.error === 'invalid_issues') throw new RequirementsHubError('invalid_issues', 400);
+  if (res.status === 400 && data?.error === 'invalid_tags') throw new RequirementsHubError('invalid_tags', 400);
   if (res.status === 400 && data?.error === 'empty_patch') throw new RequirementsHubError(HUB_CANNOT_EDIT, 400);
   if (res.status === 400 && (data?.error === 'person_not_in_network' || data?.error === 'invalid_person')) throw new RequirementsHubError('这个负责人已不在当前网络', 400);
   if (res.status === 400 && data?.error === 'owner_must_be_human') throw new RequirementsHubError('负责人只能是人类;Agent 请放在「负责 Agent」', 400);

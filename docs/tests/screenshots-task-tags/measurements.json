@@ -1,0 +1,122 @@
+[
+  {
+    "name": "desktop chips fit viewport",
+    "ok": true,
+    "detail": [
+      {
+        "x": 290,
+        "right": 329.0625,
+        "y": 172,
+        "height": 18
+      },
+      {
+        "x": 290,
+        "right": 338.25,
+        "y": 282,
+        "height": 21
+      },
+      {
+        "x": 342.25,
+        "right": 400.25,
+        "y": 282,
+        "height": 21
+      }
+    ]
+  },
+  {
+    "name": "desktop same card chips aligned",
+    "ok": true,
+    "detail": [
+      {
+        "x": 290,
+        "y": 282,
+        "height": 21
+      },
+      {
+        "x": 342.25,
+        "y": 282,
+        "height": 21
+      }
+    ]
+  },
+  {
+    "name": "desktop enter creates persisted tag",
+    "ok": true
+  },
+  {
+    "name": "desktop chooses existing",
+    "ok": true
+  },
+  {
+    "name": "desktop removes tag",
+    "ok": true
+  },
+  {
+    "name": "desktop rejected write not shown as saved",
+    "ok": true
+  },
+  {
+    "name": "desktop filters card",
+    "ok": true
+  },
+  {
+    "name": "phone chips fit viewport",
+    "ok": true,
+    "detail": [
+      {
+        "x": 42,
+        "right": 81.0625,
+        "y": 298,
+        "height": 18
+      },
+      {
+        "x": 42,
+        "right": 90.25,
+        "y": 408,
+        "height": 21
+      },
+      {
+        "x": 94.25,
+        "right": 152.25,
+        "y": 408,
+        "height": 21
+      }
+    ]
+  },
+  {
+    "name": "phone same card chips aligned",
+    "ok": true,
+    "detail": [
+      {
+        "x": 42,
+        "y": 408,
+        "height": 21
+      },
+      {
+        "x": 94.25,
+        "y": 408,
+        "height": 21
+      }
+    ]
+  },
+  {
+    "name": "phone enter creates persisted tag",
+    "ok": true
+  },
+  {
+    "name": "phone chooses existing",
+    "ok": true
+  },
+  {
+    "name": "phone removes tag",
+    "ok": true
+  },
+  {
+    "name": "phone rejected write not shown as saved",
+    "ok": true
+  },
+  {
+    "name": "phone filters card",
+    "ok": true
+  }
+]

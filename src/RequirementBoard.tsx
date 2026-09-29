@@ -1,6 +1,7 @@
 import { ownerCounts, ownerLabel } from './i18n-task-presentation';
 import { t as tr } from './i18n';
 import TaskListTable from './TaskListTable';
+import { TaskTagFilter } from './TaskTags';
 import { useTranslation } from './i18n-react';
 import { taskText } from './i18n-tasks';
 // 任务页(需求池):头部一行 + 看板 / 列表 + 新建对话框 + 详情(桌面右侧抽屉,手机推入一页)。
@@ -354,6 +355,7 @@ function ScopedRequirementBoard({ cfg, desktop, dispatch }: { cfg: HubConfig; de
   };
   const filters = section === 'dispatch' ? null : (
     <>
+      {!desktop ? <TaskTagFilter /> : null}
       <View ref={(r: any) => { chipRefs.current.owner = r; }} collapsable={false}>
         <Chip
           s={s}

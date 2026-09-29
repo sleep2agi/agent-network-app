@@ -18,6 +18,7 @@ export interface RequirementProject { id: string; name: string; color: string; s
 export interface Requirement {
   /** Manual GitHub associations; undefined means the Hub did not expose the field. */
   issues?: import('./requirement-issues').RequirementIssue[];
+  tags?: string[];
   /** 负责人。两个角色的 Hub 上只会是人类;旧 Hub 上可以是人类或 Agent(单一负责人)。 */
   owner?: RequirementPersonRef | null;
   /** 负责 Agent(执行者,节点)。undefined = 这个 Hub 还不分两个角色。 */

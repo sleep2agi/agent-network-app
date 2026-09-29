@@ -42,6 +42,7 @@ export function roleKeysOf(item: Pick<Requirement, 'owner' | 'agentOwner'>): str
 export const hasRoles = (item: Pick<Requirement, 'agentOwner'>): boolean => item.agentOwner !== undefined;
 
 export interface BoardFilter {
+  tag?: string;
   /** 负责人键(personKey 或 UNASSIGNED)。空 = 不按负责人筛。 */
   owners: string[];
   /** 空 = 不按优先级筛。 */
@@ -58,7 +59,7 @@ export const NO_PROJECT = '__none__';
 
 export const EMPTY_FILTER: BoardFilter = { owners: [], priorities: [] };
 
-export const filterActive = (f: BoardFilter): boolean => f.owners.length > 0 || f.priorities.length > 0 || !!f.project || !!f.statuses?.length;
+export const filterActive = (f: BoardFilter): boolean => f.owners.length > 0 || f.priorities.length > 0 || !!f.project || !!f.statuses?.length || !!f.tag;
 
 /** 状态筛选里的「隐藏已完成」= 只选需求池 + 进行中。 */
 export const HIDE_DONE: readonly ReqColumn[] = REQ_COLUMNS.filter(c => c !== 'done');
@@ -68,6 +69,7 @@ export const hidesDone = (statuses: readonly ReqColumn[] | undefined): boolean =
 export const toggleHideDone = (statuses: readonly ReqColumn[] | undefined): ReqColumn[] => (hidesDone(statuses) ? [] : [...HIDE_DONE]);
 
 export function matchesFilter(item: Requirement, f: BoardFilter): boolean {
+  if (f.tag && !item.tags?.includes(f.tag)) return false;
   if (f.owners.length && !roleKeysOf(item).some(k => f.owners.includes(k))) return false;
   if (f.priorities.length && !f.priorities.includes(item.priority)) return false;
   if (f.statuses?.length && !f.statuses.includes(item.column)) return false;
@@ -535,7 +537,7 @@ export const editDraftOf = (item: Requirement): EditDraft => ({
 });
 
 /** PATCH 请求体(字段名就是线上的名字)。 */
-export type EditPatch = { issues?: { url: string; title?: string }[]; name?: string; priority?: ReqPriority; due?: string; owner?: RequirementPersonRef | null; agent_owner?: RequirementPersonRef | null; description?: string; checklist?: ChecklistItem[]; project_id?: string | null };
+export type EditPatch = { tags?: string[]; issues?: { url: string; title?: string }[]; name?: string; priority?: ReqPriority; due?: string; owner?: RequirementPersonRef | null; agent_owner?: RequirementPersonRef | null; description?: string; checklist?: ChecklistItem[]; project_id?: string | null };
 
 /**
  * 只提交改过的字段;没改返回 null(保存按钮不可用)。旧 Hub(owner undefined)不提交负责人 ——
@@ -569,6 +571,7 @@ export function editPatch(item: Requirement, d: EditDraft): EditPatch | null {
  * 那不是「保存成功」,要告诉用户这个 Hub 还不能改。
  */
 export function patchApplied(row: Requirement, patch: EditPatch): boolean {
+  if (patch.tags !== undefined && JSON.stringify(row.tags) !== JSON.stringify(patch.tags)) return false;
   if (patch.issues !== undefined && JSON.stringify(row.issues?.map(i => `https://github.com/${i.repo}/issues/${i.number}`)) !== JSON.stringify(patch.issues.map(i => i.url))) return false;
   if (patch.name !== undefined && row.name !== patch.name) return false;
   if (patch.priority !== undefined && row.priority !== patch.priority) return false;
