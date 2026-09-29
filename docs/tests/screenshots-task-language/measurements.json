@@ -1,0 +1,196 @@
+{
+  "passed": 23,
+  "total": 23,
+  "results": [
+    {
+      "name": "desktop: English board labels",
+      "ok": true
+    },
+    {
+      "name": "desktop: original task content remains",
+      "ok": true
+    },
+    {
+      "name": "desktop: header fits",
+      "ok": true,
+      "detail": {
+        "x": 240,
+        "right": 1200,
+        "width": 960
+      }
+    },
+    {
+      "name": "desktop: new button stays inside header",
+      "ok": true,
+      "detail": {
+        "x": 1101.265625,
+        "y": 12,
+        "width": 74.734375,
+        "height": 32
+      }
+    },
+    {
+      "name": "desktop: columns align",
+      "ok": true,
+      "detail": [
+        {
+          "x": 264,
+          "y": 60,
+          "width": 293.328125,
+          "height": 716
+        },
+        {
+          "x": 573.328125,
+          "y": 60,
+          "width": 293.34375,
+          "height": 716
+        },
+        {
+          "x": 882.671875,
+          "y": 60,
+          "width": 293.328125,
+          "height": 716
+        }
+      ]
+    },
+    {
+      "name": "desktop: subtask section translated",
+      "ok": true
+    },
+    {
+      "name": "desktop: detail fits",
+      "ok": true,
+      "detail": {
+        "x": 780,
+        "y": 56,
+        "width": 420,
+        "height": 744
+      }
+    },
+    {
+      "name": "desktop: live language change preserves draft",
+      "ok": true
+    },
+    {
+      "name": "desktop: project manager translated",
+      "ok": true
+    },
+    {
+      "name": "desktop: project panel fits",
+      "ok": true,
+      "detail": {
+        "x": 340,
+        "y": 289,
+        "width": 520,
+        "height": 222
+      }
+    },
+    {
+      "name": "desktop: read and language switch never write Hub",
+      "ok": true,
+      "detail": {
+        "writes": 0
+      }
+    },
+    {
+      "name": "phone: English board labels",
+      "ok": true
+    },
+    {
+      "name": "phone: original task content remains",
+      "ok": true
+    },
+    {
+      "name": "phone: header fits",
+      "ok": true,
+      "detail": {
+        "x": 0,
+        "right": 390,
+        "width": 390
+      }
+    },
+    {
+      "name": "phone: new button stays inside header",
+      "ok": true,
+      "detail": {
+        "x": 342,
+        "y": 12,
+        "width": 32,
+        "height": 32
+      }
+    },
+    {
+      "name": "phone: columns align",
+      "ok": true,
+      "detail": [
+        {
+          "x": 16,
+          "y": 140,
+          "width": 330,
+          "height": 680
+        },
+        {
+          "x": 358,
+          "y": 140,
+          "width": 330,
+          "height": 680
+        },
+        {
+          "x": 700,
+          "y": 140,
+          "width": 330,
+          "height": 680
+        }
+      ]
+    },
+    {
+      "name": "phone: subtask section translated",
+      "ok": true
+    },
+    {
+      "name": "phone: detail fits",
+      "ok": true,
+      "detail": {
+        "x": 0,
+        "y": 0,
+        "width": 390,
+        "height": 844
+      }
+    },
+    {
+      "name": "phone: live language change preserves draft",
+      "ok": true
+    },
+    {
+      "name": "phone: English project menu fits",
+      "ok": true,
+      "detail": {
+        "x": 122,
+        "y": 132,
+        "width": 260,
+        "height": 138
+      }
+    },
+    {
+      "name": "phone: project manager translated",
+      "ok": true
+    },
+    {
+      "name": "phone: project panel fits",
+      "ok": true,
+      "detail": {
+        "x": 0,
+        "y": 608,
+        "width": 390,
+        "height": 236
+      }
+    },
+    {
+      "name": "phone: read and language switch never write Hub",
+      "ok": true,
+      "detail": {
+        "writes": 0
+      }
+    }
+  ]
+}

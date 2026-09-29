@@ -1,6 +1,9 @@
 import { afterEach, expect, mock, test } from 'bun:test';
 import React from 'react';
 import { act, create, type ReactTestRenderer } from 'react-test-renderer';
+import { setLanguagePreference } from './src/i18n';
+// Existing component assertions deliberately exercise the Chinese UI.
+setLanguagePreference('zh');
 
 // 组件级:手机 / 触屏分支(没有 Tauri 桥 ⇒ pointerUi() = false)。没有 onLayout ⇒ 宽度 0 ⇒ 详情是推入页(Modal)。
 (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;

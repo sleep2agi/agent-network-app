@@ -1,3 +1,6 @@
+import { t as tr } from './i18n';
+import { useTranslation } from './i18n-react';
+import { taskText } from './i18n-tasks';
 // 任务详情里的「子任务」:勾选、添加、删除;桌面按住左侧把手拖动排序(或 Alt+↑/↓)。
 // 勾选立即保存(Hub 的单项接口,只改那一项);增、删、排序立即保存整张清单。手机没有拖动(owner:
 // 桌面和安卓不是一回事),手机上删除按钮常驻,排序留给桌面。
@@ -21,6 +24,7 @@ export default function TaskChecklist({ items, pointer, onToggle, onAdd, onDelet
   onMove: (from: number, to: number) => void;
   error: string;
 }) {
+  useTranslation();
   const s = useTaskStyles();
   const f = fieldStyles();
   const [text, setText] = useState('');
@@ -73,7 +77,7 @@ export default function TaskChecklist({ items, pointer, onToggle, onAdd, onDelet
   return (
     <View style={{ gap: spacing.sm }} testID="req-checklist">
       <View style={[f.row, { justifyContent: 'space-between' }]}>
-        <Text style={f.label}>子任务</Text>
+        <Text style={f.label}>{tr('tasks.copy.93')}</Text>
         {progress.total ? <Text style={s.muted} testID="req-checklist-progress">{progress.done}/{progress.total}</Text> : null}
       </View>
       {progress.total ? (
@@ -95,7 +99,7 @@ export default function TaskChecklist({ items, pointer, onToggle, onAdd, onDelet
                 accessibilityRole="checkbox"
                 {...a11yState({ checked: item.done })}
                 accessibilityLabel={item.text}
-                accessibilityHint={pointer ? 'Alt 加上下方向键调整顺序' : undefined}
+                accessibilityHint={pointer ? tr('tasks.copy.94') : undefined}
                 {...({ onKeyDown: (e: any) => {
                   if (!pointer || !e?.altKey) return;
                   if (e.key === 'ArrowUp' && index > 0) { e.preventDefault?.(); onMove(index, index - 1); }
@@ -116,7 +120,7 @@ export default function TaskChecklist({ items, pointer, onToggle, onAdd, onDelet
                 <Ionicons name={item.done ? 'checkbox' : 'square-outline'} size={18} color={item.done ? colors.running : colors.textMuted} />
                 <Text style={{ flex: 1, color: item.done ? colors.textMuted : colors.text, fontSize: typeScale.body, textDecorationLine: item.done ? 'line-through' : 'none' }}>{item.text}</Text>
                 {/* 删除按钮一直在(键盘能 Tab 到);鼠标界面不悬停时只是透明,聚焦时显出来。 */}
-                <Pressable accessibilityRole="button" accessibilityLabel={`删除子任务 ${item.text}`} onPress={() => onDelete(item.id)} hitSlop={8}
+                <Pressable accessibilityRole="button" accessibilityLabel={tr('tasks.copy.95', { v0: item.text })} onPress={() => onDelete(item.id)} hitSlop={8}
                   style={state => ({ padding: 4, opacity: showDelete || (state as { focused?: boolean }).focused ? 1 : 0 })} testID={`req-checklist-delete-${item.id}`}>
                   <Ionicons name="close" size={14} color={colors.textMuted} />
                 </Pressable>
@@ -134,13 +138,13 @@ export default function TaskChecklist({ items, pointer, onToggle, onAdd, onDelet
           blurOnSubmit={false}
           editable={!full}
           maxLength={CHECKLIST_TEXT_MAX}
-          placeholder={full ? `最多 ${CHECKLIST_MAX_ITEMS} 项` : '添加子任务,回车保存'}
+          placeholder={full ? tr('tasks.copy.96', { v0: CHECKLIST_MAX_ITEMS }) : tr('tasks.copy.97')}
           placeholderTextColor={colors.textMuted}
           style={[f.input, { flex: 1 }]}
           testID="req-checklist-input"
-          accessibilityLabel="添加子任务"
+          accessibilityLabel={tr('tasks.copy.98')}
         />
-        <Pressable accessibilityRole="button" accessibilityLabel="添加子任务" disabled={!text.trim() || full} onPress={add} style={[s.primary, { backgroundColor: colors.subtleFill }, (!text.trim() || full) && { opacity: 0.5 }]} testID="req-checklist-add">
+        <Pressable accessibilityRole="button" accessibilityLabel={tr('tasks.copy.98')} disabled={!text.trim() || full} onPress={add} style={[s.primary, { backgroundColor: colors.subtleFill }, (!text.trim() || full) && { opacity: 0.5 }]} testID="req-checklist-add">
           <Ionicons name="add" size={16} color={colors.text} />
         </Pressable>
       </View>

@@ -1,0 +1,11 @@
+import React from 'react';
+import { createRoot } from 'react-dom/client';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
+import Board from '../../src/RequirementBoard';
+import TaskFilterSidebar from '../../src/TaskFilterSidebar';
+import { setLanguagePreference } from '../../src/i18n';
+import { setThemePreference } from '../../src/theme';
+setThemePreference('light');
+setLanguagePreference('en');
+Object.assign(window, { switchLanguage: setLanguagePreference });
+createRoot(document.getElementById('root')).render(<SafeAreaProvider>{innerWidth>700?<div style={{display:'flex',width:240,flexShrink:0}}><TaskFilterSidebar /></div>:null}<Board desktop={innerWidth>700} cfg={{serverUrl:location.origin,token:'fixture',networkId:'fixture-network'}} /></SafeAreaProvider>);

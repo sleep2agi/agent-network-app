@@ -1,3 +1,7 @@
+import { ownerCounts } from './i18n-task-presentation';
+import { t as tr } from './i18n';
+import { useTranslation } from './i18n-react';
+import { taskText } from './i18n-tasks';
 // 桌面工作区在「任务」页时的左栏:原来这里是会话 / Agent 列表(跟任务页无关)。现在是筛选:
 // 项目(全部 / 各项目 + 管理项目)、全部 / 我负责的(负责人 = 我)/ 未分配 / 按 Agent(负责 Agent,头像 + 数目),
 // 最下面是「派发记录」(Hub 派给节点的任务)。按 Agent / 按节点只列有任务的,其余收进「更多节点」(可搜)——
@@ -10,12 +14,13 @@ import { Ionicons } from './icons';
 import AliasAvatar from './AliasAvatar';
 import { colors, radius, spacing, type as typeScale, weight } from './theme';
 import { personKey } from './requirement-people';
-import { activeProjects, applyFilter, NO_PROJECT, ownerCounts, ownersForScope, projectCounts, scopeOf, splitByCount, type SidebarScope } from './task-board-model';
+import { activeProjects, applyFilter, NO_PROJECT, ownersForScope, projectCounts, scopeOf, splitByCount, type SidebarScope } from './task-board-model';
 import { setManagingProjects, setTaskFilter, setTaskSection, useTaskBoard } from './task-board-store';
 import { CONTROL_H, a11yState } from './TaskBoardParts';
 
 /** onNavigate:在「任务详情」(派发记录的一条)上点左栏时回到任务页。 */
 export default function TaskFilterSidebar({ onNavigate }: { onNavigate?: () => void }) {
+  useTranslation();
   const styles = makeSidebarStyles();
   const items = useTaskBoard(s => s.items);
   const people = useTaskBoard(s => s.people);
@@ -57,7 +62,7 @@ export default function TaskFilterSidebar({ onNavigate }: { onNavigate?: () => v
         key={`p:${id || 'all'}`}
         testID={`task-side-project-${id || 'all'}`}
         accessibilityRole="tab"
-        accessibilityLabel={`项目 ${label}`}
+        accessibilityLabel={tr('tasks.copy.86', { v0: label })}
         {...a11yState({ selected: on })}
         onPress={() => pickProject(id)}
         style={state => [styles.item, ((state as { hovered?: boolean }).hovered || state.pressed) && { backgroundColor: colors.rowHover }, on && { backgroundColor: colors.rowActive }]}
@@ -96,46 +101,46 @@ export default function TaskFilterSidebar({ onNavigate }: { onNavigate?: () => v
   const icon = (name: string, on = false) => <Ionicons name={name as never} size={17} color={on ? colors.accent : colors.textSecondary} />;
   return (
     <View style={[styles.root, { backgroundColor: colors.listBg }]} testID="task-sidebar">
-      <View style={styles.head}><Text style={[styles.title, { color: colors.text }]} testID="task-sidebar-title">视图</Text></View>
+      <View style={styles.head}><Text style={[styles.title, { color: colors.text }]} testID="task-sidebar-title">{tr('tasks.copy.190')}</Text></View>
       <ScrollView contentContainerStyle={styles.body}>
         {projects ? (
           <>
-            <Text style={[styles.section, { color: colors.textMuted, paddingTop: 0 }]}>项目</Text>
-            {projectRow('', '全部项目', icon('folder-open-outline'), Array.from(pCounts.values()).reduce((a, b) => a + b, 0))}
+            <Text style={[styles.section, { color: colors.textMuted, paddingTop: 0 }]}>{tr('tasks.copy.30')}</Text>
+            {projectRow('', tr('tasks.copy.191'), icon('folder-open-outline'), Array.from(pCounts.values()).reduce((a, b) => a + b, 0))}
             {activeProjects(projects).map(p => projectRow(p.id, p.name, dot(p.color), pCounts.get(p.id) ?? 0))}
-            {(pCounts.get(NO_PROJECT) ?? 0) > 0 && activeProjects(projects).length ? projectRow(NO_PROJECT, '无项目', icon('remove-circle-outline'), pCounts.get(NO_PROJECT) ?? 0) : null}
+            {(pCounts.get(NO_PROJECT) ?? 0) > 0 && activeProjects(projects).length ? projectRow(NO_PROJECT, tr('tasks.copy.31'), icon('remove-circle-outline'), pCounts.get(NO_PROJECT) ?? 0) : null}
             <Pressable accessibilityRole="button" onPress={() => setManagingProjects(true)} style={state => [styles.item, ((state as { hovered?: boolean }).hovered || state.pressed) && { backgroundColor: colors.rowHover }]} testID="task-side-manage-projects">
               <View style={styles.icon}>{icon('settings-outline')}</View>
-              <Text style={[styles.itemText, { color: colors.accent }]}>管理项目</Text>
+              <Text style={[styles.itemText, { color: colors.accent }]}>{tr('tasks.copy.64')}</Text>
             </Pressable>
             <View style={[styles.divider, { backgroundColor: colors.border }]} />
           </>
         ) : null}
-        {row('all', '全部任务', icon('albums-outline'), inProject.length)}
-        {row('mine', '我负责的', icon('person-outline'), meKey ? applyFilter(inProject, { owners: [meKey], priorities: [] }).length : null, !meId)}
-        {row('unassigned', '未分配', icon('help-circle-outline'), countOf('none'))}
+        {row('all', tr('tasks.copy.192'), icon('albums-outline'), inProject.length)}
+        {row('mine', tr('tasks.copy.193'), icon('person-outline'), meKey ? applyFilter(inProject, { owners: [meKey], priorities: [] }).length : null, !meId)}
+        {row('unassigned', tr('tasks.copy.6'), icon('help-circle-outline'), countOf('none'))}
         {/* 分两个角色的 Hub:这里按「负责 Agent」筛;旧 Hub 上节点就是唯一的负责人。 */}
-        {nodes.length ? <Text style={[styles.section, { color: colors.textMuted }]}>{twoRoles ? '按 Agent' : '按节点'}</Text> : null}
+        {nodes.length ? <Text style={[styles.section, { color: colors.textMuted }]}>{twoRoles ? tr('tasks.copy.194') : tr('tasks.copy.195')}</Text> : null}
         {shownNodes.map(n => row(n.key as SidebarScope, n.name, <AliasAvatar alias={n.name} size={22} />, n.count))}
         {moreTotal ? (
           <Pressable accessibilityRole="button" {...a11yState({ expanded: moreOpen })} onPress={() => setMoreOpen(o => !o)} style={state => [styles.item, ((state as { hovered?: boolean }).hovered || state.pressed) && { backgroundColor: colors.rowHover }]} testID="task-side-more-nodes">
             <View style={styles.icon}>{icon(moreOpen ? 'chevron-down' : 'chevron-forward')}</View>
-            <Text style={[styles.itemText, { color: colors.textSecondary }]}>{twoRoles ? '更多 Agent' : '更多节点'}</Text>
+            <Text style={[styles.itemText, { color: colors.textSecondary }]}>{twoRoles ? tr('tasks.copy.196') : tr('tasks.copy.197')}</Text>
             <Text style={[styles.count, { color: colors.textMuted }]}>{moreTotal}</Text>
           </Pressable>
         ) : null}
         {moreOpen && moreTotal ? (
           <>
-            <TextInput value={moreQuery} onChangeText={setMoreQuery} placeholder="搜索节点" placeholderTextColor={colors.textMuted} style={[styles.search, { color: colors.text, borderColor: colors.border, backgroundColor: colors.inputBg }]} testID="task-side-more-search" accessibilityLabel="搜索节点" />
+            <TextInput value={moreQuery} onChangeText={setMoreQuery} placeholder={tr('tasks.copy.198')} placeholderTextColor={colors.textMuted} style={[styles.search, { color: colors.text, borderColor: colors.border, backgroundColor: colors.inputBg }]} testID="task-side-more-search" accessibilityLabel={tr('tasks.copy.198')} />
             {moreNodes.slice(0, 50).map(n => row(n.key as SidebarScope, n.name, <AliasAvatar alias={n.name} size={22} />, n.count))}
-            {moreNodes.length > 50 ? <Text style={[styles.section, { color: colors.textMuted, paddingTop: spacing.xs }]}>还有 {moreNodes.length - 50} 个,搜索缩小范围</Text> : null}
-            {!moreNodes.length ? <Text style={[styles.section, { color: colors.textMuted, paddingTop: spacing.xs }]}>没有匹配的节点</Text> : null}
+            {moreNodes.length > 50 ? <Text style={[styles.section, { color: colors.textMuted, paddingTop: spacing.xs }]}>{tr('tasks.copy.199')}{moreNodes.length - 50} {tr('tasks.copy.200')}</Text> : null}
+            {!moreNodes.length ? <Text style={[styles.section, { color: colors.textMuted, paddingTop: spacing.xs }]}>{tr('tasks.copy.201')}</Text> : null}
           </>
         ) : null}
-        {others.length ? <Text style={[styles.section, { color: colors.textMuted }]}>{twoRoles ? '其他负责人' : '其他成员'}</Text> : null}
+        {others.length ? <Text style={[styles.section, { color: colors.textMuted }]}>{twoRoles ? tr('tasks.copy.202') : tr('tasks.copy.203')}</Text> : null}
         {others.map(n => row(n.key as SidebarScope, n.name, <AliasAvatar alias={n.name} size={22} />, n.count))}
         <View style={[styles.divider, { backgroundColor: colors.border }]} />
-        {row('dispatch', '派发记录', icon('paper-plane-outline'), null)}
+        {row('dispatch', tr('tasks.copy.28'), icon('paper-plane-outline'), null)}
       </ScrollView>
     </View>
   );

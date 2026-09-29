@@ -1,3 +1,6 @@
+import { t as tr } from './i18n';
+import { useTranslation } from './i18n-react';
+import { taskText } from './i18n-tasks';
 // 任务详情的「描述」:markdown 编辑 / 预览,可以放图片。
 //   桌面:Ctrl/⌘+V 粘贴截图、把图片拖进编辑框、🖼 按钮选文件;手机:🖼 按钮打开相册(没有拖放)。
 //   图片走聊天同一条上传路(/api/upload,12MB),带 network_id 归到当前网络;在光标处插入
@@ -35,6 +38,7 @@ export default function TaskDescriptionEditor({ cfg, value, onChange, pointer, t
   /** 图片窗口的标题(任务名)。 */
   title: string;
 }) {
+  useTranslation();
   const s = useTaskStyles();
   const f = fieldStyles();
   const [mode, setMode] = useState<'edit' | 'preview'>(value.trim() ? 'preview' : 'edit');
@@ -62,7 +66,7 @@ export default function TaskDescriptionEditor({ cfg, value, onChange, pointer, t
         onChange(next.text);
         setUploads(u => u.filter(x => x.id !== key));
       } catch (e) {
-        setUploads(u => u.map(x => (x.id === key ? { ...x, state: 'error', message: `「${img.fileName}」没有上传:${e instanceof Error ? e.message : String(e)}` } : x)));
+        setUploads(u => u.map(x => (x.id === key ? { ...x, state: 'error', message: tr('tasks.copy.123', { v0: img.fileName, v1: e instanceof Error ? e.message : String(e) }) } : x)));
       }
     }
   };
@@ -106,8 +110,8 @@ export default function TaskDescriptionEditor({ cfg, value, onChange, pointer, t
   const gallery = (): ViewerImage[] => descriptionImages(value).map(img => {
     const url = `${cfg.serverUrl}/api/files/${img.fileId}`;
     return Platform.OS === 'web'
-      ? { key: img.fileId, name: img.alt || '图片', authUri: url, save: true }
-      : { key: img.fileId, name: img.alt || '图片', fileId: img.fileId, save: true };
+      ? { key: img.fileId, name: img.alt || tr('tasks.copy.124'), authUri: url, save: true }
+      : { key: img.fileId, name: img.alt || tr('tasks.copy.124'), fileId: img.fileId, save: true };
   });
   const openViewer = (fileId: string, resolvedUri?: string) => {
     const images = gallery();
@@ -124,12 +128,12 @@ export default function TaskDescriptionEditor({ cfg, value, onChange, pointer, t
     return (
       <View key={key} testID={`req-description-image-${img.fileId}`}>
         {tauri ? (
-          <AuthedWebThumb uri={url} name={img.alt || '图片'} token={cfg.token} onPress={objectUrl => openViewer(img.fileId, objectUrl)} />
+          <AuthedWebThumb uri={url} name={img.alt || tr('tasks.copy.124')} token={cfg.token} onPress={objectUrl => openViewer(img.fileId, objectUrl)} />
         ) : Platform.OS !== 'web' ? (
-          <AuthedThumb fileId={img.fileId} name={img.alt || '图片'} serverUrl={cfg.serverUrl} token={cfg.token} onPress={localUri => openViewer(img.fileId, localUri)} />
+          <AuthedThumb fileId={img.fileId} name={img.alt || tr('tasks.copy.124')} serverUrl={cfg.serverUrl} token={cfg.token} onPress={localUri => openViewer(img.fileId, localUri)} />
         ) : (
           // 纯网页没有带鉴权下载图片的通道:只显示名字,不把 token 放进地址。
-          <Text style={s.muted}>[图片] {img.alt}</Text>
+          <Text style={s.muted}>[{tr('tasks.copy.124')}] {img.alt}</Text>
         )}
       </View>
     );
@@ -143,14 +147,14 @@ export default function TaskDescriptionEditor({ cfg, value, onChange, pointer, t
   return (
     <View style={{ gap: spacing.sm }} testID="req-description">
       <View style={[f.row, { justifyContent: 'space-between' }]}>
-        <Text style={f.label}>描述</Text>
+        <Text style={f.label}>{tr('tasks.copy.125')}</Text>
         <View style={[f.row, { gap: spacing.sm }]}>
           {mode === 'edit' ? (
-            <Pressable accessibilityRole="button" accessibilityLabel="插入图片" onPress={() => { void pick(); }} style={s.iconButton} testID="req-description-image-button">
+            <Pressable accessibilityRole="button" accessibilityLabel={tr('tasks.copy.126')} onPress={() => { void pick(); }} style={s.iconButton} testID="req-description-image-button">
               <Ionicons name="image-outline" size={18} color={colors.textSecondary} />
             </Pressable>
           ) : null}
-          <Segmented s={s} items={[{ key: 'edit', label: '编辑' }, { key: 'preview', label: '预览' }]} value={mode} onChange={setMode} testID="req-description-mode" />
+          <Segmented s={s} items={[{ key: 'edit', label: tr('tasks.copy.127') }, { key: 'preview', label: tr('tasks.copy.128') }]} value={mode} onChange={setMode} testID="req-description-mode" />
         </View>
       </View>
       {mode === 'edit' ? (
@@ -162,25 +166,25 @@ export default function TaskDescriptionEditor({ cfg, value, onChange, pointer, t
             onSelectionChange={e => { selection.current = e.nativeEvent.selection; }}
             multiline
             maxLength={DESCRIPTION_MAX}
-            placeholder={pointer ? '支持 Markdown;可粘贴或拖入图片' : '支持 Markdown;点右上角图标插入图片'}
+            placeholder={pointer ? tr('tasks.copy.129') : tr('tasks.copy.130')}
             placeholderTextColor={colors.textMuted}
             style={[f.input, { minHeight: 140, textAlignVertical: 'top' }, dragOver && { borderColor: colors.accent, backgroundColor: colors.accent + '10' }]}
             testID="req-description-input"
-            accessibilityLabel="描述(Markdown)"
+            accessibilityLabel={tr('tasks.copy.131')}
           />
           {value.length > DESCRIPTION_MAX * 0.9 ? <Text style={s.muted}>{value.length} / {DESCRIPTION_MAX}</Text> : null}
         </View>
       ) : (
-        <Pressable onPress={() => setMode('edit')} accessibilityRole="button" accessibilityLabel="编辑描述" style={[f.input, { minHeight: 60, backgroundColor: 'transparent' }]} testID="req-description-preview">
-          {value.trim() ? <MarkdownMessage renderImage={renderImage}>{value}</MarkdownMessage> : <Text style={s.muted}>还没有描述,点这里编辑</Text>}
+        <Pressable onPress={() => setMode('edit')} accessibilityRole="button" accessibilityLabel={tr('tasks.copy.132')} style={[f.input, { minHeight: 60, backgroundColor: 'transparent' }]} testID="req-description-preview">
+          {value.trim() ? <MarkdownMessage renderImage={renderImage}>{value}</MarkdownMessage> : <Text style={s.muted}>{tr('tasks.copy.133')}</Text>}
         </Pressable>
       )}
       {uploads.map(u => (
         <View key={u.id} style={[f.row, { gap: 6 }]} testID={`req-description-upload-${u.state}`}>
           <Ionicons name={u.state === 'error' ? 'alert-circle-outline' : 'cloud-upload-outline'} size={14} color={u.state === 'error' ? colors.failed : colors.textMuted} />
-          <Text style={[u.state === 'error' ? s.err : s.muted, { flex: 1 }]} numberOfLines={2}>{u.state === 'error' ? u.message : `正在上传「${u.name}」…`}</Text>
+          <Text style={[u.state === 'error' ? s.err : s.muted, { flex: 1 }]} numberOfLines={2}>{u.state === 'error' ? u.message : tr('tasks.copy.134', { v0: u.name })}</Text>
           {u.state === 'error' ? (
-            <Pressable accessibilityRole="button" accessibilityLabel="关闭提示" onPress={() => setUploads(list => list.filter(x => x.id !== u.id))} hitSlop={8}>
+            <Pressable accessibilityRole="button" accessibilityLabel={tr('tasks.copy.58')} onPress={() => setUploads(list => list.filter(x => x.id !== u.id))} hitSlop={8}>
               <Ionicons name="close" size={14} color={colors.textMuted} />
             </Pressable>
           ) : null}

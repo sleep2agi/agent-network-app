@@ -1,3 +1,6 @@
+import { t as tr } from './i18n';
+import { useTranslation } from './i18n-react';
+import { taskText } from './i18n-tasks';
 // 任务卡片的浮动菜单:桌面右键 / 键盘菜单键,手机长按。同一份项目:查看详情 + 移到 需求池/进行中/完成。
 // 定位复用会话行菜单的规则(agent-row-menu.ts anchorRowMenu / rowMenuMetrics):一个角贴着按下点,
 // 放不下就翻边、夹进屏幕。Modal 是为了安卓返回键(onRequestClose)与 web 的 Esc。
@@ -25,6 +28,7 @@ export default function TaskCardMenu({ target, touch, busy, onOpen, onMove, onCl
   onMove: (id: string, to: ReqColumn) => void;
   onClose: () => void;
 }) {
+  useTranslation();
   const win = useWindowDimensions();
   const safe = useModalSafePadding('fullScreen');
   const [area, setArea] = useState<{ width: number; height: number } | null>(null);
@@ -62,7 +66,7 @@ export default function TaskCardMenu({ target, touch, busy, onOpen, onMove, onCl
       <View style={{ flex: 1 }} onLayout={e => setArea({ width: e.nativeEvent.layout.width, height: e.nativeEvent.layout.height })}>
         <Pressable
           testID="task-menu-scrim"
-          accessibilityLabel="关闭菜单"
+          accessibilityLabel={tr('tasks.copy.88')}
           onPress={onClose}
           style={{ position: 'absolute', left: 0, top: 0, right: 0, bottom: 0, backgroundColor: scrim }}
           {...({ onContextMenu: (e: { preventDefault?: () => void }) => { e?.preventDefault?.(); onClose(); } } as object)}
@@ -71,16 +75,16 @@ export default function TaskCardMenu({ target, touch, busy, onOpen, onMove, onCl
           <View
             testID="task-menu"
             accessibilityRole="menu"
-            accessibilityLabel={`${target.title} 的菜单`}
+            accessibilityLabel={tr('tasks.copy.89', { v0: target.title })}
             style={{
               position: 'absolute', left: pos.left, top: pos.top, width: m.width, paddingVertical: m.padY,
               borderRadius: radius.control, backgroundColor: colors.card, overflow: 'hidden',
               ...elevated('floating'),
             }}
           >
-            {item('open', '查看详情', () => { onClose(); onOpen(target.id); }, { icon: 'open-outline' })}
+            {item('open', tr('tasks.copy.90'), () => { onClose(); onOpen(target.id); }, { icon: 'open-outline' })}
             <View style={{ height: 1, marginVertical: 0, backgroundColor: colors.border }} />
-            {REQ_COLUMNS.map(col => item(`move-${col}`, col === target.column ? `当前：${REQ_COLUMN_LABEL[col]}` : `移到 ${REQ_COLUMN_LABEL[col]}`, () => { onClose(); onMove(target.id, col); }, {
+            {REQ_COLUMNS.map(col => item(`move-${col}`, col === target.column ? tr('tasks.copy.91', { v0: taskText(REQ_COLUMN_LABEL[col]) }) : tr('tasks.copy.92', { v0: taskText(REQ_COLUMN_LABEL[col]) }), () => { onClose(); onMove(target.id, col); }, {
               disabled: busy || col === target.column, checked: col === target.column, icon: col === target.column ? 'checkmark' : 'arrow-forward',
             }))}
           </View>

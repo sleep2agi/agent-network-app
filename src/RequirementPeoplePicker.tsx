@@ -1,3 +1,6 @@
+import { t as tr } from './i18n';
+import { useTranslation } from './i18n-react';
+import { taskText } from './i18n-tasks';
 import { useEffect, useMemo, useState } from 'react';
 import { Modal, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { Text, TextInput } from './ui-text';
@@ -24,10 +27,12 @@ type Props = {
 
 /** Mount when opened. Cancel discards the draft; only Confirm invokes the caller. */
 export default function RequirementPeoplePicker(props: Props) {
+  useTranslation();
   return <Picker key={`${props.networkId}:${props.mode}`} {...props} />;
 }
 
 function Picker({ networkId, mode, people: allPeople, selected, onConfirm, onClose, kinds, title, hint }: Props) {
+  useTranslation();
   const people = kinds ? allPeople.filter(person => kinds.includes(person.kind)) : allPeople;
   const safe = useModalSafePadding('overlay');
   const [query, setQuery] = useState('');
@@ -59,24 +64,24 @@ function Picker({ networkId, mode, people: allPeople, selected, onConfirm, onClo
   return <Modal visible transparent animationType="fade" onRequestClose={onClose}>
     <View style={[styles.backdrop, withBasePadding(safe, spacing.lg)]}>
       <View style={styles.panel} accessibilityViewIsModal>
-        <Text style={styles.title}>{title || (mode === 'owner' ? '选择负责人' : '选择参与人')}</Text>
-        <Text style={styles.muted}>{hint || (mode === 'owner' ? '选择一名人类或 Agent，也可以暂不分配' : `已选 ${draft.length} 人，可同时选择人类和 Agent`)}</Text>
-        <TextInput accessibilityLabel="搜索人类或 Agent" placeholder="搜索姓名或 ID" placeholderTextColor={colors.textMuted} value={query} onChangeText={setQuery} style={styles.input} testID="people-search" />
+        <Text style={styles.title}>{title || (mode === 'owner' ? tr('tasks.copy.65') : tr('tasks.copy.66'))}</Text>
+        <Text style={styles.muted}>{hint || (mode === 'owner' ? tr('tasks.copy.67') : tr('tasks.copy.68', { v0: draft.length }))}</Text>
+        <TextInput accessibilityLabel={tr('tasks.copy.69')} placeholder={tr('tasks.copy.70')} placeholderTextColor={colors.textMuted} value={query} onChangeText={setQuery} style={styles.input} testID="people-search" />
         <ScrollView keyboardShouldPersistTaps="handled">
           {missing.map(person => <Pressable key={personKey(person)} accessibilityRole="button" onPress={() => setDraft(prev => prev.filter(row => personKey(row) !== personKey(person)))} style={styles.row}>
-            <Text style={styles.muted}>已失效 · {personKey(person)} · 点击移除</Text>
+            <Text style={styles.muted}>{tr('tasks.copy.71')}{personKey(person)} {tr('tasks.copy.72')}</Text>
           </Pressable>)}
           {rows.map(person => <Pressable key={personKey(person)} testID={`person-${personKey(person)}`} accessibilityRole="checkbox" accessibilityState={{ checked: chosen.has(personKey(person)), disabled: !!person.unavailable && !chosen.has(personKey(person)) }} disabled={!!person.unavailable && !chosen.has(personKey(person))} onPress={() => setDraft(prev => togglePerson(prev, person, mode))} style={[styles.row, chosen.has(personKey(person)) && styles.selected]}>
             <AliasAvatar alias={person.name || person.id} size={36} />
-            <View style={styles.flex}><Text style={styles.name}>{person.name || person.id}</Text><Text style={styles.muted}>{person.kind === 'user' ? '人类' : 'Agent'} · {person.id}{person.unavailable ? ' · 已失效' : ''}</Text></View>
+            <View style={styles.flex}><Text style={styles.name}>{person.name || person.id}</Text><Text style={styles.muted}>{person.kind === 'user' ? tr('tasks.copy.1') : 'Agent'} · {person.id}{person.unavailable ? tr('tasks.copy.73') : ''}</Text></View>
             <Text accessible={false} importantForAccessibility="no" style={[styles.action, !chosen.has(personKey(person)) && styles.checkOff]}>✓</Text>
           </Pressable>)}
-          {!rows.length ? <Text style={styles.muted}>{query ? '没有匹配的人类或 Agent' : kinds?.length === 1 ? (kinds[0] === 'node' ? '这个网络还没有 Agent' : '这个网络还没有成员') : '这个网络还没有可选成员'}</Text> : null}
+          {!rows.length ? <Text style={styles.muted}>{query ? tr('tasks.copy.74') : kinds?.length === 1 ? (kinds[0] === 'node' ? tr('tasks.copy.75') : tr('tasks.copy.76')) : tr('tasks.copy.77')}</Text> : null}
         </ScrollView>
-        {invalid ? <Text style={styles.muted} accessibilityRole="alert">请移除已失效的选择后再保存</Text> : null}
+        {invalid ? <Text style={styles.muted} accessibilityRole="alert">{tr('tasks.copy.78')}</Text> : null}
         <View style={styles.actions}>
-          <Pressable accessibilityRole="button" style={styles.button} testID="people-cancel" onPress={onClose}><Text style={styles.action}>取消</Text></Pressable>
-          <Pressable accessibilityRole="button" accessibilityState={{ disabled: invalid }} disabled={invalid} style={[styles.button, invalid && styles.disabled]} testID="people-confirm" onPress={() => { if (!invalid) onConfirm(draft); }}><Text style={styles.action}>确认选择</Text></Pressable>
+          <Pressable accessibilityRole="button" style={styles.button} testID="people-cancel" onPress={onClose}><Text style={styles.action}>{tr('tasks.copy.79')}</Text></Pressable>
+          <Pressable accessibilityRole="button" accessibilityState={{ disabled: invalid }} disabled={invalid} style={[styles.button, invalid && styles.disabled]} testID="people-confirm" onPress={() => { if (!invalid) onConfirm(draft); }}><Text style={styles.action}>{tr('tasks.copy.80')}</Text></Pressable>
         </View>
       </View>
     </View>
