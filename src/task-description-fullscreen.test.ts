@@ -1,6 +1,6 @@
 // 任务描述:⤢ 全屏 + 语音输入(task-description-fullscreen-model.ts)。纯逻辑 + 接线(源码)。
 import { readFileSync } from 'node:fs';
-import { descriptionEditable, desktopFullscreenMode, effectiveDesktopMode, fullscreenKind, inlineModeAfterFullscreen, settingsPromptKind, voiceEntry } from './task-description-fullscreen-model';
+import { descriptionEditable, desktopFullscreenMode, effectiveDesktopMode, fullscreenKind, initialInlineMode, inlineModeAfterFullscreen, inlineModeFor, richEditorActive, settingsPromptKind, voiceEntry } from './task-description-fullscreen-model';
 import { t as translate } from './i18n';
 import { taskDescriptionTranslations } from './i18n-tasks';
 import { GESTURE_WORDS } from './phone-only-registry';
@@ -16,6 +16,13 @@ ck('从编辑进全屏 = 左右(放得下)/ 编辑(放不下)', desktopFullscree
 ck('放不下左右时「左右」退回编辑,其余不变', effectiveDesktopMode('split', false) === 'edit' && effectiveDesktopMode('split', true) === 'split' && effectiveDesktopMode('read', false) === 'read');
 ck('退出全屏:阅读 → 预览,编辑 / 左右 → 编辑', inlineModeAfterFullscreen('read') === 'preview' && inlineModeAfterFullscreen('edit') === 'edit' && inlineModeAfterFullscreen('split') === 'edit');
 ck('可编辑:全屏开着看全屏模式,否则看小编辑框', descriptionEditable('preview', 'split') && descriptionEditable('preview', 'edit') && !descriptionEditable('edit', 'read') && descriptionEditable('edit', null) && !descriptionEditable('preview', null));
+console.log('# 所见即所得');
+ck('打开:能用富文本就直接富文本;否则有内容预览、空的编辑', initialInlineMode('## x', true) === 'rich' && initialInlineMode('', true) === 'rich' && initialInlineMode('## x', false) === 'preview' && initialInlineMode(' ', false) === 'edit' && initialInlineMode('', null) === 'preview' && initialInlineMode('## x', null) === 'preview');
+ck('富文本不可用了:富文本 → 预览;可用时预览 → 富文本;源码不动', inlineModeFor('rich', false) === 'preview' && inlineModeFor('preview', true) === 'rich' && inlineModeFor('edit', true) === 'edit' && inlineModeFor('edit', false) === 'edit');
+ck('从富文本进全屏 = 「阅读」位(富文本编辑器)', desktopFullscreenMode('rich', true) === 'read');
+ck('退出全屏:阅读位 → 富文本(可用时)/ 预览', inlineModeAfterFullscreen('read', true) === 'rich' && inlineModeAfterFullscreen('read', false) === 'preview' && inlineModeAfterFullscreen('split', true) === 'edit');
+ck('富文本时全屏的阅读位也能打字(🖼 / 🎤 出现),小编辑框的富文本也能', descriptionEditable('rich', 'read', true) && !descriptionEditable('rich', 'read', false) && descriptionEditable('rich', null, true));
+ck('插入目标:富文本编辑器只在它真开着时', richEditorActive('rich', null, true) && richEditorActive('edit', 'read', true) && !richEditorActive('rich', 'split', true) && !richEditorActive('edit', null, true) && !richEditorActive('rich', null, false));
 ck('语音入口:桌面 = 🎤(小编辑框和全屏都有)', voiceEntry({ pointer: true, available: true, editable: true, phonePage: false }) === 'desktopMic' && voiceEntry({ pointer: true, available: true, editable: true, phonePage: true }) === 'desktopMic');
 ck('语音入口:手机只在全屏页的编辑模式 = 按住说话大条', voiceEntry({ pointer: false, available: true, editable: true, phonePage: true }) === 'holdBar' && voiceEntry({ pointer: false, available: true, editable: true, phonePage: false }) === null);
 ck('语音入口:不能打字 / 平台不支持 = 不放', voiceEntry({ pointer: true, available: true, editable: false, phonePage: false }) === null && voiceEntry({ pointer: false, available: false, editable: true, phonePage: true }) === null);

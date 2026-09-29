@@ -282,6 +282,22 @@ export const taskDescriptionTranslations = {
   'taskDesc.splitValue': ['编辑区 {pct}%', 'Editor {pct}%'],
   'taskDesc.unsaved': ['有未保存的修改,回到详情点「保存修改」', 'Unsaved changes: select Save changes in the task details'],
   'taskDesc.voiceSaveFirst': ['未配置语音识别:先保存修改,再到 设置 → 语音输入 里配置', 'Voice recognition is not configured. Save your changes, then set it up in Settings → Voice input'],
+  // 所见即所得(RichDescriptionEditor.web.tsx)。
+  'taskDesc.rich': ['富文本', 'Rich text'],
+  'taskDesc.source': ['源码', 'Source'],
+  'taskDesc.richPlaceholder': ['直接写;## 标题、- 列表、[ ] 复选框,可粘贴或拖入图片', 'Just type. ## heading, - list, [ ] checkbox; paste or drop images'],
+  'taskDesc.richUnavailable': ['这段描述里有富文本显示不了的内容(如 HTML),为了不丢内容,只能用源码编辑', 'This description contains content rich text cannot show (such as HTML), so it opens as source to keep it intact'],
+  'taskDesc.richToolbar': ['格式', 'Formatting'],
+  'taskDesc.richHeading': ['{level} 级标题', 'Heading {level}'],
+  'taskDesc.richBold': ['加粗(Ctrl/⌘+B)', 'Bold (Ctrl/⌘+B)'],
+  'taskDesc.richItalic': ['斜体(Ctrl/⌘+I)', 'Italic (Ctrl/⌘+I)'],
+  'taskDesc.richCode': ['行内代码', 'Inline code'],
+  'taskDesc.richBullet': ['无序列表', 'Bulleted list'],
+  'taskDesc.richOrdered': ['编号列表', 'Numbered list'],
+  'taskDesc.richTask': ['复选框列表', 'Checklist'],
+  'taskDesc.richQuote': ['引用', 'Quote'],
+  'taskDesc.richCodeBlock': ['代码块', 'Code block'],
+  'taskDesc.richCheckbox': ['复选框:{text}', 'Checkbox: {text}'],
 } as const;
 registerTranslations(taskDescriptionTranslations);
 

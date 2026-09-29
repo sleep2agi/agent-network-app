@@ -334,7 +334,9 @@ async function desktopFlows(page, vp) {
     await cardByName(page, cName).click();
     await page.locator(tid('req-detail')).waitFor();
     await page.waitForTimeout(400);
-    const previewShown = await page.locator(tid('req-description-preview')).count();
+    // 桌面(鼠标)打开是所见即所得的「富文本」(test-task-description-wysiwyg),手机仍是「预览」。
+    await page.locator(`${tid('req-description-rich-content')}, ${tid('req-description-preview')}`).first().waitFor({ timeout: 8000 }).catch(() => {});
+    const previewShown = await page.locator(`${tid('req-description-rich-content')}, ${tid('req-description-preview')}`).count();
     await page.locator(tid('req-checklist-item-s3')).click();
     await page.waitForTimeout(600);
     const afterToggle = (await hubRow(cName)).checklist;
@@ -360,8 +362,9 @@ async function desktopFlows(page, vp) {
     const afterDelete = (await hubRow(cName)).checklist;
     await page.locator(tid('req-description-mode-edit')).click();
     await page.locator(tid('req-description-input')).fill('## 目标\n扫码登录\n\n**验收**:三端都能扫');
-    await page.locator(tid('req-description-mode-preview')).click();
-    const rendered = await page.locator(`${tid('req-description-preview')}`).textContent();
+    await page.locator(`${tid('req-description-mode-rich')}, ${tid('req-description-mode-preview')}`).first().click();
+    await page.waitForTimeout(300);
+    const rendered = await page.locator(`${tid('req-description-rich-content')}, ${tid('req-description-preview')}`).first().textContent();
     await page.locator(tid('req-edit-save')).click();
     await page.waitForTimeout(700);
     await shot(page, 'flow-description-checklist');
@@ -587,9 +590,9 @@ async function desktopFlows(page, vp) {
     await page.waitForTimeout(700);
     const saved = (await hubRow(dName))?.description ?? '';
     const ids = [...saved.matchAll(/!\[[^\]]*\]\(\/api\/files\/([A-Za-z0-9_-]+)\)/g)].map(m => m[1]);
-    await page.locator(tid('req-description-mode-preview')).click();
+    await page.locator(`${tid('req-description-mode-rich')}, ${tid('req-description-mode-preview')}`).first().click();
     await page.waitForTimeout(1500);
-    const imgs = await page.evaluate(() => [...document.querySelectorAll('[data-testid^="req-description-image-"] img')].map(i => ({ src: i.getAttribute('src') || '', w: i.naturalWidth })));
+    const imgs = await page.evaluate(() => [...document.querySelectorAll('[data-testid^="req-description-image-"] img, [data-testid^="req-description-rich-image-"] img')].map(i => ({ src: i.getAttribute('src') || '', w: i.naturalWidth })));
     await shot(page, 'flow-description-images');
     const get = (token) => fetch(`${HUB_URL}/api/files/${ids[0]}`, { headers: { authorization: `Bearer ${token}` } }).then(r => r.status);
     const memberStatus = process.env.HUB_TOKEN_MEMBER ? await get(process.env.HUB_TOKEN_MEMBER) : 0;

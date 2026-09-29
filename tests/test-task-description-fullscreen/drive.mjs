@@ -8,15 +8,15 @@
 //   PLAYWRIGHT_MODULE=<…/playwright/index.mjs> node tests/test-task-description-fullscreen/drive.mjs
 //
 // desktop 1200×800 / 1000×700 (Tauri stub, mouse):
-//   inline     the description toolbar (描述 · 🖼 · 🎤 · ⤢ 全屏 · 编辑/预览) shares one centre line ±1px
+//   inline     the description toolbar (描述 · 🖼 · 🎤 · ⤢ 全屏 · 富文本/源码) shares one centre line ±1px
 //   mic        caret in the middle → 🎤 → recording bar inside the description box (no phone overlay, no gesture copy),
 //              bar items on one centre line ±1px → 完成 → text inserted at the caret, caret after it, focus kept
 //   shortcut   Ctrl+Shift+M starts, Ctrl+Shift+M again inserts at the caret; no 「先打开一个会话」 toast
 //   fullscreen ⤢ → covers the window; opens in 左右 with equal panes filling the body; toolbar on one centre line ±1px;
 //              typing shows up in the preview; dragging the divider changes the split; paste and drop of an image upload
 //              to the hub and insert ![…](/api/files/…); 🎤 → bar at the bottom → Esc cancels (text unchanged, still full
-//              screen) → 🎤 → Enter inserts at the caret; 阅读 hides 🖼 / 🎤; Esc closes the full screen only (the
-//              details underneath stay open, draft kept) → inline shows 预览
+//              screen) → 🎤 → Enter inserts at the caret; 富文本 (the old 阅读 slot) keeps 🖼 / 🎤; Esc closes the full
+//              screen only (the details underneath stay open, draft kept) → inline shows 富文本
 //   settings   recognition not configured → 🎤 shows 「去设置」; with unsaved changes it says to save first instead
 // phone 390×844 (Android UA ⇒ touch):
 //   inline     no 🎤 in the detail's small editor
@@ -328,17 +328,18 @@ for (const v of [{ w: 1200, h: 800 }, { w: 1000, h: 700 }]) {
       inserted: afterDone.value === val0.slice(0, at) + '和充电器' + val0.slice(at), caret: afterDone.start === at + 4, recognisedOnce: (await flashCalls(page)) === c0 + 1,
     }, { caret: afterDone.start });
 
-    // 阅读 hides 🖼 / 🎤; Esc closes; inline back to 预览
+    // 所见即所得(test-task-description-wysiwyg)起,桌面的「阅读」位是可编辑的「富文本」:🖼 / 🎤 留着;Esc 关掉后小编辑框是富文本。
     await page.locator(tid('req-description-full-mode-read')).click();
     await page.waitForTimeout(300);
-    const readTools = await page.evaluate(() => ({ img: !!document.querySelector('[data-testid="req-description-full-image"]'), mic: !!document.querySelector('[data-testid="req-description-full-toolbar"] [data-testid="voice-mic"]'), read: !!document.querySelector('[data-testid="req-description-full-read"]') }));
+    await page.locator(tid('req-description-full-rich-content')).waitFor({ timeout: 8000 }).catch(() => {});
+    const readTools = await page.evaluate(() => ({ img: !!document.querySelector('[data-testid="req-description-full-image"]'), mic: !!document.querySelector('[data-testid="req-description-full-toolbar"] [data-testid="voice-mic"]'), read: !!document.querySelector('[data-testid="req-description-full-rich-content"]') }));
     await shot(page, `desktop-${v.w}-full-read`);
     await page.keyboard.press('Escape');
     await page.waitForFunction(() => !document.querySelector('[data-testid="req-description-full-toolbar"]'), null, { timeout: 8000 });
     await page.waitForTimeout(400);
-    const inlinePreview = !!(await rect(page, tid('req-description-preview')));
+    const inlinePreview = !!(await rect(page, tid('req-description-rich-content')));
     const detailOpen = !!(await rect(page, tid('req-edit-save')));
-    record(vp, 'full screen 阅读: no 🖼 / 🎤; Esc closes only the full screen (details stay open) and shows 预览', { read: readTools.read, noImg: !readTools.img, noMic: !readTools.mic, inlinePreview, detailOpen });
+    record(vp, 'full screen 富文本: editable with 🖼 / 🎤; Esc closes only the full screen (details stay open) and shows 富文本', { read: readTools.read, img: readTools.img, mic: readTools.mic, inlinePreview, detailOpen });
 
     // save: everything above lands on the hub
     await page.locator(tid('req-edit-save')).click();

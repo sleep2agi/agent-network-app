@@ -9,7 +9,7 @@
 // 纯逻辑,不 import react-native;浏览器对象只按鸭子类型用,测试传替身。
 import type { PickedImage } from './attach';
 
-type FileLike = { name?: string; type?: string; size?: number };
+export type FileLike = { name?: string; type?: string; size?: number };
 type ItemLike = { kind?: string; getAsFile?: () => FileLike | null };
 type DataTransferLike = { files?: ArrayLike<FileLike> | null; items?: ArrayLike<ItemLike> | null; types?: ArrayLike<string> | readonly string[] | null };
 

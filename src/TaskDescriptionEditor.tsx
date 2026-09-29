@@ -6,7 +6,10 @@
 //   点图:桌面开 #464 的独立图片窗口,手机 / 纯网页用 App 内的 ImageViewer。
 //   全屏与语音:手机 / 桌面各一套,见 task-description-fullscreen-model.ts;画在 TaskDescriptionFullscreen.tsx。
 //   语音和聊天是同一套:useVoiceInput(识别)+ voice-insert-model(按下那一刻冻结选区、插到光标处)。
-import { useEffect, useRef, useState } from 'react';
+//   所见即所得(owner 09-30):桌面 / 网页的鼠标界面,小编辑框是 富文本 / 源码,全屏的「阅读」是可编辑的富文本
+//   (RichDescriptionEditor.web.tsx;往返规则见 rich-markdown.ts)。富文本时语音、图片插到富文本编辑器的选区。
+//   描述里有富文本保不住的内容(HTML 等)时退回原来的 编辑 / 预览,并说明原因。手机不变(原因见 task-description-fullscreen-model.ts)。
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Platform, Pressable, View, type GestureResponderEvent } from 'react-native';
 import { Text, TextInput } from './ui-text';
 import { Ionicons } from './icons';
@@ -26,12 +29,14 @@ import { openGallery, type ViewerImage, type ViewerState } from './image-viewer-
 import { imagePreviewSurface, imageWindowPayload } from './image-window-model';
 import { openImageWindow } from './image-window';
 import { DESCRIPTION_MAX } from './task-board-model';
-import { checkDescriptionImage, descriptionImages, hubImageMarkdown, insertAtCaret } from './task-description-images';
+import { checkDescriptionImage, descriptionImages, hubImageMarkdown, imageAlt, insertAtCaret } from './task-description-images';
 import { Segmented, useTaskStyles } from './TaskBoardParts';
 import { fieldStyles } from './TaskCreateDialog';
 import type { RulesViewMode } from './node-rules-view';
 import { rulesSplitAvailable } from './rules-split';
-import { descriptionEditable, desktopFullscreenMode, fullscreenKind, inlineModeAfterFullscreen, settingsPromptKind, voiceEntry, type InlineMode } from './task-description-fullscreen-model';
+import { descriptionEditable, desktopFullscreenMode, fullscreenKind, initialInlineMode, inlineModeAfterFullscreen, inlineModeFor, richEditorActive, settingsPromptKind, voiceEntry, type InlineMode } from './task-description-fullscreen-model';
+import { loadRich, RICH_EDITOR_AVAILABLE, RichDescriptionEditor, richSafetyNow } from './rich-support';
+import type { RichEditorHandle } from './rich-editor-types';
 import { DesktopDescriptionFullscreen, PhoneDescriptionPage, type EditorBinding } from './TaskDescriptionFullscreen';
 import { useVoiceInput } from './useVoiceInput';
 import { VoiceHoldBar, VoiceSettingsPrompt } from './VoiceInputUI';
@@ -152,7 +157,17 @@ export default function TaskDescriptionEditor({ cfg, value, onChange, pointer, t
   useTranslation();
   const s = useTaskStyles();
   const f = fieldStyles();
-  const [mode, setMode] = useState<InlineMode>(value.trim() ? 'preview' : 'edit');
+  // 富文本只在鼠标界面的 web(桌面壳 / 网页);这段描述还得能保真地进富文本(richSafety)。
+  const richCapable = pointer && RICH_EDITOR_AVAILABLE;
+  // 判据按需加载:第一次打开时还没到,先按预览起步,到了之后预览自动换成富文本(inlineModeFor)。
+  const [richReady, setRichReady] = useState(() => richSafetyNow('') !== null);
+  useEffect(() => {
+    if (!richCapable || richReady) return;
+    let live = true;
+    void loadRich().then(() => { if (live) setRichReady(true); });
+    return () => { live = false; };
+  }, [richCapable, richReady]);
+  const [mode, setMode] = useState<InlineMode>(() => initialInlineMode(value, richCapable ? richSafetyNow(value) : false));
   // 桌面全屏的模式 / 手机全屏页开着没有。
   const [full, setFull] = useState<RulesViewMode | null>(null);
   const [page, setPage] = useState(false);
@@ -168,6 +183,13 @@ export default function TaskDescriptionEditor({ cfg, value, onChange, pointer, t
   const [fullInput, setFullInput] = useState<any>(null);
   const [fullBox, setFullBox] = useState<any>(null);
   const fullscreen = fullscreenKind(pointer);
+  // 富文本编辑器开着时内容就是它产出的,不用再判;源码 / 预览时每次改动重判(源码里写进 HTML → 富文本不可用)。
+  const richShowing = richCapable && (full ? full === 'read' : mode === 'rich');
+  const richOk = useMemo(() => richCapable && richReady && (richShowing || richSafetyNow(value) === true), [richCapable, richReady, richShowing, value]);
+  const shown = inlineModeFor(mode, richOk);
+  const richRef = useRef<RichEditorHandle | null>(null);
+  const richActive = useRef(false);
+  richActive.current = richEditorActive(shown, full, richOk);
   const activeInput = () => (full || page ? fullInput : inlineInput);
   const tauri = Platform.OS === 'web' && !!(globalThis as { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__;
 
@@ -200,6 +222,8 @@ export default function TaskDescriptionEditor({ cfg, value, onChange, pointer, t
       setUploads(u => [...u, { id: key, name: img.fileName, state: 'uploading' }]);
       try {
         const up = await uploadImage(cfg, img, { networkId: cfg.networkId });
+        const rich = richActive.current ? richRef.current : null;
+        if (rich) { rich.insertImage(`/api/files/${up.file_id}`, imageAlt(img.fileName)); setUploads(u => u.filter(x => x.id !== key)); continue; }
         const next = insertAtCaret(latest.current, capture.peek().live, hubImageMarkdown(img.fileName, up.file_id));
         insertText({ value: next.text, caret: next.caret }, false);
         setUploads(u => u.filter(x => x.id !== key));
@@ -209,7 +233,7 @@ export default function TaskDescriptionEditor({ cfg, value, onChange, pointer, t
       }
     }
   };
-  useImageIntake(pointer && mode === 'edit' && !full, inlineInput, inlineBox, images => { void addImages(images); }, setDragOver);
+  useImageIntake(pointer && shown === 'edit' && !full, inlineInput, inlineBox, images => { void addImages(images); }, setDragOver);
   useImageIntake(pointer && !!full && full !== 'read', fullInput, fullBox, images => { void addImages(images); }, setDragOver);
 
   // ── 语音 ──
@@ -221,6 +245,8 @@ export default function TaskDescriptionEditor({ cfg, value, onChange, pointer, t
   const voice = useVoiceInput({
     onInsert: text => {
       const source = sourceRef.current;
+      const rich = richActive.current ? richRef.current : null;
+      if (rich) { capture.take(); rich.insertText(text, refocusAfterInsert(source)); return; }
       const r = insertAtSelection(latest.current, text, voiceInsertTarget(source, capture.take()));
       // 大条(手机)插完不聚焦:不弹键盘(聊天 #422 同一条)。
       insertText({ value: r.value, caret: r.cursor }, refocusAfterInsert(source));
@@ -257,7 +283,7 @@ export default function TaskDescriptionEditor({ cfg, value, onChange, pointer, t
   const voiceDone = () => voice.micHandlers.onResponderRelease(DESKTOP_CLICK_EVENT as unknown as GestureResponderEvent);
   const voiceCancel = () => voice.micHandlers.onResponderTerminate();
   // 手机全屏页用小编辑框同一个 编辑/预览;桌面全屏有自己的 阅读/编辑/左右。
-  const editable = page ? mode === 'edit' : descriptionEditable(mode, full);
+  const editable = page ? mode === 'edit' : descriptionEditable(shown, full, richOk);
   const entry = voiceEntry({ pointer, available: voice.available, editable, phonePage: page });
   const kbd = useVoiceShortcuts(entry === 'desktopMic', { voice, start: micClick, done: voiceDone, cancel: voiceCancel, notice: showNotice });
   const holdOverlayOn = holdOverlayApplies({ desktop: pointer, os: Platform.OS, userAgent: Platform.OS === 'web' ? String((globalThis as any).navigator?.userAgent ?? '') : '' });
@@ -317,11 +343,11 @@ export default function TaskDescriptionEditor({ cfg, value, onChange, pointer, t
   const openFull = () => {
     if (fullscreen === 'phonePage') { setPage(true); return; }
     // 放不放得下左右由全屏自己按正文宽判(窄窗口退回编辑);这里按「宽布局」给默认。
-    setFull(desktopFullscreenMode(mode, rulesSplitAvailable(true, Number.MAX_SAFE_INTEGER)));
+    setFull(desktopFullscreenMode(shown, rulesSplitAvailable(true, Number.MAX_SAFE_INTEGER)));
   };
   const closeFull = () => {
     if (voice.state.phase !== 'idle') voiceCancel();
-    if (full) setMode(inlineModeAfterFullscreen(full));
+    if (full) setMode(inlineModeAfterFullscreen(full, richOk));
     setFull(null);
     setPage(false);
   };
@@ -350,18 +376,35 @@ export default function TaskDescriptionEditor({ cfg, value, onChange, pointer, t
     setInput,
   });
   const inlineVoice = !full && !page;
+  const richEditor = (variant: 'inline' | 'full') => (
+    <RichDescriptionEditor
+      value={value}
+      onChange={onChange}
+      placeholder={t('taskDesc.richPlaceholder')}
+      handleRef={richRef}
+      onFiles={files => { void addImages(files.map(file => attachmentFromFile(file))); }}
+      onOpenImage={openViewer}
+      images={{ serverUrl: cfg.serverUrl, token: cfg.token, authed: tauri }}
+      variant={variant}
+      testID={variant === 'full' ? 'req-description-full-rich' : 'req-description-rich'}
+    />
+  );
+  const inlineEditable = shown === 'edit' || shown === 'rich';
+  const modeItems: { key: InlineMode; label: string }[] = richOk
+    ? [{ key: 'rich', label: t('taskDesc.rich') }, { key: 'edit', label: t('taskDesc.source') }]
+    : [{ key: 'edit', label: t('tasks.copy.127') }, { key: 'preview', label: t('tasks.copy.128') }];
 
   return (
     <View style={{ gap: spacing.sm }} testID="req-description">
       <View style={[f.row, { justifyContent: 'space-between' }]}>
         <Text style={f.label}>{t('tasks.copy.125')}</Text>
         <View style={[f.row, { gap: spacing.sm, flexShrink: 0 }]} testID="req-description-toolbar">
-          {mode === 'edit' ? (
+          {inlineEditable ? (
             <Pressable accessibilityRole="button" accessibilityLabel={t('tasks.copy.126')} onPress={() => { void pick(); }} style={s.iconButton} testID="req-description-image-button">
               <Ionicons name="image-outline" size={18} color={colors.textSecondary} />
             </Pressable>
           ) : null}
-          {inlineVoice && mode === 'edit' ? mic : null}
+          {inlineVoice && inlineEditable ? mic : null}
           <Pressable
             accessibilityRole="button"
             accessibilityLabel={t('taskDesc.fullscreenA11y')}
@@ -372,10 +415,22 @@ export default function TaskDescriptionEditor({ cfg, value, onChange, pointer, t
             <Text style={{ color: colors.textSecondary, fontSize: 14, lineHeight: 16 }}>⤢</Text>
             <Text style={{ color: colors.textSecondary, fontSize: 12 }} numberOfLines={1} testID="req-description-fullscreen-label">{t('taskDesc.fullscreen')}</Text>
           </Pressable>
-          <Segmented s={s} items={[{ key: 'edit', label: t('tasks.copy.127') }, { key: 'preview', label: t('tasks.copy.128') }]} value={mode} onChange={setMode} testID="req-description-mode" />
+          <Segmented s={s} items={modeItems} value={shown} onChange={setMode} testID="req-description-mode" />
         </View>
       </View>
-      {mode === 'edit' ? (
+      {richCapable && richReady && !richOk ? <Text style={s.muted} testID="req-description-rich-unavailable">{t('taskDesc.richUnavailable')}</Text> : null}
+      {shown === 'rich' ? (
+        // 全屏开着时全屏里那个是唯一的富文本编辑器(语音 / 图片插到它那里),这里只画预览。
+        full ? (
+          <View style={[f.input, { minHeight: 60, backgroundColor: 'transparent' }]}>{value.trim() ? preview(value) : null}</View>
+        ) : (
+          <View style={{ gap: spacing.xs }}>
+            {richEditor('inline')}
+            {value.length > DESCRIPTION_MAX * 0.9 ? <Text style={s.muted}>{value.length} / {DESCRIPTION_MAX}</Text> : null}
+            {inlineVoice ? voiceBar : null}
+          </View>
+        )
+      ) : shown === 'edit' ? (
         <View ref={setInlineBox} collapsable={false} style={{ gap: spacing.xs }}>
           <TextInput
             ref={setInlineInput}
@@ -405,6 +460,7 @@ export default function TaskDescriptionEditor({ cfg, value, onChange, pointer, t
           mode={full}
           onMode={setFull}
           editor={editorBinding(setFullInput)}
+          rich={richOk ? richEditor('full') : null}
           setDropBox={setFullBox}
           dragOver={dragOver}
           preview={preview}
