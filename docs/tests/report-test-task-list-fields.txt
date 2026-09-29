@@ -1,0 +1,30 @@
+Desktop task list field preferences — 2026-09-29
+Base: agent-network-app origin/main d57b100 (#511, includes #483).
+Scope: desktop list extraction + new field popover/model/translations. No detail
+logic, Hub changes, version bump, production calls, merges or release.
+
+Docker only, commands in tests/test-task-list-fields/README.md.
+Node20-alpine pinned image, Bun1.3.1, npm lockfile; Chromium Playwright1.58.2.
+Pure ck: 19/19. Copy guard: 40/40. Typecheck: PASS.
+Full source test run (Docker with current src mounted): 229/229 files PASS.
+Existing detail/board component suite: 34/34, 140 expects PASS.
+Browser final: 15/15 PASS, screenshots + measurements adjacent.
+
+1200x800: button x1088.640625 y56 w87.359375 h40;
+popover x872 y102 w304 h538, 6px below button and entirely within viewport.
+After moving Status first: header x280 w110; row cell x280 w110.
+Verified: title cannot hide, participants/Issue hidden by default, column search,
+show/hide, actual handle drag, keyboard reorder, refresh persistence, reset,
+live zh/en, Escape, original task detail opens; 390x844 remains grouped cards
+with no fields button. Zero Hub writes in browser fixture.
+
+Witnessed failures/fixes: initial browser run 12/13 because RN Web filtered
+drag props; scoped native drag events fixed dispatch. Final drag handle also
+keeps draggable in React props so hover rerender cannot reset its DOM attribute.
+Initial full source run 227/229 found radius tokens + modal safe padding;
+fixed using radius tokens and useModalSafePadding/withBasePadding. Re-run229/229.
+
+Storage: per-device task_list_fields_v1 localStorage, same best-effort convention
+as existing shortcuts preferences, session fallback if storage denied. Not Hub
+data. No native phone feature or cross-device synchronization claimed.
+Only current columns offered; no phantom tags before a tag data contract exists.

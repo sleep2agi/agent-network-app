@@ -1,0 +1,128 @@
+{
+  "passed": 15,
+  "total": 15,
+  "results": [
+    {
+      "name": "secondary fields hidden",
+      "ok": true
+    },
+    {
+      "name": "anchored and inside viewport",
+      "ok": true,
+      "detail": {
+        "button": {
+          "x": 1088.640625,
+          "y": 56,
+          "width": 87.359375,
+          "height": 40
+        },
+        "pop": {
+          "x": 872,
+          "y": 102,
+          "width": 304,
+          "height": 538
+        }
+      }
+    },
+    {
+      "name": "title locked",
+      "ok": true
+    },
+    {
+      "name": "search column names",
+      "ok": true
+    },
+    {
+      "name": "drag persisted order",
+      "ok": true,
+      "detail": [
+        {
+          "id": "status",
+          "visible": true
+        },
+        {
+          "id": "title",
+          "visible": true
+        },
+        {
+          "id": "owner",
+          "visible": false
+        },
+        {
+          "id": "priority",
+          "visible": true
+        },
+        {
+          "id": "due",
+          "visible": true
+        },
+        {
+          "id": "participants",
+          "visible": true
+        },
+        {
+          "id": "project",
+          "visible": true
+        },
+        {
+          "id": "issues",
+          "visible": false
+        }
+      ]
+    },
+    {
+      "name": "visible fields applied",
+      "ok": true
+    },
+    {
+      "name": "header cell alignment",
+      "ok": true,
+      "detail": {
+        "head": {
+          "x": 280,
+          "y": 105.5,
+          "width": 110,
+          "height": 40
+        },
+        "cell": {
+          "x": 280,
+          "y": 158.5,
+          "width": 110,
+          "height": 22
+        }
+      }
+    },
+    {
+      "name": "reload retains fields",
+      "ok": true
+    },
+    {
+      "name": "reset default order and visibility",
+      "ok": true
+    },
+    {
+      "name": "keyboard reorder",
+      "ok": true
+    },
+    {
+      "name": "live translation",
+      "ok": true
+    },
+    {
+      "name": "escape closes popover",
+      "ok": true
+    },
+    {
+      "name": "row still opens detail",
+      "ok": true
+    },
+    {
+      "name": "phone grouped cards no field settings",
+      "ok": true
+    },
+    {
+      "name": "preferences never write Hub",
+      "ok": true
+    }
+  ]
+}

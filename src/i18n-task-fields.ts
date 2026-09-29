@@ -1,0 +1,20 @@
+import { registerTranslations } from './i18n';
+registerTranslations({
+  'fields.configure': ['字段配置', 'Fields'],
+  'fields.search': ['搜索列名', 'Search fields'],
+  'fields.reset': ['恢复默认', 'Reset to default'],
+  'fields.locked': ['标题列不可隐藏', 'Title cannot be hidden'],
+  'fields.show': ['显示 {name}', 'Show {name}'],
+  'fields.hide': ['隐藏 {name}', 'Hide {name}'],
+  'fields.reorder': ['拖动调整 {name}；方向键上下移动', 'Drag to reorder {name}; use arrow keys to move'],
+  'fields.empty': ['没有匹配的列', 'No matching fields'],
+  'fields.close': ['关闭字段配置', 'Close field settings'],
+  'fields.title': ['标题', 'Title'],
+  'fields.owner': ['负责人', 'Owner'],
+  'fields.priority': ['优先级', 'Priority'],
+  'fields.due': ['期限', 'Due date'],
+  'fields.participants': ['参与人', 'Participants'],
+  'fields.project': ['项目', 'Project'],
+  'fields.status': ['状态', 'Status'],
+  'fields.issues': ['GitHub Issue', 'GitHub Issue'],
+});

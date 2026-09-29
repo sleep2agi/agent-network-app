@@ -1,6 +1,6 @@
 import { ownerCounts, ownerLabel } from './i18n-task-presentation';
 import { t as tr } from './i18n';
-import { TaskIssueCount } from './TaskIssueBindings';
+import TaskListTable from './TaskListTable';
 import { useTranslation } from './i18n-react';
 import { taskText } from './i18n-tasks';
 // 任务页(需求池):头部一行 + 看板 / 列表 + 新建对话框 + 详情(桌面右侧抽屉,手机推入一页)。
@@ -535,7 +535,7 @@ function ScopedRequirementBoard({ cfg, desktop, dispatch }: { cfg: HubConfig; de
   };
 
   const list = () => {
-    if (narrow || !pointer && width < DRAWER_MIN) {
+    if (narrow || !pointer) {
       // 手机:按状态分组的列表。
       return (
         <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: spacing.xl }} testID="req-list">
@@ -572,56 +572,7 @@ function ScopedRequirementBoard({ cfg, desktop, dispatch }: { cfg: HubConfig; de
       );
     }
     const rows = sortRows(visible, sort, people, projects ?? []);
-    const th = (key: SortKey, label: string, style?: object) => {
-      const on = sort.key === key;
-      return (
-        <Pressable accessibilityRole="button" accessibilityLabel={tr('tasks.copy.50', { v0: label })} {...a11yState({ selected: on })} onPress={() => setSort(cur => nextSort(cur, key))} style={[s.th, style]} testID={`req-sort-${key}`}>
-          <Text style={[s.thText, on && s.thTextOn]}>{label}</Text>
-          {on ? <Ionicons name={sort.dir === 'asc' ? 'arrow-up' : 'arrow-down'} size={11} color={colors.text} /> : null}
-        </Pressable>
-      );
-    };
-    return (
-      <View style={s.table} testID="req-list">
-        <View style={s.tableHead}>
-          {th('title', tr('tasks.copy.51'), { flex: 1 })}
-          {th('owner', tr('tasks.copy.15'), s.colOwner)}
-          {th('priority', tr('tasks.copy.32'), s.colPriority)}
-          {th('due', tr('tasks.copy.52'), s.colDue)}
-          <View style={s.colParticipants}><Text style={s.thText}>{tr('tasks.copy.53')}</Text></View>
-          {projects ? th('project', tr('tasks.copy.30'), s.colProject) : null}
-          {th('status', tr('tasks.copy.54'), s.colStatus)}
-        </View>
-        <ScrollView style={{ flex: 1 }}>
-          {rows.length === 0 ? <View style={[s.center, { paddingVertical: spacing.xl * 2 }]}><Text style={s.muted}>{filterActive(filter) ? tr('tasks.copy.46') : tr('tasks.copy.55')}</Text></View> : null}
-          {rows.map(item => (
-            <Pressable
-              key={item.id}
-              testID={`req-row-${item.id}`}
-              accessibilityRole="button"
-              accessibilityLabel={item.name}
-              onPress={() => openDetail(item.id)}
-              onLongPress={pointer ? undefined : e => openMenuAt(item, e.nativeEvent.pageX, e.nativeEvent.pageY)}
-              style={state => [s.tr, ((state as { hovered?: boolean }).hovered || state.pressed || item.id === selectedId) && s.trHover]}
-              {...({ dataSet: { taskCard: item.id, taskFrom: item.column } } as object)}
-            >
-              <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', gap: 6, minWidth: 0 }}><Text style={[s.tdTitle, item.column === 'done' && s.cardDone]} numberOfLines={1}>{item.name}</Text><TaskIssueCount item={item} /></View>
-              <View style={s.colOwner}><OwnerBadge item={item} people={people} s={s} /></View>
-              <View style={[s.colPriority, s.owner]}><PriorityDot p={item.priority} s={s} /><Text style={s.metaText}>{taskText(REQ_PRIORITY_LABEL[item.priority])}</Text></View>
-              <View style={[s.colDue, { flexDirection: 'row' }]}>{item.due ? <DueChip item={item} today={today} s={s} /> : <Text style={s.metaMuted}>—</Text>}</View>
-              <View style={s.colParticipants}><ParticipantStack item={item} people={people} s={s} touch={!pointer} size={18} /></View>
-              {projects ? <View style={s.colProject}>{item.projectId ? <ProjectChip project={projectById.get(item.projectId)} s={s} small /> : <Text style={s.metaMuted}>—</Text>}</View> : null}
-              <View style={s.colStatus}>
-                <View style={[s.statusPill, { backgroundColor: STATUS_TONE[item.column]() + '1f' }]}>
-                  <View style={[s.prioDot, { width: 6, height: 6, backgroundColor: STATUS_TONE[item.column]() }]} />
-                  <Text style={[s.statusPillText, { color: STATUS_TONE[item.column]() }]}>{taskText(REQ_COLUMN_LABEL[item.column])}</Text>
-                </View>
-              </View>
-            </Pressable>
-          ))}
-        </ScrollView>
-      </View>
-    );
+    return <TaskListTable rows={rows} people={people} projects={projects} sort={sort} setSort={setSort} s={s} today={today} selectedId={selectedId} onOpen={openDetail} filtered={filterActive(filter)} />;
   };
 
   const body = section === 'dispatch' ? dispatch ?? null
