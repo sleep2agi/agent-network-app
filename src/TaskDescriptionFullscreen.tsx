@@ -60,10 +60,12 @@ function useEscape(onClose: () => void) {
   }, []);
 }
 
-export function DesktopDescriptionFullscreen({ mode, onMode, editor, setDropBox, dragOver, preview, onPickImage, mic, voiceBar, below, dirty, onClose }: {
+export function DesktopDescriptionFullscreen({ mode, onMode, editor, rich, setDropBox, dragOver, preview, onPickImage, mic, voiceBar, below, dirty, onClose }: {
   mode: RulesViewMode;
   onMode: (m: RulesViewMode) => void;
   editor: EditorBinding;
+  /** 所见即所得编辑器(富文本可用时):「阅读」换成它 —— 看和改在同一个地方;「编辑」叫「源码」。 */
+  rich: ReactNode | null;
   /** 拖放图片的区域(整个正文区)。 */
   setDropBox: (el: any) => void;
   dragOver: boolean;
@@ -92,7 +94,10 @@ export function DesktopDescriptionFullscreen({ mode, onMode, editor, setDropBox,
     const id = setTimeout(() => closeRef.current?.focus?.(), 0);
     return () => clearTimeout(id);
   }, []);
-  const labels: Record<RulesViewMode, string> = { read: t('taskDesc.read'), edit: t('tasks.copy.127'), split: t('taskDesc.split') };
+  const labels: Record<RulesViewMode, string> = rich
+    ? { read: t('taskDesc.rich'), edit: t('taskDesc.source'), split: t('taskDesc.split') }
+    : { read: t('taskDesc.read'), edit: t('tasks.copy.127'), split: t('taskDesc.split') };
+  const editable = shown !== 'read' || !!rich;
   // 编辑框本身不画浏览器的焦点黑框(左右模式里只框住左半边,很突兀):焦点落在编辑框里时整个外框变强调色。
   const frame = { flex: 1, borderWidth: 1, borderColor: dragOver || focused ? colors.accent : colors.border, borderRadius: radius.control, backgroundColor: dragOver ? colors.accent + '10' : colors.bg, overflow: 'hidden' as const };
   const input = (style: object) => (
@@ -126,7 +131,9 @@ export function DesktopDescriptionFullscreen({ mode, onMode, editor, setDropBox,
   );
   const inner = Math.max(0, bodyWidth - 2);
   const { left } = splitPaneWidths(inner, ratio);
-  const body = shown === 'read' ? (
+  const body = shown === 'read' && rich ? (
+    <View style={{ flex: 1, minHeight: 0 }}>{rich}</View>
+  ) : shown === 'read' ? (
     <View style={frame}>{scroller(editor.value, 'taskDesc.emptyRead', 'req-description-full-read')}</View>
   ) : split ? (
     <View style={[frame, { flexDirection: 'row' }]} testID="req-description-split">
@@ -160,13 +167,13 @@ export function DesktopDescriptionFullscreen({ mode, onMode, editor, setDropBox,
         <WinTitleBar />
         <View testID="req-description-full-toolbar" style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm, paddingHorizontal: spacing.lg, paddingVertical: spacing.md, borderBottomWidth: 1, borderBottomColor: colors.border }}>
           <ModeToggle mode={shown} tabs={rulesModeTabs(splitOk)} onChange={onMode} labels={labels} testID="req-description-full-mode" />
-          {shown !== 'read' ? (
+          {editable ? (
             <FocusRing accessibilityRole="button" accessibilityLabel={t('tasks.copy.126')} onPress={onPickImage} testID="req-description-full-image"
               style={{ width: 30, height: 30, borderRadius: radius.control, alignItems: 'center', justifyContent: 'center' }}>
               <Ionicons name="image-outline" size={18} color={colors.textSecondary} />
             </FocusRing>
           ) : null}
-          {shown !== 'read' ? mic : null}
+          {editable ? mic : null}
           <Text style={{ flex: 1, color: colors.textMuted, fontSize: 12 }} numberOfLines={1} testID="req-description-full-dirty">{dirty ? t('taskDesc.unsaved') : ''}</Text>
           <FocusRing ref={closeRef} onPress={onClose} accessibilityRole="button" accessibilityLabel={t('taskDesc.exitFullscreen')} testID="req-description-full-close"
             style={{ height: 30, paddingHorizontal: spacing.md, borderRadius: radius.item, borderWidth: 1, borderColor: colors.border, justifyContent: 'center' }}>
