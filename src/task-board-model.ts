@@ -47,6 +47,8 @@ export interface BoardFilter {
   priorities: ReqPriority[];
   /** 项目 id;NO_PROJECT = 不属于任何项目;省略 / '' = 全部项目。 */
   project?: string;
+  /** 只看顶层(不显示子需求)。 */
+  topLevel?: boolean;
 }
 
 export const NO_PROJECT = '__none__';
@@ -61,7 +63,41 @@ export function matchesFilter(item: Requirement, f: BoardFilter): boolean {
   if (f.project) {
     if (f.project === NO_PROJECT ? !!item.projectId : item.projectId !== f.project) return false;
   }
+  if (f.topLevel && item.parentId) return false;
   return true;
+}
+
+// ── 子需求 ───────────────────────────────────────────────────────────────
+
+/** 这个 Hub 有没有子需求(行里带 parent_id 字段)。 */
+export const hasSubRequirements = (item: Pick<Requirement, 'parentId'>): boolean => item.parentId !== undefined;
+
+/** 一张卡的直接子需求(按看板顺序)。 */
+export const childrenOf = (items: readonly Requirement[], id: string): Requirement[] =>
+  sortColumnByStatus(items.filter(i => i.parentId === id));
+
+const STATUS_RANK: Record<ReqColumn, number> = { doing: 0, pool: 1, done: 2 };
+const sortColumnByStatus = (list: Requirement[]): Requirement[] =>
+  [...list].sort((a, b) => STATUS_RANK[a.column] - STATUS_RANK[b.column] || (a.createdAt < b.createdAt ? -1 : 1));
+
+/** 从一张卡往上的父链(近的在前);父卡不在当前列表里就停(比如被归档了)。防环。 */
+export function ancestorsOf(items: readonly Requirement[], item: Requirement): Requirement[] {
+  const out: Requirement[] = [];
+  const seen = new Set<string>([item.id]);
+  let cur = item.parentId ? items.find(i => i.id === item.parentId) : undefined;
+  while (cur && !seen.has(cur.id) && out.length < 5) {
+    out.push(cur);
+    seen.add(cur.id);
+    cur = cur.parentId ? items.find(i => i.id === cur!.parentId) : undefined;
+  }
+  return out;
+}
+
+/** 子需求进度:优先用 Hub 给的计数(含不在当前筛选里的子需求);没有就按当前列表数。 */
+export function subProgress(items: readonly Requirement[], item: Requirement): { done: number; total: number } {
+  if (item.children) return item.children;
+  const kids = items.filter(i => i.parentId === item.id);
+  return { total: kids.length, done: kids.filter(k => k.column === 'done').length };
 }
 
 // ── 项目 ─────────────────────────────────────────────────────────────────
@@ -418,6 +454,8 @@ export interface CreateDraft {
   agentOwner: RequirementPersonRef | null;
   /** 项目(只在有项目的 Hub 上发)。 */
   projectId: string | null;
+  /** 父需求(建子需求时预填)。 */
+  parentId?: string | null;
   column: ReqColumn;
 }
 
@@ -444,7 +482,7 @@ export function checkDraft(d: Pick<CreateDraft, 'name' | 'due'>): DraftCheck {
  * 发给 POST /api/requirements 的字段。负责人只带稳定身份 {kind,id}(#484):显示名不是身份,
  * 旧的 assignee 文本永远是空串。
  */
-export function createInput(d: CreateDraft, twoRoles = false): { name: string; priority: ReqPriority; assignee: ''; due: string; column: ReqColumn; owner?: RequirementPersonRef; agentOwner?: RequirementPersonRef; projectId?: string } | null {
+export function createInput(d: CreateDraft, twoRoles = false): { name: string; priority: ReqPriority; assignee: ''; due: string; column: ReqColumn; owner?: RequirementPersonRef; agentOwner?: RequirementPersonRef; projectId?: string; parentId?: string } | null {
   const c = checkDraft(d);
   if (!c.ok) return null;
   // 分两个角色的 Hub 上,种类不对的一侧不发(Hub 会 400);旧 Hub 没有负责 Agent。
@@ -459,6 +497,7 @@ export function createInput(d: CreateDraft, twoRoles = false): { name: string; p
     ...(owner ? { owner: { kind: owner.kind, id: owner.id } } : {}),
     ...(agent ? { agentOwner: { kind: agent.kind, id: agent.id } } : {}),
     ...(d.projectId ? { projectId: d.projectId } : {}),
+    ...(d.parentId ? { parentId: d.parentId } : {}),
   };
 }
 

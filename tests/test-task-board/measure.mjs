@@ -205,6 +205,18 @@ for (const theme of ['light', 'dark']) {
       record(vp, 'header one centre line', { found: centres.length === 5, centred: Math.max(...centres) - Math.min(...centres) <= 1 }, { centres: centres.map(r1).join('/') });
     }
     const pads = geo.cards.map(c => [c.left, c.top, c.right, c.bottom]);
+    // 卡片最下一行:子任务「n/m」不被挤掉(文字完整显示);「新建」按钮在内容区里
+    // 进度那一行本身(图标 + n/m + 细条)要装得下:它的内容宽不能超过它的可见宽,也不能伸到后面参与人头像底下
+    const foot = await page.evaluate(() => [...document.querySelectorAll('[data-testid="task-checklist-progress"]')].map(e => {
+      const r = e.getBoundingClientRect();
+      const avatars = e.closest('[data-testid="task-card-footer"]')?.querySelector('[data-testid="task-participants"]')?.getBoundingClientRect();
+      const kids = [...e.children].map(c => c.getBoundingClientRect());
+      const contentRight = Math.max(...kids.map(k => k.right));
+      const overlaps = avatars && Math.abs(avatars.y - r.y) < r.height && avatars.left < contentRight - 0.5;
+      return e.scrollWidth <= e.clientWidth + 1 && contentRight <= r.right + 0.5 && !overlaps && r.width >= 90;
+    }));
+    const newBtn = await page.evaluate(() => { const b = document.querySelector('[data-testid="req-new"]')?.getBoundingClientRect(); const r = document.querySelector('[data-testid="requirement-board"]')?.getBoundingClientRect(); return b && r ? b.right <= r.right + 0.5 : false; });
+    record(vp, 'footer progress text whole; 新建 inside', { progressWhole: foot.every(Boolean), newInside: newBtn }, { progress: foot.length });
     record(vp, 'card meta stays on one line', { prioOneLine: geo.prioH > 0 && geo.prioH <= 20, dueOneLine: geo.dueH <= 20.5 }, { prioH: r1(geo.prioH), dueH: r1(geo.dueH) });
     record(vp, 'card paddings equal', {
       cards: pads.length > 0,
@@ -587,6 +599,49 @@ async function desktopFlows(page, vp) {
     }, { ids: ids.length, imgs: imgs.map(i => i.w).join('/'), member: memberStatus, outsider: outsiderStatus, src: imgs[0]?.src.slice(0, 12) });
     await page.locator(tid('req-detail-close')).click();
     await page.waitForTimeout(300);
+  }
+
+  // sub-requirements (hub with #2081): parent chip 1/2, 只看顶层 hides children, detail lists children,
+  // 新建子需求 → hub parent_id, breadcrumb back to the parent, GitHub link shown
+  const caps = (await (await fetch(`${HUB_URL}/api/requirements?network_id=${HUB_NETWORK}`, { headers: { authorization: `Bearer ${HUB_TOKEN}` } })).json()).capabilities || [];
+  if (caps.includes('sub_requirements')) {
+    const pName = '登录页支持扫码登录';
+    const chip = await page.evaluate((n) => {
+      const card = [...document.querySelectorAll('[data-testid^="req-card-"]')].find(c => c.textContent.includes(n) && !c.textContent.includes(':'));
+      return card?.querySelector('[data-testid="task-subreq-progress"]')?.textContent ?? '';
+    }, pName);
+    const childrenShown = await page.locator('[data-testid^="req-card-"]', { hasText: '扫码登录:' }).count();
+    await page.locator(tid('task-scope-top')).click();
+    await page.waitForTimeout(400);
+    const childrenTop = await page.locator('[data-testid^="req-card-"]', { hasText: '扫码登录:' }).count();
+    await shot(page, 'flow-top-level-only');
+    await page.locator(tid('task-scope-all')).click();
+    await page.waitForTimeout(300);
+    await page.locator('[data-testid^="req-card-"]', { hasText: pName }).filter({ hasNotText: '扫码登录:' }).first().click();
+    await page.locator(tid('req-subrequirements')).waitFor();
+    const kids = await page.locator('[data-testid^="req-child-"]').count();
+    const gh = await page.locator(tid('req-external-link')).textContent().catch(() => '');
+    await page.locator(tid('req-new-child')).scrollIntoViewIfNeeded();
+    await page.locator(tid('req-new-child')).click();
+    await page.locator(tid('req-create-parent')).waitFor();
+    await page.keyboard.type('扫码登录:过期刷新');
+    await page.locator(tid('req-add')).click();
+    await page.locator(tid('req-create')).waitFor({ state: 'detached' });
+    await page.waitForTimeout(500);
+    const hubParent = await hubRow(pName);
+    const hubChild = await hubRow('扫码登录:过期刷新');
+    await page.locator(tid('req-child-' + hubChild.id)).click();
+    await page.locator(tid('req-parent-breadcrumb')).waitFor();
+    await shot(page, 'flow-subrequirement-detail');
+    await page.locator(tid('req-parent-link')).click();
+    await page.waitForTimeout(300);
+    const backName = await page.locator(tid('req-edit-name')).inputValue();
+    await page.locator(tid('req-detail-close')).click();
+    record(vp, 'sub-requirements: chip, top-level toggle, children, create child, breadcrumb, GitHub link', {
+      parentChip: chip.includes('1/2'), togglesHideChildren: childrenShown === 2 && childrenTop === 0,
+      detailChildren: kids === 2, createChild: hubChild?.parent_id === hubParent?.id, breadcrumbBack: backName === pName,
+      githubLink: (gh || '').includes('GitHub'),
+    }, { chip, childrenShown, childrenTop, kids });
   }
 
   // drawer edit

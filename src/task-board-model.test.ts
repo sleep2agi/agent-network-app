@@ -7,6 +7,7 @@ import {
   patchApplied, revertMove, scopeOf, sortRows, statusPatch, toggleIn, UNASSIGNED, type DragState,
   hasRoles, roleAvatars, roleKeysOf, roleKinds, participantStack, personDisplay,
   activeProjects, checkProjectName, defaultProjectFor, filterActive, NO_PROJECT, nextProjectColor, projectCounts, splitByCount, PROJECT_COLORS,
+  ancestorsOf, childrenOf, hasSubRequirements, subProgress,
   addChecklistItem, checklistDropIndex, checklistProgress, hasDetails, moveChecklistItem, newChecklistId, removeChecklistItem, setChecklistDone,
 } from './task-board-model';
 import { createRequirementBody } from './requirements-hub';
@@ -284,6 +285,28 @@ console.log('# 参与人 / 未知成员');
   ck('悬停名单写全(含种类)', st.all.startsWith('测试者（人类）、demo-node-a（Agent）'));
   ck('没有参与人 = 空', participantStack(undefined, people).shown.length === 0);
   ck('认得的成员 known', personDisplay(ME, people).known && personDisplay(ME, people).name === '测试者');
+}
+
+
+console.log('# 子需求');
+{
+  const P = R('p', { parentId: null, children: { total: 3, done: 1 } });
+  const c1 = R('c1', { parentId: 'p', column: 'done' });
+  const c2 = R('c2', { parentId: 'p', column: 'doing' });
+  const g = R('g', { parentId: 'c2' });
+  const loopA = R('la', { parentId: 'lb' });
+  const loopB = R('lb', { parentId: 'la' });
+  const all = [P, c1, c2, g, loopA, loopB, R('legacy', { parentId: undefined })];
+  ck('Hub 行带 parent_id = 支持子需求', hasSubRequirements(P) && !hasSubRequirements(R('x', { parentId: undefined })));
+  ck('直接子需求:进行中在前、完成在后', childrenOf(all, 'p').map(i => i.id).join() === 'c2,c1');
+  ck('父链:近的在前', ancestorsOf(all, g).map(i => i.id).join() === 'c2,p');
+  ck('父链防环', ancestorsOf(all, loopA).length === 1);
+  ck('进度优先用 Hub 计数(含不在列表里的)', JSON.stringify(subProgress(all, P)) === '{"total":3,"done":1}');
+  ck('没有 Hub 计数时按列表数', JSON.stringify(subProgress(all, c2)) === '{"total":1,"done":0}');
+  ck('只看顶层:子需求不出现', applyFilter(all, { owners: [], priorities: [], topLevel: true }).map(i => i.id).join() === 'p,legacy');
+  ck('全部:都在', applyFilter(all, { owners: [], priorities: [] }).length === all.length);
+  const d = { ...emptyDraft(), name: '子需求', parentId: 'p' };
+  ck('新建子需求带 parentId,POST 体 parent_id', createInput(d)!.parentId === 'p' && createRequirementBody({ serverUrl: 'x', token: 't' }, createInput(d)!).parent_id === 'p' && !('parentId' in createInput({ ...d, parentId: null })!));
 }
 
 console.log('# 界面接线(源码)');

@@ -14,15 +14,20 @@ import type { RequirementPerson } from './requirement-people';
 import type { RequirementAssignments } from './requirement-people-api';
 import { checkDraft, editDraftOf, editPatch, hasDetails, hasRoles, type EditDraft, type EditPatch } from './task-board-model';
 import TaskChecklist from './TaskChecklist';
+import { ExternalLink, levelIn, ParentBreadcrumb, SubRequirements } from './TaskRelations';
 import TaskDescriptionEditor from './TaskDescriptionEditor';
 import { BOARD_RADIUS, cardBg, liftedShadow, STATUS_TONE, useTaskStyles, a11yState } from './TaskBoardParts';
 import { DueField, fieldStyles, PriorityPicker, ProjectPicker, RoleFields } from './TaskCreateDialog';
 
 export const DRAWER_WIDTH = 420;
 
-export default function TaskDetailPanel({ cfg, item, projects, dueDatetime, mode, top, people, peopleLoading, onLoadPeople, moving, moveError, onMove, onSave, onAssignmentsSaved, onClose, pointer, checklistError, onChecklistToggle, onChecklistAdd, onChecklistDelete, onChecklistMove }: {
+export default function TaskDetailPanel({ cfg, item, items, onOpenRequirement, onCreateChild, projects, dueDatetime, mode, top, people, peopleLoading, onLoadPeople, moving, moveError, onMove, onSave, onAssignmentsSaved, onClose, pointer, checklistError, onChecklistToggle, onChecklistAdd, onChecklistDelete, onChecklistMove }: {
   cfg: HubConfig;
   item: Requirement;
+  /** 全部卡片(找父需求 / 子需求用)。 */
+  items: readonly Requirement[];
+  onOpenRequirement: (id: string) => void;
+  onCreateChild: (parent: Requirement) => void;
   /** 项目列表;null = Hub 没有项目。 */
   projects: readonly RequirementProject[] | null;
   dueDatetime: boolean;
@@ -90,6 +95,7 @@ export default function TaskDetailPanel({ cfg, item, projects, dueDatetime, mode
 
   const body: ReactNode = (
     <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: spacing.xl, gap: spacing.lg }} keyboardShouldPersistTaps="handled">
+      <ParentBreadcrumb item={item} items={items} onOpen={onOpenRequirement} />
       <TextInput
         value={draft.name}
         onChangeText={name => set({ name })}
@@ -149,6 +155,8 @@ export default function TaskDetailPanel({ cfg, item, projects, dueDatetime, mode
       <Field label="预计完成">
         <DueField value={draft.due} onChange={due => set({ due })} error={error?.field === 'due' ? error.message : undefined} idBase="req-edit-due" allowTime={dueDatetime} pointer={pointer} sheet={mode === 'page'} />
       </Field>
+      <ExternalLink item={item} />
+      <SubRequirements item={item} items={items} onOpen={onOpenRequirement} onCreateChild={onCreateChild} canAddLevel={levelIn(items, item) < 5} />
       {hasDetails(item) ? (
         <>
           <TaskDescriptionEditor cfg={cfg} value={draft.description} onChange={description => set({ description })} pointer={pointer} title={item.name} />

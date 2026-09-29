@@ -41,6 +41,7 @@ mock.module('./src/AuthedThumb', () => ({ default: () => null }));
 mock.module('./src/AuthedWebThumb', () => ({ default: () => null }));
 mock.module('./src/ImageViewer', () => ({ default: () => null }));
 mock.module('./src/image-window', () => ({ openImageWindow: async () => false }));
+mock.module('./src/open-external', () => ({ openExternal: async (url: string) => { opened.push(url); return true; } }));
 // The detail's description preview renders MarkdownMessage (image assets, native text selection…).
 mock.module('./src/MarkdownMessage', () => ({ default: ({ children }: any) => React.createElement('Text', { testID: 'markdown' }, children) }));
 
@@ -51,6 +52,8 @@ let detailCards = false;
 let projectsMock: any[] | null = null;
 let dueCaps = false;
 let participantCards = false;
+let subCards = false;
+let opened: string[] = [];
 let itemWrites: any[] = [];
 let requests: any[] = [];
 let creates: any[] = [];
@@ -59,7 +62,11 @@ let editReply: ((v: any) => any) | null = null;
 let reply: (value: any) => void;
 let reject: (error: Error) => void;
 class HubError extends Error { constructor(public status: number, message = 'HTTP ' + status) { super(message); } }
-const listRows = async () => [
+const listRows = async () => subCards ? [
+    { ...card, owner: null, participants: [], parentId: null, children: { total: 2, done: 1 }, externalRef: 'github:acme/widgets#7', externalUrl: 'https://github.com/acme/widgets/issues/7' },
+    { ...card, id: 'r2', name: '子需求甲', owner: null, participants: [], parentId: 'r1', column: 'done' },
+    { ...card, id: 'r3', name: '子需求乙', owner: null, participants: [], parentId: 'r1', column: 'doing' },
+  ] : [
     { ...card, ...(typedCards || roleCards ? { owner: null, participants: [] } : {}),
       ...(participantCards ? { owner: { kind: 'user', id: 'u' }, participants: [{ kind: 'user', id: 'u' }, { kind: 'node', id: 'n1' }, { kind: 'user', id: 'u_a4944afaa30b' }, { kind: 'node', id: 'n_e06d936d' }] } : {}), ...(roleCards ? { agentOwner: null } : {}),
       ...(projectsMock ? { projectId: 'p1' } : {}),
@@ -120,7 +127,7 @@ async function mount() {
   setTaskSection('board');
   await act(async () => { renderer = create(<Board cfg={cfg} />); });
 }
-afterEach(async () => { dueCaps = false; participantCards = false; typedCards = false; roleCards = false; detailCards = false; itemWrites = []; projectsMock = null; if (renderer) await act(async () => renderer.unmount()); });
+afterEach(async () => { dueCaps = false; participantCards = false; subCards = false; opened = []; typedCards = false; roleCards = false; detailCards = false; itemWrites = []; projectsMock = null; if (renderer) await act(async () => renderer.unmount()); });
 
 test('header has no permanent inputs or dev note; 新建 opens the dialog', async () => {
   await mount();
@@ -425,6 +432,32 @@ test('description images: 🖼 uploads with network_id and inserts ![name](/api/
   expect(JSON.stringify(renderer.toJSON())).toContain('超过 12MB 上限');
   await act(async () => byId('req-edit-save').props.onPress());
   expect(edits[0].patch).toEqual({ description: '## 目标\n![截图.png](/api/files/f_1)' });
+});
+
+test('sub-requirements: progress chip on the parent card, children in detail, breadcrumb to the parent, 新建子需求 prefilled, GitHub link', async () => {
+  subCards = true;
+  await mount();
+  expect(JSON.stringify(byId('req-card-r1').findAll(n => n.props.testID === 'task-subreq-progress').map(n => n.props.accessibilityLabel))).toContain('子需求 1/2 完成');
+  await act(async () => byId('req-card-r1').props.onPress());
+  expect(byId('req-subrequirements')).toBeTruthy();
+  expect(byId('req-child-r3')).toBeTruthy();
+  expect(byId('req-child-r2')).toBeTruthy();
+  // GitHub 链接走 openExternal,外部引用显示出来
+  await act(async () => byId('req-external-link').props.onPress());
+  expect(opened).toEqual(['https://github.com/acme/widgets/issues/7']);
+  expect(JSON.stringify(byId('req-external-ref').props.children)).toContain('github:acme/widgets#7');
+  // 打开子需求 → 面包屑回到父需求
+  await act(async () => byId('req-child-r3').props.onPress());
+  expect(byId('req-edit-name').props.value).toBe('子需求乙');
+  expect(byId('req-parent-breadcrumb')).toBeTruthy();
+  await act(async () => byId('req-parent-link').props.onPress());
+  expect(byId('req-edit-name').props.value).toBe('验证需求详情');
+  // 新建子需求:parentId 预填,对话框说「属于:…」
+  await act(async () => byId('req-new-child').props.onPress());
+  expect(JSON.stringify(byId('req-create-parent').findAllByType('Text').map(n => n.props.children))).toContain('验证需求详情');
+  await act(async () => byId('req-name').props.onChangeText('新的子需求'));
+  await act(async () => byId('req-add').props.onPress());
+  expect(creates[0].parentId).toBe('r1');
 });
 
 test('people picker separates identical user/node names, stages selection, and confirms stable references', async () => {

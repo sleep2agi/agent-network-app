@@ -28,6 +28,13 @@ ck('坏日期丢掉，缺名字丢掉', requirementFromHub({ id: 'x', name: 'a',
   ck('project_id 读进来;null / 缺省区分', requirementFromHub({ id: 'r', name: 'x', project_id: 'proj_1' })?.projectId === 'proj_1' && requirementFromHub({ id: 'r', name: 'x', project_id: null })?.projectId === null && requirementFromHub({ id: 'r', name: 'x' })?.projectId === undefined);
 }
 
+{
+  const row = requirementFromHub({ id: 'r', name: 'x', parent_id: 'p1', children: { total: 3, done: 5 }, external_ref: 'github:acme/w#1', external_url: 'https://github.com/acme/w/issues/1' });
+  ck('parent_id / children / external_ref / external_url 读进来;done 不超过 total', row?.parentId === 'p1' && JSON.stringify(row?.children) === '{"total":3,"done":3}' && row?.externalRef === 'github:acme/w#1' && row?.externalUrl === 'https://github.com/acme/w/issues/1');
+  ck('external_url 只收 http(s)', requirementFromHub({ id: 'r', name: 'x', external_url: 'javascript:alert(1)' })?.externalUrl === null);
+  ck('旧 Hub 没有 parent_id 字段 → undefined', requirementFromHub({ id: 'r', name: 'x' })?.parentId === undefined);
+}
+
 function card(id: string, name: string, column: Requirement['column'] = 'pool'): Requirement {
   return { id, name, priority: 'normal', assignee: '', due: '', column, createdAt: '2026-09-28T00:00:00.000Z' };
 }
