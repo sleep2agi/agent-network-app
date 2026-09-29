@@ -108,6 +108,7 @@ export async function openImageWindow(payload: ImageWindowPayload, opts: { measu
       backgroundColor: '#111113',
       // Native title bar on both platforms (move / maximize / close are the system's) — the viewer
       // page draws no title bar of its own.
+      decorations: true,
       dragDropEnabled: false,
     });
     return await new Promise<boolean>(resolve => {

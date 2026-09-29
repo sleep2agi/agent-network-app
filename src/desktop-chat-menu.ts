@@ -65,6 +65,8 @@ export async function openChatWindow(alias: string, profileId?: string, context?
     minWidth: 480,
     minHeight: 520,
     focus: true,
+    // 原生标题栏(– □ × 是系统的),页面里不画 WinTitleBar —— 见 window-shell.ts windowDrawsOwnTitleBar
+    decorations: true,
     // macOS:和主窗一样隐藏原生标题栏(2026-09-16);Windows 忽略这两个键
     titleBarStyle: 'overlay',
     hiddenTitle: true,
@@ -118,6 +120,8 @@ export async function openWorkspaceWindow(profile: { profileId: string; displayN
     minWidth: 420,
     minHeight: 600,
     focus: true,
+    // 原生标题栏(– □ × 是系统的),页面里不画 WinTitleBar —— 见 window-shell.ts windowDrawsOwnTitleBar
+    decorations: true,
     titleBarStyle: 'overlay',
     hiddenTitle: true,
     // 让网页收到系统拖进来的文件(聊天区拖放加附件);开着的话 Tauri 自己截走 drop 事件。

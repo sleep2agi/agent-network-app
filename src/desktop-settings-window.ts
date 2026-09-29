@@ -53,6 +53,8 @@ export async function openSettingsWindow(category?: string | null): Promise<bool
     minWidth: 720,
     minHeight: 520,
     focus: true,
+    // 原生标题栏(– □ × 是系统的),页面里不画 WinTitleBar —— 见 window-shell.ts windowDrawsOwnTitleBar
+    decorations: true,
     titleBarStyle: 'overlay',
     hiddenTitle: true,
     dragDropEnabled: false,

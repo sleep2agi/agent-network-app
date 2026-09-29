@@ -58,7 +58,7 @@ const strip = readFileSync(new URL('./mac-title-strip.tsx', import.meta.url), 'u
 ck('strip 非 macOS 壳返回 null', strip.includes('if (!isMacTauriShell(Platform.OS)) return null;'));
 ck('strip 是拖动区', strip.includes("dataSet: { tauriDragRegion: '' }"));
 const bar = readFileSync(new URL('./win-title-bar.tsx', import.meta.url), 'utf8').replace(/\r\n?/g, '\n');
-ck('WinTitleBar 用 isWindowsTauriShell 判定、非 Windows 壳返回 null', bar.includes('const show = isWindowsTauriShell(Platform.OS);') && bar.includes('if (!show) return null;'));
+ck('WinTitleBar 用 isWindowsTauriShell 判定、非 Windows 壳返回 null', bar.includes('const show = isWindowsTauriShell(Platform.OS) && windowDrawsOwnTitleBar();') && bar.includes('if (!show) return null;'));
 ck('WinTitleBar 是拖动区', bar.includes("dataSet: { tauriDragRegion: '' }"));
 
 console.log(`\n${p}/${t} passed`); process.exit(p === t ? 0 : 1);

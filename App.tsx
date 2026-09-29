@@ -673,7 +673,8 @@ function AppRoot() {
         <SettingsScreen
           key={settingsViewKey}
           cfg={cfg}
-          onClose={() => { void closeSettingsWindow(); }}
+          // 独立设置窗不传 onClose:关窗走窗口自己的标题栏(Windows 原生 ×、macOS 红灯),
+          // 侧栏左上角再画一个 ✕ 就是第二个关闭键(Vincent 2026-09-29「怎么有两个×」)。
           onLogout={removeActiveProfile}
           onLocalDataDeleted={finishLocalDataDeletion}
           onAddAccount={() => { setReauthProfile(null); setScreen({ name: 'login' }); }}
