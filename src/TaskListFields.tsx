@@ -8,7 +8,7 @@ import { withBasePadding } from './modal-safe-area';
 import { t } from './i18n';
 import { useTranslation } from './i18n-react';
 import './i18n-task-fields';
-import { defaultFields, moveField, toggleField, type FieldId, type FieldPref } from './task-list-fields';
+import { defaultFields, moveField, resetWidths, toggleField, type FieldId, type FieldPref } from './task-list-fields';
 
 export default function TaskListFields({ fields, onChange, projects, needsUpdateUpgrade, touch }: { fields: FieldPref[]; onChange: (next: FieldPref[]) => void; projects: boolean; needsUpdateUpgrade: boolean; touch: boolean }) {
   useTranslation();
@@ -70,7 +70,10 @@ export default function TaskListFields({ fields, onChange, projects, needsUpdate
             <Pressable testID={`task-field-toggle-${f.id}`} accessibilityRole="button" disabled={f.id === 'title'} accessibilityLabel={f.id === 'title' ? t('fields.locked') : t(f.visible ? 'fields.hide' : 'fields.show', { name: t(`fields.${f.id}`) })} onPress={() => onChange(toggleField(fields, f.id))} style={{ padding: 12 }}><Ionicons name={f.id === 'title' ? 'lock-closed-outline' : f.visible ? 'eye-outline' : 'eye-off-outline'} size={18} color={f.visible ? colors.accent : colors.textMuted} /></Pressable>
           </View>)}
         </ScrollView>
-        <Pressable testID="task-fields-reset" onPress={() => { onChange(defaultFields()); setQuery(''); }} accessibilityRole="button" style={button}><Text style={{ color: colors.accent }}>{t('fields.reset')}</Text></Pressable>
+        <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+          <Pressable testID="task-fields-reset" onPress={() => { onChange(defaultFields()); setQuery(''); }} accessibilityRole="button" style={button}><Text style={{ color: colors.accent }}>{t('fields.reset')}</Text></Pressable>
+          <Pressable testID="task-fields-reset-widths" disabled={!fields.some(f => f.width !== undefined)} onPress={() => onChange(resetWidths(fields))} accessibilityRole="button" style={[button, { opacity: fields.some(f => f.width !== undefined) ? 1 : 0.4 }]}><Text style={{ color: colors.accent }}>{t('fields.resetWidths')}</Text></Pressable>
+        </View>
       </View>
     </Modal>
   </>;

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Pressable, ScrollView, View } from 'react-native';
 import { Text } from './ui-text';
 import { Ionicons } from './icons';
@@ -14,9 +14,10 @@ import { nextSort, type SortKey, type SortSpec } from './task-board-model';
 import { DueChip, OwnerBadge, ParticipantStack, PriorityDot, ProjectChip, STATUS_TONE, a11yState, type TaskStyles } from './TaskBoardParts';
 import TaskListFields from './TaskListFields';
 import TaskTimeCell from './TaskTimeCell';
-import { loadFields, saveFields, type FieldId } from './task-list-fields';
+import { fieldWidth, loadFields, resetFieldWidth, saveFields, setFieldWidth, type FieldId, type FieldPref } from './task-list-fields';
 
-const widths: Record<FieldId, number> = { title: 220, owner: 150, priority: 90, due: 110, participants: 115, project: 116, status: 110, created: 150, updated: 150, issues: 108 };
+const HANDLE = 8, KEY_STEP = 16;
+type PointerLike = { nativeEvent: { clientX: number; pointerId: number }; currentTarget: unknown };
 export default function TaskListTable({ rows, people, projects, sort, setSort, s, today, selectedId, onOpen, filtered, needsUpdateUpgrade, touch, onMenu }: {
   rows: Requirement[]; people: RequirementPerson[]; projects: RequirementProject[] | null;
   sort: SortSpec; setSort: (next: SortSpec) => void; s: TaskStyles; today: string;
@@ -27,8 +28,43 @@ export default function TaskListTable({ rows, people, projects, sort, setSort, s
   const [fields, setFields] = useState(loadFields);
   const [now, setNow] = useState(Date.now);
   useEffect(() => { const timer = setInterval(() => setNow(Date.now()), 30000); return () => clearInterval(timer); }, []);
+  const [hover, setHover] = useState<FieldId | null>(null);
+  const [resizing, setResizing] = useState<FieldId | null>(null);
+  const latest = useRef(fields); latest.current = fields;
+  const drag = useRef<{ id: FieldId; x: number; start: number; moved: boolean } | null>(null);
+  const commit = (next: FieldPref[]) => { saveFields(next); setFields(next); };
   const visible = fields.filter(f => f.visible && (projects || f.id !== 'project'));
-  const cellStyle = (id: FieldId) => ({ width: widths[id], minWidth: widths[id], flexShrink: 0, ...(id === 'title' ? { flexGrow: 1 } : {}) });
+  // Title fills spare card width until the user drags it; after that every column is
+  // exactly its stored width and the table scrolls sideways inside its card (Feishu/Notion).
+  const cellStyle = (f: FieldPref) => ({ width: fieldWidth(f), minWidth: fieldWidth(f), flexShrink: 0, ...(f.id === 'title' && f.width === undefined ? { flexGrow: 1 } : {}) });
+  const cursor = (value: string) => { const body = globalThis.document?.body; if (body) { body.style.cursor = value; body.style.userSelect = value ? 'none' : ''; } };
+  // Resize from the rendered width: a stretched title is wider than its stored width.
+  const rendered = (handleEl: unknown, id: FieldId) => (handleEl as HTMLElement).parentElement?.getBoundingClientRect().width ?? fieldWidth(latest.current.find(f => f.id === id)!);
+  const handle = (id: FieldId) => ({
+    onPointerDown: (e: PointerLike) => {
+      (e.currentTarget as HTMLElement).setPointerCapture?.(e.nativeEvent.pointerId);
+      drag.current = { id, x: e.nativeEvent.clientX, start: rendered(e.currentTarget, id), moved: false };
+      setResizing(id); cursor('col-resize');
+    },
+    onPointerMove: (e: PointerLike) => {
+      const d = drag.current; if (!d) return;
+      const dx = e.nativeEvent.clientX - d.x;
+      if (!d.moved && Math.abs(dx) < 1) return;
+      d.moved = true; setFields(setFieldWidth(latest.current, id, d.start + dx));
+    },
+    onPointerUp: () => { const d = drag.current; drag.current = null; setResizing(null); cursor(''); if (d?.moved) commit(latest.current); },
+    onPointerCancel: () => { drag.current = null; setResizing(null); cursor(''); },
+    onPointerEnter: () => setHover(id),
+    onPointerLeave: () => setHover(h => h === id ? null : h),
+    // RN Web View forwards onClick but not onDoubleClick; detail===2 is the second click.
+    onClick: (e: { detail?: number; nativeEvent?: { detail?: number } }) => { if ((e.detail ?? e.nativeEvent?.detail) === 2) commit(resetFieldWidth(latest.current, id)); },
+    onKeyDown: (e: { nativeEvent: { key: string }; preventDefault: () => void; currentTarget: unknown }) => {
+      const step = e.nativeEvent.key === 'ArrowRight' ? KEY_STEP : e.nativeEvent.key === 'ArrowLeft' ? -KEY_STEP : 0;
+      if (!step) return;
+      e.preventDefault();
+      commit(setFieldWidth(latest.current, id, rendered(e.currentTarget, id) + step));
+    },
+  });
   const content = (item: Requirement, id: FieldId) => {
     switch (id) {
       case 'created': case 'updated': {
@@ -46,21 +82,26 @@ export default function TaskListTable({ rows, people, projects, sort, setSort, s
     }
   };
   return <View style={{ flex: 1 }}>
-    <View style={{ flexDirection: 'row', justifyContent: 'flex-end', paddingHorizontal: spacing.xl, paddingBottom: 10 }}><TaskListFields fields={fields} touch={touch} projects={projects !== null} needsUpdateUpgrade={needsUpdateUpgrade} onChange={next => { saveFields(next); setFields(next); }} /></View>
+    <View style={{ flexDirection: 'row', justifyContent: 'flex-end', paddingHorizontal: spacing.xl, paddingBottom: 10 }}><TaskListFields fields={fields} touch={touch} projects={projects !== null} needsUpdateUpgrade={needsUpdateUpgrade} onChange={commit} /></View>
     <View style={s.table} testID="req-list">
       <ScrollView horizontal contentContainerStyle={{ minWidth: '100%', flexGrow: 1 }}>
-        <View style={{ flex: 1, minWidth: visible.reduce((n, f) => n + widths[f.id], 0) + spacing.md * (visible.length - 1) + spacing.lg * 2 }}>
+        <View style={{ flex: 1, minWidth: visible.reduce((n, f) => n + fieldWidth(f), 0) + spacing.md * (visible.length - 1) + spacing.lg * 2 }}>
           <View style={s.tableHead}>
-            {visible.map(({ id }) => {
+            {visible.map(f => {
+              const { id } = f;
               const sortable = id !== 'participants' && id !== 'issues';
               const on = sort.key === id;
-              return <View key={id} testID={`task-column-${id}`} style={cellStyle(id)}>{sortable ? <Pressable testID={`req-sort-${id}`} accessibilityRole="button" accessibilityLabel={t('tasks.copy.50', { v0: t(`fields.${id}`) })} {...a11yState({ selected: on })} style={s.th} onPress={() => setSort(nextSort(sort, id as SortKey))}><Text style={[s.thText, on && s.thTextOn]}>{t(`fields.${id}`)}</Text>{on ? <Ionicons name={sort.dir === 'asc' ? 'arrow-up' : 'arrow-down'} size={11} color={colors.text} /> : null}</Pressable> : <Text style={s.thText}>{t(`fields.${id}`)}</Text>}</View>;
+              const line = resizing === id ? colors.accent : hover === id ? colors.border : 'transparent';
+              return <View key={id} testID={`task-column-${id}`} style={cellStyle(f)}>
+                <View style={{ overflow: 'hidden' }}>{sortable ? <Pressable testID={`req-sort-${id}`} accessibilityRole="button" accessibilityLabel={t('tasks.copy.50', { v0: t(`fields.${id}`) })} {...a11yState({ selected: on })} style={s.th} onPress={() => setSort(nextSort(sort, id as SortKey))}><Text style={[s.thText, on && s.thTextOn]} numberOfLines={1}>{t(`fields.${id}`)}</Text>{on ? <Ionicons name={sort.dir === 'asc' ? 'arrow-up' : 'arrow-down'} size={11} color={colors.text} /> : null}</Pressable> : <Text style={s.thText} numberOfLines={1}>{t(`fields.${id}`)}</Text>}</View>
+                {!touch ? <View testID={`task-col-resize-${id}`} focusable accessibilityRole="adjustable" accessibilityLabel={t('fields.resize', { name: t(`fields.${id}`) })} {...(handle(id) as object)} style={[{ position: 'absolute', top: 0, bottom: 0, right: -(spacing.md + HANDLE) / 2, width: HANDLE, zIndex: 2, alignItems: 'center' }, { cursor: 'col-resize', touchAction: 'none', userSelect: 'none' } as object]}><View style={{ width: 2, height: '100%', backgroundColor: line }} /></View> : null}
+              </View>;
             })}
           </View>
           <ScrollView style={{ flex: 1 }}>
             {!rows.length ? <View style={[s.center, { paddingVertical: spacing.xl * 2 }]}><Text style={s.muted}>{t(filtered ? 'tasks.copy.46' : 'tasks.copy.55')}</Text></View> : null}
             {rows.map(item => <Pressable key={item.id} testID={`req-row-${item.id}`} accessibilityRole="button" accessibilityLabel={item.name} onPress={() => onOpen(item.id)} onLongPress={touch ? e => onMenu(item, e.nativeEvent.pageX, e.nativeEvent.pageY) : undefined} style={state => [s.tr, ((state as { hovered?: boolean }).hovered || state.pressed || item.id === selectedId) && s.trHover]} {...({ dataSet: { taskCard: item.id, taskFrom: item.column } } as object)}>
-              {visible.map(({ id }) => <View key={id} testID={`task-cell-${item.id}-${id}`} style={[cellStyle(id), { flexDirection: 'row', alignItems: 'center' }]}>{content(item, id)}</View>)}
+              {visible.map(f => <View key={f.id} testID={`task-cell-${item.id}-${f.id}`} style={[cellStyle(f), { flexDirection: 'row', alignItems: 'center', overflow: 'hidden' }]}>{content(item, f.id)}</View>)}
             </Pressable>)}
           </ScrollView>
         </View>

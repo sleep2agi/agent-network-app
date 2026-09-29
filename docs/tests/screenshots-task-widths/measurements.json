@@ -1,0 +1,4746 @@
+{
+  "passed": 74,
+  "total": 74,
+  "results": [
+    {
+      "name": "1440x900 baseline page body does not scroll",
+      "ok": true,
+      "detail": {
+        "inner": {
+          "scrollWidth": 1212,
+          "clientWidth": 1152,
+          "insideCard": true
+        },
+        "page": {
+          "scrollWidth": 1440,
+          "clientWidth": 1440,
+          "scrollHeight": 900,
+          "clientHeight": 900
+        },
+        "card": {
+          "x": 264,
+          "w": 1152
+        }
+      }
+    },
+    {
+      "name": "1440x900 header/cell aligned before",
+      "ok": true
+    },
+    {
+      "name": "1440x900 handle 6-8px wide, full header height, on the title/next boundary",
+      "ok": true,
+      "detail": {
+        "hb": {
+          "x": 502,
+          "y": 105.5,
+          "width": 8,
+          "height": 40
+        },
+        "title": {
+          "x": 280,
+          "w": 220
+        },
+        "next": {
+          "x": 512,
+          "w": 150
+        }
+      }
+    },
+    {
+      "name": "1440x900 col-resize cursor",
+      "ok": true
+    },
+    {
+      "name": "1440x900 header title +200",
+      "ok": true,
+      "detail": {
+        "before": 220,
+        "after": 420
+      }
+    },
+    {
+      "name": "1440x900 every row title cell +200",
+      "ok": true,
+      "detail": [
+        200,
+        200,
+        200,
+        200,
+        200,
+        200
+      ]
+    },
+    {
+      "name": "1440x900 other columns keep widths",
+      "ok": true,
+      "detail": {
+        "owner": [
+          150,
+          150
+        ],
+        "priority": [
+          90,
+          90
+        ],
+        "due": [
+          110,
+          110
+        ],
+        "project": [
+          116,
+          116
+        ],
+        "status": [
+          110,
+          110
+        ],
+        "created": [
+          150,
+          150
+        ],
+        "updated": [
+          150,
+          150
+        ]
+      }
+    },
+    {
+      "name": "1440x900 header/cell aligned after",
+      "ok": true
+    },
+    {
+      "name": "1440x900 handle click did not toggle sort",
+      "ok": true
+    },
+    {
+      "name": "1440x900 table scrolls horizontally inside its card",
+      "ok": true,
+      "detail": {
+        "baseline": {
+          "scrollWidth": 1212,
+          "clientWidth": 1152,
+          "insideCard": true
+        },
+        "after": {
+          "scrollWidth": 1412,
+          "clientWidth": 1152,
+          "insideCard": true
+        }
+      }
+    },
+    {
+      "name": "1440x900 page body does not scroll",
+      "ok": true,
+      "detail": {
+        "scrollWidth": 1440,
+        "clientWidth": 1440,
+        "scrollHeight": 900,
+        "clientHeight": 900
+      }
+    },
+    {
+      "name": "1440x900 scrolled: last column reaches card edge",
+      "ok": true,
+      "detail": {
+        "last": {
+          "x": 1250,
+          "w": 150
+        },
+        "card": {
+          "x": 264,
+          "w": 1152
+        }
+      }
+    },
+    {
+      "name": "1440x900 persisted in the #513 fields key",
+      "ok": true,
+      "detail": {
+        "id": "title",
+        "visible": true,
+        "width": 420
+      }
+    },
+    {
+      "name": "1440x900 reload keeps widths",
+      "ok": true,
+      "detail": {
+        "title": 420,
+        "owner": 150,
+        "priority": 90,
+        "due": 110,
+        "project": 116,
+        "status": 110,
+        "created": 150,
+        "updated": 150
+      }
+    },
+    {
+      "name": "1440x900 owner clamps at 64px",
+      "ok": true,
+      "detail": {
+        "x": 712,
+        "w": 64
+      }
+    },
+    {
+      "name": "1440x900 hide+show keeps width",
+      "ok": true
+    },
+    {
+      "name": "1440x900 double-click resets title to default",
+      "ok": true
+    },
+    {
+      "name": "1440x900 double-click resets both back to the initial layout",
+      "ok": true,
+      "detail": {
+        "title": [
+          220,
+          220
+        ],
+        "owner": [
+          150,
+          150
+        ],
+        "priority": [
+          90,
+          90
+        ],
+        "due": [
+          110,
+          110
+        ],
+        "project": [
+          116,
+          116
+        ],
+        "status": [
+          110,
+          110
+        ],
+        "created": [
+          150,
+          150
+        ],
+        "updated": [
+          150,
+          150
+        ]
+      }
+    },
+    {
+      "name": "1440x900 scroll width back to baseline after reset",
+      "ok": true,
+      "detail": {
+        "baseline": {
+          "scrollWidth": 1212,
+          "clientWidth": 1152,
+          "insideCard": true
+        },
+        "reset": {
+          "scrollWidth": 1212,
+          "clientWidth": 1152,
+          "insideCard": true
+        }
+      }
+    },
+    {
+      "name": "1440x900 arrow keys resize",
+      "ok": true
+    },
+    {
+      "name": "1440x900 arrow key grows title from its rendered width",
+      "ok": true,
+      "detail": {
+        "rendered": 220
+      }
+    },
+    {
+      "name": "1440x900 zh reset-widths label",
+      "ok": true
+    },
+    {
+      "name": "1440x900 恢复默认列宽 clears widths but keeps order/visibility",
+      "ok": true
+    },
+    {
+      "name": "1440x900 zh handle label",
+      "ok": true
+    },
+    {
+      "name": "1200x800 baseline page body does not scroll",
+      "ok": true,
+      "detail": {
+        "inner": {
+          "scrollWidth": 1212,
+          "clientWidth": 912,
+          "insideCard": true
+        },
+        "page": {
+          "scrollWidth": 1200,
+          "clientWidth": 1200,
+          "scrollHeight": 800,
+          "clientHeight": 800
+        },
+        "card": {
+          "x": 264,
+          "w": 912
+        }
+      }
+    },
+    {
+      "name": "1200x800 header/cell aligned before",
+      "ok": true
+    },
+    {
+      "name": "1200x800 handle 6-8px wide, full header height, on the title/next boundary",
+      "ok": true,
+      "detail": {
+        "hb": {
+          "x": 502,
+          "y": 105.5,
+          "width": 8,
+          "height": 40
+        },
+        "title": {
+          "x": 280,
+          "w": 220
+        },
+        "next": {
+          "x": 512,
+          "w": 150
+        }
+      }
+    },
+    {
+      "name": "1200x800 col-resize cursor",
+      "ok": true
+    },
+    {
+      "name": "1200x800 header title +200",
+      "ok": true,
+      "detail": {
+        "before": 220,
+        "after": 420
+      }
+    },
+    {
+      "name": "1200x800 every row title cell +200",
+      "ok": true,
+      "detail": [
+        200,
+        200,
+        200,
+        200,
+        200,
+        200
+      ]
+    },
+    {
+      "name": "1200x800 other columns keep widths",
+      "ok": true,
+      "detail": {
+        "owner": [
+          150,
+          150
+        ],
+        "priority": [
+          90,
+          90
+        ],
+        "due": [
+          110,
+          110
+        ],
+        "project": [
+          116,
+          116
+        ],
+        "status": [
+          110,
+          110
+        ],
+        "created": [
+          150,
+          150
+        ],
+        "updated": [
+          150,
+          150
+        ]
+      }
+    },
+    {
+      "name": "1200x800 header/cell aligned after",
+      "ok": true
+    },
+    {
+      "name": "1200x800 handle click did not toggle sort",
+      "ok": true
+    },
+    {
+      "name": "1200x800 table scrolls horizontally inside its card",
+      "ok": true,
+      "detail": {
+        "baseline": {
+          "scrollWidth": 1212,
+          "clientWidth": 912,
+          "insideCard": true
+        },
+        "after": {
+          "scrollWidth": 1412,
+          "clientWidth": 912,
+          "insideCard": true
+        }
+      }
+    },
+    {
+      "name": "1200x800 page body does not scroll",
+      "ok": true,
+      "detail": {
+        "scrollWidth": 1200,
+        "clientWidth": 1200,
+        "scrollHeight": 800,
+        "clientHeight": 800
+      }
+    },
+    {
+      "name": "1200x800 scrolled: last column reaches card edge",
+      "ok": true,
+      "detail": {
+        "last": {
+          "x": 1010,
+          "w": 150
+        },
+        "card": {
+          "x": 264,
+          "w": 912
+        }
+      }
+    },
+    {
+      "name": "1200x800 persisted in the #513 fields key",
+      "ok": true,
+      "detail": {
+        "id": "title",
+        "visible": true,
+        "width": 420
+      }
+    },
+    {
+      "name": "1200x800 reload keeps widths",
+      "ok": true,
+      "detail": {
+        "title": 420,
+        "owner": 150,
+        "priority": 90,
+        "due": 110,
+        "project": 116,
+        "status": 110,
+        "created": 150,
+        "updated": 150
+      }
+    },
+    {
+      "name": "1200x800 owner clamps at 64px",
+      "ok": true,
+      "detail": {
+        "x": 712,
+        "w": 64
+      }
+    },
+    {
+      "name": "1200x800 hide+show keeps width",
+      "ok": true
+    },
+    {
+      "name": "1200x800 double-click resets title to default",
+      "ok": true
+    },
+    {
+      "name": "1200x800 double-click resets both back to the initial layout",
+      "ok": true,
+      "detail": {
+        "title": [
+          220,
+          220
+        ],
+        "owner": [
+          150,
+          150
+        ],
+        "priority": [
+          90,
+          90
+        ],
+        "due": [
+          110,
+          110
+        ],
+        "project": [
+          116,
+          116
+        ],
+        "status": [
+          110,
+          110
+        ],
+        "created": [
+          150,
+          150
+        ],
+        "updated": [
+          150,
+          150
+        ]
+      }
+    },
+    {
+      "name": "1200x800 scroll width back to baseline after reset",
+      "ok": true,
+      "detail": {
+        "baseline": {
+          "scrollWidth": 1212,
+          "clientWidth": 912,
+          "insideCard": true
+        },
+        "reset": {
+          "scrollWidth": 1212,
+          "clientWidth": 912,
+          "insideCard": true
+        }
+      }
+    },
+    {
+      "name": "1200x800 arrow keys resize",
+      "ok": true
+    },
+    {
+      "name": "1200x800 arrow key grows title from its rendered width",
+      "ok": true,
+      "detail": {
+        "rendered": 220
+      }
+    },
+    {
+      "name": "1200x800 zh reset-widths label",
+      "ok": true
+    },
+    {
+      "name": "1200x800 恢复默认列宽 clears widths but keeps order/visibility",
+      "ok": true
+    },
+    {
+      "name": "1200x800 zh handle label",
+      "ok": true
+    },
+    {
+      "name": "1920x1080 baseline page body does not scroll",
+      "ok": true,
+      "detail": {
+        "inner": null,
+        "page": {
+          "scrollWidth": 1920,
+          "clientWidth": 1920,
+          "scrollHeight": 1080,
+          "clientHeight": 1080
+        },
+        "card": {
+          "x": 264,
+          "w": 1632
+        }
+      }
+    },
+    {
+      "name": "1920x1080 header/cell aligned before",
+      "ok": true
+    },
+    {
+      "name": "1920x1080 handle 6-8px wide, full header height, on the title/next boundary",
+      "ok": true,
+      "detail": {
+        "hb": {
+          "x": 922,
+          "y": 105.5,
+          "width": 8,
+          "height": 40
+        },
+        "title": {
+          "x": 280,
+          "w": 640
+        },
+        "next": {
+          "x": 932,
+          "w": 150
+        }
+      }
+    },
+    {
+      "name": "1920x1080 col-resize cursor",
+      "ok": true
+    },
+    {
+      "name": "1920x1080 header title +200",
+      "ok": true,
+      "detail": {
+        "before": 640,
+        "after": 840
+      }
+    },
+    {
+      "name": "1920x1080 every row title cell +200",
+      "ok": true,
+      "detail": [
+        200,
+        200,
+        200,
+        200,
+        200,
+        200
+      ]
+    },
+    {
+      "name": "1920x1080 other columns keep widths",
+      "ok": true,
+      "detail": {
+        "owner": [
+          150,
+          150
+        ],
+        "priority": [
+          90,
+          90
+        ],
+        "due": [
+          110,
+          110
+        ],
+        "project": [
+          116,
+          116
+        ],
+        "status": [
+          110,
+          110
+        ],
+        "created": [
+          150,
+          150
+        ],
+        "updated": [
+          150,
+          150
+        ]
+      }
+    },
+    {
+      "name": "1920x1080 header/cell aligned after",
+      "ok": true
+    },
+    {
+      "name": "1920x1080 handle click did not toggle sort",
+      "ok": true
+    },
+    {
+      "name": "1920x1080 table scrolls horizontally inside its card",
+      "ok": true,
+      "detail": {
+        "baseline": null,
+        "after": {
+          "scrollWidth": 1832,
+          "clientWidth": 1632,
+          "insideCard": true
+        }
+      }
+    },
+    {
+      "name": "1920x1080 page body does not scroll",
+      "ok": true,
+      "detail": {
+        "scrollWidth": 1920,
+        "clientWidth": 1920,
+        "scrollHeight": 1080,
+        "clientHeight": 1080
+      }
+    },
+    {
+      "name": "1920x1080 scrolled: last column reaches card edge",
+      "ok": true,
+      "detail": {
+        "last": {
+          "x": 1730,
+          "w": 150
+        },
+        "card": {
+          "x": 264,
+          "w": 1632
+        }
+      }
+    },
+    {
+      "name": "1920x1080 persisted in the #513 fields key",
+      "ok": true,
+      "detail": {
+        "id": "title",
+        "visible": true,
+        "width": 840
+      }
+    },
+    {
+      "name": "1920x1080 reload keeps widths",
+      "ok": true,
+      "detail": {
+        "title": 840,
+        "owner": 150,
+        "priority": 90,
+        "due": 110,
+        "project": 116,
+        "status": 110,
+        "created": 150,
+        "updated": 150
+      }
+    },
+    {
+      "name": "1920x1080 owner clamps at 64px",
+      "ok": true,
+      "detail": {
+        "x": 1132,
+        "w": 64
+      }
+    },
+    {
+      "name": "1920x1080 hide+show keeps width",
+      "ok": true
+    },
+    {
+      "name": "1920x1080 double-click resets title to default",
+      "ok": true
+    },
+    {
+      "name": "1920x1080 double-click resets both back to the initial layout",
+      "ok": true,
+      "detail": {
+        "title": [
+          640,
+          640
+        ],
+        "owner": [
+          150,
+          150
+        ],
+        "priority": [
+          90,
+          90
+        ],
+        "due": [
+          110,
+          110
+        ],
+        "project": [
+          116,
+          116
+        ],
+        "status": [
+          110,
+          110
+        ],
+        "created": [
+          150,
+          150
+        ],
+        "updated": [
+          150,
+          150
+        ]
+      }
+    },
+    {
+      "name": "1920x1080 scroll width back to baseline after reset",
+      "ok": true,
+      "detail": {
+        "baseline": null,
+        "reset": null
+      }
+    },
+    {
+      "name": "1920x1080 arrow keys resize",
+      "ok": true
+    },
+    {
+      "name": "1920x1080 arrow key grows title from its rendered width",
+      "ok": true,
+      "detail": {
+        "rendered": 608
+      }
+    },
+    {
+      "name": "1920x1080 zh reset-widths label",
+      "ok": true
+    },
+    {
+      "name": "1920x1080 恢复默认列宽 clears widths but keeps order/visibility",
+      "ok": true
+    },
+    {
+      "name": "1920x1080 zh handle label",
+      "ok": true
+    },
+    {
+      "name": "touch table has no resize handles",
+      "ok": true
+    },
+    {
+      "name": "widths never write Hub",
+      "ok": true
+    }
+  ],
+  "tables": {
+    "1440x900": {
+      "before": {
+        "title": {
+          "head": {
+            "x": 280,
+            "w": 220
+          },
+          "cells": [
+            {
+              "x": 280,
+              "w": 220
+            },
+            {
+              "x": 280,
+              "w": 220
+            },
+            {
+              "x": 280,
+              "w": 220
+            },
+            {
+              "x": 280,
+              "w": 220
+            },
+            {
+              "x": 280,
+              "w": 220
+            },
+            {
+              "x": 280,
+              "w": 220
+            }
+          ]
+        },
+        "owner": {
+          "head": {
+            "x": 512,
+            "w": 150
+          },
+          "cells": [
+            {
+              "x": 512,
+              "w": 150
+            },
+            {
+              "x": 512,
+              "w": 150
+            },
+            {
+              "x": 512,
+              "w": 150
+            },
+            {
+              "x": 512,
+              "w": 150
+            },
+            {
+              "x": 512,
+              "w": 150
+            },
+            {
+              "x": 512,
+              "w": 150
+            }
+          ]
+        },
+        "priority": {
+          "head": {
+            "x": 674,
+            "w": 90
+          },
+          "cells": [
+            {
+              "x": 674,
+              "w": 90
+            },
+            {
+              "x": 674,
+              "w": 90
+            },
+            {
+              "x": 674,
+              "w": 90
+            },
+            {
+              "x": 674,
+              "w": 90
+            },
+            {
+              "x": 674,
+              "w": 90
+            },
+            {
+              "x": 674,
+              "w": 90
+            }
+          ]
+        },
+        "due": {
+          "head": {
+            "x": 776,
+            "w": 110
+          },
+          "cells": [
+            {
+              "x": 776,
+              "w": 110
+            },
+            {
+              "x": 776,
+              "w": 110
+            },
+            {
+              "x": 776,
+              "w": 110
+            },
+            {
+              "x": 776,
+              "w": 110
+            },
+            {
+              "x": 776,
+              "w": 110
+            },
+            {
+              "x": 776,
+              "w": 110
+            }
+          ]
+        },
+        "project": {
+          "head": {
+            "x": 898,
+            "w": 116
+          },
+          "cells": [
+            {
+              "x": 898,
+              "w": 116
+            },
+            {
+              "x": 898,
+              "w": 116
+            },
+            {
+              "x": 898,
+              "w": 116
+            },
+            {
+              "x": 898,
+              "w": 116
+            },
+            {
+              "x": 898,
+              "w": 116
+            },
+            {
+              "x": 898,
+              "w": 116
+            }
+          ]
+        },
+        "status": {
+          "head": {
+            "x": 1026,
+            "w": 110
+          },
+          "cells": [
+            {
+              "x": 1026,
+              "w": 110
+            },
+            {
+              "x": 1026,
+              "w": 110
+            },
+            {
+              "x": 1026,
+              "w": 110
+            },
+            {
+              "x": 1026,
+              "w": 110
+            },
+            {
+              "x": 1026,
+              "w": 110
+            },
+            {
+              "x": 1026,
+              "w": 110
+            }
+          ]
+        },
+        "created": {
+          "head": {
+            "x": 1148,
+            "w": 150
+          },
+          "cells": [
+            {
+              "x": 1148,
+              "w": 150
+            },
+            {
+              "x": 1148,
+              "w": 150
+            },
+            {
+              "x": 1148,
+              "w": 150
+            },
+            {
+              "x": 1148,
+              "w": 150
+            },
+            {
+              "x": 1148,
+              "w": 150
+            },
+            {
+              "x": 1148,
+              "w": 150
+            }
+          ]
+        },
+        "updated": {
+          "head": {
+            "x": 1310,
+            "w": 150
+          },
+          "cells": [
+            {
+              "x": 1310,
+              "w": 150
+            },
+            {
+              "x": 1310,
+              "w": 150
+            },
+            {
+              "x": 1310,
+              "w": 150
+            },
+            {
+              "x": 1310,
+              "w": 150
+            },
+            {
+              "x": 1310,
+              "w": 150
+            },
+            {
+              "x": 1310,
+              "w": 150
+            }
+          ]
+        }
+      },
+      "after": {
+        "title": {
+          "head": {
+            "x": 280,
+            "w": 420
+          },
+          "cells": [
+            {
+              "x": 280,
+              "w": 420
+            },
+            {
+              "x": 280,
+              "w": 420
+            },
+            {
+              "x": 280,
+              "w": 420
+            },
+            {
+              "x": 280,
+              "w": 420
+            },
+            {
+              "x": 280,
+              "w": 420
+            },
+            {
+              "x": 280,
+              "w": 420
+            }
+          ]
+        },
+        "owner": {
+          "head": {
+            "x": 712,
+            "w": 150
+          },
+          "cells": [
+            {
+              "x": 712,
+              "w": 150
+            },
+            {
+              "x": 712,
+              "w": 150
+            },
+            {
+              "x": 712,
+              "w": 150
+            },
+            {
+              "x": 712,
+              "w": 150
+            },
+            {
+              "x": 712,
+              "w": 150
+            },
+            {
+              "x": 712,
+              "w": 150
+            }
+          ]
+        },
+        "priority": {
+          "head": {
+            "x": 874,
+            "w": 90
+          },
+          "cells": [
+            {
+              "x": 874,
+              "w": 90
+            },
+            {
+              "x": 874,
+              "w": 90
+            },
+            {
+              "x": 874,
+              "w": 90
+            },
+            {
+              "x": 874,
+              "w": 90
+            },
+            {
+              "x": 874,
+              "w": 90
+            },
+            {
+              "x": 874,
+              "w": 90
+            }
+          ]
+        },
+        "due": {
+          "head": {
+            "x": 976,
+            "w": 110
+          },
+          "cells": [
+            {
+              "x": 976,
+              "w": 110
+            },
+            {
+              "x": 976,
+              "w": 110
+            },
+            {
+              "x": 976,
+              "w": 110
+            },
+            {
+              "x": 976,
+              "w": 110
+            },
+            {
+              "x": 976,
+              "w": 110
+            },
+            {
+              "x": 976,
+              "w": 110
+            }
+          ]
+        },
+        "project": {
+          "head": {
+            "x": 1098,
+            "w": 116
+          },
+          "cells": [
+            {
+              "x": 1098,
+              "w": 116
+            },
+            {
+              "x": 1098,
+              "w": 116
+            },
+            {
+              "x": 1098,
+              "w": 116
+            },
+            {
+              "x": 1098,
+              "w": 116
+            },
+            {
+              "x": 1098,
+              "w": 116
+            },
+            {
+              "x": 1098,
+              "w": 116
+            }
+          ]
+        },
+        "status": {
+          "head": {
+            "x": 1226,
+            "w": 110
+          },
+          "cells": [
+            {
+              "x": 1226,
+              "w": 110
+            },
+            {
+              "x": 1226,
+              "w": 110
+            },
+            {
+              "x": 1226,
+              "w": 110
+            },
+            {
+              "x": 1226,
+              "w": 110
+            },
+            {
+              "x": 1226,
+              "w": 110
+            },
+            {
+              "x": 1226,
+              "w": 110
+            }
+          ]
+        },
+        "created": {
+          "head": {
+            "x": 1348,
+            "w": 150
+          },
+          "cells": [
+            {
+              "x": 1348,
+              "w": 150
+            },
+            {
+              "x": 1348,
+              "w": 150
+            },
+            {
+              "x": 1348,
+              "w": 150
+            },
+            {
+              "x": 1348,
+              "w": 150
+            },
+            {
+              "x": 1348,
+              "w": 150
+            },
+            {
+              "x": 1348,
+              "w": 150
+            }
+          ]
+        },
+        "updated": {
+          "head": {
+            "x": 1510,
+            "w": 150
+          },
+          "cells": [
+            {
+              "x": 1510,
+              "w": 150
+            },
+            {
+              "x": 1510,
+              "w": 150
+            },
+            {
+              "x": 1510,
+              "w": 150
+            },
+            {
+              "x": 1510,
+              "w": 150
+            },
+            {
+              "x": 1510,
+              "w": 150
+            },
+            {
+              "x": 1510,
+              "w": 150
+            }
+          ]
+        }
+      },
+      "reloaded": {
+        "title": {
+          "head": {
+            "x": 280,
+            "w": 420
+          },
+          "cells": [
+            {
+              "x": 280,
+              "w": 420
+            },
+            {
+              "x": 280,
+              "w": 420
+            },
+            {
+              "x": 280,
+              "w": 420
+            },
+            {
+              "x": 280,
+              "w": 420
+            },
+            {
+              "x": 280,
+              "w": 420
+            },
+            {
+              "x": 280,
+              "w": 420
+            }
+          ]
+        },
+        "owner": {
+          "head": {
+            "x": 712,
+            "w": 150
+          },
+          "cells": [
+            {
+              "x": 712,
+              "w": 150
+            },
+            {
+              "x": 712,
+              "w": 150
+            },
+            {
+              "x": 712,
+              "w": 150
+            },
+            {
+              "x": 712,
+              "w": 150
+            },
+            {
+              "x": 712,
+              "w": 150
+            },
+            {
+              "x": 712,
+              "w": 150
+            }
+          ]
+        },
+        "priority": {
+          "head": {
+            "x": 874,
+            "w": 90
+          },
+          "cells": [
+            {
+              "x": 874,
+              "w": 90
+            },
+            {
+              "x": 874,
+              "w": 90
+            },
+            {
+              "x": 874,
+              "w": 90
+            },
+            {
+              "x": 874,
+              "w": 90
+            },
+            {
+              "x": 874,
+              "w": 90
+            },
+            {
+              "x": 874,
+              "w": 90
+            }
+          ]
+        },
+        "due": {
+          "head": {
+            "x": 976,
+            "w": 110
+          },
+          "cells": [
+            {
+              "x": 976,
+              "w": 110
+            },
+            {
+              "x": 976,
+              "w": 110
+            },
+            {
+              "x": 976,
+              "w": 110
+            },
+            {
+              "x": 976,
+              "w": 110
+            },
+            {
+              "x": 976,
+              "w": 110
+            },
+            {
+              "x": 976,
+              "w": 110
+            }
+          ]
+        },
+        "project": {
+          "head": {
+            "x": 1098,
+            "w": 116
+          },
+          "cells": [
+            {
+              "x": 1098,
+              "w": 116
+            },
+            {
+              "x": 1098,
+              "w": 116
+            },
+            {
+              "x": 1098,
+              "w": 116
+            },
+            {
+              "x": 1098,
+              "w": 116
+            },
+            {
+              "x": 1098,
+              "w": 116
+            },
+            {
+              "x": 1098,
+              "w": 116
+            }
+          ]
+        },
+        "status": {
+          "head": {
+            "x": 1226,
+            "w": 110
+          },
+          "cells": [
+            {
+              "x": 1226,
+              "w": 110
+            },
+            {
+              "x": 1226,
+              "w": 110
+            },
+            {
+              "x": 1226,
+              "w": 110
+            },
+            {
+              "x": 1226,
+              "w": 110
+            },
+            {
+              "x": 1226,
+              "w": 110
+            },
+            {
+              "x": 1226,
+              "w": 110
+            }
+          ]
+        },
+        "created": {
+          "head": {
+            "x": 1348,
+            "w": 150
+          },
+          "cells": [
+            {
+              "x": 1348,
+              "w": 150
+            },
+            {
+              "x": 1348,
+              "w": 150
+            },
+            {
+              "x": 1348,
+              "w": 150
+            },
+            {
+              "x": 1348,
+              "w": 150
+            },
+            {
+              "x": 1348,
+              "w": 150
+            },
+            {
+              "x": 1348,
+              "w": 150
+            }
+          ]
+        },
+        "updated": {
+          "head": {
+            "x": 1510,
+            "w": 150
+          },
+          "cells": [
+            {
+              "x": 1510,
+              "w": 150
+            },
+            {
+              "x": 1510,
+              "w": 150
+            },
+            {
+              "x": 1510,
+              "w": 150
+            },
+            {
+              "x": 1510,
+              "w": 150
+            },
+            {
+              "x": 1510,
+              "w": 150
+            },
+            {
+              "x": 1510,
+              "w": 150
+            }
+          ]
+        }
+      },
+      "clamped": {
+        "title": {
+          "head": {
+            "x": 280,
+            "w": 420
+          },
+          "cells": [
+            {
+              "x": 280,
+              "w": 420
+            },
+            {
+              "x": 280,
+              "w": 420
+            },
+            {
+              "x": 280,
+              "w": 420
+            },
+            {
+              "x": 280,
+              "w": 420
+            },
+            {
+              "x": 280,
+              "w": 420
+            },
+            {
+              "x": 280,
+              "w": 420
+            }
+          ]
+        },
+        "owner": {
+          "head": {
+            "x": 712,
+            "w": 64
+          },
+          "cells": [
+            {
+              "x": 712,
+              "w": 64
+            },
+            {
+              "x": 712,
+              "w": 64
+            },
+            {
+              "x": 712,
+              "w": 64
+            },
+            {
+              "x": 712,
+              "w": 64
+            },
+            {
+              "x": 712,
+              "w": 64
+            },
+            {
+              "x": 712,
+              "w": 64
+            }
+          ]
+        },
+        "priority": {
+          "head": {
+            "x": 788,
+            "w": 90
+          },
+          "cells": [
+            {
+              "x": 788,
+              "w": 90
+            },
+            {
+              "x": 788,
+              "w": 90
+            },
+            {
+              "x": 788,
+              "w": 90
+            },
+            {
+              "x": 788,
+              "w": 90
+            },
+            {
+              "x": 788,
+              "w": 90
+            },
+            {
+              "x": 788,
+              "w": 90
+            }
+          ]
+        },
+        "due": {
+          "head": {
+            "x": 890,
+            "w": 110
+          },
+          "cells": [
+            {
+              "x": 890,
+              "w": 110
+            },
+            {
+              "x": 890,
+              "w": 110
+            },
+            {
+              "x": 890,
+              "w": 110
+            },
+            {
+              "x": 890,
+              "w": 110
+            },
+            {
+              "x": 890,
+              "w": 110
+            },
+            {
+              "x": 890,
+              "w": 110
+            }
+          ]
+        },
+        "project": {
+          "head": {
+            "x": 1012,
+            "w": 116
+          },
+          "cells": [
+            {
+              "x": 1012,
+              "w": 116
+            },
+            {
+              "x": 1012,
+              "w": 116
+            },
+            {
+              "x": 1012,
+              "w": 116
+            },
+            {
+              "x": 1012,
+              "w": 116
+            },
+            {
+              "x": 1012,
+              "w": 116
+            },
+            {
+              "x": 1012,
+              "w": 116
+            }
+          ]
+        },
+        "status": {
+          "head": {
+            "x": 1140,
+            "w": 110
+          },
+          "cells": [
+            {
+              "x": 1140,
+              "w": 110
+            },
+            {
+              "x": 1140,
+              "w": 110
+            },
+            {
+              "x": 1140,
+              "w": 110
+            },
+            {
+              "x": 1140,
+              "w": 110
+            },
+            {
+              "x": 1140,
+              "w": 110
+            },
+            {
+              "x": 1140,
+              "w": 110
+            }
+          ]
+        },
+        "created": {
+          "head": {
+            "x": 1262,
+            "w": 150
+          },
+          "cells": [
+            {
+              "x": 1262,
+              "w": 150
+            },
+            {
+              "x": 1262,
+              "w": 150
+            },
+            {
+              "x": 1262,
+              "w": 150
+            },
+            {
+              "x": 1262,
+              "w": 150
+            },
+            {
+              "x": 1262,
+              "w": 150
+            },
+            {
+              "x": 1262,
+              "w": 150
+            }
+          ]
+        },
+        "updated": {
+          "head": {
+            "x": 1424,
+            "w": 150
+          },
+          "cells": [
+            {
+              "x": 1424,
+              "w": 150
+            },
+            {
+              "x": 1424,
+              "w": 150
+            },
+            {
+              "x": 1424,
+              "w": 150
+            },
+            {
+              "x": 1424,
+              "w": 150
+            },
+            {
+              "x": 1424,
+              "w": 150
+            },
+            {
+              "x": 1424,
+              "w": 150
+            }
+          ]
+        }
+      },
+      "reset": {
+        "title": {
+          "head": {
+            "x": 280,
+            "w": 220
+          },
+          "cells": [
+            {
+              "x": 280,
+              "w": 220
+            },
+            {
+              "x": 280,
+              "w": 220
+            },
+            {
+              "x": 280,
+              "w": 220
+            },
+            {
+              "x": 280,
+              "w": 220
+            },
+            {
+              "x": 280,
+              "w": 220
+            },
+            {
+              "x": 280,
+              "w": 220
+            }
+          ]
+        },
+        "owner": {
+          "head": {
+            "x": 512,
+            "w": 150
+          },
+          "cells": [
+            {
+              "x": 512,
+              "w": 150
+            },
+            {
+              "x": 512,
+              "w": 150
+            },
+            {
+              "x": 512,
+              "w": 150
+            },
+            {
+              "x": 512,
+              "w": 150
+            },
+            {
+              "x": 512,
+              "w": 150
+            },
+            {
+              "x": 512,
+              "w": 150
+            }
+          ]
+        },
+        "priority": {
+          "head": {
+            "x": 674,
+            "w": 90
+          },
+          "cells": [
+            {
+              "x": 674,
+              "w": 90
+            },
+            {
+              "x": 674,
+              "w": 90
+            },
+            {
+              "x": 674,
+              "w": 90
+            },
+            {
+              "x": 674,
+              "w": 90
+            },
+            {
+              "x": 674,
+              "w": 90
+            },
+            {
+              "x": 674,
+              "w": 90
+            }
+          ]
+        },
+        "due": {
+          "head": {
+            "x": 776,
+            "w": 110
+          },
+          "cells": [
+            {
+              "x": 776,
+              "w": 110
+            },
+            {
+              "x": 776,
+              "w": 110
+            },
+            {
+              "x": 776,
+              "w": 110
+            },
+            {
+              "x": 776,
+              "w": 110
+            },
+            {
+              "x": 776,
+              "w": 110
+            },
+            {
+              "x": 776,
+              "w": 110
+            }
+          ]
+        },
+        "project": {
+          "head": {
+            "x": 898,
+            "w": 116
+          },
+          "cells": [
+            {
+              "x": 898,
+              "w": 116
+            },
+            {
+              "x": 898,
+              "w": 116
+            },
+            {
+              "x": 898,
+              "w": 116
+            },
+            {
+              "x": 898,
+              "w": 116
+            },
+            {
+              "x": 898,
+              "w": 116
+            },
+            {
+              "x": 898,
+              "w": 116
+            }
+          ]
+        },
+        "status": {
+          "head": {
+            "x": 1026,
+            "w": 110
+          },
+          "cells": [
+            {
+              "x": 1026,
+              "w": 110
+            },
+            {
+              "x": 1026,
+              "w": 110
+            },
+            {
+              "x": 1026,
+              "w": 110
+            },
+            {
+              "x": 1026,
+              "w": 110
+            },
+            {
+              "x": 1026,
+              "w": 110
+            },
+            {
+              "x": 1026,
+              "w": 110
+            }
+          ]
+        },
+        "created": {
+          "head": {
+            "x": 1148,
+            "w": 150
+          },
+          "cells": [
+            {
+              "x": 1148,
+              "w": 150
+            },
+            {
+              "x": 1148,
+              "w": 150
+            },
+            {
+              "x": 1148,
+              "w": 150
+            },
+            {
+              "x": 1148,
+              "w": 150
+            },
+            {
+              "x": 1148,
+              "w": 150
+            },
+            {
+              "x": 1148,
+              "w": 150
+            }
+          ]
+        },
+        "updated": {
+          "head": {
+            "x": 1310,
+            "w": 150
+          },
+          "cells": [
+            {
+              "x": 1310,
+              "w": 150
+            },
+            {
+              "x": 1310,
+              "w": 150
+            },
+            {
+              "x": 1310,
+              "w": 150
+            },
+            {
+              "x": 1310,
+              "w": 150
+            },
+            {
+              "x": 1310,
+              "w": 150
+            },
+            {
+              "x": 1310,
+              "w": 150
+            }
+          ]
+        }
+      },
+      "handle": {
+        "x": 502,
+        "y": 105.5,
+        "width": 8,
+        "height": 40
+      },
+      "scroll": {
+        "inner": {
+          "scrollWidth": 1412,
+          "clientWidth": 1152,
+          "insideCard": true
+        },
+        "page": {
+          "scrollWidth": 1440,
+          "clientWidth": 1440,
+          "scrollHeight": 900,
+          "clientHeight": 900
+        },
+        "card": {
+          "x": 264,
+          "w": 1152
+        }
+      }
+    },
+    "1200x800": {
+      "before": {
+        "title": {
+          "head": {
+            "x": 280,
+            "w": 220
+          },
+          "cells": [
+            {
+              "x": 280,
+              "w": 220
+            },
+            {
+              "x": 280,
+              "w": 220
+            },
+            {
+              "x": 280,
+              "w": 220
+            },
+            {
+              "x": 280,
+              "w": 220
+            },
+            {
+              "x": 280,
+              "w": 220
+            },
+            {
+              "x": 280,
+              "w": 220
+            }
+          ]
+        },
+        "owner": {
+          "head": {
+            "x": 512,
+            "w": 150
+          },
+          "cells": [
+            {
+              "x": 512,
+              "w": 150
+            },
+            {
+              "x": 512,
+              "w": 150
+            },
+            {
+              "x": 512,
+              "w": 150
+            },
+            {
+              "x": 512,
+              "w": 150
+            },
+            {
+              "x": 512,
+              "w": 150
+            },
+            {
+              "x": 512,
+              "w": 150
+            }
+          ]
+        },
+        "priority": {
+          "head": {
+            "x": 674,
+            "w": 90
+          },
+          "cells": [
+            {
+              "x": 674,
+              "w": 90
+            },
+            {
+              "x": 674,
+              "w": 90
+            },
+            {
+              "x": 674,
+              "w": 90
+            },
+            {
+              "x": 674,
+              "w": 90
+            },
+            {
+              "x": 674,
+              "w": 90
+            },
+            {
+              "x": 674,
+              "w": 90
+            }
+          ]
+        },
+        "due": {
+          "head": {
+            "x": 776,
+            "w": 110
+          },
+          "cells": [
+            {
+              "x": 776,
+              "w": 110
+            },
+            {
+              "x": 776,
+              "w": 110
+            },
+            {
+              "x": 776,
+              "w": 110
+            },
+            {
+              "x": 776,
+              "w": 110
+            },
+            {
+              "x": 776,
+              "w": 110
+            },
+            {
+              "x": 776,
+              "w": 110
+            }
+          ]
+        },
+        "project": {
+          "head": {
+            "x": 898,
+            "w": 116
+          },
+          "cells": [
+            {
+              "x": 898,
+              "w": 116
+            },
+            {
+              "x": 898,
+              "w": 116
+            },
+            {
+              "x": 898,
+              "w": 116
+            },
+            {
+              "x": 898,
+              "w": 116
+            },
+            {
+              "x": 898,
+              "w": 116
+            },
+            {
+              "x": 898,
+              "w": 116
+            }
+          ]
+        },
+        "status": {
+          "head": {
+            "x": 1026,
+            "w": 110
+          },
+          "cells": [
+            {
+              "x": 1026,
+              "w": 110
+            },
+            {
+              "x": 1026,
+              "w": 110
+            },
+            {
+              "x": 1026,
+              "w": 110
+            },
+            {
+              "x": 1026,
+              "w": 110
+            },
+            {
+              "x": 1026,
+              "w": 110
+            },
+            {
+              "x": 1026,
+              "w": 110
+            }
+          ]
+        },
+        "created": {
+          "head": {
+            "x": 1148,
+            "w": 150
+          },
+          "cells": [
+            {
+              "x": 1148,
+              "w": 150
+            },
+            {
+              "x": 1148,
+              "w": 150
+            },
+            {
+              "x": 1148,
+              "w": 150
+            },
+            {
+              "x": 1148,
+              "w": 150
+            },
+            {
+              "x": 1148,
+              "w": 150
+            },
+            {
+              "x": 1148,
+              "w": 150
+            }
+          ]
+        },
+        "updated": {
+          "head": {
+            "x": 1310,
+            "w": 150
+          },
+          "cells": [
+            {
+              "x": 1310,
+              "w": 150
+            },
+            {
+              "x": 1310,
+              "w": 150
+            },
+            {
+              "x": 1310,
+              "w": 150
+            },
+            {
+              "x": 1310,
+              "w": 150
+            },
+            {
+              "x": 1310,
+              "w": 150
+            },
+            {
+              "x": 1310,
+              "w": 150
+            }
+          ]
+        }
+      },
+      "after": {
+        "title": {
+          "head": {
+            "x": 280,
+            "w": 420
+          },
+          "cells": [
+            {
+              "x": 280,
+              "w": 420
+            },
+            {
+              "x": 280,
+              "w": 420
+            },
+            {
+              "x": 280,
+              "w": 420
+            },
+            {
+              "x": 280,
+              "w": 420
+            },
+            {
+              "x": 280,
+              "w": 420
+            },
+            {
+              "x": 280,
+              "w": 420
+            }
+          ]
+        },
+        "owner": {
+          "head": {
+            "x": 712,
+            "w": 150
+          },
+          "cells": [
+            {
+              "x": 712,
+              "w": 150
+            },
+            {
+              "x": 712,
+              "w": 150
+            },
+            {
+              "x": 712,
+              "w": 150
+            },
+            {
+              "x": 712,
+              "w": 150
+            },
+            {
+              "x": 712,
+              "w": 150
+            },
+            {
+              "x": 712,
+              "w": 150
+            }
+          ]
+        },
+        "priority": {
+          "head": {
+            "x": 874,
+            "w": 90
+          },
+          "cells": [
+            {
+              "x": 874,
+              "w": 90
+            },
+            {
+              "x": 874,
+              "w": 90
+            },
+            {
+              "x": 874,
+              "w": 90
+            },
+            {
+              "x": 874,
+              "w": 90
+            },
+            {
+              "x": 874,
+              "w": 90
+            },
+            {
+              "x": 874,
+              "w": 90
+            }
+          ]
+        },
+        "due": {
+          "head": {
+            "x": 976,
+            "w": 110
+          },
+          "cells": [
+            {
+              "x": 976,
+              "w": 110
+            },
+            {
+              "x": 976,
+              "w": 110
+            },
+            {
+              "x": 976,
+              "w": 110
+            },
+            {
+              "x": 976,
+              "w": 110
+            },
+            {
+              "x": 976,
+              "w": 110
+            },
+            {
+              "x": 976,
+              "w": 110
+            }
+          ]
+        },
+        "project": {
+          "head": {
+            "x": 1098,
+            "w": 116
+          },
+          "cells": [
+            {
+              "x": 1098,
+              "w": 116
+            },
+            {
+              "x": 1098,
+              "w": 116
+            },
+            {
+              "x": 1098,
+              "w": 116
+            },
+            {
+              "x": 1098,
+              "w": 116
+            },
+            {
+              "x": 1098,
+              "w": 116
+            },
+            {
+              "x": 1098,
+              "w": 116
+            }
+          ]
+        },
+        "status": {
+          "head": {
+            "x": 1226,
+            "w": 110
+          },
+          "cells": [
+            {
+              "x": 1226,
+              "w": 110
+            },
+            {
+              "x": 1226,
+              "w": 110
+            },
+            {
+              "x": 1226,
+              "w": 110
+            },
+            {
+              "x": 1226,
+              "w": 110
+            },
+            {
+              "x": 1226,
+              "w": 110
+            },
+            {
+              "x": 1226,
+              "w": 110
+            }
+          ]
+        },
+        "created": {
+          "head": {
+            "x": 1348,
+            "w": 150
+          },
+          "cells": [
+            {
+              "x": 1348,
+              "w": 150
+            },
+            {
+              "x": 1348,
+              "w": 150
+            },
+            {
+              "x": 1348,
+              "w": 150
+            },
+            {
+              "x": 1348,
+              "w": 150
+            },
+            {
+              "x": 1348,
+              "w": 150
+            },
+            {
+              "x": 1348,
+              "w": 150
+            }
+          ]
+        },
+        "updated": {
+          "head": {
+            "x": 1510,
+            "w": 150
+          },
+          "cells": [
+            {
+              "x": 1510,
+              "w": 150
+            },
+            {
+              "x": 1510,
+              "w": 150
+            },
+            {
+              "x": 1510,
+              "w": 150
+            },
+            {
+              "x": 1510,
+              "w": 150
+            },
+            {
+              "x": 1510,
+              "w": 150
+            },
+            {
+              "x": 1510,
+              "w": 150
+            }
+          ]
+        }
+      },
+      "reloaded": {
+        "title": {
+          "head": {
+            "x": 280,
+            "w": 420
+          },
+          "cells": [
+            {
+              "x": 280,
+              "w": 420
+            },
+            {
+              "x": 280,
+              "w": 420
+            },
+            {
+              "x": 280,
+              "w": 420
+            },
+            {
+              "x": 280,
+              "w": 420
+            },
+            {
+              "x": 280,
+              "w": 420
+            },
+            {
+              "x": 280,
+              "w": 420
+            }
+          ]
+        },
+        "owner": {
+          "head": {
+            "x": 712,
+            "w": 150
+          },
+          "cells": [
+            {
+              "x": 712,
+              "w": 150
+            },
+            {
+              "x": 712,
+              "w": 150
+            },
+            {
+              "x": 712,
+              "w": 150
+            },
+            {
+              "x": 712,
+              "w": 150
+            },
+            {
+              "x": 712,
+              "w": 150
+            },
+            {
+              "x": 712,
+              "w": 150
+            }
+          ]
+        },
+        "priority": {
+          "head": {
+            "x": 874,
+            "w": 90
+          },
+          "cells": [
+            {
+              "x": 874,
+              "w": 90
+            },
+            {
+              "x": 874,
+              "w": 90
+            },
+            {
+              "x": 874,
+              "w": 90
+            },
+            {
+              "x": 874,
+              "w": 90
+            },
+            {
+              "x": 874,
+              "w": 90
+            },
+            {
+              "x": 874,
+              "w": 90
+            }
+          ]
+        },
+        "due": {
+          "head": {
+            "x": 976,
+            "w": 110
+          },
+          "cells": [
+            {
+              "x": 976,
+              "w": 110
+            },
+            {
+              "x": 976,
+              "w": 110
+            },
+            {
+              "x": 976,
+              "w": 110
+            },
+            {
+              "x": 976,
+              "w": 110
+            },
+            {
+              "x": 976,
+              "w": 110
+            },
+            {
+              "x": 976,
+              "w": 110
+            }
+          ]
+        },
+        "project": {
+          "head": {
+            "x": 1098,
+            "w": 116
+          },
+          "cells": [
+            {
+              "x": 1098,
+              "w": 116
+            },
+            {
+              "x": 1098,
+              "w": 116
+            },
+            {
+              "x": 1098,
+              "w": 116
+            },
+            {
+              "x": 1098,
+              "w": 116
+            },
+            {
+              "x": 1098,
+              "w": 116
+            },
+            {
+              "x": 1098,
+              "w": 116
+            }
+          ]
+        },
+        "status": {
+          "head": {
+            "x": 1226,
+            "w": 110
+          },
+          "cells": [
+            {
+              "x": 1226,
+              "w": 110
+            },
+            {
+              "x": 1226,
+              "w": 110
+            },
+            {
+              "x": 1226,
+              "w": 110
+            },
+            {
+              "x": 1226,
+              "w": 110
+            },
+            {
+              "x": 1226,
+              "w": 110
+            },
+            {
+              "x": 1226,
+              "w": 110
+            }
+          ]
+        },
+        "created": {
+          "head": {
+            "x": 1348,
+            "w": 150
+          },
+          "cells": [
+            {
+              "x": 1348,
+              "w": 150
+            },
+            {
+              "x": 1348,
+              "w": 150
+            },
+            {
+              "x": 1348,
+              "w": 150
+            },
+            {
+              "x": 1348,
+              "w": 150
+            },
+            {
+              "x": 1348,
+              "w": 150
+            },
+            {
+              "x": 1348,
+              "w": 150
+            }
+          ]
+        },
+        "updated": {
+          "head": {
+            "x": 1510,
+            "w": 150
+          },
+          "cells": [
+            {
+              "x": 1510,
+              "w": 150
+            },
+            {
+              "x": 1510,
+              "w": 150
+            },
+            {
+              "x": 1510,
+              "w": 150
+            },
+            {
+              "x": 1510,
+              "w": 150
+            },
+            {
+              "x": 1510,
+              "w": 150
+            },
+            {
+              "x": 1510,
+              "w": 150
+            }
+          ]
+        }
+      },
+      "clamped": {
+        "title": {
+          "head": {
+            "x": 280,
+            "w": 420
+          },
+          "cells": [
+            {
+              "x": 280,
+              "w": 420
+            },
+            {
+              "x": 280,
+              "w": 420
+            },
+            {
+              "x": 280,
+              "w": 420
+            },
+            {
+              "x": 280,
+              "w": 420
+            },
+            {
+              "x": 280,
+              "w": 420
+            },
+            {
+              "x": 280,
+              "w": 420
+            }
+          ]
+        },
+        "owner": {
+          "head": {
+            "x": 712,
+            "w": 64
+          },
+          "cells": [
+            {
+              "x": 712,
+              "w": 64
+            },
+            {
+              "x": 712,
+              "w": 64
+            },
+            {
+              "x": 712,
+              "w": 64
+            },
+            {
+              "x": 712,
+              "w": 64
+            },
+            {
+              "x": 712,
+              "w": 64
+            },
+            {
+              "x": 712,
+              "w": 64
+            }
+          ]
+        },
+        "priority": {
+          "head": {
+            "x": 788,
+            "w": 90
+          },
+          "cells": [
+            {
+              "x": 788,
+              "w": 90
+            },
+            {
+              "x": 788,
+              "w": 90
+            },
+            {
+              "x": 788,
+              "w": 90
+            },
+            {
+              "x": 788,
+              "w": 90
+            },
+            {
+              "x": 788,
+              "w": 90
+            },
+            {
+              "x": 788,
+              "w": 90
+            }
+          ]
+        },
+        "due": {
+          "head": {
+            "x": 890,
+            "w": 110
+          },
+          "cells": [
+            {
+              "x": 890,
+              "w": 110
+            },
+            {
+              "x": 890,
+              "w": 110
+            },
+            {
+              "x": 890,
+              "w": 110
+            },
+            {
+              "x": 890,
+              "w": 110
+            },
+            {
+              "x": 890,
+              "w": 110
+            },
+            {
+              "x": 890,
+              "w": 110
+            }
+          ]
+        },
+        "project": {
+          "head": {
+            "x": 1012,
+            "w": 116
+          },
+          "cells": [
+            {
+              "x": 1012,
+              "w": 116
+            },
+            {
+              "x": 1012,
+              "w": 116
+            },
+            {
+              "x": 1012,
+              "w": 116
+            },
+            {
+              "x": 1012,
+              "w": 116
+            },
+            {
+              "x": 1012,
+              "w": 116
+            },
+            {
+              "x": 1012,
+              "w": 116
+            }
+          ]
+        },
+        "status": {
+          "head": {
+            "x": 1140,
+            "w": 110
+          },
+          "cells": [
+            {
+              "x": 1140,
+              "w": 110
+            },
+            {
+              "x": 1140,
+              "w": 110
+            },
+            {
+              "x": 1140,
+              "w": 110
+            },
+            {
+              "x": 1140,
+              "w": 110
+            },
+            {
+              "x": 1140,
+              "w": 110
+            },
+            {
+              "x": 1140,
+              "w": 110
+            }
+          ]
+        },
+        "created": {
+          "head": {
+            "x": 1262,
+            "w": 150
+          },
+          "cells": [
+            {
+              "x": 1262,
+              "w": 150
+            },
+            {
+              "x": 1262,
+              "w": 150
+            },
+            {
+              "x": 1262,
+              "w": 150
+            },
+            {
+              "x": 1262,
+              "w": 150
+            },
+            {
+              "x": 1262,
+              "w": 150
+            },
+            {
+              "x": 1262,
+              "w": 150
+            }
+          ]
+        },
+        "updated": {
+          "head": {
+            "x": 1424,
+            "w": 150
+          },
+          "cells": [
+            {
+              "x": 1424,
+              "w": 150
+            },
+            {
+              "x": 1424,
+              "w": 150
+            },
+            {
+              "x": 1424,
+              "w": 150
+            },
+            {
+              "x": 1424,
+              "w": 150
+            },
+            {
+              "x": 1424,
+              "w": 150
+            },
+            {
+              "x": 1424,
+              "w": 150
+            }
+          ]
+        }
+      },
+      "reset": {
+        "title": {
+          "head": {
+            "x": 280,
+            "w": 220
+          },
+          "cells": [
+            {
+              "x": 280,
+              "w": 220
+            },
+            {
+              "x": 280,
+              "w": 220
+            },
+            {
+              "x": 280,
+              "w": 220
+            },
+            {
+              "x": 280,
+              "w": 220
+            },
+            {
+              "x": 280,
+              "w": 220
+            },
+            {
+              "x": 280,
+              "w": 220
+            }
+          ]
+        },
+        "owner": {
+          "head": {
+            "x": 512,
+            "w": 150
+          },
+          "cells": [
+            {
+              "x": 512,
+              "w": 150
+            },
+            {
+              "x": 512,
+              "w": 150
+            },
+            {
+              "x": 512,
+              "w": 150
+            },
+            {
+              "x": 512,
+              "w": 150
+            },
+            {
+              "x": 512,
+              "w": 150
+            },
+            {
+              "x": 512,
+              "w": 150
+            }
+          ]
+        },
+        "priority": {
+          "head": {
+            "x": 674,
+            "w": 90
+          },
+          "cells": [
+            {
+              "x": 674,
+              "w": 90
+            },
+            {
+              "x": 674,
+              "w": 90
+            },
+            {
+              "x": 674,
+              "w": 90
+            },
+            {
+              "x": 674,
+              "w": 90
+            },
+            {
+              "x": 674,
+              "w": 90
+            },
+            {
+              "x": 674,
+              "w": 90
+            }
+          ]
+        },
+        "due": {
+          "head": {
+            "x": 776,
+            "w": 110
+          },
+          "cells": [
+            {
+              "x": 776,
+              "w": 110
+            },
+            {
+              "x": 776,
+              "w": 110
+            },
+            {
+              "x": 776,
+              "w": 110
+            },
+            {
+              "x": 776,
+              "w": 110
+            },
+            {
+              "x": 776,
+              "w": 110
+            },
+            {
+              "x": 776,
+              "w": 110
+            }
+          ]
+        },
+        "project": {
+          "head": {
+            "x": 898,
+            "w": 116
+          },
+          "cells": [
+            {
+              "x": 898,
+              "w": 116
+            },
+            {
+              "x": 898,
+              "w": 116
+            },
+            {
+              "x": 898,
+              "w": 116
+            },
+            {
+              "x": 898,
+              "w": 116
+            },
+            {
+              "x": 898,
+              "w": 116
+            },
+            {
+              "x": 898,
+              "w": 116
+            }
+          ]
+        },
+        "status": {
+          "head": {
+            "x": 1026,
+            "w": 110
+          },
+          "cells": [
+            {
+              "x": 1026,
+              "w": 110
+            },
+            {
+              "x": 1026,
+              "w": 110
+            },
+            {
+              "x": 1026,
+              "w": 110
+            },
+            {
+              "x": 1026,
+              "w": 110
+            },
+            {
+              "x": 1026,
+              "w": 110
+            },
+            {
+              "x": 1026,
+              "w": 110
+            }
+          ]
+        },
+        "created": {
+          "head": {
+            "x": 1148,
+            "w": 150
+          },
+          "cells": [
+            {
+              "x": 1148,
+              "w": 150
+            },
+            {
+              "x": 1148,
+              "w": 150
+            },
+            {
+              "x": 1148,
+              "w": 150
+            },
+            {
+              "x": 1148,
+              "w": 150
+            },
+            {
+              "x": 1148,
+              "w": 150
+            },
+            {
+              "x": 1148,
+              "w": 150
+            }
+          ]
+        },
+        "updated": {
+          "head": {
+            "x": 1310,
+            "w": 150
+          },
+          "cells": [
+            {
+              "x": 1310,
+              "w": 150
+            },
+            {
+              "x": 1310,
+              "w": 150
+            },
+            {
+              "x": 1310,
+              "w": 150
+            },
+            {
+              "x": 1310,
+              "w": 150
+            },
+            {
+              "x": 1310,
+              "w": 150
+            },
+            {
+              "x": 1310,
+              "w": 150
+            }
+          ]
+        }
+      },
+      "handle": {
+        "x": 502,
+        "y": 105.5,
+        "width": 8,
+        "height": 40
+      },
+      "scroll": {
+        "inner": {
+          "scrollWidth": 1412,
+          "clientWidth": 912,
+          "insideCard": true
+        },
+        "page": {
+          "scrollWidth": 1200,
+          "clientWidth": 1200,
+          "scrollHeight": 800,
+          "clientHeight": 800
+        },
+        "card": {
+          "x": 264,
+          "w": 912
+        }
+      }
+    },
+    "1920x1080": {
+      "before": {
+        "title": {
+          "head": {
+            "x": 280,
+            "w": 640
+          },
+          "cells": [
+            {
+              "x": 280,
+              "w": 640
+            },
+            {
+              "x": 280,
+              "w": 640
+            },
+            {
+              "x": 280,
+              "w": 640
+            },
+            {
+              "x": 280,
+              "w": 640
+            },
+            {
+              "x": 280,
+              "w": 640
+            },
+            {
+              "x": 280,
+              "w": 640
+            }
+          ]
+        },
+        "owner": {
+          "head": {
+            "x": 932,
+            "w": 150
+          },
+          "cells": [
+            {
+              "x": 932,
+              "w": 150
+            },
+            {
+              "x": 932,
+              "w": 150
+            },
+            {
+              "x": 932,
+              "w": 150
+            },
+            {
+              "x": 932,
+              "w": 150
+            },
+            {
+              "x": 932,
+              "w": 150
+            },
+            {
+              "x": 932,
+              "w": 150
+            }
+          ]
+        },
+        "priority": {
+          "head": {
+            "x": 1094,
+            "w": 90
+          },
+          "cells": [
+            {
+              "x": 1094,
+              "w": 90
+            },
+            {
+              "x": 1094,
+              "w": 90
+            },
+            {
+              "x": 1094,
+              "w": 90
+            },
+            {
+              "x": 1094,
+              "w": 90
+            },
+            {
+              "x": 1094,
+              "w": 90
+            },
+            {
+              "x": 1094,
+              "w": 90
+            }
+          ]
+        },
+        "due": {
+          "head": {
+            "x": 1196,
+            "w": 110
+          },
+          "cells": [
+            {
+              "x": 1196,
+              "w": 110
+            },
+            {
+              "x": 1196,
+              "w": 110
+            },
+            {
+              "x": 1196,
+              "w": 110
+            },
+            {
+              "x": 1196,
+              "w": 110
+            },
+            {
+              "x": 1196,
+              "w": 110
+            },
+            {
+              "x": 1196,
+              "w": 110
+            }
+          ]
+        },
+        "project": {
+          "head": {
+            "x": 1318,
+            "w": 116
+          },
+          "cells": [
+            {
+              "x": 1318,
+              "w": 116
+            },
+            {
+              "x": 1318,
+              "w": 116
+            },
+            {
+              "x": 1318,
+              "w": 116
+            },
+            {
+              "x": 1318,
+              "w": 116
+            },
+            {
+              "x": 1318,
+              "w": 116
+            },
+            {
+              "x": 1318,
+              "w": 116
+            }
+          ]
+        },
+        "status": {
+          "head": {
+            "x": 1446,
+            "w": 110
+          },
+          "cells": [
+            {
+              "x": 1446,
+              "w": 110
+            },
+            {
+              "x": 1446,
+              "w": 110
+            },
+            {
+              "x": 1446,
+              "w": 110
+            },
+            {
+              "x": 1446,
+              "w": 110
+            },
+            {
+              "x": 1446,
+              "w": 110
+            },
+            {
+              "x": 1446,
+              "w": 110
+            }
+          ]
+        },
+        "created": {
+          "head": {
+            "x": 1568,
+            "w": 150
+          },
+          "cells": [
+            {
+              "x": 1568,
+              "w": 150
+            },
+            {
+              "x": 1568,
+              "w": 150
+            },
+            {
+              "x": 1568,
+              "w": 150
+            },
+            {
+              "x": 1568,
+              "w": 150
+            },
+            {
+              "x": 1568,
+              "w": 150
+            },
+            {
+              "x": 1568,
+              "w": 150
+            }
+          ]
+        },
+        "updated": {
+          "head": {
+            "x": 1730,
+            "w": 150
+          },
+          "cells": [
+            {
+              "x": 1730,
+              "w": 150
+            },
+            {
+              "x": 1730,
+              "w": 150
+            },
+            {
+              "x": 1730,
+              "w": 150
+            },
+            {
+              "x": 1730,
+              "w": 150
+            },
+            {
+              "x": 1730,
+              "w": 150
+            },
+            {
+              "x": 1730,
+              "w": 150
+            }
+          ]
+        }
+      },
+      "after": {
+        "title": {
+          "head": {
+            "x": 280,
+            "w": 840
+          },
+          "cells": [
+            {
+              "x": 280,
+              "w": 840
+            },
+            {
+              "x": 280,
+              "w": 840
+            },
+            {
+              "x": 280,
+              "w": 840
+            },
+            {
+              "x": 280,
+              "w": 840
+            },
+            {
+              "x": 280,
+              "w": 840
+            },
+            {
+              "x": 280,
+              "w": 840
+            }
+          ]
+        },
+        "owner": {
+          "head": {
+            "x": 1132,
+            "w": 150
+          },
+          "cells": [
+            {
+              "x": 1132,
+              "w": 150
+            },
+            {
+              "x": 1132,
+              "w": 150
+            },
+            {
+              "x": 1132,
+              "w": 150
+            },
+            {
+              "x": 1132,
+              "w": 150
+            },
+            {
+              "x": 1132,
+              "w": 150
+            },
+            {
+              "x": 1132,
+              "w": 150
+            }
+          ]
+        },
+        "priority": {
+          "head": {
+            "x": 1294,
+            "w": 90
+          },
+          "cells": [
+            {
+              "x": 1294,
+              "w": 90
+            },
+            {
+              "x": 1294,
+              "w": 90
+            },
+            {
+              "x": 1294,
+              "w": 90
+            },
+            {
+              "x": 1294,
+              "w": 90
+            },
+            {
+              "x": 1294,
+              "w": 90
+            },
+            {
+              "x": 1294,
+              "w": 90
+            }
+          ]
+        },
+        "due": {
+          "head": {
+            "x": 1396,
+            "w": 110
+          },
+          "cells": [
+            {
+              "x": 1396,
+              "w": 110
+            },
+            {
+              "x": 1396,
+              "w": 110
+            },
+            {
+              "x": 1396,
+              "w": 110
+            },
+            {
+              "x": 1396,
+              "w": 110
+            },
+            {
+              "x": 1396,
+              "w": 110
+            },
+            {
+              "x": 1396,
+              "w": 110
+            }
+          ]
+        },
+        "project": {
+          "head": {
+            "x": 1518,
+            "w": 116
+          },
+          "cells": [
+            {
+              "x": 1518,
+              "w": 116
+            },
+            {
+              "x": 1518,
+              "w": 116
+            },
+            {
+              "x": 1518,
+              "w": 116
+            },
+            {
+              "x": 1518,
+              "w": 116
+            },
+            {
+              "x": 1518,
+              "w": 116
+            },
+            {
+              "x": 1518,
+              "w": 116
+            }
+          ]
+        },
+        "status": {
+          "head": {
+            "x": 1646,
+            "w": 110
+          },
+          "cells": [
+            {
+              "x": 1646,
+              "w": 110
+            },
+            {
+              "x": 1646,
+              "w": 110
+            },
+            {
+              "x": 1646,
+              "w": 110
+            },
+            {
+              "x": 1646,
+              "w": 110
+            },
+            {
+              "x": 1646,
+              "w": 110
+            },
+            {
+              "x": 1646,
+              "w": 110
+            }
+          ]
+        },
+        "created": {
+          "head": {
+            "x": 1768,
+            "w": 150
+          },
+          "cells": [
+            {
+              "x": 1768,
+              "w": 150
+            },
+            {
+              "x": 1768,
+              "w": 150
+            },
+            {
+              "x": 1768,
+              "w": 150
+            },
+            {
+              "x": 1768,
+              "w": 150
+            },
+            {
+              "x": 1768,
+              "w": 150
+            },
+            {
+              "x": 1768,
+              "w": 150
+            }
+          ]
+        },
+        "updated": {
+          "head": {
+            "x": 1930,
+            "w": 150
+          },
+          "cells": [
+            {
+              "x": 1930,
+              "w": 150
+            },
+            {
+              "x": 1930,
+              "w": 150
+            },
+            {
+              "x": 1930,
+              "w": 150
+            },
+            {
+              "x": 1930,
+              "w": 150
+            },
+            {
+              "x": 1930,
+              "w": 150
+            },
+            {
+              "x": 1930,
+              "w": 150
+            }
+          ]
+        }
+      },
+      "reloaded": {
+        "title": {
+          "head": {
+            "x": 280,
+            "w": 840
+          },
+          "cells": [
+            {
+              "x": 280,
+              "w": 840
+            },
+            {
+              "x": 280,
+              "w": 840
+            },
+            {
+              "x": 280,
+              "w": 840
+            },
+            {
+              "x": 280,
+              "w": 840
+            },
+            {
+              "x": 280,
+              "w": 840
+            },
+            {
+              "x": 280,
+              "w": 840
+            }
+          ]
+        },
+        "owner": {
+          "head": {
+            "x": 1132,
+            "w": 150
+          },
+          "cells": [
+            {
+              "x": 1132,
+              "w": 150
+            },
+            {
+              "x": 1132,
+              "w": 150
+            },
+            {
+              "x": 1132,
+              "w": 150
+            },
+            {
+              "x": 1132,
+              "w": 150
+            },
+            {
+              "x": 1132,
+              "w": 150
+            },
+            {
+              "x": 1132,
+              "w": 150
+            }
+          ]
+        },
+        "priority": {
+          "head": {
+            "x": 1294,
+            "w": 90
+          },
+          "cells": [
+            {
+              "x": 1294,
+              "w": 90
+            },
+            {
+              "x": 1294,
+              "w": 90
+            },
+            {
+              "x": 1294,
+              "w": 90
+            },
+            {
+              "x": 1294,
+              "w": 90
+            },
+            {
+              "x": 1294,
+              "w": 90
+            },
+            {
+              "x": 1294,
+              "w": 90
+            }
+          ]
+        },
+        "due": {
+          "head": {
+            "x": 1396,
+            "w": 110
+          },
+          "cells": [
+            {
+              "x": 1396,
+              "w": 110
+            },
+            {
+              "x": 1396,
+              "w": 110
+            },
+            {
+              "x": 1396,
+              "w": 110
+            },
+            {
+              "x": 1396,
+              "w": 110
+            },
+            {
+              "x": 1396,
+              "w": 110
+            },
+            {
+              "x": 1396,
+              "w": 110
+            }
+          ]
+        },
+        "project": {
+          "head": {
+            "x": 1518,
+            "w": 116
+          },
+          "cells": [
+            {
+              "x": 1518,
+              "w": 116
+            },
+            {
+              "x": 1518,
+              "w": 116
+            },
+            {
+              "x": 1518,
+              "w": 116
+            },
+            {
+              "x": 1518,
+              "w": 116
+            },
+            {
+              "x": 1518,
+              "w": 116
+            },
+            {
+              "x": 1518,
+              "w": 116
+            }
+          ]
+        },
+        "status": {
+          "head": {
+            "x": 1646,
+            "w": 110
+          },
+          "cells": [
+            {
+              "x": 1646,
+              "w": 110
+            },
+            {
+              "x": 1646,
+              "w": 110
+            },
+            {
+              "x": 1646,
+              "w": 110
+            },
+            {
+              "x": 1646,
+              "w": 110
+            },
+            {
+              "x": 1646,
+              "w": 110
+            },
+            {
+              "x": 1646,
+              "w": 110
+            }
+          ]
+        },
+        "created": {
+          "head": {
+            "x": 1768,
+            "w": 150
+          },
+          "cells": [
+            {
+              "x": 1768,
+              "w": 150
+            },
+            {
+              "x": 1768,
+              "w": 150
+            },
+            {
+              "x": 1768,
+              "w": 150
+            },
+            {
+              "x": 1768,
+              "w": 150
+            },
+            {
+              "x": 1768,
+              "w": 150
+            },
+            {
+              "x": 1768,
+              "w": 150
+            }
+          ]
+        },
+        "updated": {
+          "head": {
+            "x": 1930,
+            "w": 150
+          },
+          "cells": [
+            {
+              "x": 1930,
+              "w": 150
+            },
+            {
+              "x": 1930,
+              "w": 150
+            },
+            {
+              "x": 1930,
+              "w": 150
+            },
+            {
+              "x": 1930,
+              "w": 150
+            },
+            {
+              "x": 1930,
+              "w": 150
+            },
+            {
+              "x": 1930,
+              "w": 150
+            }
+          ]
+        }
+      },
+      "clamped": {
+        "title": {
+          "head": {
+            "x": 280,
+            "w": 840
+          },
+          "cells": [
+            {
+              "x": 280,
+              "w": 840
+            },
+            {
+              "x": 280,
+              "w": 840
+            },
+            {
+              "x": 280,
+              "w": 840
+            },
+            {
+              "x": 280,
+              "w": 840
+            },
+            {
+              "x": 280,
+              "w": 840
+            },
+            {
+              "x": 280,
+              "w": 840
+            }
+          ]
+        },
+        "owner": {
+          "head": {
+            "x": 1132,
+            "w": 64
+          },
+          "cells": [
+            {
+              "x": 1132,
+              "w": 64
+            },
+            {
+              "x": 1132,
+              "w": 64
+            },
+            {
+              "x": 1132,
+              "w": 64
+            },
+            {
+              "x": 1132,
+              "w": 64
+            },
+            {
+              "x": 1132,
+              "w": 64
+            },
+            {
+              "x": 1132,
+              "w": 64
+            }
+          ]
+        },
+        "priority": {
+          "head": {
+            "x": 1208,
+            "w": 90
+          },
+          "cells": [
+            {
+              "x": 1208,
+              "w": 90
+            },
+            {
+              "x": 1208,
+              "w": 90
+            },
+            {
+              "x": 1208,
+              "w": 90
+            },
+            {
+              "x": 1208,
+              "w": 90
+            },
+            {
+              "x": 1208,
+              "w": 90
+            },
+            {
+              "x": 1208,
+              "w": 90
+            }
+          ]
+        },
+        "due": {
+          "head": {
+            "x": 1310,
+            "w": 110
+          },
+          "cells": [
+            {
+              "x": 1310,
+              "w": 110
+            },
+            {
+              "x": 1310,
+              "w": 110
+            },
+            {
+              "x": 1310,
+              "w": 110
+            },
+            {
+              "x": 1310,
+              "w": 110
+            },
+            {
+              "x": 1310,
+              "w": 110
+            },
+            {
+              "x": 1310,
+              "w": 110
+            }
+          ]
+        },
+        "project": {
+          "head": {
+            "x": 1432,
+            "w": 116
+          },
+          "cells": [
+            {
+              "x": 1432,
+              "w": 116
+            },
+            {
+              "x": 1432,
+              "w": 116
+            },
+            {
+              "x": 1432,
+              "w": 116
+            },
+            {
+              "x": 1432,
+              "w": 116
+            },
+            {
+              "x": 1432,
+              "w": 116
+            },
+            {
+              "x": 1432,
+              "w": 116
+            }
+          ]
+        },
+        "status": {
+          "head": {
+            "x": 1560,
+            "w": 110
+          },
+          "cells": [
+            {
+              "x": 1560,
+              "w": 110
+            },
+            {
+              "x": 1560,
+              "w": 110
+            },
+            {
+              "x": 1560,
+              "w": 110
+            },
+            {
+              "x": 1560,
+              "w": 110
+            },
+            {
+              "x": 1560,
+              "w": 110
+            },
+            {
+              "x": 1560,
+              "w": 110
+            }
+          ]
+        },
+        "created": {
+          "head": {
+            "x": 1682,
+            "w": 150
+          },
+          "cells": [
+            {
+              "x": 1682,
+              "w": 150
+            },
+            {
+              "x": 1682,
+              "w": 150
+            },
+            {
+              "x": 1682,
+              "w": 150
+            },
+            {
+              "x": 1682,
+              "w": 150
+            },
+            {
+              "x": 1682,
+              "w": 150
+            },
+            {
+              "x": 1682,
+              "w": 150
+            }
+          ]
+        },
+        "updated": {
+          "head": {
+            "x": 1844,
+            "w": 150
+          },
+          "cells": [
+            {
+              "x": 1844,
+              "w": 150
+            },
+            {
+              "x": 1844,
+              "w": 150
+            },
+            {
+              "x": 1844,
+              "w": 150
+            },
+            {
+              "x": 1844,
+              "w": 150
+            },
+            {
+              "x": 1844,
+              "w": 150
+            },
+            {
+              "x": 1844,
+              "w": 150
+            }
+          ]
+        }
+      },
+      "reset": {
+        "title": {
+          "head": {
+            "x": 280,
+            "w": 640
+          },
+          "cells": [
+            {
+              "x": 280,
+              "w": 640
+            },
+            {
+              "x": 280,
+              "w": 640
+            },
+            {
+              "x": 280,
+              "w": 640
+            },
+            {
+              "x": 280,
+              "w": 640
+            },
+            {
+              "x": 280,
+              "w": 640
+            },
+            {
+              "x": 280,
+              "w": 640
+            }
+          ]
+        },
+        "owner": {
+          "head": {
+            "x": 932,
+            "w": 150
+          },
+          "cells": [
+            {
+              "x": 932,
+              "w": 150
+            },
+            {
+              "x": 932,
+              "w": 150
+            },
+            {
+              "x": 932,
+              "w": 150
+            },
+            {
+              "x": 932,
+              "w": 150
+            },
+            {
+              "x": 932,
+              "w": 150
+            },
+            {
+              "x": 932,
+              "w": 150
+            }
+          ]
+        },
+        "priority": {
+          "head": {
+            "x": 1094,
+            "w": 90
+          },
+          "cells": [
+            {
+              "x": 1094,
+              "w": 90
+            },
+            {
+              "x": 1094,
+              "w": 90
+            },
+            {
+              "x": 1094,
+              "w": 90
+            },
+            {
+              "x": 1094,
+              "w": 90
+            },
+            {
+              "x": 1094,
+              "w": 90
+            },
+            {
+              "x": 1094,
+              "w": 90
+            }
+          ]
+        },
+        "due": {
+          "head": {
+            "x": 1196,
+            "w": 110
+          },
+          "cells": [
+            {
+              "x": 1196,
+              "w": 110
+            },
+            {
+              "x": 1196,
+              "w": 110
+            },
+            {
+              "x": 1196,
+              "w": 110
+            },
+            {
+              "x": 1196,
+              "w": 110
+            },
+            {
+              "x": 1196,
+              "w": 110
+            },
+            {
+              "x": 1196,
+              "w": 110
+            }
+          ]
+        },
+        "project": {
+          "head": {
+            "x": 1318,
+            "w": 116
+          },
+          "cells": [
+            {
+              "x": 1318,
+              "w": 116
+            },
+            {
+              "x": 1318,
+              "w": 116
+            },
+            {
+              "x": 1318,
+              "w": 116
+            },
+            {
+              "x": 1318,
+              "w": 116
+            },
+            {
+              "x": 1318,
+              "w": 116
+            },
+            {
+              "x": 1318,
+              "w": 116
+            }
+          ]
+        },
+        "status": {
+          "head": {
+            "x": 1446,
+            "w": 110
+          },
+          "cells": [
+            {
+              "x": 1446,
+              "w": 110
+            },
+            {
+              "x": 1446,
+              "w": 110
+            },
+            {
+              "x": 1446,
+              "w": 110
+            },
+            {
+              "x": 1446,
+              "w": 110
+            },
+            {
+              "x": 1446,
+              "w": 110
+            },
+            {
+              "x": 1446,
+              "w": 110
+            }
+          ]
+        },
+        "created": {
+          "head": {
+            "x": 1568,
+            "w": 150
+          },
+          "cells": [
+            {
+              "x": 1568,
+              "w": 150
+            },
+            {
+              "x": 1568,
+              "w": 150
+            },
+            {
+              "x": 1568,
+              "w": 150
+            },
+            {
+              "x": 1568,
+              "w": 150
+            },
+            {
+              "x": 1568,
+              "w": 150
+            },
+            {
+              "x": 1568,
+              "w": 150
+            }
+          ]
+        },
+        "updated": {
+          "head": {
+            "x": 1730,
+            "w": 150
+          },
+          "cells": [
+            {
+              "x": 1730,
+              "w": 150
+            },
+            {
+              "x": 1730,
+              "w": 150
+            },
+            {
+              "x": 1730,
+              "w": 150
+            },
+            {
+              "x": 1730,
+              "w": 150
+            },
+            {
+              "x": 1730,
+              "w": 150
+            },
+            {
+              "x": 1730,
+              "w": 150
+            }
+          ]
+        }
+      },
+      "handle": {
+        "x": 922,
+        "y": 105.5,
+        "width": 8,
+        "height": 40
+      },
+      "scroll": {
+        "inner": {
+          "scrollWidth": 1832,
+          "clientWidth": 1632,
+          "insideCard": true
+        },
+        "page": {
+          "scrollWidth": 1920,
+          "clientWidth": 1920,
+          "scrollHeight": 1080,
+          "clientHeight": 1080
+        },
+        "card": {
+          "x": 264,
+          "w": 1632
+        }
+      }
+    }
+  }
+}
