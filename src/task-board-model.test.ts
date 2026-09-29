@@ -5,6 +5,7 @@ import {
   applyFilter, applyMove, boardColumns, checkDraft, createInput, DRAG_IDLE, dragReduce, dropIndex, dueInfo, editDraftOf,
   editPatch, emptyDraft, localToday, neighbourColumn, nextSort, ownerCounts, ownerKeyOf, ownerLabel, ownersForScope,
   patchApplied, revertMove, scopeOf, sortRows, statusPatch, toggleIn, UNASSIGNED, type DragState,
+  hasRoles, roleAvatars, roleKeysOf, roleKinds,
 } from './task-board-model';
 import { createRequirementBody } from './requirements-hub';
 import type { Requirement } from './requirements-model';
@@ -159,6 +160,42 @@ console.log('# 详情编辑(#488 + 负责人)');
   ck('旧 Hub 不提交负责人', editPatch(legacy, { ...editDraftOf(legacy), owner: NODE_A }) === null);
   ck('Hub 带回了改动 = 生效', patchApplied({ ...item, name: '新' }, { name: '新' }));
   ck('Hub 忽略了字段 = 没生效(老 Hub 回 200)', !patchApplied(item, { name: '新' }) && !patchApplied(item, { owner: NODE_B }));
+}
+
+
+console.log('# 负责人(人类)/ 负责 Agent 两个角色');
+{
+  const two = [
+    R('p', { owner: ME, agentOwner: NODE_A }),
+    R('q', { owner: null, agentOwner: NODE_B }),
+    R('r', { owner: ME, agentOwner: null }),
+    R('s', { owner: null, agentOwner: null }),
+  ];
+  ck('行里有 agent_owner 字段 = 分两个角色', hasRoles(two[0]) && !hasRoles(R('legacy', { agentOwner: undefined })));
+  ck('卡片头像:人类在前、Agent 在后', roleAvatars(two[0], people).map(a => `${a.role}:${a.name}`).join() === 'owner:测试者,agent:demo-node-a');
+  ck('只有 Agent 时只画 Agent', roleAvatars(two[1], people).map(a => a.role).join() === 'agent');
+  ck('两个角色都没有 = 未分配', roleKeysOf(two[3]).join() === UNASSIGNED && roleKeysOf(two[0]).join() === 'user:u_me,node:node_demo_a');
+  ck('「我负责的」只看负责人', applyFilter(two, { owners: ['user:u_me'], priorities: [] }).map(i => i.id).join() === 'p,r');
+  ck('「按 Agent」只看负责 Agent', applyFilter(two, { owners: ['node:node_demo_a'], priorities: [] }).map(i => i.id).join() === 'p');
+  ck('未分配 = 两个都空', applyFilter(two, { owners: [UNASSIGNED], priorities: [] }).map(i => i.id).join() === 's');
+  const c = ownerCounts(two, people);
+  ck('计数:一张卡同时算进负责人和负责 Agent', c.find(x => x.key === 'user:u_me')?.count === 2 && c.find(x => x.key === 'node:node_demo_a')?.count === 1 && c.find(x => x.key === UNASSIGNED)?.count === 1);
+  ck('文字:负责人 · 负责 Agent', ownerLabel(two[0], people) === '测试者 · demo-node-a');
+  ck('选择器种类:负责人只列人类,负责 Agent 只列节点,旧 Hub 两种都列', roleKinds('owner', true).join() === 'user' && roleKinds('agent', true).join() === 'node' && roleKinds('owner', false).join() === 'user,node');
+  const d = { ...emptyDraft(), name: '两个角色', owner: ME, agentOwner: NODE_A };
+  const both = createInput(d, true)!;
+  ck('新建:owner {user}、agentOwner {node} 都只带 {kind,id}', JSON.stringify(both.owner) === '{"kind":"user","id":"u_me"}' && JSON.stringify(both.agentOwner) === '{"kind":"node","id":"node_demo_a"}');
+  ck('新建:两个角色的 Hub 上节点不能当负责人(不发)', !('owner' in createInput({ ...d, owner: NODE_B }, true)!));
+  ck('新建:旧 Hub 不发负责 Agent,单一负责人照旧', !('agentOwner' in createInput(d, false)!) && JSON.stringify(createInput({ ...d, owner: NODE_B }, false)!.owner) === '{"kind":"node","id":"node_demo_b"}');
+  const body = createRequirementBody({ serverUrl: 'http://hub.test', token: 't', networkId: 'n' }, both);
+  ck('POST 请求体带 agent_owner {kind,id}', JSON.stringify(body.agent_owner) === '{"kind":"node","id":"node_demo_a"}' && JSON.stringify(body.owner) === '{"kind":"user","id":"u_me"}');
+  ck('POST 请求体:没选负责 Agent 就没有这个字段', createRequirementBody({ serverUrl: 'x', token: 't' }, createInput({ ...d, agentOwner: null }, true)!).agent_owner === undefined);
+  const item = two[0];
+  ck('详情:只改负责 Agent → {agent_owner}', JSON.stringify(editPatch(item, { ...editDraftOf(item), agentOwner: NODE_B })) === '{"agent_owner":{"kind":"node","id":"node_demo_b"}}');
+  ck('详情:清空负责 Agent = null', JSON.stringify(editPatch(item, { ...editDraftOf(item), agentOwner: null })) === '{"agent_owner":null}');
+  const legacy = R('old', { owner: NODE_A, agentOwner: undefined });
+  ck('详情:旧 Hub 不发 agent_owner', editPatch(legacy, { ...editDraftOf(legacy), agentOwner: NODE_B }) === null);
+  ck('Hub 忽略了 agent_owner = 没生效', !patchApplied(item, { agent_owner: NODE_B }) && patchApplied({ ...item, agentOwner: NODE_B }, { agent_owner: NODE_B }));
 }
 
 console.log('# 界面接线(源码)');

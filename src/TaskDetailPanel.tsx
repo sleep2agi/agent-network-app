@@ -5,7 +5,6 @@ import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { ActivityIndicator, Modal, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { Text, TextInput } from './ui-text';
 import { Ionicons } from './icons';
-import RequirementPeoplePicker from './RequirementPeoplePicker';
 import RequirementAssignmentsEditor from './RequirementAssignmentsEditor';
 import { useModalSafePadding } from './safe-area-runtime';
 import { colors, spacing, type as typeScale, weight } from './theme';
@@ -13,9 +12,9 @@ import type { HubConfig } from './api';
 import { REQ_COLUMN_LABEL, REQ_COLUMNS, type ReqColumn, type Requirement } from './requirements-model';
 import type { RequirementPerson } from './requirement-people';
 import type { RequirementAssignments } from './requirement-people-api';
-import { checkDraft, editDraftOf, editPatch, type EditDraft, type EditPatch } from './task-board-model';
+import { checkDraft, editDraftOf, editPatch, hasRoles, type EditDraft, type EditPatch } from './task-board-model';
 import { BOARD_RADIUS, cardBg, liftedShadow, STATUS_TONE, useTaskStyles } from './TaskBoardParts';
-import { DueField, fieldStyles, OwnerField, PriorityPicker } from './TaskCreateDialog';
+import { DueField, fieldStyles, PriorityPicker, RoleFields } from './TaskCreateDialog';
 
 export const DRAWER_WIDTH = 420;
 
@@ -43,7 +42,6 @@ export default function TaskDetailPanel({ cfg, item, mode, top, people, peopleLo
   const [error, setError] = useState<{ field: 'name' | 'due' | 'submit'; message: string } | null>(null);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
-  const [pickerOpen, setPickerOpen] = useState(false);
   // 换了一张卡片就换草稿;同一张卡片被 Hub 刷新(别处改了)时,没改过的字段跟着刷新。
   const shown = useRef(item);
   useEffect(() => {
@@ -58,6 +56,7 @@ export default function TaskDetailPanel({ cfg, item, mode, top, people, peopleLo
         priority: d.priority === base.priority ? next.priority : d.priority,
         due: d.due === base.due ? next.due : d.due,
         owner: JSON.stringify(d.owner) === JSON.stringify(base.owner) ? next.owner : d.owner,
+        agentOwner: JSON.stringify(d.agentOwner) === JSON.stringify(base.agentOwner) ? next.agentOwner : d.agentOwner,
       };
     });
   }, [item]);
@@ -112,16 +111,23 @@ export default function TaskDetailPanel({ cfg, item, mode, top, people, peopleLo
         {moving ? <Text style={s.muted} accessibilityLiveRegion="polite">正在保存状态…</Text> : null}
         {moveError ? <Text style={s.err} accessibilityRole="alert">{moveError}</Text> : null}
       </Field>
-      <Field label="负责人">
-        {legacy ? (
+      <RoleFields
+        twoRoles={hasRoles(item)}
+        owner={draft.owner}
+        agentOwner={draft.agentOwner}
+        people={people}
+        peopleLoading={peopleLoading}
+        networkId={cfg.networkId || ''}
+        onLoadPeople={onLoadPeople}
+        onChange={p => set(p)}
+        idBase="req-edit-owner"
+        ownerLocked={legacy ? (
           <>
             <Text style={{ color: colors.text, fontSize: typeScale.body }}>{item.assignee || '未分配'}</Text>
             <Text style={s.muted} testID="req-owner-unsupported">升级 Hub 后可绑定人类或 Agent 负责人</Text>
           </>
-        ) : (
-          <OwnerField value={draft.owner} people={people} loading={peopleLoading} disabled={peopleLoading} onPress={() => { void onLoadPeople().then(ok => { if (ok) setPickerOpen(true); }); }} idBase="req-edit-owner" />
-        )}
-      </Field>
+        ) : undefined}
+      />
       <Field label="优先级">
         <PriorityPicker value={draft.priority} onChange={priority => set({ priority })} testPrefix="req-edit-priority" />
       </Field>
@@ -171,9 +177,6 @@ export default function TaskDetailPanel({ cfg, item, mode, top, people, peopleLo
     </View>
   );
 
-  const picker = pickerOpen ? (
-    <RequirementPeoplePicker networkId={cfg.networkId || ''} mode="owner" people={people} selected={draft.owner ? [draft.owner] : []} onClose={() => setPickerOpen(false)} onConfirm={sel => { set({ owner: sel[0] || null }); setPickerOpen(false); }} />
-  ) : null;
 
   if (mode === 'drawer') {
     return (
@@ -186,7 +189,6 @@ export default function TaskDetailPanel({ cfg, item, mode, top, people, peopleLo
         {head}
         {body}
         {footer}
-        {picker}
       </View>
     );
   }
@@ -197,7 +199,6 @@ export default function TaskDetailPanel({ cfg, item, mode, top, people, peopleLo
         {body}
         {footer}
       </View>
-      {picker}
     </Modal>
   );
 }

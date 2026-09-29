@@ -33,6 +33,7 @@ mock.module('./src/AliasAvatar', () => ({ default: () => null }));
 
 const card = { id: 'r1', name: '验证需求详情', assignee: '负责人甲', priority: 'normal', due: '', column: 'pool', createdAt: '' };
 let typedCards = false;
+let roleCards = false;
 let requests: any[] = [];
 let creates: any[] = [];
 let edits: any[] = [];
@@ -41,12 +42,17 @@ let reply: (value: any) => void;
 let reject: (error: Error) => void;
 class HubError extends Error { constructor(public status: number, message = 'HTTP ' + status) { super(message); } }
 mock.module('./src/requirements-hub', () => ({
-  listRequirements: async () => [{ ...card, ...(typedCards ? { owner: null, participants: [] } : {}) }, { ...card, id: 'r2', name: '另一个需求' }], migrateLocalRequirements: async () => {},
-  createRequirementOnHub: async (_cfg: any, input: any) => { creates.push(input); return { ...card, ...input, id: 'new', owner: input.owner || null, participants: [] }; },
+  listRequirements: async () => [
+    { ...card, ...(typedCards || roleCards ? { owner: null, participants: [] } : {}), ...(roleCards ? { agentOwner: null } : {}) },
+    { ...card, id: 'r2', name: '另一个需求', ...(roleCards ? { owner: null, participants: [], agentOwner: null } : {}) },
+  ], migrateLocalRequirements: async () => {},
+  probeAgentOwnerSupport: async () => roleCards,
+  createRequirementOnHub: async (_cfg: any, input: any) => { creates.push(input); return { ...card, ...input, id: 'new', owner: input.owner || null, participants: [], ...(roleCards ? { agentOwner: input.agentOwner || null } : {}) }; },
   updateRequirementOnHub: async (_cfg: any, id: string, patch: any) => {
     edits.push({ id, patch });
     if (editReply) return editReply(patch);
-    return { ...card, id, ...patch, owner: patch.owner === undefined ? null : patch.owner, participants: [] };
+    const { agent_owner, ...rest } = patch;
+    return { ...card, id, ...rest, owner: patch.owner === undefined ? null : patch.owner, participants: [], ...(roleCards ? { agentOwner: agent_owner === undefined ? null : agent_owner } : {}) };
   },
   fetchMyUserId: async () => 'u',
   RequirementsHubError: HubError,
@@ -58,7 +64,7 @@ mock.module('./src/requirements-hub', () => ({
 let saveAssignment: (result: any) => void;
 const assignmentWrites: any[] = [];
 mock.module('./src/requirement-people-api', () => ({
-  listRequirementPeople: async () => [{ kind: 'user', id: 'u', name: '成员', networkId: 'a' }],
+  listRequirementPeople: async () => [{ kind: 'user', id: 'u', name: '成员', networkId: 'a' }, { kind: 'node', id: 'n1', name: '执行节点', networkId: 'a' }],
   saveRequirementAssignments: (_cfg: unknown, id: string, value: unknown) => {
     assignmentWrites.push({ id, value });
     return new Promise(resolve => { saveAssignment = resolve; });
@@ -80,7 +86,7 @@ async function mount() {
   setTaskSection('board');
   await act(async () => { renderer = create(<Board cfg={cfg} />); });
 }
-afterEach(async () => { typedCards = false; if (renderer) await act(async () => renderer.unmount()); });
+afterEach(async () => { typedCards = false; roleCards = false; if (renderer) await act(async () => renderer.unmount()); });
 
 test('header has no permanent inputs or dev note; 新建 opens the dialog', async () => {
   await mount();
@@ -221,6 +227,49 @@ test('owner changed in details is saved as {kind,id} with 保存修改 and shows
   expect(edits).toEqual([{ id: 'r1', patch: { owner: { kind: 'user', id: 'u' } } }]);
   await act(async () => byId('req-detail-close').props.onPress());
   expect(texts('req-card-r1')).toContain('成员');
+});
+
+test('two-role hub: 负责人 lists only humans, 负责 Agent only agents; both go out as {kind,id}', async () => {
+  roleCards = true;
+  await mount();
+  await act(async () => byId('req-new').props.onPress());
+  await act(async () => byId('req-name').props.onChangeText('分两个角色'));
+  await act(async () => byId('req-assignee').props.onPress());
+  expect(renderer.root.findAllByProps({ testID: 'person-node:n1' })).toHaveLength(0);
+  await act(async () => byId('person-user:u').props.onPress());
+  await act(async () => byId('people-confirm').props.onPress());
+  await act(async () => byId('req-assignee-agent').props.onPress());
+  expect(renderer.root.findAllByProps({ testID: 'person-user:u' })).toHaveLength(0);
+  await act(async () => byId('person-node:n1').props.onPress());
+  await act(async () => byId('people-confirm').props.onPress());
+  await act(async () => byId('req-add').props.onPress());
+  expect(creates[0].owner).toEqual({ kind: 'user', id: 'u' });
+  expect(creates[0].agentOwner).toEqual({ kind: 'node', id: 'n1' });
+  expect(creates[0].assignee).toBe('');
+  const avatars = byId('req-card-new').findAll(n => typeof n.props.testID === 'string' && n.props.testID.startsWith('task-avatar-')).map(n => n.props.testID);
+  expect([...new Set(avatars)]).toEqual(['task-avatar-owner', 'task-avatar-agent']);
+});
+
+test('two-role hub: detail changes 负责 Agent alone with 保存修改', async () => {
+  roleCards = true;
+  await mount();
+  await act(async () => byId('req-card-r1').props.onPress());
+  await act(async () => byId('req-edit-owner-agent').props.onPress());
+  await act(async () => byId('person-node:n1').props.onPress());
+  await act(async () => byId('people-confirm').props.onPress());
+  expect(edits).toHaveLength(0);
+  await act(async () => byId('req-edit-save').props.onPress());
+  expect(edits).toEqual([{ id: 'r1', patch: { agent_owner: { kind: 'node', id: 'n1' } } }]);
+});
+
+test('hub without agent_owner keeps the single 负责人 picker (humans and agents)', async () => {
+  typedCards = true;
+  await mount();
+  await act(async () => byId('req-new').props.onPress());
+  expect(renderer.root.findAllByProps({ testID: 'req-assignee-agent' })).toHaveLength(0);
+  await act(async () => byId('req-assignee').props.onPress());
+  expect(byId('person-node:n1')).toBeTruthy();
+  expect(byId('person-user:u')).toBeTruthy();
 });
 
 test('people picker separates identical user/node names, stages selection, and confirms stable references', async () => {

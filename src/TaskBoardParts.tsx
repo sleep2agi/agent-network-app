@@ -10,7 +10,7 @@ import { colors, onThemeChange, radius, spacing, themeMode, type as typeScale, w
 import { shadowOnly } from './elevation';
 import { REQ_PRIORITY_LABEL, type ReqPriority, type Requirement } from './requirements-model';
 import type { RequirementPerson } from './requirement-people';
-import { dueInfo, ownerLabel, type DueTone } from './task-board-model';
+import { dueInfo, ownerLabel, roleAvatars, type DueTone } from './task-board-model';
 
 export const BOARD_RADIUS = {
   card: radius.surface, control: radius.control, pill: radius.pill,
@@ -142,16 +142,22 @@ export function DueChip({ item, today, s }: { item: Pick<Requirement, 'due' | 'c
 
 export function OwnerBadge({ item, people, s, size = 18, avatarOnly = false }: { item: Requirement; people: readonly RequirementPerson[]; s: TaskStyles; size?: number; avatarOnly?: boolean }) {
   const label = ownerLabel(item, people);
-  const assigned = item.owner ? true : item.owner === undefined && !!item.assignee;
+  // 分两个角色时:人类负责人在前、负责 Agent 在后,两个头像;旧 Hub 只有一个负责人。
+  const avatars = roleAvatars(item, people);
+  const legacyText = item.owner === undefined && !!item.assignee;
+  const a11y = avatars.length ? avatars.map(a => `${a.role === 'agent' ? '负责 Agent' : '负责人'} ${a.name}`).join('，') : `负责人 ${label}`;
   return (
-    <View style={s.owner} accessibilityLabel={`负责人 ${label}`}>
-      {assigned ? <AliasAvatar alias={label} size={size} /> : <Ionicons name="person-circle-outline" size={size} color={colors.textMuted} />}
-      {avatarOnly && assigned ? null : <Text style={assigned ? s.metaText : s.metaMuted} numberOfLines={1}>{label}</Text>}
+    <View style={s.owner} accessibilityLabel={a11y} testID="task-owner">
+      {avatars.length ? (
+        <View style={{ flexDirection: 'row', gap: 3 }}>
+          {avatars.map(a => <View key={a.role} testID={`task-avatar-${a.role}`}><AliasAvatar alias={a.name} size={size} /></View>)}
+        </View>
+      ) : legacyText ? <AliasAvatar alias={label} size={size} /> : <Ionicons name="person-circle-outline" size={size} color={colors.textMuted} />}
+      {avatarOnly && (avatars.length || legacyText) ? null : <Text style={avatars.length || legacyText ? s.metaText : s.metaMuted} numberOfLines={1}>{label}</Text>}
     </View>
   );
 }
 
-/** 卡片的一行元信息:优先级点 + 文字 · 负责人 · 期限(靠右)。 */
 /** compact:列窄(< 260)时负责人只显示头像 —— 名字截成「d..」比不显示更难读。 */
 export function CardMeta({ item, people, today, s, compact = false }: { item: Requirement; people: readonly RequirementPerson[]; today: string; s: TaskStyles; compact?: boolean }) {
   return (

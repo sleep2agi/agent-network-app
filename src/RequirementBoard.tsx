@@ -15,7 +15,7 @@ import AliasAvatar from './AliasAvatar';
 import type { HubConfig } from './api';
 import { REQ_COLUMN_LABEL, REQ_COLUMNS, REQ_PRIORITIES, REQ_PRIORITY_LABEL, type ReqColumn, type Requirement } from './requirements-model';
 import { readRequirements, requirementsKey, writeRequirements } from './requirements-store';
-import { createRequirementOnHub, fetchMyUserId, listRequirements, migrateLocalRequirements, moveRequirementOnHub, RequirementsHubError, updateRequirementOnHub } from './requirements-hub';
+import { createRequirementOnHub, fetchMyUserId, listRequirements, migrateLocalRequirements, moveRequirementOnHub, probeAgentOwnerSupport, RequirementsHubError, updateRequirementOnHub } from './requirements-hub';
 import { listRequirementPeople } from './requirement-people-api';
 import { personKey } from './requirement-people';
 import { colors, radius, spacing } from './theme';
@@ -25,7 +25,7 @@ import { useModalSafePadding } from './safe-area-runtime';
 import { usePoll } from './usePoll';
 import {
   applyFilter, applyMove, boardColumns, createInput, DEFAULT_SORT, DRAG_IDLE, dragReduce, dropIndex, emptyDraft,
-  filterActive, localToday, neighbourColumn, nextSort, ownerCounts, ownerLabel, revertMove, sortRows, toggleIn, UNASSIGNED,
+  filterActive, hasRoles, localToday, neighbourColumn, nextSort, ownerCounts, ownerLabel, revertMove, sortRows, toggleIn, UNASSIGNED,
   type CreateDraft, type DragEvent, type DragState, type EditPatch, type SortKey, type SortSpec,
 } from './task-board-model';
 import { enterTaskScope, patchTaskBoard, setTaskFilter, setTaskSection, taskScopeKey, updateTaskItems, useTaskBoard, type TaskSection } from './task-board-store';
@@ -41,6 +41,10 @@ const POLL_MS = 15_000;
 /** 内容区窄于这个宽度:看板改成横向一列一屏,详情改成推入页。 */
 const NARROW = 700;
 const DRAWER_MIN = 860;
+
+/** 筛选键(user:… / node:…)对应的名字:没有卡片的人不在 ownerCounts 里,从成员表取。 */
+const keyName = (key: string, people: readonly { kind: string; id: string; name: string }[]) =>
+  people.find(p => `${p.kind}:${p.id}` === key)?.name || key.split(':').slice(1).join(':') || '负责人';
 
 const moveErrorText = (e: unknown) => (e instanceof RequirementsHubError && e.status === 403 ? '你没有修改这条需求的权限' : '状态未保存，请重试');
 
@@ -58,6 +62,7 @@ function ScopedRequirementBoard({ cfg, desktop, dispatch }: { cfg: HubConfig; de
   const storePeople = useTaskBoard(st => st.people);
   const meId = useTaskBoard(st => (st.scope === scope ? st.meId : null));
   const section = useTaskBoard(st => st.section);
+  const twoRoles = useTaskBoard(st => (st.scope === scope ? st.twoRoles === true : false));
   const filter = useTaskBoard(st => st.filter);
   const items = mine ? storeItems : [];
   const people = mine ? storePeople : [];
@@ -98,7 +103,10 @@ function ScopedRequirementBoard({ cfg, desktop, dispatch }: { cfg: HubConfig; de
         await migrateLocalRequirements(cfg, () => readRequirements(localKey), rows => writeRequirements(localKey, rows));
         const list = await listRequirements(cfg);
         if (dead) return;
-        patchTaskBoard(scope, { items: list, loaded: true });
+        // 分不分两个角色:有卡片就看行里带没带 agent_owner;一张都没有才去探 Hub。
+        const roles = list.length ? list.some(hasRoles) : await probeAgentOwnerSupport(cfg);
+        if (dead) return;
+        patchTaskBoard(scope, { items: list, loaded: true, twoRoles: roles });
         setPhase('ready');
         setHubError('');
       } catch (e) {
@@ -113,7 +121,7 @@ function ScopedRequirementBoard({ cfg, desktop, dispatch }: { cfg: HubConfig; de
   }, [cfg.serverUrl, cfg.token, cfg.networkId, localKey, reloadKey, scope]);
 
   // 有卡片带稳定负责人时读一次成员(卡片上的名字 / 头像、筛选里的人都从这里来)。
-  const hasOwners = items.some(item => item.owner);
+  const hasOwners = items.some(item => item.owner || item.agentOwner);
   useEffect(() => {
     if (!hasOwners || !cfg.networkId) return;
     let dead = false;
@@ -177,7 +185,7 @@ function ScopedRequirementBoard({ cfg, desktop, dispatch }: { cfg: HubConfig; de
   };
 
   const create = async (d: CreateDraft): Promise<string | null> => {
-    const input = createInput(d);
+    const input = createInput(d, twoRoles);
     if (!input) return '先写任务标题';
     try {
       const created = await track(() => createRequirementOnHub(cfg, input));
@@ -205,7 +213,10 @@ function ScopedRequirementBoard({ cfg, desktop, dispatch }: { cfg: HubConfig; de
     const only = filter.owners.length === 1 ? filter.owners[0] : null;
     if (only && only !== UNASSIGNED) {
       const [kind, ...rest] = only.split(':');
-      if (kind === 'user' || kind === 'node') d.owner = { kind, id: rest.join(':') };
+      const ref = { kind, id: rest.join(':') } as const;
+      // 在某个 Agent 下建:分两个角色的 Hub 上它是负责 Agent;旧 Hub 上是唯一的负责人。
+      if (kind === 'node' && twoRoles) d.agentOwner = { kind: 'node', id: ref.id };
+      else if (kind === 'user' || kind === 'node') d.owner = { kind, id: ref.id };
     }
     if (filter.priorities.length === 1) d.priority = filter.priorities[0];
     return d;
@@ -261,7 +272,7 @@ function ScopedRequirementBoard({ cfg, desktop, dispatch }: { cfg: HubConfig; de
     ...(desktop ? [] : [{ key: 'dispatch' as const, label: '派发记录' }]),
   ];
   const ownerChipLabel = filter.owners.length === 0 ? '负责人'
-    : filter.owners.length === 1 ? (owners.find(o => o.key === filter.owners[0])?.name || (filter.owners[0] === UNASSIGNED ? '未分配' : '负责人'))
+    : filter.owners.length === 1 ? (owners.find(o => o.key === filter.owners[0])?.name || (filter.owners[0] === UNASSIGNED ? '未分配' : keyName(filter.owners[0], people)))
       : `负责人 · ${filter.owners.length}`;
   const priorityChipLabel = filter.priorities.length === 0 ? '优先级' : filter.priorities.map(p => REQ_PRIORITY_LABEL[p]).join('、');
   const chipRefs = useRef<Record<string, any>>({});
@@ -584,6 +595,7 @@ function ScopedRequirementBoard({ cfg, desktop, dispatch }: { cfg: HubConfig; de
       ) : null}
       <TaskCreateDialog
         draft={draft}
+        twoRoles={twoRoles}
         sheet={!pointer && narrow}
         networkId={cfg.networkId || ''}
         people={people}

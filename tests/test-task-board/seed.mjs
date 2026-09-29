@@ -3,7 +3,8 @@
 // Nodes go straight into sqlite (no agent process needed); requirements go through the REST API the app uses
 // (POST with owner {kind,id}, PATCH column), so the seed exercises the same contract.
 //   demo-node-a / demo-node-b / demo-node-c   — placeholder nodes
-//   8 requirements across 需求池 / 进行中 / 完成, owners (two nodes, the tester, a second member, unassigned),
+//   8 requirements across 需求池 / 进行中 / 完成, 负责人 (the tester, a second member) and 负责 Agent (two nodes)
+//   in every combination (both, human only, agent only, neither),
 //   priorities high / normal / low, dues: one overdue, one today, a few later, some empty.
 import { Database } from "bun:sqlite";
 const [dbPath, hub, net, uid, token, member] = process.argv.slice(2);
@@ -24,15 +25,16 @@ db.run(`INSERT OR IGNORE INTO network_members (network_id,user_id,role,invited_b
 const pad = (x) => String(x).padStart(2, "0");
 const day = (offset) => { const d = new Date(); d.setDate(d.getDate() + offset); return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`; };
 const A = { kind: "node", id: "node_demo_a" }, B = { kind: "node", id: "node_demo_b" }, ME = { kind: "user", id: uid }, M2 = { kind: "user", id: member };
+// owner = 负责人 (human), agent = 负责 Agent (node). A hub without agent_owner ignores the field (single-owner fallback run).
 const rows = [
-  { name: "登录页支持扫码登录", priority: "high", due: day(-3), owner: A, column: "pool" },            // overdue
-  { name: "整理 9 月的发版说明,补上安卓和桌面端的差异", priority: "normal", due: day(5), owner: ME, column: "pool" },
-  { name: "看板卡片支持拖动换列", priority: "normal", due: "", owner: null, column: "pool" },
-  { name: "修复通知在后台不弹", priority: "high", due: day(0), owner: B, column: "doing" },          // today
-  { name: "设置页拆分子页面", priority: "low", due: day(12), owner: A, column: "doing" },
-  { name: "Hub 升级到最新预览版并回归一遍核心流程", priority: "normal", due: day(2), owner: M2, column: "doing" },
-  { name: "节点日志查看器", priority: "normal", due: day(-10), owner: B, column: "done" },
-  { name: "语音输入快捷键", priority: "low", due: "", owner: ME, column: "done" },
+  { name: "登录页支持扫码登录", priority: "high", due: day(-3), owner: ME, agent: A, column: "pool" },            // overdue
+  { name: "整理 9 月的发版说明,补上安卓和桌面端的差异", priority: "normal", due: day(5), owner: ME, agent: null, column: "pool" },
+  { name: "看板卡片支持拖动换列", priority: "normal", due: "", owner: null, agent: null, column: "pool" },
+  { name: "修复通知在后台不弹", priority: "high", due: day(0), owner: M2, agent: B, column: "doing" },          // today
+  { name: "设置页拆分子页面", priority: "low", due: day(12), owner: null, agent: A, column: "doing" },
+  { name: "Hub 升级到最新预览版并回归一遍核心流程", priority: "normal", due: day(2), owner: M2, agent: null, column: "doing" },
+  { name: "节点日志查看器", priority: "normal", due: day(-10), owner: ME, agent: B, column: "done" },
+  { name: "语音输入快捷键", priority: "low", due: "", owner: ME, agent: A, column: "done" },
 ];
 const call = async (path, init) => {
   const res = await fetch(`${hub}${path}`, { ...init, headers: { authorization: `Bearer ${token}`, "content-type": "application/json" } });
@@ -41,7 +43,7 @@ const call = async (path, init) => {
   return body;
 };
 for (const r of rows) {
-  const { requirement } = await call("/api/requirements", { method: "POST", body: JSON.stringify({ name: r.name, priority: r.priority, due: r.due, assignee: "", network_id: net, ...(r.owner ? { owner: r.owner } : {}) }) });
+  const { requirement } = await call("/api/requirements", { method: "POST", body: JSON.stringify({ name: r.name, priority: r.priority, due: r.due, assignee: "", network_id: net, ...(r.owner ? { owner: r.owner } : {}), ...(r.agent ? { agent_owner: r.agent } : {}) }) });
   if (r.column !== "pool") await call(`/api/requirements/${requirement.id}?network_id=${net}`, { method: "PATCH", body: JSON.stringify({ column: r.column }) });
 }
 const { requirements } = await call(`/api/requirements?network_id=${net}`);

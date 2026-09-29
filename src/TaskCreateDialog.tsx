@@ -1,6 +1,6 @@
 // 新建任务:桌面是居中的小对话框,手机是从底部升起的面板。字段:标题(自动聚焦)、负责人(头像选择器,
 // 复用 RequirementPeoplePicker —— 只存稳定身份 {kind,id})、优先级、预计完成。
-import { useState } from 'react';
+import { useState, type ReactNode } from 'react';
 import { KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { Text, TextInput } from './ui-text';
 import { Ionicons } from './icons';
@@ -11,7 +11,7 @@ import { withBasePadding } from './modal-safe-area';
 import { colors, spacing, themeMode, type as typeScale, weight } from './theme';
 import { REQ_COLUMN_LABEL, REQ_PRIORITIES, REQ_PRIORITY_LABEL, type ReqPriority } from './requirements-model';
 import type { RequirementPerson, RequirementPersonRef } from './requirement-people';
-import { checkDraft, createInput, localToday, personName, type CreateDraft } from './task-board-model';
+import { checkDraft, createInput, localToday, personName, roleKinds, type CreateDraft } from './task-board-model';
 import { BOARD_RADIUS, CONTROL_H, liftedShadow, PriorityDot, useTaskStyles } from './TaskBoardParts';
 
 /** 期限的快捷项:今天 / 明天 / 下周一 / 清除。日期框仍可手写 2026-10-01。 */
@@ -71,17 +71,20 @@ export function DueField({ value, onChange, error, idBase }: { value: string; on
   );
 }
 
-export function OwnerField({ value, people, onPress, disabled, loading, idBase }: {
+export function OwnerField({ value, people, onPress, disabled, loading, idBase, role = 'any' }: {
   value: RequirementPersonRef | null; people: readonly RequirementPerson[]; onPress: () => void; disabled?: boolean; loading?: boolean; idBase: string;
+  /** 'human' = 负责人(只能人类),'agent' = 负责 Agent,'any' = 旧 Hub 的单一负责人。 */
+  role?: 'human' | 'agent' | 'any';
 }) {
   const testID = idBase;
   const f = fieldStyles();
   const name = value ? personName(value, people) : '';
   return (
-    <Pressable testID={testID} accessibilityRole="button" accessibilityLabel={value ? `负责人 ${name}，更换负责人` : "选择负责人"} disabled={disabled} onPress={onPress} style={[f.input, f.row]}>
-      {value ? <AliasAvatar alias={name} size={22} /> : <Ionicons name="person-add-outline" size={16} color={colors.textMuted} />}
+    <Pressable testID={testID} accessibilityRole="button" accessibilityLabel={value ? `${role === 'agent' ? '负责 Agent' : '负责人'} ${name}，更换` : role === 'agent' ? '选择负责 Agent' : '选择负责人'} disabled={disabled} onPress={onPress} style={[f.input, f.row]}>
+      {value ? <AliasAvatar alias={name} size={22} /> : <Ionicons name={role === 'agent' ? 'hardware-chip-outline' : 'person-add-outline'} size={16} color={colors.textMuted} />}
       <Text style={{ flex: 1, color: value ? colors.text : colors.textMuted, fontSize: typeScale.body }} numberOfLines={1}>
-        {loading ? '加载人员…' : value ? `${name}（${value.kind === 'user' ? '人类' : 'Agent'}）` : '选择负责人(人类或 Agent),可空'}
+        {loading ? '加载人员…' : value ? `${name}（${value.kind === 'user' ? '人类' : 'Agent'}）`
+          : role === 'human' ? '选择负责人(人类),可空' : role === 'agent' ? '选择负责 Agent(执行者),可空' : '选择负责人(人类或 Agent),可空'}
       </Text>
       <Ionicons name="chevron-down" size={14} color={colors.textMuted} />
     </Pressable>
@@ -94,8 +97,66 @@ export const fieldStyles = () => StyleSheet.create({
   row: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
 });
 
-export default function TaskCreateDialog({ draft, sheet, networkId, people, peopleLoading, peopleError, onLoadPeople, onChange, onSubmit, onClose }: {
+/**
+ * 负责人 / 负责 Agent 两个选择器(分两个角色的 Hub),或旧 Hub 的单一负责人。
+ * 负责人只列人类、负责 Agent 只列节点(RequirementPeoplePicker 的 kinds 过滤);存的永远是 {kind,id}。
+ */
+export function RoleFields({ twoRoles, owner, agentOwner, people, peopleLoading, peopleError, networkId, onLoadPeople, onChange, idBase, ownerLocked }: {
+  twoRoles: boolean;
+  owner: RequirementPersonRef | null;
+  agentOwner: RequirementPersonRef | null;
+  people: readonly RequirementPerson[];
+  peopleLoading: boolean;
+  peopleError?: string;
+  networkId: string;
+  onLoadPeople: () => Promise<boolean>;
+  onChange: (patch: { owner?: RequirementPersonRef | null; agentOwner?: RequirementPersonRef | null }) => void;
+  /** 负责人的 testID 前缀(新建 = req-assignee,详情 = req-edit-owner);负责 Agent = 前缀 + '-agent'。 */
+  idBase: string;
+  /** 旧 Hub 的旧卡(没有稳定负责人):负责人一栏只读,由调用方自己画。 */
+  ownerLocked?: ReactNode;
+}) {
+  const s = useTaskStyles();
+  const f = fieldStyles();
+  const [picker, setPicker] = useState<'owner' | 'agent' | null>(null);
+  const open = async (role: 'owner' | 'agent') => { if (await onLoadPeople()) setPicker(role); };
+  const kinds = picker ? roleKinds(picker, twoRoles) : undefined;
+  return (
+    <>
+      <View style={{ gap: spacing.sm }}>
+        <Text style={f.label}>负责人</Text>
+        {ownerLocked ?? <OwnerField value={owner} people={people} role={twoRoles ? 'human' : 'any'} onPress={() => { void open('owner'); }} loading={peopleLoading} disabled={peopleLoading} idBase={idBase} />}
+        {twoRoles ? <Text style={s.muted}>对结果负责的人</Text> : null}
+      </View>
+      {twoRoles ? (
+        <View style={{ gap: spacing.sm }}>
+          <Text style={f.label}>负责 Agent</Text>
+          <OwnerField value={agentOwner} people={people} role="agent" onPress={() => { void open('agent'); }} loading={peopleLoading} disabled={peopleLoading} idBase={`${idBase}-agent`} />
+          <Text style={s.muted}>执行这件事的 Agent 节点</Text>
+        </View>
+      ) : null}
+      {peopleError ? <Text style={s.err} testID="req-people-error">{peopleError}，点负责人重试</Text> : null}
+      {picker ? (
+        <RequirementPeoplePicker
+          networkId={networkId}
+          mode="owner"
+          kinds={kinds}
+          title={picker === 'agent' ? '选择负责 Agent' : '选择负责人'}
+          hint={picker === 'agent' ? '选择执行这件事的 Agent 节点，也可以暂不指定' : twoRoles ? '选择一名对结果负责的人类，也可以暂不分配' : undefined}
+          people={people}
+          selected={picker === 'agent' ? (agentOwner ? [agentOwner] : []) : owner ? [owner] : []}
+          onClose={() => setPicker(null)}
+          onConfirm={sel => { onChange(picker === 'agent' ? { agentOwner: sel[0] || null } : { owner: sel[0] || null }); setPicker(null); }}
+        />
+      ) : null}
+    </>
+  );
+}
+
+export default function TaskCreateDialog({ draft, sheet, twoRoles, networkId, people, peopleLoading, peopleError, onLoadPeople, onChange, onSubmit, onClose }: {
   draft: CreateDraft | null;
+  /** Hub 分不分「负责人(人类)/ 负责 Agent」。不分就是旧的单一负责人。 */
+  twoRoles: boolean;
   /** true = 手机底部面板;false = 居中对话框。 */
   sheet: boolean;
   networkId: string;
@@ -110,7 +171,6 @@ export default function TaskCreateDialog({ draft, sheet, networkId, people, peop
   const s = useTaskStyles();
   const f = fieldStyles();
   const safe = useModalSafePadding(sheet ? 'fullScreen' : 'overlay');
-  const [pickerOpen, setPickerOpen] = useState(false);
   const [error, setError] = useState<{ field: 'name' | 'due' | 'submit'; message: string } | null>(null);
   const [saving, setSaving] = useState(false);
   if (!draft) return null;
@@ -118,14 +178,13 @@ export default function TaskCreateDialog({ draft, sheet, networkId, people, peop
     if (saving) return;
     const c = checkDraft(draft);
     if (!c.ok) { setError({ field: c.field, message: c.message }); return; }
-    if (!createInput(draft)) return;
+    if (!createInput(draft, twoRoles)) return;
     setSaving(true);
     setError(null);
     const failed = await onSubmit();
     setSaving(false);
     if (failed) setError({ field: 'submit', message: failed });
   };
-  const openPicker = async () => { if (await onLoadPeople()) setPickerOpen(true); };
   const set = (patch: Partial<CreateDraft>) => { onChange({ ...draft, ...patch }); if (error && error.field !== 'submit') setError(null); };
   const panel = {
     backgroundColor: colors.card,
@@ -162,11 +221,18 @@ export default function TaskCreateDialog({ draft, sheet, networkId, people, peop
                 maxLength={120}
               />
               {error?.field === 'name' ? <Text style={s.err} accessibilityRole="alert" testID="req-error">{error.message}</Text> : null}
-              <View style={{ gap: spacing.sm }}>
-                <Text style={f.label}>负责人</Text>
-                <OwnerField value={draft.owner} people={people} onPress={() => { void openPicker(); }} loading={peopleLoading} disabled={peopleLoading} idBase="req-assignee" />
-                {peopleError ? <Text style={s.err} testID="req-people-error">{peopleError}，点负责人重试</Text> : null}
-              </View>
+              <RoleFields
+                twoRoles={twoRoles}
+                owner={draft.owner}
+                agentOwner={draft.agentOwner}
+                people={people}
+                peopleLoading={peopleLoading}
+                peopleError={peopleError}
+                networkId={networkId}
+                onLoadPeople={onLoadPeople}
+                onChange={set}
+                idBase="req-assignee"
+              />
               <View style={{ gap: spacing.sm }}>
                 <Text style={f.label}>优先级</Text>
                 <PriorityPicker value={draft.priority} onChange={priority => set({ priority })} testPrefix="req-priority" />
@@ -191,7 +257,6 @@ export default function TaskCreateDialog({ draft, sheet, networkId, people, peop
           </View>
         </View>
       </KeyboardAvoidingView>
-      {pickerOpen ? <RequirementPeoplePicker networkId={networkId} mode="owner" people={people} selected={draft.owner ? [draft.owner] : []} onClose={() => setPickerOpen(false)} onConfirm={sel => { set({ owner: sel[0] || null }); setPickerOpen(false); }} /> : null}
     </Modal>
   );
 }

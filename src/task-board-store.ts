@@ -15,11 +15,13 @@ export interface TaskBoardState {
   items: Requirement[];
   people: RequirementPerson[];
   meId: string | null;
+  /** Hub 分不分「负责人(人类)/ 负责 Agent」。null = 还不知道(按旧的单一负责人画)。 */
+  twoRoles: boolean | null;
   loaded: boolean;
 }
 
 const fresh = (scope: string, section: TaskSection = 'board'): TaskBoardState => ({
-  scope, section, filter: EMPTY_FILTER, items: [], people: [], meId: null, loaded: false,
+  scope, section, filter: EMPTY_FILTER, items: [], people: [], meId: null, twoRoles: null, loaded: false,
 });
 
 let state: TaskBoardState = fresh('');

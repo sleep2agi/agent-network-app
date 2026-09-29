@@ -10,7 +10,10 @@ export const REQ_COLUMN_LABEL: Record<ReqColumn, string> = { pool: '需求池', 
 import type { RequirementPersonRef } from './requirement-people';
 
 export interface Requirement {
+  /** 负责人。两个角色的 Hub 上只会是人类;旧 Hub 上可以是人类或 Agent(单一负责人)。 */
   owner?: RequirementPersonRef | null;
+  /** 负责 Agent(执行者,节点)。undefined = 这个 Hub 还不分两个角色。 */
+  agentOwner?: RequirementPersonRef | null;
   participants?: RequirementPersonRef[];
   id: string;
   name: string;

@@ -30,6 +30,7 @@ export function requirementFromHub(row: unknown): Requirement | null {
   const column = REQ_COLUMNS.includes(r.column as ReqColumn) ? r.column as ReqColumn : 'pool';
   return {
     ...(('owner' in r || 'participants' in r) ? assignmentsFromHub(r) : {}),
+    ...('agent_owner' in r ? { agentOwner: agentOwnerFromHub(r.agent_owner) } : {}),
     id: r.id,
     name: r.name.trim().slice(0, 80),
     priority,
@@ -38,6 +39,13 @@ export function requirementFromHub(row: unknown): Requirement | null {
     column,
     createdAt: typeof r.createdAt === 'string' ? r.createdAt : '',
   };
+}
+
+/** 负责 Agent:只认 {kind:'node', id}。读不懂的值当成未分配,不让一张卡因为它整张丢掉。 */
+function agentOwnerFromHub(value: unknown): RequirementPersonRef | null {
+  if (!value || typeof value !== 'object') return null;
+  const v = value as Record<string, unknown>;
+  return v.kind === 'node' && typeof v.id === 'string' && v.id ? { kind: 'node', id: v.id } : null;
 }
 
 async function call(cfg: HubConfig, path: string, init?: RequestInit): Promise<unknown> {
@@ -62,7 +70,7 @@ export async function listRequirements(cfg: HubConfig): Promise<Requirement[]> {
   return rows.map(requirementFromHub).filter((row): row is Requirement => !!row);
 }
 
-type CreateInput = { name: string; priority: ReqPriority; assignee: string; due: string; column?: ReqColumn; clientId?: string; owner?: RequirementPersonRef };
+type CreateInput = { name: string; priority: ReqPriority; assignee: string; due: string; column?: ReqColumn; clientId?: string; owner?: RequirementPersonRef; agentOwner?: RequirementPersonRef };
 
 /** POST 的请求体。负责人只带稳定身份 {kind,id},多余字段(显示名、networkId…)一律不发。 */
 export function createRequirementBody(cfg: HubConfig, input: CreateInput): Record<string, unknown> {
@@ -75,6 +83,7 @@ export function createRequirementBody(cfg: HubConfig, input: CreateInput): Recor
     client_id: input.clientId,
     network_id: cfg.networkId,
     owner: input.owner ? { kind: input.owner.kind, id: input.owner.id } : undefined,
+    agent_owner: input.agentOwner ? { kind: input.agentOwner.kind, id: input.agentOwner.id } : undefined,
   };
 }
 
@@ -103,12 +112,33 @@ export async function updateRequirementOnHub(cfg: HubConfig, id: string, patch: 
   if (res.status === 403) throw new RequirementsHubError('你没有修改这条需求的权限', 403);
   if (res.status === 400 && data?.error === 'empty_patch') throw new RequirementsHubError(HUB_CANNOT_EDIT, 400);
   if (res.status === 400 && (data?.error === 'person_not_in_network' || data?.error === 'invalid_person')) throw new RequirementsHubError('这个负责人已不在当前网络', 400);
+  if (res.status === 400 && data?.error === 'owner_must_be_human') throw new RequirementsHubError('负责人只能是人类;Agent 请放在「负责 Agent」', 400);
+  if (res.status === 400 && data?.error === 'agent_owner_must_be_agent') throw new RequirementsHubError('负责 Agent 只能是 Agent 节点', 400);
   if (res.status === 404) throw new RequirementsHubError('这条需求已不存在', 404);
   if (!res.ok) throw new RequirementsHubError('修改没有保存，请重试', res.status);
   const row = requirementFromHub(data?.requirement);
   if (!row) throw new RequirementsHubError('Hub 没有返回这条需求', 502);
   if (!patchApplied(row, patch)) throw new RequirementsHubError(HUB_CANNOT_EDIT, 501);
   return row;
+}
+
+/**
+ * 这个 Hub 分不分「负责人(人类)/ 负责 Agent」?看板里有卡片时直接看行里有没有 agent_owner 字段;
+ * 一张卡都没有时用一个不存在的 id 探一下:认识 agent_owner 的 Hub 过了 empty_patch 检查、回 404
+ * requirement_not_found;旧 Hub 不认识这个字段,回 400 empty_patch。探针什么都不写。
+ */
+export async function probeAgentOwnerSupport(cfg: HubConfig): Promise<boolean> {
+  try {
+    const res = await appFetch(`${cfg.serverUrl}${scoped(cfg, '/api/requirements/__capability_probe__')}`, {
+      method: 'PATCH',
+      headers: { Authorization: `Bearer ${cfg.token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ agent_owner: null }),
+    });
+    const data = await res.json().catch(() => null) as { error?: string } | null;
+    return res.status === 404 && data?.error === 'requirement_not_found';
+  } catch {
+    return false;
+  }
 }
 
 export const HUB_CANNOT_EDIT = '这个 Hub 还不能修改已有需求的内容，升级 Hub 后再试';

@@ -23,6 +23,20 @@ export const UNASSIGNED = 'none';
 /** 一张卡片在负责人筛选里的键。旧 Hub 没有稳定负责人(owner undefined)时按未分配算。 */
 export const ownerKeyOf = (item: Pick<Requirement, 'owner'>): string => (item.owner ? personKey(item.owner) : UNASSIGNED);
 
+/**
+ * 卡片在筛选里能被哪些人认领:负责人(人类)和负责 Agent 各算一个。两个都没有 = 未分配。
+ * 「我负责的」= user:<我> 命中负责人;「按 Agent」= node:<id> 命中负责 Agent(旧 Hub 上命中单一负责人)。
+ */
+export function roleKeysOf(item: Pick<Requirement, 'owner' | 'agentOwner'>): string[] {
+  const keys: string[] = [];
+  if (item.owner) keys.push(personKey(item.owner));
+  if (item.agentOwner) keys.push(personKey(item.agentOwner));
+  return keys.length ? keys : [UNASSIGNED];
+}
+
+/** 这张卡所在的 Hub 分不分两个角色(行里带 agent_owner 字段)。 */
+export const hasRoles = (item: Pick<Requirement, 'agentOwner'>): boolean => item.agentOwner !== undefined;
+
 export interface BoardFilter {
   /** 负责人键(personKey 或 UNASSIGNED)。空 = 不按负责人筛。 */
   owners: string[];
@@ -35,7 +49,7 @@ export const EMPTY_FILTER: BoardFilter = { owners: [], priorities: [] };
 export const filterActive = (f: BoardFilter): boolean => f.owners.length > 0 || f.priorities.length > 0;
 
 export function matchesFilter(item: Requirement, f: BoardFilter): boolean {
-  if (f.owners.length && !f.owners.includes(ownerKeyOf(item))) return false;
+  if (f.owners.length && !roleKeysOf(item).some(k => f.owners.includes(k))) return false;
   if (f.priorities.length && !f.priorities.includes(item.priority)) return false;
   return true;
 }
@@ -83,11 +97,14 @@ export function ownerCounts(items: readonly Requirement[], people: readonly Requ
   const counts = new Map<string, OwnerCount>();
   let none = 0;
   for (const item of items) {
-    if (!item.owner) { none += 1; continue; }
-    const key = personKey(item.owner);
-    const row = counts.get(key);
-    if (row) row.count += 1;
-    else counts.set(key, { key, ref: { kind: item.owner.kind, id: item.owner.id }, name: personName(item.owner, people), count: 1 });
+    const refs = [item.owner, item.agentOwner].filter((r): r is RequirementPersonRef => !!r);
+    if (!refs.length) { none += 1; continue; }
+    for (const ref of refs) {
+      const key = personKey(ref);
+      const row = counts.get(key);
+      if (row) row.count += 1;
+      else counts.set(key, { key, ref: { kind: ref.kind, id: ref.id }, name: personName(ref, people), count: 1 });
+    }
   }
   const rows = [...counts.values()].sort((a, b) => b.count - a.count || a.name.localeCompare(b.name, 'zh'));
   return [...rows, { key: UNASSIGNED, ref: null, name: '未分配', count: none }];
@@ -97,10 +114,19 @@ export function personName(ref: RequirementPersonRef, people: readonly Requireme
   return people.find(p => personKey(p) === personKey(ref))?.name || ref.id;
 }
 
-/** 卡片 / 列表上的负责人文字。旧 Hub(owner undefined)显示旧的 assignee 文本。 */
-export function ownerLabel(item: Pick<Requirement, 'owner' | 'assignee'>, people: readonly RequirementPerson[]): string {
+/** 卡片 / 列表上的负责人文字:负责人在前、负责 Agent 在后。旧 Hub(owner undefined)显示旧的 assignee 文本。 */
+export function ownerLabel(item: Pick<Requirement, 'owner' | 'assignee' | 'agentOwner'>, people: readonly RequirementPerson[]): string {
   if (item.owner === undefined) return item.assignee || '未分配';
-  return item.owner ? personName(item.owner, people) : '未分配';
+  const names = [item.owner, item.agentOwner].filter((r): r is RequirementPersonRef => !!r).map(r => personName(r, people));
+  return names.length ? names.join(' · ') : '未分配';
+}
+
+/** 卡片上的头像:人类在前、Agent 在后(没有的那个不画)。 */
+export function roleAvatars(item: Pick<Requirement, 'owner' | 'agentOwner'>, people: readonly RequirementPerson[]): { role: 'owner' | 'agent'; ref: RequirementPersonRef; name: string }[] {
+  const out: { role: 'owner' | 'agent'; ref: RequirementPersonRef; name: string }[] = [];
+  if (item.owner) out.push({ role: 'owner', ref: item.owner, name: personName(item.owner, people) });
+  if (item.agentOwner) out.push({ role: 'agent', ref: item.agentOwner, name: personName(item.agentOwner, people) });
+  return out;
 }
 
 // ── 列表视图排序 ─────────────────────────────────────────────────────────
@@ -131,8 +157,8 @@ export function sortRows(items: readonly Requirement[], sort: SortSpec, people: 
     switch (sort.key) {
       case 'title': return a.name.localeCompare(b.name, 'zh') * sign;
       case 'owner': {
-        const an = a.owner || (a.owner === undefined && a.assignee) ? ownerLabel(a, people) : '';
-        const bn = b.owner || (b.owner === undefined && b.assignee) ? ownerLabel(b, people) : '';
+        const an = a.owner || a.agentOwner || (a.owner === undefined && a.assignee) ? ownerLabel(a, people) : '';
+        const bn = b.owner || b.agentOwner || (b.owner === undefined && b.assignee) ? ownerLabel(b, people) : '';
         if (an === bn) return 0;
         if (!an) return 1;
         if (!bn) return -1;
@@ -262,11 +288,18 @@ export interface CreateDraft {
   name: string;
   priority: ReqPriority;
   due: string;
+  /** 负责人。分两个角色的 Hub 上只能是人类;旧 Hub 上是唯一的负责人(人类或 Agent)。 */
   owner: RequirementPersonRef | null;
+  /** 负责 Agent(只在分两个角色的 Hub 上有)。 */
+  agentOwner: RequirementPersonRef | null;
   column: ReqColumn;
 }
 
-export const emptyDraft = (column: ReqColumn = 'pool'): CreateDraft => ({ name: '', priority: 'normal', due: '', owner: null, column });
+export const emptyDraft = (column: ReqColumn = 'pool'): CreateDraft => ({ name: '', priority: 'normal', due: '', owner: null, agentOwner: null, column });
+
+/** 两个角色各自能选哪一种人:负责人 = 人类,负责 Agent = 节点;旧 Hub 的单一负责人两种都行。 */
+export const roleKinds = (role: 'owner' | 'agent', twoRoles: boolean): ('user' | 'node')[] =>
+  !twoRoles ? ['user', 'node'] : role === 'owner' ? ['user'] : ['node'];
 
 export type DraftCheck =
   | { ok: true; name: string; due: string }
@@ -285,31 +318,37 @@ export function checkDraft(d: Pick<CreateDraft, 'name' | 'due'>): DraftCheck {
  * 发给 POST /api/requirements 的字段。负责人只带稳定身份 {kind,id}(#484):显示名不是身份,
  * 旧的 assignee 文本永远是空串。
  */
-export function createInput(d: CreateDraft): { name: string; priority: ReqPriority; assignee: ''; due: string; column: ReqColumn; owner?: RequirementPersonRef } | null {
+export function createInput(d: CreateDraft, twoRoles = false): { name: string; priority: ReqPriority; assignee: ''; due: string; column: ReqColumn; owner?: RequirementPersonRef; agentOwner?: RequirementPersonRef } | null {
   const c = checkDraft(d);
   if (!c.ok) return null;
+  // 分两个角色的 Hub 上,种类不对的一侧不发(Hub 会 400);旧 Hub 没有负责 Agent。
+  const owner = d.owner && (!twoRoles || d.owner.kind === 'user') ? d.owner : null;
+  const agent = twoRoles && d.agentOwner && d.agentOwner.kind === 'node' ? d.agentOwner : null;
   return {
     name: c.name,
     priority: REQ_PRIORITIES.includes(d.priority) ? d.priority : 'normal',
     assignee: '',
     due: c.due,
     column: d.column,
-    ...(d.owner ? { owner: { kind: d.owner.kind, id: d.owner.id } } : {}),
+    ...(owner ? { owner: { kind: owner.kind, id: owner.id } } : {}),
+    ...(agent ? { agentOwner: { kind: agent.kind, id: agent.id } } : {}),
   };
 }
 
 // ── 详情编辑 ─────────────────────────────────────────────────────────────
 
-export interface EditDraft { name: string; priority: ReqPriority; due: string; owner: RequirementPersonRef | null }
+export interface EditDraft { name: string; priority: ReqPriority; due: string; owner: RequirementPersonRef | null; agentOwner: RequirementPersonRef | null }
 
 export const editDraftOf = (item: Requirement): EditDraft => ({
   name: item.name,
   priority: item.priority,
   due: item.due,
   owner: item.owner ? { kind: item.owner.kind, id: item.owner.id } : null,
+  agentOwner: item.agentOwner ? { kind: item.agentOwner.kind, id: item.agentOwner.id } : null,
 });
 
-export type EditPatch = { name?: string; priority?: ReqPriority; due?: string; owner?: RequirementPersonRef | null };
+/** PATCH 请求体(字段名就是线上的名字)。 */
+export type EditPatch = { name?: string; priority?: ReqPriority; due?: string; owner?: RequirementPersonRef | null; agent_owner?: RequirementPersonRef | null };
 
 /**
  * 只提交改过的字段;没改返回 null(保存按钮不可用)。旧 Hub(owner undefined)不提交负责人 ——
@@ -327,6 +366,11 @@ export function editPatch(item: Requirement, d: EditDraft): EditPatch | null {
     const after = d.owner ? personKey(d.owner) : '';
     if (before !== after) patch.owner = d.owner ? { kind: d.owner.kind, id: d.owner.id } : null;
   }
+  if (item.agentOwner !== undefined) {
+    const before = item.agentOwner ? personKey(item.agentOwner) : '';
+    const after = d.agentOwner ? personKey(d.agentOwner) : '';
+    if (before !== after) patch.agent_owner = d.agentOwner ? { kind: d.agentOwner.kind, id: d.agentOwner.id } : null;
+  }
   return Object.keys(patch).length ? patch : null;
 }
 
@@ -341,6 +385,11 @@ export function patchApplied(row: Requirement, patch: EditPatch): boolean {
   if (patch.owner !== undefined) {
     const want = patch.owner ? personKey(patch.owner) : '';
     const got = row.owner ? personKey(row.owner) : '';
+    if (want !== got) return false;
+  }
+  if (patch.agent_owner !== undefined) {
+    const want = patch.agent_owner ? personKey(patch.agent_owner) : '';
+    const got = row.agentOwner ? personKey(row.agentOwner) : '';
     if (want !== got) return false;
   }
   return true;

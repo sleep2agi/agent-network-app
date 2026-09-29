@@ -1,5 +1,5 @@
 // 桌面工作区在「任务」页时的左栏:原来这里是会话 / Agent 列表(跟任务页无关)。现在是筛选:
-// 全部 / 我负责的 / 未分配 / 按节点(头像 + 数目),最下面是「派发记录」(Hub 派给节点的任务)。
+// 全部 / 我负责的(负责人 = 我)/ 未分配 / 按 Agent(负责 Agent,头像 + 数目),最下面是「派发记录」(Hub 派给节点的任务)。
 // 左栏的每一项只是头部「负责人」筛选的快捷方式 —— 同一份状态(task-board-store),两边永远一致。
 import type { ReactNode } from 'react';
 import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
@@ -20,6 +20,7 @@ export default function TaskFilterSidebar({ onNavigate }: { onNavigate?: () => v
   const meId = useTaskBoard(s => s.meId);
   const filter = useTaskBoard(s => s.filter);
   const section = useTaskBoard(s => s.section);
+  const twoRoles = useTaskBoard(s => s.twoRoles === true);
   const active = section === 'dispatch' ? null : scopeOf(filter.owners, meId);
   const counts = ownerCounts(items, people);
   const meKey = meId ? personKey({ kind: 'user', id: meId }) : '';
@@ -62,9 +63,10 @@ export default function TaskFilterSidebar({ onNavigate }: { onNavigate?: () => v
         {row('all', '全部任务', icon('albums-outline'), items.length)}
         {row('mine', '我负责的', icon('person-outline'), meKey ? applyFilter(items, { owners: [meKey], priorities: [] }).length : null, !meId)}
         {row('unassigned', '未分配', icon('help-circle-outline'), countOf('none'))}
-        {nodes.length ? <Text style={[styles.section, { color: colors.textMuted }]}>按节点</Text> : null}
+        {/* 分两个角色的 Hub:这里按「负责 Agent」筛;旧 Hub 上节点就是唯一的负责人。 */}
+        {nodes.length ? <Text style={[styles.section, { color: colors.textMuted }]}>{twoRoles ? '按 Agent' : '按节点'}</Text> : null}
         {nodes.map(n => row(n.key as SidebarScope, n.name, <AliasAvatar alias={n.name} size={22} />, n.count))}
-        {others.length ? <Text style={[styles.section, { color: colors.textMuted }]}>其他成员</Text> : null}
+        {others.length ? <Text style={[styles.section, { color: colors.textMuted }]}>{twoRoles ? '其他负责人' : '其他成员'}</Text> : null}
         {others.map(n => row(n.key as SidebarScope, n.name, <AliasAvatar alias={n.name} size={22} />, n.count))}
         <View style={[styles.divider, { backgroundColor: colors.border }]} />
         {row('dispatch', '派发记录', icon('paper-plane-outline'), null)}

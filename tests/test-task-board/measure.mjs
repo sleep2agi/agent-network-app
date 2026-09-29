@@ -31,6 +31,11 @@ import { join, extname } from 'node:path';
 const { chromium } = await import(process.env.PLAYWRIGHT_MODULE || 'playwright');
 const { WEB_DIR: WEB, OUT, HUB_URL, HUB_TOKEN, HUB_NETWORK } = process.env;
 const MODE = process.env.MODE || 'after';
+// ROLES=two: the hub has agent_owner (负责人 = human, 负责 Agent = node). ROLES=single: an older hub —
+// the app must fall back to one 负责人 (human or agent). HUB_ME = the tester's user_id (for 我负责的).
+const ROLES = process.env.ROLES || 'two';
+const HUB_ME = process.env.HUB_ME || '';
+if (ROLES === 'two' && !HUB_ME) throw new Error('ROLES=two needs HUB_ME=<tester user_id>');
 if (!WEB || !OUT || !HUB_URL || !HUB_TOKEN || !HUB_NETWORK) throw new Error('need WEB_DIR OUT HUB_URL HUB_TOKEN HUB_NETWORK');
 if (/:9200\b/.test(HUB_URL)) throw new Error('refusing :9200 — that is the production hub port; start a throwaway hub');
 mkdirSync(OUT, { recursive: true });
@@ -243,9 +248,26 @@ async function desktopFlows(page, vp) {
   await page.locator(tid('req-create')).waitFor();
   const focused = await page.evaluate(() => document.activeElement?.getAttribute('data-testid'));
   await page.keyboard.type('新建的任务:检查拖动');
-  await page.locator(tid('req-assignee')).click();
-  await page.locator(tid('person-node:node_demo_c')).click();
-  await page.locator(tid('people-confirm')).click();
+  let pickerKinds = '';
+  if (ROLES === 'two') {
+    // 负责人 = 人类,负责 Agent = 节点;两个选择器各自只列一种
+    await page.locator(tid('req-assignee')).click();
+    await page.locator(tid(`person-user:${HUB_ME}`)).waitFor();
+    const ownerNodes = await page.locator('[data-testid^="person-node:"]').count();
+    await page.locator(tid(`person-user:${HUB_ME}`)).click();
+    await page.locator(tid('people-confirm')).click();
+    await page.locator(tid('req-assignee-agent')).click();
+    await page.locator(tid('person-node:node_demo_c')).waitFor();
+    const agentUsers = await page.locator('[data-testid^="person-user:"]').count();
+    await page.locator(tid('person-node:node_demo_c')).click();
+    await page.locator(tid('people-confirm')).click();
+    pickerKinds = `${ownerNodes}/${agentUsers}`;
+  } else {
+    await page.locator(tid('req-assignee')).click();
+    await page.locator(tid('person-node:node_demo_c')).click();
+    await page.locator(tid('people-confirm')).click();
+    pickerKinds = (await page.locator(tid('req-assignee-agent')).count()) === 0 ? '0/0' : 'agent-picker-shown';
+  }
   await page.locator(tid('req-priority-high')).click();
   await shot(page, 'flow-create-dialog');
   await page.locator(tid('req-add')).click();
@@ -253,10 +275,23 @@ async function desktopFlows(page, vp) {
   const created = await hubRow('新建的任务:检查拖动');
   record(vp, 'flow: create via dialog', {
     autofocus: focused === 'req-name', onHub: !!created,
-    ownerIdentity: JSON.stringify(created?.owner) === '{"kind":"node","id":"node_demo_c"}',
+    ownerIdentity: ROLES === 'two'
+      ? JSON.stringify(created?.owner) === JSON.stringify({ kind: 'user', id: HUB_ME }) && JSON.stringify(created?.agent_owner) === '{"kind":"node","id":"node_demo_c"}'
+      : JSON.stringify(created?.owner) === '{"kind":"node","id":"node_demo_c"}' && created?.agent_owner === undefined,
+    pickersFilterKinds: pickerKinds === '0/0',
     assigneeEmpty: created?.assignee === '', priority: created?.priority === 'high',
     onBoard: await cardByName(page, '新建的任务:检查拖动').count() === 1,
-  }, { owner: JSON.stringify(created?.owner) });
+  }, { owner: JSON.stringify(created?.owner), agent: JSON.stringify(created?.agent_owner), pickerKinds });
+
+  // cards: two avatars, human then agent (ROLES=two); a card with both roles on the seed
+  if (ROLES === 'two') {
+    const av = await page.evaluate(() => {
+      const card = [...document.querySelectorAll('[data-testid^="req-card-"]')].find(c => c.textContent.includes('登录页支持扫码登录'));
+      const x = (id) => { const e = card?.querySelector(`[data-testid="${id}"]`); return e ? e.getBoundingClientRect().x : null; };
+      return { owner: x('task-avatar-owner'), agent: x('task-avatar-agent') };
+    });
+    record(vp, 'cards: 负责人 avatar then 负责 Agent avatar', { both: av.owner !== null && av.agent !== null, humanFirst: av.owner < av.agent }, { ownerX: av.owner && r1(av.owner), agentX: av.agent && r1(av.agent) });
+  }
 
   // drag 需求池 → 进行中
   const name = '看板卡片支持拖动换列';
@@ -280,6 +315,11 @@ async function desktopFlows(page, vp) {
   await page.locator(tid('req-edit-name')).fill('设置页拆分子页面(已编辑)');
   await page.locator(tid('req-edit-priority-high')).click();
   await page.locator(tid('req-edit-due-tomorrow')).click();
+  if (ROLES === 'two') {
+    await page.locator(tid('req-edit-owner-agent')).click();
+    await page.locator(tid('person-node:node_demo_b')).click();
+    await page.locator(tid('people-confirm')).click();
+  }
   await shot(page, 'flow-drawer-edit');
   await page.locator(tid('req-edit-save')).click();
   await page.waitForTimeout(800);
@@ -287,6 +327,7 @@ async function desktopFlows(page, vp) {
   record(vp, 'flow: edit in drawer', {
     drawerTopOnHeaderBottom: Math.abs(drawer.y - header.b) <= 1, drawerRightOnContentRight: Math.abs(drawer.r - root.r) <= 1,
     hubTitle: !!edited, hubPriority: edited?.priority === 'high', hubDue: !!edited?.due,
+    hubAgent: ROLES !== 'two' || edited?.agent_owner?.id === 'node_demo_b',
   }, { drawerTop: r1(drawer.y), headerBottom: r1(header.b), drawerRight: r1(drawer.r), contentRight: r1(root.r) });
   await page.locator(tid('req-detail-close')).click();
 
@@ -295,10 +336,19 @@ async function desktopFlows(page, vp) {
   await page.waitForTimeout(400);
   const shown = await page.locator('[data-testid^="req-card-"]').allTextContents();
   const all = await hubList();
-  const expectA = all.filter(r => r.owner?.id === 'node_demo_a').length;
+  const expectA = all.filter(r => (ROLES === 'two' ? r.agent_owner?.id : r.owner?.id) === 'node_demo_a').length;
   const chip = (await page.locator(tid('task-filter-owner')).textContent()) || '';
   await shot(page, 'flow-filter-node-a');
   record(vp, 'flow: filter by owner (sidebar)', { onlyA: shown.length === expectA, chipReads: chip.includes('demo-node-a') }, { shown: shown.length, expect: expectA });
+  if (ROLES === 'two') {
+    await page.locator(tid('task-side-mine')).click();
+    await page.waitForTimeout(400);
+    const mine = await page.locator('[data-testid^="req-card-"]').count();
+    const expectMine = all.filter(r => r.owner?.kind === 'user' && r.owner.id === HUB_ME).length;
+    const label = (await page.locator('[data-testid="task-sidebar"]').textContent()) || '';
+    await shot(page, 'flow-filter-mine');
+    record(vp, 'flow: 我负责的 = 负责人 is me; sidebar says 按 Agent', { mine: mine === expectMine && mine > 0, agentSection: label.includes('按 Agent') }, { shown: mine, expect: expectMine });
+  }
   await page.locator(tid('task-side-all')).click();
   await page.waitForTimeout(300);
 
