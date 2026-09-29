@@ -50,6 +50,7 @@ import { APP_VERSION } from './src/version';
 import { railBadgeText, railIconFor, railSurface, railTooltipVisible } from './src/rail-nav';
 import { badgeOffsetCentered } from './src/badge-anchor';
 import DesktopUpdatePrompt from './src/DesktopUpdatePrompt';
+import { desktopPromptMode } from './src/update-prompt-model';
 import AndroidUpdatePrompt from './src/AndroidUpdatePrompt';
 import DesktopMessageListener from './src/DesktopMessageListener';
 import DesktopNotifier from './src/DesktopNotifier';
@@ -219,10 +220,17 @@ export default function App() {
     );
   }
 
-  // 更新提示只在主窗口弹;分离出来的聊天窗(?chat=<alias>)不弹 —— 否则每个窗各弹一次
+  // 更新提示只在主窗口自动弹;分离出来的聊天窗(?chat=<alias>)不弹 —— 否则每个窗各弹一次
   // (Vincent 2026-09-06 截图:两个分离窗同时被同一份更新说明盖住)。
   // 应用多开的工作区窗口(?workspace=<profileId>)同理只让主窗口弹。
-  const dedicatedChatWindow = Platform.OS === 'web' && !!(globalThis as any).__TAURI_INTERNALS__ && (!!requestedChatAlias() || !!requestedWorkspaceProfileId() || requestedSettingsWindow());
+  // 设置窗(?settings=1)挂成 manual:只为在它里面手动点的检查弹 —— 不挂的话「发现新版本 · 点击查看并安装」
+  // 点了没反应(0.2.145),检查结果只在设置窗自己的 JS 上下文里。见 update-prompt-model desktopPromptMode。
+  const updatePromptMode = desktopPromptMode({
+    tauri: Platform.OS === 'web' && !!(globalThis as any).__TAURI_INTERNALS__,
+    chat: !!requestedChatAlias(),
+    workspace: !!requestedWorkspaceProfileId(),
+    settings: requestedSettingsWindow(),
+  });
   return (
     <SafeAreaProvider>
       <SimulatedSafeArea>
@@ -231,7 +239,7 @@ export default function App() {
           <WinTitleBar />
           <AppRoot />
         </View>
-        {dedicatedChatWindow ? null : <DesktopUpdatePrompt />}
+        {updatePromptMode ? <DesktopUpdatePrompt manualOnly={updatePromptMode === 'manual'} /> : null}
         {Platform.OS === 'android' ? <AndroidUpdatePrompt /> : null}
       </SimulatedSafeArea>
     </SafeAreaProvider>
