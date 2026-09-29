@@ -45,6 +45,8 @@ import { scheduledTaskActions } from './scheduled-task-actions';
 import type { ScheduleOpenRequest } from './node-schedules';
 import ScheduleRunResult, { type RunTaskState } from './ScheduleRunResult';
 import { runDisplay, runDurationText, runFailureText, runIsOpen } from './schedule-run-result';
+import { groupScheduleRuns, skipGroupText, skipGroupTimes } from './schedule-run-groups';
+import { useTranslation } from './i18n-react';
 import {
   DEFAULT_SCHEDULE_FILTER,
   EXTERNAL_KIND_LABEL,
@@ -569,6 +571,9 @@ function ScheduleDetail({ row, now, busy, runs, cfg, expandedRun, runTasks, onTo
   onCancel: (row: HubScheduledTask) => void;
 }) {
   const s = useMemo(makeStyles, [row]);
+  // 折叠的「上一次还没结束」跳过组展开哪一个(只影响本页显示,和单条执行的 expandedRun 分开)。
+  const [expandedSkipGroup, setExpandedSkipGroup] = useState<string | null>(null);
+  const { t } = useTranslation();
   const status = scheduleStatusMeta(row.status);
   const availableActions = scheduledTaskActions(row.status);
   const misfire = describeMisfire(row.misfire_policy);
@@ -618,7 +623,50 @@ function ScheduleDetail({ row, now, busy, runs, cfg, expandedRun, runTasks, onTo
         {!runs ? <ActivityIndicator color={colors.accent} style={{ alignSelf: 'flex-start', marginTop: spacing.sm }} />
           : runs.error ? <Text style={s.error}>{runs.error}</Text>
           : runs.runs.length === 0 ? <Text style={s.muted}>还没有执行记录</Text>
-          : <View style={s.facts}>{runs.runs.map((run, i) => {
+          : <View style={s.facts}>{groupScheduleRuns(runs.runs).map((item, i, items) => {
+            const last = i === items.length - 1;
+            if (item.kind === 'skipGroup') {
+              const text = skipGroupText(item, row.target_alias, now);
+              const open = expandedSkipGroup === item.key;
+              const blocker = item.blocker;
+              return (
+                <View key={item.key} testID={`schedule-skip-group-${item.key}`} style={[s.runRow, last && s.lastFact]}>
+                  <Pressable
+                    style={s.runHead}
+                    onPress={() => setExpandedSkipGroup(open ? null : item.key)}
+                    accessibilityRole="button"
+                    accessibilityState={{ expanded: open }}
+                    accessibilityLabel={t('schedule.skipGroup.a11y', { summary: text.summary, detail: text.detail })}
+                    testID={`schedule-skip-group-toggle-${item.key}`}
+                  >
+                    <View style={s.runText}>
+                      <Text style={s.runTime} numberOfLines={1}>{text.summary}</Text>
+                      <Text style={s.runError} numberOfLines={open ? undefined : 2} testID={`schedule-skip-group-detail-${item.key}`}>{text.detail}</Text>
+                    </View>
+                    <StatusPill label={t('schedule.skipGroup.status')} tone="rest" />
+                    <Ionicons name={open ? 'chevron-up' : 'chevron-down'} size={14} color={colors.textMuted} />
+                  </Pressable>
+                  {open ? (
+                    <View style={s.skipTimes} testID={`schedule-skip-group-times-${item.key}`}>
+                      <Text style={s.runError}>{t('schedule.skipGroup.why')}</Text>
+                      <Text style={s.skipTimesLabel}>{t('schedule.skipGroup.times')}</Text>
+                      <Text style={s.skipTimesList} selectable>{skipGroupTimes(item.runs, raw => formatAbsolute(raw, now)).join('  ')}</Text>
+                      {blocker ? (
+                        <Pressable
+                          style={s.skipLink}
+                          onPress={() => { if (expandedRun !== blocker.run_id) onToggleRun(blocker); }}
+                          accessibilityRole="link"
+                          testID={`schedule-skip-group-blocker-${item.key}`}
+                        >
+                          <Text style={s.skipLinkText}>{t('schedule.skipGroup.open', { at: text.blockerAt })}</Text>
+                        </Pressable>
+                      ) : null}
+                    </View>
+                  ) : null}
+                </View>
+              );
+            }
+            const run = item.run;
             const task = run.task_id ? runTasks[run.task_id]?.task : null;
             const meta = runDisplay(run, task);
             const err = runFailureText(run, task);
@@ -626,7 +674,7 @@ function ScheduleDetail({ row, now, busy, runs, cfg, expandedRun, runTasks, onTo
             const expanded = expandedRun === run.run_id;
             const time = formatAbsolute(run.scheduled_for, now) || run.scheduled_for;
             return (
-              <View key={run.run_id} style={[s.runRow, i === runs.runs.length - 1 && s.lastFact]} testID={`schedule-run-${run.run_id}`}>
+              <View key={run.run_id} style={[s.runRow, last && s.lastFact]} testID={`schedule-run-${run.run_id}`}>
                 <Pressable
                   style={s.runHead}
                   onPress={() => onToggleRun(run)}
@@ -968,6 +1016,11 @@ function makeStyles() { return StyleSheet.create({
   runTime: { flexShrink: 0, color: colors.text, fontSize: fontSize.body },
   runDuration: { flexShrink: 1, color: colors.textMuted, fontSize: fontSize.small },
   runError: { color: colors.textMuted, fontSize: fontSize.small, marginTop: 2 },
+  skipTimes: { paddingBottom: 10, gap: spacing.xs },
+  skipTimesLabel: { color: colors.textMuted, fontSize: fontSize.small, marginTop: spacing.xs },
+  skipTimesList: { color: colors.text, fontSize: fontSize.small, lineHeight: 19 },
+  skipLink: { alignSelf: 'flex-start', minHeight: 32, justifyContent: 'center' },
+  skipLinkText: { color: colors.accent, fontSize: fontSize.small },
   card: { backgroundColor: colors.card, borderRadius: radius.surface, padding: spacing.md, marginBottom: spacing.md, ...elevated('raised') }, cardTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }, cardTitle: { color: colors.text, fontWeight: '600', fontSize: 15, flex: 1 }, badge: { fontSize: 11, overflow: 'hidden', paddingHorizontal: 8, paddingVertical: 3, borderRadius: radius.pill }, badgeActive: { color: colors.running, backgroundColor: `${colors.running}20` }, badgeIdle: { color: colors.textMuted, backgroundColor: colors.bg },
   meta: { color: colors.textMuted, fontSize: 11, marginTop: spacing.xs }, actions: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm, marginTop: spacing.md }, action: { borderWidth: 1, borderColor: colors.border, borderRadius: radius.control, paddingHorizontal: 14, paddingVertical: 8, alignItems: 'center' }, actionText: { color: colors.textSecondary, fontSize: fontSize.body }, danger: { borderColor: `${colors.failed}50` }, dangerText: { color: colors.failed, fontSize: fontSize.body },
   error: { color: colors.failed, marginHorizontal: spacing.lg, marginBottom: spacing.md, fontSize: 13 }, empty: { paddingVertical: 64, paddingHorizontal: spacing.xl, alignItems: 'center' }, emptyTitle: { color: colors.text, fontSize: fontSize.title, fontWeight: weight.strong, marginBottom: spacing.sm }, emptyBody: { color: colors.textMuted, fontSize: 13, textAlign: 'center', lineHeight: 19, maxWidth: 300 }, muted: { color: colors.textMuted, fontSize: 13 },
