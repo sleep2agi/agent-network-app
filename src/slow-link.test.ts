@@ -33,7 +33,7 @@ const chat = fs.readFileSync(path.join(__dirname, 'ChatScreen.tsx'), 'utf8');
 ck('send success marks the echo delivered instead of removing it', chat.includes("{ ...t, _pending: false, _confirmedTaskId: confirmedTaskId }") && !chat.includes("prev.filter(t => t._localId !== localId)"));
 ck('load() drops echoes only once superseded by a fetched row', chat.includes('!echoSupersededByFetched(t, fetched)'));
 const poll = fs.readFileSync(path.join(__dirname, 'usePoll.ts'), 'utf8');
-ck('usePoll schedules the next tick after the previous one finishes', poll.includes('schedule(nextPollDelay(intervalMs, Date.now() - started))') && !poll.includes('setInterval('));
+ck('usePoll schedules the next tick after the previous one finishes', poll.includes('schedule(Math.max(nextPollDelay(intervalMs, Date.now() - started), pollBackoffMs(intervalMs)))') && !poll.includes('setInterval('));
 const cargo = fs.readFileSync(path.join(__dirname, '..', 'src-tauri', 'Cargo.toml'), 'utf8');
 ck('desktop HTTP plugin enables reqwest gzip', /tauri-plugin-http = \{ version = "2", features = \["gzip"\] \}/.test(cargo));
 

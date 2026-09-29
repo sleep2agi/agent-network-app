@@ -1,5 +1,6 @@
 import { useEffect } from 'react';
 import { AppState } from 'react-native';
+import { pollBackoffMs, subscribeReconnect } from './connectivity';
 import { nextPollDelay } from './poll-delay';
 
 /**
@@ -11,6 +12,10 @@ import { nextPollDelay } from './poll-delay';
  * throttled anyway. On return to foreground it refreshes immediately AND
  * restarts the interval, so switching back shows current data without waiting
  * for the next tick.
+ *
+ * While reads are failing the interval backs off exponentially (connectivity.ts
+ * pollBackoffMs, capped at a minute); a tap on the connectivity banner or the
+ * first successful read anywhere (requestReconnect) runs a tick right away.
  *
  * `deps` are the effect deps (usually [load], where load is a useCallback).
  * `fn` may close over refs (e.g. () => load(limitRef.current)) since refs read
@@ -33,7 +38,7 @@ export function usePoll(fn: () => void | Promise<unknown>, intervalMs: number, d
       const started = Date.now();
       try { await fn(); } catch { /* the poller itself never throws; keep polling */ }
       running = false;
-      schedule(nextPollDelay(intervalMs, Date.now() - started));
+      schedule(Math.max(nextPollDelay(intervalMs, Date.now() - started), pollBackoffMs(intervalMs)));
     };
     void tick();
     const sub = AppState.addEventListener('change', s => {
@@ -45,10 +50,12 @@ export function usePoll(fn: () => void | Promise<unknown>, intervalMs: number, d
         if (timer) { clearTimeout(timer); timer = null; }
       }
     });
+    const unsubReconnect = subscribeReconnect(() => { if (active && !running) void tick(); });
     return () => {
       active = false;
       if (timer) clearTimeout(timer);
       sub.remove();
+      unsubReconnect();
     };
   }, deps);
 }

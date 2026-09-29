@@ -70,6 +70,8 @@ function ScopedRequirementBoard({ cfg, desktop, dispatch }: { cfg: HubConfig; de
   const dueDatetime = useTaskBoard(st => st.scope === scope && st.capabilities.includes('due_datetime'));
   const filter = useTaskBoard(st => st.filter);
   const items = mine ? storeItems : [];
+  /** 这块看板本次启动里从 Hub 读成功过(哪怕是空的)——连不上时照常显示那份,而不是整页报错。 */
+  const hasCached = useTaskBoard(st => st.scope === scope && st.loaded);
   const people = mine ? storePeople : [];
   const pointer = pointerUi(desktop);
   const localKey = requirementsKey(cfg.profileId || cfg.username || 'local');
@@ -81,6 +83,7 @@ function ScopedRequirementBoard({ cfg, desktop, dispatch }: { cfg: HubConfig; de
   const [phase, setPhase] = useState<'loading' | 'ready' | 'unsupported' | 'error'>('loading');
   const [hubError, setHubError] = useState('');
   const [reloadKey, setReloadKey] = useState(0);
+  const [retrying, setRetrying] = useState(false);
   const [peopleLoading, setPeopleLoading] = useState(false);
   const [peopleError, setPeopleError] = useState('');
   const [draft, setDraft] = useState<CreateDraft | null>(null);
@@ -102,7 +105,9 @@ function ScopedRequirementBoard({ cfg, desktop, dispatch }: { cfg: HubConfig; de
   // ── 读 Hub ──
   useEffect(() => {
     let dead = false;
-    setPhase('loading');
+    // 失败后重试时停在错误页(按钮换成「正在重试…」),不要在错误页和转圈之间来回闪。
+    setPhase(p => (p === 'error' ? p : 'loading'));
+    setRetrying(true);
     (async () => {
       try {
         await migrateLocalRequirements(cfg, () => readRequirements(localKey), rows => writeRequirements(localKey, rows));
@@ -122,6 +127,8 @@ function ScopedRequirementBoard({ cfg, desktop, dispatch }: { cfg: HubConfig; de
         if (e instanceof RequirementsHubError && e.status === 404) { setPhase('unsupported'); return; }
         setPhase('error');
         setHubError(e instanceof Error ? e.message : '需求池打不开');
+      } finally {
+        if (!dead) setRetrying(false);
       }
     })();
     void fetchMyUserId(cfg).then(id => { if (!dead) patchTaskBoard(scope, { meId: id }); });
@@ -138,6 +145,8 @@ function ScopedRequirementBoard({ cfg, desktop, dispatch }: { cfg: HubConfig; de
   }, [cfg.serverUrl, cfg.token, cfg.networkId, hasOwners, scope]);
 
   const refresh = useCallback(async () => {
+    // 首次加载失败(连不上 / 超时)后不能只靠用户点「重试」:跟着轮询(失败时自动退避)再试一次首次加载。
+    if (phase === 'error') { setReloadKey(n => n + 1); return; }
     if (phase !== 'ready' || inFlight.current > 0 || drag.current.phase !== 'idle') return;
     const gen = mutations.current;
     try {
@@ -607,12 +616,15 @@ function ScopedRequirementBoard({ cfg, desktop, dispatch }: { cfg: HubConfig; de
   };
 
   const body = section === 'dispatch' ? dispatch ?? null
-    : phase === 'loading' && !(mine && items.length) ? <View style={s.center} testID="req-loading"><ActivityIndicator color={colors.accent} /></View>
+    : phase === 'loading' && !(hasCached || (mine && items.length)) ? <View style={s.center} testID="req-loading"><ActivityIndicator color={colors.accent} /></View>
       : phase === 'unsupported' ? <View style={s.center}><Text style={s.muted} testID="req-unsupported">{UNSUPPORTED}</Text></View>
-        : phase === 'error' ? (
-          <View style={s.center}>
+        // 连不上但本机已有这块看板的上次数据:照常显示,不用一句错误把整页换掉(顶部横幅已说明是缓存)。
+        : phase === 'error' && !(hasCached || (mine && items.length)) ? (
+          <View style={s.center} testID="req-error">
             <Text style={s.err}>{hubError}</Text>
-            <Pressable onPress={() => setReloadKey(n => n + 1)} testID="req-retry" accessibilityRole="button"><Text style={s.link}>重试</Text></Pressable>
+            {retrying
+              ? <Text style={s.muted} testID="req-retrying">正在重试…</Text>
+              : <Pressable onPress={() => setReloadKey(n => n + 1)} testID="req-retry" accessibilityRole="button"><Text style={s.link}>重试</Text></Pressable>}
           </View>
         ) : section === 'list' ? list() : kanban();
 

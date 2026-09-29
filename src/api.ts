@@ -95,24 +95,48 @@ const withTimeout = (run: (signal: AbortSignal) => Promise<Response>): Promise<R
 };
 
 // 连接状态横幅(通信龙 App战线①):共享读路径上每次请求结局都上报 connectivity——
-// 成功=拿到并解析出数据;失败=网络错/超时/非2xx/解析错(数据没到,UI 是陈旧的)。
+// 成功=拿到并解析出数据;失败=网络错/超时/网关 5xx/解析错(数据没到,UI 是陈旧的)。
+// 其他非 2xx(401/403/404…)说明服务器是连得上的,不算"连不上"(readStatusCountsAsFailure)。
 // 只挂在 get()(全部轮询读)上;写路径有各自显式失败 UI,不进此口径。
-import { reportReadFailure, reportReadSuccess } from './connectivity';
+import { readStatusCountsAsFailure, reportReadFailure, reportReadSuccess } from './connectivity';
 import { classifyLoginFailure, type LoginFailureKind } from './login-flow';
 import { userMessagesPath } from './user-unread';
 
+/** 一次轮询读的硬上限:从发出到**读完响应体**。withTimeout 只管到响应头,响应体卡在半开的隧道
+ *  连接上时 `res.json()` 永远不返回 —— 那个轮询就永远 running、再也不刷新(2026-09-29)。
+ *  20 s 给高延迟链路留余量(手机经 RELAY 量到 /health 2.8 s),又不会让一次卡死拖住整页。 */
+export const READ_DEADLINE_MS = 20_000;
+let readDeadlineMs = READ_DEADLINE_MS;
+/** Test-only: shorten the read deadline so a hanging-body test doesn't wait 20 s. */
+export function __setReadDeadlineForTest(ms: number = READ_DEADLINE_MS): void { readDeadlineMs = ms; }
+
 async function get<T>(cfg: HubConfig, path: string): Promise<T> {
+  const started = Date.now();
+  const ctrl = new AbortController();
+  let reported = false;
   try {
-    const res = await withTimeout(signal =>
-      appFetch(`${cfg.serverUrl}${path}`, { headers: headers(cfg), signal }),
+    const got = await withDeadline(
+      (async () => {
+        const res = await appFetch(`${cfg.serverUrl}${path}`, { headers: headers(cfg), signal: ctrl.signal });
+        reportProfileAuthResponse(res.status, cfg.profileId);
+        return { res, data: res.ok ? ((await res.json()) as T) : undefined };
+      })(),
+      readDeadlineMs,
+      () => null,
     );
-    reportProfileAuthResponse(res.status, cfg.profileId);
-    if (!res.ok) throw new Error(`HTTP ${res.status} on ${path}`);
-    const data = (await res.json()) as T;
-    reportReadSuccess();
-    return data;
+    if (!got) {
+      ctrl.abort();
+      throw new Error(`服务器 ${Math.round(readDeadlineMs / 1000)} 秒内没有返回完整响应（${path}）`);
+    }
+    if (!got.res.ok) {
+      if (!readStatusCountsAsFailure(got.res.status)) reported = true;
+      throw new Error(`HTTP ${got.res.status} on ${path}`);
+    }
+    reportReadSuccess(Date.now(), Date.now() - started);
+    reported = true;
+    return got.data as T;
   } catch (e) {
-    reportReadFailure();
+    if (!reported) reportReadFailure();
     throw e;
   }
 }
@@ -121,7 +145,7 @@ async function get<T>(cfg: HubConfig, path: string): Promise<T> {
 // projection — exactly the 6 fields the Session type uses, plus runtime +
 // network_id. On a 150-agent network the response shrinks ~5x (e.g.
 // 186 KB → 39 KB on a synthetic 160-row dataset), keeping cold open well
-// inside the 12 s timeout on flaky cellular. Older hubs ignore the param
+// inside the read deadline on flaky cellular. Older hubs ignore the param
 // and return the full payload, so the call is safe regardless of server
 // version.
 export const fetchStatus = (cfg: HubConfig) =>
