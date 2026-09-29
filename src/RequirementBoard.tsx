@@ -1,5 +1,6 @@
 import { ownerCounts, ownerLabel } from './i18n-task-presentation';
 import { t as tr } from './i18n';
+import { TaskIssueCount } from './TaskIssueBindings';
 import { useTranslation } from './i18n-react';
 import { taskText } from './i18n-tasks';
 // 任务页(需求池):头部一行 + 看板 / 列表 + 新建对话框 + 详情(桌面右侧抽屉,手机推入一页)。
@@ -604,7 +605,7 @@ function ScopedRequirementBoard({ cfg, desktop, dispatch }: { cfg: HubConfig; de
               style={state => [s.tr, ((state as { hovered?: boolean }).hovered || state.pressed || item.id === selectedId) && s.trHover]}
               {...({ dataSet: { taskCard: item.id, taskFrom: item.column } } as object)}
             >
-              <Text style={[s.tdTitle, item.column === 'done' && s.cardDone]} numberOfLines={1}>{item.name}</Text>
+              <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', gap: 6, minWidth: 0 }}><Text style={[s.tdTitle, item.column === 'done' && s.cardDone]} numberOfLines={1}>{item.name}</Text><TaskIssueCount item={item} /></View>
               <View style={s.colOwner}><OwnerBadge item={item} people={people} s={s} /></View>
               <View style={[s.colPriority, s.owner]}><PriorityDot p={item.priority} s={s} /><Text style={s.metaText}>{taskText(REQ_PRIORITY_LABEL[item.priority])}</Text></View>
               <View style={[s.colDue, { flexDirection: 'row' }]}>{item.due ? <DueChip item={item} today={today} s={s} /> : <Text style={s.metaMuted}>—</Text>}</View>

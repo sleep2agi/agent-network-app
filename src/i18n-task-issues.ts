@@ -1,0 +1,20 @@
+import { registerTranslations } from './i18n';
+registerTranslations({
+ 'issues.heading': ['GitHub Issue', 'GitHub Issue'],
+ 'issues.bind': ['＋ 绑定 Issue', '+ Link issue'],
+ 'issues.input': ['Issue 链接或 owner/repo#123', 'Issue URL or owner/repo#123'],
+ 'issues.confirm': ['绑定', 'Link'],
+ 'issues.cancel': ['取消', 'Cancel'],
+ 'issues.remove': ['解绑 {issue}', 'Unlink {issue}'],
+ 'issues.source': ['同步来源', 'Sync source'],
+ 'issues.hint': ['绑定与解绑立即保存；同步来源不可在此解绑。', 'Links save immediately. The sync source cannot be unlinked here.'],
+ 'issues.invalid': ['请输入 GitHub Issue 链接或 owner/repo#123（编号 1–10000000）。', 'Enter a GitHub issue URL or owner/repo#123 (number 1–10000000).'],
+ 'issues.rejected': ['Hub 拒绝了 Issue 关联（invalid_issues），请检查链接后重试。', 'Hub rejected these links (invalid_issues). Check the issue URLs and retry.'],
+ 'issues.duplicate': ['这个 Issue 已绑定。', 'This issue is already linked.'],
+ 'issues.limit': ['最多手动绑定 8 个 Issue。', 'Link up to 8 issues manually.'],
+ 'issues.unsupported': ['升级 Hub 后可编辑 Issue 关联。', 'Upgrade the Hub to edit issue links.'],
+ 'issues.saving': ['正在保存关联…', 'Saving links…'],
+ 'issues.failed': ['关联未保存，请重试。', 'Links were not saved. Please retry.'],
+ 'issues.openFailed': ['链接未能打开，请重试。', 'Could not open the link. Please retry.'],
+ 'issues.count': ['关联 {count} 个 GitHub Issue', '{count} linked GitHub issues'],
+});

@@ -1,0 +1,39 @@
+Task GitHub Issue bindings — 2026-09-29
+Implementation base: app main686e718 (v0.2.144); no version changes.
+Hub contract read from agent-network main6a20bde2 server/src/requirements.ts:
+HTTPS github.com/owner/repo/issues/N, optional trailing slash, N1..10000000,
+maximum8 associations. GET returns {repo,number,title}; PATCH accepts URL objects.
+
+Docker checks:
+PASS issue ck tests27/27; copy guard38/38; typecheck.
+PASS full npm test227/227 files.
+PASS requirement detail components34/34,140expects (existing32 + issue cases).
+PASS Chromium1200x800 +390x844:20/20.
+Screenshots10PNG + coordinates: docs/tests/screenshots-task-issues/.
+
+Browser uses actual Board/components/API with isolated mock HTTP Hub:
+- malformed input sends no request
+- Hub400 invalid_issues stays inline, original list/input remain
+- retry sends only issues, shorthand canonicalized to HTTPS URL, old title kept
+- opening manual/source links reaches open-external (destination intercepted)
+- unlink never sends external_ref/external_url and source identity stays unchanged
+- card/list count is distinct union of manual associations and GitHub sync source
+- source is read-only, manual duplicate/source relationship remains distinguishable
+- component test proves duplicate-click lock and late-error isolation on task switch
+- missing/malformed issues field is read-only, never silently cleared
+
+Geometry: desktop editor x805 width371; phone x24 width342.
+First link/removal aligned y341 desktop / y423 phone; removal44x44.
+Manually inspected phone Issue editor and desktop board screenshot.
+Initial browser count assertion included the icon font glyph in textContent;
+corrected to assert the exact numeric text child. Same UI then20/20.
+
+Shared-file changes kept narrow: detail mounts editor, CardMeta mounts count,
+desktop table title cell mounts count. Model/API only retain/verify issues.
+Existing ExternalLink handles non-Issue sources; GitHub Issue source moves to
+labelled read-only section. All new UI copy uses named bilingual t() keys.
+
+Limits: HTTP fixture and responsive-web evidence, not production integration or
+native device acceptance. No Hub implementation/configuration, production9200,
+TM, release workflow, package version, or website change.
+Reproduction: tests/test-task-issues/README.md.

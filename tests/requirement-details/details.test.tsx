@@ -116,6 +116,7 @@ mock.module('./src/requirement-people-api', () => ({
 const { default: Board } = await import('./src/RequirementBoard');
 const { default: PeoplePicker } = await import('./src/RequirementPeoplePicker');
 const { default: AssignmentsEditor } = await import('./src/RequirementAssignmentsEditor');
+const { default: IssueBindings } = await import('./src/TaskIssueBindings');
 const { setTaskSection } = await import('./src/task-board-store');
 const { addDays, dueFromLocal, localDateOf } = await import('./src/due-time');
 // 每个用例一个新 token ⇒ 新的看板作用域(共享 store 不串用例)。
@@ -131,6 +132,45 @@ async function mount() {
   await act(async () => { renderer = create(<Board cfg={cfg} />); });
 }
 afterEach(async () => { dueCaps = false; participantCards = false; subCards = false; opened = []; typedCards = false; roleCards = false; detailCards = false; itemWrites = []; projectsMock = null; if (renderer) await act(async () => renderer.unmount()); });
+
+test('issue links: canonical PATCH only, duplicate click lock, rejection stays local, source read-only', async () => {
+  const writes: any[]=[];
+  let finish: (result: string|null)=>void = () => {};
+  const item={...card,column:'pool' as const,priority:'normal' as const,issues:[{repo:'acme/repo',number:7,title:'keep title'}],externalUrl:'https://github.com/acme/source/issues/9',externalRef:'github:acme/source#9'};
+  const save=(patch:any)=>{writes.push(patch);return new Promise<string|null>(r=>{finish=r;});};
+  await act(async()=>{renderer=create(<IssueBindings item={item} onSave={save}/>);});
+  await act(async()=>byId('req-issue-link-0').props.onPress());
+  expect(opened).toEqual(['https://github.com/acme/repo/issues/7']);
+  await act(async()=>byId('req-issue-add').props.onPress());
+  await act(async()=>byId('req-issue-input').props.onChangeText('javascript:alert(1)'));
+  await act(async()=>byId('req-issue-confirm').props.onPress());
+  expect(writes).toHaveLength(0);
+  await act(async()=>byId('req-issue-input').props.onChangeText('acme/repo#8'));
+  await act(async()=>{byId('req-issue-confirm').props.onPress();byId('req-issue-confirm').props.onPress();});
+  expect(writes).toEqual([{issues:[{url:'https://github.com/acme/repo/issues/7',title:'keep title'},{url:'https://github.com/acme/repo/issues/8',title:''}]}]);
+  await act(async()=>finish('invalid_issues'));
+  expect(texts('req-issue-error')).toContain('invalid_issues');
+  expect(byId('req-issue-input').props.value).toBe('acme/repo#8');
+  expect(byId('req-issue-link-0')).toBeTruthy();
+  await act(async()=>byId('req-issue-remove-0').props.onPress());
+  expect(writes[1]).toEqual({issues:[]});
+  await act(async()=>finish(null));
+  expect(byId('req-issue-source-link')).toBeTruthy();
+  expect(renderer.root.findAllByProps({testID:'req-issue-source-remove'})).toHaveLength(0);
+});
+
+test('issue editor: old Hub is read-only; switching cards drops old request error', async () => {
+ const save=()=>new Promise<string|null>(r=>{reply=r;});
+ const item={...card,column:'pool' as const,priority:'normal' as const,issues:[]};
+ await act(async()=>{renderer=create(<IssueBindings key="a" item={item} onSave={save}/>);});
+ await act(async()=>byId('req-issue-add').props.onPress());
+ await act(async()=>byId('req-issue-input').props.onChangeText('a/b#1'));
+ await act(async()=>byId('req-issue-confirm').props.onPress());
+ await act(async()=>renderer.update(<IssueBindings key="b" item={{...item,id:'b',issues:undefined}} onSave={save}/>));
+ await act(async()=>reply('invalid_issues'));
+ expect(renderer.root.findAllByProps({testID:'req-issue-error'})).toHaveLength(0);
+ expect(renderer.root.findAllByProps({testID:'req-issue-add'})).toHaveLength(0);
+});
 
 test('header has no permanent inputs or dev note; 新建 opens the dialog', async () => {
   await mount();
@@ -446,9 +486,9 @@ test('sub-requirements: progress chip on the parent card, children in detail, br
   expect(byId('req-child-r3')).toBeTruthy();
   expect(byId('req-child-r2')).toBeTruthy();
   // GitHub 链接走 openExternal,外部引用显示出来
-  await act(async () => byId('req-external-link').props.onPress());
+  await act(async () => byId('req-issue-source-link').props.onPress());
   expect(opened).toEqual(['https://github.com/acme/widgets/issues/7']);
-  expect(JSON.stringify(byId('req-external-ref').props.children)).toContain('github:acme/widgets#7');
+  expect(texts('req-issue-source')).toContain('同步来源');
   // 打开子需求 → 面包屑回到父需求
   await act(async () => byId('req-child-r3').props.onPress());
   expect(byId('req-edit-name').props.value).toBe('子需求乙');

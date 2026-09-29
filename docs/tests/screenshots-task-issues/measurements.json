@@ -1,0 +1,122 @@
+[
+  {
+    "name": "desktop card count includes distinct sync source",
+    "ok": true
+  },
+  {
+    "name": "desktop invalid local input never writes",
+    "ok": true
+  },
+  {
+    "name": "desktop Hub rejection keeps original and draft",
+    "ok": true
+  },
+  {
+    "name": "desktop canonical issue-only PATCH",
+    "ok": true
+  },
+  {
+    "name": "desktop opens via external helper",
+    "ok": true
+  },
+  {
+    "name": "desktop binding region fits",
+    "ok": true,
+    "data": {
+      "x": 805,
+      "y": 319,
+      "width": 371,
+      "height": 262
+    }
+  },
+  {
+    "name": "desktop chip controls align",
+    "ok": true,
+    "data": {
+      "chip": {
+        "x": 805,
+        "y": 341,
+        "width": 207.8125,
+        "height": 44
+      },
+      "remove": {
+        "x": 1012.8125,
+        "y": 341,
+        "width": 44,
+        "height": 44
+      }
+    }
+  },
+  {
+    "name": "desktop source is labelled read-only",
+    "ok": true
+  },
+  {
+    "name": "desktop unlink preserves source identity",
+    "ok": true
+  },
+  {
+    "name": "desktop list count visible",
+    "ok": true
+  },
+  {
+    "name": "phone card count includes distinct sync source",
+    "ok": true
+  },
+  {
+    "name": "phone invalid local input never writes",
+    "ok": true
+  },
+  {
+    "name": "phone Hub rejection keeps original and draft",
+    "ok": true
+  },
+  {
+    "name": "phone canonical issue-only PATCH",
+    "ok": true
+  },
+  {
+    "name": "phone opens via external helper",
+    "ok": true
+  },
+  {
+    "name": "phone binding region fits",
+    "ok": true,
+    "data": {
+      "x": 24,
+      "y": 401,
+      "width": 342,
+      "height": 276
+    }
+  },
+  {
+    "name": "phone chip controls align",
+    "ok": true,
+    "data": {
+      "chip": {
+        "x": 24,
+        "y": 423,
+        "width": 207.8125,
+        "height": 44
+      },
+      "remove": {
+        "x": 231.8125,
+        "y": 423,
+        "width": 44,
+        "height": 44
+      }
+    }
+  },
+  {
+    "name": "phone source is labelled read-only",
+    "ok": true
+  },
+  {
+    "name": "phone unlink preserves source identity",
+    "ok": true
+  },
+  {
+    "name": "phone list count visible",
+    "ok": true
+  }
+]

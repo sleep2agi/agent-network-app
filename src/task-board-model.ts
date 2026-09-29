@@ -516,7 +516,7 @@ export const editDraftOf = (item: Requirement): EditDraft => ({
 });
 
 /** PATCH 请求体(字段名就是线上的名字)。 */
-export type EditPatch = { name?: string; priority?: ReqPriority; due?: string; owner?: RequirementPersonRef | null; agent_owner?: RequirementPersonRef | null; description?: string; checklist?: ChecklistItem[]; project_id?: string | null };
+export type EditPatch = { issues?: { url: string; title?: string }[]; name?: string; priority?: ReqPriority; due?: string; owner?: RequirementPersonRef | null; agent_owner?: RequirementPersonRef | null; description?: string; checklist?: ChecklistItem[]; project_id?: string | null };
 
 /**
  * 只提交改过的字段;没改返回 null(保存按钮不可用)。旧 Hub(owner undefined)不提交负责人 ——
@@ -550,6 +550,7 @@ export function editPatch(item: Requirement, d: EditDraft): EditPatch | null {
  * 那不是「保存成功」,要告诉用户这个 Hub 还不能改。
  */
 export function patchApplied(row: Requirement, patch: EditPatch): boolean {
+  if (patch.issues !== undefined && JSON.stringify(row.issues?.map(i => `https://github.com/${i.repo}/issues/${i.number}`)) !== JSON.stringify(patch.issues.map(i => i.url))) return false;
   if (patch.name !== undefined && row.name !== patch.name) return false;
   if (patch.priority !== undefined && row.priority !== patch.priority) return false;
   if (patch.due !== undefined && row.due !== patch.due) return false;
