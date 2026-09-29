@@ -36,12 +36,12 @@ import TaskDetailPanel from './TaskDetailPanel';
 import TaskCardMenu, { type TaskMenuTarget } from './TaskCardMenu';
 import TaskProjectManager from './TaskProjectManager';
 import { setDraggingCursor, useTaskCardDom } from './task-board-dom';
+import { boardLayout, pageAt } from './task-board-layout';
 
 const UNSUPPORTED = 'tasks.copy.14';
 /** 别的设备改了也要看得到;有未完成的写入时跳过这一轮(不拿旧数据盖掉乐观更新)。 */
 const POLL_MS = 15_000;
-/** 内容区窄于这个宽度:看板改成横向一列一屏,详情改成推入页。 */
-const NARROW = 700;
+// 内容区窄于 NARROW(task-board-layout)时:看板改成横向一列一屏,详情改成推入页。
 const DRAWER_MIN = 860;
 
 /** 筛选键(user:… / node:…)对应的名字:没有卡片的人不在 ownerCounts 里,从成员表取。 */
@@ -79,9 +79,19 @@ function ScopedRequirementBoard({ cfg, desktop, dispatch }: { cfg: HubConfig; de
   const pointer = pointerUi(desktop);
   const localKey = requirementsKey(cfg.profileId || cfg.username || 'local');
 
-  const [width, setWidth] = useState(0);
-  const narrow = width > 0 && width < NARROW;
+  const [measured, setMeasured] = useState(0);
+  // 原生第一帧 onLayout 之前量到的是 0:退到窗口宽(旋转 / 折叠屏展开时跟着变),不按 0 去排版。
+  const windowWidth = useWindowDimensions().width;
+  const layout = boardLayout(measured, windowWidth, spacing.lg);
+  const width = layout.width;
+  const narrow = layout.mode === 'paged';
   const drawer = width >= DRAWER_MIN;
+  const pagerRef = useRef<ScrollView>(null);
+  const [page, setPage] = useState(0);
+  const pageWidth = layout.mode === 'paged' ? layout.pageWidth : 0;
+  // 旋转 / 折叠后页宽变了:停在同一列上,而不是停在旧偏移量(两列中间)。
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => { if (pageWidth) pagerRef.current?.scrollTo({ x: page * pageWidth, animated: false }); }, [pageWidth]);
   const [headerBottom, setHeaderBottom] = useState(0);
   const [phase, setPhase] = useState<'loading' | 'ready' | 'unsupported' | 'error'>('loading');
   const [hubError, setHubError] = useState('');
@@ -423,7 +433,7 @@ function ScopedRequirementBoard({ cfg, desktop, dispatch }: { cfg: HubConfig; de
   );
 
   // 桌面三列的列宽(内容宽 - 两侧 24 - 两个 16 的间隙)/ 3;窄于 260 时卡片上的负责人只显示头像。
-  const compactCards = !narrow && width > 0 && (width - spacing.xl * 2 - spacing.lg * 2) / 3 < 260;
+  const compactCards = !narrow && (width - spacing.xl * 2 - spacing.lg * 2) / 3 < 260;
   const card = (item: Requirement) => {
     const isDragged = draggingItem?.id === item.id;
     return (
@@ -450,7 +460,6 @@ function ScopedRequirementBoard({ cfg, desktop, dispatch }: { cfg: HubConfig; de
 
   const kanban = () => {
     const over = dragView.phase === 'dragging' && dragView.over !== dragView.from ? dragView.over : null;
-    const colWidth = narrow ? Math.max(260, width - spacing.lg * 2 - 28) : undefined;
     const renderColumn = (col: (typeof columns)[number]) => {
       const isOver = over === col.column;
       const at = isOver && draggingItem ? dropIndex(col.items, draggingItem, col.column) : -1;
@@ -458,7 +467,7 @@ function ScopedRequirementBoard({ cfg, desktop, dispatch }: { cfg: HubConfig; de
       return (
         <View
           key={col.column}
-          style={[s.column, isOver && s.columnOver, colWidth ? { flexGrow: 0, flexShrink: 0, flexBasis: 'auto', width: colWidth } : null]}
+          style={[layout.mode === 'paged' ? s.columnPaged : s.column, isOver && s.columnOver]}
           testID={`req-col-${col.column}`}
           {...({ dataSet: { taskColumn: col.column } } as object)}
         >
@@ -516,19 +525,48 @@ function ScopedRequirementBoard({ cfg, desktop, dispatch }: { cfg: HubConfig; de
         </View>
       );
     };
-    if (narrow) {
+    if (layout.mode === 'paged') {
+      // 手机:一列一屏。页宽 = 看板宽(数值),列宽 = 页宽 − 两侧留白;上面一排胶囊标出当前是哪一列,点了跳过去。
+      const { pageWidth: pw, columnWidth, gutter } = layout;
+      const goTo = (i: number) => { setPage(i); pagerRef.current?.scrollTo({ x: i * pw, animated: true }); };
       return (
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          snapToInterval={(colWidth || 0) + spacing.md}
-          decelerationRate="fast"
-          style={{ flex: 1 }}
-          contentContainerStyle={[s.board, s.boardNarrow, { flexGrow: 0, flexShrink: 0, flexBasis: 'auto' }]}
-          testID="req-board"
-        >
-          {columns.map(renderColumn)}
-        </ScrollView>
+        <View style={{ flex: 1 }}>
+          <View style={s.pager} accessibilityRole="tablist" testID="req-pager">
+            {columns.map((col, i) => {
+              const on = i === page;
+              return (
+                <Pressable key={col.column} accessibilityRole="tab" {...a11yState({ selected: on })} onPress={() => goTo(i)} style={[s.pagerTab, on && s.pagerTabOn]} testID={`req-page-tab-${col.column}`}>
+                  <View style={[s.columnDot, { backgroundColor: STATUS_TONE[col.column]() }]} />
+                  <Text style={[s.pagerText, on && s.pagerTextOn]}>{taskText(REQ_COLUMN_LABEL[col.column])}</Text>
+                  <Text style={s.countText}>{col.items.length}</Text>
+                </Pressable>
+              );
+            })}
+          </View>
+          {/* paged-board:start —— 这段里只用数值宽度(task-board-layout.test.ts 静态检查)。 */}
+          <ScrollView
+            ref={pagerRef}
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentOffset={{ x: page * pw, y: 0 }}
+            snapToInterval={pw}
+            snapToAlignment="start"
+            disableIntervalMomentum
+            decelerationRate="fast"
+            scrollEventThrottle={16}
+            onScroll={e => { const i = pageAt(e.nativeEvent.contentOffset.x, pw, columns.length); if (i !== page) setPage(i); }}
+            style={{ flex: 1 }}
+            contentContainerStyle={s.boardPaged}
+            testID="req-board"
+          >
+            {columns.map(col => (
+              <View key={col.column} style={{ width: pw, paddingHorizontal: gutter }} testID={`req-page-${col.column}`}>
+                <View style={{ width: columnWidth, flexGrow: 1 }}>{renderColumn(col)}</View>
+              </View>
+            ))}
+          </ScrollView>
+          {/* paged-board:end */}
+        </View>
       );
     }
     return <View style={s.board} testID="req-board">{columns.map(renderColumn)}</View>;
@@ -600,7 +638,7 @@ function ScopedRequirementBoard({ cfg, desktop, dispatch }: { cfg: HubConfig; de
   ) : null;
 
   return (
-    <View style={{ flex: 1 }} testID="requirement-board" onLayout={e => setWidth(e.nativeEvent.layout.width)}>
+    <View style={{ flex: 1 }} testID="requirement-board" onLayout={e => setMeasured(e.nativeEvent.layout.width)}>
       {header}
       {banner ? (
         <View style={[s.banner, narrow && { marginHorizontal: spacing.lg }]} accessibilityRole="alert" testID="req-banner">
