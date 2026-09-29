@@ -331,6 +331,28 @@ registerTranslations({
   'bulk.agentNone': ['无(清空负责 Agent)', 'None (clear)'],
 });
 
+// 甘特图视图(TaskGantt.tsx / task-gantt-model.ts)。
+registerTranslations({
+  'gantt.view': ['甘特图', 'Gantt'],
+  'gantt.byProject': ['按项目', 'By project'],
+  'gantt.byAgent': ['按负责 Agent', 'By Agent'],
+  'gantt.scaleDay': ['日', 'Day'],
+  'gantt.scaleWeek': ['周', 'Week'],
+  'gantt.jumpToday': ['今天', 'Today'],
+  'gantt.startNote': ['开始 = 创建时间(Hub 还没有开始字段)', 'Start = created time (the Hub has no start field yet)'],
+  'gantt.noAgent': ['无负责 Agent', 'No Agent'],
+  'gantt.undated': ['未设期限', 'No due date'],
+  'gantt.undatedHint': ['设了预计完成后会画到图上', 'Set a due date to place it on the chart'],
+  'gantt.empty': ['没有设了期限的任务', 'No tasks with a due date'],
+  'gantt.barA11y': ['{name},{start} 到 {end}', '{name}, {start} to {end}'],
+  'gantt.month': ['{y}年{m}月', '{m}/{y}'],
+  'gantt.span': ['{a} → {b}', '{a} → {b}'],
+  'gantt.thisWeek': ['本周', 'This week'],
+  'gantt.lastWeek': ['上周', 'Last week'],
+  'gantt.nextWeek': ['下周', 'Next week'],
+  'gantt.weekRange': ['{a} – {b}', '{a} – {b}'],
+});
+
 // 「在新窗口打开」任务(TaskWindow / task-window.ts)。
 registerTranslations({
   'taskWin.open': ['在新窗口打开', 'Open in new window'],
