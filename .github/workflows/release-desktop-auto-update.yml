@@ -121,6 +121,9 @@ jobs:
           releaseBody: |-
             Signed and notarized stable update for macOS (Apple Silicon) and Windows (x64).
 
+            What's new in 0.2.155:
+            - 优先级显示为 P0 / P1 / P2 / P3（紧凑徽标）。P3「极低」需要 Hub 0.9.0-preview.69，在此之前不显示该选项。
+
             What's new in 0.2.154:
             - 任务描述可直接在排版后的内容上编辑（桌面：标题 / 列表 / 勾选项 / 加粗 / 链接 / 代码 / 表格 / 图片），仍存为 Markdown，可切回「源码」编辑；手机不变。
 
