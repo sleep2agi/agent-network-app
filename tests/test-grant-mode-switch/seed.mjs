@@ -42,11 +42,13 @@ const NET = (me.body.networks ?? []).find(n => n.member_role === 'owner')?.netwo
 must(NET, `no owned network ${JSON.stringify(me.body)}`);
 
 const agents = [];
+// hostname / agent 让 /api/nodes 有 hostname / runtime(按机器 / 按类型分组用;占位名,不是真机)。
+const SHAPE = { 'e2e-alpha': { hostname: 'host-a', agent: 'codex' }, 'e2e-beta': { hostname: 'host-a', agent: 'claude-code' }, 'e2e-gamma': { hostname: 'host-b', agent: 'codex' } };
 for (const alias of ['e2e-alpha', 'e2e-beta', 'e2e-gamma']) {
   const nodeId = `node-${alias}-${Math.random().toString(36).slice(2, 8)}`;   // agent-node 自己生成 node_id 并带上
   const t = await call(A, 'POST', '/api/auth/node-token', { network_id: NET, node_name: alias, node_id: nodeId });
   must(t.status === 200 && t.body.token, `node-token ${alias} ${JSON.stringify(t.body)}`);
-  const r = await mcp(t.body.token, 'report_status', { resume_id: `resume-${alias}`, alias, status: 'idle', node_id: t.body.node_id, node_name: alias, agent: 'codex' });
+  const r = await mcp(t.body.token, 'report_status', { resume_id: `resume-${alias}`, alias, status: 'idle', node_id: t.body.node_id, node_name: alias, agent: SHAPE[alias].agent, hostname: SHAPE[alias].hostname });
   must(r && r.ok !== false, `report_status ${alias} ${JSON.stringify(r)}`);
   agents.push({ alias, node_id: t.body.node_id });
 }

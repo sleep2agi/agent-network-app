@@ -69,14 +69,16 @@ export function SettingsCardContent({ children, testID }: { children: ReactNode;
   return <View style={styles.cardContent} testID={testID}>{children}</View>;
 }
 
-function RowShell({ children, onPress, disabled, testID, accessibilityLabel, accessibilityRole, accessibilityState }: {
+function RowShell({ children, onPress, disabled, testID, accessibilityLabel, accessibilityRole, accessibilityState, ariaChecked }: {
   children: ReactNode;
+  /** RN-web 0.21 不把 accessibilityState.checked 映射成 aria-checked(#547):需要时显式给。 */
+  ariaChecked?: boolean | 'mixed';
   onPress?: () => void;
   disabled?: boolean;
   testID?: string;
   accessibilityLabel?: string;
-  accessibilityRole?: 'button' | 'radio' | 'switch' | 'link';
-  accessibilityState?: { checked?: boolean; selected?: boolean; disabled?: boolean; busy?: boolean };
+  accessibilityRole?: 'button' | 'radio' | 'switch' | 'link' | 'checkbox';
+  accessibilityState?: { checked?: boolean | 'mixed'; selected?: boolean; disabled?: boolean; busy?: boolean };
 }) {
   const style = [styles.row, { minHeight: settingsRowMinHeight() }, disabled && styles.disabled];
   if (!onPress) return <View style={style} testID={testID} accessibilityLabel={accessibilityLabel}>{children}</View>;
@@ -86,6 +88,7 @@ function RowShell({ children, onPress, disabled, testID, accessibilityLabel, acc
       accessibilityRole={accessibilityRole ?? 'button'}
       accessibilityLabel={accessibilityLabel}
       accessibilityState={{ disabled: !!disabled, ...accessibilityState }}
+      {...(ariaChecked !== undefined ? { 'aria-checked': ariaChecked } : {})}
       disabled={disabled}
       onPress={onPress}
       style={({ pressed }) => [...style, pressed && styles.rowPressed]}
@@ -155,6 +158,34 @@ export function SettingsChoiceRow({ label, subtitle, subtitleTone, selected, onP
       <RowLabel label={label} subtitle={subtitle} subtitleTone={subtitleTone} testID={`${id}-label`} />
       <View style={styles.accessory} testID={`${id}-accessory`}>
         {selected ? <Ionicons name="checkmark" size={18} color={colors.accent} /> : null}
+      </View>
+    </RowShell>
+  );
+}
+
+/**
+ * 三态多选的一行(微信「选择联系人」按分组全选那种):右侧 ● 全选 / ⊖ 部分 / ○ 没选,和 ✓、› 在同一列。
+ * 点一下由调用方决定怎么翻(通常:全选 → 全不选,否则 → 全选)。
+ */
+export function SettingsTriStateRow({ label, subtitle, state, onPress, disabled, testID }: {
+  label: string;
+  subtitle?: ReactNode;
+  state: 'all' | 'some' | 'none';
+  onPress: () => void;
+  disabled?: boolean;
+  testID?: string;
+}) {
+  const id = testID ?? ROW_ID;
+  const checked = state === 'all' ? true : state === 'some' ? 'mixed' : false;
+  return (
+    <RowShell onPress={onPress} disabled={disabled} testID={id} accessibilityLabel={label} accessibilityRole="checkbox" accessibilityState={{ checked }} ariaChecked={checked}>
+      <RowLabel label={label} subtitle={subtitle} testID={`${id}-label`} />
+      <View style={styles.accessory} testID={`${id}-accessory`}>
+        <Ionicons
+          name={state === 'all' ? 'checkmark-circle' : state === 'some' ? 'remove-circle' : 'ellipse-outline'}
+          size={22}
+          color={state === 'none' ? colors.textMuted : colors.accent}
+        />
       </View>
     </RowShell>
   );

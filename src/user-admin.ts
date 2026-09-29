@@ -198,16 +198,68 @@ export function setCanMessage(sel: GrantSelection, nodeId: string, value: boolea
   return next;
 }
 
-/** 选择器里的一个 Agent。 */
-export type PickableAgent = { node_id: string; alias: string; display_name?: string | null; role?: string | null };
+/** 选择器里的一个 Agent。hostname / runtime 来自 GET /api/nodes(旧节点可能为空)。 */
+export type PickableAgent = { node_id: string; alias: string; display_name?: string | null; role?: string | null; hostname?: string | null; runtime?: string | null };
 
-/** daemon(host_supervisor)不是能对话的 Agent,不放进选择器。按名字搜(alias / 显示名,不分大小写)。 */
+/** daemon(host_supervisor)不是能对话的 Agent,不放进选择器。按名字 / 机器 / 类型搜(不分大小写)。 */
 export function filterPickable(nodes: readonly PickableAgent[], query: string): PickableAgent[] {
   const q = query.trim().toLowerCase();
+  const hit = (v: string | null | undefined) => !!v && v.toLowerCase().includes(q);
   return nodes
     .filter(n => n.role !== 'host_supervisor' && !!n.alias)
-    .filter(n => !q || n.alias.toLowerCase().includes(q) || (n.display_name ?? '').toLowerCase().includes(q))
+    .filter(n => !q || hit(n.alias) || hit(n.display_name) || hit(n.hostname) || hit(n.runtime))
     .sort((a, b) => a.alias.localeCompare(b.alias));
+}
+
+// —— 批量勾选(Vincent 2026-09-30「可以设置为全部或者是分组…而不是一个一个去选」)——
+// 🔴 这些都是**一次性**的勾选快捷方式:展开成逐个节点的授权。以后新建的 Agent 不会自动加入
+// (真正的动态分组是 RFC-038 ② 的 hub 侧 agent_groups)。UI 上要把这句话说出来。
+
+export type GroupBy = 'none' | 'host' | 'runtime';
+export type AgentGroup = { key: string; label: string | null; agents: PickableAgent[] };
+
+/** 按机器(hostname)或类型(runtime)分组。空值归到 label=null 的「未知」组,排最后;其余按名字排。 */
+export function groupAgents(agents: readonly PickableAgent[], by: Exclude<GroupBy, 'none'>): AgentGroup[] {
+  const map = new Map<string, PickableAgent[]>();
+  for (const a of agents) {
+    const raw = (by === 'host' ? a.hostname : a.runtime) ?? '';
+    const key = raw.trim();
+    const list = map.get(key) ?? [];
+    list.push(a);
+    map.set(key, list);
+  }
+  return [...map.entries()]
+    .map(([key, list]) => ({ key, label: key || null, agents: [...list].sort((a, b) => a.alias.localeCompare(b.alias)) }))
+    .sort((a, b) => (a.label === null ? 1 : b.label === null ? -1 : a.key.localeCompare(b.key)));
+}
+
+/** 一组(或任意一批)Agent 的勾选状态:全选 / 部分 / 没选(三态复选框用)。空组算 none。 */
+export function selectionState(sel: GrantSelection, agents: readonly PickableAgent[]): 'all' | 'some' | 'none' {
+  if (!agents.length) return 'none';
+  let on = 0;
+  for (const a of agents) if (sel.has(a.node_id)) on++;
+  return on === 0 ? 'none' : on === agents.length ? 'all' : 'some';
+}
+
+/**
+ * 点一组的复选框:全选了 ⇒ 这组全部取消;否则(部分 / 没选)⇒ 把没选的补上,已选的保持原样(不动它们的可对话)。
+ * 新补上的默认可对话;viewer 一律只读。
+ */
+export function toggleAgents(sel: GrantSelection, agents: readonly PickableAgent[], role?: MemberRole): Map<string, boolean> {
+  const next = new Map(sel);
+  if (selectionState(sel, agents) === 'all') {
+    for (const a of agents) next.delete(a.node_id);
+    return next;
+  }
+  for (const a of agents) if (!next.has(a.node_id)) next.set(a.node_id, role !== 'viewer');
+  return next;
+}
+
+/** 「全选搜索结果」:把当前列表里的全部加上(已选的保持原样)。 */
+export function selectAgents(sel: GrantSelection, agents: readonly PickableAgent[], role?: MemberRole): Map<string, boolean> {
+  const next = new Map(sel);
+  for (const a of agents) if (!next.has(a.node_id)) next.set(a.node_id, role !== 'viewer');
+  return next;
 }
 
 /**

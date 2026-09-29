@@ -98,7 +98,8 @@ const SUB_PAGE_FILES = ['SettingsPhonePages.tsx', 'SettingsEditPages.tsx'];
   ck('kit:文字走 ui-text(字体大小生效)', kit.includes("import { Text, TextInput } from './ui-text';") && !/import[^;]*\bText\b[^;]*from 'react-native'/.test(kit));
   ck('kit:行高下限 max(48, ds(52))(界面密度生效)', kit.includes('Math.max(48, ds(52))'));
   ck('kit:左右 16、标签内边距 16', kit.includes('export const SETTINGS_GUTTER = 16;') && kit.includes('export const SETTINGS_ROW_PAD_X = 16;') && kit.includes('marginHorizontal: SETTINGS_GUTTER'));
-  ck('kit:› 与 ✓ 共用同一个 accessory 格子', (kit.match(/style=\{styles\.accessory\}/g) ?? []).length === 2 && kit.includes("name=\"checkmark\"") && kit.includes("'chevron-forward'"));
+  // 三格:› / ✓ / 三态(SettingsTriStateRow,授权批量勾选)。
+  ck('kit:› 、✓ 与三态共用同一个 accessory 格子', (kit.match(/style=\{styles\.accessory\}/g) ?? []).length === 3 && kit.includes("name=\"checkmark\"") && kit.includes("'chevron-forward'") && kit.includes("'remove-circle'"));
   ck('kit:分隔线从标签左边缘开始', kit.includes('separator: { height: StyleSheet.hairlineWidth, backgroundColor: colors.border, marginLeft: SETTINGS_ROW_PAD_X }'));
   ck('kit:颜色只用主题 token(没有写死的色值)', !/#[0-9a-fA-F]{3,8}\b/.test(code(kit)));
   ck('kit:样式随主题重建', kit.includes('onThemeChange(() => { styles = makeStyles(); });'));

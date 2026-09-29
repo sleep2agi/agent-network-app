@@ -1,7 +1,7 @@
 // 多用户账号与 Agent 权限(hub agent-network#2084)—— 客户端纯逻辑。ck 风格,自执行。
 import { readFileSync } from 'node:fs';
 import {
-  ASSIGNABLE_ROLES, agentsEmptyKind, aliasOnlyGrants, canManageUsers, filterPickable, grantsChanged, grantsEditable, grantsPayload,
+  ASSIGNABLE_ROLES, agentsEmptyKind, groupAgents, selectAgents, selectionState, toggleAgents, aliasOnlyGrants, canManageUsers, filterPickable, grantsChanged, grantsEditable, grantsPayload,
   initialAccessMode, isRestrictedIn, memberAccessSummary, memberActions, memberSavePlan, pickDefaultNetworkId, prefillOnRestrict,
   selectionFromGrants, setCanMessage, showsCanMessage, toggleAgent, validateNewUser,
   type AuthMe,
@@ -158,6 +158,37 @@ const ck = (name: string, ok: boolean) => { n++; if (ok) { p++; console.log(`  �
   ck('viewer 改回 member、授权没动 → 只改角色', JSON.stringify(memberSavePlan({ ...base, role: 'viewer', nextRole: 'member' })) === JSON.stringify({ role: true, grants: false }));
 }
 
+// —— 批量勾选:按机器 / 按类型 / 全选搜索结果 / 清空(Vincent 2026-09-30「而不是一个一个去选」)——
+{
+  const A = [
+    { node_id: 'n1', alias: 'alpha', hostname: 'host-a', runtime: 'codex' },
+    { node_id: 'n2', alias: 'beta', hostname: 'host-a', runtime: 'claude-code' },
+    { node_id: 'n3', alias: 'gamma', hostname: 'host-b', runtime: 'codex' },
+    { node_id: 'n4', alias: 'delta', hostname: null, runtime: '  ' },
+  ];
+  const byHost = groupAgents(A, 'host');
+  ck('按机器:host-a / host-b / 未知(null 排最后)', byHost.map(g => `${g.label}:${g.agents.map(a => a.alias).join('+')}`).join(' ') === 'host-a:alpha+beta host-b:gamma null:delta');
+  const byType = groupAgents(A, 'runtime');
+  ck('按类型:claude-code / codex / 空白算未知', byType.map(g => `${g.label}:${g.agents.length}`).join(' ') === 'claude-code:1 codex:2 null:1');
+  const hostA = byHost[0].agents;
+  ck('三态:没选 → none', selectionState(new Map(), hostA) === 'none');
+  ck('三态:选一个 → some', selectionState(new Map([['n1', true]]), hostA) === 'some');
+  ck('三态:全选 → all', selectionState(new Map([['n1', true], ['n2', false]]), hostA) === 'all');
+  ck('三态:空组 → none', selectionState(new Map([['n1', true]]), []) === 'none');
+  const t1 = toggleAgents(new Map([['n1', false]]), hostA, 'member');
+  ck('点部分选中的组 → 补齐;已选的可对话不变,新补的默认可对话', t1.get('n1') === false && t1.get('n2') === true && t1.size === 2);
+  const t2 = toggleAgents(t1, hostA, 'member');
+  ck('点全选的组 → 这组全部取消,别的组不动', t2.size === 0 && toggleAgents(new Map([['n1', true], ['n2', true], ['n3', true]]), hostA).size === 1);
+  ck('viewer 补齐的一律只读', toggleAgents(new Map(), hostA, 'viewer').get('n2') === false);
+  ck('toggleAgents 不改原 Map', (() => { const m = new Map([['n1', true]]); toggleAgents(m, hostA); return m.size === 1; })());
+  const results = filterPickable(A, 'host-b');
+  ck('搜索也匹配机器名 / 类型', results.map(a => a.alias).join() === 'gamma' && filterPickable(A, 'claude').map(a => a.alias).join() === 'beta');
+  const s1 = selectAgents(new Map([['n1', false]]), results, 'member');
+  ck('全选搜索结果:只加结果里的,已选的保持', s1.size === 2 && s1.get('n1') === false && s1.get('n3') === true);
+  const body = grantsPayload(toggleAgents(new Map(), byType[1].agents, 'member'), [], { mode: 'granted', role: 'member' });
+  ck('按类型全选后保存 = 逐个节点的授权(一次性展开,没有「组」概念)', JSON.stringify(body) === JSON.stringify({ agent_access: 'granted', grants: [{ node_id: 'n1', can_message: true }, { node_id: 'n3', can_message: true }] }));
+}
+
 // —— 选择器过滤 ——
 {
   const nodes = [
@@ -206,6 +237,10 @@ const ck = (name: string, ok: boolean) => { n++; if (ok) { p++; console.log(`  �
   ck('G2 两端的可对话都看 showsCanMessage', (panel.match(/showsCanMessage\(ed\.role\)/g) ?? []).length === 2);
   ck('G3 改角色 / 移出真的调了 hub', panel.includes('updateMemberRole(cfg, networkId, member.user_id, role)') && panel.includes('removeNetworkMember(cfg, networkId, member.user_id)'));
   ck('G3 行可点看 memberActions(不再只看 grantsEditable)', panel.includes('memberActions(me, networkId, m)'));
+  ck('批量:两端都接了 按机器 / 按类型 / 全选结果 / 清空', panel.includes("GROUP_BYS: readonly GroupBy[] = ['none', 'host', 'runtime']") && (panel.match(/testID="grants-select-visible"/g) ?? []).length === 2 && (panel.match(/testID="grants-clear"/g) ?? []).length === 2);
+  ck('批量:组复选框走 toggleAgents,三态走 selectionState', panel.includes('toggleAgents(s, list, role)') && (panel.match(/selectionState\(ed\.selection, g\.agents\)/g) ?? []).length >= 2);
+  ck('批量:两端都写明「一次性,以后新建的不会自动加入」', (panel.match(/users\.oneTimeNote/g) ?? []).length === 2);
+  ck('批量:节点带上 hostname / runtime(分组依据)', panel.includes('hostname: n.hostname ?? null, runtime: n.runtime ?? null'));
   const adminApi = read('./user-admin-api.ts');
   ck('G3 API:PUT /members/:uid {role}、DELETE /members/:uid', /members\/\$\{net\(userId\)\}`, \{ method: 'PUT', body: \{ role \} \}/.test(adminApi) && /members\/\$\{net\(userId\)\}`, \{ method: 'DELETE' \}/.test(adminApi));
   const phonePages = read('./SettingsPhonePages.tsx');
