@@ -86,6 +86,7 @@ await cancelScheduledTask(cfg, row.schedule_id);
 ck('cancel is soft-delete API verb', calls.at(-1)!.init.method === 'DELETE');
 const screen = readFileSync(new URL('./ScheduledTasksScreen.tsx', import.meta.url), 'utf8');
 const viewModel = readFileSync(new URL('./scheduled-view-model.ts', import.meta.url), 'utf8');
+const editMerge = readFileSync(new URL('./schedule-edit-merge.ts', import.meta.url), 'utf8');
 ck('mobile detail shows the timezone and the form rejects empty weekly selection',
   screen.includes('<Fact label="时区" value={row.timezone} />') && screen.includes("kind === 'weekly' && weekdays.length === 0"));
 ck('mobile form exposes catch-up and skip policies and the detail discloses the effective value',
@@ -93,11 +94,15 @@ ck('mobile form exposes catch-up and skip policies and the detail discloses the 
   screen.includes('describeMisfire(row.misfire_policy)') && viewModel.includes('错过后补跑一次') && viewModel.includes('错过后跳过'));
 ck('mobile detail edits only active or paused schedules and prefill every mutable field',
   screen.includes("setEditing(row); setShowForm(true)") && screen.includes("availableActions.includes('edit')") &&
-  ['setName(editing.name)', 'setTask(editing.task_content)', 'setTarget(editing.target_node_id)',
-    'setPriority(editing.priority)', 'setTimezone(editing.timezone)', 'intervalFormValue'].every(value => screen.includes(value)));
-ck('mobile edit uses full update API and refreshes authoritative data on revision conflict',
-  screen.includes('if (editing) await updateScheduledTask') && screen.includes("e.code === 'revision_conflict'") &&
-  screen.includes('已刷新最新内容，请重新编辑'));
+  // 回填走 fillForm(fieldsOf(editing)):fieldsOf 覆盖每个可改字段(schedule-edit-merge.ts)。
+  screen.includes('fillForm(fieldsOf(editing))') &&
+  ['setName(f.name)', 'setTask(f.task)', 'setTarget(f.target_node_id)', 'setPriority(f.priority)', 'setTimezone(f.timezone)', 'intervalFormValue'].every(value => screen.includes(value)) &&
+  ['name: row.name', 'task: row.task_content', 'target_node_id: row.target_node_id', 'priority: row.priority', 'timezone: row.timezone', 'schedule: row.schedule']
+    .every(value => editMerge.includes(value)));
+// 2026-09-29 起:409 不再关表单、不再丢草稿(旧断言钉的「已刷新最新内容，请重新编辑」正是丢草稿那条路径)。
+ck('mobile edit uses full update API and resolves revision conflicts without dropping the draft',
+  screen.includes('await updateScheduledTask(cfg, row, input)') && screen.includes("e.code === 'revision_conflict'") &&
+  screen.includes('planConflict(row, latest, input)') && !screen.includes('已刷新最新内容，请重新编辑'));
 ck('cancellation uses an in-app modal and only confirms through the explicit destructive action',
   screen.includes('setCancelCandidate(row)') && screen.includes('<CancelScheduleModal') &&
   screen.includes('transparent visible={!!value}') && screen.includes('if (row) void act(row, \'cancel\')') &&
