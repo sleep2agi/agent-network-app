@@ -12,6 +12,7 @@
 import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { join, relative, sep } from 'node:path';
 import { chatWindowLabel, workspaceWindowLabel } from './desktop-chat-menu';
+import { SETTINGS_WINDOW_LABEL } from './desktop-settings-window';
 import { IMAGE_WINDOW_LABEL } from './image-window-model';
 
 let p = 0, t = 0;
@@ -35,6 +36,7 @@ function walk(dir: string, keep: (f: string) => boolean): string[] {
 const KNOWN: Record<string, string[]> = {
   'src/desktop-chat-menu.ts': [chatWindowLabel('示例-A', 'p-1'), workspaceWindowLabel('p-1')],
   'src/image-window.ts': [IMAGE_WINDOW_LABEL],
+  'src/desktop-settings-window.ts': [SETTINGS_WINDOW_LABEL],
   'src-tauri/src/tray.rs': ['tray-panel'],
 };
 
@@ -49,6 +51,7 @@ for (const f of rsFiles) { const n = countSites(read(f), /WebviewWindowBuilder::
 // non-recursive glob or a wrong suffix would read as 「0 unknown call sites」 = green).
 ck('collection sees src/desktop-chat-menu.ts (2 sites: chat + workspace)', sites.get('src/desktop-chat-menu.ts') === 2, JSON.stringify([...sites]));
 ck('collection sees src/image-window.ts', (sites.get('src/image-window.ts') ?? 0) >= 1, JSON.stringify([...sites]));
+ck('collection sees src/desktop-settings-window.ts', (sites.get('src/desktop-settings-window.ts') ?? 0) >= 1, JSON.stringify([...sites]));
 ck('collection sees src-tauri/src/tray.rs', (sites.get('src-tauri/src/tray.rs') ?? 0) >= 1, JSON.stringify([...sites]));
 ck('collection recurses into subdirectories (src/lib/avatars.ts is collected)', tsFiles.map(posix).includes('src/lib/avatars.ts'));
 const unknown = [...sites.keys()].filter(f => !KNOWN[f]);
