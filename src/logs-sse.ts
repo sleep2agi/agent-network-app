@@ -26,7 +26,7 @@
 //   the caller.
 
 import type { HubConfig } from './api';
-import { RECONNECT_MIN_MS, nextBackoffMs, type ConnState, type LogEvent } from './logs-buffer';
+import { RECONNECT_MIN_MS, nextBackoffMs, xhrSseRecycleChars, type ConnState, type LogEvent } from './logs-buffer';
 
 interface OpenEventStreamHandlers {
   onEvent: (ev: LogEvent) => void;
@@ -153,6 +153,15 @@ function openXhrNetworkEventStream(
       }
     };
 
+    const recycle = () => {
+      const old = xhr;
+      if (!old || stopped) return;
+      old.onprogress = null; old.onload = null; old.onerror = null; old.onreadystatechange = null;
+      xhr = null;
+      try { old.abort(); } catch { /* ignore */ }
+      connect();
+    };
+
     xhr.onprogress = () => {
       if (!xhr || xhr.status !== 200) return;
       const full = xhr.responseText;
@@ -183,6 +192,8 @@ function openXhrNetworkEventStream(
           handlers.onEvent({ _at: Date.now(), _raw: payload, type: 'unknown' });
         }
       }
+      // responseText never shrinks: past the cap, swap in a fresh connection (logs-buffer.ts).
+      if (readCursor >= xhrSseRecycleChars()) recycle();
     };
 
     // Both onerror and onload lead to reconnect (unless caller stopped).

@@ -3,7 +3,7 @@
 // reliable fetch ReadableStream; EventSource is missing on RN).
 
 import type { HubConfig } from './api';
-import { RECONNECT_MIN_MS, nextBackoffMs, type ConnState } from './logs-buffer';
+import { RECONNECT_MIN_MS, nextBackoffMs, xhrSseRecycleChars, type ConnState } from './logs-buffer';
 import { takeSseJsonPayloads } from './desktop-message-consume';
 
 export function userEventStreamUrl(serverUrl: string, networkId: string): string {
@@ -133,6 +133,15 @@ function openXhrUserEventStream(
       }
     };
 
+    const recycle = () => {
+      const old = xhr;
+      if (!old || stopped) return;
+      old.onprogress = null; old.onload = null; old.onerror = null; old.onreadystatechange = null;
+      xhr = null;
+      try { old.abort(); } catch { /* ignore */ }
+      connect();
+    };
+
     xhr.onprogress = () => {
       if (!xhr || xhr.status !== 200) return;
       const full = xhr.responseText;
@@ -141,6 +150,8 @@ function openXhrUserEventStream(
       const taken = takeSseJsonPayloads(chunk);
       carry = taken.rest;
       for (const payload of taken.payloads) handlers.onEvent(payload);
+      // responseText never shrinks: past the cap, swap in a fresh connection (logs-buffer.ts).
+      if (readCursor >= xhrSseRecycleChars()) recycle();
     };
 
     const scheduleReconnect = (why: string) => {
