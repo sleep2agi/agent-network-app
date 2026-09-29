@@ -11,12 +11,13 @@
 //   · 边缘/角缩放      → decorations=false 时由 Tauri 自己画不可见的 resize 边框
 //   · 最大化后仍可拖动 → drag region 在最大化状态下拖拽 = 还原并跟随,系统行为
 //
-// 只在 Tauri 桌面壳 + Windows 渲染;macOS/网页/移动端返回 null。
+// 只在 Tauri 桌面壳 + Windows + 主窗渲染;macOS/网页/移动端返回 null。设置窗、分离聊天窗、工作区窗、
+// 看图窗保留原生标题栏(decorations: true),这里也返回 null —— 否则叠出两排 – □ ×(见 window-shell.ts)。
 import { useEffect, useState, useSyncExternalStore } from 'react';
 import { Platform, Pressable, View } from 'react-native';
 import { Text } from './ui-text';
 import { colors, onThemeChange, themeMode } from './theme';
-import { WINDOWS_TITLE_BAR_HEIGHT, isWindowsTauriShell } from './window-shell';
+import { WINDOWS_TITLE_BAR_HEIGHT, isWindowsTauriShell, windowDrawsOwnTitleBar } from './window-shell';
 
 export { WINDOWS_TITLE_BAR_HEIGHT, isWindowsTauriShell } from './window-shell';
 
@@ -64,7 +65,7 @@ function glyph(op: WindowOp, maximized: boolean) {
 export default function WinTitleBar() {
   // 0.2.83:同 MacTitleStrip——挂在 AppRoot 外面,主题翻了不会自动重画,自己订阅(见 window-background.ts)。
   useSyncExternalStore(onThemeChange, themeMode, themeMode);
-  const show = isWindowsTauriShell(Platform.OS);
+  const show = isWindowsTauriShell(Platform.OS) && windowDrawsOwnTitleBar();
   const [maximized, setMaximized] = useState(false);
 
   useEffect(() => {
