@@ -121,6 +121,11 @@ jobs:
           releaseBody: |-
             Signed and notarized stable update for macOS (Apple Silicon) and Windows (x64).
 
+            What's new in 0.2.146:
+            - 修复：桌面端（Windows）设置、独立聊天、看图等窗口出现两套窗口按钮 + 多余的 ✕；现在每个窗口只有一套。
+            - 任务列表「字段配置」：列可隐藏 / 显示 / 排序（标题列固定），按设备记住；折叠屏展开和平板也可用。
+            - 任务列表新增「创建时间」「更新时间」两列，悬停看精确到秒（更新时间需 Hub 升级后显示）。
+
             What's new in 0.2.145:
             - 桌面端（Mac / Windows）「设置」在独立的新窗口打开，不再占用主窗口。
             - 任务可以绑定 GitHub Issue：详情里贴链接或 owner/repo#123，可绑多个，点一下在浏览器打开；卡片和列表显示 Issue 数量。
