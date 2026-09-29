@@ -19,6 +19,7 @@ import type { RequirementAssignments } from './requirement-people-api';
 import { checkDraft, editDraftOf, editPatch, hasDetails, hasRoles, type EditDraft, type EditPatch } from './task-board-model';
 import TaskChecklist from './TaskChecklist';
 import TaskIssueBindings from './TaskIssueBindings';
+import TaskTags from './TaskTags';
 import { parseIssue } from './requirement-issues';
 import { ExternalLink, levelIn, ParentBreadcrumb, SubRequirements } from './TaskRelations';
 import TaskDescriptionEditor from './TaskDescriptionEditor';
@@ -163,6 +164,7 @@ export default function TaskDetailPanel({ cfg, item, items, onOpenRequirement, o
         <DueField value={draft.due} onChange={due => set({ due })} error={error?.field === 'due' ? error.message : undefined} idBase="req-edit-due" allowTime={dueDatetime} pointer={pointer} sheet={mode === 'page'} />
       </Field>
       <TaskIssueBindings key={item.id} item={item} onSave={onSave} />
+      <TaskTags key={`tags:${item.id}`} cfg={cfg} item={item} onSave={onSave} />
       {!item.externalUrl || !parseIssue(item.externalUrl, false) ? <ExternalLink item={item} /> : null}
       <SubRequirements item={item} items={items} onOpen={onOpenRequirement} onCreateChild={onCreateChild} canAddLevel={levelIn(items, item) < 5} />
       {hasDetails(item) ? (

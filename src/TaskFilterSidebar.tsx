@@ -2,6 +2,7 @@ import { ownerCounts } from './i18n-task-presentation';
 import { t as tr } from './i18n';
 import { useTranslation } from './i18n-react';
 import { taskText } from './i18n-tasks';
+import './i18n-task-tags';
 // 桌面工作区在「任务」页时的左栏:原来这里是会话 / Agent 列表(跟任务页无关)。现在是筛选:
 // 项目(全部 / 各项目 + 管理项目)、全部 / 我负责的(负责人 = 我)/ 未分配 / 按 Agent(负责 Agent,头像 + 数目),
 // 最下面是「派发记录」(Hub 派给节点的任务)。按 Agent / 按节点只列有任务的,其余收进「更多节点」(可搜)——
@@ -103,6 +104,8 @@ export default function TaskFilterSidebar({ onNavigate }: { onNavigate?: () => v
     <View style={[styles.root, { backgroundColor: colors.listBg }]} testID="task-sidebar">
       <View style={styles.head}><Text style={[styles.title, { color: colors.text }]} testID="task-sidebar-title">{tr('tasks.copy.190')}</Text></View>
       <ScrollView contentContainerStyle={styles.body}>
+        <Text style={[styles.section, { color: colors.textMuted }]}>{tr('tags.title')}</Text>
+        {['', ...new Set(items.flatMap(item => item.tags ?? [])), ...(filter.tag && !items.some(item => item.tags?.includes(filter.tag!)) ? [filter.tag] : [])].map(tag => <Pressable key={`tag:${tag}`} accessibilityRole="button" testID={`task-filter-tag-${tag || 'all'}`} onPress={() => { setTaskFilter({ ...filter, tag }); onNavigate?.(); }} style={[styles.item, filter.tag === tag && { backgroundColor: colors.rowActive }]}><Text numberOfLines={1} style={[styles.itemText, { color: colors.text }]}>{tag || tr('tags.all')}</Text></Pressable>)}
         {projects ? (
           <>
             <Text style={[styles.section, { color: colors.textMuted, paddingTop: 0 }]}>{tr('tasks.copy.30')}</Text>
