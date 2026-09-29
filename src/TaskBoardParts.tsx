@@ -7,7 +7,7 @@ import { Text } from './ui-text';
 import { Ionicons } from './icons';
 import AliasAvatar from './AliasAvatar';
 import { colors, onThemeChange, radius, spacing, themeMode, type as typeScale, weight } from './theme';
-import { elevated, shadowOnly } from './elevation';
+import { shadowOnly } from './elevation';
 import { REQ_PRIORITY_LABEL, type ReqPriority, type Requirement } from './requirements-model';
 import type { RequirementPerson } from './requirement-people';
 import { dueInfo, ownerLabel, type DueTone } from './task-board-model';
@@ -20,7 +20,10 @@ export const CONTROL_H = 32;
 export const CARD_PAD = 14;
 
 /** 柔和阴影:浅色主题靠阴影浮起,深色主题阴影看不见,改用一条发丝边。 */
-export const softShadow = () => elevated('raised');
+// 几何与 #495 原版一致:浅色只有阴影(不加边框,分段选中块和卡片尺寸不变),深色一条发丝边。
+export const softShadow = () => (themeMode() === 'dark'
+  ? { borderWidth: StyleSheet.hairlineWidth, borderColor: colors.floatingBorder }
+  : shadowOnly('raised'));
 
 export const liftedShadow = () => shadowOnly('floating');
 
