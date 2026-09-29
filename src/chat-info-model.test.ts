@@ -28,7 +28,7 @@ const flat = (i: ChatInfoInput) => chatInfoGroups(i).flat();
     ['node'],
     ['search'],
     ['pin', 'mute'],
-    ['section:model', 'section:rules', 'section:skills', 'section:files', 'section:tasks', 'section:schedules'],
+    ['section:model', 'section:rules', 'section:skills', 'section:files', 'section:tasks', 'section:schedules', 'section:logs'],
   ]), `phone: node / search / toggles / node sections, in that order (${JSON.stringify(phone)})`);
   const rows = flat({ ...base, pin: { value: false }, mute: { value: true } });
   check(rows.find(r => r.key === 'pin')?.label === '置顶聊天' && rows.find(r => r.key === 'pin')?.value === false, '置顶聊天 carries the current pin state');

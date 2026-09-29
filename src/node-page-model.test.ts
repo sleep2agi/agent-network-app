@@ -34,10 +34,12 @@ ck('空输入不炸', JSON.stringify(groupNodeTasks(null, A)) === JSON.stringify
 
 // ── 分区可见性 ───────────────────────────────────────
 const keys = NODE_SECTIONS.map(s => s.key).join(',');
-ck('分区顺序固定:概览/模型/规则/技能/项目文件夹/任务/定时任务/危险', keys === 'overview,model,rules,skills,files,tasks,schedules,danger');
+ck('分区顺序固定:概览/模型/规则/技能/项目文件夹/任务/定时任务/运行日志/危险', keys === 'overview,model,rules,skills,files,tasks,schedules,logs,danger');
+ck('运行日志紧跟定时任务,图标 document-text-outline', NODE_SECTIONS.find(s => s.key === 'logs')?.label === '运行日志' && NODE_SECTIONS.find(s => s.key === 'logs')?.icon === 'document-text-outline');
+ck('运行日志分区整页不滚(工具条钉住,日志区自己滚)', !nodePageScrolls('logs') && nodePageScrolls('files'));
 ck('定时任务紧跟任务,图标 alarm-outline', NODE_SECTIONS.find(s => s.key === 'schedules')?.label === '定时任务' && NODE_SECTIONS.find(s => s.key === 'schedules')?.icon === 'alarm-outline');
-ck('可编辑 + 有规则目标 + 无技能:技能不出现,危险操作出现', visibleNodeSections({ readOnly: false, hasRulesTarget: true, skillsCapable: false }).join(',') === 'overview,model,rules,files,tasks,schedules,danger');
-ck('只读页不出现危险操作,但其它有数据的分区都在', visibleNodeSections({ readOnly: true, hasRulesTarget: true, skillsCapable: true }).join(',') === 'overview,model,rules,skills,files,tasks,schedules');
+ck('可编辑 + 有规则目标 + 无技能:技能不出现,危险操作出现', visibleNodeSections({ readOnly: false, hasRulesTarget: true, skillsCapable: false }).join(',') === 'overview,model,rules,files,tasks,schedules,logs,danger');
+ck('只读页不出现危险操作,但其它有数据的分区都在', visibleNodeSections({ readOnly: true, hasRulesTarget: true, skillsCapable: true }).join(',') === 'overview,model,rules,skills,files,tasks,schedules,logs');
 ck('没有规则目标 → 规则分区不出现', !visibleNodeSections({ readOnly: true, hasRulesTarget: false, skillsCapable: false }).includes('rules'));
 ck('选中的分区被隐藏 → 回到概览', resolveActiveSection('rules', ['overview', 'model', 'tasks']) === 'overview');
 ck('选中的分区还在 → 不变', resolveActiveSection('tasks', ['overview', 'tasks']) === 'tasks');

@@ -35,6 +35,9 @@ export interface Session {
    *  file_read. A hub that predates it omits the key entirely (node-files.ts
    *  filesSupport tells the two apart). */
   files_capable?: boolean;
+  /** Node run-log view — hub `/api/status`: this session answers logs_tail. A hub
+   *  that predates it omits the key entirely (node-logs.ts logsSupport). */
+  logs_capable?: boolean;
 }
 
 export interface HubTask {
@@ -1298,6 +1301,26 @@ export const listNodeFiles = (cfg: HubConfig, node: RulesTarget, relPath: string
 
 export const readNodeFile = (cfg: HubConfig, node: RulesTarget, relPath: string): Promise<RulesFileEnqueueResult> =>
   enqueueFiles(cfg, 'read_node_file', node, relPath);
+
+/** Node run-log view — enqueue tail_node_logs (read-only, no path; the node reads
+ *  and redacts its own log). The hub hands the result to this login once, then
+ *  purges it. Results come back through getRulesFileResult / waitForRulesFileResult. */
+const LOGS_TOOL_MISSING = '服务器版本过旧，升级后可查看日志';
+export const tailNodeLogs = async (
+  cfg: HubConfig,
+  node: RulesTarget,
+  query: { lines: number; level?: 'info' | 'warn' | 'error'; grep?: string; since_ts?: number },
+): Promise<RulesFileEnqueueResult & { code?: string }> => {
+  const networkId = cfg.networkId ?? (await fetchNetworkId(cfg));
+  const r = await callHubTool(cfg, 'tail_node_logs', { ...rulesTargetArgs(node), ...(networkId ? { network_id: networkId } : {}), ...query });
+  if (r.kind === 'unsupported') return { ok: false, unsupported: true, error: LOGS_TOOL_MISSING };
+  if (r.kind === 'error') return /not found|unknown tool/i.test(r.error) ? { ok: false, unsupported: true, error: LOGS_TOOL_MISSING } : { ok: false, error: r.error };
+  const p = r.payload;
+  if (!p || p.ok !== true || typeof p.request_id !== 'string') {
+    return { ok: false, error: String(p?.error ?? 'Hub 返回空响应'), code: typeof p?.error === 'string' ? p.error : undefined, ...(p?.existing_request_id ? { existing_request_id: p.existing_request_id } : {}) };
+  }
+  return { ok: true, request_id: p.request_id, op: 'read' };
+};
 
 export const getRulesFileResult = async (cfg: HubConfig, requestId: string): Promise<RulesFileOutcome> => {
   const networkId = cfg.networkId ?? (await fetchNetworkId(cfg));
