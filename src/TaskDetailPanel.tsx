@@ -28,7 +28,7 @@ import { DueField, fieldStyles, PriorityPicker, ProjectPicker, RoleFields } from
 
 export const DRAWER_WIDTH = 420;
 
-export default function TaskDetailPanel({ cfg, item, items, onOpenRequirement, onCreateChild, projects, dueDatetime, mode, top, people, peopleLoading, onLoadPeople, moving, moveError, onMove, onSave, onAssignmentsSaved, onClose, pointer, checklistError, onChecklistToggle, onChecklistAdd, onChecklistDelete, onChecklistMove }: {
+export default function TaskDetailPanel({ cfg, item, items, onOpenRequirement, onCreateChild, projects, dueDatetime, mode, top, people, peopleLoading, onLoadPeople, moving, moveError, onMove, onSave, onAssignmentsSaved, onClose, pointer, checklistError, onChecklistToggle, onChecklistAdd, onChecklistDelete, onChecklistMove, onOpenVoiceSettings }: {
   cfg: HubConfig;
   item: Requirement;
   /** 全部卡片(找父需求 / 子需求用)。 */
@@ -57,6 +57,8 @@ export default function TaskDetailPanel({ cfg, item, items, onOpenRequirement, o
   onChecklistAdd: (text: string) => boolean;
   onChecklistDelete: (id: string) => void;
   onChecklistMove: (from: number, to: number) => void;
+  /** 描述的语音输入未配置时「去设置」。 */
+  onOpenVoiceSettings?: () => void;
 }) {
   useTranslation();
   const s = useTaskStyles();
@@ -169,7 +171,7 @@ export default function TaskDetailPanel({ cfg, item, items, onOpenRequirement, o
       <SubRequirements item={item} items={items} onOpen={onOpenRequirement} onCreateChild={onCreateChild} canAddLevel={levelIn(items, item) < 5} />
       {hasDetails(item) ? (
         <>
-          <TaskDescriptionEditor cfg={cfg} value={draft.description} onChange={description => set({ description })} pointer={pointer} title={item.name} />
+          <TaskDescriptionEditor cfg={cfg} value={draft.description} onChange={description => set({ description })} pointer={pointer} title={item.name} dirty={!!patch} onOpenVoiceSettings={onOpenVoiceSettings} />
           <TaskChecklist
             items={item.checklist ?? []}
             pointer={pointer}

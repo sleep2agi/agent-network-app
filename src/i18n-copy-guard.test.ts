@@ -13,7 +13,7 @@ let p = 0, t = 0;
 const ck = (name: string, ok: boolean) => { t++; if (ok) p++; console.log(`${ok ? 'PASS' : 'FAIL'}: ${name}`); };
 // Expand this explicit migration boundary as additional surfaces are translated.
 const migrated = ['src/MobileNavRail.tsx', 'src/ServerSidebar.tsx', 'src/ChatScreen.tsx', 'src/ChatInfoPanel.tsx', 'src/ComposerRowParts.tsx', 'src/VoiceInputUI.tsx', 'src/DesktopVoiceBar.tsx', 'src/LanguageSettings.tsx', 'src/SettingsScreen.tsx', 'src/SettingsPhonePages.tsx', 'src/SettingsEditPages.tsx', 'src/UiScaleSettings.tsx', 'src/ShortcutsSettings.tsx', 'src/VoiceSettingsSection.tsx'];
-migrated.push(...['TasksScreen', 'RequirementBoard', 'TaskBoardParts', 'TaskCardMenu', 'TaskChecklist', 'TaskCreateDialog', 'TaskDescriptionEditor', 'TaskDetailPanel', 'TaskDetailScreen', 'TaskDuePicker', 'TaskFilterSidebar', 'TaskProjectManager', 'TaskRelations', 'RequirementPeoplePicker', 'RequirementAssignmentsEditor'].map(name => `src/${name}.tsx`));
+migrated.push(...['TasksScreen', 'RequirementBoard', 'TaskBoardParts', 'TaskCardMenu', 'TaskChecklist', 'TaskCreateDialog', 'TaskDescriptionEditor', 'TaskDescriptionFullscreen', 'TaskDetailPanel', 'TaskDetailScreen', 'TaskDuePicker', 'TaskFilterSidebar', 'TaskProjectManager', 'TaskRelations', 'RequirementPeoplePicker', 'RequirementAssignmentsEditor'].map(name => `src/${name}.tsx`));
 migrated.push('src/TaskIssueBindings.tsx');
 migrated.push('src/TaskTags.tsx');
 migrated.push('src/TaskListFields.tsx', 'src/TaskListTable.tsx');

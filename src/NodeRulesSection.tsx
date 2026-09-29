@@ -10,7 +10,7 @@
 // agent-node 旧、读失败），每种都有一句话说明为什么和怎么办。
 
 import { forwardRef, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { ActivityIndicator, Modal, PanResponder, Platform, Pressable, ScrollView, View, useWindowDimensions } from 'react-native';
+import { ActivityIndicator, Modal, Platform, Pressable, ScrollView, View, useWindowDimensions } from 'react-native';
 import { Text, TextInput } from './ui-text';
 import { useModalSafePadding } from './safe-area-runtime';
 
@@ -26,9 +26,9 @@ import WinTitleBar from './win-title-bar';
 import { RulesFindBar, useRulesFind } from './RulesFind';
 import { contentKey } from './rules-find';
 import { editorLineHeightPx, editorScrollTopForLine, RULES_EDITOR_FONT_SIZE, RULES_EDITOR_LINE_HEIGHT, RULES_READ_MAX_WIDTH } from './rules-fullscreen-layout';
-import { effectiveRulesMode, findModeFor, initialRulesMode, RULES_MODE_LABEL, rulesModeTabs, rulesSplitAvailable, rulesWideLayout, SPLIT_DIVIDER_HIT, SPLIT_PREVIEW_DEBOUNCE_MS, SPLIT_RATIO_DEFAULT, SPLIT_RATIO_STEP, clampSplitRatio, splitDividerHandlers, splitPaneWidths, syncedScrollTop, type SyncAnchor } from './rules-split';
+import { effectiveRulesMode, findModeFor, initialRulesMode, rulesModeTabs, rulesSplitAvailable, rulesWideLayout, SPLIT_PREVIEW_DEBOUNCE_MS, SPLIT_RATIO_DEFAULT, clampSplitRatio, splitPaneWidths, syncedScrollTop, type SyncAnchor } from './rules-split';
 import { loadRulesEditorPrefs, saveRulesMode, saveRulesOutlineOpen, saveRulesScrollSync, saveRulesSplitRatio } from './rules-editor-prefs';
-import { lockDocumentSelection } from './composer-resize';
+import { FocusRing, ModeToggle, prefersReducedMotion, SplitDivider, useDebounced } from './SplitEditorParts';
 
 type Phase = 'loading' | 'ready' | 'saving' | 'unavailable';
 
@@ -316,20 +316,6 @@ function caretTopInTextarea(ta: any, offset: number): number | null {
   return top;
 }
 
-function prefersReducedMotion(): boolean {
-  const mm = (globalThis as any).matchMedia;
-  try { return !!mm && mm('(prefers-reduced-motion: reduce)').matches; } catch { return false; }
-}
-
-// 键盘焦点要看得见:web 端 Pressable 的 focused 态画一圈强调色。
-const FocusRing = forwardRef<any, any>(function FocusRing({ style, children, ...rest }, ref) {
-  return (
-    <Pressable ref={ref} {...rest} style={(state: any) => [style, state.focused ? { outlineStyle: 'solid', outlineWidth: 2, outlineColor: colors.accent, outlineOffset: 1 } as any : null, state.hovered ? { backgroundColor: colors.rowHover } : null]}>
-      {children}
-    </Pressable>
-  );
-});
-
 // 工具条小按钮(约 30px 高)。primary = 强调色底(保存);其余描边。
 const SmallBtn = forwardRef<any, { label: string; onPress: () => void; disabled?: boolean; primary?: boolean; accessibilityLabel?: string }>(
   function SmallBtn({ label, onPress, disabled, primary, accessibilityLabel }, ref) {
@@ -344,21 +330,6 @@ const SmallBtn = forwardRef<any, { label: string; onPress: () => void; disabled?
     );
   });
 
-function ModeToggle({ mode, tabs, onChange }: { mode: RulesViewMode; tabs: readonly RulesViewMode[]; onChange: (m: RulesViewMode) => void }) {
-  return (
-    <View accessibilityRole="tablist" style={{ flexDirection: 'row', borderWidth: 1, borderColor: colors.border, borderRadius: radius.control, padding: 2, gap: 2 }}>
-      {tabs.map((m) => (
-        // aria-selected:react-native-web 不把 accessibilityState.selected 写进 DOM,读屏(和测试)看不出选中的是哪个。
-        <FocusRing key={m} accessibilityRole="tab" accessibilityState={{ selected: mode === m }} aria-selected={mode === m} onPress={() => onChange(m)}
-          hitSlop={WEB ? undefined : 4}
-          style={{ paddingHorizontal: spacing.md, paddingVertical: WEB ? 3 : 7, borderRadius: radius.item, backgroundColor: mode === m ? colors.subtleFill : 'transparent' }}>
-          <Text style={{ fontSize: 12, color: mode === m ? colors.text : colors.textMuted, fontWeight: mode === m ? '600' : '400' }}>{RULES_MODE_LABEL[m]}</Text>
-        </FocusRing>
-      ))}
-    </View>
-  );
-}
-
 // 左右模式的「🔗 滚动同步」开关:开 = 滚左边源码,右边预览跟到对应的块。
 function SyncToggle({ on, onPress }: { on: boolean; onPress: () => void }) {
   return (
@@ -368,62 +339,6 @@ function SyncToggle({ on, onPress }: { on: boolean; onPress: () => void }) {
       <Text style={{ fontSize: 12, color: on ? colors.text : colors.textMuted }}>{on ? '同步滚动' : '不同步'}</Text>
     </FocusRing>
   );
-}
-
-// 左右之间的分隔条:1px 的线是左栏的右边框;这里是跨在线上的 SPLIT_DIVIDER_HIT 宽热区。
-// 拖 = 实时改比例、松手存盘;双击 = 回到 50/50(rules-split.ts splitDividerHandlers)。
-function RulesSplitDivider({ left, width, ratio, onRatio, onCommit }: {
-  left: number; width: number; ratio: number; onRatio: (r: number) => void; onCommit: (r: number) => void;
-}) {
-  const [dragging, setDragging] = useState(false);
-  const ratioRef = useRef(ratio); ratioRef.current = ratio;
-  const widthRef = useRef(width); widthRef.current = width;
-  const onRatioRef = useRef(onRatio); onRatioRef.current = onRatio;
-  const onCommitRef = useRef(onCommit); onCommitRef.current = onCommit;
-  // 🔴 只建一次(空依赖):拖到一半重建 PanResponder,dx 会从 0 重算。
-  const pan = useMemo(() => PanResponder.create(splitDividerHandlers({
-    getRatio: () => ratioRef.current,
-    getWidth: () => widthRef.current,
-    setRatio: (r) => { setDragging(true); onRatioRef.current(r); },
-    commit: (r) => { setDragging(false); onCommitRef.current(r); },
-    reset: () => { setDragging(false); onCommitRef.current(SPLIT_RATIO_DEFAULT); },
-    lockSelection: WEB ? () => lockDocumentSelection() : undefined,
-  }) as any), []);
-  const pct = Math.round(ratio * 100);
-  return (
-    <View
-      testID="rules-split-divider"
-      {...pan.panHandlers}
-      accessible
-      accessibilityRole="adjustable"
-      accessibilityLabel="拖动调整左右比例，双击恢复各一半"
-      accessibilityValue={{ min: 25, max: 75, now: pct, text: `源码 ${pct}%` }}
-      accessibilityActions={[{ name: 'increment' }, { name: 'decrement' }]}
-      onAccessibilityAction={(e) => {
-        const a = e.nativeEvent.actionName;
-        if (a === 'increment' || a === 'decrement') onCommit(clampSplitRatio(ratio + (a === 'increment' ? SPLIT_RATIO_STEP : -SPLIT_RATIO_STEP)));
-      }}
-      {...({ dataSet: { ratio: ratio.toFixed(4), dragging: dragging ? '1' : '0' } } as object)}
-      style={[
-        { position: 'absolute', top: 0, bottom: 0, left: left - SPLIT_DIVIDER_HIT / 2, width: SPLIT_DIVIDER_HIT, zIndex: 5, alignItems: 'center', justifyContent: 'center' },
-        WEB ? ({ cursor: 'col-resize', touchAction: 'none', userSelect: 'none' } as object) : null,
-      ]}
-    >
-      {dragging ? <View style={{ position: 'absolute', top: 0, bottom: 0, width: 2, backgroundColor: colors.accent }} /> : null}
-      <View style={{ width: 4, height: 36, borderRadius: radius.pill, backgroundColor: dragging ? colors.accent : colors.textMuted, opacity: dragging ? 1 : 0.35 }} />
-    </View>
-  );
-}
-
-/** 停手 ms 毫秒后才跟上的值(左右模式的实时预览:边打字边重排 48 KB 会卡键盘)。 */
-function useDebounced<T>(value: T, ms: number): T {
-  const [v, setV] = useState(value);
-  useEffect(() => {
-    if (ms <= 0) { setV(value); return; }
-    const t = setTimeout(() => setV(value), ms);
-    return () => clearTimeout(t);
-  }, [value, ms]);
-  return ms <= 0 ? value : v;
 }
 
 // 编辑框里一批行的行首 y(相对 textarea 内容顶部,含上内边距)。和 caretTopInTextarea 同一个镜像 div,
@@ -676,7 +591,7 @@ function RulesBody({ mode, draft, onDraft, editable, dirty, fileName, onHeadingL
             {rendered(preview, false)}
           </ScrollView>
         </View>
-        {inner ? <RulesSplitDivider left={left} width={inner} ratio={ratio} onRatio={onRatio} onCommit={onRatioCommit} /> : null}
+        {inner ? <SplitDivider left={left} width={inner} ratio={ratio} onRatio={onRatio} onCommit={onRatioCommit} /> : null}
       </View>
     );
   }

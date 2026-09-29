@@ -48,16 +48,19 @@ export default function TasksScreen({
   cfg,
   onOpenTask,
   desktop,
+  onOpenVoiceSettings,
 }: {
   cfg: HubConfig;
   onOpenTask: (taskId: string) => void;
   /** 桌面工作区:派发记录在左栏(TaskFilterSidebar),看板可拖动。 */
   desktop?: boolean;
+  /** 任务描述的语音输入未配置时「去设置」→ 设置 → 语音输入。 */
+  onOpenVoiceSettings?: () => void;
 }) {
   useTranslation();
   // 任务页 = 需求池(列表 / 看板)+ 派发记录。头部、筛选、新建都在 RequirementBoard;
   // 派发记录(Hub 上派给节点的任务,原来的「列表」)作为它的一个分区渲染在同一个头部下面。
-  return <RequirementBoard cfg={cfg} desktop={desktop} dispatch={<DispatchLog cfg={cfg} onOpenTask={onOpenTask} />} />;
+  return <RequirementBoard cfg={cfg} desktop={desktop} onOpenVoiceSettings={onOpenVoiceSettings} dispatch={<DispatchLog cfg={cfg} onOpenTask={onOpenTask} />} />;
 }
 
 function DispatchLog({

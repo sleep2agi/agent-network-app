@@ -908,6 +908,7 @@ function AppRoot() {
                     <TasksScreen
                       cfg={cfg}
                       onOpenTask={taskId => setScreen({ name: 'taskDetail', taskId })}
+                      onOpenVoiceSettings={() => { rememberSettingsCategory('voice'); setScreen({ name: 'settings' }); }}
                     />
                   ) : screen.name === 'scheduled' ? (
                     <ScheduledTasksScreen key={screen.open ? `scheduled:${screen.open.seq}` : 'scheduled'} cfg={cfg} open={screen.open} onOpenChat={(alias, focusTaskId) => setScreen({ name: 'chat', alias, focusTaskId })} />
@@ -1125,7 +1126,7 @@ function DesktopWorkspace({ cfg, screen, setScreen, onLogout, onLocalDataDeleted
       desktop
     />
   ) : screen.name === 'tasks' ? (
-    <TasksScreen cfg={cfg} desktop onOpenTask={taskId => setScreen({ name: 'taskDetail', taskId })} />
+    <TasksScreen cfg={cfg} desktop onOpenTask={taskId => setScreen({ name: 'taskDetail', taskId })} onOpenVoiceSettings={() => { rememberSettingsCategory('voice'); void openSettingsWindow('voice').then(opened => { if (!opened) setScreen({ name: 'settings' }); }); }} />
   ) : screen.name === 'scheduled' ? <ScheduledTasksScreen key={screen.open ? `scheduled:${screen.open.seq}` : 'scheduled'} cfg={cfg} open={screen.open} onOpenChat={(alias, focusTaskId) => setScreen({ name: 'chat', alias, focusTaskId })} />
   : screen.name === 'messages' ? <MessagesScreen cfg={cfg} />
   : screen.name === 'server' ? (

@@ -266,3 +266,21 @@ registerTranslations({
 const keys = new Map<string,string>(taskCopy.map(([zh],i)=>[zh,`tasks.copy.${i}`]));
 /** Only call with known UI/model labels, never user content. */
 export const taskText = (label: string): string => { const key=keys.get(label); return key ? t(key) : label; };
+
+// 任务描述的 ⤢ 全屏与语音输入(TaskDescriptionEditor / TaskDescriptionFullscreen)。描述里已有的文案(描述 / 编辑 /
+// 预览 / 插入图片 …)沿用上面 taskCopy 的键;语音文案沿用 i18n-chat 的 voice.*。
+export const taskDescriptionTranslations = {
+  'taskDesc.read': ['阅读', 'Read'],
+  'taskDesc.split': ['左右', 'Split'],
+  'taskDesc.fullscreen': ['全屏', 'Full screen'],
+  'taskDesc.fullscreenA11y': ['全屏编辑描述', 'Edit description full screen'],
+  'taskDesc.exitFullscreen': ['退出全屏', 'Exit full screen'],
+  'taskDesc.exitFullscreenEsc': ['退出全屏 Esc', 'Exit full screen  Esc'],
+  'taskDesc.emptyRead': ['还没有描述。', 'No description yet.'],
+  'taskDesc.emptySplit': ['还没有描述,在左边写。', 'No description yet. Write on the left.'],
+  'taskDesc.splitDivider': ['拖动调整左右比例，双击恢复各一半', 'Drag to resize the panes; double-click to reset'],
+  'taskDesc.splitValue': ['编辑区 {pct}%', 'Editor {pct}%'],
+  'taskDesc.unsaved': ['有未保存的修改,回到详情点「保存修改」', 'Unsaved changes: select Save changes in the task details'],
+  'taskDesc.voiceSaveFirst': ['未配置语音识别:先保存修改,再到 设置 → 语音输入 里配置', 'Voice recognition is not configured. Save your changes, then set it up in Settings → Voice input'],
+} as const;
+registerTranslations(taskDescriptionTranslations);

@@ -47,6 +47,29 @@ mock.module('./src/image-window', () => ({ openImageWindow: async () => false })
 mock.module('./src/open-external', () => ({ openExternal: async (url: string) => { opened.push(url); return true; } }));
 // The detail's description preview renders MarkdownMessage (image assets, native text selection…).
 mock.module('./src/MarkdownMessage', () => ({ default: ({ children }: any) => React.createElement('Text', { testID: 'markdown' }, children) }));
+// Description voice input: recording / ASR are platform code. The stub records the insert callback so a test can
+// play a recognition result; `voiceAvailable` switches the platform support on and off.
+let voiceAvailable = false;
+let voiceInsert: ((text: string) => void) | null = null;
+let voicePresses = 0;
+mock.module('./src/useVoiceInput', () => ({
+  useVoiceInput: (opts: any) => {
+    voiceInsert = opts.onInsert;
+    return {
+      available: voiceAvailable, configured: true, state: { phase: 'idle' }, level: 0, elapsedMs: 0, interim: '', settingsPrompt: false, dismissSettingsPrompt() {},
+      micHandlers: { onStartShouldSetResponder: () => true, onMoveShouldSetResponder: () => false, onResponderTerminationRequest: () => false, onResponderGrant: () => { voicePresses++; }, onResponderMove() {}, onResponderRelease() {}, onResponderTerminate() {} },
+    };
+  },
+}));
+mock.module('./src/VoiceInputUI', () => ({
+  VoiceHoldBar: ({ handlers }: any) => React.createElement('View', { testID: 'voice-hold-bar', ...handlers }),
+  VoiceHoldOverlay: () => null,
+  VoiceSettingsPrompt: () => null,
+}));
+mock.module('./src/DesktopVoiceBar', () => ({ DesktopMicButton: () => React.createElement('View', { testID: 'voice-mic' }), DesktopVoiceBar: () => null }));
+mock.module('./src/SplitEditorParts', () => ({ FocusRing: 'Pressable', ModeToggle: () => null, SplitDivider: () => null, useDebounced: (v: any) => v, prefersReducedMotion: () => false }));
+mock.module('./src/mac-title-strip', () => ({ default: () => null }));
+mock.module('./src/win-title-bar', () => ({ default: () => null }));
 
 const card = { id: 'r1', name: '验证需求详情', assignee: '负责人甲', priority: 'normal', due: '', column: 'pool', createdAt: '' };
 let typedCards = false;
@@ -131,7 +154,7 @@ async function mount() {
   setTaskSection('board');
   await act(async () => { renderer = create(<Board cfg={cfg} />); });
 }
-afterEach(async () => { dueCaps = false; participantCards = false; subCards = false; opened = []; typedCards = false; roleCards = false; detailCards = false; itemWrites = []; projectsMock = null; if (renderer) await act(async () => renderer.unmount()); });
+afterEach(async () => { voiceAvailable = false; voiceInsert = null; voicePresses = 0; dueCaps = false; participantCards = false; subCards = false; opened = []; typedCards = false; roleCards = false; detailCards = false; itemWrites = []; projectsMock = null; if (renderer) await act(async () => renderer.unmount()); });
 
 test('issue links: canonical PATCH only, duplicate click lock, rejection stays local, source read-only', async () => {
   const writes: any[]=[];
@@ -475,6 +498,52 @@ test('description images: 🖼 uploads with network_id and inserts ![name](/api/
   expect(JSON.stringify(renderer.toJSON())).toContain('超过 12MB 上限');
   await act(async () => byId('req-edit-save').props.onPress());
   expect(edits[0].patch).toEqual({ description: '## 目标\n![截图.png](/api/files/f_1)' });
+});
+
+test('description full screen (phone): ⤢ opens a page with ‹, 编辑/预览 and 🖼; 按住说话 inserts at the caret and keeps going from there', async () => {
+  detailCards = true;
+  voiceAvailable = true;
+  await mount();
+  await act(async () => byId('req-card-r1').props.onPress());
+  await act(async () => byId('req-description-mode-edit').props.onPress());
+  // The small editor inside the detail page has no mic on a phone: voice lives on the full-screen page.
+  expect(renderer.root.findAllByProps({ testID: 'voice-mic' })).toHaveLength(0);
+  expect(renderer.root.findAllByProps({ testID: 'voice-hold-bar' })).toHaveLength(0);
+  await act(async () => byId('req-description-fullscreen').props.onPress());
+  expect(byId('req-description-page')).toBeTruthy();
+  expect(byId('req-description-page-back')).toBeTruthy();
+  expect(byId('req-description-page-image')).toBeTruthy();
+  const input = () => byId('req-description-page-input');
+  expect(input().props.value).toBe('## 目标');
+  await act(async () => input().props.onSelectionChange({ nativeEvent: { selection: { start: 3, end: 3 } } }));
+  await act(async () => byId('voice-hold-bar').props.onResponderGrant({ nativeEvent: { pageX: 0, pageY: 0 } }));
+  await act(async () => voiceInsert!('新'));
+  expect(input().props.value).toBe('## 新目标');
+  // The next utterance continues right after the inserted text (not at the end).
+  await act(async () => byId('voice-hold-bar').props.onResponderGrant({ nativeEvent: { pageX: 0, pageY: 0 } }));
+  await act(async () => voiceInsert!('的'));
+  expect(input().props.value).toBe('## 新的目标');
+  expect(voicePresses).toBe(2);
+  expect(byId('req-description-page-dirty')).toBeTruthy();
+  // Preview: no hold bar, no 🖼.
+  await act(async () => byId('req-description-page-mode-preview').props.onPress());
+  expect(renderer.root.findAllByProps({ testID: 'voice-hold-bar' })).toHaveLength(0);
+  expect(renderer.root.findAllByProps({ testID: 'req-description-page-image' })).toHaveLength(0);
+  // ‹ closes the page; the draft is kept and 保存修改 sends it.
+  await act(async () => byId('req-description-page-back').props.onPress());
+  expect(renderer.root.findAllByProps({ testID: 'req-description-page' })).toHaveLength(0);
+  await act(async () => byId('req-edit-save').props.onPress());
+  expect(edits[0].patch).toEqual({ description: '## 新的目标' });
+});
+
+test('description full screen (phone) without voice support: no hold bar, 🖼 still there', async () => {
+  detailCards = true;
+  await mount();
+  await act(async () => byId('req-card-r1').props.onPress());
+  await act(async () => byId('req-description-fullscreen').props.onPress());
+  await act(async () => byId('req-description-page-mode-edit').props.onPress());
+  expect(byId('req-description-page-image')).toBeTruthy();
+  expect(renderer.root.findAllByProps({ testID: 'voice-hold-bar' })).toHaveLength(0);
 });
 
 test('sub-requirements: progress chip on the parent card, children in detail, breadcrumb to the parent, 新建子需求 prefilled, GitHub link', async () => {

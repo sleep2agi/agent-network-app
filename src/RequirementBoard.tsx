@@ -51,13 +51,13 @@ const keyName = (key: string, people: readonly { kind: string; id: string; name:
 
 const moveErrorText = (e: unknown) => (e instanceof RequirementsHubError && e.status === 403 ? tr('tasks.copy.16') : tr('tasks.copy.17'));
 
-export default function RequirementBoard(props: { cfg: HubConfig; desktop?: boolean; dispatch?: ReactNode }) {
+export default function RequirementBoard(props: { cfg: HubConfig; desktop?: boolean; dispatch?: ReactNode; onOpenVoiceSettings?: () => void }) {
   useTranslation();
   const { cfg } = props;
   return <ScopedRequirementBoard key={taskScopeKey(cfg)} {...props} />;
 }
 
-function ScopedRequirementBoard({ cfg, desktop, dispatch }: { cfg: HubConfig; desktop?: boolean; dispatch?: ReactNode }) {
+function ScopedRequirementBoard({ cfg, desktop, dispatch, onOpenVoiceSettings }: { cfg: HubConfig; desktop?: boolean; dispatch?: ReactNode; onOpenVoiceSettings?: () => void }) {
   const { language } = useTranslation();
   const s = useTaskStyles();
   const scope = taskScopeKey(cfg);
@@ -689,6 +689,7 @@ function ScopedRequirementBoard({ cfg, desktop, dispatch }: { cfg: HubConfig; de
           onAssignmentsSaved={a => updateTaskItems(scope, rows => rows.map(row => (row.id === selected.id ? { ...row, ...a } : row)))}
           onClose={() => setSelectedId(null)}
           pointer={pointer}
+          onOpenVoiceSettings={onOpenVoiceSettings}
           checklistError={checklistErrors[selected.id] || ''}
           onChecklistToggle={(itemId, done) => { void toggleChecklist(selected.id, itemId, done); }}
           onChecklistAdd={text => {

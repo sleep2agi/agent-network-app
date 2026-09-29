@@ -55,8 +55,13 @@ ck('提示走现有 composerNotice(手机的「说话时间太短」改由按住
 
 // ── 「去设置」路由 ──
 const routes = app.match(/onOpenVoiceSettings=\{\(\) => \{ rememberSettingsCategory\('voice'\); setScreen\(\{ name: 'settings' \}\); \}\}/g) ?? [];
-ck('手机单栏/双栏仍在当前窗口打开设置·语音输入', routes.length === 2);
+ck('手机单栏/双栏(聊天)+ 手机任务页仍在当前窗口打开设置·语音输入', routes.length === 3);
 ck('桌面「去设置」把语音分类交给独立设置窗口', app.includes("void openSettingsWindow('voice')"));
+// 任务描述的语音输入也有「去设置」:手机任务页走当前窗口,桌面任务页和桌面聊天一样开独立设置窗口。
+const taskMounts = app.split('<TasksScreen').slice(1).map(rest => rest.slice(0, rest.indexOf('/>')));
+ck('两处任务页都传 onOpenVoiceSettings(手机:当前窗口;桌面:独立设置窗口)', taskMounts.length === 2
+  && taskMounts.some(m => !m.includes(' desktop ') && m.includes("onOpenVoiceSettings={() => { rememberSettingsCategory('voice'); setScreen({ name: 'settings' }); }}"))
+  && taskMounts.some(m => m.includes(' desktop ') && m.includes("void openSettingsWindow('voice')")));
 const detached = app.slice(app.indexOf('testID="dedicated-chat-window"'), app.indexOf('<DesktopMessageListener cfg={cfg} />'));
 ck('独立聊天窗口不传(那里没有设置页,提示条改为说明位置)', !detached.includes('onOpenVoiceSettings'));
 
