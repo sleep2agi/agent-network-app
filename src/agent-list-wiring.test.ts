@@ -81,7 +81,7 @@ ck('sorting / pins / 新消息 still from buildSections', agents.includes('build
 // ── desktop (Tauri) sidebar row unchanged ──
 const deskRow = agents.slice(agents.indexOf('const renderCompactRow = (item: Session) => {'), agents.indexOf('const renderPhoneRow'));
 ck('desktop row keeps 34 dp avatar, flat transparent rows, hover + context menu hooks', deskRow.includes('<AliasAvatar alias={item.alias} size={34} />') && deskRow.includes("backgroundColor: 'transparent'") && deskRow.includes('dataSet: { agentAlias: item.alias }') && deskRow.includes('onHoverIn={compact ?'));
-ck('desktop row keeps its header (search placeholder)', agents.includes('placeholder="搜索 agent…"'));
+ck('desktop row keeps its translated search header', agents.includes("placeholder={t('chat.searchAgent')}"));
 
 // ── inline badge ──
 ck('AgentUnreadBadge inline variant only changes placement', badge.includes('inline ? [styles.unreadBadge, styles.unreadBadgeInline] : styles.unreadBadge'));

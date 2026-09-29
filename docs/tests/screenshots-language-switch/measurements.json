@@ -1,0 +1,126 @@
+{
+  "passed": 18,
+  "total": 18,
+  "results": [
+    {
+      "name": "desktop: English chat placeholder",
+      "ok": true
+    },
+    {
+      "name": "desktop: Agent message stays Chinese",
+      "ok": true
+    },
+    {
+      "name": "desktop: visible buttons stay inside viewport",
+      "ok": true,
+      "detail": []
+    },
+    {
+      "name": "desktop: live switch preserves draft and page",
+      "ok": true
+    },
+    {
+      "name": "desktop: Chinese send label updates",
+      "ok": true
+    },
+    {
+      "name": "desktop: settings control switches immediately without reload",
+      "ok": true
+    },
+    {
+      "name": "desktop: language labels align and fit",
+      "ok": true,
+      "detail": [
+        {
+          "text": "Follow system",
+          "left": 667,
+          "right": 768.359375,
+          "height": 18,
+          "overflow": false
+        },
+        {
+          "text": "中文",
+          "left": 667,
+          "right": 699,
+          "height": 21,
+          "overflow": false
+        },
+        {
+          "text": "English",
+          "left": 667,
+          "right": 719.484375,
+          "height": 18,
+          "overflow": false
+        }
+      ]
+    },
+    {
+      "name": "desktop: Follow system resolves en-US",
+      "ok": true
+    },
+    {
+      "name": "desktop: explicit Chinese preference survives reload",
+      "ok": true
+    },
+    {
+      "name": "phone: English chat placeholder",
+      "ok": true
+    },
+    {
+      "name": "phone: Agent message stays Chinese",
+      "ok": true
+    },
+    {
+      "name": "phone: visible buttons stay inside viewport",
+      "ok": true,
+      "detail": []
+    },
+    {
+      "name": "phone: live switch preserves draft and page",
+      "ok": true
+    },
+    {
+      "name": "phone: Chinese send label updates",
+      "ok": true
+    },
+    {
+      "name": "phone: settings control switches immediately without reload",
+      "ok": true
+    },
+    {
+      "name": "phone: language labels align and fit",
+      "ok": true,
+      "detail": [
+        {
+          "text": "Follow system",
+          "left": 33,
+          "right": 134.359375,
+          "height": 18,
+          "overflow": false
+        },
+        {
+          "text": "中文",
+          "left": 33,
+          "right": 65,
+          "height": 21,
+          "overflow": false
+        },
+        {
+          "text": "English",
+          "left": 33,
+          "right": 85.484375,
+          "height": 18,
+          "overflow": false
+        }
+      ]
+    },
+    {
+      "name": "phone: Follow system resolves en-US",
+      "ok": true
+    },
+    {
+      "name": "phone: explicit Chinese preference survives reload",
+      "ok": true
+    }
+  ]
+}

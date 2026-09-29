@@ -80,7 +80,7 @@ check(!/Alert\.alert\([^)]*\[\s*\{\s*text:\s*'图片'/.test(chat), 'no 图片/�
   // mobile branch = after `) : (` of the desktop ternary, up to SideThreadDrawer
   const mobile = chat.slice(chat.indexOf('      ) : (\n      <>'), chat.indexOf('<SideThreadDrawer'));
   const rowAt = mobile.indexOf('styles.inputRow');
-  const panelAt = mobile.indexOf('accessibilityLabel="更多发送方式面板"');
+  const panelAt = mobile.indexOf("accessibilityLabel={t('chat.moreSend')}");
   check(rowAt > 0 && panelAt > rowAt, 'inline panel renders in the mobile branch, AFTER the input row');
   check(!/<Modal[^>]*visible=\{plusMenuOpen\}/.test(chat), 'mobile no longer uses a full-screen Modal for +');
   // 0.2.123 owner:桌面没有「相册 / 文件」面板了 ——「＋」直接开系统文件选择器(desktop-file-intake.ts)。

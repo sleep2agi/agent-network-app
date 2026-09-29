@@ -1,3 +1,8 @@
+import { t as tr } from './i18n';
+import { useTranslation } from './i18n-react';
+import { localizedVoiceStatus } from './i18n-settings-presentation';
+import { settingsText } from './i18n-settings';
+import { localizedThemeSummary, localizedScaleSummary } from './i18n-settings-presentation';
 // 手机「设置」的子页(Vincent 2026-09-27「设置界面有点体验太差」,截图是 设置 → 语音输入)。
 //
 // #439 把列表页做成了微信式分组,子页却还是宽屏右栏那套密排表单:贴边、大圆点单选卡片、控件之间
@@ -9,6 +14,7 @@
 // 🔴 settings-subpages.test.ts 静态守着这个文件:不许直接用 TextInput、不许画单选圆点卡片、
 //    不许从 react-native 拿 Switch —— 一律经 settings-kit。
 import type { ReactNode } from 'react';
+import LanguageSettings from './LanguageSettings';
 import { Platform } from 'react-native';
 import { SettingsButton, SettingsCardContent, SettingsChoiceRow, SettingsGroup, SettingsRow, SettingsSwitchRow, type SettingsTone } from './settings-kit';
 import { VoiceAdvancedEditPage, VoiceApiKeyEditPage, QuietHoursEditPage } from './SettingsEditPages';
@@ -26,7 +32,7 @@ import { DENSITY_OPTIONS, FONT_SIZE_OPTIONS, uiScale, uiScaleLayoutWide, uiScale
 import { CONSOLE_HELP, useVoiceSettings, VOICE_UNSUPPORTED_TEXT } from './VoiceSettingsSection';
 import MicDeviceSetting from './MicDeviceSetting';
 import { MODE_LABELS, STREAM_UNAVAILABLE_HINT, streamingSupported } from './voice-stream-policy';
-import { statusLabel, VOLC_CONSOLE_URL } from './voice-credentials-model';
+import { VOLC_CONSOLE_URL } from './voice-credentials-model';
 import { openExternal } from './open-external';
 import type { SettingsCategoryKey, SettingsDetailKey } from './settings-model';
 
@@ -88,6 +94,7 @@ export type PhonePagesCtx = {
 };
 
 export default function SettingsPhonePage({ page, ctx }: { page: SettingsCategoryKey; ctx: PhonePagesCtx }) {
+  useTranslation();
   switch (page) {
     case 'account': return ctx.detail === 'manageAccounts' ? <ManageAccountsPage ctx={ctx} /> : <AccountPage ctx={ctx} />;
     case 'localHub': return <LocalHubPage ctx={ctx} />;
@@ -100,20 +107,21 @@ export default function SettingsPhonePage({ page, ctx }: { page: SettingsCategor
   }
 }
 
-const profileName = (p: HubProfile) => p.displayName || p.username || 'Hub 账号';
+const profileName = (p: HubProfile) => p.displayName || p.username || tr('settings.copy.12');
 
 // ── 账号 ─────────────────────────────────────────────────────────────────────────────────────
 function AccountPage({ ctx }: { ctx: PhonePagesCtx }) {
+  useTranslation();
   const { cfg, profiles, show } = ctx;
   const manageable = profiles.some(p => p.profileId !== LOCAL_HUB_PROFILE_ID) || ctx.tauriDesktop;
   return (
     <>
       {show('account', 'profiles') ? (
         <SettingsGroup
-          title="Hub 账号"
+          title={tr('settings.copy.12')}
           testID="settings-account-profiles"
           footer={ctx.profileError || (ctx.storageDiagnostics
-            ? `本地数据:${ctx.storageDiagnostics.root} · ${ctx.storageDiagnostics.profile_count} 个账号${ctx.storageDiagnostics.corrupt_backups.length ? ` · 已保留 ${ctx.storageDiagnostics.corrupt_backups.length} 个损坏备份` : ''}`
+            ? tr('settings.copy.191', { v0: ctx.storageDiagnostics.root, v1: ctx.storageDiagnostics.profile_count, v2: ctx.storageDiagnostics.corrupt_backups.length ? tr('settings.copy.185', { v0: ctx.storageDiagnostics.corrupt_backups.length }) : '' })
             : undefined)}
           footerTone={ctx.profileError ? 'danger' : undefined}
         >
@@ -123,21 +131,21 @@ function AccountPage({ ctx }: { ctx: PhonePagesCtx }) {
               key={profile.profileId}
               testID={`settings-profile-${profile.profileId}`}
               label={profileName(profile)}
-              subtitle={profile.requiresReauth ? '需要重新登录 · 点击验证' : `${profile.serverUrl} · ${profile.username || '未知用户'}`}
+              subtitle={profile.requiresReauth ? tr('settings.copy.15') : `${profile.serverUrl} · ${profile.username || tr('settings.copy.14')}`}
               subtitleTone={profile.requiresReauth ? 'danger' : undefined}
               selected={profile.profileId === cfg.profileId}
               onPress={() => ctx.onPickProfile(profile)}
             />
           )) : [
-            <SettingsRow key="server" label="服务器" value={cfg.serverUrl} />,
-            <SettingsRow key="user" label="用户名" value={ctx.me.username ?? cfg.username ?? '—'} />,
+            <SettingsRow key="server" label={tr('settings.copy.18')} value={cfg.serverUrl} />,
+            <SettingsRow key="user" label={tr('settings.copy.19')} value={ctx.me.username ?? cfg.username ?? '—'} />,
           ]}
         </SettingsGroup>
       ) : null}
       {show('account', 'addAccount') || manageable ? (
         <SettingsGroup>
-          {show('account', 'addAccount') ? <SettingsRow label="添加 Hub / 账号" onPress={ctx.onAddAccount} testID="settings-add-account" /> : null}
-          {manageable && profiles.length ? <SettingsRow label="管理账号" onPress={() => ctx.openDetail('manageAccounts')} testID="settings-manage-accounts" /> : null}
+          {show('account', 'addAccount') ? <SettingsRow label={tr('settings.copy.93')} onPress={ctx.onAddAccount} testID="settings-add-account" /> : null}
+          {manageable && profiles.length ? <SettingsRow label={tr('settings.copy.94')} onPress={() => ctx.openDetail('manageAccounts')} testID="settings-manage-accounts" /> : null}
         </SettingsGroup>
       ) : null}
     </>
@@ -146,6 +154,7 @@ function AccountPage({ ctx }: { ctx: PhonePagesCtx }) {
 
 /** 三级页:每个账号一组(新窗口打开 · 移除)。当前账号的「移除」= 列表底部的退出登录,这里同样可用。 */
 function ManageAccountsPage({ ctx }: { ctx: PhonePagesCtx }) {
+  useTranslation();
   return (
     <>
       {ctx.profiles.map(profile => {
@@ -153,44 +162,45 @@ function ManageAccountsPage({ ctx }: { ctx: PhonePagesCtx }) {
         const canRemove = profile.profileId !== LOCAL_HUB_PROFILE_ID;
         if (!canOpen && !canRemove) return null;
         return (
-          <SettingsGroup key={profile.profileId} title={`${profileName(profile)}${profile.profileId === ctx.cfg.profileId ? ' · 当前' : ''}`} footer={`${profile.serverUrl}${profile.networkId ? ` · ${profile.networkId}` : ''}`}>
-            {canOpen ? <SettingsRow label="在新窗口打开" onPress={() => ctx.onOpenProfileWindow(profile)} accessibilityLabel={`在新窗口打开 ${profile.displayName || profile.username || profile.serverUrl}`} /> : null}
-            {canRemove ? <SettingsRow label="移除账号" tone="danger" chevron={false} onPress={() => ctx.onRemoveProfile(profile)} accessibilityLabel={`移除 ${profile.username || profile.serverUrl}`} testID={`settings-remove-${profile.profileId}`} /> : null}
+          <SettingsGroup key={profile.profileId} title={`${profileName(profile)}${profile.profileId === ctx.cfg.profileId ? tr('settings.copy.13') : ''}`} footer={`${profile.serverUrl}${profile.networkId ? ` · ${profile.networkId}` : ''}`}>
+            {canOpen ? <SettingsRow label={tr('settings.copy.95')} onPress={() => ctx.onOpenProfileWindow(profile)} accessibilityLabel={tr('settings.copy.183', { v0: profile.displayName || profile.username || profile.serverUrl })} /> : null}
+            {canRemove ? <SettingsRow label={tr('settings.copy.81')} tone="danger" chevron={false} onPress={() => ctx.onRemoveProfile(profile)} accessibilityLabel={tr('settings.copy.184', { v0: profile.username || profile.serverUrl })} testID={`settings-remove-${profile.profileId}`} /> : null}
           </SettingsGroup>
         );
       })}
-      <SettingsGroup footer="只删除这个账号在本机的凭据和本地目录,不影响其他 Hub。" />
+      <SettingsGroup footer={tr('settings.copy.96')} />
     </>
   );
 }
 
 // ── 本地 Hub ─────────────────────────────────────────────────────────────────────────────────
 function LocalHubPage({ ctx }: { ctx: PhonePagesCtx }) {
+  useTranslation();
   const { localHub, show, localHubBusy: busy } = ctx;
   const a = ctx.localHubActions;
   if (!localHub) return null;
-  const state = localHub.state === 'running' || localHub.state === 'running_external' ? '运行中' : localHub.state === 'error' ? '异常' : '已停止';
+  const state = localHub.state === 'running' || localHub.state === 'running_external' ? tr('settings.copy.25') : localHub.state === 'error' ? tr('settings.copy.26') : tr('settings.copy.27');
   const needsUpgrade = localHub.requiresMigration || (localHub.error ?? '').includes('version mismatch');
   return (
     <>
       <SettingsGroup footer={localHub.error || ctx.profileError || undefined} footerTone="danger" testID="local-hub-settings-card">
-        {show('localHub', 'status') ? <SettingsRow label="状态" value={state} valueTone={localHub.state === 'error' ? 'danger' : undefined} /> : null}
-        {show('localHub', 'endpoint') ? <SettingsRow label="地址" value={localHub.endpoint} /> : null}
-        {show('localHub', 'hubVersion') ? <SettingsRow label="Hub 版本" value={localHub.hubVersion} /> : null}
+        {show('localHub', 'status') ? <SettingsRow label={tr('settings.copy.24')} value={state} valueTone={localHub.state === 'error' ? 'danger' : undefined} /> : null}
+        {show('localHub', 'endpoint') ? <SettingsRow label={tr('settings.copy.28')} value={localHub.endpoint} /> : null}
+        {show('localHub', 'hubVersion') ? <SettingsRow label={tr('settings.copy.29')} value={localHub.hubVersion} /> : null}
       </SettingsGroup>
-      <SettingsGroup footer={ctx.localBackupMessage || '重新启动:停止当前 Hub 进程后用捆绑版本重新拉起。'}>
+      <SettingsGroup footer={ctx.localBackupMessage || tr('settings.copy.97')}>
         {needsUpgrade && show('localHub', 'restart') ? (
-          <SettingsRow testID="local-hub-upgrade" label={busy ? '升级中…' : `升级本地 Hub 到 ${localHub.expectedHubVersion ?? '当前捆绑版本'}`} tone="accent" disabled={busy} onPress={a.upgrade} />
+          <SettingsRow testID="local-hub-upgrade" label={busy ? tr('settings.copy.30') : tr('settings.copy.186', { v0: localHub.expectedHubVersion ?? tr('settings.copy.31') })} tone="accent" disabled={busy} onPress={a.upgrade} />
         ) : null}
-        {show('localHub', 'restart') ? <SettingsRow label="重新启动" busy={busy} disabled={busy} onPress={a.restart} chevron={false} /> : null}
-        {show('localHub', 'stop') ? <SettingsRow label="停止" disabled={busy || localHub.state === 'stopped'} onPress={a.stop} chevron={false} /> : null}
-        {show('localHub', 'logs') ? <SettingsRow label="打开日志" onPress={a.logs} /> : null}
-        {show('localHub', 'backup') ? <SettingsRow label="立即备份" busy={busy} disabled={busy} onPress={a.backup} chevron={false} /> : null}
+        {show('localHub', 'restart') ? <SettingsRow label={tr('settings.copy.32')} busy={busy} disabled={busy} onPress={a.restart} chevron={false} /> : null}
+        {show('localHub', 'stop') ? <SettingsRow label={tr('settings.copy.34')} disabled={busy || localHub.state === 'stopped'} onPress={a.stop} chevron={false} /> : null}
+        {show('localHub', 'logs') ? <SettingsRow label={tr('settings.copy.35')} onPress={a.logs} /> : null}
+        {show('localHub', 'backup') ? <SettingsRow label={tr('settings.copy.36')} busy={busy} disabled={busy} onPress={a.backup} chevron={false} /> : null}
       </SettingsGroup>
       {show('localHub', 'deleteLocal') ? (
         <>
-          <SettingsButton variant="destructive" label="删除本地工作区数据…" onPress={a.openDelete} testID="settings-danger-zone" />
-          <SettingsGroup footer="先完整备份到 ~/.anet/app/backups,再删除本地 Hub 数据与系统凭据。" />
+          <SettingsButton variant="destructive" label={tr('settings.copy.38')} onPress={a.openDelete} testID="settings-danger-zone" />
+          <SettingsGroup footer={tr('settings.copy.98')} />
         </>
       ) : null}
     </>
@@ -199,18 +209,19 @@ function LocalHubPage({ ctx }: { ctx: PhonePagesCtx }) {
 
 // ── 外观 ─────────────────────────────────────────────────────────────────────────────────────
 function AppearancePage({ ctx }: { ctx: PhonePagesCtx }) {
+  useTranslation();
   const r = uiScale();
-  const summary = uiScaleSummary(r, uiScaleLayoutWide());
+  const summary = localizedScaleSummary(r, uiScaleLayoutWide());
   const anyStored = !r.fontIsDefault || !r.densityIsDefault;
   return (
     <>
       {ctx.show('appearance', 'theme') ? (
-        <SettingsGroup title="主题" footer={themePreferenceSummary(ctx.themePref, ctx.themeModeNow)} testID="settings-theme-row">
+        <SettingsGroup title={tr('settings.copy.40')} footer={localizedThemeSummary(ctx.themePref, ctx.themeModeNow)} testID="settings-theme-row">
           {THEME_PREFERENCES.map(option => (
             <SettingsChoiceRow
               key={option}
               testID={`settings-theme-${option}`}
-              label={THEME_PREFERENCE_LABEL[option]}
+              label={settingsText(THEME_PREFERENCE_LABEL[option])}
               selected={ctx.themePref === option}
               onPress={() => {
                 if (ctx.themePref === option) return;
@@ -221,27 +232,28 @@ function AppearancePage({ ctx }: { ctx: PhonePagesCtx }) {
           ))}
         </SettingsGroup>
       ) : null}
+      {ctx.show('appearance', 'language') ? <LanguageSettings /> : null}
       {ctx.show('appearance', 'fontSize') ? (
-        <SettingsGroup title="字体大小" footer={[summary.font, summary.osNote].filter(Boolean).join(' · ')} testID="settings-font-size-row">
+        <SettingsGroup title={tr('settings.copy.99')} footer={[summary.font, summary.osNote].filter(Boolean).join(' · ')} testID="settings-font-size-row">
           {FONT_SIZE_OPTIONS.map(o => (
             // 选「只是默认」的那项 = 显式存下来(折叠/展开不再改它);选已存的那项不动。同宽屏 Segmented。
-            <SettingsChoiceRow key={o.key} testID={`settings-font-size-${o.key}`} label={o.label} selected={r.font === o.key} onPress={() => { if (r.font !== o.key || r.fontIsDefault) persistUiScale({ font: o.key }); }} />
+            <SettingsChoiceRow key={o.key} testID={`settings-font-size-${o.key}`} label={settingsText(o.label)} selected={r.font === o.key} onPress={() => { if (r.font !== o.key || r.fontIsDefault) persistUiScale({ font: o.key }); }} />
           ))}
         </SettingsGroup>
       ) : null}
       {ctx.show('appearance', 'density') ? (
-        <SettingsGroup title="界面密度" footer={`${summary.density} · 图标、头像、行高和间距`} testID="settings-density-row">
+        <SettingsGroup title={tr('settings.copy.100')} footer={tr('settings.copy.192', { v0: summary.density })} testID="settings-density-row">
           {DENSITY_OPTIONS.map(o => (
-            <SettingsChoiceRow key={o.key} testID={`settings-density-${o.key}`} label={o.label} selected={r.density === o.key} onPress={() => { if (r.density !== o.key || r.densityIsDefault) persistUiScale({ density: o.key }); }} />
+            <SettingsChoiceRow key={o.key} testID={`settings-density-${o.key}`} label={settingsText(o.label)} selected={r.density === o.key} onPress={() => { if (r.density !== o.key || r.densityIsDefault) persistUiScale({ density: o.key }); }} />
           ))}
         </SettingsGroup>
       ) : null}
       {ctx.show('appearance', 'fontSize') || ctx.show('appearance', 'density') ? (
         <>
-          <SettingsGroup title="预览">
+          <SettingsGroup title={tr('settings.copy.101')}>
             <SettingsCardContent><UiScalePreview /></SettingsCardContent>
           </SettingsGroup>
-          <SettingsButton variant="plain" label="恢复默认" accessibilityLabel="恢复默认字体大小和界面密度" disabled={!anyStored} onPress={() => persistUiScale({ font: null, density: null })} testID="settings-ui-scale-reset" />
+          <SettingsButton variant="plain" label={tr('settings.copy.102')} accessibilityLabel={tr('settings.copy.103')} disabled={!anyStored} onPress={() => persistUiScale({ font: null, density: null })} testID="settings-ui-scale-reset" />
         </>
       ) : null}
     </>
@@ -250,75 +262,76 @@ function AppearancePage({ ctx }: { ctx: PhonePagesCtx }) {
 
 // ── 通知 ─────────────────────────────────────────────────────────────────────────────────────
 function NotificationsPage({ ctx }: { ctx: PhonePagesCtx }) {
+  useTranslation();
   const { notify, show, saveNotify } = ctx;
   const permissionOff = ctx.nativeNotify && notify.enabled && ctx.permission && ctx.permission.status !== 'granted';
   const androidRows = show('notifications', 'keepAlive') || show('notifications', 'dndBypass') || show('notifications', 'xiaomiGuide');
-  const dndNote = notify.dndBypass && ctx.dndAccess === true ? '勿扰权限已授权。' : null;
+  const dndNote = notify.dndBypass && ctx.dndAccess === true ? tr('settings.copy.104') : null;
   return (
     <>
       {show('notifications', 'enabled') ? (
-        <SettingsGroup testID="notify-settings-card" footer="agent 发来消息、而你没在看那个会话时,发一条系统通知。">
+        <SettingsGroup testID="notify-settings-card" footer={tr('settings.copy.105')}>
           <SettingsSwitchRow
             testID="notify-enabled-row"
-            label="新消息通知"
+            label={tr('settings.copy.41')}
             value={notify.enabled}
             onValueChange={value => { saveNotify({ ...notify, enabled: value }); if (value) void ctx.ensurePermission(); }}
           />
-          {permissionOff ? <SettingsRow testID="notify-permission-fix" label="系统通知权限未开启" tone="danger" value="去开启" onPress={() => { void ctx.ensurePermission(); }} /> : null}
+          {permissionOff ? <SettingsRow testID="notify-permission-fix" label={tr('settings.copy.106')} tone="danger" value={tr('settings.copy.107')} onPress={() => { void ctx.ensurePermission(); }} /> : null}
         </SettingsGroup>
       ) : null}
       {show('notifications', 'mode') ? (
-        <SettingsGroup title="提醒方式" footer={notify.mode === 'new' ? '同一个 agent 有未看的通知时,后续消息只更新条数、不再响铃。' : '每条新消息都响铃并弹出横幅。'} testID="notify-mode-row">
-          {([['all', '每条消息'], ['new', '仅新消息']] as const).map(([mode, label]) => (
+        <SettingsGroup title={tr('settings.copy.44')} footer={notify.mode === 'new' ? tr('settings.copy.108') : tr('settings.copy.46')} testID="notify-mode-row">
+          {([['all', tr('settings.copy.47')], ['new', tr('settings.copy.48')]] as const).map(([mode, label]) => (
             <SettingsChoiceRow key={mode} testID={`notify-mode-${mode}`} label={label} selected={notify.mode === mode} disabled={!notify.enabled} onPress={() => saveNotify({ ...notify, mode })} />
           ))}
         </SettingsGroup>
       ) : null}
       {show('notifications', 'sound') || show('notifications', 'quiet') ? (
-        <SettingsGroup footer={notify.quiet.enabled ? `${notify.quiet.start} – ${notify.quiet.end} 之间不提醒。` : undefined}>
-          {show('notifications', 'sound') ? <SettingsSwitchRow label="消息提示音" value={notify.soundEnabled} onValueChange={ctx.onSoundChange} /> : null}
-          {show('notifications', 'quiet') ? <SettingsSwitchRow label="免打扰时段" value={notify.quiet.enabled} onValueChange={value => saveNotify({ ...notify, quiet: { ...notify.quiet, enabled: value } })} /> : null}
+        <SettingsGroup footer={notify.quiet.enabled ? tr('settings.copy.187', { v0: notify.quiet.start, v1: notify.quiet.end }) : undefined}>
+          {show('notifications', 'sound') ? <SettingsSwitchRow label={tr('settings.copy.49')} value={notify.soundEnabled} onValueChange={ctx.onSoundChange} /> : null}
+          {show('notifications', 'quiet') ? <SettingsSwitchRow label={tr('settings.copy.51')} value={notify.quiet.enabled} onValueChange={value => saveNotify({ ...notify, quiet: { ...notify.quiet, enabled: value } })} /> : null}
           {show('notifications', 'quiet') && notify.quiet.enabled ? (
-            <SettingsRow testID="notify-quiet-hours" label="时段" value={`${notify.quiet.start} – ${notify.quiet.end}`} onPress={() => ctx.openDetail('quietHours')} />
+            <SettingsRow testID="notify-quiet-hours" label={tr('settings.copy.109')} value={`${notify.quiet.start} – ${notify.quiet.end}`} onPress={() => ctx.openDetail('quietHours')} />
           ) : null}
         </SettingsGroup>
       ) : null}
       {show('notifications', 'muted') ? (
         <SettingsGroup
-          title="消息免打扰的 agent"
+          title={tr('settings.copy.57')}
           testID="notify-muted-row"
-          footer={ctx.muted.length ? '这些 agent 的消息照常收,只是不发系统通知。' : (ctx.nativeNotify ? '在会话右上角点铃铛,可以对单个 agent 免打扰。' : '在 agent 列表里右键 →「消息免打扰」。')}
+          footer={ctx.muted.length ? tr('settings.copy.58') : (ctx.nativeNotify ? tr('settings.copy.59') : tr('settings.copy.60'))}
         >
           {ctx.muted.map(alias => (
-            <SettingsRow key={alias} label={alias} value="取消" valueTone="accent" chevron={false} onPress={() => ctx.unmute(alias)} accessibilityLabel={`取消 ${alias} 的免打扰`} />
+            <SettingsRow key={alias} label={alias} value={tr('settings.copy.61')} valueTone="accent" chevron={false} onPress={() => ctx.unmute(alias)} accessibilityLabel={tr('settings.copy.188', { v0: alias })} />
           ))}
         </SettingsGroup>
       ) : null}
       {androidRows ? (
         <SettingsGroup
-          title="后台"
-          footer={[ctx.keepAliveStatus || '切到后台后继续接收消息;会常驻一条低优先级通知,耗电多一些。', dndNote].filter(Boolean).join(' ')}
+          title={tr('settings.copy.110')}
+          footer={[ctx.keepAliveStatus || tr('settings.copy.111'), dndNote].filter(Boolean).join(' ')}
           footerTone={ctx.keepAliveState.error ? 'danger' : undefined}
         >
           {show('notifications', 'keepAlive') ? (
-            <SettingsSwitchRow testID="notify-keepalive-row" label="后台保持连接" value={notify.keepAlive} disabled={!notify.enabled || !ctx.keepAliveState.available} onValueChange={ctx.onKeepAliveChange} />
+            <SettingsSwitchRow testID="notify-keepalive-row" label={tr('settings.copy.62')} value={notify.keepAlive} disabled={!notify.enabled || !ctx.keepAliveState.available} onValueChange={ctx.onKeepAliveChange} />
           ) : null}
           {show('notifications', 'dndBypass') ? (
-            <SettingsSwitchRow testID="notify-dnd-row" label="免打扰时仍然提醒" subtitle="系统勿扰时照样弹出并响铃" value={notify.dndBypass} disabled={!notify.enabled} onValueChange={ctx.onDndBypassChange} />
+            <SettingsSwitchRow testID="notify-dnd-row" label={tr('settings.copy.64')} subtitle={tr('settings.copy.112')} value={notify.dndBypass} disabled={!notify.enabled} onValueChange={ctx.onDndBypassChange} />
           ) : null}
           {show('notifications', 'dndBypass') && notify.dndBypass && ctx.dndAccess === false ? (
-            <SettingsRow testID="notify-dnd-grant" label="还没有勿扰权限" tone="danger" value="去授权" onPress={ctx.openDndAccess} />
+            <SettingsRow testID="notify-dnd-grant" label={tr('settings.copy.113')} tone="danger" value={tr('settings.copy.114')} onPress={ctx.openDndAccess} />
           ) : null}
-          {show('notifications', 'xiaomiGuide') ? <SettingsRow testID="notify-xiaomi-guide" label="小米/HyperOS 后台设置指引" onPress={ctx.openXiaomiGuide} /> : null}
+          {show('notifications', 'xiaomiGuide') ? <SettingsRow testID="notify-xiaomi-guide" label={tr('settings.copy.68')} onPress={ctx.openXiaomiGuide} /> : null}
         </SettingsGroup>
       ) : null}
       {show('notifications', 'test') ? (
-        <SettingsGroup footer={ctx.testMessage || '立即发一条通知,确认系统通知能弹出来。'} testID="notify-test-row">
-          <SettingsRow label="发送测试通知" value="发送" valueTone="accent" chevron={false} onPress={ctx.sendTest} />
+        <SettingsGroup footer={ctx.testMessage || tr('settings.copy.71')} testID="notify-test-row">
+          <SettingsRow label={tr('settings.copy.70')} value={tr('settings.copy.72')} valueTone="accent" chevron={false} onPress={ctx.sendTest} />
         </SettingsGroup>
       ) : null}
       {show('notifications', 'diagnostics') ? (
-        <SettingsGroup title="通知诊断" footer={`没收到通知时,把上面的信息复制给维护者。${ctx.nativeNotify ? '你正开着的会话不提示;在应用里看着别的会话时照常提示。' : '新消息会在系统栏和系统通知里提示;你正开着的会话不提示。'}`}>
+        <SettingsGroup title={tr('settings.copy.73')} footer={tr('settings.copy.193', { v0: ctx.nativeNotify ? tr('settings.copy.75') : tr('settings.copy.76') })}>
           {ctx.notifyPreview ? null : <SettingsCardContent><NotifyDiagnosticsPanel /></SettingsCardContent>}
         </SettingsGroup>
       ) : null}
@@ -328,51 +341,52 @@ function NotificationsPage({ ctx }: { ctx: PhonePagesCtx }) {
 
 // ── 语音输入 ─────────────────────────────────────────────────────────────────────────────────
 function VoicePhonePage({ ctx }: { ctx: PhonePagesCtx }) {
+  useTranslation();
   // 一个 hook 实例同时服务子页和它的两个三级页:表单改到一半在 API Key ↔ 高级 之间切换不丢。
   const v = useVoiceSettings();
   if (ctx.detail === 'voiceApiKey') return <VoiceApiKeyEditPage v={v} ctx={ctx} />;
   if (ctx.detail === 'voiceAdvanced') return <VoiceAdvancedEditPage v={v} ctx={ctx} />;
-  if (v.storage === 'unsupported') return <SettingsGroup testID="voice-settings-unsupported" footer={VOICE_UNSUPPORTED_TEXT} />;
+  if (v.storage === 'unsupported') return <SettingsGroup testID="voice-settings-unsupported" footer={tr(VOICE_UNSUPPORTED_TEXT)} />;
   const { show } = ctx;
   const { status } = v;
   const modeNote: { text: string; tone?: SettingsTone } = !streamingSupported(v.platform)
-    ? { text: '桌面版只支持极速版(说完再出字);边说边出字目前只在手机 App 上。' }
-    : v.mode === 'stream' && v.unavailable ? { text: STREAM_UNAVAILABLE_HINT, tone: 'accent' }
-      : v.mode === 'stream' ? { text: '边说边出字;没开通流式会自动改用极速版。' }
-        : { text: '松手后整句识别一次。' };
+    ? { text: tr('settings.copy.115') }
+    : v.mode === 'stream' && v.unavailable ? { text: settingsText(STREAM_UNAVAILABLE_HINT), tone: 'accent' }
+      : v.mode === 'stream' ? { text: tr('settings.copy.116') }
+        : { text: tr('settings.copy.117') };
   const credNote = status.configured && (status.console === 'old' || status.customEndpoint || status.customStreamEndpoint)
-    ? `${status.console === 'old' ? `旧版控制台 · App ID ${status.appId}` : '新版控制台 · API Key'}${status.customEndpoint || status.customStreamEndpoint ? ' · 自定义接口地址' : ''}`
-    : '只保存在本机,不会上传到 Hub。';
+    ? `${status.console === 'old' ? tr('settings.copy.194', { v0: status.appId }) : tr('settings.copy.118')}${status.customEndpoint || status.customStreamEndpoint ? tr('settings.copy.119') : ''}`
+    : tr('settings.copy.120');
   const t = v.test;
-  const testValue = t.kind === 'recording' ? `录音中 ${v.secondsLeft}s` : t.kind === 'transcribing' ? '识别中…' : '';
+  const testValue = t.kind === 'recording' ? tr('settings.copy.195', { v0: v.secondsLeft }) : t.kind === 'transcribing' ? tr('settings.copy.121') : '';
   const testFooter = (t.kind === 'recording' || t.kind === 'transcribing') && v.interim ? v.interim
-    : t.kind === 'done' ? `${t.text ? `识别结果(${t.via === 'stream' ? '流式' : '极速版'}):${t.text}` : '没有识别到文字(静音?)'}${t.note ? `\n${t.note}` : ''}`
+    : t.kind === 'done' ? `${t.text ? tr('settings.copy.196', { v0: t.via === 'stream' ? tr('settings.copy.122') : tr('settings.copy.123'), v1: t.text }) : tr('settings.copy.124')}${t.note ? `\n${t.note}` : ''}`
       : t.kind === 'error' ? t.message
-        : status.configured ? '点一下后说 3 秒话,显示识别出的文字。' : '先配置 API Key。';
+        : status.configured ? tr('settings.copy.125') : tr('settings.copy.126');
   return (
     <>
       {show('voice', 'mode') ? (
-        <SettingsGroup title="识别模型" footer={modeNote.text} footerTone={modeNote.tone} testID="voice-mode">
+        <SettingsGroup title={tr('settings.copy.127')} footer={modeNote.text} footerTone={modeNote.tone} testID="voice-mode">
           {v.choices.map(m => (
-            <SettingsChoiceRow key={m} testID={`voice-mode-${m}`} label={MODE_LABELS[m]} selected={v.mode === m || v.choices.length === 1} onPress={() => v.onPickMode(m)} />
+            <SettingsChoiceRow key={m} testID={`voice-mode-${m}`} label={settingsText(MODE_LABELS[m])} selected={v.mode === m || v.choices.length === 1} onPress={() => v.onPickMode(m)} />
           ))}
         </SettingsGroup>
       ) : null}
       {show('voice', 'credentials') ? (
         <>
-          <SettingsGroup title="凭据" footer={credNote}>
+          <SettingsGroup title={tr('settings.copy.128')} footer={credNote}>
             <SettingsRow
               testID="voice-api-key-row"
               label="API Key"
               busy={!v.loaded}
-              value={v.loaded ? (status.configured ? statusLabel(status).replace(' ✓', '') : '未配置') : undefined}
+              value={v.loaded ? (status.configured ? localizedVoiceStatus(status).replace(' ✓', '') : tr('settings.copy.129')) : undefined}
               valueTone={status.configured ? 'accent' : undefined}
               onPress={() => ctx.openDetail('voiceApiKey')}
             />
           </SettingsGroup>
-          <SettingsGroup title="帮助" footer={CONSOLE_HELP}>
-            <SettingsRow testID="voice-console-link" label="在火山引擎控制台开通" external onPress={() => { void openExternal(VOLC_CONSOLE_URL).catch(() => {}); }} />
-            <SettingsRow testID="voice-advanced-toggle" label="高级 / 旧版控制台" onPress={() => ctx.openDetail('voiceAdvanced')} />
+          <SettingsGroup title={tr('settings.copy.130')} footer={tr(CONSOLE_HELP)}>
+            <SettingsRow testID="voice-console-link" label={tr('settings.copy.131')} external onPress={() => { void openExternal(VOLC_CONSOLE_URL).catch(() => {}); }} />
+            <SettingsRow testID="voice-advanced-toggle" label={tr('settings.copy.132')} onPress={() => ctx.openDetail('voiceAdvanced')} />
           </SettingsGroup>
         </>
       ) : null}
@@ -385,7 +399,7 @@ function VoicePhonePage({ ctx }: { ctx: PhonePagesCtx }) {
       ) : null}
       {show('voice', 'test') ? (
         <SettingsGroup footer={testFooter} footerTone={t.kind === 'error' ? 'danger' : undefined} testID="voice-test-group">
-          <SettingsRow testID="voice-test" label="测试语音识别" value={testValue} busy={v.testBusy} disabled={v.testBusy || !status.configured} onPress={() => void v.onTest()} />
+          <SettingsRow testID="voice-test" label={tr('settings.copy.133')} value={testValue} busy={v.testBusy} disabled={v.testBusy || !status.configured} onPress={() => void v.onTest()} />
         </SettingsGroup>
       ) : null}
     </>
@@ -394,6 +408,7 @@ function VoicePhonePage({ ctx }: { ctx: PhonePagesCtx }) {
 
 // ── 快捷键(窄的桌面窗口)─────────────────────────────────────────────────────────────────────
 function ShortcutsPage({ ctx }: { ctx: PhonePagesCtx }) {
+  useTranslation();
   return (
     <SettingsGroup testID="settings-section-shortcuts">
       <SettingsCardContent>{ctx.renderShortcuts()}</SettingsCardContent>
@@ -403,15 +418,16 @@ function ShortcutsPage({ ctx }: { ctx: PhonePagesCtx }) {
 
 // ── 关于 ─────────────────────────────────────────────────────────────────────────────────────
 function AboutPage({ ctx }: { ctx: PhonePagesCtx }) {
+  useTranslation();
   const view = ctx.updateView;
   const tone: SettingsTone | undefined = view.tone === 'danger' ? 'danger' : view.tone === 'accent' ? 'accent' : undefined;
   return (
     <SettingsGroup footer={view.detail} testID="settings-about">
-      {ctx.show('about', 'version') ? <SettingsRow label="版本" value={`v${APP_VERSION}`} /> : null}
+      {ctx.show('about', 'version') ? <SettingsRow label={tr('settings.copy.77')} value={`v${APP_VERSION}`} /> : null}
       {ctx.show('about', 'update') ? (
         <SettingsRow
           testID="settings-update-row"
-          label="软件更新"
+          label={tr('settings.copy.78')}
           value={view.label}
           valueTone={tone}
           busy={view.busy}

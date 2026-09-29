@@ -1,4 +1,6 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
+import { useTranslation } from './src/i18n-react';
+import { installLanguageRuntime } from './src/i18n-runtime';
 import { ActivityIndicator, BackHandler, Image, KeyboardAvoidingView, Platform, Pressable, SafeAreaView, ScrollView, StatusBar, StyleSheet, useWindowDimensions, View } from 'react-native';
 import { Text, TextInput } from './src/ui-text';
 import { Ionicons } from './src/icons';
@@ -99,12 +101,12 @@ type Screen =
 // 跟微信的学一学 (Vincent tg 807): icon over small label, active tint.
 // Desktop keeps operational modules together and pins Settings to the bottom.
 const DESKTOP_TABS = [
-  { key: 'agents', label: 'Agents', icon: 'people-outline', iconActive: 'people' },
-  { key: 'tasks', label: 'Tasks', icon: 'list-outline', iconActive: 'list' },
-  { key: 'scheduled', label: '定时', icon: 'time-outline', iconActive: 'time' },
-  { key: 'messages', label: 'Messages', icon: 'chatbubble-ellipses-outline', iconActive: 'chatbubble-ellipses' },
-  { key: 'server', label: '服务器设置', icon: 'server-outline', iconActive: 'server' },
-  { key: 'settings', label: '设置', icon: 'settings-outline', iconActive: 'settings' },
+  { key: 'agents', label: 'nav.agents', icon: 'people-outline', iconActive: 'people' },
+  { key: 'tasks', label: 'nav.tasks', icon: 'list-outline', iconActive: 'list' },
+  { key: 'scheduled', label: 'nav.scheduled', icon: 'time-outline', iconActive: 'time' },
+  { key: 'messages', label: 'nav.messages', icon: 'chatbubble-ellipses-outline', iconActive: 'chatbubble-ellipses' },
+  { key: 'server', label: 'nav.server', icon: 'server-outline', iconActive: 'server' },
+  { key: 'settings', label: 'nav.settings', icon: 'settings-outline', iconActive: 'settings' },
 ] as const;
 
 // Vincent 2026-09-29 (Android phone): 「底部 tab 的 服务器 换成 任务」. #159 had hidden Tasks
@@ -113,17 +115,17 @@ const DESKTOP_TABS = [
 // the same order as the unfolded rail below. 服务器 moves to a row at the top of 设置
 // (PHONE_SETTINGS_SERVER_ENTRY in src/nav-chrome.ts), pushed as a leaf page with a back button.
 const MOBILE_TABS = [
-  { key: 'agents', label: 'Agent', icon: 'people-outline', iconActive: 'people' },
-  { key: 'tasks', label: '任务', icon: 'list-outline', iconActive: 'list' },
-  { key: 'scheduled', label: '定时任务', icon: 'time-outline', iconActive: 'time' },
-  { key: 'settings', label: '设置', icon: 'settings-outline', iconActive: 'settings' },
+  { key: 'agents', label: 'nav.agents', icon: 'people-outline', iconActive: 'people' },
+  { key: 'tasks', label: 'nav.tasks', icon: 'list-outline', iconActive: 'list' },
+  { key: 'scheduled', label: 'nav.scheduled', icon: 'time-outline', iconActive: 'time' },
+  { key: 'settings', label: 'nav.settings', icon: 'settings-outline', iconActive: 'settings' },
 ] as const;
 
 // Vincent 2026-09-29 「左侧加回去」: the unfolded left rail has 任务 (list + board). It has room
 // for 服务器 too, so the rail keeps it; only the phone bottom bar dropped it.
 const MOBILE_RAIL_TABS = [
   ...MOBILE_TABS.slice(0, 3),
-  { key: 'server', label: '服务器', icon: 'server-outline', iconActive: 'server' },
+  { key: 'server', label: 'nav.server', icon: 'server-outline', iconActive: 'server' },
   MOBILE_TABS[3],
 ] as const;
 
@@ -131,6 +133,7 @@ const DESKTOP_MAIN_TABS = DESKTOP_TABS.filter(tab => tab.key !== 'settings');
 const DESKTOP_SETTINGS_TAB = DESKTOP_TABS.find(tab => tab.key === 'settings')!;
 
 export default function App() {
+  useEffect(() => { installLanguageRuntime(); }, []);
   // 🔴 冷启动时用户存的主题原先只在一个 **await 了 loadConfig()/loadThemeMode() 的
   // useEffect** 里恢复(见下方 "Restore the saved session on cold start")——
   // 那意味着**首帧一定是默认 DARK**,存了 light 的用户每次冷启动都会闪一下深色。
@@ -242,6 +245,7 @@ function SimulatedSafeArea({ children }: { children: React.ReactNode }) {
 }
 
 function AppRoot() {
+  const { t } = useTranslation();
   const [cfg, setCfg] = useState<HubConfig | null>(null);
   // app#168(手机端):会话置顶,按 profile/server 分、落盘;桌面端 DesktopWorkspace 自己管一份(localStorage)。
   const [mobilePins, setMobilePins] = useState<string[]>([]);
@@ -550,6 +554,9 @@ function AppRoot() {
         <Pressable
           key={tab.key}
           style={styles.tab}
+          accessibilityRole="tab"
+          accessibilityLabel={t(tab.label)}
+          accessibilityState={{ selected: activeName === tab.key }}
           onPress={() => onNavPress(tab.key)}
           testID={`mobile-tab-${tab.key}`}
         >
@@ -559,7 +566,7 @@ function AppRoot() {
             color={activeName === tab.key ? colors.accent : colors.textSecondary}
           />
           <Text style={[styles.tabLabel, activeName === tab.key && styles.tabActive]}>
-            {tab.label}
+            {t(tab.label)}
           </Text>
         </Pressable>
       ))}
@@ -742,7 +749,7 @@ function AppRoot() {
                     ) : (
                       <View style={styles.twoPaneEmpty}>
                         <Ionicons name="chatbubbles-outline" size={52} color={colors.textMuted} />
-                        <Text style={styles.twoPaneEmptyTitle}>选择一个 agent 开始聊天</Text>
+                        <Text style={styles.twoPaneEmptyTitle}>{t('chat.empty')}</Text>
                         <Text style={styles.twoPaneEmptyHint}>{ROW_MENU_EMPTY_HINT}</Text>
                       </View>
                     )}
@@ -958,6 +965,7 @@ function DesktopWorkspace({ cfg, screen, setScreen, onLogout, onLocalDataDeleted
   onSwitchProfile: (profileId: string) => void | Promise<void>;
   onReauthProfile: (profile: Pick<HubProfile, 'profileId' | 'serverUrl' | 'username' | 'displayName'>) => void;
 }) {
+  const { t } = useTranslation();
   // AppRoot is keyed by theme, so this component remounts after every theme
   // switch. Build desktop styles on that mount instead of freezing the dark
   // palette once at module import time.
@@ -1060,8 +1068,8 @@ function DesktopWorkspace({ cfg, screen, setScreen, onLogout, onLocalDataDeleted
   : (
     <View style={desktopStyles.empty}>
       <Ionicons name="chatbubbles-outline" size={52} color={colors.textMuted} />
-      <Text style={desktopStyles.emptyTitle}>选择一个 agent 开始聊天</Text>
-      <Text style={desktopStyles.emptyHint}>会话显示在右侧，列表始终保留</Text>
+      <Text style={desktopStyles.emptyTitle}>{t('chat.empty')}</Text>
+      <Text style={desktopStyles.emptyHint}>{t('chat.emptyHint')}</Text>
     </View>
   );
 
@@ -1142,10 +1150,11 @@ function RailButton({ tab, active, hovered, onHover, onPress, styles, extraStyle
   badge?: number | null;
 }) {
   const badgeText = railBadgeText(badge);
+  const { t } = useTranslation();
   return (
     <View style={[styles.railSlot, extraStyle]}>
       <Pressable
-        accessibilityLabel={tab.label}
+        accessibilityLabel={t(tab.label)}
         accessibilityRole="tab"
         accessibilityState={{ selected: active }}
         onPress={onPress}
@@ -1163,7 +1172,7 @@ function RailButton({ tab, active, hovered, onHover, onPress, styles, extraStyle
       </Pressable>
       {railTooltipVisible(hovered ? tab.key : null, tab.key, true) ? (
         <View style={styles.railTooltip} pointerEvents="none">
-          <Text style={styles.railTooltipText} numberOfLines={1}>{tab.label}</Text>
+          <Text style={styles.railTooltipText} numberOfLines={1}>{t(tab.label)}</Text>
         </View>
       ) : null}
     </View>

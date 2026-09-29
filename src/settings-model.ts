@@ -6,6 +6,7 @@
 // 🔴 只登记**真实存在**的设置。不要为了让左栏好看往里编分类。
 // 纯逻辑,不 import react-native。
 
+import { settingsPair } from './i18n-settings';
 export type SettingsCategoryKey = 'account' | 'localHub' | 'appearance' | 'notifications' | 'voice' | 'shortcuts' | 'about';
 
 export type SettingsRow = {
@@ -64,6 +65,7 @@ export const SETTINGS_CATEGORIES: readonly SettingsCategory[] = [
     icon: 'color-palette-outline',
     rows: [
       { key: 'theme', label: '主题', keywords: ['深色', '浅色', '暗色', '跟随系统', '系统', '自动', 'dark', 'light', 'system', 'auto', 'theme'] },
+      { key: 'language', label: '语言', keywords: ['language', '中文', 'english', 'system', '跟随系统'] },
       // 字体大小 / 界面密度(src/ui-scale.ts)。「图标大小」是 Vincent 的原话,归在界面密度里。
       { key: 'fontSize', label: '字体大小', keywords: ['字号', '文字大小', '字体', '大字', 'font', 'font size', 'text size'] },
       { key: 'density', label: '界面密度', keywords: ['图标大小', '图标', '紧凑', '更紧凑', '宽松', '间距', '行高', '头像大小', 'density', 'icon', 'compact', 'spacing'] },
@@ -139,11 +141,17 @@ export function settingsPlatform(os: string, tauri: boolean): SettingsPlatform {
   return tauri ? 'desktop' : 'web';
 }
 
+function pairHit(value: string, q: string): boolean {
+  const pair = settingsPair(value);
+  return !!pair && pair.some((part) => normalize(part).includes(q));
+}
+
 export function rowMatches(row: SettingsRow, query: string): boolean {
   const q = normalize(query);
   if (!q) return true;
   if (normalize(row.label).includes(q)) return true;
-  return (row.keywords ?? []).some((k) => normalize(k).includes(q));
+  if ((row.keywords ?? []).some((k) => normalize(k).includes(q))) return true;
+  return pairHit(row.label, q);
 }
 
 /**
@@ -156,10 +164,12 @@ export function filterSettings(
   categories: readonly SettingsCategory[] = SETTINGS_CATEGORIES,
   platform?: SettingsPlatform,
 ): SettingsCategory[] {
+  const q = normalize(query);
   const out: SettingsCategory[] = [];
   for (const cat of categories) {
     if (cat.conditional && available[cat.key] !== true) continue;
-    const rows = cat.rows.filter((r) => rowOnPlatform(r, platform) && rowMatches(r, query));
+    const catHit = q.length > 0 && (normalize(cat.label).includes(q) || pairHit(cat.label, q));
+    const rows = cat.rows.filter((r) => rowOnPlatform(r, platform) && (catHit || rowMatches(r, query)));
     if (rows.length) out.push({ ...cat, rows });
   }
   return out;

@@ -7,6 +7,8 @@
 import { useEffect, useMemo, useRef } from 'react';
 import { BackHandler, Modal, Platform, Pressable, ScrollView, StyleSheet, Switch, View } from 'react-native';
 import { Text } from './ui-text';
+import { useTranslation } from './i18n-react';
+import './i18n-chat';
 import { Ionicons } from './icons';
 import AliasAvatar from './AliasAvatar';
 import { useModalSafePadding } from './safe-area-runtime';
@@ -43,6 +45,7 @@ export default function ChatInfoPanel({
   onRow: (row: ChatInfoRow) => void;
 }) {
   const safe = useModalSafePadding('fullScreen');
+  const { t } = useTranslation();
   const styles = useMemo(makeStyles, []);
   const onCloseRef = useRef(onClose);
   onCloseRef.current = onClose;
@@ -107,12 +110,12 @@ export default function ChatInfoPanel({
           style={styles.backdrop}
           onPress={onClose}
           accessibilityRole="button"
-          accessibilityLabel="关闭聊天信息"
+          accessibilityLabel={t('chat.closeInfo')}
           testID="chat-info-backdrop"
         />
         <View ref={drawerRef} style={[styles.drawer, { width: chatInfoDrawerWidth(paneWidth) }]} testID="chat-info-panel" accessibilityViewIsModal>
           <View style={[styles.header, headerHeight ? { minHeight: headerHeight } : null]} testID="chat-info-header">
-            <Text style={styles.headerTitle} testID="chat-info-title">聊天信息</Text>
+            <Text style={styles.headerTitle} testID="chat-info-title">{t('chat.info')}</Text>
           </View>
           {body}
         </View>
@@ -124,10 +127,10 @@ export default function ChatInfoPanel({
     <Modal visible={visible} animationType="slide" onRequestClose={onClose} statusBarTranslucent>
       <View style={[styles.page, safe]} testID="chat-info-panel">
         <View style={styles.header}>
-          <Pressable onPress={onClose} hitSlop={12} accessibilityRole="button" accessibilityLabel="返回" style={styles.back} testID="chat-info-back">
+          <Pressable onPress={onClose} hitSlop={12} accessibilityRole="button" accessibilityLabel={t('chat.back')} style={styles.back} testID="chat-info-back">
             <Ionicons name="chevron-back" size={24} color={colors.text} />
           </Pressable>
-          <Text style={styles.headerTitle} testID="chat-info-title">聊天信息</Text>
+          <Text style={styles.headerTitle} testID="chat-info-title">{t('chat.info')}</Text>
           {/* Balances the back button so the title sits in the true centre. */}
           <View style={styles.back} />
         </View>
@@ -145,12 +148,14 @@ function Row({ row, alias, subtitle, styles, onRow }: {
   onRow: (row: ChatInfoRow) => void;
 }) {
   const testID = chatInfoRowTestId(row.key);
+  const { t } = useTranslation();
+  const label = row.kind === 'profile' ? row.label : t(`chat.info.${row.key}`);
   if (row.kind === 'toggle') {
     return (
       <View style={styles.row} testID={testID} {...({ dataSet: { rowKind: 'toggle' } } as any)}>
-        <Text style={styles.label} numberOfLines={1} testID={`${testID}-label`}>{row.label}</Text>
+        <Text style={styles.label} numberOfLines={1} testID={`${testID}-label`}>{label}</Text>
         <Switch
-          accessibilityLabel={row.label}
+          accessibilityLabel={label}
           value={!!row.value}
           onValueChange={() => onRow(row)}
           // Off track in textMuted: the border token vanishes against the dark card.
@@ -166,7 +171,7 @@ function Row({ row, alias, subtitle, styles, onRow }: {
     return (
       <Pressable
         accessibilityRole="button"
-        accessibilityLabel={`查看节点信息:${alias}`}
+        accessibilityLabel={t('chat.nodeInfo', { alias })}
         onPress={() => onRow(row)}
         style={({ pressed }) => [styles.row, styles.profileRow, pressed && styles.pressed]}
         testID={testID}
@@ -183,13 +188,13 @@ function Row({ row, alias, subtitle, styles, onRow }: {
   return (
     <Pressable
       accessibilityRole="button"
-      accessibilityLabel={row.label}
+      accessibilityLabel={label}
       onPress={() => onRow(row)}
       style={({ pressed }) => [styles.row, pressed && styles.pressed]}
       testID={testID}
       {...({ dataSet: { rowKind: 'link' } } as any)}
     >
-      <Text style={styles.label} numberOfLines={1} testID={`${testID}-label`}>{row.label}</Text>
+      <Text style={styles.label} numberOfLines={1} testID={`${testID}-label`}>{label}</Text>
       <Ionicons name="chevron-forward" size={18} color={colors.textMuted} testID={`${testID}-chevron`} />
     </Pressable>
   );

@@ -1,3 +1,7 @@
+import { t as tr } from './i18n';
+import { useTranslation } from './i18n-react';
+import { localizedVoiceStatus } from './i18n-settings-presentation';
+import { settingsText } from './i18n-settings';
 // 设置 → 语音输入:识别模型(流式 / 极速版)+ 豆包语音(火山引擎)API Key + 麦克风(桌面,MicDeviceSetting)
 // + 「测试」。
 //
@@ -13,7 +17,7 @@ import { ActivityIndicator, Platform, Pressable, StyleSheet, View } from 'react-
 import { Text, TextInput } from './ui-text';
 import { colors, onThemeChange, radius, spacing } from './theme';
 import { clearVoiceCredentials, loadVoiceCredentials, saveVoiceCredentials, voiceStorageKind } from './voice-credentials';
-import { authMode, CONSOLE_LABELS, initialForm, mergeOnSave, statusLabel, voiceConfigStatus, VOLC_CONSOLE_URL, type VoiceConsole, type VoiceCredentials, type VoiceForm } from './voice-credentials-model';
+import { authMode, CONSOLE_LABELS, initialForm, mergeOnSave, voiceConfigStatus, VOLC_CONSOLE_URL, type VoiceConsole, type VoiceCredentials, type VoiceForm } from './voice-credentials-model';
 import { AsrError, asrErrorMessage } from './doubao-asr';
 import { openExternal } from './open-external';
 import { finishUtteranceWith, newUtterance } from './useVoiceInput';
@@ -26,7 +30,7 @@ import { buttonStyle, buttonTextStyle } from './elevation';
 
 export const TEST_RECORD_MS = 3000;
 
-export const CONSOLE_HELP = '在『开通管理』里开通：录音文件识别大模型-极速版 +（可选）流式语音识别大模型';
+export const CONSOLE_HELP = 'settings.copy.223';
 
 type TestState =
   | { kind: 'idle' }
@@ -92,9 +96,9 @@ export function useVoiceSettings() {
       clearStreamUnavailable(); // 新凭据 / 新资源 ID:流式重新试
       setCreds(r.creds);
       setForm(initialForm(r.creds)); // 🔴 保存后清空密钥栏,不回显
-      setSaveMsg({ ok: true, text: '已保存到本机' });
+      setSaveMsg({ ok: true, text: tr('settings.copy.224') });
     } catch {
-      setSaveMsg({ ok: false, text: '保存失败:本机安全存储不可用' });
+      setSaveMsg({ ok: false, text: tr('settings.copy.225') });
     } finally { setBusy(false); }
   };
 
@@ -104,9 +108,9 @@ export function useVoiceSettings() {
       await clearVoiceCredentials();
       setCreds(null);
       setForm(initialForm(null));
-      setSaveMsg({ ok: true, text: '已清除' });
+      setSaveMsg({ ok: true, text: tr('settings.copy.226') });
     } catch {
-      setSaveMsg({ ok: false, text: '清除失败' });
+      setSaveMsg({ ok: false, text: tr('settings.copy.227') });
     } finally { setBusy(false); }
   };
 
@@ -153,16 +157,17 @@ export function useVoiceSettings() {
   return { storage, platform, mode, unavailable, interim, creds, loaded, form, setForm, advanced, setAdvanced, saveMsg, busy, test, status, onSave, onClear, onTest, onPickMode, choices, setConsole, savedIs, testBusy, secondsLeft };
 }
 
-export const VOICE_UNSUPPORTED_TEXT = '网页版不支持语音输入:浏览器里没有安全存储,不能保存语音识别的密钥。请使用桌面版或手机 App。';
-export const voiceStorageLabel = (storage: string) => storage === 'keychain' ? '系统钥匙串' : '系统安全存储';
+export const VOICE_UNSUPPORTED_TEXT = 'settings.copy.228';
+export const voiceStorageLabel = (storage: string) => storage === 'keychain' ? tr('settings.copy.229') : tr('settings.copy.230');
 
 export default function VoiceSettingsSection({ showCredentials = true, showTest = true, showMode = true, showMic = true }: { showCredentials?: boolean; showTest?: boolean; showMode?: boolean; showMic?: boolean }) {
+  useTranslation();
   const { storage, platform, mode, unavailable, interim, loaded, form, setForm, advanced, setAdvanced, saveMsg, busy, test, status, onSave, onClear, onTest, onPickMode, choices, setConsole, savedIs, testBusy, secondsLeft } = useVoiceSettings();
 
   if (storage === 'unsupported') {
     return (
       <View style={styles.block} testID="voice-settings-unsupported">
-        <Text style={styles.hint}>{VOICE_UNSUPPORTED_TEXT}</Text>
+        <Text style={styles.hint}>{tr(VOICE_UNSUPPORTED_TEXT)}</Text>
       </View>
     );
   }
@@ -171,7 +176,7 @@ export default function VoiceSettingsSection({ showCredentials = true, showTest 
     <View testID="voice-settings">
       {showMode ? (
         <View style={styles.block} testID="voice-mode">
-          <Text style={styles.label}>识别模型</Text>
+          <Text style={styles.label}>{tr('settings.copy.127')}</Text>
           <View style={styles.options}>
             {choices.map(m => {
               const on = mode === m || choices.length === 1;
@@ -185,19 +190,19 @@ export default function VoiceSettingsSection({ showCredentials = true, showTest 
                   testID={`voice-mode-${m}`}
                 >
                   <View style={[styles.radio, on && styles.radioOn]} />
-                  <Text style={[styles.optionText, on && styles.optionTextOn]}>{MODE_LABELS[m]}</Text>
+                  <Text style={[styles.optionText, on && styles.optionTextOn]}>{settingsText(MODE_LABELS[m])}</Text>
                 </Pressable>
               );
             })}
           </View>
           {!streamingSupported(platform) ? (
-            <Text style={styles.hint}>桌面版暂时只支持录音文件识别·极速版(说完再出字);边说边出字目前只在手机 App 上。</Text>
+            <Text style={styles.hint}>{tr('settings.copy.231')}</Text>
           ) : mode === 'stream' && unavailable ? (
-            <Text style={[styles.hint, styles.warn]} testID="voice-stream-unavailable">{STREAM_UNAVAILABLE_HINT}</Text>
+            <Text style={[styles.hint, styles.warn]} testID="voice-stream-unavailable">{settingsText(STREAM_UNAVAILABLE_HINT)}</Text>
           ) : mode === 'stream' ? (
-            <Text style={styles.hint}>按住说话时文字实时出现在录音浮层里,松手后写进输入框。没开通流式会自动改用极速版。</Text>
+            <Text style={styles.hint}>{tr('settings.copy.232')}</Text>
           ) : (
-            <Text style={styles.hint}>松手后整句识别一次。</Text>
+            <Text style={styles.hint}>{tr('settings.copy.117')}</Text>
           )}
         </View>
       ) : null}
@@ -205,15 +210,15 @@ export default function VoiceSettingsSection({ showCredentials = true, showTest 
       {showCredentials ? (
         <View style={styles.block}>
           <View style={styles.statusRow}>
-            <Text style={styles.label}>状态</Text>
+            <Text style={styles.label}>{tr('settings.copy.24')}</Text>
             {loaded ? (
-              <Text style={[styles.status, status.configured && styles.statusOk]} testID="voice-status">{statusLabel(status)}</Text>
+              <Text style={[styles.status, status.configured && styles.statusOk]} testID="voice-status">{localizedVoiceStatus(status)}</Text>
             ) : <ActivityIndicator size="small" color={colors.textMuted} />}
           </View>
           {status.configured && (status.console === 'old' || status.customEndpoint || status.customStreamEndpoint) ? (
             <Text style={styles.hint} testID="voice-status-mode">
-              {status.console === 'old' ? `旧版控制台 · App ID ${status.appId}` : '新版控制台 · API Key'}
-              {status.customEndpoint || status.customStreamEndpoint ? ' · 自定义接口地址' : ''}
+              {status.console === 'old' ? tr('settings.copy.194', { v0: status.appId }) : tr('settings.copy.118')}
+              {status.customEndpoint || status.customStreamEndpoint ? tr('settings.copy.119') : ''}
             </Text>
           ) : null}
 
@@ -225,7 +230,7 @@ export default function VoiceSettingsSection({ showCredentials = true, showTest 
                 accessibilityLabel="API Key"
                 value={form.apiKey}
                 onChangeText={apiKey => setForm(f => ({ ...f, apiKey }))}
-                placeholder={savedIs('new') && status.configured ? `已保存 ${status.tokenTail},留空不改` : '火山引擎控制台 → API Key 管理 里复制'}
+                placeholder={savedIs('new') && status.configured ? tr('settings.copy.267', { v0: status.tokenTail }) : tr('settings.copy.233')}
                 placeholderTextColor={colors.textMuted}
                 secureTextEntry
                 autoCapitalize="none"
@@ -236,20 +241,20 @@ export default function VoiceSettingsSection({ showCredentials = true, showTest 
             </>
           ) : null}
           <Text style={styles.hint} testID="voice-console-help">
-            <Text style={styles.link} onPress={() => { void openExternal(VOLC_CONSOLE_URL).catch(() => {}); }} accessibilityRole="link" testID="voice-console-link">火山引擎控制台</Text>
-            {` ${CONSOLE_HELP}`}
+            <Text style={styles.link} onPress={() => { void openExternal(VOLC_CONSOLE_URL).catch(() => {}); }} accessibilityRole="link" testID="voice-console-link">{tr('settings.copy.234')}</Text>
+            {` ${tr(CONSOLE_HELP)}`}
           </Text>
 
           <Pressable accessibilityRole="button" accessibilityState={{ expanded: advanced }} onPress={() => setAdvanced(a => !a)} hitSlop={6} testID="voice-advanced-toggle">
-            <Text style={styles.link}>{advanced ? '收起 高级 / 旧版控制台' : '高级 / 旧版控制台 ›'}</Text>
+            <Text style={styles.link}>{advanced ? tr('settings.copy.235') : tr('settings.copy.236')}</Text>
           </Pressable>
           {advanced ? (
             <View style={styles.advanced} testID="voice-advanced">
-              <Text style={styles.fieldLabel}>控制台版本</Text>
+              <Text style={styles.fieldLabel}>{tr('settings.copy.144')}</Text>
               <View style={styles.chips}>
                 {(['new', 'old'] as const).map(c => (
                   <Pressable key={c} accessibilityRole="radio" accessibilityState={{ checked: form.console === c }} onPress={() => setConsole(c)} style={[styles.chip, form.console === c && styles.chipOn]} testID={`voice-console-${c}`}>
-                    <Text style={[styles.chipText, form.console === c && styles.chipTextOn]}>{CONSOLE_LABELS[c]}</Text>
+                    <Text style={[styles.chipText, form.console === c && styles.chipTextOn]}>{settingsText(CONSOLE_LABELS[c])}</Text>
                   </Pressable>
                 ))}
               </View>
@@ -261,7 +266,7 @@ export default function VoiceSettingsSection({ showCredentials = true, showTest 
                     accessibilityLabel="App ID"
                     value={form.appId}
                     onChangeText={appId => setForm(f => ({ ...f, appId }))}
-                    placeholder="旧版控制台应用的 APP ID"
+                    placeholder={tr('settings.copy.237')}
                     placeholderTextColor={colors.textMuted}
                     autoCapitalize="none"
                     autoCorrect={false}
@@ -273,7 +278,7 @@ export default function VoiceSettingsSection({ showCredentials = true, showTest 
                     accessibilityLabel="Access Token"
                     value={form.accessToken}
                     onChangeText={accessToken => setForm(f => ({ ...f, accessToken }))}
-                    placeholder={savedIs('old') && status.configured ? `已保存 ${status.tokenTail},留空不改` : '旧版控制台应用的 Access Token'}
+                    placeholder={savedIs('old') && status.configured ? tr('settings.copy.267', { v0: status.tokenTail }) : tr('settings.copy.238')}
                     placeholderTextColor={colors.textMuted}
                     secureTextEntry
                     autoCapitalize="none"
@@ -283,13 +288,13 @@ export default function VoiceSettingsSection({ showCredentials = true, showTest 
                   />
                 </>
               ) : null}
-              <Text style={styles.fieldLabel}>极速版接口地址</Text>
+              <Text style={styles.fieldLabel}>{tr('settings.copy.239')}</Text>
               <TextInput
                 testID="voice-endpoint"
-                accessibilityLabel="接口地址"
+                accessibilityLabel={tr('settings.copy.147')}
                 value={form.endpoint}
                 onChangeText={endpoint => setForm(f => ({ ...f, endpoint }))}
-                placeholder="留空 = 官方 openspeech.bytedance.com(必须 https)"
+                placeholder={tr('settings.copy.240')}
                 placeholderTextColor={colors.textMuted}
                 autoCapitalize="none"
                 autoCorrect={false}
@@ -297,19 +302,19 @@ export default function VoiceSettingsSection({ showCredentials = true, showTest 
               />
               {streamingSupported(platform) ? (
                 <>
-                  <Text style={styles.fieldLabel}>流式接口地址</Text>
+                  <Text style={styles.fieldLabel}>{tr('settings.copy.150')}</Text>
                   <TextInput
                     testID="voice-stream-endpoint"
-                    accessibilityLabel="流式接口地址"
+                    accessibilityLabel={tr('settings.copy.150')}
                     value={form.streamEndpoint}
                     onChangeText={streamEndpoint => setForm(f => ({ ...f, streamEndpoint }))}
-                    placeholder="留空 = 官方 wss://…/sauc/bigmodel_async(必须 wss)"
+                    placeholder={tr('settings.copy.241')}
                     placeholderTextColor={colors.textMuted}
                     autoCapitalize="none"
                     autoCorrect={false}
                     style={styles.input}
                   />
-                  <Text style={styles.fieldLabel}>流式资源 ID(控制台开通的是哪一种)</Text>
+                  <Text style={styles.fieldLabel}>{tr('settings.copy.151')}</Text>
                   <View style={styles.chips}>
                     {STREAM_RESOURCE_IDS.map(id => {
                       const on = (form.streamResourceId || STREAM_DEFAULT_RESOURCE_ID) === id;
@@ -320,26 +325,25 @@ export default function VoiceSettingsSection({ showCredentials = true, showTest 
                       );
                     })}
                   </View>
-                  <Text style={styles.hint}>1.0 小时版 volc.bigasr.sauc.duration(默认)· 并发版 …concurrent · 2.0 为 volc.seedasr.*</Text>
+                  <Text style={styles.hint}>{tr('settings.copy.152')}</Text>
                 </>
               ) : null}
             </View>
           ) : null}
 
           <View style={styles.actions}>
-            <Pressable accessibilityRole="button" accessibilityLabel="保存语音识别凭据" disabled={busy} onPress={() => void onSave()} style={({ pressed }) => [styles.primary, busy && styles.disabled, pressed && { opacity: 0.7 }]} testID="voice-save">
-              <Text style={styles.primaryText}>保存</Text>
+            <Pressable accessibilityRole="button" accessibilityLabel={tr('settings.copy.141')} disabled={busy} onPress={() => void onSave()} style={({ pressed }) => [styles.primary, busy && styles.disabled, pressed && { opacity: 0.7 }]} testID="voice-save">
+              <Text style={styles.primaryText}>{tr('settings.copy.140')}</Text>
             </Pressable>
             {status.configured ? (
-              <Pressable accessibilityRole="button" accessibilityLabel="清除语音识别凭据" disabled={busy} onPress={() => void onClear()} style={({ pressed }) => [styles.secondary, pressed && { opacity: 0.7 }]} testID="voice-clear">
-                <Text style={styles.secondaryText}>清除</Text>
+              <Pressable accessibilityRole="button" accessibilityLabel={tr('settings.copy.143')} disabled={busy} onPress={() => void onClear()} style={({ pressed }) => [styles.secondary, pressed && { opacity: 0.7 }]} testID="voice-clear">
+                <Text style={styles.secondaryText}>{tr('settings.copy.142')}</Text>
               </Pressable>
             ) : null}
             {saveMsg ? <Text style={[styles.hint, !saveMsg.ok && styles.error]} testID="voice-save-msg">{saveMsg.text}</Text> : null}
           </View>
           <Text style={styles.hint}>
-            凭据只保存在本机({voiceStorageLabel(storage)}),不会上传到 Hub;语音直接发给豆包识别,不经过 Hub。
-          </Text>
+            {tr('settings.copy.242')}{voiceStorageLabel(storage)}{tr('settings.copy.243')}</Text>
         </View>
       ) : null}
 
@@ -349,14 +353,14 @@ export default function VoiceSettingsSection({ showCredentials = true, showTest 
       {showTest ? (
         <View style={styles.block}>
           <View style={styles.statusRow}>
-            <Text style={styles.label}>测试语音识别</Text>
-            <Pressable accessibilityRole="button" accessibilityLabel="测试语音识别" disabled={testBusy || !status.configured} onPress={() => void onTest()} style={({ pressed }) => [styles.secondary, (testBusy || !status.configured) && styles.disabled, pressed && { opacity: 0.7 }]} testID="voice-test">
-              <Text style={styles.secondaryText}>{test.kind === 'recording' ? `录音中 ${secondsLeft}s` : test.kind === 'transcribing' ? '识别中…' : '测试'}</Text>
+            <Text style={styles.label}>{tr('settings.copy.133')}</Text>
+            <Pressable accessibilityRole="button" accessibilityLabel={tr('settings.copy.133')} disabled={testBusy || !status.configured} onPress={() => void onTest()} style={({ pressed }) => [styles.secondary, (testBusy || !status.configured) && styles.disabled, pressed && { opacity: 0.7 }]} testID="voice-test">
+              <Text style={styles.secondaryText}>{test.kind === 'recording' ? tr('settings.copy.195', { v0: secondsLeft }) : test.kind === 'transcribing' ? tr('settings.copy.121') : tr('settings.copy.244')}</Text>
             </Pressable>
           </View>
-          <Text style={styles.hint}>点「测试」后说 3 秒话,按上面选的识别模型显示识别出的文字{mode === 'stream' && streamingSupported(platform) ? '(流式:边说边出字)' : ''}。</Text>
+          <Text style={styles.hint}>{tr('settings.copy.245')}{mode === 'stream' && streamingSupported(platform) ? tr('settings.copy.246') : ''}。</Text>
           {(test.kind === 'recording' || test.kind === 'transcribing') && interim ? <Text style={[styles.result, styles.interim]} testID="voice-test-interim">{interim}</Text> : null}
-          {test.kind === 'done' ? <Text style={styles.result} testID="voice-test-result">{test.text ? `识别结果(${test.via === 'stream' ? '流式' : '极速版'}):${test.text}` : '没有识别到文字(静音?)'}</Text> : null}
+          {test.kind === 'done' ? <Text style={styles.result} testID="voice-test-result">{test.text ? tr('settings.copy.196', { v0: test.via === 'stream' ? tr('settings.copy.122') : tr('settings.copy.123'), v1: test.text }) : tr('settings.copy.124')}</Text> : null}
           {test.kind === 'done' && test.note ? <Text style={[styles.hint, styles.warn]} testID="voice-test-note">{test.note}</Text> : null}
           {test.kind === 'error' ? <Text style={[styles.result, styles.error]} testID="voice-test-error">{test.message}</Text> : null}
         </View>

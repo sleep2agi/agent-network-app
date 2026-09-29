@@ -117,7 +117,7 @@ ck('rail main destinations scroll so a fifth item cannot cover 设置', rail.inc
 ck('rail excludes settings from the main list', rail.includes("tabs.filter(tab => tab.key !== 'settings')"));
 ck('rail items are density-scaled hit boxes from mobileRailItem (64×56 at 标准)', rail.includes('width: mobileRailItem(uiScale().densityFactor).width,') && rail.includes('height: mobileRailItem(uiScale().densityFactor).height,'));
 ck('rail items expose tab role + selected state', rail.includes('accessibilityRole="tab"') && rail.includes('accessibilityState={{ selected }}'));
-ck('rail shows labels (touch has no hover tooltip)', rail.includes('{tab.label}</Text>'));
+ck('rail shows translated labels (touch has no hover tooltip)', rail.includes('{t(tab.label)}</Text>'));
 ck('rail badge on Agent uses the same unread counts as the list/tray', rail.includes('railUnreadTotal(agentUnreadCounts(snap))') && rail.includes("tab.key === 'agents' ? railBadgeText(unread) : null"));
 ck('rail badge updates live from the unread store', rail.includes('subscribeUnread(() => setSnap(getUnreadSnapshot()))'));
 ck('rail pads the left + bottom insets and grows by the left one', rail.includes('width: mobileRailWidth(uiScale().densityFactor) + insetLeft, paddingLeft: insetLeft, paddingBottom: 8 + insetBottom'));

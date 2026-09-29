@@ -60,7 +60,7 @@ const chatSource = readFileSync(new URL('./ChatScreen.tsx', import.meta.url), 'u
 if (!chatSource.includes('AuthedWebThumb') || !chatSource.includes('__TAURI_INTERNALS__')) {
   throw new Error('Tauri authenticated images do not use the native HTTP thumbnail path');
 }
-if (!chatSource.includes('parseAttachmentRefs(text)') || !chatSource.includes('label="下载原图"')) {
+if (!chatSource.includes('parseAttachmentRefs(text)') || !chatSource.includes("label={t('chat.downloadOriginal')}")) {
   throw new Error('both chat windows do not wire parsed node images to preview + download');
 }
 const viewerScope = chatSource.match(

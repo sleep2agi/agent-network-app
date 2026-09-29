@@ -10,7 +10,7 @@ const check = (name: string, ok: boolean) => {
   console.log(`PASS: ${name}`);
 };
 
-check('server module is labelled 服务器设置', source.includes("key: 'server', label: '服务器设置'"));
+check('server module uses translated server label', source.includes("key: 'server', label: 'nav.server'"));
 check('desktop main navigation excludes Settings', source.includes("TABS.filter(tab => tab.key !== 'settings')"));
 check('desktop Settings has a dedicated bottom control', source.includes('desktopStyles.railSettings'));
 check('Settings control is rendered after the main tabs', source.indexOf('{DESKTOP_MAIN_TABS.map') < source.indexOf('tab={DESKTOP_SETTINGS_TAB}'));

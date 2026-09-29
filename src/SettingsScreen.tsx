@@ -1,3 +1,7 @@
+import { t as tr } from './i18n';
+import { useTranslation } from './i18n-react';
+import { settingsText } from './i18n-settings';
+import { localizedThemeSummary } from './i18n-settings-presentation';
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { ActivityIndicator, AppState, BackHandler, Modal, Platform, Pressable, ScrollView, StyleSheet, Switch, View, useWindowDimensions } from 'react-native';
 import { Text, TextInput } from './ui-text';
@@ -23,6 +27,7 @@ import { refreshNotifyDiagnostics, sendTestNotification } from './notifier-runti
 import XiaomiGuideModal from './XiaomiGuideModal';
 import VoiceSettingsSection from './VoiceSettingsSection';
 import UiScaleSettings from './UiScaleSettings';
+import LanguageSettings from './LanguageSettings';
 import ShortcutsSettings from './ShortcutsSettings';
 import { ds } from './ui-scale';
 import { playChime } from './chime';
@@ -84,6 +89,7 @@ export default function SettingsScreen({
   /** 手机:列表顶部的「服务器」行推进服务器页(底部 tab 的 服务器 换成了 任务,Vincent 2026-09-29)。不传就没有这一行。 */
   onOpenServer?: () => void;
 }) {
+  const { language } = useTranslation();
   const [me, setMe] = useState<Me>({});
   const [profiles, setProfiles] = useState<HubProfile[]>([]);
   const [removeTarget, setRemoveTarget] = useState<HubProfile | null>(null);
@@ -224,7 +230,7 @@ export default function SettingsScreen({
 
   const tauriDesktop = !!(globalThis as any).__TAURI_INTERNALS__;
   const platform = notifyPreview?.platform ?? settingsPlatform(Platform.OS, tauriDesktop);
-  const filtered = useMemo(() => filterSettings(query, { localHub: !!localHub }, undefined, platform), [query, localHub, platform]);
+  const filtered = useMemo(() => filterSettings(query, { localHub: !!localHub }, undefined, platform), [query, localHub, platform, language]);
   const searching = query.trim().length > 0;
   const visible = useMemo(() => visibleRowKeys(query, filtered), [query, filtered]);
   const active = activeCategoryKey(category, filtered);
@@ -233,30 +239,30 @@ export default function SettingsScreen({
   const show = (cat: SettingsCategoryKey, row: string) => onPlatform.has(`${cat}.${row}`) && (visible === null || visible.has(`${cat}.${row}`));
   // 不在搜索:只画选中的那一类;搜索中:把所有命中的类都画出来(各带小标题)。
   const sectionsToRender = searching ? filtered.map(c => c.key) : [active];
-  const paneTitle = searching ? '搜索结果' : (SETTINGS_CATEGORIES.find(c => c.key === active)?.label ?? '设置');
+  const paneTitle = searching ? tr('settings.copy.0') : (SETTINGS_CATEGORIES.find(c => c.key === active)?.label ?? tr('settings.copy.1'));
 
   const sidebar = (
     <View style={[styles.sidebar, compact && styles.sidebarCompact]} testID="settings-sidebar">
       <View style={styles.sidebarTop}>
         {onClose ? (
-          <Pressable accessibilityLabel="关闭设置" accessibilityRole="button" onPress={onClose} hitSlop={8} style={({ pressed }) => [styles.closeButton, pressed && { opacity: 0.6 }]}>
+          <Pressable accessibilityLabel={tr('settings.copy.2')} accessibilityRole="button" onPress={onClose} hitSlop={8} style={({ pressed }) => [styles.closeButton, pressed && { opacity: 0.6 }]}>
             <Ionicons name="close" size={18} color={colors.text} />
           </Pressable>
         ) : null}
         <View style={styles.searchBox}>
           <Ionicons name="search-outline" size={15} color={colors.textMuted} />
           <TextInput
-            accessibilityLabel="搜索设置"
+            accessibilityLabel={tr('settings.copy.3')}
             value={query}
             onChangeText={setQuery}
-            placeholder="搜索设置"
+            placeholder={tr('settings.copy.3')}
             placeholderTextColor={colors.textMuted}
             style={styles.searchInput}
             autoCapitalize="none"
             autoCorrect={false}
           />
           {query ? (
-            <Pressable accessibilityLabel="清除搜索" onPress={() => setQuery('')} hitSlop={6}>
+            <Pressable accessibilityLabel={tr('settings.copy.4')} onPress={() => setQuery('')} hitSlop={6}>
               <Ionicons name="close-circle" size={15} color={colors.textMuted} />
             </Pressable>
           ) : null}
@@ -268,18 +274,18 @@ export default function SettingsScreen({
           return (
             <Pressable
               key={cat.key}
-              accessibilityLabel={`设置分类 ${cat.label}`}
+              accessibilityLabel={tr('settings.copy.178', { v0: settingsText(cat.label) })}
               accessibilityRole="button"
               accessibilityState={{ selected: isActive }}
               onPress={() => { setCategory(cat.key); if (searching) setQuery(''); }}
               style={({ pressed, hovered }: any) => [styles.categoryItem, compact && styles.categoryChip, (hovered || pressed) && styles.categoryItemHover, isActive && styles.categoryItemActive]}
             >
               <Ionicons name={cat.icon as any} size={17} color={isActive ? colors.text : colors.textSecondary} />
-              <Text style={[styles.categoryLabel, isActive && styles.categoryLabelActive]} numberOfLines={1}>{cat.label}</Text>
+              <Text style={[styles.categoryLabel, isActive && styles.categoryLabelActive]} numberOfLines={1}>{settingsText(cat.label)}</Text>
             </Pressable>
           );
         })}
-        {searching && filtered.length === 0 ? <Text style={styles.emptySide}>没有匹配的设置</Text> : null}
+        {searching && filtered.length === 0 ? <Text style={styles.emptySide}>{tr('settings.copy.5')}</Text> : null}
       </ScrollView>
     </View>
   );
@@ -287,7 +293,7 @@ export default function SettingsScreen({
   // ── 手机:分组列表 + 子页顶栏 ──────────────────────────────────────────────────────────────
   const phoneValue = (key: SettingsCategoryKey): string => {
     if (key === 'account') return me.username ?? cfg.username ?? '';
-    if (key === 'about') return `版本 ${APP_VERSION}`;
+    if (key === 'about') return tr('settings.copy.179', { v0: APP_VERSION });
     return '';
   };
   const canLogout = cfg.profileId !== LOCAL_HUB_PROFILE_ID;
@@ -300,11 +306,11 @@ export default function SettingsScreen({
             <Pressable
               testID={`settings-row-${PHONE_SETTINGS_SERVER_ENTRY.key}`}
               accessibilityRole="button"
-              accessibilityLabel={PHONE_SETTINGS_SERVER_ENTRY.label}
+              accessibilityLabel={tr('nav.server')}
               onPress={onOpenServer}
               style={({ pressed }) => [styles.phoneRow, pressed && styles.phoneRowPressed]}
             >
-              <Text style={styles.phoneRowLabel} numberOfLines={1}>{PHONE_SETTINGS_SERVER_ENTRY.label}</Text>
+              <Text style={styles.phoneRowLabel} numberOfLines={1}>{tr('nav.server')}</Text>
               <Text style={styles.phoneRowValue} numberOfLines={1}>{cfg.serverUrl.replace(/^https?:\/\//, '').replace(/\/$/, '')}</Text>
               <View style={styles.phoneChevron}>
                 <Ionicons name="chevron-forward" size={18} color={colors.textMuted} />
@@ -315,7 +321,7 @@ export default function SettingsScreen({
       ) : null}
       {phoneSettingsGroups(filtered).map((group, gi) => (
         <View key={group.title ?? `g${gi}`} testID={`settings-group-${gi}`}>
-          {group.title ? <Text style={styles.phoneGroupTitle} testID="settings-group-title">{group.title}</Text> : <View style={styles.phoneGroupGap} />}
+          {group.title ? <Text style={styles.phoneGroupTitle} testID="settings-group-title">{settingsText(group.title)}</Text> : <View style={styles.phoneGroupGap} />}
           <View style={styles.phoneBlock}>
             {group.rows.map((cat, ri) => {
               const value = phoneValue(cat.key);
@@ -325,11 +331,11 @@ export default function SettingsScreen({
                   <Pressable
                     testID={`settings-row-${cat.key}`}
                     accessibilityRole="button"
-                    accessibilityLabel={phoneRowLabel(cat)}
+                    accessibilityLabel={settingsText(phoneRowLabel(cat))}
                     onPress={() => openPage(cat.key)}
                     style={({ pressed }) => [styles.phoneRow, pressed && styles.phoneRowPressed]}
                   >
-                    <Text style={styles.phoneRowLabel} numberOfLines={1} testID={`settings-row-label-${cat.key}`}>{phoneRowLabel(cat)}</Text>
+                    <Text style={styles.phoneRowLabel} numberOfLines={1} testID={`settings-row-label-${cat.key}`}>{settingsText(phoneRowLabel(cat))}</Text>
                     {value ? <Text style={styles.phoneRowValue} numberOfLines={1}>{value}</Text> : <View style={styles.phoneRowSpacer} />}
                     <View style={styles.phoneChevron} testID={`settings-row-chevron-${cat.key}`}>
                       <Ionicons name="chevron-forward" size={18} color={colors.textMuted} />
@@ -345,11 +351,11 @@ export default function SettingsScreen({
         <Pressable
           testID="settings-logout-block"
           accessibilityRole="button"
-          accessibilityLabel="退出登录"
+          accessibilityLabel={tr('settings.copy.6')}
           onPress={() => setLogoutConfirm(true)}
           style={({ pressed }) => [styles.phoneBlock, styles.phoneLogout, pressed && styles.phoneRowPressed]}
         >
-          <Text style={styles.phoneLogoutText}>退出登录</Text>
+          <Text style={styles.phoneLogoutText}>{tr('settings.copy.6')}</Text>
         </Pressable>
       ) : null}
     </ScrollView>
@@ -358,7 +364,7 @@ export default function SettingsScreen({
   const listHeader = (
     <View style={styles.phoneHeader} testID="settings-list-header">
       <View style={styles.phoneHeaderSide} />
-      <Text style={styles.phoneHeaderTitle} numberOfLines={1}>设置</Text>
+      <Text style={styles.phoneHeaderTitle} numberOfLines={1}>{tr('settings.copy.1')}</Text>
       <View style={styles.phoneHeaderSide} />
     </View>
   );
@@ -366,10 +372,10 @@ export default function SettingsScreen({
   const openDetailKey = subPage && settingsBackTarget(subPage, detail) === 'detail' ? detail : null;
   const phoneHeader = (
     <View style={styles.phoneHeader} testID="settings-subpage-header">
-      <Pressable testID="settings-back" accessibilityRole="button" accessibilityLabel="返回" onPress={goBack} hitSlop={8} style={({ pressed }) => [styles.phoneHeaderSide, pressed && { opacity: 0.6 }]}>
+      <Pressable testID="settings-back" accessibilityRole="button" accessibilityLabel={tr('settings.copy.7')} onPress={goBack} hitSlop={8} style={({ pressed }) => [styles.phoneHeaderSide, pressed && { opacity: 0.6 }]}>
         <Ionicons name="chevron-back" size={24} color={colors.text} />
       </Pressable>
-      <Text style={styles.phoneHeaderTitle} numberOfLines={1} testID="settings-subpage-title">{openDetailKey ? SETTINGS_DETAIL_TITLE[openDetailKey] : subPageCat ? phoneRowLabel(subPageCat) : '设置'}</Text>
+      <Text style={styles.phoneHeaderTitle} numberOfLines={1} testID="settings-subpage-title">{settingsText(openDetailKey ? SETTINGS_DETAIL_TITLE[openDetailKey] : subPageCat ? phoneRowLabel(subPageCat) : tr('settings.copy.1'))}</Text>
       <View style={styles.phoneHeaderSide} />
     </View>
   );
@@ -407,7 +413,7 @@ export default function SettingsScreen({
       restart: () => runLocalHub(() => restartLocalHub().then(setLocalHub)),
       stop: () => runLocalHub(() => stopLocalHub().then(() => localHubStatus()).then(setLocalHub)),
       logs: () => { void openLocalHubLogs().catch(reportError); },
-      backup: () => { setLocalBackupMessage(''); runLocalHub(() => backupLocalHubData().then(result => setLocalBackupMessage(`备份已保存：${result.path}`))); },
+      backup: () => { setLocalBackupMessage(''); runLocalHub(() => backupLocalHubData().then(result => setLocalBackupMessage(tr('settings.copy.180', { v0: result.path })))); },
       openDelete: () => { setLocalDeleteText(''); setLocalDeleteVisible(true); },
     },
     themePref: themeSnap.pref,
@@ -429,9 +435,9 @@ export default function SettingsScreen({
     testMessage,
     sendTest: () => {
       void (async () => {
-        if (!(await ensurePermission())) { setTestMessage('没有通知权限:请在系统设置里允许通知后再试。'); return; }
-        try { await sendTestNotification(); setTestMessage('已发送。没看到的话,检查系统通知设置里的「Agent 消息」类别。'); }
-        catch (e) { setTestMessage(`发送失败:${String((e as Error)?.message ?? e)}`); }
+        if (!(await ensurePermission())) { setTestMessage(tr('settings.copy.8')); return; }
+        try { await sendTestNotification(); setTestMessage(tr('settings.copy.9')); }
+        catch (e) { setTestMessage(tr('settings.copy.181', { v0: String((e as Error)?.message ?? e) })); }
       })();
     },
     onSoundChange: value => { saveNotifySettings({ ...notify, soundEnabled: value }); if (value) playChime(); },
@@ -466,7 +472,7 @@ export default function SettingsScreen({
   ) : null;
 
   const heading = (cat: SettingsCategoryKey) => searching
-    ? <Text style={styles.groupTitle}>{SETTINGS_CATEGORIES.find(c => c.key === cat)?.label}</Text>
+    ? <Text style={styles.groupTitle}>{settingsText(SETTINGS_CATEGORIES.find(c => c.key === cat)?.label ?? '')}</Text>
     : null;
 
   return (
@@ -474,7 +480,7 @@ export default function SettingsScreen({
       {compact ? (subPage ? phoneHeader : listHeader) : sidebar}
       {compact ? (subPage ? phoneSubPage : phoneList) : (
       <View style={styles.pane} testID="settings-pane">
-        <Text style={styles.paneTitle}>{paneTitle}</Text>
+        <Text style={styles.paneTitle}>{settingsText(paneTitle)}</Text>
         {/* 0.2.80(Vincent 2026-09-19「设置页面往下面滑动不了」):右栏是 ScrollView,padding 在
             contentContainer 上——留在滚动根上的话它在可滚区域之外,最后一行照样贴着窗口底边。 */}
         <ScrollView
@@ -486,7 +492,7 @@ export default function SettingsScreen({
           testID="settings-scroll"
         >
           {searching && filtered.length === 0 ? (
-            <Text style={styles.emptyPane}>没有匹配「{query.trim()}」的设置</Text>
+            <Text style={styles.emptyPane}>{tr('settings.copy.10')}{query.trim()}{tr('settings.copy.11')}</Text>
           ) : null}
 
           {sectionsToRender.includes('account') ? (
@@ -500,7 +506,7 @@ export default function SettingsScreen({
                       <View key={profile.profileId}>
                         {index ? <Divider /> : null}
                         <Pressable
-                          accessibilityLabel={`切换到 ${profile.displayName || profile.username || profile.serverUrl}`}
+                          accessibilityLabel={tr('settings.copy.182', { v0: profile.displayName || profile.username || profile.serverUrl })}
                           style={({ pressed }) => [styles.profileRow, pressed && { opacity: 0.65 }]}
                           onPress={() => {
                             if (profile.requiresReauth) return onReauthProfile(profile);
@@ -508,19 +514,19 @@ export default function SettingsScreen({
                           }}
                         >
                           <View style={styles.profileCopy}>
-                            <Text style={styles.rowLabelStrong}>{profile.displayName || profile.username || 'Hub 账号'}{isCurrent ? ' · 当前' : ''}</Text>
-                            <Text style={styles.rowHint} numberOfLines={1}>{profile.serverUrl} · {profile.username || '未知用户'}{profile.networkId ? ` · ${profile.networkId}` : ''}</Text>
-                            {profile.requiresReauth ? <Text style={styles.dangerHint}>需要重新登录 · 点击验证</Text> : null}
+                            <Text style={styles.rowLabelStrong}>{profile.displayName || profile.username || tr('settings.copy.12')}{isCurrent ? tr('settings.copy.13') : ''}</Text>
+                            <Text style={styles.rowHint} numberOfLines={1}>{profile.serverUrl} · {profile.username || tr('settings.copy.14')}{profile.networkId ? ` · ${profile.networkId}` : ''}</Text>
+                            {profile.requiresReauth ? <Text style={styles.dangerHint}>{tr('settings.copy.15')}</Text> : null}
                           </View>
                           {tauriDesktop && !profile.requiresReauth ? (
                             // 应用多开(Vincent 2026-09-07):给这个账号开一个独立工作区窗口,主窗口的当前账号不动;同一账号再点就聚焦已开的窗。
-                            <Pressable accessibilityLabel={`在新窗口打开 ${profile.displayName || profile.username || profile.serverUrl}`} onPress={event => { event.stopPropagation(); void openWorkspaceWindow(profile).catch(error => setProfileError(String(error))); }} hitSlop={8} style={styles.inlineButton}>
-                              <Text style={styles.accentText}>新窗口</Text>
+                            <Pressable accessibilityLabel={tr('settings.copy.183', { v0: profile.displayName || profile.username || profile.serverUrl })} onPress={event => { event.stopPropagation(); void openWorkspaceWindow(profile).catch(error => setProfileError(String(error))); }} hitSlop={8} style={styles.inlineButton}>
+                              <Text style={styles.accentText}>{tr('settings.copy.16')}</Text>
                             </Pressable>
                           ) : null}
                           {profile.profileId !== LOCAL_HUB_PROFILE_ID ? (
-                            <Pressable accessibilityLabel={`移除 ${profile.username || profile.serverUrl}`} onPress={event => { event.stopPropagation(); setRemoveTarget(profile); }} hitSlop={8} style={styles.inlineButton}>
-                              <Text style={styles.dangerText}>移除</Text>
+                            <Pressable accessibilityLabel={tr('settings.copy.184', { v0: profile.username || profile.serverUrl })} onPress={event => { event.stopPropagation(); setRemoveTarget(profile); }} hitSlop={8} style={styles.inlineButton}>
+                              <Text style={styles.dangerText}>{tr('settings.copy.17')}</Text>
                             </Pressable>
                           ) : null}
                         </Pressable>
@@ -528,16 +534,16 @@ export default function SettingsScreen({
                     );
                   }) : (
                     <>
-                      <ValueRow label="服务器" value={cfg.serverUrl} />
+                      <ValueRow label={tr('settings.copy.18')} value={cfg.serverUrl} />
                       <Divider />
-                      <ValueRow label="用户名" value={me.username ?? cfg.username ?? '—'} />
+                      <ValueRow label={tr('settings.copy.19')} value={me.username ?? cfg.username ?? '—'} />
                     </>
                   )}
                   {profileError ? <Text style={styles.errorText}>{profileError}</Text> : null}
                   {storageDiagnostics ? (
                     <Text style={styles.footHint} numberOfLines={2}>
-                      本地数据：{storageDiagnostics.root} · {storageDiagnostics.profile_count} profiles
-                      {storageDiagnostics.corrupt_backups.length ? ` · 已保留 ${storageDiagnostics.corrupt_backups.length} 个损坏备份` : ''}
+                      {tr('settings.copy.20')}{storageDiagnostics.root} · {storageDiagnostics.profile_count} profiles
+                      {storageDiagnostics.corrupt_backups.length ? tr('settings.copy.185', { v0: storageDiagnostics.corrupt_backups.length }) : ''}
                     </Text>
                   ) : null}
                 </>
@@ -546,7 +552,7 @@ export default function SettingsScreen({
                 <>
                   <Divider />
                   <Pressable style={({ pressed }) => [styles.row, pressed && { opacity: 0.6 }]} onPress={onAddAccount} accessibilityRole="button">
-                    <Text style={styles.accentText}>＋ 添加 Hub / 账号</Text>
+                    <Text style={styles.accentText}>{tr('settings.copy.21')}</Text>
                     <Ionicons name="chevron-forward" size={16} color={colors.textMuted} />
                   </Pressable>
                 </>
@@ -556,8 +562,8 @@ export default function SettingsScreen({
                   <Divider />
                   <Pressable style={({ pressed }) => [styles.row, pressed && { opacity: 0.6 }]} onPress={onLogout} accessibilityRole="button">
                     <View style={styles.rowCopy}>
-                      <Text style={styles.dangerText}>移除当前账号</Text>
-                      <Text style={styles.rowHint}>只删除这个 profile 的凭据和本地目录，不影响其他 Hub。</Text>
+                      <Text style={styles.dangerText}>{tr('settings.copy.22')}</Text>
+                      <Text style={styles.rowHint}>{tr('settings.copy.23')}</Text>
                     </View>
                   </Pressable>
                 </>
@@ -568,9 +574,9 @@ export default function SettingsScreen({
           {sectionsToRender.includes('localHub') && localHub ? (
             <View style={sectionStyle} testID="local-hub-settings-card">
               {heading('localHub')}
-              {show('localHub', 'status') ? <ValueRow label="状态" value={localHub.state === 'running' || localHub.state === 'running_external' ? '运行中' : localHub.state === 'error' ? '异常' : '已停止'} /> : null}
-              {show('localHub', 'endpoint') ? <><Divider /><ValueRow label="地址" value={localHub.endpoint} /></> : null}
-              {show('localHub', 'hubVersion') ? <><Divider /><ValueRow label="Hub 版本" value={localHub.hubVersion} /></> : null}
+              {show('localHub', 'status') ? <ValueRow label={tr('settings.copy.24')} value={localHub.state === 'running' || localHub.state === 'running_external' ? tr('settings.copy.25') : localHub.state === 'error' ? tr('settings.copy.26') : tr('settings.copy.27')} /> : null}
+              {show('localHub', 'endpoint') ? <><Divider /><ValueRow label={tr('settings.copy.28')} value={localHub.endpoint} /></> : null}
+              {show('localHub', 'hubVersion') ? <><Divider /><ValueRow label={tr('settings.copy.29')} value={localHub.hubVersion} /></> : null}
               {localHub.error ? <Text style={styles.errorText}>{localHub.error}</Text> : null}
               {/* app#246(Vincent 2026-09-05「版本低了就加个触发安装的按钮」):本地数据还是旧版 Hub 写的
                   (requiresMigration)或端口上跑着旧版 sidecar(version mismatch)时,给一个显式的升级入口。
@@ -583,32 +589,32 @@ export default function SettingsScreen({
                     setProfileError('');
                     void restartLocalHub().then(setLocalHub).catch(error => setProfileError(String(error))).finally(() => setLocalHubBusy(false));
                   }}>
-                    <Text style={styles.accentText}>{localHubBusy ? '升级中…' : `升级本地 Hub 到 ${localHub.expectedHubVersion ?? '当前捆绑版本'}`}</Text>
+                    <Text style={styles.accentText}>{localHubBusy ? tr('settings.copy.30') : tr('settings.copy.186', { v0: localHub.expectedHubVersion ?? tr('settings.copy.31') })}</Text>
                   </Pressable>
                 </>
               ) : null}
-              {show('localHub', 'restart') ? <><Divider /><ActionRow label="重新启动" hint="停止当前 Hub 进程后用捆绑版本重新拉起。" busy={localHubBusy} onPress={() => {
+              {show('localHub', 'restart') ? <><Divider /><ActionRow label={tr('settings.copy.32')} hint={tr('settings.copy.33')} busy={localHubBusy} onPress={() => {
                 setLocalHubBusy(true);
                 void restartLocalHub().then(setLocalHub).catch(error => setProfileError(String(error))).finally(() => setLocalHubBusy(false));
               }} /></> : null}
-              {show('localHub', 'stop') ? <><Divider /><ActionRow label="停止" disabled={localHubBusy || localHub.state === 'stopped'} onPress={() => {
+              {show('localHub', 'stop') ? <><Divider /><ActionRow label={tr('settings.copy.34')} disabled={localHubBusy || localHub.state === 'stopped'} onPress={() => {
                 setLocalHubBusy(true);
                 void stopLocalHub().then(() => localHubStatus()).then(setLocalHub).catch(error => setProfileError(String(error))).finally(() => setLocalHubBusy(false));
               }} /></> : null}
-              {show('localHub', 'logs') ? <><Divider /><ActionRow label="打开日志" onPress={() => { void openLocalHubLogs().catch(error => setProfileError(String(error))); }} /></> : null}
-              {show('localHub', 'backup') ? <><Divider /><ActionRow label="立即备份" hint={localBackupMessage || undefined} busy={localHubBusy} onPress={() => {
+              {show('localHub', 'logs') ? <><Divider /><ActionRow label={tr('settings.copy.35')} onPress={() => { void openLocalHubLogs().catch(error => setProfileError(String(error))); }} /></> : null}
+              {show('localHub', 'backup') ? <><Divider /><ActionRow label={tr('settings.copy.36')} hint={localBackupMessage || undefined} busy={localHubBusy} onPress={() => {
                 setLocalHubBusy(true);
                 setLocalBackupMessage('');
-                void backupLocalHubData().then(result => setLocalBackupMessage(`备份已保存：${result.path}`)).catch(error => setProfileError(String(error))).finally(() => setLocalHubBusy(false));
+                void backupLocalHubData().then(result => setLocalBackupMessage(tr('settings.copy.180', { v0: result.path }))).catch(error => setProfileError(String(error))).finally(() => setLocalHubBusy(false));
               }} /></> : null}
               {show('localHub', 'deleteLocal') ? (
                 // 唯一的毁灭性动作单独一块:红边、和其它按钮隔开、要输入确认词。
                 <View style={styles.dangerZone} testID="settings-danger-zone">
-                  <Text style={styles.dangerZoneTitle}>危险区</Text>
+                  <Text style={styles.dangerZoneTitle}>{tr('settings.copy.37')}</Text>
                   <Pressable style={({ pressed }) => [styles.row, styles.dangerZoneRow, pressed && { opacity: 0.6 }]} onPress={() => { setLocalDeleteText(''); setLocalDeleteVisible(true); }} accessibilityRole="button">
                     <View style={styles.rowCopy}>
-                      <Text style={styles.dangerText}>删除本地工作区数据…</Text>
-                      <Text style={styles.rowHint}>先完整备份到 ~/.anet/app/backups，再删除本地 Hub 数据与系统凭据。</Text>
+                      <Text style={styles.dangerText}>{tr('settings.copy.38')}</Text>
+                      <Text style={styles.rowHint}>{tr('settings.copy.39')}</Text>
                     </View>
                     <Ionicons name="chevron-forward" size={16} color={colors.failed} />
                   </Pressable>
@@ -624,10 +630,10 @@ export default function SettingsScreen({
                 // 0.2.101:三选一分段控件(浅色 / 深色 / 跟随系统)。说明行写明当前生效的主题。
                 <View style={[styles.row, styles.themeRow]} testID="settings-theme-row">
                   <View style={[styles.rowCopy, styles.themeRowCopy]}>
-                    <Text style={styles.rowLabel}>主题</Text>
-                    <Text style={styles.rowHint} testID="settings-theme-summary">{themePreferenceSummary(themeSnap.pref, themeSnap.mode)}</Text>
+                    <Text style={styles.rowLabel}>{tr('settings.copy.40')}</Text>
+                    <Text style={styles.rowHint} testID="settings-theme-summary">{localizedThemeSummary(themeSnap.pref, themeSnap.mode)}</Text>
                   </View>
-                  <View style={styles.segmented} accessibilityRole="radiogroup" accessibilityLabel="主题">
+                  <View style={styles.segmented} accessibilityRole="radiogroup" accessibilityLabel={tr('settings.copy.40')}>
                     {THEME_PREFERENCES.map(option => {
                       const selected = themeSnap.pref === option;
                       return (
@@ -635,7 +641,7 @@ export default function SettingsScreen({
                           key={option}
                           accessibilityRole="radio"
                           accessibilityState={{ selected, checked: selected }}
-                          accessibilityLabel={THEME_PREFERENCE_LABEL[option]}
+                          accessibilityLabel={settingsText(THEME_PREFERENCE_LABEL[option])}
                           testID={`settings-theme-${option}`}
                           style={({ pressed }) => [styles.segment, selected && styles.segmentSelected, pressed && !selected && { opacity: 0.6 }]}
                           onPress={() => {
@@ -644,13 +650,14 @@ export default function SettingsScreen({
                             void saveThemeMode(option);
                           }}
                         >
-                          <Text style={[styles.segmentText, selected && styles.segmentTextSelected]} numberOfLines={1}>{THEME_PREFERENCE_LABEL[option]}</Text>
+                          <Text style={[styles.segmentText, selected && styles.segmentTextSelected]} numberOfLines={1}>{settingsText(THEME_PREFERENCE_LABEL[option])}</Text>
                         </Pressable>
                       );
                     })}
                   </View>
                 </View>
               ) : null}
+              {show('appearance', 'language') ? <LanguageSettings /> : null}
               {/* 字体大小 / 界面密度 + 预览 + 恢复默认 (src/UiScaleSettings.tsx, src/ui-scale.ts). */}
               <UiScaleSettings s={styles} showFont={show('appearance', 'fontSize')} showDensity={show('appearance', 'density')} />
             </View>
@@ -663,16 +670,16 @@ export default function SettingsScreen({
                 <>
                   <View style={styles.row} testID="notify-enabled-row">
                     <View style={styles.rowCopy}>
-                      <Text style={styles.rowLabel}>新消息通知</Text>
-                      <Text style={styles.rowHint}>agent 发来消息、而你没在看那个会话时,发一条系统通知(点通知直接进会话)。</Text>
+                      <Text style={styles.rowLabel}>{tr('settings.copy.41')}</Text>
+                      <Text style={styles.rowHint}>{tr('settings.copy.42')}</Text>
                       {nativeNotify && notify.enabled && permission && permission.status !== 'granted' ? (
                         <Pressable accessibilityRole="button" onPress={() => { void ensurePermission(); }} testID="notify-permission-fix">
-                          <Text style={[styles.rowHint, { color: colors.failed }]}>系统通知权限未开启 · 点此开启</Text>
+                          <Text style={[styles.rowHint, { color: colors.failed }]}>{tr('settings.copy.43')}</Text>
                         </Pressable>
                       ) : null}
                     </View>
                     <Switch
-                      accessibilityLabel="新消息通知"
+                      accessibilityLabel={tr('settings.copy.41')}
                       value={notify.enabled}
                       onValueChange={value => {
                         saveNotify({ ...notify, enabled: value });
@@ -689,11 +696,11 @@ export default function SettingsScreen({
                 <>
                   <View style={[styles.row, styles.themeRow, !notify.enabled && styles.disabled]} testID="notify-mode-row">
                     <View style={[styles.rowCopy, styles.themeRowCopy]}>
-                      <Text style={styles.rowLabel}>提醒方式</Text>
-                      <Text style={styles.rowHint}>{notify.mode === 'new' ? '同一个 agent 有未看的通知时,后续消息只更新条数,不再响铃。' : '每条新消息都响铃并弹出横幅。'}</Text>
+                      <Text style={styles.rowLabel}>{tr('settings.copy.44')}</Text>
+                      <Text style={styles.rowHint}>{notify.mode === 'new' ? tr('settings.copy.45') : tr('settings.copy.46')}</Text>
                     </View>
                     <View style={styles.segmented} accessibilityRole="radiogroup">
-                      {([['all', '每条消息'], ['new', '仅新消息']] as const).map(([mode, label]) => (
+                      {([['all', tr('settings.copy.47')], ['new', tr('settings.copy.48')]] as const).map(([mode, label]) => (
                         <Pressable
                           key={mode}
                           accessibilityRole="radio"
@@ -714,11 +721,11 @@ export default function SettingsScreen({
               {show('notifications', 'sound') ? (
                 <View style={styles.row}>
                   <View style={styles.rowCopy}>
-                    <Text style={styles.rowLabel}>消息提示音</Text>
-                    <Text style={styles.rowHint}>新消息到达时响一声。</Text>
+                    <Text style={styles.rowLabel}>{tr('settings.copy.49')}</Text>
+                    <Text style={styles.rowHint}>{tr('settings.copy.50')}</Text>
                   </View>
                   <Switch
-                    accessibilityLabel="消息提示音"
+                    accessibilityLabel={tr('settings.copy.49')}
                     value={notify.soundEnabled}
                     onValueChange={value => {
                       const next = { ...notify, soundEnabled: value };
@@ -735,11 +742,11 @@ export default function SettingsScreen({
                   <Divider />
                   <View style={styles.row}>
                     <View style={styles.rowCopy}>
-                      <Text style={styles.rowLabel}>免打扰时段</Text>
-                      <Text style={styles.rowHint}>{notify.quiet.enabled ? `${notify.quiet.start} – ${notify.quiet.end} 之间不提醒。` : '关闭时全天提醒。'}</Text>
+                      <Text style={styles.rowLabel}>{tr('settings.copy.51')}</Text>
+                      <Text style={styles.rowHint}>{notify.quiet.enabled ? tr('settings.copy.187', { v0: notify.quiet.start, v1: notify.quiet.end }) : tr('settings.copy.52')}</Text>
                     </View>
                     <Switch
-                      accessibilityLabel="免打扰时段"
+                      accessibilityLabel={tr('settings.copy.51')}
                       value={notify.quiet.enabled}
                       onValueChange={value => { saveNotifySettings({ ...notify, quiet: { ...notify.quiet, enabled: value } }); }}
                       trackColor={{ true: colors.accent, false: colors.border }}
@@ -748,9 +755,9 @@ export default function SettingsScreen({
                   </View>
                   {notify.quiet.enabled ? (
                     <View style={[styles.row, styles.quietRow]}>
-                      <Text style={styles.rowLabel}>从</Text>
+                      <Text style={styles.rowLabel}>{tr('settings.copy.53')}</Text>
                       <TextInput
-                        accessibilityLabel="免打扰开始时间"
+                        accessibilityLabel={tr('settings.copy.54')}
                         style={styles.quietInput}
                         value={quietStart}
                         onChangeText={setQuietStart}
@@ -758,9 +765,9 @@ export default function SettingsScreen({
                         placeholder="22:00"
                         placeholderTextColor={colors.textMuted}
                       />
-                      <Text style={styles.rowLabel}>到</Text>
+                      <Text style={styles.rowLabel}>{tr('settings.copy.55')}</Text>
                       <TextInput
-                        accessibilityLabel="免打扰结束时间"
+                        accessibilityLabel={tr('settings.copy.56')}
                         style={styles.quietInput}
                         value={quietEnd}
                         onChangeText={setQuietEnd}
@@ -777,13 +784,13 @@ export default function SettingsScreen({
                   <Divider />
                   <View style={[styles.row, { alignItems: 'flex-start' }]} testID="notify-muted-row">
                     <View style={styles.rowCopy}>
-                      <Text style={styles.rowLabel}>消息免打扰的 agent</Text>
-                      <Text style={styles.rowHint}>{muted.length ? '这些 agent 的消息照常收,只是不发系统通知。' : (nativeNotify ? '在会话右上角点铃铛,可以对单个 agent 免打扰。' : '在 agent 列表里右键 →「消息免打扰」。')}</Text>
+                      <Text style={styles.rowLabel}>{tr('settings.copy.57')}</Text>
+                      <Text style={styles.rowHint}>{muted.length ? tr('settings.copy.58') : (nativeNotify ? tr('settings.copy.59') : tr('settings.copy.60'))}</Text>
                       {muted.map(alias => (
                         <View key={alias} style={styles.mutedItem}>
                           <Text style={styles.rowValue} numberOfLines={1}>{alias}</Text>
-                          <Pressable accessibilityRole="button" accessibilityLabel={`取消 ${alias} 的免打扰`} onPress={() => saveNotify(toggleAgentMuted(notify, notifyKey, alias))} hitSlop={6}>
-                            <Text style={styles.accentText}>取消</Text>
+                          <Pressable accessibilityRole="button" accessibilityLabel={tr('settings.copy.188', { v0: alias })} onPress={() => saveNotify(toggleAgentMuted(notify, notifyKey, alias))} hitSlop={6}>
+                            <Text style={styles.accentText}>{tr('settings.copy.61')}</Text>
                           </Pressable>
                         </View>
                       ))}
@@ -796,14 +803,14 @@ export default function SettingsScreen({
                   <Divider />
                   <View style={styles.row} testID="notify-keepalive-row">
                     <View style={styles.rowCopy}>
-                      <Text style={styles.rowLabel}>后台保持连接</Text>
-                      <Text style={styles.rowHint}>应用切到后台后继续接收消息。会常驻一条低优先级通知「Agent Network 正在保持连接」,耗电会多一些。</Text>
+                      <Text style={styles.rowLabel}>{tr('settings.copy.62')}</Text>
+                      <Text style={styles.rowHint}>{tr('settings.copy.63')}</Text>
                       {keepAliveStatusText(notify, keepAliveState) ? (
                         <Text style={[styles.rowHint, keepAliveState.error ? { color: colors.failed } : null]} testID="notify-keepalive-status">{keepAliveStatusText(notify, keepAliveState)}</Text>
                       ) : null}
                     </View>
                     <Switch
-                      accessibilityLabel="后台保持连接"
+                      accessibilityLabel={tr('settings.copy.62')}
                       value={notify.keepAlive}
                       disabled={!notify.enabled || !keepAliveState.available}
                       onValueChange={value => {
@@ -821,18 +828,18 @@ export default function SettingsScreen({
                   <Divider />
                   <View style={styles.row} testID="notify-dnd-row">
                     <View style={styles.rowCopy}>
-                      <Text style={styles.rowLabel}>免打扰时仍然提醒</Text>
-                      <Text style={styles.rowHint}>系统勿扰模式开着时,agent 的消息照样弹出并响铃。需要在系统里给本应用「勿扰权限」。</Text>
+                      <Text style={styles.rowLabel}>{tr('settings.copy.64')}</Text>
+                      <Text style={styles.rowHint}>{tr('settings.copy.65')}</Text>
                       {notify.dndBypass && dndAccess === false ? (
                         <Pressable accessibilityRole="button" onPress={() => { void openDndAccessSettings(); }} testID="notify-dnd-grant">
-                          <Text style={[styles.rowHint, { color: colors.failed }]}>还没有勿扰权限,勿扰时仍会被静音 · 点此去授权</Text>
+                          <Text style={[styles.rowHint, { color: colors.failed }]}>{tr('settings.copy.66')}</Text>
                         </Pressable>
                       ) : notify.dndBypass && dndAccess === true ? (
-                        <Text style={styles.rowHint}>已授权。</Text>
+                        <Text style={styles.rowHint}>{tr('settings.copy.67')}</Text>
                       ) : null}
                     </View>
                     <Switch
-                      accessibilityLabel="免打扰时仍然提醒"
+                      accessibilityLabel={tr('settings.copy.64')}
                       value={notify.dndBypass}
                       disabled={!notify.enabled}
                       onValueChange={value => {
@@ -850,8 +857,8 @@ export default function SettingsScreen({
                   <Divider />
                   <Pressable style={({ pressed }) => [styles.row, pressed && { opacity: 0.6 }]} onPress={() => setGuideVisible(true)} accessibilityRole="button" testID="notify-xiaomi-guide">
                     <View style={styles.rowCopy}>
-                      <Text style={styles.rowLabel}>小米/HyperOS 后台设置指引</Text>
-                      <Text style={styles.rowHint}>自启动、省电策略「无限制」—— 不设的话小米会在后台关掉连接。</Text>
+                      <Text style={styles.rowLabel}>{tr('settings.copy.68')}</Text>
+                      <Text style={styles.rowHint}>{tr('settings.copy.69')}</Text>
                     </View>
                     <Ionicons name="chevron-forward" size={16} color={colors.textMuted} />
                   </Pressable>
@@ -862,22 +869,22 @@ export default function SettingsScreen({
                   <Divider />
                   <View style={styles.row} testID="notify-test-row">
                     <View style={styles.rowCopy}>
-                      <Text style={styles.rowLabel}>发送测试通知</Text>
-                      <Text style={styles.rowHint}>{testMessage || '立即发一条通知,确认系统通知能弹出来。'}</Text>
+                      <Text style={styles.rowLabel}>{tr('settings.copy.70')}</Text>
+                      <Text style={styles.rowHint}>{testMessage || tr('settings.copy.71')}</Text>
                     </View>
                     <Pressable
                       accessibilityRole="button"
-                      accessibilityLabel="发送测试通知"
+                      accessibilityLabel={tr('settings.copy.70')}
                       onPress={() => {
                         void (async () => {
-                          if (!(await ensurePermission())) { setTestMessage('没有通知权限:请在系统设置里允许通知后再试。'); return; }
-                          try { await sendTestNotification(); setTestMessage('已发送。没看到的话,检查系统通知设置里的「Agent 消息」类别。'); }
-                          catch (e) { setTestMessage(`发送失败:${String((e as Error)?.message ?? e)}`); }
+                          if (!(await ensurePermission())) { setTestMessage(tr('settings.copy.8')); return; }
+                          try { await sendTestNotification(); setTestMessage(tr('settings.copy.9')); }
+                          catch (e) { setTestMessage(tr('settings.copy.181', { v0: String((e as Error)?.message ?? e) })); }
                         })();
                       }}
                       style={({ pressed }) => [styles.actionButton, pressed && { opacity: 0.6 }]}
                     >
-                      <Text style={styles.actionButtonText}>发送</Text>
+                      <Text style={styles.actionButtonText}>{tr('settings.copy.72')}</Text>
                     </Pressable>
                   </View>
                 </>
@@ -887,14 +894,14 @@ export default function SettingsScreen({
                   <Divider />
                   <View style={styles.row}>
                     <View style={styles.rowCopy}>
-                      <Text style={styles.rowLabel}>通知诊断</Text>
-                      <Text style={styles.rowHint}>没收到通知时,把下面的信息复制给维护者。</Text>
+                      <Text style={styles.rowLabel}>{tr('settings.copy.73')}</Text>
+                      <Text style={styles.rowHint}>{tr('settings.copy.74')}</Text>
                     </View>
                   </View>
                   {notifyPreview ? null : <NotifyDiagnosticsPanel />}
                 </>
               ) : null}
-              {!searching ? <><Divider /><Text style={styles.footHint}>{nativeNotify ? '你正开着的会话不提示;在应用里看着别的会话时照常提示。' : '新消息会在系统栏和系统通知里提示;你正开着的会话不提示。'}</Text></> : null}
+              {!searching ? <><Divider /><Text style={styles.footHint}>{nativeNotify ? tr('settings.copy.75') : tr('settings.copy.76')}</Text></> : null}
             </View>
           ) : null}
 
@@ -915,7 +922,7 @@ export default function SettingsScreen({
           {sectionsToRender.includes('about') ? (
             <View style={sectionStyle}>
               {heading('about')}
-              {show('about', 'version') ? <ValueRow label="版本" value={`v${APP_VERSION}`} /> : null}
+              {show('about', 'version') ? <ValueRow label={tr('settings.copy.77')} value={`v${APP_VERSION}`} /> : null}
               {show('about', 'update') ? (
                 <>
                   <Divider />
@@ -939,7 +946,7 @@ export default function SettingsScreen({
                         accessibilityRole="button"
                         accessibilityState={{ busy: view.busy, disabled: !view.actionable }}
                       >
-                        <Text style={styles.rowLabel}>软件更新</Text>
+                        <Text style={styles.rowLabel}>{tr('settings.copy.78')}</Text>
                         <View style={{ alignItems: 'flex-end', flexShrink: 1, marginLeft: 12 }}>
                           <View style={styles.dropdownValue}>
                             {view.busy ? <ActivityIndicator size="small" color={colors.accent} style={{ marginRight: 6 }} /> : null}
@@ -964,17 +971,17 @@ export default function SettingsScreen({
       <Modal visible={!!removeTarget} transparent animationType="fade" onRequestClose={() => setRemoveTarget(null)}>
         <View style={[styles.modalBackdrop, withBasePadding(dialogSafe, spacing.xl)]}>
           <View style={styles.modalCard}>
-            <Text style={styles.modalTitle}>移除这个账号？</Text>
-            <Text style={styles.modalBody}>{removeTarget ? `${removeTarget.serverUrl} · ${removeTarget.username}` : ''}\n只删除这个 profile 的系统凭据和本地目录，不影响其他 Hub。</Text>
+            <Text style={styles.modalTitle}>{tr('settings.copy.79')}</Text>
+            <Text style={styles.modalBody}>{removeTarget ? `${removeTarget.serverUrl} · ${removeTarget.username}` : ''}{tr('settings.copy.80')}</Text>
             <View style={styles.modalActions}>
-              <Pressable style={styles.modalButton} onPress={() => setRemoveTarget(null)}><Text style={styles.rowValue}>返回</Text></Pressable>
+              <Pressable style={styles.modalButton} onPress={() => setRemoveTarget(null)}><Text style={styles.rowValue}>{tr('settings.copy.7')}</Text></Pressable>
               <Pressable style={[styles.modalButton, styles.modalDanger]} onPress={() => {
                 const target = removeTarget;
                 setRemoveTarget(null);
                 if (!target) return;
                 if (target.profileId === cfg.profileId) void Promise.resolve(onLogout()).catch(error => setProfileError(String(error)));
                 else void removeHubProfile(target.profileId).then(() => setProfiles(current => current.filter(item => item.profileId !== target.profileId))).catch(error => setProfileError(String(error)));
-              }}><Text style={styles.dangerText}>移除账号</Text></Pressable>
+              }}><Text style={styles.dangerText}>{tr('settings.copy.81')}</Text></Pressable>
             </View>
           </View>
         </View>
@@ -983,26 +990,26 @@ export default function SettingsScreen({
       <Modal visible={localDeleteVisible} transparent animationType="fade" onRequestClose={() => setLocalDeleteVisible(false)}>
         <View style={[styles.modalBackdrop, withBasePadding(dialogSafe, spacing.xl)]}>
           <View style={styles.modalCard}>
-            <Text style={styles.modalTitle}>删除本地工作区？</Text>
-            <Text style={styles.modalBody}>应用会先在 ~/.anet/app/backups 创建完整备份，再删除本地 Hub 数据和系统凭据。远程 Hub 账号不受影响。请输入“删除本地数据”继续。</Text>
+            <Text style={styles.modalTitle}>{tr('settings.copy.82')}</Text>
+            <Text style={styles.modalBody}>{tr('settings.copy.83')}</Text>
             <TextInput
               value={localDeleteText}
               onChangeText={setLocalDeleteText}
-              placeholder="删除本地数据"
+              placeholder={tr('settings.copy.84')}
               placeholderTextColor={colors.textMuted}
               style={styles.confirmInput}
               autoCapitalize="none"
             />
             <View style={styles.modalActions}>
-              <Pressable style={styles.modalButton} onPress={() => setLocalDeleteVisible(false)}><Text style={styles.rowValue}>返回</Text></Pressable>
-              <Pressable disabled={localDeleteText !== '删除本地数据' || localHubBusy} style={[styles.modalButton, styles.modalDanger, localDeleteText !== '删除本地数据' && styles.disabled]} onPress={() => {
+              <Pressable style={styles.modalButton} onPress={() => setLocalDeleteVisible(false)}><Text style={styles.rowValue}>{tr('settings.copy.7')}</Text></Pressable>
+              <Pressable disabled={localDeleteText !== tr('settings.copy.84') || localHubBusy} style={[styles.modalButton, styles.modalDanger, localDeleteText !== tr('settings.copy.84') && styles.disabled]} onPress={() => {
                 setLocalHubBusy(true);
                 void deleteLocalHubData().then(async backupPath => {
                   setLocalDeleteVisible(false);
-                  setLocalBackupMessage(`删除前备份：${backupPath}`);
+                  setLocalBackupMessage(tr('settings.copy.189', { v0: backupPath }));
                   await onLocalDataDeleted();
                 }).catch(error => setProfileError(String(error))).finally(() => setLocalHubBusy(false));
-              }}><Text style={styles.dangerText}>备份并删除</Text></Pressable>
+              }}><Text style={styles.dangerText}>{tr('settings.copy.85')}</Text></Pressable>
             </View>
           </View>
         </View>
@@ -1010,14 +1017,14 @@ export default function SettingsScreen({
       <Modal visible={logoutConfirm} transparent animationType="fade" onRequestClose={() => setLogoutConfirm(false)}>
         <View style={[styles.modalBackdrop, withBasePadding(dialogSafe, spacing.xl)]}>
           <View style={styles.modalCard}>
-            <Text style={styles.modalTitle}>退出登录？</Text>
-            <Text style={styles.modalBody}>{`${cfg.serverUrl} · ${me.username ?? cfg.username ?? ''}`}\n只删除这个 profile 的凭据和本地目录，不影响其他 Hub。</Text>
+            <Text style={styles.modalTitle}>{tr('settings.copy.86')}</Text>
+            <Text style={styles.modalBody}>{`${cfg.serverUrl} · ${me.username ?? cfg.username ?? ''}`}{tr('settings.copy.87')}</Text>
             <View style={styles.modalActions}>
-              <Pressable style={styles.modalButton} onPress={() => setLogoutConfirm(false)}><Text style={styles.rowValue}>返回</Text></Pressable>
+              <Pressable style={styles.modalButton} onPress={() => setLogoutConfirm(false)}><Text style={styles.rowValue}>{tr('settings.copy.7')}</Text></Pressable>
               <Pressable testID="settings-logout-confirm" style={[styles.modalButton, styles.modalDanger]} onPress={() => {
                 setLogoutConfirm(false);
                 void Promise.resolve(onLogout()).catch(error => setProfileError(String(error)));
-              }}><Text style={styles.dangerText}>退出登录</Text></Pressable>
+              }}><Text style={styles.dangerText}>{tr('settings.copy.6')}</Text></Pressable>
             </View>
           </View>
         </View>
@@ -1043,15 +1050,16 @@ function keepAliveSnapshot(): KeepAliveSnapshot {
 }
 
 function keepAliveStatusText(notify: NotifySettings, state: KeepAliveSnapshot): string {
-  if (!state.available) return '当前安装包不含后台服务(需要重新安装 0.2.107 或更新的安卓版)。';
-  if (state.error) return `启动失败:${state.error}`;
+  if (!state.available) return tr('settings.copy.88');
+  if (state.error) return tr('settings.copy.190', { v0: state.error });
   if (!notify.keepAlive) return '';
-  if (!notify.enabled) return '「新消息通知」关着时不保持连接。';
-  return state.running ? '正在保持连接。' : '正在启动…';
+  if (!notify.enabled) return tr('settings.copy.89');
+  return state.running ? tr('settings.copy.90') : tr('settings.copy.91');
 }
 
 /** 标签在左、只读值在右。 */
 function ValueRow({ label, value }: { label: string; value: string }) {
+  useTranslation();
   return (
     <View style={styles.row}>
       <Text style={styles.rowLabel}>{label}</Text>
@@ -1062,6 +1070,7 @@ function ValueRow({ label, value }: { label: string; value: string }) {
 
 /** 标签在左、动作按钮在右(本地 Hub 的几个操作)。 */
 function ActionRow({ label, hint, busy, disabled, onPress }: { label: string; hint?: string; busy?: boolean; disabled?: boolean; onPress: () => void }) {
+  useTranslation();
   const off = !!disabled || !!busy;
   return (
     <View style={styles.row}>
@@ -1070,13 +1079,14 @@ function ActionRow({ label, hint, busy, disabled, onPress }: { label: string; hi
         {hint ? <Text style={styles.rowHint} numberOfLines={2}>{hint}</Text> : null}
       </View>
       <Pressable accessibilityRole="button" accessibilityLabel={label} disabled={off} onPress={onPress} style={({ pressed }) => [styles.actionButton, off && styles.disabled, pressed && { opacity: 0.6 }]}>
-        <Text style={styles.actionButtonText}>{busy ? '处理中…' : label}</Text>
+        <Text style={styles.actionButtonText}>{busy ? tr('settings.copy.92') : label}</Text>
       </Pressable>
     </View>
   );
 }
 
 function Divider() {
+  useTranslation();
   return <View style={styles.divider} />;
 }
 

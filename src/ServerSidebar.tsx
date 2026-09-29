@@ -9,14 +9,15 @@ import { usePoll } from './usePoll';
 import { summarize } from './server-stats';
 import { badgeOffsetCentered, labelClearanceMargin } from './badge-anchor';
 import { ds } from './ui-scale';
+import { useTranslation } from './i18n-react';
 
 export type ServerSection = 'overview' | 'nodes' | 'create' | 'logs';
 
 const ITEMS: Array<{ key: ServerSection; label: string; icon: keyof typeof Ionicons.glyphMap }> = [
-  { key: 'overview', label: '概览', icon: 'grid-outline' },
-  { key: 'nodes', label: '节点', icon: 'git-network-outline' },
-  { key: 'create', label: '新建节点', icon: 'add-circle-outline' },
-  { key: 'logs', label: '事件与日志', icon: 'pulse-outline' },
+  { key: 'overview', label: 'server.overview', icon: 'grid-outline' },
+  { key: 'nodes', label: 'server.nodes', icon: 'git-network-outline' },
+  { key: 'create', label: 'server.create', icon: 'add-circle-outline' },
+  { key: 'logs', label: 'server.logs', icon: 'pulse-outline' },
 ];
 
 export default function ServerSidebar({ cfg, active, onSelect }: {
@@ -24,6 +25,7 @@ export default function ServerSidebar({ cfg, active, onSelect }: {
   active: ServerSection;
   onSelect: (section: ServerSection) => void;
 }) {
+  const { t } = useTranslation();
   // 在线 / 总数 —— 与服务器页、Agent 列表分组头同一口径(server-stats.ts)。
   // 以前这里是 `sessions.length`,把全部已注册会话当成「在线节点」。
   const [counts, setCounts] = useState<{ online: number; total: number } | null>(null);
@@ -49,23 +51,23 @@ export default function ServerSidebar({ cfg, active, onSelect }: {
             <Ionicons name="server" size={18} color="#fff" />
           </View>
           <View style={{ flex: 1, minWidth: 0 }}>
-            <Text style={styles.title}>当前服务器</Text>
+            <Text style={styles.title}>{t('server.current')}</Text>
             <Text style={styles.host} numberOfLines={1}>{host}</Text>
           </View>
         </View>
         <View style={styles.statusRow}>
           <View style={[styles.dot, { backgroundColor: reachable === false ? colors.failed : reachable ? colors.running : colors.textMuted }]} />
-          <Text style={styles.status}>{reachable === null ? '正在连接' : reachable ? '已连接' : '连接失败'}</Text>
-          {counts === null ? <ActivityIndicator size="small" color={colors.textMuted} /> : <Text style={styles.count}>{counts.online}/{counts.total} 在线</Text>}
+          <Text style={styles.status}>{t(reachable === null ? 'server.connecting' : reachable ? 'server.connected' : 'server.failed')}</Text>
+          {counts === null ? <ActivityIndicator size="small" color={colors.textMuted} /> : <Text style={styles.count}>{t('server.online', counts)}</Text>}
         </View>
       </View>
 
-      <Text style={styles.sectionLabel}>服务器管理</Text>
+      <Text style={styles.sectionLabel}>{t('server.management')}</Text>
       <View style={styles.items}>
         {ITEMS.map(item => (
           <Pressable
             key={item.key}
-            accessibilityLabel={`服务器-${item.label}`}
+            accessibilityLabel={t('server.navLabel', { label: t(item.label) })}
             onPress={() => onSelect(item.key)}
             style={({ pressed }) => [styles.item, active === item.key && styles.itemActive, pressed && { opacity: 0.65 }]}
           >
@@ -75,12 +77,12 @@ export default function ServerSidebar({ cfg, active, onSelect }: {
                 <View style={styles.badge} testID="server-nav-badge-nodes"><Text dense style={styles.badgeText}>{railBadgeText(counts?.online ?? null)}</Text></View>
               ) : null}
             </View>
-            <Text style={[styles.itemText, active === item.key && styles.itemTextActive]}>{item.label}</Text>
+            <Text style={[styles.itemText, active === item.key && styles.itemTextActive]}>{t(item.label)}</Text>
           </Pressable>
         ))}
       </View>
       <View style={styles.footer}>
-        <Text style={styles.footerLabel}>网络</Text>
+        <Text style={styles.footerLabel}>{t('server.network')}</Text>
         <Text style={styles.footerValue} numberOfLines={1}>{cfg.networkId ?? 'default'}</Text>
       </View>
     </View>

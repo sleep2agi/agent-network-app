@@ -27,7 +27,7 @@ check('主动项与任务行一起进 mergeMessagesNewestFirst(按 created_at �
 const render = chat.slice(chat.indexOf('renderItem={({ item, index }) => {'));
 // 0.2.72:请求气泡按发送方分两支(自己→右侧,别的节点→左侧),主动项仍两支都不画
 check('渲染:主动项不画发送气泡', /\{!item\._proactive \? sender\.isCurrentUser \? \(/.test(render));
-check('渲染:主动项回复气泡带「主动汇报」标', render.includes('主动汇报'));
+check('渲染:主动项回复气泡带翻译后的主动汇报标', render.includes("t('chat.proactive')"));
 // ---- 2026-09-17 回复引用条:主动消息带上它回的是哪条任务 ----
 check('in_reply_to 行字段优先', proactiveInReplyTo({ in_reply_to: ' t-1 ', meta_json: '{"in_reply_to":"t-9"}' }) === 't-1');
 check('in_reply_to 退回 meta_json', proactiveInReplyTo({ in_reply_to: null, meta_json: '{"in_reply_to":"t-9"}' }) === 't-9');

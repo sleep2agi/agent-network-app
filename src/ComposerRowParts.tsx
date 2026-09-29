@@ -9,6 +9,8 @@ import { useEffect, useRef, useState } from 'react';
 import { AccessibilityInfo, Animated, Modal, Platform, Pressable, StyleSheet, View } from 'react-native';
 import { useModalSafePadding } from './safe-area-runtime';
 import { Text, TextInput } from './ui-text';
+import { useTranslation } from './i18n-react';
+import './i18n-chat';
 import { Ionicons } from './icons';
 import { colors, onThemeChange, radius, spacing } from './theme';
 import { ds, uiScale } from './ui-scale';
@@ -41,6 +43,7 @@ export function ComposerRightSlot({ slot, sendDisabled, plusOpen, onSend, onPlus
   onPlus: () => void;
 }) {
   const reduceMotion = useReduceMotion();
+  const { t } = useTranslation();
   const show = slot === 'send';
   const gap = spacing.sm;
   const [pillWidth, setPillWidth] = useState(ds(56));
@@ -60,7 +63,7 @@ export function ComposerRightSlot({ slot, sendDisabled, plusOpen, onSend, onPlus
     <View style={styles.rightSlot} testID="composer-right-slot">
       <Pressable
         accessibilityRole="button"
-        accessibilityLabel={plusOpen ? '收起更多发送方式' : '更多发送方式'}
+        accessibilityLabel={plusOpen ? t('chat.collapsePlus') : t('chat.openPlus')}
         accessibilityState={{ expanded: plusOpen }}
         testID="composer-plus"
         style={({ pressed }) => [styles.plusBtn, plusOpen && styles.plusBtnActive, pressed && { opacity: 0.6 }]}
@@ -76,7 +79,7 @@ export function ComposerRightSlot({ slot, sendDisabled, plusOpen, onSend, onPlus
         >
           <Pressable
             accessibilityRole="button"
-            accessibilityLabel="发送"
+            accessibilityLabel={t('chat.send')}
             accessibilityState={{ disabled: sendDisabled }}
             testID="composer-send"
             onLayout={e => { const w = Math.ceil(e.nativeEvent.layout.width); if (w > 0 && w !== pillWidth) setPillWidth(w); }}
@@ -84,7 +87,7 @@ export function ComposerRightSlot({ slot, sendDisabled, plusOpen, onSend, onPlus
             onPress={onSend}
             disabled={sendDisabled || !show}
           >
-            <Text style={styles.sendPillText}>发送</Text>
+            <Text style={styles.sendPillText}>{t('chat.send')}</Text>
           </Pressable>
         </Animated.View>
       ) : null}
@@ -93,10 +96,11 @@ export function ComposerRightSlot({ slot, sendDisabled, plusOpen, onSend, onPlus
 }
 
 export function ComposerExpandButton({ onPress }: { onPress: () => void }) {
+  const { t } = useTranslation();
   return (
     <Pressable
       accessibilityRole="button"
-      accessibilityLabel="全屏编辑"
+      accessibilityLabel={t('chat.fullEditor')}
       testID="composer-expand"
       hitSlop={8}
       onPress={onPress}
@@ -117,6 +121,7 @@ export function ComposerFullscreenEditor({ visible, alias, draft, onChangeDraft,
   onClose: () => void;
 }) {
   const safe = useModalSafePadding('fullScreen');
+  const { t } = useTranslation();
   const reduceMotion = useReduceMotion();
   return (
     <Modal visible={visible} transparent={false} animationType={reduceMotion ? 'none' : 'slide'} onRequestClose={onClose}>
@@ -124,7 +129,7 @@ export function ComposerFullscreenEditor({ visible, alias, draft, onChangeDraft,
         <View style={styles.editorBar} testID="screen-header">
           <Pressable
             accessibilityRole="button"
-            accessibilityLabel="收起全屏编辑"
+            accessibilityLabel={t('chat.closeFullEditor')}
             testID="composer-fullscreen-collapse"
             hitSlop={8}
             onPress={onClose}
@@ -135,14 +140,14 @@ export function ComposerFullscreenEditor({ visible, alias, draft, onChangeDraft,
           <Text style={styles.editorTitle} numberOfLines={1}>{alias}</Text>
           <Pressable
             accessibilityRole="button"
-            accessibilityLabel="发送"
+            accessibilityLabel={t('chat.send')}
             accessibilityState={{ disabled: sendDisabled }}
             testID="composer-fullscreen-send"
             style={({ pressed }) => [styles.sendPill, sendDisabled && styles.sendPillDisabled, pressed && { opacity: 0.7 }]}
             onPress={onSend}
             disabled={sendDisabled}
           >
-            <Text style={styles.sendPillText}>发送</Text>
+            <Text style={styles.sendPillText}>{t('chat.send')}</Text>
           </Pressable>
         </View>
         <TextInput

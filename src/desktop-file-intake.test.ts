@@ -40,7 +40,7 @@ ck('dragover:types 含 Files 才接', transferHasFiles({ types: ['Files'] }) && 
   const chat = read('src/ChatScreen.tsx');
   ck('桌面没有「＋」弹层 Modal 了', !/<Modal[^>]*plusMenuOpen/.test(chat) && !chat.includes('plusMenuDesktop'));
   ck('桌面工具栏「＋」→ onPlusPress → pickFiles → appendAttachments', chat.includes('testID="composer-desktop-plus"') && chat.includes('onPress={onPlusPress}') && /pickFiles\(\)\s*\.then\(appendAttachments\)/.test(chat));
-  ck('手机仍是微信式面板(右侧槽 ＋ toggle + 内联面板)', chat.includes("onPlus={() => plusEvent('toggle')}") && chat.includes('accessibilityLabel="更多发送方式面板"'));
+  ck('手机仍是微信式面板(右侧槽 ＋ toggle + 内联面板)', chat.includes("onPlus={() => plusEvent('toggle')}") && chat.includes("accessibilityLabel={t('chat.moreSend')}"));
   ck('粘贴:所有文件,经同一出口', chat.includes('attachmentsFromClipboard(event.clipboardData?.items)') && chat.includes('appendAttachments(pasted)'));
   ck('拖放:只接聊天窗格内、带文件的拖动', chat.includes('testID="chat-pane"') && chat.includes("closest?.('[data-testid=\"chat-pane\"]')") && chat.includes('transferHasFiles(event.dataTransfer)') && chat.includes('appendAttachments(attachmentsFromFiles(files))'));
   const attach = read('src/attach.ts');

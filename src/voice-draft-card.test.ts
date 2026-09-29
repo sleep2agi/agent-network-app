@@ -112,7 +112,7 @@ ck('叠放:图片草稿条 → 引用条 → 卡片 → 按住说话行', stripA
 const card = chat.slice(cardAt, chat.indexOf('/>', cardAt));
 ck('点卡片不再切键盘模式(没有 onPress / 模式转移)', !card.includes('onPress') && !card.includes('applyComposerTransition'));
 ck('✕ 清空草稿,选区作废', card.includes("onClear={() => { setDraft(''); selectionCaptureRef.current.reset(); }}"));
-ck('识别/录音中 ✕ 不可点(busy)', card.includes('busy={voiceBusy}') && /accessibilityLabel="清空语音草稿" disabled=\{busy\}/.test(ui));
+ck('识别/录音中 ✕ 不可点(busy)', card.includes('busy={voiceBusy}') && /accessibilityLabel=\{t\('voice.clearDraft'\)\} disabled=\{busy\}/.test(ui));
 ck('卡片最多 4 行高,再多在框内滚', /draftCardInput: \{ flex: 1, maxHeight: DRAFT_CARD_LINE_HEIGHT \* VOICE_DRAFT_CARD_MAX_LINES,/.test(ui) && /<TextInput[\s\S]{0,300}multiline\s*scrollEnabled/.test(ui));
 const submitAt = chat.indexOf('const submit = async () => {');
 const submitFn = chat.slice(submitAt, chat.indexOf('\n  };', submitAt));

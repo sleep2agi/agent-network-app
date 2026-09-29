@@ -1,3 +1,6 @@
+import { t } from './i18n';
+import { useTranslation } from './i18n-react';
+import './i18n-chat';
 // 桌面语音输入的界面(模型与理由见 desktop-voice-bar-model.ts):
 //   · DesktopMicButton:输入框工具栏里的 🎤,点一下开始录音(不是按住)。
 //   · DesktopVoiceBar:录音中代替工具栏那一行的录音条 —— 红点 · 电平条 · 计时 · 提示 ……「取消 ✕」「完成 ✓」,
@@ -10,19 +13,20 @@ import { Ionicons } from './icons';
 import { colors, onThemeChange, radius, spacing } from './theme';
 import { ds } from './ui-scale';
 import { formatElapsed } from './voice-input-model';
-import { barHint, barKeyAction, isRecordingPhase } from './desktop-voice-bar-model';
+import { barKeyAction, isRecordingPhase } from './desktop-voice-bar-model';
 import type { VoiceInput } from './useVoiceInput';
 
 // mousedown 的默认动作会把焦点从输入框挪到按钮上:阻止它 → 录音期间输入框保持焦点、选区不动。
 const keepInputFocus = Platform.OS === 'web' ? { onMouseDown: (e: { preventDefault(): void }) => e.preventDefault() } : null;
 
 export function DesktopMicButton({ voice, onPress }: { voice: VoiceInput; onPress: () => void }) {
+  useTranslation();
   return (
     <Pressable
       {...keepInputFocus}
       accessibilityRole="button"
-      accessibilityLabel={voice.configured ? '语音输入' : '语音输入(未配置)'}
-      accessibilityHint={voice.configured ? '点一下开始录音,完成后文字插到光标处' : '需要先在 设置 → 语音输入 里配置'}
+      accessibilityLabel={voice.configured ? t('voice.input') : t('voice.unconfigured')}
+      accessibilityHint={voice.configured ? t('voice.tapHint') : t('voice.setupHint')}
       onPress={onPress}
       hitSlop={6}
       testID="voice-mic"
@@ -37,6 +41,7 @@ const BARS = 7;
 
 /** hint:用键盘快捷键录音时换成快捷键自己的结束 / 取消说法(voice-shortcut-model.ts kbdVoiceHint)。 */
 export function DesktopVoiceBar({ voice, onDone, onCancel, hint }: { voice: VoiceInput; onDone: () => void; onCancel: () => void; hint?: string }) {
+  useTranslation();
   const { phase } = voice.state;
   const recording = isRecordingPhase(phase);
   const live = phase === 'recording' || phase === 'cancelArmed';
@@ -76,30 +81,30 @@ export function DesktopVoiceBar({ voice, onDone, onCancel, hint }: { voice: Voic
           </View>
         )}
         <Text style={styles.elapsed} testID="voice-bar-elapsed">{formatElapsed(voice.elapsedMs)}</Text>
-        <Text style={styles.hint} numberOfLines={1} testID="voice-bar-hint">{hint ?? barHint(phase)}</Text>
+        <Text style={styles.hint} numberOfLines={1} testID="voice-bar-hint">{hint ?? t(phase === 'transcribing' ? 'voice.transcribing' : phase === 'starting' ? 'voice.preparing' : 'voice.recordingDesktop')}</Text>
         <Pressable
           {...keepInputFocus}
           accessibilityRole="button"
-          accessibilityLabel="取消录音"
+          accessibilityLabel={t('voice.cancelRecording')}
           disabled={!recording}
           onPress={onCancel}
           testID="voice-bar-cancel"
           style={({ pressed, hovered }: any) => [styles.button, (hovered || pressed) && styles.buttonHover, !recording && styles.disabled]}
         >
           <Ionicons name="close" size={16} color={colors.textSecondary} />
-          <Text style={styles.buttonText}>取消</Text>
+          <Text style={styles.buttonText}>{t('chat.cancel')}</Text>
         </Pressable>
         <Pressable
           {...keepInputFocus}
           accessibilityRole="button"
-          accessibilityLabel="完成录音,插入文字"
+          accessibilityLabel={t('voice.doneRecording')}
           disabled={!recording}
           onPress={onDone}
           testID="voice-bar-done"
           style={({ pressed }) => [styles.button, styles.done, pressed && { opacity: 0.75 }, !recording && styles.disabled]}
         >
           <Ionicons name="checkmark" size={16} color={colors.onAccent} />
-          <Text style={[styles.buttonText, styles.doneText]}>完成</Text>
+          <Text style={[styles.buttonText, styles.doneText]}>{t('voice.done')}</Text>
         </Pressable>
       </View>
     </>

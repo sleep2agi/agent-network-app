@@ -1,0 +1,11 @@
+FROM node:20-alpine@sha256:fb4cd12c85ee03686f6af5362a0b0d56d50c58a04632e6c0fb8363f609372293
+WORKDIR /app
+RUN apk add --no-cache openssl
+RUN npm install --global bun@1.3.1
+COPY package.json package-lock.json ./
+RUN npm ci --ignore-scripts --no-audit --no-fund
+COPY . .
+RUN bun src/i18n.test.ts && bun src/i18n-copy-guard.test.ts
+RUN npm run typecheck
+RUN npx expo export -p web --output-dir /web
+CMD ["sh", "-c", "cp -R /web/. /output/"]

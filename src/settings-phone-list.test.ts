@@ -76,7 +76,7 @@ const norm = (f: string) => readFileSync(new URL(f, import.meta.url), 'utf-8').r
   ck('列表行带 › 箭头', src.includes('name="chevron-forward" size={18}'));
   ck('底部整宽「退出登录」要先确认', src.includes('testID="settings-logout-block"') && src.includes('onPress={() => setLogoutConfirm(true)}') && src.includes('<Modal visible={logoutConfirm}'));
   ck('手机账号子页不再重复「移除当前账号」(它的位置是底部退出登录)', src.includes("show('account', 'logout') && canLogout && !compact"));
-  ck('宽屏仍画左栏 + 右栏标题;手机子页走 SettingsPhonePage', src.includes('{compact ? (subPage ? phoneHeader : listHeader) : sidebar}') && src.includes('<Text style={styles.paneTitle}>{paneTitle}</Text>') && src.includes('{compact ? (subPage ? phoneSubPage : phoneList) : ('));
+  ck('宽屏仍画左栏 + 右栏标题;手机子页走 SettingsPhonePage', src.includes('{compact ? (subPage ? phoneHeader : listHeader) : sidebar}') && src.includes('<Text style={styles.paneTitle}>{settingsText(paneTitle)}</Text>') && src.includes('{compact ? (subPage ? phoneSubPage : phoneList) : ('));
   ck('行高下限 48', (src.match(/minHeight: Math\.max\(48, ds\(52\)\)/g) ?? []).length >= 2);
   ck('文字走 ui-text 包装(字体大小设置生效)', src.includes("import { Text, TextInput } from './ui-text';"));
 }
