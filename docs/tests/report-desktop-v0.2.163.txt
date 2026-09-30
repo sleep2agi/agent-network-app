@@ -1,0 +1,18 @@
+desktop v0.2.163 — 电脑端任务列表标题修复、人员在线、聊天气泡修复、成员弹窗修复、弹出聊天窗标题栏
+================================================================================
+A. 本版内容(0.2.162 发版提交 64a1172 之后 main 上合入的 PR + 本 PR)
+  #581 任务列表「标题」列整列空白(电脑端 0.2.159–0.2.162):标题文字 flex:0 在 web 上编译成 0 1 0% → 0 宽
+  #583 同类 flex:0 全仓清查(聊天输入框两处,web CSS 不变)+ 静态守卫 flex-zero-rule
+  #577 人员在线点 + 「x 分钟前在线」(需要 Hub 0.9.0-preview.73 的 /humans online/last_seen_at + member_presence;旧 Hub 不显示)
+  #579 长 markdown 气泡在平板/手机提前结束、引用行压字;有序列表 10+ 标号对齐
+  #578 分段控件在安卓塌成半截 + 8 个键盘避让弹窗的遮罩盖不到底
+  #582 分离聊天窗去掉原生标题栏,页头兼当标题栏(Windows 自绘 最小化/最大化/关闭;macOS Overlay 红绿灯)
+  本 PR(版本号)
+       版本号 8 个文件 0.2.162 → 0.2.163,android.versionCode 2162 → 2163;Cargo.lock 只改根包一段。
+       release-desktop-auto-update.yml 加 What's new in 0.2.163。
+  本地:干净 origin/main(c1a1376,含 #583)bump 后 npm ci / npm test(277/277)/ typecheck 全部 rc=0;android-release-notes.mjs 0.2.163 rc=0(5 条)。
+B. 验证边界(如实)
+  本 PR 只改版本号与说明;功能验证见各 PR。
+  以下没有真机验证,发版后需 owner 手测:
+   - #579 / #578 安卓平板上的气泡与分段控件(原生 Yoga 结论来自 yoga-layout 模拟);
+   - #582 Windows 分离聊天窗:拖动、双击最大化、边缘缩放、三个按钮、任务栏名称;macOS 红绿灯位置。
