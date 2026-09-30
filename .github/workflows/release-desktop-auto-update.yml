@@ -121,6 +121,10 @@ jobs:
           releaseBody: |-
             Signed and notarized stable update for macOS (Apple Silicon) and Windows (x64).
 
+            What's new in 0.2.161:
+            - 任务很多时，搜索也会到服务器上找，不会漏掉较早的任务。
+            - 修复：安卓「发现新版本」里始终显示完整的更新说明。
+
             What's new in 0.2.160:
             - 日历视图里可以拖动任务到另一天来修改期限（电脑端）；带具体时刻的任务保持原来的时刻，Hub 拒绝时自动退回原位。
 
