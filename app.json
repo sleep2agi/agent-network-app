@@ -38,6 +38,19 @@
       ],
       "expo-sharing",
       [
+        "expo-splash-screen",
+        {
+          "image": "./assets/android-icon-foreground.png",
+          "imageWidth": 200,
+          "resizeMode": "contain",
+          "backgroundColor": "#f6f7f9",
+          "dark": {
+            "image": "./assets/android-icon-foreground.png",
+            "backgroundColor": "#111113"
+          }
+        }
+      ],
+      [
         "expo-audio",
         {
           "microphonePermission": "按住说话时录音,转成文字填进输入框(语音输入)",

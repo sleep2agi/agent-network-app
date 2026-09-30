@@ -1,0 +1,81 @@
+Cold-start placeholder splash (Android) — cause, fix, guard
+==========================================================
+
+Symptom (owner, Android): about 0.5 s at cold start of a white rounded card with a
+light-grey grid and three concentric circles on a dark background.
+
+Cause
+-----
+The picture is android/app/src/main/res/drawable-*/splashscreen_logo.png from the
+bare template shipped inside node_modules/expo/template.tgz (SDK 56). CI runs
+`expo prebuild` (android/ is not committed), which copies the template. Only the
+expo-splash-screen config plugin replaces that drawable and the template theme:
+
+    <style name="Theme.App.SplashScreen" parent="AppTheme">
+      <item name="android:windowBackground">@drawable/splashscreen_logo</item>
+
+The app never depended on expo-splash-screen and had no splash config, so the
+launch activity's window background was the placeholder, stretched to the window
+(which is why the circles are ovals in the screenshot).
+
+Proof: prebuild on origin/main, sha256 of the generated drawables equals the
+template's files byte for byte (mdpi f84b9b17…, hdpi 721c8955…, xhdpi e1c5250e…,
+xxhdpi 23d97ccb…, xxxhdpi be9fac5c…). The xxxhdpi file is
+screenshots-splash/template-placeholder-splashscreen_logo.png: a 5x5 grid and
+three concentric circles, as in the screenshot.
+
+iOS on origin/main: the template SplashScreen.storyboard references an image set
+"SplashScreenLogo" that prebuild never created, on systemBackgroundColor, so iOS
+showed a blank white/black launch screen. That is not the grid, but it is the same
+gap.
+
+Desktop (Tauri) on origin/main: the Tauri window was already #111113, but the
+page is Expo's default index.html with no background, so the webview painted
+white (body computed background rgba(0,0,0,0)) until React's first frame.
+
+Fix
+---
+1. Dependency expo-splash-screen ~56.0.10 (SDK 56 pin from expo's
+   bundledNativeModules.json). Plugin config in app.json:
+     image       ./assets/android-icon-foreground.png  (the brand mark, the same
+                 layer the launcher adaptive icon uses, already sized for the
+                 Android 12 circular mask)
+     imageWidth  200
+     backgroundColor #f6f7f9 (LIGHT.bg)   dark.backgroundColor #111113 (DARK.bg)
+   Prebuild after the change: Theme.App.SplashScreen parent Theme.SplashScreen,
+   windowSplashScreenBackground / windowSplashScreenAnimatedIcon, values-night
+   colour #111113, drawable-night-* logos; iOS gets SplashScreenLogo (light +
+   dark) and a SplashScreenBackground colour set with a dark appearance.
+2. public/index.html: Expo's template plus a boot background (dark by default,
+   light for a light system scheme, the saved theme_mode_v1 wins). Checked in
+   Chromium on the exported page with the bundle blocked (= the pre-React paint):
+     before: every case rgba(0,0,0,0) (white canvas)
+     after:  system dark → rgb(17,17,19); system light → rgb(246,247,249);
+             saved light/dark override the system scheme in both directions.
+3. Launcher adaptive icon: already the real mark (src/icon-assets.test.ts), no
+   change.
+
+Guard: src/splash-assets.test.ts (35 checks)
+--------------------------------------------
+- expo-splash-screen installed and configured, light + dark, backgrounds equal
+  to src/theme.ts DARK.bg / LIGHT.bg
+- every launch image (splash, splash dark, icon, iOS icon, adaptive layers)
+  exists and is not a template placeholder digest; splash + adaptive foreground
+  are brand assets and carry colour (placeholder is 0.0 % chromatic)
+- public/index.html boot backgrounds, theme key, Tauri window colour
+
+Red on the broken config (test copied onto origin/main): 16/29 passed, rc=1 —
+dependency, plugin, image, backgrounds, dark variant and the web page all fail.
+Mutation: splash image → the template placeholder file: 29/35, the digest,
+brand-asset and colour checks all fail.
+
+Only verifiable on a device
+---------------------------
+- the Android 12+ system splash showing the mark on #111113 / #f6f7f9 at cold
+  start, in dark and light system mode, and no placeholder frame before it
+- the pre-Android-12 path (androidx core-splashscreen compat)
+- the iOS launch screen, light and dark
+- the desktop window's first paint in both themes
+The before/after image (screenshots-splash/before-after.png) is the device
+screenshot next to a simulation from the generated drawable with the Android 12
+192 dp circle mask applied, not a device capture.
