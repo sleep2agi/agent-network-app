@@ -127,6 +127,20 @@ The concurrency group is `release-desktop-auto-update` with
 `cancel-in-progress: false`. A second trigger queues behind the first; it does
 not cancel it. Do not re-trigger because a run looks stalled.
 
+### Build order: Android and desktop first, iOS last
+
+Owner, 2026-09-30: 「iOS 的构建是优先级最低的」. Dispatch `ios-build.yml` only
+**after** both of these are done:
+
+- Android: the APK is published with `modelscope-android-publish.yml` and
+  verified (section 10, "Android channel");
+- desktop: the release is published as Latest and the ModelScope mirror's
+  `desktop/latest/VERSION` shows the new version (sections 6 and 10).
+
+Never dispatch it while an Android or desktop build is still queued: the
+runners are shared, and an iOS build ahead of them delays what users are
+waiting for. iOS is not skipped, it goes last.
+
 ## 3. `macos-signing` environment approval
 
 Both matrix jobs run under `environment: macos-signing` and wait for approval.
