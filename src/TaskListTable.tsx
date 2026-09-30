@@ -9,13 +9,13 @@ import { useTranslation } from './i18n-react';
 import { taskText } from './i18n-tasks';
 import './i18n-task-fields';
 import { TaskIssueCount } from './TaskIssueBindings';
-import { REQ_COLUMN_LABEL, type Requirement, type RequirementProject } from './requirements-model';
+import { REQ_COLUMN_LABEL, hasVisibleTitle, titleText, type Requirement, type RequirementProject } from './requirements-model';
 import type { RequirementPerson } from './requirement-people';
 import { nextSort, type SortKey, type SortSpec } from './task-board-model';
 import { DueChip, OwnerBadge, ParticipantStack, PriorityBadge, ProjectChip, STATUS_TONE, a11yState, type TaskStyles } from './TaskBoardParts';
 import TaskListFields from './TaskListFields';
 import TaskTimeCell from './TaskTimeCell';
-import { fieldWidth, loadFields, resetFieldWidth, saveFields, setFieldWidth, type FieldId, type FieldPref } from './task-list-fields';
+import { fieldWidth, fittedWidths, loadFields, resetFieldWidth, saveFields, setFieldWidth, type FieldId, type FieldPref } from './task-list-fields';
 import { ParentLine, ProjectSelect } from './TaskFieldPickers';
 import { shortIdLabel } from './task-short-id';
 import { ArchivedTag, highlight } from './TaskSearch';
@@ -51,10 +51,16 @@ export default function TaskListTable({ rows, terms, people, projects, sort, set
   const visible = fields.filter(f => f.visible && (projects || f.id !== 'project') && (seqCapable || f.id !== 'seq'));
   // Title fills spare card width until the user drags it; after that every column is
   // exactly its stored width and the table scrolls sideways inside its card (Feishu/Notion).
-  const cellStyle = (f: FieldPref) => ({ width: fieldWidth(f), minWidth: fieldWidth(f), flexShrink: 0, ...(f.id === 'title' && f.width === undefined ? { flexGrow: 1 } : {}) });
+  // 表格给列用的宽(去掉左右留白、列间隙、勾选格):放不下时没拖过的列先往紧凑宽收(task-list-fields fittedWidths),
+  // 平板横屏 ~1000 宽时「状态」不再被挤出右边。
+  const [tableW, setTableW] = useState(0);
+  const available = tableW - spacing.lg * 2 - spacing.md * (visible.length - 1) - (selection ? CHECK_W + spacing.md : 0);
+  const widths = fittedWidths(visible, available);
+  const colW = (f: FieldPref) => widths[f.id] ?? fieldWidth(f);
+  const cellStyle = (f: FieldPref) => ({ width: colW(f), minWidth: colW(f), flexShrink: 0, ...(f.id === 'title' && f.width === undefined ? { flexGrow: 1 } : {}) });
   const cursor = (value: string) => { const body = globalThis.document?.body; if (body) { body.style.cursor = value; body.style.userSelect = value ? 'none' : ''; } };
   // Resize from the rendered width: a stretched title is wider than its stored width.
-  const rendered = (handleEl: unknown, id: FieldId) => (handleEl as HTMLElement).parentElement?.getBoundingClientRect().width ?? fieldWidth(latest.current.find(f => f.id === id)!);
+  const rendered = (handleEl: unknown, id: FieldId) => (handleEl as HTMLElement).parentElement?.getBoundingClientRect().width ?? colW(latest.current.find(f => f.id === id)!);
   const handle = (id: FieldId) => ({
     onPointerDown: (e: PointerLike) => {
       (e.currentTarget as HTMLElement).setPointerCapture?.(e.nativeEvent.pointerId);
@@ -86,7 +92,9 @@ export default function TaskListTable({ rows, terms, people, projects, sort, set
         const by = id === 'updated' && item.updatedBy ? people.find(p => p.kind === item.updatedBy!.kind && p.id === item.updatedBy!.id)?.name ?? item.updatedBy.id : undefined;
         return <TaskTimeCell id={`task-time-${item.id}-${id}`} raw={id === 'created' ? item.createdAt : item.updatedAt} now={now} by={by} />;
       }
-      case 'title': return <View style={{ flex: 1, minWidth: 0, gap: 4 }}><View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, minWidth: 0 }}><Text style={[s.tdTitle, item.column === 'done' && s.cardDone]} numberOfLines={1}>{highlight(item.name, terms)}</Text>{item.archived ? <ArchivedTag /> : null}</View>{items ? <ParentLine item={item} items={items} /> : null}<TaskTagChips tags={item.tags} /></View>;
+      // 标题格:内容自己的高、在行里垂直居中(标题文字不用 flex:1 —— 在竖排的格里它是「占满剩余高度」,
+      // 会把标题顶到行的最上沿);没有标签就不放标签那一层(空的也会多一个 gap)。标题看不见字时显示「(无标题)」+ 短 id。
+      case 'title': return <View style={{ flex: 1, minWidth: 0, gap: 4, alignSelf: 'center' }} testID={`task-title-${item.id}`}><View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, minWidth: 0 }}><Text style={[s.tdTitle, { flex: 0, flexShrink: 1 }, item.column === 'done' && s.cardDone, !hasVisibleTitle(item.name) && { color: colors.textMuted }]} numberOfLines={1}>{highlight(titleText(item), terms)}</Text>{item.archived ? <ArchivedTag /> : null}</View>{items ? <ParentLine item={item} items={items} /> : null}{item.tags?.length ? <TaskTagChips tags={item.tags} /> : null}</View>;
       case 'owner': return <OwnerBadge item={item} people={people} s={s} />;
       case 'priority': return <View style={s.owner}><PriorityBadge p={item.priority} s={s} /></View>;
       case 'due': return item.due ? <DueChip item={item} today={today} s={s} /> : <Text style={s.metaMuted}>—</Text>;
@@ -101,9 +109,9 @@ export default function TaskListTable({ rows, terms, people, projects, sort, set
   };
   return <View style={{ flex: 1 }}>
     <View style={{ flexDirection: 'row', justifyContent: 'flex-end', paddingHorizontal: spacing.xl, paddingBottom: 10 }}><TaskListFields fields={fields} touch={touch} projects={projects !== null} seqCapable={seqCapable} needsUpdateUpgrade={needsUpdateUpgrade} onChange={commit} /></View>
-    <View style={s.table} testID="req-list">
+    <View style={s.table} testID="req-list" onLayout={e => setTableW(e.nativeEvent.layout.width)}>
       <ScrollView horizontal contentContainerStyle={{ minWidth: '100%', flexGrow: 1 }}>
-        <View style={{ flex: 1, minWidth: visible.reduce((n, f) => n + fieldWidth(f), 0) + spacing.md * (visible.length - 1) + spacing.lg * 2 + (selection ? CHECK_W + spacing.md : 0) }}>
+        <View style={{ flex: 1, minWidth: visible.reduce((n, f) => n + colW(f), 0) + spacing.md * (visible.length - 1) + spacing.lg * 2 + (selection ? CHECK_W + spacing.md : 0) }}>
           <View style={s.tableHead}>
             {selection ? <View style={{ width: CHECK_W }} /> : null}
             {visible.map(f => {

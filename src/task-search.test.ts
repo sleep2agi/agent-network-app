@@ -118,7 +118,7 @@ ck('没有结果时出「没找到」', board.includes('<SearchEmpty q={search.q
 ck('去抖用常量', board.includes('SEARCH_DEBOUNCE_MS'));
 ck('⌘K 走设置里「搜索」的绑定,window 捕获阶段抢在全局快捷键前面', board.includes("=== 'nav.search'") && board.includes("win.addEventListener('keydown', onKey, true)"));
 ck('归档只在勾选 + 有搜索词 + Hub 支持时读', /const wantArchived = archivedCapable && search\.archived && !!searchTerms\(search\.q\)\.length/.test(board));
-ck('列表标题高亮', src('./TaskListTable.tsx').includes('highlight(item.name, terms)'));
+ck('列表标题高亮', /highlight\((item\.name|titleText\(item\)), terms\)/.test(src('./TaskListTable.tsx')));
 ck('甘特图标题高亮(四处)', (src('./TaskGantt.tsx').match(/highlight\([a-z.]*name, terms\)/g) ?? []).length === 4);
 ck('共享状态里有 search,换网络清空', /search: EMPTY_SEARCH/.test(src('./task-board-store.ts')));
 
