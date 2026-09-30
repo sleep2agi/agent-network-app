@@ -1,0 +1,11 @@
+desktop v0.2.167 — 任务看板精简列表 + 增量刷新
+================================================================================
+A. 本版内容(0.2.166 发版提交 5555e5f7 之后 main 上合入的 PR + 本 PR)
+  #605 看板在 Hub 通告 list_summary / changes 时改用 view=summary 与 changes=1&updated_since;每 10 分钟、列表截断或 has_more 时全量读;
+       搜索走 Hub q=;父卡子任务计数在本地重算。对已发布 0.9.0-preview.75 实测 40/40 次与全量读一致,增量平均 0.51 KB gzip(原 7.79 KB)。
+       requirement-details Docker 套件的整模块 mock 补 listRequirementChanges(42/0)。
+  生产 Hub 已于 09-30 22:13 升级到 0.9.0-preview.75。
+  本 PR(版本号):0.2.166 → 0.2.167,versionCode 2166 → 2167;release-desktop-auto-update.yml 加 What's new in 0.2.167;重新生成 src/changelog-bundled.ts。
+  本地:干净 origin/main(30b43e5)bump 后 npm ci / npm test / npm run typecheck 全部 rc=0;android-release-notes.mjs 0.2.167 rc=0。
+B. 验证边界(如实)
+  本 PR 只改版本号与说明;功能验证见 #605。
