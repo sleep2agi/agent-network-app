@@ -93,6 +93,7 @@ import { DESKTOP_CLICK_EVENT, desktopVoiceNotice, micClickAction, showVoiceBar, 
 import { holdOverlayApplies, holdOverlayLayout, zoneAt as holdZoneAt, type HoldOverlayLayout } from './voice-hold-overlay-model';
 import { TOO_SHORT_NOTICE } from './voice-input-model';
 import { beginVoicePress, createSelectionCapture, hostSelection, insertAtSelection, previewAtSelection, refocusAfterInsert, selectionAcrossModeSwitch, voiceInsertTarget, withPressStart, type TextSelection, type VoiceSource } from './voice-insert-model';
+import { webComposerInputHeight } from './composer-input-height';
 import { COMPOSER_INPUT_BORDER, COMPOSER_LINE_HEIGHT, composerControlSize, composerInputPadY, composerLineCount, composerRightSlot, composerRowAlign, nextFullEditor, shouldShowExpand, type FullEditorEvent } from './composer-row-layout';
 import { ComposerExpandButton, ComposerFullscreenEditor, ComposerRightSlot } from './ComposerRowParts';
 import { loadComposerInputMode, saveComposerInputMode } from './voice-prefs';
@@ -2612,14 +2613,6 @@ function MessageHoverActions({ side, styles, onCopy, onMore }: {
       </Pressable>
     </View>
   );
-}
-
-/** Web export only: the textarea's height for `lines` lines (native TextInput sizes itself). */
-function webComposerInputHeight(lines: number): number {
-  const control = composerControlSize(uiScale().densityFactor);
-  const line = COMPOSER_LINE_HEIGHT * uiScale().fontMultiplier;
-  const pad = composerInputPadY(control, line);
-  return Math.min(120, Math.max(control, Math.ceil(lines * line + 2 * pad + 2 * COMPOSER_INPUT_BORDER)));
 }
 
 // Bubble-chain layout comes from bubble-layout.ts (shared with DmChatScreen, run through Yoga by
