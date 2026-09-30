@@ -11,6 +11,8 @@
 //   (d) pads    left and right padding of the header match, ±1px (visual edge gaps when an item
 //               is pinned to each edge, else the CSS padding)
 //   (e) panes   two-pane only: the right pane's header top == the list pane's first element top, ±1px
+//   (f) text    nothing on the screen owns text yet paints < 1px wide / tall (harness zeroSizeText) — the
+//               0.2.159–0.2.162 blank task-title shape, which every textContent check passed
 //
 // Simulated insets: phone 390×844 top 32 / bottom 24; two-pane 1200×850 (landscape) top 32 /
 // bottom 24 / left 40. Light theme, Android UA. Hub data is placeholder, served in-page by the
@@ -23,7 +25,7 @@
 // Exit 1 when any check fails or any case could not be opened (a case that never ran is a FAIL,
 // not a skip — "0 failures" over fewer cases reads the same as a real pass).
 import { mkdirSync } from 'node:fs';
-import { serveExport, initScript, findChromium, ANDROID_UA } from './harness.mjs';
+import { serveExport, initScript, findChromium, ANDROID_UA, zeroSizeText } from './harness.mjs';
 
 const { chromium } = await import(process.env.PLAYWRIGHT_MODULE || 'playwright');
 const WEB = process.env.WEB_DIR;
@@ -214,7 +216,7 @@ for (const c of CASES) {
   for (const L of c.layouts) {
     const lay = LAYOUTS[L];
     const ins = lay.insets;
-    const row = { case: c.name, layout: L, a: 'FAIL', b: '-', c: '-', d: '-', e: '-', note: '' };
+    const row = { case: c.name, layout: L, a: 'FAIL', b: '-', c: '-', d: '-', e: '-', f: 'FAIL', note: '' };
     const ctx = await browser.newContext({ viewport: { width: lay.w, height: lay.h }, userAgent: ANDROID_UA, colorScheme: 'light', deviceScaleFactor: 1 });
     const page = await ctx.newPage();
     const errors = [];
@@ -228,6 +230,9 @@ for (const c of CASES) {
       const m = await page.evaluate(measure, { scope: c.scope, pane: L === 'twoPane' ? c.pane : null, header: c.header, inset: ins });
       if (m.error) throw new Error(m.error);
       row.a = m.inBand.length ? 'FAIL' : 'PASS';
+      const zero = await zeroSizeText(page);
+      row.f = zero.length ? 'FAIL' : 'PASS';
+      if (zero.length) row.note += `zero-size text:${zero.slice(0, 3).join('|')} `;
       if (m.inBand.length) row.note += `band:${m.inBand.slice(0, 3).join('|')} `;
       if (c.header) {
         const gap = m.headerTop - ins.top;
@@ -264,10 +269,10 @@ for (const c of CASES) {
 }
 await browser.close(); web.close();
 
-const cols = ['case', 'layout', 'a', 'b', 'c', 'd', 'e', 'note'];
-console.log(`\n| ${['case', 'layout', '(a) band', '(b) gap', '(c) centre', '(d) pads', '(e) panes', 'measured'].join(' | ')} |\n|${cols.map(() => '---').join('|')}|`);
+const cols = ['case', 'layout', 'a', 'b', 'c', 'd', 'e', 'f', 'note'];
+console.log(`\n| ${['case', 'layout', '(a) band', '(b) gap', '(c) centre', '(d) pads', '(e) panes', '(f) text', 'measured'].join(' | ')} |\n|${cols.map(() => '---').join('|')}|`);
 for (const r of rows) console.log(`| ${cols.map(k => r[k]).join(' | ')} |`);
-const failing = rows.filter(r => ['a', 'b', 'c', 'd', 'e'].some(k => r[k] === 'FAIL'));
+const failing = rows.filter(r => ['a', 'b', 'c', 'd', 'e', 'f'].some(k => r[k] === 'FAIL'));
 console.log(`\n${TAG}: ${rows.length} screen×layout rows, ${failing.length} failing`);
 if (!rows.length) { console.error('no case ran (ONLY filter matched nothing?) — refusing to pass'); process.exit(1); }
 process.exit(failing.length ? 1 : 0);

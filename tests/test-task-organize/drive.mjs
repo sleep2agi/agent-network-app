@@ -180,8 +180,10 @@ for (const [w, h] of [[1000, 700], [1200, 800], [1432, 831]]) {
   record(vp, 'cards: project chip exactly on the cards that have a project', { chipOk, some: chipCheck.some(c => c.chip) }, { cards: chipCheck.length, chips: chipCheck.filter(c => c.chip).length });
 
   // child card shows ↳ parent
-  const childLine = await cardByName(page, '扫码登录:').locator(tid('task-card-parent')).first().textContent().catch(() => '');
-  record(vp, 'child card shows 「↳ 母任务名」', { line: /^↳ 登录页支持扫码登录/.test(childLine || '') }, { line: childLine });
+  const childEl = cardByName(page, '扫码登录:').locator(tid('task-card-parent')).first();
+  const childLine = await childEl.textContent().catch(() => '');
+  const childBox = await childEl.boundingBox().catch(() => null);  // painted, not only in the DOM (0px-wide text keeps its textContent)
+  record(vp, 'child card shows 「↳ 母任务名」', { line: /^↳ 登录页支持扫码登录/.test(childLine || ''), painted: !!childBox && childBox.width >= 40 && childBox.height >= 1 }, { line: childLine, w: childBox && Math.round(childBox.width) });
 
   // detail order + dropdown geometry
   await cardByName(page, '整理项目的任务甲').click();

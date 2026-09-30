@@ -10,11 +10,12 @@
 //   list   : 每行标题文字的宽 ≥ 40px,且 ≥ 标题格宽的 30% 或整段标题的宽(短标题)
 //   board  : 看板卡片的标题文字宽 ≥ 40px
 //   detail : 点开详情,标题输入框的值 = 任务名、输入框宽 ≥ 120px
+//   every  : 整页没有「有字却画成 < 1px 宽 / 高」的元素(harness zeroSizeText)
 // 桌面 1320×754 / 1000×700 + 平板 1000×700,浅色 + 深色;另跑一轮「老版本存下来的字段配置」(title 拖过宽 + 老的列集合)。
 // Exit 1 when any check fails or a viewport could not be opened.
 import { mkdirSync } from 'node:fs';
 import { join } from 'node:path';
-import { serveExport, initScript, findChromium, ANDROID_UA } from '../test-layout-sweep/harness.mjs';
+import { serveExport, initScript, findChromium, ANDROID_UA, zeroSizeText } from '../test-layout-sweep/harness.mjs';
 
 const { chromium } = await import(process.env.PLAYWRIGHT_MODULE || 'playwright');
 const WEB = process.env.WEB_DIR;
@@ -103,7 +104,8 @@ for (const theme of ['light', 'dark']) {
       const ok = !!t && !!cell && t.w >= Math.min(40, t.natural - 0.5) && t.w >= Math.min(cell.w * 0.3, t.natural - 0.5) && (!NAMES[id] || t.text === NAMES[id]);
       if (!ok) narrow.push(`${id}:${r1(t?.w ?? -1)}/${r1(cell?.w ?? -1)}`);
     }
-    record(vp, 'list', { allTitlesPainted: narrow.length === 0 }, { narrow: narrow.join(' ') || '-' });
+    const zeroList = await zeroSizeText(page);
+    record(vp, 'list', { allTitlesPainted: narrow.length === 0, noZeroSizeText: zeroList.length === 0 }, { narrow: narrow.join(' ') || '-', zero: zeroList.slice(0, 3).join(' | ') || '-' });
     // board
     try {
       await page.locator(tid('tasks-view-board')).first().click({ timeout: 10000 });
@@ -111,7 +113,8 @@ for (const theme of ['light', 'dark']) {
       await page.waitForTimeout(400);
       await shot('board');
       const card = await textBox(page, `${tid('req-card-t1')} div[dir="auto"]`, NAMES.t1);
-      record(vp, 'board', { cardTitlePainted: !!card && card.w >= 40 }, { w: r1(card?.w ?? -1), text: card?.text.slice(0, 20) });
+      const zeroBoard = await zeroSizeText(page);
+      record(vp, 'board', { cardTitlePainted: !!card && card.w >= 40, noZeroSizeText: zeroBoard.length === 0 }, { w: r1(card?.w ?? -1), text: card?.text.slice(0, 20), zero: zeroBoard.slice(0, 3).join(' | ') || '-' });
     } catch (e) { record(vp, 'board', { opened: false }, { error: String(e).split('\n')[0] }); }
     // detail (from the list row)
     try {
@@ -123,7 +126,8 @@ for (const theme of ['light', 'dark']) {
       await shot('detail');
       const value = await input.inputValue();
       const w = (await input.boundingBox())?.width ?? -1;
-      record(vp, 'detail', { nameValue: value === NAMES.t1, inputWide: w >= 120 }, { w: r1(w), value: value.slice(0, 20) });
+      const zeroDetail = await zeroSizeText(page);
+      record(vp, 'detail', { nameValue: value === NAMES.t1, inputWide: w >= 120, noZeroSizeText: zeroDetail.length === 0 }, { w: r1(w), value: value.slice(0, 20), zero: zeroDetail.slice(0, 3).join(' | ') || '-' });
     } catch (e) { record(vp, 'detail', { opened: false }, { error: String(e).split('\n')[0] }); }
     await ctx.close();
   }
