@@ -60,6 +60,7 @@ import type { GestureResponderEvent, NativeSyntheticEvent, NativeScrollEvent } f
 import { usePoll } from './usePoll';
 import { onConversationReply } from './reply-wake';
 import { fetchAuthMe } from './user-admin-api';
+import { recallConversation, rememberConversation } from './swr-cache';
 import { chatSearchState, isHighlighted, isStaleSearch, matchCountLabel, searchItems, shouldLoadOlderForSearch, stepHit, type SearchHit } from './chat-search';
 import { retryUnreadPersistFromPoll } from './conversation-unread-persist';
 import { conversationOpened } from './conversation-flags';
@@ -462,6 +463,8 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
           conversations.put(token.key, merged);
           return merged;
         });
+        // 磁盘上的最近会话(swr-cache.ts):只存 hub 行(本地回显 / 未送达 / 附件预览不进),下次冷启动先画它。
+        rememberConversation(cfg.profileId, token.key, mergeMessagesNewestFirst([], [...fetched, ...proactive]) as unknown as Record<string, unknown>[]);
         setConversationReady(true);
       } catch {
         /* poll retries — the conversation keeps whatever it already had */
@@ -506,6 +509,14 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
       setMessages(restoredNewestFirst);
       setLoaded(false);
       setConversationReady(false);
+      // Cold start: paint this conversation's last-known hub rows from disk (swr-cache.ts) while
+      // the live read is in flight. Only if the live read has not landed yet; not "ready" —
+      // unread acks and focus-jumps wait for live data, a disk copy can be days old.
+      void recallConversation<ChatItem>(cfg.profileId, conversationKeyFor).then(cached => {
+        if (!cached || !requestGate.isCurrent(token) || !mountedRef.current || conversations.peek(conversationKeyFor)) return;
+        setMessages(prev => mergeMessagesNewestFirst(prev, cached));
+        setLoaded(true);
+      });
     }
     setHasOlder(true);
     return () => {
