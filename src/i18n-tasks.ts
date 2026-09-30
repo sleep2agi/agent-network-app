@@ -247,6 +247,10 @@ export const taskCopy = [
 export const taskTranslations = Object.fromEntries(taskCopy.map((pair,i)=>[`tasks.copy.${i}`, pair]));
 registerTranslations(taskTranslations);
 registerTranslations({
+ // 任务的人员权限(RFC-038 §9):只读的卡。
+ 'tasks.readOnly': ['只读', 'Read-only'],
+ 'tasks.readOnlyBlocked': ['「{name}」是只读的：你没有编辑这张任务的权限', '“{name}” is read-only: you cannot edit this task'],
+ 'tasks.readOnlyBanner': ['只读 · 你可以查看这张任务，但没有编辑权限', 'Read-only · you can view this task but not edit it'],
  'tasks.unassigned': ['未分配', 'Unassigned'],
  'tasks.today': ['今天', 'Today'], 'tasks.allDay': ['全天', 'All day'],
  'tasks.unknownMember': ['未知成员（{id}）', 'Unknown member ({id})'],

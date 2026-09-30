@@ -18,6 +18,7 @@ import './i18n-users';
 import { SettingsButton, SettingsChoiceRow, SettingsGroup, SettingsRow, SettingsSwitchRow, SettingsTextField, SettingsTriStateRow } from './settings-kit';
 import { useModalSafePadding } from './safe-area-runtime';
 import DialogFrame, { useDialogReveal } from './DialogFrame';
+import TaskAccessSection, { useTaskAccessState } from './TaskAccessSection';
 import {
   ASSIGNABLE_ROLES, aliasOnlyGrants, canAddAdminsIn, canManageUsers, manageableNetworks, currentNetworkRow, filterNetworkChoices, filterPickable, grantsEditable, grantsPayload,
   groupAgents, initialAccessMode, memberAccessSummary, selectAgents, selectionState, toggleAgents, memberActions, memberSavePlan, prefillOnRestrict, selectionFromGrants, setCanMessage, showsCanMessage, toggleAgent, validateNewUser,
@@ -487,10 +488,14 @@ function useMemberEditor(cfg: HubConfig, me: AuthMe | null, networkId: string, m
   };
   const plan = memberSavePlan({ role: member.role, nextRole: role, mode: mode0, nextMode: mode, before, after: selection, ...(groupsSupported ? { beforeGroups: groupsBefore, afterGroups: groupSel } : {}) });
   const accessEditable = acts.editAccess && grantsEditable({ role });
+  // 任务权限(RFC-038 §9):Hub 没有 task-grants 时 tasks.supported=false,区块不画、不发。
+  const tasks = useTaskAccessState(cfg, networkId, member.user_id, role, needGrants);
+  const tasksDirty = accessEditable && tasks.supported && tasks.changed;
   const save = () => {
     setBusy(true); setError('');
     void (async () => {
       if (plan.role) await updateMemberRole(cfg, networkId, member.user_id, role);
+      if (tasksDirty) await tasks.save();
       if (plan.grants) {
         await saveAgentGrants(cfg, networkId, member.user_id, {
           ...grantsPayload(selection, aliasOnlyGrants(original), { mode, role }),
@@ -513,7 +518,8 @@ function useMemberEditor(cfg: HubConfig, me: AuthMe | null, networkId: string, m
   return {
     acts, name, agents, picker, selection, setSelection, mode, setMode, role, setRole,
     agentGroups: groupsSupported ? agentGroups! : [], groupSel, setGroupSel,
-    busy, error, confirmRemove, setConfirmRemove, accessEditable, changed: plan.role || plan.grants, save, remove,
+    tasks,
+    busy, error, confirmRemove, setConfirmRemove, accessEditable, changed: plan.role || plan.grants || tasksDirty, save, remove,
   };
 }
 
@@ -561,6 +567,9 @@ function MemberDialog({ cfg, me, networkId, member, agentGroups, onClose, onDone
             ))}
           </View>
         </View>
+      ) : null}
+      {ed.accessEditable && ed.tasks.supported ? (
+        <TaskAccessSection variant="desktop" mode={ed.tasks.mode} onModeChange={ed.tasks.setMode} projects={ed.tasks.projects} selection={ed.tasks.selection} onSelectionChange={ed.tasks.setSelection} role={ed.role} />
       ) : null}
       {ed.accessEditable ? (
         <>
@@ -681,6 +690,9 @@ function MemberPage({ cfg, me, networkId, member, agentGroups, onDone }: { cfg: 
             />
           ))}
         </SettingsGroup>
+      ) : null}
+      {ed.accessEditable && ed.tasks.supported ? (
+        <TaskAccessSection variant="phone" mode={ed.tasks.mode} onModeChange={ed.tasks.setMode} projects={ed.tasks.projects} selection={ed.tasks.selection} onSelectionChange={ed.tasks.setSelection} role={ed.role} />
       ) : null}
       {ed.error ? <SettingsGroup footer={ed.error} footerTone="danger" testID="grants-error" /> : null}
       <SettingsButton label={tr('users.save')} onPress={ed.save} disabled={!ed.changed} busy={ed.busy && !ed.confirmRemove} testID="grants-confirm" />

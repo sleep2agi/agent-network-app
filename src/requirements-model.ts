@@ -53,6 +53,8 @@ export interface Requirement {
   updatedBy?: RequirementPersonRef | null;
   /** 已归档(只出现在搜索「包含已归档」读回来的行里;平常的列表 Hub 不给归档的卡)。 */
   archived?: boolean;
+  /** 这张卡对我只读(hub 对「仅相关任务」的成员给 viewer_can.edit=false,RFC-038 §9)。undefined = 能改。 */
+  readOnly?: boolean;
 }
 
 /**

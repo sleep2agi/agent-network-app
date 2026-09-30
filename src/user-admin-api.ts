@@ -101,3 +101,12 @@ export const saveAgentGroupMembers = (cfg: HubConfig, networkId: string, groupId
 
 export const deleteAgentGroup = (cfg: HubConfig, networkId: string, groupId: string) =>
   call<{ affected_user_ids: string[] }>(cfg.serverUrl, cfg.token, `${groups(networkId)}/${net(groupId)}`, { method: 'DELETE' });
+
+// —— 任务(需求卡)的人员权限(hub RFC-038 §9,agent-network#2163)。旧 Hub 没有这条路由:404 ⇒ null,调用方整块隐藏。 ——
+export type TaskGrantsResponse = { task_access: 'all' | 'scoped'; restricted?: boolean; project_grants: Array<{ project_id: string; can_edit: boolean }> };
+export const fetchTaskGrants = (cfg: HubConfig, networkId: string, userId: string): Promise<TaskGrantsResponse | null> =>
+  call<TaskGrantsResponse>(cfg.serverUrl, cfg.token, `/api/networks/${net(networkId)}/members/${net(userId)}/task-grants`)
+    .catch(e => { if (e instanceof HubRequestError && (e.status === 404 || e.status === 405) && e.message !== 'member_not_found') return null; throw e; });
+
+export const saveTaskGrants = (cfg: HubConfig, networkId: string, userId: string, body: { task_access: 'all' | 'scoped'; project_grants: Array<{ project_id: string; can_edit: boolean }> }) =>
+  call<TaskGrantsResponse>(cfg.serverUrl, cfg.token, `/api/networks/${net(networkId)}/members/${net(userId)}/task-grants`, { method: 'PUT', body });
