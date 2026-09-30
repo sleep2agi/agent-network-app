@@ -6,18 +6,21 @@
 //   node tests/test-shortcuts-settings/drive.mjs
 //
 // 1200×800,桌面 UA(非安卓)+ Tauri 桩 = 桌面工作区(wide-layout.ts)。Linux 上键帽显示 Ctrl。
+// 设置是单独的 Tauri 窗口(src/desktop-settings-window.ts):点「设置」/ Ctrl+, 先断言请求了 'settings' 窗口,再在
+// harness openStubWindow 打开的第二个页面(同源 → 同一份 localStorage)里做设置页的检查;快捷键本身在主窗口按。
 // 检查:
 //   links   语音输入页「火山引擎控制台」点下去 → 走 plugin:opener|open_url(url 正确),且**没有**走
 //           window.open(Tauri WebView 里那条路什么都不发生 —— 0.2.123 的 bug);「高级 / 旧版控制台 ›」能展开
 //   layout  快捷键页:所有行的标签左边缘相等(±1px);键帽 / 分段控件的垂直中心与行中心差 ≤ 1px
 //   capture 点行 → 「按下新组合…」→ Ctrl+Shift+P 保存;冲突 / 保留 / 无修饰键 有提示;Esc 取消;恢复默认
-//   run     Ctrl+2 切到 Tasks、Ctrl+, 回设置、Ctrl+K 聚焦 agent 搜索框;改绑后旧组合失效、新组合生效
+//   sync    设置窗改绑后,主窗口不用重开就按新组合(跨窗口同步)
+//   run     Ctrl+2 切到 Tasks、Ctrl+, 请求设置窗、Ctrl+K 聚焦 agent 搜索框;改绑后旧组合失效、新组合生效
 //   send    发送键改成 Ctrl+Enter:Enter 换行不发送,Ctrl+Enter 发送;提示文案跟着变
 //   attach  桌面 ＋ = 系统文件选择器(多选、*/*、不出面板);拖进聊天区 / 粘贴图片进草稿;拖到区外不接
 //   phone   390×844 安卓 UA:＋ 仍是微信式 相册 / 文件 面板
 // 任何一条没跑到 = FAIL(不是 skip)。
 import { mkdirSync } from 'node:fs';
-import { serveExport, initScript, findChromium, ANDROID_UA, paintedText } from '../test-layout-sweep/harness.mjs';
+import { serveExport, initScript, findChromium, ANDROID_UA, paintedText, openStubWindow } from '../test-layout-sweep/harness.mjs';
 
 // 1×1 透明 PNG
 const PNG = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==', 'base64');
@@ -50,13 +53,14 @@ const spyScript = () => {
 const web = await serveExport(WEB);
 const browser = await chromium.launch({ executablePath: findChromium() });
 const ctx = await browser.newContext({ viewport: { width: 1200, height: 800 }, deviceScaleFactor: 1 });
-const page = await ctx.newPage();
+const main = await ctx.newPage();
+let page = main; // 设置部分在设置窗里跑(openSettings 换过去),快捷键 / 聊天部分回到主窗口
 const errors = [];
-page.on('pageerror', e => errors.push(String(e)));
-await page.addInitScript(initScript, { theme: 'light' });
-await page.addInitScript(spyScript);
-await page.goto(`${web.url}?safeAreaSim=0,0,0,0`);
-await page.locator('[data-testid="desktop-rail"]').waitFor({ timeout: 20000 });
+main.on('pageerror', e => errors.push(String(e)));
+const scripts = [[initScript, { theme: 'light' }], [spyScript, undefined]];
+for (const [fn, arg] of scripts) await main.addInitScript(fn, arg);
+await main.goto(`${web.url}?safeAreaSim=0,0,0,0`);
+await main.locator('[data-testid="desktop-rail"]').waitFor({ timeout: 20000 });
 
 const bbox = async (sel) => page.locator(sel).first().boundingBox();
 const seen = (loc) => loc.waitFor({ timeout: 8000 }).then(() => true, () => false);
@@ -84,12 +88,43 @@ const painted = async (id) => {
 };
 const shown = (p) => !!p?.painted && p.w >= 8;
 const pd = (p) => p ? `painted ${Math.round(p.w)}×${Math.round(p.h)}${p.painted ? '' : ' UNPAINTED'}` : 'not rendered';
+// 设置窗:真动作(点「设置」/ Ctrl+,)做完后调 —— 断言主窗口请求了 'settings' 窗口,打开它,page 换成它。
+const settingsWindow = async (via) => {
+  const req = await main.waitForFunction(() => (window.__openedWindows || []).find(w => w.label === 'settings') || null, null, { timeout: 5000 }).then(h => h.jsonValue(), () => null);
+  ck(`${via} → 请求打开「设置」窗口`, !!req && new URL(req.url, main.url()).searchParams.get('settings') === '1', JSON.stringify(req));
+  const sp = await openStubWindow(main, 'settings', scripts);
+  if (!sp) throw new Error(`${via}: no settings window was requested`);
+  sp.on('pageerror', e => errors.push(`[settings] ${String(e)}`));
+  await sp.locator('[data-testid="dedicated-settings-window"]').waitFor({ timeout: 20000 });
+  page = sp;
+  return sp;
+};
+// 用户关掉设置窗:关页面,并从桩的窗口表里去掉(真窗口关了 getByLabel 就找不到,下一次 Ctrl+, 会重新建窗)。page 回主窗口。
+const closeSettingsWindow = async () => {
+  if (page !== main) await page.close();
+  page = main;
+  await main.evaluate(() => { window.__openedWindows = (window.__openedWindows || []).filter(w => w.label !== 'settings'); });
+};
+// 主窗口从存储重读快捷键:shortcuts-store.ts 把偏好缓存在本窗口内存里,既不听 storage 事件也不听 Tauri 事件,
+// 所以设置窗里改的组合主窗口要重开才生效(sync 检查量的就是这个)。重开后再接着测新组合本身的行为。
+const reloadMain = async () => {
+  await main.reload();
+  await main.locator('[data-testid="desktop-rail"]').waitFor({ timeout: 20000 });
+};
 const openSettings = async (label) => {
-  await page.getByRole('tab', { name: '设置', exact: true }).click();
+  await main.getByRole('tab', { name: '设置', exact: true }).click();
+  await settingsWindow('links: 点「设置」');
   await page.getByRole('button', { name: `设置分类 ${label}` }).click();
 };
 
 try {
+  // 主窗口先按一次默认 Ctrl+K:真用户的主窗口早就处理过按键,快捷键已读进本窗口内存(shortcuts-store.ts 懒加载,
+  // 第一次按键才读存储)。不先按,sync 那条会因为「主窗口还没读过」而碰巧绿。
+  await main.keyboard.press('Control+KeyK');
+  await main.waitForTimeout(200);
+  ck('run: 改绑前默认 Ctrl+K 聚焦 agent 搜索框', await main.evaluate(() => document.activeElement?.getAttribute('data-testid')) === 'agents-search');
+  await main.locator('body').click({ position: { x: 700, y: 760 } });
+
   // ── links ──────────────────────────────────────────────────────────────────
   await openSettings('语音输入');
   const link = page.locator('[data-testid="voice-console-link"]');
@@ -123,7 +158,7 @@ try {
   }
   console.log('\nid                    rowTop  rowH  labelX  rowMid  labelMid  chipsMid  Δchips  chipsRight');
   for (const r of rows) console.log(`${r.id.padEnd(20)} ${r.rowTop.toFixed(1).padStart(7)} ${r.rowH.toFixed(1).padStart(5)} ${r.labelX.toFixed(1).padStart(7)} ${r.rowMid.toFixed(1).padStart(7)} ${r.labelMid.toFixed(1).padStart(9)} ${r.rightMid.toFixed(1).padStart(9)} ${(r.rightMid - r.rowMid).toFixed(2).padStart(7)} ${r.rightEnd.toFixed(1).padStart(10)}`);
-  ck(`layout: ${rows.length} 行(导航 7 + 会话 4 + 输入 5)`, rows.length === 16, String(rows.length));
+  ck(`layout: ${rows.length} 行(导航 7 + 会话 5 + 输入 5)`, rows.length === 17, String(rows.length)); // 会话组第 5 行 = logsFind(#493 运行日志查找)
   const xs = rows.map(r => r.labelX);
   ck('layout: 所有标签左边缘相等 ±1px', Math.max(...xs) - Math.min(...xs) <= 1, `${Math.min(...xs)}..${Math.max(...xs)}`);
   const worst = rows.reduce((m, r) => Math.max(m, Math.abs(r.rightMid - r.rowMid)), 0);
@@ -151,7 +186,7 @@ try {
   const conflictP = await painted('shortcut-warning-nav.search');
   ck('capture: Ctrl+, → 与「打开设置」冲突', conflictText.includes('打开设置') && shown(conflictP), `${conflictText} ${pd(conflictP)}`);
   await shot('shortcuts-conflict');
-  ck('capture: 录入中按 Ctrl+, 没有跳走(全局快捷键暂停)', await page.locator('[data-testid="shortcuts-settings"]').isVisible());
+  ck('capture: 录入中按 Ctrl+, 没有跳走(全局快捷键暂停)', await page.locator('[data-testid="shortcuts-settings"]').isVisible() && (await page.evaluate(() => (window.__openedWindows || []).length)) === 0);
   await page.keyboard.press('Control+Shift+KeyP');
   const saved = (await page.locator('[data-testid="shortcut-chips-nav.search"]').innerText()).replace(/\s+/g, ' ').trim();
   const savedP = await painted('shortcut-chips-nav.search');
@@ -165,17 +200,29 @@ try {
   const escP = await painted('shortcut-chips-nav.settings');
   ck('capture: Esc 取消,原组合不变', !(await page.locator('[data-testid="shortcut-capturing-nav.settings"]').count()) && (await page.locator('[data-testid="shortcut-chips-nav.settings"]').innerText()).replace(/\s+/g, ' ').trim() === 'Ctrl ,' && shown(escP), pd(escP));
 
+  // ── sync:设置窗里改的组合,主窗口不重开就生效 ──────────────────────────────────
+  await closeSettingsWindow();
+  await page.locator('body').click({ position: { x: 700, y: 760 } });
+  await page.keyboard.press('Control+Shift+KeyP');
+  await page.waitForTimeout(300);
+  {
+    const focused = await page.evaluate(() => document.activeElement?.getAttribute('data-testid') ?? document.activeElement?.tagName);
+    const stored = await page.evaluate(() => localStorage.getItem('keyboard_shortcuts_v1'));
+    ck('sync: 设置窗改成 Ctrl+Shift+P 后,主窗口不重开就认 Ctrl+Shift+P', focused === 'agents-search', `main localStorage=${stored} focused=${focused}`);
+  }
+  await reloadMain();
+
   // ── run ────────────────────────────────────────────────────────────────────
   await page.locator('body').click({ position: { x: 700, y: 760 } });
   await page.keyboard.press('Control+KeyK');
   await page.waitForTimeout(200);
-  ck('run: 改绑后旧的 Ctrl+K 不再触发', await page.locator('[data-testid="shortcuts-settings"]').isVisible() && await page.evaluate(() => document.activeElement?.getAttribute('data-testid')) !== 'agents-search');
+  ck('run: 改绑后旧的 Ctrl+K 不再触发', await page.evaluate(() => document.activeElement?.getAttribute('data-testid')) !== 'agents-search');
   await page.keyboard.press('Control+Shift+KeyP');
   await page.waitForTimeout(300);
   ck('run: 新组合 Ctrl+Shift+P 聚焦 agent 搜索框', await page.evaluate(() => document.activeElement?.getAttribute('data-testid')) === 'agents-search');
   await page.keyboard.press('Control+Digit2');
   await page.waitForTimeout(300);
-  ck('run: Ctrl+2 → Tasks(任务列表出现)', await seen(page.getByText('示例任务二', { exact: true }).first()));
+  ck('run: Ctrl+2 → Tasks(任务看板出现)', await seen(page.locator('[data-testid="requirement-board"]'))); // 任务页现在是需求看板;hub 派发记录(示例任务二)收在左栏「派发记录」里
   await page.keyboard.press('Control+Digit5');
   await page.waitForTimeout(300);
   ck('run: Ctrl+5 → 服务器设置', await seen(page.locator('[data-testid="server-overview"]')));
@@ -188,12 +235,14 @@ try {
     ck('run: 在服务器页按搜索 → 先切回 Agents 再聚焦搜索框', back && serverGone && focused === 'agents-search', `back=${back} serverGone=${serverGone} focused=${focused}`);
   }
   await page.keyboard.press('Control+Comma');
-  await page.waitForTimeout(300);
+  await settingsWindow('run: Ctrl+,');
   ck('run: Ctrl+, → 设置', await seen(page.locator('[data-testid="settings-sidebar"]')));
   await page.getByRole('button', { name: '设置分类 快捷键' }).click();
   await page.locator('[data-testid="shortcut-reset-nav.search"]').click();
   const resetP = await painted('shortcut-chips-nav.search');
   ck('run: 单行恢复默认 → Ctrl K', (await page.locator('[data-testid="shortcut-chips-nav.search"]').innerText()).replace(/\s+/g, ' ').trim() === 'Ctrl K' && shown(resetP), pd(resetP));
+  await closeSettingsWindow();
+  await reloadMain(); // 同 sync:主窗口不会自己重读
   await page.locator('body').click({ position: { x: 700, y: 760 } });
   await page.keyboard.press('Control+KeyK');
   await page.waitForTimeout(300);
@@ -201,18 +250,21 @@ try {
 
   // ── send ───────────────────────────────────────────────────────────────────
   await page.keyboard.press('Control+Comma');
+  await settingsWindow('send: Ctrl+,');
   await page.getByRole('button', { name: '设置分类 快捷键' }).click();
   await page.locator('[data-testid="shortcut-send-modEnter"]').click();
   const newline = (await page.locator('[data-testid="shortcut-chips-newline"]').innerText()).replace(/\s+/g, ' ').trim();
   const newlineP = await painted('shortcut-chips-newline');
   ck('send: 改成 Ctrl+Enter 后「换行」行显示 Enter', newline === 'Enter' && shown(newlineP), `${newline} ${pd(newlineP)}`);
   await shot('shortcuts-send-mod-enter');
+  await closeSettingsWindow();
+  await reloadMain(); // 同 sync:主窗口不会自己重读
   await page.evaluate(() => window.__anetLayoutSweep.setScreen({ name: 'chat', alias: '示例-A' }));
   const hint = page.locator('[data-testid="composer-shortcut-hint"]');
   await hint.waitFor({ timeout: 10000 });
   const hintP = await painted('composer-shortcut-hint');
   ck('send: 输入框提示跟着变', (await hint.innerText()) === 'Ctrl+Enter 发送 · Enter 换行' && shown(hintP), `${await hint.innerText()} ${pd(hintP)}`);
-  const box = page.locator('textarea[placeholder^="Message 示例-A"]').first();
+  const box = page.locator('textarea[placeholder*="示例-A"]').first();
   await box.click();
   await box.type('第一行');
   await page.keyboard.press('Enter');
@@ -225,6 +277,7 @@ try {
   ck('send: Ctrl+Enter 发送(输入框清空)', v2 === '', JSON.stringify(v2));
   await shot('chat-after-mod-enter-send');
   await page.keyboard.press('Control+Comma');
+  await settingsWindow('send: 发送后 Ctrl+,');
   await page.getByRole('button', { name: '设置分类 快捷键' }).click();
   await page.locator('[data-testid="shortcuts-reset-all"]').click();
   {
@@ -233,6 +286,7 @@ try {
     const newlineAfterP = await painted('shortcut-chips-newline');
     ck('send: 全部恢复默认 → 发送键回到 Enter(换行回到 Shift+Enter)', stored === '{"overrides":{},"sendKey":"enter"}' && newlineAfter === 'Shift Enter' && shown(newlineAfterP), `${stored} / ${newlineAfter} ${pd(newlineAfterP)}`);
   }
+  await closeSettingsWindow();
 
   // ── attach(桌面)──────────────────────────────────────────────────────────
   await page.evaluate(() => window.__anetLayoutSweep.setScreen({ name: 'chat', alias: '示例-B' }));
@@ -276,7 +330,7 @@ try {
   await page.waitForTimeout(200);
   ck('attach: 拖到聊天区外(导航栏)不接', !outside.prevented && await draft() === '2img+1file', await draft());
   // 粘贴:Ctrl/⌘+V 的 paste 事件带图片
-  await page.locator('textarea[placeholder^="Message 示例-B"]').first().click();
+  await page.locator('textarea[placeholder*="示例-B"]').first().click();
   const pastePrevented = await page.evaluate(b64 => {
     const bytes = Uint8Array.from(atob(b64), c => c.charCodeAt(0));
     const dt = new DataTransfer();

@@ -71,7 +71,7 @@ const pd = (p) => p ? `painted ${Math.round(p.w)}×${Math.round(p.h)}${p.painted
 try {
   await page.locator('[data-testid="desktop-rail"]').waitFor({ timeout: 20000 });
   await page.evaluate(() => window.__anetLayoutSweep.setScreen({ name: 'chat', alias: '示例-A' }));
-  const input = page.locator('textarea[placeholder^="Message 示例-A"]').first();
+  const input = page.locator('textarea[placeholder*="示例-A"]').first();
   await input.waitFor({ timeout: 10000 });
   const mic = page.locator('[data-testid="voice-mic"]');
   await mic.waitFor({ timeout: 10000 });

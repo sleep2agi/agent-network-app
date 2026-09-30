@@ -159,7 +159,8 @@ for (const L of LAYOUTS) {
     }
     const ids = pm.rows.map(r => r.id);
     const expected = ['chat-info-row-node', 'chat-info-row-search', 'chat-info-row-pin', 'chat-info-row-mute', ...(L.name === 'desktop' ? ['chat-info-row-windowPin'] : []),
-      'chat-info-row-section-model', 'chat-info-row-section-rules', 'chat-info-row-section-skills', 'chat-info-row-section-files', 'chat-info-row-section-tasks', 'chat-info-row-section-schedules'];
+      'chat-info-row-section-model', 'chat-info-row-section-rules', 'chat-info-row-section-skills', 'chat-info-row-section-files', 'chat-info-row-section-tasks', 'chat-info-row-section-schedules',
+      'chat-info-row-section-logs'];  // 运行日志 (#493)
     check(tag, 'rows in order', JSON.stringify(ids) === JSON.stringify(expected), ids.join(','));
     const heights = pm.rows.map(r => r.box.h);
     check(tag, 'every row ≥ 48px', heights.every(h => h >= 48), heights.map(r1).join(','));

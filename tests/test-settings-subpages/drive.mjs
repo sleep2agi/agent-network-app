@@ -13,10 +13,10 @@
 //   height   每行 ≥ 48
 //   tabs     子页 / 三级页上没有底部 tab 栏;列表页上有
 // 另:通知子页再用 ?fixture=notify-settings&platform=android 按安卓渲染一遍(后台保持连接等安卓专属行)。
-// 1200×800 桌面(非安卓 UA)只截图,供与改动前的导出逐像素比对(DESKTOP_BASELINE=<旧截图目录>)。
+// 1200×800 桌面(非安卓 UA):点「设置」要开出设置窗口(960×720),逐个分类截图,供与改动前的导出逐像素比对(DESKTOP_BASELINE=<旧截图目录>)。
 // 任何一页没打开 = FAIL(不是 skip)。
 import { mkdirSync, readFileSync, existsSync } from 'node:fs';
-import { serveExport, initScript, findChromium, ANDROID_UA, paintedText } from '../test-layout-sweep/harness.mjs';
+import { serveExport, initScript, findChromium, ANDROID_UA, paintedText, openStubWindow } from '../test-layout-sweep/harness.mjs';
 
 const { chromium } = await import(process.env.PLAYWRIGHT_MODULE || 'playwright');
 const WEB = process.env.WEB_DIR;
@@ -148,6 +148,19 @@ if (!DESKTOP_ONLY) for (const theme of ['light', 'dark']) {
   const keys = await page.locator('[data-testid^="settings-row-"]').evaluateAll(els => els.map(e => e.getAttribute('data-testid')).filter(id => !/-(label|chevron)-/.test(id)).map(id => id.replace('settings-row-', '')));
   ck(`${theme} list: 子页清单`, keys.length >= 6, keys.join(','));
   for (const key of keys) {
+    // 服务器 is not a settings subpage: on the phone its row opens the full 服务器 page (#501), whose ‹ goes back to 设置.
+    if (key === 'server') {
+      await run(key, async () => {
+        await page.locator('[data-testid="settings-row-server"]').click();
+        await page.locator('[data-testid="server-header"]').waitFor({ timeout: 8000 });
+        const title = await paintedText(page, '[data-testid="server-header"] *', '服务器');
+        ck(`${theme} server: 打开 服务器 页`, !!title?.painted && title.w >= 8, fmtPaint(title));
+        await page.locator('[data-testid="server-header"] [aria-label="返回设置"]').click();
+        await page.locator('[data-testid="settings-phone-list"]').waitFor({ timeout: 5000 });
+        ck(`${theme} server: ‹ 回到设置`, true);
+      });
+      continue;
+    }
     await run(key, async () => {
       await open(key);
       await checkPage(page, key, theme);
@@ -219,12 +232,19 @@ if (!DESKTOP_ONLY) for (const theme of ['light', 'dark']) {
   await page.goto(`${web.url}?safeAreaSim=0,0,0,0`);
   await page.locator('[data-testid="desktop-rail"]').waitFor({ timeout: 20000 });
   await page.getByRole('tab', { name: '设置', exact: true }).click();
-  for (const label of ['账号', '本地 Hub', '外观', '通知', '语音输入', '快捷键', '关于']) {
-    try {
-      await page.getByRole('button', { name: `设置分类 ${label}` }).click();
-      await page.waitForTimeout(600);
-      if (OUT) await page.screenshot({ path: `${OUT}/desktop-${label}.png` });
-    } catch (e) { ck(`desktop ${label}: 打开`, false, String(e.message || e).split('\n')[0]); }
+  // 桌面的设置是单独的窗口(desktop-settings-window.ts):桩记下开窗请求,这里把那个 URL 作为同一 context 的第二页打开。
+  const win = await openStubWindow(page, 'settings', [[initScript, { theme: 'light' }], [extraStub]]);
+  ck('desktop: 点「设置」开的是设置窗口', !!win);
+  if (win) {
+    await win.setViewportSize({ width: 960, height: 720 });  // the window's own size (openSettingsWindow)
+    await win.locator('[data-testid="dedicated-settings-window"]').waitFor({ timeout: 20000 }).catch(() => {});
+    for (const label of ['账号', '本地 Hub', '外观', '通知', '语音输入', '快捷键', '关于']) {
+      try {
+        await win.getByRole('button', { name: `设置分类 ${label}` }).click();
+        await win.waitForTimeout(600);
+        if (OUT) await win.screenshot({ path: `${OUT}/desktop-${label}.png` });
+      } catch (e) { ck(`desktop ${label}: 打开`, false, String(e.message || e).split('\n')[0]); }
+    }
   }
   await ctx.close();
 }

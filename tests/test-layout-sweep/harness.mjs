@@ -5,6 +5,11 @@ import { createServer } from 'node:http';
 import { readFileSync, existsSync, statSync } from 'node:fs';
 import { join, extname } from 'node:path';
 
+// The drives assert on the Chinese UI. Headless Chromium takes its UI language from LANG, so a shell with LANG=C / en_US
+// renders English and every Chinese text lookup times out. Default it here (before any drive launches Chromium, which
+// inherits process.env); ANET_TEST_LANG overrides, e.g. ANET_TEST_LANG=en_US.UTF-8 for an English run.
+process.env.LANG = process.env.ANET_TEST_LANG || 'zh_CN.UTF-8';
+
 const TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.png': 'image/png', '.ttf': 'font/ttf', '.json': 'application/json', '.ico': 'image/x-icon', '.svg': 'image/svg+xml' };
 
 export async function serveExport(dir) {
@@ -147,6 +152,9 @@ export const initScript = ({ theme }) => {
     return { ok: true };
   };
   let rid = 0; const reqs = new Map(); const bodies = new Map();
+  // @tauri-apps/api's unlisten calls __TAURI_EVENT_PLUGIN_INTERNALS__.unregisterListener, which the real shell injects.
+  // Without it, every listener torn down on unmount (e.g. leaving 任务) threw a TypeError that drives counted as a page error.
+  window.__TAURI_EVENT_PLUGIN_INTERNALS__ ||= { unregisterListener: () => {} };
   window.__TAURI_INTERNALS__ = {
     metadata: { currentWindow: { label: 'main' }, currentWebview: { windowLabel: 'main', label: 'main' } },
     transformCallback: (cb) => { const id = Math.floor(Math.random() * 1e9); window[`_${id}`] = cb; return id; },
@@ -171,11 +179,28 @@ export const initScript = ({ theme }) => {
           if (!b.sent) { b.sent = true; return [...b.buf, 0]; }
           return [1];
         }
+        // Desktop opens 设置 (and other windows) as separate Tauri windows (desktop-settings-window.ts). The stub has one
+        // page, so it records each request in window.__openedWindows — a drive opens that URL itself (openStubWindow).
+        case 'plugin:window|get_all_windows': return ['main', ...(window.__openedWindows || []).map(w => w.label)];
+        case 'plugin:webview|get_all_webviews': return [{ windowLabel: 'main', label: 'main' }, ...(window.__openedWindows || []).map(w => ({ windowLabel: w.label, label: w.label }))];
+        case 'plugin:webview|create_webview_window': (window.__openedWindows ||= []).push({ label: args.options.label, url: args.options.url }); return null;
         default: return null;
       }
     },
   };
 };
+
+// The window the app asked the stub to open (label, e.g. 'settings'), opened as a second page of the same browser
+// context — same origin, so localStorage is shared as between real windows of the app. `scripts` are the
+// [fn, arg] init scripts the drive gave its main page (initScript first). Returns the page, or null if none was asked for.
+export async function openStubWindow(page, label, scripts, { timeout = 5000 } = {}) {
+  const req = await page.waitForFunction((l) => (window.__openedWindows || []).filter(w => w.label === l).pop() || null, label, { timeout }).then(h => h.jsonValue()).catch(() => null);
+  if (!req) return null;
+  const win = await page.context().newPage();
+  for (const [fn, arg] of scripts) await win.addInitScript(fn, arg);
+  await win.goto(new URL(req.url, page.url()).href);
+  return win;
+}
 
 export function findChromium() {
   const base = `${process.env.HOME}/.cache/ms-playwright`;
