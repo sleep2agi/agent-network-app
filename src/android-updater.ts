@@ -5,8 +5,10 @@
  * 检查顺序(0.2.100 真机「检查更新失败：GitHub 限流」之后改的):
  *   1. 并行读镜像 desktop/latest/VERSION 与安卓通道 android/latest/VERSION(各 10 s,布局见 android-update-core.ts)。
  *      取较高的那个(同版本取 desktop);读不到/认不出的那个不参与。都不比当前新 → 已是最新,**不再问 GitHub**。
- *   2. 更新 → desktop 通道:desktop/<ver>/SHA256SUMS(必需)+ latest.json(本版说明,可缺)+ HEAD APK(大小,可缺);
- *      安卓通道:android/agent-network-<ver>.apk.sha256(必需,缺了报错不装)+ desktop/<ver>/latest.json(可缺)+ HEAD APK。
+ *   2. 更新 → desktop 通道:desktop/<ver>/SHA256SUMS(必需)+ HEAD APK(大小,可缺);
+ *      安卓通道:android/agent-network-<ver>.apk.sha256(必需,缺了报错不装)+ HEAD APK。
+ *      本版说明(可缺,永远不挡更新):两个通道都并行读 android/<ver>/notes.md 与 desktop/<ver>/latest.json,
+ *      按通道定先后;都没有才按 tag 问一次 GitHub release 正文;还没有 → 空,更新页给「查看更新说明」链接。
  *   3. 只有两种情况才打 GitHub REST(未登录每 IP 每小时 60 次):镜像本身失败(网络/超时/非 2xx/格式不对),
  *      或镜像已推进到新版本但那一版的安卓包还没同步(SHA256SUMS 里没有 APK)。
  *   两个 VERSION 都读不到/认不出也算「镜像本身失败」。
@@ -23,11 +25,11 @@ import {
   ANDROID_CHANNEL_VERSION_URL,
   ANDROID_LATEST_RELEASE_API,
   APK_MIME,
-  DEFAULT_RELEASE_NOTES,
   MIRROR_LATEST_APK_URL,
   MIRROR_VERSION_URL,
   UNKNOWN_SOURCES_SETTINGS_DATA,
   androidChannelApkUrl,
+  androidChannelNotesUrl,
   androidChannelShaUrl,
   apkCacheFileName,
   compareVersions,
@@ -37,6 +39,7 @@ import {
   evaluateAndroidRelease,
   evaluateMirror,
   githubRateLimit,
+  githubReleaseByTagApi,
   mirrorApkUrl,
   mirrorManifestUrl,
   mirrorSumsUrl,
@@ -49,6 +52,7 @@ import {
   type ApkAsset,
   type RouteAttempt,
 } from './android-update-core';
+import { notesCoverVersion } from './release-notes';
 import { sha256Chunked } from './sha256';
 import { apkUrlFor, apkUrlForAsset, createRoutePrefsStore, memoryRouteStorage, routeOrder, type RoutePrefsStore, type UpdateRoute } from './update-route';
 import { routePrefs } from './update-route-prefs';
@@ -212,6 +216,43 @@ async function checkMirror(fetchImpl: typeof fetch, currentVersion: string): Pro
   return checkDesktopChannel(fetchImpl, desktop!, currentVersion);
 }
 
+/** 镜像上 android/<ver>/notes.md:只在它确实含这一版的段落时才用。 */
+function androidNotes(fetchImpl: typeof fetch, version: string): Promise<string> {
+  return mirrorText(fetchImpl, androidChannelNotesUrl(version), timeouts.extras)
+    .then(text => (notesCoverVersion(text, version) ? text.trim() : ''))
+    .catch(() => '');
+}
+
+/** 镜像上 desktop/<ver>/latest.json 的 notes:同上。 */
+function desktopNotes(fetchImpl: typeof fetch, version: string): Promise<string> {
+  return mirrorText(fetchImpl, mirrorManifestUrl(version), timeouts.extras)
+    .then(text => notesFromMirrorManifest(JSON.parse(text), version))
+    .then(notes => (notesCoverVersion(notes, version) ? notes : ''))
+    .catch(() => '');
+}
+
+/** 两个镜像来源,按通道定先后(见 android-update-core.ts 文件头);并行取,按顺序挑第一个有这一版说明的。 */
+async function mirrorNotes(fetchImpl: typeof fetch, version: string, channel: 'android' | 'desktop'): Promise<string> {
+  const [a, d] = await Promise.all([androidNotes(fetchImpl, version), desktopNotes(fetchImpl, version)]);
+  return (channel === 'android' ? a || d : d || a);
+}
+
+/**
+ * 镜像给出「有新版本」但两个镜像来源都没有说明时,最后问一次 GitHub release 正文(按 tag)。
+ * 只在这时打 REST(60 次/小时);失败/限流/没有这一版段落 → 空串,更新页给「查看更新说明」链接。
+ */
+async function withGithubNotes<T extends AndroidReleaseVerdict | MirrorResult>(fetchImpl: typeof fetch, verdict: T): Promise<T> {
+  if (verdict.kind !== 'available' || verdict.notes) return verdict;
+  try {
+    const res = await fetchWithTimeout(fetchImpl, githubReleaseByTagApi(verdict.version), { headers: { Accept: 'application/vnd.github+json' } }, timeouts.extras);
+    if (!res.ok) return verdict;
+    const body = String((await withTimeout(res.json(), timeouts.extras) as { body?: unknown } | null)?.body ?? '').trim();
+    return notesCoverVersion(body, verdict.version) ? { ...verdict, notes: body } : verdict;
+  } catch {
+    return verdict;
+  }
+}
+
 async function checkAndroidChannel(fetchImpl: typeof fetch, version: string, currentVersion: string): Promise<AndroidReleaseVerdict> {
   const cmp = compareVersions(version, currentVersion);
   if (cmp === null || cmp <= 0) return evaluateAndroidChannel({ version }, currentVersion);
@@ -219,12 +260,10 @@ async function checkAndroidChannel(fetchImpl: typeof fetch, version: string, cur
     mirrorText(fetchImpl, androidChannelShaUrl(version), timeouts.mirror)
       .then(text => parseAndroidChannelSha(text, version))
       .catch(() => null),
-    mirrorText(fetchImpl, mirrorManifestUrl(version), timeouts.extras)
-      .then(text => notesFromMirrorManifest(JSON.parse(text), version))
-      .catch(() => DEFAULT_RELEASE_NOTES),
+    mirrorNotes(fetchImpl, version, 'android'),
     mirrorSize(fetchImpl, androidChannelApkUrl(version)),
   ]);
-  return evaluateAndroidChannel({ version, sha256, notes, size }, currentVersion);
+  return withGithubNotes(fetchImpl, evaluateAndroidChannel({ version, sha256, notes, size }, currentVersion));
 }
 
 async function checkDesktopChannel(fetchImpl: typeof fetch, version: string, currentVersion: string): Promise<MirrorResult> {
@@ -232,12 +271,10 @@ async function checkDesktopChannel(fetchImpl: typeof fetch, version: string, cur
   if (first.kind !== 'incomplete') return first; // 已是最新(或当前版本号认不出):到此为止,不再多打一个请求
   const [sumsText, notes, size] = await Promise.all([
     mirrorText(fetchImpl, mirrorSumsUrl(version), timeouts.mirror),
-    mirrorText(fetchImpl, mirrorManifestUrl(version), timeouts.extras)
-      .then(text => notesFromMirrorManifest(JSON.parse(text), version))
-      .catch(() => DEFAULT_RELEASE_NOTES),
+    mirrorNotes(fetchImpl, version, 'desktop'),
     mirrorSize(fetchImpl, mirrorApkUrl(version)),
   ]);
-  return evaluateMirror({ version, sums: parseSha256Sums(sumsText), notes, size }, currentVersion);
+  return withGithubNotes(fetchImpl, evaluateMirror({ version, sums: parseSha256Sums(sumsText), notes, size }, currentVersion));
 }
 
 async function checkGithub(fetchImpl: typeof fetch, currentVersion: string): Promise<AndroidReleaseVerdict> {

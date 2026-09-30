@@ -15,7 +15,7 @@ import {
   subscribeAndroidUpdates,
 } from './android-updater';
 import { createRoutePrefsStore, LEGACY_ROUTE_PREF_KEY, memoryRouteStorage, ROUTE_LAST_OK_KEY } from './update-route';
-import { describeAndroidUpdateRow, githubApkUrl, mirrorApkUrl, mirrorManifestUrl, mirrorSumsUrl, MIRROR_VERSION_URL, ANDROID_CHANNEL_VERSION_URL, ANDROID_LATEST_RELEASE_API } from './android-update-core';
+import { describeAndroidUpdateRow, githubApkUrl, mirrorApkUrl, mirrorManifestUrl, mirrorSumsUrl, MIRROR_VERSION_URL, ANDROID_CHANNEL_VERSION_URL, ANDROID_LATEST_RELEASE_API, githubReleaseByTagApi } from './android-update-core';
 import { Sha256 } from './sha256';
 
 let p = 0, t = 0;
@@ -137,13 +137,15 @@ const CACHED = (v: string) => `file:///cache/updates/${apkName(v)}`;
   // ↓ this is the owner's report: GitHub API is 403 rate-limited, but the mirror is fine → update still found
   ck('GitHub 403 rate limit does not matter while the mirror works (GitHub never asked)', f.gh() === 0);
 }
-// 3. mirror notes / HEAD missing → still available, generic notes, no size
+// 3. mirror notes / HEAD missing → still available, empty notes (the page shows 「查看更新说明」), no size
 {
   const { deps } = makeDeps({});
   __resetAndroidUpdaterForTest(deps);
   const f = makeFetch(mirrorRoutes('0.2.101', { notes: false, head: false }));
   const s = await checkAndroidUpdate('0.2.100', { fetchImpl: f.fetchImpl, ...noSleep });
-  ck('notes/size unavailable never block the update', s.kind === 'available' && s.notes === '此版本包含功能改进和问题修复。' && s.apk.size === undefined && f.gh() === 0);
+  ck('notes/size unavailable never block the update', s.kind === 'available' && s.notes === '' && s.apk.size === undefined);
+  // 两个镜像来源都没有说明 → 按 tag 问一次 release 正文(这里 404);不问 releases/latest。
+  ck('no mirror notes: one GitHub by-tag request, never releases/latest', f.gh() === 1 && f.calls.includes(githubReleaseByTagApi('0.2.101')) && !f.calls.includes(ANDROID_LATEST_RELEASE_API));
 }
 // 4. mirror down in each way → GitHub
 for (const [label, versionResp] of [

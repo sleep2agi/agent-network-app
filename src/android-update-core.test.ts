@@ -5,7 +5,6 @@ import {
   androidChannelShaUrl,
   evaluateAndroidChannel,
   parseAndroidChannelSha,
-  DEFAULT_RELEASE_NOTES,
   MIRROR_LATEST_APK_URL,
   MIRROR_VERSION_URL,
   androidPromptVisible,
@@ -89,7 +88,7 @@ ck('newer release without an APK → error naming the version, not up-to-date', 
 ck('bad tag → error', evaluateAndroidRelease({ ...release, tag_name: 'nightly' }, '0.2.98').kind === 'error');
 ck('null JSON → error', evaluateAndroidRelease(null, '0.2.98').kind === 'error');
 ck('bad current version → error, not up-to-date', evaluateAndroidRelease(release, 'dev').kind === 'error');
-ck('empty notes get a default', (evaluateAndroidRelease({ ...release, body: '' }, '0.2.98') as any).notes === '此版本包含功能改进和问题修复。');
+ck('empty body → empty notes (never a generic sentence; the page links to the release instead)', (evaluateAndroidRelease({ ...release, body: '' }, '0.2.98') as any).notes === '');
 
 // ── small helpers ──
 ck('cache file name is sanitised', apkCacheFileName('desktop-v0.2.99') === 'Agent.Network_0.2.99_android-universal.apk' && throws(() => apkCacheFileName('../../x')));
@@ -153,10 +152,10 @@ ck('mirror same version → up-to-date', evaluateMirror({ version: '0.2.101' }, 
 ck('mirror newer but APK not in SUMS yet → incomplete (not up-to-date, not available)', evaluateMirror({ version: '0.2.102', sums }, '0.2.101').kind === 'incomplete');
 ck('mirror newer with no SUMS at all → incomplete', evaluateMirror({ version: '0.2.102' }, '0.2.101').kind === 'incomplete');
 ck('mirror bad VERSION → error', evaluateMirror({ version: 'oops' }, '0.2.101').kind === 'error');
-ck('mirror notes default when empty', (evaluateMirror({ version: '0.2.101', sums, notes: ' ' }, '0.2.100') as any).notes === DEFAULT_RELEASE_NOTES);
+ck('mirror notes empty when blank', (evaluateMirror({ version: '0.2.101', sums, notes: ' ' }, '0.2.100') as any).notes === '');
 ck('notes from the mirrored latest.json of the same version', notesFromMirrorManifest({ version: '0.2.101', notes: "What's new in 0.2.101:\n- x" }, '0.2.101').startsWith("What's new in 0.2.101"));
-ck('notes: other version / no notes / junk → default text (never blocks)', notesFromMirrorManifest({ version: '0.2.100', notes: 'old' }, '0.2.101') === DEFAULT_RELEASE_NOTES
-  && notesFromMirrorManifest({ version: '0.2.101' }, '0.2.101') === DEFAULT_RELEASE_NOTES && notesFromMirrorManifest(null, '0.2.101') === DEFAULT_RELEASE_NOTES);
+ck('notes: other version / no notes / junk → empty (never blocks, next source is asked)', notesFromMirrorManifest({ version: '0.2.100', notes: 'old' }, '0.2.101') === ''
+  && notesFromMirrorManifest({ version: '0.2.101' }, '0.2.101') === '' && notesFromMirrorManifest(null, '0.2.101') === '');
 
 // ── GitHub digest / rate limit ──
 ck('GitHub digest sha256:<hex> → hex', githubDigestSha256(`sha256:${APK_SHA_0_2_101}`) === APK_SHA_0_2_101);

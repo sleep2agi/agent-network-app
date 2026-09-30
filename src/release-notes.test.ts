@@ -1,6 +1,6 @@
 // 更新页「更新内容」解析(release-notes.ts)。ck 风格:自执行,失败退出码非 0(scripts/run-tests.mjs 汇总)。
-import { classifyNote, parseReleaseNotes, type NoteGroup } from './release-notes';
-import { DEFAULT_RELEASE_NOTES } from './android-update-core';
+import { classifyNote, notesCoverVersion, parseReleaseNotes, type NoteGroup } from './release-notes';
+const PLAIN_NOTE = '此版本包含功能改进和问题修复。';
 
 let p = 0, t = 0;
 const ck = (name: string, ok: boolean, extra = '') => { t++; if (ok) { p++; console.log(`PASS: ${name}`); } else console.log(`FAIL: ${name}${extra ? ` — ${extra}` : ''}`); };
@@ -81,12 +81,22 @@ Existing installations can update in place; new installations can use the assets
   ck('indented continuation joins the previous bullet', items.length === 2 && items[0].endsWith('the app now takes over automatically.'), JSON.stringify(items));
   const crlf = parseReleaseNotes("a\r\n\r\nWhat's new in 1.0.0:\r\n- x\r\n\r\nWhat's new in 0.9.0:\r\n- y", { currentVersion: '0.9.0' });
   ck('CRLF input handled', versions(crlf) === '1.0.0' && texts(crlf).join() === 'x');
-  const plain = parseReleaseNotes(DEFAULT_RELEASE_NOTES, { currentVersion: '0.2.1', targetVersion: '0.2.2' });
-  ck('no heading → one group for the target version', plain.length === 1 && plain[0].version === '0.2.2' && plain[0].title === 'v0.2.2 更新内容' && texts(plain).join() === DEFAULT_RELEASE_NOTES);
+  const plain = parseReleaseNotes(PLAIN_NOTE, { currentVersion: '0.2.1', targetVersion: '0.2.2' });
+  ck('no heading → one group for the target version', plain.length === 1 && plain[0].version === '0.2.2' && plain[0].title === 'v0.2.2 更新内容' && texts(plain).join() === PLAIN_NOTE);
   const para = parseReleaseNotes("What's new in 1.0.0:\n第一句。\n- 第二条", { currentVersion: '0.1.0' });
   ck('a plain line inside a section is its own item', texts(para).join('|') === '第一句。|第二条', texts(para).join('|'));
   ck('empty inputs → no groups', parseReleaseNotes(null).length === 0 && parseReleaseNotes(undefined).length === 0 && parseReleaseNotes('   ').length === 0);
   ck('heading with no bullets is dropped', versions(parseReleaseNotes("What's new in 1.0.1:\n\nWhat's new in 1.0.0:\n- x", { currentVersion: '0.1.0' })) === '1.0.0');
+}
+
+// ── 这份正文是不是这一版的说明(安卓更新说明来源挑选用)──
+{
+  const body = "Signed.\n\nWhat's new in 0.2.160:\n- 日历拖动\n\nWhat's new in 0.2.159:\n- 搜索\n";
+  ck('covers: has this version\'s section', notesCoverVersion(body, '0.2.160') && notesCoverVersion(body, 'v0.2.159'));
+  ck('covers: only older sections → no', !notesCoverVersion("What's new in 0.2.159:\n- 搜索\n", '0.2.160'));
+  ck('covers: heading with no items → no', !notesCoverVersion("What's new in 0.2.160:\n\nWhat's new in 0.2.159:\n- 搜索\n", '0.2.160'));
+  ck('covers: plain bullet text without headings → yes (taken as this version)', notesCoverVersion('- 修复:某问题', '0.2.160'));
+  ck('covers: empty / null → no', !notesCoverVersion('', '0.2.160') && !notesCoverVersion(null, '0.2.160'));
 }
 
 console.log(`\n${p}/${t} passed`);

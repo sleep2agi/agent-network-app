@@ -2,7 +2,8 @@
  * 更新弹窗(安卓 / 桌面)要显示的文字 —— 纯函数,ck 测试直接跑;组件只负责摆放。
  * 「当前版本 vX → 新版本 vY」、大小、进度、失败提示都从这里出。下载来源是内部细节,这里一个字都不写。
  */
-import type { AndroidUpdateState } from './android-update-core';
+import { RELEASE_NOTES_LINK_LABEL, type AndroidUpdateState } from './android-update-core';
+import { parseReleaseNotes, type NoteGroup } from './release-notes';
 import type { DesktopUpdateState } from './update-check-state';
 import { formatProgressBytes, formatSize } from './update-route';
 
@@ -72,6 +73,16 @@ export function androidPromptView(state: AndroidUpdateState, opts: { currentVers
       break;
   }
   return view;
+}
+
+/**
+ * 更新页正文:解析后的分组;一组都没有(哪儿都找不到这一版的说明)时不写通用空话,
+ * 给一个「查看更新说明」链接到 GitHub release 页(owner 2026-09-30 截图)。
+ */
+export type AndroidNotesView = { groups: NoteGroup[]; link?: { label: string; url: string } };
+export function androidNotesView(notes: string | null | undefined, opts: { currentVersion?: string; targetVersion?: string; releaseUrl: string }): AndroidNotesView {
+  const groups = parseReleaseNotes(notes, { currentVersion: opts.currentVersion, targetVersion: opts.targetVersion });
+  return groups.length ? { groups } : { groups, link: { label: RELEASE_NOTES_LINK_LABEL, url: opts.releaseUrl } };
 }
 
 export type DesktopPromptView = {

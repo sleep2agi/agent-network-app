@@ -12,7 +12,8 @@
  *   What's new in 0.2.156: …                         ← 累积的旧版本
  *   Existing installations can update in place; …    ← 尾注,丢掉
  *
- * 只保留「比当前版本新」的那几段(新的在前);一段都不剩时保底留最新一段,说明永远不空。
+ * 只保留「比当前版本新」的那几段(新的在前);一段都不剩时保底留最新一段。正文为空 → 没有分组
+ * (更新页那时给「查看更新说明」链接,见 update-prompt-model.ts 的 androidNotesView)。
  */
 import { compareVersions } from './android-update-core';
 
@@ -120,3 +121,12 @@ export function parseReleaseNotes(body: string | null | undefined, opts: { curre
 }
 
 const plain = (v: string) => v.trim().replace(/^(?:desktop-)?v/, '');
+
+/**
+ * 这份正文里有没有 `version` 这一版的说明(有「What's new in <version>:」段且段里有条目;
+ * 或者整份没有版本标题、但有条目 —— 那就当作这一版的)。只有旧版本段的正文不算:那是别的版本的说明。
+ */
+export function notesCoverVersion(body: string | null | undefined, version: string): boolean {
+  const v = plain(version);
+  return parseReleaseNotes(body, { targetVersion: v }).some(g => g.version === v);
+}

@@ -1,16 +1,21 @@
 #!/usr/bin/env python3
 """Publish one Android APK to the ModelScope android channel (see src/android-update-core.ts header).
 
-  publish --apk FILE --version X.Y.Z [--dry-run]
+  publish --apk FILE --version X.Y.Z --notes FILE [--dry-run]
 
 writes, in ONE commit to the dataset:
 
   android/agent-network-<ver>.apk           the APK (skipped when the mirror already holds these bytes)
   android/agent-network-<ver>.apk.sha256    `sha256sum` line: "<64 hex>  agent-network-<ver>.apk\\n"
+  android/<ver>/notes.md                    this version's release notes (scripts/android-release-notes.mjs output;
+                                            the same text as the GitHub release body / desktop latest.json notes)
   android/latest/VERSION                    "<ver>\\n"  —— what the in-app updater reads
 
-then verifies ANONYMOUSLY (no token — what a phone in China gets): VERSION and the sha file byte for
-byte, and a full download of the APK compared by sha256. The release is not visible to the updater
+Refuses to publish without notes: the file must be non-empty and hold a "What's new in <ver>:" section
+with at least one "- " item (owner 2026-09-30: the update page showed a generic sentence instead).
+
+then verifies ANONYMOUSLY (no token — what a phone in China gets): VERSION, the sha file and the notes byte
+for byte, and a full download of the APK compared by sha256. The release is not visible to the updater
 until this passes.
 
 android/latest/VERSION only moves forward: publishing a version lower than the one it holds is
@@ -54,6 +59,26 @@ def sha256_file(path):
     return digest.hexdigest()
 
 
+def read_notes(path, version):
+    """notes.md bytes; exits when empty or without this version's section and items."""
+    with open(path, 'rb') as handle:
+        body = handle.read()
+    text = body.decode('utf-8')
+    lines = text.splitlines()
+    heading = re.compile(r"^What's new in\s+v?([0-9][^\s:]*)\s*:\s*$", re.I)
+    start = next((i for i, line in enumerate(lines) if (m := heading.match(line.strip())) and m.group(1) == version), None)
+    items = []
+    if start is not None:
+        for line in lines[start + 1:]:
+            if heading.match(line.strip()):
+                break
+            if re.match(r'^\s*[-*]\s+\S', line):
+                items.append(line)
+    if not text.strip() or not items:
+        raise SystemExit(f"::error::release notes {path} have no \"What's new in {version}:\" section with items; refusing to publish without notes")
+    return body
+
+
 def current_channel_version(repo):
     """android/latest/VERSION as anonymous users see it; None when the channel does not exist yet."""
     try:
@@ -76,6 +101,7 @@ def cmd_publish(args):
         raise SystemExit(f'::error::no such APK: {args.apk}')
 
     name = apk_name(version)
+    notes = read_notes(args.notes, version)
     sha = sha256_file(args.apk)
     size = os.path.getsize(args.apk)
     log = mirror.log
@@ -96,7 +122,7 @@ def cmd_publish(args):
 
     sha_text = f'{sha}  {name}\n'.encode()
     version_text = f'{version}\n'.encode()
-    files = {f'android/{name}.sha256': sha_text, 'android/latest/VERSION': version_text}
+    files = {f'android/{name}.sha256': sha_text, f'android/{version}/notes.md': notes, 'android/latest/VERSION': version_text}
     expected = {apk_path: sha, **{p: hashlib.sha256(b).hexdigest() for p, b in files.items()}}
 
     staging = tempfile.mkdtemp(prefix='anet-android-publish-')
@@ -177,6 +203,7 @@ def main():
     parser.add_argument('--repo', default=os.environ.get('MODELSCOPE_MIRROR_REPO', mirror.DEFAULT_REPO))
     parser.add_argument('--apk', required=True)
     parser.add_argument('--version', required=True)
+    parser.add_argument('--notes', required=True, help="notes.md for this version (scripts/android-release-notes.mjs)")
     parser.add_argument('--dry-run', action='store_true')
     args = parser.parse_args()
     cmd_publish(args)

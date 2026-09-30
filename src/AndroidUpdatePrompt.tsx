@@ -13,8 +13,8 @@ import {
   openUnknownSourcesSettings,
   subscribeAndroidUpdates,
 } from './android-updater';
-import { parseReleaseNotes } from './release-notes';
-import { androidPromptView } from './update-prompt-model';
+import { openExternal } from './open-external';
+import { androidNotesView, androidPromptView } from './update-prompt-model';
 import { routePrefs } from './update-route-prefs';
 import { colors, onThemeChange, spacing, themeMode, radius } from './theme';
 import { APP_VERSION } from './version';
@@ -42,7 +42,8 @@ export default function AndroidUpdatePrompt({ currentVersion = APP_VERSION }: { 
   const view = androidPromptView(update, { currentVersion });
   const notes = 'notes' in update ? update.notes : '';
   const version = 'version' in update ? update.version : undefined;
-  const groups = useMemo(() => parseReleaseNotes(notes, { currentVersion, targetVersion: version }), [notes, currentVersion, version]);
+  const releaseUrl = 'releaseUrl' in update ? update.releaseUrl : '';
+  const notesView = useMemo(() => androidNotesView(notes, { currentVersion, targetVersion: version, releaseUrl }), [notes, currentVersion, version, releaseUrl]);
   // 启动时读一次「上次成功来源」;顺带静默删掉 0.2.121 遗留的「下载线路」偏好。
   useEffect(() => { void routePrefs.hydrate().catch(() => undefined); }, []);
   const safe = useModalSafePadding('fullScreen');
@@ -73,7 +74,14 @@ export default function AndroidUpdatePrompt({ currentVersion = APP_VERSION }: { 
             {meta ? <Text style={styles.meta} testID="android-update-meta">{meta}</Text> : null}
           </View>
           <View style={styles.notes}>
-            <ReleaseNoteGroups groups={groups} surface={colors.groupedRow} testID="android-update-note-groups" />
+            {notesView.link ? (
+              <Pressable testID="android-update-notes-link" style={styles.notesLink} onPress={() => { void openExternal(notesView.link!.url); }} accessibilityRole="link" hitSlop={8}>
+                <Text style={styles.link}>{notesView.link.label}</Text>
+                <Ionicons name="open-outline" size={14} color={colors.accent} />
+              </Pressable>
+            ) : (
+              <ReleaseNoteGroups groups={notesView.groups} surface={colors.groupedRow} testID="android-update-note-groups" />
+            )}
           </View>
         </ScrollView>
 
@@ -144,6 +152,8 @@ const makeStyles = () =>
     version: { color: colors.text, fontSize: 34, lineHeight: 42, fontWeight: '600', letterSpacing: 0.5 },
     meta: { color: colors.textMuted, fontSize: 13, lineHeight: 18, marginTop: spacing.xs },
     notes: { paddingHorizontal: 16 },
+    // 没有这一版的说明时的「查看更新说明」(打开 GitHub release 页),替代以前那句通用空话。
+    notesLink: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 4, paddingVertical: spacing.md },
     footer: { paddingHorizontal: 16, paddingTop: spacing.md, backgroundColor: colors.groupedRow, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border },
     errorBox: { flexDirection: 'row', gap: spacing.sm, alignItems: 'flex-start', padding: spacing.md, marginBottom: spacing.md, borderRadius: radius.control, backgroundColor: tint(colors.failed, 0.1) },
     errorBody: { flex: 1 },
