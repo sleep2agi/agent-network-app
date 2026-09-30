@@ -2,6 +2,7 @@ import { ownerCounts, ownerLabel } from './i18n-task-presentation';
 import { t as tr } from './i18n';
 import TaskListTable from './TaskListTable';
 import TaskGantt from './TaskGantt';
+import TaskCalendar from './TaskCalendar';
 import { TaskTagFilter } from './TaskTags';
 import { useTranslation } from './i18n-react';
 import { taskText } from './i18n-tasks';
@@ -452,6 +453,8 @@ function ScopedRequirementBoard({ cfg, desktop, dispatch, onOpenVoiceSettings, s
     { key: 'board', label: tr('tasks.copy.27') },
     // 甘特图(只读):桌面 = 时间轴,手机 = 按周列表(TaskGantt.tsx 顶部写了为什么)。
     { key: 'gantt', label: tr('gantt.view') },
+    // 日历(只读):桌面 = 月 / 周格子,手机 = 月历 + 选中那天的列表(TaskCalendar.tsx 顶部写了为什么)。
+    { key: 'calendar', label: tr('cal.view') },
     // 桌面的派发记录在左栏(TaskFilterSidebar);手机 / 双栏没有左栏,放在分段里。
     ...(desktop ? [] : [{ key: 'dispatch' as const, label: tr('tasks.copy.28') }]),
   ];
@@ -767,6 +770,7 @@ function ScopedRequirementBoard({ cfg, desktop, dispatch, onOpenVoiceSettings, s
               : <Pressable onPress={() => setReloadKey(n => n + 1)} testID="req-retry" accessibilityRole="button"><Text style={s.link}>{tr('tasks.copy.57')}</Text></Pressable>}
           </View>
         ) : section === 'list' ? list()
+          : section === 'calendar' ? <TaskCalendar items={visible} projects={projects} people={people} today={today} s={s} onOpen={openDetail} selectedId={selectedId} phone={narrow} />
           : section === 'gantt' ? <TaskGantt items={visible} projects={projects} people={people} today={today} s={s} onOpen={openDetail} selectedId={selectedId} phone={narrow} startCapable={startCapable} onDue={pointer ? (id, due) => { void setDue(id, due); } : undefined} />
             : kanban();
 

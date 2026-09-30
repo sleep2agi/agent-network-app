@@ -357,6 +357,22 @@ registerTranslations({
   'gantt.weekRange': ['{a} – {b}', '{a} – {b}'],
 });
 
+// 日历视图(TaskCalendar.tsx / task-calendar-model.ts)。
+registerTranslations({
+  'cal.view': ['日历', 'Calendar'],
+  'cal.month': ['月', 'Month'],
+  'cal.week': ['周', 'Week'],
+  'cal.prev': ['上一页', 'Previous'],
+  'cal.next': ['下一页', 'Next'],
+  'cal.more': ['+{n}', '+{n}'],
+  'cal.moreA11y': ['还有 {n} 个任务', '{n} more tasks'],
+  'cal.undatedChip': ['未设期限 {n}', 'No due date · {n}'],
+  'cal.dayTitle': ['{md} 周{wd}', '{wd}, {md}'],
+  'cal.emptyDay': ['这天没有任务', 'No tasks on this day'],
+  'cal.hasTasks': ['{n} 个任务', '{n} tasks'],
+  'cal.itemA11y': ['{name},{when}', '{name}, {when}'],
+});
+
 // 「在新窗口打开」任务(TaskWindow / task-window.ts)。
 registerTranslations({
   'taskWin.open': ['在新窗口打开', 'Open in new window'],
