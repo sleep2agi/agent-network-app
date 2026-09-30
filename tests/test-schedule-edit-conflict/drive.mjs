@@ -16,6 +16,7 @@
 import { createServer } from 'node:http';
 import { readFileSync, existsSync, mkdirSync, statSync } from 'node:fs';
 import { join, extname } from 'node:path';
+import { paintedText } from '../test-layout-sweep/harness.mjs';
 
 const { chromium } = await import(process.env.PLAYWRIGHT_MODULE || 'playwright');
 const WEB = process.env.WEB_DIR, OUT = process.env.OUT;
@@ -105,6 +106,9 @@ const browser = await chromium.launch({ headless: true, executablePath: findExe(
 const ANDROID_UA = 'Mozilla/5.0 (Linux; Android 14; Pixel Fold) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0 Safari/537.36';
 let failures = 0;
 const ck = (name, ok, detail = '') => { if (!ok) failures++; console.log(`${ok ? 'PASS' : 'FAIL'}: ${name}${detail ? ' — ' + detail : ''}`); };
+// Text checks also demand the PAINTED box (after overflow clipping) — a 0-wide value keeps its textContent.
+const painted = (p) => !!p && p.painted && p.w >= 8;
+const pw = (p) => p ? `${p.w.toFixed(1)}×${p.h.toFixed(1)}` : 'none';
 
 const openEditor = async () => {
   const ctx = await browser.newContext({ viewport: { width: 1200, height: 850 }, userAgent: ANDROID_UA, locale: 'zh-CN' });
@@ -152,7 +156,9 @@ for (const choice of ['mine', 'theirs']) {
   await view.waitFor({ timeout: 10000 }).catch(() => {});
   ck(`${tag}: conflict view shown`, (await view.count()) === 1);
   ck(`${tag}: only 任务内容 listed`, (await page.locator('[data-testid="schedule-conflict-task"]').count()) === 1);
-  ck(`${tag}: 你的修改 / 最新版本 values`, (await page.locator('[data-testid="schedule-conflict-task-mine"]').innerText()) === `我的内容 ${tag}` && (await page.locator('[data-testid="schedule-conflict-task-theirs"]').innerText()) === '别的设备的内容');
+  const mineP = await paintedText(page, '[data-testid="schedule-conflict-task-mine"]');
+  const theirsP = await paintedText(page, '[data-testid="schedule-conflict-task-theirs"]');
+  ck(`${tag}: 你的修改 / 最新版本 values`, (await page.locator('[data-testid="schedule-conflict-task-mine"]').innerText()) === `我的内容 ${tag}` && (await page.locator('[data-testid="schedule-conflict-task-theirs"]').innerText()) === '别的设备的内容' && painted(mineP) && painted(theirsP), `painted mine ${pw(mineP)} theirs ${pw(theirsP)}`);
   ck(`${tag}: draft still in the textarea`, (await box.inputValue()) === `我的内容 ${tag}`);
   ck(`${tag}: only one PATCH so far (no blind retry)`, patches.length === 1);
   if (OUT) await page.screenshot({ path: `${OUT}/${tag}-conflict.png` });

@@ -11,7 +11,7 @@
 //   (4) 老 daemon(无 default_workdir_root):没有这一行
 // 任一断言失败或页面打不开 → exit 1。
 import { mkdirSync } from 'node:fs';
-import { serveExport, initScript, findChromium, ANDROID_UA } from '../test-layout-sweep/harness.mjs';
+import { serveExport, initScript, findChromium, ANDROID_UA, paintedText } from '../test-layout-sweep/harness.mjs';
 
 const { chromium } = await import(process.env.PLAYWRIGHT_MODULE || 'playwright');
 const WEB = process.env.WEB_DIR;
@@ -27,6 +27,8 @@ let fails = 0;
 const ck = (name, ok, extra = '') => { if (!ok) fails++; console.log(`${ok ? 'PASS' : 'FAIL'}: ${name}${extra ? ` (${extra})` : ''}`); };
 const near = (a, b, tol = 1) => Math.abs(a - b) <= tol;
 const r1 = (n) => Math.round(n * 10) / 10;
+// 报错文字要真画出来(裁剪后 ≥ 8px 宽),不能只在 textContent 里 —— title-blank 那种 0 宽也要红
+const painted = async (page, text) => { const p = await paintedText(page, ':not(:has(*))', text); return [!!p?.painted && p.w >= 8, p ? `painted ${r1(p.w)}×${r1(p.h)}` : 'painted null']; };
 
 const web = await serveExport(WEB);
 const browser = await chromium.launch({ headless: true, executablePath: findChromium() });
@@ -92,14 +94,16 @@ for (const vp of VIEWPORTS) {
     ck(`${vp.name}: editor right == row content right`, near(ib.x + ib.width, ref.val.x + ref.val.width), `${r1(ib.x + ib.width)} vs ${r1(ref.val.x + ref.val.width)}`);
     table.push({ vp: vp.name, row: '(输入框)', rowX: r1(ib.x), rowRight: r1(ib.x + ib.width), keyX: '', valRight: '', rowH: r1(ib.height), keyCY: '' });
     await input.fill('/home/alice');
+    const [rootPainted, rootP] = await painted(page, '不能直接用家目录，请用它下面的子目录');
     ck(`${vp.name}: root itself → inline error + submit disabled`,
-      (await page.getByText('不能直接用家目录，请用它下面的子目录').count()) === 1
-      && (await page.locator('[data-testid="create-node-submit"]').getAttribute('aria-disabled')) === 'true');
+      (await page.getByText('不能直接用家目录，请用它下面的子目录').count()) === 1 && rootPainted
+      && (await page.locator('[data-testid="create-node-submit"]').getAttribute('aria-disabled')) === 'true', rootP);
     if (OUT) await page.screenshot({ path: `${OUT}/${vp.name}-edit-error.png` });
     await input.fill('/home/alice/吉他大师');
+    const [asciiPainted, asciiP] = await painted(page, '目录名只能用英文字母、数字等 ASCII 字符（中文请用拼音）');
     ck(`${vp.name}: CJK dir name → inline ASCII error + submit disabled`,
-      (await page.getByText('目录名只能用英文字母、数字等 ASCII 字符（中文请用拼音）').count()) === 1
-      && (await page.locator('[data-testid="create-node-submit"]').getAttribute('aria-disabled')) === 'true');
+      (await page.getByText('目录名只能用英文字母、数字等 ASCII 字符（中文请用拼音）').count()) === 1 && asciiPainted
+      && (await page.locator('[data-testid="create-node-submit"]').getAttribute('aria-disabled')) === 'true', asciiP);
     if (OUT) await page.screenshot({ path: `${OUT}/${vp.name}-edit-ascii-error.png` });
     await input.fill('/home/alice/projects/demo');
     ck(`${vp.name}: custom path → value row follows, submit enabled`,

@@ -27,7 +27,7 @@
 // Exit 1 when any check fails or a viewport could not be opened.
 import { mkdirSync } from 'node:fs';
 import { join } from 'node:path';
-import { serveExport, initScript, findChromium, ANDROID_UA } from '../test-layout-sweep/harness.mjs';
+import { serveExport, initScript, findChromium, ANDROID_UA, paintedText } from '../test-layout-sweep/harness.mjs';
 
 const { chromium } = await import(process.env.PLAYWRIGHT_MODULE || 'playwright');
 const WEB = process.env.WEB_DIR;
@@ -88,6 +88,9 @@ const box = (page, sel) => page.evaluate((s) => {
   const b = el.getBoundingClientRect();
   return { x: b.x, y: b.y, w: b.width, h: b.height, r: b.right, b: b.bottom, cy: b.y + b.height / 2, cx: b.x + b.width / 2, text: el.textContent };
 }, sel);
+// Text checks also demand the PAINTED box (after overflow clipping) — a 0-wide label keeps its textContent.
+const painted = (p) => !!p && p.painted && p.w >= 8;
+const pw = (p) => p ? `${r1(p.w)}×${r1(p.h)}` : 'none';
 const overflow = (page) => page.evaluate(() => document.scrollingElement.scrollWidth - window.innerWidth);
 
 const { url, close } = await serveExport(WEB);
@@ -175,10 +178,11 @@ for (const theme of ['light', 'dark']) {
         return { expect: `${y}年${m}月`, pin: pin.textContent, pinX: pb.x, pinR: pb.right, pinCy: pb.y + pb.height / 2, viewX: view.x, labels };
       });
       const mg = await monthGeo();
+      const pinP = await paintedText(page, tid('gantt-pinned-month'));
       record(vp, 'pinned month = leftmost visible day', {
-        text: mg.pin === mg.expect, atLeft: Math.abs(mg.pinX - mg.viewX) <= 1,
+        text: mg.pin === mg.expect && painted(pinP), atLeft: Math.abs(mg.pinX - mg.viewX) <= 1,
         sameLine: mg.labels.every(l => Math.abs(l.cy - mg.pinCy) <= 1), noOverlap: mg.labels.every(l => l.x >= mg.pinR - 0.5),
-      }, { pin: mg.pin, expect: mg.expect, others: mg.labels.map(l => l.text).join('/') });
+      }, { pin: mg.pin, expect: mg.expect, others: mg.labels.map(l => l.text).join('/'), pinPainted: pw(pinP) });
       // scroll so the next month's 1st sits 40px from the left edge: the pinned label is pushed out, not drawn over it
       await page.evaluate(() => {
         const sc = document.querySelector('[data-testid="gantt-timeline"]');
@@ -194,7 +198,8 @@ for (const theme of ['light', 'dark']) {
       await page.waitForTimeout(500);
       const cnt = await page.evaluate(() => ({ head: document.querySelector('[data-testid="gantt-head"]').firstElementChild.textContent, bars: document.querySelectorAll('[data-testid^="gantt-bar-"]').length, undated: document.querySelectorAll('[data-testid^="gantt-undated-"]').length }));
       const side = await page.evaluate(() => { const el = [...document.querySelectorAll('[data-testid="task-sidebar"] div')].find(d => d.children.length === 0 && d.textContent === '全部任务'); return el ? Number(el.parentElement.parentElement.textContent.replace(/\D+/g, ' ').trim().split(' ').pop()) : null; });
-      record(vp, 'header count adds up to the sidebar', { undatedShown: cnt.head === `任务${cnt.bars}· 未设期限 ${cnt.undated}`, sum: side !== null && cnt.bars + cnt.undated === side }, { head: cnt.head, sidebar: side });
+      const headP = await paintedText(page, `${tid('gantt-head')} > :first-child`);
+      record(vp, 'header count adds up to the sidebar', { undatedShown: cnt.head === `任务${cnt.bars}· 未设期限 ${cnt.undated}` && painted(headP), sum: side !== null && cnt.bars + cnt.undated === side }, { head: cnt.head, sidebar: side, headPainted: pw(headP) });
 
       const widths = {};
       for (const id of Object.keys(DAYS)) widths[id] = (await box(page, tid(`gantt-bar-${id}`)))?.w ?? -1;
@@ -295,8 +300,16 @@ for (const theme of ['light', 'dark']) {
       await page.mouse.up();
       await page.waitForTimeout(800);
       const w5b = (await box(page, tid('gantt-bar-g1'))).w;
-      const banner = await page.evaluate(() => [...document.querySelectorAll('div')].some(d => d.children.length === 0 && /示例:官网首页改版/.test(d.textContent) && /不存在|没有保存/.test(d.textContent)));
-      record(vp, 'rejected drag reverts', { reverted: Math.abs(w5b - w5) <= 1, banner }, { w: `${r1(w5)}→${r1(w5b)}` });
+      // the banner text's painted box (clipped by overflow ancestors); the best-painted match if several
+      const bannerP = await page.evaluate(() => [...document.querySelectorAll('div')].filter(d => d.children.length === 0 && /示例:官网首页改版/.test(d.textContent) && /不存在|没有保存/.test(d.textContent)).map(d => {
+        const b = d.getBoundingClientRect(); let w = b.width, h = b.height;
+        for (let a = d.parentElement; a && a !== document.body; a = a.parentElement) {
+          const c = getComputedStyle(a); if (c.overflowX === 'visible' && c.overflowY === 'visible') continue;
+          const r = a.getBoundingClientRect(); w = Math.min(w, Math.max(0, Math.min(b.right, r.right) - Math.max(b.left, r.left))); h = Math.min(h, Math.max(0, Math.min(b.bottom, r.bottom) - Math.max(b.top, r.top)));
+        }
+        return { w, h, painted: w >= 1 && h >= 1 };
+      }).sort((a, b) => b.w * b.h - a.w * a.h)[0] ?? null);
+      record(vp, 'rejected drag reverts', { reverted: Math.abs(w5b - w5) <= 1, banner: painted(bannerP) }, { w: `${r1(w5)}→${r1(w5b)}`, bannerPainted: pw(bannerP) });
       await page.evaluate(() => { window.__tasksFailPatch = false; });
 
       const g9 = await box(page, tid('gantt-bar-g9'));
@@ -328,10 +341,11 @@ for (const theme of ['light', 'dark']) {
       const line = await box(page, tid('gantt-today-line'));
       await page.locator(tid('req-more-toggle')).click();
       const sum = await box(page, tid('req-more-summary'));
+      const sumP = await paintedText(page, tid('req-more-summary'));
       record(vp, 'detail: set start', {
         field: !!field, startOnly: sp.length === 1 && JSON.stringify(sp[0]) === JSON.stringify({ start: todayYmd }),
-        barFromToday: !!g7 && Math.abs(g7.x - 1 + 16 - (line.x + 1)) <= 1, summary: !!sum && sum.text.startsWith(`${+todayYmd.slice(5, 7)}月${+todayYmd.slice(8, 10)}日开始`),
-      }, { patch: JSON.stringify(sp[0] ?? null), summary: sum?.text });
+        barFromToday: !!g7 && Math.abs(g7.x - 1 + 16 - (line.x + 1)) <= 1, summary: !!sum && sum.text.startsWith(`${+todayYmd.slice(5, 7)}月${+todayYmd.slice(8, 10)}日开始`) && painted(sumP),
+      }, { patch: JSON.stringify(sp[0] ?? null), summary: sum?.text, summaryPainted: pw(sumP) });
       await shot('detail-start');
     } else {
       const seg = await Promise.all(['list', 'board', 'gantt', 'dispatch'].map(k => box(page, tid(`tasks-view-${k}`))));

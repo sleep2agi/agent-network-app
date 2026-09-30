@@ -17,7 +17,7 @@
 //   short    立刻点完成 → 提示「录音太短,没有识别」(不是手机的「说话时间太短」)
 // 任何一条没跑到 = FAIL(不是 skip)。
 import { mkdirSync } from 'node:fs';
-import { serveExport, initScript, findChromium } from '../test-layout-sweep/harness.mjs';
+import { serveExport, initScript, findChromium, paintedText } from '../test-layout-sweep/harness.mjs';
 
 const { chromium } = await import(process.env.PLAYWRIGHT_MODULE || 'playwright');
 const WEB = process.env.WEB_DIR;
@@ -62,6 +62,11 @@ await page.addInitScript(initScript, { theme: 'light' });
 await page.addInitScript(asrScript);
 await page.goto(`${web.url}?safeAreaSim=0,0,0,0`);
 const shot = async (name) => { if (OUT) await page.screenshot({ path: `${OUT}/${name}.png` }); };
+// 文字对 ≠ 看得见:title-blank 那次 textContent 一直对,元素却被 flex 0 1 0% + overflow:hidden 压成 0px 宽。
+// 文字判据旁边再量同一个元素画出来的框(被 overflow 祖先裁剪后 ≥ 8px 宽)。
+const painted = (id) => paintedText(page, `[data-testid="${id}"]`);
+const seen = (p) => !!p?.painted && p.w >= 8;
+const pd = (p) => p ? `painted ${Math.round(p.w)}×${Math.round(p.h)}${p.painted ? '' : ' UNPAINTED'}` : 'not rendered';
 
 try {
   await page.locator('[data-testid="desktop-rail"]').waitFor({ timeout: 20000 });
@@ -122,8 +127,10 @@ try {
   ck('layout: 完成在最右、取消在它左边', mids['voice-bar-done'].x > mids['voice-bar-cancel'].x && mids['voice-bar-cancel'].x > mids['voice-bar-hint'].x);
   ck('layout: 右边缘与原发送按钮右边缘对齐 ±1px', Math.abs((mids['voice-bar-done'].x + mids['voice-bar-done'].w) - (toolbarBox.x + toolbarBox.width)) <= 1);
   const elapsed = await page.locator('[data-testid="voice-bar-elapsed"]').innerText();
-  ck('recording: 计时在走', /^00:0[1-9]$/.test(elapsed), elapsed);
-  ck('recording: 提示「正在录音 · Enter 完成 · Esc 取消」', (await page.locator('[data-testid="voice-bar-hint"]').innerText()) === '正在录音 · Enter 完成 · Esc 取消');
+  const elapsedP = await painted('voice-bar-elapsed');
+  ck('recording: 计时在走', /^00:0[1-9]$/.test(elapsed) && seen(elapsedP), `${elapsed} ${pd(elapsedP)}`);
+  const hintP = await painted('voice-bar-hint');
+  ck('recording: 提示「正在录音 · Enter 完成 · Esc 取消」', (await page.locator('[data-testid="voice-bar-hint"]').innerText()) === '正在录音 · Enter 完成 · Esc 取消' && seen(hintP), pd(hintP));
   ck('recording: 录音中输入框焦点不丢、没被改', JSON.stringify(await state()) === JSON.stringify({ value: '明天去公司开会', start: 2, end: 2, focused: true }));
   await shot('1-recording-bar');
   if (OUT) await page.screenshot({ path: `${OUT}/1-recording-bar-composer-crop.png`, clip: { x: cb.x - 8, y: cb.y - 8, width: cb.width + 16, height: cb.height + 16 } });

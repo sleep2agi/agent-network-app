@@ -19,6 +19,7 @@
 import { createServer } from 'node:http';
 import { readFileSync, existsSync, mkdirSync, statSync } from 'node:fs';
 import { join, extname } from 'node:path';
+import { paintedText } from '../test-layout-sweep/harness.mjs';
 
 const { chromium } = await import(process.env.PLAYWRIGHT_MODULE || 'playwright');
 const { WEB_DIR: WEB, OUT } = process.env;
@@ -143,6 +144,9 @@ function record(vp, what, checks, detail = {}) {
   console.log(JSON.stringify({ vp, what, ...detail, ok, failed }));
 }
 const rectIn = (el) => el.evaluate(e => { const b = e.getBoundingClientRect(); return { x: b.x, y: b.y, w: b.width, h: b.height, r: b.right, b: b.bottom, cy: b.y + b.height / 2 }; });
+// Text checks also demand the PAINTED box (after overflow clipping) — a 0-wide label keeps its textContent.
+const painted = (p) => !!p && p.painted && p.w >= 8;
+const pw = (p) => p ? `${r1(p.w)}×${r1(p.h)}` : 'none';
 const shot = (page, name) => page.screenshot({ path: join(OUT, `${name}.png`) });
 const PHONE_UA = 'Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0 Mobile Safari/537.36';
 
@@ -216,7 +220,8 @@ async function checkFilter(s, expectLowest) {
     await s.page.waitForTimeout(400);
     const ids = (await badgeRows(s.page)).map(g => g.id);
     const chip = await s.page.locator(tid('task-filter-priority')).first().textContent();
-    record(s.vp, 'filter: four options P0 最高 … P3 极低; P3 leaves only the P3 card', { four: listed.every(Boolean), onlyP3: ids.length === 1 && ids[0] === 'r_p3', chip: (chip || '').includes('P3 极低') }, { opts: opts.join('|'), ids: ids.join(','), chip });
+    const chipP = await paintedText(s.page, `${tid('task-filter-priority')} *`, 'P3 极低');
+    record(s.vp, 'filter: four options P0 最高 … P3 极低; P3 leaves only the P3 card', { four: listed.every(Boolean), onlyP3: ids.length === 1 && ids[0] === 'r_p3', chip: (chip || '').includes('P3 极低') && painted(chipP) }, { opts: opts.join('|'), ids: ids.join(','), chip, chipPainted: pw(chipP) });
     await s.page.locator(tid('task-filter-priority')).first().click();
     await s.page.locator(tid('task-filter-reset')).first().click();
     await s.page.waitForTimeout(300);
@@ -295,13 +300,20 @@ async function checkList(s) {
   await s.page.waitForTimeout(300);
   const order = () => s.page.evaluate(() => [...document.querySelectorAll('[data-testid^="req-row-r_p"]')].filter(e => e.getBoundingClientRect().width > 0).map(e => e.dataset.testid.replace('req-row-', '')));
   const asc = await order();
-  const cell = await s.page.evaluate(() => { const c = document.querySelector('[data-testid="task-cell-r_p3-priority"]'); const b = c?.querySelector('[data-testid="task-prio-badge"]'); const row = document.querySelector('[data-testid="req-row-r_p3"]'); if (!b || !row) return null; const bb = b.getBoundingClientRect(); const cb = c.getBoundingClientRect(); return { text: b.textContent, dy: (bb.y + bb.height / 2) - (cb.y + cb.height / 2) }; });
+  const cell = await s.page.evaluate(() => { const c = document.querySelector('[data-testid="task-cell-r_p3-priority"]'); const b = c?.querySelector('[data-testid="task-prio-badge"]'); const row = document.querySelector('[data-testid="req-row-r_p3"]'); if (!b || !row) return null; const bb = b.getBoundingClientRect(); const cb = c.getBoundingClientRect();
+    // the badge's painted box: its rect clipped by every overflow ancestor (a 0-wide badge keeps its textContent)
+    let w = bb.width, h = bb.height;
+    for (let a = b.parentElement; a && a !== document.body; a = a.parentElement) {
+      const cs = getComputedStyle(a); if (cs.overflowX === 'visible' && cs.overflowY === 'visible') continue;
+      const r = a.getBoundingClientRect(); w = Math.min(w, Math.max(0, Math.min(bb.right, r.right) - Math.max(bb.left, r.left))); h = Math.min(h, Math.max(0, Math.min(bb.bottom, r.bottom) - Math.max(bb.top, r.top)));
+    }
+    return { text: b.textContent, dy: (bb.y + bb.height / 2) - (cb.y + cb.height / 2), pw: Math.round(w * 10) / 10, ph: Math.round(h * 10) / 10 }; });
   await shot(s.page, `list-${s.vp.replace(/\W+/g, '-')}`);
   await s.page.locator(tid('req-sort-priority')).first().click();
   await s.page.waitForTimeout(300);
   const desc = await order();
   record(s.vp, 'list: 优先级 cell is the badge (centred ±1px); sort P0→P3, then P3→P0', {
-    asc: asc.join() === 'r_p0,r_p1,r_p2,r_p3', desc: desc.join() === 'r_p3,r_p2,r_p1,r_p0', badge: cell?.text === 'P3', centred: !!cell && Math.abs(cell.dy) <= 1,
+    asc: asc.join() === 'r_p0,r_p1,r_p2,r_p3', desc: desc.join() === 'r_p3,r_p2,r_p1,r_p0', badge: cell?.text === 'P3' && cell.pw >= 8 && cell.ph >= 1, centred: !!cell && Math.abs(cell.dy) <= 1,
   }, { asc: asc.join(), desc: desc.join(), cell: JSON.stringify(cell) });
   await s.page.locator(tid('tasks-view-board')).first().click();
   await s.page.waitForTimeout(300);

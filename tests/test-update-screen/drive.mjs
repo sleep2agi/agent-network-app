@@ -42,6 +42,40 @@ const open = async ({ platform, state, theme, viewport, current, phone }) => {
   return { page, ctx };
 };
 const box = (page, id) => page.locator(`[data-testid="${id}"]`).last().boundingBox();
+// Text right ≠ text visible: the title-blank bug kept textContent correct while flex 0 1 0% + overflow:hidden painted
+// the element 0px wide. painted(loc, re) = the box of `loc` itself, or of the deepest element inside it whose text
+// matches `re`, intersected with every overflow-clipping ancestor (the harness's paintedText, but on the same
+// `.last()` element the text is read from). It is scrolled into view for the measurement and every scroll position
+// put back: a notes group below the fold is clipped by the scroller, which is "not scrolled to", not "not painted".
+// Only real scroll containers (overflow auto/scroll) may move — scrollIntoView also scrolls overflow:hidden boxes,
+// which would slide clipped text back into view and hide exactly the defect this measures.
+const painted = (loc, re) => loc.evaluate((root, src) => {
+  const el = src === null ? root : [...root.querySelectorAll('*')].reverse().find(e => e.getClientRects().length && new RegExp(src).test(e.textContent));
+  if (!el) return null;
+  const saved = [];
+  for (let a = el.parentElement; a; a = a.parentElement) saved.push([a, a.scrollTop, a.scrollLeft]);
+  el.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+  const scrolls = (v) => v === 'auto' || v === 'scroll';
+  for (const [a, top, left] of saved) {
+    if (a === document.scrollingElement) continue;
+    const cs = getComputedStyle(a);
+    if (!scrolls(cs.overflowY)) a.scrollTop = top;
+    if (!scrolls(cs.overflowX)) a.scrollLeft = left;
+  }
+  const b = el.getBoundingClientRect();
+  let w = b.width, h = b.height;
+  for (let a = el.parentElement; a && a !== document.body; a = a.parentElement) {
+    const cs = getComputedStyle(a);
+    if (cs.overflowX === 'visible' && cs.overflowY === 'visible') continue;
+    const r = a.getBoundingClientRect();
+    w = Math.min(w, Math.max(0, Math.min(b.right, r.right) - Math.max(b.left, r.left)));
+    h = Math.min(h, Math.max(0, Math.min(b.bottom, r.bottom) - Math.max(b.top, r.top)));
+  }
+  for (const [a, top, left] of saved) { a.scrollTop = top; a.scrollLeft = left; }
+  return { w, h, text: el.textContent, painted: w >= 1 && h >= 1 };
+}, re ? re.source : null);
+const seen = (p) => !!p?.painted && p.w >= 8;
+const pd = (p) => p ? `painted ${r1(p.w)}×${r1(p.h)}${p.painted ? '' : ' UNPAINTED'}` : 'not rendered';
 
 const phoneCase = async ({ vp, theme, state, current, tag }) => {
   const { page, ctx } = await open({ platform: 'android', state, theme, viewport: vp, current, phone: true });
@@ -66,7 +100,8 @@ const phoneCase = async ({ vp, theme, state, current, tag }) => {
     else ck(`${name}: ✕ top-left, below the status bar`, !!close && close.x < 40 && close.y >= INSET.top - 0.5 && close.y < INSET.top + 20, close && `x=${r1(close.x)} y=${r1(close.y)}`);
     if (state === 'downloading') {
       const txt = await page.locator('[data-testid="android-update-progress"]').last().innerText();
-      ck(`${name}: progress shows % and MB`, /44%/.test(txt) && /MB/.test(txt), JSON.stringify(txt));
+      const pctP = await painted(page.locator('[data-testid="android-update-progress"]').last(), /44%/);
+      ck(`${name}: progress shows % and MB`, /44%/.test(txt) && /MB/.test(txt) && seen(pctP), `${JSON.stringify(txt)} ${pd(pctP)}`);
       const browserLink = await box(page, 'android-update-browser');
       ck(`${name}: 在浏览器中下载 is a small text link (≤ 24px tall), not a button`, !!browserLink && browserLink.height <= 24, browserLink && `h=${r1(browserLink.height)}`);
     }
@@ -75,10 +110,13 @@ const phoneCase = async ({ vp, theme, state, current, tag }) => {
     const text = await page.locator('[data-testid="android-update-prompt"]').last().innerText();
     ck(`${name}: no "What's new" / leading "- "`, !/What's new/i.test(text) && !/^\s*- /m.test(text));
     const footerText = await page.locator('[data-testid="android-update-footer"]').last().innerText();
-    ck(`${name}: footer says 安全校验, no sha256 jargon`, footerText.includes('安全校验') && !/sha256/i.test(footerText), JSON.stringify(footerText));
+    const footerP = await painted(page.locator('[data-testid="android-update-footer"]').last(), /安全校验/);
+    ck(`${name}: footer says 安全校验, no sha256 jargon`, footerText.includes('安全校验') && !/sha256/i.test(footerText) && seen(footerP), `${JSON.stringify(footerText)} ${pd(footerP)}`);
     const titles = await page.locator('[data-testid^="update-notes-group-"]').evaluateAll(els => els.map(e => e.innerText.split('\n')[0]));
     const want = current === '0.2.153' ? ['v0.2.157 更新内容', 'v0.2.156 更新内容', 'v0.2.155 更新内容', 'v0.2.154 更新内容'] : ['v0.2.157 更新内容'];
-    ck(`${name}: groups = versions newer than installed, newest first`, JSON.stringify(titles) === JSON.stringify(want), JSON.stringify(titles));
+    const titlesP = [];
+    for (const [i, t] of titles.entries()) titlesP.push(await painted(page.locator(`[data-testid="update-notes-group-${i}"]`).last(), new RegExp(`^${t.replace(/[.]/g, '\\.')}$`)));
+    ck(`${name}: groups = versions newer than installed, newest first`, JSON.stringify(titles) === JSON.stringify(want) && titlesP.every(seen), `${JSON.stringify(titles)} ${titlesP.map(pd).join(' / ')}`);
 
     if (OUT) await page.screenshot({ path: `${OUT}/phone-${vp.width}x${vp.height}-${theme}-${tag}.png` });
 
@@ -118,7 +156,10 @@ const desktopCase = async ({ vp, theme, state, current, tag }) => {
     const text = await page.locator('[data-testid="desktop-update-card"]').last().innerText();
     ck(`${name}: no "What's new" / leading "- "`, !/What's new/i.test(text) && !/^\s*- /m.test(text));
     ck(`${name}: notes rendered (still there while downloading)`, (await page.locator('[data-testid="update-note-item"]').count()) > 0);
-    if (state === 'downloading') ck(`${name}: progress shows % and MB`, /44%/.test(text) && /MB/.test(text));
+    if (state === 'downloading') {
+      const pctP = await painted(page.locator('[data-testid="desktop-update-card"]').last(), /44%/);
+      ck(`${name}: progress shows % and MB`, /44%/.test(text) && /MB/.test(text) && seen(pctP), pd(pctP));
+    }
     const clipped = await page.locator('[data-testid="update-note-item"]').evaluateAll(els => els.filter(e => { const t = e.lastElementChild; return t && t.scrollHeight > t.clientHeight + 1; }).length);
     ck(`${name}: no note item is clipped`, clipped === 0);
     const footerCut = await page.locator('[data-testid="desktop-update-footer"]').last().evaluate(f => [...f.querySelectorAll('div')].filter(d => d.children.length === 0 && d.scrollWidth > d.clientWidth + 1).map(d => d.textContent));

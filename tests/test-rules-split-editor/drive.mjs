@@ -20,7 +20,7 @@
 // 手机 390×844(安卓 UA):只有 阅读/编辑 两个 tab、默认阅读、没有左右 —— 截图证明不变。
 // 任何一条没跑到 = FAIL(不是 skip)。
 import { mkdirSync, writeFileSync } from 'node:fs';
-import { serveExport, initScript, findChromium, ANDROID_UA } from '../test-layout-sweep/harness.mjs';
+import { serveExport, initScript, findChromium, ANDROID_UA, paintedText } from '../test-layout-sweep/harness.mjs';
 
 const { chromium } = await import(process.env.PLAYWRIGHT_MODULE || 'playwright');
 const WEB = process.env.WEB_DIR;
@@ -175,7 +175,9 @@ async function desktop(browser, web, vp) {
   const latency = Date.now() - t0;
   row(tag, '左边打字 → 右边预览出现', seen ? `${latency} ms` : '没出现', '≤3000 ms', seen);
   ck(`${tag} live: 预览跟着更新`, seen, `${latency}ms`);
-  ck(`${tag} live: 标「未保存」`, (await m.getByText('未保存', { exact: true }).count()) > 0);
+  // 不只看有没有这段字:还要真的画出来(裁掉 overflow 祖先之后 ≥ 8px 宽)——0 宽的标签 textContent 照样对
+  const dirty = await paintedText(page, '[aria-modal="true"] *', '未保存');
+  ck(`${tag} live: 标「未保存」`, (await m.getByText('未保存', { exact: true }).count()) > 0 && !!dirty?.painted && dirty.w >= 8, dirty ? `painted ${r1(dirty.w)}×${r1(dirty.h)}` : 'painted none');
 
   // scroll sync:把左边滚到「第 9 节」那一行
   const scrollSrcTo = async (needle) => {

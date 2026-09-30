@@ -112,7 +112,15 @@ record('0 prefill on switching to 仅指定', { three: (await selectedCount()) =
 // 1
 await page.locator(tid('grants-clear')).click(); await sleep(200);
 record('1 清空 → 已选 0', { zero: (await selectedCount()) === 0, alphaOff: !(await on('e2e-alpha')) });
-record('1 one-time note is shown', { note: (await page.getByText('一次性批量勾选', { exact: false }).count()) > 0 });
+{ // painted = the note's box clipped by every overflow ancestor is ≥ 1×1(textContent 在但 0 宽的那种也要红)
+  const note = page.getByText('一次性批量勾选', { exact: false });
+  if (await note.count()) await note.first().scrollIntoViewIfNeeded().catch(() => {}); // 在滚动容器里、只是在折叠线下的不算 0 宽
+  const p = (await note.count()) ? await note.first().evaluate(el => { const b = el.getBoundingClientRect(); let w = b.width, h = b.height;
+    for (let a = el.parentElement; a && a !== document.body; a = a.parentElement) { const cs = getComputedStyle(a); if (cs.overflowX === 'visible' && cs.overflowY === 'visible') continue;
+      const r = a.getBoundingClientRect(); w = Math.min(w, Math.max(0, Math.min(b.right, r.right) - Math.max(b.left, r.left))); h = Math.min(h, Math.max(0, Math.min(b.bottom, r.bottom) - Math.max(b.top, r.top))); }
+    return { w, h, painted: w >= 1 && h >= 1 }; }) : null;
+  record('1 one-time note is shown', { note: (await note.count()) > 0, painted: !!p?.painted && p.w >= 8 }, { painted: p });
+}
 
 // 2 by machine
 await page.locator(tid('grants-group-by-host')).click(); await sleep(300);

@@ -10,6 +10,7 @@
 //              or two pager tabs (phone); 清除筛选 is one line and brings back three columns
 import { createServer } from 'node:http';
 import { readFileSync, mkdirSync, existsSync } from 'node:fs';
+import { paintedText } from '../test-layout-sweep/harness.mjs';
 const { chromium } = await import(process.env.PLAYWRIGHT_MODULE || 'playwright');
 const out = process.env.OUT || '/output'; mkdirSync(out, { recursive: true });
 const bundle = process.env.BUNDLE || '/output/phone-board.js';
@@ -104,7 +105,9 @@ try {
     await page.waitForTimeout(200);
     await tap('task-filter-scrim');
     await page.waitForTimeout(300);
-    ck(`${v.tag}: chip label reads 进行中`, (await page.getByTestId('task-filter-status').innerText()).includes('进行中'));
+    // the label's own Text node, painted (a 0-wide label keeps its textContent, so innerText alone stays green)
+    const label = await paintedText(page, '[data-testid="task-filter-status"] *', '进行中');
+    ck(`${v.tag}: chip label reads 进行中`, (await page.getByTestId('task-filter-status').innerText()).includes('进行中') && !!label?.painted && label.w >= 8, { painted: label });
     ck(`${v.tag}: board has only the 进行中 column`, await page.getByTestId('req-col-doing').count() === 1 && await page.getByTestId('req-col-pool').count() === 0 && await page.getByTestId('req-col-done').count() === 0);
     if (v.phone) ck(`${v.tag}: pager has one tab`, await page.getByTestId('req-page-tab-doing').count() === 1 && await page.getByTestId('req-page-tab-pool').count() === 0);
     else {

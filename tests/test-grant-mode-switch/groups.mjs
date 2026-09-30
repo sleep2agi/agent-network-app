@@ -13,7 +13,7 @@
 // 以及新控件的 boundingBox。任何断言失败 exit 1。
 import { mkdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { serveExport, findChromium, ANDROID_UA } from '../test-layout-sweep/harness.mjs';
+import { serveExport, findChromium, ANDROID_UA, paintedText } from '../test-layout-sweep/harness.mjs';
 
 const { chromium } = await import(process.env.PLAYWRIGHT_MODULE || 'playwright');
 const { WEB_DIR: WEB, OUT, SEED, VP } = process.env;
@@ -117,7 +117,7 @@ if (OLD) {
   await page.locator(tid('agent-group-new')).click();
   await page.locator(tid(wide ? 'group-dialog' : 'group-page')).waitFor({ timeout: 8000 });
   await page.locator(tid('grant-toggle-e2e-alpha')).waitFor({ timeout: 8000 });
-  if (!wide) record('1 phone: group editor is a settings 三级页 titled 分组', { title: (await page.locator(tid('settings-subpage-title')).innerText()) === '分组' });
+  if (!wide) { const t = await paintedText(page, tid('settings-subpage-title'), '分组'); record('1 phone: group editor is a settings 三级页 titled 分组', { title: (await page.locator(tid('settings-subpage-title')).innerText()) === '分组', painted: !!t?.painted && t.w >= 8 }, { painted: t }); }
   await page.locator(tid('group-name')).fill('前端组');
   await page.locator(tid('grants-group-by-host')).click(); await sleep(300);
   await page.locator(tid('grant-group-host-a')).click(); await sleep(200);

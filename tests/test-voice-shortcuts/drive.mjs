@@ -21,7 +21,7 @@
 //   mac      ⌘⇧Space 按住 → 先松开 ⌘(mac 上按着 ⌘ 时松开 Space 没有 keyup)→ 插入
 // 任何一条没跑到 = FAIL(不是 skip)。
 import { mkdirSync } from 'node:fs';
-import { serveExport, initScript, findChromium } from '../test-layout-sweep/harness.mjs';
+import { serveExport, initScript, findChromium, paintedText } from '../test-layout-sweep/harness.mjs';
 
 const { chromium } = await import(process.env.PLAYWRIGHT_MODULE || 'playwright');
 const WEB = process.env.WEB_DIR;
@@ -74,6 +74,29 @@ async function openApp({ mac = false } = {}) {
 }
 
 const norm = (s) => s.replace(/\s+/g, ' ').trim();
+// 文字对 ≠ 看得见:title-blank 那次 textContent 一直对,元素却被 flex 0 1 0% + overflow:hidden 压成 0px 宽。
+// 文字判据旁边再量同一个元素画出来的框(被 overflow 祖先裁剪后 ≥ 8px 宽)。先滚进视口:设置页是滚动容器,
+// 首屏外的行被它裁成 0 高,那是「没滚到」不是「没画」。只让真正的滚动容器(overflow auto/scroll)动 ——
+// scrollIntoView 也会滚 overflow:hidden 的盒子,把被裁掉的字滚回来,正好掩盖要量的缺陷。
+const painted = async (page, id) => {
+  const sel = `[data-testid="${id}"]`;
+  await page.evaluate((s) => {
+    const el = document.querySelector(s);
+    if (!el) return;
+    const scrolls = (v) => v === 'auto' || v === 'scroll';
+    const pinned = [];
+    for (let a = el.parentElement; a; a = a.parentElement) if (a !== document.scrollingElement) pinned.push([a, a.scrollTop, a.scrollLeft]);
+    el.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+    for (const [a, top, left] of pinned) {
+      const cs = getComputedStyle(a);
+      if (!scrolls(cs.overflowY)) a.scrollTop = top;
+      if (!scrolls(cs.overflowX)) a.scrollLeft = left;
+    }
+  }, sel);
+  return paintedText(page, sel);
+};
+const seen = (p) => !!p?.painted && p.w >= 8;
+const pd = (p) => p ? `painted ${Math.round(p.w)}×${Math.round(p.h)}${p.painted ? '' : ' UNPAINTED'}` : 'not rendered';
 
 {
   const { ctx, page, errors } = await openApp();
@@ -92,8 +115,10 @@ const norm = (s) => s.replace(/\s+/g, ' ').trim();
     const allLabels = await page.locator('[data-testid^="shortcut-label-"]').allInnerTexts();
     const english = allLabels.filter(l => /[A-Za-z]{2,}/.test(l));
     ck('page: 页面上所有行标签没有英文单词', english.length === 0, english.join(' | '));
-    ck('page: 按键说话 = Ctrl Shift Space', norm(await page.locator('[data-testid="shortcut-chips-input.voiceHold"]').innerText()) === 'Ctrl Shift Space');
-    ck('page: 语音输入开关 = Ctrl Shift M', norm(await page.locator('[data-testid="shortcut-chips-input.voiceToggle"]').innerText()) === 'Ctrl Shift M');
+    const holdP = await painted(page, 'shortcut-chips-input.voiceHold');
+    ck('page: 按键说话 = Ctrl Shift Space', norm(await page.locator('[data-testid="shortcut-chips-input.voiceHold"]').innerText()) === 'Ctrl Shift Space' && seen(holdP), pd(holdP));
+    const toggleP = await painted(page, 'shortcut-chips-input.voiceToggle');
+    ck('page: 语音输入开关 = Ctrl Shift M', norm(await page.locator('[data-testid="shortcut-chips-input.voiceToggle"]').innerText()) === 'Ctrl Shift M' && seen(toggleP), pd(toggleP));
     await page.locator('[data-testid="shortcut-row-input.voiceHold"]').scrollIntoViewIfNeeded();
     await shot('shortcuts-1200x800-input-group');
     const rowIds = await page.locator('[data-testid^="shortcut-row-"]').evaluateAll(els => els.map(e => e.getAttribute('data-testid').replace('shortcut-row-', '')));
@@ -123,13 +148,16 @@ const norm = (s) => s.replace(/\s+/g, ' ').trim();
     ck('rebind: 点行进入录入', await page.locator('[data-testid="shortcut-capturing-input.voiceHold"]').isVisible());
     await page.keyboard.press('Control+Shift+KeyM');
     const warn = await page.locator('[data-testid="shortcut-warning-input.voiceHold"]').innerText();
-    ck('rebind: Ctrl+Shift+M → 与「语音输入开关」冲突', warn.includes('语音输入开关'), warn);
+    const warnP = await painted(page, 'shortcut-warning-input.voiceHold');
+    ck('rebind: Ctrl+Shift+M → 与「语音输入开关」冲突', warn.includes('语音输入开关') && seen(warnP), `${warn} ${pd(warnP)}`);
     await page.keyboard.press('Control+Space');
     const warn2 = await page.locator('[data-testid="shortcut-warning-input.voiceHold"]').innerText();
-    ck('rebind: Ctrl+Space → 系统输入法切换,拒绝', warn2.includes('输入法'), warn2);
+    const warn2P = await painted(page, 'shortcut-warning-input.voiceHold');
+    ck('rebind: Ctrl+Space → 系统输入法切换,拒绝', warn2.includes('输入法') && seen(warn2P), `${warn2} ${pd(warn2P)}`);
     await shot('shortcuts-voice-conflict');
     await page.keyboard.press('F8');
-    ck('rebind: F8 保存并显示', norm(await page.locator('[data-testid="shortcut-chips-input.voiceHold"]').innerText()) === 'F8');
+    const f8P = await painted(page, 'shortcut-chips-input.voiceHold');
+    ck('rebind: F8 保存并显示', norm(await page.locator('[data-testid="shortcut-chips-input.voiceHold"]').innerText()) === 'F8' && seen(f8P), pd(f8P));
     ck('rebind: 改过出现「恢复默认」', await page.locator('[data-testid="shortcut-reset-input.voiceHold"]').isVisible());
     await shot('shortcuts-voice-rebound-f8');
 
@@ -138,7 +166,9 @@ const norm = (s) => s.replace(/\s+/g, ' ').trim();
     for (let i = 0; i < 3; i++) await page.keyboard.down('F8'); // 自动重复
     await page.keyboard.up('F8');
     const toast = page.locator('[data-testid="shortcut-toast"]');
-    ck('nochat: 设置页按住说话 →「先打开一个会话」', await toast.waitFor({ timeout: 3000 }).then(() => true, () => false) && (await toast.innerText()) === '先打开一个会话');
+    const toastUp = await toast.waitFor({ timeout: 3000 }).then(() => true, () => false);
+    const toastP = await painted(page, 'shortcut-toast');
+    ck('nochat: 设置页按住说话 →「先打开一个会话」', toastUp && (await toast.innerText()) === '先打开一个会话' && seen(toastP), pd(toastP));
     ck('nochat: 自动重复不叠提示(只有 1 个)', (await toast.count()) === 1);
     await shot('nochat-toast');
     ck('nochat: 没有录音、没有识别请求', (await page.evaluate(() => window.__asr.calls)) === 0 && !(await page.locator('[data-testid="voice-bar"]').count()));
@@ -180,7 +210,8 @@ const norm = (s) => s.replace(/\s+/g, ' ').trim();
     await page.keyboard.press('Control+Comma');
     await page.getByRole('button', { name: '设置分类 快捷键' }).click();
     await page.locator('[data-testid="shortcut-reset-input.voiceHold"]').click();
-    ck('rebind: 恢复默认 → Ctrl Shift Space', norm(await page.locator('[data-testid="shortcut-chips-input.voiceHold"]').innerText()) === 'Ctrl Shift Space');
+    const resetP = await painted(page, 'shortcut-chips-input.voiceHold');
+    ck('rebind: 恢复默认 → Ctrl Shift Space', norm(await page.locator('[data-testid="shortcut-chips-input.voiceHold"]').innerText()) === 'Ctrl Shift Space' && seen(resetP), pd(resetP));
     await page.evaluate(() => window.__anetLayoutSweep.setScreen({ name: 'chat', alias: '示例-A' }));
     await input.waitFor({ timeout: 10000 });
     await page.waitForTimeout(400);
@@ -196,11 +227,13 @@ const norm = (s) => s.replace(/\s+/g, ' ').trim();
     const ind = page.locator('[data-testid="voice-bar"]');
     ck('hold: 按住期间输入框底部换成录音条', await ind.isVisible());
     const elapsed = await page.locator('[data-testid="voice-bar-elapsed"]').innerText().catch(() => '');
-    ck('hold: 录音条有计时', /^00:0[1-9]$/.test(elapsed), elapsed);
-    const bars = await page.locator('[data-testid="voice-bar-level"] > div').evaluateAll(els => els.map(e => e.getBoundingClientRect().height));
+    const bars = await page.locator('[data-testid="voice-bar-level"] > div').evaluateAll(els => els.map(e => e.getBoundingClientRect().height)); // 先采电平:假麦克风是间歇的,晚采会落进静音
+    const elapsedP = await painted(page, 'voice-bar-elapsed');
+    ck('hold: 录音条有计时', /^00:0[1-9]$/.test(elapsed) && seen(elapsedP), `${elapsed} ${pd(elapsedP)}`);
     ck('hold: 录音条有电平条(假麦克风有声音 → 不全是最低)', bars.length === 7 && Math.max(...bars) > 4, bars.join(','));
     const hint = await page.locator('[data-testid="voice-bar-hint"]').innerText();
-    ck('hold: 提示「松开 Ctrl+Shift+Space 完成 · Esc 取消」', hint === '松开 Ctrl+Shift+Space 完成 · Esc 取消', hint);
+    const hintP = await painted(page, 'voice-bar-hint');
+    ck('hold: 提示「松开 Ctrl+Shift+Space 完成 · Esc 取消」', hint === '松开 Ctrl+Shift+Space 完成 · Esc 取消' && seen(hintP), `${hint} ${pd(hintP)}`);
     ck('hold: 麦克风那张大浮层不出现', !(await page.locator('[data-testid="voice-overlay"]').count()));
     ck('hold: 发送键提示暂时让位', !(await page.locator('[data-testid="composer-shortcut-hint"]').count()));
     const during = await state();
@@ -263,7 +296,8 @@ const norm = (s) => s.replace(/\s+/g, ' ').trim();
     await page.waitForTimeout(1300);
     ck('toggle: 按一下开始、松开后仍在录', await ind.isVisible());
     const thint = await page.locator('[data-testid="voice-bar-hint"]').innerText();
-    ck('toggle: 提示「再按 Ctrl+Shift+M 完成 · Esc 取消」', thint === '再按 Ctrl+Shift+M 完成 · Esc 取消', thint);
+    const thintP = await painted(page, 'voice-bar-hint');
+    ck('toggle: 提示「再按 Ctrl+Shift+M 完成 · Esc 取消」', thint === '再按 Ctrl+Shift+M 完成 · Esc 取消' && seen(thintP), `${thint} ${pd(thintP)}`);
     await shot('toggle-recording-indicator');
     await page.keyboard.press('Control+Shift+KeyM');
     await settle();
@@ -284,7 +318,9 @@ const norm = (s) => s.replace(/\s+/g, ' ').trim();
   try {
     await page.getByRole('tab', { name: '设置', exact: true }).click();
     await page.getByRole('button', { name: '设置分类 快捷键' }).click();
-    ck('mac: 默认显示 ⌘ ⇧ Space / ⌘ ⇧ M', norm(await page.locator('[data-testid="shortcut-chips-input.voiceHold"]').innerText()) === '⌘ ⇧ Space' && norm(await page.locator('[data-testid="shortcut-chips-input.voiceToggle"]').innerText()) === '⌘ ⇧ M');
+    const macHoldP = await painted(page, 'shortcut-chips-input.voiceHold');
+    const macToggleP = await painted(page, 'shortcut-chips-input.voiceToggle');
+    ck('mac: 默认显示 ⌘ ⇧ Space / ⌘ ⇧ M', norm(await page.locator('[data-testid="shortcut-chips-input.voiceHold"]').innerText()) === '⌘ ⇧ Space' && norm(await page.locator('[data-testid="shortcut-chips-input.voiceToggle"]').innerText()) === '⌘ ⇧ M' && seen(macHoldP) && seen(macToggleP), `${pd(macHoldP)} / ${pd(macToggleP)}`);
     if (OUT) { await page.locator('[data-testid="shortcut-row-input.voiceHold"]').scrollIntoViewIfNeeded(); await page.screenshot({ path: `${OUT}/shortcuts-1200x800-mac-input-group.png` }); }
     await page.evaluate(() => window.__anetLayoutSweep.setScreen({ name: 'chat', alias: '示例-A' }));
     const input = page.locator('textarea[placeholder^="Message 示例-A"]').first();
@@ -298,7 +334,8 @@ const norm = (s) => s.replace(/\s+/g, ' ').trim();
     await page.keyboard.down('Meta'); await page.keyboard.down('Shift'); await page.keyboard.down('Space');
     await page.waitForTimeout(1300);
     const hint = await page.locator('[data-testid="voice-bar-hint"]').innerText().catch(() => '');
-    ck('mac: 提示「松开 ⌘⇧Space 完成 · Esc 取消」', hint === '松开 ⌘⇧Space 完成 · Esc 取消', hint);
+    const macHintP = await painted(page, 'voice-bar-hint');
+    ck('mac: 提示「松开 ⌘⇧Space 完成 · Esc 取消」', hint === '松开 ⌘⇧Space 完成 · Esc 取消' && seen(macHintP), `${hint} ${pd(macHintP)}`);
     await page.keyboard.up('Meta'); // 先松 ⌘:真 mac 上此时 Space 的 keyup 不会来
     await page.waitForFunction(() => !document.querySelector('[data-testid="voice-bar"]'), null, { timeout: 10000 }).catch(() => {});
     await page.waitForTimeout(250);

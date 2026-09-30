@@ -22,7 +22,7 @@
 // Exit 1 when any assertion fails.
 import { mkdirSync } from 'node:fs';
 import { join } from 'node:path';
-import { serveExport, findChromium } from '../test-layout-sweep/harness.mjs';
+import { serveExport, findChromium, paintedText } from '../test-layout-sweep/harness.mjs';
 
 const { chromium } = await import(process.env.PLAYWRIGHT_MODULE || 'playwright');
 const { WEB_DIR: WEB, OUT } = process.env;
@@ -137,6 +137,14 @@ const rect = (page, sel) => page.evaluate((s) => {
   return { x: b.x, y: b.y, w: b.width, h: b.height, r: b.right, b: b.bottom, cy: b.y + b.height / 2 };
 }, sel);
 const spread = (cs) => { const ys = cs.map(c => c?.cy).filter(v => v != null); return ys.length === cs.length ? Math.max(...ys) - Math.min(...ys) : Infinity; };
+// Text checks also demand the PAINTED box (after overflow clipping) — a 0-wide node keeps its textContent. The editor
+// scrolls, so bring the node into view first; otherwise the clip reads the scroll offset, not the layout.
+const painted = (p) => !!p && p.painted && p.w >= 8;
+const pw = (p) => p ? `${r1(p.w)}×${r1(p.h)}` : 'none';
+const paintedIn = async (page, sel, text) => {
+  await page.locator(sel).filter({ hasText: text }).first().scrollIntoViewIfNeeded({ timeout: 3000 }).catch(() => {});
+  return paintedText(page, sel, text);
+};
 const shot = async (page, name) => {
   await page.evaluate(() => { const el = [...document.querySelectorAll('[data-testid="req-description"]')].find(e => e.getBoundingClientRect().width > 0); el?.scrollIntoView({ block: 'center' }); });
   await page.waitForTimeout(150);
@@ -254,6 +262,7 @@ for (const v of [{ w: 1200, h: 800 }, { w: 1440, h: 900 }]) {
     await page.keyboard.type('工具条复选框');
     await page.waitForTimeout(200);
     const dom = await page.locator(content).evaluate(el => ({ h2: el.querySelector('h2')?.textContent, h3: el.querySelector('h3')?.textContent, lis: el.querySelectorAll('ul:not([data-type]) > li').length, tasks: el.querySelectorAll('ul[data-type="taskList"] > li').length, strong: [...el.querySelectorAll('strong')].map(s => s.textContent) }));
+    const typedP = { h2: await paintedIn(page, `${content} h2`, '目标'), h3: await paintedIn(page, `${content} h3`, '工具条标题'), strong: await paintedIn(page, `${content} strong`, '加粗'), strong2: await paintedIn(page, `${content} strong`, '星号粗') };
     await shot(page, `desktop-${v.w}-rich-typed`);
     await save(page);
     const ps = await patches(page);
@@ -261,8 +270,8 @@ for (const v of [{ w: 1200, h: 800 }, { w: 1440, h: 900 }]) {
     const got = ps.at(-1)?.body?.description;
     record(vp, 'type: heading / list / checkbox / bold (shortcuts + toolbar) → PATCH description is the expected Markdown', {
       oneBody: ps.length === 1 && Object.keys(ps[0].body).join() === 'description',
-      markdown: got === want, rendered: dom.h2 === '目标' && dom.h3 === '工具条标题' && dom.lis === 2 && dom.tasks === 3 && dom.strong.join('|') === '加粗|星号粗',
-    }, { got: JSON.stringify(got), dom });
+      markdown: got === want, rendered: dom.h2 === '目标' && dom.h3 === '工具条标题' && dom.lis === 2 && dom.tasks === 3 && dom.strong.join('|') === '加粗|星号粗' && Object.values(typedP).every(painted),
+    }, { got: JSON.stringify(got), dom, painted: Object.entries(typedP).map(([k, p]) => `${k} ${pw(p)}`).join(', ') });
 
     // ── source toggle: shows the Markdown; edit there → rendered in rich; toggle without edits → nothing changes ──
     await page.locator(tid('req-description-mode-edit')).click();
@@ -273,6 +282,7 @@ for (const v of [{ w: 1200, h: 800 }, { w: 1440, h: 900 }]) {
     await page.locator(tid('req-description-mode-rich')).click();
     await page.locator(content).waitFor();
     const em = await page.locator(content).evaluate(el => el.querySelector('em')?.textContent);
+    const emP = await paintedIn(page, `${content} em`, '斜体');
     await page.locator(tid('req-description-mode-edit')).click();
     const src3 = await page.locator(source).inputValue();
     await page.locator(tid('req-description-mode-rich')).click();
@@ -280,9 +290,9 @@ for (const v of [{ w: 1200, h: 800 }, { w: 1440, h: 900 }]) {
     const src4 = await page.locator(source).inputValue();
     await page.locator(tid('req-description-mode-rich')).click();
     record(vp, '源码 toggle: shows the saved Markdown; a source edit renders in rich; toggling without edits keeps bytes', {
-      sourceShowsMarkdown: src === want, italicRendered: em === '斜体',
+      sourceShowsMarkdown: src === want, italicRendered: em === '斜体' && painted(emP),
       keptEdit: src3 === `${want}\n\n源码里写的 *斜体*`, toggleNoop: src4 === src3,
-    }, { em, src3: JSON.stringify(src3.slice(-20)) });
+    }, { em, emPainted: pw(emP), src3: JSON.stringify(src3.slice(-20)) });
     await save(page);
     await closeDetail(page);
   }
@@ -336,6 +346,7 @@ for (const v of [{ w: 1200, h: 800 }, { w: 1440, h: 900 }]) {
     });
     await page.waitForTimeout(200);
     const pasted = await page.locator(content).evaluate(el => ({ h3: el.querySelector('h3')?.textContent, strong: el.querySelector('li strong')?.textContent, literal: el.innerText.includes('###') || el.innerText.includes('**') }));
+    const pastedP = { h3: await paintedIn(page, `${content} h3`, '贴进来的标题'), strong: await paintedIn(page, `${content} li strong`, '粗') };
     await shot(page, `desktop-${v.w}-rich-paste`);
     await save(page);
     const got = (await patches(page)).at(-1)?.body?.description;
@@ -343,8 +354,8 @@ for (const v of [{ w: 1200, h: 800 }, { w: 1440, h: 900 }]) {
       voiceAtCaret: voiceText.startsWith('第一段:明天上午开会。'),
       imageShown: !!img && img.src === 'blob:' && img.w === 1,
       markdown: got === '第一段:明天上午开会。\n\n![paste.png](/api/files/f_up1)\n\n### 贴进来的标题\n\n- **粗** 项',
-      pastedFormatted: pasted.h3 === '贴进来的标题' && pasted.strong === '粗' && !pasted.literal,
-    }, { voiceText: voiceText.slice(0, 20), img, got: JSON.stringify(got) });
+      pastedFormatted: pasted.h3 === '贴进来的标题' && pasted.strong === '粗' && !pasted.literal && painted(pastedP.h3) && painted(pastedP.strong),
+    }, { voiceText: voiceText.slice(0, 20), img, got: JSON.stringify(got), pastedPainted: `h3 ${pw(pastedP.h3)}, strong ${pw(pastedP.strong)}` });
     await closeDetail(page);
   }
 
@@ -356,6 +367,7 @@ for (const v of [{ w: 1200, h: 800 }, { w: 1440, h: 900 }]) {
     const fullContent = tid('req-description-full-rich-content');
     await page.locator(fullContent).waitFor({ timeout: 8000 });
     const tab = await page.locator(tid('req-description-full-mode-read')).innerText();
+    const tabP = await paintedText(page, `${tid('req-description-full-mode-read')} *`, '富文本');
     const tools = { image: await page.locator(tid('req-description-full-image')).count(), mic: await page.locator(`${tid('req-description-full-toolbar')} ${tid('voice-mic')}`).count() };
     const inlineEditors = await page.locator(content).count();
     const fr = await rect(page, tid('req-description-full-rich'));
@@ -370,10 +382,11 @@ for (const v of [{ w: 1200, h: 800 }, { w: 1440, h: 900 }]) {
     await page.locator(tid('req-description-full-close')).click();
     await page.locator(content).waitFor({ timeout: 8000 });
     const inlineText = await page.locator(content).innerText();
+    const keptP = await paintedIn(page, `${content} p`, '全屏里加的一段');
     record(vp, 'full screen: opens on 富文本 (editable, 🖼 🎤), only one rich editor, edits show inline after exit', {
-      richTab: tab.includes('富文本'), tools: tools.image === 1 && tools.mic === 1, oneEditor: inlineEditors === 0,
-      fills: !!fr && fr.w > v.w * 0.8, toolbarLinesUpWithText: toolText !== null && !!body && Math.abs(toolText - body.x) <= 1, keptInline: inlineText.includes('全屏里加的一段'),
-    }, { tab, tools, fullW: fr && r1(fr.w), toolText: toolText && r1(toolText), bodyX: body && r1(body.x) });
+      richTab: tab.includes('富文本') && painted(tabP), tools: tools.image === 1 && tools.mic === 1, oneEditor: inlineEditors === 0,
+      fills: !!fr && fr.w > v.w * 0.8, toolbarLinesUpWithText: toolText !== null && !!body && Math.abs(toolText - body.x) <= 1, keptInline: inlineText.includes('全屏里加的一段') && painted(keptP),
+    }, { tab, tabPainted: pw(tabP), keptPainted: pw(keptP), tools, fullW: fr && r1(fr.w), toolText: toolText && r1(toolText), bodyX: body && r1(body.x) });
     await closeDetail(page);
     await page.locator(tid('req-edit-save')).count() && await closeDetail(page);
   }
