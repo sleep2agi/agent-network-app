@@ -175,6 +175,16 @@ export async function listRequirementsFull(cfg: HubConfig): Promise<{ rows: Requ
   return { rows: rows.map(requirementFromHub).filter((row): row is Requirement => !!row), capabilities };
 }
 
+/**
+ * 归档的卡(Hub capability `archived`):GET ?archived=true 只回归档的那些。平常的列表不带它们,
+ * 搜索里勾了「包含已归档」才读一次,每行标上 archived。
+ */
+export async function listArchivedRequirements(cfg: HubConfig): Promise<Requirement[]> {
+  const data = await call(cfg, scoped(cfg, '/api/requirements?archived=true')) as { requirements?: unknown };
+  const rows = Array.isArray(data.requirements) ? data.requirements : [];
+  return rows.map(requirementFromHub).filter((row): row is Requirement => !!row).map(row => ({ ...row, archived: true }));
+}
+
 type CreateInput = { name: string; priority: ReqPriority; assignee: string; due: string; column?: ReqColumn; clientId?: string; owner?: RequirementPersonRef; agentOwner?: RequirementPersonRef; projectId?: string; parentId?: string };
 
 /** POST 的请求体。负责人只带稳定身份 {kind,id},多余字段(显示名、networkId…)一律不发。 */

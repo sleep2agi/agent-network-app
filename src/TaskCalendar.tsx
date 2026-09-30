@@ -18,6 +18,7 @@ import { colors, onThemeChange, radius, spacing, themeMode, type as typeScale, w
 import type { Requirement, RequirementProject } from './requirements-model';
 import type { RequirementPerson } from './requirement-people';
 import { PriorityDot, ProjectChip, Segmented, a11yState, cardBg, priorityColor, softShadow, type TaskStyles } from './TaskBoardParts';
+import { highlight } from './TaskSearch';
 import {
   calendarBuckets, calendarCells, cellCapacity, cellOverflow, dayDot, entryOverdue, monthAnchorOf, shiftAnchor, swipeDelta,
   type CalendarEntry, type CalendarMode,
@@ -44,6 +45,8 @@ type Props = {
   s: TaskStyles;
   onOpen: (id: string) => void;
   selectedId?: string | null;
+  /** 搜索词(task-search.ts):任务名里命中的字高亮。 */
+  terms?: readonly string[];
 };
 
 export default function TaskCalendar(props: Props & { phone: boolean }) {
@@ -51,7 +54,7 @@ export default function TaskCalendar(props: Props & { phone: boolean }) {
   return props.phone ? <CalendarPhone {...props} /> : <CalendarDesktop {...props} />;
 }
 
-function CalendarDesktop({ items, today, s, onOpen, selectedId, people }: Props) {
+function CalendarDesktop({ items, today, s, onOpen, selectedId, people, terms }: Props) {
   useTranslation();
   const c = useCalendarStyles();
   const [mode, setModeState] = useState<CalendarMode>(lastMode);
@@ -82,7 +85,7 @@ function CalendarDesktop({ items, today, s, onOpen, selectedId, people }: Props)
       >
         <View style={[c.dot, { backgroundColor: priorityColor(e.item.priority) }, (e.item.priority === 'low' || e.item.priority === 'lowest') && { backgroundColor: 'transparent', borderWidth: 1.5, borderColor: priorityColor(e.item.priority) }]} />
         {e.time ? <Text style={c.time}>{e.time}</Text> : null}
-        <Text style={[c.itemText, overdue && { color: colors.failed }, e.item.column === 'done' && s.cardDone]} numberOfLines={1}>{e.item.name}</Text>
+        <Text style={[c.itemText, overdue && { color: colors.failed }, e.item.column === 'done' && s.cardDone]} numberOfLines={1}>{highlight(e.item.name, terms)}</Text>
       </Pressable>
     );
   };
@@ -154,7 +157,7 @@ function CalendarDesktop({ items, today, s, onOpen, selectedId, people }: Props)
           {popover.entries ? popover.entries.map(e => entryRow(e, true)) : (popover.undated ?? []).map(item => (
             <Pressable key={item.id} accessibilityRole="button" accessibilityLabel={item.name} onPress={() => open(item.id)} style={state => [c.popRow, ((state as { hovered?: boolean }).hovered || state.pressed) && { backgroundColor: colors.rowHover }]} testID={`cal-undated-${item.id}`}>
               <PriorityDot p={item.priority} s={s} />
-              <Text style={[c.itemText, item.column === 'done' && s.cardDone]} numberOfLines={1}>{item.name}</Text>
+              <Text style={[c.itemText, item.column === 'done' && s.cardDone]} numberOfLines={1}>{highlight(item.name, terms)}</Text>
               <Text style={[s.muted, { maxWidth: 120 }]} numberOfLines={1}>{ownerLabel(item, people)}</Text>
             </Pressable>
           ))}
@@ -169,7 +172,7 @@ function CalendarDesktop({ items, today, s, onOpen, selectedId, people }: Props)
 const touchPoint = (ne: any): { x: number; y: number } => { const t = ne?.changedTouches?.[0] ?? ne; return { x: Number(t?.pageX), y: Number(t?.pageY) }; };
 
 // ── 手机:月历 + 选中那天的列表 ──
-function CalendarPhone({ items, projects, people, today, s, onOpen }: Props) {
+function CalendarPhone({ items, projects, people, today, s, onOpen, terms }: Props) {
   useTranslation();
   const c = useCalendarStyles();
   const [anchor, setAnchor] = useState(monthAnchorOf(today));
@@ -253,7 +256,7 @@ function CalendarPhone({ items, projects, people, today, s, onOpen }: Props) {
               testID={`cal-row-${e.item.id}`}
             >
               {projects && e.item.projectId ? <ProjectChip project={projectById.get(e.item.projectId)} s={s} small /> : null}
-              <Text style={[s.cardTitle, e.item.column === 'done' && s.cardDone]} numberOfLines={2}>{e.item.name}</Text>
+              <Text style={[s.cardTitle, e.item.column === 'done' && s.cardDone]} numberOfLines={2}>{highlight(e.item.name, terms)}</Text>
               <View style={s.meta}>
                 <PriorityDot p={e.item.priority} s={s} />
                 <Text style={[s.metaText, entryOverdue(e, today) && { color: colors.failed }]} numberOfLines={1}>{whenText(e)}</Text>
@@ -272,7 +275,7 @@ function CalendarPhone({ items, projects, people, today, s, onOpen }: Props) {
           <View style={s.groupList}>
             {undated.map((item, i) => (
               <Pressable key={item.id} accessibilityRole="button" accessibilityLabel={item.name} onPress={() => onOpen(item.id)} style={state => [s.phoneRow, i === undated.length - 1 && { borderBottomWidth: 0 }, state.pressed && { backgroundColor: colors.rowHover }]} testID={`cal-undated-${item.id}`}>
-                <Text style={[s.cardTitle, item.column === 'done' && s.cardDone]} numberOfLines={2}>{item.name}</Text>
+                <Text style={[s.cardTitle, item.column === 'done' && s.cardDone]} numberOfLines={2}>{highlight(item.name, terms)}</Text>
                 <Text style={s.metaMuted} numberOfLines={1}>{ownerLabel(item, people)}</Text>
               </Pressable>
             ))}

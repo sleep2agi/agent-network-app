@@ -4,6 +4,7 @@ import { useSyncExternalStore } from 'react';
 import type { Requirement, RequirementProject } from './requirements-model';
 import type { RequirementPerson } from './requirement-people';
 import { EMPTY_FILTER, type BoardFilter } from './task-board-model';
+import { EMPTY_SEARCH, type TaskSearch } from './task-search';
 
 /** 列表 / 看板是需求池的两种看法;派发记录是 Hub 上派给节点的任务(原来的「列表」)。 */
 export type TaskSection = 'list' | 'board' | 'gantt' | 'calendar' | 'dispatch';
@@ -12,6 +13,8 @@ export interface TaskBoardState {
   scope: string;
   section: TaskSection;
   filter: BoardFilter;
+  /** 搜索(已去抖)。和 filter 一起决定各视图画哪些卡:task-search.ts visibleTasks。换网络清空。 */
+  search: TaskSearch;
   items: Requirement[];
   people: RequirementPerson[];
   meId: string | null;
@@ -27,7 +30,7 @@ export interface TaskBoardState {
 }
 
 const fresh = (scope: string, section: TaskSection = 'board'): TaskBoardState => ({
-  scope, section, filter: EMPTY_FILTER, items: [], people: [], meId: null, twoRoles: null, projects: null, capabilities: [], managingProjects: false, loaded: false,
+  scope, section, filter: EMPTY_FILTER, search: EMPTY_SEARCH, items: [], people: [], meId: null, twoRoles: null, projects: null, capabilities: [], managingProjects: false, loaded: false,
 });
 
 let state: TaskBoardState = fresh('');
@@ -65,6 +68,7 @@ export function updateTaskItems(scope: string, fn: (items: Requirement[]) => Req
 export const setTaskSection = (section: TaskSection) => { if (state.section !== section) { state = { ...state, section }; emit(); } };
 export const setManagingProjects = (on: boolean) => { if (state.managingProjects !== on) { state = { ...state, managingProjects: on }; emit(); } };
 export const setTaskFilter = (filter: BoardFilter) => { state = { ...state, filter }; emit(); };
+export const setTaskSearch = (search: TaskSearch) => { if (state.search.q !== search.q || state.search.archived !== search.archived) { state = { ...state, search }; emit(); } };
 
 export function useTaskBoard<T>(pick: (s: TaskBoardState) => T): T {
   return useSyncExternalStore(subscribeTaskBoard, () => pick(state), () => pick(state));

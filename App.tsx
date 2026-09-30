@@ -1108,7 +1108,8 @@ function DesktopWorkspace({ cfg, screen, setScreen, onLogout, onLocalDataDeleted
     return () => clearTimeout(id);
   }, [shortcutToast]);
   const serverWorkspaceRef = useRef(serverWorkspace);
-  // 任务页的左栏也不是会话列表(TaskFilterSidebar):⌘K 同样先切回 Agents。
+  // 任务页的左栏也不是会话列表(TaskFilterSidebar):⌘K 同样先切回 Agents —— 除非任务页自己的搜索框接走了
+  // (列表 / 看板 / 甘特图上 ⌘K 聚焦任务搜索,RequirementBoard 在 window 捕获阶段 preventDefault;派发记录上照旧)。
   serverWorkspaceRef.current = serverWorkspace || taskWorkspace;
   useEffect(() => {
     const doc = (globalThis as any).document;
