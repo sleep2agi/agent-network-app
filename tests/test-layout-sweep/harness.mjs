@@ -99,6 +99,16 @@ export const initScript = ({ theme }) => {
     // GET /api/requirements/stats (hub capability stats): TASKS.stats(query) when the drive hands one in; recorded in
     // window.__statsQueries. No TASKS.stats = an old hub (404).
     if (TASKS && p === '/api/requirements/stats') { (window.__statsQueries ||= []).push(u.search); return typeof TASKS.stats === 'function' ? TASKS.stats(u.searchParams) : null; }
+    // GET /api/requirements/events (hub capability events): TASKS.events (newest first, hub shape), filtered by since /
+    // cursor / requirement_id like the hub; recorded in window.__eventsQueries. No TASKS.events = an old hub (404).
+    if (TASKS && p === '/api/requirements/events') {
+      (window.__eventsQueries ||= []).push(u.search);
+      if (!TASKS.events) return null;
+      const since = u.searchParams.get('since'), cursor = u.searchParams.get('cursor'), card = u.searchParams.get('requirement_id');
+      const limit = Number(u.searchParams.get('limit') || 200);
+      const rows = TASKS.events.filter(e => (!since || e.at >= since) && (!cursor || Number(e.id) < Number(cursor)) && (!card || e.requirement_id === card));
+      return { ok: true, events: rows.slice(0, limit), has_more: rows.length > limit, next_cursor: rows.length > limit ? rows[limit - 1].id : null, server_time: new Date().toISOString() };
+    }
     // GET /api/requirements/<id> (the dashboard opening a card that is not on the board, e.g. archived).
     const oneGet = TASKS && !bodyText && /^\/api\/requirements\/([^/]+)$/.exec(p);
     if (oneGet) { const id = decodeURIComponent(oneGet[1]); const row = [...(TASKS.requirements ?? []), ...(TASKS.archived ?? [])].find(r => r.id === id); return row ? { ok: true, requirement: row } : null; }

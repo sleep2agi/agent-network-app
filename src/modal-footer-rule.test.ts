@@ -56,6 +56,7 @@ const AUDIT: Record<string, { count: number; kinds: Kind[]; input?: boolean; key
   'SelectTextSheet.tsx': { count: 1, kinds: ['fullscreen'], keyboard: 'n/a: 只读的可选择文本(editable=false),不弹键盘', note: '正文 flex:1,复制行在外' },
   'SettingsScreen.tsx': { count: 4, kinds: ['dialog'], keyboard: 'avoider', input: true, note: '固定内容小确认框;本地删除有输入框 ⇒ 键盘避让(本次)' },
   'SideThreadDrawer.tsx': { count: 1, kinds: ['drawer'], keyboard: 'avoider', input: true, note: '86% / 100% 面板,FlatList 可收缩,自带 KAV(同一套 keyboardAvoidEnabled)' },
+  'TaskActivity.tsx': { count: 2, kinds: ['menu', 'sheet'], keyboard: 'n/a: 筛选只有勾选 / chip,没有输入框', note: '桌面下拉 maxHeight = menuMaxHeight(锚点到窗口底),选项 ScrollView flexShrink:1;手机面板 85%,chip 组 ScrollView 可收缩,「重置 / 查看 N 条」是 ScrollView 后面的兄弟(#429)' },
   'TaskCardMenu.tsx': { count: 1, kinds: ['menu'], note: 'anchorRowMenu' },
   'TaskSearch.tsx': { count: 1, kinds: ['menu'], keyboard: 'n/a: 搜索输入框在头部,不在「包含已归档」这个选项菜单 Modal 里;菜单只有一行开关', note: '锚在搜索框右端的小菜单,固定一行,不需要滚动' },
   'TaskDescriptionFullscreen.tsx': { count: 2, kinds: ['fullscreen'], keyboard: 'followup: 全屏描述编辑,手机按住说话条在底部,无键盘避让', note: '正文 flex:1' },

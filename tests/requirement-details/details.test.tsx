@@ -118,6 +118,8 @@ mock.module('./src/requirements-hub', () => ({
   // 仪表盘(TaskDashboard.tsx):这里的用例不切到仪表盘,不会被调用。
   listAllRequirementsForDashboard: async () => ({ rows: await listRows(), partial: false }),
   fetchRequirementStats: async () => { throw new Error('not used'); },
+  // 动态(TaskActivity.tsx,Hub capability events):这里的 Hub 不声明 events,不出这个视图,不会被调用。
+  fetchRequirementEvents: async () => { throw new Error('this Hub does not advertise events'); },
   getRequirementOnHub: async () => null,
   // 增量读(Hub capability changes,board-sync.ts):这里的 Hub 不声明 list_summary / changes,看板只整读。
   // 这个模块被整个替换,RequirementBoard 导入的每个名字都要在这里有一份,否则整个文件在导入时就 SyntaxError。

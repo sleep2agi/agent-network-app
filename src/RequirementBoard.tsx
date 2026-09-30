@@ -4,6 +4,7 @@ import TaskListTable from './TaskListTable';
 import TaskGantt from './TaskGantt';
 import TaskCalendar from './TaskCalendar';
 import TaskDashboard from './TaskDashboard';
+import TaskActivity from './TaskActivity';
 import { TaskTagFilter } from './TaskTags';
 import { useTranslation } from './i18n-react';
 import { taskText } from './i18n-tasks';
@@ -101,6 +102,8 @@ function ScopedRequirementBoard({ cfg, desktop, dispatch, onOpenVoiceSettings, s
   const startCapable = useTaskBoard(st => st.scope === scope && st.capabilities.includes('start_date'));
   const seqCapable = useTaskBoard(st => st.scope === scope && st.capabilities.includes(SEQ_CAPABILITY));
   const statsCapable = useTaskBoard(st => st.scope === scope && st.capabilities.includes('stats'));
+  // 动态(#429):Hub 记改动流水(capability events)才有这个视图。
+  const eventsCapable = useTaskBoard(st => st.scope === scope && st.capabilities.includes('events'));
   const lowestPriority = useTaskBoard(st => st.scope === scope && supportsLowest(st.capabilities));
   const priorityOptions = useMemo(() => priorityChoices(lowestPriority), [lowestPriority]);
   const filter = useTaskBoard(st => st.filter);
@@ -110,6 +113,8 @@ function ScopedRequirementBoard({ cfg, desktop, dispatch, onOpenVoiceSettings, s
   const items = mine ? storeItems : [];
   /** 这块看板本次启动里从 Hub 读成功过(哪怕是空的)——连不上时照常显示那份,而不是整页报错。 */
   const hasCached = useTaskBoard(st => st.scope === scope && st.loaded);
+  // 选着「动态」时换到一个不记改动的 Hub(或降级了):分段里没有这个视图了,回到看板。
+  useEffect(() => { if (section === 'activity' && hasCached && !eventsCapable) setTaskSection('board'); }, [section, hasCached, eventsCapable]);
   const people = mine ? storePeople : [];
   const pointer = pointerUi(desktop);
   const localKey = requirementsKey(cfg.profileId || cfg.username || 'local');
@@ -264,7 +269,7 @@ function ScopedRequirementBoard({ cfg, desktop, dispatch, onOpenVoiceSettings, s
   // 有卡片带稳定负责人时读一次成员(卡片上的名字 / 头像、筛选里的人都从这里来)。
   // 仪表盘也要:完成榜 / 最近完成 / 分享图上的完成者名字从这里来,没有负责人的看板上也得有。
   const hasOwners = items.some(item => item.owner || item.agentOwner || item.participants?.length);
-  const needPeople = hasOwners || section === 'dashboard';
+  const needPeople = hasOwners || section === 'dashboard' || section === 'activity';
   useEffect(() => {
     if (!needPeople || !cfg.networkId) return;
     let dead = false;
@@ -630,6 +635,8 @@ function ScopedRequirementBoard({ cfg, desktop, dispatch, onOpenVoiceSettings, s
     { key: 'calendar', label: tr('cal.view') },
     // 仪表盘(只读):大数字 + 最近完成 + 图 + 分享图(TaskDashboard.tsx 顶部写了为什么)。
     { key: 'dashboard', label: tr('dash.view') },
+    // 动态(只读):谁在什么时候改了哪张卡的什么(TaskActivity.tsx 顶部写了为什么)。旧 Hub 不记改动,不给这个视图。
+    ...(eventsCapable ? [{ key: 'activity' as const, label: tr('act.view') }] : []),
     // 桌面的派发记录在左栏(TaskFilterSidebar);手机 / 双栏没有左栏,放在分段里。
     ...(desktop ? [] : [{ key: 'dispatch' as const, label: tr('tasks.copy.28') }]),
   ];
@@ -651,7 +658,8 @@ function ScopedRequirementBoard({ cfg, desktop, dispatch, onOpenVoiceSettings, s
     else done(spacing.xl, 64, 0);
   };
   // 仪表盘不看筛选(统计的是整个网络里看得见的任务),也不在那里新建。
-  const filters = section === 'dispatch' || section === 'dashboard' ? null : (
+  // 动态有自己的筛选(项目 / 成员 / 类型,作用在事件上),不用看板这一套。
+  const filters = section === 'dispatch' || section === 'dashboard' || section === 'activity' ? null : (
     <>
       {!desktop ? <TaskTagFilter /> : null}
       <View ref={(r: any) => { chipRefs.current.owner = r; }} collapsable={false}>
@@ -723,7 +731,7 @@ function ScopedRequirementBoard({ cfg, desktop, dispatch, onOpenVoiceSettings, s
   );
 
   // 搜索:桌面宽窗口 = 工具栏里常驻的搜索框;触屏(手机 / 平板)和桌面窄窗口 = 放大镜,点开成搜索条 + 「取消」。
-  const canSearch = section !== 'dispatch' && section !== 'dashboard';
+  const canSearch = section !== 'dispatch' && section !== 'dashboard' && section !== 'activity';
   const inlineSearch = canSearch && pointer && !narrow;
   const closeSearch = () => { clearSearch(); setSearchOpen(false); };
   const searchField = (style: object, autoFocus: boolean) => (
@@ -774,9 +782,10 @@ function ScopedRequirementBoard({ cfg, desktop, dispatch, onOpenVoiceSettings, s
           {newButton}
         </View>
       )}
-      <View style={{ paddingHorizontal: spacing.lg, paddingBottom: spacing.sm }}>
+      {/* 视图多到一行放不下(加了「动态」之后手机上 7 个):横向滑,不把页面撑出横向滚动条。 */}
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ flexGrow: 0 }} contentContainerStyle={{ paddingHorizontal: spacing.lg, paddingBottom: spacing.sm }} testID="tasks-view-scroll">
         <Segmented s={s} items={sections} value={section} onChange={setTaskSection} testID="tasks-view" />
-      </View>
+      </ScrollView>
       {filters ? (
         <ScrollView horizontal showsHorizontalScrollIndicator={false} style={s.filterRowPhone} contentContainerStyle={s.filterRowPhoneContent}>{filters}</ScrollView>
       ) : null}
@@ -1004,10 +1013,11 @@ function ScopedRequirementBoard({ cfg, desktop, dispatch, onOpenVoiceSettings, s
               ? <Text style={s.muted} testID="req-retrying">{tr('tasks.copy.56')}</Text>
               : <Pressable onPress={() => setReloadKey(n => n + 1)} testID="req-retry" accessibilityRole="button"><Text style={s.link}>{tr('tasks.copy.57')}</Text></Pressable>}
           </View>
-        ) : section !== 'dashboard' && terms.length && !visible.length ? <SearchEmpty q={search.q} s={s} filtered={filterActive(filter)} partial={truncated && !serverSearchCap} onClear={closeSearch} />
+        ) : section !== 'dashboard' && section !== 'activity' && terms.length && !visible.length ? <SearchEmpty q={search.q} s={s} filtered={filterActive(filter)} partial={truncated && !serverSearchCap} onClear={closeSearch} />
         : section === 'list' ? list()
           : section === 'calendar' ? <TaskCalendar items={visible} terms={terms} projects={projects} people={people} today={today} s={s} onOpen={openDetail} selectedId={selectedId} phone={narrow} onDue={pointer ? (id, due) => { void setDue(id, due); } : undefined} />
           : section === 'dashboard' ? <TaskDashboard cfg={cfg} items={items} projects={projects} people={people} s={s} phone={narrow} statsCapable={statsCapable} onOpen={openFromDashboard} />
+          : section === 'activity' && eventsCapable ? <TaskActivity cfg={cfg} items={items} projects={projects} people={people} meId={meId} s={s} phone={narrow} onOpen={openFromDashboard} />
           : section === 'gantt' ? <TaskGantt items={visible} terms={terms} projects={projects} people={people} today={today} s={s} onOpen={openDetail} selectedId={selectedId} phone={narrow} startCapable={startCapable} onDue={pointer ? (id, due) => { void setDue(id, due); } : undefined} />
             : kanban();
 
