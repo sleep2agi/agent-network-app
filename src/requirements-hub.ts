@@ -57,6 +57,8 @@ export function requirementFromHub(row: unknown): Requirement | null {
     ...('seq' in r ? { seq: seqFromHub(r.seq) } : {}),
     // 只读(RFC-038 §9):只有 hub 显式说不能改才锁;没有这个字段(旧 Hub、全部任务的人)照旧能改。
     ...(readOnlyFromHub(r) ? { readOnly: true } : {}),
+    // 完成时间(capability completed_at):旧 Hub 没有这三个字段,仪表盘退回按 updatedAt 近似。
+    ...('completedAt' in r ? { completedAt: typeof r.completedAt === 'string' && r.completedAt ? r.completedAt : null, completedAtApprox: r.completedAtApprox === true, completedBy: updateActor(r.completedBy) } : {}),
     id: r.id,
     name: r.name.trim().slice(0, 80),
     priority,
@@ -209,6 +211,51 @@ export async function listArchivedRequirements(cfg: HubConfig): Promise<Requirem
   const data = await call(cfg, scoped(cfg, '/api/requirements?archived=true')) as { requirements?: unknown };
   const rows = Array.isArray(data.requirements) ? data.requirements : [];
   return rows.map(requirementFromHub).filter((row): row is Requirement => !!row).map(row => ({ ...row, archived: true }));
+}
+
+/**
+ * 仪表盘要整张表(含归档的卡 —— 完成的卡常被归档,只读平常的列表会少算):按 cursor 一页页读(capability paging),
+ * 平常的和归档的各读一遍。旧 Hub 没有分页:各读一次,满 500 张就标 partial(数字只是下界)。
+ * 页数封顶 DASH_MAX_PAGES,防一个坏 cursor 把它变成死循环。
+ */
+export const DASH_PAGE = 1000;
+export const DASH_MAX_PAGES = 20;
+export async function listAllRequirementsForDashboard(cfg: HubConfig): Promise<{ rows: Requirement[]; partial: boolean }> {
+  const out: Requirement[] = [];
+  let partial = false;
+  for (const archived of [false, true]) {
+    let cursor: string | null = null;
+    for (let page = 0; ; page++) {
+      const qs = `limit=${DASH_PAGE}${archived ? '&archived=true' : ''}${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ''}`;
+      const data = await call(cfg, scoped(cfg, `/api/requirements?${qs}`)) as { requirements?: unknown; has_more?: unknown; next_cursor?: unknown };
+      const rows = Array.isArray(data.requirements) ? data.requirements : [];
+      for (const row of rows) {
+        const r = requirementFromHub(row);
+        if (r) out.push(archived ? { ...r, archived: true } : r);
+      }
+      if (typeof data.has_more !== 'boolean') { if (rows.length >= HUB_LIST_CAP) partial = true; break; }
+      if (!data.has_more || typeof data.next_cursor !== 'string' || !data.next_cursor) break;
+      if (page + 1 >= DASH_MAX_PAGES) { partial = true; break; }
+      cursor = data.next_cursor;
+    }
+  }
+  // 同一张卡在两遍里都出现(读的间隙被归档 / 取消归档):留后读到的那份。
+  return { rows: [...new Map(out.map(r => [r.id, r])).values()], partial };
+}
+
+/** GET /api/requirements/stats(capability stats)。原样返回 JSON,由 task-dashboard-model.parseHubStats 校验。 */
+export async function fetchRequirementStats(cfg: HubConfig, q: { from: number | null; tz: string; days: number; recent: number }): Promise<unknown> {
+  const qs = `tz=${encodeURIComponent(q.tz)}&days=${q.days}&recent=${q.recent}${q.from !== null ? `&from=${encodeURIComponent(new Date(q.from).toISOString())}` : ''}`;
+  return call(cfg, scoped(cfg, `/api/requirements/stats?${qs}`));
+}
+
+/** 按 id 读一张卡(仪表盘点开一张不在看板里的卡 —— 通常是归档的)。 */
+export async function getRequirementOnHub(cfg: HubConfig, id: string): Promise<Requirement | null> {
+  const data = await call(cfg, scoped(cfg, `/api/requirements/${encodeURIComponent(id)}`)) as { requirement?: unknown };
+  const row = requirementFromHub(data.requirement);
+  if (!row) return null;
+  const archived = (data.requirement as { archived?: unknown } | undefined)?.archived === true;
+  return archived ? { ...row, archived: true } : row;
 }
 
 type CreateInput = { name: string; priority: ReqPriority; assignee: string; due: string; column?: ReqColumn; clientId?: string; owner?: RequirementPersonRef; agentOwner?: RequirementPersonRef; projectId?: string; parentId?: string; tags?: string[] };

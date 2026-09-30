@@ -8,7 +8,7 @@ setLanguagePreference('zh');
 // 组件级:手机 / 触屏分支(没有 Tauri 桥 ⇒ pointerUi() = false)。没有 onLayout ⇒ 宽度 0 ⇒ 详情是推入页(Modal)。
 (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
 mock.module('react-native', () => ({
-  View: 'View', Text: 'Text', TextInput: 'TextInput', Pressable: 'Pressable', ScrollView: 'ScrollView', ActivityIndicator: 'ActivityIndicator',
+  View: 'View', Text: 'Text', TextInput: 'TextInput', Pressable: 'Pressable', ScrollView: 'ScrollView', ActivityIndicator: 'ActivityIndicator', Image: 'Image',
   KeyboardAvoidingView: 'KeyboardAvoidingView',
   Keyboard: { addListener: () => ({ remove() {} }), dismiss() {} },
   Modal: ({ visible, children }: any) => visible ? children : null,
@@ -115,6 +115,10 @@ mock.module('./src/requirements-hub', () => ({
   listArchivedRequirements: async () => [],
   // 列表被截断时的服务端搜索(Hub capability search):这里的 Hub 没有 search,不会被调用。
   searchRequirementsOnHub: async () => [],
+  // 仪表盘(TaskDashboard.tsx):这里的用例不切到仪表盘,不会被调用。
+  listAllRequirementsForDashboard: async () => ({ rows: await listRows(), partial: false }),
+  fetchRequirementStats: async () => { throw new Error('not used'); },
+  getRequirementOnHub: async () => null,
   migrateLocalRequirements: async () => {},
   probeAgentOwnerSupport: async () => roleCards,
   listProjects: async () => projectsMock,
