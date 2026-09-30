@@ -74,6 +74,8 @@ const phoneCase = async ({ vp, theme, state, current, tag }) => {
     // (d) content: no raw markdown / English heading; only versions newer than installed
     const text = await page.locator('[data-testid="android-update-prompt"]').last().innerText();
     ck(`${name}: no "What's new" / leading "- "`, !/What's new/i.test(text) && !/^\s*- /m.test(text));
+    const footerText = await page.locator('[data-testid="android-update-footer"]').last().innerText();
+    ck(`${name}: footer says 安全校验, no sha256 jargon`, footerText.includes('安全校验') && !/sha256/i.test(footerText), JSON.stringify(footerText));
     const titles = await page.locator('[data-testid^="update-notes-group-"]').evaluateAll(els => els.map(e => e.innerText.split('\n')[0]));
     const want = current === '0.2.153' ? ['v0.2.157 更新内容', 'v0.2.156 更新内容', 'v0.2.155 更新内容', 'v0.2.154 更新内容'] : ['v0.2.157 更新内容'];
     ck(`${name}: groups = versions newer than installed, newest first`, JSON.stringify(titles) === JSON.stringify(want), JSON.stringify(titles));

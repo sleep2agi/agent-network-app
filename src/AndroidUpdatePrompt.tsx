@@ -120,7 +120,7 @@ export default function AndroidUpdatePrompt({ currentVersion = APP_VERSION }: { 
             <Text style={styles.linkSep}>·</Text>
             <View style={styles.trust} testID="android-update-trust">
               <Ionicons name="shield-checkmark-outline" size={12} color={colors.textMuted} />
-              <Text style={styles.trustText} numberOfLines={1}>安装前校验 sha256</Text>
+              <Text style={styles.trustText} numberOfLines={1}>安全校验</Text>
             </View>
           </View>
         </View>
