@@ -3,7 +3,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { HubConfig } from './api';
 import { t } from './i18n';
 import { fetchLoginSessions, revokeLoginSession, revokeOtherLoginSessions } from './login-sessions-api';
-import { orderSessions, otherSessionCount, type LoginSession, type SessionsLoad } from './login-sessions';
+import { groupSessions, orderSessions, otherSessionCount, type LoginSession, type SessionsLoad } from './login-sessions';
 
 export type SessionsConfirm = { kind: 'others'; count: number } | { kind: 'one'; session: LoginSession; name: string };
 
@@ -14,6 +14,9 @@ export function useLoginSessions(cfg: Pick<HubConfig, 'serverUrl' | 'token' | 'p
   const [message, setMessage] = useState<{ ok: boolean; text: string } | null>(null);
   const [confirm, setConfirm] = useState<SessionsConfirm | null>(null);
   const [showAll, setShowAll] = useState(false);
+  // 展开的分组 / 展开后又点了「显示全部」的分组(按 sessionGroupKey 的 key)。
+  const [expanded, setExpanded] = useState<ReadonlySet<string>>(new Set());
+  const [groupShowAll, setGroupShowAll] = useState<ReadonlySet<string>>(new Set());
 
   const refresh = useCallback(async () => {
     setLoad(await fetchLoginSessions(cfg as HubConfig));
@@ -24,10 +27,14 @@ export function useLoginSessions(cfg: Pick<HubConfig, 'serverUrl' | 'token' | 'p
     setLoad(null);
     setMessage(null);
     setShowAll(false);
+    setExpanded(new Set());
+    setGroupShowAll(new Set());
     void refresh();
   }, [refresh]);
 
   const sessions = useMemo(() => (load?.kind === 'ok' ? orderSessions(load.sessions) : []), [load]);
+  const items = useMemo(() => groupSessions(sessions), [sessions]);
+  const toggle = (set: ReadonlySet<string>, key: string) => { const next = new Set(set); if (next.has(key)) next.delete(key); else next.add(key); return next; };
 
   const revokeOne = async (session: LoginSession) => {
     setBusy(session.token_id);
@@ -69,6 +76,12 @@ export function useLoginSessions(cfg: Pick<HubConfig, 'serverUrl' | 'token' | 'p
     message,
     showAll,
     setShowAll,
+    /** 列表的顶层条目:本机 + 按设备名合并的组(单条的组直接是一行)。 */
+    items,
+    expanded,
+    toggleGroup: (key: string) => setExpanded(e => toggle(e, key)),
+    groupShowAll,
+    showAllInGroup: (key: string) => setGroupShowAll(g => new Set(g).add(key)),
     confirm,
     askRevokeOne: (session: LoginSession, name: string) => setConfirm({ kind: 'one', session, name }),
     askRevokeOthers: () => setConfirm({ kind: 'others', count: otherSessionCount(sessions) }),

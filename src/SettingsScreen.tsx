@@ -47,7 +47,7 @@ import { elevated, buttonStyle, buttonTextStyle } from './elevation';
 import UserManagementPanel from './UserManagementPanel';
 import { canManageUsers, type AuthMe } from './user-admin';
 import { useLoginSessions } from './useLoginSessions';
-import { describeDevice, sessionSubtitle, visibleSessions, SESSIONS_VISIBLE_DEFAULT, type DeviceKind } from './login-sessions';
+import { groupSubtitle, groupTestKey, memberSubtitle, sessionSubtitle, visibleSessions, SESSIONS_VISIBLE_DEFAULT, type DeviceKind, type LoginSession } from './login-sessions';
 import { probeSavedSessions } from './saved-session-probe';
 import { fetchAuthMe } from './user-admin-api';
 import { pooledHttpEnabled, setPooledHttpEnabled } from './app-fetch';
@@ -550,10 +550,43 @@ export default function SettingsScreen({
     </ScrollView>
   ) : null;
 
-  // 宽屏「登录设备」:每台设备一行(图标 · 名字 [本机] · 最近使用 · 右侧「退出」),底下「退出其他所有设备」。
+  // 宽屏「登录设备」:本机一行在最上;其余按设备名(client_label / UA)合并成组 —— 组头写「N 个登录 · 最近使用」,
+  // 点开才列出每一条(每条右侧「退出」)。只出现一次的设备名直接是一行。底下「退出其他所有设备」。
   const renderWideDevices = () => {
     const now = Date.now();
-    const shown = visibleSessions(sessions.sessions, sessions.showAll);
+    const shown = visibleSessions(sessions.items, sessions.showAll);
+    const deviceRow = (session: LoginSession, label: string, kind: DeviceKind, member: boolean) => {
+      const id = session.is_current ? 'login-device-current' : `login-device-${session.token_id}`;
+      return (
+        <View style={[styles.deviceRow, member && styles.deviceMemberRow]} testID={id}>
+          {member ? null : (
+            <View style={styles.deviceIcon}>
+              <Ionicons name={DEVICE_ICON[kind] as any} size={18} color={colors.textSecondary} />
+            </View>
+          )}
+          <View style={styles.rowCopy}>
+            <View style={styles.deviceTitleLine}>
+              <Text style={member ? styles.rowLabel : styles.rowLabelStrong} numberOfLines={1} testID={`${id}-label`}>{member ? sessionSubtitle(session, now) : label}</Text>
+              {session.is_current ? <View style={styles.currentBadge} testID="login-device-current-badge"><Text style={styles.currentBadgeText}>{tr('sessions.thisDevice')}</Text></View> : null}
+            </View>
+            <Text style={styles.rowHint} numberOfLines={1}>{member ? memberSubtitle(session, now) : sessionSubtitle(session, now)}</Text>
+          </View>
+          {session.is_current ? null : (
+            <Pressable
+              testID={`${id}-signout`}
+              accessibilityRole="button"
+              accessibilityLabel={tr('sessions.signOutLabel', { name: label })}
+              disabled={!!sessions.busy}
+              onPress={() => sessions.askRevokeOne(session, label)}
+              hitSlop={8}
+              style={({ pressed, hovered }: any) => [styles.deviceSignOut, (pressed || hovered) && styles.deviceSignOutHover, !!sessions.busy && styles.disabled]}
+            >
+              {sessions.busy === session.token_id ? <ActivityIndicator size="small" color={colors.failed} /> : <Text style={styles.dangerText}>{tr('sessions.signOut')}</Text>}
+            </Pressable>
+          )}
+        </View>
+      );
+    };
     return (
       <View style={sectionStyle} testID="settings-section-devices">
         {sessions.error ? (
@@ -564,44 +597,48 @@ export default function SettingsScreen({
             </Pressable>
           </>
         ) : null}
-        {shown.map((session, index) => {
-          const device = describeDevice(session);
+        {shown.map((item, index) => {
+          if (item.type === 'session') return <View key={item.key}>{index ? <Divider /> : null}{deviceRow(item.session, item.label, item.kind, false)}</View>;
+          const gid = `login-devices-group-${groupTestKey(item, index)}`;
+          const open = sessions.expanded.has(item.key);
+          const members = visibleSessions(item.sessions, sessions.groupShowAll.has(item.key));
           return (
-            <View key={session.token_id}>
+            <View key={item.key}>
               {index ? <Divider /> : null}
-              <View style={styles.deviceRow} testID={session.is_current ? 'login-device-current' : `login-device-${session.token_id}`}>
+              <Pressable
+                testID={gid}
+                accessibilityRole="button"
+                accessibilityState={{ expanded: open }}
+                accessibilityLabel={tr(open ? 'sessions.collapseGroup' : 'sessions.expandGroup', { name: item.label })}
+                onPress={() => sessions.toggleGroup(item.key)}
+                style={({ pressed, hovered }: any) => [styles.deviceRow, (pressed || hovered) && styles.categoryItemHover]}
+              >
                 <View style={styles.deviceIcon}>
-                  <Ionicons name={DEVICE_ICON[device.kind] as any} size={18} color={colors.textSecondary} />
+                  <Ionicons name={DEVICE_ICON[item.kind] as any} size={18} color={colors.textSecondary} />
                 </View>
                 <View style={styles.rowCopy}>
-                  <View style={styles.deviceTitleLine}>
-                    <Text style={styles.rowLabelStrong} numberOfLines={1} testID={`${session.is_current ? 'login-device-current' : `login-device-${session.token_id}`}-label`}>{device.label}</Text>
-                    {session.is_current ? <View style={styles.currentBadge} testID="login-device-current-badge"><Text style={styles.currentBadgeText}>{tr('sessions.thisDevice')}</Text></View> : null}
-                  </View>
-                  <Text style={styles.rowHint} numberOfLines={1}>{sessionSubtitle(session, now)}</Text>
+                  <Text style={styles.rowLabelStrong} numberOfLines={1} testID={`${gid}-label`}>{item.label}</Text>
+                  <Text style={styles.rowHint} numberOfLines={1} testID={`${gid}-subtitle`}>{groupSubtitle(item.sessions, now)}</Text>
                 </View>
-                {session.is_current ? null : (
-                  <Pressable
-                    testID={`login-device-${session.token_id}-signout`}
-                    accessibilityRole="button"
-                    accessibilityLabel={tr('sessions.signOutLabel', { name: device.label })}
-                    disabled={!!sessions.busy}
-                    onPress={() => sessions.askRevokeOne(session, device.label)}
-                    hitSlop={8}
-                    style={({ pressed, hovered }: any) => [styles.deviceSignOut, (pressed || hovered) && styles.deviceSignOutHover, !!sessions.busy && styles.disabled]}
-                  >
-                    {sessions.busy === session.token_id ? <ActivityIndicator size="small" color={colors.failed} /> : <Text style={styles.dangerText}>{tr('sessions.signOut')}</Text>}
+                <Ionicons name={open ? 'chevron-up' : 'chevron-down'} size={16} color={colors.textMuted} />
+              </Pressable>
+              {open ? members.map(m => <View key={m.token_id}><Divider />{deviceRow(m, item.label, item.kind, true)}</View>) : null}
+              {open && members.length < item.sessions.length ? (
+                <>
+                  <Divider />
+                  <Pressable testID={`${gid}-show-all`} style={({ pressed }) => [styles.row, styles.deviceMemberRow, pressed && { opacity: 0.6 }]} onPress={() => sessions.showAllInGroup(item.key)} accessibilityRole="button">
+                    <Text style={styles.accentText}>{tr('sessions.showAll', { n: item.sessions.length })}</Text>
                   </Pressable>
-                )}
-              </View>
+                </>
+              ) : null}
             </View>
           );
         })}
-        {!sessions.showAll && sessions.sessions.length > SESSIONS_VISIBLE_DEFAULT ? (
+        {!sessions.showAll && sessions.items.length > SESSIONS_VISIBLE_DEFAULT ? (
           <>
             <Divider />
             <Pressable testID="login-devices-show-all" style={({ pressed }) => [styles.row, pressed && { opacity: 0.6 }]} onPress={() => sessions.setShowAll(true)} accessibilityRole="button">
-              <Text style={styles.accentText}>{tr('sessions.showAll', { n: sessions.sessions.length })}</Text>
+              <Text style={styles.accentText}>{tr('sessions.showAll', { n: sessions.items.length })}</Text>
             </Pressable>
           </>
         ) : null}
@@ -611,7 +648,7 @@ export default function SettingsScreen({
             <Pressable testID="login-devices-revoke-others" disabled={!!sessions.busy} style={({ pressed }) => [styles.row, pressed && { opacity: 0.6 }, !!sessions.busy && styles.disabled]} onPress={sessions.askRevokeOthers} accessibilityRole="button">
               <View style={styles.rowCopy}>
                 <Text style={styles.dangerText}>{tr('sessions.signOutOthers')}</Text>
-                <Text style={styles.rowHint}>{tr('sessions.confirmOthersBody', { n: sessions.others })}</Text>
+                <Text style={styles.rowHint}>{tr('sessions.othersHint', { n: sessions.others })}</Text>
               </View>
               {sessions.busy === 'others' ? <ActivityIndicator size="small" color={colors.failed} /> : null}
             </Pressable>
@@ -1260,7 +1297,7 @@ export default function SettingsScreen({
             <Text style={styles.modalBody}>{sessions.confirm?.kind === 'others' ? tr('sessions.confirmOthersBody', { n: sessions.confirm.count }) : sessions.confirm ? tr('sessions.confirmOneBody', { name: sessions.confirm.name }) : ''}</Text>
             <View style={styles.modalActions}>
               <Pressable testID="login-devices-confirm-cancel" style={styles.modalButton} onPress={sessions.cancelConfirm}><Text style={styles.rowValue}>{tr('sessions.cancel')}</Text></Pressable>
-              <Pressable testID="login-devices-confirm-ok" style={[styles.modalButton, styles.modalDanger]} onPress={sessions.runConfirm}><Text style={styles.dangerText}>{tr('sessions.confirm')}</Text></Pressable>
+              <Pressable testID="login-devices-confirm-ok" accessibilityRole="button" style={[styles.modalButton, styles.modalDestructive]} onPress={sessions.runConfirm}><Text style={styles.modalDestructiveText}>{sessions.confirm?.kind === 'others' ? tr('sessions.confirmOthersOk', { n: sessions.confirm.count }) : tr('sessions.confirm')}</Text></Pressable>
             </View>
           </View>
         </View>
@@ -1412,6 +1449,8 @@ const makeStyles = () =>
   paneBack: { flexDirection: 'row', alignItems: 'center', gap: 2, paddingHorizontal: spacing.xs, paddingVertical: 2, borderRadius: radius.control },
   paneBackText: { color: colors.textSecondary, fontSize: 14 },
   deviceRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingHorizontal: spacing.md, paddingVertical: spacing.md },
+  // 展开的组里的每一条:不重复图标,左边对齐到组头的文字列(图标 36 + 间距 12)。
+  deviceMemberRow: { paddingLeft: spacing.md + 36 + spacing.md },
   deviceIcon: { width: 36, height: 36, borderRadius: radius.item, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.subtleFill },
   deviceTitleLine: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, minWidth: 0 },
   currentBadge: { paddingHorizontal: 6, paddingVertical: 1, borderRadius: radius.pill, backgroundColor: colors.tonalBg },
@@ -1474,6 +1513,9 @@ const makeStyles = () =>
   modalActions: { flexDirection: 'row', justifyContent: 'flex-end', gap: spacing.sm, marginTop: spacing.lg },
   modalButton: { borderColor: colors.border, borderWidth: 1, borderRadius: radius.control, paddingHorizontal: spacing.lg, paddingVertical: spacing.sm },
   modalDanger: { borderColor: colors.failed },
+  // 「退出其他所有登录」的确认键:实心红底白字 —— 一下会退掉脚本和 agent 在用的登录,比描边红字的普通确认更重。
+  modalDestructive: { backgroundColor: colors.failed, borderColor: colors.failed },
+  modalDestructiveText: { color: '#ffffff', fontSize: 14, fontWeight: '600' },
 });
 
 // Theme styling idiom (shared across screens): `styles` is a module-level
