@@ -23,6 +23,17 @@ export const LOGS_MAX = 500;
 export const RECONNECT_MIN_MS = 2000;
 export const RECONNECT_MAX_MS = 30_000;
 
+/** XHR SSE (phone / web): `responseText` holds every byte the connection ever received, so a
+ *  stream left open for hours (a chat on the phone, the 日志 screen) grows without bound. Past
+ *  this many characters the connection is recycled — a fresh XHR, no backoff (the stream was
+ *  healthy). Anything in the reconnect gap (one round trip) is missed: every consumer has a poll
+ *  behind it. 1 M chars ≈ 5 000 network events. The desktop native stream is not affected. */
+export const XHR_SSE_RECYCLE_CHARS = 1_000_000;
+let xhrRecycleChars = XHR_SSE_RECYCLE_CHARS;
+export const xhrSseRecycleChars = (): number => xhrRecycleChars;
+/** Test-only. */
+export function __setXhrSseRecycleCharsForTest(n: number = XHR_SSE_RECYCLE_CHARS): void { xhrRecycleChars = n; }
+
 // Any JSON payload the hub can push over the SSE frame. We keep the
 // shape open because the observer stream is under active evolution
 // (new hub versions may add fields); locking the shape here would
