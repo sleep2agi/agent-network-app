@@ -7,9 +7,12 @@
 //   node tests/test-voice-shortcuts/drive.mjs
 //
 // 检查(1200×800 桌面工作区;Linux 上 Mod = Ctrl,另开一个 navigator.platform=MacIntel 的上下文跑 ⌘):
+//   设置是单独的 Tauri 窗口(src/desktop-settings-window.ts):点「设置」/ Ctrl+, 先断言请求了 'settings' 窗口,
+//   再在 harness openStubWindow 打开的第二个页面(同源 → 同一份 localStorage)里做设置页的检查。
 //   page     快捷键页:输入组有「按住说话」「语音输入开关」,默认 Ctrl Shift Space / Ctrl Shift M;导航标签全中文;
 //            新行与原有行:标签左边缘、键帽右边缘、键帽垂直中心、行高 ≤1px(打印测量表);截图
 //   rebind   按住说话 改 Ctrl+Shift+M → 与「语音输入开关」冲突提示;改 F8 保存;恢复默认
+//   sync     设置窗改绑后,主窗口不用重开就按新组合(跨窗口同步)
 //   nochat   没有打开的会话时按 Ctrl+Shift+Space →「先打开一个会话」;按住不放(自动重复)不重复提示、不录音
 //   hold     「明天|去公司开会」按住 Ctrl+Shift+Space(另补 3 次自动重复)说「上午」→ 插到光标处,光标 = 4;
 //            按住期间:输入框里的录音条(#463,电平 / 计时 / 提示 / 取消 / 完成)出现、没有手机浮层、输入框没被打进空格、焦点不丢;
@@ -21,7 +24,7 @@
 //   mac      ⌘⇧Space 按住 → 先松开 ⌘(mac 上按着 ⌘ 时松开 Space 没有 keyup)→ 插入
 // 任何一条没跑到 = FAIL(不是 skip)。
 import { mkdirSync } from 'node:fs';
-import { serveExport, initScript, findChromium, paintedText } from '../test-layout-sweep/harness.mjs';
+import { serveExport, initScript, findChromium, paintedText, openStubWindow } from '../test-layout-sweep/harness.mjs';
 
 const { chromium } = await import(process.env.PLAYWRIGHT_MODULE || 'playwright');
 const WEB = process.env.WEB_DIR;
@@ -66,11 +69,30 @@ async function openApp({ mac = false } = {}) {
   const page = await ctx.newPage();
   const errors = [];
   page.on('pageerror', e => errors.push(String(e).split('\n')[0]));
-  await page.addInitScript(initScript, { theme: 'light' });
-  await page.addInitScript(asrScript, { mac });
+  const scripts = [[initScript, { theme: 'light' }], [asrScript, { mac }]];
+  for (const [fn, arg] of scripts) await page.addInitScript(fn, arg);
   await page.goto(`${web.url}?safeAreaSim=0,0,0,0`);
   await page.locator('[data-testid="desktop-rail"]').waitFor({ timeout: 20000 });
-  return { ctx, page, errors };
+  // 设置窗:`open` 做完真动作(点「设置」/ Ctrl+,)之后调,断言主窗口请求了 'settings' 窗口,打开它、进「快捷键」。
+  let sp = null;
+  const settingsWindow = async (via) => {
+    const req = await page.waitForFunction(() => (window.__openedWindows || []).find(w => w.label === 'settings') || null, null, { timeout: 5000 }).then(h => h.jsonValue(), () => null);
+    ck(`${via} → 请求打开「设置」窗口`, !!req && new URL(req.url, page.url()).searchParams.get('settings') === '1', JSON.stringify(req));
+    sp = await openStubWindow(page, 'settings', scripts);
+    if (!sp) throw new Error(`${via}: no settings window was requested`);
+    sp.on('pageerror', e => errors.push(`[settings] ${String(e).split('\n')[0]}`));
+    await sp.locator('[data-testid="dedicated-settings-window"]').waitFor({ timeout: 20000 });
+    await sp.getByRole('button', { name: '设置分类 快捷键' }).click();
+    await sp.locator('[data-testid="shortcuts-settings"]').waitFor({ timeout: 10000 });
+    return sp;
+  };
+  // 用户关掉设置窗:关页面,并从桩的窗口表里去掉(真窗口关了 getByLabel 就找不到,下一次 Ctrl+, 会重新建窗)。
+  const closeSettingsWindow = async () => {
+    if (sp) await sp.close();
+    sp = null;
+    await page.evaluate(() => { window.__openedWindows = (window.__openedWindows || []).filter(w => w.label !== 'settings'); });
+  };
+  return { ctx, page, errors, settingsWindow, closeSettingsWindow };
 }
 
 const norm = (s) => s.replace(/\s+/g, ' ').trim();
@@ -99,16 +121,25 @@ const seen = (p) => !!p?.painted && p.w >= 8;
 const pd = (p) => p ? `painted ${Math.round(p.w)}×${Math.round(p.h)}${p.painted ? '' : ' UNPAINTED'}` : 'not rendered';
 
 {
-  const { ctx, page, errors } = await openApp();
+  const { ctx, page: main, errors, settingsWindow, closeSettingsWindow } = await openApp();
+  let page = main; // 设置部分在设置窗里跑,聊天部分回到主窗口
   const shot = async (name) => { if (OUT) await page.screenshot({ path: `${OUT}/${name}.png` }); };
-  const openShortcuts = async () => {
-    await page.getByRole('tab', { name: '设置', exact: true }).click();
-    await page.getByRole('button', { name: '设置分类 快捷键' }).click();
-    await page.locator('[data-testid="shortcuts-settings"]').waitFor({ timeout: 10000 });
+  // 主窗口从存储重读快捷键:shortcuts-store.ts 把偏好缓存在本窗口内存里,既不听 storage 事件也不听 Tauri 事件,
+  // 所以设置窗里改的组合主窗口要重开才生效(sync 检查量的就是这个)。重开后再接着测新组合本身的行为。
+  const reloadMain = async () => {
+    await main.reload();
+    await main.locator('[data-testid="desktop-rail"]').waitFor({ timeout: 20000 });
   };
   try {
+    // 主窗口先按一次默认组合:真用户的主窗口早就处理过按键,快捷键已读进本窗口内存(shortcuts-store.ts 懒加载,
+    // 第一次按键才读存储)。不先按,sync 那条会因为「主窗口还没读过」而碰巧绿。等这条提示消失再往下。
+    await main.keyboard.press('Control+Shift+Space');
+    ck('sync: 主窗口默认 Ctrl+Shift+Space(没有会话)→「先打开一个会话」', await main.locator('[data-testid="shortcut-toast"]').waitFor({ timeout: 3000 }).then(() => true, () => false));
+    await main.waitForFunction(() => !document.querySelector('[data-testid="shortcut-toast"]'), null, { timeout: 10000 });
+
     // ── page ─────────────────────────────────────────────────────────────────
-    await openShortcuts();
+    await main.getByRole('tab', { name: '设置', exact: true }).click();
+    page = await settingsWindow('page: 点「设置」');
     await shot('shortcuts-1200x800-top');
     const labels = await page.locator('[data-testid^="shortcut-label-nav.tab."]').allInnerTexts();
     ck('page: 导航标签全中文', JSON.stringify(labels) === JSON.stringify(['切换到 会话', '切换到 任务', '切换到 定时任务', '切换到 消息', '切换到 服务器']), labels.join(','));
@@ -161,21 +192,33 @@ const pd = (p) => p ? `painted ${Math.round(p.w)}×${Math.round(p.h)}${p.painted
     ck('rebind: 改过出现「恢复默认」', await page.locator('[data-testid="shortcut-reset-input.voiceHold"]').isVisible());
     await shot('shortcuts-voice-rebound-f8');
 
-    // ── nochat(设置页上,没有输入框)──────────────────────────────────────────
+    // ── sync:主窗口(没有打开的会话)按新组合 F8 → 该出「先打开一个会话」──────────
+    page = main;
+    await closeSettingsWindow();
+    {
+      const stored = await main.evaluate(() => localStorage.getItem('keyboard_shortcuts_v1'));
+      await main.keyboard.press('F8');
+      const synced = await main.locator('[data-testid="shortcut-toast"]').waitFor({ timeout: 2000 }).then(() => true, () => false);
+      ck('sync: 设置窗改成 F8 后,主窗口不重开就认 F8', synced, `main localStorage=${stored} toast=${synced}`);
+    }
+    await reloadMain();
+    await main.waitForFunction(() => !document.querySelector('[data-testid="shortcut-toast"]'), null, { timeout: 10000 }).catch(() => {});
+
+    // ── nochat(主窗口,没有打开的会话 → 没有输入框;设置窗里快捷键不生效)──────────
     await page.keyboard.down('F8');
     for (let i = 0; i < 3; i++) await page.keyboard.down('F8'); // 自动重复
     await page.keyboard.up('F8');
     const toast = page.locator('[data-testid="shortcut-toast"]');
     const toastUp = await toast.waitFor({ timeout: 3000 }).then(() => true, () => false);
     const toastP = await painted(page, 'shortcut-toast');
-    ck('nochat: 设置页按住说话 →「先打开一个会话」', toastUp && (await toast.innerText()) === '先打开一个会话' && seen(toastP), pd(toastP));
+    ck('nochat: 没有打开的会话时按住说话 →「先打开一个会话」', toastUp && (await toast.innerText()) === '先打开一个会话' && seen(toastP), pd(toastP));
     ck('nochat: 自动重复不叠提示(只有 1 个)', (await toast.count()) === 1);
     await shot('nochat-toast');
     ck('nochat: 没有录音、没有识别请求', (await page.evaluate(() => window.__asr.calls)) === 0 && !(await page.locator('[data-testid="voice-bar"]').count()));
 
     // ── f8(改绑后的组合)与旧组合 ──────────────────────────────────────────────
     await page.evaluate(() => window.__anetLayoutSweep.setScreen({ name: 'chat', alias: '示例-A' }));
-    const input = page.locator('textarea[placeholder^="Message 示例-A"]').first();
+    const input = page.locator('textarea[placeholder*="示例-A"]').first();
     await input.waitFor({ timeout: 10000 });
     await page.locator('[data-testid="voice-mic"]').waitFor({ timeout: 10000 });
     await page.waitForTimeout(400);
@@ -208,10 +251,13 @@ const pd = (p) => p ? `painted ${Math.round(p.w)}×${Math.round(p.h)}${p.painted
     ck('f8: 旧组合 Ctrl+Shift+Space 不再录音', oldCombo === 0 && (await asrCalls()) === calls0);
     // 恢复默认
     await page.keyboard.press('Control+Comma');
-    await page.getByRole('button', { name: '设置分类 快捷键' }).click();
+    page = await settingsWindow('rebind: Ctrl+,');
     await page.locator('[data-testid="shortcut-reset-input.voiceHold"]').click();
     const resetP = await painted(page, 'shortcut-chips-input.voiceHold');
     ck('rebind: 恢复默认 → Ctrl Shift Space', norm(await page.locator('[data-testid="shortcut-chips-input.voiceHold"]').innerText()) === 'Ctrl Shift Space' && seen(resetP), pd(resetP));
+    page = main;
+    await closeSettingsWindow();
+    await reloadMain(); // 同 sync:主窗口不会自己重读
     await page.evaluate(() => window.__anetLayoutSweep.setScreen({ name: 'chat', alias: '示例-A' }));
     await input.waitFor({ timeout: 10000 });
     await page.waitForTimeout(400);
@@ -314,16 +360,17 @@ const pd = (p) => p ? `painted ${Math.round(p.w)}×${Math.round(p.h)}${p.painted
 
 // ── mac:⌘⇧Space,先松 ⌘ ───────────────────────────────────────────────────────
 {
-  const { ctx, page, errors } = await openApp({ mac: true });
+  const { ctx, page, errors, settingsWindow, closeSettingsWindow } = await openApp({ mac: true });
   try {
     await page.getByRole('tab', { name: '设置', exact: true }).click();
-    await page.getByRole('button', { name: '设置分类 快捷键' }).click();
-    const macHoldP = await painted(page, 'shortcut-chips-input.voiceHold');
-    const macToggleP = await painted(page, 'shortcut-chips-input.voiceToggle');
-    ck('mac: 默认显示 ⌘ ⇧ Space / ⌘ ⇧ M', norm(await page.locator('[data-testid="shortcut-chips-input.voiceHold"]').innerText()) === '⌘ ⇧ Space' && norm(await page.locator('[data-testid="shortcut-chips-input.voiceToggle"]').innerText()) === '⌘ ⇧ M' && seen(macHoldP) && seen(macToggleP), `${pd(macHoldP)} / ${pd(macToggleP)}`);
-    if (OUT) { await page.locator('[data-testid="shortcut-row-input.voiceHold"]').scrollIntoViewIfNeeded(); await page.screenshot({ path: `${OUT}/shortcuts-1200x800-mac-input-group.png` }); }
+    const sp = await settingsWindow('mac: 点「设置」');
+    const macHoldP = await painted(sp, 'shortcut-chips-input.voiceHold');
+    const macToggleP = await painted(sp, 'shortcut-chips-input.voiceToggle');
+    ck('mac: 默认显示 ⌘ ⇧ Space / ⌘ ⇧ M', norm(await sp.locator('[data-testid="shortcut-chips-input.voiceHold"]').innerText()) === '⌘ ⇧ Space' && norm(await sp.locator('[data-testid="shortcut-chips-input.voiceToggle"]').innerText()) === '⌘ ⇧ M' && seen(macHoldP) && seen(macToggleP), `${pd(macHoldP)} / ${pd(macToggleP)}`);
+    if (OUT) { await sp.locator('[data-testid="shortcut-row-input.voiceHold"]').scrollIntoViewIfNeeded(); await sp.screenshot({ path: `${OUT}/shortcuts-1200x800-mac-input-group.png` }); }
+    await closeSettingsWindow();
     await page.evaluate(() => window.__anetLayoutSweep.setScreen({ name: 'chat', alias: '示例-A' }));
-    const input = page.locator('textarea[placeholder^="Message 示例-A"]').first();
+    const input = page.locator('textarea[placeholder*="示例-A"]').first();
     await input.waitFor({ timeout: 10000 });
     await page.locator('[data-testid="voice-mic"]').waitFor({ timeout: 10000 });
     await page.waitForTimeout(400);
