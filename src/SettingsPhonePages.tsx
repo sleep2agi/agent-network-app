@@ -15,6 +15,7 @@ import { localizedThemeSummary, localizedScaleSummary } from './i18n-settings-pr
 //    不许从 react-native 拿 Switch —— 一律经 settings-kit。
 import type { ReactNode } from 'react';
 import LanguageSettings from './LanguageSettings';
+import './i18n-changelog';
 import { Platform } from 'react-native';
 import { SettingsButton, SettingsCardContent, SettingsChoiceRow, SettingsGroup, SettingsRow, SettingsSwitchRow, type SettingsTone } from './settings-kit';
 import { VoiceAdvancedEditPage, VoiceApiKeyEditPage, QuietHoursEditPage } from './SettingsEditPages';
@@ -560,6 +561,10 @@ function AboutPage({ ctx }: { ctx: PhonePagesCtx }) {
           chevron={view.actionable && !view.busy}
           onPress={view.actionable ? ctx.onCheckUpdate : undefined}
         />
+      ) : null}
+      {/* 更新日志:三级页(ChangelogScreen.tsx 的手机版,SettingsScreen 在滚动区外画它 —— 它自己滚、底部钉按钮条)。 */}
+      {ctx.show('about', 'changelog') ? (
+        <SettingsRow testID="settings-changelog-row" label={tr('changelog.title')} chevron onPress={() => ctx.openDetail('changelog')} />
       ) : null}
     </SettingsGroup>
   );

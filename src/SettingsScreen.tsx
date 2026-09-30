@@ -51,6 +51,7 @@ import { groupSubtitle, groupTestKey, memberSubtitle, sessionSubtitle, visibleSe
 import { probeSavedSessions } from './saved-session-probe';
 import { fetchAuthMe } from './user-admin-api';
 import { pooledHttpEnabled, setPooledHttpEnabled } from './app-fetch';
+import { ChangelogPage } from './ChangelogScreen';
 
 /** 设置里居中确认框的遮罩色(有键盘避让的那个画在 ModalKeyboardAvoider 上)。 */
 const MODAL_SCRIM = 'rgba(0,0,0,0.55)';
@@ -176,7 +177,7 @@ export default function SettingsScreen({
   const [query, setQuery] = useState('');
   // 切主题会整棵重挂(App.tsx key={theme}),分类与滚动位置从模块级记忆恢复,不回到「账号」。
   const [category, setCategoryState] = useState<SettingsCategoryKey>(() => rememberedSettingsView().category);
-  const setCategory = (key: SettingsCategoryKey) => { rememberSettingsCategory(key); setCategoryState(key); setWideDevices(false); };
+  const setCategory = (key: SettingsCategoryKey) => { rememberSettingsCategory(key); setWideChangelog(false); setCategoryState(key); setWideDevices(false); };
   // 手机:当前推入的子页(null = 在分组列表上)。同样走模块级记忆 —— 在「外观」子页里切主题整棵重挂后仍停在外观。
   const [page, setPage] = useState<SettingsCategoryKey | null>(() => rememberedSettingsView().page);
   const openPage = (key: SettingsCategoryKey) => { setCategory(key); setPage(key); };
@@ -202,6 +203,8 @@ export default function SettingsScreen({
   // 登录设备:手机是账号子页里的三级页(detail = loginDevices);宽屏是账号右栏里推进去的一页。
   const sessions = useLoginSessions(cfg);
   const [wideDevices, setWideDevices] = useState(false);
+  // 宽屏「更新日志」:关于右栏里推进去的一页(手机是关于子页里的三级页 detail = changelog)。
+  const [wideChangelog, setWideChangelog] = useState(false);
   const paneScrollRef = useRef<ScrollView>(null);
   useEffect(() => {
     const { scrollY } = rememberedSettingsView();
@@ -284,6 +287,7 @@ export default function SettingsScreen({
   const paneTitle = searching ? tr('settings.copy.0') : (SETTINGS_CATEGORIES.find(c => c.key === active)?.label ?? tr('settings.copy.1'));
   // 宽屏「登录设备」页:只在账号分类、不在搜索时推进来;搜索或换分类就回到账号。
   const showWideDevices = wideDevices && !compact && !searching && active === 'account' && sessions.available;
+  const showWideChangelog = wideChangelog && !compact && !searching && active === 'about';
 
   const sidebar = (
     <View style={[styles.sidebar, compact && styles.sidebarCompact]} testID="settings-sidebar">
@@ -534,7 +538,10 @@ export default function SettingsScreen({
       else void checkDesktopUpdate(undefined, { manual: true });
     },
   };
-  const phoneSubPage = subPage ? (
+  const phoneSubPage = subPage && openDetailKey === 'changelog' ? (
+    // 更新日志自己滚、底部钉「复制所选」条,不套在设置的滚动区里。
+    <View style={styles.phoneScroll} testID="settings-subpage-about-changelog"><ChangelogPage phone /></View>
+  ) : subPage ? (
     <ScrollView
       ref={paneScrollRef}
       style={styles.phoneScroll}
@@ -677,11 +684,23 @@ export default function SettingsScreen({
             </Pressable>
             <Text style={styles.paneTitleText} numberOfLines={1}>{tr('sessions.title')}</Text>
           </View>
+        ) : showWideChangelog ? (
+          <View style={styles.paneTitleRow} testID="settings-changelog-header">
+            <Pressable testID="settings-changelog-back" accessibilityRole="button" accessibilityLabel={tr('settings.copy.7')} onPress={() => setWideChangelog(false)} hitSlop={8} style={({ pressed, hovered }: any) => [styles.paneBack, (pressed || hovered) && styles.categoryItemHover]}>
+              <Ionicons name="chevron-back" size={18} color={colors.textSecondary} />
+              <Text style={styles.paneBackText}>{settingsText(SETTINGS_CATEGORIES.find(c => c.key === 'about')?.label ?? '')}</Text>
+            </Pressable>
+            <Text style={styles.paneTitleText} numberOfLines={1}>{tr('changelog.title')}</Text>
+          </View>
         ) : (
           <Text style={styles.paneTitle}>{settingsText(paneTitle)}</Text>
         )}
         {/* 0.2.80(Vincent 2026-09-19「设置页面往下面滑动不了」):右栏是 ScrollView,padding 在
             contentContainer 上——留在滚动根上的话它在可滚区域之外,最后一行照样贴着窗口底边。 */}
+        {showWideChangelog ? (
+          // 更新日志自己滚:工具栏(全选 · 复制所选)钉在顶上,「已复制」小条贴在右栏底部,不随列表滚走。
+          <View style={{ flex: 1, minHeight: 0 }} testID="settings-changelog-pane"><ChangelogPage phone={false} /></View>
+        ) : (
         <ScrollView
           ref={paneScrollRef}
           contentContainerStyle={styles.content}
@@ -1160,7 +1179,7 @@ export default function SettingsScreen({
             </View>
           ) : null}
 
-          {sectionsToRender.includes('about') ? (
+          {sectionsToRender.includes('about') && !showWideChangelog ? (
             <View style={sectionStyle}>
               {heading('about')}
               {show('about', 'version') ? <ValueRow label={tr('settings.copy.77')} value={`v${APP_VERSION}`} /> : null}
@@ -1201,6 +1220,18 @@ export default function SettingsScreen({
                   })()}
                 </>
               ) : null}
+              {show('about', 'changelog') ? (
+                <>
+                  <Divider />
+                  <Pressable testID="settings-changelog-row" style={({ pressed }) => [styles.row, pressed && { opacity: 0.6 }]} onPress={() => { setWideChangelog(true); paneScrollRef.current?.scrollTo({ y: 0, animated: false }); }} accessibilityRole="button">
+                    <View style={styles.rowCopy}>
+                      <Text style={styles.rowLabel}>{tr('changelog.title')}</Text>
+                      <Text style={styles.rowHint}>{tr('changelog.rowHint')}</Text>
+                    </View>
+                    <Ionicons name="chevron-forward" size={14} color={colors.textSecondary} />
+                  </Pressable>
+                </>
+              ) : null}
               {show('about', 'pooledHttp') ? (
                 <>
                   <Divider />
@@ -1222,6 +1253,7 @@ export default function SettingsScreen({
             </View>
           ) : null}
         </ScrollView>
+        )}
       </View>
       )}
 

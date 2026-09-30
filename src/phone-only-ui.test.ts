@@ -29,6 +29,10 @@ const ck = (name: string, ok: boolean, extra = '') => {
 const posix = (s: string) => s.split(sep).join('/').replace(/\\/g, '/');
 const lf = (s: string) => s.replace(/\r\n?/g, '\n');
 const SELF = new Set(['src/phone-only-registry.ts', 'src/phone-only-ui.test.ts']);
+// 生成的数据,不是界面文案:历次发版的 release 正文原文(scripts/changelog-bundle.mjs 从发版 workflow 抄来,
+// changelog-bundled.test.ts 守着一字不差)。里面「手机端按住说话」这类句子是在**描述**当时的改动,不是教桌面用户做手势;
+// 逐行登记例外的话每次发版都要加一条。只豁免这一个文件。
+const GENERATED_DATA = new Set(['src/changelog-bundled.ts']);
 
 /** 仓根下要扫的源文件:App.tsx + src/ 递归的 .ts/.tsx,去掉测试和本门自己。键是 POSIX 相对路径,值已转 LF。 */
 export function collect(root: string): Map<string, string> {
@@ -39,7 +43,7 @@ export function collect(root: string): Map<string, string> {
       if (statSync(full).isDirectory()) { if (e !== 'node_modules') walk(full); continue; }
       if (!/\.tsx?$/.test(e) || /\.test\.tsx?$/.test(e)) continue;
       const rel = posix(relative(root, full));
-      if (!SELF.has(rel)) out.set(rel, lf(readFileSync(full, 'utf8')));
+      if (!SELF.has(rel) && !GENERATED_DATA.has(rel)) out.set(rel, lf(readFileSync(full, 'utf8')));
     }
   };
   walk(join(root, 'src'));
