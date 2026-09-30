@@ -271,6 +271,15 @@ export async function listAllRequirementsForDashboard(cfg: HubConfig): Promise<{
   return { rows: [...new Map(out.map(r => [r.id, r])).values()], partial };
 }
 
+/**
+ * 任务动态(Hub capability events,GET /api/requirements/events):一个网络的字段级改动流水,新 → 旧。
+ * since = 只要这之后的(含);cursor = 上一页的 next_cursor(更早的);原样返回,task-activity-model.ts parseEvents 校验。
+ */
+export async function fetchRequirementEvents(cfg: HubConfig, q: { since?: string | null; cursor?: string | null; limit: number; requirementId?: string }): Promise<unknown> {
+  const qs = [`limit=${q.limit}`, q.since ? `since=${encodeURIComponent(q.since)}` : '', q.cursor ? `cursor=${encodeURIComponent(q.cursor)}` : '', q.requirementId ? `requirement_id=${encodeURIComponent(q.requirementId)}` : ''].filter(Boolean).join('&');
+  return call(cfg, scoped(cfg, `/api/requirements/events?${qs}`));
+}
+
 /** GET /api/requirements/stats(capability stats)。原样返回 JSON,由 task-dashboard-model.parseHubStats 校验。 */
 export async function fetchRequirementStats(cfg: HubConfig, q: { from: number | null; tz: string; days: number; recent: number }): Promise<unknown> {
   const qs = `tz=${encodeURIComponent(q.tz)}&days=${q.days}&recent=${q.recent}${q.from !== null ? `&from=${encodeURIComponent(new Date(q.from).toISOString())}` : ''}`;

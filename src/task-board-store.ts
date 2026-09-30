@@ -8,7 +8,7 @@ import { EMPTY_FILTER, type BoardFilter } from './task-board-model';
 import { EMPTY_SEARCH, type TaskSearch } from './task-search';
 
 /** 列表 / 看板是需求池的两种看法;派发记录是 Hub 上派给节点的任务(原来的「列表」)。 */
-export type TaskSection = 'list' | 'board' | 'gantt' | 'calendar' | 'dashboard' | 'dispatch';
+export type TaskSection = 'list' | 'board' | 'gantt' | 'calendar' | 'dashboard' | 'activity' | 'dispatch';
 
 export interface TaskBoardState {
   scope: string;
