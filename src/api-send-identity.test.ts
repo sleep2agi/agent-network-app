@@ -66,7 +66,9 @@ try {
       headers: { 'content-type': 'application/json' },
     });
   }) as typeof fetch;
-  const broken: HubConfig = { serverUrl: 'https://hub.example.test', token: 'utok_old', networkId: 'net_main' };
+  // Another token: the same token's identity is shared for a minute (user-admin-api.ts fetchAuthMe),
+  // so reusing utok_old here would read the success above instead of exercising the failure.
+  const broken: HubConfig = { serverUrl: 'https://hub.example.test', token: 'utok_broken', networkId: 'net_main' };
   await sendTask(broken, '通信牛', 'degraded hello');
   const degradedSend = calls.find(c => c.url.endsWith('/api/task'));
   check('auth/me failure does not block the send', degradedSend?.body?.task === 'degraded hello');

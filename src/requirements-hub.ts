@@ -1,5 +1,6 @@
 // 需求池走 Hub。手机和电脑读同一份。Hub 还没有这个接口时不要退回本机列表。
 import { appFetch } from './app-fetch';
+import { fetchAuthMe } from './user-admin-api';
 import { issuesFromHub } from './requirement-issues';
 import { normalizeTags } from './requirement-tags';
 import type { HubConfig } from './api';
@@ -285,11 +286,7 @@ export const HUB_CANNOT_EDIT = '这个 Hub 还不能修改已有需求的内容�
 /** 当前登录用户的 user_id(「我负责的」用)。拿不到就是 null,左栏那一项不可用。 */
 export async function fetchMyUserId(cfg: HubConfig): Promise<string | null> {
   try {
-    const data = await withDeadline((async () => {
-      const res = await appFetch(`${cfg.serverUrl}/api/auth/me`, { headers: { Authorization: `Bearer ${cfg.token}` } });
-      if (!res.ok) return null;
-      return await res.json() as { user?: { user_id?: unknown } };
-    })(), deadlineMs, () => null);
+    const data = await withDeadline(fetchAuthMe(cfg).catch(() => null) as Promise<{ user?: { user_id?: unknown } } | null>, deadlineMs, () => null);
     return typeof data?.user?.user_id === 'string' && data.user.user_id ? data.user.user_id : null;
   } catch {
     return null;
