@@ -42,7 +42,7 @@ export async function listRequirementPeople(cfg: HubConfig): Promise<Requirement
     const ref = reference(value);
     const row = value as Record<string, unknown>;
     if (typeof row.networkId !== 'string' || row.networkId !== cfg.networkId || typeof row.name !== 'string' || (row.unavailable !== undefined && typeof row.unavailable !== 'boolean')) throw new RequirementPeopleError('Hub 返回了不属于当前网络的成员或无效数据', 502);
-    return { ...ref, networkId: row.networkId, name: row.name, unavailable: row.unavailable === true };
+    return { ...ref, networkId: row.networkId, name: row.name, unavailable: row.unavailable === true, ...(typeof row.display_name === 'string' ? { displayName: row.display_name } : {}) };
   });
 }
 

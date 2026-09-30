@@ -262,13 +262,15 @@ function ScopedRequirementBoard({ cfg, desktop, dispatch, onOpenVoiceSettings, s
   }, [managingTags, cfg.serverUrl, cfg.token, cfg.networkId, scope]);
 
   // 有卡片带稳定负责人时读一次成员(卡片上的名字 / 头像、筛选里的人都从这里来)。
+  // 仪表盘也要:完成榜 / 最近完成 / 分享图上的完成者名字从这里来,没有负责人的看板上也得有。
   const hasOwners = items.some(item => item.owner || item.agentOwner || item.participants?.length);
+  const needPeople = hasOwners || section === 'dashboard';
   useEffect(() => {
-    if (!hasOwners || !cfg.networkId) return;
+    if (!needPeople || !cfg.networkId) return;
     let dead = false;
     listRequirementPeople(cfg).then(rows => { if (!dead) patchTaskBoard(scope, { people: rows }); }).catch(() => {});
     return () => { dead = true; };
-  }, [cfg.serverUrl, cfg.token, cfg.networkId, hasOwners, scope]);
+  }, [cfg.serverUrl, cfg.token, cfg.networkId, needPeople, scope]);
 
   // 精简列表的卡打开时按 id 补读全文(描述 + 子任务)。读回来之前详情里显示「正在读取…」;卡在这期间又被
   // 轮询换成新的精简行(别人改了它)时,这里跟着 updatedAt 再读一次。

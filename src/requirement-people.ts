@@ -1,6 +1,8 @@
 /** Display names are not identity: a user and node may have the same name. */
 export type RequirementPersonRef = { kind: 'user' | 'node'; id: string };
-export type RequirementPerson = RequirementPersonRef & { networkId: string; name: string; unavailable?: boolean };
+/** name:界面用的名字(Hub 已按 display_name → 用户名 / alias 回落)。displayName:Hub 单独给的显示名(#2183 起),
+ *  没设 = ""(只有用户名);undefined = 旧 Hub 没这个字段,不知道。 */
+export type RequirementPerson = RequirementPersonRef & { networkId: string; name: string; displayName?: string; unavailable?: boolean };
 
 export const personKey = (person: RequirementPersonRef) => `${person.kind}:${person.id}`;
 
