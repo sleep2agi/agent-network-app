@@ -79,22 +79,34 @@ export function searchPool(items: readonly Requirement[], archived: readonly Req
   return [...items, ...archived.filter(a => !have.has(a.id))];
 }
 
-/** 只按搜索挑(还没筛):看板的列要在这上面再按筛选分组(boardColumns 自己会筛)。 */
-export function searchedTasks(items: readonly Requirement[], archived: readonly Requirement[], search: TaskSearch, ctx: SearchContext): readonly Requirement[] {
+/**
+ * 只按搜索挑(还没筛):看板的列要在这上面再按筛选分组(boardColumns 自己会筛)。
+ * serverHits = 服务端搜索(本机的表被截断时)找到的、本机没读到的更老的卡:服务端已经按同样的语义匹配过,直接并进来。
+ */
+export function searchedTasks(items: readonly Requirement[], archived: readonly Requirement[], search: TaskSearch, ctx: SearchContext, serverHits: readonly Requirement[] = []): readonly Requirement[] {
   const terms = searchTerms(search.q);
   if (!terms.length) return items;
   // 任务 ID(#563):整句当一个 ID 去对(「#12」「12」对短号,完整 id / 8 位以上前缀对主键),和文字匹配「或」——
   // 「#12 portal」不把 ID 和文字拆开「且」。全角「＃１２」先归一成半角。
   const idQuery = taskIdQuery(search.q);
-  return searchPool(items, archived, search).filter(item => (!!idQuery && matchesTaskId(item, idQuery)) || matchesSearch(item, terms, ctx));
+  const local = searchPool(items, archived, search).filter(item => (!!idQuery && matchesTaskId(item, idQuery)) || matchesSearch(item, terms, ctx));
+  if (!serverHits.length) return local;
+  const have = new Set(local.map(i => i.id));
+  const known = new Set(items.map(i => i.id));
+  // 本机表里有、但本机判定不匹配的卡(比如刚改过名还没同步到服务端)不从服务端结果里带回来。
+  return [...local, ...serverHits.filter(h => !have.has(h.id) && !known.has(h.id))];
 }
 
 /** 喂给 matchesTaskId 的整句:去掉首尾空白,全角 ＃ / 数字 / 字母归一成半角(NFKC;ID 本身都是 ASCII)。 */
 export const taskIdQuery = (q: string): string => q.trim().normalize('NFKC');
 
+/** 要不要问服务端:Hub 支持搜索,且本机的表被截断(否则本机的结果就是全部)。 */
+export const needsServerSearch = (capabilities: readonly string[], truncated: boolean, search: Pick<TaskSearch, 'q'>): boolean =>
+  truncated && capabilities.includes('search') && searching(search);
+
 /** 各视图(列表 / 看板 / 甘特图 / 日历)共用的入口:搜索 + 筛选。 */
-export function visibleTasks(items: readonly Requirement[], archived: readonly Requirement[], filter: BoardFilter, search: TaskSearch, ctx: SearchContext): Requirement[] {
-  return applyFilter(searchedTasks(items, archived, search, ctx), filter);
+export function visibleTasks(items: readonly Requirement[], archived: readonly Requirement[], filter: BoardFilter, search: TaskSearch, ctx: SearchContext, serverHits: readonly Requirement[] = []): Requirement[] {
+  return applyFilter(searchedTasks(items, archived, search, ctx, serverHits), filter);
 }
 
 /**

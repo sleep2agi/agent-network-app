@@ -74,9 +74,18 @@ export const initScript = ({ theme }) => {
       Object.assign(row, patch, { updatedAt: new Date().toISOString() });
       return { ok: true, requirement: row };
     }
+    // ?q= (hub capability search): a naive name match over the fixture's serverOnly rows (older tasks the list
+    // didn't return) — or its archived rows with archived=true. Recorded in window.__tasksQueries for the drive.
+    if (TASKS && p === '/api/requirements' && u.searchParams.has('q')) {
+      (window.__tasksQueries ||= []).push(u.search);
+      const q = (u.searchParams.get('q') || '').toLowerCase();
+      const pool = u.searchParams.get('archived') === 'true' ? (TASKS.archived ?? []) : [...(TASKS.requirements ?? []), ...(TASKS.serverOnly ?? [])];
+      return { ok: true, requirements: pool.filter(r => q.split(/\s+/).filter(Boolean).every(t => r.name.toLowerCase().includes(t))), capabilities: TASKS.capabilities ?? [], has_more: false, next_cursor: null };
+    }
     // ?archived=true (the 任务 search's 包含已归档): only the fixture's archived rows.
     if (TASKS && p === '/api/requirements' && u.searchParams.get('archived') === 'true') return { ok: true, requirements: TASKS.archived ?? [], capabilities: TASKS.capabilities ?? [] };
-    if (TASKS && p === '/api/requirements') return { ok: true, requirements: TASKS.requirements ?? [], capabilities: TASKS.capabilities ?? [] };
+    // TASKS.hasMore: the list is truncated (a paging hub says so with has_more); undefined = an old hub (no field).
+    if (TASKS && p === '/api/requirements') return { ok: true, requirements: TASKS.requirements ?? [], capabilities: TASKS.capabilities ?? [], ...(TASKS.hasMore !== undefined ? { has_more: TASKS.hasMore, next_cursor: TASKS.hasMore ? 'c1' : null } : {}) };
     if (p === '/api/auth/me') return { ok: true, user: { username: 'tester' }, current_network: 'net-sweep', networks: [{ network_id: 'net-sweep', name: 'sweep' }] };
     // `?light=1` is the hub's narrow projection (server/src/server.ts): exactly these 8 fields, no
     // node_id, no capability bits. Answering it with full rows hid a real bug (2026-09-29: chat info

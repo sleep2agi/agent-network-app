@@ -16,6 +16,9 @@
 //   title row; tablet: a row under the title bar), field and 取消 on one centre line ±1, inside the 16/24px gutters,
 //   the input is focused; typing filters; 取消 clears and closes.
 //   No horizontal page overflow anywhere.
+// Truncated list (desktop 1320×754): on a hub with capability search whose list says has_more, a query matching only an
+//   older task (not in the loaded rows) shows it via ?q=; on an old hub (no search, exactly 500 rows) the empty state
+//   says only the latest 500 were searched and no ?q= request is made.
 // Exit 1 when any check fails or a viewport could not be opened.
 import { mkdirSync } from 'node:fs';
 import { join } from 'node:path';
@@ -276,6 +279,51 @@ for (const theme of ['light', 'dark']) {
     }
     await ctx.close();
   }
+}
+
+// ── truncated list (more than the hub returns in one page) ──
+// new hub (capabilities search + paging, has_more: true): a query that only matches an older task not in the list
+// shows it (asked with ?q=); old hub (no search capability, exactly 500 rows, no has_more): the empty state says only
+// the latest 500 were searched.
+const truncatedFixture = (kind) => {
+  const at = (d) => new Date(Date.now() + d * 86400000).toISOString();
+  const R = (id, name, o) => ({ id, name, priority: 'normal', assignee: '', column: 'pool', owner: { kind: 'user', id: 'u_tester' }, participants: [], agent_owner: null, project_id: null, due: '', createdAt: at(-1), updatedAt: at(-1), description: '', checklist: [], tags: [], parent_id: null, ...o });
+  const base = kind === 'old' ? Array.from({ length: 500 }, (_, i) => R(`n${i}`, `示例新任务 ${i}`)) : [R('n1', '示例新任务一'), R('n2', '示例新任务二')];
+  window.__tasksFixture = {
+    requirements: base,
+    serverOnly: [R('old1', '很久以前的归档前方案', { createdAt: at(-400) })],
+    projects: [], people: [{ kind: 'user', id: 'u_tester', networkId: 'net-sweep', name: 'tester' }],
+    capabilities: kind === 'old' ? ['agent_owner', 'description', 'archived'] : ['agent_owner', 'description', 'archived', 'search', 'paging'],
+    ...(kind === 'old' ? {} : { hasMore: true }),
+  };
+};
+for (const kind of ['new', 'old']) {
+  const vp = `desktop 1320x754 light truncated-${kind}-hub`;
+  const ctx = await browser.newContext({ viewport: { width: 1320, height: 754 }, deviceScaleFactor: 2, timezoneId: 'Asia/Shanghai', locale: 'zh-CN' });
+  const page = await ctx.newPage();
+  page.on('pageerror', e => console.log('PAGEERROR', e.message.split('\n')[0]));
+  await page.addInitScript(truncatedFixture, kind);
+  await page.addInitScript(initScript, { theme: 'light' });
+  try {
+    await page.goto(url);
+    await page.locator('[data-testid="desktop-rail"] [aria-label="任务"]').first().click({ timeout: 30000 });
+    await page.locator(tid('tasks-view-list')).first().click({ timeout: 20000 });
+    await page.locator(tid(kind === 'old' ? 'req-row-n0' : 'req-row-n1')).first().waitFor({ timeout: 20000 });
+    await page.locator(tid('task-search-input')).first().fill('归档前方案');
+    await page.waitForTimeout(900);
+    const got = await page.evaluate(() => [...document.querySelectorAll('[data-testid^="req-row-"]')].map(e => e.dataset.testid.slice(8)).filter(id => /^[a-z]+\d+$/.test(id)).join(','));
+    const asked = await page.evaluate(() => (window.__tasksQueries || []).join(' '));
+    if (OUT) await page.screenshot({ path: join(OUT, `desktop-1320x754-light-truncated-${kind}.png`) });
+    if (kind === 'new') {
+      record(vp, 'older task found via ?q=', { row: got === 'old1', asked: asked.includes('q=') }, { rows: got || '(none)', asked });
+    } else {
+      const partial = await box(page, tid('task-search-partial'));
+      record(vp, 'old hub: says only the latest 500 were searched', { noRow: got === '', note: !!partial, notAsked: asked === '' }, { note: partial?.text });
+    }
+  } catch (e) {
+    record(vp, 'drive', { finished: false }, { error: String(e).split('\n')[0] });
+  }
+  await ctx.close();
 }
 
 await browser.close();

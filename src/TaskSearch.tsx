@@ -172,13 +172,14 @@ export function SearchCancel({ onPress }: { onPress: () => void }) {
 }
 
 /** 搜索没有结果:「没有找到包含 “xxx” 的任务」+ 清除搜索。 */
-export function SearchEmpty({ q, s, onClear, filtered }: { q: string; s: TaskStyles; onClear: () => void; filtered: boolean }) {
+export function SearchEmpty({ q, s, onClear, filtered, partial }: { q: string; s: TaskStyles; onClear: () => void; filtered: boolean; /** 旧 Hub、表被截断:只搜了最近的 500 个。 */ partial?: boolean }) {
   useTranslation();
   return (
     <View style={[s.center, { gap: spacing.sm }]} testID="task-search-empty">
       <Ionicons name="search-outline" size={28} color={colors.textMuted} />
       <Text style={{ color: colors.textSecondary, fontSize: 14, fontWeight: '600', textAlign: 'center' }} testID="task-search-empty-text">{tr('taskSearch.empty', { q: q.trim() })}</Text>
       {filtered ? <Text style={s.muted}>{tr('taskSearch.emptyFiltered')}</Text> : null}
+      {partial ? <Text style={s.muted} testID="task-search-partial">{tr('taskSearch.partial')}</Text> : null}
       <Pressable accessibilityRole="button" onPress={onClear} style={{ height: 32, justifyContent: 'center', paddingHorizontal: spacing.md }} testID="task-search-empty-clear">
         <Text style={s.link}>{tr('taskSearch.clear')}</Text>
       </Pressable>
