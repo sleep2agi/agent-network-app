@@ -101,4 +101,5 @@ for (const w of [150, 220, 420]) for (const opts of [{}, { archived: true }, { t
 }
 
 console.log(`\n${p}/${tt} passed`);
-if (p !== tt) process.exit(1);
+// 显式退出:yoga-layout(wasm)在 windows-latest 上偶发打印完通过行后进程不退出,job 静默卡到超时(2026-09-30)。
+process.exit(p === tt ? 0 : 1);
