@@ -8,7 +8,7 @@ setLanguagePreference('zh');
 // 组件级:手机 / 触屏分支(没有 Tauri 桥 ⇒ pointerUi() = false)。没有 onLayout ⇒ 宽度 0 ⇒ 详情是推入页(Modal)。
 (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
 mock.module('react-native', () => ({
-  View: 'View', Text: 'Text', TextInput: 'TextInput', Pressable: 'Pressable', ScrollView: 'ScrollView', ActivityIndicator: 'ActivityIndicator', Image: 'Image',
+  View: 'View', Text: 'Text', TextInput: 'TextInput', Pressable: 'Pressable', ScrollView: 'ScrollView', ActivityIndicator: 'ActivityIndicator', Image: 'Image', PixelRatio: { get: () => 2 },
   KeyboardAvoidingView: 'KeyboardAvoidingView',
   Keyboard: { addListener: () => ({ remove() {} }), dismiss() {} },
   Modal: ({ visible, children }: any) => visible ? children : null,
