@@ -46,7 +46,7 @@ function Picker({ networkId, mode, people: allPeople, selected, onConfirm, onClo
   const missing = draft.filter(person => !candidates.some(candidate => personKey(candidate) === personKey(person)));
   const invalid = !networkId || missing.length > 0 || (mode === 'owner' && draft.length > 1) || draft.some(person => candidates.some(candidate => personKey(candidate) === personKey(person) && candidate.unavailable));
   const styles = useMemo(() => StyleSheet.create({
-    backdrop: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: 'rgba(0,0,0,0.45)' },
+    backdrop: { flex: 1, justifyContent: 'center', alignItems: 'center' },
     panel: { width: '100%', maxWidth: 520, maxHeight: '85%', borderRadius: radius.surface, padding: spacing.lg, backgroundColor: colors.card, gap: spacing.md, ...elevated('floating') },
     title: { fontSize: 20, fontWeight: '600', color: colors.text },
     muted: { color: colors.textMuted, fontSize: 13 },
@@ -63,7 +63,7 @@ function Picker({ networkId, mode, people: allPeople, selected, onConfirm, onClo
   }), [themeVersion]);
 
   return <Modal visible transparent animationType="fade" onRequestClose={onClose}>
-    <ModalKeyboardAvoider>
+    <ModalKeyboardAvoider scrim="rgba(0,0,0,0.45)">
     <View style={[styles.backdrop, withBasePadding(safe, spacing.lg)]}>
       <View style={styles.panel} accessibilityViewIsModal>
         <Text style={styles.title}>{title || (mode === 'owner' ? tr('tasks.copy.65') : tr('tasks.copy.66'))}</Text>

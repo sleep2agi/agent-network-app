@@ -192,8 +192,8 @@ export default function TaskCreateDialog({ draft, sheet, twoRoles, parentName, p
   };
   return (
     <Modal visible transparent animationType={sheet ? 'slide' : 'fade'} onRequestClose={onClose}>
-      <ModalKeyboardAvoider>
-        <View style={[{ flex: 1, backgroundColor: 'rgba(0,0,0,0.4)' }, sheet ? { justifyContent: 'flex-end' } : [{ alignItems: 'center', justifyContent: 'center' }, withBasePadding(safe, spacing.lg)]]}>
+      <ModalKeyboardAvoider scrim="rgba(0,0,0,0.4)">
+        <View style={[{ flex: 1 }, sheet ? { justifyContent: 'flex-end' } : [{ alignItems: 'center', justifyContent: 'center' }, withBasePadding(safe, spacing.lg)]]}>
           <Pressable accessibilityLabel={tr('tasks.copy.112')} onPress={onClose} style={StyleSheet.absoluteFill} testID="req-create-backdrop" />
           <View style={panel} accessibilityViewIsModal testID="req-create">
             <View style={[f.row, { justifyContent: 'space-between' }]}>

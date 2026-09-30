@@ -2303,7 +2303,7 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
       />}
 
       <Modal visible={!!forwardFor && forwardUiOwner === conversationKeyFor} transparent animationType="fade" onRequestClose={() => setForwardFor(null)}>
-        <ModalKeyboardAvoider>
+        <ModalKeyboardAvoider scrim="rgba(0,0,0,0.38)">
         <Pressable style={[styles.forwardBackdrop, withBasePadding(dialogSafe, spacing.xl)]} onPress={() => setForwardFor(null)}>
           <Pressable style={styles.forwardPanel} onPress={() => {}}>
             <Text style={styles.forwardTitle}>{forwardBatch ? t('chat.forwardCount', { count: forwardBatch.length }) : t('chat.forwardTo')}</Text>
@@ -2784,7 +2784,7 @@ const makeStyles = () =>
   plusCellIcon: { width: 60, height: 60, borderRadius: radius.surface, backgroundColor: colors.card, borderWidth: StyleSheet.hairlineWidth, borderColor: colors.border, alignItems: 'center', justifyContent: 'center' },
   plusCellBtw: { color: colors.accent, fontSize: 13, fontWeight: '600' },
   plusCellLabel: { color: colors.textSecondary, fontSize: 12, marginTop: 6 },
-  forwardBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.38)', alignItems: 'center', justifyContent: 'center', padding: spacing.xl },
+  forwardBackdrop: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: spacing.xl },
   forwardPanel: { width: 360, maxWidth: '92%', maxHeight: '100%', borderRadius: radius.surface, backgroundColor: colors.card, padding: spacing.lg, ...elevated('floating') },
   forwardTitle: { color: colors.text, fontSize: 17, fontWeight: '600', marginBottom: spacing.md },
   forwardSearch: { color: colors.text, backgroundColor: colors.inputBg, borderRadius: radius.control, paddingHorizontal: spacing.md, paddingVertical: 10, marginBottom: spacing.sm },

@@ -174,7 +174,7 @@ ck('form: rendered through ScheduleModal with testID schedule-form', /<ScheduleM
 ck('form: root View carries the safe-area padding (#387 approach, via useModalSafePadding)', /const safe = useModalSafePadding\('pageSheet'\)/.test(shell) && /<View testID=\{testID\} style=\{\[s\.modalRoot, safe\]\}>/.test(sheet));
 ck('form: header lives inside the padded root', sheet.indexOf('style={[s.modalRoot, safe]}') > 0 && sheet.indexOf('style={[s.modalRoot, safe]}') < sheet.indexOf('testID={`${testID}-header`}'));
 ck('form: Tauri title strips re-mounted inside the Modal (it covers the window)', /<MacTitleStrip \/>\s*<WinTitleBar \/>\s*<View testID=\{`\$\{testID\}-header`\}/.test(sheet));
-ck('desktop: ScheduleModal is a centred transparent dialog when pointerUi()', /if \(pointerUi\(\)\) \{/.test(shell) && /<Modal transparent visible=\{visible\} animationType="fade" onRequestClose=\{onClose\}>/.test(shell) && /style=\{\[s\.modalRoot, s\.dialogPanel, size\]\}/.test(shell));
+ck('desktop: ScheduleModal is a centred transparent dialog when pointerUi()', /if \(pointerUi\(\)\) \{/.test(shell) && /<Modal transparent visible=\{visible\} animationType="fade" onRequestClose=\{onClose\}>/.test(shell) && /style=\{\[s\.dialogPanel, size\]\}/.test(shell));
 ck('desktop: the dialog does not re-mount the title strips (the window keeps its own)', shell.split('<MacTitleStrip />').length === 2 && shell.indexOf('<MacTitleStrip />') > shell.indexOf('presentationStyle="pageSheet"'));
 ck('form: 取消 and 保存 get equal-width sides so the title is truly centred', /headerSide: \{ minWidth: 56/.test(screen) && /modalTitle: \{ flex: 1, textAlign: 'center'/.test(screen));
 for (const name of ['CronEditModal', 'IntentsModal']) {

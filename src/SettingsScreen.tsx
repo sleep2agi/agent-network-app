@@ -38,6 +38,7 @@ import SettingsPhonePage, { type PhonePagesCtx } from './SettingsPhonePages';
 import { PHONE_SETTINGS_SERVER_ENTRY } from './nav-chrome';
 import { settingsPageContentStyle } from './settings-kit';
 import { useModalSafePadding } from './safe-area-runtime';
+
 import { withBasePadding } from './modal-safe-area';
 import { elevated, buttonStyle, buttonTextStyle } from './elevation';
 import UserManagementPanel from './UserManagementPanel';
@@ -47,6 +48,9 @@ import { describeDevice, sessionSubtitle, visibleSessions, SESSIONS_VISIBLE_DEFA
 import { probeSavedSessions } from './saved-session-probe';
 import { fetchAuthMe } from './user-admin-api';
 import { pooledHttpEnabled, setPooledHttpEnabled } from './app-fetch';
+
+/** 设置里居中确认框的遮罩色(有键盘避让的那个画在 ModalKeyboardAvoider 上)。 */
+const MODAL_SCRIM = 'rgba(0,0,0,0.55)';
 
 // Settings (Vincent tg 720): who am I, where am I connected, which network, which build —
 // and the destructive actions live here instead of cluttering the agents list header.
@@ -1163,8 +1167,8 @@ export default function SettingsScreen({
       </Modal>
 
       <Modal visible={localDeleteVisible} transparent animationType="fade" onRequestClose={() => setLocalDeleteVisible(false)}>
-        <ModalKeyboardAvoider>
-        <View style={[styles.modalBackdrop, withBasePadding(dialogSafe, spacing.xl)]}>
+        <ModalKeyboardAvoider scrim={MODAL_SCRIM}>
+        <View style={[styles.modalFrame, withBasePadding(dialogSafe, spacing.xl)]}>
           <View style={styles.modalCard}>
             <Text style={styles.modalTitle}>{tr('settings.copy.82')}</Text>
             <Text style={styles.modalBody}>{tr('settings.copy.83')}</Text>
@@ -1400,7 +1404,9 @@ const makeStyles = () =>
   confirmInput: { marginTop: spacing.md, borderWidth: 1, borderColor: colors.border, borderRadius: radius.control, color: colors.text, backgroundColor: colors.inputBg, paddingHorizontal: spacing.md, paddingVertical: spacing.sm },
   disabled: { opacity: 0.45 },
   divider: { height: 1, backgroundColor: colors.border, marginLeft: spacing.md },
-  modalBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.55)', alignItems: 'center', justifyContent: 'center', padding: spacing.xl },
+  modalBackdrop: { flex: 1, backgroundColor: MODAL_SCRIM, alignItems: 'center', justifyContent: 'center', padding: spacing.xl },
+  // 有键盘避让的那个:遮罩画在 ModalKeyboardAvoider 上(铺满窗口),这里只管居中。
+  modalFrame: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: spacing.xl },
   modalCard: { width: '100%', maxWidth: 440, backgroundColor: colors.card, borderRadius: radius.surface, padding: spacing.lg, ...elevated('floating') },
   modalTitle: { color: colors.text, fontSize: 17, fontWeight: '600' },
   modalBody: { color: colors.textSecondary, fontSize: 13, lineHeight: 20, marginTop: spacing.sm },

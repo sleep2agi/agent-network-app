@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { AccessibilityInfo, ActivityIndicator, FlatList, Keyboard, KeyboardAvoidingView, Modal, Platform, Pressable, StyleSheet, View } from 'react-native';
+import { AccessibilityInfo, ActivityIndicator, FlatList, Modal, Platform, Pressable, StyleSheet, View } from 'react-native';
 import { Text, TextInput } from './ui-text';
 import type { RefObject } from 'react';
 import { useModalSafePadding } from './safe-area-runtime';
@@ -26,7 +26,7 @@ import {
   type SideThreadCardAction,
 } from './side-thread-model';
 import { createSideThreadActionController } from './side-thread-action-controller';
-import { keyboardAvoidEnabled, useKeyboardVisible } from './keyboard-visibility';
+import ModalKeyboardAvoider from './ModalKeyboardAvoider';
 import { colors, onThemeChange, spacing, radius } from './theme';
 import { createSideThreadScopeGate } from './side-thread-scope-gate';
 import { elevated, buttonStyle, buttonTextStyle } from './elevation';
@@ -84,7 +84,6 @@ export default function SideThreadDrawer({ cfg, alias, desktop, launch, scope, r
   // Own window (safe-area rule 2). Bottom sheet on phones (overlay: top 0 — it never reaches the
   // status bar); the panel, not the scrim, pads bottom / sides so the scrim still dims edge to edge.
   const safe = useModalSafePadding('overlay');
-  const keyboardVisible = useKeyboardVisible(Keyboard, Platform.OS);
   const client = useMemo(() => createSideThreadClient(cfg), [cfg.serverUrl, cfg.token, cfg.networkId]);
   const [visible, setVisible] = useState(false);
   const [question, setQuestion] = useState('');
@@ -332,12 +331,8 @@ export default function SideThreadDrawer({ cfg, alias, desktop, launch, scope, r
       }}
       testID="btw-drawer"
     >
-      <KeyboardAvoidingView
-        style={styles.modalRoot}
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        // Android KAV doesn't reset on keyboardDidHide — see keyboard-visibility.ts.
-        enabled={keyboardAvoidEnabled(Platform.OS, keyboardVisible)}
-      >
+      {/* Same KAV rules as every modal (keyboard-visibility.ts); the scrim is painted outside it so it never shrinks. */}
+      <ModalKeyboardAvoider scrim="rgba(0,0,0,0.48)">
       <Pressable style={[styles.backdrop, desktop && styles.desktopBackdrop]} onPress={closeDrawer}>
         <Pressable
           role="dialog"
@@ -429,7 +424,7 @@ export default function SideThreadDrawer({ cfg, alias, desktop, launch, scope, r
           )}
         </Pressable>
       </Pressable>
-      </KeyboardAvoidingView>
+      </ModalKeyboardAvoider>
     </Modal>
   );
 }
@@ -443,8 +438,7 @@ function Action({ label, onPress, danger, muted }: { label: string; onPress: () 
 }
 
 const makeStyles = () => StyleSheet.create({
-  modalRoot: { flex: 1 },
-  backdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.48)', justifyContent: 'flex-end' },
+  backdrop: { flex: 1, justifyContent: 'flex-end' },
   desktopBackdrop: { alignItems: 'flex-end' },
   panel: { backgroundColor: colors.bg },
   desktopPanel: { width: 440, maxWidth: '92%', height: '100%', ...elevated('floating', 'left') },

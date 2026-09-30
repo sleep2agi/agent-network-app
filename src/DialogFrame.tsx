@@ -17,6 +17,8 @@ import { withBasePadding } from './modal-safe-area';
 import ModalKeyboardAvoider from './ModalKeyboardAvoider';
 
 export const DIALOG_MAX_WIDTH = 460;
+/** 遮罩画在 ModalKeyboardAvoider 上(铺满窗口),backdrop 只管居中。 */
+const SCRIM = 'rgba(0,0,0,0.55)';
 
 /** 正文里的控件展开(比如下拉清单)后,让骨架把正文滚到底,展开的部分整段露出来。scroll={false} 时是空操作。 */
 const RevealContext = createContext<() => void>(() => {});
@@ -43,7 +45,7 @@ export default function DialogFrame({ title, closeLabel, onClose, footer, childr
   const reveal = () => { setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 50); };
   return (
     <Modal visible transparent animationType="fade" onRequestClose={onClose}>
-      <ModalKeyboardAvoider>
+      <ModalKeyboardAvoider scrim={SCRIM}>
         <View style={[styles.backdrop, withBasePadding(safe, spacing.lg)]} testID={`${testID}-backdrop`}>
           <View style={[styles.card, { maxWidth }]} accessibilityViewIsModal testID={testID}>
             <View style={styles.header}>
@@ -70,7 +72,7 @@ export default function DialogFrame({ title, closeLabel, onClose, footer, childr
 }
 
 const makeStyles = () => StyleSheet.create({
-  backdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.55)', alignItems: 'center', justifyContent: 'center' },
+  backdrop: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   card: { width: '100%', maxHeight: '100%', flexShrink: 1, backgroundColor: colors.card, borderRadius: radius.surface, padding: spacing.lg, gap: spacing.md, ...elevated('floating') },
   header: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   title: { flex: 1, color: colors.text, fontSize: 17, fontWeight: '600' },
