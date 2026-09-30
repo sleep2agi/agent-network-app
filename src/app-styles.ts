@@ -10,6 +10,7 @@
 import { StyleSheet } from 'react-native';
 import { colors, onThemeChange, spacing, radius } from './theme';
 import { buttonStyle, buttonTextStyle } from './elevation';
+import { badgeOffset } from './badge-anchor';
 
 const makeStyles = () =>
   StyleSheet.create({
@@ -97,6 +98,14 @@ const makeStyles = () =>
   tab: { flex: 1, alignItems: 'center', paddingVertical: spacing.sm, gap: 2 },
   tabLabel: { color: colors.textSecondary, fontSize: 11, fontWeight: '500' },
   tabActive: { color: colors.accent, fontWeight: '600' },
+  // 手机底栏图标的角标(#429 任务有新动态):左缘锚在图标右上角内侧(badge-anchor.ts),「99+」向外长、不盖图标;
+  // 白边(底栏底色)把它和图标描边隔开。
+  tabIcon: { width: 26, height: 26 },
+  tabBadge: {
+    position: 'absolute', ...badgeOffset(0, 0, 26, 18), minWidth: 18, height: 18, borderRadius: radius.pill, paddingHorizontal: 4,
+    backgroundColor: colors.failed, borderWidth: 2, borderColor: colors.bg, alignItems: 'center', justifyContent: 'center',
+  },
+  tabBadgeText: { color: '#fff', fontSize: 10, fontWeight: '600', lineHeight: 12 },
   // Non-desktop shell: [left rail slot | content]; the rail only renders in the
   // Android wide layout (src/nav-chrome.ts). On the phone the slot is empty.
   navShell: { flex: 1, flexDirection: 'row', minHeight: 0 },

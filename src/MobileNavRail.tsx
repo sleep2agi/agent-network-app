@@ -12,13 +12,14 @@ import { Ionicons } from './icons';
 import { colors, radius } from './theme';
 import { APP_VERSION } from './version';
 import { railBadgeText, railIconFor } from './rail-nav';
-import { badgeOffsetCentered } from './badge-anchor';
+import { badgeOffsetCentered, clampBadge, pillBadgeWidth } from './badge-anchor';
 import { mobileRailItem, mobileRailWidth, railUnreadTotal } from './nav-chrome';
 import { ds, listText, uiScale } from './ui-scale';
 import { alignedRailLayout, denserRowPitch, listFirstRowTop, onListFirstRowTopChange } from './list-rail-align';
 import { getUnreadSnapshot, subscribeUnread } from './unread-store';
 import { agentUnreadCounts } from './agent-unread-counts';
 import { useTranslation } from './i18n-react';
+import { useTaskUnreadCount } from './task-unread-store';
 
 export interface MobileNavTab {
   key: string;
@@ -50,36 +51,51 @@ export default function MobileNavRail({ tabs, active, onSelect, insetLeft, inset
   // AppRoot is keyed by theme + 界面密度 (uiScaleKey), so this remounts on either change and rebuilds its styles.
   const s = useMemo(makeStyles, []);
   const unread = useAgentsUnreadTotal();
+  const taskUnread = useTaskUnreadCount();
   const main = tabs.filter(tab => tab.key !== 'settings');
   const settings = tabs.find(tab => tab.key === 'settings');
   // 更紧凑: rail item n shares a band with agent-list row n (same top, same pitch) — see
   // list-rail-align.ts for what "aligned" means. Other densities keep the ordinary rail.
   const firstRowTop = useSyncExternalStore(onListFirstRowTopChange, listFirstRowTop, listFirstRowTop);
   const align = uiScale().listDense ? alignedRailLayout(firstRowTop, denserRowPitch(uiScale().denseFontMultiplier), ds(12) + (showBrand ? ds(40) : 0)) : null;
+  // Free space above the indicator inside an item (items centre their content). At 更紧凑 the items abut, so this is
+  // all the room a badge has before it runs into the label of the tab above (#429).
+  const [indicatorTop, setIndicatorTop] = useState<number | null>(null);
+  const badgeBox = (text: string) => {
+    const d = uiScale().densityFactor;
+    const h = Math.max(14, Math.min(18, Math.round(18 * d)));
+    const font = h < 16 ? 9 : 10, pad = h < 16 ? 3 : 4;
+    const off = clampBadge(badgeOffsetCentered(ds(52), ds(30), ds(24), h), pillBadgeWidth(text, font, h, pad, 2), {
+      minTop: indicatorTop === null ? -Infinity : -indicatorTop,
+      // the rail's ScrollView clips its sides: end 1 px inside the rail edge
+      maxRight: (mobileRailWidth(d) + ds(52)) / 2 - 1,
+    });
+    return { box: { ...off, height: h, minWidth: h, paddingHorizontal: pad }, text: { fontSize: font } };
+  };
 
   const item = (tab: MobileNavTab) => {
     const selected = active === tab.key;
-    const badge = tab.key === 'agents' ? railBadgeText(unread) : null;
+    const badge = tab.key === 'agents' ? railBadgeText(unread) : tab.key === 'tasks' ? railBadgeText(taskUnread) : null;
     return (
       <Pressable
         key={tab.key}
         testID={`nav-rail-${tab.key}`}
         accessibilityRole="tab"
-        accessibilityLabel={badge ? t('nav.unread', { label: t(tab.label), count: badge }) : t(tab.label)}
+        accessibilityLabel={badge ? t(tab.key === 'tasks' ? 'nav.tasksUnread' : 'nav.unread', { label: t(tab.label), count: badge }) : t(tab.label)}
         accessibilityState={{ selected }}
         aria-selected={selected}
         onPress={() => onSelect(tab.key)}
         android_ripple={{ color: colors.railHover, borderless: true, radius: 30 }}
         style={({ pressed }) => [s.item, align && { height: align.itemHeight }, pressed && !selected && s.itemPressed]}
       >
-        <View style={[s.indicator, selected && s.indicatorActive]}>
+        <View style={[s.indicator, selected && s.indicatorActive]} onLayout={tab.key === main[0]?.key ? e => setIndicatorTop(e.nativeEvent.layout.y) : undefined}>
           <Ionicons
             name={railIconFor(tab, active) as keyof typeof Ionicons.glyphMap}
             size={24 /* density-scaled by ./icons */}
             color={selected ? colors.accent : colors.textSecondary}
           />
           {badge ? (
-            <View style={s.badge} testID={`nav-rail-badge-${tab.key}`}><Text dense style={s.badgeText}>{badge}</Text></View>
+            <View style={[s.badge, badgeBox(badge).box]} testID={`nav-rail-badge-${tab.key}`}><Text dense style={[s.badgeText, badgeBox(badge).text]}>{badge}</Text></View>
           ) : null}
         </View>
         <Text dense style={[s.label, selected && s.labelActive]} numberOfLines={1}>{t(tab.label)}</Text>
@@ -143,7 +159,8 @@ const makeStyles = () => StyleSheet.create({
   label: { color: colors.textSecondary, ...listText('railLabel'), fontWeight: '500', maxWidth: mobileRailItem(uiScale().densityFactor).width },
   labelActive: { color: colors.accent, fontWeight: '600' },
   badge: {
-    // Left edge tucked just inside the glyph's top-right corner (badge-anchor.ts): 「99+」 grows outward.
+    // Left edge tucked just inside the glyph's top-right corner (badge-anchor.ts): 「99+」 grows outward — as far as the
+    // rail item allows (badgeBox clamps it and scales it with 界面密度).
     position: 'absolute', ...badgeOffsetCentered(ds(52), ds(30), ds(24), 18), minWidth: 18, height: 18, borderRadius: radius.pill, paddingHorizontal: 4,
     backgroundColor: colors.failed, borderWidth: 2, borderColor: colors.railBg, alignItems: 'center', justifyContent: 'center',
   },

@@ -57,6 +57,7 @@ import DesktopWindowPin from './src/DesktopWindowPin';
 import { styles } from './src/app-styles';
 import { APP_VERSION } from './src/version';
 import { railBadgeText, railIconFor, railSurface, railTooltipVisible } from './src/rail-nav';
+import { useTaskUnreadCount, useTaskUnreadDriver } from './src/task-unread-store';
 import { badgeOffsetCentered } from './src/badge-anchor';
 import DesktopUpdatePrompt from './src/DesktopUpdatePrompt';
 import { desktopPromptMode } from './src/update-prompt-model';
@@ -422,6 +423,9 @@ function AppRoot() {
   // 0.2.76 系统栏托盘:只有主窗口接(分离聊天窗/工作区窗/设置窗不接,否则一个 app 多个托盘项)。
   // 托盘点某个 agent → 打开那个会话。
   const trayWindow = tauriDesktop && !initialChat && !initialWorkspaceProfile && !settingsWindow;
+  // #429 任务 tab 的未读角标:主窗口 / 工作区窗口各数自己账号的;分离聊天窗、设置窗没有导航栏,不读。
+  useTaskUnreadDriver(dedicatedChatWindow || settingsWindow ? null : cfg, screen.name === 'tasks' || screen.name === 'taskDetail');
+  const taskUnread = railBadgeText(useTaskUnreadCount());
   useEffect(() => {
     if (!cfg || !trayWindow) return;
     return bindDesktopTray(
@@ -643,16 +647,21 @@ function AppRoot() {
           key={tab.key}
           style={styles.tab}
           accessibilityRole="tab"
-          accessibilityLabel={t(tab.label)}
+          accessibilityLabel={tab.key === 'tasks' && taskUnread ? t('nav.tasksUnread', { label: t(tab.label), count: taskUnread }) : t(tab.label)}
           accessibilityState={{ selected: activeName === tab.key }}
           onPress={() => onNavPress(tab.key)}
           testID={`mobile-tab-${tab.key}`}
         >
-          <Ionicons
-            name={activeName === tab.key ? tab.iconActive : tab.icon}
-            size={26}
-            color={activeName === tab.key ? colors.accent : colors.textSecondary}
-          />
+          <View style={styles.tabIcon}>
+            <Ionicons
+              name={activeName === tab.key ? tab.iconActive : tab.icon}
+              size={26}
+              color={activeName === tab.key ? colors.accent : colors.textSecondary}
+            />
+            {tab.key === 'tasks' && taskUnread ? (
+              <View style={styles.tabBadge} testID="mobile-tab-badge-tasks"><Text style={styles.tabBadgeText}>{taskUnread}</Text></View>
+            ) : null}
+          </View>
           <Text style={[styles.tabLabel, activeName === tab.key && styles.tabActive]}>
             {t(tab.label)}
           </Text>
@@ -1097,6 +1106,7 @@ function DesktopWorkspace({ cfg, screen, setScreen, onLogout, onLocalDataDeleted
   const desktopStyles = useMemo(makeDesktopStyles, []);
   // 导航栏悬停提示(微信/飞书式):只记当前悬停的 tab key,提示条挂在按钮右侧。
   const [railHover, setRailHover] = useState<string | null>(null);
+  const taskUnread = useTaskUnreadCount();
   const [pinnedAliases, setPinnedAliases] = useState(() => loadPinnedChats(cfg.profileId));
   useEffect(() => setPinnedAliases(loadPinnedChats(cfg.profileId)), [cfg.profileId]);
   const togglePin = (alias: string) => setPinnedAliases(current => {
@@ -1235,6 +1245,8 @@ function DesktopWorkspace({ cfg, screen, setScreen, onLogout, onLocalDataDeleted
               onHover={setRailHover}
               onPress={() => setScreen({ name: tab.key } as Screen)}
               styles={desktopStyles}
+              badge={tab.key === 'tasks' ? taskUnread : null}
+              badgeHint={tab.key === 'tasks' ? 'nav.tasksUpdated' : undefined}
             />
           ))}
         </View>
@@ -1271,7 +1283,7 @@ function DesktopWorkspace({ cfg, screen, setScreen, onLogout, onLocalDataDeleted
 
 // 桌面左侧导航栏按钮:40×40 命中区、激活=淡 accent 底 + accent 图标、悬停/聚焦=浅底、
 // 悬停时右侧弹出文字提示(触屏没有悬停,不显示)。角标是图标右上角的小圆标,不是行内文字。
-function RailButton({ tab, active, hovered, onHover, onPress, styles, extraStyle, badge }: {
+function RailButton({ tab, active, hovered, onHover, onPress, styles, extraStyle, badge, badgeHint }: {
   tab: { key: string; label: string; icon: string; iconActive: string };
   active: boolean;
   hovered: boolean;
@@ -1280,13 +1292,16 @@ function RailButton({ tab, active, hovered, onHover, onPress, styles, extraStyle
   styles: ReturnType<typeof makeDesktopStyles>;
   extraStyle?: object;
   badge?: number | null;
+  /** 有角标时悬停提示的后半句(i18n 键,含 {count}),如「任务 · 3 个任务有新动态」;数字标红。 */
+  badgeHint?: string;
 }) {
   const badgeText = railBadgeText(badge);
   const { t } = useTranslation();
+  const [hintBefore, hintAfter] = badgeText && badgeHint ? t(badgeHint, { count: '\u0000' }).split('\u0000') : [];
   return (
     <View style={[styles.railSlot, extraStyle]}>
       <Pressable
-        accessibilityLabel={t(tab.label)}
+        accessibilityLabel={badgeText && badgeHint ? `${t(tab.label)}, ${t(badgeHint, { count: badgeText })}` : t(tab.label)}
         accessibilityRole="tab"
         accessibilityState={{ selected: active }}
         onPress={onPress}
@@ -1299,12 +1314,15 @@ function RailButton({ tab, active, hovered, onHover, onPress, styles, extraStyle
       >
         <Ionicons name={railIconFor(tab, active ? tab.key : '') as keyof typeof Ionicons.glyphMap} size={22} color={active ? colors.accent : colors.textSecondary} />
         {badgeText ? (
-          <View style={styles.railBadge}><Text style={styles.railBadgeText}>{badgeText}</Text></View>
+          <View style={styles.railBadge} testID={`desktop-rail-badge-${tab.key}`}><Text style={styles.railBadgeText}>{badgeText}</Text></View>
         ) : null}
       </Pressable>
       {railTooltipVisible(hovered ? tab.key : null, tab.key, true) ? (
         <View style={styles.railTooltip} pointerEvents="none">
-          <Text style={styles.railTooltipText} numberOfLines={1}>{t(tab.label)}</Text>
+          <Text style={styles.railTooltipText} numberOfLines={1}>
+            {t(tab.label)}
+            {hintAfter !== undefined ? <>{' · '}{hintBefore}<Text style={styles.railTooltipCount}>{badgeText}</Text>{hintAfter}</> : null}
+          </Text>
         </View>
       ) : null}
     </View>
@@ -1335,6 +1353,8 @@ const makeDesktopStyles = () => StyleSheet.create({
   railBadgeText: { color: '#fff', fontSize: 9, fontWeight: '600', lineHeight: 12 },
   railTooltip: { position: 'absolute', left: ds(48), top: 8, paddingHorizontal: 8, paddingVertical: 4, borderRadius: radius.item, backgroundColor: colors.railTooltipBg, zIndex: 20 },
   railTooltipText: { color: colors.railTooltipText, fontSize: 12, fontWeight: '500' },
+  // 提示条在两套主题下都是深底:数字用浅红,深底上读得清(纯红 #dc2626 在深底上发闷)。
+  railTooltipCount: { color: '#fca5a5', fontWeight: '600' },
   railSettings: { marginBottom: 0 },
   railVersion: { color: colors.textMuted, fontSize: 10, marginTop: 8, textAlign: 'center' },
   // 任务页左栏只是筛选,不需要会话列表那么宽:窄一些,看板三列拿到更多宽度。
