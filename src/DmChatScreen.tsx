@@ -5,7 +5,7 @@
 // 私信没有 agent 会话的任务状态、引用、语音、⋯ 面板 —— 只有文字和附件。
 // 附件与 agent 会话同一套(owner 2026-09-30「给人好像发不了图片」):手机「＋」微信式面板(相册 / 文件 / 拍照),
 // 桌面「＋」系统文件选择器 + 拖进会话区 + ⌘/Ctrl+V;草稿缩略图、原图开关、并发上传队列、点图预览。
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { ActivityIndicator, Alert, BackHandler, FlatList, Image, Keyboard, KeyboardAvoidingView, Platform, Pressable, ScrollView, StatusBar, StyleSheet, View, useWindowDimensions } from 'react-native';
 import { Text, TextInput } from './ui-text';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -39,7 +39,7 @@ import './i18n-users';
 import { localizedChatHeader as formatChatHeader } from './i18n-chat-time';
 import { shouldShowTimeHeader } from './time';
 import { canSend, shouldSendOnEnter } from './chat-actions';
-import { sendKeyPref } from './shortcuts-store';
+import { sendKeyPref, subscribeShortcuts } from './shortcuts-store';
 import { ComposerRightSlot } from './ComposerRowParts';
 import { COMPOSER_INPUT_BORDER, COMPOSER_LINE_HEIGHT, composerControlSize, composerInputPadY, composerLineCount, composerRightSlot, composerRowAlign } from './composer-row-layout';
 import { webComposerInputHeight } from './composer-input-height';
@@ -289,7 +289,8 @@ export default function DmChatScreen({ cfg, networkId, peer, onBack, desktop = f
     setInputContentHeight(h);
   };
   const inputLines = composerLineCount(draft, inputContentHeight, oneLineHeightRef.current);
-  const sendKey = sendKeyPref();
+  // 订阅:设置窗口改了发送键,这里要跟着变(和 ChatScreen 一样),不是只在下次重渲染时碰巧读到。
+  const sendKey = useSyncExternalStore(subscribeShortcuts, sendKeyPref, sendKeyPref);
   const rightSlot = composerRightSlot({ draft, attachmentCount: attached.length, voiceMode: false });
   const bubbleCap = desktopBubbleCap(desktop, paneWidth);
   const me = cfg.username ?? '';

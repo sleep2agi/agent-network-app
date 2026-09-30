@@ -50,6 +50,22 @@ export function saveShortcutPrefs(next: ShortcutPrefs): void {
 /** 测试用:丢掉内存里的缓存,下次从存储重读。 */
 export function __reloadShortcutPrefs(): void { prefs = null; bindings = null; }
 
+// 桌面的设置是单独的窗口(desktop-settings-window.ts):在那边改快捷键 / 发送键,写的是同源的 localStorage,
+// 但每个窗口各有一份上面的内存缓存 —— 主窗口不重开就一直用旧的(F8 改了按 F8 没反应)。浏览器会把别的窗口
+// 对 localStorage 的写入作为 `storage` 事件发给本窗口(本窗口自己的写不会):收到就丢掉缓存、通知订阅者。
+/** `storage` 事件的处理:key 是本存储的(或 null = 整个 localStorage 被清空)就失效缓存。返回是否处理了。 */
+export function onShortcutsStorageChange(key: string | null): boolean {
+  if (key !== null && key !== SHORTCUTS_KEY) return false;
+  prefs = null;
+  bindings = null;
+  for (const l of listeners) l();
+  return true;
+}
+try {
+  const w = globalThis as { addEventListener?: (type: string, fn: (e: { key: string | null }) => void) => void };
+  w.addEventListener?.('storage', e => { onShortcutsStorageChange(e.key); });
+} catch { /* no window (native / tests): nothing to sync */ }
+
 // ── 录入中:设置页正在等「按下新组合」时,全局快捷键不执行(否则按 ⌘1 会直接跳走)。 ──
 let capturing = false;
 export const shortcutCaptureActive = (): boolean => capturing;
