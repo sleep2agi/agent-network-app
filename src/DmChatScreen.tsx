@@ -41,7 +41,8 @@ import { shouldShowTimeHeader } from './time';
 import { canSend, shouldSendOnEnter } from './chat-actions';
 import { sendKeyPref } from './shortcuts-store';
 import { ComposerRightSlot } from './ComposerRowParts';
-import { COMPOSER_INPUT_BORDER, COMPOSER_LINE_HEIGHT, composerControlSize, composerInputPadY, composerRightSlot } from './composer-row-layout';
+import { COMPOSER_INPUT_BORDER, COMPOSER_LINE_HEIGHT, composerControlSize, composerInputPadY, composerLineCount, composerRightSlot, composerRowAlign } from './composer-row-layout';
+import { webComposerInputHeight } from './composer-input-height';
 import { COMPOSER_CARD_INSET, COMPOSER_DIVIDER_HEIGHT, COMPOSER_HEIGHT_DEFAULT } from './composer-resize';
 import { dmSendBody, mergeDm, newClientRequestId, unackedIncomingIds, type DmAttachment, type DmMessage, type Human } from './human-dm';
 import { fetchDmMessages, sendDm } from './human-dm-api';
@@ -279,6 +280,15 @@ export default function DmChatScreen({ cfg, networkId, peer, onBack, desktop = f
   };
   // 同一个 client_request_id 重投:hub 按它定出同一个 message_id,不会多出一条;已传上的附件不重传。
   const retry = (m: LocalDm) => { void deliver(m.message_id, m.content ?? '', m._files ?? [], m._original ?? false); };
+  // 手机输入框随内容长高(与 agent 会话同一套:最小的内容高度 = 一行;web 上按行数给 textarea 定高,封顶 120)。
+  const [inputContentHeight, setInputContentHeight] = useState<number | undefined>(undefined);
+  const oneLineHeightRef = useRef<number | undefined>(undefined);
+  const onInputContentSize = (h: number) => {
+    if (!(h > 0)) return;
+    if (oneLineHeightRef.current === undefined || h < oneLineHeightRef.current) oneLineHeightRef.current = h;
+    setInputContentHeight(h);
+  };
+  const inputLines = composerLineCount(draft, inputContentHeight, oneLineHeightRef.current);
   const sendKey = sendKeyPref();
   const rightSlot = composerRightSlot({ draft, attachmentCount: attached.length, voiceMode: false });
   const bubbleCap = desktopBubbleCap(desktop, paneWidth);
@@ -525,15 +535,16 @@ export default function DmChatScreen({ cfg, networkId, peer, onBack, desktop = f
           </View>
         </View>
       ) : (
-        <View style={[styles.inputRow, { paddingBottom: spacing.md + composerInset }]} testID="dm-input-row">
+        <View style={[styles.inputRow, { alignItems: composerRowAlign(inputLines, false), paddingBottom: spacing.md + composerInset }]} testID="dm-input-row">
           <View style={styles.inputWrap}>
             <TextInput
-              style={[styles.input, styles.inputInWrap, Platform.OS === 'web' && { height: composerControlSize(uiScale().densityFactor), flexBasis: 'auto' }]}
+              style={[styles.input, styles.inputInWrap, Platform.OS === 'web' && { height: webComposerInputHeight(inputLines), flexBasis: 'auto' }]}
               {...(Platform.OS === 'web' ? { rows: 1 } : null)}
               placeholder={t('dm.placeholder', { name })}
               placeholderTextColor={colors.textMuted}
               value={draft}
               onChangeText={setDraft}
+              onContentSizeChange={event => onInputContentSize(event.nativeEvent.contentSize.height)}
               onFocus={() => { if (plusOpenRef.current) plusEvent('inputFocus'); }}
               testID="dm-input"
               multiline

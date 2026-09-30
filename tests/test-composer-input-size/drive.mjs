@@ -9,7 +9,7 @@
 // Agent 会话(chat)与人与人私信(dm),键盘模式:
 //   手机 320 / 360 / 390 / 430,折叠屏 / 平板 700 / 1000 / 1280(安卓 UA),桌面 1000 / 1320(桌面有自己的输入区,一并量)
 //   width  : 输入框画出来的宽 ≥ 120px,且占视口宽的 ≥ 25%(手机)
-//   height : 空 ≥ 30px(桌面输入区 ≥ 18px);打 4 行后比空的高(手机 / 平板私信除外:web 上固定一行高);打 20 行后封顶(手机 / 平板 maxHeight 120+1;桌面输入区 ≤ 半屏)
+//   height : 空 ≥ 30px(桌面输入区 ≥ 18px);打 4 行后比空的高(私信与 agent 会话同样长高);打 20 行后封顶(手机 / 平板 maxHeight 120+1;桌面输入区 ≤ 半屏)
 //   no-x   : 没有横向页面滚动
 // Exit 1 when any check fails or a screen could not be opened.
 import { mkdirSync } from 'node:fs';
@@ -86,7 +86,7 @@ for (const v of VIEWPORTS) for (const sc of SCREENS) {
     width: !!empty && empty.w >= 120 && (v.kind !== 'phone' || empty.w >= v.w * 0.25),
     height: !!empty && empty.h >= (v.kind === 'desktop' ? 18 : 30),
     // 手机 / 平板的私信输入框在 web 上是 web 专用的固定一行高(DmChatScreen 那一行的 height),本来就不长 —— 与 flex 无关、修前修后一样。
-    grows: (sc.name === 'dm' && v.kind !== 'desktop') || (!!four && !!empty && four.h > empty.h),
+    grows: !!four && !!empty && four.h > empty.h,
     // 桌面输入区有自己的上限(可拖高的 composerHeight / 私信 6 行),不是手机输入框的 maxHeight 120:只要求封顶在半屏内。
     capped: !!twenty && twenty.h >= four.h && twenty.h <= (v.kind === 'desktop' ? v.h / 2 : 121),
     noOverflow: overflow <= 0,
