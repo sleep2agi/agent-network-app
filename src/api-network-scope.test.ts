@@ -30,6 +30,7 @@ import {
   fetchTaskDetail,
   fetchTasks,
   fetchUserMessages,
+  fetchChatUserMessages,
   type HubConfig,
 } from './api';
 
@@ -107,6 +108,11 @@ const ENDPOINTS: Record<string, { scope: Scope; drive: () => Promise<unknown> }>
     //   作用域,否则会跨网络返回别的网络的私信。
     scope: { kind: 'network' },
     drive: () => fetchUserMessages(cfg, 20),
+  },
+  fetchChatUserMessages: {
+    // 会话页同一份 user_inbox 读(200 → 每拍 50 的窗口,user-messages-window.ts),作用域同上。
+    scope: { kind: 'network' },
+    drive: () => fetchChatUserMessages(cfg),
   },
   fetchTasks: {
     scope: { kind: 'network' },

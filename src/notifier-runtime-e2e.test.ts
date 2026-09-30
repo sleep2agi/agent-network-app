@@ -3,7 +3,7 @@
 // mobile-notify-model),notifier-runtime.ts 这一层(谁先登记快照、错误去了哪、后台计时器有没有排上)
 // 一行都没被执行过 —— 这个文件补的就是那一层。A3 / F1 在 0.2.107 的 notifier-runtime 上是红的。
 // ck 式自执行脚本(不是 bun:test)。
-import { advance, agentReply, CFG, desktopMessage, flush, H, makeCk, setAppState } from './test-support/notifier-harness';
+import { advance, agentReply, CFG, desktopMessage, flush, H, hubTs, inboxReads, makeCk, setAppState } from './test-support/notifier-harness';
 
 const { ck, done } = makeCk();
 const runtime = await import('./notifier-runtime');
@@ -101,5 +101,11 @@ agentReply('通信牛', '第一轮之后马上到的回复');
 await advance(20_000);
 ck('F2 scope=user 坏着、回复紧跟第一轮到达 → 提醒', H.posted.length === base + 1, H.posted.slice(base).map(x => x.content.body));
 H.userScopeFails = false;
+
+// 回复那半走增量读(inbox-cursor.ts):整读只在第一轮,之后 since 是最近的游标;上面每一条「回复到了就提醒」
+// 的断言都是在增量读下成立的。
+const windowSince = hubTs(H.now - 7 * 86400_000).slice(0, 10);
+const incremental = inboxReads.filter(s => s.slice(0, 10) !== windowSince && s > hubTs(H.now - 3_600_000));
+ck('I1 回复未读的 inbox 读:第一轮整读 7 天,之后都是游标之后的增量', inboxReads.length >= 3 && inboxReads[0].slice(0, 10) === windowSince && incremental.length >= inboxReads.length - 2, inboxReads);
 
 done();

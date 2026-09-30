@@ -7,6 +7,7 @@
 //   /api/tasks  task_id/from_name/to_name/content/result/status/created_at/updated_at/completed_at
 // 必须在 import notifier-runtime 之前 import 本模块(mock.module 要先登记)。
 import { mock } from 'bun:test';
+import { createReplyInboxReader } from '../inbox-cursor';
 
 export const H = {
   now: Date.parse('2026-09-26T01:10:00Z'),
@@ -26,6 +27,7 @@ export const H = {
   userRows: [] as any[],
   tasks: [] as any[],
   userScopeFails: false,
+  inboxFails: false,
   headless: null as (() => Promise<void>) | null,
   intents: [] as string[],
 };
@@ -112,6 +114,18 @@ mock.module('expo', () => ({
 mock.module('expo-intent-launcher', () => ({ startActivityAsync: async (action: string) => { H.intents.push(action); } }));
 mock.module('../storage', () => ({ loadConfig: async () => null }));
 
+// 回复未读的 inbox 读走**真的**增量读取器(inbox-cursor.ts),假 hub 按 alias 分支的 SQL 语义回行:
+// created_at >= since ORDER BY created_at DESC LIMIT n。H.inboxReads 记下每次的 since,测试可断言走了增量。
+const replyInbox = createReplyInboxReader();
+export const inboxReads: string[] = [];
+export function resetReplyInbox() { replyInbox.reset(); inboxReads.length = 0; }
+const inboxPage = async (limit: number, since: string) => {
+  inboxReads.push(since);
+  if (H.inboxFails) throw new Error('HTTP 504');
+  const rows = H.inboxRows.filter(r => r.created_at >= since).sort((a, b) => (a.created_at < b.created_at ? 1 : -1)).slice(0, limit);
+  return { ok: true, messages: rows };
+};
+
 mock.module('../api', () => ({
   fetchUserMessages: async () => {
     if (H.userScopeFails) throw new Error('HTTP 404');
@@ -123,6 +137,8 @@ mock.module('../api', () => ({
   fetchMessages: async () => ({ ok: true, messages: H.inboxRows.slice().sort((a, b) => (a.created_at < b.created_at ? 1 : -1)) }),
   fetchTasks: async (_c: unknown, q: { from_name?: string }) => ({ ok: true, tasks: H.tasks.filter(x => !q.from_name || x.from_name === q.from_name).slice() }),
   replyUnreadSince: () => hubTs(H.now - 7 * 86400_000),
+  fetchReplyInbox: (c: { serverUrl?: string; token?: string; networkId?: string }) =>
+    replyInbox.read(`${c.serverUrl}\u0000${c.token}\u0000${c.networkId ?? ''}`, inboxPage, H.now),
 }));
 
 let rowSeq = 1;

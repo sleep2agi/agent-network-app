@@ -23,9 +23,8 @@ import { isAgentOnline } from './chat-actions';
 import { fetchStatus, fetchUserMessages, takeStatusPrefetch, type HubConfig, type Session,
   ackAgentMessages,
   ackUserMessages,
-  fetchMessages,
+  fetchReplyInbox,
   fetchTasks,
-  replyUnreadSince,
 } from './api';
 import { loadSessionsCache, saveSessionsCache } from './storage';
 import { colors, onThemeChange, radius, spacing, statusColor, type, weight } from './theme';
@@ -290,7 +289,7 @@ export default function AgentsScreen({
     // the badges landed three round trips after launch (~2.3 s China → US on desktop) instead of
     // one. They are still applied in the same order as before.
     const userMessagesRead = fetchUserMessages(cfg, 50);
-    const inboxRead = fetchMessages(cfg, 300, replyUnreadSince());
+    const inboxRead = fetchReplyInbox(cfg);
     userMessagesRead.catch(() => {});
     inboxRead.catch(() => {});
     try {

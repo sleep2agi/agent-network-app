@@ -22,7 +22,7 @@ check('proactiveBody 去首尾空白', proactiveBody({ title: ' t ', content: ' 
 // 接线契约(ChatScreen import react-native,bun 里按源码查)
 const chat = readFileSync(new URL('./ChatScreen.tsx', import.meta.url), 'utf8');
 const load = chat.slice(chat.indexOf('const load = useCallback('), chat.indexOf('// Reset the lazy window when the chat target changes'));
-check('ChatScreen.load 与任务同一次轮询里取 scope=user 消息并映射为主动项', load.includes('fetchUserMessages(cfg') && load.includes('proactiveItemsForAgent('));
+check('ChatScreen.load 与任务同一次轮询里取 scope=user 消息并映射为主动项', load.includes('fetchChatUserMessages(cfg') && load.includes('proactiveItemsForAgent('));
 check('主动项与任务行一起进 mergeMessagesNewestFirst(按 created_at 排)', load.includes('[...fetched, ...proactive]'));
 const render = chat.slice(chat.indexOf('renderItem={({ item, index }) => {'));
 // 0.2.72:请求气泡按发送方分两支(自己→右侧,别的节点→左侧),主动项仍两支都不画
