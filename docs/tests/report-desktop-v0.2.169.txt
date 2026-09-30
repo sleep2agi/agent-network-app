@@ -1,0 +1,10 @@
+desktop v0.2.169 — 「任务」未读红点
+================================================================================
+A. 本版内容(0.2.168 发版提交 5dd87a89 之后 main 上合入的 PR + 本 PR)
+  #610 「任务」tab 未读红点(#429 第一步):别人改过、我能看到、lastSeen 之后的任务数;自己改的不算;lastSeen 用 Hub 时间,按账号+网络存;
+       Hub 通告 changes 时每 60 秒增量读,否则 5 分钟全量读;安卓宽屏侧栏红点锚点修复(原 Agent 红点被裁/压字)。
+       task-unread.test.ts 52 项;badge-anchor 四种密度;drive 18/18(手机/侧栏/桌面 × 深浅色 × 3/99+)。
+  本 PR(版本号):0.2.168 → 0.2.169,versionCode 2168 → 2169;release-desktop-auto-update.yml 加 What's new in 0.2.169;重新生成 src/changelog-bundled.ts。
+  本地:干净 origin/main(04cce87)bump 后 npm ci / npm test / npm run typecheck 全部 rc=0;android-release-notes.mjs 0.2.169 rc=0。
+B. 验证边界(如实)
+  本 PR 只改版本号与说明;功能验证见 #610。红点在真机上的刷新时机未在真机验证。
