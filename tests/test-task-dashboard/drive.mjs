@@ -279,14 +279,19 @@ for (const theme of ['light', 'dark']) {
     const cardTitles = await pp.evaluate(() => [...document.querySelectorAll('[data-testid="share-card-title"]')].map(e => { const b = e.getBoundingClientRect(); return { w: b.width, h: b.height, t: e.textContent }; }));
     const note = await paintedText(pp, tid('dash-share-native-note'));
     const saveBtn = await count(pp, tid('dash-share-save'));
+    const shareBtn = await paintedText(pp, `${tid('dash-share-native')} *`, '分享图片');
+    const shot = await pp.evaluate(() => { const el = [...document.querySelectorAll('[data-testid="share-card-titles"]')].map(e => e.parentElement).find(p => p && p.getBoundingClientRect().right < 0); if (!el) return null; const b = el.getBoundingClientRect(); return { w: b.width, h: b.height, r: b.right }; });
     const want = await pp.evaluate(() => window.__tasksFixture.archived[0].name);
     if (OUT) await pp.screenshot({ path: join(OUT, `phone-share-${theme}-${mode}.png`) });
     record(pvp, 'native share preview', {
       cardAspect: !!card && Math.abs(card.h / card.w - 1920 / 1080) < 0.01,
       titlesPainted: cardTitles.length >= 3 && cardTitles.every(t => t.w >= 20 && t.h >= 4),
       newestFirst: cardTitles[0]?.t === want,
-      notePainted: !!note?.painted && note.text === '保存图片请在桌面端，或截图分享',
+      notePainted: !!note?.painted && note.text.includes('分享面板'),
       noSave: saveBtn === 0,
+      shareButton: !!shareBtn?.painted && shareBtn.text === '分享图片',
+      // the off-screen capture card: laid out at 1080 physical px wide (logical 1080 / devicePixelRatio), outside the viewport
+      captureCard: !!shot && Math.abs(shot.w * 2 - 1080) < 1 && Math.abs(shot.h * 2 - 1920) < 1 && shot.r < 0,
     }, { card: card && `${r1(card.w)}x${r1(card.h)}`, titles: cardTitles.length });
     await pp.locator(tid('dash-share-dialog-close')).first().click();
     await pp.evaluate(() => { window.__anetDashNativeCard = false; });

@@ -11,7 +11,8 @@ import { useTranslation } from './i18n-react';
 // 数据:Hub 有 stats(capability,#2168)就问 Hub(真完成时刻、含归档、按可见范围);否则本机从整张表(含归档,
 //       按 cursor 翻页)估,用 updatedAt 的地方标「近似」。
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Image, Platform, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { Image, PixelRatio, Platform, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { captureShareCard, shareCardFile } from './share-card-capture';
 import DialogFrame from './DialogFrame';
 import ShareCardNative from './ShareCardNative';
 import { Text } from './ui-text';
@@ -589,6 +590,19 @@ function ShareDialog({ data, period, people, c, onClose, phone }: ViewProps & { 
     if (!blobRef.current) return;
     try { await copyImageBlob(blobRef.current); setMsg(tr('dash.copied')); } catch (e) { setMsg(tr('dash.exportFailed', { msg: e instanceof Error ? e.message : String(e) })); }
   };
+  // 手机原生端:屏外画一张按物理像素 1080 宽的卡片,点「分享图片」时截它(share-card-capture.ts)。
+  const shotRef = useRef<View>(null);
+  const [busy, setBusy] = useState(false);
+  const shareNative = async () => {
+    if (!shotRef.current || busy) return;
+    setBusy(true);
+    try {
+      const uri = await captureShareCard(shotRef.current, size);
+      await shareCardFile(uri, tr('dash.shareTitle'));
+    } catch (e) {
+      setMsg(tr('dash.exportFailed', { msg: e instanceof Error ? e.message : String(e) }));
+    } finally { setBusy(false); }
+  };
   const toggle = (id: string) => setExcluded(cur => { const n = new Set(cur); if (n.has(id)) n.delete(id); else n.add(id); return n; });
   const aspect = size === 'portrait' ? 1920 / 1080 : 1350 / 1080;
   const pw = phone ? 200 : 300;
@@ -602,8 +616,26 @@ function ShareDialog({ data, period, people, c, onClose, phone }: ViewProps & { 
         <Pressable accessibilityRole="button" onPress={save} style={[c.shareBtn, !preview && { opacity: 0.5 }]} disabled={!preview} testID="dash-share-save"><Ionicons name="download-outline" size={16} color={colors.onAccent} /><Text style={c.shareBtnText}>{tr('dash.save')}</Text></Pressable>
       </View>
     </View>
-  ) : <Text style={c.note} testID="dash-share-native-note">{tr('dash.nativeNote')}</Text>;
+  ) : (
+    <View style={{ gap: spacing.sm }}>
+      {msg ? <Text style={c.foot} testID="dash-share-msg" numberOfLines={2}>{msg}</Text> : null}
+      <Pressable accessibilityRole="button" onPress={() => { void shareNative(); }} disabled={busy} style={[c.shareBtn, { justifyContent: 'center', height: 44 }, busy && { opacity: 0.6 }]} testID="dash-share-native">
+        <Ionicons name="share-outline" size={16} color={colors.onAccent} />
+        <Text style={c.shareBtnText}>{tr('dash.shareNative')}</Text>
+      </Pressable>
+      <Text style={c.note} testID="dash-share-native-note">{tr('dash.nativeNote')}</Text>
+    </View>
+  );
   return (
+    <>
+    {!exportable ? (
+      // 屏外的全尺寸卡片(截图用):逻辑宽 1080 / 像素比 = 1080 物理像素。不可见、不可点。
+      <View style={{ position: 'absolute', left: -20000, top: 0 }} pointerEvents="none" accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
+        <View ref={shotRef} collapsable={false}>
+          <ShareCardNative model={model} opts={opts} scale={1 / PixelRatio.get()} />
+        </View>
+      </View>
+    ) : null}
     <DialogFrame title={tr('dash.shareTitle')} closeLabel={tr('dash.close')} onClose={onClose} footer={footer} maxWidth={phone ? 460 : 820} testID="dash-share-dialog">
       <View style={[{ gap: spacing.lg }, !phone && { flexDirection: 'row', alignItems: 'flex-start' }]}>
         <View style={[c.previewBox, { width: pw, height: pw * aspect }]} testID="dash-share-preview">
@@ -640,6 +672,7 @@ function ShareDialog({ data, period, people, c, onClose, phone }: ViewProps & { 
         </View>
       </View>
     </DialogFrame>
+    </>
   );
 }
 
