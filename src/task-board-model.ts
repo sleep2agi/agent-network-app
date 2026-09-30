@@ -6,6 +6,7 @@
 // 桌面拖动换列、手机长按菜单。Hub 数据模型不变(标题/状态/优先级/期限/负责人/参与人)。
 import { dueInstant, dueToLocal, formatDueFull, formatTime, isDateTime, systemClock, type Clock } from './due-time';
 import { taskTimestamp } from './task-time';
+import { seqCmp } from './task-short-id';
 import {
   type ChecklistItem,
   type RequirementProject,
@@ -262,7 +263,7 @@ export function roleAvatars(item: Pick<Requirement, 'owner' | 'agentOwner'>, peo
 
 // ── 列表视图排序 ─────────────────────────────────────────────────────────
 
-export type SortKey = 'title' | 'owner' | 'priority' | 'due' | 'status' | 'project' | 'created' | 'updated';
+export type SortKey = 'seq' | 'title' | 'owner' | 'priority' | 'due' | 'status' | 'project' | 'created' | 'updated';
 export interface SortSpec { key: SortKey; dir: 'asc' | 'desc' }
 export const DEFAULT_SORT: SortSpec = { key: 'status', dir: 'asc' };
 
@@ -297,6 +298,7 @@ export function sortRows(items: readonly Requirement[], sort: SortSpec, people: 
         if (av === null || bv === null) return av === bv ? 0 : av === null ? 1 : -1;
         return (av - bv) * sign;
       }
+      case 'seq': return seqCmp(a, b, sign);
       case 'title': return a.name.localeCompare(b.name, 'zh') * sign;
       case 'owner': {
         const an = a.owner || a.agentOwner || (a.owner === undefined && a.assignee) ? ownerLabel(a, people) : '';

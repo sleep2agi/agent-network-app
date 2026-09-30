@@ -30,6 +30,7 @@ import { moreSummary } from './task-detail-more';
 import { priorityChoices } from './task-priority';
 import { loadDetailMoreOpen, saveDetailMoreOpen } from './task-detail-prefs';
 import { PARENT_REJECTED, PARENT_TOO_DEEP } from './requirements-hub';
+import TaskIdChip from './TaskIdChip';
 
 export const DRAWER_WIDTH = 420;
 
@@ -273,7 +274,10 @@ export default function TaskDetailPanel({ cfg, item, items, onOpenRequirement, o
           <Ionicons name="chevron-back" size={22} color={colors.text} />
         </Pressable>
       ) : null}
-      <Text style={{ flex: 1, color: colors.text, fontSize: typeScale.title, fontWeight: weight.strong }}>{tr('tasks.copy.145')}</Text>
+      <View style={{ flex: 1, minWidth: 0, flexDirection: 'row', alignItems: 'center', gap: spacing.sm }}>
+        <Text style={{ flexShrink: 1, color: colors.text, fontSize: typeScale.title, fontWeight: weight.strong }} numberOfLines={1}>{tr('tasks.copy.145')}</Text>
+        <TaskIdChip item={item} pointer={pointer} />
+      </View>
       {saving || moving ? <ActivityIndicator size="small" color={colors.textMuted} /> : null}
       {mode === 'drawer' && onOpenWindow ? (
         <Pressable

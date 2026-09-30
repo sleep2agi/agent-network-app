@@ -21,7 +21,7 @@ ck('hidden column keeps width', !hidden.find(f => f.id === 'owner')!.visible && 
 const shown = toggleField(hidden, 'owner');
 ck('re-shown column restores width', shown.find(f => f.id === 'owner')!.visible && width(shown, 'owner') === 240);
 const moved = moveField(shown, 'owner', 'title');
-ck('reordered column keeps width', moved[0].id === 'owner' && width(moved, 'owner') === 240 && width(moved, 'title') === 620);
+ck('reordered column keeps width', moved.findIndex(f => f.id === 'owner') < moved.findIndex(f => f.id === 'title') && width(moved, 'owner') === 240 && width(moved, 'title') === 620);
 
 ck('round trip keeps widths', JSON.stringify(parseFields(JSON.stringify(moved))) === JSON.stringify(moved));
 const tampered = parseFields('[{"id":"title","visible":true,"width":20},{"id":"owner","visible":false,"width":"wide"},{"id":"due","visible":true,"width":null}]');

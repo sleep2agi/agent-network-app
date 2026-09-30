@@ -17,6 +17,7 @@ import type { ReqPriority, Requirement, RequirementProject } from './requirement
 import { PRIORITY_CODE, priorityLabel } from './task-priority';
 import type { RequirementPerson } from './requirement-people';
 import { checklistProgress, type DueTone } from './task-board-model';
+import { shortIdLabel } from './task-short-id';
 
 /**
  * accessibilityState + 同样的 aria-* 属性。react-native-web 0.21 已经**不读** accessibilityState
@@ -230,6 +231,9 @@ export function CardMeta({ item, people, today, s, compact = false }: { item: Re
       <OwnerBadge item={item} people={people} s={s} avatarOnly={compact} />
       <DueChip item={item} today={today} s={s} />
       <TaskIssueCount item={item} />
+      {/* 短号靠右、弱化:只在有 seq 的 Hub 上出现(旧 Hub 的卡片一个像素不变)。有期限时期限已经靠右(s.due 的 marginLeft auto),
+          短号紧跟在它后面;两个都 auto 会把剩余空间对半分,期限被挤到卡片中间。 */}
+      {shortIdLabel(item) ? <Text testID={`req-card-seq-${item.id}`} style={[s.metaMuted, { marginLeft: item.due ? 0 : 'auto', flexShrink: 0, fontVariant: ['tabular-nums'] }]} numberOfLines={1}>{shortIdLabel(item)}</Text> : null}
     </View><TaskTagChips tags={item.tags} /></View>
   );
 }

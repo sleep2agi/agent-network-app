@@ -8,9 +8,10 @@ import { withBasePadding } from './modal-safe-area';
 import { t } from './i18n';
 import { useTranslation } from './i18n-react';
 import './i18n-task-fields';
+import './task-short-id';
 import { defaultFields, moveField, resetWidths, toggleField, type FieldId, type FieldPref } from './task-list-fields';
 
-export default function TaskListFields({ fields, onChange, projects, needsUpdateUpgrade, touch }: { fields: FieldPref[]; onChange: (next: FieldPref[]) => void; projects: boolean; needsUpdateUpgrade: boolean; touch: boolean }) {
+export default function TaskListFields({ fields, onChange, projects, seqCapable = false, needsUpdateUpgrade, touch }: { fields: FieldPref[]; onChange: (next: FieldPref[]) => void; projects: boolean; seqCapable?: boolean; needsUpdateUpgrade: boolean; touch: boolean }) {
   useTranslation();
   const safe = useModalSafePadding('overlay');
   const anchor = useRef<View>(null);
@@ -22,7 +23,7 @@ export default function TaskListFields({ fields, onChange, projects, needsUpdate
   const { width, height } = useWindowDimensions();
   const close = () => { setPosition(null); drag.current = null; setTarget(null); };
   useEffect(() => { close(); }, [width, height]);
-  const available = fields.filter(f => projects || f.id !== 'project');
+  const available = fields.filter(f => (projects || f.id !== 'project') && (seqCapable || f.id !== 'seq'));
   const rows = available.filter(f => t(`fields.${f.id}`).toLocaleLowerCase().includes(query.trim().toLocaleLowerCase()));
   // RN Web filters drag props on View/Pressable. Attach native listeners only to
   // this desktop popover, never to task cards or the surrounding document.
@@ -43,7 +44,7 @@ export default function TaskListFields({ fields, onChange, projects, needsUpdate
     const key = (e: KeyboardEvent) => { if (e.key === 'Escape') { close(); return; } const id = field(e, 'task-field-drag-'); if (!id || !['ArrowUp', 'ArrowDown'].includes(e.key)) return; e.preventDefault(); const index = available.findIndex(f => f.id === id), next = available[index + (e.key === 'ArrowUp' ? -1 : 1)]; if (next) onChange(moveField(fields, id, next.id)); };
     root.addEventListener('dragstart', start); root.addEventListener('dragover', over); root.addEventListener('drop', drop); root.addEventListener('dragend', end); root.addEventListener('keydown', key);
     return () => { root.removeEventListener('dragstart', start); root.removeEventListener('dragover', over); root.removeEventListener('drop', drop); root.removeEventListener('dragend', end); root.removeEventListener('keydown', key); };
-  }, [position, fields, query, projects]);
+  }, [position, fields, query, projects, seqCapable]);
   const button = { minHeight: 40, paddingHorizontal: 12, justifyContent: 'center' as const, flexDirection: 'row' as const, alignItems: 'center' as const, gap: 8 };
   return <>
     <View ref={anchor} collapsable={false}>
