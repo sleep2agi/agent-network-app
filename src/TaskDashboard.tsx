@@ -27,10 +27,11 @@ import { usePoll } from './usePoll';
 import { Segmented, a11yState, cardBg, softShadow, type TaskStyles } from './TaskBoardParts';
 import { shortIdLabel } from './task-short-id';
 import {
-  DASH_DAYS, DASH_PERIODS, DASH_RECENT, agentShare, busiestDay, dayList, deltaPct, fromHubStats, fromItems, heatCells, localTimeZone, newlyCompleted,
+  DASH_DAYS, DASH_PERIODS, DASH_RECENT, agentShare, busiestDay, deltaPct, fromHubStats, fromItems, heatCells, localTimeZone, newlyCompleted,
   parseHubStats, periodStart, relativeTime, streaks, ymd, type DashCompletion, type DashData, type DashPeriod,
 } from './task-dashboard-model';
-import { SHARE_W, renderShareCardPng, shareCardLayout, shareFileName, type ShareCardModel, type ShareOptions, type ShareSize, type ShareTheme } from './task-share-card';
+import { SHARE_W, renderShareCardPng, shareCardLayout, shareFileName, specOf, type ShareOptions, type ShareSize, type ShareTheme } from './task-share-card';
+import { shareModel } from './task-share-model';
 import { saveImageObjectUrl } from './web-image-download';
 import { copyImageBlob } from './image-clipboard';
 
@@ -515,46 +516,6 @@ function logoUri(): string | null {
   } catch { return null; }
 }
 
-/** 分享图的内容(纯数据):标题 = 期内完成的、没被取消勾选的。 */
-export function shareModel(data: DashData, period: DashPeriod, people: readonly RequirementPerson[], excluded: ReadonlySet<string>, now: number): ShareCardModel {
-  const days = dayList(now, 30);
-  const byDate = new Map(data.daily.map(d => [d.date, d.n]));
-  const agentDone = data.leaders.filter(l => l.kind === 'node').reduce((a, l) => a + l.n, 0);
-  const big = period === 'today' ? data.todayDone : period === 'week' ? data.weekDone : data.periodDone;
-  const humans = data.leaders.filter(l => l.kind === 'user').length;
-  const agents = data.leaders.filter(l => l.kind === 'node').length;
-  const start = periodStart(period, now);
-  const dateLabel = start === null || period === 'today' ? ymd(now).replace(/-/g, '.') : `${ymd(start).replace(/-/g, '.')} – ${ymd(now).slice(5).replace('-', '.')}`;
-  return {
-    period,
-    reportLabel: tr(`card.report.${period}`),
-    dateLabel,
-    kicker: tr(`card.kicker.${period}`),
-    big,
-    unit: tr('card.unit'),
-    agentLine: agentDone ? tr('card.byAgents', { n: agentDone }) : null,
-    kpis: period === 'today'
-      ? [{ label: tr('dash.weekDone'), value: String(data.weekDone) }, { label: tr('dash.doing'), value: String(data.doing) }, { label: tr('dash.rate'), value: pct(data.rate) }]
-      : [{ label: tr('dash.todayDone'), value: String(data.todayDone) }, { label: tr('dash.doing'), value: String(data.doing) }, { label: tr('dash.rate'), value: pct(data.rate) }],
-    titlesHeading: period === 'today' ? tr('card.titles.today') : tr('card.titles.period'),
-    titles: data.recent.filter(r => !excluded.has(r.id)).map(r => titleText(r)),
-    moreTitlesLabel: n => tr('card.moreTitles', { n }),
-    dailyHeading: tr('card.daily'),
-    dailyRight: tr('dash.total', { n: days.reduce((a, d) => a + (byDate.get(d) ?? 0), 0) }),
-    daily: days.map((d, i) => ({ n: byDate.get(d) ?? 0, label: i === days.length - 1 ? tr('dash.today') : i % 7 === (days.length - 1) % 7 ? `${+d.slice(5, 7)}/${+d.slice(8, 10)}` : '' })),
-    heatHeading: tr('card.year'),
-    heatRight: `${tr('dash.total', { n: data.daily.reduce((a, d) => a + d.n, 0) })} · ${tr('dash.streak')} ${tr('dash.days', { n: streaks(data.daily).current })}`,
-    heat: heatCells(data.daily, 53),
-    topHeading: tr('card.top'),
-    top: data.leaders.slice(0, 3).map(l => ({ name: personName(l, people), sub: `${tr('card.topItem', { n: l.n })} · ${l.kind === 'node' ? tr('dash.agent') : tr('dash.member')}` })),
-    brand: 'Agent Network',
-    brandSub: tr('card.brandSub'),
-    footer: tr('card.footer', { h: humans, a: agents }),
-    link: 'github.com/sleep2agi/agent-network',
-    approxNote: data.approx ? tr('card.approx') : null,
-  };
-}
-
 function ShareDialog({ data, period, people, c, onClose, phone }: ViewProps & { onClose: () => void }) {
   const [size, setSize] = useState<ShareSize>('portrait');
   const [theme, setTheme] = useState<ShareTheme>(themeMode() === 'dark' ? 'dark' : 'light');
@@ -568,7 +529,7 @@ function ShareDialog({ data, period, people, c, onClose, phone }: ViewProps & { 
   const opts: ShareOptions = { size, theme, showHeat, showTop };
   const now = Date.now();
   const model = shareModel(data, period, people, excluded, now);
-  const layout = shareCardLayout(size, opts, model.titles.length);
+  const layout = shareCardLayout(size, specOf(model, opts));
   const key = JSON.stringify([size, theme, showHeat, showTop, [...excluded], period, data.recent.map(r => r.id), data.todayDone, data.weekDone]);
   useEffect(() => {
     if (!exportable) return;
@@ -607,7 +568,7 @@ function ShareDialog({ data, period, people, c, onClose, phone }: ViewProps & { 
   const aspect = size === 'portrait' ? 1920 / 1080 : 1350 / 1080;
   const pw = phone ? 200 : 300;
   const candidates = data.recent.slice(0, 12);
-  const shownIds = new Set(data.recent.filter(r => !excluded.has(r.id)).slice(0, layout.titleRows).map(r => r.id));
+  const shownIds = new Set(data.recent.filter(r => !excluded.has(r.id)).slice(0, layout.titlesShown).map(r => r.id));
   const footer = exportable ? (
     <View style={{ gap: spacing.sm }}>
       {msg ? <Text style={c.foot} testID="dash-share-msg" numberOfLines={2}>{msg}</Text> : null}
@@ -632,7 +593,7 @@ function ShareDialog({ data, period, people, c, onClose, phone }: ViewProps & { 
       // 屏外的全尺寸卡片(截图用):逻辑宽 1080 / 像素比 = 1080 物理像素。不可见、不可点。
       <View style={{ position: 'absolute', left: -20000, top: 0 }} pointerEvents="none" accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
         <View ref={shotRef} collapsable={false}>
-          <ShareCardNative model={model} opts={opts} scale={1 / PixelRatio.get()} />
+          <ShareCardNative model={model} opts={opts} scale={1 / PixelRatio.get()} testID="share-card-capture" />
         </View>
       </View>
     ) : null}
@@ -654,11 +615,12 @@ function ShareDialog({ data, period, people, c, onClose, phone }: ViewProps & { 
             <Opt on={theme === 'dark'} label={tr('dash.themeDark')} onPress={() => setTheme('dark')} c={c} testID="dash-theme-dark" />
             <Opt on={theme === 'light'} label={tr('dash.themeLight')} onPress={() => setTheme('light')} c={c} testID="dash-theme-light" />
           </View>
-          {size === 'portrait' ? (
+          {/* 只列这张图上真的会出现的块:热力图要有 30 天以上的历史(shareModules),「谁完成的」要有人上榜。 */}
+          {(model.heat && size === 'portrait') || model.who ? (
             <>
               <Text style={c.fieldLabel}>{tr('dash.shareShow')}</Text>
-              <Check on={showHeat} label={tr('dash.showHeat')} onPress={() => setShowHeat(v => !v)} c={c} testID="dash-show-heat" />
-              <Check on={showTop} label={tr('dash.showTop')} onPress={() => setShowTop(v => !v)} c={c} testID="dash-show-top" />
+              {model.heat && size === 'portrait' ? <Check on={showHeat} label={tr('dash.showHeat')} onPress={() => setShowHeat(v => !v)} c={c} testID="dash-show-heat" /> : null}
+              {model.who ? <Check on={showTop} label={tr('dash.showTop')} onPress={() => setShowTop(v => !v)} c={c} testID="dash-show-top" /> : null}
             </>
           ) : null}
           {candidates.length ? (

@@ -5,7 +5,7 @@ import { readFileSync } from 'node:fs';
 import {
   agentShare, busiestDay, completionOf, dayList, deltaPct, fromHubStats, fromItems, heatCells, newlyCompleted, parseHubStats, periodStart, relativeTime, streaks, ymd,
 } from './task-dashboard-model';
-import { fitText, shareCardLayout, SHARE_H, SHARE_W, MAX_TITLE_ROWS, shareFileName, type Rect } from './task-share-card';
+import { fitText, SHARE_H, SHARE_W, shareFileName } from './task-share-card';
 import { listAllRequirementsForDashboard, requirementFromHub } from './requirements-hub';
 import type { Requirement } from './requirements-model';
 
@@ -145,23 +145,7 @@ console.log('\n整张表翻页(cursor + 归档)');
   ck('旧 Hub(没有 has_more)满 500 张:partial,不再翻页', old.partial === true && calls.length === 2 && old.rows.length === 503);
 }
 
-console.log('\n分享图排版');
-const inside = (r: Rect | null, H: number) => !r || (r.x >= 0 && r.y >= 0 && r.x + r.w <= SHARE_W && r.y + r.h <= H);
-const overlap = (a: Rect | null, b: Rect | null) => !!a && !!b && a.y < b.y + b.h && b.y < a.y + a.h;
-for (const size of ['portrait', 'feed'] as const) {
-  for (const n of [0, 1, 5, 8, 30]) {
-    for (const [showHeat, showTop] of [[true, true], [false, false]] as const) {
-      const L = shareCardLayout(size, { showHeat, showTop }, n);
-      const blocks = [L.header, L.kicker, L.big, L.unit, L.kpis, L.titles, L.daily, L.heat, L.top, L.footer];
-      const noOverlap = blocks.every((a, i) => blocks.every((b, j) => i >= j || !overlap(a, b)));
-      ck(`${size} 标题 ${n} 热力 ${showHeat}:都在画布里、互不重叠`, blocks.every(b => inside(b, SHARE_H[size])) && noOverlap);
-      if (n) ck(`${size} 标题 ${n}:至少画 ${Math.min(3, n)} 行,不超过上限`, L.titleRows >= Math.min(3, n) && L.titleRows <= MAX_TITLE_ROWS[size], String(L.titleRows));
-      if (n > L.titleRows && L.titleRows) ck(`${size} 标题 ${n}:放不下的数进「还有 N 个」`, L.titleOverflow === n - L.titleRows);
-    }
-  }
-}
-ck('竖版全开:热力图和完成榜都放得下(8 条标题时)', !!shareCardLayout('portrait', { showHeat: true, showTop: true }, 8).heat && !!shareCardLayout('portrait', { showHeat: true, showTop: true }, 8).top);
-ck('4:5 永远不放热力图 / 完成榜', shareCardLayout('feed', { showHeat: true, showTop: true }, 3).heat === null && shareCardLayout('feed', { showHeat: true, showTop: true }, 3).top === null);
+console.log('\n分享图(排版与规则在 task-share-card.test.ts)');
 ck('尺寸 1080×1920 / 1080×1350', SHARE_W === 1080 && SHARE_H.portrait === 1920 && SHARE_H.feed === 1350);
 const measure = (s: string) => [...s].length * 10;
 ck('fitText:放得下原样', fitText(measure, '短标题', 100) === '短标题');
