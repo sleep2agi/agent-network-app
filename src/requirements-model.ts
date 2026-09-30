@@ -55,6 +55,15 @@ export interface Requirement {
   archived?: boolean;
 }
 
+/**
+ * 标题里有没有看得见的字。Hub 端和 requirementFromHub 都只 trim 空白,只由零宽字符(U+200B、U+FEFF…)
+ * 或其它格式字符组成的名字能通过,列表里就是一行空标题。
+ */
+export const hasVisibleTitle = (name: string): boolean => name.replace(/[\s\p{Cf}\p{Z}]/gu, '').length > 0;
+/** 列表 / 卡片上显示的标题:看不见字时「(无标题)· id 末 6 位」,好认也好点开改。 */
+export const titleText = (item: Pick<Requirement, 'name' | 'id'>): string =>
+  hasVisibleTitle(item.name) ? item.name : `（无标题）· ${item.id.length > 6 ? item.id.slice(-6) : item.id}`;
+
 /** 空、全天 'YYYY-MM-DD'、带时区的时刻(Hub #2076 存成 UTC 到秒)都合法。见 due-time.ts。 */
 export const dueOk = (due: string): boolean => dueValid(due);
 
