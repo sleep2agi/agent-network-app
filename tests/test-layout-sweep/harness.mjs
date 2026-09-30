@@ -91,6 +91,12 @@ export const initScript = ({ theme }) => {
       for (const t of sources) delete colors[t];
       return { ok: true, op: op.op, affected };
     }
+    // GET /api/requirements/stats (hub capability stats): TASKS.stats(query) when the drive hands one in; recorded in
+    // window.__statsQueries. No TASKS.stats = an old hub (404).
+    if (TASKS && p === '/api/requirements/stats') { (window.__statsQueries ||= []).push(u.search); return typeof TASKS.stats === 'function' ? TASKS.stats(u.searchParams) : null; }
+    // GET /api/requirements/<id> (the dashboard opening a card that is not on the board, e.g. archived).
+    const oneGet = TASKS && !bodyText && /^\/api\/requirements\/([^/]+)$/.exec(p);
+    if (oneGet) { const id = decodeURIComponent(oneGet[1]); const row = [...(TASKS.requirements ?? []), ...(TASKS.archived ?? [])].find(r => r.id === id); return row ? { ok: true, requirement: row } : null; }
     // PATCH /api/requirements/<id> (the only requirement call with a body): merge, record the body for the drive to
     // assert on (window.__tasksPatches); window.__tasksFailPatch = true answers 404 so the drive can watch a revert.
     const one = TASKS && /^\/api\/requirements\/([^/]+)$/.exec(p);

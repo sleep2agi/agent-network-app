@@ -3,6 +3,7 @@ import { t as tr } from './i18n';
 import TaskListTable from './TaskListTable';
 import TaskGantt from './TaskGantt';
 import TaskCalendar from './TaskCalendar';
+import TaskDashboard from './TaskDashboard';
 import { TaskTagFilter } from './TaskTags';
 import { useTranslation } from './i18n-react';
 import { taskText } from './i18n-tasks';
@@ -23,7 +24,7 @@ import AliasAvatar from './AliasAvatar';
 import type { HubConfig } from './api';
 import { REQ_COLUMN_LABEL, REQ_COLUMNS, REQ_PRIORITIES, titleText, type ChecklistItem, type ReqColumn, type Requirement, type RequirementProject } from './requirements-model';
 import { readRequirements, requirementsKey, writeRequirements } from './requirements-store';
-import { createProject, createRequirementOnHub, fetchMyUserId, listArchivedRequirements, listProjects, listRequirementsFull, searchRequirementsOnHub, setChecklistItemOnHub, updateProject, migrateLocalRequirements, moveRequirementOnHub, probeAgentOwnerSupport, RequirementsHubError, updateRequirementOnHub } from './requirements-hub';
+import { createProject, createRequirementOnHub, fetchMyUserId, getRequirementOnHub, listArchivedRequirements, listProjects, listRequirementsFull, searchRequirementsOnHub, setChecklistItemOnHub, updateProject, migrateLocalRequirements, moveRequirementOnHub, probeAgentOwnerSupport, RequirementsHubError, updateRequirementOnHub } from './requirements-hub';
 import { listRequirementPeople } from './requirement-people-api';
 import { personKey, type RequirementPerson } from './requirement-people';
 import { colors, radius, spacing } from './theme';
@@ -98,6 +99,7 @@ function ScopedRequirementBoard({ cfg, desktop, dispatch, onOpenVoiceSettings, s
   const subCaps = useTaskBoard(st => st.scope === scope && st.capabilities.includes('sub_requirements'));
   const startCapable = useTaskBoard(st => st.scope === scope && st.capabilities.includes('start_date'));
   const seqCapable = useTaskBoard(st => st.scope === scope && st.capabilities.includes(SEQ_CAPABILITY));
+  const statsCapable = useTaskBoard(st => st.scope === scope && st.capabilities.includes('stats'));
   const lowestPriority = useTaskBoard(st => st.scope === scope && supportsLowest(st.capabilities));
   const priorityOptions = useMemo(() => priorityChoices(lowestPriority), [lowestPriority]);
   const filter = useTaskBoard(st => st.filter);
@@ -190,7 +192,9 @@ function ScopedRequirementBoard({ cfg, desktop, dispatch, onOpenVoiceSettings, s
     return () => { dead = true; };
   }, [askServer, search.q, cfg.serverUrl, cfg.token, cfg.networkId]);
   const extraHits = askServer && serverHits.q === search.q ? serverHits.rows : [];
-  const selected = items.find(item => item.id === selectedId) || archived.find(item => item.id === selectedId) || extraHits.find(item => item.id === selectedId) || null;
+  // 仪表盘点开的卡可能不在看板里(归档的 / 列表截断之外的):按 id 读一张来开详情。
+  const [dashRow, setDashRow] = useState<Requirement | null>(null);
+  const selected = items.find(item => item.id === selectedId) || archived.find(item => item.id === selectedId) || extraHits.find(item => item.id === selectedId) || (dashRow?.id === selectedId ? dashRow : null) || null;
 
   // ── 读 Hub ──
   useEffect(() => {
@@ -476,6 +480,11 @@ function ScopedRequirementBoard({ cfg, desktop, dispatch, onOpenVoiceSettings, s
   });
 
   const openDetail = (id: string) => { if (!swallow.current) setSelectedId(id); };
+  const openFromDashboard = (id: string) => {
+    setSelectedId(id);
+    if (items.some(item => item.id === id)) return;
+    void getRequirementOnHub(cfg, id).then(row => { if (row) setDashRow(row); }).catch(e => setBanner(e instanceof Error ? e.message : String(e)));
+  };
   const openMenuAt = (item: Requirement, x: number, y: number) => setMenu({ id: item.id, title: item.name, column: item.column, x, y });
 
   // ── 视图 ──
@@ -573,6 +582,8 @@ function ScopedRequirementBoard({ cfg, desktop, dispatch, onOpenVoiceSettings, s
     { key: 'gantt', label: tr('gantt.view') },
     // 日历(只读):桌面 = 月 / 周格子,手机 = 月历 + 选中那天的列表(TaskCalendar.tsx 顶部写了为什么)。
     { key: 'calendar', label: tr('cal.view') },
+    // 仪表盘(只读):大数字 + 最近完成 + 图 + 分享图(TaskDashboard.tsx 顶部写了为什么)。
+    { key: 'dashboard', label: tr('dash.view') },
     // 桌面的派发记录在左栏(TaskFilterSidebar);手机 / 双栏没有左栏,放在分段里。
     ...(desktop ? [] : [{ key: 'dispatch' as const, label: tr('tasks.copy.28') }]),
   ];
@@ -593,7 +604,8 @@ function ScopedRequirementBoard({ cfg, desktop, dispatch, onOpenVoiceSettings, s
     if (el?.measureInWindow) el.measureInWindow((x: number, y: number, _w: number, h: number) => done(x, y, h));
     else done(spacing.xl, 64, 0);
   };
-  const filters = section === 'dispatch' ? null : (
+  // 仪表盘不看筛选(统计的是整个网络里看得见的任务),也不在那里新建。
+  const filters = section === 'dispatch' || section === 'dashboard' ? null : (
     <>
       {!desktop ? <TaskTagFilter /> : null}
       <View ref={(r: any) => { chipRefs.current.owner = r; }} collapsable={false}>
@@ -653,7 +665,7 @@ function ScopedRequirementBoard({ cfg, desktop, dispatch, onOpenVoiceSettings, s
       ) : null}
     </>
   );
-  const newButton = section === 'dispatch' ? null : narrow ? (
+  const newButton = section === 'dispatch' || section === 'dashboard' ? null : narrow ? (
     <Pressable accessibilityRole="button" accessibilityLabel={tr('tasks.copy.39')} onPress={() => setDraft(draftFor('pool'))} style={[s.primary, { width: 32, paddingHorizontal: 0, justifyContent: 'center' }]} testID="req-new">
       <Ionicons name="add" size={20} color={colors.onAccent} />
     </Pressable>
@@ -665,7 +677,7 @@ function ScopedRequirementBoard({ cfg, desktop, dispatch, onOpenVoiceSettings, s
   );
 
   // 搜索:桌面宽窗口 = 工具栏里常驻的搜索框;触屏(手机 / 平板)和桌面窄窗口 = 放大镜,点开成搜索条 + 「取消」。
-  const canSearch = section !== 'dispatch';
+  const canSearch = section !== 'dispatch' && section !== 'dashboard';
   const inlineSearch = canSearch && pointer && !narrow;
   const closeSearch = () => { clearSearch(); setSearchOpen(false); };
   const searchField = (style: object, autoFocus: boolean) => (
@@ -946,9 +958,10 @@ function ScopedRequirementBoard({ cfg, desktop, dispatch, onOpenVoiceSettings, s
               ? <Text style={s.muted} testID="req-retrying">{tr('tasks.copy.56')}</Text>
               : <Pressable onPress={() => setReloadKey(n => n + 1)} testID="req-retry" accessibilityRole="button"><Text style={s.link}>{tr('tasks.copy.57')}</Text></Pressable>}
           </View>
-        ) : terms.length && !visible.length ? <SearchEmpty q={search.q} s={s} filtered={filterActive(filter)} partial={truncated && !serverSearchCap} onClear={closeSearch} />
+        ) : section !== 'dashboard' && terms.length && !visible.length ? <SearchEmpty q={search.q} s={s} filtered={filterActive(filter)} partial={truncated && !serverSearchCap} onClear={closeSearch} />
         : section === 'list' ? list()
           : section === 'calendar' ? <TaskCalendar items={visible} terms={terms} projects={projects} people={people} today={today} s={s} onOpen={openDetail} selectedId={selectedId} phone={narrow} onDue={pointer ? (id, due) => { void setDue(id, due); } : undefined} />
+          : section === 'dashboard' ? <TaskDashboard cfg={cfg} items={items} projects={projects} people={people} s={s} phone={narrow} statsCapable={statsCapable} onOpen={openFromDashboard} />
           : section === 'gantt' ? <TaskGantt items={visible} terms={terms} projects={projects} people={people} today={today} s={s} onOpen={openDetail} selectedId={selectedId} phone={narrow} startCapable={startCapable} onDue={pointer ? (id, due) => { void setDue(id, due); } : undefined} />
             : kanban();
 
