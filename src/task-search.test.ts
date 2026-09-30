@@ -2,7 +2,7 @@
 import { readFileSync } from 'node:fs';
 import {
   EMPTY_SEARCH, SEARCH_DEBOUNCE_MS, descriptionText, focusKindOf, highlightRanges, highlightSegments, isSearchShortcut,
-  matchesSearch, searchFields, searchPool, searchTerms, searchedTasks, visibleTasks, type SearchContext,
+  matchesSearch, taskIdQuery, searchFields, searchPool, searchTerms, searchedTasks, visibleTasks, type SearchContext,
 } from './task-search';
 import { boardColumns, EMPTY_FILTER, NO_PROJECT } from './task-board-model';
 import { requirementFromHub } from './requirements-hub';
@@ -77,6 +77,17 @@ ck('搜 + 标签', vis('portal', { ...EMPTY_FILTER, tag: 'ux' }) === 'r2' && vis
 ck('搜 + 负责人', vis('示例', { ...EMPTY_FILTER, owners: ['node:a1'] }) === 'r1');
 const cols = boardColumns(searchedTasks(items, [], q('portal 成本'), ctx), EMPTY_FILTER);
 ck('看板列按搜索结果分组(列里的数就是搜到的数)', cols.find(c => c.column === 'doing')!.items.length === 1 && cols.find(c => c.column === 'pool')!.items.length === 0);
+
+console.log('\n任务 ID(#563)');
+const withSeq = [R('req_0a1b2c3d4e5f', '无关标题一', { seq: 12 }), R('req_99887766aabb', '标题里有 12 的任务', { seq: 3 }), R('req_55554444cccc', '别的', { seq: 120 })];
+const idv = (s: string) => ids(visibleTasks(withSeq, [], EMPTY_FILTER, q(s), ctx));
+ck('#12 对上短号 12,即使标题里没有 12', idv('#12') === 'req_0a1b2c3d4e5f');
+ck('全角「＃１２」同样对上', idv('＃１２') === 'req_0a1b2c3d4e5f' && taskIdQuery(' ＃１２ ') === '#12');
+ck('裸「12」:短号 12 或标题含 12 都算(整句「或」)', idv('12') === 'req_0a1b2c3d4e5f,req_99887766aabb');
+ck('#12 不会命中 #120', !idv('#12').includes('req_55554444cccc'));
+ck('完整 id / 8 位前缀对主键', idv('req_99887766aabb') === 'req_99887766aabb' && idv('55554444cc') === 'req_55554444cccc');
+ck('ID 也受筛选管', ids(visibleTasks(withSeq, [], { ...EMPTY_FILTER, statuses: ['done'] }, q('#12'), ctx)) === '');
+ck('「#12 portal」整句不是 ID,照文字「且」匹配(不把 ID 和文字拆开)', idv('#12 无关') === '');
 
 console.log('\n包含已归档');
 const arch = [R('z1', '归档的组织树旧方案', { archived: true }), R('r1', '同 id:本机那份优先', { archived: true })];
