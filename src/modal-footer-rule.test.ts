@@ -63,6 +63,7 @@ const AUDIT: Record<string, { count: number; kinds: Kind[]; input?: boolean; key
   'TaskDuePicker.tsx': { count: 1, kinds: ['menu', 'sheet'], keyboard: 'followup: 日期弹层里的时间输入;固定尺寸弹层,手机上键盘可能盖住下半', note: 'duePanelPlacement 固定尺寸日历' },
   'TaskListFields.tsx': { count: 1, kinds: ['menu'], keyboard: 'followup: 字段设置弹层的搜索框;弹层 maxHeight 按锚点到窗口底算,没扣键盘', note: 'maxHeight = h - y - 12,ScrollView flexShrink:1' },
   'TaskProjectManager.tsx': { count: 1, kinds: ['dialog', 'sheet'], keyboard: 'avoider', input: true, note: '面板 85%,列表可收缩,新增行在外;输入框 ⇒ 键盘避让(本次)' },
+  'TaskTagManager.tsx': { count: 1, kinds: ['dialog', 'sheet'], keyboard: 'avoider', input: true, note: '面板 85%,列表 ScrollView 可收缩,合并栏 / 操作面板在外;改名、合并输入 ⇒ 键盘避让' },
   'TaskSelectMenu.tsx': { count: 2, kinds: ['sheet', 'menu'], keyboard: 'followup: 选择菜单的搜索框;没有底部按钮', note: '70% / pos.maxHeight,ScrollView 直接子节点' },
   'TaskTimeCell.tsx': { count: 1, kinds: ['menu'], note: '一行提示' },
   'AppSelect.tsx': { count: 2, kinds: ['menu', 'sheet'], note: '设置的下拉选择(无输入框):桌面浮层 pos.maxHeight ≤ 320 + ScrollView flexGrow:0;手机动作面板 70%,选项 ScrollView 可收缩,「取消」是它后面的兄弟' },

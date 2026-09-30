@@ -111,9 +111,9 @@ for (const f of files) {
   avoiders += r.avoiders;
   for (const x of r.problems) bad.push(`${relative(here, f)}:${x}`);
 }
-// 2026-09-30 逐个审过的 8 处(DialogFrame、Settings 本地删除、NodeDetail 危险操作、转发、需求人员、新建需求、项目管理、BTW 抽屉)。
+// 2026-09-30 逐个审过的 9 处(DialogFrame、Settings 本地删除、NodeDetail 危险操作、转发、需求人员、新建需求、项目管理、标签管理、BTW 抽屉)。
 // 个数变了 ⇒ 有人新加 / 删了带键盘避让的弹窗:先按上面三条过一遍,再改这个数。
-const EXPECTED_AVOIDERS = 8;
+const EXPECTED_AVOIDERS = 9;
 ck(`取集:src 下 <ModalKeyboardAvoider> 共 ${avoiders} 处(审过的是 ${EXPECTED_AVOIDERS})`, avoiders === EXPECTED_AVOIDERS);
 ck(`遮罩都画在避让层外面${bad.length ? ` —— ${bad.join('; ')}` : ''}`, bad.length === 0);
 

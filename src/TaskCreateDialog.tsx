@@ -21,7 +21,10 @@ import { priorityLabel } from './task-priority';
 import type { RequirementPerson, RequirementPersonRef } from './requirement-people';
 import { activeProjects, checkDraft, createInput, roleKinds, type CreateDraft } from './task-board-model';
 import { BOARD_RADIUS, CONTROL_H, liftedShadow, PriorityDot, useTaskStyles, a11yState } from './TaskBoardParts';
+import './i18n-task-tags';
 import { ProjectSelect } from './TaskFieldPickers';
+import { TagInputField, useTagChoices } from './TaskTags';
+import { normalizeTags } from './requirement-tags';
 
 export { dueShortcuts } from './due-time';
 
@@ -136,8 +139,10 @@ export function RoleFields({ twoRoles, owner, agentOwner, people, peopleLoading,
   );
 }
 
-export default function TaskCreateDialog({ draft, sheet, twoRoles, parentName, projects, dueDatetime, priorities, pointer, networkId, people, peopleLoading, peopleError, onLoadPeople, onChange, onSubmit, onClose }: {
+export default function TaskCreateDialog({ draft, sheet, twoRoles, parentName, projects, dueDatetime, priorities, pointer, networkId, people, peopleLoading, peopleError, onLoadPeople, onChange, onSubmit, onClose, tagsCapable = false }: {
   draft: CreateDraft | null;
+  /** Hub 存得下标签(capabilities.tags):新建时就能带上,输入框补全已有标签。 */
+  tagsCapable?: boolean;
   /** Hub 分不分「负责人(人类)/ 负责 Agent」。不分就是旧的单一负责人。 */
   twoRoles: boolean;
   /** 项目列表;null = Hub 没有项目,不显示。 */
@@ -166,6 +171,7 @@ export default function TaskCreateDialog({ draft, sheet, twoRoles, parentName, p
   const safe = useModalSafePadding(sheet ? 'fullScreen' : 'overlay');
   const [error, setError] = useState<{ field: 'name' | 'due' | 'submit'; message: string } | null>(null);
   const [saving, setSaving] = useState(false);
+  const tagChoices = useTagChoices();
   if (!draft) return null;
   const submit = async () => {
     if (saving) return;
@@ -243,6 +249,21 @@ export default function TaskCreateDialog({ draft, sheet, twoRoles, parentName, p
                 <Text style={f.label}>{tr('tasks.copy.119')}</Text>
                 <DueField value={draft.due} onChange={due => set({ due })} error={error?.field === 'due' ? error.message : undefined} idBase="req-due" allowTime={dueDatetime} pointer={pointer} sheet={sheet} />
               </View>
+              {tagsCapable ? (
+                <View style={{ gap: spacing.sm }} testID="req-create-tags">
+                  <Text style={f.label}>{tr('tags.title')}</Text>
+                  {draft.tags?.length ? (
+                    <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>
+                      {draft.tags.map(tag => (
+                        <Pressable key={tag} accessibilityRole="button" accessibilityLabel={tr('tags.remove', { tag })} onPress={() => set({ tags: (draft.tags ?? []).filter(x => x !== tag) })} style={{ minHeight: 36, justifyContent: 'center', paddingHorizontal: 10, borderRadius: radius.control, backgroundColor: colors.subtleFill, maxWidth: '100%' }} testID={`req-create-tag-${tag}`}>
+                          <Text numberOfLines={1} style={{ color: colors.text }}>{tag} ×</Text>
+                        </Pressable>
+                      ))}
+                    </View>
+                  ) : null}
+                  <TagInputField tags={draft.tags ?? []} choices={tagChoices.choices} counts={tagChoices.counts} onAdd={tag => { const next = normalizeTags([...(draft.tags ?? []), tag]); if (next) set({ tags: next }); }} testPrefix="req-create" />
+                </View>
+              ) : null}
             </ScrollView>
             {error?.field === 'submit' ? <Text style={s.err} accessibilityRole="alert" testID="req-error">{error.message}</Text> : null}
             <View style={[f.row, { justifyContent: 'space-between' }]}>

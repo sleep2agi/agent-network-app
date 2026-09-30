@@ -32,7 +32,7 @@ import { pointerUi } from './pointer-ui';
 import { useModalSafePadding } from './safe-area-runtime';
 import { usePoll } from './usePoll';
 import { applyFilter, applyMove, boardColumns, createInput, DEFAULT_SORT, DRAG_IDLE, dragReduce, dropIndex, emptyDraft, activeProjects, defaultProjectFor, NO_PROJECT, projectCounts, filterActive, hasRoles, localToday, addChecklistItem, moveChecklistItem, removeChecklistItem, setChecklistDone, neighbourColumn, nextSort, revertMove, sortRows, toggleIn, hidesDone, toggleHideDone, UNASSIGNED, type CreateDraft, type DragEvent, type DragState, type EditPatch, type SortKey, type SortSpec } from './task-board-model';
-import { enterTaskScope, patchTaskBoard, setManagingProjects, setTaskFilter, setTaskSearch, setTaskSection, taskBoardState, taskScopeKey, updateTaskItems, useTaskBoard, type TaskSection } from './task-board-store';
+import { enterTaskScope, noteTagsUsed, patchTaskBoard, setManagingProjects, setManagingTags, setTaskFilter, setTaskSearch, setTaskSection, taskBoardState, taskScopeKey, updateTaskItems, useTaskBoard, type TaskSection } from './task-board-store';
 import { recallBoard, rememberBoard } from './swr-cache';
 import { PRIORITY_CODE, priorityChoices, priorityLabel, supportsLowest } from './task-priority';
 import { CONTROL_H, CardMeta, ChecklistProgress, Chip, ParticipantStack, ProjectChip, DueChip, OwnerBadge, PriorityDot, Segmented, STATUS_TONE, useTaskStyles, type TaskStyles, a11yState } from './TaskBoardParts';
@@ -40,6 +40,8 @@ import TaskCreateDialog from './TaskCreateDialog';
 import TaskDetailPanel, { DRAWER_WIDTH } from './TaskDetailPanel';
 import TaskCardMenu, { type TaskMenuTarget } from './TaskCardMenu';
 import TaskProjectManager from './TaskProjectManager';
+import TaskTagManager from './TaskTagManager';
+import { applyTagOp, applyTagOpToCatalog, canManageTags, fetchTagCatalog, TagOpError, runTagOp } from './task-tag-catalog';
 import { setDraggingCursor, useTaskCardDom } from './task-board-dom';
 import { boardLayout, pageAt } from './task-board-layout';
 import { ParentLine, ProjectSelect, projectOptions } from './TaskFieldPickers';
@@ -88,6 +90,10 @@ function ScopedRequirementBoard({ cfg, desktop, dispatch, onOpenVoiceSettings, s
   const twoRoles = useTaskBoard(st => (st.scope === scope ? st.twoRoles === true : false));
   const projects = useTaskBoard(st => (st.scope === scope ? st.projects : null));
   const managingProjects = useTaskBoard(st => st.managingProjects);
+  const managingTags = useTaskBoard(st => st.managingTags);
+  const tagsCapable = useTaskBoard(st => st.scope === scope && st.capabilities.includes('tags'));
+  const tagCatalog = useTaskBoard(st => (st.scope === scope ? st.tagCatalog : null));
+  const tagOpsAllowed = useTaskBoard(st => st.scope === scope && canManageTags(st.capabilities, st.tagCatalog));
   const dueDatetime = useTaskBoard(st => st.scope === scope && st.capabilities.includes('due_datetime'));
   const subCaps = useTaskBoard(st => st.scope === scope && st.capabilities.includes('sub_requirements'));
   const startCapable = useTaskBoard(st => st.scope === scope && st.capabilities.includes('start_date'));
@@ -229,8 +235,18 @@ function ScopedRequirementBoard({ cfg, desktop, dispatch, onOpenVoiceSettings, s
       }
     })();
     void fetchMyUserId(cfg).then(id => { if (!dead) patchTaskBoard(scope, { meId: id }); });
+    // 标签目录(补全、颜色、「管理标签」要不要出现)。读失败 = null:只是不给管理入口,不挡看板。
+    void fetchTagCatalog(cfg).then(cat => { if (!dead) patchTaskBoard(scope, { tagCatalog: cat }); }).catch(() => {});
     return () => { dead = true; };
   }, [cfg.serverUrl, cfg.token, cfg.networkId, localKey, reloadKey, scope]);
+
+  // 打开「管理标签」时重读一次目录:用量要是 Hub 上的实数(含归档、含没载入的老卡)。
+  useEffect(() => {
+    if (!managingTags) return;
+    let dead = false;
+    void fetchTagCatalog(cfg).then(cat => { if (!dead && cat) patchTaskBoard(scope, { tagCatalog: cat }); }).catch(() => {});
+    return () => { dead = true; };
+  }, [managingTags, cfg.serverUrl, cfg.token, cfg.networkId, scope]);
 
   // 有卡片带稳定负责人时读一次成员(卡片上的名字 / 头像、筛选里的人都从这里来)。
   const hasOwners = items.some(item => item.owner || item.agentOwner || item.participants?.length);
@@ -340,6 +356,7 @@ function ScopedRequirementBoard({ cfg, desktop, dispatch, onOpenVoiceSettings, s
     try {
       const created = await track(() => createRequirementOnHub(cfg, input));
       updateTaskItems(scope, rows => [created, ...rows.filter(row => row.id !== created.id)]);
+      if (created.tags?.length) noteTagsUsed(created.tags);
       setAnnounce(tr('tasks.copy.22', { v0: created.name }));
       return null;
     } catch (e) {
@@ -992,6 +1009,7 @@ function ScopedRequirementBoard({ cfg, desktop, dispatch, onOpenVoiceSettings, s
   const createDialog = (
       <TaskCreateDialog
         draft={draft}
+        tagsCapable={tagsCapable}
         twoRoles={twoRoles}
         parentName={draft?.parentId ? items.find(i => i.id === draft.parentId)?.name ?? null : null}
         projects={projects}
@@ -1064,6 +1082,32 @@ function ScopedRequirementBoard({ cfg, desktop, dispatch, onOpenVoiceSettings, s
             } catch (e) { return e instanceof Error ? e.message : tr('tasks.copy.59'); }
           }}
           onClose={() => setManagingProjects(false)}
+        />
+      ) : null}
+      {tagCatalog && tagOpsAllowed ? (
+        <TaskTagManager
+          open={managingTags}
+          sheet={!pointer && narrow}
+          catalog={tagCatalog}
+          onOp={async op => {
+            try {
+              await runTagOp(cfg, op);
+              // Hub 已经整网改好了:本地卡片和目录按同一条规则先改,下一轮轮询再对齐。
+              mutations.current++;
+              updateTaskItems(scope, list => list.map(it => { const next = it.tags ? applyTagOp(it.tags, op) : null; return next ? { ...it, tags: next } : it; }));
+              const st = taskBoardState();
+              if (st.tagCatalog) patchTaskBoard(scope, { tagCatalog: applyTagOpToCatalog(st.tagCatalog, op) });
+              // 正在筛的标签被改名 / 合并 / 删掉:筛选跟过去(删了就回到全部)。
+              const cur = st.filter.tag;
+              if (cur && op.op !== 'color' && (op.op === 'rename' ? op.from === cur : op.op === 'merge' ? op.from.includes(cur) : op.tag === cur)) setTaskFilter({ ...st.filter, tag: op.op === 'delete' ? '' : op.to });
+              void fetchTagCatalog(cfg).then(cat => { if (cat) patchTaskBoard(scope, { tagCatalog: cat }); }).catch(() => {});
+              return null;
+            } catch (e) {
+              if (e instanceof TagOpError && e.status === 404) void fetchTagCatalog(cfg).then(cat => { if (cat) patchTaskBoard(scope, { tagCatalog: cat }); }).catch(() => {});
+              return e instanceof TagOpError ? e.key : 'tags.opFailed';
+            }
+          }}
+          onClose={() => setManagingTags(false)}
         />
       ) : null}
       {pointer && section !== 'dispatch' && (sel.ids.length || bulk) ? (

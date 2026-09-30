@@ -62,6 +62,35 @@ export const initScript = ({ theme }) => {
     const TASKS = window.__tasksFixture;
     if (TASKS && p === '/api/requirements/projects') return { ok: true, projects: TASKS.projects ?? [] };
     if (TASKS && p === '/api/requirements/people') return { ok: true, people: TASKS.people ?? [] };
+    // Tags (hub tag_ops): GET answers from the fixture's rows (+ TASKS.tagColors, TASKS.tagCanManage); POST …/tags/ops
+    // records the body in window.__tagOps and rewrites the rows the way the hub does. TASKS.tagCanManage undefined =
+    // an older hub (no counts / colors / can_manage fields).
+    if (TASKS && p === '/api/requirements/tags' && !bodyText) {
+      const counts = {};
+      for (const r of TASKS.requirements ?? []) for (const t of r.tags ?? []) counts[t] = (counts[t] ?? 0) + 1;
+      const tags = Object.keys(counts).sort();
+      if (TASKS.tagCanManage === undefined) return { ok: true, tags };
+      const colors = Object.fromEntries(Object.entries(TASKS.tagColors ?? {}).filter(([t]) => counts[t]));
+      return { ok: true, tags, counts, colors, can_manage: TASKS.tagCanManage };
+    }
+    if (TASKS && p === '/api/requirements/tags/ops' && bodyText) {
+      const op = JSON.parse(bodyText);
+      (window.__tagOps ||= []).push(op);
+      const colors = (TASKS.tagColors ||= {});
+      if (op.op === 'color') { if (op.color) colors[op.tag] = op.color.toLowerCase(); else delete colors[op.tag]; return { ok: true, op: 'color', affected: 0 }; }
+      const sources = op.op === 'rename' ? [op.from] : op.op === 'merge' ? op.from : [op.tag];
+      const to = op.op === 'delete' ? null : op.to;
+      let affected = 0;
+      for (const r of TASKS.requirements ?? []) {
+        if (!(r.tags ?? []).some(t => sources.includes(t))) continue;
+        const next = [];
+        for (const t of r.tags) { const m = sources.includes(t) ? to : t; if (m !== null && !next.includes(m)) next.push(m); }
+        r.tags = next; affected++;
+      }
+      if (to && !colors[to]) { const c = sources.map(t => colors[t]).find(Boolean); if (c) colors[to] = c; }
+      for (const t of sources) delete colors[t];
+      return { ok: true, op: op.op, affected };
+    }
     // PATCH /api/requirements/<id> (the only requirement call with a body): merge, record the body for the drive to
     // assert on (window.__tasksPatches); window.__tasksFailPatch = true answers 404 so the drive can watch a revert.
     const one = TASKS && /^\/api\/requirements\/([^/]+)$/.exec(p);

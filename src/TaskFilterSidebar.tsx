@@ -4,6 +4,7 @@ import { useTranslation } from './i18n-react';
 import { taskText } from './i18n-tasks';
 import './i18n-task-tags';
 // 桌面工作区在「任务」页时的左栏:原来这里是会话 / Agent 列表(跟任务页无关)。现在是筛选:
+// 标签(可折叠,全部 / 各标签 + 管理标签)、
 // 项目(全部 / 各项目 + 管理项目)、全部 / 我负责的(负责人 = 我)/ 未分配 / 按 Agent(负责 Agent,头像 + 数目),
 // 最下面是「派发记录」(Hub 派给节点的任务)。按 Agent / 按节点只列有任务的,其余收进「更多节点」(可搜)——
 // owner 0.2.141 截图里这一栏是 ~300 个 0。
@@ -16,7 +17,9 @@ import AliasAvatar from './AliasAvatar';
 import { colors, radius, spacing, type as typeScale, weight } from './theme';
 import { personKey } from './requirement-people';
 import { activeProjects, applyFilter, NO_PROJECT, ownersForScope, projectCounts, scopeOf, splitByCount, type SidebarScope } from './task-board-model';
-import { setManagingProjects, setTaskFilter, setTaskSection, useTaskBoard } from './task-board-store';
+import { setManagingProjects, setManagingTags, setTaskFilter, setTaskSection, useTaskBoard } from './task-board-store';
+import { canManageTags, localTagCounts } from './task-tag-catalog';
+import { readTagsCollapsed, writeTagsCollapsed } from './task-sidebar-prefs';
 import { CONTROL_H, a11yState } from './TaskBoardParts';
 
 /** onNavigate:在「任务详情」(派发记录的一条)上点左栏时回到任务页。 */
@@ -32,6 +35,9 @@ export default function TaskFilterSidebar({ onNavigate }: { onNavigate?: () => v
   const projects = useTaskBoard(s => s.projects);
   const [moreOpen, setMoreOpen] = useState(false);
   const [moreQuery, setMoreQuery] = useState('');
+  const tagCatalog = useTaskBoard(s => s.tagCatalog);
+  const manageTags = useTaskBoard(s => canManageTags(s.capabilities, s.tagCatalog));
+  const [tagsCollapsed, setTagsCollapsed] = useState(readTagsCollapsed);
   const active = section === 'dispatch' ? null : scopeOf(filter.owners, meId);
   // 人 / 节点的数字按当前项目算(选了 TMAI,「我负责的」就是我在 TMAI 里的)。
   const inProject = applyFilter(items, { owners: [], priorities: [], project: filter.project });
@@ -75,6 +81,31 @@ export default function TaskFilterSidebar({ onNavigate }: { onNavigate?: () => v
     );
   };
   const dot = (color: string) => <View style={{ width: 10, height: 10, borderRadius: radius.pill, backgroundColor: color }} />;
+  // 标签:数字按当前列表算(同项目);筛着的标签即使这页没有卡也留在列表里(好取消)。
+  const tagCounts = localTagCounts(items);
+  const tagNames = [...new Set([...tagCounts.keys(), ...(filter.tag ? [filter.tag] : [])])].sort((a, b) => a.localeCompare(b));
+  const tagDot = (tag: string) => {
+    const c = tagCatalog?.colors[tag];
+    return <View style={{ width: 10, height: 10, borderRadius: radius.pill, backgroundColor: c ?? 'transparent', borderWidth: c ? 0 : 1.5, borderColor: colors.textMuted }} />;
+  };
+  const tagRow = (tag: string, label: string, lead: ReactNode, count: number | null) => {
+    const on = section !== 'dispatch' && (filter.tag || '') === tag;
+    return (
+      <Pressable
+        key={`tag:${tag || 'all'}`}
+        testID={`task-filter-tag-${tag || 'all'}`}
+        accessibilityRole="tab"
+        accessibilityLabel={label}
+        {...a11yState({ selected: on })}
+        onPress={() => { setTaskSection(section === 'dispatch' ? 'board' : section); setTaskFilter({ ...filter, tag }); onNavigate?.(); }}
+        style={state => [styles.item, ((state as { hovered?: boolean }).hovered || state.pressed) && { backgroundColor: colors.rowHover }, on && { backgroundColor: colors.rowActive }]}
+      >
+        <View style={styles.icon}>{lead}</View>
+        <Text style={[styles.itemText, { color: on ? colors.text : colors.textSecondary }, on && { fontWeight: weight.strong }]} numberOfLines={1}>{label}</Text>
+        {count !== null ? <Text style={[styles.count, { color: colors.textMuted }]}>{count}</Text> : null}
+      </Pressable>
+    );
+  };
   const pick = (scope: SidebarScope) => {
     setTaskSection(section === 'dispatch' ? 'board' : section);
     // 只换负责人,优先级筛选保留(与头部「负责人」筛选同一个动作)。
@@ -104,11 +135,30 @@ export default function TaskFilterSidebar({ onNavigate }: { onNavigate?: () => v
     <View style={[styles.root, { backgroundColor: colors.listBg }]} testID="task-sidebar">
       <View style={styles.head}><Text style={[styles.title, { color: colors.text }]} testID="task-sidebar-title">{tr('tasks.copy.190')}</Text></View>
       <ScrollView contentContainerStyle={styles.body}>
-        <Text style={[styles.section, { color: colors.textMuted }]}>{tr('tags.title')}</Text>
-        {['', ...new Set(items.flatMap(item => item.tags ?? [])), ...(filter.tag && !items.some(item => item.tags?.includes(filter.tag!)) ? [filter.tag] : [])].map(tag => <Pressable key={`tag:${tag}`} accessibilityRole="button" testID={`task-filter-tag-${tag || 'all'}`} onPress={() => { setTaskFilter({ ...filter, tag }); onNavigate?.(); }} style={[styles.item, filter.tag === tag && { backgroundColor: colors.rowActive }]}><Text numberOfLines={1} style={[styles.itemText, { color: colors.text }]}>{tag || tr('tags.all')}</Text></Pressable>)}
+        {/* 标签组(可折叠)与项目组:同一种组头、同样的上下间距,中间一条分隔线(owner 0.2.162 截图里两组挤在一起)。 */}
+        <SectionHeader
+          label={tr('tags.title')}
+          first
+          collapsed={tagsCollapsed}
+          onToggle={() => { const next = !tagsCollapsed; setTagsCollapsed(next); writeTagsCollapsed(next); }}
+          testID="task-side-tags-header"
+        />
+        {!tagsCollapsed ? (
+          <>
+            {tagRow('', tr('tags.all'), icon('pricetags-outline', !filter.tag), null)}
+            {tagNames.map(tag => tagRow(tag, tag, tagDot(tag), tagCounts.get(tag) ?? 0))}
+            {manageTags ? (
+              <Pressable accessibilityRole="button" onPress={() => setManagingTags(true)} style={state => [styles.item, ((state as { hovered?: boolean }).hovered || state.pressed) && { backgroundColor: colors.rowHover }]} testID="task-side-manage-tags">
+                <View style={styles.icon}>{icon('settings-outline')}</View>
+                <Text style={[styles.itemText, { color: colors.accent }]}>{tr('tags.manage')}</Text>
+              </Pressable>
+            ) : null}
+          </>
+        ) : null}
         {projects ? (
           <>
-            <Text style={[styles.section, { color: colors.textMuted, paddingTop: 0 }]}>{tr('tasks.copy.30')}</Text>
+            <View style={[styles.divider, { backgroundColor: colors.border }]} />
+            <SectionHeader label={tr('tasks.copy.30')} testID="task-side-projects-header" />
             {projectRow('', tr('tasks.copy.191'), icon('folder-open-outline'), Array.from(pCounts.values()).reduce((a, b) => a + b, 0))}
             {activeProjects(projects).map(p => projectRow(p.id, p.name, dot(p.color), pCounts.get(p.id) ?? 0))}
             {(pCounts.get(NO_PROJECT) ?? 0) > 0 && activeProjects(projects).length ? projectRow(NO_PROJECT, tr('tasks.copy.31'), icon('remove-circle-outline'), pCounts.get(NO_PROJECT) ?? 0) : null}
@@ -116,9 +166,9 @@ export default function TaskFilterSidebar({ onNavigate }: { onNavigate?: () => v
               <View style={styles.icon}>{icon('settings-outline')}</View>
               <Text style={[styles.itemText, { color: colors.accent }]}>{tr('tasks.copy.64')}</Text>
             </Pressable>
-            <View style={[styles.divider, { backgroundColor: colors.border }]} />
           </>
         ) : null}
+        <View style={[styles.divider, { backgroundColor: colors.border }]} />
         {row('all', tr('tasks.copy.192'), icon('albums-outline'), inProject.length)}
         {row('mine', tr('tasks.copy.193'), icon('person-outline'), meKey ? applyFilter(inProject, { owners: [meKey], priorities: [] }).length : null, !meId)}
         {row('unassigned', tr('tasks.copy.6'), icon('help-circle-outline'), countOf('none'))}
@@ -149,6 +199,21 @@ export default function TaskFilterSidebar({ onNavigate }: { onNavigate?: () => v
   );
 }
 
+/** 左栏的组头:标签 / 项目 / 按 Agent 用同一种样式与间距;collapsed 给了就是可折叠的(带箭头)。 */
+function SectionHeader({ label, first, collapsed, onToggle, testID }: { label: string; first?: boolean; collapsed?: boolean; onToggle?: () => void; testID: string }) {
+  const styles = makeSidebarStyles();
+  const text = <Text style={[styles.sectionText, { color: colors.textMuted }]} numberOfLines={1}>{label}</Text>;
+  const box = [styles.sectionHead, first && { paddingTop: spacing.xs }];
+  if (!onToggle) return <View style={box} testID={testID}>{text}</View>;
+  return (
+    <Pressable accessibilityRole="button" accessibilityLabel={collapsed ? tr('tags.expand') : tr('tags.collapse')} {...a11yState({ expanded: !collapsed })} onPress={onToggle}
+      style={state => [box, ((state as { hovered?: boolean }).hovered || state.pressed) && { opacity: 0.8 }]} testID={testID}>
+      {text}
+      <Ionicons name={collapsed ? 'chevron-forward' : 'chevron-down'} size={13} color={colors.textMuted} />
+    </Pressable>
+  );
+}
+
 const makeSidebarStyles = () => StyleSheet.create({
   root: { flex: 1 },
   // 与右侧任务页头部同高(控件 32 + 上下 12):两边标题落在同一条中线上。
@@ -160,6 +225,9 @@ const makeSidebarStyles = () => StyleSheet.create({
   itemText: { flex: 1, fontSize: 13 },
   count: { fontSize: typeScale.caption },
   section: { fontSize: typeScale.caption, paddingHorizontal: spacing.sm + 2, paddingTop: spacing.lg, paddingBottom: spacing.xs },
+  // 组头:标签 / 项目同一个高度与内边距;第一组上边距更小(紧贴「视图」标题下)。
+  sectionHead: { minHeight: 28, paddingTop: spacing.md, paddingBottom: spacing.xs, paddingHorizontal: spacing.sm + 2, flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
+  sectionText: { flexShrink: 1, fontSize: typeScale.caption, fontWeight: weight.medium },
   search: { height: 32, marginHorizontal: spacing.xs, marginVertical: spacing.xs, paddingHorizontal: spacing.sm, borderWidth: 1, borderRadius: radius.control, fontSize: 13 },
   divider: { height: StyleSheet.hairlineWidth, marginVertical: spacing.md, marginHorizontal: spacing.sm },
 });

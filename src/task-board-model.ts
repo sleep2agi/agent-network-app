@@ -479,6 +479,8 @@ export interface CreateDraft {
   projectId: string | null;
   /** 父需求(建子需求时预填)。 */
   parentId?: string | null;
+  /** 标签(只在有 tags 的 Hub 上发;空 = 不发)。 */
+  tags?: string[];
   column: ReqColumn;
 }
 
@@ -508,7 +510,7 @@ export const startError = (start: string): string | null => (dueOk(start.trim())
  * 发给 POST /api/requirements 的字段。负责人只带稳定身份 {kind,id}(#484):显示名不是身份,
  * 旧的 assignee 文本永远是空串。
  */
-export function createInput(d: CreateDraft, twoRoles = false): { name: string; priority: ReqPriority; assignee: ''; due: string; column: ReqColumn; owner?: RequirementPersonRef; agentOwner?: RequirementPersonRef; projectId?: string; parentId?: string } | null {
+export function createInput(d: CreateDraft, twoRoles = false): { name: string; priority: ReqPriority; assignee: ''; due: string; column: ReqColumn; owner?: RequirementPersonRef; agentOwner?: RequirementPersonRef; projectId?: string; parentId?: string; tags?: string[] } | null {
   const c = checkDraft(d);
   if (!c.ok) return null;
   // 分两个角色的 Hub 上,种类不对的一侧不发(Hub 会 400);旧 Hub 没有负责 Agent。
@@ -524,6 +526,7 @@ export function createInput(d: CreateDraft, twoRoles = false): { name: string; p
     ...(agent ? { agentOwner: { kind: agent.kind, id: agent.id } } : {}),
     ...(d.projectId ? { projectId: d.projectId } : {}),
     ...(d.parentId ? { parentId: d.parentId } : {}),
+    ...(d.tags?.length ? { tags: [...d.tags] } : {}),
   };
 }
 
