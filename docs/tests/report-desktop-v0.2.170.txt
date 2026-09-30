@@ -1,0 +1,11 @@
+desktop v0.2.170 — 任务「动态」时间线
+================================================================================
+A. 本版内容(0.2.169 发版提交 52763464 之后 main 上合入的 PR + 本 PR)
+  #612 「动态」视图(#429 第三步 a):读 Hub GET /api/requirements/events(capability events,Hub .77 起);旧 Hub 不显示该标签;
+       同一人对同一卡片 5 分钟内的连续修改合并为一条可展开;按天分组;全部/我的任务、项目、成员/Agent、10 类事件筛选;
+       电脑/手机两套版式;近 7 天,20 秒增量轮询,按 id 去重,加载更早按游标。手机视图切换条改为可横向滚动。
+       task-activity-model.test.ts 50 项;requirement-details Docker 42/0;drive 30/30。
+  本 PR(版本号):0.2.169 → 0.2.170,versionCode 2169 → 2170;release-desktop-auto-update.yml 加 What's new in 0.2.170;重新生成 src/changelog-bundled.ts。
+  本地:干净 origin/main bump 后 npm ci / npm test / npm run typecheck 全部 rc=0;android-release-notes.mjs 0.2.170 rc=0。
+B. 验证边界(如实)
+  本 PR 只改版本号与说明;功能验证见 #612。「动态」需要 Hub 0.9.0-preview.77,真机未在 .77 上验证。
