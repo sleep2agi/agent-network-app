@@ -14,6 +14,10 @@
 //   time     : a timed due shows the viewer's local HH:MM; an all-day due shows no time
 //   week     : 周 → one row of 7; today's tasks all visible; ‹ › move the title by a week; 今天 comes back
 //   undated  : 未设期限 N chip → popover with the N undated tasks; they are in no cell
+//   drag     : (STEP 2) dragging a cell's task to another day sends exactly one PATCH whose body is { due }: an all-day
+//              due stays all-day, a timed due keeps its local time (15:30 → same 07:30Z on the new day); a ghost label
+//              and the target cell's outline show while dragging; the task moves; no detail opens; a rejected PATCH
+//              puts it back with a banner
 //   page     : no horizontal page scroll
 // Phone 390×844 (Android UA, touch), light + dark:
 //   segments fit inside the 16px gutters; 7 equal day columns inside the gutters; today picked by default; a dot under
@@ -214,6 +218,53 @@ for (const theme of ['light', 'dark']) {
       const tm = (await box(page, tid('cal-title'))).text;
       await page.locator(tid('cal-today')).click();
       record(vp, 'month prev/next/today', { turned: tm !== t0, back: (await box(page, tid('cal-title'))).text === t0 }, { now: t0, next: tm });
+
+      // ── STEP 2: drag a task to another day (mouse) → exactly one PATCH { due } ──
+      const addDays = (d, n) => { const [y, m, dd] = d.split('-').map(Number); const t = new Date(Date.UTC(y, m - 1, dd + n)); return t.toISOString().slice(0, 10); };
+      const dragTo = async (id, target, peek) => {
+        const a = await box(page, tid(`cal-item-${id}`));
+        const b = await box(page, tid(`cal-cell-${target}`));
+        await page.mouse.move(a.cx, a.cy); await page.mouse.down();
+        for (let i = 1; i <= 8; i++) await page.mouse.move(a.cx + (b.cx - a.cx) * i / 8, a.cy + (b.cy - a.cy) * i / 8);
+        await page.waitForTimeout(120);
+        const during = peek ? await page.evaluate((t) => ({
+          ghost: document.querySelector('[data-testid="cal-drag-ghost"]')?.textContent ?? null,
+          outline: getComputedStyle(document.querySelector(`[data-testid="cal-cell-${t}"]`)).outlineStyle,
+        }), target) : null;
+        if (peek) await shot('dragging');
+        await page.mouse.up();
+        await page.waitForTimeout(600);
+        return during;
+      };
+      const patches = async () => page.evaluate(() => window.__tasksPatches || []);
+      const cellOf = (id) => page.evaluate((i) => document.querySelector(`[data-testid="cal-item-${i}"]`)?.closest('[data-testid^="cal-cell-"]')?.dataset.testid.slice(9) ?? null, id);
+      const n0 = (await patches()).length;
+      const t3 = addDays(today, 3);
+      const during = await dragTo('c1', t3, true);
+      const p1 = (await patches()).slice(n0);
+      const md3 = `${+t3.slice(5, 7)}月${+t3.slice(8, 10)}日`;
+      record(vp, 'drag all-day task to another day', {
+        ghost: during?.ghost === `→ ${md3}`, targetOutlined: during?.outline === 'solid', onePatch: p1.length === 1,
+        dueOnly: JSON.stringify(p1[0]) === JSON.stringify({ due: t3 }), moved: (await cellOf('c1')) === t3, noDetail: !(await box(page, tid('req-edit-name'))),
+      }, { patch: JSON.stringify(p1[0] ?? null), ghost: during?.ghost });
+
+      await page.locator(tid('cal-mode-week')).click();
+      await page.waitForTimeout(300);
+      const wd = await page.evaluate((d) => { const [y, m, dd] = d.split('-').map(Number); return (new Date(Date.UTC(y, m - 1, dd)).getUTCDay() + 6) % 7; }, today);
+      const tgt = addDays(today, wd === 6 ? -1 : 1);
+      const n1 = (await patches()).length;
+      await dragTo('c2', tgt, false);
+      const p2 = (await patches()).slice(n1);
+      record(vp, 'drag timed task keeps its local time', { dueOnly: p2.length === 1 && JSON.stringify(p2[0]) === JSON.stringify({ due: `${tgt}T07:30:00Z` }), moved: (await cellOf('c2')) === tgt, label: (await box(page, tid('cal-item-c2')))?.text.startsWith('15:30') }, { patch: JSON.stringify(p2[0] ?? null) });
+
+      await page.evaluate(() => { window.__tasksFailPatch = true; });
+      await dragTo('c7', tgt, false);
+      await page.waitForTimeout(300);
+      const back = await cellOf('c7');
+      const banner = await page.evaluate(() => [...document.querySelectorAll('div')].some(d => d.children.length === 0 && /示例:今天第七条/.test(d.textContent) && /不存在|没有保存/.test(d.textContent)));
+      record(vp, 'rejected drop reverts', { back: back === today, banner });
+      await page.evaluate(() => { window.__tasksFailPatch = false; });
+      await page.locator(tid('cal-mode-month')).click();
 
       record(vp, 'no horizontal page overflow', { none: (await overflow(page)) <= 0 });
     } else {
