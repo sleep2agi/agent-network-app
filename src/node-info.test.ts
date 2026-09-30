@@ -44,6 +44,8 @@ check('full status is network scoped and URL encoded', nodeStatusPath('net /甲?
 let missingNetworkRejected = false;
 try { nodeStatusPath(undefined); } catch { missingNetworkRejected = true; }
 check('full status refuses an unscoped request', missingNetworkRejected);
+check('one agent\'s full status asks the hub for that alias only (encoded)', nodeStatusPath('net-a', '示例 A&x') === '/api/status?network_id=net-a&alias=%E7%A4%BA%E4%BE%8B%20A%26x');
+check('blank alias keeps the whole-network read', nodeStatusPath('net-a', '  ') === '/api/status?network_id=net-a');
 
 const root = process.cwd();
 const app = fs.readFileSync(path.join(root, 'App.tsx'), 'utf8');
@@ -57,6 +59,6 @@ check('Android hardware Back restores the same chat', app.includes("if (screen.n
 check('聊天信息 rows open node settings (with the section they name)', chat.includes('canOpenNode: !!onOpenNodeSettings') && /requestNodeSection\(nodeInfoSectionKey\(cfg\.profileId \?\? cfg\.serverUrl, alias\), row\.section\);\s*onOpenNodeSettings\?\.\(\);/.test(chat));
 check('node info page honours the requested section (read-only page only)', detail.includes('const requested = readOnly ? takeNodeSectionRequest(sectionHandoffKey) : undefined;'));
 check('read-only details hide all existing mutation surfaces', detail.includes('!readOnly ? <AvatarEditSection') && detail.includes('visible={!readOnly && !!pendingAction}') && detail.includes("{readOnly ? '节点信息' : '节点详情'}"));
-check('details use network-scoped full status rather than the list projection', detail.includes('fetchNodeStatus(cfg)'));
+check('details use network-scoped full status rather than the list projection', detail.includes('fetchNodeStatus(cfg, alias)'));
 
 console.log(`node info: ${passed}/${passed} checks passed`);

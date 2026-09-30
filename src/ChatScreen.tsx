@@ -1654,7 +1654,7 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
   useEffect(() => { setFullCaps(null); }, [cfg, alias]);
   useEffect(() => {
     let live = true;
-    fetchNodeStatus(cfg)
+    fetchNodeStatus(cfg, alias)
       .then(data => {
         if (!live) return;
         const s = (data.sessions ?? []).find(x => x.alias === alias);
