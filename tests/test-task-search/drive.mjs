@@ -7,7 +7,7 @@
 // Desktop 1320×754 / 1000×700 (mouse, desktop workspace), light + dark:
 //   toolbar   : the search box sits in the task toolbar, on the header's centre line ±1, inside the header (nothing cut)
 //   keys      : 「/」 and Ctrl+K focus it; Esc clears it
-//   filter    : typing narrows 列表 / 看板 / 甘特图 to the matching tasks (after the ~120ms debounce), matched text is
+//   filter    : typing narrows 列表 / 看板 / 甘特图 / 日历 to the matching tasks (after the ~120ms debounce), matched text is
 //               highlighted in the titles, two terms are ANDed, search + 优先级 filter combine
 //   empty     : a query with no match shows 「没有找到包含 “…” 的任务」 and its 清除搜索 brings every row back
 //   archived  : archived rows only appear after 「包含已归档」 in the search menu, and carry the 已归档 tag
@@ -33,7 +33,8 @@ const fixture = () => {
   const now = Date.now();
   const at = (d) => new Date(now + d * day).toISOString();
   const A = { kind: 'node', id: 'n_sweep_a' }, B = { kind: 'node', id: 'n_sweep_b' };
-  const R = (id, name, o) => ({ id, name, priority: 'normal', assignee: '', column: 'pool', owner: { kind: 'user', id: 'u_tester' }, participants: [], agent_owner: A, project_id: 'p_a', due: '', createdAt: at(-5), updatedAt: at(-1), description: '', checklist: [], tags: [], parent_id: null, ...o });
+  // seq (#563, capability requirement_seq): s1 → #1 … so the ID column shows next to the search results
+  const R = (id, name, o) => ({ id, seq: /^s\d+$/.test(id) ? Number(id.slice(1)) : null, name, priority: 'normal', assignee: '', column: 'pool', owner: { kind: 'user', id: 'u_tester' }, participants: [], agent_owner: A, project_id: 'p_a', due: '', createdAt: at(-5), updatedAt: at(-1), description: '', checklist: [], tags: [], parent_id: null, ...o });
   window.__tasksFixture = {
     requirements: [
       R('s1', '示例企业组织树权限设置', { priority: 'high', column: 'doing', due: at(-0.2) }),
@@ -52,7 +53,7 @@ const fixture = () => {
       { kind: 'node', id: 'n_sweep_a', networkId: 'net-sweep', name: '示例-A' },
       { kind: 'node', id: 'n_sweep_b', networkId: 'net-sweep', name: '示例-门户牛' },
     ],
-    capabilities: ['agent_owner', 'description', 'checklist', 'projects', 'due_datetime', 'priority_lowest', 'start_date', 'tags', 'sub_requirements', 'archived'],
+    capabilities: ['agent_owner', 'description', 'checklist', 'projects', 'due_datetime', 'priority_lowest', 'start_date', 'tags', 'sub_requirements', 'archived', 'requirement_seq'],
   };
 };
 
@@ -171,7 +172,8 @@ for (const theme of ['light', 'dark']) {
       await settle(page);
       const listHit = await shown(page, 'req-row-');
       const hl = await hits(page);
-      record(vp, 'type filters list', { rows: listHit === 's1', highlighted: hl.includes('组织树') }, { rows: listHit, hits: hl.join('|') });
+      const seqCell = await box(page, tid('task-seq-s1'));
+      record(vp, 'type filters list', { rows: listHit === 's1', highlighted: hl.includes('组织树'), idColumn: seqCell?.text === '#1' }, { rows: listHit, hits: hl.join('|'), id: seqCell?.text });
       await shot('1-list-search');
 
       await page.keyboard.press('Escape');
@@ -201,6 +203,13 @@ for (const theme of ['light', 'dark']) {
       const gantt = await page.evaluate(() => [...new Set([...document.querySelectorAll('[data-testid^="gantt-bar-"],[data-testid^="gantt-undated-"],[data-testid^="gantt-name-"]')].map(e => e.dataset.testid.replace(/^gantt-(bar|undated|name)-/, '')).filter(id => /^s\d$/.test(id)))].sort().join(','));
       await shot('3-gantt-search');
       record(vp, 'board + gantt follow the search', { board: cards === 's2,s3,s6,s8', gantt: gantt === 's2,s3,s6,s8' }, { board: cards, gantt });
+      // 日历(#558):同一个 visibleTasks 集合 —— 有期限的 s8 在格子里,不匹配的 s1(今天到期)不在
+      await page.locator(tid('tasks-view-calendar')).first().click();
+      await settle(page);
+      const cal = await page.evaluate(() => [...new Set([...document.querySelectorAll('[data-testid^="cal-item-"],[data-testid^="cal-row-"],[data-testid^="cal-undated-"]')].filter(e => e.getClientRects().length).map(e => e.dataset.testid.replace(/^cal-(item|row|undated)-/, '')).filter(id => /^s\d+$/.test(id)))].sort().join(','));
+      const calHits = await hits(page);
+      await shot('3b-calendar-search');
+      record(vp, 'calendar follows the search', { s8: cal.split(',').includes('s8'), onlyMatches: cal.split(',').filter(Boolean).every(id => ['s2', 's3', 's6', 's8'].includes(id)), highlighted: calHits.includes('Portal') }, { calendar: cal, hits: calHits.join('|') });
       await page.locator(tid('tasks-view-list')).first().click();
       await settle(page);
 

@@ -112,7 +112,8 @@ ck('focusKindOf', focusKindOf({ tagName: 'input' }) === 'input' && focusKindOf({
 console.log('\n接线(静态)');
 const board = src('./RequirementBoard.tsx');
 ck('看板 / 列表 / 甘特图都从搜索后的集合取', /const searched = useMemo\(\(\) => searchedTasks\(items, archived, search/.test(board) && /const visible = useMemo\(\(\) => applyFilter\(searched, filter\)/.test(board) && /const columns = useMemo\(\(\) => boardColumns\(searched, filter\)/.test(board));
-ck('甘特图拿的是 visible', /<TaskGantt items=\{visible\}/.test(board));
+ck('甘特图 / 日历拿的都是 visible(搜索 + 筛选后的集合)', /<TaskGantt items=\{visible\}/.test(board) && /<TaskCalendar items=\{visible\} terms=\{terms\}/.test(board));
+ck('日历标题高亮(四处)', (src('./TaskCalendar.tsx').match(/highlight\([a-z.]*name, terms\)/g) ?? []).length === 4);
 ck('没有结果时出「没找到」', board.includes('<SearchEmpty q={search.q}'));
 ck('去抖用常量', board.includes('SEARCH_DEBOUNCE_MS'));
 ck('⌘K 走设置里「搜索」的绑定,window 捕获阶段抢在全局快捷键前面', board.includes("=== 'nav.search'") && board.includes("win.addEventListener('keydown', onKey, true)"));
