@@ -185,6 +185,13 @@ export const markHubProfileRequiresReauth = async (profileId: string, required =
   await invoke('mark_desktop_profile_requires_reauth', { profileId, required });
 };
 
+/** 设置 → 账号 →「编辑」:原地改显示名 / Hub 地址,凭据不动、当前账号不变。调用前先 validateHubEdit。 */
+export const updateHubProfile = async (profileId: string, patch: { serverUrl: string; displayName?: string }): Promise<void> => {
+  if (!isTauriDesktop()) { await mobileSessions.update(profileId, patch); return; }
+  const { invoke } = await import('@tauri-apps/api/core');
+  await invoke('update_desktop_profile', { profileId, serverUrl: patch.serverUrl, displayName: patch.displayName?.trim() || null });
+};
+
 export const getDesktopStorageDiagnostics = async (): Promise<DesktopStorageDiagnostics | null> => {
   if (!isTauriDesktop()) return null;
   const { invoke } = await import('@tauri-apps/api/core');

@@ -10,6 +10,9 @@ import { Ionicons } from './icons';
 import { HubConfig } from './api';
 import { DesktopStorageDiagnostics, HubProfile, getDesktopStorageDiagnostics, listHubProfiles, removeHubProfile, saveThemeMode, sessionIdOf } from './storage';
 import AccountSwitcher from './AccountSwitcher';
+import { ACCOUNT_TOAST_MS, AccountActionSheet, AccountEditDialog, AccountToast, accountName, copyAccountLine } from './AccountRowActions';
+import { accountRowActions, type AccountRowAction } from './account-row-actions';
+import { pointerUi } from './pointer-ui';
 import './i18n-accounts';
 import { THEME_PREFERENCES, THEME_PREFERENCE_LABEL, colors, onThemeChange, onThemePreferenceChange, setThemePreference, spacing, themeMode, themePreference, themePreferenceSummary, type ThemePreference, radius } from './theme';
 import { APP_VERSION } from './version';
@@ -79,6 +82,7 @@ export default function SettingsScreen({
   onAddAccount,
   onSwitchProfile,
   onReauthProfile,
+  onProfileEdited,
   notifyPreview,
   onPhoneSubPageChange,
   onOpenServer,
@@ -91,6 +95,8 @@ export default function SettingsScreen({
   onAddAccount: () => void;
   onSwitchProfile: (profileId: string) => void | Promise<void>;
   onReauthProfile: (profile: Pick<HubProfile, 'profileId' | 'serverUrl' | 'username' | 'displayName'>) => void;
+  /** 「编辑」改了当前账号的 Hub 地址:按新地址重新连接,留在设置里。不传就退回 onSwitchProfile(会回到列表)。 */
+  onProfileEdited?: (profileId: string) => void | Promise<void>;
   /** 只给 web 验收夹具用(NotifySettingsFixtureScreen):在浏览器里按手机平台渲染通知设置。 */
   notifyPreview?: NotifySettingsPreview;
   /** 手机:推入 / 退出子页时通知 App —— 子页是二级页,像微信一样不显示底部 tab 栏。 */
@@ -180,6 +186,15 @@ export default function SettingsScreen({
   const [logoutConfirm, setLogoutConfirm] = useState(false);
   // 切换账号面板(手机底部面板 / 宽屏对话框)。
   const [switcherOpen, setSwitcherOpen] = useState(false);
+  // 每行账号的「复制」「编辑」(Vincent 2026-09-30「账号 支持一下复制 编辑」):编辑弹窗、手机的动作面板、「已复制」小条。
+  const [editTarget, setEditTarget] = useState<HubProfile | null>(null);
+  const [sheetTarget, setSheetTarget] = useState<HubProfile | null>(null);
+  const [toast, setToast] = useState<string | null>(null);
+  useEffect(() => {
+    if (!toast) return;
+    const timer = setTimeout(() => setToast(null), ACCOUNT_TOAST_MS);
+    return () => clearTimeout(timer);
+  }, [toast]);
   // 登录设备:手机是账号子页里的三级页(detail = loginDevices);宽屏是账号右栏里推进去的一页。
   const sessions = useLoginSessions(cfg);
   const [wideDevices, setWideDevices] = useState(false);
@@ -202,7 +217,7 @@ export default function SettingsScreen({
   // 子页的返回:安卓系统返回键/手势走 BackHandler(比 App.tsx 的返回处理晚注册 ⇒ 先被调用,
   // 同 ScheduledTasksScreen 的窄屏详情);网页(验收用的 web 导出)没有返回键,听 Esc。
   // 弹窗开着时让弹窗自己的 onRequestClose 处理(安卓的 Modal 会先吞掉返回键;网页的 Esc 两边都会收到)。
-  const dialogOpen = !!removeTarget || localDeleteVisible || guideVisible || logoutConfirm || switcherOpen || !!sessions.confirm;
+  const dialogOpen = !!removeTarget || localDeleteVisible || guideVisible || logoutConfirm || switcherOpen || !!sessions.confirm || !!editTarget || !!sheetTarget;
   useEffect(() => {
     if (!subPage || dialogOpen) return;
     const sub = BackHandler.addEventListener('hardwareBackPress', () => { goBack(); return true; });
@@ -328,6 +343,21 @@ export default function SettingsScreen({
     if (profile.requiresReauth) return onReauthProfile(profile);
     if (profile.profileId !== currentId) void Promise.resolve(onSwitchProfile(profile.profileId)).catch(reportError);
   };
+  // 鼠标 + 键盘(桌面壳,任何窗口宽度)还是手指:手机管理账号页点一行出底部动作面板,桌面窄窗口照旧逐项列出。
+  const pointer = pointerUi();
+  const profileActions = (profile: HubProfile) => accountRowActions(profile, { canOpenWindow: tauriDesktop });
+  const runProfileAction = (action: AccountRowAction, profile: HubProfile) => {
+    if (action === 'copy') void copyAccountLine(profile).then(() => setToast(tr('accounts.copied')), error => setToast(tr('accounts.copyFailed', { msg: String(error) })));
+    else if (action === 'edit') setEditTarget(profile);
+    else if (action === 'openWindow') void openWorkspaceWindow(profile).catch(reportError);
+    else setRemoveTarget(profile);
+  };
+  const afterProfileEdit = async (profileId: string, serverChanged: boolean) => {
+    const registry = await listHubProfiles();
+    setProfiles(registry.profiles);
+    if (profileId !== currentId || !serverChanged) return;
+    await Promise.resolve(onProfileEdited ? onProfileEdited(profileId) : onSwitchProfile(profileId));
+  };
   const phoneList = (
     <ScrollView style={styles.phoneScroll} contentContainerStyle={styles.phoneListContent} testID="settings-phone-list">
       {onOpenServer ? (
@@ -443,6 +473,10 @@ export default function SettingsScreen({
     onPickProfile: pickProfile,
     onOpenProfileWindow: profile => { void openWorkspaceWindow(profile).catch(reportError); },
     onRemoveProfile: profile => setRemoveTarget(profile),
+    profileActions,
+    onProfileAction: runProfileAction,
+    onProfileSheet: profile => setSheetTarget(profile),
+    pointer,
     onAddAccount,
     sessions,
     localHub,
@@ -643,6 +677,15 @@ export default function SettingsScreen({
                             <Text style={styles.rowHint} numberOfLines={1}>{profile.serverUrl} · {profile.username || tr('settings.copy.14')}{profile.networkId ? ` · ${profile.networkId}` : ''}</Text>
                             {profile.requiresReauth ? <Text style={styles.dangerHint}>{tr('settings.copy.15')}</Text> : null}
                           </View>
+                          {/* 复制 · 编辑(Vincent 2026-09-30):复制只拿地址 · 用户名 · 网络 ID,不碰令牌;本地工作区只能复制。 */}
+                          <Pressable accessibilityRole="button" accessibilityLabel={tr('accounts.copyLabel', { name: accountName(profile) })} onPress={event => { event.stopPropagation(); runProfileAction('copy', profile); }} hitSlop={8} style={styles.inlineButton} testID={`settings-copy-${profile.profileId}`}>
+                            <Text style={styles.accentText}>{tr('accounts.copy')}</Text>
+                          </Pressable>
+                          {profileActions(profile).includes('edit') ? (
+                            <Pressable accessibilityRole="button" accessibilityLabel={tr('accounts.editLabel', { name: accountName(profile) })} onPress={event => { event.stopPropagation(); runProfileAction('edit', profile); }} hitSlop={8} style={styles.inlineButton} testID={`settings-edit-${profile.profileId}`}>
+                              <Text style={styles.accentText}>{tr('accounts.edit')}</Text>
+                            </Pressable>
+                          ) : null}
                           {tauriDesktop && !profile.requiresReauth ? (
                             // 应用多开(Vincent 2026-09-07):给这个账号开一个独立工作区窗口,主窗口的当前账号不动;同一账号再点就聚焦已开的窗。
                             <Pressable accessibilityLabel={tr('settings.copy.183', { v0: profile.displayName || profile.username || profile.serverUrl })} onPress={event => { event.stopPropagation(); void openWorkspaceWindow(profile).catch(error => setProfileError(String(error))); }} hitSlop={8} style={styles.inlineButton}>
@@ -650,7 +693,7 @@ export default function SettingsScreen({
                             </Pressable>
                           ) : null}
                           {profile.profileId !== LOCAL_HUB_PROFILE_ID ? (
-                            <Pressable accessibilityLabel={tr('settings.copy.184', { v0: profile.username || profile.serverUrl })} onPress={event => { event.stopPropagation(); setRemoveTarget(profile); }} hitSlop={8} style={styles.inlineButton}>
+                            <Pressable accessibilityLabel={tr('settings.copy.184', { v0: profile.username || profile.serverUrl })} onPress={event => { event.stopPropagation(); setRemoveTarget(profile); }} hitSlop={8} style={styles.inlineButton} testID={`settings-remove-${profile.profileId}`}>
                               <Text style={styles.dangerText}>{tr('settings.copy.17')}</Text>
                             </Pressable>
                           ) : null}
@@ -1228,6 +1271,24 @@ export default function SettingsScreen({
         onRemove={profile => setRemoveTarget(profiles.find(p => p.profileId === profile.profileId) ?? null)}
         onClose={() => setSwitcherOpen(false)}
       />
+      <AccountActionSheet
+        visible={!pointer && !!sheetTarget}
+        profile={sheetTarget}
+        actions={sheetTarget ? profileActions(sheetTarget) : []}
+        current={sheetTarget?.profileId === currentId}
+        onSelect={action => { if (sheetTarget) runProfileAction(action, sheetTarget); }}
+        onClose={() => setSheetTarget(null)}
+      />
+      {editTarget ? (
+        <AccountEditDialog
+          profile={editTarget}
+          current={editTarget.profileId === currentId}
+          onClose={() => setEditTarget(null)}
+          onSaved={afterProfileEdit}
+          onRelogin={onReauthProfile}
+        />
+      ) : null}
+      <AccountToast text={toast} />
       {guideVisible ? <XiaomiGuideModal onClose={() => setGuideVisible(false)} /> : null}
     </View>
   );

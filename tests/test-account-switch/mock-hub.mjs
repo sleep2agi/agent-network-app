@@ -19,6 +19,8 @@ export function startMockHub({ name, username, password, token, networkId, agent
     const url = new URL(req.url, 'http://x');
     if (req.method === 'OPTIONS') { res.writeHead(204, cors); res.end(); return; }
     if (url.pathname === '/__sse') return json(res, 200, { open: streams.size, opened, unknown: [...unknown] });
+    // Public, like the real hub: the account 编辑 dialog probes it before trying the saved token (tests/test-account-copy-edit).
+    if (url.pathname === '/health') return json(res, 200, { status: 'ok' });
     if (url.pathname === '/api/auth/login' && req.method === 'POST') {
       let raw = ''; for await (const c of req) raw += c;
       const body = JSON.parse(raw || '{}');

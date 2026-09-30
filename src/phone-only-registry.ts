@@ -100,6 +100,15 @@ export const PHONE_ONLY_SITES: readonly PhoneOnlySite[] = [
     why: '桌面菜单落在光标 / 按钮处(锚定),不从窗口底部升起。',
   },
   {
+    name: 'AccountActionSheet(手机管理账号的底部动作面板)',
+    site: /<AccountActionSheet\b/,
+    window: 'tag',
+    gate: renderGate('AccountActionSheet'),
+    definedIn: 'src/AccountRowActions.tsx',
+    minSites: 1,
+    why: '桌面的同一组动作是行尾的文字按钮(宽)或逐行列出(窄窗口),不从窗口底部升起。',
+  },
+  {
     name: 'expo-haptics(震动)',
     site: /\bHaptics\.(?:impact|notification|selection)Async\b/,
     window: 2,

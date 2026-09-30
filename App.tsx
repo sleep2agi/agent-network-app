@@ -509,16 +509,18 @@ function AppRoot() {
     if (settingsWindow) await notifySessionChanged();
   };
 
-  const activateProfile = async (profileId: string) => {
+  const activateProfile = async (profileId: string, stay = false) => {
     // Local workspace:先启动本地 Hub(钥匙串凭据丢了会在这里自动恢复),再切 profile。
     // 工作区窗口里切账号只换这个窗口,不改主窗口的「当前账号」。
     const next = await activateHubProfile(profileId, { isDesktop: () => tauriDesktop, startLocalHub, switchHubProfile: initialWorkspaceProfile ? loadHubProfile : switchHubProfile });
     await hydrateProfileLocalState(next);
     setCfg(next);
-    setScreen({ name: 'agents' });
+    if (!stay) setScreen({ name: 'agents' });
     prefetchStatus(next);
     if (settingsWindow) await notifySessionChanged();
   };
+  // 设置 →「编辑」改了当前账号的 Hub 地址:从存储重新读这个账号(新地址 + 原来的令牌)、按新地址重连,人留在设置里。
+  const reloadEditedProfile = (profileId: string) => activateProfile(profileId, true);
 
   const requestProfileReauth = (profile: Pick<HubProfile, 'profileId' | 'serverUrl' | 'username' | 'displayName'>) => {
     clearChatConversationCache(profile.profileId, profile.serverUrl);
@@ -711,6 +713,7 @@ function AppRoot() {
           onAddAccount={() => { setReauthProfile(null); setScreen({ name: 'login' }); }}
           onSwitchProfile={activateProfile}
           onReauthProfile={requestProfileReauth}
+          onProfileEdited={reloadEditedProfile}
         />
       </SafeAreaView>
     );
@@ -721,7 +724,7 @@ function AppRoot() {
       <SafeAreaView key={workspaceKey} style={[styles.root, rootInset]}>
         <StatusBar barStyle={theme === 'light' ? 'dark-content' : 'light-content'} backgroundColor={colors.bg} />
         <ConnectivityBanner />
-        <DesktopWorkspace cfg={cfg} screen={screen} setScreen={setScreen} onLogout={removeActiveProfile} onLocalDataDeleted={finishLocalDataDeletion} onAddAccount={() => { setReauthProfile(null); setScreen({ name: 'login' }); }} onSwitchProfile={activateProfile} onReauthProfile={requestProfileReauth} />
+        <DesktopWorkspace cfg={cfg} screen={screen} setScreen={setScreen} onLogout={removeActiveProfile} onLocalDataDeleted={finishLocalDataDeletion} onAddAccount={() => { setReauthProfile(null); setScreen({ name: 'login' }); }} onSwitchProfile={activateProfile} onReauthProfile={requestProfileReauth} onProfileEdited={reloadEditedProfile} />
         <DesktopMessageListener cfg={cfg} />
         {trayWindow ? <DesktopNotifier onOpenChat={alias => setScreen({ name: 'chat', alias })} profileKey={notifyProfileKey(cfg)} /> : null}
       </SafeAreaView>
@@ -963,6 +966,7 @@ function AppRoot() {
                       onAddAccount={() => { setReauthProfile(null); setScreen({ name: 'login' }); }}
                       onSwitchProfile={activateProfile}
                       onReauthProfile={requestProfileReauth}
+                      onProfileEdited={reloadEditedProfile}
                       onLocalDataDeleted={finishLocalDataDeletion}
                       onPhoneSubPageChange={setSettingsSubPage}
                       onOpenServer={layout === 'phone' ? () => setScreen({ name: 'server' }) : undefined}
@@ -1068,7 +1072,7 @@ const makeBootStyles = () => StyleSheet.create({
 let bootStyles = makeBootStyles();
 onThemeChange(() => { bootStyles = makeBootStyles(); });
 
-function DesktopWorkspace({ cfg, screen, setScreen, onLogout, onLocalDataDeleted, onAddAccount, onSwitchProfile, onReauthProfile }: {
+function DesktopWorkspace({ cfg, screen, setScreen, onLogout, onLocalDataDeleted, onAddAccount, onSwitchProfile, onReauthProfile, onProfileEdited }: {
   cfg: HubConfig;
   screen: Screen;
   setScreen: (screen: Screen) => void;
@@ -1077,6 +1081,7 @@ function DesktopWorkspace({ cfg, screen, setScreen, onLogout, onLocalDataDeleted
   onAddAccount: () => void;
   onSwitchProfile: (profileId: string) => void | Promise<void>;
   onReauthProfile: (profile: Pick<HubProfile, 'profileId' | 'serverUrl' | 'username' | 'displayName'>) => void;
+  onProfileEdited: (profileId: string) => void | Promise<void>;
 }) {
   const { t } = useTranslation();
   // AppRoot is keyed by theme, so this component remounts after every theme
@@ -1178,7 +1183,7 @@ function DesktopWorkspace({ cfg, screen, setScreen, onLogout, onLocalDataDeleted
   )
   : screen.name === 'serverNodes' ? <AgentsScreen cfg={cfg} filter={screen.filter} onOpenChat={alias => setScreen({ name: 'serverNodeDetail', alias })} onOpenPicker={() => setScreen({ name: 'picker' })} onOpenNodeDetail={alias => setScreen({ name: 'serverNodeDetail', alias })} />
   : screen.name === 'serverNodeDetail' ? <NodeDetailScreen cfg={cfg} alias={screen.alias} onBack={() => setScreen({ name: 'serverNodes' })} desktop onOpenScheduled={open => setScreen({ name: 'scheduled', open, back: screen })} />
-  : screen.name === 'settings' ? <SettingsScreen cfg={cfg} onLogout={onLogout} onLocalDataDeleted={onLocalDataDeleted} onAddAccount={onAddAccount} onSwitchProfile={onSwitchProfile} onReauthProfile={onReauthProfile} />
+  : screen.name === 'settings' ? <SettingsScreen cfg={cfg} onLogout={onLogout} onLocalDataDeleted={onLocalDataDeleted} onAddAccount={onAddAccount} onSwitchProfile={onSwitchProfile} onReauthProfile={onReauthProfile} onProfileEdited={onProfileEdited} />
   : screen.name === 'taskDetail' ? <TaskDetailScreen cfg={cfg} taskId={screen.taskId} onBack={() => setScreen({ name: 'tasks' })} desktop />
   : screen.name === 'nodeDetail' ? <NodeDetailScreen cfg={cfg} alias={screen.alias} onBack={() => setScreen({ name: 'agents' })} desktop onOpenScheduled={open => setScreen({ name: 'scheduled', open, back: screen })} />
   : screen.name === 'nodeInfo' ? <NodeDetailScreen cfg={cfg} alias={screen.alias} onBack={() => setScreen({ name: 'chat', alias: screen.alias })} readOnly desktop onOpenScheduled={open => setScreen({ name: 'scheduled', open, back: screen })} />

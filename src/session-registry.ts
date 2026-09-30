@@ -183,7 +183,29 @@ export function createSessionStore(kv: SessionKv, deps: SessionStoreDeps = {}) {
     await writeIndex({ ...index, sessions: index.sessions.map(s => (s.id === id ? { ...s, requiresReauth: required || undefined } : s)) });
   };
 
-  return { loadIndex, loadSession, activeConfig, save, switchTo, remove, removeActive, markReauth };
+  /**
+   * 设置 → 账号 →「编辑」:原地改一个账号的显示名 / 服务器地址。令牌、用户名、网络原样留着;
+   * 不改当前账号、不改顺序、不碰其他账号(save 是「登录后保存并设为当前」,这里不是)。
+   * 新地址能不能用由调用方先验过(account-row-actions.ts validateHubEdit)。
+   */
+  const update = async (id: string, patch: { serverUrl: string; displayName?: string }): Promise<HubConfig> => {
+    const index = await loadIndex();
+    const prev = index.sessions.find(s => s.id === id);
+    if (!prev) throw new Error('saved account not found');
+    const cfg = await loadSession(id);
+    if (!cfg) throw new Error('saved account is invalid');
+    const displayName = patch.displayName?.trim() || undefined;
+    const { displayName: _old, ...rest } = cfg;
+    const next: HubConfig = { ...rest, serverUrl: patch.serverUrl, ...(displayName ? { displayName } : {}) };
+    const stored: HubConfig = id === LEGACY_SESSION_ID ? (({ profileId: _drop, ...r }) => r)(next) : next;
+    await kv.set(credentialKey(id), JSON.stringify(stored));
+    const { displayName: _prevName, ...prevRest } = prev;
+    const meta: SessionMeta = { ...prevRest, serverUrl: patch.serverUrl, ...(displayName ? { displayName } : {}), updatedAt: now() };
+    await writeIndex({ ...index, sessions: index.sessions.map(s => (s.id === id ? meta : s)) });
+    return stored;
+  };
+
+  return { loadIndex, loadSession, activeConfig, save, switchTo, remove, removeActive, markReauth, update };
 }
 
 export type SessionStore = ReturnType<typeof createSessionStore>;
