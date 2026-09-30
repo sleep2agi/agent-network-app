@@ -377,6 +377,12 @@ pass."` — an instruction to ourselves, displayed to everyone who saw the updat
 prompt. Keep release discipline in this document; keep the notes about what the
 user is getting. `src/release-notes-hygiene.test.ts` enforces the boundary.
 
+The app also ships a copy of `releaseBody` (`src/changelog-bundled.ts`) so that
+设置 → 关于 → 更新日志 shows the running version's notes offline. **The version bump
+PR runs `node scripts/changelog-bundle.mjs` after adding its "What's new"** (add
+`--dates` to refresh release dates via `gh`); `src/changelog-bundled.test.ts`
+fails with that command as the fix when the copy drifts.
+
 ## 10. China mirror on ModelScope (automatic after publishing)
 
 `.github/workflows/modelscope-mirror.yml` copies every published `desktop-v*`

@@ -137,6 +137,8 @@ export const SETTINGS_CATEGORIES: readonly SettingsCategory[] = [
     rows: [
       { key: 'version', label: '版本', keywords: ['version'] },
       { key: 'update', label: '软件更新', keywords: ['升级', '检查更新', 'update', 'upgrade'] },
+      // 更新日志(owner 2026-09-30):每个版本的说明,可按 小红书 / 公众号 / 纯文本 复制(ChangelogScreen.tsx)。
+      { key: 'changelog', label: '更新日志', keywords: ['更新日志', '更新说明', '更新内容', '版本历史', '发布说明', '小红书', '公众号', '复制', 'changelog', 'release notes', "what's new", 'history'] },
       // 桌面端请求走共享连接池(app-fetch.ts pooled_fetch)。开关是出问题时不用发版就能退回插件的后路。
       { key: 'pooledHttp', label: '连接复用', keywords: ['网络', '连接', '速度', '慢', 'keep-alive', 'network', 'connection', 'speed', 'slow'], platforms: ['desktop'] },
     ],
@@ -279,7 +281,7 @@ export function phoneSettingsGroups(available: readonly Pick<SettingsCategory, '
 // ── 手机子页里的三级页(Vincent 2026-09-27「设置界面有点体验太差」)───────────────────────────
 // 子页只放行(标签 · 值 · ›);要输入的东西(API Key、接口地址、免打扰时段)点进三级编辑页再改,
 // 和微信 设置 → 个人信息 → 名字 一样。返回键 / Esc 先退三级页,再退子页。
-export type SettingsDetailKey = 'voiceApiKey' | 'voiceAdvanced' | 'quietHours' | 'manageAccounts' | 'loginDevices' | 'userMember' | 'userGroup';
+export type SettingsDetailKey = 'voiceApiKey' | 'voiceAdvanced' | 'quietHours' | 'manageAccounts' | 'loginDevices' | 'userMember' | 'userGroup' | 'changelog';
 
 export const SETTINGS_DETAIL_TITLE: Record<SettingsDetailKey, string> = {
   voiceApiKey: 'API Key',
@@ -289,6 +291,7 @@ export const SETTINGS_DETAIL_TITLE: Record<SettingsDetailKey, string> = {
   loginDevices: '登录设备',
   userMember: '成员',
   userGroup: '分组',
+  changelog: '更新日志',
 };
 
 /** 三级页属于哪个子页(返回时回到它;子页换了就不该还停在别人的三级页上)。 */
@@ -300,6 +303,7 @@ export const SETTINGS_DETAIL_PARENT: Record<SettingsDetailKey, SettingsCategoryK
   loginDevices: 'account',
   userMember: 'users',
   userGroup: 'users',
+  changelog: 'about',
 };
 
 /**

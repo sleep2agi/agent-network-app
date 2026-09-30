@@ -281,6 +281,7 @@ const copy = [
   ['分组', 'Group'],
   ['连接复用', 'Connection reuse'],
   ['复用到 Hub 的连接,每个请求少一次握手。网络出问题时可以关掉排查(关 = 每个请求新建连接,旧行为)。', 'Reuse connections to the hub so each request skips a handshake. Turn off to troubleshoot network problems (off = a new connection per request, the old behaviour).'],
+  ['更新日志', 'Changelog'],
 ] as const;
 export const settingsTranslations = Object.fromEntries(copy.map((pair, index) => [`settings.copy.${index}`, pair]));
 registerTranslations(settingsTranslations);
