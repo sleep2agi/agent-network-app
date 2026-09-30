@@ -26,6 +26,11 @@ name: ios-build
 on:
   workflow_dispatch:
     inputs:
+      commit:
+        description: "Exact commit on main to build (40-char sha). Empty = the main HEAD at dispatch."
+        required: false
+        default: ""
+        type: string
       upload_testflight:
         description: "Upload the built .ipa to TestFlight"
         type: boolean
@@ -63,7 +68,29 @@ jobs:
       IOS_BUILD_NUMBER: ${{ github.run_number }}
 
     steps:
+      # Same exact-commit gate as release-desktop-auto-update.yml. macos-signing
+      # only admits ref main, so a release built "last" (after Android and
+      # desktop) would otherwise pick up whatever merged since. Pass the release
+      # sha to build exactly it; empty keeps the old behaviour (main HEAD).
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.commit || github.sha }}
+          fetch-depth: 0
+
+      - name: Require exact merged commit
+        shell: bash
+        env:
+          REQUESTED_COMMIT: ${{ inputs.commit }}
+        run: |
+          set -euo pipefail
+          requested="${REQUESTED_COMMIT:-$GITHUB_SHA}"
+          resolved="$(git rev-parse HEAD)"
+          [[ "$requested" =~ ^[0-9a-f]{40}$ && "$resolved" == "$requested" ]]
+          # Full history from checkout; do not re-shallow main (the sha may
+          # legitimately precede the current tip).
+          git fetch origin main
+          git merge-base --is-ancestor "$resolved" origin/main
+          echo "building $resolved"
 
       - name: Require Xcode 26.2 and Swift 6.2
         run: |
