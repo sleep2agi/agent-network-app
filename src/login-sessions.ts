@@ -134,12 +134,67 @@ export function sessionSubtitle(s: LoginSession, nowMs: number = Date.now()): st
   return when ? t('sessions.lastUsed', { when }) : '';
 }
 
-/** 列表很长时(管理员账号上可能有几百条)先显示这么多,底下「显示全部 N 台」。 */
+/** 列表很长时(管理员账号上可能有几百条)先显示这么多,底下「显示全部 N 个」。顶层条目和展开的分组都用它。 */
 export const SESSIONS_VISIBLE_DEFAULT = 20;
 
-export function visibleSessions(list: readonly LoginSession[], showAll: boolean): LoginSession[] {
+export function visibleSessions<T>(list: readonly T[], showAll: boolean): T[] {
   return showAll ? [...list] : list.slice(0, SESSIONS_VISIBLE_DEFAULT);
 }
+
+// ── 按设备分组(2026-09-30:生产上 admin 有 2617 条登录会话,全是脚本 / 命令行的密码登录,client_label 与 UA 都为空,
+//    平铺出来就是「登录设备 2617 台」)。同一个 client_label(或同一种 UA)的登录并成一组,组上写个数;
+//    两个都没有的并进「未命名(多为脚本 / 命令行)」。本机那条永远单独排第一。 ──
+export type SessionGroupKey = { key: string; label: string; kind: DeviceKind; unnamed: boolean };
+
+/** 这条登录归哪一组:client_label 原样;没有就按 UA 认出来的名字;两个都没有 = 未命名。 */
+export function sessionGroupKey(s: Pick<LoginSession, 'client_label' | 'user_agent'>): SessionGroupKey {
+  const label = s.client_label?.trim();
+  if (label) return { key: `label:${label}`, label, kind: kindFromLabel(label), unnamed: false };
+  if (!s.user_agent?.trim()) return { key: 'unnamed', label: t('sessions.device.unnamed'), kind: 'terminal', unnamed: true };
+  const d = describeDevice(s);
+  return { key: `ua:${d.label}`, label: d.label, kind: d.kind, unnamed: false };
+}
+
+export type SessionItem =
+  /** 单独一行:本机,或组里只有这一条。label 用组名(未命名的单条也写「未命名」)。 */
+  | { type: 'session'; key: string; label: string; kind: DeviceKind; session: LoginSession }
+  /** 两条以上同一设备名的登录:一行组头(名字 · N 个登录 · 最近使用),点开看每一条。sessions 按最近使用倒序。 */
+  | { type: 'group'; key: string; label: string; kind: DeviceKind; unnamed: boolean; sessions: LoginSession[] };
+
+/** 输入应已是 orderSessions 的顺序;组按其中最近使用的那条排(= 第一次出现的位置)。 */
+export function groupSessions(ordered: readonly LoginSession[]): SessionItem[] {
+  const out: SessionItem[] = [];
+  const groups = new Map<string, { g: SessionGroupKey; sessions: LoginSession[] }>();
+  const order: string[] = [];
+  for (const s of ordered) {
+    const g = sessionGroupKey(s);
+    if (s.is_current) { out.push({ type: 'session', key: s.token_id, label: g.label, kind: g.kind, session: s }); continue; }
+    if (!groups.has(g.key)) { groups.set(g.key, { g, sessions: [] }); order.push(g.key); }
+    groups.get(g.key)!.sessions.push(s);
+  }
+  for (const k of order) {
+    const { g, sessions } = groups.get(k)!;
+    out.push(sessions.length === 1
+      ? { type: 'session', key: sessions[0].token_id, label: g.label, kind: g.kind, session: sessions[0] }
+      : { type: 'group', key: g.key, label: g.label, kind: g.kind, unnamed: g.unnamed, sessions });
+  }
+  return out;
+}
+
+/** 组头的副标题:「N 个登录 · 最近使用 3 小时前」。 */
+export function groupSubtitle(sessions: readonly LoginSession[], nowMs: number = Date.now()): string {
+  const when = sessions.length ? lastUsedText(sessions[0], nowMs) : '';
+  return when ? t('sessions.groupSubtitle', { n: sessions.length, when }) : t('sessions.groupCount', { n: sessions.length });
+}
+
+/** 展开的组里每一条:组名已经在组头上,这里写「最近使用 … · 登录于 …」。 */
+export function memberSubtitle(s: LoginSession, nowMs: number = Date.now()): string {
+  const since = lastUsedText({ last_used_at: null, created_at: s.created_at }, nowMs);
+  return since ? t('sessions.signedInAt', { when: since }) : '';
+}
+
+/** 组头 / 成员行的 testID 片段:未命名固定为 unnamed(驱动脚本认它),其他按在列表里的位置。 */
+export const groupTestKey = (item: Extract<SessionItem, { type: 'group' }>, index: number): string => (item.unnamed ? 'unnamed' : `g${index}`);
 
 /** 「退出其他所有设备」的确认文案里说的台数。 */
 export const otherSessionCount = (list: readonly LoginSession[]): number => list.filter(s => !s.is_current).length;

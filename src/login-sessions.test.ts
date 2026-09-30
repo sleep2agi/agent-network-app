@@ -8,7 +8,8 @@ import { join } from 'node:path';
 import { setLanguagePreference, t as translate } from './i18n';
 import {
   clientLabelForLogin, describeDevice, interpretSessionsResponse, isTokenExpiredBody, lastUsedText, orderSessions,
-  otherSessionCount, probeSavedSessionsWith, sessionSubtitle, visibleSessions, SESSIONS_VISIBLE_DEFAULT, type LoginSession,
+  groupSessions, groupSubtitle, memberSubtitle, otherSessionCount, probeSavedSessionsWith, sessionGroupKey, sessionSubtitle, visibleSessions,
+  SESSIONS_VISIBLE_DEFAULT, type LoginSession,
 } from './login-sessions';
 import { clearProfileUnauthorized, onProfileUnauthorized, profileUnauthorizedReason, reportProfileAuthResponse } from './profile-auth-state';
 import { authProfileId, fetchHubNodes, login } from './api';
@@ -174,7 +175,7 @@ ck('H1 account category has 登录设备 after 添加账号 and before 切换账
 ck('H2 on every platform; searchable in both languages', ['android', 'ios', 'desktop', 'web'].every(pl => filterSettings('', {}, undefined, pl as any).some(c => c.rows.some(r => r.key === 'devices'))) && ['登录设备', '退出其他设备', 'sessions', 'signed-in'].every(q => filterSettings(q).some(c => c.rows.some(r => r.key === 'devices'))));
 ck('H3 phone: 三级页 under 账号, title translated', SETTINGS_DETAIL_PARENT.loginDevices === 'account' && SETTINGS_DETAIL_TITLE.loginDevices === '登录设备' && settingsText('登录设备') === '登录设备');
 ck('H4 phone: the entry is gated on the hub supporting it (old hub → no row)', /const devices = show\('account', 'devices'\) && ctx\.sessions\.available;/.test(phone) && phone.includes("onPress={() => ctx.openDetail('loginDevices')}"));
-ck('H5 phone: this device says 本机 and cannot be signed out from the list', phone.includes("value={session.is_current ? tr('sessions.thisDevice') : tr('sessions.signOut')}") && phone.includes('onPress={session.is_current ? undefined : () => s.askRevokeOne(session, device.label)}'));
+ck('H5 phone: this device says 本机 and cannot be signed out from the list', phone.includes("value={session.is_current ? tr('sessions.thisDevice') : tr('sessions.signOut')}") && phone.includes('onPress={session.is_current ? undefined : () => s.askRevokeOne(session, label)}'));
 ck('H6 phone: 退出其他所有设备 is a destructive full-width button, only when there are others', /s\.others > 0 \? \(\s*<SettingsButton variant="destructive" label=\{tr\('sessions\.signOutOthers'\)\}/.test(phone));
 ck('H7 wide: row gated on support, opens its own pane page with a back to 账号', settings.includes("show('account', 'devices') && sessions.available && !compact") && settings.includes('testID="settings-devices-back"') && settings.includes('const showWideDevices = wideDevices && !compact && !searching && active === \'account\' && sessions.available;'));
 ck('H8 both layouts confirm before revoking (one shared dialog)', settings.includes('<Modal visible={!!sessions.confirm}') && settings.includes('onPress={sessions.runConfirm}') && (settings.match(/sessions\.askRevokeOthers/g) ?? []).length >= 1 && phone.includes('onPress={s.askRevokeOthers}'));
@@ -183,6 +184,37 @@ ck('H10 expired login: login page title says 登录已过期，请重新登录',
 ck('H11 App matches the 401 against sessionIdOf(cfg) (legacy phone accounts included) and clears it after re-login', app.includes('if (!cfg || profileId !== sessionIdOf(cfg)) return;') && app.includes('clearProfileUnauthorized(sessionIdOf(saved));'));
 ck('H12 login and register both send the device label', app.includes('await login(norm.url, username.trim(), password, clientLabel)') && app.includes('client_label: clientLabel'));
 ck('H13 switcher: opening it probes the other saved accounts', settings.includes('void probeSavedSessions(registry.profiles, sessionIdOf(cfg))'));
+
+// ── J. 按设备分组 + 「退出其他所有登录」的确认(2026-09-30:生产 admin 2617 条 user-login,client_label / UA 全空) ──
+{
+  const at = (h: number) => new Date(NOW - h * 3600_000).toISOString().replace('T', ' ').slice(0, 19);
+  const cur = S({ token_id: 'cur', is_current: true, client_label: 'macOS · 0.2.163', last_used_at: at(0) });
+  const scripts = Array.from({ length: 2617 }, (_, i) => S({ token_id: `s${i}`, last_used_at: at(1 + i) }));
+  const list = orderSessions([
+    ...scripts,
+    cur,
+    S({ token_id: 'mac2', client_label: 'macOS · 0.2.163', last_used_at: at(5) }),  // 另一台同版本 Mac:与本机同名,但不和本机并组
+    S({ token_id: 'a1', client_label: 'Android · 0.2.160', last_used_at: at(2) }),
+    S({ token_id: 'a2', client_label: 'Android · 0.2.160', last_used_at: at(30) }),
+    S({ token_id: 'curl', user_agent: 'curl/8.5.0', last_used_at: at(3) }),
+  ]);
+  const items = groupSessions(list);
+  const unnamed = items.find(x => x.type === 'group' && x.unnamed);
+  ck('J1 本机 stays its own first row, even when others share its label', items[0].type === 'session' && items[0].session.token_id === 'cur' && items.some(x => x.type === 'session' && x.session.token_id === 'mac2'));
+  ck('J2 NULL label + NULL UA → one 「未命名（多为脚本 / 命令行）」 group holding all 2617',
+    unnamed?.type === 'group' && unnamed.sessions.length === 2617 && unnamed.label === '未命名（多为脚本 / 命令行）', `${unnamed?.label} ${unnamed?.type === 'group' ? unnamed.sessions.length : '-'}`);
+  ck('J3 same client_label → one group with a count; a UA-only session groups by what the UA says', items.some(x => x.type === 'group' && x.label === 'Android · 0.2.160' && x.sessions.length === 2) && items.some(x => x.type === 'session' && x.label === '命令行或脚本'));
+  ck('J4 2622 sign-ins collapse to 5 top-level rows (本机, 未命名, Android, 命令行, other Mac)', items.length === 5, String(items.length));
+  ck('J5 groups ordered by their most recent sign-in', items.map(x => x.type === 'session' ? x.session.token_id : x.label).join('|') === 'cur|未命名（多为脚本 / 命令行）|Android · 0.2.160|curl|mac2', items.map(x => x.type === 'session' ? x.session.token_id : x.label).join('|'));
+  ck('J6 group subtitle: 「N 个登录 · 最近使用 …」; member subtitle: 「登录于 …」',
+    groupSubtitle((unnamed as any).sessions, NOW) === '2617 个登录 · 最近使用 1 小时前' && memberSubtitle(S({ created_at: at(48) }), NOW) === '登录于 2 天前', groupSubtitle((unnamed as any).sessions, NOW));
+  ck('J7 group key: label wins over UA; blank strings count as missing', sessionGroupKey(S({ client_label: 'iOS · 1', user_agent: 'okhttp' })).key === 'label:iOS · 1' && sessionGroupKey(S({ client_label: '  ', user_agent: ' ' })).unnamed);
+  ck('J8 the confirm states the exact count, names scripts and agents, and the button repeats the count',
+    translate('sessions.confirmOthersBody', { n: otherSessionCount(list) }) === '将退出其他 2621 个登录，包括脚本和 agent 使用的登录，它们需要重新登录。' && translate('sessions.confirmOthersOk', { n: 2621 }) === '退出 2621 个登录');
+  ck('J9 counts say 登录, not 台 (a login is not a device)', translate('sessions.count', { n: 2617 }) === '2617 个登录' && !/台/.test(translate('sessions.revokedOthers', { n: 3 })));
+  ck('J10 wide confirm: filled red destructive button carrying the count', settings.includes("style={[styles.modalButton, styles.modalDestructive]} onPress={sessions.runConfirm}") && /modalDestructive: \{ backgroundColor: colors\.failed/.test(settings) && settings.includes("tr('sessions.confirmOthersOk', { n: sessions.confirm.count })"));
+  ck('J11 both layouts render sessions.items (grouped), not the flat list', settings.includes('visibleSessions(sessions.items, sessions.showAll)') && phone.includes('visibleSessions(s.items, s.showAll)') && !settings.includes('visibleSessions(sessions.sessions') && !phone.includes('visibleSessions(s.sessions'));
+}
 
 // ── I. 文案 ──
 const used = new Set<string>();

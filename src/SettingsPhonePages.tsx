@@ -37,7 +37,7 @@ import { VOLC_CONSOLE_URL } from './voice-credentials-model';
 import { openExternal } from './open-external';
 import type { SettingsCategoryKey, SettingsDetailKey } from './settings-model';
 import type { LoginSessionsState } from './useLoginSessions';
-import { describeDevice, sessionSubtitle, visibleSessions, SESSIONS_VISIBLE_DEFAULT } from './login-sessions';
+import { groupTestKey, memberSubtitle, sessionSubtitle, visibleSessions, SESSIONS_VISIBLE_DEFAULT, type LoginSession } from './login-sessions';
 
 type KeepAliveSnapshot = { available: boolean; running: boolean; error: string | null };
 
@@ -240,7 +240,7 @@ function LoginDevicesPage({ ctx }: { ctx: PhonePagesCtx }) {
   useTranslation();
   const s = ctx.sessions;
   const now = Date.now();
-  const shown = visibleSessions(s.sessions, s.showAll);
+  const shown = visibleSessions(s.items, s.showAll);
   const footer = s.message?.text ?? (s.idleDays ? tr('sessions.idleFooter', { n: s.idleDays }) : undefined);
   if (s.error) {
     return (
@@ -250,28 +250,48 @@ function LoginDevicesPage({ ctx }: { ctx: PhonePagesCtx }) {
       </>
     );
   }
+  // 一条登录一行(本机 / 只出现一次的设备名);同一设备名的多条并成一行组头「N 个」,点开在下面列出每一条。
+  const sessionRow = (session: LoginSession, label: string, member: boolean) => (
+    <SettingsRow
+      key={session.token_id}
+      testID={session.is_current ? 'login-device-current' : `login-device-${session.token_id}`}
+      label={member ? sessionSubtitle(session, now) : label}
+      subtitle={member ? memberSubtitle(session, now) : sessionSubtitle(session, now)}
+      value={session.is_current ? tr('sessions.thisDevice') : tr('sessions.signOut')}
+      valueTone={session.is_current ? 'muted' : 'danger'}
+      chevron={false}
+      busy={s.busy === session.token_id}
+      onPress={session.is_current ? undefined : () => s.askRevokeOne(session, label)}
+      accessibilityLabel={session.is_current ? `${label} · ${tr('sessions.thisDevice')}` : tr('sessions.signOutLabel', { name: label })}
+    />
+  );
   return (
     <>
       <SettingsGroup testID="login-devices-list" footer={footer} footerTone={s.message ? (s.message.ok ? 'accent' : 'danger') : undefined}>
-        {shown.map(session => {
-          const device = describeDevice(session);
-          return (
+        {shown.flatMap((item, index) => {
+          if (item.type === 'session') return [sessionRow(item.session, item.label, false)];
+          const gid = `login-devices-group-${groupTestKey(item, index)}`;
+          const open = s.expanded.has(item.key);
+          const members = visibleSessions(item.sessions, s.groupShowAll.has(item.key));
+          return [
             <SettingsRow
-              key={session.token_id}
-              testID={session.is_current ? 'login-device-current' : `login-device-${session.token_id}`}
-              label={device.label}
-              subtitle={sessionSubtitle(session, now)}
-              value={session.is_current ? tr('sessions.thisDevice') : tr('sessions.signOut')}
-              valueTone={session.is_current ? 'muted' : 'danger'}
-              chevron={false}
-              busy={s.busy === session.token_id}
-              onPress={session.is_current ? undefined : () => s.askRevokeOne(session, device.label)}
-              accessibilityLabel={session.is_current ? `${device.label} · ${tr('sessions.thisDevice')}` : tr('sessions.signOutLabel', { name: device.label })}
-            />
-          );
+              key={item.key}
+              testID={gid}
+              label={item.label}
+              subtitle={sessionSubtitle(item.sessions[0], now)}
+              value={tr('sessions.groupCount', { n: item.sessions.length })}
+              chevron
+              onPress={() => s.toggleGroup(item.key)}
+              accessibilityLabel={tr(open ? 'sessions.collapseGroup' : 'sessions.expandGroup', { name: item.label })}
+            />,
+            ...(open ? members.map(m => sessionRow(m, item.label, true)) : []),
+            ...(open && members.length < item.sessions.length
+              ? [<SettingsRow key={`${item.key}-all`} label={tr('sessions.showAll', { n: item.sessions.length })} tone="accent" chevron={false} onPress={() => s.showAllInGroup(item.key)} testID={`${gid}-show-all`} />]
+              : []),
+          ];
         })}
-        {!s.showAll && s.sessions.length > SESSIONS_VISIBLE_DEFAULT ? (
-          <SettingsRow label={tr('sessions.showAll', { n: s.sessions.length })} tone="accent" chevron={false} onPress={() => s.setShowAll(true)} testID="login-devices-show-all" />
+        {!s.showAll && s.items.length > SESSIONS_VISIBLE_DEFAULT ? (
+          <SettingsRow label={tr('sessions.showAll', { n: s.items.length })} tone="accent" chevron={false} onPress={() => s.setShowAll(true)} testID="login-devices-show-all" />
         ) : null}
       </SettingsGroup>
       {s.others > 0 ? (

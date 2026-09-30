@@ -34,7 +34,12 @@ const others = [
   { ua: 'node', usedAgo: 9 * D },
   { usedAgo: null, createdAgo: 20 * D },
   ...Array.from({ length: 19 }, (_, i) => ({ label: `iOS · 0.2.${100 + i}`, usedAgo: (10 + i) * D })),
+  // 分组(2026-09-30):同名的两条再加进「Windows · 0.2.140」(→ 一组 3 个);40 条 label 与 UA 都为空的脚本登录
+  // (加上上面那条 → 「未命名(多为脚本 / 命令行)」一组 41 个)。共 67 条,顶层 25 项。
+  { label: 'Windows · 0.2.140', usedAgo: 4 * D }, { label: 'Windows · 0.2.140', usedAgo: 6 * D },
+  ...Array.from({ length: 40 }, (_, i) => ({ usedAgo: (30 + i) * D, createdAgo: (31 + i) * D })),
 ];
+const TOTAL = others.length + 1; // + 本机
 const MAC_UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 14_0) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15';
 const tid = (id) => `[data-testid="${id}"]`;
 const r1 = (n) => Math.round(n * 10) / 10;
@@ -77,6 +82,9 @@ async function openAccount(page, wide) {
 }
 const entry = (wide) => tid(wide ? 'settings-login-devices-row' : 'settings-login-devices');
 const rowSel = '[data-testid^="login-device-"]:not([data-testid$="-label"]):not([data-testid$="-value"]):not([data-testid$="-accessory"]):not([data-testid$="-signout"]):not([data-testid$="-badge"])';
+// 顶层条目 = 单条的行 + 组头(login-devices-group-*,不含它的 -label / -subtitle / -count / -value / -accessory / -show-all)。
+const groupSel = '[data-testid^="login-devices-group-"]:not([data-testid$="-label"]):not([data-testid$="-subtitle"]):not([data-testid$="-count"]):not([data-testid$="-value"]):not([data-testid$="-accessory"]):not([data-testid$="-show-all"])';
+const itemSel = `${rowSel}, ${groupSel}`;
 
 async function run(vp, viewport, ua, wide) {
   const hubA = await startMockHub({ name: `a${vp}`, username: 'alice', password: 'pw-a', networkId: 'net_mock_a', agents: ['alpha-agent'], others });
@@ -107,7 +115,7 @@ async function run(vp, viewport, ua, wide) {
       sameX: Math.abs(dev.x - add.x) <= 0.5, sameW: Math.abs(dev.w - add.w) <= 0.5, below: dev.y >= add.b,
       labelX: Math.abs(devLabel.x - addLabel.x) <= 0.5, chevronRight: Math.abs(devAcc.r - addAcc.r) <= 0.5,
       minH: dev.h >= 48, gutter16: Math.abs(dev.x - 16) <= 1 && Math.abs(viewport.width - dev.r - 16) <= 1,
-      count: value === '25 台',
+      count: value === `${TOTAL} 个登录`,
     }, { dev, add, devLabel, addLabel, devAcc, addAcc, value });
   } else {
     const dev = await box(page, entry(true));
@@ -127,7 +135,7 @@ async function run(vp, viewport, ua, wide) {
   await page.locator(tid('login-device-current')).waitFor({ timeout: 8000 });
   await sleep(400);
   await page.screenshot({ path: join(OUT, `${vp}-devices.png`), fullPage: false });
-  const rows = await page.locator(rowSel).evaluateAll(els => els.filter(e => e.getBoundingClientRect().height > 0).map(e => e.getAttribute('data-testid')));
+  const rows = await page.locator(itemSel).evaluateAll(els => els.filter(e => e.getBoundingClientRect().height > 0).map(e => e.getAttribute('data-testid')));
   const firstText = await page.locator(tid('login-device-current')).innerText();
   const secondText = await page.locator(tid(rows[1])).innerText();
   const showAll = await page.locator(tid('login-devices-show-all')).isVisible().catch(() => false);
@@ -146,13 +154,15 @@ async function run(vp, viewport, ua, wide) {
         if (!row || !lab || !val) continue;
         const rb = row.getBoundingClientRect(), lb = lab.getBoundingClientRect(), vb = val.getBoundingClientRect();
         if (rb.bottom > window.innerHeight || rb.top < 0) continue; // only what is on screen
-        out.push({ id, rowX: rb.x, rowR: rb.right, h: rb.height, labelX: lb.x, valueR: vb.right, valueCy: vb.y + vb.height / 2, rowCy: rb.y + rb.height / 2 });
+        const acc = document.querySelector(`[data-testid="${id}-accessory"]`)?.getBoundingClientRect();
+        out.push({ id, group: id.startsWith('login-devices-group-'), accR: acc?.right, rowX: rb.x, rowR: rb.right, h: rb.height, labelX: lb.x, valueR: vb.right, valueCy: vb.y + vb.height / 2, rowCy: rb.y + rb.height / 2 });
       }
       return out;
     }, rows);
     record(vp, '3 phone: list content + geometry', {
       ...content, title: title === '登录设备', titlePainted: !!titlePaint?.painted && titlePaint.w >= 8, visibleRows: g.length >= 8,
-      labelsAligned: same(g.map(x => x.labelX), 0.5), valuesRightAligned: same(g.map(x => x.valueR), 0.5),
+      labelsAligned: same(g.map(x => x.labelX), 0.5), valuesRightAligned: same(g.filter(x => !x.group).map(x => x.valueR), 0.5),
+      groupChevronsAtValueEdge: g.filter(x => x.group).every(x => Math.abs(x.accR - g.find(y => !y.group).valueR) <= 0.5),
       rowsSameWidth: same(g.map(x => x.rowR - x.rowX), 0.5), rows48: g.every(x => x.h >= 48),
       valueVCentred: g.every(x => Math.abs(x.valueCy - x.rowCy) <= 1),
       gutter16: g.every(x => Math.abs(x.rowX - 16) <= 1 && Math.abs(viewport.width - x.rowR - 16) <= 1),
@@ -181,8 +191,48 @@ async function run(vp, viewport, ua, wide) {
   }
   await page.locator(tid('login-devices-show-all')).click();
   await sleep(300);
-  const allRows = await page.locator(rowSel).count();
-  record(vp, '3 显示全部 shows all 25', { all: allRows === 25 }, { allRows });
+  const allRows = await page.locator(itemSel).count();
+  record(vp, '3 显示全部 shows all 25 top-level items', { all: allRows === 25 }, { allRows });
+
+  // 3b groups: 「未命名（多为脚本 / 命令行）」 with its count; a named group (Windows × 3); expanding lists members, 20 + 显示全部
+  const UG = 'login-devices-group-unnamed';
+  const ug = tid(UG), ugPart = (suffix) => tid(`${UG}-${suffix}`);
+  await page.locator(ug).scrollIntoViewIfNeeded();
+  const ugLabel = await page.locator(ugPart('label')).innerText();
+  const ugPaint = await paintedText(page, ugPart('label'), '未命名（多为脚本 / 命令行）');
+  // wide: the count is in the subtitle (「41 个登录 · 最近使用 …」); phone: the value on the right (「41 个登录」), subtitle = 最近使用 …
+  const ugCount = wide ? await page.locator(ugPart('subtitle')).innerText() : await page.locator(ugPart('value')).innerText();
+  const ugSub = await page.locator(ug).innerText();
+  const winGroup = await page.locator(groupSel).filter({ hasText: 'Windows · 0.2.140' }).count();
+  const winSingle = await page.locator(rowSel).filter({ hasText: 'Windows · 0.2.140' }).count();
+  await page.screenshot({ path: join(OUT, `${vp}-devices-groups.png`) });
+  await page.locator(ug).click();
+  await sleep(400);
+  const groupAll = await page.locator(ugPart('show-all')).isVisible().catch(() => false);
+  const mg = await page.evaluate(({ UG }) => {
+    const q = (id) => document.querySelector(`[data-testid="${id}"]`);
+    const head = q(UG), hl = q(`${UG}-label`), all = q(`${UG}-show-all`);
+    const hb = head.getBoundingClientRect(), ab = all?.getBoundingClientRect();
+    // the group's members = session rows laid out between the group head and its own 显示全部
+    const ms = [...document.querySelectorAll('[data-testid^="login-device-tok_"]')]
+      .filter(e => !/-(label|value|accessory|signout|badge)$/.test(e.getAttribute('data-testid')))
+      .map(e => ({ e, b: e.getBoundingClientRect() }))
+      .filter(x => x.b.height > 0 && x.b.top >= hb.bottom - 0.5 && (!ab || x.b.bottom <= ab.top + 0.5));
+    const m = ms[0];
+    const ml = m && document.querySelector(`[data-testid="${m.e.getAttribute('data-testid')}-label"]`);
+    return { count: ms.length, headLabelX: hl.getBoundingClientRect().x, memberLabelX: ml?.getBoundingClientRect().x, headR: hb.right, memberR: m?.b.right, memberH: m?.b.height, memberText: m?.e.innerText };
+  }, { UG });
+  await page.screenshot({ path: join(OUT, `${vp}-devices-group-open.png`) });
+  record(vp, '3b groups: 未命名 group with count, named group, expand → members', {
+    unnamedLabel: ugLabel === '未命名（多为脚本 / 命令行）', unnamedPainted: !!ugPaint?.painted && ugPaint.w >= 8,
+    unnamedCount: wide ? /^41 个登录 · 最近使用 /.test(ugCount) : ugCount === '41 个登录', countSaidOnce: (ugSub.match(/41 个登录/g) ?? []).length === 1, saysLastUsed: /最近使用 \d+ 天前/.test(ugSub),
+    windowsIsOneGroup: winGroup === 1 && winSingle === 0,
+    twentyMembers: mg.count === 20, groupShowAll: groupAll, memberSaysWhen: /最近使用/.test(mg.memberText ?? '') && /登录于/.test(mg.memberText ?? ''),
+    memberSameRight: Math.abs(mg.memberR - mg.headR) <= 0.5,
+    memberLabelAligned: Math.abs(mg.memberLabelX - mg.headLabelX) <= 0.5, memberH48: mg.memberH >= 48,
+  }, { ugCount, ugSub, mg, ugPaint });
+  await page.locator(ug).click();
+  await sleep(300);
 
   // 4 revoke one
   const victim = rows[1];
@@ -193,7 +243,7 @@ async function run(vp, viewport, ua, wide) {
   const confirmText = await page.locator(tid('login-devices-confirm')).innerText();
   await page.locator(tid('login-devices-confirm-ok')).click();
   const gone = await waitFor(async () => !(await page.locator(tid(victim)).isVisible()));
-  record(vp, '4 退出 one device', { confirmNamesIt: confirmText.includes('Android · 0.2.150') && confirmText.includes('退出这台设备'), deleteCalled: hubA.calls().some(c => c.what === `DELETE /api/auth/sessions/${victim.replace('login-device-', '')}`), gone: !!gone, left: hubA.sessionCount() === 24 });
+  record(vp, '4 退出 one device', { confirmNamesIt: confirmText.includes('Android · 0.2.150') && confirmText.includes('退出这台设备'), deleteCalled: hubA.calls().some(c => c.what === `DELETE /api/auth/sessions/${victim.replace('login-device-', '')}`), gone: !!gone, left: hubA.sessionCount() === TOTAL - 1 });
 
   // 5 revoke others
   await page.locator(tid('login-devices-revoke-others')).scrollIntoViewIfNeeded();
@@ -205,14 +255,19 @@ async function run(vp, viewport, ua, wide) {
   await page.locator(tid('login-devices-confirm')).waitFor({ timeout: 5000 });
   const confirmOthers = await page.locator(tid('login-devices-confirm')).innerText();
   await sleep(500);
+  const okBtn = await page.evaluate((sel) => { const e = document.querySelector(sel); const cs = getComputedStyle(e); const t = e.querySelector('*:not(:has(*))') ?? e; return { bg: cs.backgroundColor, color: getComputedStyle(t).color, text: e.innerText, ...(() => { const b = e.getBoundingClientRect(); return { w: b.width, h: b.height }; })() }; }, tid('login-devices-confirm-ok'));
+  const cancelBtn = await box(page, tid('login-devices-confirm-cancel'));
+  const okBox = await box(page, tid('login-devices-confirm-ok'));
+  const card = await box(page, tid('login-devices-confirm'));
   await page.screenshot({ path: join(OUT, `${vp}-confirm-others.png`) });
   await page.locator(tid('login-devices-confirm-ok')).click();
   const onlyMe = await waitFor(async () => (await page.locator(rowSel).count()) === 1);
   await sleep(300);
   await page.screenshot({ path: join(OUT, `${vp}-after-revoke-others.png`) });
   const body = await page.evaluate(() => document.body.innerText);
-  const toast = await paintedText(page, ':not(:has(*))', '已退出 23 台设备') // the leaf that holds the text, not a full-width wrapper;
-  record(vp, '5 退出其他所有设备', { confirmCount: confirmOthers.includes('23 台'), called: hubA.calls().some(c => c.what === 'POST /api/auth/sessions/revoke-others'), onlyMe: !!onlyMe, serverKeptOne: hubA.sessionCount() === 1, message: body.includes('已退出 23 台设备'), messagePainted: !!toast?.painted && toast.w >= 8, noButtonLeft: !(await page.locator(tid('login-devices-revoke-others')).isVisible().catch(() => false)) }, { toast });
+  const others2 = TOTAL - 2; // 本机 + 第 4 步退出的那台
+  const toast = await paintedText(page, ':not(:has(*))', `已退出 ${others2} 个登录`); // the leaf that holds the text, not a full-width wrapper
+  record(vp, '5 退出其他所有设备', { confirmCount: confirmOthers.includes(`将退出其他 ${others2} 个登录，包括脚本和 agent 使用的登录，它们需要重新登录。`), okSaysCount: okBtn.text.trim() === `退出 ${others2} 个登录`, okFilledRed: okBtn.bg === 'rgb(220, 38, 38)' && okBtn.color === 'rgb(255, 255, 255)', buttonsSameRow: Math.abs(okBox.y - cancelBtn.y) <= 0.5 && Math.abs(okBox.h - cancelBtn.h) <= 0.5 && okBox.x > cancelBtn.r, okInsideCard: okBox.r <= card.r + 0.5 && okBox.b <= card.b + 0.5, called: hubA.calls().some(c => c.what === 'POST /api/auth/sessions/revoke-others'), onlyMe: !!onlyMe, serverKeptOne: hubA.sessionCount() === 1, message: body.includes(`已退出 ${others2} 个登录`), messagePainted: !!toast?.painted && toast.w >= 8, noButtonLeft: !(await page.locator(tid('login-devices-revoke-others')).isVisible().catch(() => false)) }, { toast, okBtn, okBox, cancelBtn, card });
 
   // 6 token_expired → login page says so
   await fetch(`${hubA.url}/__expire`, { method: 'POST' });
