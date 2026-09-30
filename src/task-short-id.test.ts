@@ -66,4 +66,13 @@ ck('chip: phone screen-reader action for the full id', chip.includes("accessibil
 ck('chip: desktop gets a visible 复制完整 ID button, phone does not', chip.includes('{pointer && short ? (') && chip.includes('testID="req-detail-id-copy-full"'));
 ck('chip: old hub shows the uuid prefix', chip.includes('short ?? idPrefix(item.id)'));
 
+// ── 请求永远按主键,不按短号 ──
+// 短号只在一个网络里唯一;owner 是跨很多网络的 Hub 管理员,按 #N 请求会撞 409 ambiguous_seq。app 的读写一律用 req_ 主键
+// (全局唯一),#N 只用于显示、复制和本地搜索。
+const hub = src('requirements-hub.ts');
+const paths = hub.split('\n').filter(l => l.includes('/api/requirements/'));
+ck('every per-task request path is built from the task id', paths.filter(l => l.includes('/api/requirements/${')).length >= 3 && paths.filter(l => l.includes('/api/requirements/${')).every(l => /\/api\/requirements\/\$\{encodeURIComponent\(id\)\}/.test(l)));
+ck('no request path uses seq or an encoded #', !/%23|seq/.test(paths.join('\n')));
+ck('the list request is network-scoped', hub.includes("scoped(cfg, '/api/requirements')"));
+
 console.log(`${p}/${t} passed`); if (p !== t) process.exit(1);
