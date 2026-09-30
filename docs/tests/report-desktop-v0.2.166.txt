@@ -1,0 +1,12 @@
+desktop v0.2.166 — 更新日志页、手机端分享图导出 PNG、同步流量下降
+================================================================================
+A. 本版内容(0.2.165 发版提交 025cedfb 之后 main 上合入的 PR + 本 PR)
+  #604 设置 → 关于 → 更新日志:全部版本倒序带日期,单个 / 多选复制,小红书 / 公众号 / 纯文本预览,手机端复制后可分享,离线显示内置说明
+       新增发版步骤:加 What's new 后运行 node scripts/changelog-bundle.mjs 并提交 src/changelog-bundled.ts
+  #600 手机端「生成分享图」用 react-native-view-shot 导出真实 PNG(原生模块,只在新 APK/IPA 生效)
+  #603 回复收件箱增量读取、聊天 user_inbox 每次 50 条;桌面聊天 + 侧栏约 2.16 → 0.62 MB/分钟(gzip,按生产单次请求大小估算)
+  本 PR(版本号):0.2.165 → 0.2.166,versionCode 2165 → 2166;release-desktop-auto-update.yml 加 What's new in 0.2.166;重新生成 src/changelog-bundled.ts。
+  本地:干净 origin/main(20d02c9c)bump 后 npm ci / npm test(289/289)/ npm run typecheck 全部 rc=0;android-release-notes.mjs 0.2.166 rc=0(3 条)。
+B. 验证边界(如实)
+  本 PR 只改版本号与说明;功能验证见各 PR。
+  更新日志页的手机「分享」和电脑剪贴板、手机分享图导出都没有在真机上验证过。
