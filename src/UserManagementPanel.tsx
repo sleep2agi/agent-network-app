@@ -15,13 +15,13 @@ import { colors, onThemeChange, radius, spacing } from './theme';
 import { useTranslation } from './i18n-react';
 import { t as tr } from './i18n';
 import './i18n-users';
-import { SettingsButton, SettingsChoiceRow, SettingsGroup, SettingsRow, SettingsSwitchRow, SettingsTextField } from './settings-kit';
+import { SettingsButton, SettingsChoiceRow, SettingsGroup, SettingsRow, SettingsSwitchRow, SettingsTextField, SettingsTriStateRow } from './settings-kit';
 import { useModalSafePadding } from './safe-area-runtime';
 import DialogFrame, { useDialogReveal } from './DialogFrame';
 import {
   ASSIGNABLE_ROLES, aliasOnlyGrants, canAddAdminsIn, canManageUsers, manageableNetworks, currentNetworkRow, filterNetworkChoices, filterPickable, grantsEditable, grantsPayload,
-  initialAccessMode, memberAccessSummary, memberActions, memberSavePlan, prefillOnRestrict, selectionFromGrants, setCanMessage, showsCanMessage, toggleAgent, validateNewUser,
-  type AgentAccess, type AgentGrant, type AuthMe, type MemberRole, type NetworkChoice, type NetworkMember, type PickableAgent,
+  groupAgents, initialAccessMode, memberAccessSummary, selectAgents, selectionState, toggleAgents, memberActions, memberSavePlan, prefillOnRestrict, selectionFromGrants, setCanMessage, showsCanMessage, toggleAgent, validateNewUser,
+  type AgentAccess, type AgentGrant, type AgentGroup, type AuthMe, type GroupBy, type MemberRole, type NetworkChoice, type NetworkMember, type PickableAgent,
 } from './user-admin';
 import { createHubUser, fetchAgentGrants, fetchNetworkMembers, fetchNetworks, removeNetworkMember, saveAgentGrants, updateMemberRole } from './user-admin-api';
 
@@ -250,6 +250,29 @@ function NewUserDialog({ cfg, me, networkId, networks, onClose, onCreated }: {
   );
 }
 
+const GROUP_BYS: readonly GroupBy[] = ['none', 'host', 'runtime'];
+
+/** 分组标题:机器名 / 类型名;空值是「未知机器 / 未知类型」。 */
+function groupLabel(g: AgentGroup, by: GroupBy): string {
+  if (g.label) return g.label;
+  return by === 'host' ? tr('users.unknownHost') : tr('users.unknownRuntime');
+}
+
+function triChecked(sel: ReadonlyMap<string, boolean>, agents: readonly PickableAgent[]): boolean | 'mixed' {
+  const st = selectionState(sel, agents);
+  return st === 'all' ? true : st === 'some' ? 'mixed' : false;
+}
+
+/** 宽屏分组标题前的三态复选框:■✓ 全选 / ■— 部分 / □ 没选(和 Agent 行的复选框同尺寸同色)。 */
+function TriCheck({ state }: { state: 'all' | 'some' | 'none' }) {
+  if (state === 'none') return <Ionicons name="square-outline" size={20} color={colors.textMuted} />;
+  return (
+    <View style={styles.triOn}>
+      <Ionicons name={state === 'all' ? 'checkmark' : 'remove'} size={14} color={colors.onAccent} />
+    </View>
+  );
+}
+
 /** 成员编辑的状态与保存/移出(宽屏弹窗与手机三级页共用;两端只换画法)。 */
 function useMemberEditor(cfg: HubConfig, me: AuthMe | null, networkId: string, member: NetworkMember, onDone: (message: string) => void) {
   const acts = memberActions(me, networkId, member);
@@ -271,7 +294,7 @@ function useMemberEditor(cfg: HubConfig, me: AuthMe | null, networkId: string, m
     void Promise.all([fetchHubNodes({ ...cfg, networkId }), fetchAgentGrants(cfg, networkId, member.user_id)])
       .then(([nodes, grants]) => {
         if (!live) return;
-        setAgents((nodes.nodes ?? []).map(n => ({ node_id: n.node_id, alias: n.alias, display_name: (n as any).display_name ?? null, role: n.role ?? null })));
+        setAgents((nodes.nodes ?? []).map(n => ({ node_id: n.node_id, alias: n.alias, display_name: (n as any).display_name ?? null, role: n.role ?? null, hostname: n.hostname ?? null, runtime: n.runtime ?? null })));
         setOriginal(grants.grants ?? []);
         setSelection(selectionFromGrants(grants.grants ?? []));
         const m = initialAccessMode(grants.agent_access);
@@ -282,6 +305,11 @@ function useMemberEditor(cfg: HubConfig, me: AuthMe | null, networkId: string, m
   }, [cfg, networkId, member.user_id, needGrants]);
   const before = useMemo(() => selectionFromGrants(original), [original]);
   const visible = useMemo(() => filterPickable(agents ?? [], query), [agents, query]);
+  const [groupBy, setGroupBy] = useState<GroupBy>('none');
+  const groups = useMemo<AgentGroup[] | null>(() => (groupBy === 'none' ? null : groupAgents(visible, groupBy)), [visible, groupBy]);
+  const toggleGroup = (list: readonly PickableAgent[]) => setSelection(s => toggleAgents(s, list, role));
+  const selectVisible = () => setSelection(s => selectAgents(s, visible, role));
+  const clearAll = () => setSelection(new Map());
   const setMode = (next: AgentAccess) => {
     if (next === 'granted' && mode === 'all') setSelection(s => prefillOnRestrict(s, agents ?? [], role));
     setModeState(next);
@@ -307,6 +335,7 @@ function useMemberEditor(cfg: HubConfig, me: AuthMe | null, networkId: string, m
   };
   return {
     acts, name, agents, visible, selection, setSelection, mode, setMode, role, setRole, query, setQuery,
+    groupBy, setGroupBy, groups, toggleGroup, selectVisible, clearAll,
     busy, error, confirmRemove, setConfirmRemove, accessEditable, changed: plan.role || plan.grants, save, remove,
   };
 }
@@ -374,13 +403,39 @@ function MemberDialog({ cfg, me, networkId, member, onClose, onDone }: { cfg: Hu
               <Ionicons name="search-outline" size={15} color={colors.textMuted} />
               <TextInput value={ed.query} onChangeText={ed.setQuery} editable={restricted} placeholder={tr('users.search')} placeholderTextColor={colors.textMuted} accessibilityLabel={tr('users.search')} autoCapitalize="none" autoCorrect={false} style={styles.searchInput} testID="grants-search" />
             </View>
+            <View style={styles.toolbar} testID="grants-toolbar">
+              <View style={[styles.segmented, styles.segmentedSmall]} accessibilityRole="radiogroup" testID="grants-group-by">
+                {GROUP_BYS.map(g => (
+                  <Pressable key={g} accessibilityRole="radio" accessibilityState={{ selected: ed.groupBy === g, checked: ed.groupBy === g }} aria-checked={ed.groupBy === g} onPress={() => ed.setGroupBy(g)} style={[styles.segment, styles.segmentSmall, ed.groupBy === g && styles.segmentOn]} testID={`grants-group-by-${g}`}>
+                    <Text style={[styles.segmentTextSmall, ed.groupBy === g && styles.segmentTextOn]} numberOfLines={1} testID={`grants-group-by-${g}-text`}>{tr(`users.groupBy.${g}`)}</Text>
+                  </Pressable>
+                ))}
+              </View>
+              <View style={styles.toolbarLinks}>
+                <Pressable accessibilityRole="button" onPress={ed.selectVisible} hitSlop={6} style={({ pressed }) => [styles.linkBtnSmall, pressed && styles.pressed]} testID="grants-select-visible">
+                  <Text style={styles.link} numberOfLines={1}>{ed.query.trim() ? tr('users.selectResults') : tr('users.selectAll')}</Text>
+                </Pressable>
+                <Pressable accessibilityRole="button" onPress={ed.clearAll} hitSlop={6} style={({ pressed }) => [styles.linkBtnSmall, pressed && styles.pressed]} testID="grants-clear">
+                  <Text style={styles.link} numberOfLines={1}>{tr('users.clearAll')}</Text>
+                </Pressable>
+              </View>
+            </View>
             <ScrollView style={styles.list} contentContainerStyle={styles.listContent} testID="grants-list">
               {ed.agents === null ? <ActivityIndicator style={{ marginVertical: spacing.lg }} color={colors.textMuted} /> : null}
               {ed.agents && !ed.visible.length ? <Text style={styles.empty}>{ed.agents.length ? tr('users.noMatch') : tr('users.noAgents')}</Text> : null}
-              {ed.visible.map(a => {
+              {(ed.groups ?? [{ key: '', label: null, agents: ed.visible }]).map(g => (
+                <View key={`g-${g.key}`}>
+                  {ed.groups ? (
+                    <Pressable accessibilityRole="checkbox" accessibilityState={{ checked: triChecked(ed.selection, g.agents) }} aria-checked={triChecked(ed.selection, g.agents)} accessibilityLabel={groupLabel(g, ed.groupBy)} disabled={!restricted} onPress={() => ed.toggleGroup(g.agents)} style={({ pressed }) => [styles.groupHeader, pressed && styles.pressed]} testID={`grant-group-${g.key || 'unknown'}`}>
+                      <TriCheck state={selectionState(ed.selection, g.agents)} />
+                      <Text style={styles.groupName} numberOfLines={1}>{groupLabel(g, ed.groupBy)}</Text>
+                      <Text style={styles.groupCount} testID={`grant-group-${g.key || 'unknown'}-count`}>{tr('users.groupCount', { on: g.agents.filter(a => ed.selection.has(a.node_id)).length, total: g.agents.length })}</Text>
+                    </Pressable>
+                  ) : null}
+              {g.agents.map(a => {
                 const on = ed.selection.has(a.node_id);
                 return (
-                  <View key={a.node_id} style={styles.agentRow} testID={`grant-row-${a.alias}`}>
+                  <View key={a.node_id} style={[styles.agentRow, ed.groups && styles.agentRowGrouped]} testID={`grant-row-${a.alias}`}>
                     <Pressable accessibilityRole="checkbox" accessibilityState={{ checked: on, disabled: !restricted }} aria-checked={on} disabled={!restricted} accessibilityLabel={a.alias} onPress={() => ed.setSelection(s => toggleAgent(s, a.node_id))} style={styles.agentPick} testID={`grant-toggle-${a.alias}`}>
                       <Ionicons name={on ? 'checkbox' : 'square-outline'} size={20} color={on ? colors.accent : colors.textMuted} />
                       <AliasAvatar alias={a.alias} size={28} />
@@ -405,8 +460,11 @@ function MemberDialog({ cfg, me, networkId, member, onClose, onDone }: { cfg: Hu
                   </View>
                 );
               })}
+                </View>
+              ))}
             </ScrollView>
             <Text style={styles.hint} testID="grants-count">{tr('users.selected', { count: ed.selection.size })}</Text>
+            <Text style={styles.hint} testID="grants-one-time">{tr('users.oneTimeNote')}</Text>
           </View>
         </>
       ) : null}
@@ -440,21 +498,51 @@ function MemberPage({ cfg, me, networkId, member, onDone }: { cfg: HubConfig; me
         </SettingsGroup>
       ) : null}
       {ed.accessEditable && restricted ? (
-        <SettingsGroup title={tr('users.agents')} footer={tr('users.selected', { count: ed.selection.size })} testID="member-page-agents">
-          <SettingsTextField value={ed.query} onChangeText={ed.setQuery} placeholder={tr('users.search')} accessibilityLabel={tr('users.search')} testID="grants-search" />
-          {ed.agents === null ? <SettingsRow label={tr('users.loading')} busy testID="member-page-loading" /> : null}
-          {ed.agents && !ed.visible.length ? <SettingsRow label={ed.agents.length ? tr('users.noMatch') : tr('users.noAgents')} tone="muted" testID="member-page-empty" /> : null}
-          {ed.visible.map(a => (
-            <SettingsChoiceRow
-              key={a.node_id}
-              label={a.display_name || a.alias}
-              subtitle={a.display_name ? a.alias : undefined}
-              selected={ed.selection.has(a.node_id)}
-              onPress={() => ed.setSelection(s => toggleAgent(s, a.node_id))}
-              testID={`grant-toggle-${a.alias}`}
-            />
+        <>
+          <SettingsGroup title={tr('users.groupBy')} testID="member-page-group-by">
+            {GROUP_BYS.map(g => (
+              <SettingsChoiceRow key={g} label={tr(`users.groupBy.${g}`)} selected={ed.groupBy === g} onPress={() => ed.setGroupBy(g)} testID={`grants-group-by-${g}`} />
+            ))}
+          </SettingsGroup>
+          <SettingsGroup title={tr('users.agents')} footer={tr('users.oneTimeNote')} testID="member-page-agents">
+            <SettingsTextField value={ed.query} onChangeText={ed.setQuery} placeholder={tr('users.search')} accessibilityLabel={tr('users.search')} testID="grants-search" />
+            <SettingsRow label={ed.query.trim() ? tr('users.selectResults') : tr('users.selectAll')} tone="accent" chevron={false} onPress={ed.selectVisible} testID="grants-select-visible" />
+            <SettingsRow label={tr('users.clearAll')} value={tr('users.selected', { count: ed.selection.size })} tone="accent" chevron={false} onPress={ed.clearAll} testID="grants-clear" />
+            {ed.agents === null ? <SettingsRow label={tr('users.loading')} busy testID="member-page-loading" /> : null}
+            {ed.agents && !ed.visible.length ? <SettingsRow label={ed.agents.length ? tr('users.noMatch') : tr('users.noAgents')} tone="muted" testID="member-page-empty" /> : null}
+            {!ed.groups ? ed.visible.map(a => (
+              <SettingsChoiceRow
+                key={a.node_id}
+                label={a.display_name || a.alias}
+                subtitle={a.display_name ? a.alias : undefined}
+                selected={ed.selection.has(a.node_id)}
+                onPress={() => ed.setSelection(s => toggleAgent(s, a.node_id))}
+                testID={`grant-toggle-${a.alias}`}
+              />
+            )) : null}
+          </SettingsGroup>
+          {(ed.groups ?? []).map(g => (
+            <SettingsGroup key={`g-${g.key}`} title={groupLabel(g, ed.groupBy)} testID={`member-page-group-${g.key || 'unknown'}`}>
+              <SettingsTriStateRow
+                label={ed.groupBy === 'host' ? tr('users.selectHost') : tr('users.selectRuntime')}
+                subtitle={tr('users.groupSelected', { on: g.agents.filter(a => ed.selection.has(a.node_id)).length, total: g.agents.length })}
+                state={selectionState(ed.selection, g.agents)}
+                onPress={() => ed.toggleGroup(g.agents)}
+                testID={`grant-group-${g.key || 'unknown'}`}
+              />
+              {g.agents.map(a => (
+                <SettingsChoiceRow
+                  key={a.node_id}
+                  label={a.display_name || a.alias}
+                  subtitle={a.display_name ? a.alias : undefined}
+                  selected={ed.selection.has(a.node_id)}
+                  onPress={() => ed.setSelection(s => toggleAgent(s, a.node_id))}
+                  testID={`grant-toggle-${a.alias}`}
+                />
+              ))}
+            </SettingsGroup>
           ))}
-        </SettingsGroup>
+        </>
       ) : null}
       {ed.accessEditable && restricted && chat && picked.length ? (
         <SettingsGroup title={tr('users.canMessageGroup')} footer={tr('users.canMessageFooter')} testID="member-page-chat">
@@ -512,6 +600,18 @@ const makeStyles = () => StyleSheet.create({
   pickerRowOn: { backgroundColor: colors.subtleFill },
   pickerRowText: { flex: 1, minWidth: 0, color: colors.text, fontSize: 14 },
   pickerArea: { flexShrink: 1, minHeight: 0 },
+  toolbar: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  toolbarLinks: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, marginLeft: 'auto' },
+  segmentedSmall: { flexShrink: 0 },
+  segmentSmall: { flexGrow: 0, flexShrink: 0, flexBasis: 'auto', paddingHorizontal: spacing.md, paddingVertical: 6 },
+  segmentTextSmall: { color: colors.textSecondary, fontSize: 12 },
+  linkBtnSmall: { minHeight: 30, justifyContent: 'center' },
+  link: { color: colors.accent, fontSize: 13 },
+  groupHeader: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, minHeight: 36, paddingTop: spacing.sm },
+  groupName: { flex: 1, minWidth: 0, color: colors.text, fontSize: 13, fontWeight: '600' },
+  groupCount: { color: colors.textMuted, fontSize: 12 },
+  agentRowGrouped: { paddingLeft: 28 },
+  triOn: { width: 17, height: 17, marginHorizontal: 1.5, borderRadius: radius.mark, backgroundColor: colors.accent, alignItems: 'center', justifyContent: 'center' },
   readonly: { color: colors.text, fontSize: 14, paddingVertical: 4 },
   segmented: { flexDirection: 'row', borderRadius: radius.control, borderWidth: 1, borderColor: colors.border, overflow: 'hidden' },
   segment: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingVertical: 9 },
