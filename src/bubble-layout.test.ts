@@ -18,7 +18,7 @@
 // greedy character wrap — not Android's real metrics, but a deterministic, monotone stand-in; what
 // the guard checks is agreement between the text and its container, which doesn't depend on metrics.
 import Yoga, { Align, Direction, Edge, FlexDirection, Gutter, Justify, MeasureMode, PositionType, type Node } from 'yoga-layout';
-import { bubbleLayout, desktopBubbleCap, gridCellWidth, markdownLayout } from './bubble-layout';
+import { bubbleLayout, desktopBubbleCap, gridCellWidth, listIndent, markdownLayout } from './bubble-layout';
 import { parseMarkdownBlocks } from './markdown-model';
 import { stackedRows, tableLayoutFor } from './table-layout';
 
@@ -84,6 +84,7 @@ const fullWidth = (text: string, font: number) => wrap(text, font, Infinity).wid
 class Tree {
   leaves: Leaf[] = [];
   bubbles: { node: Node; group: string; chip?: Node }[] = [];
+  lists: { group: string; rows: { marker: Node; text: Node }[] }[] = [];
   view(style: Style | Style[], kids: Node[] = []) {
     const n = Yoga.Node.create();
     for (const s of ([] as Style[]).concat(style)) if (s) apply(n, s);
@@ -107,7 +108,13 @@ class Tree {
 function markdown(T: Tree, g: string, md: string, L: ReturnType<typeof markdownLayout>) {
   const kids = parseMarkdownBlocks(md, {}).map(block => {
     if (block.kind === 'heading') return T.text(g, block.text, L.heading, Math.max(15, 20 - block.level));
-    if (block.kind === 'list') return T.view(L.block, block.items.map(item => T.view(L.listRow, [T.text(g, '•', L.marker), T.text(g, item, L.listText)])));
+    if (block.kind === 'list') {
+      // origin/main's marker | text flex row (negative control) has no hanging indent
+      const indent = (L.marker as Style).position === 'absolute' ? listIndent(block.items.length, block.ordered) : { marker: {}, row: {} };
+      const rows = block.items.map((item, i) => ({ marker: T.text(g, block.ordered ? `${i + 1}.` : '•', [L.marker, indent.marker], 14, 21, 1), text: T.text(g, item, L.listText) }));
+      if (block.ordered) T.lists.push({ group: g, rows });
+      return T.view(L.block, rows.map(r => T.view([L.listRow, indent.row], [r.marker, r.text])));
+    }
     if (block.kind === 'quote') return T.view(L.quote, [T.text(g, block.text)]);
     if (block.kind === 'code') return T.view(L.code, [T.text(g, block.text, [], 12, 18)]);
     if (block.kind === 'table') {
@@ -161,6 +168,8 @@ const TABLES_MD = [
   '> 引用一段说明:以上都是示例数据,只用于布局测量,不代表真实发布进度或真实节点。', '',
   '```', 'const x = 1;', '```',
 ].join('\n');
+// 12 numbered items: two-digit markers must get the same hanging indent as one-digit ones (owner review 2026-09-30)
+const ORDERED_MD = ['【步骤】', '', ...Array.from({ length: 12 }, (_, i) => `${i + 1}. 第 ${i + 1} 步:核对示例清单里的这一项,确认无误后在看板上回写进展,再继续下一步。`)].join('\n');
 const SCHED = 'scheduler: 和示例-B 一起推进 (1) 示例网络支持任务页面支持用户自定义字段 (2) 看板状态回读 (3) 每轮汇报写清预计完成时间';
 const MSGS: Msg[] = [
   { id: 'reply+md+quote', side: 'reply', md: LONG_MD, quote: SCHED },
@@ -168,6 +177,7 @@ const MSGS: Msg[] = [
   { id: 'sent+md+quote', side: 'sent', md: LONG_MD, quote: '示例-C: 上一条消息的引用' },
   { id: 'reply+short+quote', side: 'reply', md: '收到,马上处理。', quote: SCHED },
   { id: 'reply+tables', side: 'reply', md: TABLES_MD, quote: SCHED },
+  { id: 'reply+ordered12', side: 'reply', md: ORDERED_MD, quote: SCHED },
 ];
 const LAYOUTS = [
   { name: 'phone', pane: 390, desktop: false },
@@ -196,7 +206,7 @@ const drawn = (leaf: Leaf): Rect => {
 };
 const hit = (a: Rect, b: Rect) => a.l < b.r - 0.5 && a.r > b.l + 0.5 && a.t < b.b - 0.5 && a.b > b.t + 0.5;
 
-type Row = { layout: string; bubble: string; width: number; bubbleBottom: number; textBottom: number; bubbleRight: number; textRight: number; quoteTop?: number; hits: number; fails: string[]; shapes?: { bubble: Rect; quote?: Rect; text: Rect[] } };
+type Row = { layout: string; bubble: string; width: number; bubbleBottom: number; textBottom: number; bubbleRight: number; textRight: number; quoteTop?: number; hits: number; fails: string[]; shapes?: { bubble: Rect; quote?: Rect; text: Rect[] }; markerLefts?: number[] };
 function sweep(B = bubbleLayout(), L = markdownLayout()): Row[] {
   const out: Row[] = [];
   for (const lay of LAYOUTS) {
@@ -245,6 +255,18 @@ function sweep(B = bubbleLayout(), L = markdownLayout()): Row[] {
       }
       out.push({ layout: lay.name, bubble: bub.group, width: Math.round(box.r - box.l), bubbleBottom: Math.round(inner.b), textBottom: Math.round(textBottom), bubbleRight: Math.round(inner.r), textRight: Math.round(textRight), quoteTop: quoteTop === undefined ? undefined : Math.round(quoteTop), hits, fails, ...(process.env.BUBBLE_DUMP ? { shapes: { bubble: box, quote: bub.chip ? abs(bub.chip) : undefined, text: body } } : {}) });
     }
+    for (const l of T.lists) {
+      const lefts = l.rows.map(r => abs(r.text).l);
+      const fails: string[] = [];
+      if (Math.max(...lefts) - Math.min(...lefts) > 0.5) fails.push(`(d) item text starts at ${[...new Set(lefts.map(Math.round))].join(' / ')}px, not one column`);
+      l.rows.forEach((r, i) => {
+        const m = abs(r.marker), leaf = T.leaves.find(x => x.node === r.marker)!;
+        const need = fullWidth(leaf.text, leaf.font);
+        if (need > m.r - m.l + 0.5) fails.push(`(d) marker "${leaf.text}" needs ${need}px, has ${Math.round(m.r - m.l)}`);
+        if (m.r > abs(r.text).l + 0.5) fails.push(`(d) marker ${i + 1} overlaps its text`);
+      });
+      out.push({ layout: lay.name, bubble: `${l.group}:markers`, width: 0, bubbleBottom: 0, textBottom: 0, bubbleRight: 0, textRight: 0, hits: 0, fails, markerLefts: lefts.map(Math.round) } as Row);
+    }
     list.freeRecursive();
   }
   return out;
@@ -255,7 +277,12 @@ if (process.env.BUBBLE_TABLE) {
   console.log('| layout | bubble | width | bubble bottom | text bottom | bubble right | text right | quote top | overlaps |\n|---|---|---|---|---|---|---|---|---|');
   for (const r of rows) console.log(`| ${r.layout} | ${r.bubble} | ${r.width} | ${r.bubbleBottom} | ${r.textBottom} | ${r.bubbleRight} | ${r.textRight} | ${r.quoteTop ?? '-'} | ${r.hits} |`);
 }
-ck(`swept ${LAYOUTS.length} layouts × ${MSGS.length} bubbles`, rows.length === LAYOUTS.length * MSGS.length, `got ${rows.length}`);
+ck(`swept ${LAYOUTS.length} layouts × ${MSGS.length} bubbles`, rows.filter(r => !r.bubble.endsWith(':markers')).length === LAYOUTS.length * MSGS.length, `got ${rows.length}`);
+for (const lay of ['phone', 'tablet-904']) {
+  const m = rows.find(r => r.layout === lay && r.bubble === 'reply+ordered12:markers');
+  ck(`${lay}: 12-item ordered list — items 1…12 share one text left edge, no marker spills or overlaps`, !!m && m.fails.length === 0, m ? m.fails.join('; ') : 'list not measured');
+}
+ck('marker column fits the widest number: 9 / 12 / 99 / 100 / 150 / 1000 items', [9, 12, 99, 100, 150, 1000].every(n => fullWidth(`${n}.`, 14) <= listIndent(n, true).marker.width) && listIndent(3, false).marker.width === 16);
 for (const lay of LAYOUTS) {
   const bad = rows.filter(r => r.layout === lay.name && r.fails.length);
   ck(`${lay.name}: every bubble contains its text, quote row clear of the body`, bad.length === 0, bad.map(r => `${r.bubble}: ${r.fails.join('; ')}`).join(' | '));

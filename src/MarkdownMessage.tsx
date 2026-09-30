@@ -4,7 +4,7 @@ import { Text } from './ui-text';
 import { colors, onThemeChange, spacing, radius } from './theme';
 import { isSafeMarkdownUrl, parseInline, parseMarkdownBlocks, type InlineNode } from './markdown-model';
 import { foldCode, foldLabel } from './markdown-code-fold';
-import { gridCellWidth, markdownLayout } from './bubble-layout';
+import { gridCellWidth, listIndent, markdownLayout } from './bubble-layout';
 import { openExternal } from './open-external';
 import { stackedRows, tableLayoutFor } from './table-layout';
 
@@ -130,7 +130,10 @@ export default function MarkdownMessage({ children, onHeadingLayout, sourceLines
           const onLayout = onHeadingLayout || report.onLayout ? (event: any) => { if (onHeadingLayout) onHeadingLayout(nth, event.nativeEvent.layout.y); report.onLayout?.(event); } : undefined;
           return <Text key={index} {...src(block.line, block.endLine)} onLayout={onLayout} style={[styles.text, styles.heading, { fontSize: Math.max(15, 20 - block.level) }]}><Inline text={block.text} /></Text>;
         }
-        if (block.kind === 'list') return <View key={index} style={styles.block} {...lay(id, block.line, block.endLine)}>{block.items.map((item, itemIndex) => <View key={itemIndex} style={styles.listRow} {...src(block.itemLines?.[itemIndex])} {...lay(`${id}.${itemIndex}`, block.itemLines?.[itemIndex], block.itemLines?.[itemIndex], id)}><Text style={styles.marker}>{block.ordered ? `${itemIndex + 1}.` : '•'}</Text><Text style={[styles.text, styles.listText]}><Inline text={item} /></Text></View>)}</View>;
+        if (block.kind === 'list') {
+          const indent = listIndent(block.items.length, block.ordered);
+          return <View key={index} style={styles.block} {...lay(id, block.line, block.endLine)}>{block.items.map((item, itemIndex) => <View key={itemIndex} style={[styles.listRow, indent.row]} {...src(block.itemLines?.[itemIndex])} {...lay(`${id}.${itemIndex}`, block.itemLines?.[itemIndex], block.itemLines?.[itemIndex], id)}><Text style={[styles.marker, indent.marker]} numberOfLines={1}>{block.ordered ? `${itemIndex + 1}.` : '•'}</Text><Text style={[styles.text, styles.listText]}><Inline text={item} /></Text></View>)}</View>;
+        }
         if (block.kind === 'quote') return <View key={index} style={styles.quote} {...src(block.line, block.endLine)} {...lay(id, block.line, block.endLine)}><Text style={styles.text}><Inline text={block.text} /></Text></View>;
         if (block.kind === 'code') return <CodeBlock key={index} text={block.text} srcProps={{ ...src(block.line, block.endLine), ...lay(id, block.line, block.endLine) }} />;
         if (block.kind === 'table') return <TableBlock key={index} rows={block.rows} rowLines={block.rowLines} src={src} rootProps={lay(id, block.line, block.endLine)} />;

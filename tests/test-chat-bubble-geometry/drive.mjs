@@ -9,6 +9,7 @@
 //   (a) bottom  bubble bottom ≥ bottom of its last text line
 //   (b) right   bubble right ≥ right of its widest text line
 //   (c) quote   the quote row does not intersect any body text line, and sits below the bubble
+//   (d) list    items 1…12 of an ordered list share one text left edge; no marker reaches its text
 //
 // The web renderer is CSS, not Yoga, so this sweep is the "does the page look right" half; the
 // native-layout half (the actual 0.2.161 defect) is src/bubble-layout.test.ts, which runs the same
@@ -52,6 +53,9 @@ const LONG_MD = [
   '- 苹果构建在安卓和电脑端都发完之后再排,优先级最低,预计今天晚些时候。',
   '',
   '收尾一段普通段落:以上时间都是预计,有变化会在这里同步,不另开消息。',
+  '',
+  // 12 numbered items: two-digit markers get the same hanging indent as one-digit ones
+  ...Array.from({ length: 12 }, (_, i) => `${i + 1}. 第 ${i + 1} 步:核对示例清单里的这一项,确认无误后回写进展。`),
 ].join('\n');
 const SCHED = '和示例-B 一起推进 (1) 示例网络支持任务页面支持用户自定义字段 (2) 看板状态回读 (3) 每轮汇报写清预计完成时间';
 
@@ -103,7 +107,11 @@ const measure = () => {
     for (let s = b.nextElementSibling; s; s = s.nextElementSibling) if (s.textContent.trim()) { chip = s; break; }
     const cb = chip ? chip.getBoundingClientRect() : null;
     const hits = cb ? lines.filter(l => l.left < cb.right && l.right > cb.left && l.top < cb.bottom && l.bottom > cb.top).length : 0;
+    // ordered-list markers ("1." … "12.") and the text beside each
+    const markers = [...b.querySelectorAll('div[dir="auto"], span')].filter(el => /^\d+\.$/.test(el.textContent.trim()) && el.nextElementSibling);
+    const markerRows = markers.map(el => ({ n: el.textContent.trim(), right: Math.max(...lineRects(el).map(r => r.right)), textLeft: el.nextElementSibling.getBoundingClientRect().left }));
     bubbles.push({
+      markerRows,
       label: `${sideOf(b)}:${t.textContent.trim().slice(0, 8)}${chip ? `+quote(${chip.textContent.trim().slice(0, 6)})` : ''}`,
       box: { top: box.top, bottom: box.bottom, left: box.left, right: box.right, width: box.width },
       textBottom: Math.max(...lines.map(l => l.bottom)),
@@ -151,7 +159,10 @@ for (const L of LAYOUTS) {
       const a = b.box.bottom + 0.5 >= b.textBottom;
       const r = b.box.right + 0.5 >= b.textRight;
       const c = !b.chip || (b.hits === 0 && b.chip.top + 0.5 >= b.box.bottom);
-      if (!(a && r && c)) failed++;
+      const lefts = b.markerRows.map(m => m.textLeft);
+      const d = !b.markerRows.length || (Math.max(...lefts) - Math.min(...lefts) <= 0.5 && b.markerRows.every(m => m.right <= m.textLeft + 0.5));
+      if (b.markerRows.length) rows.push({ layout: L.name, bubble: `${b.label} markers ×${b.markerRows.length}`, w: '-', a: d ? 'PASS' : 'FAIL', b: '-', c: '-', note: `(d) text left ${[...new Set(lefts.map(r1))].join('/')} · widest marker right ${r1(Math.max(...b.markerRows.map(m => m.right)))}` });
+      if (!(a && r && c && d)) failed++;
       rows.push({ layout: L.name, bubble: b.label, w: r1(b.box.width), a: a ? 'PASS' : 'FAIL', b: r ? 'PASS' : 'FAIL', c: c ? 'PASS' : 'FAIL',
         note: `bubbleBottom=${r1(b.box.bottom)} textBottom=${r1(b.textBottom)} bubbleRight=${r1(b.box.right)} textRight=${r1(b.textRight)}${b.chip ? ` quoteTop=${r1(b.chip.top)} hits=${b.hits}` : ''}` });
     }

@@ -54,9 +54,10 @@ export const markdownLayout = () => ({
   root: { gap: spacing.sm, minWidth: 0, maxWidth: '100%' },
   block: { marginBottom: 2 },
   heading: { marginTop: spacing.xs },
-  // marker in the row's left padding (16 wide + gap), text a plain column child — see the header.
-  listRow: { paddingLeft: 16 + spacing.sm, minWidth: 0 },
-  marker: { position: 'absolute', left: 0, top: 0, width: 16 },
+  // marker absolutely positioned in the row's left padding, text a plain column child — see the
+  // header. Marker width + padding come per list from listIndent() (sized for its widest number).
+  listRow: { minWidth: 0 },
+  marker: { position: 'absolute', left: 0, top: 0 },
   listText: { minWidth: 0 },
   quote: { borderLeftWidth: 3, paddingLeft: spacing.md, minWidth: 0 },
   code: { maxWidth: '100%', padding: spacing.md },
@@ -70,3 +71,17 @@ export const markdownLayout = () => ({
 
 /** Native ≤2-column grid: each cell takes an equal percentage share of the row. */
 export const gridCellWidth = (columns: number) => ({ width: `${100 / Math.max(1, columns)}%` as const });
+
+/** Widest glyphs a list marker is drawn with (14px markdown text): a digit, and the '.' after it. */
+export const MARKER_DIGIT_W = 9;
+export const MARKER_DOT_W = 6;
+
+/**
+ * Hanging indent for one list: the marker column is as wide as the list's widest marker
+ * ("12." for 12 items, "100." from 100), never less than 16, so every item's text starts at the
+ * same x and a two/three-digit number never spills into the gap or wraps.
+ */
+export function listIndent(itemCount: number, ordered: boolean): { marker: { width: number }; row: { paddingLeft: number } } {
+  const width = ordered ? Math.max(16, String(Math.max(1, itemCount)).length * MARKER_DIGIT_W + MARKER_DOT_W) : 16;
+  return { marker: { width }, row: { paddingLeft: width + spacing.sm } };
+}
