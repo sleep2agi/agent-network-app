@@ -23,7 +23,7 @@ migrated.push('src/TaskTags.tsx');
 migrated.push('src/TaskListFields.tsx', 'src/TaskListTable.tsx');
 migrated.push('src/TaskTimeCell.tsx');
 migrated.push('src/TaskGantt.tsx', 'src/TaskCalendar.tsx');
-migrated.push('src/AccountSwitcher.tsx');
+migrated.push('src/AccountSwitcher.tsx', 'src/AccountRowActions.tsx');
 migrated.push('src/UserManagementPanel.tsx', 'src/DmChatScreen.tsx');
 function untranslated(file: string, raw: string): string[] {
   const source = raw.replace(/\r\n?/g, '\n');

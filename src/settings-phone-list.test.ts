@@ -72,7 +72,8 @@ const norm = (f: string) => readFileSync(new URL(f, import.meta.url), 'utf-8').r
   ck('goBack:三级页开着先退三级页,否则关子页', src.includes("const goBack = () => { if (settingsBackTarget(page, detail) === 'detail') closeDetail(); else closePage(); };"));
   ck('弹窗开着时不抢返回(让给弹窗的 onRequestClose)', /if \(!subPage \|\| dialogOpen\) return;/.test(src)
     // 切换账号面板(2026-09-29)、登录设备的退出确认(2026-09-30)也是弹窗。
-    && /const dialogOpen = !!removeTarget \|\| localDeleteVisible \|\| guideVisible \|\| logoutConfirm \|\| switcherOpen \|\| !!sessions\.confirm;/.test(src));
+    // 账号行的「编辑」弹窗、手机管理账号的底部动作面板(2026-09-30)也是。
+    && /const dialogOpen = !!removeTarget \|\| localDeleteVisible \|\| guideVisible \|\| logoutConfirm \|\| switcherOpen \|\| !!sessions\.confirm \|\| !!editTarget \|\| !!sheetTarget;/.test(src));
   ck('子页顶栏左上有返回箭头', src.includes('testID="settings-back"') && src.includes('name="chevron-back"'));
   ck('列表行带 › 箭头', src.includes('name="chevron-forward" size={18}'));
   ck('底部整宽「退出登录」要先确认', src.includes('testID="settings-logout-block"') && src.includes('onPress={() => setLogoutConfirm(true)}') && src.includes('<Modal visible={logoutConfirm}'));

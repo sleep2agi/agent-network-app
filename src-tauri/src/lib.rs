@@ -760,6 +760,54 @@ fn set_profile_requires_reauth(
     Ok(())
 }
 
+// 设置 → 账号 →「编辑」(Vincent 2026-09-30「账号 支持一下复制 编辑」):原地改显示名 / Hub 地址。
+// 只动这一行的元数据 —— 钥匙串里的令牌按 profile id 存,不动;不改 active_profile_id、不改顺序
+// (save_desktop_profile 是「登录后保存并设为当前」,会把它挪到末尾)。新地址能不能用由前端先验过再调。
+#[tauri::command]
+fn update_desktop_profile(
+    profile_id: String,
+    server_url: String,
+    display_name: Option<String>,
+) -> Result<(), String> {
+    if local_hub::is_local_profile(&profile_id) {
+        return Err("local workspace address is managed by the app".into());
+    }
+    let _guard = PROFILE_STORE
+        .lock()
+        .map_err(|_| "profile registry lock poisoned")?;
+    let mut index = read_profile_index()?;
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_err(|error| error.to_string())?
+        .as_secs();
+    apply_profile_edit(&mut index, &profile_id, &server_url, display_name, now)?;
+    save_profile_index(&index)
+}
+
+fn apply_profile_edit(
+    index: &mut ProfileIndex,
+    profile_id: &str,
+    server_url: &str,
+    display_name: Option<String>,
+    now: u64,
+) -> Result<(), String> {
+    let server_url = server_url.trim().trim_end_matches('/');
+    if !(server_url.starts_with("http://") || server_url.starts_with("https://")) {
+        return Err("invalid server url".into());
+    }
+    let profile = index
+        .profiles
+        .iter_mut()
+        .find(|profile| profile.profile_id == profile_id)
+        .ok_or_else(|| "profile not found".to_string())?;
+    profile.server_url = server_url.to_owned();
+    profile.display_name = display_name
+        .map(|name| name.trim().to_owned())
+        .filter(|name| !name.is_empty());
+    profile.updated_at = now;
+    Ok(())
+}
+
 #[tauri::command]
 fn load_active_desktop_profile() -> Result<Option<String>, String> {
     let _guard = PROFILE_STORE
@@ -924,6 +972,46 @@ mod tests {
         assert!(index.profiles[1].requires_reauth);
         assert_eq!(index.active_profile_id.as_deref(), Some("profile-b"));
     }
+
+    #[test]
+    fn profile_edit_updates_one_row_in_place() {
+        let make_profile = |profile_id: &str| ProfileMetadata {
+            profile_id: profile_id.into(),
+            server_url: format!("https://{profile_id}.example"),
+            username: "admin".into(),
+            network_id: Some("net_test".into()),
+            display_name: Some("old".into()),
+            requires_reauth: false,
+            created_at: 1,
+            updated_at: 1,
+        };
+        let mut index = ProfileIndex {
+            schema_version: 1,
+            active_profile_id: Some("profile-a".into()),
+            profiles: vec![make_profile("profile-a"), make_profile("profile-b"), make_profile("profile-c")],
+        };
+
+        apply_profile_edit(&mut index, "profile-b", " https://new.example/ ", Some(" Work ".into()), 9)
+            .expect("edit profile b");
+        let ids: Vec<_> = index.profiles.iter().map(|p| p.profile_id.as_str()).collect();
+        assert_eq!(ids, ["profile-a", "profile-b", "profile-c"]);
+        assert_eq!(index.active_profile_id.as_deref(), Some("profile-a"));
+        assert_eq!(index.profiles[1].server_url, "https://new.example");
+        assert_eq!(index.profiles[1].display_name.as_deref(), Some("Work"));
+        assert_eq!(index.profiles[1].username, "admin");
+        assert_eq!(index.profiles[1].created_at, 1);
+        assert_eq!(index.profiles[1].updated_at, 9);
+        for untouched in [&index.profiles[0], &index.profiles[2]] {
+            assert_eq!(untouched.display_name.as_deref(), Some("old"));
+            assert_eq!(untouched.updated_at, 1);
+        }
+
+        apply_profile_edit(&mut index, "profile-b", "https://new.example", Some("  ".into()), 10)
+            .expect("clear label");
+        assert_eq!(index.profiles[1].display_name, None);
+        assert!(apply_profile_edit(&mut index, "profile-b", "ftp://x", None, 11).is_err());
+        assert!(apply_profile_edit(&mut index, "missing", "https://x.example", None, 11).is_err());
+    }
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -966,6 +1054,7 @@ pub fn run() {
             load_desktop_profile,
             remove_desktop_profile,
             mark_desktop_profile_requires_reauth,
+            update_desktop_profile,
             load_active_desktop_profile,
             write_desktop_profile_file,
             read_desktop_profile_file,

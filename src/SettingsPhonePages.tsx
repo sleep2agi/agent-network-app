@@ -20,10 +20,11 @@ import { SettingsButton, SettingsCardContent, SettingsChoiceRow, SettingsGroup, 
 import { VoiceAdvancedEditPage, VoiceApiKeyEditPage, QuietHoursEditPage } from './SettingsEditPages';
 import type { HubConfig } from './api';
 import type { DesktopStorageDiagnostics, HubProfile } from './storage';
+import { accountCopyText, type AccountRowAction } from './account-row-actions';
 import { saveThemeMode } from './storage';
 import { THEME_PREFERENCES, THEME_PREFERENCE_LABEL, setThemePreference, themePreferenceSummary, type ThemePreference } from './theme';
 import { APP_VERSION } from './version';
-import { LOCAL_HUB_PROFILE_ID, type LocalHubResult } from './local-hub';
+import type { LocalHubResult } from './local-hub';
 import type { NotifySettings } from './notify-settings';
 import type { PermissionStatus } from './mobile-notify-model';
 import NotifyDiagnosticsPanel from './NotifyDiagnosticsPanel';
@@ -60,6 +61,13 @@ export type PhonePagesCtx = {
   onPickProfile: (profile: HubProfile) => void;
   onOpenProfileWindow: (profile: HubProfile) => void;
   onRemoveProfile: (profile: HubProfile) => void;
+  /** 一行账号有哪些动作(account-row-actions.ts):复制 · 编辑 · 新窗口 · 移除;本地工作区只能复制。 */
+  profileActions: (profile: HubProfile) => AccountRowAction[];
+  onProfileAction: (action: AccountRowAction, profile: HubProfile) => void;
+  /** 手指:管理账号页点一行 → 底部动作面板(SettingsScreen 画)。 */
+  onProfileSheet: (profile: HubProfile) => void;
+  /** 鼠标 + 键盘(桌面窄窗口也会进到这一页):不出底部面板,动作逐行列出。 */
+  pointer: boolean;
   onAddAccount: () => void;
   /** 登录设备(hub 的登录会话列表);旧 hub 没有接口时 available=false,入口不出现。 */
   sessions: LoginSessionsState;
@@ -122,7 +130,8 @@ const profileName = (p: HubProfile) => p.displayName || p.username || tr('settin
 function AccountPage({ ctx }: { ctx: PhonePagesCtx }) {
   useTranslation();
   const { cfg, profiles, show } = ctx;
-  const manageable = profiles.some(p => p.profileId !== LOCAL_HUB_PROFILE_ID) || ctx.tauriDesktop;
+  // 每个账号至少能「复制」(本地工作区也能),所以有账号就有管理页。
+  const manageable = profiles.length > 0;
   const devices = show('account', 'devices') && ctx.sessions.available;
   return (
     <>
@@ -172,26 +181,56 @@ function AccountPage({ ctx }: { ctx: PhonePagesCtx }) {
   );
 }
 
-/** 三级页:每个账号一组(新窗口打开 · 移除)。当前账号的「移除」= 列表底部的退出登录,这里同样可用。 */
+/**
+ * 三级页:管理账号(Vincent 2026-09-30「账号 支持一下复制 编辑」)。
+ * 手指:每个账号一行(名字 · 当前,下面一行「地址 · 用户名 · 网络 ID」),点一下从底部升起动作面板
+ *       复制 / 编辑 / 移除 —— 微信那种,不在行里挤一排小字按钮。
+ * 鼠标(桌面窄窗口):没有底部面板,每个账号一组,动作逐行列出。
+ */
 function ManageAccountsPage({ ctx }: { ctx: PhonePagesCtx }) {
   useTranslation();
+  const title = (profile: HubProfile) => `${profileName(profile)}${profile.profileId === ctx.currentProfileId ? tr('settings.copy.13') : ''}`;
+  if (!ctx.pointer) {
+    return (
+      <>
+        <SettingsGroup testID="settings-manage-accounts-list">
+          {ctx.profiles.map(profile => (
+            <SettingsRow
+              key={profile.profileId}
+              label={title(profile)}
+              subtitle={accountCopyText(profile)}
+              onPress={() => ctx.onProfileSheet(profile)}
+              accessibilityLabel={tr('accounts.editLabel', { name: profileName(profile) })}
+              testID={`settings-manage-${profile.profileId}`}
+            />
+          ))}
+        </SettingsGroup>
+        <SettingsGroup footer={tr('settings.copy.96')} />
+      </>
+    );
+  }
   return (
     <>
-      {ctx.profiles.map(profile => {
-        const canOpen = ctx.tauriDesktop && !profile.requiresReauth;
-        const canRemove = profile.profileId !== LOCAL_HUB_PROFILE_ID;
-        if (!canOpen && !canRemove) return null;
-        return (
-          <SettingsGroup key={profile.profileId} title={`${profileName(profile)}${profile.profileId === ctx.currentProfileId ? tr('settings.copy.13') : ''}`} footer={`${profile.serverUrl}${profile.networkId ? ` · ${profile.networkId}` : ''}`}>
-            {canOpen ? <SettingsRow label={tr('settings.copy.95')} onPress={() => ctx.onOpenProfileWindow(profile)} accessibilityLabel={tr('settings.copy.183', { v0: profile.displayName || profile.username || profile.serverUrl })} /> : null}
-            {canRemove ? <SettingsRow label={tr('settings.copy.81')} tone="danger" chevron={false} onPress={() => ctx.onRemoveProfile(profile)} accessibilityLabel={tr('settings.copy.184', { v0: profile.username || profile.serverUrl })} testID={`settings-remove-${profile.profileId}`} /> : null}
-          </SettingsGroup>
-        );
-      })}
+      {ctx.profiles.map(profile => (
+        <SettingsGroup key={profile.profileId} title={title(profile)} footer={accountCopyText(profile)}>
+          {ctx.profileActions(profile).map(action => (
+            <SettingsRow
+              key={action}
+              label={tr(ACTION_LABEL_KEY[action])}
+              tone={action === 'remove' ? 'danger' : undefined}
+              chevron={action === 'edit' || action === 'openWindow'}
+              onPress={() => ctx.onProfileAction(action, profile)}
+              accessibilityLabel={action === 'remove' ? tr('settings.copy.184', { v0: profile.username || profile.serverUrl }) : action === 'openWindow' ? tr('settings.copy.183', { v0: profileName(profile) }) : action === 'copy' ? tr('accounts.copyLabel', { name: profileName(profile) }) : tr('accounts.editLabel', { name: profileName(profile) })}
+              testID={`settings-${action}-${profile.profileId}`}
+            />
+          ))}
+        </SettingsGroup>
+      ))}
       <SettingsGroup footer={tr('settings.copy.96')} />
     </>
   );
 }
+const ACTION_LABEL_KEY: Record<AccountRowAction, string> = { copy: 'accounts.copy', edit: 'accounts.edit', openWindow: 'settings.copy.95', remove: 'settings.copy.81' };
 
 /**
  * 三级页:登录设备。每台设备一行(名字 · 最近使用 · 右侧「退出」红字;本机写「本机」、不能在这里退出),
