@@ -492,7 +492,7 @@ registerTranslations({
   'dash.saved': ['已保存 {name}', 'Saved {name}'],
   'dash.copied': ['已复制', 'Copied'],
   'dash.exportFailed': ['生成图片失败:{msg}', 'Could not create the image: {msg}'],
-  'dash.nativeNote': ['这个版本的手机端还不能直接保存图片:请在桌面端生成,或截图分享。', 'This phone version cannot save the image yet: use the desktop app, or take a screenshot.'],
+  'dash.nativeNote': ['保存图片请在桌面端，或截图分享', 'To save the image, use the desktop app or take a screenshot'],
   'dash.close': ['关闭', 'Close'],
   // 分享图上的字(task-share-card.ts)
   'card.brandSub': ['人 + Agent 协作网络', 'Humans + Agents, one network'],

@@ -13,6 +13,7 @@ import { useTranslation } from './i18n-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Image, Platform, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import DialogFrame from './DialogFrame';
+import ShareCardNative from './ShareCardNative';
 import { Text } from './ui-text';
 import { Ionicons } from './icons';
 import AliasAvatar from './AliasAvatar';
@@ -28,7 +29,7 @@ import {
   DASH_DAYS, DASH_PERIODS, DASH_RECENT, agentShare, busiestDay, dayList, deltaPct, fromHubStats, fromItems, heatCells, localTimeZone, newlyCompleted,
   parseHubStats, periodStart, relativeTime, streaks, ymd, type DashCompletion, type DashData, type DashPeriod,
 } from './task-dashboard-model';
-import { renderShareCardPng, shareCardLayout, shareFileName, type ShareCardModel, type ShareOptions, type ShareSize, type ShareTheme } from './task-share-card';
+import { SHARE_W, renderShareCardPng, shareCardLayout, shareFileName, type ShareCardModel, type ShareOptions, type ShareSize, type ShareTheme } from './task-share-card';
 import { saveImageObjectUrl } from './web-image-download';
 import { copyImageBlob } from './image-clipboard';
 
@@ -499,7 +500,9 @@ function PhoneKpi({ label, value, c, testID }: { label: string; value: string; c
 
 // ── 分享 ──
 
-const canExport = () => Platform.OS === 'web' && typeof document !== 'undefined';
+// 手机原生端没有 Canvas:预览用 RN 版的同一张卡(ShareCardNative),先不能导出。__anetDashNativeCard 只给 web 上的布局测试用,
+// 让它在 web 导出里也走原生那条分支、量同一个组件。
+const canExport = () => Platform.OS === 'web' && typeof document !== 'undefined' && !(globalThis as { __anetDashNativeCard?: boolean }).__anetDashNativeCard;
 
 function logoUri(): string | null {
   try {
@@ -606,7 +609,7 @@ function ShareDialog({ data, period, people, c, onClose, phone }: ViewProps & { 
         <View style={[c.previewBox, { width: pw, height: pw * aspect }]} testID="dash-share-preview">
           {exportable
             ? (preview ? <Image source={{ uri: preview }} style={{ width: pw, height: pw * aspect }} resizeMode="contain" accessibilityLabel={tr('dash.shareTitle')} /> : null)
-            : <View style={c.nativeCard}><Text style={c.nativeBig}>{model.big}</Text><Text style={c.nativeUnit}>{model.unit}</Text>{model.titles.slice(0, 5).map(t => <Text key={t} style={c.nativeTitle} numberOfLines={1}>{`· ${t}`}</Text>)}</View>}
+            : <ShareCardNative model={model} opts={opts} scale={pw / SHARE_W} testID="dash-share-native-card" />}
         </View>
         <View style={{ flex: phone ? undefined : 1, gap: spacing.md, minWidth: 0 }}>
           <Text style={c.fieldLabel}>{tr('dash.shareSize')}</Text>
@@ -740,10 +743,6 @@ const makeDashStyles = () => {
     phoneCtaText: { color: colors.onAccent, fontSize: 15, fontWeight: weight.strong },
     dialogFoot: { flexDirection: 'row', justifyContent: 'flex-end', gap: spacing.sm },
     previewBox: { alignSelf: 'center', borderRadius: radius.thumb, overflow: 'hidden', backgroundColor: colors.subtleFill, flexShrink: 0 },
-    nativeCard: { flex: 1, padding: spacing.lg, backgroundColor: '#070b18', gap: 4 },
-    nativeBig: { color: '#2de0c0', fontSize: 64, fontWeight: weight.strong },
-    nativeUnit: { color: '#f3f6fb', fontSize: typeScale.title, fontWeight: weight.strong, marginBottom: spacing.sm },
-    nativeTitle: { color: '#f3f6fb', fontSize: typeScale.small },
     fieldLabel: { color: colors.textMuted, fontSize: typeScale.small },
     optRow: { flexDirection: 'row', gap: spacing.sm },
     opt: { flex: 1, minWidth: 0, borderWidth: 1.5, borderColor: colors.border, borderRadius: radius.control, paddingVertical: spacing.sm, paddingHorizontal: spacing.sm, alignItems: 'center', gap: 2 },

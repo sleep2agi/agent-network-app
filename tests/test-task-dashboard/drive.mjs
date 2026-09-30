@@ -269,6 +269,27 @@ for (const theme of ['light', 'dark']) {
       ctaInViewport: !!cta && cta.b <= 844 && cta.y > 700,
       noOverflow: pOverflow <= 0,
     }, { tab: tab && `${r1(tab.x)}..${r1(tab.r)}`, five, expanded, gap: heroB && rc && r1(rc.y - heroB.b) });
+    // native branch (no Canvas on Android/iOS): the RN card (ShareCardNative) is the preview, no save button, the note says
+    // to save on desktop. __anetDashNativeCard makes the web export take that branch so the same component is measured.
+    await pp.evaluate(() => { window.__anetDashNativeCard = true; });
+    await pp.locator(tid('dash-share')).first().click();
+    await pp.locator(tid('dash-share-native-card')).first().waitFor({ timeout: 10000 }).catch(() => {});
+    await pp.waitForTimeout(400);
+    const card = await box(pp, tid('dash-share-native-card'));
+    const cardTitles = await pp.evaluate(() => [...document.querySelectorAll('[data-testid="share-card-title"]')].map(e => { const b = e.getBoundingClientRect(); return { w: b.width, h: b.height, t: e.textContent }; }));
+    const note = await paintedText(pp, tid('dash-share-native-note'));
+    const saveBtn = await count(pp, tid('dash-share-save'));
+    const want = await pp.evaluate(() => window.__tasksFixture.archived[0].name);
+    if (OUT) await pp.screenshot({ path: join(OUT, `phone-share-${theme}-${mode}.png`) });
+    record(pvp, 'native share preview', {
+      cardAspect: !!card && Math.abs(card.h / card.w - 1920 / 1080) < 0.01,
+      titlesPainted: cardTitles.length >= 3 && cardTitles.every(t => t.w >= 20 && t.h >= 4),
+      newestFirst: cardTitles[0]?.t === want,
+      notePainted: !!note?.painted && note.text === '保存图片请在桌面端，或截图分享',
+      noSave: saveBtn === 0,
+    }, { card: card && `${r1(card.w)}x${r1(card.h)}`, titles: cardTitles.length });
+    await pp.locator(tid('dash-share-dialog-close')).first().click();
+    await pp.evaluate(() => { window.__anetDashNativeCard = false; });
     await pp.evaluate(() => document.querySelector('[data-testid="dash-phone"]')?.scrollTo?.(0, 900));
     if (OUT) {
       await pp.locator(tid('dash-recent-expand')).first().click().catch(() => {});

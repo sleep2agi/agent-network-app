@@ -55,10 +55,10 @@ export interface ShareLayout {
   bigFont: number;
 }
 
-const PAD = 84;
-const GAP = 24;
-const TITLE_ROW = 54;
-const TITLE_HEAD = 84; // 面板内边距 + 标题行
+export const PAD = 84;
+export const GAP = 24;
+export const TITLE_ROW = 54;
+export const TITLE_HEAD = 84; // 面板内边距 + 标题行
 const MIN_TITLE_ROWS = 3;
 export const MAX_TITLE_ROWS: Record<ShareSize, number> = { portrait: 8, feed: 5 };
 
@@ -110,8 +110,8 @@ type Ctx = CanvasRenderingContext2D;
 const FONT = '"PingFang SC","Hiragino Sans GB","Noto Sans SC","Noto Sans CJK SC","Microsoft YaHei",system-ui,sans-serif';
 const font = (px: number, w: number | string = 400) => `${w} ${px}px ${FONT}`;
 
-interface Palette { bg: string; glowA: string; glowB: string; grid: string; text: string; sub: string; panel: string; panelBorder: string; accent: string; accentB: string; accentBg: string; axis: string; heat: string[] }
-const PALETTE: Record<ShareTheme, Palette> = {
+export interface Palette { bg: string; glowA: string; glowB: string; grid: string; text: string; sub: string; panel: string; panelBorder: string; accent: string; accentB: string; accentBg: string; axis: string; heat: string[] }
+export const PALETTE: Record<ShareTheme, Palette> = {
   dark: {
     bg: '#070b18', glowA: 'rgba(45,224,192,0.28)', glowB: 'rgba(45,91,255,0.38)', grid: 'rgba(127,140,170,0.07)', text: '#f3f6fb', sub: 'rgba(243,246,251,0.62)',
     panel: 'rgba(255,255,255,0.06)', panelBorder: 'rgba(255,255,255,0.10)', accent: '#2de0c0', accentB: '#3b7bff', accentBg: 'rgba(45,224,192,0.16)', axis: 'rgba(255,255,255,0.10)',
