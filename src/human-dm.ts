@@ -53,6 +53,31 @@ export function peopleRows(humans: readonly Human[], threads: readonly DmThread[
     .sort((a, b) => (b.unread > 0 ? 1 : 0) - (a.unread > 0 ? 1 : 0) || b.lastAt - a.lastAt || a.name.localeCompare(b.name));
 }
 
+/**
+ * 人员区块放在列表**最上面**(Vincent 2026-09-30「这个人员放太下面了」:300 个 agent 时它沉在最底下)。
+ * 折叠状态和 agent 分组记在同一份「已折叠」里(每台设备各记各的),用一个不会和分组名撞上的键。
+ */
+export const PEOPLE_GROUP_KEY = '\u0000people';
+
+/**
+ * 人员区块此刻画什么:搜索时按名字 / 用户名过滤(与 agent 同一个匹配器,支持拼音),不可折叠、没匹配就整块不画;
+ * 不搜索时可折叠,折叠后只剩标题行(带人数)。total 永远是全部人数。
+ */
+export function shownPeople(
+  rows: readonly PersonRow[],
+  query: string,
+  collapsed: readonly string[],
+  match: (text: string, q: string) => boolean,
+): { rows: PersonRow[]; total: number; collapsed: boolean; collapsible: boolean; visible: boolean } {
+  const q = query.trim();
+  if (q) {
+    const hits = rows.filter(p => match(p.name, q) || match(p.username, q));
+    return { rows: hits, total: hits.length, collapsed: false, collapsible: false, visible: hits.length > 0 };
+  }
+  const folded = collapsed.includes(PEOPLE_GROUP_KEY);
+  return { rows: folded ? [] : [...rows], total: rows.length, collapsed: folded, collapsible: true, visible: rows.length > 0 };
+}
+
 export function dmUnreadTotal(rows: readonly Pick<PersonRow, 'unread'>[]): number {
   return rows.reduce((n, r) => n + r.unread, 0);
 }

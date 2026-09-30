@@ -16,7 +16,7 @@ import './i18n-chat';
 import './i18n-users';
 import { agentsEmptyKind, isRestrictedIn } from './user-admin';
 import { fetchAuthMe } from './user-admin-api';
-import { noteHumanUsernames, peopleRows, type Human, type PersonRow } from './human-dm';
+import { noteHumanUsernames, PEOPLE_GROUP_KEY, peopleRows, shownPeople, type Human, type PersonRow } from './human-dm';
 import { fetchDmThreads, fetchHumans } from './human-dm-api';
 import { subscribeHumanDm } from './human-dm-bus';
 import { isAgentOnline } from './chat-actions';
@@ -378,11 +378,28 @@ export default function AgentsScreen({
   // 更紧凑 (two-pane): tell the nav rail where the first row is and how tall rows are, so rail item n
   // sits beside row n (list-rail-align.ts). Only when the first section has rows on screen
   // (row height/pitch is not measured: both sides compute it with denserRowPitch).
-  const alignFirstRow = !compact && uiScale().listDense && (shownSections[0]?.data?.length ?? 0) > 0;
+  // 人员区块在列表最上面(ListHeaderComponent):搜索也过滤人,折叠状态与分组同存。
+  const peopleShown = useMemo(() => shownPeople(onOpenPerson ? people : [], query, collapsed, pinyinMatch), [people, !!onOpenPerson, query, collapsed]);
+  const peopleExpanded = peopleShown.visible && peopleShown.rows.length > 0;
+  // 第一行 = 列表里真正的第一行:人员展开时是第一个人,否则是第一个分组的第一行(人员折叠时要加上它的标题行高)。
+  const alignFirstRow = !compact && uiScale().listDense && (peopleExpanded || (shownSections[0]?.data?.length ?? 0) > 0);
   const listYRef = useRef<number | null>(null); // bottom of head + filter bar
   const firstHeaderHRef = useRef<number | null>(null);
+  const peopleHeaderHRef = useRef<number | null>(null);
+  const peopleSectionHRef = useRef<number | null>(null);
   const publishFirstRowTop = () => {
-    if (listYRef.current == null || firstHeaderHRef.current == null) return;
+    if (listYRef.current == null) return;
+    if (peopleShown.visible) {
+      if (peopleExpanded) {
+        if (peopleHeaderHRef.current == null) return;
+        publishListFirstRowTop(listYRef.current + peopleHeaderHRef.current);
+        return;
+      }
+      if (peopleSectionHRef.current == null || firstHeaderHRef.current == null) return;
+      publishListFirstRowTop(listYRef.current + peopleSectionHRef.current + firstHeaderHRef.current);
+      return;
+    }
+    if (firstHeaderHRef.current == null) return;
     publishListFirstRowTop(listYRef.current + firstHeaderHRef.current);
   };
   const nowMs = Date.now();
@@ -788,21 +805,35 @@ export default function AgentsScreen({
         </View>
       }
       renderItem={({ item }) => (compact ? renderCompactRow(item) : renderPhoneRow(item))}
-      ListFooterComponent={<>{people.length && onOpenPerson && !q ? (
-        // 人员:同网络的其他人,点开是私信。放在 agent 分组之后(不动第一行的位置 —— 更紧凑时导航栏按它对齐)。
-        <View testID="people-section">
-          <View style={[rowStyles.group, compact ? rowStyles.groupCompact : null, { backgroundColor: compact ? colors.listBg : colors.bg }]} testID="people-header" accessibilityRole="header">
+      ListHeaderComponent={peopleShown.visible ? (
+        // 人员:同网络的其他人,点开是私信。放在列表**最上面**、搜索框之下、agent 分组之上(Vincent 2026-09-30
+        // 「这个人员放太下面了」)。可折叠(每台设备各记各的),标题带人数;搜索时按名字过滤、不可折叠。
+        <View testID="people-section" onLayout={alignFirstRow ? e => { peopleSectionHRef.current = e.nativeEvent.layout.height; publishFirstRowTop(); } : undefined}>
+          <Pressable
+            onLayout={alignFirstRow ? e => { peopleHeaderHRef.current = e.nativeEvent.layout.height; publishFirstRowTop(); } : undefined}
+            testID="people-header"
+            disabled={!peopleShown.collapsible}
+            onPress={() => toggleGroup(PEOPLE_GROUP_KEY)}
+            accessibilityRole={peopleShown.collapsible ? 'button' : 'header'}
+            accessibilityLabel={`${t('people.title')} ${peopleShown.total}${peopleShown.collapsible ? (peopleShown.collapsed ? ',已折叠' : ',已展开') : ''}`}
+            accessibilityState={peopleShown.collapsible ? { expanded: !peopleShown.collapsed } : undefined}
+            style={[rowStyles.group, compact ? rowStyles.groupCompact : null, { backgroundColor: compact ? colors.listBg : colors.bg }]}
+          >
+            {peopleShown.collapsible ? (
+              <Ionicons name={peopleShown.collapsed ? 'chevron-forward' : 'chevron-down'} size={12} color={colors.textMuted} />
+            ) : null}
             <Text selectable={false} numberOfLines={1} style={[rowStyles.groupTitle, { color: colors.textMuted }]}>{t('people.title')}</Text>
-            <Text selectable={false} style={[rowStyles.groupCount, { color: colors.textMuted }]}>{people.length}</Text>
-          </View>
-          {people.map((p, i) => (
+            <Text selectable={false} style={[rowStyles.groupCount, { color: colors.textMuted }]} testID="people-count">{peopleShown.total}</Text>
+          </Pressable>
+          {peopleShown.rows.map((p, i) => (
             <View key={p.user_id}>
               {i && !compact ? <View style={[rowStyles.separator, { backgroundColor: colors.border }]} /> : null}
               {renderPersonRow(p)}
             </View>
           ))}
         </View>
-      ) : null}{hiddenSessions.length ? (
+      ) : null}
+      ListFooterComponent={<>{hiddenSessions.length ? (
         // 「不显示该对话」收在这里:列表最底下一行入口,点开就地展开,每行长按 → 恢复显示(点开会话也会恢复)。
         <View testID="agent-hidden-footer">
           <Pressable
