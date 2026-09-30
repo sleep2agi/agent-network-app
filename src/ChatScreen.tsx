@@ -17,6 +17,7 @@ import AuthedWebThumb from './AuthedWebThumb';
 import { ackAgentMessages, ackUserMessages, createDashboardRequestId, dashboardRequestIdForLocalId, fetchNodeStatus, fetchStatus, fetchTasks, fetchUserMessages, sendTask, HubConfig, HubTask, Session, TaskAttachment, TaskPriority } from './api';
 import { proactiveItemsForAgent } from './proactive-messages';
 import { replyQuoteFor } from './reply-quote';
+import { bubbleLayout, desktopBubbleCap } from './bubble-layout';
 import { outboxAdd, outboxForAlias, outboxMarkFailed, outboxMarkPending, outboxRemove } from './outbox';
 import { mayApplySendResult, shouldExposeSendFailure } from './send-reconciliation';
 import { conversationKey, conversationScope, createConversationRequestGate, createConversationStore } from './conversation-store';
@@ -131,9 +132,6 @@ type ChatItem = HubTask & {
    *  task_id,等轮询把同 id 的服务器行拉回来再让位;没拿到 id 时按内容+时间对账(confirmedOutboxIds)。 */
   _confirmedTaskId?: string;
 };
-
-/** 桌面聊天气泡的最大宽度(px)。 */
-const DESKTOP_BUBBLE_MAX = 640;
 
 // selectedText:桌面端右键时气泡里已有的鼠标选区(只在这个气泡内才算),菜单据此给「复制选中内容」。
 type MessageSelection = { item: ChatItem; text: string; author?: string; selectedText?: string };
@@ -394,7 +392,7 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
     lockSelection: Platform.OS === 'web' ? lockDocumentSelection : undefined,
   })), []);
   // 桌面气泡最大宽度:窗格的 85%,但不超过 DESKTOP_BUBBLE_MAX(宽窗口里一行字不拉满)。手机不变。
-  const bubbleCap = desktop && paneWidth > 0 ? { maxWidth: Math.min(DESKTOP_BUBBLE_MAX, Math.floor(paneWidth * 0.85)) } : null;
+  const bubbleCap = desktopBubbleCap(desktop, paneWidth);
   const sending = false; // optimistic echo frees the input immediately
   const limitRef = useRef(PAGE);
 
@@ -2618,7 +2616,9 @@ function webComposerInputHeight(lines: number): number {
   return Math.min(120, Math.max(control, Math.ceil(lines * line + 2 * pad + 2 * COMPOSER_INPUT_BORDER)));
 }
 
-const makeStyles = () =>
+// Bubble-chain layout comes from bubble-layout.ts (shared with DmChatScreen, run through Yoga by
+// bubble-layout.test.ts); this file adds the paint.
+const makeStyles = (B = bubbleLayout()) =>
   StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.bg },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
@@ -2662,15 +2662,15 @@ const makeStyles = () =>
   resultRowCurrent: { backgroundColor: colors.accent + '14' },
   resultMeta: { color: colors.textMuted, fontSize: 11, marginBottom: 2 },
   resultSnippet: { color: colors.text, fontSize: 13 },
-  messageRow: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.sm, width: '100%' },
-  sentRow: { justifyContent: 'flex-end' },
-  foreignRow: { justifyContent: 'flex-start' },
-  replyRow: { justifyContent: 'flex-start' },
-  messageContent: { maxWidth: '85%', flexShrink: 1, alignItems: 'flex-start' },
-  sentContent: { alignItems: 'flex-end' },
+  messageRow: B.messageRow,
+  sentRow: B.sentRow,
+  foreignRow: B.replyRow,
+  replyRow: B.replyRow,
+  messageContent: B.messageContent,
+  sentContent: B.sentContent,
   messageAuthor: { color: colors.textMuted, fontSize: 11, lineHeight: 16, marginBottom: 3 },
   sentAuthor: { textAlign: 'right' },
-  bubblePressable: { maxWidth: '100%', alignItems: 'flex-end' },
+  bubblePressable: B.bubblePressable,
   timeHeader: {
     color: colors.textMuted,
     fontSize: 11,
@@ -2687,22 +2687,14 @@ const makeStyles = () =>
     paddingVertical: 2,
   },
   // 极简:气泡不描边。发出的用中性的 rowActive 一档底色,回复用卡片色——靠底色区分,不靠边框。
-  bubble: {
-    alignSelf: 'flex-end',
-    maxWidth: '100%',
-    backgroundColor: colors.rowActive,
-    borderRadius: radius.bubble,
-    paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.md,
-  },
-  replyBubble: { alignSelf: 'flex-start', maxWidth: '85%', flexShrink: 1, backgroundColor: colors.card },
-  // 桌面:发出与回复同一个最大宽度(bubbleCap),回复不再是 85% 里再 85%。
-  replyBubbleDesktop: { maxWidth: '100%' },
+  bubble: { ...B.bubble, backgroundColor: colors.rowActive, borderRadius: radius.bubble },
+  replyBubble: { ...B.replyBubble, backgroundColor: colors.card },
+  replyBubbleDesktop: B.replyBubbleDesktop,
   bubbleText: { color: colors.text, fontSize: 14, lineHeight: 20 },
   // 微信式引用:气泡下方一条灰底小字「作者: 内容」(单行省略)
-  quoteChip: { marginTop: 4, maxWidth: '100%', borderLeftWidth: 2, borderLeftColor: colors.border, paddingLeft: spacing.sm, paddingVertical: 1 },
-  quoteChipSent: { alignSelf: 'flex-end' },
-  quoteChipReply: { alignSelf: 'flex-start' },
+  quoteChip: { ...B.quoteChip, borderLeftColor: colors.border },
+  quoteChipSent: B.quoteChipSent,
+  quoteChipReply: B.quoteChipReply,
   quoteChipText: { color: colors.textMuted, fontSize: 12, lineHeight: 16 },
   // 输入框上方的「正在引用」条
   quoteStrip: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginHorizontal: spacing.md, marginTop: spacing.sm, paddingHorizontal: spacing.sm, paddingVertical: 6, backgroundColor: colors.border + '55', borderRadius: radius.item },
@@ -2809,7 +2801,7 @@ const makeStyles = () =>
   },
   jumpPillText: { color: colors.accent, fontSize: 13, fontWeight: '600' },
   // 复制消息:桌面端悬停气泡时的右上角小按钮 + 底部「已复制」提示
-  replyPressable: { maxWidth: '100%', alignSelf: 'flex-start' },
+  replyPressable: B.replyPressable,
   // 复制 + ⋯ 两个 24px 圆钮排成一行,整行挂在气泡上沿外侧(MessageHoverActions)。
   hoverActions: { position: 'absolute', top: -10, zIndex: 2, flexDirection: 'row', gap: 4 },
   copyHover: { width: 24, height: 24, borderRadius: radius.pill, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.card, borderWidth: 1, borderColor: colors.border },

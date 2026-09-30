@@ -1,6 +1,7 @@
 // 极简 UI(2026-09-24)的 token 契约:对比度、刻度、以及已迁移界面不再有散落的颜色/粗体字面量。
 import { readFileSync, readdirSync } from 'node:fs';
 import { colors, radius, setThemeMode, type, weight } from './theme';
+import { bubbleLayout } from './bubble-layout';
 
 let p = 0, t = 0;
 const ck = (name: string, ok: boolean) => { t++; if (ok) p++; console.log(`${ok ? '✓' : '✗'} ${name}`); };
@@ -70,7 +71,7 @@ const chat = readFileSync(new URL('./ChatScreen.tsx', import.meta.url), 'utf8');
 const bubble = /\n  bubble: \{([\s\S]*?)\n  \},/.exec(chat)?.[1] ?? '';
 ck('chat bubble style block found', bubble.length > 0);
 ck('chat bubble has no border', !/borderWidth/.test(bubble));
-ck('quote chip is a left rule, not a filled block', /quoteChip: \{[^}]*borderLeftWidth: 2/.test(chat) && !/quoteChip: \{[^}]*backgroundColor/.test(chat));
+ck('quote chip is a left rule, not a filled block', bubbleLayout().quoteChip.borderLeftWidth === 2 && /quoteChip: \{ \.\.\.B\.quoteChip, borderLeftColor/.test(chat) && !/quoteChip: \{[^}]*backgroundColor/.test(chat));
 
 console.log(`${p}/${t} passed`);
 process.exit(p === t ? 0 : 1);
