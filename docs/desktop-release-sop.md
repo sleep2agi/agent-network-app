@@ -485,8 +485,11 @@ that body has no `What's new in <ver>:` section with items. So the version bump
 PR's "What's new" is a prerequisite for publishing the APK, not only the desktop
 release. Re-running the workflow for an already-published APK uploads only what
 is missing (for example the notes of a version published before this step existed). `-f dry_run=true` does everything up to the upload.
-Send the owner the APK link **after** this run is green; the release is done
-when `android/latest/VERSION` shows the new version.
+Send the owner the APK link **after** this run is green **and** the update
+page would show the full notes on a phone: `android/<ver>/notes.md` answers 200
+anonymously and contains `What's new in <ver>:` with this version's items
+(owner, 2026-09-30: 0.2.160's page showed only 「此版本包含功能改进和问题修复。」).
+The release is done when `android/latest/VERSION` shows the new version.
 The same can be run locally with `scripts/modelscope-android-publish.py publish
 --apk <file> --version <ver> --notes <notes.md> [--dry-run]` (token from `MODELSCOPE_API_TOKEN`),
 but releases go through the workflow from main.
