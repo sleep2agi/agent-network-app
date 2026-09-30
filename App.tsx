@@ -12,7 +12,7 @@ import { purgeLegacyAttachmentCache } from './src/AuthedThumb';
 import { prefetchStatus, login, fetchHubNodes, fetchNetworkId, HubConfig } from './src/api';
 import { registerHubAccount } from './src/user-admin-api';
 import { clientLabelForLogin } from './src/login-sessions';
-import { tauriShellPlatform } from './src/window-shell';
+import { popoutChatChrome, tauriShellPlatform } from './src/window-shell';
 import DmChatScreen from './src/DmChatScreen';
 import type { Human } from './src/human-dm';
 import { validateNewUser } from './src/user-admin';
@@ -51,6 +51,7 @@ import { installSystemThemeFollower } from './src/system-color-scheme';
 import { installWebScrollbarTheme } from './src/web-scrollbar';
 import MacTitleStrip from './src/mac-title-strip';
 import WinTitleBar from './src/win-title-bar';
+import PopoutWindowControls from './src/popout-window-controls';
 import { applyWindowBackground } from './src/window-background';
 import DesktopWindowPin from './src/DesktopWindowPin';
 import { styles } from './src/app-styles';
@@ -259,6 +260,8 @@ export default function App() {
           <MacTitleStrip />
           <WinTitleBar />
           <AppRoot />
+          {/* 分离聊天窗(Windows):页头兼当标题栏,– □ × 浮在右上角 —— 见 src/popout-window-controls.tsx */}
+          <PopoutWindowControls />
         </View>
         {updatePromptMode ? <DesktopUpdatePrompt manualOnly={updatePromptMode === 'manual'} /> : null}
         {Platform.OS === 'android' ? <AndroidUpdatePrompt /> : null}
@@ -673,6 +676,8 @@ function AppRoot() {
   // when the detached window is wide enough for the normal three-column UI.
   if (dedicatedChatWindow && cfg && (screen.name === 'chat' || screen.name === 'nodeInfo')) {
     const detachedAlias = screen.alias;
+    // 页头兼当标题栏(Vincent 2026-09-30「上面那个还是挺多余的」):Windows 无原生标题栏、macOS 红黄绿灯进页头。
+    const windowChrome = popoutChatChrome(Platform.OS);
     return (
       <SafeAreaView key={workspaceKey} style={[styles.root, rootInset]} testID="dedicated-chat-window">
         <StatusBar barStyle={theme === 'light' ? 'dark-content' : 'light-content'} backgroundColor={colors.bg} />
@@ -683,6 +688,7 @@ function AppRoot() {
             onBack={() => {}}
             onOpenNodeSettings={() => setScreen({ name: 'nodeInfo', alias: detachedAlias })}
             desktop
+            windowChrome={windowChrome}
           />
         ) : (
           <NodeDetailScreen
@@ -690,6 +696,7 @@ function AppRoot() {
             alias={detachedAlias}
             onBack={() => setScreen({ name: 'chat', alias: detachedAlias })}
             readOnly
+            windowChrome={windowChrome}
           />
         )}
         <DesktopMessageListener cfg={cfg} />

@@ -86,15 +86,48 @@ for (const name of ['设置窗(#483)', '看图窗(#464)', '分离聊天窗', '�
   ck(`清单包含 ${name}`, Object.values(REGISTRY).some(r => r.name === name));
 }
 
+// Windows 上一个窗口的窗口控件套数 = 原生标题栏(decorations)+ 主窗 WinTitleBar + 分离聊天窗 PopoutWindowControls,
+// 必须恰好 1。0.2.145 的「两个 ×」是 2;分离聊天窗 2026-09-30 起 decorations 按平台算(Windows 关),
+// 那一格要真算出来,不能只看字面量。
+const popoutControlsShow = (label: string): boolean => {
+  const fn = (shell as any).popoutChatChrome;
+  if (typeof fn !== 'function') return false;
+  const oldT = g.__TAURI_INTERNALS__;
+  const oldNav = Object.getOwnPropertyDescriptor(globalThis, 'navigator');
+  g.__TAURI_INTERNALS__ = { metadata: { currentWindow: { label }, currentWebview: { windowLabel: label, label } } };
+  Object.defineProperty(globalThis, 'navigator', { value: { platform: 'Win32', userAgent: 'Win32' }, configurable: true, writable: true });
+  try { return fn('web') === 'windows'; } finally {
+    if (oldT === undefined) delete g.__TAURI_INTERNALS__; else g.__TAURI_INTERNALS__ = oldT;
+    if (oldNav) Object.defineProperty(globalThis, 'navigator', oldNav); else delete g.navigator;
+  }
+};
+const COMPUTED_DECORATIONS = 'chatPopoutDecorations(tauriShellPlatform())';
+const decorationsOn = (expr: string, platform: 'windows' | 'mac'): boolean =>
+  expr === COMPUTED_DECORATIONS ? (shell as any).chatPopoutDecorations(platform) : expr !== 'false'; // Tauri 默认 true
+
 for (const s of sites) {
   const reg = REGISTRY[`${s.file} ${s.labelExpr}`];
   if (!reg) continue;
-  const deco = s.options.match(/\bdecorations:\s*(true|false)\b/)?.[1];
-  ck(`${reg.name}: decorations 显式写明(不靠默认值)`, deco === 'true' || deco === 'false', deco ?? 'missing');
-  const native = deco !== 'false'; // Tauri 默认 true
+  const deco = s.options.match(/\bdecorations:\s*(true|false|chatPopoutDecorations\(tauriShellPlatform\(\)\))/)?.[1];
+  ck(`${reg.name}: decorations 显式写明(不靠默认值)`, !!deco, deco ?? 'missing');
+  if (!deco) continue;
+  const native = decorationsOn(deco, 'windows');
   const bar = winTitleBarShows(reg.label);
-  ck(`${reg.name}: decorations ${native} ⇒ ${native ? '不' : ''}挂自绘 WinTitleBar(label=${reg.label})`, bar === !native, `WinTitleBar=${bar}`);
+  const popout = popoutControlsShow(reg.label);
+  ck(`${reg.name}: Windows 上恰好一套窗口控件(原生 ${native} / WinTitleBar ${bar} / 页头控件 ${popout},label=${reg.label})`,
+    Number(native) + Number(bar) + Number(popout) === 1);
+  ck(`${reg.name}: macOS 上保留 decorations(红黄绿灯是系统的)`, decorationsOn(deco, 'mac'));
 }
+
+// ── 分离聊天窗:页头兼当标题栏(Vincent 2026-09-30「上面那个还是挺多余的」)──────────────
+const chatSite = sites.find(s => s.labelExpr === 'chatWindowLabel()');
+ck('分离聊天窗 decorations 按平台算(Windows 关原生标题栏)', chatSite?.options.includes(`decorations: ${COMPUTED_DECORATIONS}`) === true);
+ck('分离聊天窗:Windows → decorations false,macOS → true', (shell as any).chatPopoutDecorations?.('windows') === false && (shell as any).chatPopoutDecorations?.('mac') === true);
+ck('分离聊天窗:无边框也保留阴影 + 可缩放(Tauri 无边框缩放走阴影区)', /\bshadow:\s*true\b/.test(chatSite?.options ?? '') && /\bresizable:\s*true\b/.test(chatSite?.options ?? ''));
+ck('分离聊天窗:红黄绿灯挪进页头(trafficLightPosition + Overlay)', (chatSite?.options ?? '').includes('trafficLightPosition:') && (chatSite?.options ?? '').includes("titleBarStyle: 'overlay'"));
+ck('分离聊天窗:窗口标题仍以 agent 名开头(任务栏 / Alt-Tab)', /title:\s*`\$\{alias\}/.test(chatSite?.options ?? ''));
+ck('只有分离聊天窗有页头控件:主窗/设置/工作区/任务/看图都没有', !popoutControlsShow('main') && !popoutControlsShow(SETTINGS_WINDOW_LABEL) && !popoutControlsShow(workspaceWindowLabel('p1')) && !popoutControlsShow(taskWindowLabel('p1', 'r')) && !popoutControlsShow(IMAGE_WINDOW_LABEL) && !popoutControlsShow('tray-panel'));
+ck('分离聊天窗 label 以 chat- 开头(PopoutWindowControls 靠它认窗口)', chatWindowLabel('示例', 'p1').startsWith((shell as any).CHAT_POPOUT_LABEL_PREFIX ?? '\0'));
 
 // ── 主窗:tauri.conf.json 唯一的窗口,Windows 上由 Rust 关掉 decorations,自己画标题栏 ─────────
 const conf = JSON.parse(read('src-tauri/tauri.conf.json')) as { app: { windows: Array<{ label?: string; decorations?: boolean }> } };
