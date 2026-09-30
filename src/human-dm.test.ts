@@ -2,8 +2,10 @@
 import { readFileSync } from 'node:fs';
 import {
   dmAttachments, dmSendBody, dmUnreadTotal, isHumanDmNotice, isImageAttachment, mergeDm, newClientRequestId,
-  peopleRows, stripHumanDms, unackedIncomingIds, type DmMessage,
+  PEOPLE_GROUP_KEY, peopleRows, shownPeople, stripHumanDms, unackedIncomingIds, type DmMessage,
 } from './human-dm';
+import { pinyinMatch } from './lib/pinyin';
+import { parseCollapsed, toggleCollapsed } from './agents-list';
 import { agentUnreadCounts, latestMessageAtByAgent } from './agent-unread-counts';
 import { proactiveItemsForAgent } from './proactive-messages';
 import { initialUnreadState } from './unread-ledger';
@@ -115,6 +117,33 @@ const ck = (name: string, ok: boolean) => { n++; if (ok) { p++; console.log(`  �
   ck('三种布局都能打开私信', (app.match(/<DmChatScreen /g) || []).length === 3 && (app.match(/onOpenPerson=\{p => setScreen\(dmScreenFor\(p\)\)\}/g) || []).length === 3);
   const panel = read('./UserManagementPanel.tsx');
   ck('新建用户:网络可选并按所选网络提交', panel.includes('manageableNetworks(me, networkId, allNetworks)') && panel.includes('network_id: targetNet'));
+}
+
+// —— 人员区块在列表最上面(Vincent 2026-09-30「这个人员放太下面了」)——
+{
+  const rows = peopleRows([
+    { user_id: 'u_a', username: 'chuqi' }, { user_id: 'u_b', username: 'chengshi' }, { user_id: 'u_c', username: 'vansin', display_name: '张三' },
+  ], [], 'u_me');
+  const all = shownPeople(rows, '', [], pinyinMatch);
+  ck('人员:不搜索时全部显示,可折叠,标题人数 = 全部', all.visible && all.rows.length === 3 && all.total === 3 && all.collapsible && !all.collapsed);
+  const folded = shownPeople(rows, '', [PEOPLE_GROUP_KEY], pinyinMatch);
+  ck('人员:折叠后只剩标题(人数照旧)', folded.visible && folded.rows.length === 0 && folded.total === 3 && folded.collapsed);
+  ck('人员:折叠状态与 agent 分组同存、可来回切', toggleCollapsed(toggleCollapsed([], PEOPLE_GROUP_KEY), PEOPLE_GROUP_KEY).length === 0 && parseCollapsed(JSON.stringify([PEOPLE_GROUP_KEY, '群星'])).includes(PEOPLE_GROUP_KEY));
+  ck('人员:折叠键不会和分组名撞上(不可见字符开头)', PEOPLE_GROUP_KEY.charCodeAt(0) === 0);
+  const hit = shownPeople(rows, 'cheng', [PEOPLE_GROUP_KEY], pinyinMatch);
+  ck('人员:搜索按用户名过滤,且搜索时无视折叠、不可折叠', hit.rows.map(r => r.username).join() === 'chengshi' && !hit.collapsible && hit.total === 1);
+  ck('人员:搜索支持显示名 + 拼音(zs → 张三)', shownPeople(rows, 'zs', [], pinyinMatch).rows.map(r => r.user_id).join() === 'u_c');
+  ck('人员:搜不到 → 整块不画', !shownPeople(rows, 'zzzz', [], pinyinMatch).visible);
+  ck('人员:没有人 → 整块不画', !shownPeople([], '', [], pinyinMatch).visible);
+
+  const agents = readFileSync(new URL('./AgentsScreen.tsx', import.meta.url), 'utf8');
+  const header = agents.indexOf('ListHeaderComponent={peopleShown.visible ? (');
+  const footer = agents.indexOf('ListFooterComponent={');
+  ck('顺序:人员在 ListHeaderComponent(列表最上面、分组之前)', header > 0 && agents.indexOf('testID="people-section"') > header && agents.indexOf('testID="people-section"') < footer);
+  ck('顺序:footer 里不再有人员', !agents.slice(footer).includes('people-section') && !agents.slice(footer).includes('renderPersonRow'));
+  ck('人员标题可折叠(与分组同一个 toggleGroup,键 PEOPLE_GROUP_KEY)', agents.includes('onPress={() => toggleGroup(PEOPLE_GROUP_KEY)}'));
+  ck('人员随搜索框过滤(同一个 pinyinMatch)', agents.includes('shownPeople(onOpenPerson ? people : [], query, collapsed, pinyinMatch)'));
+  ck('更紧凑对齐:人员展开时第一行 = 第一个人', agents.includes('publishListFirstRowTop(listYRef.current + peopleHeaderHRef.current)'));
 }
 
 console.log(`\n${p}/${n} passed`);
