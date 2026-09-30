@@ -7,14 +7,15 @@
 // Tablet 900 / 1000 / 1100 × 700 (Android UA, touch) and desktop 1000×700 / 1320×754 (mouse), light + dark:
 //   status    : the 状态 column header lies inside the visible part of the table (not pushed off the right edge)
 //   centred   : a row's title sits on the same centre line as its owner cell ±1.5 (the title is not pinned to the row top)
-//   untitled  : a row whose name is only zero-width characters shows 「（无标题）· <id tail>」 instead of an empty title
+//   untitled  : a row whose name is only zero-width characters shows 「（无标题）· <id tail>」 instead of an empty title,
+//               painted ≥ 40px wide (not only present in textContent)
 //   overflow  : no horizontal page scroll
 // Phone 390×844: the untitled task's card shows the same fallback.
 // Tablet 1000×700 with the #563 ID column (requirement_seq hub): 状态 still inside the table.
 // Exit 1 when any check fails or a viewport could not be opened.
 import { mkdirSync } from 'node:fs';
 import { join } from 'node:path';
-import { serveExport, initScript, findChromium, ANDROID_UA } from '../test-layout-sweep/harness.mjs';
+import { serveExport, initScript, findChromium, ANDROID_UA, paintedText } from '../test-layout-sweep/harness.mjs';
 
 const { chromium } = await import(process.env.PLAYWRIGHT_MODULE || 'playwright');
 const WEB = process.env.WEB_DIR;
@@ -88,7 +89,9 @@ for (const theme of ['light', 'dark']) {
     if (OUT) await page.screenshot({ path: join(OUT, `${v.kind}-${v.w}x${v.h}-${theme}${v.seq ? '-seq' : ''}-list.png`) });
     const overflow = await page.evaluate(() => document.scrollingElement.scrollWidth - window.innerWidth);
     const untitled = await box(page, tid('req-row-r_untitled01'));
-    const fallback = !!untitled && untitled.text.includes('（无标题）· tled01');
+    // Painted, not only textContent: 0.2.159–0.2.162 kept this text in the DOM at 0px wide and this check stayed green.
+    const fbText = await paintedText(page, `${tid('req-row-r_untitled01')} div[dir="auto"]`, '（无标题）· tled01');
+    const fallback = !!untitled && untitled.text.includes('（无标题）· tled01') && !!fbText?.painted && fbText.w >= 40;
     if (v.kind === 'phone') {
       record(vp, 'untitled card', { fallback, noOverflow: overflow <= 0 }, { text: untitled?.text.slice(0, 30) });
     } else {

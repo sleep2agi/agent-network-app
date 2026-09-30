@@ -149,3 +149,53 @@ export function findChromium() {
 }
 
 export const ANDROID_UA = 'Mozilla/5.0 (Linux; Android 14; Pixel Fold) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0 Safari/537.36';
+
+// ── painted text ──────────────────────────────────────────────────────────────────────────────────
+// A text check must look at the painted box, not textContent. 0.2.159–0.2.162 drew every task-list title 0px wide
+// (react-native-web `flex: 0` = CSS `0 1 0%` + overflow:hidden) while textContent was still the title, so every
+// text-only check stayed green (tests/test-task-title-visible, src/flex-zero-rule.test.ts).
+//
+// paintedText(page, selector, text?) → { w, h, text, painted } for the first rendered match (optionally the one whose
+// textContent === text), or null. painted = the box is ≥ 1×1 and the text is not clipped to nothing by an
+// overflow-hidden ancestor.
+export const paintedText = (page, selector, text) => page.evaluate(([s, t]) => {
+  const el = [...document.querySelectorAll(s)].find(e => e.getClientRects().length && (t === undefined || e.textContent === t));
+  if (!el) return null;
+  const b = el.getBoundingClientRect();
+  let w = b.width, h = b.height;
+  for (let a = el.parentElement; a && a !== document.body; a = a.parentElement) {
+    const cs = getComputedStyle(a);
+    if (cs.overflowX === 'visible' && cs.overflowY === 'visible') continue;
+    const r = a.getBoundingClientRect();
+    w = Math.min(w, Math.max(0, Math.min(b.right, r.right) - Math.max(b.left, r.left)));
+    h = Math.min(h, Math.max(0, Math.min(b.bottom, r.bottom) - Math.max(b.top, r.top)));
+  }
+  return { w, h, text: el.textContent, painted: w >= 1 && h >= 1 };
+}, [selector, text]);
+
+// zeroSizeText(page) → the rendered elements (inside an optional root) that own a visible text node but are painted
+// narrower / shorter than 1px — the exact title-blank shape. Skips what is meant to be unseen: visibility:hidden,
+// opacity 0 (animation / measuring twins), aria-hidden subtrees and elements positioned off-screen.
+export const zeroSizeText = (page, root) => page.evaluate((rootSel) => {
+  const scope = rootSel ? document.querySelector(rootSel) : document.body;
+  if (!scope) return [];
+  const out = [];
+  const unseen = (el) => {
+    for (let a = el; a && a !== document.documentElement; a = a.parentElement) {
+      const cs = getComputedStyle(a);
+      if (cs.visibility === 'hidden' || cs.display === 'none' || Number(cs.opacity) === 0 || a.getAttribute('aria-hidden') === 'true') return true;
+    }
+    return false;
+  };
+  for (const el of scope.querySelectorAll('*')) {
+    if (!el.getClientRects().length) continue;
+    const own = [...el.childNodes].filter(n => n.nodeType === 3 && n.textContent.replace(/[\s​-‏﻿]/g, '')).map(n => n.textContent).join('');
+    if (!own) continue;
+    const b = el.getBoundingClientRect();
+    if (b.width >= 1 && b.height >= 1) continue;
+    if (b.right < 0 || b.bottom < 0 || b.left > innerWidth || b.top > innerHeight) continue;
+    if (unseen(el)) continue;
+    out.push(`${el.getAttribute('data-testid') || el.parentElement?.getAttribute('data-testid') || el.tagName.toLowerCase()} "${own.trim().slice(0, 20)}" ${Math.round(b.width * 10) / 10}×${Math.round(b.height * 10) / 10}`);
+  }
+  return out;
+}, root ?? null);

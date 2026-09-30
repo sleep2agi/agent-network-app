@@ -80,7 +80,20 @@ const box = (page, sel) => page.evaluate((s) => {
 const overflow = (page) => page.evaluate(() => document.scrollingElement.scrollWidth - window.innerWidth);
 // ids of the task rows / cards / gantt entries on screen right now
 const shown = (page, prefix) => page.evaluate((p) => [...new Set([...document.querySelectorAll(`[data-testid^="${p}"]`)].filter(e => e.getClientRects().length).map(e => e.dataset.testid.slice(p.length)).filter(id => /^[sz]\d+$/.test(id)))].sort().join(','), prefix);
-const hits = (page) => page.evaluate(() => [...document.querySelectorAll('[data-testid="task-search-hit"]')].filter(e => e.getClientRects().length).map(e => e.textContent));
+// Painted hits only. In 0.2.159–0.2.162 the list title box was 0px wide with overflow:hidden: the highlight span inside
+// kept its own client rects and full width, it was just clipped away — so intersect with every clipping ancestor.
+const hits = (page) => page.evaluate(() => [...document.querySelectorAll('[data-testid="task-search-hit"]')].filter(e => {
+  const b = e.getBoundingClientRect();
+  let w = b.width, h = b.height;
+  for (let a = e.parentElement; a && a !== document.body; a = a.parentElement) {
+    const cs = getComputedStyle(a);
+    if (cs.overflowX === 'visible' && cs.overflowY === 'visible') continue;
+    const r = a.getBoundingClientRect();
+    w = Math.min(w, Math.min(b.right, r.right) - Math.max(b.left, r.left));
+    h = Math.min(h, Math.min(b.bottom, r.bottom) - Math.max(b.top, r.top));
+  }
+  return w >= 1 && h >= 1;
+}).map(e => e.textContent));
 const inputValue = (page) => page.evaluate(() => document.querySelector('[data-testid="task-search-input"]')?.value ?? null);
 const focused = (page) => page.evaluate(() => document.activeElement?.dataset?.testid ?? '');
 const settle = (page) => page.waitForTimeout(400); // > the 120ms debounce + a render

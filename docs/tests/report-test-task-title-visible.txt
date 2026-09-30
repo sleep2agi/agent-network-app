@@ -38,3 +38,19 @@ npm test: 276/276 test files passed · npm run typecheck: rc=0
 tests/test-task-title-visible 24/24 · tests/test-task-list-tablet 14/14 (rebuilt export)
 tests/test-composer-alignment not run (needs a hub); composer web CSS proven identical above.
 docker requirement-details (--network none): 41 pass, 0 fail (rerun on this commit)
+
+── Follow-up: composer measurement + painted-text checks (#583) ──
+Composer (tests/test-composer-input-size/drive.mjs; chat + dm, keyboard mode; phone 320/360/390/430,
+  tablet 700/1000/1280 Android UA, desktop 1000/1320): main 90f2f46 18/18, this branch 18/18,
+  every measured value byte-identical (e.g. phone 390 chat 270×40 → 4 lines 100 → 20 lines 120).
+  flex:0 did not zero the composer on web: the same line carries a web-only flexBasis:'auto'.
+  Desktop uses its own desktopInput (no inputInWrap). Mobile-web DM input is a fixed one-line height
+  (web-only `height` on that line) before and after; not flex-related, left as is.
+Painted-text helpers (tests/test-layout-sweep/harness.mjs): paintedText() clips by overflow ancestors;
+  zeroSizeText() lists rendered elements owning visible text but painted < 1px.
+  test-task-title-visible: + zeroSizeText on list/board/detail — main 8/24, branch 24/24.
+  test-layout-sweep: new column (f) — branch: (f) PASS on all 39 rows that ran; the 4 failing rows
+  (logs (d) pads ×2, modal:selectText NOT RUN ×2) fail identically on main's runner (pre-existing).
+  test-task-list-tablet: untitled fallback now painted-width — main 2/14 (was 14/14), branch 14/14.
+  test-task-search: highlight hits clipped by ancestors — main 62/68 (was 68/68), branch 68/68.
+  test-task-organize: child ↳ line boundingBox added — NOT RUN (needs a throwaway hub).
