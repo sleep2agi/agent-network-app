@@ -121,6 +121,9 @@ jobs:
           releaseBody: |-
             Signed and notarized stable update for macOS (Apple Silicon) and Windows (x64).
 
+            What's new in 0.2.168:
+            - 任务仪表盘「生成分享图」重新设计：超大数字显示本周完成了多少个任务、其中多少由 Agent 完成；下面是今天完成、单日最高和协作者人数，再列出最近完成的任务和完成人，最后是 Agent 和成员的占比。数据少的时候不画空图表。竖版和 4:5 两种尺寸，浅色、深色都有，电脑和手机导出一样的图。
+
             What's new in 0.2.167:
             - 提速：任务看板在 Hub 升级到 0.9.0-preview.75 后改为只下载精简列表和改动过的卡片，每次刷新的数据量从约 7.8 KB 降到约 0.5 KB，「数据可能有延迟」的提示会更少。打开任务时再读取完整描述和子任务。搜索改由 Hub 完成。连旧版 Hub 时照旧读取完整列表。
 
