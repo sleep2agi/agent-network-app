@@ -37,10 +37,10 @@ const fixture = (mode) => {
   const daily = [];
   for (let i = 370; i >= 0; i--) { const d0 = new Date(today0); d0.setDate(d0.getDate() - i); daily.push({ date: ymd(d0.getTime()), n: perDay(i) }); }
   const people = [
-    { kind: 'node', id: 'n_a', networkId: 'net-sweep', name: '示例需求牛', display_name: '' },
+    { kind: 'node', id: 'n_a', networkId: 'net-sweep', name: '示例助手 A', display_name: '' },
     // the hub's name falls back to the username when display_name is empty — this is the 「admin」 on the old card
     { kind: 'user', id: 'u_admin', networkId: 'net-sweep', name: 'admin', display_name: '' },
-    { kind: 'node', id: 'n_b', networkId: 'net-sweep', name: '示例通信龙', display_name: '' },
+    { kind: 'node', id: 'n_b', networkId: 'net-sweep', name: '示例助手 B', display_name: '' },
     { kind: 'node', id: 'n_c', networkId: 'net-sweep', name: '示例-C', display_name: '' },
     { kind: 'node', id: 'n_d', networkId: 'net-sweep', name: '示例-D', display_name: '' },
   ];
