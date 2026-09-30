@@ -1,4 +1,5 @@
 // 需求池走 Hub。手机和电脑读同一份。Hub 还没有这个接口时不要退回本机列表。
+import { readOnlyFromHub } from './task-access';
 import { appFetch } from './app-fetch';
 import { fetchAuthMe } from './user-admin-api';
 import { issuesFromHub } from './requirement-issues';
@@ -54,6 +55,8 @@ export function requirementFromHub(row: unknown): Requirement | null {
     // 只收 http(s):界面会把它做成可点的链接。
     ...('external_url' in r ? { externalUrl: typeof r.external_url === 'string' && /^https?:\/\//i.test(r.external_url) ? r.external_url : null } : {}),
     ...('seq' in r ? { seq: seqFromHub(r.seq) } : {}),
+    // 只读(RFC-038 §9):只有 hub 显式说不能改才锁;没有这个字段(旧 Hub、全部任务的人)照旧能改。
+    ...(readOnlyFromHub(r) ? { readOnly: true } : {}),
     id: r.id,
     name: r.name.trim().slice(0, 80),
     priority,

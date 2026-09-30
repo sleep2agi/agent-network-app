@@ -11,7 +11,7 @@ import { Text, TextInput } from './ui-text';
 import { Ionicons } from './icons';
 import RequirementAssignmentsEditor from './RequirementAssignmentsEditor';
 import { useModalSafePadding } from './safe-area-runtime';
-import { colors, spacing, type as typeScale, weight } from './theme';
+import { colors, radius, spacing, type as typeScale, weight } from './theme';
 import type { HubConfig } from './api';
 import { REQ_COLUMN_LABEL, REQ_COLUMNS, type ReqColumn, type Requirement, type RequirementProject } from './requirements-model';
 import type { RequirementPerson } from './requirement-people';
@@ -34,9 +34,11 @@ import TaskIdChip from './TaskIdChip';
 
 export const DRAWER_WIDTH = 420;
 
-export default function TaskDetailPanel({ cfg, item, items, onOpenRequirement, onCreateChild, projects, dueDatetime, lowestPriority, mode, top, people, peopleLoading, onLoadPeople, moving, moveError, onMove, onSave, onAssignmentsSaved, onClose, pointer, checklistError, onChecklistToggle, onChecklistAdd, onChecklistDelete, onChecklistMove, onOpenVoiceSettings, onOpenWindow }: {
+export default function TaskDetailPanel({ cfg, item, readOnly = false, items, onOpenRequirement, onCreateChild, projects, dueDatetime, lowestPriority, mode, top, people, peopleLoading, onLoadPeople, moving, moveError, onMove, onSave, onAssignmentsSaved, onClose, pointer, checklistError, onChecklistToggle, onChecklistAdd, onChecklistDelete, onChecklistMove, onOpenVoiceSettings, onOpenWindow }: {
   cfg: HubConfig;
   item: Requirement;
+  /** 只读(RFC-038 §9:hub 说这张卡我不能改)。表单整块不响应,底部不给「保存修改」,顶上一条说明。 */
+  readOnly?: boolean;
   /** 全部卡片(找父需求 / 子需求用)。 */
   items: readonly Requirement[];
   onOpenRequirement: (id: string) => void;
@@ -136,7 +138,15 @@ export default function TaskDetailPanel({ cfg, item, items, onOpenRequirement, o
   const moreShown = moreOpen || error?.field === 'parent' || error?.field === 'start' || !!checklistError;
   const body: ReactNode = (
     <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: spacing.xl, gap: spacing.lg }} keyboardShouldPersistTaps="handled">
+      {readOnly ? (
+        <View style={[styles.readOnly, { backgroundColor: colors.subtleFill }]} testID="req-detail-read-only">
+          <Ionicons name="lock-closed-outline" size={14} color={colors.textSecondary} />
+          <Text style={[s.muted, { flex: 1 }]}>{tr('tasks.readOnlyBanner')}</Text>
+        </View>
+      ) : null}
       <ParentBreadcrumb item={item} items={items} onOpen={onOpenRequirement} />
+      {/* 只读时下面的编辑控件整块不响应(看得见、点不动),而不是让人改完再被 hub 403 退回。 */}
+      <View pointerEvents={readOnly ? 'none' : 'auto'} style={{ gap: spacing.lg }} testID="req-detail-fields">
       <TextInput
         value={draft.name}
         onChangeText={name => set({ name })}
@@ -247,6 +257,7 @@ export default function TaskDetailPanel({ cfg, item, items, onOpenRequirement, o
           {item.createdAt ? <Text style={s.muted}>{tr('tasks.copy.139')}{item.createdAt.slice(0, 10)}</Text> : null}
         </View>
       ) : null}
+      </View>
     </ScrollView>
   );
 
@@ -254,16 +265,18 @@ export default function TaskDetailPanel({ cfg, item, items, onOpenRequirement, o
     <View style={[styles.footer, { borderTopColor: colors.border }, mode === 'page' && { paddingBottom: spacing.md + safe.paddingBottom }]}>
       {error?.field === 'submit' ? <Text style={[s.err, { flex: 1 }]} accessibilityRole="alert" testID="req-edit-error">{error.message}</Text>
         : <Text style={[s.muted, { flex: 1 }]} accessibilityLiveRegion="polite">{saving ? tr('tasks.copy.140') : saved ? tr('tasks.copy.141') : patch ? tr('tasks.copy.142') : ''}</Text>}
-      <Pressable
-        accessibilityRole="button"
-        {...a11yState({ disabled: !patch || saving })}
-        disabled={!patch || saving}
-        onPress={() => { void save(); }}
-        style={[s.primary, { height: 36, paddingHorizontal: spacing.lg }, (!patch || saving) && { opacity: 0.45 }]}
-        testID="req-edit-save"
-      >
-        <Text style={s.primaryText}>{tr('tasks.copy.143')}</Text>
-      </Pressable>
+      {readOnly ? null : (
+        <Pressable
+          accessibilityRole="button"
+          {...a11yState({ disabled: !patch || saving })}
+          disabled={!patch || saving}
+          onPress={() => { void save(); }}
+          style={[s.primary, { height: 36, paddingHorizontal: spacing.lg }, (!patch || saving) && { opacity: 0.45 }]}
+          testID="req-edit-save"
+        >
+          <Text style={s.primaryText}>{tr('tasks.copy.143')}</Text>
+        </Pressable>
+      )}
     </View>
   );
 
@@ -349,4 +362,5 @@ const makePanelStyles = () => StyleSheet.create({
   drawer: { position: 'absolute', right: 0, bottom: 0, width: DRAWER_WIDTH, maxWidth: '100%', borderLeftWidth: StyleSheet.hairlineWidth, borderTopLeftRadius: BOARD_RADIUS.card, zIndex: 20, overflow: 'hidden' },
   head: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, height: 56, paddingHorizontal: spacing.xl, borderBottomWidth: StyleSheet.hairlineWidth },
   footer: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingHorizontal: spacing.xl, paddingVertical: spacing.md, borderTopWidth: StyleSheet.hairlineWidth },
+  readOnly: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, paddingHorizontal: spacing.md, paddingVertical: spacing.sm, borderRadius: radius.item },
 });

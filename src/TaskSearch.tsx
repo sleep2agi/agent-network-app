@@ -38,6 +38,17 @@ export function ArchivedTag({ testID }: { testID?: string }) {
   );
 }
 
+/** 只读的卡(RFC-038 §9:hub 说我不能改)—— 与「已归档」同一个小标签样式,锁 + 「只读」。 */
+export function ReadOnlyTag({ testID }: { testID?: string }) {
+  useTranslation();
+  return (
+    <View style={{ flexShrink: 0, alignSelf: 'flex-start', height: 18, paddingHorizontal: 6, borderRadius: radius.pill, backgroundColor: colors.subtleFill, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', gap: 3 }} testID={testID ?? 'task-read-only-tag'}>
+      <Ionicons name="lock-closed-outline" size={10} color={colors.textMuted} />
+      <Text style={{ color: colors.textMuted, fontSize: 10, fontWeight: '600' }}>{tr('tasks.readOnly')}</Text>
+    </View>
+  );
+}
+
 type FieldProps = {
   value: string;
   onChangeText: (text: string) => void;
