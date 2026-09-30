@@ -112,6 +112,8 @@ mock.module('./src/requirements-hub', () => ({
   listRequirements: async () => listRows(),
   // 任务搜索「包含已归档」(task-search.ts):这里的用例不勾,读到就当没有归档的卡。
   listArchivedRequirements: async () => [],
+  // 列表被截断时的服务端搜索(Hub capability search):这里的 Hub 没有 search,不会被调用。
+  searchRequirementsOnHub: async () => [],
   migrateLocalRequirements: async () => {},
   probeAgentOwnerSupport: async () => roleCards,
   listProjects: async () => projectsMock,
