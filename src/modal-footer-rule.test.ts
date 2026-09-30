@@ -56,6 +56,7 @@ const AUDIT: Record<string, { count: number; kinds: Kind[]; input?: boolean; key
   'SettingsScreen.tsx': { count: 4, kinds: ['dialog'], keyboard: 'avoider', input: true, note: '固定内容小确认框;本地删除有输入框 ⇒ 键盘避让(本次)' },
   'SideThreadDrawer.tsx': { count: 1, kinds: ['drawer'], keyboard: 'avoider', input: true, note: '86% / 100% 面板,FlatList 可收缩,自带 KAV(同一套 keyboardAvoidEnabled)' },
   'TaskCardMenu.tsx': { count: 1, kinds: ['menu'], note: 'anchorRowMenu' },
+  'TaskSearch.tsx': { count: 1, kinds: ['menu'], keyboard: 'n/a: 搜索输入框在头部,不在「包含已归档」这个选项菜单 Modal 里;菜单只有一行开关', note: '锚在搜索框右端的小菜单,固定一行,不需要滚动' },
   'TaskDescriptionFullscreen.tsx': { count: 2, kinds: ['fullscreen'], keyboard: 'followup: 全屏描述编辑,手机按住说话条在底部,无键盘避让', note: '正文 flex:1' },
   'TaskDetailPanel.tsx': { count: 1, kinds: ['fullscreen'], keyboard: 'followup: 全屏详情,编辑时 iOS 键盘可能盖住底部按钮行', note: 'ScrollView flex:1,footer 在外' },
   'TaskDuePicker.tsx': { count: 1, kinds: ['menu', 'sheet'], keyboard: 'followup: 日期弹层里的时间输入;固定尺寸弹层,手机上键盘可能盖住下半', note: 'duePanelPlacement 固定尺寸日历' },

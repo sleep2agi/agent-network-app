@@ -400,3 +400,19 @@ registerTranslations({
   'detail.sumIssues': ['{n} 个 Issue', '{n} issues'],
   'detail.sumTags': ['{n} 个标签', '{n} tags'],
 });
+
+// 任务页搜索(TaskSearch.tsx / task-search.ts)。
+registerTranslations({
+  'taskSearch.placeholder': ['搜索任务', 'Search tasks'],
+  'taskSearch.open': ['搜索任务', 'Search tasks'],
+  'taskSearch.cancel': ['取消', 'Cancel'],
+  'taskSearch.clear': ['清除搜索', 'Clear search'],
+  'taskSearch.options': ['搜索选项', 'Search options'],
+  'taskSearch.includeArchived': ['包含已归档', 'Include archived'],
+  'taskSearch.archived': ['已归档', 'Archived'],
+  'taskSearch.archivedFailed': ['没能读取已归档的任务:', 'Could not load archived tasks: '],
+  'taskSearch.hint': ['按 / 或 Ctrl/⌘+K 搜索,Esc 清空', 'Press / or Ctrl/⌘+K to search, Esc to clear'],
+  'taskSearch.empty': ['没有找到包含 “{q}” 的任务', 'No tasks containing “{q}”'],
+  'taskSearch.emptyFiltered': ['也可能被上面的筛选挡住了', 'The filters above may also be hiding some'],
+  'taskSearch.count': ['找到 {n} 个', '{n} found'],
+});

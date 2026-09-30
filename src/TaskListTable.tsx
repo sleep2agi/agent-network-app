@@ -18,12 +18,15 @@ import TaskTimeCell from './TaskTimeCell';
 import { fieldWidth, loadFields, resetFieldWidth, saveFields, setFieldWidth, type FieldId, type FieldPref } from './task-list-fields';
 import { ParentLine, ProjectSelect } from './TaskFieldPickers';
 import { shortIdLabel } from './task-short-id';
+import { ArchivedTag, highlight } from './TaskSearch';
 
 const CHECK_W = 20;
 const HANDLE = 8, KEY_STEP = 16;
 type PointerLike = { nativeEvent: { clientX: number; pointerId: number }; currentTarget: unknown };
-export default function TaskListTable({ rows, people, projects, sort, setSort, s, today, selectedId, onOpen, filtered, needsUpdateUpgrade, touch, onMenu, items, selection, onProject, seqCapable = false }: {
-  rows: Requirement[]; people: RequirementPerson[]; projects: RequirementProject[] | null;
+export default function TaskListTable({ rows, terms, people, projects, sort, setSort, s, today, selectedId, onOpen, filtered, needsUpdateUpgrade, touch, onMenu, items, selection, onProject, seqCapable = false }: {
+  rows: Requirement[]; people: RequirementPerson[];
+  /** 搜索词(task-search.ts searchTerms):标题里命中的字高亮。 */
+  terms?: readonly string[]; projects: RequirementProject[] | null;
   sort: SortSpec; setSort: (next: SortSpec) => void; s: TaskStyles; today: string;
   selectedId: string | null; onOpen: (id: string) => void; filtered: boolean; needsUpdateUpgrade: boolean;
   touch: boolean; onMenu: (item: Requirement, x: number, y: number) => void;
@@ -83,7 +86,7 @@ export default function TaskListTable({ rows, people, projects, sort, setSort, s
         const by = id === 'updated' && item.updatedBy ? people.find(p => p.kind === item.updatedBy!.kind && p.id === item.updatedBy!.id)?.name ?? item.updatedBy.id : undefined;
         return <TaskTimeCell id={`task-time-${item.id}-${id}`} raw={id === 'created' ? item.createdAt : item.updatedAt} now={now} by={by} />;
       }
-      case 'title': return <View style={{ flex: 1, minWidth: 0, gap: 4 }}><Text style={[s.tdTitle, item.column === 'done' && s.cardDone]} numberOfLines={1}>{item.name}</Text>{items ? <ParentLine item={item} items={items} /> : null}<TaskTagChips tags={item.tags} /></View>;
+      case 'title': return <View style={{ flex: 1, minWidth: 0, gap: 4 }}><View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, minWidth: 0 }}><Text style={[s.tdTitle, item.column === 'done' && s.cardDone]} numberOfLines={1}>{highlight(item.name, terms)}</Text>{item.archived ? <ArchivedTag /> : null}</View>{items ? <ParentLine item={item} items={items} /> : null}<TaskTagChips tags={item.tags} /></View>;
       case 'owner': return <OwnerBadge item={item} people={people} s={s} />;
       case 'priority': return <View style={s.owner}><PriorityBadge p={item.priority} s={s} /></View>;
       case 'due': return item.due ? <DueChip item={item} today={today} s={s} /> : <Text style={s.metaMuted}>—</Text>;

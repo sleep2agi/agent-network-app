@@ -74,6 +74,8 @@ export const initScript = ({ theme }) => {
       Object.assign(row, patch, { updatedAt: new Date().toISOString() });
       return { ok: true, requirement: row };
     }
+    // ?archived=true (the 任务 search's 包含已归档): only the fixture's archived rows.
+    if (TASKS && p === '/api/requirements' && u.searchParams.get('archived') === 'true') return { ok: true, requirements: TASKS.archived ?? [], capabilities: TASKS.capabilities ?? [] };
     if (TASKS && p === '/api/requirements') return { ok: true, requirements: TASKS.requirements ?? [], capabilities: TASKS.capabilities ?? [] };
     if (p === '/api/auth/me') return { ok: true, user: { username: 'tester' }, current_network: 'net-sweep', networks: [{ network_id: 'net-sweep', name: 'sweep' }] };
     // `?light=1` is the hub's narrow projection (server/src/server.ts): exactly these 8 fields, no

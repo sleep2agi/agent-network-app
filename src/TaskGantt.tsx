@@ -21,6 +21,7 @@ import { colors, onThemeChange, radius, spacing, themeMode, type as typeScale, w
 import type { Requirement, RequirementProject } from './requirements-model';
 import type { RequirementPerson } from './requirement-people';
 import { PriorityDot, ProjectChip, Segmented, STATUS_TONE, a11yState, cardBg, softShadow, type TaskStyles } from './TaskBoardParts';
+import { highlight } from './TaskSearch';
 import {
   GANTT_DAY_PX, pinnedMonth, barGeometry, clampDragDays, dragDays, shiftedDue, barOverdue, dayDiff, firstCurrentWeek, ganttGroups, ganttRange, ganttTicks, ganttWeeks, plusDays, todayX, weekStrip,
   type GanttBar, type GanttGroup, type GanttRange, type GanttGroupBy, type GanttScale,
@@ -51,6 +52,8 @@ type Props = {
   startCapable?: boolean;
   /** 鼠标拖条的右端改期限;不传 = 只读(手机 / 触屏)。 */
   onDue?: (id: string, due: string) => void;
+  /** 搜索词(task-search.ts):任务名里命中的字高亮。 */
+  terms?: readonly string[];
 };
 
 export default function TaskGantt(props: Props & { phone: boolean }) {
@@ -58,7 +61,7 @@ export default function TaskGantt(props: Props & { phone: boolean }) {
   return props.phone ? <GanttWeekList {...props} /> : <GanttChart {...props} />;
 }
 
-function GanttChart({ items, projects, people, today, s, onOpen, selectedId, startCapable, onDue }: Props) {
+function GanttChart({ items, projects, people, today, s, onOpen, selectedId, startCapable, onDue, terms }: Props) {
   useTranslation();
   const g = useGanttStyles();
   const [groupBy, setGroupByState] = useState<GanttGroupBy>(lastGroupBy ?? (projects ? 'project' : 'agent'));
@@ -208,7 +211,7 @@ function GanttChart({ items, projects, people, today, s, onOpen, selectedId, sta
           testID={`gantt-name-${l.bar.item.id}`}
         >
           <PriorityDot p={l.bar.item.priority} s={s} />
-          <Text style={[g.nameText, l.bar.item.column === 'done' && s.cardDone]} numberOfLines={1}>{l.bar.item.name}</Text>
+          <Text style={[g.nameText, l.bar.item.column === 'done' && s.cardDone]} numberOfLines={1}>{highlight(l.bar.item.name, terms)}</Text>
         </Pressable>
       )))}
     </View>
@@ -298,7 +301,7 @@ function GanttChart({ items, projects, people, today, s, onOpen, selectedId, sta
           ) : (
             <View style={g.empty} testID="gantt-empty"><Text style={s.muted}>{tr('gantt.empty')}</Text></View>
           )}
-          {undated.length ? <UndatedList items={undated} projects={projects} people={people} s={s} g={g} onOpen={onOpen} selectedId={selectedId} /> : null}
+          {undated.length ? <UndatedList items={undated} terms={terms} projects={projects} people={people} s={s} g={g} onOpen={onOpen} selectedId={selectedId} /> : null}
         </ScrollView>
       </View>
     </View>
@@ -320,7 +323,7 @@ function PinnedMonth({ subscribe, range, px, g }: { subscribe: (f: (x: number) =
   );
 }
 
-function UndatedList({ items, projects, people, s, g, onOpen, selectedId }: { items: readonly Requirement[]; projects: readonly RequirementProject[] | null; people: readonly RequirementPerson[]; s: TaskStyles; g: GanttStyles; onOpen: (id: string) => void; selectedId?: string | null }) {
+function UndatedList({ items, projects, people, s, g, onOpen, selectedId, terms }: { terms?: readonly string[]; items: readonly Requirement[]; projects: readonly RequirementProject[] | null; people: readonly RequirementPerson[]; s: TaskStyles; g: GanttStyles; onOpen: (id: string) => void; selectedId?: string | null }) {
   useTranslation();
   const projectById = new Map((projects ?? []).map(p => [p.id, p]));
   return (
@@ -340,7 +343,7 @@ function UndatedList({ items, projects, people, s, g, onOpen, selectedId }: { it
           testID={`gantt-undated-${item.id}`}
         >
           <PriorityDot p={item.priority} s={s} />
-          <Text style={[g.nameText, item.column === 'done' && s.cardDone]} numberOfLines={1}>{item.name}</Text>
+          <Text style={[g.nameText, item.column === 'done' && s.cardDone]} numberOfLines={1}>{highlight(item.name, terms)}</Text>
           {projects && item.projectId ? <ProjectChip project={projectById.get(item.projectId)} s={s} small /> : null}
           <Text style={[s.muted, { width: 180 }]} numberOfLines={1}>{ownerLabel(item, people)}</Text>
         </Pressable>
@@ -350,7 +353,7 @@ function UndatedList({ items, projects, people, s, g, onOpen, selectedId }: { it
 }
 
 // ── 手机:按周分组的列表 ──
-function GanttWeekList({ items, projects, people, today, s, onOpen }: Props) {
+function GanttWeekList({ items, projects, people, today, s, onOpen, terms }: Props) {
   useTranslation();
   const g = useGanttStyles();
   const { weeks, undated } = useMemo(() => ganttWeeks(items, today), [items, today]);
@@ -390,7 +393,7 @@ function GanttWeekList({ items, projects, people, today, s, onOpen }: Props) {
                   testID={`gantt-week-row-${bar.item.id}`}
                 >
                   {projects && bar.item.projectId ? <ProjectChip project={projectById.get(bar.item.projectId)} s={s} small /> : null}
-                  <Text style={[s.cardTitle, bar.item.column === 'done' && s.cardDone]} numberOfLines={2}>{bar.item.name}</Text>
+                  <Text style={[s.cardTitle, bar.item.column === 'done' && s.cardDone]} numberOfLines={2}>{highlight(bar.item.name, terms)}</Text>
                   <View style={s.meta}>
                     <PriorityDot p={bar.item.priority} s={s} />
                     <Text style={[s.metaText, overdue && { color: colors.failed }]} numberOfLines={1}>
@@ -425,7 +428,7 @@ function GanttWeekList({ items, projects, people, today, s, onOpen }: Props) {
                 style={state => [s.phoneRow, i === undated.length - 1 && { borderBottomWidth: 0 }, state.pressed && { backgroundColor: colors.rowHover }]}
                 testID={`gantt-undated-${item.id}`}
               >
-                <Text style={[s.cardTitle, item.column === 'done' && s.cardDone]} numberOfLines={2}>{item.name}</Text>
+                <Text style={[s.cardTitle, item.column === 'done' && s.cardDone]} numberOfLines={2}>{highlight(item.name, terms)}</Text>
                 <Text style={s.metaMuted} numberOfLines={1}>{ownerLabel(item, people)}</Text>
               </Pressable>
             ))}

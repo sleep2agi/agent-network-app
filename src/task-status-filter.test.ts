@@ -59,7 +59,8 @@ ck('状态 chip 在项目 chip 之后', at('testID="task-filter-project"') > 0 &
 ck('状态 chip 用同一个 Chip 组件', /<Chip[\s\S]{0,400}testID="task-filter-status"/.test(board));
 ck('「清除筛选」也清状态', /setTaskFilter\(\{ owners: \[\], priorities: \[\], project: '', statuses: \[\]/.test(board));
 ck('弹层里有「隐藏已完成」', board.includes("tr('tasks.hideDone')") && board.includes('status-hide-done'));
-ck('看板和手机列表都走 boardColumns', board.includes('boardColumns(items, filter)'));
+// 任务搜索(task-search.ts)之后传进去的是「搜索后的行」;要守的是「列都由 boardColumns 按 filter 分」。
+ck('看板和手机列表都走 boardColumns', /boardColumns\((items|searched), filter\)/.test(board));
 
 console.log('\n文案');
 ck('三条新文案都有中英', ['tasks.filterStatus', 'tasks.filterStatusA11y', 'tasks.hideDone'].every(k => { setLanguagePreference('en'); const en = t(k); setLanguagePreference('zh'); const zh = t(k); return en !== k && zh !== k && en !== zh; }));

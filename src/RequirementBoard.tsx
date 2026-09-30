@@ -23,7 +23,7 @@ import AliasAvatar from './AliasAvatar';
 import type { HubConfig } from './api';
 import { REQ_COLUMN_LABEL, REQ_COLUMNS, REQ_PRIORITIES, type ChecklistItem, type ReqColumn, type Requirement, type RequirementProject } from './requirements-model';
 import { readRequirements, requirementsKey, writeRequirements } from './requirements-store';
-import { createProject, createRequirementOnHub, fetchMyUserId, listProjects, listRequirementsFull, setChecklistItemOnHub, updateProject, listRequirements, migrateLocalRequirements, moveRequirementOnHub, probeAgentOwnerSupport, RequirementsHubError, updateRequirementOnHub } from './requirements-hub';
+import { createProject, createRequirementOnHub, fetchMyUserId, listArchivedRequirements, listProjects, listRequirementsFull, setChecklistItemOnHub, updateProject, listRequirements, migrateLocalRequirements, moveRequirementOnHub, probeAgentOwnerSupport, RequirementsHubError, updateRequirementOnHub } from './requirements-hub';
 import { listRequirementPeople } from './requirement-people-api';
 import { personKey, type RequirementPerson } from './requirement-people';
 import { colors, radius, spacing } from './theme';
@@ -32,9 +32,9 @@ import { pointerUi } from './pointer-ui';
 import { useModalSafePadding } from './safe-area-runtime';
 import { usePoll } from './usePoll';
 import { applyFilter, applyMove, boardColumns, createInput, DEFAULT_SORT, DRAG_IDLE, dragReduce, dropIndex, emptyDraft, activeProjects, defaultProjectFor, NO_PROJECT, projectCounts, filterActive, hasRoles, localToday, addChecklistItem, moveChecklistItem, removeChecklistItem, setChecklistDone, neighbourColumn, nextSort, revertMove, sortRows, toggleIn, hidesDone, toggleHideDone, UNASSIGNED, type CreateDraft, type DragEvent, type DragState, type EditPatch, type SortKey, type SortSpec } from './task-board-model';
-import { enterTaskScope, patchTaskBoard, setManagingProjects, setTaskFilter, setTaskSection, taskScopeKey, updateTaskItems, useTaskBoard, type TaskSection } from './task-board-store';
+import { enterTaskScope, patchTaskBoard, setManagingProjects, setTaskFilter, setTaskSearch, setTaskSection, taskScopeKey, updateTaskItems, useTaskBoard, type TaskSection } from './task-board-store';
 import { PRIORITY_CODE, priorityChoices, priorityLabel, supportsLowest } from './task-priority';
-import { CardMeta, ChecklistProgress, Chip, ParticipantStack, ProjectChip, DueChip, OwnerBadge, PriorityDot, Segmented, STATUS_TONE, useTaskStyles, type TaskStyles, a11yState } from './TaskBoardParts';
+import { CONTROL_H, CardMeta, ChecklistProgress, Chip, ParticipantStack, ProjectChip, DueChip, OwnerBadge, PriorityDot, Segmented, STATUS_TONE, useTaskStyles, type TaskStyles, a11yState } from './TaskBoardParts';
 import TaskCreateDialog from './TaskCreateDialog';
 import TaskDetailPanel, { DRAWER_WIDTH } from './TaskDetailPanel';
 import TaskCardMenu, { type TaskMenuTarget } from './TaskCardMenu';
@@ -46,6 +46,10 @@ import { SelectMenu } from './TaskSelectMenu';
 import { changeConcernsMe, parseTaskChanged } from './task-window-model';
 import { currentWindowLabel, emitTaskChanged, listenTaskChanged, openTaskWindow } from './task-window';
 import { menuMaxHeight } from './modal-bounds';
+import { EMPTY_SEARCH, focusKindOf, isSearchShortcut, SEARCH_DEBOUNCE_MS, searchedTasks, searchTerms } from './task-search';
+import { ArchivedTag, highlight, SearchCancel, SearchEmpty, SearchField, SearchIconButton } from './TaskSearch';
+import { comboFromEvent, shortcutForCombo } from './shortcuts-model';
+import { isMacKeyboard, shortcutBindings, shortcutCaptureActive } from './shortcuts-store';
 import { isSelectClick, NO_SELECTION, pruneSelection, runBulk, selectClick, toggleSelected, type BulkProgress, type SelectAnchor, type Selection } from './task-select-model';
 import { SEQ_CAPABILITY } from './task-short-id';
 
@@ -90,6 +94,9 @@ function ScopedRequirementBoard({ cfg, desktop, dispatch, onOpenVoiceSettings, s
   const lowestPriority = useTaskBoard(st => st.scope === scope && supportsLowest(st.capabilities));
   const priorityOptions = useMemo(() => priorityChoices(lowestPriority), [lowestPriority]);
   const filter = useTaskBoard(st => st.filter);
+  // 换网络时整块看板按 scope 重新挂载;第一帧 store 还是上一个网络的,别把它的搜索词带过来。
+  const search = useTaskBoard(st => (st.scope === scope ? st.search : EMPTY_SEARCH));
+  const archivedCapable = useTaskBoard(st => st.scope === scope && st.capabilities.includes('archived'));
   const items = mine ? storeItems : [];
   /** 这块看板本次启动里从 Hub 读成功过(哪怕是空的)——连不上时照常显示那份,而不是整页报错。 */
   const hasCached = useTaskBoard(st => st.scope === scope && st.loaded);
@@ -139,7 +146,26 @@ function ScopedRequirementBoard({ cfg, desktop, dispatch, onOpenVoiceSettings, s
   /** 上一次整张表读成功的时刻(首屏或轮询)。 */
   const lastListAt = useRef(0);
   const today = localToday();
-  const selected = items.find(item => item.id === selectedId) || null;
+  // ── 搜索(task-search.ts):输入框里的字去抖后才进共享状态;归档的卡只在勾了「包含已归档」时另读 ──
+  const [searchText, setSearchText] = useState(search.q);
+  const [searchOpen, setSearchOpen] = useState(!!search.q);
+  const [archivedRows, setArchivedRows] = useState<Requirement[]>([]);
+  const searchRef = useRef<any>(null);
+  useEffect(() => {
+    if (searchText === search.q) return;
+    const t = setTimeout(() => setTaskSearch({ ...search, q: searchText }), SEARCH_DEBOUNCE_MS);
+    return () => clearTimeout(t);
+  }, [searchText, search]);
+  const clearSearch = () => { setSearchText(''); setTaskSearch({ ...search, q: '' }); };
+  const wantArchived = archivedCapable && search.archived && !!searchTerms(search.q).length;
+  useEffect(() => {
+    if (!wantArchived) return;
+    let dead = false;
+    listArchivedRequirements(cfg).then(rows => { if (!dead) setArchivedRows(rows); }).catch(e => { if (!dead) setBanner(tr('taskSearch.archivedFailed') + (e instanceof Error ? e.message : String(e))); });
+    return () => { dead = true; };
+  }, [wantArchived, cfg.serverUrl, cfg.token, cfg.networkId]);
+  const archived = wantArchived ? archivedRows : [];
+  const selected = items.find(item => item.id === selectedId) || archived.find(item => item.id === selectedId) || null;
 
   // ── 读 Hub ──
   useEffect(() => {
@@ -387,8 +413,11 @@ function ScopedRequirementBoard({ cfg, desktop, dispatch, onOpenVoiceSettings, s
   const openMenuAt = (item: Requirement, x: number, y: number) => setMenu({ id: item.id, title: item.name, column: item.column, x, y });
 
   // ── 视图 ──
-  const visible = useMemo(() => applyFilter(items, filter), [items, filter]);
-  const columns = useMemo(() => boardColumns(items, filter), [items, filter]);
+  // 搜索先挑、筛选再筛(两个都是逐行判断,顺序不影响结果);列表 / 看板 / 甘特图都只从这两个取。
+  const terms = useMemo(() => searchTerms(search.q), [search.q]);
+  const searched = useMemo(() => searchedTasks(items, archived, search, { people, projects }), [items, archived, search, people, projects]);
+  const visible = useMemo(() => applyFilter(searched, filter), [searched, filter]);
+  const columns = useMemo(() => boardColumns(searched, filter), [searched, filter]);
   // 状态筛选把列变少了:手机分页别停在已经不存在的那一页上。
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => { const last = Math.max(0, columns.length - 1); if (page > last) { setPage(last); pagerRef.current?.scrollTo({ x: last * pageWidth, animated: false }); } }, [columns.length]);
@@ -442,6 +471,25 @@ function ScopedRequirementBoard({ cfg, desktop, dispatch, onOpenVoiceSettings, s
     doc.addEventListener('keydown', onKey);
     return () => doc.removeEventListener('keydown', onKey);
   }, [pointer, sel.ids.length, selectedId, bulkMenu, menu, draft]);
+  // 桌面:「/」或 ⌘/Ctrl+K(设置 → 快捷键里「搜索」那一条的组合)聚焦任务搜索框(派发记录、新建对话框、
+  // 「在新窗口打开」的整窗里不接)。window 捕获阶段 + preventDefault:App.tsx 的全局快捷键(document 捕获阶段)
+  // 见 defaultPrevented 就不再把 ⌘K 当「搜索会话」切去 Agents —— 在任务页上 ⌘K 搜的是任务。
+  const searchKeys = pointer && !single && section !== 'dispatch' && !draft;
+  useEffect(() => {
+    const win = (globalThis as any).window;
+    if (!searchKeys || !win?.addEventListener) return;
+    const mac = isMacKeyboard();
+    const onKey = (e: any) => {
+      if (e.defaultPrevented || e.isComposing || shortcutCaptureActive()) return;
+      const nav = shortcutForCombo(shortcutBindings(), comboFromEvent(e, mac)) === 'nav.search';
+      if (!isSearchShortcut(e, focusKindOf(e.target), nav)) return;
+      e.preventDefault();
+      setSearchOpen(true);
+      searchRef.current?.focus?.();
+    };
+    win.addEventListener('keydown', onKey, true);
+    return () => win.removeEventListener('keydown', onKey, true);
+  }, [searchKeys]);
   const openBulkMenu = async (kind: 'project' | 'status' | 'agent') => {
     if (kind === 'agent' && !(await loadPeople()) && !people.length) return;
     const el = bulkRefs.current[kind];
@@ -548,13 +596,58 @@ function ScopedRequirementBoard({ cfg, desktop, dispatch, onOpenVoiceSettings, s
     </Pressable>
   );
 
+  // 搜索:桌面宽窗口 = 工具栏里常驻的搜索框;触屏(手机 / 平板)和桌面窄窗口 = 放大镜,点开成搜索条 + 「取消」。
+  const canSearch = section !== 'dispatch';
+  const inlineSearch = canSearch && pointer && !narrow;
+  const closeSearch = () => { clearSearch(); setSearchOpen(false); };
+  const searchField = (style: object, autoFocus: boolean) => (
+    <SearchField
+      ref={searchRef}
+      value={searchText}
+      onChangeText={setSearchText}
+      onClear={clearSearch}
+      onEscapeEmpty={() => (inlineSearch ? searchRef.current?.blur?.() : setSearchOpen(false))}
+      archivedCapable={archivedCapable}
+      includeArchived={search.archived}
+      onToggleArchived={() => setTaskSearch({ q: searchText, archived: !search.archived })}
+      touch={!pointer}
+      autoFocus={autoFocus}
+      style={style}
+      testID="task-search"
+    />
+  );
+  // 头部一行的筛选放得下吗:筛选条的内容宽(横向 ScrollView 报的)+ 同一行其余控件的宽 ≤ 头部宽。
+  // 两种摆法里筛选条都是同一个横向 ScrollView ⇒ 内容宽一直量得到,窗口拉宽后能挪回一行。
+  const SEARCH_BOX_W = 200;
+  const [filtersW, setFiltersW] = useState(0);
+  // 标题 + 分段 + 搜索 + 新建 + 左右留白 + 四个间隙:筛选以外这一行要占的宽(各自 onLayout 量出来,不按字数估)。
+  const [fixedParts, setFixedParts] = useState<{ title: number; seg: number; new: number }>({ title: 0, seg: 0, new: 0 });
+  const measureFixed = (k: 'title' | 'seg' | 'new', w: number) => setFixedParts(p => (Math.abs(p[k] - w) < 0.5 ? p : { ...p, [k]: w }));
+  const fixedW = fixedParts.title && fixedParts.seg ? fixedParts.title + fixedParts.seg + fixedParts.new + (inlineSearch ? SEARCH_BOX_W : canSearch ? CONTROL_H : 0) + spacing.md * 4 + spacing.xl * 2 : 0;
+  const filtersInline = !filters || !filtersW || !fixedW || filtersW + fixedW + spacing.md <= width;
+  const filterStrip = (
+    <ScrollView horizontal showsHorizontalScrollIndicator={false} style={filtersInline ? { flex: 1, minWidth: 0 } : { flexGrow: 0 }} contentContainerStyle={{ flexDirection: 'row', alignItems: 'center', gap: spacing.md }} onContentSizeChange={w => setFiltersW(Math.ceil(w))} testID="task-header-filters">
+      {filters}
+    </ScrollView>
+  );
+  const searchButton = canSearch && !inlineSearch ? <SearchIconButton s={s} active={searchOpen || !!terms.length} onPress={() => setSearchOpen(o => !o)} /> : null;
+
   const header = narrow ? (
     <View onLayout={e => setHeaderBottom(e.nativeEvent.layout.y + e.nativeEvent.layout.height)}>
-      <View style={[s.header, s.headerPhone]} testID="task-header">
-        <Text style={s.pageTitle} accessibilityRole="header">{tr('tasks.copy.41')}</Text>
-        <View style={s.spacer} />
-        {newButton}
-      </View>
+      {canSearch && searchOpen ? (
+        // 手机:搜索条占掉标题这一行(微信);分段和筛选还在下面,搜索和筛选叠加。
+        <View style={[s.header, s.headerPhone]} testID="task-header">
+          {searchField({ flex: 1 }, !searchText)}
+          <SearchCancel onPress={closeSearch} />
+        </View>
+      ) : (
+        <View style={[s.header, s.headerPhone]} testID="task-header">
+          <Text style={s.pageTitle} accessibilityRole="header">{tr('tasks.copy.41')}</Text>
+          <View style={s.spacer} />
+          {searchButton}
+          {newButton}
+        </View>
+      )}
       <View style={{ paddingHorizontal: spacing.lg, paddingBottom: spacing.sm }}>
         <Segmented s={s} items={sections} value={section} onChange={setTaskSection} testID="tasks-view" />
       </View>
@@ -563,14 +656,24 @@ function ScopedRequirementBoard({ cfg, desktop, dispatch, onOpenVoiceSettings, s
       ) : null}
     </View>
   ) : (
-    <View style={s.header} testID="task-header" onLayout={e => setHeaderBottom(e.nativeEvent.layout.y + e.nativeEvent.layout.height)}>
-      <Text style={[s.pageTitle, { flexShrink: 0 }]} numberOfLines={1} accessibilityRole="header">{tr('tasks.copy.41')}</Text>
-      <View style={{ flexShrink: 0 }}><Segmented s={s} items={sections} value={section} onChange={setTaskSection} testID="tasks-view" /></View>
-      {/* 筛选一行放不下(桌面窄窗口:1000 宽时内容区只有 ~716)就在这一格里横向滚动,不把标题挤成两行、不把「新建」挤出去。 */}
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ flex: 1, minWidth: 0 }} contentContainerStyle={{ flexDirection: 'row', alignItems: 'center', gap: spacing.md }} testID="task-header-filters">
-        {filters}
-      </ScrollView>
-      <View style={{ flexShrink: 0 }}>{newButton}</View>
+    <View onLayout={e => setHeaderBottom(e.nativeEvent.layout.y + e.nativeEvent.layout.height)}>
+      <View style={s.header} testID="task-header">
+        <Text style={[s.pageTitle, { flexShrink: 0 }]} numberOfLines={1} accessibilityRole="header" onLayout={e => measureFixed('title', e.nativeEvent.layout.width)}>{tr('tasks.copy.41')}</Text>
+        <View style={{ flexShrink: 0 }} onLayout={e => measureFixed('seg', e.nativeEvent.layout.width)}><Segmented s={s} items={sections} value={section} onChange={setTaskSection} testID="tasks-view" /></View>
+        {filtersInline ? filterStrip : <View style={s.spacer} />}
+        {inlineSearch ? searchField({ width: SEARCH_BOX_W, flexShrink: 0 }, false) : searchButton}
+        <View style={{ flexShrink: 0 }} onLayout={e => measureFixed('new', e.nativeEvent.layout.width)}>{newButton}</View>
+      </View>
+      {/* 筛选和标题 / 分段 / 搜索 / 新建一行放不下(桌面窄窗口、平板横屏 ~1000 宽)就整行挪到标题栏下面,
+          而不是在头部那一小格里横向滚动、把「状态」藏到看不见的地方(owner 09-30 平板截图)。 */}
+      {filters && !filtersInline ? <View style={{ paddingHorizontal: spacing.xl, paddingBottom: spacing.sm }} testID="task-header-filters-row">{filterStrip}</View> : null}
+      {canSearch && !inlineSearch && searchOpen ? (
+        // 平板(触屏宽屏):标题栏不动,搜索条展开在它下面一整行,右边「取消」。
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingHorizontal: spacing.xl, paddingBottom: spacing.sm }} testID="task-search-row">
+          {searchField({ flex: 1 }, !searchText)}
+          <SearchCancel onPress={closeSearch} />
+        </View>
+      ) : null}
     </View>
   );
 
@@ -593,7 +696,8 @@ function ScopedRequirementBoard({ cfg, desktop, dispatch, onOpenVoiceSettings, s
         {...({ dataSet: { taskCard: item.id, taskFrom: item.column } } as object)}
       >
         {projects && item.projectId ? <ProjectChip project={projectById.get(item.projectId)} s={s} small /> : null}
-        <Text style={[s.cardTitle, item.column === 'done' && s.cardDone]} numberOfLines={2}>{item.name}</Text>
+        <Text style={[s.cardTitle, item.column === 'done' && s.cardDone]} numberOfLines={2}>{highlight(item.name, terms)}</Text>
+        {item.archived ? <ArchivedTag /> : null}
         <ParentLine item={item} items={items} />
         <CardMeta item={item} people={people} today={today} s={s} compact={compactCards} />
         <CardFooter item={item} people={people} s={s} touch={!pointer} />
@@ -741,7 +845,8 @@ function ScopedRequirementBoard({ cfg, desktop, dispatch, onOpenVoiceSettings, s
                       style={state => [s.phoneRow, i === col.items.length - 1 && { borderBottomWidth: 0 }, state.pressed && { backgroundColor: colors.rowHover }]}
                     >
                       {projects && item.projectId ? <ProjectChip project={projectById.get(item.projectId)} s={s} small /> : null}
-                      <Text style={[s.cardTitle, item.column === 'done' && s.cardDone]} numberOfLines={2}>{item.name}</Text>
+                      <Text style={[s.cardTitle, item.column === 'done' && s.cardDone]} numberOfLines={2}>{highlight(item.name, terms)}</Text>
+        {item.archived ? <ArchivedTag /> : null}
                       <ParentLine item={item} items={items} />
                       <CardMeta item={item} people={people} today={today} s={s} />
                       <CardFooter item={item} people={people} s={s} touch={!pointer} />
@@ -755,7 +860,7 @@ function ScopedRequirementBoard({ cfg, desktop, dispatch, onOpenVoiceSettings, s
       );
     }
     const rows = listRows;
-    return <TaskListTable rows={rows} people={people} projects={projects} sort={sort} setSort={setSort} s={s} today={today} selectedId={selectedId} onOpen={openDetail} touch={!pointer} onMenu={openMenuAt} filtered={filterActive(filter)} needsUpdateUpgrade={items.some(item => item.updatedAt === undefined)} items={items}
+    return <TaskListTable rows={rows} terms={terms} people={people} projects={projects} sort={sort} setSort={setSort} s={s} today={today} selectedId={selectedId} onOpen={openDetail} touch={!pointer} onMenu={openMenuAt} filtered={filterActive(filter)} needsUpdateUpgrade={items.some(item => item.updatedAt === undefined)} items={items}
       selection={pointer ? { ids: sel.ids, onToggle: id => setSel(cur => toggleSelected(cur, id)), onPress: (id, e) => onCardPress(id, e as { nativeEvent?: any }) } : undefined}
       onProject={(id, pid) => { void setProject(id, pid); }} seqCapable={seqCapable} />;
   };
@@ -771,9 +876,10 @@ function ScopedRequirementBoard({ cfg, desktop, dispatch, onOpenVoiceSettings, s
               ? <Text style={s.muted} testID="req-retrying">{tr('tasks.copy.56')}</Text>
               : <Pressable onPress={() => setReloadKey(n => n + 1)} testID="req-retry" accessibilityRole="button"><Text style={s.link}>{tr('tasks.copy.57')}</Text></Pressable>}
           </View>
-        ) : section === 'list' ? list()
-          : section === 'calendar' ? <TaskCalendar items={visible} projects={projects} people={people} today={today} s={s} onOpen={openDetail} selectedId={selectedId} phone={narrow} />
-          : section === 'gantt' ? <TaskGantt items={visible} projects={projects} people={people} today={today} s={s} onOpen={openDetail} selectedId={selectedId} phone={narrow} startCapable={startCapable} onDue={pointer ? (id, due) => { void setDue(id, due); } : undefined} />
+        ) : terms.length && !visible.length ? <SearchEmpty q={search.q} s={s} filtered={filterActive(filter)} onClear={closeSearch} />
+        : section === 'list' ? list()
+          : section === 'calendar' ? <TaskCalendar items={visible} terms={terms} projects={projects} people={people} today={today} s={s} onOpen={openDetail} selectedId={selectedId} phone={narrow} />
+          : section === 'gantt' ? <TaskGantt items={visible} terms={terms} projects={projects} people={people} today={today} s={s} onOpen={openDetail} selectedId={selectedId} phone={narrow} startCapable={startCapable} onDue={pointer ? (id, due) => { void setDue(id, due); } : undefined} />
             : kanban();
 
   const ghost = pointer && draggingItem && dragView.phase === 'dragging' ? (
