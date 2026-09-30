@@ -44,6 +44,9 @@ import { colors, onThemeChange, radius, spacing, type as fontSize, weight } from
 import { scheduledTaskActions } from './scheduled-task-actions';
 import type { ScheduleOpenRequest } from './node-schedules';
 import ScheduleRunResult, { type RunTaskState } from './ScheduleRunResult';
+import ScheduleContentFullscreen, { type ScheduleContentDraft } from './ScheduleContentFullscreen';
+import TaskDescriptionEditor from './TaskDescriptionEditor';
+import { contentDirty, SCHEDULE_CONTENT_MAX } from './schedule-content-edit';
 import { runDisplay, runDurationText, runFailureText, runIsOpen } from './schedule-run-result';
 import { groupScheduleRuns, skipGroupText, skipGroupTimes } from './schedule-run-groups';
 import { useTranslation } from './i18n-react';
@@ -151,6 +154,10 @@ export default function ScheduledTasksScreen({ cfg, onOpenChat, open }: {
   // 「复制」:用这条预填**新建**表单(不是编辑表单),保存走 POST,源计划不动。
   const [copySource, setCopySource] = useState<HubScheduledTask | null>(null);
   const [cancelCandidate, setCancelCandidate] = useState<HubScheduledTask | null>(null);
+  // 任务内容的全屏编辑(ScheduleContentFullscreen):草稿按计划存,没保存就退出全屏也不丢(卡片上「继续编辑 / 放弃修改」)。
+  // base 是打开时那一份 —— 列表 10 秒轮询换的是 items,不动草稿;保存时按 base.revision 走 409 处理。
+  const [contentDrafts, setContentDrafts] = useState<Record<string, ScheduleContentDraft>>({});
+  const [contentOpen, setContentOpen] = useState<string | null>(null);
   const [tab, setTab] = useState<'hub' | 'node'>('hub');
   const [filter, setFilter] = useState<ScheduleStatus>(DEFAULT_SCHEDULE_FILTER);
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -337,6 +344,17 @@ export default function ScheduledTasksScreen({ cfg, onOpenChat, open }: {
     finally { setBusy(false); }
   };
 
+  const setContentDraft = (id: string, draft: ScheduleContentDraft | null) => setContentDrafts(prev => {
+    const next = { ...prev };
+    if (draft) next[id] = draft; else delete next[id];
+    return next;
+  });
+  const openContent = (row: HubScheduledTask) => {
+    if (!contentDrafts[row.schedule_id]) setContentDraft(row.schedule_id, { base: row, text: row.task_content });
+    setContentOpen(row.schedule_id);
+  };
+  const openContentDraft = contentOpen ? contentDrafts[contentOpen] ?? null : null;
+
   const openCreate = () => { setEditing(null); setCopySource(null); setCreateTarget(undefined); setShowForm(true); };
   const openCopy = (row: HubScheduledTask) => { setEditing(null); setCreateTarget(undefined); setCopySource(row); setShowForm(true); };
 
@@ -357,6 +375,9 @@ export default function ScheduledTasksScreen({ cfg, onOpenChat, open }: {
       onCopy={openCopy}
       onAction={(row, action) => void act(row, action)}
       onCancel={row => setCancelCandidate(row)}
+      contentDraft={contentDrafts[selected.schedule_id] ?? null}
+      onOpenContent={openContent}
+      onDiscardContent={row => setContentDraft(row.schedule_id, null)}
     />
   ) : null;
 
@@ -508,6 +529,24 @@ export default function ScheduledTasksScreen({ cfg, onOpenChat, open }: {
         onSubmit={cron => { if (cronEdit) void submitEditIntent(cronEdit.node, cronEdit.schedule, { cron }); }}
       />
       <IntentsModal value={intents} onClose={() => setIntents(null)} />
+      {openContentDraft ? (
+        <ScheduleContentFullscreen
+          cfg={cfg}
+          draft={openContentDraft}
+          pointer={pointerUi()}
+          onDraft={draft => setContentDraft(draft.base.schedule_id, draft)}
+          onClose={() => {
+            // 没改就不留草稿;改了留着,卡片上可以继续编辑或放弃。
+            if (!contentDirty(openContentDraft.base, openContentDraft.text)) setContentDraft(openContentDraft.base.schedule_id, null);
+            setContentOpen(null);
+          }}
+          onSaved={() => {
+            setContentDraft(openContentDraft.base.schedule_id, null);
+            setContentOpen(null);
+            void load();
+          }}
+        />
+      ) : null}
     </View>
   );
 }
@@ -559,7 +598,7 @@ function ScheduleRow({ row, now, busy, selected, onOpen, onToggle }: {
   );
 }
 
-function ScheduleDetail({ row, now, busy, runs, cfg, expandedRun, runTasks, onToggleRun, onRetryRun, onOpenChat, onBack, onEdit, onCopy, onAction, onCancel }: {
+function ScheduleDetail({ row, now, busy, runs, cfg, expandedRun, runTasks, onToggleRun, onRetryRun, onOpenChat, onBack, onEdit, onCopy, onAction, onCancel, contentDraft, onOpenContent, onDiscardContent }: {
   row: HubScheduledTask;
   now: number;
   busy: boolean;
@@ -575,6 +614,10 @@ function ScheduleDetail({ row, now, busy, runs, cfg, expandedRun, runTasks, onTo
   onCopy: (row: HubScheduledTask) => void;
   onAction: (row: HubScheduledTask, action: ScheduleAction) => void;
   onCancel: (row: HubScheduledTask) => void;
+  /** 任务内容有没保存的全屏草稿(没有 = null)。 */
+  contentDraft: ScheduleContentDraft | null;
+  onOpenContent: (row: HubScheduledTask) => void;
+  onDiscardContent: (row: HubScheduledTask) => void;
 }) {
   const s = useMemo(makeStyles, [row]);
   // 折叠的「上一次还没结束」跳过组展开哪一个(只影响本页显示,和单条执行的 expandedRun 分开)。
@@ -620,8 +663,38 @@ function ScheduleDetail({ row, now, busy, runs, cfg, expandedRun, runTasks, onTo
           {availableActions.includes('cancel') && <Pressable disabled={busy} style={[s.action, s.danger, busy && s.actionDisabled]} onPress={() => onCancel(row)}><Text style={s.dangerText}>取消计划</Text></Pressable>}
         </View> : null}
 
-        <Text style={s.sectionLabel}>任务内容</Text>
-        <Text style={s.prompt} selectable>{row.task_content}</Text>
+        {/* 任务内容:⤢ 全屏看 / 改 / 语音输入(ScheduleContentFullscreen,任务描述同一套)。只有能编辑的计划(进行中 / 已暂停)给;
+            手机上点卡片本身也进全屏(先是阅读,顶栏切「编辑」),桌面卡片保持可选中复制。 */}
+        <View style={s.sectionHead}>
+          <Text style={[s.sectionLabel, s.sectionHeadLabel]}>任务内容</Text>
+          {availableActions.includes('edit') ? (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={t('schedules.content.fullscreenA11y')}
+              onPress={() => onOpenContent(row)}
+              hitSlop={6}
+              style={({ hovered }: any) => [s.fullscreenButton, hovered && s.fullscreenButtonHover]}
+              testID="schedule-content-fullscreen"
+            >
+              <Text style={s.fullscreenGlyph}>⤢</Text>
+              <Text style={s.fullscreenText} numberOfLines={1}>{t('schedules.content.fullscreen')}</Text>
+            </Pressable>
+          ) : null}
+        </View>
+        {contentDraft && contentDirty(contentDraft.base, contentDraft.text) ? (
+          <View style={s.contentDraft} testID="schedule-content-draft">
+            <Text style={s.contentDraftText} numberOfLines={1}>{t('schedules.content.draft')}</Text>
+            <Pressable accessibilityRole="button" onPress={() => onOpenContent(row)} hitSlop={6} testID="schedule-content-draft-resume"><Text style={s.contentDraftLink}>{t('schedules.content.resume')}</Text></Pressable>
+            <Pressable accessibilityRole="button" onPress={() => onDiscardContent(row)} hitSlop={6} testID="schedule-content-draft-discard"><Text style={s.contentDraftMuted}>{t('schedules.content.discard')}</Text></Pressable>
+          </View>
+        ) : null}
+        {!pointerUi() && availableActions.includes('edit') ? (
+          <Pressable onPress={() => onOpenContent(row)} accessibilityRole="button" accessibilityLabel={t('schedules.content.fullscreenA11y')} testID="schedule-content-card">
+            <Text style={s.prompt}>{row.task_content}</Text>
+          </Pressable>
+        ) : (
+          <Text style={s.prompt} selectable testID="schedule-content-card">{row.task_content}</Text>
+        )}
 
         <Text style={s.sectionLabel}>计划</Text>
         <View style={s.facts}>
@@ -906,7 +979,27 @@ function ScheduleFormModal({ cfg, nodes, visible, editing, initialTarget, copyFr
         })() : null}
         <Label text="名称"><TextInput style={styles.input} value={name} onChangeText={setName} placeholder="每日巡检" placeholderTextColor={colors.textMuted} /></Label>
         <Label text="执行节点"><NodePickerField node={chosen} fallbackAlias={fallbackAlias} onPress={() => setPickerOpen(true)} /></Label>
-        <Label text="任务内容"><TextInput style={[styles.input, styles.textarea]} multiline value={task} onChangeText={setTask} placeholder="节点收到的任务" placeholderTextColor={colors.textMuted} /></Label>
+        {/* 任务内容:⤢ 全屏 + 🎤,和任务描述同一个编辑器(TaskDescriptionEditor);节点收到的是原文,不放图片、不走富文本。
+            表单一打开就是编辑框(原来就是输入框),桌面全屏从「左右」起。 */}
+        <View style={styles.field}>
+          <TaskDescriptionEditor
+            cfg={cfg}
+            value={task}
+            onChange={setTask}
+            pointer={pointerUi()}
+            title={name || t('schedules.field.task')}
+            dirty={base ? contentDirty(base, task) : !!task.trim()}
+            label={t('schedules.field.task')}
+            placeholder={t('schedules.content.placeholder')}
+            maxLength={SCHEDULE_CONTENT_MAX}
+            images={false}
+            richText={false}
+            initialMode="edit"
+            fullscreenA11y={t('schedules.content.fullscreenA11y')}
+            chrome={{ title: t('schedules.field.task'), unsavedText: t('schedules.content.unsavedForm') }}
+            testID="schedule-form-task"
+          />
+        </View>
         <Label text="优先级"><View style={styles.segment}>{(['high','normal','low'] as const).map((value) => <Pressable key={value} onPress={() => setPriority(value)} style={[styles.segmentItem, priority === value && styles.segmentActive]}><Text style={priority === value ? styles.segmentTextActive : styles.segmentText}>{value === 'high' ? '高' : value === 'low' ? '低' : '普通'}</Text></Pressable>)}</View></Label>
         <Label text="类型"><View style={styles.segment}>{(['once','interval','daily','weekly'] as const).map((x, i) => <Pressable key={x} onPress={() => setKind(x)} style={[styles.segmentItem, kind === x && styles.segmentActive]}><Text style={kind === x ? styles.segmentTextActive : styles.segmentText}>{['单次','间隔','每天','每周'][i]}</Text></Pressable>)}</View></Label>
         <Label text="错过执行"><View style={styles.segment}>{(['catch_up_once','skip'] as const).map((policy) => <Pressable key={policy} onPress={() => setMisfirePolicy(policy)} style={[styles.segmentItem, misfirePolicy === policy && styles.segmentActive]}><Text style={misfirePolicy === policy ? styles.segmentTextActive : styles.segmentText}>{policy === 'catch_up_once' ? '补跑一次' : '跳过本次'}</Text></Pressable>)}</View><Text style={styles.meta}>{misfirePolicy === 'catch_up_once' ? '适合新闻抓取；恢复后最多补跑一次' : '错过后等待下一周期'}</Text></Label>
@@ -1099,6 +1192,17 @@ function makeStyles() { return StyleSheet.create({
   actionsRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm, marginTop: spacing.lg },
   timeHint: { color: colors.blocked, fontSize: 11, marginTop: spacing.xs },
   sectionLabel: { color: colors.textMuted, fontSize: fontSize.small, fontWeight: weight.medium, marginTop: spacing.xl, marginBottom: spacing.sm },
+  // 「任务内容 · ⤢ 全屏」一行:标题的上下外边距挪到这一行上,按钮和标题同一条中线。
+  sectionHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: spacing.xl, marginBottom: spacing.sm },
+  sectionHeadLabel: { marginTop: 0, marginBottom: 0 },
+  fullscreenButton: { flexDirection: 'row', alignItems: 'center', gap: 4, height: 28, paddingHorizontal: spacing.sm, borderRadius: radius.item },
+  fullscreenButtonHover: { backgroundColor: colors.rowHover },
+  fullscreenGlyph: { color: colors.textSecondary, fontSize: 14, lineHeight: 16 },
+  fullscreenText: { color: colors.textSecondary, fontSize: 12 },
+  contentDraft: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, marginBottom: spacing.sm },
+  contentDraftText: { flex: 1, color: colors.textMuted, fontSize: 12 },
+  contentDraftLink: { color: colors.accent, fontSize: 12 },
+  contentDraftMuted: { color: colors.textMuted, fontSize: 12 },
   prompt: { color: colors.text, fontSize: fontSize.body, lineHeight: 21, backgroundColor: colors.card, borderColor: colors.border, borderWidth: 1, borderRadius: radius.control, padding: spacing.md },
   facts: { backgroundColor: colors.card, borderColor: colors.border, borderWidth: 1, borderRadius: radius.control, paddingHorizontal: spacing.md },
   fact: { flexDirection: 'row', gap: spacing.md, paddingVertical: 10, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.border },

@@ -155,7 +155,7 @@ console.log('# 编辑器接线(源码)');
   ck('web 入口:编辑器和判据从同一个 import(\'./rich-bundle\') 按需加载(不进主包 / __common)', dynamicImports.length === 1 && dynamicImports[0] === "import('./rich-bundle')" && !/^import [^t].*from '(@tiptap|\.\/rich-markdown|\.\/RichDescriptionEditor|\.\/rich-bundle)'/m.test(lazyCode), JSON.stringify(dynamicImports));
   ck('原生 / web 入口同一个扩展名(否则 Metro 在 web 上先命中原生占位)', existsSync(new URL('./rich-support.tsx', import.meta.url)) && existsSync(new URL('./rich-support.web.tsx', import.meta.url)) && !existsSync(new URL('./rich-support.ts', import.meta.url)));
   ck('详情不直接 import 编辑器 / 判据 / TipTap(只经 rich-support)', !/from '(@tiptap[^']*|\.\/rich-markdown|\.\/RichDescriptionEditor)'/.test(editor) && editor.includes("from './rich-support'"));
-  ck('富文本只在鼠标界面 + 能保真时', editor.includes('const richCapable = pointer && RICH_EDITOR_AVAILABLE;') && editor.includes('richSafetyNow(value) === true'));
+  ck('富文本只在鼠标界面 + 能保真时', editor.includes('const richCapable = richText && pointer && RICH_EDITOR_AVAILABLE;') && editor.includes('richSafetyNow(value) === true'));
   ck('语音 / 图片在富文本时插到富文本编辑器', editor.includes('rich.insertText(text, refocusAfterInsert(source))') && editor.includes('rich.insertImage(`/api/files/${up.file_id}`, imageAlt(img.fileName))'));
 }
 

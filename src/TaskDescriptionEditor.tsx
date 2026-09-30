@@ -9,6 +9,9 @@
 //   所见即所得(owner 09-30):桌面 / 网页的鼠标界面,小编辑框是 富文本 / 源码,全屏的「阅读」是可编辑的富文本
 //   (RichDescriptionEditor.web.tsx;往返规则见 rich-markdown.ts)。富文本时语音、图片插到富文本编辑器的选区。
 //   描述里有富文本保不住的内容(HTML 等)时退回原来的 编辑 / 预览,并说明原因。手机不变(原因见 task-description-fullscreen-model.ts)。
+//   定时任务的「任务内容」(owner 09-30「定时任务…也需要全屏以及支持语音输入」)用的也是这一个:
+//   images / richText 关掉(节点收到的是原文,不放 Hub 图片、不经富文本往返),字数上限换成 Hub 的 10000;
+//   fullscreenOnly = 只要全屏(详情页的只读卡片点「全屏」进来),打开即全屏、关掉回调 onFullscreenClose。
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Platform, Pressable, View, type GestureResponderEvent } from 'react-native';
 import { Text, TextInput } from './ui-text';
@@ -37,7 +40,7 @@ import { rulesSplitAvailable } from './rules-split';
 import { descriptionEditable, desktopFullscreenMode, fullscreenKind, initialInlineMode, inlineModeAfterFullscreen, inlineModeFor, richEditorActive, settingsPromptKind, voiceEntry, type InlineMode } from './task-description-fullscreen-model';
 import { loadRich, RICH_EDITOR_AVAILABLE, RichDescriptionEditor, richSafetyNow } from './rich-support';
 import type { RichEditorHandle } from './rich-editor-types';
-import { DesktopDescriptionFullscreen, PhoneDescriptionPage, type EditorBinding } from './TaskDescriptionFullscreen';
+import { DesktopDescriptionFullscreen, PhoneDescriptionPage, type EditorBinding, type FullscreenChrome } from './TaskDescriptionFullscreen';
 import { useVoiceInput } from './useVoiceInput';
 import { VoiceHoldBar, VoiceSettingsPrompt } from './VoiceInputUI';
 import { DesktopMicButton, DesktopVoiceBar } from './DesktopVoiceBar';
@@ -141,7 +144,7 @@ function useVoiceShortcuts(active: boolean, actions: { voice: ReturnType<typeof 
   return kbd;
 }
 
-export default function TaskDescriptionEditor({ cfg, value, onChange, pointer, title, dirty = false, onOpenVoiceSettings }: {
+export default function TaskDescriptionEditor({ cfg, value, onChange, pointer, title, dirty = false, onOpenVoiceSettings, label, placeholder, maxLength = DESCRIPTION_MAX, images: imagesOn = true, richText = true, initialMode, fullscreenA11y, chrome, fullscreenOnly = false, onFullscreenClose, testID = 'req-description' }: {
   cfg: HubConfig;
   value: string;
   onChange: (v: string) => void;
@@ -153,12 +156,29 @@ export default function TaskDescriptionEditor({ cfg, value, onChange, pointer, t
   dirty?: boolean;
   /** 设置 → 语音输入。 */
   onOpenVoiceSettings?: () => void;
+  /** 字段名(默认「描述」)。 */
+  label?: string;
+  placeholder?: string;
+  maxLength?: number;
+  /** 能不能放图片(🖼 / 粘贴 / 拖入);默认能。 */
+  images?: boolean;
+  /** 鼠标界面用不用所见即所得;默认用。 */
+  richText?: boolean;
+  /** 打开时的模式(默认:有内容先预览)。 */
+  initialMode?: InlineMode;
+  fullscreenA11y?: string;
+  /** 全屏里可换的文案 / 保存按钮(TaskDescriptionFullscreen.tsx FullscreenChrome)。 */
+  chrome?: FullscreenChrome;
+  /** 只画全屏:挂上即打开(桌面从阅读起,手机是预览页),关掉时 onFullscreenClose。 */
+  fullscreenOnly?: boolean;
+  onFullscreenClose?: () => void;
+  testID?: string;
 }) {
   useTranslation();
   const s = useTaskStyles();
   const f = fieldStyles();
   // 富文本只在鼠标界面的 web(桌面壳 / 网页);这段描述还得能保真地进富文本(richSafety)。
-  const richCapable = pointer && RICH_EDITOR_AVAILABLE;
+  const richCapable = richText && pointer && RICH_EDITOR_AVAILABLE;
   // 判据按需加载:第一次打开时还没到,先按预览起步,到了之后预览自动换成富文本(inlineModeFor)。
   const [richReady, setRichReady] = useState(() => richSafetyNow('') !== null);
   useEffect(() => {
@@ -167,10 +187,10 @@ export default function TaskDescriptionEditor({ cfg, value, onChange, pointer, t
     void loadRich().then(() => { if (live) setRichReady(true); });
     return () => { live = false; };
   }, [richCapable, richReady]);
-  const [mode, setMode] = useState<InlineMode>(() => initialInlineMode(value, richCapable ? richSafetyNow(value) : false));
-  // 桌面全屏的模式 / 手机全屏页开着没有。
-  const [full, setFull] = useState<RulesViewMode | null>(null);
-  const [page, setPage] = useState(false);
+  const [mode, setMode] = useState<InlineMode>(() => initialMode ?? initialInlineMode(value, richCapable ? richSafetyNow(value) : false));
+  // 桌面全屏的模式 / 手机全屏页开着没有。fullscreenOnly:挂上就开着(模式同点「⤢ 全屏」,见 openFull)。
+  const [full, setFull] = useState<RulesViewMode | null>(() => (fullscreenOnly && fullscreenKind(pointer) === 'desktopEditor' ? desktopFullscreenMode(mode, rulesSplitAvailable(true, Number.MAX_SAFE_INTEGER)) : null));
+  const [page, setPage] = useState(() => fullscreenOnly && fullscreenKind(pointer) === 'phonePage');
   const [uploads, setUploads] = useState<Upload[]>([]);
   const [dragOver, setDragOver] = useState(false);
   const [viewer, setViewer] = useState<ViewerState | null>(null);
@@ -233,8 +253,8 @@ export default function TaskDescriptionEditor({ cfg, value, onChange, pointer, t
       }
     }
   };
-  useImageIntake(pointer && shown === 'edit' && !full, inlineInput, inlineBox, images => { void addImages(images); }, setDragOver);
-  useImageIntake(pointer && !!full && full !== 'read', fullInput, fullBox, images => { void addImages(images); }, setDragOver);
+  useImageIntake(imagesOn && pointer && shown === 'edit' && !full, inlineInput, inlineBox, images => { void addImages(images); }, setDragOver);
+  useImageIntake(imagesOn && pointer && !!full && full !== 'read', fullInput, fullBox, images => { void addImages(images); }, setDragOver);
 
   // ── 语音 ──
   const sourceRef = useRef<VoiceSource>('desktopMic');
@@ -350,6 +370,7 @@ export default function TaskDescriptionEditor({ cfg, value, onChange, pointer, t
     if (full) setMode(inlineModeAfterFullscreen(full, richOk));
     setFull(null);
     setPage(false);
+    onFullscreenClose?.();
   };
 
   const status = (
@@ -372,8 +393,9 @@ export default function TaskDescriptionEditor({ cfg, value, onChange, pointer, t
     value,
     onChange,
     onSelectionChange,
-    placeholder: pointer ? t('tasks.copy.129') : t('tasks.copy.130'),
+    placeholder: placeholder ?? (pointer ? t('tasks.copy.129') : t('tasks.copy.130')),
     setInput,
+    maxLength,
   });
   const inlineVoice = !full && !page;
   const richEditor = (variant: 'inline' | 'full') => (
@@ -390,16 +412,61 @@ export default function TaskDescriptionEditor({ cfg, value, onChange, pointer, t
     />
   );
   const inlineEditable = shown === 'edit' || shown === 'rich';
+  const pickImage = imagesOn ? () => { void pick(); } : null;
   const modeItems: { key: InlineMode; label: string }[] = richOk
     ? [{ key: 'rich', label: t('taskDesc.rich') }, { key: 'edit', label: t('taskDesc.source') }]
     : [{ key: 'edit', label: t('tasks.copy.127') }, { key: 'preview', label: t('tasks.copy.128') }];
 
+  const fullscreens = (
+    <>
+      {full ? (
+        <DesktopDescriptionFullscreen
+          mode={full}
+          onMode={setFull}
+          editor={editorBinding(setFullInput)}
+          rich={richOk ? richEditor('full') : null}
+          setDropBox={setFullBox}
+          dragOver={dragOver}
+          preview={preview}
+          onPickImage={pickImage}
+          mic={mic}
+          voiceBar={voiceBar}
+          below={<>{prompt}{status}{chrome?.below}</>}
+          dirty={dirty}
+          onClose={closeFull}
+          chrome={chrome}
+        />
+      ) : null}
+      {page ? (
+        <PhoneDescriptionPage
+          mode={mode}
+          onMode={setMode}
+          editor={editorBinding(setFullInput)}
+          preview={preview}
+          onPickImage={pickImage}
+          holdBar={entry === 'holdBar' ? <VoiceHoldBar voice={voice} handlers={handlersFor('holdBar')} /> : null}
+          voice={voice}
+          holdOverlayOn={holdOverlayOn}
+          holdLayoutRef={holdLayoutRef}
+          originRef={originRef}
+          measureOriginRef={measureOriginRef}
+          below={<>{prompt}{status}{chrome?.below}</>}
+          dirty={dirty}
+          onClose={closeFull}
+          chrome={chrome}
+        />
+      ) : null}
+      <ImageViewer state={viewer} onClose={() => setViewer(null)} serverUrl={cfg.serverUrl} token={cfg.token} />
+    </>
+  );
+  if (fullscreenOnly) return fullscreens;
+
   return (
-    <View style={{ gap: spacing.sm }} testID="req-description">
+    <View style={{ gap: spacing.sm }} testID={testID}>
       <View style={[f.row, { justifyContent: 'space-between' }]}>
-        <Text style={f.label}>{t('tasks.copy.125')}</Text>
+        <Text style={f.label}>{label ?? t('tasks.copy.125')}</Text>
         <View style={[f.row, { gap: spacing.sm, flexShrink: 0 }]} testID="req-description-toolbar">
-          {inlineEditable ? (
+          {inlineEditable && imagesOn ? (
             <Pressable accessibilityRole="button" accessibilityLabel={t('tasks.copy.126')} onPress={() => { void pick(); }} style={s.iconButton} testID="req-description-image-button">
               <Ionicons name="image-outline" size={18} color={colors.textSecondary} />
             </Pressable>
@@ -407,7 +474,7 @@ export default function TaskDescriptionEditor({ cfg, value, onChange, pointer, t
           {inlineVoice && inlineEditable ? mic : null}
           <Pressable
             accessibilityRole="button"
-            accessibilityLabel={t('taskDesc.fullscreenA11y')}
+            accessibilityLabel={fullscreenA11y ?? t('taskDesc.fullscreenA11y')}
             onPress={openFull}
             style={({ hovered }: any) => [s.iconButton, { width: 'auto', flexShrink: 0, flexDirection: 'row', gap: 4, paddingHorizontal: spacing.sm }, hovered && { backgroundColor: colors.rowHover }]}
             testID="req-description-fullscreen"
@@ -426,7 +493,7 @@ export default function TaskDescriptionEditor({ cfg, value, onChange, pointer, t
         ) : (
           <View style={{ gap: spacing.xs }}>
             {richEditor('inline')}
-            {value.length > DESCRIPTION_MAX * 0.9 ? <Text style={s.muted}>{value.length} / {DESCRIPTION_MAX}</Text> : null}
+            {value.length > maxLength * 0.9 ? <Text style={s.muted}>{value.length} / {maxLength}</Text> : null}
             {inlineVoice ? voiceBar : null}
           </View>
         )
@@ -438,14 +505,14 @@ export default function TaskDescriptionEditor({ cfg, value, onChange, pointer, t
             onChangeText={onChange}
             onSelectionChange={onSelectionChange}
             multiline
-            maxLength={DESCRIPTION_MAX}
-            placeholder={pointer ? t('tasks.copy.129') : t('tasks.copy.130')}
+            maxLength={maxLength}
+            placeholder={placeholder ?? (pointer ? t('tasks.copy.129') : t('tasks.copy.130'))}
             placeholderTextColor={colors.textMuted}
             style={[f.input, { minHeight: 140, textAlignVertical: 'top' }, dragOver && !full && { borderColor: colors.accent, backgroundColor: colors.accent + '10' }]}
             testID="req-description-input"
             accessibilityLabel={t('tasks.copy.131')}
           />
-          {value.length > DESCRIPTION_MAX * 0.9 ? <Text style={s.muted}>{value.length} / {DESCRIPTION_MAX}</Text> : null}
+          {value.length > maxLength * 0.9 ? <Text style={s.muted}>{value.length} / {maxLength}</Text> : null}
           {inlineVoice ? voiceBar : null}
         </View>
       ) : (
@@ -455,42 +522,7 @@ export default function TaskDescriptionEditor({ cfg, value, onChange, pointer, t
       )}
       {inlineVoice ? prompt : null}
       {inlineVoice ? status : null}
-      {full ? (
-        <DesktopDescriptionFullscreen
-          mode={full}
-          onMode={setFull}
-          editor={editorBinding(setFullInput)}
-          rich={richOk ? richEditor('full') : null}
-          setDropBox={setFullBox}
-          dragOver={dragOver}
-          preview={preview}
-          onPickImage={() => { void pick(); }}
-          mic={mic}
-          voiceBar={voiceBar}
-          below={<>{prompt}{status}</>}
-          dirty={dirty}
-          onClose={closeFull}
-        />
-      ) : null}
-      {page ? (
-        <PhoneDescriptionPage
-          mode={mode}
-          onMode={setMode}
-          editor={editorBinding(setFullInput)}
-          preview={preview}
-          onPickImage={() => { void pick(); }}
-          holdBar={entry === 'holdBar' ? <VoiceHoldBar voice={voice} handlers={handlersFor('holdBar')} /> : null}
-          voice={voice}
-          holdOverlayOn={holdOverlayOn}
-          holdLayoutRef={holdLayoutRef}
-          originRef={originRef}
-          measureOriginRef={measureOriginRef}
-          below={<>{prompt}{status}</>}
-          dirty={dirty}
-          onClose={closeFull}
-        />
-      ) : null}
-      <ImageViewer state={viewer} onClose={() => setViewer(null)} serverUrl={cfg.serverUrl} token={cfg.token} />
+      {fullscreens}
     </View>
   );
 }

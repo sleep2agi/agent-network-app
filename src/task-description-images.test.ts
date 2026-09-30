@@ -47,7 +47,7 @@ console.log('# 接线(源码)');
   const attach = src('./attach.ts');
   ck('上传带 network_id(同网成员能看)', editor.includes('uploadImage(cfg, img, { networkId: cfg.networkId })') && attach.includes('network_id=${encodeURIComponent(opts.networkId)}'));
   ck('图片地址里不放 token', !/[?&](access_)?token=/.test(editor) && editor.includes('authUri: url'));
-  ck('桌面:粘贴和拖放只在鼠标界面挂(小编辑框 + 全屏编辑器各一份)', editor.includes("useImageIntake(pointer && shown === 'edit' && !full,") && editor.includes("useImageIntake(pointer && !!full && full !== 'read',") && editor.includes("addEventListener('paste'") && editor.includes("addEventListener('drop'"));
+  ck('桌面:粘贴和拖放只在鼠标界面挂(小编辑框 + 全屏编辑器各一份)', editor.includes("useImageIntake(imagesOn && pointer && shown === 'edit' && !full,") && editor.includes("useImageIntake(imagesOn && pointer && !!full && full !== 'read',") && editor.includes("addEventListener('paste'") && editor.includes("addEventListener('drop'"));
   ck('点图:桌面开独立图片窗口,否则 App 内看图', editor.includes('openImageWindow(') && editor.includes('<ImageViewer'));
 }
 

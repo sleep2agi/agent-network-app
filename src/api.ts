@@ -316,6 +316,18 @@ export const updateScheduledTask = (cfg: HubConfig, row: HubScheduledTask, input
     { revision: row.revision, ...input },
   );
 
+/**
+ * 只改任务内容(定时任务详情页的「全屏」编辑):PATCH 只带 revision + task,其余字段 Hub 保持原样
+ * (server/src/scheduled-tasks.ts:body 里没有的字段取库里的值)。409 的处理见 schedule-content-edit.ts。
+ */
+export const updateScheduledTaskContent = (cfg: HubConfig, row: HubScheduledTask, task: string) =>
+  scheduledWrite<{ ok: true; schedule: HubScheduledTask }>(
+    cfg,
+    `/api/scheduled-tasks/${encodeURIComponent(row.schedule_id)}${networkQuery(cfg)}`,
+    'PATCH',
+    { revision: row.revision, task },
+  );
+
 export const setScheduledTaskStatus = (cfg: HubConfig, row: HubScheduledTask, status: 'active' | 'paused') =>
   scheduledWrite<{ ok: true; schedule: HubScheduledTask }>(cfg, `/api/scheduled-tasks/${encodeURIComponent(row.schedule_id)}${networkQuery(cfg)}`, 'PATCH', { revision: row.revision, status });
 
