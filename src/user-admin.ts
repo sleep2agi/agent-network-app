@@ -245,6 +245,13 @@ export function manageableNetworks(
   return out.sort((a, b) => (a.network_id === currentNetworkId ? -1 : b.network_id === currentNetworkId ? 1 : a.name.localeCompare(b.name)));
 }
 
+/** 网络选择器的搜索:按名字 / id,不分大小写;顺序不变(当前网络仍在第一个)。 */
+export function filterNetworkChoices(list: readonly NetworkChoice[], query: string): NetworkChoice[] {
+  const q = query.trim().toLowerCase();
+  if (!q) return [...list];
+  return list.filter(n => n.name.toLowerCase().includes(q) || n.network_id.toLowerCase().includes(q));
+}
+
 /** 在选中的网络里能不能建 admin:Hub 管理员,或我是那个网络的 owner。 */
 export function canAddAdminsIn(me: AuthMe | null | undefined, networkId: string | undefined): boolean {
   return me?.user?.role === 'admin' || currentNetworkRow(me, networkId)?.member_role === 'owner';

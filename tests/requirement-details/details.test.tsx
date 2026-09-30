@@ -10,6 +10,7 @@ setLanguagePreference('zh');
 mock.module('react-native', () => ({
   View: 'View', Text: 'Text', TextInput: 'TextInput', Pressable: 'Pressable', ScrollView: 'ScrollView', ActivityIndicator: 'ActivityIndicator',
   KeyboardAvoidingView: 'KeyboardAvoidingView',
+  Keyboard: { addListener: () => ({ remove() {} }), dismiss() {} },
   Modal: ({ visible, children }: any) => visible ? children : null,
   StyleSheet: { create: (styles: any) => styles, hairlineWidth: 1, absoluteFill: {} },
   Platform: { OS: 'android', select: (o: any) => o.android ?? o.default },

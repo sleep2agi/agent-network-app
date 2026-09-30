@@ -44,6 +44,7 @@ import { ParentLine, ProjectSelect, projectOptions } from './TaskFieldPickers';
 import { SelectMenu } from './TaskSelectMenu';
 import { changeConcernsMe, parseTaskChanged } from './task-window-model';
 import { currentWindowLabel, emitTaskChanged, listenTaskChanged, openTaskWindow } from './task-window';
+import { menuMaxHeight } from './modal-bounds';
 import { isSelectClick, NO_SELECTION, pruneSelection, runBulk, selectClick, toggleSelected, type BulkProgress, type SelectAnchor, type Selection } from './task-select-model';
 
 const UNSUPPORTED = 'tasks.copy.14';
@@ -1104,8 +1105,8 @@ function FilterMenu({ open, touch, owners, selectedOwners, priorities, selectedP
     <Modal visible={!!open} transparent animationType="fade" onRequestClose={onClose}>
       <Pressable style={{ position: 'absolute', left: 0, top: 0, right: 0, bottom: 0, backgroundColor: touch ? 'rgba(0,0,0,0.18)' : 'transparent' }} onPress={onClose} testID="task-filter-scrim" accessibilityLabel={tr('tasks.copy.61')} />
       {open ? (
-        <View style={{ position: 'absolute', left: Math.max(8 + safe.paddingLeft, Math.min(open.x, viewport.width - safe.paddingRight - menuWidth - 8)), top: Math.max(open.y, safe.paddingTop + 8), width: menuWidth, maxHeight: 360, padding: 6, borderRadius: radius.control, backgroundColor: colors.card, ...elevated('floating') }} testID={`task-filter-menu-${open.kind}`} accessibilityRole="menu">
-          <ScrollView style={{ flexGrow: 0 }}>
+        <View style={{ position: 'absolute', left: Math.max(8 + safe.paddingLeft, Math.min(open.x, viewport.width - safe.paddingRight - menuWidth - 8)), top: Math.max(open.y, safe.paddingTop + 8), width: menuWidth, maxHeight: menuMaxHeight(open.y, viewport.height, safe.paddingTop, safe.paddingBottom), padding: 6, borderRadius: radius.control, backgroundColor: colors.card, ...elevated('floating') }} testID={`task-filter-menu-${open.kind}`} accessibilityRole="menu">
+          <ScrollView style={{ flexGrow: 0, flexShrink: 1 }}>
             {open.kind === 'project'
               ? [...activeProjects(projects).map(p => ({ id: p.id, name: p.name, color: p.color as string | null })), { id: NO_PROJECT, name: tr('tasks.copy.31'), color: null }].map(p => row(
                 p.id, selectedProject === p.id, () => { onPickProject(selectedProject === p.id ? '' : p.id); onClose(); },

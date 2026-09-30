@@ -40,6 +40,8 @@ registerTranslations({
   'users.saved': ['已保存', 'Saved'],
   'users.createdElsewhere': ['已在「{network}」创建 {name}。', 'Created {name} in “{network}”.'],
   'users.close': ['关闭', 'Close'],
+  'users.searchNetwork': ['搜索网络', 'Search networks'],
+  'users.noNetworkMatch': ['没有匹配的网络', 'No matching networks'],
   'users.member': ['成员', 'Member'],
   'users.access': ['可访问范围', 'Access'],
   'users.access.granted': ['仅指定 Agent', 'Selected agents'],

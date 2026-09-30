@@ -1,3 +1,4 @@
+import ModalKeyboardAvoider from './ModalKeyboardAvoider';
 import { t as tr } from './i18n';
 import { validationText } from './i18n-task-presentation';
 import { useTranslation } from './i18n-react';
@@ -88,6 +89,7 @@ export default function TaskProjectManager({ open, sheet, projects, counts, onCr
   };
   return (
     <Modal visible transparent animationType={sheet ? 'slide' : 'fade'} onRequestClose={onClose}>
+      <ModalKeyboardAvoider>
       <View style={[{ flex: 1, backgroundColor: 'rgba(0,0,0,0.4)' }, sheet ? { justifyContent: 'flex-end' } : [{ alignItems: 'center', justifyContent: 'center' }, withBasePadding(safe, spacing.lg)]]}>
         <Pressable accessibilityLabel={tr('tasks.copy.210')} onPress={onClose} style={StyleSheet.absoluteFill} />
         <View style={panel} accessibilityViewIsModal testID="project-manager">
@@ -116,6 +118,7 @@ export default function TaskProjectManager({ open, sheet, projects, counts, onCr
           <Text style={s.muted}>{tr('tasks.copy.215')}</Text>
         </View>
       </View>
+      </ModalKeyboardAvoider>
     </Modal>
   );
 }
