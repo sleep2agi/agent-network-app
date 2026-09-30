@@ -167,12 +167,35 @@ export async function listRequirements(cfg: HubConfig): Promise<Requirement[]> {
   return (await listRequirementsFull(cfg)).rows;
 }
 
+/** Hub 的列表一次最多给这么多张(最新的在前);更老的要靠服务端搜索(capability search)才找得到。 */
+export const HUB_LIST_CAP = 500;
+
+/**
+ * 读回来的是不是整张表:新 Hub(capability paging)直接告诉 has_more;旧 Hub 没有这个字段,
+ * 正好 500 张就当可能被截断(它的 SQL 是 LIMIT 500)。
+ */
+export function listTruncated(data: { has_more?: unknown }, rowCount: number): boolean {
+  if (typeof data.has_more === 'boolean') return data.has_more;
+  return rowCount >= HUB_LIST_CAP;
+}
+
 /** 连同 Hub 的 capabilities(#2076 起:agent_owner / description / checklist / projects / due_datetime;旧 Hub = [])。 */
-export async function listRequirementsFull(cfg: HubConfig): Promise<{ rows: Requirement[]; capabilities: string[] }> {
-  const data = await call(cfg, scoped(cfg, '/api/requirements')) as { requirements?: unknown; capabilities?: unknown };
+export async function listRequirementsFull(cfg: HubConfig): Promise<{ rows: Requirement[]; capabilities: string[]; truncated: boolean }> {
+  const data = await call(cfg, scoped(cfg, '/api/requirements')) as { requirements?: unknown; capabilities?: unknown; has_more?: unknown };
   const rows = Array.isArray(data.requirements) ? data.requirements : [];
   const capabilities = Array.isArray(data.capabilities) ? data.capabilities.filter((c): c is string => typeof c === 'string') : [];
-  return { rows: rows.map(requirementFromHub).filter((row): row is Requirement => !!row), capabilities };
+  return { rows: rows.map(requirementFromHub).filter((row): row is Requirement => !!row), capabilities, truncated: listTruncated(data, rows.length) };
+}
+
+/**
+ * 服务端搜索(Hub capability search):GET ?q=,语义同本机的任务搜索(task-search.ts)。本机读到的表被截断时
+ * 用它补上更老的那些;archived = 只搜归档的(「包含已归档」)。一页 500 张就够 —— 搜索结果不是拿来翻的。
+ */
+export async function searchRequirementsOnHub(cfg: HubConfig, q: string, archived: boolean): Promise<Requirement[]> {
+  const qs = `q=${encodeURIComponent(q)}&limit=${HUB_LIST_CAP}${archived ? '&archived=true' : ''}`;
+  const data = await call(cfg, scoped(cfg, `/api/requirements?${qs}`)) as { requirements?: unknown };
+  const rows = Array.isArray(data.requirements) ? data.requirements : [];
+  return rows.map(requirementFromHub).filter((row): row is Requirement => !!row).map(row => (archived ? { ...row, archived: true } : row));
 }
 
 /**

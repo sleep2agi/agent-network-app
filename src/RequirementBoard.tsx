@@ -23,7 +23,7 @@ import AliasAvatar from './AliasAvatar';
 import type { HubConfig } from './api';
 import { REQ_COLUMN_LABEL, REQ_COLUMNS, REQ_PRIORITIES, titleText, type ChecklistItem, type ReqColumn, type Requirement, type RequirementProject } from './requirements-model';
 import { readRequirements, requirementsKey, writeRequirements } from './requirements-store';
-import { createProject, createRequirementOnHub, fetchMyUserId, listArchivedRequirements, listProjects, listRequirementsFull, setChecklistItemOnHub, updateProject, listRequirements, migrateLocalRequirements, moveRequirementOnHub, probeAgentOwnerSupport, RequirementsHubError, updateRequirementOnHub } from './requirements-hub';
+import { createProject, createRequirementOnHub, fetchMyUserId, listArchivedRequirements, listProjects, listRequirementsFull, searchRequirementsOnHub, setChecklistItemOnHub, updateProject, migrateLocalRequirements, moveRequirementOnHub, probeAgentOwnerSupport, RequirementsHubError, updateRequirementOnHub } from './requirements-hub';
 import { listRequirementPeople } from './requirement-people-api';
 import { personKey, type RequirementPerson } from './requirement-people';
 import { colors, radius, spacing } from './theme';
@@ -46,7 +46,7 @@ import { SelectMenu } from './TaskSelectMenu';
 import { changeConcernsMe, parseTaskChanged } from './task-window-model';
 import { currentWindowLabel, emitTaskChanged, listenTaskChanged, openTaskWindow } from './task-window';
 import { menuMaxHeight } from './modal-bounds';
-import { EMPTY_SEARCH, focusKindOf, isSearchShortcut, SEARCH_DEBOUNCE_MS, searchedTasks, searchTerms } from './task-search';
+import { EMPTY_SEARCH, focusKindOf, isSearchShortcut, needsServerSearch, SEARCH_DEBOUNCE_MS, searchedTasks, searchTerms } from './task-search';
 import { ArchivedTag, highlight, SearchCancel, SearchEmpty, SearchField, SearchIconButton } from './TaskSearch';
 import { comboFromEvent, shortcutForCombo } from './shortcuts-model';
 import { isMacKeyboard, shortcutBindings, shortcutCaptureActive } from './shortcuts-store';
@@ -158,14 +158,32 @@ function ScopedRequirementBoard({ cfg, desktop, dispatch, onOpenVoiceSettings, s
   }, [searchText, search]);
   const clearSearch = () => { setSearchText(''); setTaskSearch({ ...search, q: '' }); };
   const wantArchived = archivedCapable && search.archived && !!searchTerms(search.q).length;
+  // Hub 支持服务端搜索(capability search):归档的按搜索词问服务端(不受「最多 500 张」限制,也不用把归档的整张表读回来);
+  // 旧 Hub:照旧读一次归档的整张表,本机搜。
+  const serverSearchCap = useTaskBoard(st => st.scope === scope && st.capabilities.includes('search'));
+  const truncated = useTaskBoard(st => st.scope === scope && st.truncated);
+  const archivedQuery = serverSearchCap ? search.q : '';
   useEffect(() => {
     if (!wantArchived) return;
     let dead = false;
-    listArchivedRequirements(cfg).then(rows => { if (!dead) setArchivedRows(rows); }).catch(e => { if (!dead) setBanner(tr('taskSearch.archivedFailed') + (e instanceof Error ? e.message : String(e))); });
+    (serverSearchCap ? searchRequirementsOnHub(cfg, archivedQuery, true) : listArchivedRequirements(cfg))
+      .then(rows => { if (!dead) setArchivedRows(rows); })
+      .catch(e => { if (!dead) setBanner(tr('taskSearch.archivedFailed') + (e instanceof Error ? e.message : String(e))); });
     return () => { dead = true; };
-  }, [wantArchived, cfg.serverUrl, cfg.token, cfg.networkId]);
+  }, [wantArchived, serverSearchCap, archivedQuery, cfg.serverUrl, cfg.token, cfg.networkId]);
   const archived = wantArchived ? archivedRows : [];
-  const selected = items.find(item => item.id === selectedId) || archived.find(item => item.id === selectedId) || null;
+  // 本机读到的表被截断(Hub 一次最多给最新的 500 张):问服务端要更老的匹配(needsServerSearch)。
+  const [serverHits, setServerHits] = useState<{ q: string; rows: Requirement[] }>({ q: '', rows: [] });
+  const askServer = needsServerSearch(serverSearchCap ? ['search'] : [], truncated, search);
+  useEffect(() => {
+    if (!askServer) return;
+    let dead = false;
+    const q = search.q;
+    searchRequirementsOnHub(cfg, q, false).then(rows => { if (!dead) setServerHits({ q, rows }); }).catch(() => { /* 本机的结果照样显示 */ });
+    return () => { dead = true; };
+  }, [askServer, search.q, cfg.serverUrl, cfg.token, cfg.networkId]);
+  const extraHits = askServer && serverHits.q === search.q ? serverHits.rows : [];
+  const selected = items.find(item => item.id === selectedId) || archived.find(item => item.id === selectedId) || extraHits.find(item => item.id === selectedId) || null;
 
   // ── 读 Hub ──
   useEffect(() => {
@@ -179,7 +197,7 @@ function ScopedRequirementBoard({ cfg, desktop, dispatch, onOpenVoiceSettings, s
     (async () => {
       try {
         await migrateLocalRequirements(cfg, () => readRequirements(localKey), rows => writeRequirements(localKey, rows));
-        const { rows: list, capabilities } = await listRequirementsFull(cfg);
+        const { rows: list, capabilities, truncated: cut } = await listRequirementsFull(cfg);
         if (dead) return;
         // 分不分两个角色:有卡片就看行里带没带 agent_owner;一张都没有才去探 Hub。
         const roles = list.length ? list.some(hasRoles) : await probeAgentOwnerSupport(cfg);
@@ -187,7 +205,7 @@ function ScopedRequirementBoard({ cfg, desktop, dispatch, onOpenVoiceSettings, s
         const projectList = await projectsRead;
         if (dead) return;
         lastListAt.current = Date.now();
-        patchTaskBoard(scope, { items: list, loaded: true, twoRoles: roles, projects: projectList, capabilities });
+        patchTaskBoard(scope, { items: list, loaded: true, twoRoles: roles, projects: projectList, capabilities, truncated: cut });
         setPhase('ready');
         setHubError('');
       } catch (e) {
@@ -221,9 +239,9 @@ function ScopedRequirementBoard({ cfg, desktop, dispatch, onOpenVoiceSettings, s
     if (!force && Date.now() - lastListAt.current < POLL_MS / 2) return;
     const gen = mutations.current;
     try {
-      const list = await listRequirements(cfg);
+      const { rows: list, truncated: cut } = await listRequirementsFull(cfg);
       lastListAt.current = Date.now();
-      if (gen === mutations.current && inFlight.current === 0) patchTaskBoard(scope, { items: list });
+      if (gen === mutations.current && inFlight.current === 0) patchTaskBoard(scope, { items: list, truncated: cut });
     } catch { /* 下一轮再试;看板保留上次的 */ }
   }, [cfg, phase, scope]);
   usePoll(refresh, POLL_MS, [refresh]);
@@ -415,7 +433,7 @@ function ScopedRequirementBoard({ cfg, desktop, dispatch, onOpenVoiceSettings, s
   // ── 视图 ──
   // 搜索先挑、筛选再筛(两个都是逐行判断,顺序不影响结果);列表 / 看板 / 甘特图都只从这两个取。
   const terms = useMemo(() => searchTerms(search.q), [search.q]);
-  const searched = useMemo(() => searchedTasks(items, archived, search, { people, projects }), [items, archived, search, people, projects]);
+  const searched = useMemo(() => searchedTasks(items, archived, search, { people, projects }, extraHits), [items, archived, search, people, projects, extraHits]);
   const visible = useMemo(() => applyFilter(searched, filter), [searched, filter]);
   const columns = useMemo(() => boardColumns(searched, filter), [searched, filter]);
   // 状态筛选把列变少了:手机分页别停在已经不存在的那一页上。
@@ -876,7 +894,7 @@ function ScopedRequirementBoard({ cfg, desktop, dispatch, onOpenVoiceSettings, s
               ? <Text style={s.muted} testID="req-retrying">{tr('tasks.copy.56')}</Text>
               : <Pressable onPress={() => setReloadKey(n => n + 1)} testID="req-retry" accessibilityRole="button"><Text style={s.link}>{tr('tasks.copy.57')}</Text></Pressable>}
           </View>
-        ) : terms.length && !visible.length ? <SearchEmpty q={search.q} s={s} filtered={filterActive(filter)} onClear={closeSearch} />
+        ) : terms.length && !visible.length ? <SearchEmpty q={search.q} s={s} filtered={filterActive(filter)} partial={truncated && !serverSearchCap} onClear={closeSearch} />
         : section === 'list' ? list()
           : section === 'calendar' ? <TaskCalendar items={visible} terms={terms} projects={projects} people={people} today={today} s={s} onOpen={openDetail} selectedId={selectedId} phone={narrow} onDue={pointer ? (id, due) => { void setDue(id, due); } : undefined} />
           : section === 'gantt' ? <TaskGantt items={visible} terms={terms} projects={projects} people={people} today={today} s={s} onOpen={openDetail} selectedId={selectedId} phone={narrow} startCapable={startCapable} onDue={pointer ? (id, due) => { void setDue(id, due); } : undefined} />

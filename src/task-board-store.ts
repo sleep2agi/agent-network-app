@@ -27,10 +27,12 @@ export interface TaskBoardState {
   /** 管理项目的对话框开着没有(左栏的「管理项目」和看板共用)。 */
   managingProjects: boolean;
   loaded: boolean;
+  /** Hub 给的列表不是整张表(有更老的没读回来):搜索要问服务端(capability search)。 */
+  truncated: boolean;
 }
 
 const fresh = (scope: string, section: TaskSection = 'board'): TaskBoardState => ({
-  scope, section, filter: EMPTY_FILTER, search: EMPTY_SEARCH, items: [], people: [], meId: null, twoRoles: null, projects: null, capabilities: [], managingProjects: false, loaded: false,
+  scope, section, filter: EMPTY_FILTER, search: EMPTY_SEARCH, items: [], people: [], meId: null, twoRoles: null, projects: null, capabilities: [], managingProjects: false, loaded: false, truncated: false,
 });
 
 let state: TaskBoardState = fresh('');
