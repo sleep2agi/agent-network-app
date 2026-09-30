@@ -65,14 +65,14 @@ console.log('取集自检');
     mkdirSync(join(tmp, 'deep', 'er'), { recursive: true });
     mkdirSync(join(tmp, 'node_modules'));
     for (const f of ['a.tsx', 'b.ts', 'deep/er/c.tsx', 'x.test.ts', 'node_modules/y.tsx', 'z.md']) writeFileSync(join(tmp, f), '');
-    const got = collect(tmp).map(f => relative(tmp, f)).sort();
+    const got = collect(tmp).map(f => relative(tmp, f).replace(/\\/g, '/')).sort();  // Windows: \ → /
     ck(`递归收进子目录的 .ts / .tsx,跳过测试与 node_modules(收到 ${got.join(', ')})`, JSON.stringify(got) === JSON.stringify(['a.tsx', 'b.ts', 'deep/er/c.tsx']));
   } finally { rmSync(tmp, { recursive: true, force: true }); }
 }
 
 console.log('src/');
 const files = collect(here);
-ck(`取集收到了真实文件(${files.length} 个,含 UserManagementPanel.tsx)`, files.length > 100 && files.some(f => f.endsWith('/UserManagementPanel.tsx')));
+ck(`取集收到了真实文件(${files.length} 个,含 UserManagementPanel.tsx)`, files.length > 100 && files.some(f => /[\\/]UserManagementPanel\.tsx$/.test(f)));
 const bad: string[] = [];
 for (const f of files) for (const line of violations(readFileSync(f, 'utf8'))) bad.push(`${relative(here, f)}:${line}`);
 ck(`没有在原生会生效的样式里写 flexBasis: 'auto'${bad.length ? ` —— ${bad.join(', ')}(给它一套不带 flex 的底样式,别叠在 flex:1 上再撤回)` : ''}`, bad.length === 0);

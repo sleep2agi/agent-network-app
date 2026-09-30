@@ -97,7 +97,7 @@ console.log('取集自检');
     mkdirSync(join(tmp, 'sub'));
     mkdirSync(join(tmp, 'node_modules'));
     for (const f of ['a.tsx', 'sub/b.tsx', 'c.ts', 'd.test.tsx', 'node_modules/e.tsx']) writeFileSync(join(tmp, f), '');
-    const got = collect(tmp).map(f => relative(tmp, f)).sort();
+    const got = collect(tmp).map(f => relative(tmp, f).replace(/\\/g, '/')).sort();  // Windows: \ → /
     ck(`递归收 .tsx,跳过测试与 node_modules(收到 ${got.join(', ')})`, JSON.stringify(got) === JSON.stringify(['a.tsx', 'sub/b.tsx']));
   } finally { rmSync(tmp, { recursive: true, force: true }); }
 }
