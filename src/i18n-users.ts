@@ -122,6 +122,6 @@ registerTranslations({
   'dm.placeholder': ['发给 {name}', 'Message {name}'],
   'dm.sending': ['发送中…', 'Sending…'],
   'dm.failed': ['发送失败', 'Failed to send'],
-  'dm.removeAttachment': ['移除附件', 'Remove attachment'],
+  'dm.retry': ['点击重发', 'Tap to retry'],
   'dm.pick': ['选择一个人开始私信', 'Pick a person to message'],
 });

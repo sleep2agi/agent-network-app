@@ -112,7 +112,7 @@ const ck = (name: string, ok: boolean) => { n++; if (ok) { p++; console.log(`  �
   const agents = read('./AgentsScreen.tsx');
   ck('人员区块:/humans + /dm/threads,记录人类用户名', agents.includes('fetchHumans(cfg, cfg.networkId)') && agents.includes('fetchDmThreads(') && agents.includes('noteHumanUsernames('));
   const dm = read('./DmChatScreen.tsx');
-  ck('会话:读 /api/dm、ack、上传后发', dm.includes('fetchDmMessages(') && dm.includes('ackUserMessages(cfg, ids)') && dm.includes('uploadImage(cfg, f, { networkId })') && dm.includes('sendDm('));
+  ck('会话:读 /api/dm、ack、上传后发', dm.includes('fetchDmMessages(') && dm.includes('ackUserMessages(cfg, ids)') && dm.includes("uploadImage(cfg, prepared, { networkId, purpose: 'dm' })") && dm.includes('sendDm('));
   const app = read('../App.tsx');
   ck('三种布局都能打开私信', (app.match(/<DmChatScreen /g) || []).length === 3 && (app.match(/onOpenPerson=\{p => setScreen\(dmScreenFor\(p\)\)\}/g) || []).length === 3);
   const panel = read('./UserManagementPanel.tsx');

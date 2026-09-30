@@ -7,6 +7,7 @@ import { ImageManipulator, SaveFormat, type ImageRef } from 'expo-image-manipula
 import { compressedFileName, isDraftImage, PICKER_QUALITY, planCompression } from './image-draft';
 import { resizeForUpload } from './native-resize';
 import { attachmentFromFile } from './desktop-file-intake';
+import { uploadUrlFor, type UploadOptions } from './upload-url';
 
 // Image/file attachments (#220 roadmap ③) — fully wired end to end:
 // pick → upload → attach (see uploadImage below). The hub's
@@ -203,10 +204,8 @@ const UPLOAD_ERROR_HINTS: Record<string, string> = {
   unauthorized: '登录已失效，请重新登录',
 };
 
-export const uploadImage = async (cfg: HubConfig, img: PickedImage, opts: { networkId?: string } = {}): Promise<UploadedFile> => {
-  // network_id:文件归到这个网络(Hub 的 /api/files 按网络成员放行,查看任务的同网成员都能看到)。
-  // 多网络账号不带会 400 network_id_required。聊天沿用旧行为(不带)。
-  const uploadUrl = `${cfg.serverUrl}/api/upload${opts.networkId ? `?network_id=${encodeURIComponent(opts.networkId)}` : ''}`;
+export const uploadImage = async (cfg: HubConfig, img: PickedImage, opts: UploadOptions = {}): Promise<UploadedFile> => {
+  const uploadUrl = uploadUrlFor(cfg.serverUrl, opts);
   // The hub REQUIRES a Content-Length header (411 otherwise, per #221).
   // RN's fetch streams FormData chunked on Android — Vincent's first
   // image send died on exactly that (tg 737) — so native goes through

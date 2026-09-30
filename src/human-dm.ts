@@ -97,8 +97,8 @@ export const isImageAttachment = (a: Pick<DmAttachment, 'mime' | 'name'>): boole
   (a.mime ?? '').startsWith('image/') || /\.(png|jpe?g|gif|webp|heic)$/i.test(a.name ?? '');
 
 /** 合并两批(按 message_id 去重,后来的覆盖先来的;hub 读回的那条替换本地乐观那条),新的在前。 */
-export function mergeDm(existing: readonly DmMessage[], incoming: readonly DmMessage[]): DmMessage[] {
-  const map = new Map<string, DmMessage>();
+export function mergeDm<T extends DmMessage>(existing: readonly T[], incoming: readonly T[]): T[] {
+  const map = new Map<string, T>();
   for (const m of existing) if (m?.message_id) map.set(m.message_id, m);
   for (const m of incoming) if (m?.message_id) map.set(m.message_id, m);
   return [...map.values()].sort((a, b) => hubMs(b.created_at) - hubMs(a.created_at) || (b.message_id < a.message_id ? -1 : 1));

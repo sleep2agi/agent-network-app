@@ -3,16 +3,31 @@
 // 收到靠左卡片底)、输入区(手机:输入框 +「＋ ⇄ 发送」一行;桌面:悬浮圆角卡片 + 工具栏)。样式数值与
 // ChatScreen 同源(composer-row-layout / composer-resize 的常量),两个会话的输入区量出来一样高、一样齐。
 // 私信没有 agent 会话的任务状态、引用、语音、⋯ 面板 —— 只有文字和附件。
+// 附件与 agent 会话同一套(owner 2026-09-30「给人好像发不了图片」):手机「＋」微信式面板(相册 / 文件 / 拍照),
+// 桌面「＋」系统文件选择器 + 拖进会话区 + ⌘/Ctrl+V;草稿缩略图、原图开关、并发上传队列、点图预览。
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, FlatList, Keyboard, KeyboardAvoidingView, Platform, Pressable, StatusBar, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, Alert, BackHandler, FlatList, Image, Keyboard, KeyboardAvoidingView, Platform, Pressable, ScrollView, StatusBar, StyleSheet, View, useWindowDimensions } from 'react-native';
 import { Text, TextInput } from './ui-text';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { layoutOs } from './safe-area-runtime';
 import { Ionicons } from './icons';
 import AliasAvatar from './AliasAvatar';
 import AuthedThumb, { AttachmentFile } from './AuthedThumb';
+import AuthedWebThumb from './AuthedWebThumb';
+import AttachmentFileDesktop from './AttachmentFileDesktop';
+import ImageViewer from './ImageViewer';
 import { ackUserMessages, type HubConfig } from './api';
-import { pickFiles, uploadImage, type PickedImage } from './attach';
+import { ATTACH_ENABLED, pickCameraPhoto, pickDocument, pickFiles, pickImages, prepareForUpload, uploadImage, type PickedImage } from './attach';
+import { attachmentCacheScope } from './attach-download';
+import { attachmentsFromClipboard, isTauriDesktop, releaseClipboardAttachment } from './clipboard-attachment';
+import { attachmentsFromFiles, filesFromTransfer, plusPressAction, transferHasFiles } from './desktop-file-intake';
+import { addToDraft, draftCountLabel, draftImageCount, isDraftImage, MAX_DRAFT_IMAGES, oversizeMessage, remainingImageSlots, removeFromDraft, sendBlocker, willCompressBeforeUpload } from './image-draft';
+import { createUploadMemo, runUploadQueue, UPLOAD_CONCURRENCY, uploadFailureSummary, withUploadState, type UploadState } from './upload-queue';
+import { nextPlusPanel, plusPanelHeight, plusPanelItems, type PlusItemKey, type PlusPanelEvent } from './composer-plus-panel';
+import { openGallery, viewerImageFor, type ViewerImage, type ViewerState } from './image-viewer-model';
+import { conversationGallery, imagePreviewSurface, imageWindowPayload } from './image-window-model';
+import { openImageWindow } from './image-window';
+import { dmAttachmentViews, localAttachmentViews, type DmAttachmentView } from './dm-attachment-model';
 import { usePoll } from './usePoll';
 import { colors, onThemeChange, radius, spacing } from './theme';
 import { ds, uiScale } from './ui-scale';
@@ -28,11 +43,21 @@ import { sendKeyPref } from './shortcuts-store';
 import { ComposerRightSlot } from './ComposerRowParts';
 import { COMPOSER_INPUT_BORDER, COMPOSER_LINE_HEIGHT, composerControlSize, composerInputPadY, composerRightSlot } from './composer-row-layout';
 import { COMPOSER_CARD_INSET, COMPOSER_DIVIDER_HEIGHT, COMPOSER_HEIGHT_DEFAULT } from './composer-resize';
-import { dmAttachments, dmSendBody, isImageAttachment, mergeDm, newClientRequestId, unackedIncomingIds, type DmAttachment, type DmMessage, type Human } from './human-dm';
+import { dmSendBody, mergeDm, newClientRequestId, unackedIncomingIds, type DmAttachment, type DmMessage, type Human } from './human-dm';
 import { fetchDmMessages, sendDm } from './human-dm-api';
 import { emitHumanDm, setActiveDmPeer, subscribeHumanDm } from './human-dm-bus';
 import { keyboardAvoidEnabled, useKeyboardVisible } from './keyboard-visibility';
 import { bubbleLayout, desktopBubbleCap } from './bubble-layout';
+
+/** 本地那条(还在发 / 没发出去):记住草稿里的文件和原图档,「点击重试」原样再发一次。 */
+type LocalDm = DmMessage & { _files?: PickedImage[]; _original?: boolean; _uploads?: UploadState[]; _uploadError?: string };
+
+// 重试不重传:已传上去的那几张按 (hub, 本地 uri, 原图档) 记住(与 agent 会话同一个 memo 形状)。
+const uploadMemo = createUploadMemo<DmAttachment>();
+// 多图方格:微信式每行最多 3 格。气泡按内容收缩,方格不给定宽就会一格一行地折下去 —— 按列数算出宽度。
+const GRID_CELL = 84;
+const GRID_GAP = 4;
+const gridWidth = (count: number) => { const cols = Math.min(3, count); return cols * GRID_CELL + (cols - 1) * GRID_GAP; };
 
 export default function DmChatScreen({ cfg, networkId, peer, onBack, desktop = false, hideBack = false }: {
   cfg: HubConfig;
@@ -44,7 +69,7 @@ export default function DmChatScreen({ cfg, networkId, peer, onBack, desktop = f
 }) {
   useTranslation();
   const name = (peer.display_name ?? '').trim() || peer.username;
-  const [messages, setMessages] = useState<DmMessage[]>([]);
+  const [messages, setMessages] = useState<LocalDm[]>([]);
   const [loaded, setLoaded] = useState(false);
   const [error, setError] = useState('');
   const [draft, setDraft] = useState('');
@@ -81,45 +106,254 @@ export default function DmChatScreen({ cfg, networkId, peer, onBack, desktop = f
     return () => setActiveDmPeer(null);
   }, [peer.username]);
 
+  // ── 草稿里的附件(与 ChatScreen 同一套 image-draft 规则:最多 9 张图 / 20 个附件,选择顺序即发送顺序)──
+  const attachedRef = useRef<PickedImage[]>([]);
+  attachedRef.current = attached;
+  const [sendOriginal, setSendOriginal] = useState(false);
+  const [notice, setNotice] = useState<string | null>(null);
+  useEffect(() => {
+    if (!notice) return;
+    const timer = setTimeout(() => setNotice(null), 2500);
+    return () => clearTimeout(timer);
+  }, [notice]);
+  const appendAttachments = useCallback((incoming: PickedImage[]) => {
+    if (!incoming.length) return;
+    const result = addToDraft(attachedRef.current, incoming);
+    result.rejected.forEach(releaseClipboardAttachment);
+    attachedRef.current = result.next;
+    setAttached(result.next);
+    if (result.notice) setNotice(result.notice);
+  }, []);
+  const removeAttachment = (uri: string) => {
+    const { next, removed } = removeFromDraft(attachedRef.current, uri);
+    releaseClipboardAttachment(removed);
+    attachedRef.current = next;
+    setAttached(next);
+  };
+  const willCompressLater = useCallback(
+    (img: PickedImage) => willCompressBeforeUpload(img, { original: sendOriginal, platform: Platform.OS }),
+    [sendOriginal],
+  );
+
+  // 桌面 ⌘/Ctrl+V:剪贴板里的截图 / 文件进草稿(纯文字照常粘贴)。agent 会话的这个监听只在 ChatScreen 挂着时有,
+  // 私信开着时 ChatScreen 不在 —— 此前在私信里粘截图什么都不发生。
+  useEffect(() => {
+    if (!(desktop || isTauriDesktop()) || typeof window === 'undefined') return;
+    const onPaste = (event: ClipboardEvent) => {
+      const pasted = attachmentsFromClipboard(event.clipboardData?.items);
+      if (!pasted.length) return;
+      event.preventDefault();
+      appendAttachments(pasted);
+    };
+    window.addEventListener('paste', onPaste);
+    return () => window.removeEventListener('paste', onPaste);
+  }, [appendAttachments, desktop]);
+  // 桌面:文件拖进私信会话区 = 加进草稿(拖文字 / 链接不接)。
+  const [dropActive, setDropActive] = useState(false);
+  useEffect(() => {
+    const doc = (globalThis as any).document;
+    if (!desktop || !doc?.addEventListener) return;
+    let clear: ReturnType<typeof setTimeout> | null = null;
+    const inPane = (event: DragEvent) => !!(event.target as Element | null)?.closest?.('[data-testid="dm-pane"]');
+    const onOver = (event: DragEvent) => {
+      if (!transferHasFiles(event.dataTransfer) || !inPane(event)) return;
+      event.preventDefault();
+      if (event.dataTransfer) event.dataTransfer.dropEffect = 'copy';
+      setDropActive(true);
+      if (clear) clearTimeout(clear);
+      clear = setTimeout(() => setDropActive(false), 200);
+    };
+    const onDrop = (event: DragEvent) => {
+      if (!inPane(event)) return;
+      const files = filesFromTransfer(event.dataTransfer);
+      if (!files.length) return;
+      event.preventDefault();
+      setDropActive(false);
+      appendAttachments(attachmentsFromFiles(files));
+    };
+    doc.addEventListener('dragover', onOver);
+    doc.addEventListener('drop', onDrop);
+    return () => {
+      if (clear) clearTimeout(clear);
+      doc.removeEventListener('dragover', onOver);
+      doc.removeEventListener('drop', onDrop);
+    };
+  }, [appendAttachments, desktop]);
+
+  // ── 手机「＋」:微信式一层面板(相册 / 文件 / 拍照),与 agent 会话同一个状态机 ──
+  const [plusOpen, setPlusOpen] = useState(false);
+  const plusOpenRef = useRef(plusOpen);
+  plusOpenRef.current = plusOpen;
+  const plusEvent = (event: PlusPanelEvent): boolean => {
+    const next = nextPlusPanel(plusOpenRef.current, event);
+    plusOpenRef.current = next.open;
+    setPlusOpen(next.open);
+    if (next.dismissKeyboard) Keyboard.dismiss();
+    return next.handled;
+  };
+  useEffect(() => {
+    const sub = Keyboard.addListener('keyboardDidShow', () => { if (plusOpenRef.current) plusEvent('keyboardShown'); });
+    return () => sub.remove();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  useEffect(() => {
+    if (!plusOpen || desktop || Platform.OS !== 'android') return;
+    const sub = BackHandler.addEventListener('hardwareBackPress', () => plusEvent('back'));
+    return () => sub.remove();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [plusOpen, desktop]);
+  const { height: windowHeight } = useWindowDimensions();
+  const plusItems = plusPanelItems({ os: Platform.OS, desktop, attachEnabled: ATTACH_ENABLED, btwEntry: false });
+  const cannotOpen = (error: unknown) => Alert.alert(t('chat.cannotOpen'), error instanceof Error ? error.message : String(error));
+  const runPlusItem = (key: PlusItemKey) => {
+    plusEvent('itemPicked');
+    if (key === 'album') {
+      const slots = remainingImageSlots(attachedRef.current);
+      if (slots <= 0) { setNotice(t('chat.maxImages', { count: MAX_DRAFT_IMAGES })); return; }
+      pickImages(slots).then(appendAttachments).catch(cannotOpen);
+    } else if (key === 'file') {
+      pickDocument().then(item => { if (item) appendAttachments([item]); }).catch(cannotOpen);
+    } else if (key === 'camera') {
+      pickCameraPhoto().then(item => { if (item) appendAttachments([item]); }).catch(cannotOpen);
+    }
+  };
+  // 桌面「＋」= 系统文件选择器(多选、任意类型);手机 = 上面的面板。
+  const onPlus = () => {
+    if (plusPressAction({ desktop, attachEnabled: ATTACH_ENABLED }) === 'panel') { plusEvent('toggle'); return; }
+    pickFiles().then(appendAttachments).catch(cannotOpen);
+  };
+
+  // ── 发送:先按选择顺序并发上传(≤3),全部传上才发私信;一张失败整条不发,标「未送达」可重试 ──
+  const patch = (id: string, fn: (m: LocalDm) => LocalDm) => setMessages(prev => prev.map(m => (m.message_id === id ? fn(m) : m)));
+  const deliver = async (clientId: string, text: string, files: PickedImage[], original: boolean) => {
+    patch(clientId, m => ({ ...m, pending: true, failed: false, _uploadError: undefined }));
+    try {
+      const run = await runUploadQueue(files, async img => {
+        const hit = uploadMemo.get(cfg.serverUrl, img.uri, original);
+        if (hit) return hit;
+        const prepared = await prepareForUpload(img, original);
+        const tooBig = oversizeMessage(prepared);
+        if (tooBig) throw new Error(tooBig);
+        const up = await uploadImage(cfg, prepared, { networkId, purpose: 'dm' });
+        const done: DmAttachment = { type: 'file', file_id: up.file_id, name: prepared.fileName, mime: up.mime, size: up.size };
+        uploadMemo.set(cfg.serverUrl, img.uri, original, done);
+        return done;
+      }, {
+        concurrency: UPLOAD_CONCURRENCY,
+        onState: (index, state) => patch(clientId, m => ({ ...m, _uploads: withUploadState(m._uploads, files.length, index, state) })),
+      });
+      if (run.failed.length) {
+        const summary = uploadFailureSummary(files.map(f => f.fileName), run.errors) ?? t('chat.attachmentFailed');
+        patch(clientId, m => ({ ...m, pending: false, failed: true, _uploadError: summary }));
+        return;
+      }
+      const uploaded = run.results as DmAttachment[];
+      const res = await sendDm(cfg, dmSendBody({ networkId, toUserId: peer.user_id, message: text, attachments: uploaded, clientRequestId: clientId }));
+      setMessages(prev => mergeDm<LocalDm>(prev.filter(m => m.message_id !== clientId), [{ ...res.message, direction: 'out' }]));
+      files.forEach(releaseClipboardAttachment);
+      setError('');
+    } catch (e) {
+      patch(clientId, m => ({ ...m, pending: false, failed: true }));
+      setError(String((e as Error)?.message ?? e));
+    }
+  };
   const submit = async () => {
     if (!canSend(draft, attached.length > 0, sending)) return;
+    const blocked = sendBlocker(attached, willCompressLater);
+    if (blocked) { setNotice(blocked); return; }
     const text = draft.trim();
     const files = attached;
+    const original = sendOriginal;
     const clientId = newClientRequestId();
     setSending(true);
     setDraft('');
+    attachedRef.current = [];
     setAttached([]);
-    const optimistic: DmMessage = { message_id: clientId, content: text, direction: 'out', created_at: new Date().toISOString(), pending: true };
+    const optimistic: LocalDm = { message_id: clientId, content: text, direction: 'out', created_at: new Date().toISOString(), pending: true, _files: files, _original: original };
     setMessages(prev => mergeDm(prev, [optimistic]));
     try {
-      const uploaded: DmAttachment[] = [];
-      for (const f of files) {
-        const up = await uploadImage(cfg, f, { networkId });
-        uploaded.push({ type: 'file', file_id: up.file_id, name: f.fileName, mime: up.mime, size: up.size });
-      }
-      const res = await sendDm(cfg, dmSendBody({ networkId, toUserId: peer.user_id, message: text, attachments: uploaded, clientRequestId: clientId }));
-      setMessages(prev => mergeDm(prev.filter(m => m.message_id !== clientId), [{ ...res.message, direction: 'out' }]));
-    } catch (e) {
-      setMessages(prev => prev.map(m => (m.message_id === clientId ? { ...m, pending: false, failed: true } : m)));
-      setError(String((e as Error)?.message ?? e));
+      await deliver(clientId, text, files, original);
     } finally {
       setSending(false);
     }
   };
-  const onPlus = () => { void pickFiles().then(files => { if (files.length) setAttached(prev => [...prev, ...files].slice(0, 9)); }).catch(() => {}); };
+  // 同一个 client_request_id 重投:hub 按它定出同一个 message_id,不会多出一条;已传上的附件不重传。
+  const retry = (m: LocalDm) => { void deliver(m.message_id, m.content ?? '', m._files ?? [], m._original ?? false); };
   const sendKey = sendKeyPref();
   const rightSlot = composerRightSlot({ draft, attachmentCount: attached.length, voiceMode: false });
   const bubbleCap = desktopBubbleCap(desktop, paneWidth);
   const me = cfg.username ?? '';
 
-  const renderAttachments = (m: DmMessage) => {
-    const list = dmAttachments(m);
-    if (!list.length) return null;
+  // ── 看图:手机 / 纯网页 = 全屏 ImageViewer;桌面 = 独立「图片预览」窗口,←/→ 走整个私信的图 ──
+  const [viewer, setViewer] = useState<ViewerState | null>(null);
+  const viewerEnv = { os: Platform.OS, tauri: isTauriDesktop() };
+  const viewsOf = (m: LocalDm): DmAttachmentView[] =>
+    m._files?.length && (m.pending || m.failed) ? localAttachmentViews(m._files) : dmAttachmentViews(m, cfg.serverUrl);
+  const galleryOf = (views: DmAttachmentView[]): ViewerImage[] =>
+    views.map(a => viewerImageFor(a, viewerEnv)).filter((v): v is ViewerImage => !!v);
+  const openViewer = (gallery: ViewerImage[], key: string, resolvedUri?: string) => {
+    const inApp = openGallery(gallery, key, resolvedUri);
+    if (imagePreviewSurface(viewerEnv) !== 'window') { setViewer(inApp); return; }
+    const payload = imageWindowPayload({
+      conversation: conversationGallery([...messages].reverse().map(m => galleryOf(viewsOf(m)))),
+      message: gallery,
+      tappedKey: key,
+      profileId: cfg.profileId,
+      serverUrl: cfg.serverUrl,
+      title: name,
+      now: Date.now(),
+    });
+    if (!payload) { setViewer(inApp); return; }
+    void openImageWindow(payload, { measureUri: resolvedUri }).then(ok => { if (!ok) setViewer(inApp); });
+  };
+
+  // 画法与 agent 会话的 renderAttachment 同分支:Tauri 桌面必须走 AuthedWebThumb / AttachmentFileDesktop ——
+  // AuthedThumb / AttachmentFile 靠 expo-file-system 的缓存目录,只在手机上有;此前私信在桌面上图一直转圈 / 加载失败。
+  const tauriWeb = Platform.OS === 'web' && isTauriDesktop();
+  const renderImage = (a: DmAttachmentView, gallery: ViewerImage[], compact: boolean) => {
+    const scope = `${attachmentCacheScope(cfg.serverUrl, cfg.token)}-${a.key}`;
+    if (!a.needsAuth) {
+      return (
+        <Pressable key={a.key} onPress={() => openViewer(gallery, a.key, a.uri)} accessibilityLabel={t('chat.previewName', { name: a.name })}>
+          <Image source={{ uri: a.uri }} style={compact ? styles.gridImage : styles.thumb} resizeMode={compact ? 'cover' : 'contain'} />
+        </Pressable>
+      );
+    }
+    if (tauriWeb) return <AuthedWebThumb key={scope} uri={a.uri} name={a.name} mime={a.mime} token={cfg.token} compact={compact} onPress={objectUrl => openViewer(gallery, a.key, objectUrl)} />;
+    if (Platform.OS !== 'web') return <AuthedThumb key={scope} fileId={a.key} name={a.name} mime={a.mime} serverUrl={cfg.serverUrl} token={cfg.token} compact={compact} onPress={localUri => openViewer(gallery, a.key, localUri)} />;
+    return <Text key={a.key} style={styles.attachmentLine}>📎 {a.name}</Text>;
+  };
+  const renderFile = (a: DmAttachmentView) => {
+    const scope = `${attachmentCacheScope(cfg.serverUrl, cfg.token)}-${a.key}`;
+    if (a.needsAuth && tauriWeb) return <AttachmentFileDesktop key={scope} uri={a.uri} name={a.name} token={cfg.token} size={a.size} />;
+    if (a.needsAuth && Platform.OS !== 'web') return <AttachmentFile key={scope} fileId={a.key} name={a.name} mime={a.mime} serverUrl={cfg.serverUrl} token={cfg.token} />;
+    return <Text key={a.key} style={styles.attachmentLine}>📎 {a.name}</Text>;
+  };
+  const renderAttachments = (m: LocalDm) => {
+    const views = viewsOf(m);
+    if (!views.length) return null;
+    const gallery = galleryOf(views);
+    const images = views.filter(a => a.isImage);
+    const files = views.filter(a => !a.isImage);
+    const uploadsFor = (a: DmAttachmentView) => (m._files ? m._uploads?.[views.indexOf(a)] : undefined);
+    // 两张及以上 = 微信式方格;单图照原样大图。上传中 / 失败画在格子上。
+    const cell = (a: DmAttachmentView, compact = true) => {
+      const state = uploadsFor(a);
+      return (
+        <View key={a.key} style={[compact ? styles.gridCell : styles.singleCell, state?.status === 'failed' && styles.gridCellFailed]} testID="dm-image-cell">
+          {renderImage(a, gallery, compact)}
+          {state && (state.status === 'queued' || state.status === 'uploading') ? (
+            <View style={styles.gridOverlay} pointerEvents="none"><ActivityIndicator size="small" color="#fff" /></View>
+          ) : null}
+        </View>
+      );
+    };
     return (
-      <View style={styles.attachments}>
-        {list.map(a => isImageAttachment(a)
-          ? <AuthedThumb key={a.file_id} fileId={a.file_id} name={a.name ?? a.file_id} mime={a.mime} serverUrl={cfg.serverUrl} token={cfg.token} onPress={() => {}} />
-          : <AttachmentFile key={a.file_id} fileId={a.file_id} name={a.name ?? a.file_id} mime={a.mime} serverUrl={cfg.serverUrl} token={cfg.token} />)}
+      <View style={styles.attachments} testID="dm-attachments">
+        {images.length > 1
+          ? <View style={[styles.grid, { width: gridWidth(images.length) }]}>{images.map(a => cell(a))}</View>
+          : images.map(a => (m._files ? cell(a, false) : renderImage(a, gallery, false)))}
+        {files.map(renderFile)}
       </View>
     );
   };
@@ -172,7 +406,12 @@ export default function DmChatScreen({ cfg, networkId, peer, onBack, desktop = f
                       {item.content ? <Text style={styles.bubbleText} selectable>{item.content}</Text> : null}
                       {renderAttachments(item)}
                     </View>
-                    {item.pending ? <Text style={styles.statusMark}>{t('dm.sending')}</Text> : item.failed ? <Text style={[styles.statusMark, { color: colors.failed }]}>{t('dm.failed')}</Text> : null}
+                    {item.pending ? <Text style={styles.statusMark}>{t('dm.sending')}</Text> : item.failed ? (
+                      <Pressable onPress={() => retry(item)} accessibilityRole="button" accessibilityLabel={t('dm.retry')} hitSlop={6} testID="dm-retry">
+                        <Text style={[styles.statusMark, { color: colors.failed }]}>{t('dm.failed')} · {t('dm.retry')}</Text>
+                        {item._uploadError ? <Text style={[styles.statusMark, { color: colors.failed }]} numberOfLines={2}>{item._uploadError}</Text> : null}
+                      </Pressable>
+                    ) : null}
                   </View>
                   {out ? <AliasAvatar alias={me || 'me'} size={36} /> : null}
                 </View>
@@ -184,15 +423,66 @@ export default function DmChatScreen({ cfg, networkId, peer, onBack, desktop = f
       {error ? <Text style={styles.error} testID="dm-error" numberOfLines={2}>{error}</Text> : null}
       {attached.length ? (
         <View style={styles.draftStrip} testID="dm-draft-strip">
-          {attached.map((f, i) => (
-            <View key={`${f.uri}:${i}`} style={styles.draftChip}>
-              <Ionicons name="document-outline" size={14} color={colors.textSecondary} />
-              <Text style={styles.draftName} numberOfLines={1}>{f.fileName}</Text>
-              <Pressable accessibilityLabel={t('dm.removeAttachment')} hitSlop={8} onPress={() => setAttached(prev => prev.filter((_, j) => j !== i))}>
-                <Ionicons name="close" size={14} color={colors.textMuted} />
+          <View style={styles.draftStripHeader}>
+            <Text style={styles.draftCount} testID="dm-draft-count">{draftCountLabel(attached)}</Text>
+            {draftImageCount(attached) ? (
+              <Pressable
+                accessibilityRole="checkbox"
+                accessibilityState={{ checked: sendOriginal }}
+                aria-checked={sendOriginal}
+                accessibilityLabel={t('chat.original')}
+                hitSlop={8}
+                onPress={() => setSendOriginal(v => !v)}
+                style={styles.originalToggle}
+                testID="dm-original-toggle"
+              >
+                <View style={[styles.originalBox, sendOriginal && styles.originalBoxOn]}>
+                  {sendOriginal ? <Ionicons name="checkmark" size={11} color={colors.onAccent} /> : null}
+                </View>
+                <Text style={styles.originalLabel}>{t('chat.original')}</Text>
               </Pressable>
-            </View>
-          ))}
+            ) : null}
+          </View>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.draftStripRow}>
+            {attached.map((item, index) => {
+              const tooBig = !willCompressLater(item) && !!oversizeMessage(item);
+              return isDraftImage(item) ? (
+                <View key={item.uri} style={[styles.draftThumbWrap, tooBig && styles.draftThumbTooBig]} testID="dm-draft-thumb">
+                  <Pressable onPress={() => openViewer(attached.filter(isDraftImage).map(d => ({ key: d.uri, name: d.fileName, uri: d.uri })), item.uri)} accessibilityLabel={t('chat.previewName', { name: item.fileName })}>
+                    <Image source={{ uri: item.uri }} style={styles.draftThumb} resizeMode="cover" />
+                  </Pressable>
+                  <View style={styles.draftIndex} pointerEvents="none"><Text style={styles.draftIndexText}>{index + 1}</Text></View>
+                  {tooBig ? <View style={styles.draftTooBigTag} pointerEvents="none"><Text style={styles.draftTooBigText}>{t('chat.tooLarge')}</Text></View> : null}
+                  <Pressable onPress={() => removeAttachment(item.uri)} hitSlop={8} style={styles.draftRemove} accessibilityLabel={t('chat.removeName', { name: item.fileName })}>
+                    <Text style={styles.draftRemoveText}>✕</Text>
+                  </Pressable>
+                </View>
+              ) : (
+                <View key={item.uri} style={[styles.draftFileChip, tooBig && styles.draftThumbTooBig]} testID="dm-draft-file">
+                  <Text style={styles.draftName} numberOfLines={2}>📎 {item.fileName}</Text>
+                  <Pressable onPress={() => removeAttachment(item.uri)} hitSlop={8} style={styles.draftRemove} accessibilityLabel={t('chat.removeName', { name: item.fileName })}>
+                    <Text style={styles.draftRemoveText}>✕</Text>
+                  </Pressable>
+                </View>
+              );
+            })}
+            {!desktop && ATTACH_ENABLED && remainingImageSlots(attached) > 0 ? (
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={t('chat.addMore')}
+                testID="dm-draft-add"
+                onPress={() => plusEvent('toggle')}
+                style={({ pressed }) => [styles.draftAddTile, pressed && { opacity: 0.6 }]}
+              >
+                <Ionicons name="add" size={26} color={colors.textMuted} />
+              </Pressable>
+            ) : null}
+          </ScrollView>
+        </View>
+      ) : null}
+      {notice ? (
+        <View style={styles.notice} pointerEvents="none" accessibilityLiveRegion="polite" testID="dm-notice">
+          <Text style={styles.noticeText}>{notice}</Text>
         </View>
       ) : null}
       {desktop ? (
@@ -244,13 +534,47 @@ export default function DmChatScreen({ cfg, networkId, peer, onBack, desktop = f
               placeholderTextColor={colors.textMuted}
               value={draft}
               onChangeText={setDraft}
+              onFocus={() => { if (plusOpenRef.current) plusEvent('inputFocus'); }}
               testID="dm-input"
               multiline
             />
           </View>
-          <ComposerRightSlot slot={rightSlot} sendDisabled={!canSend(draft, attached.length > 0, sending)} plusOpen={false} onSend={() => void submit()} onPlus={onPlus} />
+          <ComposerRightSlot slot={rightSlot} sendDisabled={!canSend(draft, attached.length > 0, sending)} plusOpen={plusOpen} onSend={() => void submit()} onPlus={onPlus} />
         </View>
       )}
+      {!desktop && plusOpen ? (
+        // 与 agent 会话同样内嵌在输入行下面(占键盘的位置),双栏时不盖住左边列表。
+        <View
+          accessibilityLabel={t('chat.moreSend')}
+          testID="dm-plus-panel"
+          style={[styles.plusPanel, { height: plusPanelHeight(windowHeight) + composerInset, paddingBottom: composerInset }]}
+        >
+          <View style={styles.plusGrid}>
+            {plusItems.map(item => (
+              <Pressable
+                key={item.key}
+                accessibilityRole="button"
+                accessibilityLabel={t(`chat.plusHint.${item.key}`)}
+                testID={`dm-plus-${item.key}`}
+                style={({ pressed }) => [styles.plusCell, pressed && { opacity: 0.6 }]}
+                onPress={() => runPlusItem(item.key)}
+              >
+                <View style={styles.plusCellIcon}>
+                  {item.icon ? <Ionicons name={item.icon as any} size={28} color={colors.text} /> : null}
+                </View>
+                <Text style={styles.plusCellLabel} numberOfLines={1}>{t(`chat.plus.${item.key}`)}</Text>
+              </Pressable>
+            ))}
+          </View>
+        </View>
+      ) : null}
+      {desktop && dropActive ? (
+        <View pointerEvents="none" style={styles.dropOverlay} testID="dm-drop-overlay">
+          <Ionicons name="cloud-upload-outline" size={28} color={colors.accent} />
+          <Text style={styles.dropOverlayText}>{t('chat.drop')}</Text>
+        </View>
+      ) : null}
+      <ImageViewer state={viewer} onClose={() => setViewer(null)} serverUrl={cfg.serverUrl} token={cfg.token} />
     </KeyboardAvoidingView>
   );
 }
@@ -280,9 +604,43 @@ const makeStyles = (B = bubbleLayout()) => StyleSheet.create({
   attachments: { gap: spacing.xs, marginTop: spacing.xs },
   statusMark: { color: colors.textMuted, fontSize: 10, marginTop: 2, alignSelf: 'flex-end' },
   error: { color: colors.failed, fontSize: 12, paddingHorizontal: spacing.lg, paddingVertical: spacing.xs },
-  draftStrip: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.xs, paddingHorizontal: spacing.md, paddingTop: spacing.sm },
-  draftChip: { flexDirection: 'row', alignItems: 'center', gap: 4, maxWidth: 220, paddingHorizontal: spacing.sm, paddingVertical: 4, borderRadius: radius.item, backgroundColor: colors.subtleFill },
-  draftName: { flexShrink: 1, color: colors.textSecondary, fontSize: 12 },
+  attachmentLine: { color: colors.accent, fontSize: 12, marginTop: spacing.xs },
+  thumb: { width: 180, height: 180, borderRadius: radius.thumb, backgroundColor: colors.inputBg },
+  grid: { flexDirection: 'row', flexWrap: 'wrap', gap: GRID_GAP },
+  gridCell: { width: 84, height: 84, borderRadius: radius.thumb, overflow: 'hidden', backgroundColor: colors.inputBg },
+  singleCell: { alignSelf: 'flex-start', borderRadius: radius.thumb, overflow: 'hidden' },
+  gridCellFailed: { borderWidth: 2, borderColor: colors.failed },
+  gridImage: { width: 84, height: 84 },
+  gridOverlay: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.45)', alignItems: 'center', justifyContent: 'center' },
+  draftStrip: { paddingTop: spacing.xs, paddingHorizontal: spacing.md, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border },
+  draftStripHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 },
+  draftCount: { color: colors.textSecondary, fontSize: 12 },
+  originalToggle: { flexDirection: 'row', alignItems: 'center', gap: 5 },
+  originalBox: { width: 15, height: 15, borderRadius: radius.pill, borderWidth: 1, borderColor: colors.textMuted, alignItems: 'center', justifyContent: 'center' },
+  originalBoxOn: { backgroundColor: colors.accent, borderColor: colors.accent },
+  originalLabel: { color: colors.text, fontSize: 12 },
+  draftStripRow: { gap: 8, paddingTop: 6, paddingBottom: spacing.xs, paddingRight: 6 },
+  draftThumbWrap: { width: 64, height: 64, borderRadius: radius.thumb, overflow: 'visible' },
+  draftThumbTooBig: { borderWidth: 2, borderColor: colors.failed, borderRadius: radius.thumb },
+  draftThumb: { width: 64, height: 64, borderRadius: radius.thumb, backgroundColor: colors.inputBg },
+  draftIndex: { position: 'absolute', left: 3, bottom: 3, minWidth: 16, height: 16, borderRadius: radius.pill, paddingHorizontal: 3, backgroundColor: colors.accent, alignItems: 'center', justifyContent: 'center' },
+  draftIndexText: { color: colors.onAccent, fontSize: 10, fontWeight: '600' },
+  draftTooBigTag: { position: 'absolute', left: 0, right: 0, top: 22, alignItems: 'center' },
+  draftTooBigText: { color: '#fff', backgroundColor: colors.failed, fontSize: 10, paddingHorizontal: 3, borderRadius: radius.mark, overflow: 'hidden' },
+  draftRemove: { position: 'absolute', top: -6, right: -6, width: 18, height: 18, borderRadius: radius.pill, backgroundColor: 'rgba(0,0,0,0.65)', alignItems: 'center', justifyContent: 'center' },
+  draftRemoveText: { color: '#fff', fontSize: 10, lineHeight: 12 },
+  draftFileChip: { width: 120, height: 64, borderRadius: radius.thumb, padding: 6, justifyContent: 'center', backgroundColor: colors.inputBg, borderWidth: 1, borderColor: colors.border },
+  draftName: { color: colors.textSecondary, fontSize: 12, flexShrink: 1 },
+  draftAddTile: { width: 64, height: 64, borderRadius: radius.thumb, borderWidth: 1, borderStyle: 'dashed', borderColor: colors.border, alignItems: 'center', justifyContent: 'center' },
+  notice: { alignSelf: 'center', marginVertical: 4, paddingVertical: 5, paddingHorizontal: 12, borderRadius: radius.pill, backgroundColor: colors.card, maxWidth: '92%', ...elevated('floating') },
+  noticeText: { color: colors.text, fontSize: 12 },
+  plusPanel: { backgroundColor: colors.inputBg, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border },
+  plusGrid: { flexDirection: 'row', flexWrap: 'wrap', paddingHorizontal: spacing.md, paddingTop: spacing.lg },
+  plusCell: { width: '25%', maxWidth: 104, alignItems: 'center', marginBottom: spacing.lg },
+  plusCellIcon: { width: 60, height: 60, borderRadius: radius.surface, backgroundColor: colors.card, borderWidth: StyleSheet.hairlineWidth, borderColor: colors.border, alignItems: 'center', justifyContent: 'center' },
+  plusCellLabel: { color: colors.textSecondary, fontSize: 12, marginTop: 6 },
+  dropOverlay: { position: 'absolute', top: spacing.sm, left: spacing.sm, right: spacing.sm, bottom: spacing.sm, borderWidth: 2, borderStyle: 'dashed', borderColor: colors.accent, borderRadius: radius.control, backgroundColor: colors.bg + 'E6', alignItems: 'center', justifyContent: 'center', gap: spacing.sm },
+  dropOverlayText: { color: colors.accent, fontSize: 14, fontWeight: '600' },
   inputRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, padding: spacing.md, borderTopWidth: 1, borderTopColor: colors.border },
   inputWrap: { flex: 1, justifyContent: 'flex-end' },
   input: {

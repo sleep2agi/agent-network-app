@@ -14,6 +14,8 @@
  *  frames or other types as a delivered desktop message.
  */
 
+import { eventAttachmentPreview } from './dm-attachment-model';
+
 export type DesktopMessageSeverity = 'info' | 'success' | 'warning' | 'error';
 
 export type DesktopMessageNotice = {
@@ -75,7 +77,9 @@ export function consumeDesktopMessageEvent(raw: unknown, ctx: ConsumeContext = {
   }
 
   const messageId = displayText(event.message_id, 200);
-  const message = displayText(event.message, 10000);
+  // 只带附件的私信(hub human-dm.ts 推 message:"" + meta.attachments)照样要弹、要刷新会话:
+  // 正文空时用「[图片]」/「[文件]」当预览。此前它落进下面的 unknown,收件人一点动静都没有。
+  const message = displayText(event.message, 10000) ?? eventAttachmentPreview(event.meta);
   if (!messageId || !message) return { status: 'unknown' };
 
   const severity: DesktopMessageSeverity =
