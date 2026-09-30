@@ -12,7 +12,8 @@
 //   filter    desktop: 类型 menu → tick 完成 → one row; 清除 → all rows back. 我的任务 → only cards I own / join.
 //             phone: 筛选 → sheet → tick 完成 → 「查看 1 条」 → one row; the 筛选 button shows 1
 //   open      desktop: hover a row → 打开任务 → the detail opens; phone: tap a row → the detail page
-//   text      nothing owns text yet paints < 1px (harness zeroSizeText); phone: no horizontal page scroll
+//   text      nothing owns text yet paints < 1px (harness zeroSizeText); phone: no horizontal page scroll;
+//             every row inside the feed, no text in a row cut by an overflow-hidden ancestor (ellipsis lines excepted)
 // Exit 1 when any check fails or a viewport could not be opened.
 import { mkdirSync } from 'node:fs';
 import { serveExport, initScript, findChromium, ANDROID_UA, zeroSizeText } from '../test-layout-sweep/harness.mjs';
@@ -138,8 +139,31 @@ for (const [name, V] of Object.entries(VIEWPORTS)) {
         await page.locator('[data-testid="activity-expand-200"]').click();
         record(where, 'expand', { four: lines === 4, hidden: (await page.locator('[data-testid="activity-details-200"]').count()) === 0 }, { lines });
         const zero = await zeroSizeText(page, '[data-testid="task-activity"]');
+        // clipping: every row sits inside the feed horizontally, and no text inside a row is cut by an overflow-hidden
+        // ancestor other than a deliberate one-line ellipsis (numberOfLines ⇒ -webkit-line-clamp / text-overflow).
+        const clip = await page.evaluate(() => {
+          const feed = document.querySelector('[data-testid="activity-scroll"]').getBoundingClientRect();
+          const bad = [];
+          for (const row of document.querySelectorAll('[data-testid^="activity-row-"]')) {
+            const r = row.getBoundingClientRect();
+            if (r.left < feed.left - 0.5 || r.right > feed.right + 0.5) bad.push(`${row.dataset.testid} ${Math.round(r.left)}–${Math.round(r.right)} outside ${Math.round(feed.left)}–${Math.round(feed.right)}`);
+            for (const el of row.querySelectorAll('div,span')) {
+              if (el.children.length || !el.textContent.trim()) continue;
+              const cs = getComputedStyle(el);
+              if (cs.textOverflow === 'ellipsis' || cs.webkitLineClamp !== 'none' && cs.webkitLineClamp) continue;
+              const b = el.getBoundingClientRect();
+              for (let a = el.parentElement; a && a !== row; a = a.parentElement) {
+                const ac = getComputedStyle(a);
+                if (ac.overflowX === 'visible' && ac.overflowY === 'visible') continue;
+                const q = a.getBoundingClientRect();
+                if (b.left < q.left - 0.5 || b.right > q.right + 0.5 || b.top < q.top - 0.5 || b.bottom > q.bottom + 0.5) { bad.push(`"${el.textContent.trim().slice(0, 12)}" clipped`); break; }
+              }
+            }
+          }
+          return bad;
+        });
         const overflow = await page.evaluate(() => document.scrollingElement.scrollWidth - innerWidth);
-        record(where, 'text', { painted: zero.length === 0, noHScroll: name !== 'phone' || overflow <= 0 }, { zero: zero.slice(0, 3).join('|') || '-', overflow });
+        record(where, 'text', { painted: zero.length === 0, noHScroll: name !== 'phone' || overflow <= 0, noClip: clip.length === 0 }, { zero: zero.slice(0, 3).join('|') || '-', overflow, clip: clip.slice(0, 3).join('|') || '-' });
 
         // filters
         step = 'filters';
