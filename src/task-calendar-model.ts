@@ -5,6 +5,7 @@
 // 没有期限的不进日历,单独列在「未设期限」。周一开头(和期限选择器的月历 monthGrid 一致)。
 import { addDays, dueToLocal, formatTime, monthGrid, shiftMonth, systemClock, type Clock } from './due-time';
 import type { ReqPriority, Requirement } from './requirements-model';
+import { dayDiff, shiftedDue } from './task-gantt-model';
 
 export type CalendarMode = 'month' | 'week';
 
@@ -108,3 +109,18 @@ export function swipeDelta(dx: number, dy: number, threshold = 50): number {
 
 /** 逾期:那天已经过了且没完成(时刻型的当天按天算,和甘特图一致)。 */
 export const entryOverdue = (e: CalendarEntry, today: string): boolean => e.date < today && e.item.column !== 'done';
+
+// ── 拖到另一天改期限(桌面,STEP 2) ──
+
+/**
+ * 拖到 target 那天后要存的期限:全天的还是全天;带时刻的保留查看者本地的时刻,只换日期(和甘特图拖动同一个 shiftedDue)。
+ * 放回原来那天 / 没有目标 / 读不懂 = null(不发请求)。
+ */
+export function dropDue(entry: CalendarEntry, target: string | null, clock: Clock = systemClock): string | null {
+  if (!target || target === entry.date) return null;
+  return shiftedDue(entry.item.due, dayDiff(entry.date, target), clock);
+}
+
+/** 按下后挪了多远才算开始拖(之前的都是点击)。 */
+export const DRAG_SLOP = 4;
+export const dragStarted = (dx: number, dy: number): boolean => Math.hypot(dx, dy) >= DRAG_SLOP;

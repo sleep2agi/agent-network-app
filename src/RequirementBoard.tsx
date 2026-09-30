@@ -878,7 +878,7 @@ function ScopedRequirementBoard({ cfg, desktop, dispatch, onOpenVoiceSettings, s
           </View>
         ) : terms.length && !visible.length ? <SearchEmpty q={search.q} s={s} filtered={filterActive(filter)} onClear={closeSearch} />
         : section === 'list' ? list()
-          : section === 'calendar' ? <TaskCalendar items={visible} terms={terms} projects={projects} people={people} today={today} s={s} onOpen={openDetail} selectedId={selectedId} phone={narrow} />
+          : section === 'calendar' ? <TaskCalendar items={visible} terms={terms} projects={projects} people={people} today={today} s={s} onOpen={openDetail} selectedId={selectedId} phone={narrow} onDue={pointer ? (id, due) => { void setDue(id, due); } : undefined} />
           : section === 'gantt' ? <TaskGantt items={visible} terms={terms} projects={projects} people={people} today={today} s={s} onOpen={openDetail} selectedId={selectedId} phone={narrow} startCapable={startCapable} onDue={pointer ? (id, due) => { void setDue(id, due); } : undefined} />
             : kanban();
 

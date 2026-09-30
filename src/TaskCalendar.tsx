@@ -7,6 +7,7 @@ import { ownerLabel } from './i18n-task-presentation';
 // 任务按预计完成落在那天(带时刻的按本地时区,格子里写本地时刻);没有期限的不进日历,列在「未设期限」。
 // 桌面:月 / 周两种格子,周一开头;每格列出当天的任务(优先级点 + 时刻 + 标题),放不下收进「+N」→ 当天的浮层;
 //   今天高亮,‹ › 翻页,「今天」回来,点任务 = 打开现有详情。
+//   鼠标把任务拖到另一天 = 改预计完成:请求里只有 due;带时刻的保留本地时刻(RequirementBoard.setDue,失败退回)。
 // 手机:仿微信 / 系统日历 —— 上面一张月历(有任务的日子下面一个点),点一天在下面列出那天的任务;
 //   横滑或 ‹ › 翻月。桌面那种「格子里写标题」在 390 宽上一格只有 ~50px,一个字都放不下。
 import { useEffect, useMemo, useRef, useState } from 'react';
@@ -20,7 +21,7 @@ import type { RequirementPerson } from './requirement-people';
 import { PriorityDot, ProjectChip, Segmented, a11yState, cardBg, priorityColor, softShadow, type TaskStyles } from './TaskBoardParts';
 import { highlight } from './TaskSearch';
 import {
-  calendarBuckets, calendarCells, cellCapacity, cellOverflow, dayDot, entryOverdue, monthAnchorOf, shiftAnchor, swipeDelta,
+  calendarBuckets, calendarCells, dragStarted, dropDue, cellCapacity, cellOverflow, dayDot, entryOverdue, monthAnchorOf, shiftAnchor, swipeDelta,
   type CalendarEntry, type CalendarMode,
 } from './task-calendar-model';
 
@@ -47,6 +48,8 @@ type Props = {
   selectedId?: string | null;
   /** 搜索词(task-search.ts):任务名里命中的字高亮。 */
   terms?: readonly string[];
+  /** 鼠标拖任务到另一天改期限;不传 = 只读(手机 / 触屏)。 */
+  onDue?: (id: string, due: string) => void;
 };
 
 export default function TaskCalendar(props: Props & { phone: boolean }) {
@@ -54,7 +57,7 @@ export default function TaskCalendar(props: Props & { phone: boolean }) {
   return props.phone ? <CalendarPhone {...props} /> : <CalendarDesktop {...props} />;
 }
 
-function CalendarDesktop({ items, today, s, onOpen, selectedId, people, terms }: Props) {
+function CalendarDesktop({ items, today, s, onOpen, selectedId, people, terms, onDue }: Props) {
   useTranslation();
   const c = useCalendarStyles();
   const [mode, setModeState] = useState<CalendarMode>(lastMode);
@@ -69,7 +72,50 @@ function CalendarDesktop({ items, today, s, onOpen, selectedId, people, terms }:
   const title = mode === 'month'
     ? tr('gantt.month', { y: +anchor.slice(0, 4), m: +anchor.slice(5, 7) })
     : tr('gantt.weekRange', { a: md(cells[0].date), b: md(cells[6].date) });
-  const open = (id: string) => { setPopover(null); onOpen(id); };
+  // ── 拖到另一天 ──
+  // 按下记起点;挪过 DRAG_SLOP 才算拖(之前松手仍是点击)。落点用 elementFromPoint 找 [data-cal-date] 的格子。
+  const press = useRef<{ entry: CalendarEntry; x0: number; y0: number } | null>(null);
+  const [drag, setDrag] = useState<{ entry: CalendarEntry; x: number; y: number; over: string | null } | null>(null);
+  const dragRef = useRef(drag);
+  dragRef.current = drag;
+  const swallowClick = useRef(false);
+  const [pressing, setPressing] = useState(false);
+  useEffect(() => {
+    const doc = (globalThis as { document?: any }).document;
+    if (!pressing || !doc?.addEventListener) return undefined;
+    const cellAt = (x: number, y: number): string | null => doc.elementFromPoint?.(x, y)?.closest?.('[data-cal-date]')?.getAttribute('data-cal-date') ?? null;
+    const move = (e: any) => {
+      const p = press.current;
+      if (!p) return;
+      if (!dragRef.current && !dragStarted(e.clientX - p.x0, e.clientY - p.y0)) return;
+      setDrag({ entry: p.entry, x: e.clientX, y: e.clientY, over: cellAt(e.clientX, e.clientY) });
+    };
+    const up = () => {
+      const d = dragRef.current;
+      press.current = null;
+      setPressing(false);
+      setDrag(null);
+      if (!d) return;
+      swallowClick.current = true;
+      setTimeout(() => { swallowClick.current = false; }, 0);
+      const next = dropDue(d.entry, d.over);
+      if (next && onDue) onDue(d.entry.item.id, next);
+    };
+    const body = doc.body?.style;
+    const before = body ? body.userSelect : '';
+    if (body) body.userSelect = 'none';
+    doc.addEventListener('pointermove', move);
+    doc.addEventListener('pointerup', up);
+    doc.addEventListener('pointercancel', up);
+    return () => {
+      doc.removeEventListener('pointermove', move);
+      doc.removeEventListener('pointerup', up);
+      doc.removeEventListener('pointercancel', up);
+      if (body) body.userSelect = before;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pressing]);
+  const open = (id: string) => { if (swallowClick.current) return; setPopover(null); onOpen(id); };
 
   const entryRow = (e: CalendarEntry, inPopover = false) => {
     const overdue = entryOverdue(e, today);
@@ -80,7 +126,8 @@ function CalendarDesktop({ items, today, s, onOpen, selectedId, people, terms }:
         accessibilityLabel={tr('cal.itemA11y', { name: e.item.name, when: whenText(e) })}
         {...a11yState({ selected: selectedId === e.item.id })}
         onPress={() => open(e.item.id)}
-        style={state => [inPopover ? c.popRow : c.item, ((state as { hovered?: boolean }).hovered || state.pressed) && { backgroundColor: colors.rowHover }, selectedId === e.item.id && c.itemSelected]}
+        {...(onDue && !inPopover ? { onPointerDown: (ev: any) => { if (ev.nativeEvent?.button > 0) return; press.current = { entry: e, x0: ev.nativeEvent?.clientX ?? 0, y0: ev.nativeEvent?.clientY ?? 0 }; setPressing(true); } } : {}) as object}
+        style={state => [inPopover ? c.popRow : c.item, drag?.entry.item.id === e.item.id && { opacity: 0.35 }, onDue && !inPopover && ({ cursor: 'grab' } as object), ((state as { hovered?: boolean }).hovered || state.pressed) && { backgroundColor: colors.rowHover }, selectedId === e.item.id && c.itemSelected]}
         testID={inPopover ? `cal-pop-item-${e.item.id}` : `cal-item-${e.item.id}`}
       >
         <View style={[c.dot, { backgroundColor: priorityColor(e.item.priority) }, (e.item.priority === 'low' || e.item.priority === 'lowest') && { backgroundColor: 'transparent', borderWidth: 1.5, borderColor: priorityColor(e.item.priority) }]} />
@@ -126,7 +173,7 @@ function CalendarDesktop({ items, today, s, onOpen, selectedId, people, terms }:
                 const isToday = cell.date === today;
                 const first = cell.date.endsWith('-01');
                 return (
-                  <View key={cell.date} style={[c.cell, !cell.inMonth && mode === 'month' && c.cellOut, isToday && c.cellToday]} testID={`cal-cell-${cell.date}`}>
+                  <View key={cell.date} style={[c.cell, !cell.inMonth && mode === 'month' && c.cellOut, isToday && c.cellToday, drag?.over === cell.date && cell.date !== drag.entry.date && c.cellOver]} testID={`cal-cell-${cell.date}`} {...({ dataSet: { calDate: cell.date } } as object)}>
                     <View style={c.cellHead}>
                       <Text style={[c.dayNum, !cell.inMonth && mode === 'month' && { color: colors.textMuted }, isToday && c.dayToday]} testID={isToday ? 'cal-today-num' : undefined}>
                         {first || mode === 'week' ? md(cell.date) : String(+cell.date.slice(8))}
@@ -151,6 +198,11 @@ function CalendarDesktop({ items, today, s, onOpen, selectedId, people, terms }:
           ))}
         </View>
       </View>
+      {drag ? (
+        <View pointerEvents="none" style={[c.ghost, { left: drag.x + 12, top: drag.y + 8 }]} testID="cal-drag-ghost">
+          <Text style={c.ghostText} numberOfLines={1}>{drag.over && drag.over !== drag.entry.date ? tr('gantt.dragTo', { date: md(drag.over) }) : drag.entry.item.name}</Text>
+        </View>
+      ) : null}
       {/* 某天的全部任务 / 未设期限:走全 app 统一的居中弹窗骨架(DialogFrame:卡片有界、正文可滚、安全区)。 */}
       {popover ? (
         <DialogFrame title={popover.title} closeLabel={tr('taskSel.close')} onClose={() => setPopover(null)} maxWidth={360} testID="cal-popover">
@@ -298,6 +350,10 @@ const makeCalendarStyles = () => StyleSheet.create({
   cell: { flex: 1, flexBasis: 0, minWidth: 0, overflow: 'hidden', paddingHorizontal: 4, paddingBottom: 2, borderRightWidth: StyleSheet.hairlineWidth, borderRightColor: colors.border },
   cellOut: { backgroundColor: themeMode() === 'dark' ? colors.card : colors.subtleFill },
   cellToday: { backgroundColor: colors.accent + '0f' },
+  // 拖到这一格上:描边画在盒子里面(outlineOffset 负值),格子尺寸不变。
+  cellOver: { outlineStyle: 'solid', outlineWidth: 2, outlineColor: colors.accent, outlineOffset: -2, backgroundColor: colors.accent + '14' } as object,
+  ghost: { position: 'fixed' as 'absolute', height: 26, maxWidth: 240, paddingHorizontal: spacing.sm, borderRadius: radius.pill, backgroundColor: colors.text, justifyContent: 'center', zIndex: 50 },
+  ghostText: { color: colors.bg, fontSize: typeScale.caption, fontWeight: weight.strong },
   cellHead: { height: CELL_HEAD_H, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 2 },
   dayNum: { color: colors.text, fontSize: typeScale.small, fontWeight: weight.medium, paddingHorizontal: 6, lineHeight: 20, borderRadius: radius.pill, overflow: 'hidden' },
   dayToday: { color: colors.onAccent, backgroundColor: colors.accent, fontWeight: weight.strong },

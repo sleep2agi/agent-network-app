@@ -3,7 +3,7 @@
 import { readFileSync } from 'node:fs';
 import { fixedOffsetClock } from './due-time';
 import {
-  byDayOrder, calendarBuckets, calendarCells, calendarEntry, cellCapacity, cellOverflow, dayDot, entryOverdue, mondayOfDate, monthAnchorOf, shiftAnchor, swipeDelta,
+  byDayOrder, dropDue, dragStarted, calendarBuckets, calendarCells, calendarEntry, cellCapacity, cellOverflow, dayDot, entryOverdue, mondayOfDate, monthAnchorOf, shiftAnchor, swipeDelta,
 } from './task-calendar-model';
 import type { Requirement } from './requirements-model';
 import { t, setLanguagePreference } from './i18n';
@@ -68,6 +68,15 @@ ck('横滑:左滑 = 下个月,右滑 = 上个月', swipeDelta(-80, 5) === 1 && s
 ck('横滑:位移太小或主要是竖着滚 = 不翻', swipeDelta(30, 0) === 0 && swipeDelta(-80, 70) === 0 && swipeDelta(NaN, 0) === 0);
 ck('逾期:那天过了且没完成', entryOverdue({ item: R('o'), date: '2026-09-29', time: null }, '2026-09-30') && !entryOverdue({ item: R('o', { column: 'done' }), date: '2026-09-29', time: null }, '2026-09-30') && !entryOverdue({ item: R('o'), date: '2026-09-30', time: '01:00' }, '2026-09-30'));
 
+console.log('\n拖到另一天(STEP 2)');
+const allDay = calendarEntry(R('d', { due: '2026-10-01' }), cst)!;
+ck('全天:拖到 10-05 → 存 2026-10-05(还是全天)', dropDue(allDay, '2026-10-05', cst) === '2026-10-05');
+ck('全天:往前拖跨月', dropDue(allDay, '2026-09-28', cst) === '2026-09-28');
+const tEntry = calendarEntry(R('t', { due: '2026-09-30T17:30:00Z' }), cst)!; // 东八区 10-01 01:30
+ck('带时刻:保留本地 01:30,只换日期(东八区 10-03 01:30 = 10-02T17:30Z)', tEntry.date === '2026-10-01' && dropDue(tEntry, '2026-10-03', cst) === '2026-10-02T17:30:00Z');
+ck('放回原来那天 / 没落在格子上 = 不发请求', dropDue(allDay, '2026-10-01', cst) === null && dropDue(allDay, null, cst) === null);
+ck('挪过 4px 才算拖,之前是点击', !dragStarted(2, 3) && dragStarted(3, 3) && dragStarted(-5, 0));
+
 console.log('\n接线');
 const board = src('./RequirementBoard.tsx');
 const store = src('./task-board-store.ts');
@@ -75,7 +84,10 @@ const cal = src('./TaskCalendar.tsx');
 ck('分段里有「日历」,在甘特图后面', /\{ key: 'gantt', label: tr\('gantt\.view'\) \},\n[^\n]*\n\s*\{ key: 'calendar', label: tr\('cal\.view'\) \}/.test(board));
 ck('TaskSection 有 calendar', /TaskSection = [^;]*'calendar'/.test(store));
 ck('日历吃筛选后的 visible、点任务打开现有详情、手机走 narrow', /<TaskCalendar items=\{visible\}[^>]*onOpen=\{openDetail\}[^>]*phone=\{narrow\}/.test(board));
-ck('只读:日历里没有写 Hub 的调用', !/updateRequirementOnHub|moveRequirementOnHub|onDue|saveEdit/.test(cal));
+ck('日历自己不写 Hub:改期限交给 RequirementBoard.setDue', !/updateRequirementOnHub|moveRequirementOnHub|saveEdit/.test(cal));
+ck('只有鼠标(pointer)才能拖;手机 / 触屏不传 onDue', /<TaskCalendar [^>]*onDue=\{pointer \? \(id, due\) => \{ void setDue\(id, due\); \} : undefined\}/.test(board) && !/function CalendarPhone\([^)]*onDue/.test(cal));
+ck('「+N」弹窗里的行不能拖(只有格子里的)', /onDue && !inPopover \? \{ onPointerDown/.test(cal));
+ck('setDue 只发 { due }', /const setDue = async[\s\S]*?saveEdit\(id, \{ due \}\)/.test(board));
 ck('周一开头(和期限选择器的月历同一组星期文案)', /const WEEK = \['tasks\.copy\.167'/.test(cal));
 for (const lang of ['zh', 'en'] as const) {
   setLanguagePreference(lang);
