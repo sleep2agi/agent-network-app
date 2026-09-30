@@ -17,10 +17,12 @@ const body = extractReleaseBody(workflow);
 ck('workflow has a releaseBody', typeof body === 'string' && body.length > 0);
 ck('bundled notes == releaseBody of the release workflow', BUNDLED_RELEASE_BODY === body, FIX);
 ck(`bundled notes cover the running version ${APP_VERSION}`, BUNDLED_RELEASE_BODY.includes(`What's new in ${APP_VERSION}:`), FIX);
-const file = readFileSync(new URL('./changelog-bundled.ts', import.meta.url), 'utf8');
+// Windows 检出(autocrlf)里这个文件是 CRLF,生成器永远写 LF —— 比内容不比换行符(windows-latest 曾因此红)。
+const file = readFileSync(new URL('./changelog-bundled.ts', import.meta.url), 'utf8').replace(/\r\n?/g, '\n');
 ck('file is exactly what the generator writes (not hand-edited)', file === renderBundled(body, existingDates(file)), FIX);
 ck('dates are ISO timestamps', Object.values(BUNDLED_RELEASE_DATES).every(d => !Number.isNaN(Date.parse(d))));
 // 生成器自检:一个已知的日期块能被读回(否则不带 --dates 重跑会静默丢光日期)。
+ck('generator keeps dates from a CRLF checkout', Object.keys(existingDates(renderBundled('x', { '0.2.2': '2026-01-02T00:00:00Z' }).replace(/\n/g, '\r\n'))).join() === '0.2.2');
 ck('generator keeps existing dates', existingDates(renderBundled('x', { '0.2.2': '2026-01-02T00:00:00Z', '0.2.10': '2026-01-10T00:00:00Z' }))['0.2.10'] === '2026-01-10T00:00:00Z');
 
 console.log(`\n${p}/${t} passed`);

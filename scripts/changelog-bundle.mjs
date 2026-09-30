@@ -45,7 +45,8 @@ export function renderBundled(body, dates) {
 /** Dates already recorded in the current file (so a run without --dates keeps them). */
 export function existingDates(text) {
   const out = {};
-  const block = /BUNDLED_RELEASE_DATES[^{]*\{([\s\S]*?)\n\};/.exec(text ?? '');
+  // A Windows checkout (autocrlf) has CRLF; the generator always writes LF.
+  const block = /BUNDLED_RELEASE_DATES[^{]*\{([\s\S]*?)\n\};/.exec(String(text ?? '').replace(/\r\n?/g, '\n'));
   if (!block) return out;
   for (const m of block[1].matchAll(/^\s*"([^"]+)":\s*"([^"]+)",?$/gm)) out[m[1]] = m[2];
   return out;
