@@ -1,0 +1,17 @@
+desktop v0.2.164 — 私信发图 / 显示、任务标签管理、任务权限界面
+================================================================================
+A. 本版内容(0.2.163 发版提交 47e2da0 之后 main 上合入的 PR + 本 PR)
+  #587 私信(人 ↔ 人)附件:电脑端粘贴 / 拖拽、手机 + 面板(相册 / 相机 / 文件)、草稿缩略图、上传队列、
+       电脑端图片显示(AuthedWebThumb)、点开大图、只发附件时显示 [图片]/[文件] 并实时刷新;上传带 purpose=dm
+       (Hub .73 忽略该参数;私信文件权限收紧见 Hub #2170,随 Hub .74)
+  #590 管理标签:改名 / 合并 / 删除 / 颜色、左栏标签与项目分组重排、标签自动补全(Hub 有 tag_ops 能力且 can_manage 时才出现)
+  #580 任务权限界面 TaskAccessSection + 看板只读锁(Hub 返回 task_access 时才出现;Hub .73 上隐藏)
+  #588 测试运行器单文件超时 + START 行;#589 yoga 测试必须显式退出的静态检查(仅测试)
+  本 PR(版本号)
+       版本号 8 个文件 0.2.163 → 0.2.164,android.versionCode 2163 → 2164;Cargo.lock 只改根包一段。
+       release-desktop-auto-update.yml 加 What's new in 0.2.164。
+  本地:干净 origin/main(ca7a86e)bump 后 npm ci / npm test(283/283)/ typecheck 全部 rc=0;android-release-notes.mjs 0.2.164 rc=0(3 条)。
+B. 验证边界(如实)
+  本 PR 只改版本号与说明;功能验证见各 PR。
+  标签管理和任务权限依赖 Hub .74,生产 Hub 升级前在 app 里不出现。
+  以下没有真机验证:#587 手机原生相册 / 相机选择器、Mac WKWebView 渲染(端到端测试跑的是 Chromium)。
