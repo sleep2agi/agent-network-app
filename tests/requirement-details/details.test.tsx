@@ -86,6 +86,7 @@ let roleCards = false;
 let detailCards = false;
 let projectsMock: any[] | null = null;
 let dueCaps = false;
+let tagCaps = false;
 let participantCards = false;
 let subCards = false;
 let opened: string[] = [];
@@ -117,7 +118,7 @@ mock.module('./src/requirements-hub', () => ({
   migrateLocalRequirements: async () => {},
   probeAgentOwnerSupport: async () => roleCards,
   listProjects: async () => projectsMock,
-  listRequirementsFull: async () => ({ rows: await listRows(), capabilities: dueCaps ? ['due_datetime'] : [] }),
+  listRequirementsFull: async () => ({ rows: await listRows(), capabilities: [...(dueCaps ? ['due_datetime'] : []), ...(tagCaps ? ['tags'] : [])] }),
   createProject: async () => { throw new Error('not used'); },
   updateProject: async () => { throw new Error('not used'); },
   createRequirementOnHub: async (_cfg: any, input: any) => { creates.push(input); return { ...card, ...input, id: 'new', owner: input.owner || null, participants: [], ...(roleCards ? { agentOwner: input.agentOwner || null } : {}) }; },
@@ -171,7 +172,7 @@ async function mount() {
   setTaskSection('board');
   await act(async () => { renderer = create(<Board cfg={cfg} />); });
 }
-afterEach(async () => { moreStored = true; moreSaves.length = 0; voiceAvailable = false; voiceInsert = null; voicePresses = 0; dueCaps = false; participantCards = false; subCards = false; opened = []; typedCards = false; roleCards = false; detailCards = false; itemWrites = []; projectsMock = null; if (renderer) await act(async () => renderer.unmount()); });
+afterEach(async () => { moreStored = true; moreSaves.length = 0; voiceAvailable = false; voiceInsert = null; voicePresses = 0; dueCaps = false; tagCaps = false; participantCards = false; subCards = false; opened = []; typedCards = false; roleCards = false; detailCards = false; itemWrites = []; projectsMock = null; if (renderer) await act(async () => renderer.unmount()); });
 
 test('issue links: canonical PATCH only, duplicate click lock, rejection stays local, source read-only', async () => {
   const writes: any[]=[];
@@ -257,6 +258,33 @@ test('create dialog validates the title before any write; the calendar picks a d
   await act(async () => byId('req-due-ok').props.onPress());
   await act(async () => byId('req-add').props.onPress());
   expect(creates[0].due).toBe(day);
+});
+
+test('create dialog tags: a tags hub gets the field and the POST carries them; an old hub has no field and no tags key', async () => {
+  await mount();
+  await act(async () => byId('req-new').props.onPress());
+  expect(renderer.root.findAllByProps({ testID: 'req-create-tags' })).toHaveLength(0);
+  await act(async () => byId('req-name').props.onChangeText('旧 Hub'));
+  await act(async () => byId('req-add').props.onPress());
+  expect('tags' in creates[0]).toBe(false);
+  await act(async () => renderer.unmount());
+  creates.length = 0;
+  tagCaps = true;
+  await mount();
+  await act(async () => byId('req-new').props.onPress());
+  expect(byId('req-create-tags')).toBeTruthy();
+  await act(async () => byId('req-name').props.onChangeText('带标签'));
+  await act(async () => byId('req-create-tag-input').props.onChangeText(' UI '));
+  await act(async () => byId('req-create-tag-add').props.onPress());
+  await act(async () => byId('req-create-tag-input').props.onChangeText('交互'));
+  await act(async () => byId('req-create-tag-input').props.onSubmitEditing());
+  expect(byId('req-create-tag-UI')).toBeTruthy();
+  // 点 × 去掉,再加回来:去重、保序
+  await act(async () => byId('req-create-tag-UI').props.onPress());
+  await act(async () => byId('req-create-tag-input').props.onChangeText('UI'));
+  await act(async () => byId('req-create-tag-add').props.onPress());
+  await act(async () => byId('req-add').props.onPress());
+  expect(creates[0].tags).toEqual(['交互', 'UI']);
 });
 
 test('hub with due_datetime: the calendar has 全天 + HH:MM:SS and stores UTC to the second', async () => {

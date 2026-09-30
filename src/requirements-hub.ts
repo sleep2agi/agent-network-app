@@ -211,7 +211,7 @@ export async function listArchivedRequirements(cfg: HubConfig): Promise<Requirem
   return rows.map(requirementFromHub).filter((row): row is Requirement => !!row).map(row => ({ ...row, archived: true }));
 }
 
-type CreateInput = { name: string; priority: ReqPriority; assignee: string; due: string; column?: ReqColumn; clientId?: string; owner?: RequirementPersonRef; agentOwner?: RequirementPersonRef; projectId?: string; parentId?: string };
+type CreateInput = { name: string; priority: ReqPriority; assignee: string; due: string; column?: ReqColumn; clientId?: string; owner?: RequirementPersonRef; agentOwner?: RequirementPersonRef; projectId?: string; parentId?: string; tags?: string[] };
 
 /** POST 的请求体。负责人只带稳定身份 {kind,id},多余字段(显示名、networkId…)一律不发。 */
 export function createRequirementBody(cfg: HubConfig, input: CreateInput): Record<string, unknown> {
@@ -227,6 +227,7 @@ export function createRequirementBody(cfg: HubConfig, input: CreateInput): Recor
     agent_owner: input.agentOwner ? { kind: input.agentOwner.kind, id: input.agentOwner.id } : undefined,
     project_id: input.projectId || undefined,
     parent_id: input.parentId || undefined,
+    tags: input.tags?.length ? input.tags : undefined,
   };
 }
 

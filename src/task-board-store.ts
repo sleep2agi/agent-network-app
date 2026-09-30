@@ -2,6 +2,7 @@
 // 筛选、当前视图、看板读到的卡片要是同一份。按账号 + 网络分开:换网络就回到「全部」。
 import { useSyncExternalStore } from 'react';
 import type { Requirement, RequirementProject } from './requirements-model';
+import type { TagCatalog } from './task-tag-catalog';
 import type { RequirementPerson } from './requirement-people';
 import { EMPTY_FILTER, type BoardFilter } from './task-board-model';
 import { EMPTY_SEARCH, type TaskSearch } from './task-search';
@@ -26,13 +27,17 @@ export interface TaskBoardState {
   capabilities: string[];
   /** 管理项目的对话框开着没有(左栏的「管理项目」和看板共用)。 */
   managingProjects: boolean;
+  /** 管理标签的对话框 / 底部面板开着没有(左栏、手机标签筛选共用)。 */
+  managingTags: boolean;
+  /** GET /api/requirements/tags 的结果(用量、颜色、能不能管);null = 还没读到或读失败。 */
+  tagCatalog: TagCatalog | null;
   loaded: boolean;
   /** Hub 给的列表不是整张表(有更老的没读回来):搜索要问服务端(capability search)。 */
   truncated: boolean;
 }
 
 const fresh = (scope: string, section: TaskSection = 'board'): TaskBoardState => ({
-  scope, section, filter: EMPTY_FILTER, search: EMPTY_SEARCH, items: [], people: [], meId: null, twoRoles: null, projects: null, capabilities: [], managingProjects: false, loaded: false, truncated: false,
+  scope, section, filter: EMPTY_FILTER, search: EMPTY_SEARCH, items: [], people: [], meId: null, twoRoles: null, projects: null, capabilities: [], managingProjects: false, managingTags: false, tagCatalog: null, loaded: false, truncated: false,
 });
 
 let state: TaskBoardState = fresh('');
@@ -69,6 +74,14 @@ export function updateTaskItems(scope: string, fn: (items: Requirement[]) => Req
 
 export const setTaskSection = (section: TaskSection) => { if (state.section !== section) { state = { ...state, section }; emit(); } };
 export const setManagingProjects = (on: boolean) => { if (state.managingProjects !== on) { state = { ...state, managingProjects: on }; emit(); } };
+export const setManagingTags = (on: boolean) => { if (state.managingTags !== on) { state = { ...state, managingTags: on }; emit(); } };
+/** 刚存上的标签记进目录(补全马上能选到;用量等下次读目录再对齐)。 */
+export const noteTagsUsed = (tags: readonly string[]) => {
+  const cat = state.tagCatalog;
+  if (!cat || tags.every(t => cat.tags.includes(t))) return;
+  state = { ...state, tagCatalog: { ...cat, tags: [...new Set([...cat.tags, ...tags])].sort() } };
+  emit();
+};
 export const setTaskFilter = (filter: BoardFilter) => { state = { ...state, filter }; emit(); };
 export const setTaskSearch = (search: TaskSearch) => { if (state.search.q !== search.q || state.search.archived !== search.archived) { state = { ...state, search }; emit(); } };
 
