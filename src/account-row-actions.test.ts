@@ -20,9 +20,9 @@ setLanguagePreference('zh');
 const SECRET_TOKEN = 'utok_SECRET_should_never_be_copied';
 const SECRET_PW = 'pw-SECRET-never';
 // 故意把整个 HubConfig(含令牌)和一个带 password 的对象喂进去:入参类型只收三格,运行时也只能读三格。
-const full = { serverUrl: 'http://y.vansin.top:9300', username: 'chuqi', networkId: 'net_399bdf86f528', token: SECRET_TOKEN, password: SECRET_PW, profileId: 'p1', displayName: 'Chuqi' } as any;
+const full = { serverUrl: 'http://hub.example.com:9300', username: 'demo-user', networkId: 'net_0123456789ab', token: SECRET_TOKEN, password: SECRET_PW, profileId: 'p1', displayName: 'Demo' } as any;
 const line = accountCopyText(full);
-ck('A1 copy text is 「Hub 地址 · 用户名 · 网络 ID」', line === 'http://y.vansin.top:9300 · chuqi · net_399bdf86f528', line);
+ck('A1 copy text is 「Hub 地址 · 用户名 · 网络 ID」', line === 'http://hub.example.com:9300 · demo-user · net_0123456789ab', line);
 ck('A2 🔴 copy text never contains the token or a password', !line.includes(SECRET_TOKEN) && !line.includes(SECRET_PW) && !/utok_|ntok_|Bearer/i.test(line));
 ck('A3 missing network id → no dangling separator', accountCopyText({ serverUrl: 'https://hub.example', username: 'alice' }) === 'https://hub.example · alice');
 ck('A4 missing username too → just the address', accountCopyText({ serverUrl: 'https://hub.example', username: '' }) === 'https://hub.example');
@@ -56,14 +56,14 @@ const fake = (routes: Record<string, number | 'throw' | 'hang' | { status: numbe
   };
   return { f, calls };
 };
-const ME = { status: 200, body: { ok: true, user: { username: 'chuqi' }, networks: [] } };
-const base = { currentServerUrl: 'http://y.vansin.top:9300', token: 'utok_saved', username: 'chuqi' };
+const ME = { status: 200, body: { ok: true, user: { username: 'demo-user' }, networks: [] } };
+const base = { currentServerUrl: 'http://hub.example.com:9300', token: 'utok_saved', username: 'demo-user' };
 
 const c1 = fake({});
 const r1 = await validateHubEdit({ ...base, serverUrl: 'ht tp://bad url' }, c1.f);
 ck('C1 bad URL → bad-url, and no request is made', !r1.ok && r1.kind === 'bad-url' && c1.calls.length === 0);
 const c2 = fake({});
-const r2 = await validateHubEdit({ ...base, serverUrl: 'HTTP://y.vansin.top:9300/' }, c2.f);
+const r2 = await validateHubEdit({ ...base, serverUrl: 'HTTP://hub.example.com:9300/' }, c2.f);
 ck('C2 same address (case / trailing slash) → ok, unchanged, no request (label-only edit)', r2.ok && !r2.changed && c2.calls.length === 0);
 const c3 = fake({ '/health': 'throw' });
 const r3 = await validateHubEdit({ ...base, serverUrl: 'http://10.0.0.9:9300' }, c3.f);

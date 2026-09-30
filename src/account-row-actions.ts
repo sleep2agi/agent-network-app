@@ -10,7 +10,7 @@ import type { HubProfile } from './storage';
 
 export type AccountCopySource = Pick<HubProfile, 'serverUrl' | 'username' | 'networkId'>;
 
-/** 「http://hub:9300 · chuqi · net_399bdf86f528」;缺的格子不留空分隔符。 */
+/** 「http://hub:9300 · demo-user · net_0123456789ab」;缺的格子不留空分隔符。 */
 export function accountCopyText(profile: AccountCopySource): string {
   return [profile.serverUrl, profile.username, profile.networkId]
     .map(part => (typeof part === 'string' ? part.trim() : ''))
