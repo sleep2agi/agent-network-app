@@ -17,7 +17,7 @@
 // Screenshots go to OUT. Exit 1 when any assertion fails.
 import { mkdirSync } from 'node:fs';
 import { join } from 'node:path';
-import { serveExport, findChromium, ANDROID_UA } from '../test-layout-sweep/harness.mjs';
+import { serveExport, findChromium, ANDROID_UA, paintedText } from '../test-layout-sweep/harness.mjs';
 import { startMockHub } from './mock-hub.mjs';
 
 const { chromium } = await import(process.env.PLAYWRIGHT_MODULE || 'playwright');
@@ -131,9 +131,12 @@ async function run(vp, viewport, ua, wide) {
   const firstText = await page.locator(tid('login-device-current')).innerText();
   const secondText = await page.locator(tid(rows[1])).innerText();
   const showAll = await page.locator(tid('login-devices-show-all')).isVisible().catch(() => false);
-  const content = { current: rows[0] === 'login-device-current', twenty: rows.length === 20, showAll, currentSaysThisDevice: firstText.includes('本机'), secondIsAndroid: /Android · 0\.2\.150/.test(secondText) && /最近使用 2 小时前/.test(secondText) };
+  // 本机 (phone: row value, wide: badge) must be painted, not only in textContent (title-blank: 0px wide, text still right)
+  const thisDevice = await paintedText(page, `${tid('login-device-current')} :not(:has(*))`, '本机');
+  const content = { current: rows[0] === 'login-device-current', twenty: rows.length === 20, showAll, currentSaysThisDevice: firstText.includes('本机'), thisDevicePainted: !!thisDevice?.painted && thisDevice.w >= 8, secondIsAndroid: /Android · 0\.2\.150/.test(secondText) && /最近使用 2 小时前/.test(secondText) };
   if (!wide) {
     const title = await page.locator(tid('settings-subpage-title')).innerText();
+    const titlePaint = await paintedText(page, tid('settings-subpage-title'), '登录设备');
     const g = await page.evaluate((ids) => {
       const out = [];
       for (const id of ids) {
@@ -148,12 +151,12 @@ async function run(vp, viewport, ua, wide) {
       return out;
     }, rows);
     record(vp, '3 phone: list content + geometry', {
-      ...content, title: title === '登录设备', visibleRows: g.length >= 8,
+      ...content, title: title === '登录设备', titlePainted: !!titlePaint?.painted && titlePaint.w >= 8, visibleRows: g.length >= 8,
       labelsAligned: same(g.map(x => x.labelX), 0.5), valuesRightAligned: same(g.map(x => x.valueR), 0.5),
       rowsSameWidth: same(g.map(x => x.rowR - x.rowX), 0.5), rows48: g.every(x => x.h >= 48),
       valueVCentred: g.every(x => Math.abs(x.valueCy - x.rowCy) <= 1),
       gutter16: g.every(x => Math.abs(x.rowX - 16) <= 1 && Math.abs(viewport.width - x.rowR - 16) <= 1),
-    }, { rows: rows.length, sample: g.slice(0, 3).map(x => ({ labelX: r1(x.labelX), valueR: r1(x.valueR), h: r1(x.h) })) });
+    }, { rows: rows.length, sample: g.slice(0, 3).map(x => ({ labelX: r1(x.labelX), valueR: r1(x.valueR), h: r1(x.h) })), thisDevice, titlePaint });
   } else {
     const header = await box(page, tid('settings-devices-header'));
     const g = await page.evaluate((ids) => ids.map(id => {
@@ -174,7 +177,7 @@ async function run(vp, viewport, ua, wide) {
       signOutRightAligned: same(withBtn.map(x => x.btnR), 0.5), currentHasNoSignOut: g[0]?.btnR == null,
       iconsVCentred: g.every(x => Math.abs(x.iconCy - x.rowCy) <= 1), buttonsVCentred: withBtn.every(x => Math.abs(x.btnCy - x.rowCy) <= 1),
       badge: await page.locator(tid('login-device-current-badge')).isVisible(),
-    }, { header, titleBefore, sample: g.slice(0, 3) });
+    }, { header, titleBefore, sample: g.slice(0, 3), thisDevice });
   }
   await page.locator(tid('login-devices-show-all')).click();
   await sleep(300);
@@ -208,7 +211,8 @@ async function run(vp, viewport, ua, wide) {
   await sleep(300);
   await page.screenshot({ path: join(OUT, `${vp}-after-revoke-others.png`) });
   const body = await page.evaluate(() => document.body.innerText);
-  record(vp, '5 退出其他所有设备', { confirmCount: confirmOthers.includes('23 台'), called: hubA.calls().some(c => c.what === 'POST /api/auth/sessions/revoke-others'), onlyMe: !!onlyMe, serverKeptOne: hubA.sessionCount() === 1, message: body.includes('已退出 23 台设备'), noButtonLeft: !(await page.locator(tid('login-devices-revoke-others')).isVisible().catch(() => false)) });
+  const toast = await paintedText(page, ':not(:has(*))', '已退出 23 台设备') // the leaf that holds the text, not a full-width wrapper;
+  record(vp, '5 退出其他所有设备', { confirmCount: confirmOthers.includes('23 台'), called: hubA.calls().some(c => c.what === 'POST /api/auth/sessions/revoke-others'), onlyMe: !!onlyMe, serverKeptOne: hubA.sessionCount() === 1, message: body.includes('已退出 23 台设备'), messagePainted: !!toast?.painted && toast.w >= 8, noButtonLeft: !(await page.locator(tid('login-devices-revoke-others')).isVisible().catch(() => false)) }, { toast });
 
   // 6 token_expired → login page says so
   await fetch(`${hubA.url}/__expire`, { method: 'POST' });
@@ -233,7 +237,8 @@ async function run(vp, viewport, ua, wide) {
   const flagged = await waitFor(async () => (await page.locator(`[data-testid^="account-switch-row-"]:has-text("alice @")`).innerText()).includes('登录已失效'), 10000);
   await page.screenshot({ path: join(OUT, `${vp}-switcher-expired.png`) });
   const bobRow = await page.locator(`[data-testid^="account-switch-row-"]:has-text("bob @")`).innerText();
-  record(vp, '8 switcher: expired saved account shows as needing re-login', { aliceFlagged: !!flagged, bobCurrentNotFlagged: !bobRow.includes('登录已失效') });
+  const tag = await paintedText(page, '[data-testid^="account-switch-row-"] :not(:has(*))', '登录已失效，点一下重新验证');
+  record(vp, '8 switcher: expired saved account shows as needing re-login', { aliceFlagged: !!flagged, tagPainted: !!tag?.painted && tag.w >= 8, bobCurrentNotFlagged: !bobRow.includes('登录已失效') }, { tag });
   await page.keyboard.press('Escape').catch(() => {});
   await ctx.close();
   hubA.close(); hubB.close();

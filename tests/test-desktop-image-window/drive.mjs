@@ -24,6 +24,7 @@ import { createServer } from 'node:http';
 import { readFileSync, existsSync, mkdirSync, statSync } from 'node:fs';
 import { join, extname } from 'node:path';
 import { createRequire } from 'node:module';
+import { paintedText } from '../test-layout-sweep/harness.mjs';
 
 const { chromium } = await import(process.env.PLAYWRIGHT_MODULE || 'playwright');
 const { WEB_DIR: WEB, OUT } = process.env;
@@ -146,6 +147,11 @@ const findExe = () => {
 const browser = await chromium.launch({ headless: true, executablePath: findExe() });
 let failures = 0;
 const ck = (tag, name, cond, detail = '') => { if (!cond) failures++; console.log(`${cond ? 'PASS' : 'FAIL'} [${tag}] ${name}${detail ? ` — ${detail}` : ''}`); };
+// text right ≠ text visible: the title-blank bug kept textContent correct while flex 0 1 0% + overflow:hidden painted
+// the element 0px wide. Next to each text condition, measure the same element's painted box (clipped, ≥ 8px wide).
+const painted = (page, id) => paintedText(page, `[data-testid="${id}"]`);
+const seen = (p) => !!p?.painted && p.w >= 8;
+const pd = (p) => p ? `painted ${Math.round(p.w)}×${Math.round(p.h)}${p.painted ? '' : ' UNPAINTED'}` : 'not rendered';
 const r1 = (n) => Math.round(n * 10) / 10;
 const calls = (page, cmd) => page.evaluate((c) => window.__calls.filter(x => x.cmd === c), cmd);
 
@@ -243,7 +249,8 @@ async function openChat(page) {
   ck(tag, 'token loaded from the credential store by profileId', (await calls(page, 'load_desktop_profile')).some(c => c.args.profileId === 'p-imgwin'));
   const http = await page.evaluate(() => window.__http || []);
   ck(tag, 'bearer sent only to mock-hub /api/files/…', http.length > 0 && http.every(h => !h.auth || h.url.startsWith('http://mock-hub.invalid/api/files/')), JSON.stringify(http).slice(0, 200));
-  ck(tag, 'index shows 1/4', (await page.getByTestId('image-window-index').innerText()) === '1/4');
+  const indexP = await painted(page, 'image-window-index');
+  ck(tag, 'index shows 1/4', (await page.getByTestId('image-window-index').innerText()) === '1/4' && seen(indexP), pd(indexP));
   ck(tag, 'window title follows the image', (await calls(page, 'plugin:window|set_title')).some(c => c.args.value === 'one.png · 示例-A · 图片预览'), JSON.stringify(await calls(page, 'plugin:window|set_title')));
 
   const stage = await page.getByTestId('image-window-stage').boundingBox();
@@ -304,7 +311,8 @@ async function openChat(page) {
   const bytes = writes[0]?.args?.image;
   const head = Array.isArray(bytes) ? bytes.slice(0, 4) : bytes && typeof bytes === 'object' ? [bytes[0], bytes[1], bytes[2], bytes[3]] : null;
   ck(tag, 'Ctrl+C → clipboard-manager write_image with PNG bytes', writes.length === 1 && JSON.stringify(head) === JSON.stringify([0x89, 0x50, 0x4e, 0x47]), `${writes.length} ${JSON.stringify(Object.keys(writes[0]?.args ?? {}))} ${JSON.stringify(head)}`);
-  ck(tag, '「已复制图片」 note', (await page.getByTestId('image-window-note').innerText().catch(() => '')).includes('已复制图片'));
+  const noteP = await painted(page, 'image-window-note');
+  ck(tag, '「已复制图片」 note', (await page.getByTestId('image-window-note').innerText().catch(() => '')).includes('已复制图片') && seen(noteP), pd(noteP));
 
   await page.getByTestId('image-window-save').click();
   await page.waitForTimeout(500);

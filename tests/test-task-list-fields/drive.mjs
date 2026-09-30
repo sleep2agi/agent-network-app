@@ -23,6 +23,9 @@ await new Promise(r=>server.listen(0,'127.0.0.1',r));
 const browser=await chromium.launch({args:['--no-sandbox']});
 let p=0,t=0;const results=[];
 const ck=(name,ok,detail)=>{t++;if(ok)p++;results.push({name,ok,detail});console.log(`${ok?'PASS':'FAIL'}: ${name} ${detail?JSON.stringify(detail):''}`);};
+// Painted box of a testID after clipping by every overflow ancestor (textContent survives a 0-wide cell). Inline, not
+// test-layout-sweep/harness.mjs: the README runs this file alone from a /spec mount.
+const paintedBox=(pg,id)=>pg.evaluate(id=>{const el=document.querySelector(`[data-testid="${id}"]`);if(!el)return null;const b=el.getBoundingClientRect();let w=b.width,h=b.height;for(let a=el.parentElement;a&&a!==document.body;a=a.parentElement){const c=getComputedStyle(a);if(c.overflowX==='visible'&&c.overflowY==='visible')continue;const r=a.getBoundingClientRect();w=Math.min(w,Math.max(0,Math.min(b.right,r.right)-Math.max(b.left,r.left)));h=Math.min(h,Math.max(0,Math.min(b.bottom,r.bottom)-Math.max(b.top,r.top)));}return{w:Math.round(w*10)/10,h:Math.round(h*10)/10,painted:w>=8&&h>=1};},id);
 
 
 try {
@@ -73,7 +76,8 @@ try {
  ck('row still opens detail',await page.getByTestId('req-detail').count()===1);
  await page.getByTestId('req-detail-close').click();
  await page.getByTestId('task-time-r1-updated').scrollIntoViewIfNeeded();
- ck('old Hub update is dash',await page.getByTestId('task-time-r1-updated').textContent()==='—');
+ const dash=await paintedBox(page,'task-time-r1-updated');
+ ck('old Hub update is dash',await page.getByTestId('task-time-r1-updated').textContent()==='—'&&!!dash?.painted,{painted:dash});
  await page.getByTestId('req-sort-created').click();
  ck('created ascending order',await page.locator('[data-testid^="req-row-"]').first().getAttribute('data-testid')==='req-row-r2');
  await page.getByTestId('req-sort-created').click();
@@ -86,7 +90,8 @@ try {
  const time=page.getByTestId('task-time-r1-updated');await time.scrollIntoViewIfNeeded();await time.hover();
  const hint=await time.getAttribute('title');
  ck('hover hint has local seconds and updater',/\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}/.test(hint||'')&&(hint||'').includes('用户负责人'));
- ck('relative update',await time.textContent()==='3 min ago');
+ const rel=await paintedBox(page,'task-time-r1-updated');
+ ck('relative update',await time.textContent()==='3 min ago'&&!!rel?.painted,{painted:rel});
  for(const id of ['created','updated']){
   const th=await page.getByTestId(`task-column-${id}`).boundingBox(),td=await page.getByTestId(`task-cell-r1-${id}`).boundingBox();
   ck(`${id} header cell aligned`,Math.abs(th.x-td.x)<1&&Math.abs(th.width-td.width)<1,{th,td});

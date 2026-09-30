@@ -19,6 +19,7 @@ import { readFileSync, existsSync, mkdirSync, statSync, writeFileSync } from 'no
 import { join, extname, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { startMockHub } from './mock-hub.mjs';
+import { paintedText } from '../test-layout-sweep/harness.mjs';
 
 const { chromium } = await import(process.env.PLAYWRIGHT_MODULE || 'playwright');
 const { WEB_DIR: WEB, OUT } = process.env;
@@ -171,13 +172,15 @@ async function run(vp, viewport, ua, wide) {
   await page.screenshot({ path: join(OUT, `${vp}-switcher.png`) });
   const panel = await box(page, tid(wide ? 'account-switch-dialog' : 'account-switch-sheet'));
   const rowsText = await page.locator('[data-testid^="account-switch-label-"]').allInnerTexts();
+  const labelPaint = []; for (const t of rowsText) labelPaint.push(await paintedText(page, '[data-testid^="account-switch-label-"]', t)); // painted, not only textContent
   const current = await page.locator(`[data-testid^="account-switch-row-"]:has(${tid('account-switch-current')})`).innerText();
   record(vp, '8 switcher shape', {
     variant: wide ? (panel.x > 100 && panel.y > 50 && panel.x + panel.w < viewport.width - 100) : (Math.abs(panel.y + panel.h - viewport.height) <= 1 && Math.abs(panel.w - viewport.width) <= 1),
     twoRows: rowsText.length === 2,
     rowFormat: rowsText.some(t => t === `alice @ ${hubA.url.replace('http://', '')}`) && rowsText.some(t => t === `bob @ ${hubB.url.replace('http://', '')}`),
     currentIsB: current.includes('bob @'),
-  }, { panel, rowsText });
+    labelsPainted: labelPaint.length === 2 && labelPaint.every(p => !!p?.painted && p.w >= 8),
+  }, { panel, rowsText, labelPaint });
   // 管理 → 移除 buttons appear (not pressed)
   await page.locator(tid('account-switch-manage')).click();
   await sleep(200);

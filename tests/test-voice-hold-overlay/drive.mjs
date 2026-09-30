@@ -19,6 +19,7 @@
 import { createServer } from 'node:http';
 import { readFileSync, existsSync, mkdirSync, statSync } from 'node:fs';
 import { join, extname } from 'node:path';
+import { paintedText } from '../test-layout-sweep/harness.mjs';
 
 const { chromium } = await import(process.env.PLAYWRIGHT_MODULE || 'playwright');
 const WEB = process.env.WEB_DIR, OUT = process.env.OUT;
@@ -122,6 +123,11 @@ const ck = (tag, name, cond, detail = '') => {
 const r1 = (n) => Math.round(n * 10) / 10;
 const rows = [];
 const shots = [];
+// 文字对 ≠ 看得见:title-blank 那次 textContent 一直对,元素却被 flex 0 1 0% + overflow:hidden 压成 0px 宽。
+// 文字判据旁边再量同一个元素画出来的框(被 overflow 祖先裁剪后 ≥ 8px 宽)。
+const painted = (page, id, text) => paintedText(page, `[data-testid="${id}"]`, text);
+const seen = (p) => !!p?.painted && p.w >= 8;
+const pd = (p) => p ? `${r1(p.w)}×${r1(p.h)}${p.painted ? '' : ' UNPAINTED'}` : 'not rendered';
 
 const open = async (scheme, extra = {}) => {
   const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, colorScheme: scheme, userAgent: ANDROID_UA, permissions: ['microphone'], deviceScaleFactor: 2, ...extra.context });
@@ -186,9 +192,12 @@ for (const scheme of ['light', 'dark']) {
   await page.waitForTimeout(350);
   const hB = await barHeights(page);
   ck(tag, '电平条随输入电平变化(两次采样不同、高低不齐)', hA.length === 21 && hA.join() !== hB.join() && Math.max(...hB) - Math.min(...hB) > 3, `${hA.length} bars, range ${r1(Math.min(...hB))}–${r1(Math.max(...hB))}`);
-  ck(tag, '秒数在走(≥ 00:01)', /^00:0[1-9]$/.test(await page.evaluate(() => document.querySelector('[data-testid="voice-elapsed"]')?.textContent ?? '')));
-  ck(tag, '气泡里显示流式文字', (await page.evaluate(() => document.querySelector('[data-testid="voice-interim"]')?.textContent)) === '帮我看一下昨天的构建');
-  ck(tag, '中间区:「松开 转文字」、zone=neutral', (await label(page)) === '松开 转文字' && (await zone(page)) === 'neutral', `${await label(page)} / ${await zone(page)}`);
+  const elP = await painted(page, 'voice-elapsed');
+  ck(tag, '秒数在走(≥ 00:01)', /^00:0[1-9]$/.test(await page.evaluate(() => document.querySelector('[data-testid="voice-elapsed"]')?.textContent ?? '')) && seen(elP), `painted ${pd(elP)}`);
+  const imP = await painted(page, 'voice-interim');
+  ck(tag, '气泡里显示流式文字', (await page.evaluate(() => document.querySelector('[data-testid="voice-interim"]')?.textContent)) === '帮我看一下昨天的构建' && seen(imP), `painted ${pd(imP)}`);
+  const lbN = await painted(page, 'voice-hold-label');
+  ck(tag, '中间区:「松开 转文字」、zone=neutral', (await label(page)) === '松开 转文字' && (await zone(page)) === 'neutral' && seen(lbN), `${await label(page)} / ${await zone(page)} / painted ${pd(lbN)}`);
   const dim = await bg(page, '[data-testid="voice-overlay"]');
   ck(tag, '全屏压暗 50% 黑', dim === 'rgba(0, 0, 0, 0.5)', dim);
   const bubbleBg = await bg(page, '[data-testid="voice-hold-bubble"] > div');
@@ -225,13 +234,15 @@ for (const scheme of ['light', 'dark']) {
   const start = { x: bar.cx, y: bar.cy };
   await slide(page, start, { x: tx.cx, y: tx.cy });
   const txOn = await box(page, 'voice-hold-totext');
-  ck(tag, '滑到 文:zone=toText、「松开 放进草稿」、圈高亮放大', (await zone(page)) === 'toText' && (await label(page)) === '松开 放进草稿' && txOn.w > tx.w + 10, `${await zone(page)} / ${await label(page)} / ${r1(tx.w)}→${r1(txOn.w)}`);
+  const lbT = await painted(page, 'voice-hold-label');
+  ck(tag, '滑到 文:zone=toText、「松开 放进草稿」、圈高亮放大', (await zone(page)) === 'toText' && (await label(page)) === '松开 放进草稿' && seen(lbT) && txOn.w > tx.w + 10, `${await zone(page)} / ${await label(page)} / ${r1(tx.w)}→${r1(txOn.w)} / painted ${pd(lbT)}`);
   await shot('2-totext');
   await slide(page, { x: tx.cx, y: tx.cy }, { x: cx.cx, y: cx.cy }, 16);
   const cxOn = await box(page, 'voice-hold-cancel');
   const cancelBg = await bg(page, '[data-testid="voice-hold-cancel"]');
   const bubbleCancelBg = await bg(page, '[data-testid="voice-hold-bubble"] > div');
-  ck(tag, '滑到 ✕:zone=cancel、「松开手指，取消」', (await zone(page)) === 'cancel' && (await label(page)) === '松开手指，取消');
+  const lbC = await painted(page, 'voice-hold-label');
+  ck(tag, '滑到 ✕:zone=cancel、「松开手指，取消」', (await zone(page)) === 'cancel' && (await label(page)) === '松开手指，取消' && seen(lbC), `painted ${pd(lbC)}`);
   ck(tag, '✕ 变红放大、气泡变红', cancelBg === 'rgb(229, 72, 77)' && cxOn.w > cx.w + 10 && /^rgb\((220|239), (38|68), (38|68)\)$/.test(bubbleCancelBg), `${cancelBg} ${r1(cx.w)}→${r1(cxOn.w)} bubble=${bubbleCancelBg}`);
   // 面板暗一档也必须是实色:半透明会透出下面红色的「松开 取消」大条(第一版就是这样)。
   const arcPaint = await page.evaluate(() => { const el = document.querySelector('[data-testid="voice-hold-arc"] > div'); const cs = getComputedStyle(el); return { bg: cs.backgroundColor, opacity: cs.opacity }; });
@@ -250,7 +261,8 @@ for (const scheme of ['light', 'dark']) {
   // ── 4 松手结果 ──
   await page.evaluate(() => { window.__flash.text = '不该出现'; });
   await releaseAndSettle(page);
-  ck(tag, '✕ 区松手:丢弃(没有草稿卡片)、提示「已取消」', (await draft(page)) === null && (await notice(page)) === '已取消', `${await draft(page)} / ${await notice(page)}`);
+  const ntX = await painted(page, 'composer-notice');
+  ck(tag, '✕ 区松手:丢弃(没有草稿卡片)、提示「已取消」', (await draft(page)) === null && (await notice(page)) === '已取消' && seen(ntX), `${await draft(page)} / ${await notice(page)} / painted ${pd(ntX)}`);
 
   await page.evaluate(() => { window.__flash.text = '转成文字的内容'; });
   const b2 = await press(page);
@@ -299,7 +311,9 @@ for (const scheme of ['light', 'dark']) {
   // textContent 里还有 Ionicons 的字形字符(网页上图标是一个私用区字符),只比文字部分。
   const toastBox = await box(page, 'voice-hold-toast');
   const toastCard = await page.evaluate(() => { const r = document.querySelector('[data-testid="voice-hold-toast"] > div')?.getBoundingClientRect(); return r ? { cx: r.x + r.width / 2, cy: r.y + r.height / 2 } : null; });
-  ck(tag, '太短:「说话时间太短」提示、输入区不重复提示', (toast ?? '').replace(/[\uE000-\uF8FF]/g, '') === '说话时间太短' && (await notice(page)) !== '说话时间太短', `${toast} / ${await notice(page)}`);
+  // 量文字本身那个元素(voice-hold-toast 是铺满聊天页的定位层,量它恒为真)。
+  const toastP = await paintedText(page, '[data-testid="voice-hold-toast"] *', '说话时间太短');
+  ck(tag, '太短:「说话时间太短」提示、输入区不重复提示', (toast ?? '').replace(/[\uE000-\uF8FF]/g, '') === '说话时间太短' && seen(toastP) && (await notice(page)) !== '说话时间太短', `${toast} / ${await notice(page)} / painted ${pd(toastP)}`);
   ck(tag, '太短提示在聊天页正中(≤1px)', toastCard && toastBox && Math.abs(toastCard.cx - toastBox.cx) <= 1 && Math.abs(toastCard.cy - toastBox.cy) <= 1, JSON.stringify(toastCard));
   await shot('5-too-short');
   await page.waitForTimeout(1500);
@@ -310,7 +324,8 @@ for (const scheme of ['light', 'dark']) {
   await press(page);
   await page.waitForTimeout(1100);
   await releaseAndSettle(page);
-  ck(tag, '识别报错:输入区提示原因、浮层收起、草稿不变', /频繁/.test((await notice(page)) ?? '') && (await draft(page)) === '转成文字的内容中间松手', `${await notice(page)}`);
+  const ntE = await painted(page, 'composer-notice');
+  ck(tag, '识别报错:输入区提示原因、浮层收起、草稿不变', /频繁/.test((await notice(page)) ?? '') && seen(ntE) && (await draft(page)) === '转成文字的内容中间松手', `${await notice(page)} / painted ${pd(ntE)}`);
   await page.evaluate(() => { window.__flash.fail = false; });
   await stopLevels(page);
   await ctx.close();
@@ -325,7 +340,8 @@ for (const scheme of ['light', 'dark']) {
     const overlayGone = (await box(p2, 'voice-overlay')) === null;
     await p2.mouse.up();
     await p2.waitForTimeout(300);
-    ck(tag, '麦克风被拒:浮层收起、输入区提示', overlayGone && (await p2.evaluate(() => document.querySelector('[data-testid="composer-notice"]')?.textContent ?? '')) === '麦克风权限被拒绝', await p2.evaluate(() => document.querySelector('[data-testid="composer-notice"]')?.textContent ?? ''));
+    const ntM = await painted(p2, 'composer-notice');
+    ck(tag, '麦克风被拒:浮层收起、输入区提示', overlayGone && (await p2.evaluate(() => document.querySelector('[data-testid="composer-notice"]')?.textContent ?? '')) === '麦克风权限被拒绝' && seen(ntM), `${await p2.evaluate(() => document.querySelector('[data-testid="composer-notice"]')?.textContent ?? '')} / painted ${pd(ntM)}`);
     await c2.close();
   }
 

@@ -24,6 +24,7 @@
 import { createServer } from 'node:http';
 import { readFileSync, existsSync, mkdirSync, statSync } from 'node:fs';
 import { join, extname } from 'node:path';
+import { paintedText } from '../test-layout-sweep/harness.mjs';
 
 const { chromium } = await import(process.env.PLAYWRIGHT_MODULE || 'playwright');
 const WEB = process.env.WEB_DIR, OUT = process.env.OUT;
@@ -141,6 +142,9 @@ const rect = (page, sel) => page.evaluate((s) => {
 const spread = (rs) => { const ys = rs.map(r => r?.cy); return ys.every(v => v != null) ? Math.max(...ys) - Math.min(...ys) : Infinity; };
 const count = (page, sel) => page.locator(sel).count();
 const shot = (page, name) => page.screenshot({ path: join(OUT, `${name}.png`) });
+// Text checks also demand the PAINTED box (after overflow clipping): a 0-wide element keeps its textContent.
+const painted = (p) => !!p && p.painted && p.w >= 8;
+const pw = (p) => p ? `${r1(p.w)}×${r1(p.h)}` : 'none';
 const patchKeys = (b) => Object.keys(b || {}).sort().join(',');
 
 async function openSchedules(page, kind, theme) {
@@ -181,12 +185,13 @@ for (const theme of ['light', 'dark']) {
     const full = await rect(page, FULL);
     const save = page.locator(tid('req-description-full-save'));
     const readSel = await page.locator(tid('req-description-full-mode-read')).getAttribute('aria-selected');
+    const readP = await paintedText(page, tid('req-description-full-read'));
     record(vp, 'read: covers the window, 阅读, no 🖼 / 🎤, 保存 disabled', {
       covers: !!full && full.x <= 0.5 && full.y <= 0.5 && full.w >= 1319 && full.h >= 753,
       read: readSel === 'true', noImage: (await count(page, tid('req-description-full-image'))) === 0, noMic: (await count(page, tid('voice-mic'))) === 0,
       saveDisabled: (await save.getAttribute('aria-disabled')) === 'true',
-      textShown: (await page.locator(tid('req-description-full-read')).innerText()).includes('检查全屏和换行的显示是否正常'),
-    });
+      textShown: (await page.locator(tid('req-description-full-read')).innerText()).includes('检查全屏和换行的显示是否正常') && painted(readP),
+    }, { readPainted: pw(readP) });
     await shot(page, `desktop-${theme}-fullscreen-read`);
   }
   await page.locator(tid('req-description-full-mode-split')).click();
@@ -201,13 +206,15 @@ for (const theme of ['light', 'dark']) {
     const items = await Promise.all([tid('req-description-full-mode'), tid('voice-mic'), tid('req-description-full-save'), tid('req-description-full-close')].map(s => rect(page, s)));
     const src = await rect(page, tid('req-description-split-source'));
     const prev = await rect(page, tid('req-description-split-preview'));
+    const dirtyP = await paintedText(page, tid('req-description-full-dirty'));
+    const prevP = await paintedText(page, tid('req-description-split-preview'));
     record(vp, 'split: toolbar on one centre line, 🎤 present, unsaved + 保存 enabled, panes side by side', {
       aligned: spread(items) <= 1, mic: !!items[1], noImage: (await count(page, tid('req-description-full-image'))) === 0,
-      unsaved: (await page.locator(tid('req-description-full-dirty')).innerText()).includes('未保存'),
+      unsaved: (await page.locator(tid('req-description-full-dirty')).innerText()).includes('未保存') && painted(dirtyP),
       saveEnabled: (await page.locator(tid('req-description-full-save')).getAttribute('aria-disabled')) !== 'true',
       sideBySide: !!src && !!prev && Math.abs(src.y - prev.y) <= 1 && src.r <= prev.x + 1,
-      previewLive: (await page.locator(tid('req-description-split-preview')).innerText()).includes('每次只同步 10 条'),
-    }, { spread: r1(spread(items)) });
+      previewLive: (await page.locator(tid('req-description-split-preview')).innerText()).includes('每次只同步 10 条') && painted(prevP),
+    }, { spread: r1(spread(items)), dirtyPainted: pw(dirtyP), previewPainted: pw(prevP) });
     await shot(page, `desktop-${theme}-fullscreen-split`);
   }
   // 🎤 → recording bar → Enter inserts at the caret (end of text).
@@ -231,11 +238,12 @@ for (const theme of ['light', 'dark']) {
     await page.locator(tid('req-description-full-save')).click();
     await page.locator(tid('schedule-content-problem')).waitFor({ timeout: 8000 }).catch(() => {});
     const theirs = await page.locator(tid('schedule-content-problem')).innerText().catch(() => '');
+    const problemP = await paintedText(page, tid('schedule-content-problem'));
     record(vp, 'conflict: box with the latest text, draft kept, one PATCH so far', {
       box: (await count(page, tid('schedule-content-problem'))) === 1,
-      theirs: theirs.includes('别的设备改过的内容'),
+      theirs: theirs.includes('别的设备改过的内容') && painted(problemP),
       draftKept: (await page.locator(input).inputValue()) === typed, onePatch: patches.length === 1 && patches[0].revision === 4,
-    }, { theirs: JSON.stringify(theirs) });
+    }, { theirs: JSON.stringify(theirs), problemPainted: pw(problemP) });
     await shot(page, `desktop-${theme}-fullscreen-conflict`);
     await page.locator(tid('schedule-content-conflict-mine')).click();
     await page.locator(FULL).waitFor({ state: 'detached', timeout: 8000 }).catch(() => {});
@@ -247,11 +255,12 @@ for (const theme of ['light', 'dark']) {
     await page.locator(tid('req-description-full-save')).click();
     await page.locator(FULL).waitFor({ state: 'detached', timeout: 8000 }).catch(() => {});
     await page.waitForTimeout(600);
+    const cardP = await paintedText(page, tid('schedule-content-card'));
     record(vp, 'save: one PATCH { revision: 4, task } ⇒ closed, card shows the new text', {
       patch: patches.length === 1 && patches[0].revision === 4 && patchKeys(patches[0]) === 'revision,task' && patches[0].task === typed.trim(),
       closed: (await count(page, FULL)) === 0,
-      card: (await page.locator(tid('schedule-content-card')).innerText()).includes('语音补一句'),
-    }, { patches: patches.map(p => `${p.revision}:${patchKeys(p)}`).join(' ') });
+      card: (await page.locator(tid('schedule-content-card')).innerText()).includes('语音补一句') && painted(cardP),
+    }, { patches: patches.map(p => `${p.revision}:${patchKeys(p)}`).join(' '), cardPainted: pw(cardP) });
   }
   // the edit form's 任务内容
   await page.locator(tid('schedule-detail')).getByText('编辑', { exact: true }).click();
@@ -308,12 +317,13 @@ for (const theme of ['light', 'dark']) {
   {
     const items = await Promise.all([tid('req-description-page-back'), tid('req-description-page-title'), tid('req-description-page-mode'), tid('req-description-page-save')].map(s => rect(page, s)));
     const pageR = await rect(page, tid('req-description-page'));
+    const titleP = await paintedText(page, tid('req-description-page-title'));
     record(vp, 'page: covers the screen, 预览 first, ‹ · 任务内容 · 编辑/预览 · 保存 on one centre line, no 🖼 / bar', {
       covers: !!pageR && pageR.w >= 389 && pageR.h >= 843, aligned: spread(items) <= 1,
-      title: (await page.locator(tid('req-description-page-title')).innerText()) === '任务内容',
+      title: (await page.locator(tid('req-description-page-title')).innerText()) === '任务内容' && painted(titleP),
       preview: (await count(page, tid('req-description-page-preview'))) === 1, noBar: (await count(page, tid('req-description-page-voice'))) === 0,
       headerFits: items.every(r => r && r.x >= 0 && r.r <= 390),
-    }, { spread: r1(spread(items)) });
+    }, { spread: r1(spread(items)), titlePainted: pw(titleP) });
     await shot(page, `phone-${theme}-page-read`);
   }
   await page.locator(tid('req-description-page-mode-edit')).click();

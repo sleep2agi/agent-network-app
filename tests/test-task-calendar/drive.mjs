@@ -26,7 +26,7 @@
 // Exit 1 when any check fails or a viewport could not be opened.
 import { mkdirSync } from 'node:fs';
 import { join } from 'node:path';
-import { serveExport, initScript, findChromium, ANDROID_UA } from '../test-layout-sweep/harness.mjs';
+import { serveExport, initScript, findChromium, ANDROID_UA, paintedText } from '../test-layout-sweep/harness.mjs';
 
 const { chromium } = await import(process.env.PLAYWRIGHT_MODULE || 'playwright');
 const WEB = process.env.WEB_DIR;
@@ -84,6 +84,9 @@ const box = (page, sel) => page.evaluate((s) => {
   const b = el.getBoundingClientRect();
   return { x: b.x, y: b.y, w: b.width, h: b.height, r: b.right, b: b.bottom, cy: b.y + b.height / 2, cx: b.x + b.width / 2, text: el.textContent };
 }, sel);
+// Text checks also demand the PAINTED box (after overflow clipping) — a 0-wide label keeps its textContent.
+const painted = (p) => !!p && p.painted && p.w >= 8;
+const pw = (p) => p ? `${r1(p.w)}×${r1(p.h)}` : 'none';
 const count = (page, prefix) => page.evaluate((p) => document.querySelectorAll(`[data-testid^="${p}"]`).length, prefix);
 const overflow = (page) => page.evaluate(() => document.scrollingElement.scrollWidth - window.innerWidth);
 const detailName = async (page) => {
@@ -175,9 +178,10 @@ for (const theme of ['light', 'dark']) {
       const popN = await count(page, 'cal-pop-item-');
       const pop = await box(page, tid('cal-popover'));
       const popTime = await page.evaluate(() => document.querySelector('[data-testid="cal-pop-item-c2"]')?.textContent);
+      const popTimeP = await paintedText(page, `${tid('cal-pop-item-c2')} *`, '15:30');
       await page.waitForTimeout(400); // let the fade-in finish before the screenshot
       await shot('more-popover');
-      record(vp, '「+N」 popover lists the whole day', { all: popN === TODAY_COUNT, inViewport: !!pop && pop.x >= 0 && pop.r <= v.w && pop.b <= v.h, time: popTime?.startsWith('15:30') }, { n: popN });
+      record(vp, '「+N」 popover lists the whole day', { all: popN === TODAY_COUNT, inViewport: !!pop && pop.x >= 0 && pop.r <= v.w && pop.b <= v.h, time: popTime?.startsWith('15:30') && painted(popTimeP) }, { n: popN, timePainted: pw(popTimeP) });
       await page.locator(tid('cal-pop-item-c7')).click();
       const name = await detailName(page);
       record(vp, 'popover row opens detail', { opened: name === '示例:今天第七条', closed: !(await box(page, tid('cal-popover'))) }, { name });
@@ -206,7 +210,9 @@ for (const theme of ['light', 'dark']) {
       await shot('week');
       // 周视图里今天的七条都在格子里:带时刻的写本地 15:30(07:30Z + 8h),全天的不写时刻
       const texts = await page.evaluate(() => ({ c2: document.querySelector('[data-testid="cal-item-c2"]')?.textContent, c1: document.querySelector('[data-testid="cal-item-c1"]')?.textContent }));
-      record(vp, 'local time on timed due only', { timed: texts.c2 === '15:30示例:今天下午三点半', allDay: texts.c1 === '示例:今天全天高优' }, { c2: texts.c2, c1: texts.c1 });
+      const [c2TimeP, c2NameP, c1NameP] = [await paintedText(page, `${tid('cal-item-c2')} *`, '15:30'), await paintedText(page, `${tid('cal-item-c2')} *`, '示例:今天下午三点半'), await paintedText(page, `${tid('cal-item-c1')} *`, '示例:今天全天高优')];
+      record(vp, 'local time on timed due only', { timed: texts.c2 === '15:30示例:今天下午三点半' && painted(c2TimeP) && painted(c2NameP), allDay: texts.c1 === '示例:今天全天高优' && painted(c1NameP) },
+        { c2: texts.c2, c1: texts.c1, c2Painted: `${pw(c2TimeP)} ${pw(c2NameP)}`, c1Painted: pw(c1NameP) });
       const tw = (await box(page, tid('cal-title'))).text;
       await page.locator(tid('cal-next')).click();
       const tNext = (await box(page, tid('cal-title'))).text;
@@ -229,6 +235,15 @@ for (const theme of ['light', 'dark']) {
         await page.waitForTimeout(120);
         const during = peek ? await page.evaluate((t) => ({
           ghost: document.querySelector('[data-testid="cal-drag-ghost"]')?.textContent ?? null,
+          ghostW: (() => { // the ghost's painted width after clipping by overflow ancestors
+            const el = document.querySelector('[data-testid="cal-drag-ghost"]'); if (!el) return -1;
+            const b = el.getBoundingClientRect(); let w = b.width, h = b.height;
+            for (let a = el.parentElement; a && a !== document.body; a = a.parentElement) {
+              const c = getComputedStyle(a); if (c.overflowX === 'visible' && c.overflowY === 'visible') continue;
+              const r = a.getBoundingClientRect(); w = Math.min(w, Math.max(0, Math.min(b.right, r.right) - Math.max(b.left, r.left))); h = Math.min(h, Math.max(0, Math.min(b.bottom, r.bottom) - Math.max(b.top, r.top)));
+            }
+            return h >= 1 ? w : 0;
+          })(),
           outline: getComputedStyle(document.querySelector(`[data-testid="cal-cell-${t}"]`)).outlineStyle,
         }), target) : null;
         if (peek) await shot('dragging');
@@ -244,9 +259,9 @@ for (const theme of ['light', 'dark']) {
       const p1 = (await patches()).slice(n0);
       const md3 = `${+t3.slice(5, 7)}月${+t3.slice(8, 10)}日`;
       record(vp, 'drag all-day task to another day', {
-        ghost: during?.ghost === `→ ${md3}`, targetOutlined: during?.outline === 'solid', onePatch: p1.length === 1,
+        ghost: during?.ghost === `→ ${md3}` && during?.ghostW >= 8, targetOutlined: during?.outline === 'solid', onePatch: p1.length === 1,
         dueOnly: JSON.stringify(p1[0]) === JSON.stringify({ due: t3 }), moved: (await cellOf('c1')) === t3, noDetail: !(await box(page, tid('req-edit-name'))),
-      }, { patch: JSON.stringify(p1[0] ?? null), ghost: during?.ghost });
+      }, { patch: JSON.stringify(p1[0] ?? null), ghost: during?.ghost, ghostPainted: r1(during?.ghostW ?? -1) });
 
       await page.locator(tid('cal-mode-week')).click();
       await page.waitForTimeout(300);
@@ -261,8 +276,16 @@ for (const theme of ['light', 'dark']) {
       await dragTo('c7', tgt, false);
       await page.waitForTimeout(300);
       const back = await cellOf('c7');
-      const banner = await page.evaluate(() => [...document.querySelectorAll('div')].some(d => d.children.length === 0 && /示例:今天第七条/.test(d.textContent) && /不存在|没有保存/.test(d.textContent)));
-      record(vp, 'rejected drop reverts', { back: back === today, banner });
+      // the banner text's painted box (clipped by overflow ancestors); the best-painted match if several
+      const bannerP = await page.evaluate(() => [...document.querySelectorAll('div')].filter(d => d.children.length === 0 && /示例:今天第七条/.test(d.textContent) && /不存在|没有保存/.test(d.textContent)).map(d => {
+        const b = d.getBoundingClientRect(); let w = b.width, h = b.height;
+        for (let a = d.parentElement; a && a !== document.body; a = a.parentElement) {
+          const c = getComputedStyle(a); if (c.overflowX === 'visible' && c.overflowY === 'visible') continue;
+          const r = a.getBoundingClientRect(); w = Math.min(w, Math.max(0, Math.min(b.right, r.right) - Math.max(b.left, r.left))); h = Math.min(h, Math.max(0, Math.min(b.bottom, r.bottom) - Math.max(b.top, r.top)));
+        }
+        return { w, h, painted: w >= 1 && h >= 1 };
+      }).sort((a, b) => b.w * b.h - a.w * a.h)[0] ?? null);
+      record(vp, 'rejected drop reverts', { back: back === today, banner: painted(bannerP) }, { bannerPainted: pw(bannerP) });
       await page.evaluate(() => { window.__tasksFailPatch = false; });
       await page.locator(tid('cal-mode-month')).click();
 

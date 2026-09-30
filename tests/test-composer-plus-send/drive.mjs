@@ -243,8 +243,24 @@ for (const c of CASES) {
   await input.click();
   await page.keyboard.type('桌面');
   await page.waitForTimeout(300);
-  const s = await page.evaluate(() => ({ mobileSlot: document.querySelectorAll('[data-testid="composer-right-slot"]').length, send: [...document.querySelectorAll('div,span')].filter(e => e.childElementCount === 0 && e.textContent === '发送').length }));
-  ck(tag, '桌面:没有手机右格(＋/发送 组件),工具栏 发送 还在', s.mobileSlot === 0 && s.send >= 1, JSON.stringify(s));
+  // 「发送」文字在 ≠ 看得见(title-blank:flex 0 1 0% + overflow:hidden 把字压成 0px 宽,textContent 照旧):
+  // 同一批元素再量画出来的宽 = 框 ∩ 每个 overflow 不是 visible 的祖先。
+  const s = await page.evaluate(() => {
+    const clippedW = (el) => {
+      const b = el.getBoundingClientRect(); let w = b.width, h = b.height;
+      for (let a = el.parentElement; a && a !== document.body; a = a.parentElement) {
+        const cs = getComputedStyle(a);
+        if (cs.overflowX === 'visible' && cs.overflowY === 'visible') continue;
+        const r = a.getBoundingClientRect();
+        w = Math.min(w, Math.max(0, Math.min(b.right, r.right) - Math.max(b.left, r.left)));
+        h = Math.min(h, Math.max(0, Math.min(b.bottom, r.bottom) - Math.max(b.top, r.top)));
+      }
+      return h >= 1 ? Math.round(w * 10) / 10 : 0;
+    };
+    const labels = [...document.querySelectorAll('div,span')].filter(e => e.childElementCount === 0 && e.textContent === '发送');
+    return { mobileSlot: document.querySelectorAll('[data-testid="composer-right-slot"]').length, send: labels.length, sendPaintedW: labels.map(clippedW) };
+  });
+  ck(tag, '桌面:没有手机右格(＋/发送 组件),工具栏 发送 还在', s.mobileSlot === 0 && s.send >= 1 && s.sendPaintedW.some(w => w >= 8), JSON.stringify(s));
   await page.evaluate(() => { window.__posts = []; });
   await page.getByText('发送', { exact: true }).last().click();
   await page.waitForTimeout(600);
