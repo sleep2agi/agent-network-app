@@ -18,7 +18,23 @@ Browser drive (web export + in-page Tauri stub, no hub): tests/test-task-title-v
   this branch:            24/24
   tests/test-task-list-tablet/drive.mjs on this branch: 14/14 (title still vertically centred)
 
-ck: src/task-title-web-width.test.ts (runs the real title style through react-native-web's createReactDOMStyle)
-  unfixed: 4/7 (flex:0 → zero basis; TaskListTable.tsx:99 flagged); fixed: 7/7
-npm test: 275/275 test files passed · npm run typecheck: rc=0
-docker requirement-details (--network none): 41 pass, 0 fail
+Board / detail on desktop-v0.2.162 (export built from the tag): 16/16 board+detail checks pass (card title 160–267px,
+  detail name input = full title, ≥371px wide); only the list fails (every title 0px, 16/24 overall).
+
+Class sweep (flex: 0 in src, non-test): TaskListTable.tsx title Text, ChatScreen.tsx + DmChatScreen.tsx inputInWrap.
+  All three → flex: -1 (react-native-web: 0 1 auto; Yoga: grow 0, shrink 1, basis auto). No flexBasis:'auto'
+  (flex-basis-auto-rule). RichDescriptionEditor's `flex: 0 0 auto` is a CSS string, not a style object.
+  Composer web CSS before/after via createReactDOMStyle: flex:0 + web-only flexBasis:auto = 0 1 auto → 0 1 auto (identical).
+
+ck: src/task-title-web-width.test.ts — web: real title style through react-native-web's compiler (old: red, zero basis);
+  native: yoga-layout row→cell→title tree, cells 150/220/420 × plain/+archived tag/+tag row: vertical centre equal to
+  the old style and to the owner cell, short title same width as before, long title stays inside the cell. 33/33.
+  Old style: 32/33 (web zero basis).
+ck: src/flex-zero-rule.test.ts — static guard: no `flex: 0` in style objects outside a Platform.OS === 'web' line;
+  judge + collect self-tests; composer yoga: heights identical for content 20/36/60/100/200 (only a row squeezed below
+  its content differs: -1 shrinks like web, 0 overflowed — self-check). On origin/main 90f2f46: 10/11, red at
+  TaskListTable.tsx:97, ChatScreen.tsx:2938, DmChatScreen.tsx:302. On this branch: 14/14.
+npm test: 276/276 test files passed · npm run typecheck: rc=0
+tests/test-task-title-visible 24/24 · tests/test-task-list-tablet 14/14 (rebuilt export)
+tests/test-composer-alignment not run (needs a hub); composer web CSS proven identical above.
+docker requirement-details (--network none): 41 pass, 0 fail (rerun on this commit)
