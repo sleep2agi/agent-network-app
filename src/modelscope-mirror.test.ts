@@ -9,6 +9,7 @@ import {
   selectNewestDesktopRelease,
   sha256sums,
 } from '../scripts/modelscope-mirror.mjs';
+import { androidReleaseNotes, extractReleaseBody, versionItems } from '../scripts/android-release-notes.mjs';
 
 let passed = 0;
 const check = (name: string, condition: boolean) => {
@@ -156,5 +157,26 @@ check('android publish: writes exactly the layout the updater reads',
 check('android publish: anonymous verification downloads the full APK and compares sha256',
   /def verify\(/.test(androidScript) && androidScript.includes('anonymous full download, sha256 match'));
 check('android publish: refuses to move android/latest/VERSION backwards', androidScript.includes('refusing to move it back'));
+
+// --- android channel release notes (android/<ver>/notes.md) ---------------------------------------------------
+const releaseWorkflow = readFileSync(new URL('../.github/workflows/release-desktop-auto-update.yml', import.meta.url), 'utf8');
+const pkgVersion = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8')).version as string;
+const bodyOf = extractReleaseBody(releaseWorkflow) ?? '';
+check('notes: releaseBody extracted from the real release workflow, indentation stripped',
+  bodyOf.startsWith('Signed and notarized') && bodyOf.includes(`What's new in ${pkgVersion}:`) && !/^\s/.test(bodyOf.split('\n')[2] ?? ''));
+check('notes: the current version has items (the bump PR wrote them)', versionItems(bodyOf, pkgVersion).length > 0);
+const notes = androidReleaseNotes(releaseWorkflow, pkgVersion);
+check('notes: notes.md = the release body + trailing newline', typeof notes === 'string' && notes === `${bodyOf}\n`);
+check('notes: a version with no section → error (publish refuses)', androidReleaseNotes(releaseWorkflow, '99.0.0') instanceof Error);
+check('notes: no releaseBody block → error', androidReleaseNotes('jobs: {}\n', pkgVersion) instanceof Error);
+const synthetic = [
+  'jobs:', '  x:', '    steps:', '      - with:', '          releaseBody: |-', '            Intro.', '', "            What's new in 1.2.3:", '', "            What's new in 1.2.2:", '            - old item', '          other: 1',
+].join('\n');
+check('notes: heading with no items → error', androidReleaseNotes(synthetic, '1.2.3') instanceof Error);
+check('notes: block ends at the next key of the same or lower indentation', !String(extractReleaseBody(synthetic)).includes('other: 1'));
+check('notes: items of the version only, not the next section', versionItems(extractReleaseBody(synthetic), '1.2.2').join() === 'old item');
+check('android publish: notes come from the release workflow at the APK commit and are uploaded + verified',
+  android.includes('git show "$SOURCE_SHA:.github/workflows/release-desktop-auto-update.yml"') && android.includes('--notes "$NOTES"')
+  && androidScript.includes("f'android/{version}/notes.md': notes") && androidScript.includes('refusing to publish without notes'));
 
 console.log(`\n${passed} passed`);

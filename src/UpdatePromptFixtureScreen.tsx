@@ -2,6 +2,7 @@
  * web GUI 验收夹具(更新弹窗)。不连 Hub、不打网络。
  * `?fixture=update-prompt&platform=android|desktop&state=available|downloading|verifying|fallback|error|ready|uptodate&theme=dark|light`
  * `&current=0.2.153`:换一个已装版本 —— 说明里会出现比它新的每一版(多版本分组)。
+ * `&notes=none`:没有任何这一版的说明 → 更新页显示「查看更新说明」链接(不写通用空话)。
  *
  * 背后是 设置 → 关于(按安卓渲染:版本 / 软件更新),前面是对应状态的更新弹窗。
  * 浏览器里 Platform.OS 恒为 web,App 不会挂 AndroidUpdatePrompt —— 这里直接挂。
@@ -43,7 +44,7 @@ What's new in 0.2.154:
 
 Existing installations can update in place; new installations can use the assets below.`;
 
-export type UpdatePromptFixture = { theme: 'dark' | 'light'; platform: 'android' | 'desktop'; state: string; current: string };
+export type UpdatePromptFixture = { theme: 'dark' | 'light'; platform: 'android' | 'desktop'; state: string; current: string; noNotes?: boolean };
 
 export function readUpdatePromptFixture(): UpdatePromptFixture | null {
   if (Platform.OS !== 'web') return null;
@@ -55,16 +56,18 @@ export function readUpdatePromptFixture(): UpdatePromptFixture | null {
       platform: params.get('platform') === 'desktop' ? 'desktop' : 'android',
       state: params.get('state') || 'available',
       current: /^\d+\.\d+\.\d+$/.test(params.get('current') ?? '') ? params.get('current')! : FIXTURE_CURRENT,
+      // `&notes=none`:哪儿都没找到这一版的说明(更新页应显示「查看更新说明」链接)。
+      noNotes: params.get('notes') === 'none',
     };
   } catch {
     return null;
   }
 }
 
-function androidState(kind: string): AndroidUpdateState {
+function androidState(kind: string, noNotes = false): AndroidUpdateState {
   const rel = {
     version: FIXTURE_NEXT,
-    notes: NOTES,
+    notes: noNotes ? '' : NOTES,
     releaseUrl: githubReleasePage(FIXTURE_NEXT),
     checkRoute: 'mirror' as const,
     apk: { name: apkCacheFileName(FIXTURE_NEXT), url: mirrorApkUrl(FIXTURE_NEXT), fallbackUrl: githubApkUrl(FIXTURE_NEXT), size: SIZE, sha256: 'f'.repeat(64), source: 'mirror' as const },
@@ -87,7 +90,7 @@ export default function UpdatePromptFixtureScreen({ fixture }: { fixture: Update
     if (seeded) return;
     seeded = true;
     rememberSettingsCategory('about');
-    if (fixture.platform === 'android') __showAndroidUpdateForFixture(androidState(fixture.state), { lastCheckedAt: Date.now() });
+    if (fixture.platform === 'android') __showAndroidUpdateForFixture(androidState(fixture.state, fixture.noNotes), { lastCheckedAt: Date.now() });
     else {
       __showDesktopUpdateForFixture({ kind: 'available', version: FIXTURE_NEXT, currentVersion: fixture.current, source: 'github', notes: NOTES });
       // 真实流程:先「有新版本」,点了之后进入下载 —— 说明沿用上一步那份。

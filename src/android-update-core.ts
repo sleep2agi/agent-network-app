@@ -34,6 +34,13 @@ export const ANDROID_RELEASES_PAGE = `https://github.com/${ANDROID_RELEASES_REPO
  *   android/latest/VERSION                    "<ver>\n" —— 安卓通道最新版(scripts/modelscope-android-publish.py 写)
  *   android/agent-network-<ver>.apk           安装包(android-build 产物,与 release 上的 universal 包同一份)
  *   android/agent-network-<ver>.apk.sha256    `sha256sum` 格式一行:`<64 hex>␠␠agent-network-<ver>.apk`(裸 64 hex 也认)
+ *   android/<ver>/notes.md                    这一版的 release 正文(release-desktop-auto-update.yml 的 releaseBody,
+ *                                             与 desktop latest.json 的 notes 同一份),必须含「What's new in <ver>:」段
+ *
+ * 更新说明来源(owner 2026-09-30:安卓通道先发,desktop/<ver>/latest.json 那时还没有 → 更新页只剩一句通用话):
+ *   安卓通道  android/<ver>/notes.md → desktop/<ver>/latest.json → GitHub release 正文(按 tag)
+ *   desktop 通道  desktop/<ver>/latest.json → android/<ver>/notes.md → GitHub release 正文
+ * 只认含这一版段落的说明(notesCoverVersion)。都没有 → notes 为空,更新页显示「查看更新说明」链接,不写通用话。
  *
  * 检查时两个 VERSION 都读,取较高的;同版本走 desktop 通道(有 release 说明)。各通道从自己的路径下载、
  * 对自己的 sha 文件校验;安卓通道的 sha 文件缺失/认不出/写的是别的文件名 → 报错,绝不给出没法校验的包。
@@ -49,11 +56,20 @@ export const ANDROID_CHANNEL_VERSION_URL = `${MIRROR_BASE}/android/latest/VERSIO
 export const androidChannelApkName = (version: string) => `agent-network-${plainVersion(version)}.apk`;
 export const androidChannelApkUrl = (version: string) => `${MIRROR_BASE}/android/${androidChannelApkName(version)}`;
 export const androidChannelShaUrl = (version: string) => `${androidChannelApkUrl(version)}.sha256`;
+/** 安卓通道这一版的更新说明(release 正文,同 desktop latest.json 的 notes);见文件头。 */
+export const androidChannelNotesUrl = (version: string) => `${MIRROR_BASE}/android/${plainVersion(version)}/notes.md`;
+/** 按 tag 取 release(REST,占 60 次/小时):只在两个镜像来源都没有这一版说明时用。 */
+export const githubReleaseByTagApi = (version: string) =>
+  `https://api.github.com/repos/${ANDROID_RELEASES_REPO}/releases/tags/desktop-v${plainVersion(version)}`;
 /** GitHub 资产的直链(releases/download,不是 REST API,不占那 60 次/小时)。镜像下载失败时的第二来源。 */
 export const githubApkUrl = (version: string) =>
   `https://github.com/${ANDROID_RELEASES_REPO}/releases/download/desktop-v${plainVersion(version)}/${apkCacheFileName(version)}`;
 export const githubReleasePage = (version: string) => `https://github.com/${ANDROID_RELEASES_REPO}/releases/tag/desktop-v${plainVersion(version)}`;
-export const DEFAULT_RELEASE_NOTES = '此版本包含功能改进和问题修复。';
+/**
+ * 找不到这一版的说明时,更新页不写一句空话(owner 2026-09-30 截图:v0.2.160 只显示「此版本包含功能改进和问题修复。」),
+ * 而是给这个链接,打开 GitHub release 页。notes 字段此时为空串。
+ */
+export const RELEASE_NOTES_LINK_LABEL = '查看更新说明';
 
 function plainVersion(version: string): string {
   const v = parseVersion(version)?.join('.');
@@ -176,7 +192,7 @@ export function evaluateAndroidRelease(release: ReleaseJson | null | undefined, 
   return {
     kind: 'available',
     version: latest,
-    notes: String(release.body ?? '').trim() || DEFAULT_RELEASE_NOTES,
+    notes: String(release.body ?? '').trim(),
     apk,
     releaseUrl: typeof release.html_url === 'string' && release.html_url ? release.html_url : ANDROID_RELEASES_PAGE,
   };
@@ -207,12 +223,12 @@ export function parseSha256Sums(text: string | null | undefined): Record<string,
   return out;
 }
 
-/** 镜像 latest.json 里的 notes;拿不到就给通用说明 —— 说明文字永远不挡更新。 */
+/** 镜像 latest.json 里的 notes;不是这一版的 / 没有 / 形状不对 → 空串(调用方去找下一个来源)。说明永远不挡更新。 */
 export function notesFromMirrorManifest(manifest: unknown, version: string): string {
   const m = manifest as { version?: unknown; notes?: unknown } | null;
-  if (!m || typeof m !== 'object' || typeof m.notes !== 'string') return DEFAULT_RELEASE_NOTES;
-  if (compareVersions(String(m.version ?? ''), version) !== 0) return DEFAULT_RELEASE_NOTES;
-  return m.notes.trim() || DEFAULT_RELEASE_NOTES;
+  if (!m || typeof m !== 'object' || typeof m.notes !== 'string') return '';
+  if (compareVersions(String(m.version ?? ''), version) !== 0) return '';
+  return m.notes.trim();
 }
 
 /**
@@ -236,7 +252,7 @@ export function evaluateMirror(
   return {
     kind: 'available',
     version: latest,
-    notes: String(input.notes ?? '').trim() || DEFAULT_RELEASE_NOTES,
+    notes: String(input.notes ?? '').trim(),
     apk: {
       name,
       url: mirrorApkUrl(latest),
@@ -279,7 +295,7 @@ export function evaluateAndroidChannel(
   return {
     kind: 'available',
     version: latest,
-    notes: String(input.notes ?? '').trim() || DEFAULT_RELEASE_NOTES,
+    notes: String(input.notes ?? '').trim(),
     apk: {
       name: apkCacheFileName(latest),
       url: androidChannelApkUrl(latest),

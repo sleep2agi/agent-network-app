@@ -376,6 +376,7 @@ Nothing has to be triggered by hand in a normal release.
 | `desktop/latest/SHA256SUMS` | over the files in `desktop/latest/` |
 | `android/agent-network-<ver>.apk` | the Android APK, from a successful `android-build` run on main (Android channel, below) |
 | `android/agent-network-<ver>.apk.sha256` | one `sha256sum` line: `<64 hex>  agent-network-<ver>.apk` |
+| `android/<ver>/notes.md` | this version's release notes: the `releaseBody` of `release-desktop-auto-update.yml` at the APK's commit (= the GitHub release body) |
 | `android/latest/VERSION` | the version the Android channel currently holds; only moves forward |
 
 Anonymous download URL:
@@ -437,11 +438,18 @@ updater does not fall back — the manifest endpoint already succeeded.
 0.2.103; the Android channel from 0.2.158). It reads **both** `desktop/latest/VERSION`
 and `android/latest/VERSION` and takes the higher one (a tie goes to `desktop/`):
 
-- desktop channel: `desktop/<ver>/SHA256SUMS` (required), `desktop/<ver>/latest.json`
-  (release notes, optional), download `desktop/<ver>/Agent.Network_<ver>_android-universal.apk`;
+- desktop channel: `desktop/<ver>/SHA256SUMS` (required), download
+  `desktop/<ver>/Agent.Network_<ver>_android-universal.apk`;
 - Android channel: `android/agent-network-<ver>.apk.sha256` (required — missing or
-  unparseable is an error, never an unverified install), notes from
-  `desktop/<ver>/latest.json` when present, download `android/agent-network-<ver>.apk`.
+  unparseable is an error, never an unverified install), download `android/agent-network-<ver>.apk`.
+
+Release notes (never block an update; from 0.2.161): the Android channel reads
+`android/<ver>/notes.md`, then `desktop/<ver>/latest.json`, then the GitHub
+release body by tag; the desktop channel reads `latest.json` first, then
+`notes.md`, then GitHub. Only text with a `What's new in <ver>:` section counts.
+With none of them the update page shows a 「查看更新说明」 link to the GitHub
+release page. Before 0.2.161 it showed a generic sentence
+(「此版本包含功能改进和问题修复。」, owner screenshot of 0.2.160 on 2026-09-30).
 
 Either way the APK is checked against its sha256 before it reaches the installer,
 and the GitHub release asset is the download fallback (same build; a byte
@@ -467,14 +475,20 @@ It refuses a run that is not `android-build`, not on `main` or not successful,
 checks the APK's `versionName`/`versionCode`/package with `aapt2`, refuses to move
 `android/latest/VERSION` backwards or to replace an existing `agent-network-<ver>.apk`
 with different bytes, uploads the APK (skipped when ModelScope already holds the
-same bytes), its `.sha256` and `android/latest/VERSION` in **one commit**, then
-verifies anonymously: every path in the listing with the expected sha256,
-`VERSION` and the `.sha256` file byte for byte, and a full download of the APK
-compared by sha256. `-f dry_run=true` does everything up to the upload.
+same bytes), its `.sha256`, `android/<ver>/notes.md` and `android/latest/VERSION` in
+**one commit**, then verifies anonymously: every path in the listing with the
+expected sha256, `VERSION`, the `.sha256` file and the notes byte for byte, and a
+full download of the APK compared by sha256. The notes are the `releaseBody` of
+`release-desktop-auto-update.yml` **at the commit the APK was built from**
+(`scripts/android-release-notes.mjs`); the run fails before uploading anything when
+that body has no `What's new in <ver>:` section with items. So the version bump
+PR's "What's new" is a prerequisite for publishing the APK, not only the desktop
+release. Re-running the workflow for an already-published APK uploads only what
+is missing (for example the notes of a version published before this step existed). `-f dry_run=true` does everything up to the upload.
 Send the owner the APK link **after** this run is green; the release is done
 when `android/latest/VERSION` shows the new version.
 The same can be run locally with `scripts/modelscope-android-publish.py publish
---apk <file> --version <ver> [--dry-run]` (token from `MODELSCOPE_API_TOKEN`),
+--apk <file> --version <ver> --notes <notes.md> [--dry-run]` (token from `MODELSCOPE_API_TOKEN`),
 but releases go through the workflow from main.
 Phones on 0.2.157 or older read only `desktop/latest/VERSION`: for them the
 mirror dispatch in section 6 is still what makes a release visible, so keep doing

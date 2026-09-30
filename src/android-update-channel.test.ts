@@ -50,6 +50,7 @@ const androidRoutes = (v: string, opts: { sha?: string | null } = {}): Record<st
   [ANDROID_VERSION]: { status: 200, body: `${v}\n` },
   ...(opts.sha === null ? {} : { [androidSha(v)]: { status: 200, body: opts.sha ?? `${GOOD_SHA}  agent-network-${v}.apk\n` } }),
   [`HEAD ${androidApk(v)}`]: { status: 200, headers: { 'content-length': String(SIZE) } },
+  [`${MIRROR_BASE}/android/${v}/notes.md`]: { status: 200, body: `What's new in ${v}:\n- android notes ${v}\n` },
 });
 const GH_500: Resp = { status: 500, body: '' };
 const noSleep = { minVisibleMs: 0, sleep: async () => {} };

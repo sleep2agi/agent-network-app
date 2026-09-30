@@ -1,5 +1,6 @@
 # Android channel on the China mirror: publish ONE finished android-build APK to
-#   android/agent-network-<ver>.apk + android/agent-network-<ver>.apk.sha256 + android/latest/VERSION
+#   android/agent-network-<ver>.apk + android/agent-network-<ver>.apk.sha256 + android/<ver>/notes.md
+#   + android/latest/VERSION
 # on the ModelScope dataset SmartFlowAI/agent-network-releases, in one commit, then verify anonymously.
 #
 # Why this exists (Vincent 2026-09-30「你每次就是 modelscope 给我上传好之后，我在设置里面检查更新都检查不到」):
@@ -61,6 +62,7 @@ jobs:
           if [ "$path" != ".github/workflows/android-build.yml" ]; then echo "::error::run $RUN_ID is not an android-build run ($path)"; exit 1; fi
           if [ "$branch" != "main" ]; then echo "::error::run $RUN_ID was built from '$branch', only main may be published"; exit 1; fi
           if [ "$conclusion" != "success" ]; then echo "::error::run $RUN_ID concluded '$conclusion'"; exit 1; fi
+          echo "SOURCE_SHA=$sha" >> "$GITHUB_ENV"
 
       - name: Download the APK artifact
         env:
@@ -92,6 +94,19 @@ jobs:
           if [ "$pkg" != "$expected_pkg" ]; then echo "::error::package '$pkg' is not '$expected_pkg'"; exit 1; fi
           echo "VERSION=$name" >> "$GITHUB_ENV"
 
+      # Same text as the desktop release body / latest.json notes: the releaseBody of the release workflow AT THE
+      # COMMIT THE APK WAS BUILT FROM (the bump PR adds "What's new in <ver>:" there). No section → no publish:
+      # the update page must never fall back to a generic sentence (owner 2026-09-30).
+      - name: Release notes for this version (from the APK's commit)
+        run: |
+          set -euo pipefail
+          if ! [[ "$SOURCE_SHA" =~ ^[0-9a-f]{40}$ ]]; then echo "::error::bad source sha '$SOURCE_SHA'"; exit 1; fi
+          git fetch --no-tags --depth=1 origin "$SOURCE_SHA"
+          git show "$SOURCE_SHA:.github/workflows/release-desktop-auto-update.yml" > "$RUNNER_TEMP/release-workflow.yml"
+          node scripts/android-release-notes.mjs "$RUNNER_TEMP/release-workflow.yml" "$VERSION" > "$RUNNER_TEMP/notes.md"
+          echo "NOTES=$RUNNER_TEMP/notes.md" >> "$GITHUB_ENV"
+          echo "notes: $(wc -c < "$RUNNER_TEMP/notes.md") bytes"; sed -n '1,12p' "$RUNNER_TEMP/notes.md"
+
       - name: Install ModelScope SDK (pinned)
         run: |
           set -euo pipefail
@@ -104,7 +119,7 @@ jobs:
           DRY_RUN: ${{ inputs.dry_run && '--dry-run' || '' }}
         run: |
           set -euo pipefail
-          "$RUNNER_TEMP/ms/bin/python" scripts/modelscope-android-publish.py publish --apk "$APK" --version "$VERSION" $DRY_RUN
+          "$RUNNER_TEMP/ms/bin/python" scripts/modelscope-android-publish.py publish --apk "$APK" --version "$VERSION" --notes "$NOTES" $DRY_RUN
 
       - name: Summary
         if: success() && !inputs.dry_run
@@ -115,4 +130,5 @@ jobs:
             echo "- version: \`$VERSION\` (android/latest/VERSION verified anonymously)"
             echo "- APK: $base/agent-network-$VERSION.apk"
             echo "- sha256: $base/agent-network-$VERSION.apk.sha256"
+            echo "- notes: $base/$VERSION/notes.md"
           } >> "$GITHUB_STEP_SUMMARY"
