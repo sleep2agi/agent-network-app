@@ -3,6 +3,7 @@ import { Platform, Pressable, StyleSheet } from 'react-native';
 import { Ionicons } from './icons';
 import { colors, radius } from './theme';
 import { ds } from './ui-scale';
+import { popoutChatChrome, popoutHeaderPadding } from './window-shell';
 import { applyStoredPinState, pinStorageKey, togglePinState } from './desktop-window-pin';
 
 // One state per JS context (= per Tauri window): the 📌 button (rail or floating) and the 聊天信息 row
@@ -65,7 +66,8 @@ export default function DesktopWindowPin({ placement = 'floating', hidden = fals
       backgroundColor: pinned ? colors.railActiveBg : 'transparent',
       opacity: busy ? 0.55 : 1,
     } : {
-      position: 'absolute', top: 10, right: 10, zIndex: 1000,
+      // 分离聊天窗(Windows)右上角是 – □ ×(popout-window-controls.tsx),图钉让到它们左边。
+      position: 'absolute', top: 10, right: popoutHeaderPadding(popoutChatChrome(Platform.OS), 10).right, zIndex: 1000,
       width: 34, height: 34, borderRadius: radius.item,
       alignItems: 'center', justifyContent: 'center',
       // 极简:未置顶时是无底无框的图标;置顶时一档中性底色表示「开着」。

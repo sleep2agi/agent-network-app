@@ -6,6 +6,7 @@ import { useSyncExternalStore } from 'react';
 import { Platform, View } from 'react-native';
 import { colors, onThemeChange, themeMode } from './theme';
 import { MAC_TITLE_STRIP_HEIGHT, isMacTauriShell } from './mac-shell';
+import { popoutChatChrome } from './window-shell';
 
 export { MAC_TITLE_STRIP_HEIGHT, isMacTauriShell } from './mac-shell';
 
@@ -14,6 +15,9 @@ export default function MacTitleStrip() {
   // 就留着首次渲染时的浅色底(Vincent 2026-09-22 截图:顶部红黄绿灯那条是白的)。自己订阅。
   useSyncExternalStore(onThemeChange, themeMode, themeMode);
   if (!isMacTauriShell(Platform.OS)) return null;
+  // 2026-09-30:分离聊天窗不要这条空带 —— 红黄绿灯挪进了页头那一行(页头兼当标题栏,
+  // 见 window-shell.ts「分离聊天窗」)。主窗 / 设置窗 / 工作区窗照旧。
+  if (popoutChatChrome(Platform.OS) === 'mac') return null;
   return (
     <View
       accessibilityLabel="窗口拖动区"

@@ -1,3 +1,5 @@
+import { POPOUT_TRAFFIC_LIGHT_X, POPOUT_TRAFFIC_LIGHT_Y, chatPopoutDecorations, tauriShellPlatform } from './window-shell';
+
 const PIN_KEY = 'anet_chat_pin_v1';
 const pinKey = (profileId?: string) => profileId ? `${PIN_KEY}:${profileId}` : PIN_KEY;
 
@@ -50,6 +52,7 @@ export function mergeDetachedChatWindow(windows: DetachedChatWindowRecord[], nex
 export async function openChatWindow(alias: string, profileId?: string, context?: string): Promise<void> {
   if (!(globalThis as any).__TAURI_INTERNALS__) return;
   const { WebviewWindow } = await import('@tauri-apps/api/webviewWindow');
+  const { LogicalPosition } = await import('@tauri-apps/api/dpi');
   const label = chatWindowLabel(alias, profileId);
   const existing = await WebviewWindow.getByLabel(label);
   if (existing) {
@@ -65,11 +68,15 @@ export async function openChatWindow(alias: string, profileId?: string, context?
     minWidth: 480,
     minHeight: 520,
     focus: true,
-    // 原生标题栏(– □ × 是系统的),页面里不画 WinTitleBar —— 见 window-shell.ts windowDrawsOwnTitleBar
-    decorations: true,
-    // macOS:和主窗一样隐藏原生标题栏(2026-09-16);Windows 忽略这两个键
+    // 页头就是标题栏(window-shell.ts「分离聊天窗」):Windows 关原生标题栏,– □ × 由
+    // PopoutWindowControls 画;macOS 保留 decorations 给红黄绿灯,Overlay 标题栏 + 灯挪进页头。
+    decorations: chatPopoutDecorations(tauriShellPlatform()),
+    // Windows 无边框窗口的阴影;开着时边缘缩放走阴影区(Tauri undecorated_resizing),关掉就没有外缩放边。
+    shadow: true,
+    resizable: true,
     titleBarStyle: 'overlay',
     hiddenTitle: true,
+    trafficLightPosition: new LogicalPosition(POPOUT_TRAFFIC_LIGHT_X, POPOUT_TRAFFIC_LIGHT_Y),
     // 让网页收到系统拖进来的文件(聊天区拖放加附件);开着的话 Tauri 自己截走 drop 事件。
     dragDropEnabled: false,
   });

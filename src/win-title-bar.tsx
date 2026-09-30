@@ -17,7 +17,7 @@ import { useEffect, useState, useSyncExternalStore } from 'react';
 import { Platform, Pressable, View } from 'react-native';
 import { Text } from './ui-text';
 import { colors, onThemeChange, themeMode } from './theme';
-import { WINDOWS_TITLE_BAR_HEIGHT, isWindowsTauriShell, windowDrawsOwnTitleBar } from './window-shell';
+import { WINDOWS_TITLE_BAR_HEIGHT, WINDOW_CONTROL_WIDTH, isWindowsTauriShell, windowDrawsOwnTitleBar } from './window-shell';
 
 export { WINDOWS_TITLE_BAR_HEIGHT, isWindowsTauriShell } from './window-shell';
 
@@ -39,7 +39,7 @@ export async function runWindowOp(op: WindowOp): Promise<void> {
  *    一旦缺字体就是三个豆腐块(在 Linux 上截图时就是这样),而这三个按钮是窗口唯一的
  *    关闭入口——不能让它取决于某个字体在不在。
  */
-function glyph(op: WindowOp, maximized: boolean) {
+function glyph(op: WindowOp, maximized: boolean, restoreBg: string) {
   const c = colors.textSecondary;
   if (op === 'minimize') return <View style={{ width: 10, height: 1, backgroundColor: c }} />;
   if (op === 'close') {
@@ -55,21 +55,22 @@ function glyph(op: WindowOp, maximized: boolean) {
     return (
       <View style={{ width: 10, height: 10 }}>
         <View style={{ position: 'absolute', left: 2, top: 0, width: 8, height: 8, borderWidth: 1, borderColor: c }} />
-        <View style={{ position: 'absolute', left: 0, top: 2, width: 8, height: 8, borderWidth: 1, borderColor: c, backgroundColor: colors.railBg }} />
+        <View style={{ position: 'absolute', left: 0, top: 2, width: 8, height: 8, borderWidth: 1, borderColor: c, backgroundColor: restoreBg }} />
       </View>
     );
   }
   return <View style={{ width: 10, height: 10, borderWidth: 1, borderColor: c }} />;
 }
 
-export default function WinTitleBar() {
-  // 0.2.83:同 MacTitleStrip——挂在 AppRoot 外面,主题翻了不会自动重画,自己订阅(见 window-background.ts)。
-  useSyncExternalStore(onThemeChange, themeMode, themeMode);
-  const show = isWindowsTauriShell(Platform.OS) && windowDrawsOwnTitleBar();
+/**
+ * – □ × 三颗按钮(46×32,关闭悬停红底)。主窗的 WinTitleBar 和分离聊天窗的
+ * PopoutWindowControls(页头兼标题栏,见 window-shell.ts)共用这一套,不各写一份。
+ * `restoreBg`:「向下还原」图形里压在后面那个方框的底色,要和按钮所在的背景一致。
+ */
+export function WindowControls({ restoreBg = colors.railBg }: { restoreBg?: string }) {
   const [maximized, setMaximized] = useState(false);
 
   useEffect(() => {
-    if (!show) return;
     let stop = false;
     let unlisten: (() => void) | undefined;
     void (async () => {
@@ -88,18 +89,17 @@ export default function WinTitleBar() {
       } catch { /* 网页端没有这个 API */ }
     })();
     return () => { stop = true; unlisten?.(); };
-  }, [show]);
-
-  if (!show) return null;
+  }, []);
 
   const button = (label: string, op: WindowOp, danger = false) => (
     <Pressable
       accessibilityRole="button"
       accessibilityLabel={label}
+      testID={`window-control-${op}`}
       onPress={() => { void runWindowOp(op).catch(() => { /* 用户能再点一次 */ }); }}
       style={({ hovered, pressed }: any) => [
         {
-          width: 46,
+          width: WINDOW_CONTROL_WIDTH,
           height: WINDOWS_TITLE_BAR_HEIGHT,
           alignItems: 'center',
           justifyContent: 'center',
@@ -108,9 +108,24 @@ export default function WinTitleBar() {
         pressed && { backgroundColor: danger ? '#b2271a' : colors.card },
       ]}
     >
-      {glyph(op, maximized)}
+      {glyph(op, maximized, restoreBg)}
     </Pressable>
   );
+
+  return (
+    <>
+      {button('最小化', 'minimize')}
+      {button(maximized ? '向下还原' : '最大化', 'toggleMaximize')}
+      {button('关闭', 'close', true)}
+    </>
+  );
+}
+
+export default function WinTitleBar() {
+  // 0.2.83:同 MacTitleStrip——挂在 AppRoot 外面,主题翻了不会自动重画,自己订阅(见 window-background.ts)。
+  useSyncExternalStore(onThemeChange, themeMode, themeMode);
+  const show = isWindowsTauriShell(Platform.OS) && windowDrawsOwnTitleBar();
+  if (!show) return null;
 
   return (
     <View
@@ -134,9 +149,7 @@ export default function WinTitleBar() {
       >
         Agent Network
       </Text>
-      {button('最小化', 'minimize')}
-      {button(maximized ? '向下还原' : '最大化', 'toggleMaximize')}
-      {button('关闭', 'close', true)}
+      <WindowControls />
     </View>
   );
 }

@@ -44,6 +44,7 @@ import { addToDraft, draftCountLabel, draftImageCount, isDraftImage, MAX_DRAFT_I
 import { createUploadMemo, removeAttachmentAt, runUploadQueue, UPLOAD_CONCURRENCY, uploadFailureSummary, withUploadState, type UploadState } from './upload-queue';
 import type { UploadedFile } from './attach';
 import { colors, onThemeChange, radius, spacing } from './theme';
+import { popoutHeaderChrome, type PopoutChrome } from './window-shell';
 import { ds, uiScale } from './ui-scale';
 import { shouldShowTimeHeader } from './time';
 import { localizedChatHeader as formatChatHeader } from './i18n-chat-time';
@@ -246,6 +247,8 @@ interface Props {
   onOpenVoiceSettings?: () => void;
   /** 定时任务「去会话」:打开后定位到这条任务(在已加载的那一页里才定位得到,找不到就停在最新)。 */
   focusTaskId?: string;
+  /** 分离聊天窗:页头兼当标题栏(拖动 / 双击最大化 + 给窗口控件让位,window-shell.ts popoutChatChrome)。主窗 / 手机不传。 */
+  windowChrome?: PopoutChrome;
 }
 
 // Module level on purpose: the cache has to outlive a screen unmount, or
@@ -256,7 +259,7 @@ export const clearChatConversationCache = (profileId?: string, serverUrl = ''): 
   conversations.clearScope(conversationScope(profileId, serverUrl));
 };
 
-export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpenNodeSettings, pinned = false, onTogglePin, muted = false, onToggleMute, hideBack = false, onOpenVoiceSettings, focusTaskId }: Props) {
+export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpenNodeSettings, pinned = false, onTogglePin, muted = false, onToggleMute, hideBack = false, onOpenVoiceSettings, focusTaskId, windowChrome = null }: Props) {
   useTranslation();
   // Android edge-to-edge draws the composer under the gesture bar (same
   // class of bug as the tg 802 tab bar) — pad by the real bottom inset.
@@ -844,6 +847,8 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
   // 鼠标 + 键盘(pointer-ui.ts):Tauri 壳里任何窗口宽度都是。右键 / 悬停「⋯」开锚定菜单,
   // 不挂长按 —— 桌面上按住鼠标是在拖选文字,不该冒出手机的底部 action sheet。
   const pointer = pointerUi(desktop);
+  // 分离聊天窗:页头 = 标题栏(整行拖动 + 给红黄绿灯 / – □ × 让位);其余场景是空对象,页头不变。
+  const headerChrome = popoutHeaderChrome(windowChrome, spacing.lg);
   // 放大阅读:单条消息的全屏可选中视图(我们的代码块很长,气泡里读不完)。
   const [expandFor, setExpandFor] = useState<MessageSelection | null>(null);
   // 选择文本(2026-09-26 Vincent 安卓折叠屏:「只能复制整个的消息…想划选部分段落或句子」):
@@ -1776,7 +1781,8 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
       keyboardVerticalOffset={Platform.OS === 'android' ? (StatusBar.currentHeight ?? 0) : 0}
     >
       <View
-        style={styles.header}
+        {...({ dataSet: headerChrome.dataSet } as any)}
+        style={[styles.header, headerChrome.style]}
         onLayout={(event) => { const h = Math.round(event.nativeEvent.layout.height); setHeaderHeight(c => (c === h ? c : h)); }}
         testID="chat-header"
       >

@@ -59,6 +59,7 @@ import { teamOf } from './agents-list';
 import { fetchHubNodes, fetchNodeStatus, runNodeLifecycleAction, type HubConfig, type HubNode, type NodeLifecycleAction, type Session } from './api';
 import { styles } from './app-styles';
 import { colors, onThemeChange, radius, spacing, statusColor, type as typeScale, weight } from './theme';
+import { popoutHeaderChrome, type PopoutChrome } from './window-shell';
 import { ds } from './ui-scale';
 import { formatTime } from './time';
 import { usePoll } from './usePoll';
@@ -166,6 +167,7 @@ export default function NodeDetailScreen({
   touch = false,
   desktop = false,
   onOpenScheduled,
+  windowChrome = null,
 }: {
   cfg: HubConfig;
   alias: string;
@@ -181,6 +183,8 @@ export default function NodeDetailScreen({
   /** 「定时任务」分区:点一行 / 「＋ 新建」→ 定时任务页落在那一条 / 打开预填了这个节点的新建表单。
    *  没有(独立聊天窗口)时分区只读:行不可点,不画新建。 */
   onOpenScheduled?: (request: ScheduleOpenRequest) => void;
+  /** 分离聊天窗:页头兼当标题栏(window-shell.ts popoutChatChrome)。其他地方不传。 */
+  windowChrome?: PopoutChrome;
 }) {
   const [state, setState] = useState<LoadState>({ kind: 'loading' });
   const [node, setNode] = useState<HubNode | null>(null);
@@ -271,10 +275,13 @@ export default function NodeDetailScreen({
   // once at mount, so no separate mount effect (that one fetched everything twice).
   usePoll(load, POLL_MS, [load]);
 
+  // 分离聊天窗里的「节点信息」:页头同样兼当标题栏(见 window-shell.ts popoutChatChrome)。
+  const headerChrome = popoutHeaderChrome(windowChrome, spacing.lg);
   const header = (
     <View
       testID="screen-header"
-      style={{
+      {...({ dataSet: headerChrome.dataSet } as any)}
+      style={[{
         flexDirection: 'row',
         alignItems: 'center',
         paddingHorizontal: spacing.lg,
@@ -282,7 +289,7 @@ export default function NodeDetailScreen({
         borderBottomWidth: 1,
         borderBottomColor: colors.border,
         gap: spacing.md,
-      }}
+      }, headerChrome.style]}
     >
       {paneShowsBack(desktop) ? (
         <Pressable onPress={guardedBack} testID={PANE_BACK_TEST_ID} hitSlop={12} accessibilityRole="button" accessibilityLabel="返回">

@@ -58,7 +58,7 @@ ck('只在 Windows 壳渲染', bar.includes("isWindowsTauriShell(Platform.OS)") 
 ck('整条 bar 是拖动区(拖动窗口)', bar.includes('tauriDragRegion'));
 ck('三个窗口控件都在', bar.includes("'minimize'") && bar.includes("'toggleMaximize'") && bar.includes("'close'"));
 ck('最大化/还原跟随窗口状态', bar.includes('isMaximized()') && bar.includes('onResized'));
-ck('控件按 Windows 习惯 46×32', bar.includes('width: 46') && bar.includes('height: WINDOWS_TITLE_BAR_HEIGHT'));
+ck('控件按 Windows 习惯 46×32', bar.includes('width: WINDOW_CONTROL_WIDTH') && bar.includes('height: WINDOWS_TITLE_BAR_HEIGHT'));
 ck('关闭键悬停是红的(Windows 习惯)', bar.includes('#c42b1c'));
 // 🔴 控件图形不能依赖 Segoe MDL2 Assets:缺字体就是三个豆腐块,而这是唯一的关闭入口。
 //    判据要判「有没有用字体」——不能判「文件里有没有出现那个字体名」:解释「为什么不用它」的
