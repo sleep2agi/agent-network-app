@@ -32,8 +32,7 @@ import { dmAttachments, dmSendBody, isImageAttachment, mergeDm, newClientRequest
 import { fetchDmMessages, sendDm } from './human-dm-api';
 import { emitHumanDm, setActiveDmPeer, subscribeHumanDm } from './human-dm-bus';
 import { keyboardAvoidEnabled, useKeyboardVisible } from './keyboard-visibility';
-
-const DESKTOP_BUBBLE_MAX = 640;
+import { bubbleLayout, desktopBubbleCap } from './bubble-layout';
 
 export default function DmChatScreen({ cfg, networkId, peer, onBack, desktop = false, hideBack = false }: {
   cfg: HubConfig;
@@ -110,7 +109,7 @@ export default function DmChatScreen({ cfg, networkId, peer, onBack, desktop = f
   const onPlus = () => { void pickFiles().then(files => { if (files.length) setAttached(prev => [...prev, ...files].slice(0, 9)); }).catch(() => {}); };
   const sendKey = sendKeyPref();
   const rightSlot = composerRightSlot({ draft, attachmentCount: attached.length, voiceMode: false });
-  const bubbleCap = desktop && paneWidth > 0 ? { maxWidth: Math.min(DESKTOP_BUBBLE_MAX, Math.floor(paneWidth * 0.85)) } : null;
+  const bubbleCap = desktopBubbleCap(desktop, paneWidth);
   const me = cfg.username ?? '';
 
   const renderAttachments = (m: DmMessage) => {
@@ -165,7 +164,7 @@ export default function DmChatScreen({ cfg, networkId, peer, onBack, desktop = f
                 {showHeader && item.created_at ? <Text style={styles.timeHeader}>{formatChatHeader(item.created_at)}</Text> : null}
                 <View style={[styles.messageRow, out ? styles.sentRow : styles.replyRow]}>
                   {out ? null : <AliasAvatar alias={peer.username} size={36} />}
-                  <View style={[styles.messageContent, out && styles.sentContent, bubbleCap]}>
+                  <View style={[styles.messageContent, out && styles.sentContent, !out && bubbleCap]}>
                     <Text style={[styles.messageAuthor, out && styles.sentAuthor]} numberOfLines={1}>
                       {out ? me : name}{item.created_at ? ` · ${formatChatHeader(item.created_at)}` : ''}
                     </Text>
@@ -256,7 +255,7 @@ export default function DmChatScreen({ cfg, networkId, peer, onBack, desktop = f
   );
 }
 
-const makeStyles = () => StyleSheet.create({
+const makeStyles = (B = bubbleLayout()) => StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.bg },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   header: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingHorizontal: spacing.lg, paddingVertical: spacing.md, borderBottomWidth: 1, borderBottomColor: colors.border, backgroundColor: colors.card },
@@ -267,16 +266,16 @@ const makeStyles = () => StyleSheet.create({
   beginning: { color: colors.textMuted, fontSize: 11, textAlign: 'center', marginVertical: spacing.md },
   bubbleWrap: { marginBottom: spacing.md, gap: spacing.xs },
   timeHeader: { color: colors.textMuted, fontSize: 11, alignSelf: 'center', flexShrink: 0, textAlign: 'center', marginTop: spacing.md, marginBottom: spacing.sm, backgroundColor: colors.subtleFill, borderRadius: radius.pill, overflow: 'hidden', paddingHorizontal: spacing.sm, paddingVertical: 2 },
-  messageRow: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.sm, width: '100%' },
-  sentRow: { justifyContent: 'flex-end' },
-  replyRow: { justifyContent: 'flex-start' },
-  messageContent: { maxWidth: '85%', flexShrink: 1, alignItems: 'flex-start' },
-  sentContent: { alignItems: 'flex-end' },
+  messageRow: B.messageRow,
+  sentRow: B.sentRow,
+  replyRow: B.replyRow,
+  messageContent: B.messageContent,
+  sentContent: B.sentContent,
   messageAuthor: { color: colors.textMuted, fontSize: 11, lineHeight: 16, marginBottom: 3 },
   sentAuthor: { textAlign: 'right' },
-  bubble: { alignSelf: 'flex-end', maxWidth: '100%', backgroundColor: colors.rowActive, borderRadius: radius.bubble, paddingHorizontal: spacing.lg, paddingVertical: spacing.md },
-  replyBubble: { alignSelf: 'flex-start', maxWidth: '85%', flexShrink: 1, backgroundColor: colors.card },
-  replyBubbleDesktop: { maxWidth: '100%' },
+  bubble: { ...B.bubble, backgroundColor: colors.rowActive, borderRadius: radius.bubble },
+  replyBubble: { ...B.replyBubble, backgroundColor: colors.card },
+  replyBubbleDesktop: B.replyBubbleDesktop,
   bubbleText: { color: colors.text, fontSize: 14, lineHeight: 20 },
   attachments: { gap: spacing.xs, marginTop: spacing.xs },
   statusMark: { color: colors.textMuted, fontSize: 10, marginTop: 2, alignSelf: 'flex-end' },

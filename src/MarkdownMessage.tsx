@@ -4,6 +4,7 @@ import { Text } from './ui-text';
 import { colors, onThemeChange, spacing, radius } from './theme';
 import { isSafeMarkdownUrl, parseInline, parseMarkdownBlocks, type InlineNode } from './markdown-model';
 import { foldCode, foldLabel } from './markdown-code-fold';
+import { gridCellWidth, markdownLayout } from './bubble-layout';
 import { openExternal } from './open-external';
 import { stackedRows, tableLayoutFor } from './table-layout';
 
@@ -57,17 +58,16 @@ function TableBlock({ rows, rowLines, src = NO_SRC, rootProps }: { rows: string[
         {stackedRows(rows).map((cells, rowIndex) => (
           <View key={rowIndex} style={styles.tableCard} {...src(rowLines?.[rowIndex + 1])}>
             {cells.map((cell, cellIndex) => (
-              <View key={cellIndex} style={styles.tableCardLine}>
-                <Text style={[styles.text, styles.tableCardLabel]} numberOfLines={2}>{cell.label}</Text>
-                <Text style={[styles.text, styles.tableCardValue]}><Inline text={cell.value} /></Text>
-              </View>
+              // One Text, label as a span: a label / value flex row inside the shrink-to-fit bubble gets its
+              // height negotiated at a different width than it is drawn at (bubble-layout.ts).
+              <Text key={cellIndex} style={styles.text}><Text style={styles.tableCardLabel}>{cell.label}</Text>{'  '}<Inline text={cell.value} /></Text>
             ))}
           </View>
         ))}
       </View>
     );
   }
-  const cellStyle = layout === 'grid-flex' ? styles.tableCellFlex : styles.tableCell;
+  const cellStyle = layout === 'grid-flex' ? [styles.tableCellFlex, gridCellWidth(columns)] : styles.tableCell;
   const grid = (
     <WideBlock style={styles.table}>
       <View>
@@ -144,35 +144,34 @@ export default function MarkdownMessage({ children, onHeadingLayout, sourceLines
 // web/桌面:允许在任意位置断行;原生端 Text 本来就按字符换行,不需要。
 export const WRAP_ANYWHERE = Platform.OS === 'web' ? ({ overflowWrap: 'anywhere', wordBreak: 'break-word' } as any) : {};
 
-const makeStyles = () => StyleSheet.create({
-  // minWidth 0:气泡里的列与行是 flex 子项,默认 min-width:auto 会按内容宽度撑开父级
-  root: { gap: spacing.sm, minWidth: 0, maxWidth: '100%' },
+// Layout (flex / widths / padding) lives in bubble-layout.ts so bubble-layout.test.ts can run it
+// through Yoga; this file adds the paint. 🔴 No `flexBasis: 0` / `flex: n` in here (see there).
+const makeStyles = (L = markdownLayout()) => StyleSheet.create({
+  root: L.root,
   text: { color: colors.text, fontSize: 14, lineHeight: 21, ...WRAP_ANYWHERE },
-  block: { marginBottom: 2 },
-  heading: { fontWeight: '600', marginTop: spacing.xs },
+  block: L.block,
+  heading: { fontWeight: '600', ...L.heading },
   strong: { fontWeight: '600' },
   em: { fontStyle: 'italic' },
   inlineCode: { color: colors.accent, backgroundColor: colors.inputBg, fontFamily: 'monospace', fontSize: 13, ...WRAP_ANYWHERE },
   link: { color: colors.accent, textDecorationLine: 'underline' },
-  listRow: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.sm, minWidth: 0 },
-  marker: { color: colors.textSecondary, fontSize: 14, lineHeight: 21, minWidth: 16, textAlign: 'right' },
-  listText: { flexShrink: 1, flexGrow: 1, flexBasis: 0, minWidth: 0 },
-  quote: { borderLeftWidth: 3, borderLeftColor: colors.textMuted, paddingLeft: spacing.md, opacity: 0.9, minWidth: 0 },
-  code: { maxWidth: '100%', backgroundColor: colors.inputBg, borderRadius: radius.item, padding: spacing.md },
+  listRow: L.listRow,
+  marker: { color: colors.textSecondary, fontSize: 14, lineHeight: 21, textAlign: 'right', ...L.marker },
+  listText: L.listText,
+  quote: { borderLeftColor: colors.textMuted, opacity: 0.9, ...L.quote },
+  code: { backgroundColor: colors.inputBg, borderRadius: radius.item, ...L.code },
   codeText: { color: colors.text, fontFamily: 'monospace', fontSize: 12, lineHeight: 18 },
   foldToggle: { color: colors.accent, fontSize: 12, marginTop: spacing.xs },
-  table: { maxWidth: '100%', borderWidth: 1, borderColor: colors.border, borderRadius: radius.item, overflow: 'hidden' },
-  tableRow: { flexDirection: 'row' },
+  table: { borderColor: colors.border, borderRadius: radius.item, overflow: 'hidden', ...L.table },
+  tableRow: L.tableRow,
   tableHead: { backgroundColor: colors.inputBg },
   tableCell: { width: 150, paddingHorizontal: spacing.sm, paddingVertical: spacing.xs, borderRightWidth: 1, borderBottomWidth: 1, borderColor: colors.border },
   // 原生 ≤2 列:列宽随气泡走,不再定宽 150 撑出屏幕
-  tableCellFlex: { flex: 1, minWidth: 0, paddingHorizontal: spacing.sm, paddingVertical: spacing.xs, borderRightWidth: 1, borderBottomWidth: 1, borderColor: colors.border },
+  tableCellFlex: { borderColor: colors.border, ...L.tableCellFlex },
   // 原生 ≥3 列:每行一张卡,「表头: 值」逐行
-  tableStack: { gap: spacing.sm },
-  tableCard: { borderWidth: 1, borderColor: colors.border, borderRadius: radius.item, paddingHorizontal: spacing.md, paddingVertical: spacing.sm, backgroundColor: colors.inputBg + '55', gap: 2 },
-  tableCardLine: { flexDirection: 'row', gap: spacing.sm, alignItems: 'flex-start' },
-  tableCardLabel: { color: colors.textMuted, fontSize: 12, lineHeight: 20, minWidth: 64, maxWidth: '40%', flexShrink: 0 },
-  tableCardValue: { flex: 1, minWidth: 0 },
+  tableStack: L.tableStack,
+  tableCard: { borderColor: colors.border, borderRadius: radius.item, backgroundColor: colors.inputBg + '55', ...L.tableCard },
+  tableCardLabel: { color: colors.textMuted, fontSize: 12 },
 });
 
 let styles = makeStyles();

@@ -95,8 +95,10 @@ export const initScript = ({ theme }) => {
     }
     if (p === '/api/status') return { ok: true, sessions, files_capable: true };
     if (p === '/api/nodes') return { ok: true, nodes, count: nodes.length };
-    if (p === '/api/tasks') return { ok: true, tasks: tasks.filter(t => !u.searchParams.get('to') || t.to_name === u.searchParams.get('to')) };
-    if (p === '/api/task') return { ok: true, task: tasks[0], ...tasks[0] };
+    // A drive can hand in its own chat history (window.__chatTasksFixture = HubTask[]), e.g. long markdown replies.
+    const chatTasks = window.__chatTasksFixture || tasks;
+    if (p === '/api/tasks') return { ok: true, tasks: chatTasks.filter(t => !u.searchParams.get('to') || t.to_name === u.searchParams.get('to')) };
+    if (p === '/api/task') return { ok: true, task: chatTasks[0], ...chatTasks[0] };
     if (p === '/api/task_events' || p === '/api/hub/task-events') return { ok: true, events: [] };
     if (p === '/api/messages') return { ok: true, messages: [], unread: 0, pending_count: 0 };
     if (p === '/api/scheduled-tasks') return { ok: true, schedules };

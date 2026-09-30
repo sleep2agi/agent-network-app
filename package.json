@@ -50,7 +50,8 @@
     "@types/node": "^26.2.0",
     "@types/react": "~19.2.2",
     "pngjs": "^7.0.0",
-    "typescript": "~6.0.3"
+    "typescript": "~6.0.3",
+    "yoga-layout": "^3.2.1"
   },
   "expoSdkLockedDependencies": {
     "expo-video": "56.x is paired with Expo SDK 56. Its peerDependencies are wildcards, so SDK upgrades must update this package deliberately."

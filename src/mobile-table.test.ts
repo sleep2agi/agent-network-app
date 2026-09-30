@@ -2,6 +2,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { tableLayoutFor, stackedRows } from './table-layout';
+import { gridCellWidth, markdownLayout } from './bubble-layout';
 let p = 0, t = 0; const ck = (n: string, c: boolean) => { t++; if (c) { p++; console.log('✅', n); } else console.log('❌', n); };
 
 ck('web always scrolls a grid', tableLayoutFor(5, false) === 'grid-scroll' && tableLayoutFor(2, false) === 'grid-scroll');
@@ -19,7 +20,10 @@ ck('empty table → no cards', stackedRows([]).length === 0);
 const src = fs.readFileSync(path.join(__dirname, 'MarkdownMessage.tsx'), 'utf8').replace(/\r\n?/g, '\n');
 ck('table block delegates to TableBlock', /if \(block\.kind === 'table'\) return <TableBlock key=\{index\} rows=\{block\.rows\}[^>]*\/>;/.test(src));
 ck('TableBlock uses the layout helper with the native flag', src.includes('tableLayoutFor(columns, NATIVE)'));
-ck('flex cells have no fixed width', /tableCellFlex: \{ flex: 1, minWidth: 0,/.test(src) && !/tableCellFlex: \{[^}]*width: 150/.test(src));
-ck('stacked cards render label + value per cell', src.includes('styles.tableCardLabel') && src.includes('styles.tableCardValue'));
+// 2026-09-30: an equal percentage share per column (gridCellWidth), not `flex: 1` — a grow/shrink negotiation
+// inside the shrink-to-fit bubble gets its height from a different width than it is drawn at (bubble-layout.ts).
+const cell: Record<string, unknown> = markdownLayout().tableCellFlex;
+ck('flex cells have no fixed width', cell.minWidth === 0 && !('width' in cell) && !('flex' in cell) && !('flexBasis' in cell) && gridCellWidth(2).width === '50%' && gridCellWidth(1).width === '100%' && src.includes('[styles.tableCellFlex, gridCellWidth(columns)]') && !/tableCellFlex: \{[^}]*width: 150/.test(src));
+ck('stacked cards render label + value per cell', /<Text style=\{styles\.tableCardLabel\}>\{cell\.label\}<\/Text>\{'  '\}<Inline text=\{cell\.value\} \/>/.test(src));
 
 console.log(`\n${p}/${t} passed`); process.exit(p === t ? 0 : 1);
