@@ -22,7 +22,7 @@ migrated.push('src/RichDescriptionEditor.tsx');
 migrated.push('src/TaskTags.tsx');
 migrated.push('src/TaskListFields.tsx', 'src/TaskListTable.tsx');
 migrated.push('src/TaskTimeCell.tsx');
-migrated.push('src/TaskGantt.tsx');
+migrated.push('src/TaskGantt.tsx', 'src/TaskCalendar.tsx');
 migrated.push('src/AccountSwitcher.tsx');
 migrated.push('src/UserManagementPanel.tsx', 'src/DmChatScreen.tsx');
 function untranslated(file: string, raw: string): string[] {
