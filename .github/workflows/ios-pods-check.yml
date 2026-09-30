@@ -1,0 +1,71 @@
+# iOS native-dependency check for pull requests: Expo prebuild + `pod install`, no signing, no archive.
+#
+# Why: ios-build.yml only runs from main (its macos-signing environment admits ref main only), so a PR that adds
+# a native module (#600: react-native-view-shot) had no iOS signal until after merge, when the release build
+# is already queued last. This job answers the one question a new native dependency raises on iOS — do the
+# pods resolve and install against this Expo SDK / Xcode — on the PR itself.
+# Same toolchain as ios-build.yml (macos-15, Xcode 26.2, EXPO_USE_PRECOMPILED_MODULES=false). No secrets.
+name: ios-pods-check
+
+on:
+  pull_request:
+    paths:
+      - package.json
+      - package-lock.json
+      - app.json
+      - plugins/**
+      - modules/**
+      - .github/workflows/ios-pods-check.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  pods:
+    runs-on: macos-15
+    timeout-minutes: 45
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_26.2.app/Contents/Developer
+      EXPO_USE_PRECOMPILED_MODULES: "false"
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Require Xcode 26.2
+        run: |
+          set -euo pipefail
+          test -d "$DEVELOPER_DIR"
+          xcodebuild -version
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - run: npm ci
+
+      - name: Expo prebuild (generate ios/)
+        run: npx expo prebuild --platform ios --no-install
+
+      - name: CocoaPods install
+        run: |
+          set -euo pipefail
+          cd ios
+          pod install
+
+      # A green `pod install` that silently skipped a module would read the same as a real pass: assert the
+      # workspace exists and that every third-party RN module (react-native-*) in dependencies that ships a
+      # root podspec was actually installed (listed in Podfile.lock). `react-native` itself and expo-* are
+      # left out: their podspec names depend on the precompiled / source mode, not on autolinking.
+      - name: Every react-native-* podspec is in Podfile.lock
+        run: |
+          set -euo pipefail
+          ls -d ios/*.xcworkspace
+          missing=0
+          for dep in $(node -e 'console.log(Object.keys(require("./package.json").dependencies).filter(d => d.startsWith("react-native-")).join("\n"))'); do
+            spec=$(find "node_modules/$dep" -maxdepth 1 -name '*.podspec' 2>/dev/null | head -1 || true)
+            [ -z "$spec" ] && continue
+            name=$(basename "$spec" .podspec)
+            if grep -q "^  - $name" ios/Podfile.lock; then echo "ok  $dep → $name"; else echo "::error::$dep has $name.podspec but it is not in Podfile.lock"; missing=1; fi
+          done
+          exit $missing
