@@ -137,6 +137,8 @@ export const SETTINGS_CATEGORIES: readonly SettingsCategory[] = [
     rows: [
       { key: 'version', label: '版本', keywords: ['version'] },
       { key: 'update', label: '软件更新', keywords: ['升级', '检查更新', 'update', 'upgrade'] },
+      // 桌面端请求走共享连接池(app-fetch.ts pooled_fetch)。开关是出问题时不用发版就能退回插件的后路。
+      { key: 'pooledHttp', label: '连接复用', keywords: ['网络', '连接', '速度', '慢', 'keep-alive', 'network', 'connection', 'speed', 'slow'], platforms: ['desktop'] },
     ],
   },
 ];

@@ -4,6 +4,7 @@
 const SESSION_SERVICE: &str = "top.vansin.agentnetwork.desktop";
 const SESSION_ACCOUNT: &str = "active-hub-session";
 mod chat_notify;
+mod hub_http;
 mod tray;
 mod local_credentials;
 mod local_daemon;
@@ -992,6 +993,7 @@ pub fn run() {
             tray::tray_dismiss_all,
             tray::tray_panel_hide,
             chat_notify::show_chat_notification,
+            hub_http::pooled_fetch,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

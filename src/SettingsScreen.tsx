@@ -46,6 +46,7 @@ import { useLoginSessions } from './useLoginSessions';
 import { describeDevice, sessionSubtitle, visibleSessions, SESSIONS_VISIBLE_DEFAULT, type DeviceKind } from './login-sessions';
 import { probeSavedSessions } from './saved-session-probe';
 import { fetchAuthMe } from './user-admin-api';
+import { pooledHttpEnabled, setPooledHttpEnabled } from './app-fetch';
 
 // Settings (Vincent tg 720): who am I, where am I connected, which network, which build —
 // and the destructive actions live here instead of cluttering the agents list header.
@@ -99,6 +100,7 @@ export default function SettingsScreen({
 }) {
   const { language } = useTranslation();
   const [me, setMe] = useState<Me>({});
+  const [pooledHttp, setPooledHttp] = useState(pooledHttpEnabled);
   // 多用户:auth/me 原样留一份,判断「用户管理」该不该出现(Hub 管理员 / 当前网络 owner、admin)。
   const [authMe, setAuthMe] = useState<AuthMe | null>(null);
   const [profiles, setProfiles] = useState<HubProfile[]>([]);
@@ -1113,6 +1115,24 @@ export default function SettingsScreen({
                       </Pressable>
                     );
                   })()}
+                </>
+              ) : null}
+              {show('about', 'pooledHttp') ? (
+                <>
+                  <Divider />
+                  <View style={styles.row} testID="settings-pooled-http-row">
+                    <View style={styles.rowCopy}>
+                      <Text style={styles.rowLabel}>{tr('settings.copy.277')}</Text>
+                      <Text style={styles.rowHint}>{tr('settings.copy.278')}</Text>
+                    </View>
+                    <Switch
+                      accessibilityLabel={tr('settings.copy.277')}
+                      value={pooledHttp}
+                      onValueChange={value => { setPooledHttpEnabled(value); setPooledHttp(value); }}
+                      trackColor={{ true: colors.accent, false: colors.border }}
+                      thumbColor={colors.card}
+                    />
+                  </View>
                 </>
               ) : null}
             </View>
