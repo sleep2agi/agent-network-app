@@ -10,7 +10,8 @@ import { ownerLabel } from './i18n-task-presentation';
 // 手机:仿微信 / 系统日历 —— 上面一张月历(有任务的日子下面一个点),点一天在下面列出那天的任务;
 //   横滑或 ‹ › 翻月。桌面那种「格子里写标题」在 390 宽上一格只有 ~50px,一个字都放不下。
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Modal, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import DialogFrame from './DialogFrame';
 import { Text } from './ui-text';
 import { Ionicons } from './icons';
 import { colors, onThemeChange, radius, spacing, themeMode, type as typeScale, weight } from './theme';
@@ -147,30 +148,18 @@ function CalendarDesktop({ items, today, s, onOpen, selectedId, people }: Props)
           ))}
         </View>
       </View>
-      <Modal visible={!!popover} transparent animationType="fade" onRequestClose={() => setPopover(null)}>
-        <View style={c.scrimWrap}>
-          <Pressable accessibilityLabel={tr('taskSel.close')} onPress={() => setPopover(null)} style={StyleSheet.absoluteFill} testID="cal-pop-scrim" />
-          {popover ? (
-            <View style={c.popover} accessibilityViewIsModal testID="cal-popover">
-              <View style={c.popHead}>
-                <Text style={c.popTitle} numberOfLines={1}>{popover.title}</Text>
-                <Pressable accessibilityRole="button" accessibilityLabel={tr('taskSel.close')} onPress={() => setPopover(null)} style={s.iconButton} testID="cal-pop-close">
-                  <Ionicons name="close" size={16} color={colors.textSecondary} />
-                </Pressable>
-              </View>
-              <ScrollView style={{ maxHeight: 360 }}>
-                {popover.entries ? popover.entries.map(e => entryRow(e, true)) : (popover.undated ?? []).map(item => (
-                  <Pressable key={item.id} accessibilityRole="button" accessibilityLabel={item.name} onPress={() => open(item.id)} style={state => [c.popRow, ((state as { hovered?: boolean }).hovered || state.pressed) && { backgroundColor: colors.rowHover }]} testID={`cal-undated-${item.id}`}>
-                    <PriorityDot p={item.priority} s={s} />
-                    <Text style={[c.itemText, item.column === 'done' && s.cardDone]} numberOfLines={1}>{item.name}</Text>
-                    <Text style={[s.muted, { maxWidth: 120 }]} numberOfLines={1}>{ownerLabel(item, people)}</Text>
-                  </Pressable>
-                ))}
-              </ScrollView>
-            </View>
-          ) : null}
-        </View>
-      </Modal>
+      {/* 某天的全部任务 / 未设期限:走全 app 统一的居中弹窗骨架(DialogFrame:卡片有界、正文可滚、安全区)。 */}
+      {popover ? (
+        <DialogFrame title={popover.title} closeLabel={tr('taskSel.close')} onClose={() => setPopover(null)} maxWidth={360} testID="cal-popover">
+          {popover.entries ? popover.entries.map(e => entryRow(e, true)) : (popover.undated ?? []).map(item => (
+            <Pressable key={item.id} accessibilityRole="button" accessibilityLabel={item.name} onPress={() => open(item.id)} style={state => [c.popRow, ((state as { hovered?: boolean }).hovered || state.pressed) && { backgroundColor: colors.rowHover }]} testID={`cal-undated-${item.id}`}>
+              <PriorityDot p={item.priority} s={s} />
+              <Text style={[c.itemText, item.column === 'done' && s.cardDone]} numberOfLines={1}>{item.name}</Text>
+              <Text style={[s.muted, { maxWidth: 120 }]} numberOfLines={1}>{ownerLabel(item, people)}</Text>
+            </Pressable>
+          ))}
+        </DialogFrame>
+      ) : null}
     </View>
   );
 }
@@ -316,11 +305,7 @@ const makeCalendarStyles = () => StyleSheet.create({
   itemText: { flex: 1, minWidth: 0, color: colors.text, fontSize: typeScale.caption + 1 },
   more: { height: ITEM_H, justifyContent: 'center', paddingHorizontal: 4, borderRadius: radius.mark },
   moreText: { color: colors.textSecondary, fontSize: typeScale.caption, fontWeight: weight.strong },
-  scrimWrap: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(0,0,0,0.18)' },
-  popover: { width: 340, maxWidth: '92%', padding: spacing.md, borderRadius: radius.surface, backgroundColor: colors.card, borderWidth: themeMode() === 'dark' ? 1 : 0, borderColor: colors.border, ...softShadow() },
-  popHead: { flexDirection: 'row', alignItems: 'center', paddingLeft: spacing.sm, marginBottom: spacing.xs },
-  popTitle: { flex: 1, color: colors.text, fontSize: typeScale.body, fontWeight: weight.strong },
-  popRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, minHeight: 36, paddingHorizontal: spacing.sm, borderRadius: radius.item },
+  popRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, minHeight: 36, marginVertical: -spacing.sm / 2, paddingHorizontal: spacing.sm, borderRadius: radius.item },
   // 手机
   phoneHead: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs, paddingHorizontal: spacing.lg, paddingTop: spacing.xs, paddingBottom: spacing.sm },
   phoneWeek: { flexDirection: 'row', paddingHorizontal: spacing.lg, paddingBottom: spacing.xs },

@@ -171,6 +171,7 @@ for (const theme of ['light', 'dark']) {
       const popN = await count(page, 'cal-pop-item-');
       const pop = await box(page, tid('cal-popover'));
       const popTime = await page.evaluate(() => document.querySelector('[data-testid="cal-pop-item-c2"]')?.textContent);
+      await page.waitForTimeout(400); // let the fade-in finish before the screenshot
       await shot('more-popover');
       record(vp, '「+N」 popover lists the whole day', { all: popN === TODAY_COUNT, inViewport: !!pop && pop.x >= 0 && pop.r <= v.w && pop.b <= v.h, time: popTime?.startsWith('15:30') }, { n: popN });
       await page.locator(tid('cal-pop-item-c7')).click();
@@ -191,7 +192,7 @@ for (const theme of ['light', 'dark']) {
       const und = await page.evaluate(() => [...document.querySelectorAll('[data-testid^="cal-undated-"]')].map(e => e.dataset.testid).filter(t => t !== 'cal-undated-chip'));
       const inCell = await count(page, 'cal-item-u');
       record(vp, 'undated popover', { two: und.length === 2, notInCells: inCell === 0 }, { rows: und.join(',') });
-      await page.locator(tid('cal-pop-close')).click();
+      await page.locator(tid('cal-popover-close')).click();
       await page.waitForTimeout(200);
 
       const t0 = (await box(page, tid('cal-title'))).text;
