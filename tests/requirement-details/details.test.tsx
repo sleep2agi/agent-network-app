@@ -19,6 +19,9 @@ mock.module('react-native', () => ({
 }));
 mock.module('./src/ui-text', () => ({ Text: 'Text', TextInput: 'TextInput' }));
 mock.module('./src/icons', () => ({ Ionicons: () => null }));
+// 镜像里没装 expo-clipboard(只装 react):桩成记录写入内容,详情头的 ID 复制在这里断言。
+const copied: string[] = [];
+mock.module('expo-clipboard', () => ({ setStringAsync: async (text: string) => { copied.push(text); return true; } }));
 mock.module('./src/ui-scale', () => ({ uiScale: () => ({ densityFactor: 1, denseFontMultiplier: 1, fontMultiplier: 1 }), ds: (n: number) => n }));
 mock.module('./src/safe-area-runtime', () => ({ useModalSafePadding: () => ({ paddingTop: 0, paddingBottom: 0, paddingLeft: 0, paddingRight: 0 }) }));
 mock.module('./src/theme', () => ({
@@ -751,4 +754,20 @@ test('old Hub cards show unsupported instead of a working assignment editor', as
   await act(async () => { renderer = create(<AssignmentsEditor cfg={cfg} item={{ ...card, priority: 'normal', column: 'pool' }} onSaved={() => { throw new Error('must not save'); }} />); });
   expect(byId('assignments-unsupported')).toBeTruthy();
   expect(renderer.root.findAllByProps({ testID: 'edit-owner' })).toHaveLength(0);
+});
+
+test('detail ID chip (phone): tap copies #N, long-press copies the full id; old hub copies the full id', async () => {
+  const { default: TaskIdChip } = await import('./src/TaskIdChip');
+  copied.length = 0;
+  await act(async () => { renderer = create(<TaskIdChip item={{ id: 'req_0f3a9c2e-1111', seq: 7 }} pointer={false} />); });
+  expect(byId('req-detail-id-text').props.children).toBe('#7');
+  expect(renderer.root.findAllByProps({ testID: 'req-detail-id-copy-full' })).toHaveLength(0);
+  await act(async () => { await pressable('req-detail-id-copy').props.onPress(); });
+  await act(async () => { await pressable('req-detail-id-copy').props.onLongPress(); });
+  expect(copied).toEqual(['#7', 'req_0f3a9c2e-1111']);
+  // 换一张旧 Hub 的卡(没有 seq):「已复制」随卡片切换清掉,显示 uuid 前 8 位
+  await act(async () => renderer.update(<TaskIdChip item={{ id: 'req_9b8c7d6e-2222' }} pointer={false} />));
+  expect(byId('req-detail-id-text').props.children).toBe('9b8c7d6e');
+  await act(async () => { await pressable('req-detail-id-copy').props.onPress(); });
+  expect(copied[2]).toBe('req_9b8c7d6e-2222');
 });
