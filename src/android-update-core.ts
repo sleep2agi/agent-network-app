@@ -26,6 +26,18 @@ export const ANDROID_RELEASES_PAGE = `https://github.com/${ANDROID_RELEASES_REPO
  *   desktop/<ver>/Agent.Network_<ver>_android-universal.apk   与 GitHub 资产逐字节相同
  *
  * 下载用带版本号的路径,不用 desktop/latest/ 下那份无版本号的副本:后者在镜像推进时会被换掉,下到一半会串版本。
+ *
+ * 安卓专用通道(Vincent 2026-09-30「你每次就是 modelscope 给我上传好之后，我在设置里面检查更新都检查不到」):
+ * 发版时安卓包**先**传到 android/,desktop/latest/VERSION 要等桌面 release 发布为 Latest、镜像 workflow
+ * 跑完才前进(release:published 对 bot 发布不触发,cron 实测 4–7 h 一次),中间几十分钟到几小时手机一直报「已是最新」。
+ *
+ *   android/latest/VERSION                    "<ver>\n" —— 安卓通道最新版(scripts/modelscope-android-publish.py 写)
+ *   android/agent-network-<ver>.apk           安装包(android-build 产物,与 release 上的 universal 包同一份)
+ *   android/agent-network-<ver>.apk.sha256    `sha256sum` 格式一行:`<64 hex>␠␠agent-network-<ver>.apk`(裸 64 hex 也认)
+ *
+ * 检查时两个 VERSION 都读,取较高的;同版本走 desktop 通道(有 release 说明)。各通道从自己的路径下载、
+ * 对自己的 sha 文件校验;安卓通道的 sha 文件缺失/认不出/写的是别的文件名 → 报错,绝不给出没法校验的包。
+ * 同一脚本写这三个文件,是一个 commit;VERSION 先于 sha 可见的窗口不存在,但仍按上面的规则防御。
  */
 export const MIRROR_BASE = 'https://modelscope.cn/datasets/SmartFlowAI/agent-network-releases/resolve/master';
 export const MIRROR_VERSION_URL = `${MIRROR_BASE}/desktop/latest/VERSION`;
@@ -33,6 +45,10 @@ export const MIRROR_LATEST_APK_URL = `${MIRROR_BASE}/desktop/latest/Agent.Networ
 export const mirrorSumsUrl = (version: string) => `${MIRROR_BASE}/desktop/${plainVersion(version)}/SHA256SUMS`;
 export const mirrorManifestUrl = (version: string) => `${MIRROR_BASE}/desktop/${plainVersion(version)}/latest.json`;
 export const mirrorApkUrl = (version: string) => `${MIRROR_BASE}/desktop/${plainVersion(version)}/${apkCacheFileName(version)}`;
+export const ANDROID_CHANNEL_VERSION_URL = `${MIRROR_BASE}/android/latest/VERSION`;
+export const androidChannelApkName = (version: string) => `agent-network-${plainVersion(version)}.apk`;
+export const androidChannelApkUrl = (version: string) => `${MIRROR_BASE}/android/${androidChannelApkName(version)}`;
+export const androidChannelShaUrl = (version: string) => `${androidChannelApkUrl(version)}.sha256`;
 /** GitHub 资产的直链(releases/download,不是 REST API,不占那 60 次/小时)。镜像下载失败时的第二来源。 */
 export const githubApkUrl = (version: string) =>
   `https://github.com/${ANDROID_RELEASES_REPO}/releases/download/desktop-v${plainVersion(version)}/${apkCacheFileName(version)}`;
@@ -96,8 +112,9 @@ export type ReleaseJson = {
  * url = 首选下载地址;fallbackUrl = 首选地址硬失败(HTTP 错误/网络错误/校验不符)后改用的地址。
  * sha256 = 期望的小写十六进制摘要;镜像来源取自 SHA256SUMS,GitHub 来源取自资产的 `digest`。
  * 没有 sha256 的包不会交给安装器(下载阶段拒绝,见 android-updater.ts)。
+ * channel = 'android' 表示镜像上的地址是安卓通道 android/agent-network-<ver>.apk(不是 desktop/<ver>/)。
  */
-export type ApkAsset = { name: string; url: string; size?: number; sha256?: string; fallbackUrl?: string; source?: 'mirror' | 'github' };
+export type ApkAsset = { name: string; url: string; size?: number; sha256?: string; fallbackUrl?: string; source?: 'mirror' | 'github'; channel?: 'android' };
 
 /**
  * 从 release 里挑安卓包。优先 `_<ver>_android-universal.apk`(版本号必须和 tag 一致,
@@ -227,6 +244,50 @@ export function evaluateMirror(
       size: typeof input.size === 'number' && input.size > 0 ? input.size : undefined,
       sha256,
       source: 'mirror',
+    },
+    releaseUrl: githubReleasePage(latest),
+  };
+}
+
+/**
+ * android/agent-network-<ver>.apk.sha256 → 小写 hex。认 `sha256sum` 一行(文件名必须是这一版的安卓包,
+ * 防止把别的版本的摘要配给这个包)或整份内容就是一个裸 64 hex。其他形状(HTML 错误页、空)→ null。
+ */
+export function parseAndroidChannelSha(text: string | null | undefined, version: string): string | null {
+  const t = String(text ?? '').trim();
+  if (/^[0-9a-fA-F]{64}$/.test(t)) return t.toLowerCase();
+  return parseSha256Sums(t)[androidChannelApkName(version)] ?? null;
+}
+
+/**
+ * 安卓通道给出的结论。sha256 必需:VERSION 已经前进但 sha 文件没有/认不出 → 报错(不是「已是最新」,
+ * 也不是一个没法校验的「有新版本」)。GitHub 直链留作下载兜底:release 上的 universal 包是同一个构建,
+ * 字节不同时 sha256 校验会拒装,不会装错。
+ */
+export function evaluateAndroidChannel(
+  input: { version: string; sha256?: string | null; notes?: string; size?: number },
+  currentVersion: string,
+): AndroidReleaseVerdict {
+  const latest = parseMirrorVersion(input.version);
+  if (!latest) return { kind: 'error', message: `镜像版本号格式错误(${String(input.version).slice(0, 20)})` };
+  const cmp = compareVersions(latest, currentVersion);
+  if (cmp === null) return { kind: 'error', message: `无法识别当前版本 ${currentVersion}` };
+  if (cmp <= 0) return { kind: 'up-to-date', latest };
+  if (!input.sha256 || !/^[0-9a-f]{64}$/.test(input.sha256)) {
+    return { kind: 'error', message: `新版本 v${latest} 的安卓安装包缺少校验文件,请几分钟后再试` };
+  }
+  return {
+    kind: 'available',
+    version: latest,
+    notes: String(input.notes ?? '').trim() || DEFAULT_RELEASE_NOTES,
+    apk: {
+      name: apkCacheFileName(latest),
+      url: androidChannelApkUrl(latest),
+      fallbackUrl: githubApkUrl(latest),
+      size: typeof input.size === 'number' && input.size > 0 ? input.size : undefined,
+      sha256: input.sha256,
+      source: 'mirror',
+      channel: 'android',
     },
     releaseUrl: githubReleasePage(latest),
   };

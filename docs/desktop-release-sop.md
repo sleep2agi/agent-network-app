@@ -255,6 +255,15 @@ pointer.
 
 ## 7. Verify what users actually get
 
+**A release is not done until the in-app updaters can see it.** For Android that
+means `android/latest/VERSION` on ModelScope shows the new version (section 10,
+"Android channel") — the APK being on ModelScope is not enough, the phone reads
+the `VERSION` file:
+
+```bash
+curl -sSL https://modelscope.cn/datasets/SmartFlowAI/agent-network-releases/resolve/master/android/latest/VERSION
+```
+
 ```bash
 curl -sS -D - -L https://www.anet.sh/desktop/update/latest.json -o latest.json
 ```
@@ -351,6 +360,9 @@ Nothing has to be triggered by hand in a normal release.
 | `desktop/latest/VERSION` | the version `desktop/latest/` currently holds |
 | `desktop/latest/Agent.Network_{aarch64.dmg,x64-setup.exe,x64_en-US.msi,android-universal.apk}` | version-less copies of the installers (stable download-page links) |
 | `desktop/latest/SHA256SUMS` | over the files in `desktop/latest/` |
+| `android/agent-network-<ver>.apk` | the Android APK, from a successful `android-build` run on main (Android channel, below) |
+| `android/agent-network-<ver>.apk.sha256` | one `sha256sum` line: `<64 hex>  agent-network-<ver>.apk` |
+| `android/latest/VERSION` | the version the Android channel currently holds; only moves forward |
 
 Anonymous download URL:
 `https://modelscope.cn/datasets/SmartFlowAI/agent-network-releases/resolve/master/<path>`.
@@ -408,16 +420,51 @@ Limitation: if anet.sh answers but the GitHub download itself is blocked, the
 updater does not fall back — the manifest endpoint already succeeded.
 
 **Android in-app update reads the mirror first** (`src/android-updater.ts`, from
-0.2.103). It reads `desktop/latest/VERSION`; when that is newer than the
-installed app it reads `desktop/<ver>/SHA256SUMS` (required), `desktop/<ver>/latest.json`
-(release notes, optional) and downloads `desktop/<ver>/Agent.Network_<ver>_android-universal.apk`,
-checking it against `SHA256SUMS` before handing it to the installer. The
-GitHub REST API (60 unauthenticated requests per hour per IP) is used only when
-the mirror fails, or when `VERSION` has moved but that version's `SHA256SUMS`
-has no APK line yet. Consequence for releasing: **Android users do not see a
-release until the mirror run for it has finished** — while the mirror lags, a
-phone that already runs the previous version reports "up to date". Dispatch the
-mirror as part of publishing (above) and check `latest/VERSION` afterwards.
+0.2.103; the Android channel from 0.2.158). It reads **both** `desktop/latest/VERSION`
+and `android/latest/VERSION` and takes the higher one (a tie goes to `desktop/`):
+
+- desktop channel: `desktop/<ver>/SHA256SUMS` (required), `desktop/<ver>/latest.json`
+  (release notes, optional), download `desktop/<ver>/Agent.Network_<ver>_android-universal.apk`;
+- Android channel: `android/agent-network-<ver>.apk.sha256` (required — missing or
+  unparseable is an error, never an unverified install), notes from
+  `desktop/<ver>/latest.json` when present, download `android/agent-network-<ver>.apk`.
+
+Either way the APK is checked against its sha256 before it reaches the installer,
+and the GitHub release asset is the download fallback (same build; a byte
+difference fails the check instead of installing). The GitHub REST API (60
+unauthenticated requests per hour per IP) is used only when neither `VERSION`
+can be read or parsed, or when `desktop/latest/VERSION` has moved but that
+version's `SHA256SUMS` has no APK line yet.
+
+**Android channel: publish the APK with the workflow, not by hand.** Before
+0.2.158 the APK was uploaded to `android/` by hand while the updater only read
+`desktop/latest/VERSION`, which moves after the desktop release is published and
+the mirror has run — so for tens of minutes to hours the phone said "up to date"
+while the owner already had the new APK link (2026-09-30: `desktop/latest/VERSION`
+was 0.2.156 with 0.2.157 on `android/`). Publish every Android build that users
+should get with:
+
+```bash
+gh workflow run modelscope-android-publish.yml --repo sleep2agi/agent-network-app \
+  --ref main -f run_id=<successful android-build run id on main>
+```
+
+It refuses a run that is not `android-build`, not on `main` or not successful,
+checks the APK's `versionName`/`versionCode`/package with `aapt2`, refuses to move
+`android/latest/VERSION` backwards or to replace an existing `agent-network-<ver>.apk`
+with different bytes, uploads the APK (skipped when ModelScope already holds the
+same bytes), its `.sha256` and `android/latest/VERSION` in **one commit**, then
+verifies anonymously: every path in the listing with the expected sha256,
+`VERSION` and the `.sha256` file byte for byte, and a full download of the APK
+compared by sha256. `-f dry_run=true` does everything up to the upload.
+Send the owner the APK link **after** this run is green; the release is done
+when `android/latest/VERSION` shows the new version.
+The same can be run locally with `scripts/modelscope-android-publish.py publish
+--apk <file> --version <ver> [--dry-run]` (token from `MODELSCOPE_API_TOKEN`),
+but releases go through the workflow from main.
+Phones on 0.2.157 or older read only `desktop/latest/VERSION`: for them the
+mirror dispatch in section 6 is still what makes a release visible, so keep doing
+both until the installed base has moved past 0.2.157.
 
 **Rollback touches both endpoints.** Section 8's "point `latest.json` back at the
 previous version" now means the anet.sh route *and* `desktop/latest/` on

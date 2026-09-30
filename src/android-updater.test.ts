@@ -15,7 +15,7 @@ import {
   subscribeAndroidUpdates,
 } from './android-updater';
 import { createRoutePrefsStore, LEGACY_ROUTE_PREF_KEY, memoryRouteStorage, ROUTE_LAST_OK_KEY } from './update-route';
-import { describeAndroidUpdateRow, githubApkUrl, mirrorApkUrl, mirrorManifestUrl, mirrorSumsUrl, MIRROR_VERSION_URL, ANDROID_LATEST_RELEASE_API } from './android-update-core';
+import { describeAndroidUpdateRow, githubApkUrl, mirrorApkUrl, mirrorManifestUrl, mirrorSumsUrl, MIRROR_VERSION_URL, ANDROID_CHANNEL_VERSION_URL, ANDROID_LATEST_RELEASE_API } from './android-update-core';
 import { Sha256 } from './sha256';
 
 let p = 0, t = 0;
@@ -122,7 +122,8 @@ const CACHED = (v: string) => `file:///cache/updates/${apkName(v)}`;
   const f = makeFetch({ ...mirrorRoutes('0.2.101'), [ANDROID_LATEST_RELEASE_API]: GH_403_RL });
   const s = await checkAndroidUpdate('0.2.101', { fetchImpl: f.fetchImpl, ...noSleep });
   ck('mirror OK + same version → up-to-date', s.kind === 'up-to-date' && s.latest === '0.2.101');
-  ck('up-to-date check costs one mirror request and zero GitHub requests', f.calls.length === 1 && f.calls[0] === MIRROR_VERSION_URL && f.gh() === 0);
+  // 两个通道的 VERSION 各一次(android/latest/VERSION 这里没配 → 404 → 只看 desktop),不打 GitHub。
+  ck('up-to-date check costs the two channel VERSION requests and zero GitHub requests', f.calls.length === 2 && f.calls[0] === MIRROR_VERSION_URL && f.calls[1] === ANDROID_CHANNEL_VERSION_URL && f.gh() === 0);
 }
 // 2. mirror OK, newer → available from the mirror (0.2.100 installed → 0.2.101)
 {

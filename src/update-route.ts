@@ -2,6 +2,7 @@
  * 安卓更新的下载来源(内部概念,不对用户展示 —— Vincent 2026-09-26「客户端里面标那么多线路一线路二干嘛」)。
  *
  *   mirror = 国内 ModelScope 镜像(默认)   desktop/<ver>/Agent.Network_<ver>_android-universal.apk
+ *            (检查结果来自安卓通道时是 android/agent-network-<ver>.apk,见 android-update-core.ts 文件头)
  *   github = GitHub Releases 直链           releases/download/desktop-v<ver>/Agent.Network_<ver>_android-universal.apk
  *
  * 两边的安装包逐字节相同(modelscope-mirror 按 GitHub 资产的 sha256 同步),同一个期望 sha256 两边都能校验。
@@ -12,7 +13,7 @@
  *   - 下载成功才记「上次成功来源」。
  *   - 0.2.121 曾有「下载线路」偏好(自动/线路一/线路二):已存的值一律忽略,并在读取时静默删掉。
  */
-import { apkCacheFileName, githubApkUrl, mirrorApkUrl } from './android-update-core';
+import { androidChannelApkUrl, apkCacheFileName, githubApkUrl, mirrorApkUrl } from './android-update-core';
 
 export type UpdateRoute = 'mirror' | 'github';
 
@@ -45,10 +46,11 @@ export function apkUrlFor(route: UpdateRoute, version: string): string {
  * GitHub 那条若 release 里挂的是别的 APK 名(没有 universal、退回同版本任意 .apk),就用 release 给的原地址;
  * 镜像只同步 universal 包,那时镜像没有这个文件 → null(跳过,不去 404)。
  */
-export function apkUrlForAsset(route: UpdateRoute, version: string, apk: { name: string; url: string; source?: UpdateRoute }): string | null {
+export function apkUrlForAsset(route: UpdateRoute, version: string, apk: { name: string; url: string; source?: UpdateRoute; channel?: 'android' }): string | null {
   const universal = apk.name === apkCacheFileName(version);
   if (route === 'github') return universal ? githubApkUrl(version) : apk.source === 'github' ? apk.url : null;
-  return universal ? mirrorApkUrl(version) : null;
+  if (!universal) return null;
+  return apk.channel === 'android' ? androidChannelApkUrl(version) : mirrorApkUrl(version);
 }
 
 /** `12.3 / 77.0 MB`;不知道总大小时只写已下载。 */
