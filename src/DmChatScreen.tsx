@@ -299,7 +299,8 @@ const makeStyles = (B = bubbleLayout()) => StyleSheet.create({
     lineHeight: 20,
     maxHeight: 120,
   },
-  inputInWrap: { flex: 0, alignSelf: 'stretch' },
+  // flex:-1 不是 flex:0:web 上 flex:0 = `0 1 0%`(flex-zero-rule.test.ts);-1 两个引擎都是 `0 1 auto`。
+  inputInWrap: { flex: -1, alignSelf: 'stretch' },
   desktopComposerWrap: { paddingHorizontal: COMPOSER_CARD_INSET, paddingBottom: COMPOSER_CARD_INSET, backgroundColor: colors.bg },
   desktopComposer: { backgroundColor: colors.card, borderRadius: radius.surface, paddingHorizontal: 14, paddingTop: 12, paddingBottom: 8, overflow: 'hidden', ...elevated('raised') },
   desktopInput: { minHeight: 21, color: colors.text, fontSize: 14, lineHeight: 21, padding: 0, textAlignVertical: 'top', outlineStyle: 'none' } as any,

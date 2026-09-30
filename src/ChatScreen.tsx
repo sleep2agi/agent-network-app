@@ -2940,8 +2940,9 @@ const makeStyles = (B = bubbleLayout()) =>
     maxHeight: 120,
   },
   inputWrap: { flex: 1, justifyContent: 'flex-end' },
-  // flex 归零:输入框在列方向的 inputWrap 里,flexBasis 0 会被压扁。
-  inputInWrap: { flex: 0, alignSelf: 'stretch' },
+  // 撤掉 input 的 flex:1:输入框在列方向的 inputWrap 里,flexBasis 0 会被压扁。用 flex:-1 不用 flex:0 ——
+  // web 上 flex:0 = `0 1 0%`(flex-zero-rule.test.ts);-1 两个引擎都是 `0 1 auto`。
+  inputInWrap: { flex: -1, alignSelf: 'stretch' },
   sendTextDisabled: { color: colors.textMuted },
 });
 
