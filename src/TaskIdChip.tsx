@@ -4,7 +4,6 @@
 // 旧 Hub(没有短号):显示 uuid 前 8 位,点了复制完整 ID。复制后就地变成「已复制」1.5 秒。
 import { useEffect, useRef, useState } from 'react';
 import { Pressable, View } from 'react-native';
-import * as Clipboard from 'expo-clipboard';
 import { Text } from './ui-text';
 import { Ionicons } from './icons';
 import { colors, radius, type as typeScale } from './theme';
@@ -23,7 +22,9 @@ export default function TaskIdChip({ item, pointer }: { item: Pick<Requirement, 
   useEffect(() => { setCopied(null); }, [item.id]);
   const short = shortIdLabel(item);
   const copy = async (which: 'short' | 'full') => {
-    try { await Clipboard.setStringAsync(which === 'short' && short ? short : item.id); } catch { return; }
+    // 第一次复制时才加载剪贴板模块:任务详情被很多只装了 react 的测试镜像渲染(tests/requirement-details),
+    // 静态 import 会让它们在载入时就找不到原生包。
+    try { const Clipboard = await import('expo-clipboard'); await Clipboard.setStringAsync(which === 'short' && short ? short : item.id); } catch { return; }
     setCopied(which);
     if (timer.current) clearTimeout(timer.current);
     timer.current = setTimeout(() => setCopied(null), COPIED_MS);
