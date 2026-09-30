@@ -73,6 +73,6 @@ const hub = src('requirements-hub.ts');
 const paths = hub.split('\n').filter(l => l.includes('/api/requirements/'));
 ck('every per-task request path is built from the task id', paths.filter(l => l.includes('/api/requirements/${')).length >= 3 && paths.filter(l => l.includes('/api/requirements/${')).every(l => /\/api\/requirements\/\$\{encodeURIComponent\(id\)\}/.test(l)));
 ck('no request path uses seq or an encoded #', !/%23|seq/.test(paths.join('\n')));
-ck('the list request is network-scoped', hub.includes("scoped(cfg, '/api/requirements')"));
+ck('the list request is network-scoped', hub.includes("scoped(cfg, opts.summary ? '/api/requirements?view=summary' : '/api/requirements')") && hub.includes('scoped(cfg, `/api/requirements?changes=1'));
 
 console.log(`${p}/${t} passed`); if (p !== t) process.exit(1);

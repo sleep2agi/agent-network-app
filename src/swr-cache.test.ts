@@ -46,7 +46,8 @@ const board = readFileSync(new URL('./RequirementBoard.tsx', import.meta.url), '
 ck('board paints the disk snapshot only while nothing has been read this launch',
   /if \(!taskBoardState\(\)\.loaded && !taskBoardState\(\)\.items\.length\) \{\s*void recallBoard\(cfg\.profileId, cfg\.networkId\)/.test(board)
   && /if \(dead \|\| !snap \|\| st\.scope !== scope \|\| st\.loaded \|\| st\.items\.length\) return;/.test(board));
-ck('board remembers after the first load and after polls', (board.match(/rememberBoard\(cfg\.profileId, \{ networkId: cfg\.networkId/g) || []).length === 2);
+// 首屏、整读的轮询、增量的轮询(board-sync.ts)各记一次。
+ck('board remembers after the first load and after polls', (board.match(/rememberBoard\(cfg\.profileId, \{ networkId: cfg\.networkId/g) || []).length === 3);
 const chat = readFileSync(new URL('./ChatScreen.tsx', import.meta.url), 'utf8');
 ck('chat paints the disk copy only when nothing (memory or live) is there yet',
   /recallConversation<ChatItem>\(cfg\.profileId, conversationKeyFor\)\.then\(cached => \{\s*if \(!cached \|\| !requestGate\.isCurrent\(token\) \|\| !mountedRef\.current \|\| conversations\.peek\(conversationKeyFor\)\) return;/.test(chat));

@@ -119,6 +119,9 @@ mock.module('./src/requirements-hub', () => ({
   listAllRequirementsForDashboard: async () => ({ rows: await listRows(), partial: false }),
   fetchRequirementStats: async () => { throw new Error('not used'); },
   getRequirementOnHub: async () => null,
+  // 增量读(Hub capability changes,board-sync.ts):这里的 Hub 不声明 list_summary / changes,看板只整读。
+  // 这个模块被整个替换,RequirementBoard 导入的每个名字都要在这里有一份,否则整个文件在导入时就 SyntaxError。
+  listRequirementChanges: async () => { throw new Error('this Hub does not advertise changes'); },
   migrateLocalRequirements: async () => {},
   probeAgentOwnerSupport: async () => roleCards,
   listProjects: async () => projectsMock,

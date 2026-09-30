@@ -24,7 +24,7 @@ import AliasAvatar from './AliasAvatar';
 import type { HubConfig } from './api';
 import { REQ_COLUMN_LABEL, REQ_COLUMNS, REQ_PRIORITIES, titleText, type ChecklistItem, type ReqColumn, type Requirement, type RequirementProject } from './requirements-model';
 import { readRequirements, requirementsKey, writeRequirements } from './requirements-store';
-import { createProject, createRequirementOnHub, fetchMyUserId, getRequirementOnHub, listArchivedRequirements, listProjects, listRequirementsFull, searchRequirementsOnHub, setChecklistItemOnHub, updateProject, migrateLocalRequirements, moveRequirementOnHub, probeAgentOwnerSupport, RequirementsHubError, updateRequirementOnHub } from './requirements-hub';
+import { createProject, createRequirementOnHub, fetchMyUserId, getRequirementOnHub, listArchivedRequirements, listProjects, listRequirementChanges, listRequirementsFull, searchRequirementsOnHub, setChecklistItemOnHub, updateProject, migrateLocalRequirements, moveRequirementOnHub, probeAgentOwnerSupport, RequirementsHubError, updateRequirementOnHub } from './requirements-hub';
 import { listRequirementPeople } from './requirement-people-api';
 import { personKey, type RequirementPerson } from './requirement-people';
 import { colors, radius, spacing } from './theme';
@@ -33,6 +33,7 @@ import { pointerUi } from './pointer-ui';
 import { useModalSafePadding } from './safe-area-runtime';
 import { usePoll } from './usePoll';
 import { applyFilter, applyMove, boardColumns, createInput, DEFAULT_SORT, DRAG_IDLE, dragReduce, dropIndex, emptyDraft, activeProjects, defaultProjectFor, NO_PROJECT, projectCounts, filterActive, hasRoles, localToday, addChecklistItem, moveChecklistItem, removeChecklistItem, setChecklistDone, neighbourColumn, nextSort, revertMove, sortRows, toggleIn, hidesDone, toggleHideDone, UNASSIGNED, type CreateDraft, type DragEvent, type DragState, type EditPatch, type SortKey, type SortSpec } from './task-board-model';
+import { applyChanges, checklistCounts, cursorAfterList, hasFullText, mergeListRows, needsFullText, planBoardRead, type BoardSyncState } from './board-sync';
 import { enterTaskScope, noteTagsUsed, patchTaskBoard, setManagingProjects, setManagingTags, setTaskFilter, setTaskSearch, setTaskSection, taskBoardState, taskScopeKey, updateTaskItems, useTaskBoard, type TaskSection } from './task-board-store';
 import { recallBoard, rememberBoard } from './swr-cache';
 import { PRIORITY_CODE, priorityChoices, priorityLabel, supportsLowest } from './task-priority';
@@ -154,6 +155,8 @@ function ScopedRequirementBoard({ cfg, desktop, dispatch, onOpenVoiceSettings, s
   const inFlight = useRef(0);
   /** 上一次整张表读成功的时刻(首屏或轮询)。 */
   const lastListAt = useRef(0);
+  // 省流读(board-sync.ts):增量的游标和上次整读的时刻。换账号 / 网络 = 从整读重新开始。
+  const sync = useRef<BoardSyncState>({ cursor: null, fullAt: 0 });
   const today = localToday();
   // ── 搜索(task-search.ts):输入框里的字去抖后才进共享状态;归档的卡只在勾了「包含已归档」时另读 ──
   const [searchText, setSearchText] = useState(search.q);
@@ -183,7 +186,9 @@ function ScopedRequirementBoard({ cfg, desktop, dispatch, onOpenVoiceSettings, s
   const archived = wantArchived ? archivedRows : [];
   // 本机读到的表被截断(Hub 一次最多给最新的 500 张):问服务端要更老的匹配(needsServerSearch)。
   const [serverHits, setServerHits] = useState<{ q: string; rows: Requirement[] }>({ q: '', rows: [] });
-  const askServer = needsServerSearch(serverSearchCap ? ['search'] : [], truncated, search);
+  // 精简列表的卡本机没有描述正文:搜索词可能只出现在描述里,也要问服务端(board-sync.ts)。
+  const summaryRows = items.some(item => item.summary && item.description === undefined);
+  const askServer = needsServerSearch(serverSearchCap ? ['search'] : [], truncated || summaryRows, search);
   useEffect(() => {
     if (!askServer) return;
     let dead = false;
@@ -217,8 +222,12 @@ function ScopedRequirementBoard({ cfg, desktop, dispatch, onOpenVoiceSettings, s
     (async () => {
       try {
         await migrateLocalRequirements(cfg, () => readRequirements(localKey), rows => writeRequirements(localKey, rows));
-        const { rows: list, capabilities, truncated: cut } = await listRequirementsFull(cfg);
+        sync.current = { cursor: null, fullAt: 0 };
+        // Hub 声明过 list_summary(上次启动存下的能力)就读精简列表;第一次连这个 Hub 读完整的,顺便拿到能力。
+        const { rows: fetched, capabilities, truncated: cut } = await listRequirementsFull(cfg, { summary: taskBoardState().capabilities.includes('list_summary') });
         if (dead) return;
+        const list = mergeListRows(taskBoardState().items, fetched);
+        sync.current = { cursor: cursorAfterList(list), fullAt: Date.now() };
         // 分不分两个角色:有卡片就看行里带没带 agent_owner;一张都没有才去探 Hub。
         const roles = list.length ? list.some(hasRoles) : await probeAgentOwnerSupport(cfg);
         if (dead) return;
@@ -261,6 +270,20 @@ function ScopedRequirementBoard({ cfg, desktop, dispatch, onOpenVoiceSettings, s
     return () => { dead = true; };
   }, [cfg.serverUrl, cfg.token, cfg.networkId, hasOwners, scope]);
 
+  // 精简列表的卡打开时按 id 补读全文(描述 + 子任务)。读回来之前详情里显示「正在读取…」;卡在这期间又被
+  // 轮询换成新的精简行(别人改了它)时,这里跟着 updatedAt 再读一次。
+  const openNeedsText = needsFullText(selected);
+  const openId = selected?.id ?? null;
+  const openAt = selected?.updatedAt ?? null;
+  useEffect(() => {
+    if (!openNeedsText || !openId) return;
+    let dead = false;
+    getRequirementOnHub(cfg, openId)
+      .then(full => { if (!dead && full) updateTaskItems(scope, rows => rows.map(row => (row.id === openId && !hasFullText(row) ? full : row))); })
+      .catch(e => { if (!dead) setBanner(e instanceof Error ? e.message : String(e)); });
+    return () => { dead = true; };
+  }, [openNeedsText, openId, openAt, cfg.serverUrl, cfg.token, cfg.networkId, scope]);
+
   const refresh = useCallback(async (force?: boolean) => {
     // 首次加载失败(连不上 / 超时)后不能只靠用户点「重试」:跟着轮询(失败时自动退避)再试一次首次加载。
     if (phase === 'error') { setReloadKey(n => n + 1); return; }
@@ -270,9 +293,30 @@ function ScopedRequirementBoard({ cfg, desktop, dispatch, onOpenVoiceSettings, s
     if (!force && Date.now() - lastListAt.current < POLL_MS / 2) return;
     const gen = mutations.current;
     try {
-      const { rows: list, truncated: cut } = await listRequirementsFull(cfg);
+      const st0 = taskBoardState();
+      const plan = planBoardRead(st0.capabilities, st0.truncated, sync.current, Date.now());
+      if (plan.kind === 'changes') {
+        const delta = await listRequirementChanges(cfg, plan.since);
+        if (!delta.hasMore) {
+          lastListAt.current = Date.now();
+          // 读的时候本机改过卡:这一拍不并(游标也不动),下一拍从同一个游标再读一次。
+          if (gen !== mutations.current || inFlight.current !== 0) return;
+          const list = applyChanges(taskBoardState().items, delta.rows, delta.deleted);
+          if (delta.serverTime) sync.current = { ...sync.current, cursor: delta.serverTime };
+          patchTaskBoard(scope, { items: list });
+          const st = taskBoardState();
+          if (cfg.networkId && st.scope === scope && (delta.rows.length || delta.deleted.length)) rememberBoard(cfg.profileId, { networkId: cfg.networkId, items: list, projects: st.projects, twoRoles: st.twoRoles, capabilities: st.capabilities });
+          return;
+        }
+        // 这段时间改的太多,一页装不下:整读一次。
+      }
+      const { rows: fetched, capabilities, truncated: cut } = await listRequirementsFull(cfg, { summary: plan.kind === 'list' ? plan.summary : true });
       lastListAt.current = Date.now();
       if (gen === mutations.current && inFlight.current === 0) {
+        const list = mergeListRows(taskBoardState().items, fetched);
+        sync.current = { cursor: cursorAfterList(list), fullAt: Date.now() };
+        // Hub 升级 / 降级后能力会变(精简列表、增量):跟着这次的响应走。
+        if (capabilities.length) patchTaskBoard(scope, { capabilities });
         patchTaskBoard(scope, { items: list, truncated: cut });
         const st = taskBoardState();
         if (cfg.networkId && st.scope === scope) rememberBoard(cfg.profileId, { networkId: cfg.networkId, items: list, projects: st.projects, twoRoles: st.twoRoles, capabilities: st.capabilities });
@@ -1246,7 +1290,7 @@ function BulkBar({ count, bulk, canProject, canAgent, right, setRef, onOpen, onR
 /** 卡片最下一行:子任务进度(左,可没有)+ 参与人头像(右,可没有)。都没有就不占位置。 */
 function CardFooter({ item, people, s, touch }: { item: Requirement; people: readonly RequirementPerson[]; s: TaskStyles; touch: boolean }) {
   useTranslation();
-  const hasList = !!item.checklist?.length;
+  const hasList = checklistCounts(item).total > 0;
   const hasPeople = !!item.participants?.length;
   const subs = item.children?.total ? item.children : null;
   if (!hasList && !hasPeople && !subs) return null;

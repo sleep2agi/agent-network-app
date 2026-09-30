@@ -92,9 +92,17 @@ export function searchedTasks(items: readonly Requirement[], archived: readonly 
   const local = searchPool(items, archived, search).filter(item => (!!idQuery && matchesTaskId(item, idQuery)) || matchesSearch(item, terms, ctx));
   if (!serverHits.length) return local;
   const have = new Set(local.map(i => i.id));
-  const known = new Set(items.map(i => i.id));
-  // 本机表里有、但本机判定不匹配的卡(比如刚改过名还没同步到服务端)不从服务端结果里带回来。
-  return [...local, ...serverHits.filter(h => !have.has(h.id) && !known.has(h.id))];
+  const known = new Map(items.map(i => [i.id, i]));
+  // 本机表里有、但本机判定不匹配的卡(比如刚改过名还没同步到服务端)不从服务端结果里带回来 ——
+  // 除非本机那一行是精简行(board-sync.ts,没有描述正文,本机判定不了):那就信服务端,并进来的是本机那一行。
+  const extra: Requirement[] = [];
+  for (const h of serverHits) {
+    if (have.has(h.id)) continue;
+    const mine = known.get(h.id);
+    if (!mine) extra.push(h);
+    else if (mine.summary && mine.description === undefined) extra.push(mine);
+  }
+  return [...local, ...extra];
 }
 
 /** 喂给 matchesTaskId 的整句:去掉首尾空白,全角 ＃ / 数字 / 字母归一成半角(NFKC;ID 本身都是 ASCII)。 */

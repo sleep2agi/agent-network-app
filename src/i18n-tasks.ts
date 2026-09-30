@@ -389,6 +389,7 @@ registerTranslations({
 // 详情的「更多」(TaskDetailPanel + task-detail-more.ts)。
 registerTranslations({
   'detail.more': ['更多', 'More'],
+  'detail.loadingDetails': ['正在读取描述和子任务…', 'Loading description and checklist…'],
   'detail.moreA11y': ['展开更多字段', 'Show more fields'],
   'detail.lessA11y': ['收起更多字段', 'Hide more fields'],
   'detail.sumHigh': ['P0 最高', 'P0 Highest'],

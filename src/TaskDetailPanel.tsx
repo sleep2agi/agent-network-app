@@ -206,7 +206,10 @@ export default function TaskDetailPanel({ cfg, item, readOnly = false, items, on
       {hasDetails(item) ? (
         <TaskDescriptionEditor cfg={cfg} value={draft.description} onChange={description => set({ description })} pointer={pointer} title={item.name} dirty={!!patch} onOpenVoiceSettings={onOpenVoiceSettings} />
       ) : (
-        <Text style={s.muted} testID="req-details-unsupported">{tr('tasks.copy.138')}</Text>
+        // 精简列表的卡:全文正在按 id 补读(RequirementBoard);旧 Hub 才是真的不支持。
+        item.summary
+          ? <Text style={s.muted} testID="req-details-loading">{tr('detail.loadingDetails')}</Text>
+          : <Text style={s.muted} testID="req-details-unsupported">{tr('tasks.copy.138')}</Text>
       )}
       <Pressable
         accessibilityRole="button"
