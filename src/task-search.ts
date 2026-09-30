@@ -10,6 +10,7 @@
 //   · 和筛选叠加:先搜后筛、先筛后搜结果一样(两个都是逐行判断),各视图都用 visibleTasks 这一个入口
 import { applyFilter, personName, type BoardFilter } from './task-board-model';
 import type { Requirement, RequirementProject } from './requirements-model';
+import { matchesTaskId } from './task-short-id';
 import type { RequirementPerson } from './requirement-people';
 
 export interface TaskSearch {
@@ -82,8 +83,14 @@ export function searchPool(items: readonly Requirement[], archived: readonly Req
 export function searchedTasks(items: readonly Requirement[], archived: readonly Requirement[], search: TaskSearch, ctx: SearchContext): readonly Requirement[] {
   const terms = searchTerms(search.q);
   if (!terms.length) return items;
-  return searchPool(items, archived, search).filter(item => matchesSearch(item, terms, ctx));
+  // 任务 ID(#563):整句当一个 ID 去对(「#12」「12」对短号,完整 id / 8 位以上前缀对主键),和文字匹配「或」——
+  // 「#12 portal」不把 ID 和文字拆开「且」。全角「＃１２」先归一成半角。
+  const idQuery = taskIdQuery(search.q);
+  return searchPool(items, archived, search).filter(item => (!!idQuery && matchesTaskId(item, idQuery)) || matchesSearch(item, terms, ctx));
 }
+
+/** 喂给 matchesTaskId 的整句:去掉首尾空白,全角 ＃ / 数字 / 字母归一成半角(NFKC;ID 本身都是 ASCII)。 */
+export const taskIdQuery = (q: string): string => q.trim().normalize('NFKC');
 
 /** 各视图(列表 / 看板 / 甘特图 / 日历)共用的入口:搜索 + 筛选。 */
 export function visibleTasks(items: readonly Requirement[], archived: readonly Requirement[], filter: BoardFilter, search: TaskSearch, ctx: SearchContext): Requirement[] {
