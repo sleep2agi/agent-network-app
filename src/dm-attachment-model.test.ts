@@ -2,6 +2,7 @@
 import { readFileSync } from 'node:fs';
 import { attachmentPreviewText, dmAttachmentViews, eventAttachmentPreview, localAttachmentViews } from './dm-attachment-model';
 import { viewerImageFor } from './image-viewer-model';
+import { uploadUrlFor } from './upload-url';
 
 let p = 0, n = 0;
 const ck = (name: string, ok: boolean) => { n++; if (ok) { p++; console.log(`  ✓ ${name}`); } else console.log(`  ✗ ${name}`); };
@@ -37,6 +38,12 @@ const ck = (name: string, ok: boolean) => { n++; if (ok) { p++; console.log(`  �
   ck('local image previews with its own uri', viewerImageFor(v[0], { os: 'web', tauri: true })?.uri === 'blob:1');
 }
 
+// —— 上传地址:私信带 purpose=dm,agent 会话不带(旧形状逐字不变)——
+{
+  ck('chat upload url unchanged', uploadUrlFor('https://h') === 'https://h/api/upload' && uploadUrlFor('https://h', { networkId: 'n 1' }) === 'https://h/api/upload?network_id=n%201');
+  ck('DM upload url carries purpose=dm', uploadUrlFor('https://h', { networkId: 'n1', purpose: 'dm' }) === 'https://h/api/upload?network_id=n1&purpose=dm');
+}
+
 // —— 只有附件时的预览一行 ——
 {
   ck('all images → [图片]', attachmentPreviewText([{ mime: 'image/png' }, { name: 'a.JPG' }]) === '[图片]');
@@ -52,7 +59,7 @@ const ck = (name: string, ok: boolean) => { n++; if (ok) { p++; console.log(`  �
   ck('paste: window paste listener feeds attachmentsFromClipboard', /addEventListener\('paste'/.test(src) && src.includes('attachmentsFromClipboard('));
   ck('drop: listens for drop scoped to the dm pane', /addEventListener\('drop'/.test(src) && src.includes('[data-testid="dm-pane"]'));
   ck('phone ＋ opens the WeChat panel (album / file / camera)', src.includes('plusPanelItems(') && src.includes('pickImages(') && src.includes('pickCameraPhoto('));
-  ck('uploads go through the shared queue with the network id', src.includes('runUploadQueue(') && /uploadImage\(cfg, prepared, \{ networkId \}\)/.test(src));
+  ck('uploads go through the shared queue with the network id', src.includes('runUploadQueue(') && /uploadImage\(cfg, prepared, \{ networkId, purpose: 'dm' \}\)/.test(src));
   ck('send is blocked on oversize / too many (sendBlocker)', src.includes('sendBlocker('));
   ck('tapping an image opens the viewer', src.includes('<ImageViewer') && !src.includes('onPress={() => {}}'));
   // 桌面上 AuthedThumb / AttachmentFile(expo-file-system)下载不了 —— 必须先分出 Tauri 分支

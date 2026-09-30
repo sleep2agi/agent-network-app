@@ -6,7 +6,8 @@
 //   HUB_JSON=<{ base, net, alice:{token,id}, bob:{token,id}, carol:{token,id} }> WEB_DIR=<expo export dir> \
 //   OUT=<png dir> PLAYWRIGHT_MODULE=<…/playwright/index.mjs> node tests/test-dm-attachments/drive.mjs
 //
-// A hub seeded for it: register dm_alice / dm_bob / dm_carol, add bob and carol to alice's network, boot on a spare port
+// A hub seeded for it: register dm_alice / dm_bob / dm_carol, add bob and carol to alice's network with agent_access=all
+// (a restricted member can't read network files anyway, which would make check 6 pass for the wrong reason), boot on a spare port
 // (agent-network server/src: register + addNetworkMember + bootServer, HOME and COMMHUB_DB under mktemp -d).
 //
 // Desktop (1320×754), alice → bob:
@@ -19,6 +20,8 @@
 //   4  bob's DM with alice renders both images (loaded), tapping one opens the image preview
 // Phone (390×844), bob:
 //   5  ＋ opens the WeChat panel with 相册 / 文件 inside the DM pane
+// Hub ACL (agent-network DM files): with EXPECT_DM_ACL=1 (a Hub that knows ?purpose=dm):
+//   6  carol, in the same network but not in the DM, gets 404 on the images; bob gets 200
 // Exit 1 when any assertion fails. Against the pre-fix export 1–4 go red.
 import { readFileSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
@@ -194,6 +197,17 @@ const panel = await phone.page.locator(tid('dm-plus-panel')).count();
 const cells = await phone.page.locator(`${tid('dm-plus-album')}, ${tid('dm-plus-file')}`).count();
 await phone.page.screenshot({ path: join(OUT, '5-phone-plus.png') });
 record('5 phone ＋ opens the album / file panel', { panel: panel === 1, cells: cells === 2 }, { panel, cells });
+
+// ── 6: a member outside the DM ──────────────────────────────────────────────
+{
+  const ids = stored.map(a => a.file_id);
+  const st = async (who, id) => (await fetch(`${hub.base}/api/files/${id}`, { headers: { Authorization: `Bearer ${hub[who].token}` } })).status;
+  const carol = await Promise.all(ids.map(id => st('carol', id)));
+  const bobS = await Promise.all(ids.map(id => st('bob', id)));
+  const checks = { bobReads: bobS.every(s => s === 200) };
+  if (process.env.EXPECT_DM_ACL === '1') checks.carol404 = carol.length === 2 && carol.every(s => s === 404);
+  record('6 member outside the DM cannot fetch the images', checks, { carol, bob: bobS, enforced: process.env.EXPECT_DM_ACL === '1' });
+}
 
 await browser.close();
 web.close();

@@ -44,7 +44,7 @@ console.log('# 渲染');
 console.log('# 接线(源码)');
 {
   const editor = src('./TaskDescriptionEditor.tsx');
-  const attach = src('./attach.ts');
+  const attach = src('./upload-url.ts');
   ck('上传带 network_id(同网成员能看)', editor.includes('uploadImage(cfg, img, { networkId: cfg.networkId })') && attach.includes('network_id=${encodeURIComponent(opts.networkId)}'));
   ck('图片地址里不放 token', !/[?&](access_)?token=/.test(editor) && editor.includes('authUri: url'));
   ck('桌面:粘贴和拖放只在鼠标界面挂(小编辑框 + 全屏编辑器各一份)', editor.includes("useImageIntake(imagesOn && pointer && shown === 'edit' && !full,") && editor.includes("useImageIntake(imagesOn && pointer && !!full && full !== 'read',") && editor.includes("addEventListener('paste'") && editor.includes("addEventListener('drop'"));

@@ -234,7 +234,7 @@ export default function DmChatScreen({ cfg, networkId, peer, onBack, desktop = f
         const prepared = await prepareForUpload(img, original);
         const tooBig = oversizeMessage(prepared);
         if (tooBig) throw new Error(tooBig);
-        const up = await uploadImage(cfg, prepared, { networkId });
+        const up = await uploadImage(cfg, prepared, { networkId, purpose: 'dm' });
         const done: DmAttachment = { type: 'file', file_id: up.file_id, name: prepared.fileName, mime: up.mime, size: up.size };
         uploadMemo.set(cfg.serverUrl, img.uri, original, done);
         return done;
