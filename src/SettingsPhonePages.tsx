@@ -501,12 +501,8 @@ function VoicePhonePage({ ctx }: { ctx: PhonePagesCtx }) {
         </>
       ) : null}
       {/* 麦克风选择只在 webview 里有(窄的桌面窗口);手机走原生录音,没有这一栏。 */}
-      {show('voice', 'mic') && Platform.OS === 'web' ? (
-        // MicDeviceSetting 自带「麦克风」标题,组上不再重复。
-        <SettingsGroup>
-          <SettingsCardContent><MicDeviceSetting /></SettingsCardContent>
-        </SettingsGroup>
-      ) : null}
+      {/* phone = 微信设置行 + 底部面板,整组(行 · 电平条 · footer 说明)由 MicDeviceSetting 自己画。 */}
+      {show('voice', 'mic') && Platform.OS === 'web' ? <MicDeviceSetting phone /> : null}
       {show('voice', 'test') ? (
         <SettingsGroup footer={testFooter} footerTone={t.kind === 'error' ? 'danger' : undefined} testID="voice-test-group">
           <SettingsRow testID="voice-test" label={tr('settings.copy.133')} value={testValue} busy={v.testBusy} disabled={v.testBusy || !status.configured} onPress={() => void v.onTest()} />

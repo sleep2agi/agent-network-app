@@ -65,6 +65,7 @@ const AUDIT: Record<string, { count: number; kinds: Kind[]; input?: boolean; key
   'TaskProjectManager.tsx': { count: 1, kinds: ['dialog', 'sheet'], keyboard: 'avoider', input: true, note: '面板 85%,列表可收缩,新增行在外;输入框 ⇒ 键盘避让(本次)' },
   'TaskSelectMenu.tsx': { count: 2, kinds: ['sheet', 'menu'], keyboard: 'followup: 选择菜单的搜索框;没有底部按钮', note: '70% / pos.maxHeight,ScrollView 直接子节点' },
   'TaskTimeCell.tsx': { count: 1, kinds: ['menu'], note: '一行提示' },
+  'AppSelect.tsx': { count: 2, kinds: ['menu', 'sheet'], note: '设置的下拉选择(无输入框):桌面浮层 pos.maxHeight ≤ 320 + ScrollView flexGrow:0;手机动作面板 70%,选项 ScrollView 可收缩,「取消」是它后面的兄弟' },
   'XiaomiGuideModal.tsx': { count: 1, kinds: ['dialog'], note: '卡片 90%,正文 flexGrow:0 直接子节点,按钮在外' },
 };
 
