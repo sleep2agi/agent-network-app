@@ -15,7 +15,9 @@ A. 本版内容(0.2.157 版本号提交 ad17bd3 之后 main 上合入的 PR + �
   #555 (P0) 启动页换掉 Expo 模板占位图(加 expo-splash-screen)
   #556 安卓更新读镜像上的 Android 通道(android/latest/VERSION)
   #557 任务详情里设「开始」(需要带 start 字段的 Hub;旧 Hub 不显示、不提交)
-  本 PR(版本号)
+  #558 任务页「日历」视图(只读,STEP 1)—— #561 的 CI 期间合入 main,补进说明
+  #559 更新页重做(手机全屏 / 桌面新卡片,按 新功能 / 提速 / 修复 分组展示更新内容)—— 同上
+  本 PR(版本号,#561)
        版本号 8 个文件 0.2.157 → 0.2.158,android.versionCode 2157 → 2158;Cargo.lock 只改根包一段。
        release-desktop-auto-update.yml 加 What's new in 0.2.158。
 
@@ -23,4 +25,6 @@ B. 验证边界(如实)
 --------------------------------------------------------------------------------
   本 PR 只改版本号与说明;功能验证见各 PR。
   干净检出 origin/main(919e451,含 #557):npm ci / npm test(261/261 测试文件)/ typecheck 全部 rc=0。
+  #561 合入后的 main(b36714a,含 #558 #559):npm ci / npm test(263/263)/ typecheck 全部 rc=0。
+  What's new 已用 #559 的 parseReleaseNotes 实际解析:1 组,新功能 6 / 提速 3 / 修复 3,无杂项。
   发版时在构建出的 APK 上核对:versionCode 2158、启动图不是 Expo 模板占位图。
