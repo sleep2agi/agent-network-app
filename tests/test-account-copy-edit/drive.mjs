@@ -18,6 +18,7 @@ import { createServer } from 'node:http';
 import { readFileSync, existsSync, mkdirSync, statSync, writeFileSync } from 'node:fs';
 import { join, extname } from 'node:path';
 import { startMockHub } from '../test-account-switch/mock-hub.mjs';
+import { paintedText } from '../test-layout-sweep/harness.mjs';
 
 const { chromium } = await import(process.env.PLAYWRIGHT_MODULE || 'playwright');
 const { WEB_DIR: WEB, OUT } = process.env;
@@ -228,6 +229,8 @@ async function runViewport(vp, viewport, ua, wide) {
   const idxL = JSON.parse(afterLabel.hub_sessions_v2);
   const credA0 = JSON.parse(storeBefore[`hub_session_${idA}`] ?? storeBefore.hub_config_v1);
   const credA1 = JSON.parse(afterLabel[`hub_session_${idA}`] ?? afterLabel.hub_config_v1);
+  // the leaf holding 「Alice work」 must be painted (≥ 8px after overflow clipping), not only present in textContent
+  const labelPaint = await paintedText(page, `${wide ? '' : `${tid(`settings-manage-${idA}`)} `}:not(:has(*))`, 'Alice work');
   record(vp, '4 label-only edit on a non-current account', {
     labelSaved: idxL.sessions.find(s => s.id === idA)?.displayName === 'Alice work',
     samePosition: idxL.sessions.map(s => s.id).join() === idx.sessions.map(s => s.id).join(),
@@ -235,7 +238,8 @@ async function runViewport(vp, viewport, ua, wide) {
     tokenKept: credA1.token === credA0.token && credA1.serverUrl === credA0.serverUrl,
     otherUntouched: afterLabel[`hub_session_${idB}`] === storeBefore[`hub_session_${idB}`],
     rowShowsLabel: wide ? (await page.getByText('Alice work', { exact: true }).count()) > 0 : (await page.locator(tid(`settings-manage-${idA}`)).innerText()).includes('Alice work'),
-  });
+    labelPainted: !!labelPaint?.painted && labelPaint.w >= 8,
+  }, { labelPaint });
 
   // 5. edit B (current) Hub address
   const credB0 = afterLabel[`hub_session_${idB}`];

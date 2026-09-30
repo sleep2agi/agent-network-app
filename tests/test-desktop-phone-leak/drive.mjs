@@ -350,7 +350,22 @@ const openChat = async (page) => {
   await page.getByText('建不了节点', { exact: false }).first().waitFor({ timeout: 10000 }).catch(() => {});
   const text = await page.evaluate(() => document.body.innerText);
   await page.screenshot({ path: `${OUT}/${tag}-picker.png` });
-  check(tag, 'picker: phone keeps 「下拉刷新」, the back button, and no 刷新 button', /下拉刷新/.test(text) && (await page.locator(tid('pane-back')).count()) > 0 && (await page.locator(tid('picker-refresh')).count()) === 0);
+  // text right ≠ text visible (title-blank: flex 0 1 0% + overflow:hidden painted it 0px wide): the deepest element
+  // carrying 下拉刷新, its box intersected with every overflow-clipping ancestor, must be ≥ 8px wide.
+  const pull = await page.evaluate(() => {
+    const el = [...document.body.querySelectorAll('*')].reverse().find(e => e.getClientRects().length && /下拉刷新/.test(e.textContent));
+    if (!el) return null;
+    const b = el.getBoundingClientRect(); let w = b.width, h = b.height;
+    for (let a = el.parentElement; a && a !== document.body; a = a.parentElement) {
+      const cs = getComputedStyle(a);
+      if (cs.overflowX === 'visible' && cs.overflowY === 'visible') continue;
+      const r = a.getBoundingClientRect();
+      w = Math.min(w, Math.max(0, Math.min(b.right, r.right) - Math.max(b.left, r.left)));
+      h = Math.min(h, Math.max(0, Math.min(b.bottom, r.bottom) - Math.max(b.top, r.top)));
+    }
+    return { w, h };
+  });
+  check(tag, 'picker: phone keeps 「下拉刷新」, the back button, and no 刷新 button', /下拉刷新/.test(text) && !!pull && pull.w >= 8 && pull.h >= 1 && (await page.locator(tid('pane-back')).count()) > 0 && (await page.locator(tid('picker-refresh')).count()) === 0, pull ? `下拉刷新 painted ${r1(pull.w)}×${r1(pull.h)}` : '下拉刷新 not rendered');
   check(tag, 'no page errors', errors.length === 0, errors.slice(0, 3).join(' | '));
   await ctx.close();
 }

@@ -22,6 +22,7 @@
 import { createServer } from 'node:http';
 import { readFileSync, existsSync, mkdirSync, statSync } from 'node:fs';
 import { join, extname } from 'node:path';
+import { paintedText } from '../test-layout-sweep/harness.mjs';
 
 const { chromium } = await import(process.env.PLAYWRIGHT_MODULE || 'playwright');
 const WEB = process.env.WEB_DIR, OUT = process.env.OUT;
@@ -135,13 +136,16 @@ function record(vp, scheme, what, checks, detail) {
   rows.push(row);
   console.log(JSON.stringify(row));
 }
+// Text checks also demand the PAINTED box (after overflow clipping) — a 0-wide element keeps its textContent.
+const painted = (p) => !!p && p.painted && p.w >= 8;
+const pw = (p) => p ? `${r1(p.w)}×${r1(p.h)}` : 'none';
 const spread = (bs) => r1(Math.max(...bs.map(b => b.cy)) - Math.min(...bs.map(b => b.cy)));
 
 for (const [w, h] of [[390, 844], [1200, 850]]) {
   for (const scheme of ['light', 'dark']) {
     const vp = `${w}x${h}`;
     const tag = `${w}-${scheme}`;
-    const ctx = await browser.newContext({ viewport: { width: w, height: h }, colorScheme: scheme, userAgent: ANDROID_UA, deviceScaleFactor: 2, hasTouch: w < 700, isMobile: false });
+    const ctx = await browser.newContext({ viewport: { width: w, height: h }, colorScheme: scheme, userAgent: ANDROID_UA, deviceScaleFactor: 2, hasTouch: w < 700, isMobile: false, locale: 'zh-CN' });
     const page = await ctx.newPage();
     page.on('pageerror', e => console.log('PAGEERROR', e.message.split('\n')[0]));
     await page.route(`${HUB}/**`, route => route.fulfill(answer(route.request().url())));
@@ -197,13 +201,17 @@ for (const [w, h] of [[390, 844], [1200, 850]]) {
     record(vp, scheme, 'search placeholder counts listed rows', { count: placeholder === `搜索 ${LISTED} 个节点(支持拼音)` }, { text: placeholder });
     // footer: scroll the list to the end
     await page.locator('[data-testid="node-picker-list"]').first().evaluate(el => { const sc = [el, ...el.querySelectorAll('*')].find(e => e.scrollHeight > e.clientHeight + 4); if (sc) sc.scrollTop = sc.scrollHeight; });
+    // On the 390 sheet that scroll does not reach the footer (the painted check showed it 0 px tall, below the sheet's
+    // clip, and the footer screenshot had no footer in it): bring it into view the way a user scrolling down would.
+    await page.locator('[data-testid="node-picker-hidden-offline"]').first().scrollIntoViewIfNeeded({ timeout: 3000 }).catch(() => {});
     await page.waitForTimeout(700);
     const footer = await page.locator('[data-testid="node-picker-hidden-offline"]').textContent().catch(() => '');
+    const footerP = await paintedText(page, '[data-testid="node-picker-hidden-offline"]');
     // text left edge (a Range, not the element box: the padding is inside the element)
     const glyphX = await page.locator('[data-testid="node-picker-hidden-offline"]').first().evaluate(el => { const r = document.createRange(); r.selectNodeContents(el); return r.getBoundingClientRect().left; }).catch(() => null);
     const footInset = glyphX == null ? -1 : glyphX - panel.x - border[0];
-    record(vp, scheme, 'footer names hidden offline sessions', { text: footer === '另有 3 个离线会话没有登记节点，无法指派', inset: glyphX != null && Math.abs(footInset - padL) <= 1 },
-      { text: footer, padL: r1(footInset), searchPad: r1(padL) });
+    record(vp, scheme, 'footer names hidden offline sessions', { text: footer === '另有 3 个离线会话没有登记节点，无法指派' && painted(footerP), inset: glyphX != null && Math.abs(footInset - padL) <= 1 },
+      { text: footer, painted: pw(footerP), padL: r1(footInset), searchPad: r1(padL) });
     await page.screenshot({ path: `${OUT}/nodepicker-${tag}-footer.png` });
 
     // unassignable rows: search the group, measure the centre line and the reason column
@@ -255,7 +263,8 @@ for (const [w, h] of [[390, 844], [1200, 850]]) {
     await page.locator('[data-testid="node-picker-input"]').fill('zzzq');
     await page.waitForTimeout(400);
     const empty = await page.locator('[data-testid="node-picker-empty"]').textContent().catch(() => '');
-    record(vp, scheme, 'empty search text', { text: empty === '没有找到 “zzzq”' }, { text: empty });
+    const emptyP = await paintedText(page, '[data-testid="node-picker-empty"]');
+    record(vp, scheme, 'empty search text', { text: empty === '没有找到 “zzzq”' && painted(emptyP) }, { text: empty, painted: pw(emptyP) });
     await page.locator('[data-testid="node-picker-input"]').fill('');
     await page.waitForTimeout(400);
 
@@ -268,8 +277,9 @@ for (const [w, h] of [[390, 844], [1200, 850]]) {
     await page.waitForTimeout(400);
     // folded ⇒ none of the group's rows are rendered, but its header (with online/total) stays
     const headerText = await grp.textContent();
+    const headerP = await paintedText(page, `[data-testid="picker-group-${gTitle}"]`);
     const after = await namesIn();
-    record(vp, scheme, `fold group ${gTitle}`, { folded: before > 0 && after === 0, header: /\d+\/15$/.test(headerText) }, { rowsBefore: before, rowsAfter: after, header: headerText });
+    record(vp, scheme, `fold group ${gTitle}`, { folded: before > 0 && after === 0, header: /\d+\/15$/.test(headerText) && painted(headerP) }, { rowsBefore: before, rowsAfter: after, header: headerText, painted: pw(headerP) });
     await page.screenshot({ path: `${OUT}/nodepicker-${tag}-group-collapsed.png` });
     await grp.click();
     await page.waitForTimeout(300);

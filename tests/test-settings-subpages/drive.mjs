@@ -16,7 +16,7 @@
 // 1200×800 桌面(非安卓 UA)只截图,供与改动前的导出逐像素比对(DESKTOP_BASELINE=<旧截图目录>)。
 // 任何一页没打开 = FAIL(不是 skip)。
 import { mkdirSync, readFileSync, existsSync } from 'node:fs';
-import { serveExport, initScript, findChromium, ANDROID_UA } from '../test-layout-sweep/harness.mjs';
+import { serveExport, initScript, findChromium, ANDROID_UA, paintedText } from '../test-layout-sweep/harness.mjs';
 
 const { chromium } = await import(process.env.PLAYWRIGHT_MODULE || 'playwright');
 const WEB = process.env.WEB_DIR;
@@ -84,6 +84,14 @@ const measure = () => {
   return { cards, tabBar: !!tabBar && visible(tabBar), title: document.querySelector('[data-testid="settings-subpage-title"]')?.textContent ?? null };
 };
 
+// 标题要真画出来:textContent 对但被裁成 0 宽(title-blank)的那种也要红。返回 [ok, extra] 给 ck。
+const TITLE = '[data-testid="settings-subpage-title"]';
+const fmtPaint = (p) => p ? `painted ${p.painted} ${p.w.toFixed(1)}×${p.h.toFixed(1)}` : 'painted null';
+const titleIs = async (page, want) => {
+  const text = await page.locator(TITLE).innerText(); const p = await paintedText(page, TITLE, want);
+  return [text === want && !!p?.painted && p.w >= 8, `${text} · ${fmtPaint(p)}`];
+};
+
 const table = [];
 const checkPage = async (page, name, theme) => {
   await page.waitForTimeout(500);
@@ -146,10 +154,10 @@ if (!DESKTOP_ONLY) for (const theme of ['light', 'dark']) {
       if (key === 'account') {
         await page.locator('[data-testid="settings-manage-accounts"]').click();
         await page.waitForTimeout(300);
-        ck(`${theme} account→管理账号: 标题`, (await page.locator('[data-testid="settings-subpage-title"]').innerText()) === '管理账号');
+        ck(`${theme} account→管理账号: 标题`, ...(await titleIs(page, '管理账号')));
         await checkPage(page, 'account-manage', theme);
         await back();
-        ck(`${theme} account: 返回先退三级页`, (await page.locator('[data-testid="settings-subpage-title"]').innerText()) === '账号');
+        ck(`${theme} account: 返回先退三级页`, ...(await titleIs(page, '账号')));
       }
       if (key === 'notifications') {
         const quiet = page.getByRole('switch', { name: '免打扰时段' });
@@ -159,15 +167,16 @@ if (!DESKTOP_ONLY) for (const theme of ['light', 'dark']) {
         await checkPage(page, 'notifications-quiet', theme);
         await page.keyboard.press('Escape');
         await page.waitForTimeout(250);
-        ck(`${theme} notifications: Esc 先退三级页`, (await page.locator('[data-testid="settings-subpage-title"]').innerText()) === '通知');
+        ck(`${theme} notifications: Esc 先退三级页`, ...(await titleIs(page, '通知')));
       }
       if (key === 'voice') {
         const value = (await page.locator('[data-testid="voice-api-key-row-value"]').innerText()).trim();
-        ck(`${theme} voice: API Key 行值 = 已配置 …abcd`, value === '已配置 …abcd', value);
+        const vp = await paintedText(page, '[data-testid="voice-api-key-row-value"]');
+        ck(`${theme} voice: API Key 行值 = 已配置 …abcd`, value === '已配置 …abcd' && !!vp?.painted && vp.w >= 8, `${value} · ${fmtPaint(vp)}`);
         ck(`${theme} voice: 页面上没有输入框`, (await page.locator('[data-testid="settings-subpage-voice"] input').count()) === 0);
         await page.locator('[data-testid="voice-api-key-row"]').click();
         await page.locator('[data-testid="voice-api-key"]').waitFor({ timeout: 5000 });
-        ck(`${theme} voice→API Key: 标题`, (await page.locator('[data-testid="settings-subpage-title"]').innerText()) === 'API Key');
+        ck(`${theme} voice→API Key: 标题`, ...(await titleIs(page, 'API Key')));
         ck(`${theme} voice→API Key: 密钥栏是密码框、不回显`, (await page.locator('[data-testid="voice-api-key"]').getAttribute('type')) === 'password' && (await page.locator('[data-testid="voice-api-key"]').inputValue()) === '');
         await checkPage(page, 'voice-apikey', theme);
         const save = await page.locator('[data-testid="voice-save"]').boundingBox();

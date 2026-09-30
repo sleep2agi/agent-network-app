@@ -16,6 +16,7 @@
 import { createServer } from 'node:http';
 import { readFileSync, existsSync, mkdirSync, statSync } from 'node:fs';
 import { join, extname } from 'node:path';
+import { paintedText } from '../test-layout-sweep/harness.mjs';
 
 const { chromium } = await import(process.env.PLAYWRIGHT_MODULE || 'playwright');
 const WEB = process.env.WEB_DIR, OUT = process.env.OUT;
@@ -115,6 +116,9 @@ const browser = await chromium.launch({ headless: true, executablePath: findExe(
 const ANDROID_UA = 'Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0 Mobile Safari/537.36';
 let failures = 0;
 const ck = (name, ok, detail = '') => { if (!ok) failures++; console.log(`${ok ? 'PASS' : 'FAIL'}: ${name}${detail ? ' — ' + detail : ''}`); };
+// Text checks also demand the PAINTED box (after overflow clipping) — a 0-wide title keeps its textContent.
+const painted = (p) => !!p && p.painted && p.w >= 8;
+const pw = (p) => p ? `painted ${p.w.toFixed(1)}×${p.h.toFixed(1)}` : 'painted (none)';
 
 const open = async ({ phone }) => {
   const ctx = await browser.newContext(phone
@@ -179,11 +183,13 @@ const nonCreateWrites = () => writes.filter(w => !(w.method === 'POST' && w.path
   if (OUT) await page.screenshot({ path: `${OUT}/desktop-detail.png` });
   await page.locator('[data-testid="schedule-copy"]').click();
   await form(page).waitFor({ timeout: 10000 });
-  ck('A: opens the NEW form, not 编辑', (await page.locator('[data-testid="schedule-form-title"]').innerText()) === '新建定时任务');
+  const titleA = await paintedText(page, '[data-testid="schedule-form-title"]');
+  ck('A: opens the NEW form, not 编辑', (await page.locator('[data-testid="schedule-form-title"]').innerText()) === '新建定时任务' && painted(titleA), pw(titleA));
   const name = page.getByPlaceholder('每日巡检');
   ck('A: name prefilled with 「 副本」', (await name.inputValue()) === '巡检 副本', await name.inputValue());
   ck('A: task prefilled', (await page.getByPlaceholder('节点收到的任务').inputValue()) === '检查一遍日志');
-  ck('A: node prefilled', (await page.locator('[data-testid="schedule-target-name"]').innerText()) === '测试甲');
+  const nodeA = await paintedText(page, '[data-testid="schedule-target-name"]');
+  ck('A: node prefilled', (await page.locator('[data-testid="schedule-target-name"]').innerText()) === '测试甲' && painted(nodeA), pw(nodeA));
   ck('A: timezone prefilled', (await page.getByPlaceholder('Asia/Shanghai').inputValue()) === 'Asia/Shanghai');
   ck('A: weekly time prefilled', (await page.getByPlaceholder('09:00').inputValue()) === '08:30');
   if (OUT) { await page.waitForTimeout(600); await page.screenshot({ path: `${OUT}/desktop-copy-form.png` }); }
@@ -211,7 +217,10 @@ const nonCreateWrites = () => writes.filter(w => !(w.method === 'POST' && w.path
   const when = await page.getByPlaceholder('2026-08-10T09:00').inputValue();
   ck('B: one-shot time moved into the future', new Date(when).getTime() > Date.now(), when);
   const hint = page.locator('[data-testid="schedule-form-time-hint"]');
-  ck('B: hint explains the move', (await hint.count()) === 1 && (await hint.innerText()).includes('已过'), await hint.count() ? await hint.innerText() : '(none)');
+  // Below the form's scroll fold at 1200×800: scroll it in first, or the clip test reads the scroll offset, not the layout.
+  if (await hint.count()) await hint.scrollIntoViewIfNeeded();
+  const hintP = await paintedText(page, '[data-testid="schedule-form-time-hint"]');
+  ck('B: hint explains the move', (await hint.count()) === 1 && (await hint.innerText()).includes('已过') && painted(hintP), `${await hint.count() ? await hint.innerText() : '(none)'}; ${pw(hintP)}`);
   if (OUT) { await hint.scrollIntoViewIfNeeded(); await page.waitForTimeout(600); await page.screenshot({ path: `${OUT}/desktop-copy-once-past.png` }); }
   await page.locator('[data-testid="schedule-form-save"]').click();
   await page.waitForTimeout(1500);
@@ -227,7 +236,8 @@ const nonCreateWrites = () => writes.filter(w => !(w.method === 'POST' && w.path
   await selectRow(page, 'sched_gone', 'paused');
   await page.locator('[data-testid="schedule-copy"]').click();
   await form(page).waitFor({ timeout: 10000 });
-  ck('C: missing node stays selected (alias shown)', (await page.locator('[data-testid="schedule-target-name"]').innerText()) === '测试已下线');
+  const nodeC = await paintedText(page, '[data-testid="schedule-target-name"]');
+  ck('C: missing node stays selected (alias shown)', (await page.locator('[data-testid="schedule-target-name"]').innerText()) === '测试已下线' && painted(nodeC), pw(nodeC));
   const hint = page.locator('[data-testid="schedule-target-hint"]');
   console.log(`   node field hint: ${await hint.count() ? await hint.innerText() : '(none)'}`);
   if (OUT) { await page.waitForTimeout(600); await page.screenshot({ path: `${OUT}/desktop-copy-node-gone.png` }); }
@@ -263,7 +273,8 @@ const nonCreateWrites = () => writes.filter(w => !(w.method === 'POST' && w.path
   if (OUT) await page.screenshot({ path: `${OUT}/phone-detail.png` });
   await page.locator('[data-testid="schedule-copy"]').click();
   await form(page).waitFor({ timeout: 10000 });
-  ck('D: phone opens the new-schedule sheet', (await page.locator('[data-testid="schedule-form-title"]').innerText()) === '新建定时任务' && (await page.getByPlaceholder('每日巡检').inputValue()) === '巡检 副本');
+  const titleD = await paintedText(page, '[data-testid="schedule-form-title"]');
+  ck('D: phone opens the new-schedule sheet', (await page.locator('[data-testid="schedule-form-title"]').innerText()) === '新建定时任务' && painted(titleD) && (await page.getByPlaceholder('每日巡检').inputValue()) === '巡检 副本', pw(titleD));
   if (OUT) { await page.waitForTimeout(600); await page.screenshot({ path: `${OUT}/phone-copy-form.png` }); }
   await page.locator('[data-testid="schedule-form-save"]').click();
   await page.waitForTimeout(1500);

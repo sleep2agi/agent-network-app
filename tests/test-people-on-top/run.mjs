@@ -12,7 +12,7 @@
 // Exit 1 when any assertion fails. Run it against the pre-change export first: it must go red.
 import { mkdirSync } from 'node:fs';
 import { join } from 'node:path';
-import { serveExport, findChromium, ANDROID_UA } from '../test-layout-sweep/harness.mjs';
+import { serveExport, findChromium, ANDROID_UA, paintedText } from '../test-layout-sweep/harness.mjs';
 
 const { chromium } = await import(process.env.PLAYWRIGHT_MODULE || 'playwright');
 const { WEB_DIR: WEB, OUT } = process.env;
@@ -113,14 +113,16 @@ async function run(vp, viewport, ua) {
     aboveGroups: !!m.people && firstGroupY !== null && m.people.b <= firstGroupY + 0.5,
   }, { searchBottom: searchBox?.b, peopleY: m.people?.y, peopleBottom: m.people?.b, firstGroupY, groups: m.groups.length });
   const count = await page.locator(tid('people-count')).innerText().catch(() => '');
+  const countPaint = await paintedText(page, tid('people-count'), '3'); // a single digit: painted ≥ 4px wide, not only textContent
   const personRow = await box(page, '[data-testid^="person-row-"]');
   const agentRow = await box(page, '[data-testid^="agent-row-"]');
-  record(vp, '2 header shows the count; people rows share the agent rows’ left edge and width', { count: count === '3', left: !!personRow && !!agentRow && Math.abs(personRow.x - agentRow.x) <= 1, width: !!personRow && !!agentRow && Math.abs(personRow.w - agentRow.w) <= 1 }, { count, personRow, agentRow });
+  record(vp, '2 header shows the count; people rows share the agent rows’ left edge and width', { count: count === '3', countPainted: !!countPaint?.painted && countPaint.w >= 4, left: !!personRow && !!agentRow && Math.abs(personRow.x - agentRow.x) <= 1, width: !!personRow && !!agentRow && Math.abs(personRow.w - agentRow.w) <= 1 }, { count, countPaint, personRow, agentRow });
 
   // 3 fold → reload → still folded → unfold
   await page.locator(tid('people-header')).click(); await sleep(400);
   const foldedRows = await page.locator('[data-testid^="person-row-"]').count();
-  record(vp, '3 tap header → folded (rows gone, count stays)', { rows: foldedRows === 0, count: (await page.locator(tid('people-count')).innerText()) === '3' });
+  const foldedCount = await paintedText(page, tid('people-count'), '3');
+  record(vp, '3 tap header → folded (rows gone, count stays)', { rows: foldedRows === 0, count: (await page.locator(tid('people-count')).innerText()) === '3', countPainted: !!foldedCount?.painted && foldedCount.w >= 4 }, { foldedCount });
   await page.reload(); await page.locator(tid('people-header')).waitFor({ timeout: 30000 }); await sleep(800);
   record(vp, '3 reload → still folded (remembered on this device)', { rows: (await page.locator('[data-testid^="person-row-"]').count()) === 0 });
   await page.screenshot({ path: join(OUT, `${vp}-2-folded.png`) });

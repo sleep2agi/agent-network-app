@@ -10,7 +10,7 @@
 // clicked (navigates or toggles), Esc / outside click (drawer), history back / ‹ (page), Ctrl+F.
 // Exit 1 when any check fails.
 import { mkdirSync, writeFileSync } from 'node:fs';
-import { serveExport, initScript, findChromium } from '../test-layout-sweep/harness.mjs';
+import { serveExport, initScript, findChromium, paintedText } from '../test-layout-sweep/harness.mjs';
 
 const { chromium } = await import(process.env.PLAYWRIGHT_MODULE || 'playwright');
 const WEB = process.env.WEB_DIR, OUT = process.env.OUT;
@@ -32,6 +32,22 @@ const check = (tag, name, ok, detail = '') => {
 };
 const r1 = (n) => Math.round(n * 10) / 10;
 const tid = (id) => `[data-testid="${id}"]`;
+// The glyph itself must be painted: range box of the text node holding `glyph`, clipped by its own element and every
+// overflow ancestor (numberOfLines ellipsis / 0-wide flex item would hide it while textContent still has it).
+const paintedGlyph = (page, rootSel, glyph) => page.evaluate(([s, g]) => {
+  const root = document.querySelector(s); if (!root) return null;
+  const tw = document.createTreeWalker(root, NodeFilter.SHOW_TEXT); let n; while ((n = tw.nextNode()) && !n.textContent.includes(g));
+  if (!n) return null;
+  const r = document.createRange(); const i = n.textContent.indexOf(g); r.setStart(n, i); r.setEnd(n, i + g.length);
+  const b = r.getBoundingClientRect(); let w = b.width, h = b.height;
+  for (let a = n.parentElement; a && a !== document.body; a = a.parentElement) {
+    const cs = getComputedStyle(a); if (a !== n.parentElement && cs.overflowX === 'visible' && cs.overflowY === 'visible') continue;
+    const c = a.getBoundingClientRect();
+    w = Math.min(w, Math.max(0, Math.min(b.right, c.right) - Math.max(b.left, c.left))); h = Math.min(h, Math.max(0, Math.min(b.bottom, c.bottom) - Math.max(b.top, c.top)));
+  }
+  return { w, h, painted: w >= 1 && h >= 1 };
+}, [rootSel, glyph]);
+const fmtP = (p) => p ? `painted ${r1(p.w)}×${r1(p.h)}` : 'painted null';
 
 /** Header geometry: right-side actions, ⋯ vs name block centre, left / right padding. */
 const measureHeader = () => {
@@ -193,11 +209,12 @@ for (const L of LAYOUTS) {
       let listSide = '';
       // Desktop: the agent list is on screen next to the chat — its row shows the same state (📌 / 🔕).
       const rowText = L.name === 'desktop' ? await page.locator(`[data-agent-alias="${ALIAS}"]`).first().textContent() : '';
-      if (L.name === 'desktop' && key === 'pin') listSide = `list pin icon=${rowText.includes('📌') ? 1 : 0}`;
-      if (L.name === 'desktop' && key === 'mute') listSide = `list mute icon=${rowText.includes('🔕') ? 1 : 0}`;
+      const icon = { pin: '📌', mute: '🔕' }[key];
+      const iconP = L.name === 'desktop' && icon ? await paintedGlyph(page, `[data-agent-alias="${ALIAS}"]`, icon) : null;
+      if (L.name === 'desktop' && icon) listSide = `list ${key} icon=${rowText.includes(icon) && !!iconP?.painted && iconP.w >= 8 ? 1 : 0} (${fmtP(iconP)})`;
       if (key === 'pin' && scheme === 'light') await page.screenshot({ path: `${OUT}/${tag}-4-toggled-pin.png` });
       check(tag, `toggle ${key}: ${before} → ${after}`, before === false && after === true, listSide);
-      if (L.name === 'desktop' && key !== 'windowPin') check(tag, `toggle ${key} is the same state the agent list shows`, /=1$/.test(listSide), listSide);
+      if (L.name === 'desktop' && key !== 'windowPin') check(tag, `toggle ${key} is the same state the agent list shows`, /icon=1 /.test(listSide), listSide);
       await page.locator(tid(`${id}-switch`)).click();
       await page.waitForTimeout(400);
       check(tag, `toggle ${key} back off`, (await switchChecked(page, id)) === false);
@@ -227,8 +244,9 @@ for (const L of LAYOUTS) {
         return on.length === 1 ? on[0].getAttribute('aria-label') : `ambiguous(${on.length})`;
       });
       const onInfo = (await page.getByText('节点信息', { exact: true }).count()) > 0;
+      const titleP = await paintedText(page, ':not(:has(*))', '节点信息'); // the title is painted, not only in textContent
       if (key === 'section-rules' && scheme === 'light') await page.screenshot({ path: `${OUT}/${tag}-6-rules.png` });
-      check(tag, `row ${key} → 节点信息 on 「${label}」`, onInfo && active === label, `active=${active}`);
+      check(tag, `row ${key} → 节点信息 on 「${label}」`, onInfo && !!titleP?.painted && titleP.w >= 8 && active === label, `active=${active} title ${fmtP(titleP)}`);
       // Back to the chat: phone uses the page's ‹; desktop panes have no ‹ since #447 (pane-header.ts),
       // there the agent's row in the list is the way back.
       if (L.name === 'desktop') await page.locator(`[data-agent-alias="${ALIAS}"]`).first().click();

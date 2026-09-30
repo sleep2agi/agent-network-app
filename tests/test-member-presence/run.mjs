@@ -15,7 +15,7 @@
 // Exit 1 when any assertion fails. Run it against the pre-change export first: it must go red.
 import { mkdirSync } from 'node:fs';
 import { join } from 'node:path';
-import { serveExport, findChromium, ANDROID_UA } from '../test-layout-sweep/harness.mjs';
+import { serveExport, findChromium, ANDROID_UA, paintedText } from '../test-layout-sweep/harness.mjs';
 
 const { chromium } = await import(process.env.PLAYWRIGHT_MODULE || 'playwright');
 const { WEB_DIR: WEB, OUT } = process.env;
@@ -147,11 +147,13 @@ async function run(vp, viewport, ua) {
   }, { person: on && { x: on.x, w: on.w, h: on.h, right: on.right, bottom: on.bottom, avatarW: on.avatarW }, agent: agentOn && { x: agentOn.x, w: agentOn.w, h: agentOn.h, right: agentOn.right, bottom: agentOn.bottom, avatarW: agentOn.avatarW } });
   const text = async (username) => (await page.locator(tid(`person-row-${username}`)).innerText().catch(() => '')).replace(/\s+/g, ' ').trim();
   const tOn = await text('person-on'), tOff = await text('person-off'), tUnk = await text('person-unk');
+  const subOff = await paintedText(page, tid('person-subtitle-person-off')); // painted, not only in textContent
   record(vp, '3 subtitle: 「5 分钟前在线」 when offline; nothing when online or unknown', {
     off: tOff.includes('5 分钟前在线'),
+    offPainted: !!subOff?.painted && subOff.w >= 8 && subOff.text.includes('5 分钟前在线'),
     on: !tOn.includes('在线'),
     unk: !tUnk.includes('在线'),
-  }, { tOn, tOff, tUnk });
+  }, { tOn, tOff, tUnk, subOff });
   await page.screenshot({ path: join(OUT, `${vp}-1-presence.png`) });
   const rowsBox = await page.locator(tid('people-section')).boundingBox().catch(() => null);
   if (rowsBox) await page.screenshot({ path: join(OUT, `${vp}-1-presence-crop.png`), clip: { x: Math.max(0, rowsBox.x - 8), y: Math.max(0, rowsBox.y - 8), width: Math.min(viewport.width, rowsBox.width + 16), height: rowsBox.height + 16 } });
@@ -162,12 +164,14 @@ async function run(vp, viewport, ua) {
   await sleep(400);
   const on2 = await dotGeom(page, tid('person-dot-person-on'));
   const unk2 = await dotGeom(page, tid('person-dot-person-unk'));
+  const subOn2 = await paintedText(page, tid('person-subtitle-person-on'));
   record(vp, '4 member_presence flips the dots live', {
     pushed: pushed >= 2,
     onNowOffline: !!on2 && !!agentOff && on2.bg === agentOff.bg,
     unkNowOnline: !!unk2 && !!agentOn && unk2.bg === agentOn.bg,
     justNow: (await text('person-on')).includes('刚刚在线'),
-  }, { pushed, on2: on2?.bg, unk2: unk2?.bg });
+    justNowPainted: !!subOn2?.painted && subOn2.w >= 8 && subOn2.text.includes('刚刚在线'),
+  }, { pushed, on2: on2?.bg, unk2: unk2?.bg, subOn2 });
   await page.screenshot({ path: join(OUT, `${vp}-2-live.png`) });
   await ctx.close();
 

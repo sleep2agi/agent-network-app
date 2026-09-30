@@ -14,7 +14,7 @@
 // 以及每一步新控件的 boundingBox(对齐 / 边距)。截图进 OUT。任何断言失败 exit 1。
 import { mkdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { serveExport, findChromium, ANDROID_UA } from '../test-layout-sweep/harness.mjs';
+import { serveExport, findChromium, ANDROID_UA, paintedText } from '../test-layout-sweep/harness.mjs';
 
 const { chromium } = await import(process.env.PLAYWRIGHT_MODULE || 'playwright');
 const { WEB_DIR: WEB, OUT, SEED, VP } = process.env;
@@ -99,7 +99,7 @@ record('1 legacy member row reads 全部 Agent', { all: (await rowValue()) === '
 
 // 2
 await openBob();
-if (!wide) record('2 phone: member page is a settings 三级页 titled 成员', { title: (await page.locator(tid('settings-subpage-title')).innerText()) === '成员' });
+if (!wide) { const t = await paintedText(page, tid('settings-subpage-title'), '成员'); record('2 phone: member page is a settings 三级页 titled 成员', { title: (await page.locator(tid('settings-subpage-title')).innerText()) === '成员', painted: !!t?.painted && t.w >= 8 }, { painted: t }); }
 record('2 opens on 全部 Agent', { all: (await checked('grants-mode-all')) === 'true', notGranted: (await checked('grants-mode-granted')) === 'false' });
 if (wide) {
   const disabled = await page.locator(tid('grant-toggle-e2e-alpha')).getAttribute('aria-disabled');

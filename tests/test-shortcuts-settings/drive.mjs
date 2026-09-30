@@ -17,7 +17,7 @@
 //   phone   390×844 安卓 UA:＋ 仍是微信式 相册 / 文件 面板
 // 任何一条没跑到 = FAIL(不是 skip)。
 import { mkdirSync } from 'node:fs';
-import { serveExport, initScript, findChromium, ANDROID_UA } from '../test-layout-sweep/harness.mjs';
+import { serveExport, initScript, findChromium, ANDROID_UA, paintedText } from '../test-layout-sweep/harness.mjs';
 
 // 1×1 透明 PNG
 const PNG = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==', 'base64');
@@ -61,6 +61,29 @@ await page.locator('[data-testid="desktop-rail"]').waitFor({ timeout: 20000 });
 const bbox = async (sel) => page.locator(sel).first().boundingBox();
 const seen = (loc) => loc.waitFor({ timeout: 8000 }).then(() => true, () => false);
 const shot = async (name) => { if (OUT) await page.screenshot({ path: `${OUT}/${name}.png` }); };
+// 文字对 ≠ 看得见:title-blank 那次 textContent 一直对,元素却被 flex 0 1 0% + overflow:hidden 压成 0px 宽。
+// 文字判据旁边再量同一个元素画出来的框(被 overflow 祖先裁剪后 ≥ 8px 宽)。先滚进视口:设置页是滚动容器,
+// 首屏外的行被它裁成 0 高,那是「没滚到」不是「没画」。只让真正的滚动容器(overflow auto/scroll)动 ——
+// scrollIntoView 也会滚 overflow:hidden 的盒子,把被裁掉的字滚回来,正好掩盖要量的缺陷。
+const painted = async (id) => {
+  const sel = `[data-testid="${id}"]`;
+  await page.evaluate((s) => {
+    const el = document.querySelector(s);
+    if (!el) return;
+    const scrolls = (v) => v === 'auto' || v === 'scroll';
+    const pinned = [];
+    for (let a = el.parentElement; a; a = a.parentElement) if (a !== document.scrollingElement) pinned.push([a, a.scrollTop, a.scrollLeft]);
+    el.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+    for (const [a, top, left] of pinned) {
+      const cs = getComputedStyle(a);
+      if (!scrolls(cs.overflowY)) a.scrollTop = top;
+      if (!scrolls(cs.overflowX)) a.scrollLeft = left;
+    }
+  }, sel);
+  return paintedText(page, sel);
+};
+const shown = (p) => !!p?.painted && p.w >= 8;
+const pd = (p) => p ? `painted ${Math.round(p.w)}×${Math.round(p.h)}${p.painted ? '' : ' UNPAINTED'}` : 'not rendered';
 const openSettings = async (label) => {
   await page.getByRole('tab', { name: '设置', exact: true }).click();
   await page.getByRole('button', { name: `设置分类 ${label}` }).click();
@@ -110,31 +133,37 @@ try {
   const ends = rows.map(r => r.rightEnd);
   ck('layout: 右侧键帽列右边缘对齐 ±1px', Math.max(...ends) - Math.min(...ends) <= 1, `${Math.min(...ends)}..${Math.max(...ends)}`);
   const chipText = await page.locator('[data-testid="shortcut-chips-nav.search"]').innerText();
-  ck('layout: 非 mac 显示 Ctrl 键帽', chipText.replace(/\s+/g, ' ').trim() === 'Ctrl K', JSON.stringify(chipText));
+  const chipP = await painted('shortcut-chips-nav.search');
+  ck('layout: 非 mac 显示 Ctrl 键帽', chipText.replace(/\s+/g, ' ').trim() === 'Ctrl K' && shown(chipP), `${JSON.stringify(chipText)} ${pd(chipP)}`);
 
   // ── capture ────────────────────────────────────────────────────────────────
   await page.locator('[data-testid="shortcut-row-nav.search"]').click();
   ck('capture: 点行进入「按下新组合…」', await page.locator('[data-testid="shortcut-capturing-nav.search"]').isVisible());
   await shot('shortcuts-capturing');
   await page.keyboard.press('KeyP');
-  ck('capture: 不带修饰键 → 提示需要 Ctrl,仍在录入', (await page.locator('[data-testid="shortcut-warning-nav.search"]').innerText()).includes('Ctrl') && await page.locator('[data-testid="shortcut-capturing-nav.search"]').isVisible());
+  const needModP = await painted('shortcut-warning-nav.search');
+  ck('capture: 不带修饰键 → 提示需要 Ctrl,仍在录入', (await page.locator('[data-testid="shortcut-warning-nav.search"]').innerText()).includes('Ctrl') && shown(needModP) && await page.locator('[data-testid="shortcut-capturing-nav.search"]').isVisible(), pd(needModP));
   await page.keyboard.press('Control+KeyC');
-  ck('capture: Ctrl+C → 保留组合提示', (await page.locator('[data-testid="shortcut-warning-nav.search"]').innerText()).includes('复制'));
+  const reservedP = await painted('shortcut-warning-nav.search');
+  ck('capture: Ctrl+C → 保留组合提示', (await page.locator('[data-testid="shortcut-warning-nav.search"]').innerText()).includes('复制') && shown(reservedP), pd(reservedP));
   await page.keyboard.press('Control+Comma');
   const conflictText = await page.locator('[data-testid="shortcut-warning-nav.search"]').innerText();
-  ck('capture: Ctrl+, → 与「打开设置」冲突', conflictText.includes('打开设置'), conflictText);
+  const conflictP = await painted('shortcut-warning-nav.search');
+  ck('capture: Ctrl+, → 与「打开设置」冲突', conflictText.includes('打开设置') && shown(conflictP), `${conflictText} ${pd(conflictP)}`);
   await shot('shortcuts-conflict');
   ck('capture: 录入中按 Ctrl+, 没有跳走(全局快捷键暂停)', await page.locator('[data-testid="shortcuts-settings"]').isVisible());
   await page.keyboard.press('Control+Shift+KeyP');
   const saved = (await page.locator('[data-testid="shortcut-chips-nav.search"]').innerText()).replace(/\s+/g, ' ').trim();
-  ck('capture: Ctrl+Shift+P 保存并显示', saved === 'Ctrl Shift P', saved);
+  const savedP = await painted('shortcut-chips-nav.search');
+  ck('capture: Ctrl+Shift+P 保存并显示', saved === 'Ctrl Shift P' && shown(savedP), `${saved} ${pd(savedP)}`);
   ck('capture: 改过的行出现「恢复默认」', await page.locator('[data-testid="shortcut-reset-nav.search"]').isVisible());
   const stored = await page.evaluate(() => localStorage.getItem('keyboard_shortcuts_v1'));
   ck('capture: 落 localStorage', (stored ?? '').includes('Mod+Shift+P'), stored ?? 'null');
   await shot('shortcuts-customized');
   await page.locator('[data-testid="shortcut-row-nav.settings"]').click();
   await page.keyboard.press('Escape');
-  ck('capture: Esc 取消,原组合不变', !(await page.locator('[data-testid="shortcut-capturing-nav.settings"]').count()) && (await page.locator('[data-testid="shortcut-chips-nav.settings"]').innerText()).replace(/\s+/g, ' ').trim() === 'Ctrl ,');
+  const escP = await painted('shortcut-chips-nav.settings');
+  ck('capture: Esc 取消,原组合不变', !(await page.locator('[data-testid="shortcut-capturing-nav.settings"]').count()) && (await page.locator('[data-testid="shortcut-chips-nav.settings"]').innerText()).replace(/\s+/g, ' ').trim() === 'Ctrl ,' && shown(escP), pd(escP));
 
   // ── run ────────────────────────────────────────────────────────────────────
   await page.locator('body').click({ position: { x: 700, y: 760 } });
@@ -163,7 +192,8 @@ try {
   ck('run: Ctrl+, → 设置', await seen(page.locator('[data-testid="settings-sidebar"]')));
   await page.getByRole('button', { name: '设置分类 快捷键' }).click();
   await page.locator('[data-testid="shortcut-reset-nav.search"]').click();
-  ck('run: 单行恢复默认 → Ctrl K', (await page.locator('[data-testid="shortcut-chips-nav.search"]').innerText()).replace(/\s+/g, ' ').trim() === 'Ctrl K');
+  const resetP = await painted('shortcut-chips-nav.search');
+  ck('run: 单行恢复默认 → Ctrl K', (await page.locator('[data-testid="shortcut-chips-nav.search"]').innerText()).replace(/\s+/g, ' ').trim() === 'Ctrl K' && shown(resetP), pd(resetP));
   await page.locator('body').click({ position: { x: 700, y: 760 } });
   await page.keyboard.press('Control+KeyK');
   await page.waitForTimeout(300);
@@ -174,12 +204,14 @@ try {
   await page.getByRole('button', { name: '设置分类 快捷键' }).click();
   await page.locator('[data-testid="shortcut-send-modEnter"]').click();
   const newline = (await page.locator('[data-testid="shortcut-chips-newline"]').innerText()).replace(/\s+/g, ' ').trim();
-  ck('send: 改成 Ctrl+Enter 后「换行」行显示 Enter', newline === 'Enter', newline);
+  const newlineP = await painted('shortcut-chips-newline');
+  ck('send: 改成 Ctrl+Enter 后「换行」行显示 Enter', newline === 'Enter' && shown(newlineP), `${newline} ${pd(newlineP)}`);
   await shot('shortcuts-send-mod-enter');
   await page.evaluate(() => window.__anetLayoutSweep.setScreen({ name: 'chat', alias: '示例-A' }));
   const hint = page.locator('[data-testid="composer-shortcut-hint"]');
   await hint.waitFor({ timeout: 10000 });
-  ck('send: 输入框提示跟着变', (await hint.innerText()) === 'Ctrl+Enter 发送 · Enter 换行', await hint.innerText());
+  const hintP = await painted('composer-shortcut-hint');
+  ck('send: 输入框提示跟着变', (await hint.innerText()) === 'Ctrl+Enter 发送 · Enter 换行' && shown(hintP), `${await hint.innerText()} ${pd(hintP)}`);
   const box = page.locator('textarea[placeholder^="Message 示例-A"]').first();
   await box.click();
   await box.type('第一行');
@@ -198,7 +230,8 @@ try {
   {
     const stored = await page.evaluate(() => localStorage.getItem('keyboard_shortcuts_v1'));
     const newlineAfter = (await page.locator('[data-testid="shortcut-chips-newline"]').innerText()).replace(/\s+/g, ' ').trim();
-    ck('send: 全部恢复默认 → 发送键回到 Enter(换行回到 Shift+Enter)', stored === '{"overrides":{},"sendKey":"enter"}' && newlineAfter === 'Shift Enter', `${stored} / ${newlineAfter}`);
+    const newlineAfterP = await painted('shortcut-chips-newline');
+    ck('send: 全部恢复默认 → 发送键回到 Enter(换行回到 Shift+Enter)', stored === '{"overrides":{},"sendKey":"enter"}' && newlineAfter === 'Shift Enter' && shown(newlineAfterP), `${stored} / ${newlineAfter} ${pd(newlineAfterP)}`);
   }
 
   // ── attach(桌面)──────────────────────────────────────────────────────────
