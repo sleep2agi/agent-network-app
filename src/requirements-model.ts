@@ -38,6 +38,8 @@ export interface Requirement {
   externalUrl?: string | null;
   participants?: RequirementPersonRef[];
   id: string;
+  /** 短号(#N,每个网络各自递增、不回收)。undefined = 这个 Hub 还没有短号(capabilities 不含 requirement_seq)。 */
+  seq?: number | null;
   name: string;
   priority: ReqPriority;
   assignee: string;

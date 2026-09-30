@@ -3,6 +3,7 @@ import { appFetch } from './app-fetch';
 import { fetchAuthMe } from './user-admin-api';
 import { issuesFromHub } from './requirement-issues';
 import { normalizeTags } from './requirement-tags';
+import { seqFromHub } from './task-short-id';
 import type { HubConfig } from './api';
 import { readStatusCountsAsFailure, reportReadFailure, reportReadSuccess } from './connectivity';
 import { withDeadline } from './deadline';
@@ -52,6 +53,7 @@ export function requirementFromHub(row: unknown): Requirement | null {
     ...('external_ref' in r ? { externalRef: typeof r.external_ref === 'string' && r.external_ref ? r.external_ref : null } : {}),
     // 只收 http(s):界面会把它做成可点的链接。
     ...('external_url' in r ? { externalUrl: typeof r.external_url === 'string' && /^https?:\/\//i.test(r.external_url) ? r.external_url : null } : {}),
+    ...('seq' in r ? { seq: seqFromHub(r.seq) } : {}),
     id: r.id,
     name: r.name.trim().slice(0, 80),
     priority,

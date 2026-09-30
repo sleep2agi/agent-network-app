@@ -1,11 +1,11 @@
-export const FIELD_IDS = ['title', 'owner', 'priority', 'due', 'participants', 'project', 'status', 'created', 'updated', 'issues'] as const;
+export const FIELD_IDS = ['seq', 'title', 'owner', 'priority', 'due', 'participants', 'project', 'status', 'created', 'updated', 'issues'] as const;
 export type FieldId = typeof FIELD_IDS[number];
 // width is the user's dragged width in px; absent means the default (title then
 // also stretches to fill the card). It rides on the same pref entry so hiding
 // or reordering a column never loses it.
 export type FieldPref = { id: FieldId; visible: boolean; width?: number };
 export const FIELDS_KEY = 'task_list_fields_v1';
-export const DEFAULT_WIDTHS: Record<FieldId, number> = { title: 220, owner: 150, priority: 90, due: 110, participants: 115, project: 116, status: 110, created: 150, updated: 150, issues: 108 };
+export const DEFAULT_WIDTHS: Record<FieldId, number> = { seq: 72, title: 220, owner: 150, priority: 90, due: 110, participants: 115, project: 116, status: 110, created: 150, updated: 150, issues: 108 };
 export const minWidth = (id: FieldId) => id === 'title' ? 160 : 64;
 const MAX_WIDTH = 1600;
 export const clampWidth = (id: FieldId, px: number) => Math.round(Math.min(MAX_WIDTH, Math.max(minWidth(id), px)));
@@ -22,7 +22,14 @@ export function parseFields(raw: string | null): FieldPref[] {
     if (typeof item.width === 'number' && Number.isFinite(item.width)) pref.width = clampWidth(item.id, item.width);
     out.push(pref);
   }
-  return [...out, ...defaultFields().filter(f => !out.some(saved => saved.id === f.id))];
+  // 存下来的配置里没有的列(后来新加的,比如 ID):放回它在默认顺序里的位置 —— 插在第一个默认顺序比它靠后的已存列前面。
+  for (const f of defaultFields()) {
+    if (out.some(saved => saved.id === f.id)) continue;
+    const rank = FIELD_IDS.indexOf(f.id);
+    const at = out.findIndex(saved => FIELD_IDS.indexOf(saved.id) > rank);
+    if (at < 0) out.push(f); else out.splice(at, 0, f);
+  }
+  return out;
 }
 export function toggleField(fields: FieldPref[], id: FieldId): FieldPref[] {
   return fields.map(f => f.id === id && id !== 'title' ? { ...f, visible: !f.visible } : f);

@@ -47,6 +47,7 @@ import { changeConcernsMe, parseTaskChanged } from './task-window-model';
 import { currentWindowLabel, emitTaskChanged, listenTaskChanged, openTaskWindow } from './task-window';
 import { menuMaxHeight } from './modal-bounds';
 import { isSelectClick, NO_SELECTION, pruneSelection, runBulk, selectClick, toggleSelected, type BulkProgress, type SelectAnchor, type Selection } from './task-select-model';
+import { SEQ_CAPABILITY } from './task-short-id';
 
 const UNSUPPORTED = 'tasks.copy.14';
 /** 别的设备改了也要看得到;有未完成的写入时跳过这一轮(不拿旧数据盖掉乐观更新)。 */
@@ -85,6 +86,7 @@ function ScopedRequirementBoard({ cfg, desktop, dispatch, onOpenVoiceSettings, s
   const dueDatetime = useTaskBoard(st => st.scope === scope && st.capabilities.includes('due_datetime'));
   const subCaps = useTaskBoard(st => st.scope === scope && st.capabilities.includes('sub_requirements'));
   const startCapable = useTaskBoard(st => st.scope === scope && st.capabilities.includes('start_date'));
+  const seqCapable = useTaskBoard(st => st.scope === scope && st.capabilities.includes(SEQ_CAPABILITY));
   const lowestPriority = useTaskBoard(st => st.scope === scope && supportsLowest(st.capabilities));
   const priorityOptions = useMemo(() => priorityChoices(lowestPriority), [lowestPriority]);
   const filter = useTaskBoard(st => st.filter);
@@ -755,7 +757,7 @@ function ScopedRequirementBoard({ cfg, desktop, dispatch, onOpenVoiceSettings, s
     const rows = listRows;
     return <TaskListTable rows={rows} people={people} projects={projects} sort={sort} setSort={setSort} s={s} today={today} selectedId={selectedId} onOpen={openDetail} touch={!pointer} onMenu={openMenuAt} filtered={filterActive(filter)} needsUpdateUpgrade={items.some(item => item.updatedAt === undefined)} items={items}
       selection={pointer ? { ids: sel.ids, onToggle: id => setSel(cur => toggleSelected(cur, id)), onPress: (id, e) => onCardPress(id, e as { nativeEvent?: any }) } : undefined}
-      onProject={(id, pid) => { void setProject(id, pid); }} />;
+      onProject={(id, pid) => { void setProject(id, pid); }} seqCapable={seqCapable} />;
   };
 
   const body = section === 'dispatch' ? dispatch ?? null
