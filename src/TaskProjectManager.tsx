@@ -89,8 +89,8 @@ export default function TaskProjectManager({ open, sheet, projects, counts, onCr
   };
   return (
     <Modal visible transparent animationType={sheet ? 'slide' : 'fade'} onRequestClose={onClose}>
-      <ModalKeyboardAvoider>
-      <View style={[{ flex: 1, backgroundColor: 'rgba(0,0,0,0.4)' }, sheet ? { justifyContent: 'flex-end' } : [{ alignItems: 'center', justifyContent: 'center' }, withBasePadding(safe, spacing.lg)]]}>
+      <ModalKeyboardAvoider scrim="rgba(0,0,0,0.4)">
+      <View style={[{ flex: 1 }, sheet ? { justifyContent: 'flex-end' } : [{ alignItems: 'center', justifyContent: 'center' }, withBasePadding(safe, spacing.lg)]]}>
         <Pressable accessibilityLabel={tr('tasks.copy.210')} onPress={onClose} style={StyleSheet.absoluteFill} />
         <View style={panel} accessibilityViewIsModal testID="project-manager">
           <View style={[f.row, { justifyContent: 'space-between' }]}>

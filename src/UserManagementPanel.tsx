@@ -330,7 +330,7 @@ function DesktopAgentPicker({ p, enabled, chat, readOnlyTag = true, note }: { p:
       <View style={styles.toolbar} testID="grants-toolbar">
         <View style={[styles.segmented, styles.segmentedSmall]} accessibilityRole="radiogroup" testID="grants-group-by">
           {GROUP_BYS.map(g => (
-            <Pressable key={g} accessibilityRole="radio" accessibilityState={{ selected: p.groupBy === g, checked: p.groupBy === g }} aria-checked={p.groupBy === g} onPress={() => p.setGroupBy(g)} style={[styles.segment, styles.segmentSmall, p.groupBy === g && styles.segmentOn]} testID={`grants-group-by-${g}`}>
+            <Pressable key={g} accessibilityRole="radio" accessibilityState={{ selected: p.groupBy === g, checked: p.groupBy === g }} aria-checked={p.groupBy === g} onPress={() => p.setGroupBy(g)} style={[styles.segmentSmall, p.groupBy === g && styles.segmentOn]} testID={`grants-group-by-${g}`}>
               <Text style={[styles.segmentTextSmall, p.groupBy === g && styles.segmentTextOn]} numberOfLines={1} testID={`grants-group-by-${g}-text`}>{tr(`users.groupBy.${g}`)}</Text>
             </Pressable>
           ))}
@@ -832,7 +832,9 @@ const makeStyles = () => StyleSheet.create({
   toolbar: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   toolbarLinks: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, marginLeft: 'auto' },
   segmentedSmall: { flexShrink: 0 },
-  segmentSmall: { flexGrow: 0, flexShrink: 0, flexBasis: 'auto', paddingHorizontal: spacing.md, paddingVertical: 6 },
+  // 按内容宽的小分段:自己一套底样式,不叠在 segment(flex: 1)上。原生 Yoga 里 flex > 0 时 flexBasis: 'auto' 等于没写,
+  // 基准取 0 → 每段只剩左右内边距、字宽 0(0.2.161 平板「半截青色药丸」)。flex-basis-auto-rule.test.ts 守着。
+  segmentSmall: { alignItems: 'center', justifyContent: 'center', paddingHorizontal: spacing.md, paddingVertical: 6 },
   segmentTextSmall: { color: colors.textSecondary, fontSize: 12 },
   linkBtnSmall: { minHeight: 30, justifyContent: 'center' },
   link: { color: colors.accent, fontSize: 13 },

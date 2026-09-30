@@ -1047,7 +1047,7 @@ function ScheduleModal({ visible, onClose, testID = 'schedule-modal', title, pri
     return <Modal transparent visible={visible} animationType="fade" onRequestClose={onClose}>
       <View style={[s.dialogOverlay, withBasePadding(safe, spacing.lg)]}>
         <Pressable testID={`${testID}-backdrop`} accessibilityLabel="关闭" focusable={false} onPress={onClose} style={[StyleSheet.absoluteFill, s.dialogBackdrop]} />
-        <View testID={testID} style={[s.modalRoot, s.dialogPanel, size]}>
+        <View testID={testID} style={[s.dialogPanel, size]}>
           <View testID={`${testID}-header`} style={s.dialogHeader}>
             <Text testID={`${testID}-title`} style={s.dialogTitle} numberOfLines={1}>{title}</Text>
             <Pressable accessibilityRole="button" accessibilityLabel={`关闭${title}`} testID={`${testID}-close`} hitSlop={8} onPress={onClose} style={({ hovered }: any) => [s.dialogClose, hovered && s.dialogBtnHover]}>
@@ -1246,8 +1246,9 @@ function makeStyles() { return StyleSheet.create({
   // 桌面对话框(ScheduleModal):居中卡片,标题左对齐 + ✕,底部右对齐「取消」「保存」,按钮 32 高。
   dialogOverlay: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   dialogBackdrop: { backgroundColor: 'rgba(0,0,0,0.38)' },
-  // modalRoot 的 flex: 1 在 RN-web 里是 flex-basis 0%,会压过 height(列方向):这里改回按 height 定高。
-  dialogPanel: { flexGrow: 0, flexShrink: 1, flexBasis: 'auto', borderRadius: radius.surface, overflow: 'hidden', ...elevated('floating') } as any,
+  // 按 size 的 height 定高:不叠 modalRoot(flex: 1)再用 flexBasis: 'auto' 撤回 —— 那招只在 RN-web 生效,
+  // 原生 Yoga 里 flex > 0 时 flexBasis: 'auto' 等于没写,基准取 0(flex-basis-auto-rule.test.ts)。
+  dialogPanel: { flexShrink: 1, backgroundColor: colors.bg, borderRadius: radius.surface, overflow: 'hidden', ...elevated('floating') } as any,
   dialogHeader: { minHeight: 52, paddingLeft: spacing.lg, paddingRight: spacing.md, flexDirection: 'row', alignItems: 'center', gap: spacing.sm, borderBottomWidth: 1, borderBottomColor: colors.border },
   dialogTitle: { flex: 1, color: colors.text, fontWeight: '600', fontSize: 15 },
   dialogClose: { width: 28, height: 28, borderRadius: radius.item, alignItems: 'center', justifyContent: 'center' },

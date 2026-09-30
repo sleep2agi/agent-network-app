@@ -96,10 +96,13 @@ check(/addListener\('keyboardDidHide', this\._onKeyboardChange\)/.test(kav), 'RN
 const chat = readFileSync(new URL('./ChatScreen.tsx', import.meta.url), 'utf8');
 const node = readFileSync(new URL('./NodeDetailScreen.tsx', import.meta.url), 'utf8');
 const drawer = readFileSync(new URL('./SideThreadDrawer.tsx', import.meta.url), 'utf8');
-for (const [name, src] of [['ChatScreen', chat], ['NodeDetailScreen', node], ['SideThreadDrawer', drawer]] as const) {
+const avoider = readFileSync(new URL('./ModalKeyboardAvoider.tsx', import.meta.url), 'utf8');
+for (const [name, src] of [['ChatScreen', chat], ['NodeDetailScreen', node], ['ModalKeyboardAvoider', avoider]] as const) {
   check(src.includes('useKeyboardVisible(Keyboard, Platform.OS)'), `${name} tracks keyboard visibility`);
-  check(/enabled=\{keyboardAvoidEnabled\(Platform\.OS, keyboardVisible/.test(src), `${name} gates its KeyboardAvoidingView on it`);
+  check(/enabled=\{keyboardAvoidEnabled\(Platform\.OS, (keyboardVisible|visible)\b/.test(src), `${name} gates its KeyboardAvoidingView on it`);
 }
+// 弹窗(含 BTW 抽屉)一律走 ModalKeyboardAvoider:同一套门控,遮罩画在避让层外面(modal-scrim-rule.test.ts)。
+check(drawer.includes('<ModalKeyboardAvoider') && !drawer.includes('<KeyboardAvoidingView'), 'SideThreadDrawer uses the shared ModalKeyboardAvoider');
 check(!/keyboardWillHide/.test(node), 'NodeDetailScreen no longer hand-rolls its own listeners');
 
 console.log(`keyboard-visibility: ${ck} checks passed`);

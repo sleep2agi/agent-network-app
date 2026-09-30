@@ -646,8 +646,8 @@ export default function NodeDetailScreen({
       </Modal>
 
       <Modal transparent visible={!readOnly && !!pendingAction} onRequestClose={() => setPendingAction(null)} animationType="fade">
-        <ModalKeyboardAvoider>
-        <View style={[{ flex: 1, backgroundColor: 'rgba(0,0,0,0.55)', alignItems: 'center', justifyContent: 'center' }, withBasePadding(dialogSafe, spacing.xl)]}>
+        <ModalKeyboardAvoider scrim="rgba(0,0,0,0.55)">
+        <View style={[{ flex: 1, alignItems: 'center', justifyContent: 'center' }, withBasePadding(dialogSafe, spacing.xl)]}>
           <View style={{ width: '100%', maxWidth: 420, borderRadius: radius.surface, backgroundColor: colors.card, padding: spacing.xl, gap: spacing.md, ...elevated('floating') }}>
             <Text style={{ color: colors.text, fontSize: 17, fontWeight: '600' }}>
               {pendingAction === 'restart_node' ? '重启节点？' : pendingAction === 'stop_node' ? '停止节点？' : '删除节点？'}

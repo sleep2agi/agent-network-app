@@ -112,7 +112,7 @@ function frameShapeOk(src: string): { bounded: boolean; shrinkBody: boolean; foo
   const bodyAt = src.indexOf('<ScrollView');
   const footerAt = src.indexOf('{footer ?');
   const footerAfterBody = bodyAt > 0 && footerAt > bodyAt && src.indexOf('</ScrollView>') < footerAt;
-  const keyboard = src.includes('<ModalKeyboardAvoider>');
+  const keyboard = /<ModalKeyboardAvoider\b/.test(src);
   return { bounded, shrinkBody, footerAfterBody, keyboard };
 }
 {
