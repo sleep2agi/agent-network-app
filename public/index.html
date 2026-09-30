@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="%LANG_ISO_CODE%">
+  <head>
+    <meta charset="utf-8" />
+    <meta httpEquiv="X-UA-Compatible" content="IE=edge" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no" />
+    <title>%WEB_TITLE%</title>
+    <!-- The `react-native-web` recommended style reset: https://necolas.github.io/react-native-web/docs/setup/#root-element -->
+    <style id="expo-reset">
+      /* These styles make the body full-height */
+      html,
+      body {
+        height: 100%;
+      }
+      /* These styles disable body scrolling if you are using <ScrollView> */
+      body {
+        overflow: hidden;
+      }
+      /* These styles make the root element full-height */
+      #root {
+        display: flex;
+        height: 100%;
+        flex: 1;
+      }
+    </style>
+    <!--
+      Paint the page in the app's own ground colour before the bundle runs.
+      Expo's default template has no background, so the desktop window showed a
+      white page between load and React's first frame. Values match src/theme.ts
+      (DARK.bg / LIGHT.bg); src/splash-assets.test.ts pins them together.
+    -->
+    <style id="anet-boot-bg">
+      html, body { background: #111113; }
+      @media (prefers-color-scheme: light) {
+        html, body { background: #f6f7f9; }
+      }
+      html[data-boot-theme="dark"], html[data-boot-theme="dark"] body { background: #111113; }
+      html[data-boot-theme="light"], html[data-boot-theme="light"] body { background: #f6f7f9; }
+    </style>
+    <script>
+      // The theme saved in settings (src/desktop-theme-storage.ts, key theme_mode_v1)
+      // overrides the system scheme; 'system' or nothing saved falls through to the media query.
+      try {
+        var m = localStorage.getItem('theme_mode_v1');
+        if (m === 'light' || m === 'dark') document.documentElement.setAttribute('data-boot-theme', m);
+      } catch (e) {}
+    </script>
+  </head>
+
+  <body>
+    <!-- Use static rendering with Expo Router to support running without JavaScript. -->
+    <noscript>
+      You need to enable JavaScript to run this app.
+    </noscript>
+    <!-- The root element for your Expo app. -->
+    <div id="root"></div>
+  </body>
+</html>
