@@ -2,7 +2,7 @@
 // 只调这几条:auth/me、networks/:id/members(列表 / 改角色 / 移出)、admin/users、members/:uid/agent-grants、auth/register。
 import { appFetch } from './app-fetch';
 import type { HubConfig } from './api';
-import type { AgentGrant, AuthMe, MemberRole, NetworkMember } from './user-admin';
+import type { AgentGrant, AuthMe, GroupGrant, HubAgentGroup, MemberRole, NetworkMember } from './user-admin';
 
 const TIMEOUT_MS = 12_000;
 
@@ -61,9 +61,9 @@ export const createHubUser = (cfg: HubConfig, body: { username: string; password
   call<{ user: { user_id: string; username: string }; membership: unknown }>(cfg.serverUrl, cfg.token, '/api/admin/users', { method: 'POST', body });
 
 export const fetchAgentGrants = (cfg: HubConfig, networkId: string, userId: string) =>
-  call<{ agent_access: 'all' | 'granted' | null; grants: AgentGrant[] }>(cfg.serverUrl, cfg.token, `/api/networks/${net(networkId)}/members/${net(userId)}/agent-grants`);
+  call<{ agent_access: 'all' | 'granted' | null; grants: AgentGrant[]; group_grants?: GroupGrant[] }>(cfg.serverUrl, cfg.token, `/api/networks/${net(networkId)}/members/${net(userId)}/agent-grants`);
 
-export const saveAgentGrants = (cfg: HubConfig, networkId: string, userId: string, body: { agent_access: 'all' | 'granted'; grants: Array<{ node_id?: string; alias?: string; can_message: boolean }> }) =>
+export const saveAgentGrants = (cfg: HubConfig, networkId: string, userId: string, body: { agent_access: 'all' | 'granted'; grants: Array<{ node_id?: string; alias?: string; can_message: boolean }>; group_grants?: Array<{ group_id: string; can_message: boolean }> }) =>
   call<{ agent_access: 'all' | 'granted'; grants: AgentGrant[] }>(cfg.serverUrl, cfg.token, `/api/networks/${net(networkId)}/members/${net(userId)}/agent-grants`, { method: 'PUT', body });
 
 /** POST /api/auth/register(公开)。成功返回用户令牌,调用方按登录同一条路径继续。 */
@@ -81,3 +81,23 @@ export const updateMemberRole = (cfg: HubConfig, networkId: string, userId: stri
 /** DELETE /api/networks/:id/members/:uid —— 网络 owner / admin;hub 同时清掉授权、断开此人的实时流。 */
 export const removeNetworkMember = (cfg: HubConfig, networkId: string, userId: string) =>
   call<{ ok: true }>(cfg.serverUrl, cfg.token, `/api/networks/${net(networkId)}/members/${net(userId)}`, { method: 'DELETE' });
+
+// —— Agent 分组(RFC-038 §8)。旧 Hub 没有这些路由:列表返回 404 ⇒ null,调用方整块隐藏。 ——
+const groups = (networkId: string) => `/api/networks/${net(networkId)}/agent-groups`;
+
+export const fetchAgentGroups = (cfg: HubConfig, networkId: string): Promise<HubAgentGroup[] | null> =>
+  call<{ groups: HubAgentGroup[] }>(cfg.serverUrl, cfg.token, groups(networkId))
+    .then(d => d.groups ?? [])
+    .catch(e => { if (e instanceof HubRequestError && (e.status === 404 || e.status === 405)) return null; throw e; });
+
+export const createAgentGroup = (cfg: HubConfig, networkId: string, body: { name: string; node_ids: string[] }) =>
+  call<{ group: HubAgentGroup }>(cfg.serverUrl, cfg.token, groups(networkId), { method: 'POST', body });
+
+export const renameAgentGroup = (cfg: HubConfig, networkId: string, groupId: string, name: string) =>
+  call<{ group: HubAgentGroup }>(cfg.serverUrl, cfg.token, `${groups(networkId)}/${net(groupId)}`, { method: 'PATCH', body: { name } });
+
+export const saveAgentGroupMembers = (cfg: HubConfig, networkId: string, groupId: string, nodeIds: string[]) =>
+  call<{ group: HubAgentGroup; added: string[]; removed: string[] }>(cfg.serverUrl, cfg.token, `${groups(networkId)}/${net(groupId)}/members`, { method: 'PUT', body: { node_ids: nodeIds } });
+
+export const deleteAgentGroup = (cfg: HubConfig, networkId: string, groupId: string) =>
+  call<{ affected_user_ids: string[] }>(cfg.serverUrl, cfg.token, `${groups(networkId)}/${net(groupId)}`, { method: 'DELETE' });
