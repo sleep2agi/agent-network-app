@@ -111,11 +111,13 @@ function RowLabel({ label, subtitle, tone, subtitleTone, testID }: { label: stri
  * 标签 · 右侧值 · ›。有 onPress 默认画 ›(chevron={false} 关掉);没有 onPress 就是只读的「标签 — 值」。
  * external = 跳到应用外(浏览器),右侧用 ↗ 而不是 ›。
  */
-export function SettingsRow({ label, subtitle, subtitleTone, value, valueTone, tone, onPress, chevron, external, busy, disabled, testID, accessibilityLabel }: {
+export function SettingsRow({ label, subtitle, subtitleTone, value, valueTone, valueExtra, tone, onPress, chevron, external, busy, disabled, testID, accessibilityLabel }: {
   label: string;
   subtitle?: ReactNode;
   subtitleTone?: SettingsTone;
   value?: string;
+  /** 值左边的一小块自绘内容(成员页「已选 Agent」的头像叠放)。 */
+  valueExtra?: ReactNode;
   valueTone?: SettingsTone;
   tone?: SettingsTone;
   onPress?: () => void;
@@ -132,7 +134,8 @@ export function SettingsRow({ label, subtitle, subtitleTone, value, valueTone, t
     <RowShell onPress={onPress} disabled={disabled} testID={id} accessibilityLabel={accessibilityLabel ?? label} accessibilityRole={external ? 'link' : 'button'} accessibilityState={busy ? { busy } : undefined}>
       <RowLabel label={label} subtitle={subtitle} tone={tone} subtitleTone={subtitleTone} testID={`${id}-label`} />
       {busy ? <ActivityIndicator size="small" color={colors.textMuted} /> : null}
-      {value ? <Text style={[styles.value, { color: toneColor(valueTone, colors.textMuted) }]} numberOfLines={1} testID={`${id}-value`}>{value}</Text> : null}
+      {valueExtra ? <View style={styles.valueExtra}>{valueExtra}</View> : null}
+      {value ? <Text style={[styles.value, valueExtra ? styles.valueFit : null, { color: toneColor(valueTone, colors.textMuted) }]} numberOfLines={1} testID={`${id}-value`}>{value}</Text> : null}
       {showChevron || external ? (
         <View style={styles.accessory} testID={`${id}-accessory`}>
           <Ionicons name={external ? 'open-outline' : 'chevron-forward'} size={external ? 16 : 18} color={colors.textMuted} />
@@ -295,6 +298,9 @@ const makeStyles = () => StyleSheet.create({
   label: { fontSize: 16 },
   subtitle: { fontSize: 13, lineHeight: 18 },
   value: { flex: 1, minWidth: 0, fontSize: 15, textAlign: 'right' },
+  valueExtra: { marginLeft: 'auto', flexShrink: 0 },
+  // 有 valueExtra 时值按字宽(flex: -1 = 按内容、放不下再缩),两者一起靠右。
+  valueFit: { flex: -1 },
   accessory: { width: ACCESSORY, height: ACCESSORY, marginLeft: 'auto', alignItems: 'center', justifyContent: 'center' },
   switch: { marginLeft: 'auto' },
   fieldLabel: { color: colors.text, fontSize: 16, width: 124 },

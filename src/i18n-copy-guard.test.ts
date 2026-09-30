@@ -27,6 +27,7 @@ migrated.push('src/TaskGantt.tsx', 'src/TaskCalendar.tsx');
 migrated.push('src/TaskDashboard.tsx', 'src/ShareCardNative.tsx');
 migrated.push('src/AccountSwitcher.tsx', 'src/AccountRowActions.tsx');
 migrated.push('src/UserManagementPanel.tsx', 'src/DmChatScreen.tsx');
+migrated.push('src/MemberEditor.tsx', 'src/MemberEditorKit.tsx', 'src/TaskAccessSection.tsx', 'src/RemoveSheet.tsx');
 migrated.push('src/ChangelogScreen.tsx');
 function untranslated(file: string, raw: string): string[] {
   const source = raw.replace(/\r\n?/g, '\n');

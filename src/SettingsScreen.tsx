@@ -36,7 +36,7 @@ import LanguageSettings from './LanguageSettings';
 import ShortcutsSettings from './ShortcutsSettings';
 import { ds } from './ui-scale';
 import { playChime } from './chime';
-import { SETTINGS_CATEGORIES, SETTINGS_DETAIL_TITLE, activeCategoryKey, closeSettingsPage, filterSettings, phoneRowLabel, phoneSettingsGroups, rememberSettingsCategory, rememberSettingsScroll, rememberedSettingsView, settingsBackTarget, settingsPlatform, visibleRowKeys, type SettingsCategoryKey, type SettingsDetailKey, type SettingsPlatform } from './settings-model';
+import { SETTINGS_CATEGORIES, SETTINGS_DETAIL_TITLE, activeCategoryKey, closeSettingsPage, filterSettings, phoneRowLabel, phoneSettingsGroups, rememberSettingsCategory, rememberSettingsScroll, rememberedSettingsView, settingsBackTarget, settingsPlatform, visibleRowKeys, type SettingsCategoryKey, type SettingsDetailKey, type SettingsHeaderOverride, type SettingsPlatform } from './settings-model';
 import SettingsPhonePage, { type PhonePagesCtx } from './SettingsPhonePages';
 import { PHONE_SETTINGS_SERVER_ENTRY } from './nav-chrome';
 import { settingsPageContentStyle } from './settings-kit';
@@ -183,11 +183,21 @@ export default function SettingsScreen({
   const openPage = (key: SettingsCategoryKey) => { setCategory(key); setPage(key); };
   // 手机三级页(API Key、高级 / 旧版控制台、免打扰时段、管理账号)。
   const [detail, setDetail] = useState<SettingsDetailKey | null>(null);
-  const closePage = () => { closeSettingsPage(); setPage(null); setDetail(null); };
-  const openDetail = (key: SettingsDetailKey) => { setDetail(key); paneScrollRef.current?.scrollTo({ y: 0, animated: false }); };
-  const closeDetail = () => { setDetail(null); paneScrollRef.current?.scrollTo({ y: 0, animated: false }); };
-  // 返回箭头 / 安卓返回键 / 网页 Esc 都走这里:先退三级页,再退子页。
-  const goBack = () => { if (settingsBackTarget(page, detail) === 'detail') closeDetail(); else closePage(); };
+  // 三级页接管的顶栏(成员页的「保存」、它推入的选择页)。onBack 放 ref:返回键的监听不因它重注册。
+  const [headerOverride, setHeaderOverrideState] = useState<SettingsHeaderOverride | null>(null);
+  const headerBackRef = useRef<(() => void) | undefined>(undefined);
+  const setHeaderOverride = (h: SettingsHeaderOverride | null) => { headerBackRef.current = h?.onBack; setHeaderOverrideState(h); };
+  const scrollPaneTop = () => paneScrollRef.current?.scrollTo({ y: 0, animated: false });
+  const closePage = () => { closeSettingsPage(); setPage(null); setDetail(null); setHeaderOverride(null); };
+  const openDetail = (key: SettingsDetailKey) => { setDetail(key); scrollPaneTop(); };
+  const closeDetail = () => { setDetail(null); setHeaderOverride(null); scrollPaneTop(); };
+  // 返回箭头 / 安卓返回键 / 网页 Esc 都走这里:三级页推入的页先退,再退三级页,再退子页。
+  const goBack = () => {
+    const target = settingsBackTarget(page, detail);
+    if (target === 'detail' && headerBackRef.current) headerBackRef.current();
+    else if (target === 'detail') closeDetail();
+    else closePage();
+  };
   const [logoutConfirm, setLogoutConfirm] = useState(false);
   // 切换账号面板(手机底部面板 / 宽屏对话框)。
   const [switcherOpen, setSwitcherOpen] = useState(false);
@@ -449,13 +459,30 @@ export default function SettingsScreen({
   );
   const subPageCat = subPage ? SETTINGS_CATEGORIES.find(c => c.key === active) : undefined;
   const openDetailKey = subPage && settingsBackTarget(subPage, detail) === 'detail' ? detail : null;
+  const headerAction = headerOverride?.action;
   const phoneHeader = (
     <View style={styles.phoneHeader} testID="settings-subpage-header">
-      <Pressable testID="settings-back" accessibilityRole="button" accessibilityLabel={tr('settings.copy.7')} onPress={goBack} hitSlop={8} style={({ pressed }) => [styles.phoneHeaderSide, pressed && { opacity: 0.6 }]}>
+      <Pressable testID="settings-back" accessibilityRole="button" accessibilityLabel={tr('settings.copy.7')} onPress={goBack} hitSlop={8} style={({ pressed }) => [styles.phoneHeaderSide, openDetailKey && headerAction && styles.phoneHeaderBackWide, pressed && { opacity: 0.6 }]}>
         <Ionicons name="chevron-back" size={24} color={colors.text} />
       </Pressable>
-      <Text style={styles.phoneHeaderTitle} numberOfLines={1} testID="settings-subpage-title">{settingsText(openDetailKey ? SETTINGS_DETAIL_TITLE[openDetailKey] : subPageCat ? phoneRowLabel(subPageCat) : tr('settings.copy.1'))}</Text>
-      <View style={styles.phoneHeaderSide} />
+      <Text style={styles.phoneHeaderTitle} numberOfLines={1} testID="settings-subpage-title">{openDetailKey && headerOverride?.title ? headerOverride.title : settingsText(openDetailKey ? SETTINGS_DETAIL_TITLE[openDetailKey] : subPageCat ? phoneRowLabel(subPageCat) : tr('settings.copy.1'))}</Text>
+      {openDetailKey && headerAction ? (
+        <View style={[styles.phoneHeaderSide, styles.phoneHeaderActionSide]}>
+          <Pressable
+            testID={headerAction.testID}
+            accessibilityRole="button"
+            accessibilityLabel={headerAction.label}
+            accessibilityState={{ disabled: !!(headerAction.disabled || headerAction.busy), busy: !!headerAction.busy }}
+            disabled={headerAction.disabled || headerAction.busy}
+            onPress={headerAction.onPress}
+            hitSlop={6}
+            style={({ pressed }) => [styles.phoneHeaderAction, (headerAction.disabled || headerAction.busy) && styles.disabled, pressed && { opacity: 0.75 }]}
+          >
+            {headerAction.busy ? <ActivityIndicator size="small" color={colors.onAccent} /> : null}
+            <Text style={styles.phoneHeaderActionText} numberOfLines={1}>{headerAction.label}</Text>
+          </Pressable>
+        </View>
+      ) : <View style={styles.phoneHeaderSide} />}
     </View>
   );
   const sectionStyle = styles.section;
@@ -528,7 +555,7 @@ export default function SettingsScreen({
     quietEnd,
     setQuietStart,
     setQuietEnd,
-    renderUsers: detail => <UserManagementPanel cfg={cfg} me={authMe} networkId={me.networkId} phone={{ memberOpen: detail === 'userMember', groupOpen: detail === 'userGroup', openMember: () => openDetail('userMember'), openGroup: () => openDetail('userGroup'), closeMember: closeDetail }} />,
+    renderUsers: detail => <UserManagementPanel cfg={cfg} me={authMe} networkId={me.networkId} phone={{ memberOpen: detail === 'userMember', groupOpen: detail === 'userGroup', openMember: () => openDetail('userMember'), openGroup: () => openDetail('userGroup'), closeMember: closeDetail, setHeader: setHeaderOverride, scrollTop: scrollPaneTop }} />,
     renderShortcuts: () => <ShortcutsSettings s={styles} showNav={show('shortcuts', 'nav')} showChat={show('shortcuts', 'chat')} showSend={show('shortcuts', 'send')} />,
     updateView: isAndroid
       ? describeAndroidUpdateRow(androidUpdate, { currentVersion: APP_VERSION, lastCheckedAt: androidUpdateLastCheckedAt(), now: Date.now() })
@@ -1456,6 +1483,12 @@ const makeStyles = () =>
   phoneHeader: { flexDirection: 'row', alignItems: 'center', minHeight: 48, paddingHorizontal: spacing.xs, backgroundColor: colors.bg },
   phoneHeaderSide: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
   phoneHeaderTitle: { flex: 1, color: colors.text, fontSize: 17, fontWeight: '600', textAlign: 'center' },
+  // 右上角有按钮(保存 / 完成(N))时两侧同宽,标题仍在正中。
+  // 返回箭头的左边距(头 4 + 格子里 10)与按钮的右边距同为 14。
+  phoneHeaderActionSide: { width: 104, alignItems: 'flex-end', paddingRight: 10 },
+  phoneHeaderBackWide: { width: 104, alignItems: 'flex-start', paddingLeft: 10 },
+  phoneHeaderAction: { flexDirection: 'row', alignItems: 'center', gap: 6, minHeight: 32, paddingHorizontal: spacing.md, borderRadius: radius.item, backgroundColor: colors.accent },
+  phoneHeaderActionText: { color: colors.onAccent, fontSize: 15, fontWeight: '600' },
   // 左栏:与导航栏同一色系,细线分隔;宽屏固定宽,窄屏变成顶部一条横向分类。
   sidebar: { width: 232, backgroundColor: colors.railBg, borderRightWidth: 1, borderRightColor: colors.border, paddingTop: spacing.lg },
   sidebarCompact: { width: '100%', borderRightWidth: 0, borderBottomWidth: 1, borderBottomColor: colors.border, paddingBottom: spacing.sm },

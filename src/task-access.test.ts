@@ -59,13 +59,16 @@ ck('仅相关任务 的标签逐字', t('users.tasks.scoped') === '仅相关任�
 // —— 接线(源码级:函数有测试但没人调的那种坑)——
 {
   const read = (f: string) => readFileSync(new URL(f, import.meta.url), 'utf8');
-  const panel = read('./UserManagementPanel.tsx');
-  ck('成员弹窗 / 成员页各放一个 TaskAccessSection,Hub 不支持就不画', panel.includes('<TaskAccessSection variant="desktop"') && panel.includes('<TaskAccessSection variant="phone"') && (panel.match(/ed\.accessEditable && ed\.tasks\.supported \?/g) ?? []).length === 2);
-  ck('保存:任务权限有改动才发,且计入「保存」可用', panel.includes('if (tasksDirty) await tasks.save();') && panel.includes('plan.role || plan.grants || tasksDirty'));
+  // 成员编辑器 #417 起在 MemberEditor.tsx;保存由 member-editor.ts 的 memberSaveRequests 统一决定(member-editor.test.ts 逐场景比对旧逻辑)。
+  const panel = read('./MemberEditor.tsx');
+  ck('成员弹窗 / 成员页各放一个 TaskAccessSection,Hub 不支持就不画', panel.includes('<TaskAccessSection variant="desktop"') && panel.includes('<TaskAccessSection variant="phone"') && panel.includes('const tasksShown = ed.accessEditable && ed.tasks.supported;') && panel.includes('{ed.accessEditable && ed.tasks.supported ? ('));
+  const model = read('./member-editor.ts');
+  ck('保存:任务权限有改动才发,且计入「保存」可用', panel.includes('...(tasks.supported ? { tasks: { before: tasks.before, mode: tasks.mode, selection: tasks.selection } } : {})') && model.includes('if (accessEditableFor(d) && d.tasks && tasksChanged(d.tasks, d.nextRole))') && panel.includes('changed: requests.length > 0'));
   const section = read('./TaskAccessSection.tsx');
   ck('区块自带状态 hook(给重设计的双栏弹窗直接用)', section.includes('export function useTaskAccessState(') && section.includes('export default function TaskAccessSection('));
   ck('切到仅相关任务时预填', section.includes('prefillProjectsOnScope(s, projects ?? [])'));
   ck('viewer 不出可编辑开关', section.includes('{on && !viewer ? (') && section.includes("mode === 'scoped' && !viewer && picked.length"));
+  ck('手机:授权的项目推入一页(不原地展开)', section.includes('export function TaskProjectsPage(') && section.includes('onPress={onOpenProjects ??') && panel.includes("onOpenProjects={() => setSub('projects')}"));
   const api = read('./user-admin-api.ts');
   ck('task-grants:404 → null(旧 Hub 整块隐藏)', /fetchTaskGrants[\s\S]*?e\.status === 404/.test(api));
   const board = read('./RequirementBoard.tsx');
