@@ -16,9 +16,9 @@ import './i18n-chat';
 import './i18n-users';
 import { agentsEmptyKind, isRestrictedIn } from './user-admin';
 import { fetchAuthMe } from './user-admin-api';
-import { noteHumanUsernames, PEOPLE_GROUP_KEY, peopleRows, shownPeople, type Human, type PersonRow } from './human-dm';
+import { applyMemberPresence, noteHumanUsernames, PEOPLE_GROUP_KEY, peopleRows, personPresence, shownPeople, type Human, type PersonPresence, type PersonRow } from './human-dm';
 import { fetchDmThreads, fetchHumans } from './human-dm-api';
-import { subscribeHumanDm } from './human-dm-bus';
+import { subscribeHumanDm, subscribeMemberPresence } from './human-dm-bus';
 import { isAgentOnline } from './chat-actions';
 import { fetchStatus, fetchUserMessages, takeStatusPrefetch, type HubConfig, type Session,
   ackAgentMessages,
@@ -149,6 +149,8 @@ export default function AgentsScreen({
   }, [cfg.serverUrl, cfg.token, cfg.networkId, !!onOpenPerson, preview, selfUserId]);
   usePoll(loadPeople, 15000, [loadPeople]);
   useEffect(() => subscribeHumanDm(() => { void loadPeople(); }), [loadPeople]);
+  // 在线状态的实时变化(hub 的 member_presence):就地改那一行。旧 hub 不推,只剩 15 s 轮询里的 online 字段。
+  useEffect(() => subscribeMemberPresence(ev => setPeople(rows => applyMemberPresence(rows, ev))), []);
   // 设置 → 快捷键 的「搜索会话」(默认 ⌘/Ctrl+K,App.tsx DesktopWorkspace 发起):只有桌面列表栏
   // (compact)接。搜索框平时 > 10 个 agent 才出现;按了快捷键就算 agent 少也临时露出来并聚焦。
   // 从别的页切回来时列表刚挂上、会话还在加载,搜索框可能还没渲染:记下「要聚焦」,等它出现的那次渲染后再聚焦。
@@ -522,6 +524,7 @@ export default function AgentsScreen({
         <AliasAvatar alias={item.alias} size={34} />
         {/* 更像微信·round-5: 头像右下在线态圆点(带描边环·offline 灰暗) */}
         <View
+          testID={`agent-dot-${item.alias}`}
           style={[
             styles.statusDot,
             { backgroundColor: statusColor(item.status ?? '', true) },
@@ -547,16 +550,24 @@ export default function AgentsScreen({
   };
 
   // 人员行:与 agent 行同一套几何(桌面侧栏 = renderCompactRow 的平铺行;手机 / 双栏 = renderPhoneRow 的 68 dp 行),
-  // 头像 · 名字(· 用户名)· 未读角标。没有在线点、没有任务预览 —— 那是 agent 才有的状态。
+  // 头像(+ 在线点)· 名字 · 副标题(用户名 ·「x 分钟前在线」)· 未读角标。没有任务预览 —— 那是 agent 才有的。
+  // 在线点与 agent 的点同一个样式、同一个位置(绿 = colors.running,灰 = colors.rest);hub 没给 online → 不画。
+  const lastSeenText = (pr: PersonPresence): string => {
+    const ls = pr && !pr.online ? pr.lastSeen : null;
+    return ls ? t(`people.lastSeen.${ls.key}`, { n: ls.n ?? 0, date: ls.date ?? '' }) : '';
+  };
   const renderPersonRow = (p: PersonRow) => {
     const selected = selectedPerson === p.username;
     const badge = formatUnreadBadge(p.unread);
+    const presence = personPresence(p, nowMs);
+    const subtitle = [p.name !== p.username ? p.username : '', lastSeenText(presence)].filter(Boolean).join(' · ');
+    const presenceA11y = presence ? `，${t(presence.online ? 'people.online' : 'people.offline')}` : '';
     if (compact) {
       return (
         <Pressable
           testID={`person-row-${p.username}`}
           accessibilityRole="button"
-          accessibilityLabel={t('people.a11y', { name: p.name })}
+          accessibilityLabel={t('people.a11y', { name: p.name }) + presenceA11y}
           onPress={() => onOpenPerson?.(p)}
           style={({ pressed }) => [
             styles.card,
@@ -568,11 +579,17 @@ export default function AgentsScreen({
         >
           <View style={styles.avatarWrap}>
             <AliasAvatar alias={p.username} size={34} />
+            {presence ? (
+              <View
+                testID={`person-dot-${p.username}`}
+                style={[styles.statusDot, { backgroundColor: presence.online ? colors.running : colors.rest }, !presence.online && styles.statusDotOffline]}
+              />
+            ) : null}
             <AgentUnreadBadge badge={badge} testID={`person-unread-${p.username}`} />
           </View>
           <View style={{ flex: 1, minWidth: 0 }}>
             <Text dense selectable={false} style={[styles.alias, { fontSize: 13, fontWeight: '600' }]} numberOfLines={1}>{p.name}</Text>
-            {p.name !== p.username ? <Text dense selectable={false} style={[styles.task, { fontSize: 11 }]} numberOfLines={1}>{p.username}</Text> : null}
+            {subtitle ? <Text dense selectable={false} testID={`person-subtitle-${p.username}`} style={[styles.task, { fontSize: 11 }]} numberOfLines={1}>{subtitle}</Text> : null}
           </View>
         </Pressable>
       );
@@ -582,19 +599,25 @@ export default function AgentsScreen({
         testID={`person-row-${p.username}`}
         accessibilityRole="button"
         accessibilityState={{ selected }}
-        accessibilityLabel={t('people.a11y', { name: p.name })}
+        accessibilityLabel={t('people.a11y', { name: p.name }) + presenceA11y}
         onPress={() => onOpenPerson?.(p)}
         style={({ pressed }) => [rowStyles.row, { backgroundColor: selected ? colors.rowActive : pressed ? colors.rowHover : colors.bg }]}
       >
         <View style={rowStyles.avatar}>
           <AliasAvatar alias={p.username} size={rowGeom().avatar} fixedSize />
+          {presence ? (
+            <View
+              testID={`person-dot-${p.username}`}
+              style={[rowStyles.dot, { backgroundColor: presence.online ? colors.running : colors.rest, borderColor: selected ? colors.rowActive : colors.bg }]}
+            />
+          ) : null}
         </View>
         <View style={rowStyles.body}>
           <View style={rowStyles.line}>
             <Text dense selectable={false} numberOfLines={1} style={[rowStyles.name, { color: colors.text }]}>{p.name}</Text>
           </View>
-          {p.name !== p.username || badge ? <View style={rowStyles.line}>
-            <Text dense selectable={false} numberOfLines={1} style={[rowStyles.preview, { color: colors.textMuted }]}>{p.name !== p.username ? p.username : ''}</Text>
+          {subtitle || badge ? <View style={rowStyles.line}>
+            <Text dense selectable={false} testID={`person-subtitle-${p.username}`} numberOfLines={1} style={[rowStyles.preview, { color: colors.textMuted }]}>{subtitle}</Text>
             <AgentUnreadBadge inline badge={badge} testID={`person-unread-${p.username}`} />
           </View> : null}
         </View>

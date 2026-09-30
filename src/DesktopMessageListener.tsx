@@ -8,8 +8,8 @@ import {
 import DesktopMessageNotice from './DesktopMessageNotice';
 import { canOpenUserEventStream, openUserEventStream } from './user-events-sse';
 import { requestNotifierRefresh } from './notifier-bus';
-import { isHumanDmNotice } from './human-dm';
-import { activeDmPeer, emitHumanDm } from './human-dm-bus';
+import { isHumanDmNotice, parseMemberPresence } from './human-dm';
+import { activeDmPeer, emitHumanDm, emitMemberPresence } from './human-dm-bus';
 
 const SEEN_CAP = 200;
 
@@ -26,6 +26,8 @@ export default function DesktopMessageListener({ cfg }: { cfg: HubConfig }) {
     const ctx = { networkId: cfg.networkId };
     const close = openUserEventStream(cfg, {
       onEvent: (raw) => {
+        const presence = parseMemberPresence(raw);
+        if (presence) { emitMemberPresence(presence); return; }
         const result = consumeDesktopMessageEvent(raw, ctx);
         if (result.status !== 'present') return;
         if (seen.current.has(result.notice.messageId)) return;

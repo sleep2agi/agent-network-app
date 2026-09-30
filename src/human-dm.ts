@@ -8,8 +8,9 @@
 
 export const HUMAN_DM_KIND = 'human_dm';
 
-/** GET /api/networks/:id/humans 的一项。 */
-export type Human = { user_id: string; username: string; display_name?: string | null };
+/** GET /api/networks/:id/humans 的一项。online / last_seen_at 是 hub 较新版本才给的在线状态(只给用户令牌);
+ *  旧 hub 没有这两个字段 → 什么都不画(不画成假的灰点)。 */
+export type Human = { user_id: string; username: string; display_name?: string | null; online?: boolean; last_seen_at?: string | null };
 /** GET /api/dm/threads 的一项。 */
 export type DmThread = { other_user_id: string; last_at?: string | null; unread?: number | null };
 /** GET /api/dm 的一条(新的在前)。 */
@@ -173,3 +174,45 @@ export function stripHumanDms<T extends UserMessagesBodyLike>(body: T, humans: R
 
 /** SSE 的 desktop_message(desktop-message-consume 解析过的)是不是一条私信。 */
 export const isHumanDmNotice = (notice: { kind?: string | null } | null | undefined): boolean => notice?.kind === HUMAN_DM_KIND;
+
+// —— 在线状态(hub:humans 的 online / last_seen_at + 用户流上的 member_presence)——
+
+/** 用户流上的 `{type:'member_presence', member_user_id, online, last_seen_at}`(事件里的 user_id 是收件人自己)。 */
+export type MemberPresence = { user_id: string; online: boolean; last_seen_at: string | null };
+
+export function parseMemberPresence(raw: unknown): MemberPresence | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const e = raw as Record<string, unknown>;
+  if (e.type !== 'member_presence' || typeof e.member_user_id !== 'string' || !e.member_user_id || typeof e.online !== 'boolean') return null;
+  return { user_id: e.member_user_id, online: e.online, last_seen_at: typeof e.last_seen_at === 'string' ? e.last_seen_at : null };
+}
+
+/** 把一条 member_presence 合进人员行。没有这个人 → 原样返回(同一个数组,不触发重画)。 */
+export function applyMemberPresence(rows: PersonRow[], ev: MemberPresence): PersonRow[] {
+  const i = rows.findIndex(r => r.user_id === ev.user_id);
+  if (i < 0) return rows;
+  const next = rows.slice();
+  next[i] = { ...rows[i], online: ev.online, last_seen_at: ev.last_seen_at };
+  return next;
+}
+
+/** 「x 分钟前在线」的档位,由调用方按语言拼字。 */
+export type LastSeen = { key: 'justNow' | 'minutes' | 'hours' | 'days' | 'date'; n?: number; date?: string };
+/** null = 不画点(旧 hub 没给 online)。离线且 last_seen 未知(hub 重启后没再连过)→ 只有灰点,没有「x 前在线」。 */
+export type PersonPresence = { online: boolean; lastSeen: LastSeen | null } | null;
+
+export function personPresence(p: Pick<Human, 'online' | 'last_seen_at'>, nowMs: number): PersonPresence {
+  if (typeof p.online !== 'boolean') return null;
+  if (p.online) return { online: true, lastSeen: null };
+  const at = hubMs(p.last_seen_at);
+  if (!at) return { online: false, lastSeen: null };
+  const min = Math.floor(Math.max(0, nowMs - at) / 60000);
+  if (min < 1) return { online: false, lastSeen: { key: 'justNow' } };
+  if (min < 60) return { online: false, lastSeen: { key: 'minutes', n: min } };
+  const hours = Math.floor(min / 60);
+  if (hours < 24) return { online: false, lastSeen: { key: 'hours', n: hours } };
+  const days = Math.floor(hours / 24);
+  if (days < 7) return { online: false, lastSeen: { key: 'days', n: days } };
+  const d = new Date(at);
+  return { online: false, lastSeen: { key: 'date', date: `${d.getMonth() + 1}-${String(d.getDate()).padStart(2, '0')}` } };
+}
