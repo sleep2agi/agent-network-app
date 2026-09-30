@@ -292,8 +292,12 @@ for (const theme of ['light', 'dark']) {
   const pickedRow = await box(page, tid('member-picked-agents'));
   ck(`phone ${theme}: 已选 Agent 行带头像叠放、在行内`, !!stack && stack.x > pickedRow.x + 80 && stack.r < pickedRow.r, stack && `${stack.x}..${stack.r} in ${pickedRow.x}..${pickedRow.r}`);
   if (OUT) await page.screenshot({ path: `${OUT}/phone-member-${theme}.png` });
-  await page.locator(tid('settings-scroll')).evaluate(el => el.scrollTo(0, 10000));
+  await page.locator(tid('member-remove-open')).scrollIntoViewIfNeeded();
   await page.waitForTimeout(300);
+  const rm = await box(page, tid('member-remove-open'));
+  const ed = await box(page, tid('task-access-editable'));
+  ck(`phone ${theme}: 滚到底 —「可编辑的项目」和「移出网络」都在屏上,移出网络左右 16`, !!rm && !!ed && rm.b <= 844 - 24 && near(rm.x, 16) && near(390 - rm.r, 16), rm && `${rm.x}..${rm.r} b ${rm.b}`);
+  await checkPage('member-bottom');
   if (OUT) await page.screenshot({ path: `${OUT}/phone-member-scrolled-${theme}.png` });
 
   // 选择 Agent
