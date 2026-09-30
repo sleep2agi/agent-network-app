@@ -46,7 +46,7 @@ console.log('# 接线(源码)');
   ck('左右编辑器是规则文件同一套零件(不是复制一份)', /import \{[^}]*\bModeToggle\b[^}]*\bSplitDivider\b[^}]*\buseDebounced\b[^}]*\} from '\.\/SplitEditorParts'/.test(rules) && /import \{[^}]*\bModeToggle\b[^}]*\bSplitDivider\b[^}]*\buseDebounced\b[^}]*\} from '\.\/SplitEditorParts'/.test(full) && !/function (ModeToggle|RulesSplitDivider|useDebounced)\b/.test(rules));
   ck('分隔条只在 SplitEditorParts 里建 PanResponder', /PanResponder\.create\(/.test(parts) && !/PanResponder\.create\(/.test(rules) && !/PanResponder\.create\(/.test(full));
   ck('全屏的模式 tab 按 rulesModeTabs(splitOk) 给,预览节流同规则文件', full.includes('tabs={rulesModeTabs(splitOk)}') && full.includes('useDebounced(editor.value, split ? SPLIT_PREVIEW_DEBOUNCE_MS : 0)'));
-  ck('全屏里 🖼 / 粘贴 / 拖放都还在', full.includes('testID="req-description-full-image"') && full.includes('ref={setDropBox}') && editor.includes("useImageIntake(pointer && !!full && full !== 'read', fullInput, fullBox"));
+  ck('全屏里 🖼 / 粘贴 / 拖放都还在', full.includes('testID="req-description-full-image"') && full.includes('ref={setDropBox}') && editor.includes("useImageIntake(imagesOn && pointer && !!full && full !== 'read', fullInput, fullBox"));
   ck('手机页:‹ 返回、编辑/预览、🖼', full.includes('testID="req-description-page-back"') && full.includes('testID="req-description-page-mode"') && full.includes('testID="req-description-page-image"'));
   ck('桌面全屏挂 MacTitleStrip / WinTitleBar(Modal 盖住了主窗口那两条)', full.includes('<MacTitleStrip />') && full.includes('<WinTitleBar />'));
   ck('识别结果插到按下那一刻冻结的选区(聊天同一套)', editor.includes('insertAtSelection(latest.current, text, voiceInsertTarget(source, capture.take()))') && editor.includes('sourceRef.current = beginVoicePress(source, capture)') && editor.includes('hostSelection(activeInput())'));

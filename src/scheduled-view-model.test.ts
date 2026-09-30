@@ -197,7 +197,8 @@ has('selection reconciled per filter', 'reconcileSelection(visible, selectedId, 
 has('phone detail replaces the list', '{!wide && selected ? detail : <>');
 has('hardware back closes the phone detail', "BackHandler.addEventListener('hardwareBackPress', () => { setSelectedId(null); return true; })");
 has('history is loaded for the selected schedule', 'fetchScheduledRuns(cfg, scheduleId)');
-has('prompt is selectable', '<Text style={s.prompt} selectable>{row.task_content}</Text>');
+// 手机上能编辑的计划:点卡片进全屏(ScheduleContentFullscreen);其余(桌面 / 已结束的计划)卡片仍可选中复制。
+has('prompt is selectable', '<Text style={s.prompt} selectable testID="schedule-content-card">{row.task_content}</Text>');
 has('detail actions gated by scheduledTaskActions', 'scheduledTaskActions(row.status)');
 has('run-now action', "onAction(row, 'run')");
 has('empty state per filter', 'emptyStateFor(filter, items.length)');

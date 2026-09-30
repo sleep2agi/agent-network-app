@@ -3,6 +3,8 @@
 //     (SplitEditorParts:模式切换、分隔条、预览节流);🖼 / 🎤 在工具条上,录音条在底部。
 //   · PhoneDescriptionPage:推入的一整页,‹ 返回 · 编辑/预览 · 🖼;编辑时底部「按住 说话」,按住时微信式浮层铺满这一页。
 // 草稿、图片上传、语音状态都在 TaskDescriptionEditor;这里只摆位置。
+// 定时任务的「任务内容」也用这一套(ScheduledTasksScreen / ScheduleContentFullscreen):标题、字数上限、未保存提示可换,
+// 🖼 可以不给(onPickImage = null),可以带一个「保存」(save;定时任务详情页没有外层的保存按钮)。
 import { useEffect, useRef, useState, type MutableRefObject, type ReactNode } from 'react';
 import { Modal, Platform, Pressable, ScrollView, View } from 'react-native';
 import { Text, TextInput } from './ui-text';
@@ -33,6 +35,22 @@ export type EditorBinding = {
   placeholder: string;
   /** 编辑框宿主(web 上是 <textarea>):粘贴图片、语音插入读选区都靠它。 */
   setInput: (el: any) => void;
+  /** 字数上限(默认任务描述的 DESCRIPTION_MAX;定时任务内容是 Hub 的 10000)。 */
+  maxLength?: number;
+};
+
+/** 全屏里的「保存」:没有外层保存按钮的地方(定时任务详情页)才给。 */
+export type FullscreenSave = { label: string; disabled: boolean; onPress: () => void };
+
+/** 两种全屏共用的可换文案 / 可选零件;不给 = 任务描述原样。 */
+export type FullscreenChrome = {
+  /** 手机页顶栏的标题(默认「描述」)。 */
+  title?: string;
+  /** 有未保存修改时的提示(默认「回到详情点保存修改」)。 */
+  unsavedText?: string;
+  save?: FullscreenSave | null;
+  /** 正文下面多放的东西(保存出错 / 冲突时的选择)。 */
+  below?: ReactNode;
 };
 
 const WEB = Platform.OS === 'web';
@@ -60,7 +78,7 @@ function useEscape(onClose: () => void) {
   }, []);
 }
 
-export function DesktopDescriptionFullscreen({ mode, onMode, editor, rich, setDropBox, dragOver, preview, onPickImage, mic, voiceBar, below, dirty, onClose }: {
+export function DesktopDescriptionFullscreen({ mode, onMode, editor, rich, setDropBox, dragOver, preview, onPickImage, mic, voiceBar, below, dirty, onClose, chrome = {} }: {
   mode: RulesViewMode;
   onMode: (m: RulesViewMode) => void;
   editor: EditorBinding;
@@ -70,7 +88,8 @@ export function DesktopDescriptionFullscreen({ mode, onMode, editor, rich, setDr
   setDropBox: (el: any) => void;
   dragOver: boolean;
   preview: (text: string) => ReactNode;
-  onPickImage: () => void;
+  /** 🖼;null = 这里不能放图片(定时任务内容)。 */
+  onPickImage: (() => void) | null;
   /** 🎤(不支持语音时 null)。 */
   mic: ReactNode;
   /** 录音条(没在录音时 null)。 */
@@ -79,6 +98,7 @@ export function DesktopDescriptionFullscreen({ mode, onMode, editor, rich, setDr
   below: ReactNode;
   dirty: boolean;
   onClose: () => void;
+  chrome?: FullscreenChrome;
 }) {
   useTranslation();
   const [bodyWidth, setBodyWidth] = useState(0);
@@ -110,7 +130,7 @@ export function DesktopDescriptionFullscreen({ mode, onMode, editor, rich, setDr
       onBlur={() => setFocused(false)}
       multiline
       scrollEnabled
-      maxLength={DESCRIPTION_MAX}
+      maxLength={editor.maxLength ?? DESCRIPTION_MAX}
       placeholder={editor.placeholder}
       placeholderTextColor={colors.textMuted}
       textAlignVertical="top"
@@ -167,14 +187,21 @@ export function DesktopDescriptionFullscreen({ mode, onMode, editor, rich, setDr
         <WinTitleBar />
         <View testID="req-description-full-toolbar" style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm, paddingHorizontal: spacing.lg, paddingVertical: spacing.md, borderBottomWidth: 1, borderBottomColor: colors.border }}>
           <ModeToggle mode={shown} tabs={rulesModeTabs(splitOk)} onChange={onMode} labels={labels} testID="req-description-full-mode" />
-          {editable ? (
+          {editable && onPickImage ? (
             <FocusRing accessibilityRole="button" accessibilityLabel={t('tasks.copy.126')} onPress={onPickImage} testID="req-description-full-image"
               style={{ width: 30, height: 30, borderRadius: radius.control, alignItems: 'center', justifyContent: 'center' }}>
               <Ionicons name="image-outline" size={18} color={colors.textSecondary} />
             </FocusRing>
           ) : null}
           {editable ? mic : null}
-          <Text style={{ flex: 1, color: colors.textMuted, fontSize: 12 }} numberOfLines={1} testID="req-description-full-dirty">{dirty ? t('taskDesc.unsaved') : ''}</Text>
+          <Text style={{ flex: 1, color: colors.textMuted, fontSize: 12 }} numberOfLines={1} testID="req-description-full-dirty">{dirty ? chrome.unsavedText ?? t('taskDesc.unsaved') : ''}</Text>
+          {chrome.save ? (
+            // 不用 FocusRing:它悬停时把底色换成行悬停色,主按钮的强调色会被盖掉。
+            <Pressable onPress={chrome.save.onPress} disabled={chrome.save.disabled} accessibilityRole="button" accessibilityState={{ disabled: chrome.save.disabled }} testID="req-description-full-save"
+              style={{ height: 30, paddingHorizontal: spacing.md, borderRadius: radius.item, backgroundColor: colors.accent, justifyContent: 'center', opacity: chrome.save.disabled ? 0.5 : 1 }}>
+              <Text style={{ color: colors.onAccent, fontSize: 12, fontWeight: '600' }}>{chrome.save.label}</Text>
+            </Pressable>
+          ) : null}
           <FocusRing ref={closeRef} onPress={onClose} accessibilityRole="button" accessibilityLabel={t('taskDesc.exitFullscreen')} testID="req-description-full-close"
             style={{ height: 30, paddingHorizontal: spacing.md, borderRadius: radius.item, borderWidth: 1, borderColor: colors.border, justifyContent: 'center' }}>
             <Text style={{ color: colors.textSecondary, fontSize: 12 }}>{WEB ? t('taskDesc.exitFullscreenEsc') : t('taskDesc.exitFullscreen')}</Text>
@@ -194,12 +221,13 @@ export function DesktopDescriptionFullscreen({ mode, onMode, editor, rich, setDr
  * 手机全屏页。按住浮层的几何(holdOverlayLayout)按这一页的宽高 + 底部安全区 + 大条的上沿算;
  * 手指命中用同一份几何(holdLayoutRef),手指坐标减去这一页在窗口里的原点(measureOrigin,按下时量)。
  */
-export function PhoneDescriptionPage({ mode, onMode, editor, preview, onPickImage, holdBar, voice, holdOverlayOn, holdLayoutRef, originRef, measureOriginRef, below, dirty, onClose }: {
+export function PhoneDescriptionPage({ mode, onMode, editor, preview, onPickImage, holdBar, voice, holdOverlayOn, holdLayoutRef, originRef, measureOriginRef, below, dirty, onClose, chrome = {} }: {
   mode: InlineMode;
   onMode: (m: InlineMode) => void;
   editor: EditorBinding;
   preview: (text: string) => ReactNode;
-  onPickImage: () => void;
+  /** 🖼;null = 这里不能放图片(定时任务内容)。 */
+  onPickImage: (() => void) | null;
   /** 「按住 说话」大条(不支持语音 / 预览模式时 null)。 */
   holdBar: ReactNode;
   voice: VoiceInput;
@@ -211,6 +239,7 @@ export function PhoneDescriptionPage({ mode, onMode, editor, preview, onPickImag
   below: ReactNode;
   dirty: boolean;
   onClose: () => void;
+  chrome?: FullscreenChrome;
 }) {
   useTranslation();
   const s = useTaskStyles();
@@ -234,15 +263,21 @@ export function PhoneDescriptionPage({ mode, onMode, editor, preview, onPickImag
           <Pressable accessibilityRole="button" accessibilityLabel={t('tasks.copy.144')} onPress={onClose} hitSlop={8} style={[s.iconButton, { marginLeft: -spacing.sm }]} testID="req-description-page-back">
             <Ionicons name="chevron-back" size={22} color={colors.text} />
           </Pressable>
-          <Text style={{ flex: 1, color: colors.text, fontSize: 17, fontWeight: '600' }} numberOfLines={1}>{t('tasks.copy.125')}</Text>
-          {mode === 'edit' ? (
+          <Text style={{ flex: 1, color: colors.text, fontSize: 17, fontWeight: '600' }} numberOfLines={1} testID="req-description-page-title">{chrome.title ?? t('tasks.copy.125')}</Text>
+          {mode === 'edit' && onPickImage ? (
             <Pressable accessibilityRole="button" accessibilityLabel={t('tasks.copy.126')} onPress={onPickImage} hitSlop={6} style={s.iconButton} testID="req-description-page-image">
               <Ionicons name="image-outline" size={20} color={colors.textSecondary} />
             </Pressable>
           ) : null}
           <Segmented s={s} items={[{ key: 'edit', label: t('tasks.copy.127') }, { key: 'preview', label: t('tasks.copy.128') }]} value={mode} onChange={onMode} testID="req-description-page-mode" />
+          {chrome.save ? (
+            <Pressable onPress={chrome.save.onPress} disabled={chrome.save.disabled} accessibilityRole="button" accessibilityState={{ disabled: chrome.save.disabled }} hitSlop={6} testID="req-description-page-save"
+              style={{ height: 32, paddingHorizontal: spacing.md, borderRadius: radius.item, backgroundColor: colors.accent, justifyContent: 'center', opacity: chrome.save.disabled ? 0.5 : 1 }}>
+              <Text style={{ color: colors.onAccent, fontSize: 14, fontWeight: '600' }}>{chrome.save.label}</Text>
+            </Pressable>
+          ) : null}
         </View>
-        {dirty ? <Text style={{ color: colors.textMuted, fontSize: 12, paddingHorizontal: spacing.lg, paddingTop: spacing.sm }} testID="req-description-page-dirty">{t('taskDesc.unsaved')}</Text> : null}
+        {dirty ? <Text style={{ color: colors.textMuted, fontSize: 12, paddingHorizontal: spacing.lg, paddingTop: spacing.sm }} testID="req-description-page-dirty">{chrome.unsavedText ?? t('taskDesc.unsaved')}</Text> : null}
         <View style={{ flex: 1, padding: spacing.lg, gap: spacing.sm }}>
           {mode === 'edit' ? (
             <TextInput
@@ -251,7 +286,7 @@ export function PhoneDescriptionPage({ mode, onMode, editor, preview, onPickImag
               onChangeText={editor.onChange}
               onSelectionChange={editor.onSelectionChange}
               multiline
-              maxLength={DESCRIPTION_MAX}
+              maxLength={editor.maxLength ?? DESCRIPTION_MAX}
               placeholder={editor.placeholder}
               placeholderTextColor={colors.textMuted}
               textAlignVertical="top"
