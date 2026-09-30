@@ -13,7 +13,7 @@
 //    人在应用里看 A,B 来了消息 —— 这是最常见的情形,必须弹。
 
 import { AppState, Platform, type AppStateStatus } from 'react-native';
-import { fetchMessages, fetchTasks, fetchUserMessages, replyUnreadSince, type HubConfig } from './api';
+import { fetchReplyInbox, fetchTasks, fetchUserMessages, type HubConfig } from './api';
 import { loadConfig } from './storage';
 import {
   decideWithReason,
@@ -145,7 +145,7 @@ async function fetchOnce(force: boolean): Promise<void> {
       if (cfg === c) { ingestUserMessagesBody(body); result.user = Array.isArray((body as any)?.messages) ? (body as any).messages.length : 0; }
     } catch (e) { fail('scope=user', e); }
     try {
-      const body = await fetchMessages(c, 300, replyUnreadSince());
+      const body = await fetchReplyInbox(c);
       if (cfg === c) { ingestInboxMessagesBody(body, c.username); result.inbox = Array.isArray((body as any)?.messages) ? (body as any).messages.length : 0; }
     } catch (e) { fail('inbox', e); }
   } finally {

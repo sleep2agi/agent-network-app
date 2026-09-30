@@ -15,7 +15,7 @@ const load = agents.slice(agents.indexOf('const load = useCallback(async () => {
 const firstAwait = load.indexOf('await ');
 ck('chat list starts the status read before awaiting anything', load.indexOf('fetchStatus(cfg)') >= 0 && load.indexOf('fetchStatus(cfg)') < firstAwait);
 ck('chat list starts the user-inbox unread read before awaiting anything', load.indexOf('fetchUserMessages(cfg, 50)') >= 0 && load.indexOf('fetchUserMessages(cfg, 50)') < firstAwait);
-ck('chat list starts the reply-unread read before awaiting anything', load.indexOf('fetchMessages(cfg, 300, replyUnreadSince())') >= 0 && load.indexOf('fetchMessages(cfg, 300, replyUnreadSince())') < firstAwait);
+ck('chat list starts the reply-unread read before awaiting anything', load.indexOf('fetchReplyInbox(cfg)') >= 0 && load.indexOf('fetchReplyInbox(cfg)') < firstAwait);
 ck('early-started reads never surface as unhandled rejections', /userMessagesRead\.catch\(\(\) => \{\}\)/.test(load) && /inboxRead\.catch\(\(\) => \{\}\)/.test(load));
 ck('unread bodies are still applied in the old order (status → user inbox → replies)', before(load, 'await statusRead', 'await userMessagesRead') && before(load, 'await userMessagesRead', 'await inboxRead'));
 

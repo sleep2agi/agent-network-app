@@ -14,7 +14,7 @@ import AliasAvatar from './AliasAvatar';
 import AttachmentFileDesktop from './AttachmentFileDesktop';
 import AuthedThumb, { AttachmentFile, AuthedVideo, mimeFromName } from './AuthedThumb';
 import AuthedWebThumb from './AuthedWebThumb';
-import { ackAgentMessages, ackUserMessages, createDashboardRequestId, dashboardRequestIdForLocalId, fetchNodeStatus, fetchStatus, fetchTasks, fetchUserMessages, sendTask, HubConfig, HubTask, Session, TaskAttachment, TaskPriority } from './api';
+import { ackAgentMessages, ackUserMessages, createDashboardRequestId, dashboardRequestIdForLocalId, fetchNodeStatus, fetchStatus, fetchChatUserMessages, fetchTasks, sendTask, HubConfig, HubTask, Session, TaskAttachment, TaskPriority } from './api';
 import { proactiveItemsForAgent } from './proactive-messages';
 import { replyQuoteFor } from './reply-quote';
 import { bubbleLayout, desktopBubbleCap } from './bubble-layout';
@@ -440,7 +440,7 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
       if (!token) return;
       try {
         // app#160:同一次轮询顺带取 Agent 主动发给用户的消息(user_inbox),与任务并行;它失败不影响任务行。
-        const userMessagesPromise = fetchUserMessages(cfg, 200).catch(() => ({ messages: [] as any[] }));
+        const userMessagesPromise = fetchChatUserMessages(cfg).catch(() => ({ messages: [] as any[] }));
         const data = await fetchTasks(cfg, { to_name: alias, limit });
         const userMessages = await userMessagesPromise;
         // The await is where the conversation can change underneath us. Every

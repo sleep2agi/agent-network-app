@@ -128,7 +128,13 @@ ck('G8 总开关关 → 判定 = master_off', diag.getNotifyDiagnostics().lastDe
 settings.saveNotifySettings({ ...settings.loadNotifySettings(), enabled: true });
 
 // 过期才拉到的消息(应用在后台被暂停、回来时已超过 10 分钟)→ 判定 = stale(以前是无声无息)。
-agentReply('SDK马', '十五分钟前的消息', H.now - 15 * 60_000);
+// 按真实顺序演:先到后台(不轮询),消息在暂停期间进了 hub(created_at 是插入时刻,晚于上次读到的最新一条),
+// 20 分钟后回到前台才拉到。hub 从不回填更早的 created_at,所以不在「已读过的时刻之前」塞行。
+await setAppState('background');
+await advance(5 * 60_000);
+agentReply('SDK马', '十五分钟前的消息');
+await advance(15 * 60_000);
+await setAppState('active');
 await advance(20_000);
 ck('G9 超过 10 分钟才拉到 → 判定 = stale', diag.getNotifyDiagnostics().lastDecision?.outcome === 'stale', diag.getNotifyDiagnostics().lastDecision);
 

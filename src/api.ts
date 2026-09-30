@@ -110,6 +110,8 @@ import { userMessagesPath } from './user-unread';
 import { pickDefaultNetworkId } from './user-admin';
 import { fetchAuthMe } from './user-admin-api';
 import { stripHumanDms } from './human-dm';
+import { createReplyInboxReader } from './inbox-cursor';
+import { createUserMessagesWindow } from './user-messages-window';
 
 /** 一次轮询读的硬上限:从发出到**读完响应体**。withTimeout 只管到响应头,响应体卡在半开的隧道
  *  连接上时 `res.json()` 永远不返回 —— 那个轮询就永远 running、再也不刷新(2026-09-29)。
@@ -648,6 +650,17 @@ export const replyUnreadSince = (now: Date = new Date()): string =>
   new Date(now.getTime() - 7 * 24 * 3600 * 1000).toISOString().replace('T', ' ').slice(0, 19);
 
 /**
+ * 回复未读 / 通知的 inbox 读(Agent 列表和通知轮询共用一份)。第一次整读 7 天 × 300 条,之后只读游标之后的
+ * 新行并合并成同一个「窗口内最新 300 条」(inbox-cursor.ts)。生产上每 10 s 从 116 KB(gzip)降到几 KB。
+ * 读失败时缓存不动,照旧抛给调用方。
+ */
+const replyInbox = createReplyInboxReader();
+export const fetchReplyInbox = (cfg: HubConfig, now: number = Date.now()): Promise<{ messages: HubMessage[] }> =>
+  replyInbox.read(`${cfg.serverUrl}\u0000${cfg.token}\u0000${cfg.networkId ?? ''}`, (limit, since) => fetchMessages(cfg, limit, since), now);
+/** Test-only. */
+export function __resetReplyInboxForTest(): void { replyInbox.reset(); }
+
+/**
  * #1563 —— agent 主动发给**登录用户**的消息落在 hub 的 `user_inbox` 表,
  * 上面那个 `fetchMessages` 走的是 **alias 分支**(读 `inbox` 表),取不到它们。
  * 服务端的 user 作用域返回 `{ ok, messages, unread, pending_count }`,
@@ -665,6 +678,19 @@ export interface UserMessagesResponse {
 // 私信(kind='human_dm')也在 user_inbox 里:在这个唯一的取数口摘掉,agent 的会话 / 角标 / 通知都看不到它(human-dm.ts)。
 export const fetchUserMessages = (cfg: HubConfig, limit: number) =>
   get<UserMessagesResponse>(cfg, userMessagesPath(limit, cfg.networkId)).then(body => stripHumanDms(body));
+
+/**
+ * 会话页的 user_inbox 读:第一次 200 条,之后每拍只读最新 50 条并进手里的 200 条(user-messages-window.ts)。
+ * 口径与每拍读 200 条相同;生产上每 5 s 从 90 KB(gzip)降到约 19 KB。人与人私信照旧在最后剥掉 ——
+ * 窗口按 hub 原始行判断「有没有漏」,剥掉之后的条数不能拿来判断。
+ */
+const chatUserWindow = createUserMessagesWindow();
+export const fetchChatUserMessages = (cfg: HubConfig, now: number = Date.now()) =>
+  chatUserWindow
+    .read(`${cfg.serverUrl}\u0000${cfg.token}\u0000${cfg.networkId ?? ''}`, limit => get<UserMessagesResponse>(cfg, userMessagesPath(limit, cfg.networkId)), now)
+    .then(body => stripHumanDms(body as UserMessagesResponse));
+/** Test-only. */
+export function __resetChatUserMessagesForTest(): void { chatUserWindow.reset(); }
 
 /** #1828:把看过的消息在 hub 上标已读(user_inbox 行 + inbox 里发给自己用户名的回复行);hub 只改自己的行。 */
 export const ackUserMessages = async (cfg: HubConfig, messageIds: string[]): Promise<number> => {
