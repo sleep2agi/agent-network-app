@@ -42,7 +42,7 @@ const fixture = () => {
   const now = Date.now();
   const at = (d) => new Date(now + d * day);
   const ymd = (d) => { const t = at(d); return `${t.getFullYear()}-${String(t.getMonth() + 1).padStart(2, '0')}-${String(t.getDate()).padStart(2, '0')}`; };
-  const R = (id, name, o) => ({ id, name, priority: 'normal', assignee: '', column: 'pool', owner: { kind: 'user', id: 'u_tester' }, participants: [], agent_owner: null, project_id: null, due: '', createdAt: at(-5).toISOString(), updatedAt: at(-1).toISOString(), description: '', checklist: [], ...o });
+  const R = (id, name, o) => ({ id, name, priority: 'normal', assignee: '', column: 'pool', start: '' /* a start_date hub sends it on every row */, owner: { kind: 'user', id: 'u_tester' }, participants: [], agent_owner: null, project_id: null, due: '', createdAt: at(-5).toISOString(), updatedAt: at(-1).toISOString(), description: '', checklist: [], ...o });
   const A = { kind: 'node', id: 'n_sweep_a' }, B = { kind: 'node', id: 'n_sweep_b' };
   const requirements = [
     R('g1', '示例:官网首页改版', { project_id: 'p_a', agent_owner: A, createdAt: at(-20).toISOString(), due: ymd(3), column: 'doing', priority: 'high' }),
@@ -308,6 +308,31 @@ for (const theme of ['light', 'dark']) {
       const name = await page.evaluate(() => document.querySelector('[data-testid="req-edit-name"]')?.value ?? null);
       record(vp, 'click bar opens detail', { opened: name === '示例:下周的发布' }, { name });
       await shot('detail');
+
+      // ── 详情「更多」里的「开始」:点「今天」→ 保存 → 只发 { start },条从今天画起 ──
+      // close the previous drawer first (it overlays the chart), then open g7 from its name cell
+      await page.locator(tid('req-detail-close')).first().click();
+      await page.waitForTimeout(300);
+      await page.evaluate(() => document.querySelector('[data-testid="gantt-name-g7"]').scrollIntoView({ block: 'center' }));
+      await page.locator(tid('gantt-name-g7')).click();
+      await page.locator(tid('req-edit-name')).first().waitFor({ timeout: 10000 });
+      if (!(await box(page, tid('req-more')))) await page.locator(tid('req-more-toggle')).click();
+      const field = await box(page, tid('req-edit-start'));
+      const nBefore = (await page.evaluate(() => (window.__tasksPatches || []).length));
+      await page.locator(tid('req-edit-start-today')).click();
+      await page.locator(tid('req-edit-save')).click();
+      await page.waitForTimeout(700);
+      const sp = await page.evaluate((n) => (window.__tasksPatches || []).slice(n), nBefore);
+      const todayYmd = await page.evaluate(() => { const t = new Date(); return `${t.getFullYear()}-${String(t.getMonth() + 1).padStart(2, '0')}-${String(t.getDate()).padStart(2, '0')}`; });
+      const g7 = await box(page, tid('gantt-bar-g7'));
+      const line = await box(page, tid('gantt-today-line'));
+      await page.locator(tid('req-more-toggle')).click();
+      const sum = await box(page, tid('req-more-summary'));
+      record(vp, 'detail: set start', {
+        field: !!field, startOnly: sp.length === 1 && JSON.stringify(sp[0]) === JSON.stringify({ start: todayYmd }),
+        barFromToday: !!g7 && Math.abs(g7.x - 1 + 16 - (line.x + 1)) <= 1, summary: !!sum && sum.text.startsWith(`${+todayYmd.slice(5, 7)}月${+todayYmd.slice(8, 10)}日开始`),
+      }, { patch: JSON.stringify(sp[0] ?? null), summary: sum?.text });
+      await shot('detail-start');
     } else {
       const seg = await Promise.all(['list', 'board', 'gantt', 'dispatch'].map(k => box(page, tid(`tasks-view-${k}`))));
       record(vp, 'segments fit', { four: seg.every(Boolean), inGutter: seg[0].x >= 16 - 1 && seg[3].r <= v.w - 16 + 1, oneLine: Math.max(...seg.map(s => s.cy)) - Math.min(...seg.map(s => s.cy)) <= 1 }, { left: r1(seg[0].x), right: r1(seg[3].r) });
@@ -339,6 +364,30 @@ for (const theme of ['light', 'dark']) {
     }
     await ctx.close();
   }
+}
+
+// Old hub (no start_date capability, rows without `start`): the detail has no 开始 field and the bars still start at createdAt.
+{
+  const vp = 'desktop 1320x754 light old-hub';
+  const ctx = await browser.newContext({ viewport: { width: 1320, height: 754 }, colorScheme: 'light', deviceScaleFactor: 2, timezoneId: 'Asia/Shanghai', locale: 'zh-CN' });
+  const page = await ctx.newPage();
+  await page.addInitScript(fixture);
+  await page.addInitScript(() => {
+    const f = window.__tasksFixture;
+    f.capabilities = f.capabilities.filter(c => c !== 'start_date');
+    for (const r of f.requirements) delete r.start;
+  });
+  await page.addInitScript(initScript, { theme: 'light' });
+  await open(page, 'desktop');
+  const note = await box(page, tid('gantt-start-note'));
+  const g9 = await box(page, tid('gantt-bar-g9'));
+  await page.locator(tid('gantt-bar-g9')).click();
+  await page.locator(tid('req-edit-name')).first().waitFor({ timeout: 10000 });
+  if (!(await box(page, tid('req-more')))) await page.locator(tid('req-more-toggle')).click();
+  record(vp, 'old hub: no start field, createdAt start', {
+    noField: !(await box(page, tid('req-edit-start'))), note: note?.text === '开始 = 创建时间(Hub 还没有开始字段)', createdStart: !!g9 && g9.w > 7 * 32,
+  }, { g9: r1(g9?.w ?? -1) });
+  await ctx.close();
 }
 
 await browser.close();
