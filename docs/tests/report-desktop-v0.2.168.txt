@@ -1,0 +1,12 @@
+desktop v0.2.168 — 分享图重新设计(方向 A 大字报)
+================================================================================
+A. 本版内容(0.2.167 发版提交 a33682d0 之后 main 上合入的 PR + 本 PR)
+  #608 分享图方向 A:电脑 Canvas 与手机 RN 共用一套版式;1080×1920 / 1080×1350,浅色 / 深色;
+       30 天内 ≥7 天有完成才画 30 天图,否则 7 天内 ≥5 天画 7 天图,否则不画;热力图需首个完成 ≥30 天;
+       最近完成 ≥8 条带完成人 +「还有 N 个」;display_name 缺失保留原名、为空显示「成员」(Hub #2183 随 .76)。
+       task-share-card.test.ts 229 项;tests/test-share-card drive 9/9(边距 72/72、无越界、无重叠)。
+  iOS:0.2.167 未单独出 iOS(ios-build 编 main HEAD,已含 #608),本版一起出。
+  本 PR(版本号):0.2.167 → 0.2.168,versionCode 2167 → 2168;release-desktop-auto-update.yml 加 What's new in 0.2.168;重新生成 src/changelog-bundled.ts。
+  本地:干净 origin/main(30b5825)bump 后 npm ci / npm test / npm run typecheck 全部 rc=0;android-release-notes.mjs 0.2.168 rc=0。
+B. 验证边界(如实)
+  本 PR 只改版本号与说明;功能验证见 #608。分享图的手机系统分享面板与桌面保存未在真机验证。
