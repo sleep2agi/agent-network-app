@@ -13,7 +13,9 @@ const checks: Array<[string, boolean]> = [
   // 2026-09-06 截图:每个窗各弹一次 → 分离聊天窗 / 工作区窗不挂;设置窗(0.2.145「点了没反应」)挂成 manual,
   // 只为本窗口手动点出来的检查弹。细节见 desktop-update-prompt-window.test.ts。
   ['detached chat windows do not mount the prompt; the settings window mounts it manual-only', app.includes('{updatePromptMode ? <DesktopUpdatePrompt') && app.includes('chat: !!requestedChatAlias()') && app.includes('settings: requestedSettingsWindow()')],
-  ['prompt shows only the newest section in a bounded scroll view', prompt.includes('latestReleaseNotes(update.notes)') && prompt.includes('<ScrollView style={styles.notesScroll}') && prompt.includes('maxHeight: 240')],
+  // 2026-09-30 更新页重做:说明解析成分组,只留比已装版本新的那几段(release-notes.test.ts);
+  // 说明区在有高度上限的卡片里收缩滚动,不再固定 240 高。
+  ['prompt shows the versions newer than the installed one, in a shrinking scroll view inside a bounded card', prompt.includes('parseReleaseNotes(notes, { currentVersion: current, targetVersion: next })') && prompt.includes('<ScrollView style={[styles.notesScroll, styles.noFocusRing]}') && /notesScroll: \{ flexGrow: 0, flexShrink: 1 \}/.test(prompt) && /card: \{[^}]*maxHeight: '88%'/.test(prompt)],
   ['install button stays outside the scroll view', prompt.indexOf('</ScrollView>') < prompt.indexOf('installDesktopUpdate()')],
   ['startup check is delayed and non-blocking', prompt.includes('setTimeout') && prompt.includes('checkDesktopUpdate')],
   ['manual settings check exists', settings.includes('checkDesktopUpdate')],

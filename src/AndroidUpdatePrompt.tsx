@@ -1,6 +1,7 @@
-import { useEffect, useSyncExternalStore } from 'react';
-import { ActivityIndicator, Modal, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { useEffect, useMemo, useSyncExternalStore } from 'react';
+import { ActivityIndicator, Modal, Platform, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { Text } from './ui-text';
+import { Ionicons } from './icons';
 import { androidPromptVisible, INSTALL_PERMISSION_HINT } from './android-update-core';
 import {
   androidUpdatePromptDismissed,
@@ -12,20 +13,25 @@ import {
   openUnknownSourcesSettings,
   subscribeAndroidUpdates,
 } from './android-updater';
-import { latestReleaseNotes } from './desktop-updater';
+import { parseReleaseNotes } from './release-notes';
 import { androidPromptView } from './update-prompt-model';
 import { routePrefs } from './update-route-prefs';
 import { colors, onThemeChange, spacing, themeMode, radius } from './theme';
 import { APP_VERSION } from './version';
 import { useModalSafePadding } from './safe-area-runtime';
-import { withBasePadding } from './modal-safe-area';
-import { elevated, buttonStyle, buttonTextStyle } from './elevation';
+import { buttonStyle, buttonTextStyle } from './elevation';
+import { heroBackground, heroTopColor, ReleaseNoteGroups, tint, UpdateBrandMark } from './update-screen-parts';
 
 /**
- * 安卓更新弹窗。只在用户点了「软件更新」之后出现(安卓不做启动时自动检查)。
- * 当前版本 → 新版本 + 本版说明 → 下载(大小、进度)→ sha256 → 系统安装器;一个「在浏览器中下载」。
+ * 安卓「新版本」页。只在用户点了「软件更新」之后出现(安卓不做启动时自动检查)。
+ *
+ * owner 2026-09-30「更新的窗口太丑了,这是每次都要发社交媒体的……最好是能够全屏去看」:
+ * 原来是一个小卡片,说明限高 150 截断在半行、露着英文标题和「- 」横杠,「在浏览器中下载」
+ * 在下载进行时还占一整个大按钮,sha256 的技术说明直接给用户看。现在是全屏页(微信式):
+ *   顶栏 ✕(= 稍后)· 头部 品牌图标 + 新版本号 + 大小 · 正文 解析后的完整说明(整页滚动)·
+ *   底部固定 一个主按钮(下载中变成带 % 和 MB 的进度条)+ 一行小字链接「在浏览器中下载」。
  * 下载来源(镜像优先、GitHub 兜底、记住上次成功的)全在 android-updater.ts 里静默处理,这里不出现任何来源。
- * 文案全部来自 update-prompt-model.ts(有测试),这里只摆放。
+ * 文案全部来自 update-prompt-model.ts / release-notes.ts(有测试),这里只摆放。
  */
 export default function AndroidUpdatePrompt({ currentVersion = APP_VERSION }: { currentVersion?: string } = {}) {
   const update = useSyncExternalStore(subscribeAndroidUpdates, androidUpdateSnapshot, androidUpdateSnapshot);
@@ -34,6 +40,9 @@ export default function AndroidUpdatePrompt({ currentVersion = APP_VERSION }: { 
   useSyncExternalStore(onThemeChange, themeMode, themeMode);
   const visible = androidPromptVisible(update, dismissed);
   const view = androidPromptView(update, { currentVersion });
+  const notes = 'notes' in update ? update.notes : '';
+  const version = 'version' in update ? update.version : undefined;
+  const groups = useMemo(() => parseReleaseNotes(notes, { currentVersion, targetVersion: version }), [notes, currentVersion, version]);
   // 启动时读一次「上次成功来源」;顺带静默删掉 0.2.121 遗留的「下载线路」偏好。
   useEffect(() => { void routePrefs.hydrate().catch(() => undefined); }, []);
   const safe = useModalSafePadding('fullScreen');
@@ -43,80 +52,77 @@ export default function AndroidUpdatePrompt({ currentVersion = APP_VERSION }: { 
     if (view.primary.action === 'install') void installAndroidUpdate();
     else void downloadAndroidUpdate();
   };
+  const progress = view.progress;
+  const meta = [view.versions.current ? `当前 ${view.versions.current}` : '', view.meta].filter(Boolean).join('  ·  ');
 
   return (
-    <Modal visible={visible} transparent animationType="fade" onRequestClose={() => { if (update.kind !== 'downloading') dismissAndroidUpdate(); }}>
-      <View style={[styles.backdrop, withBasePadding(safe, 20)]}>
-        <View style={styles.card} testID="android-update-prompt">
-          <ScrollView style={styles.body} contentContainerStyle={styles.bodyContent} bounces={false}>
-            <Text style={styles.title}>{view.title}</Text>
-            <View style={styles.versions} testID="android-update-versions">
-              {view.versions.current ? (
-                <>
-                  <View style={styles.versionCol}>
-                    <Text style={styles.versionCaption}>当前版本</Text>
-                    <Text style={styles.versionOld} testID="android-update-current">{view.versions.current}</Text>
-                  </View>
-                  <Text style={styles.arrow}>→</Text>
-                </>
-              ) : null}
-              <View style={styles.versionCol}>
-                <Text style={styles.versionCaption}>新版本</Text>
-                <Text style={styles.versionNew} testID="android-update-next">{view.versions.next}</Text>
-              </View>
-            </View>
-            <Text style={styles.meta} testID="android-update-meta">{view.meta}</Text>
+    <Modal visible={visible} animationType="slide" onRequestClose={() => { if (update.kind !== 'downloading') dismissAndroidUpdate(); }}>
+      <View style={[styles.page, { paddingLeft: safe.paddingLeft, paddingRight: safe.paddingRight }]} testID="android-update-prompt">
+        <View style={[styles.topBar, { backgroundColor: heroTopColor(colors.groupedBg), paddingTop: safe.paddingTop }]} testID="android-update-topbar">
+          {view.showLater ? (
+            <Pressable testID="android-update-later" style={styles.close} onPress={dismissAndroidUpdate} accessibilityRole="button" accessibilityLabel="稍后" hitSlop={8}>
+              <Ionicons name="close" size={24} color={colors.text} />
+            </Pressable>
+          ) : <View style={styles.close} />}
+        </View>
+        <ScrollView style={[styles.scroll, styles.noFocusRing]} contentContainerStyle={styles.scrollContent} testID="android-update-notes">
+          <View style={[styles.hero, heroBackground(colors.groupedBg)]} testID="android-update-hero">
+            <UpdateBrandMark size={76} />
+            <Text style={styles.kicker}>{view.title}</Text>
+            <Text style={styles.version} testID="android-update-next">{view.versions.next}</Text>
+            {meta ? <Text style={styles.meta} testID="android-update-meta">{meta}</Text> : null}
+          </View>
+          <View style={styles.notes}>
+            <ReleaseNoteGroups groups={groups} surface={colors.groupedRow} testID="android-update-note-groups" />
+          </View>
+        </ScrollView>
 
-            <Text style={styles.sectionLabel}>更新内容</Text>
-            <ScrollView style={styles.notesScroll} contentContainerStyle={styles.notesContent} testID="android-update-notes" nestedScrollEnabled>
-              <Text style={styles.notes} selectable>{latestReleaseNotes(update.notes)}</Text>
-            </ScrollView>
-
-            {update.kind === 'downloading' ? (
-              <View style={styles.progressBlock} testID="android-update-progress">
-                <View style={styles.progressRow}>
-                  <ActivityIndicator color={colors.accent} size="small" />
-                  <Text style={styles.progressText} testID="android-update-progress-line">{view.progressLine}</Text>
-                </View>
-                <View style={styles.bar}><View style={[styles.barFill, { width: `${update.percent ?? 0}%` }]} /></View>
-              </View>
-            ) : null}
-
-            {update.kind === 'download-error' ? (
-              <View testID="android-update-error">
+        <View style={[styles.footer, { paddingBottom: safe.paddingBottom + spacing.md }]} testID="android-update-footer">
+          {update.kind === 'download-error' ? (
+            <View style={styles.errorBox} testID="android-update-error">
+              <Ionicons name="alert-circle" size={16} color={colors.failed} />
+              <View style={styles.errorBody}>
                 <Text style={styles.error} testID="android-update-error-title">{view.errorTitle}</Text>
                 {view.errorDetail ? <Text style={styles.errorLine}>{view.errorDetail}</Text> : null}
               </View>
-            ) : null}
+            </View>
+          ) : null}
+          {view.showOpenSettings ? (
+            <Text style={styles.hintBlock} testID="android-update-install-hint">{INSTALL_PERMISSION_HINT}</Text>
+          ) : null}
 
-            {view.showOpenSettings ? (
-              <Text style={styles.hintBlock} testID="android-update-install-hint">{INSTALL_PERMISSION_HINT}</Text>
-            ) : null}
-
-            {view.primary ? (
-              <Pressable testID={`android-update-${view.primary.action}`} style={styles.button} onPress={onPrimary}>
-                <Text style={styles.buttonText}>{view.primary.label}</Text>
-              </Pressable>
-            ) : null}
-            {view.showOpenSettings ? (
-              <Pressable testID="android-update-open-settings" style={styles.secondary} onPress={() => { void openUnknownSourcesSettings(); }}>
-                <Text style={styles.secondaryText}>去设置允许安装</Text>
-              </Pressable>
-            ) : null}
-
-            <Pressable testID="android-update-browser" style={styles.browserButton} onPress={() => { void openApkInBrowser(); }}>
-              <Text style={styles.browserText} numberOfLines={1}>在浏览器中下载</Text>
+          {progress ? (
+            <View style={styles.progress} testID="android-update-progress" accessibilityRole="progressbar" accessibilityLabel={view.progressLine}>
+              {progress.percent != null ? <View style={[styles.progressFill, { width: `${progress.percent}%` }]} /> : null}
+              <View style={styles.progressLabel}>
+                {progress.verifying || progress.percent == null ? <ActivityIndicator color={colors.accent} size="small" /> : null}
+                <Text style={styles.progressText} numberOfLines={1} testID="android-update-progress-line">
+                  {progress.verifying ? '正在校验安装包…' : `正在下载 ${progress.percent != null ? `${progress.percent}%` : ''}`.trim()}
+                </Text>
+                {!progress.verifying && progress.bytes ? <Text style={styles.progressBytes} numberOfLines={1}>{progress.bytes}</Text> : null}
+              </View>
+            </View>
+          ) : view.primary ? (
+            <Pressable testID={`android-update-${view.primary.action}`} style={styles.button} onPress={onPrimary}>
+              <Text style={styles.buttonText}>{view.primary.label}</Text>
             </Pressable>
+          ) : null}
+          {view.showOpenSettings ? (
+            <Pressable testID="android-update-open-settings" style={styles.secondary} onPress={() => { void openUnknownSourcesSettings(); }}>
+              <Text style={styles.secondaryText}>去设置允许安装</Text>
+            </Pressable>
+          ) : null}
 
-            {view.showLater ? (
-              <Pressable testID="android-update-later" style={styles.later} onPress={dismissAndroidUpdate}>
-                <Text style={styles.laterText}>稍后</Text>
-              </Pressable>
-            ) : null}
-            <Text style={styles.hint}>
-              下载后先校验 sha256,再交给安卓系统安装器,不会静默安装。
-            </Text>
-          </ScrollView>
+          <View style={styles.links}>
+            <Pressable testID="android-update-browser" onPress={() => { void openApkInBrowser(); }} hitSlop={8}>
+              <Text style={styles.link} numberOfLines={1}>在浏览器中下载</Text>
+            </Pressable>
+            <Text style={styles.linkSep}>·</Text>
+            <View style={styles.trust} testID="android-update-trust">
+              <Ionicons name="shield-checkmark-outline" size={12} color={colors.textMuted} />
+              <Text style={styles.trustText} numberOfLines={1}>安全校验</Text>
+            </View>
+          </View>
         </View>
       </View>
     </Modal>
@@ -125,41 +131,40 @@ export default function AndroidUpdatePrompt({ currentVersion = APP_VERSION }: { 
 
 const makeStyles = () =>
   StyleSheet.create({
-    backdrop: { flex: 1, backgroundColor: '#0009', alignItems: 'center', justifyContent: 'center', padding: 20 },
-    card: { width: '100%', maxWidth: 440, maxHeight: '92%', borderRadius: radius.surface, backgroundColor: colors.card, overflow: 'hidden', ...elevated('floating') },
-    body: { flexGrow: 0 },
-    bodyContent: { padding: 20 },
-    title: { color: colors.text, fontSize: 18, fontWeight: '600' },
-    versions: { flexDirection: 'row', alignItems: 'flex-end', gap: spacing.md, marginTop: spacing.md },
-    versionCol: { gap: 2 },
-    versionCaption: { color: colors.textMuted, fontSize: 11 },
-    versionOld: { color: colors.textSecondary, fontSize: 17, lineHeight: 26, fontWeight: '500' },
-    versionNew: { color: colors.accent, fontSize: 20, lineHeight: 26, fontWeight: '600' },
-    // 两列数值同一行高(26)→ 标题行、数值行、箭头各自同一条中线。
-    arrow: { color: colors.textMuted, fontSize: 17, lineHeight: 26 },
-    meta: { color: colors.textSecondary, fontSize: 12, marginTop: spacing.xs },
-    sectionLabel: { color: colors.textMuted, fontSize: 12, marginTop: spacing.md, marginBottom: spacing.xs },
-    notesScroll: { maxHeight: 150, borderRadius: radius.control, backgroundColor: colors.bg, borderWidth: 1, borderColor: colors.border },
-    notesContent: { padding: spacing.md },
-    notes: { color: colors.textSecondary, fontSize: 13, lineHeight: 19 },
-    progressBlock: { marginTop: spacing.md },
-    progressRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
-    progressText: { color: colors.textSecondary, fontSize: 13, flexShrink: 1 },
-    bar: { height: 6, borderRadius: radius.pill, backgroundColor: colors.border, marginTop: spacing.sm, overflow: 'hidden' },
-    barFill: { height: 6, backgroundColor: colors.accent },
-    error: { color: colors.failed, fontSize: 13, lineHeight: 19, marginTop: spacing.md },
-    errorLine: { color: colors.failed, fontSize: 12, lineHeight: 18 },
-    hintBlock: { color: colors.textSecondary, fontSize: 12, lineHeight: 18, marginTop: spacing.sm },
-    // 主按钮 / 次按钮 / 在浏览器中下载 / 稍后 同宽(撑满卡片内容宽)、同一条中线。
-    button: { ...buttonStyle('primary'), marginTop: spacing.lg },
-    buttonText: { ...buttonTextStyle('primary') },
-    secondary: { ...buttonStyle('secondary'), marginTop: spacing.sm },
+    page: { flex: 1, backgroundColor: colors.groupedBg },
+    // 顶栏和头部同一片渐变,✕ 左上角(微信全屏页)。
+    topBar: { paddingHorizontal: spacing.sm, flexDirection: 'row', alignItems: 'center' },
+    // web 夹具里 Modal 打开会把焦点给 ✕,浏览器画一圈方框 —— 截图里像个坏掉的按钮;原生没有这圈。
+    close: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center', ...(Platform.OS === 'web' ? ({ outlineStyle: 'none' } as object) : null) },
+    scroll: { flex: 1 },
+    noFocusRing: (Platform.OS === 'web' ? { outlineStyle: 'none' } : {}) as object,
+    scrollContent: { paddingBottom: spacing.lg },
+    hero: { alignItems: 'center', paddingTop: spacing.sm, paddingBottom: 28, paddingHorizontal: 16 },
+    kicker: { color: colors.textSecondary, fontSize: 14, lineHeight: 20, marginTop: spacing.lg },
+    version: { color: colors.text, fontSize: 34, lineHeight: 42, fontWeight: '600', letterSpacing: 0.5 },
+    meta: { color: colors.textMuted, fontSize: 13, lineHeight: 18, marginTop: spacing.xs },
+    notes: { paddingHorizontal: 16 },
+    footer: { paddingHorizontal: 16, paddingTop: spacing.md, backgroundColor: colors.groupedRow, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border },
+    errorBox: { flexDirection: 'row', gap: spacing.sm, alignItems: 'flex-start', padding: spacing.md, marginBottom: spacing.md, borderRadius: radius.control, backgroundColor: tint(colors.failed, 0.1) },
+    errorBody: { flex: 1 },
+    error: { color: colors.failed, fontSize: 14, lineHeight: 20, fontWeight: '600' },
+    errorLine: { color: colors.failed, fontSize: 12, lineHeight: 18, marginTop: 2 },
+    hintBlock: { color: colors.textSecondary, fontSize: 12, lineHeight: 18, marginBottom: spacing.md },
+    // 主按钮和进度条同一个位置、同一个尺寸:点下去按钮原地变成进度条,不跳。
+    button: { ...buttonStyle('primary'), height: 48, borderRadius: radius.control },
+    buttonText: { ...buttonTextStyle('primary'), fontSize: 16 },
+    progress: { height: 48, borderRadius: radius.control, backgroundColor: colors.tonalBg, overflow: 'hidden', justifyContent: 'center' },
+    progressFill: { position: 'absolute', left: 0, top: 0, bottom: 0, backgroundColor: tint(colors.accent, themeMode() === 'dark' ? 0.34 : 0.22) },
+    progressLabel: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.sm, paddingHorizontal: spacing.lg },
+    progressText: { color: colors.accent, fontSize: 16, fontWeight: '600' },
+    progressBytes: { color: colors.textSecondary, fontSize: 13 },
+    secondary: { ...buttonStyle('secondary'), height: 44, marginTop: spacing.sm },
     secondaryText: { ...buttonTextStyle('secondary') },
-    browserButton: { ...buttonStyle('secondary'), marginTop: spacing.sm },
-    browserText: { ...buttonTextStyle('secondary') },
-    later: { marginTop: spacing.sm, height: 40, borderRadius: radius.control, alignItems: 'center', justifyContent: 'center' },
-    laterText: { color: colors.textSecondary, fontSize: 14 },
-    hint: { color: colors.textMuted, fontSize: 10, lineHeight: 15, marginTop: spacing.xs },
+    links: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.sm, marginTop: spacing.md },
+    link: { color: colors.accent, fontSize: 13, lineHeight: 18 },
+    linkSep: { color: colors.textMuted, fontSize: 13, lineHeight: 18 },
+    trust: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+    trustText: { color: colors.textMuted, fontSize: 12, lineHeight: 18 },
   });
 
 // 模块级 StyleSheet 必须随主题重建(theme-restyle-coverage.test.ts)。
