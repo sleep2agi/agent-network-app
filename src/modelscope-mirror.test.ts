@@ -135,4 +135,26 @@ check('ModelScope SDK version is pinned', /modelscope==\d+\.\d+\.\d+/.test(workf
 check('token comes from the secret via env only', workflow.includes('MODELSCOPE_API_TOKEN: ${{ secrets.MODELSCOPE_API_TOKEN }}')
   && !/echo[^\n]*MODELSCOPE_API_TOKEN/.test(workflow));
 
+// --- android channel publish workflow (android/latest/VERSION, see src/android-update-core.ts) ------------
+const android = readFileSync(new URL('../.github/workflows/modelscope-android-publish.yml', import.meta.url), 'utf8');
+const androidScript = readFileSync(new URL('../scripts/modelscope-android-publish.py', import.meta.url), 'utf8');
+check('android publish: manual dispatch with a run_id input only', /workflow_dispatch:[\s\S]*run_id:/.test(android) && !/^\s*(push|pull_request|schedule|release):/m.test(android));
+check('android publish: job runs from main only', android.includes("if: github.ref == 'refs/heads/main'"));
+check('android publish: source run must be android-build, on main, successful',
+  android.includes('.github/workflows/android-build.yml') && android.includes('"$branch" != "main"') && android.includes('"$conclusion" != "success"'));
+// Not the mirror's group: a mirror cron queued behind it would replace (cancel) a pending publish.
+check('android publish: own concurrency group, never cancelled by a queued mirror run',
+  /concurrency:\s*\n\s*group: modelscope-android-publish\s*\n\s*cancel-in-progress: false/.test(android));
+check('android publish: every `uses:` is pinned to a full commit SHA', [...android.matchAll(/uses:\s*(\S+)/g)].every((m) => /@[0-9a-f]{40}$/.test(m[1])));
+check('android publish: ModelScope SDK pinned to the same version as the mirror',
+  (android.match(/modelscope==(\d+\.\d+\.\d+)/) ?? [])[1] === (workflow.match(/modelscope==(\d+\.\d+\.\d+)/) ?? [])[1]);
+check('android publish: token from the secret via env only', android.includes('MODELSCOPE_API_TOKEN: ${{ secrets.MODELSCOPE_API_TOKEN }}')
+  && !/echo[^\n]*MODELSCOPE_API_TOKEN/.test(android) && !/print\([^\n]*token/i.test(androidScript));
+check('android publish: writes exactly the layout the updater reads',
+  androidScript.includes("f'agent-network-{version}.apk'") && androidScript.includes("f'android/{name}.sha256'") && androidScript.includes("'android/latest/VERSION'")
+  && androidScript.includes("f'{sha}  {name}\\n'"));
+check('android publish: anonymous verification downloads the full APK and compares sha256',
+  /def verify\(/.test(androidScript) && androidScript.includes('anonymous full download, sha256 match'));
+check('android publish: refuses to move android/latest/VERSION backwards', androidScript.includes('refusing to move it back'));
+
 console.log(`\n${passed} passed`);

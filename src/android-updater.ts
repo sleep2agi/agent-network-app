@@ -3,12 +3,15 @@
  * → sha256 校验 → 系统安装器。
  *
  * 检查顺序(0.2.100 真机「检查更新失败：GitHub 限流」之后改的):
- *   1. 镜像 desktop/latest/VERSION(10 s)。不比当前新 → 已是最新,**不再问 GitHub**。
- *   2. 更新 → 镜像 desktop/<ver>/SHA256SUMS(必需)+ latest.json(本版说明,可缺)+ HEAD APK(大小,可缺)。
+ *   1. 并行读镜像 desktop/latest/VERSION 与安卓通道 android/latest/VERSION(各 10 s,布局见 android-update-core.ts)。
+ *      取较高的那个(同版本取 desktop);读不到/认不出的那个不参与。都不比当前新 → 已是最新,**不再问 GitHub**。
+ *   2. 更新 → desktop 通道:desktop/<ver>/SHA256SUMS(必需)+ latest.json(本版说明,可缺)+ HEAD APK(大小,可缺);
+ *      安卓通道:android/agent-network-<ver>.apk.sha256(必需,缺了报错不装)+ desktop/<ver>/latest.json(可缺)+ HEAD APK。
  *   3. 只有两种情况才打 GitHub REST(未登录每 IP 每小时 60 次):镜像本身失败(网络/超时/非 2xx/格式不对),
  *      或镜像已推进到新版本但那一版的安卓包还没同步(SHA256SUMS 里没有 APK)。
- *   镜像比 GitHub 慢几分钟(镜像是发版后手动 dispatch 的)时,这几分钟里会报「已是最新」,下一次检查就能看到;
- *   为了这几分钟让每次检查都去打 GitHub,正是 0.2.100 用光配额的原因,所以不这么做。
+ *   两个 VERSION 都读不到/认不出也算「镜像本身失败」。
+ *   为了镜像滞后去让每次检查都打 GitHub,正是 0.2.100 用光配额的原因,所以不这么做;滞后靠安卓通道解决
+ *   (发版时安卓包、sha、android/latest/VERSION 由 modelscope-android-publish 一次写入)。
  * 下载:镜像带版本号的路径优先,硬失败(HTTP 错误/网络错误/校验不符)换 GitHub 资产直链;停滞则保留断点、下次续传同一来源。
  *
  * 纯逻辑在 android-update-core.ts;这里只是把它接到 expo-file-system / expo-intent-launcher 上,
@@ -17,15 +20,20 @@
  */
 import { atLeast } from './update-check-state';
 import {
+  ANDROID_CHANNEL_VERSION_URL,
   ANDROID_LATEST_RELEASE_API,
   APK_MIME,
   DEFAULT_RELEASE_NOTES,
   MIRROR_LATEST_APK_URL,
   MIRROR_VERSION_URL,
   UNKNOWN_SOURCES_SETTINGS_DATA,
+  androidChannelApkUrl,
+  androidChannelShaUrl,
   apkCacheFileName,
+  compareVersions,
   downloadErrorReason,
   downloadPercent,
+  evaluateAndroidChannel,
   evaluateAndroidRelease,
   evaluateMirror,
   githubRateLimit,
@@ -33,6 +41,7 @@ import {
   mirrorManifestUrl,
   mirrorSumsUrl,
   notesFromMirrorManifest,
+  parseAndroidChannelSha,
   parseMirrorVersion,
   parseSha256Sums,
   type AndroidReleaseVerdict,
@@ -171,10 +180,54 @@ let timeouts = { ...DEFAULT_TIMEOUTS };
 
 type MirrorResult = ReturnType<typeof evaluateMirror>;
 
+/** 一个通道的 VERSION;读不到或认不出 → null(另一个通道还能回答)。 */
+async function mirrorVersion(fetchImpl: typeof fetch, url: string): Promise<string | null> {
+  try {
+    const version = parseMirrorVersion(await mirrorText(fetchImpl, url, timeouts.mirror));
+    if (!version) console.warn('[android-update] mirror VERSION unparseable', url);
+    return version;
+  } catch (error) {
+    const message = (error as any)?.message || String(error);
+    // 404 = 这个通道还没建(安卓通道首次发布前就是这样),不是故障,不刷日志。
+    if (message !== 'mirror 404') console.warn('[android-update] mirror VERSION unavailable', url, message);
+    return null;
+  }
+}
+
+/** 镜像 HEAD 安装包拿大小;拿不到 = undefined(大小只用于进度和完整性,不挡更新)。 */
+function mirrorSize(fetchImpl: typeof fetch, url: string): Promise<number | undefined> {
+  return withTimeout(fetchWithTimeout(fetchImpl, url, { method: 'HEAD' }, timeouts.extras), timeouts.extras)
+    .then(res => (res.ok ? Number(res.headers?.get?.('content-length')) : NaN))
+    .then(n => (Number.isFinite(n) && n > 0 ? n : undefined))
+    .catch(() => undefined);
+}
+
 async function checkMirror(fetchImpl: typeof fetch, currentVersion: string): Promise<MirrorResult> {
-  const raw = await mirrorText(fetchImpl, MIRROR_VERSION_URL, timeouts.mirror);
-  const version = parseMirrorVersion(raw);
-  if (!version) throw new Error('mirror VERSION unparseable');
+  const [desktop, android] = await Promise.all([
+    mirrorVersion(fetchImpl, MIRROR_VERSION_URL),
+    mirrorVersion(fetchImpl, ANDROID_CHANNEL_VERSION_URL),
+  ]);
+  if (!desktop && !android) throw new Error('mirror VERSION unavailable or unparseable on both channels');
+  if (android && (!desktop || compareVersions(android, desktop) === 1)) return checkAndroidChannel(fetchImpl, android, currentVersion);
+  return checkDesktopChannel(fetchImpl, desktop!, currentVersion);
+}
+
+async function checkAndroidChannel(fetchImpl: typeof fetch, version: string, currentVersion: string): Promise<AndroidReleaseVerdict> {
+  const cmp = compareVersions(version, currentVersion);
+  if (cmp === null || cmp <= 0) return evaluateAndroidChannel({ version }, currentVersion);
+  const [sha256, notes, size] = await Promise.all([
+    mirrorText(fetchImpl, androidChannelShaUrl(version), timeouts.mirror)
+      .then(text => parseAndroidChannelSha(text, version))
+      .catch(() => null),
+    mirrorText(fetchImpl, mirrorManifestUrl(version), timeouts.extras)
+      .then(text => notesFromMirrorManifest(JSON.parse(text), version))
+      .catch(() => DEFAULT_RELEASE_NOTES),
+    mirrorSize(fetchImpl, androidChannelApkUrl(version)),
+  ]);
+  return evaluateAndroidChannel({ version, sha256, notes, size }, currentVersion);
+}
+
+async function checkDesktopChannel(fetchImpl: typeof fetch, version: string, currentVersion: string): Promise<MirrorResult> {
   const first = evaluateMirror({ version }, currentVersion);
   if (first.kind !== 'incomplete') return first; // 已是最新(或当前版本号认不出):到此为止,不再多打一个请求
   const [sumsText, notes, size] = await Promise.all([
@@ -182,10 +235,7 @@ async function checkMirror(fetchImpl: typeof fetch, currentVersion: string): Pro
     mirrorText(fetchImpl, mirrorManifestUrl(version), timeouts.extras)
       .then(text => notesFromMirrorManifest(JSON.parse(text), version))
       .catch(() => DEFAULT_RELEASE_NOTES),
-    withTimeout(fetchWithTimeout(fetchImpl, mirrorApkUrl(version), { method: 'HEAD' }, timeouts.extras), timeouts.extras)
-      .then(res => (res.ok ? Number(res.headers?.get?.('content-length')) : NaN))
-      .then(n => (Number.isFinite(n) && n > 0 ? n : undefined))
-      .catch(() => undefined),
+    mirrorSize(fetchImpl, mirrorApkUrl(version)),
   ]);
   return evaluateMirror({ version, sums: parseSha256Sums(sumsText), notes, size }, currentVersion);
 }

@@ -1,0 +1,118 @@
+# Android channel on the China mirror: publish ONE finished android-build APK to
+#   android/agent-network-<ver>.apk + android/agent-network-<ver>.apk.sha256 + android/latest/VERSION
+# on the ModelScope dataset SmartFlowAI/agent-network-releases, in one commit, then verify anonymously.
+#
+# Why this exists (Vincent 2026-09-30「你每次就是 modelscope 给我上传好之后，我在设置里面检查更新都检查不到」):
+# the APK used to be uploaded to android/ by hand, but the in-app updater only read desktop/latest/VERSION,
+# which moves only after the desktop release is published as Latest AND modelscope-mirror.yml has run
+# (release:published does not fire for bot publishes; the cron runs every 4–7 h in practice). The updater
+# now reads android/latest/VERSION as well (src/android-update-core.ts header has the layout), and this
+# workflow is the only thing that should write it.
+#
+#   gh workflow run modelscope-android-publish.yml --repo sleep2agi/agent-network-app --ref main -f run_id=<android-build run id>
+#
+# Layout, verification and the release step are in docs/desktop-release-sop.md section 10.
+name: modelscope android publish
+
+on:
+  workflow_dispatch:
+    inputs:
+      run_id:
+        description: 'android-build run id whose APK artifact to publish (must be a successful run on main)'
+        required: true
+        type: string
+      dry_run:
+        description: 'Plan only: download, check, print what would be uploaded; no upload'
+        required: false
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+  actions: read
+
+# Its own group, NOT modelscope-mirror: GitHub keeps one pending run per group and a newer pending run
+# replaces it, so a mirror cron firing while this waits would silently cancel the publish. The two workflows
+# write disjoint paths (android/ vs desktop/); a commit that races the mirror's fails and is retried by
+# upload_folder's retry loop, and the anonymous verification below decides success either way.
+concurrency:
+  group: modelscope-android-publish
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    # Everything users download is built and published from main only.
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4.3.0
+
+      - name: Check the source run (android-build, success, main)
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_ID: ${{ inputs.run_id }}
+        run: |
+          set -euo pipefail
+          if ! [[ "$RUN_ID" =~ ^[0-9]+$ ]]; then echo "::error::run_id must be numeric"; exit 1; fi
+          run=$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$RUN_ID")
+          path=$(jq -r .path <<<"$run"); branch=$(jq -r .head_branch <<<"$run"); conclusion=$(jq -r .conclusion <<<"$run"); sha=$(jq -r .head_sha <<<"$run")
+          echo "run $RUN_ID: $path on $branch @ $sha → $conclusion"
+          if [ "$path" != ".github/workflows/android-build.yml" ]; then echo "::error::run $RUN_ID is not an android-build run ($path)"; exit 1; fi
+          if [ "$branch" != "main" ]; then echo "::error::run $RUN_ID was built from '$branch', only main may be published"; exit 1; fi
+          if [ "$conclusion" != "success" ]; then echo "::error::run $RUN_ID concluded '$conclusion'"; exit 1; fi
+
+      - name: Download the APK artifact
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_ID: ${{ inputs.run_id }}
+        run: |
+          set -euo pipefail
+          gh run download "$RUN_ID" --repo "$GITHUB_REPOSITORY" -n agent-network-android-apk -D "$RUNNER_TEMP/apk"
+          apks=$(find "$RUNNER_TEMP/apk" -name '*.apk')
+          n=$(grep -c . <<<"$apks" || true)
+          if [ "$n" != "1" ]; then echo "::error::expected exactly one APK in the artifact, found $n"; exit 1; fi
+          echo "APK=$apks" >> "$GITHUB_ENV"
+          ls -l "$apks"
+
+      - name: Read and check the APK version
+        run: |
+          set -euo pipefail
+          bt_list=$(ls "$ANDROID_HOME/build-tools" | sort -V)
+          BT="$ANDROID_HOME/build-tools/${bt_list##*$'\n'}"
+          badging=$("$BT/aapt2" dump badging "$APK")
+          code=$(sed -n "s/^package: .*versionCode='\([0-9]*\)'.*/\1/p" <<<"$badging")
+          name=$(sed -n "s/^package: .*versionName='\([^']*\)'.*/\1/p" <<<"$badging")
+          pkg=$(sed -n "s/^package: name='\([^']*\)'.*/\1/p" <<<"$badging")
+          echo "package=$pkg versionName=$name versionCode=$code"
+          if ! [[ "$name" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then echo "::error::versionName '$name' is not X.Y.Z"; exit 1; fi
+          expected_code=$(node -e 'const v=process.argv[1].split(".").map(Number);process.stdout.write(String(v[0]*1e6+v[1]*1e3+v[2]))' "$name")
+          if [ "$code" != "$expected_code" ]; then echo "::error::versionCode $code does not match versionName $name ($expected_code)"; exit 1; fi
+          expected_pkg=$(node -p 'require("./app.json").expo.android.package')
+          if [ "$pkg" != "$expected_pkg" ]; then echo "::error::package '$pkg' is not '$expected_pkg'"; exit 1; fi
+          echo "VERSION=$name" >> "$GITHUB_ENV"
+
+      - name: Install ModelScope SDK (pinned)
+        run: |
+          set -euo pipefail
+          python3 -m venv "$RUNNER_TEMP/ms"
+          "$RUNNER_TEMP/ms/bin/pip" install --disable-pip-version-check --quiet 'modelscope==1.40.1'
+
+      - name: Upload (one commit) and verify anonymously
+        env:
+          MODELSCOPE_API_TOKEN: ${{ secrets.MODELSCOPE_API_TOKEN }}
+          DRY_RUN: ${{ inputs.dry_run && '--dry-run' || '' }}
+        run: |
+          set -euo pipefail
+          "$RUNNER_TEMP/ms/bin/python" scripts/modelscope-android-publish.py publish --apk "$APK" --version "$VERSION" $DRY_RUN
+
+      - name: Summary
+        if: success() && !inputs.dry_run
+        run: |
+          base=https://modelscope.cn/datasets/SmartFlowAI/agent-network-releases/resolve/master/android
+          {
+            echo '### ModelScope android channel'
+            echo "- version: \`$VERSION\` (android/latest/VERSION verified anonymously)"
+            echo "- APK: $base/agent-network-$VERSION.apk"
+            echo "- sha256: $base/agent-network-$VERSION.apk.sha256"
+          } >> "$GITHUB_STEP_SUMMARY"

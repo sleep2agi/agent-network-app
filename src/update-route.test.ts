@@ -18,7 +18,7 @@ import {
   routeOrder,
 } from './update-route';
 import { androidPromptView, desktopPromptView, DOWNLOAD_FAILED_TITLE, versionLine, type AndroidPromptView } from './update-prompt-model';
-import { apkCacheFileName, describeAndroidUpdateRow, notesFromMirrorManifest, type AndroidUpdateState } from './android-update-core';
+import { androidChannelApkUrl, apkCacheFileName, describeAndroidUpdateRow, notesFromMirrorManifest, type AndroidUpdateState } from './android-update-core';
 import { SETTINGS_CATEGORIES } from './settings-model';
 import { describeUpdateRow } from './update-check-state';
 import { desktopUpdateSource, latestReleaseNotes } from './desktop-updater';
@@ -41,6 +41,9 @@ ck('URL builder rejects a non-version (no path injection)', threw);
 const uni = { name: apkCacheFileName('0.2.118'), url: 'x', source: 'mirror' as const };
 const odd = { name: 'Agent.Network_0.2.118_arm64.apk', url: `${GH}/desktop-v0.2.118/Agent.Network_0.2.118_arm64.apk`, source: 'github' as const };
 ck('asset URL: universal → both routes', apkUrlForAsset('mirror', '0.2.118', uni) === apkUrlFor('mirror', '0.2.118') && apkUrlForAsset('github', '0.2.118', uni) === apkUrlFor('github', '0.2.118'));
+ck('asset URL: android-channel universal → mirror = android/agent-network-<ver>.apk, GitHub unchanged',
+  apkUrlForAsset('mirror', '0.2.118', { ...uni, channel: 'android' }) === androidChannelApkUrl('0.2.118')
+  && apkUrlForAsset('github', '0.2.118', { ...uni, channel: 'android' }) === apkUrlFor('github', '0.2.118'));
 ck('asset URL: non-universal GitHub asset → GitHub keeps its own URL, mirror skipped (mirror only has universal)', apkUrlForAsset('github', '0.2.118', odd) === odd.url && apkUrlForAsset('mirror', '0.2.118', odd) === null);
 
 // ── 来源顺序(内部,全自动)──

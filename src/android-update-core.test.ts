@@ -1,5 +1,10 @@
 import {
+  ANDROID_CHANNEL_VERSION_URL,
   ANDROID_LATEST_RELEASE_API,
+  androidChannelApkUrl,
+  androidChannelShaUrl,
+  evaluateAndroidChannel,
+  parseAndroidChannelSha,
   DEFAULT_RELEASE_NOTES,
   MIRROR_LATEST_APK_URL,
   MIRROR_VERSION_URL,
@@ -167,6 +172,28 @@ ck('download errors: sha mismatch / no sha are explained', downloadErrorReason('
 ck('prompt hidden when idle / up-to-date', !androidPromptVisible({ kind: 'idle' }, false) && !androidPromptVisible({ kind: 'up-to-date', latest: '0.2.98' }, false));
 ck('prompt shows for available unless dismissed', androidPromptVisible({ kind: 'available', ...base }, false) && !androidPromptVisible({ kind: 'available', ...base }, true));
 ck('prompt cannot be dismissed while downloading', androidPromptVisible({ kind: 'downloading', ...base }, true));
+
+// ── 安卓通道(android/latest/VERSION)──
+{
+  const B = 'https://modelscope.cn/datasets/SmartFlowAI/agent-network-releases/resolve/master';
+  const sha = 'ab'.repeat(32);
+  ck('android channel URLs', ANDROID_CHANNEL_VERSION_URL === `${B}/android/latest/VERSION`
+    && androidChannelApkUrl('0.2.157') === `${B}/android/agent-network-0.2.157.apk`
+    && androidChannelShaUrl('0.2.157') === `${B}/android/agent-network-0.2.157.apk.sha256`);
+  ck('android sha: sha256sum line for this version', parseAndroidChannelSha(`${sha.toUpperCase()}  agent-network-0.2.157.apk\n`, '0.2.157') === sha);
+  ck('android sha: binary-mode line accepted', parseAndroidChannelSha(`${sha} *agent-network-0.2.157.apk`, '0.2.157') === sha);
+  ck('android sha: bare digest accepted', parseAndroidChannelSha(`${sha}\n`, '0.2.157') === sha);
+  ck('android sha: line for another version rejected', parseAndroidChannelSha(`${sha}  agent-network-0.2.156.apk`, '0.2.157') === null);
+  ck('android sha: html / empty rejected', parseAndroidChannelSha('<html></html>', '0.2.157') === null && parseAndroidChannelSha('', '0.2.157') === null);
+  const av = evaluateAndroidChannel({ version: '0.2.157', sha256: sha, size: 10 }, '0.2.156');
+  ck('android channel newer + sha → available, android path, GitHub fallback, cache name unchanged',
+    av.kind === 'available' && av.apk.url === androidChannelApkUrl('0.2.157') && av.apk.channel === 'android'
+    && av.apk.fallbackUrl === githubApkUrl('0.2.157') && av.apk.name === apkCacheFileName('0.2.157') && av.apk.sha256 === sha);
+  ck('android channel newer, no sha → error', evaluateAndroidChannel({ version: '0.2.157' }, '0.2.156').kind === 'error');
+  ck('android channel malformed sha → error', evaluateAndroidChannel({ version: '0.2.157', sha256: 'zz' }, '0.2.156').kind === 'error');
+  ck('android channel not newer → up-to-date without needing sha', evaluateAndroidChannel({ version: '0.2.157' }, '0.2.157').kind === 'up-to-date');
+  ck('android channel VERSION garbage → error', evaluateAndroidChannel({ version: 'x' }, '0.2.157').kind === 'error');
+}
 
 console.log(`\n${p}/${t} passed`);
 if (p !== t) process.exit(1);
