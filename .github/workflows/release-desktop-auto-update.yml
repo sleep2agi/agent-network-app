@@ -121,6 +121,9 @@ jobs:
           releaseBody: |-
             Signed and notarized stable update for macOS (Apple Silicon) and Windows (x64).
 
+            What's new in 0.2.160:
+            - 日历视图里可以拖动任务到另一天来修改期限（电脑端）；带具体时刻的任务保持原来的时刻，Hub 拒绝时自动退回原位。
+
             What's new in 0.2.159:
             - 任务搜索：按标题 / 描述 / 负责人 / 项目 / 标签搜索，多个词同时匹配、命中处高亮，也能搜到已归档的任务；输入 #编号 直接找到那个任务。
             - 定时任务的内容可以全屏编辑，并支持语音输入。
