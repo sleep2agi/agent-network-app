@@ -86,7 +86,7 @@ if (OLD) {
   await page.screenshot({ fullPage: !wide, path: join(OUT, `${VP}-task-old-hub.png`) });
 } else {
   await page.locator(tid('task-access')).waitFor({ timeout: 8000 });
-  record('1 任务权限 section shown; new member starts on 仅相关任务', { scoped: (await checked('task-access-mode-scoped')) === 'true', label: (await page.locator(tid('task-access-mode-scoped')).innerText()).includes('仅相关任务') });
+  record('1 任务权限 section shown; scoped member (seed sets it) shows 仅相关任务', { scoped: (await checked('task-access-mode-scoped')) === 'true', label: (await page.locator(tid('task-access-mode-scoped')).innerText()).includes('仅相关任务') });
   if (!wide) { await page.locator(tid('task-access-projects-row')).click(); await sleep(300); }
   await page.locator(tid('task-project-官网改版')).click();
   await page.locator(tid('task-project-安卓发布')).click();

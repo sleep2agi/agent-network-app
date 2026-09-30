@@ -1,5 +1,6 @@
 // 任务权限(RFC-038 §9)端到端的种子:对一个**一次性** hub(HOME=$(mktemp -d)、非 9200 端口、临时库,
-// hub 取自 agent-network#2163)造出 admin + 新成员 bob(新成员默认「仅相关任务」)+ 两个项目 + 五张卡。
+// hub 取自 agent-network#2163)造出 admin + 成员 bob(显式设成「仅相关任务」)+ 两个项目 + 五张卡。
+// Hub 的新成员默认值会变(agent-network#2174 暂时改成 'all'),所以 bob 的 scoped 由种子经授权接口显式设,不靠默认值。
 //   HUB=http://127.0.0.1:<port> node tests/test-task-access-ui/seed.mjs > seed.json
 // 拒绝对 9200 运行。
 const HUB = process.env.HUB;
@@ -20,6 +21,8 @@ const NET = me.body.networks.find(n => n.member_role === 'owner').network_id;
 const bob = await call(A, 'POST', '/api/admin/users', { username: 'scoped_bob', password: PW, network_id: NET, role: 'member' });
 must(bob.status === 200, `bob ${JSON.stringify(bob.body)}`);
 const BOB = bob.body.user.user_id;
+const scoped = await call(A, 'PUT', `/api/networks/${NET}/members/${BOB}/task-grants`, { task_access: 'scoped' });
+must(scoped.status === 200 || scoped.status === 404, `bob scoped ${scoped.status} ${JSON.stringify(scoped.body)}`);
 const proj = {};
 for (const name of ['官网改版', '安卓发布']) {
   const r = await call(A, 'POST', `/api/requirements/projects?network_id=${NET}`, { name });
