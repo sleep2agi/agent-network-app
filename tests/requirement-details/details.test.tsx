@@ -110,6 +110,8 @@ const listRows = async () => subCards ? [
   ];
 mock.module('./src/requirements-hub', () => ({
   listRequirements: async () => listRows(),
+  // 任务搜索「包含已归档」(task-search.ts):这里的用例不勾,读到就当没有归档的卡。
+  listArchivedRequirements: async () => [],
   migrateLocalRequirements: async () => {},
   probeAgentOwnerSupport: async () => roleCards,
   listProjects: async () => projectsMock,
