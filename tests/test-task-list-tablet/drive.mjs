@@ -10,6 +10,7 @@
 //   untitled  : a row whose name is only zero-width characters shows 「（无标题）· <id tail>」 instead of an empty title
 //   overflow  : no horizontal page scroll
 // Phone 390×844: the untitled task's card shows the same fallback.
+// Tablet 1000×700 with the #563 ID column (requirement_seq hub): 状态 still inside the table.
 // Exit 1 when any check fails or a viewport could not be opened.
 import { mkdirSync } from 'node:fs';
 import { join } from 'node:path';
@@ -21,10 +22,10 @@ if (!WEB) throw new Error('need WEB_DIR (expo web export)');
 const OUT = process.env.OUT || '';
 if (OUT) mkdirSync(OUT, { recursive: true });
 
-const fixture = () => {
+const fixture = (seq) => {
   const now = Date.now();
   const at = (d) => new Date(now + d * 86400000).toISOString();
-  const R = (id, name, o) => ({ id, name, priority: 'high', assignee: '', column: 'doing', owner: { kind: 'user', id: 'u_tester' }, participants: [], agent_owner: { kind: 'node', id: 'n_sweep_a' }, project_id: 'p_a', due: '', createdAt: at(-5), updatedAt: at(-1), description: '', checklist: [], tags: [], parent_id: null, ...o });
+  const R = (id, name, o) => ({ id, ...(seq ? { seq: Number(id.replace(/\D/g, '')) || 99 } : {}), name, priority: 'high', assignee: '', column: 'doing', owner: { kind: 'user', id: 'u_tester' }, participants: [], agent_owner: { kind: 'node', id: 'n_sweep_a' }, project_id: 'p_a', due: '', createdAt: at(-5), updatedAt: at(-1), description: '', checklist: [], tags: [], parent_id: null, ...o });
   window.__tasksFixture = {
     requirements: [
       R('r_untitled01', '​', { due: at(-0.2) }),
@@ -33,7 +34,7 @@ const fixture = () => {
     ],
     projects: [{ id: 'p_a', name: '示例项目-A', color: '#2563eb', sort: 1, archived: false }],
     people: [{ kind: 'user', id: 'u_tester', networkId: 'net-sweep', name: 'tester' }, { kind: 'node', id: 'n_sweep_a', networkId: 'net-sweep', name: '示例-门户牛' }],
-    capabilities: ['agent_owner', 'description', 'checklist', 'projects', 'due_datetime', 'priority_lowest', 'start_date', 'tags', 'sub_requirements'],
+    capabilities: ['agent_owner', 'description', 'checklist', 'projects', 'due_datetime', 'priority_lowest', 'start_date', 'tags', 'sub_requirements', ...(seq ? ['requirement_seq'] : [])],
   };
 };
 
@@ -60,15 +61,17 @@ const browser = await chromium.launch({ headless: true, executablePath: findChro
 const VIEWPORTS = [
   { w: 900, h: 700, kind: 'tablet' }, { w: 1000, h: 700, kind: 'tablet' }, { w: 1100, h: 700, kind: 'tablet' },
   { w: 1000, h: 700, kind: 'desktop' }, { w: 1320, h: 754, kind: 'desktop' }, { w: 390, h: 844, kind: 'phone' },
+  // #563 的 ID 列(requirement_seq Hub):多一列,平板 1000 宽「状态」照样在表格里
+  { w: 1000, h: 700, kind: 'tablet', seq: true },
 ];
 for (const theme of ['light', 'dark']) {
   for (const v of VIEWPORTS) {
-    const vp = `${v.kind} ${v.w}x${v.h} ${theme}`;
+    const vp = `${v.kind} ${v.w}x${v.h} ${theme}${v.seq ? ' +ID列' : ''}`;
     const touch = v.kind !== 'desktop';
     const ctx = await browser.newContext({ viewport: { width: v.w, height: v.h }, colorScheme: theme, deviceScaleFactor: 2, timezoneId: 'Asia/Shanghai', locale: 'zh-CN', ...(touch ? { userAgent: ANDROID_UA, hasTouch: true } : {}) });
     const page = await ctx.newPage();
     page.on('pageerror', e => console.log('PAGEERROR', e.message.split('\n')[0]));
-    await page.addInitScript(fixture);
+    await page.addInitScript(fixture, !!v.seq);
     await page.addInitScript(initScript, { theme });
     try {
       await page.goto(v.kind === 'desktop' ? url : `${url}?safeAreaSim=0,0,0,0`);
@@ -82,7 +85,7 @@ for (const theme of ['light', 'dark']) {
       await ctx.close();
       continue;
     }
-    if (OUT) await page.screenshot({ path: join(OUT, `${v.kind}-${v.w}x${v.h}-${theme}-list.png`) });
+    if (OUT) await page.screenshot({ path: join(OUT, `${v.kind}-${v.w}x${v.h}-${theme}${v.seq ? '-seq' : ''}-list.png`) });
     const overflow = await page.evaluate(() => document.scrollingElement.scrollWidth - window.innerWidth);
     const untitled = await box(page, tid('req-row-r_untitled01'));
     const fallback = !!untitled && untitled.text.includes('（无标题）· tled01');
