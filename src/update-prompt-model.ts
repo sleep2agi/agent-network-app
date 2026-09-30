@@ -19,6 +19,8 @@ export type AndroidPromptView = {
   meta: string;
   /** 下载中那一行:「正在下载 · 12.3 / 77.0 MB · 16%」 */
   progressLine?: string;
+  /** 同一份进度拆开给进度条用:百分比(未知 = 不确定进度)、「12.3 / 77.0 MB」、是否在校验 */
+  progress?: DownloadProgressView;
   /** 下载失败:一句话 +(只在不是网络问题时)一句原因 */
   errorTitle?: string;
   errorDetail?: string;
@@ -26,6 +28,9 @@ export type AndroidPromptView = {
   showOpenSettings: boolean;
   showLater: boolean;
 };
+
+export type DownloadProgressView = { percent?: number; bytes?: string; verifying: boolean };
+const clampPercent = (p: number | undefined) => (p == null || !Number.isFinite(p) ? undefined : Math.max(0, Math.min(100, Math.round(p))));
 
 /** 下载失败的统一说法。下载来源/切换/每个来源的原因都是内部细节,不展示(Vincent 2026-09-26)。 */
 export const DOWNLOAD_FAILED_TITLE = '下载失败，请检查网络后重试';
@@ -43,15 +48,17 @@ export function androidPromptView(state: AndroidUpdateState, opts: { currentVers
   };
   switch (state.kind) {
     case 'available':
-      view.primary = { label: '下载并安装', action: 'download' };
+      view.primary = { label: '立即更新', action: 'download' };
       break;
     case 'downloading': {
       if (state.verifying) {
         view.progressLine = '正在校验安装包（sha256）…';
+        view.progress = { verifying: true };
       } else {
         const bytes = formatProgressBytes(state.written, state.total ?? state.apk.size);
         const pct = state.percent == null ? undefined : `${state.percent}%`;
         view.progressLine = ['正在下载', bytes, pct].filter(Boolean).join(' · ');
+        view.progress = { percent: clampPercent(state.percent), bytes, verifying: false };
       }
       break;
     }
@@ -70,6 +77,7 @@ export function androidPromptView(state: AndroidUpdateState, opts: { currentVers
 export type DesktopPromptView = {
   versions: VersionLine;
   progressLine?: string;
+  progress?: DownloadProgressView;
 };
 
 export function desktopPromptView(state: DesktopUpdateState, fallbackCurrent: string): DesktopPromptView | null {
@@ -81,6 +89,7 @@ export function desktopPromptView(state: DesktopUpdateState, fallbackCurrent: st
     const bytes = formatProgressBytes(state.downloaded, state.total);
     const pct = state.percent == null ? undefined : `${state.percent}%`;
     view.progressLine = ['正在下载安装…', bytes, pct].filter(Boolean).join(' · ');
+    view.progress = { percent: clampPercent(state.percent), bytes, verifying: false };
   }
   return view;
 }

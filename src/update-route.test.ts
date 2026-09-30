@@ -111,13 +111,26 @@ const view = (s: AndroidUpdateState) => androidPromptView(s, { currentVersion: '
   const v = view({ ...rel, kind: 'available' });
   ck('prompt: 当前 v0.2.117 → 新 v0.2.118', v.versions.current === 'v0.2.117' && v.versions.next === 'v0.2.118');
   ck('prompt: meta = size only', v.meta === '77.0 MB');
-  ck('prompt available: download button, 稍后 shown', v.primary?.action === 'download' && v.primary.label === '下载并安装' && v.showLater);
+  ck('prompt available: download button, 稍后 shown', v.primary?.action === 'download' && v.primary.label === '立即更新' && v.showLater);
 }
 {
   const v = view({ ...rel, kind: 'downloading', route: 'github', percent: 42, written: Math.round(SIZE * 0.42), total: SIZE, fallbackFrom: { route: 'mirror', reason: '网络不通' } });
   ck('prompt downloading (after a silent switch): progress = bytes + percent, nothing else', v.progressLine === '正在下载 · 32.3 / 77.0 MB · 42%');
   ck('prompt downloading: no 稍后, no primary', !v.showLater && !v.primary);
   ck('prompt downloading: meta unchanged by the source in use', v.meta === '77.0 MB');
+}
+{
+  // 更新页的进度条(2026-09-30):同一份进度拆成 百分比 / MB / 是否校验,和 progressLine 一致。
+  const v = view({ ...rel, kind: 'downloading', route: 'mirror', percent: 44, written: Math.round(SIZE * 0.44), total: SIZE });
+  ck('prompt downloading: progress bar gets 44 + 「33.9 / 77.0 MB」', v.progress?.percent === 44 && v.progress.bytes === '33.9 / 77.0 MB' && !v.progress.verifying && v.progressLine === '正在下载 · 33.9 / 77.0 MB · 44%');
+  const unknown = view({ ...rel, kind: 'downloading', route: 'mirror', written: 1024 * 1024 });
+  ck('prompt downloading, no percent yet: indeterminate bar, bytes against the APK size', unknown.progress?.percent === undefined && unknown.progress?.bytes === '1.0 / 77.0 MB');
+  const over = view({ ...rel, kind: 'downloading', route: 'mirror', percent: 130, written: SIZE, total: SIZE });
+  ck('prompt downloading: percent clamped to 0..100', over.progress?.percent === 100);
+  ck('prompt verifying: progress.verifying, no percent shown', (() => { const p = view({ ...rel, kind: 'downloading', route: 'mirror', percent: 100, verifying: true }).progress; return p?.verifying === true && p.percent === undefined; })());
+  ck('prompt available / error: no progress bar', view({ ...rel, kind: 'available' }).progress === undefined && view({ ...rel, kind: 'download-error', message: 'x' }).progress === undefined);
+  const d = desktopPromptView({ kind: 'downloading', version: '0.2.118', percent: 44, downloaded: Math.round(SIZE * 0.44), total: SIZE }, '0.2.117');
+  ck('desktop downloading: progress bar gets 44 + MB', d?.progress?.percent === 44 && d.progress.bytes === '33.9 / 77.0 MB');
 }
 ck('prompt verifying line', view({ ...rel, kind: 'downloading', route: 'mirror', percent: 100, verifying: true }).progressLine === '正在校验安装包（sha256）…');
 {

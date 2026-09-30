@@ -1,0 +1,276 @@
+# 更新页重做(2026-09-30)—— tests/test-update-screen/drive.mjs 输出
+# WEB_DIR=<expo web export> OUT=<dir> node tests/test-update-screen/drive.mjs
+
+PASS: phone 390×844 light available: full-screen page (covers the window) (390×844)
+PASS: phone 390×844 light available: android-update-download fully on screen, above the bottom safe area (y=754..802 limit 820)
+PASS: phone 390×844 light available: button 16px gutters (left=16 right=16)
+PASS: phone 390×844 light available: notes card 16px gutters (left=16 right=16)
+PASS: phone 390×844 light available: ✕ top-left, below the status bar (x=8 y=32)
+PASS: phone 390×844 light available: no "What's new" / leading "- "
+PASS: phone 390×844 light available: groups = versions newer than installed, newest first (["v0.2.157 更新内容"])
+PASS: phone 390×844 light available: no note item is clipped / ellipsised ([])
+PASS: phone 390×844 light available: scrolled to the end, the last item is fully above the footer (last ends 697 footer 741)
+  phone 390×844 light available: button 16,754 358×48  card 16..374  footer.y 741
+PASS: phone 390×844 light downloading: full-screen page (covers the window) (390×844)
+PASS: phone 390×844 light downloading: android-update-progress fully on screen, above the bottom safe area (y=754..802 limit 820)
+PASS: phone 390×844 light downloading: button 16px gutters (left=16 right=16)
+PASS: phone 390×844 light downloading: notes card 16px gutters (left=16 right=16)
+PASS: phone 390×844 light downloading: no ✕ while downloading
+PASS: phone 390×844 light downloading: progress shows % and MB ("正在下载 44%\n33.7 / 76.6 MB")
+PASS: phone 390×844 light downloading: 在浏览器中下载 is a small text link (≤ 24px tall), not a button (h=18)
+PASS: phone 390×844 light downloading: no "What's new" / leading "- "
+PASS: phone 390×844 light downloading: groups = versions newer than installed, newest first (["v0.2.157 更新内容"])
+PASS: phone 390×844 light downloading: no note item is clipped / ellipsised ([])
+PASS: phone 390×844 light downloading: scrolled to the end, the last item is fully above the footer (last ends 697 footer 741)
+  phone 390×844 light downloading: button 16,754 358×48  card 16..374  footer.y 741
+PASS: phone 390×844 light error: full-screen page (covers the window) (390×844)
+PASS: phone 390×844 light error: android-update-retry fully on screen, above the bottom safe area (y=754..802 limit 820)
+PASS: phone 390×844 light error: button 16px gutters (left=16 right=16)
+PASS: phone 390×844 light error: notes card 16px gutters (left=16 right=16)
+PASS: phone 390×844 light error: ✕ top-left, below the status bar (x=8 y=32)
+PASS: phone 390×844 light error: no "What's new" / leading "- "
+PASS: phone 390×844 light error: groups = versions newer than installed, newest first (["v0.2.157 更新内容"])
+PASS: phone 390×844 light error: no note item is clipped / ellipsised ([])
+PASS: phone 390×844 light error: scrolled to the end, the last item is fully above the footer (last ends 641 footer 685)
+  phone 390×844 light error: button 16,754 358×48  card 16..374  footer.y 685
+PASS: phone 390×844 light multi-version: full-screen page (covers the window) (390×844)
+PASS: phone 390×844 light multi-version: android-update-download fully on screen, above the bottom safe area (y=754..802 limit 820)
+PASS: phone 390×844 light multi-version: button 16px gutters (left=16 right=16)
+PASS: phone 390×844 light multi-version: notes card 16px gutters (left=16 right=16)
+PASS: phone 390×844 light multi-version: ✕ top-left, below the status bar (x=8 y=32)
+PASS: phone 390×844 light multi-version: no "What's new" / leading "- "
+PASS: phone 390×844 light multi-version: groups = versions newer than installed, newest first (["v0.2.157 更新内容","v0.2.156 更新内容","v0.2.155 更新内容","v0.2.154 更新内容"])
+PASS: phone 390×844 light multi-version: no note item is clipped / ellipsised ([])
+PASS: phone 390×844 light multi-version: scrolled to the end, the last item is fully above the footer (last ends 697 footer 741)
+  phone 390×844 light multi-version: button 16,754 358×48  card 16..374  footer.y 741
+PASS: phone 390×844 dark available: full-screen page (covers the window) (390×844)
+PASS: phone 390×844 dark available: android-update-download fully on screen, above the bottom safe area (y=754..802 limit 820)
+PASS: phone 390×844 dark available: button 16px gutters (left=16 right=16)
+PASS: phone 390×844 dark available: notes card 16px gutters (left=16 right=16)
+PASS: phone 390×844 dark available: ✕ top-left, below the status bar (x=8 y=32)
+PASS: phone 390×844 dark available: no "What's new" / leading "- "
+PASS: phone 390×844 dark available: groups = versions newer than installed, newest first (["v0.2.157 更新内容"])
+PASS: phone 390×844 dark available: no note item is clipped / ellipsised ([])
+PASS: phone 390×844 dark available: scrolled to the end, the last item is fully above the footer (last ends 697 footer 741)
+  phone 390×844 dark available: button 16,754 358×48  card 16..374  footer.y 741
+PASS: phone 390×844 dark downloading: full-screen page (covers the window) (390×844)
+PASS: phone 390×844 dark downloading: android-update-progress fully on screen, above the bottom safe area (y=754..802 limit 820)
+PASS: phone 390×844 dark downloading: button 16px gutters (left=16 right=16)
+PASS: phone 390×844 dark downloading: notes card 16px gutters (left=16 right=16)
+PASS: phone 390×844 dark downloading: no ✕ while downloading
+PASS: phone 390×844 dark downloading: progress shows % and MB ("正在下载 44%\n33.7 / 76.6 MB")
+PASS: phone 390×844 dark downloading: 在浏览器中下载 is a small text link (≤ 24px tall), not a button (h=18)
+PASS: phone 390×844 dark downloading: no "What's new" / leading "- "
+PASS: phone 390×844 dark downloading: groups = versions newer than installed, newest first (["v0.2.157 更新内容"])
+PASS: phone 390×844 dark downloading: no note item is clipped / ellipsised ([])
+PASS: phone 390×844 dark downloading: scrolled to the end, the last item is fully above the footer (last ends 697 footer 741)
+  phone 390×844 dark downloading: button 16,754 358×48  card 16..374  footer.y 741
+PASS: phone 390×844 dark error: full-screen page (covers the window) (390×844)
+PASS: phone 390×844 dark error: android-update-retry fully on screen, above the bottom safe area (y=754..802 limit 820)
+PASS: phone 390×844 dark error: button 16px gutters (left=16 right=16)
+PASS: phone 390×844 dark error: notes card 16px gutters (left=16 right=16)
+PASS: phone 390×844 dark error: ✕ top-left, below the status bar (x=8 y=32)
+PASS: phone 390×844 dark error: no "What's new" / leading "- "
+PASS: phone 390×844 dark error: groups = versions newer than installed, newest first (["v0.2.157 更新内容"])
+PASS: phone 390×844 dark error: no note item is clipped / ellipsised ([])
+PASS: phone 390×844 dark error: scrolled to the end, the last item is fully above the footer (last ends 641 footer 685)
+  phone 390×844 dark error: button 16,754 358×48  card 16..374  footer.y 685
+PASS: phone 390×844 dark multi-version: full-screen page (covers the window) (390×844)
+PASS: phone 390×844 dark multi-version: android-update-download fully on screen, above the bottom safe area (y=754..802 limit 820)
+PASS: phone 390×844 dark multi-version: button 16px gutters (left=16 right=16)
+PASS: phone 390×844 dark multi-version: notes card 16px gutters (left=16 right=16)
+PASS: phone 390×844 dark multi-version: ✕ top-left, below the status bar (x=8 y=32)
+PASS: phone 390×844 dark multi-version: no "What's new" / leading "- "
+PASS: phone 390×844 dark multi-version: groups = versions newer than installed, newest first (["v0.2.157 更新内容","v0.2.156 更新内容","v0.2.155 更新内容","v0.2.154 更新内容"])
+PASS: phone 390×844 dark multi-version: no note item is clipped / ellipsised ([])
+PASS: phone 390×844 dark multi-version: scrolled to the end, the last item is fully above the footer (last ends 697 footer 741)
+  phone 390×844 dark multi-version: button 16,754 358×48  card 16..374  footer.y 741
+PASS: phone 360×800 light available: full-screen page (covers the window) (360×800)
+PASS: phone 360×800 light available: android-update-download fully on screen, above the bottom safe area (y=710..758 limit 776)
+PASS: phone 360×800 light available: button 16px gutters (left=16 right=16)
+PASS: phone 360×800 light available: notes card 16px gutters (left=16 right=16)
+PASS: phone 360×800 light available: ✕ top-left, below the status bar (x=8 y=32)
+PASS: phone 360×800 light available: no "What's new" / leading "- "
+PASS: phone 360×800 light available: groups = versions newer than installed, newest first (["v0.2.157 更新内容"])
+PASS: phone 360×800 light available: no note item is clipped / ellipsised ([])
+PASS: phone 360×800 light available: scrolled to the end, the last item is fully above the footer (last ends 653 footer 697)
+  phone 360×800 light available: button 16,710 328×48  card 16..344  footer.y 697
+PASS: phone 360×800 light downloading: full-screen page (covers the window) (360×800)
+PASS: phone 360×800 light downloading: android-update-progress fully on screen, above the bottom safe area (y=710..758 limit 776)
+PASS: phone 360×800 light downloading: button 16px gutters (left=16 right=16)
+PASS: phone 360×800 light downloading: notes card 16px gutters (left=16 right=16)
+PASS: phone 360×800 light downloading: no ✕ while downloading
+PASS: phone 360×800 light downloading: progress shows % and MB ("正在下载 44%\n33.7 / 76.6 MB")
+PASS: phone 360×800 light downloading: 在浏览器中下载 is a small text link (≤ 24px tall), not a button (h=18)
+PASS: phone 360×800 light downloading: no "What's new" / leading "- "
+PASS: phone 360×800 light downloading: groups = versions newer than installed, newest first (["v0.2.157 更新内容"])
+PASS: phone 360×800 light downloading: no note item is clipped / ellipsised ([])
+PASS: phone 360×800 light downloading: scrolled to the end, the last item is fully above the footer (last ends 653 footer 697)
+  phone 360×800 light downloading: button 16,710 328×48  card 16..344  footer.y 697
+PASS: phone 360×800 light error: full-screen page (covers the window) (360×800)
+PASS: phone 360×800 light error: android-update-retry fully on screen, above the bottom safe area (y=710..758 limit 776)
+PASS: phone 360×800 light error: button 16px gutters (left=16 right=16)
+PASS: phone 360×800 light error: notes card 16px gutters (left=16 right=16)
+PASS: phone 360×800 light error: ✕ top-left, below the status bar (x=8 y=32)
+PASS: phone 360×800 light error: no "What's new" / leading "- "
+PASS: phone 360×800 light error: groups = versions newer than installed, newest first (["v0.2.157 更新内容"])
+PASS: phone 360×800 light error: no note item is clipped / ellipsised ([])
+PASS: phone 360×800 light error: scrolled to the end, the last item is fully above the footer (last ends 597 footer 641)
+  phone 360×800 light error: button 16,710 328×48  card 16..344  footer.y 641
+PASS: phone 360×800 light multi-version: full-screen page (covers the window) (360×800)
+PASS: phone 360×800 light multi-version: android-update-download fully on screen, above the bottom safe area (y=710..758 limit 776)
+PASS: phone 360×800 light multi-version: button 16px gutters (left=16 right=16)
+PASS: phone 360×800 light multi-version: notes card 16px gutters (left=16 right=16)
+PASS: phone 360×800 light multi-version: ✕ top-left, below the status bar (x=8 y=32)
+PASS: phone 360×800 light multi-version: no "What's new" / leading "- "
+PASS: phone 360×800 light multi-version: groups = versions newer than installed, newest first (["v0.2.157 更新内容","v0.2.156 更新内容","v0.2.155 更新内容","v0.2.154 更新内容"])
+PASS: phone 360×800 light multi-version: no note item is clipped / ellipsised ([])
+PASS: phone 360×800 light multi-version: scrolled to the end, the last item is fully above the footer (last ends 653 footer 697)
+  phone 360×800 light multi-version: button 16,710 328×48  card 16..344  footer.y 697
+PASS: phone 360×800 dark available: full-screen page (covers the window) (360×800)
+PASS: phone 360×800 dark available: android-update-download fully on screen, above the bottom safe area (y=710..758 limit 776)
+PASS: phone 360×800 dark available: button 16px gutters (left=16 right=16)
+PASS: phone 360×800 dark available: notes card 16px gutters (left=16 right=16)
+PASS: phone 360×800 dark available: ✕ top-left, below the status bar (x=8 y=32)
+PASS: phone 360×800 dark available: no "What's new" / leading "- "
+PASS: phone 360×800 dark available: groups = versions newer than installed, newest first (["v0.2.157 更新内容"])
+PASS: phone 360×800 dark available: no note item is clipped / ellipsised ([])
+PASS: phone 360×800 dark available: scrolled to the end, the last item is fully above the footer (last ends 653 footer 697)
+  phone 360×800 dark available: button 16,710 328×48  card 16..344  footer.y 697
+PASS: phone 360×800 dark downloading: full-screen page (covers the window) (360×800)
+PASS: phone 360×800 dark downloading: android-update-progress fully on screen, above the bottom safe area (y=710..758 limit 776)
+PASS: phone 360×800 dark downloading: button 16px gutters (left=16 right=16)
+PASS: phone 360×800 dark downloading: notes card 16px gutters (left=16 right=16)
+PASS: phone 360×800 dark downloading: no ✕ while downloading
+PASS: phone 360×800 dark downloading: progress shows % and MB ("正在下载 44%\n33.7 / 76.6 MB")
+PASS: phone 360×800 dark downloading: 在浏览器中下载 is a small text link (≤ 24px tall), not a button (h=18)
+PASS: phone 360×800 dark downloading: no "What's new" / leading "- "
+PASS: phone 360×800 dark downloading: groups = versions newer than installed, newest first (["v0.2.157 更新内容"])
+PASS: phone 360×800 dark downloading: no note item is clipped / ellipsised ([])
+PASS: phone 360×800 dark downloading: scrolled to the end, the last item is fully above the footer (last ends 653 footer 697)
+  phone 360×800 dark downloading: button 16,710 328×48  card 16..344  footer.y 697
+PASS: phone 360×800 dark error: full-screen page (covers the window) (360×800)
+PASS: phone 360×800 dark error: android-update-retry fully on screen, above the bottom safe area (y=710..758 limit 776)
+PASS: phone 360×800 dark error: button 16px gutters (left=16 right=16)
+PASS: phone 360×800 dark error: notes card 16px gutters (left=16 right=16)
+PASS: phone 360×800 dark error: ✕ top-left, below the status bar (x=8 y=32)
+PASS: phone 360×800 dark error: no "What's new" / leading "- "
+PASS: phone 360×800 dark error: groups = versions newer than installed, newest first (["v0.2.157 更新内容"])
+PASS: phone 360×800 dark error: no note item is clipped / ellipsised ([])
+PASS: phone 360×800 dark error: scrolled to the end, the last item is fully above the footer (last ends 597 footer 641)
+  phone 360×800 dark error: button 16,710 328×48  card 16..344  footer.y 641
+PASS: phone 360×800 dark multi-version: full-screen page (covers the window) (360×800)
+PASS: phone 360×800 dark multi-version: android-update-download fully on screen, above the bottom safe area (y=710..758 limit 776)
+PASS: phone 360×800 dark multi-version: button 16px gutters (left=16 right=16)
+PASS: phone 360×800 dark multi-version: notes card 16px gutters (left=16 right=16)
+PASS: phone 360×800 dark multi-version: ✕ top-left, below the status bar (x=8 y=32)
+PASS: phone 360×800 dark multi-version: no "What's new" / leading "- "
+PASS: phone 360×800 dark multi-version: groups = versions newer than installed, newest first (["v0.2.157 更新内容","v0.2.156 更新内容","v0.2.155 更新内容","v0.2.154 更新内容"])
+PASS: phone 360×800 dark multi-version: no note item is clipped / ellipsised ([])
+PASS: phone 360×800 dark multi-version: scrolled to the end, the last item is fully above the footer (last ends 653 footer 697)
+  phone 360×800 dark multi-version: button 16,710 328×48  card 16..344  footer.y 697
+PASS: desktop 1280×800 light available: card centred ±1px (Δx=0 Δy=0)
+PASS: desktop 1280×800 light available: card inside the window
+PASS: desktop 1280×800 light available: desktop-update-install inside the card (y=644..684 card 99..701)
+PASS: desktop 1280×800 light available: no "What's new" / leading "- "
+PASS: desktop 1280×800 light available: notes rendered (still there while downloading)
+PASS: desktop 1280×800 light available: no note item is clipped
+PASS: desktop 1280×800 light available: footer text not cut off (no ellipsis) ([])
+  desktop 1280×800 light available: card 360,99 560×602  button 757,644 142×40
+PASS: desktop 1280×800 light downloading: card centred ±1px (Δx=0 Δy=0)
+PASS: desktop 1280×800 light downloading: card inside the window
+PASS: desktop 1280×800 light downloading: desktop-update-progress inside the card (y=644..684 card 99..701)
+PASS: desktop 1280×800 light downloading: no "What's new" / leading "- "
+PASS: desktop 1280×800 light downloading: notes rendered (still there while downloading)
+PASS: desktop 1280×800 light downloading: progress shows % and MB
+PASS: desktop 1280×800 light downloading: no note item is clipped
+PASS: desktop 1280×800 light downloading: footer text not cut off (no ellipsis) ([])
+  desktop 1280×800 light downloading: card 360,99 560×602  button 659,644 240×40
+PASS: desktop 1280×800 light multi-version: card centred ±1px (Δx=0 Δy=0)
+PASS: desktop 1280×800 light multi-version: card inside the window
+PASS: desktop 1280×800 light multi-version: desktop-update-install inside the card (y=673.9..713.9 card 69.1..730.9)
+PASS: desktop 1280×800 light multi-version: no "What's new" / leading "- "
+PASS: desktop 1280×800 light multi-version: notes rendered (still there while downloading)
+PASS: desktop 1280×800 light multi-version: no note item is clipped
+PASS: desktop 1280×800 light multi-version: footer text not cut off (no ellipsis) ([])
+  desktop 1280×800 light multi-version: card 360,69.1 560×661.8  button 757,673.9 142×40
+PASS: desktop 1280×800 dark available: card centred ±1px (Δx=0 Δy=0)
+PASS: desktop 1280×800 dark available: card inside the window
+PASS: desktop 1280×800 dark available: desktop-update-install inside the card (y=644..684 card 99..701)
+PASS: desktop 1280×800 dark available: no "What's new" / leading "- "
+PASS: desktop 1280×800 dark available: notes rendered (still there while downloading)
+PASS: desktop 1280×800 dark available: no note item is clipped
+PASS: desktop 1280×800 dark available: footer text not cut off (no ellipsis) ([])
+  desktop 1280×800 dark available: card 360,99 560×602  button 757,644 142×40
+PASS: desktop 1280×800 dark downloading: card centred ±1px (Δx=0 Δy=0)
+PASS: desktop 1280×800 dark downloading: card inside the window
+PASS: desktop 1280×800 dark downloading: desktop-update-progress inside the card (y=644..684 card 99..701)
+PASS: desktop 1280×800 dark downloading: no "What's new" / leading "- "
+PASS: desktop 1280×800 dark downloading: notes rendered (still there while downloading)
+PASS: desktop 1280×800 dark downloading: progress shows % and MB
+PASS: desktop 1280×800 dark downloading: no note item is clipped
+PASS: desktop 1280×800 dark downloading: footer text not cut off (no ellipsis) ([])
+  desktop 1280×800 dark downloading: card 360,99 560×602  button 659,644 240×40
+PASS: desktop 1280×800 dark multi-version: card centred ±1px (Δx=0 Δy=0)
+PASS: desktop 1280×800 dark multi-version: card inside the window
+PASS: desktop 1280×800 dark multi-version: desktop-update-install inside the card (y=673.9..713.9 card 69.1..730.9)
+PASS: desktop 1280×800 dark multi-version: no "What's new" / leading "- "
+PASS: desktop 1280×800 dark multi-version: notes rendered (still there while downloading)
+PASS: desktop 1280×800 dark multi-version: no note item is clipped
+PASS: desktop 1280×800 dark multi-version: footer text not cut off (no ellipsis) ([])
+  desktop 1280×800 dark multi-version: card 360,69.1 560×661.8  button 757,673.9 142×40
+PASS: desktop 720×520 light min-window: card centred ±1px (Δx=0 Δy=0)
+PASS: desktop 720×520 light min-window: card inside the window
+PASS: desktop 720×520 light min-window: desktop-update-install inside the card (y=410.7..450.7 card 52.3..467.7)
+PASS: desktop 720×520 light min-window: no "What's new" / leading "- "
+PASS: desktop 720×520 light min-window: notes rendered (still there while downloading)
+PASS: desktop 720×520 light min-window: no note item is clipped
+PASS: desktop 720×520 light min-window: footer text not cut off (no ellipsis) ([])
+  desktop 720×520 light min-window: card 80,52.3 560×415.4  button 477,410.7 142×40
+
+203 passed, 0 failed
+rc=0
+
+# 回归:tests/test-settings-window-update/drive.mjs(桌面设置窗弹窗:居中 / 不裁切 / 安装调用顺序)
+PASS: settings 1200×800: no startup auto check in the settings window ([])
+PASS: settings 1200×800: no prompt before the click
+PASS: settings 1200×800: click → prompt appears
+  row label: 发现新版本 v0.2.146
+  settings 1200×800 viewport 1200×800  card x=320.0 y=244.0 w=560.0 h=312.0  centre Δx=0.00 Δy=0.00  button y=499.0..539.0
+PASS: settings 1200×800: card centred horizontally ±1px (Δx=0.00)
+PASS: settings 1200×800: card centred vertically ±1px (Δy=0.00)
+PASS: settings 1200×800: card fully inside the window
+PASS: settings 1200×800: install button inside the card and the window
+PASS: settings: install → download_and_install → stop_local_hub → restart, from this window (["plugin:updater|check","plugin:updater|download_and_install","stop_local_hub","plugin:process|restart"])
+PASS: settings 960×720: no startup auto check in the settings window ([])
+PASS: settings 960×720: no prompt before the click
+PASS: settings 960×720: click → prompt appears
+  row label: 发现新版本 v0.2.146
+  settings 960×720 viewport 960×720  card x=200.0 y=204.0 w=560.0 h=312.0  centre Δx=0.00 Δy=0.00  button y=459.0..499.0
+PASS: settings 960×720: card centred horizontally ±1px (Δx=0.00)
+PASS: settings 960×720: card centred vertically ±1px (Δy=0.00)
+PASS: settings 960×720: card fully inside the window
+PASS: settings 960×720: install button inside the card and the window
+PASS: settings 720×520: no startup auto check in the settings window ([])
+PASS: settings 720×520: no prompt before the click
+PASS: settings 720×520: click → prompt appears
+  row label: 发现新版本 v0.2.146
+  settings 720×520 viewport 720×520  card x=80.0 y=104.0 w=560.0 h=312.0  centre Δx=0.00 Δy=0.00  button y=359.0..399.0
+PASS: settings 720×520: card centred horizontally ±1px (Δx=0.00)
+PASS: settings 720×520: card centred vertically ±1px (Δy=0.00)
+PASS: settings 720×520: card fully inside the window
+PASS: settings 720×520: install button inside the card and the window
+PASS: main-auto: startup check prompts in the main window (["plugin:updater|check"])
+  main-auto      viewport 1200×800  card x=320.0 y=244.0 w=560.0 h=312.0  centre Δx=0.00 Δy=0.00  button y=499.0..539.0
+PASS: main-auto: card centred horizontally ±1px (Δx=0.00)
+PASS: main-auto: card centred vertically ±1px (Δy=0.00)
+PASS: main-auto: card fully inside the window
+PASS: main-auto: install button inside the card and the window
+PASS: main-row: startup check ran and found nothing
+PASS: main-row: no prompt
+PASS: main-row: click in main's settings → prompt appears (["plugin:updater|check","plugin:updater|check"])
+PASS: chat: no update check in a detached chat window ([])
+PASS: chat: no prompt
+
+32/32 passed
+rc=0
