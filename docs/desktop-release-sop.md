@@ -141,6 +141,23 @@ Never dispatch it while an Android or desktop build is still queued: the
 runners are shared, and an iOS build ahead of them delays what users are
 waiting for. iOS is not skipped, it goes last.
 
+**Build iOS at the release sha.** `ios-build.yml` runs under `macos-signing`,
+whose branch policy admits only `main`, so it cannot be dispatched on a
+`desktop-v*` tag. Without input it builds **main HEAD at dispatch time** — and
+since iOS goes last, main has often moved on (0.2.159 and 0.2.160 were both
+skipped on iOS for that reason). Pass the release commit:
+
+```bash
+gh workflow run ios-build.yml --repo sleep2agi/agent-network-app --ref main \
+  -f commit=<40-character release SHA>
+```
+
+The first step, `Require exact merged commit`, fails closed like the desktop
+release: the input must match `^[0-9a-f]{40}$`, equal the checked-out `HEAD`,
+and be an ancestor of `origin/main`. Before approving `macos-signing`, confirm
+the run log will build the release sha; if a run was started without it and
+main has moved, cancel it **before** approval (no certificate is used).
+
 ## 3. `macos-signing` environment approval
 
 Both matrix jobs run under `environment: macos-signing` and wait for approval.

@@ -4,6 +4,8 @@ const workflow = fs.readFileSync(new URL('../.github/workflows/ios-build.yml', i
 const exportOptions = fs.readFileSync(new URL('../ios-ci/ExportOptions.plist', import.meta.url), 'utf8');
 const signingScript = fs.readFileSync(new URL('../scripts/ios-distribution-signing.mjs', import.meta.url), 'utf8');
 
+const gateStep = workflow.slice(workflow.indexOf('name: Require exact merged commit'), workflow.indexOf('uses: actions/setup-node'));
+
 const checks: Array<[string, boolean]> = [
   ['workflow pins a Swift 6.2-capable Xcode', workflow.includes('DEVELOPER_DIR: /Applications/Xcode_26.2.app/Contents/Developer') && workflow.includes("Apple Swift version 6\\.2")],
   ['archive targets a generic iOS device', workflow.includes("-destination 'generic/platform=iOS'")],
@@ -19,6 +21,9 @@ const checks: Array<[string, boolean]> = [
   ['native modules are compiled from the checkout', workflow.includes('EXPO_USE_PRECOMPILED_MODULES: "false"')],
   ['iOS build number is numeric and monotonic per Actions run', workflow.includes('IOS_BUILD_NUMBER: ${{ github.run_number }}') && workflow.includes('CURRENT_PROJECT_VERSION="$IOS_BUILD_NUMBER"')],
   ['export remains App Store distribution and is switched to manual profile signing at runtime', exportOptions.includes('<string>app-store</string>') && workflow.includes("Set :signingStyle manual") && workflow.includes('provisioningProfiles:$BUNDLE_ID')],
+  ['an optional exact commit input defaults to the dispatched main HEAD', workflow.includes('ref: ${{ inputs.commit || github.sha }}') && workflow.includes('requested="${REQUESTED_COMMIT:-$GITHUB_SHA}"')],
+  ['the commit gate fails closed: 40-char sha, equals HEAD, ancestor of origin/main, before any build step', workflow.includes('[[ "$requested" =~ ^[0-9a-f]{40}$ && "$resolved" == "$requested" ]]') && workflow.includes('git merge-base --is-ancestor "$resolved" origin/main') && workflow.indexOf('name: Require exact merged commit') < workflow.indexOf('uses: actions/setup-node')],
+  ['the commit input reaches the shell through env, not string interpolation', workflow.includes('REQUESTED_COMMIT: ${{ inputs.commit }}') && !gateStep.includes("requested='${{ inputs.commit }}'")],
   ['IPA artifact is uploaded before optional TestFlight step', workflow.indexOf('name: Upload .ipa artifact') < workflow.indexOf('name: Upload to TestFlight')],
 ];
 
