@@ -53,7 +53,8 @@ ck('看得见就原样', titleText({ id: 'x', name: 'Portal 文案' }) === 'Port
 console.log('\n接线(静态)');
 const table = src('./TaskListTable.tsx');
 ck('列宽走 fittedWidths(按量到的表格宽)', table.includes('fittedWidths(visible, available)') && table.includes('onLayout={e => setTableW('));
-ck('标题格里的标题文字不 flex:1(竖排里会占满行高、把字顶到最上沿)', /s\.tdTitle, \{ flex: 0, flexShrink: 1 \}/.test(table));
+// 不是 flex:0 —— web 上那是 0 基准宽,整列标题空白(task-title-web-width.test.ts)。
+ck('标题格里的标题文字不 flex:1(竖排里会占满行高、把字顶到最上沿),按内容宽(flex:-1)', /s\.tdTitle, \{ flex: -1 \}/.test(table));
 ck('没有标签不放标签那一层', table.includes('item.tags?.length ? <TaskTagChips'));
 ck('列表 / 卡片 / 手机行都用 titleText(搜索高亮包在外面)', table.includes('highlight(titleText(item), terms)') && (src('./RequirementBoard.tsx').match(/\{highlight\(titleText\(item\), terms\)\}/g) ?? []).length === 2);
 

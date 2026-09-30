@@ -1,0 +1,24 @@
+test-task-title-visible — 任务列表「标题」列整列空白(0.2.159–0.2.162)
+Date: 2026-09-30
+Base: origin/main 90f2f46 (desktop 0.2.162 + #577–#579)
+
+Root cause
+  #564 (ceac423, desktop 0.2.159) gave the list title Text `{ flex: 0, flexShrink: 1 }`.
+  react-native-web 0.21 expands only flex:-1. It writes flex:0 as CSS `flex: 0`, which is `0 1 0%`:
+  basis 0, no grow, and numberOfLines' overflow:hidden → the text box is 0px wide on web/Tauri.
+  textContent is unchanged, so text-only checks (test-task-list-tablet `fallback`) stayed green.
+  The title line is byte-identical in desktop-v0.2.159 / .160 / .161 / .162 / main; .158 has the old line.
+Fix
+  `{ flex: -1 }` → web `0 1 auto` (content width, shrinks with ellipsis); native: sized by content, shrinks to minWidth.
+
+Browser drive (web export + in-page Tauri stub, no hub): tests/test-task-title-visible/drive.mjs
+  Desktop 1320×754 / 1000×700, tablet 1000×700, desktop 1320×754 with 字段配置 saved by an older version
+  (no seq column, title width 320, status width 96), light + dark; list / board / detail each.
+  main 90f2f46 (unfixed): 16/24 — every list row title width 0 (e.g. t1:0/152, legacy t1:0/320); board and detail OK
+  this branch:            24/24
+  tests/test-task-list-tablet/drive.mjs on this branch: 14/14 (title still vertically centred)
+
+ck: src/task-title-web-width.test.ts (runs the real title style through react-native-web's createReactDOMStyle)
+  unfixed: 4/7 (flex:0 → zero basis; TaskListTable.tsx:99 flagged); fixed: 7/7
+npm test: 275/275 test files passed · npm run typecheck: rc=0
+docker requirement-details (--network none): 41 pass, 0 fail
