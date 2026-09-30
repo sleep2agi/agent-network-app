@@ -118,7 +118,9 @@ ck('rail excludes settings from the main list', rail.includes("tabs.filter(tab =
 ck('rail items are density-scaled hit boxes from mobileRailItem (64×56 at 标准)', rail.includes('width: mobileRailItem(uiScale().densityFactor).width,') && rail.includes('height: mobileRailItem(uiScale().densityFactor).height,'));
 ck('rail items expose tab role + selected state', rail.includes('accessibilityRole="tab"') && rail.includes('accessibilityState={{ selected }}'));
 ck('rail shows translated labels (touch has no hover tooltip)', rail.includes('{t(tab.label)}</Text>'));
-ck('rail badge on Agent uses the same unread counts as the list/tray', rail.includes('railUnreadTotal(agentUnreadCounts(snap))') && rail.includes("tab.key === 'agents' ? railBadgeText(unread) : null"));
+ck('rail badge on Agent uses the same unread counts as the list/tray', rail.includes('railUnreadTotal(agentUnreadCounts(snap))') && rail.includes("tab.key === 'agents' ? railBadgeText(unread) :"));
+// #429: 任务 carries the task-activity badge (task-unread-store.ts), not the chat unread count.
+ck('rail badge on 任务 is the task-activity count', rail.includes('useTaskUnreadCount()') && rail.includes("tab.key === 'tasks' ? railBadgeText(taskUnread) : null"));
 ck('rail badge updates live from the unread store', rail.includes('subscribeUnread(() => setSnap(getUnreadSnapshot()))'));
 ck('rail pads the left + bottom insets and grows by the left one', rail.includes('width: mobileRailWidth(uiScale().densityFactor) + insetLeft, paddingLeft: insetLeft, paddingBottom: 8 + insetBottom'));
 ck('rail uses the desktop rail palette', rail.includes('backgroundColor: colors.railBg') && rail.includes('backgroundColor: colors.railActiveBg'));

@@ -126,7 +126,8 @@ export const initScript = ({ theme }) => {
     if (TASKS && p === '/api/requirements' && u.searchParams.get('archived') === 'true') return { ok: true, requirements: TASKS.archived ?? [], capabilities: TASKS.capabilities ?? [] };
     // TASKS.hasMore: the list is truncated (a paging hub says so with has_more); undefined = an old hub (no field).
     if (TASKS && p === '/api/requirements') return { ok: true, requirements: TASKS.requirements ?? [], capabilities: TASKS.capabilities ?? [], ...(TASKS.hasMore !== undefined ? { has_more: TASKS.hasMore, next_cursor: TASKS.hasMore ? 'c1' : null } : {}) };
-    if (p === '/api/auth/me') return { ok: true, user: { username: 'tester' }, current_network: 'net-sweep', networks: [{ network_id: 'net-sweep', name: 'sweep' }] };
+    // TASKS.meId: the signed-in user's id (the 任务 badge tells my own edits from others' by it); unset = an app that never needed it.
+    if (p === '/api/auth/me') return { ok: true, user: { username: 'tester', ...(TASKS?.meId ? { user_id: TASKS.meId } : {}) }, current_network: 'net-sweep', networks: [{ network_id: 'net-sweep', name: 'sweep' }] };
     // `?light=1` is the hub's narrow projection (server/src/server.ts): exactly these 8 fields, no
     // node_id, no capability bits. Answering it with full rows hid a real bug (2026-09-29: chat info
     // read caps from the light rows and dropped 规则文件 / 技能 for every claude-code session).

@@ -2,7 +2,7 @@
 import { readFileSync as readRaw } from 'node:fs';
 import { dirname, join, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { BADGE_TUCK, MIN_ICON_VISIBLE, badgeOffset, badgeOffsetCentered, coveredShare, intersectionArea, labelClearanceMargin } from './badge-anchor';
+import { BADGE_TUCK, MIN_ICON_VISIBLE, badgeOffset, badgeOffsetCentered, clampBadge, coveredShare, intersectionArea, labelClearanceMargin, pillBadgeWidth } from './badge-anchor';
 
 let p = 0, t = 0;
 const ck = (n: string, c: boolean, extra = '') => { t++; if (c) { p++; console.log(`PASS: ${n}`); } else console.log(`FAIL: ${n}${extra ? ` (${extra})` : ''}`); };
@@ -55,6 +55,7 @@ const STYLE_SITES: Array<{ file: string; key: string }> = [
   { file: 'src/ServerSidebar.tsx', key: 'badge' },
   { file: 'App.tsx', key: 'railBadge' },
   { file: 'src/MobileNavRail.tsx', key: 'badge' },
+  { file: 'src/app-styles.ts', key: 'tabBadge' },
 ];
 for (const site of STYLE_SITES) {
   const src = read(site.file);
@@ -64,6 +65,27 @@ for (const site of STYLE_SITES) {
   ck(`${posix(site.file)} ${site.key}: positioned with badgeOffset*`, /badgeOffset(Centered)?\(/.test(body), body.slice(0, 120));
   ck(`${posix(site.file)} ${site.key}: no right: anchor (grows inward)`, !/\bright\s*:/.test(body));
 }
+// ── clamp into the rail item (#429) ──
+ck('pill width: one digit = its height', pillBadgeWidth('3', 10, 18, 4, 2) === 18);
+ck('pill width: 「99+」 at 10px ≈ 30 (measured 30 in the drive)', Math.abs(pillBadgeWidth('99+', 10, 18, 4, 2) - 30) <= 1);
+ck('clamp: inside bounds = unchanged', JSON.stringify(clampBadge({ left: 10, top: -3 }, 18, { minTop: -5, maxRight: 40 })) === JSON.stringify({ left: 10, top: -3 }));
+ck('clamp: too high → pulled down to minTop', clampBadge({ left: 10, top: -9 }, 18, { minTop: -4, maxRight: 40 }).top === -4);
+ck('clamp: too wide → ends at maxRight', (() => { const o = clampBadge({ left: 30, top: 0 }, 30, { minTop: -4, maxRight: 48 }); return o.left + 30 === 48; })());
+// MobileNavRail at every 界面密度 (item / rail sizes from nav-chrome.ts; 更紧凑 = aligned 44 dp items, no gap). Worst case
+// 「99+」 still leaves ≥ MIN_ICON_VISIBLE of the glyph and ends inside the rail. Same formulas as MobileNavRail's badgeBox.
+for (const [name, d, railW, itemH, labelH] of [['更紧凑', 0.75, 56, 44, 13], ['紧凑', 0.85, 62, 48, 13], ['标准', 1, 72, 56, 14], ['宽松', 1.15, 83, 64, 14]] as const) {
+  const indW = Math.round(52 * d), indH = Math.round(30 * d), glyph = Math.round(24 * d), h = Math.max(14, Math.min(18, Math.round(18 * d))), font = h < 16 ? 9 : 10, pad = h < 16 ? 3 : 4;
+  const freeAbove = (itemH - indH - 3 - labelH) / 2;
+  for (const text of ['3', '99+']) {
+    const w = pillBadgeWidth(text, font, h, pad, 2);
+    const o = clampBadge(badgeOffsetCentered(indW, indH, glyph, h), w, { minTop: -freeAbove, maxRight: (railW + indW) / 2 - 1 });
+    const g = { x: (indW - glyph) / 2, y: (indH - glyph) / 2, w: glyph, h: glyph };
+    const share = coveredShare(g, { x: o.left, y: o.top, w, h });
+    ck(`rail ${name} 「${text}」: glyph ≥ ${MIN_ICON_VISIBLE * 100}% visible (${Math.round((1 - share) * 100)}%)`, share <= 1 - MIN_ICON_VISIBLE);
+    ck(`rail ${name} 「${text}」: stays inside the rail`, o.left + w <= (railW + indW) / 2);
+  }
+}
+
 // Judge self-test: the old ServerSidebar line must be flagged.
 const OLD = `\n  badge: { position: 'absolute', top: -6, right: -8, minWidth: 16, height: 16 },\n`;
 const oldBody = OLD.match(/\n\s*badge: \{([\s\S]*?)\n?\s*\},?\n/)?.[1] ?? '';

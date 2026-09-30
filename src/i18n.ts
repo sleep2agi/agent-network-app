@@ -10,6 +10,8 @@ const tables: TranslationTable = {
   'nav.messages': ['消息', 'Messages'],
   'nav.unread': ['{label}，{count} 条未读', '{label}, {count} unread'],
   'nav.tasks': ['任务', 'Tasks'],
+  'nav.tasksUpdated': ['{count} 个任务有新动态', '{count} tasks updated'],
+  'nav.tasksUnread': ['{label}，{count} 个任务有新动态', '{label}, {count} tasks updated'],
   'nav.settings': ['设置', 'Settings'],
   'nav.server': ['服务器设置', 'Server settings'],
   'nav.scheduled': ['定时任务', 'Schedules'],

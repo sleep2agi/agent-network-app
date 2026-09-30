@@ -50,3 +50,22 @@ export function coveredShare(icon: Rect, badge: Rect): number {
 export function labelClearanceMargin(offsetLeft: number, maxBadgeW: number, boxW: number, gap: number, clearance = 2): number {
   return Math.max(0, Math.ceil(offsetLeft + maxBadgeW + clearance - boxW - gap));
 }
+
+/**
+ * Painted width of a pill badge (min-width = its height) holding `text` in digits / 「+」: ~0.62 em each, plus the
+ * horizontal padding and border on both sides. Close enough to clamp with (tests/test-task-unread-badge measures it).
+ */
+export function pillBadgeWidth(text: string, fontSize: number, height: number, padX: number, border: number): number {
+  return Math.max(height, Math.round(text.length * fontSize * 0.62 + 2 * (padX + border)));
+}
+
+/**
+ * Keep an anchored badge inside the box it may paint in. #429: on the Android rail at 更紧凑 the items abut (44 dp
+ * pitch, no gap) and the rail's ScrollView clips its sides, so the anchored badge ran into the label of the tab above
+ * and 「99+」 was cut off at the rail edge. `minTop` = the highest it may start (its own item's top), `maxRight` = the
+ * furthest right it may end (the rail's edge), both in the badge's positioning box. Moving it left / down only ever
+ * tucks it further into the glyph's corner; badge-anchor.test.ts keeps that under 1 − MIN_ICON_VISIBLE.
+ */
+export function clampBadge(off: { left: number; top: number }, badgeW: number, bounds: { minTop: number; maxRight: number }): { left: number; top: number } {
+  return { left: Math.min(off.left, bounds.maxRight - badgeW), top: Math.max(off.top, bounds.minTop) };
+}
