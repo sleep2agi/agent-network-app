@@ -48,6 +48,8 @@ export function requirementFromHub(row: unknown): Requirement | null {
     // 开始(Hub 的 start_date 能力):读不懂的值当没设,不让一张卡因为它整张丢掉。
     ...('start' in r ? { start: typeof r.start === 'string' && dueOk(r.start.trim()) ? r.start.trim() : '' } : {}),
     ...(Array.isArray(r.checklist) ? { checklist: checklistFromHub(r.checklist) } : {}),
+    // 精简列表(view=summary):没有正文,只有「有没有描述」和子任务计数。
+    ...(!Array.isArray(r.checklist) && r.checklist_count && typeof r.checklist_count === 'object' ? { summary: true as const, hasDescription: r.has_description === true, checklistCount: childCounts(r.checklist_count) } : {}),
     ...('project_id' in r ? { projectId: typeof r.project_id === 'string' && r.project_id ? r.project_id : null } : {}),
     ...('parent_id' in r ? { parentId: typeof r.parent_id === 'string' && r.parent_id ? r.parent_id : null } : {}),
     ...(r.children && typeof r.children === 'object' ? { children: childCounts(r.children) } : {}),
@@ -184,12 +186,38 @@ export function listTruncated(data: { has_more?: unknown }, rowCount: number): b
   return rowCount >= HUB_LIST_CAP;
 }
 
-/** 连同 Hub 的 capabilities(#2076 起:agent_owner / description / checklist / projects / due_datetime;旧 Hub = [])。 */
-export async function listRequirementsFull(cfg: HubConfig): Promise<{ rows: Requirement[]; capabilities: string[]; truncated: boolean }> {
-  const data = await call(cfg, scoped(cfg, '/api/requirements')) as { requirements?: unknown; capabilities?: unknown; has_more?: unknown };
+/**
+ * 连同 Hub 的 capabilities(#2076 起:agent_owner / description / checklist / projects / due_datetime;旧 Hub = [])。
+ * summary = 读精简列表(capability list_summary):每行不带描述正文和子任务条目,打开卡时再按 id 读全文。
+ * 只在上一次读到的 capabilities 里有 list_summary 时才传 —— 旧 Hub 不认识 view,会照旧回完整列表,也不会错。
+ */
+export async function listRequirementsFull(cfg: HubConfig, opts: { summary?: boolean } = {}): Promise<{ rows: Requirement[]; capabilities: string[]; truncated: boolean }> {
+  const data = await call(cfg, scoped(cfg, opts.summary ? '/api/requirements?view=summary' : '/api/requirements')) as { requirements?: unknown; capabilities?: unknown; has_more?: unknown };
   const rows = Array.isArray(data.requirements) ? data.requirements : [];
   const capabilities = Array.isArray(data.capabilities) ? data.capabilities.filter((c): c is string => typeof c === 'string') : [];
   return { rows: rows.map(requirementFromHub).filter((row): row is Requirement => !!row), capabilities, truncated: listTruncated(data, rows.length) };
+}
+
+/**
+ * 增量读(Hub capability changes):since 之后改过的卡(含归档的,行上 archived: true)+ 删掉的卡的 id + 下次用的 server_time。
+ * 精简行(view=summary)。has_more = 这段时间改动太多一页装不下 —— 调用方改为整读一次。
+ */
+export async function listRequirementChanges(cfg: HubConfig, since: string): Promise<{ rows: Requirement[]; deleted: string[]; serverTime: string | null; hasMore: boolean; capabilities: string[] }> {
+  const data = await call(cfg, scoped(cfg, `/api/requirements?changes=1&view=summary&limit=${HUB_LIST_CAP}&updated_since=${encodeURIComponent(since)}`)) as {
+    requirements?: unknown; deleted?: unknown; server_time?: unknown; has_more?: unknown; capabilities?: unknown;
+  };
+  const raw = Array.isArray(data.requirements) ? data.requirements : [];
+  const rows = raw.map(row => {
+    const r = requirementFromHub(row);
+    return r && (row as { archived?: unknown }).archived === true ? { ...r, archived: true } : r;
+  }).filter((row): row is Requirement => !!row);
+  return {
+    rows,
+    deleted: Array.isArray(data.deleted) ? data.deleted.filter((id): id is string => typeof id === 'string') : [],
+    serverTime: typeof data.server_time === 'string' && data.server_time ? data.server_time : null,
+    hasMore: data.has_more === true,
+    capabilities: Array.isArray(data.capabilities) ? data.capabilities.filter((c): c is string => typeof c === 'string') : [],
+  };
 }
 
 /**

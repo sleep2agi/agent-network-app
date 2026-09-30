@@ -61,6 +61,13 @@ export interface Requirement {
   completedAtApprox?: boolean;
   /** 谁把它移进「完成」的(近似值的卡为 null)。 */
   completedBy?: RequirementPersonRef | null;
+  /**
+   * 这一行来自精简列表(Hub capability list_summary,view=summary):没带 description / checklist 正文,
+   * 只带下面两个摘要;打开这张卡时按 id 读全文(board-sync.ts)。undefined = 完整的一行。
+   */
+  summary?: true;
+  hasDescription?: boolean;
+  checklistCount?: { total: number; done: number };
 }
 
 /**

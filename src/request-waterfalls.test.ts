@@ -22,11 +22,12 @@ ck('unread bodies are still applied in the old order (status → user inbox → 
 // ── task board: projects read starts with the list, not after it ──
 const board = src('RequirementBoard.tsx');
 const firstLoad = board.slice(board.indexOf('// ── 读 Hub ──'), board.indexOf('const refresh = useCallback'));
-ck('task board starts the projects read before the list read resolves', before(firstLoad, 'listProjects(cfg)', 'await listRequirementsFull(cfg)'));
+ck('task board starts the projects read before the list read resolves', before(firstLoad, 'listProjects(cfg)', 'await listRequirementsFull(cfg'));
 ck('task board awaits the early projects read instead of issuing a second one', /await projectsRead/.test(firstLoad) && (firstLoad.match(/listProjects\(cfg\)/g) || []).length === 1);
 const refresh = board.slice(board.indexOf('const refresh = useCallback'), board.indexOf('usePoll(refresh'));
 ck('poll skips a full-list read right after one landed (phase→ready re-runs the poll at once)', /if \(!force && Date\.now\(\) - lastListAt\.current < POLL_MS \/ 2\) return;/.test(refresh));
-ck('first load and every poll stamp lastListAt', (board.match(/lastListAt\.current = Date\.now\(\);/g) || []).length === 2);
+// 轮询有两条路(增量 / 整读,board-sync.ts),各自盖一次。
+ck('first load and every poll stamp lastListAt', (board.match(/lastListAt\.current = Date\.now\(\);/g) || []).length === 3);
 ck('a task-changed event from another window still refreshes at once', /refreshRef\.current\(true\)/.test(board));
 
 // ── node detail: nodes + status together, loaded once at mount ──

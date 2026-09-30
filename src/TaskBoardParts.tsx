@@ -16,7 +16,8 @@ import { shadowOnly } from './elevation';
 import type { ReqPriority, Requirement, RequirementProject } from './requirements-model';
 import { PRIORITY_CODE, priorityLabel } from './task-priority';
 import type { RequirementPerson } from './requirement-people';
-import { checklistProgress, type DueTone } from './task-board-model';
+import { type DueTone } from './task-board-model';
+import { checklistCounts } from './board-sync';
 import { shortIdLabel } from './task-short-id';
 
 /**
@@ -270,9 +271,11 @@ export function Chip({ label, on, onPress, s, testID, leading, accessibilityLabe
 }
 
 /** 卡片上的子任务进度:「✓ 3/7」+ 一条细进度条。没有子任务就不画。 */
-export function ChecklistProgress({ item, s }: { item: Pick<Requirement, 'checklist'>; s: TaskStyles }) {
+export function ChecklistProgress({ item, s }: { item: Pick<Requirement, 'checklist' | 'checklistCount'>; s: TaskStyles }) {
   useTranslation();
-  const p = checklistProgress(item.checklist);
+  // 精简列表的行(board-sync.ts)没有子任务条目,只有 Hub 给的计数。
+  const c = checklistCounts(item);
+  const p = { ...c, ratio: c.total ? c.done / c.total : 0 };
   if (!p.total) return null;
   const complete = p.done === p.total;
   return (
