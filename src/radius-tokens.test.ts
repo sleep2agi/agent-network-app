@@ -27,6 +27,12 @@ const ALLOW: Record<string, string> = {
   'src/VoiceInputUI.tsx|1': '键盘图标的键帽点(图形几何)',
   // 「按住说话」气泡下方旋转 45° 的小方块尾巴:2 只是把尖角磨钝,属于图形几何。
   'src/VoiceInputUI.tsx|2': '语音气泡尾巴(旋转方块的尖角)',
+  // 分享图的 RN 版(ShareCardNative):是一张按 1080 宽画、再整体缩放的图片,圆角与 Canvas 版(task-share-card.ts)同值,
+  // 属于图的几何,不是界面圆角档位。
+  'src/ShareCardNative.tsx|u(28)': '分享图面板(与 Canvas 版同值,随 scale 缩放)',
+  'src/ShareCardNative.tsx|u(22)': '分享图 logo 圆角方块',
+  'src/ShareCardNative.tsx|u(6)': '分享图柱子顶端',
+  'src/ShareCardNative.tsx|u(3)': '分享图热力格',
 };
 
 export interface Finding { file: string; line: number; value: string }
