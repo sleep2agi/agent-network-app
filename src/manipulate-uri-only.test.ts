@@ -6,27 +6,29 @@
 import { strict as assert } from 'node:assert';
 import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 let ck = 0;
 const check = (cond: boolean, msg: string) => { assert.ok(cond, msg); ck++; };
 
-const root = new URL('.', import.meta.url).pathname;
+const root = fileURLToPath(new URL('.', import.meta.url)); // Windows: pathname 是 /D:/…,不能直接用
 const walk = (dir: string): string[] => readdirSync(dir).flatMap(e => {
   const p = join(dir, e);
   if (statSync(p).isDirectory()) return walk(p);
   return /\.(ts|tsx)$/.test(e) && !/\.test\.tsx?$/.test(e) ? [p] : [];
 });
-const files = walk(root);
+const rel = (p: string) => p.slice(root.length).replace(/\\/g, '/').replace(/^\//, '');
+const files = walk(root).map(p => ({ path: p, name: rel(p) }));
 
 // 取集自检:attach.ts 和 share-card-capture.ts 都在扫描范围里(各有一处已知的 manipulate 调用)。
-check(files.some(f => f.endsWith('/attach.ts')) && files.some(f => f.endsWith('/share-card-capture.ts')), `scan covers attach.ts + share-card-capture.ts (${files.length} files)`);
+check(files.some(f => f.name === 'attach.ts') && files.some(f => f.name === 'share-card-capture.ts'), `scan covers attach.ts + share-card-capture.ts (${files.length} files)`);
 
 // 允许的实参:只认名字里带 uri 的字符串变量、`raw`(captureRef 的 tmpfile 路径)。
 const ALLOWED = /^(uri|decoded\.uri|raw)$/;
 const calls: { file: string; arg: string }[] = [];
 for (const f of files) {
-  const src = readFileSync(f, 'utf8');
-  for (const m of src.matchAll(/ImageManipulator\.manipulate\(([^)]+)\)/g)) calls.push({ file: f.slice(root.length), arg: m[1].trim() });
+  const src = readFileSync(f.path, 'utf8');
+  for (const m of src.matchAll(/ImageManipulator\.manipulate\(([^)]+)\)/g)) calls.push({ file: f.name, arg: m[1].trim() });
 }
 check(calls.length >= 3, `found the native manipulate calls (${calls.map(c => `${c.file}:${c.arg}`).join(', ')})`);
 for (const c of calls) check(ALLOWED.test(c.arg), `${c.file}: manipulate(${c.arg}) must take a uri string, never an ImageRef (iOS SIGTRAP)`);
