@@ -138,12 +138,17 @@ export const initScript = ({ theme }) => {
       return { ok: true, requirement: row };
     }
     // ?q= (hub capability search): a naive name match over the fixture's serverOnly rows (older tasks the list
-    // didn't return) — or its archived rows with archived=true. Recorded in window.__tasksQueries for the drive.
+    // didn't return) — or its archived rows with archived=true, or both with include_archived=1. limit / cursor page
+    // like the hub (the cursor here is just an offset). Recorded in window.__tasksQueries for the drive.
     if (TASKS && p === '/api/requirements' && u.searchParams.has('q')) {
       (window.__tasksQueries ||= []).push(u.search);
       const q = (u.searchParams.get('q') || '').toLowerCase();
-      const pool = u.searchParams.get('archived') === 'true' ? (TASKS.archived ?? []) : [...(TASKS.requirements ?? []), ...(TASKS.serverOnly ?? [])];
-      return { ok: true, requirements: pool.filter(r => q.split(/\s+/).filter(Boolean).every(t => r.name.toLowerCase().includes(t))), capabilities: TASKS.capabilities ?? [], has_more: false, next_cursor: null };
+      const live = [...(TASKS.requirements ?? []), ...(TASKS.serverOnly ?? [])];
+      const pool = u.searchParams.get('archived') === 'true' ? (TASKS.archived ?? []) : u.searchParams.get('include_archived') === '1' ? [...live, ...(TASKS.archived ?? [])] : live;
+      const matched = pool.filter(r => q.split(/\s+/).filter(Boolean).every(t => r.name.toLowerCase().includes(t)));
+      const limit = Number(u.searchParams.get('limit')) || 500, from = Number(u.searchParams.get('cursor')) || 0;
+      const more = matched.length > from + limit;
+      return { ok: true, requirements: matched.slice(from, from + limit), capabilities: TASKS.capabilities ?? [], has_more: more, next_cursor: more ? String(from + limit) : null };
     }
     // ?archived=true (the 任务 search's 包含已归档): only the fixture's archived rows.
     if (TASKS && p === '/api/requirements' && u.searchParams.get('archived') === 'true') return { ok: true, requirements: TASKS.archived ?? [], capabilities: TASKS.capabilities ?? [] };

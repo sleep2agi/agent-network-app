@@ -449,6 +449,10 @@ registerTranslations({
   'taskSearch.empty': ['没有找到包含 “{q}” 的任务', 'No tasks containing “{q}”'],
   'taskSearch.emptyFiltered': ['也可能被上面的筛选挡住了', 'The filters above may also be hiding some'],
   'taskSearch.count': ['找到 {n} 个', '{n} found'],
+  'taskSearch.hiddenByFilter': ['另有 {n} 个被筛选隐藏', '{n} more hidden by filters'],
+  'taskSearch.clearFilters': ['清除筛选', 'Clear filters'],
+  'taskSearch.loadMore': ['加载更多', 'Load more'],
+  'taskSearch.loadingMore': ['正在搜索更早的任务…', 'Searching older tasks…'],
   'taskSearch.partial': ['只搜了最近的 500 个任务(这个 Hub 版本不支持在服务器上搜更早的)', 'Only the latest 500 tasks were searched (this Hub cannot search older ones)'],
 });
 

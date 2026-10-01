@@ -2,10 +2,10 @@
 import { readFileSync } from 'node:fs';
 import {
   EMPTY_SEARCH, SEARCH_DEBOUNCE_MS, descriptionText, focusKindOf, highlightRanges, highlightSegments, isSearchShortcut,
-  matchesSearch, needsServerSearch, taskIdQuery, searchFields, searchPool, searchTerms, searchedTasks, visibleTasks, type SearchContext,
+  filterHiddenCount, matchesSearch, needsServerSearch, taskIdQuery, searchFields, searchPool, searchTerms, searchedTasks, visibleTasks, type SearchContext,
 } from './task-search';
 import { HUB_LIST_CAP, listTruncated } from './requirements-hub';
-import { boardColumns, EMPTY_FILTER, NO_PROJECT } from './task-board-model';
+import { applyFilter, boardColumns, EMPTY_FILTER, NO_PROJECT } from './task-board-model';
 import { requirementFromHub } from './requirements-hub';
 import type { Requirement } from './requirements-model';
 import { t, setLanguagePreference } from './i18n';
@@ -94,23 +94,34 @@ ck('ID 命中和服务端结果一起:本机 ID 命中在前,服务端更老的�
 
 console.log('\n包含已归档');
 const arch = [R('z1', '归档的组织树旧方案', { archived: true }), R('r1', '同 id:本机那份优先', { archived: true })];
-ck('默认不含归档', vis('组织树') === 'r1' && ids(visibleTasks(items, arch, EMPTY_FILTER, q('组织树'), ctx)) === 'r1');
-ck('勾了才含,排在本机行后面', ids(visibleTasks(items, arch, EMPTY_FILTER, { q: '组织树', archived: true }, ctx)) === 'r1,z1');
+// Owner 2026-10-01「经常…搜不到那个历史任务」:做完的卡常被归档,「包含已归档」默认开。
+ck('默认就含归档(EMPTY_SEARCH.archived = true),排在本机行后面', EMPTY_SEARCH.archived === true && ids(visibleTasks(items, arch, EMPTY_FILTER, q('组织树'), ctx)) === 'r1,z1');
+ck('关掉才不含', ids(visibleTasks(items, arch, EMPTY_FILTER, { q: '组织树', archived: false }, ctx)) === 'r1');
 ck('勾了但没有搜索词:不混进来', searchPool(items, arch, { q: '', archived: true }) === items);
 ck('同一个 id 用本机那份', searchPool(items, arch, { q: 'x', archived: true }).filter(r => r.id === 'r1').length === 1 && !searchPool(items, arch, { q: 'x', archived: true }).find(r => r.id === 'r1')!.archived);
 ck('归档的也受筛选管', ids(visibleTasks(items, arch, { ...EMPTY_FILTER, priorities: ['high'] }, { q: '组织树', archived: true }, ctx)) === 'r1');
 ck('Hub 行里 archived 不影响普通解析(没有这个字段)', requirementFromHub({ id: 'h', name: 'x', archived: true })?.archived === undefined);
 
-console.log('\n服务端搜索(本机的表被截断时)');
+console.log('\n服务端搜索');
 ck('新 Hub:has_more 说了算', listTruncated({ has_more: true }, 3) && !listTruncated({ has_more: false }, 500));
 ck('旧 Hub(没有 has_more):正好 500 张当截断,少于 500 不算', listTruncated({}, HUB_LIST_CAP) && !listTruncated({}, 499) && HUB_LIST_CAP === 500);
-ck('只在「支持 search + 被截断 + 有搜索词」时问服务端', needsServerSearch(['search'], true, q('x')) && !needsServerSearch([], true, q('x')) && !needsServerSearch(['search'], false, q('x')) && !needsServerSearch(['search'], true, q('  ')));
+// 以前只在「本机的表被截断」时问:没截断时归档的、只在描述里的词(精简行没有正文)都搜不到。
+ck('Hub 支持 search 且有搜索词就问服务端(不看截不截断)', needsServerSearch(['search'], q('x')) && !needsServerSearch([], q('x')) && !needsServerSearch(['search'], q('  ')));
+const oldArchived = R('old2', '很久以前归档的组织树', { archived: true, column: 'done' });
+ck('服务端的归档行(include_archived=1 回来的)并进结果并保留 archived 标记', (() => { const r = searchedTasks(items, [], q('组织树'), ctx, [oldArchived]); return ids(r) === 'r1,old2' && r[1].archived === true; })());
 const old1 = R('old1', '很久以前的组织树');
 ck('服务端找到的更老的卡并进结果(排在本机结果后面)', ids(searchedTasks(items, [], q('组织树'), ctx, [old1])) === 'r1,old1');
 ck('服务端结果里本机已有的不重复', ids(searchedTasks(items, [], q('组织树'), ctx, [items[0], old1])) === 'r1,old1');
 ck('本机有、本机判不匹配的卡不被服务端结果带回来(本机是新的)', ids(searchedTasks(items, [], q('组织树'), ctx, [{ ...items[1] }])) === 'r1');
 ck('服务端的卡也受筛选管', ids(visibleTasks(items, [], { ...EMPTY_FILTER, priorities: ['high'] }, q('组织树'), ctx, [old1])) === 'r1');
 ck('没有搜索词:服务端结果不混进来', searchedTasks(items, [], EMPTY_SEARCH, ctx, [old1]) === items);
+
+console.log('\n被筛选挡住的结果');
+{
+  const searched = searchedTasks(items, [], q('组织树'), ctx, [old1]);
+  const visible = applyFilter(searched, { ...EMPTY_FILTER, priorities: ['high'] });
+  ck('数得出被筛选挡住了几个', filterHiddenCount(searched, visible) === 1 && filterHiddenCount(searched, searched) === 0);
+}
 
 console.log('\n高亮区间');
 const hr = (text: string, s: string) => JSON.stringify(highlightRanges(text, searchTerms(s)));
@@ -142,18 +153,20 @@ ck('日历标题高亮(四处)', (src('./TaskCalendar.tsx').match(/highlight\([a
 ck('没有结果时出「没找到」', board.includes('<SearchEmpty q={search.q}'));
 ck('去抖用常量', board.includes('SEARCH_DEBOUNCE_MS'));
 ck('⌘K 走设置里「搜索」的绑定,window 捕获阶段抢在全局快捷键前面', board.includes("=== 'nav.search'") && board.includes("win.addEventListener('keydown', onKey, true)"));
-ck('归档只在勾选 + 有搜索词 + Hub 支持时读', /const wantArchived = archivedCapable && search\.archived && !!searchTerms\(search\.q\)\.length/.test(board));
+ck('旧 Hub(没有 search):归档只在勾选 + 有搜索词时整表读一次', /const wantArchived = archivedCapable && search\.archived && !!searchTerms\(search\.q\)\.length && !serverSearchCap/.test(board) && board.includes('listArchivedRequirements(cfg)'));
 ck('列表标题高亮', /highlight\((item\.name|titleText\(item\)), terms\)/.test(src('./TaskListTable.tsx')));
 ck('甘特图标题高亮(四处)', (src('./TaskGantt.tsx').match(/highlight\([a-z.]*name, terms\)/g) ?? []).length === 4);
 ck('共享状态里有 search,换网络清空', /search: EMPTY_SEARCH/.test(src('./task-board-store.ts')));
-ck('表被截断且 Hub 支持 search 时问服务端,结果并进 searchedTasks', board.includes('needsServerSearch(') && board.includes('searchRequirementsOnHub(cfg, q, false)') && /searchedTasks\(items, archived, search, \{ people, projects \}, extraHits\)/.test(board));
+ck('Hub 支持 search 时问服务端(连归档的一起),结果并进 searchedTasks', board.includes('needsServerSearch(serverSearchCap') && board.includes('searchRequirementsOnHub(cfg, search.q, { includeArchived: includeArchivedOnServer })') && /searchedTasks\(items, archived, search, \{ people, projects \}, extraHits\)/.test(board));
+ck('「加载更多」带上一页的 cursor,按 key 丢掉换词前的回包', board.includes('cursor: next })') && board.includes('if (cur.key !== key) return cur;'));
+ck('搜索时结果上方有状态行:被筛选挡住的个数 + 清除筛选 + 加载更多', board.includes('<SearchStatusBar') && board.includes('hidden={filterHiddenCount(searched, visible)}') && board.includes('more={serverCurrent && !!serverHits.next}'));
+ck('请求带 include_archived=1 / cursor,回包按 has_more + next_cursor 给下一页', /include_archived=1/.test(src('./requirements-hub.ts')) && /data\.has_more === true && typeof data\.next_cursor === 'string'/.test(src('./requirements-hub.ts')));
 ck('首屏和轮询都更新 truncated', (board.match(/truncated: cut \}\);/g) ?? []).length === 2);
-ck('新 Hub 的「包含已归档」按搜索词问服务端', board.includes('searchRequirementsOnHub(cfg, archivedQuery, true)'));
 
 console.log('\n文案');
 for (const lang of ['zh', 'en'] as const) {
   setLanguagePreference(lang);
-  ck(`${lang}:搜索文案都有翻译`, ['taskSearch.placeholder', 'taskSearch.cancel', 'taskSearch.clear', 'taskSearch.includeArchived', 'taskSearch.archived', 'taskSearch.empty', 'taskSearch.hint'].every(k => t(k) !== k));
+  ck(`${lang}:搜索文案都有翻译`, ['taskSearch.placeholder', 'taskSearch.cancel', 'taskSearch.clear', 'taskSearch.includeArchived', 'taskSearch.archived', 'taskSearch.empty', 'taskSearch.hint', 'taskSearch.hiddenByFilter', 'taskSearch.clearFilters', 'taskSearch.loadMore', 'taskSearch.loadingMore'].every(k => t(k) !== k));
 }
 setLanguagePreference('zh');
 ck('没找到的原话', t('taskSearch.empty', { q: '发布' }) === '没有找到包含 “发布” 的任务');

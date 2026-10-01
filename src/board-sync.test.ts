@@ -154,7 +154,8 @@ const board = readFileSync(new URL('./RequirementBoard.tsx', import.meta.url), '
 ck('看板轮询按 planBoardRead 选读法(旧 Hub 回退到完整列表)', board.includes('planBoardRead(st0.capabilities, st0.truncated, sync.current, Date.now())') && board.includes("listRequirementsFull(cfg, { summary: plan.kind === 'list' ? plan.summary : true })"));
 ck('读的时候本机改过卡:增量不并、游标不动', /if \(gen !== mutations\.current \|\| inFlight\.current !== 0\) return;\s*\n\s*const list = applyChanges/.test(board));
 ck('打开精简行按 id 补读全文', board.includes('needsFullText(selected)') && board.includes('getRequirementOnHub(cfg, openId)'));
-ck('精简行在场时搜索问服务端', board.includes('truncated || summaryRows'));
+// 精简行没有描述正文:有搜索词就问服务端(Hub 支持 search 时不再看截不截断、有没有精简行,task-search.ts needsServerSearch)。
+ck('精简行在场时搜索问服务端', board.includes("needsServerSearch(serverSearchCap ? ['search'] : [], search)"));
 
 console.log(`\n${p}/${t} passed`);
 if (p !== t) { if (typeof process !== 'undefined') process.exit(1); }

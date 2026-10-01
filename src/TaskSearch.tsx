@@ -1,7 +1,8 @@
 // 任务页搜索的界面件(逻辑在 task-search.ts)。桌面和手机是两套交互,不共用一个形状:
 //   · 桌面(鼠标 + 键盘):头部工具栏里一个常驻搜索框;「/」或 Ctrl/⌘+K 聚焦,Esc 清空(空了再按 Esc 失焦)
 //   · 手机 / 平板(触屏):标题栏一个放大镜,点开变成微信那样的搜索条(圆角灰底输入框 + 右边「取消」)
-// 两边的「包含已归档」都在搜索框右端的选项按钮弹出的小菜单里(只有 Hub 支持归档时才有这个按钮)。
+// 两边的「包含已归档」都在搜索框右端的选项按钮弹出的小菜单里(只有 Hub 支持归档时才有这个按钮)。默认开;
+// 关掉(不是默认)时搜索框描一圈强调色、选项按钮变色 —— 提醒「现在搜得比平常少」。
 import { forwardRef, useRef, useState, type ReactNode } from 'react';
 import { Modal, Pressable, View, useWindowDimensions, type TextInput as RNTextInput } from 'react-native';
 import { Text, TextInput } from './ui-text';
@@ -81,7 +82,7 @@ export const SearchField = forwardRef<RNTextInput, FieldProps & { style?: object
   const h = touch ? 36 : CONTROL_H;
   return (
     <View
-      style={[{ flexDirection: 'row', alignItems: 'center', gap: 6, height: h, paddingLeft: spacing.md - 2, paddingRight: 4, borderRadius: touch ? radius.pill : radius.control, backgroundColor: colors.inputBg, borderWidth: 1, borderColor: includeArchived ? colors.accent + '66' : 'transparent' }, style]}
+      style={[{ flexDirection: 'row', alignItems: 'center', gap: 6, height: h, paddingLeft: spacing.md - 2, paddingRight: 4, borderRadius: touch ? radius.pill : radius.control, backgroundColor: colors.inputBg, borderWidth: 1, borderColor: archivedCapable && !includeArchived ? colors.accent + '66' : 'transparent' }, style]}
       testID={testID}
       accessibilityRole={'search' as never}
     >
@@ -119,7 +120,7 @@ export const SearchField = forwardRef<RNTextInput, FieldProps & { style?: object
             style={state => [{ width: 26, height: 26, borderRadius: radius.item, alignItems: 'center', justifyContent: 'center' }, ((state as { hovered?: boolean }).hovered || state.pressed) && { backgroundColor: colors.rowHover }]}
             testID={`${testID}-options`}
           >
-            <Ionicons name={includeArchived ? 'archive' : 'options-outline'} size={14} color={includeArchived ? colors.accent : colors.textMuted} />
+            <Ionicons name="options-outline" size={14} color={includeArchived ? colors.textMuted : colors.accent} />
           </Pressable>
         </View>
       ) : null}
@@ -195,6 +196,36 @@ export function SearchEmpty({ q, s, onClear, filtered, partial }: { q: string; s
       <Pressable accessibilityRole="button" onPress={onClear} style={{ height: 32, justifyContent: 'center', paddingHorizontal: spacing.md }} testID="task-search-empty-clear">
         <Text style={s.link}>{tr('taskSearch.clear')}</Text>
       </Pressable>
+    </View>
+  );
+}
+
+/**
+ * 搜索时结果上方的一行:「找到 N 个」+(筛选挡住了一些时)「另有 M 个被筛选隐藏 · 清除筛选」+(服务端还有下一页时)「加载更多」。
+ * 以前只有一个结果都没剩时才提一句筛选,剩下几个时被挡住的那些就悄悄没了。
+ */
+export function SearchStatusBar({ shown, hidden, more, loading, onClearFilters, onLoadMore, phone }: {
+  shown: number; hidden: number; more: boolean; loading: boolean; onClearFilters: () => void; onLoadMore: () => void; phone: boolean;
+}) {
+  useTranslation();
+  const link = { color: colors.accent, fontSize: 12, fontWeight: '600' as const };
+  return (
+    <View style={{ flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', columnGap: spacing.md, rowGap: 2, minHeight: 28, paddingHorizontal: phone ? spacing.lg : spacing.xl, paddingVertical: 4 }} accessibilityLiveRegion="polite" testID="task-search-status">
+      <Text style={{ color: colors.textSecondary, fontSize: 12 }} testID="task-search-count">{tr('taskSearch.count', { n: more ? `${shown}+` : shown })}</Text>
+      {hidden > 0 ? (
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+          <Text style={{ color: colors.textMuted, fontSize: 12 }} testID="task-search-hidden">{tr('taskSearch.hiddenByFilter', { n: hidden })}</Text>
+          <Pressable accessibilityRole="button" onPress={onClearFilters} hitSlop={8} testID="task-search-clear-filters">
+            <Text style={link}>{tr('taskSearch.clearFilters')}</Text>
+          </Pressable>
+        </View>
+      ) : null}
+      {loading ? <Text style={{ color: colors.textMuted, fontSize: 12 }} testID="task-search-loading">{tr('taskSearch.loadingMore')}</Text>
+        : more ? (
+          <Pressable accessibilityRole="button" onPress={onLoadMore} hitSlop={8} testID="task-search-load-more">
+            <Text style={link}>{tr('taskSearch.loadMore')}</Text>
+          </Pressable>
+        ) : null}
     </View>
   );
 }
