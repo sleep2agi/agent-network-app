@@ -1,0 +1,9 @@
+desktop v0.2.175 — 手机端左滑 / 长按快速改状态和优先级
+================================================================================
+A. 本版内容(0.2.174 发版提交之后 main 上合入的 PR + 本 PR)
+  #624 手机(窄屏+触屏)任务列表/看板卡片左滑出「进行中/完成/更多」,点击只发 {column},5 秒撤销;长按菜单「改状态… / 改优先级…」;
+       参与人仅可改状态,只读卡片不可滑。task-quick-status.test 26 项;requirement-details Docker 46/0;drive 18/18(改动前导出 rc=1)。
+  本 PR(版本号):0.2.174 → 0.2.175,versionCode 2174 → 2175;release-desktop-auto-update.yml 加 What's new in 0.2.175;重新生成 src/changelog-bundled.ts。
+  本地:干净 origin/main(4a3dddf) bump 后 npm ci / npm test / npm run typecheck 全部 rc=0;android-release-notes.mjs 0.2.175 rc=0。
+B. 验证边界(如实)
+  功能验证在 web 导出页内桩完成;安卓原生上左滑与看板横向翻页是否冲突未在真机验证。
