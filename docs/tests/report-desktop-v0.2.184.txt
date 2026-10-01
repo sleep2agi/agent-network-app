@@ -1,0 +1,8 @@
+desktop v0.2.184 — 设置页重新设计 v1(#427)
+================================================================================
+A. 本版内容(0.2.183 发版提交之后 main 上合入的 PR + 本 PR)
+  #648 设置页 v1:settings-kit 新增 SettingsAccountRow(头像固定 48 槽 + 当前/本机标签 + ⋯)、SettingsRow 图标槽、SettingsGroup highlight;桌面「账号」分组 当前账号/其他账号/安全/本地数据/移除当前账号(末组),行内 4 个按钮收进 ⋯ 菜单;其余分类包进 760px 同宽卡片;手机 ⋯ 走底部操作面板,去掉「管理账号」三级页。行为不变。settings-redesign 21/21;浏览器 72/72(改动前 22/64);test-settings-subpages 155/155;npm test 311/311。
+  本 PR(版本号):0.2.183 → 0.2.184,versionCode 2183 → 2184;release-desktop-auto-update.yml 加 What's new in 0.2.184;重新生成 src/changelog-bundled.ts。
+  本地:干净 origin/main(dca5813) bump 后 npm ci / npm test / npm run typecheck 全部 rc=0;android-release-notes.mjs 0.2.184 rc=0。
+B. 验证边界(如实)
+  页内桩 + 浏览器驱动验证;各分类行内部样式统一是 v2;「登录设备」数量是数据问题(#428),非本版范围。

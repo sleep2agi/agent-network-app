@@ -5,6 +5,10 @@
 export const BUNDLED_RELEASE_BODY: string = [
   "Signed and notarized stable update for macOS (Apple Silicon) and Windows (x64).",
   "",
+  "What's new in 0.2.184:",
+  "- 设置页重新设计（第一版）：账号改成带头像的卡片，当前账号置顶高亮；每个账号的操作收进「⋯」菜单（手机是底部菜单）；「移除当前账号」单独放在最后。",
+  "- 设置里其他分类（本地 Hub、外观、通知、语音、快捷键、关于）统一成同宽的分组卡片，边缘对齐。功能不变。",
+  "",
   "What's new in 0.2.183:",
   "- 任务看板：在桌面端点卡片上的参与人头像，改成贴着头像弹出的下拉菜单（和任务详情里一样，可直接打字搜索、方向键选择、回车勾选、Ctrl/⌘+回车确认、Esc 取消），不再弹出屏幕中间的大窗口；手机端不变。",
   "",
