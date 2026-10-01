@@ -17,6 +17,16 @@ on:
         required: false
         type: boolean
         default: false
+      list_beta_groups:
+        description: Print every beta group's name, isInternalGroup, hasAccessToAllBuilds, publicLinkEnabled and whether it holds this build (no tester emails)
+        required: false
+        type: boolean
+        default: false
+      distribute_to_groups:
+        description: Comma-separated beta group names (or all-internal) to attach this build to once it is VALID. Empty = no change.
+        required: false
+        type: string
+        default: ""
 
 permissions:
   contents: read
@@ -34,6 +44,8 @@ jobs:
           BUILD_NUMBER: ${{ inputs.build_number }}
           ENABLE_PUBLIC_TESTING: ${{ inputs.enable_public_testing }}
           SET_EXPORT_COMPLIANCE_ONLY: ${{ inputs.set_export_compliance_only }}
+          LIST_BETA_GROUPS: ${{ inputs.list_beta_groups }}
+          DISTRIBUTE_TO_GROUPS: ${{ inputs.distribute_to_groups }}
           BUNDLE_ID: top.vansin.agentnetwork
           PUBLIC_LINK_ID: ZvqYnCA9
         shell: bash
@@ -52,7 +64,10 @@ jobs:
           const header = b64url(JSON.stringify({ alg: 'ES256', kid: process.env.APPLE_API_KEY, typ: 'JWT' }));
           const payload = b64url(JSON.stringify({
             iss: process.env.APPLE_API_ISSUER,
-            iat: now,
+            // Same claims as scripts/ios-distribution-signing.mjs (used by
+            // ios-build): back-date iat a few seconds so runner clock skew
+            // can't make Apple see a token issued in the future.
+            iat: now - 5,
             exp: now + 900,
             aud: 'appstoreconnect-v1',
           }));
@@ -67,26 +82,48 @@ jobs:
           chmod 600 "$jwt_file"
           jwt=$(<"$jwt_file")
 
+          # On any non-2xx, print the HTTP status, the endpoint path and Apple's
+          # errors[] (status/code/title/detail) on stderr, then fail. Never echo
+          # request headers or the JWT. Success bodies go to stdout as before.
+          asc_fail() {
+            local method="$1" endpoint="$2" code="$3" body="$4"
+            echo "::error::App Store Connect $method /v1/$endpoint returned HTTP $code" >&2
+            jq -r '.errors[]? | "  apple error: status=\(.status // "") code=\(.code // "") title=\(.title // "") detail=\(.detail // "")"' "$body" >&2 2>/dev/null \
+              || echo '  (response body was not JSON)' >&2
+            rm -f "$body"
+            return 1
+          }
+
           asc_get() {
             local endpoint="$1"
             shift
-            curl --fail-with-body --silent --show-error --get \
+            local body="$RUNNER_TEMP/asc-response.json" code
+            code=$(curl --silent --show-error --get --output "$body" --write-out '%{http_code}' \
               -H "Authorization: Bearer $jwt" \
               -H 'Accept: application/json' \
-              "https://api.appstoreconnect.apple.com/v1/$endpoint" "$@"
+              "https://api.appstoreconnect.apple.com/v1/$endpoint" "$@" || true)
+            case "$code" in
+              2??) cat "$body"; rm -f "$body" ;;
+              *) asc_fail GET "$endpoint" "${code:-000}" "$body" ;;
+            esac
           }
 
           asc_write() {
             local method="$1"
             local endpoint="$2"
             local body="$3"
-            curl --fail-with-body --silent --show-error \
+            local out="$RUNNER_TEMP/asc-response.json" code
+            code=$(curl --silent --show-error --output "$out" --write-out '%{http_code}' \
               --request "$method" \
               -H "Authorization: Bearer $jwt" \
               -H 'Accept: application/json' \
               -H 'Content-Type: application/json' \
               --data "$body" \
-              "https://api.appstoreconnect.apple.com/v1/$endpoint"
+              "https://api.appstoreconnect.apple.com/v1/$endpoint" || true)
+            case "$code" in
+              2??) cat "$out"; rm -f "$out" ;;
+              *) asc_fail "$method" "$endpoint" "${code:-000}" "$out" ;;
+            esac
           }
 
           app_json="$RUNNER_TEMP/app.json"
@@ -209,6 +246,55 @@ jobs:
             asc_get betaGroups --data-urlencode "filter[app]=$app_id" --data-urlencode 'limit=200' > "$groups_json"
           fi
 
+          # Attach this build to named beta groups (or every internal group).
+          # Groups with hasAccessToAllBuilds already receive every build and
+          # Apple rejects a manual attach there, so they are only reported.
+          # An external group still needs Beta App Review before testers see it.
+          if [ -n "$DISTRIBUTE_TO_GROUPS" ]; then
+            processing=$(jq -r '.data[0].attributes.processingState // "UNKNOWN"' "$builds_json")
+            if [ "$processing" != 'VALID' ]; then
+              echo "::error::build $BUILD_NUMBER is $processing, not VALID; refusing to distribute"
+              exit 1
+            fi
+            if [ "$DISTRIBUTE_TO_GROUPS" = 'all-internal' ]; then
+              targets=$(jq -c '[.data[] | select(.attributes.isInternalGroup == true)]' "$groups_json")
+            else
+              targets=$(jq -c --arg want "$DISTRIBUTE_TO_GROUPS" '
+                ($want | split(",") | map(gsub("^\\s+|\\s+$"; "")) | map(select(. != ""))) as $names
+                | [.data[] | select(.attributes.name as $n | $names | index($n))]' "$groups_json")
+              missing=$(jq -r --arg want "$DISTRIBUTE_TO_GROUPS" --argjson found "$targets" '
+                $want | split(",") | map(gsub("^\\s+|\\s+$"; "")) | map(select(. != ""))
+                | map(select(. as $n | ($found | map(.attributes.name) | index($n)) | not)) | join(", ")' <<< '""')
+              if [ -n "$missing" ]; then
+                echo "::error::beta group(s) not found: $missing (dispatch with list_beta_groups=true to see the names)"
+                exit 1
+              fi
+            fi
+            if [ "$(jq 'length' <<< "$targets")" = '0' ]; then
+              echo "::error::no beta group matched distribute_to_groups=$DISTRIBUTE_TO_GROUPS"
+              exit 1
+            fi
+            while IFS= read -r group; do
+              group_id=$(jq -r '.id' <<< "$group")
+              group_name=$(jq -r '.attributes.name' <<< "$group")
+              if [ "$(jq -r '.attributes.hasAccessToAllBuilds // false' <<< "$group")" = 'true' ]; then
+                echo "Group '$group_name' has hasAccessToAllBuilds=true; it already receives build $BUILD_NUMBER."
+                continue
+              fi
+              dist_builds="$RUNNER_TEMP/dist-group-builds.json"
+              asc_get "betaGroups/$group_id/relationships/builds" --data-urlencode 'limit=200' > "$dist_builds"
+              if [ "$(jq --arg build "$build_id" 'any(.data[]?; .id == $build)' "$dist_builds")" = 'true' ]; then
+                echo "Build $BUILD_NUMBER is already in group '$group_name'."
+              else
+                echo "Adding build $BUILD_NUMBER to group '$group_name'."
+                group_link=$(jq -cn --arg id "$build_id" '{data:[{type:"builds",id:$id}]}')
+                asc_write POST "betaGroups/$group_id/relationships/builds" "$group_link" > /dev/null
+              fi
+            done < <(jq -c '.[]' <<< "$targets")
+            asc_get buildBetaDetails --data-urlencode "filter[build]=$build_id" --data-urlencode 'limit=2' > "$details_json"
+            echo "After distribution: internalBuildState=$(jq -r '.data[0].attributes.internalBuildState // "UNKNOWN"' "$details_json") externalBuildState=$(jq -r '.data[0].attributes.externalBuildState // "UNKNOWN"' "$details_json")"
+          fi
+
           reviews_json="$RUNNER_TEMP/reviews.json"
           asc_get betaAppReviewSubmissions --data-urlencode "filter[build]=$build_id" --data-urlencode 'limit=10' > "$reviews_json"
 
@@ -235,6 +321,18 @@ jobs:
               '{id:$id,name:$name,publicLinkEnabled:$publicLinkEnabled,publicLinkId:$publicLinkId,publicLinkLimitEnabled:$publicLinkLimitEnabled,publicLinkLimit:$publicLinkLimit,containsBuild:$containsBuild}' \
               >> "$memberships"
           done < <(jq -c '.data[]' "$groups_json")
+
+          if [ "$LIST_BETA_GROUPS" = 'true' ]; then
+            echo 'Beta groups (names and flags only; testers intentionally omitted):'
+            jq --slurpfile memberships "$memberships" '
+              [.data[] | . as $g | {
+                name: .attributes.name,
+                isInternalGroup: (.attributes.isInternalGroup // false),
+                hasAccessToAllBuilds: (.attributes.hasAccessToAllBuilds // false),
+                publicLinkEnabled: (.attributes.publicLinkEnabled // false),
+                containsBuild: ([$memberships[] | select(.id == $g.id) | .containsBuild] | first // false)
+              }]' "$groups_json"
+          fi
 
           echo 'TestFlight status (credentials and JWT intentionally omitted):'
           jq -n \
