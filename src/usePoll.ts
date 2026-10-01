@@ -2,6 +2,9 @@ import { useEffect } from 'react';
 import { AppState } from 'react-native';
 import { pollBackoffMs, subscribeReconnect } from './connectivity';
 import { nextPollDelay } from './poll-delay';
+import { installConnectivityLifecycle } from './connectivity-lifecycle';
+
+installConnectivityLifecycle();
 
 /**
  * Foreground-only polling (perf: access speed / battery / data).
