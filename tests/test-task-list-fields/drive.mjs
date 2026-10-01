@@ -50,7 +50,10 @@ try {
  await page.getByTestId('task-field-toggle-owner').click();
  await page.getByTestId('task-field-drag-status').dragTo(page.getByTestId('task-field-title'));
  let saved=await page.evaluate(()=>JSON.parse(localStorage.getItem('task_list_fields_v1')));
- ck('drag persisted order',saved[0].id==='status',saved);
+ // Saved prefs always start with 'seq' (task ID column, #563) — hidden here because this fixture Hub lacks requirement_seq —
+ // so positions are relative to it (the drive assumed title was first and had been red since #563; 2026-10-02 sweep).
+ const at=(list,id)=>list.findIndex(f=>f.id===id);
+ ck('drag persisted order',at(saved,'status')===1&&at(saved,'title')===2,saved);
  await page.getByLabel('Close field settings',{exact:true}).last().click();
  ck('visible fields applied',await page.getByTestId('task-column-participants').count()===1&&await page.getByTestId('task-column-owner').count()===0);
  const head=await page.getByTestId('task-column-status').boundingBox(),cell=await page.getByTestId('task-cell-r1-status').boundingBox();
@@ -61,16 +64,18 @@ try {
  await page.getByTestId('task-fields-button').click();
  await page.getByTestId('task-fields-reset').click();
  saved=await page.evaluate(()=>JSON.parse(localStorage.getItem('task_list_fields_v1')));
- ck('reset default order and visibility',saved[0].id==='title'&&saved.find(f=>f.id==='owner').visible&&!saved.find(f=>f.id==='participants').visible);
+ ck('reset default order and visibility',saved[0].id==='seq'&&saved[1].id==='title'&&saved.find(f=>f.id==='owner').visible&&!saved.find(f=>f.id==='participants').visible);
  await page.getByTestId('task-field-drag-owner').focus();
  await page.keyboard.press('ArrowDown');
  saved=await page.evaluate(()=>JSON.parse(localStorage.getItem('task_list_fields_v1')));
- ck('keyboard reorder',saved[2].id==='owner');
+ ck('keyboard reorder',saved[3].id==='owner');
  await page.getByTestId('task-fields-reset').click();
  await page.evaluate(()=>window.switchLanguage('zh'));
  ck('live translation',await page.getByText('恢复默认',{exact:true}).count()===1);
  await page.screenshot({path:out+'/desktop-fields-zh.png'});
  await page.getByTestId('task-fields-search').focus();await page.keyboard.press('Escape');
+ // Esc closes on keyup (escape-close.ts, #639); let React commit the close before counting.
+ await page.waitForTimeout(200);
  ck('escape closes popover',await page.getByTestId('task-fields-popover').count()===0);
  // 桌面列表单击格子 = 选中格(多维表格式就地编辑);进详情走标题格悬停出现的「展开」。
  await page.getByTestId('req-row-r1').hover();await page.getByTestId('req-row-open-r1').click();
@@ -118,10 +123,10 @@ try {
  await fold.getByTestId('task-fields-button').tap();
  await fold.getByTestId('task-field-down-title').tap();
  let foldPrefs=await fold.evaluate(()=>JSON.parse(localStorage.getItem('task_list_fields_v1')));
- ck('touch down button reorders',foldPrefs[1].id==='title');
+ ck('touch down button reorders',foldPrefs[2].id==='title');
  await fold.getByTestId('task-field-up-title').tap();
  foldPrefs=await fold.evaluate(()=>JSON.parse(localStorage.getItem('task_list_fields_v1')));
- ck('touch up button reorders and first boundary disabled',foldPrefs[0].id==='title'&&await fold.getByTestId('task-field-up-title').isDisabled());
+ ck('touch up button reorders and first boundary disabled',foldPrefs[1].id==='title'&&await fold.getByTestId('task-field-up-title').isDisabled());
  await fold.getByTestId('task-field-toggle-participants').tap();
  const fp=await fold.getByTestId('task-fields-popover').boundingBox(),up=await fold.getByTestId('task-field-up-owner').boundingBox();
  ck('fold popover fits and reorder targets44px',fp.x>=0&&fp.x+fp.width<=1000&&fp.y+fp.height<=700&&up.width>=44&&up.height>=44,{fp,up});

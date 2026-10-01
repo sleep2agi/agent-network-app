@@ -31,7 +31,10 @@ try{for(const[name,width,height]of[['desktop',1200,800],['phone',390,844]]){
  await page.getByTestId('tasks-view-board').click();await page.getByTestId('req-card-r1').waitFor();
  ck(name+' card count includes distinct sync source',await page.getByTestId('req-card-r1').getByTestId('req-issue-count-r1').getByText('2',{exact:true}).count()===1);
  await page.screenshot({path:`/output/${name}-board.png`});
- await page.getByTestId('req-card-r1').click();await page.getByTestId('req-issue-add').click();
+ await page.getByTestId('req-card-r1').click();await page.getByTestId('req-detail').waitFor();
+ // GitHub issues live inside the detail's 「更多」 disclosure since #510 — open it (the drive had been red since; 2026-10-02 sweep).
+ if(await page.getByTestId('req-more').count()===0)await page.getByTestId('req-more-toggle').click();
+ await page.getByTestId('req-issue-add').click();
  await page.getByTestId('req-issue-input').fill('not an issue');await page.getByTestId('req-issue-confirm').click();
  ck(name+' invalid local input never writes',writes.length===0&&await page.getByTestId('req-issue-error').isVisible());
  await page.getByTestId('req-issue-input').fill('acme/widgets#13');await page.getByTestId('req-issue-confirm').click();
@@ -54,6 +57,8 @@ try{for(const[name,width,height]of[['desktop',1200,800],['phone',390,844]]){
  ck(name+' unlink preserves source identity',row.issues.length===1&&row.external_ref===original.external_ref&&row.external_url===original.external_url&&Object.keys(writes[2].body).join()==='issues');
  await page.getByTestId('req-detail-close').click();
  const list=page.getByRole('tab',{name:'列表',exact:true});await list.click();
+ // Desktop list: the GitHub column is off by default since list field settings (#513) — turn it on the way a user does.
+ if(await page.getByTestId('task-fields-button').count()){await page.getByTestId('task-fields-button').click();await page.getByTestId('task-field-toggle-issues').click();await page.keyboard.press('Escape');await page.waitForTimeout(200);}
  const target=page.getByTestId('req-row-r1');
  ck(name+' list count visible',await target.getByTestId('req-issue-count-r1').getByText('2',{exact:true}).count()===1);
  await page.screenshot({path:`/output/${name}-list.png`});

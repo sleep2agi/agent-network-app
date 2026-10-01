@@ -1,6 +1,6 @@
 // Actual web export, isolated placeholder Hub bridge. No production requests.
 import { mkdirSync, writeFileSync } from 'node:fs';
-import { serveExport, initScript, ANDROID_UA } from '../test-layout-sweep/harness.mjs';
+import { serveExport, initScript, ANDROID_UA, openStubWindow } from '../test-layout-sweep/harness.mjs';
 const { chromium } = await import(process.env.PLAYWRIGHT_MODULE || 'playwright');
 const out = process.env.OUT || '/output';
 mkdirSync(out, { recursive: true });
@@ -39,24 +39,31 @@ try {
     await page.screenshot({ path: `${out}/${name}-chat-zh.png` });
     if (name === 'phone') await page.getByRole('button', { name: '返回', exact: true }).click();
     await page.getByRole('tab', { name: '设置', exact: true }).click();
-    if (name === 'phone') await page.getByTestId('settings-row-appearance').click();
-    else await page.getByRole('button', { name: '设置分类 外观', exact: true }).click();
-    await page.getByTestId('settings-language-en').click();
-    ck(`${name}: settings control switches immediately without reload`, await page.getByText('Language', { exact: true }).count() > 0 && await page.evaluate(() => window.__languagePageMarker === true));
+    // Desktop: 设置 is its own window (#483) — the stub records the request, the drive opens it as a second page of the
+    // same context (shared localStorage, like two real windows). Phone: the settings page in place.
+    const sp = name === 'phone' ? page : await openStubWindow(page, 'settings', []);
+    if (!sp) throw new Error('desktop: 设置 did not open its window');
+    if (name === 'phone') await sp.getByTestId('settings-row-appearance').click();
+    else await sp.getByRole('button', { name: '设置分类 外观', exact: true }).click();
+    await sp.getByTestId('settings-language-en').click();
+    await page.waitForTimeout(300);
+    ck(`${name}: settings control switches immediately without reload`, await sp.getByText('Language', { exact: true }).count() > 0 && await page.evaluate(() => window.__languagePageMarker === true)
+      && (name === 'phone' || await page.getByRole('button', { name: 'Send', exact: true }).count() > 0));
     // Playwright scrolls nested containers to the clicked radio row. Capture the
     // complete appearance page from its top, not an arbitrary auto-scroll offset.
-    await page.evaluate(() => { window.scrollTo(0, 0); document.querySelectorAll('*').forEach(el => { if (el.scrollTop) el.scrollTop = 0; }); });
-    const geometry = await page.getByTestId('settings-language').evaluate(el => [...el.querySelectorAll('[data-testid$="-label"]')].map(label => {
+    await sp.evaluate(() => { window.scrollTo(0, 0); document.querySelectorAll('*').forEach(el => { if (el.scrollTop) el.scrollTop = 0; }); });
+    const geometry = await sp.getByTestId('settings-language').evaluate(el => [...el.querySelectorAll('[data-testid$="-label"]')].map(label => {
       const b = label.getBoundingClientRect();
       return { text: label.textContent, left: b.left, right: b.right, height: b.height, overflow: label.scrollWidth > label.clientWidth + 1 };
     }));
     ck(`${name}: language labels align and fit`, geometry.length === 3 && Math.max(...geometry.map(b => b.left)) - Math.min(...geometry.map(b => b.left)) <= 1 && geometry.every(b => !b.overflow && b.left >= 0 && b.right <= width), geometry);
-    await page.screenshot({ path: `${out}/${name}-settings-en.png` });
-    await page.getByTestId('settings-language-system').click();
-    ck(`${name}: Follow system resolves en-US`, await page.evaluate(() => localStorage.getItem('anet.language.v1') === 'system') && await page.getByText('Language', { exact: true }).count() > 0);
-    await page.getByTestId('settings-language-zh').click();
-    await page.evaluate(() => { window.scrollTo(0, 0); document.querySelectorAll('*').forEach(el => { if (el.scrollTop) el.scrollTop = 0; }); });
-    await page.screenshot({ path: `${out}/${name}-settings-zh.png` });
+    await sp.screenshot({ path: `${out}/${name}-settings-en.png` });
+    await sp.getByTestId('settings-language-system').click();
+    ck(`${name}: Follow system resolves en-US`, await sp.evaluate(() => localStorage.getItem('anet.language.v1') === 'system') && await sp.getByText('Language', { exact: true }).count() > 0);
+    await sp.getByTestId('settings-language-zh').click();
+    await sp.evaluate(() => { window.scrollTo(0, 0); document.querySelectorAll('*').forEach(el => { if (el.scrollTop) el.scrollTop = 0; }); });
+    await sp.screenshot({ path: `${out}/${name}-settings-zh.png` });
+    if (sp !== page) await sp.close();
     await page.reload();
     await page.getByRole('tab', { name: '设置', exact: true }).waitFor();
     ck(`${name}: explicit Chinese preference survives reload`, await page.evaluate(() => localStorage.getItem('anet.language.v1') === 'zh'));

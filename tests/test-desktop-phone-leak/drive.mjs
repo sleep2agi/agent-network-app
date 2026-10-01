@@ -92,9 +92,11 @@ const go = async (page, screen) => { await page.evaluate((s) => window.__anetLay
 const box = async (page, sel) => ((await page.locator(sel).count()) ? page.locator(sel).first().boundingBox() : null);
 const modalOpen = (page) => page.evaluate(() => [...document.querySelectorAll('[aria-modal="true"]')].some(el => el.getBoundingClientRect().height > 0));
 const menuPanel = (page) => page.evaluate(() => {
-  // The message menu's panel: the outermost ancestor of its 复制消息 item that is still smaller than the
+  // The message menu's panel: the outermost ancestor of its 复制 item that is still smaller than the
   // window (the next one up is the full-window backdrop) — the anchored card on desktop, the sheet on touch.
-  const item = [...document.querySelectorAll('[aria-modal="true"] [aria-label="复制消息"]')].pop();
+  // (The menu item's label is 「复制」 since the i18n pass, #507 — 「复制消息」 stayed on the hover button only;
+  // the drive looked for the old label and reported 「no menu」 although the menu opened. 2026-10-02 sweep.)
+  const item = [...document.querySelectorAll('[aria-modal="true"] [aria-label="复制"]')].pop();
   if (!item) return null;
   let el = item;
   while (el.parentElement) {
@@ -137,12 +139,16 @@ const openChat = async (page) => {
   if (await modalOpen(page)) await closeModal(page);
 
   // msg-right
+  // The menu is anchored at the point and slid up to fit the window: ChatScreen clamps top to
+  // [8, windowHeight − 300] (the menu's height budget). A bubble in the lower ~300px of the window gets a clamped
+  // menu — the drive used to assume the reply bubble sat higher (it no longer does since the composer card grew).
+  const anchoredTop = (y) => Math.max(8, Math.min(y, L.h - 300));
   const rx = tb.x + 30, ry = tb.y + tb.height / 2;
   await replyText.click({ button: 'right', position: { x: 30, y: tb.height / 2 } });
   await page.waitForTimeout(400);
   const rp = await menuPanel(page);
   await page.screenshot({ path: `${OUT}/${tag}-msg-right.png` });
-  check(tag, 'msg-right: right-click opens the anchored menu at the cursor (±2px)', !!rp && Math.abs(rp.x - rx) <= 2 && Math.abs(rp.y - ry) <= 2, rp ? `menu at (${r1(rp.x)},${r1(rp.y)}) cursor (${r1(rx)},${r1(ry)})` : 'no menu');
+  check(tag, 'msg-right: right-click opens the anchored menu at the cursor (±2px; top slid up to fit the window)', !!rp && Math.abs(rp.x - rx) <= 2 && Math.abs(rp.y - anchoredTop(ry)) <= 2, rp ? `menu at (${r1(rp.x)},${r1(rp.y)}) cursor (${r1(rx)},${r1(ry)}) expected top ${r1(anchoredTop(ry))}` : 'no menu');
   check(tag, 'msg-right: no 「选择文本」 (mouse selects in place)', !!rp && !rp.labels.includes('选择文本'), rp ? rp.labels.join('/') : '');
   await closeModal(page);
 
@@ -174,7 +180,7 @@ const openChat = async (page) => {
     await page.waitForTimeout(400);
     const mp = await menuPanel(page);
     await page.screenshot({ path: `${OUT}/${tag}-msg-more.png` });
-    check(tag, 'msg-hover: ⋯ opens the same anchored menu right under the button (left ±1, top = bottom + 4 ±1)', !!mp && Math.abs(mp.x - moreB.x) <= 1 && Math.abs(mp.y - (moreB.y + moreB.height + 4)) <= 1, mp ? `menu (${r1(mp.x)},${r1(mp.y)}) ⋯ (${r1(moreB.x)},${r1(moreB.y + moreB.height)})` : 'no menu');
+    check(tag, 'msg-hover: ⋯ opens the same anchored menu right under the button (left ±1, top = bottom + 4 ±1, slid up to fit)', !!mp && Math.abs(mp.x - moreB.x) <= 1 && Math.abs(mp.y - anchoredTop(moreB.y + moreB.height + 4)) <= 1, mp ? `menu (${r1(mp.x)},${r1(mp.y)}) ⋯ (${r1(moreB.x)},${r1(moreB.y + moreB.height)}) expected top ${r1(anchoredTop(moreB.y + moreB.height + 4))}` : 'no menu');
     if (mp) { measure('⋯ 打开的菜单', '菜单左缘 − ⋯ 左缘', r1(mp.x - moreB.x), '0'); measure('⋯ 打开的菜单', '菜单顶边 − ⋯ 底边', r1(mp.y - moreB.y - moreB.height), '4'); }
     await closeModal(page);
   } else check(tag, 'msg-hover: ⋯ opens the anchored menu', false, 'no hover buttons');
@@ -186,7 +192,7 @@ const openChat = async (page) => {
   await page.waitForTimeout(400);
   const kp = await menuPanel(page);
   await page.screenshot({ path: `${OUT}/${tag}-msg-key.png` });
-  check(tag, 'msg-key: Shift+F10 on a focused bubble opens the menu inside that bubble', focused && !!kp && !!bb && kp.x >= bb.x && kp.x <= bb.x + bb.width && kp.y >= bb.y && kp.y <= bb.y + bb.height, kp && bb ? `menu (${r1(kp.x)},${r1(kp.y)}) bubble [${r1(bb.x)},${r1(bb.y)} ${r1(bb.width)}×${r1(bb.height)}] focused=${focused}` : `focused=${focused} menu=${!!kp}`);
+  check(tag, 'msg-key: Shift+F10 on a focused bubble opens the menu inside that bubble (top slid up to fit the window)', focused && !!kp && !!bb && kp.x >= bb.x && kp.x <= bb.x + bb.width && ((kp.y >= bb.y && kp.y <= bb.y + bb.height) || Math.abs(kp.y - (L.h - 300)) <= 1), kp && bb ? `menu (${r1(kp.x)},${r1(kp.y)}) bubble [${r1(bb.x)},${r1(bb.y)} ${r1(bb.width)}×${r1(bb.height)}] focused=${focused}` : `focused=${focused} menu=${!!kp}`);
   await closeModal(page);
 
   // row-right / row-key
