@@ -13,6 +13,9 @@ const node = readFileSync(new URL('./NodeDetailScreen.tsx', import.meta.url), 'u
 // Decision comes from the tested helper, and desktop is still "layout === 'desktop'".
 ck('App decides via chooseAppLayout', app.includes('chooseAppLayout({'));
 ck('desktop flag is the helper\'s desktop result', app.includes("const desktop = layout === 'desktop';"));
+// iPad landscape (#ipad-landscape): App feeds the helper height + Platform.isPad so rotation re-decides.
+ck('App passes height and Platform.isPad to chooseAppLayout', /chooseAppLayout\(\{[\s\S]*?\n    height,\n    isPad: Platform\.OS === 'ios' && Platform\.isPad,\n  \}\);/.test(app));
+ck('App reads height from useWindowDimensions (re-renders on rotation)', app.includes('const { width, height, fontScale } = useWindowDimensions();'));
 ck('no second inline desktop threshold left in App', !/const desktop = tauriDesktop && width/.test(app));
 
 // Phone branch unchanged: the phone ChatScreen / NodeDetailScreen get none of the new props.

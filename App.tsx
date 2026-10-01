@@ -350,19 +350,22 @@ function AppRoot() {
   const { width, height, fontScale } = useWindowDimensions();
   const tauriDesktop = Platform.OS === 'web' && !!(globalThis as any).__TAURI_INTERNALS__;
   // Layout choice lives in src/wide-layout.ts (pure + tested). Desktop is still exactly
-  // `tauriDesktop && width >= 860`; Android at ≥ 700 dp (unfolded foldables, tablets)
-  // gets list + detail; everything else is the phone stack as before.
+  // `tauriDesktop && width >= 860`; Android at ≥ 700 dp (unfolded foldables, tablets) and
+  // iPad in landscape (≥ 1024 pt, width > height) get list + detail; everything else is
+  // the phone stack as before. Rotation changes width/height, so this follows the device.
   const layout = chooseAppLayout({
     os: Platform.OS,
     tauri: tauriDesktop,
     userAgent: Platform.OS === 'web' ? String((globalThis as any).navigator?.userAgent ?? '') : '',
     width,
+    height,
+    isPad: Platform.OS === 'ios' && Platform.isPad,
   });
   const desktop = layout === 'desktop';
   // Fold/unfold remounts the chat / node screens at a new tree position; bump the
   // handoff generation in this render (before their unmount cleanup runs) so the
   // unsent draft and the node tab are carried over. See src/layout-handoff.ts.
-  // Only Android fold/unfold (a switch into or out of 'twoPane') bumps: the desktop
+  // Only Android fold/unfold or iPad rotation (a switch into or out of 'twoPane') bumps: the desktop
   // ⇄ phone resize at 860 keeps its existing behaviour.
   const lastLayout = useRef(layout);
   if (lastLayout.current !== layout) {

@@ -29,6 +29,23 @@
  */
 export const ANDROID_TWO_PANE_MIN_WIDTH = 700;
 
+/**
+ * iPad switches to list + detail at this window width (pt) — and only when the window is
+ * landscape (width > height).
+ *
+ * Why not reuse Android's 700:
+ * - The owner asked for portrait to stay exactly as it is (the phone stack) and landscape to
+ *   split. iPad portrait widths are 744 (mini) / 768–834 (10–11") / 1024 (12.9"/13"), so a
+ *   width threshold alone cannot do that — 12.9" portrait is as wide as 11" landscape. Hence
+ *   the orientation check.
+ * - Landscape full-screen widths: 1024 (9.7"), 1080 (10.2"), 1133 (mini 6), 1180 (10.9" Air),
+ *   1194/1210 (11" Pro), 1366 (12.9"/13"); every one is ≥ 1024. Split View / Slide Over / Stage Manager windows
+ *   narrower than that stay on the phone stack, which is what they were before.
+ * - iPhones never take this branch (Platform.isPad is false), so an iPhone held landscape
+ *   (≈ 844–932 pt) keeps the phone stack it has today.
+ */
+export const IPAD_TWO_PANE_MIN_WIDTH = 1024;
+
 /** Existing Tauri desktop threshold (was inline in App.tsx as `width >= 860`). */
 export const TAURI_DESKTOP_MIN_WIDTH = 860;
 
@@ -43,6 +60,10 @@ export interface LayoutInput {
   userAgent?: string;
   /** useWindowDimensions().width, in dp. */
   width: number;
+  /** useWindowDimensions().height, in dp. Only the iPad branch reads it (landscape check). */
+  height?: number;
+  /** iOS `Platform.isPad` (false/omitted everywhere else). */
+  isPad?: boolean;
 }
 
 /**
@@ -54,8 +75,22 @@ export interface LayoutInput {
 export const isAndroidLike = (os: string, userAgent = ''): boolean =>
   os === 'android' || (os === 'web' && /\bAndroid\b/i.test(userAgent));
 
-export function chooseAppLayout({ os, tauri, userAgent = '', width }: LayoutInput): AppLayout {
+/**
+ * iPad native (`Platform.isPad`), or the web build with an iPad UA. The UA half exists for the
+ * web-export harness (Playwright's iPad descriptors send `iPad`); real iPadOS Safari sends a
+ * Mac UA and stays on the web phone layout as before.
+ */
+export const isIPadLike = (os: string, isPad = false, userAgent = ''): boolean =>
+  (os === 'ios' && isPad) || (os === 'web' && /\biPad\b/.test(userAgent));
+
+export function chooseAppLayout({ os, tauri, userAgent = '', width, height, isPad = false }: LayoutInput): AppLayout {
   if (isAndroidLike(os, userAgent)) return width >= ANDROID_TWO_PANE_MIN_WIDTH ? 'twoPane' : 'phone';
+  // iPad: landscape full-screen splits, portrait keeps the phone stack. Rotation changes
+  // useWindowDimensions, so App.tsx re-runs this and the layout follows the device.
+  if (isIPadLike(os, isPad, userAgent)) {
+    const landscape = typeof height === 'number' && width > height;
+    return landscape && width >= IPAD_TWO_PANE_MIN_WIDTH ? 'twoPane' : 'phone';
+  }
   // Unchanged from before this module existed: `tauriDesktop && width >= 860`.
   if (os === 'web' && tauri && width >= TAURI_DESKTOP_MIN_WIDTH) return 'desktop';
   return 'phone';
