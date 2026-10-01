@@ -44,6 +44,8 @@ console.log('# M9 人员选择器');
   ck('行副标题不再拼 person.id', !/· \{person\.id\}/.test(picker) && picker.includes('subtitle(person)'));
   ck('我那行标「（我）」(tasks.copy.62)', picker.includes("isMe(person) ? tr('tasks.copy.62'"));
   ck('参与人模式才有「加我」', /mode === 'participants' \? candidates\.find/.test(picker) && picker.includes('testID="people-add-me"'));
+  ck('「已选 N 人」跟着当前勾选(draft)走', picker.includes("typeof hint === 'function' ? hint(draft.length) : hint"));
+  ck('参与人说明不再传已保存的数', !/participantsPickHint', \{ v0: (humanParticipants\(|value\.length)/.test(src('./RequirementBoard.tsx') + src('./TaskCreateDialog.tsx')) && src('./RequirementBoard.tsx').includes("(n: number) => tr('tasks.participantsPickHint', { v0: n })"));
   ck('看板的选择器把 meId 传进去', /kinds=\{assignFor\.mode === 'owner'[^\n]*\n\s*meId=\{meId\}/.test(src('./RequirementBoard.tsx')));
 }
 

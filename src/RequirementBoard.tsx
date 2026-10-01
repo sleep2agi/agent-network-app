@@ -1423,7 +1423,7 @@ function ScopedRequirementBoard({ cfg, desktop, dispatch, onOpenVoiceSettings, s
           kinds={assignFor.mode === 'owner' ? roleKinds('owner', hasRoles(assignItem)) : ['user']}
           meId={meId}
           title={assignFor.mode === 'owner' ? tr('tasks.copy.65') : tr('tasks.copy.66')}
-          hint={assignFor.mode === 'owner' ? (hasRoles(assignItem) ? tr('tasks.copy.109') : undefined) : tr('tasks.participantsPickHint', { v0: humanParticipants(assignItem).length })}
+          hint={assignFor.mode === 'owner' ? (hasRoles(assignItem) ? tr('tasks.copy.109') : undefined) : (n: number) => tr('tasks.participantsPickHint', { v0: n })}
           people={people}
           selected={assignFor.mode === 'owner' ? (assignItem.owner ? [assignItem.owner] : []) : humanParticipants(assignItem)}
           onClose={() => setAssignFor(null)}

@@ -200,10 +200,13 @@ for (const [name, V] of Object.entries(VIEWPORTS)) {
         // RN-web 不渲染 accessibilityState 的 aria-checked;说明里的「已选 N 人」又是看板传进来的已保存数。
         // 看行尾 ✓ 的不透明度(没选 = opacity 0)。
         const picked = () => page.evaluate(() => { const row = document.querySelector('[data-testid="person-user:u_tester"]'); const mark = row && [...row.querySelectorAll('*')].find(e => e.textContent === '✓' && !e.children.length); return mark ? getComputedStyle(mark).opacity === '1' : null; });
+        const count = async () => Number(((await page.locator(tid('people-hint')).first().innerText().catch(() => '')).match(/已选 (\d+) 人/) || [])[1] ?? -1);
+        const countBefore = await count();
         const before = await picked();
         if (addMe) await press(page.locator(tid('people-add-me')).first());
         await page.waitForTimeout(300);
         const after = await picked();
+        const countAfter = await count();
         await shot('picker-participants-added');
         record(where, 'participants: 加我', {
           present: !!addMe,
@@ -212,8 +215,9 @@ for (const [name, V] of Object.entries(VIEWPORTS)) {
           insidePanel: inside(addMe, panel),
           tapTarget: !!addMe && addMe.height >= 32,
           checksMe: before === false && after === true,
+          liveCount: countBefore === 1 && countAfter === 2,
           goneAfter: (await page.locator(tid('people-add-me')).count()) === 0,
-        }, { before, after });
+        }, { before, after, countBefore, countAfter });
         await press(page.locator(tid('people-cancel')).first());
         await page.waitForTimeout(300);
       });

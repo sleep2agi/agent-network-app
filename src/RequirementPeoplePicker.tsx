@@ -24,7 +24,8 @@ type Props = {
   kinds?: readonly ('user' | 'node')[];
   /** 标题 / 说明覆盖(负责 Agent 用)。 */
   title?: string;
-  hint?: string;
+  /** 函数 = 跟着当前勾选数变(「已选 N 人」),不要传已保存的数。 */
+  hint?: string | ((selected: number) => string);
   /** 我的 user id:排第一、标「（我）」,参与人模式给「加我」。省略 = 用任务看板读到的那个。 */
   meId?: string | null;
 };
@@ -89,7 +90,7 @@ function Picker({ networkId, mode, people: allPeople, selected, onConfirm, onClo
           <Text style={[styles.title, styles.flex]}>{title || (mode === 'owner' ? tr('tasks.copy.65') : tr('tasks.copy.66'))}</Text>
           {canAddMe && me ? <Pressable accessibilityRole="button" accessibilityLabel={tr('tasks.peopleAddMeA11y')} testID="people-add-me" onPress={() => setDraft(prev => togglePerson(prev, me, mode))} style={styles.addMe}><Text style={styles.action}>{tr('tasks.peopleAddMe')}</Text></Pressable> : null}
         </View>
-        <Text style={styles.muted}>{hint || (mode === 'owner' ? tr('tasks.copy.67') : tr('tasks.copy.68', { v0: draft.length }))}</Text>
+        <Text style={styles.muted} testID="people-hint">{(typeof hint === 'function' ? hint(draft.length) : hint) || (mode === 'owner' ? tr('tasks.copy.67') : tr('tasks.copy.68', { v0: draft.length }))}</Text>
         <TextInput accessibilityLabel={tr('tasks.copy.69')} placeholder={tr('tasks.copy.70')} placeholderTextColor={colors.textMuted} value={query} onChangeText={setQuery} style={styles.input} testID="people-search" />
         <ScrollView keyboardShouldPersistTaps="handled">
           {missing.map(person => <Pressable key={personKey(person)} accessibilityRole="button" onPress={() => setDraft(prev => prev.filter(row => personKey(row) !== personKey(person)))} style={styles.row}>

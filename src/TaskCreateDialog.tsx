@@ -160,7 +160,7 @@ export function ParticipantsField({ value, people, networkId, loading, onLoadPeo
       mode="participants"
       kinds={['user']}
       title={tr('tasks.copy.66')}
-      hint={tr('tasks.participantsPickHint', { v0: value.length })}
+      hint={n => tr('tasks.participantsPickHint', { v0: n })}
       people={people}
       selected={value}
       onClose={() => setOpen(false)}
