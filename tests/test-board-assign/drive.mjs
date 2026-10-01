@@ -147,7 +147,8 @@ for (const [name, V] of Object.entries(VIEWPORTS)) {
         await openMenu('r1');
         const menu = await bb(page, tid('task-menu'));
         const openItem = await bb(page, tid('task-menu-open')), mOwner = await bb(page, tid('task-menu-assign-owner')), mPart = await bb(page, tid('task-menu-assign-participants'));
-        const firstMove = await bb(page, tid('task-menu-move-pool'));
+        // 手机菜单的三个「移到」换成了「改状态…」(test-phone-quick-status)。
+        const firstMove = await bb(page, tid(V.ua ? 'task-menu-status' : 'task-menu-move-pool'));
         measure(where, '菜单', menu); measure(where, '菜单 指派负责人…', mOwner); measure(where, '菜单 设置参与人…', mPart);
         record(where, 'menu items (editable card)', {
           present: !!mOwner && !!mPart,

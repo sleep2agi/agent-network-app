@@ -134,6 +134,7 @@ export const SWIPE_FILES: Readonly<Record<string, { alternative: RegExp | null; 
   'src/NodePicker.tsx': { alternative: /testID="node-picker-backdrop"[^>]*onPress=\{onClose\}/, why: '拖把手关闭只在手机 sheet;点遮罩 / Esc 关闭,宽窗口是居中对话框' },
   'src/TwoPaneDivider.tsx': { alternative: null, why: '只在安卓双栏渲染;拖分隔条在鼠标上也是拖' },
   'src/ChatScreen.tsx': { alternative: null, why: '桌面输入框上沿的拖高把手 —— 鼠标拖动本来就是桌面手势' },
+  'src/TaskSwipeRow.tsx': { alternative: null, why: '只在手机(窄屏 + 触屏,RequirementBoard swipeable)挂;同样的改状态桌面走右键菜单「移到 …」,手机也能长按「改状态…」' },
   'src/SplitEditorParts.tsx': { alternative: /accessibilityRole="adjustable"[\s\S]*onAccessibilityAction=/, why: '规则文件 / 任务描述全屏的左右分栏分隔条:鼠标拖动本来就是桌面手势;读屏 / 键盘按步调比例,双击回 50/50' },
 };
 

@@ -16,6 +16,8 @@ mock.module('react-native', () => ({
   Platform: { OS: 'android', select: (o: any) => o.android ?? o.default },
   AppState: { addEventListener: () => ({ remove() {} }), currentState: 'active' },
   useWindowDimensions: () => ({ width: 390, height: 844, scale: 1, fontScale: 1 }),
+  // 手机行的左滑(TaskSwipeRow):手势本身由 drive.mjs 在浏览器里拖;这里直接调 onOpenChange 打开。
+  PanResponder: { create: () => ({ panHandlers: {} }) },
 }));
 mock.module('./src/ui-text', () => ({ Text: 'Text', TextInput: 'TextInput' }));
 mock.module('./src/icons', () => ({ Ionicons: () => null }));
@@ -354,17 +356,36 @@ test('failed move reverts the card and allows a retry', async () => {
   await act(async () => reply({ ...card, column: 'doing' }));
 });
 
-test('phone long-press menu moves a card without opening details', async () => {
+test('phone long-press menu 改状态… moves a card without opening details', async () => {
   await mount();
   expect(byId('req-card-r2').props.onLongPress).toBeDefined();
   await act(async () => byId('req-card-r2').props.onLongPress({ nativeEvent: { pageX: 100, pageY: 200 } }));
   expect(byId('task-menu')).toBeTruthy();
-  expect(byId('task-menu-move-pool').props.disabled).toBe(true);
-  await act(async () => byId('task-menu-move-done').props.onPress());
+  // 手机菜单:三个「移到」换成「改状态…」「改优先级…」两个选择器。
+  expect(renderer.root.findAllByProps({ testID: 'task-menu-move-done' })).toHaveLength(0);
+  expect(byId('task-menu-priority').props.disabled).toBe(false);
+  await act(async () => byId('task-menu-status').props.onPress());
+  await act(async () => byId('quick-status-opt-done').props.onPress());
   expect(requests).toEqual([{ network: 'a', id: 'r2', column: 'done' }]);
   expect(renderer.root.findAllByProps({ testID: 'req-detail' })).toHaveLength(0);
   expect(texts('req-count-done')).toContain('1');
   await act(async () => reply({ ...card, id: 'r2', name: '另一个需求', column: 'done' }));
+});
+
+test('phone swipe 完成 saves {column} at once; undo puts it back', async () => {
+  await mount();
+  const row = renderer.root.find((n: any) => n.props.id === 'r2' && typeof n.props.onOpenChange === 'function');
+  expect(row.props.actions).toEqual(['doing', 'done', 'more']);
+  await act(async () => row.props.onOpenChange(true));
+  await act(async () => byId('task-swipe-done-r2').props.onPress({ nativeEvent: { pageX: 300, pageY: 200 } }));
+  expect(requests).toEqual([{ network: 'a', id: 'r2', column: 'done' }]);
+  expect(renderer.root.findAllByProps({ testID: 'req-detail' })).toHaveLength(0);
+  expect(texts('quick-undo')).toContain('已移到「完成」');
+  await act(async () => reply({ ...card, id: 'r2', name: '另一个需求', column: 'done' }));
+  await act(async () => byId('quick-undo-button').props.onPress());
+  expect(requests).toEqual([{ network: 'a', id: 'r2', column: 'done' }, { network: 'a', id: 'r2', column: 'pool' }]);
+  expect(renderer.root.findAllByProps({ testID: 'quick-undo' })).toHaveLength(0);
+  await act(async () => reply({ ...card, id: 'r2', name: '另一个需求', column: 'pool' }));
 });
 
 test('switching network closes old details and ignores its late mutation response', async () => {
