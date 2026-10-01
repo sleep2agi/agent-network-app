@@ -2,8 +2,9 @@ import { t as tr } from './i18n';
 import { useTranslation } from './i18n-react';
 import { taskText } from './i18n-tasks';
 // 任务卡片的浮动菜单:桌面右键 / 键盘菜单键,手机长按。同一份项目:查看详情 · 指派负责人… · 设置参与人… ·
-// 移到 需求池/进行中/完成(桌面);手机长按把三个「移到」换成「改状态…」「改优先级…」两个选择器(task-quick-status.ts),
-// 参与人的卡只有改状态能点。指派两项:旧 Hub 的卡不出现;卡对我只读时灰掉(Hub 不许参与人改人,task-assign.ts)。
+// 移到 需求池/进行中/完成 + 优先级 P0…P3(桌面,当前那一档打 ✓;审计 M2:以前桌面右键没有改优先级,只有手机能改);
+// 手机长按把三个「移到」和四档优先级换成「改状态…」「改优先级…」两个选择器(task-quick-status.ts),
+// 参与人的卡只有改状态能点(优先级在桌面也一样灰掉)。指派两项:旧 Hub 的卡不出现;卡对我只读时灰掉(Hub 不许参与人改人,task-assign.ts)。
 // 定位复用会话行菜单的规则(agent-row-menu.ts anchorRowMenu / rowMenuMetrics):一个角贴着按下点,
 // 放不下就翻边、夹进屏幕。Modal 是为了安卓返回键(onRequestClose)与 web 的 Esc。
 import { useState } from 'react';
@@ -16,11 +17,16 @@ import { elevated } from './elevation';
 import { uiScale } from './ui-scale';
 import { useModalSafePadding } from './safe-area-runtime';
 import { anchorRowMenu, rowMenuHeight, rowMenuMetrics } from './agent-row-menu';
-import { REQ_COLUMN_LABEL, REQ_COLUMNS, type ReqColumn } from './requirements-model';
+import { REQ_COLUMN_LABEL, REQ_COLUMNS, type ReqColumn, type ReqPriority } from './requirements-model';
+import { priorityLabel } from './task-priority';
 
-export interface TaskMenuTarget { id: string; title: string; column: ReqColumn; x: number; y: number; assign: 'on' | 'locked' | 'hidden'; quick: { status: 'on' | 'locked'; priority: 'on' | 'locked' } }
+export interface TaskMenuTarget {
+  id: string; title: string; column: ReqColumn; x: number; y: number; assign: 'on' | 'locked' | 'hidden'; quick: { status: 'on' | 'locked'; priority: 'on' | 'locked' };
+  /** 当前优先级与可选档(priorityChoices:旧 Hub 没有 P3,已经是 P3 的卡仍列出来)。桌面菜单直接列这几档。 */
+  priority: ReqPriority; priorities: readonly ReqPriority[];
+}
 
-export default function TaskCardMenu({ target, touch, busy, onOpen, onAssign, onMove, onQuick, onClose }: {
+export default function TaskCardMenu({ target, touch, busy, onOpen, onAssign, onMove, onQuick, onPriority, onClose }: {
   target: TaskMenuTarget | null;
   /** 手机长按:44 行高 + 淡遮罩;桌面右键:紧凑行高 + 透明遮罩。 */
   touch: boolean;
@@ -31,6 +37,8 @@ export default function TaskCardMenu({ target, touch, busy, onOpen, onAssign, on
   onMove: (id: string, to: ReqColumn) => void;
   /** 手机:「改状态…」/「改优先级…」→ 父级弹选择器(锚在按下点)。 */
   onQuick: (id: string, kind: 'status' | 'priority', at: { x: number; y: number }) => void;
+  /** 桌面:菜单里直接点某一档优先级(和列表单元格同一条 PATCH:editCell priority)。 */
+  onPriority: (id: string, priority: ReqPriority) => void;
   onClose: () => void;
 }) {
   useTranslation();
@@ -39,10 +47,11 @@ export default function TaskCardMenu({ target, touch, busy, onOpen, onAssign, on
   const [area, setArea] = useState<{ width: number; height: number } | null>(null);
   const m = rowMenuMetrics(touch, uiScale().densityFactor, uiScale().denseFontMultiplier);
   const assignRows = target && target.assign !== 'hidden' ? 2 : 0;
-  const count = 1 + assignRows + (touch ? 2 : REQ_COLUMNS.length);
+  const priorityRows = target && !touch ? target.priorities.length : 0;
+  const count = 1 + assignRows + (touch ? 2 : REQ_COLUMNS.length) + priorityRows;
   const pos = target ? anchorRowMenu({
     x: target.x, y: target.y,
-    menuWidth: m.width, menuHeight: rowMenuHeight(m, count) + 1,
+    menuWidth: m.width, menuHeight: rowMenuHeight(m, count) + 1 + (priorityRows ? 1 : 0),
     viewportWidth: area?.width ?? win.width, viewportHeight: area?.height ?? win.height,
     insets: touch ? { top: safe.paddingTop, bottom: safe.paddingBottom, left: safe.paddingLeft, right: safe.paddingRight } : undefined,
   }) : null;
@@ -104,6 +113,10 @@ export default function TaskCardMenu({ target, touch, busy, onOpen, onAssign, on
             )) : REQ_COLUMNS.map(col => item(`move-${col}`, col === target.column ? tr('tasks.copy.91', { v0: taskText(REQ_COLUMN_LABEL[col]) }) : tr('tasks.copy.92', { v0: taskText(REQ_COLUMN_LABEL[col]) }), () => { onClose(); onMove(target.id, col); }, {
               disabled: busy || col === target.column, checked: col === target.column, icon: col === target.column ? 'checkmark' : 'arrow-forward',
             }))}
+            {!touch ? <View style={{ height: 1, backgroundColor: colors.border }} /> : null}
+            {!touch ? target.priorities.map(p => item(`priority-${p}`, priorityLabel(p), () => { onClose(); onPriority(target.id, p); }, {
+              disabled: target.quick.priority === 'locked' || p === target.priority, checked: p === target.priority, icon: p === target.priority ? 'checkmark' : 'flag-outline',
+            })) : null}
           </View>
         ) : null}
       </View>

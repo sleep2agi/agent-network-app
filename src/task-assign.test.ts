@@ -73,9 +73,11 @@ console.log('# 接线(源码)');
   const menu = src('./TaskCardMenu.tsx');
   ck('菜单:查看详情之后是 指派负责人… / 设置参与人…', menu.indexOf("item('open'") < menu.indexOf("(['owner', 'participants'] as const).map") && menu.includes("`assign-${mode}`"));
   ck('菜单:旧 Hub 的卡不画、只读的卡灰掉', menu.includes("target.assign !== 'hidden' ?") && menu.includes("disabled: target.assign === 'locked'"));
-  ck('菜单高度算上这两行(放不下时照样翻边)', menu.includes('const count = 1 + assignRows + (touch ? 2 : REQ_COLUMNS.length);'));
+  // 审计 M2 起桌面菜单还列优先级各档(priorityRows),高度一并算进去。
+  ck('菜单高度算上这两行(放不下时照样翻边)', menu.includes('const count = 1 + assignRows + (touch ? 2 : REQ_COLUMNS.length) + priorityRows;'));
   const board = src('./RequirementBoard.tsx');
-  ck('右键 / 长按的目标都带 assign 权限', (board.match(/assign: assignAccess\(item\)/g) ?? []).length === 2);
+  // 右键 / 长按 / 列表行 ⋯ 都经 menuTarget(审计 M2 合成一个),它带 assign 权限。
+  ck('右键 / 长按的目标都带 assign 权限', /const menuTarget = \(item: Requirement, x: number, y: number\): TaskMenuTarget => \(\{[\s\S]*?assign: assignAccess\(item\)/.test(board) && (board.match(/setMenu\(menuTarget\(item, x, y\)\)/g) ?? []).length === 2);
   ck('卡片菜单打开的是同一个 RequirementPeoplePicker(新建 / 详情用的那个)', board.includes('<RequirementPeoplePicker') && board.includes("onAssign={(id, mode) => { void openAssign(id, mode); }}"));
   ck('负责人选择器:分两个角色的 Hub 上只列人类(roleKinds);参与人只列人类', board.includes("kinds={assignFor.mode === 'owner' ? roleKinds('owner', hasRoles(assignItem)) : ['user']}"));
   ck('参与人头像:能改 = 设置参与人,不能改 = 打开详情', board.includes("canAssignPeople(item) ? (stack?: any) => { void openAssign(item.id, 'participants', stack); } : () => openDetail(item.id)"));
