@@ -9,6 +9,7 @@ import { useTranslation } from './i18n-react';
 import { taskText } from './i18n-tasks';
 import './i18n-task-fields';
 import { TaskIssueCount } from './TaskIssueBindings';
+import { issueCount } from './requirement-issues';
 import { REQ_COLUMN_LABEL, hasVisibleTitle, titleText, type Requirement, type RequirementProject } from './requirements-model';
 import type { RequirementPerson } from './requirement-people';
 import { nextSort, type SortKey, type SortSpec } from './task-board-model';
@@ -205,7 +206,7 @@ export default function TaskListTable({ rows, terms, people, projects, sort, set
       case 'project':
         if (!live && onProject && projects && item.projectId !== undefined) return <ProjectSelect compact label={false} value={item.projectId ?? null} projects={projects} onChange={pid => onProject(item.id, pid)} touch={touch} idBase={`req-row-project-${item.id}`} />;
         return item.projectId ? <ProjectChip project={projects?.find(p => p.id === item.projectId)} s={s} small /> : <Text style={s.metaMuted}>—</Text>;
-      case 'issues': return <TaskIssueCount item={item} />;
+      case 'issues': return issueCount(item) ? <TaskIssueCount item={item} /> : <Text style={s.metaMuted}>—</Text>;
       case 'tags': return item.tags?.length ? <TaskTagChips tags={item.tags} /> : <Text style={s.metaMuted}>—</Text>;
       case 'seq': return <Text testID={`task-seq-${item.id}`} style={[s.metaMuted, { fontVariant: ['tabular-nums'] }]} numberOfLines={1}>{shortIdLabel(item) ?? '—'}</Text>;
       case 'status': return <View style={[s.statusPill, { backgroundColor: STATUS_TONE[item.column]() + '1f' }]}><View style={[s.prioDot, { width: 6, height: 6, backgroundColor: STATUS_TONE[item.column]() }]} /><Text style={[s.statusPillText, { color: STATUS_TONE[item.column]() }]}>{taskText(REQ_COLUMN_LABEL[item.column])}</Text></View>;

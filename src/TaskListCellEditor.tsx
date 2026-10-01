@@ -3,11 +3,12 @@ import { useTranslation } from './i18n-react';
 import { taskText } from './i18n-tasks';
 import './i18n-task-fields';
 import './i18n-task-tags';
+import './i18n-task-issues';
 // 列表视图里一格的编辑器(多维表格式就地编辑,只在桌面宽屏表格上;TaskListTable 管选中 / 键盘,这里只画打开后的那一块)。
 //   · 优先级 / 状态 / 项目:就是详情里那个下拉浮层(TaskSelectMenu.SelectMenu),锚在格子下面。
 //   · 期限:详情里那个月历(TaskDuePicker 的贴格子模式),快捷项 今天 / 明天 / 下周一 + 清除 在面板里。
 //   · 负责人 / 参与人 / 标签:同一种浮层,顶上是当前值的胶囊(× 去掉),下面搜索 + 选项(✓ = 已选);
-//     标签搜不到时回车 / 点「创建」新建。点一下就保存,浮层不关,Esc / 点外面关。
+//     标签搜不到时回车 / 点「创建」新建;Issue 格同一种浮层,输入链接或 owner/repo#123 回车绑定。点一下就保存,浮层不关,Esc / 点外面关。
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { Modal, Platform, Pressable, ScrollView, View, useWindowDimensions } from 'react-native';
 import { Text, TextInput } from './ui-text';
@@ -24,9 +25,10 @@ import { anchorSelectMenu, filterSelectOptions, type SelectAnchor, type SelectOp
 import { priorityChoices, priorityLabel } from './task-priority';
 import { REQ_COLUMNS, REQ_COLUMN_LABEL, type Requirement, type RequirementProject } from './requirements-model';
 import { peopleInNetwork, personKey, type RequirementPerson, type RequirementPersonRef } from './requirement-people';
-import { pickOwner, tagAddable, toggleParticipant, toggleTag, type CellEdit } from './task-list-edit-model';
+import { addIssue, pickOwner, removeIssue, tagAddable, toggleParticipant, toggleTag, type CellEdit } from './task-list-edit-model';
+import { issueLabel } from './requirement-issues';
 
-export type CellEditorField = 'owner' | 'priority' | 'due' | 'participants' | 'project' | 'status' | 'tags';
+export type CellEditorField = 'owner' | 'priority' | 'due' | 'participants' | 'project' | 'status' | 'tags' | 'issues';
 
 export type CellEditorContext = {
   people: readonly RequirementPerson[];
@@ -68,6 +70,7 @@ export function CellEditor({ item, field, anchor, ctx, onEdit, onClose }: {
       return <TaskDuePicker value={item.due} anchorAt={anchor} onDismiss={onClose} onChange={due => onEdit({ field: 'due', due })} allowTime={ctx.allowTime} pointer sheet={false} idBase={id} />;
     case 'owner': case 'participants': return <PeopleEditor item={item} field={field} anchor={anchor} ctx={ctx} onEdit={onEdit} onClose={onClose} />;
     case 'tags': return <TagEditor item={item} anchor={anchor} ctx={ctx} onEdit={onEdit} onClose={onClose} />;
+    case 'issues': return <IssueEditor item={item} anchor={anchor} onEdit={onEdit} onClose={onClose} />;
   }
 }
 
@@ -85,7 +88,7 @@ function PeopleEditor({ item, field, anchor, ctx, onEdit, onClose }: { item: Req
   // 分两个角色的 Hub:负责人只列人类、负责 Agent 只列 Agent,两段;旧 Hub 一个负责人,人和 Agent 一起列。
   const groups: PickGroup[] = field === 'owner' && ctx.twoRoles
     ? [{ title: tr('tasks.copy.15'), options: people.filter(p => p.kind === 'user').map(option) }, { title: tr('tasks.copy.82'), options: people.filter(p => p.kind === 'node').map(option) }]
-    : [{ options: people.map(option) }];
+    : [{ options: (field === 'participants' ? people.filter(p => p.kind === 'user') : people).map(option) }];
   const toggle = (key: string) => {
     const p = people.find(x => personKey(x) === key) ?? chosen.find(x => personKey(x) === key);
     if (!p) return;
@@ -97,33 +100,55 @@ function PeopleEditor({ item, field, anchor, ctx, onEdit, onClose }: { item: Req
     empty={ctx.peopleLoading ? tr('tasks.copy.101') : tr('tasks.copy.77')} />;
 }
 
+function IssueEditor({ item, anchor, onEdit, onClose }: { item: Requirement; anchor: SelectAnchor; onEdit: (edit: CellEdit) => void; onClose: () => void }) {
+  useTranslation();
+  const [error, setError] = useState('');
+  const issues = item.issues ?? [];
+  const add = (text: string) => {
+    const r = addIssue(item, text);
+    if (typeof r === 'string') { setError(r); return false; }
+    setError('');
+    onEdit(r);
+    return true;
+  };
+  return <ChipPicker anchor={anchor} testID="list-edit-issues" title={tr('fields.issues')} search={tr('issues.input')}
+    chips={issues.map(i => ({ key: issueLabel(i), label: issueLabel(i), lead: <Ionicons name="logo-github" size={12} color={colors.textMuted} /> }))}
+    groups={[]} onToggle={label => { setError(''); onEdit(removeIssue(item, label)); }} onCreate={add} createLabel={q => tr('listEdit.bindIssue', { issue: q })} onQueryChange={() => setError('')}
+    onClose={onClose} error={error ? tr(error) : ''} empty="" />;
+}
+
 function TagEditor({ item, anchor, ctx, onEdit, onClose }: { item: Requirement; anchor: SelectAnchor; ctx: CellEditorContext; onEdit: (edit: CellEdit) => void; onClose: () => void }) {
   useTranslation();
   const tags = item.tags ?? [];
   const [error, setError] = useState(false);
   const all = [...new Set([...tags, ...ctx.tagChoices])];
   const toggle = (tag: string) => {
-    if (!tags.includes(tag) && !tagAddable(item, tag)) { setError(true); return; }
+    if (!tags.includes(tag) && !tagAddable(item, tag)) { setError(true); return false; }
     setError(false);
     onEdit(toggleTag(item, tag));
+    return true;
   };
   return <ChipPicker anchor={anchor} testID="list-edit-tags" title={tr('fields.tags')} search={tr('listEdit.searchTags')}
     chips={tags.map(tag => ({ key: tag, label: tag, color: ctx.tagColors?.[tag] }))}
     groups={[{ options: all.map(tag => ({ id: tag, label: tag, color: ctx.tagColors?.[tag] ?? null, checked: tags.includes(tag) })) }]}
-    onToggle={toggle} onCreate={toggle} onClose={onClose} error={error ? tr('tags.invalid') : ''} empty="" />;
+    onToggle={toggle} onCreate={toggle} onQueryChange={() => setError(false)} onClose={onClose} error={error ? tr('tags.invalid') : ''} empty="" />;
 }
 
 type PickOption = SelectOption & { checked: boolean };
 type PickGroup = { title?: string; options: PickOption[] };
 
 /** 胶囊 + 搜索 + 选项的浮层(多维表格的人员 / 多选格编辑器)。键盘:↑↓ 走、回车选 / 建、退格删最后一个胶囊、Esc 关。 */
-function ChipPicker({ anchor, testID, title, search, chips, groups, onToggle, onCreate, onClose, empty, error = '' }: {
+function ChipPicker({ anchor, testID, title, search, chips, groups, onToggle, onCreate, createLabel, onQueryChange, onClose, empty, error = '' }: {
   anchor: SelectAnchor; testID: string; title: string; search: string;
   chips: { key: string; label: string; lead?: ReactNode; color?: string }[];
   groups: PickGroup[];
   onToggle: (id: string) => void;
   /** 有这个 = 搜不到时可以新建(标签)。 */
-  onCreate?: (text: string) => void;
+  onCreate?: (text: string) => boolean | void;
+  /** 「新建」那一行的字(默认「创建「…」」)。 */
+  createLabel?: (text: string) => string;
+  /** 搜索框改了(调用方据此清掉上一次的就地错误)。 */
+  onQueryChange?: (text: string) => void;
   onClose: () => void;
   empty: string;
   error?: string;
@@ -141,7 +166,8 @@ function ChipPicker({ anchor, testID, title, search, chips, groups, onToggle, on
   const rows = flat.length + (creatable ? 1 : 0);
   const choose = (i: number) => {
     if (i < flat.length) { const o = flat[i]; if (!o.disabled) onToggle(o.id); return; }
-    if (creatable) { onCreate!(q); setQuery(''); setActive(0); }
+    // 建不成(不合法 / 重复 / 超限)时留着输入,调用方就地说原因。
+    if (creatable && onCreate!(q) !== false) { setQuery(''); setActive(0); }
   };
   const keys = useRef({ rows, active, choose, onClose, chips, onToggle, query });
   keys.current = { rows, active, choose, onClose, chips, onToggle, query };
@@ -162,7 +188,7 @@ function ChipPicker({ anchor, testID, title, search, chips, groups, onToggle, on
   }, []);
   const rowH = 34;
   const headers = shown.filter(g => g.title).length;
-  const pos = anchorSelectMenu(anchor, { width: win.width, height: win.height }, { rows: Math.max(1, rows) + headers + 1 + Math.ceil(chips.length / 3), rowH, search: true });
+  const pos = anchorSelectMenu(anchor, { width: win.width, height: win.height }, { rows: Math.max(1, rows) + headers + 1 + Math.ceil(chips.length / 3) + (error ? 2 : 0), rowH, search: true });
   let index = -1;
   const line = (o: PickOption) => {
     const i = ++index;
@@ -183,7 +209,7 @@ function ChipPicker({ anchor, testID, title, search, chips, groups, onToggle, on
   return (
     <Modal visible transparent animationType="none" onRequestClose={onClose}>
       <Pressable style={{ position: 'absolute', left: 0, top: 0, right: 0, bottom: 0 }} onPress={onClose} accessibilityLabel={tr('taskSel.close')} testID={`${testID}-scrim`} />
-      <View style={{ position: 'absolute', left: Math.max(pos.left, safe.paddingLeft + 8), top: Math.max(pos.top, safe.paddingTop + 8), width: pos.width, maxHeight: pos.maxHeight, padding: 6, borderRadius: radius.control, backgroundColor: colors.card, ...elevated('floating') }}
+      <View style={{ position: 'absolute', left: Math.max(pos.left, safe.paddingLeft + 8), ...(pos.top < anchor.y ? { bottom: win.height - anchor.y + 4 } : { top: Math.max(pos.top, safe.paddingTop + 8) }), width: pos.width, maxHeight: pos.maxHeight, padding: 6, borderRadius: radius.control, backgroundColor: colors.card, ...elevated('floating') }}
         testID={testID} accessibilityRole="menu" accessibilityLabel={title}>
         {/* 当前值 + 搜索框在同一个框里(多维表格的样子):胶囊 × 去掉,后面接着打字搜索。 */}
         <View style={{ flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 4, minHeight: 34, paddingHorizontal: 6, paddingVertical: 4, marginBottom: 4, borderRadius: radius.control, borderWidth: 1, borderColor: colors.accent, backgroundColor: colors.inputBg }} testID={`${testID}-chips`}>
@@ -196,7 +222,7 @@ function ChipPicker({ anchor, testID, title, search, chips, groups, onToggle, on
               </Pressable>
             </View>
           ))}
-          <TextInput autoFocus value={query} onChangeText={v => { setQuery(v); setActive(0); }} placeholder={chips.length ? '' : search} placeholderTextColor={colors.textMuted}
+          <TextInput autoFocus value={query} onChangeText={v => { setQuery(v); setActive(0); onQueryChange?.(v); }} placeholder={chips.length && !onCreate ? '' : search} placeholderTextColor={colors.textMuted}
             style={{ flex: 1, minWidth: 80, height: 24, color: colors.text, fontSize: 13, ...(Platform.OS === 'web' ? { outlineStyle: 'none' } : null) } as object}
             accessibilityLabel={search} testID={`${testID}-search`} />
         </View>
@@ -211,7 +237,7 @@ function ChipPicker({ anchor, testID, title, search, chips, groups, onToggle, on
             <Pressable testID={`${testID}-create`} accessibilityRole="menuitem" onPress={() => choose(flat.length)} onHoverIn={() => setActive(flat.length)}
               style={state => ({ minHeight: rowH, flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: spacing.md, borderRadius: radius.item, backgroundColor: (state as { hovered?: boolean }).hovered || active === flat.length ? colors.rowHover : 'transparent' })}>
               <Ionicons name="add" size={14} color={colors.accent} />
-              <Text style={{ color: colors.accent, fontSize: 13, flex: 1 }} numberOfLines={1}>{tr('listEdit.create', { tag: q })}</Text>
+              <Text style={{ color: colors.accent, fontSize: 13, flex: 1 }} numberOfLines={1}>{createLabel ? createLabel(q) : tr('listEdit.create', { tag: q })}</Text>
             </Pressable>
           ) : null}
           {!rows && empty ? <Text style={[s.muted, { padding: spacing.md }]}>{q ? tr('taskSel.noMatch') : empty}</Text> : null}

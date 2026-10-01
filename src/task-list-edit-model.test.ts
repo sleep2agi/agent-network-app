@@ -1,6 +1,6 @@
 // 列表就地编辑(task-list-edit-model.ts):哪些格能改、每次编辑发什么请求体、乐观更新 / 退回、键盘走格。
 import { readFileSync } from 'node:fs';
-import { applyCellEdit, cellEditable, cellKey, cellRequest, EDITABLE_CELLS, pickOwner, rollbackCellEdit, tagAddable, toggleParticipant, toggleTag } from './task-list-edit-model';
+import { addIssue, applyCellEdit, CELL_KINDS, cellEditable, cellKey, cellRequest, EDITABLE_CELLS, pickOwner, removeIssue, rollbackCellEdit, tagAddable, toggleParticipant, toggleTag } from './task-list-edit-model';
 import { FIELD_IDS, defaultFields } from './task-list-fields';
 import type { Requirement } from './requirements-model';
 
@@ -10,18 +10,32 @@ const src = (f: string) => readFileSync(new URL(`./${f}`, import.meta.url), 'utf
 const json = (v: unknown) => JSON.stringify(v);
 
 const me = { kind: 'user' as const, id: 'u_me' }, ua = { kind: 'user' as const, id: 'u_a' }, na = { kind: 'node' as const, id: 'node-a' };
-const R = (o: Partial<Requirement> = {}): Requirement => ({ id: 'r1', name: '示例任务', priority: 'normal', assignee: '', due: '', column: 'pool', createdAt: '2026-09-01T00:00:00Z', owner: ua, agentOwner: null, participants: [me], projectId: null, tags: ['前端'], ...o } as Requirement);
+const gh = { repo: 'example/app', number: 1, title: '' };
+const R = (o: Partial<Requirement> = {}): Requirement => ({ id: 'r1', name: '示例任务', priority: 'normal', assignee: '', due: '', column: 'pool', createdAt: '2026-09-01T00:00:00Z', owner: ua, agentOwner: null, participants: [me], projectId: null, tags: ['前端'], issues: [gh], ...o } as Requirement);
+
+// ── 每一列都分过类(owner 10-01:「除了 ID 等不允许编辑的外都要支持一下编辑」)──
+// 字段配置加新列却没在 CELL_KINDS 里写 edit / system ⇒ 这里红(Record<FieldId,…> 也让 typecheck 红)。
+ck('every configurable column is classified edit or system', FIELD_IDS.every(f => CELL_KINDS[f] === 'edit' || CELL_KINDS[f] === 'system') && Object.keys(CELL_KINDS).length === FIELD_IDS.length);
+ck('only system fields are read-only: ID / 创建时间 / 更新时间', json(FIELD_IDS.filter(f => CELL_KINDS[f] === 'system')) === json(['seq', 'created', 'updated']));
+ck('EDITABLE_CELLS = every non-system column', json(EDITABLE_CELLS) === json(FIELD_IDS.filter(f => CELL_KINDS[f] !== 'system')));
+{
+  const editor = src('TaskListCellEditor.tsx'), table = src('TaskListTable.tsx');
+  const missing = EDITABLE_CELLS.filter(f => f === 'title' ? !table.includes('const titleInput = (item: Requirement)') : !new RegExp(`case '${f}':`).test(editor));
+  ck(`every editable column has an editor${missing.length ? ` (missing: ${missing.join(',')})` : ''}`, missing.length === 0);
+  const shown = FIELD_IDS.filter(f => !new RegExp(`case '${f}'`).test(table.slice(table.indexOf('const content = ('))));
+  ck(`every column has a cell renderer${shown.length ? ` (missing: ${shown.join(',')})` : ''}`, shown.length === 0);
+}
 const ctx = { projects: true };
 
 // ── 权限 ──
 const all = (item: Requirement) => FIELD_IDS.filter(f => cellEditable(item, f, ctx));
 ck('full-edit card: exactly the editable columns', json(all(R())) === json(FIELD_IDS.filter(f => EDITABLE_CELLS.includes(f))));
-ck('ID / 时间 / Issue never editable', ['seq', 'created', 'updated', 'issues'].every(f => !cellEditable(R(), f as never, ctx)));
+ck('ID / 时间 never editable', ['seq', 'created', 'updated'].every(f => !cellEditable(R(), f as never, ctx)));
 const participant = R({ readOnly: true, editFields: ['column', 'checklist'] });
 ck('participant (edit_fields column): only 状态', json(all(participant)) === json(['status']));
 ck('read-only card without edit_fields: nothing', all(R({ readOnly: true })).length === 0);
 ck('archived: nothing', all(R({ archived: true })).length === 0);
-ck('old Hub without owner/participants/tags/project: those cells locked', json(all(R({ owner: undefined, participants: undefined, tags: undefined, projectId: undefined }))) === json(['title', 'priority', 'due', 'status']));
+ck('old Hub without owner/participants/tags/project/issues: those cells locked', json(all(R({ owner: undefined, participants: undefined, tags: undefined, projectId: undefined, issues: undefined }))) === json(['title', 'priority', 'due', 'status']));
 ck('no projects capability: project locked', !cellEditable(R(), 'project', { projects: false }));
 
 // ── 请求体:只带改的那一个字段 ──
@@ -37,6 +51,10 @@ ck('status → move (PATCH {column})', body({ field: 'status', column: 'doing' }
 ck('project → {project_id}', body({ field: 'project', projectId: 'p1' }) === json({ kind: 'patch', patch: { project_id: 'p1' } }));
 ck('tags → {tags}', body({ field: 'tags', tags: ['前端', '新标签'] }) === json({ kind: 'patch', patch: { tags: ['前端', '新标签'] } }));
 ck('tags over the limit → nothing sent', cellRequest(R(), { field: 'tags', tags: Array.from({ length: 11 }, (_, i) => `t${i}`) }) === null);
+ck('issues → {issues:[{url,title}]}', body(addIssue(R(), 'example/app#2') as never) === json({ kind: 'patch', patch: { issues: [{ url: 'https://github.com/example/app/issues/1', title: '' }, { url: 'https://github.com/example/app/issues/2', title: '' }] } }));
+ck('issue removed → {issues:[]}', body(removeIssue(R(), 'example/app#1')) === json({ kind: 'patch', patch: { issues: [] } }));
+ck('issue input: invalid / duplicate / limit are refused before any request', addIssue(R(), 'not a link') === 'issues.invalid' && addIssue(R(), 'https://github.com/example/app/issues/1') === 'issues.duplicate'
+  && addIssue(R({ issues: Array.from({ length: 8 }, (_, i) => ({ repo: 'example/app', number: i + 1, title: '' })) }), 'example/app#99') === 'issues.limit');
 ck('participants → assign full list', body({ field: 'participants', participants: [me, ua] }) === json({ kind: 'assign', participants: [me, ua] }));
 ck('same value → nothing sent', [
   cellRequest(R(), { field: 'owner', owner: ua }), cellRequest(R(), { field: 'priority', priority: 'normal' }), cellRequest(R(), { field: 'status', column: 'pool' }),
@@ -89,6 +107,7 @@ ck('table: Shift+arrows left to the board (status move)', /\(e\.shiftKey && e\.k
 ck('board: editCell gates on readOnlyBlock with column for status', /const editCell = async[\s\S]*?readOnlyBlock\(id, edit\.field === 'status' \? 'column' : undefined\)[\s\S]*?updateTaskItems\(scope, rows => rows\.map\(row => \(row\.id === id \? applyCellEdit/.test(board));
 ck('board: failure rolls back only that field', /rollbackCellEdit\(row, before, edit\)/.test(board));
 ck('board: phone rows still open the detail', /testID=\{`req-row-\$\{item\.id\}`\}[\s\S]{0,200}onPress=\{\(\) => openDetail\(item\.id\)\}/.test(board));
+ck('participants editor lists humans only (same as card menu / create); Agent participants stay as chips', /field === 'participants' \? people\.filter\(p => p\.kind === 'user'\)/.test(src('TaskListCellEditor.tsx')));
 ck('tags column exists, hidden by default, not sortable', FIELD_IDS.includes('tags') && defaultFields().find(f => f.id === 'tags')?.visible === false && /id !== 'tags';/.test(table));
 
 console.log(`\n${p}/${t} passed`);

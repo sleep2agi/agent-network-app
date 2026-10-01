@@ -9,9 +9,19 @@ import { normalizeTags } from './requirement-tags';
 import { personKey, togglePerson, uniquePeople, type RequirementPersonRef } from './requirement-people';
 import type { ReqColumn, ReqPriority, Requirement } from './requirements-model';
 import type { EditPatch } from './task-board-model';
-import type { FieldId } from './task-list-fields';
+import { FIELD_IDS, type FieldId } from './task-list-fields';
+import { issueLabel, MAX_REQUIREMENT_ISSUES, issuesWire, parseIssue, type RequirementIssue } from './requirement-issues';
 
-export const EDITABLE_CELLS: readonly FieldId[] = ['title', 'owner', 'priority', 'due', 'participants', 'project', 'status', 'tags'];
+/**
+ * 字段配置里每一列:能就地改(edit),还是系统字段只读(system:ID 是 Hub 发的号,创建 / 更新时间是 Hub 记的)。
+ * owner 10-01:「除了 ID 等不允许编辑的外都要支持一下编辑」。Record<FieldId, …> ⇒ 字段配置加了新列而这里没写,
+ * typecheck 直接红(task-list-edit-model.test.ts 再按 FIELD_IDS 逐个核一遍)。
+ */
+export const CELL_KINDS: Record<FieldId, 'edit' | 'system'> = {
+  seq: 'system', title: 'edit', owner: 'edit', priority: 'edit', due: 'edit', participants: 'edit',
+  project: 'edit', status: 'edit', created: 'system', updated: 'system', issues: 'edit', tags: 'edit',
+};
+export const EDITABLE_CELLS: readonly FieldId[] = FIELD_IDS.filter(f => CELL_KINDS[f] === 'edit');
 
 export type CellEdit =
   | { field: 'title'; name: string }
@@ -22,7 +32,8 @@ export type CellEdit =
   | { field: 'due'; due: string }
   | { field: 'status'; column: ReqColumn }
   | { field: 'project'; projectId: string | null }
-  | { field: 'tags'; tags: string[] };
+  | { field: 'tags'; tags: string[] }
+  | { field: 'issues'; issues: RequirementIssue[] };
 
 /** 发给 Hub 的那一个请求。patch = PATCH /api/requirements/:id;move = 状态(同看板拖动);assign = 参与人(同详情)。 */
 export type CellRequest =
@@ -42,6 +53,7 @@ export function cellEditable(item: Requirement, field: FieldId, ctx: { projects:
   if (field === 'participants') return item.participants !== undefined;
   if (field === 'project') return ctx.projects && item.projectId !== undefined;
   if (field === 'tags') return item.tags !== undefined;
+  if (field === 'issues') return item.issues !== undefined;
   return true;
 }
 
@@ -69,6 +81,10 @@ export function cellRequest(item: Requirement, edit: CellEdit): CellRequest | nu
       const tags = normalizeTags(edit.tags);
       return !tags || sameList(item.tags ?? [], tags) ? null : { kind: 'patch', patch: { tags } };
     }
+    case 'issues': {
+      const next = edit.issues.map(issueLabel);
+      return edit.issues.length > MAX_REQUIREMENT_ISSUES || new Set(next).size !== next.length || sameList((item.issues ?? []).map(issueLabel), next) ? null : { kind: 'patch', patch: { issues: issuesWire(edit.issues) } };
+    }
   }
 }
 
@@ -84,6 +100,7 @@ export function applyCellEdit(row: Requirement, edit: CellEdit): Requirement {
     case 'status': return { ...row, column: edit.column };
     case 'project': return { ...row, projectId: edit.projectId };
     case 'tags': return { ...row, tags: normalizeTags(edit.tags) ?? row.tags };
+    case 'issues': return { ...row, issues: edit.issues };
   }
 }
 
@@ -99,6 +116,7 @@ export function rollbackCellEdit(row: Requirement, before: Requirement, edit: Ce
     case 'status': return { ...row, column: before.column };
     case 'project': return { ...row, projectId: before.projectId };
     case 'tags': return { ...row, tags: before.tags };
+    case 'issues': return { ...row, issues: before.issues };
   }
 }
 
@@ -120,6 +138,19 @@ export function toggleTag(item: Requirement, tag: string): CellEdit {
 
 /** 加上这个标签以后还合不合法(最多 10 个、每个 1–20 字)。 */
 export const tagAddable = (item: Requirement, tag: string): boolean => !!tag.trim() && (item.tags ?? []).includes(tag.trim()) === false && normalizeTags([...(item.tags ?? []), tag]) !== null;
+
+/**
+ * Issue 格里加一个(链接或 owner/repo#123)/ 点 × 去掉。不合法 / 重复 / 超过 8 个 ⇒ 返回 i18n 键(就地提示),不发请求。
+ */
+export function addIssue(item: Requirement, input: string): CellEdit | 'issues.invalid' | 'issues.duplicate' | 'issues.limit' {
+  const issue = parseIssue(input);
+  if (!issue) return 'issues.invalid';
+  const cur = item.issues ?? [];
+  if (cur.some(i => issueLabel(i) === issueLabel(issue))) return 'issues.duplicate';
+  if (cur.length >= MAX_REQUIREMENT_ISSUES) return 'issues.limit';
+  return { field: 'issues', issues: [...cur, issue] };
+}
+export const removeIssue = (item: Requirement, label: string): CellEdit => ({ field: 'issues', issues: (item.issues ?? []).filter(i => issueLabel(i) !== label) });
 
 export type CellPos = { row: string; field: FieldId };
 

@@ -28,7 +28,7 @@ if (OUT) mkdirSync(OUT, { recursive: true });
 const fixture = () => {
   const at = (min) => new Date(Date.now() - min * 60000).toISOString();
   const me = { kind: 'user', id: 'u_tester' }, ua = { kind: 'user', id: 'u_a' };
-  const R = (id, seq, name, o) => ({ id, seq, name, priority: 'normal', assignee: '', column: 'pool', owner: ua, participants: [me], agent_owner: null, project_id: null, due: '', createdAt: at(3000 - seq), updatedAt: at(seq), description: '示例描述', checklist: [], tags: ['示例标签'], parent_id: null, ...o });
+  const R = (id, seq, name, o) => ({ id, seq, name, priority: 'normal', assignee: '', column: 'pool', owner: ua, participants: [me], agent_owner: null, project_id: null, due: '', createdAt: at(3000 - seq), updatedAt: at(seq), description: '示例描述', checklist: [], tags: ['示例标签'], issues: [], parent_id: null, ...o });
   const rows = [R('r1', 1, '示例任务一'), R('r2', 2, '示例任务二:我参与', { owner: { kind: 'user', id: 'u_b' }, viewer_can: { edit: false, delete: false, edit_fields: ['column', 'checklist'] } })];
   for (let i = 3; i <= 16; i++) rows.push(R(`r${i}`, i, `示例任务${i}`));
   window.__tasksFixture = {
@@ -46,7 +46,7 @@ const fixture = () => {
   try {
     localStorage.setItem('anet.language.v1', 'zh');
     // 参与人、标签两列打开(默认隐藏),顺序 = 默认顺序,标签在最右。
-    localStorage.setItem('task_list_fields_v1', JSON.stringify(['seq', 'title', 'owner', 'priority', 'due', 'participants', 'project', 'status', 'created', 'updated', 'issues', 'tags'].map(id => ({ id, visible: id !== 'issues' && id !== 'created' && id !== 'updated' }))));
+    localStorage.setItem('task_list_fields_v1', JSON.stringify(['seq', 'title', 'owner', 'priority', 'due', 'participants', 'project', 'status', 'created', 'updated', 'issues', 'tags'].map(id => ({ id, visible: id !== 'created' && id !== 'updated' }))));
   } catch {}
 };
 
@@ -211,6 +211,28 @@ for (const theme of ['light', 'dark']) {
     await page.locator(tid('list-edit-status-opt-doing')).first().click(); await page.waitForTimeout(300);
     record(where, 'status', { ...o.geo, body: json(await patches()) === json([{ column: 'doing' }]) });
 
+    step = 'issues';
+    await clearPatches();
+    o = await open('r1', 'issues', 'list-edit-issues');
+    await page.locator(tid('list-edit-issues-search')).first().fill('not a link');
+    await page.keyboard.press('Enter'); await page.waitForTimeout(200);
+    const badShown = (await page.locator(tid('list-edit-issues-error')).count()) === 1, badSent = (await patches()).length;
+    const badKept = (await page.locator(tid('list-edit-issues-search')).first().inputValue()) === 'not a link';
+    const badBox = await bb(page, tid('list-edit-issues-error')), popBox = await bb(page, tid('list-edit-issues'));
+    measure(where, 'issues error', badBox);
+    await shot('edit-issues-invalid');
+    await page.locator(tid('list-edit-issues-search')).first().fill('example/app#7');
+    await page.waitForTimeout(150);
+    const errorClears = (await page.locator(tid('list-edit-issues-error')).count()) === 0;
+    const createBox = await bb(page, tid('list-edit-issues-create')), pop2 = await bb(page, tid('list-edit-issues'));
+    measure(where, 'issues create row', createBox);
+    await shot('edit-issues');
+    await page.keyboard.press('Enter'); await page.waitForTimeout(300);
+    const ip = await patches();
+    const chip = await page.locator(tid('list-edit-issues-chip-example/app#7')).count();
+    await closeEditor();
+    record(where, 'issues', { ...o.geo, invalidRefused: badShown && badSent === 0, invalidTextKept: badKept, errorInsidePopover: inside(badBox, popBox), errorClearsOnTyping: errorClears, createRowInsidePopover: inside(createBox, pop2), body: json(ip) === json([{ issues: [{ url: 'https://github.com/example/app/issues/7', title: '' }] }]), chipShown: chip === 1 }, { bodies: json(ip) });
+
     step = 'tags (rightmost column)';
     await clearPatches();
     o = await open('r1', 'tags', 'list-edit-tags');
@@ -255,7 +277,7 @@ for (const theme of ['light', 'dark']) {
     step = 'access';
     await page.keyboard.press('Escape');
     await page.locator(cellSel('r2', 'title')).first().scrollIntoViewIfNeeded();
-    const editable = await page.evaluate(() => Object.fromEntries(['title', 'owner', 'priority', 'due', 'participants', 'project', 'status', 'tags'].map(f => [f, document.querySelector(`[data-testid="task-cell-r2-${f}"]`)?.getAttribute('data-editable') === '1'])));
+    const editable = await page.evaluate(() => Object.fromEntries(['title', 'owner', 'priority', 'due', 'participants', 'project', 'status', 'issues', 'tags', 'seq'].map(f => [f, document.querySelector(`[data-testid="task-cell-r2-${f}"]`)?.getAttribute('data-editable') === '1'])));
     await page.locator(cellSel('r2', 'priority')).first().hover(); await page.waitForTimeout(150);
     // 悬停框 = 格子里一个绝对定位、有边框的直接子元素。
     const hasFrame = (id) => page.evaluate((s) => [...document.querySelector(s).children].some(c => getComputedStyle(c).position === 'absolute' && parseFloat(getComputedStyle(c).borderTopWidth) >= 1), tid(id));
@@ -271,6 +293,10 @@ for (const theme of ['light', 'dark']) {
     const closeX = page.locator(tid('req-detail-close')).first();
     if (await closeX.count()) await closeX.click(); else await page.keyboard.press('Escape');
     await page.waitForTimeout(400);
+
+    step = 'system columns';
+    const sys = await page.evaluate(() => ['seq', 'title', 'issues'].map(f => document.querySelector(`[data-testid="task-cell-r3-${f}"]`)?.getAttribute('data-editable') === '1'));
+    record(where, 'system column read-only, others editable', { seqReadOnly: sys[0] === false, titleEditable: sys[1] === true, issuesEditable: sys[2] === true });
 
     step = 'expand';
     await page.locator(cellSel('r4', 'title')).first().hover(); await page.waitForTimeout(150);

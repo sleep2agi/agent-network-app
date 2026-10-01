@@ -40,5 +40,6 @@ registerTranslations({
   'listEdit.create': ['创建「{tag}」', 'Create "{tag}"'],
   'listEdit.remove': ['移除 {name}', 'Remove {name}'],
   'listEdit.failed': ['「{name}」没有保存：{reason}', '"{name}" was not saved: {reason}'],
+  'listEdit.bindIssue': ['绑定 {issue}', 'Link {issue}'],
   'listEdit.dismiss': ['关闭提示', 'Dismiss'],
 });
