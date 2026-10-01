@@ -12,6 +12,7 @@ import './i18n-accounts';
 import './i18n-users';
 import './i18n-sessions';
 import './i18n-changelog';
+import './i18n-fatal';
 
 let p = 0, t = 0;
 const ck = (name: string, ok: boolean) => { t++; if (ok) p++; console.log(`${ok ? 'PASS' : 'FAIL'}: ${name}`); };
@@ -29,6 +30,7 @@ migrated.push('src/AccountSwitcher.tsx', 'src/AccountRowActions.tsx');
 migrated.push('src/UserManagementPanel.tsx', 'src/DmChatScreen.tsx');
 migrated.push('src/MemberEditor.tsx', 'src/MemberEditorKit.tsx', 'src/TaskAccessSection.tsx', 'src/RemoveSheet.tsx');
 migrated.push('src/ChangelogScreen.tsx');
+migrated.push('src/FatalBoundary.tsx', 'src/LastCrashChip.tsx');
 function untranslated(file: string, raw: string): string[] {
   const source = raw.replace(/\r\n?/g, '\n');
   const tree = ts.createSourceFile(file, source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);

@@ -196,7 +196,7 @@ ck(`rendered settings 软件更新 row (${renderedRows.length} states) never men
 ck('settings up-to-date row: 已是最新版本 + 刚刚检查, no source suffix', (() => { const r = describeAndroidUpdateRow({ kind: 'up-to-date', latest: '0.2.118', route: 'mirror' }, { currentVersion: '0.2.118', lastCheckedAt: now, now }); return r.label === '已是最新版本 v0.2.118' && r.detail === describeUpdateRow({ kind: 'up-to-date' }, { currentVersion: '0.2.118', lastCheckedAt: now, now }).detail && r.detail === '刚刚检查'; })());
 ck('rendered desktop prompt never mentions 线路 / 更新来源', renderedDesktop.every(t => !NO_ROUTE.test(t) && !t.includes('更新来源')));
 ck(`settings model (labels + search keywords, ${settingsText.length} strings) never mentions 线路`, settingsText.length > 20 && settingsText.every(t => !NO_ROUTE.test(t)));
-ck('settings model: the 下载线路 row is gone', SETTINGS_CATEGORIES.every(c => c.rows.every(r => r.key !== 'updateRoute')) && SETTINGS_CATEGORIES.find(c => c.key === 'about')!.rows.map(r => r.key).join() === 'version,update,changelog,pooledHttp');
+ck('settings model: the 下载线路 row is gone', SETTINGS_CATEGORIES.every(c => c.rows.every(r => r.key !== 'updateRoute')) && SETTINGS_CATEGORIES.find(c => c.key === 'about')!.rows.map(r => r.key).join() === 'version,update,changelog,lastCrash,pooledHttp');
 
 // 2) 组件源码里的字面量(注释不算):弹窗、设置、夹具都不许再写「线路」。路径统一成 POSIX,CRLF 统一成 LF。
 const root = fileURLToPath(new URL('..', import.meta.url));

@@ -38,6 +38,8 @@ import LogsScreen from './src/LogsScreen';
 import ScheduledTasksScreen from './src/ScheduledTasksScreen';
 import type { ScheduleOpenRequest } from './src/node-schedules';
 import ConnectivityBanner from './src/ConnectivityBanner';
+import FatalBoundary, { FatalFixtureScreen, readFatalFixture } from './src/FatalBoundary';
+import LastCrashChip from './src/LastCrashChip';
 import type { HostSupervisorDaemon } from './src/api';
 import { clearConfig, listHubProfiles, loadConfig, loadHubProfile, loadLocalAvatars, loadOutbox, loadForwardOperations, saveForwardOperations, loadThemeMode, loadUiScalePrefs, markHubProfileRequiresReauth, onDesktopThemeStorageChange, onDesktopUiScaleStorageChange, removeHubProfile, saveConfig, saveLocalAvatars, saveOutbox, sessionIdOf, switchHubProfile, type HubProfile } from './src/storage';
 import { clearProfileUnauthorized, onProfileUnauthorized, profileUnauthorizedReason } from './src/profile-auth-state';
@@ -213,6 +215,14 @@ export default function App() {
     );
   }
 
+  if (readFatalFixture()) {
+    return (
+      <SafeAreaProvider>
+        <FatalFixtureScreen />
+      </SafeAreaProvider>
+    );
+  }
+
   const notifyFixture = readNotifyFixture();
   if (notifyFixture) {
     return (
@@ -261,7 +271,10 @@ export default function App() {
         <View style={{ flex: 1 }}>
           <MacTitleStrip />
           <WinTitleBar />
-          <AppRoot />
+          {/* 渲染期抛错:显示「出错了 · 重新加载」并记诊断,而不是整个 app 闪退(fatal-boundary.ts)。 */}
+          <FatalBoundary>
+            <AppRoot />
+          </FatalBoundary>
           {/* 分离聊天窗(Windows):页头兼当标题栏,– □ × 浮在右上角 —— 见 src/popout-window-controls.tsx */}
           <PopoutWindowControls />
         </View>
@@ -747,6 +760,7 @@ function AppRoot() {
         <DesktopWorkspace cfg={cfg} screen={screen} setScreen={setScreen} onLogout={removeActiveProfile} onLocalDataDeleted={finishLocalDataDeletion} onAddAccount={() => { setReauthProfile(null); setScreen({ name: 'login' }); }} onSwitchProfile={activateProfile} onReauthProfile={requestProfileReauth} onProfileEdited={reloadEditedProfile} />
         <DesktopMessageListener cfg={cfg} onOpenTask={id => openTaskNotice(id, cfg, setScreen)} />
         {trayWindow ? <DesktopNotifier onOpenChat={alias => setScreen({ name: 'chat', alias })} profileKey={notifyProfileKey(cfg)} /> : null}
+        <LastCrashChip cfg={cfg} />
       </SafeAreaView>
     );
   }
@@ -1012,6 +1026,8 @@ function AppRoot() {
           {navChrome === 'bottomTabs' ? mobileTabBar(navActive) : null}
         </>
       )}
+      {/* 上次异常退出:角落小提示,~8 秒自动隐藏(fatal-runtime / LastCrashChip)。 */}
+      {screen.name !== 'login' && cfg ? <LastCrashChip cfg={cfg} /> : null}
     </SafeAreaView>
   );
 }
