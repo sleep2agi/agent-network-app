@@ -834,6 +834,8 @@ export const BUNDLED_RELEASE_BODY: string = [
 
 /** Release date (published_at) per version, as far as it was known when this file was generated. */
 export const BUNDLED_RELEASE_DATES: Record<string, string> = {
+  "0.2.188": "2026-10-01T20:46:20Z",
+  "0.2.187": "2026-10-01T19:48:15Z",
   "0.2.186": "2026-10-01T19:06:36Z",
   "0.2.185": "2026-10-01T17:58:35Z",
   "0.2.184": "2026-10-01T16:02:25Z",
