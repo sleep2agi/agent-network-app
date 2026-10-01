@@ -13,7 +13,10 @@
       "buildNumber": "1",
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false,
-        "NSPhotoLibraryAddUsageDescription": "允许把图片保存到相册"
+        "NSPhotoLibraryAddUsageDescription": "允许把图片保存到相册",
+        "LSApplicationQueriesSchemes": [
+          "itms-beta"
+        ]
       }
     },
     "web": {
