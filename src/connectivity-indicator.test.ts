@@ -31,7 +31,7 @@ function sources(dir: string): string[] {
 // 取集自检:必须真递归到 src 的子目录、并且收到 App.tsx —— 否则「0 处违规」只说明没扫到。
 const files = ['App.tsx', ...sources('src')];
 ck(`取集:收到了 App.tsx、src 下的 .tsx 和子目录里的文件(共 ${files.length} 个)`, files.includes('App.tsx')
-  && files.includes(join('src', 'ConnectivityIndicator.tsx')) && files.length > 100 && files.some(f => f.split('/').length > 2));
+  && files.includes(join('src', 'ConnectivityIndicator.tsx')) && files.length > 100 && files.some(f => f.split(/[\\/]/).length > 2));
 
 // 1. bannerText 只由角标使用
 const users = files.filter(f => f !== join('src', 'connectivity.ts') && /\bbannerText\s*\(/.test(code(read(f))));
