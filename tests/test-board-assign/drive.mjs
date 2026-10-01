@@ -1,6 +1,8 @@
 // 从看板直接指派 —— 点真按钮、量真框、截下真请求体。Placeholder data only, served in-page by the Tauri stub in
 // tests/test-layout-sweep/harness.mjs (no hub process, no port, no HOME touched).
-// Not in CI: needs Playwright + Chromium and a web export.
+// Not in CI: needs Playwright + Chromium and a web export. No workflow runs any tests/*/drive.mjs — only the
+// requirement-details Docker suite is in unit-tests.yml — so run this by hand when touching the board / picker.
+// (Refreshed 2026-10-02: it had been red since #637 / #646 changed the desktop pickers and nobody noticed.)
 //
 //   WEB_DIR=<expo export dir> [OUT=<png dir>] [PLAYWRIGHT_MODULE=<…/playwright/index.mjs>] node tests/test-board-assign/drive.mjs
 //
@@ -9,15 +11,17 @@
 //               inside the menu and the viewport; on a participant's card (viewer_can.edit=false) both are aria-disabled
 //   owner       指派负责人… → the same people picker as create/detail, humans only on a two-role hub → PATCH body
 //               exactly {"owner":{kind,id}}, card shows the new owner without opening the detail
-//   avatars     tapping the participant avatars on an editable card opens 设置参与人 (humans only) → PATCH body
+//   avatars     tapping the participant avatars on an editable card opens 设置参与人 (humans only; desktop = the anchored
+//               dropdown under the avatars, #646; phone = the centred panel) → PATCH body
 //               exactly {"participants":[…]} with the existing Agent participant kept; on a read-only card it opens
 //               the detail instead and sends nothing
 //   bulk        desktop: Ctrl-click three cards (one read-only) → 「指派负责人…」 → PATCH only for the two editable
 //               ones, bar says 「跳过 1 个(无权修改)」
 //   priority    (owner 10-01) 优先级 sits right under 状态, above 负责人 and the ~40-line 描述, inside the first screen;
 //               on a participant card the order is 状态 → 检查项 → 优先级 → 负责人 → 描述
-//   detail      参与人 sits right under 负责人 / 负责 Agent (no 更多 needed, above the fold); changing 负责人 saves at
-//               once (PATCH {"owner"}), 「已保存」 shows, 保存修改 stays disabled
+//   detail      参与人 sits right under 负责人 / 负责 Agent (no 更多 needed, above the fold); changing 负责人 (desktop:
+//               anchored dropdown, a click applies it; phone: panel + 确定) saves at once (PATCH {"owner"}), 「已保存」
+//               shows, 保存修改 stays disabled
 // Prints a measurement table. Exit 1 when any check fails or a viewport could not be opened.
 import { mkdirSync } from 'node:fs';
 import { serveExport, initScript, findChromium, ANDROID_UA } from '../test-layout-sweep/harness.mjs';
@@ -101,7 +105,9 @@ for (const [name, V] of Object.entries(VIEWPORTS)) {
       await page.waitForTimeout(250);
     };
     const closeMenu = async () => { if (await page.locator(tid('task-menu')).count()) { await page.locator(tid('task-menu-scrim')).first().click({ position: { x: 5, y: 5 } }); await page.waitForTimeout(300); } };
-    const pickerRows = () => page.evaluate(() => [...document.querySelectorAll('[data-testid^="person-"]')].map(e => e.getAttribute('data-testid')));
+    // Picker rows only: `person-<kind>:<id>`. The rows' name / subtitle texts carry `person-name-…` / `person-sub-…` ids
+    // (added after this drive was written), which a bare ^="person-" prefix also matched — and failed humansOnly.
+    const pickerRows = () => page.evaluate(() => [...document.querySelectorAll('[data-testid^="person-"]')].map(e => e.getAttribute('data-testid')).filter(id => /^person-(user|node):/.test(id)));
     const closeDetail = async () => {
       const close = page.locator(tid('req-detail-close')).first();
       if (await close.count() && await close.isVisible()) await press(close); else await page.keyboard.press('Escape');
@@ -201,6 +207,9 @@ for (const [name, V] of Object.entries(VIEWPORTS)) {
         await press(stack);
         await page.locator(tid('people-confirm')).first().waitFor({ timeout: 5000 });
         await page.waitForTimeout(300);
+        // Desktop (#646): the avatars open the anchored dropdown under the avatar group (multi-select, 确定 in its footer);
+        // phone: the centred panel. Both are the same RequirementPeoplePicker.
+        const partSurface = (await page.locator(tid('people-dropdown')).count()) ? 'dropdown' : (await page.locator(tid('people-panel')).count()) ? 'panel' : 'none';
         const partRows = await pickerRows();
         await shot('picker-participants');
         await press(page.locator(tid('person-user:u_b')).first());
@@ -209,10 +218,11 @@ for (const [name, V] of Object.entries(VIEWPORTS)) {
         const afterPart = await patches();
         record(where, 'participants from avatar tap', {
           stackInsideCard: inside(stackBox, await bb(page, tid('req-card-r1'))),
+          surface: partSurface === (V.ua ? 'panel' : 'dropdown'),
           humansOnly: partRows.length > 0 && partRows.every(r => r.startsWith('person-user:')),
           body: afterPart.length === 2 && afterPart[1] === '{"participants":[{"kind":"user","id":"u_a"},{"kind":"user","id":"u_b"},{"kind":"node","id":"n_demo"}]}',
           noDetailOpened: (await page.locator(tid('req-detail')).count()) === 0,
-        }, { bodies: afterPart.join(' | '), rows: partRows.join(',') });
+        }, { surface: partSurface, bodies: afterPart.join(' | '), rows: partRows.join(',') });
 
       });
       await guarded('avatars r2', async () => {
@@ -291,9 +301,16 @@ for (const [name, V] of Object.entries(VIEWPORTS)) {
         }, { moreOpen });
         await shot('detail');
         await press(page.locator(tid('req-edit-owner')).first());
-        await page.locator(tid('people-confirm')).first().waitFor({ timeout: 5000 });
-        await press(page.locator(tid('person-user:u_b')).first());
-        await press(page.locator(tid('people-confirm')).first());
+        // Desktop (#637): the owner picker is the anchored dropdown under the field — single choice, a click applies it,
+        // there is no 确定. Phone: the centred panel with 确定.
+        if (V.ua) {
+          await page.locator(tid('people-confirm')).first().waitFor({ timeout: 5000 });
+          await press(page.locator(tid('person-user:u_b')).first());
+          await press(page.locator(tid('people-confirm')).first());
+        } else {
+          await page.locator(tid('people-dropdown')).first().waitFor({ timeout: 5000 });
+          await press(page.locator(tid('person-user:u_b')).first());
+        }
         await page.waitForTimeout(700);
         const detailBodies = (await patches()).slice(before);
         const status = await bb(page, tid('req-assign-status'));
