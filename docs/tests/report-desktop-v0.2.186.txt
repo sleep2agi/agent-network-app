@@ -1,0 +1,8 @@
+desktop v0.2.186 — 任务详情改动自动保存(审计 H1)
+================================================================================
+A. 本版内容(0.2.185 发版提交之后 main 上合入的 PR + 本 PR)
+  #652 详情页:选择型字段(优先级/项目/截止/开始/父任务)选即存,单字段 PATCH,失败回滚并提示;标题/描述关闭前先保存,被拒则保持打开并说明原因;底部「保存中…/已保存」。requirement-details Docker 48/0(新增关闭即存/关闭被拒用例);浏览器 test-detail-autosave 16/16(改动前 12/16 失败);test-requirement-priority 25/25;npm test 311/311。
+  本 PR(版本号):0.2.185 → 0.2.186,versionCode 2185 → 2186;release-desktop-auto-update.yml 加 What's new in 0.2.186;重新生成 src/changelog-bundled.ts。
+  本地:干净 origin/main(62284f1) bump 后 npm ci / npm test / npm run typecheck 全部 rc=0;android-release-notes.mjs 0.2.186 rc=0。
+B. 验证边界(如实)
+  页内桩 + 浏览器驱动 + Docker 验证;直接点另一张卡片 / 非面板关闭时未保存的标题描述仍可能丢(审计 M1,下一版)。
