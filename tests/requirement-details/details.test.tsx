@@ -430,6 +430,28 @@ test('closing the detail with an unsaved title saves it first instead of droppin
   expect(texts('req-card-r1')).toContain('关之前改的标题');
 });
 
+test('switching to another card saves the first card\'s unsaved title (by its own id) instead of dropping it', async () => {
+  await mount();
+  await act(async () => byId('req-card-r1').props.onPress());
+  await act(async () => byId('req-edit-name').props.onChangeText('换卡之前改的标题'));
+  await act(async () => byId('req-card-r2').props.onPress());
+  expect(edits).toEqual([{ id: 'r1', patch: { name: '换卡之前改的标题' } }]);
+  expect(texts('req-card-r1')).toContain('换卡之前改的标题');
+  // the detail now shows r2 with its own, untouched draft — and closing it sends nothing more
+  expect(byId('req-edit-name').props.value).not.toBe('换卡之前改的标题');
+  await act(async () => byId('req-detail-close').props.onPress());
+  expect(edits).toHaveLength(1);
+});
+
+test('a title saved with 保存修改 and then closed is not sent a second time', async () => {
+  await mount();
+  await act(async () => byId('req-card-r1').props.onPress());
+  await act(async () => byId('req-edit-name').props.onChangeText('只发一次'));
+  await act(async () => byId('req-edit-save').props.onPress());
+  await act(async () => byId('req-detail-close').props.onPress());
+  expect(edits).toEqual([{ id: 'r1', patch: { name: '只发一次' } }]);
+});
+
 test('closing with a title the Hub rejects keeps the detail open and says why', async () => {
   await mount();
   editReply = () => { throw new HubError(400, '这个 Hub 还不能修改已有需求的内容，升级 Hub 后再试'); };
