@@ -13,6 +13,7 @@ import { elevated } from './elevation';
 import { useModalSafePadding } from './safe-area-runtime';
 import { highlightSegments } from './task-search';
 import { CONTROL_H, a11yState, type TaskStyles } from './TaskBoardParts';
+import { readOnlyLabelKey, type TaskEditField } from './task-access';
 
 /** 命中的字:浅色主题淡黄底,深色主题暗金底(两种主题下正文色都读得清)。 */
 const hitStyle = () => (themeMode() === 'dark'
@@ -38,13 +39,13 @@ export function ArchivedTag({ testID }: { testID?: string }) {
   );
 }
 
-/** 只读的卡(RFC-038 §9:hub 说我不能改)—— 与「已归档」同一个小标签样式,锁 + 「只读」。 */
-export function ReadOnlyTag({ testID }: { testID?: string }) {
+/** 只读的卡(RFC-038 §9:hub 说我不能改)—— 与「已归档」同一个小标签样式,锁 + 「只读」;参与人的卡说「仅可改状态和检查项」。 */
+export function ReadOnlyTag({ testID, editFields }: { testID?: string; editFields?: readonly TaskEditField[] }) {
   useTranslation();
   return (
     <View style={{ flexShrink: 0, alignSelf: 'flex-start', height: 18, paddingHorizontal: 6, borderRadius: radius.pill, backgroundColor: colors.subtleFill, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', gap: 3 }} testID={testID ?? 'task-read-only-tag'}>
       <Ionicons name="lock-closed-outline" size={10} color={colors.textMuted} />
-      <Text style={{ color: colors.textMuted, fontSize: 10, fontWeight: '600' }}>{tr('tasks.readOnly')}</Text>
+      <Text style={{ color: colors.textMuted, fontSize: 10, fontWeight: '600' }}>{tr(readOnlyLabelKey(editFields))}</Text>
     </View>
   );
 }

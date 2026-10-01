@@ -63,6 +63,7 @@ import DesktopUpdatePrompt from './src/DesktopUpdatePrompt';
 import { desktopPromptMode } from './src/update-prompt-model';
 import AndroidUpdatePrompt from './src/AndroidUpdatePrompt';
 import DesktopMessageListener from './src/DesktopMessageListener';
+import { requestOpenTask } from './src/task-open-request';
 import DesktopNotifier from './src/DesktopNotifier';
 import MobileNotifier from './src/MobileNotifier';
 import { loadNotifySettings, mutedAgents, notifyProfileKey, saveNotifySettings, subscribeNotifySettings, toggleAgentMuted } from './src/notify-settings';
@@ -741,7 +742,7 @@ function AppRoot() {
         <StatusBar barStyle={theme === 'light' ? 'dark-content' : 'light-content'} backgroundColor={colors.bg} />
         <ConnectivityBanner />
         <DesktopWorkspace cfg={cfg} screen={screen} setScreen={setScreen} onLogout={removeActiveProfile} onLocalDataDeleted={finishLocalDataDeletion} onAddAccount={() => { setReauthProfile(null); setScreen({ name: 'login' }); }} onSwitchProfile={activateProfile} onReauthProfile={requestProfileReauth} onProfileEdited={reloadEditedProfile} />
-        <DesktopMessageListener cfg={cfg} />
+        <DesktopMessageListener cfg={cfg} onOpenTask={id => openTaskNotice(id, cfg, setScreen)} />
         {trayWindow ? <DesktopNotifier onOpenChat={alias => setScreen({ name: 'chat', alias })} profileKey={notifyProfileKey(cfg)} /> : null}
       </SafeAreaView>
     );
@@ -756,7 +757,7 @@ function AppRoot() {
       {/* 全局连接状态横幅(App战线①):断连时所有已登录界面顶部出现,声明缓存数据+
           诚实的"截至"时间(最后一次成功,非尝试)。登录页不挂(还没有 hub 可言)。 */}
       {screen.name !== 'login' && cfg ? <ConnectivityBanner /> : null}
-      {screen.name !== 'login' && cfg ? <DesktopMessageListener cfg={cfg} /> : null}
+      {screen.name !== 'login' && cfg ? <DesktopMessageListener cfg={cfg} onOpenTask={id => openTaskNotice(id, cfg, setScreen)} /> : null}
       {/* 0.2.107 手机系统通知:登出(cfg=null)也要挂着,好让运行时停掉轮询和前台服务。 */}
       {Platform.OS === 'android' || Platform.OS === 'ios' ? <MobileNotifier cfg={cfg} onOpenChat={alias => setScreen({ name: 'chat', alias })} onOpenTask={taskId => setScreen({ name: 'taskDetail', taskId })} /> : null}
       {screen.name === 'login' || !cfg ? (
@@ -869,7 +870,7 @@ function AppRoot() {
                         onToggleMute={() => toggleMute(screen.alias)}
                       />
                     ) : screen.name === 'dm' && cfg.networkId ? (
-                      <DmChatScreen key={`dm:${screen.userId}`} cfg={cfg} networkId={cfg.networkId} peer={dmPeerOf(screen)} onBack={() => setScreen({ name: 'agents' })} hideBack />
+                      <DmChatScreen key={`dm:${screen.userId}`} cfg={cfg} networkId={cfg.networkId} peer={dmPeerOf(screen)} onBack={() => setScreen({ name: 'agents' })} onOpenTask={id => openTaskNotice(id, cfg, setScreen)} hideBack />
                     ) : screen.name === 'nodeInfo' ? (
                       <NodeDetailScreen key={`nodeInfo:${screen.alias}`} cfg={cfg} alias={screen.alias} onBack={() => setScreen({ name: 'chat', alias: screen.alias })} readOnly layoutWidth={paneAreaWidth - paneListWidth} touch onOpenScheduled={open => setScreen({ name: 'scheduled', open, back: screen })} />
                     ) : screen.name === 'nodeDetail' ? (
@@ -899,7 +900,7 @@ function AppRoot() {
                   onToggleMute={() => toggleMute(screen.alias)}
                 />
               ) : screen.name === 'dm' && cfg.networkId ? (
-                <DmChatScreen key={`dm:${screen.userId}`} cfg={cfg} networkId={cfg.networkId} peer={dmPeerOf(screen)} onBack={() => setScreen({ name: 'agents' })} />
+                <DmChatScreen key={`dm:${screen.userId}`} cfg={cfg} networkId={cfg.networkId} peer={dmPeerOf(screen)} onBack={() => setScreen({ name: 'agents' })} onOpenTask={id => openTaskNotice(id, cfg, setScreen)} />
               ) : screen.name === 'nodeInfo' ? (
                 <NodeDetailScreen cfg={cfg} alias={screen.alias} onBack={() => setScreen({ name: 'chat', alias: screen.alias })} readOnly onOpenScheduled={open => setScreen({ name: 'scheduled', open, back: screen })} />
               ) : screen.name === 'nodeDetail' ? (
@@ -1181,7 +1182,7 @@ function DesktopWorkspace({ cfg, screen, setScreen, onLogout, onLocalDataDeleted
       desktop
     />
   ) : screen.name === 'dm' && cfg.networkId ? (
-    <DmChatScreen key={`dm:${screen.userId}`} cfg={cfg} networkId={cfg.networkId} peer={dmPeerOf(screen)} onBack={() => setScreen({ name: 'agents' })} desktop />
+    <DmChatScreen key={`dm:${screen.userId}`} cfg={cfg} networkId={cfg.networkId} peer={dmPeerOf(screen)} onBack={() => setScreen({ name: 'agents' })} onOpenTask={id => openTaskNotice(id, cfg, setScreen)} desktop />
   ) : screen.name === 'tasks' ? (
     <TasksScreen cfg={cfg} desktop onOpenTask={taskId => setScreen({ name: 'taskDetail', taskId })} onOpenVoiceSettings={() => { rememberSettingsCategory('voice'); void openSettingsWindow('voice').then(opened => { if (!opened) setScreen({ name: 'settings' }); }); }} />
   ) : screen.name === 'scheduled' ? <ScheduledTasksScreen key={screen.open ? `scheduled:${screen.open.seq}` : 'scheduled'} cfg={cfg} open={screen.open} onOpenChat={(alias, focusTaskId) => setScreen({ name: 'chat', alias, focusTaskId })} />
@@ -1365,6 +1366,12 @@ const makeDesktopStyles = () => StyleSheet.create({
   emptyTitle: { color: colors.textSecondary, fontSize: 16, fontWeight: '600' },
   emptyHint: { color: colors.textMuted, fontSize: 12 },
 });
+
+// 任务通知私信(meta.task_notice)→ 留条子给任务页(task-open-request.ts)再切过去:桌面是抽屉,手机是推入的详情页。
+function openTaskNotice(requirementId: string, cfg: HubConfig, setScreen: (s: Screen) => void) {
+  requestOpenTask({ requirementId, networkId: cfg.networkId ?? null });
+  setScreen({ name: 'tasks' });
+}
 
 // 人员行 → 私信页;私信页 → DmChatScreen 要的对方。
 const dmScreenFor = (p: Human) => ({ name: 'dm' as const, alias: p.username, userId: p.user_id, displayName: p.display_name ?? null });

@@ -15,6 +15,7 @@
  */
 
 import { eventAttachmentPreview } from './dm-attachment-model';
+import { taskNoticeOf, type TaskNoticeRef } from './human-dm';
 
 export type DesktopMessageSeverity = 'info' | 'success' | 'warning' | 'error';
 
@@ -26,6 +27,8 @@ export type DesktopMessageNotice = {
   from: string | null;
   kind: string;
   createdAt: string | null;
+  /** 参与人改任务的通知私信(meta.task_notice):点提示打开这张任务。只在有时出现。 */
+  taskNotice?: TaskNoticeRef;
 };
 
 export type ConsumeContext = {
@@ -87,9 +90,11 @@ export function consumeDesktopMessageEvent(raw: unknown, ctx: ConsumeContext = {
       ? (event.severity as DesktopMessageSeverity)
       : 'info';
 
+  const taskNotice = taskNoticeOf(event.meta);
   return {
     status: 'present',
     notice: {
+      ...(taskNotice ? { taskNotice } : {}),
       messageId,
       title: displayText(event.title, 200),
       message,

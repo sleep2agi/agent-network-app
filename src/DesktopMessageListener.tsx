@@ -17,7 +17,7 @@ const SEEN_CAP = 200;
  * App-wide consumer for Hub `type=desktop_message` SSE events.
  * Mounted only while a user session exists. Does not touch unread/badge.
  */
-export default function DesktopMessageListener({ cfg }: { cfg: HubConfig }) {
+export default function DesktopMessageListener({ cfg, onOpenTask }: { cfg: HubConfig; onOpenTask?: (requirementId: string) => void }) {
   const [notice, setNotice] = useState<Notice | null>(null);
   const seen = useRef<Set<string>>(new Set());
 
@@ -52,7 +52,7 @@ export default function DesktopMessageListener({ cfg }: { cfg: HubConfig }) {
   if (!notice) return null;
   return (
     <View pointerEvents="box-none" style={styles.overlay}>
-      <DesktopMessageNotice notice={notice} onDismiss={() => setNotice(null)} />
+      <DesktopMessageNotice notice={notice} onDismiss={() => setNotice(null)} onOpenTask={onOpenTask} />
     </View>
   );
 }

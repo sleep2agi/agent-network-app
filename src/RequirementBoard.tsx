@@ -58,6 +58,8 @@ import { comboFromEvent, shortcutForCombo } from './shortcuts-model';
 import { isMacKeyboard, shortcutBindings, shortcutCaptureActive } from './shortcuts-store';
 import { isSelectClick, NO_SELECTION, pruneSelection, runBulk, selectClick, toggleSelected, type BulkProgress, type SelectAnchor, type Selection } from './task-select-model';
 import { SEQ_CAPABILITY } from './task-short-id';
+import { canEditTaskField, readOnlyLabelKey, type TaskEditField } from './task-access';
+import { subscribeOpenTaskRequest, takeOpenTaskRequest } from './task-open-request';
 
 const UNSUPPORTED = 'tasks.copy.14';
 /** 别的设备改了也要看得到;有未完成的写入时跳过这一轮(不拿旧数据盖掉乐观更新)。 */
@@ -376,14 +378,16 @@ function ScopedRequirementBoard({ cfg, desktop, dispatch, onOpenVoiceSettings, s
 
   // 只读的卡(RFC-038 §9,hub 说我不能改):所有写入口先挡住并说一声,不做乐观更新、不发请求。
   // UI 上本来就点不动(卡片不能拖、详情整块不响应),这里是兜底:键盘移动、批量、甘特图拖动都走这几个函数。
-  const readOnlyBlock = (id: string): string | null => {
+  // 参与人的卡(hub viewer_can.edit_fields):状态和检查项放开,其余照样挡;挡的时候说清楚能改什么。
+  const readOnlyBlock = (id: string, field?: TaskEditField): string | null => {
     const it = items.find(row => row.id === id);
-    return it?.readOnly ? tr('tasks.readOnlyBlocked', { name: it.name }) : null;
+    if (!it?.readOnly || (field && canEditTaskField(it, field))) return null;
+    return it.editFields?.length ? tr('tasks.partialBlocked', { name: it.name, what: tr(readOnlyLabelKey(it.editFields)) }) : tr('tasks.readOnlyBlocked', { name: it.name });
   };
   const move = async (id: string, to: ReqColumn) => {
     const item = items.find(row => row.id === id);
     if (!item || item.column === to || pendingMoves.current.has(id)) return;
-    const blocked = readOnlyBlock(id);
+    const blocked = readOnlyBlock(id, 'column');
     if (blocked) { setBanner(blocked); return; }
     const from = item.column;
     pendingMoves.current.add(id);
@@ -425,7 +429,7 @@ function ScopedRequirementBoard({ cfg, desktop, dispatch, onOpenVoiceSettings, s
   const replaceChecklist = async (id: string, next: ChecklistItem[]) => {
     const prev = items.find(row => row.id === id)?.checklist;
     if (!prev) return;
-    const blocked = readOnlyBlock(id);
+    const blocked = readOnlyBlock(id, 'checklist');
     if (blocked) { setChecklistErrors(errs => ({ ...errs, [id]: blocked })); return; }
     setChecklistErrors(({ [id]: _, ...rest }) => rest);
     setChecklistLocal(id, next);
@@ -440,7 +444,7 @@ function ScopedRequirementBoard({ cfg, desktop, dispatch, onOpenVoiceSettings, s
   const toggleChecklist = async (id: string, itemId: string, done: boolean) => {
     const list = items.find(row => row.id === id)?.checklist;
     if (!list) return;
-    const blocked = readOnlyBlock(id);
+    const blocked = readOnlyBlock(id, 'checklist');
     if (blocked) { setChecklistErrors(errs => ({ ...errs, [id]: blocked })); return; }
     setChecklistErrors(({ [id]: _, ...rest }) => rest);
     updateTaskItems(scope, rows => rows.map(row => (row.id === id && row.checklist ? { ...row, checklist: setChecklistDone(row.checklist, itemId, done) } : row)));
@@ -538,6 +542,15 @@ function ScopedRequirementBoard({ cfg, desktop, dispatch, onOpenVoiceSettings, s
     if (items.some(item => item.id === id)) return;
     void getRequirementOnHub(cfg, id).then(row => { if (row) setDashRow(row); }).catch(e => setBanner(e instanceof Error ? e.message : String(e)));
   };
+  // 私信 / 顶部提示里的任务通知 → 打开那张任务(task-open-request.ts)。「在新窗口打开」的单卡窗口不接。
+  const openFromDashboardRef = useRef(openFromDashboard);
+  openFromDashboardRef.current = openFromDashboard;
+  useEffect(() => {
+    if (single) return;
+    const take = () => { const id = takeOpenTaskRequest(cfg.networkId); if (id) openFromDashboardRef.current(id); };
+    take();
+    return subscribeOpenTaskRequest(take);
+  }, [single, cfg.networkId]);
   const openMenuAt = (item: Requirement, x: number, y: number) => setMenu({ id: item.id, title: item.name, column: item.column, x, y });
 
   // ── 视图 ──
@@ -571,7 +584,7 @@ function ScopedRequirementBoard({ cfg, desktop, dispatch, onOpenVoiceSettings, s
     const targets = ids.map(id => items.find(i => i.id === id)).filter((i): i is Requirement => !!i).map(i => ({ id: i.id, name: i.name }));
     const result = await runBulk(targets, async id => {
       const cur = items.find(i => i.id === id);
-      const blocked = readOnlyBlock(id);
+      const blocked = readOnlyBlock(id, kind === 'status' ? 'column' : undefined);
       if (blocked) throw new Error(blocked);
       if (kind === 'status') {
         if (!cur || cur.column === value) return;
@@ -829,14 +842,14 @@ function ScopedRequirementBoard({ cfg, desktop, dispatch, onOpenVoiceSettings, s
         onPress={e => onCardPress(item.id, e)}
         onLongPress={pointer ? undefined : e => openMenuAt(item, e.nativeEvent.pageX, e.nativeEvent.pageY)}
         delayLongPress={350}
-        style={state => [s.card, ((state as { hovered?: boolean }).hovered || state.pressed) && s.cardHover, isDragged && s.cardDragging, sel.ids.includes(item.id) && s.cardSelected, pointer && ({ cursor: item.readOnly ? 'pointer' : 'grab' } as object)]}
-        // 只读的卡不带 taskFrom:task-board-dom 只从带 data-task-from 的卡开始拖。
-        {...({ dataSet: item.readOnly ? { taskCard: item.id } : { taskCard: item.id, taskFrom: item.column } } as object)}
+        style={state => [s.card, ((state as { hovered?: boolean }).hovered || state.pressed) && s.cardHover, isDragged && s.cardDragging, sel.ids.includes(item.id) && s.cardSelected, pointer && ({ cursor: canEditTaskField(item, 'column') ? 'grab' : 'pointer' } as object)]}
+        // 改不了状态的卡不带 taskFrom:task-board-dom 只从带 data-task-from 的卡开始拖(参与人的卡能拖)。
+        {...({ dataSet: canEditTaskField(item, 'column') ? { taskCard: item.id, taskFrom: item.column } : { taskCard: item.id } } as object)}
       >
         {projects && item.projectId ? <ProjectChip project={projectById.get(item.projectId)} s={s} small /> : null}
         <Text style={[s.cardTitle, item.column === 'done' && s.cardDone]} numberOfLines={2}>{highlight(titleText(item), terms)}</Text>
         {item.archived ? <ArchivedTag /> : null}
-        {item.readOnly ? <ReadOnlyTag /> : null}
+        {item.readOnly ? <ReadOnlyTag editFields={item.editFields} /> : null}
         <ParentLine item={item} items={items} />
         <CardMeta item={item} people={people} today={today} s={s} compact={compactCards} />
         <CardFooter item={item} people={people} s={s} touch={!pointer} />
@@ -1041,6 +1054,7 @@ function ScopedRequirementBoard({ cfg, desktop, dispatch, onOpenVoiceSettings, s
           cfg={cfg}
           item={selected}
           readOnly={!!selected.readOnly}
+          editFields={selected.editFields}
           items={items}
           onOpenRequirement={id => { setSelectedId(id); const next = items.find(i => i.id === id); if (single && next) single.onTitle?.(next.name); }}
           onCreateChild={parent => setDraft({ ...draftFor('pool'), parentId: parent.id, projectId: parent.projectId ?? (projects ? defaultProjectFor(filter, projects) : null) })}

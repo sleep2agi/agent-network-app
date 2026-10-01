@@ -251,6 +251,15 @@ registerTranslations({
  'tasks.readOnly': ['只读', 'Read-only'],
  'tasks.readOnlyBlocked': ['「{name}」是只读的：你没有编辑这张任务的权限', '“{name}” is read-only: you cannot edit this task'],
  'tasks.readOnlyBanner': ['只读 · 你可以查看这张任务，但没有编辑权限', 'Read-only · you can view this task but not edit it'],
+ // 参与人(hub viewer_can.edit_fields):整卡只读,但能改状态 / 检查项。
+ 'tasks.partialColumnChecklist': ['仅可改状态和检查项', 'Status & checklist only'],
+ 'tasks.partialColumn': ['仅可改状态', 'Status only'],
+ 'tasks.partialChecklist': ['仅可改检查项', 'Checklist only'],
+ 'tasks.partialBanner': ['你参与了这张任务：{what}，其余只能查看。改动会通知其他参与人', 'You are a participant: {what}; everything else is view-only. Others are notified of your changes'],
+ 'tasks.partialBlocked': ['「{name}」{what}', '“{name}”: {what}'],
+ // 任务通知私信(meta.task_notice):顶部提示 / 私信气泡里点它打开那张任务。
+ 'tasks.noticeOpen': ['查看任务 ›', 'View task ›'],
+ 'tasks.noticeOpenA11y': ['打开任务', 'Open task'],
  'tasks.unassigned': ['未分配', 'Unassigned'],
  'tasks.today': ['今天', 'Today'], 'tasks.allDay': ['全天', 'All day'],
  'tasks.unknownMember': ['未知成员（{id}）', 'Unknown member ({id})'],

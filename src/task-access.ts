@@ -85,3 +85,30 @@ export function readOnlyFromHub(row: Record<string, unknown>): boolean {
   const can = row.viewer_can as { edit?: unknown } | undefined;
   return !!can && typeof can === 'object' && can.edit === false;
 }
+
+/** 只读的卡上还能改的字段(hub agent-network#2201:参与人能改状态和检查项)。 */
+export type TaskEditField = 'column' | 'checklist';
+const TASK_EDIT_FIELDS: readonly TaskEditField[] = ['column', 'checklist'];
+
+/**
+ * 只读的卡上 hub 额外放开的字段:viewer_can.edit=false 且带 edit_fields 时,取其中认得的几个(按固定顺序)。
+ * 能整卡改、或旧 Hub 没有这个键 ⇒ 空数组(与今天逐字相同:只读就是全只读)。看不懂的项丢掉。
+ */
+export function editFieldsFromHub(row: Record<string, unknown>): TaskEditField[] {
+  if (!readOnlyFromHub(row)) return [];
+  const raw = (row.viewer_can as { edit_fields?: unknown }).edit_fields;
+  if (!Array.isArray(raw)) return [];
+  return TASK_EDIT_FIELDS.filter(f => raw.includes(f));
+}
+
+/** 这张卡的这个字段我能不能改:不是只读 ⇒ 能;只读 ⇒ 只有 hub 放开的那几个。 */
+export function canEditTaskField(item: { readOnly?: boolean; editFields?: readonly TaskEditField[] }, field: TaskEditField): boolean {
+  return !item.readOnly || !!item.editFields?.includes(field);
+}
+
+/** 只读小标签 / 详情横幅说哪句:全只读 → 「只读」;放开了状态 / 检查项 → 「仅可改…」。 */
+export function readOnlyLabelKey(editFields: readonly TaskEditField[] | undefined): 'tasks.readOnly' | 'tasks.partialColumnChecklist' | 'tasks.partialColumn' | 'tasks.partialChecklist' {
+  const col = !!editFields?.includes('column');
+  const ck = !!editFields?.includes('checklist');
+  return col && ck ? 'tasks.partialColumnChecklist' : col ? 'tasks.partialColumn' : ck ? 'tasks.partialChecklist' : 'tasks.readOnly';
+}
