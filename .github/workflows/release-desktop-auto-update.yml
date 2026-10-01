@@ -121,6 +121,10 @@ jobs:
           releaseBody: |-
             Signed and notarized stable update for macOS (Apple Silicon) and Windows (x64).
 
+            What's new in 0.2.176:
+            - iPad 横屏改成左右分栏（左边列表、右边内容），竖屏保持现在的样子；转屏时自动切换。
+            - 修复（iPad/iPhone）：一次发多张大图时可能闪退——图片改为一张一张压缩，内存占用降到原来的约三分之一；补上「保存图片到相册」的权限说明。
+
             What's new in 0.2.175:
             - 手机上不用打开任务就能改状态：在任务列表或看板卡片上向左滑，直接点「进行中」「完成」，底部会出现「撤销」；「更多」里可以改状态、改优先级。长按卡片也能改。参与人只能改状态，只读的任务不能滑动。
 

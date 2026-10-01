@@ -1,0 +1,10 @@
+desktop v0.2.176 — iPad 横屏分栏 + 发图内存修复
+================================================================================
+A. 本版内容(0.2.175 发版提交之后 main 上合入的 PR + 本 PR)
+  #627 iPad 横屏(宽≥1024 且横向)走 twoPane;竖屏/Split View<1024/iPhone 不变;转屏重新判定。wide-layout.test 140 项等;web 导出 iPad UA 实测。
+  #628 原生端图片解码→缩放→保存串行(同一时刻最多 1 张全尺寸位图);草稿缩略图 resizeMethod=resize;Info.plist 补 NSPhotoLibraryAddUsageDescription。native-resize.test 20/20。
+  #626 TestFlight 状态查询打印苹果错误原文 + 列测试组 / 加入指定组(CI 工作流,不影响 app)。
+  本 PR(版本号):0.2.175 → 0.2.176,versionCode 2175 → 2176;release-desktop-auto-update.yml 加 What's new in 0.2.176;重新生成 src/changelog-bundled.ts。
+  本地:干净 origin/main(cb4f80a) bump 后 npm ci / npm test / npm run typecheck 全部 rc=0;android-release-notes.mjs 0.2.176 rc=0。
+B. 验证边界(如实)
+  iPad 闪退未拿到崩溃日志,#628 依据代码分析的最可能原因(内存);需真机确认。横屏未在真机验证。
