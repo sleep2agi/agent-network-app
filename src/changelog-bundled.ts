@@ -5,6 +5,9 @@
 export const BUNDLED_RELEASE_BODY: string = [
   "Signed and notarized stable update for macOS (Apple Silicon) and Windows (x64).",
   "",
+  "What's new in 0.2.174:",
+  "- 任务「列表」像飞书多维表格一样直接在格子里改：单击选中格子，再点一下、双击或回车开始编辑，方向键 / Tab 移动，Esc 取消。标题、负责人 / 负责 Agent、优先级、期限、参与人、项目、状态、标签、GitHub Issue 都能直接改（ID、创建时间、更新时间不能改）。改完立即保存，失败会自动恢复并提示。打开详情改用标题格里的「展开」。仅电脑端，手机上仍点一行进详情。",
+  "",
   "What's new in 0.2.173:",
   "- 修复（Mac）：每次打开 app 不再弹出「Where is use_default?」选程序的窗口。",
   "- 修复：主窗口不再一直浮在最上面。「窗口置顶」只在本次打开时有效，重新打开 app 都是正常窗口；之前被卡住置顶的也会自动恢复。",
