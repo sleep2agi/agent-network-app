@@ -1,0 +1,10 @@
+desktop v0.2.181 — 连接状态改成角落小圆点 + Esc 只关当前菜单 + 崩溃记录
+================================================================================
+A. 本版内容(0.2.180 发版提交之后 main 上合入的 PR + 本 PR)
+  #639 Esc 统一处理(src/escape-close.ts):11 处逐个核对,6 处修(TaskSelectMenu/TaskDuePicker 实际会关掉下面的详情页),5 处说明安全。select-menu-esc 18/18;浏览器 24/24(改动前 4 失败 rc=1)。
+  #641 致命 JS 错误记录 + 顶层 FatalBoundary「出错了 · 重新加载」+ 角落「上次异常退出 · 发送诊断」(选节点发送,记住上次)+ 关于页复制。fatal-report 58/58;浏览器 18/18。未真机验证原生同步写。
+  #642 连接较慢/离线横幅改为 7px 角落圆点(宽屏侧栏版本号旁、手机右上角),悬停/点按显示说明并重试;去掉事件流「实时流已断开」整行条。connectivity-indicator 20/20(main 上 10 失败);浏览器 36/36(改动前 12/36)。
+  本 PR(版本号):0.2.180 → 0.2.181,versionCode 2180 → 2181;release-desktop-auto-update.yml 加 What's new in 0.2.181;重新生成 src/changelog-bundled.ts。
+  本地:干净 origin/main(cb22678) bump 后 npm ci / npm test / npm run typecheck 全部 rc=0;android-release-notes.mjs 0.2.181 rc=0。
+B. 验证边界(如实)
+  页内桩 + 浏览器驱动验证;崩溃记录的原生同步写未在真机验证。
