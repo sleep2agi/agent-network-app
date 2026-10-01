@@ -11,6 +11,7 @@ use tauri::{AppHandle, Emitter, Runtime};
 // → 系统弹「Where is use_default?」选程序框。插件 2.4 自己发通知前会 set_application,
 // 但我们这条路(点通知打开对话)不经过插件。所以 setup 里先登记一次,发通知的地方
 // 再兜一次(底层是 Once,重复调只回 AlreadySet)。
+#[cfg_attr(not(target_os = "macos"), allow(dead_code))]
 pub(crate) fn notification_app_id(dev: bool, identifier: &str) -> &str {
     // 和插件 desktop.rs 同一判据:开发态没有打包的 bundle,借 Terminal 的身份。
     if dev {
@@ -129,8 +130,14 @@ mod tests {
         let helper = own.find("fn new_notification").expect("helper exists");
         let guard_line = own[helper..].lines().nth(1).unwrap_or("");
         assert!(guard_line.contains("init_notification_app(app)"), "helper must set the app first: {guard_line}");
-        let helper_line = own[..helper].lines().count() + 2;
-        assert_eq!(constructed, vec![format!("chat_notify.rs:{helper_line}")], "notify_rust::Notification built outside new_notification");
+        // 期望的那一行 = helper 里真正调用 Notification::new() 的那一行(按内容找,不按偏移算)。
+        let expected_line = own
+            .lines()
+            .position(|l| l.contains("notify_rust::Notification::new()") && !l.trim_start().starts_with("//") && !l.contains("contains("))
+            .map(|i| i + 1)
+            .expect("helper constructs the notification");
+        assert!(own.lines().nth(expected_line - 2).unwrap_or("").contains("init_notification_app(app)"), "set_application must run right before construction");
+        assert_eq!(constructed, vec![format!("chat_notify.rs:{expected_line}")], "notify_rust::Notification built outside new_notification");
 
         let lib = include_str!("lib.rs");
         let setup = lib.find(".setup(|app|").expect("setup block");
