@@ -37,6 +37,13 @@ let failureRounds = 0;
 let streakStartedAt: number | null = null;
 let roundStartedAt: number | null = null;
 let recentReadMs: number[] = [];
+/** 最近几次计入「慢」判断的读(诊断用:提示条里写出是哪个接口、多慢、多大)。 */
+let recentReads: ReadSample[] = [];
+/** app 每离开一次前台(切后台 / 锁屏 / 多任务切换器 / 窗口隐藏)就 +1。 */
+let suspendEpoch = 0;
+
+/** 一次读的诊断样本。 */
+export interface ReadSample { path: string; ms: number; bytes?: number }
 
 /** 距本轮第一次失败不到这么久的失败算同一轮(同一轮轮询里并发的几个读一起失败只算一次)。 */
 export const FAILURE_ROUND_MS = 3_000;
@@ -102,8 +109,20 @@ function maybeEmit(prev: string): void {
   }
 }
 
-/** 一次读拿到并解析出了数据。`durationMs` = 这次读从发出到读完响应体的耗时(用于判慢)。 */
-export function reportReadSuccess(at: number = Date.now(), durationMs?: number): void {
+/**
+ * app 离开前台时调用(connectivity-lifecycle.ts 接 AppState)。
+ * 2026-10-01(Vincent iPad「连接较慢」,#431):读的耗时是墙钟时间。iOS 把后台的 app 挂起,挂起前发出的读
+ * 回到前台才算读完 —— 耗时把整段后台时间都算进去,一次切走就能凑出「连续 3 次 ≥6 秒」。跨过挂起的读不计入判慢。
+ */
+export function noteAppSuspended(): void { suspendEpoch += 1; }
+/** 读开始时取一次;读完时原样交回 reportReadSuccess,期间离开过前台就不计耗时。 */
+export function readEpoch(): number { return suspendEpoch; }
+
+/**
+ * 一次读拿到并解析出了数据。`durationMs` = 这次读从发出到读完响应体的耗时(用于判慢)。
+ * `sample.epoch` 是读开始时的 readEpoch():中间离开过前台 ⇒ 耗时不可信,不计入判慢(成功本身照常算)。
+ */
+export function reportReadSuccess(at: number = Date.now(), durationMs?: number, sample?: { path?: string; bytes?: number; epoch?: number }): void {
   const prev = snapshot();
   const wasFailing = failureRounds > 0;
   lastSuccessAt = at;
@@ -111,8 +130,10 @@ export function reportReadSuccess(at: number = Date.now(), durationMs?: number):
   failureRounds = 0;
   streakStartedAt = null;
   roundStartedAt = null;
-  if (typeof durationMs === 'number' && Number.isFinite(durationMs)) {
+  const spannedSuspend = sample?.epoch !== undefined && sample.epoch !== suspendEpoch;
+  if (typeof durationMs === 'number' && Number.isFinite(durationMs) && !spannedSuspend) {
     recentReadMs = [...recentReadMs, durationMs].slice(-SLOW_AFTER_READS);
+    recentReads = [...recentReads, { path: sample?.path ?? '', ms: durationMs, ...(sample?.bytes !== undefined ? { bytes: sample.bytes } : {}) }].slice(-SLOW_AFTER_READS);
   }
   maybeEmit(prev);
   // 链路回来了:让还在退避里的其他轮询立刻刷新,而不是各自再等最长一分钟。
@@ -175,6 +196,23 @@ function hhmm(at: number, now: number): string {
   return sameDay ? `${hh}:${mm}` : `${d.getMonth() + 1}月${d.getDate()}日 ${hh}:${mm}`;
 }
 
+/** 最近计入判慢的几次读(旧 → 新)。 */
+export function recentReadSamples(): ReadSample[] { return [...recentReads]; }
+
+/** 接口路径的短名:去掉查询串和 /api/ 前缀(「requirements/stats」),诊断行里不放 token / 网络 id。 */
+export function shortReadPath(path: string): string {
+  return (path.split('?')[0] || '').replace(/^\/api\//, '') || path;
+}
+
+/**
+ * 「连接较慢」时提示条的第二行:最近几次读各是哪个接口、多久、多大 —— 下次截图就能看出是链路卡(小接口也慢)
+ * 还是某个接口太大。不是慢的口径 → null。
+ */
+export function slowReadDetail(s: ConnectivityState, samples: readonly ReadSample[] = recentReads): string | null {
+  if (!s.slowReads || !samples.length) return null;
+  return samples.map(r => `${shortReadPath(r.path)} ${(r.ms / 1000).toFixed(1)}s${r.bytes !== undefined ? ` ${r.bytes < 1024 ? `${r.bytes}B` : `${Math.round(r.bytes / 1024)}KB`}` : ''}`).join(' · ');
+}
+
 /** 横幅文案(纯函数便于测试)。在线 → null(不显示)。 */
 export function bannerText(s: ConnectivityState, now: number = Date.now()): string | null {
   if (s.level === 'online') return null;
@@ -192,6 +230,8 @@ export function __resetConnectivityForTest(): void {
   streakStartedAt = null;
   roundStartedAt = null;
   recentReadMs = [];
+  recentReads = [];
+  suspendEpoch = 0;
   version = 0;
   RECONNECT_LISTENERS.clear();
 }

@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'reac
 import { Platform, Pressable, StyleSheet, View, type StyleProp, type TextStyle, type ViewStyle } from 'react-native';
 import { Text } from './ui-text';
 
-import { bannerText, connectivityState, connectivityVersion, requestReconnect, subscribeConnectivity, type ConnectivityState } from './connectivity';
+import { bannerText, connectivityState, connectivityVersion, requestReconnect, slowReadDetail, subscribeConnectivity, type ConnectivityState } from './connectivity';
 import { colors, radius } from './theme';
 
 // 连接状态角标(取代 0.2.178 及以前的全宽顶部横幅 ConnectivityBanner)。
@@ -41,6 +41,8 @@ export default function ConnectivityIndicator({ placement, label, labelStyle, st
   const styles = useMemo(makeStyles, []);
   const s = connectivityState();
   const text = bannerText(s);
+  // 「连接较慢」时第二行写出最近几次读(接口 · 耗时 · 大小):截图里就能看出是链路卡还是哪个接口太大(#431)。
+  const detail = slowReadDetail(s);
   const [hovered, setHovered] = useState(false);
   const [tapped, setTapped] = useState(false);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -65,6 +67,7 @@ export default function ConnectivityIndicator({ placement, label, labelStyle, st
     <View testID="connectivity-indicator-tip" pointerEvents="none" style={[styles.tip, placement === 'rail' ? styles.tipRail : styles.tipCorner]}>
       <Text style={styles.tipText}>{text}</Text>
       {s.level === 'offline' ? <Text style={styles.tipHint}>已立即重试</Text> : null}
+      {detail ? <Text testID="connectivity-indicator-detail" style={styles.tipHint}>{detail}</Text> : null}
     </View>
   ) : null;
   const a11y = {

@@ -98,7 +98,7 @@ const withTimeout = (run: (signal: AbortSignal) => Promise<Response>): Promise<R
 // 成功=拿到并解析出数据;失败=网络错/超时/网关 5xx/解析错(数据没到,UI 是陈旧的)。
 // 其他非 2xx(401/403/404…)说明服务器是连得上的,不算"连不上"(readStatusCountsAsFailure)。
 // 只挂在 get()(全部轮询读)上;写路径有各自显式失败 UI,不进此口径。
-import { readStatusCountsAsFailure, reportReadFailure, reportReadSuccess } from './connectivity';
+import { readEpoch, readStatusCountsAsFailure, reportReadFailure, reportReadSuccess } from './connectivity';
 import { classifyLoginFailure, type LoginFailureKind } from './login-flow';
 import { isTokenExpiredBody } from './login-sessions';
 import { LEGACY_SESSION_ID } from './session-registry';
@@ -121,8 +121,15 @@ let readDeadlineMs = READ_DEADLINE_MS;
 /** Test-only: shorten the read deadline so a hanging-body test doesn't wait 20 s. */
 export function __setReadDeadlineForTest(ms: number = READ_DEADLINE_MS): void { readDeadlineMs = ms; }
 
+/** 响应头里的长度(经 gzip 时是线上字节);没有就不报。诊断用。 */
+export function bodyBytes(res: { headers?: { get?: (k: string) => string | null } }): number | undefined {
+  const n = Number(res.headers?.get?.('content-length') ?? NaN);
+  return Number.isFinite(n) && n >= 0 ? n : undefined;
+}
+
 async function get<T>(cfg: HubConfig, path: string): Promise<T> {
   const started = Date.now();
+  const epoch = readEpoch();
   const ctrl = new AbortController();
   let reported = false;
   try {
@@ -145,7 +152,7 @@ async function get<T>(cfg: HubConfig, path: string): Promise<T> {
       if (!readStatusCountsAsFailure(got.res.status)) reported = true;
       throw new Error(`HTTP ${got.res.status} on ${path}`);
     }
-    reportReadSuccess(Date.now(), Date.now() - started);
+    reportReadSuccess(Date.now(), Date.now() - started, { path, bytes: bodyBytes(got.res), epoch });
     reported = true;
     return got.data as T;
   } catch (e) {

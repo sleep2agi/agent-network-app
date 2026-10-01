@@ -6,7 +6,7 @@ import { issuesFromHub } from './requirement-issues';
 import { normalizeTags } from './requirement-tags';
 import { seqFromHub } from './task-short-id';
 import type { HubConfig } from './api';
-import { readStatusCountsAsFailure, reportReadFailure, reportReadSuccess } from './connectivity';
+import { readEpoch, readStatusCountsAsFailure, reportReadFailure, reportReadSuccess } from './connectivity';
 import { withDeadline } from './deadline';
 import { assignmentsFromHub } from './requirement-people-api';
 import type { RequirementPersonRef } from './requirement-people';
@@ -129,8 +129,10 @@ async function call(cfg: HubConfig, path: string, init?: RequestInit): Promise<u
   // 30 秒一次的头像轮询判断连没连上,「截至」时刻也会比屏上看板的实际数据更旧。写有自己的失败提示。
   const isRead = !init?.method || init.method === 'GET';
   const started = Date.now();
+  const epoch = readEpoch();
   const ctrl = new AbortController();
   let status = 0;
+  let bytes: number | undefined;
   try {
     const got = await withDeadline(
       (async () => {
@@ -142,6 +144,8 @@ async function call(cfg: HubConfig, path: string, init?: RequestInit): Promise<u
           signal: ctrl.signal,
         });
         status = res.status;
+        const len = Number(res.headers?.get?.('content-length') ?? NaN);
+        bytes = Number.isFinite(len) && len >= 0 ? len : undefined;
         if (res.status === 304 && cached) { status = 200; return { body: cached.body }; }
         if (res.status === 404) throw new RequirementsHubError('这个 Hub 还没有需求池', 404);
         if (!res.ok) throw new RequirementsHubError(`HTTP ${res.status}`, res.status);
@@ -158,7 +162,7 @@ async function call(cfg: HubConfig, path: string, init?: RequestInit): Promise<u
       ctrl.abort();
       throw new RequirementsHubError(REQUIREMENTS_TIMEOUT_TEXT, 0);
     }
-    if (isRead) reportReadSuccess(Date.now(), Date.now() - started);
+    if (isRead) reportReadSuccess(Date.now(), Date.now() - started, { path, bytes, epoch });
     return got.body;
   } catch (e) {
     if (isRead && (status === 0 || status === 200 || readStatusCountsAsFailure(status))) reportReadFailure();
