@@ -267,6 +267,12 @@ registerTranslations({
  'tasks.filterStatus': ['状态', 'Status'],
  'tasks.filterStatusA11y': ['按状态筛选，当前：{v0}', 'Filter by status; current: {v0}'],
  'tasks.hideDone': ['隐藏已完成', 'Hide completed'],
+ 'tasks.participating': ['我参与的', 'Participating'],
+ 'tasks.addParticipants': ['添加参与人', 'Add participants'],
+ 'tasks.participantsPlaceholder': ['添加参与人(可多选)', 'Add participants (optional)'],
+ 'tasks.participantsA11y': ['参与人：{v0}，更改', 'Participants: {v0}, change'],
+ 'tasks.participantsPickHint': ['已选 {v0} 人；参与人只能是人类', '{v0} selected; participants are humans'],
+ 'tasks.removeParticipant': ['移除参与人 {name}', 'Remove participant {name}'],
 });
 const keys = new Map<string,string>(taskCopy.map(([zh],i)=>[zh,`tasks.copy.${i}`]));
 /** Only call with known UI/model labels, never user content. */
@@ -540,7 +546,8 @@ registerTranslations({
   'act.view': ['动态', 'Activity'],
   'act.new': ['新', 'New'],
   'act.all': ['全部', 'All'],
-  'act.mine': ['我的任务', 'My tasks'],
+  // 「我的任务」= 我负责或参与的(isMyCard);左栏「我负责的」只算负责人,两个词说清楚,不再同名不同义。
+  'act.mine': ['负责或参与', 'Owned or joined'],
   'act.project': ['项目', 'Project'],
   'act.people': ['成员 / Agent', 'Members / Agents'],
   'act.type': ['类型', 'Type'],

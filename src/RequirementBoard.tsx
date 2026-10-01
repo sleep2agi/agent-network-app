@@ -490,6 +490,8 @@ function ScopedRequirementBoard({ cfg, desktop, dispatch, onOpenVoiceSettings, s
       if (kind === 'node' && twoRoles) d.agentOwner = { kind: 'node', id: ref.id };
       else if (kind === 'user' || kind === 'node') d.owner = { kind, id: ref.id };
     }
+    // 在「我参与的」下建:参与人默认带上我(不然新卡一建好就不在当前视图里)。
+    if (filter.participant?.startsWith('user:')) d.participants = [{ kind: 'user', id: filter.participant.slice(5) }];
     // 筛着某一档就用那一档建;旧 Hub 不收 P3,筛着 P3 也按默认 P1 建。
     if (filter.priorities.length === 1 && priorityOptions.includes(filter.priorities[0])) d.priority = filter.priorities[0];
     if (projects) d.projectId = defaultProjectFor(filter, projects);
@@ -1080,6 +1082,7 @@ function ScopedRequirementBoard({ cfg, desktop, dispatch, onOpenVoiceSettings, s
         draft={draft}
         tagsCapable={tagsCapable}
         twoRoles={twoRoles}
+        participantsCapable={twoRoles || items.some(item => item.participants !== undefined)}
         parentName={draft?.parentId ? items.find(i => i.id === draft.parentId)?.name ?? null : null}
         projects={projects}
         dueDatetime={dueDatetime}

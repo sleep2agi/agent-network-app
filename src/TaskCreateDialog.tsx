@@ -4,7 +4,7 @@ import { validationText } from './i18n-task-presentation';
 import { useTranslation } from './i18n-react';
 import { taskText } from './i18n-tasks';
 // 新建任务:桌面是居中的小对话框,手机是从底部升起的面板。字段:标题(自动聚焦)、负责人(头像选择器,
-// 复用 RequirementPeoplePicker —— 只存稳定身份 {kind,id})、优先级、预计完成。
+// 复用 RequirementPeoplePicker —— 只存稳定身份 {kind,id})、参与人(同一个选择器多选,只列人类)、优先级、预计完成。
 import { useState, type ReactNode } from 'react';
 import { Modal, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import ModalKeyboardAvoider from './ModalKeyboardAvoider';
@@ -16,6 +16,7 @@ import TaskDuePicker from './TaskDuePicker';
 import { useModalSafePadding } from './safe-area-runtime';
 import { withBasePadding } from './modal-safe-area';
 import { colors, radius, spacing, themeMode, type as typeScale, weight } from './theme';
+import { personKey } from './requirement-people';
 import { REQ_COLUMN_LABEL, type ReqPriority, type RequirementProject } from './requirements-model';
 import { priorityLabel } from './task-priority';
 import type { RequirementPerson, RequirementPersonRef } from './requirement-people';
@@ -139,8 +140,76 @@ export function RoleFields({ twoRoles, owner, agentOwner, people, peopleLoading,
   );
 }
 
-export default function TaskCreateDialog({ draft, sheet, twoRoles, parentName, projects, dueDatetime, priorities, pointer, networkId, people, peopleLoading, peopleError, onLoadPeople, onChange, onSubmit, onClose, tagsCapable = false }: {
+/**
+ * 参与人(多选,只列人类)。选择器和任务详情「编辑参与人」是同一个 RequirementPeoplePicker(mode=participants)。
+ * 桌面:一格输入框,里面是已选的人(头像 + 名字),点开选择器增删。
+ * 手机:每人一枚可点掉的胶囊(≥36 高)+ 一枚「添加参与人」按钮(44 高)—— 手指在面板里直接删,不必再开一层。
+ */
+export function ParticipantsField({ value, people, networkId, loading, onLoadPeople, onChange, touch, idBase }: {
+  value: readonly RequirementPersonRef[]; people: readonly RequirementPerson[]; networkId: string; loading: boolean;
+  onLoadPeople: () => Promise<boolean>; onChange: (next: RequirementPersonRef[]) => void; touch: boolean; idBase: string;
+}) {
+  useTranslation();
+  const f = fieldStyles();
+  const [open, setOpen] = useState(false);
+  const show = async () => { if (await onLoadPeople()) setOpen(true); };
+  const names = value.map(r => personName(r, people));
+  const picker = open ? (
+    <RequirementPeoplePicker
+      networkId={networkId}
+      mode="participants"
+      kinds={['user']}
+      title={tr('tasks.copy.66')}
+      hint={tr('tasks.participantsPickHint', { v0: value.length })}
+      people={people}
+      selected={value}
+      onClose={() => setOpen(false)}
+      onConfirm={sel => { onChange(sel.filter(r => r.kind === 'user')); setOpen(false); }}
+    />
+  ) : null;
+  if (touch) {
+    return (
+      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm }} testID={idBase}>
+        {value.map((r, i) => (
+          <Pressable key={personKey(r)} accessibilityRole="button" accessibilityLabel={tr('tasks.removeParticipant', { name: names[i] })} onPress={() => onChange(value.filter(x => personKey(x) !== personKey(r)))}
+            style={{ minHeight: 36, flexDirection: 'row', alignItems: 'center', gap: 6, paddingLeft: 4, paddingRight: 12, borderRadius: radius.pill, backgroundColor: colors.subtleFill, maxWidth: '100%' }} testID={`${idBase}-chip-${r.id}`}>
+            <AliasAvatar alias={names[i]} size={26} />
+            <Text style={{ color: colors.text, fontSize: typeScale.body, flexShrink: 1 }} numberOfLines={1}>{names[i]}</Text>
+            <Ionicons name="close" size={14} color={colors.textMuted} />
+          </Pressable>
+        ))}
+        <Pressable accessibilityRole="button" accessibilityLabel={tr('tasks.addParticipants')} disabled={loading} onPress={() => { void show(); }}
+          style={{ minHeight: 44, flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: spacing.md, borderRadius: radius.pill, borderWidth: 1, borderColor: colors.border, borderStyle: 'dashed' }} testID={`${idBase}-add`}>
+          <Ionicons name="person-add-outline" size={16} color={colors.accent} />
+          <Text style={{ color: colors.accent, fontSize: typeScale.body }}>{loading ? tr('tasks.copy.101') : tr('tasks.addParticipants')}</Text>
+        </Pressable>
+        {picker}
+      </View>
+    );
+  }
+  return (
+    <>
+      <Pressable testID={idBase} accessibilityRole="button" accessibilityLabel={value.length ? tr('tasks.participantsA11y', { v0: names.join('、') }) : tr('tasks.addParticipants')} disabled={loading} onPress={() => { void show(); }}
+        style={state => [f.input, f.row, { flexWrap: 'wrap' }, (state as { hovered?: boolean }).hovered && { borderColor: colors.textMuted }]}>
+        {value.length ? value.map((r, i) => (
+          // 22 高:输入框 minHeight 40 = 22 + 上下 padding 8 + 边框 1 —— 选了人这一格也不长高(和负责人一样高)。
+          <View key={personKey(r)} style={{ flexDirection: 'row', alignItems: 'center', gap: 4, height: 22, paddingLeft: 2, paddingRight: 8, borderRadius: radius.pill, backgroundColor: colors.subtleFill, maxWidth: 160 }} testID={`${idBase}-chip-${r.id}`}>
+            <AliasAvatar alias={names[i]} size={18} />
+            <Text style={{ color: colors.text, fontSize: typeScale.small, flexShrink: 1 }} numberOfLines={1}>{names[i]}</Text>
+          </View>
+        )) : <Ionicons name="people-outline" size={16} color={colors.textMuted} />}
+        <Text style={{ flex: 1, color: colors.textMuted, fontSize: typeScale.body }} numberOfLines={1}>{loading ? tr('tasks.copy.101') : value.length ? '' : tr('tasks.participantsPlaceholder')}</Text>
+        <Ionicons name="chevron-down" size={14} color={colors.textMuted} />
+      </Pressable>
+      {picker}
+    </>
+  );
+}
+
+export default function TaskCreateDialog({ draft, sheet, twoRoles, parentName, projects, dueDatetime, priorities, pointer, networkId, people, peopleLoading, peopleError, onLoadPeople, onChange, onSubmit, onClose, tagsCapable = false, participantsCapable = false }: {
   draft: CreateDraft | null;
+  /** Hub 的 POST 收参与人(#2065 起;行里带 participants 字段)。旧 Hub 不显示这一栏 —— 发了也会被忽略。 */
+  participantsCapable?: boolean;
   /** Hub 存得下标签(capabilities.tags):新建时就能带上,输入框补全已有标签。 */
   tagsCapable?: boolean;
   /** Hub 分不分「负责人(人类)/ 负责 Agent」。不分就是旧的单一负责人。 */
@@ -240,6 +309,12 @@ export default function TaskCreateDialog({ draft, sheet, twoRoles, parentName, p
                 onChange={set}
                 idBase="req-assignee"
               />
+              {participantsCapable ? (
+                <View style={{ gap: spacing.sm }} testID="req-create-participants">
+                  <Text style={f.label}>{tr('tasks.copy.53')}</Text>
+                  <ParticipantsField value={draft.participants ?? []} people={people} networkId={networkId} loading={peopleLoading} onLoadPeople={onLoadPeople} onChange={participants => set({ participants })} touch={sheet} idBase="req-participants" />
+                </View>
+              ) : null}
               {projects ? <ProjectSelect value={draft.projectId} projects={projects} onChange={projectId => set({ projectId })} touch={!pointer} idBase="req-project" /> : null}
               <View style={{ gap: spacing.sm }}>
                 <Text style={f.label}>{tr('tasks.copy.32')}</Text>
