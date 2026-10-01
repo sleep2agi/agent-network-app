@@ -119,7 +119,10 @@ for (const theme of ['light', 'dark']) {
     // detail (from the list row)
     try {
       await page.locator(tid('tasks-view-list')).first().click({ timeout: 10000 });
-      await page.locator(tid('req-row-t1')).first().click({ timeout: 10000 });
+      // 桌面列表的格子单击是「选中格」(多维表格式就地编辑);进详情走标题格悬停出现的「展开」按钮。
+      await page.locator(tid('req-row-t1')).first().hover({ timeout: 10000 });
+      const expand = page.locator(tid('req-row-open-t1')).first();
+      if (await expand.count()) await expand.click(); else await page.locator(tid('req-row-t1')).first().click({ timeout: 10000 });
       const input = page.locator(tid('req-edit-name')).first();
       await input.waitFor({ timeout: 10000 });
       await page.waitForTimeout(400);

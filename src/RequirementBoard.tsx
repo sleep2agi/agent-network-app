@@ -27,6 +27,7 @@ import { REQ_COLUMN_LABEL, REQ_COLUMNS, REQ_PRIORITIES, titleText, type Checklis
 import { readRequirements, requirementsKey, writeRequirements } from './requirements-store';
 import { createProject, createRequirementOnHub, fetchMyUserId, getRequirementOnHub, listArchivedRequirements, listProjects, listRequirementChanges, listRequirementsFull, searchRequirementsOnHub, setChecklistItemOnHub, updateProject, migrateLocalRequirements, moveRequirementOnHub, probeAgentOwnerSupport, RequirementsHubError, updateRequirementOnHub } from './requirements-hub';
 import { listRequirementPeople, saveRequirementAssignments } from './requirement-people-api';
+import { applyCellEdit, cellRequest, rollbackCellEdit, type CellEdit } from './task-list-edit-model';
 import { personKey, type RequirementPerson } from './requirement-people';
 import RequirementPeoplePicker from './RequirementPeoplePicker';
 import { assignAccess, bulkOwnerPlan, canAssignPeople, humanParticipants, ownerChange, participantsChange, revertAssign, type AssignChange } from './task-assign';
@@ -515,6 +516,29 @@ function ScopedRequirementBoard({ cfg, desktop, dispatch, onOpenVoiceSettings, s
     const change = target.mode === 'owner' ? ownerChange(item, picked) : participantsChange(item, picked);
     if (!change) return;
     void assign(item.id, change).then(failed => { if (failed) setBanner(`「${item.name}」${failed}`); });
+  };
+  // 列表就地编辑(多维表格式):一格一个字段,先乐观改,失败只退回那一个字段;返回原因给表格就地提示。
+  const editCell = async (id: string, edit: CellEdit): Promise<string | null> => {
+    const before = items.find(row => row.id === id);
+    const req = before && cellRequest(before, edit);
+    if (!before || !req) return null;
+    const blocked = readOnlyBlock(id, edit.field === 'status' ? 'column' : undefined);
+    if (blocked) return blocked;
+    updateTaskItems(scope, rows => rows.map(row => (row.id === id ? applyCellEdit(row, edit) : row)));
+    try {
+      if (req.kind === 'assign') {
+        const saved = await track(() => saveRequirementAssignments(cfg, id, { participants: req.participants }));
+        updateTaskItems(scope, rows => rows.map(row => (row.id === id ? { ...row, ...saved } : row)));
+      } else {
+        const updated = await track(() => (req.kind === 'move' ? moveRequirementOnHub(cfg, id, req.column) : updateRequirementOnHub(cfg, id, req.patch)));
+        updateTaskItems(scope, rows => rows.map(row => (row.id === id ? updated : row)));
+      }
+      if (edit.field === 'tags') noteTagsUsed(edit.tags);
+      return null;
+    } catch (e) {
+      updateTaskItems(scope, rows => rows.map(row => (row.id === id ? rollbackCellEdit(row, before, edit) : row)));
+      return e instanceof Error ? e.message : tr('tasks.copy.25');
+    }
   };
 
   // 甘特图拖动改期限:只发 due(描述等别的字段不动),先乐观更新,失败退回并提示。
@@ -1074,7 +1098,8 @@ function ScopedRequirementBoard({ cfg, desktop, dispatch, onOpenVoiceSettings, s
     const rows = listRows;
     return <TaskListTable rows={rows} terms={terms} people={people} projects={projects} sort={sort} setSort={setSort} s={s} today={today} selectedId={selectedId} onOpen={openDetail} touch={!pointer} onMenu={openMenuAt} filtered={filterActive(filter)} needsUpdateUpgrade={items.some(item => item.updatedAt === undefined)} items={items}
       selection={pointer ? { ids: sel.ids, onToggle: id => setSel(cur => toggleSelected(cur, id)), onPress: (id, e) => onCardPress(id, e as { nativeEvent?: any }) } : undefined}
-      onProject={(id, pid) => { void setProject(id, pid); }} seqCapable={seqCapable} />;
+      onProject={(id, pid) => { void setProject(id, pid); }} seqCapable={seqCapable}
+      edit={{ onEdit: editCell, onLoadPeople: () => { void loadPeople(); }, ctx: { people, peopleLoading, projects, networkId: cfg.networkId || '', twoRoles, lowestPriority, allowTime: dueDatetime, tagChoices: tagCatalog?.tags ?? [...new Set(items.flatMap(it => it.tags ?? []))], tagColors: tagCatalog?.colors } }} />;
   };
 
   const body = section === 'dispatch' ? dispatch ?? null

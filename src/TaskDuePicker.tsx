@@ -24,7 +24,7 @@ export const DUE_PANEL_WIDTH = 308;
 type Time = { hh: number; mm: number; ss: number };
 const pad = (n: number) => String(n).padStart(2, '0');
 
-export default function TaskDuePicker({ value, onChange, allowTime, pointer, sheet, idBase, error }: {
+export default function TaskDuePicker({ value, onChange, allowTime, pointer, sheet, idBase, error, anchorAt, onDismiss }: {
   value: string;
   onChange: (due: string) => void;
   /** Hub 能存时刻(capabilities 里有 due_datetime)。 */
@@ -34,6 +34,9 @@ export default function TaskDuePicker({ value, onChange, allowTime, pointer, she
   sheet: boolean;
   idBase: string;
   error?: string;
+  /** 列表格子里就地改(TaskListCellEditor):不画字段,直接在这个位置打开面板,快捷项放进面板;关了调 onDismiss。 */
+  anchorAt?: { x: number; y: number; w: number; h: number };
+  onDismiss?: () => void;
 }) {
   useTranslation();
   const s = useTaskStyles();
@@ -42,8 +45,11 @@ export default function TaskDuePicker({ value, onChange, allowTime, pointer, she
   const win = useWindowDimensions();
   const safe = useModalSafePadding('fullScreen');
   const fieldRef = useRef<any>(null);
-  const [open, setOpen] = useState(false);
-  const [anchor, setAnchor] = useState<{ x: number; y: number; w: number; h: number } | null>(null);
+  const [open, setOpen] = useState(!!anchorAt);
+  const [anchor, setAnchor] = useState<{ x: number; y: number; w: number; h: number } | null>(anchorAt ?? null);
+  const dismiss = useRef(onDismiss);
+  dismiss.current = onDismiss;
+  useEffect(() => { if (anchorAt && !open) dismiss.current?.(); }, [open]); // eslint-disable-line react-hooks/exhaustive-deps
   const today = localDateOf(Date.now());
   const initial = dueToLocal(value);
   const [date, setDate] = useState<string>(initial?.date ?? today);
@@ -169,6 +175,15 @@ export default function TaskDuePicker({ value, onChange, allowTime, pointer, she
           </View>
         </View>
       ) : null}
+      {anchorAt ? (
+        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm }}>
+          {dueShortcuts(today).map(o => (
+            <Pressable key={o.key} onPress={() => { onChange(o.value); setOpen(false); }} style={[s.chip, { height: 28 }, value === o.value && s.chipOn]} testID={`${idBase}-${o.key}`} accessibilityRole="button">
+              <Text style={[s.chipText, value === o.value && s.chipTextOn]}>{validationText(o.label)}</Text>
+            </Pressable>
+          ))}
+        </View>
+      ) : null}
       <View style={[f.row, { justifyContent: 'space-between' }]}>
         <Pressable accessibilityRole="button" onPress={() => { onChange(''); setOpen(false); }} style={styles.footBtn} testID={`${idBase}-picker-clear`}>
           <Text style={s.link}>{tr('tasks.copy.183')}</Text>
@@ -188,10 +203,28 @@ export default function TaskDuePicker({ value, onChange, allowTime, pointer, she
   // 桌面:贴着字段下沿;放不下就翻到上面;左边和字段左边对齐,右边夹进窗口。
   // 上下都放不下(矮窗口,字段在中间 —— 详情里项目 / 母任务挪到标题下以后更常见):放到字段左边、竖直居中,
   // 不再夹到窗口顶上把字段本身盖住。
-  const panelH = allowTime ? 452 : 404;
+  const panelH = (allowTime ? 452 : 404) + (anchorAt ? 40 : 0);
   const place = duePanelPlacement(anchor, { width: win.width, height: win.height }, { width: DUE_PANEL_WIDTH, height: panelH });
   const left = place.left;
   const top = place.top;
+
+  const modal = (
+      <Modal visible={open} transparent animationType={sheet ? 'slide' : 'fade'} onRequestClose={() => setOpen(false)}>
+        <View style={{ flex: 1, backgroundColor: sheet ? 'rgba(0,0,0,0.4)' : 'transparent', justifyContent: sheet ? 'flex-end' : undefined }}>
+          <Pressable accessibilityLabel={tr('tasks.copy.189')} onPress={() => setOpen(false)} style={StyleSheet.absoluteFill} testID={`${idBase}-scrim`} />
+          <View
+            style={sheet
+              ? { backgroundColor: colors.card, borderTopLeftRadius: radius.surface, borderTopRightRadius: radius.surface, padding: spacing.lg, paddingBottom: spacing.lg + safe.paddingBottom, alignItems: 'center', ...elevated('floating') }
+              : { position: 'absolute', left, top, width: DUE_PANEL_WIDTH, padding: spacing.lg, borderRadius: radius.surface, backgroundColor: colors.card, borderWidth: themeMode() === 'dark' ? 1 : 0, borderColor: colors.border, ...elevated('floating') }}
+            accessibilityViewIsModal
+            testID={`${idBase}-panel`}
+          >
+            <View style={{ width: DUE_PANEL_WIDTH - spacing.lg * 2 }}>{panelBody}</View>
+          </View>
+        </View>
+      </Modal>
+  );
+  if (anchorAt) return modal;
 
   return (
     <View style={{ gap: spacing.sm }}>
@@ -225,20 +258,7 @@ export default function TaskDuePicker({ value, onChange, allowTime, pointer, she
         ) : null}
       </View>
       {error ? <Text style={s.err} accessibilityRole="alert">{error}</Text> : null}
-      <Modal visible={open} transparent animationType={sheet ? 'slide' : 'fade'} onRequestClose={() => setOpen(false)}>
-        <View style={{ flex: 1, backgroundColor: sheet ? 'rgba(0,0,0,0.4)' : 'transparent', justifyContent: sheet ? 'flex-end' : undefined }}>
-          <Pressable accessibilityLabel={tr('tasks.copy.189')} onPress={() => setOpen(false)} style={StyleSheet.absoluteFill} testID={`${idBase}-scrim`} />
-          <View
-            style={sheet
-              ? { backgroundColor: colors.card, borderTopLeftRadius: radius.surface, borderTopRightRadius: radius.surface, padding: spacing.lg, paddingBottom: spacing.lg + safe.paddingBottom, alignItems: 'center', ...elevated('floating') }
-              : { position: 'absolute', left, top, width: DUE_PANEL_WIDTH, padding: spacing.lg, borderRadius: radius.surface, backgroundColor: colors.card, borderWidth: themeMode() === 'dark' ? 1 : 0, borderColor: colors.border, ...elevated('floating') }}
-            accessibilityViewIsModal
-            testID={`${idBase}-panel`}
-          >
-            <View style={{ width: DUE_PANEL_WIDTH - spacing.lg * 2 }}>{panelBody}</View>
-          </View>
-        </View>
-      </Modal>
+      {modal}
     </View>
   );
 }

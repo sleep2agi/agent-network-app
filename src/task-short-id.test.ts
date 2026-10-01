@@ -55,7 +55,7 @@ ck('capability name', SEQ_CAPABILITY === 'requirement_seq');
 ck('board reads the capability and passes it to the list', board.includes('st.capabilities.includes(SEQ_CAPABILITY)') && /seqCapable=\{seqCapable\}/.test(board));
 ck('list hides the ID column without the capability', table.includes("(seqCapable || f.id !== 'seq')"));
 ck('field config hides the ID row without the capability', fields.includes("(seqCapable || f.id !== 'seq')") && table.includes('seqCapable={seqCapable}'));
-ck('ID column is sortable (not in the unsortable set)', /const sortable = id !== 'participants' && id !== 'issues';/.test(table));
+ck('ID column is sortable (not in the unsortable set)', /const sortable = id !== 'participants' && id !== 'issues' && id !== 'tags';/.test(table));
 ck('kanban / phone card shows #N only when the card has one', /\{shortIdLabel\(item\) \? <Text testID=\{`req-card-seq-/.test(parts));
 ck('card #N is subtle: muted, right-aligned, does not shrink', /req-card-seq-[^\n]*metaMuted[^\n]*marginLeft: item\.due \? 0 : 'auto'[^\n]*flexShrink: 0/.test(parts));
 ck('only one auto margin per meta row: the due chip keeps its own, #N follows it', /due: \{ marginLeft: 'auto'/.test(parts));

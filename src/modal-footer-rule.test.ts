@@ -62,6 +62,7 @@ const AUDIT: Record<string, { count: number; kinds: Kind[]; input?: boolean; key
   'TaskDescriptionFullscreen.tsx': { count: 2, kinds: ['fullscreen'], keyboard: 'followup: 全屏描述编辑,手机按住说话条在底部,无键盘避让', note: '正文 flex:1' },
   'TaskDetailPanel.tsx': { count: 1, kinds: ['fullscreen'], keyboard: 'followup: 全屏详情,编辑时 iOS 键盘可能盖住底部按钮行', note: 'ScrollView flex:1,footer 在外' },
   'TaskDuePicker.tsx': { count: 1, kinds: ['menu', 'sheet'], keyboard: 'followup: 日期弹层里的时间输入;固定尺寸弹层,手机上键盘可能盖住下半', note: 'duePanelPlacement 固定尺寸日历' },
+  'TaskListCellEditor.tsx': { count: 1, kinds: ['menu'], keyboard: 'n/a: 列表格子编辑器只在桌面鼠标表格上打开(TaskListTable live = !touch),没有软键盘', input: true, note: '锚在格子下面,anchorSelectMenu 算 maxHeight ≤ 320,选项 ScrollView flexGrow:0' },
   'TaskListFields.tsx': { count: 1, kinds: ['menu'], keyboard: 'followup: 字段设置弹层的搜索框;弹层 maxHeight 按锚点到窗口底算,没扣键盘', note: 'maxHeight = h - y - 12,ScrollView flexShrink:1' },
   'TaskProjectManager.tsx': { count: 1, kinds: ['dialog', 'sheet'], keyboard: 'avoider', input: true, note: '面板 85%,列表可收缩,新增行在外;输入框 ⇒ 键盘避让(本次)' },
   'TaskTagManager.tsx': { count: 1, kinds: ['dialog', 'sheet'], keyboard: 'avoider', input: true, note: '面板 85%,列表 ScrollView 可收缩,合并栏 / 操作面板在外;改名、合并输入 ⇒ 键盘避让' },
