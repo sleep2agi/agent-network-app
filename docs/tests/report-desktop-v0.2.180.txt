@@ -1,0 +1,12 @@
+desktop v0.2.180 — 修 iOS 发图闪退 + 任务卡片「我」标记 + 桌面端下拉选人
+================================================================================
+A. 本版内容(0.2.179 发版提交之后 main 上合入的 PR + 本 PR)
+  #636 ci(ios): ios-crash-feedback 工作流(只读拉 TestFlight 崩溃日志,不影响 app 代码)。
+  #638 修 iOS 发图闪退:TestFlight 崩溃日志(iPhone18,5 iOS 26.5.1 / iPad7,11)栈 JavaScriptValue.getAny 断言 ← ImageManipulator.manipulate(ImageRef) 的 Either<URL,SharedRef> 转换;改为只传 uri。manipulate-uri-only.test 守卫;未真机验证。
+  #637 任务审计 L10/L12/L13:卡片上「我」的头像置前+高亮环;桌面端负责人/参与人锚定下拉(键盘可用,Esc 不再误关详情页);
+       无编辑权限的项目不进建任务/移动的项目列表(依赖 Hub 下发 viewer_can.edit,未下发时行为不变)。
+       npm test 304/304;typecheck rc=0;requirement-details Docker 46/0;task-audit-lows 33/33;浏览器驱动 28/28(改动前导出 20 组失败 rc=1)。
+  本 PR(版本号):0.2.179 → 0.2.180,versionCode 2179 → 2180;release-desktop-auto-update.yml 加 What's new in 0.2.180;重新生成 src/changelog-bundled.ts。
+  本地:干净 origin/main(cf14d6b) bump 后 npm ci / npm test / npm run typecheck 全部 rc=0;android-release-notes.mjs 0.2.180 rc=0。
+B. 验证边界(如实)
+  页内桩 + 浏览器驱动验证;L13 需 Hub 侧下发项目 viewer_can.edit 后才在真实环境生效;卡片头像点开的选人仍是居中弹窗。
