@@ -64,3 +64,23 @@ export async function resizeForUpload<D extends DecodedImage>(
     }
   }
 }
+
+/**
+ * 原生缩放一次只跑一张(iPad 发图闪退的首要嫌疑)。
+ *
+ * 每张图的 decode → resize → save 要把整张原图解成位图:48MP 的 HEIC ≈ 8064×6048×4B ≈ 195MB,
+ * 再加 2048 边长的输出(≈ 16MB)。上传队列默认 3 路并发(upload-queue.ts),以前三张大图会同时解码
+ * ⇒ 峰值 ≈ 3 × 195MB,iPad 上会被 jetsam 杀掉。排成一队后,任一时刻最多一张原图位图在内存里
+ * (上一张的 ImageRef 在 resizeForUpload 的 finally 里 release 之后,下一张才开始 decode)。
+ * 上传本身(读缩好的小文件、走网络)仍然 3 路并发。
+ *
+ * 一项失败不卡住队列:下一项照常开始,失败照常抛给调用方。
+ */
+export function createSerialQueue(): <T>(job: () => Promise<T>) => Promise<T> {
+  let tail: Promise<unknown> = Promise.resolve();
+  return <T>(job: () => Promise<T>): Promise<T> => {
+    const run = tail.then(job, job);
+    tail = run.then(() => undefined, () => undefined);
+    return run;
+  };
+}

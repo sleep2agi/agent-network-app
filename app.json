@@ -12,7 +12,8 @@
       "bundleIdentifier": "top.vansin.agentnetwork",
       "buildNumber": "1",
       "infoPlist": {
-        "ITSAppUsesNonExemptEncryption": false
+        "ITSAppUsesNonExemptEncryption": false,
+        "NSPhotoLibraryAddUsageDescription": "允许把图片保存到相册"
       }
     },
     "web": {
