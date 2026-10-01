@@ -218,7 +218,7 @@ function PeopleDropdown({ anchor, viewport, mode, rows, missing, chosen, invalid
         {!rows.length ? <Text style={{ color: colors.textMuted, fontSize: 13, padding: spacing.md }}>{empty}</Text> : null}
       </ScrollView>
       {footer ? <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm, paddingTop: 4, paddingLeft: spacing.sm, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border }}>
-        <Text style={{ flex: 1, color: invalid ? colors.failed : colors.textMuted, fontSize: 12 }} numberOfLines={1} accessibilityRole={invalid ? 'alert' : undefined}>{invalid ? tr('tasks.copy.78') : hint}</Text>
+        <Text style={{ flex: 1, color: invalid ? colors.failed : colors.textMuted, fontSize: 12 }} numberOfLines={1} accessibilityRole={invalid ? 'alert' : undefined} testID="people-hint">{invalid ? tr('tasks.copy.78') : hint}</Text>
         <Pressable accessibilityRole="button" testID="people-cancel" onPress={onClose} style={{ height: 30, justifyContent: 'center', paddingHorizontal: spacing.sm }}><Text style={{ color: colors.textSecondary, fontSize: 13 }}>{tr('tasks.copy.79')}</Text></Pressable>
         <Pressable accessibilityRole="button" accessibilityState={{ disabled: invalid }} disabled={invalid} testID="people-confirm" onPress={onConfirm}
           style={{ height: 30, justifyContent: 'center', paddingHorizontal: spacing.md, borderRadius: radius.control, backgroundColor: colors.accent, opacity: invalid ? 0.5 : 1 }}><Text style={{ color: colors.onAccent, fontSize: 13, fontWeight: '600' }}>{tr('tasks.copy.80')}</Text></Pressable>

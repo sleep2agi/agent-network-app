@@ -6,7 +6,7 @@ import { useTranslation } from './i18n-react';
 // 任务看板的共用小件与样式:卡片、优先级点、期限胶囊、负责人、分段控件、筛选胶囊、主按钮。
 // 圆角 / 阴影:卡片与列 16、输入与按钮 12、胶囊 999、柔和阴影 —— 都取自全局 token
 // (theme.ts radius / elevation.ts);BOARD_RADIUS / softShadow / liftedShadow 只是看板里的别名。
-import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 import { Text } from './ui-text';
 import { Ionicons } from './icons';
@@ -311,21 +311,23 @@ export function ProjectChip({ project, s, small = false }: { project: Requiremen
  */
 /** onPress:看板卡片上点头像 = 设置参与人(能改时)或打开详情(task-assign.ts);列表表格里不给,点了没有动作。 */
 /** meKey:我参与时我的头像排第一、描强调色边(描边宽度不变 → 卡片不长高),名单里标「我」。 */
-export function ParticipantStack({ item, people, s, touch, size = 20, onPress, pressLabel, meKey }: { item: Pick<Requirement, 'participants'>; people: readonly RequirementPerson[]; s: TaskStyles; touch: boolean; size?: number; onPress?: () => void; pressLabel?: 'assign' | 'open'; meKey?: string | null }) {
+export function ParticipantStack({ item, people, s, touch, size = 20, onPress, pressLabel, meKey }: { item: Pick<Requirement, 'participants'>; people: readonly RequirementPerson[]; s: TaskStyles; touch: boolean; size?: number; onPress?: (stack: any) => void; pressLabel?: 'assign' | 'open'; meKey?: string | null }) {
   useTranslation();
   const [open, setOpen] = useState(false);
+  // 头像组本身:点开参与人选择器时把它交出去,桌面把下拉锚在它下面(measureAnchor)。
+  const stackEl = useRef<any>(null);
   const st = participantStack(item.participants, people, 3, meKey);
   if (!st.shown.length) return null;
   return (
     <View style={{ alignItems: 'flex-end', gap: 4 }}>
       <Pressable
-        onPress={onPress}
+        onPress={onPress ? () => onPress(stackEl.current) : undefined}
         // 头像只有 20 高:点的范围上下各放 10(手指 ≥ 40)。
         hitSlop={onPress ? { top: 10, bottom: 10, left: 6, right: 6 } : undefined}
         onLongPress={touch ? () => setOpen(v => !v) : undefined}
         accessibilityRole={onPress ? 'button' : undefined}
         accessibilityLabel={onPress ? tr(pressLabel === 'open' ? 'assign.participantsOpenA11y' : 'assign.participantsA11y', { v0: st.all }) : tr('tasks.copy.87', { v0: st.all })}
-        ref={(el: any) => { if (el && typeof el.setAttribute === 'function') el.setAttribute('title', tr('tasks.copy.87', { v0: st.all })); }}
+        ref={(el: any) => { stackEl.current = el; if (el && typeof el.setAttribute === 'function') el.setAttribute('title', tr('tasks.copy.87', { v0: st.all })); }}
         style={{ flexDirection: 'row', alignItems: 'center' }}
         testID="task-participants"
       >
