@@ -1,0 +1,13 @@
+desktop v0.2.173 — Mac 弹窗/置顶修复 + 看板指派 + 优先级前移
+================================================================================
+A. 本版内容(0.2.172 发版提交 788d3cb 之后 main 上合入的 PR + 本 PR)
+  #620 修复:macOS 启动弹「Where is use_default?」(notify-rust 未 set_application → mac-notification-sys 跑 AppleScript
+       get id of application "use_default");setup 先登记 bundle id,所有通知经 new_notification(),Rust 契约测试钉住。
+       修复:窗口置顶不再跨启动保留,每次启动主动 setAlwaysOnTop(false) 并清旧记录。
+  #619 看板卡片菜单「指派负责人… / 设置参与人…」、参与人头像点开设置、批量指派负责人(跳过无权卡片);
+       详情顺序 标题→状态→优先级→负责人→负责 Agent→参与人→项目→预计完成→描述→更多(Vincent「把优先级放前面去」)。
+       task-assign.test 35 项;requirement-details Docker 45/0;drive 42/42(改动前导出 rc=1)。
+  本 PR(版本号):0.2.172 → 0.2.173,versionCode 2172 → 2173;release-desktop-auto-update.yml 加 What's new in 0.2.173;重新生成 src/changelog-bundled.ts。
+  本地:干净 origin/main(8eee3b7) bump 后 npm ci / npm test / npm run typecheck 全部 rc=0;android-release-notes.mjs 0.2.173 rc=0。
+B. 验证边界(如实)
+  本 PR 只改版本号与说明。#620 的 Mac 弹窗只能在 Mac 真机确认,发布后验证;本机无 Rust 工具链,Rust 由 CI rust-check 编译测试。
