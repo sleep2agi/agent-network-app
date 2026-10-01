@@ -1,0 +1,10 @@
+desktop v0.2.172 — 参与人可改状态和检查项 + 任务更新通知
+================================================================================
+A. 本版内容(0.2.171 发版提交 f4fbc71 之后 main 上合入的 PR + 本 PR)
+  #617 参与人可改(Hub #2201 / 0.9.0-preview.80 的 viewer_can.edit_fields):看板拖动/移动、详情状态、检查项增删改勾;其余字段只读且渲染为纯文字;
+       「任务更新」私信/顶部提醒加「查看任务 ›」直接打开任务;所有顶部提醒改为不透明、标题独占一行;完全只读卡片同样纯文字。
+       participant-edit.test.ts 45 项;requirement-details Docker 42/0;drive 48/48(改动前导出 rc=1)。
+  本 PR(版本号):0.2.171 → 0.2.172,versionCode 2171 → 2172;release-desktop-auto-update.yml 加 What's new in 0.2.172;重新生成 src/changelog-bundled.ts。
+  本地:干净 origin/main(06556f7) bump 后 npm ci / npm test(296/296) / npm run typecheck 全部 rc=0;android-release-notes.mjs 0.2.172 rc=0。
+B. 验证边界(如实)
+  本 PR 只改版本号与说明;功能验证见 #617(页内桩)。参与人可改需要 Hub .80;旧 Hub 上行为不变。真机未验证。
