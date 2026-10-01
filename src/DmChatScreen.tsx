@@ -35,6 +35,7 @@ import { elevated } from './elevation';
 import { t } from './i18n';
 import { useTranslation } from './i18n-react';
 import './i18n-chat';
+import './i18n-tasks';
 import './i18n-users';
 import { localizedChatHeader as formatChatHeader } from './i18n-chat-time';
 import { shouldShowTimeHeader } from './time';
@@ -44,7 +45,7 @@ import { ComposerRightSlot } from './ComposerRowParts';
 import { COMPOSER_INPUT_BORDER, COMPOSER_LINE_HEIGHT, composerControlSize, composerInputPadY, composerLineCount, composerRightSlot, composerRowAlign } from './composer-row-layout';
 import { webComposerInputHeight } from './composer-input-height';
 import { COMPOSER_CARD_INSET, COMPOSER_DIVIDER_HEIGHT, COMPOSER_HEIGHT_DEFAULT } from './composer-resize';
-import { dmSendBody, mergeDm, newClientRequestId, unackedIncomingIds, type DmAttachment, type DmMessage, type Human } from './human-dm';
+import { dmSendBody, mergeDm, newClientRequestId, taskNoticeOf, unackedIncomingIds, type DmAttachment, type DmMessage, type Human } from './human-dm';
 import { fetchDmMessages, sendDm } from './human-dm-api';
 import { emitHumanDm, setActiveDmPeer, subscribeHumanDm } from './human-dm-bus';
 import { keyboardAvoidEnabled, useKeyboardVisible } from './keyboard-visibility';
@@ -60,13 +61,15 @@ const GRID_CELL = 84;
 const GRID_GAP = 4;
 const gridWidth = (count: number) => { const cols = Math.min(3, count); return cols * GRID_CELL + (cols - 1) * GRID_GAP; };
 
-export default function DmChatScreen({ cfg, networkId, peer, onBack, desktop = false, hideBack = false }: {
+export default function DmChatScreen({ cfg, networkId, peer, onBack, desktop = false, hideBack = false, onOpenTask }: {
   cfg: HubConfig;
   networkId: string;
   peer: Human;
   onBack: () => void;
   desktop?: boolean;
   hideBack?: boolean;
+  /** 任务通知私信(meta.task_notice):气泡下「查看任务 ›」打开那张任务。不传 = 不画。 */
+  onOpenTask?: (requirementId: string) => void;
 }) {
   useTranslation();
   const name = (peer.display_name ?? '').trim() || peer.username;
@@ -404,6 +407,7 @@ export default function DmChatScreen({ cfg, networkId, peer, onBack, desktop = f
           renderItem={({ item, index }) => {
             const showHeader = shouldShowTimeHeader(item.created_at ?? undefined, data[index + 1]?.created_at ?? undefined);
             const out = item.direction === 'out';
+            const taskNotice = onOpenTask ? taskNoticeOf(item.meta_json) : null;
             return (
               <View style={styles.bubbleWrap} testID={`dm-msg-${out ? 'out' : 'in'}`}>
                 {showHeader && item.created_at ? <Text style={styles.timeHeader}>{formatChatHeader(item.created_at)}</Text> : null}
@@ -416,6 +420,18 @@ export default function DmChatScreen({ cfg, networkId, peer, onBack, desktop = f
                     <View style={[styles.bubble, !out && styles.replyBubble, !out && desktop && styles.replyBubbleDesktop]} testID="dm-bubble">
                       {item.content ? <Text style={styles.bubbleText} selectable>{item.content}</Text> : null}
                       {renderAttachments(item)}
+                      {taskNotice ? (
+                        <Pressable
+                          accessibilityRole="link"
+                          accessibilityLabel={t('tasks.noticeOpenA11y')}
+                          onPress={() => onOpenTask!(taskNotice.requirementId)}
+                          hitSlop={6}
+                          style={styles.taskLink}
+                          testID="dm-open-task"
+                        >
+                          <Text style={styles.taskLinkText}>{t('tasks.noticeOpen')}</Text>
+                        </Pressable>
+                      ) : null}
                     </View>
                     {item.pending ? <Text style={styles.statusMark}>{t('dm.sending')}</Text> : item.failed ? (
                       <Pressable onPress={() => retry(item)} accessibilityRole="button" accessibilityLabel={t('dm.retry')} hitSlop={6} testID="dm-retry">
@@ -617,6 +633,8 @@ const makeStyles = (B = bubbleLayout()) => StyleSheet.create({
   statusMark: { color: colors.textMuted, fontSize: 10, marginTop: 2, alignSelf: 'flex-end' },
   error: { color: colors.failed, fontSize: 12, paddingHorizontal: spacing.lg, paddingVertical: spacing.xs },
   attachmentLine: { color: colors.accent, fontSize: 12, marginTop: spacing.xs },
+  taskLink: { alignSelf: 'flex-start', marginTop: spacing.xs, minHeight: 24, justifyContent: 'center' },
+  taskLinkText: { color: colors.accent, fontSize: 13, fontWeight: '600' },
   thumb: { width: 180, height: 180, borderRadius: radius.thumb, backgroundColor: colors.inputBg },
   grid: { flexDirection: 'row', flexWrap: 'wrap', gap: GRID_GAP },
   gridCell: { width: 84, height: 84, borderRadius: radius.thumb, overflow: 'hidden', backgroundColor: colors.inputBg },

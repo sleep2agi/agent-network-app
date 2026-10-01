@@ -93,6 +93,25 @@ export function dmAttachments(msg: Pick<DmMessage, 'meta_json'>): DmAttachment[]
   }
 }
 
+/**
+ * 参与人改任务的通知私信(hub agent-network#2201):meta.task_notice = {requirement_id, seq, network_id}。
+ * SSE 推来的是对象(event.meta),GET /api/dm 读回来的是字符串(meta_json),两种都收。读不懂 → null(当普通私信)。
+ */
+export type TaskNoticeRef = { requirementId: string; seq: number | null; networkId: string | null };
+export function taskNoticeOf(meta: unknown): TaskNoticeRef | null {
+  let m = meta;
+  if (typeof m === 'string') { try { m = JSON.parse(m); } catch { return null; } }
+  const n = m && typeof m === 'object' ? (m as { task_notice?: unknown }).task_notice : undefined;
+  if (!n || typeof n !== 'object') return null;
+  const v = n as Record<string, unknown>;
+  if (typeof v.requirement_id !== 'string' || !v.requirement_id) return null;
+  return {
+    requirementId: v.requirement_id,
+    seq: typeof v.seq === 'number' && Number.isInteger(v.seq) && v.seq > 0 ? v.seq : null,
+    networkId: typeof v.network_id === 'string' && v.network_id ? v.network_id : null,
+  };
+}
+
 export const isImageAttachment = (a: Pick<DmAttachment, 'mime' | 'name'>): boolean =>
   (a.mime ?? '').startsWith('image/') || /\.(png|jpe?g|gif|webp|heic)$/i.test(a.name ?? '');
 

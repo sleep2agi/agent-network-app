@@ -1,5 +1,5 @@
 // 需求池走 Hub。手机和电脑读同一份。Hub 还没有这个接口时不要退回本机列表。
-import { readOnlyFromHub } from './task-access';
+import { editFieldsFromHub, readOnlyFromHub } from './task-access';
 import { appFetch } from './app-fetch';
 import { fetchAuthMe } from './user-admin-api';
 import { issuesFromHub } from './requirement-issues';
@@ -59,6 +59,8 @@ export function requirementFromHub(row: unknown): Requirement | null {
     ...('seq' in r ? { seq: seqFromHub(r.seq) } : {}),
     // 只读(RFC-038 §9):只有 hub 显式说不能改才锁;没有这个字段(旧 Hub、全部任务的人)照旧能改。
     ...(readOnlyFromHub(r) ? { readOnly: true } : {}),
+    // 只读但参与这张卡:hub 放开状态和检查项(viewer_can.edit_fields,agent-network#2201)。旧 Hub 没有 → 不出现。
+    ...(editFieldsFromHub(r).length ? { editFields: editFieldsFromHub(r) } : {}),
     // 完成时间(capability completed_at):旧 Hub 没有这三个字段,仪表盘退回按 updatedAt 近似。
     ...('completedAt' in r ? { completedAt: typeof r.completedAt === 'string' && r.completedAt ? r.completedAt : null, completedAtApprox: r.completedAtApprox === true, completedBy: updateActor(r.completedBy) } : {}),
     id: r.id,
@@ -342,8 +344,9 @@ export async function updateRequirementOnHub(cfg: HubConfig, id: string, patch: 
     headers: { Authorization: `Bearer ${cfg.token}`, 'Content-Type': 'application/json' },
     body: JSON.stringify(patch),
   });
-  const data = await res.json().catch(() => null) as { requirement?: unknown; error?: string } | null;
-  if (res.status === 403) throw new RequirementsHubError('你没有修改这条需求的权限', 403);
+  const data = await res.json().catch(() => null) as { requirement?: unknown; error?: string; message?: unknown } | null;
+  // 参与人改了状态 / 检查项以外的字段:hub 带一句中文 message(agent-network#2201),照它说。
+  if (res.status === 403) throw new RequirementsHubError(typeof data?.message === 'string' && data.message.trim() ? data.message.trim().slice(0, 200) : '你没有修改这条需求的权限', 403);
   if (res.status === 400 && data?.error === 'invalid_issues') throw new RequirementsHubError('invalid_issues', 400);
   if (res.status === 400 && data?.error === 'invalid_tags') throw new RequirementsHubError('invalid_tags', 400);
   if (res.status === 400 && data?.error === 'empty_patch') throw new RequirementsHubError(HUB_CANNOT_EDIT, 400);

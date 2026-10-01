@@ -55,6 +55,8 @@ export interface Requirement {
   archived?: boolean;
   /** 这张卡对我只读(hub 对「仅相关任务」的成员给 viewer_can.edit=false,RFC-038 §9)。undefined = 能改。 */
   readOnly?: boolean;
+  /** 只读的卡上 hub 仍放开的字段(参与人:状态、检查项;hub viewer_can.edit_fields)。只在 readOnly 时出现。 */
+  editFields?: ('column' | 'checklist')[];
   /** 进「完成」列的时刻(Hub capability completed_at);null = 不在完成列;undefined = 这个 Hub 还没有。 */
   completedAt?: string | null;
   /** completedAt 是升级前按 updatedAt 补的近似值。 */

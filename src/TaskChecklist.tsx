@@ -14,7 +14,7 @@ import { CHECKLIST_MAX_ITEMS, CHECKLIST_TEXT_MAX, checklistDropIndex, checklistP
 import { fieldStyles } from './TaskCreateDialog';
 import { useTaskStyles, a11yState } from './TaskBoardParts';
 
-export default function TaskChecklist({ items, pointer, onToggle, onAdd, onDelete, onMove, error }: {
+export default function TaskChecklist({ items, pointer, onToggle, onAdd, onDelete, onMove, error, readOnly = false }: {
   items: readonly ChecklistItem[];
   /** 鼠标界面:显示拖动把手、悬停才显示删除。 */
   pointer: boolean;
@@ -23,6 +23,8 @@ export default function TaskChecklist({ items, pointer, onToggle, onAdd, onDelet
   onDelete: (id: string) => void;
   onMove: (from: number, to: number) => void;
   error: string;
+  /** 只读的卡(hub 说不能改检查项):只画勾选状态和文字,没有把手 / 删除 / 新增输入框,行不可点。 */
+  readOnly?: boolean;
 }) {
   useTranslation();
   const s = useTaskStyles();
@@ -96,8 +98,9 @@ export default function TaskChecklist({ items, pointer, onToggle, onAdd, onDelet
                 onHoverIn={() => setHover(item.id)}
                 onHoverOut={() => setHover(h => (h === item.id ? null : h))}
                 onPress={() => onToggle(item.id, !item.done)}
+                disabled={readOnly}
                 accessibilityRole="checkbox"
-                {...a11yState({ checked: item.done })}
+                {...a11yState({ checked: item.done, disabled: readOnly })}
                 accessibilityLabel={item.text}
                 accessibilityHint={pointer ? tr('tasks.copy.94') : undefined}
                 {...({ onKeyDown: (e: any) => {
@@ -111,7 +114,7 @@ export default function TaskChecklist({ items, pointer, onToggle, onAdd, onDelet
                 testID={`req-checklist-item-${item.id}`}
                 {...({ dataSet: { checklistRow: String(index) } } as object)}
               >
-                {pointer ? (
+                {pointer && !readOnly ? (
                   // 把手自己是个 Pressable:点它不会顺带勾选这一行。
                   <Pressable onPress={() => {}} style={{ width: 14, alignItems: 'center', opacity: hover === item.id || drag ? 1 : 0.25, cursor: 'grab' } as object} accessibilityElementsHidden importantForAccessibility="no" {...({ dataSet: { checklistHandle: String(index) } } as object)} testID={`req-checklist-handle-${item.id}`}>
                     <Ionicons name="reorder-two-outline" size={14} color={colors.textMuted} />
@@ -119,18 +122,18 @@ export default function TaskChecklist({ items, pointer, onToggle, onAdd, onDelet
                 ) : null}
                 <Ionicons name={item.done ? 'checkbox' : 'square-outline'} size={18} color={item.done ? colors.running : colors.textMuted} />
                 <Text style={{ flex: 1, color: item.done ? colors.textMuted : colors.text, fontSize: typeScale.body, textDecorationLine: item.done ? 'line-through' : 'none' }}>{item.text}</Text>
-                {/* 删除按钮一直在(键盘能 Tab 到);鼠标界面不悬停时只是透明,聚焦时显出来。 */}
-                <Pressable accessibilityRole="button" accessibilityLabel={tr('tasks.copy.95', { v0: item.text })} onPress={() => onDelete(item.id)} hitSlop={8}
+                {/* 删除按钮一直在(键盘能 Tab 到);鼠标界面不悬停时只是透明,聚焦时显出来。只读的卡不画。 */}
+                {readOnly ? null : <Pressable accessibilityRole="button" accessibilityLabel={tr('tasks.copy.95', { v0: item.text })} onPress={() => onDelete(item.id)} hitSlop={8}
                   style={state => ({ padding: 4, opacity: showDelete || (state as { focused?: boolean }).focused ? 1 : 0 })} testID={`req-checklist-delete-${item.id}`}>
                   <Ionicons name="close" size={14} color={colors.textMuted} />
-                </Pressable>
+                </Pressable>}
               </Pressable>
               {dropHere && drag!.to > drag!.from ? <View style={[s.dropLine, { marginVertical: 1 }]} testID="req-checklist-drop" /> : null}
             </View>
           );
         })}
       </View>
-      <View style={[f.row, { gap: spacing.sm }]}>
+      {readOnly ? null : <View style={[f.row, { gap: spacing.sm }]}>
         <TextInput
           value={text}
           onChangeText={setText}
@@ -147,7 +150,7 @@ export default function TaskChecklist({ items, pointer, onToggle, onAdd, onDelet
         <Pressable accessibilityRole="button" accessibilityLabel={tr('tasks.copy.98')} disabled={!text.trim() || full} onPress={add} style={[s.primary, { backgroundColor: colors.subtleFill }, (!text.trim() || full) && { opacity: 0.5 }]} testID="req-checklist-add">
           <Ionicons name="add" size={16} color={colors.text} />
         </Pressable>
-      </View>
+      </View>}
       {error ? <Text style={s.err} accessibilityRole="alert" testID="req-checklist-error">{error}</Text> : null}
     </View>
   );

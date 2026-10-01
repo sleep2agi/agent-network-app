@@ -72,15 +72,16 @@ ck('仅相关任务 的标签逐字', t('users.tasks.scoped') === '仅相关任�
   const api = read('./user-admin-api.ts');
   ck('task-grants:404 → null(旧 Hub 整块隐藏)', /fetchTaskGrants[\s\S]*?e\.status === 404/.test(api));
   const board = read('./RequirementBoard.tsx');
-  for (const fn of ['const move = async', 'const replaceChecklist = async', 'const toggleChecklist = async', 'const saveEdit = async', 'const setDue = async']) {
+  // 参与人(agent-network#2201):状态走 'column'、检查项走 'checklist' 放行;其余写入口照样整卡挡。
+  for (const [fn, gate] of [['const move = async', "readOnlyBlock(id, 'column')"], ['const replaceChecklist = async', "readOnlyBlock(id, 'checklist')"], ['const toggleChecklist = async', "readOnlyBlock(id, 'checklist')"], ['const saveEdit = async', 'readOnlyBlock(id)'], ['const setDue = async', 'readOnlyBlock(id)']]) {
     const body = board.slice(board.indexOf(fn), board.indexOf(fn) + 600);
-    ck(`看板:${fn.replace('const ', '').replace(' = async', '')} 先挡只读`, body.includes('readOnlyBlock(id)'));
+    ck(`看板:${fn.replace('const ', '').replace(' = async', '')} 先挡只读(${gate})`, body.includes(gate));
   }
-  ck('看板:批量里只读的卡算失败', /runBulk\(targets, async id => \{[\s\S]{0,200}readOnlyBlock\(id\)/.test(board));
-  ck('看板:只读的卡不带 data-task-from(拖不动)+ 锁标签', board.includes('item.readOnly ? { taskCard: item.id } : { taskCard: item.id, taskFrom: item.column }') && board.includes('{item.readOnly ? <ReadOnlyTag /> : null}'));
+  ck('看板:批量里只读的卡算失败(批量改状态按 column 放行)', /runBulk\(targets, async id => \{[\s\S]{0,200}readOnlyBlock\(id, kind === 'status' \? 'column' : undefined\)/.test(board));
+  ck('看板:改不了状态的卡不带 data-task-from(拖不动)+ 锁标签', board.includes("canEditTaskField(item, 'column') ? { taskCard: item.id, taskFrom: item.column } : { taskCard: item.id }") && board.includes('{item.readOnly ? <ReadOnlyTag editFields={item.editFields} /> : null}'));
   ck('看板:详情拿到 readOnly', board.includes('readOnly={!!selected.readOnly}'));
   const detail = read('./TaskDetailPanel.tsx');
-  ck('详情:只读时表单整块不响应、不给保存、顶上说明', detail.includes("pointerEvents={readOnly ? 'none' : 'auto'}") && detail.includes('{readOnly ? null : (') && detail.includes('req-detail-read-only'));
+  ck('详情:只读时表单整块不响应、不给保存、顶上说明', detail.includes("pointerEvents={readOnly && !partial ? 'none' : 'auto'}") && detail.includes('{readOnly ? null : (') && detail.includes('req-detail-read-only'));
   ck('列表视图也标只读', read('./TaskListTable.tsx').includes('{item.readOnly ? <ReadOnlyTag'));
 }
 

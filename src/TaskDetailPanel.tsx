@@ -31,14 +31,18 @@ import { priorityChoices } from './task-priority';
 import { loadDetailMoreOpen, saveDetailMoreOpen } from './task-detail-prefs';
 import { PARENT_REJECTED, PARENT_TOO_DEEP } from './requirements-hub';
 import TaskIdChip from './TaskIdChip';
+import { readOnlyLabelKey, type TaskEditField } from './task-access';
+import { lockedMainRows, lockedMoreRows, lockedRestRows, type LockedRow } from './task-detail-locked';
 
 export const DRAWER_WIDTH = 420;
 
-export default function TaskDetailPanel({ cfg, item, readOnly = false, items, onOpenRequirement, onCreateChild, projects, dueDatetime, lowestPriority, mode, top, people, peopleLoading, onLoadPeople, moving, moveError, onMove, onSave, onAssignmentsSaved, onClose, pointer, checklistError, onChecklistToggle, onChecklistAdd, onChecklistDelete, onChecklistMove, onOpenVoiceSettings, onOpenWindow }: {
+export default function TaskDetailPanel({ cfg, item, readOnly = false, editFields, items, onOpenRequirement, onCreateChild, projects, dueDatetime, lowestPriority, mode, top, people, peopleLoading, onLoadPeople, moving, moveError, onMove, onSave, onAssignmentsSaved, onClose, pointer, checklistError, onChecklistToggle, onChecklistAdd, onChecklistDelete, onChecklistMove, onOpenVoiceSettings, onOpenWindow }: {
   cfg: HubConfig;
   item: Requirement;
   /** 只读(RFC-038 §9:hub 说这张卡我不能改)。表单整块不响应,底部不给「保存修改」,顶上一条说明。 */
   readOnly?: boolean;
+  /** 只读的卡上仍能改的字段(参与人:状态、检查项;hub viewer_can.edit_fields)。只有这几块响应,其余照只读。 */
+  editFields?: readonly TaskEditField[];
   /** 全部卡片(找父需求 / 子需求用)。 */
   items: readonly Requirement[];
   onOpenRequirement: (id: string) => void;
@@ -135,18 +139,39 @@ export default function TaskDetailPanel({ cfg, item, readOnly = false, items, on
   // 更多收起时,里面有值的字段在「更多」那一行上用一行字说出来(task-detail-more.ts),不悄悄藏掉。
   const summary = moreSummary(item, draft, items);
   // 母任务被 Hub 拒绝、检查项没存上:错误在「更多」里,自动展开,不能藏着。
-  const moreShown = moreOpen || error?.field === 'parent' || error?.field === 'start' || !!checklistError;
+  // 参与人的卡:整块不再锁死,改成逐块锁 —— 状态、「更多」开关、检查项能点,别的照只读(看得见、点不动)。
+  // RN 原生上父级 pointerEvents=none 会连子级一起吃掉,所以不能「父锁子开」,只能把锁的几块各包一层。
+  const partial = readOnly && !!editFields?.length;
+  const moreShown = moreOpen || error?.field === 'parent' || error?.field === 'start' || (!partial && !!checklistError);
+  const canColumn = !readOnly || !!editFields?.includes('column');
+  const canChecklist = !readOnly || !!editFields?.includes('checklist');
+  // 参与人能改的只有状态和检查项:检查项直接放在状态下面,不藏进收起的「更多」里。其余情况仍在「更多」里。
+  const checklistBlock = hasDetails(item) ? (
+            <View pointerEvents={canChecklist ? 'auto' : 'none'} testID="req-checklist-wrap">
+              <TaskChecklist
+                items={item.checklist ?? []}
+                pointer={pointer}
+                onToggle={onChecklistToggle}
+                onAdd={onChecklistAdd}
+                onDelete={onChecklistDelete}
+                onMove={onChecklistMove}
+                error={checklistError}
+                readOnly={!canChecklist}
+              />
+            </View>
+  ) : null;
   const body: ReactNode = (
     <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: spacing.xl, gap: spacing.lg }} keyboardShouldPersistTaps="handled">
       {readOnly ? (
         <View style={[styles.readOnly, { backgroundColor: colors.subtleFill }]} testID="req-detail-read-only">
           <Ionicons name="lock-closed-outline" size={14} color={colors.textSecondary} />
-          <Text style={[s.muted, { flex: 1 }]}>{tr('tasks.readOnlyBanner')}</Text>
+          <Text style={[s.muted, { flex: 1 }]}>{partial ? tr('tasks.partialBanner', { what: tr(readOnlyLabelKey(editFields)) }) : tr('tasks.readOnlyBanner')}</Text>
         </View>
       ) : null}
       <ParentBreadcrumb item={item} items={items} onOpen={onOpenRequirement} />
       {/* 只读时下面的编辑控件整块不响应(看得见、点不动),而不是让人改完再被 hub 403 退回。 */}
-      <View pointerEvents={readOnly ? 'none' : 'auto'} style={{ gap: spacing.lg }} testID="req-detail-fields">
+      <View pointerEvents={readOnly && !partial ? 'none' : 'auto'} style={{ gap: spacing.lg }} testID="req-detail-fields">
+      <Locked on={readOnly} testID="req-locked-title" title={item.name}>
       <TextInput
         value={draft.name}
         onChangeText={name => set({ name })}
@@ -158,8 +183,9 @@ export default function TaskDetailPanel({ cfg, item, readOnly = false, items, on
         accessibilityLabel={tr('tasks.copy.118')}
       />
       {error?.field === 'name' ? <Text style={s.err} accessibilityRole="alert">{error.message}</Text> : null}
+      </Locked>
       <Field label={tr('tasks.copy.54')}>
-        <View style={[s.segment, { alignSelf: 'flex-start' }]} accessibilityRole="radiogroup">
+        <View pointerEvents={canColumn ? 'auto' : 'none'} style={[s.segment, { alignSelf: 'flex-start' }]} accessibilityRole="radiogroup" testID="req-move-group">
           {REQ_COLUMNS.map(col => {
             const on = col === item.column;
             return (
@@ -167,8 +193,8 @@ export default function TaskDetailPanel({ cfg, item, readOnly = false, items, on
                 key={col}
                 accessibilityRole="radio"
                 accessibilityLabel={on ? tr('tasks.copy.91', { v0: taskText(REQ_COLUMN_LABEL[col]) }) : tr('tasks.copy.135', { v0: taskText(REQ_COLUMN_LABEL[col]) })}
-                {...a11yState({ disabled: moving || on, selected: on, checked: on })}
-                disabled={moving || on}
+                {...a11yState({ disabled: moving || on || !canColumn, selected: on, checked: on })}
+                disabled={moving || on || !canColumn}
                 onPress={() => onMove(col)}
                 style={[s.segmentItem, { flexDirection: 'row', gap: 6 }, on && s.segmentItemOn]}
                 testID={`req-move-${col}`}
@@ -182,6 +208,8 @@ export default function TaskDetailPanel({ cfg, item, readOnly = false, items, on
         {moving ? <Text style={s.muted} accessibilityLiveRegion="polite">{tr('tasks.copy.136')}</Text> : null}
         {moveError ? <Text style={s.err} accessibilityRole="alert">{moveError}</Text> : null}
       </Field>
+      {partial ? checklistBlock : null}
+      <Locked on={readOnly} testID="req-locked-main" rows={readOnly ? lockedMainRows(item, people, projects) : undefined}>
       <RoleFields
         twoRoles={hasRoles(item)}
         owner={draft.owner}
@@ -211,6 +239,7 @@ export default function TaskDetailPanel({ cfg, item, readOnly = false, items, on
           ? <Text style={s.muted} testID="req-details-loading">{tr('detail.loadingDetails')}</Text>
           : <Text style={s.muted} testID="req-details-unsupported">{tr('tasks.copy.138')}</Text>
       )}
+      </Locked>
       <Pressable
         accessibilityRole="button"
         accessibilityLabel={moreShown ? tr('detail.lessA11y') : tr('detail.moreA11y')}
@@ -225,6 +254,7 @@ export default function TaskDetailPanel({ cfg, item, readOnly = false, items, on
       </Pressable>
       {moreShown ? (
         <View style={{ gap: spacing.lg }} testID="req-more">
+          <Locked on={readOnly} testID="req-locked-more" rows={readOnly ? lockedMoreRows(item, items) : undefined}>
           {/* 开始(甘特图的条从这里画):只有带 start 字段的 Hub(capability start_date)才有;只到日。 */}
           {item.start !== undefined ? (
             <Field label={tr('detail.start')}>
@@ -236,19 +266,9 @@ export default function TaskDetailPanel({ cfg, item, readOnly = false, items, on
           </Field>
           <ParentSelect item={item} items={items} value={draft.parentId} onChange={parentId => set({ parentId })} touch={!pointer} idBase="req-edit-parent" error={error?.field === 'parent' ? error.message : undefined} />
           <SubRequirements item={item} items={items} onOpen={onOpenRequirement} onCreateChild={onCreateChild} canAddLevel={levelIn(items, item) < 5} />
-          {hasDetails(item) ? (
-            <>
-              <TaskChecklist
-                items={item.checklist ?? []}
-                pointer={pointer}
-                onToggle={onChecklistToggle}
-                onAdd={onChecklistAdd}
-                onDelete={onChecklistDelete}
-                onMove={onChecklistMove}
-                error={checklistError}
-              />
-            </>
-          ) : null}
+          </Locked>
+          {partial ? null : checklistBlock}
+          <Locked on={readOnly} testID="req-locked-rest" rows={readOnly ? lockedRestRows(item, people) : undefined}>
           {!legacy ? (
             <Field label={tr('tasks.copy.53')}>
               <RequirementAssignmentsEditor key={item.id} cfg={cfg} item={item} fields="participants" onSaved={onAssignmentsSaved} />
@@ -258,6 +278,9 @@ export default function TaskDetailPanel({ cfg, item, readOnly = false, items, on
           <TaskTags key={`tags:${item.id}`} cfg={cfg} item={item} onSave={onSave} />
           {!item.externalUrl || !parseIssue(item.externalUrl, false) ? <ExternalLink item={item} /> : null}
           {item.createdAt ? <Text style={s.muted}>{tr('tasks.copy.139')}{item.createdAt.slice(0, 10)}</Text> : null}
+          </Locked>
+          {/* 外部链接只是个链接(看,不改):参与人的卡上也照样能点。 */}
+          {readOnly && (!item.externalUrl || !parseIssue(item.externalUrl, false)) ? <ExternalLink item={item} /> : null}
         </View>
       ) : null}
       </View>
@@ -367,3 +390,23 @@ const makePanelStyles = () => StyleSheet.create({
   footer: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingHorizontal: spacing.xl, paddingVertical: spacing.md, borderTopWidth: StyleSheet.hairlineWidth },
   readOnly: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, paddingHorizontal: spacing.md, paddingVertical: spacing.sm, borderRadius: radius.item },
 });
+
+/**
+ * 参与人的卡上锁住的一块:包一层 pointerEvents=none(看得见、点不动)。不锁时原样返回子节点,布局与以前逐字相同。
+ * 放在模块级:在组件里现定义的组件每次渲染都是新类型,会把里面的输入框整个重挂(打一个字丢一次焦点)。
+ */
+function Locked({ on, children, testID, rows, title }: { on: boolean; children: ReactNode; testID?: string; rows?: readonly LockedRow[]; title?: string }) {
+  if (!on) return <>{children}</>;
+  // 锁住时不画编辑控件(输入框 / 下拉箭头 / 今天明天 / 富文本工具栏),只画值:看起来能点、点了没反应最糟。
+  return (
+    <View pointerEvents="none" style={{ gap: spacing.md }} testID={testID}>
+      {title !== undefined ? <Text style={{ color: colors.text, fontSize: typeScale.heading - 2, fontWeight: weight.strong }} testID="req-locked-name">{title}</Text> : null}
+      {(rows ?? []).map(r => (
+        <View key={r.key} style={{ gap: 4 }} testID={`req-locked-row-${r.key}`}>
+          <Text style={{ color: colors.textMuted, fontSize: typeScale.small, fontWeight: weight.medium }}>{r.label}</Text>
+          <Text style={{ color: colors.textSecondary, fontSize: typeScale.body, lineHeight: 20 }} numberOfLines={r.multiline ? 12 : 2}>{r.value}</Text>
+        </View>
+      ))}
+    </View>
+  );
+}
