@@ -283,8 +283,8 @@ async function checkDetail(s, expectLowest) {
   await shot(s.page, `detail-${s.vp.replace(/\W+/g, '-')}`);
   const shown = opts.filter(Boolean);
   if (expectLowest) {
+    // 优先级选完立即保存(不再等「保存修改」,任务页审计 2026-10-02 H1)。
     await s.page.locator(tid('req-edit-priority-lowest')).first().click();
-    await s.page.locator(tid('req-edit-save')).first().click();
     await s.page.waitForTimeout(800);
   }
   record(s.vp, `detail: edit picker offers ${expectLowest ? 'four; P0 → P3 saves lowest' : 'P0–P2 only'}`, {

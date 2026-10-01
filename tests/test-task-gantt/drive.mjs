@@ -322,7 +322,7 @@ for (const theme of ['light', 'dark']) {
       record(vp, 'click bar opens detail', { opened: name === '示例:下周的发布' }, { name });
       await shot('detail');
 
-      // ── 详情「更多」里的「开始」:点「今天」→ 保存 → 只发 { start },条从今天画起 ──
+      // ── 详情「更多」里的「开始」:点「今天」→ 立即只发 { start },条从今天画起 ──
       // close the previous drawer first (it overlays the chart), then open g7 from its name cell
       await page.locator(tid('req-detail-close')).first().click();
       await page.waitForTimeout(300);
@@ -332,8 +332,8 @@ for (const theme of ['light', 'dark']) {
       if (!(await box(page, tid('req-more')))) await page.locator(tid('req-more-toggle')).click();
       const field = await box(page, tid('req-edit-start'));
       const nBefore = (await page.evaluate(() => (window.__tasksPatches || []).length));
+      // 「开始」选完立即保存(不再等「保存修改」,任务页审计 2026-10-02 H1)。
       await page.locator(tid('req-edit-start-today')).click();
-      await page.locator(tid('req-edit-save')).click();
       await page.waitForTimeout(700);
       const sp = await page.evaluate((n) => (window.__tasksPatches || []).slice(n), nBefore);
       const todayYmd = await page.evaluate(() => { const t = new Date(); return `${t.getFullYear()}-${String(t.getMonth() + 1).padStart(2, '0')}-${String(t.getDate()).padStart(2, '0')}`; });

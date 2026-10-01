@@ -99,7 +99,7 @@ export default function TaskDetailPanel({ cfg, item, readOnly = false, editField
   useEffect(() => {
     const prev = shown.current;
     shown.current = item;
-    if (prev.id !== item.id) { setDraft(editDraftOf(item)); setError(null); setSaved(false); setRoleSave(null); return; }
+    if (prev.id !== item.id) { setDraft(editDraftOf(item)); setError(null); setSaved(false); setRoleSave(null); setFieldSave(null); return; }
     setDraft(d => {
       const base = editDraftOf(prev);
       const next = editDraftOf(item);
@@ -118,20 +118,53 @@ export default function TaskDetailPanel({ cfg, item, readOnly = false, editField
   }, [item]);
   const patch = editPatch(item, draft);
   const set = (p: Partial<EditDraft>) => { setDraft(d => ({ ...d, ...p })); setSaved(false); if (error) setError(null); };
-  const save = async () => {
-    if (!patch || saving) return;
+  /** 返回 true = 没有要存的,或存上了。 */
+  const save = async (): Promise<boolean> => {
+    if (!patch) return true;
+    if (saving) return false;
     const c = checkDraft(draft);
-    if (!c.ok) { setError({ field: c.field, message: validationText(c.message) }); return; }
+    if (!c.ok) { setError({ field: c.field, message: validationText(c.message) }); return false; }
     const badStart = patch.start !== undefined ? startError(patch.start) : null;
-    if (badStart) { setError({ field: 'start', message: validationText(badStart) }); return; }
+    if (badStart) { setError({ field: 'start', message: validationText(badStart) }); return false; }
     setSaving(true);
     const failed = await onSave(patch);
     setSaving(false);
-    if (failed) setError({ field: patch.parent_id !== undefined && (failed === PARENT_TOO_DEEP || failed === PARENT_REJECTED) ? 'parent' : 'submit', message: failed });
-    else setSaved(true);
+    if (failed) { setError({ field: patch.parent_id !== undefined && (failed === PARENT_TOO_DEEP || failed === PARENT_REJECTED) ? 'parent' : 'submit', message: failed }); return false; }
+    setSaved(true);
+    return true;
+  };
+  // 关详情(✕ / 返回 / 系统返回):还有没存的修改(标题、描述)就先存上再关;存不上(标题空、Hub 拒绝)留在详情里显示原因。
+  // 以前直接关掉,改了的东西悄悄丢了(任务页审计 2026-10-02 H1)。
+  const close = async () => {
+    if (await save()) onClose();
   };
   // 负责人 / 负责 Agent:选完立即保存,不进草稿(草稿里的这两个字段永远等于卡上的值,「保存修改」不会再带它们)。
   const [roleSave, setRoleSave] = useState<{ state: 'saving' | 'saved' } | { state: 'error'; message: string } | null>(null);
+  // 优先级 / 项目 / 预计完成 / 开始 / 母任务:选完立即保存,只发这一个字段 —— 和状态、负责人、看板卡片菜单、列表格子一样。
+  // 以前它们进草稿等「保存修改」,不点就关详情 = 改了白改(任务页审计 2026-10-02 H1)。标题和描述(打字)仍走草稿 + 关时自动存。
+  const [fieldSave, setFieldSave] = useState<{ state: 'saving' | 'saved' } | { state: 'error'; message: string } | null>(null);
+  const saveField = async (p: Partial<Pick<EditDraft, 'priority' | 'projectId' | 'due' | 'start' | 'parentId'>>) => {
+    setDraft(d => ({ ...d, ...p }));
+    setSaved(false);
+    if (error && error.field !== 'name') setError(null);
+    const base = editDraftOf(item);
+    const one = editPatch(item, { ...base, ...p });
+    if (!one) return;
+    const c = checkDraft({ ...base, ...p });
+    if (!c.ok) { setError({ field: c.field, message: validationText(c.message) }); return; }
+    const badStart = one.start !== undefined ? startError(one.start) : null;
+    if (badStart) { setError({ field: 'start', message: validationText(badStart) }); return; }
+    const id = item.id;
+    setFieldSave({ state: 'saving' });
+    const failed = await onSave(one);
+    if (shown.current.id !== id) return;
+    if (failed) {
+      // 没存上:这个字段退回卡上的值,原因就地说(母任务的原因在「更多」里)。
+      setDraft(d => ({ ...d, ...Object.fromEntries(Object.keys(p).map(k => [k, editDraftOf(shown.current)[k as keyof EditDraft]])) }));
+      if (one.parent_id !== undefined && (failed === PARENT_TOO_DEEP || failed === PARENT_REJECTED)) setError({ field: 'parent', message: failed });
+      setFieldSave({ state: 'error', message: failed });
+    } else setFieldSave({ state: 'saved' });
+  };
   const assignRole = async (p: { owner?: RequirementPersonRef | null; agentOwner?: RequirementPersonRef | null }) => {
     let change: AssignChange | null = null;
     if (p.owner !== undefined) change = ownerChange(item, p.owner ? [p.owner] : []);
@@ -235,7 +268,7 @@ export default function TaskDetailPanel({ cfg, item, readOnly = false, editField
       {/* 优先级在状态之后、描述之前(owner 10-01:「把优先级放前面去啊,放详细后面很难拖动」)—— 常改的短字段都在长描述上面。 */}
       <Field label={tr('tasks.copy.32')}>
         <View testID="req-priority-row">
-          <PriorityPicker value={draft.priority} onChange={priority => set({ priority })} testPrefix="req-edit-priority" choices={priorityChoices(lowestPriority, item.priority)} />
+          <PriorityPicker value={draft.priority} onChange={priority => { void saveField({ priority }); }} testPrefix="req-edit-priority" choices={priorityChoices(lowestPriority, item.priority)} />
         </View>
       </Field>
       <RoleFields
@@ -265,9 +298,9 @@ export default function TaskDetailPanel({ cfg, item, readOnly = false, editField
           </Field>
         </View>
       ) : null}
-      {projects && item.projectId !== undefined ? <ProjectSelect value={draft.projectId} projects={projects} onChange={projectId => set({ projectId })} touch={!pointer} idBase="req-edit-project" /> : null}
+      {projects && item.projectId !== undefined ? <ProjectSelect value={draft.projectId} projects={projects} onChange={projectId => { void saveField({ projectId }); }} touch={!pointer} idBase="req-edit-project" /> : null}
       <Field label={tr('tasks.copy.119')}>
-        <DueField value={draft.due} onChange={due => set({ due })} error={error?.field === 'due' ? error.message : undefined} idBase="req-edit-due" allowTime={dueDatetime} pointer={pointer} sheet={mode === 'page'} />
+        <DueField value={draft.due} onChange={due => { void saveField({ due }); }} error={error?.field === 'due' ? error.message : undefined} idBase="req-edit-due" allowTime={dueDatetime} pointer={pointer} sheet={mode === 'page'} />
       </Field>
       {hasDetails(item) ? (
         <TaskDescriptionEditor cfg={cfg} value={draft.description} onChange={description => set({ description })} pointer={pointer} title={item.name} dirty={!!patch} onOpenVoiceSettings={onOpenVoiceSettings} />
@@ -296,10 +329,10 @@ export default function TaskDetailPanel({ cfg, item, readOnly = false, editField
           {/* 开始(甘特图的条从这里画):只有带 start 字段的 Hub(capability start_date)才有;只到日。 */}
           {item.start !== undefined ? (
             <Field label={tr('detail.start')}>
-              <DueField value={draft.start} onChange={start => set({ start })} error={error?.field === 'start' ? error.message : undefined} idBase="req-edit-start" pointer={pointer} sheet={mode === 'page'} />
+              <DueField value={draft.start} onChange={start => { void saveField({ start }); }} error={error?.field === 'start' ? error.message : undefined} idBase="req-edit-start" pointer={pointer} sheet={mode === 'page'} />
             </Field>
           ) : null}
-          <ParentSelect item={item} items={items} value={draft.parentId} onChange={parentId => set({ parentId })} touch={!pointer} idBase="req-edit-parent" error={error?.field === 'parent' ? error.message : undefined} />
+          <ParentSelect item={item} items={items} value={draft.parentId} onChange={parentId => { void saveField({ parentId }); }} touch={!pointer} idBase="req-edit-parent" error={error?.field === 'parent' ? error.message : undefined} />
           <SubRequirements item={item} items={items} onOpen={onOpenRequirement} onCreateChild={onCreateChild} canAddLevel={levelIn(items, item) < 5} />
           </Locked>
           {partial ? null : checklistBlock}
@@ -320,7 +353,8 @@ export default function TaskDetailPanel({ cfg, item, readOnly = false, editField
   const footer = (
     <View style={[styles.footer, { borderTopColor: colors.border }, mode === 'page' && { paddingBottom: spacing.md + safe.paddingBottom }]}>
       {error?.field === 'submit' ? <Text style={[s.err, { flex: 1 }]} accessibilityRole="alert" testID="req-edit-error">{error.message}</Text>
-        : <Text style={[s.muted, { flex: 1 }]} accessibilityLiveRegion="polite">{saving ? tr('tasks.copy.140') : saved ? tr('tasks.copy.141') : patch ? tr('tasks.copy.142') : ''}</Text>}
+        : fieldSave?.state === 'error' ? <Text style={[s.err, { flex: 1 }]} accessibilityRole="alert" testID="req-field-save-error">{fieldSave.message}</Text>
+        : <Text style={[s.muted, { flex: 1 }]} accessibilityLiveRegion="polite" testID="req-save-status">{saving || fieldSave?.state === 'saving' ? tr('tasks.copy.140') : patch ? tr('tasks.copy.142') : saved || fieldSave?.state === 'saved' ? tr('tasks.copy.141') : ''}</Text>}
       {readOnly ? null : (
         <Pressable
           accessibilityRole="button"
@@ -339,7 +373,7 @@ export default function TaskDetailPanel({ cfg, item, readOnly = false, editField
   const head = (
     <View style={[styles.head, { borderBottomColor: colors.border }]}>
       {mode === 'page' ? (
-        <Pressable accessibilityRole="button" accessibilityLabel={tr('tasks.copy.144')} onPress={onClose} style={[s.iconButton, { marginLeft: -spacing.sm }]} testID="req-detail-close">
+        <Pressable accessibilityRole="button" accessibilityLabel={tr('tasks.copy.144')} onPress={() => { void close(); }} style={[s.iconButton, { marginLeft: -spacing.sm }]} testID="req-detail-close">
           <Ionicons name="chevron-back" size={22} color={colors.text} />
         </Pressable>
       ) : null}
@@ -361,7 +395,7 @@ export default function TaskDetailPanel({ cfg, item, readOnly = false, editField
         </Pressable>
       ) : null}
       {mode === 'drawer' ? (
-        <Pressable accessibilityRole="button" accessibilityLabel={tr('tasks.copy.146')} onPress={onClose} style={s.iconButton} testID="req-detail-close">
+        <Pressable accessibilityRole="button" accessibilityLabel={tr('tasks.copy.146')} onPress={() => { void close(); }} style={s.iconButton} testID="req-detail-close">
           <Ionicons name="close" size={18} color={colors.textSecondary} />
         </Pressable>
       ) : null}
@@ -393,7 +427,7 @@ export default function TaskDetailPanel({ cfg, item, readOnly = false, editField
     );
   }
   return (
-    <Modal visible animationType="slide" onRequestClose={onClose} presentationStyle="fullScreen">
+    <Modal visible animationType="slide" onRequestClose={() => { void close(); }} presentationStyle="fullScreen">
       <View style={{ flex: 1, backgroundColor: colors.bg, paddingTop: safe.paddingTop }} testID="req-detail" accessibilityViewIsModal>
         {head}
         {body}

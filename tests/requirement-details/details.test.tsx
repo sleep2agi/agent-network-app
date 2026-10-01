@@ -398,18 +398,45 @@ test('switching network closes old details and ignores its late mutation respons
   expect(JSON.stringify(renderer.toJSON())).not.toContain('旧网络回复');
 });
 
-test('existing card can change title, priority and due; nothing is written before 保存修改 and only changed fields go', async () => {
+test('existing card: priority and due save at once (one field each, like status / owner); the title waits for 保存修改', async () => {
   await mount();
   await act(async () => byId('req-card-r1').props.onPress());
   expect(byId('req-edit-name').props.value).toBe('验证需求详情');
   expect(byId('req-edit-save').props.disabled).toBe(true);
   await act(async () => byId('req-edit-name').props.onChangeText('改过的标题'));
+  expect(edits).toHaveLength(0);
   await act(async () => byId('req-edit-priority-high').props.onPress());
   await act(async () => byId('req-edit-due-tomorrow').props.onPress());
-  expect(edits).toHaveLength(0);
+  expect(edits).toEqual([
+    { id: 'r1', patch: { priority: 'high' } },
+    { id: 'r1', patch: { due: addDays(localDateOf(Date.now()), 1) } },
+  ]);
+  // the typed title is still a draft and is the only thing 保存修改 sends
+  expect(byId('req-edit-save').props.disabled).toBe(false);
   await act(async () => byId('req-edit-save').props.onPress());
-  expect(edits).toEqual([{ id: 'r1', patch: { name: '改过的标题', priority: 'high', due: addDays(localDateOf(Date.now()), 1) } }]);
+  expect(edits[2]).toEqual({ id: 'r1', patch: { name: '改过的标题' } });
   expect(texts('req-card-r1')).toContain('改过的标题');
+});
+
+test('closing the detail with an unsaved title saves it first instead of dropping it', async () => {
+  await mount();
+  await act(async () => byId('req-card-r1').props.onPress());
+  await act(async () => byId('req-edit-name').props.onChangeText('关之前改的标题'));
+  await act(async () => byId('req-detail-close').props.onPress());
+  expect(edits).toEqual([{ id: 'r1', patch: { name: '关之前改的标题' } }]);
+  expect(renderer.root.findAllByProps({ testID: 'req-detail' })).toHaveLength(0);
+  expect(texts('req-card-r1')).toContain('关之前改的标题');
+});
+
+test('closing with a title the Hub rejects keeps the detail open and says why', async () => {
+  await mount();
+  editReply = () => { throw new HubError(400, '这个 Hub 还不能修改已有需求的内容，升级 Hub 后再试'); };
+  await act(async () => byId('req-card-r1').props.onPress());
+  await act(async () => byId('req-edit-name').props.onChangeText('存不上的标题'));
+  await act(async () => byId('req-detail-close').props.onPress());
+  expect(renderer.root.findAllByProps({ testID: 'req-detail' }).length).toBeGreaterThan(0);
+  expect(JSON.stringify(renderer.toJSON())).toContain('这个 Hub 还不能修改已有需求的内容');
+  editReply = null;
 });
 
 test('an old Hub that cannot edit keeps the draft and says so', async () => {
@@ -594,7 +621,7 @@ test('hub without projects: no project picker, no project chip filter', async ()
   expect(renderer.root.findAllByProps({ testID: 'req-project' })).toHaveLength(0);
 });
 
-test('母任务: pick a parent (not itself or its descendants), saved as parent_id with 保存修改; hub rejection shows under the field', async () => {
+test('母任务: pick a parent (not itself or its descendants), saved at once as parent_id; hub rejection shows under the field', async () => {
   subCards = true;
   await mount();
   await act(async () => byId('req-card-r2').props.onPress());
@@ -604,17 +631,17 @@ test('母任务: pick a parent (not itself or its descendants), saved as parent_
   expect(renderer.root.findAllByProps({ testID: 'req-edit-parent-menu-opt-r2' })).toHaveLength(0);
   expect(byId('req-edit-parent-menu-opt-r3')).toBeTruthy();
   expect(byId('req-edit-parent-menu-opt-none')).toBeTruthy();
-  await act(async () => byId('req-edit-parent-menu-opt-r3').props.onPress());
   editReply = () => { throw new HubError(400, '不能挂到这个母任务下(会形成循环,或它已不存在)'); };
-  await act(async () => byId('req-edit-save').props.onPress());
+  await act(async () => byId('req-edit-parent-menu-opt-r3').props.onPress());
   expect(edits[0].patch).toEqual({ parent_id: 'r3' });
   expect(byId('req-edit-parent-error').props.children).toBe('不能挂到这个母任务下(会形成循环,或它已不存在)');
   expect(renderer.root.findAllByProps({ testID: 'req-edit-error' })).toHaveLength(0);
+  // 没存上:字段退回卡上的值
+  expect(byId('req-edit-parent-value').props.children).toBe('验证需求详情');
   editReply = null;
   // 清成顶层
   await act(async () => pressable('req-edit-parent').props.onPress());
   await act(async () => byId('req-edit-parent-menu-opt-none').props.onPress());
-  await act(async () => byId('req-edit-save').props.onPress());
   expect(edits[1].patch).toEqual({ parent_id: null });
 });
 
