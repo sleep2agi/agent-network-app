@@ -754,7 +754,8 @@ async function phoneFlows(page, vp) {
   await page.mouse.up();
   const menu = await page.locator(tid('task-menu')).count();
   await shot(page, 'flow-phone-longpress-menu');
-  if (menu) await page.locator(tid('task-menu-move-done')).click();
+  // 手机菜单:改状态… → 选择器 → 完成(test-phone-quick-status)。
+  if (menu) { await page.locator(tid('task-menu-status')).click(); await page.locator(tid('quick-status-opt-done')).click(); }
   await page.waitForTimeout(800);
   record(vp, 'phone: no drag, long-press menu moves', {
     dragDidNothing: afterDrag === before, menuOpened: menu === 1, hubColumn: (await hubRow(name))?.column === 'done',
