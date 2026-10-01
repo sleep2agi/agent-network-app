@@ -5,14 +5,11 @@ import type { EditDraft } from './task-board-model';
 
 export type SummaryPart = { key: string; values?: Record<string, string | number> };
 
-/** 顺序同「更多」里面的顺序:开始 · 优先级 · 母任务 · 子任务 · 检查项 · Issue · 标签。没值的不说(参与人已常显,不在这里)。 */
-export function moreSummary(item: Requirement, draft: Pick<EditDraft, 'priority' | 'parentId'> & { start?: string }, items: readonly Requirement[]): SummaryPart[] {
+/** 顺序同「更多」里面的顺序:开始 · 母任务 · 子任务 · 检查项 · Issue · 标签。没值的不说(优先级、参与人已常显,不在这里)。 */
+export function moreSummary(item: Requirement, draft: Pick<EditDraft, 'parentId'> & { start?: string }, items: readonly Requirement[]): SummaryPart[] {
   const out: SummaryPart[] = [];
   const start = draft.start?.trim().slice(0, 10);
   if (start && /^\d{4}-\d{2}-\d{2}$/.test(start)) out.push({ key: 'detail.sumStart', values: { m: +start.slice(5, 7), d: +start.slice(8, 10) } });
-  if (draft.priority === 'high') out.push({ key: 'detail.sumHigh' });
-  else if (draft.priority === 'low') out.push({ key: 'detail.sumLow' });
-  else if (draft.priority === 'lowest') out.push({ key: 'detail.sumLowest' });
   if (draft.parentId) {
     const parent = items.find(i => i.id === draft.parentId);
     out.push(parent ? { key: 'detail.sumParent', values: { name: parent.name } } : { key: 'detail.sumParentUnknown' });

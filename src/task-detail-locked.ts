@@ -14,10 +14,11 @@ export type LockedRow = { key: string; label: string; value: string; multiline?:
 
 const NONE = '—';
 
-/** 常显区:负责人 · 负责 Agent · 参与人 · 项目 · 预计完成 · 描述(与可编辑时的顺序一样)。 */
+/** 常显区:优先级 · 负责人 · 负责 Agent · 参与人 · 项目 · 预计完成 · 描述(与可编辑时的顺序一样)。 */
 export function lockedMainRows(item: Requirement, people: readonly RequirementPerson[], projects: readonly RequirementProject[] | null): LockedRow[] {
   const rows: LockedRow[] = [];
   const unassigned = t('tasks.copy.6');
+  rows.push({ key: 'priority', label: t('tasks.copy.32'), value: priorityLabel(item.priority) });
   if (item.owner === undefined) rows.push({ key: 'owner', label: t('tasks.copy.15'), value: item.assignee || unassigned });
   else rows.push({ key: 'owner', label: t('tasks.copy.15'), value: item.owner ? personName(item.owner, people) : unassigned });
   if (hasRoles(item)) rows.push({ key: 'agent', label: t('tasks.copy.82'), value: item.agentOwner ? personName(item.agentOwner, people) : unassigned });
@@ -32,11 +33,10 @@ export function lockedMainRows(item: Requirement, people: readonly RequirementPe
   return rows;
 }
 
-/** 「更多」里检查项以上的:开始 · 优先级 · 母任务 · 子任务。 */
+/** 「更多」里检查项以上的:开始 · 母任务 · 子任务。 */
 export function lockedMoreRows(item: Requirement, items: readonly Requirement[]): LockedRow[] {
   const rows: LockedRow[] = [];
   if (item.start !== undefined) rows.push({ key: 'start', label: t('detail.start'), value: item.start || NONE });
-  rows.push({ key: 'priority', label: t('tasks.copy.32'), value: priorityLabel(item.priority) });
   if (item.parentId !== undefined) {
     const parent = item.parentId ? items.find(i => i.id === item.parentId) : null;
     rows.push({ key: 'parent', label: t('taskSel.parent'), value: parent?.name || NONE });

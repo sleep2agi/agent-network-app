@@ -97,7 +97,7 @@ console.log('# 只读详情:参与人那一行跟着挪');
 {
   const item = R('a', { owner: AMY, participants: [AMY], readOnly: true });
   const people = [{ ...AMY, networkId: 'n', name: '示例成员甲' }];
-  ck('锁住的常显区里有参与人(负责人之后)', lockedMainRows(item, people, null).map(r => r.key).slice(0, 2).join() === 'owner,participants');
+  ck('锁住的常显区:优先级、负责人、参与人', lockedMainRows(item, people, null).map(r => r.key).slice(0, 3).join() === 'priority,owner,participants');
   ck('锁住的其余里没有参与人', !lockedRestRows(item, people).some(r => r.key === 'participants'));
 }
 

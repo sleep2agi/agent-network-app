@@ -7,6 +7,7 @@ import { taskText } from './i18n-tasks';
 //   · 人和状态 —— 状态、负责人、负责 Agent、参与人:选完立即保存(和看板上的拖动 / 卡片菜单「指派负责人… / 设置参与人…」
 //     是同一个动作、同一个 PATCH,只发那一个字段),旁边一行「正在保存人员绑定… / 已保存」。
 //   · 文字和日期 —— 标题、描述、优先级、预计完成、开始、项目、母任务:在草稿里改,点「保存修改」才写 Hub(只发改过的字段)。
+// 顺序:标题 → 状态 → 优先级 → 负责人 → 负责 Agent → 参与人 → 项目 → 预计完成 → 描述 → 更多(开始 / 母任务 / 子任务 / …)。
 // 参与人紧跟在负责人 / 负责 Agent 下面(不再藏进「更多」),参与人沿用 RequirementAssignmentsEditor。
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { ActivityIndicator, Modal, Pressable, ScrollView, StyleSheet, View } from 'react-native';
@@ -155,7 +156,8 @@ export default function TaskDetailPanel({ cfg, item, readOnly = false, editField
     else if (!ok) setError({ field: 'submit', message: tr('taskWin.failed') });
   };
 
-  // 常显:标题 · 状态 · 负责人 / 负责 Agent · 参与人 · 项目 · 预计完成 · 描述;其余收进「更多」(owner 09-29:详情太长)。
+  // 常显:标题 · 状态 · 优先级 · 负责人 / 负责 Agent · 参与人 · 项目 · 预计完成 · 描述;其余收进「更多」(owner 09-29:详情太长)。
+  // 常改的短字段一律在长描述上面(owner 10-01:优先级在描述后面要滚很远)。
   // 更多收起时,里面有值的字段在「更多」那一行上用一行字说出来(task-detail-more.ts),不悄悄藏掉。
   const summary = moreSummary(item, draft, items);
   // 母任务被 Hub 拒绝、检查项没存上:错误在「更多」里,自动展开,不能藏着。
@@ -230,6 +232,12 @@ export default function TaskDetailPanel({ cfg, item, readOnly = false, editField
       </Field>
       {partial ? checklistBlock : null}
       <Locked on={readOnly} testID="req-locked-main" rows={readOnly ? lockedMainRows(item, people, projects) : undefined}>
+      {/* 优先级在状态之后、描述之前(owner 10-01:「把优先级放前面去啊,放详细后面很难拖动」)—— 常改的短字段都在长描述上面。 */}
+      <Field label={tr('tasks.copy.32')}>
+        <View testID="req-priority-row">
+          <PriorityPicker value={draft.priority} onChange={priority => set({ priority })} testPrefix="req-edit-priority" choices={priorityChoices(lowestPriority, item.priority)} />
+        </View>
+      </Field>
       <RoleFields
         twoRoles={hasRoles(item)}
         owner={draft.owner}
@@ -290,9 +298,6 @@ export default function TaskDetailPanel({ cfg, item, readOnly = false, editField
               <DueField value={draft.start} onChange={start => set({ start })} error={error?.field === 'start' ? error.message : undefined} idBase="req-edit-start" pointer={pointer} sheet={mode === 'page'} />
             </Field>
           ) : null}
-          <Field label={tr('tasks.copy.32')}>
-            <PriorityPicker value={draft.priority} onChange={priority => set({ priority })} testPrefix="req-edit-priority" choices={priorityChoices(lowestPriority, item.priority)} />
-          </Field>
           <ParentSelect item={item} items={items} value={draft.parentId} onChange={parentId => set({ parentId })} touch={!pointer} idBase="req-edit-parent" error={error?.field === 'parent' ? error.message : undefined} />
           <SubRequirements item={item} items={items} onOpen={onOpenRequirement} onCreateChild={onCreateChild} canAddLevel={levelIn(items, item) < 5} />
           </Locked>

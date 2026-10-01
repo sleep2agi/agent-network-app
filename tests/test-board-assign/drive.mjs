@@ -14,6 +14,8 @@
 //               the detail instead and sends nothing
 //   bulk        desktop: Ctrl-click three cards (one read-only) → 「指派负责人…」 → PATCH only for the two editable
 //               ones, bar says 「跳过 1 个(无权修改)」
+//   priority    (owner 10-01) 优先级 sits right under 状态, above 负责人 and the ~40-line 描述, inside the first screen;
+//               on a participant card the order is 状态 → 检查项 → 优先级 → 负责人 → 描述
 //   detail      参与人 sits right under 负责人 / 负责 Agent (no 更多 needed, above the fold); changing 负责人 saves at
 //               once (PATCH {"owner"}), 「已保存」 shows, 保存修改 stays disabled
 // Prints a measurement table. Exit 1 when any check fails or a viewport could not be opened.
@@ -29,13 +31,15 @@ if (OUT) mkdirSync(OUT, { recursive: true });
 const fixture = () => {
   const at = (min) => new Date(Date.now() - min * 60000).toISOString();
   const me = { kind: 'user', id: 'u_tester' }, ua = { kind: 'user', id: 'u_a' }, bot = { kind: 'node', id: 'n_demo' };
+  // ~40 行的描述:优先级必须在它上面、打开详情第一屏就看得到(owner 10-01)。
+  const longDesc = Array.from({ length: 40 }, (_, i) => `第 ${i + 1} 行:示例描述,用来把详情撑长。`).join('\n');
   const R = (id, seq, name, o) => ({ id, seq, name, priority: 'normal', assignee: '', column: 'pool', owner: ua, participants: [], agent_owner: null, project_id: null, due: '', createdAt: at(3000), updatedAt: at(1), description: '示例描述', checklist: [], tags: [], parent_id: null, ...o });
   window.__tasksFixture = {
     meId: 'u_tester',
     requirements: [
       R('r1', 31, '示例任务一:可指派', { participants: [ua, bot] }),
-      R('r2', 32, '示例任务二:我参与', { participants: [me], viewer_can: { edit: false, delete: false, edit_fields: ['column', 'checklist'] } }),
-      R('r3', 33, '示例任务三:没有参与人', { owner: null }),
+      R('r2', 32, '示例任务二:我参与', { participants: [me], description: longDesc, checklist: [{ id: 'i1', text: '示例检查项', done: false }], viewer_can: { edit: false, delete: false, edit_fields: ['column', 'checklist'] } }),
+      R('r3', 33, '示例任务三:没有参与人', { owner: null, description: longDesc }),
     ],
     projects: [],
     people: [
@@ -215,6 +219,18 @@ for (const [name, V] of Object.entries(VIEWPORTS)) {
         await page.locator(tid('req-detail-read-only')).first().waitFor({ timeout: 5000 });
         await page.waitForTimeout(300);
         record(where, 'read-only avatars open detail', { detail: true, noPicker: (await page.locator(tid('people-confirm')).count()) === 0, noRequest: (await patches()).length === 2 });
+        // 参与人的卡(只可改状态和检查项):状态 → 检查项 → 优先级(只读值)→ 负责人 … → 描述。
+        const pStatus = await bb(page, tid('req-move-group')), pCheck = await bb(page, tid('req-checklist-wrap'));
+        const pPrio = await bb(page, tid('req-locked-row-priority')), pOwner = await bb(page, tid('req-locked-row-owner')), pDesc = await bb(page, tid('req-locked-row-description'));
+        measure(where, '参与人详情 优先级(只读)', pPrio); measure(where, '参与人详情 描述(只读)', pDesc);
+        record(where, 'partial detail order: 状态 → 检查项 → 优先级 → 负责人 → 描述', {
+          checklistUnderStatus: !!(pStatus && pCheck) && pCheck.y >= pStatus.y + pStatus.height,
+          priorityUnderChecklist: !!(pCheck && pPrio) && pPrio.y >= pCheck.y + pCheck.height - 0.5,
+          priorityAboveOwner: !!(pPrio && pOwner) && pPrio.y < pOwner.y,
+          priorityAboveDescription: !!(pPrio && pDesc) && pPrio.y < pDesc.y,
+          priorityFirstScreen: !!pPrio && pPrio.y + pPrio.height <= V.h,
+        });
+        await shot('detail-partial');
         await closeDetail();
         if (name === 'phone') await toBoard();
 
@@ -254,6 +270,17 @@ for (const [name, V] of Object.entries(VIEWPORTS)) {
         const partRow = await bb(page, tid('req-participants-row')), dueF = await bb(page, tid('req-edit-due')), moreT = await bb(page, tid('req-more-toggle'));
         measure(where, '详情 负责人', ownerF); measure(where, '详情 负责 Agent', agentF); measure(where, '详情 参与人行(挪出更多)', partRow); measure(where, '详情 预计完成', dueF); measure(where, '详情 更多', moreT);
         const moreOpen = (await page.locator(tid('req-more')).count()) > 0;
+        const prio = await bb(page, tid('req-priority-row')), desc = await bb(page, tid('req-description'));
+        const statusSeg = await bb(page, tid('req-move-group'));
+        measure(where, '详情 优先级', prio); measure(where, '详情 描述(40 行)', desc);
+        record(where, 'detail: 优先级 above the long 描述, first screen (owner 10-01)', {
+          present: !!prio,
+          afterStatus: !!(prio && statusSeg) && prio.y >= statusSeg.y + statusSeg.height,
+          beforeOwner: !!(prio && ownerF) && prio.y + prio.height <= ownerF.y,
+          aboveDescription: !!(prio && desc) && prio.y < desc.y,
+          firstScreen: !!prio && prio.y + prio.height <= V.h,
+          notInMore: (await page.locator(`${tid('req-more')} ${tid('req-priority-row')}`).count()) === 0,
+        });
         record(where, 'detail: 参与人 under 负责人 / 负责 Agent', {
           present: !!partRow,
           underRoles: !!(partRow && agentF && ownerF) && partRow.y >= agentF.y + agentF.height && agentF.y > ownerF.y,

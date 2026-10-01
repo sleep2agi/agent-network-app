@@ -699,9 +699,9 @@ test('详情渐进展开: 常显字段在前,其余收进「更多」(默认收�
   subCards = true;
   await mount();
   await act(async () => byId('req-card-r1').props.onPress());
-  // 收起:优先级 / 母任务 / 子任务 看不到;摘要说「1 子任务」(r1 的 children.total = 2)
+  // 收起:母任务 / 子任务 看不到;优先级常显(owner 10-01:放在描述前面);摘要说「2 子任务」(r1 的 children.total = 2)
   expect(renderer.root.findAllByProps({ testID: 'req-more' })).toHaveLength(0);
-  expect(renderer.root.findAllByProps({ testID: 'req-edit-priority-high' })).toHaveLength(0);
+  expect(byId('req-edit-priority-high')).toBeTruthy();
   expect(renderer.root.findAllByProps({ testID: 'req-subrequirements' })).toHaveLength(0);
   expect(byId('req-more-summary').props.children).toBe('2 子任务');
   expect(byId('req-edit-due')).toBeTruthy();

@@ -25,7 +25,7 @@ ck('开始日期校验:空和 YYYY-MM-DD 合法,乱写不合法', startError('')
 
 console.log('\n「更多」');
 const sum = moreSummary(R({ start: '2026-09-20' }), { priority: 'high', parentId: null, start: '2026-09-20' }, []);
-ck('收起时一句话说出开始,排在最前', sum[0]?.key === 'detail.sumStart' && sum[0].values?.m === 9 && sum[0].values?.d === 20 && sum[1]?.key === 'detail.sumHigh');
+ck('收起时一句话说出开始,排在最前', sum[0]?.key === 'detail.sumStart' && sum[0].values?.m === 9 && sum[0].values?.d === 20 && sum.length === 1); // 优先级已常显(owner 10-01),不进摘要
 ck('没设开始不说', !moreSummary(R(), { priority: 'normal', parentId: null, start: '' }, []).length);
 ck('旧调用方不传 start 也行', !moreSummary(R(), { priority: 'normal', parentId: null }, []).length);
 setLanguagePreference('en');
