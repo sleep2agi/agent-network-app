@@ -20,7 +20,7 @@ import { join } from 'node:path';
 import { serveExport, initScript, findChromium, ANDROID_UA, paintedText } from '../test-layout-sweep/harness.mjs';
 
 // The fixture completes today's tasks up to ~5h ago, so between midnight and ~05:00 local half of them fell on yesterday and 今日 / the bar chart / the hero count failed (2026-10-02 sweep, run at 03:00). A fixed midday clock makes every run the same at any hour.
-const FIXED_NOW = new Date('2026-10-15T12:00:00+08:00');
+const FIXED_NOW = new Date('2026-10-15T12:00:00Z'); // 20:00 in UTC+8, 12:00 in UTC (the CI runner) — midday-ish in both
 
 const { chromium } = await import(process.env.PLAYWRIGHT_MODULE || 'playwright');
 const WEB = process.env.WEB_DIR;

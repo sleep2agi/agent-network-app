@@ -375,7 +375,11 @@ for (const v of [{ w: 1200, h: 800 }, { w: 1440, h: 900 }]) {
     const body = await rect(page, fullContent);
     const toolText = firstTool ? firstTool.x + 5 : null;
     await page.locator(fullContent).click();
+    // Put the caret at the very end of the editor deterministically. Control+End alone was not enough on the CI runner
+    // (2026-10-02, first drives.yml run): the caret stayed at the start, the text went into the first paragraph and the
+    // 「its own paragraph after exit」 check failed although the product was fine (green locally on the same export).
     await page.keyboard.press('Control+End');
+    await page.evaluate((sel) => { const el = document.querySelector(sel); const r = document.createRange(); r.selectNodeContents(el); r.collapse(false); const s = getSelection(); s.removeAllRanges(); s.addRange(r); }, fullContent);
     await page.keyboard.press('Enter');
     await page.keyboard.type('全屏里加的一段');
     await shot(page, `desktop-${v.w}-rich-full`);

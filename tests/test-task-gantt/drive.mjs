@@ -30,7 +30,7 @@ import { join } from 'node:path';
 import { serveExport, initScript, findChromium, ANDROID_UA, paintedText } from '../test-layout-sweep/harness.mjs';
 
 // The timeline geometry depends on today (which week holds a month boundary, how far the range scrolls): on most real days one of the month checks failed, on 10-02 another (2026-10-02 sweep). A fixed clock makes every run the same; 10-21 noon has a month boundary that can scroll to 40px and a leftmost day well inside a month.
-const FIXED_NOW = new Date('2026-10-21T12:00:00+08:00');
+const FIXED_NOW = new Date('2026-10-21T12:00:00Z'); // 20:00 in UTC+8, 12:00 in UTC (the CI runner): the same day in both
 
 const { chromium } = await import(process.env.PLAYWRIGHT_MODULE || 'playwright');
 const WEB = process.env.WEB_DIR;
