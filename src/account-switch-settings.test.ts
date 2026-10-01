@@ -31,7 +31,7 @@ ck('S5 phone: same block style as 退出登录 (so edges / height line up)', set
 ck('S6 phone: shown even when 退出登录 is hidden (local workspace)', !settings.slice(settings.lastIndexOf('\n', phoneSwitch - 200), phoneSwitch).includes('canLogout ?'));
 // ── wide: a row above the 退出登录 row ──
 const wideSwitch = settings.indexOf('testID="settings-switch-account-row"');
-const wideLogout = settings.indexOf("show('account', 'logout') && canLogout && !compact");
+const wideLogout = settings.indexOf("show('account', 'logout') && canLogout ?");
 ck('S7 wide/desktop: 切换账号 row sits before the 退出登录 row', wideSwitch > 0 && wideLogout > wideSwitch);
 // ── the switcher ──
 ck('S8 phone gets the bottom sheet, wide/desktop gets the dialog (not a phone sheet)', settings.includes("variant={compact ? 'sheet' : 'dialog'}"));

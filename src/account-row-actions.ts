@@ -33,6 +33,16 @@ export function accountRowActions(profile: Pick<HubProfile, 'profileId' | 'requi
   return out;
 }
 
+/** ⋯ 菜单里的一项:账号行动作 + 「切换到这个账号」(只给不是当前、也不用重新验证的账号)。 */
+export type AccountMenuItem = AccountRowAction | 'switch';
+/** 菜单的顺序:切换 → 新窗口 → 复制 → 编辑 →(分隔)→ 移除。纯函数,测试用。 */
+export function accountMenuItems(actions: readonly AccountRowAction[], opts: { current: boolean; requiresReauth?: boolean }): AccountMenuItem[] {
+  const order: AccountMenuItem[] = ['switch', 'openWindow', 'copy', 'edit', 'remove'];
+  const have = new Set<AccountMenuItem>(actions);
+  if (!opts.current && !opts.requiresReauth) have.add('switch');
+  return order.filter(item => have.has(item));
+}
+
 export type HubEditFailure = 'bad-url' | 'unreachable' | 'not-hub' | 'token-rejected' | 'other-user' | 'server-error';
 export type HubEditCheck = { ok: true; serverUrl: string; changed: boolean } | { ok: false; kind: HubEditFailure; detail?: string };
 

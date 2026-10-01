@@ -6,20 +6,24 @@
 // 子页文件(SettingsPhonePages.tsx)只通过这里画东西 —— settings-subpages.test.ts 静态守着:
 // 子页里不许直接出现 TextInput / 单选圆点卡片,要输入框就用 SettingsTextField(只放在三级编辑页里)。
 // 文字一律走 ui-text(字体大小设置生效),尺寸走 ds()(界面密度生效)。
-// 宽屏(桌面两栏)的设置不用这些积木,保持原样。
-import { Children, Fragment, isValidElement, type ReactNode } from 'react';
+// 宽屏(桌面两栏)右栏也用这些积木(#427「设置页整体重新设计」):SettingsPane 把内容收在一列居中的窄栏里,
+// 每段一张卡片;账号一段用 SettingsAccountRow(头像 · 名字 · 当前 · ⋯)。
+import { Children, Fragment, isValidElement, useRef, type ReactNode } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Switch, View, type TextInputProps } from 'react-native';
 import { Text, TextInput } from './ui-text';
 import { Ionicons } from './icons';
 import { colors, onThemeChange, spacing, radius } from './theme';
 import { ds } from './ui-scale';
 import { elevated } from './elevation';
+import AliasAvatar from './AliasAvatar';
 
 /** 卡片左右边距 与 行内左右内边距(标签左边缘 = 卡片左边缘 + ROW_PAD_X)。 */
 export const SETTINGS_GUTTER = 16;
 export const SETTINGS_ROW_PAD_X = 16;
 /** 行高下限(Material 触控下限 48;标准密度 52)。 */
 export const settingsRowMinHeight = (): number => Math.max(48, ds(52));
+/** 行首图标 / 头像的格子宽:账号头像(当前 48、其他 36)和图标方块都左对齐放进同一宽度,后面的文字左边缘因此对齐。 */
+export const SETTINGS_LEAD = 48;
 /** 最右一列(› / ✓)的格子宽:两者共用,右边缘必然对齐。 */
 const ACCESSORY = 18;
 /** 没给 testID 的行的默认 testID(web 验收脚本按 `<id>` / `<id>-label` / `<id>-accessory` 量)。 */
@@ -38,25 +42,29 @@ export function settingsPageContentStyle() {
  * 一组:可选的小灰字标题 + 白色圆角卡片 + 可选的小灰字说明。
  * 子节点之间自动插细线(从标签左边缘开始);null / false 子节点不占位也不插线。
  */
-export function SettingsGroup({ title, footer, footerTone, children, testID }: {
+export function SettingsGroup({ title, footer, footerTone, children, testID, separators = true, highlight }: {
   title?: string;
   footer?: ReactNode;
   footerTone?: SettingsTone;
   children?: ReactNode;
   testID?: string;
+  /** false = 子节点自己画分隔(宽屏里沿用旧行的那几段):卡片照样有,不再自动插线。 */
+  separators?: boolean;
+  /** 当前账号那张卡:主色细边。 */
+  highlight?: boolean;
 }) {
   const items = Children.toArray(children); // toArray 已丢掉 null / false / undefined
   return (
     <View style={[styles.group, !title && styles.groupUntitled]} testID={testID}>
       {title ? <Text style={styles.groupTitle} testID="settings-kit-group-title">{title}</Text> : null}
       {items.length ? (
-        <View style={styles.card} testID="settings-kit-card">
-          {items.map((child, i) => (
+        <View style={[styles.card, highlight && styles.cardHighlight]} testID="settings-kit-card">
+          {separators ? items.map((child, i) => (
             <Fragment key={isValidElement(child) && child.key != null ? child.key : i}>
               {i ? <View style={styles.separator} testID="settings-kit-separator" /> : null}
               {child}
             </Fragment>
-          ))}
+          )) : items}
         </View>
       ) : null}
       {footer ? <Text style={[styles.footer, { color: toneColor(footerTone, colors.textMuted) }]} testID="settings-kit-footer">{footer}</Text> : null}
@@ -111,8 +119,11 @@ function RowLabel({ label, subtitle, tone, subtitleTone, testID }: { label: stri
  * 标签 · 右侧值 · ›。有 onPress 默认画 ›(chevron={false} 关掉);没有 onPress 就是只读的「标签 — 值」。
  * external = 跳到应用外(浏览器),右侧用 ↗ 而不是 ›。
  */
-export function SettingsRow({ label, subtitle, subtitleTone, value, valueTone, valueExtra, tone, onPress, chevron, external, busy, disabled, testID, accessibilityLabel }: {
+export function SettingsRow({ label, subtitle, subtitleTone, value, valueTone, valueExtra, tone, onPress, chevron, external, busy, disabled, testID, accessibilityLabel, icon, iconColor }: {
   label: string;
+  /** 行首图标(Ionicons 名):主色 / iconColor 的小方块,放在 SETTINGS_LEAD 格子里(和账号头像同一列)。 */
+  icon?: string;
+  iconColor?: string;
   subtitle?: ReactNode;
   subtitleTone?: SettingsTone;
   value?: string;
@@ -132,6 +143,11 @@ export function SettingsRow({ label, subtitle, subtitleTone, value, valueTone, v
   const id = testID ?? ROW_ID;
   return (
     <RowShell onPress={onPress} disabled={disabled} testID={id} accessibilityLabel={accessibilityLabel ?? label} accessibilityRole={external ? 'link' : 'button'} accessibilityState={busy ? { busy } : undefined}>
+      {icon ? (
+        <View style={[styles.lead, { width: ds(SETTINGS_LEAD) }]} testID={`${id}-lead`}>
+          <View style={[styles.iconTile, { backgroundColor: iconColor ?? colors.accent }]}><Ionicons name={icon as any} size={17} color={colors.onAccent} /></View>
+        </View>
+      ) : null}
       <RowLabel label={label} subtitle={subtitle} tone={tone} subtitleTone={subtitleTone} testID={`${id}-label`} />
       {busy ? <ActivityIndicator size="small" color={colors.textMuted} /> : null}
       {valueExtra ? <View style={styles.valueExtra}>{valueExtra}</View> : null}
@@ -140,6 +156,58 @@ export function SettingsRow({ label, subtitle, subtitleTone, value, valueTone, v
         <View style={styles.accessory} testID={`${id}-accessory`}>
           <Ionicons name={external ? 'open-outline' : 'chevron-forward'} size={external ? 16 : 18} color={colors.textMuted} />
         </View>
+      ) : null}
+    </RowShell>
+  );
+}
+
+/**
+ * 一个账号(#427):头像 · 名字(+「当前」/「本机」小标)· 一行灰字(地址 · 用户名 · 网络)· 最右 ⋯。
+ * 点行 = onPress(切换 / 重新验证);点 ⋯ = onMore(锚点元素),由调用方出菜单(桌面锚定菜单 / 手机底部面板)。
+ * ⋯ 放在 › / ✓ 同一列(右边缘对齐)。large = 当前账号那张卡(头像 48)。
+ */
+export function SettingsAccountRow({ name, subtitle, warning, current, badge, large, onPress, onMore, moreLabel, testID, accessibilityLabel }: {
+  name: string;
+  subtitle?: string;
+  /** 例如「登录已失效」:红字,在灰字下面。 */
+  warning?: string;
+  /** 「当前」小标的文字;不传 = 不是当前账号。 */
+  current?: string;
+  /** 其他小标(本地工作区 =「本机」)。 */
+  badge?: string;
+  large?: boolean;
+  onPress?: () => void;
+  onMore?: (anchor: any) => void;
+  moreLabel?: string;
+  testID?: string;
+  accessibilityLabel?: string;
+}) {
+  const id = testID ?? ROW_ID;
+  const moreRef = useRef<any>(null);
+  return (
+    <RowShell onPress={onPress} testID={id} accessibilityLabel={accessibilityLabel ?? name}>
+      <View style={[styles.lead, { width: ds(SETTINGS_LEAD) }]} testID={`${id}-lead`}><AliasAvatar alias={name} size={large ? 48 : 36} /></View>
+      <View style={styles.accountCopy}>
+        <View style={styles.accountNameLine}>
+          <Text style={[styles.label, { color: colors.text }, large && styles.accountNameLarge]} numberOfLines={1} testID={`${id}-label`}>{name}</Text>
+          {current ? <Text style={[styles.pill, styles.pillCurrent]} testID={`${id}-current`}>{current}</Text> : null}
+          {badge ? <Text style={[styles.pill, styles.pillMuted]}>{badge}</Text> : null}
+        </View>
+        {subtitle ? <Text style={[styles.subtitle, { color: colors.textMuted }]} numberOfLines={1}>{subtitle}</Text> : null}
+        {warning ? <Text style={[styles.subtitle, { color: colors.failed }]} numberOfLines={1}>{warning}</Text> : null}
+      </View>
+      {onMore ? (
+        <Pressable
+          ref={moreRef}
+          testID={`${id}-more`}
+          accessibilityRole="button"
+          accessibilityLabel={moreLabel}
+          hitSlop={10}
+          onPress={(e: any) => { e?.stopPropagation?.(); onMore(moreRef.current); }}
+          style={({ pressed, hovered }: any) => [styles.accessory, styles.more, (pressed || hovered) && styles.morePressed]}
+        >
+          <View testID={`${id}-accessory`} style={styles.accessoryInner}><Ionicons name="ellipsis-horizontal" size={18} color={colors.textSecondary} /></View>
+        </Pressable>
       ) : null}
     </RowShell>
   );
@@ -289,6 +357,18 @@ const makeStyles = () => StyleSheet.create({
     overflow: 'hidden',
     ...elevated('raised'),
   },
+  cardHighlight: { borderWidth: 1, borderColor: colors.accent },
+  lead: { width: SETTINGS_LEAD, alignItems: 'flex-start', justifyContent: 'center', flexShrink: 0 },
+  iconTile: { width: 30, height: 30, borderRadius: radius.item, alignItems: 'center', justifyContent: 'center' },
+  accountCopy: { flex: 1, minWidth: 0, gap: 2 },
+  accountNameLine: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, minWidth: 0 },
+  accountNameLarge: { fontSize: 17, fontWeight: '600' },
+  pill: { fontSize: 11, fontWeight: '600', paddingHorizontal: 6, paddingVertical: 1, borderRadius: radius.pill, overflow: 'hidden', flexShrink: 0 },
+  pillCurrent: { color: colors.accent, backgroundColor: colors.railActiveBg },
+  pillMuted: { color: colors.textSecondary, backgroundColor: colors.subtleFill },
+  more: { borderRadius: radius.item },
+  morePressed: { backgroundColor: colors.groupedRowPressed },
+  accessoryInner: { width: ACCESSORY, height: ACCESSORY, alignItems: 'center', justifyContent: 'center' },
   cardContent: { padding: SETTINGS_ROW_PAD_X },
   footer: { fontSize: 13, lineHeight: 18, paddingHorizontal: SETTINGS_GUTTER + SETTINGS_ROW_PAD_X, paddingTop: spacing.xs + 2 },
   separator: { height: StyleSheet.hairlineWidth, backgroundColor: colors.border, marginLeft: SETTINGS_ROW_PAD_X },

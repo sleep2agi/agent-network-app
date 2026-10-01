@@ -17,7 +17,8 @@ const checks: Array<[string, boolean]> = [
   ['settings exposes local Hub status card', settings.includes('testID="local-hub-settings-card"')],
   ['settings exposes restart, stop and logs', settings.includes('restartLocalHub()') && settings.includes('stopLocalHub()') && settings.includes('openLocalHubLogs()')],
   ['settings exposes explicit backup and confirmed delete', settings.includes('backupLocalHubData()') && settings.includes('deleteLocalHubData()') && settings.includes("localDeleteText !== tr('settings.copy.84')")],
-  ['ordinary account removal hides for local profile', settings.includes("profile.profileId !== LOCAL_HUB_PROFILE_ID")],
+  // #427:移除收进 ⋯ 菜单,菜单项来自 accountRowActions(本地工作区只有复制 / 新窗口)。
+  ['ordinary account removal hides for local profile', settings.includes('accountMenuItems(profileActions(menuFor.profile)') && fs.readFileSync(new URL('./account-row-actions.ts', import.meta.url), 'utf8').includes("if (!local) out.push('remove');")],
   ['bridge uses Tauri supervisor commands', bridge.includes("invokeLocalHub('start_local_hub')") && bridge.includes("invokeLocalHub('local_hub_status')")],
   ['signed release runs the packaged executable local Hub smoke on both platforms', rust.includes('pub fn packaged_smoke()') && rust.includes('/api/auth/me') && rust.includes('/api/status') && appWorkflow.includes('--smoke-local-hub') && appWorkflow.includes('ANET_PACKAGED_SMOKE_ROOT') && !appWorkflow.includes('HOME="$smoke_root"')],
   ['packaged local workspace proves public node and task flow', rust.includes('/api/auth/node-token') && rust.includes('"name": "report_status"') && rust.includes('report.text()') && rust.includes('reported node is missing from public status API') && rust.includes('public task dispatch returned') && rust.includes('dispatched task is missing from public tasks API')],

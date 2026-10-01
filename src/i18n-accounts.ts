@@ -3,6 +3,22 @@ import { registerTranslations } from './i18n';
 // 切换账号(Vincent 2026-09-29):设置里「退出登录」上面那一行、手机底部面板 / 桌面对话框、登录页「添加账号」模式。
 registerTranslations({
   'accounts.switch': ['切换账号', 'Switch account'],
+  // 设置 → 账号 重新设计(#427):分组标题 · ⋯ 菜单。
+  'accounts.groupCurrent': ['当前账号', 'Current account'],
+  'accounts.groupOthers': ['其他账号', 'Other accounts'],
+  'accounts.groupSecurity': ['安全', 'Security'],
+  'accounts.groupLocalData': ['本地数据', 'Local data'],
+  'accounts.dataDir': ['数据目录', 'Data folder'],
+  'accounts.dataDirValue': ['{n} 个账号', '{n} accounts'],
+  'accounts.othersFooter': ['点一下账号直接切换；保存的账号都保持登录。', 'Click an account to switch. Saved accounts stay signed in.'],
+  'accounts.othersFooterTouch': ['点一下切换 · 点 ⋯ 管理', 'Tap to switch · ⋯ to manage'],
+  'accounts.currentPill': ['当前', 'Current'],
+  'accounts.localPill': ['本机', 'This device'],
+  'accounts.more': ['{name} 的更多操作', 'More actions for {name}'],
+  'accounts.switchTo': ['切换到这个账号', 'Switch to this account'],
+  'accounts.copyAddress': ['复制账号信息', 'Copy account details'],
+  'accounts.editEllipsis': ['编辑…', 'Edit…'],
+  'accounts.removeEllipsis': ['移除账号…', 'Remove account…'],
   'accounts.switchHint': ['保存的账号都保持登录，点一下直接切换', 'Saved accounts stay signed in. Tap one to switch.'],
   'accounts.current': ['当前使用', 'Current'],
   'accounts.add': ['添加账号', 'Add account'],

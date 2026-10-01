@@ -37,7 +37,7 @@ const AUDIT: Record<string, { count: number; kinds: Kind[]; input?: boolean; key
   'DialogFrame.tsx': { count: 1, kinds: ['frame'], keyboard: 'avoider', input: true, note: '规则本体' },
   'RemoveSheet.tsx': { count: 1, kinds: ['sheet'], note: '手机「移出网络」「删除分组」确认:固定内容的底部 sheet(说明 + 两个按钮),不需要滚动(#417 从 UserManagementPanel 挪出来)' },
   'TaskCreateDialog.tsx': { count: 1, kinds: ['dialog', 'sheet'], keyboard: 'avoider', input: true, note: '面板 maxHeight 100% / 92%,表单 ScrollView 可收缩(本次 BUG 修复)' },
-  'AccountRowActions.tsx': { count: 1, kinds: ['sheet'], keyboard: 'n/a: 这个 <Modal 是手机管理账号的底部动作面板(固定几行按钮,无输入框);文件里的 TextInput 在编辑弹窗里,编辑弹窗是 DialogFrame(自带键盘避让)', note: '动作面板高度由固定行数决定,取消在最底;编辑走 DialogFrame' },
+  'AccountRowActions.tsx': { count: 2, kinds: ['menu', 'sheet'], keyboard: 'n/a: 两个 <Modal 都没有输入框(桌面 ⋯ 锚定菜单 / 手机账号 ⋯ 底部动作面板,固定几行);文件里的 TextInput 在编辑弹窗里,编辑弹窗是 DialogFrame(自带键盘避让)', note: '⋯ 菜单高度按条目数算、夹进窗口(#427);动作面板高度由固定行数决定,取消在最底;编辑走 DialogFrame' },
   'AccountSwitcher.tsx': { count: 1, kinds: ['dialog', 'sheet'], note: '80% / 85% 有界,列表 flexGrow:0 直接子节点,取消在外' },
   'AgentRowMenu.tsx': { count: 1, kinds: ['menu'], note: 'anchorRowMenu 算好高度,固定条目' },
   'AndroidUpdatePrompt.tsx': { count: 1, kinds: ['fullscreen'], note: '全屏页(2026-09-30):ScrollView flex:1 装头部 + 完整说明,主按钮 / 进度条在 footer 里、在外' },

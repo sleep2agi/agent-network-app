@@ -283,13 +283,12 @@ export function phoneSettingsGroups(available: readonly Pick<SettingsCategory, '
 // ── 手机子页里的三级页(Vincent 2026-09-27「设置界面有点体验太差」)───────────────────────────
 // 子页只放行(标签 · 值 · ›);要输入的东西(API Key、接口地址、免打扰时段)点进三级编辑页再改,
 // 和微信 设置 → 个人信息 → 名字 一样。返回键 / Esc 先退三级页,再退子页。
-export type SettingsDetailKey = 'voiceApiKey' | 'voiceAdvanced' | 'quietHours' | 'manageAccounts' | 'loginDevices' | 'userMember' | 'userGroup' | 'changelog';
+export type SettingsDetailKey = 'voiceApiKey' | 'voiceAdvanced' | 'quietHours' | 'loginDevices' | 'userMember' | 'userGroup' | 'changelog';
 
 export const SETTINGS_DETAIL_TITLE: Record<SettingsDetailKey, string> = {
   voiceApiKey: 'API Key',
   voiceAdvanced: '高级 / 旧版控制台',
   quietHours: '免打扰时段',
-  manageAccounts: '管理账号',
   loginDevices: '登录设备',
   userMember: '成员',
   userGroup: '分组',
@@ -312,7 +311,6 @@ export const SETTINGS_DETAIL_PARENT: Record<SettingsDetailKey, SettingsCategoryK
   voiceApiKey: 'voice',
   voiceAdvanced: 'voice',
   quietHours: 'notifications',
-  manageAccounts: 'account',
   loginDevices: 'account',
   userMember: 'users',
   userGroup: 'users',
