@@ -81,6 +81,10 @@
       "kind": "stub",
       "secs": 23
     },
+    "test-detail-flush/drive.mjs": {
+      "kind": "stub",
+      "secs": 25
+    },
     "test-dm-attachments/drive.mjs": {
       "kind": "hub",
       "why": "needs a throwaway hub with three synthetic users (HUB_JSON)"
@@ -213,6 +217,10 @@
     "test-task-activity/drive.mjs": {
       "kind": "stub",
       "secs": 23
+    },
+    "test-task-archive/drive.mjs": {
+      "kind": "stub",
+      "secs": 40
     },
     "test-task-audit-lows/drive.mjs": {
       "kind": "stub",
