@@ -9,18 +9,18 @@
 // 纯逻辑、不 import react-native:测试可以直接引。
 
 import { isTauriShell } from './window-shell';
-import { isAndroidLike } from './wide-layout';
+import { isAndroidLike, isIPadLike } from './wide-layout';
 
 /**
  * 鼠标 + 键盘的界面:Tauri 桌面壳(任何窗口宽度),或调用方已经知道自己在桌面工作区里(`desktop` 属性)。
  * 手机、安卓双栏、手机浏览器里的 web 导出都是 false。
  *
  * 安卓 UA 先判(与 chooseAppLayout 同一顺序):Tauri 桌面 webview 从不带安卓 UA,而 web 导出的测量夹具
- * 用 Tauri 桥桩 + 安卓 UA 模拟手机 —— 那是手指,不是鼠标。
+ * 用 Tauri 桥桩 + 安卓 UA 模拟手机 —— 那是手指,不是鼠标。iPad UA 同理(iPad 横屏双栏的夹具)。
  */
 export const pointerUi = (desktopLayout?: boolean): boolean => {
   if (desktopLayout) return true;
   if (!isTauriShell()) return false;
   const ua = String((globalThis as { navigator?: { userAgent?: string } }).navigator?.userAgent ?? '');
-  return !isAndroidLike('web', ua);
+  return !isAndroidLike('web', ua) && !isIPadLike('web', false, ua);
 };

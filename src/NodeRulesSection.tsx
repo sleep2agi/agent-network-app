@@ -45,12 +45,14 @@ export default function NodeRulesSection({ cfg, node, session, onDirtyChange }: 
   const [messageTone, setMessageTone] = useState<'muted' | 'ok' | 'error'>('muted');
   // 模式:用户选过的(本机偏好)优先;没选过按布局给默认 —— 宽布局「左右」,手机「阅读」(rules-split.ts)。
   // 选过「左右」但此刻放不下(窗口缩窄、折叠屏合上)时画「编辑」,偏好不动。
-  const { width: windowWidth } = useWindowDimensions();
+  const { width: windowWidth, height: windowHeight } = useWindowDimensions();
   const wide = rulesWideLayout({
     os: Platform.OS,
     tauri: Platform.OS === 'web' && !!(globalThis as any).__TAURI_INTERNALS__,
     userAgent: Platform.OS === 'web' ? String((globalThis as any).navigator?.userAgent ?? '') : '',
     width: windowWidth,
+    height: windowHeight,
+    isPad: Platform.OS === 'ios' && Platform.isPad,
   });
   const [bodyWidth, setBodyWidth] = useState(0);
   const splitOk = rulesSplitAvailable(wide, bodyWidth);

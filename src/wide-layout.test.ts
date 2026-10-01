@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 import {
-  ANDROID_TWO_PANE_MIN_WIDTH, TAURI_DESKTOP_MIN_WIDTH, chooseAppLayout, isAndroidLike,
+  ANDROID_TWO_PANE_MIN_WIDTH, IPAD_TWO_PANE_MIN_WIDTH, TAURI_DESKTOP_MIN_WIDTH, chooseAppLayout, isAndroidLike, isIPadLike,
   paneSelectionFor, screenForPaneSelection, splitsInTwoPane, twoPaneListWidth,
   CHAT_PANE_MIN_WIDTH, LIST_PANE_DEFAULT_WIDTH, LIST_PANE_MAX_WIDTH, LIST_PANE_MIN_WIDTH, listWidthFromDrag, parseStoredListWidth,
 } from './wide-layout';
@@ -50,7 +50,36 @@ for (const ua of [MAC_UA, WIN_UA, '']) {
   }
 }
 
-// ── phone / iOS / plain web unchanged: always the phone stack ──
+// ── iPad: landscape splits, portrait keeps the phone stack (owner, iPad TestFlight) ──
+const IPAD_WEB_UA = 'Mozilla/5.0 (iPad; CPU OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Mobile/15E148 Safari/604.1';
+const ipad = (width: number, height: number) => chooseAppLayout({ os: 'ios', tauri: false, width, height, isPad: true });
+ck('iPad threshold is 1024 pt', IPAD_TWO_PANE_MIN_WIDTH === 1024);
+for (const [w, h, name] of [[1024, 768, '9.7"'], [1080, 810, '10.2"'], [1133, 744, 'mini 6'], [1180, 820, '10.9" Air'], [1194, 834, '11" Pro'], [1366, 1024, '12.9" Pro']] as const) {
+  ck(`iPad ${name} landscape ${w}×${h} → twoPane`, ipad(w, h) === 'twoPane');
+  ck(`iPad ${name} portrait ${h}×${w} → phone`, ipad(h, w) === 'phone');
+}
+// 12.9" portrait is exactly as wide as 9.7" landscape: only the orientation tells them apart.
+ck('iPad 12.9" portrait 1024×1366 → phone (width alone would have split it)', ipad(1024, 1366) === 'phone');
+ck('iPad Split View / Stage Manager window 981×1024 → phone', ipad(981, 1024) === 'phone');
+ck('iPad landscape window narrower than 1024 (e.g. 2/3 split 980×768) → phone', ipad(980, 768) === 'phone');
+ck('iPad with no height (caller did not pass it) → phone, never a guess', chooseAppLayout({ os: 'ios', tauri: false, width: 1366, isPad: true }) === 'phone');
+ck('iPad never gets the desktop workspace', ipad(1366, 1024) !== 'desktop' && ipad(2000, 1000) !== 'desktop');
+// Rotation: the same device re-evaluated with swapped dimensions flips both ways.
+ck('rotation portrait→landscape→portrait: phone→twoPane→phone', ipad(820, 1180) === 'phone' && ipad(1180, 820) === 'twoPane' && ipad(820, 1180) === 'phone');
+// iPhone landscape: isPad false → unchanged phone stack.
+ck('iPhone Pro Max landscape 932×430 → phone (unchanged)', chooseAppLayout({ os: 'ios', tauri: false, width: 932, height: 430, isPad: false }) === 'phone');
+ck('iPhone at an iPad-sized width without isPad → phone', chooseAppLayout({ os: 'ios', tauri: false, width: 1366, height: 1024 }) === 'phone');
+ck('isIPadLike: native ios + isPad', isIPadLike('ios', true));
+ck('isIPadLike: not ios without isPad', !isIPadLike('ios', false));
+ck('isIPadLike: android never', !isIPadLike('android', true, IPAD_WEB_UA));
+ck('isIPadLike: web + iPad UA (harness)', isIPadLike('web', false, IPAD_WEB_UA));
+ck('isIPadLike: web + Mac UA (iPadOS Safari desktop mode) → no', !isIPadLike('web', false, MAC_UA));
+ck('web + iPad UA landscape 1180×820 → twoPane', chooseAppLayout({ os: 'web', tauri: false, userAgent: IPAD_WEB_UA, width: 1180, height: 820 }) === 'twoPane');
+ck('web + iPad UA portrait 820×1180 → phone', chooseAppLayout({ os: 'web', tauri: false, userAgent: IPAD_WEB_UA, width: 820, height: 1180 }) === 'phone');
+// Android is unaffected by height: a portrait 10" tablet at 800 dp still splits as before.
+ck('android portrait 800×1280 still twoPane (height ignored)', chooseAppLayout({ os: 'android', tauri: false, width: 800, height: 1280 }) === 'twoPane');
+
+// ── phone / iOS (no isPad) / plain web unchanged: always the phone stack ──
 for (const w of [320, 390, 700, 900, 1366]) {
   ck(`ios @${w} → phone (unchanged)`, chooseAppLayout({ os: 'ios', tauri: false, width: w }) === 'phone');
   ck(`plain web (desktop browser) @${w} → phone (unchanged)`, chooseAppLayout({ os: 'web', tauri: false, userAgent: MAC_UA, width: w }) === 'phone');

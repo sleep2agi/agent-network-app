@@ -42,7 +42,15 @@ ck('threshold edge: 699.9 → bottomTabs, 700 → rail', chrome('android', 699.9
 // ── never a rail on login ──
 for (const w of [390, 900]) ck(`login @${w} → none`, chrome('android', w, 'login') === 'none');
 
-// ── iOS and plain web: phone behaviour at every width (the wide layout is Android-only) ──
+// ── iPad landscape: the same rail as the Android wide layout; portrait keeps bottom tabs ──
+for (const [w, h] of [[1024, 768], [1180, 820], [1366, 1024]]) {
+  const l = chooseAppLayout({ os: 'ios', tauri: false, width: w, height: h, isPad: true });
+  ck(`iPad landscape ${w}×${h} agents → rail`, navChromeFor(l, 'agents') === 'rail');
+  const pt = chooseAppLayout({ os: 'ios', tauri: false, width: h, height: w, isPad: true });
+  ck(`iPad portrait ${h}×${w} agents → bottomTabs`, navChromeFor(pt, 'agents') === 'bottomTabs');
+}
+
+// ── iPhone (no isPad) and plain web: phone behaviour at every width ──
 for (const w of [390, 834, 1024, 1366]) {
   ck(`ios @${w} agents → bottomTabs`, chrome('ios', w) === 'bottomTabs');
   ck(`plain web @${w} agents → bottomTabs`, chrome('web', w, 'agents', { ua: MAC_UA }) === 'bottomTabs');
