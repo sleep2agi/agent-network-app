@@ -1,0 +1,8 @@
+desktop v0.2.182 — 「连接较慢」判定排除后台时间 + 提示显示最近请求
+================================================================================
+A. 本版内容(0.2.181 发版提交之后 main 上合入的 PR + 本 PR)
+  #644 跨越后台/挂起的读取不计入「较慢」样本;较慢时小圆点提示列出最近 3 次读取(接口·秒·KB)。npm test 309/309;typecheck rc=0;requirement-details Docker 46/0;浏览器 test-slow-read-suspend 12/12(改动前 8/12 失败)。
+  本 PR(版本号):0.2.181 → 0.2.182,versionCode 2181 → 2182;release-desktop-auto-update.yml 加 What's new in 0.2.182;重新生成 src/changelog-bundled.ts。
+  本地:干净 origin/main(b8cae62) bump 后 npm ci / npm test / npm run typecheck 全部 rc=0;android-release-notes.mjs 0.2.182 rc=0。
+B. 验证边界(如实)
+  页内桩 + 浏览器驱动验证;未在真机 iPad 验证后台挂起场景。

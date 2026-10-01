@@ -121,6 +121,10 @@ jobs:
           releaseBody: |-
             Signed and notarized stable update for macOS (Apple Silicon) and Windows (x64).
 
+            What's new in 0.2.182:
+            - 「连接较慢」更准确：app 切到后台或锁屏期间的请求不再算进耗时，iPad 切回来不会误报。
+            - 显示「较慢」时，点开角落小圆点能看到最近 3 次请求（接口 · 秒数 · KB），方便定位到底慢在哪。
+
             What's new in 0.2.181:
             - 「连接较慢」不再是顶部整行横幅，改成角落里的小圆点（桌面 / iPad 在左侧栏版本号旁，手机在右上角），悬停或点一下看说明并立即重试；截图更干净。
             - 按 Esc 只关当前的小菜单（日期、项目、选人等），不会再把下面的任务详情一起关掉。
