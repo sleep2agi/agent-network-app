@@ -42,7 +42,7 @@ import { lockedMainRows, lockedMoreRows, lockedRestRows, type LockedRow } from '
 
 export const DRAWER_WIDTH = 420;
 
-export default function TaskDetailPanel({ cfg, item, readOnly = false, editFields, items, onOpenRequirement, onCreateChild, projects, dueDatetime, lowestPriority, mode, top, people, peopleLoading, onLoadPeople, moving, moveError, onMove, onSave, onAssignmentsSaved, onAssign, onClose, onArchive, pointer, checklistError, onChecklistToggle, onChecklistAdd, onChecklistDelete, onChecklistMove, onOpenVoiceSettings, onOpenWindow }: {
+export default function TaskDetailPanel({ cfg, item, readOnly = false, editFields, items, onOpenRequirement, onCreateChild, projects, dueDatetime, lowestPriority, mode, top, people, peopleLoading, onLoadPeople, moving, moveError, onMove, onSave, onAssignmentsSaved, onAssign, onClose, onArchive, onFlush, pointer, checklistError, onChecklistToggle, onChecklistAdd, onChecklistDelete, onChecklistMove, onOpenVoiceSettings, onOpenWindow }: {
   cfg: HubConfig;
   item: Requirement;
   /** 只读(RFC-038 §9:hub 说这张卡我不能改)。表单整块不响应,底部不给「保存修改」,顶上一条说明。 */
@@ -75,6 +75,11 @@ export default function TaskDetailPanel({ cfg, item, readOnly = false, editField
   onClose: () => void;
   /** 归档(true)/ 恢复(false);不给 = 这张卡不能归档(旧 Hub、只读、单卡窗口)。 */
   onArchive?: (archived: boolean) => void;
+  /**
+   * 详情不是经过自己的 ✕ / 返回关掉的(点了另一张卡、筛选把它藏了、面板被换掉)时,没存的标题 / 描述交给看板按 id 存 ——
+   * 不靠「当前选中的卡」,因为那时选中的已经是别的卡了(任务页审计 2026-10-02 M1)。
+   */
+  onFlush?: (id: string, patch: EditPatch) => void;
   /** 鼠标界面:子任务可拖动排序。 */
   pointer: boolean;
   checklistError: string;
@@ -98,10 +103,30 @@ export default function TaskDetailPanel({ cfg, item, readOnly = false, editField
   const [saved, setSaved] = useState(false);
   // 换了一张卡片就换草稿;同一张卡片被 Hub 刷新(别处改了)时,没改过的字段跟着刷新。
   const shown = useRef(item);
+  // 没存的打字(标题 / 描述)在换卡 / 卸载时交给看板存(onFlush)。选择类字段选完就存了,不在这里重发。
+  // savedRef:刚经「保存修改」/ ✕ 存过的同一份改动不再发第二次(卸载时卡片行可能还没刷新成新值)。
+  const draftRef = useRef(draft);
+  draftRef.current = draft;
+  const onFlushRef = useRef(onFlush);
+  onFlushRef.current = onFlush;
+  const savedRef = useRef('');
+  const flushTyped = (forItem: Requirement) => {
+    const all = editPatch(forItem, draftRef.current);
+    if (!all || !onFlushRef.current) return;
+    const typed: EditPatch = {};
+    if (all.name !== undefined) typed.name = all.name;
+    if (all.description !== undefined) typed.description = all.description;
+    if (!Object.keys(typed).length) return;
+    const key = `${forItem.id}\u0000${JSON.stringify(typed)}`;
+    if (key === savedRef.current || !checkDraft(draftRef.current).ok) return;
+    savedRef.current = key;
+    onFlushRef.current(forItem.id, typed);
+  };
+  useEffect(() => () => flushTyped(shown.current), []);
   useEffect(() => {
     const prev = shown.current;
     shown.current = item;
-    if (prev.id !== item.id) { setDraft(editDraftOf(item)); setError(null); setSaved(false); setRoleSave(null); setFieldSave(null); return; }
+    if (prev.id !== item.id) { flushTyped(prev); setDraft(editDraftOf(item)); setError(null); setSaved(false); setRoleSave(null); setFieldSave(null); return; }
     setDraft(d => {
       const base = editDraftOf(prev);
       const next = editDraftOf(item);
@@ -133,6 +158,10 @@ export default function TaskDetailPanel({ cfg, item, readOnly = false, editField
     setSaving(false);
     if (failed) { setError({ field: patch.parent_id !== undefined && (failed === PARENT_TOO_DEEP || failed === PARENT_REJECTED) ? 'parent' : 'submit', message: failed }); return false; }
     setSaved(true);
+    const typed: EditPatch = {};
+    if (patch.name !== undefined) typed.name = patch.name;
+    if (patch.description !== undefined) typed.description = patch.description;
+    savedRef.current = `${item.id}\u0000${JSON.stringify(typed)}`;
     return true;
   };
   // 关详情(✕ / 返回 / 系统返回):还有没存的修改(标题、描述)就先存上再关;存不上(标题空、Hub 拒绝)留在详情里显示原因。

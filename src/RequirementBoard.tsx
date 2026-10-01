@@ -1268,6 +1268,10 @@ function ScopedRequirementBoard({ cfg, desktop, dispatch, onOpenVoiceSettings, s
           onAssign={change => assign(selected.id, change)}
           onClose={() => (single ? single.onClose() : setSelectedId(null))}
           onArchive={archivedCapable && !selected.readOnly && !single ? archived => { void setArchived(selected.id, archived); } : undefined}
+          onFlush={(id, patch) => {
+            const name = items.find(row => row.id === id)?.name ?? patch.name ?? '';
+            void saveEdit(id, patch).then(failed => { if (failed) setBanner(`「${name}」${failed}`); });
+          }}
           onOpenWindow={tauriShell && pointer && !single ? () => openTaskWindow({ taskId: selected.id, profileId: cfg.profileId, serverUrl: cfg.serverUrl, networkId: cfg.networkId, title: selected.name, at: Date.now() }) : undefined}
           pointer={pointer}
           onOpenVoiceSettings={onOpenVoiceSettings}
