@@ -4,7 +4,7 @@ import { useTranslation } from './i18n-react';
 import { settingsText } from './i18n-settings';
 import { localizedThemeSummary } from './i18n-settings-presentation';
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
-import { ActivityIndicator, AppState, BackHandler, Modal, Platform, Pressable, ScrollView, StyleSheet, Switch, View, useWindowDimensions } from 'react-native';
+import { ActivityIndicator, AppState, BackHandler, Linking, Modal, Platform, Pressable, ScrollView, StyleSheet, Switch, View, useWindowDimensions } from 'react-native';
 import { Text, TextInput } from './ui-text';
 import { Ionicons } from './icons';
 import { HubConfig } from './api';
@@ -18,6 +18,7 @@ import { THEME_PREFERENCES, THEME_PREFERENCE_LABEL, colors, onThemeChange, onThe
 import { APP_VERSION } from './version';
 import { checkDesktopUpdate, desktopUpdateLastCheckedAt, desktopUpdateSnapshot, subscribeDesktopUpdates } from './desktop-updater';
 import { describeUpdateRow } from './update-check-state';
+import { IOS_UPDATE_ROW, openTestFlight } from './ios-testflight';
 import { androidUpdateLastCheckedAt, androidUpdateSnapshot, checkAndroidUpdate, subscribeAndroidUpdates } from './android-updater';
 import { describeAndroidUpdateRow } from './android-update-core';
 import { backupLocalHubData, deleteLocalHubData, LOCAL_HUB_PROFILE_ID, localHubStatus, openLocalHubLogs, restartLocalHub, stopLocalHub, type LocalHubResult } from './local-hub';
@@ -128,6 +129,8 @@ export default function SettingsScreen({
   const androidUpdate = useSyncExternalStore(subscribeAndroidUpdates, androidUpdateSnapshot, androidUpdateSnapshot);
   // web 验收夹具按安卓渲染时(notifyPreview.platform=android)也走安卓那一套更新行,截图才看得到真实形状。
   const isAndroid = Platform.OS === 'android' || notifyPreview?.platform === 'android';
+  // iOS 走 TestFlight,应用内没有自更新:那一行写「通过 TestFlight 更新 ›」,点了打开 TestFlight(不是「当前环境不支持自动更新」)。
+  const isIOS = !isAndroid && (notifyPreview ? notifyPreview.platform === 'ios' : Platform.OS === 'ios');
   // 0.2.76 通知设置(桌面端落 localStorage)
   const notify = useSyncExternalStore(subscribeNotifySettings, loadNotifySettings, loadNotifySettings);
   // 偏好从「深色」换成「跟随系统(当前深色)」时生效主题没变,App 不会重挂 —— 这一行要自己订阅才会刷新。
@@ -557,11 +560,12 @@ export default function SettingsScreen({
     setQuietEnd,
     renderUsers: detail => <UserManagementPanel cfg={cfg} me={authMe} networkId={me.networkId} phone={{ memberOpen: detail === 'userMember', groupOpen: detail === 'userGroup', openMember: () => openDetail('userMember'), openGroup: () => openDetail('userGroup'), closeMember: closeDetail, setHeader: setHeaderOverride, scrollTop: scrollPaneTop }} />,
     renderShortcuts: () => <ShortcutsSettings s={styles} showNav={show('shortcuts', 'nav')} showChat={show('shortcuts', 'chat')} showSend={show('shortcuts', 'send')} />,
-    updateView: isAndroid
+    updateView: isIOS ? IOS_UPDATE_ROW : isAndroid
       ? describeAndroidUpdateRow(androidUpdate, { currentVersion: APP_VERSION, lastCheckedAt: androidUpdateLastCheckedAt(), now: Date.now() })
       : describeUpdateRow(update, { currentVersion: APP_VERSION, lastCheckedAt: desktopUpdateLastCheckedAt(), now: Date.now() }),
     onCheckUpdate: () => {
-      if (isAndroid) void checkAndroidUpdate(APP_VERSION);
+      if (isIOS) void openTestFlight(Linking);
+      else if (isAndroid) void checkAndroidUpdate(APP_VERSION);
       else void checkDesktopUpdate(undefined, { manual: true });
     },
   };
@@ -1216,7 +1220,7 @@ export default function SettingsScreen({
                   {(() => {
                     // 「点击更新好像没用」:每次手动检查都要落到一句看得见、和上一次不同的话上
                     // (版本号 + 刚刚检查 / 失败原因),而不是闪一下转圈又回到同一句。
-                    const view = isAndroid
+                    const view = isIOS ? IOS_UPDATE_ROW : isAndroid
                       ? describeAndroidUpdateRow(androidUpdate, { currentVersion: APP_VERSION, lastCheckedAt: androidUpdateLastCheckedAt(), now: Date.now() })
                       : describeUpdateRow(update, { currentVersion: APP_VERSION, lastCheckedAt: desktopUpdateLastCheckedAt(), now: Date.now() });
                     const valueColor = view.tone === 'danger' ? colors.failed : view.tone === 'accent' ? colors.accent : colors.textSecondary;
@@ -1226,7 +1230,8 @@ export default function SettingsScreen({
                         style={({ pressed }) => [styles.row, pressed && view.actionable && { opacity: 0.6 }]}
                         onPress={() => {
                           if (!view.actionable) return;
-                          if (isAndroid) void checkAndroidUpdate(APP_VERSION);
+                          if (isIOS) void openTestFlight(Linking);
+                          else if (isAndroid) void checkAndroidUpdate(APP_VERSION);
                           else void checkDesktopUpdate(undefined, { manual: true });
                         }}
                         disabled={!view.actionable}
