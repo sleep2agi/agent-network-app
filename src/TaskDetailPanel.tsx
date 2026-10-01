@@ -32,6 +32,7 @@ import { loadDetailMoreOpen, saveDetailMoreOpen } from './task-detail-prefs';
 import { PARENT_REJECTED, PARENT_TOO_DEEP } from './requirements-hub';
 import TaskIdChip from './TaskIdChip';
 import { readOnlyLabelKey, type TaskEditField } from './task-access';
+import { lockedMainRows, lockedMoreRows, lockedRestRows, type LockedRow } from './task-detail-locked';
 
 export const DRAWER_WIDTH = 420;
 
@@ -155,7 +156,7 @@ export default function TaskDetailPanel({ cfg, item, readOnly = false, editField
       <ParentBreadcrumb item={item} items={items} onOpen={onOpenRequirement} />
       {/* 只读时下面的编辑控件整块不响应(看得见、点不动),而不是让人改完再被 hub 403 退回。 */}
       <View pointerEvents={readOnly && !partial ? 'none' : 'auto'} style={{ gap: spacing.lg }} testID="req-detail-fields">
-      <Locked on={partial} testID="req-locked-title">
+      <Locked on={partial} testID="req-locked-title" title={item.name}>
       <TextInput
         value={draft.name}
         onChangeText={name => set({ name })}
@@ -192,7 +193,7 @@ export default function TaskDetailPanel({ cfg, item, readOnly = false, editField
         {moving ? <Text style={s.muted} accessibilityLiveRegion="polite">{tr('tasks.copy.136')}</Text> : null}
         {moveError ? <Text style={s.err} accessibilityRole="alert">{moveError}</Text> : null}
       </Field>
-      <Locked on={partial} testID="req-locked-main">
+      <Locked on={partial} testID="req-locked-main" rows={partial ? lockedMainRows(item, people, projects) : undefined}>
       <RoleFields
         twoRoles={hasRoles(item)}
         owner={draft.owner}
@@ -237,7 +238,7 @@ export default function TaskDetailPanel({ cfg, item, readOnly = false, editField
       </Pressable>
       {moreShown ? (
         <View style={{ gap: spacing.lg }} testID="req-more">
-          <Locked on={partial} testID="req-locked-more">
+          <Locked on={partial} testID="req-locked-more" rows={partial ? lockedMoreRows(item, items) : undefined}>
           {/* 开始(甘特图的条从这里画):只有带 start 字段的 Hub(capability start_date)才有;只到日。 */}
           {item.start !== undefined ? (
             <Field label={tr('detail.start')}>
@@ -263,7 +264,7 @@ export default function TaskDetailPanel({ cfg, item, readOnly = false, editField
               />
             </View>
           ) : null}
-          <Locked on={partial} testID="req-locked-rest">
+          <Locked on={partial} testID="req-locked-rest" rows={partial ? lockedRestRows(item, people) : undefined}>
           {!legacy ? (
             <Field label={tr('tasks.copy.53')}>
               <RequirementAssignmentsEditor key={item.id} cfg={cfg} item={item} fields="participants" onSaved={onAssignmentsSaved} />
@@ -274,6 +275,8 @@ export default function TaskDetailPanel({ cfg, item, readOnly = false, editField
           {!item.externalUrl || !parseIssue(item.externalUrl, false) ? <ExternalLink item={item} /> : null}
           {item.createdAt ? <Text style={s.muted}>{tr('tasks.copy.139')}{item.createdAt.slice(0, 10)}</Text> : null}
           </Locked>
+          {/* 外部链接只是个链接(看,不改):参与人的卡上也照样能点。 */}
+          {partial && (!item.externalUrl || !parseIssue(item.externalUrl, false)) ? <ExternalLink item={item} /> : null}
         </View>
       ) : null}
       </View>
@@ -388,6 +391,18 @@ const makePanelStyles = () => StyleSheet.create({
  * 参与人的卡上锁住的一块:包一层 pointerEvents=none(看得见、点不动)。不锁时原样返回子节点,布局与以前逐字相同。
  * 放在模块级:在组件里现定义的组件每次渲染都是新类型,会把里面的输入框整个重挂(打一个字丢一次焦点)。
  */
-function Locked({ on, children, testID }: { on: boolean; children: ReactNode; testID?: string }) {
-  return on ? <View pointerEvents="none" style={{ gap: spacing.lg }} testID={testID}>{children}</View> : <>{children}</>;
+function Locked({ on, children, testID, rows, title }: { on: boolean; children: ReactNode; testID?: string; rows?: readonly LockedRow[]; title?: string }) {
+  if (!on) return <>{children}</>;
+  // 锁住时不画编辑控件(输入框 / 下拉箭头 / 今天明天 / 富文本工具栏),只画值:看起来能点、点了没反应最糟。
+  return (
+    <View pointerEvents="none" style={{ gap: spacing.md }} testID={testID}>
+      {title !== undefined ? <Text style={{ color: colors.text, fontSize: typeScale.heading - 2, fontWeight: weight.strong }} testID="req-locked-name">{title}</Text> : null}
+      {(rows ?? []).map(r => (
+        <View key={r.key} style={{ gap: 4 }} testID={`req-locked-row-${r.key}`}>
+          <Text style={{ color: colors.textMuted, fontSize: typeScale.small, fontWeight: weight.medium }}>{r.label}</Text>
+          <Text style={{ color: colors.textSecondary, fontSize: typeScale.body, lineHeight: 20 }} numberOfLines={r.multiline ? 12 : 2}>{r.value}</Text>
+        </View>
+      ))}
+    </View>
+  );
 }

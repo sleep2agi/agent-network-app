@@ -4,6 +4,7 @@ import { readFileSync } from 'node:fs';
 import { canEditTaskField, editFieldsFromHub, readOnlyLabelKey } from './task-access';
 import { moveRequirementOnHub, requirementFromHub, setChecklistItemOnHub, updateRequirementOnHub } from './requirements-hub';
 import { taskNoticeOf } from './human-dm';
+import { lockedMainRows, lockedMoreRows, lockedRestRows } from './task-detail-locked';
 import { consumeDesktopMessageEvent } from './desktop-message-consume';
 import { requestOpenTask, subscribeOpenTaskRequest, takeOpenTaskRequest } from './task-open-request';
 import { t } from './i18n';
@@ -38,6 +39,20 @@ const read = (f: string) => readFileSync(new URL(f, import.meta.url), 'utf8').re
   ck('标签:参与人 = 「仅可改状态和检查项」', t(readOnlyLabelKey(['column', 'checklist'])) === '仅可改状态和检查项' || t(readOnlyLabelKey(['column', 'checklist'])) === 'Status & checklist only');
   ck('标签:没有放开 = 「只读」(旧文案不变)', readOnlyLabelKey(undefined) === 'tasks.readOnly' && readOnlyLabelKey([]) === 'tasks.readOnly');
   ck('标签:只放开一个时说那一个', readOnlyLabelKey(['column']) === 'tasks.partialColumn' && readOnlyLabelKey(['checklist']) === 'tasks.partialChecklist');
+}
+
+// —— 锁住的字段画成什么 ——
+{
+  const people = [{ kind: 'user' as const, id: 'u_a', networkId: 'n', name: '示例成员甲' }, { kind: 'node' as const, id: 'n_x', networkId: 'n', name: '示例-A' }];
+  const item = requirementFromHub({ id: 'r1', name: '写测试', owner: { kind: 'user', id: 'u_a' }, agent_owner: { kind: 'node', id: 'n_x' }, participants: [{ kind: 'user', id: 'u_a' }], project_id: 'p1', due: '2026-10-08', description: '示例描述', checklist: [], tags: ['前端'], parent_id: null, priority: 'high', viewer_can: { edit: false, edit_fields: ['column', 'checklist'] } })!;
+  const main = lockedMainRows(item, people, [{ id: 'p1', name: '示例项目' } as any]);
+  const v = (rows: { key: string; value: string }[], k: string) => rows.find(r => r.key === k)?.value;
+  ck('锁住的常显区:负责人 / 负责 Agent / 项目 / 预计完成 / 描述 都是值', main.map(r => r.key).join() === 'owner,agent,project,due,description' && v(main, 'owner') === '示例成员甲' && v(main, 'agent') === '示例-A' && v(main, 'project') === '示例项目' && (v(main, 'due') ?? '').startsWith('2026-10-08') && v(main, 'description') === '示例描述', JSON.stringify(main));
+  const more = lockedMoreRows(item, [item]);
+  ck('锁住的「更多」:优先级 / 母任务(无)', v(more, 'parent') === '—' && !!v(more, 'priority'), JSON.stringify(more));
+  const rest = lockedRestRows(item, people);
+  ck('锁住的其余:参与人 / 标签', v(rest, 'participants') === '示例成员甲' && v(rest, 'tags') === '前端', JSON.stringify(rest));
+  ck('没设的显示「—」不是空白', v(lockedMainRows({ ...item, due: '', description: '' }, people, null), 'due') === '—');
 }
 
 // —— 请求体:只带放开的键 ——
@@ -112,8 +127,11 @@ const read = (f: string) => readFileSync(new URL(f, import.meta.url), 'utf8').re
 // —— 接线(源码级)——
 {
   const detail = read('./TaskDetailPanel.tsx');
-  ck('详情:参与人逐块锁(标题 / 主体 / 更多 / 其余),状态和检查项不锁', ['req-locked-title', 'req-locked-main', 'req-locked-more', 'req-locked-rest'].every(id => detail.includes(`<Locked on={partial} testID="${id}">`)) && detail.includes("pointerEvents={canColumn ? 'auto' : 'none'}") && detail.includes("pointerEvents={canChecklist ? 'auto' : 'none'}"));
+  const toast = read('./DesktopMessageNotice.tsx');
+  ck('详情:参与人逐块锁(标题 / 主体 / 更多 / 其余),状态和检查项不锁', ['req-locked-title', 'req-locked-main', 'req-locked-more', 'req-locked-rest'].every(id => detail.includes(`<Locked on={partial} testID="${id}"`)) && detail.includes("pointerEvents={canColumn ? 'auto' : 'none'}") && detail.includes("pointerEvents={canChecklist ? 'auto' : 'none'}"));
   ck('详情:Locked 在模块级(组件里现定义会把输入框每次重挂)', /\nfunction Locked\(/.test(detail) && !/const Locked = /.test(detail));
+  ck('详情:锁住的块只画值(标签 + 文字),不画编辑控件', /function Locked\([\s\S]*?if \(!on\) return <>\{children\}<\/>;[\s\S]*?rows \?\? \[\]\)\.map/.test(detail) && detail.includes('rows={partial ? lockedMainRows(item, people, projects) : undefined}'));
+  ck('顶部提示:不透明面(colors.card + elevated),标题单独一行', toast.includes('backgroundColor: colors.card,') && toast.includes("...elevated('floating'),") && !toast.includes("'#f4f6f8f2'") && toast.includes('testID="desktop-message-title"'));
   ck('详情:参与人不给「保存修改」(其余字段本来就改不了)', detail.includes('{readOnly ? null : ('));
   const board = read('./RequirementBoard.tsx');
   ck('看板:详情拿到 editFields', board.includes('editFields={selected.editFields}'));
@@ -122,7 +140,6 @@ const read = (f: string) => readFileSync(new URL(f, import.meta.url), 'utf8').re
   ck('App:私信页三处 + 顶部提示两处都接 openTaskNotice', (app.match(/onOpenTask=\{id => openTaskNotice\(id, cfg, setScreen\)\}/g) ?? []).length === 5);
   const dm = read('./DmChatScreen.tsx');
   ck('私信气泡:任务通知画「查看任务 ›」', dm.includes('taskNoticeOf(item.meta_json)') && dm.includes('testID="dm-open-task"'));
-  const toast = read('./DesktopMessageNotice.tsx');
   ck('顶部提示:任务通知点了打开任务', toast.includes('onOpenTask!(task.requirementId)') && toast.includes('desktop-message-open-task'));
 }
 

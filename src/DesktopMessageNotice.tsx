@@ -1,10 +1,11 @@
 import { useEffect, useRef } from 'react';
-import { Animated, Easing, Pressable, StyleSheet } from 'react-native';
+import { Animated, Easing, Pressable, StyleSheet, View } from 'react-native';
 import { Text } from './ui-text';
 import { t } from './i18n';
 import './i18n-tasks';
 import type { DesktopMessageNotice as Notice } from './desktop-message-consume';
-import { colors, onThemeChange, spacing, themeMode, radius } from './theme';
+import { colors, onThemeChange, spacing, radius } from './theme';
+import { elevated } from './elevation';
 
 const AUTO_DISMISS_MS = 8000;
 
@@ -28,9 +29,6 @@ export default function DesktopMessageNotice({
   onOpenTask?: (requirementId: string) => void;
 }) {
   const opacity = useRef(new Animated.Value(0)).current;
-  const light = themeMode() === 'light';
-  const surface = light ? '#f4f6f8f2' : '#161618f2';
-  const outline = light ? '#e1e5ea' : '#26262b';
   const heading = notice.title || notice.from || '消息';
   const task = notice.taskNotice && onOpenTask ? notice.taskNotice : null;
 
@@ -44,7 +42,7 @@ export default function DesktopMessageNotice({
 
   return (
     <Animated.View
-      style={[styles.toast, { backgroundColor: surface, borderColor: outline, opacity }]}
+      style={[styles.toast, { opacity }]}
       testID="desktop-message-notice"
       accessibilityRole="text"
       accessibilityLiveRegion="polite"
@@ -57,8 +55,11 @@ export default function DesktopMessageNotice({
         style={styles.body}
       >
         <Animated.View style={[styles.dot, { backgroundColor: severityColor(notice.severity) }]} />
-        <Text style={[styles.title, { color: colors.text }]} numberOfLines={1}>{heading}</Text>
-        <Text style={[styles.detail, { color: colors.textSecondary }]} numberOfLines={2}>{notice.message}</Text>
+        {/* 标题单独一行、正文在下:原来标题和正文挤在同一行,正文一长标题就被压成「任…」。 */}
+        <View style={styles.textCol}>
+          <Text style={[styles.title, { color: colors.text }]} numberOfLines={1} testID="desktop-message-title">{heading}</Text>
+          <Text style={[styles.detail, { color: colors.textSecondary }]} numberOfLines={2}>{notice.message}</Text>
+        </View>
         {task ? <Text style={[styles.open, { color: colors.accent }]} testID="desktop-message-open-task">{t('tasks.noticeOpen')}</Text> : null}
       </Pressable>
     </Animated.View>
@@ -72,7 +73,9 @@ const makeStyles = () =>
     maxWidth: 440,
     marginBottom: spacing.xs,
     borderRadius: radius.surface,
-    borderWidth: 1,
+    // 不透明的浮层面(与菜单 / 快捷键提示同一组 token):原来是 95% 透明度的手调色,底下列表的字会透出来。
+    backgroundColor: colors.card,
+    ...elevated('floating'),
   },
   body: {
     flexDirection: 'row',
@@ -81,8 +84,9 @@ const makeStyles = () =>
     paddingVertical: 8,
   },
   dot: { width: 6, height: 6, borderRadius: radius.pill, marginRight: spacing.sm },
-  title: { fontSize: 12, fontWeight: '600', marginRight: spacing.sm, maxWidth: 120 },
-  detail: { fontSize: 12, flexShrink: 1 },
+  textCol: { flexShrink: 1, minWidth: 0, gap: 2 },
+  title: { fontSize: 12, fontWeight: '600' },
+  detail: { fontSize: 12 },
   open: { fontSize: 12, fontWeight: '600', marginLeft: spacing.sm, flexShrink: 0 },
 });
 

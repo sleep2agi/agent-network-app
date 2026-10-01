@@ -95,6 +95,22 @@ const tid = (id) => `[data-testid="${id}"]`;
 const bb = async (page, sel) => { const l = page.locator(sel).first(); return (await l.count()) && await l.isVisible() ? l.boundingBox() : null; };
 const measure = (where, el, b) => { if (b) measures.push({ where, el, x: r1(b.x), y: r1(b.y), w: r1(b.width), h: r1(b.height) }); };
 const inside = (a, b) => !!(a && b) && a.x >= b.x - 0.5 && a.y >= b.y - 0.5 && a.x + a.width <= b.x + b.width + 0.5 && a.y + a.height <= b.y + b.height + 0.5;
+// What a locked block may NOT contain: inputs, rich-text editors, buttons / pickers, icon glyphs (chevrons, calendar,
+// toolbar icons all come from the Ionicons font). It must contain plain label + value rows only.
+const lockedJunk = (page, id) => page.evaluate((s) => {
+  const root = document.querySelector(s);
+  if (!root) return ['missing'];
+  const out = [];
+  for (const el of root.querySelectorAll('*')) {
+    if (!el.getClientRects().length) continue;
+    const tag = el.tagName.toLowerCase();
+    if (tag === 'input' || tag === 'textarea' || el.isContentEditable) out.push(tag);
+    const role = el.getAttribute('role');
+    if (role && /button|combobox|checkbox|radio|link|toolbar|textbox/.test(role)) out.push(`role=${role}`);
+    if (/ionicons/i.test(getComputedStyle(el).fontFamily) && el.textContent.trim()) out.push('icon');
+  }
+  return out;
+}, `[data-testid="${id}"]`);
 const pe = (page, id) => page.evaluate((s) => { const el = document.querySelector(s); return el ? getComputedStyle(el).pointerEvents : null; }, tid(id));
 
 const VIEWPORTS = {
@@ -174,8 +190,14 @@ for (const [name, V] of Object.entries(VIEWPORTS)) {
         moreLocked: (await pe(page, 'req-locked-more')) === 'none',
         restLocked: (await pe(page, 'req-locked-rest')) === 'none',
         noSave: (await page.locator(tid('req-edit-save')).count()) === 0,
+        titleIsText: (await page.locator(tid('req-edit-name')).count()) === 0 && (await page.locator(tid('req-locked-name')).first().innerText()).trim() === '示例任务一:我参与',
+        valueRows: (await Promise.all(['owner', 'agent', 'due', 'description'].map(k => page.locator(tid(`req-locked-row-${k}`)).count()))).every(n => n === 1),
         bannerInDrawer: !!banner && banner.y >= 0 && !!moveGroup && moveGroup.y > banner.y + banner.height,
       }, { bannerText });
+      const junk = {};
+      for (const id of ['req-locked-title', 'req-locked-main', 'req-locked-more', 'req-locked-rest']) junk[id] = await lockedJunk(page, id);
+      record(where, 'locked blocks are value-only (no input / chevron / toolbar / chips)', Object.fromEntries(Object.entries(junk).map(([k, v]) => [k, v.length === 0])), { junk: JSON.stringify(junk) });
+      for (const k of ['owner', 'due', 'description', 'priority', 'participants']) measure(where, `locked row ${k}`, await bb(page, tid(`req-locked-row-${k}`)));
       await shot('detail-participant-checklist');
 
       step = 'requests';
@@ -241,16 +263,32 @@ for (const [name, V] of Object.entries(VIEWPORTS)) {
       await page.evaluate(() => window.__anetLayoutSweep.setScreen({ name: 'agents' }));
       await page.waitForTimeout(500);
       const streams = await page.evaluate(() => window.__ue.streams.length);
+      // A plain agent toast with a long body: same layout fix applies to every toast (the old row squeezed the title).
+      await page.evaluate(() => window.__pushUserEvent({ type: 'desktop_message', scope: 'user', message_id: `plain_${Date.now()}`, kind: 'agent_message', from: '示例-A', title: '构建完成', message: '示例-A:构建已经完成,全部检查通过,产物已经上传到示例存储,可以开始下一步验证了。', severity: 'success', network_id: 'net-sweep' }));
+      await page.locator(tid('desktop-message-title')).first().waitFor({ timeout: 5000 });
+      await page.waitForTimeout(400);
+      const plain = await page.evaluate(() => { const el = document.querySelector('[data-testid="desktop-message-title"]'); return { text: el?.textContent, full: !!el && el.scrollWidth <= el.clientWidth + 0.5, w: el ? Math.round(el.getBoundingClientRect().width * 10) / 10 : 0 }; });
+      record(where, 'plain toast title', { full: plain.text === '构建完成' && plain.full }, plain);
+      await shot('toast-plain');
       await page.evaluate(() => window.__pushUserEvent({ type: 'desktop_message', scope: 'user', message_id: `dm_task_toast_${Date.now()}`, kind: 'human_dm', from: 'shili_jia', title: '任务更新', message: '示例成员甲 改了「示例任务一:我参与」:检查项「写测试」已完成', severity: 'info', network_id: 'net-sweep', created_at: new Date().toISOString(), meta: { task_notice: { requirement_id: 'r1', seq: 21, network_id: 'net-sweep' } } }));
       await page.locator(tid('desktop-message-open-task')).first().waitFor({ timeout: 5000 });
+      await page.waitForTimeout(400); // past the 140 ms fade-in
+      const toastLook = await page.evaluate(() => {
+        const t = document.querySelector('[data-testid="desktop-message-notice"]');
+        const title = document.querySelector('[data-testid="desktop-message-title"]');
+        const bg = getComputedStyle(t).backgroundColor;
+        const alpha = /rgba\(([^)]+)\)/.exec(bg) ? Number(/rgba\(([^)]+)\)/.exec(bg)[1].split(',')[3]) : 1;
+        let op = 1; for (let a = t; a && a !== document.body; a = a.parentElement) op *= Number(getComputedStyle(a).opacity);
+        return { bg, alpha, op, title: title?.textContent, titleW: title ? Math.round(title.getBoundingClientRect().width * 10) / 10 : 0, titleFull: !!title && title.scrollWidth <= title.clientWidth + 0.5 };
+      });
       const toast = await bb(page, tid('desktop-message-notice')), open = await bb(page, tid('desktop-message-open-task'));
       measure(where, 'toast', toast); measure(where, 'toast 查看任务', open);
-      record(where, 'toast', { streamOpened: streams > 0, openInsideToast: inside(open, toast), withinViewport: !!toast && toast.x >= 0 && toast.x + toast.width <= V.w + 0.5 }, { streams });
+      record(where, 'toast', { opaque: toastLook.alpha === 1 && toastLook.op === 1, titleFull: toastLook.title === '任务更新' && toastLook.titleFull, streamOpened: streams > 0, openInsideToast: inside(open, toast), withinViewport: !!toast && toast.x >= 0 && toast.x + toast.width <= V.w + 0.5 }, { streams, ...toastLook });
       await shot('toast');
       await press(page.locator(tid('desktop-message-notice')).locator('[role="button"]').first());
       await page.locator(tid('req-detail-read-only')).first().waitFor({ timeout: 8000 });
       await page.waitForTimeout(400);
-      record(where, 'toast opens task', { r1: (await page.locator(tid('req-edit-name')).first().inputValue()) === '示例任务一:我参与', toastGone: (await page.locator(tid('desktop-message-notice')).count()) === 0 });
+      record(where, 'toast opens task', { r1: (await page.locator(tid('req-locked-name')).first().innerText()).trim() === '示例任务一:我参与', toastGone: (await page.locator(tid('desktop-message-notice')).count()) === 0 });
       await shot('toast-opened-task');
 
       record(where, 'page errors', { none: errors.length === 0 }, { errors: errors.join(' | ') });
