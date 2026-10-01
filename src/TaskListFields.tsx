@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { listenEscapeClose } from './escape-close';
 import { Modal, Pressable, ScrollView, View, useWindowDimensions } from 'react-native';
 import { Text, TextInput } from './ui-text';
 import { Ionicons } from './icons';
@@ -41,9 +42,11 @@ export default function TaskListFields({ fields, onChange, projects, seqCapable 
     const over = (e: DragEvent) => { const id = row(e); if (drag.current && id) { e.preventDefault(); setTarget(id); } };
     const end = () => { drag.current = null; setTarget(null); };
     const drop = (e: DragEvent) => { const id = row(e); if (drag.current && id) { e.preventDefault(); onChange(moveField(fields, drag.current, id)); } end(); };
-    const key = (e: KeyboardEvent) => { if (e.key === 'Escape') { close(); return; } const id = field(e, 'task-field-drag-'); if (!id || !['ArrowUp', 'ArrowDown'].includes(e.key)) return; e.preventDefault(); const index = available.findIndex(f => f.id === id), next = available[index + (e.key === 'ArrowUp' ? -1 : 1)]; if (next) onChange(moveField(fields, id, next.id)); };
+    const key = (e: KeyboardEvent) => { const id = field(e, 'task-field-drag-'); if (!id || !['ArrowUp', 'ArrowDown'].includes(e.key)) return; e.preventDefault(); const index = available.findIndex(f => f.id === id), next = available[index + (e.key === 'ArrowUp' ? -1 : 1)]; if (next) onChange(moveField(fields, id, next.id)); };
     root.addEventListener('dragstart', start); root.addEventListener('dragover', over); root.addEventListener('drop', drop); root.addEventListener('dragend', end); root.addEventListener('keydown', key);
-    return () => { root.removeEventListener('dragstart', start); root.removeEventListener('dragover', over); root.removeEventListener('drop', drop); root.removeEventListener('dragend', end); root.removeEventListener('keydown', key); };
+    // Esc 在 keyup 上关、并吞掉那下 keyup(escape-close.ts;同 TaskSelectMenu)。焦点不在面板里也能关。
+    const offEsc = listenEscapeClose(close);
+    return () => { root.removeEventListener('dragstart', start); root.removeEventListener('dragover', over); root.removeEventListener('drop', drop); root.removeEventListener('dragend', end); root.removeEventListener('keydown', key); offEsc(); };
   }, [position, fields, query, projects, seqCapable]);
   const button = { minHeight: 40, paddingHorizontal: 12, justifyContent: 'center' as const, flexDirection: 'row' as const, alignItems: 'center' as const, gap: 8 };
   return <>

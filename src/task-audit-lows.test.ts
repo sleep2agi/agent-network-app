@@ -52,7 +52,7 @@ console.log('# L12 人员选择器:桌面锚定下拉');
   ck('下拉的位置用 anchorSelectMenu(同 TaskSelectMenu)', /anchorSelectMenu\(anchor, viewport,/.test(picker));
   ck('键盘:↑↓ / 回车 / ⌘·Ctrl+回车', ['ArrowDown', 'ArrowUp', "e.key === 'Enter' && (e.metaKey || e.ctrlKey)"].every(k => picker.includes(k)));
   const drop = picker.slice(picker.indexOf('function PeopleDropdown'));
-  ck('Esc 交给 Modal 的 onRequestClose(keyup),不在 keydown 上关 —— 不连带关掉下面的整页详情', !drop.includes("'Escape'") && /onRequestClose=\{onClose\}/.test(drop));
+  ck('Esc 走 listenEscapeClose(keyup 才关并吞掉),不在 keydown 上关 —— 不连带关掉下面的整页详情', !drop.includes("'Escape'") && /listenEscapeClose\(\(\) => keyRef\.current\.onClose\(\)\)/.test(drop));
   ck('翻到上面时用 bottom 贴住字段上沿', /up \? \{ bottom: viewport\.height - \(anchor\.y - 4\) \}/.test(drop));
   ck('搜索框自动聚焦(打字就筛)', /<TextInput ref=\{search\} autoFocus value=\{query\}/.test(picker));
   ck('负责人在下拉里点了就生效', /if \(anchored && mode === 'owner'\) \{ onConfirm\(next\); return; \}/.test(picker));
