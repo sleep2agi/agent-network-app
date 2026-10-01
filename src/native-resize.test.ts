@@ -2,7 +2,8 @@
 // 原生端「原图关闭 → 最长边 2048、JPEG 0.8」的流程,用假的 manipulator 驱动。
 import { strict as assert } from 'node:assert';
 
-const { resizeForUpload } = await import('./native-resize');
+const { createSerialQueue, resizeForUpload } = await import('./native-resize');
+const { runUploadQueue } = await import('./upload-queue');
 
 let ck = 0;
 const check = (cond: boolean, msg: string) => { assert.ok(cond, msg); ck++; };
@@ -73,6 +74,52 @@ const photo = { uri: 'file:///pick/IMG_1.HEIC', fileName: 'IMG_1.HEIC', mimeType
   const { deps } = make({ w: 4032, h: 3024, outSize: undefined });
   const out = await resizeForUpload(photo, false, deps);
   check(out.uri === 'file:///cache/out.jpg' && out.fileSize === undefined, 'unknown output size: still use the resized file');
+}
+
+{
+  // 9 big photos through the real 3-lane upload queue: native decodes never overlap (max in flight = 1),
+  // each ImageRef is released before the next decode starts, and uploads after resize still overlap.
+  const serial = createSerialQueue();
+  let inFlight = 0, maxInFlight = 0, uploading = 0, maxUploading = 0;
+  const events: string[] = [];
+  const tick = () => new Promise(r => setTimeout(r, 1));
+  const deps = {
+    decode: async (uri: string): Promise<Dec> => {
+      inFlight++; maxInFlight = Math.max(maxInFlight, inFlight); events.push(`decode ${uri}`);
+      await tick();
+      return { width: 8064, height: 6048, id: uri };
+    },
+    resizeAndSave: async (d: Dec, width: number, height: number) => { await tick(); return { uri: `${d.id}.out.jpg`, width, height }; },
+    sizeOf: async () => 300_000,
+    release: (d: Dec) => { inFlight--; events.push(`release ${d.id}`); },
+  };
+  const imgs = Array.from({ length: 9 }, (_, i) => ({ ...photo, uri: `file:///pick/${i}.HEIC`, fileSize: 9_000_000 }));
+  const r = await runUploadQueue(imgs, async (img) => {
+    const out = await serial(() => resizeForUpload(img, false, deps));
+    uploading++; maxUploading = Math.max(maxUploading, uploading);
+    await tick(); await tick(); await tick();
+    uploading--;
+    return out.uri;
+  }, { concurrency: 3 });
+  check(r.failed.length === 0 && r.results.every((u, i) => u === `file:///pick/${i}.HEIC.out.jpg`), 'serial resize: every image resized, results in input order');
+  check(maxInFlight === 1, `serial resize: max decoded images in flight = 1 (got ${maxInFlight})`);
+  const alternates = events.every((e, i) => e.startsWith(i % 2 ? 'release ' : 'decode ') && (i % 2 === 0 || e.slice(8) === events[i - 1].slice(7)));
+  check(alternates && events.length === 18, `serial resize: decode A, release A, decode B, … (${events.slice(0, 4).join(' | ')})`);
+  check(maxUploading > 1, `uploads after resize stay concurrent (max ${maxUploading})`);
+
+  // Control: the same run without the serial queue overlaps decodes — proves the check above can go red.
+  inFlight = 0; maxInFlight = 0;
+  await runUploadQueue(imgs, async (img) => (await resizeForUpload(img, false, deps)).uri, { concurrency: 3 });
+  check(maxInFlight === 3, `control: without the queue 3 decodes overlap (got ${maxInFlight})`);
+}
+{
+  // A failing job does not block the queue, and its error still reaches the caller.
+  const serial = createSerialQueue();
+  const order: string[] = [];
+  const a = serial(async () => { order.push('a'); throw new Error('boom'); });
+  const b = serial(async () => { order.push('b'); return 'B'; });
+  const ra = await a.then(() => 'ok', (e: Error) => e.message);
+  check(ra === 'boom' && (await b) === 'B' && order.join() === 'a,b', 'serial queue: a failure is reported and the next job still runs');
 }
 
 console.log(`native-resize: ${ck}/${ck} checks passed`);

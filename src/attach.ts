@@ -5,7 +5,7 @@ import { Platform } from 'react-native';
 import { appFetch } from './app-fetch';
 import { ImageManipulator, SaveFormat, type ImageRef } from 'expo-image-manipulator';
 import { compressedFileName, isDraftImage, PICKER_QUALITY, planCompression } from './image-draft';
-import { resizeForUpload } from './native-resize';
+import { createSerialQueue, resizeForUpload } from './native-resize';
 import { attachmentFromFile } from './desktop-file-intake';
 import { uploadUrlFor, type UploadOptions } from './upload-url';
 
@@ -116,12 +116,14 @@ const nativeResizeDeps = {
   },
   release: (decoded: ImageRef) => decoded.release(),
 };
+/** 原生端一次只缩一张图:限住原图位图的内存峰值(见 native-resize.createSerialQueue)。 */
+const nativeResizeSerial = createSerialQueue();
 
 /** 发送前按原图开关压缩(最长边 2048、JPEG 0.8;规则见 image-draft.planCompression)。
  *  原生端走 expo-image-manipulator(native-resize.ts),web/桌面走 canvas 重采样。
  *  压缩失败或压完反而更大:退回原文件(之后的 12MB 检查照常把关)。 */
 export const prepareForUpload = async (img: PickedImage, original: boolean): Promise<PickedImage> => {
-  if (Platform.OS !== 'web') return resizeForUpload(img, original, nativeResizeDeps);
+  if (Platform.OS !== 'web') return nativeResizeSerial(() => resizeForUpload(img, original, nativeResizeDeps));
   if (original || !img.webFile || !isDraftImage(img)) return img;
   try {
     const g: any = globalThis as any;

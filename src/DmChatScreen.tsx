@@ -476,7 +476,7 @@ export default function DmChatScreen({ cfg, networkId, peer, onBack, desktop = f
               return isDraftImage(item) ? (
                 <View key={item.uri} style={[styles.draftThumbWrap, tooBig && styles.draftThumbTooBig]} testID="dm-draft-thumb">
                   <Pressable onPress={() => openViewer(attached.filter(isDraftImage).map(d => ({ key: d.uri, name: d.fileName, uri: d.uri })), item.uri)} accessibilityLabel={t('chat.previewName', { name: item.fileName })}>
-                    <Image source={{ uri: item.uri }} style={styles.draftThumb} resizeMode="cover" />
+                    <Image source={{ uri: item.uri }} style={styles.draftThumb} resizeMode="cover" resizeMethod="resize" />
                   </Pressable>
                   <View style={styles.draftIndex} pointerEvents="none"><Text style={styles.draftIndexText}>{index + 1}</Text></View>
                   {tooBig ? <View style={styles.draftTooBigTag} pointerEvents="none"><Text style={styles.draftTooBigText}>{t('chat.tooLarge')}</Text></View> : null}
