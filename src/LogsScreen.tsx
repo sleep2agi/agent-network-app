@@ -155,8 +155,9 @@ export default function LogsScreen({
           flexDirection: 'row',
           alignItems: 'center',
           minHeight: 57,
-          paddingLeft: showBack ? spacing.md : spacing.lg,
-          paddingRight: spacing.lg,
+          // Same inset on both sides: the ‹ box starts 16 from the edge exactly like the 连接 pill ends 16 from it
+          // (tests/test-layout-sweep (d) pads; it was 12 / 16 with the back arrow, 9 / 12 in the two-pane).
+          paddingHorizontal: spacing.lg,
           paddingVertical: spacing.sm,
           borderBottomWidth: 1,
           borderBottomColor: colors.border,
