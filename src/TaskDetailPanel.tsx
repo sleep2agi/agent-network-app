@@ -139,12 +139,27 @@ export default function TaskDetailPanel({ cfg, item, readOnly = false, editField
   // 更多收起时,里面有值的字段在「更多」那一行上用一行字说出来(task-detail-more.ts),不悄悄藏掉。
   const summary = moreSummary(item, draft, items);
   // 母任务被 Hub 拒绝、检查项没存上:错误在「更多」里,自动展开,不能藏着。
-  const moreShown = moreOpen || error?.field === 'parent' || error?.field === 'start' || !!checklistError;
   // 参与人的卡:整块不再锁死,改成逐块锁 —— 状态、「更多」开关、检查项能点,别的照只读(看得见、点不动)。
   // RN 原生上父级 pointerEvents=none 会连子级一起吃掉,所以不能「父锁子开」,只能把锁的几块各包一层。
   const partial = readOnly && !!editFields?.length;
+  const moreShown = moreOpen || error?.field === 'parent' || error?.field === 'start' || (!partial && !!checklistError);
   const canColumn = !readOnly || !!editFields?.includes('column');
   const canChecklist = !readOnly || !!editFields?.includes('checklist');
+  // 参与人能改的只有状态和检查项:检查项直接放在状态下面,不藏进收起的「更多」里。其余情况仍在「更多」里。
+  const checklistBlock = hasDetails(item) ? (
+            <View pointerEvents={canChecklist ? 'auto' : 'none'} testID="req-checklist-wrap">
+              <TaskChecklist
+                items={item.checklist ?? []}
+                pointer={pointer}
+                onToggle={onChecklistToggle}
+                onAdd={onChecklistAdd}
+                onDelete={onChecklistDelete}
+                onMove={onChecklistMove}
+                error={checklistError}
+                readOnly={!canChecklist}
+              />
+            </View>
+  ) : null;
   const body: ReactNode = (
     <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: spacing.xl, gap: spacing.lg }} keyboardShouldPersistTaps="handled">
       {readOnly ? (
@@ -156,7 +171,7 @@ export default function TaskDetailPanel({ cfg, item, readOnly = false, editField
       <ParentBreadcrumb item={item} items={items} onOpen={onOpenRequirement} />
       {/* 只读时下面的编辑控件整块不响应(看得见、点不动),而不是让人改完再被 hub 403 退回。 */}
       <View pointerEvents={readOnly && !partial ? 'none' : 'auto'} style={{ gap: spacing.lg }} testID="req-detail-fields">
-      <Locked on={partial} testID="req-locked-title" title={item.name}>
+      <Locked on={readOnly} testID="req-locked-title" title={item.name}>
       <TextInput
         value={draft.name}
         onChangeText={name => set({ name })}
@@ -193,7 +208,8 @@ export default function TaskDetailPanel({ cfg, item, readOnly = false, editField
         {moving ? <Text style={s.muted} accessibilityLiveRegion="polite">{tr('tasks.copy.136')}</Text> : null}
         {moveError ? <Text style={s.err} accessibilityRole="alert">{moveError}</Text> : null}
       </Field>
-      <Locked on={partial} testID="req-locked-main" rows={partial ? lockedMainRows(item, people, projects) : undefined}>
+      {partial ? checklistBlock : null}
+      <Locked on={readOnly} testID="req-locked-main" rows={readOnly ? lockedMainRows(item, people, projects) : undefined}>
       <RoleFields
         twoRoles={hasRoles(item)}
         owner={draft.owner}
@@ -238,7 +254,7 @@ export default function TaskDetailPanel({ cfg, item, readOnly = false, editField
       </Pressable>
       {moreShown ? (
         <View style={{ gap: spacing.lg }} testID="req-more">
-          <Locked on={partial} testID="req-locked-more" rows={partial ? lockedMoreRows(item, items) : undefined}>
+          <Locked on={readOnly} testID="req-locked-more" rows={readOnly ? lockedMoreRows(item, items) : undefined}>
           {/* 开始(甘特图的条从这里画):只有带 start 字段的 Hub(capability start_date)才有;只到日。 */}
           {item.start !== undefined ? (
             <Field label={tr('detail.start')}>
@@ -251,20 +267,8 @@ export default function TaskDetailPanel({ cfg, item, readOnly = false, editField
           <ParentSelect item={item} items={items} value={draft.parentId} onChange={parentId => set({ parentId })} touch={!pointer} idBase="req-edit-parent" error={error?.field === 'parent' ? error.message : undefined} />
           <SubRequirements item={item} items={items} onOpen={onOpenRequirement} onCreateChild={onCreateChild} canAddLevel={levelIn(items, item) < 5} />
           </Locked>
-          {hasDetails(item) ? (
-            <View pointerEvents={canChecklist ? 'auto' : 'none'} testID="req-checklist-wrap">
-              <TaskChecklist
-                items={item.checklist ?? []}
-                pointer={pointer}
-                onToggle={onChecklistToggle}
-                onAdd={onChecklistAdd}
-                onDelete={onChecklistDelete}
-                onMove={onChecklistMove}
-                error={checklistError}
-              />
-            </View>
-          ) : null}
-          <Locked on={partial} testID="req-locked-rest" rows={partial ? lockedRestRows(item, people) : undefined}>
+          {partial ? null : checklistBlock}
+          <Locked on={readOnly} testID="req-locked-rest" rows={readOnly ? lockedRestRows(item, people) : undefined}>
           {!legacy ? (
             <Field label={tr('tasks.copy.53')}>
               <RequirementAssignmentsEditor key={item.id} cfg={cfg} item={item} fields="participants" onSaved={onAssignmentsSaved} />
@@ -276,7 +280,7 @@ export default function TaskDetailPanel({ cfg, item, readOnly = false, editField
           {item.createdAt ? <Text style={s.muted}>{tr('tasks.copy.139')}{item.createdAt.slice(0, 10)}</Text> : null}
           </Locked>
           {/* 外部链接只是个链接(看,不改):参与人的卡上也照样能点。 */}
-          {partial && (!item.externalUrl || !parseIssue(item.externalUrl, false)) ? <ExternalLink item={item} /> : null}
+          {readOnly && (!item.externalUrl || !parseIssue(item.externalUrl, false)) ? <ExternalLink item={item} /> : null}
         </View>
       ) : null}
       </View>

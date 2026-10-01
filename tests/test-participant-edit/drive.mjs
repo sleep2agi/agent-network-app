@@ -173,8 +173,19 @@ for (const [name, V] of Object.entries(VIEWPORTS)) {
       const banner = await bb(page, tid('req-detail-read-only')), moveGroup = await bb(page, tid('req-move-group'));
       measure(where, '详情 banner', banner); measure(where, '状态 segment', moveGroup);
       await shot('detail-participant');
+      // The checklist is one of the two things a participant can edit: it must be there without opening 更多.
+      const ckFirst = await bb(page, tid('req-checklist-item-i1')), ckSection = await bb(page, tid('req-checklist-wrap')), mainBlock = await bb(page, tid('req-locked-main'));
+      const moreExpandedAtOpen = (await page.locator(tid('req-more')).count()) > 0;
+      measure(where, '检查项(打开即见)', ckSection); measure(where, '检查项 i1 行', ckFirst);
+      record(where, 'participant checklist visible without 更多', {
+        visible: !!ckFirst && ckFirst.y + ckFirst.height <= V.h,
+        moreStillCollapsed: !moreExpandedAtOpen,
+        underStatus: !!(ckSection && moveGroup) && ckSection.y >= moveGroup.y + moveGroup.height,
+        aboveLockedFields: !!(ckSection && mainBlock) && ckSection.y + ckSection.height <= mainBlock.y + 0.5,
+      });
       const more = page.locator(tid('req-more-toggle')).first();
-      if (!(await page.locator(tid('req-checklist')).count())) { await press(more); await page.waitForTimeout(300); }
+      // 更多 itself must still open (the locked start / priority / participants rows live there).
+      if (!(await page.locator(tid('req-more')).count())) { await press(more); await page.waitForTimeout(300); }
       await page.locator(tid('req-checklist-wrap')).first().scrollIntoViewIfNeeded();
       const ckWrap = await bb(page, tid('req-checklist-wrap'));
       measure(where, '检查项(滚到可见)', ckWrap);
@@ -184,7 +195,8 @@ for (const [name, V] of Object.entries(VIEWPORTS)) {
         fieldsOpen: (await pe(page, 'req-detail-fields')) === 'auto',
         statusOpen: (await pe(page, 'req-move-group')) === 'auto' && (await page.locator(tid('req-move-doing')).first().getAttribute('aria-disabled')) !== 'true',
         checklistOpen: (await pe(page, 'req-checklist-wrap')) === 'auto',
-        moreToggleWorks: (await page.locator(tid('req-checklist')).count()) === 1,
+        oneChecklist: (await page.locator(tid('req-checklist')).count()) === 1,
+        moreToggleWorks: (await page.locator(tid('req-more')).count()) === 1,
         titleLocked: (await pe(page, 'req-locked-title')) === 'none',
         mainLocked: (await pe(page, 'req-locked-main')) === 'none',
         moreLocked: (await pe(page, 'req-locked-more')) === 'none',
@@ -231,7 +243,8 @@ for (const [name, V] of Object.entries(VIEWPORTS)) {
         bannerUnchanged: oldBanner.includes('没有编辑权限'),
         wholeFormLocked: (await pe(page, 'req-detail-fields')) === 'none',
         statusDisabled: (await page.locator(tid('req-move-doing')).first().getAttribute('aria-disabled')) === 'true',
-        noPerBlockWrappers: (await page.locator(tid('req-locked-title')).count()) === 0,
+        valueOnly: (await lockedJunk(page, 'req-locked-title')).length === 0 && (await lockedJunk(page, 'req-locked-main')).length === 0 && (await page.locator(tid('req-edit-name')).count()) === 0,
+        ownerIsValue: (await page.locator(tid('req-locked-row-owner')).count()) === 1,
         noSave: (await page.locator(tid('req-edit-save')).count()) === 0,
         noRequest: (await patches()).card.length === before,
       }, { oldBanner });
