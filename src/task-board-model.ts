@@ -236,6 +236,21 @@ export function ownerCounts(items: readonly Requirement[], people: readonly Requ
   return [...rows, { key: UNASSIGNED, ref: null, name: '未分配', count: none }];
 }
 
+/**
+ * 头部「负责人」筛选的分段:「人」(我排第一)、「Agent」、最后「未分配」。
+ * 负责人和负责 Agent 都能筛(roleKeysOf),但混在一张按数目排的表里时「我」常沉到底、人和节点分不清(任务页审计 M8)。
+ * 空段不返回。
+ */
+export function ownerFilterSections<T extends { key: string; ref: RequirementPersonRef | null }>(rows: readonly T[], meKey: string): { kind: 'people' | 'agents' | 'none'; rows: T[] }[] {
+  const people = rows.filter(r => r.ref?.kind === 'user');
+  const sections = [
+    { kind: 'people' as const, rows: [...people.filter(r => r.key === meKey), ...people.filter(r => r.key !== meKey)] },
+    { kind: 'agents' as const, rows: rows.filter(r => r.ref?.kind === 'node') },
+    { kind: 'none' as const, rows: rows.filter(r => !r.ref) },
+  ];
+  return sections.filter(s => s.rows.length > 0);
+}
+
 /** 短 id(未知成员时附在后面,方便认):取最后 6 位。 */
 export const shortId = (id: string): string => (id.length > 6 ? id.slice(-6) : id);
 

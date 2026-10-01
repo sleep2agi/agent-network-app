@@ -69,7 +69,7 @@ export function OwnerField({ value, people, onPress, disabled, loading, idBase, 
     <Pressable testID={testID} accessibilityRole="button" accessibilityLabel={value ? tr('tasks.copy.99', { v0: role === 'agent' ? tr('tasks.copy.82') : tr('tasks.copy.15'), v1: name }) : role === 'agent' ? tr('tasks.copy.100') : tr('tasks.copy.65')} disabled={disabled} onPress={onPress} style={[f.input, f.row]}>
       {value ? <AliasAvatar alias={name} size={22} /> : <Ionicons name={role === 'agent' ? 'hardware-chip-outline' : 'person-add-outline'} size={16} color={colors.textMuted} />}
       <Text style={{ flex: 1, color: value ? colors.text : colors.textMuted, fontSize: typeScale.body }} numberOfLines={1}>
-        {loading ? tr('tasks.copy.101') : value ? `${name}（${value.kind === 'user' ? tr('tasks.copy.1') : 'Agent'}）`
+        {loading ? tr('tasks.copy.101') : value ? (role === 'any' ? `${name}（${value.kind === 'user' ? tr('tasks.copy.1') : 'Agent'}）` : name)
           : role === 'human' ? tr('tasks.copy.102') : role === 'agent' ? tr('tasks.copy.103') : tr('tasks.copy.104')}
       </Text>
       <Ionicons name="chevron-down" size={14} color={colors.textMuted} />
@@ -160,7 +160,7 @@ export function ParticipantsField({ value, people, networkId, loading, onLoadPeo
       mode="participants"
       kinds={['user']}
       title={tr('tasks.copy.66')}
-      hint={tr('tasks.participantsPickHint', { v0: value.length })}
+      hint={n => tr('tasks.participantsPickHint', { v0: n })}
       people={people}
       selected={value}
       onClose={() => setOpen(false)}

@@ -8,6 +8,7 @@ import { Text } from './ui-text';
 import type { HubConfig } from './api';
 import type { Requirement } from './requirements-model';
 import { listRequirementPeople, saveRequirementAssignments, type RequirementAssignments } from './requirement-people-api';
+import { hasRoles } from './task-board-model';
 import { personKey, type RequirementPerson, type RequirementPersonRef } from './requirement-people';
 import PeoplePicker from './RequirementPeoplePicker';
 import { colors, spacing } from './theme';
@@ -45,7 +46,10 @@ export default function RequirementAssignmentsEditor({ cfg, item, onSaved, field
   // 找不到的成员显示「未知成员（末 6 位）」,永远不把裸 id 当名字(owner 0.2.141 截图)。
   const label = (ref: RequirementPersonRef) => {
     const person = people.find(row => personKey(row) === personKey(ref));
-    return `${personDisplay(ref, people).name}（${ref.kind === 'user' ? tr('tasks.copy.1') : 'Agent'}${person?.unavailable ? tr('tasks.copy.2') : ''}）`;
+    // 分两个角色的 Hub 上负责人 / 参与人只会是人类,不再标「（人类）」;旧 Hub 人和 Agent 混着,照旧标种类。
+    const kind = hasRoles(item) && ref.kind === 'user' ? '' : ref.kind === 'user' ? tr('tasks.copy.1') : 'Agent';
+    const suffix = `${kind}${person?.unavailable ? tr('tasks.copy.2') : ''}`;
+    return suffix ? `${personDisplay(ref, people).name}（${suffix}）` : personDisplay(ref, people).name;
   };
   const confirm = async (selected: RequirementPersonRef[]) => {
     if (!mode || pending.current || !supported) return;

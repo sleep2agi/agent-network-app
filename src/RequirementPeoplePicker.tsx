@@ -9,7 +9,8 @@ import { colors, onThemeChange, radius, spacing } from './theme';
 import { useModalSafePadding } from './safe-area-runtime';
 import { withBasePadding } from './modal-safe-area';
 import AliasAvatar from './AliasAvatar';
-import { peopleInNetwork, personKey, togglePerson, uniquePeople, type RequirementPerson, type RequirementPersonRef } from './requirement-people';
+import { meFirst, peopleInNetwork, personKey, personSubtitle, togglePerson, uniquePeople, type RequirementPerson, type RequirementPersonRef } from './requirement-people';
+import { useTaskBoard } from './task-board-store';
 import { elevated } from './elevation';
 
 type Props = {
@@ -23,7 +24,10 @@ type Props = {
   kinds?: readonly ('user' | 'node')[];
   /** 标题 / 说明覆盖(负责 Agent 用)。 */
   title?: string;
-  hint?: string;
+  /** 函数 = 跟着当前勾选数变(「已选 N 人」),不要传已保存的数。 */
+  hint?: string | ((selected: number) => string);
+  /** 我的 user id:排第一、标「（我）」,参与人模式给「加我」。省略 = 用任务看板读到的那个。 */
+  meId?: string | null;
 };
 
 /** Mount when opened. Cancel discards the draft; only Confirm invokes the caller. */
@@ -32,8 +36,10 @@ export default function RequirementPeoplePicker(props: Props) {
   return <Picker key={`${props.networkId}:${props.mode}`} {...props} />;
 }
 
-function Picker({ networkId, mode, people: allPeople, selected, onConfirm, onClose, kinds, title, hint }: Props) {
+function Picker({ networkId, mode, people: allPeople, selected, onConfirm, onClose, kinds, title, hint, meId: meIdProp }: Props) {
   useTranslation();
+  const boardMe = useTaskBoard(s => s.meId);
+  const meId = meIdProp === undefined ? boardMe : meIdProp;
   const people = kinds ? allPeople.filter(person => kinds.includes(person.kind)) : allPeople;
   const safe = useModalSafePadding('overlay');
   const [query, setQuery] = useState('');
@@ -41,7 +47,19 @@ function Picker({ networkId, mode, people: allPeople, selected, onConfirm, onClo
   const [themeVersion, setThemeVersion] = useState(0);
   useEffect(() => onThemeChange(() => setThemeVersion(n => n + 1)), []);
   const candidates = peopleInNetwork(people, networkId);
-  const rows = peopleInNetwork(people, networkId, query);
+  const rows = meFirst(peopleInNetwork(people, networkId, query), meId);
+  const isMe = (person: RequirementPersonRef) => !!meId && person.kind === 'user' && person.id === meId;
+  // 「加我」:参与人模式、我在可选名单里、还没选上、不是已停用。
+  const me = mode === 'participants' ? candidates.find(person => isMe(person) && !person.unavailable) : undefined;
+  const canAddMe = !!me && !draft.some(isMe);
+  const subtitle = (person: RequirementPerson) => {
+    const sub = personSubtitle(person, query);
+    return [
+      sub.role === 'agent' ? 'Agent' : sub.role === 'admin' ? tr('tasks.peopleRoleAdmin') : tr('tasks.peopleRoleMember'),
+      ...(sub.online === undefined ? [] : [sub.online ? tr('tasks.peopleOnline') : tr('tasks.peopleOffline')]),
+      ...(sub.id ? [sub.id] : []),
+    ].join(' · ') + (person.unavailable ? tr('tasks.copy.73') : '');
+  };
   const chosen = new Set(draft.map(personKey));
   const missing = draft.filter(person => !candidates.some(candidate => personKey(candidate) === personKey(person)));
   const invalid = !networkId || missing.length > 0 || (mode === 'owner' && draft.length > 1) || draft.some(person => candidates.some(candidate => personKey(candidate) === personKey(person) && candidate.unavailable));
@@ -56,6 +74,8 @@ function Picker({ networkId, mode, people: allPeople, selected, onConfirm, onClo
     name: { color: colors.text, fontSize: 14 },
     flex: { flex: 1 },
     actions: { flexDirection: 'row', justifyContent: 'flex-end', gap: spacing.md },
+    headRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
+    addMe: { minHeight: 32, justifyContent: 'center', paddingHorizontal: spacing.md, borderRadius: radius.pill, borderWidth: 1, borderColor: colors.accent },
     button: { minHeight: 44, justifyContent: 'center', paddingHorizontal: spacing.md },
     action: { color: colors.accent, fontSize: 14 },
     checkOff: { opacity: 0 },
@@ -65,9 +85,12 @@ function Picker({ networkId, mode, people: allPeople, selected, onConfirm, onClo
   return <Modal visible transparent animationType="fade" onRequestClose={onClose}>
     <ModalKeyboardAvoider scrim="rgba(0,0,0,0.45)">
     <View style={[styles.backdrop, withBasePadding(safe, spacing.lg)]}>
-      <View style={styles.panel} accessibilityViewIsModal>
-        <Text style={styles.title}>{title || (mode === 'owner' ? tr('tasks.copy.65') : tr('tasks.copy.66'))}</Text>
-        <Text style={styles.muted}>{hint || (mode === 'owner' ? tr('tasks.copy.67') : tr('tasks.copy.68', { v0: draft.length }))}</Text>
+      <View style={styles.panel} accessibilityViewIsModal testID="people-panel">
+        <View style={styles.headRow}>
+          <Text style={[styles.title, styles.flex]}>{title || (mode === 'owner' ? tr('tasks.copy.65') : tr('tasks.copy.66'))}</Text>
+          {canAddMe && me ? <Pressable accessibilityRole="button" accessibilityLabel={tr('tasks.peopleAddMeA11y')} testID="people-add-me" onPress={() => setDraft(prev => togglePerson(prev, me, mode))} style={styles.addMe}><Text style={styles.action}>{tr('tasks.peopleAddMe')}</Text></Pressable> : null}
+        </View>
+        <Text style={styles.muted} testID="people-hint">{(typeof hint === 'function' ? hint(draft.length) : hint) || (mode === 'owner' ? tr('tasks.copy.67') : tr('tasks.copy.68', { v0: draft.length }))}</Text>
         <TextInput accessibilityLabel={tr('tasks.copy.69')} placeholder={tr('tasks.copy.70')} placeholderTextColor={colors.textMuted} value={query} onChangeText={setQuery} style={styles.input} testID="people-search" />
         <ScrollView keyboardShouldPersistTaps="handled">
           {missing.map(person => <Pressable key={personKey(person)} accessibilityRole="button" onPress={() => setDraft(prev => prev.filter(row => personKey(row) !== personKey(person)))} style={styles.row}>
@@ -75,7 +98,7 @@ function Picker({ networkId, mode, people: allPeople, selected, onConfirm, onClo
           </Pressable>)}
           {rows.map(person => <Pressable key={personKey(person)} testID={`person-${personKey(person)}`} accessibilityRole="checkbox" accessibilityState={{ checked: chosen.has(personKey(person)), disabled: !!person.unavailable && !chosen.has(personKey(person)) }} disabled={!!person.unavailable && !chosen.has(personKey(person))} onPress={() => setDraft(prev => togglePerson(prev, person, mode))} style={[styles.row, chosen.has(personKey(person)) && styles.selected]}>
             <AliasAvatar alias={person.name || person.id} size={36} />
-            <View style={styles.flex}><Text style={styles.name}>{person.name || person.id}</Text><Text style={styles.muted}>{person.kind === 'user' ? tr('tasks.copy.1') : 'Agent'} · {person.id}{person.unavailable ? tr('tasks.copy.73') : ''}</Text></View>
+            <View style={styles.flex}><Text style={styles.name} testID={`person-name-${personKey(person)}`}>{isMe(person) ? tr('tasks.copy.62', { v0: person.name || person.id }) : person.name || person.id}</Text><Text style={styles.muted} testID={`person-sub-${personKey(person)}`}>{subtitle(person)}</Text></View>
             <Text accessible={false} importantForAccessibility="no" style={[styles.action, !chosen.has(personKey(person)) && styles.checkOff]}>✓</Text>
           </Pressable>)}
           {!rows.length ? <Text style={styles.muted}>{query ? tr('tasks.copy.74') : kinds?.length === 1 ? (kinds[0] === 'node' ? tr('tasks.copy.75') : tr('tasks.copy.76')) : tr('tasks.copy.77')}</Text> : null}
