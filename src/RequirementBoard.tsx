@@ -157,6 +157,11 @@ function ScopedRequirementBoard({ cfg, desktop, dispatch, onOpenVoiceSettings, s
   // 手机快捷改状态(task-quick-status.ts):开着的那一行左滑、长按菜单弹出的选择器、刚改完的撤销提示。
   const [swipeOpen, setSwipeOpen] = useState<string | null>(null);
   const [quickPick, setQuickPick] = useState<{ id: string; kind: 'status' | 'priority'; anchor: SelectAnchor } | null>(null);
+  // 卡片菜单的目标(右键 / 长按 / 列表行 ⋯ 都走这里):桌面菜单直接列优先级档,所以带上当前档和可选档。
+  const menuTarget = (item: Requirement, x: number, y: number): TaskMenuTarget => ({
+    id: item.id, title: item.name, column: item.column, x, y, assign: assignAccess(item), quick: quickMenuAccess(item),
+    priority: item.priority, priorities: priorityChoices(lowestPriority, item.priority),
+  });
   const [undo, setUndo] = useState<QuickUndo | null>(null);
   const [sort, setSort] = useState<SortSpec>(DEFAULT_SORT);
   const [filterMenu, setFilterMenu] = useState<{ kind: FilterKind; x: number; y: number } | null>(null);
@@ -624,7 +629,7 @@ function ScopedRequirementBoard({ cfg, desktop, dispatch, onOpenVoiceSettings, s
     dragging: () => drag.current.phase === 'dragging',
     onContextMenu: (id, x, y) => {
       const item = items.find(row => row.id === id);
-      if (item) setMenu({ id, title: item.name, column: item.column, x, y, assign: assignAccess(item), quick: quickMenuAccess(item) });
+      if (item) setMenu(menuTarget(item, x, y));
     },
     onKeyMove: (id, dir) => {
       const item = items.find(row => row.id === id);
@@ -648,7 +653,7 @@ function ScopedRequirementBoard({ cfg, desktop, dispatch, onOpenVoiceSettings, s
     take();
     return subscribeOpenTaskRequest(take);
   }, [single, cfg.networkId]);
-  const openMenuAt = (item: Requirement, x: number, y: number) => { setSwipeOpen(null); setMenu({ id: item.id, title: item.name, column: item.column, x, y, assign: assignAccess(item), quick: quickMenuAccess(item) }); };
+  const openMenuAt = (item: Requirement, x: number, y: number) => { setSwipeOpen(null); setMenu(menuTarget(item, x, y)); };
   // 手机快捷改状态:只发 {column}(editCell → cellRequest → moveRequirementOnHub),失败退回并提示;成功留 5 秒撤销。
   // 撤销同样只发 {column},改回原来的状态。
   const quickStatus = (id: string, to: ReqColumn) => {
@@ -1393,6 +1398,11 @@ function ScopedRequirementBoard({ cfg, desktop, dispatch, onOpenVoiceSettings, s
         onAssign={(id, mode) => { void openAssign(id, mode); }}
         onMove={(id, to) => { void move(id, to); if (pointer) focusCard(id); }}
         onQuick={(id, kind, at) => setQuickPick({ id, kind, anchor: { x: at.x, y: at.y, w: 1, h: 1 } })}
+        onPriority={(id, priority) => {
+          // 和列表单元格 / 手机「改优先级…」同一条路:editCell(乐观改,失败只退回这一格并提示)。
+          const it = items.find(row => row.id === id);
+          if (it && priority !== it.priority) void editCell(id, { field: 'priority', priority }).then(failed => { if (failed) setBanner(`「${it.name}」${failed}`); });
+        }}
         onClose={() => setMenu(null)}
       />
       {(() => {
