@@ -1,5 +1,8 @@
 import ModalKeyboardAvoider from './ModalKeyboardAvoider';
 import { t as tr } from './i18n';
+import './i18n-fatal';
+import { fatalSummary } from './fatal-report';
+import { copyLastFatal, useLastFatalReport } from './use-last-fatal';
 import { useTranslation } from './i18n-react';
 import { settingsText } from './i18n-settings';
 import { localizedThemeSummary } from './i18n-settings-presentation';
@@ -113,6 +116,7 @@ export default function SettingsScreen({
   const { language } = useTranslation();
   const [me, setMe] = useState<Me>({});
   const [pooledHttp, setPooledHttp] = useState(pooledHttpEnabled);
+  const lastFatal = useLastFatalReport();
   // 多用户:auth/me 原样留一份,判断「用户管理」该不该出现(Hub 管理员 / 当前网络 owner、admin)。
   const [authMe, setAuthMe] = useState<AuthMe | null>(null);
   const [profiles, setProfiles] = useState<HubProfile[]>([]);
@@ -1280,6 +1284,12 @@ export default function SettingsScreen({
                       thumbColor={colors.card}
                     />
                   </View>
+                </>
+              ) : null}
+              {lastFatal && show('about', 'lastCrash') ? (
+                <>
+                  <Divider />
+                  <ActionRow label={tr('fatal.copyRow')} hint={fatalSummary(lastFatal)} onPress={() => { void copyLastFatal(lastFatal); }} />
                 </>
               ) : null}
             </View>

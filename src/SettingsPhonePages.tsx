@@ -16,6 +16,9 @@ import { localizedThemeSummary, localizedScaleSummary } from './i18n-settings-pr
 import type { ReactNode } from 'react';
 import LanguageSettings from './LanguageSettings';
 import './i18n-changelog';
+import './i18n-fatal';
+import { fatalSummary } from './fatal-report';
+import { copyLastFatal, useLastFatalReport } from './use-last-fatal';
 import { Platform } from 'react-native';
 import { SettingsButton, SettingsCardContent, SettingsChoiceRow, SettingsGroup, SettingsRow, SettingsSwitchRow, type SettingsTone } from './settings-kit';
 import { VoiceAdvancedEditPage, VoiceApiKeyEditPage, QuietHoursEditPage } from './SettingsEditPages';
@@ -546,6 +549,7 @@ function ShortcutsPage({ ctx }: { ctx: PhonePagesCtx }) {
 // ── 关于 ─────────────────────────────────────────────────────────────────────────────────────
 function AboutPage({ ctx }: { ctx: PhonePagesCtx }) {
   useTranslation();
+  const lastFatal = useLastFatalReport();
   const view = ctx.updateView;
   const tone: SettingsTone | undefined = view.tone === 'danger' ? 'danger' : view.tone === 'accent' ? 'accent' : undefined;
   return (
@@ -565,6 +569,9 @@ function AboutPage({ ctx }: { ctx: PhonePagesCtx }) {
       {/* 更新日志:三级页(ChangelogScreen.tsx 的手机版,SettingsScreen 在滚动区外画它 —— 它自己滚、底部钉按钮条)。 */}
       {ctx.show('about', 'changelog') ? (
         <SettingsRow testID="settings-changelog-row" label={tr('changelog.title')} chevron onPress={() => ctx.openDetail('changelog')} />
+      ) : null}
+      {lastFatal && ctx.show('about', 'lastCrash') ? (
+        <SettingsRow testID="settings-last-crash-row" label={tr('fatal.copyRow')} value={fatalSummary(lastFatal, 24)} onPress={() => { void copyLastFatal(lastFatal); }} />
       ) : null}
     </SettingsGroup>
   );
