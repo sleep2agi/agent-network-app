@@ -1,0 +1,8 @@
+desktop v0.2.187 — 桌面卡片右键菜单改优先级(审计 M2)
+================================================================================
+A. 本版内容(0.2.186 发版提交之后 main 上合入的 PR + 本 PR)
+  #654 桌面右键菜单在「移到」下方加优先级各级(priorityChoices,与手机同源;当前级 ✓ 不可点;参与人卡全部禁用),走 editCell 同一 PATCH;右键/长按/列表行菜单共用 menuTarget。task-card-menu-priority 11/11;浏览器 24/24(改动前桌面 16 组全失败);test-phone-quick-status 18/18;test-people-picker 40/40;npm test 312/312。
+  本 PR(版本号):0.2.186 → 0.2.187,versionCode 2186 → 2187;release-desktop-auto-update.yml 加 What's new in 0.2.187;重新生成 src/changelog-bundled.ts。
+  本地:干净 origin/main(105c6f4) bump 后 npm ci / npm test / npm run typecheck 全部 rc=0;android-release-notes.mjs 0.2.187 rc=0。
+B. 验证边界(如实)
+  页内桩 + 浏览器驱动验证;test-board-assign 驱动自 #646 起已过期(main 上同样失败),另修。

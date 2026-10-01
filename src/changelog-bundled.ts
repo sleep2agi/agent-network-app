@@ -5,6 +5,9 @@
 export const BUNDLED_RELEASE_BODY: string = [
   "Signed and notarized stable update for macOS (Apple Silicon) and Windows (x64).",
   "",
+  "What's new in 0.2.187:",
+  "- 桌面端看板：右键卡片菜单可以直接改优先级（P0–P3，当前的打勾），不用再打开详情；列表视图的右键菜单也一样。手机端长按菜单不变。",
+  "",
   "What's new in 0.2.186:",
   "- 任务详情改动不再丢：优先级、项目、截止 / 开始日期、父任务选完就自动保存（和看板、列表里一样）；标题和描述在关闭详情时自动保存，保存失败会提示原因并保持打开。底部显示「保存中… / 已保存」。",
   "",
