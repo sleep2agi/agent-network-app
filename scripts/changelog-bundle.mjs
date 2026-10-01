@@ -3,11 +3,12 @@
 // version's notes (and the whole history) even offline. Source = the `releaseBody` block of
 // .github/workflows/release-desktop-auto-update.yml, the same text the release, latest.json and android/<ver>/notes.md use.
 //
-//   node scripts/changelog-bundle.mjs            # after editing releaseBody (the version bump PR)
-//   node scripts/changelog-bundle.mjs --dates    # also refresh release dates from `gh api` (optional, needs gh auth)
+//   node scripts/changelog-bundle.mjs            # after editing releaseBody (the version bump PR); also refreshes the
+//                                                # release dates from `gh api` when gh is available (kept otherwise)
+//   node scripts/changelog-bundle.mjs --no-dates # skip the gh call
 //
 // src/changelog-bundled.test.ts fails when the bundled text drifts from the workflow, with this command as the fix.
-// Dates already in the file are kept; --dates only adds / updates them.
+// Dates already in the file are kept; a run only adds / updates them.
 
 import { readFileSync, writeFileSync, existsSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
@@ -42,7 +43,7 @@ export function renderBundled(body, dates) {
   ].join('\n');
 }
 
-/** Dates already recorded in the current file (so a run without --dates keeps them). */
+/** Dates already recorded in the current file (so a run without gh, or with --no-dates, keeps them). */
 export function existingDates(text) {
   const out = {};
   // A Windows checkout (autocrlf) has CRLF; the generator always writes LF.
@@ -70,7 +71,12 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
     process.exit(1);
   }
   const dates = existingDates(existsSync(OUT) ? readFileSync(OUT, 'utf8') : '');
-  if (process.argv.includes('--dates')) Object.assign(dates, githubDates());
+  // Dates are refreshed on every run now (they had stopped at 0.2.165 because the bump PR ran this without --dates,
+  // so the offline 更新日志 showed no date for 0.2.166–0.2.186). No gh / no auth / offline → keep the recorded ones.
+  if (!process.argv.includes('--no-dates')) {
+    try { Object.assign(dates, githubDates()); }
+    catch (error) { console.warn(`note: release dates not refreshed (${String(error?.message ?? error).split('\n')[0]}); keeping ${Object.keys(dates).length} recorded`); }
+  }
   writeFileSync(OUT, renderBundled(body, dates));
   console.log(`wrote ${OUT} (${body.split('\n').length} lines, ${Object.keys(dates).length} dates)`);
 }
