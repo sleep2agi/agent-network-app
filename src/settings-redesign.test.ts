@@ -7,6 +7,10 @@
 //   4. ⋯ 菜单:Esc 走 escape-close,菜单项来自 accountRowActions(+ 切换)。
 import { readFileSync } from 'node:fs';
 import { accountMenuItems } from './account-row-actions';
+import { setLanguagePreference, t } from './i18n';
+import './i18n-settings';
+import './i18n-accounts';
+import './i18n-users';
 
 let p = 0, n = 0;
 const ck = (name: string, ok: boolean, extra = '') => { n++; if (ok) { p++; console.log(`  ✓ ${name}`); } else console.log(`  ✗ ${name}${extra ? ` (${extra})` : ''}`); };
@@ -87,6 +91,29 @@ console.log('# 5 v2:其他分类的行也是设置积木(#427 v2)');
   const list = settings.slice(settings.indexOf('const phoneList = ('), settings.indexOf('const listHeader = ('));
   ck('手机设置首页:每个分类一行 SettingsRow(带图标),分组 = SettingsGroup', /<SettingsGroup key=\{group\.title/.test(list) && /<SettingsRow\s+key=\{cat\.key\}[\s\S]*?icon=\{SETTINGS_CATEGORIES\.find/.test(list) && !/styles\.phoneRow\b/.test(list));
   ck('手机设置首页:切换账号 / 退出登录 = SettingsButton', (list.match(/<SettingsButton variant="plain"/g) ?? []).length === 2);
+}
+
+console.log('# 6 footer 在卡片下面:不许说「下面 / below」(那会指空)');
+{
+  // v2 重新分组后 通知诊断 的「把下面的信息复制给维护者」跑到了卡片下面(team-lead 2026-10-02)。指向卡片内容的话
+  // 放 caption(标题下、卡片上);footer 里只能说「上面」或不带方向。取集:这几个文件里每个 footer={…} 用到的翻译键,两种语言都查。
+  const files = ['./SettingsScreen.tsx', './VoiceSettingsSection.tsx', './SettingsPhonePages.tsx', './UserManagementPanel.tsx', './MicDeviceSetting.tsx', './SettingsEditPages.tsx', './LanguageSettings.tsx'];
+  const keys = new Set<string>();
+  for (const f of files) {
+    for (const m of code(read(f)).matchAll(/footer=\{([^\n]*)/g)) for (const k of m[1].matchAll(/tr\('([\w.]+)'/g)) keys.add(k[1]);
+  }
+  ck(`取集:找到 footer 用到的翻译键(${keys.size} 个,含 settings.copy.193)`, keys.size >= 15 && keys.has('settings.copy.193'));
+  const bad: string[] = [];
+  for (const lang of ['zh', 'en'] as const) {
+    setLanguagePreference(lang);
+    for (const k of keys) if (/下面|下方|以下|below/i.test(t(k))) bad.push(`${lang}:${k}`);
+  }
+  setLanguagePreference('zh');
+  ck('没有 footer 说「下面 / below」', bad.length === 0, bad.join(','));
+  ck('通知诊断的说明是 caption(卡片上方)', /<SettingsGroup title=\{tr\('settings\.copy\.73'\)\} caption=\{tr\('settings\.copy\.74'\)\}/.test(settings));
+  // 自检:把旧写法喂给同一个判据,必须判红。
+  setLanguagePreference('zh');
+  ck('判据自检:settings.copy.74 本身说「下面」(放 footer 会红)', /下面/.test(t('settings.copy.74')));
 }
 
 console.log(`\n${p}/${n} passed`);

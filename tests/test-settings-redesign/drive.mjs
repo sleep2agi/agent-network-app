@@ -210,6 +210,17 @@ for (const theme of ['light', 'dark']) {
         ck(`${where} ${label}: 内容在卡片里、和账号页卡片同一列 ±1`, cards.length >= 1 && !!acc && [...ls, ...acc.cardL].every(v => Math.abs(v - acc.cardL[0]) <= 1) && [...rs, ...acc.cardR].every(v => Math.abs(v - acc.cardR[0]) <= 1), `${cards.length} cards ${rng(ls)} / ${rng(rs)}`);
         const MIN = { '本地 Hub': 7, '外观': 4, '通知': 4, '语音输入': 3, '关于': 4 };
         if (MIN[label]) checkKitRows(`${where} ${label}`, (await win.evaluate(measureKitRows, '[data-testid="settings-scroll"]')) ?? [], MIN[label]);
+        if (label === '通知') {
+          // 「把下面的信息复制给维护者」要在诊断卡片上面(caption),不能在卡片下面指空。
+          const g = await win.evaluate(() => {
+            const grp = document.querySelector('[data-testid="notify-diagnostics-group"]');
+            const cap = grp?.querySelector('[data-testid="settings-kit-caption"]'), card = grp?.querySelector('[data-testid="settings-kit-card"]');
+            const foot = grp?.querySelector('[data-testid="settings-kit-footer"]');
+            return { cap: cap ? [cap.textContent, cap.getBoundingClientRect().bottom] : null, cardTop: card ? card.getBoundingClientRect().top : null, foot: foot?.textContent ?? null };
+          });
+          table.push({ where: `${where} 通知诊断说明`, caption: g.cap ? `${g.cap[0].slice(0, 14)}… bottom ${r1(g.cap[1])}` : 'none', cardTop: g.cardTop === null ? 'none' : r1(g.cardTop), footer: g.foot ?? '-' });
+          ck(`${where} 通知: 「把下面的信息…」在诊断卡片上方`, !!g.cap && /下面/.test(g.cap[0]) && g.cardTop !== null && g.cap[1] <= g.cardTop + 0.5 && !/下面/.test(g.foot ?? ''), JSON.stringify(g));
+        }
         if (label === '快捷键') {
           const pads = await win.evaluate(() => [...document.querySelectorAll('[data-testid^="shortcut-group-"]')].map(t => { const c = t.closest('[data-testid="settings-kit-card"]'); return c ? t.getBoundingClientRect().left + parseFloat(getComputedStyle(t).paddingLeft) - c.getBoundingClientRect().left : null; }));
           table.push({ where: `${where} 快捷键 v2`, groupTitlePad: pads.map(v => v === null ? 'none' : r1(v)).join(',') });

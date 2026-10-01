@@ -1055,7 +1055,7 @@ export default function SettingsScreen({
                 ) : null}
               </SettingsGroup>
               {show('notifications', 'diagnostics') ? (
-                <SettingsGroup title={tr('settings.copy.73')} footer={tr('settings.copy.74')} testID="notify-diagnostics-group">
+                <SettingsGroup title={tr('settings.copy.73')} caption={tr('settings.copy.74')} testID="notify-diagnostics-group">
                   {notifyPreview ? null : <SettingsCardContent><NotifyDiagnosticsPanel /></SettingsCardContent>}
                 </SettingsGroup>
               ) : null}

@@ -42,8 +42,10 @@ export function settingsPageContentStyle() {
  * 一组:可选的小灰字标题 + 白色圆角卡片 + 可选的小灰字说明。
  * 子节点之间自动插细线(从标签左边缘开始);null / false 子节点不占位也不插线。
  */
-export function SettingsGroup({ title, footer, footerTone, children, testID, separators = true, highlight }: {
+export function SettingsGroup({ title, caption, footer, footerTone, children, testID, separators = true, highlight }: {
   title?: string;
+  /** 卡片上方、标题下面的说明(指向卡片里内容的话放这里:「把下面的信息…」;footer 在卡片下面,说「下面」就指空了)。 */
+  caption?: ReactNode;
   footer?: ReactNode;
   footerTone?: SettingsTone;
   children?: ReactNode;
@@ -57,6 +59,7 @@ export function SettingsGroup({ title, footer, footerTone, children, testID, sep
   return (
     <View style={[styles.group, !title && styles.groupUntitled]} testID={testID}>
       {title ? <Text style={styles.groupTitle} testID="settings-kit-group-title">{title}</Text> : null}
+      {caption ? <Text style={[styles.footer, styles.caption]} testID="settings-kit-caption">{caption}</Text> : null}
       {items.length ? (
         <View style={[styles.card, highlight && styles.cardHighlight]} testID="settings-kit-card">
           {separators ? items.map((child, i) => (
@@ -423,6 +426,7 @@ const makeStyles = () => StyleSheet.create({
     overflow: 'hidden',
     ...elevated('raised'),
   },
+  caption: { color: colors.textMuted, paddingTop: 0, paddingBottom: spacing.xs + 2 },
   cardHighlight: { borderWidth: 1, borderColor: colors.accent },
   lead: { width: SETTINGS_LEAD, alignItems: 'flex-start', justifyContent: 'center', flexShrink: 0 },
   iconTile: { width: 30, height: 30, borderRadius: radius.item, alignItems: 'center', justifyContent: 'center' },
