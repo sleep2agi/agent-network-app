@@ -37,7 +37,7 @@ import NodeDetailScreen from './src/NodeDetailScreen';
 import LogsScreen from './src/LogsScreen';
 import ScheduledTasksScreen from './src/ScheduledTasksScreen';
 import type { ScheduleOpenRequest } from './src/node-schedules';
-import ConnectivityBanner from './src/ConnectivityBanner';
+import ConnectivityIndicator from './src/ConnectivityIndicator';
 import FatalBoundary, { FatalFixtureScreen, readFatalFixture } from './src/FatalBoundary';
 import LastCrashChip from './src/LastCrashChip';
 import type { HostSupervisorDaemon } from './src/api';
@@ -756,7 +756,6 @@ function AppRoot() {
     return (
       <SafeAreaView key={workspaceKey} style={[styles.root, rootInset]}>
         <StatusBar barStyle={theme === 'light' ? 'dark-content' : 'light-content'} backgroundColor={colors.bg} />
-        <ConnectivityBanner />
         <DesktopWorkspace cfg={cfg} screen={screen} setScreen={setScreen} onLogout={removeActiveProfile} onLocalDataDeleted={finishLocalDataDeletion} onAddAccount={() => { setReauthProfile(null); setScreen({ name: 'login' }); }} onSwitchProfile={activateProfile} onReauthProfile={requestProfileReauth} onProfileEdited={reloadEditedProfile} />
         <DesktopMessageListener cfg={cfg} onOpenTask={id => openTaskNotice(id, cfg, setScreen)} />
         {trayWindow ? <DesktopNotifier onOpenChat={alias => setScreen({ name: 'chat', alias })} profileKey={notifyProfileKey(cfg)} /> : null}
@@ -771,9 +770,6 @@ function AppRoot() {
         barStyle={theme === 'light' ? 'dark-content' : 'light-content'}
         backgroundColor={colors.bg}
       />
-      {/* 全局连接状态横幅(App战线①):断连时所有已登录界面顶部出现,声明缓存数据+
-          诚实的"截至"时间(最后一次成功,非尝试)。登录页不挂(还没有 hub 可言)。 */}
-      {screen.name !== 'login' && cfg ? <ConnectivityBanner /> : null}
       {screen.name !== 'login' && cfg ? <DesktopMessageListener cfg={cfg} onOpenTask={id => openTaskNotice(id, cfg, setScreen)} /> : null}
       {/* 0.2.107 手机系统通知:登出(cfg=null)也要挂着,好让运行时停掉轮询和前台服务。 */}
       {Platform.OS === 'android' || Platform.OS === 'ios' ? <MobileNotifier cfg={cfg} onOpenChat={alias => setScreen({ name: 'chat', alias })} onOpenTask={taskId => setScreen({ name: 'taskDetail', taskId })} /> : null}
@@ -1021,6 +1017,9 @@ function AppRoot() {
                   )}
                 </View>
               )}
+              {/* 连接状态(App战线①):手机上是内容区右上角一个小圆点(绝对定位,不推内容),点按看全文;
+                  有左栏时它在左栏版本号旁边(MobileNavRail)。见 src/ConnectivityIndicator.tsx。 */}
+              {railShown ? null : <ConnectivityIndicator placement="corner" />}
             </View>
           </View>
           {navChrome === 'bottomTabs' ? mobileTabBar(navActive) : null}
@@ -1279,7 +1278,8 @@ function DesktopWorkspace({ cfg, screen, setScreen, onLogout, onLocalDataDeleted
           styles={desktopStyles}
           extraStyle={desktopStyles.railSettings}
         />
-        <Text style={desktopStyles.railVersion}>v{APP_VERSION}</Text>
+        {/* 连接状态(App战线①):不再是顶部全宽横幅,是版本号左边一个小圆点,悬停/点按看全文(ConnectivityIndicator)。 */}
+        <ConnectivityIndicator placement="rail" label={`v${APP_VERSION}`} labelStyle={desktopStyles.railVersionText} style={desktopStyles.railVersion} />
       </View>
       <View style={[desktopStyles.conversations, taskWorkspace && desktopStyles.taskSidebar]}>
         {taskWorkspace ? (
@@ -1376,7 +1376,8 @@ const makeDesktopStyles = () => StyleSheet.create({
   // 提示条在两套主题下都是深底:数字用浅红,深底上读得清(纯红 #dc2626 在深底上发闷)。
   railTooltipCount: { color: '#fca5a5', fontWeight: '600' },
   railSettings: { marginBottom: 0 },
-  railVersion: { color: colors.textMuted, fontSize: 10, marginTop: 8, textAlign: 'center' },
+  railVersion: { marginTop: 8 },
+  railVersionText: { color: colors.textMuted, fontSize: 10, textAlign: 'center' },
   // 任务页左栏只是筛选,不需要会话列表那么宽:窄一些,看板三列拿到更多宽度。
   taskSidebar: { width: ds(220) },
   conversations: { width: ds(310), borderRightWidth: 1, borderRightColor: colors.border, backgroundColor: themeMode() === 'light' ? '#fafafb' : colors.bg },

@@ -198,6 +198,10 @@ export const initScript = ({ theme }) => {
         case 'plugin:http|fetch': { const id = ++rid; reqs.set(id, args.clientConfig); return id; }
         case 'plugin:http|fetch_send': {
           const c = reqs.get(args.rid);
+          // A drive can degrade the link: window.__stubFail = true makes every request a network error,
+          // window.__stubDelayMs answers each one that much later (tests/test-connectivity-indicator).
+          if (window.__stubFail) throw new Error('stub: network unreachable');
+          if (window.__stubDelayMs) await new Promise(r => setTimeout(r, window.__stubDelayMs));
           const body = route(c.url, c.data ? new TextDecoder().decode(new Uint8Array(c.data)) : '', c.method || 'GET');
           const buf = new TextEncoder().encode(body === null ? '{"ok":false}' : JSON.stringify(body));
           const id = ++rid; bodies.set(id, { buf, sent: false });

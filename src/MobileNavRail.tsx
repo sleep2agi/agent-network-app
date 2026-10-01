@@ -11,6 +11,7 @@ import { Text } from './ui-text';
 import { Ionicons } from './icons';
 import { colors, radius } from './theme';
 import { APP_VERSION } from './version';
+import ConnectivityIndicator from './ConnectivityIndicator';
 import { railBadgeText, railIconFor } from './rail-nav';
 import { badgeOffsetCentered, clampBadge, pillBadgeWidth } from './badge-anchor';
 import { mobileRailItem, mobileRailWidth, railUnreadTotal } from './nav-chrome';
@@ -124,7 +125,10 @@ export default function MobileNavRail({ tabs, active, onSelect, insetLeft, inset
         {main.map(item)}
       </ScrollView>
       {settings ? item(settings) : null}
-      {showBrand ? <Text style={s.version}>v{APP_VERSION}</Text> : null}
+      {/* 连接状态:版本号左边的小圆点(没有版本号的矮屏只画圆点,贴在底部留白里);悬停/点按看全文。 */}
+      {showBrand
+        ? <ConnectivityIndicator placement="rail" label={`v${APP_VERSION}`} labelStyle={s.versionText} style={s.version} />
+        : <ConnectivityIndicator placement="rail" style={s.dotOnly} />}
     </View>
   );
 }
@@ -132,6 +136,8 @@ export default function MobileNavRail({ tabs, active, onSelect, insetLeft, inset
 const makeStyles = () => StyleSheet.create({
   rail: {
     alignItems: 'center',
+    // 连接状态提示条挂在 rail 右侧,要画在右边内容之上。
+    zIndex: 10,
     paddingTop: ds(12),
     backgroundColor: colors.railBg,
     borderRightWidth: StyleSheet.hairlineWidth,
@@ -165,5 +171,8 @@ const makeStyles = () => StyleSheet.create({
     backgroundColor: colors.failed, borderWidth: 2, borderColor: colors.railBg, alignItems: 'center', justifyContent: 'center',
   },
   badgeText: { color: '#fff', fontSize: 10, fontWeight: '600', lineHeight: 12 },
-  version: { color: colors.textMuted, fontSize: 10, marginTop: 4, textAlign: 'center' },
+  version: { marginTop: 4 },
+  versionText: { color: colors.textMuted, fontSize: 10, textAlign: 'center' },
+  // 矮屏(不画品牌和版本号):圆点放进 rail 底部留白,绝对定位,不改 rail 的排布。
+  dotOnly: { position: 'absolute', bottom: 0 },
 });
