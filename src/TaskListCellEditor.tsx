@@ -1,4 +1,5 @@
 import { t as tr } from './i18n';
+import { listenEscapeClose } from './escape-close';
 import { useTranslation } from './i18n-react';
 import { taskText } from './i18n-tasks';
 import './i18n-task-fields';
@@ -181,10 +182,11 @@ function ChipPicker({ anchor, testID, title, search, chips, groups, onToggle, on
       else if (e.key === 'ArrowUp') { e.preventDefault(); setActive(i => Math.max(0, i - 1)); }
       else if (e.key === 'Enter') { e.preventDefault(); k.choose(k.active); }
       else if (e.key === 'Backspace' && !k.query && k.chips.length) { e.preventDefault(); k.onToggle(k.chips[k.chips.length - 1].key); }
-      else if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); k.onClose(); }
     };
     doc.addEventListener('keydown', onKey, true);
-    return () => doc.removeEventListener('keydown', onKey, true);
+    // Esc 在 keyup 上关、并吞掉那下 keyup(escape-close.ts;同 TaskSelectMenu)。
+    const offEsc = listenEscapeClose(() => keys.current.onClose());
+    return () => { doc.removeEventListener('keydown', onKey, true); offEsc(); };
   }, []);
   const rowH = 34;
   const headers = shown.filter(g => g.title).length;

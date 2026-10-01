@@ -1,4 +1,5 @@
 import ModalKeyboardAvoider from './ModalKeyboardAvoider';
+import { listenEscapeClose } from './escape-close';
 import { t as tr } from './i18n';
 import { useTranslation } from './i18n-react';
 import { taskText } from './i18n-tasks';
@@ -161,8 +162,6 @@ function PeopleDropdown({ anchor, viewport, mode, rows, missing, chosen, invalid
   const safe = useModalSafePadding('fullScreen');
   const [active, setActive] = useState(0);
   const rowEls = useRef(new Map<number, any>());
-  // Esc 不在这里接:Modal 自己在 keyup 上 onRequestClose(= 取消)。在 keydown 上关掉的话,同一下 keyup 会落到下面那层
-  // Modal(窄窗口的整页详情)上,把详情也关了。
   const search = useRef<any>(null);
   useEffect(() => { const t = setTimeout(() => search.current?.focus?.(), 0); return () => clearTimeout(t); }, []);
   useEffect(() => { setActive(0); }, [query]);
@@ -180,7 +179,9 @@ function PeopleDropdown({ anchor, viewport, mode, rows, missing, chosen, invalid
       else if (e.key === 'Enter') { const person = k.rows[k.active]; if (person) { e.preventDefault(); k.onPick(person); } }
     };
     doc.addEventListener('keydown', onKey, true);
-    return () => doc.removeEventListener('keydown', onKey, true);
+    // Esc = 取消:keyup 上关、并吞掉 keydown / keyup(escape-close.ts)—— 不连带关掉下面那层 Modal(整页详情)。
+    const offEsc = listenEscapeClose(() => keyRef.current.onClose());
+    return () => { doc.removeEventListener('keydown', onKey, true); offEsc(); };
   }, [mode]);
   const footer = mode === 'participants';
   const pos = anchorSelectMenu(anchor, viewport, { rows: Math.max(1, rows.length + missing.length) + (footer ? 2 : 0), rowH: DROP_ROW_H, search: true, maxWidth: 360 });

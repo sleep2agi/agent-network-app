@@ -7,6 +7,7 @@
 //                       Esc / Tab 关;点浮层外面关;选中项右边 ✓;键盘焦点有强调色描边;关了焦点回到行上。
 //   手机(sheet=true):微信那种设置行(标签 · 当前值 · ›,settings-kit 的 SettingsRow),点了从底部弹
 //                       动作面板:标题、选项(选中项 ✓)、隔开的「取消」。
+import { listenEscapeClose } from './escape-close';
 import { useEffect, useRef, useState } from 'react';
 import { Modal, Platform, Pressable, ScrollView, StyleSheet, View, useWindowDimensions } from 'react-native';
 import { Text } from './ui-text';
@@ -131,11 +132,12 @@ function PopoverMenu({ anchor, title, options, value, onPick, onClose, testID }:
       else if (e.key === 'Home') { e.preventDefault(); setActive(stepOption(k.options, -1, 1)); }
       else if (e.key === 'End') { e.preventDefault(); setActive(stepOption(k.options, k.options.length, -1)); }
       else if (e.key === 'Enter' || e.key === ' ') { const o = k.options[k.active]; e.preventDefault(); e.stopPropagation(); if (o && !o.disabled) k.onPick(o.value); }
-      else if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); k.onClose(true); }
       else if (e.key === 'Tab') { k.onClose(true); }
     };
     doc.addEventListener('keydown', onKey, true);
-    return () => doc.removeEventListener('keydown', onKey, true);
+    // Esc 在 keyup 上关、并吞掉 keydown / keyup(escape-close.ts;同 TaskSelectMenu)—— 设置页的「Esc 返回」也看不到它。
+    const offEsc = listenEscapeClose(() => keyRef.current.onClose(true));
+    return () => { doc.removeEventListener('keydown', onKey, true); offEsc(); };
   }, []);
   const pos = anchorSelectMenu(anchor, { width: win.width, height: win.height }, { rows: options.length || 1, rowH: MENU_ROW_H, search: false, maxWidth: MENU_MAX_WIDTH });
   return (

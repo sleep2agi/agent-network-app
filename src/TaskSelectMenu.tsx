@@ -1,4 +1,5 @@
 import { t as tr } from './i18n';
+import { listenEscapeClose } from './escape-close';
 import { useTranslation } from './i18n-react';
 import './i18n-tasks';
 // 任务详情里的下拉选择(项目 / 母任务),样子跟「负责人」「负责 Agent」一样:一个输入框高的按钮
@@ -129,10 +130,11 @@ export function SelectMenu({ anchor, touch, title, options, noneLabel, selected,
       if (e.key === 'ArrowDown') { e.preventDefault(); setActive(i => Math.min(k.shown.length - 1, i + 1)); }
       else if (e.key === 'ArrowUp') { e.preventDefault(); setActive(i => Math.max(0, i - 1)); }
       else if (e.key === 'Enter') { const o = k.shown[k.active]; if (o) { e.preventDefault(); k.pick(o); } }
-      else if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); k.onClose(); }
     };
     doc.addEventListener('keydown', onKey, true);
-    return () => doc.removeEventListener('keydown', onKey, true);
+    // Esc 在 keyup 上关、并吞掉那下 keyup(escape-close.ts):不然会连带关掉下面那层 Modal(整页详情)。
+    const offEsc = listenEscapeClose(() => keyRef.current.onClose());
+    return () => { doc.removeEventListener('keydown', onKey, true); offEsc(); };
   }, [anchor, touch]);
   if (!anchor) return null;
   const rowH = touch ? 44 : 34;

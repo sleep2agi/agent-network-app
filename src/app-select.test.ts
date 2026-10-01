@@ -27,7 +27,9 @@ ck('当前值被禁用 → 第一个可选', initialActive(opts, 'a') === 0);
 
 const read = (f: string) => readFileSync(new URL(f, import.meta.url), 'utf8');
 const src = read('./AppSelect.tsx');
-for (const key of ['ArrowDown', 'ArrowUp', 'Enter', 'Escape', 'Home', 'End', 'Tab']) ck(`浮层键盘: ${key}`, src.includes(`'${key}'`));
+for (const key of ['ArrowDown', 'ArrowUp', 'Enter', 'Home', 'End', 'Tab']) ck(`浮层键盘: ${key}`, src.includes(`'${key}'`));
+// Esc 走 escape-close.ts(keyup 才关、吞掉 keyup,不连带关下面那层;select-menu-esc.test.ts 测行为)。
+ck('浮层键盘: Escape(listenEscapeClose)', /listenEscapeClose\(\(\) => keyRef\.current\.onClose\(true\)\)/.test(src));
 ck('键盘焦点描边(state.focused → outline)', /state\.focused[^\n]*focusRing\(\)/.test(src) && /outlineWidth: 2/.test(src));
 ck('选中项有 ✓', (src.match(/name="checkmark"/g) ?? []).length >= 2);
 ck('点浮层外面关(铺满的 scrim)', /StyleSheet\.absoluteFill\} onPress=\{\(\) => onClose\(false\)\}/.test(src));

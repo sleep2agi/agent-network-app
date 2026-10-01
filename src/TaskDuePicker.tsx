@@ -1,4 +1,5 @@
 import { formatDueFull } from './i18n-task-presentation';
+import { listenEscapeClose } from './escape-close';
 import { t as tr } from './i18n';
 import { duePanelPlacement } from './task-select-model';
 import { validationText } from './i18n-task-presentation';
@@ -90,14 +91,16 @@ export default function TaskDuePicker({ value, onChange, allowTime, pointer, she
     if (!open || !pointer || !doc?.addEventListener) return;
     const onKey = (e: any) => {
       const tag = String(e.target?.tagName || '').toLowerCase();
-      if (e.key === 'Escape') { e.preventDefault?.(); setOpen(false); return; }
+      if (e.key === 'Escape') return; // listenEscapeClose 管
       if (tag === 'input' || tag === 'textarea') return; // 在时分秒框里打字时不抢方向键 / 回车
       if (e.key === 'Enter') { e.preventDefault?.(); keyState.current.commit(); return; }
       const next = calendarKey(keyState.current.date, e.key);
       if (next) { e.preventDefault?.(); keyState.current.pick(next); }
     };
     doc.addEventListener('keydown', onKey, true);
-    return () => doc.removeEventListener('keydown', onKey, true);
+    // Esc 在 keyup 上关、并吞掉那下 keyup(escape-close.ts):不然会连带关掉下面那层 Modal(整页详情 / 新建对话框)。
+    const offEsc = listenEscapeClose(() => setOpen(false));
+    return () => { doc.removeEventListener('keydown', onKey, true); offEsc(); };
   }, [open, pointer]);
 
   const setPart = (part: keyof Time, text: string) => {
