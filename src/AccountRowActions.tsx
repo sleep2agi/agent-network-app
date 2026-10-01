@@ -1,10 +1,13 @@
 // 设置 → 账号:每行的「复制」「编辑」(Vincent 2026-09-30「账号 支持一下复制 编辑」)。
 //
-// 桌面 / 宽屏:行尾的文字按钮 复制 · 编辑 · 新窗口 · 移除(SettingsScreen 画),编辑是居中的 DialogFrame。
-// 手机:管理账号页里点一行 → 底部 action sheet(微信长按 / 点「⋯」那种)列出同一组动作,编辑同样走 DialogFrame。
+// 桌面(鼠标):行尾一个 ⋯,点开锚在它下面的小菜单(AccountMoreMenu):切换到这个账号 · 在新窗口打开 · 复制 · 编辑 · 移除。
+//   以前行尾挤一排 4 个彩色文字按钮(Vincent 2026-09-30「设置页面的账号挺丑的」,#427)。
+// 手机:点 ⋯ → 底部 action sheet(微信那种)列出同一组动作。编辑都走居中的 DialogFrame。
 // 动作清单、复制文本、保存前的验证都在 account-row-actions.ts(纯逻辑、有测试),这里只负责画。
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, Modal, Platform, Pressable, StyleSheet, View } from 'react-native';
+import { Ionicons } from './icons';
+import { listenEscapeClose } from './escape-close';
+import { ActivityIndicator, Modal, Platform, Pressable, StyleSheet, View, useWindowDimensions } from 'react-native';
 import * as Clipboard from 'expo-clipboard';
 import { Text, TextInput } from './ui-text';
 import { t as tr } from './i18n';
@@ -17,7 +20,7 @@ import { useModalSafePadding } from './safe-area-runtime';
 import { appFetch } from './app-fetch';
 import { loadSavedProfileConfig, markHubProfileRequiresReauth, updateHubProfile, type HubProfile } from './storage';
 import { forgetAuthMe } from './user-admin-api';
-import { HUB_EDIT_FAILURE_KEY, accountCopyText, offersRelogin, validateHubEdit, type AccountRowAction, type HubEditFailure } from './account-row-actions';
+import { HUB_EDIT_FAILURE_KEY, accountCopyText, offersRelogin, validateHubEdit, type AccountMenuItem, type AccountRowAction, type HubEditFailure } from './account-row-actions';
 
 export const accountName = (p: Pick<HubProfile, 'displayName' | 'username' | 'serverUrl'>): string => p.displayName || p.username || p.serverUrl;
 
@@ -52,6 +55,55 @@ const ACTION_LABEL: Record<AccountRowAction, string> = {
   openWindow: 'accounts.openWindow',
   remove: 'accounts.remove',
 };
+
+const MENU_ICON: Record<AccountMenuItem, string> = { switch: 'swap-horizontal', openWindow: 'browsers-outline', copy: 'copy-outline', edit: 'create-outline', remove: 'trash-outline' };
+const MENU_W = 220, MENU_ROW_H = 34;
+
+/**
+ * 桌面:⋯ 下面的小菜单。右边缘对齐 ⋯、在它下面(放不下翻到上面);点外面 / Esc 关(escape-close:不连带关设置窗口里的别的层)。
+ */
+export function AccountMoreMenu({ anchor, profile, items, onSelect, onClose }: {
+  anchor: { x: number; y: number; w: number; h: number } | null;
+  profile: HubProfile | null;
+  items: readonly AccountMenuItem[];
+  onSelect: (item: AccountMenuItem) => void;
+  onClose: () => void;
+}) {
+  useTranslation();
+  const win = useWindowDimensions();
+  // 锚定菜单:遮罩铺满窗口,安全区只用来夹住菜单的位置(同 AgentRowMenu / TaskCardMenu)。
+  const safe = useModalSafePadding('fullScreen');
+  useEffect(() => (anchor && profile ? listenEscapeClose(onClose) : undefined), [anchor, profile, onClose]);
+  if (!anchor || !profile) return null;
+  const h = 12 + items.length * MENU_ROW_H + (items.includes('remove') && items.length > 1 ? 9 : 0);
+  const minX = (safe.paddingLeft ?? 0) + 8, maxX = win.width - (safe.paddingRight ?? 0) - MENU_W - 8;
+  const minY = (safe.paddingTop ?? 0) + 8, maxY = win.height - (safe.paddingBottom ?? 0) - 8;
+  const left = Math.max(minX, Math.min(anchor.x + anchor.w - MENU_W, maxX));
+  const below = anchor.y + anchor.h + 4 + h <= maxY;
+  const top = below ? anchor.y + anchor.h + 4 : Math.max(minY, anchor.y - 4 - h);
+  return (
+    <Modal visible transparent animationType="none" onRequestClose={onClose}>
+      <Pressable style={StyleSheet.absoluteFill} onPress={onClose} accessibilityLabel={tr('accounts.close')} testID="account-menu-scrim" />
+      <View style={[styles.menu, { left, top, width: MENU_W }]} testID="account-menu" accessibilityRole="menu" accessibilityLabel={accountName(profile)}>
+        {items.map(item => (
+          <View key={item}>
+            {item === 'remove' && items.length > 1 ? <View style={styles.menuDivider} /> : null}
+            <Pressable
+              accessibilityRole="menuitem"
+              onPress={() => { onClose(); onSelect(item); }}
+              testID={item === 'switch' ? `settings-switch-to-${profile.profileId}` : `settings-${item}-${profile.profileId}`}
+              style={({ pressed, hovered }: any) => [styles.menuItem, (pressed || hovered) && styles.menuItemHover]}
+            >
+              <Ionicons name={MENU_ICON[item] as any} size={16} color={item === 'remove' ? colors.failed : colors.textSecondary} />
+              <Text style={item === 'remove' ? styles.menuDanger : styles.menuText} numberOfLines={1}>{item === 'switch' ? tr('accounts.switchTo') : tr(MENU_LABEL[item])}</Text>
+            </Pressable>
+          </View>
+        ))}
+      </View>
+    </Modal>
+  );
+}
+const MENU_LABEL: Record<AccountRowAction, string> = { copy: 'accounts.copyAddress', edit: 'accounts.editEllipsis', openWindow: 'accounts.openWindow', remove: 'accounts.removeEllipsis' };
 
 /**
  * 手机:一行账号的底部 action sheet。上面一行灰字是这个账号(名字 + 地址),下面是动作,移除标红,
@@ -228,6 +280,12 @@ const makeStyles = () => StyleSheet.create({
   toast: { paddingVertical: 8, paddingHorizontal: spacing.lg, borderRadius: radius.pill, backgroundColor: colors.card, ...elevated('floating') },
   toastText: { color: colors.text, fontSize: 13 },
   sheetBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.45)', justifyContent: 'flex-end' },
+  menu: { position: 'absolute', padding: 6, borderRadius: radius.control, backgroundColor: colors.card, borderWidth: StyleSheet.hairlineWidth, borderColor: colors.border, ...elevated('floating') },
+  menuItem: { height: MENU_ROW_H, flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 10, borderRadius: radius.item },
+  menuItemHover: { backgroundColor: colors.rowHover },
+  menuText: { color: colors.text, fontSize: 13 },
+  menuDanger: { color: colors.failed, fontSize: 13 },
+  menuDivider: { height: StyleSheet.hairlineWidth, backgroundColor: colors.border, marginVertical: 4, marginHorizontal: 4 },
   sheet: { backgroundColor: colors.card, borderTopLeftRadius: radius.surface, borderTopRightRadius: radius.surface, overflow: 'hidden' },
   sheetHead: { alignItems: 'center', gap: 2, paddingHorizontal: spacing.lg, paddingVertical: spacing.md },
   sheetTitle: { color: colors.text, fontSize: 14, fontWeight: '600' },

@@ -147,10 +147,11 @@ const actionsUi = read('src/AccountRowActions.tsx');
 const storage = read('src/storage.ts');
 const rust = read('src-tauri/src/lib.rs');
 const app = read('App.tsx');
-const wideRow = settings.slice(settings.indexOf("show('account', 'profiles')"), settings.indexOf("show('account', 'addAccount')"));
-ck('E1 wide / desktop rows: 复制 and 编辑 sit in the row before 新窗口 / 移除', wideRow.indexOf('settings-copy-') > 0 && wideRow.indexOf('settings-edit-') > wideRow.indexOf('settings-copy-') && wideRow.indexOf('settings.copy.183') > wideRow.indexOf('settings-edit-'));
-ck('E2 编辑 on the wide row only when the action list has it (Local workspace = copy only)', wideRow.includes("profileActions(profile).includes('edit') ?"));
-ck('E3 phone: 管理账号 rows open the bottom action sheet; pointer devices list the actions instead', phone.includes('ctx.onProfileSheet(profile)') && phone.includes('if (!ctx.pointer)') && phone.includes('ctx.profileActions(profile).map'));
+// #427:宽屏行尾不再挤一排文字按钮,动作收进 ⋯(鼠标 = 锚定菜单,手指 = 底部动作面板);菜单项 = 同一份 accountRowActions(+ 切换)。
+const menuUi = actionsUi.slice(actionsUi.indexOf('export function AccountMoreMenu'), actionsUi.indexOf('export function AccountActionSheet'));
+ck('E1 wide rows: 复制 · 编辑 · 新窗口 · 移除 live in the ⋯ menu (no inline text buttons), ids kept', !settings.includes('styles.inlineButton') && menuUi.includes('`settings-${item}-${profile.profileId}`') && settings.includes('accountMenuItems(profileActions(menuFor.profile)'));
+ck('E2 the menu only lists what the action list has (Local workspace = copy only) + 切换 for other, signed-in accounts', /export function accountMenuItems[\s\S]*?if \(!opts\.current && !opts\.requiresReauth\) have\.add\('switch'\);/.test(read('src/account-row-actions.ts')));
+ck('E3 ⋯: pointer → anchored menu, touch → the bottom action sheet (phone pages hand ⋯ to SettingsScreen)', /const openProfileMore = \(profile: HubProfile, el: any\) => \{\n    if \(!pointer \|\| !el\?\.measureInWindow\) \{ setSheetTarget\(profile\); return; \}/.test(settings) && phone.includes('onMore={el => ctx.onProfileMore(profile, el)}'));
 ck('E4 the bottom sheet is gated on the touch predicate', settings.includes('visible={!pointer && !!sheetTarget}'));
 ck('E5 the edit dialog uses the shared DialogFrame', actionsUi.includes("import DialogFrame from './DialogFrame'") && actionsUi.includes('<DialogFrame') && actionsUi.includes('testID="account-edit-dialog"'));
 ck('E6 save validates first and saves only on ok; 重新登录 only on token-rejected', /const check = await validateHubEdit[\s\S]*?if \(!check\.ok\) \{ setError[\s\S]*?return; \}[\s\S]*?await updateHubProfile/.test(actionsUi) && actionsUi.includes('offersRelogin(error.kind)'));

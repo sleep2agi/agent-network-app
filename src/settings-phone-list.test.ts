@@ -73,12 +73,13 @@ const norm = (f: string) => readFileSync(new URL(f, import.meta.url), 'utf-8').r
   ck('goBack:三级页推入的页先退,再退三级页,否则关子页', src.includes("if (target === 'detail' && headerBackRef.current) headerBackRef.current();") && src.includes("else if (target === 'detail') closeDetail();") && /else closePage\(\);\n  \};/.test(src));
   ck('弹窗开着时不抢返回(让给弹窗的 onRequestClose)', /if \(!subPage \|\| dialogOpen\) return;/.test(src)
     // 切换账号面板(2026-09-29)、登录设备的退出确认(2026-09-30)也是弹窗。
-    // 账号行的「编辑」弹窗、手机管理账号的底部动作面板(2026-09-30)也是。
-    && /const dialogOpen = !!removeTarget \|\| localDeleteVisible \|\| guideVisible \|\| logoutConfirm \|\| switcherOpen \|\| !!sessions\.confirm \|\| !!editTarget \|\| !!sheetTarget;/.test(src));
+    // 账号行的「编辑」弹窗、手机管理账号的底部动作面板(2026-09-30)也是;账号 ⋯ 菜单(#427)也是。
+    && /const dialogOpen = !!removeTarget \|\| localDeleteVisible \|\| guideVisible \|\| logoutConfirm \|\| switcherOpen \|\| !!sessions\.confirm \|\| !!editTarget \|\| !!sheetTarget \|\| !!menuFor;/.test(src));
   ck('子页顶栏左上有返回箭头', src.includes('testID="settings-back"') && src.includes('name="chevron-back"'));
   ck('列表行带 › 箭头', src.includes('name="chevron-forward" size={18}'));
   ck('底部整宽「退出登录」要先确认', src.includes('testID="settings-logout-block"') && src.includes('onPress={() => setLogoutConfirm(true)}') && src.includes('<Modal visible={logoutConfirm}'));
-  ck('手机账号子页不再重复「移除当前账号」(它的位置是底部退出登录)', src.includes("show('account', 'logout') && canLogout && !compact"));
+  // 「移除当前账号」只画在宽屏右栏(compact 时走 phoneSubPage,根本不进那一段);手机子页文件里没有它。
+  ck('手机账号子页不再重复「移除当前账号」(它的位置是底部退出登录)', src.includes("show('account', 'logout') && canLogout ?") && !readFileSync(new URL('./SettingsPhonePages.tsx', import.meta.url), 'utf8').includes("tr('settings.copy.22')"));
   ck('宽屏仍画左栏 + 右栏标题;手机子页走 SettingsPhonePage', src.includes('{compact ? (subPage ? phoneHeader : listHeader) : sidebar}') && src.includes('<Text style={styles.paneTitle}>{settingsText(paneTitle)}</Text>') && src.includes('{compact ? (subPage ? phoneSubPage : phoneList) : ('));
   ck('行高下限 48', (src.match(/minHeight: Math\.max\(48, ds\(52\)\)/g) ?? []).length >= 2);
   ck('文字走 ui-text 包装(字体大小设置生效)', src.includes("import { Text, TextInput } from './ui-text';"));

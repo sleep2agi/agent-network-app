@@ -4,7 +4,7 @@
 //
 //   WEB_DIR=<expo export dir> OUT=<png dir> PLAYWRIGHT_MODULE=<…/playwright/index.mjs> node tests/test-account-copy-edit/drive.mjs
 //
-// Wide 1320×754 (desktop rows: 复制 · 编辑 · 移除 at the end of each row) and phone 390×844 (Android UA: 管理账号 →
+// Wide 1320×754 (desktop: each account row's ⋯ → anchored menu, #427) and phone 390×844 (Android UA: the row's ⋯ →
 // tap a row → bottom action sheet). For each:
 //   1  sign in to hub A, add hub B (current = B)
 //   2  geometry of the row actions (wide) / the action sheet (phone), boundingBox
@@ -109,21 +109,19 @@ async function runViewport(vp, viewport, ua, wide) {
   const openAccounts = async () => {
     await openSettings();
     if (!wide) {
-      if (!(await page.locator(tid('settings-manage-accounts-list')).isVisible().catch(() => false))) {
-        if (!(await page.locator(tid('settings-manage-accounts')).isVisible().catch(() => false))) await page.locator(tid('settings-row-account')).click();
-        await page.locator(tid('settings-manage-accounts')).click();
-        await page.locator(tid('settings-manage-accounts-list')).waitFor({ timeout: 5000 });
-      }
+      if (!(await page.locator(tid(`settings-profile-${idA}`)).isVisible().catch(() => false))) await page.locator(tid('settings-row-account')).click();
     } else {
       const acct = page.locator(tid('settings-category-account'));
       if (await acct.isVisible().catch(() => false)) await acct.click();
-      await page.locator(tid(`settings-copy-${idA}`)).waitFor({ timeout: 5000 });
     }
+    await page.locator(tid(`settings-profile-${idA}`)).waitFor({ timeout: 5000 });
     await sleep(300);
   };
+  // #427: the actions live behind each row's ⋯ — an anchored menu in the desktop shell (pointer), the bottom action
+  // sheet otherwise. This drive is the plain web build (no Tauri shell ⇒ pointerUi() is false), so both viewports get
+  // the sheet; the desktop-shell menu is measured in tests/test-settings-redesign/drive.mjs.
   const act = async (id, action) => {
-    if (wide) { await page.locator(tid(`settings-${action}-${id}`)).click(); return; }
-    await page.locator(tid(`settings-manage-${id}`)).click();
+    await page.locator(tid(`settings-profile-${id}-more`)).click();
     await page.locator(tid('account-sheet')).waitFor({ timeout: 5000 });
     await sleep(350); // slide-in
     await page.locator(tid(`account-sheet-${action}`)).click();
@@ -133,41 +131,30 @@ async function runViewport(vp, viewport, ua, wide) {
   await openAccounts();
   await page.screenshot({ path: join(OUT, `${vp}-accounts.png`) });
   if (wide) {
-    const rows = [];
-    for (const id of [idA, idB]) {
-      const copy = await box(page, tid(`settings-copy-${id}`));
-      const edit = await box(page, tid(`settings-edit-${id}`));
-      const rm = await box(page, tid(`settings-remove-${id}`));
-      const row = await page.locator(tid(`settings-copy-${id}`)).evaluate(e => { const r = e.parentElement.getBoundingClientRect(); return { x: r.x, y: r.y, w: r.width, h: r.height }; });
-      const label = await page.locator(tid(`settings-copy-${id}`)).evaluate(e => { const r = e.parentElement.firstElementChild.getBoundingClientRect(); return { x: r.x, y: r.y, w: r.width, h: r.height }; });
-      rows.push({ id, copy, edit, rm, row, label });
-    }
-    const [a, b] = rows;
-    const rowChecks = {};
-    for (const [n, r] of [['A', a], ['B', b]]) {
-      rowChecks[`${n}_buttonsCentredInRow`] = [r.copy, r.edit, r.rm].every(bb => bb && Math.abs(cy(bb) - (r.row.y + r.row.h / 2)) <= 1);
-      rowChecks[`${n}_order_copy_edit_remove`] = r.copy.x + r.copy.w <= r.edit.x && r.edit.x + r.edit.w <= r.rm.x;
-      rowChecks[`${n}_equalGaps`] = Math.abs((r.edit.x - (r.copy.x + r.copy.w)) - (r.rm.x - (r.edit.x + r.edit.w))) <= 1;
-      rowChecks[`${n}_buttonsRightOfText`] = r.label.x + r.label.w <= r.copy.x;
-    }
-    rowChecks.sameColumnsAcrossRows = Math.abs(a.copy.x - b.copy.x) <= 0.5 && Math.abs(a.edit.x - b.edit.x) <= 0.5 && Math.abs(a.rm.x - b.rm.x) <= 0.5;
-    // Row heights are not compared: a label with 「· 当前」 renders ~2px taller (CJK fallback line box) — that is the
-    // pre-existing label, not the new buttons. The buttons are centred in their own row (checked above).
-    record(vp, '2 wide: row actions geometry', rowChecks, { rows });
-    await page.locator(tid(`settings-copy-${idB}`)).evaluate(e => e.parentElement.setAttribute('data-shot', 'rowB'));
-    await page.locator('[data-shot="rowB"]').screenshot({ path: join(OUT, `${vp}-row-current.png`) });
+    await page.locator(tid(`settings-profile-${idA}-more`)).click();
+    await page.locator(tid('account-sheet')).waitFor({ timeout: 5000 });
+    await sleep(500);
+    const btns = {};
+    for (const k of ['copy', 'edit', 'remove', 'cancel']) btns[k] = await box(page, tid(`account-sheet-${k}`));
+    record(vp, '2 wide (web build): ⋯ → action sheet', {
+      allActions: Object.values(btns).every(Boolean),
+      order: !!(btns.copy && btns.edit && btns.remove && btns.cancel) && btns.copy.y < btns.edit.y && btns.edit.y < btns.remove.y && btns.remove.y < btns.cancel.y,
+      noInlineButtons: (await page.getByText('复制', { exact: true }).count()) === 0 || (await page.locator(`${tid('settings-pane')} >> text=复制`).count()) === 0,
+    }, { btns });
+    await page.screenshot({ path: join(OUT, `${vp}-row-sheet.png`) });
+    await page.locator(tid('account-sheet-cancel')).click();
+    await sleep(400);
   } else {
-    const list = await box(page, tid('settings-manage-accounts-list'));
-    const rA = await box(page, tid(`settings-manage-${idA}`));
-    const rB = await box(page, tid(`settings-manage-${idB}`));
-    await page.locator(tid(`settings-manage-${idA}`)).click();
+    const rA = await box(page, tid(`settings-profile-${idA}`));
+    const rB = await box(page, tid(`settings-profile-${idB}`));
+    await page.locator(tid(`settings-profile-${idA}-more`)).click();
     await page.locator(tid('account-sheet')).waitFor({ timeout: 5000 });
     await sleep(500);
     const sheet = await box(page, tid('account-sheet'));
     const btns = {};
     for (const k of ['copy', 'edit', 'remove', 'cancel']) btns[k] = await box(page, tid(`account-sheet-${k}`));
     const labelCentres = await page.locator('[data-testid^="account-sheet-"][role="button"]').evaluateAll(els => els.map(e => { const b = e.getBoundingClientRect(); const t = e.firstElementChild.getBoundingClientRect(); return { dx: (t.x + t.width / 2) - (b.x + b.width / 2), dy: (t.y + t.height / 2) - (b.y + b.height / 2) }; }));
-    record(vp, '2 phone: manage rows + action sheet geometry', {
+    record(vp, '2 phone: account rows + action sheet geometry', {
       rowsSameColumn: Math.abs(rA.x - rB.x) <= 0.5 && Math.abs(rA.w - rB.w) <= 0.5,
       rowsSymmetricInset: Math.abs(rA.x - (viewport.width - rA.x - rA.w)) <= 0.5,
       rowsAtLeast48: rA.h >= 48 && rB.h >= 48,
@@ -178,7 +165,7 @@ async function runViewport(vp, viewport, ua, wide) {
       orderCopyEditRemoveCancel: btns.copy.y < btns.edit.y && btns.edit.y < btns.remove.y && btns.remove.y < btns.cancel.y,
       cancelSeparated: btns.cancel.y - (btns.remove.y + btns.remove.h) >= 7.5,
       labelsCentred: labelCentres.every(c => Math.abs(c.dx) <= 1 && Math.abs(c.dy) <= 1),
-    }, { list, rowA: rA, rowB: rB, sheet, btns, labelCentres });
+    }, { rowA: rA, rowB: rB, sheet, btns, labelCentres });
     await page.screenshot({ path: join(OUT, `${vp}-action-sheet.png`) });
     await page.locator(tid('account-sheet-cancel')).click();
     await sleep(400);
@@ -230,14 +217,14 @@ async function runViewport(vp, viewport, ua, wide) {
   const credA0 = JSON.parse(storeBefore[`hub_session_${idA}`] ?? storeBefore.hub_config_v1);
   const credA1 = JSON.parse(afterLabel[`hub_session_${idA}`] ?? afterLabel.hub_config_v1);
   // the leaf holding 「Alice work」 must be painted (≥ 8px after overflow clipping), not only present in textContent
-  const labelPaint = await paintedText(page, `${wide ? '' : `${tid(`settings-manage-${idA}`)} `}:not(:has(*))`, 'Alice work');
+  const labelPaint = await paintedText(page, `${tid(`settings-profile-${idA}`)} :not(:has(*))`, 'Alice work');
   record(vp, '4 label-only edit on a non-current account', {
     labelSaved: idxL.sessions.find(s => s.id === idA)?.displayName === 'Alice work',
     samePosition: idxL.sessions.map(s => s.id).join() === idx.sessions.map(s => s.id).join(),
     stillOnB: idxL.active === idB,
     tokenKept: credA1.token === credA0.token && credA1.serverUrl === credA0.serverUrl,
     otherUntouched: afterLabel[`hub_session_${idB}`] === storeBefore[`hub_session_${idB}`],
-    rowShowsLabel: wide ? (await page.getByText('Alice work', { exact: true }).count()) > 0 : (await page.locator(tid(`settings-manage-${idA}`)).innerText()).includes('Alice work'),
+    rowShowsLabel: wide ? (await page.getByText('Alice work', { exact: true }).count()) > 0 : (await page.locator(tid(`settings-profile-${idA}`)).innerText()).includes('Alice work'),
     labelPainted: !!labelPaint?.painted && labelPaint.w >= 8,
   }, { labelPaint });
 
@@ -274,7 +261,7 @@ async function runViewport(vp, viewport, ua, wide) {
   const moved = await waitFor(async () => (hubB2.sse().open === 1 && hubB.sse().open === 0) ? { b: hubB.sse(), b2: hubB2.sse() } : null, 10000);
   const store2 = await readStore();
   const credB1 = JSON.parse(store2[`hub_session_${idB}`]);
-  const stillInSettings = await page.locator(tid('settings-phone-list') + ',' + tid('settings-pane') + ',' + tid('settings-manage-accounts-list')).first().isVisible().catch(() => false);
+  const stillInSettings = await page.locator(tid('settings-phone-list') + ',' + tid('settings-pane') + ',' + tid('settings-subpage-account')).first().isVisible().catch(() => false);
   await sleep(400);
   await page.screenshot({ path: join(OUT, `${vp}-edited-current.png`) });
   record(vp, '5 moved hub → saved in place, reconnected, still in settings', {

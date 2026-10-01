@@ -164,14 +164,7 @@ if (!DESKTOP_ONLY) for (const theme of ['light', 'dark']) {
     await run(key, async () => {
       await open(key);
       await checkPage(page, key, theme);
-      if (key === 'account') {
-        await page.locator('[data-testid="settings-manage-accounts"]').click();
-        await page.waitForTimeout(300);
-        ck(`${theme} account→管理账号: 标题`, ...(await titleIs(page, '管理账号')));
-        await checkPage(page, 'account-manage', theme);
-        await back();
-        ck(`${theme} account: 返回先退三级页`, ...(await titleIs(page, '账号')));
-      }
+      // 账号:「管理账号」三级页已收进每行的 ⋯(#427,tests/test-settings-redesign/drive.mjs 量那一页)。
       if (key === 'notifications') {
         const quiet = page.getByRole('switch', { name: '免打扰时段' });
         if (!(await quiet.isChecked())) await quiet.click();

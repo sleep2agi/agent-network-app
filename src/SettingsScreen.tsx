@@ -6,15 +6,15 @@ import { copyLastFatal, useLastFatalReport } from './use-last-fatal';
 import { useTranslation } from './i18n-react';
 import { settingsText } from './i18n-settings';
 import { localizedThemeSummary } from './i18n-settings-presentation';
-import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
+import { Children, useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from 'react';
 import { ActivityIndicator, AppState, BackHandler, Linking, Modal, Platform, Pressable, ScrollView, StyleSheet, Switch, View, useWindowDimensions } from 'react-native';
 import { Text, TextInput } from './ui-text';
 import { Ionicons } from './icons';
 import { HubConfig } from './api';
 import { DesktopStorageDiagnostics, HubProfile, getDesktopStorageDiagnostics, listHubProfiles, removeHubProfile, saveThemeMode, sessionIdOf } from './storage';
 import AccountSwitcher from './AccountSwitcher';
-import { ACCOUNT_TOAST_MS, AccountActionSheet, AccountEditDialog, AccountToast, accountName, copyAccountLine } from './AccountRowActions';
-import { accountRowActions, type AccountRowAction } from './account-row-actions';
+import { ACCOUNT_TOAST_MS, AccountActionSheet, AccountEditDialog, AccountMoreMenu, AccountToast, accountName, copyAccountLine } from './AccountRowActions';
+import { accountMenuItems, accountRowActions, type AccountMenuItem, type AccountRowAction } from './account-row-actions';
 import { pointerUi } from './pointer-ui';
 import './i18n-accounts';
 import { THEME_PREFERENCES, THEME_PREFERENCE_LABEL, colors, onThemeChange, onThemePreferenceChange, setThemePreference, spacing, themeMode, themePreference, themePreferenceSummary, type ThemePreference, radius } from './theme';
@@ -41,9 +41,9 @@ import ShortcutsSettings from './ShortcutsSettings';
 import { ds } from './ui-scale';
 import { playChime } from './chime';
 import { SETTINGS_CATEGORIES, SETTINGS_DETAIL_TITLE, activeCategoryKey, closeSettingsPage, filterSettings, phoneRowLabel, phoneSettingsGroups, rememberSettingsCategory, rememberSettingsScroll, rememberedSettingsView, settingsBackTarget, settingsPlatform, visibleRowKeys, type SettingsCategoryKey, type SettingsDetailKey, type SettingsHeaderOverride, type SettingsPlatform } from './settings-model';
-import SettingsPhonePage, { type PhonePagesCtx } from './SettingsPhonePages';
+import SettingsPhonePage, { accountSubtitle, type PhonePagesCtx } from './SettingsPhonePages';
 import { PHONE_SETTINGS_SERVER_ENTRY } from './nav-chrome';
-import { settingsPageContentStyle } from './settings-kit';
+import { SETTINGS_ROW_PAD_X, SettingsAccountRow, SettingsButton, SettingsGroup, SettingsRow, settingsPageContentStyle } from './settings-kit';
 import { useModalSafePadding } from './safe-area-runtime';
 
 import { withBasePadding } from './modal-safe-area';
@@ -211,6 +211,7 @@ export default function SettingsScreen({
   // 每行账号的「复制」「编辑」(Vincent 2026-09-30「账号 支持一下复制 编辑」):编辑弹窗、手机的动作面板、「已复制」小条。
   const [editTarget, setEditTarget] = useState<HubProfile | null>(null);
   const [sheetTarget, setSheetTarget] = useState<HubProfile | null>(null);
+  const [menuFor, setMenuFor] = useState<{ profile: HubProfile; anchor: { x: number; y: number; w: number; h: number } } | null>(null);
   const [toast, setToast] = useState<string | null>(null);
   useEffect(() => {
     if (!toast) return;
@@ -241,7 +242,7 @@ export default function SettingsScreen({
   // 子页的返回:安卓系统返回键/手势走 BackHandler(比 App.tsx 的返回处理晚注册 ⇒ 先被调用,
   // 同 ScheduledTasksScreen 的窄屏详情);网页(验收用的 web 导出)没有返回键,听 Esc。
   // 弹窗开着时让弹窗自己的 onRequestClose 处理(安卓的 Modal 会先吞掉返回键;网页的 Esc 两边都会收到)。
-  const dialogOpen = !!removeTarget || localDeleteVisible || guideVisible || logoutConfirm || switcherOpen || !!sessions.confirm || !!editTarget || !!sheetTarget;
+  const dialogOpen = !!removeTarget || localDeleteVisible || guideVisible || logoutConfirm || switcherOpen || !!sessions.confirm || !!editTarget || !!sheetTarget || !!menuFor;
   useEffect(() => {
     if (!subPage || dialogOpen) return;
     const sub = BackHandler.addEventListener('hardwareBackPress', () => { goBack(); return true; });
@@ -377,6 +378,34 @@ export default function SettingsScreen({
     else if (action === 'openWindow') void openWorkspaceWindow(profile).catch(reportError);
     else setRemoveTarget(profile);
   };
+  // ⋯(#427):鼠标 = 锚在 ⋯ 下面的菜单;手指 = 底部 action sheet(和以前「管理账号」页同一个)。
+  const openProfileMore = (profile: HubProfile, el: any) => {
+    if (!pointer || !el?.measureInWindow) { setSheetTarget(profile); return; }
+    el.measureInWindow((x: number, y: number, w: number, h: number) => setMenuFor({ profile, anchor: { x, y, w, h } }));
+  };
+  const runMenuItem = (item: AccountMenuItem, profile: HubProfile) => {
+    if (item === 'switch') pickProfile(profile);
+    else runProfileAction(item, profile);
+  };
+  const closeMenu = useCallback(() => setMenuFor(null), []);
+  const currentProfile = profiles.find(profile => profile.profileId === currentId) ?? null;
+  const otherProfiles = profiles.filter(profile => profile.profileId !== currentId);
+  const accountRow = (profile: HubProfile, isCurrent: boolean) => (
+    <SettingsAccountRow
+      key={profile.profileId}
+      testID={`settings-profile-${profile.profileId}`}
+      name={profile.displayName || profile.username || tr('settings.copy.12')}
+      subtitle={accountSubtitle(profile)}
+      warning={profile.requiresReauth ? tr('settings.copy.15') : undefined}
+      current={isCurrent ? tr('accounts.currentPill') : undefined}
+      badge={profile.profileId === LOCAL_HUB_PROFILE_ID ? tr('accounts.localPill') : undefined}
+      large={isCurrent}
+      accessibilityLabel={tr('settings.copy.182', { v0: profile.displayName || profile.username || profile.serverUrl })}
+      onPress={() => pickProfile(profile)}
+      onMore={el => openProfileMore(profile, el)}
+      moreLabel={tr('accounts.more', { name: accountName(profile) })}
+    />
+  );
   const afterProfileEdit = async (profileId: string, serverChanged: boolean) => {
     const registry = await listHubProfiles();
     setProfiles(registry.profiles);
@@ -515,9 +544,7 @@ export default function SettingsScreen({
     onPickProfile: pickProfile,
     onOpenProfileWindow: profile => { void openWorkspaceWindow(profile).catch(reportError); },
     onRemoveProfile: profile => setRemoveTarget(profile),
-    profileActions,
-    onProfileAction: runProfileAction,
-    onProfileSheet: profile => setSheetTarget(profile),
+    onProfileMore: openProfileMore,
     pointer,
     onAddAccount,
     sessions,
@@ -631,73 +658,75 @@ export default function SettingsScreen({
     };
     return (
       <View style={sectionStyle} testID="settings-section-devices">
-        {sessions.error ? (
-          <>
-            <Text style={styles.errorText}>{tr('sessions.loadFailed', { msg: sessions.error })}</Text>
-            <Pressable testID="login-devices-retry" style={({ pressed }) => [styles.row, pressed && { opacity: 0.6 }]} onPress={() => void sessions.refresh()} accessibilityRole="button">
-              <Text style={styles.accentText}>{tr('sessions.retry')}</Text>
-            </Pressable>
-          </>
-        ) : null}
-        {shown.map((item, index) => {
-          if (item.type === 'session') return <View key={item.key}>{index ? <Divider /> : null}{deviceRow(item.session, item.label, item.kind, false)}</View>;
-          const gid = `login-devices-group-${groupTestKey(item, index)}`;
-          const open = sessions.expanded.has(item.key);
-          const members = visibleSessions(item.sessions, sessions.groupShowAll.has(item.key));
-          return (
-            <View key={item.key}>
-              {index ? <Divider /> : null}
-              <Pressable
-                testID={gid}
-                accessibilityRole="button"
-                accessibilityState={{ expanded: open }}
-                accessibilityLabel={tr(open ? 'sessions.collapseGroup' : 'sessions.expandGroup', { name: item.label })}
-                onPress={() => sessions.toggleGroup(item.key)}
-                style={({ pressed, hovered }: any) => [styles.deviceRow, (pressed || hovered) && styles.categoryItemHover]}
-              >
-                <View style={styles.deviceIcon}>
-                  <Ionicons name={DEVICE_ICON[item.kind] as any} size={18} color={colors.textSecondary} />
-                </View>
-                <View style={styles.rowCopy}>
-                  <Text style={styles.rowLabelStrong} numberOfLines={1} testID={`${gid}-label`}>{item.label}</Text>
-                  <Text style={styles.rowHint} numberOfLines={1} testID={`${gid}-subtitle`}>{groupSubtitle(item.sessions, now)}</Text>
-                </View>
-                <Ionicons name={open ? 'chevron-up' : 'chevron-down'} size={16} color={colors.textMuted} />
+        <WideCard>
+          {sessions.error ? (
+            <>
+              <Text style={styles.errorText}>{tr('sessions.loadFailed', { msg: sessions.error })}</Text>
+              <Pressable testID="login-devices-retry" style={({ pressed }) => [styles.row, pressed && { opacity: 0.6 }]} onPress={() => void sessions.refresh()} accessibilityRole="button">
+                <Text style={styles.accentText}>{tr('sessions.retry')}</Text>
               </Pressable>
-              {open ? members.map(m => <View key={m.token_id}><Divider />{deviceRow(m, item.label, item.kind, true)}</View>) : null}
-              {open && members.length < item.sessions.length ? (
-                <>
-                  <Divider />
-                  <Pressable testID={`${gid}-show-all`} style={({ pressed }) => [styles.row, styles.deviceMemberRow, pressed && { opacity: 0.6 }]} onPress={() => sessions.showAllInGroup(item.key)} accessibilityRole="button">
-                    <Text style={styles.accentText}>{tr('sessions.showAll', { n: item.sessions.length })}</Text>
-                  </Pressable>
-                </>
-              ) : null}
-            </View>
-          );
-        })}
-        {!sessions.showAll && sessions.items.length > SESSIONS_VISIBLE_DEFAULT ? (
-          <>
-            <Divider />
-            <Pressable testID="login-devices-show-all" style={({ pressed }) => [styles.row, pressed && { opacity: 0.6 }]} onPress={() => sessions.setShowAll(true)} accessibilityRole="button">
-              <Text style={styles.accentText}>{tr('sessions.showAll', { n: sessions.items.length })}</Text>
-            </Pressable>
-          </>
-        ) : null}
-        {sessions.others > 0 ? (
-          <>
-            <Divider />
-            <Pressable testID="login-devices-revoke-others" disabled={!!sessions.busy} style={({ pressed }) => [styles.row, pressed && { opacity: 0.6 }, !!sessions.busy && styles.disabled]} onPress={sessions.askRevokeOthers} accessibilityRole="button">
-              <View style={styles.rowCopy}>
-                <Text style={styles.dangerText}>{tr('sessions.signOutOthers')}</Text>
-                <Text style={styles.rowHint}>{tr('sessions.othersHint', { n: sessions.others })}</Text>
+            </>
+          ) : null}
+          {shown.map((item, index) => {
+            if (item.type === 'session') return <View key={item.key}>{index ? <Divider /> : null}{deviceRow(item.session, item.label, item.kind, false)}</View>;
+            const gid = `login-devices-group-${groupTestKey(item, index)}`;
+            const open = sessions.expanded.has(item.key);
+            const members = visibleSessions(item.sessions, sessions.groupShowAll.has(item.key));
+            return (
+              <View key={item.key}>
+                {index ? <Divider /> : null}
+                <Pressable
+                  testID={gid}
+                  accessibilityRole="button"
+                  accessibilityState={{ expanded: open }}
+                  accessibilityLabel={tr(open ? 'sessions.collapseGroup' : 'sessions.expandGroup', { name: item.label })}
+                  onPress={() => sessions.toggleGroup(item.key)}
+                  style={({ pressed, hovered }: any) => [styles.deviceRow, (pressed || hovered) && styles.categoryItemHover]}
+                >
+                  <View style={styles.deviceIcon}>
+                    <Ionicons name={DEVICE_ICON[item.kind] as any} size={18} color={colors.textSecondary} />
+                  </View>
+                  <View style={styles.rowCopy}>
+                    <Text style={styles.rowLabelStrong} numberOfLines={1} testID={`${gid}-label`}>{item.label}</Text>
+                    <Text style={styles.rowHint} numberOfLines={1} testID={`${gid}-subtitle`}>{groupSubtitle(item.sessions, now)}</Text>
+                  </View>
+                  <Ionicons name={open ? 'chevron-up' : 'chevron-down'} size={16} color={colors.textMuted} />
+                </Pressable>
+                {open ? members.map(m => <View key={m.token_id}><Divider />{deviceRow(m, item.label, item.kind, true)}</View>) : null}
+                {open && members.length < item.sessions.length ? (
+                  <>
+                    <Divider />
+                    <Pressable testID={`${gid}-show-all`} style={({ pressed }) => [styles.row, styles.deviceMemberRow, pressed && { opacity: 0.6 }]} onPress={() => sessions.showAllInGroup(item.key)} accessibilityRole="button">
+                      <Text style={styles.accentText}>{tr('sessions.showAll', { n: item.sessions.length })}</Text>
+                    </Pressable>
+                  </>
+                ) : null}
               </View>
-              {sessions.busy === 'others' ? <ActivityIndicator size="small" color={colors.failed} /> : null}
-            </Pressable>
-          </>
-        ) : sessions.sessions.length ? <Text style={styles.footHint}>{tr('sessions.onlyThis')}</Text> : null}
-        {sessions.message ? <Text style={[styles.footHint, { color: sessions.message.ok ? colors.accent : colors.failed }]} testID="login-devices-message">{sessions.message.text}</Text> : null}
-        {sessions.idleDays ? <Text style={styles.footHint} testID="login-devices-idle">{tr('sessions.idleFooter', { n: sessions.idleDays })}</Text> : null}
+            );
+          })}
+          {!sessions.showAll && sessions.items.length > SESSIONS_VISIBLE_DEFAULT ? (
+            <>
+              <Divider />
+              <Pressable testID="login-devices-show-all" style={({ pressed }) => [styles.row, pressed && { opacity: 0.6 }]} onPress={() => sessions.setShowAll(true)} accessibilityRole="button">
+                <Text style={styles.accentText}>{tr('sessions.showAll', { n: sessions.items.length })}</Text>
+              </Pressable>
+            </>
+          ) : null}
+          {sessions.others > 0 ? (
+            <>
+              <Divider />
+              <Pressable testID="login-devices-revoke-others" disabled={!!sessions.busy} style={({ pressed }) => [styles.row, pressed && { opacity: 0.6 }, !!sessions.busy && styles.disabled]} onPress={sessions.askRevokeOthers} accessibilityRole="button">
+                <View style={styles.rowCopy}>
+                  <Text style={styles.dangerText}>{tr('sessions.signOutOthers')}</Text>
+                  <Text style={styles.rowHint}>{tr('sessions.othersHint', { n: sessions.others })}</Text>
+                </View>
+                {sessions.busy === 'others' ? <ActivityIndicator size="small" color={colors.failed} /> : null}
+              </Pressable>
+            </>
+          ) : sessions.sessions.length ? <Text style={styles.footHint}>{tr('sessions.onlyThis')}</Text> : null}
+          {sessions.message ? <Text style={[styles.footHint, { color: sessions.message.ok ? colors.accent : colors.failed }]} testID="login-devices-message">{sessions.message.text}</Text> : null}
+          {sessions.idleDays ? <Text style={styles.footHint} testID="login-devices-idle">{tr('sessions.idleFooter', { n: sessions.idleDays })}</Text> : null}
+        </WideCard>
       </View>
     );
   };
@@ -750,111 +779,73 @@ export default function SettingsScreen({
 
           {showWideDevices ? renderWideDevices() : null}
           {sectionsToRender.includes('account') && !showWideDevices ? (
+            // #427「设置页整体重新设计」:分组卡片 —— 当前账号(置顶、头像、主色细边)/ 其他账号(点一下切换,⋯ 收动作)/
+            // 安全 / 本地数据 / 最后单独一组危险操作。行为不变:点行切换、⋯ 里是原来行尾那四个按钮(+ 切换)。
             <View style={sectionStyle} testID="settings-section-account">
               {heading('account')}
               {show('account', 'profiles') ? (
-                <>
-                  {profiles.length ? profiles.map((profile, index) => {
-                    const isCurrent = profile.profileId === currentId;
-                    return (
-                      <View key={profile.profileId}>
-                        {index ? <Divider /> : null}
-                        <Pressable
-                          accessibilityLabel={tr('settings.copy.182', { v0: profile.displayName || profile.username || profile.serverUrl })}
-                          style={({ pressed }) => [styles.profileRow, pressed && { opacity: 0.65 }]}
-                          onPress={() => {
-                            if (profile.requiresReauth) return onReauthProfile(profile);
-                            if (!isCurrent) void Promise.resolve(onSwitchProfile(profile.profileId)).catch(error => setProfileError(String(error)));
-                          }}
-                        >
-                          <View style={styles.profileCopy}>
-                            <Text style={styles.rowLabelStrong}>{profile.displayName || profile.username || tr('settings.copy.12')}{isCurrent ? tr('settings.copy.13') : ''}</Text>
-                            <Text style={styles.rowHint} numberOfLines={1}>{profile.serverUrl} · {profile.username || tr('settings.copy.14')}{profile.networkId ? ` · ${profile.networkId}` : ''}</Text>
-                            {profile.requiresReauth ? <Text style={styles.dangerHint}>{tr('settings.copy.15')}</Text> : null}
-                          </View>
-                          {/* 复制 · 编辑(Vincent 2026-09-30):复制只拿地址 · 用户名 · 网络 ID,不碰令牌;本地工作区只能复制。 */}
-                          <Pressable accessibilityRole="button" accessibilityLabel={tr('accounts.copyLabel', { name: accountName(profile) })} onPress={event => { event.stopPropagation(); runProfileAction('copy', profile); }} hitSlop={8} style={styles.inlineButton} testID={`settings-copy-${profile.profileId}`}>
-                            <Text style={styles.accentText}>{tr('accounts.copy')}</Text>
-                          </Pressable>
-                          {profileActions(profile).includes('edit') ? (
-                            <Pressable accessibilityRole="button" accessibilityLabel={tr('accounts.editLabel', { name: accountName(profile) })} onPress={event => { event.stopPropagation(); runProfileAction('edit', profile); }} hitSlop={8} style={styles.inlineButton} testID={`settings-edit-${profile.profileId}`}>
-                              <Text style={styles.accentText}>{tr('accounts.edit')}</Text>
-                            </Pressable>
-                          ) : null}
-                          {tauriDesktop && !profile.requiresReauth ? (
-                            // 应用多开(Vincent 2026-09-07):给这个账号开一个独立工作区窗口,主窗口的当前账号不动;同一账号再点就聚焦已开的窗。
-                            <Pressable accessibilityLabel={tr('settings.copy.183', { v0: profile.displayName || profile.username || profile.serverUrl })} onPress={event => { event.stopPropagation(); void openWorkspaceWindow(profile).catch(error => setProfileError(String(error))); }} hitSlop={8} style={styles.inlineButton}>
-                              <Text style={styles.accentText}>{tr('settings.copy.16')}</Text>
-                            </Pressable>
-                          ) : null}
-                          {profile.profileId !== LOCAL_HUB_PROFILE_ID ? (
-                            <Pressable accessibilityLabel={tr('settings.copy.184', { v0: profile.username || profile.serverUrl })} onPress={event => { event.stopPropagation(); setRemoveTarget(profile); }} hitSlop={8} style={styles.inlineButton} testID={`settings-remove-${profile.profileId}`}>
-                              <Text style={styles.dangerText}>{tr('settings.copy.17')}</Text>
-                            </Pressable>
-                          ) : null}
-                        </Pressable>
-                      </View>
-                    );
-                  }) : (
-                    <>
-                      <ValueRow label={tr('settings.copy.18')} value={cfg.serverUrl} />
-                      <Divider />
-                      <ValueRow label={tr('settings.copy.19')} value={me.username ?? cfg.username ?? '—'} />
-                    </>
-                  )}
-                  {profileError ? <Text style={styles.errorText}>{profileError}</Text> : null}
-                  {storageDiagnostics ? (
-                    <Text style={styles.footHint} numberOfLines={2}>
-                      {tr('settings.copy.20')}{storageDiagnostics.root} · {storageDiagnostics.profile_count} profiles
-                      {storageDiagnostics.corrupt_backups.length ? tr('settings.copy.185', { v0: storageDiagnostics.corrupt_backups.length }) : ''}
-                    </Text>
+                profiles.length ? (
+                  <>
+                    {currentProfile ? (
+                      <SettingsGroup title={tr('accounts.groupCurrent')} highlight testID="settings-account-current">
+                        {accountRow(currentProfile, true)}
+                      </SettingsGroup>
+                    ) : null}
+                    <SettingsGroup
+                      title={otherProfiles.length ? tr('accounts.groupOthers') : undefined}
+                      footer={profileError || (otherProfiles.length ? tr(pointer ? 'accounts.othersFooter' : 'accounts.othersFooterTouch') : undefined)}
+                      footerTone={profileError ? 'danger' : undefined}
+                      testID="settings-account-others"
+                    >
+                      {otherProfiles.map(profile => accountRow(profile, false))}
+                      {show('account', 'addAccount') ? <SettingsRow label={tr('settings.copy.93')} tone="accent" icon="add" onPress={onAddAccount} testID="settings-add-account-row" /> : null}
+                    </SettingsGroup>
+                  </>
+                ) : (
+                  <SettingsGroup>
+                    <SettingsRow label={tr('settings.copy.18')} value={cfg.serverUrl} />
+                    <SettingsRow label={tr('settings.copy.19')} value={me.username ?? cfg.username ?? '—'} />
+                    {show('account', 'addAccount') ? <SettingsRow label={tr('settings.copy.93')} tone="accent" icon="add" onPress={onAddAccount} testID="settings-add-account-row" /> : null}
+                  </SettingsGroup>
+                )
+              ) : show('account', 'addAccount') ? (
+                <SettingsGroup><SettingsRow label={tr('settings.copy.93')} tone="accent" icon="add" onPress={onAddAccount} testID="settings-add-account-row" /></SettingsGroup>
+              ) : null}
+              {(show('account', 'devices') && sessions.available) || show('account', 'switchAccount') ? (
+                <SettingsGroup title={tr('accounts.groupSecurity')} testID="settings-account-security">
+                  {show('account', 'devices') && sessions.available ? (
+                    <SettingsRow
+                      label={tr('sessions.title')}
+                      icon="desktop-outline"
+                      subtitle={tr('sessions.rowHint')}
+                      value={sessions.sessions.length ? tr('sessions.count', { n: sessions.sessions.length }) : undefined}
+                      onPress={() => { setWideDevices(true); if (searching) setQuery(''); paneScrollRef.current?.scrollTo({ y: 0, animated: false }); }}
+                      accessibilityLabel={tr('sessions.title')}
+                      testID="settings-login-devices-row"
+                    />
                   ) : null}
-                </>
+                  {show('account', 'switchAccount') ? (
+                    <SettingsRow label={tr('accounts.switch')} icon="swap-horizontal" subtitle={tr('accounts.switchHint')} value={profiles.length > 1 ? tr('accounts.dataDirValue', { n: profiles.length }) : undefined} onPress={() => setSwitcherOpen(true)} accessibilityLabel={tr('accounts.switch')} testID="settings-switch-account-row" />
+                  ) : null}
+                </SettingsGroup>
               ) : null}
-              {show('account', 'addAccount') ? (
-                <>
-                  <Divider />
-                  <Pressable testID="settings-add-account-row" style={({ pressed }) => [styles.row, pressed && { opacity: 0.6 }]} onPress={onAddAccount} accessibilityRole="button">
-                    <Text style={styles.accentText}>{tr('settings.copy.21')}</Text>
-                    <Ionicons name="chevron-forward" size={16} color={colors.textMuted} />
-                  </Pressable>
-                </>
+              {show('account', 'profiles') && storageDiagnostics ? (
+                <SettingsGroup title={tr('accounts.groupLocalData')} testID="settings-account-local-data">
+                  <SettingsRow
+                    label={tr('accounts.dataDir')}
+                    icon="folder-outline"
+                    subtitle={`${storageDiagnostics.root}${storageDiagnostics.corrupt_backups.length ? tr('settings.copy.185', { v0: storageDiagnostics.corrupt_backups.length }) : ''}`}
+                    value={tr('accounts.dataDirValue', { n: storageDiagnostics.profile_count })}
+                    testID="settings-account-data-dir"
+                  />
+                </SettingsGroup>
               ) : null}
-              {show('account', 'devices') && sessions.available && !compact ? (
-                <>
-                  <Divider />
-                  <Pressable testID="settings-login-devices-row" style={({ pressed }) => [styles.row, pressed && { opacity: 0.6 }]} onPress={() => { setWideDevices(true); if (searching) setQuery(''); paneScrollRef.current?.scrollTo({ y: 0, animated: false }); }} accessibilityRole="button" accessibilityLabel={tr('sessions.title')}>
-                    <View style={styles.rowCopy}>
-                      <Text style={styles.rowLabel}>{tr('sessions.title')}</Text>
-                      <Text style={styles.rowHint}>{tr('sessions.rowHint')}</Text>
-                    </View>
-                    {sessions.sessions.length ? <Text style={styles.rowValue}>{tr('sessions.count', { n: sessions.sessions.length })}</Text> : null}
-                    <Ionicons name="chevron-forward" size={16} color={colors.textMuted} />
-                  </Pressable>
-                </>
-              ) : null}
-              {show('account', 'switchAccount') && !compact ? (
-                <>
-                  <Divider />
-                  <Pressable testID="settings-switch-account-row" style={({ pressed }) => [styles.row, pressed && { opacity: 0.6 }]} onPress={() => setSwitcherOpen(true)} accessibilityRole="button" accessibilityLabel={tr('accounts.switch')}>
-                    <View style={styles.rowCopy}>
-                      <Text style={styles.rowLabel}>{tr('accounts.switch')}</Text>
-                      <Text style={styles.rowHint}>{tr('accounts.switchHint')}</Text>
-                    </View>
-                    <Ionicons name="chevron-forward" size={16} color={colors.textMuted} />
-                  </Pressable>
-                </>
-              ) : null}
-              {show('account', 'logout') && canLogout && !compact ? (
-                <>
-                  <Divider />
-                  <Pressable testID="settings-logout-row" style={({ pressed }) => [styles.row, pressed && { opacity: 0.6 }]} onPress={onLogout} accessibilityRole="button">
-                    <View style={styles.rowCopy}>
-                      <Text style={styles.dangerText}>{tr('settings.copy.22')}</Text>
-                      <Text style={styles.rowHint}>{tr('settings.copy.23')}</Text>
-                    </View>
-                  </Pressable>
-                </>
+              {show('account', 'logout') && canLogout ? (
+                // 危险操作单独最后一组(和上面隔开),整行红字居中。
+                <View testID="settings-account-danger">
+                  <SettingsButton variant="destructive" label={tr('settings.copy.22')} onPress={onLogout} testID="settings-logout-row" />
+                  <SettingsGroup footer={tr('settings.copy.23')} />
+                </View>
               ) : null}
             </View>
           ) : null}
@@ -862,436 +853,453 @@ export default function SettingsScreen({
           {sectionsToRender.includes('users') && usersAvailable ? (
             <View style={sectionStyle} testID="settings-section-users">
               {heading('users')}
-              <UserManagementPanel cfg={cfg} me={authMe} networkId={me.networkId} />
+              <WideCard>
+                <UserManagementPanel cfg={cfg} me={authMe} networkId={me.networkId} />
+              </WideCard>
             </View>
           ) : null}
 
           {sectionsToRender.includes('localHub') && localHub ? (
             <View style={sectionStyle} testID="local-hub-settings-card">
               {heading('localHub')}
-              {show('localHub', 'status') ? <ValueRow label={tr('settings.copy.24')} value={localHub.state === 'running' || localHub.state === 'running_external' ? tr('settings.copy.25') : localHub.state === 'error' ? tr('settings.copy.26') : tr('settings.copy.27')} /> : null}
-              {show('localHub', 'endpoint') ? <><Divider /><ValueRow label={tr('settings.copy.28')} value={localHub.endpoint} /></> : null}
-              {show('localHub', 'hubVersion') ? <><Divider /><ValueRow label={tr('settings.copy.29')} value={localHub.hubVersion} /></> : null}
-              {localHub.error ? <Text style={styles.errorText}>{localHub.error}</Text> : null}
-              {/* app#246(Vincent 2026-09-05「版本低了就加个触发安装的按钮」):本地数据还是旧版 Hub 写的
-                  (requiresMigration)或端口上跑着旧版 sidecar(version mismatch)时,给一个显式的升级入口。
-                  它做的事 = 重新启动:停掉旧 sidecar → 备份 → 迁移 → 用捆绑的 Hub 接管。 */}
-              {(localHub.requiresMigration || (localHub.error ?? '').includes('version mismatch')) && show('localHub', 'restart') ? (
-                <>
-                  <Divider />
-                  <Pressable disabled={localHubBusy} testID="local-hub-upgrade" style={({ pressed }) => [styles.row, pressed && { opacity: 0.6 }]} onPress={() => {
-                    setLocalHubBusy(true);
-                    setProfileError('');
-                    void restartLocalHub().then(setLocalHub).catch(error => setProfileError(String(error))).finally(() => setLocalHubBusy(false));
-                  }}>
-                    <Text style={styles.accentText}>{localHubBusy ? tr('settings.copy.30') : tr('settings.copy.186', { v0: localHub.expectedHubVersion ?? tr('settings.copy.31') })}</Text>
-                  </Pressable>
-                </>
-              ) : null}
-              {show('localHub', 'restart') ? <><Divider /><ActionRow label={tr('settings.copy.32')} hint={tr('settings.copy.33')} busy={localHubBusy} onPress={() => {
-                setLocalHubBusy(true);
-                void restartLocalHub().then(setLocalHub).catch(error => setProfileError(String(error))).finally(() => setLocalHubBusy(false));
-              }} /></> : null}
-              {show('localHub', 'stop') ? <><Divider /><ActionRow label={tr('settings.copy.34')} disabled={localHubBusy || localHub.state === 'stopped'} onPress={() => {
-                setLocalHubBusy(true);
-                void stopLocalHub().then(() => localHubStatus()).then(setLocalHub).catch(error => setProfileError(String(error))).finally(() => setLocalHubBusy(false));
-              }} /></> : null}
-              {show('localHub', 'logs') ? <><Divider /><ActionRow label={tr('settings.copy.35')} onPress={() => { void openLocalHubLogs().catch(error => setProfileError(String(error))); }} /></> : null}
-              {show('localHub', 'backup') ? <><Divider /><ActionRow label={tr('settings.copy.36')} hint={localBackupMessage || undefined} busy={localHubBusy} onPress={() => {
-                setLocalHubBusy(true);
-                setLocalBackupMessage('');
-                void backupLocalHubData().then(result => setLocalBackupMessage(tr('settings.copy.180', { v0: result.path }))).catch(error => setProfileError(String(error))).finally(() => setLocalHubBusy(false));
-              }} /></> : null}
-              {show('localHub', 'deleteLocal') ? (
-                // 唯一的毁灭性动作单独一块:红边、和其它按钮隔开、要输入确认词。
-                <View style={styles.dangerZone} testID="settings-danger-zone">
-                  <Text style={styles.dangerZoneTitle}>{tr('settings.copy.37')}</Text>
-                  <Pressable style={({ pressed }) => [styles.row, styles.dangerZoneRow, pressed && { opacity: 0.6 }]} onPress={() => { setLocalDeleteText(''); setLocalDeleteVisible(true); }} accessibilityRole="button">
-                    <View style={styles.rowCopy}>
-                      <Text style={styles.dangerText}>{tr('settings.copy.38')}</Text>
-                      <Text style={styles.rowHint}>{tr('settings.copy.39')}</Text>
-                    </View>
-                    <Ionicons name="chevron-forward" size={16} color={colors.failed} />
-                  </Pressable>
-                </View>
-              ) : null}
+              <WideCard>
+                {show('localHub', 'status') ? <ValueRow label={tr('settings.copy.24')} value={localHub.state === 'running' || localHub.state === 'running_external' ? tr('settings.copy.25') : localHub.state === 'error' ? tr('settings.copy.26') : tr('settings.copy.27')} /> : null}
+                {show('localHub', 'endpoint') ? <><Divider /><ValueRow label={tr('settings.copy.28')} value={localHub.endpoint} /></> : null}
+                {show('localHub', 'hubVersion') ? <><Divider /><ValueRow label={tr('settings.copy.29')} value={localHub.hubVersion} /></> : null}
+                {localHub.error ? <Text style={styles.errorText}>{localHub.error}</Text> : null}
+                {/* app#246(Vincent 2026-09-05「版本低了就加个触发安装的按钮」):本地数据还是旧版 Hub 写的
+                    (requiresMigration)或端口上跑着旧版 sidecar(version mismatch)时,给一个显式的升级入口。
+                    它做的事 = 重新启动:停掉旧 sidecar → 备份 → 迁移 → 用捆绑的 Hub 接管。 */}
+                {(localHub.requiresMigration || (localHub.error ?? '').includes('version mismatch')) && show('localHub', 'restart') ? (
+                  <>
+                    <Divider />
+                    <Pressable disabled={localHubBusy} testID="local-hub-upgrade" style={({ pressed }) => [styles.row, pressed && { opacity: 0.6 }]} onPress={() => {
+                      setLocalHubBusy(true);
+                      setProfileError('');
+                      void restartLocalHub().then(setLocalHub).catch(error => setProfileError(String(error))).finally(() => setLocalHubBusy(false));
+                    }}>
+                      <Text style={styles.accentText}>{localHubBusy ? tr('settings.copy.30') : tr('settings.copy.186', { v0: localHub.expectedHubVersion ?? tr('settings.copy.31') })}</Text>
+                    </Pressable>
+                  </>
+                ) : null}
+                {show('localHub', 'restart') ? <><Divider /><ActionRow label={tr('settings.copy.32')} hint={tr('settings.copy.33')} busy={localHubBusy} onPress={() => {
+                  setLocalHubBusy(true);
+                  void restartLocalHub().then(setLocalHub).catch(error => setProfileError(String(error))).finally(() => setLocalHubBusy(false));
+                }} /></> : null}
+                {show('localHub', 'stop') ? <><Divider /><ActionRow label={tr('settings.copy.34')} disabled={localHubBusy || localHub.state === 'stopped'} onPress={() => {
+                  setLocalHubBusy(true);
+                  void stopLocalHub().then(() => localHubStatus()).then(setLocalHub).catch(error => setProfileError(String(error))).finally(() => setLocalHubBusy(false));
+                }} /></> : null}
+                {show('localHub', 'logs') ? <><Divider /><ActionRow label={tr('settings.copy.35')} onPress={() => { void openLocalHubLogs().catch(error => setProfileError(String(error))); }} /></> : null}
+                {show('localHub', 'backup') ? <><Divider /><ActionRow label={tr('settings.copy.36')} hint={localBackupMessage || undefined} busy={localHubBusy} onPress={() => {
+                  setLocalHubBusy(true);
+                  setLocalBackupMessage('');
+                  void backupLocalHubData().then(result => setLocalBackupMessage(tr('settings.copy.180', { v0: result.path }))).catch(error => setProfileError(String(error))).finally(() => setLocalHubBusy(false));
+                }} /></> : null}
+                {show('localHub', 'deleteLocal') ? (
+                  // 唯一的毁灭性动作单独一块:红边、和其它按钮隔开、要输入确认词。
+                  <View style={styles.dangerZone} testID="settings-danger-zone">
+                    <Text style={styles.dangerZoneTitle}>{tr('settings.copy.37')}</Text>
+                    <Pressable style={({ pressed }) => [styles.row, styles.dangerZoneRow, pressed && { opacity: 0.6 }]} onPress={() => { setLocalDeleteText(''); setLocalDeleteVisible(true); }} accessibilityRole="button">
+                      <View style={styles.rowCopy}>
+                        <Text style={styles.dangerText}>{tr('settings.copy.38')}</Text>
+                        <Text style={styles.rowHint}>{tr('settings.copy.39')}</Text>
+                      </View>
+                      <Ionicons name="chevron-forward" size={16} color={colors.failed} />
+                    </Pressable>
+                  </View>
+                ) : null}
+              </WideCard>
             </View>
           ) : null}
 
           {sectionsToRender.includes('appearance') ? (
             <View style={sectionStyle}>
               {heading('appearance')}
-              {show('appearance', 'theme') ? (
-                // 0.2.101:三选一分段控件(浅色 / 深色 / 跟随系统)。说明行写明当前生效的主题。
-                <View style={[styles.row, styles.themeRow]} testID="settings-theme-row">
-                  <View style={[styles.rowCopy, styles.themeRowCopy]}>
-                    <Text style={styles.rowLabel}>{tr('settings.copy.40')}</Text>
-                    <Text style={styles.rowHint} testID="settings-theme-summary">{localizedThemeSummary(themeSnap.pref, themeSnap.mode)}</Text>
+              <WideCard>
+                {show('appearance', 'theme') ? (
+                  // 0.2.101:三选一分段控件(浅色 / 深色 / 跟随系统)。说明行写明当前生效的主题。
+                  <View style={[styles.row, styles.themeRow]} testID="settings-theme-row">
+                    <View style={[styles.rowCopy, styles.themeRowCopy]}>
+                      <Text style={styles.rowLabel}>{tr('settings.copy.40')}</Text>
+                      <Text style={styles.rowHint} testID="settings-theme-summary">{localizedThemeSummary(themeSnap.pref, themeSnap.mode)}</Text>
+                    </View>
+                    <View style={styles.segmented} accessibilityRole="radiogroup" accessibilityLabel={tr('settings.copy.40')}>
+                      {THEME_PREFERENCES.map(option => {
+                        const selected = themeSnap.pref === option;
+                        return (
+                          <Pressable
+                            key={option}
+                            accessibilityRole="radio"
+                            accessibilityState={{ selected, checked: selected }}
+                            accessibilityLabel={settingsText(THEME_PREFERENCE_LABEL[option])}
+                            testID={`settings-theme-${option}`}
+                            style={({ pressed }) => [styles.segment, selected && styles.segmentSelected, pressed && !selected && { opacity: 0.6 }]}
+                            onPress={() => {
+                              if (selected) return;
+                              setThemePreference(option);
+                              void saveThemeMode(option);
+                            }}
+                          >
+                            <Text style={[styles.segmentText, selected && styles.segmentTextSelected]} numberOfLines={1}>{settingsText(THEME_PREFERENCE_LABEL[option])}</Text>
+                          </Pressable>
+                        );
+                      })}
+                    </View>
                   </View>
-                  <View style={styles.segmented} accessibilityRole="radiogroup" accessibilityLabel={tr('settings.copy.40')}>
-                    {THEME_PREFERENCES.map(option => {
-                      const selected = themeSnap.pref === option;
-                      return (
-                        <Pressable
-                          key={option}
-                          accessibilityRole="radio"
-                          accessibilityState={{ selected, checked: selected }}
-                          accessibilityLabel={settingsText(THEME_PREFERENCE_LABEL[option])}
-                          testID={`settings-theme-${option}`}
-                          style={({ pressed }) => [styles.segment, selected && styles.segmentSelected, pressed && !selected && { opacity: 0.6 }]}
-                          onPress={() => {
-                            if (selected) return;
-                            setThemePreference(option);
-                            void saveThemeMode(option);
-                          }}
-                        >
-                          <Text style={[styles.segmentText, selected && styles.segmentTextSelected]} numberOfLines={1}>{settingsText(THEME_PREFERENCE_LABEL[option])}</Text>
-                        </Pressable>
-                      );
-                    })}
-                  </View>
-                </View>
-              ) : null}
+                ) : null}
+              </WideCard>
+              {/* 语言本身就是一组积木卡片(LanguageSettings):放在两张卡中间,不套进卡里。 */}
               {show('appearance', 'language') ? <LanguageSettings /> : null}
-              {/* 字体大小 / 界面密度 + 预览 + 恢复默认 (src/UiScaleSettings.tsx, src/ui-scale.ts). */}
-              <UiScaleSettings s={styles} showFont={show('appearance', 'fontSize')} showDensity={show('appearance', 'density')} />
+              <WideCard>
+                {/* 字体大小 / 界面密度 + 预览 + 恢复默认 (src/UiScaleSettings.tsx, src/ui-scale.ts). */}
+                <UiScaleSettings s={styles} showFont={show('appearance', 'fontSize')} showDensity={show('appearance', 'density')} />
+              </WideCard>
             </View>
           ) : null}
 
           {sectionsToRender.includes('notifications') ? (
             <View style={sectionStyle} testID="notify-settings-card">
               {heading('notifications')}
-              {show('notifications', 'enabled') ? (
-                <>
-                  <View style={styles.row} testID="notify-enabled-row">
-                    <View style={styles.rowCopy}>
-                      <Text style={styles.rowLabel}>{tr('settings.copy.41')}</Text>
-                      <Text style={styles.rowHint}>{tr('settings.copy.42')}</Text>
-                      {nativeNotify && notify.enabled && permission && permission.status !== 'granted' ? (
-                        <Pressable accessibilityRole="button" onPress={() => { void ensurePermission(); }} testID="notify-permission-fix">
-                          <Text style={[styles.rowHint, { color: colors.failed }]}>{tr('settings.copy.43')}</Text>
-                        </Pressable>
-                      ) : null}
-                    </View>
-                    <Switch
-                      accessibilityLabel={tr('settings.copy.41')}
-                      value={notify.enabled}
-                      onValueChange={value => {
-                        saveNotify({ ...notify, enabled: value });
-                        if (value) void ensurePermission();
-                      }}
-                      trackColor={{ true: colors.accent, false: colors.border }}
-                      thumbColor={colors.card}
-                    />
-                  </View>
-                  <Divider />
-                </>
-              ) : null}
-              {show('notifications', 'mode') ? (
-                <>
-                  <View style={[styles.row, styles.themeRow, !notify.enabled && styles.disabled]} testID="notify-mode-row">
-                    <View style={[styles.rowCopy, styles.themeRowCopy]}>
-                      <Text style={styles.rowLabel}>{tr('settings.copy.44')}</Text>
-                      <Text style={styles.rowHint}>{notify.mode === 'new' ? tr('settings.copy.45') : tr('settings.copy.46')}</Text>
-                    </View>
-                    <View style={styles.segmented} accessibilityRole="radiogroup">
-                      {([['all', tr('settings.copy.47')], ['new', tr('settings.copy.48')]] as const).map(([mode, label]) => (
-                        <Pressable
-                          key={mode}
-                          accessibilityRole="radio"
-                          accessibilityState={{ selected: notify.mode === mode, disabled: !notify.enabled }}
-                          disabled={!notify.enabled}
-                          onPress={() => saveNotify({ ...notify, mode })}
-                          style={[styles.segment, notify.mode === mode && styles.segmentSelected]}
-                          testID={`notify-mode-${mode}`}
-                        >
-                          <Text style={[styles.segmentText, notify.mode === mode && styles.segmentTextSelected]}>{label}</Text>
-                        </Pressable>
-                      ))}
-                    </View>
-                  </View>
-                  <Divider />
-                </>
-              ) : null}
-              {show('notifications', 'sound') ? (
-                <View style={styles.row}>
-                  <View style={styles.rowCopy}>
-                    <Text style={styles.rowLabel}>{tr('settings.copy.49')}</Text>
-                    <Text style={styles.rowHint}>{tr('settings.copy.50')}</Text>
-                  </View>
-                  <Switch
-                    accessibilityLabel={tr('settings.copy.49')}
-                    value={notify.soundEnabled}
-                    onValueChange={value => {
-                      const next = { ...notify, soundEnabled: value };
-                      saveNotifySettings(next);
-                      if (value) playChime();
-                    }}
-                    trackColor={{ true: colors.accent, false: colors.border }}
-                    thumbColor={colors.card}
-                  />
-                </View>
-              ) : null}
-              {show('notifications', 'quiet') ? (
-                <>
-                  <Divider />
-                  <View style={styles.row}>
-                    <View style={styles.rowCopy}>
-                      <Text style={styles.rowLabel}>{tr('settings.copy.51')}</Text>
-                      <Text style={styles.rowHint}>{notify.quiet.enabled ? tr('settings.copy.187', { v0: notify.quiet.start, v1: notify.quiet.end }) : tr('settings.copy.52')}</Text>
-                    </View>
-                    <Switch
-                      accessibilityLabel={tr('settings.copy.51')}
-                      value={notify.quiet.enabled}
-                      onValueChange={value => { saveNotifySettings({ ...notify, quiet: { ...notify.quiet, enabled: value } }); }}
-                      trackColor={{ true: colors.accent, false: colors.border }}
-                      thumbColor={colors.card}
-                    />
-                  </View>
-                  {notify.quiet.enabled ? (
-                    <View style={[styles.row, styles.quietRow]}>
-                      <Text style={styles.rowLabel}>{tr('settings.copy.53')}</Text>
-                      <TextInput
-                        accessibilityLabel={tr('settings.copy.54')}
-                        style={styles.quietInput}
-                        value={quietStart}
-                        onChangeText={setQuietStart}
-                        onBlur={() => saveNotifySettings({ ...notify, quiet: { ...notify.quiet, start: quietStart } })}
-                        placeholder="22:00"
-                        placeholderTextColor={colors.textMuted}
-                      />
-                      <Text style={styles.rowLabel}>{tr('settings.copy.55')}</Text>
-                      <TextInput
-                        accessibilityLabel={tr('settings.copy.56')}
-                        style={styles.quietInput}
-                        value={quietEnd}
-                        onChangeText={setQuietEnd}
-                        onBlur={() => saveNotifySettings({ ...notify, quiet: { ...notify.quiet, end: quietEnd } })}
-                        placeholder="08:00"
-                        placeholderTextColor={colors.textMuted}
-                      />
-                    </View>
-                  ) : null}
-                </>
-              ) : null}
-              {show('notifications', 'muted') ? (
-                <>
-                  <Divider />
-                  <View style={[styles.row, { alignItems: 'flex-start' }]} testID="notify-muted-row">
-                    <View style={styles.rowCopy}>
-                      <Text style={styles.rowLabel}>{tr('settings.copy.57')}</Text>
-                      <Text style={styles.rowHint}>{muted.length ? tr('settings.copy.58') : (nativeNotify ? tr('settings.copy.59') : tr('settings.copy.60'))}</Text>
-                      {muted.map(alias => (
-                        <View key={alias} style={styles.mutedItem}>
-                          <Text style={styles.rowValue} numberOfLines={1}>{alias}</Text>
-                          <Pressable accessibilityRole="button" accessibilityLabel={tr('settings.copy.188', { v0: alias })} onPress={() => saveNotify(toggleAgentMuted(notify, notifyKey, alias))} hitSlop={6}>
-                            <Text style={styles.accentText}>{tr('settings.copy.61')}</Text>
+              <WideCard>
+                {show('notifications', 'enabled') ? (
+                  <>
+                    <View style={styles.row} testID="notify-enabled-row">
+                      <View style={styles.rowCopy}>
+                        <Text style={styles.rowLabel}>{tr('settings.copy.41')}</Text>
+                        <Text style={styles.rowHint}>{tr('settings.copy.42')}</Text>
+                        {nativeNotify && notify.enabled && permission && permission.status !== 'granted' ? (
+                          <Pressable accessibilityRole="button" onPress={() => { void ensurePermission(); }} testID="notify-permission-fix">
+                            <Text style={[styles.rowHint, { color: colors.failed }]}>{tr('settings.copy.43')}</Text>
                           </Pressable>
-                        </View>
-                      ))}
+                        ) : null}
+                      </View>
+                      <Switch
+                        accessibilityLabel={tr('settings.copy.41')}
+                        value={notify.enabled}
+                        onValueChange={value => {
+                          saveNotify({ ...notify, enabled: value });
+                          if (value) void ensurePermission();
+                        }}
+                        trackColor={{ true: colors.accent, false: colors.border }}
+                        thumbColor={colors.card}
+                      />
                     </View>
-                  </View>
-                </>
-              ) : null}
-              {show('notifications', 'keepAlive') ? (
-                <>
-                  <Divider />
-                  <View style={styles.row} testID="notify-keepalive-row">
-                    <View style={styles.rowCopy}>
-                      <Text style={styles.rowLabel}>{tr('settings.copy.62')}</Text>
-                      <Text style={styles.rowHint}>{tr('settings.copy.63')}</Text>
-                      {keepAliveStatusText(notify, keepAliveState) ? (
-                        <Text style={[styles.rowHint, keepAliveState.error ? { color: colors.failed } : null]} testID="notify-keepalive-status">{keepAliveStatusText(notify, keepAliveState)}</Text>
-                      ) : null}
+                    <Divider />
+                  </>
+                ) : null}
+                {show('notifications', 'mode') ? (
+                  <>
+                    <View style={[styles.row, styles.themeRow, !notify.enabled && styles.disabled]} testID="notify-mode-row">
+                      <View style={[styles.rowCopy, styles.themeRowCopy]}>
+                        <Text style={styles.rowLabel}>{tr('settings.copy.44')}</Text>
+                        <Text style={styles.rowHint}>{notify.mode === 'new' ? tr('settings.copy.45') : tr('settings.copy.46')}</Text>
+                      </View>
+                      <View style={styles.segmented} accessibilityRole="radiogroup">
+                        {([['all', tr('settings.copy.47')], ['new', tr('settings.copy.48')]] as const).map(([mode, label]) => (
+                          <Pressable
+                            key={mode}
+                            accessibilityRole="radio"
+                            accessibilityState={{ selected: notify.mode === mode, disabled: !notify.enabled }}
+                            disabled={!notify.enabled}
+                            onPress={() => saveNotify({ ...notify, mode })}
+                            style={[styles.segment, notify.mode === mode && styles.segmentSelected]}
+                            testID={`notify-mode-${mode}`}
+                          >
+                            <Text style={[styles.segmentText, notify.mode === mode && styles.segmentTextSelected]}>{label}</Text>
+                          </Pressable>
+                        ))}
+                      </View>
                     </View>
-                    <Switch
-                      accessibilityLabel={tr('settings.copy.62')}
-                      value={notify.keepAlive}
-                      disabled={!notify.enabled || !keepAliveState.available}
-                      onValueChange={value => {
-                        saveNotify({ ...notify, keepAlive: value });
-                        setTimeout(() => bumpKeepAlive(n => n + 1), 1500);
-                      }}
-                      trackColor={{ true: colors.accent, false: colors.border }}
-                      thumbColor={colors.card}
-                    />
-                  </View>
-                </>
-              ) : null}
-              {show('notifications', 'dndBypass') ? (
-                <>
-                  <Divider />
-                  <View style={styles.row} testID="notify-dnd-row">
-                    <View style={styles.rowCopy}>
-                      <Text style={styles.rowLabel}>{tr('settings.copy.64')}</Text>
-                      <Text style={styles.rowHint}>{tr('settings.copy.65')}</Text>
-                      {notify.dndBypass && dndAccess === false ? (
-                        <Pressable accessibilityRole="button" onPress={() => { void openDndAccessSettings(); }} testID="notify-dnd-grant">
-                          <Text style={[styles.rowHint, { color: colors.failed }]}>{tr('settings.copy.66')}</Text>
-                        </Pressable>
-                      ) : notify.dndBypass && dndAccess === true ? (
-                        <Text style={styles.rowHint}>{tr('settings.copy.67')}</Text>
-                      ) : null}
-                    </View>
-                    <Switch
-                      accessibilityLabel={tr('settings.copy.64')}
-                      value={notify.dndBypass}
-                      disabled={!notify.enabled}
-                      onValueChange={value => {
-                        saveNotify({ ...notify, dndBypass: value });
-                        if (value && dndAccessGranted() === false) void openDndAccessSettings();
-                      }}
-                      trackColor={{ true: colors.accent, false: colors.border }}
-                      thumbColor={colors.card}
-                    />
-                  </View>
-                </>
-              ) : null}
-              {show('notifications', 'xiaomiGuide') ? (
-                <>
-                  <Divider />
-                  <Pressable style={({ pressed }) => [styles.row, pressed && { opacity: 0.6 }]} onPress={() => setGuideVisible(true)} accessibilityRole="button" testID="notify-xiaomi-guide">
-                    <View style={styles.rowCopy}>
-                      <Text style={styles.rowLabel}>{tr('settings.copy.68')}</Text>
-                      <Text style={styles.rowHint}>{tr('settings.copy.69')}</Text>
-                    </View>
-                    <Ionicons name="chevron-forward" size={16} color={colors.textMuted} />
-                  </Pressable>
-                </>
-              ) : null}
-              {show('notifications', 'test') ? (
-                <>
-                  <Divider />
-                  <View style={styles.row} testID="notify-test-row">
-                    <View style={styles.rowCopy}>
-                      <Text style={styles.rowLabel}>{tr('settings.copy.70')}</Text>
-                      <Text style={styles.rowHint}>{testMessage || tr('settings.copy.71')}</Text>
-                    </View>
-                    <Pressable
-                      accessibilityRole="button"
-                      accessibilityLabel={tr('settings.copy.70')}
-                      onPress={() => {
-                        void (async () => {
-                          if (!(await ensurePermission())) { setTestMessage(tr('settings.copy.8')); return; }
-                          try { await sendTestNotification(); setTestMessage(tr('settings.copy.9')); }
-                          catch (e) { setTestMessage(tr('settings.copy.181', { v0: String((e as Error)?.message ?? e) })); }
-                        })();
-                      }}
-                      style={({ pressed }) => [styles.actionButton, pressed && { opacity: 0.6 }]}
-                    >
-                      <Text style={styles.actionButtonText}>{tr('settings.copy.72')}</Text>
-                    </Pressable>
-                  </View>
-                </>
-              ) : null}
-              {show('notifications', 'diagnostics') ? (
-                <>
-                  <Divider />
+                    <Divider />
+                  </>
+                ) : null}
+                {show('notifications', 'sound') ? (
                   <View style={styles.row}>
                     <View style={styles.rowCopy}>
-                      <Text style={styles.rowLabel}>{tr('settings.copy.73')}</Text>
-                      <Text style={styles.rowHint}>{tr('settings.copy.74')}</Text>
+                      <Text style={styles.rowLabel}>{tr('settings.copy.49')}</Text>
+                      <Text style={styles.rowHint}>{tr('settings.copy.50')}</Text>
                     </View>
+                    <Switch
+                      accessibilityLabel={tr('settings.copy.49')}
+                      value={notify.soundEnabled}
+                      onValueChange={value => {
+                        const next = { ...notify, soundEnabled: value };
+                        saveNotifySettings(next);
+                        if (value) playChime();
+                      }}
+                      trackColor={{ true: colors.accent, false: colors.border }}
+                      thumbColor={colors.card}
+                    />
                   </View>
-                  {notifyPreview ? null : <NotifyDiagnosticsPanel />}
-                </>
-              ) : null}
-              {!searching ? <><Divider /><Text style={styles.footHint}>{nativeNotify ? tr('settings.copy.75') : tr('settings.copy.76')}</Text></> : null}
+                ) : null}
+                {show('notifications', 'quiet') ? (
+                  <>
+                    <Divider />
+                    <View style={styles.row}>
+                      <View style={styles.rowCopy}>
+                        <Text style={styles.rowLabel}>{tr('settings.copy.51')}</Text>
+                        <Text style={styles.rowHint}>{notify.quiet.enabled ? tr('settings.copy.187', { v0: notify.quiet.start, v1: notify.quiet.end }) : tr('settings.copy.52')}</Text>
+                      </View>
+                      <Switch
+                        accessibilityLabel={tr('settings.copy.51')}
+                        value={notify.quiet.enabled}
+                        onValueChange={value => { saveNotifySettings({ ...notify, quiet: { ...notify.quiet, enabled: value } }); }}
+                        trackColor={{ true: colors.accent, false: colors.border }}
+                        thumbColor={colors.card}
+                      />
+                    </View>
+                    {notify.quiet.enabled ? (
+                      <View style={[styles.row, styles.quietRow]}>
+                        <Text style={styles.rowLabel}>{tr('settings.copy.53')}</Text>
+                        <TextInput
+                          accessibilityLabel={tr('settings.copy.54')}
+                          style={styles.quietInput}
+                          value={quietStart}
+                          onChangeText={setQuietStart}
+                          onBlur={() => saveNotifySettings({ ...notify, quiet: { ...notify.quiet, start: quietStart } })}
+                          placeholder="22:00"
+                          placeholderTextColor={colors.textMuted}
+                        />
+                        <Text style={styles.rowLabel}>{tr('settings.copy.55')}</Text>
+                        <TextInput
+                          accessibilityLabel={tr('settings.copy.56')}
+                          style={styles.quietInput}
+                          value={quietEnd}
+                          onChangeText={setQuietEnd}
+                          onBlur={() => saveNotifySettings({ ...notify, quiet: { ...notify.quiet, end: quietEnd } })}
+                          placeholder="08:00"
+                          placeholderTextColor={colors.textMuted}
+                        />
+                      </View>
+                    ) : null}
+                  </>
+                ) : null}
+                {show('notifications', 'muted') ? (
+                  <>
+                    <Divider />
+                    <View style={[styles.row, { alignItems: 'flex-start' }]} testID="notify-muted-row">
+                      <View style={styles.rowCopy}>
+                        <Text style={styles.rowLabel}>{tr('settings.copy.57')}</Text>
+                        <Text style={styles.rowHint}>{muted.length ? tr('settings.copy.58') : (nativeNotify ? tr('settings.copy.59') : tr('settings.copy.60'))}</Text>
+                        {muted.map(alias => (
+                          <View key={alias} style={styles.mutedItem}>
+                            <Text style={styles.rowValue} numberOfLines={1}>{alias}</Text>
+                            <Pressable accessibilityRole="button" accessibilityLabel={tr('settings.copy.188', { v0: alias })} onPress={() => saveNotify(toggleAgentMuted(notify, notifyKey, alias))} hitSlop={6}>
+                              <Text style={styles.accentText}>{tr('settings.copy.61')}</Text>
+                            </Pressable>
+                          </View>
+                        ))}
+                      </View>
+                    </View>
+                  </>
+                ) : null}
+                {show('notifications', 'keepAlive') ? (
+                  <>
+                    <Divider />
+                    <View style={styles.row} testID="notify-keepalive-row">
+                      <View style={styles.rowCopy}>
+                        <Text style={styles.rowLabel}>{tr('settings.copy.62')}</Text>
+                        <Text style={styles.rowHint}>{tr('settings.copy.63')}</Text>
+                        {keepAliveStatusText(notify, keepAliveState) ? (
+                          <Text style={[styles.rowHint, keepAliveState.error ? { color: colors.failed } : null]} testID="notify-keepalive-status">{keepAliveStatusText(notify, keepAliveState)}</Text>
+                        ) : null}
+                      </View>
+                      <Switch
+                        accessibilityLabel={tr('settings.copy.62')}
+                        value={notify.keepAlive}
+                        disabled={!notify.enabled || !keepAliveState.available}
+                        onValueChange={value => {
+                          saveNotify({ ...notify, keepAlive: value });
+                          setTimeout(() => bumpKeepAlive(n => n + 1), 1500);
+                        }}
+                        trackColor={{ true: colors.accent, false: colors.border }}
+                        thumbColor={colors.card}
+                      />
+                    </View>
+                  </>
+                ) : null}
+                {show('notifications', 'dndBypass') ? (
+                  <>
+                    <Divider />
+                    <View style={styles.row} testID="notify-dnd-row">
+                      <View style={styles.rowCopy}>
+                        <Text style={styles.rowLabel}>{tr('settings.copy.64')}</Text>
+                        <Text style={styles.rowHint}>{tr('settings.copy.65')}</Text>
+                        {notify.dndBypass && dndAccess === false ? (
+                          <Pressable accessibilityRole="button" onPress={() => { void openDndAccessSettings(); }} testID="notify-dnd-grant">
+                            <Text style={[styles.rowHint, { color: colors.failed }]}>{tr('settings.copy.66')}</Text>
+                          </Pressable>
+                        ) : notify.dndBypass && dndAccess === true ? (
+                          <Text style={styles.rowHint}>{tr('settings.copy.67')}</Text>
+                        ) : null}
+                      </View>
+                      <Switch
+                        accessibilityLabel={tr('settings.copy.64')}
+                        value={notify.dndBypass}
+                        disabled={!notify.enabled}
+                        onValueChange={value => {
+                          saveNotify({ ...notify, dndBypass: value });
+                          if (value && dndAccessGranted() === false) void openDndAccessSettings();
+                        }}
+                        trackColor={{ true: colors.accent, false: colors.border }}
+                        thumbColor={colors.card}
+                      />
+                    </View>
+                  </>
+                ) : null}
+                {show('notifications', 'xiaomiGuide') ? (
+                  <>
+                    <Divider />
+                    <Pressable style={({ pressed }) => [styles.row, pressed && { opacity: 0.6 }]} onPress={() => setGuideVisible(true)} accessibilityRole="button" testID="notify-xiaomi-guide">
+                      <View style={styles.rowCopy}>
+                        <Text style={styles.rowLabel}>{tr('settings.copy.68')}</Text>
+                        <Text style={styles.rowHint}>{tr('settings.copy.69')}</Text>
+                      </View>
+                      <Ionicons name="chevron-forward" size={16} color={colors.textMuted} />
+                    </Pressable>
+                  </>
+                ) : null}
+                {show('notifications', 'test') ? (
+                  <>
+                    <Divider />
+                    <View style={styles.row} testID="notify-test-row">
+                      <View style={styles.rowCopy}>
+                        <Text style={styles.rowLabel}>{tr('settings.copy.70')}</Text>
+                        <Text style={styles.rowHint}>{testMessage || tr('settings.copy.71')}</Text>
+                      </View>
+                      <Pressable
+                        accessibilityRole="button"
+                        accessibilityLabel={tr('settings.copy.70')}
+                        onPress={() => {
+                          void (async () => {
+                            if (!(await ensurePermission())) { setTestMessage(tr('settings.copy.8')); return; }
+                            try { await sendTestNotification(); setTestMessage(tr('settings.copy.9')); }
+                            catch (e) { setTestMessage(tr('settings.copy.181', { v0: String((e as Error)?.message ?? e) })); }
+                          })();
+                        }}
+                        style={({ pressed }) => [styles.actionButton, pressed && { opacity: 0.6 }]}
+                      >
+                        <Text style={styles.actionButtonText}>{tr('settings.copy.72')}</Text>
+                      </Pressable>
+                    </View>
+                  </>
+                ) : null}
+                {show('notifications', 'diagnostics') ? (
+                  <>
+                    <Divider />
+                    <View style={styles.row}>
+                      <View style={styles.rowCopy}>
+                        <Text style={styles.rowLabel}>{tr('settings.copy.73')}</Text>
+                        <Text style={styles.rowHint}>{tr('settings.copy.74')}</Text>
+                      </View>
+                    </View>
+                    {notifyPreview ? null : <NotifyDiagnosticsPanel />}
+                  </>
+                ) : null}
+                {!searching ? <><Divider /><Text style={styles.footHint}>{nativeNotify ? tr('settings.copy.75') : tr('settings.copy.76')}</Text></> : null}
+              </WideCard>
             </View>
           ) : null}
 
           {sectionsToRender.includes('voice') ? (
             <View style={sectionStyle} testID="settings-section-voice">
               {heading('voice')}
-              <VoiceSettingsSection showMode={show('voice', 'mode')} showCredentials={show('voice', 'credentials')} showMic={show('voice', 'mic')} showTest={show('voice', 'test')} />
+              <WideCard>
+                <VoiceSettingsSection showMode={show('voice', 'mode')} showCredentials={show('voice', 'credentials')} showMic={show('voice', 'mic')} showTest={show('voice', 'test')} />
+              </WideCard>
             </View>
           ) : null}
 
           {sectionsToRender.includes('shortcuts') ? (
             <View style={styles.section} testID="settings-section-shortcuts">
               {heading('shortcuts')}
-              <ShortcutsSettings s={styles} showNav={show('shortcuts', 'nav')} showChat={show('shortcuts', 'chat')} showSend={show('shortcuts', 'send')} />
+              <WideCard>
+                <ShortcutsSettings s={styles} showNav={show('shortcuts', 'nav')} showChat={show('shortcuts', 'chat')} showSend={show('shortcuts', 'send')} />
+              </WideCard>
             </View>
           ) : null}
 
           {sectionsToRender.includes('about') && !showWideChangelog ? (
             <View style={sectionStyle}>
               {heading('about')}
-              {show('about', 'version') ? <ValueRow label={tr('settings.copy.77')} value={`v${APP_VERSION}`} /> : null}
-              {show('about', 'update') ? (
-                <>
-                  <Divider />
-                  {(() => {
-                    // 「点击更新好像没用」:每次手动检查都要落到一句看得见、和上一次不同的话上
-                    // (版本号 + 刚刚检查 / 失败原因),而不是闪一下转圈又回到同一句。
-                    const view = isIOS ? IOS_UPDATE_ROW : isAndroid
-                      ? describeAndroidUpdateRow(androidUpdate, { currentVersion: APP_VERSION, lastCheckedAt: androidUpdateLastCheckedAt(), now: Date.now() })
-                      : describeUpdateRow(update, { currentVersion: APP_VERSION, lastCheckedAt: desktopUpdateLastCheckedAt(), now: Date.now() });
-                    const valueColor = view.tone === 'danger' ? colors.failed : view.tone === 'accent' ? colors.accent : colors.textSecondary;
-                    return (
-                      <Pressable
-                        testID="settings-update-row"
-                        style={({ pressed }) => [styles.row, pressed && view.actionable && { opacity: 0.6 }]}
-                        onPress={() => {
-                          if (!view.actionable) return;
-                          if (isIOS) void openTestFlight(Linking);
-                          else if (isAndroid) void checkAndroidUpdate(APP_VERSION);
-                          else void checkDesktopUpdate(undefined, { manual: true });
-                        }}
-                        disabled={!view.actionable}
-                        accessibilityRole="button"
-                        accessibilityState={{ busy: view.busy, disabled: !view.actionable }}
-                      >
-                        <Text style={styles.rowLabel}>{tr('settings.copy.78')}</Text>
-                        <View style={{ alignItems: 'flex-end', flexShrink: 1, marginLeft: 12 }}>
-                          <View style={styles.dropdownValue}>
-                            {view.busy ? <ActivityIndicator size="small" color={colors.accent} style={{ marginRight: 6 }} /> : null}
-                            <Text testID="settings-update-label" style={[styles.rowValue, { color: valueColor }]} numberOfLines={2}>{view.label}</Text>
-                            {view.actionable && !view.busy ? <Ionicons name="chevron-forward" size={14} color={colors.textSecondary} /> : null}
+              <WideCard>
+                {show('about', 'version') ? <ValueRow label={tr('settings.copy.77')} value={`v${APP_VERSION}`} /> : null}
+                {show('about', 'update') ? (
+                  <>
+                    <Divider />
+                    {(() => {
+                      // 「点击更新好像没用」:每次手动检查都要落到一句看得见、和上一次不同的话上
+                      // (版本号 + 刚刚检查 / 失败原因),而不是闪一下转圈又回到同一句。
+                      const view = isIOS ? IOS_UPDATE_ROW : isAndroid
+                        ? describeAndroidUpdateRow(androidUpdate, { currentVersion: APP_VERSION, lastCheckedAt: androidUpdateLastCheckedAt(), now: Date.now() })
+                        : describeUpdateRow(update, { currentVersion: APP_VERSION, lastCheckedAt: desktopUpdateLastCheckedAt(), now: Date.now() });
+                      const valueColor = view.tone === 'danger' ? colors.failed : view.tone === 'accent' ? colors.accent : colors.textSecondary;
+                      return (
+                        <Pressable
+                          testID="settings-update-row"
+                          style={({ pressed }) => [styles.row, pressed && view.actionable && { opacity: 0.6 }]}
+                          onPress={() => {
+                            if (!view.actionable) return;
+                            if (isIOS) void openTestFlight(Linking);
+                            else if (isAndroid) void checkAndroidUpdate(APP_VERSION);
+                            else void checkDesktopUpdate(undefined, { manual: true });
+                          }}
+                          disabled={!view.actionable}
+                          accessibilityRole="button"
+                          accessibilityState={{ busy: view.busy, disabled: !view.actionable }}
+                        >
+                          <Text style={styles.rowLabel}>{tr('settings.copy.78')}</Text>
+                          <View style={{ alignItems: 'flex-end', flexShrink: 1, marginLeft: 12 }}>
+                            <View style={styles.dropdownValue}>
+                              {view.busy ? <ActivityIndicator size="small" color={colors.accent} style={{ marginRight: 6 }} /> : null}
+                              <Text testID="settings-update-label" style={[styles.rowValue, { color: valueColor }]} numberOfLines={2}>{view.label}</Text>
+                              {view.actionable && !view.busy ? <Ionicons name="chevron-forward" size={14} color={colors.textSecondary} /> : null}
+                            </View>
+                            {view.detail ? <Text testID="settings-update-detail" style={[styles.rowValue, { fontSize: 11, color: colors.textMuted, marginTop: 2 }]}>{view.detail}</Text> : null}
                           </View>
-                          {view.detail ? <Text testID="settings-update-detail" style={[styles.rowValue, { fontSize: 11, color: colors.textMuted, marginTop: 2 }]}>{view.detail}</Text> : null}
-                        </View>
-                      </Pressable>
-                    );
-                  })()}
-                </>
-              ) : null}
-              {show('about', 'changelog') ? (
-                <>
-                  <Divider />
-                  <Pressable testID="settings-changelog-row" style={({ pressed }) => [styles.row, pressed && { opacity: 0.6 }]} onPress={() => { setWideChangelog(true); paneScrollRef.current?.scrollTo({ y: 0, animated: false }); }} accessibilityRole="button">
-                    <View style={styles.rowCopy}>
-                      <Text style={styles.rowLabel}>{tr('changelog.title')}</Text>
-                      <Text style={styles.rowHint}>{tr('changelog.rowHint')}</Text>
+                        </Pressable>
+                      );
+                    })()}
+                  </>
+                ) : null}
+                {show('about', 'changelog') ? (
+                  <>
+                    <Divider />
+                    <Pressable testID="settings-changelog-row" style={({ pressed }) => [styles.row, pressed && { opacity: 0.6 }]} onPress={() => { setWideChangelog(true); paneScrollRef.current?.scrollTo({ y: 0, animated: false }); }} accessibilityRole="button">
+                      <View style={styles.rowCopy}>
+                        <Text style={styles.rowLabel}>{tr('changelog.title')}</Text>
+                        <Text style={styles.rowHint}>{tr('changelog.rowHint')}</Text>
+                      </View>
+                      <Ionicons name="chevron-forward" size={14} color={colors.textSecondary} />
+                    </Pressable>
+                  </>
+                ) : null}
+                {show('about', 'pooledHttp') ? (
+                  <>
+                    <Divider />
+                    <View style={styles.row} testID="settings-pooled-http-row">
+                      <View style={styles.rowCopy}>
+                        <Text style={styles.rowLabel}>{tr('settings.copy.277')}</Text>
+                        <Text style={styles.rowHint}>{tr('settings.copy.278')}</Text>
+                      </View>
+                      <Switch
+                        accessibilityLabel={tr('settings.copy.277')}
+                        value={pooledHttp}
+                        onValueChange={value => { setPooledHttpEnabled(value); setPooledHttp(value); }}
+                        trackColor={{ true: colors.accent, false: colors.border }}
+                        thumbColor={colors.card}
+                      />
                     </View>
-                    <Ionicons name="chevron-forward" size={14} color={colors.textSecondary} />
-                  </Pressable>
-                </>
-              ) : null}
-              {show('about', 'pooledHttp') ? (
-                <>
-                  <Divider />
-                  <View style={styles.row} testID="settings-pooled-http-row">
-                    <View style={styles.rowCopy}>
-                      <Text style={styles.rowLabel}>{tr('settings.copy.277')}</Text>
-                      <Text style={styles.rowHint}>{tr('settings.copy.278')}</Text>
-                    </View>
-                    <Switch
-                      accessibilityLabel={tr('settings.copy.277')}
-                      value={pooledHttp}
-                      onValueChange={value => { setPooledHttpEnabled(value); setPooledHttp(value); }}
-                      trackColor={{ true: colors.accent, false: colors.border }}
-                      thumbColor={colors.card}
-                    />
-                  </View>
-                </>
-              ) : null}
-              {lastFatal && show('about', 'lastCrash') ? (
-                <>
-                  <Divider />
-                  <ActionRow label={tr('fatal.copyRow')} hint={fatalSummary(lastFatal)} onPress={() => { void copyLastFatal(lastFatal); }} />
-                </>
-              ) : null}
+                  </>
+                ) : null}
+                {lastFatal && show('about', 'lastCrash') ? (
+                  <>
+                    <Divider />
+                    <ActionRow label={tr('fatal.copyRow')} hint={fatalSummary(lastFatal)} onPress={() => { void copyLastFatal(lastFatal); }} />
+                  </>
+                ) : null}
+              </WideCard>
             </View>
           ) : null}
         </ScrollView>
@@ -1386,6 +1394,13 @@ export default function SettingsScreen({
         onRemove={profile => setRemoveTarget(profiles.find(p => p.profileId === profile.profileId) ?? null)}
         onClose={() => setSwitcherOpen(false)}
       />
+      <AccountMoreMenu
+        anchor={menuFor?.anchor ?? null}
+        profile={menuFor?.profile ?? null}
+        items={menuFor ? accountMenuItems(profileActions(menuFor.profile), { current: menuFor.profile.profileId === currentId, requiresReauth: menuFor.profile.requiresReauth }) : []}
+        onSelect={item => { if (menuFor) runMenuItem(item, menuFor.profile); }}
+        onClose={closeMenu}
+      />
       <AccountActionSheet
         visible={!pointer && !!sheetTarget}
         profile={sheetTarget}
@@ -1433,6 +1448,16 @@ function keepAliveStatusText(notify: NotifySettings, state: KeepAliveSnapshot): 
 }
 
 /** 标签在左、只读值在右。 */
+/**
+ * 宽屏右栏的一段(#427):沿用原来的行,外面套上设置积木的卡片(同手机子页的白色圆角卡),整页读起来是一组组卡片,
+ * 和账号段的 SettingsGroup 左右边缘对齐。旧行自带 12 的左右内边距,这里再补 4 —— 标签左边缘 = 卡片 + 16,
+ * 和积木行(SETTINGS_ROW_PAD_X)一样;分隔线的缩进同理。
+ */
+function WideCard({ children }: { children: ReactNode }) {
+  if (!Children.toArray(children).length) return null;
+  return <SettingsGroup separators={false} testID="settings-wide-card"><View style={styles.wideCardInner}>{children}</View></SettingsGroup>;
+}
+
 function ValueRow({ label, value }: { label: string; value: string }) {
   useTranslation();
   return (
@@ -1538,8 +1563,11 @@ const makeStyles = () =>
   deviceSignOut: { paddingHorizontal: spacing.sm, paddingVertical: spacing.xs, borderRadius: radius.control },
   deviceSignOutHover: { backgroundColor: colors.subtleFill },
   // 底部多留一个 spacing.xl:最后一行要能完全离开窗口下沿,而不是刚好贴上去——贴上去看起来就和「滚不动」一样。
-  content: { padding: spacing.lg, paddingBottom: spacing.xl * 2 },
-  section: { paddingHorizontal: spacing.md, paddingBottom: spacing.md },
+  // #427:右栏内容收成居中的一列(最宽 760),卡片在大窗口里不被拉成一整条。
+  content: { padding: spacing.lg, paddingBottom: spacing.xl * 2, width: '100%', maxWidth: 760, alignSelf: 'center' },
+  // 卡片自己带 16 的左右边距(settings-kit SETTINGS_GUTTER),段落不再另加。
+  section: { paddingBottom: spacing.md },
+  wideCardInner: { paddingHorizontal: SETTINGS_ROW_PAD_X - spacing.md, paddingVertical: spacing.xs },
   groupTitle: { color: colors.textMuted, fontSize: 12, marginTop: spacing.md, marginBottom: spacing.xs },
   emptyPane: { color: colors.textMuted, fontSize: 14, paddingHorizontal: spacing.md, paddingVertical: spacing.lg },
   row: {
@@ -1569,12 +1597,8 @@ const makeStyles = () =>
   quietRow: { justifyContent: 'flex-start', gap: spacing.sm },
   mutedItem: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.md, paddingTop: spacing.sm },
   quietInput: { color: colors.text, fontSize: 14, borderWidth: 1, borderColor: colors.border, borderRadius: radius.item, paddingHorizontal: 8, paddingVertical: 4, minWidth: 64, textAlign: 'center', backgroundColor: colors.inputBg },
-  profileRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingHorizontal: spacing.md, paddingVertical: spacing.md },
-  profileCopy: { flex: 1, minWidth: 0 },
-  inlineButton: { paddingHorizontal: spacing.xs },
   accentText: { color: colors.accent, fontSize: 14, fontWeight: '600' },
   dangerText: { color: colors.failed, fontSize: 14, fontWeight: '600' },
-  dangerHint: { color: colors.failed, fontSize: 11 },
   errorText: { color: colors.failed, fontSize: 12, paddingHorizontal: spacing.md, paddingVertical: spacing.sm },
   actionButton: { ...buttonStyle('secondary') },
   actionButtonText: { ...buttonTextStyle('secondary') },
