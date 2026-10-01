@@ -5,6 +5,9 @@
 export const BUNDLED_RELEASE_BODY: string = [
   "Signed and notarized stable update for macOS (Apple Silicon) and Windows (x64).",
   "",
+  "What's new in 0.2.183:",
+  "- 任务看板：在桌面端点卡片上的参与人头像，改成贴着头像弹出的下拉菜单（和任务详情里一样，可直接打字搜索、方向键选择、回车勾选、Ctrl/⌘+回车确认、Esc 取消），不再弹出屏幕中间的大窗口；手机端不变。",
+  "",
   "What's new in 0.2.182:",
   "- 「连接较慢」更准确：app 切到后台或锁屏期间的请求不再算进耗时，iPad 切回来不会误报。",
   "- 显示「较慢」时，点开角落小圆点能看到最近 3 次请求（接口 · 秒数 · KB），方便定位到底慢在哪。",

@@ -1,0 +1,8 @@
+desktop v0.2.183 — 看板卡片参与人头像改为锚定下拉
+================================================================================
+A. 本版内容(0.2.182 发版提交之后 main 上合入的 PR + 本 PR)
+  #646 桌面端(指针 + 宽度≥600)点卡片参与人头像 → 锚定在头像组下方、右对齐的 PeopleDropdown(anchorRightAligned,空间不足上翻);键盘同字段选人;手机保持居中面板。card-participants-anchored 14/14(main 上失败);浏览器 test-people-picker 40/40(改动前 12 组失败);test-task-audit-lows 28/28;npm test 310/310。
+  本 PR(版本号):0.2.182 → 0.2.183,versionCode 2182 → 2183;release-desktop-auto-update.yml 加 What's new in 0.2.183;重新生成 src/changelog-bundled.ts。
+  本地:干净 origin/main(2426f7f) bump 后 npm ci / npm test / npm run typecheck 全部 rc=0;android-release-notes.mjs 0.2.183 rc=0。
+B. 验证边界(如实)
+  页内桩 + 浏览器驱动验证;右键菜单「设置参与人…」无锚点元素,仍是居中面板。
