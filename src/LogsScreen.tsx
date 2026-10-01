@@ -169,9 +169,13 @@ export default function LogsScreen({
           </Pressable>
         ) : null}
         <Text testID="logs-title" style={{ flex: 1, color: colors.text, fontSize: 17, fontWeight: '600' }} numberOfLines={1}>事件流</Text>
-        {/* Connection state pill — 3 states, distinct visually */}
+        {/* Connection state pill — 3 states, distinct visually. It is the only disconnect notice: the full-width
+            「实时流已断开」 strip that used to sit above the list (and push it down) is gone (connectivity indicator rule,
+            src/connectivity-indicator.test.ts); the detail rides on the pill's accessible label. */}
         <View
           testID={`logs-conn-${conn}`}
+          accessible
+          accessibilityLabel={conn === 'disconnected' ? `实时流已断开，正在重连…${connErr ? `(${connErr})` : ''}` : CONN_LABEL[conn]}
           style={{
             flexDirection: 'row',
             alignItems: 'center',
@@ -221,23 +225,6 @@ export default function LogsScreen({
         </View>
       ) : (
         <View style={{ flex: 1 }}>
-          {conn === 'disconnected' ? (
-            <View
-              testID="logs-disconnected-banner"
-              style={{
-                backgroundColor: colors.failed + '22',
-                borderRadius: radius.control,
-                marginHorizontal: spacing.lg,
-                marginBottom: spacing.sm,
-                paddingHorizontal: spacing.md,
-                paddingVertical: spacing.sm,
-              }}
-            >
-              <Text style={{ color: colors.failed, fontSize: 12, fontWeight: '600' }}>
-                实时流已断开，正在重连… {connErr ? `(${connErr})` : ''}
-              </Text>
-            </View>
-          ) : null}
           <FlatList
             data={events}
             keyExtractor={item => item.key}

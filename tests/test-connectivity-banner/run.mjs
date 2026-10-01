@@ -125,7 +125,8 @@ function record(what, checks, detail = {}) {
   if (!ok) failures++;
   console.log(JSON.stringify({ what, ok, failed: Object.keys(checks).filter(k => !checks[k]).join(',') || '-', ...detail }));
 }
-const bannerNow = (page) => page.evaluate((s) => document.querySelector(s)?.textContent ?? null, tid('connectivity-banner'));
+// The status is a corner dot now (src/ConnectivityIndicator.tsx); its full text is the accessible label.
+const bannerNow = (page) => page.evaluate((s) => document.querySelector(s)?.getAttribute('aria-label') ?? null, tid('connectivity-indicator'));
 async function sample(page, ms) {
   const seenTexts = new Set();
   const end = Date.now() + ms;
@@ -195,7 +196,7 @@ record('sustained: requests back off (no hammering the dead hub)', { backedOff: 
 // ── recover: hub back + tap the banner ──
 mode = { kind: 'ok' };
 const tr = Date.now();
-await page.locator(tid('connectivity-banner')).click();
+await page.locator(tid('connectivity-indicator')).click();
 let gone = false;
 while (Date.now() - tr < 3_000) { if ((await bannerNow(page)) === null) { gone = true; break; } await page.waitForTimeout(100); }
 record('recover: tap → banner gone within 3 s', { gone }, { ms: Date.now() - tr });
