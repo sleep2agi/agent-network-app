@@ -225,15 +225,17 @@ for (const theme of ['light', 'dark']) {
     record(where, 'tags', { ...o.geo, createRow: createRow === 1, body: json(tg) === json([{ tags: ['示例标签', '新标签'] }]) }, { placeholder: ph, bodies: json(tg) });
 
     step = 'bottom row';
-    await page.locator(cellSel('r16', 'status')).first().scrollIntoViewIfNeeded();
+    // 最下面那一行按当前排序从 DOM 读(前面改过状态,行序会变)。
+    const last = await page.evaluate(() => { const ids = [...document.querySelectorAll('[data-testid^="req-row-r"]')].map(e => e.getAttribute('data-testid').slice(8)).filter(x => /^r\d+$/.test(x)); return ids[ids.length - 1]; });
+    await page.locator(cellSel(last, 'status')).first().scrollIntoViewIfNeeded();
     await page.waitForTimeout(200);
-    o = await open('r16', 'status', 'list-edit-status');
+    o = await open(last, 'status', 'list-edit-status');
     await shot('edit-bottom-row');
     await closeEditor();
-    const ob = await open('r16', 'tags', 'list-edit-tags');
+    const ob = await open(last, 'tags', 'list-edit-tags');
     await shot('edit-bottom-right');
     await closeEditor();
-    record(where, 'bottom row / right edge', { statusInWindow: o.geo.inWindow, statusAnchored: o.geo.anchored, tagsInWindow: ob.geo.inWindow, tagsAnchored: ob.geo.anchored });
+    record(where, 'bottom row / right edge', { lastRowNearBottom: !!o.c && o.c.y + o.c.height > H - 120, statusInWindow: o.geo.inWindow, statusAnchored: o.geo.anchored, tagsInWindow: ob.geo.inWindow, tagsAnchored: ob.geo.anchored });
 
     step = 'rollback';
     await page.locator(cellSel('r3', 'priority')).first().scrollIntoViewIfNeeded();
