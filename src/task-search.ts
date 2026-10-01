@@ -1,8 +1,9 @@
 // 任务页搜索的纯逻辑(不 import react-native —— task-search.test.ts 直接引)。
 //
 // Owner 2026-09-30(平板横屏截图):「这个任务是不是可以加一下搜索的功能啊?我有时候我想找那些任务,可能找不到」。
-// 搜的是已经读到本机的行(Hub GET /api/requirements 最多 500 行,见 PR 说明),不另发请求;
-// 归档的卡默认不在列表里,只有搜索里勾了「包含已归档」才另读一次 ?archived=true 混进来并标出。
+// 本机读到的行先搜一遍;Hub 支持 search 时再问服务端(?q=,一页一页读,「加载更多」接着翻),本机没读到的更老的卡并进来。
+// 「包含已归档」默认开(Owner 2026-10-01「经常…搜不到那个历史任务」:做完的卡常被归档,默认不搜就找不到),
+// 归档的卡在结果里标「已归档」;搜索选项里可以关掉。
 //
 //   · 搜:标题、描述、负责人 / 负责 Agent / 参与人的显示名、旧 Hub 的 assignee 文本、项目名、标签
 //   · 大小写不敏感;全角字母数字按半角算(NFKC);中文按子串,不分词
@@ -16,11 +17,11 @@ import type { RequirementPerson } from './requirement-people';
 export interface TaskSearch {
   /** 输入框里的原文(已经过去抖)。 */
   q: string;
-  /** 「包含已归档」:只在有搜索词时生效。 */
+  /** 「包含已归档」:只在有搜索词时生效。默认开。 */
   archived: boolean;
 }
 
-export const EMPTY_SEARCH: TaskSearch = { q: '', archived: false };
+export const EMPTY_SEARCH: TaskSearch = { q: '', archived: true };
 
 /** 输入去抖(毫秒):打字停下这么久才重新筛。 */
 export const SEARCH_DEBOUNCE_MS = 120;
@@ -108,9 +109,16 @@ export function searchedTasks(items: readonly Requirement[], archived: readonly 
 /** 喂给 matchesTaskId 的整句:去掉首尾空白,全角 ＃ / 数字 / 字母归一成半角(NFKC;ID 本身都是 ASCII)。 */
 export const taskIdQuery = (q: string): string => q.trim().normalize('NFKC');
 
-/** 要不要问服务端:Hub 支持搜索,且本机的表被截断(否则本机的结果就是全部)。 */
-export const needsServerSearch = (capabilities: readonly string[], truncated: boolean, search: Pick<TaskSearch, 'q'>): boolean =>
-  truncated && capabilities.includes('search') && searching(search);
+/**
+ * 要不要问服务端:Hub 支持搜索且有搜索词。不再只在「本机的表被截断」时问 —— 归档的卡、精简行的描述正文本机都没有,
+ * 本机的结果从来不是全部。
+ */
+export const needsServerSearch = (capabilities: readonly string[], search: Pick<TaskSearch, 'q'>): boolean =>
+  capabilities.includes('search') && searching(search);
+
+/** 搜到了、但被看板的筛选(负责人 / 状态 / 项目 / 只看顶层…)挡住的有几个:搜索条上说出来,点一下清掉筛选。 */
+export const filterHiddenCount = (searched: readonly Requirement[], visible: readonly Requirement[]): number =>
+  Math.max(0, searched.length - visible.length);
 
 /** 各视图(列表 / 看板 / 甘特图 / 日历)共用的入口:搜索 + 筛选。 */
 export function visibleTasks(items: readonly Requirement[], archived: readonly Requirement[], filter: BoardFilter, search: TaskSearch, ctx: SearchContext, serverHits: readonly Requirement[] = []): Requirement[] {

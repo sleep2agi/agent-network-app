@@ -113,10 +113,10 @@ const listRows = async () => subCards ? [
   ];
 mock.module('./src/requirements-hub', () => ({
   listRequirements: async () => listRows(),
-  // 任务搜索「包含已归档」(task-search.ts):这里的用例不勾,读到就当没有归档的卡。
+  // 任务搜索「包含已归档」(task-search.ts,默认开):这里的 Hub 没有 archived 能力,不会读;读到也当没有归档的卡。
   listArchivedRequirements: async () => [],
-  // 列表被截断时的服务端搜索(Hub capability search):这里的 Hub 没有 search,不会被调用。
-  searchRequirementsOnHub: async () => [],
+  // 服务端搜索(Hub capability search):这里的 Hub 没有 search,不会被调用。
+  searchRequirementsOnHub: async () => ({ rows: [], next: null }),
   // 仪表盘(TaskDashboard.tsx):这里的用例不切到仪表盘,不会被调用。
   listAllRequirementsForDashboard: async () => ({ rows: await listRows(), partial: false }),
   fetchRequirementStats: async () => { throw new Error('not used'); },

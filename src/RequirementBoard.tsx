@@ -36,7 +36,7 @@ import { elevated } from './elevation';
 import { pointerUi } from './pointer-ui';
 import { useModalSafePadding } from './safe-area-runtime';
 import { usePoll } from './usePoll';
-import { applyFilter, applyMove, boardColumns, createInput, DEFAULT_SORT, DRAG_IDLE, dragReduce, dropIndex, emptyDraft, activeProjects, defaultProjectFor, NO_PROJECT, projectCounts, filterActive, hasRoles, roleKinds, localToday, addChecklistItem, moveChecklistItem, removeChecklistItem, setChecklistDone, neighbourColumn, nextSort, revertMove, sortRows, toggleIn, hidesDone, toggleHideDone, UNASSIGNED, type CreateDraft, type DragEvent, type DragState, type EditPatch, type SortKey, type SortSpec } from './task-board-model';
+import { applyFilter, EMPTY_FILTER, applyMove, boardColumns, createInput, DEFAULT_SORT, DRAG_IDLE, dragReduce, dropIndex, emptyDraft, activeProjects, defaultProjectFor, NO_PROJECT, projectCounts, filterActive, hasRoles, roleKinds, localToday, addChecklistItem, moveChecklistItem, removeChecklistItem, setChecklistDone, neighbourColumn, nextSort, revertMove, sortRows, toggleIn, hidesDone, toggleHideDone, UNASSIGNED, type CreateDraft, type DragEvent, type DragState, type EditPatch, type SortKey, type SortSpec } from './task-board-model';
 import { applyChanges, checklistCounts, cursorAfterList, hasFullText, mergeListRows, needsFullText, planBoardRead, type BoardSyncState } from './board-sync';
 import { enterTaskScope, noteTagsUsed, patchTaskBoard, setManagingProjects, setManagingTags, setTaskFilter, setTaskSearch, setTaskSection, taskBoardState, taskScopeKey, updateTaskItems, useTaskBoard, type TaskSection } from './task-board-store';
 import { recallBoard, rememberBoard } from './swr-cache';
@@ -57,8 +57,8 @@ import { SelectMenu } from './TaskSelectMenu';
 import { changeConcernsMe, parseTaskChanged } from './task-window-model';
 import { currentWindowLabel, emitTaskChanged, listenTaskChanged, openTaskWindow } from './task-window';
 import { menuMaxHeight } from './modal-bounds';
-import { EMPTY_SEARCH, focusKindOf, isSearchShortcut, needsServerSearch, SEARCH_DEBOUNCE_MS, searchedTasks, searchTerms } from './task-search';
-import { ArchivedTag, ReadOnlyTag, highlight, SearchCancel, SearchEmpty, SearchField, SearchIconButton } from './TaskSearch';
+import { EMPTY_SEARCH, filterHiddenCount, focusKindOf, isSearchShortcut, needsServerSearch, SEARCH_DEBOUNCE_MS, searchedTasks, searchTerms } from './task-search';
+import { ArchivedTag, ReadOnlyTag, highlight, SearchCancel, SearchEmpty, SearchField, SearchIconButton, SearchStatusBar } from './TaskSearch';
 import { comboFromEvent, shortcutForCombo } from './shortcuts-model';
 import { isMacKeyboard, shortcutBindings, shortcutCaptureActive } from './shortcuts-store';
 import { isSelectClick, NO_SELECTION, pruneSelection, runBulk, selectClick, toggleSelected, type BulkProgress, type SelectAnchor, type Selection } from './task-select-model';
@@ -189,34 +189,49 @@ function ScopedRequirementBoard({ cfg, desktop, dispatch, onOpenVoiceSettings, s
     return () => clearTimeout(t);
   }, [searchText, search]);
   const clearSearch = () => { setSearchText(''); setTaskSearch({ ...search, q: '' }); };
-  const wantArchived = archivedCapable && search.archived && !!searchTerms(search.q).length;
-  // Hub 支持服务端搜索(capability search):归档的按搜索词问服务端(不受「最多 500 张」限制,也不用把归档的整张表读回来);
-  // 旧 Hub:照旧读一次归档的整张表,本机搜。
+  // Hub 支持服务端搜索(capability search):有搜索词就问服务端(归档的一起,?include_archived=1),一页一页读;
+  // 旧 Hub:「包含已归档」照旧读一次归档的整张表,本机搜。
   const serverSearchCap = useTaskBoard(st => st.scope === scope && st.capabilities.includes('search'));
   const truncated = useTaskBoard(st => st.scope === scope && st.truncated);
-  const archivedQuery = serverSearchCap ? search.q : '';
+  const wantArchived = archivedCapable && search.archived && !!searchTerms(search.q).length && !serverSearchCap;
   useEffect(() => {
     if (!wantArchived) return;
     let dead = false;
-    (serverSearchCap ? searchRequirementsOnHub(cfg, archivedQuery, true) : listArchivedRequirements(cfg))
+    listArchivedRequirements(cfg)
       .then(rows => { if (!dead) setArchivedRows(rows); })
       .catch(e => { if (!dead) setBanner(tr('taskSearch.archivedFailed') + (e instanceof Error ? e.message : String(e))); });
     return () => { dead = true; };
-  }, [wantArchived, serverSearchCap, archivedQuery, cfg.serverUrl, cfg.token, cfg.networkId]);
+  }, [wantArchived, cfg.serverUrl, cfg.token, cfg.networkId]);
   const archived = wantArchived ? archivedRows : [];
-  // 本机读到的表被截断(Hub 一次最多给最新的 500 张):问服务端要更老的匹配(needsServerSearch)。
-  const [serverHits, setServerHits] = useState<{ q: string; rows: Requirement[] }>({ q: '', rows: [] });
-  // 精简列表的卡本机没有描述正文:搜索词可能只出现在描述里,也要问服务端(board-sync.ts)。
-  const summaryRows = items.some(item => item.summary && item.description === undefined);
-  const askServer = needsServerSearch(serverSearchCap ? ['search'] : [], truncated || summaryRows, search);
+  // 服务端的结果按「搜索词 + 含不含归档」记;换了词,旧词晚到的回包丢掉(key 对不上)。next = 下一页的 cursor(「加载更多」)。
+  const askServer = needsServerSearch(serverSearchCap ? ['search'] : [], search);
+  const includeArchivedOnServer = archivedCapable && search.archived;
+  const serverKey = `${search.q}\u0000${includeArchivedOnServer ? 1 : 0}`;
+  const [serverHits, setServerHits] = useState<{ key: string; rows: Requirement[]; next: string | null; loading: boolean }>({ key: '', rows: [], next: null, loading: false });
   useEffect(() => {
     if (!askServer) return;
     let dead = false;
-    const q = search.q;
-    searchRequirementsOnHub(cfg, q, false).then(rows => { if (!dead) setServerHits({ q, rows }); }).catch(() => { /* 本机的结果照样显示 */ });
+    const key = serverKey;
+    setServerHits({ key, rows: [], next: null, loading: true });
+    searchRequirementsOnHub(cfg, search.q, { includeArchived: includeArchivedOnServer })
+      .then(r => { if (!dead) setServerHits({ key, rows: r.rows, next: r.next, loading: false }); })
+      .catch(() => { if (!dead) setServerHits({ key, rows: [], next: null, loading: false }); /* 本机的结果照样显示 */ });
     return () => { dead = true; };
-  }, [askServer, search.q, cfg.serverUrl, cfg.token, cfg.networkId]);
-  const extraHits = askServer && serverHits.q === search.q ? serverHits.rows : [];
+  }, [askServer, serverKey, cfg.serverUrl, cfg.token, cfg.networkId]);
+  const serverCurrent = askServer && serverHits.key === serverKey;
+  const extraHits = serverCurrent ? serverHits.rows : [];
+  const loadMoreHits = () => {
+    const { key, next, rows } = serverHits;
+    if (!serverCurrent || !next || serverHits.loading) return;
+    setServerHits(cur => ({ ...cur, loading: true }));
+    searchRequirementsOnHub(cfg, search.q, { includeArchived: includeArchivedOnServer, cursor: next })
+      .then(r => setServerHits(cur => {
+        if (cur.key !== key) return cur;
+        const have = new Set(rows.map(row => row.id));
+        return { key, rows: [...rows, ...r.rows.filter(row => !have.has(row.id))], next: r.next, loading: false };
+      }))
+      .catch(e => { setServerHits(cur => (cur.key === key ? { ...cur, loading: false } : cur)); setBanner(e instanceof Error ? e.message : String(e)); });
+  };
   // 仪表盘点开的卡可能不在看板里(归档的 / 列表截断之外的):按 id 读一张来开详情。
   const [dashRow, setDashRow] = useState<Requirement | null>(null);
   const selected = items.find(item => item.id === selectedId) || archived.find(item => item.id === selectedId) || extraHits.find(item => item.id === selectedId) || (dashRow?.id === selectedId ? dashRow : null) || null;
@@ -1142,6 +1157,18 @@ function ScopedRequirementBoard({ cfg, desktop, dispatch, onOpenVoiceSettings, s
       edit={{ onEdit: editCell, onLoadPeople: () => { void loadPeople(); }, ctx: { people, peopleLoading, projects, networkId: cfg.networkId || '', twoRoles, lowestPriority, allowTime: dueDatetime, tagChoices: tagCatalog?.tags ?? [...new Set(items.flatMap(it => it.tags ?? []))], tagColors: tagCatalog?.colors } }} />;
   };
 
+  // 搜索时结果上方:数量 + 被筛选挡住了几个(一键清掉)+ 服务端的「加载更多」。
+  const searchBar = terms.length && section !== 'dispatch' && section !== 'dashboard' && section !== 'activity' && phase !== 'loading' ? (
+    <SearchStatusBar
+      shown={visible.length}
+      hidden={filterHiddenCount(searched, visible)}
+      more={serverCurrent && !!serverHits.next}
+      loading={serverCurrent && serverHits.loading}
+      onClearFilters={() => setTaskFilter({ ...EMPTY_FILTER, project: '', statuses: [] })}
+      onLoadMore={loadMoreHits}
+      phone={narrow}
+    />
+  ) : null;
   const body = section === 'dispatch' ? dispatch ?? null
     : phase === 'loading' && !(hasCached || (mine && items.length)) ? <View style={s.center} testID="req-loading"><ActivityIndicator color={colors.accent} /></View>
       : phase === 'unsupported' ? <View style={s.center}><Text style={s.muted} testID="req-unsupported">{tr(UNSUPPORTED)}</Text></View>
@@ -1266,6 +1293,7 @@ function ScopedRequirementBoard({ cfg, desktop, dispatch, onOpenVoiceSettings, s
           <Pressable onPress={() => setBanner('')} accessibilityRole="button" accessibilityLabel={tr('tasks.copy.58')}><Ionicons name="close" size={14} color={colors.textMuted} /></Pressable>
         </View>
       ) : null}
+      {searchBar}
       {body}
       <Text style={{ position: 'absolute', width: 1, height: 1, opacity: 0 }} accessibilityLiveRegion="polite">{announce}</Text>
       {ghost}

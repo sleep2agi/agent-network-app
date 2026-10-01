@@ -10,7 +10,8 @@
 //   filter    : typing narrows 列表 / 看板 / 甘特图 / 日历 to the matching tasks (after the ~120ms debounce), matched text is
 //               highlighted in the titles, two terms are ANDed, search + 优先级 filter combine
 //   empty     : a query with no match shows 「没有找到包含 “…” 的任务」 and its 清除搜索 brings every row back
-//   archived  : archived rows only appear after 「包含已归档」 in the search menu, and carry the 已归档 tag
+//   archived  : 「包含已归档」 is on by default (owner 2026-10-01: old finished tasks get archived and then could not be
+//               found) — archived rows show up with the 已归档 tag; unticking it in the search menu hides them
 // Tablet 1000×700 (Android UA, touch — the owner's landscape tablet) and phone 390×844, light + dark:
 //   a magnifier in the title bar (no always-on box); tapping it opens a search field + 「取消」 (phone: in place of the
 //   title row; tablet: a row under the title bar), field and 取消 on one centre line ±1, inside the 16/24px gutters,
@@ -19,6 +20,9 @@
 // Truncated list (desktop 1320×754): on a hub with capability search whose list says has_more, a query matching only an
 //   older task (not in the loaded rows) shows it via ?q=; on an old hub (no search, exactly 500 rows) the empty state
 //   says only the latest 500 were searched and no ?q= request is made.
+// History (desktop 1320×754 + phone 390×844, light): on a search hub, an old done task, an old archived task (tagged
+//   已归档) and the first page of 250 older matches come back; 「加载更多」 reads the next page with the cursor; with
+//   「隐藏已完成」 on, the status line says how many hits the filter hides and 清除筛选 brings them back.
 // Exit 1 when any check fails or a viewport could not be opened.
 import { mkdirSync } from 'node:fs';
 import { join } from 'node:path';
@@ -189,7 +193,7 @@ for (const theme of ['light', 'dark']) {
       const listHit = await shown(page, 'req-row-');
       const hl = await hits(page);
       const seqCell = await box(page, tid('task-seq-s1'));
-      record(vp, 'type filters list', { rows: listHit === 's1', highlighted: hl.includes('组织树'), idColumn: seqCell?.text === '#1' }, { rows: listHit, hits: hl.join('|'), id: seqCell?.text });
+      record(vp, 'type filters list (archived z1 included by default)', { rows: listHit === 's1,z1', highlighted: hl.includes('组织树'), idColumn: seqCell?.text === '#1' }, { rows: listHit, hits: hl.join('|'), id: seqCell?.text });
       await shot('1-list-search');
 
       await page.keyboard.press('Escape');
@@ -237,14 +241,15 @@ for (const theme of ['light', 'dark']) {
       record(vp, 'empty state', { text: empty?.text === '没有找到包含 “完全不存在的词” 的任务', cleared: (await shown(page, 'req-row-')) === ALL && (await inputValue(page)) === '' }, { text: empty?.text });
 
       await typeQuery('组织树');
-      const before = await shown(page, 'req-row-');
-      await page.locator(tid('task-search-options')).first().click();
-      await page.locator(tid('task-search-archived')).first().click();
       await page.waitForTimeout(700);
-      const after = await shown(page, 'req-row-');
+      const before = await shown(page, 'req-row-');
       const tag = await box(page, tid('task-archived-tag'));
       await shot('5-archived');
-      record(vp, 'archived toggle', { hiddenByDefault: before === 's1', shownWhenOn: after === 's1,z1', tagged: !!tag }, { before, after });
+      await page.locator(tid('task-search-options')).first().click();
+      await page.locator(tid('task-search-archived')).first().click();
+      await settle(page);
+      const after = await shown(page, 'req-row-');
+      record(vp, 'archived toggle', { shownByDefault: before === 's1,z1', tagged: !!tag, hiddenWhenOff: after === 's1' }, { before, after });
       await page.locator(tid('task-search-options')).first().click();
       await page.locator(tid('task-search-archived')).first().click();
       await typeQuery('');
@@ -335,6 +340,82 @@ for (const kind of ['new', 'old']) {
     }
   } catch (e) {
     record(vp, 'drive', { finished: false }, { error: String(e).split('\n')[0] });
+  }
+  await ctx.close();
+}
+
+// ── history: old done / archived tasks, paging, filters ──
+const historyFixture = () => {
+  const at = (d) => new Date(Date.now() + d * 86400000).toISOString();
+  const R = (id, name, o) => ({ id, name, priority: 'normal', assignee: '', column: 'pool', owner: { kind: 'user', id: 'u_tester' }, participants: [], agent_owner: null, project_id: null, due: '', createdAt: at(-1), updatedAt: at(-1), description: '', checklist: [], tags: [], parent_id: null, ...o });
+  window.__tasksFixture = {
+    requirements: [R('n1', '示例新任务一', { column: 'doing' }), R('n2', '示例新任务二')],
+    serverOnly: [
+      R('h1', '示例旧发票导出', { column: 'done', createdAt: at(-300), updatedAt: at(-290) }),
+      ...Array.from({ length: 250 }, (_, i) => R(`m${i}`, `示例周报 第 ${i} 期`, { column: i % 2 ? 'done' : 'pool', createdAt: at(-30 - i) })),
+    ],
+    archived: [R('a1', '示例雪豹计划', { column: 'done', archived: true, createdAt: at(-400) })],
+    projects: [], people: [{ kind: 'user', id: 'u_tester', networkId: 'net-sweep', name: 'tester' }],
+    capabilities: ['agent_owner', 'description', 'archived', 'search', 'paging', 'list_summary'],
+    hasMore: false,
+  };
+};
+for (const v of [{ w: 1320, h: 754, kind: 'desktop' }, { w: 390, h: 844, kind: 'phone' }]) {
+  const vp = `${v.kind} ${v.w}x${v.h} light history`;
+  const touch = v.kind !== 'desktop';
+  const ctx = await browser.newContext({ viewport: { width: v.w, height: v.h }, deviceScaleFactor: 2, timezoneId: 'Asia/Shanghai', locale: 'zh-CN', ...(touch ? { userAgent: ANDROID_UA, hasTouch: true } : {}) });
+  const page = await ctx.newPage();
+  page.on('pageerror', e => console.log('PAGEERROR', e.message.split('\n')[0]));
+  await page.addInitScript(historyFixture);
+  await page.addInitScript(initScript, { theme: 'light' });
+  const shot = (name) => OUT && page.screenshot({ path: join(OUT, `${v.kind}-${v.w}x${v.h}-light-history-${name}.png`) });
+  const ids = () => page.evaluate(() => [...new Set([...document.querySelectorAll('[data-testid^="req-row-"]')].filter(e => e.getClientRects().length).map(e => e.dataset.testid.slice(8)).filter(id => /^[a-z]+\d+$/.test(id)))]);
+  try {
+    if (v.kind === 'desktop') {
+      await page.goto(url);
+      await page.locator('[data-testid="desktop-rail"] [aria-label="任务"]').first().click({ timeout: 30000 });
+    } else {
+      await page.goto(`${url}?safeAreaSim=0,0,0,0`);
+      await page.waitForFunction(() => !!window.__anetLayoutSweep, null, { timeout: 30000 });
+      await page.evaluate(() => window.__anetLayoutSweep.setScreen({ name: 'tasks' }));
+    }
+    await page.locator(tid('tasks-view-list')).first().click({ timeout: 20000 });
+    await page.locator(tid('req-row-n1')).first().waitFor({ timeout: 20000 });
+    if (touch) { await page.locator(tid('task-search-open')).first().click(); await page.waitForTimeout(300); }
+    const search = async (text) => { await page.locator(tid('task-search-input')).first().fill(text); await page.waitForTimeout(900); };
+
+    await search('发票');
+    record(vp, 'old done task by title word', { row: (await ids()).join() === 'h1' }, { rows: (await ids()).join() || '(none)' });
+    await search('雪豹');
+    const tag = await box(page, tid('task-archived-tag'));
+    await shot('1-archived');
+    record(vp, 'old archived task found by default, tagged', { row: (await ids()).join() === 'a1', tagged: !!tag, askedInclude: (await page.evaluate(() => (window.__tasksQueries || []).join(' '))).includes('include_archived=1') }, { rows: (await ids()).join() || '(none)' });
+
+    await search('周报');
+    const first = (await ids()).length;
+    const count1 = (await box(page, tid('task-search-count')))?.text;
+    const more = await box(page, tid('task-search-load-more'));
+    await shot('2-load-more');
+    await page.locator(tid('task-search-load-more')).first().click();
+    await page.waitForTimeout(900);
+    const second = (await ids()).length;
+    const asked = await page.evaluate(() => (window.__tasksQueries || []).filter(q => q.includes('cursor=')).join(' '));
+    record(vp, '加载更多 reads the next page', { firstPage: first === 200, button: !!more, allAfter: second === 250, cursor: asked.includes('cursor=200'), gone: !(await box(page, tid('task-search-load-more'))), noOverflow: (await overflow(page)) <= 0 }, { first, second, count1 });
+
+    // 隐藏已完成 via the status filter: the status line says how many hits it hides; 清除筛选 brings them back
+    await page.locator(tid('task-filter-status')).first().click();
+    await page.locator(tid('task-filter-opt-status-hide-done')).first().click().catch(() => {});
+    await page.locator(tid('task-filter-scrim')).first().click({ position: { x: 5, y: v.h - 5 } }).catch(() => {});
+    await page.waitForTimeout(500);
+    const hidden = await box(page, tid('task-search-hidden'));
+    const filtered = (await ids()).length;
+    await shot('3-hidden-by-filter');
+    await page.locator(tid('task-search-clear-filters')).first().click();
+    await page.waitForTimeout(500);
+    record(vp, 'hits hidden by filters are counted and 清除筛选 shows them', { counted: hidden?.text === '另有 125 个被筛选隐藏', filtered: filtered === 125, back: (await ids()).length === 250, barGone: !(await box(page, tid('task-search-hidden'))) }, { hidden: hidden?.text, filtered });
+  } catch (e) {
+    record(vp, 'drive', { finished: false }, { error: String(e).split('\n')[0] });
+    await shot('x-error');
   }
   await ctx.close();
 }

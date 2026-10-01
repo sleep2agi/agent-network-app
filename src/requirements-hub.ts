@@ -222,15 +222,23 @@ export async function listRequirementChanges(cfg: HubConfig, since: string): Pro
   };
 }
 
+/** 服务端搜索一页几张(带完整描述,比看板的精简行重):更多的点「加载更多」接着读。 */
+export const SEARCH_PAGE = 200;
+
 /**
- * 服务端搜索(Hub capability search):GET ?q=,语义同本机的任务搜索(task-search.ts)。本机读到的表被截断时
- * 用它补上更老的那些;archived = 只搜归档的(「包含已归档」)。一页 500 张就够 —— 搜索结果不是拿来翻的。
+ * 服务端搜索(Hub capability search):GET ?q=,语义同本机的任务搜索(task-search.ts)。
+ * includeArchived = 连归档的一起搜(?include_archived=1,行上 archived: true 的标出来);cursor = 上一页的 next_cursor。
+ * next = 还有下一页时的 cursor(Hub capability paging 的 has_more / next_cursor;没有就是 null)。
  */
-export async function searchRequirementsOnHub(cfg: HubConfig, q: string, archived: boolean): Promise<Requirement[]> {
-  const qs = `q=${encodeURIComponent(q)}&limit=${HUB_LIST_CAP}${archived ? '&archived=true' : ''}`;
-  const data = await call(cfg, scoped(cfg, `/api/requirements?${qs}`)) as { requirements?: unknown };
-  const rows = Array.isArray(data.requirements) ? data.requirements : [];
-  return rows.map(requirementFromHub).filter((row): row is Requirement => !!row).map(row => (archived ? { ...row, archived: true } : row));
+export async function searchRequirementsOnHub(cfg: HubConfig, q: string, opts: { includeArchived?: boolean; cursor?: string | null } = {}): Promise<{ rows: Requirement[]; next: string | null }> {
+  const qs = `q=${encodeURIComponent(q)}&limit=${SEARCH_PAGE}${opts.includeArchived ? '&include_archived=1' : ''}${opts.cursor ? `&cursor=${encodeURIComponent(opts.cursor)}` : ''}`;
+  const data = await call(cfg, scoped(cfg, `/api/requirements?${qs}`)) as { requirements?: unknown; has_more?: unknown; next_cursor?: unknown };
+  const raw = Array.isArray(data.requirements) ? data.requirements : [];
+  const rows = raw.map(row => {
+    const r = requirementFromHub(row);
+    return r && (row as { archived?: unknown }).archived === true ? { ...r, archived: true } : r;
+  }).filter((row): row is Requirement => !!row);
+  return { rows, next: data.has_more === true && typeof data.next_cursor === 'string' && data.next_cursor ? data.next_cursor : null };
 }
 
 /**
