@@ -10,5 +10,7 @@ cp index.html out/index.html
 python3 -m http.server "${PORT:-8765}" --directory out >/dev/null 2>&1 &
 srv=$!
 trap 'kill "$srv" 2>/dev/null || true' EXIT
-sleep 1
+# Wait until the server answers (a fixed `sleep 1` lost the race on a busy machine: the page was not up yet and the
+# drive timed out on its first selector — 2026-10-02 sweep).
+for _ in $(seq 1 50); do curl -fsS -o /dev/null "http://127.0.0.1:${PORT:-8765}/index.html" && break; sleep 0.2; done
 node drive.mjs

@@ -39,14 +39,21 @@ try{
   ck(`${name}: columns align`,columns.every(b=>b&&Math.abs(b.y-columns[0].y)<1&&Math.abs(b.width-columns[0].width)<1),columns);
   await page.screenshot({path:`${out}/${name}-board-en.png`});
   await page.getByTestId('req-card-r1').click();await page.getByTestId('req-detail').waitFor();await page.waitForTimeout(350);
+  // 子需求 lives inside the detail's 「更多」 disclosure since #510; open it first (the drive looked for it in the
+  // main body and had been red since; 2026-10-02 sweep).
+  if(await page.getByTestId('req-more').count()===0){await page.getByTestId('req-more-toggle').click();await page.waitForTimeout(200);}
   ck(`${name}: subtask section translated`,await page.getByText('Subtasks',{exact:true}).count()>0&&await page.getByText('New subtask',{exact:true}).count()>0);
   const detail=await page.getByTestId('req-detail').boundingBox();ck(`${name}: detail fits`,detail.x>=-1&&detail.x+detail.width<=width+1,detail);
   await page.getByTestId('req-edit-name').fill('用户草稿：保持不变');
   await page.screenshot({path:`${out}/${name}-detail-en.png`});
   await page.evaluate(()=>window.switchLanguage('zh'));
-  ck(`${name}: live language change preserves draft`,await page.getByTestId('req-edit-name').inputValue()==='用户草稿：保持不变'&&await page.getByText('子需求',{exact:true}).count()>0);
+  const draftAfter=await page.getByTestId('req-edit-name').inputValue(),moreOpen=await page.getByTestId('req-more').count(),subZh=await page.getByText('子任务',{exact:true}).count(); // 子需求 → 子任务 in the task wording pass
+  ck(`${name}: live language change preserves draft`,draftAfter==='用户草稿：保持不变'&&subZh>0,{draftAfter,moreOpen,subZh});
   await page.screenshot({path:`${out}/${name}-detail-zh.png`});
   await page.evaluate(()=>window.switchLanguage('en'));
+  // Closing the detail saves a changed title since #652 (改了不点保存也不丢). Put the original back first, so closing has
+  // nothing to save — this drive's point is that reading and switching language never write.
+  await page.getByTestId('req-edit-name').fill('用户任务标题：不要翻译');
   await page.getByTestId('req-detail-close').click();
   if(name==='phone'){
    await page.getByTestId('task-filter-project').click();

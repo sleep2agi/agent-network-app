@@ -29,6 +29,9 @@ import { mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { serveExport, initScript, findChromium, ANDROID_UA, paintedText } from '../test-layout-sweep/harness.mjs';
 
+// The timeline geometry depends on today (which week holds a month boundary, how far the range scrolls): on most real days one of the month checks failed, on 10-02 another (2026-10-02 sweep). A fixed clock makes every run the same; 10-21 noon has a month boundary that can scroll to 40px and a leftmost day well inside a month.
+const FIXED_NOW = new Date('2026-10-21T12:00:00+08:00');
+
 const { chromium } = await import(process.env.PLAYWRIGHT_MODULE || 'playwright');
 const WEB = process.env.WEB_DIR;
 if (!WEB) throw new Error('need WEB_DIR (expo web export)');
@@ -121,6 +124,7 @@ for (const theme of ['light', 'dark']) {
     const touch = v.kind === 'phone';
     const ctx = await browser.newContext({ viewport: { width: v.w, height: v.h }, colorScheme: theme, deviceScaleFactor: 2, timezoneId: 'Asia/Shanghai', locale: 'zh-CN', ...(touch ? { userAgent: ANDROID_UA, hasTouch: true } : {}) });
     const page = await ctx.newPage();
+    await page.clock.install({ time: FIXED_NOW });
     page.on('pageerror', e => console.log('PAGEERROR', e.message.split('\n')[0]));
     await page.addInitScript(fixture);
     await page.addInitScript(initScript, { theme });
@@ -385,6 +389,7 @@ for (const theme of ['light', 'dark']) {
   const vp = 'desktop 1320x754 light old-hub';
   const ctx = await browser.newContext({ viewport: { width: 1320, height: 754 }, colorScheme: 'light', deviceScaleFactor: 2, timezoneId: 'Asia/Shanghai', locale: 'zh-CN' });
   const page = await ctx.newPage();
+  await page.clock.install({ time: FIXED_NOW });
   await page.addInitScript(fixture);
   await page.addInitScript(() => {
     const f = window.__tasksFixture;

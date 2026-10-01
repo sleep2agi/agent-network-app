@@ -19,6 +19,9 @@ import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { serveExport, initScript, findChromium, ANDROID_UA, paintedText } from '../test-layout-sweep/harness.mjs';
 
+// The fixture completes today's tasks up to ~5h ago, so between midnight and ~05:00 local half of them fell on yesterday and 今日 / the bar chart / the hero count failed (2026-10-02 sweep, run at 03:00). A fixed midday clock makes every run the same at any hour.
+const FIXED_NOW = new Date('2026-10-15T12:00:00+08:00');
+
 const { chromium } = await import(process.env.PLAYWRIGHT_MODULE || 'playwright');
 const WEB = process.env.WEB_DIR;
 if (!WEB) throw new Error('need WEB_DIR (expo web export)');
@@ -136,6 +139,7 @@ for (const theme of ['light', 'dark']) {
     const vp = `desktop 1440x900 ${theme} ${mode}`;
     const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 }, colorScheme: theme, deviceScaleFactor: 1, timezoneId: 'Asia/Shanghai', locale: 'zh-CN', acceptDownloads: true });
     const page = await ctx.newPage();
+    await page.clock.install({ time: FIXED_NOW });
     page.on('pageerror', e => console.log('PAGEERROR', e.message.split('\n')[0]));
     await page.addInitScript(fixture, mode);
     await page.addInitScript(initScript, { theme });
@@ -243,6 +247,7 @@ for (const theme of ['light', 'dark']) {
     const pvp = `phone 390x844 ${theme} ${mode}`;
     const pctx = await browser.newContext({ viewport: { width: 390, height: 844 }, colorScheme: theme, deviceScaleFactor: 2, timezoneId: 'Asia/Shanghai', locale: 'zh-CN', userAgent: ANDROID_UA, hasTouch: true });
     const pp = await pctx.newPage();
+    await pp.clock.install({ time: FIXED_NOW });
     pp.on('pageerror', e => console.log('PAGEERROR', e.message.split('\n')[0]));
     await pp.addInitScript(fixture, mode);
     await pp.addInitScript(initScript, { theme });

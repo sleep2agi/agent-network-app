@@ -35,6 +35,7 @@ const web = createServer((req, res) => {
 await new Promise(r => web.once('listening', r));
 const WEB_URL = `http://127.0.0.1:${web.address().port}/`;
 const ALIAS = '示例-A';
+const PLACEHOLDER = `发消息给 ${ALIAS}…`;
 // 1×1 PNG
 const PNG = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==', 'base64');
 
@@ -45,6 +46,9 @@ const initScript = ({ theme }) => {
   const creds = { appId: '', accessToken: 'placeholder-api-key-0000', endpoint: 'http://127.0.0.1:1/flash' };
   const sessions = [{ alias: '示例-A', status: 'idle', agent: 'claude-code', runtime: 'agent-node', node_id: 'n_demo_a', hostname: 'host-a', project_dir: '/work/demo-a', version: '0.0.0', updated_at: iso(1) }];
   try { localStorage.setItem('voice_composer_input_mode_v1', 'keyboard'); } catch {}
+  // UI language pinned to Chinese (the assertions read 相册 / 文件 / 发送). Since the live language switch (#507) the app
+  // follows the browser language, and a CI / LANG=C Chromium is English — the drive then failed on 「相册」 (2026-10-02 sweep).
+  try { localStorage.setItem('anet.language.v1', 'zh'); } catch {}
   window.__posts = [];
   let uploads = 0;
   const route = (url, method) => {
@@ -140,7 +144,7 @@ for (const c of CASES) {
   await page.goto(`${WEB_URL}?safeAreaSim=${c.sim}`);
   await page.waitForFunction(() => !!window.__anetLayoutSweep, null, { timeout: 20000 });
   await page.evaluate((a) => window.__anetLayoutSweep.setScreen({ name: 'chat', alias: a }), ALIAS);
-  const inputSel = `textarea[placeholder="Message ${ALIAS}…"]`;
+  const inputSel = `textarea[placeholder="${PLACEHOLDER}"]`;
   const input = page.locator(inputSel);
   await input.waitFor({ timeout: 15000 });
   await page.waitForTimeout(400);
@@ -238,7 +242,7 @@ for (const c of CASES) {
   // 没有 safeAreaSim(它会把布局当安卓 → 双栏),所以不走 __anetLayoutSweep,直接点会话列表。
   await page.goto(WEB_URL);
   await page.getByText(ALIAS, { exact: true }).first().click({ timeout: 20000 });
-  const input = page.locator(`textarea[placeholder="Message ${ALIAS}…"]`);
+  const input = page.locator(`textarea[placeholder="${PLACEHOLDER}"]`);
   await input.waitFor({ timeout: 15000 });
   await input.click();
   await page.keyboard.type('桌面');
