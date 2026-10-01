@@ -1,0 +1,9 @@
+desktop v0.2.178 — 任务搜索能搜到历史任务
+================================================================================
+A. 本版内容(0.2.177 发版提交之后 main 上合入的 PR + 本 PR)
+  #632 搜索默认包含已归档;支持搜索的 Hub 上一次分页请求 q=&include_archived=1&limit=200 + 加载更多;过期请求结果丢弃;
+       搜索时显示「找到 N 个 · 另有 M 个被筛选隐藏 · 清除筛选 · 加载更多」;旧 Hub 保持原路径。task-search ck 92/92;requirement-details Docker 46/0;drive 76/76;一次性 Hub 回放 6/6。
+  本 PR(版本号):0.2.177 → 0.2.178,versionCode 2177 → 2178;release-desktop-auto-update.yml 加 What's new in 0.2.178;重新生成 src/changelog-bundled.ts。
+  本地:干净 origin/main(7f94b85) bump 后 npm ci / npm test / npm run typecheck 全部 rc=0;android-release-notes.mjs 0.2.178 rc=0。
+B. 验证边界(如实)
+  功能验证在页内桩与一次性 Hub;真机未验证。
