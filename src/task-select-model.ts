@@ -24,13 +24,16 @@ export function filterSelectOptions(options: readonly SelectOption[], query: str
   return options.filter(o => !o.id || `${o.label}\n${o.sub ?? ''}\n${o.keywords ?? ''}`.toLowerCase().includes(q));
 }
 
+/** anchorSelectMenu 给的最窄宽度(右对齐锚点用)。 */
+export const SELECT_MENU_MIN_WIDTH = 240;
+
 /**
  * 浮层放在按钮下面,左边对齐,宽 = max(按钮宽, 240)、不超过 maxWidth(默认 360);下面放不下而上面地方更大就翻到上面。
  * 夹进窗口(两边留 8)。高度按选项数算,最多 320。
  */
 export function anchorSelectMenu(a: SelectAnchor, viewport: { width: number; height: number }, m: { rows: number; rowH: number; search: boolean; maxWidth?: number }): { left: number; top: number; width: number; maxHeight: number } {
   const margin = 8;
-  const width = Math.min(Math.max(a.w, 240), m.maxWidth ?? 360, viewport.width - margin * 2);
+  const width = Math.min(Math.max(a.w, SELECT_MENU_MIN_WIDTH), m.maxWidth ?? 360, viewport.width - margin * 2);
   const left = Math.max(margin, Math.min(a.x, viewport.width - width - margin));
   const want = Math.min(320, 12 + (m.search ? 38 : 0) + m.rows * m.rowH);
   const below = viewport.height - (a.y + a.h + 4) - margin;
@@ -38,6 +41,15 @@ export function anchorSelectMenu(a: SelectAnchor, viewport: { width: number; hei
   if (below >= want || below >= above) return { left, top: a.y + a.h + 4, width, maxHeight: Math.max(120, Math.min(want, below)) };
   const h = Math.min(want, above);
   return { left, top: a.y - 4 - h, width, maxHeight: h };
+}
+
+/**
+ * 卡片右下角的参与人头像组只有几十 px 宽、贴着卡片右边:按左沿锚,240 宽的下拉会伸出卡片、压到隔壁列。
+ * 改成右沿对齐 —— 把锚点换成「右边和头像组对齐、宽 240」的框(anchorSelectMenu 照旧夹进窗口、放不下翻上去)。
+ */
+export function anchorRightAligned(a: SelectAnchor, width: number = SELECT_MENU_MIN_WIDTH): SelectAnchor {
+  if (a.w >= width) return a;
+  return { x: a.x + a.w - width, y: a.y, w: width, h: a.h };
 }
 
 /** 这张卡的全部后代(按 parentId 往下走;防环)。 */

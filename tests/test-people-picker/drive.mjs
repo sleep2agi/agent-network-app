@@ -4,12 +4,16 @@
 //
 //   WEB_DIR=<expo export dir> [OUT=<png dir>] [PLAYWRIGHT_MODULE=<…/playwright/index.mjs>] node tests/test-people-picker/drive.mjs
 //
-// desktop 1440×900 (Tauri stub ⇒ mouse) and phone 390×844 (Android UA ⇒ touch), light + dark:
+// desktop 1440×900 and 1100×620 (Tauri stub ⇒ mouse) and phone 390×844 (Android UA ⇒ touch), light + dark:
 //   filter   头部「负责人」筛选:段标题「人」在「Agent」上面,「我」是第一行且在「人」段里,所有节点在「Agent」段里,
 //            未分配最后;弹层在视口内
 //   owner    卡片菜单「指派负责人…」:第一行是我、名字带「（我）」;副标题是「成员」不是「人类 · u_…」;
 //            搜索 u_b 时那行副标题才带 id
-//   partic   点卡片参与人头像 → 设置参与人:标题行右边有「加我」(同一行、在面板内),点了我被勾上、按钮消失
+//   partic   点卡片参与人头像 → 设置参与人:「加我」在面板 / 下拉内(手机:标题行右边同一行),点了我被勾上、按钮消失
+//   anchored 桌面(1440×900、1100×620,指针)点卡片参与人头像 → 锚在头像组下面的下拉(people-dropdown,不是居中的
+//            people-panel):右沿对齐头像组、上沿 = 头像组下沿 + 4(放不下翻上去时下沿 = 头像组上沿 − 4)、在视口内、
+//            搜索框拿到焦点;打字筛、↑↓ 走、回车勾、⌘/Ctrl+回车确定(PATCH 带上我);再开一次按 Esc = 取消
+//            (不发 PATCH、看板还在、没打开详情)。手机 390×844 照旧居中面板。
 //   detail   分两个角色的 Hub:详情负责人字段只写名字,不再跟「（人类）」
 // Each step runs on its own, so a pre-change export shows every red, not just the first. Exit 1 on any failure.
 import { mkdirSync } from 'node:fs';
@@ -67,6 +71,7 @@ const inView = (b, V) => !!b && b.x >= 0 && b.y >= 0 && b.x + b.width <= V.w + 0
 
 const VIEWPORTS = {
   desktop: { w: 1440, h: 900, ua: undefined },
+  small: { w: 1100, h: 620, ua: undefined },
   phone: { w: 390, h: 844, ua: ANDROID_UA },
 };
 
@@ -193,8 +198,9 @@ for (const [name, V] of Object.entries(VIEWPORTS)) {
         await page.locator(tid('people-confirm')).first().waitFor({ timeout: 5000 });
         await page.waitForTimeout(300);
         const addMe = await bb(page, tid('people-add-me'));
-        const panel = await bb(page, tid('people-panel'));
-        const title = await page.getByText('选择参与人', { exact: true }).first().boundingBox().catch(() => null);
+        // 桌面是锚定下拉(没有标题行,「加我」在搜索框右端);手机是居中面板(标题行右边)。
+        const panel = await bb(page, tid(V.ua ? 'people-panel' : 'people-dropdown'));
+        const title = V.ua ? await page.getByText('选择参与人', { exact: true }).first().boundingBox().catch(() => null) : await bb(page, tid('people-search'));
         measure(where, '参与人 加我', addMe); measure(where, '参与人 面板', panel); measure(where, '参与人 标题', title);
         await shot('picker-participants');
         // RN-web 不渲染 accessibilityState 的 aria-checked;说明里的「已选 N 人」又是看板传进来的已保存数。
@@ -211,15 +217,79 @@ for (const [name, V] of Object.entries(VIEWPORTS)) {
         record(where, 'participants: 加我', {
           present: !!addMe,
           sameLineAsTitle: !!(addMe && title) && Math.abs((addMe.y + addMe.height / 2) - (title.y + title.height / 2)) <= 4,
-          rightOfTitle: !!(addMe && title) && addMe.x >= title.x + title.width,
+          rightOfTitle: !!(addMe && title) && (V.ua ? addMe.x >= title.x + title.width : addMe.x + addMe.width <= title.x + title.width + 0.5 && addMe.x > title.x + title.width / 2),
           insidePanel: inside(addMe, panel),
-          tapTarget: !!addMe && addMe.height >= 32,
-          checksMe: before === false && after === true,
+          // 下拉是指针尺寸(26 高);手机面板要手指尺寸。下拉里没勾的行不画 ✓(null),面板里画透明的(false)。
+          tapTarget: !!addMe && addMe.height >= (V.ua ? 32 : 24),
+          checksMe: (before === false || (!V.ua && before === null)) && after === true,
           liveCount: countBefore === 1 && countAfter === 2,
           goneAfter: (await page.locator(tid('people-add-me')).count()) === 0,
         }, { before, after, countBefore, countAfter });
         await press(page.locator(tid('people-cancel')).first());
         await page.waitForTimeout(300);
+      });
+
+      await guarded('card anchored', async () => {
+        const stackSel = `${tid('req-card-r1')} ${tid('task-participants')}`;
+        const stack = await bb(page, stackSel);
+        await press(page.locator(stackSel).first());
+        await page.locator(tid('people-confirm')).first().waitFor({ timeout: 5000 });
+        await page.waitForTimeout(300);
+        const dd = await bb(page, tid('people-dropdown'));
+        const panel = await bb(page, tid('people-panel'));
+        measure(where, '卡片 头像组', stack); measure(where, '卡片 参与人下拉', dd); measure(where, '卡片 参与人面板', panel);
+        await shot('card-participants');
+        if (V.ua) {
+          record(where, 'card avatars (phone): centred panel, no dropdown', { panel: !!panel, noDropdown: !dd, panelInView: inView(panel, V) });
+          await press(page.locator(tid('people-cancel')).first());
+          await page.waitForTimeout(300);
+          return;
+        }
+        const below = !!(dd && stack) && dd.y >= stack.y + stack.height;
+        const vGap = dd && stack ? (below ? dd.y - (stack.y + stack.height) : stack.y - (dd.y + dd.height)) : null;
+        const rightGap = dd && stack ? (dd.x + dd.width) - (stack.x + stack.width) : null;
+        const focused = await page.evaluate(() => document.activeElement?.getAttribute('data-testid') ?? null);
+        const patchesBefore = (await patches()).length;
+        // 打字筛 → 只剩我;↑↓ 走;回车勾上;⌘/Ctrl+回车确定。
+        await page.keyboard.type('tester');
+        await page.waitForTimeout(250);
+        const filtered = await pickerRows();
+        await page.keyboard.press('ArrowDown');
+        await page.keyboard.press('ArrowUp');
+        await page.keyboard.press('Enter');
+        await page.waitForTimeout(200);
+        const checked = await page.evaluate(() => { const row = document.querySelector('[data-testid="person-user:u_tester"]'); return !!row && [...row.querySelectorAll('*')].some(e => e.textContent === '✓' && !e.children.length); });
+        const stillOpen = (await page.locator(tid('people-dropdown')).count()) > 0;
+        await page.keyboard.press(process.platform === 'darwin' ? 'Meta+Enter' : 'Control+Enter');
+        await page.waitForTimeout(500);
+        const after = await patches();
+        const sent = after.slice(patchesBefore);
+        record(where, 'card avatars (desktop): anchored dropdown under the avatar group', {
+          dropdown: !!dd,
+          noCentredPanel: !panel,
+          rightAligned: rightGap !== null && Math.abs(rightGap) <= 1,
+          touchesGroup: vGap !== null && vGap >= 3 && vGap <= 5,
+          inView: inView(dd, V),
+          searchFocused: focused === 'people-search',
+          typeFilters: filtered.filter(id => /^person-(user|node):/.test(id)).join() === 'person-user:u_tester',
+          enterToggles: checked && stillOpen,
+          modEnterConfirms: (await page.locator(tid('people-dropdown')).count()) === 0 && sent.length === 1 && sent[0].includes('u_tester') && sent[0].includes('u_a'),
+        }, { below, vGap: vGap === null ? null : r1(vGap), rightGap: rightGap === null ? null : r1(rightGap), focused, filtered: filtered.join(','), sent: sent.join(' ') });
+        // Esc = 取消:只关下拉,不发 PATCH、看板还在、没有打开详情。
+        await page.waitForTimeout(400);
+        await press(page.locator(stackSel).first());
+        await page.locator(tid('people-dropdown')).first().waitFor({ timeout: 5000 });
+        await page.waitForTimeout(300);
+        const n0 = (await patches()).length;
+        await page.keyboard.press('Escape');
+        await page.waitForTimeout(500);
+        record(where, 'card avatars (desktop): Esc cancels only the dropdown', {
+          closed: (await page.locator(tid('people-dropdown')).count()) === 0,
+          noPatch: (await patches()).length === n0,
+          boardStays: !!(await bb(page, tid('tasks-view'))) && !!(await bb(page, tid('req-card-r1'))),
+          noDetail: (await page.locator(tid('req-detail')).count()) === 0,
+        });
+        await shot('card-participants-esc');
       });
 
       await guarded('detail owner', async () => {

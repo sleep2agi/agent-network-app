@@ -29,7 +29,7 @@ import { createProject, createRequirementOnHub, fetchMyUserId, getRequirementOnH
 import { listRequirementPeople, saveRequirementAssignments } from './requirement-people-api';
 import { applyCellEdit, cellRequest, rollbackCellEdit, type CellEdit } from './task-list-edit-model';
 import { personKey, type RequirementPerson } from './requirement-people';
-import RequirementPeoplePicker from './RequirementPeoplePicker';
+import RequirementPeoplePicker, { measureAnchor } from './RequirementPeoplePicker';
 import { assignAccess, bulkOwnerPlan, canAssignPeople, humanParticipants, ownerChange, participantsChange, revertAssign, type AssignChange } from './task-assign';
 import { colors, radius, spacing } from './theme';
 import { elevated } from './elevation';
@@ -61,7 +61,7 @@ import { EMPTY_SEARCH, filterHiddenCount, focusKindOf, isSearchShortcut, needsSe
 import { ArchivedTag, ReadOnlyTag, highlight, SearchCancel, SearchEmpty, SearchField, SearchIconButton, SearchStatusBar } from './TaskSearch';
 import { comboFromEvent, shortcutForCombo } from './shortcuts-model';
 import { isMacKeyboard, shortcutBindings, shortcutCaptureActive } from './shortcuts-store';
-import { isSelectClick, NO_SELECTION, pruneSelection, runBulk, selectClick, toggleSelected, type BulkProgress, type SelectAnchor, type Selection } from './task-select-model';
+import { anchorRightAligned, isSelectClick, NO_SELECTION, pruneSelection, runBulk, selectClick, toggleSelected, type BulkProgress, type SelectAnchor, type Selection } from './task-select-model';
 import { SEQ_CAPABILITY } from './task-short-id';
 import { canEditTaskField, readOnlyLabelKey, type TaskEditField } from './task-access';
 import { subscribeOpenTaskRequest, takeOpenTaskRequest } from './task-open-request';
@@ -168,7 +168,8 @@ function ScopedRequirementBoard({ cfg, desktop, dispatch, onOpenVoiceSettings, s
   const [bulkMenu, setBulkMenu] = useState<{ kind: BulkKind; anchor: SelectAnchor } | null>(null);
   const lastBulk = useRef<{ kind: BulkKind; value: string | null } | null>(null);
   // 从看板直接指派(卡片菜单 / 卡片上的参与人头像):开着哪张卡的哪个选择器。
-  const [assignFor, setAssignFor] = useState<{ id: string; mode: 'owner' | 'participants' } | null>(null);
+  // anchor:从卡片头像组点开(桌面)时锚在头像组下面的下拉;卡片菜单 / 手机 = null = 居中面板。
+  const [assignFor, setAssignFor] = useState<{ id: string; mode: 'owner' | 'participants'; anchor: SelectAnchor | null } | null>(null);
   const bulkRefs = useRef<Record<string, any>>({});
   const pendingMoves = useRef(new Set<string>());
   const mutations = useRef(0);
@@ -521,12 +522,15 @@ function ScopedRequirementBoard({ cfg, desktop, dispatch, onOpenVoiceSettings, s
       return e instanceof Error ? e.message : tr('tasks.copy.3');
     }
   };
-  const openAssign = async (id: string, mode: 'owner' | 'participants') => {
+  const openAssign = async (id: string, mode: 'owner' | 'participants', anchorEl?: any) => {
     const item = items.find(row => row.id === id);
     if (!item) return;
     if (!canAssignPeople(item)) { setBanner(readOnlyBlock(id) || tr('tasks.copy.4')); return; }
     if (!(await loadPeople()) && !people.length) return;
-    setAssignFor({ id, mode });
+    // 桌面(指针)从卡片头像组点开:和详情 / 新建里的字段一样,锚在头像组下面的下拉(右沿对齐头像组,不伸进隔壁列)。
+    // 手机、或量不到(元素没了):居中面板。窗口够不够宽由选择器自己判(PEOPLE_DROPDOWN_MIN_WIDTH)。
+    if (!pointer || !anchorEl) { setAssignFor({ id, mode, anchor: null }); return; }
+    measureAnchor(anchorEl, a => setAssignFor({ id, mode, anchor: a ? anchorRightAligned(a) : null }));
   };
   const assignItem = assignFor ? items.find(row => row.id === assignFor.id) ?? null : null;
   const confirmAssign = (picked: { kind: 'user' | 'node'; id: string }[]) => {
@@ -680,7 +684,7 @@ function ScopedRequirementBoard({ cfg, desktop, dispatch, onOpenVoiceSettings, s
       onAction={(a, at) => onSwipe(item, a, at)} background={background} style={style}>{node}</TaskSwipeRow>
   ) : node);
   // 卡片上的参与人头像:能改 = 设置参与人;不能改 = 打开详情(和点卡片一样)。
-  const onParticipants = (item: Requirement) => (canAssignPeople(item) ? () => { void openAssign(item.id, 'participants'); } : () => openDetail(item.id));
+  const onParticipants = (item: Requirement) => (canAssignPeople(item) ? (stack?: any) => { void openAssign(item.id, 'participants', stack); } : () => openDetail(item.id));
 
   // ── 视图 ──
   // 搜索先挑、筛选再筛(两个都是逐行判断,顺序不影响结果);列表 / 看板 / 甘特图都只从这两个取。
@@ -1426,6 +1430,7 @@ function ScopedRequirementBoard({ cfg, desktop, dispatch, onOpenVoiceSettings, s
           hint={assignFor.mode === 'owner' ? (hasRoles(assignItem) ? tr('tasks.copy.109') : undefined) : (n: number) => tr('tasks.participantsPickHint', { v0: n })}
           people={people}
           selected={assignFor.mode === 'owner' ? (assignItem.owner ? [assignItem.owner] : []) : humanParticipants(assignItem)}
+          anchor={assignFor.anchor}
           onClose={() => setAssignFor(null)}
           onConfirm={confirmAssign}
         />
@@ -1523,7 +1528,7 @@ function BulkBar({ count, bulk, canProject, canAgent, canOwner, ownerEditable, r
 }
 
 /** 卡片最下一行:子任务进度(左,可没有)+ 参与人头像(右,可没有)。都没有就不占位置。 */
-function CardFooter({ item, people, s, touch, onParticipants, canAssign, meId }: { item: Requirement; people: readonly RequirementPerson[]; s: TaskStyles; touch: boolean; onParticipants: () => void; canAssign: boolean; meId: string | null }) {
+function CardFooter({ item, people, s, touch, onParticipants, canAssign, meId }: { item: Requirement; people: readonly RequirementPerson[]; s: TaskStyles; touch: boolean; onParticipants: (stack?: any) => void; canAssign: boolean; meId: string | null }) {
   useTranslation();
   const hasList = checklistCounts(item).total > 0;
   const hasPeople = !!item.participants?.length;
