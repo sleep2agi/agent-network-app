@@ -991,7 +991,7 @@ function ScopedRequirementBoard({ cfg, desktop, dispatch, onOpenVoiceSettings, s
         {item.readOnly ? <ReadOnlyTag editFields={item.editFields} /> : null}
         <ParentLine item={item} items={items} />
         <CardMeta item={item} people={people} today={today} s={s} compact={compactCards} />
-        <CardFooter item={item} people={people} s={s} touch={!pointer} onParticipants={onParticipants(item)} canAssign={canAssignPeople(item)} />
+        <CardFooter item={item} people={people} s={s} touch={!pointer} onParticipants={onParticipants(item)} canAssign={canAssignPeople(item)} meId={meId} />
         {moveErrors[item.id] ? <Text style={s.err} numberOfLines={1}>{moveErrors[item.id]}</Text> : null}
       </Pressable>
     ), { borderRadius: BOARD_RADIUS.card }, cardBg());
@@ -1140,7 +1140,7 @@ function ScopedRequirementBoard({ cfg, desktop, dispatch, onOpenVoiceSettings, s
         {item.archived ? <ArchivedTag /> : null}
                       <ParentLine item={item} items={items} />
                       <CardMeta item={item} people={people} today={today} s={s} />
-                      <CardFooter item={item} people={people} s={s} touch={!pointer} onParticipants={onParticipants(item)} canAssign={canAssignPeople(item)} />
+                      <CardFooter item={item} people={people} s={s} touch={!pointer} onParticipants={onParticipants(item)} canAssign={canAssignPeople(item)} meId={meId} />
                     </Pressable>
                   ), undefined, cardBg()))}
                 </View>
@@ -1209,7 +1209,7 @@ function ScopedRequirementBoard({ cfg, desktop, dispatch, onOpenVoiceSettings, s
           editFields={selected.editFields}
           items={items}
           onOpenRequirement={id => { setSelectedId(id); const next = items.find(i => i.id === id); if (single && next) single.onTitle?.(next.name); }}
-          onCreateChild={parent => setDraft({ ...draftFor('pool'), parentId: parent.id, projectId: parent.projectId ?? (projects ? defaultProjectFor(filter, projects) : null) })}
+          onCreateChild={parent => setDraft({ ...draftFor('pool'), parentId: parent.id, projectId: parent.projectId && !projects?.some(p => p.id === parent.projectId && p.canEdit === false) ? parent.projectId : (projects ? defaultProjectFor(filter, projects) : null) })}
           projects={projects}
           dueDatetime={dueDatetime}
           lowestPriority={lowestPriority}
@@ -1523,7 +1523,7 @@ function BulkBar({ count, bulk, canProject, canAgent, canOwner, ownerEditable, r
 }
 
 /** 卡片最下一行:子任务进度(左,可没有)+ 参与人头像(右,可没有)。都没有就不占位置。 */
-function CardFooter({ item, people, s, touch, onParticipants, canAssign }: { item: Requirement; people: readonly RequirementPerson[]; s: TaskStyles; touch: boolean; onParticipants: () => void; canAssign: boolean }) {
+function CardFooter({ item, people, s, touch, onParticipants, canAssign, meId }: { item: Requirement; people: readonly RequirementPerson[]; s: TaskStyles; touch: boolean; onParticipants: () => void; canAssign: boolean; meId: string | null }) {
   useTranslation();
   const hasList = checklistCounts(item).total > 0;
   const hasPeople = !!item.participants?.length;
@@ -1540,7 +1540,7 @@ function CardFooter({ item, people, s, touch, onParticipants, canAssign }: { ite
         </View>
       ) : null}
       <View style={{ flex: 1, minWidth: hasList ? 96 : 0 }}>{hasList ? <ChecklistProgress item={item} s={s} /> : null}</View>
-      {hasPeople ? <ParticipantStack item={item} people={people} s={s} touch={touch} onPress={onParticipants} pressLabel={canAssign ? 'assign' : 'open'} /> : null}
+      {hasPeople ? <ParticipantStack item={item} people={people} s={s} touch={touch} onPress={onParticipants} pressLabel={canAssign ? 'assign' : 'open'} meKey={meId ? personKey({ kind: 'user', id: meId }) : null} /> : null}
     </View>
   );
 }

@@ -10,16 +10,17 @@ import { Text } from './ui-text';
 import { Ionicons } from './icons';
 import { colors, spacing } from './theme';
 import { REQ_COLUMN_LABEL, type Requirement, type RequirementProject } from './requirements-model';
-import { activeProjects } from './task-board-model';
+import { activeProjects, pickableProjects } from './task-board-model';
 import { parentCandidates } from './task-select-model';
 import { SelectField, type SelectOption } from './TaskSelectMenu';
 import { STATUS_TONE, useTaskStyles } from './TaskBoardParts';
 import { fieldStyles } from './TaskCreateDialog';
 
 export function projectOptions(projects: readonly RequirementProject[], current: string | null): SelectOption[] {
-  const list: SelectOption[] = activeProjects(projects).map(p => ({ id: p.id, label: p.name, color: p.color }));
-  const archived = current ? projects.find(p => p.id === current && p.archived) : undefined;
-  if (archived) list.push({ id: archived.id, label: tr('tasks.copy.110', { v0: archived.name }), color: archived.color, disabled: true });
+  const list: SelectOption[] = pickableProjects(projects).map(p => ({ id: p.id, label: p.name, color: p.color }));
+  const cur = current ? projects.find(p => p.id === current) : undefined;
+  if (cur?.archived) list.push({ id: cur.id, label: tr('tasks.copy.110', { v0: cur.name }), color: cur.color, disabled: true });
+  else if (cur && cur.canEdit === false) list.push({ id: cur.id, label: tr('tasks.projectNotEditable', { v0: cur.name }), color: cur.color, disabled: true });
   return list;
 }
 
@@ -59,7 +60,8 @@ export function ProjectSelect({ value, projects, onChange, touch, idBase, compac
     <View style={{ gap: spacing.sm }} testID={`${idBase}-field`}>
       <Text style={f.label}>{tr('tasks.copy.30')}</Text>
       {field}
-      {!activeProjects(projects).length ? <Text style={s.muted}>{tr('tasks.copy.111')}</Text> : null}
+      {!activeProjects(projects).length ? <Text style={s.muted}>{tr('tasks.copy.111')}</Text>
+        : !pickableProjects(projects).length ? <Text style={s.muted} testID={`${idBase}-none-editable`}>{tr('tasks.projectNoneEditable')}</Text> : null}
     </View>
   );
 }

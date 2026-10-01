@@ -310,10 +310,11 @@ export function ProjectChip({ project, s, small = false }: { project: Requiremen
  * 认不出的成员画占位头像,不显示裸 id。
  */
 /** onPress:看板卡片上点头像 = 设置参与人(能改时)或打开详情(task-assign.ts);列表表格里不给,点了没有动作。 */
-export function ParticipantStack({ item, people, s, touch, size = 20, onPress, pressLabel }: { item: Pick<Requirement, 'participants'>; people: readonly RequirementPerson[]; s: TaskStyles; touch: boolean; size?: number; onPress?: () => void; pressLabel?: 'assign' | 'open' }) {
+/** meKey:我参与时我的头像排第一、描强调色边(描边宽度不变 → 卡片不长高),名单里标「我」。 */
+export function ParticipantStack({ item, people, s, touch, size = 20, onPress, pressLabel, meKey }: { item: Pick<Requirement, 'participants'>; people: readonly RequirementPerson[]; s: TaskStyles; touch: boolean; size?: number; onPress?: () => void; pressLabel?: 'assign' | 'open'; meKey?: string | null }) {
   useTranslation();
   const [open, setOpen] = useState(false);
-  const st = participantStack(item.participants, people);
+  const st = participantStack(item.participants, people, 3, meKey);
   if (!st.shown.length) return null;
   return (
     <View style={{ alignItems: 'flex-end', gap: 4 }}>
@@ -329,7 +330,7 @@ export function ParticipantStack({ item, people, s, touch, size = 20, onPress, p
         testID="task-participants"
       >
         {st.shown.map((p, i) => (
-          <View key={p.key} style={{ marginLeft: i ? -6 : 0, borderRadius: radius.pill, borderWidth: 1.5, borderColor: cardBg() }} testID="task-participant-avatar">
+          <View key={p.key} style={{ marginLeft: i ? -6 : 0, borderRadius: radius.pill, borderWidth: 1.5, borderColor: p.me ? colors.accent : cardBg(), zIndex: p.me ? 1 : 0 }} testID="task-participant-avatar" {...(p.me ? { dataSet: { participantMe: '1' } } : null) as object}>
             {p.known ? <AliasAvatar alias={p.name} size={size} /> : <View style={{ width: size, height: size, borderRadius: radius.pill, backgroundColor: colors.subtleFill, alignItems: 'center', justifyContent: 'center' }}><Ionicons name="help" size={size * 0.6} color={colors.textMuted} /></View>}
           </View>
         ))}

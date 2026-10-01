@@ -20,10 +20,11 @@ export function ownerCounts(...args: Parameters<typeof model.ownerCounts>) {
 export function roleAvatars(...args: Parameters<typeof model.roleAvatars>) {
  return model.roleAvatars(...args).map(row => ({ ...row, name: personName(row.ref, args[1]) }));
 }
-export function participantStack(...[refs, people, max = 3]: Parameters<typeof model.participantStack>) {
- const raw = model.participantStack(refs, people, max);
- const names = (refs ?? []).map(ref => personDisplay(ref, people));
- return { ...raw, shown: raw.shown.map((row,i) => ({ ...row, ...names[i] })), all: (refs ?? []).map((ref,i) => `${names[i].name} (${ref.kind === 'user' ? t('tasks.copy.1') : 'Agent'})`).join(', ') };
+export function participantStack(...[refs, people, max = 3, meKey]: Parameters<typeof model.participantStack>) {
+ const raw = model.participantStack(refs, people, max, meKey);
+ const ordered = model.participantsMeFirst(refs, meKey);
+ const names = ordered.map(ref => personDisplay(ref, people));
+ return { ...raw, shown: raw.shown.map((row,i) => ({ ...row, ...names[i] })), all: ordered.map((ref,i) => `${names[i].name} (${i === 0 && raw.shown[0]?.me ? t('tasks.participantMe') : ref.kind === 'user' ? t('tasks.copy.1') : 'Agent'})`).join(', ') };
 }
 function dueText(value: string): string {
  if (currentLanguage() === 'zh') return value;

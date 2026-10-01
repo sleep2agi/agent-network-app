@@ -5,13 +5,14 @@ import { useTranslation } from './i18n-react';
 import { taskText } from './i18n-tasks';
 // 新建任务:桌面是居中的小对话框,手机是从底部升起的面板。字段:标题(自动聚焦)、负责人(头像选择器,
 // 复用 RequirementPeoplePicker —— 只存稳定身份 {kind,id})、参与人(同一个选择器多选,只列人类)、优先级、预计完成。
-import { useState, type ReactNode } from 'react';
+import { useRef, useState, type ReactNode } from 'react';
 import { Modal, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import ModalKeyboardAvoider from './ModalKeyboardAvoider';
 import { Text, TextInput } from './ui-text';
 import { Ionicons } from './icons';
 import AliasAvatar from './AliasAvatar';
-import RequirementPeoplePicker from './RequirementPeoplePicker';
+import RequirementPeoplePicker, { measureAnchor } from './RequirementPeoplePicker';
+import type { SelectAnchor } from './task-select-model';
 import TaskDuePicker from './TaskDuePicker';
 import { useModalSafePadding } from './safe-area-runtime';
 import { withBasePadding } from './modal-safe-area';
@@ -87,7 +88,7 @@ export const fieldStyles = () => StyleSheet.create({
  * 负责人 / 负责 Agent 两个选择器(分两个角色的 Hub),或旧 Hub 的单一负责人。
  * 负责人只列人类、负责 Agent 只列节点(RequirementPeoplePicker 的 kinds 过滤);存的永远是 {kind,id}。
  */
-export function RoleFields({ twoRoles, owner, agentOwner, people, peopleLoading, peopleError, networkId, onLoadPeople, onChange, idBase, ownerLocked }: {
+export function RoleFields({ twoRoles, owner, agentOwner, people, peopleLoading, peopleError, networkId, onLoadPeople, onChange, idBase, ownerLocked, pointer = false }: {
   twoRoles: boolean;
   owner: RequirementPersonRef | null;
   agentOwner: RequirementPersonRef | null;
@@ -101,24 +102,33 @@ export function RoleFields({ twoRoles, owner, agentOwner, people, peopleLoading,
   idBase: string;
   /** 旧 Hub 的旧卡(没有稳定负责人):负责人一栏只读,由调用方自己画。 */
   ownerLocked?: ReactNode;
+  /** 桌面(鼠标):选择器锚在字段下面的下拉,不再居中盖住详情面板。 */
+  pointer?: boolean;
 }) {
   useTranslation();
   const s = useTaskStyles();
   const f = fieldStyles();
   const [picker, setPicker] = useState<'owner' | 'agent' | null>(null);
-  const open = async (role: 'owner' | 'agent') => { if (await onLoadPeople()) setPicker(role); };
+  const [anchor, setAnchor] = useState<SelectAnchor | null>(null);
+  const ownerRef = useRef<any>(null);
+  const agentRef = useRef<any>(null);
+  const open = async (role: 'owner' | 'agent') => {
+    if (!(await onLoadPeople())) return;
+    if (!pointer) { setAnchor(null); setPicker(role); return; }
+    measureAnchor((role === 'agent' ? agentRef : ownerRef).current, a => { setAnchor(a); setPicker(role); });
+  };
   const kinds = picker ? roleKinds(picker, twoRoles) : undefined;
   return (
     <>
       <View style={{ gap: spacing.sm }}>
         <Text style={f.label}>{tr('tasks.copy.15')}</Text>
-        {ownerLocked ?? <OwnerField value={owner} people={people} role={twoRoles ? 'human' : 'any'} onPress={() => { void open('owner'); }} loading={peopleLoading} disabled={peopleLoading} idBase={idBase} />}
+        {ownerLocked ?? <View ref={ownerRef} collapsable={false}><OwnerField value={owner} people={people} role={twoRoles ? 'human' : 'any'} onPress={() => { void open('owner'); }} loading={peopleLoading} disabled={peopleLoading} idBase={idBase} /></View>}
         {twoRoles ? <Text style={s.muted}>{tr('tasks.copy.105')}</Text> : null}
       </View>
       {twoRoles ? (
         <View style={{ gap: spacing.sm }}>
           <Text style={f.label}>{tr('tasks.copy.82')}</Text>
-          <OwnerField value={agentOwner} people={people} role="agent" onPress={() => { void open('agent'); }} loading={peopleLoading} disabled={peopleLoading} idBase={`${idBase}-agent`} />
+          <View ref={agentRef} collapsable={false}><OwnerField value={agentOwner} people={people} role="agent" onPress={() => { void open('agent'); }} loading={peopleLoading} disabled={peopleLoading} idBase={`${idBase}-agent`} /></View>
           <Text style={s.muted}>{tr('tasks.copy.106')}</Text>
         </View>
       ) : null}
@@ -132,6 +142,7 @@ export function RoleFields({ twoRoles, owner, agentOwner, people, peopleLoading,
           hint={picker === 'agent' ? tr('tasks.copy.108') : twoRoles ? tr('tasks.copy.109') : undefined}
           people={people}
           selected={picker === 'agent' ? (agentOwner ? [agentOwner] : []) : owner ? [owner] : []}
+          anchor={anchor}
           onClose={() => setPicker(null)}
           onConfirm={sel => { onChange(picker === 'agent' ? { agentOwner: sel[0] || null } : { owner: sel[0] || null }); setPicker(null); }}
         />
@@ -152,7 +163,13 @@ export function ParticipantsField({ value, people, networkId, loading, onLoadPeo
   useTranslation();
   const f = fieldStyles();
   const [open, setOpen] = useState(false);
-  const show = async () => { if (await onLoadPeople()) setOpen(true); };
+  const [anchor, setAnchor] = useState<SelectAnchor | null>(null);
+  const fieldRef = useRef<any>(null);
+  const show = async () => {
+    if (!(await onLoadPeople())) return;
+    if (touch) { setAnchor(null); setOpen(true); return; }
+    measureAnchor(fieldRef.current, a => { setAnchor(a); setOpen(true); });
+  };
   const names = value.map(r => personName(r, people));
   const picker = open ? (
     <RequirementPeoplePicker
@@ -163,6 +180,7 @@ export function ParticipantsField({ value, people, networkId, loading, onLoadPeo
       hint={n => tr('tasks.participantsPickHint', { v0: n })}
       people={people}
       selected={value}
+      anchor={anchor}
       onClose={() => setOpen(false)}
       onConfirm={sel => { onChange(sel.filter(r => r.kind === 'user')); setOpen(false); }}
     />
@@ -189,6 +207,7 @@ export function ParticipantsField({ value, people, networkId, loading, onLoadPeo
   }
   return (
     <>
+      <View ref={fieldRef} collapsable={false}>
       <Pressable testID={idBase} accessibilityRole="button" accessibilityLabel={value.length ? tr('tasks.participantsA11y', { v0: names.join('、') }) : tr('tasks.addParticipants')} disabled={loading} onPress={() => { void show(); }}
         style={state => [f.input, f.row, { flexWrap: 'wrap' }, (state as { hovered?: boolean }).hovered && { borderColor: colors.textMuted }]}>
         {value.length ? value.map((r, i) => (
@@ -201,6 +220,7 @@ export function ParticipantsField({ value, people, networkId, loading, onLoadPeo
         <Text style={{ flex: 1, color: colors.textMuted, fontSize: typeScale.body }} numberOfLines={1}>{loading ? tr('tasks.copy.101') : value.length ? '' : tr('tasks.participantsPlaceholder')}</Text>
         <Ionicons name="chevron-down" size={14} color={colors.textMuted} />
       </Pressable>
+      </View>
       {picker}
     </>
   );
@@ -308,6 +328,7 @@ export default function TaskCreateDialog({ draft, sheet, twoRoles, parentName, p
                 onLoadPeople={onLoadPeople}
                 onChange={set}
                 idBase="req-assignee"
+                pointer={pointer && !sheet}
               />
               {participantsCapable ? (
                 <View style={{ gap: spacing.sm }} testID="req-create-participants">

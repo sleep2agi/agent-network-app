@@ -10,15 +10,18 @@ import type { Requirement } from './requirements-model';
 import { listRequirementPeople, saveRequirementAssignments, type RequirementAssignments } from './requirement-people-api';
 import { hasRoles } from './task-board-model';
 import { personKey, type RequirementPerson, type RequirementPersonRef } from './requirement-people';
-import PeoplePicker from './RequirementPeoplePicker';
+import PeoplePicker, { measureAnchor } from './RequirementPeoplePicker';
+import type { SelectAnchor } from './task-select-model';
 import { colors, spacing } from './theme';
 
 import { PersonChips, useTaskStyles } from './TaskBoardParts';
 
-export default function RequirementAssignmentsEditor({ cfg, item, onSaved, fields = 'both' }: {
+export default function RequirementAssignmentsEditor({ cfg, item, onSaved, fields = 'both', pointer = false }: {
   cfg: HubConfig; item: Requirement; onSaved: (assignments: RequirementAssignments) => void;
   /** 任务详情里负责人和标题 / 期限一起在草稿里改(「保存修改」),这里只管参与人。 */
   fields?: 'both' | 'participants';
+  /** 桌面:选择器锚在「编辑参与人」下面的下拉,不居中盖住详情面板。 */
+  pointer?: boolean;
 }) {
   useTranslation();
   const supported = item.owner !== undefined && item.participants !== undefined;
@@ -28,6 +31,12 @@ export default function RequirementAssignmentsEditor({ cfg, item, onSaved, field
   const [error, setError] = useState('');
   const [reload, setReload] = useState(0);
   const [mode, setMode] = useState<'owner' | 'participants' | null>(null);
+  const [anchor, setAnchor] = useState<SelectAnchor | null>(null);
+  const actionsRef = useRef<any>(null);
+  const openPicker = (value: 'owner' | 'participants') => {
+    if (!pointer) { setAnchor(null); setMode(value); return; }
+    measureAnchor(actionsRef.current, a => { setAnchor(a); setMode(value); });
+  };
   const [saving, setSaving] = useState(false);
   const pending = useRef(false);
   const alive = useRef(true);
@@ -76,10 +85,10 @@ export default function RequirementAssignmentsEditor({ cfg, item, onSaved, field
     {loading ? <Text style={{ color: colors.textMuted, fontSize: 12 }} testID="participants-loading">{tr('tasks.copy.9')}</Text> : null}
     {error ? <Text accessibilityRole="alert" style={{ color: colors.failed }}>{error}</Text> : null}
     {error ? <Pressable accessibilityRole="button" disabled={saving} onPress={() => setReload(n => n + 1)}><Text style={{ color: colors.accent }}>{tr('tasks.copy.10')}</Text></Pressable> : null}
-    <View style={{ flexDirection: 'row', gap: spacing.md }}>
-      {(fields === 'both' ? ['owner', 'participants'] as const : ['participants'] as const).map(value => <Pressable key={value} testID={`edit-${value}`} accessibilityRole="button" disabled={loading || saving || !!error} onPress={() => setMode(value)} style={{ minHeight: 44, justifyContent: 'center' }}><Text style={{ color: colors.accent }}>{value === 'owner' ? tr('tasks.copy.11') : tr('tasks.copy.12')}</Text></Pressable>)}
+    <View ref={actionsRef} collapsable={false} style={{ flexDirection: 'row', gap: spacing.md }}>
+      {(fields === 'both' ? ['owner', 'participants'] as const : ['participants'] as const).map(value => <Pressable key={value} testID={`edit-${value}`} accessibilityRole="button" disabled={loading || saving || !!error} onPress={() => openPicker(value)} style={{ minHeight: 44, justifyContent: 'center' }}><Text style={{ color: colors.accent }}>{value === 'owner' ? tr('tasks.copy.11') : tr('tasks.copy.12')}</Text></Pressable>)}
     </View>
     {saving ? <Text accessibilityLiveRegion="polite" style={{ color: colors.textMuted }}>{tr('tasks.copy.13')}</Text> : null}
-    {mode ? <PeoplePicker networkId={cfg.networkId || ''} mode={mode} people={people} selected={mode === 'owner' ? item.owner ? [item.owner] : [] : item.participants!} onClose={() => setMode(null)} onConfirm={selected => { void confirm(selected); }} /> : null}
+    {mode ? <PeoplePicker networkId={cfg.networkId || ''} mode={mode} people={people} selected={mode === 'owner' ? item.owner ? [item.owner] : [] : item.participants!} anchor={anchor} onClose={() => setMode(null)} onConfirm={selected => { void confirm(selected); }} /> : null}
   </View>;
 }

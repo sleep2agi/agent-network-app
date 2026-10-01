@@ -123,6 +123,9 @@ export function subProgress(items: readonly Requirement[], item: Requirement): {
 export const activeProjects = (projects: readonly RequirementProject[]): RequirementProject[] =>
   projects.filter(p => !p.archived).sort((a, b) => a.sort - b.sort || a.name.localeCompare(b.name, 'zh'));
 
+/** 能把任务放进去的项目:未归档、且不是「只看」授权(「仅相关任务」的成员,Hub 只收 can_edit 的项目或无项目)。 */
+export const pickableProjects = (projects: readonly RequirementProject[]): RequirementProject[] => activeProjects(projects).filter(p => p.canEdit !== false);
+
 /** 各项目的卡片数(按当前除项目以外的筛选算,左栏的数字才和点进去看到的一致)。 */
 export function projectCounts(items: readonly Requirement[], f: BoardFilter): Map<string, number> {
   const counts = new Map<string, number>();
@@ -136,7 +139,8 @@ export function projectCounts(items: readonly Requirement[], f: BoardFilter): Ma
 /** 新建时默认的项目:左栏 / 头部正选着一个(未归档的)项目就用它。 */
 export function defaultProjectFor(f: BoardFilter, projects: readonly RequirementProject[]): string | null {
   if (!f.project || f.project === NO_PROJECT) return null;
-  return projects.some(p => p.id === f.project && !p.archived) ? f.project : null;
+  // 筛到一个只看的项目(scoped 成员)时不预选它 —— Hub 只收能编辑的项目或无项目。
+  return projects.some(p => p.id === f.project && !p.archived && p.canEdit !== false) ? f.project : null;
 }
 
 export const PROJECT_COLORS = ['#2563eb', '#16a34a', '#d97706', '#dc2626', '#7c3aed', '#0891b2', '#db2777', '#4b5563'] as const;
@@ -269,9 +273,18 @@ export function personName(ref: RequirementPersonRef, people: readonly Requireme
 }
 
 /** 卡片 / 列表上的参与人头像:最多 3 个,其余「+N」。 */
-export function participantStack(refs: readonly RequirementPersonRef[] | undefined, people: readonly RequirementPerson[], max = 3): { shown: { key: string; name: string; known: boolean; kind: 'user' | 'node' }[]; more: number; all: string } {
-  const list = (refs ?? []).map(r => ({ key: personKey(r), kind: r.kind, ...personDisplay(r, people) }));
-  return { shown: list.slice(0, max), more: Math.max(0, list.length - max), all: list.map(p => `${p.name}（${p.kind === 'user' ? '人类' : 'Agent'}）`).join('、') };
+/** 我在参与人里就排到最前(第 4 位以后会被折进「+N」,卡片上就看不出我在不在)。其余保持原顺序。 */
+export function participantsMeFirst(refs: readonly RequirementPersonRef[] | undefined, meKey?: string | null): RequirementPersonRef[] {
+  const list = [...(refs ?? [])];
+  const i = meKey ? list.findIndex(r => personKey(r) === meKey) : -1;
+  if (i > 0) list.unshift(...list.splice(i, 1));
+  return list;
+}
+
+/** meKey = 当前用户的 personKey;那一个头像 me=true(卡片上画强调色描边)。 */
+export function participantStack(refs: readonly RequirementPersonRef[] | undefined, people: readonly RequirementPerson[], max = 3, meKey?: string | null): { shown: { key: string; name: string; known: boolean; kind: 'user' | 'node'; me: boolean }[]; more: number; all: string } {
+  const list = participantsMeFirst(refs, meKey).map(r => ({ key: personKey(r), kind: r.kind, me: !!meKey && personKey(r) === meKey, ...personDisplay(r, people) }));
+  return { shown: list.slice(0, max), more: Math.max(0, list.length - max), all: list.map(p => `${p.name}（${p.me ? '我' : p.kind === 'user' ? '人类' : 'Agent'}）`).join('、') };
 }
 
 /** 卡片 / 列表上的负责人文字:负责人在前、负责 Agent 在后。旧 Hub(owner undefined)显示旧的 assignee 文本。 */
