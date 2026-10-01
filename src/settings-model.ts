@@ -294,6 +294,17 @@ export const SETTINGS_DETAIL_TITLE: Record<SettingsDetailKey, string> = {
   changelog: '更新日志',
 };
 
+/**
+ * 三级页自己接管顶栏(成员页:右上角「保存」;它推入的「选择 Agent」/「授权的项目」:换标题、右上角「完成」、
+ * 返回键先退回成员页)。null = 用默认顶栏。
+ */
+export type SettingsHeaderOverride = {
+  title?: string;
+  /** 返回箭头 / 安卓返回键 / Esc:给了就只调它(不退出三级页)。 */
+  onBack?: () => void;
+  action?: { label: string; onPress: () => void; disabled?: boolean; busy?: boolean; testID: string };
+};
+
 /** 三级页属于哪个子页(返回时回到它;子页换了就不该还停在别人的三级页上)。 */
 export const SETTINGS_DETAIL_PARENT: Record<SettingsDetailKey, SettingsCategoryKey> = {
   voiceApiKey: 'voice',

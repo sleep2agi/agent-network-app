@@ -55,9 +55,12 @@ export const initScript = ({ theme }) => {
     }
     return { ok: true };
   };
-  const route = (url, bodyText) => {
+  const route = (url, bodyText, method) => {
     const u = new URL(url);
     const p = u.pathname;
+    // A drive can answer routes of its own first (window.__routeOverride(u, bodyText, method) → body, null = 404,
+    // undefined = fall through to the defaults below), e.g. the member editor's members / grants / groups.
+    if (typeof window.__routeOverride === 'function') { const r = window.__routeOverride(u, bodyText, method); if (r !== undefined) return r; }
     if (p === '/mcp') {
       let params = {};
       try { params = JSON.parse(bodyText || '{}')?.params ?? {}; } catch {}
@@ -190,7 +193,7 @@ export const initScript = ({ theme }) => {
         case 'plugin:http|fetch': { const id = ++rid; reqs.set(id, args.clientConfig); return id; }
         case 'plugin:http|fetch_send': {
           const c = reqs.get(args.rid);
-          const body = route(c.url, c.data ? new TextDecoder().decode(new Uint8Array(c.data)) : '');
+          const body = route(c.url, c.data ? new TextDecoder().decode(new Uint8Array(c.data)) : '', c.method || 'GET');
           const buf = new TextEncoder().encode(body === null ? '{"ok":false}' : JSON.stringify(body));
           const id = ++rid; bodies.set(id, { buf, sent: false });
           return { status: body === null ? 404 : 200, statusText: 'OK', url: c.url, headers: [['content-type', 'application/json']], rid: id };

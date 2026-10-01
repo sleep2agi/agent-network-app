@@ -24,8 +24,10 @@ const SCRIM = 'rgba(0,0,0,0.55)';
 const RevealContext = createContext<() => void>(() => {});
 export const useDialogReveal = () => useContext(RevealContext);
 
-export default function DialogFrame({ title, closeLabel, onClose, footer, children, scroll = true, maxWidth = DIALOG_MAX_WIDTH, testID }: {
+export default function DialogFrame({ title, subtitle, closeLabel, onClose, footer, children, scroll = true, maxWidth = DIALOG_MAX_WIDTH, height, sectioned = false, testID }: {
   title: string;
+  /** 标题后面的小灰字(成员弹窗:用户名)。 */
+  subtitle?: string;
   closeLabel: string;
   onClose: () => void;
   /** 钉在卡片底部的按钮行(取消 / 确认)。 */
@@ -37,6 +39,13 @@ export default function DialogFrame({ title, closeLabel, onClose, footer, childr
    */
   scroll?: boolean;
   maxWidth?: number;
+  /** 想要的卡片高度(仍受窗口约束):正文里的列表要撑满剩下的高度时给(成员弹窗)。不给 = 按内容高。 */
+  height?: number;
+  /**
+   * 分区样式:标题栏 / 底部按钮行贴边、各带一条分隔线,正文不留卡片内边距(双栏弹窗自己排栏)。
+   * 骨架(有界卡片 · 能收缩的正文 · 正文后面的按钮行)不变。
+   */
+  sectioned?: boolean;
   testID: string;
 }) {
   const safe = useModalSafePadding('fullScreen');
@@ -47,9 +56,12 @@ export default function DialogFrame({ title, closeLabel, onClose, footer, childr
     <Modal visible transparent animationType="fade" onRequestClose={onClose}>
       <ModalKeyboardAvoider scrim={SCRIM}>
         <View style={[styles.backdrop, withBasePadding(safe, spacing.lg)]} testID={`${testID}-backdrop`}>
-          <View style={[styles.card, { maxWidth }]} accessibilityViewIsModal testID={testID}>
-            <View style={styles.header}>
-              <Text style={styles.title} numberOfLines={1}>{title}</Text>
+          <View style={[styles.card, { maxWidth }, sectioned && styles.cardSectioned, height ? { height: '100%', maxHeight: height } : null]} accessibilityViewIsModal testID={testID}>
+            <View style={[styles.header, sectioned && styles.headerSectioned]}>
+              <Text style={styles.title} numberOfLines={1} testID={`${testID}-title`}>
+                {title}
+                {subtitle ? <Text style={styles.subtitle}>{`  ${subtitle}`}</Text> : null}
+              </Text>
               <Pressable accessibilityRole="button" accessibilityLabel={closeLabel} onPress={onClose} hitSlop={8} style={styles.closeBtn} testID={`${testID}-close`}>
                 <Ionicons name="close" size={18} color={colors.textSecondary} />
               </Pressable>
@@ -61,9 +73,9 @@ export default function DialogFrame({ title, closeLabel, onClose, footer, childr
                 </ScrollView>
               </RevealContext.Provider>
             ) : (
-              <View style={[styles.body, styles.bodyContent]} testID={`${testID}-body`}>{children}</View>
+              <View style={[styles.body, styles.bodyContent, sectioned && styles.bodySectioned]} testID={`${testID}-body`}>{children}</View>
             )}
-            {footer ? <View style={styles.footer} testID={`${testID}-footer`}>{footer}</View> : null}
+            {footer ? <View style={[styles.footer, sectioned && styles.footerSectioned]} testID={`${testID}-footer`}>{footer}</View> : null}
           </View>
         </View>
       </ModalKeyboardAvoider>
@@ -76,6 +88,11 @@ const makeStyles = () => StyleSheet.create({
   card: { width: '100%', maxHeight: '100%', flexShrink: 1, backgroundColor: colors.card, borderRadius: radius.surface, padding: spacing.lg, gap: spacing.md, ...elevated('floating') },
   header: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   title: { flex: 1, color: colors.text, fontSize: 17, fontWeight: '600' },
+  subtitle: { color: colors.textMuted, fontSize: 12, fontWeight: '400' },
+  cardSectioned: { padding: 0, gap: 0, overflow: 'hidden' },
+  headerSectioned: { paddingHorizontal: spacing.lg + spacing.xs, paddingVertical: spacing.lg, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.border },
+  bodySectioned: { gap: 0, flexGrow: 1 },
+  footerSectioned: { paddingHorizontal: spacing.lg + spacing.xs, paddingVertical: spacing.md, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border },
   closeBtn: { width: 28, height: 28, alignItems: 'center', justifyContent: 'center' },
   body: { flexGrow: 0, flexShrink: 1, minHeight: 0 },
   bodyContent: { gap: spacing.md },

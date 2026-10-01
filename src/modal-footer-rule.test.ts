@@ -35,7 +35,7 @@ type Kind = 'dialog' | 'sheet' | 'menu' | 'fullscreen' | 'drawer' | 'frame';
 type Keyboard = 'avoider' | `followup: ${string}` | `n/a: ${string}`;
 const AUDIT: Record<string, { count: number; kinds: Kind[]; input?: boolean; keyboard?: Keyboard; note: string }> = {
   'DialogFrame.tsx': { count: 1, kinds: ['frame'], keyboard: 'avoider', input: true, note: '规则本体' },
-  'UserManagementPanel.tsx': { count: 1, kinds: ['dialog', 'sheet'], keyboard: 'avoider', input: true, note: '新建用户 / 成员 / 分组弹窗走 DialogFrame;手机「移出网络」「删除分组」确认是固定内容的底部 sheet(RemoveSheet)' },
+  'RemoveSheet.tsx': { count: 1, kinds: ['sheet'], note: '手机「移出网络」「删除分组」确认:固定内容的底部 sheet(说明 + 两个按钮),不需要滚动(#417 从 UserManagementPanel 挪出来)' },
   'TaskCreateDialog.tsx': { count: 1, kinds: ['dialog', 'sheet'], keyboard: 'avoider', input: true, note: '面板 maxHeight 100% / 92%,表单 ScrollView 可收缩(本次 BUG 修复)' },
   'AccountRowActions.tsx': { count: 1, kinds: ['sheet'], keyboard: 'n/a: 这个 <Modal 是手机管理账号的底部动作面板(固定几行按钮,无输入框);文件里的 TextInput 在编辑弹窗里,编辑弹窗是 DialogFrame(自带键盘避让)', note: '动作面板高度由固定行数决定,取消在最底;编辑走 DialogFrame' },
   'AccountSwitcher.tsx': { count: 1, kinds: ['dialog', 'sheet'], note: '80% / 85% 有界,列表 flexGrow:0 直接子节点,取消在外' },
@@ -134,7 +134,9 @@ function frameShapeOk(src: string): { bounded: boolean; shrinkBody: boolean; foo
 // —— 逐文件:已修的 BUG 不许回退 ——
 {
   const um = read('UserManagementPanel.tsx');
-  ck('用户管理:三个居中弹窗(新建用户 / 成员 / 分组)都走 DialogFrame,自己画的 <Modal 只剩手机底部确认单', countModals(um) === 1 && um.includes('function RemoveSheet') && (um.match(/<DialogFrame\b/g) ?? []).length === 3);
+  const me = read('MemberEditor.tsx');
+  ck('用户管理:三个居中弹窗(新建用户 / 分组 在面板里,成员 在 MemberEditor)都走 DialogFrame,自己不画 <Modal(手机确认单是 RemoveSheet)', countModals(um) === 0 && countModals(me) === 0 && (um.match(/<DialogFrame\b/g) ?? []).length === 2 && (me.match(/<DialogFrame\b/g) ?? []).length === 1 && um.includes('<RemoveSheet ') && me.includes('<RemoveSheet '));
+  ck('成员弹窗:正文不交给骨架滚(清单自己滚),卡片高度有界', /<DialogFrame[\s\S]{0,400}scroll=\{false\}[\s\S]{0,200}height=\{/.test(me) && /card: \{[^}]*maxHeight: '100%'/.test(frame));
   ck('用户管理:新建用户的按钮行在 DialogFrame 的 footer 里', /footer=\{<Actions onCancel=\{onClose\} onConfirm=\{submit\}/.test(um));
   ck('用户管理:网络不再平铺 chip(NetworkPicker,可搜索)', um.includes('<NetworkPicker') && !um.includes('netChips') && um.includes('new-user-network-search'));
   ck('用户管理:网络清单内部滚动且有高度上限', /pickerList:\s*\{\s*maxHeight:\s*\d+/.test(um));

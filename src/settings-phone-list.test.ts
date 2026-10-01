@@ -69,7 +69,8 @@ const norm = (f: string) => readFileSync(new URL(f, import.meta.url), 'utf-8').r
   ck('子页状态从模块级记忆初始化(切主题重挂后仍在子页)', src.includes('useState<SettingsCategoryKey | null>(() => rememberedSettingsView().page)'));
   ck('安卓返回键:BackHandler 返回(先三级页再子页)并消费事件', /BackHandler\.addEventListener\('hardwareBackPress', \(\) => \{ goBack\(\); return true; \}\)/.test(src));
   ck('网页:Esc 返回', /event\.key === 'Escape'\) \{ event\.preventDefault\(\); goBack\(\); \}/.test(src));
-  ck('goBack:三级页开着先退三级页,否则关子页', src.includes("const goBack = () => { if (settingsBackTarget(page, detail) === 'detail') closeDetail(); else closePage(); };"));
+  // 三级页可以接管返回(成员页推入的「选择 Agent」/「授权的项目」先退回成员页,#417)。
+  ck('goBack:三级页推入的页先退,再退三级页,否则关子页', src.includes("if (target === 'detail' && headerBackRef.current) headerBackRef.current();") && src.includes("else if (target === 'detail') closeDetail();") && /else closePage\(\);\n  \};/.test(src));
   ck('弹窗开着时不抢返回(让给弹窗的 onRequestClose)', /if \(!subPage \|\| dialogOpen\) return;/.test(src)
     // 切换账号面板(2026-09-29)、登录设备的退出确认(2026-09-30)也是弹窗。
     // 账号行的「编辑」弹窗、手机管理账号的底部动作面板(2026-09-30)也是。

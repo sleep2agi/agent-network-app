@@ -1,15 +1,15 @@
 // 成员的「任务权限」(RFC-038 §9):全部任务 / 仅相关任务 + 授权的项目(可看 / 可编辑)。
 //
-// 自成一体的区块:状态由调用方持有(mode + selection + onChange),这里只画 —— 现在的成员弹窗 / 成员页,
-// 和正在设计的双栏成员弹窗(另一个 agent 的稿)都能直接放进去,不用改这里。
-//   desktop —— 小节标题 + 分段控件「全部任务 / 仅相关任务」+ 说明 + 项目清单(复选框 · 色点 · 名称 · 可编辑开关)。
-//   phone   —— 微信式分组:两个单选行 +「授权的项目 N 个 ›」(点开就地展开 ✓ 清单)+「可编辑的项目」开关组,
+// 自成一体的区块:状态由调用方持有(mode + selection + onChange),这里只画(成员编辑器 MemberEditor.tsx 用)。
+//   desktop —— 双栏成员弹窗的左栏:小节标题 + 分段控件「全部任务 / 仅相关任务」+ 说明 + 带边框的项目清单
+//              (复选框 · 色点 · 名称 · 可编辑开关)。
+//   phone   —— 微信式分组:两个单选行 +「授权的项目 N 个 ›」(推入 TaskProjectsPage)+「可编辑的项目」开关组,
 //              只用 settings-kit 的积木。
 // viewer:没有「可编辑」开关(hub 上 viewer 本来就不能改),只显示「只看」。
-import { Pressable, ScrollView, StyleSheet, Switch, View } from 'react-native';
+import { Pressable, StyleSheet, View } from 'react-native';
 import { useEffect, useState } from 'react';
 import { Text } from './ui-text';
-import { Ionicons } from './icons';
+import { CheckBox, LabeledSwitch, Segmented, SectionLabel } from './MemberEditorKit';
 import { colors, onThemeChange, radius, spacing } from './theme';
 import { t as tr } from './i18n';
 import './i18n-users';
@@ -57,7 +57,7 @@ export function useTaskAccessState(cfg: HubConfig, networkId: string, userId: st
   const normalized = new Map(taskGrantsPayload(mode, selection, role).project_grants.map(g => [g.project_id, g.can_edit] as [string, boolean]));
   const changed = supported && taskGrantsChanged(before, { mode, selection: normalized });
   const save = () => saveTaskGrants(cfg, networkId, userId, taskGrantsPayload(mode, selection, role));
-  return { supported, projects, mode, setMode, selection, setSelection, changed, save };
+  return { supported, projects, before, mode, setMode, selection, setSelection, changed, save };
 }
 
 export type TaskAccessSectionProps = {
@@ -69,6 +69,8 @@ export type TaskAccessSectionProps = {
   selection: ProjectGrantSelection;
   onSelectionChange: (next: Map<string, boolean>) => void;
   role: MemberRole;
+  /** 手机:点「授权的项目 N 个 ›」推入项目页(TaskProjectsPage)。 */
+  onOpenProjects?: () => void;
 };
 
 const MODES: readonly TaskAccess[] = ['all', 'scoped'];
@@ -82,56 +84,60 @@ function hint(mode: TaskAccess, role: MemberRole): string {
   return role === 'viewer' ? tr('users.tasks.viewerHint') : tr('users.tasks.scopedHint');
 }
 
+/**
+ * 宽屏(成员弹窗左栏):小节标题 + 分段控件 + 一行说明 + 带边框的项目清单(勾选 · 色点 · 名称 · 可编辑)。
+ * 清单不自己滚:左栏整栏是一个 ScrollView(别在里面再套一个同向的)。
+ */
 function DesktopTaskAccess({ mode, onModeChange, projects, selection, onSelectionChange, role }: TaskAccessSectionProps) {
   const viewer = role === 'viewer';
   const list = grantableProjects(projects ?? [], selection);
   return (
     <View style={styles.field} testID="task-access">
-      <Text style={styles.fieldLabel}>{tr('users.tasks')}</Text>
-      <View style={styles.segmented} accessibilityRole="radiogroup" testID="task-access-mode">
-        {MODES.map(m => (
-          <Pressable key={m} accessibilityRole="radio" accessibilityState={{ selected: mode === m, checked: mode === m }} aria-checked={mode === m} onPress={() => onModeChange(m)} style={[styles.segment, mode === m && styles.segmentOn]} testID={`task-access-mode-${m}`}>
-            <Text style={[styles.segmentText, mode === m && styles.segmentTextOn]} numberOfLines={1}>{m === 'all' ? tr('users.tasks.all') : tr('users.tasks.scoped')}</Text>
-          </Pressable>
-        ))}
-      </View>
-      <Text style={styles.hint} testID="task-access-hint">{hint(mode, role)}</Text>
+      <SectionLabel>{tr('users.tasks')}</SectionLabel>
+      <Segmented
+        options={MODES.map(m => ({ value: m, label: m === 'all' ? tr('users.tasks.all') : tr('users.tasks.scoped') }))}
+        value={mode}
+        onChange={onModeChange}
+        label={tr('users.tasks')}
+        testID="task-access-mode"
+      />
+      <Text style={styles.hint} numberOfLines={2} testID="task-access-hint">{hint(mode, role)}</Text>
       {mode === 'scoped' ? (
-        <ScrollView style={styles.list} contentContainerStyle={styles.listContent} testID="task-access-projects">
+        <View style={styles.list} testID="task-access-projects">
           {projects === null ? <Text style={styles.empty}>…</Text> : null}
           {projects && !list.length ? <Text style={styles.empty}>{tr('users.tasks.noProjects')}</Text> : null}
-          {list.map(p => {
+          {list.map((p, i) => {
             const on = selection.has(p.id);
             return (
-              <View key={p.id} style={[styles.row, on && styles.rowOn]} testID={`task-project-row-${p.name}`}>
+              <View key={p.id} style={[styles.row, i > 0 && styles.rowDivider, on && styles.rowOn]} testID={`task-project-row-${p.name}`}>
                 <Pressable accessibilityRole="checkbox" accessibilityState={{ checked: on }} aria-checked={on} accessibilityLabel={p.name} onPress={() => onSelectionChange(toggleProject(selection, p.id))} style={styles.pick} testID={`task-project-${p.name}`}>
-                  <Ionicons name={on ? 'checkbox' : 'square-outline'} size={20} color={on ? colors.accent : colors.textMuted} />
+                  <CheckBox state={on} />
                   <View style={[styles.dot, { backgroundColor: p.color || colors.textMuted }]} />
                   <Text style={styles.name} numberOfLines={1}>{p.name}</Text>
                 </Pressable>
                 {on && !viewer ? (
-                  <View style={styles.editable}>
-                    <Text style={styles.editableText}>{tr('users.tasks.editable')}</Text>
-                    <Switch
-                      accessibilityLabel={`${tr('users.tasks.editable')} ${p.name}`}
-                      value={selection.get(p.id) === true}
-                      onValueChange={v => onSelectionChange(setProjectEditable(selection, p.id, v))}
-                      trackColor={{ true: colors.accent, false: colors.border }}
-                      thumbColor={colors.card}
-                      testID={`task-project-editable-${p.name}`}
-                    />
-                  </View>
+                  <LabeledSwitch
+                    label={tr('users.tasks.editable')}
+                    accessibilityLabel={`${tr('users.tasks.editable')} ${p.name}`}
+                    value={selection.get(p.id) === true}
+                    onValueChange={v => onSelectionChange(setProjectEditable(selection, p.id, v))}
+                    testID={`task-project-editable-${p.name}`}
+                  />
                 ) : on ? <Text style={styles.viewOnly} testID={`task-project-view-only-${p.name}`}>{tr('users.tasks.viewOnly')}</Text> : null}
               </View>
             );
           })}
-        </ScrollView>
+        </View>
       ) : null}
     </View>
   );
 }
 
-function PhoneTaskAccess({ mode, onModeChange, projects, selection, onSelectionChange, role }: TaskAccessSectionProps) {
+/**
+ * 手机(成员页):微信式分组 —— 两个单选行 +「授权的项目 N 个 ›」(推入 TaskProjectsPage)+「可编辑的项目」开关组。
+ * 没给 onOpenProjects 时(不该发生)退回原地展开的清单,别让项目选不了。
+ */
+function PhoneTaskAccess({ mode, onModeChange, projects, selection, onSelectionChange, role, onOpenProjects }: TaskAccessSectionProps) {
   const [open, setOpen] = useState(false);
   const viewer = role === 'viewer';
   const list = grantableProjects(projects ?? [], selection);
@@ -146,21 +152,13 @@ function PhoneTaskAccess({ mode, onModeChange, projects, selection, onSelectionC
           <SettingsRow
             label={tr('users.tasks.projects')}
             value={tr('users.tasks.projectsCount', { count: selection.size })}
-            onPress={() => setOpen(o => !o)}
+            onPress={onOpenProjects ?? (() => setOpen(o => !o))}
             accessibilityLabel={`${tr('users.tasks.projects')} ${selection.size}`}
             testID="task-access-projects-row"
           />
         ) : null}
       </SettingsGroup>
-      {mode === 'scoped' && open ? (
-        <SettingsGroup title={tr('users.tasks.projects')} testID="task-access-projects">
-          {projects === null ? <SettingsRow label="…" busy testID="task-access-projects-loading" /> : null}
-          {projects && !list.length ? <SettingsRow label={tr('users.tasks.noProjects')} tone="muted" testID="task-access-projects-empty" /> : null}
-          {list.map(p => (
-            <SettingsChoiceRow key={p.id} label={p.name} selected={selection.has(p.id)} onPress={() => onSelectionChange(toggleProject(selection, p.id))} testID={`task-project-${p.name}`} />
-          ))}
-        </SettingsGroup>
-      ) : null}
+      {mode === 'scoped' && open && !onOpenProjects ? <TaskProjectsPage projects={projects} selection={selection} onSelectionChange={onSelectionChange} /> : null}
       {mode === 'scoped' && !viewer && picked.length ? (
         <SettingsGroup title={tr('users.tasks.editableGroup')} footer={tr('users.tasks.editableFooter')} testID="task-access-editable">
           {picked.map(p => (
@@ -172,25 +170,31 @@ function PhoneTaskAccess({ mode, onModeChange, projects, selection, onSelectionC
   );
 }
 
+/** 手机推入的「授权的项目」页:一张卡片的 ✓ 清单。 */
+export function TaskProjectsPage({ projects, selection, onSelectionChange }: Pick<TaskAccessSectionProps, 'projects' | 'selection' | 'onSelectionChange'>) {
+  const list = grantableProjects(projects ?? [], selection);
+  return (
+    <SettingsGroup title={tr('users.tasks.projects')} footer={tr('users.tasks.scopedHint')} testID="task-access-projects">
+      {projects === null ? <SettingsRow label="…" busy testID="task-access-projects-loading" /> : null}
+      {projects && !list.length ? <SettingsRow label={tr('users.tasks.noProjects')} tone="muted" testID="task-access-projects-empty" /> : null}
+      {list.map(p => (
+        <SettingsChoiceRow key={p.id} label={p.name} selected={selection.has(p.id)} onPress={() => onSelectionChange(toggleProject(selection, p.id))} testID={`task-project-${p.name}`} />
+      ))}
+    </SettingsGroup>
+  );
+}
+
 const makeStyles = () => StyleSheet.create({
-  field: { gap: 6, flexShrink: 1, minHeight: 0 },
-  fieldLabel: { color: colors.textSecondary, fontSize: 12, fontWeight: '600' },
+  field: { gap: spacing.sm },
   hint: { color: colors.textMuted, fontSize: 12, lineHeight: 18 },
-  segmented: { flexDirection: 'row', borderRadius: radius.control, borderWidth: 1, borderColor: colors.border, overflow: 'hidden' },
-  segment: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingVertical: 9 },
-  segmentOn: { backgroundColor: colors.accent },
-  segmentText: { color: colors.textSecondary, fontSize: 13 },
-  segmentTextOn: { color: colors.onAccent, fontWeight: '600' },
-  list: { maxHeight: 176, flexGrow: 0, flexShrink: 1 },
-  listContent: { gap: 2 },
+  list: { borderWidth: 1, borderColor: colors.border, borderRadius: radius.control, overflow: 'hidden' },
   empty: { color: colors.textMuted, fontSize: 13, textAlign: 'center', paddingVertical: spacing.md },
-  row: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, minHeight: 44, borderRadius: radius.item, paddingRight: spacing.xs },
-  rowOn: {},
-  pick: { flex: 1, minWidth: 0, flexDirection: 'row', alignItems: 'center', gap: spacing.sm, paddingVertical: 6 },
+  row: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, minHeight: 42, paddingHorizontal: spacing.md + 2 },
+  rowDivider: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border },
+  rowOn: { backgroundColor: colors.tonalBg },
+  pick: { flex: 1, minWidth: 0, flexDirection: 'row', alignItems: 'center', gap: spacing.sm + 2, paddingVertical: spacing.sm },
   dot: { width: 8, height: 8, borderRadius: radius.pill },
   name: { flex: 1, minWidth: 0, color: colors.text, fontSize: 14 },
-  editable: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  editableText: { color: colors.textSecondary, fontSize: 12 },
   viewOnly: { color: colors.textMuted, fontSize: 12 },
 });
 
