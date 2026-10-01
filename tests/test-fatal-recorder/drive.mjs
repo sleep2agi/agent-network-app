@@ -7,8 +7,10 @@
 //
 //   1  a child that throws in render → 「出错了 · 重新加载」 screen (not a blank page), the error is recorded
 //      (kind=boundary, message + component stack); 重新加载 remounts the children
-//   2  next launch with a record → the corner chip 「上次异常退出 · 发送诊断」; no dialog; 发送诊断 POSTs /api/task
-//      to the maintainer alias with the diagnostics JSON, then the record is deleted
+//   2  next launch with a record → the corner chip 「上次异常退出 · 发送诊断」; no dialog; 发送诊断 opens the node
+//      picker (nothing sent yet); picking a node POSTs /api/task to THAT alias with the diagnostics JSON, then the
+//      record is deleted; closing the picker sends nothing and keeps the chip
+//   2b next time the picker preselects the last recipient (✓, pinned under 最近使用)
 //   3  untouched chip auto-hides after ~8 s; the record stays (flagged shown) and the chip does not come back
 //   4  Settings › 关于 shows 「复制上次崩溃信息」 only while a record exists; tapping copies the diagnostics and deletes it
 // Exit 1 when any assertion fails.
@@ -22,7 +24,8 @@ if (!WEB) throw new Error('need WEB_DIR');
 if (OUT) mkdirSync(OUT, { recursive: true });
 const HUB = 'http://hub.placeholder.invalid';
 const KEY = 'anet.lastFatal.v1';
-const ALIAS = /DIAGNOSTICS_ALIAS = '([^']+)'/.exec(readFileSync(new URL('../../src/LastCrashChip.tsx', import.meta.url), 'utf8'))[1];
+// Placeholder network: the recipient is whatever the user picks — the app has no built-in one.
+const NODES = [{ node_id: 'n-alpha', alias: 'agent-alpha', runtime: 'claude-code' }, { node_id: 'n-beta', alias: 'agent-beta', runtime: 'codex' }];
 const json = (body, status = 200) => ({ status, contentType: 'application/json', body: JSON.stringify(body) });
 
 const types = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.png': 'image/png', '.ttf': 'font/ttf', '.json': 'application/json', '.ico': 'image/x-icon' };
@@ -106,6 +109,8 @@ const open = async ({ seed, query = '' } = {}) => {
       posted.push(JSON.parse(req.postData() || '{}'));
       return route.fulfill(json({ ok: true, task_id: 't-diag-1' }));
     }
+    if (new URL(req.url()).pathname === '/api/nodes') return route.fulfill(json({ ok: true, nodes: NODES }));
+    if (new URL(req.url()).pathname === '/api/status') return route.fulfill(json({ ok: true, sessions: NODES.map(n => ({ alias: n.alias, node_id: n.node_id, status: 'idle', runtime: n.runtime })) }));
     return route.fulfill(json({ ok: true, messages: [], tasks: [], nodes: [], sessions: [], schedules: [] }));
   });
   await page.addInitScript(initScript, { hubUrl: HUB, seed: seed ? JSON.stringify(seed) : null, key: KEY });
@@ -130,7 +135,7 @@ const open = async ({ seed, query = '' } = {}) => {
   await ctx.close();
 }
 
-// 2 chip → send
+// 2 chip → picker → send
 {
   const { ctx, page, posted, dialogs } = await open({ seed: REPORT });
   const chip = page.locator(tid('last-crash-chip'));
@@ -140,11 +145,36 @@ const open = async ({ seed, query = '' } = {}) => {
   const b = seen ? await chip.boundingBox() : null;
   ck('chip is small and in the corner (not a dialog)', !!b && b.height <= 40 && b.width < 300 && b.x + b.width > 390 - 40 && dialogs.length === 0, JSON.stringify(b));
   if (OUT) await page.screenshot({ path: `${OUT}/chip.png` });
+
+  // close without picking → nothing sent, chip still there
   await page.locator(tid('last-crash-send')).click();
+  const picker = page.locator(tid('node-picker'));
+  const opened = await picker.waitFor({ timeout: 10000 }).then(() => true, () => false);
+  const title = opened ? await page.locator(tid('node-picker-title')).textContent() : '';
+  ck('发送诊断 opens the node picker titled 「把诊断发给…」, nothing sent yet', opened && title === '把诊断发给…' && posted.length === 0, JSON.stringify(title));
+  await page.locator(tid('picker-row-n-beta')).waitFor({ timeout: 10000 }).catch(() => {});
+  ck('picker lists the network\'s nodes, nothing preselected the first time', await page.locator(tid('picker-row-n-beta')).isVisible() && !(await page.locator('[data-testid$="-check"]').count()));
+  if (OUT) await page.screenshot({ path: `${OUT}/picker.png` });
+  await page.locator(tid('node-picker-close')).click();
+  await picker.waitFor({ state: 'detached', timeout: 5000 }).catch(() => {});
+  ck('closing the picker sends nothing and keeps the chip + record', posted.length === 0 && await chip.isVisible() && (await stored(page)) !== null);
+
+  await page.locator(tid('last-crash-send')).click();
+  await page.locator(tid('picker-row-n-beta')).click({ timeout: 10000 });
   await page.waitForTimeout(800);
   const p = posted[0];
-  ck(`发送诊断 → POST /api/task to ${ALIAS} with the diagnostics JSON`, posted.length === 1 && p.alias === ALIAS && p.task.startsWith('[diagnostics] last fatal JS error · v0.2.180') && p.task.includes("evaluating 'x.y'"), JSON.stringify(p)?.slice(0, 200));
+  ck('picking agent-beta → POST /api/task to agent-beta with the diagnostics JSON', posted.length === 1 && p.alias === 'agent-beta' && p.task.startsWith('[diagnostics] last fatal JS error · v0.2.180') && p.task.includes("evaluating 'x.y'"), JSON.stringify(p)?.slice(0, 160));
   ck('sent → record deleted, chip says 诊断已发送', (await stored(page)) === null && (await chip.textContent().catch(() => '')).includes('诊断已发送'));
+
+  // 2b next crash: the last recipient is preselected
+  await page.evaluate(([k, v]) => localStorage.setItem(k, v), [KEY, JSON.stringify({ ...REPORT, at: '2026-10-02T01:00:00.000Z' })]);
+  await page.reload();
+  await chip.waitFor({ timeout: 25000 }).catch(() => {});
+  await page.locator(tid('last-crash-send')).click();
+  const check = page.locator('[data-testid="picker-recent-n-beta-check"], [data-testid="picker-row-n-beta-check"]');
+  const pre = await check.first().waitFor({ timeout: 10000 }).then(() => true, () => false);
+  ck('next time the last recipient is preselected (✓) and listed under 最近使用', pre && await page.locator(tid('picker-recent-n-beta')).isVisible() && !(await page.locator(tid('picker-row-n-alpha-check')).isVisible()));
+  if (OUT) await page.screenshot({ path: `${OUT}/picker-preselected.png` });
   await ctx.close();
 }
 

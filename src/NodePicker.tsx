@@ -83,7 +83,9 @@ const coarsePointer = (): boolean => {
   try { return !!(globalThis as any).matchMedia?.('(pointer: coarse)')?.matches; } catch { return false; }
 };
 
-export default function NodePickerSheet({ visible, nodes, hiddenOffline = 0, selectedId, recents, pinned, onSelect, onClose }: {
+export default function NodePickerSheet({ visible, nodes, hiddenOffline = 0, selectedId, recents, pinned, onSelect, onClose, title = '选择执行节点' }: {
+  /** 标题;默认是定时任务表单的「选择执行节点」(「发送诊断」传自己的)。 */
+  title?: string;
   visible: boolean;
   nodes: readonly PickerNode[];
   /** 没有节点登记的离线会话数(不列,底部说一句)。 */
@@ -204,7 +206,7 @@ export default function NodePickerSheet({ visible, nodes, hiddenOffline = 0, sel
         </View>
       ) : null}
       <View testID="node-picker-header" style={[s.head, dialog && { paddingTop: spacing.md }]}>
-        <Text testID="node-picker-title" style={s.title} numberOfLines={1}>选择执行节点</Text>
+        <Text testID="node-picker-title" style={s.title} numberOfLines={1}>{title}</Text>
         <Pressable testID="node-picker-close" onPress={onClose} hitSlop={10} accessibilityRole="button" accessibilityLabel="关闭" style={s.close}>
           <Ionicons name="close" size={20} color={colors.textMuted} />
         </Pressable>

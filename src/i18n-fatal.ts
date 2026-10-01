@@ -8,6 +8,7 @@ registerTranslations({
   'fatal.reload': ['重新加载', 'Reload'],
   'fatal.chip': ['上次异常退出', 'Quit unexpectedly last time'],
   'fatal.send': ['发送诊断', 'Send diagnostics'],
+  'fatal.pickRecipient': ['把诊断发给…', 'Send diagnostics to…'],
   'fatal.sending': ['发送中…', 'Sending…'],
   'fatal.sent': ['诊断已发送', 'Diagnostics sent'],
   'fatal.sendFailed': ['发送失败，可在 设置 › 关于 复制', 'Send failed — copy it from Settings › About'],

@@ -149,6 +149,27 @@ check(installFatalRecorder(undefined, () => {}) === false && installFatalRecorde
   check(!threw, 'a failing recorder never breaks the fallback');
 }
 
+// ── recipient: remembered per account, preselected only if still present ────
+{
+  const { readRecipient, writeRecipient, preselectRecipient } = await import('./diagnostics-recipient');
+  const a = { profileId: 'p-a' }, b = { profileId: 'p-b' };
+  let disk: string | null = null;
+  check(readRecipient(disk, a) === null && readRecipient('{bad', a) === null && readRecipient('[]', a) === null, 'nothing / garbage → no remembered recipient');
+  disk = writeRecipient(disk, a, 'agent-one');
+  disk = writeRecipient(disk, b, 'agent-two');
+  check(readRecipient(disk, a) === 'agent-one' && readRecipient(disk, b) === 'agent-two', 'remembered per account (two profiles do not share it)');
+  disk = writeRecipient(disk, a, 'agent-three');
+  check(readRecipient(disk, a) === 'agent-three' && readRecipient(disk, b) === 'agent-two', 'last pick wins, other accounts untouched');
+  check(readRecipient(writeRecipient('{bad', a, 'x'), a) === 'x', 'garbage on disk is rewritten');
+  const node = (alias: string, id: string, assignable = true) => ({ node_id: id, alias, runtime: '', status: 'idle', online: true, group: '', assignable });
+  const nodes = [node('agent-one', 'n1'), node('agent-three', 'n3'), node('legacy', '', false)];
+  const hit = preselectRecipient(nodes, 'agent-three');
+  check(hit.selectedId === 'n3' && hit.recents.join() === 'n3', 'remembered recipient present → preselected (✓) and pinned under 最近使用');
+  const gone = preselectRecipient(nodes, 'agent-gone');
+  check(gone.selectedId === '' && gone.recents.length === 0, 'remembered recipient no longer in this network → nothing preselected');
+  check(preselectRecipient(nodes, 'legacy').selectedId === '' && preselectRecipient(nodes, null).selectedId === '', 'unassignable row / no memory → nothing preselected');
+}
+
 // ── wiring (source contract) ────────────────────────────────────────────────
 {
   const index = readFileSync(new URL('../index.ts', import.meta.url), 'utf8');
@@ -160,7 +181,9 @@ check(installFatalRecorder(undefined, () => {}) === false && installFatalRecorde
   check(/textSync\(\)/.test(runtime) && /\.write\(text\)/.test(runtime) && !/await /.test(runtime), 'native backend is synchronous (no await between the fatal handler and the write)');
   const chip = readFileSync(new URL('./LastCrashChip.tsx', import.meta.url), 'utf8');
   check(/CHIP_AUTO_HIDE_MS = 8000/.test(chip) && /fatalStore\.markShown\(\)/.test(chip), 'chip auto-hides after ~8s and marks the report shown (no repeat nag)');
-  check(/sendTask\(cfg, DIAGNOSTICS_ALIAS, fatalDiagnosticsText\(report\)\)/.test(chip) && /fatalStore\.clear\(\)/.test(chip), 'send uses the normal sendTask path and deletes the record');
+  check(/sendTask\(cfg, target\.alias, fatalDiagnosticsText\(report\)\)/.test(chip) && /fatalStore\.clear\(\)/.test(chip), 'send goes to the alias picked in the node picker via sendTask, then deletes the record');
+  check(!/DIAGNOSTICS_ALIAS/.test(chip) && !/sendTask\(cfg, '/.test(chip), 'no hard-coded recipient alias (public product: other networks have no such node, or a stranger has one)');
+  check(/<NodePickerSheet/.test(chip) && /onPress=\{openPicker\}/.test(chip) && /saveDiagnosticsRecipient\(cfg, target\.alias\)/.test(chip), '发送诊断 opens the existing node picker and remembers the pick');
   check(!/Alert\./.test(chip), 'no blocking Alert');
   const phone = readFileSync(new URL('./SettingsPhonePages.tsx', import.meta.url), 'utf8');
   const desk = readFileSync(new URL('./SettingsScreen.tsx', import.meta.url), 'utf8');
