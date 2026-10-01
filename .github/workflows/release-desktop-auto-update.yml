@@ -121,6 +121,9 @@ jobs:
           releaseBody: |-
             Signed and notarized stable update for macOS (Apple Silicon) and Windows (x64).
 
+            What's new in 0.2.177:
+            - iPhone / iPad：设置 → 关于 →「软件更新」改成「通过 TestFlight 更新」，点一下直接打开 TestFlight 安装新版本（以前显示「当前环境不支持自动更新」）。
+
             What's new in 0.2.176:
             - iPad 横屏改成左右分栏（左边列表、右边内容），竖屏保持现在的样子；转屏时自动切换。
             - 修复（iPad/iPhone）：一次发多张大图时可能闪退——图片改为一张一张压缩，内存占用降到原来的约三分之一；补上「保存图片到相册」的权限说明。

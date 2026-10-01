@@ -1,0 +1,9 @@
+desktop v0.2.177 — iOS「通过 TestFlight 更新」
+================================================================================
+A. 本版内容(0.2.176 发版提交之后 main 上合入的 PR + 本 PR)
+  #630 iOS 设置→关于「软件更新」改为「通过 TestFlight 更新 ›」,点开 itms-beta://,不可用时打开公开 TestFlight 链接;Info.plist 加 LSApplicationQueriesSchemes itms-beta。安卓/桌面不变。
+       (截图里标题上的毛玻璃条经核对是 iOS 系统通知横幅,不是 app 的界面,未改动标题栏。)
+  本 PR(版本号):0.2.176 → 0.2.177,versionCode 2176 → 2177;release-desktop-auto-update.yml 加 What's new in 0.2.177;重新生成 src/changelog-bundled.ts。
+  本地:干净 origin/main(fbde3b9) bump 后 npm ci / npm test / npm run typecheck 全部 rc=0;android-release-notes.mjs 0.2.177 rc=0。
+B. 验证边界(如实)
+  打开 TestFlight 需要真机验证。
