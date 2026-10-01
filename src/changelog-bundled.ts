@@ -5,6 +5,9 @@
 export const BUNDLED_RELEASE_BODY: string = [
   "Signed and notarized stable update for macOS (Apple Silicon) and Windows (x64).",
   "",
+  "What's new in 0.2.178:",
+  "- 任务搜索能搜到历史任务了：默认包含已归档的任务（标「已归档」）；结果很多时有「加载更多」；看板筛选把结果藏起来时会提示「另有 N 个被筛选隐藏 · 清除筛选」。",
+  "",
   "What's new in 0.2.177:",
   "- iPhone / iPad：设置 → 关于 →「软件更新」改成「通过 TestFlight 更新」，点一下直接打开 TestFlight 安装新版本（以前显示「当前环境不支持自动更新」）。",
   "",
