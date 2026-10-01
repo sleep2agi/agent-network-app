@@ -481,7 +481,7 @@ export function filterAssigneeChoices(aliases: readonly string[], query: string)
 // ── 项目 ──
 // GET 在旧 Hub 上是 404(没有这个路由)→ 返回 null:界面把项目整个藏起来。
 
-function projectFromHub(value: unknown): RequirementProject | null {
+export function projectFromHub(value: unknown): RequirementProject | null {
   if (!value || typeof value !== 'object') return null;
   const v = value as Record<string, unknown>;
   if (typeof v.id !== 'string' || typeof v.name !== 'string' || !v.name.trim()) return null;
@@ -491,6 +491,8 @@ function projectFromHub(value: unknown): RequirementProject | null {
     color: typeof v.color === 'string' && /^#[0-9a-fA-F]{6}$/.test(v.color) ? v.color : '#4b5563',
     sort: typeof v.sort === 'number' ? v.sort : 0,
     archived: v.archived === true,
+    // 同卡片的 viewer_can:只认显式的 edit === false(task-access.readOnlyFromHub 同一判据)。
+    ...(readOnlyFromHub(v) ? { canEdit: false } : {}),
   };
 }
 

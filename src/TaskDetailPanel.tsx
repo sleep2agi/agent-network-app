@@ -248,6 +248,7 @@ export default function TaskDetailPanel({ cfg, item, readOnly = false, editField
         onLoadPeople={onLoadPeople}
         onChange={p => { void assignRole(p); }}
         idBase="req-edit-owner"
+        pointer={pointer}
         ownerLocked={legacy ? (
           <>
             <Text style={{ color: colors.text, fontSize: typeScale.body }}>{item.assignee || tr('tasks.copy.6')}</Text>
@@ -260,7 +261,7 @@ export default function TaskDetailPanel({ cfg, item, readOnly = false, editField
       {!legacy ? (
         <View testID="req-participants-row">
           <Field label={tr('tasks.copy.53')}>
-            <RequirementAssignmentsEditor key={item.id} cfg={cfg} item={item} fields="participants" onSaved={onAssignmentsSaved} />
+            <RequirementAssignmentsEditor key={item.id} cfg={cfg} item={item} fields="participants" onSaved={onAssignmentsSaved} pointer={pointer} />
           </Field>
         </View>
       ) : null}
