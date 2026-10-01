@@ -1028,6 +1028,8 @@ pub fn run() {
         .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_clipboard_manager::init())
         .setup(|app| {
+            // 先于任何通知登记 bundle id,否则 macOS 弹「Where is use_default?」(见 chat_notify.rs)
+            chat_notify::init_notification_app(app.handle());
             // 0.2.76 系统栏常驻项;失败只记日志,不能拖垮主窗口
             if let Err(error) = tray::init(app.handle()) {
                 eprintln!("[tray] init failed: {error}");
