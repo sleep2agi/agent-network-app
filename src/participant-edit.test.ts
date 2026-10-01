@@ -47,11 +47,11 @@ const read = (f: string) => readFileSync(new URL(f, import.meta.url), 'utf8').re
   const item = requirementFromHub({ id: 'r1', name: '写测试', owner: { kind: 'user', id: 'u_a' }, agent_owner: { kind: 'node', id: 'n_x' }, participants: [{ kind: 'user', id: 'u_a' }], project_id: 'p1', due: '2026-10-08', description: '示例描述', checklist: [], tags: ['前端'], parent_id: null, priority: 'high', viewer_can: { edit: false, edit_fields: ['column', 'checklist'] } })!;
   const main = lockedMainRows(item, people, [{ id: 'p1', name: '示例项目' } as any]);
   const v = (rows: { key: string; value: string }[], k: string) => rows.find(r => r.key === k)?.value;
-  ck('锁住的常显区:负责人 / 负责 Agent / 项目 / 预计完成 / 描述 都是值', main.map(r => r.key).join() === 'owner,agent,project,due,description' && v(main, 'owner') === '示例成员甲' && v(main, 'agent') === '示例-A' && v(main, 'project') === '示例项目' && (v(main, 'due') ?? '').startsWith('2026-10-08') && v(main, 'description') === '示例描述', JSON.stringify(main));
+  ck('锁住的常显区:优先级 / 负责人 / 负责 Agent / 参与人 / 项目 / 预计完成 / 描述 都是值', main.map(r => r.key).join() === 'priority,owner,agent,participants,project,due,description' && !!v(main, 'priority') && v(main, 'participants') === '示例成员甲' && v(main, 'owner') === '示例成员甲' && v(main, 'agent') === '示例-A' && v(main, 'project') === '示例项目' && (v(main, 'due') ?? '').startsWith('2026-10-08') && v(main, 'description') === '示例描述', JSON.stringify(main));
   const more = lockedMoreRows(item, [item]);
-  ck('锁住的「更多」:优先级 / 母任务(无)', v(more, 'parent') === '—' && !!v(more, 'priority'), JSON.stringify(more));
+  ck('锁住的「更多」:母任务(无);优先级不在这里', v(more, 'parent') === '—' && v(more, 'priority') === undefined, JSON.stringify(more));
   const rest = lockedRestRows(item, people);
-  ck('锁住的其余:参与人 / 标签', v(rest, 'participants') === '示例成员甲' && v(rest, 'tags') === '前端', JSON.stringify(rest));
+  ck('锁住的其余:标签(参与人已挪到常显区)', v(rest, 'participants') === undefined && v(rest, 'tags') === '前端', JSON.stringify(rest));
   ck('没设的显示「—」不是空白', v(lockedMainRows({ ...item, due: '', description: '' }, people, null), 'due') === '—');
 }
 

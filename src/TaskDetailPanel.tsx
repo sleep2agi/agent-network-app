@@ -3,8 +3,12 @@ import { validationText } from './i18n-task-presentation';
 import { useTranslation } from './i18n-react';
 import { taskText } from './i18n-tasks';
 // 任务详情:宽屏是右侧抽屉(看板仍在左边可见),手机是推入的一整页(安卓返回键 / 左上 ‹ 关闭)。
-// 可改:标题、优先级、预计完成、负责人(#488 + Hub #2070 的 PATCH,只发改过的字段),点「保存修改」才写 Hub。
-// 状态单独一排,点了立即保存(和看板上拖动 / 菜单是同一个动作)。参与人沿用 RequirementAssignmentsEditor。
+// 两种保存:
+//   · 人和状态 —— 状态、负责人、负责 Agent、参与人:选完立即保存(和看板上的拖动 / 卡片菜单「指派负责人… / 设置参与人…」
+//     是同一个动作、同一个 PATCH,只发那一个字段),旁边一行「正在保存人员绑定… / 已保存」。
+//   · 文字和日期 —— 标题、描述、优先级、预计完成、开始、项目、母任务:在草稿里改,点「保存修改」才写 Hub(只发改过的字段)。
+// 顺序:标题 → 状态 → 优先级 → 负责人 → 负责 Agent → 参与人 → 项目 → 预计完成 → 描述 → 更多(开始 / 母任务 / 子任务 / …)。
+// 参与人紧跟在负责人 / 负责 Agent 下面(不再藏进「更多」),参与人沿用 RequirementAssignmentsEditor。
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { ActivityIndicator, Modal, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { Text, TextInput } from './ui-text';
@@ -16,6 +20,8 @@ import type { HubConfig } from './api';
 import { REQ_COLUMN_LABEL, REQ_COLUMNS, type ReqColumn, type Requirement, type RequirementProject } from './requirements-model';
 import type { RequirementPerson } from './requirement-people';
 import type { RequirementAssignments } from './requirement-people-api';
+import { ownerChange, type AssignChange } from './task-assign';
+import { personKey, type RequirementPersonRef } from './requirement-people';
 import { checkDraft, startError, editDraftOf, editPatch, hasDetails, hasRoles, type EditDraft, type EditPatch } from './task-board-model';
 import TaskChecklist from './TaskChecklist';
 import TaskIssueBindings from './TaskIssueBindings';
@@ -36,7 +42,7 @@ import { lockedMainRows, lockedMoreRows, lockedRestRows, type LockedRow } from '
 
 export const DRAWER_WIDTH = 420;
 
-export default function TaskDetailPanel({ cfg, item, readOnly = false, editFields, items, onOpenRequirement, onCreateChild, projects, dueDatetime, lowestPriority, mode, top, people, peopleLoading, onLoadPeople, moving, moveError, onMove, onSave, onAssignmentsSaved, onClose, pointer, checklistError, onChecklistToggle, onChecklistAdd, onChecklistDelete, onChecklistMove, onOpenVoiceSettings, onOpenWindow }: {
+export default function TaskDetailPanel({ cfg, item, readOnly = false, editFields, items, onOpenRequirement, onCreateChild, projects, dueDatetime, lowestPriority, mode, top, people, peopleLoading, onLoadPeople, moving, moveError, onMove, onSave, onAssignmentsSaved, onAssign, onClose, pointer, checklistError, onChecklistToggle, onChecklistAdd, onChecklistDelete, onChecklistMove, onOpenVoiceSettings, onOpenWindow }: {
   cfg: HubConfig;
   item: Requirement;
   /** 只读(RFC-038 §9:hub 说这张卡我不能改)。表单整块不响应,底部不给「保存修改」,顶上一条说明。 */
@@ -64,6 +70,8 @@ export default function TaskDetailPanel({ cfg, item, readOnly = false, editField
   onMove: (to: ReqColumn) => void;
   onSave: (patch: EditPatch) => Promise<string | null>;
   onAssignmentsSaved: (a: RequirementAssignments) => void;
+  /** 负责人 / 负责 Agent 选完立即保存(只发那一个字段);null = 存上了,字符串 = 没存上的原因。 */
+  onAssign: (change: AssignChange) => Promise<string | null>;
   onClose: () => void;
   /** 鼠标界面:子任务可拖动排序。 */
   pointer: boolean;
@@ -91,7 +99,7 @@ export default function TaskDetailPanel({ cfg, item, readOnly = false, editField
   useEffect(() => {
     const prev = shown.current;
     shown.current = item;
-    if (prev.id !== item.id) { setDraft(editDraftOf(item)); setError(null); setSaved(false); return; }
+    if (prev.id !== item.id) { setDraft(editDraftOf(item)); setError(null); setSaved(false); setRoleSave(null); return; }
     setDraft(d => {
       const base = editDraftOf(prev);
       const next = editDraftOf(item);
@@ -122,6 +130,19 @@ export default function TaskDetailPanel({ cfg, item, readOnly = false, editField
     if (failed) setError({ field: patch.parent_id !== undefined && (failed === PARENT_TOO_DEEP || failed === PARENT_REJECTED) ? 'parent' : 'submit', message: failed });
     else setSaved(true);
   };
+  // 负责人 / 负责 Agent:选完立即保存,不进草稿(草稿里的这两个字段永远等于卡上的值,「保存修改」不会再带它们)。
+  const [roleSave, setRoleSave] = useState<{ state: 'saving' | 'saved' } | { state: 'error'; message: string } | null>(null);
+  const assignRole = async (p: { owner?: RequirementPersonRef | null; agentOwner?: RequirementPersonRef | null }) => {
+    let change: AssignChange | null = null;
+    if (p.owner !== undefined) change = ownerChange(item, p.owner ? [p.owner] : []);
+    else if (p.agentOwner !== undefined && (item.agentOwner ? personKey(item.agentOwner) : '') !== (p.agentOwner ? personKey(p.agentOwner) : '')) change = { agentOwner: p.agentOwner };
+    if (!change) return;
+    const id = item.id;
+    setRoleSave({ state: 'saving' });
+    const failed = await onAssign(change);
+    if (shown.current.id !== id) return;
+    setRoleSave(failed ? { state: 'error', message: failed } : { state: 'saved' });
+  };
   const legacy = item.owner === undefined;
   // 「更多」展开没有:本机记住(task-detail-prefs.ts);读到之前按收起。
   const [moreOpen, setMoreOpen] = useState(false);
@@ -135,7 +156,8 @@ export default function TaskDetailPanel({ cfg, item, readOnly = false, editField
     else if (!ok) setError({ field: 'submit', message: tr('taskWin.failed') });
   };
 
-  // 常显:标题 · 状态 · 负责人 / 负责 Agent · 项目 · 预计完成 · 描述;其余收进「更多」(owner 09-29:详情太长)。
+  // 常显:标题 · 状态 · 优先级 · 负责人 / 负责 Agent · 参与人 · 项目 · 预计完成 · 描述;其余收进「更多」(owner 09-29:详情太长)。
+  // 常改的短字段一律在长描述上面(owner 10-01:优先级在描述后面要滚很远)。
   // 更多收起时,里面有值的字段在「更多」那一行上用一行字说出来(task-detail-more.ts),不悄悄藏掉。
   const summary = moreSummary(item, draft, items);
   // 母任务被 Hub 拒绝、检查项没存上:错误在「更多」里,自动展开,不能藏着。
@@ -210,6 +232,12 @@ export default function TaskDetailPanel({ cfg, item, readOnly = false, editField
       </Field>
       {partial ? checklistBlock : null}
       <Locked on={readOnly} testID="req-locked-main" rows={readOnly ? lockedMainRows(item, people, projects) : undefined}>
+      {/* 优先级在状态之后、描述之前(owner 10-01:「把优先级放前面去啊,放详细后面很难拖动」)—— 常改的短字段都在长描述上面。 */}
+      <Field label={tr('tasks.copy.32')}>
+        <View testID="req-priority-row">
+          <PriorityPicker value={draft.priority} onChange={priority => set({ priority })} testPrefix="req-edit-priority" choices={priorityChoices(lowestPriority, item.priority)} />
+        </View>
+      </Field>
       <RoleFields
         twoRoles={hasRoles(item)}
         owner={draft.owner}
@@ -218,7 +246,7 @@ export default function TaskDetailPanel({ cfg, item, readOnly = false, editField
         peopleLoading={peopleLoading}
         networkId={cfg.networkId || ''}
         onLoadPeople={onLoadPeople}
-        onChange={p => set(p)}
+        onChange={p => { void assignRole(p); }}
         idBase="req-edit-owner"
         ownerLocked={legacy ? (
           <>
@@ -227,6 +255,15 @@ export default function TaskDetailPanel({ cfg, item, readOnly = false, editField
           </>
         ) : undefined}
       />
+      {roleSave?.state === 'error' ? <Text style={s.err} accessibilityRole="alert" testID="req-assign-error">{roleSave.message}</Text>
+        : roleSave ? <Text style={s.muted} accessibilityLiveRegion="polite" testID="req-assign-status">{roleSave.state === 'saving' ? tr('tasks.copy.13') : tr('tasks.copy.141')}</Text> : null}
+      {!legacy ? (
+        <View testID="req-participants-row">
+          <Field label={tr('tasks.copy.53')}>
+            <RequirementAssignmentsEditor key={item.id} cfg={cfg} item={item} fields="participants" onSaved={onAssignmentsSaved} />
+          </Field>
+        </View>
+      ) : null}
       {projects && item.projectId !== undefined ? <ProjectSelect value={draft.projectId} projects={projects} onChange={projectId => set({ projectId })} touch={!pointer} idBase="req-edit-project" /> : null}
       <Field label={tr('tasks.copy.119')}>
         <DueField value={draft.due} onChange={due => set({ due })} error={error?.field === 'due' ? error.message : undefined} idBase="req-edit-due" allowTime={dueDatetime} pointer={pointer} sheet={mode === 'page'} />
@@ -261,19 +298,11 @@ export default function TaskDetailPanel({ cfg, item, readOnly = false, editField
               <DueField value={draft.start} onChange={start => set({ start })} error={error?.field === 'start' ? error.message : undefined} idBase="req-edit-start" pointer={pointer} sheet={mode === 'page'} />
             </Field>
           ) : null}
-          <Field label={tr('tasks.copy.32')}>
-            <PriorityPicker value={draft.priority} onChange={priority => set({ priority })} testPrefix="req-edit-priority" choices={priorityChoices(lowestPriority, item.priority)} />
-          </Field>
           <ParentSelect item={item} items={items} value={draft.parentId} onChange={parentId => set({ parentId })} touch={!pointer} idBase="req-edit-parent" error={error?.field === 'parent' ? error.message : undefined} />
           <SubRequirements item={item} items={items} onOpen={onOpenRequirement} onCreateChild={onCreateChild} canAddLevel={levelIn(items, item) < 5} />
           </Locked>
           {partial ? null : checklistBlock}
           <Locked on={readOnly} testID="req-locked-rest" rows={readOnly ? lockedRestRows(item, people) : undefined}>
-          {!legacy ? (
-            <Field label={tr('tasks.copy.53')}>
-              <RequirementAssignmentsEditor key={item.id} cfg={cfg} item={item} fields="participants" onSaved={onAssignmentsSaved} />
-            </Field>
-          ) : null}
           <TaskIssueBindings key={item.id} item={item} onSave={onSave} />
           <TaskTags key={`tags:${item.id}`} cfg={cfg} item={item} onSave={onSave} />
           {!item.externalUrl || !parseIssue(item.externalUrl, false) ? <ExternalLink item={item} /> : null}

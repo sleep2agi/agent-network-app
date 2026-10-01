@@ -14,13 +14,16 @@ export type LockedRow = { key: string; label: string; value: string; multiline?:
 
 const NONE = '—';
 
-/** 常显区:负责人 · 负责 Agent · 项目 · 预计完成 · 描述(与可编辑时的顺序一样)。 */
+/** 常显区:优先级 · 负责人 · 负责 Agent · 参与人 · 项目 · 预计完成 · 描述(与可编辑时的顺序一样)。 */
 export function lockedMainRows(item: Requirement, people: readonly RequirementPerson[], projects: readonly RequirementProject[] | null): LockedRow[] {
   const rows: LockedRow[] = [];
   const unassigned = t('tasks.copy.6');
+  rows.push({ key: 'priority', label: t('tasks.copy.32'), value: priorityLabel(item.priority) });
   if (item.owner === undefined) rows.push({ key: 'owner', label: t('tasks.copy.15'), value: item.assignee || unassigned });
   else rows.push({ key: 'owner', label: t('tasks.copy.15'), value: item.owner ? personName(item.owner, people) : unassigned });
   if (hasRoles(item)) rows.push({ key: 'agent', label: t('tasks.copy.82'), value: item.agentOwner ? personName(item.agentOwner, people) : unassigned });
+  // 参与人紧跟负责人 / 负责 Agent(和可编辑时一样,不在「更多」里)。
+  if (item.owner !== undefined) rows.push({ key: 'participants', label: t('tasks.copy.53'), value: (item.participants ?? []).map(r => personName(r, people)).join('、') || NONE });
   if (projects && item.projectId !== undefined) {
     const p = item.projectId ? projects.find(x => x.id === item.projectId) : null;
     rows.push({ key: 'project', label: t('tasks.copy.30'), value: p?.name || t('tasks.copy.31') });
@@ -30,11 +33,10 @@ export function lockedMainRows(item: Requirement, people: readonly RequirementPe
   return rows;
 }
 
-/** 「更多」里检查项以上的:开始 · 优先级 · 母任务 · 子任务。 */
+/** 「更多」里检查项以上的:开始 · 母任务 · 子任务。 */
 export function lockedMoreRows(item: Requirement, items: readonly Requirement[]): LockedRow[] {
   const rows: LockedRow[] = [];
   if (item.start !== undefined) rows.push({ key: 'start', label: t('detail.start'), value: item.start || NONE });
-  rows.push({ key: 'priority', label: t('tasks.copy.32'), value: priorityLabel(item.priority) });
   if (item.parentId !== undefined) {
     const parent = item.parentId ? items.find(i => i.id === item.parentId) : null;
     rows.push({ key: 'parent', label: t('taskSel.parent'), value: parent?.name || NONE });
@@ -44,10 +46,9 @@ export function lockedMoreRows(item: Requirement, items: readonly Requirement[])
   return rows;
 }
 
-/** 「更多」里检查项以下的:参与人 · Issue · 标签 · 创建时间。 */
+/** 「更多」里检查项以下的:Issue · 标签 · 创建时间。 */
 export function lockedRestRows(item: Requirement, people: readonly RequirementPerson[]): LockedRow[] {
   const rows: LockedRow[] = [];
-  if (item.owner !== undefined) rows.push({ key: 'participants', label: t('tasks.copy.53'), value: (item.participants ?? []).map(r => personName(r, people)).join('、') || NONE });
   if (item.issues?.length) rows.push({ key: 'issues', label: t('issues.heading'), value: item.issues.map(i => `${i.repo}#${i.number}${i.title ? ` ${i.title}` : ''}`).join('\n'), multiline: true });
   if (item.tags !== undefined) rows.push({ key: 'tags', label: t('tags.title'), value: item.tags.length ? item.tags.join('、') : NONE });
   if (item.createdAt) rows.push({ key: 'created', label: t('tasks.copy.139').replace(/[:：]\s*$/, ''), value: item.createdAt.slice(0, 10) });

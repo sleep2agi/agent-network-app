@@ -404,16 +404,17 @@ test('an old Hub that cannot edit keeps the draft and says so', async () => {
   expect(byId('req-owner-unsupported')).toBeTruthy();
 });
 
-test('owner changed in details is saved as {kind,id} with 保存修改 and shows on the card', async () => {
+test('owner changed in details saves immediately as {kind,id} (like participants), no 保存修改, and shows on the card', async () => {
   typedCards = true;
   await mount();
   await act(async () => byId('req-card-r1').props.onPress());
   await act(async () => byId('req-edit-owner').props.onPress());
   await act(async () => byId('person-user:u').props.onPress());
   await act(async () => byId('people-confirm').props.onPress());
-  expect(edits).toHaveLength(0);
-  await act(async () => byId('req-edit-save').props.onPress());
   expect(edits).toEqual([{ id: 'r1', patch: { owner: { kind: 'user', id: 'u' } } }]);
+  expect(texts('req-assign-status')).toContain('已保存');
+  // The draft never carries the owner: 保存修改 stays disabled, nothing is sent twice.
+  expect(byId('req-edit-save').props.disabled).toBe(true);
   await act(async () => byId('req-detail-close').props.onPress());
   expect(texts('req-card-r1')).toContain('成员');
 });
@@ -439,16 +440,60 @@ test('two-role hub: 负责人 lists only humans, 负责 Agent only agents; both 
   expect([...new Set(avatars)]).toEqual(['task-avatar-owner', 'task-avatar-agent']);
 });
 
-test('two-role hub: detail changes 负责 Agent alone with 保存修改', async () => {
+test('two-role hub: detail changes 负责 Agent alone, immediately', async () => {
   roleCards = true;
   await mount();
   await act(async () => byId('req-card-r1').props.onPress());
   await act(async () => byId('req-edit-owner-agent').props.onPress());
   await act(async () => byId('person-node:n1').props.onPress());
   await act(async () => byId('people-confirm').props.onPress());
-  expect(edits).toHaveLength(0);
-  await act(async () => byId('req-edit-save').props.onPress());
   expect(edits).toEqual([{ id: 'r1', patch: { agent_owner: { kind: 'node', id: 'n1' } } }]);
+  expect(byId('req-edit-save').props.disabled).toBe(true);
+});
+
+test('owner save failure in details reverts the card and says why; title draft is untouched', async () => {
+  typedCards = true;
+  await mount();
+  editReply = () => { throw new HubError(400, '这个负责人已不在当前网络'); };
+  await act(async () => byId('req-card-r1').props.onPress());
+  await act(async () => byId('req-edit-name').props.onChangeText('草稿标题'));
+  await act(async () => byId('req-edit-owner').props.onPress());
+  await act(async () => byId('person-user:u').props.onPress());
+  await act(async () => byId('people-confirm').props.onPress());
+  expect(edits).toEqual([{ id: 'r1', patch: { owner: { kind: 'user', id: 'u' } } }]);
+  expect(texts('req-assign-error')).toContain('这个负责人已不在当前网络');
+  expect(byId('req-edit-name').props.value).toBe('草稿标题');
+  expect(texts('req-card-r1')).not.toContain('成员');
+});
+
+test('board card menu: 指派负责人… / 设置参与人… save immediately with only that field', async () => {
+  participantCards = true;
+  await mount();
+  // 参与人:只列人类;Agent 参与人原样保留,体里只有 participants。
+  await act(async () => byId('req-card-r1').props.onLongPress({ nativeEvent: { pageX: 10, pageY: 10 } }));
+  expect(byId('task-menu-assign-participants').props.disabled).toBeFalsy();
+  await act(async () => byId('task-menu-assign-participants').props.onPress());
+  expect(renderer.root.findAllByProps({ testID: 'person-node:n1' })).toHaveLength(0);
+  await act(async () => byId('person-user:u').props.onPress());
+  // 已离开网络的成员挡住保存,点那一行移除(选择器原有行为)。
+  const gone = renderer.root.findAll(n => n.props.accessibilityRole === 'button' && typeof n.props.onPress === 'function' && JSON.stringify(n.findAllByType('Text').map(t => t.props.children)).includes('u_a4944afaa30b'))[0];
+  await act(async () => gone.props.onPress());
+  await act(async () => byId('people-confirm').props.onPress());
+  expect(assignmentWrites.at(-1)).toEqual({ id: 'r1', value: { participants: [{ kind: 'node', id: 'n1' }, { kind: 'node', id: 'n_e06d936d' }] } });
+  await act(async () => byId('req-card-r1').props.onLongPress({ nativeEvent: { pageX: 10, pageY: 10 } }));
+  await act(async () => byId('task-menu-assign-owner').props.onPress());
+  await act(async () => byId('person-user:u').props.onPress()); // unselect the current owner
+  await act(async () => byId('people-confirm').props.onPress());
+  expect(edits).toEqual([{ id: 'r1', patch: { owner: null } }]);
+});
+
+test('board: tapping the participant avatars opens 设置参与人', async () => {
+  participantCards = true;
+  await mount();
+  const stack = byId('req-card-r1').findAll(n => n.props.testID === 'task-participants' && typeof n.props.onPress === 'function')[0];
+  await act(async () => stack.props.onPress());
+  expect(byId('people-confirm')).toBeTruthy();
+  expect(renderer.root.findAllByProps({ testID: 'req-detail' })).toHaveLength(0);
 });
 
 test('hub without agent_owner keeps the single 负责人 picker (humans and agents)', async () => {
@@ -654,9 +699,9 @@ test('详情渐进展开: 常显字段在前,其余收进「更多」(默认收�
   subCards = true;
   await mount();
   await act(async () => byId('req-card-r1').props.onPress());
-  // 收起:优先级 / 母任务 / 子任务 看不到;摘要说「1 子任务」(r1 的 children.total = 2)
+  // 收起:母任务 / 子任务 看不到;优先级常显(owner 10-01:放在描述前面);摘要说「2 子任务」(r1 的 children.total = 2)
   expect(renderer.root.findAllByProps({ testID: 'req-more' })).toHaveLength(0);
-  expect(renderer.root.findAllByProps({ testID: 'req-edit-priority-high' })).toHaveLength(0);
+  expect(byId('req-edit-priority-high')).toBeTruthy();
   expect(renderer.root.findAllByProps({ testID: 'req-subrequirements' })).toHaveLength(0);
   expect(byId('req-more-summary').props.children).toBe('2 子任务');
   expect(byId('req-edit-due')).toBeTruthy();
