@@ -305,7 +305,8 @@ export function ProjectChip({ project, s, small = false }: { project: Requiremen
  * 参与人头像叠放:最多 3 个 + 「+N」。桌面悬停出全部名单(DOM title),手机长按展开名单。
  * 认不出的成员画占位头像,不显示裸 id。
  */
-export function ParticipantStack({ item, people, s, touch, size = 20 }: { item: Pick<Requirement, 'participants'>; people: readonly RequirementPerson[]; s: TaskStyles; touch: boolean; size?: number }) {
+/** onPress:看板卡片上点头像 = 设置参与人(能改时)或打开详情(task-assign.ts);列表表格里不给,点了没有动作。 */
+export function ParticipantStack({ item, people, s, touch, size = 20, onPress, pressLabel }: { item: Pick<Requirement, 'participants'>; people: readonly RequirementPerson[]; s: TaskStyles; touch: boolean; size?: number; onPress?: () => void; pressLabel?: 'assign' | 'open' }) {
   useTranslation();
   const [open, setOpen] = useState(false);
   const st = participantStack(item.participants, people);
@@ -313,8 +314,12 @@ export function ParticipantStack({ item, people, s, touch, size = 20 }: { item: 
   return (
     <View style={{ alignItems: 'flex-end', gap: 4 }}>
       <Pressable
+        onPress={onPress}
+        // 头像只有 20 高:点的范围上下各放 10(手指 ≥ 40)。
+        hitSlop={onPress ? { top: 10, bottom: 10, left: 6, right: 6 } : undefined}
         onLongPress={touch ? () => setOpen(v => !v) : undefined}
-        accessibilityLabel={tr('tasks.copy.87', { v0: st.all })}
+        accessibilityRole={onPress ? 'button' : undefined}
+        accessibilityLabel={onPress ? tr(pressLabel === 'open' ? 'assign.participantsOpenA11y' : 'assign.participantsA11y', { v0: st.all }) : tr('tasks.copy.87', { v0: st.all })}
         ref={(el: any) => { if (el && typeof el.setAttribute === 'function') el.setAttribute('title', tr('tasks.copy.87', { v0: st.all })); }}
         style={{ flexDirection: 'row', alignItems: 'center' }}
         testID="task-participants"

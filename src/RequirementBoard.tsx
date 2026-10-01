@@ -26,14 +26,16 @@ import type { HubConfig } from './api';
 import { REQ_COLUMN_LABEL, REQ_COLUMNS, REQ_PRIORITIES, titleText, type ChecklistItem, type ReqColumn, type Requirement, type RequirementProject } from './requirements-model';
 import { readRequirements, requirementsKey, writeRequirements } from './requirements-store';
 import { createProject, createRequirementOnHub, fetchMyUserId, getRequirementOnHub, listArchivedRequirements, listProjects, listRequirementChanges, listRequirementsFull, searchRequirementsOnHub, setChecklistItemOnHub, updateProject, migrateLocalRequirements, moveRequirementOnHub, probeAgentOwnerSupport, RequirementsHubError, updateRequirementOnHub } from './requirements-hub';
-import { listRequirementPeople } from './requirement-people-api';
+import { listRequirementPeople, saveRequirementAssignments } from './requirement-people-api';
 import { personKey, type RequirementPerson } from './requirement-people';
+import RequirementPeoplePicker from './RequirementPeoplePicker';
+import { assignAccess, bulkOwnerPlan, canAssignPeople, humanParticipants, ownerChange, participantsChange, revertAssign, type AssignChange } from './task-assign';
 import { colors, radius, spacing } from './theme';
 import { elevated } from './elevation';
 import { pointerUi } from './pointer-ui';
 import { useModalSafePadding } from './safe-area-runtime';
 import { usePoll } from './usePoll';
-import { applyFilter, applyMove, boardColumns, createInput, DEFAULT_SORT, DRAG_IDLE, dragReduce, dropIndex, emptyDraft, activeProjects, defaultProjectFor, NO_PROJECT, projectCounts, filterActive, hasRoles, localToday, addChecklistItem, moveChecklistItem, removeChecklistItem, setChecklistDone, neighbourColumn, nextSort, revertMove, sortRows, toggleIn, hidesDone, toggleHideDone, UNASSIGNED, type CreateDraft, type DragEvent, type DragState, type EditPatch, type SortKey, type SortSpec } from './task-board-model';
+import { applyFilter, applyMove, boardColumns, createInput, DEFAULT_SORT, DRAG_IDLE, dragReduce, dropIndex, emptyDraft, activeProjects, defaultProjectFor, NO_PROJECT, projectCounts, filterActive, hasRoles, roleKinds, localToday, addChecklistItem, moveChecklistItem, removeChecklistItem, setChecklistDone, neighbourColumn, nextSort, revertMove, sortRows, toggleIn, hidesDone, toggleHideDone, UNASSIGNED, type CreateDraft, type DragEvent, type DragState, type EditPatch, type SortKey, type SortSpec } from './task-board-model';
 import { applyChanges, checklistCounts, cursorAfterList, hasFullText, mergeListRows, needsFullText, planBoardRead, type BoardSyncState } from './board-sync';
 import { enterTaskScope, noteTagsUsed, patchTaskBoard, setManagingProjects, setManagingTags, setTaskFilter, setTaskSearch, setTaskSection, taskBoardState, taskScopeKey, updateTaskItems, useTaskBoard, type TaskSection } from './task-board-store';
 import { recallBoard, rememberBoard } from './swr-cache';
@@ -62,6 +64,8 @@ import { canEditTaskField, readOnlyLabelKey, type TaskEditField } from './task-a
 import { subscribeOpenTaskRequest, takeOpenTaskRequest } from './task-open-request';
 
 const UNSUPPORTED = 'tasks.copy.14';
+/** 桌面多选的批量操作(底部操作条上的按钮)。 */
+type BulkKind = 'project' | 'status' | 'agent' | 'owner';
 /** 别的设备改了也要看得到;有未完成的写入时跳过这一轮(不拿旧数据盖掉乐观更新)。 */
 const POLL_MS = 15_000;
 // 内容区窄于 NARROW(task-board-layout)时:看板改成横向一列一屏,详情改成推入页。
@@ -154,8 +158,10 @@ function ScopedRequirementBoard({ cfg, desktop, dispatch, onOpenVoiceSettings, s
   // ── 桌面多选 + 批量改(task-select-model.ts):Ctrl/⌘ 单击、Shift 单击、列表行首勾选框 ──
   const [sel, setSel] = useState<Selection>(NO_SELECTION);
   const [bulk, setBulk] = useState<BulkProgress | null>(null);
-  const [bulkMenu, setBulkMenu] = useState<{ kind: 'project' | 'status' | 'agent'; anchor: SelectAnchor } | null>(null);
-  const lastBulk = useRef<{ kind: 'project' | 'status' | 'agent'; value: string | null } | null>(null);
+  const [bulkMenu, setBulkMenu] = useState<{ kind: BulkKind; anchor: SelectAnchor } | null>(null);
+  const lastBulk = useRef<{ kind: BulkKind; value: string | null } | null>(null);
+  // 从看板直接指派(卡片菜单 / 卡片上的参与人头像):开着哪张卡的哪个选择器。
+  const [assignFor, setAssignFor] = useState<{ id: string; mode: 'owner' | 'participants' } | null>(null);
   const bulkRefs = useRef<Record<string, any>>({});
   const pendingMoves = useRef(new Set<string>());
   const mutations = useRef(0);
@@ -469,6 +475,48 @@ function ScopedRequirementBoard({ cfg, desktop, dispatch, onOpenVoiceSettings, s
     }
   };
 
+  // 指派人(卡片菜单、卡片上的参与人头像、批量、详情里的负责人 / 负责 Agent):立即保存,只发改的那一个字段;
+  // 先乐观更新,失败只退回这个字段。负责人 / 负责 Agent 走同一个 PATCH(updateRequirementOnHub),参与人走人员绑定接口。
+  const assign = async (id: string, change: AssignChange): Promise<string | null> => {
+    const prev = items.find(row => row.id === id);
+    if (!prev) return null;
+    const blocked = readOnlyBlock(id);
+    if (blocked) return blocked;
+    updateTaskItems(scope, rows => rows.map(row => (row.id === id ? { ...row, ...change } : row)));
+    try {
+      if (change.participants !== undefined) {
+        const saved = await track(() => saveRequirementAssignments(cfg, id, { participants: change.participants }));
+        updateTaskItems(scope, rows => rows.map(row => (row.id === id ? { ...row, ...saved } : row)));
+      } else {
+        const patch: EditPatch = change.owner !== undefined ? { owner: change.owner } : { agent_owner: change.agentOwner ?? null };
+        const updated = await track(() => updateRequirementOnHub(cfg, id, patch));
+        updateTaskItems(scope, rows => rows.map(row => (row.id === id ? updated : row)));
+      }
+      setAnnounce(tr('assign.saved', { name: prev.name }));
+      return null;
+    } catch (e) {
+      updateTaskItems(scope, rows => rows.map(row => (row.id === id ? revertAssign(row, prev, change) : row)));
+      return e instanceof Error ? e.message : tr('tasks.copy.3');
+    }
+  };
+  const openAssign = async (id: string, mode: 'owner' | 'participants') => {
+    const item = items.find(row => row.id === id);
+    if (!item) return;
+    if (!canAssignPeople(item)) { setBanner(readOnlyBlock(id) || tr('tasks.copy.4')); return; }
+    if (!(await loadPeople()) && !people.length) return;
+    setAssignFor({ id, mode });
+  };
+  const assignItem = assignFor ? items.find(row => row.id === assignFor.id) ?? null : null;
+  const confirmAssign = (picked: { kind: 'user' | 'node'; id: string }[]) => {
+    const target = assignFor;
+    setAssignFor(null);
+    const item = target && items.find(row => row.id === target.id);
+    if (!target || !item) return;
+    const change = target.mode === 'owner' ? ownerChange(item, picked) : participantsChange(item, picked);
+    if (!change) return;
+    void assign(item.id, change).then(failed => { if (failed) setBanner(`「${item.name}」${failed}`); });
+  };
+
   // 甘特图拖动改期限:只发 due(描述等别的字段不动),先乐观更新,失败退回并提示。
   const setDue = async (id: string, due: string) => {
     const prev = items.find(row => row.id === id);
@@ -527,7 +575,7 @@ function ScopedRequirementBoard({ cfg, desktop, dispatch, onOpenVoiceSettings, s
     dragging: () => drag.current.phase === 'dragging',
     onContextMenu: (id, x, y) => {
       const item = items.find(row => row.id === id);
-      if (item) setMenu({ id, title: item.name, column: item.column, x, y });
+      if (item) setMenu({ id, title: item.name, column: item.column, x, y, assign: assignAccess(item) });
     },
     onKeyMove: (id, dir) => {
       const item = items.find(row => row.id === id);
@@ -551,7 +599,9 @@ function ScopedRequirementBoard({ cfg, desktop, dispatch, onOpenVoiceSettings, s
     take();
     return subscribeOpenTaskRequest(take);
   }, [single, cfg.networkId]);
-  const openMenuAt = (item: Requirement, x: number, y: number) => setMenu({ id: item.id, title: item.name, column: item.column, x, y });
+  const openMenuAt = (item: Requirement, x: number, y: number) => setMenu({ id: item.id, title: item.name, column: item.column, x, y, assign: assignAccess(item) });
+  // 卡片上的参与人头像:能改 = 设置参与人;不能改 = 打开详情(和点卡片一样)。
+  const onParticipants = (item: Requirement) => (canAssignPeople(item) ? () => { void openAssign(item.id, 'participants'); } : () => openDetail(item.id));
 
   // ── 视图 ──
   // 搜索先挑、筛选再筛(两个都是逐行判断,顺序不影响结果);列表 / 看板 / 甘特图都只从这两个取。
@@ -579,9 +629,11 @@ function ScopedRequirementBoard({ cfg, desktop, dispatch, onOpenVoiceSettings, s
     const failed = await saveEdit(id, { project_id: projectId });
     if (failed) setBanner(failed);
   };
-  const applyBulk = async (kind: 'project' | 'status' | 'agent', value: string | null, ids: readonly string[] = sel.ids) => {
+  const applyBulk = async (kind: BulkKind, value: string | null, ids: readonly string[] = sel.ids) => {
     lastBulk.current = { kind, value };
-    const targets = ids.map(id => items.find(i => i.id === id)).filter((i): i is Requirement => !!i).map(i => ({ id: i.id, name: i.name }));
+    // 指派负责人:我不能改的卡(只读 / 旧 Hub)不发请求,直接跳过,数出来显示在条上。
+    const plan = kind === 'owner' ? bulkOwnerPlan(items, ids) : { editable: [...ids], skipped: 0 };
+    const targets = plan.editable.map(id => items.find(i => i.id === id)).filter((i): i is Requirement => !!i).map(i => ({ id: i.id, name: i.name }));
     const result = await runBulk(targets, async id => {
       const cur = items.find(i => i.id === id);
       const blocked = readOnlyBlock(id, kind === 'status' ? 'column' : undefined);
@@ -592,11 +644,19 @@ function ScopedRequirementBoard({ cfg, desktop, dispatch, onOpenVoiceSettings, s
         updateTaskItems(scope, rows => rows.map(row => (row.id === id ? updated : row)));
         return;
       }
+      if (kind === 'owner') {
+        const [k, ...rest] = (value ?? '').split(':');
+        const change = cur && ownerChange(cur, value ? [{ kind: k as 'user' | 'node', id: rest.join(':') }] : []);
+        if (!change) return;
+        const failed = await assign(id, change);
+        if (failed) throw new Error(failed);
+        return;
+      }
       if (kind === 'project' && cur && (cur.projectId ?? null) === value) return;
       const patch: EditPatch = kind === 'project' ? { project_id: value } : { agent_owner: value ? { kind: 'node', id: value } : null };
       const updated = await track(() => updateRequirementOnHub(cfg, id, patch));
       updateTaskItems(scope, rows => rows.map(row => (row.id === id ? updated : row)));
-    }, setBulk);
+    }, p => setBulk({ ...p, skipped: plan.skipped }));
     // 没改成的留在选择里(可以直接「重试」);都成了就清掉选择。
     setSel(result.failed.length ? { ids: result.failed.map(f => f.id), anchor: null } : NO_SELECTION);
     setAnnounce(tr('bulk.done', { n: result.total - result.failed.length }));
@@ -633,8 +693,8 @@ function ScopedRequirementBoard({ cfg, desktop, dispatch, onOpenVoiceSettings, s
     win.addEventListener('keydown', onKey, true);
     return () => win.removeEventListener('keydown', onKey, true);
   }, [searchKeys]);
-  const openBulkMenu = async (kind: 'project' | 'status' | 'agent') => {
-    if (kind === 'agent' && !(await loadPeople()) && !people.length) return;
+  const openBulkMenu = async (kind: BulkKind) => {
+    if ((kind === 'agent' || kind === 'owner') && !(await loadPeople()) && !people.length) return;
     const el = bulkRefs.current[kind];
     const done = (x: number, y: number, w: number, h: number) => setBulkMenu({ kind, anchor: { x, y, w, h } });
     if (el?.measureInWindow) el.measureInWindow(done);
@@ -852,7 +912,7 @@ function ScopedRequirementBoard({ cfg, desktop, dispatch, onOpenVoiceSettings, s
         {item.readOnly ? <ReadOnlyTag editFields={item.editFields} /> : null}
         <ParentLine item={item} items={items} />
         <CardMeta item={item} people={people} today={today} s={s} compact={compactCards} />
-        <CardFooter item={item} people={people} s={s} touch={!pointer} />
+        <CardFooter item={item} people={people} s={s} touch={!pointer} onParticipants={onParticipants(item)} canAssign={canAssignPeople(item)} />
         {moveErrors[item.id] ? <Text style={s.err} numberOfLines={1}>{moveErrors[item.id]}</Text> : null}
       </Pressable>
     );
@@ -1001,7 +1061,7 @@ function ScopedRequirementBoard({ cfg, desktop, dispatch, onOpenVoiceSettings, s
         {item.archived ? <ArchivedTag /> : null}
                       <ParentLine item={item} items={items} />
                       <CardMeta item={item} people={people} today={today} s={s} />
-                      <CardFooter item={item} people={people} s={s} touch={!pointer} />
+                      <CardFooter item={item} people={people} s={s} touch={!pointer} onParticipants={onParticipants(item)} canAssign={canAssignPeople(item)} />
                     </Pressable>
                   ))}
                 </View>
@@ -1071,6 +1131,7 @@ function ScopedRequirementBoard({ cfg, desktop, dispatch, onOpenVoiceSettings, s
           onMove={to => { void move(selected.id, to); }}
           onSave={patch => saveEdit(selected.id, patch)}
           onAssignmentsSaved={a => updateTaskItems(scope, rows => rows.map(row => (row.id === selected.id ? { ...row, ...a } : row)))}
+          onAssign={change => assign(selected.id, change)}
           onClose={() => (single ? single.onClose() : setSelectedId(null))}
           onOpenWindow={tauriShell && pointer && !single ? () => openTaskWindow({ taskId: selected.id, profileId: cfg.profileId, serverUrl: cfg.serverUrl, networkId: cfg.networkId, title: selected.name, at: Date.now() }) : undefined}
           pointer={pointer}
@@ -1202,6 +1263,8 @@ function ScopedRequirementBoard({ cfg, desktop, dispatch, onOpenVoiceSettings, s
           bulk={bulk}
           canProject={!!projects}
           canAgent={twoRoles}
+          canOwner={sel.ids.some(id => { const it = items.find(i => i.id === id); return !!it && assignAccess(it) !== 'hidden'; })}
+          ownerEditable={bulkOwnerPlan(items, sel.ids).editable.length}
           right={selected && drawer ? DRAWER_WIDTH : 0}
           setRef={(kind, r) => { bulkRefs.current[kind] = r; }}
           onOpen={kind => { void openBulkMenu(kind); }}
@@ -1212,13 +1275,15 @@ function ScopedRequirementBoard({ cfg, desktop, dispatch, onOpenVoiceSettings, s
       <SelectMenu
         anchor={bulkMenu?.anchor ?? null}
         touch={!pointer}
-        title={bulkMenu?.kind === 'project' ? tr('bulk.project') : bulkMenu?.kind === 'agent' ? tr('bulk.agent') : tr('bulk.status')}
+        title={bulkMenu?.kind === 'project' ? tr('bulk.project') : bulkMenu?.kind === 'agent' ? tr('bulk.agent') : bulkMenu?.kind === 'owner' ? tr('bulk.owner') : tr('bulk.status')}
         options={bulkMenu?.kind === 'project' ? projectOptions(projects ?? [], null)
           : bulkMenu?.kind === 'agent' ? people.filter(p => p.kind === 'node').map(p => ({ id: p.id, label: p.name, lead: <AliasAvatar alias={p.name} size={18} /> }))
+            // 负责人:分两个角色的 Hub 上只列人类(同详情 / 新建的 roleKinds);id 用 personKey(人类和 Agent 可能同名同 id)。
+            : bulkMenu?.kind === 'owner' ? people.filter(p => roleKinds('owner', twoRoles).includes(p.kind) && !p.unavailable).map(p => ({ id: personKey(p), label: p.name, lead: <AliasAvatar alias={p.name} size={18} /> }))
             : REQ_COLUMNS.map(col => ({ id: col, label: taskText(REQ_COLUMN_LABEL[col]), color: STATUS_TONE[col]() }))}
-        noneLabel={bulkMenu?.kind === 'project' ? tr('tasks.copy.31') : bulkMenu?.kind === 'agent' ? tr('bulk.agentNone') : undefined}
+        noneLabel={bulkMenu?.kind === 'project' ? tr('tasks.copy.31') : bulkMenu?.kind === 'agent' ? tr('bulk.agentNone') : bulkMenu?.kind === 'owner' ? tr('bulk.ownerNone') : undefined}
         selected={null}
-        searchable={bulkMenu?.kind === 'agent'}
+        searchable={bulkMenu?.kind === 'agent' || bulkMenu?.kind === 'owner'}
         onPick={value => { const kind = bulkMenu?.kind; setBulkMenu(null); if (kind) void applyBulk(kind, value); }}
         onClose={() => setBulkMenu(null)}
         testID={`task-bulk-menu-${bulkMenu?.kind ?? 'none'}`}
@@ -1228,9 +1293,24 @@ function ScopedRequirementBoard({ cfg, desktop, dispatch, onOpenVoiceSettings, s
         touch={!pointer}
         busy={!!menu && movingIds.includes(menu.id)}
         onOpen={id => setSelectedId(id)}
+        onAssign={(id, mode) => { void openAssign(id, mode); }}
         onMove={(id, to) => { void move(id, to); if (pointer) focusCard(id); }}
         onClose={() => setMenu(null)}
       />
+      {assignFor && assignItem ? (
+        <RequirementPeoplePicker
+          networkId={cfg.networkId || ''}
+          mode={assignFor.mode}
+          // 负责人:分两个角色的 Hub 上只能是人类;参与人:只列人类(同新建对话框),原有的 Agent 参与人保留(task-assign.ts)。
+          kinds={assignFor.mode === 'owner' ? roleKinds('owner', hasRoles(assignItem)) : ['user']}
+          title={assignFor.mode === 'owner' ? tr('tasks.copy.65') : tr('tasks.copy.66')}
+          hint={assignFor.mode === 'owner' ? (hasRoles(assignItem) ? tr('tasks.copy.109') : undefined) : tr('tasks.participantsPickHint', { v0: humanParticipants(assignItem).length })}
+          people={people}
+          selected={assignFor.mode === 'owner' ? (assignItem.owner ? [assignItem.owner] : []) : humanParticipants(assignItem)}
+          onClose={() => setAssignFor(null)}
+          onConfirm={confirmAssign}
+        />
+      ) : null}
       <FilterMenu
         open={filterMenu}
         touch={!pointer}
@@ -1256,29 +1336,34 @@ function ScopedRequirementBoard({ cfg, desktop, dispatch, onOpenVoiceSettings, s
 }
 
 /** 桌面多选的底部操作条:已选几个 · 移到项目… · 改状态… · 负责 Agent… · 取消选择;改的过程中显示进度,失败的列出来可以重试。 */
-function BulkBar({ count, bulk, canProject, canAgent, right, setRef, onOpen, onRetry, onClear }: {
+function BulkBar({ count, bulk, canProject, canAgent, canOwner, ownerEditable, right, setRef, onOpen, onRetry, onClear }: {
   count: number;
   bulk: BulkProgress | null;
   canProject: boolean;
   canAgent: boolean;
+  /** 选中的卡里有带稳定负责人的(新 Hub):给「指派负责人…」。 */
+  canOwner: boolean;
+  /** 选中的卡里我能改负责人的张数;0 = 按钮灰掉。 */
+  ownerEditable: number;
   /** 右边被详情抽屉占掉的宽度(条在剩下的区域里居中)。 */
   right: number;
-  setRef: (kind: 'project' | 'status' | 'agent', r: any) => void;
-  onOpen: (kind: 'project' | 'status' | 'agent') => void;
+  setRef: (kind: BulkKind, r: any) => void;
+  onOpen: (kind: BulkKind) => void;
   onRetry: () => void;
   onClear: () => void;
 }) {
   useTranslation();
   const s = useTaskStyles();
   const running = !!bulk?.running;
-  const btn = (kind: 'project' | 'status' | 'agent', label: string, icon: string) => (
+  const btn = (kind: BulkKind, label: string, icon: string, off = false, hint?: string) => (
     <View key={kind} ref={r => setRef(kind, r)} collapsable={false}>
       <Pressable
         accessibilityRole="button"
-        {...a11yState({ disabled: running })}
-        disabled={running}
+        {...a11yState({ disabled: running || off })}
+        disabled={running || off}
         onPress={() => onOpen(kind)}
-        style={state => [{ flexDirection: 'row', alignItems: 'center', gap: 6, height: 32, paddingHorizontal: spacing.md, borderRadius: radius.control, flexShrink: 0 }, ((state as { hovered?: boolean }).hovered || state.pressed) && { backgroundColor: colors.rowHover }, running && { opacity: 0.45 }]}
+        {...(hint ? { accessibilityHint: hint, title: hint } as object : {})}
+        style={state => [{ flexDirection: 'row', alignItems: 'center', gap: 6, height: 32, paddingHorizontal: spacing.md, borderRadius: radius.control, flexShrink: 0 }, ((state as { hovered?: boolean }).hovered || state.pressed) && { backgroundColor: colors.rowHover }, (running || off) && { opacity: 0.45 }]}
         testID={`task-bulk-${kind}`}
       >
         <Ionicons name={icon as never} size={15} color={colors.textSecondary} />
@@ -1286,9 +1371,10 @@ function BulkBar({ count, bulk, canProject, canAgent, right, setRef, onOpen, onR
       </Pressable>
     </View>
   );
-  const status = running ? tr('bulk.running', { done: bulk!.done, total: bulk!.total })
+  const skipped = bulk?.skipped ? ` · ${tr('bulk.skipped', { n: bulk.skipped })}` : '';
+  const status = running ? tr('bulk.running', { done: bulk!.done, total: bulk!.total }) + skipped
     : count ? tr('bulk.selected', { n: count })
-      : bulk && !bulk.failed.length ? tr('bulk.done', { n: bulk.total }) : '';
+      : bulk && !bulk.failed.length ? tr('bulk.done', { n: bulk.total }) + skipped : '';
   return (
     <View pointerEvents="box-none" style={{ position: 'absolute', left: 0, right, bottom: spacing.xl, alignItems: 'center', gap: spacing.sm, zIndex: 15 }}>
       {bulk && !bulk.running && bulk.failed.length ? (
@@ -1306,6 +1392,7 @@ function BulkBar({ count, bulk, canProject, canAgent, right, setRef, onOpen, onR
             {canProject ? btn('project', tr('bulk.project'), 'folder-outline') : null}
             {btn('status', tr('bulk.status'), 'swap-horizontal-outline')}
             {canAgent ? btn('agent', tr('bulk.agent'), 'hardware-chip-outline') : null}
+            {canOwner ? btn('owner', tr('bulk.owner'), 'person-outline', ownerEditable === 0, ownerEditable === 0 ? tr('bulk.ownerNoneEditable') : count > ownerEditable ? tr('bulk.skipped', { n: count - ownerEditable }) : undefined) : null}
           </>
         ) : null}
         <Pressable accessibilityRole="button" accessibilityLabel={tr('bulk.clear')} onPress={onClear} disabled={running} style={state => [{ width: 32, height: 32, borderRadius: radius.pill, alignItems: 'center', justifyContent: 'center' }, ((state as { hovered?: boolean }).hovered || state.pressed) && { backgroundColor: colors.rowHover }]} testID="task-bulk-clear">
@@ -1317,7 +1404,7 @@ function BulkBar({ count, bulk, canProject, canAgent, right, setRef, onOpen, onR
 }
 
 /** 卡片最下一行:子任务进度(左,可没有)+ 参与人头像(右,可没有)。都没有就不占位置。 */
-function CardFooter({ item, people, s, touch }: { item: Requirement; people: readonly RequirementPerson[]; s: TaskStyles; touch: boolean }) {
+function CardFooter({ item, people, s, touch, onParticipants, canAssign }: { item: Requirement; people: readonly RequirementPerson[]; s: TaskStyles; touch: boolean; onParticipants: () => void; canAssign: boolean }) {
   useTranslation();
   const hasList = checklistCounts(item).total > 0;
   const hasPeople = !!item.participants?.length;
@@ -1334,7 +1421,7 @@ function CardFooter({ item, people, s, touch }: { item: Requirement; people: rea
         </View>
       ) : null}
       <View style={{ flex: 1, minWidth: hasList ? 96 : 0 }}>{hasList ? <ChecklistProgress item={item} s={s} /> : null}</View>
-      {hasPeople ? <ParticipantStack item={item} people={people} s={s} touch={touch} /> : null}
+      {hasPeople ? <ParticipantStack item={item} people={people} s={s} touch={touch} onPress={onParticipants} pressLabel={canAssign ? 'assign' : 'open'} /> : null}
     </View>
   );
 }

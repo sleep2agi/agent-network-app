@@ -348,6 +348,20 @@ registerTranslations({
   'bulk.retry': ['重试没改成的', 'Retry failed'],
   'bulk.hint': ['Ctrl/⌘ 单击多选,Shift 单击连选', 'Ctrl/⌘-click to select, Shift-click for a range'],
   'bulk.agentNone': ['无(清空负责 Agent)', 'None (clear)'],
+  'bulk.owner': ['指派负责人…', 'Assign owner…'],
+  'bulk.ownerNone': ['无(清空负责人)', 'None (unassign)'],
+  'bulk.skipped': ['跳过 {n} 个(无权修改)', '{n} skipped (no permission)'],
+  'bulk.ownerNoneEditable': ['选中的任务你都不能改负责人', 'You cannot change the owner of any selected task'],
+});
+
+// 从看板直接指派(TaskCardMenu / 卡片上的参与人头像 / 详情里的负责人立即保存;task-assign.ts)。
+registerTranslations({
+  'assign.owner': ['指派负责人…', 'Assign owner…'],
+  'assign.participants': ['设置参与人…', 'Set participants…'],
+  'assign.locked': ['无权修改人员', 'No permission to change people'],
+  'assign.saved': ['已保存「{name}」的人员', 'Saved people for “{name}”'],
+  'assign.participantsA11y': ['参与人:{v0}。设置参与人', 'Participants: {v0}. Set participants'],
+  'assign.participantsOpenA11y': ['参与人:{v0}。打开详情', 'Participants: {v0}. Open details'],
 });
 
 // 甘特图视图(TaskGantt.tsx / task-gantt-model.ts)。

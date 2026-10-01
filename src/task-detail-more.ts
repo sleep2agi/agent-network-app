@@ -5,7 +5,7 @@ import type { EditDraft } from './task-board-model';
 
 export type SummaryPart = { key: string; values?: Record<string, string | number> };
 
-/** 顺序同「更多」里面的顺序:开始 · 优先级 · 母任务 · 子任务 · 检查项 · 参与人 · Issue · 标签。没值的不说。 */
+/** 顺序同「更多」里面的顺序:开始 · 优先级 · 母任务 · 子任务 · 检查项 · Issue · 标签。没值的不说(参与人已常显,不在这里)。 */
 export function moreSummary(item: Requirement, draft: Pick<EditDraft, 'priority' | 'parentId'> & { start?: string }, items: readonly Requirement[]): SummaryPart[] {
   const out: SummaryPart[] = [];
   const start = draft.start?.trim().slice(0, 10);
@@ -21,8 +21,6 @@ export function moreSummary(item: Requirement, draft: Pick<EditDraft, 'priority'
   if (kids) out.push({ key: 'detail.sumChildren', values: { n: kids } });
   const list = item.checklist ?? [];
   if (list.length) out.push({ key: 'detail.sumChecklist', values: { done: list.filter(c => c.done).length, n: list.length } });
-  const people = item.participants?.length ?? 0;
-  if (people) out.push({ key: 'detail.sumParticipants', values: { n: people } });
   const issues = item.issues?.length ?? 0;
   if (issues) out.push({ key: 'detail.sumIssues', values: { n: issues } });
   const tags = item.tags?.length ?? 0;

@@ -124,7 +124,8 @@ export function pruneSelection(sel: Selection, present: readonly string[]): Sele
 }
 
 /** 批量改的进度:几张做完、几张失败(失败的带原因,方便重试)。 */
-export type BulkProgress = { total: number; done: number; failed: { id: string; name: string; message: string }[]; running: boolean };
+/** skipped:没发请求就跳过的卡(批量指派负责人时我不能改的那几张)。 */
+export type BulkProgress = { total: number; done: number; failed: { id: string; name: string; message: string }[]; running: boolean; skipped?: number };
 
 /**
  * 一张一张改(和单张修改同一个 PATCH;不并发,免得几十个请求同时打到 Hub、也好报进度)。
