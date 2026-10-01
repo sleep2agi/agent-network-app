@@ -112,7 +112,7 @@ export function resolveActiveSection(active: NodeSectionKey, visible: readonly N
 }
 
 /** 概览网格里默认露出的字段;其余放进「更多信息」折叠区。 */
-export const PRIMARY_FACT_LABELS: readonly string[] = ['节点 ID', '服务器', 'Hostname', '工作路径', '所属 team', '最后更新'];
+export const PRIMARY_FACT_LABELS: readonly string[] = ['节点 ID', '服务器', 'Hostname', '工作路径', 'codex_home', '所属 team', '最后更新'];
 
 export function splitOverviewFacts(facts: readonly NodeInfoFact[]): { primary: NodeInfoFact[]; secondary: NodeInfoFact[] } {
   const primary: NodeInfoFact[] = [];
