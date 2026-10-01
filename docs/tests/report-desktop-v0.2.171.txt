@@ -1,0 +1,11 @@
+desktop v0.2.171 — 成员编辑重新设计 + 新建任务选参与人
+================================================================================
+A. 本版内容(0.2.170 发版提交 566c74c 之后 main 上合入的 PR + 本 PR)
+  #615 新建任务可选参与人(随创建请求一起发 participants);左栏「我负责的」下新增「我参与的」;「动态」「我的任务」改名「负责或参与」;
+       旧 Hub(不支持参与人)隐藏该栏。task-participants-create.test.ts 30 项;requirement-details Docker 42/0;drive 26/26。
+  #614 成员编辑重新设计(#417):电脑两栏弹窗(角色 + 任务权限 / 可访问的 Agent),手机 iOS 设置式分页;Hub 接口不变。
+       合并前已同步到含 #615 的 main 并重跑 CI。
+  本 PR(版本号):0.2.170 → 0.2.171,versionCode 2170 → 2171;release-desktop-auto-update.yml 加 What's new in 0.2.171;重新生成 src/changelog-bundled.ts。
+  本地:干净 origin/main(92b0d3f) bump 后 npm ci / npm test(295/295) / npm run typecheck 全部 rc=0;android-release-notes.mjs 0.2.171 rc=0。
+B. 验证边界(如实)
+  本 PR 只改版本号与说明;功能验证见 #614/#615(页内桩 + 截图测量)。真机未验证。
