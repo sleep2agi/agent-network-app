@@ -1,0 +1,9 @@
+desktop v0.2.179 — 选人与负责人筛选优化
+================================================================================
+A. 本版内容(0.2.178 发版提交之后 main 上合入的 PR + 本 PR)
+  #634 负责人筛选分「人 / Agent」两组且「我」第一;选人副标题显示角色、id 仅搜索命中时显示、「（我）」置顶、参与人「加我」+「已选 N 人」实时;两角色 Hub 去掉「（人类）」。
+       people-picker-polish.test 28/28;requirement-details Docker 46/0;drive 20/20(改动前导出 rc=1)。
+  本 PR(版本号):0.2.178 → 0.2.179,versionCode 2178 → 2179;release-desktop-auto-update.yml 加 What's new in 0.2.179;重新生成 src/changelog-bundled.ts。
+  本地:干净 origin/main(80d4f51) bump 后 npm ci / npm test / npm run typecheck 全部 rc=0;android-release-notes.mjs 0.2.179 rc=0。
+B. 验证边界(如实)
+  页内桩验证;生产 Hub 暂未下发 role/online,副标题目前只会显示「成员」或「Agent」。
