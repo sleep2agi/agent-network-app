@@ -122,10 +122,14 @@ export const initScript = ({ theme }) => {
       const patch = JSON.parse(bodyText);
       (window.__tasksPatches ||= []).push(patch);
       if (window.__tasksFailPatch) return null;
-      const row = TASKS.requirements.find(r => r.id === decodeURIComponent(one[1]));
+      const id = decodeURIComponent(one[1]);
+      const row = TASKS.requirements.find(r => r.id === id) ?? (TASKS.archived ?? []).find(r => r.id === id);
       if (!row) return null;
       Object.assign(row, patch, { updatedAt: new Date().toISOString() });
-      return { ok: true, requirement: row };
+      // { archived } moves the row between the board list and TASKS.archived, the way the hub's list / ?archived=true split them.
+      if (patch.archived === true) { TASKS.requirements = TASKS.requirements.filter(r => r.id !== id); (TASKS.archived ||= []).unshift(row); }
+      if (patch.archived === false) { TASKS.archived = (TASKS.archived ?? []).filter(r => r.id !== id); if (!TASKS.requirements.some(r => r.id === id)) TASKS.requirements.unshift(row); }
+      return { ok: true, requirement: { ...row, archived: row.archived === true } };
     }
     // POST /api/requirements (新建): record the body (window.__tasksCreates) and answer with the new row the way the hub
     // does (agent_owner → agent_owner, project_id → project_id, participants default []).

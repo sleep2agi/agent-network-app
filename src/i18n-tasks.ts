@@ -691,4 +691,10 @@ registerTranslations({
   'quick.priority': ['改优先级…', 'Change priority…'],
   'quick.moved': ['已移到「{v0}」', 'Moved to “{v0}”'],
   'quick.undo': ['撤销', 'Undo'],
+  'archive.action': ['归档', 'Archive'],
+  'archive.detailAction': ['归档这个任务', 'Archive this task'],
+  'archive.restore': ['恢复', 'Restore'],
+  'archive.banner': ['已归档 · 不在看板和列表里', 'Archived · not on the board or in the list'],
+  'archive.done': ['已归档「{name}」', 'Archived “{name}”'],
+  'archive.restored': ['已恢复「{name}」', 'Restored “{name}”'],
 });

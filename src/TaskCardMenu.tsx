@@ -24,9 +24,11 @@ export interface TaskMenuTarget {
   id: string; title: string; column: ReqColumn; x: number; y: number; assign: 'on' | 'locked' | 'hidden'; quick: { status: 'on' | 'locked'; priority: 'on' | 'locked' };
   /** 当前优先级与可选档(priorityChoices:旧 Hub 没有 P3,已经是 P3 的卡仍列出来)。桌面菜单直接列这几档。 */
   priority: ReqPriority; priorities: readonly ReqPriority[];
+  /** 'archive' = 末尾给「归档」,'hidden' = 不给(旧 Hub 没有归档能力 / 卡对我只读)。看板上的卡都是没归档的。 */
+  archive?: 'archive' | 'hidden';
 }
 
-export default function TaskCardMenu({ target, touch, busy, onOpen, onAssign, onMove, onQuick, onPriority, onClose }: {
+export default function TaskCardMenu({ target, touch, busy, onOpen, onAssign, onMove, onQuick, onPriority, onArchive, onClose }: {
   target: TaskMenuTarget | null;
   /** 手机长按:44 行高 + 淡遮罩;桌面右键:紧凑行高 + 透明遮罩。 */
   touch: boolean;
@@ -39,6 +41,8 @@ export default function TaskCardMenu({ target, touch, busy, onOpen, onAssign, on
   onQuick: (id: string, kind: 'status' | 'priority', at: { x: number; y: number }) => void;
   /** 桌面:菜单里直接点某一档优先级(和列表单元格同一条 PATCH:editCell priority)。 */
   onPriority: (id: string, priority: ReqPriority) => void;
+  /** 「归档」(可撤销,不再确认;看板随后给一条带「撤销」的提示)。 */
+  onArchive?: (id: string) => void;
   onClose: () => void;
 }) {
   useTranslation();
@@ -48,7 +52,8 @@ export default function TaskCardMenu({ target, touch, busy, onOpen, onAssign, on
   const m = rowMenuMetrics(touch, uiScale().densityFactor, uiScale().denseFontMultiplier);
   const assignRows = target && target.assign !== 'hidden' ? 2 : 0;
   const priorityRows = target && !touch ? target.priorities.length : 0;
-  const count = 1 + assignRows + (touch ? 2 : REQ_COLUMNS.length) + priorityRows;
+  const archiveRow = target?.archive === 'archive' && onArchive ? 1 : 0;
+  const count = 1 + assignRows + (touch ? 2 : REQ_COLUMNS.length) + priorityRows + archiveRow;
   const pos = target ? anchorRowMenu({
     x: target.x, y: target.y,
     menuWidth: m.width, menuHeight: rowMenuHeight(m, count) + 1 + (priorityRows ? 1 : 0),
@@ -117,6 +122,8 @@ export default function TaskCardMenu({ target, touch, busy, onOpen, onAssign, on
             {!touch ? target.priorities.map(p => item(`priority-${p}`, priorityLabel(p), () => { onClose(); onPriority(target.id, p); }, {
               disabled: target.quick.priority === 'locked' || p === target.priority, checked: p === target.priority, icon: p === target.priority ? 'checkmark' : 'flag-outline',
             })) : null}
+            {archiveRow ? <View style={{ height: 1, marginVertical: 0, backgroundColor: colors.border }} /> : null}
+            {archiveRow ? item('archive', tr('archive.action'), () => { onClose(); onArchive!(target.id); }, { icon: 'archive-outline', disabled: busy }) : null}
           </View>
         ) : null}
       </View>

@@ -73,8 +73,8 @@ console.log('# 接线(源码)');
   const menu = src('./TaskCardMenu.tsx');
   ck('菜单:查看详情之后是 指派负责人… / 设置参与人…', menu.indexOf("item('open'") < menu.indexOf("(['owner', 'participants'] as const).map") && menu.includes("`assign-${mode}`"));
   ck('菜单:旧 Hub 的卡不画、只读的卡灰掉', menu.includes("target.assign !== 'hidden' ?") && menu.includes("disabled: target.assign === 'locked'"));
-  // 审计 M2 起桌面菜单还列优先级各档(priorityRows),高度一并算进去。
-  ck('菜单高度算上这两行(放不下时照样翻边)', menu.includes('const count = 1 + assignRows + (touch ? 2 : REQ_COLUMNS.length) + priorityRows;'));
+  // 审计 M2 起桌面菜单还列优先级各档(priorityRows),H2 起末尾还有「归档」(archiveRow),高度一并算进去。
+  ck('菜单高度算上这两行(放不下时照样翻边)', menu.includes('const count = 1 + assignRows + (touch ? 2 : REQ_COLUMNS.length) + priorityRows + archiveRow;'));
   const board = src('./RequirementBoard.tsx');
   // 右键 / 长按 / 列表行 ⋯ 都经 menuTarget(审计 M2 合成一个),它带 assign 权限。
   ck('右键 / 长按的目标都带 assign 权限', /const menuTarget = \(item: Requirement, x: number, y: number\): TaskMenuTarget => \(\{[\s\S]*?assign: assignAccess\(item\)/.test(board) && (board.match(/setMenu\(menuTarget\(item, x, y\)\)/g) ?? []).length === 2);

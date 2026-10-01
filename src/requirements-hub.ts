@@ -380,6 +380,29 @@ export async function updateRequirementOnHub(cfg: HubConfig, id: string, patch: 
 }
 
 /**
+ * 归档 / 恢复(Hub capability `archived`):只发 { archived }。归档的卡不在平常的列表里(增量读里带 archived: true 的行
+ * 由看板去掉),只在搜索「包含已归档」里出现。Agent 一直能通过 MCP requirements_update 归档;这是人在 app 里的同一个动作。
+ * 回来的行带 archived 标记(requirementFromHub 不读这个键)。
+ */
+export async function setRequirementArchivedOnHub(cfg: HubConfig, id: string, archived: boolean): Promise<Requirement> {
+  const res = await appFetch(`${cfg.serverUrl}${scoped(cfg, `/api/requirements/${encodeURIComponent(id)}`)}`, {
+    method: 'PATCH',
+    headers: { Authorization: `Bearer ${cfg.token}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ archived }),
+  });
+  const data = await res.json().catch(() => null) as { requirement?: unknown; message?: unknown } | null;
+  if (res.status === 403) throw new RequirementsHubError(typeof data?.message === 'string' && data.message.trim() ? data.message.trim().slice(0, 200) : '你没有修改这条需求的权限', 403);
+  if (res.status === 404) throw new RequirementsHubError('这条需求已不存在', 404);
+  if (!res.ok) throw new RequirementsHubError(archived ? '没有归档成功，请重试' : '没有恢复成功，请重试', res.status);
+  const raw = data?.requirement as { archived?: unknown } | undefined;
+  const row = requirementFromHub(raw);
+  if (!row) throw new RequirementsHubError('Hub 没有返回这条需求', 502);
+  // 回来的行上 archived 没变成要的值(Hub 不认识这个键):当没成功,不假装归档了。
+  if (raw?.archived !== archived) throw new RequirementsHubError(HUB_CANNOT_EDIT, 501);
+  return archived ? { ...row, archived: true } : row;
+}
+
+/**
  * 这个 Hub 分不分「负责人(人类)/ 负责 Agent」?看板里有卡片时直接看行里有没有 agent_owner 字段;
  * 一张卡都没有时用一个不存在的 id 探一下:认识 agent_owner 的 Hub 过了 empty_patch 检查、回 404
  * requirement_not_found;旧 Hub 不认识这个字段,回 400 empty_patch。探针什么都不写。

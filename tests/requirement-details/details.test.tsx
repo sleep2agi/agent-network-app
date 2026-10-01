@@ -142,6 +142,8 @@ mock.module('./src/requirements-hub', () => ({
     return { ...card, id, ...rest, owner: patch.owner === undefined ? null : patch.owner, participants: [], ...(roleCards ? { agentOwner: agent_owner === undefined ? null : agent_owner } : {}) };
   },
   fetchMyUserId: async () => 'u',
+  // 归档 / 恢复(任务页审计 H2)。这个套件的看板没有 archived capability,入口不出现;只要导出在,模块加载不报错。
+  setRequirementArchivedOnHub: async (_cfg: any, id: string, archived: boolean) => { edits.push({ id, patch: { archived } }); return { ...card, id, ...(archived ? { archived: true } : {}) }; },
   setChecklistItemOnHub: async (_cfg: any, id: string, itemId: string, done: boolean) => {
     itemWrites.push({ id, itemId, done });
     return { ...card, id, description: '## 目标', checklist: [{ id: 'a', text: '写接口', done: itemId === 'a' ? done : false }, { id: 'b', text: '写测试', done: itemId === 'b' ? done : true }] };
