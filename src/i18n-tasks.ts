@@ -666,3 +666,14 @@ registerTranslations({
   'act.t.project': ['移动项目', 'Project'],
   'act.t.archive': ['归档 / 删除', 'Archive / delete'],
 });
+
+// 手机快捷改状态 / 优先级(左滑 + 长按菜单;task-quick-status.ts)。
+registerTranslations({
+  'quick.more': ['更多', 'More'],
+  'quick.moveTo': ['移到 {v0}', 'Move to {v0}'],
+  'quick.close': ['收起操作', 'Close actions'],
+  'quick.status': ['改状态…', 'Change status…'],
+  'quick.priority': ['改优先级…', 'Change priority…'],
+  'quick.moved': ['已移到「{v0}」', 'Moved to “{v0}”'],
+  'quick.undo': ['撤销', 'Undo'],
+});

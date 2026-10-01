@@ -149,6 +149,10 @@ export const makeTaskStyles = () => StyleSheet.create({
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: spacing.xl, gap: spacing.sm },
   muted: { color: colors.textMuted, fontSize: typeScale.small },
   err: { color: colors.failed, fontSize: typeScale.small },
+  // 手机快捷改状态后的撤销提示(task-quick-status.ts):底部居中、深色底,5 秒后自己消失。
+  undoToast: { position: 'absolute', left: spacing.lg, right: spacing.lg, bottom: spacing.xl, minHeight: 48, paddingLeft: spacing.lg, paddingRight: spacing.xs, borderRadius: BOARD_RADIUS.control, backgroundColor: themeMode() === 'dark' ? colors.rowActive : '#2b2b2b', flexDirection: 'row', alignItems: 'center', gap: spacing.sm, ...softShadow() },
+  undoText: { flex: 1, color: '#fff', fontSize: 14 },
+  undoAction: { color: colors.accent, fontSize: 14, fontWeight: '600' },
   banner: { marginHorizontal: spacing.xl, marginBottom: spacing.sm, paddingHorizontal: spacing.md, paddingVertical: spacing.sm, borderRadius: BOARD_RADIUS.control, backgroundColor: colors.failed + '14', flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   link: { color: colors.accent, fontSize: typeScale.small, fontWeight: weight.medium },
 });

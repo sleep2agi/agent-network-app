@@ -41,10 +41,12 @@ import { applyChanges, checklistCounts, cursorAfterList, hasFullText, mergeListR
 import { enterTaskScope, noteTagsUsed, patchTaskBoard, setManagingProjects, setManagingTags, setTaskFilter, setTaskSearch, setTaskSection, taskBoardState, taskScopeKey, updateTaskItems, useTaskBoard, type TaskSection } from './task-board-store';
 import { recallBoard, rememberBoard } from './swr-cache';
 import { PRIORITY_CODE, priorityChoices, priorityLabel, supportsLowest } from './task-priority';
-import { CONTROL_H, CardMeta, ChecklistProgress, Chip, ParticipantStack, ProjectChip, DueChip, OwnerBadge, PriorityDot, Segmented, STATUS_TONE, useTaskStyles, type TaskStyles, a11yState } from './TaskBoardParts';
+import { BOARD_RADIUS, CONTROL_H, cardBg, CardMeta, ChecklistProgress, Chip, ParticipantStack, ProjectChip, DueChip, OwnerBadge, PriorityDot, Segmented, STATUS_TONE, useTaskStyles, type TaskStyles, a11yState } from './TaskBoardParts';
 import TaskCreateDialog from './TaskCreateDialog';
 import TaskDetailPanel, { DRAWER_WIDTH } from './TaskDetailPanel';
 import TaskCardMenu, { type TaskMenuTarget } from './TaskCardMenu';
+import TaskSwipeRow from './TaskSwipeRow';
+import { quickMenuAccess, swipeActions, UNDO_MS, type QuickUndo, type SwipeAction } from './task-quick-status';
 import TaskProjectManager from './TaskProjectManager';
 import TaskTagManager from './TaskTagManager';
 import { applyTagOp, applyTagOpToCatalog, canManageTags, fetchTagCatalog, TagOpError, runTagOp } from './task-tag-catalog';
@@ -152,6 +154,10 @@ function ScopedRequirementBoard({ cfg, desktop, dispatch, onOpenVoiceSettings, s
   const [moveErrors, setMoveErrors] = useState<Record<string, string>>({});
   const [banner, setBanner] = useState('');
   const [menu, setMenu] = useState<TaskMenuTarget | null>(null);
+  // 手机快捷改状态(task-quick-status.ts):开着的那一行左滑、长按菜单弹出的选择器、刚改完的撤销提示。
+  const [swipeOpen, setSwipeOpen] = useState<string | null>(null);
+  const [quickPick, setQuickPick] = useState<{ id: string; kind: 'status' | 'priority'; anchor: SelectAnchor } | null>(null);
+  const [undo, setUndo] = useState<QuickUndo | null>(null);
   const [sort, setSort] = useState<SortSpec>(DEFAULT_SORT);
   const [filterMenu, setFilterMenu] = useState<{ kind: FilterKind; x: number; y: number } | null>(null);
   const [quickAdd, setQuickAdd] = useState<{ column: ReqColumn; name: string } | null>(null);
@@ -599,7 +605,7 @@ function ScopedRequirementBoard({ cfg, desktop, dispatch, onOpenVoiceSettings, s
     dragging: () => drag.current.phase === 'dragging',
     onContextMenu: (id, x, y) => {
       const item = items.find(row => row.id === id);
-      if (item) setMenu({ id, title: item.name, column: item.column, x, y, assign: assignAccess(item) });
+      if (item) setMenu({ id, title: item.name, column: item.column, x, y, assign: assignAccess(item), quick: quickMenuAccess(item) });
     },
     onKeyMove: (id, dir) => {
       const item = items.find(row => row.id === id);
@@ -623,7 +629,41 @@ function ScopedRequirementBoard({ cfg, desktop, dispatch, onOpenVoiceSettings, s
     take();
     return subscribeOpenTaskRequest(take);
   }, [single, cfg.networkId]);
-  const openMenuAt = (item: Requirement, x: number, y: number) => setMenu({ id: item.id, title: item.name, column: item.column, x, y, assign: assignAccess(item) });
+  const openMenuAt = (item: Requirement, x: number, y: number) => { setSwipeOpen(null); setMenu({ id: item.id, title: item.name, column: item.column, x, y, assign: assignAccess(item), quick: quickMenuAccess(item) }); };
+  // 手机快捷改状态:只发 {column}(editCell → cellRequest → moveRequirementOnHub),失败退回并提示;成功留 5 秒撤销。
+  // 撤销同样只发 {column},改回原来的状态。
+  const quickStatus = (id: string, to: ReqColumn) => {
+    const item = items.find(row => row.id === id);
+    setSwipeOpen(null);
+    if (!item || item.column === to) return;
+    const from = item.column;
+    setUndo({ id, name: item.name, from, to, at: Date.now() });
+    void editCell(id, { field: 'status', column: to }).then(failed => {
+      if (!failed) return;
+      setUndo(u => (u?.id === id && u.to === to ? null : u));
+      setBanner(`「${item.name}」${failed}`);
+    });
+  };
+  const undoQuick = () => {
+    const u = undo;
+    setUndo(null);
+    if (u) void editCell(u.id, { field: 'status', column: u.from }).then(failed => { if (failed) setBanner(`「${u.name}」${failed}`); });
+  };
+  useEffect(() => {
+    if (!undo) return;
+    const timer = setTimeout(() => setUndo(u => (u === undo ? null : u)), UNDO_MS);
+    return () => clearTimeout(timer);
+  }, [undo]);
+  const onSwipe = (item: Requirement, e: SwipeAction, at: { x: number; y: number }) => {
+    if (e === 'more') { openMenuAt(item, at.x, at.y); return; }
+    quickStatus(item.id, e);
+  };
+  // 只有手机(窄屏 + 触屏)能左滑;只读的卡 swipeActions 为空,不挂手势。
+  const swipeable = narrow && !pointer;
+  const swipeWrap = (item: Requirement, node: ReactNode, style: object | undefined, background: string) => (swipeable ? (
+    <TaskSwipeRow key={item.id} id={item.id} actions={swipeActions(item)} open={swipeOpen === item.id} onOpenChange={o => setSwipeOpen(cur => (o ? item.id : cur === item.id ? null : cur))}
+      onAction={(a, at) => onSwipe(item, a, at)} background={background} style={style}>{node}</TaskSwipeRow>
+  ) : node);
   // 卡片上的参与人头像:能改 = 设置参与人;不能改 = 打开详情(和点卡片一样)。
   const onParticipants = (item: Requirement) => (canAssignPeople(item) ? () => { void openAssign(item.id, 'participants'); } : () => openDetail(item.id));
 
@@ -915,7 +955,7 @@ function ScopedRequirementBoard({ cfg, desktop, dispatch, onOpenVoiceSettings, s
   const compactCards = !narrow && (width - spacing.xl * 2 - spacing.lg * (columns.length - 1)) / Math.max(1, columns.length) < 260;
   const card = (item: Requirement) => {
     const isDragged = draggingItem?.id === item.id;
-    return (
+    return swipeWrap(item, (
       <Pressable
         key={item.id}
         testID={`req-card-${item.id}`}
@@ -939,7 +979,7 @@ function ScopedRequirementBoard({ cfg, desktop, dispatch, onOpenVoiceSettings, s
         <CardFooter item={item} people={people} s={s} touch={!pointer} onParticipants={onParticipants(item)} canAssign={canAssignPeople(item)} />
         {moveErrors[item.id] ? <Text style={s.err} numberOfLines={1}>{moveErrors[item.id]}</Text> : null}
       </Pressable>
-    );
+    ), { borderRadius: BOARD_RADIUS.card }, cardBg());
   };
 
   const kanban = () => {
@@ -1070,7 +1110,7 @@ function ScopedRequirementBoard({ cfg, desktop, dispatch, onOpenVoiceSettings, s
               </View>
               {col.items.length ? (
                 <View style={s.groupList}>
-                  {col.items.map((item, i) => (
+                  {col.items.map((item, i) => swipeWrap(item, (
                     <Pressable
                       key={item.id}
                       testID={`req-row-${item.id}`}
@@ -1087,7 +1127,7 @@ function ScopedRequirementBoard({ cfg, desktop, dispatch, onOpenVoiceSettings, s
                       <CardMeta item={item} people={people} today={today} s={s} />
                       <CardFooter item={item} people={people} s={s} touch={!pointer} onParticipants={onParticipants(item)} canAssign={canAssignPeople(item)} />
                     </Pressable>
-                  ))}
+                  ), undefined, cardBg()))}
                 </View>
               ) : <Text style={[s.muted, { paddingHorizontal: spacing.lg + spacing.xs }]}>{tr('tasks.copy.8')}</Text>}
             </View>
@@ -1320,8 +1360,33 @@ function ScopedRequirementBoard({ cfg, desktop, dispatch, onOpenVoiceSettings, s
         onOpen={id => setSelectedId(id)}
         onAssign={(id, mode) => { void openAssign(id, mode); }}
         onMove={(id, to) => { void move(id, to); if (pointer) focusCard(id); }}
+        onQuick={(id, kind, at) => setQuickPick({ id, kind, anchor: { x: at.x, y: at.y, w: 1, h: 1 } })}
         onClose={() => setMenu(null)}
       />
+      {(() => {
+        const it = quickPick && items.find(row => row.id === quickPick.id);
+        if (!quickPick || !it) return null;
+        return quickPick.kind === 'status' ? (
+          <SelectMenu anchor={quickPick.anchor} touch title={tr('fields.status')} searchable={false} selected={it.column} testID="quick-status" onClose={() => setQuickPick(null)}
+            options={REQ_COLUMNS.map(c => ({ id: c, label: taskText(REQ_COLUMN_LABEL[c]), color: STATUS_TONE[c]() }))}
+            onPick={c => { setQuickPick(null); if (c) quickStatus(it.id, c as ReqColumn); }} />
+        ) : (
+          <SelectMenu anchor={quickPick.anchor} touch title={tr('fields.priority')} searchable={false} selected={it.priority} testID="quick-priority" onClose={() => setQuickPick(null)}
+            options={priorityChoices(lowestPriority, it.priority).map(p => ({ id: p, label: priorityLabel(p), lead: <PriorityDot p={p} s={s} /> }))}
+            onPick={p => {
+              setQuickPick(null);
+              if (p && p !== it.priority) void editCell(it.id, { field: 'priority', priority: p as Requirement['priority'] }).then(failed => { if (failed) setBanner(`「${it.name}」${failed}`); });
+            }} />
+        );
+      })()}
+      {undo ? (
+        <View style={s.undoToast} testID="quick-undo" accessibilityLiveRegion="polite">
+          <Text style={s.undoText} numberOfLines={1}>{tr('quick.moved', { v0: taskText(REQ_COLUMN_LABEL[undo.to]) })}</Text>
+          <Pressable testID="quick-undo-button" accessibilityRole="button" accessibilityLabel={tr('quick.undo')} onPress={undoQuick} hitSlop={8} style={{ minHeight: 44, justifyContent: 'center', paddingHorizontal: spacing.sm }}>
+            <Text style={s.undoAction}>{tr('quick.undo')}</Text>
+          </Pressable>
+        </View>
+      ) : null}
       {assignFor && assignItem ? (
         <RequirementPeoplePicker
           networkId={cfg.networkId || ''}

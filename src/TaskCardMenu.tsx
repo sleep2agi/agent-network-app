@@ -2,7 +2,8 @@ import { t as tr } from './i18n';
 import { useTranslation } from './i18n-react';
 import { taskText } from './i18n-tasks';
 // 任务卡片的浮动菜单:桌面右键 / 键盘菜单键,手机长按。同一份项目:查看详情 · 指派负责人… · 设置参与人… ·
-// 移到 需求池/进行中/完成。指派两项:旧 Hub 的卡不出现;卡对我只读时灰掉(Hub 不许参与人改人,task-assign.ts)。
+// 移到 需求池/进行中/完成(桌面);手机长按把三个「移到」换成「改状态…」「改优先级…」两个选择器(task-quick-status.ts),
+// 参与人的卡只有改状态能点。指派两项:旧 Hub 的卡不出现;卡对我只读时灰掉(Hub 不许参与人改人,task-assign.ts)。
 // 定位复用会话行菜单的规则(agent-row-menu.ts anchorRowMenu / rowMenuMetrics):一个角贴着按下点,
 // 放不下就翻边、夹进屏幕。Modal 是为了安卓返回键(onRequestClose)与 web 的 Esc。
 import { useState } from 'react';
@@ -17,9 +18,9 @@ import { useModalSafePadding } from './safe-area-runtime';
 import { anchorRowMenu, rowMenuHeight, rowMenuMetrics } from './agent-row-menu';
 import { REQ_COLUMN_LABEL, REQ_COLUMNS, type ReqColumn } from './requirements-model';
 
-export interface TaskMenuTarget { id: string; title: string; column: ReqColumn; x: number; y: number; assign: 'on' | 'locked' | 'hidden' }
+export interface TaskMenuTarget { id: string; title: string; column: ReqColumn; x: number; y: number; assign: 'on' | 'locked' | 'hidden'; quick: { status: 'on' | 'locked'; priority: 'on' | 'locked' } }
 
-export default function TaskCardMenu({ target, touch, busy, onOpen, onAssign, onMove, onClose }: {
+export default function TaskCardMenu({ target, touch, busy, onOpen, onAssign, onMove, onQuick, onClose }: {
   target: TaskMenuTarget | null;
   /** 手机长按:44 行高 + 淡遮罩;桌面右键:紧凑行高 + 透明遮罩。 */
   touch: boolean;
@@ -28,6 +29,8 @@ export default function TaskCardMenu({ target, touch, busy, onOpen, onAssign, on
   onOpen: (id: string) => void;
   onAssign: (id: string, mode: 'owner' | 'participants') => void;
   onMove: (id: string, to: ReqColumn) => void;
+  /** 手机:「改状态…」/「改优先级…」→ 父级弹选择器(锚在按下点)。 */
+  onQuick: (id: string, kind: 'status' | 'priority', at: { x: number; y: number }) => void;
   onClose: () => void;
 }) {
   useTranslation();
@@ -36,7 +39,7 @@ export default function TaskCardMenu({ target, touch, busy, onOpen, onAssign, on
   const [area, setArea] = useState<{ width: number; height: number } | null>(null);
   const m = rowMenuMetrics(touch, uiScale().densityFactor, uiScale().denseFontMultiplier);
   const assignRows = target && target.assign !== 'hidden' ? 2 : 0;
-  const count = 1 + assignRows + REQ_COLUMNS.length;
+  const count = 1 + assignRows + (touch ? 2 : REQ_COLUMNS.length);
   const pos = target ? anchorRowMenu({
     x: target.x, y: target.y,
     menuWidth: m.width, menuHeight: rowMenuHeight(m, count) + 1,
@@ -93,7 +96,12 @@ export default function TaskCardMenu({ target, touch, busy, onOpen, onAssign, on
               { icon: mode === 'owner' ? 'person-outline' : 'people-outline', disabled: target.assign === 'locked' },
             )) : null}
             <View style={{ height: 1, marginVertical: 0, backgroundColor: colors.border }} />
-            {REQ_COLUMNS.map(col => item(`move-${col}`, col === target.column ? tr('tasks.copy.91', { v0: taskText(REQ_COLUMN_LABEL[col]) }) : tr('tasks.copy.92', { v0: taskText(REQ_COLUMN_LABEL[col]) }), () => { onClose(); onMove(target.id, col); }, {
+            {touch ? (['status', 'priority'] as const).map(kind => item(
+              kind,
+              tr(kind === 'status' ? 'quick.status' : 'quick.priority'),
+              () => { onClose(); onQuick(target.id, kind, { x: target.x, y: target.y }); },
+              { icon: kind === 'status' ? 'swap-horizontal-outline' : 'flag-outline', disabled: busy || target.quick[kind] === 'locked' },
+            )) : REQ_COLUMNS.map(col => item(`move-${col}`, col === target.column ? tr('tasks.copy.91', { v0: taskText(REQ_COLUMN_LABEL[col]) }) : tr('tasks.copy.92', { v0: taskText(REQ_COLUMN_LABEL[col]) }), () => { onClose(); onMove(target.id, col); }, {
               disabled: busy || col === target.column, checked: col === target.column, icon: col === target.column ? 'checkmark' : 'arrow-forward',
             }))}
           </View>
