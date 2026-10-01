@@ -1,0 +1,11 @@
+desktop v0.2.188 — 任务归档/恢复 + 切换卡片自动保存(审计 H2/M1)
+================================================================================
+A. 本版内容(0.2.187 发版提交之后 main 上合入的 PR + 本 PR)
+  #655 归档/恢复:卡片菜单末项「归档」、详情「更多」底部「归档这个任务」(先存未保存文字);已归档任务顶部横幅 +「恢复」;均只 PATCH {archived},无确认、底部 toast 带撤销;旧 Hub/只读/单任务窗口隐藏。与 #654 冲突逐段合并(优先级行在前、归档在末)。task-archive 14/14;浏览器 test-task-archive 16/16(改动前 12/16 失败);test-card-menu-priority 24/24。
+  #656 详情切换卡片/跳子父任务/被筛选隐藏时,未保存的标题/描述经看板 onFlush 按原卡片 id 保存,失败横幅点名卡片。Docker requirement-details 50/0;浏览器 test-detail-flush 10/10(改动前 6/10 失败);test-detail-autosave 16/16。
+  #657 测试:刷新过期的 test-board-assign(42/42),标注其不在 CI 中。
+  npm test 313/313。
+  本 PR(版本号):0.2.187 → 0.2.188,versionCode 2187 → 2188;release-desktop-auto-update.yml 加 What's new in 0.2.188;重新生成 src/changelog-bundled.ts。
+  本地:干净 origin/main(d13180c) bump 后 npm ci / npm test / npm run typecheck 全部 rc=0;android-release-notes.mjs 0.2.188 rc=0。
+B. 验证边界(如实)
+  页内桩 + 浏览器驱动 + Docker 验证;约 78 个浏览器驱动未进 CI,全量体检与 CI 接入进行中。

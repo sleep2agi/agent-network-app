@@ -5,6 +5,10 @@
 export const BUNDLED_RELEASE_BODY: string = [
   "Signed and notarized stable update for macOS (Apple Silicon) and Windows (x64).",
   "",
+  "What's new in 0.2.188:",
+  "- 任务可以归档 / 恢复了：卡片菜单最下面有「归档」，详情页「更多」里有「归档这个任务」；搜「包含已归档」打开已归档的任务，顶部会提示并带「恢复」按钮。归档后底部弹出提示，可一键撤销。",
+  "- 任务详情里正在写的标题 / 描述，直接点别的卡片、跳到子任务 / 父任务时也会自动保存，不会丢。",
+  "",
   "What's new in 0.2.187:",
   "- 桌面端看板：右键卡片菜单可以直接改优先级（P0–P3，当前的打勾），不用再打开详情；列表视图的右键菜单也一样。手机端长按菜单不变。",
   "",
