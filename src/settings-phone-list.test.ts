@@ -81,7 +81,8 @@ const norm = (f: string) => readFileSync(new URL(f, import.meta.url), 'utf-8').r
   // 「移除当前账号」只画在宽屏右栏(compact 时走 phoneSubPage,根本不进那一段);手机子页文件里没有它。
   ck('手机账号子页不再重复「移除当前账号」(它的位置是底部退出登录)', src.includes("show('account', 'logout') && canLogout ?") && !readFileSync(new URL('./SettingsPhonePages.tsx', import.meta.url), 'utf8').includes("tr('settings.copy.22')"));
   ck('宽屏仍画左栏 + 右栏标题;手机子页走 SettingsPhonePage', src.includes('{compact ? (subPage ? phoneHeader : listHeader) : sidebar}') && src.includes('<Text style={styles.paneTitle}>{settingsText(paneTitle)}</Text>') && src.includes('{compact ? (subPage ? phoneSubPage : phoneList) : ('));
-  ck('行高下限 48', (src.match(/minHeight: Math\.max\(48, ds\(52\)\)/g) ?? []).length >= 2);
+  // #427 v2:列表行是设置积木(settingsRowMinHeight = max(48, ds(52))),右栏旧样式的行也用同一个下限。
+  ck('行高下限 48', readFileSync(new URL('./settings-kit.tsx', import.meta.url), 'utf8').includes('export const settingsRowMinHeight = (): number => Math.max(48, ds(52));') && src.includes('minHeight: settingsRowMinHeight()') && /<SettingsRow\s+key=\{cat\.key\}/.test(src));
   ck('文字走 ui-text 包装(字体大小设置生效)', src.includes("import { Text, TextInput } from './ui-text';"));
 }
 

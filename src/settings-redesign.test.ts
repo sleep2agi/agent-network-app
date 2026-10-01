@@ -27,13 +27,15 @@ console.log('# 1 宽屏右栏:每一段都在卡片里');
   const bare: string[] = [];
   marks.forEach((m, i) => {
     const body = settings.slice(m.at, i + 1 < marks.length ? marks[i + 1].at : settings.indexOf('</ScrollView>', m.at));
-    if (!/<WideCard>|<SettingsGroup/.test(body)) bare.push(m.key);
+    // 自己画成设置积木卡片的组件(VoiceSettingsSection / UserManagementPanel)直接放在段里,不再套 WideCard。
+    if (!/<WideCard>|<SettingsGroup|<VoiceSettingsSection |<UserManagementPanel /.test(body)) bare.push(m.key);
   });
   ck('每一段都画在 WideCard / SettingsGroup 里', bare.length === 0, bare.join(','));
   ck('WideCard = SettingsGroup 卡片(不自带分隔,旧行自己画),空的不画', /function WideCard[\s\S]*?if \(!Children\.toArray\(children\)\.length\) return null;[\s\S]*?<SettingsGroup separators=\{false\}/.test(settings));
   ck('登录设备子页也在卡片里', /testID="settings-section-devices">\s*<WideCard>/.test(settings));
   ck('右栏内容收成居中一列(最宽 760)', /content: \{[^}]*maxWidth: 760, alignSelf: 'center'/.test(settings));
-  ck('语言(本身就是一组卡片)不套进别的卡片', /<\/WideCard>\s*\{show\('appearance', 'language'\) \? <LanguageSettings \/> : null\}\s*<WideCard>/.test(settings));
+  ck('语言(本身就是一组卡片)不套进别的卡片', /<\/SettingsGroup>\s*\{show\('appearance', 'language'\) \? <LanguageSettings \/> : null\}\s*<WideCard>/.test(settings));
+  ck('那两个组件确实自己画成积木卡片', /<SettingsGroup/.test(code(read('./VoiceSettingsSection.tsx'))) && /<SettingsGroup/.test(code(read('./UserManagementPanel.tsx'))));
 }
 
 console.log('# 2 宽屏账号段');
@@ -64,6 +66,27 @@ console.log('# 4 积木与菜单');
   ck('菜单:当前账号没有「切换」', !accountMenuItems(['copy', 'edit', 'openWindow', 'remove'], { current: true }).includes('switch'));
   ck('菜单:要重新登录的账号没有「切换」(点行去验证)', !accountMenuItems(['copy', 'edit', 'remove'], { current: false, requiresReauth: true }).includes('switch'));
   ck('菜单:本地工作区只有切换 · 新窗口 · 复制', accountMenuItems(['copy', 'openWindow'], { current: false }).join() === 'switch,openWindow,copy');
+}
+
+console.log('# 5 v2:其他分类的行也是设置积木(#427 v2)');
+{
+  // 右栏不再有自画的「标签 + 值」「标签 + 按钮」「标签 + 开关」行:都换成 SettingsRow / SettingsActionRow / SettingsSwitchRow /
+  // SettingsControlRow,标签列、右侧控件列、52 行高都由积木给。
+  ck('ValueRow / ActionRow 已删除', !/function ValueRow|function ActionRow|<ValueRow|<ActionRow/.test(settings));
+  ck('SettingsScreen 不再直接画 <Switch>(开关只在 SettingsSwitchRow 里)', !/<Switch\b/.test(settings));
+  const kitRows = (body: string) => (body.match(/<Settings(Row|ActionRow|SwitchRow|ControlRow|ChoiceRow)\b/g) ?? []).length;
+  const slice = (key: string) => { const a = settings.indexOf(`sectionsToRender.includes('${key}')`); const b = settings.indexOf('sectionsToRender.includes(', a + 10); return settings.slice(a, b > 0 ? b : settings.indexOf('</ScrollView>', a)); };
+  for (const [key, min] of [['localHub', 8], ['notifications', 10], ['about', 5], ['appearance', 1]] as const) {
+    ck(`${key}:至少 ${min} 个积木行`, kitRows(slice(key)) >= min, String(kitRows(slice(key))));
+  }
+  const voice = code(read('./VoiceSettingsSection.tsx'));
+  ck('语音:识别模型是单选积木行(不再是大卡片单选)', voice.includes('<SettingsChoiceRow') && !/styles\.option\b/.test(voice));
+  ck('语音:测试是 SettingsActionRow,按钮保留旧 id voice-test', /<SettingsActionRow[\s\S]*?buttonTestID="voice-test"/.test(voice));
+  ck('右栏旧样式的行(快捷键 / 字体大小 / 登录设备)和积木同一套尺寸', /row: \{[^}]*paddingHorizontal: SETTINGS_ROW_PAD_X,[^}]*minHeight: settingsRowMinHeight\(\),/.test(settings) && /divider: \{ height: StyleSheet\.hairlineWidth, backgroundColor: colors\.border, marginLeft: SETTINGS_ROW_PAD_X \}/.test(settings));
+  ck('积木:SettingsControlRow / SettingsActionRow 的控件都在右侧同一列(marginLeft auto)', /control: \{ marginLeft: 'auto'/.test(kit) && /styles\.control, styles\.actionButton/.test(kit));
+  const list = settings.slice(settings.indexOf('const phoneList = ('), settings.indexOf('const listHeader = ('));
+  ck('手机设置首页:每个分类一行 SettingsRow(带图标),分组 = SettingsGroup', /<SettingsGroup key=\{group\.title/.test(list) && /<SettingsRow\s+key=\{cat\.key\}[\s\S]*?icon=\{SETTINGS_CATEGORIES\.find/.test(list) && !/styles\.phoneRow\b/.test(list));
+  ck('手机设置首页:切换账号 / 退出登录 = SettingsButton', (list.match(/<SettingsButton variant="plain"/g) ?? []).length === 2);
 }
 
 console.log(`\n${p}/${n} passed`);

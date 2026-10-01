@@ -56,8 +56,9 @@ const firstGroups = settings.indexOf('phoneSettingsGroups(filtered).map', listSt
 const serverRowAt = settings.indexOf('testID={`settings-row-${PHONE_SETTINGS_SERVER_ENTRY.key}`}', listStart);
 ck('Settings: the 服务器 row is in the phone list', listStart >= 0 && serverRowAt > listStart);
 ck('Settings: the 服务器 row is above every other group (near the top)', serverRowAt > 0 && serverRowAt < firstGroups);
-ck('Settings: the row only renders when onOpenServer is passed', /\{onOpenServer \? \(\s*<View testID="settings-group-server">/.test(settings));
-ck('Settings: the row uses the grouped-list row style and chevron', /onPress=\{onOpenServer\}\s*style=\{\(\{ pressed \}\) => \[styles\.phoneRow, pressed && styles\.phoneRowPressed\]\}/.test(settings) && settings.slice(serverRowAt, firstGroups).includes('chevron-forward'));
+ck('Settings: the row only renders when onOpenServer is passed', /\{onOpenServer \? \(\s*<SettingsGroup testID="settings-group-server">/.test(settings));
+// #427 v2:列表行是设置积木的 SettingsRow(有 onPress 就画 ›),和其他分类行同一套。
+ck('Settings: the row uses the grouped-list row style and chevron', /<SettingsRow\s+testID=\{`settings-row-\$\{PHONE_SETTINGS_SERVER_ENTRY\.key\}`\}[\s\S]*?onPress=\{onOpenServer\}/.test(settings.slice(serverRowAt - 80, firstGroups)));
 const server = read('src/ServerScreen.tsx');
 ck('Server: back arrow only when onBack is passed, tagged pane-back', /\{onBack \? \(\s*<Pressable onPress=\{onBack\}[^>]*accessibilityLabel="返回设置" testID=\{PANE_BACK_TEST_ID\}/.test(server));
 

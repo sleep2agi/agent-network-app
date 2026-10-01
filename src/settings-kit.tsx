@@ -262,6 +262,71 @@ export function SettingsTriStateRow({ label, subtitle, state, onPress, disabled,
   );
 }
 
+/**
+ * 标签 · 右侧一块自定义控件(分段控件 / 小按钮 / 时间输入)。v2(#427):桌面右栏里没法套进 › / ✓ / 开关的那些行,
+ * 左边的标签列、行高、内边距和其他积木行完全一样,只是右边换成调用方给的控件(靠右放)。
+ * 有 onPress 就是可点的一整行(例如「软件更新」)。
+ */
+export function SettingsControlRow({ label, subtitle, subtitleTone, children, onPress, disabled, testID, accessibilityLabel, accessibilityState }: {
+  label: string;
+  subtitle?: ReactNode;
+  subtitleTone?: SettingsTone;
+  children?: ReactNode;
+  onPress?: () => void;
+  disabled?: boolean;
+  testID?: string;
+  accessibilityLabel?: string;
+  accessibilityState?: { busy?: boolean; disabled?: boolean };
+}) {
+  const id = testID ?? ROW_ID;
+  return (
+    <RowShell onPress={onPress} disabled={disabled} testID={id} accessibilityLabel={accessibilityLabel ?? label} accessibilityState={accessibilityState}>
+      <RowLabel label={label} subtitle={subtitle} subtitleTone={subtitleTone} testID={`${id}-label`} />
+      {children ? <View style={styles.control} testID={`${id}-control`}>{children}</View> : null}
+    </RowShell>
+  );
+}
+
+/**
+ * 标签 · 右侧一个小按钮(桌面右栏:重启 / 停止 / 打开日志 / 备份 / 发送测试通知…)。手机上同类动作是整行可点的
+ * SettingsRow;桌面保留按钮(鼠标点按钮,不点整行),但按钮落在和 › / 开关同一个右侧列里。
+ */
+export function SettingsActionRow({ label, subtitle, subtitleTone, action, busyLabel, busy, disabled, onPress, tone, testID, buttonTestID }: {
+  label: string;
+  subtitle?: ReactNode;
+  subtitleTone?: SettingsTone;
+  /** 按钮上的字;省略 = 和标签一样(旧 ActionRow 的写法)。 */
+  action?: string;
+  busyLabel?: string;
+  busy?: boolean;
+  disabled?: boolean;
+  onPress: () => void;
+  tone?: SettingsTone;
+  testID?: string;
+  /** 按钮自己的 testID(默认 `<testID>-button`;旧测试按原来的按钮 id 点)。 */
+  buttonTestID?: string;
+}) {
+  const id = testID ?? ROW_ID;
+  const off = !!disabled || !!busy;
+  return (
+    <RowShell testID={id} accessibilityLabel={label}>
+      <RowLabel label={label} subtitle={subtitle} subtitleTone={subtitleTone} testID={`${id}-label`} />
+      <Pressable
+        testID={buttonTestID ?? `${id}-button`}
+        accessibilityRole="button"
+        accessibilityLabel={action ?? label}
+        accessibilityState={{ disabled: off, busy: !!busy }}
+        disabled={off}
+        onPress={onPress}
+        style={({ pressed, hovered }: any) => [styles.control, styles.actionButton, off && styles.disabled, (pressed || hovered) && !off && styles.rowPressed]}
+      >
+        {busy ? <ActivityIndicator size="small" color={colors.textMuted} /> : null}
+        <Text style={[styles.actionText, { color: toneColor(tone, colors.text) }]} numberOfLines={1}>{busy && busyLabel ? busyLabel : action ?? label}</Text>
+      </Pressable>
+    </RowShell>
+  );
+}
+
 /** 标签 · 开关。 */
 export function SettingsSwitchRow({ label, subtitle, subtitleTone, value, onValueChange, disabled, testID }: {
   label: string;
@@ -277,6 +342,7 @@ export function SettingsSwitchRow({ label, subtitle, subtitleTone, value, onValu
     <RowShell testID={id} accessibilityLabel={label}>
       <RowLabel label={label} subtitle={subtitle} subtitleTone={subtitleTone} testID={`${id}-label`} />
       <Switch
+        testID={`${id}-switch`}
         accessibilityLabel={label}
         value={value}
         disabled={disabled}
@@ -383,6 +449,9 @@ const makeStyles = () => StyleSheet.create({
   valueFit: { flex: -1 },
   accessory: { width: ACCESSORY, height: ACCESSORY, marginLeft: 'auto', alignItems: 'center', justifyContent: 'center' },
   switch: { marginLeft: 'auto' },
+  control: { marginLeft: 'auto', flexShrink: 0, alignItems: 'flex-end' },
+  actionButton: { flexDirection: 'row', alignItems: 'center', gap: 6, minHeight: 32, paddingHorizontal: 12, borderRadius: radius.control, borderWidth: StyleSheet.hairlineWidth, borderColor: colors.border, backgroundColor: colors.groupedRow },
+  actionText: { fontSize: 14 },
   fieldLabel: { color: colors.text, fontSize: 16, width: 124 },
   fieldInput: { flex: 1, minWidth: 0, color: colors.text, fontSize: 16, paddingVertical: spacing.sm, outlineStyle: 'none' } as any,
   button: { flexDirection: 'row', gap: spacing.sm, marginHorizontal: SETTINGS_GUTTER, marginTop: spacing.lg, borderRadius: radius.control, alignItems: 'center', justifyContent: 'center', paddingHorizontal: SETTINGS_ROW_PAD_X },

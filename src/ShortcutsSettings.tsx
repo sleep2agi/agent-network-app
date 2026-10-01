@@ -12,6 +12,7 @@ import { Text } from './ui-text';
 import { Ionicons } from './icons';
 import { colors, onThemeChange, spacing, radius } from './theme';
 import { ds } from './ui-scale';
+import { SETTINGS_ROW_PAD_X } from './settings-kit';
 import {
   FIXED_SHORTCUTS,
   SHORTCUTS,
@@ -260,7 +261,8 @@ function Chips({ combo, mac, testID }: { combo: string; mac: boolean; testID?: s
 }
 
 const makeStyles = () => StyleSheet.create({
-  groupTitle: { color: colors.textMuted, fontSize: 12, fontWeight: '600', paddingHorizontal: spacing.md, marginTop: spacing.lg, marginBottom: spacing.xs },
+  // 和设置积木的分组标题同一列(左边 16,13 号灰字;#427 v2)。
+  groupTitle: { color: colors.textMuted, fontSize: 13, paddingHorizontal: SETTINGS_ROW_PAD_X, marginTop: spacing.lg, marginBottom: spacing.xs },
   // 行高固定:键帽、「按下新组合…」、分段控件三种右侧内容切换时整列不跳。
   row: { minHeight: ds(48), paddingVertical: spacing.sm, borderRadius: radius.item },
   rowHover: { backgroundColor: colors.rowHover },

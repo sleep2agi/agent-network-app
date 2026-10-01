@@ -11,6 +11,9 @@
 //   ⋯      桌面:锚在 ⋯ 下面的菜单(右边缘对齐、上沿 = ⋯ 下沿 + 4),非当前账号第一项是「切换到这个账号」,移除在最后;
 //          Esc 只关菜单。手机:底部动作面板(贴屏幕底)
 //   其他页 桌面每个分类的内容都在卡片里,卡片左右边缘和账号页一致
+//   v2     (#427 v2)本地 Hub / 外观 / 通知 / 语音输入 / 关于 的行是设置积木:每类至少 N 行;标签左边缘 = 卡片 + 16、
+//          右侧控件(› / 值 / 开关 / 按钮 / 分段)右边缘 = 卡片右边 − 16、行高 ≥ 52;快捷键的分组标题也在卡片 + 16。
+//          手机设置首页:每个分类一行(图标在卡片 + 16、文字左边缘相等、› 右边缘相等)、行高 ≥ 52、卡片左右 16。
 // 打印测量表。任何一项不过 exit 1。对着改动前的导出跑应当红。
 import { mkdirSync } from 'node:fs';
 import { serveExport, initScript, findChromium, ANDROID_UA, openStubWindow } from '../test-layout-sweep/harness.mjs';
@@ -87,6 +90,38 @@ const measureAccount = (root) => {
     oldButtons,
     dangerLast: !!danger && r(danger).top >= cardsBottom - 0.5,
   };
+};
+
+// 积木行(有 `<id>-label` 的行)的几何:标签左边缘、行首、右侧控件右边缘、行高,各自相对所在卡片。
+const measureKitRows = (root) => {
+  const scope = document.querySelector(root);
+  if (!scope) return null;
+  const r = (el) => el.getBoundingClientRect();
+  const vis = (el) => { const b = r(el); return b.width > 0 && b.height > 0; };
+  const rows = [];
+  for (const c of [...scope.querySelectorAll('[data-testid="settings-kit-card"]')].filter(vis)) {
+    for (const label of c.querySelectorAll('[data-testid$="-label"]')) {
+      const id = label.getAttribute('data-testid').slice(0, -'-label'.length);
+      const row = [...c.querySelectorAll(`[data-testid="${id}"]`)].find(el => el.contains(label));
+      if (!row || !vis(row)) continue;
+      const lead = row.querySelector(`[data-testid="${id}-lead"]`);
+      const trail = ['accessory', 'switch', 'control', 'button', 'value'].map(k => row.querySelector(`[data-testid="${id}-${k}"]`)).filter(el => el && vis(el));
+      rows.push({ id, cardL: r(c).left, cardR: r(c).right, labelL: r(label).left, leadL: lead ? r(lead).left : null, trailR: trail.length ? Math.max(...trail.map(el => r(el).right)) : null, h: r(row).height });
+    }
+  }
+  return rows;
+};
+const checkKitRows = (where, rows, min) => {
+  const plain = rows.filter(x => x.leadL === null);
+  const labelPad = plain.map(x => x.labelL - x.cardL);
+  const trailed = rows.filter(x => x.trailR !== null);
+  const trailPad = trailed.map(x => x.cardR - x.trailR);
+  const minH = rows.length ? Math.min(...rows.map(x => x.h)) : 0;
+  table.push({ where: `${where} v2`, rows: rows.length, labelPad: rng(labelPad), trailPad: rng(trailPad), minRowH: r1(minH) });
+  ck(`${where} v2: 至少 ${min} 个积木行`, rows.length >= min, String(rows.length));
+  ck(`${where} v2: 标签左边缘 = 卡片 + 16 ±1`, labelPad.every(v => Math.abs(v - 16) <= 1.5), rng(labelPad));
+  ck(`${where} v2: 右侧控件右边缘 = 卡片右边 − 16 ±1`, trailed.length > 0 && trailPad.every(v => Math.abs(v - 16) <= 1.5), rng(trailPad));
+  ck(`${where} v2: 行高 ≥ 52`, rows.length > 0 && minH >= 51.5, r1(minH));
 };
 
 const checkAccount = async (page, where, root, { danger = true } = {}) => {
@@ -173,6 +208,13 @@ for (const theme of ['light', 'dark']) {
         const ls = cards.map(c => c[0]), rs = cards.map(c => c[1]);
         table.push({ where: `${where} ${label}`, cards: cards.length, cardL: rng(ls), cardR: rng(rs) });
         ck(`${where} ${label}: 内容在卡片里、和账号页卡片同一列 ±1`, cards.length >= 1 && !!acc && [...ls, ...acc.cardL].every(v => Math.abs(v - acc.cardL[0]) <= 1) && [...rs, ...acc.cardR].every(v => Math.abs(v - acc.cardR[0]) <= 1), `${cards.length} cards ${rng(ls)} / ${rng(rs)}`);
+        const MIN = { '本地 Hub': 7, '外观': 4, '通知': 4, '语音输入': 3, '关于': 4 };
+        if (MIN[label]) checkKitRows(`${where} ${label}`, (await win.evaluate(measureKitRows, '[data-testid="settings-scroll"]')) ?? [], MIN[label]);
+        if (label === '快捷键') {
+          const pads = await win.evaluate(() => [...document.querySelectorAll('[data-testid^="shortcut-group-"]')].map(t => { const c = t.closest('[data-testid="settings-kit-card"]'); return c ? t.getBoundingClientRect().left + parseFloat(getComputedStyle(t).paddingLeft) - c.getBoundingClientRect().left : null; }));
+          table.push({ where: `${where} 快捷键 v2`, groupTitlePad: pads.map(v => v === null ? 'none' : r1(v)).join(',') });
+          ck(`${where} 快捷键 v2: 分组标题左边缘 = 卡片 + 16 ±1`, pads.length >= 2 && pads.every(v => v !== null && Math.abs(v - 16) <= 1), pads.map(v => v === null ? 'none' : r1(v)).join(','));
+        }
       } catch (e) { ck(`${where} ${label}: 打开`, false, String(e.message || e).split('\n')[0]); }
     }
   } catch (e) { ck(`${where}: run`, false, String(e.message || e).split('\n')[0]); }
@@ -216,6 +258,18 @@ for (const theme of ['light', 'dark']) {
     await page.locator('[data-testid="settings-back"]').click();
     await page.locator('[data-testid="settings-phone-list"]').waitFor({ timeout: 5000 });
     await page.waitForTimeout(300);
+    if (OUT) await page.screenshot({ path: `${OUT}/phone-${theme}-list.png`, fullPage: true });
+    // v2:设置首页每个分类一行积木(图标 · 名字 · 值 · ›)
+    const list = (await page.evaluate(measureKitRows, '[data-testid="settings-phone-list"]')) ?? [];
+    const cats = list.filter(x => x.id.startsWith('settings-row-'));
+    const leadPad = cats.map(x => x.leadL === null ? null : x.leadL - x.cardL);
+    const labels = cats.map(x => x.labelL), trails = cats.map(x => x.trailR).filter(v => v !== null);
+    const cardLs = cats.map(x => x.cardL), cardRs = cats.map(x => 390 - x.cardR);
+    table.push({ where: `${where} 首页 v2`, rows: cats.length, leadPad: leadPad.map(v => v === null ? 'none' : r1(v)).join(','), labelL: rng(labels), accR: rng(trails), gutter: `${rng(cardLs)} / ${rng(cardRs)}`, minRowH: cats.length ? r1(Math.min(...cats.map(x => x.h))) : 0 });
+    ck(`${where} 首页 v2: 每个分类一行积木(≥ 6)`, cats.length >= 6, String(cats.length));
+    ck(`${where} 首页 v2: 图标在卡片 + 16 ±1`, leadPad.length > 0 && leadPad.every(v => v !== null && Math.abs(v - 16) <= 1.5), leadPad.join(','));
+    ck(`${where} 首页 v2: 文字左边缘相等 ±1、› 右边缘相等 ±1`, span(labels) <= 1 && trails.length === cats.length && span(trails) <= 1, `${rng(labels)} / ${rng(trails)}`);
+    ck(`${where} 首页 v2: 卡片左右 16 ±1、行高 ≥ 52`, cardLs.every(v => Math.abs(v - 16) <= 1) && cardRs.every(v => Math.abs(v - 16) <= 1) && cats.every(x => x.h >= 51.5));
     const last = await page.evaluate(() => {
       const list = document.querySelector('[data-testid="settings-phone-list"]');
       const blocks = [...list.querySelectorAll('[data-testid]')].filter(el => el.getBoundingClientRect().height > 30);

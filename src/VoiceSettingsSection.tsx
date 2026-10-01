@@ -23,6 +23,7 @@ import { openExternal } from './open-external';
 import { finishUtteranceWith, newUtterance } from './useVoiceInput';
 import { useVoiceRecorder } from './useVoiceRecorder';
 import MicDeviceSetting from './MicDeviceSetting';
+import { SettingsActionRow, SettingsCardContent, SettingsChoiceRow, SettingsControlRow, SettingsGroup } from './settings-kit';
 import { STREAM_DEFAULT_RESOURCE_ID, STREAM_RESOURCE_IDS } from './doubao-stream-protocol';
 import { MODE_LABELS, STREAM_UNAVAILABLE_HINT, streamingSupported, testFallbackNote, type VoiceMode, type VoicePlatform } from './voice-stream-policy';
 import { clearStreamUnavailable, currentVoiceMode, loadVoiceMode, saveVoiceMode, streamUnavailable, subscribeVoicePrefs, voicePlatform } from './voice-prefs';
@@ -166,61 +167,45 @@ export default function VoiceSettingsSection({ showCredentials = true, showTest 
 
   if (storage === 'unsupported') {
     return (
-      <View style={styles.block} testID="voice-settings-unsupported">
-        <Text style={styles.hint}>{tr(VOICE_UNSUPPORTED_TEXT)}</Text>
-      </View>
+      <SettingsGroup testID="voice-settings-unsupported">
+        <SettingsCardContent><Text style={styles.hint}>{tr(VOICE_UNSUPPORTED_TEXT)}</Text></SettingsCardContent>
+      </SettingsGroup>
     );
   }
 
   return (
     <View testID="voice-settings">
       {showMode ? (
-        <View style={styles.block} testID="voice-mode">
-          <Text style={styles.label}>{tr('settings.copy.127')}</Text>
-          <View style={styles.options}>
-            {choices.map(m => {
-              const on = mode === m || choices.length === 1;
-              return (
-                <Pressable
-                  key={m}
-                  accessibilityRole="radio"
-                  accessibilityState={{ checked: on }}
-                  onPress={() => onPickMode(m)}
-                  style={({ pressed }) => [styles.option, on && styles.optionOn, pressed && { opacity: 0.7 }]}
-                  testID={`voice-mode-${m}`}
-                >
-                  <View style={[styles.radio, on && styles.radioOn]} />
-                  <Text style={[styles.optionText, on && styles.optionTextOn]}>{settingsText(MODE_LABELS[m])}</Text>
-                </Pressable>
-              );
-            })}
-          </View>
-          {!streamingSupported(platform) ? (
-            <Text style={styles.hint}>{tr('settings.copy.231')}</Text>
-          ) : mode === 'stream' && unavailable ? (
-            <Text style={[styles.hint, styles.warn]} testID="voice-stream-unavailable">{settingsText(STREAM_UNAVAILABLE_HINT)}</Text>
-          ) : mode === 'stream' ? (
-            <Text style={styles.hint}>{tr('settings.copy.232')}</Text>
-          ) : (
-            <Text style={styles.hint}>{tr('settings.copy.117')}</Text>
-          )}
-        </View>
+        // v2(#427):识别方式 = 设置积木的单选行(✓ 在右侧同一列),说明放在卡片下面。
+        <SettingsGroup
+          title={tr('settings.copy.127')}
+          testID="voice-mode"
+          footer={!streamingSupported(platform) ? tr('settings.copy.231')
+            : mode === 'stream' && unavailable ? <Text testID="voice-stream-unavailable">{settingsText(STREAM_UNAVAILABLE_HINT)}</Text>
+              : mode === 'stream' ? tr('settings.copy.232') : tr('settings.copy.117')}
+          footerTone={mode === 'stream' && unavailable && streamingSupported(platform) ? 'accent' : undefined}
+        >
+          {choices.map(m => (
+            <SettingsChoiceRow key={m} label={settingsText(MODE_LABELS[m])} selected={mode === m || choices.length === 1} onPress={() => onPickMode(m)} testID={`voice-mode-${m}`} />
+          ))}
+        </SettingsGroup>
       ) : null}
 
       {showCredentials ? (
-        <View style={styles.block}>
-          <View style={styles.statusRow}>
-            <Text style={styles.label}>{tr('settings.copy.24')}</Text>
+        <SettingsGroup footer={`${tr('settings.copy.242')}${voiceStorageLabel(storage)}${tr('settings.copy.243')}`} testID="voice-credentials">
+          <SettingsControlRow
+            label={tr('settings.copy.24')}
+            subtitle={status.configured && (status.console === 'old' || status.customEndpoint || status.customStreamEndpoint)
+              ? <Text testID="voice-status-mode">{status.console === 'old' ? tr('settings.copy.194', { v0: status.appId }) : tr('settings.copy.118')}{status.customEndpoint || status.customStreamEndpoint ? tr('settings.copy.119') : ''}</Text>
+              : undefined}
+            testID="voice-status-row"
+          >
             {loaded ? (
               <Text style={[styles.status, status.configured && styles.statusOk]} testID="voice-status">{localizedVoiceStatus(status)}</Text>
             ) : <ActivityIndicator size="small" color={colors.textMuted} />}
-          </View>
-          {status.configured && (status.console === 'old' || status.customEndpoint || status.customStreamEndpoint) ? (
-            <Text style={styles.hint} testID="voice-status-mode">
-              {status.console === 'old' ? tr('settings.copy.194', { v0: status.appId }) : tr('settings.copy.118')}
-              {status.customEndpoint || status.customStreamEndpoint ? tr('settings.copy.119') : ''}
-            </Text>
-          ) : null}
+          </SettingsControlRow>
+          <SettingsCardContent testID="voice-credentials-form">
+          <View style={styles.formStack}>
 
           {form.console === 'new' ? (
             <>
@@ -342,37 +327,41 @@ export default function VoiceSettingsSection({ showCredentials = true, showTest 
             ) : null}
             {saveMsg ? <Text style={[styles.hint, !saveMsg.ok && styles.error]} testID="voice-save-msg">{saveMsg.text}</Text> : null}
           </View>
-          <Text style={styles.hint}>
-            {tr('settings.copy.242')}{voiceStorageLabel(storage)}{tr('settings.copy.243')}</Text>
-        </View>
+          </View>
+          </SettingsCardContent>
+        </SettingsGroup>
       ) : null}
 
       {/* 麦克风选择只在 webview 里有(getUserMedia);手机走原生录音,没有这一栏。 */}
-      {showMic && Platform.OS === 'web' ? <MicDeviceSetting /> : null}
+      {showMic && Platform.OS === 'web' ? <SettingsGroup><SettingsCardContent><MicDeviceSetting /></SettingsCardContent></SettingsGroup> : null}
 
       {showTest ? (
-        <View style={styles.block}>
-          <View style={styles.statusRow}>
-            <Text style={styles.label}>{tr('settings.copy.133')}</Text>
-            <Pressable accessibilityRole="button" accessibilityLabel={tr('settings.copy.133')} disabled={testBusy || !status.configured} onPress={() => void onTest()} style={({ pressed }) => [styles.secondary, (testBusy || !status.configured) && styles.disabled, pressed && { opacity: 0.7 }]} testID="voice-test">
-              <Text style={styles.secondaryText}>{test.kind === 'recording' ? tr('settings.copy.195', { v0: secondsLeft }) : test.kind === 'transcribing' ? tr('settings.copy.121') : tr('settings.copy.244')}</Text>
-            </Pressable>
-          </View>
-          <Text style={styles.hint}>{tr('settings.copy.245')}{mode === 'stream' && streamingSupported(platform) ? tr('settings.copy.246') : ''}。</Text>
-          {(test.kind === 'recording' || test.kind === 'transcribing') && interim ? <Text style={[styles.result, styles.interim]} testID="voice-test-interim">{interim}</Text> : null}
-          {test.kind === 'done' ? <Text style={styles.result} testID="voice-test-result">{test.text ? tr('settings.copy.196', { v0: test.via === 'stream' ? tr('settings.copy.122') : tr('settings.copy.123'), v1: test.text }) : tr('settings.copy.124')}</Text> : null}
-          {test.kind === 'done' && test.note ? <Text style={[styles.hint, styles.warn]} testID="voice-test-note">{test.note}</Text> : null}
-          {test.kind === 'error' ? <Text style={[styles.result, styles.error]} testID="voice-test-error">{test.message}</Text> : null}
-        </View>
+        <SettingsGroup testID="voice-test-group">
+          <SettingsActionRow
+            label={tr('settings.copy.133')}
+            subtitle={`${tr('settings.copy.245')}${mode === 'stream' && streamingSupported(platform) ? tr('settings.copy.246') : ''}。`}
+            action={test.kind === 'recording' ? tr('settings.copy.195', { v0: secondsLeft }) : test.kind === 'transcribing' ? tr('settings.copy.121') : tr('settings.copy.244')}
+            disabled={testBusy || !status.configured}
+            onPress={() => void onTest()}
+            testID="voice-test-row"
+            buttonTestID="voice-test"
+          />
+          {(test.kind === 'recording' || test.kind === 'transcribing') && interim ? <SettingsCardContent><Text style={[styles.result, styles.interim]} testID="voice-test-interim">{interim}</Text></SettingsCardContent> : null}
+          {test.kind === 'done' ? (
+            <SettingsCardContent>
+              <Text style={styles.result} testID="voice-test-result">{test.text ? tr('settings.copy.196', { v0: test.via === 'stream' ? tr('settings.copy.122') : tr('settings.copy.123'), v1: test.text }) : tr('settings.copy.124')}</Text>
+              {test.note ? <Text style={[styles.hint, styles.warn]} testID="voice-test-note">{test.note}</Text> : null}
+            </SettingsCardContent>
+          ) : null}
+          {test.kind === 'error' ? <SettingsCardContent><Text style={[styles.result, styles.error]} testID="voice-test-error">{test.message}</Text></SettingsCardContent> : null}
+        </SettingsGroup>
       ) : null}
     </View>
   );
 }
 
 const makeStyles = () => StyleSheet.create({
-  block: { paddingVertical: spacing.sm, gap: 6 },
-  statusRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', minHeight: 36 },
-  label: { color: colors.text, fontSize: 14 },
+  formStack: { gap: 6 },
   status: { color: colors.textMuted, fontSize: 14 },
   statusOk: { color: colors.accent, fontWeight: '600' },
   fieldLabel: { color: colors.textSecondary, fontSize: 12, marginTop: 6 },
@@ -390,13 +379,6 @@ const makeStyles = () => StyleSheet.create({
   result: { color: colors.text, fontSize: 14, marginTop: 4 },
   interim: { color: colors.textSecondary },
   warn: { color: colors.accent },
-  options: { gap: 6, marginTop: 4 },
-  option: { flexDirection: 'row', alignItems: 'center', gap: 10, borderWidth: 1, borderColor: colors.border, borderRadius: radius.control, paddingHorizontal: spacing.md, paddingVertical: 10 },
-  optionOn: { borderColor: colors.accent },
-  radio: { width: 16, height: 16, borderRadius: radius.pill, borderWidth: 2, borderColor: colors.textMuted },
-  radioOn: { borderColor: colors.accent, backgroundColor: colors.accent },
-  optionText: { color: colors.text, fontSize: 14, flexShrink: 1 },
-  optionTextOn: { fontWeight: '600' },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 4 },
   chip: { borderWidth: 1, borderColor: colors.border, borderRadius: radius.pill, paddingHorizontal: 12, paddingVertical: 6 },
   chipOn: { borderColor: colors.accent, backgroundColor: colors.accent },
