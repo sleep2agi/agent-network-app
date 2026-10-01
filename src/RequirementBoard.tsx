@@ -25,7 +25,7 @@ import AliasAvatar from './AliasAvatar';
 import type { HubConfig } from './api';
 import { REQ_COLUMN_LABEL, REQ_COLUMNS, REQ_PRIORITIES, titleText, type ChecklistItem, type ReqColumn, type Requirement, type RequirementProject } from './requirements-model';
 import { readRequirements, requirementsKey, writeRequirements } from './requirements-store';
-import { createProject, createRequirementOnHub, fetchMyUserId, getRequirementOnHub, listArchivedRequirements, listProjects, listRequirementChanges, listRequirementsFull, searchRequirementsOnHub, setChecklistItemOnHub, updateProject, migrateLocalRequirements, moveRequirementOnHub, probeAgentOwnerSupport, RequirementsHubError, updateRequirementOnHub } from './requirements-hub';
+import { createProject, createRequirementOnHub, fetchMyUserId, getRequirementOnHub, listArchivedRequirements, listProjects, listRequirementChanges, listRequirementsFull, searchRequirementsOnHub, setChecklistItemOnHub, updateProject, migrateLocalRequirements, moveRequirementOnHub, probeAgentOwnerSupport, RequirementsHubError, setRequirementArchivedOnHub, updateRequirementOnHub } from './requirements-hub';
 import { listRequirementPeople, saveRequirementAssignments } from './requirement-people-api';
 import { applyCellEdit, cellRequest, rollbackCellEdit, type CellEdit } from './task-list-edit-model';
 import { personKey, type RequirementPerson } from './requirement-people';
@@ -158,9 +158,11 @@ function ScopedRequirementBoard({ cfg, desktop, dispatch, onOpenVoiceSettings, s
   const [swipeOpen, setSwipeOpen] = useState<string | null>(null);
   const [quickPick, setQuickPick] = useState<{ id: string; kind: 'status' | 'priority'; anchor: SelectAnchor } | null>(null);
   // 卡片菜单的目标(右键 / 长按 / 列表行 ⋯ 都走这里):桌面菜单直接列优先级档,所以带上当前档和可选档。
+  // 归档(Hub capability archived;任务页审计 2026-10-02 H2):旧 Hub / 只读 / 已归档的卡不给入口。
+  const archiveAccess = (item: Requirement): 'archive' | 'hidden' => (archivedCapable && !item.readOnly && !item.archived ? 'archive' : 'hidden');
   const menuTarget = (item: Requirement, x: number, y: number): TaskMenuTarget => ({
     id: item.id, title: item.name, column: item.column, x, y, assign: assignAccess(item), quick: quickMenuAccess(item),
-    priority: item.priority, priorities: priorityChoices(lowestPriority, item.priority),
+    priority: item.priority, priorities: priorityChoices(lowestPriority, item.priority), archive: archiveAccess(item),
   });
   const [undo, setUndo] = useState<QuickUndo | null>(null);
   const [sort, setSort] = useState<SortSpec>(DEFAULT_SORT);
@@ -654,6 +656,37 @@ function ScopedRequirementBoard({ cfg, desktop, dispatch, onOpenVoiceSettings, s
     return subscribeOpenTaskRequest(take);
   }, [single, cfg.networkId]);
   const openMenuAt = (item: Requirement, x: number, y: number) => { setSwipeOpen(null); setMenu(menuTarget(item, x, y)); };
+  // 归档 / 恢复(Hub capability archived;任务页审计 2026-10-02 H2):只发 { archived }。归档可撤销,不再确认 ——
+  // 成功后底部一条提示带「撤销」(和手机快捷改状态同一种),撤销 = 反方向再发一次。只读的卡不给入口(Hub 也会拒)。
+  const [archUndo, setArchUndo] = useState<{ id: string; name: string; archived: boolean } | null>(null);
+  const setArchived = async (id: string, archived: boolean, fromUndo = false): Promise<void> => {
+    const it = items.find(row => row.id === id) ?? archivedRows.find(row => row.id === id) ?? serverHits.rows.find(row => row.id === id) ?? (selected?.id === id ? selected : undefined);
+    const name = it?.name ?? '';
+    const blocked = readOnlyBlock(id);
+    if (blocked) { setBanner(blocked); return; }
+    try {
+      const row = await track(() => setRequirementArchivedOnHub(cfg, id, archived));
+      if (archived) {
+        updateTaskItems(scope, rows => rows.filter(r => r.id !== id));
+        setArchivedRows(rs => [row, ...rs.filter(r => r.id !== id)]);
+        // 详情里归档:卡不在看板上了,详情跟着关 —— 只有正在搜、而且搜索包含已归档时它还在结果里,才留着(显示「已归档」横幅)。
+        // 不关的话选中的 id 留着,下次一搜到它详情会自己冒出来。
+        if (selectedId === id && !(search.archived && searchTerms(search.q).length)) setSelectedId(null);
+      } else {
+        updateTaskItems(scope, rows => [row, ...rows.filter(r => r.id !== id)]);
+        setArchivedRows(rs => rs.filter(r => r.id !== id));
+      }
+      setServerHits(h => (h.rows.some(r => r.id === id) ? { ...h, rows: h.rows.map(r => (r.id === id ? row : r)) } : h));
+      setArchUndo(fromUndo ? null : { id, name: name || row.name, archived });
+    } catch (e) {
+      setBanner(`「${name}」${e instanceof Error ? e.message : String(e)}`);
+    }
+  };
+  useEffect(() => {
+    if (!archUndo) return;
+    const timer = setTimeout(() => setArchUndo(u => (u === archUndo ? null : u)), UNDO_MS);
+    return () => clearTimeout(timer);
+  }, [archUndo]);
   // 手机快捷改状态:只发 {column}(editCell → cellRequest → moveRequirementOnHub),失败退回并提示;成功留 5 秒撤销。
   // 撤销同样只发 {column},改回原来的状态。
   const quickStatus = (id: string, to: ReqColumn) => {
@@ -1234,6 +1267,7 @@ function ScopedRequirementBoard({ cfg, desktop, dispatch, onOpenVoiceSettings, s
           onAssignmentsSaved={a => updateTaskItems(scope, rows => rows.map(row => (row.id === selected.id ? { ...row, ...a } : row)))}
           onAssign={change => assign(selected.id, change)}
           onClose={() => (single ? single.onClose() : setSelectedId(null))}
+          onArchive={archivedCapable && !selected.readOnly && !single ? archived => { void setArchived(selected.id, archived); } : undefined}
           onOpenWindow={tauriShell && pointer && !single ? () => openTaskWindow({ taskId: selected.id, profileId: cfg.profileId, serverUrl: cfg.serverUrl, networkId: cfg.networkId, title: selected.name, at: Date.now() }) : undefined}
           pointer={pointer}
           onOpenVoiceSettings={onOpenVoiceSettings}
@@ -1403,6 +1437,7 @@ function ScopedRequirementBoard({ cfg, desktop, dispatch, onOpenVoiceSettings, s
           const it = items.find(row => row.id === id);
           if (it && priority !== it.priority) void editCell(id, { field: 'priority', priority }).then(failed => { if (failed) setBanner(`「${it.name}」${failed}`); });
         }}
+        onArchive={id => { void setArchived(id, true); }}
         onClose={() => setMenu(null)}
       />
       {(() => {
@@ -1421,6 +1456,14 @@ function ScopedRequirementBoard({ cfg, desktop, dispatch, onOpenVoiceSettings, s
             }} />
         );
       })()}
+      {archUndo && !undo ? (
+        <View style={s.undoToast} testID="archive-undo" accessibilityLiveRegion="polite">
+          <Text style={s.undoText} numberOfLines={1}>{tr(archUndo.archived ? 'archive.done' : 'archive.restored', { name: archUndo.name })}</Text>
+          <Pressable testID="archive-undo-button" accessibilityRole="button" accessibilityLabel={tr('quick.undo')} onPress={() => { const u = archUndo; setArchUndo(null); void setArchived(u.id, !u.archived, true); }} hitSlop={8} style={{ minHeight: 44, justifyContent: 'center', paddingHorizontal: spacing.sm }}>
+            <Text style={s.undoAction}>{tr('quick.undo')}</Text>
+          </Pressable>
+        </View>
+      ) : null}
       {undo ? (
         <View style={s.undoToast} testID="quick-undo" accessibilityLiveRegion="polite">
           <Text style={s.undoText} numberOfLines={1}>{tr('quick.moved', { v0: taskText(REQ_COLUMN_LABEL[undo.to]) })}</Text>

@@ -42,7 +42,7 @@ import { lockedMainRows, lockedMoreRows, lockedRestRows, type LockedRow } from '
 
 export const DRAWER_WIDTH = 420;
 
-export default function TaskDetailPanel({ cfg, item, readOnly = false, editFields, items, onOpenRequirement, onCreateChild, projects, dueDatetime, lowestPriority, mode, top, people, peopleLoading, onLoadPeople, moving, moveError, onMove, onSave, onAssignmentsSaved, onAssign, onClose, pointer, checklistError, onChecklistToggle, onChecklistAdd, onChecklistDelete, onChecklistMove, onOpenVoiceSettings, onOpenWindow }: {
+export default function TaskDetailPanel({ cfg, item, readOnly = false, editFields, items, onOpenRequirement, onCreateChild, projects, dueDatetime, lowestPriority, mode, top, people, peopleLoading, onLoadPeople, moving, moveError, onMove, onSave, onAssignmentsSaved, onAssign, onClose, onArchive, pointer, checklistError, onChecklistToggle, onChecklistAdd, onChecklistDelete, onChecklistMove, onOpenVoiceSettings, onOpenWindow }: {
   cfg: HubConfig;
   item: Requirement;
   /** 只读(RFC-038 §9:hub 说这张卡我不能改)。表单整块不响应,底部不给「保存修改」,顶上一条说明。 */
@@ -73,6 +73,8 @@ export default function TaskDetailPanel({ cfg, item, readOnly = false, editField
   /** 负责人 / 负责 Agent 选完立即保存(只发那一个字段);null = 存上了,字符串 = 没存上的原因。 */
   onAssign: (change: AssignChange) => Promise<string | null>;
   onClose: () => void;
+  /** 归档(true)/ 恢复(false);不给 = 这张卡不能归档(旧 Hub、只读、单卡窗口)。 */
+  onArchive?: (archived: boolean) => void;
   /** 鼠标界面:子任务可拖动排序。 */
   pointer: boolean;
   checklistError: string;
@@ -223,6 +225,18 @@ export default function TaskDetailPanel({ cfg, item, readOnly = false, editField
           <Text style={[s.muted, { flex: 1 }]}>{partial ? tr('tasks.partialBanner', { what: tr(readOnlyLabelKey(editFields)) }) : tr('tasks.readOnlyBanner')}</Text>
         </View>
       ) : null}
+      {item.archived ? (
+        // 归档的卡(搜索「包含已归档」打开的):说清楚它不在看板上,一键恢复(任务页审计 2026-10-02 H2)。
+        <View style={[styles.readOnly, { backgroundColor: colors.subtleFill }]} testID="req-archived-banner">
+          <Ionicons name="archive-outline" size={14} color={colors.textSecondary} />
+          <Text style={[s.muted, { flex: 1 }]}>{tr('archive.banner')}</Text>
+          {onArchive ? (
+            <Pressable accessibilityRole="button" onPress={() => onArchive(false)} hitSlop={8} style={{ minHeight: 32, justifyContent: 'center', paddingHorizontal: spacing.sm }} testID="req-restore">
+              <Text style={{ color: colors.accent, fontSize: typeScale.small, fontWeight: weight.medium }}>{tr('archive.restore')}</Text>
+            </Pressable>
+          ) : null}
+        </View>
+      ) : null}
       <ParentBreadcrumb item={item} items={items} onOpen={onOpenRequirement} />
       {/* 只读时下面的编辑控件整块不响应(看得见、点不动),而不是让人改完再被 hub 403 退回。 */}
       <View pointerEvents={readOnly && !partial ? 'none' : 'auto'} style={{ gap: spacing.lg }} testID="req-detail-fields">
@@ -341,6 +355,13 @@ export default function TaskDetailPanel({ cfg, item, readOnly = false, editField
           <TaskTags key={`tags:${item.id}`} cfg={cfg} item={item} onSave={onSave} />
           {!item.externalUrl || !parseIssue(item.externalUrl, false) ? <ExternalLink item={item} /> : null}
           {item.createdAt ? <Text style={s.muted}>{tr('tasks.copy.139')}{item.createdAt.slice(0, 10)}</Text> : null}
+          {onArchive && !item.archived ? (
+            // 没存的标题 / 描述先存上再归档(和关详情一样),免得归档把它们带走。
+            <Pressable accessibilityRole="button" onPress={() => { void save().then(ok => { if (ok) onArchive(true); }); }} style={state => [{ alignSelf: 'flex-start', flexDirection: 'row', alignItems: 'center', gap: 6, minHeight: 36, paddingHorizontal: spacing.md, borderRadius: radius.control, borderWidth: 1, borderColor: colors.border }, ((state as { hovered?: boolean }).hovered || state.pressed) && { backgroundColor: colors.rowHover }]} testID="req-archive">
+              <Ionicons name="archive-outline" size={15} color={colors.textSecondary} />
+              <Text style={{ color: colors.text, fontSize: typeScale.small }}>{tr('archive.detailAction')}</Text>
+            </Pressable>
+          ) : null}
           </Locked>
           {/* 外部链接只是个链接(看,不改):参与人的卡上也照样能点。 */}
           {readOnly && (!item.externalUrl || !parseIssue(item.externalUrl, false)) ? <ExternalLink item={item} /> : null}
