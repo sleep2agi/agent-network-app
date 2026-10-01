@@ -5,7 +5,7 @@
 //   - 同一个人(或 Agent)对同一张卡、前后相隔不超过 COLLAPSE_MS 的改动并成一行「更新了 N 项」,可展开看每一项;
 //     新建 / 删除永远单独一行。
 //   - 按本地日期分段(今天 / 昨天 / 9月28日 周一),段内新 → 旧。
-//   - 筛选(全部 / 我的任务、项目、成员 / Agent、事件类型)作用在事件上,再并行 —— 并出来的「N 项」只数留下来的。
+//   - 筛选(全部 / 负责或参与、项目、成员 / Agent、事件类型)作用在事件上,再并行 —— 并出来的「N 项」只数留下来的。
 import type { RequirementPersonRef } from './requirement-people';
 import type { ReqColumn, ReqPriority, Requirement } from './requirements-model';
 
@@ -96,7 +96,7 @@ export const EMPTY_ACTIVITY_FILTER: ActivityFilter = { mine: false, project: '',
 export const activityFilterCount = (f: ActivityFilter): number => (f.project ? 1 : 0) + (f.actors.length ? 1 : 0) + (f.types.length ? 1 : 0);
 export const actorKey = (r: RequirementPersonRef | null): string => (r ? `${r.kind}:${r.id}` : '');
 
-/** 这张卡算不算「我的任务」:我是负责人或参与人。卡不在手里(删了 / 归档了 / 看板没读到)= 不算。 */
+/** 这张卡算不算「负责或参与」(动态视图的筛选,原名「我的任务」):我是负责人或参与人。卡不在手里(删了 / 归档了 / 看板没读到)= 不算。 */
 export function isMyCard(card: Pick<Requirement, 'owner' | 'participants'> | undefined, meId: string | null): boolean {
   if (!card || !meId) return false;
   const me = (r: RequirementPersonRef | null | undefined) => !!r && r.kind === 'user' && r.id === meId;

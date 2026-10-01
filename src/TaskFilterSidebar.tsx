@@ -5,7 +5,7 @@ import { taskText } from './i18n-tasks';
 import './i18n-task-tags';
 // 桌面工作区在「任务」页时的左栏:原来这里是会话 / Agent 列表(跟任务页无关)。现在是筛选:
 // 标签(可折叠,全部 / 各标签 + 管理标签)、
-// 项目(全部 / 各项目 + 管理项目)、全部 / 我负责的(负责人 = 我)/ 未分配 / 按 Agent(负责 Agent,头像 + 数目),
+// 项目(全部 / 各项目 + 管理项目)、全部 / 我负责的(负责人 = 我)/ 我参与的(参与人里有我)/ 未分配 / 按 Agent(负责 Agent,头像 + 数目),
 // 最下面是「派发记录」(Hub 派给节点的任务)。按 Agent / 按节点只列有任务的,其余收进「更多节点」(可搜)——
 // owner 0.2.141 截图里这一栏是 ~300 个 0。
 // 左栏的每一项只是头部「负责人」筛选的快捷方式 —— 同一份状态(task-board-store),两边永远一致。
@@ -16,7 +16,7 @@ import { Ionicons } from './icons';
 import AliasAvatar from './AliasAvatar';
 import { colors, radius, spacing, type as typeScale, weight } from './theme';
 import { personKey } from './requirement-people';
-import { activeProjects, applyFilter, NO_PROJECT, ownersForScope, projectCounts, scopeOf, splitByCount, type SidebarScope } from './task-board-model';
+import { activeProjects, applyFilter, filterForScope, NO_PROJECT, projectCounts, scopeOf, splitByCount, type SidebarScope } from './task-board-model';
 import { setManagingProjects, setManagingTags, setTaskFilter, setTaskSection, useTaskBoard } from './task-board-store';
 import { canManageTags, localTagCounts } from './task-tag-catalog';
 import { readTagsCollapsed, writeTagsCollapsed } from './task-sidebar-prefs';
@@ -38,7 +38,7 @@ export default function TaskFilterSidebar({ onNavigate }: { onNavigate?: () => v
   const tagCatalog = useTaskBoard(s => s.tagCatalog);
   const manageTags = useTaskBoard(s => canManageTags(s.capabilities, s.tagCatalog));
   const [tagsCollapsed, setTagsCollapsed] = useState(readTagsCollapsed);
-  const active = section === 'dispatch' ? null : scopeOf(filter.owners, meId);
+  const active = section === 'dispatch' ? null : scopeOf(filter.owners, meId, filter.participant);
   // 人 / 节点的数字按当前项目算(选了 TMAI,「我负责的」就是我在 TMAI 里的)。
   const inProject = applyFilter(items, { owners: [], priorities: [], project: filter.project });
   const counts = ownerCounts(inProject, people);
@@ -108,8 +108,8 @@ export default function TaskFilterSidebar({ onNavigate }: { onNavigate?: () => v
   };
   const pick = (scope: SidebarScope) => {
     setTaskSection(section === 'dispatch' ? 'board' : section);
-    // 只换负责人,优先级筛选保留(与头部「负责人」筛选同一个动作)。
-    setTaskFilter({ ...filter, owners: ownersForScope(scope, meId) });
+    // 只换负责人 / 参与人,优先级筛选保留(负责人那格与头部「负责人」筛选同一个动作)。
+    setTaskFilter(filterForScope(filter, scope, meId));
   };
   const row = (scope: SidebarScope | 'dispatch', label: string, lead: ReactNode, count: number | null, disabled = false) => {
     const on = scope === 'dispatch' ? section === 'dispatch' : active === scope;
@@ -171,6 +171,7 @@ export default function TaskFilterSidebar({ onNavigate }: { onNavigate?: () => v
         <View style={[styles.divider, { backgroundColor: colors.border }]} />
         {row('all', tr('tasks.copy.192'), icon('albums-outline'), inProject.length)}
         {row('mine', tr('tasks.copy.193'), icon('person-outline'), meKey ? applyFilter(inProject, { owners: [meKey], priorities: [] }).length : null, !meId)}
+        {row('participating', tr('tasks.participating'), icon('people-outline'), meKey ? applyFilter(inProject, { owners: [], priorities: [], participant: meKey }).length : null, !meId)}
         {row('unassigned', tr('tasks.copy.6'), icon('help-circle-outline'), countOf('none'))}
         {/* 分两个角色的 Hub:这里按「负责 Agent」筛;旧 Hub 上节点就是唯一的负责人。 */}
         {nodes.length ? <Text style={[styles.section, { color: colors.textMuted }]}>{twoRoles ? tr('tasks.copy.194') : tr('tasks.copy.195')}</Text> : null}
