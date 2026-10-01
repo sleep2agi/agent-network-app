@@ -72,7 +72,8 @@ try {
  await page.screenshot({path:out+'/desktop-fields-zh.png'});
  await page.getByTestId('task-fields-search').focus();await page.keyboard.press('Escape');
  ck('escape closes popover',await page.getByTestId('task-fields-popover').count()===0);
- await page.getByTestId('req-row-r1').click();
+ // 桌面列表单击格子 = 选中格(多维表格式就地编辑);进详情走标题格悬停出现的「展开」。
+ await page.getByTestId('req-row-r1').hover();await page.getByTestId('req-row-open-r1').click();
  ck('row still opens detail',await page.getByTestId('req-detail').count()===1);
  await page.getByTestId('req-detail-close').click();
  await page.getByTestId('task-time-r1-updated').scrollIntoViewIfNeeded();

@@ -21,7 +21,7 @@ migrated.push(...['TasksScreen', 'RequirementBoard', 'TaskBoardParts', 'TaskCard
 migrated.push('src/TaskIssueBindings.tsx');
 migrated.push('src/RichDescriptionEditor.tsx');
 migrated.push('src/TaskTags.tsx');
-migrated.push('src/TaskListFields.tsx', 'src/TaskListTable.tsx');
+migrated.push('src/TaskListFields.tsx', 'src/TaskListTable.tsx', 'src/TaskListCellEditor.tsx');
 migrated.push('src/TaskTimeCell.tsx');
 migrated.push('src/TaskGantt.tsx', 'src/TaskCalendar.tsx');
 migrated.push('src/TaskDashboard.tsx', 'src/ShareCardNative.tsx');

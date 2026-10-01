@@ -73,7 +73,7 @@ ck('仅相关任务 的标签逐字', t('users.tasks.scoped') === '仅相关任�
   ck('task-grants:404 → null(旧 Hub 整块隐藏)', /fetchTaskGrants[\s\S]*?e\.status === 404/.test(api));
   const board = read('./RequirementBoard.tsx');
   // 参与人(agent-network#2201):状态走 'column'、检查项走 'checklist' 放行;其余写入口照样整卡挡。
-  for (const [fn, gate] of [['const move = async', "readOnlyBlock(id, 'column')"], ['const replaceChecklist = async', "readOnlyBlock(id, 'checklist')"], ['const toggleChecklist = async', "readOnlyBlock(id, 'checklist')"], ['const saveEdit = async', 'readOnlyBlock(id)'], ['const setDue = async', 'readOnlyBlock(id)']]) {
+  for (const [fn, gate] of [['const move = async', "readOnlyBlock(id, 'column')"], ['const replaceChecklist = async', "readOnlyBlock(id, 'checklist')"], ['const toggleChecklist = async', "readOnlyBlock(id, 'checklist')"], ['const saveEdit = async', 'readOnlyBlock(id)'], ['const setDue = async', 'readOnlyBlock(id)'], ['const editCell = async', "readOnlyBlock(id, edit.field === 'status' ? 'column' : undefined)"]]) {
     const body = board.slice(board.indexOf(fn), board.indexOf(fn) + 600);
     ck(`看板:${fn.replace('const ', '').replace(' = async', '')} 先挡只读(${gate})`, body.includes(gate));
   }

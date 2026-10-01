@@ -30,4 +30,16 @@ registerTranslations({
   'fields.project': ['项目', 'Project'],
   'fields.status': ['状态', 'Status'],
   'fields.issues': ['GitHub Issue', 'GitHub Issue'],
+  'fields.tags': ['标签', 'Tags'],
+  // 列表就地编辑(TaskListTable + TaskListCellEditor)
+  'listEdit.cell': ['{field}：单击选中，再单击或回车编辑', '{field}: click to select, click again or press Enter to edit'],
+  'listEdit.open': ['展开「{name}」', 'Open "{name}"'],
+  'listEdit.title': ['编辑标题', 'Edit title'],
+  'listEdit.searchPeople': ['查找成员', 'Find a member'],
+  'listEdit.searchTags': ['查找或创建选项', 'Find or create an option'],
+  'listEdit.create': ['创建「{tag}」', 'Create "{tag}"'],
+  'listEdit.remove': ['移除 {name}', 'Remove {name}'],
+  'listEdit.failed': ['「{name}」没有保存：{reason}', '"{name}" was not saved: {reason}'],
+  'listEdit.bindIssue': ['绑定 {issue}', 'Link {issue}'],
+  'listEdit.dismiss': ['关闭提示', 'Dismiss'],
 });

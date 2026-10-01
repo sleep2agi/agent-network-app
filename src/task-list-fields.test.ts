@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs';
 let p = 0, t = 0;
 const ck = (name: string, ok: boolean) => { t++; if (ok) p++; console.log(`${ok ? 'PASS' : 'FAIL'}: ${name}`); };
 ck('complete catalog', defaultFields().length === FIELD_IDS.length);
-ck('secondary columns hidden', defaultFields().filter(f => !f.visible).map(f => f.id).join() === 'participants,issues');
+ck('secondary columns hidden', defaultFields().filter(f => !f.visible).map(f => f.id).join() === 'participants,issues,tags');
 for (const raw of [null, '{', '{}', 'false', '[null,4,"x"]']) ck(`invalid preference ${raw}`, parseFields(raw).length === FIELD_IDS.length);
 const repaired = parseFields('[{"id":"title","visible":false},{"id":"owner","visible":false},{"id":"owner"},{"id":"bogus"}]');
 ck('title always visible', repaired.find(f => f.id === 'title')!.visible);
