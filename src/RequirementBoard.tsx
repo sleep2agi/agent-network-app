@@ -36,7 +36,7 @@ import { elevated } from './elevation';
 import { pointerUi } from './pointer-ui';
 import { useModalSafePadding } from './safe-area-runtime';
 import { usePoll } from './usePoll';
-import { applyFilter, EMPTY_FILTER, applyMove, boardColumns, createInput, DEFAULT_SORT, DRAG_IDLE, dragReduce, dropIndex, emptyDraft, activeProjects, defaultProjectFor, NO_PROJECT, projectCounts, filterActive, hasRoles, roleKinds, localToday, addChecklistItem, moveChecklistItem, removeChecklistItem, setChecklistDone, neighbourColumn, nextSort, revertMove, sortRows, toggleIn, hidesDone, toggleHideDone, UNASSIGNED, type CreateDraft, type DragEvent, type DragState, type EditPatch, type SortKey, type SortSpec } from './task-board-model';
+import { applyFilter, EMPTY_FILTER, applyMove, boardColumns, createInput, DEFAULT_SORT, DRAG_IDLE, dragReduce, dropIndex, emptyDraft, activeProjects, defaultProjectFor, NO_PROJECT, projectCounts, filterActive, hasRoles, ownerFilterSections, roleKinds, localToday, addChecklistItem, moveChecklistItem, removeChecklistItem, setChecklistDone, neighbourColumn, nextSort, revertMove, sortRows, toggleIn, hidesDone, toggleHideDone, UNASSIGNED, type CreateDraft, type DragEvent, type DragState, type EditPatch, type SortKey, type SortSpec } from './task-board-model';
 import { applyChanges, checklistCounts, cursorAfterList, hasFullText, mergeListRows, needsFullText, planBoardRead, type BoardSyncState } from './board-sync';
 import { enterTaskScope, noteTagsUsed, patchTaskBoard, setManagingProjects, setManagingTags, setTaskFilter, setTaskSearch, setTaskSection, taskBoardState, taskScopeKey, updateTaskItems, useTaskBoard, type TaskSection } from './task-board-store';
 import { recallBoard, rememberBoard } from './swr-cache';
@@ -1421,6 +1421,7 @@ function ScopedRequirementBoard({ cfg, desktop, dispatch, onOpenVoiceSettings, s
           mode={assignFor.mode}
           // 负责人:分两个角色的 Hub 上只能是人类;参与人:只列人类(同新建对话框),原有的 Agent 参与人保留(task-assign.ts)。
           kinds={assignFor.mode === 'owner' ? roleKinds('owner', hasRoles(assignItem)) : ['user']}
+          meId={meId}
           title={assignFor.mode === 'owner' ? tr('tasks.copy.65') : tr('tasks.copy.66')}
           hint={assignFor.mode === 'owner' ? (hasRoles(assignItem) ? tr('tasks.copy.109') : undefined) : tr('tasks.participantsPickHint', { v0: humanParticipants(assignItem).length })}
           people={people}
@@ -1615,11 +1616,17 @@ function FilterMenu({ open, touch, owners, selectedOwners, priorities, selectedP
                 p.name, projectCounts.get(p.id) ?? 0,
               ))
               : open.kind === 'owner'
-              ? owners.filter(o => o.count > 0 || selectedOwners.includes(o.key)).map(o => row(
-                o.key, selectedOwners.includes(o.key), () => onToggleOwner(o.key),
-                o.ref ? <AliasAvatar alias={o.name} size={22} /> : <Ionicons name="person-circle-outline" size={22} color={colors.textMuted} />,
-                o.key === meKey ? tr('tasks.copy.62', { v0: o.name }) : o.name, o.count,
-              ))
+              // 分段:「人」(我第一)/「Agent」/ 未分配(任务页审计 M8:人和节点混排、「我」沉底)。
+              ? ownerFilterSections(owners.filter(o => o.count > 0 || selectedOwners.includes(o.key)), meKey).flatMap((sec, i) => [
+                ...(sec.kind === 'none'
+                  ? [<View key="owner-sep-none" style={{ height: 1, marginVertical: 4, backgroundColor: colors.border }} />]
+                  : [<Text key={`owner-sec-${sec.kind}`} testID={`task-filter-sec-${sec.kind}`} style={[s.metaMuted, { paddingHorizontal: spacing.md, paddingTop: i ? spacing.sm : 2, paddingBottom: 2, fontSize: 12 }]}>{sec.kind === 'people' ? tr('tasks.filterSectionPeople') : tr('tasks.filterSectionAgents')}</Text>]),
+                ...sec.rows.map(o => row(
+                  o.key, selectedOwners.includes(o.key), () => onToggleOwner(o.key),
+                  o.ref ? <AliasAvatar alias={o.name} size={22} /> : <Ionicons name="person-circle-outline" size={22} color={colors.textMuted} />,
+                  o.key === meKey ? tr('tasks.copy.62', { v0: o.name }) : o.name, o.count,
+                )),
+              ])
               : open.kind === 'status'
               ? [
                 ...REQ_COLUMNS.map(c => row(`status-${c}`, selectedStatuses.includes(c), () => onToggleStatus(c), <View style={[s.columnDot, { backgroundColor: STATUS_TONE[c]() }]} />, taskText(REQ_COLUMN_LABEL[c]))),

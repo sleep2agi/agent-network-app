@@ -104,7 +104,7 @@ export const taskCopy = [
  ['{v0} {v1}，更换','{v0} {v1}, change'],
  ['选择负责 Agent','Choose assigned Agent'],
  ['加载人员…','Loading people…'],
- ['选择负责人(人类),可空','Choose human owner (optional)'],
+ ['选择负责人,可空','Choose owner (optional)'],
  ['选择负责 Agent(执行者),可空','Choose executing Agent (optional)'],
  ['选择负责人(人类或 Agent),可空','Choose human or Agent owner (optional)'],
  ['对结果负责的人','Person accountable for the result'],
@@ -282,6 +282,14 @@ registerTranslations({
  'tasks.participantsA11y': ['参与人：{v0}，更改', 'Participants: {v0}, change'],
  'tasks.participantsPickHint': ['已选 {v0} 人；参与人只能是人类', '{v0} selected; participants are humans'],
  'tasks.removeParticipant': ['移除参与人 {name}', 'Remove participant {name}'],
+ 'tasks.peopleRoleMember': ['成员', 'Member'],
+ 'tasks.peopleRoleAdmin': ['管理员', 'Admin'],
+ 'tasks.peopleOnline': ['在线', 'Online'],
+ 'tasks.peopleOffline': ['离线', 'Offline'],
+ 'tasks.peopleAddMe': ['加我', 'Add me'],
+ 'tasks.peopleAddMeA11y': ['把我加为参与人', 'Add me as a participant'],
+ 'tasks.filterSectionPeople': ['人', 'People'],
+ 'tasks.filterSectionAgents': ['Agent', 'Agents'],
 });
 const keys = new Map<string,string>(taskCopy.map(([zh],i)=>[zh,`tasks.copy.${i}`]));
 /** Only call with known UI/model labels, never user content. */

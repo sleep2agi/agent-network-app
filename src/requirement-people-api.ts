@@ -42,7 +42,10 @@ export async function listRequirementPeople(cfg: HubConfig): Promise<Requirement
     const ref = reference(value);
     const row = value as Record<string, unknown>;
     if (typeof row.networkId !== 'string' || row.networkId !== cfg.networkId || typeof row.name !== 'string' || (row.unavailable !== undefined && typeof row.unavailable !== 'boolean')) throw new RequirementPeopleError('Hub 返回了不属于当前网络的成员或无效数据', 502);
-    return { ...ref, networkId: row.networkId, name: row.name, unavailable: row.unavailable === true, ...(typeof row.display_name === 'string' ? { displayName: row.display_name } : {}) };
+    return { ...ref, networkId: row.networkId, name: row.name, unavailable: row.unavailable === true, ...(typeof row.display_name === 'string' ? { displayName: row.display_name } : {}),
+      // 角色 / 在线:Hub 给了才带上(目前的 Hub 不给 —— 选择器副标题就只写 成员 / Agent)。
+      ...(row.role === 'admin' || row.role === 'owner' ? { role: 'admin' as const } : row.role === 'member' ? { role: 'member' as const } : {}),
+      ...(typeof row.online === 'boolean' ? { online: row.online } : {}) };
   });
 }
 
