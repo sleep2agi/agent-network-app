@@ -127,6 +127,16 @@ export const initScript = ({ theme }) => {
       Object.assign(row, patch, { updatedAt: new Date().toISOString() });
       return { ok: true, requirement: row };
     }
+    // POST /api/requirements (新建): record the body (window.__tasksCreates) and answer with the new row the way the hub
+    // does (agent_owner → agent_owner, project_id → project_id, participants default []).
+    if (TASKS && p === '/api/requirements' && bodyText) {
+      const b = JSON.parse(bodyText);
+      (window.__tasksCreates ||= []).push(b);
+      const row = { id: `req_created_${window.__tasksCreates.length}`, name: b.name, priority: b.priority || 'normal', assignee: '', due: b.due || '', column: b.column || 'pool', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
+        owner: b.owner ?? null, agent_owner: b.agent_owner ?? null, participants: b.participants ?? [], project_id: b.project_id ?? null, parent_id: b.parent_id ?? null, tags: b.tags ?? [], description: '', checklist: [] };
+      (TASKS.requirements ||= []).unshift(row);
+      return { ok: true, requirement: row };
+    }
     // ?q= (hub capability search): a naive name match over the fixture's serverOnly rows (older tasks the list
     // didn't return) — or its archived rows with archived=true. Recorded in window.__tasksQueries for the drive.
     if (TASKS && p === '/api/requirements' && u.searchParams.has('q')) {

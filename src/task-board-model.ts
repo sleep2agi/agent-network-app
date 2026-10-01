@@ -46,6 +46,8 @@ export interface BoardFilter {
   tag?: string;
   /** 负责人键(personKey 或 UNASSIGNED)。空 = 不按负责人筛。 */
   owners: string[];
+  /** 参与人键(personKey):左栏「我参与的」。省略 / '' = 不按参与人筛。和负责人是两回事(我负责的 ≠ 我参与的)。 */
+  participant?: string;
   /** 空 = 不按优先级筛。 */
   priorities: ReqPriority[];
   /** 项目 id;NO_PROJECT = 不属于任何项目;省略 / '' = 全部项目。 */
@@ -60,7 +62,7 @@ export const NO_PROJECT = '__none__';
 
 export const EMPTY_FILTER: BoardFilter = { owners: [], priorities: [] };
 
-export const filterActive = (f: BoardFilter): boolean => f.owners.length > 0 || f.priorities.length > 0 || !!f.project || !!f.statuses?.length || !!f.tag;
+export const filterActive = (f: BoardFilter): boolean => f.owners.length > 0 || f.priorities.length > 0 || !!f.project || !!f.statuses?.length || !!f.tag || !!f.participant;
 
 /** 状态筛选里的「隐藏已完成」= 只选需求池 + 进行中。 */
 export const HIDE_DONE: readonly ReqColumn[] = REQ_COLUMNS.filter(c => c !== 'done');
@@ -72,6 +74,7 @@ export const toggleHideDone = (statuses: readonly ReqColumn[] | undefined): ReqC
 export function matchesFilter(item: Requirement, f: BoardFilter): boolean {
   if (f.tag && !item.tags?.includes(f.tag)) return false;
   if (f.owners.length && !roleKeysOf(item).some(k => f.owners.includes(k))) return false;
+  if (f.participant && !item.participants?.some(r => personKey(r) === f.participant)) return false;
   if (f.priorities.length && !f.priorities.includes(item.priority)) return false;
   if (f.statuses?.length && !f.statuses.includes(item.column)) return false;
   if (f.project) {
@@ -177,20 +180,30 @@ export function toggleIn<T>(list: readonly T[], value: T): T[] {
 export const boardColumns = (items: readonly Requirement[], f: BoardFilter) =>
   columnsOf(applyFilter(items, f)).filter(col => !f.statuses?.length || f.statuses.includes(col.column));
 
-// ── 桌面左栏:全部 / 我负责的 / 按节点 ─────────────────────────────────────
+// ── 桌面左栏:全部 / 我负责的 / 我参与的 / 按节点 ─────────────────────────────
 
-export type SidebarScope = 'all' | 'mine' | 'unassigned' | `node:${string}`;
+export type SidebarScope = 'all' | 'mine' | 'participating' | 'unassigned' | `node:${string}`;
 
 /** 左栏的一项对应的负责人筛选(与头部「负责人」筛选是同一份状态)。 */
 export function ownersForScope(scope: SidebarScope, meId: string | null): string[] {
-  if (scope === 'all') return [];
+  if (scope === 'all' || scope === 'participating') return [];
   if (scope === 'mine') return meId ? [personKey({ kind: 'user', id: meId })] : [];
   if (scope === 'unassigned') return [UNASSIGNED];
   return [scope];
 }
 
-/** 当前负责人筛选对应左栏哪一项;多选或混合时一个都不亮(null)。 */
-export function scopeOf(owners: readonly string[], meId: string | null): SidebarScope | null {
+/**
+ * 点左栏一项后的整份筛选:换负责人和参与人两格,其余(优先级、项目、状态…)保留。
+ * 「我参与的」= 参与人里有我、负责人不限;其余各项都清掉参与人。
+ */
+export function filterForScope(f: BoardFilter, scope: SidebarScope, meId: string | null): BoardFilter {
+  const participant = scope === 'participating' && meId ? personKey({ kind: 'user', id: meId }) : '';
+  return { ...f, owners: ownersForScope(scope, meId), participant };
+}
+
+/** 当前负责人 / 参与人筛选对应左栏哪一项;多选或混合时一个都不亮(null)。 */
+export function scopeOf(owners: readonly string[], meId: string | null, participant = ''): SidebarScope | null {
+  if (participant) return owners.length === 0 && meId && participant === personKey({ kind: 'user', id: meId }) ? 'participating' : null;
   if (owners.length === 0) return 'all';
   if (owners.length !== 1) return null;
   const only = owners[0];
@@ -475,6 +488,8 @@ export interface CreateDraft {
   owner: RequirementPersonRef | null;
   /** 负责 Agent(只在分两个角色的 Hub 上有)。 */
   agentOwner: RequirementPersonRef | null;
+  /** 参与人(只能是人类;只在认识参与人的 Hub 上发,空 = 不发)。 */
+  participants?: RequirementPersonRef[];
   /** 项目(只在有项目的 Hub 上发)。 */
   projectId: string | null;
   /** 父需求(建子需求时预填)。 */
@@ -510,12 +525,14 @@ export const startError = (start: string): string | null => (dueOk(start.trim())
  * 发给 POST /api/requirements 的字段。负责人只带稳定身份 {kind,id}(#484):显示名不是身份,
  * 旧的 assignee 文本永远是空串。
  */
-export function createInput(d: CreateDraft, twoRoles = false): { name: string; priority: ReqPriority; assignee: ''; due: string; column: ReqColumn; owner?: RequirementPersonRef; agentOwner?: RequirementPersonRef; projectId?: string; parentId?: string; tags?: string[] } | null {
+export function createInput(d: CreateDraft, twoRoles = false): { name: string; priority: ReqPriority; assignee: ''; due: string; column: ReqColumn; owner?: RequirementPersonRef; agentOwner?: RequirementPersonRef; participants?: RequirementPersonRef[]; projectId?: string; parentId?: string; tags?: string[] } | null {
   const c = checkDraft(d);
   if (!c.ok) return null;
   // 分两个角色的 Hub 上,种类不对的一侧不发(Hub 会 400);旧 Hub 没有负责 Agent。
   const owner = d.owner && (!twoRoles || d.owner.kind === 'user') ? d.owner : null;
   const agent = twoRoles && d.agentOwner && d.agentOwner.kind === 'node' ? d.agentOwner : null;
+  // 参与人只收人类,按 personKey 去重,只带 {kind,id}。
+  const participants = [...new Map((d.participants ?? []).filter(r => r.kind === 'user' && r.id).map(r => [personKey(r), { kind: r.kind, id: r.id }] as const)).values()];
   return {
     name: c.name,
     priority: REQ_PRIORITIES.includes(d.priority) ? d.priority : 'normal',
@@ -524,6 +541,7 @@ export function createInput(d: CreateDraft, twoRoles = false): { name: string; p
     column: d.column,
     ...(owner ? { owner: { kind: owner.kind, id: owner.id } } : {}),
     ...(agent ? { agentOwner: { kind: agent.kind, id: agent.id } } : {}),
+    ...(participants.length ? { participants } : {}),
     ...(d.projectId ? { projectId: d.projectId } : {}),
     ...(d.parentId ? { parentId: d.parentId } : {}),
     ...(d.tags?.length ? { tags: [...d.tags] } : {}),
