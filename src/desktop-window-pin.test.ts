@@ -18,14 +18,15 @@ const restoredOff = await applyStoredPinState(storage, mainKey, setAlwaysOnTop);
 check('restore applies the persisted off state to the native window', restoredOff === false && calls.at(-1) === false);
 const pinned = await togglePinState(false, storage, mainKey, setAlwaysOnTop);
 check('toggle turns native always-on-top on', pinned === true && calls.at(-1) === true);
-check('successful toggle is persisted', storedPinState(storage, mainKey) === true);
+check('toggle is session-only (not persisted)', storedPinState(storage, mainKey) === false);
 check('another window remains independent', storedPinState(storage, chatKey) === false);
 const unpinned = await togglePinState(true, storage, mainKey, setAlwaysOnTop);
 check('second toggle turns native always-on-top off', unpinned === false && calls.at(-1) === false);
 
 values.set(mainKey, 'true');
 const restoredOn = await applyStoredPinState(storage, mainKey, setAlwaysOnTop);
-check('restart restores pinned state', restoredOn === true && calls.at(-1) === true);
+check('restart never re-pins: a window stuck by an old stored true is unpinned', restoredOn === false && calls.at(-1) === false);
+check('the old stored true is cleared', storedPinState(storage, mainKey) === false);
 
 let failedPersist = false;
 try {

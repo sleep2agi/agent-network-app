@@ -5,6 +5,36 @@
 
 use tauri::{AppHandle, Emitter, Runtime};
 
+// 0.2.173(Vincent:每次打开 mac 版都弹「Choose Application — Where is use_default?」):
+// macOS 上 notify-rust 发第一条通知前若没 set_application,mac-notification-sys 的
+// ensure_application_set() 会跑 AppleScript `get id of application "use_default"`
+// → 系统弹「Where is use_default?」选程序框。插件 2.4 自己发通知前会 set_application,
+// 但我们这条路(点通知打开对话)不经过插件。所以 setup 里先登记一次,发通知的地方
+// 再兜一次(底层是 Once,重复调只回 AlreadySet)。
+pub(crate) fn notification_app_id(dev: bool, identifier: &str) -> &str {
+    // 和插件 desktop.rs 同一判据:开发态没有打包的 bundle,借 Terminal 的身份。
+    if dev {
+        "com.apple.Terminal"
+    } else {
+        identifier
+    }
+}
+
+pub fn init_notification_app<R: Runtime>(app: &AppHandle<R>) {
+    #[cfg(target_os = "macos")]
+    {
+        let _ = notify_rust::set_application(notification_app_id(tauri::is_dev(), &app.config().identifier));
+    }
+    #[cfg(not(target_os = "macos"))]
+    let _ = app;
+}
+
+/// 本 crate 里唯一构造 notify_rust::Notification 的地方(源码测试钉住)。
+fn new_notification<R: Runtime>(app: &AppHandle<R>) -> notify_rust::Notification {
+    init_notification_app(app);
+    notify_rust::Notification::new()
+}
+
 pub(crate) fn opens_chat(response: &notify_rust::NotificationResponse) -> bool {
     match response {
         notify_rust::NotificationResponse::Default => true,
@@ -31,7 +61,7 @@ pub fn show_chat_notification<R: Runtime>(app: AppHandle<R>, alias: String, titl
         return;
     }
     std::thread::spawn(move || {
-        let mut notification = notify_rust::Notification::new();
+        let mut notification = new_notification(&app);
         notification.summary(&title).body(&body).appname("Agent Network");
         // Linux: 不登记 default,点正文不会回报。Windows 点正文是 Default,这个按钮也是同一条路。
         notification.action("default", "打开");
@@ -68,8 +98,44 @@ fn set_windows_app_id(notification: &mut notify_rust::Notification) {
 
 #[cfg(test)]
 mod tests {
-    use super::opens_chat;
+    use super::{notification_app_id, opens_chat};
     use notify_rust::{CloseReason, NotificationResponse};
+
+    #[test]
+    fn mac_notifications_use_the_bundle_identifier_not_use_default() {
+        assert_eq!(notification_app_id(false, "top.vansin.agentnetwork.desktop"), "top.vansin.agentnetwork.desktop");
+        assert_eq!(notification_app_id(true, "top.vansin.agentnetwork.desktop"), "com.apple.Terminal");
+    }
+
+    // 源码层契约:只能证明「构造都走 new_notification、setup 调了 init_notification_app」;
+    // 证明不了 macOS 上真的不弹框(那要在 Mac 上跑打包产物)。
+    #[test]
+    fn every_notify_rust_notification_goes_through_the_set_application_guard() {
+        let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src");
+        let mut constructed = Vec::new();
+        for entry in std::fs::read_dir(&dir).expect("read src") {
+            let path = entry.expect("entry").path();
+            if path.extension().and_then(|e| e.to_str()) != Some("rs") {
+                continue;
+            }
+            let text = std::fs::read_to_string(&path).expect("read file");
+            for (i, line) in text.lines().enumerate() {
+                if line.contains("Notification::new()") && !line.trim_start().starts_with("//") && !line.contains("contains(") {
+                    constructed.push(format!("{}:{}", path.file_name().unwrap().to_string_lossy(), i + 1));
+                }
+            }
+        }
+        let own = include_str!("chat_notify.rs");
+        let helper = own.find("fn new_notification").expect("helper exists");
+        let guard_line = own[helper..].lines().nth(1).unwrap_or("");
+        assert!(guard_line.contains("init_notification_app(app)"), "helper must set the app first: {guard_line}");
+        let helper_line = own[..helper].lines().count() + 2;
+        assert_eq!(constructed, vec![format!("chat_notify.rs:{helper_line}")], "notify_rust::Notification built outside new_notification");
+
+        let lib = include_str!("lib.rs");
+        let setup = lib.find(".setup(|app|").expect("setup block");
+        assert!(lib[setup..].contains("chat_notify::init_notification_app(app.handle())"), "setup must register the bundle id");
+    }
 
     #[test]
     fn body_click_opens_the_chat() {
