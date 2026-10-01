@@ -7,7 +7,7 @@ import { useTranslation } from './i18n-react';
 import { settingsText } from './i18n-settings';
 import { localizedThemeSummary } from './i18n-settings-presentation';
 import { Children, useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from 'react';
-import { ActivityIndicator, AppState, BackHandler, Linking, Modal, Platform, Pressable, ScrollView, StyleSheet, Switch, View, useWindowDimensions } from 'react-native';
+import { ActivityIndicator, AppState, BackHandler, Linking, Modal, Platform, Pressable, ScrollView, StyleSheet, View, useWindowDimensions } from 'react-native';
 import { Text, TextInput } from './ui-text';
 import { Ionicons } from './icons';
 import { HubConfig } from './api';
@@ -43,7 +43,7 @@ import { playChime } from './chime';
 import { SETTINGS_CATEGORIES, SETTINGS_DETAIL_TITLE, activeCategoryKey, closeSettingsPage, filterSettings, phoneRowLabel, phoneSettingsGroups, rememberSettingsCategory, rememberSettingsScroll, rememberedSettingsView, settingsBackTarget, settingsPlatform, visibleRowKeys, type SettingsCategoryKey, type SettingsDetailKey, type SettingsHeaderOverride, type SettingsPlatform } from './settings-model';
 import SettingsPhonePage, { accountSubtitle, type PhonePagesCtx } from './SettingsPhonePages';
 import { PHONE_SETTINGS_SERVER_ENTRY } from './nav-chrome';
-import { SETTINGS_ROW_PAD_X, SettingsAccountRow, SettingsButton, SettingsGroup, SettingsRow, settingsPageContentStyle } from './settings-kit';
+import { SETTINGS_ROW_PAD_X, settingsRowMinHeight, SettingsAccountRow, SettingsActionRow, SettingsButton, SettingsCardContent, SettingsControlRow, SettingsGroup, SettingsRow, SettingsSwitchRow, settingsPageContentStyle } from './settings-kit';
 import { useModalSafePadding } from './safe-area-runtime';
 
 import { withBasePadding } from './modal-safe-area';
@@ -414,75 +414,38 @@ export default function SettingsScreen({
   };
   const phoneList = (
     <ScrollView style={styles.phoneScroll} contentContainerStyle={styles.phoneListContent} testID="settings-phone-list">
+      {/* v2(#427):列表页也是设置积木 —— 每个分类一行(行首图标方块 · 名字 · 右侧值 · ›),分组标题照旧。 */}
       {onOpenServer ? (
-        <View testID="settings-group-server">
-          <View style={styles.phoneGroupGap} />
-          <View style={styles.phoneBlock}>
-            <Pressable
-              testID={`settings-row-${PHONE_SETTINGS_SERVER_ENTRY.key}`}
-              accessibilityRole="button"
-              accessibilityLabel={tr('nav.server')}
-              onPress={onOpenServer}
-              style={({ pressed }) => [styles.phoneRow, pressed && styles.phoneRowPressed]}
-            >
-              <Text style={styles.phoneRowLabel} numberOfLines={1}>{tr('nav.server')}</Text>
-              <Text style={styles.phoneRowValue} numberOfLines={1}>{cfg.serverUrl.replace(/^https?:\/\//, '').replace(/\/$/, '')}</Text>
-              <View style={styles.phoneChevron}>
-                <Ionicons name="chevron-forward" size={18} color={colors.textMuted} />
-              </View>
-            </Pressable>
-          </View>
-        </View>
+        <SettingsGroup testID="settings-group-server">
+          <SettingsRow
+            testID={`settings-row-${PHONE_SETTINGS_SERVER_ENTRY.key}`}
+            icon="cloud-outline"
+            label={tr('nav.server')}
+            value={cfg.serverUrl.replace(/^https?:\/\//, '').replace(/\/$/, '')}
+            accessibilityLabel={tr('nav.server')}
+            onPress={onOpenServer}
+          />
+        </SettingsGroup>
       ) : null}
       {phoneSettingsGroups(filtered).map((group, gi) => (
-        <View key={group.title ?? `g${gi}`} testID={`settings-group-${gi}`}>
-          {group.title ? <Text style={styles.phoneGroupTitle} testID="settings-group-title">{settingsText(group.title)}</Text> : <View style={styles.phoneGroupGap} />}
-          <View style={styles.phoneBlock}>
-            {group.rows.map((cat, ri) => {
-              const value = phoneValue(cat.key);
-              return (
-                <View key={cat.key}>
-                  {ri ? <View style={styles.phoneDivider} /> : null}
-                  <Pressable
-                    testID={`settings-row-${cat.key}`}
-                    accessibilityRole="button"
-                    accessibilityLabel={settingsText(phoneRowLabel(cat))}
-                    onPress={() => openPage(cat.key)}
-                    style={({ pressed }) => [styles.phoneRow, pressed && styles.phoneRowPressed]}
-                  >
-                    <Text style={styles.phoneRowLabel} numberOfLines={1} testID={`settings-row-label-${cat.key}`}>{settingsText(phoneRowLabel(cat))}</Text>
-                    {value ? <Text style={styles.phoneRowValue} numberOfLines={1}>{value}</Text> : <View style={styles.phoneRowSpacer} />}
-                    <View style={styles.phoneChevron} testID={`settings-row-chevron-${cat.key}`}>
-                      <Ionicons name="chevron-forward" size={18} color={colors.textMuted} />
-                    </View>
-                  </Pressable>
-                </View>
-              );
-            })}
-          </View>
-        </View>
+        <SettingsGroup key={group.title ?? `g${gi}`} title={group.title ? settingsText(group.title) : undefined} testID={`settings-group-${gi}`}>
+          {group.rows.map(cat => (
+            <SettingsRow
+              key={cat.key}
+              testID={`settings-row-${cat.key}`}
+              icon={SETTINGS_CATEGORIES.find(c => c.key === cat.key)?.icon}
+              label={settingsText(phoneRowLabel(cat))}
+              value={phoneValue(cat.key) || undefined}
+              accessibilityLabel={settingsText(phoneRowLabel(cat))}
+              onPress={() => openPage(cat.key)}
+            />
+          ))}
+        </SettingsGroup>
       ))}
-      {/* 切换账号(Vincent 2026-09-29):单独一块,紧挨在「退出登录」上面,和它同宽同高(照微信)。 */}
-      <Pressable
-        testID="settings-switch-account-block"
-        accessibilityRole="button"
-        accessibilityLabel={tr('accounts.switch')}
-        onPress={() => setSwitcherOpen(true)}
-        style={({ pressed }) => [styles.phoneBlock, styles.phoneLogout, pressed && styles.phoneRowPressed]}
-      >
-        <Text style={styles.phoneLogoutText}>{tr('accounts.switch')}</Text>
-      </Pressable>
-      {canLogout ? (
-        <Pressable
-          testID="settings-logout-block"
-          accessibilityRole="button"
-          accessibilityLabel={tr('settings.copy.6')}
-          onPress={() => setLogoutConfirm(true)}
-          style={({ pressed }) => [styles.phoneBlock, styles.phoneLogout, pressed && styles.phoneRowPressed]}
-        >
-          <Text style={styles.phoneLogoutText}>{tr('settings.copy.6')}</Text>
-        </Pressable>
-      ) : null}
+      {/* 切换账号(Vincent 2026-09-29)/ 退出登录:最下面两块整宽按钮(照微信),v2 起是设置积木的 SettingsButton,
+          和上面的卡片同一左右边距。退出登录要先确认(弹窗不变)。 */}
+      <SettingsButton variant="plain" label={tr('accounts.switch')} onPress={() => setSwitcherOpen(true)} testID="settings-switch-account-block" />
+      {canLogout ? <SettingsButton variant="plain" label={tr('settings.copy.6')} onPress={() => setLogoutConfirm(true)} testID="settings-logout-block" /> : null}
     </ScrollView>
   );
   // 顶栏(列表与子页同一高度、同一底色 = 状态栏那条的底色,和微信一样看不出接缝;标题位置切页不跳)。
@@ -853,77 +816,68 @@ export default function SettingsScreen({
           {sectionsToRender.includes('users') && usersAvailable ? (
             <View style={sectionStyle} testID="settings-section-users">
               {heading('users')}
-              <WideCard>
-                <UserManagementPanel cfg={cfg} me={authMe} networkId={me.networkId} />
-              </WideCard>
+              {/* 用户管理自己就是几组设置积木卡片,不再套一层 WideCard(v2:卡片里套卡片)。 */}
+              <UserManagementPanel cfg={cfg} me={authMe} networkId={me.networkId} />
             </View>
           ) : null}
 
           {sectionsToRender.includes('localHub') && localHub ? (
+            // v2(#427):每一行都是设置积木(标签列 · 值 / › 列 · 52 行高);毁灭性动作单独最后一组。
             <View style={sectionStyle} testID="local-hub-settings-card">
               {heading('localHub')}
-              <WideCard>
-                {show('localHub', 'status') ? <ValueRow label={tr('settings.copy.24')} value={localHub.state === 'running' || localHub.state === 'running_external' ? tr('settings.copy.25') : localHub.state === 'error' ? tr('settings.copy.26') : tr('settings.copy.27')} /> : null}
-                {show('localHub', 'endpoint') ? <><Divider /><ValueRow label={tr('settings.copy.28')} value={localHub.endpoint} /></> : null}
-                {show('localHub', 'hubVersion') ? <><Divider /><ValueRow label={tr('settings.copy.29')} value={localHub.hubVersion} /></> : null}
-                {localHub.error ? <Text style={styles.errorText}>{localHub.error}</Text> : null}
+              <SettingsGroup footer={localHub.error || undefined} footerTone="danger" testID="local-hub-status-group">
+                {show('localHub', 'status') ? <SettingsRow label={tr('settings.copy.24')} value={localHub.state === 'running' || localHub.state === 'running_external' ? tr('settings.copy.25') : localHub.state === 'error' ? tr('settings.copy.26') : tr('settings.copy.27')} testID="local-hub-status" /> : null}
+                {show('localHub', 'endpoint') ? <SettingsRow label={tr('settings.copy.28')} value={localHub.endpoint} testID="local-hub-endpoint" /> : null}
+                {show('localHub', 'hubVersion') ? <SettingsRow label={tr('settings.copy.29')} value={localHub.hubVersion} testID="local-hub-version" /> : null}
+              </SettingsGroup>
+              <SettingsGroup testID="local-hub-actions-group">
                 {/* app#246(Vincent 2026-09-05「版本低了就加个触发安装的按钮」):本地数据还是旧版 Hub 写的
                     (requiresMigration)或端口上跑着旧版 sidecar(version mismatch)时,给一个显式的升级入口。
                     它做的事 = 重新启动:停掉旧 sidecar → 备份 → 迁移 → 用捆绑的 Hub 接管。 */}
                 {(localHub.requiresMigration || (localHub.error ?? '').includes('version mismatch')) && show('localHub', 'restart') ? (
-                  <>
-                    <Divider />
-                    <Pressable disabled={localHubBusy} testID="local-hub-upgrade" style={({ pressed }) => [styles.row, pressed && { opacity: 0.6 }]} onPress={() => {
+                  <SettingsRow
+                    label={localHubBusy ? tr('settings.copy.30') : tr('settings.copy.186', { v0: localHub.expectedHubVersion ?? tr('settings.copy.31') })}
+                    tone="accent"
+                    disabled={localHubBusy}
+                    onPress={() => {
                       setLocalHubBusy(true);
                       setProfileError('');
                       void restartLocalHub().then(setLocalHub).catch(error => setProfileError(String(error))).finally(() => setLocalHubBusy(false));
-                    }}>
-                      <Text style={styles.accentText}>{localHubBusy ? tr('settings.copy.30') : tr('settings.copy.186', { v0: localHub.expectedHubVersion ?? tr('settings.copy.31') })}</Text>
-                    </Pressable>
-                  </>
+                    }}
+                    testID="local-hub-upgrade"
+                  />
                 ) : null}
-                {show('localHub', 'restart') ? <><Divider /><ActionRow label={tr('settings.copy.32')} hint={tr('settings.copy.33')} busy={localHubBusy} onPress={() => {
+                {show('localHub', 'restart') ? <SettingsActionRow label={tr('settings.copy.32')} subtitle={tr('settings.copy.33')} busy={localHubBusy} busyLabel={tr('settings.copy.92')} onPress={() => {
                   setLocalHubBusy(true);
                   void restartLocalHub().then(setLocalHub).catch(error => setProfileError(String(error))).finally(() => setLocalHubBusy(false));
-                }} /></> : null}
-                {show('localHub', 'stop') ? <><Divider /><ActionRow label={tr('settings.copy.34')} disabled={localHubBusy || localHub.state === 'stopped'} onPress={() => {
+                }} testID="local-hub-restart" /> : null}
+                {show('localHub', 'stop') ? <SettingsActionRow label={tr('settings.copy.34')} disabled={localHubBusy || localHub.state === 'stopped'} onPress={() => {
                   setLocalHubBusy(true);
                   void stopLocalHub().then(() => localHubStatus()).then(setLocalHub).catch(error => setProfileError(String(error))).finally(() => setLocalHubBusy(false));
-                }} /></> : null}
-                {show('localHub', 'logs') ? <><Divider /><ActionRow label={tr('settings.copy.35')} onPress={() => { void openLocalHubLogs().catch(error => setProfileError(String(error))); }} /></> : null}
-                {show('localHub', 'backup') ? <><Divider /><ActionRow label={tr('settings.copy.36')} hint={localBackupMessage || undefined} busy={localHubBusy} onPress={() => {
+                }} testID="local-hub-stop" /> : null}
+                {show('localHub', 'logs') ? <SettingsActionRow label={tr('settings.copy.35')} onPress={() => { void openLocalHubLogs().catch(error => setProfileError(String(error))); }} testID="local-hub-logs" /> : null}
+                {show('localHub', 'backup') ? <SettingsActionRow label={tr('settings.copy.36')} subtitle={localBackupMessage || undefined} busy={localHubBusy} busyLabel={tr('settings.copy.92')} onPress={() => {
                   setLocalHubBusy(true);
                   setLocalBackupMessage('');
                   void backupLocalHubData().then(result => setLocalBackupMessage(tr('settings.copy.180', { v0: result.path }))).catch(error => setProfileError(String(error))).finally(() => setLocalHubBusy(false));
-                }} /></> : null}
-                {show('localHub', 'deleteLocal') ? (
-                  // 唯一的毁灭性动作单独一块:红边、和其它按钮隔开、要输入确认词。
-                  <View style={styles.dangerZone} testID="settings-danger-zone">
-                    <Text style={styles.dangerZoneTitle}>{tr('settings.copy.37')}</Text>
-                    <Pressable style={({ pressed }) => [styles.row, styles.dangerZoneRow, pressed && { opacity: 0.6 }]} onPress={() => { setLocalDeleteText(''); setLocalDeleteVisible(true); }} accessibilityRole="button">
-                      <View style={styles.rowCopy}>
-                        <Text style={styles.dangerText}>{tr('settings.copy.38')}</Text>
-                        <Text style={styles.rowHint}>{tr('settings.copy.39')}</Text>
-                      </View>
-                      <Ionicons name="chevron-forward" size={16} color={colors.failed} />
-                    </Pressable>
-                  </View>
-                ) : null}
-              </WideCard>
+                }} testID="local-hub-backup" /> : null}
+              </SettingsGroup>
+              {show('localHub', 'deleteLocal') ? (
+                // 唯一的毁灭性动作单独一组、放最后:红字、要输入确认词(确认框不变)。
+                <SettingsGroup title={tr('settings.copy.37')} testID="settings-danger-zone">
+                  <SettingsRow label={tr('settings.copy.38')} subtitle={tr('settings.copy.39')} tone="danger" onPress={() => { setLocalDeleteText(''); setLocalDeleteVisible(true); }} testID="local-hub-delete" />
+                </SettingsGroup>
+              ) : null}
             </View>
           ) : null}
 
           {sectionsToRender.includes('appearance') ? (
             <View style={sectionStyle}>
               {heading('appearance')}
-              <WideCard>
+              <SettingsGroup>
                 {show('appearance', 'theme') ? (
                   // 0.2.101:三选一分段控件(浅色 / 深色 / 跟随系统)。说明行写明当前生效的主题。
-                  <View style={[styles.row, styles.themeRow]} testID="settings-theme-row">
-                    <View style={[styles.rowCopy, styles.themeRowCopy]}>
-                      <Text style={styles.rowLabel}>{tr('settings.copy.40')}</Text>
-                      <Text style={styles.rowHint} testID="settings-theme-summary">{localizedThemeSummary(themeSnap.pref, themeSnap.mode)}</Text>
-                    </View>
+                  <SettingsControlRow label={tr('settings.copy.40')} subtitle={localizedThemeSummary(themeSnap.pref, themeSnap.mode)} testID="settings-theme-row">
                     <View style={styles.segmented} accessibilityRole="radiogroup" accessibilityLabel={tr('settings.copy.40')}>
                       {THEME_PREFERENCES.map(option => {
                         const selected = themeSnap.pref === option;
@@ -946,9 +900,9 @@ export default function SettingsScreen({
                         );
                       })}
                     </View>
-                  </View>
+                  </SettingsControlRow>
                 ) : null}
-              </WideCard>
+              </SettingsGroup>
               {/* 语言本身就是一组积木卡片(LanguageSettings):放在两张卡中间,不套进卡里。 */}
               {show('appearance', 'language') ? <LanguageSettings /> : null}
               <WideCard>
@@ -959,255 +913,160 @@ export default function SettingsScreen({
           ) : null}
 
           {sectionsToRender.includes('notifications') ? (
+            // v2(#427):开关行 = SettingsSwitchRow、分段 / 时间 / 测试按钮 = SettingsControlRow / SettingsActionRow,
+            // 标签列、右侧控件列、52 行高和其它积木行一致;需要修的权限提示单独一行红字(点了去修),不再夹在说明文字里。
             <View style={sectionStyle} testID="notify-settings-card">
               {heading('notifications')}
-              <WideCard>
+              <SettingsGroup footer={!searching ? (nativeNotify ? tr('settings.copy.75') : tr('settings.copy.76')) : undefined}>
                 {show('notifications', 'enabled') ? (
-                  <>
-                    <View style={styles.row} testID="notify-enabled-row">
-                      <View style={styles.rowCopy}>
-                        <Text style={styles.rowLabel}>{tr('settings.copy.41')}</Text>
-                        <Text style={styles.rowHint}>{tr('settings.copy.42')}</Text>
-                        {nativeNotify && notify.enabled && permission && permission.status !== 'granted' ? (
-                          <Pressable accessibilityRole="button" onPress={() => { void ensurePermission(); }} testID="notify-permission-fix">
-                            <Text style={[styles.rowHint, { color: colors.failed }]}>{tr('settings.copy.43')}</Text>
-                          </Pressable>
-                        ) : null}
-                      </View>
-                      <Switch
-                        accessibilityLabel={tr('settings.copy.41')}
-                        value={notify.enabled}
-                        onValueChange={value => {
-                          saveNotify({ ...notify, enabled: value });
-                          if (value) void ensurePermission();
-                        }}
-                        trackColor={{ true: colors.accent, false: colors.border }}
-                        thumbColor={colors.card}
-                      />
-                    </View>
-                    <Divider />
-                  </>
+                  <SettingsSwitchRow
+                    label={tr('settings.copy.41')}
+                    subtitle={tr('settings.copy.42')}
+                    value={notify.enabled}
+                    onValueChange={value => {
+                      saveNotify({ ...notify, enabled: value });
+                      if (value) void ensurePermission();
+                    }}
+                    testID="notify-enabled-row"
+                  />
+                ) : null}
+                {show('notifications', 'enabled') && nativeNotify && notify.enabled && permission && permission.status !== 'granted' ? (
+                  <SettingsRow label={tr('settings.copy.43')} tone="danger" onPress={() => { void ensurePermission(); }} testID="notify-permission-fix" />
                 ) : null}
                 {show('notifications', 'mode') ? (
-                  <>
-                    <View style={[styles.row, styles.themeRow, !notify.enabled && styles.disabled]} testID="notify-mode-row">
-                      <View style={[styles.rowCopy, styles.themeRowCopy]}>
-                        <Text style={styles.rowLabel}>{tr('settings.copy.44')}</Text>
-                        <Text style={styles.rowHint}>{notify.mode === 'new' ? tr('settings.copy.45') : tr('settings.copy.46')}</Text>
-                      </View>
-                      <View style={styles.segmented} accessibilityRole="radiogroup">
-                        {([['all', tr('settings.copy.47')], ['new', tr('settings.copy.48')]] as const).map(([mode, label]) => (
-                          <Pressable
-                            key={mode}
-                            accessibilityRole="radio"
-                            accessibilityState={{ selected: notify.mode === mode, disabled: !notify.enabled }}
-                            disabled={!notify.enabled}
-                            onPress={() => saveNotify({ ...notify, mode })}
-                            style={[styles.segment, notify.mode === mode && styles.segmentSelected]}
-                            testID={`notify-mode-${mode}`}
-                          >
-                            <Text style={[styles.segmentText, notify.mode === mode && styles.segmentTextSelected]}>{label}</Text>
-                          </Pressable>
-                        ))}
-                      </View>
+                  <SettingsControlRow label={tr('settings.copy.44')} subtitle={notify.mode === 'new' ? tr('settings.copy.45') : tr('settings.copy.46')} disabled={!notify.enabled} testID="notify-mode-row">
+                    <View style={styles.segmented} accessibilityRole="radiogroup">
+                      {([['all', tr('settings.copy.47')], ['new', tr('settings.copy.48')]] as const).map(([mode, label]) => (
+                        <Pressable
+                          key={mode}
+                          accessibilityRole="radio"
+                          accessibilityState={{ selected: notify.mode === mode, disabled: !notify.enabled }}
+                          disabled={!notify.enabled}
+                          onPress={() => saveNotify({ ...notify, mode })}
+                          style={[styles.segment, notify.mode === mode && styles.segmentSelected]}
+                          testID={`notify-mode-${mode}`}
+                        >
+                          <Text style={[styles.segmentText, notify.mode === mode && styles.segmentTextSelected]}>{label}</Text>
+                        </Pressable>
+                      ))}
                     </View>
-                    <Divider />
-                  </>
+                  </SettingsControlRow>
                 ) : null}
                 {show('notifications', 'sound') ? (
-                  <View style={styles.row}>
-                    <View style={styles.rowCopy}>
-                      <Text style={styles.rowLabel}>{tr('settings.copy.49')}</Text>
-                      <Text style={styles.rowHint}>{tr('settings.copy.50')}</Text>
-                    </View>
-                    <Switch
-                      accessibilityLabel={tr('settings.copy.49')}
-                      value={notify.soundEnabled}
-                      onValueChange={value => {
-                        const next = { ...notify, soundEnabled: value };
-                        saveNotifySettings(next);
-                        if (value) playChime();
-                      }}
-                      trackColor={{ true: colors.accent, false: colors.border }}
-                      thumbColor={colors.card}
-                    />
-                  </View>
+                  <SettingsSwitchRow
+                    label={tr('settings.copy.49')}
+                    subtitle={tr('settings.copy.50')}
+                    value={notify.soundEnabled}
+                    onValueChange={value => {
+                      const next = { ...notify, soundEnabled: value };
+                      saveNotifySettings(next);
+                      if (value) playChime();
+                    }}
+                    testID="notify-sound-row"
+                  />
                 ) : null}
                 {show('notifications', 'quiet') ? (
-                  <>
-                    <Divider />
-                    <View style={styles.row}>
-                      <View style={styles.rowCopy}>
-                        <Text style={styles.rowLabel}>{tr('settings.copy.51')}</Text>
-                        <Text style={styles.rowHint}>{notify.quiet.enabled ? tr('settings.copy.187', { v0: notify.quiet.start, v1: notify.quiet.end }) : tr('settings.copy.52')}</Text>
-                      </View>
-                      <Switch
-                        accessibilityLabel={tr('settings.copy.51')}
-                        value={notify.quiet.enabled}
-                        onValueChange={value => { saveNotifySettings({ ...notify, quiet: { ...notify.quiet, enabled: value } }); }}
-                        trackColor={{ true: colors.accent, false: colors.border }}
-                        thumbColor={colors.card}
+                  <SettingsSwitchRow
+                    label={tr('settings.copy.51')}
+                    subtitle={notify.quiet.enabled ? tr('settings.copy.187', { v0: notify.quiet.start, v1: notify.quiet.end }) : tr('settings.copy.52')}
+                    value={notify.quiet.enabled}
+                    onValueChange={value => { saveNotifySettings({ ...notify, quiet: { ...notify.quiet, enabled: value } }); }}
+                    testID="notify-quiet-row"
+                  />
+                ) : null}
+                {show('notifications', 'quiet') && notify.quiet.enabled ? (
+                  <SettingsControlRow label={tr('settings.copy.53')} testID="notify-quiet-times">
+                    <View style={styles.quietRow}>
+                      <TextInput
+                        accessibilityLabel={tr('settings.copy.54')}
+                        style={styles.quietInput}
+                        value={quietStart}
+                        onChangeText={setQuietStart}
+                        onBlur={() => saveNotifySettings({ ...notify, quiet: { ...notify.quiet, start: quietStart } })}
+                        placeholder="22:00"
+                        placeholderTextColor={colors.textMuted}
+                      />
+                      <Text style={styles.rowHint}>{tr('settings.copy.55')}</Text>
+                      <TextInput
+                        accessibilityLabel={tr('settings.copy.56')}
+                        style={styles.quietInput}
+                        value={quietEnd}
+                        onChangeText={setQuietEnd}
+                        onBlur={() => saveNotifySettings({ ...notify, quiet: { ...notify.quiet, end: quietEnd } })}
+                        placeholder="08:00"
+                        placeholderTextColor={colors.textMuted}
                       />
                     </View>
-                    {notify.quiet.enabled ? (
-                      <View style={[styles.row, styles.quietRow]}>
-                        <Text style={styles.rowLabel}>{tr('settings.copy.53')}</Text>
-                        <TextInput
-                          accessibilityLabel={tr('settings.copy.54')}
-                          style={styles.quietInput}
-                          value={quietStart}
-                          onChangeText={setQuietStart}
-                          onBlur={() => saveNotifySettings({ ...notify, quiet: { ...notify.quiet, start: quietStart } })}
-                          placeholder="22:00"
-                          placeholderTextColor={colors.textMuted}
-                        />
-                        <Text style={styles.rowLabel}>{tr('settings.copy.55')}</Text>
-                        <TextInput
-                          accessibilityLabel={tr('settings.copy.56')}
-                          style={styles.quietInput}
-                          value={quietEnd}
-                          onChangeText={setQuietEnd}
-                          onBlur={() => saveNotifySettings({ ...notify, quiet: { ...notify.quiet, end: quietEnd } })}
-                          placeholder="08:00"
-                          placeholderTextColor={colors.textMuted}
-                        />
-                      </View>
-                    ) : null}
-                  </>
+                  </SettingsControlRow>
                 ) : null}
                 {show('notifications', 'muted') ? (
-                  <>
-                    <Divider />
-                    <View style={[styles.row, { alignItems: 'flex-start' }]} testID="notify-muted-row">
-                      <View style={styles.rowCopy}>
-                        <Text style={styles.rowLabel}>{tr('settings.copy.57')}</Text>
-                        <Text style={styles.rowHint}>{muted.length ? tr('settings.copy.58') : (nativeNotify ? tr('settings.copy.59') : tr('settings.copy.60'))}</Text>
-                        {muted.map(alias => (
-                          <View key={alias} style={styles.mutedItem}>
-                            <Text style={styles.rowValue} numberOfLines={1}>{alias}</Text>
-                            <Pressable accessibilityRole="button" accessibilityLabel={tr('settings.copy.188', { v0: alias })} onPress={() => saveNotify(toggleAgentMuted(notify, notifyKey, alias))} hitSlop={6}>
-                              <Text style={styles.accentText}>{tr('settings.copy.61')}</Text>
-                            </Pressable>
-                          </View>
-                        ))}
-                      </View>
-                    </View>
-                  </>
+                  <SettingsRow label={tr('settings.copy.57')} subtitle={muted.length ? tr('settings.copy.58') : (nativeNotify ? tr('settings.copy.59') : tr('settings.copy.60'))} testID="notify-muted-row" />
                 ) : null}
+                {show('notifications', 'muted') ? muted.map(alias => (
+                  <SettingsActionRow key={`muted-${alias}`} label={alias} action={tr('settings.copy.61')} tone="accent" onPress={() => saveNotify(toggleAgentMuted(notify, notifyKey, alias))} testID={`notify-muted-${alias}`} />
+                )) : null}
                 {show('notifications', 'keepAlive') ? (
-                  <>
-                    <Divider />
-                    <View style={styles.row} testID="notify-keepalive-row">
-                      <View style={styles.rowCopy}>
-                        <Text style={styles.rowLabel}>{tr('settings.copy.62')}</Text>
-                        <Text style={styles.rowHint}>{tr('settings.copy.63')}</Text>
-                        {keepAliveStatusText(notify, keepAliveState) ? (
-                          <Text style={[styles.rowHint, keepAliveState.error ? { color: colors.failed } : null]} testID="notify-keepalive-status">{keepAliveStatusText(notify, keepAliveState)}</Text>
-                        ) : null}
-                      </View>
-                      <Switch
-                        accessibilityLabel={tr('settings.copy.62')}
-                        value={notify.keepAlive}
-                        disabled={!notify.enabled || !keepAliveState.available}
-                        onValueChange={value => {
-                          saveNotify({ ...notify, keepAlive: value });
-                          setTimeout(() => bumpKeepAlive(n => n + 1), 1500);
-                        }}
-                        trackColor={{ true: colors.accent, false: colors.border }}
-                        thumbColor={colors.card}
-                      />
-                    </View>
-                  </>
+                  <SettingsSwitchRow
+                    label={tr('settings.copy.62')}
+                    subtitle={keepAliveStatusText(notify, keepAliveState) ? `${tr('settings.copy.63')}\n${keepAliveStatusText(notify, keepAliveState)}` : tr('settings.copy.63')}
+                    subtitleTone={keepAliveState.error ? 'danger' : undefined}
+                    value={notify.keepAlive}
+                    disabled={!notify.enabled || !keepAliveState.available}
+                    onValueChange={value => {
+                      saveNotify({ ...notify, keepAlive: value });
+                      setTimeout(() => bumpKeepAlive(n => n + 1), 1500);
+                    }}
+                    testID="notify-keepalive-row"
+                  />
                 ) : null}
                 {show('notifications', 'dndBypass') ? (
-                  <>
-                    <Divider />
-                    <View style={styles.row} testID="notify-dnd-row">
-                      <View style={styles.rowCopy}>
-                        <Text style={styles.rowLabel}>{tr('settings.copy.64')}</Text>
-                        <Text style={styles.rowHint}>{tr('settings.copy.65')}</Text>
-                        {notify.dndBypass && dndAccess === false ? (
-                          <Pressable accessibilityRole="button" onPress={() => { void openDndAccessSettings(); }} testID="notify-dnd-grant">
-                            <Text style={[styles.rowHint, { color: colors.failed }]}>{tr('settings.copy.66')}</Text>
-                          </Pressable>
-                        ) : notify.dndBypass && dndAccess === true ? (
-                          <Text style={styles.rowHint}>{tr('settings.copy.67')}</Text>
-                        ) : null}
-                      </View>
-                      <Switch
-                        accessibilityLabel={tr('settings.copy.64')}
-                        value={notify.dndBypass}
-                        disabled={!notify.enabled}
-                        onValueChange={value => {
-                          saveNotify({ ...notify, dndBypass: value });
-                          if (value && dndAccessGranted() === false) void openDndAccessSettings();
-                        }}
-                        trackColor={{ true: colors.accent, false: colors.border }}
-                        thumbColor={colors.card}
-                      />
-                    </View>
-                  </>
+                  <SettingsSwitchRow
+                    label={tr('settings.copy.64')}
+                    subtitle={notify.dndBypass && dndAccess === true ? `${tr('settings.copy.65')}\n${tr('settings.copy.67')}` : tr('settings.copy.65')}
+                    value={notify.dndBypass}
+                    disabled={!notify.enabled}
+                    onValueChange={value => {
+                      saveNotify({ ...notify, dndBypass: value });
+                      if (value && dndAccessGranted() === false) void openDndAccessSettings();
+                    }}
+                    testID="notify-dnd-row"
+                  />
+                ) : null}
+                {show('notifications', 'dndBypass') && notify.dndBypass && dndAccess === false ? (
+                  <SettingsRow label={tr('settings.copy.66')} tone="danger" onPress={() => { void openDndAccessSettings(); }} testID="notify-dnd-grant" />
                 ) : null}
                 {show('notifications', 'xiaomiGuide') ? (
-                  <>
-                    <Divider />
-                    <Pressable style={({ pressed }) => [styles.row, pressed && { opacity: 0.6 }]} onPress={() => setGuideVisible(true)} accessibilityRole="button" testID="notify-xiaomi-guide">
-                      <View style={styles.rowCopy}>
-                        <Text style={styles.rowLabel}>{tr('settings.copy.68')}</Text>
-                        <Text style={styles.rowHint}>{tr('settings.copy.69')}</Text>
-                      </View>
-                      <Ionicons name="chevron-forward" size={16} color={colors.textMuted} />
-                    </Pressable>
-                  </>
+                  <SettingsRow label={tr('settings.copy.68')} subtitle={tr('settings.copy.69')} onPress={() => setGuideVisible(true)} testID="notify-xiaomi-guide" />
                 ) : null}
                 {show('notifications', 'test') ? (
-                  <>
-                    <Divider />
-                    <View style={styles.row} testID="notify-test-row">
-                      <View style={styles.rowCopy}>
-                        <Text style={styles.rowLabel}>{tr('settings.copy.70')}</Text>
-                        <Text style={styles.rowHint}>{testMessage || tr('settings.copy.71')}</Text>
-                      </View>
-                      <Pressable
-                        accessibilityRole="button"
-                        accessibilityLabel={tr('settings.copy.70')}
-                        onPress={() => {
-                          void (async () => {
-                            if (!(await ensurePermission())) { setTestMessage(tr('settings.copy.8')); return; }
-                            try { await sendTestNotification(); setTestMessage(tr('settings.copy.9')); }
-                            catch (e) { setTestMessage(tr('settings.copy.181', { v0: String((e as Error)?.message ?? e) })); }
-                          })();
-                        }}
-                        style={({ pressed }) => [styles.actionButton, pressed && { opacity: 0.6 }]}
-                      >
-                        <Text style={styles.actionButtonText}>{tr('settings.copy.72')}</Text>
-                      </Pressable>
-                    </View>
-                  </>
+                  <SettingsActionRow
+                    label={tr('settings.copy.70')}
+                    subtitle={testMessage || tr('settings.copy.71')}
+                    action={tr('settings.copy.72')}
+                    onPress={() => {
+                      void (async () => {
+                        if (!(await ensurePermission())) { setTestMessage(tr('settings.copy.8')); return; }
+                        try { await sendTestNotification(); setTestMessage(tr('settings.copy.9')); }
+                        catch (e) { setTestMessage(tr('settings.copy.181', { v0: String((e as Error)?.message ?? e) })); }
+                      })();
+                    }}
+                    testID="notify-test-row"
+                  />
                 ) : null}
-                {show('notifications', 'diagnostics') ? (
-                  <>
-                    <Divider />
-                    <View style={styles.row}>
-                      <View style={styles.rowCopy}>
-                        <Text style={styles.rowLabel}>{tr('settings.copy.73')}</Text>
-                        <Text style={styles.rowHint}>{tr('settings.copy.74')}</Text>
-                      </View>
-                    </View>
-                    {notifyPreview ? null : <NotifyDiagnosticsPanel />}
-                  </>
-                ) : null}
-                {!searching ? <><Divider /><Text style={styles.footHint}>{nativeNotify ? tr('settings.copy.75') : tr('settings.copy.76')}</Text></> : null}
-              </WideCard>
+              </SettingsGroup>
+              {show('notifications', 'diagnostics') ? (
+                <SettingsGroup title={tr('settings.copy.73')} caption={tr('settings.copy.74')} testID="notify-diagnostics-group">
+                  {notifyPreview ? null : <SettingsCardContent><NotifyDiagnosticsPanel /></SettingsCardContent>}
+                </SettingsGroup>
+              ) : null}
             </View>
           ) : null}
 
           {sectionsToRender.includes('voice') ? (
             <View style={sectionStyle} testID="settings-section-voice">
               {heading('voice')}
-              <WideCard>
-                <VoiceSettingsSection showMode={show('voice', 'mode')} showCredentials={show('voice', 'credentials')} showMic={show('voice', 'mic')} showTest={show('voice', 'test')} />
-              </WideCard>
+              {/* VoiceSettingsSection 自己画成几组设置积木卡片(v2),不再套一层 WideCard。 */}
+              <VoiceSettingsSection showMode={show('voice', 'mode')} showCredentials={show('voice', 'credentials')} showMic={show('voice', 'mic')} showTest={show('voice', 'test')} />
             </View>
           ) : null}
 
@@ -1223,83 +1082,46 @@ export default function SettingsScreen({
           {sectionsToRender.includes('about') && !showWideChangelog ? (
             <View style={sectionStyle}>
               {heading('about')}
-              <WideCard>
-                {show('about', 'version') ? <ValueRow label={tr('settings.copy.77')} value={`v${APP_VERSION}`} /> : null}
-                {show('about', 'update') ? (
-                  <>
-                    <Divider />
-                    {(() => {
-                      // 「点击更新好像没用」:每次手动检查都要落到一句看得见、和上一次不同的话上
-                      // (版本号 + 刚刚检查 / 失败原因),而不是闪一下转圈又回到同一句。
-                      const view = isIOS ? IOS_UPDATE_ROW : isAndroid
-                        ? describeAndroidUpdateRow(androidUpdate, { currentVersion: APP_VERSION, lastCheckedAt: androidUpdateLastCheckedAt(), now: Date.now() })
-                        : describeUpdateRow(update, { currentVersion: APP_VERSION, lastCheckedAt: desktopUpdateLastCheckedAt(), now: Date.now() });
-                      const valueColor = view.tone === 'danger' ? colors.failed : view.tone === 'accent' ? colors.accent : colors.textSecondary;
-                      return (
-                        <Pressable
-                          testID="settings-update-row"
-                          style={({ pressed }) => [styles.row, pressed && view.actionable && { opacity: 0.6 }]}
-                          onPress={() => {
-                            if (!view.actionable) return;
-                            if (isIOS) void openTestFlight(Linking);
-                            else if (isAndroid) void checkAndroidUpdate(APP_VERSION);
-                            else void checkDesktopUpdate(undefined, { manual: true });
-                          }}
-                          disabled={!view.actionable}
-                          accessibilityRole="button"
-                          accessibilityState={{ busy: view.busy, disabled: !view.actionable }}
-                        >
-                          <Text style={styles.rowLabel}>{tr('settings.copy.78')}</Text>
-                          <View style={{ alignItems: 'flex-end', flexShrink: 1, marginLeft: 12 }}>
-                            <View style={styles.dropdownValue}>
-                              {view.busy ? <ActivityIndicator size="small" color={colors.accent} style={{ marginRight: 6 }} /> : null}
-                              <Text testID="settings-update-label" style={[styles.rowValue, { color: valueColor }]} numberOfLines={2}>{view.label}</Text>
-                              {view.actionable && !view.busy ? <Ionicons name="chevron-forward" size={14} color={colors.textSecondary} /> : null}
-                            </View>
-                            {view.detail ? <Text testID="settings-update-detail" style={[styles.rowValue, { fontSize: 11, color: colors.textMuted, marginTop: 2 }]}>{view.detail}</Text> : null}
-                          </View>
-                        </Pressable>
-                      );
-                    })()}
-                  </>
-                ) : null}
-                {show('about', 'changelog') ? (
-                  <>
-                    <Divider />
-                    <Pressable testID="settings-changelog-row" style={({ pressed }) => [styles.row, pressed && { opacity: 0.6 }]} onPress={() => { setWideChangelog(true); paneScrollRef.current?.scrollTo({ y: 0, animated: false }); }} accessibilityRole="button">
-                      <View style={styles.rowCopy}>
-                        <Text style={styles.rowLabel}>{tr('changelog.title')}</Text>
-                        <Text style={styles.rowHint}>{tr('changelog.rowHint')}</Text>
+              <SettingsGroup>
+                {show('about', 'version') ? <SettingsRow label={tr('settings.copy.77')} value={`v${APP_VERSION}`} testID="settings-version-row" /> : null}
+                {show('about', 'update') ? (() => {
+                  // 「点击更新好像没用」:每次手动检查都要落到一句看得见、和上一次不同的话上
+                  // (版本号 + 刚刚检查 / 失败原因),而不是闪一下转圈又回到同一句。
+                  const view = isIOS ? IOS_UPDATE_ROW : isAndroid
+                    ? describeAndroidUpdateRow(androidUpdate, { currentVersion: APP_VERSION, lastCheckedAt: androidUpdateLastCheckedAt(), now: Date.now() })
+                    : describeUpdateRow(update, { currentVersion: APP_VERSION, lastCheckedAt: desktopUpdateLastCheckedAt(), now: Date.now() });
+                  const valueColor = view.tone === 'danger' ? colors.failed : view.tone === 'accent' ? colors.accent : colors.textMuted;
+                  return (
+                    <SettingsControlRow
+                      label={tr('settings.copy.78')}
+                      testID="settings-update-row"
+                      onPress={view.actionable ? () => {
+                        if (isIOS) void openTestFlight(Linking);
+                        else if (isAndroid) void checkAndroidUpdate(APP_VERSION);
+                        else void checkDesktopUpdate(undefined, { manual: true });
+                      } : undefined}
+                      disabled={!view.actionable}
+                      accessibilityState={{ busy: view.busy, disabled: !view.actionable }}
+                    >
+                      <View style={styles.dropdownValue}>
+                        {view.busy ? <ActivityIndicator size="small" color={colors.accent} style={{ marginRight: 6 }} /> : null}
+                        <Text testID="settings-update-label" style={[styles.updateValue, { color: valueColor }]} numberOfLines={2}>{view.label}</Text>
+                        <View style={styles.accessoryCell}>{view.actionable && !view.busy ? <Ionicons name="chevron-forward" size={18} color={colors.textMuted} /> : null}</View>
                       </View>
-                      <Ionicons name="chevron-forward" size={14} color={colors.textSecondary} />
-                    </Pressable>
-                  </>
+                      {view.detail ? <Text testID="settings-update-detail" style={styles.updateDetail}>{view.detail}</Text> : null}
+                    </SettingsControlRow>
+                  );
+                })() : null}
+                {show('about', 'changelog') ? (
+                  <SettingsRow label={tr('changelog.title')} subtitle={tr('changelog.rowHint')} onPress={() => { setWideChangelog(true); paneScrollRef.current?.scrollTo({ y: 0, animated: false }); }} testID="settings-changelog-row" />
                 ) : null}
                 {show('about', 'pooledHttp') ? (
-                  <>
-                    <Divider />
-                    <View style={styles.row} testID="settings-pooled-http-row">
-                      <View style={styles.rowCopy}>
-                        <Text style={styles.rowLabel}>{tr('settings.copy.277')}</Text>
-                        <Text style={styles.rowHint}>{tr('settings.copy.278')}</Text>
-                      </View>
-                      <Switch
-                        accessibilityLabel={tr('settings.copy.277')}
-                        value={pooledHttp}
-                        onValueChange={value => { setPooledHttpEnabled(value); setPooledHttp(value); }}
-                        trackColor={{ true: colors.accent, false: colors.border }}
-                        thumbColor={colors.card}
-                      />
-                    </View>
-                  </>
+                  <SettingsSwitchRow label={tr('settings.copy.277')} subtitle={tr('settings.copy.278')} value={pooledHttp} onValueChange={value => { setPooledHttpEnabled(value); setPooledHttp(value); }} testID="settings-pooled-http-row" />
                 ) : null}
                 {lastFatal && show('about', 'lastCrash') ? (
-                  <>
-                    <Divider />
-                    <ActionRow label={tr('fatal.copyRow')} hint={fatalSummary(lastFatal)} onPress={() => { void copyLastFatal(lastFatal); }} />
-                  </>
+                  <SettingsActionRow label={tr('fatal.copyRow')} subtitle={fatalSummary(lastFatal)} onPress={() => { void copyLastFatal(lastFatal); }} testID="settings-last-crash-row" />
                 ) : null}
-              </WideCard>
+              </SettingsGroup>
             </View>
           ) : null}
         </ScrollView>
@@ -1458,33 +1280,6 @@ function WideCard({ children }: { children: ReactNode }) {
   return <SettingsGroup separators={false} testID="settings-wide-card"><View style={styles.wideCardInner}>{children}</View></SettingsGroup>;
 }
 
-function ValueRow({ label, value }: { label: string; value: string }) {
-  useTranslation();
-  return (
-    <View style={styles.row}>
-      <Text style={styles.rowLabel}>{label}</Text>
-      <Text style={styles.rowValue} numberOfLines={1}>{value}</Text>
-    </View>
-  );
-}
-
-/** 标签在左、动作按钮在右(本地 Hub 的几个操作)。 */
-function ActionRow({ label, hint, busy, disabled, onPress }: { label: string; hint?: string; busy?: boolean; disabled?: boolean; onPress: () => void }) {
-  useTranslation();
-  const off = !!disabled || !!busy;
-  return (
-    <View style={styles.row}>
-      <View style={styles.rowCopy}>
-        <Text style={styles.rowLabel}>{label}</Text>
-        {hint ? <Text style={styles.rowHint} numberOfLines={2}>{hint}</Text> : null}
-      </View>
-      <Pressable accessibilityRole="button" accessibilityLabel={label} disabled={off} onPress={onPress} style={({ pressed }) => [styles.actionButton, off && styles.disabled, pressed && { opacity: 0.6 }]}>
-        <Text style={styles.actionButtonText}>{busy ? tr('settings.copy.92') : label}</Text>
-      </Pressable>
-    </View>
-  );
-}
-
 const DEVICE_ICON: Record<DeviceKind, string> = {
   phone: 'phone-portrait-outline',
   desktop: 'desktop-outline',
@@ -1508,18 +1303,6 @@ const makeStyles = () =>
   rootPhone: { backgroundColor: colors.bg },
   phoneScroll: { flex: 1 },
   phoneListContent: { paddingBottom: spacing.xl * 2 },
-  phoneGroupTitle: { color: colors.textMuted, fontSize: 13, paddingHorizontal: spacing.lg, paddingTop: spacing.lg, paddingBottom: spacing.xs + 2 },
-  phoneGroupGap: { height: spacing.sm },
-  phoneBlock: { backgroundColor: colors.groupedRow, borderTopWidth: StyleSheet.hairlineWidth, borderBottomWidth: StyleSheet.hairlineWidth, borderColor: colors.border },
-  phoneRow: { flexDirection: 'row', alignItems: 'center', minHeight: Math.max(48, ds(52)), paddingHorizontal: spacing.lg, gap: spacing.sm, backgroundColor: colors.groupedRow },
-  phoneRowPressed: { backgroundColor: colors.groupedRowPressed },
-  phoneRowLabel: { color: colors.text, fontSize: 16, flexShrink: 0 },
-  phoneRowValue: { flex: 1, minWidth: 0, color: colors.textMuted, fontSize: 14, textAlign: 'right' },
-  phoneRowSpacer: { flex: 1 },
-  phoneChevron: { width: 18, height: 18, alignItems: 'center', justifyContent: 'center' },
-  phoneDivider: { height: StyleSheet.hairlineWidth, backgroundColor: colors.border, marginLeft: spacing.lg },
-  phoneLogout: { marginTop: spacing.sm * 2, minHeight: Math.max(48, ds(52)), alignItems: 'center', justifyContent: 'center' },
-  phoneLogoutText: { color: colors.text, fontSize: 16 },
   phoneHeader: { flexDirection: 'row', alignItems: 'center', minHeight: 48, paddingHorizontal: spacing.xs, backgroundColor: colors.bg },
   phoneHeaderSide: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
   phoneHeaderTitle: { flex: 1, color: colors.text, fontSize: 17, fontWeight: '600', textAlign: 'center' },
@@ -1553,9 +1336,9 @@ const makeStyles = () =>
   paneTitleText: { color: colors.text, fontSize: 20, fontWeight: '600', flexShrink: 1 },
   paneBack: { flexDirection: 'row', alignItems: 'center', gap: 2, paddingHorizontal: spacing.xs, paddingVertical: 2, borderRadius: radius.control },
   paneBackText: { color: colors.textSecondary, fontSize: 14 },
-  deviceRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingHorizontal: spacing.md, paddingVertical: spacing.md },
+  deviceRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingHorizontal: SETTINGS_ROW_PAD_X, paddingVertical: spacing.sm, minHeight: settingsRowMinHeight() },
   // 展开的组里的每一条:不重复图标,左边对齐到组头的文字列(图标 36 + 间距 12)。
-  deviceMemberRow: { paddingLeft: spacing.md + 36 + spacing.md },
+  deviceMemberRow: { paddingLeft: SETTINGS_ROW_PAD_X + 36 + spacing.md },
   deviceIcon: { width: 36, height: 36, borderRadius: radius.item, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.subtleFill },
   deviceTitleLine: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, minWidth: 0 },
   currentBadge: { paddingHorizontal: 6, paddingVertical: 1, borderRadius: radius.pill, backgroundColor: colors.tonalBg },
@@ -1567,23 +1350,26 @@ const makeStyles = () =>
   content: { padding: spacing.lg, paddingBottom: spacing.xl * 2, width: '100%', maxWidth: 760, alignSelf: 'center' },
   // 卡片自己带 16 的左右边距(settings-kit SETTINGS_GUTTER),段落不再另加。
   section: { paddingBottom: spacing.md },
-  wideCardInner: { paddingHorizontal: SETTINGS_ROW_PAD_X - spacing.md, paddingVertical: spacing.xs },
+  wideCardInner: {},
   groupTitle: { color: colors.textMuted, fontSize: 12, marginTop: spacing.md, marginBottom: spacing.xs },
   emptyPane: { color: colors.textMuted, fontSize: 14, paddingHorizontal: spacing.md, paddingVertical: spacing.lg },
+  // v2(#427):右栏里还在用这套样式的行(快捷键、字体大小 / 界面密度、登录设备,经 s={styles} 传进去)和设置积木
+  // 同一套尺寸 —— 左右内边距 16、行高下限 52(settingsRowMinHeight)、标签 16 号、说明 13 号、分隔线从 16 开始。
   row: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    gap: spacing.lg,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.md + 2,
+    gap: spacing.sm,
+    paddingHorizontal: SETTINGS_ROW_PAD_X,
+    paddingVertical: spacing.sm,
+    minHeight: settingsRowMinHeight(),
   },
   rowCopy: { flex: 1, minWidth: 0, gap: 3 },
-  rowLabel: { color: colors.text, fontSize: 14 },
-  rowLabelStrong: { color: colors.text, fontSize: 14, fontWeight: '600' },
-  rowValue: { color: colors.textSecondary, fontSize: 14, flexShrink: 1 },
-  rowHint: { color: colors.textMuted, fontSize: 12, flexShrink: 1 },
-  footHint: { color: colors.textMuted, fontSize: 12, paddingHorizontal: spacing.md, paddingVertical: spacing.sm },
+  rowLabel: { color: colors.text, fontSize: 16 },
+  rowLabelStrong: { color: colors.text, fontSize: 16, fontWeight: '600' },
+  rowValue: { color: colors.textMuted, fontSize: 15, flexShrink: 1 },
+  rowHint: { color: colors.textMuted, fontSize: 13, lineHeight: 18, flexShrink: 1 },
+  footHint: { color: colors.textMuted, fontSize: 13, lineHeight: 18, paddingHorizontal: SETTINGS_ROW_PAD_X, paddingVertical: spacing.sm },
   dropdownValue: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
   // 主题三选一。宽处与说明并排;窄屏(手机竖屏)放不下「跟随系统（当前：深色）」一整行时,
   // 分段控件整体折到下一行 —— 说明文字不被挤成两行半个词。
@@ -1594,12 +1380,15 @@ const makeStyles = () =>
   segmentSelected: { backgroundColor: colors.card, borderColor: colors.border },
   segmentText: { color: colors.textSecondary, fontSize: 13 },
   segmentTextSelected: { color: colors.text, fontWeight: '600' },
-  quietRow: { justifyContent: 'flex-start', gap: spacing.sm },
-  mutedItem: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.md, paddingTop: spacing.sm },
+  quietRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  updateValue: { fontSize: 15, textAlign: 'right', flexShrink: 1 },
+  updateDetail: { fontSize: 12, color: colors.textMuted, marginTop: 2, marginRight: 18 + spacing.sm, textAlign: 'right' },
+  // 右侧 › 的格子:和设置积木的 accessory 同宽(18),› 右边缘和其他行对齐。
+  accessoryCell: { width: 18, height: 18, marginLeft: spacing.sm, alignItems: 'center', justifyContent: 'center' },
   quietInput: { color: colors.text, fontSize: 14, borderWidth: 1, borderColor: colors.border, borderRadius: radius.item, paddingHorizontal: 8, paddingVertical: 4, minWidth: 64, textAlign: 'center', backgroundColor: colors.inputBg },
   accentText: { color: colors.accent, fontSize: 14, fontWeight: '600' },
   dangerText: { color: colors.failed, fontSize: 14, fontWeight: '600' },
-  errorText: { color: colors.failed, fontSize: 12, paddingHorizontal: spacing.md, paddingVertical: spacing.sm },
+  errorText: { color: colors.failed, fontSize: 13, paddingHorizontal: SETTINGS_ROW_PAD_X, paddingVertical: spacing.sm },
   actionButton: { ...buttonStyle('secondary') },
   actionButtonText: { ...buttonTextStyle('secondary') },
   dangerZone: { marginTop: spacing.lg, borderWidth: 1, borderColor: colors.failed, borderRadius: radius.surface, overflow: 'hidden' },
@@ -1607,7 +1396,7 @@ const makeStyles = () =>
   dangerZoneRow: { paddingTop: spacing.sm },
   confirmInput: { marginTop: spacing.md, borderWidth: 1, borderColor: colors.border, borderRadius: radius.control, color: colors.text, backgroundColor: colors.inputBg, paddingHorizontal: spacing.md, paddingVertical: spacing.sm },
   disabled: { opacity: 0.45 },
-  divider: { height: 1, backgroundColor: colors.border, marginLeft: spacing.md },
+  divider: { height: StyleSheet.hairlineWidth, backgroundColor: colors.border, marginLeft: SETTINGS_ROW_PAD_X },
   modalBackdrop: { flex: 1, backgroundColor: MODAL_SCRIM, alignItems: 'center', justifyContent: 'center', padding: spacing.xl },
   // 有键盘避让的那个:遮罩画在 ModalKeyboardAvoider 上(铺满窗口),这里只管居中。
   modalFrame: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: spacing.xl },

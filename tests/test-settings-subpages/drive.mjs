@@ -145,7 +145,7 @@ if (!DESKTOP_ONLY) for (const theme of ['light', 'dark']) {
     try { await fn(); } catch (e) { ck(`${theme} ${name}: 打开`, false, String(e.message || e).split('\n')[0]); }
   };
 
-  const keys = await page.locator('[data-testid^="settings-row-"]').evaluateAll(els => els.map(e => e.getAttribute('data-testid')).filter(id => !/-(label|chevron)-/.test(id)).map(id => id.replace('settings-row-', '')));
+  const keys = await page.locator('[data-testid^="settings-row-"]').evaluateAll(els => els.map(e => e.getAttribute('data-testid')).filter(id => !/-(label|chevron)-/.test(id) && !/-(label|value|accessory|lead)$/.test(id)).map(id => id.replace('settings-row-', '')));
   ck(`${theme} list: 子页清单`, keys.length >= 6, keys.join(','));
   for (const key of keys) {
     // 服务器 is not a settings subpage: on the phone its row opens the full 服务器 page (#501), whose ‹ goes back to 设置.

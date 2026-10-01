@@ -13,7 +13,9 @@ check(rust.includes('expected_hub_version: String,'), 'Rust LocalHubResult decla
 check((rust.match(/expected_hub_version: EXPECTED_HUB_VERSION\.into\(\),/g) ?? []).length === (rust.match(/^\s+requires_migration: (?!bool)/gm) ?? []).length, 'every LocalHubResult literal sets expected_hub_version');
 check(settings.includes('testID="local-hub-upgrade"'), 'settings renders the upgrade button');
 check(settings.includes("localHub.requiresMigration || (localHub.error ?? '').includes('version mismatch')"), 'upgrade button shows on requiresMigration or version-mismatch error');
-const button = settings.slice(settings.indexOf('testID="local-hub-upgrade"'), settings.indexOf('testID="local-hub-upgrade"') + 700);
+// #427 v2:按钮是一行 SettingsRow,label / onPress 写在 testID 前面 —— 取整个 <SettingsRow … /> 元素。
+const upgradeAt = settings.indexOf('testID="local-hub-upgrade"');
+const button = settings.slice(settings.lastIndexOf('<SettingsRow', upgradeAt), upgradeAt + 40);
 check(button.includes('restartLocalHub()'), 'upgrade button restarts the local Hub (stale takeover lives in start_local_hub)');
 check(button.includes("tr('settings.copy.186', { v0: localHub.expectedHubVersion"), 'translated button label names the bundled Hub version');
 check(rust.includes('fn stop_stale_process(pid: u32, port: u16)') && rust.includes('stale_owner_taken_over = true;'), 'start_local_hub takes over a stale owned sidecar on version mismatch');

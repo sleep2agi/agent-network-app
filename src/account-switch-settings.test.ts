@@ -27,7 +27,8 @@ ck('S3 it exists on every platform (phone and desktop)', ['android', 'ios', 'des
 const phoneSwitch = settings.indexOf('testID="settings-switch-account-block"');
 const phoneLogout = settings.indexOf('testID="settings-logout-block"');
 ck('S4 phone: 切换账号 block is rendered right before the 退出登录 block', phoneSwitch > 0 && phoneLogout > phoneSwitch && !settings.slice(phoneSwitch, phoneLogout).includes('testID="settings-row-'));
-ck('S5 phone: same block style as 退出登录 (so edges / height line up)', settings.slice(phoneSwitch, phoneLogout).includes('[styles.phoneBlock, styles.phoneLogout, pressed && styles.phoneRowPressed]'));
+// #427 v2:两块都是设置积木的整宽按钮(同一个 SettingsButton variant),边距 / 高度天然一致。
+ck('S5 phone: same block style as 退出登录 (so edges / height line up)', settings.includes(`<SettingsButton variant="plain" label={tr('accounts.switch')} onPress={() => setSwitcherOpen(true)} testID="settings-switch-account-block" />`) && settings.includes(`<SettingsButton variant="plain" label={tr('settings.copy.6')} onPress={() => setLogoutConfirm(true)} testID="settings-logout-block" />`) && phoneSwitch < phoneLogout);
 ck('S6 phone: shown even when 退出登录 is hidden (local workspace)', !settings.slice(settings.lastIndexOf('\n', phoneSwitch - 200), phoneSwitch).includes('canLogout ?'));
 // ── wide: a row above the 退出登录 row ──
 const wideSwitch = settings.indexOf('testID="settings-switch-account-row"');

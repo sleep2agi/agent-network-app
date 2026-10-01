@@ -86,7 +86,7 @@ ck('通知组件等 user_inbox 拉到后才登记首份快照(登录不弹历史
 // 0.2.95:函数体搬到 agent-unread-counts.ts(节点列表「新消息」组也用它),托盘只委托 ⇒ 契约跟着搬。
 const unreadCounts = norm('agent-unread-counts.ts');
 ck('托盘数用列表同一函数算', unreadCounts.includes('unreadCountForAgentRow(snap.serverBody, snap.ledger, alias, reply)') && tray.includes('return agentUnreadCounts(snap);') && tray.includes("invoke('tray_update'"));
-ck('设置页有翻译的「消息提示音」和「免打扰时段」', settings.includes("<Text style={styles.rowLabel}>{tr('settings.copy.49')}</Text>") && settings.includes("<Text style={styles.rowLabel}>{tr('settings.copy.51')}</Text>"));
+ck('设置页有翻译的「消息提示音」和「免打扰时段」', /<SettingsSwitchRow\s+label=\{tr\('settings\.copy\.49'\)\}/.test(settings) && /<SettingsSwitchRow\s+label=\{tr\('settings\.copy\.51'\)\}/.test(settings));
 const rust = norm('../src-tauri/src/tray.rs'), lib = norm('../src-tauri/src/lib.rs'), cargo = norm('../src-tauri/Cargo.toml'), cap = norm('../src-tauri/capabilities/default.json');
 // 0.2.79 起嵌的是 @2x:tray-icon 把状态栏图像强制成 18pt 高,22px 那份在 Retina 上
 // 是放大后显示。图标本身的形状判据在 src/tray-icon-assets.test.ts(它才是 0.2.76

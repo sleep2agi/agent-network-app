@@ -157,11 +157,13 @@ async function run({ W, H, theme, full }) {
       ck(`${tag} layout: 标签左边缘 = 其它行标签 ±1px`, lbl && refLbl && Math.abs(lbl.x - refLbl.x) <= 1, `${f1(lbl?.x)} vs ${f1(refLbl?.x)}`);
     } else {
       const refs = [];
-      for (const [name, s] of [['识别模型 选项', '[data-testid="voice-mode-flash"]'], ['API Key 输入框', '[data-testid="voice-api-key"]']]) { const b = await bbox(s); if (b) refs.push({ name, b }); }
+      // #427 v2:识别模型改成设置积木的单选行(整卡宽的行,不是卡片里的表单控件),不再拿来比;
+      // 选择框和 API Key 输入框 / 保存按钮都在卡片内容区(左右 16),仍然要对齐。
+      for (const [name, s] of [['API Key 输入框', '[data-testid="voice-api-key"]']]) { const b = await bbox(s); if (b) refs.push({ name, b }); }
       console.log(`\n${tag} control              left    right   height`);
       console.log(`麦克风 选择行          ${f1(sel.x).padStart(7)} ${f1(sel.x + sel.width).padStart(7)} ${f1(sel.height).padStart(6)}`);
       for (const r of refs) console.log(`${r.name.padEnd(18)} ${f1(r.b.x).padStart(7)} ${f1(r.b.x + r.b.width).padStart(7)} ${f1(r.b.height).padStart(6)}`);
-      ck(`${tag} layout: 找到 2 个参照控件`, refs.length === 2);
+      ck(`${tag} layout: 找到参照控件(API Key 输入框)`, refs.length === 1);
       ck(`${tag} layout: 选择行左边缘 = 其它控件 ±1px`, refs.every(r => Math.abs(r.b.x - sel.x) <= 1));
       ck(`${tag} layout: 选择行右边缘 = 其它控件 ±1px`, refs.every(r => Math.abs(r.b.x + r.b.width - sel.x - sel.width) <= 1));
       const save = await bbox('[data-testid="voice-save"]');

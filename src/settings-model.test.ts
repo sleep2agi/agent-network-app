@@ -64,7 +64,7 @@ const norm = (f: string) => readFileSync(new URL(f, import.meta.url), 'utf-8').r
   ck('分类按钮按模型渲染并翻译', src.includes("accessibilityLabel={tr('settings.copy.178', { v0: settingsText(cat.label) })}"));
   ck('右栏标题 = 当前分类名', src.includes('<Text style={styles.paneTitle}>'));
   ck('删除本地工作区放在单独的危险区', src.includes('testID="settings-danger-zone"'));
-  ck('提示音 / 免打扰用真正的开关', src.includes('<Switch'));
+  ck('提示音 / 免打扰用真正的开关', src.includes('<SettingsSwitchRow') && norm('./settings-kit.tsx').includes('<Switch'));
 }
 
 // 0.2.87:切主题整棵重挂后,设置分类与滚动位置要从模块级记忆恢复(不回到「账号」)。
