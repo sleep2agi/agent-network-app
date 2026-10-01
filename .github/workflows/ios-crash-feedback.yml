@@ -1,0 +1,162 @@
+name: ios crash feedback
+
+# Read-only: pulls TestFlight crash feedback (betaFeedbackCrashSubmissions + crash logs)
+# and Xcode-Organizer-style diagnostic signatures for recent builds out of App Store
+# Connect, prints a summary into the job log and uploads the raw JSON / crash logs
+# as an artifact. Never writes to App Store Connect, never echoes the JWT.
+
+on:
+  workflow_dispatch:
+    inputs:
+      limit:
+        description: How many most-recent crash submissions to fetch (1-50)
+        required: true
+        default: "20"
+      builds:
+        description: How many most-recent builds to query diagnosticSignatures for (0-10)
+        required: true
+        default: "3"
+
+permissions:
+  contents: read
+
+jobs:
+  crash-feedback:
+    runs-on: ubuntu-latest
+    environment: macos-signing
+    steps:
+      - name: Fetch crash feedback and diagnostics
+        env:
+          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+          APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
+          APPLE_API_KEY_BASE64: ${{ secrets.APPLE_API_KEY_BASE64 }}
+          LIMIT: ${{ inputs.limit }}
+          BUILDS: ${{ inputs.builds }}
+          BUNDLE_ID: top.vansin.agentnetwork
+        shell: bash
+        run: |
+          set -euo pipefail
+          case "$LIMIT" in ''|*[!0-9]*) echo "::error::limit must be numeric"; exit 1 ;; esac
+          case "$BUILDS" in ''|*[!0-9]*) echo "::error::builds must be numeric"; exit 1 ;; esac
+          [ "$LIMIT" -ge 1 ] && [ "$LIMIT" -le 50 ] || { echo "::error::limit must be 1-50"; exit 1; }
+          [ "$BUILDS" -le 10 ] || { echo "::error::builds must be 0-10"; exit 1; }
+
+          out="$RUNNER_TEMP/crash-feedback"
+          mkdir -p "$out/logs" "$out/diagnostics"
+
+          jwt_file="$RUNNER_TEMP/app-store-connect.jwt"
+          node <<'NODE' > "$jwt_file"
+          const crypto = require('node:crypto');
+          const b64url = (value) => Buffer.from(value).toString('base64url');
+          const now = Math.floor(Date.now() / 1000);
+          const header = b64url(JSON.stringify({ alg: 'ES256', kid: process.env.APPLE_API_KEY, typ: 'JWT' }));
+          const payload = b64url(JSON.stringify({
+            iss: process.env.APPLE_API_ISSUER,
+            iat: now - 5,
+            exp: now + 1200,
+            aud: 'appstoreconnect-v1',
+          }));
+          const unsigned = `${header}.${payload}`;
+          const key = Buffer.from(process.env.APPLE_API_KEY_BASE64, 'base64').toString('utf8');
+          const signature = crypto.sign('sha256', Buffer.from(unsigned), {
+            key,
+            dsaEncoding: 'ieee-p1363',
+          }).toString('base64url');
+          process.stdout.write(`${unsigned}.${signature}`);
+          NODE
+          chmod 600 "$jwt_file"
+          jwt=$(<"$jwt_file")
+
+          # asc_get <path> <outfile> [curl --data-urlencode args...]
+          # Returns 0 on 2xx (body in outfile), 1 otherwise (Apple errors[] on stderr).
+          asc_get() {
+            local endpoint="$1" dest="$2"
+            shift 2
+            local code
+            code=$(curl --silent --show-error --get --output "$dest" --write-out '%{http_code}' \
+              -H "Authorization: Bearer $jwt" \
+              -H 'Accept: application/json' \
+              "https://api.appstoreconnect.apple.com/v1/$endpoint" "$@" || true)
+            case "$code" in
+              2??) return 0 ;;
+              *)
+                echo "::warning::App Store Connect GET /v1/$endpoint returned HTTP ${code:-000}" >&2
+                jq -r '.errors[]? | "  apple error: status=\(.status // "") code=\(.code // "") title=\(.title // "") detail=\(.detail // "")"' "$dest" >&2 2>/dev/null \
+                  || echo '  (response body was not JSON)' >&2
+                return 1 ;;
+            esac
+          }
+
+          asc_get apps "$RUNNER_TEMP/app.json" --data-urlencode "filter[bundleId]=$BUNDLE_ID" --data-urlencode 'limit=2' \
+            || { echo "::error::cannot look up app"; exit 1; }
+          app_id=$(jq -r '.data[0].id // empty' "$RUNNER_TEMP/app.json")
+          [ -n "$app_id" ] || { echo "::error::no App Store Connect app found for $BUNDLE_ID"; exit 1; }
+
+          echo "== TestFlight crash submissions (newest first, limit $LIMIT) =="
+          subs="$out/crash-submissions.json"
+          if asc_get "apps/$app_id/betaFeedbackCrashSubmissions" "$subs" \
+              --data-urlencode "limit=$LIMIT" \
+              --data-urlencode 'sort=-createdDate' \
+              --data-urlencode 'include=build'; then
+            count=$(jq '.data | length' "$subs")
+            echo "submissions: $count"
+            # Map build id -> CFBundleVersion via the included builds.
+            jq -r '
+              (reduce (.included // [])[] as $i ({}; if $i.type == "builds" then .[$i.id] = ($i.attributes.version // "?") else . end)) as $b
+              | .data[]
+              | [ .id,
+                  (.attributes.createdDate // ""),
+                  ("build=" + ($b[(.relationships.build.data.id // "")] // "?")),
+                  ("device=" + (.attributes.deviceModel // "?")),
+                  ("os=" + (.attributes.osVersion // "?")),
+                  ("platform=" + (.attributes.appPlatform // .attributes.devicePlatform // "?")),
+                  ("mem=" + ((.attributes.deviceFreeMemory // "") | tostring)),
+                  ("comment=" + ((.attributes.comment // "") | gsub("\n"; " ")))
+                ] | join("  ")' "$subs"
+            for id in $(jq -r '.data[].id' "$subs"); do
+              log="$out/logs/$id.json"
+              if asc_get "betaFeedbackCrashSubmissions/$id/crashLog" "$log"; then
+                jq -r '.data.attributes.logText // ""' "$log" > "$out/logs/$id.crash"
+                echo
+                echo "::group::crash log $id ($(wc -l < "$out/logs/$id.crash") lines)"
+                # Header + exception + crashed thread are what matter; full text is in the artifact.
+                sed -n '1,220p' "$out/logs/$id.crash"
+                echo "::endgroup::"
+              fi
+            done
+          else
+            echo "::warning::betaFeedbackCrashSubmissions not available for this key"
+          fi
+
+          if [ "$BUILDS" -gt 0 ]; then
+            echo
+            echo "== diagnosticSignatures for the $BUILDS most recent builds =="
+            asc_get builds "$RUNNER_TEMP/builds.json" \
+              --data-urlencode "filter[app]=$app_id" \
+              --data-urlencode 'sort=-uploadedDate' \
+              --data-urlencode "limit=$BUILDS" || true
+            for row in $(jq -r '.data[]? | "\(.id)|\(.attributes.version)"' "$RUNNER_TEMP/builds.json" 2>/dev/null); do
+              bid=${row%%|*}; ver=${row##*|}
+              for kind in HANGS DISK_WRITES LAUNCHES; do
+                sig="$out/diagnostics/build-$ver-$kind.json"
+                if asc_get "builds/$bid/diagnosticSignatures" "$sig" \
+                    --data-urlencode "filter[diagnosticType]=$kind" --data-urlencode 'limit=20'; then
+                  echo "build $ver $kind: $(jq '.data | length' "$sig") signature(s)"
+                  jq -r '.data[] | "  \(.attributes.weight // "")  \(.attributes.signature // "")"' "$sig"
+                  for sid in $(jq -r '.data[].id' "$sig"); do
+                    asc_get "diagnosticSignatures/$sid/logs" "$out/diagnostics/$sid-logs.json" --data-urlencode 'limit=5' || true
+                  done
+                fi
+              done
+            done
+          fi
+          rm -f "$jwt_file"
+
+      - name: Upload crash logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-crash-feedback
+          path: ${{ runner.temp }}/crash-feedback
+          if-no-files-found: warn
+          retention-days: 14
