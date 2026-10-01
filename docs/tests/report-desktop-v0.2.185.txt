@@ -1,0 +1,8 @@
+desktop v0.2.185 — 设置页 v2(#427)
+================================================================================
+A. 本版内容(0.2.184 发版提交之后 main 上合入的 PR + 本 PR)
+  #650 设置页 v2:settings-kit 新增 SettingsControlRow/SettingsActionRow;本地 Hub/外观/通知/语音输入/关于/快捷键/登录设备/用户管理行内部统一(左缘 17、右控件列 17、最小行高 52),危险区末组;通知修复权限入口独立红行,诊断说明移到卡片上方;语音模式改 ✓ 行;手机设置列表每项图标+值+›。行为不变。settings-redesign 34/34;浏览器 122/122(v2 新增 32 项改动前全失败);settings-subpages 155/155;mic-device 132/132;npm test 311/311。
+  本 PR(版本号):0.2.184 → 0.2.185,versionCode 2184 → 2185;release-desktop-auto-update.yml 加 What's new in 0.2.185;重新生成 src/changelog-bundled.ts。
+  本地:干净 origin/main(1392c94) bump 后 npm ci / npm test / npm run typecheck 全部 rc=0;android-release-notes.mjs 0.2.185 rc=0。
+B. 验证边界(如实)
+  页内桩 + 浏览器驱动验证;用户管理面板需管理员身份,驱动未覆盖(仅去掉外层卡片)。
