@@ -93,13 +93,33 @@ export const pickImages = async (limit: number): Promise<PickedImage[]> => {
   }));
 };
 
-/** 原生端(Android/iOS):expo-image-manipulator 解码(已按 EXIF 摆正)→ 缩放 → JPEG 落盘。 */
+/** 原生端(Android/iOS):expo-image-manipulator 解码(已按 EXIF 摆正)→ 缩放 → JPEG 落盘。
+ *
+ *  🔴 `ImageManipulator.manipulate()` 只能传 uri 字符串,绝不能传 ImageRef(renderAsync 的结果)。
+ *  iOS 原生签名是 `Either<URL, SharedRef<UIImage>>`,expo-modules-core 先按 URL 试转:对 ImageRef
+ *  调 `JavaScriptValue.getAny()`,遍历属性碰到 `saveAsync` 这类函数 → `FatalError.unimplemented()`
+ *  → SIGTRAP 闪退,JS 的 try/catch 接不住。TestFlight 崩溃日志(0.2.178 build 70 iPhone、
+ *  build 28 iPad)两份都是这一条栈。所以 decode 只量尺寸、随即释放;缩放从 uri 重新解码一次
+ *  (串行队列保证同一时刻只有一张原图位图)。 */
+type NativeDecoded = { uri: string; width: number; height: number };
 const nativeResizeDeps = {
-  decode: async (uri: string) => ImageManipulator.manipulate(uri).renderAsync(),
-  resizeAndSave: async (decoded: ImageRef, width: number, height: number, quality: number) => {
-    const context = ImageManipulator.manipulate(decoded).resize({ width, height });
+  decode: async (uri: string): Promise<NativeDecoded> => {
+    const context = ImageManipulator.manipulate(uri);
     try {
-      const resized = await context.renderAsync();
+      const ref = await context.renderAsync();
+      try {
+        return { uri, width: ref.width, height: ref.height };
+      } finally {
+        ref.release();
+      }
+    } finally {
+      context.release(); // context 也攥着整张解码位图,不释放就要等 GC
+    }
+  },
+  resizeAndSave: async (decoded: NativeDecoded, width: number, height: number, quality: number) => {
+    const context = ImageManipulator.manipulate(decoded.uri).resize({ width, height });
+    try {
+      const resized: ImageRef = await context.renderAsync();
       try {
         const saved = await resized.saveAsync({ compress: quality, format: SaveFormat.JPEG });
         return { uri: saved.uri, width: saved.width, height: saved.height };
@@ -114,7 +134,6 @@ const nativeResizeDeps = {
     const info = await FileSystem.getInfoAsync(uri);
     return info.exists && typeof (info as any).size === 'number' ? (info as any).size : undefined;
   },
-  release: (decoded: ImageRef) => decoded.release(),
 };
 /** 原生端一次只缩一张图:限住原图位图的内存峰值(见 native-resize.createSerialQueue)。 */
 const nativeResizeSerial = createSerialQueue();

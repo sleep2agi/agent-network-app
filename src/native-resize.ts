@@ -12,7 +12,8 @@ export interface DecodedImage {
 }
 
 export interface ResizeDeps<D extends DecodedImage> {
-  /** 解码一次,拿到摆正后的尺寸;返回的句柄交给 resizeAndSave 复用,不重复解码。 */
+  /** 解码一次,拿到摆正后的尺寸;返回的句柄交给 resizeAndSave。
+   *  iOS 上句柄不能是 ImageRef 再喂回 manipulate()(会 SIGTRAP 闪退,见 attach.ts nativeResizeDeps)。 */
   decode: (uri: string) => Promise<D>;
   resizeAndSave: (decoded: D, width: number, height: number, quality: number) => Promise<{ uri: string; width: number; height: number }>;
   /** 产物字节数;拿不到时返回 undefined。 */

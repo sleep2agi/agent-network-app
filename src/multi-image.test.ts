@@ -194,7 +194,7 @@ const attach = readFileSync(new URL('./attach.ts', import.meta.url), 'utf8');
   check(/if \(Platform\.OS !== 'web'\) return nativeResizeSerial\(\(\) => resizeForUpload\(img, original, nativeResizeDeps\)\)/.test(prep), 'prepareForUpload: native resizes via expo-image-manipulator, one image at a time');
   check(/const nativeResizeSerial = createSerialQueue\(\);/.test(attach) && (attach.match(/nativeResizeSerial\(/g) ?? []).length === 1, 'one module-level serial queue, used only by the native branch (web/desktop canvas path unchanged)');
   check(/SaveFormat\.JPEG/.test(attach) && /\.resize\(\{ width, height \}\)/.test(attach), 'native deps: resize + JPEG save');
-  check(/decode: async \(uri: string\) => ImageManipulator\.manipulate\(uri\)\.renderAsync\(\)/.test(attach), 'native decodes first so EXIF-rotated dimensions drive the plan');
+  check(/decode: async \(uri: string\)[^]*?ImageManipulator\.manipulate\(uri\)[^]*?renderAsync\(\)/.test(attach), 'native decodes first so EXIF-rotated dimensions drive the plan');
   check(/planCompression\(/.test(prep) && /toBlob\(resolve, plan\.mimeType, plan\.quality\)/.test(prep), 'web compression follows planCompression');
   check(/blob\.size >= /.test(prep), 'a bigger re-encode falls back to the original');
 }
