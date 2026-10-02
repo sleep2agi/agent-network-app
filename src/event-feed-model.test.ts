@@ -89,8 +89,9 @@ const blank = feedRowModel({ ...lu, from: '', to: '' }, NOW);
 ck('row: missing ends are labelled, not blank', blank.from === '（未知）' && blank.to === '（未指定）');
 
 // ── click target ──
-ck('click: I sent → chat with recipient', JSON.stringify(clickTarget(h, 'tester')) === JSON.stringify({ kind: 'chat', alias: 'demo-node' }));
-ck('click: sent to me → chat with sender', JSON.stringify(clickTarget(lr, 'tester')) === JSON.stringify({ kind: 'chat', alias: 'demo-node' }));
+ck('click: I sent → chat with recipient, focused on that task (#463)', JSON.stringify(clickTarget(h, 'tester')) === JSON.stringify({ kind: 'chat', alias: 'demo-node', taskId: h.taskId }) && !!h.taskId);
+ck('click: sent to me → chat with sender, focused on that task (#463)', JSON.stringify(clickTarget(lr, 'tester')) === JSON.stringify({ kind: 'chat', alias: 'demo-node', taskId: 'task_live' }));
+ck('click: chat without a task id → no focus field', JSON.stringify(clickTarget({ ...lr, taskId: '' }, 'tester')) === JSON.stringify({ kind: 'chat', alias: 'demo-node' }));
 ck('click: agent ↔ agent → task detail', JSON.stringify(clickTarget({ from: 'node-a', to: 'node-b', taskId: 't1' }, 'tester')) === JSON.stringify({ kind: 'task', taskId: 't1' }));
 ck('click: identity unknown → task detail', clickTarget(h, undefined)?.kind === 'task');
 ck('click: nothing to open → null', clickTarget({ from: 'node-a', to: 'node-b', taskId: '' }, 'tester') === null);
