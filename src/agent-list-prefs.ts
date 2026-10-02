@@ -7,13 +7,15 @@
 // best-effort: a preference we cannot store just lasts for this session.
 import * as FileSystem from 'expo-file-system/legacy';
 import { parseCollapsed } from './agents-list';
+import { parseConversationTab, type ConversationTab } from './conversation-tab';
 import { parseStoredListWidth } from './wide-layout';
 
 export const LIST_WIDTH_KEY = 'agent_list_pane_width_v1';
 export const COLLAPSED_KEY = 'agent_list_collapsed_v1';
+export const CONVERSATION_TAB_KEY = 'agent_list_tab_v1';
 const PREFS_FILE = () => `${FileSystem.documentDirectory}agent_list_prefs_v1.json`;
 
-type Prefs = { [LIST_WIDTH_KEY]?: string; [COLLAPSED_KEY]?: string };
+type Prefs = { [LIST_WIDTH_KEY]?: string; [COLLAPSED_KEY]?: string; [CONVERSATION_TAB_KEY]?: string };
 
 const webStorage = (): Storage | null => {
   try {
@@ -63,3 +65,25 @@ export const saveListPaneWidth = (width: number): Promise<void> =>
 
 export const loadCollapsedGroups = async (): Promise<string[]> => parseCollapsed(await readKey(COLLAPSED_KEY));
 export const saveCollapsedGroups = (titles: readonly string[]): Promise<void> => writeKey(COLLAPSED_KEY, JSON.stringify(parseCollapsed([...titles])));
+
+// 「全部 / 未读」(conversation-tab.ts),每台设备各记各的。
+// 手机上打开会话会卸载列表,回来时重新挂载:内存里留一份上次的值,重新挂载那一帧就用它,
+// 不先画「全部」再跳成「未读」。null = 本进程还没读过存储。
+let tabMemo: ConversationTab | null = null;
+export const peekConversationTab = (): ConversationTab | null => {
+  if (tabMemo) return tabMemo;
+  // web(Tauri 桌面 / web 导出)的 localStorage 是同步的:首次挂载那一帧就能拿到,不闪。
+  const ls = webStorage();
+  if (!ls) return null;
+  try { tabMemo = parseConversationTab(ls.getItem(CONVERSATION_TAB_KEY)); } catch { return null; }
+  return tabMemo;
+};
+export const loadConversationTab = async (): Promise<ConversationTab> => {
+  if (tabMemo) return tabMemo;
+  tabMemo = parseConversationTab(await readKey(CONVERSATION_TAB_KEY));
+  return tabMemo;
+};
+export const saveConversationTab = (tab: ConversationTab): Promise<void> => {
+  tabMemo = tab;
+  return writeKey(CONVERSATION_TAB_KEY, tab);
+};

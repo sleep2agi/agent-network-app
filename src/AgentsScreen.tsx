@@ -27,7 +27,8 @@ import { fetchStatus, fetchUserMessages, takeStatusPrefetch, type HubConfig, typ
   fetchTasks,
 } from './api';
 import { loadSessionsCache, saveSessionsCache } from './storage';
-import { colors, onThemeChange, radius, spacing, statusColor, type, weight } from './theme';
+import { colors, onThemeChange, radius, spacing, statusColor, themeMode, type, weight } from './theme';
+import { shadowOnly } from './elevation';
 import { ds, fs, listText, uiScale } from './ui-scale';
 import { denserRowPitch, publishListFirstRowTop } from './list-rail-align';
 import { usePoll } from './usePoll';
@@ -51,7 +52,8 @@ import { styles } from './app-styles';
 import { applyCollapsed, buildSections, countShown, holdWhileActive, SORT_BY_ACTIVITY, toggleCollapsed } from './agents-list';
 import { AGENT_ROW_AVATAR, AGENT_ROW_DOT, AGENT_ROW_GAP, AGENT_ROW_HEIGHT, AGENT_ROW_PAD_X, AGENT_ROW_PAD_Y, AGENT_ROW_SEPARATOR_INSET, AGENT_ROW_TOUCH_MIN, agentRowGeometry, agentRowModel, latestMessageByAgent, rowActivity } from './agent-row-model';
 import { TaskTimeResolver } from './agent-task-time';
-import { loadCollapsedGroups, saveCollapsedGroups } from './agent-list-prefs';
+import { loadCollapsedGroups, loadConversationTab, peekConversationTab, saveCollapsedGroups, saveConversationTab } from './agent-list-prefs';
+import { applyConversationTab, applyConversationTabToPeople, formatTabCount, unreadConversationCount, type ConversationTab } from './conversation-tab';
 import { agentUnreadCounts, latestMessageAtByAgent } from './agent-unread-counts';
 import { pinyinMatch } from './lib/pinyin';
 import { ackAgentUnread } from './agent-ack';
@@ -232,6 +234,21 @@ export default function AgentsScreen({
     loadCollapsedGroups().then(v => { if (live) setCollapsed(v); }).catch(() => {});
     return () => { live = false; };
   }, []);
+  // 「全部 / 未读 N」(board #449,conversation-tab.ts):只在会话列表(能置顶的那个)上出现,每台设备记住选了哪个。
+  // 首帧用内存 / localStorage 里的值(peekConversationTab),手机从会话返回时不会先闪「全部」。
+  const showTabs = rowMenu;
+  const [tab, setTabState] = useState<ConversationTab>(() => peekConversationTab() ?? 'all');
+  useEffect(() => {
+    if (peekConversationTab()) return;
+    let live = true;
+    loadConversationTab().then(v => { if (live) setTabState(v); }).catch(() => {});
+    return () => { live = false; };
+  }, []);
+  const setTab = useCallback((next: ConversationTab) => {
+    setTabState(next);
+    void saveConversationTab(next);
+  }, []);
+  const effectiveTab: ConversationTab = showTabs ? tab : 'all';
   const toggleGroup = useCallback((title: string) => {
     setCollapsed(prev => {
       const next = toggleCollapsed(prev, title);
@@ -362,8 +379,20 @@ export default function AgentsScreen({
   useEffect(() => {
     updateConversationFlags(f => pruneRevivedHidden(f, liveUnread.lastAt));
   }, [liveUnread]);
+  // 未读视图:只留有未读的会话 + 正打开着的那一个(读完也不在用户眼前抽走,离开它之后才消失)。
+  // 判据用 floatInput —— 与「新消息」组同一份(指针在列表上移动时按住),行不会在光标底下消失。
+  const tabbedSessions = useMemo(
+    () => applyConversationTab(visibleSessions, effectiveTab, { counts: floatInput.counts, manualUnread: convFlags.manualUnread }, selectedAlias),
+    [visibleSessions, effectiveTab, floatInput, convFlags, selectedAlias],
+  );
+  // 「未读 N」:实时数(不按住),只数列表里会出现的会话(可见的 agent + 人员)。
+  const unreadTabCount = unreadConversationCount(
+    visibleSessions.map(s => s.alias),
+    { counts: liveUnread.counts, manualUnread: convFlags.manualUnread },
+    onOpenPerson ? people : [],
+  );
   const sections = useMemo(
-    () => buildSections(applyAgentFilter(visibleSessions, activeFilter), query, {
+    () => buildSections(applyAgentFilter(tabbedSessions, activeFilter), query, {
       match: pinyinMatch,
       sort: {
         pinned: alias => pinnedAliases.includes(alias),
@@ -372,7 +401,7 @@ export default function AgentsScreen({
       },
       unread: { count: alias => floatInput.counts[alias] ?? 0, lastMessageAt: alias => floatInput.lastAt[alias] ?? 0 },
     }),
-    [visibleSessions, activeFilter, query, pinnedAliases, floatInput, activityByAlias],
+    [tabbedSessions, activeFilter, query, pinnedAliases, floatInput, activityByAlias],
   );
   const shownCount = countShown(sections);
   const shownSections = useMemo(() => applyCollapsed(sections, collapsed, query), [sections, collapsed, query]);
@@ -380,7 +409,10 @@ export default function AgentsScreen({
   // sits beside row n (list-rail-align.ts). Only when the first section has rows on screen
   // (row height/pitch is not measured: both sides compute it with denserRowPitch).
   // 人员区块在列表最上面(ListHeaderComponent):搜索也过滤人,折叠状态与分组同存。
-  const peopleShown = useMemo(() => shownPeople(onOpenPerson ? people : [], query, collapsed, pinyinMatch), [people, !!onOpenPerson, query, collapsed]);
+  const peopleShown = useMemo(
+    () => shownPeople(onOpenPerson ? applyConversationTabToPeople(people, effectiveTab, selectedPerson) : [], query, collapsed, pinyinMatch),
+    [people, !!onOpenPerson, query, collapsed, effectiveTab, selectedPerson],
+  );
   const peopleExpanded = peopleShown.visible && peopleShown.rows.length > 0;
   // 第一行 = 列表里真正的第一行:人员展开时是第一个人,否则是第一个分组的第一行(人员折叠时要加上它的标题行高)。
   const alignFirstRow = !compact && uiScale().listDense && (peopleExpanded || (shownSections[0]?.data?.length ?? 0) > 0);
@@ -724,6 +756,38 @@ export default function AgentsScreen({
           {q ? <Text style={[styles.listHeader, rowStyles.searchCount]}>{`${shownCount} / ${sessions.length} agents`}</Text> : null}
         </View>
       )}
+      {showTabs ? (
+        // 飞书 / 微信的位置:搜索框下面、列表上面,左缘对齐行的头像(手机 = 行的 padX;桌面侧栏 = 列表内边距 + 行内边距)。
+        <View testID="conversation-tabs-bar" style={[rowStyles.tabsBar, compact ? rowStyles.tabsBarCompact : null, { backgroundColor: compact ? colors.listBg : colors.bg }]}>
+          <View testID="conversation-tabs" accessibilityRole="tablist" accessibilityLabel={t('chat.tabsLabel')} style={[rowStyles.tabsTrack, { backgroundColor: colors.subtleFill }]}>
+            {(['all', 'unread'] as const).map(k => {
+              const on = tab === k;
+              const n = k === 'unread' ? formatTabCount(unreadTabCount) : '';
+              const label = k === 'all' ? t('chat.tabAll') : t('chat.tabUnread');
+              return (
+                <Pressable
+                  key={k}
+                  testID={`conversation-tab-${k}`}
+                  accessibilityRole="tab"
+                  accessibilityState={{ selected: on }}
+                  {...({ 'aria-selected': on } as any)}
+                  accessibilityLabel={n ? `${label} ${n}` : label}
+                  onPress={() => setTab(k)}
+                  style={({ hovered }: any) => [
+                    rowStyles.tabSeg,
+                    on ? [rowStyles.tabSegOn, { backgroundColor: themeMode() === 'dark' ? colors.rowActive : colors.card }] : hovered && { backgroundColor: colors.rowHover },
+                  ]}
+                >
+                  <View style={rowStyles.tabLabel}>
+                    <Text dense selectable={false} numberOfLines={1} style={[rowStyles.tabText, { color: on ? colors.accent : colors.textSecondary }, on && rowStyles.tabTextOn]}>{label}</Text>
+                    {n ? <Text dense selectable={false} numberOfLines={1} testID={`conversation-tab-${k}-count`} style={[rowStyles.tabText, { color: on ? colors.accent : colors.textSecondary }, on && rowStyles.tabTextOn]}>{n}</Text> : null}
+                  </View>
+                </Pressable>
+              );
+            })}
+          </View>
+        </View>
+      ) : null}
       {filtering ? (
         <View testID="agent-filter-bar" style={[rowStyles.filterBar, { backgroundColor: compact ? colors.listBg : colors.bg }]}>
           {(['all', 'online', 'working', 'error', 'offline'] as const).map(k => {
@@ -802,7 +866,18 @@ export default function AgentsScreen({
           tintColor={colors.accent}
         />
       }
-      ListEmptyComponent={
+      ListEmptyComponent={effectiveTab === 'unread' && !q && !filtering ? (
+        // 未读视图空了:说清楚是「没有未读」,不是列表挂了;一键回到「全部」。人员区块里还有未读私信时不出现。
+        peopleShown.rows.length ? null : (
+          <View style={styles.center} testID="agents-empty-unread">
+            <Text style={styles.errorTitle}>{t('chat.unreadEmpty')}</Text>
+            <Text style={styles.errorHint}>{t('chat.unreadEmptyHint')}</Text>
+            <Pressable testID="agents-empty-unread-show-all" style={styles.retryBtn} onPress={() => setTab('all')}>
+              <Text style={styles.retryBtnText}>{t('chat.showAll')}</Text>
+            </Pressable>
+          </View>
+        )
+      ) :
         // 搜不到时必须说出"为什么空",否则用户分不清「搜挂了」和「真没有」
         // ——空白屏是这两种情况唯一相同的表现。加载中/加载失败在上面的
         // early return 里已经各自有屏,走到这里必然是"数据到了但没有匹配"。
@@ -855,7 +930,7 @@ export default function AgentsScreen({
           ))}
         </View>
       ) : null}
-      ListFooterComponent={<>{hiddenSessions.length ? (
+      ListFooterComponent={<>{hiddenSessions.length && effectiveTab === 'all' ? (
         // 「不显示该对话」收在这里:列表最底下一行入口,点开就地展开,每行长按 → 恢复显示(点开会话也会恢复)。
         <View testID="agent-hidden-footer">
           <Pressable
@@ -898,6 +973,15 @@ const makeRowStyles = () => ({
   filterChip: { minHeight: ds(26), borderRadius: radius.pill, paddingHorizontal: 10, alignItems: 'center', justifyContent: 'center' },
   filterChipText: { fontSize: type.small, fontWeight: weight.medium },
   filterClear: { flexDirection: 'row', alignItems: 'center', gap: 4, marginLeft: 'auto' },
+  // 「全部 / 未读 N」:左缘 = 行头像的左缘(手机 padX;桌面侧栏 = 列表 sm + 行 md)。飞书同款胶囊轨道 + 选中段浮起。
+  tabsBar: { flexDirection: 'row', paddingHorizontal: rowGeom().padX, paddingTop: spacing.xs, paddingBottom: spacing.xs },
+  tabsBarCompact: { paddingHorizontal: spacing.sm + spacing.md },
+  tabsTrack: { flexDirection: 'row', alignItems: 'center', borderRadius: radius.pill, padding: 3, gap: 2 },
+  tabSeg: { minHeight: ds(28), minWidth: ds(56), paddingHorizontal: ds(14), borderRadius: radius.pill, alignItems: 'center', justifyContent: 'center' },
+  tabSegOn: themeMode() === 'dark' ? {} : { ...shadowOnly('raised') },
+  tabLabel: { flexDirection: 'row', alignItems: 'center', gap: ds(4) },
+  tabText: { fontSize: type.small, fontWeight: weight.medium },
+  tabTextOn: { fontWeight: weight.strong },
   group: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: rowGeom().padX, paddingTop: rowGeom().groupPadTop, paddingBottom: rowGeom().groupPadBottom },
   groupCompact: { paddingHorizontal: spacing.md, paddingTop: spacing.sm },
   groupTitle: { flexShrink: 1, ...listText('meta'), fontWeight: weight.medium, letterSpacing: 0.4 },

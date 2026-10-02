@@ -55,6 +55,13 @@ export const chatTranslations = {
   'chat.clearOnly': ['仅清除状态', 'Clear status only'],
   'chat.clearNoResend': ['仅清除待确认状态（不会重发）', 'Clear unconfirmed status (do not resend)'],
   'chat.searchAgent': ['搜索 agent…', 'Search agents…'],
+  // board #449 会话列表顶部「全部 / 未读 N」(飞书同款,「标记」暂缓)。
+  'chat.tabAll': ['全部', 'All'],
+  'chat.tabUnread': ['未读', 'Unread'],
+  'chat.tabsLabel': ['会话筛选', 'Conversation filter'],
+  'chat.unreadEmpty': ['没有未读消息', 'No unread messages'],
+  'chat.unreadEmptyHint': ['新消息到达后会出现在这里', 'New messages will show up here'],
+  'chat.showAll': ['查看全部', 'Show all'],
   'chat.noAgent': ['没有匹配的 agent', 'No matching agents'],
   'chat.resize': ['拖动调整输入框高度', 'Drag to resize the composer'],
   'chat.quoting': ['正在引用', 'Quoting a message'],
