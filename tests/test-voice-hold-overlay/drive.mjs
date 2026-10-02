@@ -14,7 +14,8 @@
 //   4 松手结果:✕ = 丢弃(草稿不变);文 = 进草稿、不发送;中间 = 现状(进草稿、不发送)
 //   5 气泡里的流式文字 ≤3 行,再多在气泡里滚到最新
 //   6 太短 → 屏幕中间「说话时间太短」;识别报错 → 输入区提示;麦克风被拒 → 输入区提示,浮层收起
-//   7 减弱动态效果:气泡一出现就是完整大小(不缩放)
+//   7 减弱动态效果:气泡不做缩放淡入 —— 从按下起记下气泡的每一个样式,没有任何中间值(只有挂上那一刻的 0/0.8 和
+//     完整的 1/1),最后是完整大小(开着动画时 150ms 里有约 20 个中间值)
 // 退出码 1 = 任何一条失败。
 import { createServer } from 'node:http';
 import { readFileSync, existsSync, mkdirSync, statSync } from 'node:fs';
@@ -347,13 +348,41 @@ for (const scheme of ['light', 'dark']) {
 
   // ── 减弱动态效果 ──
   {
-    const { ctx: c3, page: p3 } = await open(scheme, { context: { reducedMotion: 'reduce' } });
+    const { ctx: c3, page: p3 } = await open(scheme, { context: { reducedMotion: process.env.VOICE_HOLD_MOTION || 'reduce' } });
     const b = await box(p3, 'voice-hold-bar');
     await p3.mouse.move(b.cx, b.cy);
+    // Not one sample taken right after the overlay appears: the bubble is committed with the Animated value's initial
+    // 0 (opacity 0, scale 0.8) and the effect that jumps it to 1 under reduced motion runs after that commit. Whether a
+    // single read lands before or after it is timing — CI caught the 0/0.8 frame now and then (2026-10-02, #666 and
+    // #668, light and dark), locally it showed up for 1–3 frames with the CPU throttled 6×. That initial frame is
+    // invisible (opacity 0) and is not motion. What reduced motion must rule out is the 150 ms scale-in: so record
+    // every style the bubble ever has (MutationObserver on style + every animation frame) from before the press on,
+    // and require no in-between value and that it ends at full size. With the motion on (VOICE_HOLD_MOTION=no-preference)
+    // this records ~20 in-between values and goes red. No time bound on the jump: that is the same timing again.
+    await p3.evaluate(() => {
+      const out = window.__bubbleFrames = []; const t0 = performance.now();
+      const snap = () => {
+        const el = document.querySelector('[data-testid="voice-hold-bubble"]');
+        if (!el) return;
+        const cs = getComputedStyle(el);
+        const scale = cs.transform === 'none' ? 1 : Number(cs.transform.slice(7).split(',')[0]);
+        out.push({ t: Math.round(performance.now() - t0), opacity: Number(cs.opacity), scale: Math.round(scale * 1000) / 1000 });
+      };
+      new MutationObserver(snap).observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ['style'] });
+      const tick = () => { snap(); if (performance.now() - t0 < 2000) requestAnimationFrame(tick); };
+      requestAnimationFrame(tick);
+    });
     await p3.mouse.down();
     await p3.waitForSelector('[data-testid="voice-overlay"]', { timeout: 5000 });
-    const early = await p3.evaluate(() => { const el = document.querySelector('[data-testid="voice-hold-bubble"]'); const cs = getComputedStyle(el); return { opacity: cs.opacity, transform: cs.transform }; });
-    ck(tag, '减弱动态效果:气泡一出现就是完整大小、不透明', early.opacity === '1' && (early.transform === 'none' || early.transform === 'matrix(1, 0, 0, 1, 0, 0)'), JSON.stringify(early));
+    await p3.waitForTimeout(400);
+    const frames = await p3.evaluate(() => window.__bubbleFrames);
+    const first = frames[0]?.t ?? null;
+    const between = frames.filter(f => !((f.opacity === 0 && f.scale === 0.8) || (f.opacity === 1 && f.scale === 1)));
+    const last = frames.at(-1);
+    const full = frames.find(f => f.opacity === 1 && f.scale === 1);
+    ck(tag, '减弱动态效果:气泡不做缩放淡入(没有中间值),最后完整大小、不透明',
+      frames.length > 0 && between.length === 0 && last?.opacity === 1 && last?.scale === 1,
+      `${frames.length} samples, in-between ${between.length}${between.length ? ` e.g. ${JSON.stringify(between[0])}` : ''}, full ${full && first !== null ? `${full.t - first}ms after it appeared` : 'never'}`);
     await p3.mouse.up();
     await c3.close();
   }
