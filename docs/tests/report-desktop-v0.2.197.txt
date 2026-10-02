@@ -1,0 +1,9 @@
+desktop v0.2.197 — 部门群聊(#457) + 节点权限设置(#489)
+================================================================================
+A. 本版内容(0.2.196 发版提交之后 main 上合入的 PR + 本 PR)
+  #683 节点设置「权限」分区:正常 / 只读 / 受限 + 「本来会拦下 N 次」报告;只在 Hub 返回 viewer_can.permission_mode=true 时出现(Hub ≥ 0.9.0-preview.93)。
+  #684 部门群聊:会话列表「群聊」分区(未读与私信合并)、群聊界面复用私信组件、部门页建群/成员(部门/手动)/加移手动成员/改名;电脑侧栏+右栏、手机整页;按 /health chat_groups 能力位或探测决定是否显示,旧 Hub 全部隐藏。npm test 323/323,ck 93,drive 42/42(三种 Hub)。
+  本 PR(版本号):0.2.196 → 0.2.197,versionCode 2196 → 2197;release-desktop-auto-update.yml 加 What's new in 0.2.197;重新生成 src/changelog-bundled.ts。
+  本地:干净 origin/main(07d2e8f) bump 后 npm ci / npm test / npm run typecheck 全部 rc=0;android-release-notes.mjs 0.2.197 rc=0。
+B. 验证边界(如实)
+  ck 单测 + 页内桩浏览器驱动(桌面/手机、浅色/深色、新 Hub / 无新字段的 .93 / 旧 Hub);两项功能都需要 Hub 0.9.0-preview.93,更早的 Hub 上不显示,其他行为与 0.2.196 相同。未在真机上对真实 Hub 走查;群成员变化没有实时事件(下一次列表刷新约 15 秒内出现)。

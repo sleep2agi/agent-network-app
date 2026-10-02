@@ -5,6 +5,10 @@
 export const BUNDLED_RELEASE_BODY: string = [
   "Signed and notarized stable update for macOS (Apple Silicon) and Windows (x64).",
   "",
+  "What's new in 0.2.197:",
+  "- 新增部门群聊：会话列表多了「群聊」，未读和私信一起算；部门负责人和管理员可以在部门页建群、管成员、改群名，成员随部门自动进出群（需要 Hub 0.9.0-preview.93）",
+  "- 节点设置新增「权限」：可以把 Agent 设成正常 / 只读 / 受限，并查看「本来会拦下 N 次」的记录（需要 Hub 0.9.0-preview.93）",
+  "",
   "What's new in 0.2.196:",
   "- 部门负责人可以管理本部门了：电脑在侧栏「管理本部门」、手机在「设置」最上面。可以在本部门内调人、新建和调整下级部门，查看本部门的任务和 Agent 状态（需要 Hub 0.9.0-preview.91）",
   "",
@@ -860,6 +864,7 @@ export const BUNDLED_RELEASE_BODY: string = [
 
 /** Release date (published_at) per version, as far as it was known when this file was generated. */
 export const BUNDLED_RELEASE_DATES: Record<string, string> = {
+  "0.2.196": "2026-10-02T18:30:03Z",
   "0.2.195": "2026-10-02T15:36:03Z",
   "0.2.194": "2026-10-02T10:05:05Z",
   "0.2.193": "2026-10-02T06:23:26Z",
