@@ -5,6 +5,9 @@
 export const BUNDLED_RELEASE_BODY: string = [
   "Signed and notarized stable update for macOS (Apple Silicon) and Windows (x64).",
   "",
+  "What's new in 0.2.193:",
+  "- 「去会话」直接跳到那一次的回复：从定时任务执行记录、日志或引用点进会话时，会自动往前翻到对应消息并高亮，长回复从第一行开始显示；太早找不到时会提示并停在最新。",
+  "",
   "What's new in 0.2.192:",
   "- Agent 出问题时一眼可见：如果 Codex 节点的 App Server 断开、TUI 退出，或者登录过期需要重新登录，Agent 列表和节点详情会显示琥珀色「降级 · 原因」标签，悬停或点一下能看到怎么修。节点没有上报健康状态时不显示。",
   "",
@@ -848,6 +851,7 @@ export const BUNDLED_RELEASE_BODY: string = [
 
 /** Release date (published_at) per version, as far as it was known when this file was generated. */
 export const BUNDLED_RELEASE_DATES: Record<string, string> = {
+  "0.2.192": "2026-10-02T05:34:24Z",
   "0.2.191": "2026-10-02T04:52:37Z",
   "0.2.190": "2026-10-02T04:04:15Z",
   "0.2.189": "2026-10-02T00:38:18Z",
