@@ -1,5 +1,6 @@
 import { appFetch } from './app-fetch';
 import { reportProfileAuthResponse } from './profile-auth-state';
+import type { NodePermissionReport } from './node-permission-model';
 import { withDeadline } from './deadline';
 import { pollUntilTerminal } from './node-rules';
 
@@ -224,6 +225,10 @@ export interface HubNode {
   /** 行最近一次被写的时间(hub `datetime('now')`,UTC)。同一别名有多行时,选择器挑最新的那行。 */
   updated_at?: string | null;
   config_revision?: number | null;
+  /** RFC-041(Hub ≥ .92):节点自己的模式。旧 Hub 没有 ⇒ undefined(当作正常)。 */
+  permission_mode?: 'normal' | 'readonly' | 'restricted' | null;
+  /** Hub ≥ .93(#2275):调用者能不能改这个节点的模式 —— 「权限」分区只在它为 true 时出现。 */
+  viewer_can?: { permission_mode?: boolean } | null;
   config_snapshot?: {
     model?: string | null;
     role?: string | null;
@@ -473,6 +478,41 @@ export const createExternalScheduleEdit = (
 export type PutAvatarResult =
   | { ok: true; avatar_url: string | null }
   | { ok: false; error: string; reason?: string; status?: number };
+
+/** PUT /api/nodes/:node_id/permission-mode(RFC-041,#489)—— 节点主人、网络 owner / admin 能改;
+ *  别人 403,看不见这个节点 404。 */
+export const putNodePermissionMode = async (
+  cfg: HubConfig,
+  nodeId: string,
+  mode: 'normal' | 'readonly' | 'restricted',
+): Promise<{ ok: true; permission_mode: string; previous?: string } | { ok: false; error: string; status?: number }> => {
+  try {
+    const res = await withTimeout(signal =>
+      appFetch(`${cfg.serverUrl}/api/nodes/${encodeURIComponent(nodeId)}/permission-mode`, {
+        method: 'PUT',
+        headers: headers(cfg),
+        signal,
+        body: JSON.stringify({ mode }),
+      }),
+    );
+    const body = (await res.json().catch(() => ({}))) as any;
+    if (!res.ok || body?.ok === false) return { ok: false, error: body?.error || `HTTP ${res.status}`, status: res.status };
+    return { ok: true, permission_mode: String(body?.permission_mode ?? mode), previous: body?.previous };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : String(e) };
+  }
+};
+
+/** GET /api/networks/:id/node-permission-report —— 过去 7 天每个节点「本来会被拦」的次数。只给网络 owner / admin;
+ *  别人(包括只是节点主人的普通成员)403 ⇒ 返回 null,界面不显示报表这一行。 */
+export const fetchNodePermissionReport = async (cfg: HubConfig): Promise<NodePermissionReport | null> => {
+  if (!cfg.networkId) return null;
+  try {
+    return await get<NodePermissionReport>(cfg, `/api/networks/${encodeURIComponent(cfg.networkId)}/node-permission-report${networkQuery(cfg)}`);
+  } catch {
+    return null;
+  }
+};
 
 /** PUT /api/nodes/:ref/avatar — set (or clear with null) a node's cross-device
  *  `avatar_url`. ref = alias (the hub resolves node_id/node_name/alias). The hub

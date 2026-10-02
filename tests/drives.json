@@ -149,6 +149,10 @@
       "kind": "stub",
       "secs": 60
     },
+    "test-node-permission-mode/drive.mjs": {
+      "kind": "stub",
+      "secs": 50
+    },
     "test-org-chart/drive.mjs": {
       "kind": "stub",
       "secs": 60

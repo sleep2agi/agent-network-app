@@ -76,6 +76,8 @@ import NodeSkillsSection from './NodeSkillsSection';
 import NodeFilesSection from './NodeFilesSection';
 import NodeSchedulesSection from './NodeSchedulesSection';
 import NodeLogsSection from './NodeLogsSection';
+import NodePermissionSection from './NodePermissionSection';
+import { canShowPermissionSection } from './node-permission-model';
 import { pointerUi } from './pointer-ui';
 import type { ScheduleOpenRequest } from './node-schedules';
 import { keyboardAvoidEnabled, useKeyboardVisible } from './keyboard-visibility';
@@ -381,7 +383,7 @@ export default function NodeDetailScreen({
   const { primary, secondary } = splitOverviewFacts(facts);
   const chips = headerChips(facts);
   const skillsCapable = (s as Session & { skills_capable?: boolean }).skills_capable === true;
-  const visibleSections = visibleNodeSections({ readOnly, hasRulesTarget: !!rulesTarget, skillsCapable });
+  const visibleSections = visibleNodeSections({ readOnly, hasRulesTarget: !!rulesTarget, skillsCapable, permissionsAllowed: canShowPermissionSection(node) });
   const section = resolveActiveSection(activeSection, visibleSections);
   const sectionMeta = NODE_SECTIONS.filter(item => visibleSections.includes(item.key));
   const needConfirm = leaveNeedsConfirm({ section, rulesDirty });
@@ -566,6 +568,12 @@ export default function NodeDetailScreen({
         <SectionTitle title="任务" hint="发给这个节点的任务。自己发给自己的定时提醒单独一组,不算运行中。" />
         {/* app#157 —— 这个节点正在跑什么、前面排着几条(只读视图也显示,它不改任何东西) */}
         <NodeTasksSection cfg={cfg} alias={alias} embedded />
+      </View>
+    );
+    if (section === 'permissions' && node) return (
+      <View>
+        <SectionTitle title="权限" />
+        <NodePermissionSection cfg={cfg} node={node} compact={compact} onChanged={mode => setNode(prev => prev ? { ...prev, permission_mode: mode } : prev)} />
       </View>
     );
     // danger
