@@ -5,6 +5,9 @@
 export const BUNDLED_RELEASE_BODY: string = [
   "Signed and notarized stable update for macOS (Apple Silicon) and Windows (x64).",
   "",
+  "What's new in 0.2.196:",
+  "- 部门负责人可以管理本部门了：电脑在侧栏「管理本部门」、手机在「设置」最上面。可以在本部门内调人、新建和调整下级部门，查看本部门的任务和 Agent 状态（需要 Hub 0.9.0-preview.91）",
+  "",
   "What's new in 0.2.195:",
   "- 任务评论：在任务详情里给任务追加评论，Agent 和人都能写，按时间显示作者和内容；「动态」里每条评论单独一行（需要 Hub 0.9.0-preview.90）",
   "",
@@ -857,6 +860,7 @@ export const BUNDLED_RELEASE_BODY: string = [
 
 /** Release date (published_at) per version, as far as it was known when this file was generated. */
 export const BUNDLED_RELEASE_DATES: Record<string, string> = {
+  "0.2.195": "2026-10-02T15:36:03Z",
   "0.2.194": "2026-10-02T10:05:05Z",
   "0.2.193": "2026-10-02T06:23:26Z",
   "0.2.192": "2026-10-02T05:34:24Z",
