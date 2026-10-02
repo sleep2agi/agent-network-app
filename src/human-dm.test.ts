@@ -137,7 +137,8 @@ const ck = (name: string, ok: boolean) => { n++; if (ok) { p++; console.log(`  �
   ck('人员:没有人 → 整块不画', !shownPeople([], '', [], pinyinMatch).visible);
 
   const agents = readFileSync(new URL('./AgentsScreen.tsx', import.meta.url), 'utf8');
-  const header = agents.indexOf('ListHeaderComponent={peopleShown.visible ? (');
+  // 列表头里人员前面可能还有「管理本部门」入口(#485,只给部门负责人),条件因此是 `peopleShown.visible || …`。
+  const header = agents.indexOf('ListHeaderComponent={peopleShown.visible');
   const footer = agents.indexOf('ListFooterComponent={');
   ck('顺序:人员在 ListHeaderComponent(列表最上面、分组之前)', header > 0 && agents.indexOf('testID="people-section"') > header && agents.indexOf('testID="people-section"') < footer);
   ck('顺序:footer 里不再有人员', !agents.slice(footer).includes('people-section') && !agents.slice(footer).includes('renderPersonRow'));
