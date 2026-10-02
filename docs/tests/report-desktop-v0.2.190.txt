@@ -1,0 +1,9 @@
+desktop v0.2.190 — 会话列表「未读」筛选(#449)
+================================================================================
+A. 本版内容(0.2.189 发版提交之后 main 上合入的 PR + 本 PR)
+  #667 会话列表顶部「全部 / 未读 N」:N=有未读的会话数(agent 未读 + 手动标未读 + 有未读的私聊),只算列表里可见的;未读视图中正在打开的会话保留到离开后才移出;选择按设备记住且不闪「全部」;空态带「查看全部」。手机 / 安卓双栏 / 桌面侧栏。conversation-tab 34/34;浏览器 test-conversation-unread-tab 改动前 22 项失败、改动后全过;61 个页内桩驱动全绿;npm test 315/315。
+  #663 浏览器驱动接入 CI(8 分片 + 每晚 Docker);#661/#659/#660 已随 0.2.189 发布。
+  本 PR(版本号):0.2.189 → 0.2.190,versionCode 2189 → 2190;release-desktop-auto-update.yml 加 What's new in 0.2.190;重新生成 src/changelog-bundled.ts。
+  本地:干净 origin/main(1ac6bf6) bump 后 npm ci / npm test / npm run typecheck 全部 rc=0;android-release-notes.mjs 0.2.190 rc=0。
+B. 验证边界(如实)
+  页内桩 + 浏览器驱动验证;「标记」分页未做(待 Vincent 看效果再定)。
