@@ -42,7 +42,7 @@ const fs = fsStart >= 0 ? code.slice(fsStart) : '';
 ck('全屏:经 useModalSafePadding(\'fullScreen\') 取安全区(同一张表 / 同一个库)', /from '\.\/safe-area-runtime'/.test(src) && /const safe = useModalSafePadding\('fullScreen'\)/.test(fs));
 const iModal = fs.indexOf('<Modal');
 const iRoot = fs.indexOf('<View style={[{ flex: 1, backgroundColor: colors.bg }, safe]}');
-const iToolbar = fs.indexOf('{toolbar}');
+const iToolbar = fs.indexOf('{header(');  // 顶栏(#450 起 header(exit))
 ck('全屏:Modal 根 View 挂上安全区垫子', iModal >= 0 && iRoot > iModal);
 ck('全屏:工具条在垫过的根 View 里面', iRoot >= 0 && iToolbar > iRoot);
 ck('编辑框:字号 / 行高用常量', /fontSize: RULES_EDITOR_FONT_SIZE, lineHeight: RULES_EDITOR_LINE_HEIGHT, fontFamily: MONO/.test(code));

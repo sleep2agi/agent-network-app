@@ -93,6 +93,10 @@
       "kind": "hub",
       "why": "needs a throwaway hub with three synthetic users (HUB_JSON)"
     },
+    "test-editor-header/drive.mjs": {
+      "kind": "stub",
+      "secs": 190
+    },
     "test-fatal-recorder/drive.mjs": {
       "kind": "stub",
       "secs": 20

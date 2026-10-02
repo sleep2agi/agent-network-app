@@ -9,7 +9,7 @@
 // 三种可见状态分开：读取中 / 就绪（可编辑）/ 不可用（hub 旧、节点离线或
 // agent-node 旧、读失败），每种都有一句话说明为什么和怎么办。
 
-import { forwardRef, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { ActivityIndicator, Modal, Platform, Pressable, ScrollView, View, useWindowDimensions } from 'react-native';
 import { Text, TextInput } from './ui-text';
 import { useModalSafePadding } from './safe-area-runtime';
@@ -28,7 +28,7 @@ import { contentKey } from './rules-find';
 import { editorLineHeightPx, editorScrollTopForLine, RULES_EDITOR_FONT_SIZE, RULES_EDITOR_LINE_HEIGHT, RULES_READ_MAX_WIDTH } from './rules-fullscreen-layout';
 import { effectiveRulesMode, findModeFor, initialRulesMode, rulesModeTabs, rulesSplitAvailable, rulesWideLayout, SPLIT_PREVIEW_DEBOUNCE_MS, SPLIT_RATIO_DEFAULT, clampSplitRatio, splitPaneWidths, syncedScrollTop, type SyncAnchor } from './rules-split';
 import { loadRulesEditorPrefs, saveRulesMode, saveRulesOutlineOpen, saveRulesScrollSync, saveRulesSplitRatio } from './rules-editor-prefs';
-import { FocusRing, ModeToggle, prefersReducedMotion, SplitDivider, useDebounced } from './SplitEditorParts';
+import { EDITOR_BTN_HEIGHT, EditorHeaderButton, FocusRing, ModeToggle, prefersReducedMotion, SplitDivider, useDebounced } from './SplitEditorParts';
 
 type Phase = 'loading' | 'ready' | 'saving' | 'unavailable';
 
@@ -84,6 +84,8 @@ export default function NodeRulesSection({ cfg, node, session, onDirtyChange }: 
   // 原生编辑框没有 selectionStart:光标位置从 onSelectionChange 记下来(编辑切回阅读时滚回光标所在块)。
   const caretRef = useRef<number | null>(null);
   const [full, setFull] = useState(false);
+  // 全屏顶栏一行放不下的宽度(手机竖屏):分两行(fullHeader)。
+  const fullNarrow = windowWidth < 600;
   const fullBtn = useRef<any>(null);
   // 退出全屏后焦点回到「全屏」按钮(键盘用户不至于掉回页面顶部)。
   // Modal 卸载时 web 端会把焦点放回 body,所以等它卸完(fade 约 300 ms)再聚焦;两次都试,哪次赶上算哪次。
@@ -260,14 +262,52 @@ export default function NodeRulesSection({ cfg, node, session, onDirtyChange }: 
         <View style={{ flex: 1, minWidth: find.open ? 0 : 120 }}>{statusLine}</View>
       )}
       {hasContent && !inFull ? (
-        <SmallBtn ref={fullBtn} onPress={() => setFull(true)} accessibilityLabel="全屏阅读规则文件" label="全屏" />
+        <EditorHeaderButton ref={fullBtn} onPress={() => setFull(true)} accessibilityLabel="全屏阅读规则文件" label="全屏" />
       ) : null}
-      <SmallBtn onPress={() => void runRead()} disabled={busy} label="重新读取" />
+      <EditorHeaderButton onPress={() => void runRead()} disabled={busy} label="重新读取" />
       {/* 主按钮:强调色底 + onAccent 字(强调色字压强调色底在浅色主题下看不见,Vincent 09-02 截图里那个空白按钮)。 */}
-      <SmallBtn primary onPress={() => void runSave()} disabled={!dirty} label={saveButtonLabel(phase)} />
+      <EditorHeaderButton primary onPress={() => void runSave()} disabled={!dirty} label={saveButtonLabel(phase)} />
       {bar.statusOwnLine && message ? <View style={{ width: '100%' }}>{statusLine}</View> : null}
     </View>
   );
+
+  // 全屏顶栏(#450):一行 —— 左 阅读/编辑 + 文件名 + ⓘ + 未保存 …,右 重新读取 · 保存 · 退出全屏,全部同高、中线对齐;
+  // 状态句(「已保存到节点工作目录」)单独放在顶栏下面一行,不再把工具条撑成两行、让右边的退出全屏掉下去。
+  // 窄屏(手机竖屏)放不下一行:第一行 阅读/编辑 + 文件名 + 退出全屏,第二行 查找 / 状态 + 重新读取 · 保存。
+  const fullHeader = (exit: ReactNode) => {
+    const left = (
+      <>
+        <ModeToggle mode={mode} tabs={rulesModeTabs(splitOk)} onChange={changeMode} testID="rules-full-mode" />
+        <Text style={{ color: colors.text, fontSize: 13, fontFamily: MONO, flexShrink: 1 }} selectable numberOfLines={1}>{fileName}</Text>
+        <InfoTip label="规则文件说明" text={rulesInfoText(fileName, true)} />
+        {view.unsaved ? <UnsavedMark /> : null}
+        {mode === 'split' && WEB ? <SyncToggle on={scrollSync} onPress={toggleSync} /> : null}
+        {busy ? <ActivityIndicator size="small" color={colors.accent} /> : null}
+      </>
+    );
+    const actions = (
+      <>
+        <EditorHeaderButton onPress={() => void runRead()} disabled={busy} label="重新读取" testID="rules-full-reload" />
+        <EditorHeaderButton primary onPress={() => void runSave()} disabled={!dirty} label={saveButtonLabel(phase)} testID="rules-full-save" />
+      </>
+    );
+    const row = { flexDirection: 'row' as const, alignItems: 'center' as const, gap: spacing.sm };
+    const findBar = find.open && full ? <RulesFindBar find={find} /> : null;
+    if (fullNarrow) {
+      return (
+        <View style={{ gap: spacing.sm }} testID="rules-full-header">
+          <View style={row}>{left}<View style={{ flex: 1 }} />{exit}</View>
+          <View style={row}>{findBar}<View style={{ flex: 1, minWidth: 0 }}>{statusLine}</View>{actions}</View>
+        </View>
+      );
+    }
+    return (
+      <View style={{ gap: spacing.xs }} testID="rules-full-header">
+        <View style={row}>{left}{findBar}<View style={{ flex: 1 }} />{actions}{exit}</View>
+        {statusLine ? <View testID="rules-full-status">{statusLine}</View> : null}
+      </View>
+    );
+  };
 
   const bodyProps: RulesBodyProps = {
     mode, draft: editor, onDraft: setEditor, editable: phase === 'ready', dirty, fileName,
@@ -287,7 +327,7 @@ export default function NodeRulesSection({ cfg, node, session, onDirtyChange }: 
         {hasContent && !full ? <RulesBody {...bodyProps} /> : null}
       </View>
       {full ? (
-        <RulesFullscreen onClose={closeFull} toolbar={toolbar(true)} source={view.renderSource} bodyProps={bodyProps} outlineOpen={outlineOpen} onToggleOutline={toggleOutline} />
+        <RulesFullscreen onClose={closeFull} header={fullHeader} source={view.renderSource} bodyProps={bodyProps} outlineOpen={outlineOpen} onToggleOutline={toggleOutline} />
       ) : null}
     </View>
   );
@@ -296,7 +336,7 @@ export default function NodeRulesSection({ cfg, node, session, onDirtyChange }: 
 const MONO = Platform.OS === 'ios' ? 'Menlo' : 'monospace';
 const WEB = Platform.OS === 'web';
 /** 工具条按钮高:桌面 30;手指点的原生端 36(再加 hitSlop,够到 48dp 的触控区)。 */
-const TOUCH_BTN_HEIGHT = WEB ? 30 : 36;
+const TOUCH_BTN_HEIGHT = EDITOR_BTN_HEIGHT;
 
 // 编辑框里某个字符偏移处的 y(相对 textarea 内容顶部)。长行会折行,按行号乘行高会越滚越偏,
 // 所以用一个同宽同字体的隐藏镜像 div 量真实高度。只在 web 用。
@@ -317,20 +357,6 @@ function caretTopInTextarea(ta: any, offset: number): number | null {
   div.remove();
   return top;
 }
-
-// 工具条小按钮(约 30px 高)。primary = 强调色底(保存);其余描边。
-const SmallBtn = forwardRef<any, { label: string; onPress: () => void; disabled?: boolean; primary?: boolean; accessibilityLabel?: string }>(
-  function SmallBtn({ label, onPress, disabled, primary, accessibilityLabel }, ref) {
-    return (
-      <FocusRing ref={ref} onPress={onPress} disabled={disabled} accessibilityRole="button" accessibilityLabel={accessibilityLabel ?? label} accessibilityState={{ disabled: !!disabled }}
-        hitSlop={WEB ? undefined : 6}
-        style={[{ height: TOUCH_BTN_HEIGHT, paddingHorizontal: spacing.md, borderRadius: radius.control, justifyContent: 'center', alignItems: 'center' },
-          primary ? { backgroundColor: colors.accent } : { borderWidth: 1, borderColor: colors.border },
-          disabled ? { opacity: 0.4 } : null]}>
-        <Text style={{ fontSize: 12, fontWeight: primary ? '600' : '400', color: primary ? colors.onAccent : colors.textSecondary }}>{label}</Text>
-      </FocusRing>
-    );
-  });
 
 // 左右模式的「🔗 滚动同步」开关:开 = 滚左边源码,右边预览跟到对应的块。
 function SyncToggle({ on, onPress }: { on: boolean; onPress: () => void }) {
@@ -634,8 +660,8 @@ type RulesBodyProps = {
   syncHold: { current: number };
 };
 
-function RulesFullscreen({ onClose, toolbar, source, bodyProps, outlineOpen, onToggleOutline }: {
-  onClose: () => void; toolbar: ReactNode; source: string; bodyProps: RulesBodyProps; outlineOpen: boolean; onToggleOutline: () => void;
+function RulesFullscreen({ onClose, header, source, bodyProps, outlineOpen, onToggleOutline }: {
+  onClose: () => void; header: (exit: ReactNode) => ReactNode; source: string; bodyProps: RulesBodyProps; outlineOpen: boolean; onToggleOutline: () => void;
 }) {
   const mode = bodyProps.mode;
   const outline = buildRulesOutline(source);
@@ -679,11 +705,8 @@ function RulesFullscreen({ onClose, toolbar, source, bodyProps, outlineOpen, onT
             同样再挂一次;它自己只在 Tauri+Windows 渲染。两者平台互斥,任何平台最多出一条。 */}
         <MacTitleStrip />
         <WinTitleBar />
-        <View testID="screen-header" style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingHorizontal: spacing.lg, paddingVertical: spacing.md, borderBottomWidth: 1, borderBottomColor: colors.border }}>
-          <View style={{ flex: 1 }}>{toolbar}</View>
-          <FocusRing ref={closeRef} onPress={onClose} accessibilityLabel="退出全屏(Esc)" style={{ paddingHorizontal: spacing.md, paddingVertical: 5, borderRadius: radius.item, borderWidth: 1, borderColor: colors.border }}>
-            <Text style={{ color: colors.textSecondary, fontSize: 12 }}>{WEB ? '退出全屏 Esc' : '退出全屏'}</Text>
-          </FocusRing>
+        <View testID="screen-header" style={{ paddingHorizontal: spacing.lg, paddingVertical: spacing.md, borderBottomWidth: 1, borderBottomColor: colors.border }}>
+          {header(<EditorHeaderButton ref={closeRef} onPress={onClose} accessibilityLabel="退出全屏(Esc)" label={WEB ? '退出全屏 Esc' : '退出全屏'} testID="rules-full-exit" />)}
         </View>
         <View style={{ flex: 1, flexDirection: 'row' }}>
           {withOutline ? (

@@ -41,7 +41,7 @@ ck('找到 RulesFullscreen', body.length > 0);
 const code = body.replace(/\{\/\*[\s\S]*?\*\/\}/g, ''); // 去掉 JSX 注释,免得命中说明文字
 const iModal = code.indexOf('<Modal');
 const iStrip = code.indexOf('<MacTitleStrip />');
-const iToolbar = code.indexOf('{toolbar}');
+const iToolbar = code.indexOf('{header(');  // 顶栏(#450 起 header(exit) 一行摆下工具条和退出全屏)
 const iEsc = code.indexOf('退出全屏 Esc');
 ck('strip 在 Modal 里面', iModal >= 0 && iStrip > iModal);
 ck('strip 在工具条之前(工具条被推到空带下面)', iStrip >= 0 && iToolbar > iStrip);

@@ -73,7 +73,7 @@ mock.module('./src/VoiceInputUI', () => ({
   VoiceSettingsPrompt: () => null,
 }));
 mock.module('./src/DesktopVoiceBar', () => ({ DesktopMicButton: () => React.createElement('View', { testID: 'voice-mic' }), DesktopVoiceBar: () => null }));
-mock.module('./src/SplitEditorParts', () => ({ FocusRing: 'Pressable', ModeToggle: () => null, SplitDivider: () => null, useDebounced: (v: any) => v, prefersReducedMotion: () => false }));
+mock.module('./src/SplitEditorParts', () => ({ FocusRing: 'Pressable', ModeToggle: () => null, SplitDivider: () => null, useDebounced: (v: any) => v, prefersReducedMotion: () => false, EDITOR_BTN_HEIGHT: 30, EditorHeaderButton: () => null }));
 // 「更多」展开状态(本机偏好,expo-file-system):默认按「上次展开过」,老用例照旧能点到里面的字段;
 // 渐进展开的用例把它设成没存过(null = 收起)。
 let moreStored: boolean | null = true;

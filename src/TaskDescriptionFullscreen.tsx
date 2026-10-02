@@ -16,12 +16,12 @@ import './i18n-tasks';
 import { useModalSafePadding } from './safe-area-runtime';
 import MacTitleStrip from './mac-title-strip';
 import WinTitleBar from './win-title-bar';
-import { FocusRing, ModeToggle, prefersReducedMotion, SplitDivider, useDebounced } from './SplitEditorParts';
+import { EDITOR_BTN_HEIGHT, EditorHeaderButton, FocusRing, ModeToggle, prefersReducedMotion, SplitDivider, useDebounced } from './SplitEditorParts';
 import { rulesModeTabs, rulesSplitAvailable, SPLIT_PREVIEW_DEBOUNCE_MS, SPLIT_RATIO_DEFAULT, clampSplitRatio, splitPaneWidths } from './rules-split';
 import { RULES_READ_MAX_WIDTH } from './rules-fullscreen-layout';
 import type { RulesViewMode } from './node-rules-view';
 import { effectiveDesktopMode, type InlineMode } from './task-description-fullscreen-model';
-import { Segmented, useTaskStyles } from './TaskBoardParts';
+import { CONTROL_H, Segmented, useTaskStyles } from './TaskBoardParts';
 import { DESCRIPTION_MAX } from './task-board-model';
 import { holdOverlayLayout, type HoldOverlayLayout } from './voice-hold-overlay-model';
 import { VoiceHoldOverlay } from './VoiceInputUI';
@@ -189,23 +189,17 @@ export function DesktopDescriptionFullscreen({ mode, onMode, editor, rich, setDr
           <ModeToggle mode={shown} tabs={rulesModeTabs(splitOk)} onChange={onMode} labels={labels} testID="req-description-full-mode" />
           {editable && onPickImage ? (
             <FocusRing accessibilityRole="button" accessibilityLabel={t('tasks.copy.126')} onPress={onPickImage} testID="req-description-full-image"
-              style={{ width: 30, height: 30, borderRadius: radius.control, alignItems: 'center', justifyContent: 'center' }}>
+              style={{ width: EDITOR_BTN_HEIGHT, height: EDITOR_BTN_HEIGHT, borderRadius: radius.control, alignItems: 'center', justifyContent: 'center' }}>
               <Ionicons name="image-outline" size={18} color={colors.textSecondary} />
             </FocusRing>
           ) : null}
           {editable ? mic : null}
           <Text style={{ flex: 1, color: colors.textMuted, fontSize: 12 }} numberOfLines={1} testID="req-description-full-dirty">{dirty ? chrome.unsavedText ?? t('taskDesc.unsaved') : ''}</Text>
+          {/* 保存 / 退出全屏:和规则文件全屏同一个顶栏按钮(EditorHeaderButton,同高同圆角,保存禁用时浅灰底灰字)。 */}
           {chrome.save ? (
-            // 不用 FocusRing:它悬停时把底色换成行悬停色,主按钮的强调色会被盖掉。
-            <Pressable onPress={chrome.save.onPress} disabled={chrome.save.disabled} accessibilityRole="button" accessibilityState={{ disabled: chrome.save.disabled }} testID="req-description-full-save"
-              style={{ height: 30, paddingHorizontal: spacing.md, borderRadius: radius.item, backgroundColor: colors.accent, justifyContent: 'center', opacity: chrome.save.disabled ? 0.5 : 1 }}>
-              <Text style={{ color: colors.onAccent, fontSize: 12, fontWeight: '600' }}>{chrome.save.label}</Text>
-            </Pressable>
+            <EditorHeaderButton primary onPress={chrome.save.onPress} disabled={chrome.save.disabled} label={chrome.save.label} testID="req-description-full-save" />
           ) : null}
-          <FocusRing ref={closeRef} onPress={onClose} accessibilityRole="button" accessibilityLabel={t('taskDesc.exitFullscreen')} testID="req-description-full-close"
-            style={{ height: 30, paddingHorizontal: spacing.md, borderRadius: radius.item, borderWidth: 1, borderColor: colors.border, justifyContent: 'center' }}>
-            <Text style={{ color: colors.textSecondary, fontSize: 12 }}>{WEB ? t('taskDesc.exitFullscreenEsc') : t('taskDesc.exitFullscreen')}</Text>
-          </FocusRing>
+          <EditorHeaderButton ref={closeRef} onPress={onClose} accessibilityLabel={t('taskDesc.exitFullscreen')} label={WEB ? t('taskDesc.exitFullscreenEsc') : t('taskDesc.exitFullscreen')} testID="req-description-full-close" />
         </View>
         <View ref={setDropBox} collapsable={false} style={{ flex: 1, padding: spacing.lg, gap: spacing.sm }}>
           <View style={{ flex: 1 }} onLayout={e => setBodyWidth(e.nativeEvent.layout.width)}>{body}</View>
@@ -271,10 +265,7 @@ export function PhoneDescriptionPage({ mode, onMode, editor, preview, onPickImag
           ) : null}
           <Segmented s={s} items={[{ key: 'edit', label: t('tasks.copy.127') }, { key: 'preview', label: t('tasks.copy.128') }]} value={mode} onChange={onMode} testID="req-description-page-mode" />
           {chrome.save ? (
-            <Pressable onPress={chrome.save.onPress} disabled={chrome.save.disabled} accessibilityRole="button" accessibilityState={{ disabled: chrome.save.disabled }} hitSlop={6} testID="req-description-page-save"
-              style={{ height: 32, paddingHorizontal: spacing.md, borderRadius: radius.item, backgroundColor: colors.accent, justifyContent: 'center', opacity: chrome.save.disabled ? 0.5 : 1 }}>
-              <Text style={{ color: colors.onAccent, fontSize: 14, fontWeight: '600' }}>{chrome.save.label}</Text>
-            </Pressable>
+            <EditorHeaderButton primary onPress={chrome.save.onPress} disabled={chrome.save.disabled} label={chrome.save.label} height={CONTROL_H} fontSize={14} testID="req-description-page-save" />
           ) : null}
         </View>
         {dirty ? <Text style={{ color: colors.textMuted, fontSize: 12, paddingHorizontal: spacing.lg, paddingTop: spacing.sm }} testID="req-description-page-dirty">{chrome.unsavedText ?? t('taskDesc.unsaved')}</Text> : null}
