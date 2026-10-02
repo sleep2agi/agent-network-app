@@ -16,6 +16,8 @@
 //   6  phone: after 复制 the 分享… button appears and hands the same text to the share sheet (navigator.share stub)
 //   7  offline (mirror + GitHub unreachable): the page still lists the bundled notes incl. the running version, with the
 //      offline hint
+//   8  小红书 preview per release kind mix (feature-only / speed-only / fix-only / mixed, fixture notes): every item line
+//      carries its kind's emoji (✨ / ⚡️ / 🔧), no `- ` lines; 复制 copies it (#468)
 // Exit 1 when any assertion fails.
 import { createServer } from 'node:http';
 import { readFileSync, existsSync, mkdirSync, statSync } from 'node:fs';
@@ -33,8 +35,30 @@ const json = (body, status = 200) => ({ status, contentType: 'application/json',
 // The mirror serves the real cumulative notes (the bundled copy of the release workflow's releaseBody) for the version
 // the app says it is.
 const bundledSrc = readFileSync(new URL('../../src/changelog-bundled.ts', import.meta.url), 'utf8');
-const BODY = JSON.parse(`[${/BUNDLED_RELEASE_BODY: string = \[\n([\s\S]*?)\n\]\.join/.exec(bundledSrc)[1].replace(/,\s*$/, '')}]`).join('\n');
+const REAL_BODY = JSON.parse(`[${/BUNDLED_RELEASE_BODY: string = \[\n([\s\S]*?)\n\]\.join/.exec(bundledSrc)[1].replace(/,\s*$/, '')}]`).join('\n');
 const APP_VERSION = /APP_VERSION = '([^']+)'/.exec(readFileSync(new URL('../../src/version.ts', import.meta.url), 'utf8'))[1];
+
+// The running version's own notes are a FIXTURE (#468): the 小红书 check used to require a ✨ line, so a release whose
+// notes were all speed items (「更快」, release-notes.ts SPEED_WORDS) or all fixes failed it — the 0.2.194 bump PR had
+// to be reworded to pass. The rest of the cumulative notes (older versions) stay the real bundled ones.
+// Kinds are given by explicit prefixes, so each item's expected 小红书 line (emoji by kind) is known here, independently
+// of the app's formatter: ✨ new · ⚡️ speed · 🔧 fix (changelog-model.ts XHS_EMOJI).
+const KIND_ITEMS = {
+  new: { bullet: '新功能：示例功能，可以把示例数据导出成表格', emoji: '✨', text: '示例功能，可以把示例数据导出成表格' },
+  speed: { bullet: '提速：示例列表打开更快，首屏从两秒缩到半秒', emoji: '⚡️', text: '示例列表打开更快，首屏从两秒缩到半秒' },
+  fix: { bullet: '修复：示例按钮在窄屏上错位的问题', emoji: '🔧', text: '示例按钮在窄屏上错位的问题' },
+};
+const KIND_CASES = { 'feature-only': ['new'], 'speed-only': ['speed'], 'fix-only': ['fix'], mixed: ['new', 'speed', 'fix'] };
+/** REAL_BODY with the running version's section replaced by bullets of these kinds. */
+const bodyWithKinds = (kinds) => {
+  const lines = REAL_BODY.split('\n');
+  const at = lines.findIndex(l => l.trim() === `What's new in ${APP_VERSION}:`);
+  if (at < 0) throw new Error(`bundled notes have no section for ${APP_VERSION}`);
+  let end = at + 1;
+  while (end < lines.length && !/^What's new in\s/i.test(lines[end].trim()) && !/^Existing installations\b/i.test(lines[end].trim())) end++;
+  return [...lines.slice(0, at + 1), ...kinds.map(k => `- ${KIND_ITEMS[k].bullet}`), '', ...lines.slice(end)].join('\n');
+};
+const BODY = bodyWithKinds(KIND_CASES.mixed);
 const [maj, min, pat] = APP_VERSION.split('.').map(Number);
 const PREV = `${maj}.${min}.${pat - 1}`, PREV2 = `${maj}.${min}.${pat - 2}`;
 // What the running version's card must show, read from the same notes (not hard-coded: every release changes them —
@@ -110,7 +134,7 @@ const r1 = (n) => Math.round(n * 10) / 10;
 const box = async (page, sel) => { const b = await page.locator(sel).first().boundingBox(); return b && { x: r1(b.x), y: r1(b.y), w: r1(b.width), h: r1(b.height) }; };
 const cy = (b) => b.y + b.h / 2;
 
-const open = async ({ phone, offline }) => {
+const open = async ({ phone, offline, body = BODY }) => {
   const ctx = await browser.newContext(phone
     ? { viewport: { width: 390, height: 844 }, userAgent: ANDROID_UA, locale: 'zh-CN', deviceScaleFactor: 2, hasTouch: true }
     : { viewport: { width: 1440, height: 900 }, locale: 'zh-CN', deviceScaleFactor: 2 });
@@ -123,7 +147,7 @@ const open = async ({ phone, offline }) => {
     const u = route.request().url(); hits.push(u);
     if (offline) return route.abort('internetdisconnected');
     if (u.endsWith('/desktop/latest/VERSION')) return route.fulfill({ status: 200, contentType: 'text/plain', body: `${APP_VERSION}\n` });
-    if (u.endsWith(`/desktop/${APP_VERSION}/latest.json`)) return route.fulfill(json({ version: APP_VERSION, notes: BODY, pub_date: '2026-09-30T10:30:38.172Z' }));
+    if (u.endsWith(`/desktop/${APP_VERSION}/latest.json`)) return route.fulfill(json({ version: APP_VERSION, notes: body, pub_date: '2026-09-30T10:30:38.172Z' }));
     return route.fulfill({ status: 404, body: '' });
   });
   await page.route('https://api.github.com/**', route => { hits.push(route.request().url()); return offline ? route.abort('internetdisconnected') : route.fulfill(json({ message: 'API rate limit exceeded' }, 403)); });
@@ -149,8 +173,18 @@ const openChangelog = async (page, phone) => {
   await page.locator(tid(`changelog-card-${APP_VERSION}`)).waitFor({ timeout: 10000 });
 };
 
+// 小红书 shape for one version: title, hashtags at the end, no `- ` lines, at least one item line, and every item on
+// its own line with the emoji of ITS kind (not 「a ✨ line somewhere」).
+const ITEM_LINE = /^(✨|⚡️|🔧) /mu;
+const xhsShapeOk = (t, kinds) => t.startsWith(`Agent Network ${APP_VERSION} 更新了什么\n`) && /\n#\S+( #\S+){2,4}$/.test(t)
+  && !/^- /m.test(t) && ITEM_LINE.test(t)
+  && kinds.every(k => t.split('\n').includes(`${KIND_ITEMS[k].emoji} ${KIND_ITEMS[k].text}`))
+  && Object.keys(KIND_ITEMS).filter(k => !kinds.includes(k)).every(k => !t.includes(KIND_ITEMS[k].text));
+// The assertion this replaces (kept only to witness it red on a speed-only release).
+const xhsOldAssertion = t => t.startsWith(`Agent Network ${APP_VERSION} 更新了什么\n`) && /\n#\S+( #\S+){2,4}$/.test(t) && !/^- /m.test(t) && /^✨ /m.test(t);
+
 const FORMATS = [
-  ['xhs', t => t.startsWith(`Agent Network ${APP_VERSION} 更新了什么\n`) && /\n#\S+( #\S+){2,4}$/.test(t) && !/^- /m.test(t) && /^✨ /m.test(t)],
+  ['xhs', t => xhsShapeOk(t, KIND_CASES.mixed)],
   ['wechat', t => t.startsWith(`Agent Network ${APP_VERSION} 更新说明\n`) && /^1\. /m.test(t) && t.includes('共带来')],
   ['plain', t => t.startsWith(`Agent Network v${APP_VERSION}（`) && /^- /m.test(t) && !/#AI工具/.test(t)],
 ];
@@ -281,8 +315,34 @@ async function run({ phone }) {
   await off.ctx.close();
 }
 
+// 8 (#468) the 小红书 preview for releases of each kind mix — feature-only / speed-only / fix-only / mixed. Each case
+//   serves its own fixture notes for the running version; the new shape check must pass for all four, and the old
+//   「needs a ✨ line」 assertion is shown to fail exactly the cases it wrongly failed (speed-only, fix-only).
+async function kindCases() {
+  for (const [name, kinds] of Object.entries(KIND_CASES)) {
+    const { ctx, page } = await open({ phone: false, offline: false, body: bodyWithKinds(kinds) });
+    await openChangelog(page, false);
+    await page.waitForTimeout(800);
+    await page.locator(tid(`changelog-copy-${APP_VERSION}`)).click();
+    await page.locator(tid('changelog-preview')).waitFor({ timeout: 5000 });
+    await page.locator(tid('changelog-format-xhs')).click();
+    await page.waitForTimeout(150);
+    const text = await page.locator(tid('changelog-preview-text')).innerText();
+    const items = text.split('\n').filter(l => ITEM_LINE.test(l));
+    ck(`kinds ${name}: 小红书 items carry their kind's emoji`, xhsShapeOk(text, kinds), items.join(' | '));
+    const oldOk = xhsOldAssertion(text);
+    ck(`kinds ${name}: old 「needs ✨」 assertion ${kinds.includes('new') ? 'passes' : 'fails (the false failure #468 fixes)'}`, oldOk === kinds.includes('new'), `old=${oldOk}`);
+    await page.locator(tid('changelog-preview-copy')).click();
+    await page.waitForTimeout(300);
+    const clip = await page.evaluate(() => navigator.clipboard.readText());
+    ck(`kinds ${name}: 复制 puts the preview on the clipboard`, clip === text && clip.length > 40, `${clip.length} vs ${text.length}`);
+    await ctx.close();
+  }
+}
+
 await run({ phone: false });
 await run({ phone: true });
+await kindCases();
 await browser.close();
 web.close();
 console.log(failures ? `\n${failures} FAILED` : '\nALL PASS');
