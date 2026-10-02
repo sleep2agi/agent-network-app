@@ -21,6 +21,7 @@
 import { readFileSync } from 'node:fs';
 import {
   fetchExternalScheduleEdits,
+  fetchNodePermissionReport,
   fetchHubNodes,
   fetchMessages,
   fetchNodeStatus,
@@ -102,6 +103,11 @@ const ENDPOINTS: Record<string, { scope: Scope; drive: () => Promise<unknown> }>
   fetchExternalScheduleEdits: {
     scope: { kind: 'network' },
     drive: () => fetchExternalScheduleEdits(cfg, 'node_1'),
+  },
+  fetchNodePermissionReport: {
+    // #489 —— 报表本来就在网络路径下(/api/networks/:id/…);query 里的 network_id 与路径一致,和其余读一个样子。
+    scope: { kind: 'network' },
+    drive: () => fetchNodePermissionReport(cfg),
   },
   fetchUserMessages: {
     // #1563 —— agent 主动发给登录用户的消息落在 user_inbox;这个读必须按网络

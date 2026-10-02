@@ -34,7 +34,10 @@ ck('空输入不炸', JSON.stringify(groupNodeTasks(null, A)) === JSON.stringify
 
 // ── 分区可见性 ───────────────────────────────────────
 const keys = NODE_SECTIONS.map(s => s.key).join(',');
-ck('分区顺序固定:概览/模型/规则/技能/项目文件夹/任务/定时任务/运行日志/危险', keys === 'overview,model,rules,skills,files,tasks,schedules,logs,danger');
+ck('分区顺序固定:概览/模型/规则/技能/项目文件夹/任务/定时任务/运行日志/权限/危险', keys === 'overview,model,rules,skills,files,tasks,schedules,logs,permissions,danger');
+ck('权限:Hub 说能改才出现,紧挨危险操作之前', visibleNodeSections({ readOnly: false, hasRulesTarget: true, skillsCapable: true, permissionsAllowed: true }).join(',') === 'overview,model,rules,skills,files,tasks,schedules,logs,permissions,danger');
+ck('权限:Hub 没说(旧 Hub)/ 说不能 → 不出现', !visibleNodeSections({ readOnly: false, hasRulesTarget: true, skillsCapable: true }).includes('permissions') && !visibleNodeSections({ readOnly: false, hasRulesTarget: true, skillsCapable: true, permissionsAllowed: false }).includes('permissions'));
+ck('权限:只读页不出现(只读页不放编辑控件)', !visibleNodeSections({ readOnly: true, hasRulesTarget: true, skillsCapable: true, permissionsAllowed: true }).includes('permissions'));
 ck('运行日志紧跟定时任务,图标 document-text-outline', NODE_SECTIONS.find(s => s.key === 'logs')?.label === '运行日志' && NODE_SECTIONS.find(s => s.key === 'logs')?.icon === 'document-text-outline');
 ck('运行日志分区整页不滚(工具条钉住,日志区自己滚)', !nodePageScrolls('logs') && nodePageScrolls('files'));
 ck('定时任务紧跟任务,图标 alarm-outline', NODE_SECTIONS.find(s => s.key === 'schedules')?.label === '定时任务' && NODE_SECTIONS.find(s => s.key === 'schedules')?.icon === 'alarm-outline');
