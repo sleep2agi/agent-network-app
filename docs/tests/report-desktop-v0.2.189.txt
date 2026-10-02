@@ -1,0 +1,10 @@
+desktop v0.2.189 — 浏览器驱动全量体检后的修复
+================================================================================
+A. 本版内容(0.2.188 发版提交之后 main 上合入的 PR + 本 PR)
+  #659 事件流标题左右内边距一致(体检发现的 UI 偏差)。
+  #660 内置更新日志的发布日期停在 0.2.165,修复生成逻辑。
+  #661 测试:刷新体检发现的 12 个过期浏览器驱动(仅测试)。
+  本 PR(版本号):0.2.188 → 0.2.189,versionCode 2188 → 2189;release-desktop-auto-update.yml 加 What's new in 0.2.189;重新生成 src/changelog-bundled.ts。
+  本地:干净 origin/main(eaf41fe) bump 后 npm ci / npm test / npm run typecheck 全部 rc=0;android-release-notes.mjs 0.2.189 rc=0。
+B. 验证边界(如实)
+  三个 PR CI 全绿;把浏览器驱动接入 CI 的 #663 仍有失败项,单独排查,不在本版。
