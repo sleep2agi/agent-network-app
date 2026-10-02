@@ -28,6 +28,12 @@ export interface Session {
    *  doorbell (agent-node, or a claude-code session's channel server). Absent on
    *  older hubs / older nodes ⇒ treat as false. */
   rules_file_capable?: boolean;
+  /** #460 — hub ≥ #460: failing health layers, present only when the node's fresh health says a layer is down
+   *  (light and full projections). Older hubs omit it; node-degraded.ts then reads `health` (full projection). */
+  degraded?: Array<{ layer: string; label: string; reason: string }> | null;
+  /** #448 — hub ≥ .84 full projection: the node's last layered health report (null = not reported / stale). */
+  health?: Record<string, unknown> | null;
+  health_observed_ms_ago?: number | null;
   /** Node skills view — hub `/api/status`: this session answers skills_list /
    *  skill_read on the rules-file doorbell. Absent ⇒ false (no fallback). */
   skills_capable?: boolean;
