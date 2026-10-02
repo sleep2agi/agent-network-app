@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
-import type { HubConfig } from './api';
+import { ackUserMessages, type HubConfig } from './api';
+import { noticeAckIds } from './system-notice';
 import {
   consumeDesktopMessageEvent,
   type DesktopMessageNotice as Notice,
@@ -22,6 +23,11 @@ const SEEN_CAP = 200;
 export default function DesktopMessageListener({ cfg, onOpenTask }: { cfg: HubConfig; onOpenTask?: (requirementId: string) => void }) {
   const [notice, setNotice] = useState<Notice | null>(null);
   const seen = useRef<Set<string>>(new Set());
+
+  const ackNotice = (n: Notice, event: 'shown' | 'opened') => {
+    const ids = noticeAckIds(n, event);
+    if (ids.length) void ackUserMessages(cfg, ids).catch(() => {});
+  };
 
   useEffect(() => {
     if (!canOpenUserEventStream(cfg)) return;
@@ -49,6 +55,8 @@ export default function DesktopMessageListener({ cfg, onOpenTask }: { cfg: HubCo
           emitHumanDm(result.notice.from ?? null);
           if (result.notice.from && result.notice.from === activeDmPeer()) return;
         }
+        // 「任务提醒」的到期提醒没有会话可去:弹出即在 Hub 上标已读(system-notice.ts),不留清不掉的未读。
+        ackNotice(result.notice, 'shown');
         setNotice(result.notice);
       },
     });
@@ -58,7 +66,7 @@ export default function DesktopMessageListener({ cfg, onOpenTask }: { cfg: HubCo
   if (!notice) return null;
   return (
     <View pointerEvents="box-none" style={styles.overlay}>
-      <DesktopMessageNotice notice={notice} onDismiss={() => setNotice(null)} onOpenTask={onOpenTask} />
+      <DesktopMessageNotice notice={notice} onDismiss={() => setNotice(null)} onOpenTask={onOpenTask ? id => { ackNotice(notice, 'opened'); onOpenTask(id); } : undefined} />
     </View>
   );
 }

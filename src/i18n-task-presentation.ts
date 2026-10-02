@@ -28,7 +28,10 @@ export function participantStack(...[refs, people, max = 3, meKey]: Parameters<t
 }
 function dueText(value: string): string {
  if (currentLanguage() === 'zh') return value;
- return value.replace(/逾期 (\d+) (天|小时|分钟)/g, (_, n, unit) => t(unit === '天' ? 'tasks.overdueDays' : unit === '小时' ? 'tasks.overdueHours' : 'tasks.overdueMinutes', { n }))
+ return value.replace(/已?逾期 (\d+) (天|小时|分钟)/g, (_, n, unit) => t(unit === '天' ? 'tasks.overdueDays' : unit === '小时' ? 'tasks.overdueHours' : 'tasks.overdueMinutes', { n }))
+  // 到期提示(due-marker.ts):带时刻的先换,再换全天的,最后才是裸的「今天 / 明天」。
+  .replace(/(今天|明天) (\d{2}:\d{2}) 到期/g, (_, day, time) => t(day === '今天' ? 'tasks.dueTodayAt' : 'tasks.dueTomorrowAt', { time }))
+  .replace(/今天到期/g, t('tasks.dueToday')).replace(/明天到期/g, t('tasks.dueTomorrow'))
   .replace(/(\d+)月(\d+)日/g, (_,m,d) => t('tasks.monthDay',{m,d}))
   .replace(/今天/g, t('tasks.today')).replace(/明天/g, t('tasks.tomorrow')).replace(/全天/g, t('tasks.allDay'));
 }

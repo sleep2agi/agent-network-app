@@ -75,7 +75,7 @@ ck('满 50 条全是没见过的 → 可能漏', !pollOverlaps([a], Array.from({
 const chat = readFileSync(new URL('./ChatScreen.tsx', import.meta.url), 'utf8');
 const api = readFileSync(new URL('./api.ts', import.meta.url), 'utf8');
 ck('会话页不再每拍读 200 条,改走 fetchChatUserMessages', chat.includes('fetchChatUserMessages(cfg)') && !chat.includes('fetchUserMessages(cfg, 200)'));
-ck('fetchChatUserMessages 在窗口合并之后剥私信(判断「有没有漏」用的是 hub 原始行)', /fetchChatUserMessages[\s\S]{0,400}chatUserWindow[\s\S]{0,300}\.then\(body => stripHumanDms\(/.test(api));
+ck('fetchChatUserMessages 在窗口合并之后剥私信 / 系统通知(判断「有没有漏」用的是 hub 原始行)', /fetchChatUserMessages[\s\S]{0,400}chatUserWindow[\s\S]{0,300}\.then\(body => (?:stripSystemNotices\()?stripHumanDms\(/.test(api));
 
 console.log(`\n${p}/${t} passed`);
 if (p !== t) { if (typeof process !== 'undefined') process.exit(1); }

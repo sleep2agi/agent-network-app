@@ -118,6 +118,7 @@ import { userMessagesPath } from './user-unread';
 import { pickDefaultNetworkId } from './user-admin';
 import { fetchAuthMe } from './user-admin-api';
 import { stripHumanDms } from './human-dm';
+import { stripSystemNotices } from './system-notice';
 import { createReplyInboxReader } from './inbox-cursor';
 import { createUserMessagesWindow } from './user-messages-window';
 
@@ -732,8 +733,9 @@ export interface UserMessagesResponse {
   unread_total?: number;
 }
 // 私信(kind='human_dm')也在 user_inbox 里:在这个唯一的取数口摘掉,agent 的会话 / 角标 / 通知都看不到它(human-dm.ts)。
+// 「任务提醒」发的到期提醒(没有会话可去的系统通知)同样摘掉(system-notice.ts,#493)。
 export const fetchUserMessages = (cfg: HubConfig, limit: number) =>
-  get<UserMessagesResponse>(cfg, userMessagesPath(limit, cfg.networkId)).then(body => stripHumanDms(body));
+  get<UserMessagesResponse>(cfg, userMessagesPath(limit, cfg.networkId)).then(body => stripSystemNotices(stripHumanDms(body)));
 
 /**
  * 会话页的 user_inbox 读:第一次 200 条,之后每拍只读最新 50 条并进手里的 200 条(user-messages-window.ts)。
@@ -744,7 +746,7 @@ const chatUserWindow = createUserMessagesWindow();
 export const fetchChatUserMessages = (cfg: HubConfig, now: number = Date.now()) =>
   chatUserWindow
     .read(`${cfg.serverUrl}\u0000${cfg.token}\u0000${cfg.networkId ?? ''}`, limit => get<UserMessagesResponse>(cfg, userMessagesPath(limit, cfg.networkId)), now)
-    .then(body => stripHumanDms(body as UserMessagesResponse));
+    .then(body => stripSystemNotices(stripHumanDms(body as UserMessagesResponse)));
 /** Test-only. */
 export function __resetChatUserMessagesForTest(): void { chatUserWindow.reset(); }
 

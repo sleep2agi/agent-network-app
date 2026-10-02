@@ -55,7 +55,9 @@ export const columnBg = () => (themeMode() === 'dark' ? colors.card : colors.sub
 export const cardBg = () => (themeMode() === 'dark' ? colors.rowActive : colors.card);
 
 export const priorityColor = (p: ReqPriority): string => (p === 'high' ? colors.failed : p === 'normal' ? colors.textSecondary : p === 'low' ? colors.rest : colors.textMuted);
-export const dueColor = (tone: DueTone): string => (tone === 'overdue' ? colors.failed : tone === 'today' ? colors.blocked : colors.textSecondary);
+// 到期提示(#493):逾期 = 危险色(failed),今天 / 明天 = 警示色(blocked);明天只染字、不铺底色(比今天弱一档)。
+export const dueColor = (tone: DueTone): string => (tone === 'overdue' ? colors.failed : tone === 'today' || tone === 'tomorrow' ? colors.blocked : colors.textSecondary);
+export const dueBg = (tone: DueTone): string => (tone === 'overdue' ? colors.failed + '1a' : tone === 'today' ? colors.blocked + '1a' : colors.subtleFill);
 
 export const makeTaskStyles = () => StyleSheet.create({
   // 头部
@@ -188,9 +190,10 @@ export function PriorityBadge({ p, s, testID = 'task-prio-badge' }: { p: ReqPrio
   );
 }
 
-export function DueChip({ item, today, s }: { item: Pick<Requirement, 'due' | 'column'>; today: string; s: TaskStyles }) {
+export function DueChip({ item, today, s }: { item: Pick<Requirement, 'due' | 'column' | 'archived'>; today: string; s: TaskStyles }) {
   useTranslation();
-  const d = dueInfo(item.due, today, item.column);
+  // 已归档的卡和已完成一样:只显示日期,不提示到期 / 逾期。
+  const d = dueInfo(item.due, today, item.archived ? 'done' : item.column);
   if (d.tone === 'none') return null;
   const c = dueColor(d.tone);
   return (
@@ -198,7 +201,7 @@ export function DueChip({ item, today, s }: { item: Pick<Requirement, 'due' | 'c
       // 悬停提示完整的本地时刻(到秒):web 上直接写 DOM 的 title(RN-web 不转发 title 属性)。
       ref={(el: any) => { if (el && typeof el.setAttribute === 'function') el.setAttribute('title', d.full); }}
       accessibilityLabel={tr('tasks.copy.81', { v0: d.full })}
-      style={[s.due, { flexShrink: 0 }, { backgroundColor: d.tone === 'overdue' ? colors.failed + '1a' : d.tone === 'today' ? colors.blocked + '1a' : colors.subtleFill }]}
+      style={[s.due, { flexShrink: 0 }, { backgroundColor: dueBg(d.tone) }]}
       testID="task-due"
     >
       <Ionicons name={d.tone === 'overdue' ? 'alert-circle-outline' : 'calendar-outline'} size={11} color={c} />
@@ -270,6 +273,19 @@ export function Chip({ label, on, onPress, s, testID, leading, accessibilityLabe
       {leading}
       <Text style={[s.chipText, on && s.chipTextOn]} numberOfLines={1}>{label}</Text>
       <Ionicons name="chevron-down" size={12} color={on ? colors.accent : colors.textMuted} />
+    </Pressable>
+  );
+}
+
+/** 快捷筛选的开关胶囊(#493 我负责 / 我参与 / 已逾期):与 Chip 同高同形,但没有下拉箭头 —— 点一下就开 / 关。 */
+export function QuickChip({ label, on, onPress, s, testID, icon, accessibilityLabel }: {
+  label: string; on: boolean; onPress: () => void; s: TaskStyles; testID?: string; icon?: keyof typeof Ionicons.glyphMap; accessibilityLabel?: string;
+}) {
+  useTranslation();
+  return (
+    <Pressable accessibilityRole="button" accessibilityLabel={accessibilityLabel || label} {...a11yState({ selected: on })} onPress={onPress} style={[s.chip, on && s.chipOn]} testID={testID}>
+      {icon ? <Ionicons name={icon} size={14} color={on ? colors.accent : colors.textMuted} /> : null}
+      <Text style={[s.chipText, on && s.chipTextOn]} numberOfLines={1}>{label}</Text>
     </Pressable>
   );
 }
