@@ -1,0 +1,8 @@
+desktop v0.2.194 — 状态和任务列表没变化就不重新下载(#467 / #431)
+================================================================================
+A. 本版内容(0.2.193 发版提交之后 main 上合入的 PR + 本 PR)
+  #676 轮询读取（Hub 返回 ETag 的 /api/status、/api/requirements）带 If-None-Match，304 时复用上次内容；缓存按账号+Hub+令牌+路径隔离，退出/切换账号/重新登录/删除本地数据时清空；旧 Hub 无 ETag 时行为不变。ck 25/25（改动前 11/25），驱动 test-status-etag 4/4（改动前 2/4），npm test 320/320。
+  本 PR(版本号):0.2.193 → 0.2.194,versionCode 2193 → 2194;release-desktop-auto-update.yml 加 What's new in 0.2.194;重新生成 src/changelog-bundled.ts。
+  本地:干净 origin/main(838294a) bump 后 npm ci / npm test / npm run typecheck 全部 rc=0;android-release-notes.mjs 0.2.194 rc=0。
+B. 验证边界(如实)
+  页内桩 + 浏览器驱动验证;生产节点尚无 agent-node .94,上线后暂时不会出现降级标签。
