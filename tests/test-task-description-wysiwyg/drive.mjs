@@ -375,13 +375,23 @@ for (const v of [{ w: 1200, h: 800 }, { w: 1440, h: 900 }]) {
     const body = await rect(page, fullContent);
     const toolText = firstTool ? firstTool.x + 5 : null;
     await page.locator(fullContent).click();
-    // Put the caret at the very end of the editor deterministically. Control+End alone was not enough on the CI runner
-    // (2026-10-02, first drives.yml run): the caret stayed at the start, the text went into the first paragraph and the
-    // 「its own paragraph after exit」 check failed although the product was fine (green locally on the same export).
-    await page.keyboard.press('Control+End');
-    await page.evaluate((sel) => { const el = document.querySelector(sel); const r = document.createRange(); r.selectNodeContents(el); r.collapse(false); const s = getSelection(); s.removeAllRanges(); s.addRange(r); }, fullContent);
+    // Put the caret at the very end through the editor itself, then wait until ProseMirror's own selection is there.
+    // A DOM-only caret (Control+End, or a Range set on the contenteditable) was not enough on the CI runner (2026-10-02,
+    // first drives.yml runs): the DOM caret read 20/20 chars right before Enter, yet Enter + typing landed at the very
+    // start. ProseMirror acts on its state selection and only picks the DOM one up from an async selectionchange (and
+    // re-applies its own 20 ms after focus) — keys sent milliseconds after the click raced that. A person never types
+    // within those milliseconds; green locally on the same export.
+    await page.evaluate((sel) => document.querySelector(sel).editor.commands.focus('end'), fullContent);
+    await page.waitForFunction((sel) => {
+      const ed = document.querySelector(sel)?.editor;
+      if (!ed?.view.hasFocus()) return false;
+      const { selection, doc } = ed.state;
+      return selection.empty && selection.from === doc.content.size - 1;
+    }, fullContent, { timeout: 5000 });
+    const caret = await page.evaluate((sel) => { const { selection, doc } = document.querySelector(sel).editor.state; return `${selection.from}/${doc.content.size - 1}`; }, fullContent);
     await page.keyboard.press('Enter');
     await page.keyboard.type('全屏里加的一段');
+    const fullText = (await page.locator(fullContent).innerText()).replace(/\n+/g, '⏎').slice(0, 60);
     await shot(page, `desktop-${v.w}-rich-full`);
     await page.locator(tid('req-description-full-close')).click();
     await page.locator(content).waitFor({ timeout: 8000 });
@@ -390,7 +400,7 @@ for (const v of [{ w: 1200, h: 800 }, { w: 1440, h: 900 }]) {
     record(vp, 'full screen: opens on 富文本 (editable, 🖼 🎤), only one rich editor, edits show inline after exit', {
       richTab: tab.includes('富文本') && painted(tabP), tools: tools.image === 1 && tools.mic === 1, oneEditor: inlineEditors === 0,
       fills: !!fr && fr.w > v.w * 0.8, toolbarLinesUpWithText: toolText !== null && !!body && Math.abs(toolText - body.x) <= 1, keptInline: inlineText.includes('全屏里加的一段') && painted(keptP),
-    }, { tab, tabPainted: pw(tabP), keptPainted: pw(keptP), tools, fullW: fr && r1(fr.w), toolText: toolText && r1(toolText), bodyX: body && r1(body.x) });
+    }, { tab, tabPainted: pw(tabP), keptPainted: pw(keptP), caret, fullText, inline: inlineText.replace(/\n+/g, '⏎').slice(0, 60), tools, fullW: fr && r1(fr.w), toolText: toolText && r1(toolText), bodyX: body && r1(body.x) });
     await closeDetail(page);
     await page.locator(tid('req-edit-save')).count() && await closeDetail(page);
   }
