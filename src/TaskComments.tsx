@@ -1,4 +1,4 @@
-// 任务详情里的「评论」(#474,Hub ≥ preview.89):Agent 经 MCP requirements_comment、人经 REST 发的评论 / 进展,
+// 任务详情里的「评论」(#474,Hub ≥ preview.90):Agent 经 MCP requirements_comment、人经 REST 发的评论 / 进展,
 // 存在 Hub 的任务动态里(GET /api/requirements/events?requirement_id=,kind = comment,正文 new.text)。
 // 这里只读:按时间从旧到新,最多先显示最近 COMMENTS_SHOWN 条,更早的点一下展开。
 // 旧 Hub 没有评论(或没有动态接口):读不到 / 没有评论就什么都不画,详情和以前一样。

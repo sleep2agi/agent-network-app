@@ -1,4 +1,4 @@
-// #474 任务评论(Hub ≥ preview.89:requirements_comment / POST /api/requirements/{id}/comments,存为动态 kind = comment)
+// #474 任务评论(Hub ≥ preview.90:requirements_comment / POST /api/requirements/{id}/comments,存为动态 kind = comment)
 // 在 app 里看得见、读得清。Placeholder data only, served in-page by the Tauri stub in tests/test-layout-sweep/harness.mjs
 // (no hub process, no port, no HOME touched). Not in CI: needs Playwright + Chromium and a web export.
 //

@@ -14,7 +14,7 @@ export const COLLAPSE_MS = 5 * 60_000;
 /** 默认读多久以内的(之前的点「加载更早」)。 */
 export const ACTIVITY_WINDOW_MS = 7 * 86_400_000;
 
-// comment(#474,Hub ≥ preview.89):一条评论 / 进展,正文在 new.text;旧 Hub 没有这种事件,旧 app 不认识就丢掉。
+// comment(#474,Hub ≥ preview.90):一条评论 / 进展,正文在 new.text;旧 Hub 没有这种事件,旧 app 不认识就丢掉。
 export type ActivityKind = 'created' | 'changed' | 'deleted' | 'comment';
 export interface ActivityEvent {
   id: string;
