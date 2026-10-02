@@ -1,0 +1,8 @@
+desktop v0.2.195 — 任务评论(#474)
+================================================================================
+A. 本版内容(0.2.194 发版提交之后 main 上合入的 PR + 本 PR)
+  #679 任务详情新增「评论」区（按时间顺序，显示最近 20 条，带作者、时间和完整多行内容；Agent 有标记），「动态」里每条评论单独一行；任务没有负责人时也能正确显示评论作者（修复「未知成员」）。旧 Hub 不显示评论区；旧 app 忽略不认识的事件。ck 16/16，npm test 321/321，驱动 test-task-comments 全过（改动前 8 项失败）。
+  本 PR(版本号):0.2.194 → 0.2.195,versionCode 2194 → 2195;release-desktop-auto-update.yml 加 What's new in 0.2.195;重新生成 src/changelog-bundled.ts。
+  本地:干净 origin/main(0350855) bump 后 npm ci / npm test / npm run typecheck 全部 rc=0;android-release-notes.mjs 0.2.195 rc=0。
+B. 验证边界(如实)
+  ck 单测 + 页内桩浏览器驱动(test-task-comments 桌面/手机);评论区需要 Hub 0.9.0-preview.90(10-02 23:04 已上生产),对更早的 Hub 不显示评论区,其他行为与 0.2.194 相同。

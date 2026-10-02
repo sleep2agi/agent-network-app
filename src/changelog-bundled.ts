@@ -5,6 +5,9 @@
 export const BUNDLED_RELEASE_BODY: string = [
   "Signed and notarized stable update for macOS (Apple Silicon) and Windows (x64).",
   "",
+  "What's new in 0.2.195:",
+  "- 任务评论：在任务详情里给任务追加评论，Agent 和人都能写，按时间显示作者和内容；「动态」里每条评论单独一行（需要 Hub 0.9.0-preview.90）",
+  "",
   "What's new in 0.2.194:",
   "- 读取 Agent 状态和任务列表时，Hub 上没有变化就不再整份重新下载，省流量（配合 Hub .88 生效），「连接较慢」提示会更少出现。",
   "",
@@ -854,6 +857,7 @@ export const BUNDLED_RELEASE_BODY: string = [
 
 /** Release date (published_at) per version, as far as it was known when this file was generated. */
 export const BUNDLED_RELEASE_DATES: Record<string, string> = {
+  "0.2.194": "2026-10-02T10:05:05Z",
   "0.2.193": "2026-10-02T06:23:26Z",
   "0.2.192": "2026-10-02T05:34:24Z",
   "0.2.191": "2026-10-02T04:52:37Z",
