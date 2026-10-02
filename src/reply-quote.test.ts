@@ -45,7 +45,7 @@ ck('查找函数形式也可用', !!replyQuoteFor(pro, 'admin', (id) => (id === 
 const src = fs.readFileSync(path.join(__dirname, 'ChatScreen.tsx'), 'utf8').replace(/\r\n?/g, '\n');
 ck('ChatScreen 引入 replyQuoteFor', src.includes("import { replyQuoteFor } from './reply-quote';"));
 ck('回复分支按 replyQuoteFor 算引用(手写引用优先)', src.includes('const replyQuote = replyQuoted.quote ? null : replyQuoteFor(item, currentUsername, byTaskId);'));
-ck('引用条渲染 quoteLabel(replyQuote) 且可点', src.includes('onPress={() => locateKey(replyQuote.targetKey)}') && src.includes('{quoteLabel(replyQuote)}'));
-ck('点击定位复用搜索的滚动+高亮', src.includes('const locateKey = (key: string) => {') && src.includes('setHighlight({ key, at: Date.now() });'));
+ck('引用条渲染 quoteLabel(replyQuote) 且可点', src.includes('onPress={() => goToMessage(replyQuote.targetKey)}') && src.includes('{quoteLabel(replyQuote)}'));
+ck('点击定位复用搜索的滚动+高亮(经 goToMessage:不在已加载的页里就往前拉,#463)', src.includes("const locateKey = (key: string, align: 'center' | 'top' = 'center') => {") && src.includes('setHighlight({ key, at: Date.now() });'));
 
 console.log(`\n${p}/${t} passed`); process.exit(p === t ? 0 : 1);

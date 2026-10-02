@@ -963,7 +963,7 @@ function AppRoot() {
                 <LogsScreen
                   cfg={cfg}
                   onBack={() => setScreen({ name: 'server' })}
-                  onOpenChat={alias => setScreen({ name: 'chat', alias })}
+                  onOpenChat={(alias, focusTaskId) => setScreen({ name: 'chat', alias, focusTaskId })}
                   onOpenTask={taskId => setScreen({ name: 'taskDetail', taskId })}
                 />
               ) : (
@@ -1223,7 +1223,7 @@ function DesktopWorkspace({ cfg, screen, setScreen, onLogout, onLocalDataDeleted
   : screen.name === 'taskDetail' ? <TaskDetailScreen cfg={cfg} taskId={screen.taskId} onBack={() => setScreen({ name: 'tasks' })} desktop />
   : screen.name === 'nodeDetail' ? <NodeDetailScreen cfg={cfg} alias={screen.alias} onBack={() => setScreen({ name: 'agents' })} desktop onOpenScheduled={open => setScreen({ name: 'scheduled', open, back: screen })} />
   : screen.name === 'nodeInfo' ? <NodeDetailScreen cfg={cfg} alias={screen.alias} onBack={() => setScreen({ name: 'chat', alias: screen.alias })} readOnly desktop onOpenScheduled={open => setScreen({ name: 'scheduled', open, back: screen })} />
-  : screen.name === 'logs' ? <LogsScreen cfg={cfg} onBack={() => setScreen({ name: 'server' })} onOpenChat={alias => setScreen({ name: 'chat', alias })} onOpenTask={taskId => setScreen({ name: 'taskDetail', taskId })} desktop />
+  : screen.name === 'logs' ? <LogsScreen cfg={cfg} onBack={() => setScreen({ name: 'server' })} onOpenChat={(alias, focusTaskId) => setScreen({ name: 'chat', alias, focusTaskId })} onOpenTask={taskId => setScreen({ name: 'taskDetail', taskId })} desktop />
   : screen.name === 'picker' ? <HostSupervisorPickerScreen cfg={cfg} onBack={() => setScreen({ name: 'server' })} onPicked={d => setScreen({ name: 'wizard', daemon: d })} desktop />
   : screen.name === 'wizard' ? <CreateNodeWizardScreen cfg={cfg} daemon={screen.daemon} onBack={() => setScreen({ name: 'picker' })} onExit={() => setScreen({ name: 'serverNodes' })} desktop />
   : (

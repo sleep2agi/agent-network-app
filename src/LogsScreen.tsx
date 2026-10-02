@@ -68,7 +68,7 @@ export default function LogsScreen({
 }: {
   cfg: HubConfig;
   onBack: () => void;
-  onOpenChat?: (alias: string) => void;
+  onOpenChat?: (alias: string, focusTaskId?: string) => void;
   onOpenTask?: (taskId: string) => void;
   /** Tauri desktop workspace: the server sidebar selects this page — no phone back (pane-header.ts). */
   desktop?: boolean;
@@ -137,7 +137,7 @@ export default function LogsScreen({
 
   const openEvent = (ev: FeedEvent) => {
     const target = clickTarget(ev, cfg.username);
-    if (target?.kind === 'chat' && onOpenChat) onOpenChat(target.alias);
+    if (target?.kind === 'chat' && onOpenChat) onOpenChat(target.alias, target.taskId);
     else if (target?.kind === 'task' && onOpenTask) onOpenTask(target.taskId);
   };
 

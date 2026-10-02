@@ -101,6 +101,10 @@
       "kind": "stub",
       "secs": 20
     },
+    "test-goto-message/drive.mjs": {
+      "kind": "stub",
+      "secs": 90
+    },
     "test-grant-mode-switch/drive.mjs": {
       "kind": "hub",
       "why": "needs a throwaway hub seeded by its seed.mjs (SEED / VP)"

@@ -173,6 +173,18 @@ export const initScript = ({ theme }) => {
     if (p === '/api/nodes') return { ok: true, nodes, count: nodes.length };
     // A drive can hand in its own chat history (window.__chatTasksFixture = HubTask[]), e.g. long markdown replies.
     const chatTasks = window.__chatTasksFixture || tasks;
+    // window.__chatTasksPaged: answer like the hub — task_id= is one row, to_name= filters, newest first, at most `limit`
+    // rows (the chat opens with one page and grows it; tests/test-goto-message needs the target outside the first page).
+    // Recorded in window.__tasksLimits. Off by default: older drives expect every fixture row in one answer.
+    if (p === '/api/tasks' && window.__chatTasksPaged) {
+      const id = u.searchParams.get('task_id');
+      if (id) return { ok: true, tasks: chatTasks.filter(t => t.task_id === id) };
+      const to = u.searchParams.get('to_name');
+      const limit = Math.min(Number(u.searchParams.get('limit')) || 50, 200); // the hub caps at 200 too
+      (window.__tasksLimits ||= []).push(limit);
+      const rows = chatTasks.filter(t => !to || t.to_name === to).slice().sort((a, b) => String(b.created_at).localeCompare(String(a.created_at)));
+      return { ok: true, tasks: rows.slice(0, limit) };
+    }
     if (p === '/api/tasks') return { ok: true, tasks: chatTasks.filter(t => !u.searchParams.get('to') || t.to_name === u.searchParams.get('to')) };
     if (p === '/api/task') return { ok: true, task: chatTasks[0], ...chatTasks[0] };
     if (p === '/api/task_events' || p === '/api/hub/task-events') return { ok: true, events: [] };

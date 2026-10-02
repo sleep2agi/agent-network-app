@@ -17,6 +17,7 @@ import AuthedWebThumb from './AuthedWebThumb';
 import { ackAgentMessages, ackUserMessages, createDashboardRequestId, dashboardRequestIdForLocalId, fetchNodeStatus, fetchStatus, fetchChatUserMessages, fetchTasks, sendTask, HubConfig, HubTask, Session, TaskAttachment, TaskPriority } from './api';
 import { proactiveItemsForAgent } from './proactive-messages';
 import { replyQuoteFor } from './reply-quote';
+import { nextFocusStep } from './message-focus';
 import { bubbleLayout, desktopBubbleCap } from './bubble-layout';
 import { outboxAdd, outboxForAlias, outboxMarkFailed, outboxMarkPending, outboxRemove } from './outbox';
 import { mayApplySendResult, shouldExposeSendFailure } from './send-reconciliation';
@@ -106,6 +107,8 @@ import { elevated } from './elevation';
 // which is exactly the load-older trigger.
 
 const PAGE = 20;
+/** 定位滚动大约多久停下(动画 + 未量到布局时的补滚):高亮从这时起计时。 */
+const LOCATE_SETTLE_MS = 600;
 
 // Local echo: sent messages appear instantly with a pending mark and
 // either get replaced by the server copy on the next reload (delivered)
@@ -246,7 +249,7 @@ interface Props {
   hideBack?: boolean;
   /** 语音输入未配置时「去设置」跳到 设置 → 语音输入。不传(独立聊天窗口)就只提示位置。 */
   onOpenVoiceSettings?: () => void;
-  /** 定时任务「去会话」:打开后定位到这条任务(在已加载的那一页里才定位得到,找不到就停在最新)。 */
+  /** 「去会话」带来的那条(task_id):打开后定位并高亮;不在已加载的那页就往前拉(message-focus.ts),拉到头没有就提示。 */
   focusTaskId?: string;
   /** 分离聊天窗:页头兼当标题栏(拖动 / 双击最大化 + 给窗口控件让位,window-shell.ts popoutChatChrome)。主窗 / 手机不传。 */
   windowChrome?: PopoutChrome;
@@ -974,12 +977,19 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
   };
   // 用 key 找**当前** messages 里的下标(列表可能在结果算出后又长了),滚过去并高亮 2 秒。
   // 搜索定位和回复引用条点击共用。
-  const locateKey = (key: string) => {
+  // align 'top'(「去会话」落到那一条):消息顶边对齐可视区顶边 —— 定时任务的回复常常比一屏还高,居中会把回复的
+  // 开头推到屏幕外面。列表是 inverted 的,viewPosition 1 = 视觉上的顶边。搜索 / 引用条仍居中。
+  const locateViewPosRef = useRef(0.5);
+  const locateKey = (key: string, align: 'center' | 'top' = 'center') => {
     const index = messages.findIndex(m => msgKey(m) === key);
     if (index < 0) return;
-    listRef.current?.scrollToIndex({ index, animated: true, viewPosition: 0.5 });
+    const viewPosition = locateViewPosRef.current = align === 'top' ? 1 : 0.5;
+    listRef.current?.scrollToIndex({ index, animated: true, viewPosition });
     setHighlight({ key, at: Date.now() });
-    setTimeout(() => setHighlightTick(t => t + 1), 2100);
+    // 远处的目标要先滚过去(还没量到布局时 onScrollToIndexFailed 再补一次):滚完再从头计 2 秒,
+    // 不然人看到它的时候高亮已经过了一大半(#463 量到:落地后只亮了 0.5 秒)。
+    setTimeout(() => setHighlight(h => (h && h.key === key ? { key, at: Date.now() } : h)), LOCATE_SETTLE_MS);
+    setTimeout(() => setHighlightTick(t => t + 1), LOCATE_SETTLE_MS + 2100);
   };
   const locateHit = (i: number) => {
     const hit = searchHits[i];
@@ -1072,6 +1082,7 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
   }, [voice.state.phase]);
   const searchState =chatSearchState({ query: searchQuery, loading: searchLoading, hits: searchHits.length, failed: searchFailed });
   void highlightTick;
+  const highlightExtra = useMemo(() => ({ highlight, highlightTick }), [highlight, highlightTick]);
 
   useEffect(() => {
     const doc = (globalThis as any).document;
@@ -1270,15 +1281,28 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
     newestKeyRef.current = k;
   }, [messages, showJump]);
 
-  // 定时任务「去会话」带来的 task_id:会话就绪后定位一次(与搜索/引用同一个 locateKey)。
+  // 「去会话」落到那一条(message-focus.ts):定时任务执行记录 / 事件流带来的 task_id、回复引用条点的那条。
+  // 已加载就滚过去高亮;不在已加载的消息里就往前多拉(每次 FOCUS_PAGE_STEP 条,最多 FOCUS_MAX_LIMIT),
+  // 到头还没有就提示一句、停在最新。
+  const [focusTarget, setFocusTarget] = useState<string | null>(null);
+  const goToMessage = (key: string) => setFocusTarget(key);
   const focusedRef = useRef<string | null>(null);
   useEffect(() => {
-    if (!focusTaskId || !conversationReady || focusedRef.current === focusTaskId) return;
-    if (!messages.some(m => msgKey(m) === focusTaskId)) return;
+    if (!focusTaskId || focusedRef.current === focusTaskId) return;
     focusedRef.current = focusTaskId;
-    setTimeout(() => locateKey(focusTaskId), 0);
+    setFocusTarget(focusTaskId);
+  }, [focusTaskId]);
+  useEffect(() => {
+    if (!focusTarget) return;
+    const step = nextFocusStep({ index: messages.findIndex(m => msgKey(m) === focusTarget), ready: conversationReady, hasOlder, loading: loadingOlder, limit: limitRef.current });
+    if (step.kind === 'wait') return;
+    if (step.kind === 'locate') { setFocusTarget(null); setTimeout(() => locateKey(focusTarget, 'top'), 0); return; }
+    if (step.kind === 'missing') { setFocusTarget(null); setComposerNotice(t('chat.focusNotFound')); return; }
+    setLoadingOlder(true);
+    limitRef.current = step.limit;
+    void load(step.limit).finally(() => setLoadingOlder(false));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [focusTaskId, conversationReady, messages]);
+  }, [focusTarget, conversationReady, messages, hasOlder, loadingOlder]);
 
   // #161 列表徽标：打开会话不清零；只有消息真正展示到最新才清。
   useEffect(() => {
@@ -1972,13 +1996,15 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
           scrollEventThrottle={16}
           inverted
           data={messages}
+          // 高亮(定位 / 搜索)只改 state 不改 data:不传 extraData,列表不重画格子,高亮根本画不出来(#463 量到的)。
+          extraData={highlightExtra}
           keyExtractor={(m, i) => m._localId ?? m.task_id ?? String(i)}
           contentContainerStyle={{ padding: spacing.lg }}
           onEndReached={loadOlder}
           onScrollToIndexFailed={info => {
             // 目标还没量到布局:先按平均高度滚过去,再补一次精确定位。
             listRef.current?.scrollToOffset({ offset: info.averageItemLength * info.index, animated: false });
-            setTimeout(() => listRef.current?.scrollToIndex({ index: info.index, animated: true, viewPosition: 0.5 }), 120);
+            setTimeout(() => listRef.current?.scrollToIndex({ index: info.index, animated: true, viewPosition: locateViewPosRef.current }), 120);
           }}
           onEndReachedThreshold={0.2}
           ListFooterComponent={
@@ -2004,7 +2030,7 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
             // 挂一条指向它所回的那条请求的引用条,点击定位原文。
             const replyQuote = replyQuoted.quote ? null : replyQuoteFor(item, currentUsername, byTaskId);
             return (
-              <View style={[styles.bubbleWrap, isHighlighted(msgKey(item), highlight, Date.now()) && styles.bubbleHighlight]}>
+              <View style={[styles.bubbleWrap, isHighlighted(msgKey(item), highlight, Date.now()) && styles.bubbleHighlight]} testID={`chat-item-${msgKey(item)}`}>
                 {showHeader && item.created_at ? (
                   <Text style={styles.timeHeader}>{formatChatHeader(item.created_at)}</Text>
                 ) : null}
@@ -2100,7 +2126,7 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
                             <Text style={styles.quoteChipText} numberOfLines={1}>{quoteLabel(replyQuoted.quote)}</Text>
                           </View>
                         ) : replyQuote ? (
-                          <Pressable accessibilityLabel={t('chat.quote')} accessibilityRole="button" hitSlop={4} onPress={() => locateKey(replyQuote.targetKey)} style={({ pressed }) => [styles.quoteChip, styles.quoteChipReply, pressed && { opacity: 0.6 }]}>
+                          <Pressable accessibilityLabel={t('chat.quote')} accessibilityRole="button" hitSlop={4} onPress={() => goToMessage(replyQuote.targetKey)} style={({ pressed }) => [styles.quoteChip, styles.quoteChipReply, pressed && { opacity: 0.6 }]}>
                             <Text style={styles.quoteChipText} numberOfLines={1}>{quoteLabel(replyQuote)}</Text>
                           </Pressable>
                         ) : null}

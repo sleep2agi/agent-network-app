@@ -184,11 +184,13 @@ export function relativeTime(atMs: number, nowMs: number): string {
  * here and opens the task detail instead (null when there is not even a task id).
  */
 export function clickTarget(ev: Pick<FeedEvent, 'from' | 'to' | 'taskId'>, me: string | null | undefined):
-  { kind: 'chat'; alias: string } | { kind: 'task'; taskId: string } | null {
+  { kind: 'chat'; alias: string; taskId?: string } | { kind: 'task'; taskId: string } | null {
   const self = str(me);
+  // 会话里那一条 = 这个任务(#463):带上 taskId,打开会话后定位到它(message-focus.ts)。
+  const focus = ev.taskId ? { taskId: ev.taskId } : {};
   if (self) {
-    if (ev.from === self && ev.to && ev.to !== self) return { kind: 'chat', alias: ev.to };
-    if (ev.to === self && ev.from && ev.from !== self) return { kind: 'chat', alias: ev.from };
+    if (ev.from === self && ev.to && ev.to !== self) return { kind: 'chat', alias: ev.to, ...focus };
+    if (ev.to === self && ev.from && ev.from !== self) return { kind: 'chat', alias: ev.from, ...focus };
   }
   return ev.taskId ? { kind: 'task', taskId: ev.taskId } : null;
 }
