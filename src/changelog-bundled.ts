@@ -5,6 +5,9 @@
 export const BUNDLED_RELEASE_BODY: string = [
   "Signed and notarized stable update for macOS (Apple Silicon) and Windows (x64).",
   "",
+  "What's new in 0.2.192:",
+  "- Agent 出问题时一眼可见：如果 Codex 节点的 App Server 断开、TUI 退出，或者登录过期需要重新登录，Agent 列表和节点详情会显示琥珀色「降级 · 原因」标签，悬停或点一下能看到怎么修。节点没有上报健康状态时不显示。",
+  "",
   "What's new in 0.2.191:",
   "- 新增「成员与部门」组织架构（设置 → 用户管理）：可以多层部门、设置部门负责人、把成员归到部门；手机端逐层进入，电脑端左边部门树、右边详情；「人员」列表按部门分组。只有管理员能编辑。需要 Hub 0.9.0-preview.85 及以上。",
   "- 全屏编辑页（规则文件、任务描述等）顶部按钮统一：高度、样式对齐，「保存」是主按钮，不可点时清楚显示为灰色；保存提示不再把按钮挤歪。",
@@ -845,6 +848,7 @@ export const BUNDLED_RELEASE_BODY: string = [
 
 /** Release date (published_at) per version, as far as it was known when this file was generated. */
 export const BUNDLED_RELEASE_DATES: Record<string, string> = {
+  "0.2.191": "2026-10-02T04:52:37Z",
   "0.2.190": "2026-10-02T04:04:15Z",
   "0.2.189": "2026-10-02T00:38:18Z",
   "0.2.188": "2026-10-01T20:46:20Z",

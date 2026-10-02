@@ -1,0 +1,8 @@
+desktop v0.2.192 — 节点「降级」标签(#460 / #448)
+================================================================================
+A. 本版内容(0.2.191 发版提交之后 main 上合入的 PR + 本 PR)
+  #672 Agent 列表行(手机/双栏/桌面侧栏)和节点详情头显示「降级 · 原因」(App Server 断开 / TUI 已退出 / TUI 被占位 / 需要重新登录 / 登录已过期),悬停/点按显示各层原因与修复;health 为空或过期不显示。数据取 Hub .86 的 degraded 字段,旧 Hub 回退为从 health 计算(仅详情页)。ck 22/22;浏览器 test-node-degraded-badge 改动前 16 项失败、改动后全过;64 个页内桩驱动全绿;npm test 318/318。
+  本 PR(版本号):0.2.191 → 0.2.192,versionCode 2191 → 2192;release-desktop-auto-update.yml 加 What's new in 0.2.192;重新生成 src/changelog-bundled.ts。
+  本地:干净 origin/main(4040e83) bump 后 npm ci / npm test / npm run typecheck 全部 rc=0;android-release-notes.mjs 0.2.192 rc=0。
+B. 验证边界(如实)
+  页内桩 + 浏览器驱动验证;生产节点尚无 agent-node .94,上线后暂时不会出现降级标签。
