@@ -1,0 +1,8 @@
+desktop v0.2.193 — 「去会话」跳到对应回复(#463)
+================================================================================
+A. 本版内容(0.2.192 发版提交之后 main 上合入的 PR + 本 PR)
+  #674 「去会话」/引用/日志行点进会话时定位到那一次的回复:未加载则向前翻页(每次 100,上限 200=Hub 上限),找到后顶部对齐并高亮(高亮进 FlatList extraData,滚动结束后再开始计时);找不到给提示停在最新。新增 message-focus ck 测试与浏览器 drive test-goto-message(已登记 tests/drives.json)。
+  本 PR(版本号):0.2.192 → 0.2.193,versionCode 2192 → 2193;release-desktop-auto-update.yml 加 What's new in 0.2.193;重新生成 src/changelog-bundled.ts。
+  本地:干净 origin/main(c7f61c2) bump 后 npm ci / npm test / npm run typecheck 全部 rc=0;android-release-notes.mjs 0.2.193 rc=0。
+B. 验证边界(如实)
+  页内桩 + 浏览器驱动验证;生产节点尚无 agent-node .94,上线后暂时不会出现降级标签。
