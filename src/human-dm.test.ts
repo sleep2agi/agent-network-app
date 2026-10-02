@@ -143,7 +143,7 @@ const ck = (name: string, ok: boolean) => { n++; if (ok) { p++; console.log(`  �
   ck('顺序:footer 里不再有人员', !agents.slice(footer).includes('people-section') && !agents.slice(footer).includes('renderPersonRow'));
   ck('人员标题可折叠(与分组同一个 toggleGroup,键 PEOPLE_GROUP_KEY)', agents.includes('onPress={() => toggleGroup(PEOPLE_GROUP_KEY)}'));
   ck('人员随搜索框过滤(同一个 pinyinMatch)', agents.includes('shownPeople(onOpenPerson ? applyConversationTabToPeople(people, effectiveTab, selectedPerson) : [], query, collapsed, pinyinMatch)'));
-  ck('更紧凑对齐:人员展开时第一行 = 第一个人', agents.includes('publishListFirstRowTop(listYRef.current + peopleHeaderHRef.current)'));
+  ck('更紧凑对齐:人员展开时第一行 = 第一个人(按部门分组时加上第一个部门小标题)', agents.includes('publishListFirstRowTop(listYRef.current + peopleHeaderHRef.current + (peopleGroups ? peopleGroupHeadHRef.current ?? 0 : 0))'));
 }
 
 console.log(`\n${p}/${n} passed`);

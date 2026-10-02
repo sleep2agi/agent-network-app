@@ -5,6 +5,8 @@
 // 🔴 样式必须从 ./app-styles 引入,不能在本文件复制一份 —— 那是 let 变量,
 // 主题切换时整体重新赋值,复制的那份不会跟着变(见 app-styles.ts 头注释)。
 
+import { fetchOrg } from './org-api';
+import { groupPeopleByDepartment, type OrgData } from './org-model';
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { ActivityIndicator, Platform, Pressable, RefreshControl, SectionList, StyleSheet, View } from 'react-native';
 import { Text, TextInput } from './ui-text';
@@ -139,6 +141,9 @@ export default function AgentsScreen({
   }, [cfg.serverUrl, cfg.token, cfg.networkId, preview]);
   // 人员(hub#2086):同网络的其他人 + 各自私信未读。旧 hub 没有这些接口 → 空,区块不出现。
   const [people, setPeople] = useState<PersonRow[]>([]);
+  // 组织架构(board #419):有部门、且有人分了部门时,「人员」按部门分小组(部门路径做小标题,未分配的最后)。
+  // 旧 Hub 没有 /departments → null,照旧一个平的列表。
+  const [org, setOrg] = useState<OrgData | null>(null);
   const loadPeople = useCallback(async () => {
     if (!onOpenPerson || !cfg.networkId || preview || !selfUserId) return;
     try {
@@ -146,6 +151,7 @@ export default function AgentsScreen({
       noteHumanUsernames(humans.map(h => h.username));
       const threads = await fetchDmThreads(cfg, cfg.networkId).catch(() => []);
       setPeople(peopleRows(humans, threads, selfUserId));
+      void fetchOrg(cfg, cfg.networkId).then(setOrg).catch(() => { /* 读不到部门就不分组 */ });
     } catch { setPeople([]); }
   }, [cfg.serverUrl, cfg.token, cfg.networkId, !!onOpenPerson, preview, selfUserId]);
   usePoll(loadPeople, 15000, [loadPeople]);
@@ -414,6 +420,8 @@ export default function AgentsScreen({
     [people, !!onOpenPerson, query, collapsed, effectiveTab, selectedPerson],
   );
   const peopleExpanded = peopleShown.visible && peopleShown.rows.length > 0;
+  const peopleGroups = useMemo(() => groupPeopleByDepartment(org, peopleShown.rows), [org, peopleShown.rows]);
+  const peopleGroupHeadHRef = useRef<number | null>(null);
   // 第一行 = 列表里真正的第一行:人员展开时是第一个人,否则是第一个分组的第一行(人员折叠时要加上它的标题行高)。
   const alignFirstRow = !compact && uiScale().listDense && (peopleExpanded || (shownSections[0]?.data?.length ?? 0) > 0);
   const listYRef = useRef<number | null>(null); // bottom of head + filter bar
@@ -425,7 +433,9 @@ export default function AgentsScreen({
     if (peopleShown.visible) {
       if (peopleExpanded) {
         if (peopleHeaderHRef.current == null) return;
-        publishListFirstRowTop(listYRef.current + peopleHeaderHRef.current);
+        // 按部门分组时第一行上面还有一个部门小标题。
+        if (peopleGroups && peopleGroupHeadHRef.current == null) return;
+        publishListFirstRowTop(listYRef.current + peopleHeaderHRef.current + (peopleGroups ? peopleGroupHeadHRef.current ?? 0 : 0));
         return;
       }
       if (peopleSectionHRef.current == null || firstHeaderHRef.current == null) return;
@@ -922,7 +932,20 @@ export default function AgentsScreen({
             <Text selectable={false} numberOfLines={1} style={[rowStyles.groupTitle, { color: colors.textMuted }]}>{t('people.title')}</Text>
             <Text selectable={false} style={[rowStyles.groupCount, { color: colors.textMuted }]} testID="people-count">{peopleShown.total}</Text>
           </Pressable>
-          {peopleShown.rows.map((p, i) => (
+          {peopleGroups ? peopleGroups.map((g, gi) => (
+            <View key={g.key ?? '__none'} testID={`people-dept-${g.key ?? 'none'}`}>
+              <View onLayout={gi === 0 && alignFirstRow ? e => { peopleGroupHeadHRef.current = e.nativeEvent.layout.height; publishFirstRowTop(); } : undefined}
+                style={{ paddingHorizontal: compact ? 12 : 16, paddingTop: 6, paddingBottom: 2, backgroundColor: compact ? colors.listBg : colors.bg }}>
+                <Text selectable={false} numberOfLines={1} style={{ color: colors.textMuted, fontSize: 11 }} testID={`people-dept-title-${g.key ?? 'none'}`}>{g.title ?? t('people.noDept')}</Text>
+              </View>
+              {g.people.map((p, i) => (
+                <View key={p.user_id}>
+                  {i && !compact ? <View style={[rowStyles.separator, { backgroundColor: colors.border }]} /> : null}
+                  {renderPersonRow(p)}
+                </View>
+              ))}
+            </View>
+          )) : peopleShown.rows.map((p, i) => (
             <View key={p.user_id}>
               {i && !compact ? <View style={[rowStyles.separator, { backgroundColor: colors.border }]} /> : null}
               {renderPersonRow(p)}

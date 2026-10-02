@@ -5,6 +5,9 @@
 //   宽屏 —— 双栏弹窗(左:角色 / 任务权限;右:可访问的 Agent);
 //   手机 —— 设置三级页「成员」+ 推入的「选择 Agent」/「授权的项目」,保存在顶栏。
 // 分组编辑(新建 / 改名 / 成员 / 删除)仍在本文件。纯判断在 user-admin.ts / member-editor.ts。
+import { fetchOrg } from './org-api';
+import type { OrgData } from './org-model';
+import { OrgDesktopPanel, OrgPhoneModal } from './OrgChart';
 import { useCallback, useEffect, useMemo, useState, type ComponentProps, type ReactNode } from 'react';
 import { ActivityIndicator, Platform, Pressable, ScrollView, StyleSheet, Switch, View } from 'react-native';
 import { Text, TextInput } from './ui-text';
@@ -47,6 +50,9 @@ export default function UserManagementPanel({ cfg, me, networkId, phone }: { cfg
   // Agent 分组(RFC-038 §8):undefined = 读取中,null = 这个 Hub 没有分组接口(旧 Hub,整块不显示)。
   const [agentGroups, setAgentGroups] = useState<HubAgentGroup[] | null | undefined>(undefined);
   const [editingGroup, setEditingGroup] = useState<HubAgentGroup | 'new' | null>(null);
+  // 组织架构(board #419):undefined = 读取中,null = 这个 Hub 没有部门接口(旧 Hub,整块不显示)。
+  const [org, setOrg] = useState<OrgData | null | undefined>(undefined);
+  const [orgOpen, setOrgOpen] = useState(false);
   const allowed = canManageUsers(me, networkId);
   const myId = me?.user?.user_id;
   // 新建用户能选的网络:Hub 管理员 = 全部网络;否则 = 我管的(owner / admin)。当前网络排第一、默认选中。
@@ -62,7 +68,13 @@ export default function UserManagementPanel({ cfg, me, networkId, phone }: { cfg
     setLoadError('');
     void fetchNetworkMembers(cfg, networkId).then(setMembers).catch(e => { setMembers(null); setLoadError(String((e as Error)?.message ?? e)); });
     void fetchAgentGroups(cfg, networkId).then(setAgentGroups).catch(() => setAgentGroups(null));
+    void fetchOrg(cfg, networkId).then(setOrg).catch(() => setOrg(null));
   }, [cfg, networkId, allowed]);
+  const reloadOrg = useCallback(() => {
+    if (!networkId) return;
+    void fetchOrg(cfg, networkId).then(setOrg).catch(() => { /* 留着上一份;界面上的错误由操作本身说 */ });
+  }, [cfg, networkId]);
+  const networkName = currentNetworkRow(me, networkId)?.network_name || networkId || '';
   useEffect(load, [load]);
   // 三级页被返回键关掉了 → 丢掉编辑中的成员;三级页开着却没有成员(状态丢了)→ 退回列表。
   const memberOpen = !!phone?.memberOpen;
@@ -123,6 +135,21 @@ export default function UserManagementPanel({ cfg, me, networkId, phone }: { cfg
           </SettingsGroup>
           <SettingsButton label={tr('users.newGroup')} variant="plain" onPress={() => openGroup('new')} testID="agent-group-new" />
         </>
+      ) : null}
+      {org && members ? (
+        phone ? (
+          <SettingsGroup title={tr('users.org')} footer={tr('users.orgFooter')} testID="org-group">
+            <SettingsRow label={tr('users.orgMembersDepts')} value={tr('users.orgCount', { count: org.departments.length })} onPress={() => setOrgOpen(true)} testID="org-open" />
+          </SettingsGroup>
+        ) : (
+          // 和上面几组同一个设置卡片(同宽、同左右边、同标题样式);面板自己不再画外框。
+          <SettingsGroup title={tr('users.org')} footer={tr('users.orgFooter')} separators={false} testID="org-group">
+            <OrgDesktopPanel cfg={cfg} networkId={networkId} networkName={networkName} org={org} people={members} onChanged={reloadOrg} />
+          </SettingsGroup>
+        )
+      ) : null}
+      {orgOpen && org && members ? (
+        <OrgPhoneModal cfg={cfg} networkId={networkId} networkName={networkName} org={org} people={members} onChanged={reloadOrg} onClose={() => setOrgOpen(false)} />
       ) : null}
       {creating ? (
         <NewUserDialog
