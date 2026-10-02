@@ -222,8 +222,21 @@ export const initScript = ({ theme }) => {
           if (window.__stubFail) throw new Error('stub: network unreachable');
           if (window.__stubDelayMs) await new Promise(r => setTimeout(r, window.__stubDelayMs));
           const body = route(c.url, c.data ? new TextDecoder().decode(new Uint8Array(c.data)) : '', c.method || 'GET');
-          const buf = new TextEncoder().encode(body === null ? '{"ok":false}' : JSON.stringify(body));
+          const text = body === null ? '{"ok":false}' : JSON.stringify(body);
+          const buf = new TextEncoder().encode(text);
           const id = ++rid; bodies.set(id, { buf, sent: false });
+          // window.__statusEtag: answer GET /api/status like hub ≥ .88 (#2247) — a strong ETag of the body, and
+          // If-None-Match on the current ETag → 304 with no body. Every status read is recorded in
+          // window.__statusReads ({ url, inm, status, bytes }) (tests/test-status-etag).
+          if (window.__statusEtag && body !== null && (c.method || 'GET') === 'GET' && new URL(c.url).pathname === '/api/status') {
+            let h = 0; for (let i = 0; i < text.length; i++) h = (h * 31 + text.charCodeAt(i)) | 0;
+            const etag = `"s-${(h >>> 0).toString(36)}-${text.length.toString(36)}"`;
+            const inm = (c.headers || []).find(([k]) => String(k).toLowerCase() === 'if-none-match')?.[1] ?? null;
+            const hit = inm === etag;
+            (window.__statusReads ||= []).push({ url: c.url, inm, status: hit ? 304 : 200, bytes: hit ? 0 : buf.length });
+            if (hit) { bodies.set(id, { buf: new Uint8Array(0), sent: false }); return { status: 304, statusText: 'Not Modified', url: c.url, headers: [['etag', etag]], rid: id }; }
+            return { status: 200, statusText: 'OK', url: c.url, headers: [['content-type', 'application/json'], ['etag', etag]], rid: id };
+          }
           return { status: body === null ? 404 : 200, statusText: 'OK', url: c.url, headers: [['content-type', 'application/json']], rid: id };
         }
         case 'plugin:http|fetch_read_body': {

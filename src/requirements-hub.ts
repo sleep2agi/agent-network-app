@@ -1,6 +1,7 @@
 // 需求池走 Hub。手机和电脑读同一份。Hub 还没有这个接口时不要退回本机列表。
 import { editFieldsFromHub, readOnlyFromHub } from './task-access';
 import { appFetch } from './app-fetch';
+import { clearConditionalReads, conditionalHeaders, readConditionalText } from './conditional-get';
 import { fetchAuthMe } from './user-admin-api';
 import { issuesFromHub } from './requirement-issues';
 import { normalizeTags } from './requirement-tags';
@@ -114,15 +115,12 @@ let deadlineMs = REQUIREMENTS_DEADLINE_MS;
 export function __setRequirementsDeadlineForTest(ms: number = REQUIREMENTS_DEADLINE_MS): void { deadlineMs = ms; }
 
 /**
- * 条件 GET(hub ≥ 这版的 GET /api/requirements 带 ETag):上次的 ETag 和解析好的正文按「hub + 令牌 +
- * 路径」记着,下次带 If-None-Match;hub 回 304 就用上次的正文。任务页每 15 s 轮询整张表(生产 500 行
- * gzip 163 KB,中国 → 美国约 0.65 s 纯传输),绝大多数轮询里表没变 —— 304 只剩一个往返。
- * 旧 hub 不发 ETag → 这里什么都不记、从不带 If-None-Match,行为与原来逐字相同。只在内存里,重启清空。
+ * 条件 GET(hub ≥ .75 的 GET /api/requirements 带 ETag):与 api.ts 的轮询读共用 conditional-get.ts ——
+ * 按「账号 + hub + 令牌 + 路径」记原文,下次带 If-None-Match,304 用上次的;旧 hub 不发 ETag 就什么都不记。
+ * 任务页每 15 s 轮询整张表(生产 500 行 gzip 163 KB),绝大多数轮询里表没变 —— 304 只剩一个往返。
  */
-const conditional = new Map<string, { etag: string; body: unknown }>();
-const conditionalKey = (cfg: HubConfig, path: string) => `${cfg.serverUrl}\u0000${cfg.token}\u0000${path}`;
 /** Test-only. */
-export function __resetRequirementsConditionalCache(): void { conditional.clear(); }
+export function __resetRequirementsConditionalCache(): void { clearConditionalReads(); }
 
 async function call(cfg: HubConfig, path: string, init?: RequestInit): Promise<unknown> {
   // 读(GET)和 api.ts 的轮询读一样上报连接横幅:任务页上轮询的主要就是这一路,不报的话横幅只能靠
@@ -136,24 +134,24 @@ async function call(cfg: HubConfig, path: string, init?: RequestInit): Promise<u
   try {
     const got = await withDeadline(
       (async () => {
-        const key = isRead ? conditionalKey(cfg, path) : '';
-        const cached = isRead ? conditional.get(key) : undefined;
         const res = await appFetch(`${cfg.serverUrl}${path}`, {
           ...init,
-          headers: { Authorization: `Bearer ${cfg.token}`, 'Content-Type': 'application/json', ...(cached ? { 'If-None-Match': cached.etag } : {}) },
+          headers: { Authorization: `Bearer ${cfg.token}`, 'Content-Type': 'application/json', ...(isRead ? conditionalHeaders(cfg, path) : {}) },
           signal: ctrl.signal,
         });
         status = res.status;
         const len = Number(res.headers?.get?.('content-length') ?? NaN);
         bytes = Number.isFinite(len) && len >= 0 ? len : undefined;
-        if (res.status === 304 && cached) { status = 200; return { body: cached.body }; }
+        if (isRead && res.status === 304) {
+          const text = await readConditionalText(cfg, path, res);
+          if (text === null) throw new RequirementsHubError('HTTP 304', 304);
+          status = 200;
+          return { body: JSON.parse(text) as unknown };
+        }
         if (res.status === 404) throw new RequirementsHubError('这个 Hub 还没有需求池', 404);
         if (!res.ok) throw new RequirementsHubError(`HTTP ${res.status}`, res.status);
-        const body = await res.json() as unknown;
-        const etag = isRead ? res.headers?.get?.('etag') ?? null : null;
-        if (etag) conditional.set(key, { etag, body });
-        else if (isRead) conditional.delete(key);
-        return { body };
+        if (!isRead) return { body: await res.json() as unknown };
+        return { body: JSON.parse((await readConditionalText(cfg, path, res))!) as unknown };
       })(),
       deadlineMs,
       () => null,

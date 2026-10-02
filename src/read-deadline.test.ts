@@ -18,7 +18,8 @@ const settle = async <T>(pr: Promise<T>) => {
 };
 const g = globalThis as { fetch: unknown };
 const realFetch = g.fetch;
-const respond = (status: number, json: () => Promise<unknown>) => { g.fetch = async () => ({ ok: status >= 200 && status < 300, status, json }); };
+// 轮询读按原文读正文(条件 GET 要记原文,#467):假响应同时给 text(),挂住的 json() 让 text() 一样挂住。
+const respond = (status: number, json: () => Promise<unknown>) => { g.fetch = async () => ({ ok: status >= 200 && status < 300, status, json, text: async () => JSON.stringify(await json()) }); };
 
 __setReadDeadlineForTest(150);
 __setRequirementsDeadlineForTest(150);

@@ -226,6 +226,10 @@
       "kind": "stub",
       "secs": 133
     },
+    "test-status-etag/drive.mjs": {
+      "kind": "stub",
+      "secs": 70
+    },
     "test-tag-manager/drive.mjs": {
       "kind": "stub",
       "secs": 31

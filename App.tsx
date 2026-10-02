@@ -1,5 +1,6 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { useTranslation } from './src/i18n-react';
+import { clearConditionalReads } from './src/conditional-get';
 import { installLanguageRuntime } from './src/i18n-runtime';
 import './src/i18n-accounts';
 import { ActivityIndicator, BackHandler, Image, KeyboardAvoidingView, Platform, Pressable, SafeAreaView, ScrollView, StatusBar, StyleSheet, useWindowDimensions, View } from 'react-native';
@@ -512,6 +513,7 @@ function AppRoot() {
 
   const removeActiveProfile = async () => {
     clearChatConversationCache(cfg?.profileId, cfg?.serverUrl);
+    clearConditionalReads();
     if (cfg?.profileId) await removeHubProfile(cfg.profileId);
     else await clearConfig();
     const next = await loadConfig();
@@ -525,6 +527,7 @@ function AppRoot() {
   };
 
   const finishLocalDataDeletion = async () => {
+    clearConditionalReads();
     const next = await loadConfig();
     await hydrateProfileLocalState(next);
     setCfg(next);
@@ -536,6 +539,8 @@ function AppRoot() {
   const activateProfile = async (profileId: string, stay = false) => {
     // Local workspace:先启动本地 Hub(钥匙串凭据丢了会在这里自动恢复),再切 profile。
     // 工作区窗口里切账号只换这个窗口,不改主窗口的「当前账号」。
+    // #467:条件 GET 记着的正文按账号分开,换账号时仍整个清掉(conditional-get.ts)。
+    clearConditionalReads();
     const next = await activateHubProfile(profileId, { isDesktop: () => tauriDesktop, startLocalHub, switchHubProfile: initialWorkspaceProfile ? loadHubProfile : switchHubProfile });
     await hydrateProfileLocalState(next);
     setCfg(next);
@@ -548,6 +553,7 @@ function AppRoot() {
 
   const requestProfileReauth = (profile: Pick<HubProfile, 'profileId' | 'serverUrl' | 'username' | 'displayName'>) => {
     clearChatConversationCache(profile.profileId, profile.serverUrl);
+    clearConditionalReads();
     setReauthProfile(profile);
     setScreen({ name: 'login' });
   };
