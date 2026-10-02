@@ -122,7 +122,7 @@ jobs:
             Signed and notarized stable update for macOS (Apple Silicon) and Windows (x64).
 
             What's new in 0.2.194:
-            - 更省流量：app 读取 Agent 状态和任务列表时，如果 Hub 上没有变化，就不再整份重新下载（配合 Hub .88 生效）。国内网络下刷新更快，「连接较慢」提示会更少出现
+            - 读取 Agent 状态和任务列表时，Hub 上没有变化就不再整份重新下载，省流量（配合 Hub .88 生效），「连接较慢」提示会更少出现。
 
             What's new in 0.2.193:
             - 「去会话」直接跳到那一次的回复：从定时任务执行记录、日志或引用点进会话时，会自动往前翻到对应消息并高亮，长回复从第一行开始显示；太早找不到时会提示并停在最新。

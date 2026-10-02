@@ -5,4 +5,4 @@ A. 本版内容(0.2.193 发版提交之后 main 上合入的 PR + 本 PR)
   本 PR(版本号):0.2.193 → 0.2.194,versionCode 2193 → 2194;release-desktop-auto-update.yml 加 What's new in 0.2.194;重新生成 src/changelog-bundled.ts。
   本地:干净 origin/main(838294a) bump 后 npm ci / npm test / npm run typecheck 全部 rc=0;android-release-notes.mjs 0.2.194 rc=0。
 B. 验证边界(如实)
-  页内桩 + 浏览器驱动验证;生产节点尚无 agent-node .94,上线后暂时不会出现降级标签。
+  ck 单测 + 页内桩浏览器驱动验证(test-status-etag 桌面/手机);省流量效果要等生产 Hub 升到 .88(/api/status 返回 ETag)后才出现,对 .87 及更早的 Hub 行为与 0.2.193 相同。
