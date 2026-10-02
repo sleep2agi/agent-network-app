@@ -106,7 +106,7 @@ const ck = (name: string, ok: boolean) => { n++; if (ok) { p++; console.log(`  �
 {
   const read = (f: string) => readFileSync(new URL(f, import.meta.url), 'utf8');
   const api = read('./api.ts');
-  ck('唯一取数口剥掉私信', api.includes('.then(body => stripHumanDms(body))'));
+  ck('唯一取数口剥掉私信', api.includes('.then(body => stripHumanDms(body))') || api.includes('.then(body => stripSystemNotices(stripHumanDms(body)))'));
   const listener = read('./DesktopMessageListener.tsx');
   ck('SSE 私信通知人员列表与会话', listener.includes('isHumanDmNotice(result.notice)') && listener.includes('emitHumanDm('));
   const agents = read('./AgentsScreen.tsx');

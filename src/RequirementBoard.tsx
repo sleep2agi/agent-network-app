@@ -36,12 +36,12 @@ import { elevated } from './elevation';
 import { pointerUi } from './pointer-ui';
 import { useModalSafePadding } from './safe-area-runtime';
 import { usePoll } from './usePoll';
-import { applyFilter, EMPTY_FILTER, applyMove, boardColumns, createInput, DEFAULT_SORT, DRAG_IDLE, dragReduce, dropIndex, emptyDraft, activeProjects, defaultProjectFor, NO_PROJECT, projectCounts, filterActive, hasRoles, ownerFilterSections, roleKinds, localToday, addChecklistItem, moveChecklistItem, removeChecklistItem, setChecklistDone, neighbourColumn, nextSort, revertMove, sortRows, toggleIn, hidesDone, toggleHideDone, UNASSIGNED, type CreateDraft, type DragEvent, type DragState, type EditPatch, type SortKey, type SortSpec } from './task-board-model';
+import { applyFilter, EMPTY_FILTER, applyMove, boardColumns, createInput, DEFAULT_SORT, DRAG_IDLE, dragReduce, dropIndex, emptyDraft, activeProjects, defaultProjectFor, NO_PROJECT, projectCounts, filterActive, hasRoles, ownerFilterSections, roleKinds, localToday, addChecklistItem, moveChecklistItem, removeChecklistItem, setChecklistDone, neighbourColumn, nextSort, revertMove, sortRows, toggleIn, hidesDone, toggleHideDone, UNASSIGNED, quickFilterOn, toggleQuickFilter, type QuickFilter, type CreateDraft, type DragEvent, type DragState, type EditPatch, type SortKey, type SortSpec } from './task-board-model';
 import { applyChanges, checklistCounts, cursorAfterList, hasFullText, mergeListRows, needsFullText, planBoardRead, type BoardSyncState } from './board-sync';
 import { enterTaskScope, noteTagsUsed, patchTaskBoard, setManagingProjects, setManagingTags, setTaskFilter, setTaskSearch, setTaskSection, taskBoardState, taskScopeKey, updateTaskItems, useTaskBoard, type TaskSection } from './task-board-store';
 import { recallBoard, rememberBoard } from './swr-cache';
 import { PRIORITY_CODE, priorityChoices, priorityLabel, supportsLowest } from './task-priority';
-import { BOARD_RADIUS, CONTROL_H, cardBg, CardMeta, ChecklistProgress, Chip, ParticipantStack, ProjectChip, DueChip, OwnerBadge, PriorityDot, Segmented, STATUS_TONE, useTaskStyles, type TaskStyles, a11yState } from './TaskBoardParts';
+import { BOARD_RADIUS, CONTROL_H, cardBg, CardMeta, ChecklistProgress, Chip, QuickChip, ParticipantStack, ProjectChip, DueChip, OwnerBadge, PriorityDot, Segmented, STATUS_TONE, useTaskStyles, type TaskStyles, a11yState } from './TaskBoardParts';
 import TaskCreateDialog from './TaskCreateDialog';
 import TaskDetailPanel, { DRAWER_WIDTH } from './TaskDetailPanel';
 import TaskCardMenu, { type TaskMenuTarget } from './TaskCardMenu';
@@ -853,11 +853,31 @@ function ScopedRequirementBoard({ cfg, desktop, dispatch, onOpenVoiceSettings, s
     if (el?.measureInWindow) el.measureInWindow((x: number, y: number, _w: number, h: number) => done(x, y, h));
     else done(spacing.xl, 64, 0);
   };
+  // 「我负责 / 我参与」要知道我是谁(meId);「我参与」只在认识参与人的 Hub 上出现(同新建里的参与人一栏)。
+  const participantsKnown = twoRoles || items.some(item => item.participants !== undefined);
+  const quickFilters: { key: QuickFilter; label: string; icon: keyof typeof Ionicons.glyphMap }[] = [
+    ...(meId ? [{ key: 'mine' as const, label: tr('tasks.quickMine'), icon: 'person-outline' as const }] : []),
+    ...(meId && participantsKnown ? [{ key: 'participating' as const, label: tr('tasks.quickParticipating'), icon: 'people-circle-outline' as const }] : []),
+    { key: 'overdue', label: tr('tasks.quickOverdue'), icon: 'alert-circle-outline' },
+  ];
   // 仪表盘不看筛选(统计的是整个网络里看得见的任务),也不在那里新建。
   // 动态有自己的筛选(项目 / 成员 / 类型,作用在事件上),不用看板这一套。
   const filters = section === 'dispatch' || section === 'dashboard' || section === 'activity' ? null : (
     <>
       {!desktop ? <TaskTagFilter /> : null}
+      {/* 快捷筛选(#493):我负责 / 我参与 / 已逾期。开关胶囊,与下面的下拉筛选同高同行;桌面在工具栏、手机在横向滑动的筛选行(同一个 filters)。 */}
+      {quickFilters.map(q => (
+        <QuickChip
+          key={q.key}
+          s={s}
+          label={q.label}
+          icon={q.icon}
+          on={quickFilterOn(filter, q.key, meId)}
+          onPress={() => setTaskFilter(toggleQuickFilter(filter, q.key, meId))}
+          testID={`task-quick-${q.key}`}
+          accessibilityLabel={tr('tasks.quickA11y', { v0: q.label })}
+        />
+      ))}
       <View ref={(r: any) => { chipRefs.current.owner = r; }} collapsable={false}>
         <Chip
           s={s}

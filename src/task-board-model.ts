@@ -6,6 +6,7 @@
 // 桌面拖动换列、手机长按菜单。Hub 数据模型不变(标题/状态/优先级/期限/负责人/参与人)。
 import { dueInstant, dueToLocal, formatDueFull, formatTime, isDateTime, systemClock, type Clock } from './due-time';
 import { taskTimestamp } from './task-time';
+import { dueMarker, dueMarkerLabel, isOverdue, type DueAt } from './due-marker';
 import { seqCmp } from './task-short-id';
 import {
   type ChecklistItem,
@@ -56,13 +57,15 @@ export interface BoardFilter {
   topLevel?: boolean;
   /** 状态(看板的列)。省略 / 空 = 不按状态筛;看板只画选中的列。 */
   statuses?: ReqColumn[];
+  /** 快捷筛选「已逾期」(#493):只看逾期且未完成 / 未归档的卡(判据 due-marker.ts isOverdue,与红色胶囊同源)。 */
+  overdue?: boolean;
 }
 
 export const NO_PROJECT = '__none__';
 
 export const EMPTY_FILTER: BoardFilter = { owners: [], priorities: [] };
 
-export const filterActive = (f: BoardFilter): boolean => f.owners.length > 0 || f.priorities.length > 0 || !!f.project || !!f.statuses?.length || !!f.tag || !!f.participant;
+export const filterActive = (f: BoardFilter): boolean => f.owners.length > 0 || f.priorities.length > 0 || !!f.project || !!f.statuses?.length || !!f.tag || !!f.participant || !!f.overdue;
 
 /** 状态筛选里的「隐藏已完成」= 只选需求池 + 进行中。 */
 export const HIDE_DONE: readonly ReqColumn[] = REQ_COLUMNS.filter(c => c !== 'done');
@@ -71,7 +74,8 @@ export const hidesDone = (statuses: readonly ReqColumn[] | undefined): boolean =
 /** 点「隐藏已完成」:已经是这个组合就清空(回到全部),否则换成它。 */
 export const toggleHideDone = (statuses: readonly ReqColumn[] | undefined): ReqColumn[] => (hidesDone(statuses) ? [] : [...HIDE_DONE]);
 
-export function matchesFilter(item: Requirement, f: BoardFilter): boolean {
+export function matchesFilter(item: Requirement, f: BoardFilter, at: DueAt = {}): boolean {
+  if (f.overdue && !isOverdue(item, at)) return false;
   if (f.tag && !item.tags?.includes(f.tag)) return false;
   if (f.owners.length && !roleKeysOf(item).some(k => f.owners.includes(k))) return false;
   if (f.participant && !item.participants?.some(r => personKey(r) === f.participant)) return false;
@@ -172,7 +176,11 @@ export function splitByCount<T extends { name: string; count: number }>(rows: re
   return { shown, more };
 }
 
-export const applyFilter = (items: readonly Requirement[], f: BoardFilter): Requirement[] => items.filter(item => matchesFilter(item, f));
+export const applyFilter = (items: readonly Requirement[], f: BoardFilter, at: DueAt = {}): Requirement[] => {
+  // 「已逾期」按同一个「现在」判整批(不在逐张卡之间跨过午夜)。
+  const when = f.overdue && at.now === undefined ? { ...at, now: Date.now() } : at;
+  return items.filter(item => matchesFilter(item, f, when));
+};
 
 /** 多选筛选里点一项:有就去掉,没有就加上。 */
 export function toggleIn<T>(list: readonly T[], value: T): T[] {
@@ -181,8 +189,8 @@ export function toggleIn<T>(list: readonly T[], value: T): T[] {
 
 /** 看板三列:先筛再分组,列里的数就是筛过之后的数(与看到的卡片一致)。 */
 /** 看板的列 / 手机列表的分组:按状态筛了就只留选中的列(剩下的列平分宽度)。 */
-export const boardColumns = (items: readonly Requirement[], f: BoardFilter) =>
-  columnsOf(applyFilter(items, f)).filter(col => !f.statuses?.length || f.statuses.includes(col.column));
+export const boardColumns = (items: readonly Requirement[], f: BoardFilter, at: DueAt = {}) =>
+  columnsOf(applyFilter(items, f, at)).filter(col => !f.statuses?.length || f.statuses.includes(col.column));
 
 // ── 桌面左栏:全部 / 我负责的 / 我参与的 / 按节点 ─────────────────────────────
 
@@ -215,6 +223,26 @@ export function scopeOf(owners: readonly string[], meId: string | null, particip
   if (meId && only === personKey({ kind: 'user', id: meId })) return 'mine';
   if (only.startsWith('node:')) return only as SidebarScope;
   return null;
+}
+
+// ── 快捷筛选:我负责 / 我参与 / 已逾期(#493)─────────────────────────────────
+// 头部一排开关胶囊(桌面在工具栏,手机在横向滑动的筛选行)。「我负责」「我参与」就是左栏的同名两项
+// (同一份 owners / participant 状态,两边永远一致,也和左栏一样互斥);「已逾期」是独立的一格,
+// 和其余所有筛选(负责人 / 优先级 / 项目 / 状态 / 标签 / 搜索)取交集。
+
+export const QUICK_FILTERS = ['mine', 'participating', 'overdue'] as const;
+export type QuickFilter = (typeof QUICK_FILTERS)[number];
+
+export function quickFilterOn(f: BoardFilter, key: QuickFilter, meId: string | null): boolean {
+  if (key === 'overdue') return !!f.overdue;
+  return scopeOf(f.owners, meId, f.participant) === key;
+}
+
+/** 点一下快捷胶囊:开着就关(回到「全部」负责人 / 关掉逾期),关着就开;其余筛选原样保留。 */
+export function toggleQuickFilter(f: BoardFilter, key: QuickFilter, meId: string | null): BoardFilter {
+  if (key === 'overdue') return { ...f, overdue: !f.overdue };
+  if (!meId) return f;
+  return filterForScope(f, quickFilterOn(f, key, meId) ? 'all' : key, meId);
 }
 
 export interface OwnerCount { key: string; ref: RequirementPersonRef | null; name: string; count: number }
@@ -381,7 +409,7 @@ const dayNumber = (ymd: string): number => {
   return Math.round(Date.UTC(y, m - 1, d) / 86_400_000);
 };
 
-export type DueTone = 'none' | 'overdue' | 'today' | 'normal';
+export type DueTone = 'none' | 'overdue' | 'today' | 'tomorrow' | 'normal';
 
 /** 两个期限比先后:全天 = 本地那天结束,时刻按真实时刻;空的永远在后。 */
 export function dueCmp(a: string, b: string, clock: Clock = systemClock): number {
@@ -392,41 +420,28 @@ export function dueCmp(a: string, b: string, clock: Clock = systemClock): number
 
 /**
  * 期限的显示:文字 + 色调 + 完整值(悬停提示)。已完成的卡片不算逾期(做完了就不再催)。
- * 全天:今天 / 明天 / 10月5日 / 逾期 N 天(按本地日期)。
- * 时刻:今天 18:30 / 明天 09:00 / 10-01 18:30;逾期按真实时刻(逾期 N 天 / N 小时 / N 分钟)。
+ * 到期提示(due-marker.ts,#493):今天到期 / 明天到期 / 已逾期 N 天(全天按本地日期;时刻按真实时刻,不足一天写小时 / 分钟)。
+ * 时刻在今天 / 明天时带上本地时刻:「今天 18:30 到期」。其余显示日期:全天「10月5日」,时刻「10-05 09:00」。
  */
 export function dueInfo(due: string, today: string, column: ReqColumn = 'pool', now: number = Date.now(), clock: Clock = systemClock): { label: string; tone: DueTone; full: string } {
   if (!due || !dueOk(due)) return { label: '', tone: 'none', full: '' };
   const full = formatDueFull(due, clock);
+  const marker = dueMarker({ due, column }, { now, clock, today });
+  let hm = '';
+  let plain: string;
   if (isDateTime(due)) {
     const local = dueToLocal(due, clock)!;
     const [y, m, d] = local.date.split('-').map(Number);
-    const hm = formatTime(local.time!);
+    hm = formatTime(local.time!);
     const dayDiff = dayNumber(local.date) - dayNumber(today);
-    const short = dayDiff === 0 ? `今天 ${hm}` : dayDiff === 1 ? `明天 ${hm}`
+    plain = dayDiff === 0 ? `今天 ${hm}` : dayDiff === 1 ? `明天 ${hm}`
       : y === Number(today.slice(0, 4)) ? `${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')} ${hm}` : `${local.date} ${hm}`;
-    if (column === 'done') return { label: short, tone: 'normal', full };
-    const late = now - Date.parse(due);
-    if (late > 0) {
-      const mins = Math.floor(late / 60_000);
-      const label = mins >= 1440 ? `逾期 ${Math.floor(mins / 1440)} 天` : mins >= 60 ? `逾期 ${Math.floor(mins / 60)} 小时` : `逾期 ${Math.max(1, mins)} 分钟`;
-      return { label, tone: 'overdue', full };
-    }
-    return { label: short, tone: dayDiff === 0 ? 'today' : 'normal', full };
+  } else {
+    const [y, m, d] = due.split('-').map(Number);
+    plain = y === Number(today.slice(0, 4)) ? `${m}月${d}日` : `${y}年${m}月${d}日`;
   }
-  return { ...dateOnlyInfo(due, today, column), full };
-}
-
-function dateOnlyInfo(due: string, today: string, column: ReqColumn): { label: string; tone: DueTone } {
-  const diff = dayNumber(due) - dayNumber(today);
-  const [y, m, d] = due.split('-').map(Number);
-  const sameYear = y === Number(today.slice(0, 4));
-  const date = sameYear ? `${m}月${d}日` : `${y}年${m}月${d}日`;
-  if (column === 'done') return { label: date, tone: 'normal' };
-  if (diff < 0) return { label: `逾期 ${-diff} 天`, tone: 'overdue' };
-  if (diff === 0) return { label: '今天', tone: 'today' };
-  if (diff === 1) return { label: '明天', tone: 'normal' };
-  return { label: date, tone: 'normal' };
+  if (marker.kind === 'none') return { label: plain, tone: 'normal', full };
+  return { label: dueMarkerLabel(marker, hm), tone: marker.kind, full };
 }
 
 // ── 拖动(只在桌面:鼠标)──────────────────────────────────────────────────

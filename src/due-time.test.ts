@@ -39,12 +39,12 @@ console.log('# 逾期 / 排序');
   const now = Date.parse('2026-10-01T10:00:00Z'); // 东八区 18:00
   const today = localDateOf(now, SH);
   const soon = dueInfo('2026-10-01T10:30:00Z', today, 'pool', now, SH);
-  ck('今天 18:30(还没到):今天 + 时刻', soon.label === '今天 18:30' && soon.tone === 'today', soon.label);
+  ck('今天 18:30(还没到):今天 + 时刻', soon.label === '今天 18:30 到期' && soon.tone === 'today', soon.label);
   const late = dueInfo('2026-10-01T09:15:00Z', today, 'pool', now, SH);
-  ck('过了 45 分钟:逾期 45 分钟(按精确时刻)', late.label === '逾期 45 分钟' && late.tone === 'overdue', late.label);
-  ck('过了几小时 / 几天', dueInfo('2026-10-01T06:00:00Z', today, 'pool', now, SH).label === '逾期 4 小时' && dueInfo('2026-09-28T10:00:00Z', today, 'pool', now, SH).label === '逾期 3 天');
+  ck('过了 45 分钟:逾期 45 分钟(按精确时刻)', late.label === '已逾期 45 分钟' && late.tone === 'overdue', late.label);
+  ck('过了几小时 / 几天', dueInfo('2026-10-01T06:00:00Z', today, 'pool', now, SH).label === '已逾期 4 小时' && dueInfo('2026-09-28T10:00:00Z', today, 'pool', now, SH).label === '已逾期 3 天');
   ck('全天的今天不算逾期(当天结束前)', dueInfo('2026-10-01', today, 'pool', now, SH).tone === 'today');
-  ck('明天带时刻 / 以后显示「10-05 09:00」', dueInfo('2026-10-02T01:00:00Z', today, 'pool', now, SH).label === '明天 09:00' && dueInfo('2026-10-05T01:00:00Z', today, 'pool', now, SH).label === '10-05 09:00');
+  ck('明天带时刻 / 以后显示「10-05 09:00」', dueInfo('2026-10-02T01:00:00Z', today, 'pool', now, SH).label === '明天 09:00 到期' && dueInfo('2026-10-02T01:00:00Z', today, 'pool', now, SH).tone === 'tomorrow' && dueInfo('2026-10-05T01:00:00Z', today, 'pool', now, SH).label === '10-05 09:00');
   ck('已完成不算逾期', dueInfo('2026-09-28T10:00:00Z', today, 'done', now, SH).tone === 'normal');
   ck('悬停提示是到秒的本地时刻', soon.full === '2026-10-01 18:30:00');
   ck('全天 = 本地那天 23:59:59', dueInstant('2026-10-01', SH) === Date.parse('2026-10-01T15:59:59Z'));

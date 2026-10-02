@@ -326,6 +326,10 @@
       "kind": "hub",
       "why": "needs a throwaway hub with the tests/test-task-board seed"
     },
+    "test-task-due-markers/drive.mjs": {
+      "kind": "stub",
+      "secs": 60
+    },
     "test-task-status-filter/drive.mjs": {
       "kind": "docker",
       "image": "test-phone-board",
