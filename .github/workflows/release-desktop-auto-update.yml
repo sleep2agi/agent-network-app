@@ -121,6 +121,9 @@ jobs:
           releaseBody: |-
             Signed and notarized stable update for macOS (Apple Silicon) and Windows (x64).
 
+            What's new in 0.2.195:
+            - 任务评论：在任务详情里给任务追加评论，Agent 和人都能写，按时间显示作者和内容；「动态」里每条评论单独一行（需要 Hub 0.9.0-preview.90）
+
             What's new in 0.2.194:
             - 读取 Agent 状态和任务列表时，Hub 上没有变化就不再整份重新下载，省流量（配合 Hub .88 生效），「连接较慢」提示会更少出现。
 
