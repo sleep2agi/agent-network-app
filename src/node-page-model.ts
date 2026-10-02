@@ -4,7 +4,7 @@
 // 纯逻辑,不 import react-native。
 import type { NodeInfoFact } from './node-info';
 
-export type NodeSectionKey = 'overview' | 'model' | 'rules' | 'skills' | 'files' | 'tasks' | 'schedules' | 'logs' | 'danger';
+export type NodeSectionKey = 'overview' | 'model' | 'rules' | 'skills' | 'files' | 'tasks' | 'schedules' | 'logs' | 'permissions' | 'danger';
 
 export interface NodeSection {
   readonly key: NodeSectionKey;
@@ -26,6 +26,8 @@ export const NODE_SECTIONS: readonly NodeSection[] = [
   // 节点自己的 agent-node 运行日志(只读,节点上脱敏):始终出现 —— 节点没上报 logs_capable 时分区里直接说
   // 「节点版本过旧，升级后可查看日志」(node-logs.ts logsSupport)。
   { key: 'logs', label: '运行日志', icon: 'document-text-outline' },
+  // 节点自己的权限(正常 / 只读 / 受限,#489):只在 Hub 说你能改它时出现(viewer_can.permission_mode)。
+  { key: 'permissions', label: '权限', icon: 'shield-checkmark-outline' },
   { key: 'danger', label: '危险操作', icon: 'warning-outline' },
 ];
 
@@ -91,6 +93,8 @@ export interface NodeSectionVisibility {
   hasRulesTarget: boolean;
   /** 会话上报了 skills_capable === true。 */
   skillsCapable: boolean;
+  /** Hub 说调用者能改这个节点的权限模式(GET /api/nodes 的 viewer_can.permission_mode,Hub ≥ .93)。 */
+  permissionsAllowed?: boolean;
 }
 
 /**
@@ -101,6 +105,7 @@ export function visibleNodeSections(v: NodeSectionVisibility): NodeSectionKey[] 
   return NODE_SECTIONS.map(s => s.key).filter(key => {
     if (key === 'rules') return v.hasRulesTarget;
     if (key === 'skills') return v.skillsCapable;
+    if (key === 'permissions') return !v.readOnly && v.permissionsAllowed === true;
     if (key === 'danger') return !v.readOnly;
     return true;
   });
