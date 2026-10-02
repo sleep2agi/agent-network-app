@@ -159,6 +159,7 @@ registerTranslations({
   'group.subtitleNoCount': ['群聊', 'Group chat'],
   'group.empty': ['群里还没有消息，发一条开始吧', 'No messages in this group yet. Say hi.'],
   'group.noMessages': ['还没有消息', 'No messages yet'],
+  'group.readOnly': ['你已不在这个群里，不能发消息', 'You are no longer in this group and cannot send messages'],
   // 部门负责人(RFC-040,Hub ≥ .91):「管理本部门」入口和它的「任务 / Agent」两页。
   'dept.manage': ['管理本部门', 'Manage my department'],
   'dept.loading': ['正在读取…', 'Loading…'],

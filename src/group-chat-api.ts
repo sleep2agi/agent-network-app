@@ -46,20 +46,44 @@ export function noteGroupSupport(cfg: HubConfig, networkId: string, supported: b
   support.set(supportKey(cfg, networkId), Promise.resolve(supported));
 }
 
-/** 这个 Hub 有没有群接口。任何失败(404 / 405 / 403 / 断网)都算「没有」并且不缓存失败以外的结论 —— 下次再探。 */
+/** /health 的 capabilities 里有没有 chat_groups(RFC-042 §10,Hub #2284 起)。读不到 / 没有这个数组 → false(交给下面的试探)。 */
+export async function healthHasChatGroups(cfg: HubConfig): Promise<boolean> {
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), TIMEOUT_MS);
+  try {
+    const res = await appFetch(`${cfg.serverUrl.replace(/\/$/, '')}/health`, { method: 'GET', signal: ctrl.signal });
+    if (!res.ok) return false;
+    const caps = (JSON.parse(await res.text()) as { capabilities?: unknown })?.capabilities;
+    return Array.isArray(caps) && caps.includes('chat_groups');
+  } catch {
+    return false;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/**
+ * 这个 Hub 有没有群接口。先看 /health 的 capabilities(有 chat_groups = 有,不必试探);没有这个能力位的 Hub
+ * (.93 有接口但还不报能力位,或更老的根本没有)再试探 GET …/chat-groups:2xx = 有;404 / 405 = 没有(记住);
+ * 别的失败也当没有,但不记,下次再探。
+ */
 export function probeGroupSupport(cfg: HubConfig, networkId: string): Promise<boolean> {
   const key = supportKey(cfg, networkId);
   const hit = support.get(key);
   if (hit) return hit;
-  const p = call<{ groups?: unknown }>(cfg, `/api/networks/${net(networkId)}/chat-groups`)
+  const p = healthHasChatGroups(cfg).then(yes => yes || probeChatGroupsRoute(cfg, networkId, key));
+  support.set(key, p);
+  return p;
+}
+
+function probeChatGroupsRoute(cfg: HubConfig, networkId: string, key: string): Promise<boolean> {
+  return call<{ groups?: unknown }>(cfg, `/api/networks/${net(networkId)}/chat-groups`)
     .then(d => Array.isArray(d?.groups))
     .catch((e: unknown) => {
       // 404 / 405 = 旧 Hub,确定没有 → 记住;别的失败(超时 / 5xx)不记,下次重探。
       if (!(e instanceof GroupRequestError && (e.status === 404 || e.status === 405))) support.delete(key);
       return false;
     });
-  support.set(key, p);
-  return p;
 }
 
 /** 只给测试用:清掉探测缓存。 */

@@ -1,8 +1,8 @@
 // 部门群 / 群聊(RFC-042,看板 #457 第 4 步)—— 功能门、未读合并、列表排序、按权限出按钮、事件、接线。ck 风格,自执行。
 import { readFileSync } from 'node:fs';
 import {
-  addableMembers, applyConversationTabToGroups, applyGroupEvent, canManageDeptGroup, canRemoveMember, conversationUnreadTotal,
-  groupErrorText, groupMemberRows, groupRows, groupSendBody, groupThreadsOf, maxSeq, memberSourceLabel, parseGroupEvent, readTarget,
+  addableMembers, applyConversationTabToGroups, applyGroupEvent, canManageDeptGroup, canManageGroup, canPostInGroup, canRemoveMember, conversationUnreadTotal,
+  groupErrorText, groupMemberRows, groupRows, groupSendBody, groupSubtitle, groupThreadsOf, maxSeq, memberSourceLabel, parseGroupEvent, previewOf, readTarget,
   senderOf, shownGroups, validGroupName,
 } from './group-chat';
 import { fetchConversationThreads, probeGroupSupport, resetGroupSupportForTest } from './group-chat-api';
@@ -33,7 +33,7 @@ async function gateChecks() {
     ck('404(旧 Hub)→ 没有群', (await probeGroupSupport(cfg, 'net1')) === false);
     const before = calls.length;
     ck('404 的结论被记住,不再探', (await probeGroupSupport(cfg, 'net1')) === false && calls.length === before);
-    ck('探的是 …/chat-groups', calls[0]?.endsWith('/api/networks/net1/chat-groups'));
+    ck('先看 /health,没有能力位再探 …/chat-groups', calls[0]?.endsWith('/health') && calls[1]?.endsWith('/api/networks/net1/chat-groups'));
     resetGroupSupportForTest();
     globalThis.fetch = respond(405, { ok: false, error: 'method_not_allowed' }) as any;
     ck('405 → 没有群', (await probeGroupSupport(cfg, 'net1')) === false);
@@ -45,6 +45,27 @@ async function gateChecks() {
     resetGroupSupportForTest();
     globalThis.fetch = respond(200, { ok: true }) as any;
     ck('2xx 但没有 groups 数组 → 不算有', (await probeGroupSupport(cfg, 'net1')) === false);
+    // —— /health 能力位(§10)优先 ——
+    const route = (table: Record<string, [number, unknown]>) => async (url: any) => {
+      const u = String(url); calls.push(u);
+      const hit = Object.entries(table).find(([k]) => u.endsWith(k));
+      const [status, body] = hit ? hit[1] : [404, { ok: false, error: 'not found' }];
+      return new Response(JSON.stringify(body), { status });
+    };
+    resetGroupSupportForTest();
+    calls.length = 0;
+    globalThis.fetch = route({ '/health': [200, { status: 'ok', capabilities: ['status_node_id', 'chat_groups'] }] }) as any;
+    ck('/health 有 chat_groups → 有群,不试探接口', (await probeGroupSupport(cfg, 'net1')) === true && calls.length === 1 && calls[0].endsWith('/health'));
+    resetGroupSupportForTest();
+    calls.length = 0;
+    globalThis.fetch = route({ '/health': [200, { status: 'ok', capabilities: ['status_node_id'] }], '/chat-groups': [200, { ok: true, groups: [] }] }) as any;
+    ck('能力位里没有 chat_groups(.93)→ 回落试探,2xx = 有', (await probeGroupSupport(cfg, 'net1')) === true && calls.some(c => c.endsWith('/chat-groups')));
+    resetGroupSupportForTest();
+    globalThis.fetch = route({ '/health': [200, { status: 'ok' }] }) as any;
+    ck('旧 Hub:/health 没有 capabilities、接口 404 → 没有群', (await probeGroupSupport(cfg, 'net1')) === false);
+    resetGroupSupportForTest();
+    globalThis.fetch = route({ '/health': [200, 'not json'] , '/chat-groups': [404, { ok: false }] }) as any;
+    ck('/health 读不懂 → 回落试探(404 → 没有)', (await probeGroupSupport(cfg, 'net1')) === false);
     resetGroupSupportForTest();
     globalThis.fetch = respond(200, { ok: true, threads: [{ other_user_id: 'u_b', unread: 1 }], group_threads: [{ group_id: 'g1', name: '研发部', unread: 2 }] }) as any;
     const conv = await fetchConversationThreads(cfg, 'net1');
@@ -112,6 +133,56 @@ async function gateChecks() {
   ck('人员表里没有 → 用消息里的用户名', senderOf({ sender_user_id: 'u_x', from_session: 'carol' }, ppl).name === 'carol');
 }
 
+// —— §10 预览 / 成员名 / viewer_can 及各自的回落 ——
+{
+  const fmt = (ms: number) => `T${ms}`;
+  const opts = { selfUserId: 'u_me', formatTime: fmt, noMessages: '还没有消息' };
+  const rows = groupRows([
+    { group_id: 'g_t', name: '研发部', last_at: '2026-10-03 09:00:00', last_message: { text: '  示例:今天\n评审 ', attachment_count: 0, sender_user_id: 'u_a', sender_name: 'Alice', at: '2026-10-03 09:00:00' } },
+    { group_id: 'g_f', name: '前端', last_at: '2026-10-03 08:00:00', last_message: { text: '', attachment_count: 3, sender_user_id: 'u_a', sender_name: 'Alice', at: '2026-10-03 08:00:00' } },
+    { group_id: 'g_m', name: '我的', last_at: '2026-10-03 07:00:00', last_message: { text: '收到', attachment_count: 0, sender_user_id: 'u_me', sender_name: 'tester', at: '2026-10-03 07:00:00' } },
+    { group_id: 'g_n', name: '空群', last_at: null, last_message: null },
+    { group_id: 'g_o', name: '旧 Hub', last_at: '2026-10-03 06:00:00' },
+  ]);
+  const sub = (id: string) => groupSubtitle(rows.find(r => r.group_id === id)!, opts);
+  ck('预览:「发信人: 正文」,空白折成一个空格', sub('g_t') === 'Alice: 示例:今天 评审');
+  ck('只有附件 →「[附件] N」', sub('g_f') === 'Alice: [附件] 3');
+  ck('我自己发的不写名字', sub('g_m') === '收到');
+  ck('last_message = null 且没有消息 →「还没有消息」', sub('g_n') === '还没有消息');
+  ck('没有 last_message 字段(旧 Hub)→ 照旧写时间', sub('g_o') === `T${rows.find(r => r.group_id === 'g_o')!.lastAt}` && rows.find(r => r.group_id === 'g_o')!.preview === null);
+  ck('坏的 last_message(空字、0 附件 / 不是对象)→ 不当预览', previewOf({ text: '  ', attachment_count: 0 }) === null && previewOf('x' as any) === null);
+  ck('没有 last_at 时用 last_message.at 排序', groupRows([{ group_id: 'a', name: 'a', last_message: { text: 'x', at: '2026-10-03 10:00:00' } }, { group_id: 'b', name: 'b', last_at: '2026-10-03 09:00:00' }])[0].group_id === 'a');
+  // 实时事件带上预览
+  const ev = parseGroupEvent({ type: 'group_message', group_id: 'g_t', message_id: 'gm_9', seq: 9, from: 'alice', from_user_id: 'u_a', created_at: '2026-10-03 10:00:00', unread: 1, message: '新的一条', meta: { attachments: [{ file_id: 'f1' }] } })!;
+  const next = applyGroupEvent(rows, ev)!;
+  ck('事件:预览换成新消息,同一发信人沿用 Hub 给的显示名', groupSubtitle(next.find(r => r.group_id === 'g_t')!, opts) === 'Alice: 新的一条');
+  const ev2 = parseGroupEvent({ type: 'group_message', group_id: 'g_t', message_id: 'gm_10', seq: 10, from: 'carol', from_user_id: 'u_c', created_at: '2026-10-03 10:01:00', unread: 2, message: '', meta: { attachments: [{ file_id: 'f1' }, { file_id: 'f2' }] } })!;
+  ck('事件:别人发的只有附件 →「carol: [附件] 2」', groupSubtitle(applyGroupEvent(next, ev2)!.find(r => r.group_id === 'g_t')!, opts) === 'carol: [附件] 2');
+
+  // 成员名:成员行自带 → 用它;没有 → /humans;再没有 → user_id
+  const people = [{ user_id: 'u_a', username: 'alice_humans', display_name: '从人员表' }, { user_id: 'u_b', username: 'bob' }];
+  const m = groupMemberRows([
+    { user_id: 'u_a', source: 'department', username: 'alice', display_name: 'Alice' },
+    { user_id: 'u_b', source: 'department' },
+    { user_id: 'u_c', source: 'manual', username: 'carol', display_name: '' },
+    { user_id: 'u_x', source: 'manual' },
+  ], { department_id: 'd' }, people);
+  const nameOf = (id: string) => m.find(r => r.user_id === id)!.name;
+  ck('成员名:成员行的 display_name 优先(不用人员表的)', nameOf('u_a') === 'Alice' && m.find(r => r.user_id === 'u_a')!.username === 'alice');
+  ck('成员行没有 username(旧 Hub)→ 回落 /humans', nameOf('u_b') === 'bob');
+  ck('display_name = ""(没设)→ 用成员行的 username', nameOf('u_c') === 'carol');
+  ck('两边都没有 → user_id', nameOf('u_x') === 'u_x');
+
+  // viewer_can
+  const managed = new Set(['d_fe']);
+  ck('viewer_can.manage = true 盖过本地规则(负责人子树外也给)', canManageGroup({ department_id: 'd_rd', viewer_can: { manage: true, post: true } }, managed, 'd_rd'));
+  ck('viewer_can.manage = false 盖过本地规则(管理员也不给)', !canManageGroup({ department_id: 'd_rd', viewer_can: { manage: false } }, null, 'd_rd'));
+  ck('没有 viewer_can(旧 Hub)→ 本地规则', canManageGroup({ department_id: 'd_fe' }, managed, 'd_fe') && !canManageGroup({ department_id: 'd_rd' }, managed, 'd_rd'));
+  ck('还没有群(null)→ 本地规则按部门判', canManageGroup(null, managed, 'd_fe') && !canManageGroup(null, managed, 'd_rd'));
+  ck('viewer_can.post = false → 藏输入栏', !canPostInGroup({ viewer_can: { post: false } }));
+  ck('viewer_can.post 缺 / 群没读到 → 照常能发', canPostInGroup({}) && canPostInGroup({ viewer_can: { manage: true } }) && canPostInGroup(null));
+}
+
 // —— 部门页:按权限出按钮 ——
 {
   ck('owner / admin(非负责人模式)→ 能管任何部门的群', canManageDeptGroup(null, 'd_rd'));
@@ -159,6 +230,9 @@ async function gateChecks() {
   ck('群聊复用私信页:发送走群接口、带 client_request_id', chat.includes('sendGroupMessage(cfg, networkId, groupId, groupSendBody({ message: text, attachments: uploaded, clientRequestId: clientId }))'));
   ck('群聊打开即读(只前进)', chat.includes('readTarget(rows, readMarked.current)') && chat.includes('markGroupRead(cfg, networkId, groupId, target)'));
   ck('群聊收到 group_message 才重拉', chat.includes("ev?.type === 'group_message' && ev.group_id === groupId"));
+  ck('群聊:viewer_can.post = false 时不画输入栏', chat.includes('{isGroup && !canPost ? (') && chat.includes('setCanPost(canPostInGroup(d.group))'));
+  ck('面板:管理按钮按 viewer_can.manage(回落本地规则)', panel.includes("const canManage = canManageGroup(state.kind === 'ok' ? state.detail.group : null, managed, deptId);"));
+  ck('群行副标题走 groupSubtitle(预览 / 时间 / 还没有消息)', agents.includes('groupSubtitle(g, {'));
   const app = read('../App.tsx');
   ck('三种布局都接了群聊页(手机推入 / 双栏右侧 / 桌面右面板)', (app.match(/group=\{groupRefOf\(screen\)\}/g) ?? []).length === 3);
 }

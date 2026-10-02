@@ -48,7 +48,7 @@ import { webComposerInputHeight } from './composer-input-height';
 import { COMPOSER_CARD_INSET, COMPOSER_DIVIDER_HEIGHT, COMPOSER_HEIGHT_DEFAULT } from './composer-resize';
 import { dmSendBody, mergeDm, newClientRequestId, taskNoticeOf, unackedIncomingIds, type DmAttachment, type DmMessage, type Human } from './human-dm';
 import { fetchDmMessages, fetchHumans, sendDm } from './human-dm-api';
-import { groupSendBody, readTarget, senderOf, type GroupMessage } from './group-chat';
+import { canPostInGroup, groupSendBody, readTarget, senderOf, type GroupMessage } from './group-chat';
 import { fetchGroup, fetchGroupMessages, markGroupRead, sendGroupMessage } from './group-chat-api';
 import { emitGroupChat, setActiveGroup, subscribeGroupChat } from './group-chat-bus';
 import { emitHumanDm, setActiveDmPeer, subscribeHumanDm } from './human-dm-bus';
@@ -89,11 +89,13 @@ export default function DmChatScreen({ cfg, networkId, peer: peerProp, group, on
   // 群:发信人的显示名(人员表)和群人数(群资料)。读不到就用消息里的用户名、不写人数。
   const [groupPeople, setGroupPeople] = useState<Human[]>([]);
   const [memberCount, setMemberCount] = useState<number | null>(null);
+  // viewer_can.post === false(§10:已不是群成员)→ 不画输入栏;旧 Hub 没给 → 照常能发。
+  const [canPost, setCanPost] = useState(true);
   useEffect(() => {
     if (!isGroup) return;
     let live = true;
     void fetchHumans(cfg, networkId).then(h => { if (live) setGroupPeople(h); }).catch(() => {});
-    void fetchGroup(cfg, networkId, groupId).then(d => { if (live) setMemberCount(d.members.length || d.group.member_count || null); }).catch(() => {});
+    void fetchGroup(cfg, networkId, groupId).then(d => { if (live) { setMemberCount(d.members.length || d.group.member_count || null); setCanPost(canPostInGroup(d.group)); } }).catch(() => {});
     return () => { live = false; };
   }, [cfg.serverUrl, cfg.token, networkId, groupId, isGroup]);
   const readMarked = useRef(0);
@@ -307,6 +309,8 @@ export default function DmChatScreen({ cfg, networkId, peer: peerProp, group, on
         ? await sendGroupMessage(cfg, networkId, groupId, groupSendBody({ message: text, attachments: uploaded, clientRequestId: clientId }))
         : await sendDm(cfg, dmSendBody({ networkId, toUserId: peer.user_id, message: text, attachments: uploaded, clientRequestId: clientId }));
       setMessages(prev => mergeDm<LocalDm>(prev.filter(m => m.message_id !== clientId), [{ ...res.message, direction: 'out' }]));
+      // 群:会话列表的预览 / 排序跟上我刚发的这条(SSE 也会推,这里不等它 —— 推送断了时列表不该停在旧预览上)。
+      if (isGroup) emitGroupChat(null);
       files.forEach(releaseClipboardAttachment);
       setError('');
     } catch (e) {
@@ -569,7 +573,11 @@ export default function DmChatScreen({ cfg, networkId, peer: peerProp, group, on
           <Text style={styles.noticeText}>{notice}</Text>
         </View>
       ) : null}
-      {desktop ? (
+      {isGroup && !canPost ? (
+        <View style={styles.readOnlyBar} testID="group-readonly">
+          <Text style={styles.readOnlyText}>{t('group.readOnly')}</Text>
+        </View>
+      ) : desktop ? (
         <View style={styles.desktopComposerWrap}>
           {/* agent 会话在卡片上方有一条 6 px 的拖动分隔条;私信不可拖,留同样高的空,两边卡片落在同一高度。 */}
           <View style={{ height: COMPOSER_DIVIDER_HEIGHT }} />
@@ -728,6 +736,8 @@ const makeStyles = (B = bubbleLayout()) => StyleSheet.create({
   plusCellLabel: { color: colors.textSecondary, fontSize: 12, marginTop: 6 },
   dropOverlay: { position: 'absolute', top: spacing.sm, left: spacing.sm, right: spacing.sm, bottom: spacing.sm, borderWidth: 2, borderStyle: 'dashed', borderColor: colors.accent, borderRadius: radius.control, backgroundColor: colors.bg + 'E6', alignItems: 'center', justifyContent: 'center', gap: spacing.sm },
   dropOverlayText: { color: colors.accent, fontSize: 14, fontWeight: '600' },
+  readOnlyBar: { padding: spacing.lg, borderTopWidth: 1, borderTopColor: colors.border, alignItems: 'center' },
+  readOnlyText: { color: colors.textMuted, fontSize: 13 },
   inputRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, padding: spacing.md, borderTopWidth: 1, borderTopColor: colors.border },
   inputWrap: { flex: 1, justifyContent: 'flex-end' },
   input: {

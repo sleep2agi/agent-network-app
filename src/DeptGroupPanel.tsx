@@ -1,7 +1,7 @@
 // 部门群(RFC-042,看板 #457 第 4 步;Hub ≥ .93)—— 「成员与部门」/「管理本部门」里的那一块。
 //
 // 功能门:useGroupSupport 探 GET …/chat-groups,2xx 才画;旧 Hub(404)整块不出现,不报错。
-// 权限:按钮只给能管的人画(canManageDeptGroup:owner / admin = 非负责人模式;负责人 = 本部门子树)。Hub 仍是最后的判定,
+// 权限:按钮只给能管的人画 —— 优先 Hub 的 viewer_can.manage(§10),没有就按 canManageDeptGroup(owner / admin;负责人 = 本部门子树)。Hub 仍是最后的判定,
 // 被拒时照 Hub 的原因说(groupErrorText)。
 // 内容:还没有群 →「创建部门群」;有群 → 群名(可改)、成员列表(每人标「部门 / 手动」)、添加成员、移出手动拉进来的人。
 // 两套交互:
@@ -15,7 +15,7 @@ import AliasAvatar from './AliasAvatar';
 import GroupAvatar from './GroupAvatar';
 import { colors, radius, spacing, type as typeScale, weight } from './theme';
 import type { HubConfig } from './api';
-import { addableMembers, canManageDeptGroup, groupMemberRows, validGroupName } from './group-chat';
+import { addableMembers, canManageGroup, groupMemberRows, validGroupName } from './group-chat';
 import { addGroupMember, createDepartmentGroup, fetchDepartmentGroup, probeGroupSupport, removeGroupMember, renameGroup, type GroupDetail } from './group-chat-api';
 import { emitGroupChat } from './group-chat-bus';
 import { pinyinMatch } from './lib/pinyin';
@@ -46,8 +46,9 @@ export function DeptGroupSection({ cfg, networkId, deptId, deptName, managed, pe
   people: readonly Person[];
   desktop: boolean;
 }) {
-  const canManage = canManageDeptGroup(managed, deptId);
   const [state, setState] = useState<State>({ kind: 'loading' });
+  // Hub 给了 viewer_can.manage(§10)就照它;还没有群 / 旧 Hub 没给 → 本地规则(owner / admin,或本部门子树的负责人)。
+  const canManage = canManageGroup(state.kind === 'ok' ? state.detail.group : null, managed, deptId);
   const [mode, setMode] = useState<Mode>('view');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');

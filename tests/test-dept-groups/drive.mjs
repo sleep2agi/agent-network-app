@@ -1,7 +1,9 @@
 // 部门群 / 群聊(RFC-042,看板 #457 第 4 步;Hub ≥ .93)—— 点真按钮、量真框。Placeholder data only (alice / bob /
 // carol, 研发部 / 销售部), served in-page by the Tauri stub in tests/test-layout-sweep/harness.mjs plus a small in-page Hub
 // below that answers like Hub .93 (group_threads on /api/dm/threads, …/chat-groups, …/departments/:dept/group).
-// `HUB=old` rows answer like the current production Hub: no group_threads key, 404 on every group route.
+// Three Hubs: `new` = §10 (Hub #2284: /health capabilities chat_groups, last_message previews, member username /
+// display_name, viewer_can); `93` = group routes but none of the §10 fields (the app falls back: probe, time-only rows,
+// names from /humans, local manage rule); `old` = the current production Hub: no group_threads key, 404 on every group route.
 // No hub process, no port, no HOME touched. SSE answers 404, so the chat runs on its 8 s poll.
 //
 //   WEB_DIR=<expo export dir> [OUT=<png dir>] [PLAYWRIGHT_MODULE=<…/playwright/index.mjs>] node tests/test-dept-groups/drive.mjs
@@ -54,20 +56,28 @@ const fixture = ({ hub }) => {
         ], unread: 2 },
       g_sales: { id: 'g_sales', network_id: NET, name: '销售部', department_id: 'd_sales', created_by: 'u_x', created_at: at(900), updated_at: at(900),
         members: [{ user_id: 'u_me', source: 'manual', joined_at: at(900) }, { user_id: 'u_c', source: 'department', joined_at: at(900) }],
-        messages: [{ seq: 4, message_id: 'gm_4', sender_user_id: 'u_c', from_session: 'carol', content: '示例:周报', created_at: at(120) }], unread: 0 },
+        messages: [{ seq: 4, message_id: 'gm_4', sender_user_id: 'u_c', from_session: 'carol', content: '', attachments: 2, created_at: at(120) }], unread: 0 },
     },
   };
   window.__groupCalls = [];
   const modern = hub !== 'old';
+  const polish = hub === 'new';
+  // §10 fields: only on the `new` Hub.
+  const nameOfUid = (uid) => { const h = humans.find(x => x.user_id === uid); return h ? (h.display_name || h.username) : uid; };
+  const memberOut = (x) => polish ? { ...x, username: humans.find(h => h.user_id === x.user_id)?.username ?? x.user_id, display_name: humans.find(h => h.user_id === x.user_id)?.display_name ?? '' } : x;
+  const lastMessage = (g) => { const x = g.messages[g.messages.length - 1]; return x ? { text: x.content ?? '', attachment_count: x.attachments ?? 0, sender_user_id: x.sender_user_id, sender_name: nameOfUid(x.sender_user_id), at: x.created_at } : null; };
+  const viewerCan = (g) => ({ manage: g.department_id === 'd_rd' || g.department_id === 'd_fe', post: g.id !== 'g_sales' });
   const dir = (uid, m) => (m.sender_user_id === uid ? 'out' : 'in');
-  const groupPublic = (g) => ({ id: g.id, network_id: NET, name: g.name, department_id: g.department_id, member_count: g.members.length, created_by: g.created_by, created_at: g.created_at, updated_at: g.updated_at });
+  const groupPublic = (g) => ({ id: g.id, network_id: NET, name: g.name, department_id: g.department_id, member_count: g.members.length, created_by: g.created_by, created_at: g.created_at, updated_at: g.updated_at, ...(polish ? { viewer_can: viewerCan(g) } : {}) });
   const lastAt = (g) => g.messages.length ? g.messages[g.messages.length - 1].created_at : null;
   const threads = () => Object.values(store.groups).filter(g => g.members.some(m => m.user_id === 'u_me'))
-    .map(g => ({ group_id: g.id, name: g.name, department_id: g.department_id, last_at: lastAt(g), unread: g.unread, last_read_seq: 0 }))
+    .map(g => ({ group_id: g.id, name: g.name, department_id: g.department_id, last_at: lastAt(g), unread: g.unread, last_read_seq: 0, ...(polish ? { last_message: lastMessage(g) } : {}) }))
     .sort((a, b) => String(b.last_at ?? '').localeCompare(String(a.last_at ?? '')));
-  const row = (g, m) => ({ ...m, group_id: g.id, network_id: NET, meta_json: null, kind: 'group_message', direction: dir('u_me', m) });
+  const row = (g, m) => ({ ...m, group_id: g.id, network_id: NET, meta_json: m.attachments ? JSON.stringify({ attachments: Array.from({ length: m.attachments }, (_, i) => ({ type: 'file', file_id: `f_demo_${i}`, name: `示例-${i + 1}.pdf`, mime: 'application/pdf' })) }) : null, kind: 'group_message', direction: dir('u_me', m) });
+  window.__healthReads = 0;
   window.__routeOverride = (u, body, method) => {
     const p = u.pathname;
+    if (p === '/health') { window.__healthReads++; return polish ? { status: 'ok', capabilities: ['status_node_id', 'node_permission_mode', 'chat_groups'] } : { status: 'ok' }; }
     if (p === '/api/auth/me') return { ok: true, user: { user_id: 'u_me', username: 'tester', role: 'user' }, current_network: NET, networks: [{ network_id: NET, network_name: '示例网络', member_role: 'member', agent_access: 'granted', task_access: 'scoped', managed_department_ids: ['d_rd', 'd_fe'] }] };
     if (p === `/api/networks/${NET}/humans`) return { ok: true, humans };
     if (p === '/api/dm/threads') return modern ? { ok: true, threads: [{ other_user_id: 'u_a', last_at: at(40), unread: 1 }], group_threads: threads() } : { ok: true, threads: [{ other_user_id: 'u_a', last_at: at(40), unread: 1 }] };
@@ -76,6 +86,7 @@ const fixture = ({ hub }) => {
       departments: store.departments.map(d => ({ ...d, member_count: Object.values(store.members).filter(x => x === d.id).length, viewer_can: { manage: d.id === 'd_fe', create_child: d.id === 'd_rd' || d.id === 'd_fe' } })),
       members: Object.entries(store.members).map(([user_id, department_id]) => ({ user_id, department_id })) };
     if (!modern && (p.includes('/chat-groups') || /\/departments\/[^/]+\/group$/.test(p))) return null; // 旧 Hub:404
+    if (p === `/api/networks/${NET}/chat-groups`) { window.__groupCalls.push({ method, path: p }); } 
     if (p === `/api/networks/${NET}/chat-groups`) return { ok: true, network_id: NET, groups: Object.values(store.groups).map(g => ({ ...groupPublic(g), is_member: true, unread: g.unread, last_message_at: lastAt(g) })) };
     let m = /^\/api\/networks\/[^/]+\/departments\/([^/]+)\/group$/.exec(p);
     if (m) {
@@ -87,9 +98,9 @@ const fixture = ({ hub }) => {
         const d = store.departments.find(x => x.id === dept);
         g = store.groups[`g_${dept}`] = { id: `g_${dept}`, network_id: NET, name: d.name, department_id: dept, created_by: 'u_me', created_at: at(0), updated_at: at(0),
           members: Object.entries(store.members).filter(([, x]) => x === dept).map(([user_id]) => ({ user_id, source: 'department', joined_at: at(0) })).concat(d.leader_user_id ? [] : []), messages: [], unread: 0 };
-        return { ok: true, group: groupPublic(g), members: g.members };
+        return { ok: true, group: groupPublic(g), members: g.members.map(memberOut) };
       }
-      return g ? { ok: true, group: groupPublic(g), members: g.members, is_member: g.members.some(x => x.user_id === 'u_me') } : null;
+      return g ? { ok: true, group: groupPublic(g), members: g.members.map(memberOut), is_member: g.members.some(x => x.user_id === 'u_me') } : null;
     }
     m = /^\/api\/networks\/[^/]+\/chat-groups\/([^/]+)(?:\/(members|messages|read)(?:\/([^/]+))?)?$/.exec(p);
     if (m) {
@@ -105,10 +116,10 @@ const fixture = ({ hub }) => {
         return { ok: true, group_id: g.id, message: row(g, msg), duplicate: false, delivered_to: 1 };
       }
       if (m[2] === 'read') { g.unread = 0; return { ok: true, group_id: g.id, last_read_seq: b?.seq ?? 0, unread: 0 }; }
-      if (m[2] === 'members' && method === 'POST') { const mem = { user_id: b.user_id, source: 'manual', joined_at: at(0) }; g.members.push(mem); return { ok: true, member: mem }; }
+      if (m[2] === 'members' && method === 'POST') { const mem = { user_id: b.user_id, source: 'manual', joined_at: at(0) }; g.members.push(mem); return { ok: true, member: memberOut(mem) }; }
       if (m[2] === 'members' && method === 'DELETE') { g.members = g.members.filter(x => x.user_id !== decodeURIComponent(m[3])); return { ok: true, removed: m[3] }; }
       if (!m[2] && method === 'PATCH') { g.name = b.name; return { ok: true, group: groupPublic(g) }; }
-      if (!m[2]) return { ok: true, group: groupPublic(g), members: g.members, is_member: true };
+      if (!m[2]) return { ok: true, group: groupPublic(g), members: g.members.map(memberOut), is_member: true };
     }
     return undefined;
   };
@@ -151,16 +162,16 @@ const tabCount = async (page) => {
 
 // ── desktop ──
 const desktopUnread = {};
-for (const [theme, hub] of [['light', 'new'], ['light', 'old'], ['dark', 'new']]) {
-  const where = `desktop/${theme}${hub === 'old' ? '/old-hub' : ''}`;
+for (const [theme, hub] of [['light', 'new'], ['light', '93'], ['light', 'old'], ['dark', 'new']]) {
+  const where = `desktop/${theme}${hub === 'old' ? '/old-hub' : hub === '93' ? '/hub93' : ''}`;
   const { ctx, page, errors } = await open('desktop', theme, hub);
-  const shot = async (n) => { if (OUT) await page.screenshot({ path: `${OUT}/desktop-${theme}${hub === 'old' ? '-oldhub' : ''}-${n}.png` }); };
+  const shot = async (n) => { if (OUT) await page.screenshot({ path: `${OUT}/desktop-${theme}${hub === 'old' ? '-oldhub' : hub === '93' ? '-hub93' : ''}-${n}.png` }); };
   const step = async (what, fn) => { try { await fn(); } catch (e) { record(where, what, { ran: false }, { error: String(e).split('\n')[0] }); await shot(`FAIL-${what}`); } };
   await step('list', async () => {
     await page.locator(tid('desktop-rail')).waitFor({ timeout: 20000 });
     await page.locator(tid('people-section')).waitFor({ timeout: 15000 });
     await page.waitForTimeout(800);
-    desktopUnread[hub] = await tabCount(page);
+    if (hub !== '93') desktopUnread[hub] = await tabCount(page);
     if (hub === 'old') {
       await shot('1-list');
       record(where, 'old Hub: no 群聊 section', { absent: !(await has(page, 'groups-section')) }, { unreadTab: desktopUnread.old });
@@ -170,15 +181,31 @@ for (const [theme, hub] of [['light', 'new'], ['light', 'old'], ['dark', 'new']]
     const people = await box(page, tid('people-section'));
     const order = await page.locator('[data-testid^="group-row-"]').evaluateAll(els => els.map(e => e.getAttribute('data-testid')));
     const badge = (await page.locator(tid('group-unread-g_rd')).innerText().catch(() => '')).trim();
+    const subRd = (await page.locator(tid('group-subtitle-g_rd')).innerText()).trim();
+    const subSales = (await page.locator(tid('group-subtitle-g_sales')).innerText()).trim();
+    const probed = (await calls(page)).some(c => c.path.endsWith('/chat-groups') && c.method === 'GET');
     await shot('1-list');
     record(where, '群聊 above 人员, sorted by last message, unread badge', {
       above: !!groups && !!people && groups.y + groups.height <= people.y + 0.5 && Math.abs(groups.x - people.x) <= 0.5,
       order: order.join() === 'group-row-g_rd,group-row-g_sales',
       badge: badge === '2',
     }, { order: order.join(), badge });
+    record(where, hub === 'new' ? 'previews from last_message (text / [附件] N)' : '.93 Hub (no last_message): rows show the time', hub === 'new'
+      ? { rd: subRd === 'Carol: 示例:我也来旁听', sales: subSales === 'Carol: [附件] 2' }
+      : { rdTime: /^\d{1,2}:\d\d$/.test(subRd), salesTime: /^\d{1,2}:\d\d$/.test(subSales) }, { subRd, subSales });
+    // 功能门:列表已经从 group_threads 知道这个 Hub 有群,部门页不再探接口(/health 能力位 vs 试探的取舍在
+    // src/group-chat.test.ts 里用假 fetch 逐条测,这里不重复)。
+    await page.locator(tid('manage-dept-entry')).click();
+    await page.locator(tid('org-desktop')).waitFor({ timeout: 8000 });
+    await page.locator(tid('dept-group-section')).waitFor({ timeout: 5000 });
+    const probedAfter = (await calls(page)).some(c => c.path.endsWith('/chat-groups') && c.method === 'GET');
+    record(where, 'gate: dept card shows without probing …/chat-groups (learnt from group_threads)', { noProbe: !probed && !probedAfter });
+    await page.locator(tid('manage-dept-desktop-close')).click();
+    await page.waitForTimeout(300);
   });
   if (hub !== 'old') {
     await step('chat', async () => {
+      if (await has(page, 'manage-dept-desktop')) throw new Error('dept dialog still open');
       await page.locator(tid('group-row-g_rd')).click();
       await page.locator(tid('dm-pane')).waitFor({ timeout: 8000 });
       await page.locator(tid('dm-bubble')).first().waitFor({ timeout: 8000 });
@@ -209,11 +236,18 @@ for (const [theme, hub] of [['light', 'new'], ['light', 'old'], ['dark', 'new']]
         bubble: (await page.locator(tid('dm-list')).innerText()).includes('示例:好的'),
         symmetric: Math.abs(left - right) <= 1, bottomEqSides: Math.abs(bottom - left) <= 1, centered: dCenter <= 1,
       }, { left: r1(left), right: r1(right), bottom: r1(bottom), dCenter: r1(dCenter) });
+      // viewer_can.post = false(new Hub 的销售部)→ 没有输入栏;.93 没有 viewer_can → 照常有。
+      await page.locator(tid('group-row-g_sales')).click();
+      await page.waitForTimeout(1200);
+      const readOnly = await has(page, 'group-readonly');
+      const composer = await has(page, 'dm-desktop-composer');
+      if (hub === 'new') await shot('2b-readonly');
+      record(where, hub === 'new' ? 'viewer_can.post=false hides the input bar' : 'no viewer_can (.93) → input bar stays', hub === 'new' ? { readOnly, noComposer: !composer } : { composer, noReadOnly: !readOnly });
     });
   }
   if (theme === 'light') {
     await step('dept', async () => {
-      await page.locator(tid('manage-dept-entry')).click();
+      if (!(await has(page, 'manage-dept-desktop'))) await page.locator(tid('manage-dept-entry')).click();
       await page.locator(tid('org-desktop')).waitFor({ timeout: 8000 });
       await page.waitForTimeout(800);
       if (hub === 'old') {
@@ -229,6 +263,7 @@ for (const [theme, hub] of [['light', 'new'], ['light', 'old'], ['dark', 'new']]
       record(where, 'dept group card: members with 部门 / 手动, remove only on manual, rename / add', {
         alice: (await src('alice')) === '部门', carol: (await src('carol')) === '手动', removeOnManual, noRemoveOnDept,
         rename: await has(page, 'dept-group-rename'), add: await has(page, 'dept-group-add'),
+        names: (await page.locator(tid('dept-group-members')).innerText()).includes('Carol'),
       });
       await page.locator(tid('dept-group-add')).click();
       await page.locator(tid('dept-group-add-bob')).click();
@@ -262,7 +297,9 @@ for (const [theme, hub] of [['light', 'new'], ['light', 'old'], ['dark', 'new']]
     if (hub === 'old') { record(where, 'old Hub: no 群聊 section', { absent: !(await has(page, 'groups-section')) }); return; }
     const groups = await box(page, tid('groups-section'));
     const people = await box(page, tid('people-section'));
-    record(where, '群聊 above 人员', { above: !!groups && !!people && groups.y + groups.height <= people.y + 0.5 }, {});
+    const subRd = (await page.locator(tid('group-subtitle-g_rd')).innerText()).trim();
+    const time = await has(page, 'group-time-g_rd');
+    record(where, '群聊 above 人员; preview + time on the row (WeChat)', { above: !!groups && !!people && groups.y + groups.height <= people.y + 0.5, preview: subRd === 'Carol: 示例:我也来旁听', time }, { subRd });
   });
   if (hub !== 'old') {
     await step('chat', async () => {

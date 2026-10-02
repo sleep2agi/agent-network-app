@@ -11,12 +11,19 @@ export const GROUP_MESSAGE_EVENT = 'group_message';
 export const GROUP_READ_EVENT = 'group_read';
 
 /** GET /api/dm/threads 里 group_threads 的一项。 */
-export type GroupThread = { group_id: string; name: string; department_id?: string | null; last_at?: string | null; unread?: number | null; last_read_seq?: number | null };
-/** 会话列表里的一行群。 */
-export type GroupRow = { group_id: string; name: string; department_id: string | null; unread: number; lastAt: number };
+export type GroupThread = { group_id: string; name: string; department_id?: string | null; last_at?: string | null; unread?: number | null; last_read_seq?: number | null; last_message?: LastMessage | null };
+/** RFC-042 §10(Hub #2284):群行上的最后一条。旧一点的 Hub(.93)没有这个字段 → 行上只写时间。 */
+export type LastMessage = { text?: string | null; attachment_count?: number | null; sender_user_id?: string | null; sender_name?: string | null; at?: string | null };
+/** 行上画的预览(已规整)。 */
+export type GroupPreview = { text: string; attachmentCount: number; senderUserId: string | null; senderName: string };
+/** 会话列表里的一行群。preview = null:Hub 没给 last_message(没消息,或 .93 那版没有这个字段)。 */
+export type GroupRow = { group_id: string; name: string; department_id: string | null; unread: number; lastAt: number; preview: GroupPreview | null };
+/** §10:Hub 自己判的「我能不能管 / 能不能发」。旧 Hub 没有 → undefined,按本地规则推。 */
+export type ViewerCan = { manage?: boolean; post?: boolean };
 /** GET …/chat-groups/:gid 的群资料。 */
-export type ChatGroup = { id: string; network_id?: string; name: string; department_id: string | null; member_count?: number; created_by?: string | null; created_at?: string; updated_at?: string };
-export type ChatGroupMember = { user_id: string; source: string; joined_at?: string };
+export type ChatGroup = { id: string; network_id?: string; name: string; department_id: string | null; member_count?: number; created_by?: string | null; created_at?: string; updated_at?: string; viewer_can?: ViewerCan | null };
+/** §10 起成员行带 username / display_name(display_name 没设 = "");旧 Hub 只有 user_id。 */
+export type ChatGroupMember = { user_id: string; source: string; joined_at?: string; username?: string | null; display_name?: string | null };
 /** 群消息:和私信行同形,另加 group_id / seq / sender_user_id。 */
 export type GroupMessage = DmMessage & { group_id?: string; seq?: number; sender_user_id?: string | null };
 
@@ -36,8 +43,30 @@ export function groupThreadsOf(body: unknown): GroupThread[] | null {
 /** 群行:按最后一条消息时间倒序(没消息的排最后,再按名字)—— 与 Hub listGroupThreads 同序,与私信「最近聊过的在前」一致。 */
 export function groupRows(threads: readonly GroupThread[] | null | undefined): GroupRow[] {
   return (threads ?? [])
-    .map(g => ({ group_id: g.group_id, name: (g.name ?? '').trim() || g.group_id, department_id: g.department_id ?? null, unread: count(g.unread), lastAt: hubMs(g.last_at) }))
+    .map(g => ({ group_id: g.group_id, name: (g.name ?? '').trim() || g.group_id, department_id: g.department_id ?? null, unread: count(g.unread), lastAt: hubMs(g.last_at) || hubMs(g.last_message?.at), preview: previewOf(g.last_message) }))
     .sort(byLastAt);
+}
+
+/** last_message → 预览;null / 不是对象 / 既没字也没附件 → null(行上回落成只写时间)。 */
+export function previewOf(m: LastMessage | null | undefined): GroupPreview | null {
+  if (!m || typeof m !== 'object') return null;
+  const text = typeof m.text === 'string' ? m.text.replace(/\s+/g, ' ').trim() : '';
+  const attachmentCount = count(m.attachment_count);
+  if (!text && !attachmentCount) return null;
+  const senderUserId = typeof m.sender_user_id === 'string' && m.sender_user_id ? m.sender_user_id : null;
+  return { text, attachmentCount, senderUserId, senderName: (typeof m.sender_name === 'string' ? m.sender_name.trim() : '') };
+}
+
+/**
+ * 群行的副标题,照私信 / 微信:「发信人: 正文」;只有附件 →「发信人: [附件] N」;我自己发的不写名字。
+ * 没有预览(last_message = null / 旧 Hub)→ 和以前一样写时间;连时间也没有 → noMessages。
+ */
+export function groupSubtitle(row: Pick<GroupRow, 'preview' | 'lastAt'>, opts: { selfUserId?: string; formatTime: (ms: number) => string; noMessages: string }): string {
+  const p = row.preview;
+  if (!p) return row.lastAt ? opts.formatTime(row.lastAt) : opts.noMessages;
+  const body = p.text || `[附件] ${p.attachmentCount}`;
+  const mine = !!opts.selfUserId && p.senderUserId === opts.selfUserId;
+  return !mine && p.senderName ? `${p.senderName}: ${body}` : body;
 }
 const byLastAt = (a: GroupRow, b: GroupRow) => b.lastAt - a.lastAt || a.name.localeCompare(b.name) || a.group_id.localeCompare(b.group_id);
 
@@ -63,7 +92,7 @@ export function shownGroups<T extends { name: string }>(rows: readonly T[], quer
 
 // ── 实时事件(/events/users/me)──
 
-export type GroupMessageEvent = { type: 'group_message'; group_id: string; group_name: string | null; message_id: string; seq: number | null; from: string | null; from_user_id: string | null; created_at: string | null; unread: number | null };
+export type GroupMessageEvent = { type: 'group_message'; group_id: string; group_name: string | null; message_id: string; seq: number | null; from: string | null; from_user_id: string | null; created_at: string | null; unread: number | null; text: string; attachment_count: number };
 export type GroupReadEvent = { type: 'group_read'; group_id: string; last_read_seq: number | null; unread: number | null };
 export type GroupEvent = GroupMessageEvent | GroupReadEvent;
 
@@ -79,7 +108,9 @@ export function parseGroupEvent(raw: unknown): GroupEvent | null {
   if (e.type === GROUP_MESSAGE_EVENT) {
     const mid = str(e.message_id);
     if (!mid) return null;
-    return { type: 'group_message', group_id: gid, group_name: str(e.group_name), message_id: mid, seq: num(e.seq), from: str(e.from), from_user_id: str(e.from_user_id), created_at: str(e.created_at), unread: num(e.unread) };
+    const meta = e.meta && typeof e.meta === 'object' ? (e.meta as { attachments?: unknown }).attachments : undefined;
+    return { type: 'group_message', group_id: gid, group_name: str(e.group_name), message_id: mid, seq: num(e.seq), from: str(e.from), from_user_id: str(e.from_user_id), created_at: str(e.created_at), unread: num(e.unread),
+      text: typeof e.message === 'string' ? e.message : '', attachment_count: Array.isArray(meta) ? meta.length : 0 };
   }
   if (e.type === GROUP_READ_EVENT) return { type: 'group_read', group_id: gid, last_read_seq: num(e.last_read_seq), unread: num(e.unread) };
   return null;
@@ -94,12 +125,20 @@ export function applyGroupEvent(rows: GroupRow[], ev: GroupEvent): GroupRow[] | 
   if (i < 0) return ev.type === 'group_message' ? null : rows;
   const cur = rows[i];
   const next: GroupRow = ev.type === 'group_message'
-    ? { ...cur, name: ev.group_name?.trim() || cur.name, unread: ev.unread === null ? cur.unread : count(ev.unread), lastAt: Math.max(cur.lastAt, hubMs(ev.created_at)) }
+    ? { ...cur, name: ev.group_name?.trim() || cur.name, unread: ev.unread === null ? cur.unread : count(ev.unread), lastAt: Math.max(cur.lastAt, hubMs(ev.created_at)), preview: eventPreview(cur.preview, ev) }
     : { ...cur, unread: ev.unread === null ? cur.unread : count(ev.unread) };
-  if (next.unread === cur.unread && next.lastAt === cur.lastAt && next.name === cur.name) return rows;
+  if (next.unread === cur.unread && next.lastAt === cur.lastAt && next.name === cur.name && next.preview === cur.preview) return rows;
   const out = rows.slice();
   out[i] = next;
   return ev.type === 'group_message' ? out.sort(byLastAt) : out;
+}
+
+/** 事件里的新消息成为预览。事件只带用户名(from):同一个发信人沿用上一条预览里 Hub 给的显示名。 */
+function eventPreview(prev: GroupPreview | null, ev: GroupMessageEvent): GroupPreview | null {
+  const p = previewOf({ text: ev.text, attachment_count: ev.attachment_count, sender_user_id: ev.from_user_id, sender_name: ev.from });
+  if (!p) return prev;
+  if (prev && prev.senderUserId && prev.senderUserId === p.senderUserId && prev.senderName) p.senderName = prev.senderName;
+  return p;
 }
 
 // ── 群聊页 ──
@@ -144,6 +183,18 @@ export function canManageDeptGroup(managed: ReadonlySet<string> | null, departme
   return !!departmentId && managed.has(departmentId);
 }
 
+/** 群已经拿到手时:Hub 给了 viewer_can.manage(§10)就照它,没给(.93)就按上面的本地规则推。 */
+export function canManageGroup(group: Pick<ChatGroup, 'department_id' | 'viewer_can'> | null | undefined, managed: ReadonlySet<string> | null, departmentId: string | null): boolean {
+  const flag = group?.viewer_can?.manage;
+  if (typeof flag === 'boolean') return flag;
+  return canManageDeptGroup(managed, group ? group.department_id : departmentId);
+}
+
+/** 能不能在群里发消息:viewer_can.post === false 才藏输入栏;没给(旧 Hub)= 能(Hub 本来只把群给成员看)。 */
+export function canPostInGroup(group: Pick<ChatGroup, 'viewer_can'> | null | undefined): boolean {
+  return group?.viewer_can?.post !== false;
+}
+
 export type MemberSource = 'department' | 'manual';
 export const memberSource = (s: unknown): MemberSource => (s === 'department' ? 'department' : 'manual');
 export const memberSourceLabel = (s: unknown): string => (memberSource(s) === 'department' ? '部门' : '手动');
@@ -159,9 +210,12 @@ export type GroupMemberRow = ChatGroupMember & { name: string; username: string;
 export function groupMemberRows(members: readonly ChatGroupMember[], group: Pick<ChatGroup, 'department_id'>, people: readonly { user_id: string; username: string; display_name?: string | null }[]): GroupMemberRow[] {
   return members
     .map(m => {
+      // §10 起成员行自带 username / display_name;旧 Hub 没有 → 去人员表(/humans)里找;再没有 → user_id。
       const p = people.find(x => x.user_id === m.user_id);
-      const username = p?.username ?? m.user_id;
-      return { ...m, username, name: (p?.display_name ?? '').trim() || username, sourceLabel: memberSourceLabel(m.source), removable: canRemoveMember(m, group) };
+      const own = typeof m.username === 'string' && m.username ? m.username : null;
+      const username = own ?? p?.username ?? m.user_id;
+      const display = own ? (m.display_name ?? '').trim() : (p?.display_name ?? '').trim();
+      return { ...m, username, name: display || username, sourceLabel: memberSourceLabel(m.source), removable: canRemoveMember(m, group) };
     })
     .sort((a, b) => (memberSource(a.source) === memberSource(b.source) ? 0 : memberSource(a.source) === 'department' ? -1 : 1) || a.name.localeCompare(b.name));
 }

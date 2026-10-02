@@ -21,7 +21,7 @@ import { agentsEmptyKind, isRestrictedIn } from './user-admin';
 import { fetchAuthMe } from './user-admin-api';
 import { applyMemberPresence, noteHumanUsernames, PEOPLE_GROUP_KEY, peopleRows, personPresence, shownPeople, type Human, type PersonPresence, type PersonRow } from './human-dm';
 import { fetchHumans } from './human-dm-api';
-import { applyConversationTabToGroups, applyGroupEvent, groupRows, shownGroups, type GroupRow } from './group-chat';
+import { applyConversationTabToGroups, applyGroupEvent, groupRows, groupSubtitle, shownGroups, type GroupRow } from './group-chat';
 import { fetchConversationThreads } from './group-chat-api';
 import { subscribeGroupChat } from './group-chat-bus';
 import { localizedChatHeader as formatChatHeader } from './i18n-chat-time';
@@ -727,12 +727,14 @@ export default function AgentsScreen({
     );
   };
 
-  // 群行(RFC-042):与人员行同一套几何。头像是「多人」图标(群没有插画);副标题 = 最后一条消息的时间,
-  // 还没有消息写「还没有消息」。Hub 的 group_threads 不带最后一条的正文,所以没有消息预览。
+  // 群行(RFC-042):与人员行同一套几何。头像是「多人」图标(群没有插画);副标题 = 最后一条消息预览
+  // (§10 last_message:「发信人: 正文」/「[附件] N」);Hub 没给预览 → 写时间;还没有消息写「还没有消息」。
+  // 手机行的右上角是时间(微信式,与 agent 行同一个 time 样式)。
   const renderGroupRow = (g: GroupRow) => {
     const selected = selectedGroup === g.group_id;
     const badge = formatUnreadBadge(g.unread);
-    const subtitle = g.lastAt ? formatChatHeader(new Date(g.lastAt).toISOString()) : t('group.noMessages');
+    const timeText = g.lastAt ? formatChatHeader(new Date(g.lastAt).toISOString()) : '';
+    const subtitle = groupSubtitle(g, { selfUserId, formatTime: ms => formatChatHeader(new Date(ms).toISOString()), noMessages: t('group.noMessages') });
     const open = () => onOpenGroup?.({ group_id: g.group_id, name: g.name });
     if (compact) {
       return (
@@ -776,6 +778,7 @@ export default function AgentsScreen({
         <View style={rowStyles.body}>
           <View style={rowStyles.line}>
             <Text dense selectable={false} numberOfLines={1} style={[rowStyles.name, { color: colors.text }]} testID={`group-name-${g.group_id}`}>{g.name}</Text>
+            {g.preview && timeText ? <Text dense selectable={false} numberOfLines={1} style={[rowStyles.time, { color: colors.textMuted }]} testID={`group-time-${g.group_id}`}>{timeText}</Text> : null}
           </View>
           <View style={rowStyles.line}>
             <Text dense selectable={false} testID={`group-subtitle-${g.group_id}`} numberOfLines={1} style={[rowStyles.preview, { color: colors.textMuted }]}>{subtitle}</Text>
