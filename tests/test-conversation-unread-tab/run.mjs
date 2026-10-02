@@ -161,7 +161,7 @@ async function run(vp, viewport, ua, theme, phone) {
   await tap(page, tid('conversation-tab-unread')); await sleep(600);
   const unreadRows = await agentRows(page);
   const personRows = await page.locator('[data-testid^="person-row-"]').evaluateAll(els => els.map(e => e.getAttribute('data-testid')));
-  const selected = await page.locator(tid('conversation-tab-unread')).getAttribute('aria-selected');
+  const selected = await page.locator(tid('conversation-tab-unread')).getAttribute('aria-selected', { timeout: 5000 }).catch(() => null);
   await page.screenshot({ path: join(OUT, `${tag}-2-unread.png`) });
   record(tag, '3 未读 → only the unread conversations', {
     agents: unreadRows.length === 3 && UNREAD.every(a => unreadRows.includes(a)),
@@ -201,7 +201,7 @@ async function run(vp, viewport, ua, theme, phone) {
   await page.reload();
   await page.locator(tid('conversation-tabs')).waitFor({ timeout: 30000 }).catch(() => {});
   await sleep(1500);
-  record(tag, '5 reload → 未读 still selected', { selected: (await page.locator(tid('conversation-tab-unread')).getAttribute('aria-selected')) === 'true' });
+  record(tag, '5 reload → 未读 still selected', { selected: (await page.locator(tid('conversation-tab-unread')).getAttribute('aria-selected', { timeout: 5000 }).catch(() => null)) === 'true' });
   await ctx.close();
 }
 
