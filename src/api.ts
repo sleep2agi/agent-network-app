@@ -105,6 +105,7 @@ const withTimeout = (run: (signal: AbortSignal) => Promise<Response>): Promise<R
 // 其他非 2xx(401/403/404…)说明服务器是连得上的,不算"连不上"(readStatusCountsAsFailure)。
 // 只挂在 get()(全部轮询读)上;写路径有各自显式失败 UI,不进此口径。
 import { readEpoch, readStatusCountsAsFailure, reportReadFailure, reportReadSuccess } from './connectivity';
+import { conditionalHeaders, readConditionalText } from './conditional-get';
 import { classifyLoginFailure, type LoginFailureKind } from './login-flow';
 import { isTokenExpiredBody } from './login-sessions';
 import { LEGACY_SESSION_ID } from './session-registry';
@@ -141,11 +142,13 @@ async function get<T>(cfg: HubConfig, path: string): Promise<T> {
   try {
     const got = await withDeadline(
       (async () => {
-        const res = await appFetch(`${cfg.serverUrl}${path}`, { headers: headers(cfg), signal: ctrl.signal });
+        // #467 —— hub 回过 ETag 的读(/api/status、/api/requirements)带 If-None-Match;304 用上次的原文(conditional-get.ts)。
+        const res = await appFetch(`${cfg.serverUrl}${path}`, { headers: { ...headers(cfg), ...conditionalHeaders(cfg, path) }, signal: ctrl.signal });
         // 401 的正文区分「登录已过期」(hub 闲置过期,error=token_expired)和别的失效。
         const expired = res.status === 401 && isTokenExpiredBody(await res.json().catch(() => null));
         reportProfileAuthResponse(res.status, authProfileId(cfg), expired ? 'token_expired' : undefined);
-        return { res, data: res.ok ? ((await res.json()) as T) : undefined };
+        const text = res.ok || res.status === 304 ? await readConditionalText(cfg, path, res) : null;
+        return { res, ok: text !== null, data: text !== null ? (JSON.parse(text) as T) : undefined };
       })(),
       readDeadlineMs,
       () => null,
@@ -154,7 +157,7 @@ async function get<T>(cfg: HubConfig, path: string): Promise<T> {
       ctrl.abort();
       throw new Error(`服务器 ${Math.round(readDeadlineMs / 1000)} 秒内没有返回完整响应（${path}）`);
     }
-    if (!got.res.ok) {
+    if (!got.ok) {
       if (!readStatusCountsAsFailure(got.res.status)) reported = true;
       throw new Error(`HTTP ${got.res.status} on ${path}`);
     }
