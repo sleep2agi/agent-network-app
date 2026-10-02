@@ -1,0 +1,336 @@
+{
+  "//": "Every tests/*/drive.mjs and tests/*/run.mjs, and how CI runs it. stub = needs only the web export + Chromium (run by .github/workflows/drives.yml in shards; secs = measured runtime, used to balance shards); docker = builds its own bundle with its Dockerfile (nightly job); hub / manual = not in CI, with the reason. src/drive-registry.test.ts fails when a drive is missing here.",
+  "drives": {
+    "local-hub-runtime/run.mjs": {
+      "kind": "manual",
+      "why": "needs the packaged commhub binary (LOCAL_HUB_BINARY) inside its Docker image"
+    },
+    "test-account-copy-edit/drive.mjs": {
+      "kind": "stub",
+      "secs": 25
+    },
+    "test-account-switch/drive.mjs": {
+      "kind": "stub",
+      "secs": 70
+    },
+    "test-agent-row-menu-visual/drive.mjs": {
+      "kind": "hub",
+      "why": "needs a throwaway hub (HUB_URL / HUB_TOKEN) with a seeded node row"
+    },
+    "test-board-assign/drive.mjs": {
+      "kind": "stub",
+      "secs": 90
+    },
+    "test-card-menu-priority/drive.mjs": {
+      "kind": "stub",
+      "secs": 60
+    },
+    "test-changelog/drive.mjs": {
+      "kind": "stub",
+      "secs": 90
+    },
+    "test-chat-bubble-geometry/drive.mjs": {
+      "kind": "stub",
+      "secs": 21
+    },
+    "test-chat-info-panel/drive.mjs": {
+      "kind": "stub",
+      "secs": 101
+    },
+    "test-composer-drag-browser/drive.mjs": {
+      "kind": "manual",
+      "why": "positive-control harness for the 0.2.46 divider bug: run via its run.sh (bun build of a standalone page), not against the app export"
+    },
+    "test-composer-input-size/drive.mjs": {
+      "kind": "stub",
+      "secs": 43
+    },
+    "test-composer-plus-send/drive.mjs": {
+      "kind": "stub",
+      "secs": 60
+    },
+    "test-composer-wechat-visual/drive.mjs": {
+      "kind": "hub",
+      "why": "needs a throwaway hub (HUB_URL / HUB_TOKEN / ALIAS)"
+    },
+    "test-connectivity-banner/run.mjs": {
+      "kind": "stub",
+      "secs": 145
+    },
+    "test-connectivity-indicator/drive.mjs": {
+      "kind": "stub",
+      "secs": 304
+    },
+    "test-create-node-workdir/drive.mjs": {
+      "kind": "stub",
+      "secs": 20
+    },
+    "test-desktop-image-window/drive.mjs": {
+      "kind": "stub",
+      "secs": 20
+    },
+    "test-desktop-phone-leak/drive.mjs": {
+      "kind": "stub",
+      "secs": 90
+    },
+    "test-desktop-voice-bar/drive.mjs": {
+      "kind": "stub",
+      "secs": 20
+    },
+    "test-detail-autosave/drive.mjs": {
+      "kind": "stub",
+      "secs": 23
+    },
+    "test-detail-flush/drive.mjs": {
+      "kind": "stub",
+      "secs": 25
+    },
+    "test-dm-attachments/drive.mjs": {
+      "kind": "hub",
+      "why": "needs a throwaway hub with three synthetic users (HUB_JSON)"
+    },
+    "test-fatal-recorder/drive.mjs": {
+      "kind": "stub",
+      "secs": 20
+    },
+    "test-grant-mode-switch/drive.mjs": {
+      "kind": "hub",
+      "why": "needs a throwaway hub seeded by its seed.mjs (SEED / VP)"
+    },
+    "test-language-switch/drive.mjs": {
+      "kind": "stub",
+      "secs": 60
+    },
+    "test-layout-sweep/run.mjs": {
+      "kind": "stub",
+      "secs": 86
+    },
+    "test-list-inline-edit/drive.mjs": {
+      "kind": "stub",
+      "secs": 90
+    },
+    "test-login-devices/drive.mjs": {
+      "kind": "stub",
+      "secs": 59
+    },
+    "test-member-editor/drive.mjs": {
+      "kind": "stub",
+      "secs": 33
+    },
+    "test-member-presence/run.mjs": {
+      "kind": "stub",
+      "secs": 20
+    },
+    "test-mic-device-settings/drive.mjs": {
+      "kind": "stub",
+      "secs": 23
+    },
+    "test-modal-footer-guard/run.mjs": {
+      "kind": "stub",
+      "secs": 20
+    },
+    "test-participant-edit/drive.mjs": {
+      "kind": "stub",
+      "secs": 53
+    },
+    "test-people-on-top/run.mjs": {
+      "kind": "stub",
+      "secs": 20
+    },
+    "test-people-picker/drive.mjs": {
+      "kind": "stub",
+      "secs": 192
+    },
+    "test-phone-board/drive.mjs": {
+      "kind": "docker",
+      "image": "test-phone-board",
+      "secs": 120
+    },
+    "test-phone-quick-status/drive.mjs": {
+      "kind": "stub",
+      "secs": 28
+    },
+    "test-phone-tab-tasks/drive.mjs": {
+      "kind": "hub",
+      "why": "needs a throwaway hub with the tests/test-task-board seed (HUB_URL / HUB_TOKEN / HUB_NETWORK)"
+    },
+    "test-popout-titlebar/drive.mjs": {
+      "kind": "stub",
+      "secs": 20
+    },
+    "test-requirement-priority/drive.mjs": {
+      "kind": "stub",
+      "secs": 32
+    },
+    "test-rules-split-editor/drive.mjs": {
+      "kind": "stub",
+      "secs": 39
+    },
+    "test-schedule-content-fullscreen/drive.mjs": {
+      "kind": "stub",
+      "secs": 27
+    },
+    "test-schedule-copy/drive.mjs": {
+      "kind": "stub",
+      "secs": 20
+    },
+    "test-schedule-edit-conflict/drive.mjs": {
+      "kind": "stub",
+      "secs": 24
+    },
+    "test-select-menu-esc/drive.mjs": {
+      "kind": "stub",
+      "secs": 35
+    },
+    "test-settings-redesign/drive.mjs": {
+      "kind": "stub",
+      "secs": 27
+    },
+    "test-settings-subpages/drive.mjs": {
+      "kind": "stub",
+      "secs": 35
+    },
+    "test-settings-window-update/drive.mjs": {
+      "kind": "stub",
+      "secs": 32
+    },
+    "test-share-card/drive.mjs": {
+      "kind": "stub",
+      "secs": 36
+    },
+    "test-shortcuts-settings/drive.mjs": {
+      "kind": "stub",
+      "secs": 20
+    },
+    "test-slow-read-suspend/drive.mjs": {
+      "kind": "stub",
+      "secs": 133
+    },
+    "test-tag-manager/drive.mjs": {
+      "kind": "stub",
+      "secs": 31
+    },
+    "test-task-access-ui/drive.mjs": {
+      "kind": "hub",
+      "why": "needs a throwaway hub seeded by test-grant-mode-switch/seed.mjs (SEED / VP)"
+    },
+    "test-task-activity/drive.mjs": {
+      "kind": "stub",
+      "secs": 23
+    },
+    "test-task-archive/drive.mjs": {
+      "kind": "stub",
+      "secs": 40
+    },
+    "test-task-audit-lows/drive.mjs": {
+      "kind": "stub",
+      "secs": 55
+    },
+    "test-task-calendar/drive.mjs": {
+      "kind": "stub",
+      "secs": 49
+    },
+    "test-task-dashboard/drive.mjs": {
+      "kind": "stub",
+      "secs": 100
+    },
+    "test-task-description-fullscreen/drive.mjs": {
+      "kind": "hub",
+      "why": "needs a throwaway hub with the tests/test-task-board seed"
+    },
+    "test-task-description-wysiwyg/drive.mjs": {
+      "kind": "stub",
+      "secs": 35
+    },
+    "test-task-gantt/drive.mjs": {
+      "kind": "stub",
+      "secs": 120
+    },
+    "test-task-issues/drive.mjs": {
+      "kind": "docker",
+      "image": "test-task-issues",
+      "secs": 120
+    },
+    "test-task-language/drive.mjs": {
+      "kind": "docker",
+      "image": "test-task-language",
+      "secs": 120
+    },
+    "test-task-list-fields/drive.mjs": {
+      "kind": "docker",
+      "image": "test-task-list-fields",
+      "secs": 120
+    },
+    "test-task-list-tablet/drive.mjs": {
+      "kind": "stub",
+      "secs": 39
+    },
+    "test-task-list-widths/drive.mjs": {
+      "kind": "docker",
+      "image": "test-task-list-widths",
+      "secs": 120
+    },
+    "test-task-organize/drive.mjs": {
+      "kind": "hub",
+      "why": "needs a throwaway hub with the tests/test-task-board seed; writes to it"
+    },
+    "test-task-participants/drive.mjs": {
+      "kind": "stub",
+      "secs": 25
+    },
+    "test-task-search/drive.mjs": {
+      "kind": "stub",
+      "secs": 112
+    },
+    "test-task-short-id/drive.mjs": {
+      "kind": "hub",
+      "why": "needs a throwaway hub with the tests/test-task-board seed"
+    },
+    "test-task-status-filter/drive.mjs": {
+      "kind": "docker",
+      "image": "test-phone-board",
+      "secs": 120
+    },
+    "test-task-tags/drive.mjs": {
+      "kind": "docker",
+      "image": "test-task-tags",
+      "secs": 120
+    },
+    "test-task-title-visible/drive.mjs": {
+      "kind": "stub",
+      "secs": 37
+    },
+    "test-task-unread-badge/drive.mjs": {
+      "kind": "stub",
+      "secs": 195
+    },
+    "test-update-screen/drive.mjs": {
+      "kind": "stub",
+      "secs": 50
+    },
+    "test-voice-composer-visual/drive.mjs": {
+      "kind": "hub",
+      "why": "needs a throwaway hub (HUB_URL / HUB_TOKEN / ALIAS)"
+    },
+    "test-voice-draft-cursor/drive.mjs": {
+      "kind": "hub",
+      "why": "needs a throwaway hub (HUB_URL / HUB_TOKEN / ALIAS)"
+    },
+    "test-voice-hold-overlay/drive.mjs": {
+      "kind": "stub",
+      "secs": 46
+    },
+    "test-voice-insert-at-cursor/drive.mjs": {
+      "kind": "hub",
+      "why": "needs a throwaway hub (HUB_URL / HUB_TOKEN / ALIAS)"
+    },
+    "test-voice-shortcuts/drive.mjs": {
+      "kind": "stub",
+      "secs": 27
+    },
+    "test-window-controls/drive.mjs": {
+      "kind": "stub",
+      "secs": 20
+    }
+  }
+}

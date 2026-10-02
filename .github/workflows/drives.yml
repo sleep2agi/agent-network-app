@@ -1,0 +1,122 @@
+# Browser drives (tests/*/drive.mjs, tests/*/run.mjs) — the Playwright checks that measure real boxes in the web export.
+#
+# Until 2026-10-02 no workflow ran any of them. The sweep that day (all ~80 against a fresh export of main) found 14
+# red — 12 tests that had fallen behind deliberate product changes, one real UI bug (事件流 header padding), one data
+# gap (bundled release dates) — some red for days, all invisible. A drive nobody runs rots.
+#
+# What runs here is decided by tests/drives.json, not by this file:
+#   stub   — needs only the web export + Chromium: 8 shards, on every PR that touches app code, nightly, on demand
+#   docker — builds its own bundle with its Dockerfile: nightly + on demand only (≈1–2 min of docker build each)
+#   hub / manual — not in CI (each entry says why: a seeded throwaway hub, a packaged binary …)
+# src/drive-registry.test.ts (npm test) fails when a drive is missing from the registry, so a new drive has to be put in
+# one of those buckets — "not in CI" is allowed, but only with a reason.
+#
+# Runtime: export ≈ 4 min, then 8 stub shards in parallel ≈ 6–8 min each (balanced by measured secs).
+
+name: drives
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '30 18 * * *'   # 02:30 UTC+8, after the evening releases
+  pull_request:
+    paths:
+      - 'src/**'
+      - 'App.tsx'
+      - 'index.ts'
+      - 'assets/**'
+      - 'tests/**'
+      - 'package.json'
+      - 'package-lock.json'
+      - 'scripts/run-drives.mjs'
+      - '.github/workflows/drives.yml'
+
+concurrency:
+  group: drives-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  export:
+    name: web export
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      - run: npx expo export -p web --output-dir web-export
+      - uses: actions/upload-artifact@v4
+        with:
+          name: web-export
+          path: web-export
+          retention-days: 3
+
+  stub:
+    name: stub drives (${{ matrix.shard }}/8)
+    needs: export
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4, 5, 6, 7, 8]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      # Drives import a few app modules / fixtures from the repo (tests/test-layout-sweep/harness.mjs, src/*.ts text).
+      - run: npm ci
+      - uses: actions/download-artifact@v4
+        with:
+          name: web-export
+          path: web-export
+      # Same Playwright as the suites' Docker images (mcr.microsoft.com/playwright:v1.58.2-noble).
+      - name: Playwright + Chromium
+        run: |
+          npm install --prefix /tmp/pw --no-audit --no-fund playwright@1.58.2
+          /tmp/pw/node_modules/.bin/playwright install --with-deps chromium
+      - name: Run shard
+        env:
+          PLAYWRIGHT_MODULE: /tmp/pw/node_modules/playwright/index.mjs
+          LANG: zh_CN.UTF-8
+        run: node scripts/run-drives.mjs --web web-export --out drive-out --shard ${{ matrix.shard }}/8
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: drives-shard-${{ matrix.shard }}
+          path: drive-out
+          retention-days: 7
+
+  docker:
+    name: docker drive (${{ matrix.suite }})
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { suite: test-phone-board, image: test-phone-board }
+          - { suite: test-task-issues, image: test-task-issues }
+          - { suite: test-task-language, image: test-task-language }
+          - { suite: test-task-list-fields, image: test-task-list-fields }
+          - { suite: test-task-list-widths, image: test-task-list-widths }
+          - { suite: test-task-status-filter, image: test-phone-board }
+          - { suite: test-task-tags, image: test-task-tags }
+    steps:
+      - uses: actions/checkout@v4
+      - run: bash scripts/run-docker-drive.sh ${{ matrix.suite }} ${{ matrix.image }} drive-out
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: drives-docker-${{ matrix.suite }}
+          path: drive-out
+          retention-days: 7
