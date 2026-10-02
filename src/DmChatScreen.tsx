@@ -12,6 +12,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { layoutOs } from './safe-area-runtime';
 import { Ionicons } from './icons';
 import AliasAvatar from './AliasAvatar';
+import GroupAvatar from './GroupAvatar';
 import AuthedThumb, { AttachmentFile } from './AuthedThumb';
 import AuthedWebThumb from './AuthedWebThumb';
 import AttachmentFileDesktop from './AttachmentFileDesktop';
@@ -46,13 +47,16 @@ import { COMPOSER_INPUT_BORDER, COMPOSER_LINE_HEIGHT, composerControlSize, compo
 import { webComposerInputHeight } from './composer-input-height';
 import { COMPOSER_CARD_INSET, COMPOSER_DIVIDER_HEIGHT, COMPOSER_HEIGHT_DEFAULT } from './composer-resize';
 import { dmSendBody, mergeDm, newClientRequestId, taskNoticeOf, unackedIncomingIds, type DmAttachment, type DmMessage, type Human } from './human-dm';
-import { fetchDmMessages, sendDm } from './human-dm-api';
+import { fetchDmMessages, fetchHumans, sendDm } from './human-dm-api';
+import { groupSendBody, readTarget, senderOf, type GroupMessage } from './group-chat';
+import { fetchGroup, fetchGroupMessages, markGroupRead, sendGroupMessage } from './group-chat-api';
+import { emitGroupChat, setActiveGroup, subscribeGroupChat } from './group-chat-bus';
 import { emitHumanDm, setActiveDmPeer, subscribeHumanDm } from './human-dm-bus';
 import { keyboardAvoidEnabled, useKeyboardVisible } from './keyboard-visibility';
 import { bubbleLayout, desktopBubbleCap } from './bubble-layout';
 
 /** 本地那条(还在发 / 没发出去):记住草稿里的文件和原图档,「点击重试」原样再发一次。 */
-type LocalDm = DmMessage & { _files?: PickedImage[]; _original?: boolean; _uploads?: UploadState[]; _uploadError?: string };
+type LocalDm = GroupMessage & { _files?: PickedImage[]; _original?: boolean; _uploads?: UploadState[]; _uploadError?: string };
 
 // 重试不重传:已传上去的那几张按 (hub, 本地 uri, 原图档) 记住(与 agent 会话同一个 memo 形状)。
 const uploadMemo = createUploadMemo<DmAttachment>();
@@ -61,10 +65,16 @@ const GRID_CELL = 84;
 const GRID_GAP = 4;
 const gridWidth = (count: number) => { const cols = Math.min(3, count); return cols * GRID_CELL + (cols - 1) * GRID_GAP; };
 
-export default function DmChatScreen({ cfg, networkId, peer, onBack, desktop = false, hideBack = false, onOpenTask }: {
+/** 群聊(RFC-042,Hub ≥ .93):同一个会话页,换成群的取数 / 发送 / 已读。 */
+export type GroupChatRef = { group_id: string; name: string };
+
+// 私信和群聊共用这一页(输入区、附件、乐观发送 + client_request_id 重试、看图都一样);不同的只有取数 / 发送 / 已读,
+// 以及群里收到的消息按各自的发信人画头像和名字。peer 与 group 二选一。
+export default function DmChatScreen({ cfg, networkId, peer: peerProp, group, onBack, desktop = false, hideBack = false, onOpenTask }: {
   cfg: HubConfig;
   networkId: string;
-  peer: Human;
+  peer?: Human;
+  group?: GroupChatRef;
   onBack: () => void;
   desktop?: boolean;
   hideBack?: boolean;
@@ -72,7 +82,21 @@ export default function DmChatScreen({ cfg, networkId, peer, onBack, desktop = f
   onOpenTask?: (requirementId: string) => void;
 }) {
   useTranslation();
-  const name = (peer.display_name ?? '').trim() || peer.username;
+  const peer: Human = peerProp ?? { user_id: '', username: group?.name ?? '' };
+  const isGroup = !!group;
+  const groupId = group?.group_id ?? '';
+  const name = isGroup ? group!.name : (peer.display_name ?? '').trim() || peer.username;
+  // 群:发信人的显示名(人员表)和群人数(群资料)。读不到就用消息里的用户名、不写人数。
+  const [groupPeople, setGroupPeople] = useState<Human[]>([]);
+  const [memberCount, setMemberCount] = useState<number | null>(null);
+  useEffect(() => {
+    if (!isGroup) return;
+    let live = true;
+    void fetchHumans(cfg, networkId).then(h => { if (live) setGroupPeople(h); }).catch(() => {});
+    void fetchGroup(cfg, networkId, groupId).then(d => { if (live) setMemberCount(d.members.length || d.group.member_count || null); }).catch(() => {});
+    return () => { live = false; };
+  }, [cfg.serverUrl, cfg.token, networkId, groupId, isGroup]);
+  const readMarked = useRef(0);
   const [messages, setMessages] = useState<LocalDm[]>([]);
   const [loaded, setLoaded] = useState(false);
   const [error, setError] = useState('');
@@ -86,6 +110,26 @@ export default function DmChatScreen({ cfg, networkId, peer, onBack, desktop = f
   const acked = useRef(new Set<string>());
 
   const load = useCallback(async () => {
+    if (isGroup) {
+      try {
+        const page = await fetchGroupMessages(cfg, networkId, groupId);
+        const rows = page.messages;
+        setMessages(prev => mergeDm(prev.filter(m => !m.pending || !rows.some(r => r.message_id === m.message_id)), rows));
+        setError('');
+        // 打开即读:读到这一页最新的那条(只前进);Hub 推 group_read 给我的其他设备,列表角标一起清。
+        const target = readTarget(rows, readMarked.current);
+        if (target !== null) {
+          readMarked.current = target;
+          await markGroupRead(cfg, networkId, groupId, target).then(r => emitGroupChat({ type: 'group_read', group_id: groupId, last_read_seq: r.last_read_seq, unread: r.unread }))
+            .catch(() => { readMarked.current = 0; });
+        }
+      } catch (e) {
+        setError(String((e as Error)?.message ?? e));
+      } finally {
+        setLoaded(true);
+      }
+      return;
+    }
     try {
       const rows = await fetchDmMessages(cfg, networkId, peer.user_id);
       setMessages(prev => mergeDm(prev.filter(m => !m.pending || !rows.some(r => r.message_id === m.message_id)), rows));
@@ -102,13 +146,19 @@ export default function DmChatScreen({ cfg, networkId, peer, onBack, desktop = f
     } finally {
       setLoaded(true);
     }
-  }, [cfg, networkId, peer.user_id]);
+  }, [cfg, networkId, peer.user_id, isGroup, groupId]);
   usePoll(load, 8000, [load]);
-  useEffect(() => subscribeHumanDm(from => { if (!from || from === peer.username) void load(); }), [load, peer.username]);
+  useEffect(() => (isGroup
+    ? subscribeGroupChat(ev => { if (ev?.type === 'group_message' && ev.group_id === groupId) void load(); })
+    : subscribeHumanDm(from => { if (!from || from === peer.username) void load(); })), [load, peer.username, isGroup, groupId]);
   useEffect(() => {
+    if (isGroup) {
+      setActiveGroup(groupId);
+      return () => setActiveGroup(null);
+    }
     setActiveDmPeer(peer.username);
     return () => setActiveDmPeer(null);
-  }, [peer.username]);
+  }, [peer.username, isGroup, groupId]);
 
   // ── 草稿里的附件(与 ChatScreen 同一套 image-draft 规则:最多 9 张图 / 20 个附件,选择顺序即发送顺序)──
   const attachedRef = useRef<PickedImage[]>([]);
@@ -252,7 +302,10 @@ export default function DmChatScreen({ cfg, networkId, peer, onBack, desktop = f
         return;
       }
       const uploaded = run.results as DmAttachment[];
-      const res = await sendDm(cfg, dmSendBody({ networkId, toUserId: peer.user_id, message: text, attachments: uploaded, clientRequestId: clientId }));
+      // 群:同一个 client_request_id 重投,Hub 按 (群, 发信人, client_request_id) 定出同一个 message_id,不会多出一条。
+      const res = isGroup
+        ? await sendGroupMessage(cfg, networkId, groupId, groupSendBody({ message: text, attachments: uploaded, clientRequestId: clientId }))
+        : await sendDm(cfg, dmSendBody({ networkId, toUserId: peer.user_id, message: text, attachments: uploaded, clientRequestId: clientId }));
       setMessages(prev => mergeDm<LocalDm>(prev.filter(m => m.message_id !== clientId), [{ ...res.message, direction: 'out' }]));
       files.forEach(releaseClipboardAttachment);
       setError('');
@@ -388,10 +441,12 @@ export default function DmChatScreen({ cfg, networkId, peer, onBack, desktop = f
             <Text style={styles.back}>‹</Text>
           </Pressable>
         ) : null}
-        <AliasAvatar alias={peer.username} size={32} />
+        {isGroup ? <GroupAvatar size={32} /> : <AliasAvatar alias={peer.username} size={32} />}
         <View style={styles.headerTitleCol}>
           <Text style={styles.title} numberOfLines={1} testID="dm-header-title">{name}</Text>
-          <Text style={styles.subtitle} numberOfLines={1}>{t('dm.subtitle', { username: peer.username })}</Text>
+          <Text style={styles.subtitle} numberOfLines={1} testID="dm-header-subtitle">
+            {isGroup ? (memberCount ? t('group.subtitle', { n: memberCount }) : t('group.subtitleNoCount')) : t('dm.subtitle', { username: peer.username })}
+          </Text>
         </View>
       </View>
       {!loaded ? (
@@ -403,19 +458,21 @@ export default function DmChatScreen({ cfg, networkId, peer, onBack, desktop = f
           keyExtractor={m => m.message_id}
           contentContainerStyle={{ padding: spacing.lg }}
           testID="dm-list"
-          ListFooterComponent={data.length ? null : <Text style={styles.beginning}>{t('dm.empty', { name })}</Text>}
+          ListFooterComponent={data.length ? null : <Text style={styles.beginning}>{isGroup ? t('group.empty') : t('dm.empty', { name })}</Text>}
           renderItem={({ item, index }) => {
             const showHeader = shouldShowTimeHeader(item.created_at ?? undefined, data[index + 1]?.created_at ?? undefined);
             const out = item.direction === 'out';
-            const taskNotice = onOpenTask ? taskNoticeOf(item.meta_json) : null;
+            const taskNotice = onOpenTask && !isGroup ? taskNoticeOf(item.meta_json) : null;
+            // 群里收到的消息:各画各的发信人;私信:对方。
+            const from = isGroup && !out ? senderOf(item, groupPeople) : { username: peer.username, name };
             return (
               <View style={styles.bubbleWrap} testID={`dm-msg-${out ? 'out' : 'in'}`}>
                 {showHeader && item.created_at ? <Text style={styles.timeHeader}>{formatChatHeader(item.created_at)}</Text> : null}
                 <View style={[styles.messageRow, out ? styles.sentRow : styles.replyRow]}>
-                  {out ? null : <AliasAvatar alias={peer.username} size={36} />}
+                  {out ? null : <AliasAvatar alias={from.username} size={36} />}
                   <View style={[styles.messageContent, out && styles.sentContent, !out && bubbleCap]}>
                     <Text style={[styles.messageAuthor, out && styles.sentAuthor]} numberOfLines={1}>
-                      {out ? me : name}{item.created_at ? ` · ${formatChatHeader(item.created_at)}` : ''}
+                      {out ? me : from.name}{item.created_at ? ` · ${formatChatHeader(item.created_at)}` : ''}
                     </Text>
                     <View style={[styles.bubble, !out && styles.replyBubble, !out && desktop && styles.replyBubbleDesktop]} testID="dm-bubble">
                       {item.content ? <Text style={styles.bubbleText} selectable>{item.content}</Text> : null}

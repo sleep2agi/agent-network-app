@@ -153,6 +153,12 @@ registerTranslations({
   'dm.failed': ['发送失败', 'Failed to send'],
   'dm.retry': ['点击重发', 'Tap to retry'],
   'dm.pick': ['选择一个人开始私信', 'Pick a person to message'],
+  'group.title': ['群聊', 'Groups'],
+  'group.a11y': ['{name}，群聊', '{name}, group chat'],
+  'group.subtitle': ['群聊 · {n} 人', 'Group · {n} members'],
+  'group.subtitleNoCount': ['群聊', 'Group chat'],
+  'group.empty': ['群里还没有消息，发一条开始吧', 'No messages in this group yet. Say hi.'],
+  'group.noMessages': ['还没有消息', 'No messages yet'],
   // 部门负责人(RFC-040,Hub ≥ .91):「管理本部门」入口和它的「任务 / Agent」两页。
   'dept.manage': ['管理本部门', 'Manage my department'],
   'dept.loading': ['正在读取…', 'Loading…'],

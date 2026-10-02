@@ -73,7 +73,7 @@ ck('tauri @800 agents → bottomTabs (narrow desktop window = phone stack, uncha
 }
 
 // ── phone leaves = exactly the screens App rendered without mobileTabBar before ──
-ck('phone leaf set', JSON.stringify([...PHONE_LEAF_SCREENS].sort()) === JSON.stringify(['chat', 'dm', 'login', 'logs', 'nodeDetail', 'nodeInfo', 'picker', 'taskDetail', 'wizard']));
+ck('phone leaf set', JSON.stringify([...PHONE_LEAF_SCREENS].sort()) === JSON.stringify(['chat', 'dm', 'group', 'login', 'logs', 'nodeDetail', 'nodeInfo', 'picker', 'taskDetail', 'wizard']));
 
 // ── active destination ──
 for (const s of ['agents', 'chat', 'nodeInfo', 'nodeDetail', 'picker', 'wizard']) ck(`${s} lights Agent`, navActiveKey(s) === 'agents');

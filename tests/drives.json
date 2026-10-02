@@ -69,6 +69,10 @@
       "kind": "stub",
       "secs": 20
     },
+    "test-dept-groups/drive.mjs": {
+      "kind": "stub",
+      "secs": 60
+    },
     "test-desktop-image-window/drive.mjs": {
       "kind": "stub",
       "secs": 20

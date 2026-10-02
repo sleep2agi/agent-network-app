@@ -20,7 +20,12 @@ import './i18n-users';
 import { agentsEmptyKind, isRestrictedIn } from './user-admin';
 import { fetchAuthMe } from './user-admin-api';
 import { applyMemberPresence, noteHumanUsernames, PEOPLE_GROUP_KEY, peopleRows, personPresence, shownPeople, type Human, type PersonPresence, type PersonRow } from './human-dm';
-import { fetchDmThreads, fetchHumans } from './human-dm-api';
+import { fetchHumans } from './human-dm-api';
+import { applyConversationTabToGroups, applyGroupEvent, groupRows, shownGroups, type GroupRow } from './group-chat';
+import { fetchConversationThreads } from './group-chat-api';
+import { subscribeGroupChat } from './group-chat-bus';
+import { localizedChatHeader as formatChatHeader } from './i18n-chat-time';
+import GroupAvatar from './GroupAvatar';
 import { subscribeHumanDm, subscribeMemberPresence } from './human-dm-bus';
 import { isAgentOnline } from './chat-actions';
 import { fetchStatus, fetchUserMessages, takeStatusPrefetch, type HubConfig, type Session,
@@ -90,6 +95,8 @@ export default function AgentsScreen({
   onOpenNodeDetail,
   onOpenPerson,
   selectedPerson,
+  onOpenGroup,
+  selectedGroup,
   compact = false,
   selectedAlias,
   pinnedAliases = [],
@@ -112,6 +119,10 @@ export default function AgentsScreen({
   onOpenPerson?: (person: Human) => void;
   /** 当前打开的私信对象(用户名),行高亮。 */
   selectedPerson?: string;
+  /** 群聊区块(RFC-042,Hub ≥ .93)。不传 = 不画;Hub 的 /api/dm/threads 没有 group_threads = 也不画。 */
+  onOpenGroup?: (group: { group_id: string; name: string }) => void;
+  /** 当前打开的群(group_id),行高亮。 */
+  selectedGroup?: string;
   compact?: boolean;
   selectedAlias?: string;
   pinnedAliases?: string[];
@@ -157,18 +168,33 @@ export default function AgentsScreen({
   // 组织架构(board #419):有部门、且有人分了部门时,「人员」按部门分小组(部门路径做小标题,未分配的最后)。
   // 旧 Hub 没有 /departments → null,照旧一个平的列表。
   const [org, setOrg] = useState<OrgData | null>(null);
+  // 群会话(RFC-042):和私信同一次 /api/dm/threads 拿到。null = 这个 Hub 没有群(没有 group_threads 字段)→ 区块不画。
+  const [groups, setGroups] = useState<GroupRow[] | null>(null);
   const loadPeople = useCallback(async () => {
     if (!onOpenPerson || !cfg.networkId || preview || !selfUserId) return;
     try {
       const humans = await fetchHumans(cfg, cfg.networkId);
       noteHumanUsernames(humans.map(h => h.username));
-      const threads = await fetchDmThreads(cfg, cfg.networkId).catch(() => []);
-      setPeople(peopleRows(humans, threads, selfUserId));
+      const conv = await fetchConversationThreads(cfg, cfg.networkId).catch(() => ({ threads: [], groupThreads: null }));
+      setPeople(peopleRows(humans, conv.threads, selfUserId));
+      setGroups(onOpenGroup && conv.groupThreads ? groupRows(conv.groupThreads) : null);
       void fetchOrg(cfg, cfg.networkId).then(setOrg).catch(() => { /* 读不到部门就不分组 */ });
-    } catch { setPeople([]); }
-  }, [cfg.serverUrl, cfg.token, cfg.networkId, !!onOpenPerson, preview, selfUserId]);
+    } catch { setPeople([]); setGroups(null); }
+  }, [cfg.serverUrl, cfg.token, cfg.networkId, !!onOpenPerson, !!onOpenGroup, preview, selfUserId]);
   usePoll(loadPeople, 15000, [loadPeople]);
   useEffect(() => subscribeHumanDm(() => { void loadPeople(); }), [loadPeople]);
+  // 群消息 / 已读的实时变化:Hub 在事件里带了我的未读数,就地改那一行;列表里没有这个群(新入群)→ 整表重拉。
+  useEffect(() => subscribeGroupChat(ev => {
+    if (!ev) { void loadPeople(); return; }
+    let missing = false;
+    setGroups(rows => {
+      if (!rows) return rows;
+      const next = applyGroupEvent(rows, ev);
+      if (next === null) { missing = true; return rows; }
+      return next;
+    });
+    if (missing) void loadPeople();
+  }), [loadPeople]);
   // 在线状态的实时变化(hub 的 member_presence):就地改那一行。旧 hub 不推,只剩 15 s 轮询里的 online 字段。
   useEffect(() => subscribeMemberPresence(ev => setPeople(rows => applyMemberPresence(rows, ev))), []);
   // 设置 → 快捷键 的「搜索会话」(默认 ⌘/Ctrl+K,App.tsx DesktopWorkspace 发起):只有桌面列表栏
@@ -408,7 +434,7 @@ export default function AgentsScreen({
   const unreadTabCount = unreadConversationCount(
     visibleSessions.map(s => s.alias),
     { counts: liveUnread.counts, manualUnread: convFlags.manualUnread },
-    onOpenPerson ? people : [],
+    [...(onOpenPerson ? people : []), ...(groups ?? [])],
   );
   const sections = useMemo(
     () => buildSections(applyAgentFilter(tabbedSessions, activeFilter), query, {
@@ -433,30 +459,48 @@ export default function AgentsScreen({
     [people, !!onOpenPerson, query, collapsed, effectiveTab, selectedPerson],
   );
   const peopleExpanded = peopleShown.visible && peopleShown.rows.length > 0;
+  // 群聊区块在「人员」上面:按最后一条消息时间排(Hub 同序);搜索按群名过滤;「未读」视图只留有未读的。
+  const GROUPS_KEY = '\u0000groups';
+  const groupsAll = useMemo(() => applyConversationTabToGroups(groups ?? [], effectiveTab, selectedGroup), [groups, effectiveTab, selectedGroup]);
+  const groupsMatched = useMemo(() => shownGroups(groupsAll, query, pinyinMatch), [groupsAll, query]);
+  const groupsVisible = !!groups && groupsMatched.length > 0;
+  const groupsCollapsed = !query.trim() && collapsed.includes(GROUPS_KEY);
+  const groupsShown = groupsCollapsed ? [] : groupsMatched;
+  const groupsHeaderHRef = useRef<number | null>(null);
+  const groupsSectionHRef = useRef<number | null>(null);
   const peopleGroups = useMemo(() => groupPeopleByDepartment(org, peopleShown.rows), [org, peopleShown.rows]);
   const peopleGroupHeadHRef = useRef<number | null>(null);
   // 第一行 = 列表里真正的第一行:人员展开时是第一个人,否则是第一个分组的第一行(人员折叠时要加上它的标题行高)。
-  const alignFirstRow = !compact && uiScale().listDense && (peopleExpanded || (shownSections[0]?.data?.length ?? 0) > 0);
+  const alignFirstRow = !compact && uiScale().listDense && (groupsShown.length > 0 || peopleExpanded || (shownSections[0]?.data?.length ?? 0) > 0);
   const listYRef = useRef<number | null>(null); // bottom of head + filter bar
   const firstHeaderHRef = useRef<number | null>(null);
   const peopleHeaderHRef = useRef<number | null>(null);
   const peopleSectionHRef = useRef<number | null>(null);
   const publishFirstRowTop = () => {
     if (listYRef.current == null) return;
+    // 群聊区块在最上面:展开时第一行是第一个群;折叠时整块(只剩标题)算进偏移,再按人员 / 分组算。
+    if (groupsVisible && groupsShown.length) {
+      if (groupsHeaderHRef.current == null) return;
+      publishListFirstRowTop(listYRef.current + groupsHeaderHRef.current);
+      return;
+    }
+    const groupsOffset = groupsVisible ? groupsSectionHRef.current : 0;
+    if (groupsOffset == null) return;
+    const top = listYRef.current + groupsOffset;
     if (peopleShown.visible) {
       if (peopleExpanded) {
         if (peopleHeaderHRef.current == null) return;
         // 按部门分组时第一行上面还有一个部门小标题。
         if (peopleGroups && peopleGroupHeadHRef.current == null) return;
-        publishListFirstRowTop(listYRef.current + peopleHeaderHRef.current + (peopleGroups ? peopleGroupHeadHRef.current ?? 0 : 0));
+        publishListFirstRowTop(top + peopleHeaderHRef.current + (peopleGroups ? peopleGroupHeadHRef.current ?? 0 : 0));
         return;
       }
       if (peopleSectionHRef.current == null || firstHeaderHRef.current == null) return;
-      publishListFirstRowTop(listYRef.current + peopleSectionHRef.current + firstHeaderHRef.current);
+      publishListFirstRowTop(top + peopleSectionHRef.current + firstHeaderHRef.current);
       return;
     }
     if (firstHeaderHRef.current == null) return;
-    publishListFirstRowTop(listYRef.current + firstHeaderHRef.current);
+    publishListFirstRowTop(top + firstHeaderHRef.current);
   };
   const nowMs = Date.now();
 
@@ -683,6 +727,65 @@ export default function AgentsScreen({
     );
   };
 
+  // 群行(RFC-042):与人员行同一套几何。头像是「多人」图标(群没有插画);副标题 = 最后一条消息的时间,
+  // 还没有消息写「还没有消息」。Hub 的 group_threads 不带最后一条的正文,所以没有消息预览。
+  const renderGroupRow = (g: GroupRow) => {
+    const selected = selectedGroup === g.group_id;
+    const badge = formatUnreadBadge(g.unread);
+    const subtitle = g.lastAt ? formatChatHeader(new Date(g.lastAt).toISOString()) : t('group.noMessages');
+    const open = () => onOpenGroup?.({ group_id: g.group_id, name: g.name });
+    if (compact) {
+      return (
+        <Pressable
+          testID={`group-row-${g.group_id}`}
+          accessibilityRole="button"
+          accessibilityState={{ selected }}
+          accessibilityLabel={t('group.a11y', { name: g.name })}
+          onPress={open}
+          style={({ pressed }) => [
+            styles.card,
+            { userSelect: 'none', cursor: 'default' } as any,
+            { borderWidth: 0, borderBottomWidth: 0, borderRadius: radius.control, paddingHorizontal: spacing.md, paddingVertical: 10, marginBottom: 2, backgroundColor: 'transparent' },
+            selected && { backgroundColor: colors.rowActive },
+            pressed && { opacity: 0.7 },
+          ]}
+        >
+          <View style={styles.avatarWrap}>
+            <GroupAvatar size={34} />
+            <AgentUnreadBadge badge={badge} testID={`group-unread-${g.group_id}`} />
+          </View>
+          <View style={{ flex: 1, minWidth: 0 }}>
+            <Text dense selectable={false} style={[styles.alias, { fontSize: 13, fontWeight: '600' }]} numberOfLines={1} testID={`group-name-${g.group_id}`}>{g.name}</Text>
+            <Text dense selectable={false} testID={`group-subtitle-${g.group_id}`} style={[styles.task, { fontSize: 11 }]} numberOfLines={1}>{subtitle}</Text>
+          </View>
+        </Pressable>
+      );
+    }
+    return (
+      <Pressable
+        testID={`group-row-${g.group_id}`}
+        accessibilityRole="button"
+        accessibilityState={{ selected }}
+        accessibilityLabel={t('group.a11y', { name: g.name })}
+        onPress={open}
+        style={({ pressed }) => [rowStyles.row, { backgroundColor: selected ? colors.rowActive : pressed ? colors.rowHover : colors.bg }]}
+      >
+        <View style={rowStyles.avatar}>
+          <GroupAvatar size={rowGeom().avatar} fixedSize />
+        </View>
+        <View style={rowStyles.body}>
+          <View style={rowStyles.line}>
+            <Text dense selectable={false} numberOfLines={1} style={[rowStyles.name, { color: colors.text }]} testID={`group-name-${g.group_id}`}>{g.name}</Text>
+          </View>
+          <View style={rowStyles.line}>
+            <Text dense selectable={false} testID={`group-subtitle-${g.group_id}`} numberOfLines={1} style={[rowStyles.preview, { color: colors.textMuted }]}>{subtitle}</Text>
+            <AgentUnreadBadge inline badge={badge} testID={`group-unread-${g.group_id}`} />
+          </View>
+        </View>
+      </Pressable>
+    );
+  };
+
   // Phone / Android two-pane row (0.2.106, WeChat-style): flat 68 dp, 44 dp avatar with the
   // online dot, name + last message on two lines, time + unread badge on the right.
   // Model (status → dot / label, time format): agent-row-model.ts.
@@ -897,7 +1000,7 @@ export default function AgentsScreen({
       }
       ListEmptyComponent={effectiveTab === 'unread' && !q && !filtering ? (
         // 未读视图空了:说清楚是「没有未读」,不是列表挂了;一键回到「全部」。人员区块里还有未读私信时不出现。
-        peopleShown.rows.length ? null : (
+        peopleShown.rows.length || groupsMatched.length ? null : (
           <View style={styles.center} testID="agents-empty-unread">
             <Text style={styles.errorTitle}>{t('chat.unreadEmpty')}</Text>
             <Text style={styles.errorHint}>{t('chat.unreadEmptyHint')}</Text>
@@ -931,7 +1034,7 @@ export default function AgentsScreen({
         </View>
       }
       renderItem={({ item }) => (compact ? renderCompactRow(item) : renderPhoneRow(item))}
-      ListHeaderComponent={peopleShown.visible || (compact && managedDepts.ids.length) ? (<>
+      ListHeaderComponent={groupsVisible || peopleShown.visible || (compact && managedDepts.ids.length) ? (<>
         {compact && managedDepts.ids.length ? (
           // 「管理本部门」:只给部门负责人,放在「人员」上方(RFC-040 §6)。只在桌面侧栏(compact)出现 —— 手机在「设置」里。
           <Pressable testID="manage-dept-entry" accessibilityRole="button" accessibilityLabel={t('dept.manage')} onPress={() => setManageDeptOpen(true)}
@@ -940,6 +1043,31 @@ export default function AgentsScreen({
             <Text selectable={false} numberOfLines={1} style={{ flex: 1, color: colors.text, fontSize: 13 }}>{t('dept.manage')}</Text>
             <Ionicons name="chevron-forward" size={12} color={colors.textMuted} />
           </Pressable>
+        ) : null}
+        {groupsVisible ? (
+        // 群聊(RFC-042,Hub ≥ .93):部门群等。放在「人员」上面,和私信一起是「人」的会话;可折叠(与分组同存)。
+        <View testID="groups-section" onLayout={alignFirstRow ? e => { groupsSectionHRef.current = e.nativeEvent.layout.height; publishFirstRowTop(); } : undefined}>
+          <Pressable
+            onLayout={alignFirstRow ? e => { groupsHeaderHRef.current = e.nativeEvent.layout.height; publishFirstRowTop(); } : undefined}
+            testID="groups-header"
+            disabled={!!query.trim()}
+            onPress={() => toggleGroup(GROUPS_KEY)}
+            accessibilityRole={query.trim() ? 'header' : 'button'}
+            accessibilityLabel={`${t('group.title')} ${groupsMatched.length}${query.trim() ? '' : groupsCollapsed ? ',已折叠' : ',已展开'}`}
+            accessibilityState={query.trim() ? undefined : { expanded: !groupsCollapsed }}
+            style={[rowStyles.group, compact ? rowStyles.groupCompact : null, { backgroundColor: compact ? colors.listBg : colors.bg }]}
+          >
+            {query.trim() ? null : <Ionicons name={groupsCollapsed ? 'chevron-forward' : 'chevron-down'} size={12} color={colors.textMuted} />}
+            <Text selectable={false} numberOfLines={1} style={[rowStyles.groupTitle, { color: colors.textMuted }]}>{t('group.title')}</Text>
+            <Text selectable={false} style={[rowStyles.groupCount, { color: colors.textMuted }]} testID="groups-count">{groupsMatched.length}</Text>
+          </Pressable>
+          {groupsShown.map((g, i) => (
+            <View key={g.group_id}>
+              {i && !compact ? <View style={[rowStyles.separator, { backgroundColor: colors.border }]} /> : null}
+              {renderGroupRow(g)}
+            </View>
+          ))}
+        </View>
         ) : null}
         {peopleShown.visible ? (
         // 人员:同网络的其他人,点开是私信。放在列表**最上面**、搜索框之下、agent 分组之上(Vincent 2026-09-30

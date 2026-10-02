@@ -78,7 +78,8 @@ const um = src('UserManagementPanel.tsx'), agents = src('AgentsScreen.tsx'), cha
 ck('用户管理:有部门接口才出现;手机是一行「成员与部门」,桌面是左树右详情', /\{org && members \? \(\s*phone \?/.test(um) && um.includes('testID="org-open"') && um.includes('<OrgDesktopPanel'));
 ck('手机全屏页:底部「添加成员 | 添加子部门 | 更多」', ["'添加成员'", "'添加子部门'", "'更多'"].every(k => chart.includes(k)) && chart.includes('testID="org-bottom-bar"'));
 ck('添加子部门表单:部门名称* / 上级部门 / 部门 ID / 部门负责人', ['部门名称', '上级部门', '部门 ID', '部门负责人', '请输入否则自动生成'].every(k => chart.includes(k)));
-ck('不做部门群(v1 范围外)', !chart.split('\n').filter(l => !l.trim().startsWith('//')).join('\n').includes('部门群'));
+// 部门群(RFC-042,#457 第 4 步)起做了:但两处入口都要过功能门(旧 Hub 没有群接口 → 不出现)和权限。
+ck('部门群:入口都过功能门 + 权限', (chart.match(/groupsOn && [^\n]*canManageDeptGroup\(head\?\.managed \?\? null, /g) ?? []).length === 2);
 ck('「人员」按部门分组(旧 Hub 不分)', agents.includes('groupPeopleByDepartment(org, peopleShown.rows)') && agents.includes("t('people.noDept')"));
 
 console.log(`${p}/${n} passed`);
