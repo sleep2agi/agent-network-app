@@ -208,6 +208,8 @@ function PartView({ part, v }: { part: Part; v: ViewCtx }) {
     case 'date': return <Text style={[c.text, part.strike && c.strike]}>{dueText(part.v)}</Text>;
     case 'check': return <Ionicons name={part.done ? 'checkbox' : 'square-outline'} size={16} color={part.done ? colors.accent : colors.textMuted} />;
     case 'arrow': return <Text style={c.arrow}>→</Text>;
+    // 评论整段换行显示(最多 8 行),不是一个小引号块:Agent 的进展说明往往有好几行。
+    case 'comment': return <Text style={[c.text, c.comment]} numberOfLines={8} selectable testID="activity-comment">{part.v}</Text>;
   }
 }
 
@@ -575,6 +577,7 @@ const makeStyles = () => StyleSheet.create({
   strike: { textDecorationLine: 'line-through', color: colors.textMuted },
   arrow: { color: colors.textMuted, fontSize: typeScale.body },
   fields: { color: colors.textSecondary, fontSize: typeScale.body, flexShrink: 1 },
+  comment: { flexBasis: '100%', color: colors.text, lineHeight: 20, paddingLeft: spacing.sm, borderLeftWidth: 2, borderLeftColor: colors.border },
   expand: { color: colors.accent, fontSize: typeScale.small, fontWeight: weight.strong },
   agentTag: { paddingHorizontal: 5, height: 18, justifyContent: 'center', borderRadius: radius.mark, backgroundColor: colors.tonalBg },
   agentTagText: { color: colors.accent, fontSize: 11, fontWeight: weight.strong },

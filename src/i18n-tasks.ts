@@ -623,6 +623,9 @@ registerTranslations({
   'act.unknown': ['有人', 'Someone'],
   // 一条事件怎么说(task-activity-model.ts describe)
   'act.created': ['创建了任务', 'created the task'],
+  'act.commented': ['评论:', 'commented:'],
+  'comments.title': ['评论', 'Comments'],
+  'comments.earlier': ['还有 {n} 条更早的评论', '{n} earlier comments'],
   'act.deleted': ['删除了任务', 'deleted the task'],
   'act.done': ['完成了任务', 'completed the task'],
   'act.reopened': ['重新打开了任务', 'reopened the task as'],
@@ -671,6 +674,7 @@ registerTranslations({
   'act.f.other': ['其他', 'other'],
   // 事件类型(筛选)
   'act.t.created': ['创建', 'Created'],
+  'act.t.comment': ['评论', 'Comments'],
   'act.t.title': ['标题 / 描述', 'Title / description'],
   'act.t.status': ['状态变更', 'Status'],
   'act.t.done': ['完成', 'Completed'],
