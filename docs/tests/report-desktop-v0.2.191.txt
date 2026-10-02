@@ -1,0 +1,10 @@
+desktop v0.2.191 — 成员与部门(#419 v1) + 全屏编辑顶栏统一(#450)
+================================================================================
+A. 本版内容(0.2.190 发版提交之后 main 上合入的 PR + 本 PR)
+  #666 组织架构 v1:手机「成员与部门」逐层进入 + 添加子部门表单(照 Vincent 截图)、成员调动/设负责人/移出、更多(部门设置/删除);桌面左树右详情;「人员」按部门分组;旧 Hub 隐藏。org-model 30/30;浏览器 test-org-chart 20/20(改动前 16/20 失败)。依赖 Hub .85(已上生产 12:09)。
+  #669 全屏编辑页顶栏:EditorHeaderButton 统一高度/圆角/边框,保存=主按钮+明确禁用态,规则页状态行另起一行不再挤歪按钮;editor-header 36/36(main 13/36);浏览器 24/24(main 6/24)。
+  #670 测试:test-voice-hold-overlay 减弱动态效果检查改为记录全部样式序列,消除时序偶发失败(仅测试)。
+  本 PR(版本号):0.2.190 → 0.2.191,versionCode 2190 → 2191;release-desktop-auto-update.yml 加 What's new in 0.2.191;重新生成 src/changelog-bundled.ts。
+  本地:干净 origin/main(7174620) bump 后 npm ci / npm test / npm run typecheck 全部 rc=0;android-release-notes.mjs 0.2.191 rc=0。
+B. 验证边界(如实)
+  页内桩 + 浏览器驱动验证;未在真机 iPad 验证全屏顶栏;部门群与拖拽调整不在 v1。
