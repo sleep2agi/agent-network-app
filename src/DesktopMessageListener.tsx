@@ -10,6 +10,8 @@ import { canOpenUserEventStream, openUserEventStream } from './user-events-sse';
 import { requestNotifierRefresh } from './notifier-bus';
 import { isHumanDmNotice, parseMemberPresence } from './human-dm';
 import { activeDmPeer, emitHumanDm, emitMemberPresence } from './human-dm-bus';
+import { parseGroupEvent } from './group-chat';
+import { emitGroupChat } from './group-chat-bus';
 
 const SEEN_CAP = 200;
 
@@ -28,6 +30,10 @@ export default function DesktopMessageListener({ cfg, onOpenTask }: { cfg: HubCo
       onEvent: (raw) => {
         const presence = parseMemberPresence(raw);
         if (presence) { emitMemberPresence(presence); return; }
+        // 群聊(RFC-042,Hub ≥ .93):group_message / group_read 不是 desktop_message,不弹顶部提示,
+        // 只让会话列表改未读、开着的群聊拉新的。旧 Hub 不推这两种事件。
+        const groupEvent = parseGroupEvent(raw);
+        if (groupEvent) { emitGroupChat(groupEvent); return; }
         const result = consumeDesktopMessageEvent(raw, ctx);
         if (result.status !== 'present') return;
         if (seen.current.has(result.notice.messageId)) return;

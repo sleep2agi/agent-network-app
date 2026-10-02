@@ -71,7 +71,7 @@ ck('坏值 / null / 旧值 → all(不让人以为会话都没了)', ['', null, 
 const screen = read('./AgentsScreen.tsx');
 const prefs = read('./agent-list-prefs.ts');
 ck('只在会话列表(能置顶的那个)上出现', screen.includes('const showTabs = rowMenu;'));
-ck('N 取实时未读(liveUnread),只数可见会话 + 人员', /unreadConversationCount\(\s*visibleSessions\.map\(s => s\.alias\),\s*\{ counts: liveUnread\.counts, manualUnread: convFlags\.manualUnread \},\s*onOpenPerson \? people : \[\],\s*\)/.test(screen));
+ck('N 取实时未读(liveUnread),只数可见会话 + 人员 + 群(RFC-042)', /unreadConversationCount\(\s*visibleSessions\.map\(s => s\.alias\),\s*\{ counts: liveUnread\.counts, manualUnread: convFlags\.manualUnread \},\s*\[\.\.\.\(onOpenPerson \? people : \[\]\), \.\.\.\(groups \?\? \[\]\)\],\s*\)/.test(screen));
 ck('视图过滤用 floatInput(与「新消息」组同一份,指针移动时按住)+ keep = 当前打开的会话', screen.includes('applyConversationTab(visibleSessions, effectiveTab, { counts: floatInput.counts, manualUnread: convFlags.manualUnread }, selectedAlias)'));
 ck('分组吃过滤后的会话', screen.includes('buildSections(applyAgentFilter(tabbedSessions, activeFilter), query, {'));
 ck('人员同样按 tab 过滤,keep = 当前私信', screen.includes('applyConversationTabToPeople(people, effectiveTab, selectedPerson)'));

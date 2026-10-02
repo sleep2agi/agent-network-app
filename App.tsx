@@ -14,7 +14,8 @@ import { prefetchStatus, login, fetchHubNodes, fetchNetworkId, HubConfig } from 
 import { registerHubAccount } from './src/user-admin-api';
 import { clientLabelForLogin } from './src/login-sessions';
 import { popoutChatChrome, tauriShellPlatform } from './src/window-shell';
-import DmChatScreen from './src/DmChatScreen';
+import DmChatScreen, { type GroupChatRef } from './src/DmChatScreen';
+import { groupNameFor, rememberGroupName } from './src/group-chat-bus';
 import type { Human } from './src/human-dm';
 import { validateNewUser } from './src/user-admin';
 import './src/i18n-users';
@@ -110,6 +111,7 @@ type Screen =
   | { name: 'settings' }
   | { name: 'chat'; alias: string; focusTaskId?: string }  // focusTaskId: 定时任务「去会话」要定位的那条任务
   | { name: 'dm'; alias: string; userId: string; displayName?: string | null }  // 人与人私信(hub#2086);alias = 对方用户名
+  | { name: 'group'; alias: string; groupName?: string }  // 群聊(RFC-042,Hub ≥ .93);alias = group_id
   | { name: 'nodeInfo'; alias: string }
   | { name: 'taskDetail'; taskId: string }   // full-screen (no tab bar) — hardware back returns to /tasks list
   | { name: 'nodeDetail'; alias: string }  // issue #8 row 4 (V1) — 会话行菜单「节点详情」(以前是直接长按); back returns to agents
@@ -491,7 +493,7 @@ function AppRoot() {
   // Bottom inset owner (rule 1): the tab bar when it shows; the chat composer pads itself
   // (ChatScreen composerInset) and so does the two-pane (panes below); any other full-screen
   // leaf gets it from navContent, so its last row is not under the gesture bar.
-  const contentBottomInset = navChromeFor(layout, screen.name, inPageLeaf) === 'none' && screen.name !== 'chat' && screen.name !== 'dm' && screen.name !== 'login' ? tabBarInset : 0;
+  const contentBottomInset = navChromeFor(layout, screen.name, inPageLeaf) === 'none' && screen.name !== 'chat' && screen.name !== 'dm' && screen.name !== 'group' && screen.name !== 'login' ? tabBarInset : 0;
   // Web layout sweep only: lets tests/test-layout-sweep/run.mjs open screens the phone has no
   // tab for (taskDetail, logs, wizard). Never set on a device (SAFE_AREA_SIM is web-only).
   useEffect(() => {
@@ -864,6 +866,8 @@ function AppRoot() {
                       onOpenChat={alias => setScreen({ name: 'chat', alias })}
                       onOpenPerson={p => setScreen(dmScreenFor(p))}
                       selectedPerson={screen.name === 'dm' ? screen.alias : undefined}
+                      onOpenGroup={g => setScreen(groupScreenFor(g))}
+                      selectedGroup={screen.name === 'group' ? screen.alias : undefined}
                       onOpenPicker={() => setScreen({ name: 'picker' })}
                       onOpenNodeDetail={alias => setScreen({ name: 'nodeDetail', alias })}
                       pinnedAliases={mobilePins}
@@ -872,7 +876,7 @@ function AppRoot() {
                       onToggleMute={toggleMute}
                     />
                   </View>
-                  <View style={[styles.twoPaneDetail, screen.name !== 'chat' && screen.name !== 'dm' && { paddingBottom: tabBarInset }]} testID="two-pane-detail">
+                  <View style={[styles.twoPaneDetail, screen.name !== 'chat' && screen.name !== 'dm' && screen.name !== 'group' && { paddingBottom: tabBarInset }]} testID="two-pane-detail">
                     {screen.name === 'chat' ? (
                       <ChatScreen
                         key={`chat:${screen.alias}`}
@@ -890,6 +894,8 @@ function AppRoot() {
                       />
                     ) : screen.name === 'dm' && cfg.networkId ? (
                       <DmChatScreen key={`dm:${screen.userId}`} cfg={cfg} networkId={cfg.networkId} peer={dmPeerOf(screen)} onBack={() => setScreen({ name: 'agents' })} onOpenTask={id => openTaskNotice(id, cfg, setScreen)} hideBack />
+                    ) : screen.name === 'group' && cfg.networkId ? (
+                      <DmChatScreen key={`group:${screen.alias}`} cfg={cfg} networkId={cfg.networkId} group={groupRefOf(screen)} onBack={() => setScreen({ name: 'agents' })} hideBack />
                     ) : screen.name === 'nodeInfo' ? (
                       <NodeDetailScreen key={`nodeInfo:${screen.alias}`} cfg={cfg} alias={screen.alias} onBack={() => setScreen({ name: 'chat', alias: screen.alias })} readOnly layoutWidth={paneAreaWidth - paneListWidth} touch onOpenScheduled={open => setScreen({ name: 'scheduled', open, back: screen })} />
                     ) : screen.name === 'nodeDetail' ? (
@@ -920,6 +926,9 @@ function AppRoot() {
                 />
               ) : screen.name === 'dm' && cfg.networkId ? (
                 <DmChatScreen key={`dm:${screen.userId}`} cfg={cfg} networkId={cfg.networkId} peer={dmPeerOf(screen)} onBack={() => setScreen({ name: 'agents' })} onOpenTask={id => openTaskNotice(id, cfg, setScreen)} />
+              ) : screen.name === 'group' && cfg.networkId ? (
+                // 手机:微信式推入的整页群聊,左上角返回会话列表。
+                <DmChatScreen key={`group:${screen.alias}`} cfg={cfg} networkId={cfg.networkId} group={groupRefOf(screen)} onBack={() => setScreen({ name: 'agents' })} />
               ) : screen.name === 'nodeInfo' ? (
                 <NodeDetailScreen cfg={cfg} alias={screen.alias} onBack={() => setScreen({ name: 'chat', alias: screen.alias })} readOnly onOpenScheduled={open => setScreen({ name: 'scheduled', open, back: screen })} />
               ) : screen.name === 'nodeDetail' ? (
@@ -1013,6 +1022,7 @@ function AppRoot() {
                       filter={screen.name === 'agents' ? screen.filter : undefined}
                       onOpenChat={alias => setScreen({ name: 'chat', alias })}
                       onOpenPerson={p => setScreen(dmScreenFor(p))}
+                      onOpenGroup={g => setScreen(groupScreenFor(g))}
                       onOpenPicker={() => setScreen({ name: 'picker' })}
                       onOpenNodeDetail={alias => setScreen({ name: 'nodeDetail', alias })}
                       pinnedAliases={mobilePins}
@@ -1190,7 +1200,7 @@ function DesktopWorkspace({ cfg, screen, setScreen, onLogout, onLocalDataDeleted
     return () => doc.removeEventListener('keydown', onKey, true);
   }, [setScreen]);
   // With no back header on desktop, the rail must light up the page a detail belongs to (任务详情 → 任务).
-  const active = serverWorkspace ? 'server' : ['chat', 'dm', 'nodeDetail', 'nodeInfo'].includes(screen.name) ? 'agents' : screen.name === 'taskDetail' ? 'tasks' : screen.name;
+  const active = serverWorkspace ? 'server' : ['chat', 'dm', 'group', 'nodeDetail', 'nodeInfo'].includes(screen.name) ? 'agents' : screen.name === 'taskDetail' ? 'tasks' : screen.name;
   const content = screen.name === 'chat' ? (
     <ChatScreen
       cfg={cfg}
@@ -1207,6 +1217,9 @@ function DesktopWorkspace({ cfg, screen, setScreen, onLogout, onLocalDataDeleted
     />
   ) : screen.name === 'dm' && cfg.networkId ? (
     <DmChatScreen key={`dm:${screen.userId}`} cfg={cfg} networkId={cfg.networkId} peer={dmPeerOf(screen)} onBack={() => setScreen({ name: 'agents' })} onOpenTask={id => openTaskNotice(id, cfg, setScreen)} desktop />
+  ) : screen.name === 'group' && cfg.networkId ? (
+    // 桌面:左边会话列表里点群,右边面板就是群聊(和私信同一个面板,没有返回键)。
+    <DmChatScreen key={`group:${screen.alias}`} cfg={cfg} networkId={cfg.networkId} group={groupRefOf(screen)} onBack={() => setScreen({ name: 'agents' })} desktop />
   ) : screen.name === 'tasks' ? (
     <TasksScreen cfg={cfg} desktop onOpenTask={taskId => setScreen({ name: 'taskDetail', taskId })} onOpenVoiceSettings={() => { rememberSettingsCategory('voice'); void openSettingsWindow('voice').then(opened => { if (!opened) setScreen({ name: 'settings' }); }); }} />
   ) : screen.name === 'scheduled' ? <ScheduledTasksScreen key={screen.open ? `scheduled:${screen.open.seq}` : 'scheduled'} cfg={cfg} open={screen.open} onOpenChat={(alias, focusTaskId) => setScreen({ name: 'chat', alias, focusTaskId })} />
@@ -1299,7 +1312,7 @@ function DesktopWorkspace({ cfg, screen, setScreen, onLogout, onLocalDataDeleted
             else setScreen({ name: 'logs' });
           }} />
         ) : (
-          <AgentsScreen cfg={cfg} compact selectedAlias={screen.name === 'chat' || screen.name === 'nodeInfo' ? screen.alias : undefined} pinnedAliases={pinnedAliases} onTogglePin={togglePin} mutedAliases={mutedAliases} onToggleMute={toggleMute} onOpenChatWindow={alias => { void openRememberedChatWindow(alias, cfg.profileId, cfg.username || cfg.serverUrl); }} onOpenChat={alias => setScreen({ name: 'chat', alias })} onOpenPerson={p => setScreen(dmScreenFor(p))} selectedPerson={screen.name === 'dm' ? screen.alias : undefined} onOpenPicker={() => setScreen({ name: 'picker' })} onOpenNodeDetail={alias => setScreen({ name: 'nodeDetail', alias })} />
+          <AgentsScreen cfg={cfg} compact selectedAlias={screen.name === 'chat' || screen.name === 'nodeInfo' ? screen.alias : undefined} pinnedAliases={pinnedAliases} onTogglePin={togglePin} mutedAliases={mutedAliases} onToggleMute={toggleMute} onOpenChatWindow={alias => { void openRememberedChatWindow(alias, cfg.profileId, cfg.username || cfg.serverUrl); }} onOpenChat={alias => setScreen({ name: 'chat', alias })} onOpenPerson={p => setScreen(dmScreenFor(p))} selectedPerson={screen.name === 'dm' ? screen.alias : undefined} onOpenGroup={g => setScreen(groupScreenFor(g))} selectedGroup={screen.name === 'group' ? screen.alias : undefined} onOpenPicker={() => setScreen({ name: 'picker' })} onOpenNodeDetail={alias => setScreen({ name: 'nodeDetail', alias })} />
         )}
       </View>
       <View style={desktopStyles.content}>{content}<ShortcutToast text={shortcutToast} /></View>
@@ -1402,6 +1415,9 @@ function openTaskNotice(requirementId: string, cfg: HubConfig, setScreen: (s: Sc
 // 人员行 → 私信页;私信页 → DmChatScreen 要的对方。
 const dmScreenFor = (p: Human) => ({ name: 'dm' as const, alias: p.username, userId: p.user_id, displayName: p.display_name ?? null });
 const dmPeerOf = (s: { alias: string; userId: string; displayName?: string | null }): Human => ({ user_id: s.userId, username: s.alias, display_name: s.displayName ?? null });
+// 群行 → 群聊页(alias = group_id,和私信一样走「详情」那一套导航:双栏右侧 / 手机推入 / 桌面右面板)。
+const groupScreenFor = (g: { group_id: string; name: string }) => { rememberGroupName(g.group_id, g.name); return { name: 'group' as const, alias: g.group_id, groupName: g.name }; };
+const groupRefOf = (s: { alias: string; groupName?: string }): GroupChatRef => ({ group_id: s.alias, name: s.groupName || groupNameFor(s.alias) || s.alias });
 
 export function LoginScreen({ onLogin, initialProfile, onCancelReauth, onCancelAdd }: {
   onLogin: (cfg: HubConfig) => Promise<void>;

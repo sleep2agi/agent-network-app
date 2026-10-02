@@ -110,11 +110,11 @@ const ck = (name: string, ok: boolean) => { n++; if (ok) { p++; console.log(`  �
   const listener = read('./DesktopMessageListener.tsx');
   ck('SSE 私信通知人员列表与会话', listener.includes('isHumanDmNotice(result.notice)') && listener.includes('emitHumanDm('));
   const agents = read('./AgentsScreen.tsx');
-  ck('人员区块:/humans + /dm/threads,记录人类用户名', agents.includes('fetchHumans(cfg, cfg.networkId)') && agents.includes('fetchDmThreads(') && agents.includes('noteHumanUsernames('));
+  ck('人员区块:/humans + /dm/threads,记录人类用户名', agents.includes('fetchHumans(cfg, cfg.networkId)') && agents.includes('fetchConversationThreads(') && agents.includes('noteHumanUsernames('));
   const dm = read('./DmChatScreen.tsx');
   ck('会话:读 /api/dm、ack、上传后发', dm.includes('fetchDmMessages(') && dm.includes('ackUserMessages(cfg, ids)') && dm.includes("uploadImage(cfg, prepared, { networkId, purpose: 'dm' })") && dm.includes('sendDm('));
   const app = read('../App.tsx');
-  ck('三种布局都能打开私信', (app.match(/<DmChatScreen /g) || []).length === 3 && (app.match(/onOpenPerson=\{p => setScreen\(dmScreenFor\(p\)\)\}/g) || []).length === 3);
+  ck('三种布局都能打开私信', (app.match(/<DmChatScreen [^\n]*peer=\{dmPeerOf\(screen\)\}/g) || []).length === 3 && (app.match(/onOpenPerson=\{p => setScreen\(dmScreenFor\(p\)\)\}/g) || []).length === 3);
   const panel = read('./UserManagementPanel.tsx');
   ck('新建用户:网络可选并按所选网络提交', panel.includes('manageableNetworks(me, networkId, allNetworks)') && panel.includes('network_id: targetNet'));
 }
@@ -137,14 +137,14 @@ const ck = (name: string, ok: boolean) => { n++; if (ok) { p++; console.log(`  �
   ck('人员:没有人 → 整块不画', !shownPeople([], '', [], pinyinMatch).visible);
 
   const agents = readFileSync(new URL('./AgentsScreen.tsx', import.meta.url), 'utf8');
-  // 列表头里人员前面可能还有「管理本部门」入口(#485,只给部门负责人),条件因此是 `peopleShown.visible || …`。
-  const header = agents.indexOf('ListHeaderComponent={peopleShown.visible');
+  // 列表头里人员前面可能还有「管理本部门」入口(#485,只给部门负责人)和群聊区块(RFC-042),条件因此是 `groupsVisible || peopleShown.visible || …`。
+  const header = agents.indexOf('ListHeaderComponent={groupsVisible || peopleShown.visible');
   const footer = agents.indexOf('ListFooterComponent={');
   ck('顺序:人员在 ListHeaderComponent(列表最上面、分组之前)', header > 0 && agents.indexOf('testID="people-section"') > header && agents.indexOf('testID="people-section"') < footer);
   ck('顺序:footer 里不再有人员', !agents.slice(footer).includes('people-section') && !agents.slice(footer).includes('renderPersonRow'));
   ck('人员标题可折叠(与分组同一个 toggleGroup,键 PEOPLE_GROUP_KEY)', agents.includes('onPress={() => toggleGroup(PEOPLE_GROUP_KEY)}'));
   ck('人员随搜索框过滤(同一个 pinyinMatch)', agents.includes('shownPeople(onOpenPerson ? applyConversationTabToPeople(people, effectiveTab, selectedPerson) : [], query, collapsed, pinyinMatch)'));
-  ck('更紧凑对齐:人员展开时第一行 = 第一个人(按部门分组时加上第一个部门小标题)', agents.includes('publishListFirstRowTop(listYRef.current + peopleHeaderHRef.current + (peopleGroups ? peopleGroupHeadHRef.current ?? 0 : 0))'));
+  ck('更紧凑对齐:人员展开时第一行 = 第一个人(按部门分组时加上第一个部门小标题)', agents.includes('publishListFirstRowTop(top + peopleHeaderHRef.current + (peopleGroups ? peopleGroupHeadHRef.current ?? 0 : 0))') && agents.includes('const top = listYRef.current + groupsOffset;'));
 }
 
 console.log(`\n${p}/${n} passed`);

@@ -3,7 +3,8 @@
 // 手机:照 Vincent 2026-10-02 发的企业微信截图做 —— 全屏页,顶栏「‹ 成员与部门 ×」、搜索框、当前层级的名字、
 // 子部门一行一个(›点进去)、本部门成员(头像 + 名字)、底部一条「添加成员 | 添加子部门 | 更多」;
 // 「添加子部门」是一页表单:部门名称* / 上级部门(默认当前部门)/ 部门 ID(可不填,自动生成)/ 部门负责人。
-// 不做「创建部门群 / 自动加入部门群」(v1 范围外)。点成员 → 底部面板:调动到其他部门… / 设为负责人 / 移出部门。
+// 部门群(RFC-042,Hub ≥ .93):手机部门页底下一行「部门群 ›」推入整页,桌面在部门详情里一张卡片(DeptGroupPanel.tsx);
+// 旧 Hub 没有群接口 → 两处都不出现。点成员 → 底部面板:调动到其他部门… / 设为负责人 / 移出部门。
 // 桌面:左边部门树、右边部门详情(负责人 · 子部门 · 直属成员),按钮在详情里,改名 / 新建 / 选人都是居中弹窗。
 // 数据和规则都在 Hub(departments.ts);这里只调接口,失败照 Hub 的原因说(org-api.ts orgErrorText)。
 // 负责人模式(RFC-040,传 head):同一套页面,但只在本部门子树里能动 —— 按钮按 orgPerms(Hub 的 viewer_can)出现,
@@ -18,6 +19,8 @@ import ModalKeyboardAvoider from './ModalKeyboardAvoider';
 import { colors, radius, spacing, type as typeScale, weight } from './theme';
 import { useModalSafePadding } from './safe-area-runtime';
 import type { HubConfig } from './api';
+import { DeptGroupSection, useGroupSupport } from './DeptGroupPanel';
+import { canManageDeptGroup } from './group-chat';
 import { createDepartment, deleteDepartment, setMemberDepartment, updateDepartment, type DepartmentInput } from './org-api';
 import {
   childrenOf, deleteBlocker, departmentOf, flattenTree, managedRoots, membersIn, orgPerms, pathTo, personName, searchOrg, subtreeIds, totalMembers,
@@ -155,13 +158,15 @@ type PhoneView =
   | { kind: 'addMembers'; dept: DeptKey }
   | { kind: 'move'; userId: string }
   | { kind: 'tasks'; dept: string }
-  | { kind: 'agents'; dept: string };
+  | { kind: 'agents'; dept: string }
+  | { kind: 'group'; dept: string };
 
 type Sheet = { title: string; items: Array<{ label: string; onPress: () => void; danger?: boolean; disabled?: string; testID: string }> };
 
 export function OrgPhoneModal({ cfg, networkId, networkName, org, people, onChanged, onClose, head }: Common & { onClose: () => void }) {
   const safe = useModalSafePadding('fullScreen');
   const perms = useMemo(() => orgPerms(org, head?.managed ?? null), [org, head?.managed]);
+  const groupsOn = useGroupSupport(cfg, networkId);
   // 负责人:只负责一个部门 → 直接进那个部门(企业微信同样);负责几个 → 先列出来。
   const roots = useMemo(() => (head ? managedRoots(org, head.managed) : []), [org, head]);
   const [stack, setStack] = useState<PhoneView[]>(() => [{ kind: 'dept', id: head && roots.length === 1 ? roots[0].id : null }]);
@@ -216,7 +221,7 @@ export function OrgPhoneModal({ cfg, networkId, networkName, org, people, onChan
 
   const header = () => {
     const title = top.kind === 'dept' ? (top.id ? deptName(org, top.id, networkName) : head ? '管理本部门' : '成员与部门')
-      : top.kind === 'tasks' ? '本部门任务' : top.kind === 'agents' ? '本部门 Agent'
+      : top.kind === 'tasks' ? '本部门任务' : top.kind === 'agents' ? '本部门 Agent' : top.kind === 'group' ? '部门群'
       : top.kind === 'form' ? (top.mode === 'create' ? '添加子部门' : '部门设置')
         : top.kind === 'pickParent' ? '上级部门' : top.kind === 'pickLeader' ? '部门负责人' : top.kind === 'addMembers' ? '添加成员' : '调动到';
     return (
@@ -286,6 +291,12 @@ export function OrgPhoneModal({ cfg, networkId, networkName, org, people, onChan
                 ))}
               </View>
               {!kids.length && !mine.length ? <Text style={{ color: colors.textMuted, padding: spacing.lg }} testID="org-empty">{id ? '这个部门还没有成员和子部门' : '还没有部门,用下面「添加子部门」建一个'}</Text> : null}
+              {groupsOn && id && canManageDeptGroup(head?.managed ?? null, id) ? (
+                // 部门群:只给能建 / 能管的人(owner / admin、本部门负责人);群成员在会话列表里就能看到群。
+                <View style={{ marginTop: spacing.lg, backgroundColor: colors.card }} testID="org-group-link">
+                  <Row onPress={() => push({ kind: 'group', dept: id })} testID="org-group-entry"><Ionicons name="people-outline" size={18} color={colors.textMuted} /><Text style={{ flex: 1, color: colors.text, fontSize: typeScale.body }}>部门群</Text><Ionicons name="chevron-forward" size={16} color={colors.textMuted} /></Row>
+                </View>
+              ) : null}
               {head && id && perms.inScope(id) ? (
                 <View style={{ marginTop: spacing.lg, backgroundColor: colors.card }} testID="org-head-links">
                   <Row onPress={() => push({ kind: 'tasks', dept: id })} testID="org-head-tasks"><Ionicons name="list-outline" size={18} color={colors.textMuted} /><Text style={{ flex: 1, color: colors.text, fontSize: typeScale.body }}>本部门任务</Text><Ionicons name="chevron-forward" size={16} color={colors.textMuted} /></Row>
@@ -365,6 +376,7 @@ export function OrgPhoneModal({ cfg, networkId, networkName, org, people, onChan
         </>
       ) : top.kind === 'tasks' ? <View style={{ flex: 1 }} testID="org-head-tasks-page">{head?.renderTasks(top.dept)}</View>
       : top.kind === 'agents' ? <View style={{ flex: 1 }} testID="org-head-agents-page">{head?.renderAgents(top.dept)}</View>
+      : top.kind === 'group' ? <View style={{ flex: 1 }} testID="org-group-page"><DeptGroupSection cfg={cfg} networkId={networkId} deptId={top.dept} deptName={deptName(org, top.dept, networkName)} managed={head?.managed ?? null} people={people} desktop={false} /></View>
       : (
         <ScrollView style={{ flex: 1, backgroundColor: colors.card }}>
           <DeptPickList org={org} networkName={networkName} value={departmentOf(org, top.userId)} disabled={perms.pickDisabled} rootDisabled={!perms.rootPickable}
@@ -419,6 +431,7 @@ type DeskDialog =
 
 export function OrgDesktopPanel({ cfg, networkId, networkName, org, people, onChanged, head }: Common) {
   const perms = useMemo(() => orgPerms(org, head?.managed ?? null), [org, head?.managed]);
+  const groupsOn = useGroupSupport(cfg, networkId);
   // 负责人:默认选中自己负责的第一个部门;树上本部门以外的(含网络根)灰掉、点不了。
   const [sel, setSel] = useState<DeptKey>(() => (head ? managedRoots(org, head.managed)[0]?.id ?? null : null));
   const [tab, setTab] = useState<'members' | 'tasks' | 'agents'>('members');
@@ -608,6 +621,9 @@ export function OrgDesktopPanel({ cfg, networkId, networkName, org, people, onCh
                 {leader && perms.canManage(dept.id) ? btn('清除', () => void run(() => updateDepartment(cfg, networkId, dept.id, { leader_user_id: null })), 'org-detail-leader-clear') : null}
               </View>
             </View>
+          ) : null}
+          {dept && groupsOn && canManageDeptGroup(head?.managed ?? null, dept.id) ? (
+            <DeptGroupSection key={dept.id} cfg={cfg} networkId={networkId} deptId={dept.id} deptName={dept.name} managed={head?.managed ?? null} people={people} desktop />
           ) : null}
           <View style={{ gap: spacing.sm }}>
             <View style={{ flexDirection: 'row', alignItems: 'center' }}>
