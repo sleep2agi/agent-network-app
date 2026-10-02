@@ -101,12 +101,12 @@ ck('标为未读: sets the local manual mark', /\} else \{\s*updateConversationF
 const hideCase = handler.slice(handler.indexOf("case 'hide':"));
 ck('不显示该对话 records the latest message time; 恢复显示 restores',
   hideCase.includes('restoreConversation(f, alias)') && hideCase.includes('hideConversation(f, alias, liveUnread.lastAt[alias] ?? 0)'));
-ck('hidden rows are partitioned out before grouping', agents.includes('partitionHidden(sessions, convFlags, alias => liveUnread.lastAt[alias] ?? 0, !!q)') && agents.includes('buildSections(applyAgentFilter(visibleSessions, activeFilter), query, {'));
+ck('hidden rows are partitioned out before grouping', agents.includes('partitionHidden(sessions, convFlags, alias => liveUnread.lastAt[alias] ?? 0, !!q)') && agents.includes('applyConversationTab(visibleSessions, effectiveTab,') && agents.includes('buildSections(applyAgentFilter(tabbedSessions, activeFilter), query, {'));
 ck('revived rows are pruned from storage when a newer message arrives', agents.includes('updateConversationFlags(f => pruneRevivedHidden(f, liveUnread.lastAt));'));
 ck('flags bound to this account on mount', agents.includes('bindConversationFlags(cfg);') && agents.includes('useSyncExternalStore(subscribeConversationFlags, getConversationFlags, getConversationFlags)'));
 // 「人员」区块已挪到列表最上面(ListHeaderComponent);footer 里只剩「已隐藏的对话」—— 从隐藏区块的起点切到 footer 的结尾。
 const footerStart = agents.indexOf('ListFooterComponent={');
-const footer = agents.slice(agents.indexOf('{hiddenSessions.length ? (', footerStart), agents.indexOf(') : null}</>}\n      />'));
+const footer = agents.slice(agents.indexOf("{hiddenSessions.length && effectiveTab === 'all' ? (", footerStart), agents.indexOf(') : null}</>}\n      />'));
 ck('「已隐藏的对话」 footer: only when something is hidden, toggles, shows the count', footer.includes('testID="agent-hidden-toggle"') && footer.includes('onPress={() => setShowHidden(v => !v)}') && footer.includes('已隐藏的对话') && footer.includes('{hiddenSessions.length}'));
 ck('footer renders the hidden rows with the normal row renderers (so long-press → 恢复显示 works there)', footer.includes('hiddenSessions.map(item => (') && footer.includes('compact ? renderCompactRow(item) : renderPhoneRow(item)'));
 ck('opening a hidden chat restores it', /const openChat = \(alias: string\) => \{\s*if \(alias in convFlags\.hidden\) updateConversationFlags\(f => restoreConversation\(f, alias\)\);\s*onOpenChat\(alias\);/.test(agents));

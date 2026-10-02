@@ -61,6 +61,10 @@
       "kind": "stub",
       "secs": 304
     },
+    "test-conversation-unread-tab/run.mjs": {
+      "kind": "stub",
+      "secs": 50
+    },
     "test-create-node-workdir/drive.mjs": {
       "kind": "stub",
       "secs": 20

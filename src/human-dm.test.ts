@@ -142,7 +142,7 @@ const ck = (name: string, ok: boolean) => { n++; if (ok) { p++; console.log(`  �
   ck('顺序:人员在 ListHeaderComponent(列表最上面、分组之前)', header > 0 && agents.indexOf('testID="people-section"') > header && agents.indexOf('testID="people-section"') < footer);
   ck('顺序:footer 里不再有人员', !agents.slice(footer).includes('people-section') && !agents.slice(footer).includes('renderPersonRow'));
   ck('人员标题可折叠(与分组同一个 toggleGroup,键 PEOPLE_GROUP_KEY)', agents.includes('onPress={() => toggleGroup(PEOPLE_GROUP_KEY)}'));
-  ck('人员随搜索框过滤(同一个 pinyinMatch)', agents.includes('shownPeople(onOpenPerson ? people : [], query, collapsed, pinyinMatch)'));
+  ck('人员随搜索框过滤(同一个 pinyinMatch)', agents.includes('shownPeople(onOpenPerson ? applyConversationTabToPeople(people, effectiveTab, selectedPerson) : [], query, collapsed, pinyinMatch)'));
   ck('更紧凑对齐:人员展开时第一行 = 第一个人', agents.includes('publishListFirstRowTop(listYRef.current + peopleHeaderHRef.current)'));
 }
 
