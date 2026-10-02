@@ -4,7 +4,11 @@
 // 网络本身是根(parent_id = null 的部门挂在网络下面)。这里只做界面要的:树、路径、某部门的子部门 / 直属成员、
 // 搜索、能不能删、移动时哪些部门不能选(自己和下级),以及「人员」列表按部门分组。
 
-export type Department = { id: string; name: string; parent_id: string | null; leader_user_id: string | null; sort: number; member_count: number };
+export type Department = {
+  id: string; name: string; parent_id: string | null; leader_user_id: string | null; sort: number; member_count: number;
+  /** RFC-040(Hub ≥ .91):这个调用者能不能改名 / 移动 / 删除 / 换负责人(manage),能不能在下面建子部门(create_child)。旧 Hub 没有。 */
+  viewer_can?: { manage?: boolean; create_child?: boolean };
+};
 export type MemberPlacement = { user_id: string; department_id: string | null };
 export type OrgData = { departments: Department[]; members: MemberPlacement[] };
 /** 人(成员表 / 通讯录里的一行),只用到这几个字段。 */
@@ -114,4 +118,67 @@ export function groupPeopleByDepartment<P extends OrgPerson>(data: OrgData | nul
   const rest = people.filter(p => !departmentOf(data, p.user_id));
   if (rest.length) groups.push({ key: null, title: null, people: rest });
   return groups;
+}
+
+// ── 部门负责人(RFC-040,Hub ≥ .91)──────────────────────────────────────────
+// Hub 每次请求现算「我负责的部门 + 全部下级」(/api/auth/me 的 managed_department_ids),界面只照着它和每个部门的
+// viewer_can 画按钮:Hub 会拒的操作不出现。管理员走原来的「成员与部门」,不受这里影响(orgPerms(org, null) = 全能)。
+
+/** /api/auth/me 里当前网络的 managed_department_ids;旧 Hub 没有这个字段 / 不是负责人 ⇒ 空数组(入口不出现)。 */
+export function managedDepartmentIds(me: { networks?: ReadonlyArray<{ network_id?: string; managed_department_ids?: unknown }> | null } | null | undefined, networkId: string | undefined): string[] {
+  const row = (me?.networks ?? []).find(n => n.network_id === networkId);
+  const ids = row?.managed_department_ids;
+  return Array.isArray(ids) ? ids.filter((id): id is string => typeof id === 'string' && !!id) : [];
+}
+
+/** 入口:我负责的部门里,上级不在我负责范围内的那几个(负责一个部门 → 一个;并列负责几个 → 几个)。按树的顺序。 */
+export function managedRoots(data: OrgData, managed: ReadonlySet<string>): Department[] {
+  return flattenTree(data).map(r => r.dept).filter(d => managed.has(d.id) && !(d.parent_id && managed.has(d.parent_id)));
+}
+
+export type OrgPerms = {
+  /** 负责人模式(false = 管理员,和以前一样什么都能做)。 */
+  head: boolean;
+  /** 能不能在这个部门下建子部门(null = 网络根)。 */
+  canCreateUnder: (id: DeptKey) => boolean;
+  /** 能不能改名 / 移动 / 删除 / 换负责人。 */
+  canManage: (id: string) => boolean;
+  /** 这个部门在不在我的管理范围(负责人:本部门子树)。 */
+  inScope: (id: DeptKey) => boolean;
+  /** 能不能调动这个人(负责人:人在本部门子树里;目标也只能是本部门子树)。 */
+  canMoveMember: (userId: string) => boolean;
+  /** 能不能把人移出部门(设为未分配)—— 负责人不能(调出归管理员)。 */
+  canUnassign: boolean;
+  /** 部门选择器里不能选的部门(负责人:本部门子树以外的全部);网络根能不能选。 */
+  pickDisabled: ReadonlySet<string> | undefined;
+  rootPickable: boolean;
+  /** 选负责人 / 添加成员时能选的人(负责人:本部门子树里的成员)。 */
+  candidates: <P extends OrgPerson>(people: readonly P[]) => P[];
+};
+
+export function orgPerms(data: OrgData, managed: ReadonlySet<string> | null): OrgPerms {
+  if (!managed) {
+    return { head: false, canCreateUnder: () => true, canManage: () => true, inScope: () => true, canMoveMember: () => true, canUnassign: true, pickDisabled: undefined, rootPickable: true, candidates: people => [...people] };
+  }
+  const byId = new Map(data.departments.map(d => [d.id, d]));
+  // viewer_can 是 Hub 的判定;没有(理论上不会:有 managed_department_ids 的 Hub 都带)⇒ 按同一规则自己推:
+  // 能建 = 在本部门子树里;能改 = 在子树里、且不是「上级不在子树里」的那个(自己负责的那层归上一级)。
+  const createChild = (id: string) => byId.get(id)?.viewer_can?.create_child ?? managed.has(id);
+  const manage = (id: string) => {
+    const d = byId.get(id);
+    if (d?.viewer_can?.manage !== undefined) return d.viewer_can.manage === true;
+    return !!d && managed.has(id) && !!d.parent_id && managed.has(d.parent_id);
+  };
+  const scoped = (userId: string) => { const dept = departmentOf(data, userId); return !!dept && managed.has(dept); };
+  return {
+    head: true,
+    canCreateUnder: id => !!id && createChild(id),
+    canManage: manage,
+    inScope: id => !!id && managed.has(id),
+    canMoveMember: scoped,
+    canUnassign: false,
+    pickDisabled: new Set(data.departments.filter(d => !managed.has(d.id)).map(d => d.id)),
+    rootPickable: false,
+    candidates: people => people.filter(p => scoped(p.user_id)),
+  };
 }

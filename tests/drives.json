@@ -125,6 +125,10 @@
       "kind": "stub",
       "secs": 59
     },
+    "test-manage-department/drive.mjs": {
+      "kind": "stub",
+      "secs": 60
+    },
     "test-member-editor/drive.mjs": {
       "kind": "stub",
       "secs": 33

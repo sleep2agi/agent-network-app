@@ -6,7 +6,8 @@
 // 主题切换时整体重新赋值,复制的那份不会跟着变(见 app-styles.ts 头注释)。
 
 import { fetchOrg } from './org-api';
-import { groupPeopleByDepartment, type OrgData } from './org-model';
+import { groupPeopleByDepartment, managedDepartmentIds, type OrgData } from './org-model';
+import { ManageDepartmentDesktop, ManageDepartmentIcon } from './ManageDepartment';
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { ActivityIndicator, Platform, Pressable, RefreshControl, SectionList, StyleSheet, View } from 'react-native';
 import { Text, TextInput } from './ui-text';
@@ -135,10 +136,20 @@ export default function AgentsScreen({
   // 多用户 Agent 权限:当前网络里我是不是受限成员(只看管理员分配的 Agent)。决定空列表说什么。
   const [restricted, setRestricted] = useState(false);
   const [selfUserId, setSelfUserId] = useState<string | undefined>(undefined);
+  // 部门负责人(RFC-040,Hub ≥ .91):/api/auth/me 的 managed_department_ids 非空 → 桌面侧栏「人员」上方多一项「管理本部门」。
+  // 旧 Hub 没有这个字段 → 空,入口不出现。
+  const [managedDepts, setManagedDepts] = useState<{ ids: string[]; networkName: string }>({ ids: [], networkName: '' });
+  const [manageDeptOpen, setManageDeptOpen] = useState(false);
   useEffect(() => {
     if (preview) return;
     let live = true;
-    void fetchAuthMe(cfg).then(me => { if (!live) return; setRestricted(isRestrictedIn(me, cfg.networkId)); setSelfUserId(me?.user?.user_id ?? undefined); }).catch(() => {});
+    void fetchAuthMe(cfg).then(me => {
+      if (!live) return;
+      setRestricted(isRestrictedIn(me, cfg.networkId));
+      setSelfUserId(me?.user?.user_id ?? undefined);
+      const net = (me?.networks ?? []).find(n => n.network_id === cfg.networkId);
+      setManagedDepts({ ids: managedDepartmentIds(me, cfg.networkId), networkName: net?.network_name ?? '' });
+    }).catch(() => {});
     return () => { live = false; };
   }, [cfg.serverUrl, cfg.token, cfg.networkId, preview]);
   // 人员(hub#2086):同网络的其他人 + 各自私信未读。旧 hub 没有这些接口 → 空,区块不出现。
@@ -920,7 +931,17 @@ export default function AgentsScreen({
         </View>
       }
       renderItem={({ item }) => (compact ? renderCompactRow(item) : renderPhoneRow(item))}
-      ListHeaderComponent={peopleShown.visible ? (
+      ListHeaderComponent={peopleShown.visible || (compact && managedDepts.ids.length) ? (<>
+        {compact && managedDepts.ids.length ? (
+          // 「管理本部门」:只给部门负责人,放在「人员」上方(RFC-040 §6)。只在桌面侧栏(compact)出现 —— 手机在「设置」里。
+          <Pressable testID="manage-dept-entry" accessibilityRole="button" accessibilityLabel={t('dept.manage')} onPress={() => setManageDeptOpen(true)}
+            style={state => [{ minHeight: 34, flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 12, backgroundColor: colors.listBg }, ((state as { hovered?: boolean }).hovered || state.pressed) ? { backgroundColor: colors.rowHover } : null]}>
+            <ManageDepartmentIcon size={16} />
+            <Text selectable={false} numberOfLines={1} style={{ flex: 1, color: colors.text, fontSize: 13 }}>{t('dept.manage')}</Text>
+            <Ionicons name="chevron-forward" size={12} color={colors.textMuted} />
+          </Pressable>
+        ) : null}
+        {peopleShown.visible ? (
         // 人员:同网络的其他人,点开是私信。放在列表**最上面**、搜索框之下、agent 分组之上(Vincent 2026-09-30
         // 「这个人员放太下面了」)。可折叠(每台设备各记各的),标题带人数;搜索时按名字过滤、不可折叠。
         <View testID="people-section" onLayout={alignFirstRow ? e => { peopleSectionHRef.current = e.nativeEvent.layout.height; publishFirstRowTop(); } : undefined}>
@@ -960,7 +981,8 @@ export default function AgentsScreen({
             </View>
           ))}
         </View>
-      ) : null}
+        ) : null}
+      </>) : null}
       ListFooterComponent={<>{hiddenSessions.length && effectiveTab === 'all' ? (
         // 「不显示该对话」收在这里:列表最底下一行入口,点开就地展开,每行长按 → 恢复显示(点开会话也会恢复)。
         <View testID="agent-hidden-footer">
@@ -984,6 +1006,9 @@ export default function AgentsScreen({
       />
       {rowMenu ? (
         <AgentRowMenu target={menuFor} items={menuItems} touch={!pointer} onSelect={onRowMenu} onClose={() => setMenuFor(null)} />
+      ) : null}
+      {manageDeptOpen && cfg.networkId ? (
+        <ManageDepartmentDesktop cfg={cfg} networkId={cfg.networkId} networkName={managedDepts.networkName} managed={managedDepts.ids} onClose={() => setManageDeptOpen(false)} />
       ) : null}
     </View>
   );

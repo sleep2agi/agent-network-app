@@ -2,6 +2,8 @@
 import { appFetch } from './app-fetch';
 import type { HubConfig } from './api';
 import type { Department, OrgData } from './org-model';
+import { requirementFromHub } from './requirements-hub';
+import type { Requirement } from './requirements-model';
 
 const TIMEOUT_MS = 12_000;
 
@@ -25,6 +27,7 @@ export function orgErrorText(code: string, detail?: Record<string, unknown>): st
     case 'member_not_found': return '这个人已不在本网络';
     case 'too_many_departments': return '部门数量已达上限(500)';
     case 'owner/admin required': return '只有网络所有者和管理员能修改组织架构';
+    case 'department_scope_denied': return '只能在你负责的部门里操作;调进 / 调出本部门请找管理员';
     default: return '没有保存成功,请重试';
   }
 }
@@ -74,3 +77,19 @@ export const deleteDepartment = (cfg: HubConfig, networkId: string, id: string) 
   call<{ deleted: string }>(cfg, `/api/networks/${net(networkId)}/departments/${encodeURIComponent(id)}`, { method: 'DELETE' });
 export const setMemberDepartment = (cfg: HubConfig, networkId: string, userId: string, departmentId: string | null) =>
   call<{ department_id: string | null }>(cfg, `/api/networks/${net(networkId)}/members/${encodeURIComponent(userId)}/department`, { method: 'PUT', body: { department_id: departmentId } });
+
+// ── 部门负责人(RFC-040,Hub ≥ .91)──
+
+/** GET …/departments/:dept/nodes 的一项:本部门(含下级)成员的 Agent,只读状态与健康。 */
+export type DepartmentNode = {
+  node_id: string; alias: string | null; display_name: string | null; owner_user_id: string | null;
+  status: string; last_seen_at: string | null; degraded: Array<{ layer: string; label: string; reason: string }>;
+};
+export const fetchDepartmentNodes = (cfg: HubConfig, networkId: string, departmentId: string) =>
+  call<{ nodes?: DepartmentNode[] }>(cfg, `/api/networks/${net(networkId)}/departments/${encodeURIComponent(departmentId)}/nodes`)
+    .then(d => (Array.isArray(d.nodes) ? d.nodes : []).map(n => ({ ...n, degraded: Array.isArray(n.degraded) ? n.degraded : [] })));
+
+/** 本部门(含下级)的任务卡:GET /api/requirements?department_id=(精简行,仍在我能看见的范围里)。 */
+export const fetchDepartmentRequirements = (cfg: HubConfig, networkId: string, departmentId: string) =>
+  call<{ requirements?: unknown[] }>(cfg, `/api/requirements?network_id=${net(networkId)}&department_id=${encodeURIComponent(departmentId)}&view=summary&limit=500`)
+    .then(d => (Array.isArray(d.requirements) ? d.requirements : []).map(requirementFromHub).filter((r): r is Requirement => !!r));

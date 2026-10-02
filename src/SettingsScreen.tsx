@@ -49,6 +49,8 @@ import { useModalSafePadding } from './safe-area-runtime';
 import { withBasePadding } from './modal-safe-area';
 import { elevated, buttonStyle, buttonTextStyle } from './elevation';
 import UserManagementPanel from './UserManagementPanel';
+import { ManageDepartmentPhone } from './ManageDepartment';
+import { managedDepartmentIds } from './org-model';
 import { canManageUsers, type AuthMe } from './user-admin';
 import { useLoginSessions } from './useLoginSessions';
 import { groupSubtitle, groupTestKey, memberSubtitle, sessionSubtitle, visibleSessions, SESSIONS_VISIBLE_DEFAULT, type DeviceKind, type LoginSession } from './login-sessions';
@@ -293,6 +295,9 @@ export default function SettingsScreen({
   const tauriDesktop = !!(globalThis as any).__TAURI_INTERNALS__;
   const platform = notifyPreview?.platform ?? settingsPlatform(Platform.OS, tauriDesktop);
   const usersAvailable = canManageUsers(authMe, me.networkId);
+  // 部门负责人(RFC-040,Hub ≥ .91):手机设置列表最上面一组「管理本部门」(电脑在侧栏「人员」上方)。旧 Hub ⇒ 空,不出现。
+  const managedDepts = managedDepartmentIds(authMe, me.networkId);
+  const [manageDeptOpen, setManageDeptOpen] = useState(false);
   const filtered = useMemo(() => filterSettings(query, { localHub: !!localHub, users: usersAvailable }, undefined, platform), [query, localHub, usersAvailable, platform, language]);
   const searching = query.trim().length > 0;
   const visible = useMemo(() => visibleRowKeys(query, filtered), [query, filtered]);
@@ -424,6 +429,17 @@ export default function SettingsScreen({
             value={cfg.serverUrl.replace(/^https?:\/\//, '').replace(/\/$/, '')}
             accessibilityLabel={tr('nav.server')}
             onPress={onOpenServer}
+          />
+        </SettingsGroup>
+      ) : null}
+      {managedDepts.length && me.networkId ? (
+        <SettingsGroup testID="settings-group-manage-dept">
+          <SettingsRow
+            testID="settings-row-manageDepartment"
+            icon="git-network-outline"
+            label={tr('dept.manage')}
+            accessibilityLabel={tr('dept.manage')}
+            onPress={() => setManageDeptOpen(true)}
           />
         </SettingsGroup>
       ) : null}
@@ -1206,6 +1222,9 @@ export default function SettingsScreen({
           </View>
         </View>
       </Modal>
+      {manageDeptOpen && me.networkId ? (
+        <ManageDepartmentPhone cfg={cfg} networkId={me.networkId} networkName={me.networkName ?? ''} managed={managedDepts} onClose={() => setManageDeptOpen(false)} />
+      ) : null}
       <AccountSwitcher
         visible={switcherOpen}
         variant={compact ? 'sheet' : 'dialog'}
