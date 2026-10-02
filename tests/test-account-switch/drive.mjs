@@ -11,7 +11,8 @@
 //   4  after every switch the agent list and the task list show only that account's data
 //   5  after every switch the previous hub's user SSE is closed and the new hub's is open
 //   6  reload: both accounts are still saved, the last one is still active
-//   7  geometry: the 切换账号 entry lines up with 退出登录 and the other settings rows (boundingBox)
+//   7  geometry: phone — the 切换账号 block lines up with 退出登录; wide — 切换账号 is a row in the same column as
+//      添加 Hub / 账号 and the isolated 移除当前账号 button sits under them with its label centred (settings v1, #648)
 //   8  phone shows a bottom sheet; wide shows a centred dialog
 // Screenshots go to OUT. Exit 1 when any assertion fails.
 import { createServer } from 'node:http';
@@ -145,11 +146,14 @@ async function run(vp, viewport, ua, wide) {
     const lo = await box(page, tid('settings-logout-row'));
     const label = await box(page, `${tid('settings-switch-account-row')} >> text=切换账号`);
     const loLabel = await box(page, `${tid('settings-logout-row')} >> text=移除当前账号`);
+    // #427 (settings v1, #648): 切换账号 is a kit row in the 安全 card (same column as 添加 Hub / 账号); 移除当前账号 is
+    // the isolated full-width red button under every card (its 1px border makes it 1px wider on each side), label centred.
     record(vp, '7 wide: 切换账号 row geometry', {
       betweenAddAndLogout: add.y + add.h <= sw.y && sw.y + sw.h <= lo.y,
-      sameLeftAsLogout: Math.abs(sw.x - lo.x) <= 0.5, sameWidthAsLogout: Math.abs(sw.w - lo.w) <= 0.5, sameHeightAsLogout: Math.abs(sw.h - lo.h) <= 0.5,
       sameLeftAsAdd: Math.abs(sw.x - add.x) <= 0.5, sameWidthAsAdd: Math.abs(sw.w - add.w) <= 0.5,
-      labelSameXAsLogout: Math.abs(label.x - loLabel.x) <= 0.5,
+      atLeast52: sw.h >= 51.5 && add.h >= 51.5,
+      logoutSameColumn: Math.abs(lo.x - sw.x) <= 1.5 && Math.abs((lo.x + lo.w) - (sw.x + sw.w)) <= 1.5,
+      logoutLabelCentred: Math.abs((loLabel.x + loLabel.w / 2) - (lo.x + lo.w / 2)) <= 1,
     }, { add, switch: sw, logout: lo, label, logoutLabel: loLabel });
     await page.locator(tid('settings-switch-account-row')).screenshot({ path: join(OUT, `${vp}-switch-row.png`) });
   }

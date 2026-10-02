@@ -72,11 +72,16 @@ try {
   ck(`${tag} header title +200`,near(dTitle,200),{before:before.title.head.w,after:after.title.head.w});
   ck(`${tag} every row title cell +200`,after.title.cells.every((c,i)=>near(c.w-before.title.cells[i].w,200)),after.title.cells.map((c,i)=>+(c.w-before.title.cells[i].w).toFixed(1)));
   const others=ids.filter(id=>id!=='title');
-  ck(`${tag} other columns keep widths`,others.every(id=>near(after[id].head.w,before[id].head.w)&&after[id].cells.every((c,i)=>near(c.w,before[id].cells[i].w))),Object.fromEntries(others.map(id=>[id,[before[id].head.w,after[id].head.w]])));
+  // Since #564 (tablet list fit) columns the user has not dragged shrink toward their compact widths when the table
+  // no longer fits, before it scrolls — so widening the title may narrow the others. They must never grow, and each
+  // header still matches its cells (next check). The drive asserted 「keep widths」 and had been red since #564.
+  ck(`${tag} other columns never grow (may shrink to fit)`,others.every(id=>after[id].head.w<=before[id].head.w+0.5&&after[id].head.w>=40&&after[id].cells.every((c,i)=>c.w<=before[id].cells[i].w+0.5)),Object.fromEntries(others.map(id=>[id,[before[id].head.w,after[id].head.w]])));
   ck(`${tag} header/cell aligned after`,ids.every(id=>after[id].cells.every(c=>near(c.x,after[id].head.x)&&near(c.w,after[id].head.w))));
   ck(`${tag} handle click did not toggle sort`,await page.getByTestId('req-sort-title').getAttribute('aria-selected')===sort0);
   const s1=await scroll();
-  ck(`${tag} table scrolls horizontally inside its card`,!!s1.inner&&s1.inner.insideCard&&(cw0===null?s1.inner.scrollWidth>s1.inner.clientWidth:near(s1.inner.scrollWidth-sw0,200)),{baseline:s0.inner,after:s1.inner});
+  // The +200 title no longer fits after the others reached what they can give up: the table scrolls inside its card
+  // (content grew by the 200 minus whatever the un-dragged columns gave up).
+  ck(`${tag} table scrolls horizontally inside its card`,!!s1.inner&&s1.inner.insideCard&&(cw0===null?s1.inner.scrollWidth>s1.inner.clientWidth:(s1.inner.scrollWidth-sw0>0&&s1.inner.scrollWidth-sw0<=200.5)),{baseline:s0.inner,after:s1.inner});
   ck(`${tag} page body does not scroll`,s1.page.scrollWidth===s1.page.clientWidth&&s1.page.scrollHeight===s1.page.clientHeight,s1.page);
   await page.screenshot({path:`${out}/${tag}-after.png`});
   await page.evaluate(()=>{const head=document.querySelector('[data-testid="task-column-title"]');let el=head.parentElement;while(el&&!(el.scrollWidth>el.clientWidth))el=el.parentElement;el.scrollLeft=el.scrollWidth;});

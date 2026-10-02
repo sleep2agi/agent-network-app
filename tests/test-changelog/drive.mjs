@@ -37,6 +37,15 @@ const BODY = JSON.parse(`[${/BUNDLED_RELEASE_BODY: string = \[\n([\s\S]*?)\n\]\.
 const APP_VERSION = /APP_VERSION = '([^']+)'/.exec(readFileSync(new URL('../../src/version.ts', import.meta.url), 'utf8'))[1];
 const [maj, min, pat] = APP_VERSION.split('.').map(Number);
 const PREV = `${maj}.${min}.${pat - 1}`, PREV2 = `${maj}.${min}.${pat - 2}`;
+// What the running version's card must show, read from the same notes (not hard-coded: every release changes them —
+// the drive used to expect 「任务仪表盘」 and exactly 新功能 / 修复, true for one release only). The first bullet's text
+// (minus a 新功能：/修复：/提速： prefix), first 8 characters.
+const CURRENT_FIRST = (() => {
+  const lines = BODY.split('\n');
+  const at = lines.findIndex(l => l.trim() === `What's new in ${APP_VERSION}:`);
+  const first = lines.slice(at + 1).find(l => /^\s*[-*]\s+/.test(l)) ?? '';
+  return first.replace(/^\s*[-*]\s+/, '').replace(/^(?:新功能|新增|提速|修复|New|Feature|Fix|Speed)\s*[:：]\s*/i, '').slice(0, 8);
+})();
 
 const types = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.png': 'image/png', '.ttf': 'font/ttf', '.json': 'application/json', '.ico': 'image/x-icon' };
 const web = createServer((req, res) => {
@@ -167,10 +176,11 @@ async function run({ phone }) {
   const v0 = await paintedText(page, tid(`changelog-version-${APP_VERSION}`));
   const d0 = await paintedText(page, tid(`changelog-date-${APP_VERSION}`));
   ck(`${vp}: version + date painted`, painted(v0) && painted(d0) && /^\d{4}-\d{2}-\d{2}$/.test(d0?.text ?? ''), `${pw(v0)} / ${d0?.text} ${pw(d0)}`);
-  const item = await page.locator(tid(`changelog-card-${APP_VERSION}`)).evaluate(el => { const t = [...el.querySelectorAll('div')].find(d => d.textContent.startsWith('任务仪表盘')); const r = t?.getBoundingClientRect(); return r ? { w: r.width, h: r.height } : null; });
-  ck(`${vp}: first item painted in the card`, !!item && item.w > 100 && item.h > 15, JSON.stringify(item));
+  const item = await page.locator(tid(`changelog-card-${APP_VERSION}`)).evaluate((el, head) => { const t = [...el.querySelectorAll('div')].find(d => d.textContent.startsWith(head)); const r = t?.getBoundingClientRect(); return r ? { w: r.width, h: r.height } : null; }, CURRENT_FIRST);
+  ck(`${vp}: first item painted in the card`, CURRENT_FIRST.length >= 4 && !!item && item.w > 100 && item.h > 15, `${CURRENT_FIRST}… ${JSON.stringify(item)}`);
   const groupTitles = await page.locator(tid(`changelog-card-${APP_VERSION}`)).evaluate(el => [...el.querySelectorAll('div')].filter(d => ['新功能', '修复', '提速'].includes(d.textContent) && d.children.length === 0).map(d => d.textContent));
-  ck(`${vp}: grouped (新功能 / 修复)`, groupTitles.join('/') === '新功能/修复', groupTitles.join('/'));
+  const ORDER = ['新功能', '提速', '修复'];
+  ck(`${vp}: grouped (新功能 / 提速 / 修复, in that order)`, groupTitles.length > 0 && groupTitles.every((g, i) => i === 0 || ORDER.indexOf(groupTitles[i - 1]) < ORDER.indexOf(g)), groupTitles.join('/'));
   if (OUT) await page.screenshot({ path: `${OUT}/${tag}-list.png` });
 
   // 3 geometry
