@@ -5,6 +5,9 @@
 export const BUNDLED_RELEASE_BODY: string = [
   "Signed and notarized stable update for macOS (Apple Silicon) and Windows (x64).",
   "",
+  "What's new in 0.2.190:",
+  "- 会话列表顶部新增「全部 / 未读 N」切换（参考飞书）：点「未读」只看有未读消息的会话，读完离开后自动移出；N 实时更新，选择会记住。手机和电脑都有。",
+  "",
   "What's new in 0.2.189:",
   "- 「关于 → 更新日志」里每个版本的发布日期现在显示正确（之前一直停在 0.2.165 的日期）。",
   "- 事件流页面标题左右边距对齐。",
@@ -838,6 +841,7 @@ export const BUNDLED_RELEASE_BODY: string = [
 
 /** Release date (published_at) per version, as far as it was known when this file was generated. */
 export const BUNDLED_RELEASE_DATES: Record<string, string> = {
+  "0.2.189": "2026-10-02T00:38:18Z",
   "0.2.188": "2026-10-01T20:46:20Z",
   "0.2.187": "2026-10-01T19:48:15Z",
   "0.2.186": "2026-10-01T19:06:36Z",
