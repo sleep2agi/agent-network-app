@@ -133,6 +133,10 @@
       "kind": "stub",
       "secs": 20
     },
+    "test-org-chart/drive.mjs": {
+      "kind": "stub",
+      "secs": 60
+    },
     "test-participant-edit/drive.mjs": {
       "kind": "stub",
       "secs": 53
