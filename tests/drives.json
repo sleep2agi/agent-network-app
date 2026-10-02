@@ -137,6 +137,10 @@
       "kind": "stub",
       "secs": 20
     },
+    "test-node-degraded-badge/run.mjs": {
+      "kind": "stub",
+      "secs": 60
+    },
     "test-org-chart/drive.mjs": {
       "kind": "stub",
       "secs": 60

@@ -36,6 +36,8 @@ import { denserRowPitch, publishListFirstRowTop } from './list-rail-align';
 import { usePoll } from './usePoll';
 import { retryUnreadPersistFromPoll } from './conversation-unread-persist';
 import AgentUnreadBadge from './AgentUnreadBadge';
+import DegradedBadge from './DegradedBadge';
+import { nodeDegraded } from './node-degraded';
 import { formatUnreadBadge, type UnreadState } from './unread-ledger';
 import { unreadCountForAgentRow } from './unread-badge';
 import {
@@ -575,11 +577,15 @@ export default function AgentsScreen({
         <AgentUnreadBadge badge={rowBadge(item.alias)} testID={`unread-badge-${item.alias}`} />
       </View>
       <View style={{ flex: 1, minWidth: 0 }}>
-        <Text dense selectable={false} style={[styles.alias, compact && { fontSize: 13, fontWeight: '600' }]} numberOfLines={1}>
-          {pinnedAliases.includes(item.alias) ? '📌 ' : ''}
-          {item.alias}
-          {mutedAliases.includes(item.alias) ? ' 🔕' : ''}
-        </Text>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, minWidth: 0 }}>
+          <Text dense selectable={false} style={[styles.alias, compact && { fontSize: 13, fontWeight: '600' }, { flexShrink: 1 }]} numberOfLines={1}>
+            {pinnedAliases.includes(item.alias) ? '📌 ' : ''}
+            {item.alias}
+            {mutedAliases.includes(item.alias) ? ' 🔕' : ''}
+          </Text>
+          {/* #460 降级:App Server 断开 / TUI 不在 / 需要重新登录 —— Hub 会拒收发给它的新任务。不知道时不画。 */}
+          <DegradedBadge info={nodeDegraded(item)} testID={`agent-degraded-${item.alias}`} />
+        </View>
         {item.task ? (
           <Text dense selectable={false} style={[styles.task, compact && { fontSize: 11 }]} numberOfLines={1}>
             {item.task}
@@ -707,6 +713,8 @@ export default function AgentsScreen({
             </Text>
             {pinned ? <Ionicons name="pin" size={12} color={colors.textMuted} accessibilityLabel="已置顶" style={rowStyles.pin} /> : null}
             {mutedAliases.includes(item.alias) ? <Ionicons name="notifications-off-outline" size={12} color={colors.textMuted} accessibilityLabel="消息免打扰" style={rowStyles.pin} testID={`agent-muted-${item.alias}`} /> : null}
+            {/* #460 降级徽标(Hub 会拒收新任务);不知道时不画。 */}
+            <DegradedBadge info={nodeDegraded(item)} testID={`agent-degraded-${item.alias}`} />
             <Text dense selectable={false} numberOfLines={1} style={[rowStyles.time, { color: colors.textMuted }]}>{model.time}</Text>
           </View>
           {/* No second line when there is nothing to say (and no badge): the name then centres. */}

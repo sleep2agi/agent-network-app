@@ -54,6 +54,8 @@ import { Text, TextInput } from './ui-text';
 import { Ionicons } from './icons';
 
 import AliasAvatar from './AliasAvatar';
+import DegradedBadge from './DegradedBadge';
+import { nodeDegraded } from './node-degraded';
 import AvatarEditSection from './AvatarEditSection';
 import { teamOf } from './agents-list';
 import { fetchHubNodes, fetchNodeStatus, runNodeLifecycleAction, type HubConfig, type HubNode, type NodeLifecycleAction, type Session } from './api';
@@ -403,6 +405,8 @@ export default function NodeDetailScreen({
             <View style={{ width: 7, height: 7, borderRadius: radius.pill, backgroundColor: chipColor }} />
             <Text style={{ color: colors.textSecondary, fontSize: typeScale.small }}>{online ? s.status : 'offline'}</Text>
           </View>
+          {/* #460 降级:原因 + 修法在提示条里(悬停 / 点按)。 */}
+          <DegradedBadge info={nodeDegraded(s)} testID="node-degraded" size="header" />
         </View>
         {chips.length ? (
           <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: spacing.xs }}>
