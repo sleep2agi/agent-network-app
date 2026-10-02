@@ -1,0 +1,8 @@
+desktop v0.2.196 — 部门负责人管理本部门(#455)
+================================================================================
+A. 本版内容(0.2.195 发版提交之后 main 上合入的 PR + 本 PR)
+  #681 部门负责人「管理本部门」入口：只有 /api/auth/me 返回 managed_department_ids 时显示（旧 Hub、非负责人、只读成员都不显示）。电脑侧栏一行打开大窗口（部门树负责人模式，范围外置灰；成员 / 任务 / Agent 三个页签）；手机在「设置」顶部，直接进入自己负责的部门、逐层进入，调人是「选人 → 选部门」。只显示 Hub 会接受的操作（按 viewer_can）。ck 25/25，npm test 322/322，新驱动 26/26（main 上 16/26 失败），管理员组织架构驱动 20/20 不变。
+  本 PR(版本号):0.2.195 → 0.2.196,versionCode 2195 → 2196;release-desktop-auto-update.yml 加 What's new in 0.2.196;重新生成 src/changelog-bundled.ts。
+  本地:干净 origin/main(21ce3bc) bump 后 npm ci / npm test / npm run typecheck 全部 rc=0;android-release-notes.mjs 0.2.196 rc=0。
+B. 验证边界(如实)
+  ck 单测 + 页内桩浏览器驱动(桌面/手机、浅色/深色、非负责人、旧 Hub);需要 Hub 0.9.0-preview.91(10-03 00:38 已上生产),更早的 Hub 不显示入口,其他行为与 0.2.195 相同。主任务看板的「本部门」快捷筛选、从「任务」页签打开卡片不在本版。
