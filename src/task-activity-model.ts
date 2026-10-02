@@ -14,7 +14,8 @@ export const COLLAPSE_MS = 5 * 60_000;
 /** 默认读多久以内的(之前的点「加载更早」)。 */
 export const ACTIVITY_WINDOW_MS = 7 * 86_400_000;
 
-export type ActivityKind = 'created' | 'changed' | 'deleted';
+// comment(#474,Hub ≥ preview.89):一条评论 / 进展,正文在 new.text;旧 Hub 没有这种事件,旧 app 不认识就丢掉。
+export type ActivityKind = 'created' | 'changed' | 'deleted' | 'comment';
 export interface ActivityEvent {
   id: string;
   requirementId: string;
@@ -41,7 +42,7 @@ export function parseEvents(raw: unknown): { events: ActivityEvent[]; nextCursor
   const events: ActivityEvent[] = [];
   for (const row of Array.isArray(data.events) ? data.events : []) {
     const r = row as Record<string, unknown>;
-    const kind = r.kind === 'created' || r.kind === 'changed' || r.kind === 'deleted' ? r.kind : null;
+    const kind = r.kind === 'created' || r.kind === 'changed' || r.kind === 'deleted' || r.kind === 'comment' ? r.kind : null;
     const ms = typeof r.at === 'string' ? Date.parse(r.at) : Number.NaN;
     if (!kind || typeof r.id !== 'string' || typeof r.requirement_id !== 'string' || !Number.isFinite(ms)) continue;
     events.push({
@@ -65,11 +66,12 @@ export function mergeEvents(prev: readonly ActivityEvent[], incoming: readonly A
 }
 
 // ── 事件类型(筛选用)──
-export const ACTIVITY_TYPES = ['created', 'title', 'status', 'done', 'people', 'schedule', 'tags', 'checklist', 'project', 'archive'] as const;
+export const ACTIVITY_TYPES = ['created', 'comment', 'title', 'status', 'done', 'people', 'schedule', 'tags', 'checklist', 'project', 'archive'] as const;
 export type ActivityType = typeof ACTIVITY_TYPES[number];
 
 export function activityType(e: Pick<ActivityEvent, 'kind' | 'field' | 'new'>): ActivityType {
   if (e.kind === 'created') return 'created';
+  if (e.kind === 'comment') return 'comment';
   if (e.kind === 'deleted') return 'archive';
   switch (e.field) {
     case 'column': return e.new === 'done' ? 'done' : 'status';
@@ -206,6 +208,8 @@ export type Part =
   | { t: 'person'; ref: RequirementPersonRef }
   | { t: 'date'; v: string; strike?: boolean }
   | { t: 'check'; done: boolean }
+  /** 评论正文(多行,整段显示)。 */
+  | { t: 'comment'; v: string }
   | { t: 'arrow' };
 
 const COLUMNS: readonly string[] = ['pool', 'doing', 'done'];
@@ -214,6 +218,12 @@ const str = (v: unknown): string => (typeof v === 'string' ? v : '');
 const refs = (v: unknown): RequirementPersonRef[] => (Array.isArray(v) ? v.map(ref).filter((r): r is RequirementPersonRef => !!r) : []);
 const strs = (v: unknown): string[] => (Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string') : []);
 const sameRef = (a: RequirementPersonRef, b: RequirementPersonRef) => a.kind === b.kind && a.id === b.id;
+
+/** 评论事件的正文(new.text);形状不对就空串。 */
+export function commentText(e: Pick<ActivityEvent, 'new'>): string {
+  const v = (e.new ?? null) as { text?: unknown } | null;
+  return v && typeof v.text === 'string' ? v.text : '';
+}
 
 /** 字段名的 i18n 键(并行的「更新了 N 项:标题、状态…」和展开后的每一行都用它)。 */
 export const FIELD_KEY: Record<string, string> = {
@@ -230,6 +240,7 @@ export function describe(e: ActivityEvent): { lead: Part[]; detail: Part[]; done
   const both = (p: Part[]) => ({ lead: p, detail: p });
   if (e.kind === 'created') return both([{ t: 'text', key: 'act.created' }]);
   if (e.kind === 'deleted') return both([{ t: 'text', key: 'act.deleted' }]);
+  if (e.kind === 'comment') return both([{ t: 'text', key: 'act.commented' }, { t: 'comment', v: commentText(e) }]);
   const o = e.old, n = e.new;
   const change = (field: string, from: Part | null, to: Part | null): { lead: Part[]; detail: Part[] } => {
     const tail: Part[] = [...(from ? [from, { t: 'arrow' } as Part] : []), ...(to ? [to] : [{ t: 'text', key: 'act.none' } as Part])];

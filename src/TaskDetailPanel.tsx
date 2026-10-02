@@ -26,6 +26,7 @@ import { checkDraft, startError, editDraftOf, editPatch, hasDetails, hasRoles, t
 import TaskChecklist from './TaskChecklist';
 import TaskIssueBindings from './TaskIssueBindings';
 import TaskTags from './TaskTags';
+import TaskComments from './TaskComments';
 import { parseIssue } from './requirement-issues';
 import { ExternalLink, levelIn, ParentBreadcrumb, SubRequirements } from './TaskRelations';
 import TaskDescriptionEditor from './TaskDescriptionEditor';
@@ -354,6 +355,8 @@ export default function TaskDetailPanel({ cfg, item, readOnly = false, editField
           : <Text style={s.muted} testID="req-details-unsupported">{tr('tasks.copy.138')}</Text>
       )}
       </Locked>
+      {/* 评论 / 进展(#474):只读,Agent 经 MCP 发、人经 REST 发;旧 Hub / 没有评论时不画。 */}
+      <TaskComments key={`comments:${item.id}`} cfg={cfg} requirementId={item.id} people={people ?? []} onLoadPeople={onLoadPeople} />
       <Pressable
         accessibilityRole="button"
         accessibilityLabel={moreShown ? tr('detail.lessA11y') : tr('detail.moreA11y')}

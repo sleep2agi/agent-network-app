@@ -242,6 +242,10 @@
       "kind": "stub",
       "secs": 23
     },
+    "test-task-comments/drive.mjs": {
+      "kind": "stub",
+      "secs": 25
+    },
     "test-task-archive/drive.mjs": {
       "kind": "stub",
       "secs": 40
