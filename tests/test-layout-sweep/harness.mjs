@@ -47,10 +47,13 @@ export const initScript = ({ theme }) => {
   const RULES = window.__rulesFixture || '# 示例规则\n\n占位内容,只用于布局测量。\n\n## 第二节\n\n- 一\n- 二\n';
   const LISTING = JSON.stringify({ path: '', total: 3, truncated: false, entries: [{ name: 'src', type: 'dir' }, { name: 'README.md', type: 'file', size: 120 }, { name: 'package.json', type: 'file', size: 64 }] });
   const mcp = (name, args) => {
-    if (name === 'read_node_rules_file' || name === 'write_node_rules_file') return { ok: true, request_id: 'r_sweep', op: 'read' };
+    if (name === 'read_node_rules_file') return { ok: true, request_id: 'r_sweep', op: 'read' };
+    // A write answers as a write (like the hub): the app then says 「CLAUDE.md 已保存到节点工作目录」.
+    if (name === 'write_node_rules_file') return { ok: true, request_id: 'w_sweep', op: 'write' };
     if (name === 'list_node_files') return { ok: true, request_id: 'f_sweep_list', op: 'read' };
     if (name === 'get_rules_file_result') {
       const listing = args?.request_id === 'f_sweep_list';
+      if (args?.request_id === 'w_sweep') return { ok: true, request_id: 'w_sweep', op: 'write', status: 'done', file_name: 'CLAUDE.md', exists: true, content: null, error: null, age_ms: 5 };
       return { ok: true, request_id: args?.request_id, op: 'read', status: 'done', file_name: listing ? null : 'CLAUDE.md', exists: true, content: listing ? LISTING : RULES, error: null, age_ms: 5 };
     }
     return { ok: true };

@@ -25,17 +25,52 @@ export const FocusRing = forwardRef<any, any>(function FocusRing({ style, childr
   );
 });
 
+/**
+ * 编辑器顶栏(规则文件、任务描述、定时任务内容的全屏和内联工具条)里所有控件的统一高度:桌面 30,手指点的原生端 36。
+ * 「阅读 / 编辑」切换、重新读取、保存、退出全屏都是这个高 —— 中线对齐(2026-10-02 #450 iPad 截图:退出全屏低一截、
+ * 三个按钮三种样子)。几何守卫:src/editor-header.test.ts + tests/test-editor-header/drive.mjs。
+ */
+export const EDITOR_BTN_HEIGHT = WEB ? 30 : 36;
+
+/**
+ * 编辑器顶栏的按钮。plain = 描边;primary = 强调色底(保存)。height:跟同一行的切换控件一样高(手机整页用 Segmented 的 32)。
+ * 禁用:主按钮换成浅灰底 + 灰字(一眼看得出不能点),不只是把强调色调淡 —— 调淡的强调色看起来像「正在加载」。
+ */
+export const EditorHeaderButton = forwardRef<any, { label: string; onPress: () => void; disabled?: boolean; primary?: boolean; accessibilityLabel?: string; testID?: string; height?: number; fontSize?: number }>(
+  function EditorHeaderButton({ label, onPress, disabled, primary, accessibilityLabel, testID, height = EDITOR_BTN_HEIGHT, fontSize = 12 }, ref) {
+    const style = {
+      height, paddingHorizontal: spacing.md, borderRadius: radius.control, justifyContent: 'center' as const, alignItems: 'center' as const, borderWidth: 1,
+      ...(primary
+        ? (disabled ? { backgroundColor: colors.subtleFill, borderColor: colors.subtleFill } : { backgroundColor: colors.accent, borderColor: colors.accent })
+        : { borderColor: colors.border }),
+    };
+    const text = <Text style={{ fontSize, fontWeight: primary ? '600' : '400', color: disabled ? colors.textMuted : primary ? colors.onAccent : colors.textSecondary }} numberOfLines={1}>{label}</Text>;
+    // 主按钮不用 FocusRing:它悬停时把底色换成行悬停色,强调色会被盖掉。
+    return primary ? (
+      <Pressable ref={ref} onPress={onPress} disabled={disabled} accessibilityRole="button" accessibilityLabel={accessibilityLabel ?? label} accessibilityState={{ disabled: !!disabled }} aria-disabled={!!disabled}
+        hitSlop={WEB ? undefined : 6} testID={testID}
+        style={(state: any) => [style, state.focused ? { outlineStyle: 'solid', outlineWidth: 2, outlineColor: colors.accent, outlineOffset: 1 } as any : null, state.pressed && !disabled ? { opacity: 0.85 } : null]}>
+        {text}
+      </Pressable>
+    ) : (
+      <FocusRing ref={ref} onPress={onPress} disabled={disabled} accessibilityRole="button" accessibilityLabel={accessibilityLabel ?? label} accessibilityState={{ disabled: !!disabled }} aria-disabled={!!disabled}
+        hitSlop={WEB ? undefined : 6} testID={testID} style={style}>
+        {text}
+      </FocusRing>
+    );
+  });
+
 /** labels:默认是规则文件的中文标签;新界面传 t() 翻译过的。 */
 export function ModeToggle({ mode, tabs, onChange, labels = RULES_MODE_LABEL, testID }: {
   mode: RulesViewMode; tabs: readonly RulesViewMode[]; onChange: (m: RulesViewMode) => void; labels?: Record<RulesViewMode, string>; testID?: string;
 }) {
   return (
-    <View accessibilityRole="tablist" testID={testID} style={{ flexDirection: 'row', borderWidth: 1, borderColor: colors.border, borderRadius: radius.control, padding: 2, gap: 2 }}>
+    <View accessibilityRole="tablist" testID={testID} style={{ flexDirection: 'row', alignItems: 'stretch', height: EDITOR_BTN_HEIGHT, borderWidth: 1, borderColor: colors.border, borderRadius: radius.control, padding: 2, gap: 2 }}>
       {tabs.map((m) => (
         // aria-selected:react-native-web 不把 accessibilityState.selected 写进 DOM,读屏(和测试)看不出选中的是哪个。
         <FocusRing key={m} accessibilityRole="tab" accessibilityState={{ selected: mode === m }} aria-selected={mode === m} onPress={() => onChange(m)}
           hitSlop={WEB ? undefined : 4} testID={testID ? `${testID}-${m}` : undefined}
-          style={{ paddingHorizontal: spacing.md, paddingVertical: WEB ? 3 : 7, borderRadius: radius.item, backgroundColor: mode === m ? colors.subtleFill : 'transparent' }}>
+          style={{ justifyContent: 'center', paddingHorizontal: spacing.md, borderRadius: radius.item, backgroundColor: mode === m ? colors.subtleFill : 'transparent' }}>
           <Text style={{ fontSize: 12, color: mode === m ? colors.text : colors.textMuted, fontWeight: mode === m ? '600' : '400' }}>{labels[m]}</Text>
         </FocusRing>
       ))}
