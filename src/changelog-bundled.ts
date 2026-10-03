@@ -5,6 +5,10 @@
 export const BUNDLED_RELEASE_BODY: string = [
   "Signed and notarized stable update for macOS (Apple Silicon) and Windows (x64).",
   "",
+  "What's new in 0.2.201:",
+  "- 发消息不再一直停在「发送中」：断线、无响应、Hub 重启时都会变成「未送达 · 点击重试」",
+  "- 设置 → 通知诊断 新增「最近一次发送」各阶段耗时",
+  "",
   "What's new in 0.2.200:",
   "- 任务卡片显示检查项进度「☑ 3/5」，全部完成变绿",
   "- 任务卡片和列表行显示最近一条动态（谁、什么时候更新）",
@@ -876,6 +880,7 @@ export const BUNDLED_RELEASE_BODY: string = [
 
 /** Release date (published_at) per version, as far as it was known when this file was generated. */
 export const BUNDLED_RELEASE_DATES: Record<string, string> = {
+  "0.2.200": "2026-10-03T13:03:05Z",
   "0.2.199": "2026-10-03T01:33:14Z",
   "0.2.198": "2026-10-02T23:46:00Z",
   "0.2.197": "2026-10-02T21:57:59Z",

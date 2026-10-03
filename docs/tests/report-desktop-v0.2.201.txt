@@ -1,0 +1,8 @@
+desktop v0.2.201 — 发消息不再卡在「发送中」(#499)
+================================================================================
+A. 本版内容(0.2.200 发版提交之后 main 上合入的 PR + 本 PR)
+  #693 (#518) 消息气泡不再永远停在「发送中」:发送中切会话/重挂载时失败写回 outbox、无主 pending 打开会话即转「未送达·点击重试」;sendTask 整次请求(含响应体)15s 上限;附件上传 120s 上限;重试复用 client_request_id;身份按 hub+token 缓存,热身后每次发送 1 个请求;新增 send_timing(含 clock_offset_ms),设置→通知诊断「最近一次发送」。send-settle 31/31,drive test-send-dispatch 19/19,npm test 330/330。
+  本 PR(版本号):0.2.200 → 0.2.201,versionCode 2200 → 2201;release-desktop-auto-update.yml 加 What's new in 0.2.201;重新生成 src/changelog-bundled.ts。
+  本地:干净 origin/main(9bed3e7) bump 后 npm ci / npm test / npm run typecheck 全部 rc=0;android-release-notes.mjs 0.2.201 rc=0。
+B. 验证边界(如实)
+  假 hub 端到端 + 单测;owner 反馈的 5–10s 发送慢在模拟中未复现(0.2.175 与 0.2.200 均 60–90ms),本版用 send_timing 的 clock_offset_ms 区分真实延迟与客户端时钟偏差。
