@@ -19,6 +19,7 @@ import type { RequirementPerson } from './requirement-people';
 import { type DueTone } from './task-board-model';
 import { checklistCounts } from './board-sync';
 import { shortIdLabel } from './task-short-id';
+import { cardActivity, checklistProgress, checklistProgressA11y } from './task-card-activity';
 
 /**
  * accessibilityState + 同样的 aria-* 属性。react-native-web 0.21 已经**不读** accessibilityState
@@ -290,21 +291,70 @@ export function QuickChip({ label, on, onPress, s, testID, icon, accessibilityLa
   );
 }
 
-/** 卡片上的子任务进度:「✓ 3/7」+ 一条细进度条。没有子任务就不画。 */
+/** 卡片上的子任务进度:「✓ 3/7」+ 一条细进度条。没有子任务就不画;全勾完 = 绿色实心勾 + 绿条。 */
 export function ChecklistProgress({ item, s }: { item: Pick<Requirement, 'checklist' | 'checklistCount'>; s: TaskStyles }) {
   useTranslation();
   // 精简列表的行(board-sync.ts)没有子任务条目,只有 Hub 给的计数。
-  const c = checklistCounts(item);
-  const p = { ...c, ratio: c.total ? c.done / c.total : 0 };
-  if (!p.total) return null;
-  const complete = p.done === p.total;
+  const p = checklistProgress(checklistCounts(item));
+  if (!p) return null;
+  const tone = p.complete ? colors.running : colors.textMuted;
   return (
-    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }} testID="task-checklist-progress" accessibilityLabel={tr('tasks.copy.85', { v0: p.done, v1: p.total })}>
-      <Ionicons name={complete ? 'checkmark-circle' : 'checkbox-outline'} size={13} color={complete ? colors.running : colors.textMuted} />
-      <Text style={[s.metaMuted, { fontSize: 11, flexShrink: 0 }]}>{p.done}/{p.total}</Text>
+    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }} testID="task-checklist-progress" accessibilityLabel={checklistProgressA11y(p)} {...({ dataSet: { complete: p.complete ? '1' : '0' } } as object)}>
+      <Ionicons name={p.complete ? 'checkmark-circle' : 'checkbox-outline'} size={13} color={tone} />
+      <Text style={[s.metaMuted, { fontSize: 11, flexShrink: 0, fontVariant: ['tabular-nums'] }, p.complete && { color: colors.running, fontWeight: weight.medium }]}>{p.done}/{p.total}</Text>
       <View style={{ flex: 1, minWidth: 16, height: 3, borderRadius: radius.pill, backgroundColor: colors.subtleFill, overflow: 'hidden' }}>
-        <View style={{ width: `${Math.round(p.ratio * 100)}%`, height: 3, backgroundColor: complete ? colors.running : colors.accent }} testID="task-checklist-bar" />
+        <View style={{ width: `${p.pct}%`, height: 3, backgroundColor: p.complete ? colors.running : colors.accent }} testID="task-checklist-bar" />
       </View>
+    </View>
+  );
+}
+
+/** 列表行上的紧凑进度(#506):图标 +「3/5」,不画进度条;和优先级徽标 / 期限胶囊同高(20),一行里中线对齐。 */
+export function ChecklistCompact({ item, s, testID = 'task-checklist-compact' }: { item: Pick<Requirement, 'checklist' | 'checklistCount'>; s: TaskStyles; testID?: string }) {
+  useTranslation();
+  const p = checklistProgress(checklistCounts(item));
+  if (!p) return null;
+  const tone = p.complete ? colors.running : colors.textSecondary;
+  return (
+    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 3, height: 20, paddingHorizontal: 6, borderRadius: BOARD_RADIUS.pill, backgroundColor: p.complete ? colors.running + '1a' : colors.subtleFill, flexShrink: 0 }} testID={testID} accessibilityLabel={checklistProgressA11y(p)} {...({ dataSet: { complete: p.complete ? '1' : '0' } } as object)}>
+      <Ionicons name={p.complete ? 'checkmark-circle' : 'checkbox-outline'} size={11} color={tone} />
+      <Text style={[s.dueText, { color: tone, fontVariant: ['tabular-nums'] }]} numberOfLines={1}>{p.done}/{p.total}</Text>
+    </View>
+  );
+}
+
+// 卡片上的相对时间:整个看板共用一个每分钟一跳的时钟(500 张卡不各开一个定时器)。
+let minuteNow = Date.now();
+const minuteListeners = new Set<(n: number) => void>();
+let minuteTimer: ReturnType<typeof setInterval> | null = null;
+export function useMinuteNow(): number {
+  const [now, setNow] = useState(() => (minuteListeners.size ? minuteNow : (minuteNow = Date.now())));
+  useEffect(() => {
+    minuteListeners.add(setNow);
+    if (!minuteTimer) minuteTimer = setInterval(() => { minuteNow = Date.now(); minuteListeners.forEach(f => f(minuteNow)); }, 30_000);
+    return () => { minuteListeners.delete(setNow); if (!minuteListeners.size && minuteTimer) { clearInterval(minuteTimer); minuteTimer = null; } };
+  }, []);
+  return now;
+}
+
+/**
+ * 卡片 / 手机列表行最下面一行弱化的「2 小时前 · 张三 更新」(#506)。Agent 名字前一个芯片图标;名字太长只截名字,
+ * 时间和动词不截。Hub 不给 updatedAt(旧 Hub)就不画。
+ */
+export function CardActivityLine({ item, people, s }: { item: Pick<Requirement, 'id' | 'updatedAt' | 'updatedBy' | 'createdAt'>; people: readonly RequirementPerson[]; s: TaskStyles }) {
+  const { language } = useTranslation();
+  const now = useMinuteNow();
+  const a = cardActivity(item, people, now);
+  if (!a) return null;
+  const text = [s.metaMuted, { fontSize: 11, lineHeight: 16 }];
+  return (
+    <View style={{ flexDirection: 'row', alignItems: 'center', minHeight: 16, minWidth: 0 }} testID="task-card-activity" accessibilityLabel={a.a11y} {...({ dataSet: { actor: a.actor ? (a.actor.agent ? 'agent' : 'user') : 'none', verb: a.verb } } as object)}>
+      {a.actor ? <>
+        <Text style={[text, { flexShrink: 0 }]} numberOfLines={1} testID="task-card-activity-ago">{a.ago}{' ·\u00a0'}</Text>
+        {a.actor.agent ? <Ionicons name="hardware-chip-outline" size={11} color={colors.textMuted} style={{ marginRight: 2 }} testID="task-card-activity-agent" /> : null}
+        <Text style={[text, { flexShrink: 1, minWidth: 0 }]} numberOfLines={1} testID="task-card-activity-name">{a.actor.name}</Text>
+        <Text style={[text, { flexShrink: 0 }]} numberOfLines={1}>{language === 'zh' ? '' : '\u00a0'}{a.verbText}</Text>
+      </> : <Text style={[text, { flexShrink: 1 }]} numberOfLines={1}>{a.text}</Text>}
     </View>
   );
 }
