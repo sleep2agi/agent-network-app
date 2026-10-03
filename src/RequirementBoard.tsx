@@ -1055,7 +1055,7 @@ function ScopedRequirementBoard({ cfg, desktop, dispatch, onOpenVoiceSettings, s
         <CardMeta item={item} people={people} today={today} s={s} compact={compactCards} />
         <CardFooter item={item} people={people} s={s} touch={!pointer} onParticipants={onParticipants(item)} canAssign={canAssignPeople(item)} meId={meId} />
         {/* 最近动静(#506):最下面一行弱化的小字;卡片 gap 10 对它收到 6,只多一行 16 高。 */}
-        <View style={{ marginTop: -4 }}><CardActivityLine item={item} people={people} s={s} /></View>
+        <View style={{ marginTop: -4 }}><CardActivityLine item={item} people={people} s={s} preview={!!desktop} /></View>
         {moveErrors[item.id] ? <Text style={s.err} numberOfLines={1}>{moveErrors[item.id]}</Text> : null}
       </Pressable>
     ), { borderRadius: BOARD_RADIUS.card }, cardBg());

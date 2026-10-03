@@ -1,6 +1,9 @@
 // #506 卡片 / 列表行上的检查项进度 + 最近动静。ck 风格自执行。
 // 日期一律注入固定偏移时钟(东八区 / 纽约),结果不随跑测试的机器时区变。
-import { activityAgo, cardActivity, checklistProgress, checklistProgressA11y } from './task-card-activity';
+import { activityAgo, cardActivity, checklistProgress, checklistProgressA11y, eventVerbText } from './task-card-activity';
+import { activityTime, lastEventFromHub, usableEvent, type RequirementLastEvent } from './requirement-last-event';
+import { requirementFromHub } from './requirements-hub';
+import { sortRows } from './task-board-model';
 import { checklistCounts } from './board-sync';
 import { fixedOffsetClock } from './due-time';
 import { setLanguagePreference } from './i18n';
@@ -86,6 +89,140 @@ ck('anon: 「Updated 3h ago」/「Created …」', anon && cardActivity({ update
 ck('checklist a11y en', checklistProgressA11y(p35) === 'Checklist 3/5' && checklistProgressA11y(full) === 'Checklist complete 5/5');
 setLanguagePreference('zh');
 
+// ── last_event(Hub ≥ preview.97,agent-network#2308)──
+setLanguagePreference('zh');
+console.log('# last_event 解析');
+const evIso = iso(NOW - 2 * H);
+const parsed = lastEventFromHub({ type: 'comment', field: null, actor: { id: 'u1', kind: 'user', display_name: '张三' }, at: evIso, summary: '已经复现，正在修。' });
+ck('评论 → type/actor/actorName/summary', !!parsed && parsed.type === 'comment' && parsed.field === null && parsed.actor?.id === 'u1' && parsed.actor.kind === 'user' && parsed.actorName === '张三' && parsed.summary === '已经复现，正在修。');
+ck('null / 非对象 / 缺 type / at 读不懂 → null(不抛)', [null, undefined, 'x', 3, {}, { type: 'changed', at: 'nope' }, { type: '', at: evIso }, { type: 'changed' }].every(v => lastEventFromHub(v) === null));
+ck('actor null / 形状不对 → actor null', lastEventFromHub({ type: 'changed', field: 'title', actor: null, at: evIso })!.actor === null && lastEventFromHub({ type: 'changed', field: 'title', actor: { id: 'x', kind: 'robot' }, at: evIso })!.actor === null);
+ck('display_name null → actorName null;空 summary → null', (() => { const e = lastEventFromHub({ type: 'changed', field: 'owner', actor: { id: 'u1', kind: 'user', display_name: null }, at: evIso, summary: '  ' })!; return e.actorName === null && e.summary === null; })());
+const rowNew = requirementFromHub({ id: 'r1', name: 'x', updatedAt: evIso, updated_by: { kind: 'user', id: 'u1' }, last_event: { type: 'created', field: null, actor: null, at: evIso } })!;
+const rowNull = requirementFromHub({ id: 'r1', name: 'x', updatedAt: evIso, last_event: null })!;
+const rowOld = requirementFromHub({ id: 'r1', name: 'x', updatedAt: evIso })!;
+ck('requirementFromHub:有 last_event → lastEvent;null → null;旧 Hub 无字段 → 不出现', rowNew.lastEvent?.type === 'created' && rowNull.lastEvent === null && !('lastEvent' in rowOld));
+ck('requirementFromHub:坏的 last_event → null,整行照样读', requirementFromHub({ id: 'r1', name: 'x', last_event: { type: 7 } })?.lastEvent === null);
+
+const ev = (o: Partial<RequirementLastEvent> & { type: string }, atMs = NOW - 2 * H): RequirementLastEvent => ({ field: null, actor: { kind: 'user', id: 'u1' }, actorName: '张三', at: iso(atMs), summary: null, ...o });
+const withEv = (e: RequirementLastEvent | null | undefined, updatedMs = NOW - 2 * H) => ({ updatedAt: iso(updatedMs), updatedBy: { kind: 'user' as const, id: 'u1' }, createdAt: created, lastEvent: e });
+const line = (e: RequirementLastEvent) => cardActivity(withEv(e), people, NOW, SH)!;
+
+console.log('# last_event → 一句话(zh,每个字段)');
+const ZH: [Partial<RequirementLastEvent> & { type: string }, string][] = [
+  [{ type: 'created' }, '创建了'],
+  [{ type: 'comment', summary: '已经复现' }, '评论了'],
+  [{ type: 'changed', field: 'column', summary: 'pool → doing' }, '把状态改成「进行中」'],
+  [{ type: 'changed', field: 'column', summary: 'doing → done' }, '把状态改成「完成」'],
+  [{ type: 'changed', field: 'column', summary: 'done → pool' }, '把状态改成「需求池」'],
+  [{ type: 'changed', field: 'column', summary: 'pool → weird' }, '改了状态'],
+  [{ type: 'changed', field: 'column' }, '改了状态'],
+  [{ type: 'changed', field: 'priority', summary: 'normal → high' }, '改了优先级'],
+  [{ type: 'changed', field: 'owner' }, '改了负责人'],
+  [{ type: 'changed', field: 'assignee', summary: 'a → b' }, '改了负责人'],
+  [{ type: 'changed', field: 'agent_owner' }, '改了负责 Agent'],
+  [{ type: 'changed', field: 'participants' }, '改了参与人'],
+  [{ type: 'changed', field: 'due', summary: '— → 2026-10-05' }, '改了预计完成'],
+  [{ type: 'changed', field: 'start', summary: '— → 2026-10-01' }, '改了开始时间'],
+  [{ type: 'changed', field: 'title', summary: '新标题' }, '改了标题'],
+  [{ type: 'changed', field: 'description' }, '改了描述'],
+  [{ type: 'changed', field: 'tags', summary: 'bug, ui' }, '改了标签'],
+  [{ type: 'changed', field: 'checklist', summary: '2/5' }, '改了检查项'],
+  [{ type: 'changed', field: 'checklist_item', summary: '[x] 写测试' }, '勾选了检查项'],
+  [{ type: 'changed', field: 'checklist_item', summary: '[ ] 写测试' }, '取消勾选检查项'],
+  [{ type: 'changed', field: 'checklist_item' }, '改了检查项'],
+  [{ type: 'changed', field: 'project', summary: '— → p1' }, '改了项目'],
+  [{ type: 'changed', field: 'parent', summary: '— → r9' }, '改了父任务'],
+  [{ type: 'changed', field: 'archived', summary: '0 → 1' }, '归档了'],
+  [{ type: 'changed', field: 'archived', summary: 'false → true' }, '归档了'],
+  [{ type: 'changed', field: 'archived', summary: '1 → 0' }, '取消归档'],
+  [{ type: 'changed', field: 'archived', summary: '1 → —' }, '取消归档'],
+  [{ type: 'changed', field: 'archived' }, '更新了'],
+  [{ type: 'changed', field: 'some_new_field', summary: 'a → b' }, '更新了'],
+  [{ type: 'changed', field: null }, '更新了'],
+  [{ type: 'deleted' }, '更新了'],
+  [{ type: 'some_future_kind', field: 'column', summary: 'pool → doing' }, '更新了'],
+];
+for (const [e, verb] of ZH) {
+  const a = line(ev(e));
+  ck(`${e.type}/${e.field ?? '-'}${e.summary ? `「${e.summary}」` : ''} → 「2 小时前 · 张三${verb}」`, a.text === `2 小时前 · 张三${verb}` && a.source === 'event' && a.verbText === verb, a.text);
+}
+ck('不露原始 id:没有一句含 pool / doing / done / some_new_field', ZH.every(([e]) => !/pool|doing|done|some_new_field|future/.test(line(ev(e)).text)));
+ck('verb 分类:created / commented / changed', line(ev({ type: 'created' })).verb === 'created' && line(ev({ type: 'comment', summary: 'x' })).verb === 'commented' && line(ev({ type: 'changed', field: 'title' })).verb === 'changed' && line(ev({ type: 'changed', field: 'title' })).field === 'title');
+ck('eventVerbText 单独可用', eventVerbText({ type: 'changed', field: 'column', summary: 'pool → doing' }).text === '把状态改成「进行中」');
+
+console.log('# 评论预览 / 操作者');
+const cm = line(ev({ type: 'comment', summary: '已经复现，\n  正在修。' }));
+ck('评论:preview = 正文(压空白一行),text 不含预览', cm.preview === '已经复现， 正在修。' && cm.text === '2 小时前 · 张三评论了', JSON.stringify(cm));
+ck('评论:读屏带上预览', cm.a11y === '最近动静：2 小时前 · 张三评论了：已经复现， 正在修。', cm.a11y);
+ck('评论没有 summary → 没有预览', line(ev({ type: 'comment' })).preview === null);
+ck('非评论的 summary 不当预览(状态的「pool → doing」不出现)', line(ev({ type: 'changed', field: 'column', summary: 'pool → doing' })).preview === null);
+const nodeEv = line(ev({ type: 'changed', field: 'column', summary: 'pool → doing', actor: { kind: 'node', id: 'nd1' }, actorName: 'hub里的名字' }));
+ck('Agent 操作者:本机名单的名字 + （Agent）、agent=true', nodeEv.text === '2 小时前 · 示例Agent（Agent）把状态改成「进行中」' && nodeEv.actor?.agent === true, nodeEv.text);
+const hubName = line(ev({ type: 'comment', actor: { kind: 'user', id: 'u_left' }, actorName: '已离开的成员', summary: 'x' }));
+ck('本机名单没有这个人 → 用 Hub 给的 display_name', hubName.text === '2 小时前 · 已离开的成员评论了' && hubName.actor?.known === true, hubName.text);
+const noName = line(ev({ type: 'comment', actor: { kind: 'user', id: 'u_zzzzzzzz' }, actorName: null, summary: 'x' }));
+ck('名单没有、Hub 也没给名字 → 「未知成员」', /未知成员/.test(noName.text) && noName.actor?.known === false, noName.text);
+const anonEv = line(ev({ type: 'changed', field: 'column', summary: 'pool → doing', actor: null, actorName: null }));
+ck('actor null → 不写人:「2 小时前 · 把状态改成「进行中」」', anonEv.text === '2 小时前 · 把状态改成「进行中」' && anonEv.actor === null, anonEv.text);
+
+console.log('# 什么时候用 last_event,什么时候退回 #691');
+ck('lastEvent undefined(旧 Hub)→ #691「更新」', cardActivity(withEv(undefined), people, NOW, SH)!.text === '2 小时前 · 张三更新' && cardActivity(withEv(undefined), people, NOW, SH)!.source === 'updatedAt');
+ck('lastEvent null(没有流水)→ #691', cardActivity(withEv(null), people, NOW, SH)!.source === 'updatedAt');
+const newerComment = cardActivity(withEv(ev({ type: 'comment', summary: 'hi' }, NOW - 5 * MIN), NOW - 2 * H), people, NOW, SH)!;
+ck('评论比 updated_at 新 → 用评论、时间取评论的(5 分钟前)', newerComment.source === 'event' && newerComment.text === '5 分钟前 · 张三评论了', newerComment.text);
+const stale = cardActivity(withEv(ev({ type: 'changed', field: 'title' }, NOW - 3 * H), NOW - 1 * H), people, NOW, SH)!;
+ck('last_event 比 updated_at 旧(> 2s)→ 退回「1 小时前 · 张三更新」', stale.source === 'updatedAt' && stale.text === '1 小时前 · 张三更新', stale.text);
+ck('同一次写入(相差 < 2s)→ 用 last_event', cardActivity(withEv(ev({ type: 'changed', field: 'title' }, NOW - 2 * H - 1500), NOW - 2 * H), people, NOW, SH)!.source === 'event');
+ck('updatedAt 缺但有 last_event → 照样用 last_event', cardActivity({ createdAt: created, lastEvent: ev({ type: 'created' }) }, people, NOW, SH)?.text === '2 小时前 · 张三创建了');
+ck('usableEvent:at 读不懂 → null', usableEvent({ updatedAt: iso(NOW), lastEvent: { ...ev({ type: 'created' }), at: 'bad' } }) === null);
+ck('activityTime:评论新于 updated_at 取评论;旧 Hub 取 updated_at;都没有 null',
+  activityTime(withEv(ev({ type: 'comment' }, NOW - MIN), NOW - H)) === NOW - MIN && activityTime(withEv(undefined, NOW - H)) === NOW - H && activityTime({ updatedAt: null }) === null);
+
+const sorted = sortRows([
+  { id: 'a', name: 'a', priority: 'normal', assignee: '', due: '', column: 'pool', createdAt: created, updatedAt: iso(NOW - H) },
+  { id: 'b', name: 'b', priority: 'normal', assignee: '', due: '', column: 'pool', createdAt: created, updatedAt: iso(NOW - 2 * H), lastEvent: ev({ type: 'comment', summary: 'x' }, NOW - MIN) },
+], { key: 'updated', dir: 'desc' }, people).map(r => r.id).join(',');
+ck('「更新时间」排序按卡片上显示的时刻(刚评论的排前面)', sorted === 'b,a', sorted);
+
+setLanguagePreference('en');
+console.log('# last_event en');
+const EN: [Partial<RequirementLastEvent> & { type: string }, string][] = [
+  [{ type: 'created' }, 'created'],
+  [{ type: 'comment', summary: 'x' }, 'commented'],
+  [{ type: 'changed', field: 'column', summary: 'pool → doing' }, 'moved to In progress'],
+  [{ type: 'changed', field: 'column', summary: 'doing → done' }, 'moved to Done'],
+  [{ type: 'changed', field: 'column', summary: 'done → pool' }, 'moved to Backlog'],
+  [{ type: 'changed', field: 'column', summary: '???' }, 'changed status'],
+  [{ type: 'changed', field: 'priority' }, 'changed priority'],
+  [{ type: 'changed', field: 'owner' }, 'changed owner'],
+  [{ type: 'changed', field: 'agent_owner' }, 'changed agent owner'],
+  [{ type: 'changed', field: 'participants' }, 'changed participants'],
+  [{ type: 'changed', field: 'due' }, 'changed due date'],
+  [{ type: 'changed', field: 'start' }, 'changed start date'],
+  [{ type: 'changed', field: 'title' }, 'changed title'],
+  [{ type: 'changed', field: 'description' }, 'changed description'],
+  [{ type: 'changed', field: 'tags' }, 'changed tags'],
+  [{ type: 'changed', field: 'checklist' }, 'changed checklist'],
+  [{ type: 'changed', field: 'checklist_item', summary: '[x] a' }, 'checked an item'],
+  [{ type: 'changed', field: 'checklist_item', summary: '[ ] a' }, 'unchecked an item'],
+  [{ type: 'changed', field: 'project' }, 'changed project'],
+  [{ type: 'changed', field: 'parent' }, 'changed parent task'],
+  [{ type: 'changed', field: 'archived', summary: '0 → 1' }, 'archived'],
+  [{ type: 'changed', field: 'archived', summary: '1 → 0' }, 'unarchived'],
+  [{ type: 'changed', field: 'whatever' }, 'updated'],
+  [{ type: 'mystery' }, 'updated'],
+];
+for (const [e, verb] of EN) {
+  const a = line(ev(e));
+  ck(`${e.type}/${e.field ?? '-'} → 「2h ago · 张三 ${verb}」`, a.text === `2h ago · 张三 ${verb}`, a.text);
+}
+const cmEn = line(ev({ type: 'comment', summary: 'Reproduced, fixing.' }));
+ck('en comment a11y: 「Latest activity: 2h ago · 张三 commented: Reproduced, fixing.」', cmEn.a11y === 'Latest activity: 2h ago · 张三 commented: Reproduced, fixing.', cmEn.a11y);
+ck('en anon event: 「2h ago · moved to In progress」', line(ev({ type: 'changed', field: 'column', summary: 'pool → doing', actor: null })).text === '2h ago · moved to In progress');
+ck('en agent: 「2h ago · 示例Agent (Agent) commented」', line(ev({ type: 'comment', actor: { kind: 'node', id: 'nd1' } })).text === '2h ago · 示例Agent (Agent) commented');
+setLanguagePreference('zh');
+
 console.log('# 接线(源码)');
 const board = readFileSync(new URL('./RequirementBoard.tsx', import.meta.url), 'utf8');
 const table = readFileSync(new URL('./TaskListTable.tsx', import.meta.url), 'utf8');
@@ -93,6 +230,8 @@ ck('看板卡片和手机列表行都画 CardActivityLine', (board.match(/<CardA
 ck('手机列表行的子任务进度是紧凑胶囊(compact)', /meId=\{meId\} compact \/>/.test(board));
 ck('桌面表格标题格有紧凑进度', /<ChecklistCompact item=\{item\} s=\{s\} testID=\{`task-row-checklist-/.test(table));
 ck('桌面表格「更新时间」列把更新者写在时间后面', /byInline=\{/.test(table));
+ck('桌面看板卡片带评论预览(preview={!!desktop}),手机列表行不带', /<CardActivityLine item=\{item\} people=\{people\} s=\{s\} preview=\{!!desktop\} \/>/.test(board) && /<CardActivityLine item=\{item\} people=\{people\} s=\{s\} \/>/.test(board));
+ck('桌面表格有 last_event 时写动词 + 评论预览', /verb: ev\.verbText, preview: ev\.preview \? previewText\(ev\.preview\) : null/.test(table));
 
 console.log(`\n${p}/${t} passed`);
 process.exit(p === t ? 0 : 1);

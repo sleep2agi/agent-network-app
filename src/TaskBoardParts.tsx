@@ -19,7 +19,7 @@ import type { RequirementPerson } from './requirement-people';
 import { type DueTone } from './task-board-model';
 import { checklistCounts } from './board-sync';
 import { shortIdLabel } from './task-short-id';
-import { cardActivity, checklistProgress, checklistProgressA11y } from './task-card-activity';
+import { cardActivity, checklistProgress, checklistProgressA11y, previewText } from './task-card-activity';
 
 /**
  * accessibilityState + 同样的 aria-* 属性。react-native-web 0.21 已经**不读** accessibilityState
@@ -338,23 +338,31 @@ export function useMinuteNow(): number {
 }
 
 /**
- * 卡片 / 手机列表行最下面一行弱化的「2 小时前 · 张三 更新」(#506)。Agent 名字前一个芯片图标;名字太长只截名字,
- * 时间和动词不截。Hub 不给 updatedAt(旧 Hub)就不画。
+ * 卡片 / 手机列表行最下面一行弱化的「2 小时前 · 张三把状态改成「进行中」」(#506)。Hub 给 last_event 就说干了什么(含评论),
+ * 不给(旧 Hub)按 updatedAt 说「更新」。Agent 名字前一个芯片图标;名字太长只截名字,时间和动词不截。
+ * preview(桌面端):评论的正文跟在动词后面,一行、放不下就截,截它先于截名字。手机不画(列表行窄,点开看)。
+ * Hub 不给 updatedAt(更旧的 Hub)就不画。
  */
-export function CardActivityLine({ item, people, s }: { item: Pick<Requirement, 'id' | 'updatedAt' | 'updatedBy' | 'createdAt'>; people: readonly RequirementPerson[]; s: TaskStyles }) {
+export function CardActivityLine({ item, people, s, preview = false }: { item: Pick<Requirement, 'id' | 'updatedAt' | 'updatedBy' | 'createdAt' | 'lastEvent'>; people: readonly RequirementPerson[]; s: TaskStyles; preview?: boolean }) {
   const { language } = useTranslation();
   const now = useMinuteNow();
   const a = cardActivity(item, people, now);
   if (!a) return null;
   const text = [s.metaMuted, { fontSize: 11, lineHeight: 16 }];
+  const showPreview = preview && !!a.preview;
+  const dataSet = { actor: a.actor ? (a.actor.agent ? 'agent' : 'user') : 'none', verb: a.verb, source: a.source, field: a.field ?? '' };
   return (
-    <View style={{ flexDirection: 'row', alignItems: 'center', minHeight: 16, minWidth: 0 }} testID="task-card-activity" accessibilityLabel={a.a11y} {...({ dataSet: { actor: a.actor ? (a.actor.agent ? 'agent' : 'user') : 'none', verb: a.verb } } as object)}>
+    <View style={{ flexDirection: 'row', alignItems: 'center', minHeight: 16, minWidth: 0 }} testID="task-card-activity" accessibilityLabel={a.a11y} {...({ dataSet } as object)}>
       {a.actor ? <>
         <Text style={[text, { flexShrink: 0 }]} numberOfLines={1} testID="task-card-activity-ago">{a.ago}{' ·\u00a0'}</Text>
         {a.actor.agent ? <Ionicons name="hardware-chip-outline" size={11} color={colors.textMuted} style={{ marginRight: 2 }} testID="task-card-activity-agent" /> : null}
         <Text style={[text, { flexShrink: 1, minWidth: 0 }]} numberOfLines={1} testID="task-card-activity-name">{a.actor.name}</Text>
-        <Text style={[text, { flexShrink: 0 }]} numberOfLines={1}>{language === 'zh' ? '' : '\u00a0'}{a.verbText}</Text>
-      </> : <Text style={[text, { flexShrink: 1 }]} numberOfLines={1}>{a.text}</Text>}
+        <Text style={[text, { flexShrink: 0 }]} numberOfLines={1} testID="task-card-activity-verb">{language === 'zh' ? '' : '\u00a0'}{a.verbText}</Text>
+      </> : a.source === 'event'
+        ? <Text style={[text, { flexShrink: 0 }]} numberOfLines={1} testID="task-card-activity-verb">{a.ago}{' ·\u00a0'}{a.verbText}</Text>
+        : <Text style={[text, { flexShrink: 1 }]} numberOfLines={1}>{a.text}</Text>}
+      {/* 预览 flex:1 + 基准 0:只吃剩下的宽度,永远不会挤得名字被截(flexShrink 再大,名字也会被挤掉零点几像素出省略号)。 */}
+      {showPreview ? <Text style={[text, { flex: 1, flexBasis: 0, minWidth: 0 }]} numberOfLines={1} testID="task-card-activity-preview">{previewText(a.preview!)}</Text> : null}
     </View>
   );
 }

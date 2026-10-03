@@ -11,6 +11,7 @@ import './i18n-task-fields';
 import { TaskIssueCount } from './TaskIssueBindings';
 import { issueCount } from './requirement-issues';
 import { personDisplay } from './i18n-task-presentation';
+import { cardActivity, previewText } from './task-card-activity';
 import { REQ_COLUMN_LABEL, hasVisibleTitle, titleText, type Requirement, type RequirementProject } from './requirements-model';
 import type { RequirementPerson } from './requirement-people';
 import { nextSort, type SortKey, type SortSpec } from './task-board-model';
@@ -192,8 +193,13 @@ export default function TaskListTable({ rows, terms, people, projects, sort, set
   const content = (item: Requirement, id: FieldId, rowHovered = false): ReactNode => {
     switch (id) {
       case 'created': case 'updated': {
+        // 「更新时间」列把更新者直接写在时间后面(#506),不用悬停。Hub 给 last_event(含评论)时写最新那条动态:
+        // 时间取它的(评论比 updated_at 新;排序用同一个时刻,见 task-board-model activityTime),后面跟「谁干了什么」+ 评论预览。
+        const ev = id === 'updated' ? cardActivity(item, people, now) : null;
+        if (ev?.source === 'event') {
+          return <TaskTimeCell id={`task-time-${item.id}-${id}`} raw={new Date(ev.at).toISOString()} now={now} by={ev.actor?.name} byInline={{ name: ev.actor?.name ?? null, agent: !!ev.actor?.agent, verb: ev.verbText, preview: ev.preview ? previewText(ev.preview) : null }} />;
+        }
         const by = id === 'updated' && item.updatedBy ? personDisplay(item.updatedBy, people).name : undefined;
-        // 「更新时间」列把更新者直接写在时间后面(#506),不用悬停。
         return <TaskTimeCell id={`task-time-${item.id}-${id}`} raw={id === 'created' ? item.createdAt : item.updatedAt} now={now} by={by} byInline={by && item.updatedBy ? { name: by, agent: item.updatedBy.kind === 'node' } : undefined} />;
       }
       // 标题格:内容自己的高、在行里垂直居中(标题文字不用 flex:1 —— 在竖排的格里它是「占满剩余高度」,
