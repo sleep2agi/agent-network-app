@@ -121,6 +121,10 @@ jobs:
           releaseBody: |-
             Signed and notarized stable update for macOS (Apple Silicon) and Windows (x64).
 
+            What's new in 0.2.200:
+            - 任务卡片显示检查项进度「☑ 3/5」，全部完成变绿
+            - 任务卡片和列表行显示最近一条动态（谁、什么时候更新）
+
             What's new in 0.2.199:
             - 任务到期提醒：手机在后台也会弹系统通知，点开直接进任务；电脑窗口不在前台时也会弹通知
             - Agent 会话里的到期提醒带「查看任务 ›」链接

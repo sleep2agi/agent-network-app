@@ -1,0 +1,8 @@
+desktop v0.2.200 — 任务卡显示检查项进度和最近动态(#499)
+================================================================================
+A. 本版内容(0.2.199 发版提交之后 main 上合入的 PR + 本 PR)
+  #691 (#506) 任务卡/手机列表/电脑表格:检查项进度「☑ 3/5」进度条(全部完成变绿)+ 一行最近动态(相对时间 · 谁更新,Agent 带芯片图标)。npm test 329/329,新单测 46/46,截图测试 25/25(电脑/手机 × 浅/深 × 中/英),徽标/到期标记/进度条对齐误差 ≤1px。
+  本 PR(版本号):0.2.199 → 0.2.200,versionCode 2199 → 2200;release-desktop-auto-update.yml 加 What's new in 0.2.200;重新生成 src/changelog-bundled.ts。
+  本地:干净 origin/main(f7e4874) bump 后 npm ci / npm test / npm run typecheck 全部 rc=0;android-release-notes.mjs 0.2.200 rc=0。
+B. 验证边界(如实)
+  ck 单测 + 页内桩截图测试;「最近动态」用的是现有字段,评论暂不计入(Hub 列表还没有 last_event 字段)。
