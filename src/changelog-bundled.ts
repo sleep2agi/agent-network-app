@@ -5,6 +5,10 @@
 export const BUNDLED_RELEASE_BODY: string = [
   "Signed and notarized stable update for macOS (Apple Silicon) and Windows (x64).",
   "",
+  "What's new in 0.2.199:",
+  "- 任务到期提醒：手机在后台也会弹系统通知，点开直接进任务；电脑窗口不在前台时也会弹通知",
+  "- Agent 会话里的到期提醒带「查看任务 ›」链接",
+  "",
   "What's new in 0.2.198:",
   "- 任务卡显示「今天到期 / 明天到期 / 已逾期 N 天」，完成的任务只显示日期",
   "- 任务看板新增「我负责 / 我参与 / 已逾期」快捷筛选，电脑和手机都有",
@@ -868,6 +872,7 @@ export const BUNDLED_RELEASE_BODY: string = [
 
 /** Release date (published_at) per version, as far as it was known when this file was generated. */
 export const BUNDLED_RELEASE_DATES: Record<string, string> = {
+  "0.2.198": "2026-10-02T23:46:00Z",
   "0.2.197": "2026-10-02T21:57:59Z",
   "0.2.196": "2026-10-02T18:30:03Z",
   "0.2.195": "2026-10-02T15:36:03Z",
