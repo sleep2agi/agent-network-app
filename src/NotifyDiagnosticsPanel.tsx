@@ -8,10 +8,13 @@ import * as Clipboard from 'expo-clipboard';
 import { colors, onThemeChange, spacing, radius } from './theme';
 import { APP_VERSION } from './version';
 import { diagnosticsRows, formatDiagnostics, getNotifyDiagnostics, subscribeNotifyDiagnostics } from './notify-diagnostics';
+import { recentSendTimings, subscribeSendTimings } from './send-timing';
 import { refreshNotifyDiagnostics } from './notifier-runtime';
 
 export default function NotifyDiagnosticsPanel() {
   const d = useSyncExternalStore(subscribeNotifyDiagnostics, getNotifyDiagnostics, getNotifyDiagnostics);
+  // #518: the 「最近一次发送」 row (diagnosticsRows reads it) refreshes when a send settles.
+  useSyncExternalStore(subscribeSendTimings, recentSendTimings, recentSendTimings);
   const [copied, setCopied] = useState('');
   const [now, setNow] = useState(Date.now());
   useEffect(() => {

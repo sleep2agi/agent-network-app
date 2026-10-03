@@ -6,7 +6,8 @@
 //   - **只有 sendTask 确认成功才删**:失败/被杀都留着;
 //   - ChatScreen 打开某会话时,把该会话的 outbox 条目并回消息列表(可重试)。
 //
-// 重开后 'pending' 条目一律恢复为 'failed':app 死在发送中,送没送到不可知——
+// 重开后 'pending' 条目一律恢复为 'failed'(#518:由 ChatScreen 打开会话时按 send-lifecycle 的孤儿判据做,
+// 先保留 pending 只为让同一次 load 能先按 client_request_id 对掉 hub 已收的):app 死在发送中,送没送到不可知——
 // 诚实的做法是标「未送达」交用户决定重试(极端情况下可能重复发出,重复在聊天里
 // 可见,比静默丢失好)。绝不把「命运未知」呈现成「已送达」。
 //
@@ -26,10 +27,40 @@ export interface OutboxEntry {
 let entries: Record<string, OutboxEntry> = {};
 let persist: ((all: OutboxEntry[]) => void) | null = null;
 
+const listeners = new Set<() => void>();
+let notifyQueued = false;
+
 function flush(): void {
   if (persist) {
     try { persist(Object.values(entries)); } catch { /* best-effort */ }
   }
+  // #518: a mounted ChatScreen re-derives its echoes from the outbox when another instance's send
+  // settles. Deferred to a microtask so a caller that adds an entry and starts its send in the same
+  // tick is already marked in-flight when listeners look (send-lifecycle.ts).
+  if (listeners.size && !notifyQueued) {
+    notifyQueued = true;
+    queueMicrotask(() => {
+      notifyQueued = false;
+      for (const l of [...listeners]) { try { l(); } catch { /* a listener must not break the outbox */ } }
+    });
+  }
+}
+
+/** A send settled without changing the outbox (e.g. it was already removed): let listeners re-derive. */
+export function notifyOutboxListeners(): void {
+  const persistFn = persist;
+  persist = null;
+  try { flush(); } finally { persist = persistFn; }
+}
+
+/** Called after any outbox change. Returns the unsubscribe function. */
+export function subscribeOutbox(listener: () => void): () => void {
+  listeners.add(listener);
+  return () => { listeners.delete(listener); };
+}
+
+export function outboxEntry(id: string): OutboxEntry | undefined {
+  return entries[id];
 }
 
 /** 启动时注入:saved=磁盘上的条目(重开恢复),persist=落盘写手。
@@ -96,4 +127,5 @@ export function outboxForAlias(alias: string): OutboxEntry[] {
 export function __resetOutboxForTest(): void {
   entries = {};
   persist = null;
+  listeners.clear();
 }

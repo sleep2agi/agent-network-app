@@ -3,6 +3,7 @@ import * as FileSystem from 'expo-file-system/legacy';
 import * as ImagePicker from 'expo-image-picker';
 import { Platform } from 'react-native';
 import { appFetch } from './app-fetch';
+import { withDeadline } from './deadline';
 import { ImageManipulator, SaveFormat, type ImageRef } from 'expo-image-manipulator';
 import { compressedFileName, isDraftImage, PICKER_QUALITY, planCompression } from './image-draft';
 import { createSerialQueue, resizeForUpload } from './native-resize';
@@ -225,6 +226,15 @@ const UPLOAD_ERROR_HINTS: Record<string, string> = {
   unauthorized: '登录已失效，请重新登录',
 };
 
+// #518 —— 附件上传的硬上限(含读完响应)。以前没有任何上限:hub 重启 / 隧道半开时上传永远 await,
+// 那条消息停在「发送中…」、sendTask 根本没机会调用。与 pooled_fetch 的整体上限同量级(src-tauri hub_http.rs
+// REQUEST_TIMEOUT 300 s 是给卡死的连接兜底);这里取 120 s:大图走慢链路也够,卡死时两分钟内出「未送达」。
+export const UPLOAD_DEADLINE_MS = 120_000;
+let uploadDeadlineMs = UPLOAD_DEADLINE_MS;
+/** Test-only. No args = production value. */
+export function __setUploadDeadlineForTest(ms: number = UPLOAD_DEADLINE_MS): void { uploadDeadlineMs = ms; }
+const uploadTimeoutMessage = () => `上传 ${Math.round(uploadDeadlineMs / 1000)} 秒内没有完成`;
+
 export const uploadImage = async (cfg: HubConfig, img: PickedImage, opts: UploadOptions = {}): Promise<UploadedFile> => {
   const uploadUrl = uploadUrlFor(cfg.serverUrl, opts);
   // The hub REQUIRES a Content-Length header (411 otherwise, per #221).
@@ -237,22 +247,37 @@ export const uploadImage = async (cfg: HubConfig, img: PickedImage, opts: Upload
     const form = new FormData();
     if (img.webFile) form.append('file', img.webFile, img.fileName);
     else form.append('file', { uri: img.uri, name: img.fileName, type: img.mimeType } as any);
-    const res = await appFetch(uploadUrl, {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${cfg.token}` },
-      body: form,
-    });
-    status = res.status;
-    data = await res.json().catch(() => null);
+    const ctrl = new AbortController();
+    const got = await withDeadline(
+      (async () => {
+        const res = await appFetch(uploadUrl, {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${cfg.token}` },
+          body: form,
+          signal: ctrl.signal,
+        });
+        return { status: res.status, data: await res.json().catch(() => null) };
+      })(),
+      uploadDeadlineMs,
+      () => null,
+    );
+    if (!got) {
+      ctrl.abort();
+      throw new Error(uploadTimeoutMessage());
+    }
+    status = got.status;
+    data = got.data;
   } else {
-    const res = await FileSystem.uploadAsync(uploadUrl, img.uri, {
+    // uploadAsync 不能中途取消;到点不再等它(结果丢弃),气泡转「未送达 · 重试」。
+    const res = await withDeadline(FileSystem.uploadAsync(uploadUrl, img.uri, {
       httpMethod: 'POST',
       uploadType: FileSystem.FileSystemUploadType.MULTIPART,
       fieldName: 'file',
       mimeType: img.mimeType,
       parameters: {},
       headers: { Authorization: `Bearer ${cfg.token}` },
-    });
+    }), uploadDeadlineMs, () => null);
+    if (!res) throw new Error(uploadTimeoutMessage());
     status = res.status;
     try {
       data = JSON.parse(res.body);

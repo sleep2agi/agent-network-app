@@ -222,6 +222,10 @@
       "kind": "stub",
       "secs": 35
     },
+    "test-send-dispatch/drive.mjs": {
+      "kind": "stub",
+      "secs": 150
+    },
     "test-settings-redesign/drive.mjs": {
       "kind": "stub",
       "secs": 27

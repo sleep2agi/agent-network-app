@@ -1,7 +1,8 @@
-import { appFetch } from './app-fetch';
+import { appFetch, appFetchLoad } from './app-fetch';
 import { reportProfileAuthResponse } from './profile-auth-state';
 import type { NodePermissionReport } from './node-permission-model';
 import { withDeadline } from './deadline';
+import { clockOffsetFrom, dreqCreatedAt, recordSendTiming, type SendTiming } from './send-timing';
 import { pollUntilTerminal } from './node-rules';
 
 // Thin CommHub API client. The app talks to the same hub the dashboard
@@ -871,6 +872,33 @@ export const dashboardRequestIdForLocalId = (localId: string): string => {
   return `dreq_${output}`;
 };
 
+// #518 —— 发送的身份(network_id / username)每个 hub + 令牌只查一次,之后发送前**零等待**。
+// 以前它只挂在传进来的 cfg 对象上:cfg 一换新对象(切账号回来、资料重载)就又是一次 /api/auth/me 往返
+// (中国 → 美国 hub 一次 0.2–0.3 s,查询卡住时最多 15 s),全堆在「点发送」和「请求发出」之间。
+// 只缓存查到的值;/api/task 回 401/403 时丢掉(令牌换了网络 / 被移出)。
+const sendIdentityCache = new Map<string, { networkId?: string; username?: string }>();
+const sendIdentityKey = (cfg: Pick<HubConfig, 'serverUrl' | 'token'>) => `${cfg.serverUrl}\u0000${cfg.token}`;
+/** Test-only / after a role change. */
+export function forgetSendIdentity(): void { sendIdentityCache.clear(); }
+const rememberSendIdentity = (cfg: HubConfig, identity: { networkId?: string; username?: string }) => {
+  if (!identity.networkId && !identity.username) return;
+  const key = sendIdentityKey(cfg);
+  sendIdentityCache.set(key, { ...sendIdentityCache.get(key), ...identity });
+};
+
+// #518 —— 一次发送的硬上限。withTimeout 只管到**响应头**(12 s);之后的 `res.json()` 在响应体卡住的连接上
+// (半开隧道、hub 重启时被代理吊住)永远不返回 —— 气泡就永远「发送中…」。整个请求(含响应体)一个上限,
+// 与 hub 工具调用同一个值(HUB_TOOL_DEADLINE_MS);到点 abort 并抛错,气泡转「未送达 · 重试」。
+let sendHeaderTimeoutMs = TIMEOUT_MS;
+let sendDeadlineMs = HUB_TOOL_DEADLINE_MS;
+/** Test-only: shorten the send bounds so hang tests don't wait 15 s. No args = production values. */
+export function __setSendBoundsForTest(bounds: { headerMs?: number; totalMs?: number } = {}): void {
+  sendHeaderTimeoutMs = bounds.headerMs ?? TIMEOUT_MS;
+  sendDeadlineMs = bounds.totalMs ?? HUB_TOOL_DEADLINE_MS;
+}
+/** Upper bound of one sendTask: identity lookup (only when network_id is unknown) + the request incl. body. */
+export const sendSettleBoundMs = (): number => HUB_TOOL_DEADLINE_MS + sendDeadlineMs;
+
 export const sendTask = async (
   cfg: HubConfig,
   to: string,
@@ -879,52 +907,120 @@ export const sendTask = async (
   priority: TaskPriority = 'normal',
   clientRequestId = createDashboardRequestId(),
 ): Promise<SendTaskResponse> => {
-  let networkId = cfg.networkId;
-  let username = cfg.username?.trim();
-  // #68 replacement: current hubs (#1156 / preview.38+) attribute omitted
-  // `from` from the user token. Still send `from` when we have a username so
-  // older hubs do not persist the transport label `api`. Lookup is lazy and
-  // fail-open — missing identity means omit `from`, never block the send.
-  if (!networkId || !username) {
+  const started = Date.now();
+  const dreqAt = dreqCreatedAt(clientRequestId);
+  const load = appFetchLoad(started);
+  const cached = sendIdentityCache.get(sendIdentityKey(cfg));
+  let networkId = cfg.networkId ?? cached?.networkId;
+  let username = cfg.username?.trim() || cached?.username;
+  let identitySource: SendTiming['identity'] = cfg.networkId && cfg.username?.trim() ? 'cfg' : 'cache';
+  // #68 replacement: current hubs (#1156 / preview.38+) attribute omitted `from` from the user token.
+  // Still send `from` when we have a username so older hubs do not persist the transport label `api`.
+  // #518: only a missing network_id (required for utok sends) is worth waiting for; a missing
+  // username is looked up in the background for the next send — never block the send on it.
+  if (!networkId) {
+    identitySource = 'lookup';
     const identity = await fetchAuthIdentity(cfg);
-    networkId ??= identity.networkId;
+    rememberSendIdentity(cfg, identity);
+    networkId = identity.networkId;
     username ||= identity.username;
-    if (networkId) cfg.networkId = networkId;
-    if (username) cfg.username = username;
+  } else if (!username) {
+    identitySource = 'background';
+    void fetchAuthIdentity(cfg).then(identity => rememberSendIdentity(cfg, identity));
   }
-  const res = await withTimeout(signal =>
-    appFetch(`${cfg.serverUrl}/api/task`, {
-      method: 'POST',
-      headers: headers(cfg),
-      signal,
-      body: JSON.stringify({
-        alias: to,
-        task: content,
-        priority,
-        network_id: networkId,
-        ...(username ? { from: username } : {}),
-        meta: {
-          source: 'dashboard-chat',
-          client_request_id: clientRequestId,
-        },
-        ...(attachments?.length ? { attachments } : {}),
-      }),
-    }),
-  );
-  const data = await res.json().catch(() => null);
+  if (networkId) cfg.networkId = networkId;
+  if (username) cfg.username = username;
+  const identityMs = Date.now() - started;
+
+  const ctrl = new AbortController();
+  const headerTimer = setTimeout(() => ctrl.abort(), sendHeaderTimeoutMs);
+  const postAt = Date.now();
+  let headersAt: number | null = null;
+  let bodyAt: number | null = null;
+  let status: number | null = null;
+  let clockOffsetMs: number | null = null;
+  const timing = (outcome: SendTiming['outcome'], error?: unknown) => recordSendTiming({
+    at: started,
+    requestId: clientRequestId,
+    identity: identitySource,
+    sinceDreqMs: dreqAt === null ? null : started - dreqAt,
+    identityMs,
+    headersMs: headersAt === null ? null : headersAt - postAt,
+    bodyMs: headersAt === null || bodyAt === null ? null : bodyAt - headersAt,
+    totalMs: Date.now() - started,
+    outcome,
+    status,
+    clockOffsetMs,
+    inflightAtSend: load.inflight,
+    requestsLastMinute: load.lastMinute,
+    ...(error !== undefined ? { error: error instanceof Error ? error.message : String(error) } : {}),
+  });
+  let got: { res: Response; data: any } | null;
+  try {
+    got = await withDeadline(
+      (async () => {
+        const res = await appFetch(`${cfg.serverUrl}/api/task`, {
+          method: 'POST',
+          headers: headers(cfg),
+          signal: ctrl.signal,
+          body: JSON.stringify({
+            alias: to,
+            task: content,
+            priority,
+            network_id: networkId,
+            ...(username ? { from: username } : {}),
+            meta: {
+              source: 'dashboard-chat',
+              client_request_id: clientRequestId,
+            },
+            ...(attachments?.length ? { attachments } : {}),
+          }),
+        });
+        headersAt = Date.now();
+        status = res.status;
+        clockOffsetMs = clockOffsetFrom(res.headers?.get?.('date'), postAt, headersAt);
+        const data = await res.json().catch(() => null);
+        bodyAt = Date.now();
+        return { res, data };
+      })(),
+      sendDeadlineMs,
+      () => null,
+    );
+  } catch (e) {
+    const aborted = ctrl.signal.aborted;
+    const error = aborted && headersAt === null ? new Error(`服务器 ${Math.round(sendHeaderTimeoutMs / 1000)} 秒内没有响应（/api/task）`) : e;
+    timing(aborted ? 'timeout' : 'error', error);
+    throw error;
+  } finally {
+    clearTimeout(headerTimer);
+  }
+  if (!got) {
+    ctrl.abort();
+    const error = new Error(`服务器 ${Math.round(sendDeadlineMs / 1000)} 秒内没有返回完整响应（/api/task）`);
+    timing('timeout', error);
+    throw error;
+  }
+  const { res, data } = got;
+  if (res.status === 401 || res.status === 403) sendIdentityCache.delete(sendIdentityKey(cfg));
   // CommHub returns this exact 429 only after an identical task was already
   // recorded during its five-minute deduplication window. Retire the local
   // optimistic row instead of accumulating a false “未送达” bubble.
   if (res.status === 429 && data?.error === 'duplicate_send') {
+    timing('ok');
     return { ...data, ok: true, deduplicated: true } as SendTaskResponse;
   }
   // Hub #1209 intentionally keeps the existing offline body semantics:
   // HTTP 202 + ok:false + queued:true + alias_offline is an accepted write.
   if (res.status === 202 && data?.queued === true && data?.error === 'alias_offline') {
+    timing('ok');
     return { ...data, ok: true } as SendTaskResponse;
   }
-  if (!res.ok) throw new Error(`HTTP ${res.status} on /api/task`);
-  if (!data?.ok) throw new Error(String(data?.error ?? 'send failed'));
+  const failure = !res.ok ? new Error(`HTTP ${res.status} on /api/task`) : !data?.ok ? new Error(String(data?.error ?? 'send failed')) : null;
+  if (failure) {
+    timing('error', failure);
+    throw failure;
+  }
+  timing('ok');
   return data as SendTaskResponse;
 };
 

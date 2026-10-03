@@ -20,7 +20,9 @@ import { proactiveItemsForAgent } from './proactive-messages';
 import { replyQuoteFor } from './reply-quote';
 import { nextFocusStep } from './message-focus';
 import { bubbleLayout, desktopBubbleCap } from './bubble-layout';
-import { outboxAdd, outboxForAlias, outboxMarkFailed, outboxMarkPending, outboxRemove } from './outbox';
+import { notifyOutboxListeners, outboxAdd, outboxEntry, outboxForAlias, outboxMarkFailed, outboxMarkPending, outboxRemove, subscribeOutbox } from './outbox';
+import { beginSend, endSend, orphanedPendingIds, settleEchoes } from './send-lifecycle';
+import { recordSendBubble } from './send-timing';
 import { mayApplySendResult, shouldExposeSendFailure } from './send-reconciliation';
 import { conversationKey, conversationScope, createConversationRequestGate, createConversationStore } from './conversation-store';
 import { resolveSender } from './chat-sender';
@@ -466,10 +468,10 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
         const confirmed = new Set(confirmedOutboxIds(outboxForAlias(alias), fetched));
         confirmed.forEach(outboxRemove);
         setMessages(prev => {
-          const merged = mergeMessagesNewestFirst(
+          const merged = settleEchoes<ChatItem>(mergeMessagesNewestFirst(
             prev.filter(t => t._localId && !confirmed.has(t._localId) && !echoSupersededByFetched(t, fetched)),
             [...fetched, ...proactive],
-          );
+          ) as ChatItem[], outboxEntry);
           conversations.put(token.key, merged);
           return merged;
         });
@@ -493,6 +495,10 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
   // 「未送达 · 点击重试」,retry 复用同一 id。恢复项无 _img(附件不持久化,见 outbox.ts)。
   useEffect(() => {
     limitRef.current = PAGE;
+    // #518: a 'pending' entry nobody in this process is sending (the app was killed mid-send, or the
+    // instance that started it let go) would otherwise paint 「发送中…」 forever. It becomes 「未送达」;
+    // the load below still retires it if the hub has its client_request_id.
+    orphanedPendingIds(outboxForAlias(alias)).forEach(outboxMarkFailed);
     const restored = outboxForAlias(alias).map<ChatItem>((e) => ({
       content: e.content, // 保持原文——重试发的就是它
       created_at: new Date(e.createdAt).toISOString(),
@@ -533,6 +539,14 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
       requestGate.close(token);
     };
   }, [load, alias, conversationKeyFor]);
+
+  // #518: echoes follow the outbox. Another ChatScreen instance (before a remount / a sidebar switch)
+  // may finish the send that owns an echo shown here; re-derive 发送中 / 已送达 / 未送达 when it does.
+  useEffect(() => subscribeOutbox(() => {
+    if (!mountedRef.current) return;
+    orphanedPendingIds(outboxForAlias(alias)).forEach(outboxMarkFailed);
+    setMessages(prev => settleEchoes(prev, outboxEntry));
+  }), [alias]);
 
   // Foreground-only message polling: 5s while visible, paused in background,
   // instant refresh on resume (shared hook). Reads the live window via limitRef.
@@ -1486,6 +1500,25 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
   ) => {
     const startedConversationKey = conversationKeyFor;
     const startedAlias = alias;
+    beginSend(localId);
+    try {
+      await doSendAttempt(content, localId, imgs, priority, original, startedConversationKey, startedAlias);
+    } finally {
+      endSend(localId);
+      // Whatever happened above, any instance still showing this echo re-derives it now.
+      notifyOutboxListeners();
+    }
+  };
+
+  const doSendAttempt = async (
+    content: string,
+    localId: string,
+    imgs: PickedImage[],
+    priority: TaskPriority,
+    original: boolean,
+    startedConversationKey: string,
+    startedAlias: string,
+  ) => {
     const mayTouchVisibleState = () => mayApplySendResult(
       startedConversationKey,
       visibleConversationKeyRef.current,
@@ -1547,6 +1580,7 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
       // load() drops it once a fetched row carries the same task_id (or matches by content/time).
       const confirmedTaskId = typeof (response as any)?.task_id === 'string' ? (response as any).task_id : undefined;
       setMessages(prev => prev.map(t => (t._localId === localId ? { ...t, _pending: false, _confirmedTaskId: confirmedTaskId } : t)));
+      recordSendBubble(dashboardRequestIdForLocalId(localId), 'sent');
       await load(limitRef.current);
     } catch {
       // Timeout is not proof that the write failed. The Hub may have committed
@@ -1556,7 +1590,14 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
         // A late A failure while B is visible is ambiguous, not a reason to
         // paint a retry under B. Reconcile A directly without borrowing B's
         // request token; leave it pending if the Hub is unreachable.
-        try { await reconcileStartedConversation(); } catch { /* remain pending */ }
+        try { await reconcileStartedConversation(); } catch { /* the hub is unreachable: unconfirmed */ }
+        // #518: still unconfirmed ⇒ 「未送达」, never a 「发送中…」 that nobody will finish. The instance
+        // showing this conversation now (or the next one to open it) picks it up from the outbox; retry
+        // reuses the same client_request_id, so a send the hub did take is deduplicated, not doubled.
+        if (outboxForAlias(startedAlias).some(entry => entry.id === localId)) {
+          outboxMarkFailed(localId);
+          recordSendBubble(dashboardRequestIdForLocalId(localId), 'failed');
+        }
         return;
       }
       const exposeFailure = await shouldExposeSendFailure(
@@ -1568,6 +1609,7 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
       setMessages(prev =>
         prev.map(t => (t._localId === localId ? { ...t, _pending: false, _failed: true } : t)),
       );
+      recordSendBubble(dashboardRequestIdForLocalId(localId), 'failed');
     }
   };
 
