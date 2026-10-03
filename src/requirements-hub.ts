@@ -4,6 +4,7 @@ import { appFetch } from './app-fetch';
 import { clearConditionalReads, conditionalHeaders, readConditionalText } from './conditional-get';
 import { fetchAuthMe } from './user-admin-api';
 import { issuesFromHub } from './requirement-issues';
+import { lastEventFromHub } from './requirement-last-event';
 import { normalizeTags } from './requirement-tags';
 import { seqFromHub } from './task-short-id';
 import type { HubConfig } from './api';
@@ -41,6 +42,8 @@ export function requirementFromHub(row: unknown): Requirement | null {
   return {
     ...(('updatedAt' in r || 'updated_at' in r) ? { updatedAt: typeof (r.updatedAt ?? r.updated_at) === 'string' ? String(r.updatedAt ?? r.updated_at) : null } : {}),
     ...('updated_by' in r ? { updatedBy: updateActor(r.updated_by) } : {}),
+    // 最新一条动态(#506,Hub capability last_event):没有这个字段的旧 Hub 不出现,卡片照旧按 updatedAt 显示。
+    ...('last_event' in r ? { lastEvent: lastEventFromHub(r.last_event) } : {}),
     ...('issues' in r ? { issues: issuesFromHub(r.issues) } : {}),
     ...('tags' in r ? { tags: normalizeTags(r.tags) ?? [] } : {}),
     ...(('owner' in r || 'participants' in r) ? assignmentsFromHub(r) : {}),

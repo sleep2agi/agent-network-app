@@ -6,6 +6,7 @@
 // 桌面拖动换列、手机长按菜单。Hub 数据模型不变(标题/状态/优先级/期限/负责人/参与人)。
 import { dueInstant, dueToLocal, formatDueFull, formatTime, isDateTime, systemClock, type Clock } from './due-time';
 import { taskTimestamp } from './task-time';
+import { activityTime } from './requirement-last-event';
 import { dueMarker, dueMarkerLabel, isOverdue, type DueAt } from './due-marker';
 import { seqCmp } from './task-short-id';
 import {
@@ -362,8 +363,9 @@ export function sortRows(items: readonly Requirement[], sort: SortSpec, people: 
   const primary = (a: Requirement, b: Requirement): number => {
     switch (sort.key) {
       case 'created': case 'updated': {
-        const av = taskTimestamp(sort.key === 'created' ? a.createdAt : a.updatedAt);
-        const bv = taskTimestamp(sort.key === 'created' ? b.createdAt : b.updatedAt);
+        // 「更新时间」按卡片上显示的那个时刻排:Hub 给 last_event(评论比 updated_at 新)就用它(#506)。
+        const av = sort.key === 'created' ? taskTimestamp(a.createdAt) : activityTime(a);
+        const bv = sort.key === 'created' ? taskTimestamp(b.createdAt) : activityTime(b);
         if (av === null || bv === null) return av === bv ? 0 : av === null ? 1 : -1;
         return (av - bv) * sign;
       }

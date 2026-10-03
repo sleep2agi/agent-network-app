@@ -52,6 +52,8 @@ export interface Requirement {
   /** Missing means the connected Hub did not expose update metadata. */
   updatedAt?: string | null;
   updatedBy?: RequirementPersonRef | null;
+  /** 最新一条动态(Hub capability last_event,#506;含评论)。undefined = 这个 Hub 还不给;null = 这张卡没有流水。 */
+  lastEvent?: import('./requirement-last-event').RequirementLastEvent | null;
   /** 已归档(只出现在搜索「包含已归档」读回来的行里;平常的列表 Hub 不给归档的卡)。 */
   archived?: boolean;
   /** 这张卡对我只读(hub 对「仅相关任务」的成员给 viewer_can.edit=false,RFC-038 §9)。undefined = 能改。 */

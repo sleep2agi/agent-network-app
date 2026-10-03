@@ -9,6 +9,10 @@
 //   list   桌面表格:标题格里紧凑「3/5」胶囊(20 高,和优先级徽标 / 期限胶囊中线对齐);「更新时间」列时间后面跟更新者。
 //          手机分组列表:紧凑「3/5」胶囊(不画条)+ 动静一行。
 //   geometry  boundingBox 表:优先级徽标 / 期限胶囊 / 进度胶囊的中线和高度;动静行的左边和优先级徽标左边对齐。
+//   last_event(Hub ≥ preview.97,agent-network#2308)r5–r7:「10 分钟前 · 示例成员甲评论了」+ 桌面端一行截断的评论预览(手机没有)/
+//          Agent「把状态改成「进行中」」(动词不截、名字截、不露 doing)/ 没有操作者「1 小时前 · 改了优先级」;
+//          桌面表格「更新时间」列同样写动词 + 预览(同一段文字,列窄在末尾截、不出格)。一行里时间 / 名字 / 动词 / 预览的中线差 ≤ 1px。
+//          r1–r4 没有 last_event(= 旧 Hub)→ 照旧按 updatedAt(data-source=updatedAt)。
 // Exit 1 on any failure.
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { serveExport, initScript, findChromium, ANDROID_UA } from '../test-layout-sweep/harness.mjs';
@@ -33,6 +37,13 @@ const fixture = () => {
       R('r3', 13, '示例任务三:没有检查项、不知道是谁改的', { priority: 'low', checklist: [], updatedAt: at(3 * 1440), updated_by: null }),
       // 精简列表行(view=summary):没有条目,只有计数;建了以后没人动过(updatedAt == createdAt)。
       R('r4', 14, '示例任务四:精简行 2/7', { priority: 'normal', checklist: undefined, checklist_count: { total: 7, done: 2 }, has_description: false, createdAt: at(600), updatedAt: at(600), updated_by: ua }),
+      // last_event(#506):评论比 updated_at 新 / Agent 改状态 / 没有操作者。
+      R('r5', 15, '示例任务五:有人评论了', { priority: 'high', due: today, checklist: ck(4, 1), updatedAt: at(300), updated_by: ua,
+        last_event: { type: 'comment', field: null, actor: { id: 'u_a', kind: 'user', display_name: '示例成员甲' }, at: at(10), summary: '已经复现了,正在修;这是一条很长很长很长的评论,用来测桌面端一行截断的预览,不能把卡片撑宽,也不能换行。' } }),
+      R('r6', 16, '示例任务六:Agent 改了状态', { checklist: [], updatedAt: at(30), updated_by: agent,
+        last_event: { type: 'changed', field: 'column', actor: { id: 'n_long', kind: 'node', display_name: 'hub-name' }, at: at(30), summary: 'pool → doing' } }),
+      R('r7', 17, '示例任务七:不知道是谁改的优先级', { priority: 'low', checklist: [], updatedAt: at(60), updated_by: null,
+        last_event: { type: 'changed', field: 'priority', actor: null, at: at(60), summary: 'normal → low' } }),
     ],
     projects: [],
     people: [
@@ -40,7 +51,7 @@ const fixture = () => {
       { kind: 'user', id: 'u_a', networkId: 'net-sweep', name: '示例成员甲' },
       { kind: 'node', id: 'n_long', networkId: 'net-sweep', name: '示例-一个名字特别特别特别长的Agent节点-用来测截断' },
     ],
-    capabilities: ['agent_owner', 'description', 'checklist', 'requirement_seq', 'list_summary'],
+    capabilities: ['agent_owner', 'description', 'checklist', 'requirement_seq', 'list_summary', 'last_event'],
   };
 };
 
@@ -75,6 +86,9 @@ const measure = (page, rootSel) => page.evaluate((sel) => {
   const bar = q('[data-testid="task-checklist-bar"]');
   const compact = q('[data-testid="task-checklist-compact"]') || q('[data-testid^="task-row-checklist-"]');
   const prioText = q('[data-testid="task-prio-badge"]');
+  const verb = q('[data-testid="task-card-activity-verb"]');
+  const preview = q('[data-testid="task-card-activity-preview"]');
+  const trunc = (el) => (el ? el.scrollWidth > el.clientWidth + 0.5 : null);
   return {
     card: r(root), prio: r(q('[data-testid="task-prio-badge"]')), due: r(q('[data-testid="task-due"]')),
     prog: r(prog), progText: prog?.textContent.match(/\d+\/\d+/)?.[0] ?? null, /* textContent also holds the icon-font glyph */ progComplete: (prog || compact)?.getAttribute('data-complete') ?? null,
@@ -82,7 +96,9 @@ const measure = (page, rootSel) => page.evaluate((sel) => {
     barColor: bar ? getComputedStyle(bar).backgroundColor : null,
     compact: r(compact), compactText: compact?.textContent.match(/\d+\/\d+/)?.[0] ?? null,
     act: r(act), actText: act?.textContent.replace(/\u00a0/g, ' ') ?? null, actActor: act?.getAttribute('data-actor') ?? null, actVerb: act?.getAttribute('data-verb') ?? null,
-    actAgentIcon: !!q('[data-testid="task-card-activity-agent"]'),
+    actAgentIcon: !!q('[data-testid="task-card-activity-agent"]'), actSource: act?.getAttribute('data-source') ?? null,
+    ago: r(q('[data-testid="task-card-activity-ago"]')), name: r(name), verb: r(verb), verbText: verb?.textContent.replace(/\u00a0/g, ' ').trim() ?? null, verbTruncated: trunc(verb),
+    preview: r(preview), previewText: preview?.textContent ?? null, previewTruncated: trunc(preview),
     nameTruncated: name ? name.scrollWidth > name.clientWidth + 0.5 : null,
     title: r(q('[data-testid^="task-title-"]') ? q('[data-testid^="task-title-"] div[dir="auto"]') || q('[data-testid^="task-title-"]') : null),
     prioLabel: prioText?.textContent ?? null,
@@ -142,6 +158,7 @@ for (const { name, V, theme, lang } of RUNS) {
         r2Agent: m.r2.actActor === 'agent' && m.r2.actAgentIcon && m.r2.nameTruncated === true,
         r3Anon: m.r3.actActor === 'none' && m.r3.actText === (zh ? '3 天前更新' : 'Updated 3d ago'),
         r4Created: m.r4.actVerb === 'created',
+        noEventFallback: ['r1', 'r2', 'r3', 'r4'].every(id => m[id].actSource === 'updatedAt'),
         oneLine: ['r1', 'r2', 'r3', 'r4'].every(id => m[id].act && m[id].act.h <= 17),
         insideCard: ['r1', 'r2', 'r3', 'r4'].every(id => inCard(m[id])),
         noHScroll: await noHScroll(),
@@ -160,12 +177,52 @@ for (const { name, V, theme, lang } of RUNS) {
       }, { prioCy: c.prio.cy, dueCy: c.due?.cy, progX: c.prog.x, prioX: c.prio.x, actX: c.act.x, gap: c.act.y - c.prog.bottom });
     });
 
+    await guarded('board-events', async () => {
+      const m = {};
+      for (const id of ['r5', 'r6', 'r7']) {
+        await page.locator(tid(`req-card-${id}`)).first().scrollIntoViewIfNeeded().catch(() => {});
+        m[id] = await measure(page, tid(`req-card-${id}`));
+      }
+      await page.locator(tid('req-card-r5')).first().scrollIntoViewIfNeeded().catch(() => {});
+      await page.waitForTimeout(200);
+      m.r5 = await measure(page, tid('req-card-r5'));
+      await shot('board-events');
+      const zh = lang === 'zh', desk = !V.ua;
+      const inCard = (c) => !!c.act && c.act.x >= c.card.x && c.act.right <= c.card.right - 13.5 && c.act.bottom <= c.card.bottom && (!c.preview || c.preview.right <= c.card.right - 13.5);
+      const cy1 = (c) => [c.ago, c.name, c.verb, c.preview].filter(Boolean).every(b => Math.abs(b.cy - c.verb.cy) <= 1);
+      record(where, 'board cards with last_event: comment / agent status / no actor', {
+        r5Comment: m.r5.actSource === 'event' && m.r5.actVerb === 'commented' && m.r5.actText.startsWith(zh ? '10 分钟前 · 示例成员甲评论了' : '10m ago · 示例成员甲 commented'),
+        r5Preview: desk ? (!!m.r5.preview && m.r5.previewTruncated === true && m.r5.previewText.startsWith(zh ? '：已经复现了' : ': 已经复现了')) : m.r5.preview === null,
+        r5VerbWhole: m.r5.verbTruncated === false && m.r5.nameTruncated === false, // 预览只吃剩下的宽度,不挤名字
+        r6Agent: m.r6.actActor === 'agent' && m.r6.actAgentIcon && m.r6.verbText === (zh ? '把状态改成「进行中」' : 'moved to In progress') && m.r6.verbTruncated === false && m.r6.nameTruncated === true,
+        r6NoRawId: !/\bdoing\b|pool/.test(m.r6.actText),
+        r7Anon: m.r7.actActor === 'none' && m.r7.actSource === 'event' && m.r7.actText === (zh ? '1 小时前 · 改了优先级' : '1h ago · changed priority'),
+        oneLine: ['r5', 'r6', 'r7'].every(id => m[id].act && m[id].act.h <= 17),
+        insideCard: ['r5', 'r6', 'r7'].every(id => inCard(m[id])),
+        centreLine: ['r5', 'r6'].every(id => cy1(m[id])),
+        noHScroll: await noHScroll(),
+      }, { r5: m.r5.actText, r6: m.r6.verbText, r7: m.r7.actText });
+      const c = m.r5;
+      geo.push({ where, view: 'board-event', id: 'r5', prioCy: c.prio?.cy, dueCy: c.due?.cy, prioH: c.prio?.h, dueH: c.due?.h, progX: c.prog?.x, prioX: c.prio?.x, actX: c.act?.x, agoCy: c.ago?.cy, nameCy: c.name?.cy, verbCy: c.verb?.cy, previewCy: c.preview?.cy ?? '-', actRight: c.act?.right, cardRight: c.card.right, actGapAbove: c.act && c.prog ? Math.round((c.act.y - c.prog.bottom) * 2) / 2 : '-' });
+      record(where, 'board geometry (last_event card): badge / due same centre; progress + activity at badge left; activity gap 4–8', {
+        prioDueCentre: !!c.due && Math.abs(c.prio.cy - c.due.cy) <= 0.5,
+        progLeft: Math.abs(c.prog.x - c.prio.x) <= 0.5,
+        actLeft: Math.abs(c.act.x - c.prio.x) <= 0.5,
+        actGap: c.act.y - c.prog.bottom >= 4 && c.act.y - c.prog.bottom <= 8,
+      }, { prioCy: c.prio.cy, dueCy: c.due?.cy, actX: c.act.x, prioX: c.prio.x, gap: c.act.y - c.prog.bottom });
+    });
+
     await guarded('list', async () => {
       await view('list');
       await page.locator(tid('req-row-r1')).first().waitFor({ timeout: 6000 });
       await page.waitForTimeout(400);
       const m = {};
-      for (const id of ['r1', 'r2', 'r3', 'r4']) m[id] = await measure(page, tid(`req-row-${id}`));
+      for (const id of ['r1', 'r2', 'r3', 'r4', 'r5', 'r6', 'r7']) {
+        await page.locator(tid(`req-row-${id}`)).first().scrollIntoViewIfNeeded().catch(() => {});
+        m[id] = await measure(page, tid(`req-row-${id}`));
+      }
+      await page.locator(tid('req-row-r1')).first().scrollIntoViewIfNeeded().catch(() => {});
+      await page.waitForTimeout(200);
       await shot('list');
       if (!V.ua) {
         const upd = await page.evaluate(() => ['r1', 'r2', 'r3'].map(id => document.querySelector(`[data-testid="task-time-${id}-updated"]`)?.textContent ?? null));
@@ -178,6 +235,25 @@ for (const { name, V, theme, lang } of RUNS) {
           updater: !!upd[0] && upd[0].includes('示例成员甲') && !!upd[1] && upd[1].includes('示例-一个名字') && !!upd[2] && !upd[2].includes('·'),
           noHScroll: await noHScroll(),
         }, { updated: upd.join(' | ') });
+        const cell = (id) => page.evaluate((id) => {
+          const q = (s) => document.querySelector(`[data-testid="task-time-${id}-updated${s}"]`);
+          const r = (el) => { if (!el) return null; const b = el.getBoundingClientRect(); return { x: b.x, right: b.right, cy: Math.round((b.y + b.height / 2) * 2) / 2, h: b.height }; };
+          const cellBox = q('')?.parentElement?.getBoundingClientRect();
+          const pv = q('-preview');
+          const ln = q('-line');
+          return { text: q('')?.textContent.replace(/\u00a0/g, ' ') ?? null, by: r(q('-by')), verb: r(q('-verb')), verbText: q('-verb')?.textContent.replace(/\u00a0/g, ' ').trim() ?? null,
+            preview: r(pv), line: r(ln), lineTrunc: ln ? ln.scrollWidth > ln.clientWidth + 0.5 : null, cellRight: cellBox ? cellBox.right : null };
+        }, id);
+        const t5 = await cell('r5'), t6 = await cell('r6'), t7 = await cell('r7');
+        const zh = lang === 'zh';
+        record(where, 'desktop table with last_event: 「time · who did what」+ comment preview, one centre line', {
+          r5: !!t5.text && t5.text.includes('示例成员甲') && t5.verbText === (zh ? '评论了' : 'commented') && !!t5.preview && !!t5.line && t5.line.right <= t5.cellRight + 0.5 && t5.lineTrunc === true,
+          r6: t6.verbText === (zh ? '把状态改成「进行中」' : 'moved to In progress') && !/doing/.test(t6.text ?? ''),
+          r7: t7.by === null && t7.verbText === (zh ? '改了优先级' : 'changed priority'),
+          centre: [t5, t6].every(c => c.by && c.verb && Math.abs(c.by.cy - c.verb.cy) <= 1) && Math.abs(t5.preview.cy - t5.verb.cy) <= 1,
+          noHScroll: await noHScroll(),
+        }, { r5: t5.text, r6: t6.text, r7: t7.text });
+        geo.push({ where, view: 'table-event', id: 'r5', byCy: t5.by?.cy, verbCy: t5.verb?.cy, previewCy: t5.preview?.cy, lineRight: t5.line?.right, cellRight: t5.cellRight });
         const c = m.r1;
         geo.push({ where, view: 'table', id: 'r1', chipCy: c.compact?.cy, titleCy: c.title?.cy, prioCy: c.prio?.cy, dueCy: c.due?.cy, chipH: c.compact?.h, prioH: c.prio?.h, dueH: c.due?.h, rowH: c.card.h });
         record(where, 'table geometry: progress chip / P-badge / due chip share one centre line and height 20', {
@@ -193,6 +269,8 @@ for (const { name, V, theme, lang } of RUNS) {
           r3None: m.r3.compact === null,
           activity: ['r1', 'r2', 'r3', 'r4'].every(id => !!m[id].act && m[id].act.h <= 17 && m[id].act.right <= m[id].card.right),
           agentTrunc: m.r2.nameTruncated === true,
+          eventRows: m.r5.actVerb === 'commented' && m.r5.preview === null && m.r6.verbText === (lang === 'zh' ? '把状态改成「进行中」' : 'moved to In progress') && m.r6.verbTruncated === false && m.r7.actActor === 'none',
+          eventRowsInside: ['r5', 'r6', 'r7'].every(id => !!m[id].act && m[id].act.h <= 17 && m[id].act.right <= m[id].card.right),
           noHScroll: await noHScroll(),
         });
         const c = m.r1;
