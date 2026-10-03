@@ -1,0 +1,9 @@
+desktop v0.2.199 — 任务到期提醒系统通知 + 查看任务链接(#499)
+================================================================================
+A. 本版内容(0.2.198 发版提交之后 main 上合入的 PR + 本 PR)
+  #688 「任务提醒」到期提醒:手机后台弹系统通知(复用现有 expo-notifications,尊重通知开关/免打扰/声音,点开进任务,登录时已有的不补弹);电脑窗口不在前台时弹系统通知;Agent 会话里的提醒气泡加「查看任务 ›」;通知诊断面板加「上次任务提醒」,日志 [anet-notify] task_due。npm test 328/328,新单测 48 + 18,drive 4/4。
+  #689 部门群页面测试接受「昨天 HH:MM」(跨本地午夜不再误报)。
+  本 PR(版本号):0.2.198 → 0.2.199,versionCode 2198 → 2199;release-desktop-auto-update.yml 加 What's new in 0.2.199;重新生成 src/changelog-bundled.ts。
+  本地:干净 origin/main(164c952) bump 后 npm ci / npm test / npm run typecheck 全部 rc=0;android-release-notes.mjs 0.2.199 rc=0。
+B. 验证边界(如实)
+  ck 单测 + 假边界端到端 + 页内桩驱动;真机系统通知未验证(请按诊断面板「上次任务提醒」和 adb logcat | grep task_due 核对)。Hub 侧到期提醒目前在生产关闭,开启前这些通知不会被触发。
