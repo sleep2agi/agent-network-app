@@ -212,13 +212,14 @@ const entry = (id: string, state: 'pending' | 'failed' = 'pending') => ({ id, al
 
 // ── 7. wiring (ChatScreen is React Native; the anchors below are the paths the drive exercises end to end) ──
 {
-  const chat = readFileSync(new URL('./ChatScreen.tsx', import.meta.url), 'utf8');
+  // Windows checkouts are CRLF (core.autocrlf): normalise before matching multi-line anchors.
+  const chat = readFileSync(new URL('./ChatScreen.tsx', import.meta.url), 'utf8').replace(/\r\n?/g, '\n');
   const failBranch = chat.slice(chat.indexOf('if (!mayTouchVisibleState()) {\n        // A late A failure'), chat.indexOf('const exposeFailure = await shouldExposeSendFailure('));
   ck('ChatScreen: a send that fails while its conversation is not visible marks the outbox failed', /outboxMarkFailed\(localId\)/.test(failBranch), failBranch.length ? '' : 'branch not found');
   ck('ChatScreen: opening a conversation turns orphaned pending entries into failed', chat.includes('orphanedPendingIds(outboxForAlias(alias)).forEach(outboxMarkFailed);'));
   ck('ChatScreen: echoes re-derive from the outbox when another instance settles a send', chat.includes('subscribeOutbox(') && chat.includes('settleEchoes(prev, outboxEntry)'));
   ck('ChatScreen: every send is registered live for its whole attempt', /beginSend\(localId\);[\s\S]{0,200}finally \{\s*endSend\(localId\);/.test(chat));
-  const attach = readFileSync(new URL('./attach.ts', import.meta.url), 'utf8');
+  const attach = readFileSync(new URL('./attach.ts', import.meta.url), 'utf8').replace(/\r\n?/g, '\n');
   ck('attach: uploads are bounded on both web and native paths', (attach.match(/uploadDeadlineMs/g) ?? []).length >= 3);
 }
 
