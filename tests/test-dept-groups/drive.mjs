@@ -192,7 +192,7 @@ for (const [theme, hub] of [['light', 'new'], ['light', '93'], ['light', 'old'],
     }, { order: order.join(), badge });
     record(where, hub === 'new' ? 'previews from last_message (text / [附件] N)' : '.93 Hub (no last_message): rows show the time', hub === 'new'
       ? { rd: subRd === 'Carol: 示例:我也来旁听', sales: subSales === 'Carol: [附件] 2' }
-      : { rdTime: /^\d{1,2}:\d\d$/.test(subRd), salesTime: /^\d{1,2}:\d\d$/.test(subSales) }, { subRd, subSales });
+      : { rdTime: /^(昨天 )?\d{1,2}:\d\d$/.test(subRd), salesTime: /^(昨天 )?\d{1,2}:\d\d$/.test(subSales) }, { subRd, subSales });
     // 功能门:列表已经从 group_threads 知道这个 Hub 有群,部门页不再探接口(/health 能力位 vs 试探的取舍在
     // src/group-chat.test.ts 里用假 fetch 逐条测,这里不重复)。
     await page.locator(tid('manage-dept-entry')).click();
