@@ -183,7 +183,7 @@ ck('指引写了自启动与省电策略「无限制」', XIAOMI_GUIDE_STEPS.som
 // ── 10. 接线 / 原生清单契约 ──
 const app = norm('../App.tsx'), index = norm('../index.ts'), runtime = norm('notifier-runtime.ts'), listener = norm('DesktopMessageListener.tsx');
 const settingsSrc = norm('SettingsScreen.tsx'), chat = norm('ChatScreen.tsx');
-ck('App:安卓/iOS 挂 MobileNotifier(cfg 可为 null → 登出时停),点通知走 setScreen 进会话', app.includes("{Platform.OS === 'android' || Platform.OS === 'ios' ? <MobileNotifier cfg={cfg} onOpenChat={alias => setScreen({ name: 'chat', alias })} onOpenTask={taskId => setScreen({ name: 'taskDetail', taskId })} /> : null}"));
+ck('App:安卓/iOS 挂 MobileNotifier(cfg 可为 null → 登出时停),点通知走 setScreen 进会话', app.includes("{Platform.OS === 'android' || Platform.OS === 'ios' ? <MobileNotifier cfg={cfg} onOpenChat={alias => setScreen({ name: 'chat', alias })} onOpenTask={taskId => setScreen({ name: 'taskDetail', taskId })} onOpenRequirement={(requirementId, networkId) => openTaskRef(requirementId, networkId, cfg, setScreen)} /> : null}"));
 ck('入口顶层登记 headless 任务', index.includes('registerKeepAliveTask();'));
 // 0.2.109:运行时用 decideWithReason(与 decide 同一条判据,多带原因给诊断);decide 本身只是丢掉原因的包装。
 ck('运行时用与桌面同一条判据(decideWithReason)+ incomingFromSnapshot', runtime.includes('decideWithReason(g.agent, presence, settings, minutes)') && runtime.includes('incomingFromSnapshot(snap)') && fs.readFileSync(path.join(__dirname, 'notify-policy.ts'), 'utf8').includes('const d = decideWithReason(agent, presence, settings, nowMinutes);'));

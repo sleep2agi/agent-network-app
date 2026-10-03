@@ -74,3 +74,12 @@ export function stripSystemNotices<T extends UserMessagesBodyLike>(body: T): T {
   if (typeof body.unread_total === 'number') next.unread_total = sub(body.unread_total, keyed) as number;
   return next;
 }
+
+/**
+ * #499:同 stripSystemNotices,但把摘掉的系统通知行一并交出来 —— 手机通知运行时要用它们发系统通知
+ * (应用在后台、用户流没推到时,轮询是唯一能看到这种行的地方;agent 链路照旧看不到)。
+ */
+export function splitSystemNotices<T extends UserMessagesBodyLike>(body: T): { body: T; systemRows: Array<Record<string, unknown>> } {
+  const rows = body && typeof body === 'object' && Array.isArray(body.messages) ? (body.messages as ReadonlyArray<RowLike>) : [];
+  return { body: stripSystemNotices(body), systemRows: rows.filter(isSystemNoticeRow) as Array<Record<string, unknown>> };
+}

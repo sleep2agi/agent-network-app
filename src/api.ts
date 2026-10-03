@@ -118,7 +118,7 @@ import { userMessagesPath } from './user-unread';
 import { pickDefaultNetworkId } from './user-admin';
 import { fetchAuthMe } from './user-admin-api';
 import { stripHumanDms } from './human-dm';
-import { stripSystemNotices } from './system-notice';
+import { splitSystemNotices, stripSystemNotices } from './system-notice';
 import { createReplyInboxReader } from './inbox-cursor';
 import { createUserMessagesWindow } from './user-messages-window';
 
@@ -736,6 +736,12 @@ export interface UserMessagesResponse {
 // 「任务提醒」发的到期提醒(没有会话可去的系统通知)同样摘掉(system-notice.ts,#493)。
 export const fetchUserMessages = (cfg: HubConfig, limit: number) =>
   get<UserMessagesResponse>(cfg, userMessagesPath(limit, cfg.networkId)).then(body => stripSystemNotices(stripHumanDms(body)));
+/**
+ * 手机通知运行时用(#499):同一次读,agent 链路照旧拿不到系统通知行,另外把这些行单独交出来
+ * (应用在后台、用户流没推到时,只有轮询能看到「任务提醒」发的到期提醒)。
+ */
+export const fetchUserMessagesWithSystemRows = (cfg: HubConfig, limit: number) =>
+  get<UserMessagesResponse>(cfg, userMessagesPath(limit, cfg.networkId)).then(body => splitSystemNotices(stripHumanDms(body)));
 
 /**
  * 会话页的 user_inbox 读:第一次 200 条,之后每拍只读最新 50 条并进手里的 200 条(user-messages-window.ts)。

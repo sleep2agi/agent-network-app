@@ -2,6 +2,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, use
 import { t } from './i18n';
 import { useTranslation } from './i18n-react';
 import './i18n-chat';
+import './i18n-tasks';
 import ModalKeyboardAvoider from './ModalKeyboardAvoider';
 import { PanResponder, ActivityIndicator, Alert, BackHandler, FlatList, Image, Keyboard, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StatusBar, StyleSheet, useWindowDimensions, View } from 'react-native';
 import { Text, TextInput } from './ui-text';
@@ -133,6 +134,8 @@ type ChatItem = HubTask & {
   /** app#160:Agent 主动发给用户的消息(user_inbox),只有回复气泡、没有发送气泡。 */
   _proactive?: boolean;
   _severity?: string;
+  /** #499 到期提醒指向的任务(proactive-messages.dueReminderTaskRef)。 */
+  _taskNotice?: { requirementId: string; seq: number | null; networkId: string | null };
   /** 2026-09-16:发送成功后本地回显不再立刻撤掉(慢链路上会「吞」几秒),而是记下 hub 返回的
    *  task_id,等轮询把同 id 的服务器行拉回来再让位;没拿到 id 时按内容+时间对账(confirmedOutboxIds)。 */
   _confirmedTaskId?: string;
@@ -253,6 +256,8 @@ interface Props {
   focusTaskId?: string;
   /** 分离聊天窗:页头兼当标题栏(拖动 / 双击最大化 + 给窗口控件让位,window-shell.ts popoutChatChrome)。主窗 / 手机不传。 */
   windowChrome?: PopoutChrome;
+  /** #499 负责 Agent 发的到期提醒:气泡下「查看任务 ›」打开那张任务(同顶部提示)。不传 = 不画(分离聊天窗没有任务页)。 */
+  onOpenTask?: (requirementId: string, networkId: string | null) => void;
 }
 
 // Module level on purpose: the cache has to outlive a screen unmount, or
@@ -263,7 +268,7 @@ export const clearChatConversationCache = (profileId?: string, serverUrl = ''): 
   conversations.clearScope(conversationScope(profileId, serverUrl));
 };
 
-export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpenNodeSettings, pinned = false, onTogglePin, muted = false, onToggleMute, hideBack = false, onOpenVoiceSettings, focusTaskId, windowChrome = null }: Props) {
+export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpenNodeSettings, pinned = false, onTogglePin, muted = false, onToggleMute, hideBack = false, onOpenVoiceSettings, focusTaskId, windowChrome = null, onOpenTask }: Props) {
   useTranslation();
   // Android edge-to-edge draws the composer under the gesture bar (same
   // class of bug as the tg 802 tab bar) — pad by the real bottom inset.
@@ -2120,6 +2125,18 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
                           ) : null}
                           <MarkdownMessage>{cleanAttachmentDebugText(replyQuoted.body)}</MarkdownMessage>
                           {renderAttachments(replyAttachmentViews(item, cfg.serverUrl))}
+                          {item._taskNotice && onOpenTask ? (
+                            <Pressable
+                              accessibilityRole="link"
+                              accessibilityLabel={t('tasks.noticeOpenA11y')}
+                              onPress={() => onOpenTask(item._taskNotice!.requirementId, item._taskNotice!.networkId)}
+                              hitSlop={6}
+                              style={styles.taskLink}
+                              testID="chat-open-task"
+                            >
+                              <Text style={styles.taskLinkText}>{t('tasks.noticeOpen')}</Text>
+                            </Pressable>
+                          ) : null}
                         </View>
                         {replyQuoted.quote ? (
                           <View style={[styles.quoteChip, styles.quoteChipReply]} accessibilityLabel={t('chat.quote')}>
@@ -2827,6 +2844,9 @@ const makeStyles = (B = bubbleLayout()) =>
   jumpPillText: { color: colors.accent, fontSize: 13, fontWeight: '600' },
   // 复制消息:桌面端悬停气泡时的右上角小按钮 + 底部「已复制」提示
   replyPressable: B.replyPressable,
+  // #499 到期提醒气泡下的「查看任务 ›」,与私信气泡(DmChatScreen.taskLink)同一个样子。
+  taskLink: { alignSelf: 'flex-start', marginTop: spacing.xs, minHeight: 24, justifyContent: 'center' },
+  taskLinkText: { color: colors.accent, fontSize: 13, fontWeight: '600' },
   // 复制 + ⋯ 两个 24px 圆钮排成一行,整行挂在气泡上沿外侧(MessageHoverActions)。
   hoverActions: { position: 'absolute', top: -10, zIndex: 2, flexDirection: 'row', gap: 4 },
   copyHover: { width: 24, height: 24, borderRadius: radius.pill, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.card, borderWidth: 1, borderColor: colors.border },

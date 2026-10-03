@@ -5,16 +5,24 @@ import { useEffect, useRef } from 'react';
 import type { HubConfig } from './api';
 import { attachNotifierUi, setNotifierConfig } from './notifier-runtime';
 
-export default function MobileNotifier({ cfg, onOpenChat, onOpenTask }: { cfg: HubConfig | null; onOpenChat: (alias: string) => void; onOpenTask?: (taskId: string) => void }) {
+export default function MobileNotifier({ cfg, onOpenChat, onOpenTask, onOpenRequirement }: {
+  cfg: HubConfig | null;
+  onOpenChat: (alias: string) => void;
+  onOpenTask?: (taskId: string) => void;
+  /** #499 点「任务提醒」的到期提醒通知 → 打开那张任务卡片。 */
+  onOpenRequirement?: (requirementId: string, networkId: string | null) => void;
+}) {
   const open = useRef(onOpenChat);
   open.current = onOpenChat;
   // 0.2.109 任务状态通知带 taskId:点它进任务详情(没有任务详情入口时退回会话)。
   const openTask = useRef(onOpenTask);
   openTask.current = onOpenTask;
+  const openRequirement = useRef(onOpenRequirement);
+  openRequirement.current = onOpenRequirement;
   useEffect(() => { void setNotifierConfig(cfg).catch(() => { /* 通知是附带功能 */ }); }, [cfg?.profileId, cfg?.serverUrl, cfg?.token, cfg?.username, cfg?.networkId]);
   useEffect(() => attachNotifierUi((alias, taskId) => {
     if (taskId && openTask.current) openTask.current(taskId);
     else open.current(alias);
-  }), []);
+  }, (requirementId, networkId) => openRequirement.current?.(requirementId, networkId)), []);
   return null;
 }

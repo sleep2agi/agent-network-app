@@ -451,6 +451,8 @@ function AppRoot() {
     return bindDesktopTray(
       alias => setScreen({ name: 'chat', alias }),
       () => { void dismissAllForConfig(cfg); },
+      // #499 到期提醒的系统通知把任务编码进 alias(due-reminder-notify.taskOpenAlias):点它打开任务,不是会话。
+      (requirementId, networkId) => openTaskRef(requirementId, networkId, cfg, setScreen),
     );
   }, [cfg?.profileId, cfg?.serverUrl, trayWindow]);
   const reloadMainSession = useRef<() => Promise<void>>(async () => {});
@@ -766,7 +768,7 @@ function AppRoot() {
         <StatusBar barStyle={theme === 'light' ? 'dark-content' : 'light-content'} backgroundColor={colors.bg} />
         <DesktopWorkspace cfg={cfg} screen={screen} setScreen={setScreen} onLogout={removeActiveProfile} onLocalDataDeleted={finishLocalDataDeletion} onAddAccount={() => { setReauthProfile(null); setScreen({ name: 'login' }); }} onSwitchProfile={activateProfile} onReauthProfile={requestProfileReauth} onProfileEdited={reloadEditedProfile} />
         <DesktopMessageListener cfg={cfg} onOpenTask={id => openTaskNotice(id, cfg, setScreen)} />
-        {trayWindow ? <DesktopNotifier onOpenChat={alias => setScreen({ name: 'chat', alias })} profileKey={notifyProfileKey(cfg)} /> : null}
+        {trayWindow ? <DesktopNotifier onOpenChat={alias => setScreen({ name: 'chat', alias })} onOpenTask={(id, net) => openTaskRef(id, net, cfg, setScreen)} profileKey={notifyProfileKey(cfg)} /> : null}
         <LastCrashChip cfg={cfg} />
       </SafeAreaView>
     );
@@ -780,7 +782,7 @@ function AppRoot() {
       />
       {screen.name !== 'login' && cfg ? <DesktopMessageListener cfg={cfg} onOpenTask={id => openTaskNotice(id, cfg, setScreen)} /> : null}
       {/* 0.2.107 手机系统通知:登出(cfg=null)也要挂着,好让运行时停掉轮询和前台服务。 */}
-      {Platform.OS === 'android' || Platform.OS === 'ios' ? <MobileNotifier cfg={cfg} onOpenChat={alias => setScreen({ name: 'chat', alias })} onOpenTask={taskId => setScreen({ name: 'taskDetail', taskId })} /> : null}
+      {Platform.OS === 'android' || Platform.OS === 'ios' ? <MobileNotifier cfg={cfg} onOpenChat={alias => setScreen({ name: 'chat', alias })} onOpenTask={taskId => setScreen({ name: 'taskDetail', taskId })} onOpenRequirement={(requirementId, networkId) => openTaskRef(requirementId, networkId, cfg, setScreen)} /> : null}
       {screen.name === 'login' || !cfg ? (
         tauriDesktop && !reauthProfile && !showRemoteLogin ? (
           <FirstRunScreen
@@ -886,6 +888,7 @@ function AppRoot() {
                         hideBack
                         onOpenNodeSettings={() => setScreen({ name: 'nodeInfo', alias: screen.alias })}
                         onOpenVoiceSettings={() => { rememberSettingsCategory('voice'); setScreen({ name: 'settings' }); }}
+                        onOpenTask={(id, net) => openTaskRef(id, net, cfg, setScreen)}
                         focusTaskId={screen.focusTaskId}
                         pinned={mobilePins.includes(screen.alias)}
                         onTogglePin={() => toggleMobilePin(screen.alias)}
@@ -918,6 +921,7 @@ function AppRoot() {
                   onBack={() => setScreen({ name: 'agents' })}
                   onOpenNodeSettings={() => setScreen({ name: 'nodeInfo', alias: screen.alias })}
                   onOpenVoiceSettings={() => { rememberSettingsCategory('voice'); setScreen({ name: 'settings' }); }}
+                  onOpenTask={(id, net) => openTaskRef(id, net, cfg, setScreen)}
                   focusTaskId={screen.focusTaskId}
                   pinned={mobilePins.includes(screen.alias)}
                   onTogglePin={() => toggleMobilePin(screen.alias)}
@@ -1208,6 +1212,7 @@ function DesktopWorkspace({ cfg, screen, setScreen, onLogout, onLocalDataDeleted
       onBack={() => setScreen({ name: 'agents' })}
       onOpenNodeSettings={() => setScreen({ name: 'nodeInfo', alias: screen.alias })}
       onOpenVoiceSettings={() => { rememberSettingsCategory('voice'); void openSettingsWindow('voice').then(opened => { if (!opened) setScreen({ name: 'settings' }); }); }}
+      onOpenTask={(id, net) => openTaskRef(id, net, cfg, setScreen)}
       focusTaskId={screen.focusTaskId}
       pinned={pinnedAliases.includes(screen.alias)}
       onTogglePin={() => togglePin(screen.alias)}
@@ -1409,6 +1414,11 @@ const makeDesktopStyles = () => StyleSheet.create({
 // 任务通知私信(meta.task_notice)→ 留条子给任务页(task-open-request.ts)再切过去:桌面是抽屉,手机是推入的详情页。
 function openTaskNotice(requirementId: string, cfg: HubConfig, setScreen: (s: Screen) => void) {
   requestOpenTask({ requirementId, networkId: cfg.networkId ?? null });
+  setScreen({ name: 'tasks' });
+}
+/** #499 系统通知点开的任务:通知里带了网络就用它(提醒可能来自别的网络),否则当前网络。 */
+function openTaskRef(requirementId: string, networkId: string | null, cfg: HubConfig | null, setScreen: (s: Screen) => void) {
+  requestOpenTask({ requirementId, networkId: networkId ?? cfg?.networkId ?? null });
   setScreen({ name: 'tasks' });
 }
 

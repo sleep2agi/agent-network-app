@@ -3,6 +3,8 @@
 // 所以映射成一条只有 result 的 ChatItem,并打 `_proactive` 标 —— 渲染时不画发送气泡,只画回复气泡 + 「主动汇报」小标。
 // 纯函数;取数在 ChatScreen.load(与任务同一次轮询),去重靠 message_id(与 task_id 不会撞:dm_ 前缀)。
 import type { HubTask, HubUserMessage } from './api';
+import { taskNoticeOf, type TaskNoticeRef } from './human-dm';
+import { DUE_REMINDER_KIND } from './system-notice';
 
 export interface ProactiveMessageRow extends HubUserMessage {
   kind?: string;
@@ -14,7 +16,19 @@ export interface ProactiveMessageRow extends HubUserMessage {
   in_reply_to?: string | null;
 }
 
-export type ProactiveChatItem = HubTask & { _proactive: true; _severity?: string; in_reply_to?: string | null };
+export type ProactiveChatItem = HubTask & {
+  _proactive: true;
+  _severity?: string;
+  in_reply_to?: string | null;
+  /** #499 负责 Agent 发的到期提醒(kind=task_due + meta.task_notice):气泡下画「查看任务 ›」打开那张任务。 */
+  _taskNotice?: TaskNoticeRef;
+};
+
+/** 会话里的这条主动消息是不是到期提醒、指向哪张任务(没有 = 不画链接)。 */
+export function dueReminderTaskRef(row: Pick<ProactiveMessageRow, 'kind' | 'meta_json'>): TaskNoticeRef | null {
+  if (row.kind !== DUE_REMINDER_KIND) return null;
+  return taskNoticeOf(row.meta_json);
+}
 
 /** 主动消息若是对某条任务的回应:行上的 in_reply_to 优先,否则看 meta_json.in_reply_to。 */
 export function proactiveInReplyTo(row: Pick<ProactiveMessageRow, 'in_reply_to' | 'meta_json'>): string | null {
@@ -45,7 +59,9 @@ export function proactiveItemsForAgent(rows: readonly ProactiveMessageRow[] | un
     if (!row || row.from_session !== alias || typeof row.message_id !== 'string' || !row.message_id) continue;
     const body = proactiveBody(row);
     if (!body) continue;
+    const taskNotice = dueReminderTaskRef(row);
     out.push({
+      ...(taskNotice ? { _taskNotice: taskNotice } : {}),
       task_id: row.message_id,
       from_name: alias,
       to_name: username,
