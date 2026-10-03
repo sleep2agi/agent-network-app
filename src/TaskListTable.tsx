@@ -10,10 +10,11 @@ import { taskText } from './i18n-tasks';
 import './i18n-task-fields';
 import { TaskIssueCount } from './TaskIssueBindings';
 import { issueCount } from './requirement-issues';
+import { personDisplay } from './i18n-task-presentation';
 import { REQ_COLUMN_LABEL, hasVisibleTitle, titleText, type Requirement, type RequirementProject } from './requirements-model';
 import type { RequirementPerson } from './requirement-people';
 import { nextSort, type SortKey, type SortSpec } from './task-board-model';
-import { DueChip, OwnerBadge, ParticipantStack, PriorityBadge, ProjectChip, STATUS_TONE, a11yState, type TaskStyles } from './TaskBoardParts';
+import { ChecklistCompact, DueChip, OwnerBadge, ParticipantStack, PriorityBadge, ProjectChip, STATUS_TONE, a11yState, type TaskStyles } from './TaskBoardParts';
 import TaskListFields from './TaskListFields';
 import TaskTimeCell from './TaskTimeCell';
 import { fieldWidth, fittedWidths, loadFields, resetFieldWidth, saveFields, setFieldWidth, type FieldId, type FieldPref } from './task-list-fields';
@@ -191,14 +192,15 @@ export default function TaskListTable({ rows, terms, people, projects, sort, set
   const content = (item: Requirement, id: FieldId, rowHovered = false): ReactNode => {
     switch (id) {
       case 'created': case 'updated': {
-        const by = id === 'updated' && item.updatedBy ? people.find(p => p.kind === item.updatedBy!.kind && p.id === item.updatedBy!.id)?.name ?? item.updatedBy.id : undefined;
-        return <TaskTimeCell id={`task-time-${item.id}-${id}`} raw={id === 'created' ? item.createdAt : item.updatedAt} now={now} by={by} />;
+        const by = id === 'updated' && item.updatedBy ? personDisplay(item.updatedBy, people).name : undefined;
+        // 「更新时间」列把更新者直接写在时间后面(#506),不用悬停。
+        return <TaskTimeCell id={`task-time-${item.id}-${id}`} raw={id === 'created' ? item.createdAt : item.updatedAt} now={now} by={by} byInline={by && item.updatedBy ? { name: by, agent: item.updatedBy.kind === 'node' } : undefined} />;
       }
       // 标题格:内容自己的高、在行里垂直居中(标题文字不用 flex:1 —— 在竖排的格里它是「占满剩余高度」,
       // 会把标题顶到行的最上沿);没有标签就不放标签那一层(空的也会多一个 gap)。标题看不见字时显示「(无标题)」+ 短 id。
       // 是 flex:-1 不是 flex:0:react-native-web 把 flex:0 原样写成 CSS `flex: 0` = `0 1 0%`,基准宽 0 + overflow:hidden
       // → 字宽 0,整列标题空白(0.2.159–0.2.162 桌面端)。-1 在 web 上是 `0 1 auto`,原生上是「按内容宽、放不下再缩」。
-      case 'title': return titleInput(item) ?? <View style={{ flex: 1, minWidth: 0, flexDirection: 'row', alignItems: 'center', gap: 4, alignSelf: 'center' }}><View style={{ flex: 1, minWidth: 0, gap: 4, alignSelf: 'center' }} testID={`task-title-${item.id}`}><View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, minWidth: 0 }}><Text style={[s.tdTitle, { flex: -1 }, item.column === 'done' && s.cardDone, !hasVisibleTitle(item.name) && { color: colors.textMuted }]} numberOfLines={1}>{highlight(titleText(item), terms)}</Text>{item.archived ? <ArchivedTag /> : null}{item.readOnly ? <ReadOnlyTag testID={`task-read-only-${item.id}`} editFields={item.editFields} /> : null}</View>{items ? <ParentLine item={item} items={items} /> : null}{item.tags?.length && !tagsColumn ? <TaskTagChips tags={item.tags} /> : null}</View>{live && rowHovered ? <Pressable testID={`req-row-open-${item.id}`} accessibilityRole="button" accessibilityLabel={t('listEdit.open', { name: item.name })} onPress={() => onOpen(item.id)} hitSlop={4} style={state => [{ width: 24, height: 24, borderRadius: radius.item, alignItems: 'center', justifyContent: 'center' }, ((state as { hovered?: boolean }).hovered || state.pressed) && { backgroundColor: colors.rowActive }]}><Ionicons name="expand-outline" size={14} color={colors.textMuted} /></Pressable> : null}</View>;
+      case 'title': return titleInput(item) ?? <View style={{ flex: 1, minWidth: 0, flexDirection: 'row', alignItems: 'center', gap: 4, alignSelf: 'center' }}><View style={{ flex: 1, minWidth: 0, gap: 4, alignSelf: 'center' }} testID={`task-title-${item.id}`}><View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, minWidth: 0 }}><Text style={[s.tdTitle, { flex: -1 }, item.column === 'done' && s.cardDone, !hasVisibleTitle(item.name) && { color: colors.textMuted }]} numberOfLines={1}>{highlight(titleText(item), terms)}</Text>{item.archived ? <ArchivedTag /> : null}{item.readOnly ? <ReadOnlyTag testID={`task-read-only-${item.id}`} editFields={item.editFields} /> : null}<ChecklistCompact item={item} s={s} testID={`task-row-checklist-${item.id}`} /></View>{items ? <ParentLine item={item} items={items} /> : null}{item.tags?.length && !tagsColumn ? <TaskTagChips tags={item.tags} /> : null}</View>{live && rowHovered ? <Pressable testID={`req-row-open-${item.id}`} accessibilityRole="button" accessibilityLabel={t('listEdit.open', { name: item.name })} onPress={() => onOpen(item.id)} hitSlop={4} style={state => [{ width: 24, height: 24, borderRadius: radius.item, alignItems: 'center', justifyContent: 'center' }, ((state as { hovered?: boolean }).hovered || state.pressed) && { backgroundColor: colors.rowActive }]}><Ionicons name="expand-outline" size={14} color={colors.textMuted} /></Pressable> : null}</View>;
       case 'owner': return <OwnerBadge item={item} people={people} s={s} />;
       case 'priority': return <View style={s.owner}><PriorityBadge p={item.priority} s={s} /></View>;
       case 'due': return item.due ? <DueChip item={item} today={today} s={s} /> : <Text style={s.metaMuted}>—</Text>;

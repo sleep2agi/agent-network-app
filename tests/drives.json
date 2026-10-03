@@ -25,6 +25,10 @@
       "kind": "stub",
       "secs": 60
     },
+    "test-card-progress-activity/drive.mjs": {
+      "kind": "stub",
+      "secs": 60
+    },
     "test-changelog/drive.mjs": {
       "kind": "stub",
       "secs": 90
