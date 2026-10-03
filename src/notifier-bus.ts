@@ -10,3 +10,28 @@ export function setNotifierRefreshHandler(next: (() => void) | null): void {
 export function requestNotifierRefresh(): void {
   try { handler?.(); } catch { /* 通知是附带功能,不能打断 SSE 消费 */ }
 }
+
+// #499:「任务提醒」发的到期提醒(system-notice.ts)不进 agent 链路,轮询那边分组通知看不到它。
+// DesktopMessageListener 收到这种事件时把解析好的 notice 交到这里;手机通知运行时 / 桌面 DesktopNotifier
+// 登记处理者,自己判要不要发系统通知。没人登记(独立聊天窗)= 空操作。
+export type SystemNoticeEvent = {
+  messageId: string;
+  message: string;
+  title?: string | null;
+  from?: string | null;
+  kind?: string | null;
+  createdAt?: string | null;
+  taskNotice?: { requirementId: string; networkId: string | null } | null;
+};
+const systemNoticeHandlers = new Set<(n: SystemNoticeEvent) => void>();
+
+export function subscribeSystemNotice(fn: (n: SystemNoticeEvent) => void): () => void {
+  systemNoticeHandlers.add(fn);
+  return () => { systemNoticeHandlers.delete(fn); };
+}
+
+export function emitSystemNotice(n: SystemNoticeEvent): void {
+  for (const fn of systemNoticeHandlers) {
+    try { fn(n); } catch { /* 通知是附带功能,不能打断 SSE 消费 */ }
+  }
+}

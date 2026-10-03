@@ -61,4 +61,4 @@ check('desktop tray is bound only in the main window and opens the picked chat',
 check('desktop tray wires the panel dismiss-all back to the main window', src076.includes('dismissAllForConfig(cfg)'));
 // 0.2.81:通知要能点进会话 ⇒ DesktopNotifier 接上和托盘同一条 onOpenChat 路(props 变了,契约跟着变)。
 // 0.2.107:再带上账号键(按 agent 的「消息免打扰」按账号存)。
-check('desktop notifier mounts only in the main window', src076.includes("{trayWindow ? <DesktopNotifier onOpenChat={alias => setScreen({ name: 'chat', alias })} profileKey={notifyProfileKey(cfg)} /> : null}"));
+check('desktop notifier mounts only in the main window', src076.includes("{trayWindow ? <DesktopNotifier onOpenChat={alias => setScreen({ name: 'chat', alias })} onOpenTask={(id, net) => openTaskRef(id, net, cfg, setScreen)} profileKey={notifyProfileKey(cfg)} /> : null}"));

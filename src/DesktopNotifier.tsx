@@ -21,6 +21,8 @@ import { localMinutes } from './quiet-hours';
 import { plainTextForNotification } from './notify-text';
 import { initialNotifyTarget, recordNotified, targetOnFocus, type NotifyTargetState } from './notify-target';
 import { getUnreadSnapshot, subscribeUnread, type UnreadStoreSnapshot } from './unread-store';
+import { subscribeSystemNotice } from './notifier-bus';
+import { dueLogLine, dueReminderFromNotice, parseTaskOpenAlias, planDueReminder, taskOpenAlias } from './due-reminder-notify';
 
 const isTauri = () => !!(globalThis as any).__TAURI_INTERNALS__;
 
@@ -57,13 +59,43 @@ async function sendSystemNotification(alias: string, title: string, body: string
   return true;
 }
 
-export default function DesktopNotifier({ onOpenChat, profileKey = '' }: { onOpenChat?: (alias: string) => void; profileKey?: string } = {}) {
+export default function DesktopNotifier({ onOpenChat, onOpenTask, profileKey = '' }: {
+  onOpenChat?: (alias: string) => void;
+  /** #499 点「任务提醒」的系统通知(网页端 Notification.onclick)→ 打开任务。桌面壳走 tray-open-chat,见 App。 */
+  onOpenTask?: (requirementId: string, networkId: string | null) => void;
+  profileKey?: string;
+} = {}) {
   const notifyProfileKeyRef = useRef(profileKey);
   notifyProfileKeyRef.current = profileKey;
   const seen = useRef<SeenState>(initialSeen());
   const target = useRef<NotifyTargetState>(initialNotifyTarget());
   const openChat = useRef(onOpenChat);
   openChat.current = onOpenChat;
+  const openTask = useRef(onOpenTask);
+  openTask.current = onOpenTask;
+
+  // #499「任务提醒」的到期提醒:窗口在前台时顶部提示已经弹了;窗口没焦点(最小化 / 在别的应用里)时
+  // 与 agent 消息一样发一条系统通知,点它打开那张任务。总开关 / 免打扰时段与 agent 消息同一份判据。
+  useEffect(() => subscribeSystemNotice(n => {
+    const rem = dueReminderFromNotice(n);
+    if (!rem || !rem.requirementId) return;
+    const plan = planDueReminder(rem, {
+      profileKey: notifyProfileKeyRef.current,
+      foreground: presenceOf(getUnreadSnapshot()).windowFocused,
+      source: 'stream',
+      settings: loadNotifySettings(),
+      minutes: localMinutes(),
+    });
+    const outcome = 'skip' in plan ? plan.skip : 'notified';
+    try { console.info(dueLogLine({ source: 'stream', outcome, messageId: rem.messageId, requirementId: rem.requirementId, platform: 'desktop' })); } catch { /* 没有 console */ }
+    if ('skip' in plan) return;
+    const ref = { requirementId: rem.requirementId, networkId: rem.networkId };
+    void sendSystemNotification(taskOpenAlias(ref), plan.post.title, plan.post.body, alias => {
+      const target = parseTaskOpenAlias(alias);
+      if (target) openTask.current?.(target.requirementId, target.networkId);
+    }).catch(() => { /* 权限被拒/平台不支持 */ });
+    if (plan.post.alert) playChime();
+  }), []);
 
   // 0.2.83:两条激活信号都接——点 toast 时 Windows 会把应用带到前台(focus);若窗口本来就在
   // 前台、只是被 toast 短暂遮过,能观测到的可能只是 visibilitychange。目标是不是「正在看的

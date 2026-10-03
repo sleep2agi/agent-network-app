@@ -299,7 +299,7 @@ export function receiveTap(q: TapQueue, data: unknown, key: string): TapQueue {
 export function takeRoute(
   q: TapQueue,
   ready: { loggedIn: boolean; uiAttached: boolean; profileKey: string },
-): { queue: TapQueue; alias: string | null; taskId: string | null; consumed: boolean } {
+): { queue: TapQueue; alias: string | null; taskId: string | null; consumed: boolean; data?: unknown } {
   if (!q.pending || !ready.loggedIn || !ready.uiAttached) return { queue: q, alias: null, taskId: null, consumed: false };
   const handled = new Set(q.handled);
   handled.add(q.pending.key);
@@ -309,5 +309,7 @@ export function takeRoute(
     alias: target?.alias ?? null,
     taskId: target?.taskId ?? null,
     consumed: true,
+    // #499 到期提醒的通知没有 alias(点它开任务卡片):原始 data 交回去,由调用方按自己的 kind 解析。
+    data: q.pending.data,
   };
 }

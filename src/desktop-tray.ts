@@ -2,6 +2,7 @@
 // 托盘菜单点某个 agent → Rust 聚焦主窗口并 emit `tray-open-chat` → 这里回调打开会话。
 // 只在 Tauri 主窗口生效(分离聊天窗/工作区窗不接托盘)。
 
+import { parseTaskOpenAlias } from './due-reminder-notify';
 import { createTrayPusher, trayModelFrom, type TrayModel } from './tray-menu-model';
 import { getUnreadSnapshot, subscribeUnread, type UnreadStoreSnapshot } from './unread-store';
 import { agentUnreadCounts } from './agent-unread-counts';
@@ -50,7 +51,12 @@ export async function dismissAllUnread(deps: {
 }
 
 /** 挂上托盘同步 + 菜单点击回调;返回卸载函数。 */
-export function bindDesktopTray(onOpenChat: (alias: string) => void, onDismissAll?: () => void): () => void {
+export function bindDesktopTray(
+  onOpenChat: (alias: string) => void,
+  onDismissAll?: () => void,
+  /** #499 「任务提醒」的系统通知点开(alias 是 due-reminder-notify.taskOpenAlias 编出来的)→ 打开任务。 */
+  onOpenTask?: (requirementId: string, networkId: string | null) => void,
+): () => void {
   if (!isTauriDesktop()) return () => {};
   let stopped = false;
   const sync = () => {
@@ -72,7 +78,10 @@ export function bindDesktopTray(onOpenChat: (alias: string) => void, onDismissAl
   void import('@tauri-apps/api/event').then(async events => {
     if (stopped) return;
     const stopOpen = await events.listen<string>('tray-open-chat', ({ payload }) => {
-      if (typeof payload === 'string' && payload.trim()) onOpenChat(payload.trim());
+      if (typeof payload !== 'string' || !payload.trim()) return;
+      const task = parseTaskOpenAlias(payload.trim());
+      if (task) { onOpenTask?.(task.requirementId, task.networkId); return; }
+      onOpenChat(payload.trim());
     });
     const stopDismiss = await events.listen('tray-dismiss-all', () => { onDismissAll?.(); });
     unlisten = () => { stopOpen(); stopDismiss(); };

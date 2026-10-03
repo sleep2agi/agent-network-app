@@ -13,7 +13,7 @@
 //    人在应用里看 A,B 来了消息 —— 这是最常见的情形,必须弹。
 
 import { AppState, Platform, type AppStateStatus } from 'react-native';
-import { fetchReplyInbox, fetchTasks, fetchUserMessages, type HubConfig } from './api';
+import { ackUserMessages, fetchReplyInbox, fetchTasks, fetchUserMessagesWithSystemRows, type HubConfig } from './api';
 import { loadConfig } from './storage';
 import {
   decideWithReason,
@@ -91,10 +91,23 @@ import {
   type TaskSeen,
 } from './task-notify';
 import { keepAliveRunning, keepAliveTaskActive, setKeepAliveBootHook, startKeepAlive, stopKeepAlive } from './keep-alive';
-import { setNotifierRefreshHandler } from './notifier-bus';
+import { setNotifierRefreshHandler, subscribeSystemNotice, type SystemNoticeEvent } from './notifier-bus';
+import {
+  dueLogLine,
+  dueReminderFromNotice,
+  dueRouteFromNotificationData,
+  initialDueSeen,
+  markDueSeen,
+  pickDueRows,
+  planDueReminder,
+  type DueReminder,
+  type DueSeen,
+} from './due-reminder-notify';
 import { getUnreadSnapshot, ingestInboxMessagesBody, ingestUserMessagesBody, subscribeUnread, unreadHalvesIngested, unreadLastIngestAt } from './unread-store';
 
 type RouteHandler = (alias: string, taskId?: string | null) => void;
+/** #499 点到期提醒的通知 → 打开那张任务卡片。 */
+type RequirementHandler = (requirementId: string, networkId: string | null) => void;
 
 let cfg: HubConfig | null = null;
 let profileKey = '';
@@ -104,6 +117,8 @@ let timer: ReturnType<typeof setTimeout> | null = null;
 let fetching = false;
 let unsubs: Array<() => void> = [];
 let routeHandler: RouteHandler | null = null;
+let requirementHandler: RequirementHandler | null = null;
+let dueSeen: DueSeen = initialDueSeen();
 let taps: TapQueue = initialTapQueue();
 let tapsBound = false;
 /** 本账号第一轮拉取(两半各试过一次,成功失败都算)结束了没有。见 baselineReady。 */
@@ -141,8 +156,12 @@ async function fetchOnce(force: boolean): Promise<void> {
     } catch (e) { fail('tasks', e); }
     // 🔴 0.2.107 这两处 catch 什么都不记:hub 读失败时通知整条链路静默失效、面板上也看不见。现在记进诊断。
     try {
-      const body = await fetchUserMessages(c, 50);
-      if (cfg === c) { ingestUserMessagesBody(body); result.user = Array.isArray((body as any)?.messages) ? (body as any).messages.length : 0; }
+      const { body, systemRows } = await fetchUserMessagesWithSystemRows(c, 50);
+      if (cfg === c) {
+        ingestUserMessagesBody(body);
+        result.user = Array.isArray((body as any)?.messages) ? (body as any).messages.length : 0;
+        onDueRows(systemRows);
+      }
     } catch (e) { fail('scope=user', e); }
     try {
       const body = await fetchReplyInbox(c);
@@ -310,6 +329,55 @@ function flushExpiredTaskMarks(): void {
   void deliver(plans);
 }
 
+// ── #499 到期提醒(「任务提醒」发的,没有 agent 会话)──
+/** 轮询补到的系统通知行:首轮只登记;之后没见过、未读、新鲜的发系统通知(用户流先到的已经记过了)。 */
+function onDueRows(rows: ReadonlyArray<Record<string, unknown>>): void {
+  if (!cfg) return;
+  const picked = pickDueRows(dueSeen, rows, Date.now());
+  for (const rem of picked.stale) logDue(rem, 'poll', 'stale');
+  for (const rem of picked.toNotify) handleDue(rem, 'poll');
+}
+
+/** 用户流推来的(DesktopMessageListener → notifier-bus)。 */
+function onSystemNoticeEvent(n: SystemNoticeEvent): void {
+  if (!cfg) return;
+  const rem = dueReminderFromNotice(n);
+  if (!rem || !markDueSeen(dueSeen, rem.messageId)) return;
+  handleDue(rem, 'stream');
+}
+
+function logDue(rem: DueReminder, source: 'stream' | 'poll', outcome: DecisionOutcome): void {
+  patchNotifyDiagnostics({ lastDueReminder: { at: Date.now(), source, outcome, requirementId: rem.requirementId } });
+  recordDecision({ agent: '任务提醒', outcome, kind: 'task_due', detail: rem.requirementId ?? undefined });
+  // 真机核对用(adb logcat | grep '\[anet-notify\] task_due'):本 PR 没在真机上验证过系统通知。
+  try { console.info(dueLogLine({ source, outcome, messageId: rem.messageId, requirementId: rem.requirementId, platform: Platform.OS, appState: AppState.currentState ?? null })); } catch { /* 没有 console */ }
+}
+
+function handleDue(rem: DueReminder, source: 'stream' | 'poll'): void {
+  const c = cfg;
+  if (!c) return;
+  const stored = loadNotifySettings();
+  const plan = planDueReminder(rem, { profileKey, foreground: appActive(), source, settings: stored, minutes: localMinutes() });
+  if ('skip' in plan) { logDue(rem, source, plan.skip as DecisionOutcome); return; }
+  void (async () => {
+    let status: string = 'unknown';
+    try { status = (await notificationPermission()).status; } catch (e) { recordError(e, 'getPermissionsAsync'); }
+    patchNotifyDiagnostics({ permission: status });
+    if (status !== 'granted' && status !== 'unknown') { logDue(rem, source, 'no_permission'); return; }
+    try {
+      await postNotification(plan.post);
+      const d = getDiag();
+      patchNotifyDiagnostics({ postedCount: d.postedCount + 1, lastPostedAt: Date.now() });
+      logDue(rem, source, 'notified');
+      // 轮询补到的:没有顶部提示替它在 Hub 上标已读(用户流那一路 DesktopMessageListener 已经标了)。
+      if (source === 'poll') void ackUserMessages(c, [rem.messageId]).catch(() => {});
+    } catch (e) {
+      recordError(e, 'scheduleNotificationAsync');
+      logDue(rem, source, 'error');
+    }
+  })();
+}
+
 // ── 点通知 ──
 function deliverRoute(): void {
   const handler = routeHandler;
@@ -317,6 +385,12 @@ function deliverRoute(): void {
   taps = taken.queue;
   if (!taken.consumed) return;
   void clearLastNotificationTap();
+  const due = dueRouteFromNotificationData(taken.data, profileKey);
+  if (due) {
+    try { console.info(`[anet-notify] task_due tap req=${due.requirementId} handler=${requirementHandler ? 'yes' : 'no'}`); } catch { /* 没有 console */ }
+    if (requirementHandler) requirementHandler(due.requirementId, due.networkId);
+    return;
+  }
   if (taken.alias && handler) handler(taken.alias, taken.taskId);
 }
 
@@ -381,6 +455,7 @@ export async function setNotifierConfig(next: HubConfig | null): Promise<void> {
     buckets = {};
     taskSeen = initialTaskSeen();
     pairs = initialPairState();
+    dueSeen = initialDueSeen();
   }
   firstRoundDone = false;
   cfg = next;
@@ -413,6 +488,7 @@ export async function setNotifierConfig(next: HubConfig | null): Promise<void> {
   unsubs.push(() => appSub.remove());
   unsubs.push(subscribeUnread(onSnapshot));
   unsubs.push(subscribeNotifySettings(onSettingsChanged));
+  unsubs.push(subscribeSystemNotice(onSystemNoticeEvent));
   patchNotifyDiagnostics({ runtimeRunning: true, runtimeStartedAt: Date.now(), appState: AppState.currentState ?? null });
   setNotifierRefreshHandler(() => { void fetchOnce(true); });
   onSnapshot();
@@ -428,11 +504,15 @@ export async function setNotifierConfig(next: HubConfig | null): Promise<void> {
  * 界面挂上来:登记「跳到某个会话」的回调,并把冷启动时那次点通知交给它。
  * 返回卸载函数 —— 只摘回调,不停运行时(停不停由 setNotifierConfig(null) / 「保持连接」决定)。
  */
-export function attachNotifierUi(onRoute: RouteHandler): () => void {
+export function attachNotifierUi(onRoute: RouteHandler, onOpenRequirement?: RequirementHandler): () => void {
   routeHandler = onRoute;
+  requirementHandler = onOpenRequirement ?? null;
   bindTaps();
   deliverRoute();
-  return () => { if (routeHandler === onRoute) routeHandler = null; };
+  return () => {
+    if (routeHandler === onRoute) routeHandler = null;
+    if (onOpenRequirement && requirementHandler === onOpenRequirement) requirementHandler = null;
+  };
 }
 
 function getDiag() {

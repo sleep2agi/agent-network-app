@@ -1,14 +1,14 @@
 import { useEffect, useRef, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { ackUserMessages, type HubConfig } from './api';
-import { noticeAckIds } from './system-notice';
+import { isSystemNotice, noticeAckIds } from './system-notice';
 import {
   consumeDesktopMessageEvent,
   type DesktopMessageNotice as Notice,
 } from './desktop-message-consume';
 import DesktopMessageNotice from './DesktopMessageNotice';
 import { canOpenUserEventStream, openUserEventStream } from './user-events-sse';
-import { requestNotifierRefresh } from './notifier-bus';
+import { emitSystemNotice, requestNotifierRefresh } from './notifier-bus';
 import { isHumanDmNotice, parseMemberPresence } from './human-dm';
 import { activeDmPeer, emitHumanDm, emitMemberPresence } from './human-dm-bus';
 import { parseGroupEvent } from './group-chat';
@@ -56,6 +56,8 @@ export default function DesktopMessageListener({ cfg, onOpenTask }: { cfg: HubCo
           if (result.notice.from && result.notice.from === activeDmPeer()) return;
         }
         // 「任务提醒」的到期提醒没有会话可去:弹出即在 Hub 上标已读(system-notice.ts),不留清不掉的未读。
+        // #499:同时交给系统通知那边(手机后台 / 桌面窗口没焦点时发一条系统通知,点它打开任务)。
+        if (isSystemNotice(result.notice)) emitSystemNotice(result.notice);
         ackNotice(result.notice, 'shown');
         setNotice(result.notice);
       },

@@ -188,6 +188,8 @@ export const initScript = ({ theme }) => {
     if (p === '/api/tasks') return { ok: true, tasks: chatTasks.filter(t => !u.searchParams.get('to') || t.to_name === u.searchParams.get('to')) };
     if (p === '/api/task') return { ok: true, task: chatTasks[0], ...chatTasks[0] };
     if (p === '/api/task_events' || p === '/api/hub/task-events') return { ok: true, events: [] };
+    // A drive can hand in user_inbox rows (window.__userMessagesFixture = rows), e.g. an agent's proactive due reminder (#499).
+    if (p === '/api/messages' && u.searchParams.get('scope') === 'user' && window.__userMessagesFixture) return { ok: true, messages: window.__userMessagesFixture, unread: 0, pending_count: 0 };
     if (p === '/api/messages') return { ok: true, messages: [], unread: 0, pending_count: 0 };
     if (p === '/api/scheduled-tasks') return { ok: true, schedules };
     if (/\/api\/scheduled-tasks\/[^/]+\/runs$/.test(p)) return { ok: true, runs: [] };

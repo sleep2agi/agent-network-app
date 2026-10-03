@@ -15,6 +15,7 @@ export type DecisionOutcome =
   | 'stale'
   | 'baseline'
   | 'no_permission'
+  | 'foreground_notice'
   | 'error';
 
 export type LastDecision = {
@@ -22,7 +23,7 @@ export type LastDecision = {
   agent: string;
   outcome: DecisionOutcome;
   /** 任务通知时带上:done / failed。 */
-  kind?: 'message' | 'task_done' | 'task_failed';
+  kind?: 'message' | 'task_done' | 'task_failed' | 'task_due';
   detail?: string;
 };
 
@@ -50,6 +51,8 @@ export type NotifyDiagnostics = {
   keepAliveRunning: boolean | null;
   keepAliveTaskActive: boolean | null;
   appState: string | null;
+  /** #499 上一条「任务提醒」到期提醒的处理(真机核对用:没弹时看这一行)。 */
+  lastDueReminder: { at: number; source: 'stream' | 'poll'; outcome: DecisionOutcome; requirementId: string | null } | null;
 };
 
 const initial = (): NotifyDiagnostics => ({
@@ -74,6 +77,7 @@ const initial = (): NotifyDiagnostics => ({
   keepAliveRunning: null,
   keepAliveTaskActive: null,
   appState: null,
+  lastDueReminder: null,
 });
 
 let state: NotifyDiagnostics = initial();
@@ -120,6 +124,7 @@ const OUTCOME_TEXT: Record<DecisionOutcome, string> = {
   stale: '未通知:消息超过 10 分钟才拉到(应用在后台被暂停?)',
   baseline: '未通知:启动时已存在的消息只登记',
   no_permission: '未通知:没有系统通知权限',
+  foreground_notice: '未通知:应用在前台,已弹顶部提示',
   error: '出错',
 };
 
@@ -171,6 +176,10 @@ export function diagnosticsRows(d: NotifyDiagnostics, now = Date.now()): Array<{
     add('拉取结果', `user_inbox ${n(d.lastPollResult.user)} 条 · inbox ${n(d.lastPollResult.inbox)} 条 · 任务 ${n(d.lastPollResult.tasks)} 条${d.lastPollResult.error ? ` · 错误:${d.lastPollResult.error}` : ''}`, !!d.lastPollResult.error);
   }
   add('上次判定', d.lastDecision ? `${hhmmss(d.lastDecision.at)} ${d.lastDecision.agent} — ${outcomeText(d.lastDecision)}` : '—', !!d.lastDecision && d.lastDecision.outcome !== 'notified');
+  if (d.lastDueReminder) {
+    const r = d.lastDueReminder;
+    add('上次任务提醒', `${hhmmss(r.at)} ${r.source === 'stream' ? '用户流' : '轮询'} · 任务 ${r.requirementId ?? '—'} — ${outcomeText({ at: r.at, agent: '', outcome: r.outcome })}`, r.outcome !== 'notified' && r.outcome !== 'foreground_notice');
+  }
   add('已发通知', `${d.postedCount} 条(最近 ${hhmmss(d.lastPostedAt)})`);
   add('后台保持连接', `设置 ${yn(d.keepAliveSetting)} · 服务在跑 ${yn(d.keepAliveRunning)} · 后台任务 ${yn(d.keepAliveTaskActive)}`, d.platform === 'android' && d.keepAliveSetting === false);
   if (d.platform === 'android' && d.keepAliveSetting === false) add('提示', '后台保持连接关着:锁屏或切到后台后不会拉消息,也就不会提醒', true);

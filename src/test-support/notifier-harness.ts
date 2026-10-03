@@ -8,6 +8,7 @@
 // 必须在 import notifier-runtime 之前 import 本模块(mock.module 要先登记)。
 import { mock } from 'bun:test';
 import { createReplyInboxReader } from '../inbox-cursor';
+import { splitSystemNotices } from '../system-notice';
 
 export const H = {
   now: Date.parse('2026-09-26T01:10:00Z'),
@@ -30,6 +31,10 @@ export const H = {
   inboxFails: false,
   headless: null as (() => Promise<void>) | null,
   intents: [] as string[],
+  /** #499:ackUserMessages 收到的 message_id。 */
+  acked: [] as string[],
+  /** 运行时登记的「点通知」监听(addNotificationResponseReceivedListener)。 */
+  tapListener: null as ((r: any) => void) | null,
 };
 export const USER = 'admin';
 
@@ -92,7 +97,7 @@ mock.module('expo-notifications', () => ({
     return req.identifier;
   },
   dismissNotificationAsync: async () => {},
-  addNotificationResponseReceivedListener: () => ({ remove: () => {} }),
+  addNotificationResponseReceivedListener: (fn: (r: any) => void) => { H.tapListener = fn; return { remove: () => { if (H.tapListener === fn) H.tapListener = null; } }; },
   getLastNotificationResponse: () => null,
   clearLastNotificationResponse: () => {},
 }));
@@ -126,13 +131,21 @@ const inboxPage = async (limit: number, since: string) => {
   return { ok: true, messages: rows };
 };
 
+const userScopeBody = () => {
+  if (H.userScopeFails) throw new Error('HTTP 404');
+  const byAgent: Record<string, number> = {};
+  for (const m of H.userRows) if (!m.acked) byAgent[m.from_session] = (byAgent[m.from_session] ?? 0) + 1;
+  for (const r of H.inboxRows) if (r.to_alias === USER && !r.acked) byAgent[r.from_alias] = (byAgent[r.from_alias] ?? 0) + 1;
+  return { ok: true, messages: H.userRows.slice(), unread: H.userRows.filter(m => !m.acked).length, pending_count: 0, unread_by_agent: byAgent, unread_total: 0 };
+};
 mock.module('../api', () => ({
-  fetchUserMessages: async () => {
-    if (H.userScopeFails) throw new Error('HTTP 404');
-    const byAgent: Record<string, number> = {};
-    for (const m of H.userRows) if (!m.acked) byAgent[m.from_session] = (byAgent[m.from_session] ?? 0) + 1;
-    for (const r of H.inboxRows) if (r.to_alias === USER && !r.acked) byAgent[r.from_alias] = (byAgent[r.from_alias] ?? 0) + 1;
-    return { ok: true, messages: H.userRows.slice(), unread: H.userRows.filter(m => !m.acked).length, pending_count: 0, unread_by_agent: byAgent, unread_total: 0 };
+  // 与 api.ts 同口径:系统通知行(「任务提醒」的到期提醒)从 agent 链路摘掉(真的 system-notice.ts)。
+  fetchUserMessages: async () => splitSystemNotices(userScopeBody()).body,
+  fetchUserMessagesWithSystemRows: async () => splitSystemNotices(userScopeBody()),
+  ackUserMessages: async (_c: unknown, ids: string[]) => {
+    H.acked.push(...ids);
+    for (const m of H.userRows) if (ids.includes(m.message_id)) m.acked = 1;
+    return ids.length;
   },
   fetchMessages: async () => ({ ok: true, messages: H.inboxRows.slice().sort((a, b) => (a.created_at < b.created_at ? 1 : -1)) }),
   fetchTasks: async (_c: unknown, q: { from_name?: string }) => ({ ok: true, tasks: H.tasks.filter(x => !q.from_name || x.from_name === q.from_name).slice() }),
