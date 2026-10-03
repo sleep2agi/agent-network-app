@@ -19,6 +19,30 @@
  * bundle, so a real shell always has it).
  */
 export async function appFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
+  const startedAt = Date.now();
+  inflight++;
+  starts.push(startedAt);
+  if (starts.length > STARTS_CAP) starts.splice(0, starts.length - STARTS_CAP);
+  try {
+    return await transport(input, init);
+  } finally {
+    inflight--;
+  }
+}
+
+// #518 —— 这个 JS 上下文里**此刻有多少个请求在路上**、最近一分钟发了多少个。发送时记进
+// `[anet-chat] send_timing`(inflight / req_60s):「发送要等很久」时一眼看出是不是被别的请求淹了
+// (轮询堆积、窗口越开越多),还是链路本身慢。只计数,不排队、不限流。
+let inflight = 0;
+const starts: number[] = [];
+const STARTS_CAP = 2000;
+export function appFetchLoad(now = Date.now()): { inflight: number; lastMinute: number } {
+  let lastMinute = 0;
+  for (let i = starts.length - 1; i >= 0 && now - starts[i] <= 60_000; i--) lastMinute++;
+  return { inflight, lastMinute };
+}
+
+async function transport(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
   if ((globalThis as { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__) {
     if (pooledHttpEnabled()) {
       const pooled = await pooledFetch(input, init);

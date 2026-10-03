@@ -5,6 +5,8 @@
 // 纯模块(不 import react-native / expo),正式包里照样工作(不是 dev-only)。
 // 写入方:notifier-runtime.ts(轮询/判定/发送)、设置页(权限/渠道/勿扰的现场读数)。
 
+import { recentSendTimings, sendTimingRow } from './send-timing';
+
 export type DecisionOutcome =
   | 'notified'
   | 'viewing'
@@ -185,6 +187,9 @@ export function diagnosticsRows(d: NotifyDiagnostics, now = Date.now()): Array<{
   if (d.platform === 'android' && d.keepAliveSetting === false) add('提示', '后台保持连接关着:锁屏或切到后台后不会拉消息,也就不会提醒', true);
   add('应用状态', d.appState ?? '—');
   add('最近错误', d.lastError ? `${hhmmss(d.lastError.at)} ${d.lastError.message}` : '无', !!d.lastError);
+  // #518「发消息要很久」:最近一次发送每一段的耗时(send-timing.ts),和通知诊断一起复制给维护者。
+  const send = sendTimingRow(recentSendTimings()[0]);
+  if (send) add(send.label, `${hhmmss(recentSendTimings()[0].at)} ${send.value}`, send.warn);
   return rows;
 }
 
