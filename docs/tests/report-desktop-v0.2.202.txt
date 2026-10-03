@@ -1,0 +1,8 @@
+desktop v0.2.202 — 任务卡显示「评论了 / 改了状态」(#499)
+================================================================================
+A. 本版内容(0.2.201 发版提交之后 main 上合入的 PR + 本 PR)
+  #695 (#506) 任务卡/手机列表/电脑表格「最近动态」用 Hub .97 的 last_event:「<时间> · <谁><动作>」——评论了(电脑带一行预览)/把状态改成「进行中」/改了优先级/改了负责人/改了参与人/改了预计完成/改了标题/改了描述/创建了;未知→更新了;旧 Hub 或 last_event 比 updated_at 早 2s 以上→沿用 #691 文案;「更新时间」列按显示时间排序。formatter 单测 133/133,npm test 330/330,截图 38/38 组。
+  本 PR(版本号):0.2.201 → 0.2.202,versionCode 2201 → 2202;release-desktop-auto-update.yml 加 What's new in 0.2.202;重新生成 src/changelog-bundled.ts。
+  本地:干净 origin/main(ae810fd) bump 后 npm ci / npm test / npm run typecheck 全部 rc=0;android-release-notes.mjs 0.2.202 rc=0。
+B. 验证边界(如实)
+  ck 单测 + 页内桩截图;需要 Hub 0.9.0-preview.97(生产 10-03 23:25 已升)。评论不改 updated_at,增量刷新不触发,下次全量刷新才显示「评论了」。
