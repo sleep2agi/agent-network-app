@@ -9,6 +9,11 @@ import { join, extname } from 'node:path';
 // renders English and every Chinese text lookup times out. Default it here (before any drive launches Chromium, which
 // inherits process.env); ANET_TEST_LANG overrides, e.g. ANET_TEST_LANG=en_US.UTF-8 for an English run.
 process.env.LANG = process.env.ANET_TEST_LANG || 'zh_CN.UTF-8';
+// LANG alone is not enough: in the Playwright Docker image (mcr.microsoft.com/playwright) findChromium() finds nothing
+// under $HOME, Playwright launches its headless shell, and that — like the full Chromium there — reports en-US whatever
+// LANG says, so the whole UI renders English and every Chinese label lookup misses (test-desktop-phone-leak 41/48,
+// 2026-10-04). Pass this as the context's `locale` to pin navigator.language / Intl in every environment.
+export const TEST_LOCALE = (process.env.ANET_TEST_LANG || 'zh_CN.UTF-8').split('.')[0].replace('_', '-');
 
 const TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.png': 'image/png', '.ttf': 'font/ttf', '.json': 'application/json', '.ico': 'image/x-icon', '.svg': 'image/svg+xml' };
 
