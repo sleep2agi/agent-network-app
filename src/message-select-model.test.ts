@@ -3,8 +3,9 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import {
-  acceptSelectionEvent, chunkMenuRows, clampSelection, fullSelection, isWholeSelection, placeSelectCard, placeSelectMenu,
-  selectedPart, selectInputTraits, selectionPayload, selectMenuItems,
+  acceptSelectionEvent, chunkMenuRows, clampSelection, fullSelection, handleZones, HANDLE_REACH_ABOVE, HANDLE_REACH_BELOW, isWholeSelection,
+  lineIndexAt, placeMenuAvoidingHandles, placeSelectCard, placeSelectMenu, selectedPart, selectInputTraits, selectionLinesFromLayout,
+  selectionPayload, selectMenuItems, zonesOverlap,
 } from './message-select-model';
 import { selectableTextOf } from './message-plain-text';
 
@@ -85,6 +86,105 @@ ck('安卓:不藏系统菜单(contextMenuHidden 会让系统把选区收成光�
 ck('iOS:只读 + 藏系统菜单,只留我们的', i.readOnly === true && i.contextMenuHidden === true);
 ck('web:只读 textarea', w.readOnly === true);
 
+
+// ── #551 菜单避开选区手柄 ────────────────────────────────────────────────
+// 行 → 偏移映射
+const L = [{ y: 0, height: 21, text: '一二三四\n' }, { y: 21, height: 21, text: '五六七' }, { y: 42, height: 21, text: '八九' }];
+ck('lineIndexAt:字符 0 在第 0 行', lineIndexAt(L, 0, true) === 0);
+ck('lineIndexAt:行尾换行符仍在第 0 行', lineIndexAt(L, 4, true) === 0);
+ck('lineIndexAt:字符 5(首个「五」)在第 1 行', lineIndexAt(L, 5, true) === 1);
+ck('lineIndexAt:光标偏移 5(行交界)不 preferNext → 前一行', lineIndexAt(L, 5) === 0);
+ck('lineIndexAt:越界 → 最后一行', lineIndexAt(L, 99, true) === 2);
+ck('lineIndexAt:空行表 → -1', lineIndexAt([], 0) === -1);
+const SL = selectionLinesFromLayout(L, { start: 6, end: 10 }, 10);
+ck('选区 6..10 → 起点行 1、终点行 2', js(SL) === js({ startTop: 21, startBottom: 42, endTop: 42, endBottom: 63 }), js(SL));
+const SL2 = selectionLinesFromLayout(L, { start: 0, end: 8 }, 10);
+ck('终点取最后一个选中字符(end-1)所在行', !!SL2 && SL2.endTop === 21, js(SL2));
+ck('没有行信息 → null(调用方退回按卡片放)', selectionLinesFromLayout([], { start: 0, end: 1 }, 1) === null);
+
+// 手柄禁区
+const zz = handleZones({ lines: { startTop: 0, startBottom: 21, endTop: 210, endBottom: 231 }, textTop: 300, clip: { top: 290, bottom: 800 } });
+ck('起点手柄禁区 = 行顶上 HANDLE_REACH_ABOVE ~ 行底下 HANDLE_REACH_BELOW', !!zz.start && zz.start.top === 300 - HANDLE_REACH_ABOVE && zz.start.bottom === 321 + HANDLE_REACH_BELOW, js(zz));
+ck('终点手柄禁区同理', !!zz.end && zz.end.top === 510 - HANDLE_REACH_ABOVE && zz.end.bottom === 531 + HANDLE_REACH_BELOW, js(zz));
+const zs = handleZones({ lines: { startTop: 0, startBottom: 21, endTop: 2000, endBottom: 2021 }, textTop: 300, scrollY: 0, clip: { top: 290, bottom: 812 } });
+ck('终点行在可见区外 → 没有终点手柄(不当禁区)', !!zs.start && zs.end === null, js(zs));
+const zsc = handleZones({ lines: { startTop: 0, startBottom: 21, endTop: 400, endBottom: 421 }, textTop: 300, scrollY: 200, clip: { top: 290, bottom: 812 } });
+ck('卡片里滚过 200 → 起点行滚出(无手柄),终点行上移 200', zsc.start === null && !!zsc.end && zsc.end.top === 500 - HANDLE_REACH_ABOVE, js(zsc));
+
+// 截图复现(iPhone 0.2.205,390×844 换算):一条比屏还高的消息,卡片从 y=210 起一直到可见区底;整条选中。
+const shotEdge = { top: 47, bottom: 34, left: 0, right: 0 };
+const shotMenu = { width: 316, height: 160 };
+const shotCard = { x: 70, y: 210, width: 290, height: 844 - 34 - 8 - 210 };
+const textTop = shotCard.y + 10 + 4;
+const old = placeSelectMenu({ anchor: shotCard, menu: shotMenu, viewport: vp, edge: shotEdge });
+const shotZones = handleZones({ lines: { startTop: 0, startBottom: 21, endTop: 1400, endBottom: 1421 }, textTop, clip: { top: shotCard.y, bottom: shotCard.y + shotCard.height } });
+ck('复现:#537 的放法在这里走 inside,并且盖住起点手柄(这就是 bug)', old.side === 'inside' && !!shotZones.start && zonesOverlap({ top: old.top, bottom: old.top + shotMenu.height }, shotZones.start), js({ old, z: shotZones.start }));
+const fixed = placeMenuAvoidingHandles({ anchor: shotCard, menu: shotMenu, viewport: vp, edge: shotEdge, ...shotZones });
+const noHit = (pl: { top: number }, z: { start: any; end: any }, h = shotMenu.height) => [z.start, z.end].every(q => !q || !zonesOverlap({ top: pl.top, bottom: pl.top + h }, q));
+ck('修后:同一场景菜单不碰起点手柄', !fixed.overlapsHandle && noHit(fixed, shotZones), js(fixed));
+ck('修后:仍整块在可见带内', fixed.top >= shotEdge.top + 8 && fixed.top + shotMenu.height <= vp.height - shotEdge.bottom - 8, js(fixed));
+ck('修后:放在起点手柄下方的空档(上方只剩 ~140 放不下 160)', fixed.side === 'inside' && fixed.top === shotZones.start!.bottom + 6, js(fixed));
+
+// 用户把终点拖到屏幕中间(截图里那只看得见的手柄):终点下方放得下 → below
+const dragZones = handleZones({ lines: { startTop: 0, startBottom: 21, endTop: 330, endBottom: 351 }, textTop, clip: { top: shotCard.y, bottom: shotCard.y + shotCard.height } });
+const dragged = placeMenuAvoidingHandles({ anchor: shotCard, menu: shotMenu, viewport: vp, edge: shotEdge, ...dragZones });
+ck('终点在中间 → 菜单放终点手柄下方(below),两只手柄都不碰', dragged.side === 'below' && dragged.top === dragZones.end!.bottom + 6 && noHit(dragged, dragZones), js(dragged));
+
+// 普通气泡:选区起点上方放得下 → above,底边离起点手柄禁区 gap
+const midZones = handleZones({ lines: { startTop: 0, startBottom: 21, endTop: 42, endBottom: 63 }, textTop: 520, clip: { top: 506, bottom: 590 } });
+const midP = placeMenuAvoidingHandles({ anchor: { x: 60, y: 506, width: 280, height: 84 }, menu: shotMenu, viewport: vp, edge: shotEdge, ...midZones });
+ck('屏幕中间的气泡 → above,菜单底 = 起点手柄禁区顶 - 6', midP.side === 'above' && midP.top + shotMenu.height === midZones.start!.top - 6 && noHit(midP, midZones), js(midP));
+// 选区只是中间一段:above 以**选区起点行**为准,不是卡片顶
+const partZones = handleZones({ lines: { startTop: 210, startBottom: 231, endTop: 231, endBottom: 252 }, textTop: 100, clip: { top: 86, bottom: 800 } });
+const partP = placeMenuAvoidingHandles({ anchor: { x: 60, y: 86, width: 280, height: 714 }, menu: shotMenu, viewport: vp, edge: shotEdge, ...partZones });
+ck('选区在卡片中段 → 菜单贴着选区起点行上方,而不是被卡片顶逼到别处', partP.side === 'above' && partP.top + shotMenu.height === partZones.start!.top - 6, js(partP));
+
+// 选区贴顶(起点上方放不下)→ 终点下方
+const topZones = handleZones({ lines: { startTop: 0, startBottom: 21, endTop: 21, endBottom: 42 }, textTop: 80, clip: { top: 66, bottom: 140 } });
+const topP = placeMenuAvoidingHandles({ anchor: { x: 60, y: 66, width: 280, height: 74 }, menu: shotMenu, viewport: vp, edge: shotEdge, ...topZones });
+ck('贴顶的气泡 → below,在终点手柄禁区下 6', topP.side === 'below' && topP.top === topZones.end!.bottom + 6 && noHit(topP, topZones), js(topP));
+
+// 键盘开着:不进键盘区,且不碰手柄
+const kbZones = handleZones({ lines: { startTop: 0, startBottom: 21, endTop: 42, endBottom: 63 }, textTop: 360, clip: { top: 346, bottom: 430 } });
+const kbP = placeMenuAvoidingHandles({ anchor: { x: 60, y: 346, width: 280, height: 84 }, menu: shotMenu, viewport: vp, edge: shotEdge, keyboardHeight: 330, ...kbZones });
+ck('键盘开着 → 菜单底不进键盘,不碰手柄', kbP.top + shotMenu.height <= vp.height - 330 - 8 && noHit(kbP, kbZones) && !kbP.overlapsHandle, js(kbP));
+
+// 选区两头都在屏外(中间一大段)→ 没有手柄可躲,放在卡片可见顶附近
+const bothOut = placeMenuAvoidingHandles({ anchor: shotCard, menu: shotMenu, viewport: vp, edge: shotEdge, start: null, end: null });
+ck('两只手柄都不可见 → inside,不报重叠,在可见带内', bothOut.side === 'inside' && !bothOut.overlapsHandle && bothOut.top >= shotEdge.top + 8, js(bothOut));
+
+// 屏太矮,无处可放 → overlapsHandle=true(不假装躲开了)
+const tiny = placeMenuAvoidingHandles({ anchor: { x: 0, y: 20, width: 300, height: 200 }, menu: shotMenu, viewport: { width: 320, height: 240 }, start: { top: 30, bottom: 90 }, end: { top: 150, bottom: 210 } });
+ck('屏太矮放不开 → overlapsHandle=true', tiny.overlapsHandle === true, js(tiny));
+
+// 随机扫:只要返回 overlapsHandle=false,就一定不碰任何手柄、整块在可见带内
+let sweepBad = 0, sweepN = 0;
+for (let sy = -400; sy <= 700; sy += 37) for (let ey = 0; ey <= 1400; ey += 53) for (const kbh of [0, 300]) {
+  if (ey < sy + 21 && ey !== 0) continue;
+  const cardA = { x: 40, y: 120, width: 300, height: 600 };
+  const z = handleZones({ lines: { startTop: sy, startBottom: sy + 21, endTop: Math.max(sy, ey), endBottom: Math.max(sy, ey) + 21 }, textTop: 134, clip: { top: 120, bottom: 720 } });
+  const pl = placeMenuAvoidingHandles({ anchor: cardA, menu: shotMenu, viewport: vp, edge: shotEdge, keyboardHeight: kbh, ...z });
+  sweepN++;
+  const band = { top: shotEdge.top + 8, bottom: vp.height - Math.max(shotEdge.bottom, kbh) - 8 };
+  if (!pl.overlapsHandle && (!noHit(pl, z) || pl.top < band.top || pl.top + shotMenu.height > band.bottom)) sweepBad++;
+}
+ck(`扫 ${sweepN} 种选区/键盘组合:声称不重叠的放法全都真的不碰手柄且在屏内`, sweepN > 500 && sweepBad === 0, `bad=${sweepBad}`);
+
+// ── #551 这一类:我们自己画、浮在可选文字上的菜单都必须走 placeMenuAvoidingHandles + 拖动时隐藏 ──
+// 判据:藏掉系统菜单(contextMenuHidden 不是字面 false)= 我们自己出菜单 ⇒ 这个文件必须用手柄避让放法和隐藏开关。
+const needsHandleRule = (src: string) => /contextMenuHidden=\{(?!false\})/.test(src);
+const followsHandleRule = (src: string) => src.includes('placeMenuAvoidingHandles(') && src.includes('menuShown') && src.includes('SELECT_MENU_SETTLE_MS');
+ck('判据自检:藏系统菜单的假文件 → 需要', needsHandleRule('<TextInput contextMenuHidden={traits.contextMenuHidden} />') && needsHandleRule('<TextInput contextMenuHidden={true} />'));
+ck('判据自检:contextMenuHidden={false}(用系统菜单,系统自己躲手柄)→ 不需要', !needsHandleRule('<TextInput contextMenuHidden={false} />'));
+ck('判据自检:没用规则的假文件 → 不合格', !followsHandleRule('placeSelectMenu({ anchor })'));
+const srcFiles: string[] = [];
+const walk = (d: string) => { for (const e of fs.readdirSync(d, { withFileTypes: true })) { const f = path.join(d, e.name); if (e.isDirectory()) walk(f); else if (/\.tsx$/.test(e.name) && !/\.test\./.test(e.name)) srcFiles.push(f); } };
+walk(__dirname);
+const needing = srcFiles.filter(f => needsHandleRule(fs.readFileSync(f, 'utf8')));
+const offenders = needing.filter(f => !followsHandleRule(fs.readFileSync(f, 'utf8')));
+ck(`取集:递归扫 src/ 下 ${srcFiles.length} 个 .tsx,找到自画菜单的文件 ≥ 1(MessageSelectOverlay)`, srcFiles.length > 50 && needing.some(f => f.endsWith('MessageSelectOverlay.tsx')), needing.map(f => path.basename(f)).join(','));
+ck('每个自画选区菜单都避让手柄 + 拖动时隐藏', offenders.length === 0, offenders.map(f => path.basename(f)).join(','));
+
 // ── 接线(源码契约)──────────────────────────────────────────────────────
 const chat = fs.readFileSync(path.join(__dirname, 'ChatScreen.tsx'), 'utf8');
 const overlay = fs.readFileSync(path.join(__dirname, 'MessageSelectOverlay.tsx'), 'utf8');
@@ -97,6 +197,8 @@ ck('卡片文字与气泡同一条管线(selectableTextOf)', overlay.includes("s
 ck('受控 selection + 事件过滤', overlay.includes('selection={sel}') && overlay.includes('acceptSelectionEvent(next, Date.now() - openedAt.current)'));
 ck('全选 = 把选区设回整条(不关菜单)', overlay.includes("if (key === 'selectAll') { setSel(fullSelection(plain.length)); return; }"));
 ck('点空白退出', overlay.includes('testID="msg-select-backdrop"') && /msg-select-backdrop"[^>]*/.test(overlay) && overlay.includes('onPress={onClose}'));
-ck('菜单位置由 placeSelectMenu 算', overlay.includes('placeSelectMenu({ anchor, menu: menuSize'));
+ck('菜单位置:有选区几何时 placeMenuAvoidingHandles,量到之前 / 纯附件 placeSelectMenu', overlay.includes('placeMenuAvoidingHandles({') && overlay.includes('placeSelectMenu({ anchor, menu: menuSize'));
+ck('#551 拖手柄时菜单隐藏:触摸按下 / 选区变化 → 藏,松手 + 停稳再出', overlay.includes('const menuShown = !!placed && !touching && !settling;') && overlay.includes('if (next.start !== sel.start || next.end !== sel.end) settle();') && overlay.includes("onTouchStart: touchDown") && overlay.includes("onPointerDown: touchDown"));
+ck('#551 隐藏时不接点击(pointerEvents none),dataSet 暴露 hidden 供测试', overlay.includes("pointerEvents={menuShown ? 'auto' : 'none'}") && overlay.includes("hidden: menuShown ? '0' : '1'"));
 
 console.log(`\n${p}/${t} passed`); process.exit(p === t ? 0 : 1);
