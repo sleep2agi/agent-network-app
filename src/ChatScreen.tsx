@@ -2201,7 +2201,7 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
                         {pointer && hoverKey === `${msgKey(item)}:sent` && item.content ? (
                           <MessageHoverActions side="sent" styles={styles} onCopy={() => void copyMessage(item.content ?? '')} onMore={at => openMenuAt(at, { item, text: item.content ?? '', author: sender.alias })} />
                         ) : null}
-                        <MarkdownMessage>{hideGridImageLines(cleanAttachmentDebugText(sentQuoted.body || (sentQuoted.quote ? '' : '—')), sentGridNames) || (sentQuoted.quote ? '' : '—')}</MarkdownMessage>
+                        <MarkdownMessage tone="mine">{hideGridImageLines(cleanAttachmentDebugText(sentQuoted.body || (sentQuoted.quote ? '' : '—')), sentGridNames) || (sentQuoted.quote ? '' : '—')}</MarkdownMessage>
                         {renderAttachments(sentAttachmentViews(item, cfg.serverUrl), item)}
                       </View>
                       {sentQuoted.quote ? (
@@ -2874,8 +2874,8 @@ const makeStyles = (B = bubbleLayout()) =>
     paddingHorizontal: spacing.sm,
     paddingVertical: 2,
   },
-  // 极简:气泡不描边。发出的用中性的 rowActive 一档底色,回复用卡片色——靠底色区分,不靠边框。
-  bubble: { ...B.bubble, backgroundColor: colors.rowActive, borderRadius: radius.bubble },
+  // 极简:气泡不描边。我发出的用 bubbleMine(#545 强调色方案给出),回复用卡片色——靠底色区分,不靠边框。
+  bubble: { ...B.bubble, backgroundColor: colors.bubbleMine, borderRadius: radius.bubble },
   replyBubble: { ...B.replyBubble, backgroundColor: colors.card },
   replyBubbleDesktop: B.replyBubbleDesktop,
   bubbleText: { color: colors.text, fontSize: 14, lineHeight: 20 },
