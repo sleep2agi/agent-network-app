@@ -5,6 +5,10 @@
 export const BUNDLED_RELEASE_BODY: string = [
   "Signed and notarized stable update for macOS (Apple Silicon) and Windows (x64).",
   "",
+  "What's new in 0.2.203:",
+  "- 图片发送失败后点「重新发送」会带上原图重发（离开会话再回来、重启 app 后也一样）",
+  "- 图片确实找不回来时提示「图片已丢失」，不再只发文字",
+  "",
   "What's new in 0.2.202:",
   "- 任务卡片显示具体动态：谁评论了、把状态改成什么、改了负责人 / 优先级 / 预计完成",
   "- 表格的「更新时间」按显示的时间排序，新评论排到最上面",
@@ -884,6 +888,7 @@ export const BUNDLED_RELEASE_BODY: string = [
 
 /** Release date (published_at) per version, as far as it was known when this file was generated. */
 export const BUNDLED_RELEASE_DATES: Record<string, string> = {
+  "0.2.202": "2026-10-03T16:19:11Z",
   "0.2.201": "2026-10-03T15:32:57Z",
   "0.2.200": "2026-10-03T13:03:05Z",
   "0.2.199": "2026-10-03T01:33:14Z",
