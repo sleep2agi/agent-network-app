@@ -1,0 +1,8 @@
+desktop v0.2.203 — 图片发送失败重发带上原图 (#527)
+================================================================================
+A. 本版内容(0.2.202 发版提交之后 main 上合入的 PR + 本 PR)
+  #697 (#527) 失败消息的本地发送队列改为保存每张图的本地路径与已上传 file_id;重发复用已上传的、补传未上传的;图片无法恢复时提示「图片已丢失」+「删除这条」而不是只发文字。resend-image 单测 58/58;浏览器驱动 test-resend-image 64/64(main 52/64);npm test 331/331。
+  本 PR(版本号):0.2.202 → 0.2.203,versionCode 2202 → 2203;release-desktop-auto-update.yml 加 What's new in 0.2.203;重新生成 src/changelog-bundled.ts。
+  本地:干净 origin/main(1e81323) bump 后 npm ci / npm test / npm run typecheck 全部 rc=0;android-release-notes.mjs 0.2.203 rc=0。
+B. 验证边界(如实)
+  ck 单测 + 页内桩浏览器驱动(桩 Hub);不依赖新 Hub 接口。真机重发未在真设备上验证,请按:发图→断网→失败→切走再回来→重发 验一次。
