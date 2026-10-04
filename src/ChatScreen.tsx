@@ -28,6 +28,7 @@ import { mayApplySendResult, shouldExposeSendFailure } from './send-reconciliati
 import { conversationKey, conversationScope, createConversationRequestGate, createConversationStore } from './conversation-store';
 import { resolveSender } from './chat-sender';
 import { keyboardAvoidEnabled, useKeyboardVisible } from './keyboard-visibility';
+import { useScreenKeyboardInset } from './screen-keyboard-inset';
 import { nextIdentityRetryDelay } from './identity-retry';
 import { COMPOSER_CARD_INSET, COMPOSER_HEIGHT_DEFAULT, composerCardHeight, composerDragHandlers, inputMaxHeight, loadComposerHeight, lockDocumentSelection, saveComposerHeight } from './composer-resize';
 import {
@@ -350,6 +351,8 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
   const [rootHeight, setRootHeight] = useState(0);
   const [inputRowTop, setInputRowTop] = useState(0);
   const keyboardVisible = useKeyboardVisible(Keyboard, Platform.OS);
+  // iOS: the composer's keyboard inset, measured in window coordinates (#547, screen-keyboard-inset.tsx).
+  const iosKeyboard = useScreenKeyboardInset();
   // 「＋」 panel (composer-plus-panel.ts). Mobile: inline panel under the input row,
   // sharing the keyboard's slot. Desktop: the small popover Modal. One level either way.
   const plusOpenRef = useRef(plusMenuOpen);
@@ -1922,12 +1925,15 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
 
   return (
     <KeyboardAvoidingView
-      style={styles.root}
+      style={[styles.root, iosKeyboard.style]}
       testID="chat-pane"
       // Edge-to-edge Android ignores adjustResize, so behavior=undefined
       // left the keyboard covering the input (Vincent tg 738). 'padding'
-      // works on both platforms under edge-to-edge.
-      behavior={Platform.OS === 'ios' ? 'padding' : 'padding'}
+      // works under edge-to-edge. iOS pads itself (iosKeyboard): RN's KAV
+      // mixed parent-relative layout with window coordinates and came out one
+      // top safe-area inset short once the chat moved under the nav shell, so
+      // the IME covered the composer (#547, keyboard-inset.ts).
+      behavior={iosKeyboard.handled ? undefined : 'padding'}
       // RN's Android KAV never resets its padding on keyboardDidHide (it
       // recomputes it from the hide event), which left a keyboard-height band
       // under the composer after dismissing (Vincent, 0.2.102 foldable). Only
@@ -1936,6 +1942,7 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
       onLayout={(event) => { const { height: h, width: w } = event.nativeEvent.layout; rootHeightRef.current = h; setRootHeight(h); setPaneWidth(w); }}
       keyboardVerticalOffset={Platform.OS === 'android' ? (StatusBar.currentHeight ?? 0) : 0}
     >
+      {iosKeyboard.probe}
       <View
         {...({ dataSet: headerChrome.dataSet } as any)}
         style={[styles.header, headerChrome.style]}

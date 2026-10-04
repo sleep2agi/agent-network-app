@@ -49,6 +49,10 @@
       "kind": "stub",
       "secs": 43
     },
+    "test-composer-keyboard-inset/drive.mjs": {
+      "kind": "stub",
+      "secs": 30
+    },
     "test-composer-plus-send/drive.mjs": {
       "kind": "stub",
       "secs": 60
