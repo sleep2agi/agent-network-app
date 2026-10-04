@@ -4,6 +4,8 @@
 //
 //   WEB_DIR=<expo web export> OUT=<png dir> [BASELINE=1] [PLAYWRIGHT_MODULE=<…/playwright/index.mjs>] \
 //     node tests/test-desktop-phone-leak/drive.mjs
+//   Docker (mcr.microsoft.com/playwright:v1.58.2-noble, playwright@1.58.2 in /tmp/runner) works the same: the context is
+//   pinned to TEST_LOCALE (zh-CN) because Chromium there ignores LANG and would render English; an `env:` check says so.
 //
 // 桌面 1200×800(Tauri 壳,无安卓 UA):
 //   msg-hold       鼠标按住回复气泡 800ms:不出任何菜单(以前是手机底部 action sheet)
@@ -21,7 +23,7 @@
 //   「下拉刷新」文案、返回键、没有「刷新」钮、没有悬停按钮。
 // 退出码 1 = 有断言失败(BASELINE=1 只记录不判,给「修之前」那一列)。
 import { mkdirSync, writeFileSync } from 'node:fs';
-import { serveExport, initScript, findChromium } from '../test-layout-sweep/harness.mjs';
+import { serveExport, initScript, findChromium, TEST_LOCALE } from '../test-layout-sweep/harness.mjs';
 
 const { chromium } = await import(process.env.PLAYWRIGHT_MODULE || 'playwright');
 const WEB = process.env.WEB_DIR, OUT = process.env.OUT;
@@ -77,7 +79,7 @@ const web = await serveExport(WEB);
 const browser = await chromium.launch({ headless: true, executablePath: findChromium() });
 
 async function open(L) {
-  const ctx = await browser.newContext({ viewport: { width: L.w, height: L.h }, colorScheme: 'light', deviceScaleFactor: 1, ...(L.ua ? { userAgent: L.ua, hasTouch: true } : {}) });
+  const ctx = await browser.newContext({ viewport: { width: L.w, height: L.h }, colorScheme: 'light', deviceScaleFactor: 1, locale: TEST_LOCALE, ...(L.ua ? { userAgent: L.ua, hasTouch: true } : {}) });
   const page = await ctx.newPage();
   const errors = [];
   page.on('pageerror', e => errors.push(e.message.split('\n')[0]));
@@ -86,6 +88,10 @@ async function open(L) {
   await page.goto(`${web.url}?safeAreaSim=0,0,0,0`);
   await page.waitForFunction(() => !!window.__anetLayoutSweep, null, { timeout: 30000 });
   await page.waitForTimeout(600);
+  // Every label this drive looks up is the Chinese copy. If the page came up in another language, say so once instead
+  // of reporting the menus as missing (they open — with English labels — and 7 checks failed as 「no menu」).
+  const lang = await page.evaluate(() => [navigator.language, Intl.DateTimeFormat().resolvedOptions().locale]);
+  if (!process.env.ANET_TEST_LANG) check(`${L.name}`, `env: the page runs in Chinese (navigator.language / Intl = ${TEST_LOCALE})`, lang.every(l => /^zh/i.test(l)), lang.join(' / '));
   return { ctx, page, errors };
 }
 const go = async (page, screen) => { await page.evaluate((s) => window.__anetLayoutSweep.setScreen(s), screen); await page.waitForTimeout(700); };
