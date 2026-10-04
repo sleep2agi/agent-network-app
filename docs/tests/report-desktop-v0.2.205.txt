@@ -1,0 +1,8 @@
+desktop v0.2.205 — iPhone 输入法不再挡住输入框 (#547)
+================================================================================
+A. 本版内容(0.2.204 发版提交之后 main 上合入的 PR + 本 PR)
+  #701 (#547) iOS 上 KeyboardAvoidingView 自 #381 导航外壳后少推一个状态栏高度（iPhone 14 少 47pt）；改为测量页面底边真实位置、按键盘重叠量推，键盘显示 / 高度变化 / 收起都重算；聊天、私信群聊、规则编辑器覆盖；安卓与桌面不变。单测 82/82（旧代码 12/15 红），驱动 33/33。
+  本 PR(版本号):0.2.204 → 0.2.205,versionCode 2204 → 2205;release-desktop-auto-update.yml 加 What's new in 0.2.205;重新生成 src/changelog-bundled.ts。
+  本地:干净 origin/main(c812355) bump 后 npm ci / npm test / npm run typecheck 全部 rc=0;android-release-notes.mjs 0.2.205 rc=0。
+B. 验证边界(如实)
+  ck 单测 + 页内桩模拟键盘驱动；真机 8 步清单见 PR #701（中文九宫格候选栏 / 切英文 / 表情 / 横屏 / 收起 / 私信群聊 / 规则编辑器）。安卓键盘开着时高度变化不跟随（RN 限制）。
