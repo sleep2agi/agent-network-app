@@ -5,6 +5,10 @@
 export const BUNDLED_RELEASE_BODY: string = [
   "Signed and notarized stable update for macOS (Apple Silicon) and Windows (x64).",
   "",
+  "What's new in 0.2.206:",
+  "- 手机上长按消息选文字时，操作菜单不再压住选区两端的拖动把手",
+  "- 拖动把手时菜单先隐藏，松手后出现在选区上方或下方",
+  "",
   "What's new in 0.2.205:",
   "- 修复 iPhone 上输入法（尤其中文九宫格 + 候选栏）把聊天输入框挡住的问题",
   "- 切换输入法、候选栏出现或消失时，输入框始终贴在键盘上方",
@@ -896,6 +900,7 @@ export const BUNDLED_RELEASE_BODY: string = [
 
 /** Release date (published_at) per version, as far as it was known when this file was generated. */
 export const BUNDLED_RELEASE_DATES: Record<string, string> = {
+  "0.2.205": "2026-10-04T07:01:00Z",
   "0.2.204": "2026-10-04T05:34:58Z",
   "0.2.203": "2026-10-04T03:05:02Z",
   "0.2.202": "2026-10-03T16:19:11Z",
