@@ -17,7 +17,7 @@
 //   copy           每个桌面页的可见文字 + aria-label 里没有 上滑/下滑/左滑/右滑/滑动/下拉刷新/长按/按住
 //   cursor         每个桌面页上可聚焦的可点元素都是手形指针(会话行按系统列表惯例是箭头,单列)
 //   select         任务详情里的回复正文可以鼠标选中(三击后 getSelection 非空)
-// 手机 390×844(安卓 UA):同样的入口仍是手机的 —— 长按气泡 = 底部 sheet(含「选择文本」)、表单整屏、
+// 手机 390×844(安卓 UA):同样的入口仍是手机的 —— 长按气泡 = 就地选区 + 微信式浮动菜单(#537,含「全屏选择」)、表单整屏、
 //   「下拉刷新」文案、返回键、没有「刷新」钮、没有悬停按钮。
 // 退出码 1 = 有断言失败(BASELINE=1 只记录不判,给「修之前」那一列)。
 import { mkdirSync, writeFileSync } from 'node:fs';
@@ -329,8 +329,10 @@ const openChat = async (page) => {
   await page.waitForTimeout(500);
   const sp = await menuPanel(page);
   await page.screenshot({ path: `${OUT}/${tag}-msg-hold.png` });
-  check(tag, 'msg-hold: long-press still opens the bottom action sheet (panel bottom = window bottom ±1)', !!sp && Math.abs(sp.bottom - L.h) <= 1, sp ? `bottom=${r1(sp.bottom)}` : 'no sheet');
-  check(tag, 'msg-hold: the sheet offers 「选择文本」', !!sp && sp.labels.includes('选择文本'), sp ? sp.labels.join('/') : '');
+  // #537:手机长按不再是底部 sheet,而是就地选区 + 锚在气泡上 / 下方的浮动菜单(微信同款)。
+  const fm = await page.evaluate(() => { const m = document.querySelector('[data-testid="msg-select-menu"]'); if (!m) return null; const r = m.getBoundingClientRect(); return { top: r.top, bottom: r.bottom, side: m.getAttribute('data-side'), labels: [...m.querySelectorAll('[role="menuitem"]')].map(e => e.getAttribute('aria-label')) }; });
+  check(tag, 'msg-hold: long-press opens the in-place selection menu (anchored above/below the bubble, inside the window)', !!fm && (fm.side === 'above' || fm.side === 'below') && fm.top >= 0 && fm.bottom <= L.h, fm ? `side=${fm.side} top=${r1(fm.top)} bottom=${r1(fm.bottom)}` : (sp ? `old sheet bottom=${r1(sp.bottom)}` : 'no menu'));
+  check(tag, 'msg-hold: the menu offers 复制 / 全选 and the full-screen 「全屏选择」', !!fm && ['复制', '全选', '全屏选择'].every(l => fm.labels.includes(l)), fm ? fm.labels.join('/') : '');
   await closeModal(page);
   await replyText.hover().catch(() => {});
   check(tag, 'msg-hover: no hover buttons on touch', (await page.locator(tid('message-hover-actions')).count()) === 0);

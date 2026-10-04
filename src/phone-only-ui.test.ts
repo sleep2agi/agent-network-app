@@ -195,9 +195,9 @@ ck(`real tree: 0 phone-only leaks outside the named debt (${real.length} found, 
 
 // ── 4. 见证:把真实文件里一处带判定的长按去掉判定,门必须红 ────────────────────────────────────
 const chat = files.get('src/ChatScreen.tsx') ?? '';
-const gated = 'onLongPress={pointer ? undefined : () => setMenuFor(';
+const gated = 'onLongPress={pointer ? undefined : () => openSelect(';
 ck('witness: ChatScreen carries the gated long-press the witness mutates', chat.includes(gated));
-const mutated = new Map(files); mutated.set('src/ChatScreen.tsx', chat.replace(gated, 'onLongPress={() => setMenuFor('));
+const mutated = new Map(files); mutated.set('src/ChatScreen.tsx', chat.replace(gated, 'onLongPress={() => openSelect('));
 const w = judgeAll(mutated).filter(f => !f.debt && f.kind === 'site' && f.file === 'src/ChatScreen.tsx');
 ck(`witness: dropping that gate turns the real tree red (${w.length} finding at ChatScreen.tsx:${w[0]?.line})`, w.length === 1);
 const picker = files.get('src/HostSupervisorPickerScreen.tsx') ?? '';

@@ -149,6 +149,10 @@
       "kind": "stub",
       "secs": 20
     },
+    "test-message-select/drive.mjs": {
+      "kind": "stub",
+      "secs": 45
+    },
     "test-mic-device-settings/drive.mjs": {
       "kind": "stub",
       "secs": 23

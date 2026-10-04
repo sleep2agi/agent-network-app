@@ -75,6 +75,15 @@ export const PHONE_ONLY_SITES: readonly PhoneOnlySite[] = [
     why: '触摸端的原生选区跨不过 Markdown 块;鼠标直接在气泡里拖选,不需要整屏选区页。',
   },
   {
+    name: 'MessageSelectOverlay(长按就地选区 + 微信式浮动菜单)',
+    site: /<MessageSelectOverlay\b/,
+    window: 'tag',
+    gate: renderGate('MessageSelectOverlay'),
+    definedIn: 'src/MessageSelectOverlay.tsx',
+    minSites: 1,
+    why: '#537 长按进选区、拖手柄是手指的手势;桌面是鼠标在气泡里拖选 + 右键菜单(复制选中内容 / 复制)。',
+  },
+  {
     name: 'ComposerFullscreenEditor(⤢ 全屏编辑)',
     site: /<ComposerFullscreenEditor\b/,
     window: 'tag',
