@@ -10,14 +10,14 @@ import { SafeAreaInsetsContext, SafeAreaProvider, useSafeAreaInsets } from 'reac
 import { SAFE_AREA_SIM, layoutOs, statusBarHeight } from './src/safe-area-runtime';
 import { mainWindowTopPadding } from './src/modal-safe-area';
 import { purgeLegacyAttachmentCache } from './src/AuthedThumb';
-import { prefetchStatus, login, fetchHubNodes, fetchNetworkId, HubConfig } from './src/api';
-import { registerHubAccount } from './src/user-admin-api';
+import { prefetchStatus, login, fetchHubNodes, fetchNetworkId, setNetworkIdPersister, HubConfig } from './src/api';
+import { fetchAuthMe, registerHubAccount } from './src/user-admin-api';
 import { clientLabelForLogin } from './src/login-sessions';
 import { popoutChatChrome, tauriShellPlatform } from './src/window-shell';
 import DmChatScreen, { type GroupChatRef } from './src/DmChatScreen';
 import { groupNameFor, rememberGroupName } from './src/group-chat-bus';
 import type { Human } from './src/human-dm';
-import { validateNewUser } from './src/user-admin';
+import { reconcileNetworkId, validateNewUser } from './src/user-admin';
 import './src/i18n-users';
 import { LOGIN_FAILURE_COPY, normalizeServerUrl, type LoginFailureKind } from './src/login-flow';
 import { hydrateHubAvatars, initLocalAvatars } from './src/lib/avatars';
@@ -43,7 +43,7 @@ import ConnectivityIndicator from './src/ConnectivityIndicator';
 import FatalBoundary, { FatalFixtureScreen, readFatalFixture } from './src/FatalBoundary';
 import LastCrashChip from './src/LastCrashChip';
 import type { HostSupervisorDaemon } from './src/api';
-import { clearConfig, listHubProfiles, loadConfig, loadHubProfile, loadLocalAvatars, loadOutbox, loadForwardOperations, saveForwardOperations, loadThemeMode, loadUiScalePrefs, markHubProfileRequiresReauth, onDesktopThemeStorageChange, onDesktopUiScaleStorageChange, removeHubProfile, saveConfig, saveLocalAvatars, saveOutbox, sessionIdOf, switchHubProfile, type HubProfile } from './src/storage';
+import { clearConfig, listHubProfiles, loadConfig, loadHubProfile, loadLocalAvatars, loadOutbox, loadForwardOperations, saveForwardOperations, loadThemeMode, loadUiScalePrefs, markHubProfileRequiresReauth, onDesktopThemeStorageChange, persistProfileNetworkId, onDesktopUiScaleStorageChange, removeHubProfile, saveConfig, saveLocalAvatars, saveOutbox, sessionIdOf, switchHubProfile, type HubProfile } from './src/storage';
 import { clearProfileUnauthorized, onProfileUnauthorized, profileUnauthorizedReason } from './src/profile-auth-state';
 import { initOutbox } from './src/outbox';
 import { createForwardPersistence, initForwardController } from './src/forward-controller';
@@ -298,6 +298,25 @@ function SimulatedSafeArea({ children }: { children: React.ReactNode }) {
 function AppRoot() {
   const { t } = useTranslation();
   const [cfg, setCfg] = useState<HubConfig | null>(null);
+  // #552 —— 保存的网络过期了(登录时落的是个人网络,之后管理员把人拉进团队并授权 Agent):改内存里的 cfg、
+  // 落到这个账号上(不切当前账号),并换一个新 cfg 对象让各页面按新网络重读。发送路径(api.ts sendTask)
+  // 和下面的启动 / 切账号复核都走这里。
+  const correctNetworkId = (target: HubConfig, networkId: string) => {
+    target.networkId = networkId;
+    void persistProfileNetworkId(target, networkId).catch(() => { /* 下次启动的复核会再改一次 */ });
+    setCfg(prev => (prev && prev.serverUrl === target.serverUrl && prev.token === target.token ? { ...prev, networkId } : prev));
+  };
+  const correctNetworkIdRef = useRef(correctNetworkId);
+  correctNetworkIdRef.current = correctNetworkId;
+  useEffect(() => setNetworkIdPersister((target, networkId) => correctNetworkIdRef.current(target, networkId)), []);
+  // 启动 / 切账号 / 登录后在后台复核一次(/api/auth/me 与其他页面共用,不多一次往返);读不到就不动。
+  const revalidateNetworkId = (target: HubConfig | null) => {
+    if (!target) return;
+    void fetchAuthMe(target).then(me => {
+      const next = reconcileNetworkId(me, target.networkId);
+      if (next) correctNetworkIdRef.current(target, next);
+    }).catch(() => { /* fail-open */ });
+  };
   // app#168(手机端):会话置顶,按 profile/server 分、落盘;桌面端 DesktopWorkspace 自己管一份(localStorage)。
   const [mobilePins, setMobilePins] = useState<string[]>([]);
   useEffect(() => {
@@ -548,6 +567,7 @@ function AppRoot() {
     const next = await activateHubProfile(profileId, { isDesktop: () => tauriDesktop, startLocalHub, switchHubProfile: initialWorkspaceProfile ? loadHubProfile : switchHubProfile });
     await hydrateProfileLocalState(next);
     setCfg(next);
+    revalidateNetworkId(next);
     if (!stay) setScreen({ name: 'agents' });
     prefetchStatus(next);
     if (settingsWindow) await notifySessionChanged();
@@ -597,6 +617,7 @@ function AppRoot() {
       // 注入落盘写手——此后 提交即落盘/确认才删。
       if (saved) {
         setCfg(saved);
+        revalidateNetworkId(saved);
         setScreen(initialChat ? { name: 'chat', alias: initialChat } : { name: 'agents' });
         // Fire the status request now so its RTT overlaps the boot→AgentsScreen
         // mount; AgentsScreen's first load consumes this in-flight promise.

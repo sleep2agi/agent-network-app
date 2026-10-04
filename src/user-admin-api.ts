@@ -53,6 +53,8 @@ export const fetchAuthMe = (cfg: Pick<HubConfig, 'serverUrl' | 'token'>): Promis
 };
 /** Drop the shared /api/auth/me answers (test hook; also safe after a role change). */
 export const forgetAuthMe = (): void => { authMeCache.clear(); };
+/** #552 —— 只丢这一个 hub + 令牌的「我是谁」(发送回 404/400/403 网络类错误后要重新判网络,不能读 60 s 内的旧答案)。 */
+export const forgetAuthMeFor = (cfg: Pick<HubConfig, 'serverUrl' | 'token'>): void => { authMeCache.delete(`${cfg.serverUrl}\u0000${cfg.token}`); };
 
 export const fetchNetworkMembers = (cfg: HubConfig, networkId: string) =>
   call<{ members: NetworkMember[] }>(cfg.serverUrl, cfg.token, `/api/networks/${net(networkId)}/members`).then(d => d.members ?? []);

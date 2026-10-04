@@ -15,6 +15,7 @@ import AliasAvatar from './AliasAvatar';
 import AttachmentFileDesktop from './AttachmentFileDesktop';
 import AuthedThumb, { AttachmentFile, AuthedVideo, mimeFromName } from './AuthedThumb';
 import AuthedWebThumb from './AuthedWebThumb';
+import { sendFailureReason, type SendFailureReason } from './send-failure-reason';
 import { ackAgentMessages, ackUserMessages, createDashboardRequestId, dashboardRequestIdForLocalId, fetchNodeStatus, fetchStatus, fetchChatUserMessages, fetchTasks, sendTask, HubConfig, HubTask, Session, TaskAttachment, TaskPriority } from './api';
 import { proactiveItemsForAgent } from './proactive-messages';
 import { replyQuoteFor } from './reply-quote';
@@ -124,6 +125,8 @@ type ChatItem = HubTask & {
   _localId?: string;
   _pending?: boolean;
   _failed?: boolean;
+  /** #552:Hub 回了明确错误码时的原因(i18n key 后缀,chat.failReason.<key>);超时 / 断网没有。 */
+  _failReason?: SendFailureReason;
   _img?: PickedImage;
   /** 回显里的图。从 outbox 重建时可能只剩 hub 上那份(hubFileId,预览带令牌读)——#527。 */
   _imgs?: (PickedImage & { hubFileId?: string })[];
@@ -1655,7 +1658,8 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
       setMessages(prev => prev.map(t => (t._localId === localId ? { ...t, _pending: false, _confirmedTaskId: confirmedTaskId } : t)));
       recordSendBubble(dashboardRequestIdForLocalId(localId), 'sent');
       await load(limitRef.current);
-    } catch {
+    } catch (sendError) {
+      const failReason = sendFailureReason(sendError) ?? undefined;
       // Timeout is not proof that the write failed. The Hub may have committed
       // the task and lost only the HTTP acknowledgement; reconcile before a
       // red retry action can manufacture duplicate work.
@@ -1680,7 +1684,7 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
       if (!exposeFailure) return;
       outboxMarkFailed(localId); // 盘上也是 failed——杀 app 重开仍可重试
       setMessages(prev =>
-        prev.map(t => (t._localId === localId ? { ...t, _pending: false, _failed: true } : t)),
+        prev.map(t => (t._localId === localId ? { ...t, _pending: false, _failed: true, _failReason: failReason } : t)),
       );
       recordSendBubble(dashboardRequestIdForLocalId(localId), 'failed');
     }
@@ -1765,7 +1769,7 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
     outboxMarkPending(item._localId, retriedAt); // 重试中被杀照样恢复(仍在盘上)
     setMessages(prev =>
       mergeMessagesNewestFirst(
-        prev.map(t => (t._localId === item._localId ? { ...t, created_at: new Date(retriedAt).toISOString(), _pending: true, _failed: false, _uploadError: undefined } : t)),
+        prev.map(t => (t._localId === item._localId ? { ...t, created_at: new Date(retriedAt).toISOString(), _pending: true, _failed: false, _failReason: undefined, _uploadError: undefined } : t)),
         [],
       ),
     );
@@ -2295,6 +2299,7 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
                   <Pressable onPress={() => retry(item)} hitSlop={8}>
                     {item._uploadError ? <Text style={styles.uploadErrorText}>{item._uploadError}</Text> : null}
                     <Text style={styles.failedMark}>{t('chat.notDelivered')}</Text>
+                    {item._failReason ? <Text style={styles.failReasonText} testID="chat-fail-reason">{t(`chat.failReason.${item._failReason}`)}</Text> : null}
                   </Pressable>
                 ) : sender.isCurrentUser && !(item.result ?? item.reply) ? (
                   // PR3 要求2:「送达了但对方没回」≠「未送达」——前者灰勾不可点(不用重试),
@@ -3040,6 +3045,7 @@ const makeStyles = (B = bubbleLayout()) =>
   attachIndex: { color: colors.textMuted, fontSize: 10, marginLeft: 'auto' },
   attachRemove: { color: colors.textMuted, fontSize: 14 },
   failedMark: { color: colors.failed, fontSize: 11, alignSelf: 'flex-end', fontWeight: '600' },
+  failReasonText: { color: colors.failed, fontSize: 11, textAlign: 'right', marginTop: 2 },
   // 左列:⤢(顶)+ 🎤/⌨(底);stretch 到整行高度,⤢ 才能落在左上角。
   inputLeftCol: { alignSelf: 'stretch', justifyContent: 'space-between', alignItems: 'center' },
   draftAddTile: { width: 64, height: 64, borderRadius: radius.thumb, borderWidth: 1, borderStyle: 'dashed', borderColor: colors.border, alignItems: 'center', justifyContent: 'center' },

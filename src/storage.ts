@@ -192,6 +192,17 @@ export const updateHubProfile = async (profileId: string, patch: { serverUrl: st
   await invoke('update_desktop_profile', { profileId, serverUrl: patch.serverUrl, displayName: patch.displayName?.trim() || null });
 };
 
+/**
+ * #552:把纠正过的 network_id 落到这个账号上(不切当前账号)。手机 / 网页写 session-registry。
+ * 桌面端的 profile 在 Rust 里,只有「保存并设为当前」一个写口(会改当前账号 / 顺序),这里不动它:
+ * 桌面只改内存里的 cfg,下次启动 / 切回账号时 App 的网络复核会再纠正一次。
+ */
+export const persistProfileNetworkId = async (cfg: HubConfig, networkId: string): Promise<void> => {
+  if (isTauriDesktop()) return;
+  const id = sessionIdOf(cfg);
+  if (id) await mobileSessions.setNetworkId(id, networkId);
+};
+
 export const getDesktopStorageDiagnostics = async (): Promise<DesktopStorageDiagnostics | null> => {
   if (!isTauriDesktop()) return null;
   const { invoke } = await import('@tauri-apps/api/core');

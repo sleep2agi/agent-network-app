@@ -64,6 +64,35 @@ export function pickDefaultNetworkId(me: AuthMe | null | undefined): string | un
   return typeof id === 'string' && id.trim() ? id : undefined;
 }
 
+/**
+ * #552 —— 保存的 cfg.networkId 还对不对。登录时按 pickDefaultNetworkId 选过一次并落盘,之后:
+ * 管理员把人拉进自己的网络并授权 Agent、或者把人移出某网络,落盘那个值就过期了 —— 每次发送都打到错的网络
+ * (404 alias_not_found),气泡只显示「未送达」。启动 / 切回账号时用这个判断要不要改。
+ *
+ * 规则跟 pickDefaultNetworkId 的注释一致,只在以下情况返回新值(其余返回 undefined = 不动):
+ *   - 令牌绑定了网络(current_network)且与保存的不同 → 用 current_network;
+ *   - 保存的网络已经不在 networks 里了(被移出 / 网络删了)→ 重新挑;
+ *   - 用户在某个网络里是受限成员,而保存的网络不是受限成员的那个(典型:登录时还没被拉进团队,
+ *     落盘的是自己那个空的个人网络)→ 落到受限成员的网络。
+ * 读不到 / networks 为空(旧 Hub、离线)→ 不动,fail-open。Hub 管理员不受第二条约束(管理员可跨网络发)。
+ */
+export function reconcileNetworkId(me: AuthMe | null | undefined, saved: string | undefined): string | undefined {
+  if (!me) return undefined;
+  const picked = pickDefaultNetworkId(me);
+  if (!picked || picked === saved) return undefined;
+  const cur = me.current_network;
+  const current = typeof cur === 'string' ? cur : cur?.network_id;
+  if (typeof current === 'string' && current.trim()) return picked;
+  const list = (me.networks ?? []).filter(n => typeof n.network_id === 'string' && n.network_id);
+  if (list.length === 0) return undefined;
+  if (!saved) return picked;
+  const row = list.find(n => n.network_id === saved);
+  if (!row) return me.user?.role === 'admin' ? undefined : picked;
+  const restrictedSomewhere = list.some(n => n.agent_access === 'granted');
+  if (restrictedSomewhere && row.agent_access !== 'granted') return picked;
+  return undefined;
+}
+
 export const MIN_PASSWORD = 8;
 export type NewUserDraft = { username: string; password: string; displayName: string; role: MemberRole };
 export type NewUserProblem = 'username' | 'usernameChars' | 'password' | null;

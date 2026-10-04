@@ -205,7 +205,23 @@ export function createSessionStore(kv: SessionKv, deps: SessionStoreDeps = {}) {
     return stored;
   };
 
-  return { loadIndex, loadSession, activeConfig, save, switchTo, remove, removeActive, markReauth, update };
+  /**
+   * #552:发送 / 启动时发现保存的网络过期了,原地改这个账号的 networkId。
+   * 和 update 一样:不改当前账号、不改顺序、不碰其他账号。账号不在了 → 什么都不做。
+   */
+  const setNetworkId = async (id: string, networkId: string): Promise<void> => {
+    const index = await loadIndex();
+    const prev = index.sessions.find(s => s.id === id);
+    if (!prev) return;
+    const cfg = await loadSession(id);
+    if (!cfg || cfg.networkId === networkId) return;
+    const next: HubConfig = { ...cfg, networkId };
+    const stored: HubConfig = id === LEGACY_SESSION_ID ? (({ profileId: _drop, ...r }) => r)(next) : next;
+    await kv.set(credentialKey(id), JSON.stringify(stored));
+    await writeIndex({ ...index, sessions: index.sessions.map(s => (s.id === id ? { ...s, networkId, updatedAt: now() } : s)) });
+  };
+
+  return { loadIndex, loadSession, activeConfig, save, switchTo, remove, removeActive, markReauth, update, setNetworkId };
 }
 
 export type SessionStore = ReturnType<typeof createSessionStore>;
