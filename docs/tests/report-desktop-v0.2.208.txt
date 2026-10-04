@@ -1,0 +1,9 @@
+desktop v0.2.208 — 晴蓝配色 (#545)
+
+A. 本版内容(0.2.207 发版提交之后 main 上合入的 PR + 本 PR)
+  #707 (#545) 唯一主色改晴蓝：自己气泡 + 发送按钮实心蓝底白字（浅 5.34 / 深 5.43~7.12）；自己气泡内原 accent 色文字改白（bubble-ink）；深色行内代码黑块改浅色 chip；安卓通知色 #1b65db。npm test 335/335，layout-sweep 41/0，requirement-details Docker 50/50。
+  #708 测试：desktop-phone-leak 驱动固定 zh-CN locale（Playwright Docker 里默认 en-US，7 项假红），51/51。
+  本 PR(版本号):0.2.207 → 0.2.208,versionCode 2207 → 2208;release-desktop-auto-update.yml 加 What's new in 0.2.208;重新生成 src/changelog-bundled.ts。
+  本地:干净 origin/main(06ac0c7) bump 后 npm ci / npm test / npm run typecheck 全部 rc=0;android-release-notes.mjs 0.2.208 rc=0。
+B. 验证边界(如实)
+  ck 单测 + 布局巡检；真机：手机/桌面、浅色/深色各看一眼自己气泡和发送按钮是蓝底白字，文件消息文字可读。

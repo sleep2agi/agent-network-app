@@ -5,6 +5,10 @@
 export const BUNDLED_RELEASE_BODY: string = [
   "Signed and notarized stable update for macOS (Apple Silicon) and Windows (x64).",
   "",
+  "What's new in 0.2.208:",
+  "- 新配色「晴蓝」：自己的消息气泡和发送按钮改为蓝色，浅色、深色都更清晰",
+  "- 自己气泡里的文件名、下载原图、上传状态改为白字，不再看不清",
+  "",
   "What's new in 0.2.207:",
   "- 发消息时如果账号所在的网络已变更，会自动改用正确的网络重发一次",
   "- 消息发送失败时，在「未送达」下面直接显示原因（例如没有找到这个 Agent、没有发消息的权限）",
@@ -904,6 +908,7 @@ export const BUNDLED_RELEASE_BODY: string = [
 
 /** Release date (published_at) per version, as far as it was known when this file was generated. */
 export const BUNDLED_RELEASE_DATES: Record<string, string> = {
+  "0.2.207": "2026-10-04T09:09:42Z",
   "0.2.206": "2026-10-04T08:07:05Z",
   "0.2.205": "2026-10-04T07:01:00Z",
   "0.2.204": "2026-10-04T05:34:58Z",
