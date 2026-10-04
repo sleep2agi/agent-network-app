@@ -1,3 +1,31 @@
+// ── #545 强调色:晴蓝(Vincent 2026-10-04「感觉这个 绿色是真的丑」→ 换掉 0.2.207 及以前的墨青)────────
+// 「我发出的气泡」「发送」「主按钮」「恢复默认」这类次按钮、选中态、开关、链接……全 app 的强调色一族
+// 只从这里来,浅色 / 深色各一份,都过 WCAG AA(src/theme-accent-schemes.test.ts 逐对断言)。
+// 当时比较过的另外两套(微信绿 / 石墨)与对比度表见 docs/design/accent-schemes-545.md。
+//   accent           强调色:主按钮底、链接 / 文字按钮、选中勾、开关、焦点线(作文字时在 bg/card/tonalBg 上 ≥ 4.5)
+//   onAccent         主按钮上的字 / 图标(在 accent 上 ≥ 4.5)
+//   tonalBg          次按钮(tonal)的浅底,字用 accent
+//   railActiveBg     导航栏 / 分段控件的选中底
+//   bubbleMine       我发出的聊天气泡底(实底蓝,iMessage / Telegram 一类)
+//   onBubbleMine     我发出的气泡里的字(≥ 4.5)
+//   linkOnBubbleMine 我发出的气泡里的链接 / 行内强调(≥ 4.5)
+export type AccentTokens = {
+  accent: string; onAccent: string; tonalBg: string; railActiveBg: string;
+  bubbleMine: string; onBubbleMine: string; linkOnBubbleMine: string;
+};
+export const ACCENT: { light: AccentTokens; dark: AccentTokens } = {
+  light: { accent: '#1b65db', onAccent: '#ffffff', tonalBg: '#edf3fe', railActiveBg: '#e6eefd', bubbleMine: '#1b65db', onBubbleMine: '#ffffff', linkOnBubbleMine: '#ffffff' },
+  dark: { accent: '#5e9bff', onAccent: '#0b0b0d', tonalBg: '#172a48', railActiveBg: '#15243b', bubbleMine: '#2563d9', onBubbleMine: '#ffffff', linkOnBubbleMine: '#ffffff' },
+};
+/** 永远画在深色底上的强调(语音浮层的电平条):不随浅 / 深主题变。 */
+export const ACCENT_ON_DARK = ACCENT.dark.accent;
+
+/** '#rrggbb' 线性混合:t=0 → a,t=1 → b。热力图等「强调色的几档深浅」由它从 accent 推出来,不另写死色值。 */
+export const mixHex = (a: string, b: string, t: number): string => {
+  const ch = (h: string, i: number) => Number.parseInt(h.replace('#', '').slice(i, i + 2), 16);
+  return '#' + [0, 2, 4].map(i => Math.round(ch(a, i) + (ch(b, i) - ch(a, i)) * t).toString(16).padStart(2, '0')).join('');
+};
+
 // Design tokens lifted from the dashboard's #217 design language:
 // neutral near-black surfaces, restrained color, semantic status triad.
 // 极简(2026-09-24):地面从近黑抬到 #111113,卡片只比地面亮一档;边框只用来分区,不用来包每个元素。
@@ -10,9 +38,6 @@ const DARK = {
   textSecondary: '#a1a1aa',
   // 旧 #52525b 在近黑地面上对比 2.6:1,时间戳/提示几乎看不见;抬到在所有深色面上 ≥4.5:1。
   textMuted: '#8b8b95',
-  // 霓虹青 #22d3ee 改成同色相、降饱和的青:仍是品牌色,但不再抢眼。
-  accent: '#4cc3d6',
-  onAccent: '#0b0b0d',
   broadcast: '#a78bfa',
   running: '#22c55e',
   failed: '#ef4444',
@@ -27,7 +52,6 @@ const DARK = {
   // 桌面左侧导航栏(rail):比会话列表再深一档;激活态用弱化的 accent 底色。
   railBg: '#0d0d0f',
   railHover: '#1a1a1e',
-  railActiveBg: '#15282c',
   railTooltipBg: '#27272a',
   railTooltipText: '#f4f4f5',
   // 手机「设置」分组列表(照微信):地面一档、行一档、按下再一档。深色是同一结构的深色版,不是反色。
@@ -44,8 +68,8 @@ const DARK = {
   // 浮起的面(见 ELEVATION):深色下没有阴影可用,靠「亮一档的面 + 细边」把它从地面上分出来。
   floatingBg: '#1c1c20',
   floatingBorder: '#2e2e33',
-  // 次按钮(tonal):强调色的浅底 + 强调色字。
-  tonalBg: '#17313a',
+  // 强调色一族(accent / onAccent / tonalBg / railActiveBg / bubbleMine …)由文件顶部的 ACCENT 统一给出。
+  ...ACCENT.dark,
 };
 
 // 白色主题 (Vincent tg 811/812) — same restraint on white surfaces;
@@ -59,9 +83,6 @@ const LIGHT: typeof DARK = {
   textSecondary: '#5d6470',
   // 弱化文字在全部浅色面(含选中行)上 ≥4.5:1。
   textMuted: '#636a75',
-  // 强调色作为文字(链接/「复制」「刷新」)在白底 ≥4.5:1;按钮上的字改白色(5.1:1)。
-  accent: '#067a86',
-  onAccent: '#ffffff',
   broadcast: '#7c3aed',
   running: '#15803d',
   failed: '#dc2626',
@@ -73,7 +94,6 @@ const LIGHT: typeof DARK = {
   subtleFill: '#f0f1f3',
   railBg: '#eef0f3',
   railHover: '#e3e6ea',
-  railActiveBg: '#dcedf0',
   railTooltipBg: '#20242a',
   railTooltipText: '#f4f4f5',
   groupedBg: '#ededf0',
@@ -87,7 +107,7 @@ const LIGHT: typeof DARK = {
   floatingBg: '#ffffff',
   // 浅色下浮起的面靠阴影,不画边:透明边只为了与深色同尺寸(不让内容在切主题时挪 1px)。
   floatingBorder: 'transparent',
-  tonalBg: '#eaf5f6',
+  ...ACCENT.light,
 };
 
 export type ThemeMode = 'dark' | 'light';

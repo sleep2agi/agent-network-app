@@ -19,7 +19,7 @@ export interface MessageSelectTarget {
   rect: Rect;
   /** 原始消息内容(可能带「@作者: …」引用行、Markdown)。 */
   raw: string;
-  /** 'sent' = 我发的(rowActive 底),'reply' = 对方的(card 底)—— 卡片底色跟气泡一致。 */
+  /** 'sent' = 我发的(bubbleMine 底),'reply' = 对方的(card 底)—— 卡片底色跟气泡一致。 */
   tone: 'sent' | 'reply';
 }
 
@@ -223,7 +223,7 @@ export default function MessageSelectOverlay({ target, selectionMode, onAction, 
               selectionColor={Platform.OS === 'android' ? SELECT_HIGHLIGHT_COLOR : SELECT_HANDLE_COLOR}
               selectionHandleColor={SELECT_HANDLE_COLOR}
               textAlignVertical="top"
-              style={styles.text}
+              style={[styles.text, target.tone === 'sent' && styles.textSent]}
             />
           </View>
         ) : null}
@@ -323,8 +323,9 @@ const makeStyles = () => StyleSheet.create({
   root: { flex: 1 },
   card: { position: 'absolute', borderRadius: radius.bubble, overflow: 'hidden', paddingHorizontal: CARD_PAD_H, paddingVertical: CARD_PAD_V },
   mirror: { position: 'absolute', left: CARD_PAD_H + TEXT_PAD, top: CARD_PAD_V + TEXT_PAD, opacity: 0, fontSize: TEXT_SIZE, lineHeight: TEXT_LINE, padding: 0, margin: 0 },
-  cardSent: { backgroundColor: colors.rowActive },
+  cardSent: { backgroundColor: colors.bubbleMine },
   cardReply: { backgroundColor: colors.card },
+  textSent: { color: colors.onBubbleMine },
   // 与气泡正文同字号同行高(MarkdownMessage styles.text),选中时字不跳。
   text: {
     color: colors.text, fontSize: TEXT_SIZE, lineHeight: TEXT_LINE, padding: TEXT_PAD, margin: 0, borderWidth: 0, flexGrow: 0,

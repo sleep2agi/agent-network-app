@@ -3,6 +3,7 @@ import { ActivityIndicator, Image, Pressable, StyleSheet, View } from 'react-nat
 import { Text } from './ui-text';
 import { appFetch } from './app-fetch';
 import { colors, onThemeChange, spacing, radius } from './theme';
+import { useBubbleInk } from './bubble-ink';
 import { downloadImageObjectUrl, saveImageObjectUrl } from './web-image-download';
 import { chooseSavePath, isTauriDesktop, revealInFolder, saveToDownloads, displayDownloadPath } from './desktop-download';
 
@@ -33,6 +34,7 @@ export default function AuthedWebThumb({
   /** 多图气泡的方格:84×84 cover,不带「下载原图」行(点开预览里下载)。 */
   compact?: boolean;
 }) {
+  const ink = useBubbleInk('link');
   const [objectUrl, setObjectUrl] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [attempt, setAttempt] = useState(0);
@@ -105,11 +107,11 @@ export default function AuthedWebThumb({
         hitSlop={6}
         onPress={(e: any) => { void saveOriginal(objectUrl, !!(e?.nativeEvent?.altKey ?? e?.altKey)); }}
       >
-        <Text style={styles.download}>{savedPath ? `✓ 已保存到 ${displayDownloadPath(savedPath)}` : '↓ 下载原图'}</Text>
+        <Text style={[styles.download, ink]}>{savedPath ? `✓ 已保存到 ${displayDownloadPath(savedPath)}` : '↓ 下载原图'}</Text>
       </Pressable>
       {savedPath ? (
         <Pressable accessibilityRole="button" hitSlop={6} onPress={() => { void revealInFolder(savedPath).catch(() => undefined); }}>
-          <Text style={styles.download}>在文件夹中显示</Text>
+          <Text style={[styles.download, ink]}>在文件夹中显示</Text>
         </Pressable>
       ) : null}
     </View>

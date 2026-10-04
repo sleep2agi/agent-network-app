@@ -51,6 +51,7 @@ import { addToDraft, draftCountLabel, draftImageCount, isDraftImage, MAX_DRAFT_I
 import { createUploadMemo, removeAttachmentAt, UPLOAD_CONCURRENCY, withUploadState, type UploadState } from './upload-queue';
 import type { UploadedFile } from './attach';
 import { colors, onThemeChange, radius, spacing } from './theme';
+import { bubbleInk, MineBubble } from './bubble-ink';
 import { popoutHeaderChrome, type PopoutChrome } from './window-shell';
 import { ds, uiScale } from './ui-scale';
 import { shouldShowTimeHeader } from './time';
@@ -1423,7 +1424,8 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
   }, [alias, conversationReady, showJump]);
 
   // shared by the sent bubble and the reply bubble (tg 771)
-  const renderAttachment = (a: AttachmentView, gallery: ViewerImage[] = galleryOf([a])) =>
+  // mine:画在「我发出的」实底气泡里(#545)—— 直接画在底色上的「📎 文件名」/ 上传状态改用 onBubbleMine。
+  const renderAttachment = (a: AttachmentView, gallery: ViewerImage[] = galleryOf([a]), mine = false) =>
     a.isImage && a.uri && !a.needsAuth ? (
       <Pressable key={a.key} onPress={() => openViewer(gallery, a.key, a.uri)}>
         <Image source={{ uri: a.uri }} style={styles.thumb} resizeMode="contain" />
@@ -1485,7 +1487,7 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
         size={a.size}
       />
     ) : (
-      <Text key={a.key} style={styles.attachmentLine}>
+      <Text key={a.key} style={[styles.attachmentLine, bubbleInk(mine, 'link')]}>
         📎 {a.name}
       </Text>
     );
@@ -1530,18 +1532,18 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
       </View>
     );
   };
-  const renderAttachments = (views: AttachmentView[], item?: ChatItem) => {
+  const renderAttachments = (views: AttachmentView[], item?: ChatItem, mine = false) => {
     const gridViews = views.filter(gridRenderable);
     // 预览里左右滑 = 这条消息的全部图片(方格 + 单图同一套)。
     const gallery = galleryOf(views);
     if (gridViews.length < 2) {
       return views.map(a => {
         const state = a.localIndex !== undefined ? item?._uploads?.[a.localIndex] : undefined;
-        if (!state || state.status === 'done') return renderAttachment(a, gallery);
+        if (!state || state.status === 'done') return renderAttachment(a, gallery, mine);
         return (
           <View key={`state-${a.key}`}>
-            {renderAttachment(a, gallery)}
-            <Text style={[styles.attachmentLine, state.status === 'failed' && { color: colors.failed }]}>
+            {renderAttachment(a, gallery, mine)}
+            <Text style={[styles.attachmentLine, state.status === 'failed' && { color: colors.failed }, bubbleInk(mine)]}>
               {state.status === 'failed' ? t('chat.uploadError', { error: state.error ?? '' }) : state.status === 'uploading' ? t('chat.uploadProgress') : t('chat.uploadQueued')}
             </Text>
           </View>
@@ -1554,7 +1556,7 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
         <View style={styles.imageGrid} testID="chat-image-grid">
           {gridViews.map(a => renderGridCell(a, item, gallery))}
         </View>
-        {rest.map(a => renderAttachment(a, gallery))}
+        {rest.map(a => renderAttachment(a, gallery, mine))}
       </>
     );
   };
@@ -2198,11 +2200,13 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
                       style={({ pressed }) => [styles.bubblePressable, pressed && { opacity: 0.7 }]}
                     >
                       <View style={styles.bubble} ref={bubbleRef(`${msgKey(item)}:sent`)}>
+                        <MineBubble value>
                         {pointer && hoverKey === `${msgKey(item)}:sent` && item.content ? (
                           <MessageHoverActions side="sent" styles={styles} onCopy={() => void copyMessage(item.content ?? '')} onMore={at => openMenuAt(at, { item, text: item.content ?? '', author: sender.alias })} />
                         ) : null}
-                        <MarkdownMessage>{hideGridImageLines(cleanAttachmentDebugText(sentQuoted.body || (sentQuoted.quote ? '' : '—')), sentGridNames) || (sentQuoted.quote ? '' : '—')}</MarkdownMessage>
-                        {renderAttachments(sentAttachmentViews(item, cfg.serverUrl), item)}
+                        <MarkdownMessage tone="mine">{hideGridImageLines(cleanAttachmentDebugText(sentQuoted.body || (sentQuoted.quote ? '' : '—')), sentGridNames) || (sentQuoted.quote ? '' : '—')}</MarkdownMessage>
+                        {renderAttachments(sentAttachmentViews(item, cfg.serverUrl), item, true)}
+                        </MineBubble>
                       </View>
                       {sentQuoted.quote ? (
                         <View style={[styles.quoteChip, styles.quoteChipSent]} accessibilityLabel={t('chat.quote')}>
@@ -2874,8 +2878,8 @@ const makeStyles = (B = bubbleLayout()) =>
     paddingHorizontal: spacing.sm,
     paddingVertical: 2,
   },
-  // 极简:气泡不描边。发出的用中性的 rowActive 一档底色,回复用卡片色——靠底色区分,不靠边框。
-  bubble: { ...B.bubble, backgroundColor: colors.rowActive, borderRadius: radius.bubble },
+  // 极简:气泡不描边。我发出的用 bubbleMine(#545 晴蓝实底),回复用卡片色——靠底色区分,不靠边框。
+  bubble: { ...B.bubble, backgroundColor: colors.bubbleMine, borderRadius: radius.bubble },
   replyBubble: { ...B.replyBubble, backgroundColor: colors.card },
   replyBubbleDesktop: B.replyBubbleDesktop,
   bubbleText: { color: colors.text, fontSize: 14, lineHeight: 20 },

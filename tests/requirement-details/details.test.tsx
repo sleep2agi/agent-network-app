@@ -27,7 +27,7 @@ mock.module('expo-clipboard', () => ({ setStringAsync: async (text: string) => {
 mock.module('./src/ui-scale', () => ({ uiScale: () => ({ densityFactor: 1, denseFontMultiplier: 1, fontMultiplier: 1 }), ds: (n: number) => n }));
 mock.module('./src/safe-area-runtime', () => ({ useModalSafePadding: () => ({ paddingTop: 0, paddingBottom: 0, paddingLeft: 0, paddingRight: 0 }) }));
 mock.module('./src/theme', () => ({
-  colors: {}, onThemeChange: () => () => {}, themeMode: () => 'light',
+  colors: {}, onThemeChange: () => () => {}, themeMode: () => 'light', mixHex: (a: string) => a,
   radius: { inline: 2, mark: 4, item: 8, control: 12, thumb: 12, surface: 16, bubble: 18, pill: 999, sm: 8, md: 12, lg: 16 },
   avatarRadius: () => 999, spacing: { xs: 4, sm: 8, md: 12, lg: 16, xl: 24 },
   type: { caption: 11, small: 12, body: 14, title: 16, heading: 20 }, weight: { regular: '400', medium: '500', strong: '600' },

@@ -31,6 +31,7 @@ import { openImageWindow } from './image-window';
 import { dmAttachmentViews, localAttachmentViews, type DmAttachmentView } from './dm-attachment-model';
 import { usePoll } from './usePoll';
 import { colors, onThemeChange, radius, spacing } from './theme';
+import { bubbleInk, MineBubble, useBubbleInk } from './bubble-ink';
 import { ds, uiScale } from './ui-scale';
 import { elevated } from './elevation';
 import { t } from './i18n';
@@ -395,13 +396,13 @@ export default function DmChatScreen({ cfg, networkId, peer: peerProp, group, on
     }
     if (tauriWeb) return <AuthedWebThumb key={scope} uri={a.uri} name={a.name} mime={a.mime} token={cfg.token} compact={compact} onPress={objectUrl => openViewer(gallery, a.key, objectUrl)} />;
     if (Platform.OS !== 'web') return <AuthedThumb key={scope} fileId={a.key} name={a.name} mime={a.mime} serverUrl={cfg.serverUrl} token={cfg.token} compact={compact} onPress={localUri => openViewer(gallery, a.key, localUri)} />;
-    return <Text key={a.key} style={styles.attachmentLine}>📎 {a.name}</Text>;
+    return <AttachmentLine key={a.key} name={a.name} />;
   };
   const renderFile = (a: DmAttachmentView) => {
     const scope = `${attachmentCacheScope(cfg.serverUrl, cfg.token)}-${a.key}`;
     if (a.needsAuth && tauriWeb) return <AttachmentFileDesktop key={scope} uri={a.uri} name={a.name} token={cfg.token} size={a.size} />;
     if (a.needsAuth && Platform.OS !== 'web') return <AttachmentFile key={scope} fileId={a.key} name={a.name} mime={a.mime} serverUrl={cfg.serverUrl} token={cfg.token} />;
-    return <Text key={a.key} style={styles.attachmentLine}>📎 {a.name}</Text>;
+    return <AttachmentLine key={a.key} name={a.name} />;
   };
   const renderAttachments = (m: LocalDm) => {
     const views = viewsOf(m);
@@ -483,7 +484,8 @@ export default function DmChatScreen({ cfg, networkId, peer: peerProp, group, on
                       {out ? me : from.name}{item.created_at ? ` · ${formatChatHeader(item.created_at)}` : ''}
                     </Text>
                     <View style={[styles.bubble, !out && styles.replyBubble, !out && desktop && styles.replyBubbleDesktop]} testID="dm-bubble">
-                      {item.content ? <Text style={styles.bubbleText} selectable>{item.content}</Text> : null}
+                      <MineBubble value={out}>
+                      {item.content ? <Text style={[styles.bubbleText, out && styles.bubbleTextMine]} selectable>{item.content}</Text> : null}
                       {renderAttachments(item)}
                       {taskNotice ? (
                         <Pressable
@@ -494,9 +496,10 @@ export default function DmChatScreen({ cfg, networkId, peer: peerProp, group, on
                           style={styles.taskLink}
                           testID="dm-open-task"
                         >
-                          <Text style={styles.taskLinkText}>{t('tasks.noticeOpen')}</Text>
+                          <Text style={[styles.taskLinkText, bubbleInk(out, 'link')]}>{t('tasks.noticeOpen')}</Text>
                         </Pressable>
                       ) : null}
+                      </MineBubble>
                     </View>
                     {item.pending ? <Text style={styles.statusMark}>{t('dm.sending')}</Text> : item.failed ? (
                       <Pressable onPress={() => retry(item)} accessibilityRole="button" accessibilityLabel={t('dm.retry')} hitSlop={6} testID="dm-retry">
@@ -694,10 +697,11 @@ const makeStyles = (B = bubbleLayout()) => StyleSheet.create({
   sentContent: B.sentContent,
   messageAuthor: { color: colors.textMuted, fontSize: 11, lineHeight: 16, marginBottom: 3 },
   sentAuthor: { textAlign: 'right' },
-  bubble: { ...B.bubble, backgroundColor: colors.rowActive, borderRadius: radius.bubble },
+  bubble: { ...B.bubble, backgroundColor: colors.bubbleMine, borderRadius: radius.bubble },
   replyBubble: { ...B.replyBubble, backgroundColor: colors.card },
   replyBubbleDesktop: B.replyBubbleDesktop,
   bubbleText: { color: colors.text, fontSize: 14, lineHeight: 20 },
+  bubbleTextMine: { color: colors.onBubbleMine },
   attachments: { gap: spacing.xs, marginTop: spacing.xs },
   statusMark: { color: colors.textMuted, fontSize: 10, marginTop: 2, alignSelf: 'flex-end' },
   error: { color: colors.failed, fontSize: 12, paddingHorizontal: spacing.lg, paddingVertical: spacing.xs },
@@ -773,3 +777,9 @@ const makeStyles = (B = bubbleLayout()) => StyleSheet.create({
 
 let styles = makeStyles();
 onThemeChange(() => { styles = makeStyles(); });
+
+// 「📎 文件名」一行:在「我发出的」实底气泡里换成 onBubbleMine 一族(#545,见 bubble-ink.ts),否则蓝字画在蓝底上。
+function AttachmentLine({ name }: { name: string }) {
+  const ink = useBubbleInk('link');
+  return <Text style={[styles.attachmentLine, ink]}>📎 {name}</Text>;
+}

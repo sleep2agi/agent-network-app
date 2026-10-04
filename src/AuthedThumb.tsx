@@ -13,6 +13,7 @@ import { useEffect, useState } from 'react';
 import { ActivityIndicator, Image, Pressable, StyleSheet, View } from 'react-native';
 import { Text } from './ui-text';
 import { colors, onThemeChange, spacing, radius } from './theme';
+import { useBubbleInk } from './bubble-ink';
 
 // Server-side attachment thumbnails were black boxes on device (Vincent
 // tg 756): the hub serves /api/files with nosniff + octet-stream +
@@ -60,6 +61,7 @@ export function AttachmentFile({
   token: string;
   label?: string;
 }) {
+  const ink = useBubbleInk('link');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -83,7 +85,7 @@ export function AttachmentFile({
 
   return (
     <Pressable accessibilityRole="button" accessibilityLabel={label ?? name} onPress={open} hitSlop={6}>
-      <Text style={[styles.fallback, error && { color: colors.failed }]}>
+      <Text style={[styles.fallback, error && { color: colors.failed }, ink]}>
         {busy ? '⏳' : label ? '↓' : '📎'} {label ?? name}
         {error ? `（${error}，点击重试）` : ''}
       </Text>

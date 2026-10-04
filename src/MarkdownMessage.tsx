@@ -1,7 +1,8 @@
-import { Fragment, useState, type ReactNode } from 'react';
+import { Fragment, useContext, useState, type ReactNode } from 'react';
 import { Platform, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { Text } from './ui-text';
 import { colors, onThemeChange, spacing, radius } from './theme';
+import { MineBubble, MineBubbleContext, useMineBubble } from './bubble-ink';
 import { isSafeMarkdownUrl, parseInline, parseMarkdownBlocks, type InlineNode } from './markdown-model';
 import { foldCode, foldLabel } from './markdown-code-fold';
 import { gridCellWidth, listIndent, markdownLayout } from './bubble-layout';
@@ -16,11 +17,13 @@ export async function openMarkdownUrl(url: string) {
 // 行内解析在 markdown-model.ts 的 parseInline(纯函数、有测试):裸链接 / 行内代码 / [文字](链接) 是原子段,
 // 里面的 `_`、`*` 一个都不当记号;`_` 遵守 CommonMark 词内规则(snake_case 原样)。
 function LinkText({ url, label }: { url: string; label: string }) {
+  const styles = useMd();
   const safe = isSafeMarkdownUrl(url);
   return <Text accessibilityRole={safe ? 'link' : undefined} style={safe ? styles.link : undefined} onPress={safe ? (event) => { event.stopPropagation(); void openMarkdownUrl(url); } : undefined}>{label}</Text>;
 }
 
 function InlineNodes({ nodes }: { nodes: InlineNode[] }) {
+  const styles = useMd();
   return <>{nodes.map((node, key) => {
     if (node.kind === 'text') return <Fragment key={key}>{node.text}</Fragment>;
     if (node.kind === 'code') return <Text key={key} style={styles.inlineCode}>{node.text}</Text>;
@@ -50,6 +53,7 @@ const WITH_SRC: Src = (start, end) => (start == null ? {} : ({ dataSet: { mdLine
 // 表格三种布局(table-layout.ts):web 横向滚动网格;原生 ≤2 列自适应网格;原生 ≥3 列每行一张卡。
 // rootProps:挂在表格最外层元素上(规则文件原生阅读区用它报块布局)。
 function TableBlock({ rows, rowLines, src = NO_SRC, rootProps }: { rows: string[][]; rowLines?: number[]; src?: Src; rootProps?: object }) {
+  const styles = useMd();
   const columns = rows.reduce((max, row) => Math.max(max, row.length), 0);
   const layout = tableLayoutFor(columns, NATIVE);
   if (layout === 'stacked') {
@@ -85,6 +89,7 @@ function TableBlock({ rows, rowLines, src = NO_SRC, rootProps }: { rows: string[
 }
 
 function CodeBlock({ text, srcProps }: { text: string; srcProps?: object }) {
+  const styles = useMd();
   const [expanded, setExpanded] = useState(false);
   const fold = foldCode(text, expanded);
   const label = foldLabel(fold, expanded);
@@ -108,8 +113,10 @@ function CodeBlock({ text, srcProps }: { text: string; srcProps?: object }) {
 // 带行号;列表项的 y 相对所在列表(parent)。node-rules-view.ts resolveBlockRects / blockAtY 用它按手指位置找块。
 // 都不传就和以前一样,聊天里不多挂 onLayout、不多挂属性。
 export type MarkdownBlockLayout = { id: string; parent?: string; start: number; end: number; y: number; height: number };
-export default function MarkdownMessage({ children, onHeadingLayout, sourceLines, onBlockLayout, renderImage }: {
-  children: string; onHeadingLayout?: (index: number, y: number) => void; sourceLines?: boolean; onBlockLayout?: (layout: MarkdownBlockLayout) => void;
+export default function MarkdownMessage({ children, onHeadingLayout, sourceLines, onBlockLayout, renderImage, tone }: {
+  children: string;
+  /** 'mine' = 画在「我发出的」气泡里(#545):字 / 链接用 onBubbleMine / linkOnBubbleMine。 */
+  tone?: 'mine'; onHeadingLayout?: (index: number, y: number) => void; sourceLines?: boolean; onBlockLayout?: (layout: MarkdownBlockLayout) => void;
   /** 任务描述:独占一行的 `![名字](/api/files/<id>)` 交给调用方画(带鉴权下载、点开看大图)。不传 = 和聊天一样当文字。 */
   renderImage?: (image: { alt: string; fileId: string; url: string }, key: number) => ReactNode;
 }) {
@@ -119,7 +126,11 @@ export default function MarkdownMessage({ children, onHeadingLayout, sourceLines
   const lay = (id: string, start?: number, end?: number, parent?: string) => (onBlockLayout && start != null
     ? { onLayout: (event: any) => { const { y, height } = event.nativeEvent.layout; onBlockLayout({ id, parent, start, end: end ?? start, y, height }); } }
     : {});
+  const inMineBubble = useMineBubble();
+  const mine = tone === 'mine' || inMineBubble;
+  const styles = mine ? mineStyles : globalStyles();
   return (
+    <MineBubble value={mine}>
     <View style={styles.root}>
       {parseMarkdownBlocks(children, { hubImages: !!renderImage }).map((block, index) => {
         const id = `b${index}`;
@@ -140,6 +151,7 @@ export default function MarkdownMessage({ children, onHeadingLayout, sourceLines
         return <Text key={index} {...src(block.line, block.endLine)} {...lay(id, block.line, block.endLine)} style={[styles.text, styles.block]}><Inline text={block.text} /></Text>;
       })}
     </View>
+    </MineBubble>
   );
 }
 
@@ -149,22 +161,23 @@ export const WRAP_ANYWHERE = Platform.OS === 'web' ? ({ overflowWrap: 'anywhere'
 
 // Layout (flex / widths / padding) lives in bubble-layout.ts so bubble-layout.test.ts can run it
 // through Yoga; this file adds the paint. 🔴 No `flexBasis: 0` / `flex: n` in here (see there).
-const makeStyles = (L = markdownLayout()) => StyleSheet.create({
+const makeStyles = (L = markdownLayout(), ink?: { text: string; link: string }) => StyleSheet.create({
   root: L.root,
-  text: { color: colors.text, fontSize: 14, lineHeight: 21, ...WRAP_ANYWHERE },
+  text: { color: ink?.text ?? colors.text, fontSize: 14, lineHeight: 21, ...WRAP_ANYWHERE },
   block: L.block,
   heading: { fontWeight: '600', ...L.heading },
   strong: { fontWeight: '600' },
   em: { fontStyle: 'italic' },
-  inlineCode: { color: colors.accent, backgroundColor: colors.inputBg, fontFamily: 'monospace', fontSize: 13, ...WRAP_ANYWHERE },
-  link: { color: colors.accent, textDecorationLine: 'underline' },
+  // 我发出的实底气泡里:行内代码用气泡字色 + 半透明白底(深浅主题下都是同一块浅一档的蓝),不再是一块输入框底色。
+  inlineCode: { color: ink ? ink.text : colors.accent, backgroundColor: ink ? 'rgba(255,255,255,0.18)' : colors.inputBg, fontFamily: 'monospace', fontSize: 13, ...WRAP_ANYWHERE },
+  link: { color: ink?.link ?? colors.accent, textDecorationLine: 'underline' },
   listRow: L.listRow,
-  marker: { color: colors.textSecondary, fontSize: 14, lineHeight: 21, textAlign: 'right', ...L.marker },
+  marker: { color: ink?.text ?? colors.textSecondary, fontSize: 14, lineHeight: 21, textAlign: 'right', ...L.marker },
   listText: L.listText,
-  quote: { borderLeftColor: colors.textMuted, opacity: 0.9, ...L.quote },
+  quote: { borderLeftColor: ink?.text ?? colors.textMuted, opacity: 0.9, ...L.quote },
   code: { backgroundColor: colors.inputBg, borderRadius: radius.item, ...L.code },
   codeText: { color: colors.text, fontFamily: 'monospace', fontSize: 12, lineHeight: 18 },
-  foldToggle: { color: colors.accent, fontSize: 12, marginTop: spacing.xs },
+  foldToggle: { color: ink?.link ?? colors.accent, fontSize: 12, marginTop: spacing.xs },
   table: { borderColor: colors.border, borderRadius: radius.item, overflow: 'hidden', ...L.table },
   tableRow: L.tableRow,
   tableHead: { backgroundColor: colors.inputBg },
@@ -174,8 +187,13 @@ const makeStyles = (L = markdownLayout()) => StyleSheet.create({
   // 原生 ≥3 列:每行一张卡,「表头: 值」逐行
   tableStack: L.tableStack,
   tableCard: { borderColor: colors.border, borderRadius: radius.item, backgroundColor: colors.inputBg + '55', ...L.tableCard },
-  tableCardLabel: { color: colors.textMuted, fontSize: 12 },
+  tableCardLabel: { color: ink?.text ?? colors.textMuted, fontSize: 12 },
 });
 
+// #545:「我发出的」气泡是实底蓝,里面的字和链接改用 onBubbleMine / linkOnBubbleMine。
+const mineInk = () => ({ text: colors.onBubbleMine, link: colors.linkOnBubbleMine });
 let styles = makeStyles();
-onThemeChange(() => { styles = makeStyles(); });
+let mineStyles = makeStyles(markdownLayout(), mineInk());
+onThemeChange(() => { styles = makeStyles(); mineStyles = makeStyles(markdownLayout(), mineInk()); });
+const globalStyles = () => styles;
+const useMd = () => (useContext(MineBubbleContext) ? mineStyles : styles);
