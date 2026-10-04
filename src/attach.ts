@@ -8,7 +8,7 @@ import { ImageManipulator, SaveFormat, type ImageRef } from 'expo-image-manipula
 import { compressedFileName, isDraftImage, PICKER_QUALITY, planCompression } from './image-draft';
 import { createSerialQueue, resizeForUpload } from './native-resize';
 import { attachmentFromFile } from './desktop-file-intake';
-import { uploadUrlFor, type UploadOptions } from './upload-url';
+import { resolveUploadNetworkId, uploadUrlFor, type UploadOptions } from './upload-url';
 
 // Image/file attachments (#220 roadmap ③) — fully wired end to end:
 // pick → upload → attach (see uploadImage below). The hub's
@@ -205,7 +205,7 @@ export const pickCameraPhoto = async (): Promise<PickedImage | null> => {
   };
 };
 
-import { HubConfig } from './api';
+import { HubConfig, fetchNetworkId } from './api';
 
 // Frozen contract from sleep2agi/agent-network#221 (commit 72fc790):
 // POST /api/upload (multipart, single `file` field, ≤12MiB, Bearer)
@@ -236,7 +236,11 @@ export function __setUploadDeadlineForTest(ms: number = UPLOAD_DEADLINE_MS): voi
 const uploadTimeoutMessage = () => `上传 ${Math.round(uploadDeadlineMs / 1000)} 秒内没有完成`;
 
 export const uploadImage = async (cfg: HubConfig, img: PickedImage, opts: UploadOptions = {}): Promise<UploadedFile> => {
-  const uploadUrl = uploadUrlFor(cfg.serverUrl, opts);
+  // Accounts in 2+ networks get 400 network_id_required without it (fiona, 10-04): always attribute the
+  // upload to the network this app is using — same resolution as sendTask (cfg first, then /api/auth/me).
+  const networkId = await resolveUploadNetworkId(opts, cfg.networkId, () => fetchNetworkId(cfg));
+  if (networkId && !cfg.networkId) cfg.networkId = networkId;
+  const uploadUrl = uploadUrlFor(cfg.serverUrl, { ...opts, ...(networkId ? { networkId } : {}) });
   // The hub REQUIRES a Content-Length header (411 otherwise, per #221).
   // RN's fetch streams FormData chunked on Android — Vincent's first
   // image send died on exactly that (tg 737) — so native goes through
