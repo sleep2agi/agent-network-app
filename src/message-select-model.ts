@@ -197,3 +197,125 @@ export const selectInputTraits = (os: string): SelectInputTraits => {
 /** 微信的绿色:手柄实色,高亮带透明度(安卓 selectionColor 原样画在字底下,实色会压字)。 */
 export const SELECT_HANDLE_COLOR = '#07C160';
 export const SELECT_HIGHLIGHT_COLOR = 'rgba(7,193,96,0.28)';
+
+// ── 菜单避开选区手柄(#551)──────────────────────────────────────────────────
+//
+// Vincent 2026-10-04 iPhone 截图(0.2.205):长按一条比屏还高的消息,菜单走了上面的 'inside' 分支 —— 「压在气泡可见部分的
+// 顶端」,正好盖住选区**起点**那只绿色手柄,手柄拖不动。根因:菜单锚的是整张卡片,不知道手柄在哪。
+//
+// 规则(微信同款,所有「我们自己画的、浮在可选文字上的菜单」都走这一条):
+//   1. 手指按在选区上 / 选区在变(拖手柄)时菜单隐藏;松手、选区停下来 SELECT_MENU_SETTLE_MS 后再出;
+//   2. 再出时永远不压任何一只**看得见的**手柄:优先放在选区起点那行上方;放不下放在终点那行下方;
+//      都放不下(选区比屏还高)就放在手柄之间 / 之外的空档里;仍整块在屏内(安全区 + 键盘)。
+// 手柄的竖直范围按两端最坏情况取(iOS 起点圆点在行顶上方、安卓水滴挂在行底下方),整行宽度都算禁区 ——
+// 菜单几乎和屏一样宽,横向躲不开,所以只按竖直方向判。
+
+/** 一只手柄从所在行的行顶往上伸出多少(iOS 起点圆点 ≈ 10pt,留余量)。 */
+export const HANDLE_REACH_ABOVE = 16;
+/** 一只手柄从所在行的行底往下挂多少(安卓水滴 ≈ 22dp,iOS 终点圆点 ≈ 10pt,取大 + 余量)。 */
+export const HANDLE_REACH_BELOW = 28;
+/** 选区停止变化 / 手指抬起后多久菜单重新出现。 */
+export const SELECT_MENU_SETTLE_MS = 300;
+
+/** 原生 onTextLayout 的一行(只用到这几个字段)。 */
+export interface TextLine { readonly y: number; readonly height: number; readonly text: string }
+
+/** 第 offset 个字符在哪一行。偏移落在两行交界(行末)算前一行的末尾 —— 用于终点;起点传 preferNext 取下一行行首。 */
+export const lineIndexAt = (lines: readonly TextLine[], offset: number, preferNext = false): number => {
+  if (!lines.length) return -1;
+  let acc = 0;
+  for (let i = 0; i < lines.length; i++) {
+    const len = lines[i].text.length;
+    const end = acc + len;
+    if (offset < end || (offset === end && !preferNext)) return i;
+    acc = end;
+  }
+  return lines.length - 1;
+};
+
+/** 选区起点行 / 终点行的竖直范围(相对文字区顶,未减滚动)。 */
+export interface SelectionLines { readonly startTop: number; readonly startBottom: number; readonly endTop: number; readonly endBottom: number }
+
+export const selectionLinesFromLayout = (lines: readonly TextLine[], sel: TextSelection, len: number): SelectionLines | null => {
+  if (!lines.length) return null;
+  const s = clampSelection(sel, len);
+  const a = lines[lineIndexAt(lines, s.start, true)];
+  // 终点是「最后一个选中字符」所在行:end 指向它后面一格,所以取 end-1(空选区取 start)。
+  const b = lines[lineIndexAt(lines, Math.max(s.start, s.end - 1), true)];
+  return { startTop: a.y, startBottom: a.y + a.height, endTop: b.y, endBottom: b.y + b.height };
+};
+
+/** 一只手柄占的竖直范围(窗口坐标)。 */
+export interface HandleZone { readonly top: number; readonly bottom: number }
+
+/**
+ * 两只手柄在窗口里的竖直禁区。`clip` = 文字实际看得见的那块(卡片可视区 ∩ 屏幕可见带):行不在里面 = 手柄画不出来,不算禁区。
+ */
+export const handleZones = (args: { lines: SelectionLines; textTop: number; scrollY?: number; clip: { top: number; bottom: number } }): { start: HandleZone | null; end: HandleZone | null } => {
+  const off = args.textTop - (args.scrollY ?? 0);
+  const vis = (top: number, bottom: number) => bottom > args.clip.top && top < args.clip.bottom;
+  const { startTop, startBottom, endTop, endBottom } = args.lines;
+  return {
+    start: vis(startTop + off, startBottom + off) ? { top: startTop + off - HANDLE_REACH_ABOVE, bottom: startBottom + off + HANDLE_REACH_BELOW } : null,
+    end: vis(endTop + off, endBottom + off) ? { top: endTop + off - HANDLE_REACH_ABOVE, bottom: endBottom + off + HANDLE_REACH_BELOW } : null,
+  };
+};
+
+export const zonesOverlap = (a: { top: number; bottom: number }, b: { top: number; bottom: number }): boolean => a.top < b.bottom && b.top < a.bottom;
+
+/**
+ * 有选区时菜单放哪(#551):
+ *   above  —— 选区起点那行(连同手柄)上方 gap 处,放得下就放(微信默认);起点行不可见时,没有「上方」;
+ *   below  —— 终点那行(连同手柄)下方 gap 处;终点行不可见时,没有「下方」;
+ *   inside —— 都不行(选区比屏高 / 两头都贴边):在可见带里找一段不碰任何可见手柄的空档,离选区起点最近的那段;
+ *   实在一段都没有(屏比菜单 + 两只手柄还矮)才压在可见带顶 —— 返回 overlapsHandle=true,调用方 / 测试能看见。
+ * 水平与 placeSelectMenu 相同:以卡片中心为准,夹进屏幕。
+ */
+export const placeMenuAvoidingHandles = (args: {
+  /** 卡片(水平居中和 'inside' 时的优先位置用)。 */
+  anchor: Rect;
+  start: HandleZone | null;
+  end: HandleZone | null;
+  menu: { width: number; height: number };
+  viewport: { width: number; height: number };
+  edge?: Insets;
+  keyboardHeight?: number;
+  gap?: number;
+  margin?: number;
+}): MenuPlacement & { readonly overlapsHandle: boolean } => {
+  const edge = args.edge ?? { top: 0, bottom: 0, left: 0, right: 0 };
+  const gap = args.gap ?? 6;
+  const margin = args.margin ?? 8;
+  const { anchor, menu, viewport, start, end } = args;
+  const band = visibleBand(viewport.height, edge, args.keyboardHeight ?? 0, margin);
+  const zones = [start, end].filter((z): z is HandleZone => !!z);
+  const clear = (top: number) => top >= band.top && top + menu.height <= band.bottom
+    && zones.every(z => !zonesOverlap({ top, bottom: top + menu.height }, z));
+  let side: MenuPlacementSide = 'inside';
+  let top: number | null = null;
+  if (start && clear(start.top - gap - menu.height)) { side = 'above'; top = start.top - gap - menu.height; }
+  else if (end && clear(end.bottom + gap)) { side = 'below'; top = end.bottom + gap; }
+  else {
+    // 候选:可见带顶、每只手柄的上方 / 下方。取不碰手柄、离选区起点(没有就离卡片顶)最近的一个。
+    const pref = start ? start.top : Math.max(anchor.y, band.top);
+    const cands = [band.top, band.bottom - menu.height, ...zones.flatMap(z => [z.top - gap - menu.height, z.bottom + gap])]
+      .filter(clear)
+      .sort((p, q) => Math.abs(p - pref) - Math.abs(q - pref));
+    top = cands.length ? cands[0] : null;
+  }
+  const overlapsHandle = top === null;
+  if (top === null) top = band.top;
+  const minLeft = edge.left + margin;
+  const maxLeft = viewport.width - edge.right - margin - menu.width;
+  const centre = anchor.x + anchor.width / 2;
+  const left = maxLeft < minLeft ? minLeft : Math.max(minLeft, Math.min(centre - menu.width / 2, maxLeft));
+  const arrowX = Math.max(16, Math.min(centre - left, menu.width - 16));
+  return { left, top, side, arrowX, overlapsHandle };
+};
+
+/**
+ * 菜单此刻该不该显示:手指按着选区 → 不显示;选区刚变过(拖手柄的事件流)→ 等它停 settleMs 再显示。
+ * 纯函数,渲染层每次 tick 调一次。
+ */
+export const selectMenuVisible = (s: { touching: boolean; msSinceSelectionChange: number; settleMs?: number }): boolean =>
+  !s.touching && s.msSinceSelectionChange >= (s.settleMs ?? SELECT_MENU_SETTLE_MS);

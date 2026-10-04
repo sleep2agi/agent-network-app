@@ -15,6 +15,11 @@
 //   P6 点空白 → 退出(选区层消失)
 //   P7 长按贴顶的气泡 → 菜单翻到下方(side=below),整块在视口内、不盖卡片
 //   P8 「引用」一段 → 输入框上方的引用条是那段
+// 手机 · 比屏还高的消息(#551,Vincent iPhone 截图:菜单盖住起点手柄,拖不动):
+//   H1 长按 → 整条选中;菜单矩形与「起点手柄」「终点手柄」矩形都不相交(看得见的手柄才算)
+//   H2 把终点拖到屏幕中段(setSelectionRange)→ 停稳后菜单重新出现,仍与两只手柄都不相交
+//   H3 手指按在选区上 → 菜单隐藏(data-hidden=1、opacity 0、不接点击);松手 → 停稳后重新出现、不压手柄
+//   手柄矩形由本脚本自己量(镜像 div 取起点 / 终点字符的矩形,上伸 16、下挂 28、左右各 14),不读应用算出来的值。
 // 桌面(1200×850,无安卓 UA ⇒ 鼠标):
 //   D1 按住鼠标 600ms 不出选区层(手机的长按 UI 不上桌面)
 //   D2 鼠标在气泡里拖选 → 浏览器原生选区有字
@@ -34,6 +39,8 @@ const PHONE_UA = 'Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (K
 const BOTTOM = '创造型人才和哲学家，本质上就无法经营婚姻。这是一句用来测长按选区的示例文字。';
 const TOP = '置顶测量用的示例气泡:它会被滚到屏幕最上沿,菜单放不下上方就要翻到下方。';
 const FILLER = (i) => `第 ${i} 条示例消息,用来把列表撑满一屏。`;
+// #551:比屏还高的一条(合成占位文本)
+const TALL = Array.from({ length: 34 }, (_, i) => `第 ${i + 1} 行:这是一条很长的示例回复,用来复现菜单压住起点手柄。`).join('\n');
 
 const chatInit = ({ bottom, top, fillers }) => {
   const now = Date.now();
@@ -213,6 +220,123 @@ const click = (page, testId) => page.locator(`[data-testid="${testId}"]`).click(
     const hasQuote = await page.evaluate((q) => [...document.querySelectorAll('div[dir="auto"], span')].some(e => e.getClientRects().length && e.textContent.includes(q) && !e.textContent.includes('滚到屏幕最上沿')), quotePart);
     s = await layerState(page);
     ck(tag, 'P8 引用一段 → 引用条是那段,选区层关闭', hasQuote && !s.open, `quote=${quotePart}`);
+  } catch (err) {
+    failures++; total++;
+    console.log(`FAIL [${tag}] NOT RUN: ${String(err.message || err).split('\n')[0]}`);
+  }
+  await ctx.close();
+}
+
+/** 本脚本独立量的两只手柄矩形(窗口坐标;行不在卡片可视区里 = 手柄不可见 = null)。 */
+const handleRects = (page) => page.evaluate(() => {
+  const ta = document.querySelector('[data-testid="msg-select-text"]');
+  const card = document.querySelector('[data-testid="msg-select-card"]');
+  if (!ta || !card) return null;
+  const cs = getComputedStyle(ta);
+  const div = document.createElement('div');
+  for (const k of ['boxSizing', 'width', 'paddingTop', 'paddingRight', 'paddingBottom', 'paddingLeft', 'borderTopWidth', 'borderLeftWidth', 'borderRightWidth', 'borderBottomWidth', 'borderStyle', 'fontFamily', 'fontSize', 'fontWeight', 'letterSpacing', 'lineHeight', 'wordBreak', 'overflowWrap']) div.style[k] = cs[k];
+  Object.assign(div.style, { position: 'absolute', visibility: 'hidden', left: '-9999px', top: '0px', whiteSpace: 'pre-wrap', height: 'auto' });
+  const node = document.createTextNode(ta.value); div.appendChild(node); document.body.appendChild(div);
+  const d = div.getBoundingClientRect(), t = ta.getBoundingClientRect(), c = card.getBoundingClientRect();
+  const lh = parseFloat(cs.lineHeight);
+  const at = (i) => { const r = document.createRange(); r.setStart(node, i); r.setEnd(node, i + 1); const q = r.getClientRects()[0] || r.getBoundingClientRect(); const mid = (q.top + q.bottom) / 2 - d.top + t.top - ta.scrollTop; return { x: q.left - d.left + t.left, lineTop: mid - lh / 2, lineBottom: mid + lh / 2 }; };
+  let a = ta.selectionStart, b = Math.max(a, ta.selectionEnd - 1);
+  while (a < b && ta.value[a] === '\n') a++;
+  while (b > a && ta.value[b] === '\n') b--;
+  const A = at(a), B = at(b);
+  div.remove();
+  const vis = (p) => p.lineBottom > c.top && p.lineTop < c.bottom;
+  const rect = (p) => ({ x: p.x - 14, y: p.lineTop - 16, right: p.x + 14, bottom: p.lineBottom + 28 });
+  return { start: vis(A) ? rect(A) : null, end: vis(B) ? rect(B) : null, sel: [ta.selectionStart, ta.selectionEnd] };
+});
+/** 多行消息的气泡:同时含首行和末行文字的最小元素,往上找有底色有圆角的祖先。 */
+const tallBubbleBox = (page) => page.evaluate(() => {
+  const bg = (el) => { const c = getComputedStyle(el).backgroundColor; return c && c !== 'rgba(0, 0, 0, 0)' && c !== 'transparent'; };
+  const all = [...document.querySelectorAll('div, span')].filter(e => e.textContent.includes('第 1 行:') && e.textContent.includes('第 34 行:') && e.getClientRects().length && !e.closest('[data-testid="msg-select-layer"]'));
+  const hit = all.find(e => ![...e.children].some(ch => all.includes(ch)));  // 最深的那个
+  if (!hit) return null;
+  let b = hit;
+  while (b && !(bg(b) && parseFloat(getComputedStyle(b).borderTopLeftRadius) > 0)) b = b.parentElement;
+  if (!b) return null;
+  const r = b.getBoundingClientRect();
+  return { x: r.x, y: r.y, width: r.width, height: r.height };
+});
+const hits = (m, h) => !!m && !!h && !(m.bottom <= h.y || m.y >= h.bottom || m.right <= h.x || m.x >= h.right);
+const menuShown = (page) => page.waitForFunction(() => { const m = document.querySelector('[data-testid="msg-select-menu"]'); return m && m.getAttribute('data-hidden') === '0' && getComputedStyle(m).opacity === '1'; }, null, { timeout: 4000 }).then(() => true, () => false);
+const handleGeometry = (tag, label, s, h) => {
+  const m = s.menu;
+  const inside = !!m && m.x >= 0 && m.y >= 0 && m.right <= s.vw && m.bottom <= s.vh;
+  ck(tag, `${label}: 菜单整块在视口内`, inside, m ? `menu y=${r1(m.y)}..${r1(m.bottom)} vh=${s.vh}` : 'no menu');
+  ck(tag, `${label}: 至少一只手柄看得见(否则这条断言是空的)`, !!h && !!(h.start || h.end), JSON.stringify(h));
+  ck(tag, `${label}: 菜单不压起点手柄`, !hits(m, h?.start), h?.start ? `start y=${r1(h.start.y)}..${r1(h.start.bottom)}` : 'start 不可见');
+  ck(tag, `${label}: 菜单不压终点手柄`, !hits(m, h?.end), h?.end ? `end y=${r1(h.end.y)}..${r1(h.end.bottom)}` : 'end 不可见');
+  rows.push({ tag, label, side: s.side, menu: m ? `${r1(m.x)},${r1(m.y)} ${r1(m.width)}×${r1(m.height)}` : '-', card: s.card ? `${r1(s.card.x)},${r1(s.card.y)} ${r1(s.card.width)}×${r1(s.card.height)}` : '-', gap: `start ${h?.start ? `${r1(h.start.y)}..${r1(h.start.bottom)}` : '—'} / end ${h?.end ? `${r1(h.end.y)}..${r1(h.end.bottom)}` : '—'}`, inside: inside ? 'yes' : 'NO', overlap: hits(m, h?.start) || hits(m, h?.end) ? 'YES' : 'no', vp: `${s.vw}×${s.vh}` });
+};
+
+// ── 手机 · 比屏还高的消息(#551)─────────────────────────────────────────────
+{
+  const tag = 'phone-tall';
+  const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, userAgent: PHONE_UA, colorScheme: 'dark', deviceScaleFactor: 1 });
+  const page = await ctx.newPage();
+  page.on('pageerror', e => console.log('PAGEERROR', e.message.split('\n')[0]));
+  try {
+    await page.addInitScript(chatInit, { bottom: TALL, top: TOP, fillers: Array.from({ length: 2 }, (_, i) => FILLER(i + 1)) });
+    await page.addInitScript(initScript, { theme: 'dark' });
+    await page.goto(`${web.url}?safeAreaSim=47,0,34,0`);
+    await page.getByText('示例-A', { exact: true }).first().click({ timeout: 20000 });
+    await page.getByText('第 1 行:', { exact: false }).first().waitFor({ timeout: 15000 });
+    await page.waitForTimeout(800);
+    // 把气泡顶滚到页头下面一点(≈ 截图:气泡顶在 y≈210,底在屏外)
+    await page.mouse.move(200, 400);
+    for (let i = 0; i < 60; i++) {
+      const b = await tallBubbleBox(page);
+      const y = b ? b.y : 9999;
+      if (y > 180 && y < 260) break;
+      await page.mouse.wheel(0, y > 260 ? 40 : -40);
+      await page.waitForTimeout(100);
+    }
+    await page.waitForTimeout(400);
+    const tb = await tallBubbleBox(page);
+    ck(tag, '气泡比可见区高、顶在屏幕上部(截图同款)', !!tb && tb.y > 120 && tb.y < 320 && tb.y + tb.height > 844, JSON.stringify(tb && { y: r1(tb.y), h: r1(tb.height) }));
+    // 长按看得见的那块的中间
+    await longPress(page, { x: tb.x, y: tb.y, width: tb.width, height: Math.min(tb.height, 844 - tb.y - 120) });
+    let s = await layerState(page);
+    ck(tag, 'H1 长按 → 选区层,整条选中', s.open && !!s.sel && s.sel.start === 0 && s.sel.end === s.sel.len, JSON.stringify(s.sel && { start: s.sel.start, end: s.sel.end, len: s.sel.len }));
+    ck(tag, 'H1 菜单可见', await menuShown(page));
+    s = await layerState(page);
+    let h = await handleRects(page);
+    handleGeometry(tag, 'H1 整条选中', s, h);
+    if (OUT) { const f = `${OUT}/select-phone-tall-whole.png`; await page.screenshot({ path: f }); shots.push(f); }
+
+    // H2 终点拖到屏幕中段:取可见区中部那一行的行尾
+    const endAt = await page.evaluate(() => {
+      const ta = document.querySelector('[data-testid="msg-select-text"]');
+      const lines = ta.value.split('\n');
+      return lines.slice(0, 12).join('\n').length;
+    });
+    await setPartial(page, 0, endAt);
+    ck(tag, 'H2 拖完手柄停稳后菜单重新出现', await menuShown(page));
+    s = await layerState(page);
+    h = await handleRects(page);
+    ck(tag, 'H2 选区 = 0..第 12 行行尾', !!s.sel && s.sel.start === 0 && s.sel.end === endAt, JSON.stringify(s.sel && { start: s.sel.start, end: s.sel.end }));
+    handleGeometry(tag, 'H2 终点在中段', s, h);
+    if (OUT) { const f = `${OUT}/select-phone-tall-partial.png`; await page.screenshot({ path: f }); shots.push(f); }
+
+    // H3 手指按在选区上 → 菜单藏;松手 → 再出
+    const card = s.card;
+    const px = card.x + card.width / 2, py = Math.min(card.bottom - 30, (h?.end?.bottom ?? card.y + 200) + 60);
+    await page.mouse.move(px, py);
+    await page.mouse.down();
+    await page.waitForTimeout(150);
+    const during = await page.evaluate(() => { const m = document.querySelector('[data-testid="msg-select-menu"]'); return m && { hidden: m.getAttribute('data-hidden'), opacity: getComputedStyle(m).opacity, pe: getComputedStyle(m).pointerEvents }; });
+    ck(tag, 'H3 按住选区 → 菜单隐藏且不接点击', !!during && during.hidden === '1' && during.opacity === '0' && during.pe === 'none', JSON.stringify(during));
+    await page.mouse.up();
+    // web 上点一下会把 textarea 选区收成光标(真手机上拖手柄不会);把选区恢复成拖完的样子再看重新出现的位置
+    await setPartial(page, 0, endAt);
+    ck(tag, 'H3 松手停稳后菜单重新出现', await menuShown(page));
+    s = await layerState(page);
+    h = await handleRects(page);
+    handleGeometry(tag, 'H3 松手后', s, h);
   } catch (err) {
     failures++; total++;
     console.log(`FAIL [${tag}] NOT RUN: ${String(err.message || err).split('\n')[0]}`);
