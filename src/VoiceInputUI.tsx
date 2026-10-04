@@ -13,7 +13,7 @@ import { useEffect, useRef, useState, type Ref } from 'react';
 import { AccessibilityInfo, ActivityIndicator, Animated, Platform, Pressable, ScrollView, StyleSheet, View, type TextInput as RNTextInput } from 'react-native';
 import { Text, TextInput } from './ui-text';
 import { Ionicons } from './icons';
-import { colors, onThemeChange, spacing, radius } from './theme';
+import { ACCENT_ON_DARK, colors, onThemeChange, spacing, radius } from './theme';
 import { ds, uiScale } from './ui-scale';
 import { composerControlSize } from './composer-row-layout';
 import { formatElapsed, holdBarTone, isLivePhase, toggleButtonShows, TOO_SHORT_NOTICE, VOICE_DRAFT_CARD_MAX_LINES, VOICE_TOGGLE_ICON, type ComposerInputMode, type VoicePhase } from './voice-input-model';
@@ -430,7 +430,7 @@ const makeStyles = () => StyleSheet.create({
   interimCancel: { opacity: 0.65, textDecorationLine: 'line-through' },
   interimPlaceholder: { color: '#9ca3af', fontSize: 15 },
   bars: { flexDirection: 'row', alignItems: 'center', gap: 5, height: 42 },
-  bar: { width: 5, borderRadius: radius.pill, backgroundColor: '#7ee0ee' },
+  bar: { width: 5, borderRadius: radius.pill, backgroundColor: ACCENT_ON_DARK },
   barCancel: { backgroundColor: '#fecaca' },
   cardFoot: { alignItems: 'center', gap: 2 },
   elapsed: { color: '#fff', fontSize: 14, fontVariant: ['tabular-nums'] },

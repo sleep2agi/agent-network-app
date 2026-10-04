@@ -153,7 +153,7 @@ export default function MessageSelectOverlay({ target, selectionMode, onAction, 
               selectionColor={Platform.OS === 'android' ? SELECT_HIGHLIGHT_COLOR : SELECT_HANDLE_COLOR}
               selectionHandleColor={SELECT_HANDLE_COLOR}
               textAlignVertical="top"
-              style={styles.text}
+              style={[styles.text, target.tone === 'sent' && styles.textSent]}
             />
           </View>
         ) : null}
@@ -200,8 +200,9 @@ const ITEM_W = 60;
 const makeStyles = () => StyleSheet.create({
   root: { flex: 1 },
   card: { position: 'absolute', borderRadius: radius.bubble, overflow: 'hidden', paddingHorizontal: spacing.lg - 4, paddingVertical: spacing.md - 6 },
-  cardSent: { backgroundColor: colors.rowActive },
+  cardSent: { backgroundColor: colors.bubbleMine },
   cardReply: { backgroundColor: colors.card },
+  textSent: { color: colors.onBubbleMine },
   // 与气泡正文同字号同行高(MarkdownMessage styles.text),选中时字不跳。
   text: {
     color: colors.text, fontSize: 14, lineHeight: 21, padding: 4, margin: 0, borderWidth: 0, flexGrow: 0,

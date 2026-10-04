@@ -479,7 +479,7 @@ export default function DmChatScreen({ cfg, networkId, peer: peerProp, group, on
                       {out ? me : from.name}{item.created_at ? ` · ${formatChatHeader(item.created_at)}` : ''}
                     </Text>
                     <View style={[styles.bubble, !out && styles.replyBubble, !out && desktop && styles.replyBubbleDesktop]} testID="dm-bubble">
-                      {item.content ? <Text style={styles.bubbleText} selectable>{item.content}</Text> : null}
+                      {item.content ? <Text style={[styles.bubbleText, out && styles.bubbleTextMine]} selectable>{item.content}</Text> : null}
                       {renderAttachments(item)}
                       {taskNotice ? (
                         <Pressable
@@ -690,10 +690,11 @@ const makeStyles = (B = bubbleLayout()) => StyleSheet.create({
   sentContent: B.sentContent,
   messageAuthor: { color: colors.textMuted, fontSize: 11, lineHeight: 16, marginBottom: 3 },
   sentAuthor: { textAlign: 'right' },
-  bubble: { ...B.bubble, backgroundColor: colors.rowActive, borderRadius: radius.bubble },
+  bubble: { ...B.bubble, backgroundColor: colors.bubbleMine, borderRadius: radius.bubble },
   replyBubble: { ...B.replyBubble, backgroundColor: colors.card },
   replyBubbleDesktop: B.replyBubbleDesktop,
   bubbleText: { color: colors.text, fontSize: 14, lineHeight: 20 },
+  bubbleTextMine: { color: colors.onBubbleMine },
   attachments: { gap: spacing.xs, marginTop: spacing.xs },
   statusMark: { color: colors.textMuted, fontSize: 10, marginTop: 2, alignSelf: 'flex-end' },
   error: { color: colors.failed, fontSize: 12, paddingHorizontal: spacing.lg, paddingVertical: spacing.xs },

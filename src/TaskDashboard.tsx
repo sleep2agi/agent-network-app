@@ -19,7 +19,7 @@ import { Text } from './ui-text';
 import { Ionicons } from './icons';
 import AliasAvatar from './AliasAvatar';
 import type { HubConfig } from './api';
-import { colors, onThemeChange, radius, spacing, themeMode, type as typeScale, weight } from './theme';
+import { colors, mixHex, onThemeChange, radius, spacing, themeMode, type as typeScale, weight } from './theme';
 import { titleText, type Requirement, type RequirementProject } from './requirements-model';
 import type { RequirementPerson } from './requirement-people';
 import { fetchRequirementStats, listAllRequirementsForDashboard } from './requirements-hub';
@@ -669,7 +669,7 @@ const makeDashStyles = () => {
     card: { backgroundColor: cardBg(), borderRadius: radius.surface, padding: spacing.lg, borderWidth: dark ? 1 : 0, borderColor: colors.floatingBorder, ...softShadow(), minWidth: 0 },
     recentCard: { paddingBottom: spacing.sm },
     hero: { flex: 1, minHeight: 124, overflow: 'hidden' },
-    heroFeatured: { backgroundColor: dark ? '#15282c' : '#eaf5f6' },
+    heroFeatured: { backgroundColor: dark ? colors.railActiveBg : colors.tonalBg },
     heroLabelRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
     heroLabel: { color: colors.textSecondary, fontSize: 13 },
     heroValue: { color: colors.text, fontSize: 44, lineHeight: 52, fontWeight: weight.strong, marginTop: 4, fontVariant: ['tabular-nums'] },
@@ -705,7 +705,7 @@ const makeDashStyles = () => {
     tick: { position: 'absolute', width: 48, left: '50%', marginLeft: -24, textAlign: 'center' },
     tickLast: { left: undefined, right: 0, marginLeft: 0, textAlign: 'right' },
     lbRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, height: 46, paddingHorizontal: spacing.xs, borderRadius: radius.item },
-    lbFirst: { backgroundColor: dark ? '#15282c' : '#eaf5f6' },
+    lbFirst: { backgroundColor: dark ? colors.railActiveBg : colors.tonalBg },
     rank: { width: 18, textAlign: 'center', color: colors.textMuted, fontWeight: weight.strong, fontSize: 13 },
     lbName: { color: colors.text, fontSize: 13, fontWeight: weight.medium },
     lbCount: { color: colors.text, fontSize: typeScale.title, fontWeight: weight.strong, minWidth: 32, textAlign: 'right', fontVariant: ['tabular-nums'] },
@@ -753,7 +753,8 @@ const makeDashStyles = () => {
     ...st,
     upBg: dark ? 'rgba(34,197,94,0.14)' : 'rgba(21,128,61,0.10)',
     downBg: dark ? 'rgba(239,68,68,0.14)' : 'rgba(220,38,38,0.10)',
-    heat: dark ? ['#1e1e22', '#173a40', '#1f6570', '#3398a8', '#4cc3d6'] : ['#eceef1', '#b7dfe3', '#6fbfc8', '#2b97a3', '#067a86'],
+    // 热力 5 档:空格子一档中性底,其余 4 档从 accent 按比例混出来(#545:换强调色方案时跟着换)。
+    heat: (() => { const base = dark ? '#1e1e22' : '#eceef1'; return [base, mixHex(base, colors.accent, 0.25), mixHex(base, colors.accent, 0.5), mixHex(base, colors.accent, 0.75), colors.accent]; })(),
   };
 };
 type DashStyles = ReturnType<typeof makeDashStyles>;

@@ -149,7 +149,7 @@ export function UiScalePreview() {
       </View>
       <View style={st.chat}>
         <View style={[st.bubble, st.bubbleThem]}><Text style={st.bubbleText}>{tr('settings.copy.158')}</Text></View>
-        <View style={[st.bubble, st.bubbleMe]}><Text style={[st.bubbleText, { color: colors.onAccent }]}>{tr('settings.copy.159')}</Text></View>
+        <View style={[st.bubble, st.bubbleMe]}><Text style={[st.bubbleText, { color: colors.onBubbleMine }]}>{tr('settings.copy.159')}</Text></View>
       </View>
       <View style={st.buttons}>
         <View style={st.button}>
@@ -179,7 +179,8 @@ const makePreviewStyles = () => { const g = agentRowGeometry(uiScale().listDense
   chat: { gap: spacing.sm, paddingHorizontal: spacing.md, paddingVertical: spacing.sm, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border, backgroundColor: colors.bg },
   bubble: { maxWidth: '80%', borderRadius: radius.bubble, paddingHorizontal: spacing.md, paddingVertical: spacing.sm },
   bubbleThem: { alignSelf: 'flex-start', backgroundColor: colors.card, borderWidth: 1, borderColor: colors.border },
-  bubbleMe: { alignSelf: 'flex-end', backgroundColor: colors.accent },
+  // 与聊天里「我发出的」气泡同一个 token(#545:预览曾用 accent,和真聊天对不上)。
+  bubbleMe: { alignSelf: 'flex-end', backgroundColor: colors.bubbleMine },
   bubbleText: { color: colors.text, fontSize: 14, lineHeight: 20 },
   buttons: { flexDirection: 'row', justifyContent: 'flex-end', padding: spacing.md, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border },
   button: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs, height: ds(36), paddingHorizontal: spacing.lg, borderRadius: radius.control, backgroundColor: colors.accent },
