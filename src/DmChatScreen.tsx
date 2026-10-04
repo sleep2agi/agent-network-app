@@ -53,6 +53,7 @@ import { fetchGroup, fetchGroupMessages, markGroupRead, sendGroupMessage } from 
 import { emitGroupChat, setActiveGroup, subscribeGroupChat } from './group-chat-bus';
 import { emitHumanDm, setActiveDmPeer, subscribeHumanDm } from './human-dm-bus';
 import { keyboardAvoidEnabled, useKeyboardVisible } from './keyboard-visibility';
+import { useScreenKeyboardInset } from './screen-keyboard-inset';
 import { bubbleLayout, desktopBubbleCap } from './bubble-layout';
 
 /** 本地那条(还在发 / 没发出去):记住草稿里的文件和原图档,「点击重试」原样再发一次。 */
@@ -109,6 +110,8 @@ export default function DmChatScreen({ cfg, networkId, peer: peerProp, group, on
   const insets = useSafeAreaInsets();
   const composerInset = layoutOs() === 'android' ? insets.bottom : 0;
   const keyboardVisible = useKeyboardVisible(Keyboard, Platform.OS);
+  // iOS: composer keyboard inset measured in window coordinates (#547, same as ChatScreen).
+  const iosKeyboard = useScreenKeyboardInset();
   const acked = useRef(new Set<string>());
 
   const load = useCallback(async () => {
@@ -432,13 +435,14 @@ export default function DmChatScreen({ cfg, networkId, peer: peerProp, group, on
   const data = useMemo(() => messages, [messages]);
   return (
     <KeyboardAvoidingView
-      style={styles.root}
+      style={[styles.root, iosKeyboard.style]}
       testID="dm-pane"
-      behavior="padding"
+      behavior={iosKeyboard.handled ? undefined : 'padding'}
       enabled={keyboardAvoidEnabled(Platform.OS, keyboardVisible)}
       keyboardVerticalOffset={Platform.OS === 'android' ? (StatusBar.currentHeight ?? 0) : 0}
       onLayout={e => setPaneWidth(e.nativeEvent.layout.width)}
     >
+      {iosKeyboard.probe}
       <View style={styles.header} testID="dm-header">
         {!desktop && !hideBack ? (
           <Pressable onPress={onBack} hitSlop={12} accessibilityRole="button" accessibilityLabel={t('chat.back')} testID="dm-header-back">

@@ -81,6 +81,7 @@ import { canShowPermissionSection } from './node-permission-model';
 import { pointerUi } from './pointer-ui';
 import type { ScheduleOpenRequest } from './node-schedules';
 import { keyboardAvoidEnabled, useKeyboardVisible } from './keyboard-visibility';
+import { useScreenKeyboardInset } from './screen-keyboard-inset';
 import { filesTreeMode, nodePageColumnMaxWidth } from './node-files-tree';
 import { NODE_PAGE_COMPACT_WIDTH, NODE_SECTIONS, factText, headerChips, leaveNeedsConfirm, nodePageChrome, nodePageContentWidth, nodePageScrolls, overviewFactColumns, resolveActiveSection, splitOverviewFacts, visibleNodeSections, type NodeSectionKey } from './node-page-model';
 import { useModalSafePadding } from './safe-area-runtime';
@@ -217,6 +218,8 @@ export default function NodeDetailScreen({
   const [pendingLeave, setPendingLeave] = useState<null | (() => void)>(null);
   // 软键盘弹起(原生端):规则分区里收起头部卡片,把高度让给编辑框;web / 桌面没有这些事件,恒 false。
   const keyboardVisible = useKeyboardVisible(Keyboard, Platform.OS);
+  // iOS:键盘避让按窗口坐标量(#547,同 ChatScreen;RN 的 KAV 在导航壳里少算一个顶部安全区)。
+  const iosKeyboard = useScreenKeyboardInset();
   // 返回(页头 ‹ 和 Android 系统返回键)也要过确认。needConfirm 在下面算(要先有 section),这里用 ref 读最新值。
   const onBackRef = useRef(onBack);
   onBackRef.current = onBack;
@@ -618,12 +621,13 @@ export default function NodeDetailScreen({
     // 规则分区在原生端打字时:键盘把页面底部顶上来(Android edge-to-edge 下 adjustResize 不生效,同 ChatScreen 的做法),
     // 编辑框底边和光标所在行不被键盘盖住;别的分区不启用,行为不变。
     <KeyboardAvoidingView
-      style={styles.root}
+      style={[styles.root, Platform.OS !== 'web' && section === 'rules' ? iosKeyboard.style : null]}
       // Android: 只在键盘真弹着时启用 —— RN 的 KAV 收起键盘时不归零 padding,会留一条键盘高的空白(见 keyboard-visibility.ts)。
       enabled={keyboardAvoidEnabled(Platform.OS, keyboardVisible, Platform.OS !== 'web' && section === 'rules')}
-      behavior="padding"
+      behavior={iosKeyboard.handled ? undefined : 'padding'}
       keyboardVerticalOffset={Platform.OS === 'android' ? (StatusBar.currentHeight ?? 0) : 0}
     >
+      {iosKeyboard.probe}
       {header}
       {chrome.headerCard ? headerCard : null}
       <View style={{ flex: 1, flexDirection: compact ? 'column' : 'row', minHeight: 0 }}>
