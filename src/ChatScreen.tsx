@@ -75,6 +75,8 @@ import { dispatchUnread, hubHasAgentUnread, markAgentRepliesSeen, markAgentServe
 import { ackAgentUnread } from './agent-ack';
 import MarkdownMessage from './MarkdownMessage';
 import SelectTextSheet from './SelectTextSheet';
+import MessageSelectOverlay, { type MessageSelectTarget } from './MessageSelectOverlay';
+import type { SelectionPayload, SelectMenuKey } from './message-select-model';
 import ImageViewer from './ImageViewer';
 import { openGallery, viewerImageFor, type ViewerImage, type ViewerState } from './image-viewer-model';
 import { conversationGallery, imagePreviewSurface, imageWindowPayload } from './image-window-model';
@@ -893,6 +895,30 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
   // 选择文本(2026-09-26 Vincent 安卓折叠屏:「只能复制整个的消息…想划选部分段落或句子」):
   // 全屏只读文本,系统选区手柄可跨段落。null = 未打开。
   const [selectTextFor, setSelectTextFor] = useState<MessageSelection | null>(null);
+  // #537 手机长按 = 就地选区 + 微信式浮动菜单(MessageSelectOverlay)。null = 没在选。
+  const [selectFor, setSelectFor] = useState<(MessageSelectTarget & { selection: MessageSelection }) | null>(null);
+  // 长按时要量气泡在窗口里的位置:每个气泡 View 按「消息键:sent|reply」登记。回调按键缓存,滚动重渲染不反复解绑。
+  const bubbleViews = useRef(new Map<string, View>());
+  const bubbleRefFns = useRef(new Map<string, (el: View | null) => void>());
+  const bubbleRef = (key: string) => {
+    let fn = bubbleRefFns.current.get(key);
+    if (!fn) {
+      fn = (el: View | null) => { if (el) bubbleViews.current.set(key, el); else bubbleViews.current.delete(key); };
+      bubbleRefFns.current.set(key, fn);
+    }
+    return fn;
+  };
+  // 换了会话(双栏里点了别人)选区层不能挂着别人的气泡位置。
+  useEffect(() => setSelectFor(null), [conversationKeyFor]);
+  const openSelect = (bubbleKey: string, selection: MessageSelection, tone: MessageSelectTarget['tone']) => {
+    const el = bubbleViews.current.get(bubbleKey) as unknown as { measureInWindow?: (cb: (x: number, y: number, w: number, h: number) => void) => void } | undefined;
+    // 量不到(极少:气泡刚被回收)就退回原来的底部菜单,长按至少有反应。
+    if (!el?.measureInWindow) { setMenuFor(selection); return; }
+    el.measureInWindow((x, y, width, height) => {
+      if (!(width > 0 && height > 0)) { setMenuFor(selection); return; }
+      setSelectFor({ rect: { x, y, width, height }, raw: selection.text, tone, selection });
+    });
+  };
   // 光标定位的菜单要夹在窗口内,否则贴右/贴底时会被切掉。
   const { width: menuWindowWidth, height: menuWindowHeight } = useWindowDimensions();
   // 多选:进入后气泡带复选框,底栏给转发/删除。
@@ -1260,6 +1286,26 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
     }
     if (key === 'expand') { setMenuFor(null); setExpandFor(selection); return; }
     if (key === 'delete') { setMessages(prev => removeMessage(prev, selection.item)); setMenuFor(null); }
+  };
+
+  // #537 浮动菜单动作:整条选中 = 与原来长按菜单同一条路(复制走 copyTextOf);只选了一段 = 就那一段。
+  const onSelectAction = (key: SelectMenuKey, payload: SelectionPayload) => {
+    const target = selectFor;
+    if (!target) return;
+    const selection = target.selection;
+    const part = payload.kind === 'part' ? payload.text : null;
+    setSelectFor(null);
+    if (key === 'copy') { void (part !== null ? copyValue(part) : copyMessage(selection.text)); return; }
+    if (key === 'forward') { void openForwardPicker(part !== null ? { ...selection, text: part } : selection); return; }
+    if (key === 'quote') {
+      setQuote({ author: selection.author, text: compactQuoteText(part ?? selection.text) });
+      mainComposerRef.current?.focus?.();
+      return;
+    }
+    if (key === 'multiSelect') { setSelectionMode(true); setSelectedKeys([msgKey(selection.item)]); return; }
+    if (key === 'selectText') { setSelectTextFor(selection); return; }
+    if (key === 'expand') { setExpandFor(selection); return; }
+    if (key === 'delete') setMessages(prev => removeMessage(prev, selection.item));
   };
 
   // ── 多选(0.2.78) ────────────────────────────────────────────────────────
@@ -2136,11 +2182,11 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
                     </Text>
                     <Pressable
                       {...(pointer ? ({ dataSet: { messageKey: msgKey(item), messagePart: 'sent' }, onMouseEnter: () => setHoverKey(`${msgKey(item)}:sent`), onMouseLeave: () => setHoverKey(null) } as any) : {})}
-                      onLongPress={pointer ? undefined : () => setMenuFor({ item, text: item.content ?? '', author: sender.alias })}
+                      onLongPress={pointer ? undefined : () => openSelect(`${msgKey(item)}:sent`, { item, text: item.content ?? '', author: sender.alias }, 'sent')}
                       delayLongPress={300}
                       style={({ pressed }) => [styles.bubblePressable, pressed && { opacity: 0.7 }]}
                     >
-                      <View style={styles.bubble}>
+                      <View style={styles.bubble} ref={bubbleRef(`${msgKey(item)}:sent`)}>
                         {pointer && hoverKey === `${msgKey(item)}:sent` && item.content ? (
                           <MessageHoverActions side="sent" styles={styles} onCopy={() => void copyMessage(item.content ?? '')} onMore={at => openMenuAt(at, { item, text: item.content ?? '', author: sender.alias })} />
                         ) : null}
@@ -2167,11 +2213,11 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
                     </Text>
                     <Pressable
                       {...(pointer ? ({ dataSet: { messageKey: msgKey(item), messagePart: 'sent' }, onMouseEnter: () => setHoverKey(`${msgKey(item)}:sent`), onMouseLeave: () => setHoverKey(null) } as any) : {})}
-                      onLongPress={pointer ? undefined : () => setMenuFor({ item, text: item.content ?? '', author: sender.alias })}
+                      onLongPress={pointer ? undefined : () => openSelect(`${msgKey(item)}:sent`, { item, text: item.content ?? '', author: sender.alias }, 'reply')}
                       delayLongPress={300}
                       style={styles.replyPressable}
                     >
-                      <View style={[styles.bubble, styles.replyBubble, desktop && styles.replyBubbleDesktop]}>
+                      <View style={[styles.bubble, styles.replyBubble, desktop && styles.replyBubbleDesktop]} ref={bubbleRef(`${msgKey(item)}:sent`)}>
                         {pointer && hoverKey === `${msgKey(item)}:sent` && item.content ? (
                           <MessageHoverActions side="reply" styles={styles} onCopy={() => void copyMessage(item.content ?? '')} onMore={at => openMenuAt(at, { item, text: item.content ?? '', author: sender.alias })} />
                         ) : null}
@@ -2195,11 +2241,11 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
                       <Text style={styles.messageAuthor} numberOfLines={1}>{alias}{item._proactive ? t('chat.proactive') : ''}{(item.completed_at ?? item.created_at) ? ` · ${formatChatHeader(item.completed_at ?? item.created_at)}` : ''}</Text>
                       <Pressable
                         {...(pointer ? ({ dataSet: { messageKey: msgKey(item), messagePart: 'reply' }, onMouseEnter: () => setHoverKey(`${msgKey(item)}:reply`), onMouseLeave: () => setHoverKey(null) } as any) : {})}
-                        onLongPress={pointer ? undefined : () => setMenuFor({ item, text: item.result ?? item.reply ?? '', author: alias })}
+                        onLongPress={pointer ? undefined : () => openSelect(`${msgKey(item)}:reply`, { item, text: item.result ?? item.reply ?? '', author: alias }, 'reply')}
                         delayLongPress={300}
                         style={styles.replyPressable}
                       >
-                        <View style={[styles.bubble, styles.replyBubble, desktop && styles.replyBubbleDesktop]}>
+                        <View style={[styles.bubble, styles.replyBubble, desktop && styles.replyBubbleDesktop]} ref={bubbleRef(`${msgKey(item)}:reply`)}>
                           {pointer && hoverKey === `${msgKey(item)}:reply` ? (
                             <MessageHoverActions side="reply" styles={styles} onCopy={() => void copyMessage(item.result ?? item.reply ?? '')} onMore={at => openMenuAt(at, { item, text: item.result ?? item.reply ?? '', author: alias })} />
                           ) : null}
@@ -2421,6 +2467,14 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
           </Pressable>
         </Pressable>
       </Modal>
+
+      {/* #537 触摸端长按:就地选区 + 微信式浮动菜单。桌面是鼠标拖选 + 右键菜单(上面的锚定菜单),不挂这一层。 */}
+      {pointer ? null : <MessageSelectOverlay
+        target={selectFor}
+        selectionMode={selectionMode}
+        onAction={onSelectAction}
+        onClose={() => setSelectFor(null)}
+      />}
 
       {/* 触摸端才有「选择文本」(message-menu-model.ts):鼠标直接在气泡里拖选,不需要全屏选区页。 */}
       {pointer ? null : <SelectTextSheet

@@ -51,6 +51,10 @@ const openMessageMenu = async (page) => {
   await bubble.waitFor({ timeout: 10000 });
   await bubble.click({ button: 'right' }).catch(() => {});
   if (!(await page.locator('[aria-modal="true"]').count())) await bubble.click({ delay: 700 });
+  // #537: on touch the long-press opens the in-place selection layer; its floating menu is placed after it has
+  // measured itself (data-side leaves 'measuring'). Wait for that so the case measures the placed menu.
+  const floating = page.locator('[data-testid="msg-select-menu"]');
+  if (await floating.count()) await page.waitForFunction(() => document.querySelector('[data-testid="msg-select-menu"]')?.getAttribute('data-side') !== 'measuring', null, { timeout: 5000 });
 };
 
 // scope: 'main' (window) | 'modal' (topmost RN-web Modal). pane: 'detail' | 'list' (two-pane).
@@ -108,7 +112,8 @@ const CASES = [
   { name: 'modal:selectText', layouts: ['phone', 'twoPane'], scope: 'modal', header: '[data-testid="screen-header"]',
     open: async (page) => {
       await openMessageMenu(page);
-      await page.getByText('选择文本', { exact: true }).last().click({ timeout: 5000 });
+      // #537: the full-screen select sheet is now 「全屏选择」 in the long-press floating menu (was 「选择文本」 in the bottom sheet).
+      await page.locator('[data-testid="msg-select-selectText"]').click({ timeout: 5000 });
       await page.getByText('拖动选区手柄选中任意段落，用系统菜单复制').waitFor({ timeout: 5000 });
     } },
   { name: 'modal:nodeAction', layouts: ['phone', 'twoPane'], scope: 'modal', header: null,
