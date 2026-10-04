@@ -1,0 +1,8 @@
+desktop v0.2.209 — 多网络账号发图片失败修复
+
+A. 本版内容(0.2.208 发版提交之后 main 上合入的 PR + 本 PR)
+  #710 多网络账号（如 fiona：自己的个人网络 + 被授权的团队网络）在 Agent 会话发图全部 400 network_id_required：agent 会话上传从不带 network_id（私信/任务描述上传带）。uploadImage 改为与 sendTask 同样解析网络（opts → cfg.networkId → /api/auth/me），查不到才按旧行为不带。新测试 upload-network 7/7（旧 attach.ts 5/7），npm test 336/336，typecheck 通过。
+  本 PR(版本号):0.2.208 → 0.2.209,versionCode 2208 → 2209;release-desktop-auto-update.yml 加 What's new in 0.2.209;重新生成 src/changelog-bundled.ts。
+  本地:干净 origin/main(063dc11) bump 后 npm ci / npm test / npm run typecheck 全部 rc=0;android-release-notes.mjs 0.2.209 rc=0。
+B. 验证边界(如实)
+  ck 单测；真机：用 fiona 账号在小盐助手会话里发一张图，应送达不再报 network_id_required。
