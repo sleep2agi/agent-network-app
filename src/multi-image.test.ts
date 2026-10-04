@@ -212,9 +212,11 @@ const attach = readFileSync(new URL('./attach.ts', import.meta.url), 'utf8');
 const chat = readFileSync(new URL('./ChatScreen.tsx', import.meta.url), 'utf8').replace(/\r\n?/g, '\n');
 {
   const send = chat.slice(chat.indexOf('  const doSend = async ('), chat.indexOf('  const submit = async'));
-  check(/runUploadQueue\(imgs,/.test(send) && /concurrency: UPLOAD_CONCURRENCY/.test(send), 'doSend uploads through the limited queue');
+  // #527: the queue moved into resend-plan.ts uploadForSend (reuses an image's recorded hub file on retry).
+  const resendPlan = readFileSync(new URL('./resend-plan.ts', import.meta.url), 'utf8');
+  check(/await uploadForSend</.test(send) && /concurrency: UPLOAD_CONCURRENCY/.test(send) && /runUploadQueue\(imgs,[\s\S]*?concurrency: args\.concurrency/.test(resendPlan), 'doSend uploads through the limited queue');
   check(!/Promise\.all\(imgs\.map/.test(send), 'no unbounded Promise.all upload left in doSend');
-  const failAt = send.indexOf('if (run.failed.length)');
+  const failAt = send.indexOf('if (!run.ok)');
   const sendAt = send.indexOf('await sendTask(');
   check(failAt > 0 && sendAt > failAt && /_failed: true, _uploadError: summary[\s\S]*?return;/.test(send.slice(failAt, sendAt)), 'any failed upload stops BEFORE sendTask (no partial message)');
   check(/uploadMemo\.get\(cfg\.serverUrl, img\.uri, original\)/.test(send), 'retry skips already-uploaded images');
@@ -225,7 +227,7 @@ const chat = readFileSync(new URL('./ChatScreen.tsx', import.meta.url), 'utf8').
   check(/sendBlocker\(attached, willCompressLater\)/.test(submit) && submit.indexOf('sendBlocker(') < submit.indexOf('const imgs = attached') && /if \(blocked\) \{\s*setComposerNotice\(blocked\);[^\n]*\n\s*return;/.test(submit), 'oversize/limit blocks BEFORE the draft is cleared');
   check(/doSend\(content, localId, imgs, priority, original\)/.test(submit), 'send carries the 原图 choice');
   const retry = chat.slice(chat.indexOf('  const retry = '), chat.indexOf('  const removeFailedAttachment'));
-  check(/!!item\._original/.test(retry), 'retry keeps the 原图 choice');
+  check(/!!\(?item\._original/.test(retry), 'retry keeps the 原图 choice');
   check(/addToDraft\(attachedRef\.current, incoming\)/.test(chat), 'every add (album, paste, file, camera) goes through addToDraft');
   check(/remainingImageSlots\(attachedRef\.current\)/.test(chat), '相册 asks only for the remaining slots');
   check(chat.includes('testID="composer-draft-strip"') && chat.includes('testID="composer-original-toggle"') && chat.includes("accessibilityLabel={t('chat.original')}"), 'draft strip with a translated 原图 toggle');
