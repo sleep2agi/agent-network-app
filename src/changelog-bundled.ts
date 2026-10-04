@@ -5,6 +5,10 @@
 export const BUNDLED_RELEASE_BODY: string = [
   "Signed and notarized stable update for macOS (Apple Silicon) and Windows (x64).",
   "",
+  "What's new in 0.2.204:",
+  "- 手机上长按消息像微信一样：整条选中，可拖动手柄只选一部分",
+  "- 浮层菜单：复制（只复制选中部分）/ 全选 / 转发 / 引用 / 多选 / 放大阅读 / 删除",
+  "",
   "What's new in 0.2.203:",
   "- 图片发送失败后点「重新发送」会带上原图重发（离开会话再回来、重启 app 后也一样）",
   "- 图片确实找不回来时提示「图片已丢失」，不再只发文字",
@@ -888,6 +892,7 @@ export const BUNDLED_RELEASE_BODY: string = [
 
 /** Release date (published_at) per version, as far as it was known when this file was generated. */
 export const BUNDLED_RELEASE_DATES: Record<string, string> = {
+  "0.2.203": "2026-10-04T03:05:02Z",
   "0.2.202": "2026-10-03T16:19:11Z",
   "0.2.201": "2026-10-03T15:32:57Z",
   "0.2.200": "2026-10-03T13:03:05Z",
