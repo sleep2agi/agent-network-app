@@ -1,0 +1,8 @@
+desktop v0.2.206 — 长按菜单不再压住选区拖动把手 (#551)
+
+A. 本版内容(0.2.205 发版提交之后 main 上合入的 PR + 本 PR)
+  #703 (#551) 长按菜单原按整条消息定位，消息高于屏幕时上下都放不下、落到可见部分上面，正压住起点把手；改为按两端把手定位（首行上方→末行下方→不碰把手的空隙，限安全区与键盘之上），拖动/选区变化时隐藏、静止 300ms 后重定位；仅手机端。model 单测 79/79（含截图几何），test-message-select 45/45（main 上 38/45），layout-sweep 49/49。
+  本 PR(版本号):0.2.205 → 0.2.206,versionCode 2205 → 2206;release-desktop-auto-update.yml 加 What's new in 0.2.206;重新生成 src/changelog-bundled.ts。
+  本地:干净 origin/main(d0d107e) bump 后 npm ci / npm test / npm run typecheck 全部 rc=0;android-release-notes.mjs 0.2.206 rc=0。
+B. 验证边界(如实)
+  ck 单测 + Playwright 驱动量把手与菜单矩形不相交；原生行测量仅单测覆盖，需真机：长按一条比屏幕还长的消息→全选→拖起点把手，菜单不得压住把手。
