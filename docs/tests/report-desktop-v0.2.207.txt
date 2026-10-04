@@ -1,0 +1,8 @@
+desktop v0.2.207 — 发消息自动纠正网络、未送达显示原因 (#552)
+
+A. 本版内容(0.2.206 发版提交之后 main 上合入的 PR + 本 PR)
+  #705 (#552) 受限成员手机上存着旧的 network_id，发消息全部 404 alias_not_found、只显示「未送达」。sendTask 遇 alias_not_found / network_id_required / 网络拒绝时清身份缓存与 /api/auth/me 缓存、重选网络，仅网络确有变化时用同一 client_request_id 重发一次；启动/切号时校正存储的网络；未送达下显示原因。新测试 50/50，npm test 334/334，驱动 test-send-dispatch 19/19、test-resend-image 64/64。
+  本 PR(版本号):0.2.206 → 0.2.207,versionCode 2206 → 2207;release-desktop-auto-update.yml 加 What's new in 0.2.207;重新生成 src/changelog-bundled.ts。
+  本地:干净 origin/main(0fb834a) bump 后 npm ci / npm test / npm run typecheck 全部 rc=0;android-release-notes.mjs 0.2.207 rc=0。
+B. 验证边界(如实)
+  ck 单测 + 发送驱动；真机：受限成员账号发一条给已授权 Agent 应送达；对未授权 Agent 发送，未送达下应显示「没有给这个 Agent 发消息的权限」。
