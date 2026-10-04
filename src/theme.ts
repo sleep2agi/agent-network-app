@@ -37,7 +37,7 @@ export const ACCENT_SCHEMES: Record<AccentSchemeId, { light: AccentTokens; dark:
   },
 };
 /** 🔴 换强调色只改这一行。 */
-export const ACCENT_SCHEME: AccentSchemeId = 'teal';
+export const ACCENT_SCHEME: AccentSchemeId = 'blue';
 const ACCENT = ACCENT_SCHEMES[ACCENT_SCHEME];
 /** 永远画在深色底上的强调(语音浮层的电平条):不随浅 / 深主题变。 */
 export const ACCENT_ON_DARK = ACCENT.dark.accent;
