@@ -19,7 +19,7 @@ export interface MessageSelectTarget {
   rect: Rect;
   /** 原始消息内容(可能带「@作者: …」引用行、Markdown)。 */
   raw: string;
-  /** 'sent' = 我发的(rowActive 底),'reply' = 对方的(card 底)—— 卡片底色跟气泡一致。 */
+  /** 'sent' = 我发的(bubbleMine 底),'reply' = 对方的(card 底)—— 卡片底色跟气泡一致。 */
   tone: 'sent' | 'reply';
 }
 

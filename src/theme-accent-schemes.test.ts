@@ -1,7 +1,7 @@
-// #545 强调色方案:每一套(不只是当前选中的那套)在浅色 / 深色下都要过 WCAG AA,
-// 这样 ACCENT_SCHEME 改成哪一套都不会把字画成看不清。另外钉住:气泡 / 按钮 / 预览都从同一组 token 取色。
+// #545 强调色(晴蓝):浅色 / 深色下每一对前景 / 背景都要过 WCAG AA,改色值时不会把字画成看不清。
+// 另外钉住:气泡 / 按钮 / 预览都从同一组 token 取色,不再有写死的旧墨青色值。
 import { readFileSync } from 'node:fs';
-import { ACCENT_SCHEME, ACCENT_SCHEMES, colors, mixHex, setThemeMode } from './theme';
+import { ACCENT, colors, mixHex, setThemeMode } from './theme';
 
 let failed = 0;
 const ck = (name: string, ok: boolean, detail = '') => {
@@ -28,36 +28,31 @@ const LIGHT_SURF = { bg: colors.bg, card: colors.card, text: colors.text };
 setThemeMode('dark');
 const DARK_SURF = { bg: colors.bg, card: colors.card, text: colors.text };
 
-for (const [id, scheme] of Object.entries(ACCENT_SCHEMES)) {
-  for (const mode of ['light', 'dark'] as const) {
-    const t = scheme[mode];
-    const surf = mode === 'light' ? LIGHT_SURF : DARK_SURF;
-    const pairs: Array<[string, string, string]> = [
-      ['onAccent on accent (主按钮字)', t.onAccent, t.accent],
-      ['accent on bg (链接 / 文字按钮)', t.accent, surf.bg],
-      ['accent on card', t.accent, surf.card],
-      ['accent on tonalBg (次按钮字)', t.accent, t.tonalBg],
-      ['accent on railActiveBg (选中项字)', t.accent, t.railActiveBg],
-      ['onBubbleMine on bubbleMine (我发出的气泡字)', t.onBubbleMine, t.bubbleMine],
-      ['linkOnBubbleMine on bubbleMine', t.linkOnBubbleMine, t.bubbleMine],
-    ];
-    for (const [label, fg, bg] of pairs) {
-      const r = contrast(fg, bg);
-      // teal = 0.2.204 的原值,逐字节保留不改;它的浅色 railActiveBg(4.21)与灰气泡里的青色链接(4.25)本来就差一点,
-      // 只记录不拦。新方案没有这个豁免。
-      if (id === 'teal' && mode === 'light' && /railActiveBg|linkOnBubbleMine/.test(label) && r < 4.5) { console.log(`· ${id}/${mode} ${label} = ${r.toFixed(2)} (legacy, not gated)`); continue; }
-      ck(`${id}/${mode} ${label} ≥ 4.5`, r >= 4.5, `${fg} on ${bg} = ${r.toFixed(2)}`);
-    }
-    ck(`${id}/${mode} tonalBg differs from card`, t.tonalBg.toLowerCase() !== surf.card.toLowerCase());
-    ck(`${id}/${mode} bubbleMine differs from card (我发出的 / 对方的 能分开)`, t.bubbleMine.toLowerCase() !== surf.card.toLowerCase());
+for (const mode of ['light', 'dark'] as const) {
+  const t = ACCENT[mode];
+  const surf = mode === 'light' ? LIGHT_SURF : DARK_SURF;
+  const pairs: Array<[string, string, string]> = [
+    ['onAccent on accent (主按钮字)', t.onAccent, t.accent],
+    ['accent on bg (链接 / 文字按钮)', t.accent, surf.bg],
+    ['accent on card', t.accent, surf.card],
+    ['accent on tonalBg (次按钮字)', t.accent, t.tonalBg],
+    ['accent on railActiveBg (选中项字)', t.accent, t.railActiveBg],
+    ['onBubbleMine on bubbleMine (我发出的气泡字)', t.onBubbleMine, t.bubbleMine],
+    ['linkOnBubbleMine on bubbleMine', t.linkOnBubbleMine, t.bubbleMine],
+  ];
+  for (const [label, fg, bg] of pairs) {
+    const r = contrast(fg, bg);
+    ck(`${mode} ${label} ≥ 4.5`, r >= 4.5, `${fg} on ${bg} = ${r.toFixed(2)}`);
   }
+  ck(`${mode} tonalBg differs from card`, t.tonalBg.toLowerCase() !== surf.card.toLowerCase());
+  ck(`${mode} bubbleMine differs from card (我发出的 / 对方的 能分开)`, t.bubbleMine.toLowerCase() !== surf.card.toLowerCase());
 }
 
-// 当前选中的方案真的进了 colors。
+// 强调色一族真的进了 colors(浅 / 深两份都要)。
 for (const mode of ['light', 'dark'] as const) {
   setThemeMode(mode);
-  const t = ACCENT_SCHEMES[ACCENT_SCHEME][mode];
-  for (const k of Object.keys(t) as Array<keyof typeof t>) ck(`${mode} colors.${k} comes from ACCENT_SCHEME=${ACCENT_SCHEME}`, colors[k] === t[k], `${colors[k]} vs ${t[k]}`);
+  const t = ACCENT[mode];
+  for (const k of Object.keys(t) as Array<keyof typeof t>) ck(`${mode} colors.${k} comes from ACCENT.${mode}`, colors[k] === t[k], `${colors[k]} vs ${t[k]}`);
 }
 setThemeMode('dark');
 
@@ -70,8 +65,15 @@ const wired: Record<string, string[]> = {
   'DmChatScreen.tsx': ['backgroundColor: colors.bubbleMine', 'bubbleTextMine: { color: colors.onBubbleMine }'],
   'MessageSelectOverlay.tsx': ['cardSent: { backgroundColor: colors.bubbleMine }', 'textSent: { color: colors.onBubbleMine }'],
   'UiScaleSettings.tsx': ['bubbleMe: { alignSelf: \'flex-end\', backgroundColor: colors.bubbleMine }', 'color: colors.onBubbleMine'],
-  'MarkdownMessage.tsx': ['colors.onBubbleMine', 'colors.linkOnBubbleMine'],
+  'MarkdownMessage.tsx': ['colors.onBubbleMine', 'colors.linkOnBubbleMine', 'useMineBubble()'],
+  // 气泡里直接画在蓝底上的附件行 / 下载链接 / 上传状态(原 accent 字,蓝配蓝看不见):走 bubble-ink.ts。
+  'AttachmentFileDesktop.tsx': ["useBubbleInk('link')"],
+  'AuthedThumb.tsx': ["useBubbleInk('link')"],
+  'AuthedWebThumb.tsx': ["useBubbleInk('link')"],
 };
+ck('ChatScreen.tsx wraps own bubble in <MineBubble value>', src('ChatScreen.tsx').includes('<MineBubble value>'));
+ck('ChatScreen.tsx own-bubble attachments get mine=true', src('ChatScreen.tsx').includes('renderAttachments(sentAttachmentViews(item, cfg.serverUrl), item, true)'));
+ck('DmChatScreen.tsx wraps bubble in <MineBubble value={out}>', src('DmChatScreen.tsx').includes('<MineBubble value={out}>'));
 for (const [f, needles] of Object.entries(wired)) for (const n of needles) ck(`${f} uses ${n}`, src(f).includes(n));
 
 const OLD_LITERALS = /#(067a86|4cc3d6|eaf5f6|17313a|dcedf0|15282c|7ee0ee)\b/i;

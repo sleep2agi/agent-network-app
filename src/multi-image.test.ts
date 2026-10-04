@@ -234,7 +234,7 @@ const chat = readFileSync(new URL('./ChatScreen.tsx', import.meta.url), 'utf8').
   check(/onPress=\{\(\) => openViewer\(attached\.filter\(isDraftImage\)\.map\([^\n]*\), item\.uri\)\}/.test(chat), 'tapping a draft thumbnail previews it (swipe through the draft images)');
   check(/onPress=\{\(\) => removeAttachment\(item\.uri\)\}/.test(chat), 'draft thumbnails have ✕');
   check(/if \(gridViews\.length < 2\)/.test(chat) && chat.includes('testID="chat-image-grid"'), '≥2 images render as a grid; single image path unchanged');
-  check((chat.match(/renderAttachments\(sentAttachmentViews\(item, cfg\.serverUrl\), item\)/g) ?? []).length === 2, 'both sent-bubble variants use the grid renderer');
+  check((chat.match(/renderAttachments\(sentAttachmentViews\(item, cfg\.serverUrl\), item(?:, true)?\)/g) ?? []).length === 2, 'both sent-bubble variants use the grid renderer');
   check(/renderAttachments\(replyAttachmentViews\(item, cfg\.serverUrl\)\)/.test(chat), 'agent replies with several images also use the grid');
   check(/imageGrid:[^\n]*maxWidth: 3 \* 84 \+ 2 \* 4/.test(chat), 'grid is 3 columns wide');
   check(/removeFailedAttachment\(item, a\.localIndex!\)/.test(chat), 'a failed tile can be removed from the failed message');

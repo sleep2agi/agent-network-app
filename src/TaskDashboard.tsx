@@ -753,7 +753,7 @@ const makeDashStyles = () => {
     ...st,
     upBg: dark ? 'rgba(34,197,94,0.14)' : 'rgba(21,128,61,0.10)',
     downBg: dark ? 'rgba(239,68,68,0.14)' : 'rgba(220,38,38,0.10)',
-    // 热力 5 档:空格子一档中性底,其余 4 档从 accent 按比例混出来(#545:换强调色方案时跟着换)。
+    // 热力 5 档:空格子一档中性底,其余 4 档从 accent 按比例混出来(#545:换强调色时跟着换)。
     heat: (() => { const base = dark ? '#1e1e22' : '#eceef1'; return [base, mixHex(base, colors.accent, 0.25), mixHex(base, colors.accent, 0.5), mixHex(base, colors.accent, 0.75), colors.accent]; })(),
   };
 };

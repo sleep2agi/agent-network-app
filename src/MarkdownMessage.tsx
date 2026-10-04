@@ -1,7 +1,8 @@
-import { createContext, Fragment, useContext, useState, type ReactNode } from 'react';
+import { Fragment, useContext, useState, type ReactNode } from 'react';
 import { Platform, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { Text } from './ui-text';
 import { colors, onThemeChange, spacing, radius } from './theme';
+import { MineBubble, MineBubbleContext, useMineBubble } from './bubble-ink';
 import { isSafeMarkdownUrl, parseInline, parseMarkdownBlocks, type InlineNode } from './markdown-model';
 import { foldCode, foldLabel } from './markdown-code-fold';
 import { gridCellWidth, listIndent, markdownLayout } from './bubble-layout';
@@ -125,10 +126,11 @@ export default function MarkdownMessage({ children, onHeadingLayout, sourceLines
   const lay = (id: string, start?: number, end?: number, parent?: string) => (onBlockLayout && start != null
     ? { onLayout: (event: any) => { const { y, height } = event.nativeEvent.layout; onBlockLayout({ id, parent, start, end: end ?? start, y, height }); } }
     : {});
-  const mine = tone === 'mine';
+  const inMineBubble = useMineBubble();
+  const mine = tone === 'mine' || inMineBubble;
   const styles = mine ? mineStyles : globalStyles();
   return (
-    <ToneContext.Provider value={mine}>
+    <MineBubble value={mine}>
     <View style={styles.root}>
       {parseMarkdownBlocks(children, { hubImages: !!renderImage }).map((block, index) => {
         const id = `b${index}`;
@@ -149,7 +151,7 @@ export default function MarkdownMessage({ children, onHeadingLayout, sourceLines
         return <Text key={index} {...src(block.line, block.endLine)} {...lay(id, block.line, block.endLine)} style={[styles.text, styles.block]}><Inline text={block.text} /></Text>;
       })}
     </View>
-    </ToneContext.Provider>
+    </MineBubble>
   );
 }
 
@@ -166,7 +168,8 @@ const makeStyles = (L = markdownLayout(), ink?: { text: string; link: string }) 
   heading: { fontWeight: '600', ...L.heading },
   strong: { fontWeight: '600' },
   em: { fontStyle: 'italic' },
-  inlineCode: { color: ink ? colors.text : colors.accent, backgroundColor: colors.inputBg, fontFamily: 'monospace', fontSize: 13, ...WRAP_ANYWHERE },
+  // 我发出的实底气泡里:行内代码用气泡字色 + 半透明白底(深浅主题下都是同一块浅一档的蓝),不再是一块输入框底色。
+  inlineCode: { color: ink ? ink.text : colors.accent, backgroundColor: ink ? 'rgba(255,255,255,0.18)' : colors.inputBg, fontFamily: 'monospace', fontSize: 13, ...WRAP_ANYWHERE },
   link: { color: ink?.link ?? colors.accent, textDecorationLine: 'underline' },
   listRow: L.listRow,
   marker: { color: ink?.text ?? colors.textSecondary, fontSize: 14, lineHeight: 21, textAlign: 'right', ...L.marker },
@@ -187,11 +190,10 @@ const makeStyles = (L = markdownLayout(), ink?: { text: string; link: string }) 
   tableCardLabel: { color: ink?.text ?? colors.textMuted, fontSize: 12 },
 });
 
-// #545:「我发出的」气泡底色由强调色方案给(可能是实底绿 / 蓝),里面的字和链接改用 onBubbleMine / linkOnBubbleMine。
+// #545:「我发出的」气泡是实底蓝,里面的字和链接改用 onBubbleMine / linkOnBubbleMine。
 const mineInk = () => ({ text: colors.onBubbleMine, link: colors.linkOnBubbleMine });
 let styles = makeStyles();
 let mineStyles = makeStyles(markdownLayout(), mineInk());
 onThemeChange(() => { styles = makeStyles(); mineStyles = makeStyles(markdownLayout(), mineInk()); });
-const ToneContext = createContext(false);
 const globalStyles = () => styles;
-const useMd = () => (useContext(ToneContext) ? mineStyles : styles);
+const useMd = () => (useContext(MineBubbleContext) ? mineStyles : styles);

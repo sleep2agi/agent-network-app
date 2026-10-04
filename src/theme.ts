@@ -1,44 +1,22 @@
-// ── #545 强调色方案(Vincent 2026-10-04「感觉这个 绿色是真的丑」)─────────────────────────────
+// ── #545 强调色:晴蓝(Vincent 2026-10-04「感觉这个 绿色是真的丑」→ 换掉 0.2.207 及以前的墨青)────────
 // 「我发出的气泡」「发送」「主按钮」「恢复默认」这类次按钮、选中态、开关、链接……全 app 的强调色一族
-// 只从这里来。换一套 = 改下面 ACCENT_SCHEME 一行;每套都带浅色 / 深色两份,且都过 WCAG AA
-// (src/theme-accent-schemes.test.ts 逐套逐对断言)。
+// 只从这里来,浅色 / 深色各一份,都过 WCAG AA(src/theme-accent-schemes.test.ts 逐对断言)。
+// 当时比较过的另外两套(微信绿 / 石墨)与对比度表见 docs/design/accent-schemes-545.md。
 //   accent           强调色:主按钮底、链接 / 文字按钮、选中勾、开关、焦点线(作文字时在 bg/card/tonalBg 上 ≥ 4.5)
 //   onAccent         主按钮上的字 / 图标(在 accent 上 ≥ 4.5)
 //   tonalBg          次按钮(tonal)的浅底,字用 accent
 //   railActiveBg     导航栏 / 分段控件的选中底
-//   bubbleMine       我发出的聊天气泡底
+//   bubbleMine       我发出的聊天气泡底(实底蓝,iMessage / Telegram 一类)
 //   onBubbleMine     我发出的气泡里的字(≥ 4.5)
 //   linkOnBubbleMine 我发出的气泡里的链接 / 行内强调(≥ 4.5)
-type AccentTokens = {
+export type AccentTokens = {
   accent: string; onAccent: string; tonalBg: string; railActiveBg: string;
   bubbleMine: string; onBubbleMine: string; linkOnBubbleMine: string;
 };
-export type AccentSchemeId = 'teal' | 'wechat' | 'blue' | 'graphite';
-export const ACCENT_SCHEMES: Record<AccentSchemeId, { light: AccentTokens; dark: AccentTokens }> = {
-  // 0.2.204 及以前:墨青。气泡是中性灰(与 rowActive 同值),只有按钮 / 链接是青。
-  teal: {
-    light: { accent: '#067a86', onAccent: '#ffffff', tonalBg: '#eaf5f6', railActiveBg: '#dcedf0', bubbleMine: '#e9ebee', onBubbleMine: '#1d2026', linkOnBubbleMine: '#067a86' },
-    dark: { accent: '#4cc3d6', onAccent: '#0b0b0d', tonalBg: '#17313a', railActiveBg: '#15282c', bubbleMine: '#222227', onBubbleMine: '#ededef', linkOnBubbleMine: '#4cc3d6' },
-  },
-  // A 微信绿:气泡就是微信的 #95EC69 + 深色字;按钮用更深一档的绿(微信的 #07C160 配白字只有 2.4:1,不过 AA)。
-  wechat: {
-    light: { accent: '#07803c', onAccent: '#ffffff', tonalBg: '#eef8f1', railActiveBg: '#e9f6ed', bubbleMine: '#95ec69', onBubbleMine: '#111111', linkOnBubbleMine: '#111111' },
-    dark: { accent: '#3eb575', onAccent: '#0b0b0d', tonalBg: '#173226', railActiveBg: '#142a1f', bubbleMine: '#3eb575', onBubbleMine: '#0b0b0d', linkOnBubbleMine: '#0b0b0d' },
-  },
-  // B 晴蓝(iMessage / Telegram 一类):实底蓝气泡 + 白字。
-  blue: {
-    light: { accent: '#1b65db', onAccent: '#ffffff', tonalBg: '#edf3fe', railActiveBg: '#e6eefd', bubbleMine: '#1b65db', onBubbleMine: '#ffffff', linkOnBubbleMine: '#ffffff' },
-    dark: { accent: '#5e9bff', onAccent: '#0b0b0d', tonalBg: '#172a48', railActiveBg: '#15243b', bubbleMine: '#2563d9', onBubbleMine: '#ffffff', linkOnBubbleMine: '#ffffff' },
-  },
-  // C 石墨(中性):不用彩色,主按钮是墨黑 / 深色下是浅灰,气泡是中性灰 —— 让内容和状态色(绿/红/黄)说话。
-  graphite: {
-    light: { accent: '#27272a', onAccent: '#ffffff', tonalBg: '#eceef1', railActiveBg: '#e3e5e9', bubbleMine: '#e3e5e9', onBubbleMine: '#1d2026', linkOnBubbleMine: '#1d2026' },
-    dark: { accent: '#e4e4e7', onAccent: '#111113', tonalBg: '#26262b', railActiveBg: '#232328', bubbleMine: '#2c2c31', onBubbleMine: '#ededef', linkOnBubbleMine: '#ededef' },
-  },
+export const ACCENT: { light: AccentTokens; dark: AccentTokens } = {
+  light: { accent: '#1b65db', onAccent: '#ffffff', tonalBg: '#edf3fe', railActiveBg: '#e6eefd', bubbleMine: '#1b65db', onBubbleMine: '#ffffff', linkOnBubbleMine: '#ffffff' },
+  dark: { accent: '#5e9bff', onAccent: '#0b0b0d', tonalBg: '#172a48', railActiveBg: '#15243b', bubbleMine: '#2563d9', onBubbleMine: '#ffffff', linkOnBubbleMine: '#ffffff' },
 };
-/** 🔴 换强调色只改这一行。 */
-export const ACCENT_SCHEME: AccentSchemeId = 'blue';
-const ACCENT = ACCENT_SCHEMES[ACCENT_SCHEME];
 /** 永远画在深色底上的强调(语音浮层的电平条):不随浅 / 深主题变。 */
 export const ACCENT_ON_DARK = ACCENT.dark.accent;
 
@@ -90,7 +68,7 @@ const DARK = {
   // 浮起的面(见 ELEVATION):深色下没有阴影可用,靠「亮一档的面 + 细边」把它从地面上分出来。
   floatingBg: '#1c1c20',
   floatingBorder: '#2e2e33',
-  // 强调色一族(accent / onAccent / tonalBg / railActiveBg / bubbleMine …)由文件顶部的 ACCENT_SCHEME 统一给出。
+  // 强调色一族(accent / onAccent / tonalBg / railActiveBg / bubbleMine …)由文件顶部的 ACCENT 统一给出。
   ...ACCENT.dark,
 };
 
