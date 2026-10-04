@@ -117,7 +117,9 @@ import { LEGACY_SESSION_ID } from './session-registry';
 export const authProfileId = (cfg: Pick<HubConfig, 'profileId'>): string => cfg.profileId ?? LEGACY_SESSION_ID;
 import { userMessagesPath } from './user-unread';
 import { pickDefaultNetworkId } from './user-admin';
-import { fetchAuthMe } from './user-admin-api';
+import { fetchAuthMe, forgetAuthMeFor } from './user-admin-api';
+import { SendTaskError, isNetworkScopedSendFailure } from './send-failure-reason';
+export { SendTaskError } from './send-failure-reason';
 import { stripHumanDms } from './human-dm';
 import { splitSystemNotices, stripSystemNotices } from './system-notice';
 import { createReplyInboxReader } from './inbox-cursor';
@@ -899,6 +901,21 @@ export function __setSendBoundsForTest(bounds: { headerMs?: number; totalMs?: nu
 /** Upper bound of one sendTask: identity lookup (only when network_id is unknown) + the request incl. body. */
 export const sendSettleBoundMs = (): number => HUB_TOOL_DEADLINE_MS + sendDeadlineMs;
 
+// #552 —— 发送把网络纠正过来后,把新的 network_id 落到这个账号上(App 装;手机 / 网页写 session-registry,
+// 不改当前账号)。没装 = 只改内存里的 cfg。
+type NetworkIdPersister = (cfg: HubConfig, networkId: string) => Promise<void> | void;
+let networkIdPersister: NetworkIdPersister | null = null;
+export function setNetworkIdPersister(fn: NetworkIdPersister | null): () => void {
+  networkIdPersister = fn;
+  return () => { if (networkIdPersister === fn) networkIdPersister = null; };
+}
+
+/**
+ * POST /api/task。#552:Hub 回 404 alias_not_found / 400 network_id_required / 403「access denied to requested
+ * network」时,很可能是 app 记着的网络过期了(登录时落盘的是个人网络,之后管理员把人拉进团队并授权 Agent)。
+ * 这时丢掉缓存的身份、重新读 /api/auth/me 判网络(pickDefaultNetworkId);网络**真变了**才用同一个
+ * client_request_id 再发**一次**(Hub 按它去重),并把新网络落盘。网络没变 / 第二次还失败 → 原样抛,绝不循环。
+ */
 export const sendTask = async (
   cfg: HubConfig,
   to: string,
@@ -906,6 +923,30 @@ export const sendTask = async (
   attachments?: TaskAttachment[],
   priority: TaskPriority = 'normal',
   clientRequestId = createDashboardRequestId(),
+): Promise<SendTaskResponse> => {
+  try {
+    return await sendTaskOnce(cfg, to, content, attachments, priority, clientRequestId);
+  } catch (err) {
+    if (!isNetworkScopedSendFailure(err)) throw err;
+    sendIdentityCache.delete(sendIdentityKey(cfg));
+    forgetAuthMeFor(cfg);
+    const identity = await fetchAuthIdentity(cfg);
+    const fresh = identity.networkId;
+    if (!fresh || fresh === err.networkId) throw err;
+    rememberSendIdentity(cfg, identity);
+    cfg.networkId = fresh;
+    try { void Promise.resolve(networkIdPersister?.(cfg, fresh)).catch(() => {}); } catch { /* persistence is best-effort */ }
+    return sendTaskOnce(cfg, to, content, attachments, priority, clientRequestId);
+  }
+};
+
+const sendTaskOnce = async (
+  cfg: HubConfig,
+  to: string,
+  content: string,
+  attachments: TaskAttachment[] | undefined,
+  priority: TaskPriority,
+  clientRequestId: string,
 ): Promise<SendTaskResponse> => {
   const started = Date.now();
   const dreqAt = dreqCreatedAt(clientRequestId);
@@ -1015,7 +1056,10 @@ export const sendTask = async (
     timing('ok');
     return { ...data, ok: true } as SendTaskResponse;
   }
-  const failure = !res.ok ? new Error(`HTTP ${res.status} on /api/task`) : !data?.ok ? new Error(String(data?.error ?? 'send failed')) : null;
+  const code = typeof data?.error === 'string' && data.error ? data.error : undefined;
+  const failure = !res.ok
+    ? new SendTaskError(`HTTP ${res.status} on /api/task${code ? ` (${code})` : ''}`, res.status, code, networkId)
+    : !data?.ok ? new SendTaskError(String(data?.error ?? 'send failed'), res.status, code, networkId) : null;
   if (failure) {
     timing('error', failure);
     throw failure;
