@@ -204,7 +204,7 @@
     },
     "test-resend-image/drive.mjs": {
       "kind": "stub",
-      "secs": 80
+      "secs": 57
     },
     "test-rules-split-editor/drive.mjs": {
       "kind": "stub",
