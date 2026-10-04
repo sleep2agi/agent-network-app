@@ -11,8 +11,13 @@
 // 诚实的做法是标「未送达」交用户决定重试(极端情况下可能重复发出,重复在聊天里
 // 可见,比静默丢失好)。绝不把「命运未知」呈现成「已送达」。
 //
-// 附件限制(v1·PR 注明):只持久化文本内容;图片的本地缓存 URI 不保证活过重启,
-// hadImage 标记让恢复后的气泡说明「图片附件未保存」,重试只发文本。
+// 附件(#527「图片发送失败，我点击重新发送它那个图片并不会去重新发送」):
+//   旧版只持久化文本 + hadImage 标记,任何「从 outbox 重建回显」(切会话再切回、两栏重挂、主题/密度
+//   重 key、杀 app 重开)都把图片丢了 —— 重试只发出「[附件] x.png」这行字。现在:
+//   - attachments 与气泡里的图同序,能活过重启的本地 uri(file:// 等,非 blob:/data:)和已传成功的
+//     hub 文件(uploaded)都落盘;重试复用 uploaded,不重传;
+//   - liveImages 是本进程内的原始 PickedImage(含 web/Tauri 的 Blob),重挂后靠它保住预览与重传;
+//   - 都拿不回来的图 = 丢了:重试拒发(绝不发出只剩文字的半条),见 resend-plan.ts。
 
 export interface OutboxEntry {
   id: string; // == ChatScreen 的 _localId,重试复用
@@ -22,9 +27,59 @@ export interface OutboxEntry {
   state: 'pending' | 'failed';
   hadImage?: boolean;
   priority?: 'high' | 'normal';
+  /** 发送时的「原图」开关;重试沿用它。 */
+  original?: boolean;
+  /** 与气泡里的图同序(#527)。缺省 = 纯文本消息,或旧版本落的盘(只有 hadImage)。 */
+  attachments?: OutboxAttachment[];
 }
 
+export interface OutboxUploaded {
+  file_id: string;
+  path: string;
+  url: string;
+  size: number;
+  mime: string;
+}
+
+export interface OutboxAttachment {
+  fileName: string;
+  mimeType: string;
+  fileSize?: number;
+  width?: number;
+  height?: number;
+  /** 能活过重启的本地 uri(blob:/data: 只在本进程有效,不落盘)。 */
+  uri?: string;
+  /** 这张已经传上 hub:重试直接用它的 file_id,不重传。name/mime 是上传时(压缩后)的那一份。 */
+  uploaded?: { name: string; mime: string; up: OutboxUploaded };
+}
+
+/** 本进程内的原图(PickedImage 形状;这里不 import attach.ts,保持纯模块)。 */
+export interface OutboxLiveImage {
+  uri: string;
+  fileName: string;
+  mimeType: string;
+  fileSize?: number;
+  width?: number;
+  height?: number;
+}
+
+/** blob:/data: 是进程内句柄(或巨大的内联字节),不能当「重开后还能读」的地址落盘。 */
+export const persistableUri = (uri: string | undefined): string | undefined =>
+  uri && !/^(blob:|data:)/i.test(uri) ? uri : undefined;
+
+export const describeAttachments = (imgs: readonly OutboxLiveImage[]): OutboxAttachment[] =>
+  imgs.map(img => {
+    const a: OutboxAttachment = { fileName: img.fileName, mimeType: img.mimeType };
+    if (typeof img.fileSize === 'number') a.fileSize = img.fileSize;
+    if (typeof img.width === 'number') a.width = img.width;
+    if (typeof img.height === 'number') a.height = img.height;
+    const uri = persistableUri(img.uri);
+    if (uri) a.uri = uri;
+    return a;
+  });
+
 let entries: Record<string, OutboxEntry> = {};
+let liveImages: Record<string, OutboxLiveImage[]> = {};
 let persist: ((all: OutboxEntry[]) => void) | null = null;
 
 const listeners = new Set<() => void>();
@@ -69,6 +124,7 @@ export function outboxEntry(id: string): OutboxEntry | undefined {
  * until ChatScreen reconciles against the authoritative task list. */
 export function initOutbox(saved: OutboxEntry[] | null, persistFn: (all: OutboxEntry[]) => void): void {
   entries = {};
+  liveImages = {};
   for (const e of saved ?? []) {
     if (!e || !e.id || !e.alias) continue;
     // Pre-dreq app versions persisted every ambiguous timeout/restart as a
@@ -85,9 +141,14 @@ export function initOutbox(saved: OutboxEntry[] | null, persistFn: (all: OutboxE
   flush();
 }
 
-/** 提交即登记(网络尝试之前调)。 */
-export function outboxAdd(e: OutboxEntry): void {
-  entries[e.id] = e;
+/** 提交即登记(网络尝试之前调)。带图时传 imgs:描述落盘,原件留在本进程(#527)。 */
+export function outboxAdd(e: OutboxEntry, imgs?: readonly OutboxLiveImage[]): void {
+  if (imgs && imgs.length) {
+    entries[e.id] = { ...e, hadImage: true, attachments: e.attachments ?? describeAttachments(imgs) };
+    liveImages[e.id] = [...imgs];
+  } else {
+    entries[e.id] = e;
+  }
   flush();
 }
 
@@ -95,6 +156,40 @@ export function outboxAdd(e: OutboxEntry): void {
 export function outboxRemove(id: string): void {
   if (!entries[id]) return;
   delete entries[id];
+  delete liveImages[id];
+  flush();
+}
+
+/** 本进程内这条消息的原图(重挂后恢复预览、重传用)。重启后为 undefined。 */
+export function outboxLiveImages(id: string): OutboxLiveImage[] | undefined {
+  return liveImages[id];
+}
+
+/** 第 index 张已传上 hub(#527):落盘,之后的重试(含杀 app 重开后)复用 file_id、不重传。 */
+export function outboxRecordUpload(id: string, index: number, name: string, mime: string, up: OutboxUploaded): void {
+  const e = entries[id];
+  const list = e?.attachments;
+  if (!e || !list || index < 0 || index >= list.length) return;
+  const { file_id, path, url, size } = up;
+  const next = list.map((a, i) => (i === index ? { ...a, uploaded: { name, mime, up: { file_id, path, url, size, mime: up.mime } } } : a));
+  entries[id] = { ...e, attachments: next };
+  flush();
+}
+
+/** 第 index 张已传上的 hub 文件,没有则 undefined。 */
+export function outboxUploadedAt(id: string, index: number): OutboxAttachment['uploaded'] {
+  return entries[id]?.attachments?.[index]?.uploaded;
+}
+
+/** 失败消息里用户删掉第 index 张(与气泡同步,否则下标错位)。 */
+export function outboxRemoveAttachment(id: string, index: number): void {
+  const e = entries[id];
+  if (!e) return;
+  if (e.attachments) {
+    const attachments = e.attachments.filter((_, i) => i !== index);
+    entries[id] = { ...e, attachments, hadImage: attachments.length > 0 };
+  }
+  if (liveImages[id]) liveImages[id] = liveImages[id].filter((_, i) => i !== index);
   flush();
 }
 
@@ -126,6 +221,7 @@ export function outboxForAlias(alias: string): OutboxEntry[] {
 /** Test-only. */
 export function __resetOutboxForTest(): void {
   entries = {};
+  liveImages = {};
   persist = null;
   listeners.clear();
 }

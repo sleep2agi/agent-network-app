@@ -163,6 +163,9 @@ export const chatTranslations = {
   'chat.forwardPartialUncertain': ['已转发 {sent}/{total} 条，这一条可能已经送达。为避免重复转发，请先在目标会话确认。', 'Forwarded {sent}/{total}. This message may have arrived. Check the destination before forwarding again.'],
   'chat.searchHint': ['输入关键词,只搜「{alias}」这个会话。Enter 下一条,Shift+Enter 上一条,Esc 关闭。', 'Search only the chat with {alias}. Enter: next, Shift+Enter: previous, Esc: close.'],
   'chat.searchLimit': ['最近 {count} 条里没有找到;更早的历史请继续{gesture}后再搜', 'No match in the last {count} messages. {gesture} to load older history, then search again.'],
-  'chat.restoredTextOnly': ['（图片附件未保存·重试仅发文本）', '(Images not saved · Retry sends text only)'],
+  'chat.restoredTextOnly': ['（图片没有保存下来·无法重发这条）', '(Images were not saved · This message cannot be resent)'],
+  'chat.imagesLostTitle': ['图片已丢失', 'Images lost'],
+  'chat.imagesLostBody': ['这条消息里的图片没有保存下来，无法重新发送（不会只发文字）。请删掉这条，重新选择图片发送。', 'The images in this message were not saved, so it cannot be resent (text alone is never sent). Delete it and pick the images again.'],
+  'chat.deleteUnsent': ['删除这条', 'Delete message'],
 } satisfies Record<string, readonly [string, string]>;
 registerTranslations(chatTranslations);

@@ -20,7 +20,8 @@ import { proactiveItemsForAgent } from './proactive-messages';
 import { replyQuoteFor } from './reply-quote';
 import { nextFocusStep } from './message-focus';
 import { bubbleLayout, desktopBubbleCap } from './bubble-layout';
-import { notifyOutboxListeners, outboxAdd, outboxEntry, outboxForAlias, outboxMarkFailed, outboxMarkPending, outboxRemove, subscribeOutbox } from './outbox';
+import { notifyOutboxListeners, outboxAdd, outboxEntry, outboxForAlias, outboxLiveImages, outboxMarkFailed, outboxMarkPending, outboxRemove, outboxRemoveAttachment, subscribeOutbox } from './outbox';
+import { imagesForResend, planResend, uploadForSend, type ResendImage } from './resend-plan';
 import { beginSend, endSend, orphanedPendingIds, settleEchoes } from './send-lifecycle';
 import { recordSendBubble } from './send-timing';
 import { mayApplySendResult, shouldExposeSendFailure } from './send-reconciliation';
@@ -45,7 +46,7 @@ import { attachmentsFromClipboard, isTauriDesktop, releaseClipboardAttachment } 
 import { pointerUi } from './pointer-ui';
 import { attachmentsFromFiles, filesFromTransfer, plusPressAction, transferHasFiles } from './desktop-file-intake';
 import { addToDraft, draftCountLabel, draftImageCount, isDraftImage, MAX_DRAFT_IMAGES, oversizeMessage, remainingImageSlots, removeFromDraft, sendBlocker, willCompressBeforeUpload } from './image-draft';
-import { createUploadMemo, removeAttachmentAt, runUploadQueue, UPLOAD_CONCURRENCY, uploadFailureSummary, withUploadState, type UploadState } from './upload-queue';
+import { createUploadMemo, removeAttachmentAt, UPLOAD_CONCURRENCY, withUploadState, type UploadState } from './upload-queue';
 import type { UploadedFile } from './attach';
 import { colors, onThemeChange, radius, spacing } from './theme';
 import { popoutHeaderChrome, type PopoutChrome } from './window-shell';
@@ -121,14 +122,17 @@ type ChatItem = HubTask & {
   _pending?: boolean;
   _failed?: boolean;
   _img?: PickedImage;
-  _imgs?: PickedImage[];
+  /** 回显里的图。从 outbox 重建时可能只剩 hub 上那份(hubFileId,预览带令牌读)——#527。 */
+  _imgs?: (PickedImage & { hubFileId?: string })[];
   /** 多图发送:与 _imgs 同序的逐张上传状态(queued/uploading/done/failed)。 */
   _uploads?: UploadState[];
   /** 有附件没传上时的汇总;此时整条不发,等用户重试或移除失败的那几张。 */
   _uploadError?: string;
   /** 发送时的「原图」开关;重试沿用它。 */
   _original?: boolean;
-  /** PR3 review①:恢复自 outbox 且原带图片——说明文案走这个标志单独渲染,
+  /** #527:从 outbox 重建时有图拿不回来(旧版本落的盘 / web 重开后既没传上也没有可读的本地 uri)。
+   *  此时重试拒发——绝不发出只剩文字的半条。
+   *  PR3 review①:说明文案走这个标志单独渲染,
    *  🔴 绝不拼进 content:content 是「要发出去的字」,注解是「给用户看的字」,
    *  共用一个字段迟早串(重试会把注解原样发给对方 agent)。 */
   _restoredNoImage?: boolean;
@@ -203,15 +207,21 @@ const pushTextRefs = (text: string, push: (id: string, name: string, mime?: stri
 const sentAttachmentViews = (item: ChatItem, serverUrl: string): AttachmentView[] => {
   const localAttachments = item._imgs ?? (item._img ? [item._img] : []);
   if (localAttachments.length) {
-    return localAttachments.map((img, localIndex) => ({
-      localIndex,
-      key: img.uri,
-      name: img.fileName,
-      isImage: isImageLike(img.fileName, img.mimeType),
-      isVideo: isVideoLike(img.fileName, img.mimeType),
-      uri: img.uri,
-      size: img.fileSize,
-    }));
+    return localAttachments.map((img, localIndex) => {
+      // #527:重建的回显里本机已没有原件、只剩 hub 那份 —— 预览照常画(走带令牌的 /api/files)。
+      const hubFileId = (img as ResendImage).hubFileId;
+      return {
+        localIndex,
+        key: hubFileId ?? img.uri,
+        name: img.fileName,
+        isImage: isImageLike(img.fileName, img.mimeType),
+        isVideo: isVideoLike(img.fileName, img.mimeType),
+        uri: hubFileId ? `${serverUrl}/api/files/${hubFileId}` : img.uri,
+        needsAuth: hubFileId ? true : undefined,
+        mime: img.mimeType,
+        size: img.fileSize,
+      };
+    });
   }
   const out: AttachmentView[] = [];
   const push = makePusher(serverUrl, out);
@@ -492,22 +502,28 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
   // initial fetch + polling (fires fn() right after this effect → limit=PAGE).
   // PR3 判据C:同时把该会话的 outbox 未送达条目并回列表(上次 app 被杀时留下的)。
   // 恢复项带 _localId → :188 的 merge 会让它们在轮询重载中存活;_failed → 渲染成
-  // 「未送达 · 点击重试」,retry 复用同一 id。恢复项无 _img(附件不持久化,见 outbox.ts)。
+  // 「未送达 · 点击重试」,retry 复用同一 id。#527:恢复项带回它的图(imagesForResend),
+  // 否则重试只会发出「[附件] x.png」这行字。
   useEffect(() => {
     limitRef.current = PAGE;
     // #518: a 'pending' entry nobody in this process is sending (the app was killed mid-send, or the
     // instance that started it let go) would otherwise paint 「发送中…」 forever. It becomes 「未送达」;
     // the load below still retires it if the hub has its client_request_id.
     orphanedPendingIds(outboxForAlias(alias)).forEach(outboxMarkFailed);
-    const restored = outboxForAlias(alias).map<ChatItem>((e) => ({
-      content: e.content, // 保持原文——重试发的就是它
-      created_at: new Date(e.createdAt).toISOString(),
-      _localId: e.id,
-      _pending: e.state === 'pending',
-      _failed: e.state === 'failed',
-      _restoredNoImage: !!e.hadImage,
-      _priority: e.priority ?? 'normal',
-    }));
+    const restored = outboxForAlias(alias).map<ChatItem>((e) => {
+      const { imgs, lost } = imagesForResend(e, outboxLiveImages(e.id), cfg.serverUrl);
+      return {
+        content: e.content, // 保持原文——重试发的就是它
+        created_at: new Date(e.createdAt).toISOString(),
+        _localId: e.id,
+        _pending: e.state === 'pending',
+        _failed: e.state === 'failed',
+        ...(imgs.length ? { _imgs: imgs as ChatItem['_imgs'] } : {}),
+        _restoredNoImage: lost > 0,
+        _original: !!e.original,
+        _priority: e.priority ?? 'normal',
+      };
+    });
     // Opening invalidates anything still in flight for the previous
     // conversation, then hands back this one's cached content.
     const token = requestGate.open(conversationKeyFor);
@@ -1540,27 +1556,35 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
           if (!mayTouchVisibleState()) return;
           setMessages(prev => prev.map(t => (t._localId === localId ? { ...t, _uploads: withUploadState(t._uploads, imgs.length, index, state) } : t)));
         };
-        const run = await runUploadQueue(imgs, async img => {
-          const hit = uploadMemo.get(cfg.serverUrl, img.uri, original);
-          if (hit) return hit;
-          const prepared = await prepareForUpload(img, original);
-          const tooBig = oversizeMessage(prepared);
-          if (tooBig) throw new Error(tooBig);
-          const done = { img: prepared, up: await uploadImage(cfg, prepared) };
-          uploadMemo.set(cfg.serverUrl, img.uri, original, done);
-          return done;
-        }, { concurrency: UPLOAD_CONCURRENCY, onState: setState });
-        if (run.failed.length) {
+        // #527:已传上的那张(记在 outbox,重挂/重开后也认)复用 file_id,不重传;没传上的才传。
+        const run = await uploadForSend<PickedImage & ResendImage>({
+          localId,
+          imgs,
+          upload: async img => {
+            const prepared = await prepareForUpload(img, original);
+            const tooBig = oversizeMessage(prepared);
+            if (tooBig) throw new Error(tooBig);
+            return { img: prepared, up: await uploadImage(cfg, prepared) };
+          },
+          memo: {
+            get: img => uploadMemo.get(cfg.serverUrl, img.uri, original),
+            set: (img, done) => uploadMemo.set(cfg.serverUrl, img.uri, original, done),
+          },
+          concurrency: UPLOAD_CONCURRENCY,
+          onState: setState,
+          fallbackError: t('chat.attachmentFailed'),
+        });
+        if (!run.ok) {
           // 🔴 一张没传上就整条不发:绝不静默发出缺图的半条消息。sendTask 根本没调用,
           // 不存在「hub 其实收到了」的歧义,直接标未送达,让用户重试(已传的不重传)或移除失败的那几张。
-          const summary = uploadFailureSummary(imgs.map(img => img.fileName), run.errors) ?? t('chat.attachmentFailed');
+          const summary = run.summary;
           outboxMarkFailed(localId);
           if (mayTouchVisibleState()) {
             setMessages(prev => prev.map(t => (t._localId === localId ? { ...t, _pending: false, _failed: true, _uploadError: summary } : t)));
           }
           return;
         }
-        const uploaded = run.results as { img: PickedImage; up: UploadedFile }[];
+        const uploaded = run.uploaded;
         attachments = uploaded.map(({ img, up }) => toTaskAttachment(img, up));
         outgoing = `${content}${uploaded.map(({ img, up }) => attachmentTextHint(img, up)).join('')}`;
       }
@@ -1665,7 +1689,7 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
     // PR3 判据C:id 跨次启动唯一(重开恢复的旧 local-N 不能和新 id 撞车);
     // 🔴 提交即落盘(网络尝试之前)——发送中被杀,重开后它还在。
     const localId = createDashboardRequestId();
-    outboxAdd({ id: localId, alias, content, createdAt: Date.now(), state: 'pending', hadImage: imgs.length > 0, priority });
+    outboxAdd({ id: localId, alias, content, createdAt: Date.now(), state: 'pending', hadImage: imgs.length > 0, priority, original }, imgs);
     setMessages(prev => [
       { content, created_at: new Date().toISOString(), _localId: localId, _pending: true, _imgs: imgs, _priority: priority, _original: original },
       ...prev,
@@ -1674,7 +1698,20 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
   };
 
   const retry = (item: ChatItem) => {
-    if (!item._localId || !item.content) return;
+    // #527:重试发的是「这条消息」——字和图一起。图拿不回来就不发,让用户删掉重选(绝不只发文字)。
+    const plan = planResend(item);
+    if (plan.kind === 'nothing' || !item._localId) return;
+    if (plan.kind === 'images_lost') {
+      const id = item._localId;
+      Alert.alert(t('chat.imagesLostTitle'), t('chat.imagesLostBody'), [
+        { text: t('chat.cancel'), style: 'cancel' },
+        { text: t('chat.deleteUnsent'), style: 'destructive', onPress: () => {
+          outboxRemove(id);
+          setMessages(prev => prev.filter(m => m._localId !== id));
+        } },
+      ]);
+      return;
+    }
     const retriedAt = Date.now();
     outboxMarkPending(item._localId, retriedAt); // 重试中被杀照样恢复(仍在盘上)
     setMessages(prev =>
@@ -1684,12 +1721,13 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
       ),
     );
     const priority = item._priority ?? outboxForAlias(alias).find(e => e.id === item._localId)?.priority ?? 'normal';
-    doSend(item.content, item._localId, item._imgs ?? (item._img ? [item._img] : []), priority, !!item._original);
+    doSend(plan.content, item._localId, plan.imgs, priority, !!(item._original ?? outboxEntry(item._localId)?.original));
   };
 
   // 失败消息里移除一张没传上的附件(微信:「重发」或「删掉这张」)。只在 _failed 时可用。
   const removeFailedAttachment = (item: ChatItem, index: number) => {
     if (!item._localId || !item._failed) return;
+    outboxRemoveAttachment(item._localId, index); // outbox 与气泡同序,否则下次重试下标错位(#527)
     setMessages(prev => prev.map(t => {
       if (t._localId !== item._localId) return t;
       const current = t._imgs ?? (t._img ? [t._img] : []);
