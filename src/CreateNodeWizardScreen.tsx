@@ -7,7 +7,7 @@ import { createRequestVerdict, timeoutMessage, type CreateRequestVerdict } from 
 import { colors, onThemeChange, spacing, radius } from './theme';
 import { advancedExpanded, advancedRuntimesOf, primaryRuntimes, runtimeDisplayLabel, showsAdvancedToggle, type WizardRuntime } from './wizard-runtime-groups';
 import { PANE_BACK_TEST_ID, paneShowsBack } from './pane-header';
-import { buildCreateNodeSpec, describeCopresenceError } from './create-node-request';
+import { buildCreateNodeSpec, describeCopresenceError, NO_PARAMS_LINE, wizardParamsFor } from './create-node-request';
 import { defaultWorkdir, describeWorkdirError, randomHex6, workdirError, workdirForRequest, workdirRootOf, workdirSlug } from './create-node-workdir';
 import { buttonStyle, buttonTextStyle } from './elevation';
 
@@ -113,7 +113,6 @@ export default function CreateNodeWizardScreen({ cfg, daemon, onBack, onExit, de
   const [permissionMode, setPermissionMode] = useState('default');
   const [maxTurns, setMaxTurns] = useState('');
   const [budget, setBudget] = useState('');
-  const [timeoutMs, setTimeoutMs] = useState('');
   // 工作目录:null = 没改过,跟着名字走(<root>/<name>);改过之后固定为用户填的值。
   const [workdirEdited, setWorkdirEdited] = useState<string | null>(null);
   const [workdirOpen, setWorkdirOpen] = useState(false);
@@ -182,6 +181,8 @@ export default function CreateNodeWizardScreen({ cfg, daemon, onBack, onExit, de
 
   // Derived: runtime details + nav gates
   const runtime = RUNTIMES.find(r => r.id === runtimeId) || RUNTIMES[0];
+  // #591 —— 第 4 步「参数」只摆这个 runtime 真会读的设置。
+  const params = wizardParamsFor(runtimeId);
   // Mirror hub regex — the UX must surface exactly what the hub will
   // accept, not a looser local rule. A looser client-side check would
   // let the user submit names that the server then rejects, turning
@@ -271,7 +272,7 @@ export default function CreateNodeWizardScreen({ cfg, daemon, onBack, onExit, de
     // flags.copresence:true 只给「Codex（TUI 共存）」(codex-app-server),见 create-node-request.ts。
     const node_spec: CreateNodeRequest['node_spec'] = buildCreateNodeSpec({
       name, runtimeId, model, runtimeModels: runtime.models,
-      permissionMode, maxTurns, budget, timeoutMs,
+      permissionMode, maxTurns, budget,
       workdirField: workdirForRequest(workdirRoot, workdir),
     });
     const res = await createNode(cfg, {
@@ -458,63 +459,68 @@ export default function CreateNodeWizardScreen({ cfg, daemon, onBack, onExit, de
             )}
 
             {step === 3 && (
-              <View style={styles.section}>
-                <Text style={styles.label}>permissionMode</Text>
-                <View style={styles.choiceList}>
-                  {PERMISSION_MODES.map(m => (
-                    <Pressable
-                      key={m}
-                      onPress={() => setPermissionMode(m)}
-                      style={({ pressed }) => [
-                        styles.choiceRow,
-                        permissionMode === m && styles.choiceRowSelected,
-                        pressed && { opacity: 0.85 },
-                      ]}
-                    >
-                      <Text style={[styles.choiceText, permissionMode === m && styles.choiceTextSelected]}>
-                        {m}
-                      </Text>
-                      {permissionMode === m ? <Ionicons name="checkmark" size={18} color={colors.accent} /> : null}
-                    </Pressable>
-                  ))}
-                </View>
+              <View style={styles.section} testID="create-params-step">
+                {/* #591 —— 只显示这个 runtime 真会读的设置(矩阵与依据见 create-node-request.ts)。 */}
+                {params.length === 0 ? (
+                  <Text style={styles.noParams} testID="create-params-none">{NO_PARAMS_LINE}</Text>
+                ) : null}
+                {params.includes('permissionMode') ? (
+                  <>
+                    <Text style={styles.label}>permissionMode</Text>
+                    <View style={styles.choiceList} testID="create-param-permissionMode">
+                      {PERMISSION_MODES.map(m => (
+                        <Pressable
+                          key={m}
+                          onPress={() => setPermissionMode(m)}
+                          style={({ pressed }) => [
+                            styles.choiceRow,
+                            permissionMode === m && styles.choiceRowSelected,
+                            pressed && { opacity: 0.85 },
+                          ]}
+                        >
+                          <Text style={[styles.choiceText, permissionMode === m && styles.choiceTextSelected]}>
+                            {m}
+                          </Text>
+                          {permissionMode === m ? <Ionicons name="checkmark" size={18} color={colors.accent} /> : null}
+                        </Pressable>
+                      ))}
+                    </View>
+                  </>
+                ) : null}
 
-                <Text style={[styles.label, { marginTop: spacing.lg }]}>限制（可空）</Text>
-                <View style={styles.row3}>
-                  <View style={styles.row3Cell}>
-                    <Text style={styles.subLabel}>maxTurns</Text>
-                    <TextInput
-                      value={maxTurns}
-                      onChangeText={setMaxTurns}
-                      placeholder="—"
-                      placeholderTextColor={colors.textMuted}
-                      style={styles.input}
-                      keyboardType="numeric"
-                    />
-                  </View>
-                  <View style={styles.row3Cell}>
-                    <Text style={styles.subLabel}>budget</Text>
-                    <TextInput
-                      value={budget}
-                      onChangeText={setBudget}
-                      placeholder="—"
-                      placeholderTextColor={colors.textMuted}
-                      style={styles.input}
-                      keyboardType="numeric"
-                    />
-                  </View>
-                  <View style={styles.row3Cell}>
-                    <Text style={styles.subLabel}>timeout</Text>
-                    <TextInput
-                      value={timeoutMs}
-                      onChangeText={setTimeoutMs}
-                      placeholder="—"
-                      placeholderTextColor={colors.textMuted}
-                      style={styles.input}
-                      keyboardType="numeric"
-                    />
-                  </View>
-                </View>
+                {params.includes('maxTurns') || params.includes('budget') ? (
+                  <>
+                    <Text style={[styles.label, params.includes('permissionMode') && { marginTop: spacing.lg }]}>限制（可空）</Text>
+                    <View style={styles.row3}>
+                      {params.includes('maxTurns') ? (
+                        <View style={styles.row3Cell} testID="create-param-maxTurns">
+                          <Text style={styles.subLabel}>maxTurns</Text>
+                          <TextInput
+                            value={maxTurns}
+                            onChangeText={setMaxTurns}
+                            placeholder="—"
+                            placeholderTextColor={colors.textMuted}
+                            style={styles.input}
+                            keyboardType="numeric"
+                          />
+                        </View>
+                      ) : null}
+                      {params.includes('budget') ? (
+                        <View style={styles.row3Cell} testID="create-param-budget">
+                          <Text style={styles.subLabel}>budget（美元）</Text>
+                          <TextInput
+                            value={budget}
+                            onChangeText={setBudget}
+                            placeholder="—"
+                            placeholderTextColor={colors.textMuted}
+                            style={styles.input}
+                            keyboardType="numeric"
+                          />
+                        </View>
+                      ) : null}
+                    </View>
+                  </>
+                ) : null}
               </View>
             )}
 
@@ -529,13 +535,18 @@ export default function CreateNodeWizardScreen({ cfg, daemon, onBack, onExit, de
                   <SummaryRow k="Runtime" v={runtimeDisplayLabel(RUNTIMES, runtime)} />
                   <Divider />
                   <SummaryRow k="模型" v={model || runtime.models[0] || '跟随宿主登录'} />
-                  <Divider />
-                  <SummaryRow k="permissionMode" v={permissionMode} />
-                  <Divider />
-                  <SummaryRow
-                    k="maxTurns / budget / timeout"
-                    v={`${maxTurns || '—'} / ${budget || '—'} / ${timeoutMs || '—'}`}
-                  />
+                  {params.includes('permissionMode') ? (
+                    <>
+                      <Divider />
+                      <SummaryRow k="permissionMode" v={permissionMode} />
+                    </>
+                  ) : null}
+                  {params.includes('maxTurns') || params.includes('budget') ? (
+                    <>
+                      <Divider />
+                      <SummaryRow k="maxTurns / budget" v={`${maxTurns || '—'} / ${budget || '—'}`} />
+                    </>
+                  ) : null}
                   {workdirRoot ? (
                     <>
                       <Divider />
@@ -709,6 +720,7 @@ const makeStyles = () => StyleSheet.create({
   label: { color: colors.textMuted, fontSize: 12 },
   subLabel: { color: colors.textMuted, fontSize: 11 },
   hint: { color: colors.textMuted, fontSize: 11 },
+  noParams: { color: colors.textMuted, fontSize: 14, lineHeight: 20 },
   hintErr: { color: colors.failed },
 
   input: {

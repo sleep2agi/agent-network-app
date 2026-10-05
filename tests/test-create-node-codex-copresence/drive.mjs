@@ -94,8 +94,9 @@ for (const vp of VIEWPORTS) {
     const a = await submit(page, 'Codex（TUI 共存）', 'ok');
     ck(`${vp.name}: Codex（TUI 共存） → runtime codex-app-server, flags.copresence === true`,
       a?.node_spec?.runtime === 'codex-app-server' && a?.node_spec?.flags?.copresence === true, JSON.stringify(a?.node_spec));
-    ck(`${vp.name}: co-presence request keeps permissionMode, sends no model`,
-      a?.node_spec?.flags?.permissionMode === 'default' && !('model' in (a?.node_spec ?? {})));
+    // #591:codex-app-server 不读 permissionMode → 不再发,flags 只剩 copresence。
+    ck(`${vp.name}: co-presence request sends only flags.copresence, no model`,
+      JSON.stringify(a?.node_spec?.flags) === '{"copresence":true}' && !('model' in (a?.node_spec ?? {})));
 
     const b = await submit(page, 'Claude Agent SDK', 'ok');
     ck(`${vp.name}: Claude Agent SDK → no copresence key`, b?.node_spec?.runtime === 'claude-agent-sdk' && !('copresence' in (b?.node_spec?.flags ?? {})), JSON.stringify(b?.node_spec?.flags));
