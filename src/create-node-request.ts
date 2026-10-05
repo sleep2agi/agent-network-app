@@ -14,6 +14,50 @@ export function copresenceFlags(runtimeId: string): { copresence?: true } {
   return COPRESENCE_FLAG_RUNTIMES.includes(runtimeId) ? { copresence: true } : {};
 }
 
+/** 向导第 4 步「参数」可能出现的设置。 */
+export type WizardParam = 'permissionMode' | 'maxTurns' | 'budget';
+
+/**
+ * #591 —— 每个 runtime 在向导里显示(并发送)哪些参数。Hub 对 7 个 runtime 一视同仁地收
+ * permissionMode/maxTurns/budget/timeout(server/src/create-node-validate.ts:54 FLAG_KEYS),daemon 原样
+ * 写进子节点 config.flags(agent-node/src/runtime/create-node-daemon.ts childConfigFieldsFromSpec)——
+ * **收下不等于生效**。谁真读,看 agent-network 仓 origin/main(eee23141)的消费点:
+ *
+ *   claude-agent-sdk  permissionMode  agent-node/src/cli.ts:2804(→ SDK options.permissionMode)
+ *                     maxTurns        agent-node/src/cli.ts:779 / :2815
+ *                     budget          agent-node/src/cli.ts:787 / :2873(→ maxBudgetUsd,美元)
+ *   codex-sdk         只读 timeout(cli.ts:846 / :3390);不读 permissionMode/maxTurns/budget
+ *   codex-app-server  一个都不读(processWithCodexAppServer cli.ts:3859 不传任何 flags)
+ *   grok-build-acp    一个都不读(超时走 flags.grokAcpTimeoutMs,cli.ts:4104)
+ *   grok-build-cli    maxTurns 只在无头通道读(cli.ts:4987);共存通道见到 maxTurns 直接拒绝启动
+ *                     (cli.ts:4326-4333)——向导里它就是「共存模式」,所以不显示
+ *   opencode-cli      只读 timeout(runtime/opencode-timeout.ts:39)
+ *   claude-code-cli   不走 agent-node;anet 启动器只读 dangerouslySkipPermissions / teammateMode
+ *                     (agent-network/bin/cli.ts:7324 / :7336)
+ *
+ * 🔴 timeout 对谁都不显示:Hub 只收 1..86400 的整数(create-node-validate.ts:131,看上去是秒),
+ *    agent-node 却按**毫秒**读(cli.ts:812-818 默认 "300000";config-apply.ts:161 也写明 ms)。
+ *    在向导里填 600(以为 10 分钟)= 0.6 秒超时,每个任务都失败;想填真正的毫秒数又过不了 Hub。
+ *    单位对齐之前,不让用户在这里设它(各 runtime 用自己的默认值:claude/codex 300s、opencode 30min)。
+ * 不在表里的 runtime ⇒ 空:我们说不清它读什么,就不给它摆一个旋钮。
+ */
+export const WIZARD_RUNTIME_PARAMS: Readonly<Record<string, readonly WizardParam[]>> = {
+  'claude-agent-sdk': ['permissionMode', 'maxTurns', 'budget'],
+  'codex-sdk': [],
+  'codex-app-server': [],
+  'grok-build-acp': [],
+  'grok-build-cli': [],
+  'opencode-cli': [],
+  'claude-code-cli': [],
+};
+
+export function wizardParamsFor(runtimeId: string): readonly WizardParam[] {
+  return WIZARD_RUNTIME_PARAMS[runtimeId] ?? [];
+}
+
+/** 没有适用参数时,第 4 步只显示这一行。 */
+export const NO_PARAMS_LINE = '这个 runtime 没有额外参数，直接下一步';
+
 export interface CreateNodeSpecInput {
   name: string;
   runtimeId: string;
@@ -23,7 +67,6 @@ export interface CreateNodeSpecInput {
   permissionMode: string;
   maxTurns: string;
   budget: string;
-  timeoutMs: string;
   /** workdirForRequest(...) 的结果:{} 或 { workdir }。 */
   workdirField: { workdir?: string };
 }
@@ -39,6 +82,15 @@ export interface CreateNodeSpec {
 export function buildCreateNodeSpec(i: CreateNodeSpecInput): CreateNodeSpec {
   const numOrUndef = (v: string) => (v.trim() === '' ? undefined : Number(v));
   const model = i.model || i.runtimeModels[0];
+  // #591 —— 只发这个 runtime 真会读的设置(向导第 4 步也只显示这些)。用户先在 Claude 下填了
+  // maxTurns 再切到 Codex,那个值不能跟着溜进请求。
+  const params = wizardParamsFor(i.runtimeId);
+  const flags: Record<string, unknown> = {
+    ...(params.includes('permissionMode') ? { permissionMode: i.permissionMode } : {}),
+    ...(params.includes('maxTurns') && numOrUndef(i.maxTurns) !== undefined ? { maxTurns: numOrUndef(i.maxTurns) } : {}),
+    ...(params.includes('budget') && numOrUndef(i.budget) !== undefined ? { budget: numOrUndef(i.budget) } : {}),
+    ...copresenceFlags(i.runtimeId),
+  };
   return {
     name: i.name.trim(),
     runtime: i.runtimeId,
@@ -46,13 +98,9 @@ export function buildCreateNodeSpec(i: CreateNodeSpecInput): CreateNodeSpec {
     // 的 models 为空数组，跟随宿主 TUI 登录态 —— 此时必须**省略**字段，
     // 传空串仍会被 min(1) 拒。
     ...(model ? { model } : {}),
-    flags: {
-      permissionMode: i.permissionMode,
-      ...(numOrUndef(i.maxTurns) !== undefined ? { maxTurns: numOrUndef(i.maxTurns) } : {}),
-      ...(numOrUndef(i.budget) !== undefined ? { budget: numOrUndef(i.budget) } : {}),
-      ...(numOrUndef(i.timeoutMs) !== undefined ? { timeout: numOrUndef(i.timeoutMs) } : {}),
-      ...copresenceFlags(i.runtimeId),
-    },
+    // flags 在 Hub(create-node-validate.ts buildAnetArgs)和 daemon(childConfigFieldsFromSpec)都是可选的;
+    // 没有适用项就整个不发,而不是发一个空对象。
+    ...(Object.keys(flags).length ? { flags } : {}),
     ...i.workdirField,
   };
 }

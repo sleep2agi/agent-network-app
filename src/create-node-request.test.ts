@@ -7,20 +7,21 @@ import { createRequestVerdict } from './create-request-status';
 let passed = 0, total = 0;
 const check = (name: string, ok: boolean) => { total++; if (ok) { passed++; console.log('✅', name); } else { console.error('❌', name); } };
 
-const base = { name: ' demo ', model: '', permissionMode: 'default', maxTurns: '', budget: '', timeoutMs: '', workdirField: {} };
+const base = { name: ' demo ', model: '', permissionMode: 'default', maxTurns: '', budget: '', workdirField: {} };
 
 // ── 请求体 ──
 const codex = buildCreateNodeSpec({ ...base, runtimeId: 'codex-app-server', runtimeModels: [] });
 check('🔴 codex-app-server → flags.copresence === true', codex.flags?.copresence === true);
-check('codex-app-server keeps permissionMode and omits model (co-presence follows the TUI login)', codex.flags?.permissionMode === 'default' && !('model' in codex) && codex.runtime === 'codex-app-server' && codex.name === 'demo');
+// #591:codex-app-server 不读 permissionMode,不再发(见 create-node-params.test.ts)。
+check('codex-app-server sends no permissionMode and omits model (co-presence follows the TUI login)', !('permissionMode' in (codex.flags ?? {})) && !('model' in codex) && codex.runtime === 'codex-app-server' && codex.name === 'demo');
 for (const rt of ['claude-agent-sdk', 'codex-sdk', 'grok-build-acp', 'claude-code-cli', 'grok-build-cli', 'opencode-cli']) {
   const s = buildCreateNodeSpec({ ...base, runtimeId: rt, runtimeModels: ['m1'] });
-  check(`${rt} → no copresence key at all (hub rejects it for other runtimes)`, s.flags !== undefined && !('copresence' in s.flags));
+  check(`${rt} → no copresence key at all (hub rejects it for other runtimes)`, !('copresence' in (s.flags ?? {})));
 }
 check('copresenceFlags is the single switch', JSON.stringify(copresenceFlags('codex-app-server')) === '{"copresence":true}' && JSON.stringify(copresenceFlags('codex-sdk')) === '{}');
-const full = buildCreateNodeSpec({ ...base, runtimeId: 'claude-agent-sdk', runtimeModels: ['deepseek-v4-pro'], maxTurns: '5', budget: ' ', timeoutMs: '60000', workdirField: { workdir: '/home/alice/demo' } });
-check('other fields unchanged: first suggested model, numeric flags, blank omitted, workdir passed through',
-  full.model === 'deepseek-v4-pro' && full.flags?.maxTurns === 5 && !('budget' in (full.flags ?? {})) && full.flags?.timeout === 60000 && full.workdir === '/home/alice/demo');
+const full = buildCreateNodeSpec({ ...base, runtimeId: 'claude-agent-sdk', runtimeModels: ['deepseek-v4-pro'], maxTurns: '5', budget: ' ', workdirField: { workdir: '/home/alice/demo' } });
+check('other fields: first suggested model, numeric flags, blank omitted, no timeout (#591), workdir passed through',
+  full.model === 'deepseek-v4-pro' && full.flags?.maxTurns === 5 && !('budget' in (full.flags ?? {})) && !('timeout' in (full.flags ?? {})) && full.workdir === '/home/alice/demo');
 check('explicit model wins over suggestion', buildCreateNodeSpec({ ...base, model: 'x', runtimeId: 'claude-agent-sdk', runtimeModels: ['y'] }).model === 'x');
 
 // ── 报错 ──
