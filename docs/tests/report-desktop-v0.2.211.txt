@@ -1,0 +1,9 @@
+desktop v0.2.211 — app 内建 Codex 共存节点 / 停止的节点一键启动
+
+A. 本版内容(0.2.210 发版提交 dd4b499 之后 main 上合入的 PR + 本 PR)
+  #714 新建节点选「Codex（TUI 共存）」时发 node_spec.flags.copresence；Hub/daemon 版本太旧、机器缺 tmux/codex/登录态时给出明确中文提示。
+  #715 节点页「危险操作」新增「启动节点」：daemon 管理的已停止节点可一键启动；已停止节点只保留「启动」「删除」；手动启动的已停止节点显示 anet 启动命令。
+  本 PR(版本号):0.2.210 → 0.2.211,versionCode 2210 → 2211;release-desktop-auto-update.yml 加 What's new in 0.2.211;重新生成 src/changelog-bundled.ts(含 0.2.210 发布日期)。
+  本地:干净 origin/main(e74cc77) bump 后 npm ci / npm test(338/338) / npm run typecheck 全部 rc=0;android-release-notes.mjs 0.2.211 rc=0。
+B. 验证边界(如实)
+  ck 单测 + 页内桩驱动(见 #714/#715 各自 PR)；Codex 共存建节点需要 Hub 与 daemon 为最新预览版，旧版本走提示分支。真机：对一个 daemon 管理的已停止节点点「启动节点」应能拉起；手动启动的已停止节点只显示命令提示。
