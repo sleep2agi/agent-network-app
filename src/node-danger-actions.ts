@@ -46,13 +46,18 @@ export interface DangerActions {
   /** board #585 —— 启动节点。 */
   start: StartActionState;
   restart: DangerActionState;
-  /** 停止和删除的判据相同,共用一个原因。 */
+  /** 停止按钮。手动启动 = stopDelete;daemon 管的节点停了再停没意义 ⇒ 置灰。 */
+  stop: DangerActionState;
+  /** 删除按钮(以及手动启动时的停止)。名字沿用 #712。 */
   stopDelete: DangerActionState;
   /** 是不是「手动启动、没有 daemon 管」的节点(说明文案用)。 */
   handStarted: boolean;
 }
 
 export const HAND_STARTED_STOP_DELETE_REASON = '这个节点是手动启动的，只能在它所在的机器上停止 / 删除。';
+
+export const STOPPED_RESTART_REASON = '节点已停止，请先启动。';
+export const STOPPED_STOP_REASON = '节点已停止。';
 
 export const handStartedStartReason = (alias: string) =>
   `这个节点是手动启动的，只能在它所在的机器上启动（\`anet node start ${alias}\`）。`;
@@ -73,8 +78,19 @@ export function dangerActions(input: DangerActionInput): DangerActions {
       ? { visible: true, enabled: false, reason: handStartedStartReason(input.alias ?? '<别名>') }
       : { visible: true, enabled: true, reason: '' };
 
-  // daemon 管着(或旧 Hub 不说):重启和以前一样,走 daemon / Hub,出错由 Hub 拒绝并显示。
-  if (!handStarted) return { start, restart: { enabled: true, reason: '' }, stopDelete, handStarted };
+  // daemon 管着(或旧 Hub 不说),在跑:三个都和以前一样,出错由 Hub 拒绝并显示。
+  // 没在跑(#715 复审):restart_node 救不活已停止的节点,再停一次也没意义 —— 重启 / 停止置灰,删除照常。
+  if (!handStarted) {
+    if (down) {
+      return {
+        start,
+        restart: { enabled: false, reason: STOPPED_RESTART_REASON },
+        stop: { enabled: false, reason: STOPPED_STOP_REASON },
+        stopDelete, handStarted,
+      };
+    }
+    return { start, restart: { enabled: true, reason: '' }, stop: stopDelete, stopDelete, handStarted };
+  }
 
   // 手动启动的节点:靠节点自己 exit 75 重启 —— 它得在线,并且报了 config_update_capable。
   let restart: DangerActionState;
@@ -87,7 +103,7 @@ export function dangerActions(input: DangerActionInput): DangerActions {
   } else {
     restart = { enabled: false, reason: '这个节点的版本不支持远程重启。请在它所在的机器上升级或重启。' };
   }
-  return { start, restart, stopDelete, handStarted };
+  return { start, restart, stop: stopDelete, stopDelete, handStarted };
 }
 
 // ── board #585:提交启动之后,页面怎么说 ─────────────────────────────────────────

@@ -17,10 +17,10 @@ ck('手动启动 + Hub 读不到 config(null) → 按不支持', !hand(true, nul
 ck('手动启动 + 还在读 → 先不亮,有原因', !hand(true, undefined).restart.enabled && hand(true, undefined).restart.reason.length > 0);
 ck('置灰时一定有原因(不是静默变灰)', [hand(false, true), hand(true, false), hand(true, null), hand(true, undefined)].every(a => a.restart.reason.length > 0 && a.stopDelete.reason.length > 0));
 
-// daemon 管着的节点:三个都和以前一样可点(与在线 / 能力无关)
+// daemon 管着的节点、在跑:三个都和以前一样可点(与能力无关)。停了的情况见文件末尾(#715 复审)。
 for (const lc of [true, undefined] as const) {
-  const a = dangerActions({ lifecycleControllable: lc, online: false, configUpdateCapable: null });
-  ck(`lifecycle_controllable=${lc} → 三个都可点(与升级前相同)`, a.restart.enabled && a.stopDelete.enabled && !a.handStarted);
+  const a = dangerActions({ lifecycleControllable: lc, online: true, configUpdateCapable: null });
+  ck(`lifecycle_controllable=${lc} + 在线 → 三个都可点(与升级前相同)`, a.restart.enabled && a.stop.enabled && a.stopDelete.enabled && !a.handStarted);
 }
 
 // 源码契约:页面按这个函数决定,而不是三个按钮都用 lifecycle_controllable 一刀切
@@ -61,6 +61,19 @@ ck('提交 / 上线 是绿,超时 是黄,失败 / 错误 是红', actionMessageT
   && actionMessageTone(START_OUTCOME_MESSAGE.timeout) === 'warn' && actionMessageTone(START_OUTCOME_MESSAGE.failed) === 'error' && actionMessageTone(startErrorMessage('node_not_stopped')) === 'error');
 ck('原有三条「已提交」仍是绿', ['重启请求已提交', '停止请求已提交', '删除请求已提交'].every(m => actionMessageTone(m) === 'ok'));
 ck('Hub 错误码翻成人话,不认识的原样', startErrorMessage('daemon_not_resolvable').includes('daemon') && startErrorMessage('node_already_starting').includes('正在启动') && startErrorMessage('HTTP 500') === 'HTTP 500');
+
+// 复审(#715):daemon 管的节点停了 —— 重启救不活、停止没意义;删除照常。手动启动的停止节点保持原样。
+const down = (lifecycleState: string | null | undefined, online = false) =>
+  dangerActions({ lifecycleControllable: true, online, configUpdateCapable: null, lifecycleState, alias: '示例' });
+ck('托管 + 已停止 → 启动可点', down('stopped').start.enabled);
+ck('托管 + 已停止 → 重启置灰,原因「节点已停止，请先启动」', !down('stopped').restart.enabled && down('stopped').restart.reason === '节点已停止，请先启动。');
+ck('托管 + 已停止 → 停止置灰,原因「节点已停止」', !down('stopped').stop.enabled && down('stopped').stop.reason === '节点已停止。');
+ck('托管 + 已停止 → 删除仍可点', down('stopped').stopDelete.enabled && down('stopped').stopDelete.reason === '');
+ck('托管 + 离线(active)→ 同样按已停止处理', !down('active').restart.enabled && !down('active').stop.enabled && down('active').start.enabled);
+ck('托管 + 在线运行 → 重启 / 停止 / 删除都可点,无原因', (() => { const a = down('active', true); return a.restart.enabled && a.stop.enabled && a.stopDelete.enabled && !a.start.visible && a.restart.reason === '' && a.stop.reason === ''; })());
+ck('手动启动 + 已停止 → 与之前相同(重启说离线,停止 / 删除说手动启动)', (() => { const a = dangerActions({ lifecycleControllable: false, online: false, configUpdateCapable: true, lifecycleState: 'stopped', alias: '示例' });
+  return !a.restart.enabled && a.restart.reason.includes('离线') && !a.stop.enabled && a.stop.reason === HAND_STARTED_STOP_DELETE_REASON && !a.stopDelete.enabled; })());
+ck('页面的停止按钮用 danger.stop 决定', /label="停止节点"[^\n]*danger\.stop\.enabled/.test(src) && src.includes('danger.stop.reason'));
 
 console.log(`${p}/${t} passed`);
 process.exit(p === t ? 0 : 1);

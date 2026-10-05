@@ -638,16 +638,20 @@ export default function NodeDetailScreen({
                   <NodeActionButton label="启动节点" tone="primary" disabled={!danger.start.enabled} disabledHint={danger.start.reason} onPress={() => setPendingAction('start_node')} />
                 ) : null}
                 <NodeActionButton label="重启节点" tone="neutral" disabled={!danger.restart.enabled} disabledHint={danger.restart.reason} onPress={() => setPendingAction('restart_node')} />
-                <NodeActionButton label="停止节点" tone="caution" disabled={!danger.stopDelete.enabled} disabledHint={danger.stopDelete.reason} onPress={() => setPendingAction('stop_node')} />
+                <NodeActionButton label="停止节点" tone="caution" disabled={!danger.stop.enabled} disabledHint={danger.stop.reason} onPress={() => setPendingAction('stop_node')} />
                 <NodeActionButton label="删除节点" tone="danger" disabled={!danger.stopDelete.enabled} disabledHint={danger.stopDelete.reason} onPress={() => setPendingAction('delete_node')} />
               </View>
-              {danger.start.reason || danger.restart.reason || danger.stopDelete.reason ? (
+              {danger.start.reason || danger.restart.reason || danger.stop.reason || danger.stopDelete.reason ? (
                 <View style={{ gap: spacing.xs }} testID="node-danger-reasons">
                   {danger.start.visible && danger.start.reason ? (
                     <Text testID="node-danger-start-reason" style={{ color: colors.textMuted, fontSize: typeScale.small, lineHeight: 18 }}>{danger.start.reason}</Text>
                   ) : null}
                   {danger.restart.reason ? (
                     <Text testID="node-danger-restart-reason" style={{ color: colors.textMuted, fontSize: typeScale.small, lineHeight: 18 }}>重启：{danger.restart.reason}</Text>
+                  ) : null}
+                  {/* #715 复审 —— daemon 管的节点停了:停止置灰的那句(手动启动的走下面那行,不重复)。 */}
+                  {danger.stop.reason && danger.stop.reason !== danger.stopDelete.reason ? (
+                    <Text testID="node-danger-stop-state-reason" style={{ color: colors.textMuted, fontSize: typeScale.small, lineHeight: 18 }}>停止：{danger.stop.reason}</Text>
                   ) : null}
                   {danger.stopDelete.reason ? (
                     <Text testID="node-danger-stop-reason" style={{ color: colors.textMuted, fontSize: typeScale.small, lineHeight: 18 }}>

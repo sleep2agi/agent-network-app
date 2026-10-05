@@ -5,7 +5,7 @@
 //
 // Three nodes, as GET /api/status + GET /api/nodes describe them:
 //   示例-托管停止  offline, lifecycle_state=stopped, lifecycle_controllable=true (daemon node_daemon_x)
-//                  → 启动节点 visible + enabled; 确认 sends start_node {node_id:n_daemon_stopped, daemon_node_id:node_daemon_x};
+//                  → 启动节点 enabled; 重启 grey「节点已停止，请先启动」; 停止 grey「节点已停止」; 删除 enabled; 确认 sends start_node {node_id:n_daemon_stopped, daemon_node_id:node_daemon_x};
 //                    the page says 已提交 (stub: lifecycle_state=starting), then — the stub brings the node up 3s later —
 //                    已上线 after the page's next 10s poll
 //   示例-手动停止  offline, lifecycle_state=stopped, lifecycle_controllable=false
@@ -149,6 +149,7 @@ async function dangerState(page) {
     const b = (l) => { const e = document.querySelector(`[role="button"][aria-label="${l}"]`); if (!e) return null; const r = e.getBoundingClientRect(); return { disabled: e.getAttribute('aria-disabled') === 'true', l: r.left, r: r.right, w: r.width }; };
     const txt = (id) => { const e = document.querySelector(`[data-testid="${id}"]`); if (!e) return null; const r = e.getBoundingClientRect(); return { text: e.textContent, l: r.left, r: r.right, h: r.height }; };
     return { start: b('启动节点'), restart: b('重启节点'), stop: b('停止节点'), del: b('删除节点'), startReason: txt('node-danger-start-reason'),
+      restartReason: txt('node-danger-restart-reason'), stopStateReason: txt('node-danger-stop-state-reason'), reasons: txt('node-danger-reasons'),
       result: txt('node-danger-action-message'), docW: document.documentElement.scrollWidth, vw };
   });
 }
@@ -173,10 +174,14 @@ async function run(vp, viewport, ua, theme) {
 
   // 1 daemon-managed, stopped: Start visible + enabled; the others keep #712 behavior.
   let g = await openDanger('示例-托管停止');
-  record(tag, '1 示例-托管停止: 启动节点 visible + enabled', {
+  const restartPaint = await paintedText(page, tid('node-danger-restart-reason')).catch(() => null);
+  record(tag, '1 示例-托管停止: 启动 enabled; 重启 grey「节点已停止，请先启动」; 停止 grey「节点已停止」; 删除 enabled', {
     found: !!g.start, startEnabled: g.start?.disabled === false, noStartReason: g.startReason === null,
-    stopDeleteEnabled: g.stop?.disabled === false && g.del?.disabled === false,
-    inView: inView(g, g.start), noOverflow: noOverflow(g),
+    restartGrey: g.restart?.disabled === true, restartReason: !!g.restartReason?.text?.includes('节点已停止，请先启动'),
+    noGenericOffline: !g.reasons?.text?.includes('离线'),
+    stopGrey: g.stop === null || g.stop.disabled === true, stopReason: g.stop === null || !!g.stopStateReason?.text?.includes('节点已停止'),
+    deleteEnabled: g.del?.disabled === false, painted: !!restartPaint?.painted,
+    inView: inView(g, g.start) && inView(g, g.restartReason), noOverflow: noOverflow(g),
   }, { g });
   await page.screenshot({ path: join(OUT, `${tag}-1-daemon-stopped.png`) });
   await page.locator(btn('启动节点')).click({ timeout: 3000 }).catch(() => {});
@@ -198,8 +203,9 @@ async function run(vp, viewport, ua, theme) {
   // The page polls every 10s; the stub already flipped the node to idle.
   const deadline = Date.now() + 15000;
   while (Date.now() < deadline) { g = await dangerState(page); if (g.result?.text?.includes('已上线')) break; await sleep(500); }
-  record(tag, '1d after the next poll the page says 已上线 and hides 启动节点', {
+  record(tag, '1d after the next poll the page says 已上线, hides 启动节点, and 重启/停止 come back', {
     online: !!g.result?.text?.includes('已上线'), startGone: g.start === null,
+    restartEnabled: g.restart?.disabled === false, stopEnabled: g.stop?.disabled === false, noStateReasons: g.restartReason === null && g.stopStateReason === null,
   }, { result: g.result?.text });
   await page.screenshot({ path: join(OUT, `${tag}-1d-online.png`) });
 
@@ -210,13 +216,15 @@ async function run(vp, viewport, ua, theme) {
     found: !!g.start, startGrey: g.start?.disabled === true,
     reason: !!g.startReason?.text?.includes('这个节点是手动启动的，只能在它所在的机器上启动（`anet node start 示例-手动停止`）'),
     painted: !!paint?.painted, inView: inView(g, g.startReason), noOverflow: noOverflow(g),
+    unchanged: g.restart?.disabled === true && !!g.restartReason?.text?.includes('离线') && g.stop?.disabled === true && g.del?.disabled === true && g.stopStateReason === null,
   }, { g });
   await page.screenshot({ path: join(OUT, `${tag}-2-hand-stopped.png`) });
 
   // 3 daemon-managed, running: no Start; the three others enabled.
   g = await openDanger('示例-托管运行');
-  record(tag, '3 示例-托管运行: no 启动节点; 重启/停止/删除 enabled', {
+  record(tag, '3 示例-托管运行: no 启动节点; 重启/停止/删除 enabled, no reason lines', {
     noStart: g.start === null, all: g.restart?.disabled === false && g.stop?.disabled === false && g.del?.disabled === false,
+    noReasons: g.reasons === null,
   }, { g });
   await page.screenshot({ path: join(OUT, `${tag}-3-daemon-running.png`) });
 
