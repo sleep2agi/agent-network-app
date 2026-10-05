@@ -1191,7 +1191,7 @@ export interface CreateNodeRequest {
 import type { CreateRequestRow } from './create-request-status';
 export type CreateNodeResult =
   | { ok: true; request_id?: string; result?: unknown }
-  | { ok: false; unconfirmed?: true; error: string };
+  | { ok: false; unconfirmed?: true; error: string; /** Hub 校验错误带的字段名(如 flag_key_unknown 的 copresence);老 hub/其它错误没有。 */ field?: string };
 
 const NEEDS_UPGRADE_HINT = '当前 hub 不响应 create_node MCP 工具，需升级到 commhub-server@0.9.0-preview.8 以上';
 
@@ -1689,11 +1689,11 @@ export const createNode = async (cfg: HubConfig, req: CreateNodeRequest): Promis
       return { ok: false, error: parsed.message };
     }
     // payload kind
-    const payload = parsed.payload as { ok?: boolean; error?: string; request_id?: string; result?: unknown } | null;
+    const payload = parsed.payload as { ok?: boolean; error?: string; field?: unknown; request_id?: string; result?: unknown } | null;
     if (!payload) return { ok: false, error: 'empty hub response' };
     if (payload.ok === false) {
       // Tool returned ok:false in its content payload — also business.
-      return { ok: false, error: payload.error || 'create_node failed' };
+      return { ok: false, error: payload.error || 'create_node failed', ...(typeof payload.field === 'string' ? { field: payload.field } : {}) };
     }
     return { ok: true, request_id: payload.request_id, result: payload.result ?? payload };
   } catch (e: unknown) {

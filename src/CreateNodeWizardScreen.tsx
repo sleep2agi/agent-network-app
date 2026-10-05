@@ -7,6 +7,7 @@ import { createRequestVerdict, timeoutMessage, type CreateRequestVerdict } from 
 import { colors, onThemeChange, spacing, radius } from './theme';
 import { advancedExpanded, advancedRuntimesOf, primaryRuntimes, runtimeDisplayLabel, showsAdvancedToggle, type WizardRuntime } from './wizard-runtime-groups';
 import { PANE_BACK_TEST_ID, paneShowsBack } from './pane-header';
+import { buildCreateNodeSpec, describeCopresenceError } from './create-node-request';
 import { defaultWorkdir, describeWorkdirError, randomHex6, workdirError, workdirForRequest, workdirRootOf, workdirSlug } from './create-node-workdir';
 import { buttonStyle, buttonTextStyle } from './elevation';
 
@@ -267,22 +268,12 @@ export default function CreateNodeWizardScreen({ cfg, daemon, onBack, onExit, de
   const handleSubmit = async () => {
     setPhase('creating');
     setMsg('');
-    const numOrUndef = (v: string) => (v.trim() === '' ? undefined : Number(v));
-    const node_spec: CreateNodeRequest['node_spec'] = {
-      name: name.trim(),
-      runtime: runtimeId,
-      // model 可空（hub 自 da84f34d 起 optional/nullable）：共存 runtime
-      // 的 models 为空数组，跟随宿主 TUI 登录态 —— 此时必须**省略**字段，
-      // 传空串仍会被 min(1) 拒。
-      ...((model || runtime.models[0]) ? { model: model || runtime.models[0] } : {}),
-      flags: {
-        permissionMode,
-        ...(numOrUndef(maxTurns) !== undefined ? { maxTurns: numOrUndef(maxTurns) } : {}),
-        ...(numOrUndef(budget) !== undefined ? { budget: numOrUndef(budget) } : {}),
-        ...(numOrUndef(timeoutMs) !== undefined ? { timeout: numOrUndef(timeoutMs) } : {}),
-      },
-      ...workdirForRequest(workdirRoot, workdir),
-    };
+    // flags.copresence:true 只给「Codex（TUI 共存）」(codex-app-server),见 create-node-request.ts。
+    const node_spec: CreateNodeRequest['node_spec'] = buildCreateNodeSpec({
+      name, runtimeId, model, runtimeModels: runtime.models,
+      permissionMode, maxTurns, budget, timeoutMs,
+      workdirField: workdirForRequest(workdirRoot, workdir),
+    });
     const res = await createNode(cfg, {
       daemon_node_id: daemon.daemon_node_id,
       node_spec,
@@ -297,7 +288,7 @@ export default function CreateNodeWizardScreen({ cfg, daemon, onBack, onExit, de
       setMsg(`服务器未就绪：${res.error}`);
     } else {
       setPhase('error');
-      setMsg(`创建失败：${describeWorkdirError(res.error) ?? res.error}`);
+      setMsg(`创建失败：${describeCopresenceError({ error: res.error, field: res.field, runtime: runtimeId }) ?? describeWorkdirError(res.error) ?? res.error}`);
     }
   };
 

@@ -2,6 +2,7 @@
 // (commhub-server ≥ 含该接口的版本;老 hub 404 → 当作「不知道」,行为退回只等注册)。
 // 纯函数:把 daemon 回的 status/error 变成向导该显示的话。
 import { describeWorkdirError } from './create-node-workdir';
+import { describeCopresenceError } from './create-node-request';
 
 export type CreateRequestStatus = 'pending' | 'delivered' | 'started' | 'failed' | 'rejected' | 'runtime_capability_check_failed' | string;
 
@@ -25,6 +26,9 @@ export function createRequestVerdict(row: CreateRequestRow | null | undefined): 
   const status = String(row.status);
   if (FAILED.has(status)) {
     const why = (row.error ?? '').trim();
+    // Codex 共存:老 Hub/daemon 不认 flags.copresence、或目标机缺 tmux/codex/codex 登录 → 说人话,原文附在后面。
+    const co = describeCopresenceError({ error: why, status, runtime: row.runtime });
+    if (co) return { kind: 'failed', text: co };
     const head = status === 'runtime_capability_check_failed'
       ? `daemon 说它不支持 ${row.runtime ?? '这个'} runtime`
       : status === 'rejected' ? 'daemon 拒绝了这次创建' : 'daemon 启动子节点失败';

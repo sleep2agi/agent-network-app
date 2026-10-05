@@ -73,6 +73,10 @@
       "kind": "stub",
       "secs": 50
     },
+    "test-create-node-codex-copresence/drive.mjs": {
+      "kind": "stub",
+      "secs": 30
+    },
     "test-create-node-workdir/drive.mjs": {
       "kind": "stub",
       "secs": 20
