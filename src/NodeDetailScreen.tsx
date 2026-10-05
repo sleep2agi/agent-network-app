@@ -58,7 +58,7 @@ import DegradedBadge from './DegradedBadge';
 import { nodeDegraded } from './node-degraded';
 import AvatarEditSection from './AvatarEditSection';
 import { teamOf } from './agents-list';
-import { fetchHubNodes, fetchNodeStatus, runNodeLifecycleAction, type HubConfig, type HubNode, type NodeLifecycleAction, type Session } from './api';
+import { fetchHubNodes, fetchNodeConfig, fetchNodeStatus, runNodeLifecycleAction, type HubConfig, type HubNode, type NodeLifecycleAction, type Session } from './api';
 import { styles } from './app-styles';
 import { colors, onThemeChange, radius, spacing, statusColor, type as typeScale, weight } from './theme';
 import { popoutHeaderChrome, type PopoutChrome } from './window-shell';
@@ -88,6 +88,7 @@ import { useModalSafePadding } from './safe-area-runtime';
 import { withBasePadding } from './modal-safe-area';
 import { PANE_BACK_TEST_ID, paneShowsBack } from './pane-header';
 import { elevated } from './elevation';
+import { dangerActions } from './node-danger-actions';
 
 const POLL_MS = 10_000; // same cadence as AgentsScreen — hub-friendly, felt-live
 
@@ -96,10 +97,13 @@ function NodeActionButton({
   tone,
   onPress,
   disabled,
+  disabledHint,
 }: {
   label: string;
   tone: NodeActionTone;
   onPress: () => void;
+  /** board #586 —— 置灰原因(读屏用;页面上另有一行可见文字)。 */
+  disabledHint?: string;
   /** app#196 —— 置灰而不是隐藏（Vincent 定）：隐藏会让人以为功能不存在，
    *  置灰 + 底下一句说明能告诉他为什么、以及替代做法。 */
   disabled?: boolean;
@@ -112,7 +116,7 @@ function NodeActionButton({
       accessibilityRole="button"
       accessibilityLabel={label}
       accessibilityState={{ disabled: !!disabled }}
-      accessibilityHint={disabled ? '此节点不支持远程生命周期操作' : tone === 'danger' ? '需要输入节点别名再次确认' : '打开确认窗口'}
+      accessibilityHint={disabled ? (disabledHint || '此节点不支持远程生命周期操作') : tone === 'danger' ? '需要输入节点别名再次确认' : '打开确认窗口'}
       onHoverIn={() => setHovered(true)}
       onHoverOut={() => setHovered(false)}
       onFocus={() => setFocused(true)}
@@ -282,6 +286,23 @@ export default function NodeDetailScreen({
   // once at mount, so no separate mount effect (that one fetched everything twice).
   usePoll(load, POLL_MS, [load]);
 
+  // board #586 —— 手动启动的节点(lifecycle_controllable=false)重启不需要 daemon:节点上报了
+  // config_update_capable 就会自己 exit 75 重启。这个能力只在 GET /api/nodes/:id/config 里有
+  // (/api/nodes 的列表把 config_snapshot 去掉了),所以进「危险操作」时单独读一次。
+  // undefined = 读取中,null = Hub 没这个接口或读失败(按不支持说)。
+  const [configUpdateCapable, setConfigUpdateCapable] = useState<boolean | null | undefined>(undefined);
+  const handStartedNodeId = node?.lifecycle_controllable === false ? node.node_id : null;
+  const onDangerTab = activeSection === 'danger';
+  useEffect(() => {
+    setConfigUpdateCapable(undefined);
+    if (!handStartedNodeId || !onDangerTab) return;
+    let live = true;
+    fetchNodeConfig(cfg, handStartedNodeId)
+      .then(c => { if (live) setConfigUpdateCapable(c ? c.config_update_capable : null); })
+      .catch(() => { if (live) setConfigUpdateCapable(null); });
+    return () => { live = false; };
+  }, [cfg, handStartedNodeId, onDangerTab]);
+
   // 分离聊天窗里的「节点信息」:页头同样兼当标题栏(见 window-shell.ts popoutChatChrome)。
   const headerChrome = popoutHeaderChrome(windowChrome, spacing.lg);
   const header = (
@@ -356,6 +377,7 @@ export default function NodeDetailScreen({
   const s = state.session;
   const rulesTarget = rulesFileTarget({ readOnly, node, session: s });
   const online = s.status !== 'offline';
+  const danger = dangerActions({ lifecycleControllable: node?.lifecycle_controllable, online, configUpdateCapable });
   const chipColor = statusColor(s.status, online);
   const team = teamOf(s.alias);
   const executeLifecycle = async () => {
@@ -589,16 +611,25 @@ export default function NodeDetailScreen({
               {/* app#196 —— hub 明确说不可控时置灰。
                   🔴 undefined（旧 hub 没这个字段）按可控渲染：与升级前行为逐字相同，
                   真不行的话提交时 hub 会拒绝并显示错误 —— 宁可多让用户点一次，
-                  也不能因为 hub 旧就把 11 个真正可控的节点全灰掉。 */}
+                  也不能因为 hub 旧就把 11 个真正可控的节点全灰掉。
+                  board #586 —— 重启和停止 / 删除分开判:手动启动的节点在线且报了 config_update_capable 就能重启
+                  (节点自己 exit 75,不需要 daemon);判据见 node-danger-actions.ts。置灰一律写一句原因。 */}
               <View style={localStyles.actionRow}>
-                <NodeActionButton label="重启节点" tone="neutral" disabled={node?.lifecycle_controllable === false} onPress={() => setPendingAction('restart_node')} />
-                <NodeActionButton label="停止节点" tone="caution" disabled={node?.lifecycle_controllable === false} onPress={() => setPendingAction('stop_node')} />
-                <NodeActionButton label="删除节点" tone="danger" disabled={node?.lifecycle_controllable === false} onPress={() => setPendingAction('delete_node')} />
+                <NodeActionButton label="重启节点" tone="neutral" disabled={!danger.restart.enabled} disabledHint={danger.restart.reason} onPress={() => setPendingAction('restart_node')} />
+                <NodeActionButton label="停止节点" tone="caution" disabled={!danger.stopDelete.enabled} disabledHint={danger.stopDelete.reason} onPress={() => setPendingAction('stop_node')} />
+                <NodeActionButton label="删除节点" tone="danger" disabled={!danger.stopDelete.enabled} disabledHint={danger.stopDelete.reason} onPress={() => setPendingAction('delete_node')} />
               </View>
-              {node?.lifecycle_controllable === false ? (
-                <Text style={{ color: colors.textMuted, fontSize: typeScale.small, lineHeight: 18 }}>
-                  此节点不是由 daemon 创建的，无法远程停止/删除。请在它所在的机器上执行 `anet node stop {alias}`。
-                </Text>
+              {danger.restart.reason || danger.stopDelete.reason ? (
+                <View style={{ gap: spacing.xs }} testID="node-danger-reasons">
+                  {danger.restart.reason ? (
+                    <Text testID="node-danger-restart-reason" style={{ color: colors.textMuted, fontSize: typeScale.small, lineHeight: 18 }}>重启：{danger.restart.reason}</Text>
+                  ) : null}
+                  {danger.stopDelete.reason ? (
+                    <Text testID="node-danger-stop-reason" style={{ color: colors.textMuted, fontSize: typeScale.small, lineHeight: 18 }}>
+                      {danger.stopDelete.reason}可在那台机器上执行 `anet node stop {alias}`。
+                    </Text>
+                  ) : null}
+                </View>
               ) : null}
               {actionMessage ? <Text style={{ color: actionMessage.includes('已提交') ? colors.running : colors.failed, fontSize: typeScale.small }}>{actionMessage}</Text> : null}
             </View>
