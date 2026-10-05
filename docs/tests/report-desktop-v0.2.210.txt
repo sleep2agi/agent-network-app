@@ -1,0 +1,8 @@
+desktop v0.2.210 — 手动启动节点可远程重启
+
+A. 本版内容(0.2.209 发版提交之后 main 上合入的 PR + 本 PR)
+  #712 节点页「危险操作」：Hub 报 lifecycle_controllable=false(手动启动、无 daemon)时重启/停止/删除一起置灰。重启不需要 daemon(restart 事件 → 节点 exit 75 → 启动器拉起)，改为节点在线且 GET /api/nodes/:id/config 报 config_update_capable=true 时可点；停止/删除仍按 lifecycle_controllable 置灰，并显示原因与 `anet node stop <alias>` 提示。node-danger-actions 14/14(main 上 10/14)，桩驱动 test-node-danger-restart 桌面+手机×浅深 PASS(main FAIL 16)。
+  本 PR(版本号):0.2.209 → 0.2.210,versionCode 2209 → 2210;release-desktop-auto-update.yml 加 What's new in 0.2.210;重新生成 src/changelog-bundled.ts(含 0.2.209 发布日期)。
+  本地:干净 origin/main(0a08335) bump 后 npm ci / npm test(337/337) / npm run typecheck 全部 rc=0;android-release-notes.mjs 0.2.210 rc=0。
+B. 验证边界(如实)
+  ck 单测 + 页内桩驱动；真机：对一个手动启动(anet node start 之外直起)且 config_update_capable 的在线节点点「重启」，应弹确认框并能重启；停止/删除置灰且显示原因。
