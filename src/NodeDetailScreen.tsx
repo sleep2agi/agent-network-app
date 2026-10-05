@@ -88,7 +88,7 @@ import { useModalSafePadding } from './safe-area-runtime';
 import { withBasePadding } from './modal-safe-area';
 import { PANE_BACK_TEST_ID, paneShowsBack } from './pane-header';
 import { elevated } from './elevation';
-import { dangerActions } from './node-danger-actions';
+import { actionMessageTone, dangerActions, START_OUTCOME_MESSAGE, START_SUBMITTED_MESSAGE, START_WAIT_MS, startErrorMessage, startWatchOutcome } from './node-danger-actions';
 
 const POLL_MS = 10_000; // same cadence as AgentsScreen — hub-friendly, felt-live
 
@@ -202,6 +202,8 @@ export default function NodeDetailScreen({
   const [confirmAlias, setConfirmAlias] = useState('');
   const [actionBusy, setActionBusy] = useState(false);
   const [actionMessage, setActionMessage] = useState('');
+  // board #585 —— 提交启动后等节点上线(只看页面本来就在轮询的节点 / 会话状态,不另起轮询)。
+  const [startWatch, setStartWatch] = useState<{ deadline: number; sawStarting: boolean } | null>(null);
   const [activeSection, setActiveSection] = useState<NodeSectionKey>('overview');
   // Fold/unfold remounts this screen; keep the selected tab (概览/规则文件/技能/…)
   // across that remount only (see layout-handoff.ts).
@@ -303,6 +305,21 @@ export default function NodeDetailScreen({
     return () => { live = false; };
   }, [cfg, handStartedNodeId, onDangerTab]);
 
+  // board #585 —— 启动请求提交后:节点上线 / daemon 报失败 / 2 分钟没动静,各说一句。
+  const watchOnline = state.kind === 'ready' && state.session.status !== 'offline';
+  const watchLifecycle = node?.lifecycle_state;
+  useEffect(() => {
+    if (!startWatch) return;
+    const outcome = startWatchOutcome({ online: watchOnline, lifecycleState: watchLifecycle, sawStarting: startWatch.sawStarting, now: Date.now(), deadline: startWatch.deadline });
+    if (outcome === 'waiting') {
+      if (watchLifecycle === 'starting' && !startWatch.sawStarting) { setStartWatch({ ...startWatch, sawStarting: true }); return; }
+      const timer = setTimeout(() => setStartWatch(w => (w ? { ...w } : w)), Math.max(0, startWatch.deadline - Date.now()) + 50);
+      return () => clearTimeout(timer);
+    }
+    setStartWatch(null);
+    setActionMessage(START_OUTCOME_MESSAGE[outcome]);
+  }, [startWatch, watchOnline, watchLifecycle]);
+
   // 分离聊天窗里的「节点信息」:页头同样兼当标题栏(见 window-shell.ts popoutChatChrome)。
   const headerChrome = popoutHeaderChrome(windowChrome, spacing.lg);
   const header = (
@@ -377,7 +394,7 @@ export default function NodeDetailScreen({
   const s = state.session;
   const rulesTarget = rulesFileTarget({ readOnly, node, session: s });
   const online = s.status !== 'offline';
-  const danger = dangerActions({ lifecycleControllable: node?.lifecycle_controllable, online, configUpdateCapable });
+  const danger = dangerActions({ lifecycleControllable: node?.lifecycle_controllable, online, configUpdateCapable, lifecycleState: node?.lifecycle_state, alias });
   const chipColor = statusColor(s.status, online);
   const team = teamOf(s.alias);
   const executeLifecycle = async () => {
@@ -389,10 +406,11 @@ export default function NodeDetailScreen({
     if (!result.ok) {
       setActionMessage(result.error === 'node_busy_in_flight'
         ? `节点仍有 ${result.in_flight_count ?? 1} 个处理中任务，未强制操作`
-        : result.error);
+        : pendingAction === 'start_node' ? startErrorMessage(result.error) : result.error);
       return;
     }
-    setActionMessage(pendingAction === 'restart_node' ? '重启请求已提交' : pendingAction === 'stop_node' ? '停止请求已提交' : '删除请求已提交');
+    setStartWatch(pendingAction === 'start_node' ? { deadline: Date.now() + START_WAIT_MS, sawStarting: false } : null);
+    setActionMessage(pendingAction === 'start_node' ? START_SUBMITTED_MESSAGE : pendingAction === 'restart_node' ? '重启请求已提交' : pendingAction === 'stop_node' ? '停止请求已提交' : '删除请求已提交');
     setPendingAction(null);
     setConfirmAlias('');
     void load();
@@ -615,12 +633,19 @@ export default function NodeDetailScreen({
                   board #586 —— 重启和停止 / 删除分开判:手动启动的节点在线且报了 config_update_capable 就能重启
                   (节点自己 exit 75,不需要 daemon);判据见 node-danger-actions.ts。置灰一律写一句原因。 */}
               <View style={localStyles.actionRow}>
+                {/* board #585 —— 节点没在跑时才出现;手动启动的节点置灰,下面一句说去那台机器上 anet node start。 */}
+                {danger.start.visible ? (
+                  <NodeActionButton label="启动节点" tone="primary" disabled={!danger.start.enabled} disabledHint={danger.start.reason} onPress={() => setPendingAction('start_node')} />
+                ) : null}
                 <NodeActionButton label="重启节点" tone="neutral" disabled={!danger.restart.enabled} disabledHint={danger.restart.reason} onPress={() => setPendingAction('restart_node')} />
                 <NodeActionButton label="停止节点" tone="caution" disabled={!danger.stopDelete.enabled} disabledHint={danger.stopDelete.reason} onPress={() => setPendingAction('stop_node')} />
                 <NodeActionButton label="删除节点" tone="danger" disabled={!danger.stopDelete.enabled} disabledHint={danger.stopDelete.reason} onPress={() => setPendingAction('delete_node')} />
               </View>
-              {danger.restart.reason || danger.stopDelete.reason ? (
+              {danger.start.reason || danger.restart.reason || danger.stopDelete.reason ? (
                 <View style={{ gap: spacing.xs }} testID="node-danger-reasons">
+                  {danger.start.visible && danger.start.reason ? (
+                    <Text testID="node-danger-start-reason" style={{ color: colors.textMuted, fontSize: typeScale.small, lineHeight: 18 }}>{danger.start.reason}</Text>
+                  ) : null}
                   {danger.restart.reason ? (
                     <Text testID="node-danger-restart-reason" style={{ color: colors.textMuted, fontSize: typeScale.small, lineHeight: 18 }}>重启：{danger.restart.reason}</Text>
                   ) : null}
@@ -631,7 +656,9 @@ export default function NodeDetailScreen({
                   ) : null}
                 </View>
               ) : null}
-              {actionMessage ? <Text style={{ color: actionMessage.includes('已提交') ? colors.running : colors.failed, fontSize: typeScale.small }}>{actionMessage}</Text> : null}
+              {actionMessage ? (
+                <Text testID="node-danger-action-message" style={{ color: { ok: colors.running, warn: colors.blocked, error: colors.failed }[actionMessageTone(actionMessage)], fontSize: typeScale.small, lineHeight: 18 }}>{actionMessage}</Text>
+              ) : null}
             </View>
           ) : (
             <Text style={{ color: colors.textMuted, fontSize: typeScale.small }}>{nodeIdentityNotice(s, node, nodeListState)}</Text>
@@ -704,10 +731,10 @@ export default function NodeDetailScreen({
         <View style={[{ flex: 1, alignItems: 'center', justifyContent: 'center' }, withBasePadding(dialogSafe, spacing.xl)]}>
           <View style={{ width: '100%', maxWidth: 420, borderRadius: radius.surface, backgroundColor: colors.card, padding: spacing.xl, gap: spacing.md, ...elevated('floating') }}>
             <Text style={{ color: colors.text, fontSize: 17, fontWeight: '600' }}>
-              {pendingAction === 'restart_node' ? '重启节点？' : pendingAction === 'stop_node' ? '停止节点？' : '删除节点？'}
+              {pendingAction === 'start_node' ? '启动节点？' : pendingAction === 'restart_node' ? '重启节点？' : pendingAction === 'stop_node' ? '停止节点？' : '删除节点？'}
             </Text>
             <Text style={{ color: colors.textSecondary, fontSize: 13, lineHeight: 19 }}>
-              {pendingAction === 'delete_node' ? `删除会撤销节点身份。请输入别名“${alias}”确认；节点配置默认备份保留。` : `目标：${alias}。请求提交后请等待节点状态刷新。`}
+              {pendingAction === 'delete_node' ? `删除会撤销节点身份。请输入别名“${alias}”确认；节点配置默认备份保留。` : pendingAction === 'start_node' ? `目标：${alias}。由它所在机器上的 daemon 启动，提交后这里会等它上线。` : `目标：${alias}。请求提交后请等待节点状态刷新。`}
             </Text>
             {pendingAction === 'delete_node' ? (
               <TextInput value={confirmAlias} onChangeText={setConfirmAlias} autoCapitalize="none" placeholder={alias} placeholderTextColor={colors.textMuted} style={{ color: colors.text, borderWidth: 1, borderColor: colors.border, borderRadius: radius.control, padding: spacing.md }} />

@@ -1,7 +1,7 @@
 // agent-network board #586 —— 手动启动的节点:重启不该跟着停止 / 删除一起置灰。
 // ck 风格自执行脚本(npm test = scripts/run-tests.mjs 逐个 spawn)。
 import { readFileSync } from 'node:fs';
-import { dangerActions, HAND_STARTED_STOP_DELETE_REASON } from './node-danger-actions';
+import { actionMessageTone, dangerActions, HAND_STARTED_STOP_DELETE_REASON, START_OUTCOME_MESSAGE, START_SUBMITTED_MESSAGE, startErrorMessage, startWatchOutcome } from './node-danger-actions';
 
 let p = 0, t = 0;
 const ck = (n: string, c: boolean) => { t++; if (c) { p++; console.log('✅', n); } else console.error('❌', n); };
@@ -30,6 +30,37 @@ ck('页面用 dangerActions 决定按钮', src.includes("from './node-danger-act
 ck('重启按钮不再直接看 lifecycle_controllable', restartLine.length > 0 && !restartLine.includes('lifecycle_controllable'));
 ck('页面读节点的 config_update_capable(fetchNodeConfig)', src.includes('fetchNodeConfig('));
 ck('置灰原因画出来了(restart / stopDelete reason)', src.includes('danger.restart.reason') && src.includes('danger.stopDelete.reason'));
+
+// agent-network board #585 —— 「启动节点」:停掉之后要能从 app 里拉回来(start_node 走 daemon)。
+const st = (lc: boolean | undefined, online: boolean, lifecycleState: string | null | undefined) =>
+  dangerActions({ lifecycleControllable: lc, online, configUpdateCapable: null, lifecycleState, alias: '示例' }).start;
+ck('daemon 管的节点 + 已停止 → 启动可见且可点', st(true, false, 'stopped').visible && st(true, false, 'stopped').enabled && st(true, false, 'stopped').reason === '');
+ck('daemon 管的节点 + 离线(lifecycle 未说 stopped)→ 启动可见可点,由 Hub 判', st(true, false, 'active').visible && st(true, false, 'active').enabled);
+ck('daemon 管的节点 + 卡在 starting → 仍可点(Hub 60s 后允许重派)', st(true, false, 'starting').visible && st(true, false, 'starting').enabled);
+ck('daemon 管的节点 + 在线运行 → 启动不出现', !st(true, true, 'active').visible && !st(true, true, null).visible && !st(true, true, undefined).visible);
+ck('在线但 Hub 说 stopped(状态还没刷新)→ 启动出现', st(true, true, 'stopped').visible);
+ck('旧 Hub(lifecycle_controllable 缺失)+ 离线 → 启动可点,与 app#196 一致', st(undefined, false, undefined).visible && st(undefined, false, undefined).enabled);
+ck('手动启动 + 已停止 → 启动置灰,一句话说去那台机器上 anet node start <别名>', st(false, false, 'stopped').visible && !st(false, false, 'stopped').enabled
+  && st(false, false, 'stopped').reason === '这个节点是手动启动的，只能在它所在的机器上启动（`anet node start 示例`）。');
+ck('手动启动 + 在线 → 启动不出现', !st(false, true, 'active').visible);
+ck('加了启动之后重启 / 停止 / 删除判据不变', JSON.stringify(dangerActions({ lifecycleControllable: false, online: true, configUpdateCapable: true, lifecycleState: 'active' }).restart) === JSON.stringify(hand(true, true).restart));
+ck('页面画了启动按钮并用 danger.start 决定', src.includes('label="启动节点"') && src.includes('danger.start.visible') && src.includes('danger.start.reason'));
+ck('页面把 lifecycle_state 交给 dangerActions', /dangerActions\(\{[^}]*lifecycleState:/.test(src));
+const apiSrc = readFileSync(new URL('./api.ts', import.meta.url), 'utf8');
+ck('api 的生命周期操作包含 start_node', /NodeLifecycleAction = [^;]*'start_node'/.test(apiSrc));
+
+// 提交之后:等上线 / daemon 报失败 / 超时
+const w = (online: boolean, lifecycleState: string | null | undefined, sawStarting: boolean, now = 0) => startWatchOutcome({ online, lifecycleState, sawStarting, now, deadline: 100 });
+ck('提交后还是离线 + starting → 继续等', w(false, 'starting', true) === 'waiting');
+ck('刚提交、读到的还是 stopped(没见过 starting)→ 继续等,不当失败', w(false, 'stopped', false) === 'waiting');
+ck('上线且 Hub 改回 active → 已上线', w(true, 'active', true) === 'online' && w(true, null, false) === 'online');
+ck('会话在线但 Hub 还记 starting → 继续等', w(true, 'starting', true) === 'waiting');
+ck('见过 starting 又回到 stopped → daemon 启动失败', w(false, 'stopped', true) === 'failed');
+ck('到期还没上线 → 超时', w(false, 'starting', true, 100) === 'timeout');
+ck('提交 / 上线 是绿,超时 是黄,失败 / 错误 是红', actionMessageTone(START_SUBMITTED_MESSAGE) === 'ok' && actionMessageTone(START_OUTCOME_MESSAGE.online) === 'ok'
+  && actionMessageTone(START_OUTCOME_MESSAGE.timeout) === 'warn' && actionMessageTone(START_OUTCOME_MESSAGE.failed) === 'error' && actionMessageTone(startErrorMessage('node_not_stopped')) === 'error');
+ck('原有三条「已提交」仍是绿', ['重启请求已提交', '停止请求已提交', '删除请求已提交'].every(m => actionMessageTone(m) === 'ok'));
+ck('Hub 错误码翻成人话,不认识的原样', startErrorMessage('daemon_not_resolvable').includes('daemon') && startErrorMessage('node_already_starting').includes('正在启动') && startErrorMessage('HTTP 500') === 'HTTP 500');
 
 console.log(`${p}/${t} passed`);
 process.exit(p === t ? 0 : 1);

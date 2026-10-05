@@ -169,6 +169,10 @@
       "kind": "stub",
       "secs": 75
     },
+    "test-node-danger-start/drive.mjs": {
+      "kind": "stub",
+      "secs": 90
+    },
     "test-node-degraded-badge/run.mjs": {
       "kind": "stub",
       "secs": 60
