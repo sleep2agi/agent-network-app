@@ -10,16 +10,18 @@ const check = (name: string, condition: boolean) => {
 };
 
 const dark = {
-  card: '#161618', border: '#26262b', textSecondary: '#a1a1aa', blocked: '#f59e0b', failed: '#ef4444',
+  card: '#161618', border: '#26262b', textSecondary: '#a1a1aa', blocked: '#f59e0b', failed: '#ef4444', accent: '#5e9bff',
 };
 const light = {
-  card: '#ffffff', border: '#e1e5ea', textSecondary: '#626a76', blocked: '#d97706', failed: '#dc2626',
+  card: '#ffffff', border: '#e1e5ea', textSecondary: '#626a76', blocked: '#d97706', failed: '#dc2626', accent: '#1b65db',
 };
 
 for (const [name, palette] of [['dark', dark], ['light', light]] as const) {
   const restart = nodeActionVisual(palette, 'neutral');
   const stop = nodeActionVisual(palette, 'caution');
   const remove = nodeActionVisual(palette, 'danger');
+  const start = nodeActionVisual(palette, 'primary');
+  check(`${name}: start is the accent (晴蓝) outline`, start.borderColor === palette.accent && start.textColor === palette.accent && start.backgroundColor === palette.card);
   check(`${name}: restart is neutral`, restart.borderColor === palette.border && restart.textColor === palette.textSecondary);
   check(`${name}: stop is caution amber`, stop.borderColor === palette.blocked && stop.textColor === palette.blocked);
   check(`${name}: delete is destructive red`, remove.borderColor === palette.failed && remove.textColor === palette.failed);
@@ -31,7 +33,8 @@ const screen = readFileSync('src/NodeDetailScreen.tsx', 'utf8').replace(/\r\n?/g
 check('all three semantic tones are wired to their exact actions',
   screen.includes('label="重启节点" tone="neutral"') &&
   screen.includes('label="停止节点" tone="caution"') &&
-  screen.includes('label="删除节点" tone="danger"'));
+  screen.includes('label="删除节点" tone="danger"') &&
+  screen.includes('label="启动节点" tone="primary"'));
 check('buttons are compact desktop controls', /actionButton:\s*\{[\s\S]*?minWidth: ds\(92\),[\s\S]*?height: ds\(34\),[\s\S]*?borderRadius: radius\.control,/.test(screen));
 check('row wraps instead of overflowing narrow windows', /actionRow:\s*\{[\s\S]*?flexWrap: 'wrap'/.test(screen));
 check('hover and keyboard focus are both handled', screen.includes('onHoverIn=') && screen.includes('onHoverOut=') && screen.includes('onFocus=') && screen.includes('onBlur='));

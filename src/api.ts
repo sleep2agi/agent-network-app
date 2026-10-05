@@ -1264,7 +1264,7 @@ function parseMcpToolResponse(rawText: string): ParsedMcp {
   }
 }
 
-export type NodeLifecycleAction = 'restart_node' | 'stop_node' | 'delete_node';
+export type NodeLifecycleAction = 'start_node' | 'restart_node' | 'stop_node' | 'delete_node';
 
 export type NodeLifecycleResult =
   | { ok: true; request_id?: string; update_id?: string; lifecycle_state?: string }
@@ -1276,11 +1276,17 @@ export type NodeLifecycleResult =
 export const runNodeLifecycleAction = async (
   cfg: HubConfig,
   action: NodeLifecycleAction,
-  node: Pick<HubNode, 'node_id' | 'alias'>,
+  node: Pick<HubNode, 'node_id' | 'alias'> & Partial<Pick<HubNode, 'lifecycle_daemon_node_id'>>,
   options: { force?: boolean; deleteConfig?: boolean } = {},
 ): Promise<NodeLifecycleResult> => {
   const networkId = cfg.networkId ?? (await fetchNetworkId(cfg));
-  const args = action === 'restart_node'
+  // board #585 —— start_node 由节点所在机器上的 daemon 执行。daemon_node_id 可省(Hub 按创建记录自己找),
+  // 带上 /api/nodes 给的那个只是让 Hub 核对;Hub 的 zod 只收 node_[a-z0-9_-]+,不合形状就不带。
+  const daemonId = node.lifecycle_daemon_node_id && /^node_[a-z0-9_-]+$/.test(node.lifecycle_daemon_node_id)
+    ? node.lifecycle_daemon_node_id : undefined;
+  const args = action === 'start_node'
+    ? { node_id: node.node_id, ...(daemonId ? { daemon_node_id: daemonId } : {}), ...(networkId ? { network_id: networkId } : {}) }
+    : action === 'restart_node'
     ? { node_id: node.node_id, ...(networkId ? { network_id: networkId } : {}) }
     : action === 'stop_node'
       ? { child_node_id: node.node_id, ...(networkId ? { network_id: networkId } : {}), ...(options.force ? { force: true } : {}) }
