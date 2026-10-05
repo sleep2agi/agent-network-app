@@ -68,7 +68,8 @@ check('create-request verdict turns a daemon workdir rejection into words + keep
 // ── 接线契约 ──
 const wiz = readFileSync(new URL('./CreateNodeWizardScreen.tsx', import.meta.url), 'utf8');
 check('wizard only renders the row when the daemon advertises a root', wiz.includes('{workdirRoot ? (') && wiz.includes('testID="create-workdir-row"'));
-check('wizard sends workdir through workdirForRequest (omitted for old daemons)', wiz.includes('...workdirForRequest(workdirRoot, workdir),'));
+check('wizard sends workdir through workdirForRequest (omitted for old daemons)', wiz.includes('workdirField: workdirForRequest(workdirRoot, workdir),')
+  && readFileSync(new URL('./create-node-request.ts', import.meta.url), 'utf8').includes('...i.workdirField,'));
 check('submit is disabled while the workdir is invalid', wiz.includes('disabled={!canSubmit}') && wiz.includes('const canSubmit = !workdirErr;'));
 check('unedited workdir follows the name through the ASCII slug', wiz.includes('workdirEdited ?? (workdirRoot ? defaultWorkdir(workdirRoot, workdirSlug(name, workdirFallback))'));
 check('fallback is fixed once per wizard (useState initialiser, not per render)', wiz.includes('const [workdirFallback] = useState(() => `node-${randomHex6()}`);'));
