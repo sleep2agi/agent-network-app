@@ -5,6 +5,11 @@
 export const BUNDLED_RELEASE_BODY: string = [
   "Signed and notarized stable update for macOS (Apple Silicon) and Windows (x64).",
   "",
+  "What's new in 0.2.211:",
+  "- Codex 共存节点可以在 app 里直接建（需要 Hub 和 daemon 升级到最新预览版，旧版本会明确提示）",
+  "- 节点停止后可以在 app 里一键启动",
+  "- 已停止的节点只保留「启动」「删除」",
+  "",
   "What's new in 0.2.210:",
   "- 手动启动的节点现在也能在节点页「危险操作」里远程重启（节点在线且版本支持时）",
   "- 停止 / 删除按钮不可用时会说明原因：手动启动的节点只能在它所在的机器上停止或删除",
@@ -915,6 +920,7 @@ export const BUNDLED_RELEASE_BODY: string = [
 
 /** Release date (published_at) per version, as far as it was known when this file was generated. */
 export const BUNDLED_RELEASE_DATES: Record<string, string> = {
+  "0.2.210": "2026-10-05T17:52:22Z",
   "0.2.209": "2026-10-04T14:11:36Z",
   "0.2.208": "2026-10-04T11:18:15Z",
   "0.2.207": "2026-10-04T09:09:42Z",
