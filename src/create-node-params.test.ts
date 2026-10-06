@@ -2,7 +2,8 @@
 // 没读的不显示、也不发进 create_node 请求。依据见 create-node-request.ts 的 WIZARD_RUNTIME_PARAMS 注释
 // (agent-node/src/cli.ts、agent-network/bin/cli.ts、server/src/create-node-validate.ts 逐条 file:line)。
 import { readFileSync } from 'node:fs';
-import { buildCreateNodeSpec, wizardParamsFor, WIZARD_RUNTIME_PARAMS, NO_PARAMS_LINE } from './create-node-request';
+import { buildCreateNodeSpec, wizardParamsFor, WIZARD_RUNTIME_PARAMS } from './create-node-request';
+import { SKIPPED_PARAMS_TEXT, wizardSteps } from './create-node-steps';
 
 let passed = 0, total = 0;
 const check = (name: string, ok: boolean) => { total++; if (ok) { passed++; console.log('✅', name); } else { console.error('❌', name); } };
@@ -19,7 +20,10 @@ check('unknown runtime → no params (fail closed: never show a knob we cannot v
 check('🔴 timeout is offered for NO runtime (hub caps it at 86400 but agent-node reads it as ms)',
   ALL.every(rt => !(wizardParamsFor(rt) as readonly string[]).includes('timeout')));
 check('matrix only names known runtimes', Object.keys(WIZARD_RUNTIME_PARAMS).every(k => ALL.includes(k)));
-check('plain no-params line', NO_PARAMS_LINE === '这个 runtime 没有额外参数，直接下一步');
+check('plain skipped-params line (confirm page)', SKIPPED_PARAMS_TEXT === '这个 runtime 没有额外参数');
+// #614 —— 没有适用参数的 runtime 不进第 4 步;有的照常进。
+check('🔴 claude-agent-sdk keeps the params step', wizardSteps('claude-agent-sdk', ['a', 'b']).includes('params'));
+for (const rt of ALL.filter(r => r !== 'claude-agent-sdk')) check(`🔴 ${rt} skips the params step`, !wizardSteps(rt, ['a', 'b']).includes('params'));
 
 // ── 请求体:隐藏的设置不发 ──
 const typed = { name: 'demo', model: '', permissionMode: 'plan', maxTurns: '7', budget: '2.5', workdirField: {} };
@@ -38,11 +42,11 @@ for (const rt of ['codex-sdk', 'grok-build-acp', 'claude-code-cli', 'grok-build-
 
 // ── 接线契约(向导 import react-native,只能读源码) ──
 const wiz = readFileSync(new URL('./CreateNodeWizardScreen.tsx', import.meta.url), 'utf8');
-const step3 = wiz.slice(wiz.indexOf('{step === 3 && ('), wiz.indexOf('{step === 4 && ('));
+const step3 = wiz.slice(wiz.indexOf("{cur === 'params' && ("), wiz.indexOf("{cur === 'confirm' && ("));
 check('🔴 step 4 renders from wizardParamsFor(runtimeId)', /wizardParamsFor\(runtimeId\)/.test(wiz) && step3.includes('params.includes('));
-check('🔴 step 4 shows NO_PARAMS_LINE when the runtime has none', step3.includes('NO_PARAMS_LINE'));
+check('🔴 the step table comes from wizardSteps(runtimeId, runtime.models)', wiz.includes('const steps = wizardSteps(runtimeId, runtime.models);'));
 check('🔴 the timeout input is gone from the wizard', !/setTimeoutMs|>timeout</.test(wiz));
-const step4 = wiz.slice(wiz.indexOf('{step === 4 && ('));
+const step4 = wiz.slice(wiz.indexOf("{cur === 'confirm' && ("));
 check('confirm page summarises only applicable params', step4.includes("params.includes('permissionMode')") && !step4.includes('maxTurns / budget / timeout'));
 
 console.log(`create node params: ${passed}/${total} checks passed`);

@@ -55,8 +55,7 @@ export function wizardParamsFor(runtimeId: string): readonly WizardParam[] {
   return WIZARD_RUNTIME_PARAMS[runtimeId] ?? [];
 }
 
-/** 没有适用参数时,第 4 步只显示这一行。 */
-export const NO_PARAMS_LINE = '这个 runtime 没有额外参数，直接下一步';
+// 没有适用参数的 runtime 不进第 4 步(#614,create-node-steps.ts),确认页一行说明 SKIPPED_PARAMS_TEXT。
 
 export interface CreateNodeSpecInput {
   name: string;

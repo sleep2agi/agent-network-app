@@ -66,8 +66,10 @@ async function submit(page, runtimeLabel, mode) {
   await page.getByPlaceholder('例如 my-agent-1').fill('demo_agent');
   await page.getByText('下一步', { exact: true }).click();
   await page.getByText(runtimeLabel, { exact: true }).first().click();
-  for (let i = 0; i < 3; i++) await page.getByText('下一步', { exact: true }).click();
-  await page.locator('[data-testid="create-node-submit"]').click();
+  // #614:没有可选项的步骤(共存 runtime 的 模型 / 参数)不出现 —— 按「下一步」走到出现「创建节点」为止。
+  const submitBtn = page.locator('[data-testid="create-node-submit"]');
+  for (let i = 0; i < 4 && !(await submitBtn.count()); i++) await page.getByText('下一步', { exact: true }).click();
+  await submitBtn.click();
   await page.waitForFunction(() => (window.__createCalls || []).length > 0, null, { timeout: 5000 });
   return page.evaluate(() => window.__createCalls[0]);
 }

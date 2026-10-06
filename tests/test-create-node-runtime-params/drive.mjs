@@ -8,8 +8,8 @@
 // 每个视口(桌面 1200×800、手机 390×844)× 主题(浅、深):
 //   (1) Claude Agent SDK:第 4 步有 permissionMode / maxTurns / budget,没有 timeout、没有「没有额外参数」那行;
 //       maxTurns 与 budget 两格铺满一行(左右边各贴内容区 ±1px,不留被删掉那格的空位)
-//   (2) Codex（TUI 共存）、Grok:三项都没有,只有一行「这个 runtime 没有额外参数，直接下一步」,
-//       且该节的高度 = 那一行的高度 ±1px(没有残留的空块)
+//   (2) Codex（TUI 共存）、Grok:三项都没有 ⇒ #614 起整个「参数」步不出现(Runtime 之后下一步直接是确认页),
+//       确认页上一行「参数：这个 runtime 没有额外参数」,页面上没有 permissionMode / maxTurns / budget / timeout
 //   (3) 请求体:Claude → flags {permissionMode, maxTurns, budget};先在 Claude 下填了值再切到 Codex 共存 →
 //       flags 恰为 {copresence:true};Grok → 没有 flags 键
 // 任一断言失败或页面打不开 → exit 1。先对改动前的 export 跑:必须红。
@@ -25,7 +25,7 @@ if (OUT) mkdirSync(OUT, { recursive: true });
 const DAEMON = { daemon_node_id: 'd_sweep_1', alias: '示例-守护', hostname: 'host-d', online: true, runtimes_supported: ['claude-agent-sdk', 'codex-app-server', 'grok-build-acp'], can_create_nodes: true };
 const VIEWPORTS = [{ name: 'desktop-1200x800', w: 1200, h: 800 }, { name: 'phone-390x844', w: 390, h: 844, mobile: true }];
 const THEMES = ['light', 'dark'];
-const NONE = '这个 runtime 没有额外参数，直接下一步';
+const NONE = '参数：这个 runtime 没有额外参数';
 
 let fails = 0;
 const ck = (name, ok, extra = '') => { if (!ok) fails++; console.log(`${ok ? 'PASS' : 'FAIL'}: ${name}${extra ? ` (${extra})` : ''}`); };
@@ -59,11 +59,22 @@ async function openWizard(page) {
   await page.getByPlaceholder('例如 my-agent-1').fill('demo_agent');
   await next(page);
 }
+// 从 Runtime 步选一个没有参数的 runtime,下一步 —— #614:应直接到确认页(参数步被跳过)
+async function toConfirmSkippingParams(page, runtimeLabel) {
+  await page.getByText(runtimeLabel, { exact: true }).first().click();
+  await next(page);
+  await page.locator('[data-testid="create-node-submit"]').waitFor({ timeout: 5000 });
+}
+async function submitFromConfirm(page) {
+  await page.locator('[data-testid="create-node-submit"]').click();
+  await page.waitForFunction(() => (window.__createCalls || []).length > 0, null, { timeout: 5000 });
+  return page.evaluate(() => window.__createCalls[0]);
+}
 // 从第 2 步(Runtime)选 runtime 并走到第 4 步(参数)
 async function toParams(page, runtimeLabel) {
   await page.getByText(runtimeLabel, { exact: true }).first().click();
   await next(page); await next(page);
-  await page.getByText('参数', { exact: true }).first().waitFor();
+  await page.locator('[data-testid="create-params-step"]').waitFor();
 }
 async function submitFromParams(page) {
   await next(page);
@@ -89,7 +100,8 @@ const visibleFields = (page) => page.evaluate((none) => {
     maxTurns: leaves.includes('maxTurns'),
     budget: leaves.some(t => /^budget/.test(t)),
     timeout: leaves.includes('timeout'),
-    none: leaves.includes(none),
+    none: [...document.querySelectorAll('[data-testid="create-skipped-note"]')].some(e => (e.textContent || '').includes(none)),
+    paramsStep: !!document.querySelector('[data-testid="create-params-step"]'),
   };
 }, NONE);
 const limitInput = (page, i) => page.locator('input[placeholder="—"]').nth(i);
@@ -133,25 +145,21 @@ for (const vp of VIEWPORTS) {
       await limitInput(page, 0).fill('9');
       await page.getByText('上一步', { exact: true }).click();
       await page.getByText('上一步', { exact: true }).click();
-      await toParams(page, 'Codex（TUI 共存）');
+      await toConfirmSkippingParams(page, 'Codex（TUI 共存）');
       const fx = await visibleFields(page);
-      ck(`${tag}: Codex co-presence step 4 shows only the none-line`,
-        !fx.permissionMode && !fx.maxTurns && !fx.budget && !fx.timeout && fx.none, JSON.stringify(fx));
-      const sx = await box(page, '[data-testid="create-params-step"]');
-      const lx = await box(page, '[data-testid="create-params-none"]');
-      ck(`${tag}: Codex params section is exactly the one line (no leftover blocks)`,
-        !!(sx && lx) && near(sx.y, lx.y) && near(sx.b, lx.b), sx && lx ? `section ${r1(sx.y)}..${r1(sx.b)} line ${r1(lx.y)}..${r1(lx.b)}` : 'missing');
-      if (OUT) await page.screenshot({ path: `${OUT}/${tag}-codex-step4.png` });
-      const b = await submitFromParams(page);
+      ck(`${tag}: Codex co-presence skips the params step; confirm page says so in one line, no param fields`,
+        !fx.paramsStep && !fx.permissionMode && !fx.maxTurns && !fx.budget && !fx.timeout && fx.none, JSON.stringify(fx));
+      if (OUT) await page.screenshot({ path: `${OUT}/${tag}-codex-confirm.png` });
+      const b = await submitFromConfirm(page);
       ck(`${tag}: Codex co-presence request flags = {copresence:true} (stale maxTurns not sent)`,
         b?.node_spec?.runtime === 'codex-app-server' && JSON.stringify(b?.node_spec?.flags) === '{"copresence":true}', JSON.stringify(b?.node_spec?.flags));
     });
     await step(`${tag} Grok`, async () => {
       await openWizard(page);
-      await toParams(page, 'Grok');
+      await toConfirmSkippingParams(page, 'Grok');
       const fg = await visibleFields(page);
-      ck(`${tag}: Grok step 4 shows only the none-line`, !fg.permissionMode && !fg.maxTurns && !fg.budget && !fg.timeout && fg.none, JSON.stringify(fg));
-      const g = await submitFromParams(page);
+      ck(`${tag}: Grok skips the params step; confirm page says so in one line`, !fg.paramsStep && !fg.permissionMode && !fg.maxTurns && !fg.budget && !fg.timeout && fg.none, JSON.stringify(fg));
+      const g = await submitFromConfirm(page);
       ck(`${tag}: Grok request has no flags key`, g?.node_spec?.runtime === 'grok-build-acp' && !('flags' in (g?.node_spec ?? {})), JSON.stringify(g?.node_spec));
     });
     await ctx.close();
