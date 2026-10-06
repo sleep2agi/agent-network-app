@@ -183,7 +183,7 @@ ck('voiceSim 在设备上恒不开(os ≠ web)', !installVoiceSim('android') && 
   ck('hook:有 zoneAt 且判得出区 → zone 事件,否则沿用 dy(桌面)', /if \(zone\) dispatch\(\{ type: 'zone', zone \}\);\s*else dispatch\(\{ type: 'move', dy:/.test(hook));
   ck('voiceSim 只在模块加载时按 Platform.OS 装一次', hook.includes('const VOICE_SIM = installVoiceSim(Platform.OS);'));
   const theme = read('src', 'theme.ts');
-  ck('亮 / 暗主题都有气泡与弧形面板色', (theme.match(/voiceBubble: '#/g) ?? []).length === 2 && (theme.match(/voiceArc: '#/g) ?? []).length === 2);
+  ck('亮 / 暗主题都有气泡与弧形面板色(#609 气泡 = 强调色的 bubbleMine,不写色值)', (theme.match(/voiceBubble: ACCENT\.(light|dark)\.bubbleMine,/g) ?? []).length === 2 && (theme.match(/onVoiceBubble: ACCENT\.(light|dark)\.onBubbleMine,/g) ?? []).length === 2 && (theme.match(/voiceArc: '#/g) ?? []).length === 2);
 }
 
 console.log(`voice hold overlay: ${p}/${t} checks passed`);

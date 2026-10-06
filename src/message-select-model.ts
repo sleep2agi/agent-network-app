@@ -194,7 +194,9 @@ export const selectInputTraits = (os: string): SelectInputTraits => {
   return { readOnly: true, showSoftInputOnFocus: false, contextMenuHidden: false, caretHidden: true };
 };
 
-/** 微信的绿色:手柄实色,高亮带透明度(安卓 selectionColor 原样画在字底下,实色会压字)。 */
+/** 微信的绿色:手柄实色,高亮带透明度(安卓 selectionColor 原样画在字底下,实色会压字)。
+ *  #609 换晴蓝时**有意保留**:选区卡片在「我发出的」气泡上是 bubbleMine 晴蓝底,蓝手柄 / 蓝高亮会看不见;
+ *  这是全 src/ 唯一允许的微信绿(src/voice-accent-guard.test.ts 的 ALLOW)。 */
 export const SELECT_HANDLE_COLOR = '#07C160';
 export const SELECT_HIGHLIGHT_COLOR = 'rgba(7,193,96,0.28)';
 
