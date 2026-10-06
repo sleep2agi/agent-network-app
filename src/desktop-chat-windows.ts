@@ -1,4 +1,5 @@
 import { mergeDetachedChatWindow, openChatWindow } from './desktop-chat-menu';
+import { maskedHubHost } from './mask-hub-address';
 import { listHubProfiles, loadDetachedChatWindows, saveDetachedChatWindows } from './storage';
 
 export async function openRememberedChatWindow(alias: string, profileId?: string, context?: string): Promise<void> {
@@ -19,7 +20,8 @@ export async function restoreDetachedChatWindows(): Promise<void> {
       await openChatWindow(
         window.alias,
         profile.profileId,
-        window.context || profile.displayName || profile.username || profile.serverUrl,
+        // #649:窗口标题进 Dock / 任务栏 / 录屏,地址打码。
+        window.context || profile.displayName || profile.username || maskedHubHost(profile.serverUrl),
       );
     }
   }));

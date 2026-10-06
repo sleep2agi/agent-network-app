@@ -18,11 +18,12 @@ import { colors, onThemeChange, radius, spacing } from './theme';
 import { elevated } from './elevation';
 import { useModalSafePadding } from './safe-area-runtime';
 import { appFetch } from './app-fetch';
+import { maskedHubHost } from './mask-hub-address';
 import { loadSavedProfileConfig, markHubProfileRequiresReauth, updateHubProfile, type HubProfile } from './storage';
 import { forgetAuthMe } from './user-admin-api';
 import { HUB_EDIT_FAILURE_KEY, accountCopyText, offersRelogin, validateHubEdit, type AccountMenuItem, type AccountRowAction, type HubEditFailure } from './account-row-actions';
 
-export const accountName = (p: Pick<HubProfile, 'displayName' | 'username' | 'serverUrl'>): string => p.displayName || p.username || p.serverUrl;
+export const accountName = (p: Pick<HubProfile, 'displayName' | 'username' | 'serverUrl'>): string => p.displayName || p.username || maskedHubHost(p.serverUrl);
 
 /** 复制一行「Hub 地址 · 用户名 · 网络 ID」。只传元数据的三格进去 —— 令牌不在这条路上。 */
 export async function copyAccountLine(profile: HubProfile): Promise<void> {

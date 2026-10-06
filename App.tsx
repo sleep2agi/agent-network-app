@@ -25,6 +25,7 @@ import { usePoll } from './src/usePoll'; // R1 avatar 30s hydrate poll (main's A
 import ChatScreen, { clearChatConversationCache } from './src/ChatScreen';
 import MessagesScreen from './src/MessagesScreen';
 import ServerScreen from './src/ServerScreen';
+import { maskedHubHost, maskUrlsInText } from './src/mask-hub-address';
 import { agentListScreen, type AgentListFilter } from './src/server-stats';
 import ServerSidebar, { type ServerSection } from './src/ServerSidebar';
 import HostSupervisorPickerScreen from './src/HostSupervisorPickerScreen';
@@ -1089,7 +1090,7 @@ export function FirstRunScreen({ busy, stage, error, onStartLocal, onRemote }: {
         <Image source={require('./assets/splash-icon.png')} style={entryStyles.logo} resizeMode="contain" />
         <Text style={entryStyles.title}>Agent Network</Text>
         <Text style={entryStyles.copy}>在这台电脑创建本地工作区，数据留在本机；也可以登录已有服务器。</Text>
-        {error ? <View style={entryStyles.errorBox}><Ionicons name="alert-circle-outline" size={17} color={colors.failed} /><Text style={entryStyles.error}>{error}</Text></View> : null}
+        {error ? <View style={entryStyles.errorBox}><Ionicons name="alert-circle-outline" size={17} color={colors.failed} /><Text style={entryStyles.error}>{maskUrlsInText(error)}</Text></View> : null}
         <Pressable
           accessibilityRole="button"
           disabled={busy}
@@ -1338,7 +1339,7 @@ function DesktopWorkspace({ cfg, screen, setScreen, onLogout, onLocalDataDeleted
             else setScreen({ name: 'logs' });
           }} />
         ) : (
-          <AgentsScreen cfg={cfg} compact selectedAlias={screen.name === 'chat' || screen.name === 'nodeInfo' ? screen.alias : undefined} pinnedAliases={pinnedAliases} onTogglePin={togglePin} mutedAliases={mutedAliases} onToggleMute={toggleMute} onOpenChatWindow={alias => { void openRememberedChatWindow(alias, cfg.profileId, cfg.username || cfg.serverUrl); }} onOpenChat={alias => setScreen({ name: 'chat', alias })} onOpenPerson={p => setScreen(dmScreenFor(p))} selectedPerson={screen.name === 'dm' ? screen.alias : undefined} onOpenGroup={g => setScreen(groupScreenFor(g))} selectedGroup={screen.name === 'group' ? screen.alias : undefined} onOpenPicker={() => setScreen({ name: 'picker' })} onOpenNodeDetail={alias => setScreen({ name: 'nodeDetail', alias })} />
+          <AgentsScreen cfg={cfg} compact selectedAlias={screen.name === 'chat' || screen.name === 'nodeInfo' ? screen.alias : undefined} pinnedAliases={pinnedAliases} onTogglePin={togglePin} mutedAliases={mutedAliases} onToggleMute={toggleMute} onOpenChatWindow={alias => { void openRememberedChatWindow(alias, cfg.profileId, cfg.username || maskedHubHost(cfg.serverUrl)); }} onOpenChat={alias => setScreen({ name: 'chat', alias })} onOpenPerson={p => setScreen(dmScreenFor(p))} selectedPerson={screen.name === 'dm' ? screen.alias : undefined} onOpenGroup={g => setScreen(groupScreenFor(g))} selectedGroup={screen.name === 'group' ? screen.alias : undefined} onOpenPicker={() => setScreen({ name: 'picker' })} onOpenNodeDetail={alias => setScreen({ name: 'nodeDetail', alias })} />
         )}
       </View>
       <View style={desktopStyles.content}>{content}<ShortcutToast text={shortcutToast} /></View>
@@ -1612,12 +1613,12 @@ export function LoginScreen({ onLogin, initialProfile, onCancelReauth, onCancelA
           <Text style={loginStyles.errorTitle}>{LOGIN_FAILURE_COPY[failKind].what}</Text>
           <Text style={loginStyles.errorNext}>{LOGIN_FAILURE_COPY[failKind].next}</Text>
           {failDetail ? (
-            <Text style={loginStyles.errorDetail} numberOfLines={2}>{failDetail}</Text>
+            <Text style={loginStyles.errorDetail} numberOfLines={2}>{maskUrlsInText(failDetail)}</Text>
           ) : null}
           </View>
         </View>
       ) : error ? (
-        <View style={loginStyles.errorBox} accessibilityRole="alert"><Ionicons name="alert-circle-outline" size={18} color={colors.failed} /><Text style={loginStyles.errorTitle}>{error}</Text></View>
+        <View style={loginStyles.errorBox} accessibilityRole="alert"><Ionicons name="alert-circle-outline" size={18} color={colors.failed} /><Text style={loginStyles.errorTitle}>{maskUrlsInText(error)}</Text></View>
       ) : null}
       <Pressable
         style={({ pressed }) => [entryStyles.primary, (!serverUrl || !username || !password) && loginStyles.inactive, pressed && entryStyles.pressed]}

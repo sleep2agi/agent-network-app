@@ -39,6 +39,13 @@ const WEB_URL = `http://127.0.0.1:${web.address().port}/`;
 
 const hubA = await startMockHub({ name: 'a', username: 'alice', password: 'pw-a', token: 'utok_mock_alice', networkId: 'net_mock_a', agents: ['alpha-agent-a1', 'alpha-agent-a2'], tasks: ['task-only-in-hub-A'] });
 const hubB = await startMockHub({ name: 'b', username: 'bob', password: 'pw-b', token: 'utok_mock_bob', networkId: 'net_mock_b', agents: ['bravo-agent-b1'], tasks: ['task-only-in-hub-B'] });
+// #649 打码后的 loopback Hub 地址:http://127.0.0.1:PORT → 127.***.***.1:PORT。写死这一种形状并在不是 loopback 时直接抛,
+// 不在测试里再实现一遍打码规则(规则本身由 src/mask-hub-address.test.ts 钉)。
+const maskedLoopback = (url) => {
+  const m = /^http:\/\/127\.0\.0\.1:(\d+)\/?$/.exec(url);
+  if (!m) throw new Error(`expected a loopback hub url, got ${url}`);
+  return `127.***.***.1:${m[1]}`;
+};
 const HUBS = { A: { hub: hubA, user: 'alice', pw: 'pw-a', agent: 'alpha-agent-a1', task: 'task-only-in-hub-A' }, B: { hub: hubB, user: 'bob', pw: 'pw-b', agent: 'bravo-agent-b1', task: 'task-only-in-hub-B' } };
 
 const findExe = () => {
@@ -181,7 +188,9 @@ async function run(vp, viewport, ua, wide) {
   record(vp, '8 switcher shape', {
     variant: wide ? (panel.x > 100 && panel.y > 50 && panel.x + panel.w < viewport.width - 100) : (Math.abs(panel.y + panel.h - viewport.height) <= 1 && Math.abs(panel.w - viewport.width) <= 1),
     twoRows: rowsText.length === 2,
-    rowFormat: rowsText.some(t => t === `alice @ ${hubA.url.replace('http://', '')}`) && rowsText.some(t => t === `bob @ ${hubB.url.replace('http://', '')}`),
+    // #649:行是「账号 @ 打码主机」。两台 Hub 都是 127.0.0.1:<port>,打码后 = 127.***.***.1:<port>(src/mask-hub-address.ts 的 IPv4 规则)。
+    rowFormat: rowsText.some(t => t === `alice @ ${maskedLoopback(hubA.url)}`) && rowsText.some(t => t === `bob @ ${maskedLoopback(hubB.url)}`),
+    rowNoFullHost: rowsText.length === 2 && rowsText.every(t => !t.includes(hubA.url.replace('http://', '')) && !t.includes(hubB.url.replace('http://', ''))),
     currentIsB: current.includes('bob @'),
     labelsPainted: labelPaint.length === 2 && labelPaint.every(p => !!p?.painted && p.w >= 8),
   }, { panel, rowsText, labelPaint });

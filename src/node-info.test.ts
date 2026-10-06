@@ -31,7 +31,17 @@ const legacy = nodeInfoFacts({
 }, null, 'https://hub.example');
 check('missing OS user is honest and never inferred from project_dir', value(legacy, '系统用户') === '未上报');
 check('safe projection allowlists labels and excludes arbitrary secrets', !legacy.some(f => /token|secret|config/i.test(f.label)) && !JSON.stringify(legacy).includes('atok_secret'));
-check('server URL is a truthful fallback', value(legacy, '服务器') === 'https://hub.example');
+// #649:兜底用的是本端 Hub 地址 → 只上屏打码值。
+check('server URL fallback is masked (#649)', value(legacy, '服务器') === 'h****.example');
+const urlReported = nodeInfoFacts({ alias: 'u', status: 'idle', server: 'https://hub.example.com:9300' } as any, null, 'https://other.example');
+check('a node that reports the Hub URL as its server is masked too (#649)', value(urlReported, '服务器') === 'h.e****.com:9300');
+// N6:节点把本端 Hub 主机(不带协议)当 server 报上来 → 也打码;别的机器名照旧。
+const hubHostOnly = nodeInfoFacts({ alias: 'h', status: 'idle', server: 'hub.example.com:9300' } as any, null, 'https://hub.example.com:9300');
+check('a node that reports the Hub host:port without scheme is masked (#649 N6)', value(hubHostOnly, '服务器') === 'h.e****.com:9300');
+const hubNameOnly = nodeInfoFacts({ alias: 'h', status: 'idle', server: 'HUB.example.com' } as any, null, 'https://hub.example.com:9300');
+check('a node that reports the bare Hub hostname (any case) is masked (#649 N6)', value(hubNameOnly, '服务器') === 'H.e****.com');
+const otherHost = nodeInfoFacts({ alias: 'h', status: 'idle', server: 'edge-b.example.com' } as any, null, 'https://hub.example.com:9300');
+check('a different machine name stays as reported', value(otherHost, '服务器') === 'edge-b.example.com');
 check('credential-bearing server URL is reduced to its safe origin', safeServerLabel('https://user:secret@hub.example/base?q=token#private') === 'https://hub.example');
 check('invalid or non-http server URL fails closed', safeServerLabel('not://[a-secret') === undefined && safeServerLabel('file:///tmp/secret') === undefined);
 check('plain server labels reject credential/query/path shapes', safeServerLabel('hub.example?token=SECRET') === undefined && safeServerLabel('user@host') === undefined && safeServerLabel('host/path') === undefined && safeServerLabel('host name') === undefined);

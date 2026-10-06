@@ -1,4 +1,5 @@
 import { POPOUT_TRAFFIC_LIGHT_X, POPOUT_TRAFFIC_LIGHT_Y, chatPopoutDecorations, tauriShellPlatform } from './window-shell';
+import { maskedHubHost } from './mask-hub-address';
 
 const PIN_KEY = 'anet_chat_pin_v1';
 const pinKey = (profileId?: string) => profileId ? `${PIN_KEY}:${profileId}` : PIN_KEY;
@@ -104,8 +105,8 @@ export function requestedWorkspaceProfileId(search = typeof location === 'undefi
 /** 窗口标题:「账号 · Hub 主机 · Agent Network」,让两个窗口在 Dock / 任务栏里一眼分得开。 */
 export function workspaceWindowTitle(profile: { displayName?: string; username?: string; serverUrl: string }): string {
   const who = profile.displayName?.trim() || profile.username?.trim() || 'Hub 账号';
-  let host = profile.serverUrl;
-  try { host = new URL(profile.serverUrl).host || profile.serverUrl; } catch { /* keep raw */ }
+  // #649:窗口标题会出现在 Dock / 任务栏 / 录屏里,主机打码。
+  const host = maskedHubHost(profile.serverUrl);
   return `${who} · ${host} · Agent Network`;
 }
 

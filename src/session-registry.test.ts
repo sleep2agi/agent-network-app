@@ -10,7 +10,6 @@ import {
   createSessionStore,
   credentialKey,
   sameAccount,
-  accountHost,
   type SessionKv,
 } from './session-registry';
 
@@ -136,7 +135,6 @@ const B = { serverUrl: 'http://127.0.0.1:9311', token: 'utok_bbb', username: 'bo
 
 // ── helpers ──────────────────────────────────────────────────────────────────────────────────
 ck('E1 sameAccount ignores trailing slash + host case, not username', sameAccount({ serverUrl: 'https://H.x/', username: 'u' }, { serverUrl: 'https://h.x', username: 'u' }) && !sameAccount({ serverUrl: 'https://h.x', username: 'u' }, { serverUrl: 'https://h.x', username: 'v' }));
-ck('E2 accountHost strips scheme + slash', accountHost('https://hub.example.com/') === 'hub.example.com' && accountHost('http://127.0.0.1:9311') === '127.0.0.1:9311');
 
 console.log(`\n${p}/${t} passed`);
 if (p !== t) process.exit(1);

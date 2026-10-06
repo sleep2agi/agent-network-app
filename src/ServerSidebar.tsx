@@ -7,6 +7,7 @@ import { railBadgeText } from './rail-nav';
 import { colors, onThemeChange, spacing, radius } from './theme';
 import { usePoll } from './usePoll';
 import { summarize } from './server-stats';
+import { displayHubAddress } from './mask-hub-address';
 import { badgeOffsetCentered, labelClearanceMargin } from './badge-anchor';
 import { ds } from './ui-scale';
 import { useTranslation } from './i18n-react';
@@ -42,7 +43,8 @@ export default function ServerSidebar({ cfg, active, onSelect }: {
   }, [cfg]);
   usePoll(load, 10000, [load]);
 
-  const host = cfg.serverUrl.replace(/^https?:\/\//, '').replace(/\/$/, '');
+  // #649:侧栏常驻在桌面窗口里,一律打码(展开完整地址在「概览 → 连接 → 地址」的眼睛按钮)。
+  const host = displayHubAddress(cfg.serverUrl, false);
   return (
     <View style={styles.root} testID="server-sidebar">
       <View style={styles.header}>
@@ -52,7 +54,7 @@ export default function ServerSidebar({ cfg, active, onSelect }: {
           </View>
           <View style={{ flex: 1, minWidth: 0 }}>
             <Text style={styles.title}>{t('server.current')}</Text>
-            <Text style={styles.host} numberOfLines={1}>{host}</Text>
+            <Text style={styles.host} numberOfLines={1} testID="server-sidebar-host">{host}</Text>
           </View>
         </View>
         <View style={styles.statusRow}>

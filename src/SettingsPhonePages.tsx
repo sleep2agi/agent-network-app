@@ -1,4 +1,5 @@
 import { t as tr } from './i18n';
+import { maskedHubHost } from './mask-hub-address';
 import { useTranslation } from './i18n-react';
 import { localizedVoiceStatus } from './i18n-settings-presentation';
 import { settingsText } from './i18n-settings';
@@ -126,9 +127,9 @@ export default function SettingsPhonePage({ page, ctx }: { page: SettingsCategor
 }
 
 const profileName = (p: HubProfile) => p.displayName || p.username || tr('settings.copy.12');
-/** 账号行的灰字:地址(去掉 http(s):// 和结尾 /)· 用户名 · 网络。宽屏同一写法(settings-account-subtitle)。 */
+/** 账号行的灰字:地址(去掉 http(s):// 和结尾 /,#649 打码)· 用户名 · 网络。宽屏同一写法(settings-account-subtitle)。 */
 export const accountSubtitle = (p: Pick<HubProfile, 'serverUrl' | 'username' | 'networkId'>): string =>
-  `${p.serverUrl.replace(/^https?:\/\//, '').replace(/\/$/, '')} · ${p.username || tr('settings.copy.14')}${p.networkId ? ` · ${p.networkId}` : ''}`;
+  `${maskedHubHost(p.serverUrl)} · ${p.username || tr('settings.copy.14')}${p.networkId ? ` · ${p.networkId}` : ''}`;
 
 // ── 账号 ─────────────────────────────────────────────────────────────────────────────────────
 // #427「设置页整体重新设计」:当前账号一张卡(大头像、「当前」小标、主色细边)置顶;其他账号一组,点一下切换,
@@ -171,7 +172,7 @@ function AccountPage({ ctx }: { ctx: PhonePagesCtx }) {
         </>
       ) : (
         <SettingsGroup>
-          {show('account', 'profiles') ? <SettingsRow label={tr('settings.copy.18')} value={cfg.serverUrl} /> : null}
+          {show('account', 'profiles') ? <SettingsRow label={tr('settings.copy.18')} value={maskedHubHost(cfg.serverUrl)} /> : null}
           {show('account', 'profiles') ? <SettingsRow label={tr('settings.copy.19')} value={ctx.me.username ?? cfg.username ?? '—'} /> : null}
           {show('account', 'addAccount') ? <SettingsRow label={tr('settings.copy.93')} tone="accent" icon="add" onPress={ctx.onAddAccount} testID="settings-add-account" /> : null}
         </SettingsGroup>
