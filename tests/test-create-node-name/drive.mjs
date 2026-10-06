@@ -32,6 +32,22 @@ const r1 = (n) => Math.round(n * 10) / 10;
 const painted = async (page, text) => { const p = await paintedText(page, ':not(:has(*))', text); return [!!p?.painted && p.w >= 8, p ? `painted ${r1(p.w)}×${r1(p.h)}` : 'painted null']; };
 const nextDisabled = async (page) => (await page.locator('[data-testid="create-node-next"]').getAttribute('aria-disabled')) === 'true';
 
+// create_node 的请求原样记下(与 test-create-node-runtime-params 同一个桩),供 (6) 断言实际发出的 workdir。
+const overrideScript = () => {
+  window.__createCalls = [];
+  window.__routeOverride = (u, bodyText) => {
+    if (u.pathname === '/mcp') {
+      let params = {};
+      try { params = JSON.parse(bodyText || '{}')?.params ?? {}; } catch {}
+      if (params.name !== 'create_node') return undefined;
+      window.__createCalls.push(params.arguments);
+      return { jsonrpc: '2.0', id: 1, result: { content: [{ type: 'text', text: JSON.stringify({ ok: true, request_id: 'cr_drive_652' }) }] } };
+    }
+    if (u.pathname === '/api/node-create-requests') return { ok: true, request: { request_id: 'cr_drive_652', status: 'delivered' } };
+    return undefined;
+  };
+};
+
 const web = await serveExport(WEB);
 const browser = await chromium.launch({ headless: true, executablePath: findChromium() });
 const table = [];
@@ -47,6 +63,7 @@ for (const vp of VIEWPORTS) {
   const ctx = await browser.newContext({ viewport: { width: vp.w, height: vp.h }, ...(vp.mobile ? { userAgent: ANDROID_UA, isMobile: true, hasTouch: true, deviceScaleFactor: 2 } : {}) });
   const page = await ctx.newPage();
   await page.addInitScript(initScript, { theme: 'light' });
+  await page.addInitScript(overrideScript);
   await page.goto(`${web.url}?safeAreaSim=0,0,0,0`);
   try {
     await openWizard(page, DAEMON);
@@ -100,6 +117,23 @@ for (const vp of VIEWPORTS) {
     await wd.waitFor({ timeout: 5000 });
     ck(`${vp.name}: confirm page workdir = <root>/<edited folder>`, (await wd.textContent()) === '/home/alice/my-dir', await wd.textContent());
     ck(`${vp.name}: confirm page shows the Chinese name`, (await page.getByText('研发助手A', { exact: true }).count()) >= 1);
+
+    // (6) 端到端:向导「文件夹：…」显示的那个文件夹 == 实际发给 Hub 的 workdir 的最后一段。
+    //     daemon 侧(sleep2agi/agent-network #652:node-name-652.test.ts + qa-rfc026 A.cn2)断言
+    //     收到 `<root>/<folder>` 时盘上建的就是 <root>/<folder>/.anet/nodes/<folder>/ —— 两段接起来即「显示 == 落盘」。
+    await openWizard(page, DAEMON);
+    await page.locator('[data-testid="create-name-input"]').fill('测试');
+    const shown = (await page.locator('[data-testid="create-folder-value"]').textContent()) || '';
+    const shownFolder = shown.replace(/^文件夹：/, '');
+    for (let i = 0; i < 4; i++) await page.locator('[data-testid="create-node-next"]').click();
+    await page.locator('[data-testid="create-node-submit"]').waitFor({ timeout: 5000 });
+    await page.evaluate(() => { window.__createCalls = []; });
+    await page.locator('[data-testid="create-node-submit"]').click();
+    await page.waitForFunction(() => (window.__createCalls || []).length > 0, null, { timeout: 5000 });
+    const sent = await page.evaluate(() => window.__createCalls[0]);
+    ck(`${vp.name}: submitted workdir == <root>/<folder shown in the wizard>`,
+      shownFolder === 'ceshi' && sent?.node_spec?.workdir === `/home/alice/${shownFolder}` && sent?.node_spec?.name === '测试',
+      `shown=${shownFolder} sent=${JSON.stringify(sent?.node_spec)}`);
 
     // 老 daemon
     await openWizard(page, OLD_DAEMON);
