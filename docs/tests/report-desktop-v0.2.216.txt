@@ -1,0 +1,9 @@
+desktop v0.2.216 — 长按「复制」就地复制并提示「已复制」；服务器地址默认打码
+
+A. 本版内容(0.2.215 发版提交 61c3746 之后 main 上合入的 PR + 本 PR)
+  #730(看板 #650) 长按消息只出菜单,「复制」直接复制整条并底部提示「已复制」,不再盖一张新的选区卡片;划选改为点「选择文本」才出。
+  #729(看板 #649) Hub 服务器地址默认打码(服务器页地址行/副标题/切换服务器列表/桌面侧栏);地址行眼睛按钮可临时显示完整地址,复制仍复制完整地址。
+  本 PR(版本号):0.2.215 → 0.2.216,versionCode 2215 → 2216;release-desktop-auto-update.yml 加 What's new in 0.2.216;重新生成 src/changelog-bundled.ts(含 0.2.215 发布日期)。
+  本地:干净 origin/main(daacf4d) bump 后 npm ci / npm test(346/346) / npm run typecheck 全部 rc=0;android-release-notes.mjs 0.2.216 rc=0。
+B. 验证边界(如实)
+  ck 单测 + 页内桩驱动(见 #729 / #730 PR,含 test-server-address-mask 与 test-account-switch drive)。真机:手机长按消息点「复制」不出新消息框、出「已复制」;服务器页地址默认打码、点眼睛显示完整、离开页面后恢复打码。
