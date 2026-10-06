@@ -152,7 +152,7 @@ async function get<T>(cfg: HubConfig, path: string): Promise<T> {
         const res = await appFetch(`${cfg.serverUrl}${path}`, { headers: { ...headers(cfg), ...conditionalHeaders(cfg, path) }, signal: ctrl.signal });
         // 401 的正文区分「登录已过期」(hub 闲置过期,error=token_expired)和别的失效。
         const expired = res.status === 401 && isTokenExpiredBody(await res.json().catch(() => null));
-        reportProfileAuthResponse(res.status, authProfileId(cfg), expired ? 'token_expired' : undefined);
+        reportProfileAuthResponse(res.status, authProfileId(cfg), expired ? 'token_expired' : undefined, cfg.token);
         const text = res.ok || res.status === 304 ? await readConditionalText(cfg, path, res) : null;
         return { res, ok: text !== null, data: text !== null ? (JSON.parse(text) as T) : undefined };
       })(),

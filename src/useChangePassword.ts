@@ -2,7 +2,8 @@
 import { useState } from 'react';
 import { t as tr } from './i18n';
 import './i18n-password';
-import type { HubConfig } from './api';
+import { authProfileId, type HubConfig } from './api';
+import { beginTokenRotation } from './profile-auth-state';
 import { changeHubPassword } from './change-password-api';
 import { changePasswordFormProblem, strengthHint, type ChangePasswordForm, type StrengthHint } from './password-policy';
 
@@ -36,14 +37,24 @@ export type ChangePasswordOutcome = { ok: true } | { ok: false; error: string; c
  * 本地校验不过 = 不发请求。onChanged 拿到 hub 新签的令牌(旧 hub 没有 → undefined),负责把它存下、换掉当前会话;抛错 = 存不下。
  */
 export async function runChangePassword(
-  cfg: Pick<HubConfig, 'serverUrl' | 'token'>,
+  cfg: Pick<HubConfig, 'serverUrl' | 'token' | 'profileId'>,
   form: ChangePasswordForm,
   onChanged: (token: string | undefined, revoked: number | undefined) => Promise<void>,
   api: typeof changeHubPassword = changeHubPassword,
 ): Promise<ChangePasswordOutcome> {
   const problem = changePasswordFormProblem(form);
   if (problem) return { ok: false, error: tr(`password.err.${problem}`) };
-  const result = await api(cfg, form.current, form.next);
+  // hub 会在处理这个请求时吊销 cfg.token:同时在飞的读拿旧令牌回 401,别把人踢回登录页(profile-auth-state.ts)。
+  const endRotation = beginTokenRotation(authProfileId(cfg), cfg.token);
+  let result: Awaited<ReturnType<typeof changeHubPassword>>;
+  try {
+    result = await api(cfg, form.current, form.next);
+  } catch (e) {
+    endRotation(false);
+    throw e;
+  }
+  // 旧 hub 不回新令牌也不吊销旧的:那旧令牌没死,它的 401 照常上报。
+  endRotation(result.ok && !!result.token);
   if (!result.ok) {
     return {
       ok: false,
@@ -60,7 +71,7 @@ export async function runChangePassword(
 }
 
 /** 表单状态 + 提交。成功后表单清空(密码不在内存里多留)。 */
-export function useChangePassword(cfg: Pick<HubConfig, 'serverUrl' | 'token'>, onChanged: (token: string | undefined, revoked: number | undefined) => Promise<void>): ChangePasswordState {
+export function useChangePassword(cfg: Pick<HubConfig, 'serverUrl' | 'token' | 'profileId'>, onChanged: (token: string | undefined, revoked: number | undefined) => Promise<void>): ChangePasswordState {
   const [form, setForm] = useState<ChangePasswordForm>(EMPTY);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);

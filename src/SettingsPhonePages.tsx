@@ -121,7 +121,7 @@ export type PhonePagesCtx = {
 export default function SettingsPhonePage({ page, ctx }: { page: SettingsCategoryKey; ctx: PhonePagesCtx }) {
   useTranslation();
   switch (page) {
-    case 'account': return ctx.detail === 'loginDevices' ? <LoginDevicesPage ctx={ctx} /> : ctx.detail === 'changePassword' ? <ChangePasswordEditPage ctx={ctx} /> : <AccountPage ctx={ctx} />;
+    case 'account': return ctx.detail === 'loginDevices' ? <LoginDevicesPage ctx={ctx} /> : ctx.detail === 'changePassword' && ctx.canChangePassword ? <ChangePasswordEditPage ctx={ctx} /> : <AccountPage ctx={ctx} />;
     case 'users': return <>{ctx.renderUsers(ctx.detail === 'userMember' ? 'userMember' : ctx.detail === 'userGroup' ? 'userGroup' : null)}</>;
     case 'localHub': return <LocalHubPage ctx={ctx} />;
     case 'appearance': return <AppearancePage ctx={ctx} />;

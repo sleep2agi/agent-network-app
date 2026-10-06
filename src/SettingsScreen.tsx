@@ -63,6 +63,7 @@ import './i18n-password';
 import ChangePasswordPanel from './ChangePasswordPanel';
 import { useChangePassword } from './useChangePassword';
 import { useWeakPassword, weakPasswordFlags } from './weak-password-flag';
+import { clearProfileUnauthorized } from './profile-auth-state';
 
 /** 设置里居中确认框的遮罩色(有键盘避让的那个画在 ModalKeyboardAvoider 上)。 */
 const MODAL_SCRIM = 'rgba(0,0,0,0.55)';
@@ -199,7 +200,8 @@ export default function SettingsScreen({
   const [initialDetail] = useState(() => peekPendingSettingsDetail());
   useEffect(() => { clearPendingSettingsDetail(); }, []);
   // 手机三级页(API Key、高级 / 旧版控制台、免打扰时段、管理账号)。
-  const [detail, setDetail] = useState<SettingsDetailKey | null>(initialDetail);
+  // 本地工作区账号没有「修改密码」(canChangePassword):从外面带进来的这个三级页请求直接丢掉,不落在一个有标题没内容的页上。
+  const [detail, setDetail] = useState<SettingsDetailKey | null>(initialDetail === 'changePassword' && cfg.profileId === LOCAL_HUB_PROFILE_ID ? null : initialDetail);
   // 三级页接管的顶栏(成员页的「保存」、它推入的选择页)。onBack 放 ref:返回键的监听不因它重注册。
   const [headerOverride, setHeaderOverrideState] = useState<SettingsHeaderOverride | null>(null);
   const headerBackRef = useRef<(() => void) | undefined>(undefined);
@@ -242,6 +244,8 @@ export default function SettingsScreen({
     await weakPasswordFlags.clear(cfg);
     if (token && token !== cfg.token) {
       await saveConfig({ ...cfg, token });
+      // 万一在换令牌前已经有一次 401 被记下(不该发生:旧令牌的 401 在 profile-auth-state 里被忽略),也清掉。
+      clearProfileUnauthorized(sessionIdOf(cfg));
       const id = sessionIdOf(cfg);
       if (id) await Promise.resolve((onProfileEdited ?? onSwitchProfile)(id));
     }

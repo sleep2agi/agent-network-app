@@ -11,7 +11,8 @@ import { changePasswordFormProblem, classifyChangePasswordFailure, isCommonPassw
 import { changeHubPassword } from './change-password-api';
 import { runChangePassword, strengthHintText } from './useChangePassword';
 import { createWeakPasswordFlags, weakPasswordKey, WEAK_PASSWORD_STORAGE_KEY } from './weak-password-flag-core';
-import { login } from './api';
+import { fetchStatus, login } from './api';
+import { onProfileUnauthorized, reportProfileAuthResponse, clearProfileUnauthorized } from './profile-auth-state';
 import { SETTINGS_CATEGORIES, SETTINGS_DETAIL_PARENT, SETTINGS_DETAIL_TITLE, clearPendingSettingsDetail, filterSettings, peekPendingSettingsDetail, rememberedSettingsView, requestSettingsDetail, resetSettingsViewMemory, settingsDetailFromQuery } from './settings-model';
 import { settingsText } from './i18n-settings';
 import { settingsWindowUrl, requestedSettingsDetail } from './desktop-settings-window';
@@ -204,12 +205,72 @@ g.fetch = realFetch;
   ck('I2 phone banner sits in navContent before the screens, only on tab home screens, and opens 修改密码', /styles\.navContent[\s\S]{0,400}PHONE_BANNER_SCREENS\.has\(screen\.name\)[\s\S]{0,200}<WeakPasswordBanner cfg=\{cfg\} onOpen=\{\(\) => \{ requestSettingsDetail\('changePassword'\); setScreen\(\{ name: 'settings' \}\); \}\} \/>[\s\S]{0,40}\{twoPaneSelection \?/.test(app) && !/new Set\(\[[^\]]*'chat'/.test(app.match(/PHONE_BANNER_SCREENS[^;]*;/)?.[0] ?? ''));
   ck('I3 desktop banner tops the content column and opens the settings window on 修改密码', /<View style=\{desktopStyles\.content\}>[\s\S]{0,200}<WeakPasswordBanner cfg=\{cfg\} desktop onOpen=\{\(\) => \{ void openSettingsWindow\('account', 'changePassword'\)/.test(app));
   ck('I4 settings window boot / category event honour the detail', app.includes('const detail = requestedSettingsDetail();') && app.includes('const detail = settingsDetailFromQuery(event.payload?.detail);'));
-  ck('I5 success: clear the flag, store the new token for this account, reload it in place, toast 密码已修改', /weakPasswordFlags\.clear\(cfg\)[\s\S]{0,120}saveConfig\(\{ \.\.\.cfg, token \}\)[\s\S]{0,160}onProfileEdited \?\? onSwitchProfile[\s\S]{0,200}setToast\(tr\('password\.done'\)\)/.test(settings));
+  ck('I5 success: clear the flag, store the new token for this account, reload it in place, toast 密码已修改', /weakPasswordFlags\.clear\(cfg\)[\s\S]{0,120}saveConfig\(\{ \.\.\.cfg, token \}\)[\s\S]{0,400}onProfileEdited \?\? onSwitchProfile[\s\S]{0,200}setToast\(tr\('password\.done'\)\)/.test(settings));
   ck('I6 wide: 安全 group has the 修改密码 row; its page replaces the account section', settings.includes('testID="settings-change-password-row"') && settings.includes('<ChangePasswordPanel pw={password} weak={weakPassword}') && settings.includes("!showWideDevices && !showWidePassword ? ("));
-  ck('I7 phone: account sub-page row → detail page with the three fields', phone.includes('testID="settings-change-password"') && phone.includes("ctx.detail === 'changePassword' ? <ChangePasswordEditPage ctx={ctx} />") && ['change-password-current', 'change-password-new', 'change-password-confirm'].every(id => edit.includes(`testID="${id}"`)));
+  ck('I7 phone: account sub-page row → detail page with the three fields', phone.includes('testID="settings-change-password"') && phone.includes("ctx.detail === 'changePassword' && ctx.canChangePassword ? <ChangePasswordEditPage ctx={ctx} />") && ['change-password-current', 'change-password-new', 'change-password-confirm'].every(id => edit.includes(`testID="${id}"`)));
   ck('I8 not offered for the local workspace account', settings.includes('const canChangePassword = cfg.profileId !== LOCAL_HUB_PROFILE_ID;'));
   ck('I9 theme blue only: banner and panel use accent / tonalBg tokens, no literal colours', !/['"]#[0-9a-f]{3,8}['"]|rgba?\(/i.test(banner + panel) && banner.includes('colors.tonalBg') && banner.includes('colors.accent'));
   ck('I10 banner text is the owner\'s wording', read('src/i18n-password.ts').includes("'password.weakBanner': ['当前密码过于简单，请修改'") && read('src/i18n-password.ts').includes("'password.done': ['密码已修改'"));
+}
+
+// ── J. N1:hub 在改密码时吊销旧令牌 —— 同时在飞的请求拿旧令牌回 401,不许把人踢回登录页 ──
+{
+  const PID = 'p-rotate';
+  const OLD = 'utok_placeholder_rot_old', NEW = 'utok_placeholder_rot_new';
+  const rcfg = { serverUrl: 'http://hub-rot.invalid', token: OLD, profileId: PID, networkId: 'net_x' };
+  const kicked: string[] = [];
+  const off = onProfileUnauthorized(id => { kicked.push(id); });
+  // the hub's view: OLD is live until the password POST, then only NEW is.
+  let live = new Set([OLD]);
+  const statusCalls: number[] = [];
+  g.fetch = async (url: string, init: any) => {
+    const tok = String(init?.headers?.Authorization ?? '').replace('Bearer ', '');
+    const ok = live.has(tok);
+    const status = ok ? 200 : 401;
+    if (String(url).includes('/api/status')) statusCalls.push(status);
+    const body = ok ? { sessions: [] } : { ok: false, error: 'invalid token' };
+    return { ok, status, headers: { get: () => null }, text: async () => JSON.stringify(body), json: async () => body };
+  };
+  let concurrent: Promise<unknown> | null = null;
+  const api = async () => {
+    live = new Set([NEW]); // revoked during the POST …
+    concurrent = fetchStatus(rcfg).catch(() => null); // … while a poll with the old token is in flight
+    await concurrent;
+    return { ok: true as const, token: NEW, revoked: 3 };
+  };
+  let saved: string | undefined;
+  const out = await runChangePassword(rcfg, F('old-placeholder', STRONG), async token => { saved = token; }, api);
+  ck('J1 a request that 401s on the old token during the change does not log the user out', out.ok && saved === NEW && statusCalls.includes(401) && kicked.length === 0, JSON.stringify({ statusCalls, kicked }));
+  await fetchStatus(rcfg).catch(() => null);
+  ck('J2 a late request still holding the old token after the change: 401 ignored too', kicked.length === 0);
+  const after = await fetchStatus({ ...rcfg, token: NEW }).then(() => true, () => false);
+  ck('J3 the new token reads fine (user stays signed in)', after && kicked.length === 0);
+  live = new Set();
+  await fetchStatus({ ...rcfg, token: NEW }).catch(() => null);
+  ck('J4 a 401 on the NEW token still logs out', kicked.length === 1 && kicked[0] === PID);
+  clearProfileUnauthorized(PID);
+  // failed change: the old token was never revoked, so its 401 means what it always meant.
+  const PID2 = 'p-rotate-fail';
+  const fcfg = { ...rcfg, profileId: PID2, token: 'utok_placeholder_fail' };
+  const failed = await runChangePassword(fcfg, F('wrong-placeholder', STRONG), async () => {}, async () => ({ ok: false as const, kind: 'wrong-current' as const, message: 'incorrect current password' }));
+  reportProfileAuthResponse(401, PID2, undefined, fcfg.token);
+  ck('J5 after a failed change the old token is not exempt any more (its 401 is reported)', !failed.ok && kicked.includes(PID2));
+  const OLDHUB = 'p-rotate-oldhub';
+  const ocfg = { ...rcfg, profileId: OLDHUB, token: 'utok_placeholder_oldhub' };
+  await runChangePassword(ocfg, F('old-placeholder', STRONG), async () => {}, async () => ({ ok: true as const }));
+  reportProfileAuthResponse(401, OLDHUB, undefined, ocfg.token);
+  ck('J6 an older hub that returns no new token (and revokes nothing): the kept token is not exempt', kicked.includes(OLDHUB));
+  off();
+  g.fetch = realFetch;
+  ck('J7 both 401 reporters pass the token they used', read('src/api.ts').includes("expired ? 'token_expired' : undefined, cfg.token);") && read('src/login-sessions-api.ts').includes("'token_expired' : undefined, cfg.token);"));
+}
+
+// ── K. N7:本地工作区账号到不了修改密码页 ──
+{
+  const phone = read('src/SettingsPhonePages.tsx');
+  const settings = read('src/SettingsScreen.tsx');
+  ck('K1 phone router renders the page only when canChangePassword', phone.includes("ctx.detail === 'changePassword' && ctx.canChangePassword ? <ChangePasswordEditPage ctx={ctx} />") && !/ctx\.detail === 'changePassword' \?/.test(phone));
+  ck('K2 a deep link (banner / detail=changePassword) for the local account is dropped, wide page gated too', settings.includes("initialDetail === 'changePassword' && cfg.profileId === LOCAL_HUB_PROFILE_ID ? null : initialDetail") && /const showWidePassword = [^;]*canChangePassword/.test(settings));
 }
 
 console.log(`${p}/${t} passed`);
