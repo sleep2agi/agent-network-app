@@ -13,11 +13,16 @@ import {
   ageLabel,
   compareHosts,
   cpuMeter,
+  daemonDisplayName,
   heartbeatMs,
+  HOST_DEAD_MS,
   HOST_STALE_MS,
+  hostDisplayName,
   hostLevels,
+  isDeadNode,
   isStale,
   levelTone,
+  shortHostname,
   sizeMeter,
   telemetryOf,
 } from './host-levels';
@@ -171,6 +176,101 @@ ck('null / NaN → none', levelTone(null) === 'none' && levelTone(NaN) === 'none
   ck('行上带 hostname 时也按 hostname 命中', applyAgentFilter([{ alias: 'z', status: 'idle', hostname: 'host-a' } as Session], { host: 'host-a', aliases: [] }).length === 1);
   ck('isFilterActive 认 host', isFilterActive({ host: 'host-a' }));
   ck('filterLabel 写机器名', filterLabel({ host: 'host-a', status: 'offline' }) === '机器 host-a · 离线', filterLabel({ host: 'host-a', status: 'offline' }));
+  ck('filterLabel 有 hostLabel 时写显示名', filterLabel({ host: 'iZab12cd34ef56gh78ijZ', hostLabel: 'cloud' }) === '机器 cloud');
+}
+
+// ── 8a. 显示名(daemon 别名 / 云主机名缩短) ──
+{
+  ck('daemon-alpha → alpha', daemonDisplayName('daemon-alpha') === 'alpha');
+  ck('daemon-beta → beta', daemonDisplayName('daemon-beta') === 'beta');
+  ck('daemon-gamma → gamma', daemonDisplayName('daemon-gamma') === 'gamma');
+  ck('没有 daemon- 前缀的别名原样', daemonDisplayName('box-7') === 'box-7');
+  ck('只去开头的 daemon-(中间的不动)', daemonDisplayName('my-daemon-x') === 'my-daemon-x');
+  ck('别名就叫 daemon- ⇒ 不变成空', daemonDisplayName('daemon-') === 'daemon-');
+  const CLOUD = 'iZab12cd34ef56gh78ijZ'; // 占位:iZ + 18 位小写字母数字 + Z
+  ck('iZ…Z 云主机名 → 前 8 个字符 + …', shortHostname(CLOUD) === 'iZab12cd…', shortHostname(CLOUD));
+  ck('iZ 段恰好 15 位也缩短', shortHostname('iZabcdefghijklmnoZ') === 'iZabcdef…');
+  ck('iZ 段只有 14 位不缩短', shortHostname('iZabcdefghijklmnZ') === 'iZabcdefghijklmnZ');
+  ck('普通名字不截断(哪怕很长)', shortHostname('example-workstation-very-long.local') === 'example-workstation-very-long.local');
+  ck('大写段 / 没有结尾 Z 的不当云主机名', shortHostname('iZAB12CD34EF56GH78Z') === 'iZAB12CD34EF56GH78Z' && shortHostname('iZab12cd34ef56gh78ij') === 'iZab12cd34ef56gh78ij');
+  const daemons = [
+    { alias: 'daemon-alpha', hostname: 'host-alpha', online: true },
+    { alias: 'daemon-old', hostname: CLOUD, online: false },
+    { alias: 'daemon-cloud', hostname: CLOUD, online: true },
+  ];
+  ck('hostname 上有 daemon ⇒ 用 daemon 别名去前缀', hostDisplayName('host-alpha', daemons) === 'alpha');
+  ck('daemon 优先于云主机名缩短;多个 daemon 时在线的那个胜', hostDisplayName(CLOUD, daemons) === 'cloud', hostDisplayName(CLOUD, daemons));
+  ck('hostname 匹配忽略大小写和首尾空白', hostDisplayName('HOST-ALPHA', [{ alias: 'daemon-alpha', hostname: ' host-alpha ' }]) === 'alpha');
+  ck('没有 daemon 的云主机 ⇒ 缩短', hostDisplayName(CLOUD, []) === 'iZab12cd…');
+  ck('没有 daemon 的普通机器 ⇒ 原样', hostDisplayName('host-plain', daemons) === 'host-plain');
+  ck('daemon 没报 hostname 不匹配任何机器', hostDisplayName('host-x', [{ alias: 'daemon-x', hostname: null }]) === 'host-x');
+  const r = hostLevels([row('d1', 'idle', 1, full('host-alpha')), row('c1', 'idle', 1, full(CLOUD)), row('p1', 'idle', 1, full('host-plain'))], NOW, daemons);
+  const by = Object.fromEntries(r.hosts.map(h => [h.hostname, h]));
+  ck('hostLevels 带出 displayName', by['host-alpha'].displayName === 'alpha' && by[CLOUD].displayName === 'cloud' && by['host-plain'].displayName === 'host-plain');
+  ck('renamed 只在显示名 ≠ hostname 时为真', by['host-alpha'].renamed && by[CLOUD].renamed && !by['host-plain'].renamed);
+  ck('完整 hostname 保留在 hostname 上(筛选键不变)', by[CLOUD].hostname === CLOUD);
+}
+
+// ── 8b. 主列表 / 离线折叠 ──
+{
+  const r = hostLevels([
+    row('on-1', 'idle', 1, full('host-on')),
+    row('on-2', 'offline', 30, full('host-on')),
+    row('off-1', 'offline', 2, full('host-off')), // 全离线(心跳新)
+    row('off-2', 'offline', 3, full('host-off')),
+    row('st-1', 'idle', 20, full('host-stale')), // 有「在线」节点但数据 20 分钟前
+    row('on-3', 'working', 1, full('host-on2')),
+  ], NOW);
+  ck('主列表 = 有在线节点且数据新鲜', r.active.map(h => h.hostname).join() === 'host-on,host-on2', r.active.map(h => h.hostname).join());
+  ck('节点全离线 ⇒ 折叠区', r.offline.some(h => h.hostname === 'host-off'));
+  ck('数据过期(哪怕 Hub 还说在线) ⇒ 折叠区', r.offline.some(h => h.hostname === 'host-stale'));
+  ck('折叠区 2 台', r.offline.length === 2, String(r.offline.length));
+  ck('主列表里没有一台过期机器', r.active.every(h => !h.stale && h.online > 0));
+  ck('hosts = 主列表在前、离线在后', r.hosts.map(h => h.hostname).join() === [...r.active, ...r.offline].map(h => h.hostname).join());
+  const none = hostLevels([row('x', 'offline', 2, full('host-x'))], NOW);
+  ck('没有在线机器时主列表为空、全在折叠区', none.active.length === 0 && none.offline.length === 1);
+}
+
+// ── 8c. 总数不算死节点(离线且心跳 > 7 天) ──
+{
+  const DAY = 24 * 60;
+  const r = hostLevels([
+    row('live-1', 'idle', 1, full('host-a')),
+    row('live-2', 'offline', 6 * DAY, full('host-a')), // 6 天:还算
+    row('dead-1', 'offline', 8 * DAY, full('host-a', { mem_used_gb: 63 })),
+    row('dead-2', 'offline', 30 * DAY, full('host-a')),
+    row('gone-1', 'offline', 9 * DAY, full('host-gone')), // 整台只剩死节点
+    row('nohost-dead', 'offline', 10 * DAY, {}),
+    row('nohost-live', 'idle', 1, {}),
+  ], NOW);
+  const a = r.hosts.find(h => h.hostname === 'host-a')!;
+  ck('死节点不进总数(1 在线 · 共 2)', a.online === 1 && a.total === 2, JSON.stringify({ o: a.online, t: a.total }));
+  ck('死节点单独计数', a.dead === 2, String(a.dead));
+  ck('死节点不进别名(点进列表不带它们)', a.aliases.join() === 'live-1,live-2', a.aliases.join());
+  ck('只剩死节点的机器整台不出现', !r.hosts.some(h => h.hostname === 'host-gone') && r.deadHosts === 1, String(r.deadHosts));
+  ck('未上报 hostname 的死节点也不计入「未上报」', r.unreported === 1, String(r.unreported));
+  ck('isDeadNode:恰好 7 天不算死', !isDeadNode({ alias: 'e', status: 'offline', updated_at: ago(HOST_DEAD_MS / 60_000) } as Session, NOW));
+  ck('isDeadNode:7 天 + 1 分钟算死', isDeadNode({ alias: 'e', status: 'offline', updated_at: ago(HOST_DEAD_MS / 60_000 + 1) } as Session, NOW));
+  ck('isDeadNode:在线的节点心跳再旧也不算死(在线数 ≤ 总数)', !isDeadNode({ alias: 'e', status: 'idle', updated_at: ago(30 * DAY) } as Session, NOW));
+  ck('isDeadNode:读不出心跳不算死', !isDeadNode({ alias: 'e', status: 'offline' } as Session, NOW));
+}
+
+// ── 8d. 告警排最前 + 红点 ──
+{
+  const r = hostLevels([
+    ...Array.from({ length: 5 }, (_, i) => row(`big-${i}`, 'idle', 1, full('host-big'))),
+    row('disk-red', 'idle', 1, full('host-zz-disk', { disk_used_gb: 470 })), // 94% 磁盘
+    row('warn', 'idle', 1, full('host-warn', { mem_used_gb: 57 })), // 89% 只是黄
+    row('stale-red', 'idle', 30, full('host-stale-red', { mem_used_gb: 63 })),
+  ], NOW, [{ alias: 'daemon-aa', hostname: 'host-zz-disk', online: true }]);
+  const order = r.active.map(h => h.hostname);
+  ck('> 90% 的机器排最前(哪怕只有 1 个节点)', order[0] === 'host-zz-disk', order.join());
+  ck('只有 > 90% 才算告警:89% 不排前', order.indexOf('host-warn') > order.indexOf('host-big'), order.join());
+  ck('告警机器 alert = true', r.active[0].alert);
+  ck('非告警机器 alert = false', r.active.slice(1).every(h => !h.alert));
+  const st = r.offline.find(h => h.hostname === 'host-stale-red')!;
+  ck('过期的红机器不算告警(没有红点、在折叠区)', !!st && !st.alert);
+  ck('同档内按显示名排序', compareHosts({ ...r.active[1], hostname: 'z', displayName: 'a', online: 1, total: 1, alert: false }, { ...r.active[1], hostname: 'a', displayName: 'b', online: 1, total: 1, alert: false }) < 0);
 }
 
 // ── 8. 接线(源码契约) ──
@@ -180,9 +280,12 @@ ck('null / NaN → none', levelTone(null) === 'none' && levelTone(NaN) === 'none
   const agents = fs.readFileSync(path.join(root, 'src/AgentsScreen.tsx'), 'utf8');
   ck('服务器页用 hostLevels 算机器分区', server.includes('hostLevels(hostRows'));
   ck('服务器页读全量投影(light 没有 host 字段)', server.includes('fetchNodeStatus(cfg)'));
-  ck('点机器行 → onOpenAgents 带 host + aliases', server.includes('onOpenAgents?.({ host: h.hostname, aliases: h.aliases })'));
-  ck('机器分区默认最多 HOSTS_COLLAPSED 台', server.includes('hosts.slice(0, HOSTS_COLLAPSED)'));
-  ck('节点列表筛选条显示机器名', agents.includes('`机器 ${activeFilter.host}`'));
+  ck('点机器行 → onOpenAgents 带 host + aliases + 显示名', server.includes('onOpenAgents?.({ host: h.hostname, aliases: h.aliases, hostLabel: h.displayName })'));
+  ck('主列表默认最多 HOSTS_COLLAPSED 台(只数在线机器)', server.includes('activeHosts.slice(0, HOSTS_COLLAPSED)'));
+  ck('离线机器折叠在「离线机器 N 台」后面', server.includes('`离线机器 ${offlineHosts.length} 台`') && server.includes('showOfflineHosts'));
+  ck('服务器页把 daemon 列表交给 hostLevels(起显示名)', server.includes('hostLevels(hostRows ?? [], Date.now(), daemons)') && server.includes('fetchHostSupervisors(cfg)'));
+  ck('机器名显示 displayName,完整 hostname 只在提示条 / 展开行', server.includes('{h.displayName}</Text>') && server.includes('server-host-full-'));
+  ck('节点列表筛选条显示机器显示名', agents.includes('`机器 ${activeFilter.hostLabel || activeFilter.host}`'));
 }
 
 console.log(`\n${pass}/${total} passed`);
