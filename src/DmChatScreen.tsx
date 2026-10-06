@@ -5,7 +5,7 @@
 // 私信没有 agent 会话的任务状态、引用、语音、⋯ 面板 —— 只有文字和附件。
 // 附件与 agent 会话同一套(owner 2026-09-30「给人好像发不了图片」):手机「＋」微信式面板(相册 / 文件 / 拍照),
 // 桌面「＋」系统文件选择器 + 拖进会话区 + ⌘/Ctrl+V;草稿缩略图、原图开关、并发上传队列、点图预览。
-import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { ActivityIndicator, Alert, BackHandler, FlatList, Image, Keyboard, KeyboardAvoidingView, Platform, Pressable, ScrollView, StatusBar, StyleSheet, View, useWindowDimensions } from 'react-native';
 import { Text, TextInput } from './ui-text';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -21,6 +21,7 @@ import { ackUserMessages, type HubConfig } from './api';
 import { ATTACH_ENABLED, pickCameraPhoto, pickDocument, pickFiles, pickImages, prepareForUpload, uploadImage, type PickedImage } from './attach';
 import { attachmentCacheScope } from './attach-download';
 import { attachmentsFromClipboard, isTauriDesktop, releaseClipboardAttachment } from './clipboard-attachment';
+import { conversationDraftKey, stashDraftAttachments, takeDraftAttachments, useComposerDraft } from './composer-drafts';
 import { attachmentsFromFiles, filesFromTransfer, plusPressAction, transferHasFiles } from './desktop-file-intake';
 import { addToDraft, draftCountLabel, draftImageCount, isDraftImage, MAX_DRAFT_IMAGES, oversizeMessage, remainingImageSlots, removeFromDraft, sendBlocker, willCompressBeforeUpload } from './image-draft';
 import { createUploadMemo, runUploadQueue, UPLOAD_CONCURRENCY, uploadFailureSummary, withUploadState, type UploadState } from './upload-queue';
@@ -104,7 +105,10 @@ export default function DmChatScreen({ cfg, networkId, peer: peerProp, group, on
   const [messages, setMessages] = useState<LocalDm[]>([]);
   const [loaded, setLoaded] = useState(false);
   const [error, setError] = useState('');
-  const [draft, setDraft] = useState('');
+  const [draft, setDraftState] = useState('');
+  // #632 草稿(微信同款):按 账号 + Hub + 网络 + 会话(私信对方 / 群)存在本机;发成功才删,发失败留着(composer-drafts.ts)。
+  const composerDraftKey = conversationDraftKey({ ...cfg, networkId }, isGroup ? { kind: 'group', groupId } : { kind: 'dm', userId: peer.user_id || peer.username });
+  const { setDraft, holdForSend } = useComposerDraft(composerDraftKey, draft, setDraftState);
   const [attached, setAttached] = useState<PickedImage[]>([]);
   const [sending, setSending] = useState(false);
   const [paneWidth, setPaneWidth] = useState(0);
@@ -169,6 +173,13 @@ export default function DmChatScreen({ cfg, networkId, peer: peerProp, group, on
   // ── 草稿里的附件(与 ChatScreen 同一套 image-draft 规则:最多 9 张图 / 20 个附件,选择顺序即发送顺序)──
   const attachedRef = useRef<PickedImage[]>([]);
   attachedRef.current = attached;
+  // #632 选了还没发的附件:按会话留在本次运行的内存里(重启不保留)。
+  useLayoutEffect(() => {
+    const restored = takeDraftAttachments(composerDraftKey);
+    attachedRef.current = restored;
+    setAttached(restored);
+    return () => stashDraftAttachments(composerDraftKey, attachedRef.current);
+  }, [composerDraftKey]);
   const [sendOriginal, setSendOriginal] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   useEffect(() => {
@@ -285,7 +296,7 @@ export default function DmChatScreen({ cfg, networkId, peer: peerProp, group, on
 
   // ── 发送:先按选择顺序并发上传(≤3),全部传上才发私信;一张失败整条不发,标「未送达」可重试 ──
   const patch = (id: string, fn: (m: LocalDm) => LocalDm) => setMessages(prev => prev.map(m => (m.message_id === id ? fn(m) : m)));
-  const deliver = async (clientId: string, text: string, files: PickedImage[], original: boolean) => {
+  const deliver = async (clientId: string, text: string, files: PickedImage[], original: boolean): Promise<boolean> => {
     patch(clientId, m => ({ ...m, pending: true, failed: false, _uploadError: undefined }));
     try {
       const run = await runUploadQueue(files, async img => {
@@ -305,7 +316,7 @@ export default function DmChatScreen({ cfg, networkId, peer: peerProp, group, on
       if (run.failed.length) {
         const summary = uploadFailureSummary(files.map(f => f.fileName), run.errors) ?? t('chat.attachmentFailed');
         patch(clientId, m => ({ ...m, pending: false, failed: true, _uploadError: summary }));
-        return;
+        return false;
       }
       const uploaded = run.results as DmAttachment[];
       // 群:同一个 client_request_id 重投,Hub 按 (群, 发信人, client_request_id) 定出同一个 message_id,不会多出一条。
@@ -317,9 +328,11 @@ export default function DmChatScreen({ cfg, networkId, peer: peerProp, group, on
       if (isGroup) emitGroupChat(null);
       files.forEach(releaseClipboardAttachment);
       setError('');
+      return true;
     } catch (e) {
       patch(clientId, m => ({ ...m, pending: false, failed: true }));
       setError(String((e as Error)?.message ?? e));
+      return false;
     }
   };
   const submit = async () => {
@@ -331,19 +344,24 @@ export default function DmChatScreen({ cfg, networkId, peer: peerProp, group, on
     const original = sendOriginal;
     const clientId = newClientRequestId();
     setSending(true);
+    // #632:先把草稿「押」住再清空输入框 —— 发成功才删草稿,发失败离开再回来字还在。
+    const draftSettled = holdForSend(draft);
     setDraft('');
     attachedRef.current = [];
     setAttached([]);
     const optimistic: LocalDm = { message_id: clientId, content: text, direction: 'out', created_at: new Date().toISOString(), pending: true, _files: files, _original: original };
     setMessages(prev => mergeDm(prev, [optimistic]));
     try {
-      await deliver(clientId, text, files, original);
+      draftSettled(await deliver(clientId, text, files, original));
     } finally {
       setSending(false);
     }
   };
   // 同一个 client_request_id 重投:hub 按它定出同一个 message_id,不会多出一条;已传上的附件不重传。
-  const retry = (m: LocalDm) => { void deliver(m.message_id, m.content ?? '', m._files ?? [], m._original ?? false); };
+  const retry = (m: LocalDm) => {
+    const draftSettled = holdForSend(m.content ?? '');
+    void deliver(m.message_id, m.content ?? '', m._files ?? [], m._original ?? false).then(draftSettled);
+  };
   // 手机输入框随内容长高(与 agent 会话同一套:最小的内容高度 = 一行;web 上按行数给 textarea 定高,封顶 120)。
   const [inputContentHeight, setInputContentHeight] = useState<number | undefined>(undefined);
   const oneLineHeightRef = useRef<number | undefined>(undefined);

@@ -45,6 +45,7 @@ import {
   PickedImage,
 } from './attach';
 import { attachmentsFromClipboard, isTauriDesktop, releaseClipboardAttachment } from './clipboard-attachment';
+import { conversationDraftKey, stashDraftAttachments, takeDraftAttachments, useComposerDraft } from './composer-drafts';
 import { pointerUi } from './pointer-ui';
 import { attachmentsFromFiles, filesFromTransfer, plusPressAction, transferHasFiles } from './desktop-file-intake';
 import { addToDraft, draftCountLabel, draftImageCount, isDraftImage, MAX_DRAFT_IMAGES, oversizeMessage, remainingImageSlots, removeFromDraft, sendBlocker, willCompressBeforeUpload } from './image-draft';
@@ -307,7 +308,11 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
   const [conversationReady, setConversationReady] = useState(false);
   const [hasOlder, setHasOlder] = useState(true);
   const [loadingOlder, setLoadingOlder] = useState(false);
-  const [draft, setDraft] = useState('');
+  const [draft, setDraftState] = useState('');
+  // #632 草稿(微信同款):按 账号 + Hub + 网络 + 会话 存在本机,离开 / 切会话 / 退后台 / 重启后放回。
+  // 主窗口复用同一个 ChatScreen 切会话 —— key 变就等于离开旧会话、进新会话(composer-drafts.ts)。
+  const composerDraftKey = conversationDraftKey(cfg, { kind: 'node', alias });
+  const { setDraft } = useComposerDraft(composerDraftKey, draft, setDraftState);
   // 设置 → 快捷键:Enter 发送(默认)还是 Ctrl/⌘+Enter 发送。
   const sendKey = useSyncExternalStore(subscribeShortcuts, sendKeyPref, sendKeyPref);
   // Fold/unfold remounts this screen (phone stack ⇄ two-pane); carry the unsent
@@ -771,6 +776,13 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
   };
   const attachedRef = useRef<PickedImage[]>([]);
   attachedRef.current = attached;
+  // #632 选了还没发的附件:按会话留在本次运行的内存里(切走再回来还在;重启不保留,见 composer-drafts.ts)。
+  useLayoutEffect(() => {
+    const restored = takeDraftAttachments(composerDraftKey);
+    attachedRef.current = restored;
+    setAttached(restored);
+    return () => stashDraftAttachments(composerDraftKey, attachedRef.current);
+  }, [composerDraftKey]);
   // 选择顺序即发送顺序:addToDraft 只追加、不排序;超出 9 张图 / 20 个附件的部分被拒并提示。
   const appendAttachments = useCallback((incoming: PickedImage[]) => {
     if (!incoming.length) return;

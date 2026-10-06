@@ -41,6 +41,10 @@
       "kind": "stub",
       "secs": 101
     },
+    "test-composer-drafts/drive.mjs": {
+      "kind": "stub",
+      "secs": 45
+    },
     "test-composer-drag-browser/drive.mjs": {
       "kind": "manual",
       "why": "positive-control harness for the 0.2.46 divider bug: run via its run.sh (bun build of a standalone page), not against the app export"

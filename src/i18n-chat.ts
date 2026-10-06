@@ -12,6 +12,8 @@ export const chatTranslations = {
   'chat.attachmentFailed': ['附件上传失败', 'Attachment upload failed'],
   'chat.btwQuestion': ['BTW 需要一个问题', 'BTW needs a question'],
   'chat.btwUpload': ['BTW 附件上传失败', 'BTW attachment upload failed'],
+  // #632 会话列表:有没发出去的字的会话,红色「[草稿]」+ 草稿开头(微信同款)。
+  'chat.draftTag': ['[草稿]', '[Draft]'],
   'chat.draftKept': ['附件未上传，草稿已保留', 'Attachment not uploaded. Your draft was kept.'],
   'chat.processing': ['••• 正在处理…', '••• Working…'],
   'chat.cannotOpen': ['无法打开', 'Could not open'],
