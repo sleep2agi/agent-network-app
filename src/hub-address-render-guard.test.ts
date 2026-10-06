@@ -48,11 +48,15 @@ const ALLOWLIST: Array<{ file: string; line: string; why: string }> = [
   { file: 'App.tsx', line: 'value={serverUrl}', why: '登录页「服务器地址」输入框(TextInput),用户自己在输入' },
 ];
 
+/** 路径一律用正斜杠比较(Windows 上 path.relative 给的是 src\\a.tsx)。 */
+export const toPosix = (p: string): string => p.split(path.sep).join('/').replace(/\\/g, '/');
+
 export type Finding = { file: string; line: number; rule: string; text: string };
 
 export function scanSource(file: string, src: string): Finding[] {
   const out: Finding[] = [];
-  src.split('\n').forEach((raw, i) => {
+  // CRLF 检出(Windows 上 git autocrlf)按行切完先去掉行尾 \r。
+  src.split(/\r?\n/).forEach((raw, i) => {
     const line = raw.replace(/(^|[^:])\/\/.*$/, '$1');
     if (!new RegExp(IDENT).test(line) || MASKED.test(line)) return;
     const trimmed = line.trim();
@@ -136,27 +140,39 @@ for (const [name, file, code] of good) {
 ck('白名单只认那个文件:别的文件里同一行照报', scanSource('src/Other.tsx', 'value={serverUrl}').length === 1);
 ck('白名单每条都写了理由', ALLOWLIST.every(a => a.why.length >= 8));
 
+// ── 2b. 跨平台自检(Linux 上就能抓到 Windows 才会出的错) ──
+ck('toPosix:反斜杠路径 → 正斜杠', toPosix('src\\deep\\er\\c.tsx') === 'src/deep/er/c.tsx' && toPosix('src/a.tsx') === 'src/a.tsx');
+{
+  const crlf = ['const ok = 1;', '<SettingsRow value={cfg.serverUrl} />', '                value={serverUrl}', "const b = `${cfg.serverUrl}`;", '// 以前这里是 <Text>{cfg.serverUrl}</Text>', ''].join('\r\n');
+  const f = scanSource('App.tsx', crlf);
+  ck('CRLF 源码:坏行照报、行号对', f.length === 1 && f[0].line === 2 && f[0].rule.startsWith('R1'), JSON.stringify(f));
+  ck('CRLF 源码:白名单输入框照样放行(行尾 \\r 不影响比较)', !f.some(x => x.line === 3));
+  ck('CRLF 源码:只有插值的模板串不因行尾 \\r 被当成上屏文字', !f.some(x => x.line === 4), JSON.stringify(f));
+  // `.` 不匹配 \r:不先去掉行尾 \r,去注释的 /\/\/.*$/ 在 CRLF 行上整条失配,注释里的旧写法会被当成代码报出来。
+  ck('CRLF 源码:注释行照样被去掉', !f.some(x => x.line === 5), JSON.stringify(f));
+}
+
 // ── 3. 取集自检 ──
 {
   const tmp = fs.mkdtempSync(path.join(require('node:os').tmpdir(), 'hub-guard-'));
   fs.mkdirSync(path.join(tmp, 'src', 'deep', 'er'), { recursive: true });
   for (const f of ['src/a.tsx', 'src/b.ts', 'src/deep/er/c.tsx', 'src/x.test.ts', 'src/mask-hub-address.ts', 'App.tsx']) fs.writeFileSync(path.join(tmp, f), '');
-  const got = collect(tmp).map(p => path.relative(tmp, p)).sort();
+  const got = collect(tmp).map(p => toPosix(path.relative(tmp, p))).sort();
   ck('取集:递归收子目录、带上 App.tsx、跳过测试与打码模块本身', JSON.stringify(got) === JSON.stringify(['App.tsx', 'src/a.tsx', 'src/b.ts', 'src/deep/er/c.tsx']), JSON.stringify(got));
   fs.rmSync(tmp, { recursive: true, force: true });
 }
 const files = collect(ROOT);
-const rel = files.map(f => path.relative(ROOT, f));
+const rel = files.map(f => toPosix(path.relative(ROOT, f)));
 ck('取集:真仓里收到了 ServerScreen / SettingsScreen / SettingsPhonePages / App.tsx', ['src/ServerScreen.tsx', 'src/SettingsScreen.tsx', 'src/SettingsPhonePages.tsx', 'App.tsx'].every(f => rel.includes(f)), String(rel.length));
-ck('取集:真仓里有子目录下的文件(没退回非递归)', rel.some(f => f.split(path.sep).length > 2), '');
+ck('取集:真仓里有子目录下的文件(没退回非递归)', rel.some(f => f.split('/').length > 2), '');
 ck('取集:文件数 > 100(分母没塌)', files.length > 100, String(files.length));
 
 // ── 4. 真仓:0 条违规,且白名单每条都还在用 ──
-const findings = files.flatMap(f => scanSource(path.relative(ROOT, f).split(path.sep).join('/'), fs.readFileSync(f, 'utf8')));
+const findings = files.flatMap(f => scanSource(toPosix(path.relative(ROOT, f)), fs.readFileSync(f, 'utf8')));
 ck('真仓:没有未打码的 Hub 地址上屏', findings.length === 0, '\n' + findings.map(f => `   ${f.file}:${f.line} [${f.rule}] ${f.text}`).join('\n'));
 for (const a of ALLOWLIST) {
   const src = fs.readFileSync(path.join(ROOT, a.file), 'utf8');
-  ck(`白名单仍然对应真代码:${a.file} ${a.line}`, src.split('\n').some(l => l.trim() === a.line));
+  ck(`白名单仍然对应真代码:${a.file} ${a.line}`, src.split(/\r?\n/).some(l => l.trim() === a.line));
 }
 
 console.log(`\n${pass}/${total} passed`);
