@@ -8,7 +8,7 @@
 // 390×844 + 安卓 UA + safeAreaSim 32/0/24/0 = 手机单栏,起始就是语音模式。亮 / 暗各跑一遍。
 //
 // 断言:
-//   1 按住:全屏压暗、绿色气泡(电平条随喂的电平变化、秒数、流式文字)、✕ / 文 两个圈、弧形面板「松开 转文字」
+//   1 按住:全屏压暗、晴蓝气泡(电平条随喂的电平变化、秒数、流式文字)、✕ / 文 两个圈、弧形面板「松开 转文字」
 //   2 几何:气泡水平居中 ≤1px;✕ / 文 关于中线对称 ≤1px(且同高);弧形面板满宽、贴底,面板内容在底部安全区之上
 //   3 滑到 文:高亮 + 「松开 放进草稿」;滑到 ✕:变红放大 + 「松开手指，取消」;滞回(出圈 hitEnter+10 仍在区里)
 //   4 松手结果:✕ = 丢弃(草稿不变);文 = 进草稿、不发送;中间 = 现状(进草稿、不发送)
@@ -184,6 +184,7 @@ for (const scheme of ['light', 'dark']) {
   const { ctx, page } = await open(scheme);
   const shot = async (name) => { const f = `${OUT}/holdoverlay-${tag}-${name}.png`; await page.screenshot({ path: f }); shots.push(f); };
 
+  await shot('0-idle'); // #609:未按下时的「按住 说话」大条(换色前后对照用)
   // ── 1 按住:中间区 ──
   await startLevels(page);
   const bar = await press(page);
@@ -202,7 +203,7 @@ for (const scheme of ['light', 'dark']) {
   const dim = await bg(page, '[data-testid="voice-overlay"]');
   ck(tag, '全屏压暗 50% 黑', dim === 'rgba(0, 0, 0, 0.5)', dim);
   const bubbleBg = await bg(page, '[data-testid="voice-hold-bubble"] > div');
-  ck(tag, '气泡是绿色(亮 #95ec69 / 暗 #3eb575)', bubbleBg === (scheme === 'light' ? 'rgb(149, 236, 105)' : 'rgb(62, 181, 117)'), bubbleBg);
+  ck(tag, '气泡是晴蓝(#609:亮 #1b65db / 暗 #2563d9,= bubbleMine)', bubbleBg === (scheme === 'light' ? 'rgb(27, 101, 219)' : 'rgb(37, 99, 217)'), bubbleBg);
 
   // ── 2 几何 ──
   const pane = await box(page, 'chat-pane');
