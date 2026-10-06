@@ -7,6 +7,8 @@
 // 这个开关放在 flags 里而不是 node_spec 顶层,是为了让老 Hub / 老 daemon **报错**(flag_key_unknown)
 // 而不是静默丢掉字段、照样建一个无头节点。
 
+import { normalizeNodeName } from './node-name';
+
 /** 只有这些 runtime 发 flags.copresence:true。Hub 对其它 runtime 会回 flag_not_applicable_to_runtime。 */
 export const COPRESENCE_FLAG_RUNTIMES: readonly string[] = ['codex-app-server'];
 
@@ -91,7 +93,8 @@ export function buildCreateNodeSpec(i: CreateNodeSpecInput): CreateNodeSpec {
     ...copresenceFlags(i.runtimeId),
   };
   return {
-    name: i.name.trim(),
+    // #652 —— Hub 存的是 trim + NFC 后的名字(normalizeNodeName,与 Hub/daemon 同一个函数)。
+    name: normalizeNodeName(i.name),
     runtime: i.runtimeId,
     // model 可空（hub 自 da84f34d 起 optional/nullable）：共存 runtime
     // 的 models 为空数组，跟随宿主 TUI 登录态 —— 此时必须**省略**字段，

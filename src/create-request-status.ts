@@ -3,6 +3,7 @@
 // 纯函数:把 daemon 回的 status/error 变成向导该显示的话。
 import { describeWorkdirError } from './create-node-workdir';
 import { describeCopresenceError } from './create-node-request';
+import { describeNodeNameRejection } from './node-name';
 
 export type CreateRequestStatus = 'pending' | 'delivered' | 'started' | 'failed' | 'rejected' | 'runtime_capability_check_failed' | string;
 
@@ -21,7 +22,8 @@ export type CreateRequestVerdict =
 
 const FAILED = new Set(['failed', 'rejected', 'runtime_capability_check_failed']);
 
-export function createRequestVerdict(row: CreateRequestRow | null | undefined): CreateRequestVerdict {
+/** `name` = 向导里提交的名字(行里没有 child_name 时用它判断是不是老 daemon 拒了新规则的名字)。 */
+export function createRequestVerdict(row: CreateRequestRow | null | undefined, name?: string): CreateRequestVerdict {
   if (!row || !row.status) return { kind: 'unknown' };
   const status = String(row.status);
   if (FAILED.has(status)) {
@@ -29,6 +31,9 @@ export function createRequestVerdict(row: CreateRequestRow | null | undefined): 
     // Codex 共存:老 Hub/daemon 不认 flags.copresence、或目标机缺 tmux/codex/codex 登录 → 说人话,原文附在后面。
     const co = describeCopresenceError({ error: why, status, runtime: row.runtime });
     if (co) return { kind: 'failed', text: co };
+    // #652 —— 老 daemon 只认小写英文名:Hub 放行了「测试」,daemon 回 node_name_invalid。
+    const nm = describeNodeNameRejection(why, row.child_name || name || '', 'daemon');
+    if (nm) return { kind: 'failed', text: `${nm}(${why})` };
     const head = status === 'runtime_capability_check_failed'
       ? `daemon 说它不支持 ${row.runtime ?? '这个'} runtime`
       : status === 'rejected' ? 'daemon 拒绝了这次创建' : 'daemon 启动子节点失败';

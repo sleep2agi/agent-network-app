@@ -10,6 +10,7 @@ import { PANE_BACK_TEST_ID, paneShowsBack } from './pane-header';
 import { buildCreateNodeSpec, describeCopresenceError, wizardParamsFor } from './create-node-request';
 import { STEP_DESCRIPTIONS, STEP_TITLES, skippedStepsLine, stepAfter, stepBefore, stepState, visibleStep, wizardSteps, type WizardStepKey } from './create-node-steps';
 import { defaultWorkdir, describeWorkdirError, randomHex6, workdirError, workdirForRequest, workdirRootOf, workdirSlug } from './create-node-workdir';
+import { checkNodeName, describeNodeNameRejection, folderError, normalizeNodeName, NODE_NAME_HINT } from './node-name';
 import { buttonStyle, buttonTextStyle, elevated } from './elevation';
 import { readinessFor, readinessSelectable } from './runtime-readiness';
 
@@ -37,13 +38,11 @@ import { readinessFor, readinessSelectable } from './runtime-readiness';
 // MUST match exactly — a stale id here ships invalid combos to the hub
 // and surfaces only at submit failure. Caught via local curl probe
 // during wizard build, not as a regression.
-// Hub-side name validator (server/src/create-node-validate.ts:34).
-// Wizard MUST surface the regex at step 0 instead of only validating
-// length > 0 — otherwise uppercase / spaces / Chinese / digit-prefix
-// names pass the wizard, walk all 5 steps, then fail with
-// node_name_invalid only after submit (通信龙 #3 B2 catch).
-const NAME_RE = /^[a-z][a-z0-9_-]{0,63}$/;
-const NAME_RULE_HINT = '小写字母开头，仅允许 a-z 0-9 _ -，最多 64 字符';
+// Hub-side name validator: checkNodeName in ./node-name (a verbatim copy of the Hub/daemon
+// shared module server/src/shared/node-name.ts, #652). The wizard MUST surface the same
+// rule at step 1 — otherwise a name walks all 5 steps and fails with node_name_invalid only
+// after submit (通信龙 #3 B2 catch). Before #652 the rule was /^[a-z][a-z0-9_-]{0,63}$/ and
+// refused 「测试」; now the name may be Chinese and the folder (working directory) stays ASCII.
 
 const RUNTIMES: WizardRuntime[] = [
   { id: 'claude-agent-sdk', label: 'Claude Agent SDK', models: ['deepseek-v4-pro', 'MiniMax-M3', 'claude-sonnet-4-6', 'claude-opus-4-x'] },
@@ -118,6 +117,9 @@ export default function CreateNodeWizardScreen({ cfg, daemon, onBack, onExit, de
   const [workdirOpen, setWorkdirOpen] = useState(false);
   // 名字转不出 ASCII 时的兜底目录名;整个向导里固定一个,不随重渲染变。
   const [workdirFallback] = useState(() => `node-${randomHex6()}`);
+  // #652 —— 第 1 步名字下面的「文件夹」:null = 没改过,跟着名字走(workdirSlug);改过之后固定为用户填的值。
+  const [folderEdited, setFolderEdited] = useState<string | null>(null);
+  const [folderOpen, setFolderOpen] = useState(false);
   const [phase, setPhase] = useState<Phase>('form');
   const [msg, setMsg] = useState('');
 
@@ -139,7 +141,7 @@ export default function CreateNodeWizardScreen({ cfg, daemon, onBack, onExit, de
   useEffect(() => {
     if (phase !== 'awaiting_register' || childUp) return;
     let tries = 0;
-    const want = name.trim();
+    const want = normalizeNodeName(name);
     let lastVerdict: CreateRequestVerdict = { kind: 'unknown' };
     const tick = async () => {
       if (!pollAlive.current) return;
@@ -157,7 +159,7 @@ export default function CreateNodeWizardScreen({ cfg, daemon, onBack, onExit, de
       // (Vincent 2026-09-07:Mac 上 opencode 共存起不来,向导只会说「24s 没注册」)。老 hub 404 → unknown。
       if (requestId) {
         try {
-          lastVerdict = createRequestVerdict(await fetchCreateRequestStatus(cfg, requestId));
+          lastVerdict = createRequestVerdict(await fetchCreateRequestStatus(cfg, requestId), want);
           if (pollAlive.current && lastVerdict.kind === 'failed') {
             setPhase('error');
             setMsg(`创建失败:${lastVerdict.text}`);
@@ -190,11 +192,12 @@ export default function CreateNodeWizardScreen({ cfg, daemon, onBack, onExit, de
   const nextStep = stepAfter(steps, cur);
   const prevStep = stepBefore(steps, cur);
   const skippedLine = skippedStepsLine(runtimeId, runtime.models);
-  // Mirror hub regex — the UX must surface exactly what the hub will
+  // Mirror the hub rule — the UX must surface exactly what the hub will
   // accept, not a looser local rule. A looser client-side check would
   // let the user submit names that the server then rejects, turning
   // "validation" into a delayed failure the user has to guess at.
-  const nameValid = NAME_RE.test(name.trim());
+  const nameCheck = checkNodeName(name);
+  const nameValid = nameCheck.ok;
   const isRuntimeSupported = useCallback((id: string) => {
     const supported = daemon.runtimes_supported;
     if (!Array.isArray(supported) || supported.length === 0) return true;
@@ -216,17 +219,21 @@ export default function CreateNodeWizardScreen({ cfg, daemon, onBack, onExit, de
     !Array.isArray(daemon.runtimes_supported) ||
     daemon.runtimes_supported.length === 0 ||
     RUNTIMES.some(r => daemon.runtimes_supported!.includes(r.id));
+  // 老 daemon/hub 不带 default_workdir_root → null → 文件夹 / 工作目录两行都隐藏、请求不带 workdir。
+  const workdirRoot = workdirRootOf(daemon);
+  // #652 —— 文件夹(工作目录最后一段):默认 = 名字的 ASCII slug(中文转拼音);在第 1 步可改,规则 ^[a-z][a-z0-9-]{0,63}$。
+  const folder = folderEdited ?? workdirSlug(name, workdirFallback);
+  const folderErr = workdirRoot && folderEdited !== null ? folderError(folderEdited) : null;
   const canNext =
     hasUsableRuntime &&
     (
-      (cur === 'name' && nameValid) ||
+      (cur === 'name' && nameValid && !folderErr) ||
       (cur === 'runtime' && isRuntimeAllowed(runtimeId)) ||
       cur === 'model' || cur === 'params'
     );
   const busy = phase === 'creating' || phase === 'awaiting_register';
-  // 老 daemon/hub 不带 default_workdir_root → null → 整行隐藏、请求不带 workdir。
-  const workdirRoot = workdirRootOf(daemon);
-  const workdir = workdirEdited ?? (workdirRoot ? defaultWorkdir(workdirRoot, workdirSlug(name, workdirFallback)) : '');
+  // 确认页上显式改过完整路径(workdirEdited)优先;否则 <root>/<文件夹>。
+  const workdir = workdirEdited ?? (workdirRoot ? defaultWorkdir(workdirRoot, folder) : '');
   const workdirErr = workdirRoot ? workdirError(workdir, workdirRoot) : null;
   const canSubmit = !workdirErr;
 
@@ -327,7 +334,7 @@ export default function CreateNodeWizardScreen({ cfg, daemon, onBack, onExit, de
       setMsg(`服务器未就绪：${res.error}`);
     } else {
       setPhase('error');
-      setMsg(`创建失败：${describeCopresenceError({ error: res.error, field: res.field, runtime: runtimeId }) ?? describeWorkdirError(res.error) ?? res.error}`);
+      setMsg(`创建失败：${describeNodeNameRejection(res.error, name, 'hub') ?? describeCopresenceError({ error: res.error, field: res.field, runtime: runtimeId }) ?? describeWorkdirError(res.error) ?? res.error}`);
     }
   };
 
@@ -413,9 +420,9 @@ export default function CreateNodeWizardScreen({ cfg, daemon, onBack, onExit, de
           {phase === 'creating'
             ? '正在下发创建请求…'
             : phase === 'awaiting_register'
-              ? `正在监测 ${name.trim()} 注册…（最长 24s）`
+              ? `正在监测 ${normalizeNodeName(name)} 注册…（最长 24s）`
               : phase === 'done' && childUp
-                ? `✓ ${name.trim()} 已上线`
+                ? `✓ ${normalizeNodeName(name)} 已上线`
                 : msg}
         </Text>
       </View>
@@ -433,10 +440,49 @@ export default function CreateNodeWizardScreen({ cfg, daemon, onBack, onExit, de
               style={styles.input}
               autoCapitalize="none"
               autoCorrect={false}
+              testID="create-name-input"
             />
-            <Text style={[styles.hint, name.trim() !== '' && !nameValid && styles.hintErr]}>
-              {NAME_RULE_HINT}
+            <Text testID="create-name-hint" style={[styles.hint, !nameCheck.ok && nameCheck.error !== 'empty' && styles.hintErr]}>
+              {!nameCheck.ok && nameCheck.error !== 'empty' ? nameCheck.message : NODE_NAME_HINT}
             </Text>
+            {/* #652 —— 名字可以是中文,文件夹(工作目录)必须是英文:单独一行显示、可改。
+                与确认页「工作目录」同一个开关:daemon 不报 default_workdir_root 就不显示(它不认 workdir)。 */}
+            {workdirRoot ? (
+              <View style={styles.folderBlock}>
+                <View style={styles.folderLine} testID="create-folder-row">
+                  <Text style={styles.folderText} numberOfLines={1} testID="create-folder-value">
+                    {`文件夹：${folder}`}
+                  </Text>
+                  <Pressable
+                    testID="create-folder-edit"
+                    onPress={() => setFolderOpen(o => !o)}
+                    hitSlop={8}
+                    accessibilityLabel={folderOpen ? '收起文件夹编辑' : '修改文件夹名'}
+                    style={({ pressed }) => [styles.summaryEdit, pressed && { opacity: 0.6 }]}
+                  >
+                    <Text style={styles.summaryEditText}>{folderOpen ? '收起' : '改'}</Text>
+                  </Pressable>
+                </View>
+                {folderOpen ? (
+                  <TextInput
+                    testID="create-folder-input"
+                    autoFocus
+                    value={folder}
+                    onChangeText={setFolderEdited}
+                    placeholder="例如 my-agent-1"
+                    placeholderTextColor={colors.textMuted}
+                    style={styles.input}
+                    autoCapitalize="none"
+                    autoCorrect={false}
+                  />
+                ) : null}
+                {folderOpen || folderErr ? (
+                  <Text testID="create-folder-hint" style={[styles.hint, !!folderErr && styles.hintErr]}>
+                    {folderErr ?? '文件夹名只能用小写英文字母、数字和 -，以字母开头；节点建在这个目录里。'}
+                  </Text>
+                ) : null}
+              </View>
+            ) : null}
           </View>
         )}
 
@@ -571,7 +617,7 @@ export default function CreateNodeWizardScreen({ cfg, daemon, onBack, onExit, de
             <View style={styles.summaryCard}>
               <SummaryRow k="服务器" v={`${daemon.alias} (${daemon.hostname || '—'})`} />
               <Divider />
-              <SummaryRow k="名字" v={name.trim() || '—'} />
+              <SummaryRow k="名字" v={normalizeNodeName(name) || '—'} />
               <Divider />
               <SummaryRow k="Runtime" v={runtimeDisplayLabel(RUNTIMES, runtime)} />
               <Divider />
@@ -613,7 +659,7 @@ export default function CreateNodeWizardScreen({ cfg, daemon, onBack, onExit, de
                         autoFocus
                         value={workdir}
                         onChangeText={setWorkdirEdited}
-                        placeholder={defaultWorkdir(workdirRoot, workdirSlug(name, 'my-agent-1'))}
+                        placeholder={defaultWorkdir(workdirRoot, folder)}
                         placeholderTextColor={colors.textMuted}
                         style={styles.input}
                         autoCapitalize="none"
@@ -646,6 +692,7 @@ export default function CreateNodeWizardScreen({ cfg, daemon, onBack, onExit, de
           </Pressable>
           {nextStep !== null ? (
             <Pressable
+              testID="create-node-next"
               disabled={!canNext}
               onPress={() => setStep(nextStep)}
               style={({ pressed }) => [
@@ -971,6 +1018,10 @@ const makeStyles = () => StyleSheet.create({
   // 值 +「改」共一条中线(「改」是 CJK 字形,行盒比 ASCII 路径高,顶对齐会差 1–2px)。
   summaryValWithAction: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: spacing.md },
   summaryEdit: { flexShrink: 0 },
+  // #652 —— 第 1 步「文件夹：…」一行:左边与名字输入框对齐(同一 section,无额外缩进)。
+  folderBlock: { gap: spacing.xs },
+  folderLine: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
+  folderText: { flex: 1, minWidth: 0, color: colors.text, fontSize: 13 },
   summaryEditText: { color: colors.accent, fontSize: 13, fontWeight: '600' },
   summaryEditor: { gap: spacing.xs, paddingHorizontal: spacing.lg, paddingBottom: spacing.md },
   divider: { height: 1, backgroundColor: colors.border, marginLeft: spacing.lg },

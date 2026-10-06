@@ -27,6 +27,8 @@ check('nothing usable (emoji) → fallback', workdirSlug('🎸', 'node-1a2b3c', 
 check('dictionary unavailable → fallback, never the raw CJK', workdirSlug('吉他大师', 'node-1a2b3c', () => null) === 'node-1a2b3c');
 check('empty / only separators → fallback', workdirSlug('  ', 'node-1a2b3c', fakePy) === 'node-1a2b3c' && workdirSlug('__--', 'node-1a2b3c', fakePy) === 'node-1a2b3c');
 check('leading/trailing separators trimmed', workdirSlug('-x-', 'f', fakePy) === 'x');
+check('#652 digit-leading slug gets node- prefix (folder rule ^[a-z])', workdirSlug('123', 'f', fakePy) === 'node-123' && workdirSlug('_x', 'f', fakePy) === 'x' && workdirSlug('2号机', 'f', () => '2haoji') === 'node-2haoji');
+check('#652 every slug satisfies the folder rule', ['My_Agent 1', '123', '-x-', 'a'.repeat(80), '9'.repeat(70), '吉他大师', '🎸'].every(n => /^[a-z][a-z0-9-]{0,63}$/.test(workdirSlug(n, 'node-1a2b3c', fakePy))));
 check('slug capped at 64 chars without a trailing dash', (() => { const s = workdirSlug('a'.repeat(63) + '-bbbb', 'f', fakePy); return s.length <= 64 && !s.endsWith('-'); })());
 check('every slug is [a-z0-9-]', ['My_Agent 1', '吉他大师', 'N站牛', '🎸', 'A.B.C'].every(n => /^[a-z0-9-]+$/.test(workdirSlug(n, 'node-abcdef', fakePy))));
 check('randomHex6 is 6 lowercase hex', /^[0-9a-f]{6}$/.test(randomHex6()) && randomHex6(() => 0.999) === 'ffffff');
@@ -71,7 +73,9 @@ check('wizard only renders the row when the daemon advertises a root', wiz.inclu
 check('wizard sends workdir through workdirForRequest (omitted for old daemons)', wiz.includes('workdirField: workdirForRequest(workdirRoot, workdir),')
   && readFileSync(new URL('./create-node-request.ts', import.meta.url), 'utf8').includes('...i.workdirField,'));
 check('submit is disabled while the workdir is invalid', wiz.includes('disabled={!canSubmit}') && wiz.includes('const canSubmit = !workdirErr;'));
-check('unedited workdir follows the name through the ASCII slug', wiz.includes('workdirEdited ?? (workdirRoot ? defaultWorkdir(workdirRoot, workdirSlug(name, workdirFallback))'));
+check('unedited workdir follows the name through the ASCII slug (via the step-1 folder, #652)',
+  wiz.includes('const folder = folderEdited ?? workdirSlug(name, workdirFallback);')
+  && wiz.includes('workdirEdited ?? (workdirRoot ? defaultWorkdir(workdirRoot, folder)'));
 check('fallback is fixed once per wizard (useState initialiser, not per render)', wiz.includes('const [workdirFallback] = useState(() => `node-${randomHex6()}`);'));
 check('row reuses the shared summaryRow layout', /testID="create-workdir-row"/.test(wiz) && wiz.includes('<View style={styles.summaryRow} testID="create-workdir-row">'));
 const api = readFileSync(new URL('./api.ts', import.meta.url), 'utf8');
