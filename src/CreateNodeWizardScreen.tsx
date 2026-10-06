@@ -11,6 +11,7 @@ import { buildCreateNodeSpec, describeCopresenceError, wizardParamsFor } from '.
 import { STEP_DESCRIPTIONS, STEP_TITLES, skippedStepsLine, stepAfter, stepBefore, stepState, visibleStep, wizardSteps, type WizardStepKey } from './create-node-steps';
 import { defaultWorkdir, describeWorkdirError, randomHex6, workdirError, workdirForRequest, workdirRootOf, workdirSlug } from './create-node-workdir';
 import { buttonStyle, buttonTextStyle, elevated } from './elevation';
+import { readinessFor, readinessSelectable } from './runtime-readiness';
 
 // #338 RFC-026 §3.1 — mobile create-node wizard rest (Plan B).
 // Up to 5 post-picker steps: ① name ② runtime ③ model ④ flags ⑤ confirm.
@@ -70,6 +71,19 @@ const RUNTIMES: WizardRuntime[] = [
 ];
 const PERMISSION_MODES = ['default', 'acceptEdits', 'plan', 'bypassPermissions'];
 
+// 初始 runtime:daemon 声明支持、且(#623)没被 runtime_readiness 判为建不了的第一个 ——
+// 先主列表,再「高级」折叠项(不把实验性 runtime 当默认)。一个都没有时退回原来的取法
+// (第一个声明支持的),由 Runtime 步把原因摆出来。daemon 没报 readiness 时结果与以前完全相同。
+function initialRuntime(daemon: HostSupervisorDaemon): WizardRuntime {
+  const supported = daemon.runtimes_supported;
+  const declared = Array.isArray(supported) && supported.length > 0;
+  const usable = (r: WizardRuntime) => (!declared || supported!.includes(r.id)) && readinessSelectable(daemon, r.id);
+  const pick = primaryRuntimes(RUNTIMES).find(usable) ?? RUNTIMES.find(usable);
+  if (pick) return pick;
+  if (declared) return primaryRuntimes(RUNTIMES).find(r => supported!.includes(r.id)) ?? RUNTIMES.find(r => supported!.includes(r.id)) ?? RUNTIMES[0];
+  return RUNTIMES[0];
+}
+
 type Phase = 'form' | 'creating' | 'awaiting_register' | 'done' | 'error';
 
 export interface CreateNodeWizardScreenProps {
@@ -86,30 +100,14 @@ export default function CreateNodeWizardScreen({ cfg, daemon, onBack, onExit, de
   // ── All hooks FIRST (no conditional-hook regressions) ──────────────
   const [step, setStep] = useState<WizardStepKey>('name');
   const [name, setName] = useState('');
-  const [runtimeId, setRuntimeId] = useState(() => {
-    // Initial runtime: first supported by daemon if it published; else default.
-    const supported = daemon.runtimes_supported;
-    if (Array.isArray(supported) && supported.length > 0) {
-      // 先在主列表里找,找不到才落到「高级」折叠项(不把实验性 runtime 当默认)。
-      const match = primaryRuntimes(RUNTIMES).find(r => supported.includes(r.id))
-        ?? RUNTIMES.find(r => supported.includes(r.id));
-      return match?.id ?? RUNTIMES[0].id;
-    }
-    return RUNTIMES[0].id;
-  });
+  // Initial runtime: first supported (and, #623, not reported unusable) by the daemon; else default.
+  const [runtimeId, setRuntimeId] = useState(() => initialRuntime(daemon).id);
   // Initialize model to the runtime's first model (NEVER ''). Hub
   // schema requires model.min(1) (tools.ts:1977); a 默认/empty pick
   // makes the create_node call zod-reject which then surfaces as a
   // misleading "需升级 hub" message — caught by 通信龙 #3 CHANGE_REQ.
   // No "默认" option in step 2 anymore; we pick first explicitly.
-  const [model, setModel] = useState(() => {
-    const supported = daemon.runtimes_supported;
-    const initRuntime =
-      Array.isArray(supported) && supported.length > 0
-        ? primaryRuntimes(RUNTIMES).find(r => supported.includes(r.id)) || RUNTIMES.find(r => supported.includes(r.id)) || RUNTIMES[0]
-        : RUNTIMES[0];
-    return initRuntime.models[0] || '';
-  });
+  const [model, setModel] = useState(() => initialRuntime(daemon).models[0] || '');
   // 「高级」折叠(目前只有 Grok 行有:共存模式·实验性)。默认收起。
   const [advancedOpen, setAdvancedOpen] = useState(false);
   const [permissionMode, setPermissionMode] = useState('default');
@@ -197,11 +195,17 @@ export default function CreateNodeWizardScreen({ cfg, daemon, onBack, onExit, de
   // let the user submit names that the server then rejects, turning
   // "validation" into a delayed failure the user has to guess at.
   const nameValid = NAME_RE.test(name.trim());
-  const isRuntimeAllowed = useCallback((id: string) => {
+  const isRuntimeSupported = useCallback((id: string) => {
     const supported = daemon.runtimes_supported;
     if (!Array.isArray(supported) || supported.length === 0) return true;
     return supported.includes(id);
   }, [daemon.runtimes_supported]);
+  // #623 —— 能选 = daemon 声明支持 且 runtime_readiness 没判它建不了(缺 CLI / 没登录 / 不通网)。
+  // 没报 readiness ⇒ readinessSelectable 恒 true,与以前一致。
+  const isRuntimeAllowed = useCallback(
+    (id: string) => isRuntimeSupported(id) && readinessSelectable(daemon, id),
+    [isRuntimeSupported, daemon],
+  );
   // (#3 nit ②) If the daemon's declared runtimes all sit outside our
   // known RUNTIMES list (e.g. App is older than the daemon, or the
   // daemon advertises a future-only runtime), the wizard would init
@@ -231,12 +235,20 @@ export default function CreateNodeWizardScreen({ cfg, daemon, onBack, onExit, de
   // indented, and its note (the experimental warning) shows as soon as the
   // disclosure is open — the cost is visible BEFORE it is picked.
   const renderRuntimeRow = (r: WizardRuntime, nested: boolean) => {
-    const allowed = isRuntimeAllowed(r.id);
+    const supported = isRuntimeSupported(r.id);
+    // #623 —— 这台机器上这个 runtime 的实测状态(没报 = 不灰、不加注)。
+    const ready = readinessFor(daemon, r.id);
+    const allowed = supported && ready.selectable;
+    const blockedByReadiness = supported && !ready.selectable;
     const selected = runtimeId === r.id;
     const showNote = !!r.note && allowed && (selected || nested);
     return (
       <Fragment key={r.id}>
         <Pressable
+          testID={`runtime-row-${r.id}`}
+          accessibilityRole="radio"
+          accessibilityState={{ disabled: !allowed, checked: selected && allowed }}
+          aria-checked={selected && allowed}
           disabled={!allowed}
           onPress={() => {
             if (allowed) {
@@ -251,20 +263,37 @@ export default function CreateNodeWizardScreen({ cfg, daemon, onBack, onExit, de
             styles.choiceRow,
             nested && styles.choiceRowNested,
             selected && allowed && styles.choiceRowSelected,
-            !allowed && styles.choiceRowDisabled,
+            !supported && styles.choiceRowDisabled,
+            blockedByReadiness && styles.choiceRowBlocked,
             pressed && allowed && { opacity: 0.85 },
           ]}
         >
-          <Text style={[
-            styles.choiceText,
-            selected && allowed && styles.choiceTextSelected,
-            !allowed && styles.choiceTextDisabled,
-          ]}>
-            {r.label}
-            {!allowed && (
-              <Text style={styles.choiceUnsupported}>  · 该 daemon 不支持</Text>
-            )}
-          </Text>
+          <View style={styles.choiceMain}>
+            <Text style={[
+              styles.choiceText,
+              selected && allowed && styles.choiceTextSelected,
+              !allowed && styles.choiceTextDisabled,
+            ]}>
+              {r.label}
+              {!supported && (
+                <Text style={styles.choiceUnsupported}>  · 该 daemon 不支持</Text>
+              )}
+            </Text>
+            {/* #623 —— 名字下面:建不了的原因(带修法,hub 原样给)/ 未检测 / 共用登录提醒 */}
+            {supported && ready.note ? (
+              <Text
+                testID={blockedByReadiness ? `runtime-reason-${r.id}` : `runtime-unchecked-${r.id}`}
+                style={[styles.readinessLine, blockedByReadiness ? styles.readinessBlocked : styles.readinessUnchecked]}
+              >
+                {blockedByReadiness ? `✗ ${ready.note}` : ready.note}
+              </Text>
+            ) : null}
+            {allowed && ready.sharedLoginWarning ? (
+              <Text testID={`runtime-shared-${r.id}`} style={[styles.readinessLine, styles.readinessShared]}>
+                {`⚠ ${ready.sharedLoginWarning}`}
+              </Text>
+            ) : null}
+          </View>
           {selected && allowed ? (
             <Ionicons name="checkmark" size={18} color={colors.accent} />
           ) : null}
@@ -895,6 +924,13 @@ const makeStyles = () => StyleSheet.create({
   choiceTextSelected: { color: colors.accent, fontWeight: '600' },
   choiceTextDisabled: { color: colors.textMuted },
   choiceUnsupported: { color: colors.textMuted, fontSize: 11 },
+  // #623 —— 被 runtime_readiness 判为建不了:灰底、名字弱化,但原因那行用语义红、不跟着变淡(要看得清修法)。
+  choiceRowBlocked: { backgroundColor: colors.bg, borderStyle: 'dashed' },
+  choiceMain: { flex: 1, minWidth: 0, gap: 2 },
+  readinessLine: { fontSize: 12, lineHeight: 17 },
+  readinessBlocked: { color: colors.failed },
+  readinessUnchecked: { color: colors.textMuted },
+  readinessShared: { color: colors.blocked },
   // 「高级」折叠开关 + 折叠里的行:紧凑,缩进一级,不抢主列表的视觉权重。
   advancedToggle: { flexDirection: 'row', alignItems: 'center', gap: 4, alignSelf: 'flex-start', paddingVertical: 2, paddingHorizontal: spacing.xs },
   advancedToggleText: { color: colors.textMuted, fontSize: 12 },

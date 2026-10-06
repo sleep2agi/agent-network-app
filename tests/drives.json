@@ -81,6 +81,10 @@
       "kind": "stub",
       "secs": 30
     },
+    "test-create-node-runtime-readiness/drive.mjs": {
+      "kind": "stub",
+      "secs": 30
+    },
     "test-create-node-runtime-params/drive.mjs": {
       "kind": "stub",
       "secs": 15
