@@ -13,7 +13,7 @@
 //       localhost:9200           → l****:9200
 //   - IPv4:保留首尾两段,中间两段 `***`:203.0.113.177:9300 → 203.***.***.177:9300
 //   - IPv6:保留第一组:[2001:db8::1]:9300 → [2001:****]:9300
-//   - 空串原样返回。
+//   - 空串原样返回;控制字符去掉;以 `[` 开头却没有 `]` 的、端口不是数字的 → 整段 `****`。
 
 const MASK = '****';
 
@@ -29,10 +29,11 @@ function maskDomain(host: string): string {
 
 function maskHost(host: string): string {
   if (host.startsWith('[')) {
-    // IPv6 字面量 [..]
-    const inner = host.slice(1, host.indexOf(']') > 0 ? host.indexOf(']') : undefined);
-    const first = inner.split(':')[0] || '';
-    return `[${first}:${MASK}]`;
+    // IPv6 字面量 [..]。没有收尾的 `]` 就不是合法字面量 —— 整段打码,别把 `[` 之后的原文当「第一组」漏出去。
+    const close = host.indexOf(']');
+    if (close < 0) return MASK;
+    const first = host.slice(1, close).split(':')[0];
+    return first ? `[${first}:${MASK}]` : `[${MASK}]`;
   }
   const v4 = host.match(/^(\d{1,3})\.\d{1,3}\.\d{1,3}\.(\d{1,3})$/);
   if (v4) return `${v4[1]}.***.***.${v4[2]}`;
@@ -41,7 +42,8 @@ function maskHost(host: string): string {
 
 /** 把 Hub 地址(可带或不带协议)打码成可以出现在屏幕上的样子。 */
 export function maskHubAddress(address: string): string {
-  const s = (address ?? '').trim();
+  // 控制字符(含 NUL)不上屏。
+  const s = (address ?? '').replace(/[\u0000-\u001f\u007f]/g, '').trim();
   if (!s) return s;
   const m = s.match(/^([a-zA-Z][a-zA-Z0-9+.-]*:\/\/)?(?:[^@/]*@)?(\[[^\]]*\]|[^:/?#]*)(:\d+)?([/?#].*)?$/);
   if (!m) return MASK;
@@ -64,5 +66,9 @@ export function maskedHubHost(serverUrl: string): string {
 /** 错误 / 提示文案里夹着的 http(s) 地址(fetch 报错常把完整 URL 带出来)逐个打码。 */
 export function maskUrlsInText(text: string): string {
   if (!text) return text;
-  return text.replace(/\bhttps?:\/\/[^\s'"<>()（）]+/gi, m => maskHubAddress(m.replace(/[.,;:!?。，；：]+$/, '')) + (m.match(/[.,;:!?。，；：]+$/)?.[0] ?? ''));
+  return text
+    .replace(/\bhttps?:\/\/[^\s'"<>()（）]+/gi, m => maskHubAddress(m.replace(/[.,;:!?。，；：]+$/, '')) + (m.match(/[.,;:!?。，；：]+$/)?.[0] ?? ''))
+    // Node / Bun 的网络错误把裸 host[:port] 跟在错误码后面:getaddrinfo ENOTFOUND hub.example.com / connect ECONNREFUSED 1.2.3.4:9300
+    .replace(/\b(ENOTFOUND|ECONNREFUSED|ECONNRESET|ETIMEDOUT|EAI_AGAIN|EHOSTUNREACH|ENETUNREACH)(\s+)(\[[0-9A-Fa-f:]+\](?::\d+)?|[A-Za-z0-9.-]+(?::\d+)?)/g,
+      (_m, code, sp, hostPort) => `${code}${sp}${maskHubAddress(hostPort)}`);
 }

@@ -12,7 +12,8 @@
 //   R2 模板串:`…${…serverUrl…}…` 且插值后面紧跟的是文字(空格、·、@、中文、反引号前有别的字)——
 //      `${cfg.serverUrl}${path}` / `${serverUrl}/api` / `${a}\u0000${b}` / `${a}|${b}` 这类拼请求或缓存键的放行
 //   R3 去协议的显示惯用法:`xxx.serverUrl.replace(/^https?:\/\//…` —— 去协议只为了上屏
-//   R4 兜底显示:`… || x.serverUrl` 作为表达式结尾(名字没有就退回地址)
+//   R1' 对象字面量的文本字段 `label: … / value: …` 里出现地址
+//   R4 兜底显示:`… || x.serverUrl` / `… ?? f(serverUrl)` 作为表达式结尾(名字没有就退回地址)
 // 白名单只给「用户在里面输入地址」的输入框,逐条写理由;mask-hub-address.ts 自身、测试文件不扫。
 //
 // 两层自检(取集 ≠ 判据,见 CLAUDE.md 复核纪律 ⑤):
@@ -20,7 +21,11 @@
 //   - 取集:递归收 src/ 下所有 .ts/.tsx(含子目录)+ 根目录 App.tsx;断言收到了已知文件和子目录里的文件。
 //
 // 盲区(写明,不假装):变量改名(const u = cfg.serverUrl; <Text>{u}</Text>)、跨行拼接、i18n 参数插值
-// 里的地址、包在别的函数调用里的插值(`${f(cfg.serverUrl)}`,为放过拼缓存键的调用而让),本门看不见。行为层由 mask-hub-address.test.ts 与 tests/test-server-address-mask 的截图驱动兜。
+// 里的地址、包在别的函数调用里的插值(`${f(cfg.serverUrl)}`,为放过拼缓存键的调用而让)、两层以上的函数嵌套
+// (`?? f(g(serverUrl))`)、花括号嵌套的 JSX 属性(`value={tr('k', { v: cfg.serverUrl })}`)、同一行已出现打码函数时整行放行
+// (`value={maskHubAddress(a) || cfg.serverUrl}`),本门看不见。
+// 2026-10-06 #729 独立审查补上:对象字面量 `value:` / `label:`、`??` 兜底、以 `,` 结尾的 `||` 链(此前也看不见,
+// 而且真仓里各有一处:node-info.ts、desktop-chat-windows.ts)。行为层由 mask-hub-address.test.ts 与 tests/test-server-address-mask 的截图驱动兜。
 
 import fs from 'node:fs';
 import path from 'node:path';
@@ -38,10 +43,13 @@ const MASKED = /\b(maskHubAddress|displayHubAddress|maskedHubHost|maskUrlsInText
 const TEXT_PROPS = 'value|subtitle|title|label|name|text|description|message|accessibilityLabel|placeholder|footer|hint|detail';
 
 const R1_PROP = new RegExp(String.raw`\b(?:${TEXT_PROPS})=\{[^{}]*${IDENT}`);
+// 对象字面量的文本字段(facts / rows 数组里的 { label, value }),#729 审查 B1 node-info.ts 就是这一形。
+const R1_OBJ = new RegExp(String.raw`\b(?:${TEXT_PROPS})\s*:\s*[^,;{}]*${IDENT}`);
 const R1_CHILD = new RegExp(String.raw`(?<!=)>\s*\{[^{}]*${IDENT}[^{}]*\}`);
 const R2 = new RegExp(String.raw`\$\{[^{}]*${IDENT}[^{}]*\}([^$/\\|?&#:\u0000]|$)`);
 const R3 = new RegExp(String.raw`${IDENT}\.replace\(\/\^https\?`);
-const R4 = new RegExp(String.raw`\|\|\s*[\w.?]*${IDENT}\s*[;)\]}]`);
+// `||` / `??` 兜底到地址(可包一层函数调用),以 ; ) ] } , 结尾。#729 审查:`?? safeServerUrl(serverUrl) }`、`|| profile.serverUrl,`。
+const R4 = new RegExp(String.raw`(?:\|\||\?\?)\s*(?:[\w.?]+\()?[\w.?]*${IDENT}\)?\s*[;)\]},]`);
 
 /** 用户在里面输入地址的输入框:原样显示是对的。每条写明是哪一个框。 */
 const ALLOWLIST: Array<{ file: string; line: string; why: string }> = [
@@ -63,9 +71,10 @@ export function scanSource(file: string, src: string): Finding[] {
     if (ALLOWLIST.some(a => a.file === file && trimmed === a.line)) return;
     const hit = (rule: string) => out.push({ file, line: i + 1, rule, text: trimmed });
     if (R1_PROP.test(line) || R1_CHILD.test(line)) return hit('R1 jsx');
+    if (R1_OBJ.test(line)) return hit('R1 object');
     // R2:插值后面紧跟反引号时,只有模板里还有别的字才算「上屏文字」。
     // 键 / 缓存作用域(xxxKey = / scope = / key={…})不上屏;插值里是函数调用的,值是函数的返回值不是地址本身。
-    const isKey = /\b\w*(?:Key|key|Scope|scope)\s*=|\bkey=\{/.test(line);
+    const isKey = /\b\w*(?:Key|key|Scope|scope)\s*[=(]|\bkey=\{/.test(line);
     const tm = isKey ? [] : line.match(/`[^`]*`/g) ?? [];
     for (const t of tm) {
       if (!new RegExp(IDENT).test(t)) continue;
@@ -76,7 +85,7 @@ export function scanSource(file: string, src: string): Finding[] {
       return hit('R2 template');
     }
     if (R3.test(line)) return hit('R3 strip-scheme');
-    if (R4.test(line)) return hit('R4 fallback');
+    if (!isKey && R4.test(line)) return hit('R4 fallback');
   });
   return out;
 }
@@ -110,6 +119,11 @@ const bad: Array<[string, string, string]> = [
   ['R3 去协议上屏', 'R3', "const host = cfg.serverUrl.replace(/^https?:\\/\\//, '');"],
   ['R4 名字退回地址', 'R4', "const name = p.displayName || p.username || p.serverUrl;"],
   ['R4 i18n 参数里退回地址', 'R4', "tr('settings.copy.182', { v0: profile.displayName || profile.serverUrl })"],
+  ['R1 对象字面量 value:(审查 B1 原形)', 'R1', "    { label: '服务器', value: safeServerLabel(node?.server ?? session.server) ?? safeServerUrl(serverUrl) },"],
+  ['R1 对象字面量 label:', 'R1', "rows.push({ label: cfg.serverUrl, key: 'srv' });"],
+  ['R4 ?? 兜底到地址', 'R4', "const shown = node?.server ?? cfg.serverUrl;"],
+  ['R4 ?? 包一层函数', 'R4', "const shown = label ?? safeServerUrl(serverUrl);"],
+  ['R4 || 链以逗号结尾(审查 N2 原形)', 'R4', "        window.context || profile.displayName || profile.username || profile.serverUrl,"],
 ];
 for (const [name, rule, code] of bad) {
   const f = scanSource('fixture.tsx', code);
@@ -127,6 +141,11 @@ const good: Array<[string, string, string]> = [
   ['传给子组件的 serverUrl 属性', 'fixture.tsx', `<AttachmentFile serverUrl={cfg.serverUrl} token={cfg.token} />`],
   ['?? 当键', 'fixture.tsx', "const k = `${cfg?.profileId ?? cfg?.serverUrl ?? 'login'}`;"],
   ['复制完整值', 'fixture.tsx', "onCopy={() => copy('host', cfg.serverUrl)}"],
+  ['?? 左边是地址(取缓存)', 'fixture.ts', "const v = connectedSinceByServer.get(cfg.serverUrl) ?? null;"],
+  ['类型标注里的 serverUrl', 'fixture.ts', "type P = { label: string; serverUrl: string };"],
+  ['?? 拼进 xxxKey(不上屏)', 'fixture.ts', "const draftHandoffKey = `chatDraft:${cfg.profileId ?? cfg.serverUrl}:${alias}`;"],
+  ['?? 作为 xxxKey() 参数', 'fixture.ts', "requestNodeSection(nodeInfoSectionKey(cfg.profileId ?? cfg.serverUrl, alias), s);"],
+  ['对象里 serverUrl 作键传参', 'fixture.ts', "const text = accountCopyText({ serverUrl: profile.serverUrl, username: profile.username });"],
   ['注释里提到', 'fixture.tsx', "// 以前这里是 <Text>{cfg.serverUrl}</Text>"],
   ['白名单输入框', 'App.tsx', '                value={serverUrl}'],
   ['React key 用地址', 'fixture.tsx', "<View key={`${attachmentCacheScope(cfg.serverUrl, cfg.token)}-${a.key}`} />"],

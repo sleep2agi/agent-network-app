@@ -43,6 +43,21 @@ eq('IPv6 字面量保留第一组', maskHubAddress('[2001:db8::1]:9300'), '[2001
 eq('空串原样', maskHubAddress(''), '');
 eq('前后空白先去掉', maskHubAddress('  hub.example.com:9300 '), 'h.e****.com:9300');
 
+// ── 4b. 边界(独立审查 #729 B2 / N3 逐条) ──
+eq('裸单段主机 hub → h****', maskHubAddress('hub'), 'h****');
+eq('IPv6 不带端口', maskHubAddress('[2001:db8::1]'), '[2001:****]');
+eq('IPv6 带协议、首组为空 → 整组打码', maskHubAddress('http://[::1]:9200'), 'http://[****]:9200');
+eq('无协议 userinfo 整段丢掉', maskHubAddress('user:secret@hub.example.com'), 'h.e****.com');
+eq('非数字端口 → 整段打码(不猜)', maskHubAddress('hub.example.com:abc'), '****');
+eq('只有协议', maskHubAddress('https://'), 'https://****');
+eq('大写协议与主机:原样大小写,照样打码', maskHubAddress('HTTPS://HUB.EXAMPLE.COM'), 'HTTPS://H.E****.COM');
+eq('畸形 IPv4 999.999.999.999 仍按 IPv4 形状', maskHubAddress('999.999.999.999'), '999.***.***.999');
+eq('五段数字不是 IPv4 → 按域名', maskHubAddress('1.2.3.4.5'), '1.2****.5');
+eq('B2:以 [ 开头没有 ] → 整段打码', maskHubAddress('[hub.example.com'), '****');
+ck('B2:结果里没有原主机名', !maskHubAddress('https://[hub.example.com:9300').includes('example'), maskHubAddress('https://[hub.example.com:9300'));
+eq('空主机 + 端口', maskHubAddress(':9300'), '****:9300');
+eq('控制字符去掉', maskHubAddress('\u0000hub.example.com'), 'h.e****.com');
+
 // ── 5. 被隐藏的部分真的不在结果里 ──
 {
   const out = maskHubAddress('https://hub.secretname.example.com:9300');
@@ -59,6 +74,9 @@ eq('maskedHubHost = 去协议 + 打码', maskedHubHost('https://hub.example.com:
 eq('错误文案里的 URL 打码,其余字不动', maskUrlsInText('error sending request for url (https://hub.example.com:9300/api/status)'), 'error sending request for url (https://h.e****.com:9300/****)');
 eq('句末标点留在原位', maskUrlsInText('无法连接 http://hub.example.com。'), '无法连接 http://h.e****.com。');
 eq('没有 URL 的文案原样', maskUrlsInText('请求超时'), '请求超时');
+eq('N4:ENOTFOUND 后的裸主机打码', maskUrlsInText('getaddrinfo ENOTFOUND hub.example.com'), 'getaddrinfo ENOTFOUND h.e****.com');
+eq('N4:ECONNREFUSED host:port 打码', maskUrlsInText('connect ECONNREFUSED 203.0.113.9:9300'), 'connect ECONNREFUSED 203.***.***.9:9300');
+eq('N4:错误文本里的畸形括号 URL 不漏', maskUrlsInText('failed https://[hub.example.com done'), 'failed https://**** done');
 {
   const d = describeFailure(new Error('fetch failed: https://hub.example.com:9300/api/status'));
   ck('服务器页断开原因不带完整主机', !d.includes('hub.example.com') && d.includes('h.e****.com:9300'), d);

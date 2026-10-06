@@ -1,4 +1,5 @@
 import type { HubNode, Session } from './api';
+import { maskedHubHost } from './mask-hub-address';
 
 export interface NodeInfoFact {
   label: string;
@@ -39,14 +40,20 @@ export function safeServerUrl(value?: string | null): string | undefined {
   return safeServerLabel(trimmed);
 }
 
+/** URL 形态一律打码(本端 Hub 地址、或节点把 Hub 地址当 server 报上来);普通主机名标签原样。 */
+const serverFact = (label?: string): string | undefined =>
+  label === undefined ? undefined : label.includes('://') ? maskedHubHost(label) : label;
+
 /** Build the safe, read-only node facts shown from a chat header.
  * Deliberately allowlists public fields: tokens, config contents and arbitrary
  * session keys can never become rows by accident. */
 export function nodeInfoFacts(session: Session, node: HubNode | null, serverUrl: string): NodeInfoFact[] {
+  const hubOrigin = safeServerUrl(serverUrl);
   return [
     { label: '节点名称', value: node?.node_name ?? session.alias },
     { label: '节点 ID', value: node?.node_id ?? session.node_id },
-    { label: '服务器', value: safeServerLabel(node?.server ?? session.server) ?? safeServerUrl(serverUrl) },
+    // #649:URL 形态的「服务器」(节点报上来的是 Hub 地址,或兜底用本端 Hub 地址)只出打码值;普通主机名标签原样。
+    { label: '服务器', value: serverFact(safeServerLabel(node?.server ?? session.server)) ?? serverFact(hubOrigin) },
     { label: 'Hostname', value: node?.hostname ?? session.hostname },
     { label: 'IP', value: session.ip },
     // Only explicit runtime-reported identities are accepted. In particular,
