@@ -5,6 +5,11 @@
 export const BUNDLED_RELEASE_BODY: string = [
   "Signed and notarized stable update for macOS (Apple Silicon) and Windows (x64).",
   "",
+  "What's new in 0.2.218:",
+  "- 节点详情页新增「收编」：可以把手工起的节点交给 daemon 管理",
+  "- 已收编的节点可以在客户端停止、启动；重启需先停止再启动",
+  "- 收编相关的报错改为中文提示",
+  "",
   "What's new in 0.2.217:",
   "- 设置 → 账号 → 安全 → 修改密码；弱密码登录后顶部提示改密码",
   "- 新建节点名字可以用中文和大写，文件夹自动用英文",
@@ -944,6 +949,7 @@ export const BUNDLED_RELEASE_BODY: string = [
 
 /** Release date (published_at) per version, as far as it was known when this file was generated. */
 export const BUNDLED_RELEASE_DATES: Record<string, string> = {
+  "0.2.217": "2026-10-06T14:05:04Z",
   "0.2.216": "2026-10-06T11:02:05Z",
   "0.2.215": "2026-10-06T07:11:47Z",
   "0.2.214": "2026-10-06T06:40:49Z",
