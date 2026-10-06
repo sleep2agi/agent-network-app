@@ -5,6 +5,9 @@
 export const BUNDLED_RELEASE_BODY: string = [
   "Signed and notarized stable update for macOS (Apple Silicon) and Windows (x64).",
   "",
+  "What's new in 0.2.215:",
+  "- 服务器概览「机器」更清楚：机器名好认、离线机器折叠、只突出在线数、告警排最前",
+  "",
   "What's new in 0.2.214:",
   "- 聊天输入框草稿：没发出去的文字，退出、切换、重启后都还在；会话列表显示「[草稿]」",
   "- 服务器概览「机器」水位条改为主题蓝",
@@ -932,6 +935,7 @@ export const BUNDLED_RELEASE_BODY: string = [
 
 /** Release date (published_at) per version, as far as it was known when this file was generated. */
 export const BUNDLED_RELEASE_DATES: Record<string, string> = {
+  "0.2.214": "2026-10-06T06:40:49Z",
   "0.2.213": "2026-10-06T04:04:10Z",
   "0.2.212": "2026-10-06T01:55:12Z",
   "0.2.211": "2026-10-05T18:46:37Z",
