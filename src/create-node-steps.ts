@@ -22,7 +22,7 @@ export const STEP_TITLES: Readonly<Record<WizardStepKey, string>> = {
 /** 每一步标题下的一行说明。 */
 export const STEP_DESCRIPTIONS: Readonly<Record<WizardStepKey, string>> = {
   name: '节点的名字，也是它在网络里的别名。',
-  runtime: '节点用哪种 Agent 运行时；灰掉的是这台服务器不支持的。',
+  runtime: '节点用哪种 Agent 运行时；灰掉的是这台服务器上用不了的，原因写在名字下面。',
   model: '这个 runtime 使用的模型。',
   params: '只列出这个 runtime 真会读取的设置。',
   confirm: '核对一下，确认无误后创建。',

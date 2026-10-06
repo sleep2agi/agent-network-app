@@ -10,6 +10,7 @@ import {
   HubConfig,
 } from './api';
 import { describeDaemonCapability } from './daemon-capability';
+import { chipTitle, readinessChips, type ReadinessChip } from './runtime-readiness';
 import LocalDaemonSetupCard from './LocalDaemonSetupCard';
 import { LOCAL_HUB_PROFILE_ID } from './local-hub';
 import { isTauriDesktop } from './clipboard-attachment';
@@ -350,6 +351,7 @@ function DaemonCard({
   rightAction?: { label: string; onPress: () => void };
 }) {
   const alert = daemon.host_telemetry?.alert_level || 'gray';
+  const readiness = readinessChips(daemon);
   const alertColor = {
     green: colors.running,
     yellow: colors.blocked,
@@ -382,8 +384,10 @@ function DaemonCard({
       {daemon.hostname ? (
         <Text style={styles.cardSubtitle} numberOfLines={1}>{daemon.hostname}</Text>
       ) : null}
-      <RuntimeChips runtimes={daemon.runtimes_supported} />
-      <CapabilityRow daemon={daemon} />
+      {/* #623 —— daemon 报了 runtime_readiness:每个 runtime 一颗 ✓/✗/? 胶囊,替掉「可建节点 ✓」那一行。
+          机器级闸门(can_create_nodes)不变:建不了 / 未知时那一行照旧在。没报 ⇒ 和以前一模一样。 */}
+      {readiness ? <ReadinessChips chips={readiness} /> : <RuntimeChips runtimes={daemon.runtimes_supported} />}
+      {readiness && describeDaemonCapability(daemon, Date.now()).kind === 'ready' ? null : <CapabilityRow daemon={daemon} />}
       {(daemon.host_telemetry?.cpu_cores != null || daemon.host_telemetry?.mem_gb != null) ? (
         <Text style={styles.telemetry}>
           {daemon.host_telemetry?.cpu_cores != null ? `${daemon.host_telemetry.cpu_cores} 核` : ''}
@@ -395,12 +399,12 @@ function DaemonCard({
   );
   if (onPress) {
     return (
-      <Pressable style={({ pressed }) => [cardStyle, pressed && { opacity: 0.85 }]} onPress={onPress}>
+      <Pressable testID={`daemon-card-${daemon.daemon_node_id}`} style={({ pressed }) => [cardStyle, pressed && { opacity: 0.85 }]} onPress={onPress}>
         {inner}
       </Pressable>
     );
   }
-  return <View style={cardStyle}>{inner}</View>;
+  return <View testID={`daemon-card-${daemon.daemon_node_id}`} style={cardStyle}>{inner}</View>;
 }
 
 // #1545 —— 卡片上那一行「它现在能不能建节点」。
@@ -419,6 +423,55 @@ function CapabilityRow({ daemon }: { daemon: HostSupervisorDaemon }) {
         {v.label}
       </Text>
       {v.detail ? <Text style={styles.capDetail}>{v.detail}</Text> : null}
+    </View>
+  );
+}
+
+// #623 —— 每个 runtime 一颗胶囊:✓ 能建(绿)/ ✗ 建不了(红)/ ? 未检测(灰)。
+// 原因:指针悬停出提示条(桌面),点按在胶囊排下面展开同一句(手机,再点收起)。
+// 完整原因始终在 accessibilityLabel 里。判据与措辞都不在这里产生:见 src/runtime-readiness.ts。
+// 提示条朝**上**弹(同 DegradedBadge):列表里后面的卡片会盖住前面卡片里绝对定位的东西。
+function ReadinessChips({ chips }: { chips: ReadinessChip[] }) {
+  const [hovered, setHovered] = useState<string | null>(null);
+  const [expanded, setExpanded] = useState<string | null>(null);
+  const open = chips.find(c => c.runtime === expanded) ?? null;
+  return (
+    <View testID="picker-readiness">
+      <View style={styles.chipRow}>
+        {chips.map(c => {
+          const tone = c.view.chip === 'ready' ? colors.running : c.view.chip === 'blocked' ? colors.failed : colors.rest;
+          const title = chipTitle(c);
+          return (
+            <View key={c.runtime} style={styles.rChipWrap}>
+              <Pressable
+                testID={`readiness-chip-${c.runtime}`}
+                accessibilityRole="button"
+                accessibilityLabel={title}
+                accessibilityState={{ expanded: expanded === c.runtime }}
+                onPress={() => setExpanded(expanded === c.runtime ? null : c.runtime)}
+                onHoverIn={() => setHovered(c.runtime)}
+                onHoverOut={() => setHovered(h => (h === c.runtime ? null : h))}
+                hitSlop={4}
+                style={({ pressed }: any) => [styles.rChip, { borderColor: tone, backgroundColor: tone + '1f' }, pressed && { opacity: 0.7 }]}
+              >
+                <Text dense selectable={false} numberOfLines={1} style={[styles.rChipText, { color: tone }]}>
+                  {`${c.view.icon} ${c.runtime}`}
+                </Text>
+              </Pressable>
+              {hovered === c.runtime && expanded !== c.runtime ? (
+                <View testID={`readiness-tip-${c.runtime}`} pointerEvents="none" style={styles.rTip}>
+                  <Text style={styles.rTipText}>{title}</Text>
+                </View>
+              ) : null}
+            </View>
+          );
+        })}
+      </View>
+      {open ? (
+        <Text testID={`readiness-detail-${open.runtime}`} style={[styles.rDetail, open.view.chip === 'blocked' && { color: colors.failed }]}>
+          {chipTitle(open)}
+        </Text>
+      ) : null}
     </View>
   );
 }
@@ -579,6 +632,13 @@ const makeStyles = () => StyleSheet.create({
     paddingVertical: 2,
   },
   chipText: { color: colors.textSecondary, fontSize: 10 },
+  // #623 readiness 胶囊
+  rChipWrap: { zIndex: 20, maxWidth: '100%' },
+  rChip: { borderRadius: radius.pill, borderWidth: StyleSheet.hairlineWidth, paddingHorizontal: spacing.sm, paddingVertical: 2, maxWidth: '100%' },
+  rChipText: { fontSize: 11, fontWeight: '600' },
+  rTip: { position: 'absolute', bottom: '100%', marginBottom: 6, left: 0, width: 260, paddingHorizontal: 10, paddingVertical: 6, borderRadius: radius.item, backgroundColor: colors.railTooltipBg, zIndex: 40 },
+  rTipText: { color: colors.railTooltipText, fontSize: 12, lineHeight: 17 },
+  rDetail: { color: colors.textSecondary, fontSize: 12, lineHeight: 17, marginTop: spacing.xs },
   runtimeEmpty: { color: colors.textMuted, fontSize: 11, marginTop: spacing.xs },
   telemetry: { color: colors.textMuted, fontSize: 11, marginTop: spacing.xs },
 

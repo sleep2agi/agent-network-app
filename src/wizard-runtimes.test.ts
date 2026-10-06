@@ -29,7 +29,11 @@ check('only one entry uses advancedOf (the Grok co-presence one)', (table.match(
 check('step 1 renders the primary list, not the raw table', src.includes('{primaryRuntimes(RUNTIMES).map(r => {') && !src.includes('{RUNTIMES.map(r => {'));
 check('the disclosure is labelled 高级 and renders its rows when open',
   src.includes('<Text style={styles.advancedToggleText}>高级</Text>') && src.includes('{open ? kids.map(k => renderRuntimeRow(k, true)) : null}'));
-check('the initial runtime prefers the primary list over advanced rows', (src.match(/primaryRuntimes\(RUNTIMES\)\.find\(r => supported\.includes\(r\.id\)\)/g) ?? []).length === 2);
+// #623:runtime 与 model 的初值都来自 initialRuntime(daemon);它先查主列表、再查折叠项(可用的和退回的两条路都是)。
+check('the initial runtime prefers the primary list over advanced rows',
+  src.includes('primaryRuntimes(RUNTIMES).find(usable) ?? RUNTIMES.find(usable)') &&
+  /primaryRuntimes\(RUNTIMES\)\.find\(r => supported!\.includes\(r\.id\)\) \?\? RUNTIMES\.find/.test(src) &&
+  src.includes('useState(() => initialRuntime(daemon).id)') && src.includes('useState(() => initialRuntime(daemon).models[0] || \'\')'));
 // 选中才显示 note(主列表);折叠里的实验性行展开即显示(选之前就看到代价)。
 check('runtime notes: shown when selected, or always inside an open disclosure', src.includes('const showNote = !!r.note && allowed && (selected || nested);'));
 check('grok-build-cli keeps its runtime id (existing nodes unaffected)', entry('grok-build-cli').includes("id: 'grok-build-cli'"));

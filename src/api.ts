@@ -1,3 +1,4 @@
+import type { RuntimeReadinessMap } from './runtime-readiness';
 import { appFetch, appFetchLoad } from './app-fetch';
 import { reportProfileAuthResponse } from './profile-auth-state';
 import type { NodePermissionReport } from './node-permission-model';
@@ -1109,6 +1110,10 @@ export interface HostSupervisorDaemon {
    *  node_spec.workdir、且调用者是 admin/owner 时才出现;缺席 = 不支持,向导隐藏「工作目录」行。
    *  见 src/create-node-workdir.ts。 */
   default_workdir_root?: string;
+  /** #623(hub PR #2429 / 看板 #622)—— daemon 逐 runtime 实测「能不能在这台机器建这种节点」。
+   *  只有 daemon 真报了才出现;缺席(旧 daemon / 第一轮自检没跑完)= 按今天的样子、什么都不灰。
+   *  怎么画在 src/runtime-readiness.ts。 */
+  runtime_readiness?: RuntimeReadinessMap;
 }
 export type HostSupervisorListResult =
   | { ok: true; count: number; daemons: HostSupervisorDaemon[] }
