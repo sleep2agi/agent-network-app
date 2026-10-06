@@ -84,6 +84,7 @@ import {
 import { bindConversationFlags, getConversationFlags, subscribeConversationFlags, updateConversationFlags } from './conversation-flags';
 import { applyAgentFilter, filterLabel, isFilterActive, STATUS_FILTER_LABEL, type AgentListFilter, type AgentStatusFilter } from './server-stats';
 import { pointerUi } from './pointer-ui';
+import { conversationDraftKey, draftPreview, draftTextFor, useDraftsVersion, type DraftConversation } from './composer-drafts';
 
 // 受限成员的空态文案比「还没有 agent」长,窄屏会折行:居中并留出与列表同宽的边距。
 const restrictedEmptyCopy = () => ({ textAlign: 'center' as const, paddingHorizontal: spacing.xl });
@@ -139,6 +140,17 @@ export default function AgentsScreen({
   filter?: AgentListFilter | null;
 }) {
   const { t } = useTranslation();
+  // #632 草稿(微信同款):有没发出去的字的会话,行上用红色「[草稿]」+ 开头几个字代替最后一条消息预览。
+  // 正开着的那个会话不画(双栏里一边打字一边看自己的草稿行跳没有意义)。
+  useDraftsVersion();
+  const draftFor = (conversation: DraftConversation, open: boolean): string =>
+    open || preview ? '' : draftTextFor(conversationDraftKey(cfg, conversation));
+  const draftLine = (text: string, style: any, testID: string) => (
+    <Text dense selectable={false} numberOfLines={1} style={style} testID={testID}>
+      <Text dense selectable={false} style={{ color: colors.failed }}>{t('chat.draftTag')}</Text>
+      {' '}{draftPreview(text)}
+    </Text>
+  );
   const [sessions, setSessions] = useState<Session[]>(preview?.sessions ?? []);
   const [loading, setLoading] = useState(!preview);
   const [refreshing, setRefreshing] = useState(false);
@@ -590,6 +602,7 @@ export default function AgentsScreen({
 
   // Desktop (Tauri) sidebar row — unchanged by the 0.2.106 phone / two-pane redesign.
   const renderCompactRow = (item: Session) => {
+    const rowDraft = draftFor({ kind: 'node', alias: item.alias }, selectedAlias === item.alias);
     return (
     <Pressable
       testID={`agent-row-${item.alias}`}
@@ -641,7 +654,7 @@ export default function AgentsScreen({
           {/* #460 降级:App Server 断开 / TUI 不在 / 需要重新登录 —— Hub 会拒收发给它的新任务。不知道时不画。 */}
           <DegradedBadge info={nodeDegraded(item)} testID={`agent-degraded-${item.alias}`} />
         </View>
-        {item.task ? (
+        {rowDraft ? draftLine(rowDraft, [styles.task, compact && { fontSize: 11 }], `draft-preview-${item.alias}`) : item.task ? (
           <Text dense selectable={false} style={[styles.task, compact && { fontSize: 11 }]} numberOfLines={1}>
             {item.task}
           </Text>
@@ -663,6 +676,7 @@ export default function AgentsScreen({
     const badge = formatUnreadBadge(p.unread);
     const presence = personPresence(p, nowMs);
     const subtitle = [p.name !== p.username ? p.username : '', lastSeenText(presence)].filter(Boolean).join(' · ');
+    const rowDraft = draftFor({ kind: 'dm', userId: p.user_id || p.username }, selected);
     const presenceA11y = presence ? `，${t(presence.online ? 'people.online' : 'people.offline')}` : '';
     if (compact) {
       return (
@@ -691,7 +705,7 @@ export default function AgentsScreen({
           </View>
           <View style={{ flex: 1, minWidth: 0 }}>
             <Text dense selectable={false} style={[styles.alias, { fontSize: 13, fontWeight: '600' }]} numberOfLines={1}>{p.name}</Text>
-            {subtitle ? <Text dense selectable={false} testID={`person-subtitle-${p.username}`} style={[styles.task, { fontSize: 11 }]} numberOfLines={1}>{subtitle}</Text> : null}
+            {rowDraft ? draftLine(rowDraft, [styles.task, { fontSize: 11 }], `draft-preview-person-${p.username}`) : subtitle ? <Text dense selectable={false} testID={`person-subtitle-${p.username}`} style={[styles.task, { fontSize: 11 }]} numberOfLines={1}>{subtitle}</Text> : null}
           </View>
         </Pressable>
       );
@@ -718,8 +732,10 @@ export default function AgentsScreen({
           <View style={rowStyles.line}>
             <Text dense selectable={false} numberOfLines={1} style={[rowStyles.name, { color: colors.text }]}>{p.name}</Text>
           </View>
-          {subtitle || badge ? <View style={rowStyles.line}>
-            <Text dense selectable={false} testID={`person-subtitle-${p.username}`} numberOfLines={1} style={[rowStyles.preview, { color: colors.textMuted }]}>{subtitle}</Text>
+          {subtitle || badge || rowDraft ? <View style={rowStyles.line}>
+            {rowDraft
+              ? draftLine(rowDraft, [rowStyles.preview, { color: colors.textMuted }], `draft-preview-person-${p.username}`)
+              : <Text dense selectable={false} testID={`person-subtitle-${p.username}`} numberOfLines={1} style={[rowStyles.preview, { color: colors.textMuted }]}>{subtitle}</Text>}
             <AgentUnreadBadge inline badge={badge} testID={`person-unread-${p.username}`} />
           </View> : null}
         </View>
@@ -736,6 +752,7 @@ export default function AgentsScreen({
     const timeText = g.lastAt ? formatChatHeader(new Date(g.lastAt).toISOString()) : '';
     const subtitle = groupSubtitle(g, { selfUserId, formatTime: ms => formatChatHeader(new Date(ms).toISOString()), noMessages: t('group.noMessages') });
     const open = () => onOpenGroup?.({ group_id: g.group_id, name: g.name });
+    const rowDraft = draftFor({ kind: 'group', groupId: g.group_id }, selected);
     if (compact) {
       return (
         <Pressable
@@ -758,7 +775,9 @@ export default function AgentsScreen({
           </View>
           <View style={{ flex: 1, minWidth: 0 }}>
             <Text dense selectable={false} style={[styles.alias, { fontSize: 13, fontWeight: '600' }]} numberOfLines={1} testID={`group-name-${g.group_id}`}>{g.name}</Text>
-            <Text dense selectable={false} testID={`group-subtitle-${g.group_id}`} style={[styles.task, { fontSize: 11 }]} numberOfLines={1}>{subtitle}</Text>
+            {rowDraft
+              ? draftLine(rowDraft, [styles.task, { fontSize: 11 }], `draft-preview-group-${g.group_id}`)
+              : <Text dense selectable={false} testID={`group-subtitle-${g.group_id}`} style={[styles.task, { fontSize: 11 }]} numberOfLines={1}>{subtitle}</Text>}
           </View>
         </Pressable>
       );
@@ -781,7 +800,9 @@ export default function AgentsScreen({
             {g.preview && timeText ? <Text dense selectable={false} numberOfLines={1} style={[rowStyles.time, { color: colors.textMuted }]} testID={`group-time-${g.group_id}`}>{timeText}</Text> : null}
           </View>
           <View style={rowStyles.line}>
-            <Text dense selectable={false} testID={`group-subtitle-${g.group_id}`} numberOfLines={1} style={[rowStyles.preview, { color: colors.textMuted }]}>{subtitle}</Text>
+            {rowDraft
+              ? draftLine(rowDraft, [rowStyles.preview, { color: colors.textMuted }], `draft-preview-group-${g.group_id}`)
+              : <Text dense selectable={false} testID={`group-subtitle-${g.group_id}`} numberOfLines={1} style={[rowStyles.preview, { color: colors.textMuted }]}>{subtitle}</Text>}
             <AgentUnreadBadge inline badge={badge} testID={`group-unread-${g.group_id}`} />
           </View>
         </View>
@@ -796,6 +817,7 @@ export default function AgentsScreen({
     const pinned = pinnedAliases.includes(item.alias);
     const model = agentRowModel(item, { latest: latestByAgent[item.alias], taskAt: taskTimes.timeFor(item.alias, item.task), pinned, nowMs });
     const selected = selectedAlias === item.alias;
+    const rowDraft = draftFor({ kind: 'node', alias: item.alias }, selected);
     const rowBg = selected ? colors.rowActive : colors.bg;
     const badge = rowBadge(item.alias);
     return (
@@ -835,11 +857,13 @@ export default function AgentsScreen({
             <Text dense selectable={false} numberOfLines={1} style={[rowStyles.time, { color: colors.textMuted }]}>{model.time}</Text>
           </View>
           {/* No second line when there is nothing to say (and no badge): the name then centres. */}
-          {model.status.label || model.preview || badge ? <View style={rowStyles.line}>
+          {model.status.label || model.preview || badge || rowDraft ? <View style={rowStyles.line}>
             {model.status.label && model.status.labelTone ? (
               <Text dense selectable={false} style={[rowStyles.label, { color: colors[model.status.labelTone] }]}>{model.status.label}</Text>
             ) : null}
-            <Text dense selectable={false} numberOfLines={1} style={[rowStyles.preview, { color: colors.textMuted }]}>{model.preview}</Text>
+            {rowDraft
+              ? draftLine(rowDraft, [rowStyles.preview, { color: colors.textMuted }], `draft-preview-${item.alias}`)
+              : <Text dense selectable={false} numberOfLines={1} style={[rowStyles.preview, { color: colors.textMuted }]}>{model.preview}</Text>}
             <AgentUnreadBadge inline badge={badge} testID={`unread-badge-${item.alias}`} />
           </View> : null}
         </View>
