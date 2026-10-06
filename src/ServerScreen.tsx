@@ -20,7 +20,7 @@ import {
   type AgentListFilter,
 } from './server-stats';
 import { listHubProfiles, type HubProfile } from './storage';
-import { colors, onThemeChange, radius, spacing, type, weight } from './theme';
+import { colors, mixHex, onThemeChange, radius, spacing, type, weight } from './theme';
 import { usePoll } from './usePoll';
 import { elevated, buttonStyle, buttonTextStyle } from './elevation';
 
@@ -442,16 +442,27 @@ const METERS = [
   { key: 'disk', label: '磁盘' },
 ] as const;
 
+/**
+ * 水位条配色(看板「app 机器水位条配色太丑」,Vincent 2026-10-06「改成那个蓝色,我们蓝色主题的」):
+ *   正常 = 主题强调色 accent(晴蓝),轨道 = 强调色的浅底 tonalBg —— 不再是深绿条 + 中性灰轨道。
+ *   警告 / 危险仍用主题的 blocked / failed,但向卡片底色淡一档(HOST_ALERT_SOFTEN),
+ *   跟晴蓝站在同一亮度上,不再是「泥橙」。全部从主题 token 推出,不写死色值;深浅色各自跟着换。
+ *   过期的机器:条灰、轨道也退回中性灰(subtleFill)—— 蓝轨道只给「现在」的数。
+ */
+const HOST_ALERT_SOFTEN = 0.22;
 function toneColor(tone: LevelTone, stale: boolean): string | undefined {
   if (stale) return colors.textMuted;
-  return { ok: colors.running, warn: colors.blocked, danger: colors.failed, none: undefined }[tone];
+  if (tone === 'ok') return colors.accent;
+  if (tone === 'warn') return mixHex(colors.blocked, colors.card, HOST_ALERT_SOFTEN);
+  if (tone === 'danger') return mixHex(colors.failed, colors.card, HOST_ALERT_SOFTEN);
+  return undefined;
 }
 
 /** 一根水位条。缺数据 = 只有轨道(不画 0% 的条);过期 = 灰色。 */
 function MeterBar({ meter, stale, testID, grow }: { meter: Meter; stale: boolean; testID: string; grow?: boolean }) {
   const fill = toneColor(meter.tone, stale);
   return (
-    <View style={[styles.meterTrack, grow && styles.meterTrackGrow]} testID={testID}>
+    <View style={[styles.meterTrack, stale && styles.meterTrackStale, grow && styles.meterTrackGrow]} testID={testID}>
       {meter.pct != null && fill ? (
         <View style={[styles.meterFill, { width: `${Math.max(2, Math.round(meter.pct))}%`, backgroundColor: fill }, stale && styles.meterFillStale]} />
       ) : null}
@@ -642,7 +653,8 @@ const makeStyles = () =>
     meterPct: { fontSize: type.small, fontWeight: weight.medium, fontVariant: ['tabular-nums'] },
     meterDetail: { color: colors.textMuted, fontSize: type.caption, fontVariant: ['tabular-nums'] },
     meterTrackGrow: { flex: 1, minWidth: 0 },
-    meterTrack: { height: 6, borderRadius: radius.pill, backgroundColor: colors.subtleFill, overflow: 'hidden' },
+    meterTrack: { height: 6, borderRadius: radius.pill, backgroundColor: colors.tonalBg, overflow: 'hidden' },
+    meterTrackStale: { backgroundColor: colors.subtleFill },
     meterFill: { height: 6, borderRadius: radius.pill },
     meterFillStale: { opacity: 0.55 },
     hostMetersPhone: { gap: 6 },

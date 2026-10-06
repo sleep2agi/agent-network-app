@@ -10,8 +10,13 @@
 // 布局:桌面 1200×850(桌面 UA + Tauri 桩 = 桌面工作区)与窄屏 390×844(安卓 UA),浅色 / 深色各一遍。
 // 检查:
 //   order   红色机器(host-b)排第一;其余按在线节点数
-//   tone    host-b 内存条 = 主题 failed 色;host-e 磁盘条 = blocked 色;host-a 条 = running 色
-//   stale   host-c 有「数据 17 分钟前」,三根条都是灰(textMuted),不是任何告警色
+//   tone    (看板「app 机器水位条配色太丑」)host-a 条 = 主题 accent(晴蓝),轨道 = tonalBg(强调色浅底);
+//           host-b 内存条 = failed 向 card 淡 22%;host-b CPU / host-e 磁盘 = blocked 向 card 淡 22%;
+//           没有任何一根条还是 running 绿
+//   stale   host-c 有「数据 17 分钟前」,三根条都是灰(textMuted)、轨道是中性灰(subtleFill),不是任何告警色
+//   name    每行机器名的字形左边缘(Range 量文字本身,不是元素框)在行的内边距以内、且不早于名字元素的左边缘 ——
+//           截图里一台机器名「少了首字」要能和「被裁掉首字」区分开(实测是 Hub 上报的 hostname 本身就少那个字,不是渲染裁切)
+//   back    点一台机器进节点列表再回到服务器页,没有任何一行停在按下的灰底(rowHover)
 //   missing host-d 磁盘:没有填充条,文字「—」(不是 0%)
 //   align   每一列(CPU / 内存 / 磁盘)的条左边缘逐行相等(±1px);窄屏三根条左边缘也相等
 //   fit     窄屏:每行右边缘不超出视口(没有横向溢出)
@@ -63,10 +68,19 @@ const fixtureScript = ({ manyHosts }) => {
 const web = await serveExport(WEB);
 const browser = await chromium.launch({ executablePath: findChromium() });
 
-const COLORS = {
-  light: { running: 'rgb(21, 128, 61)', failed: 'rgb(220, 38, 38)', blocked: 'rgb(217, 119, 6)', muted: 'rgb(99, 106, 117)' },
-  dark: { running: 'rgb(34, 197, 94)', failed: 'rgb(239, 68, 68)', blocked: 'rgb(245, 158, 11)', muted: 'rgb(139, 139, 149)' },
+// 主题 token(src/theme.ts 的原值)。告警色 = 原 token 向 card 线性混合 SOFTEN(与 theme.ts mixHex 同一公式,这里独立再算一遍)。
+const TOKENS = {
+  light: { accent: '#1b65db', tonalBg: '#edf3fe', subtleFill: '#f0f1f3', card: '#ffffff', running: '#15803d', failed: '#dc2626', blocked: '#d97706', muted: '#636a75', rowHover: '#f1f3f5' },
+  dark: { accent: '#5e9bff', tonalBg: '#172a48', subtleFill: '#1e1e22', card: '#18181b', running: '#22c55e', failed: '#ef4444', blocked: '#f59e0b', muted: '#8b8b95', rowHover: '#1b1b1f' },
 };
+const SOFTEN = 0.22;
+const hexRgb = (h) => [0, 2, 4].map(i => Number.parseInt(h.slice(1).slice(i, i + 2), 16));
+const rgb = (h) => `rgb(${hexRgb(h).join(', ')})`;
+const mixRgb = (a, b, t) => { const x = hexRgb(a), y = hexRgb(b); return `rgb(${x.map((v, i) => Math.round(v + (y[i] - v) * t)).join(', ')})`; };
+const COLORS = Object.fromEntries(Object.entries(TOKENS).map(([k, T]) => [k, {
+  accent: rgb(T.accent), track: rgb(T.tonalBg), trackStale: rgb(T.subtleFill), running: rgb(T.running),
+  failed: mixRgb(T.failed, T.card, SOFTEN), blocked: mixRgb(T.blocked, T.card, SOFTEN), muted: rgb(T.muted), rowHover: rgb(T.rowHover),
+}]));
 
 async function open({ layout, theme, manyHosts = false }) {
   const phone = layout === 'phone';
@@ -93,7 +107,7 @@ const fillOf = (page, id) => page.evaluate((sel) => {
   const track = document.querySelector(sel);
   if (!track) return { found: false };
   const fill = track.firstElementChild;
-  return { found: true, fill: !!fill, color: fill ? getComputedStyle(fill).backgroundColor : null, width: fill ? fill.getBoundingClientRect().width : 0 };
+  return { found: true, fill: !!fill, color: fill ? getComputedStyle(fill).backgroundColor : null, track: getComputedStyle(track).backgroundColor, width: fill ? fill.getBoundingClientRect().width : 0 };
 }, `[data-testid="${id}"]`);
 
 const measurements = [];
@@ -119,13 +133,16 @@ for (const layout of ['desktop', 'phone']) {
     ck(`${tag}: 其余按在线节点数、再按总数`, order.join() === 'host-b,host-a,host-d,host-c,host-e', order.join());
     // tone
     const bMem = await fillOf(page, 'server-host-bar-mem-host-b');
-    ck(`${tag}: host-b 内存条 = failed 色`, bMem.color === C.failed, JSON.stringify(bMem));
+    ck(`${tag}: host-b 内存条 = failed(淡)色`, bMem.color === C.failed, JSON.stringify(bMem));
     const bCpu = await fillOf(page, 'server-host-bar-cpu-host-b');
-    ck(`${tag}: host-b CPU 88% = blocked 色`, bCpu.color === C.blocked, JSON.stringify(bCpu));
+    ck(`${tag}: host-b CPU 88% = blocked(淡)色`, bCpu.color === C.blocked, JSON.stringify(bCpu));
     const eDisk = await fillOf(page, 'server-host-bar-disk-host-e');
-    ck(`${tag}: host-e 磁盘 80% = blocked 色`, eDisk.color === C.blocked, JSON.stringify(eDisk));
+    ck(`${tag}: host-e 磁盘 80% = blocked(淡)色`, eDisk.color === C.blocked, JSON.stringify(eDisk));
     const aCpu = await fillOf(page, 'server-host-bar-cpu-host-a');
-    ck(`${tag}: host-a CPU = running 色`, aCpu.color === C.running, JSON.stringify(aCpu));
+    ck(`${tag}: host-a CPU = accent 晴蓝`, aCpu.color === C.accent, JSON.stringify(aCpu));
+    ck(`${tag}: host-a 轨道 = tonalBg(强调色浅底)`, aCpu.track === C.track, JSON.stringify(aCpu));
+    const fills = await page.$$eval('[data-testid^="server-host-bar-"]', els => els.map(e => e.firstElementChild ? getComputedStyle(e.firstElementChild).backgroundColor : null));
+    ck(`${tag}: 没有一根条还是 running 绿`, fills.length === 15 && !fills.includes(C.running), JSON.stringify(fills));
     // stale
     // 标记里还有一个图标字形(icon font 的私有区字符),按可见文字段比。
     const staleText = await page.locator('[data-testid="server-host-stale-host-c"]').innerText({ timeout: 3000 }).catch(() => null);
@@ -133,6 +150,7 @@ for (const layout of ['desktop', 'phone']) {
     for (const k of ['cpu', 'mem', 'disk']) {
       const f = await fillOf(page, `server-host-bar-${k}-host-c`);
       ck(`${tag}: host-c ${k} 条是灰色(过期)`, f.fill && f.color === C.muted, JSON.stringify(f));
+      ck(`${tag}: host-c ${k} 轨道是中性灰(过期)`, f.track === C.trackStale, JSON.stringify(f));
     }
     ck(`${tag}: 新鲜的机器没有过期标记`, !(await page.locator('[data-testid="server-host-stale-host-a"]').count()));
     // missing
@@ -163,6 +181,20 @@ for (const layout of ['desktop', 'phone']) {
       row.widths = widths;
       ck(`${tag}: 三列条等宽(±1px)`, Math.max(...widths) - Math.min(...widths) <= 1, JSON.stringify(widths));
     }
+    // name:字形左边缘在行内边距以内(量 Range,不是元素框 —— 元素框不动、字被 overflow 裁掉时只有 Range 会露出来)
+    const names = await page.$$eval('[data-testid^="server-host-name-"]', els => els.map(el => {
+      const rowEl = el.closest('[data-testid^="server-host-host-"]');
+      const r = rowEl.getBoundingClientRect();
+      const padL = parseFloat(getComputedStyle(rowEl).paddingLeft) || 0;
+      const range = document.createRange(); range.selectNodeContents(el);
+      const g = range.getBoundingClientRect();
+      const e = el.getBoundingClientRect();
+      return { name: el.textContent, glyphLeft: g.left, elLeft: e.left, contentLeft: r.left + padL, rowLeft: r.left, padL };
+    }));
+    row.names = names.map(n => ({ name: n.name, glyphLeft: Math.round(n.glyphLeft * 10) / 10, contentLeft: Math.round(n.contentLeft * 10) / 10 }));
+    ck(`${tag}: 机器名字形左边缘在行内边距以内(${names.length} 行)`,
+      names.length === 5 && names.every(n => n.padL > 0 && n.glyphLeft >= n.contentLeft - 0.5 && n.glyphLeft >= n.elLeft - 0.5 && n.glyphLeft <= n.contentLeft + 2),
+      JSON.stringify(row.names));
     measurements.push(row);
     ck(`${tag}: 没有页面错误`, errors.length === 0, errors.join(' | ').slice(0, 300));
 
@@ -176,6 +208,12 @@ for (const layout of ['desktop', 'phone']) {
       const otherShown = await page.getByText('示例-B1', { exact: true }).count();
       ck(`${tag}: 别的机器的节点不在列表里`, otherShown === 0, String(otherShown));
       if (OUT) await page.screenshot({ path: `${OUT}/${tag}-click-host-a.png` });
+      // back:回到服务器页,没有一行留着按下态的灰底
+      await page.evaluate(() => window.__anetLayoutSweep.setScreen({ name: 'server' }));
+      await page.locator('[data-testid="server-hosts"]').waitFor({ timeout: 15000 }).catch(() => {});
+      await page.waitForTimeout(300);
+      const bgs = await page.$$eval('[data-testid^="server-host-host-"]', els => els.map(e => getComputedStyle(e).backgroundColor));
+      ck(`${tag}: 返回服务器页后没有行停在按下的灰底`, bgs.length === 5 && !bgs.includes(C.rowHover), JSON.stringify(bgs));
     }
     await ctx.close();
   }
