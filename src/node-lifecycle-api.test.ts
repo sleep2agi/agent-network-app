@@ -9,6 +9,7 @@ const cfg: HubConfig = { serverUrl: 'https://hub.example.test', token: 'utok_sec
 const calls: Array<{ url: string; init: RequestInit }> = [];
 (globalThis as any).fetch = async (url: string, init: RequestInit) => {
   calls.push({ url, init });
+  if (url.includes('/api/nodes')) return new Response(JSON.stringify({ nodes: [{ node_id: 'n_1', alias: 'worker' }] }));
   const body = JSON.stringify({ ok: true, request_id: 'req_1', lifecycle_state: 'stopping' });
   return new Response(JSON.stringify({ result: { content: [{ text: body }] } }), { status: 200 });
 };

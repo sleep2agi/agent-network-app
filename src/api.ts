@@ -227,6 +227,9 @@ export interface HubNode {
    *  错误仍会在提交时由 hub 拒绝并显示）。 */
   lifecycle_controllable?: boolean;
   lifecycle_daemon_node_id?: string | null;
+  /** Hub .110 user-only projection; missing means no adoption UI. */
+  managed?: 'created' | 'adopted' | 'none';
+  adoption?: { request_id: string; daemon_node_id: string; status: 'pending' | 'active' | 'refused' | 'revoked'; error: string | null } | null;
   /** 行最近一次被写的时间(hub `datetime('now')`,UTC)。同一别名有多行时,选择器挑最新的那行。 */
   updated_at?: string | null;
   config_revision?: number | null;
@@ -1080,6 +1083,7 @@ const sendTaskOnce = async (
 // from a supported hub that genuinely has no daemons yet; the third
 // state must be visible to callers).
 export interface HostSupervisorDaemon {
+  adopt_capable?: boolean;
   daemon_node_id: string;
   alias: string;
   hostname?: string | null;
@@ -1271,6 +1275,31 @@ function parseMcpToolResponse(rawText: string): ParsedMcp {
 
 export type NodeLifecycleAction = 'start_node' | 'restart_node' | 'stop_node' | 'delete_node';
 
+export type NodeLifecycleRequest = {
+  kind: 'adopt' | 'start' | 'stop'; request_id: string; node_id: string;
+  status: string; error: string | null;
+};
+export async function fetchNodeLifecycleRequest(cfg: HubConfig, kind: NodeLifecycleRequest['kind'], requestId: string): Promise<NodeLifecycleRequest | null> {
+  if (!cfg.networkId || !requestId) throw new Error('lifecycle_scope_required');
+  return withDeadline((async () => {
+    const q = new URLSearchParams({ kind, request_id: requestId, network_id: cfg.networkId! });
+    const res = await withTimeout(signal => appFetch(`${cfg.serverUrl}/api/node-lifecycle-requests?${q}`, { headers: headers(cfg), signal }));
+    if (res.status === 404 || res.status === 501) return null;
+    if (!res.ok) throw new Error('lifecycle_read_failed');
+    const d = await res.json();
+    if (!d?.ok || !d.request || d.request.kind !== kind || d.request.request_id !== requestId) throw new Error('lifecycle_read_failed');
+    return d.request;
+  })(), 15000, () => { throw new Error('lifecycle_read_failed'); });
+}
+
+export async function adoptKnownNode(cfg: HubConfig, nodeId: string, daemonId: string, workdir: string): Promise<NodeLifecycleResult> {
+  if (!cfg.networkId || !nodeId || !daemonId || !workdir.trim()) return { ok: false, error: 'invalid_workdir' };
+  const r = await callHubTool(cfg, 'request_adopt_node', { node_id: nodeId, daemon_node_id: daemonId, workdir: workdir.trim(), network_id: cfg.networkId });
+  if (r.kind !== 'payload') return { ok: false, error: 'lifecycle_error' };
+  if (r.payload?.ok !== true) return { ok: false, error: r.payload?.error ?? 'lifecycle_error' };
+  return typeof r.payload.request_id === 'string' ? { ok: true, request_id: r.payload.request_id } : { ok: false, error: 'lifecycle_error' };
+}
+
 export type NodeLifecycleResult =
   | { ok: true; request_id?: string; update_id?: string; lifecycle_state?: string }
   | { ok: false; error: string; in_flight_count?: number; unsupported?: true };
@@ -1281,10 +1310,22 @@ export type NodeLifecycleResult =
 export const runNodeLifecycleAction = async (
   cfg: HubConfig,
   action: NodeLifecycleAction,
-  node: Pick<HubNode, 'node_id' | 'alias'> & Partial<Pick<HubNode, 'lifecycle_daemon_node_id'>>,
+  node: Pick<HubNode, 'node_id' | 'alias'> & Partial<Pick<HubNode, 'lifecycle_daemon_node_id' | 'managed' | 'adoption'>>,
   options: { force?: boolean; deleteConfig?: boolean } = {},
 ): Promise<NodeLifecycleResult> => {
+  if (action === 'restart_node' && (node.managed === 'adopted' || node.adoption?.status === 'active')) return { ok: false, error: 'adopted_restart_requires_daemon' };
   const networkId = cfg.networkId ?? (await fetchNetworkId(cfg));
+  // ID-only callers must resolve current authority, not silently skip the guard.
+  // A real old-Hub row may still omit both fields: preserve its legacy behavior.
+  if (action === 'restart_node' && (node.managed === undefined || node.adoption === undefined)) {
+    try {
+      if (!networkId) throw new Error('missing network');
+      const full = await withDeadline(fetchHubNodes({ ...cfg, networkId }), 15000, () => null);
+      const target = full?.nodes?.find(n => n.node_id === node.node_id);
+      if (!target) return { ok: false, error: 'lifecycle_identity_unavailable' };
+      if (target.managed === 'adopted' || target.adoption?.status === 'active') return { ok: false, error: 'adopted_restart_requires_daemon' };
+    } catch { return { ok: false, error: 'lifecycle_identity_unavailable' }; }
+  }
   // board #585 —— start_node 由节点所在机器上的 daemon 执行。daemon_node_id 可省(Hub 按创建记录自己找),
   // 带上 /api/nodes 给的那个只是让 Hub 核对;Hub 的 zod 只收 node_[a-z0-9_-]+,不合形状就不带。
   const daemonId = node.lifecycle_daemon_node_id && /^node_[a-z0-9_-]+$/.test(node.lifecycle_daemon_node_id)
