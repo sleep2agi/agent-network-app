@@ -121,6 +121,10 @@ jobs:
           releaseBody: |-
             Signed and notarized stable update for macOS (Apple Silicon) and Windows (x64).
 
+            What's new in 0.2.212:
+            - 新建节点向导第 4 步只显示该运行时用得到的参数
+            - 按住说话录音浮层改为主题蓝（晴蓝）
+
             What's new in 0.2.211:
             - Codex 共存节点可以在 app 里直接建（需要 Hub 和 daemon 升级到最新预览版，旧版本会明确提示）
             - 节点停止后可以在 app 里一键启动
