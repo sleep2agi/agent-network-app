@@ -1,0 +1,9 @@
+desktop v0.2.213 — 新建节点向导重做 / 服务器概览新增「机器」水位
+
+A. 本版内容(0.2.212 发版提交 f9875b2 之后 main 上合入的 PR + 本 PR)
+  #720 新建节点向导重做：编号步骤条、居中卡片、没得选的步骤自动跳过(agent-network board #614)。
+  #721 服务器概览新增「机器」：每台机器的 CPU / 内存 / 磁盘水位(agent-network board #618)。
+  本 PR(版本号):0.2.212 → 0.2.213,versionCode 2212 → 2213;release-desktop-auto-update.yml 加 What's new in 0.2.213;重新生成 src/changelog-bundled.ts(含 0.2.212 发布日期)。
+  本地:干净 origin/main(bd26f04) bump 后 npm ci / npm test(342/342) / npm run typecheck 全部 rc=0;android-release-notes.mjs 0.2.213 rc=0。
+B. 验证边界(如实)
+  ck 单测 + 页内桩驱动(见 #720/#721 各自 PR)。真机:新建节点向导顶部为编号步骤条、内容居中卡片，只有一个选项的步骤自动跳过；服务器概览出现「机器」区，每台机器显示 CPU / 内存 / 磁盘水位。
