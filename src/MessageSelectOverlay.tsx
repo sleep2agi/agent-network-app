@@ -9,8 +9,8 @@ import { useModalSafePadding } from './safe-area-runtime';
 import { selectableTextOf } from './message-plain-text';
 import {
   acceptSelectionEvent, chunkMenuRows, clampSelection, fullSelection, handleZones, placeMenuAvoidingHandles, placeSelectCard, placeSelectMenu,
-  selectInputTraits, selectionLinesFromLayout, selectMenuItems, selectionPayload, SELECT_HANDLE_COLOR, SELECT_HIGHLIGHT_COLOR, SELECT_MENU_SETTLE_MS,
-  type Rect, type SelectionLines, type SelectionPayload, type SelectMenuKey, type TextLine, type TextSelection,
+  selectInputTraits, selectionLinesFromLayout, selectMenuItems, selectionPayload, selectOverlayStep, SELECT_HANDLE_COLOR, SELECT_HIGHLIGHT_COLOR, SELECT_MENU_SETTLE_MS,
+  type Rect, type SelectionLines, type SelectionPayload, type SelectMenuKey, type SelectOverlayPhase, type TextLine, type TextSelection,
 } from './message-select-model';
 
 /** 长按时量到的那条气泡。null = 没在选择。 */
@@ -24,7 +24,14 @@ export interface MessageSelectTarget {
 }
 
 /**
- * 手机长按消息 → 就地选区 + 微信式浮动菜单(#537)。只在触摸端渲染(phone-only-registry.ts 有一行守着)。
+ * 手机长按消息 → 微信式浮动菜单(#537);#650 起分两段(message-select-model SelectOverlayPhase):
+ *   - 'menu'(长按默认):只有锚在原气泡上 / 下方的菜单,**不盖卡片、不出选区**。「复制」= 整条进剪贴板 +「已复制」。
+ *     Vincent 2026-10-06:「为什么他那个复制的时候会有一个新的消息框出来？用原来那个消息框复制不行吗？」
+ *   - 'select'(菜单里点「选择文本」才进):下面描述的选区卡片。
+ * 只在触摸端渲染(phone-only-registry.ts 有一行守着)。
+ *
+ * 为什么划选仍是一张盖在气泡上的卡片、不是气泡本身:气泡正文是 Markdown 渲染出来的一串 Text/View,原生选区跨不过块边界;
+ * iOS 的 `<Text selectable>` 只有「拷整段」没有区间手柄(message-plain-text.ts selectTextSurface)。所以只在用户明确要划选时才出它。
  *
  * 结构:一个透明 Modal(自己的窗口,盖住键盘以外的一切):
  *   - 整窗透明遮罩:点空白处 = 退出选择(微信同款);
@@ -47,6 +54,8 @@ export default function MessageSelectOverlay({ target, selectionMode, onAction, 
   const plain = useMemo(() => selectableTextOf(target?.raw ?? ''), [target?.raw]);
   const hasText = plain.length > 0;
   const [sel, setSel] = useState<TextSelection>(() => fullSelection(plain.length));
+  const [phase, setPhase] = useState<SelectOverlayPhase>('menu');
+  const selecting = phase === 'select';
   const openedAt = useRef(0);
   const [cardBox, setCardBox] = useState<Rect | null>(null);
   const [menuSize, setMenuSize] = useState<{ width: number; height: number } | null>(null);
@@ -72,14 +81,16 @@ export default function MessageSelectOverlay({ target, selectionMode, onAction, 
   const [scrollY, setScrollY] = useState(0);
   const [webGeom, setWebGeom] = useState<{ lines: SelectionLines; textTop: number } | null>(null);
 
-  // 每次打开都从「整条选中」开始,重新量卡片 / 菜单。
+  // 每次打开都从「只有菜单」开始(#650),重新量卡片 / 菜单。
   useEffect(() => {
     if (!target) return;
+    setPhase('menu');
     openedAt.current = Date.now();
     setSel(fullSelection(plain.length));
     setArmed(Platform.OS !== 'web');
     setCardBox(null);
-    setMenuSize(null);
+    // 菜单尺寸不清(#650):尺寸只随菜单项变,项变了 onLayout 自会再来;清掉而尺寸没变时 web 上 onLayout 不再触发,
+    // 菜单永远停在 measuring(透明、不接点击)—— 第二次长按就点不到「选择文本」(drive 实测)。
     setTouching(false);
     setSettling(false);
     setTextLines(null);
@@ -98,7 +109,7 @@ export default function MessageSelectOverlay({ target, selectionMode, onAction, 
   }, [target]);
 
   useEffect(() => {
-    if (!target || Platform.OS !== 'web' || typeof document === 'undefined') return;
+    if (!target || !selecting || Platform.OS !== 'web' || typeof document === 'undefined') return;
     let done = false;
     const arm = () => {
       if (done) return;
@@ -111,28 +122,30 @@ export default function MessageSelectOverlay({ target, selectionMode, onAction, 
     };
     const events = ['pointerup', 'mouseup', 'touchend', 'pointercancel', 'touchcancel'];
     events.forEach(ev => document.addEventListener(ev, arm, true));
-    // 手势在选区层出来之前就结束了(或是键盘 / 读屏打开的):兜底按时间 arm。
-    const fallback = setTimeout(arm, 900);
+    // 手势在选区层出来之前就结束了:兜底按时间 arm。#650 起 select 段只能从菜单里点「选择文本」进,
+    // 那一下在切段前已经松手,等不到下一次 pointerup —— 只留够触摸端补发的兼容 click 落完的时间。
+    const fallback = setTimeout(arm, 350);
     return () => { done = true; clearTimeout(fallback); events.forEach(ev => document.removeEventListener(ev, arm, true)); };
-  }, [target]);
+  }, [target, selecting]);
 
-  const items = useMemo(() => selectMenuItems({ hasText, selectionMode }), [hasText, selectionMode]);
+  const items = useMemo(() => selectMenuItems({ hasText, selectionMode, phase }), [hasText, selectionMode, phase]);
   const rows = useMemo(() => chunkMenuRows(items), [items]);
   const card = target ? placeSelectCard({ anchor: target.rect, viewportHeight: vh, edge, keyboardHeight }) : null;
-  // 菜单锚在「看得见的那块」上:有文字 = 选区卡片(可能比气泡高),没文字 = 气泡本身。
-  const anchor = hasText ? cardBox : target?.rect ?? null;
+  // 菜单锚在「看得见的那块」上:在划选 = 选区卡片(可能比气泡高);只有菜单 / 没文字 = 原气泡本身。
+  const showCard = selecting && hasText;
+  const anchor = showCard ? cardBox : target?.rect ?? null;
   // web:选区 / 卡片 / 滚动一变、以及每次停稳(settling → false)时用镜像量一次(读 DOM,放在 effect 里)。
   // 量的是 textarea **当下的真实选区**,不是 sel 状态:React 的 onSelect 有自己的「上次选区」缓存,
   // 点一下再拖回同一段时事件不来,状态会停在光标上(drive 实测:菜单按光标那行放,压住了终点手柄)。
   useEffect(() => {
-    if (Platform.OS !== 'web' || !hasText || !cardBox || settling || touching) return;
+    if (Platform.OS !== 'web' || !showCard || !cardBox || settling || touching) return;
     const ta = inputRef.current as HTMLTextAreaElement | null;
     if (!ta || typeof ta.getBoundingClientRect !== 'function') { setWebGeom(null); return; }
     const live = typeof ta.selectionStart === 'number' && typeof ta.selectionEnd === 'number'
       ? clampSelection({ start: ta.selectionStart, end: ta.selectionEnd }, plain.length) : sel;
     setWebGeom(measureWebSelection(ta, live));
-  }, [sel, cardBox, scrollY, hasText, armed, settling, touching]);
-  const selGeom = !hasText || !cardBox ? null
+  }, [sel, cardBox, scrollY, showCard, armed, settling, touching]);
+  const selGeom = !showCard || !cardBox ? null
     : Platform.OS === 'web' ? webGeom
     : (() => {
       const lines = textLines ? selectionLinesFromLayout(textLines, sel, plain.length) : null;
@@ -140,7 +153,7 @@ export default function MessageSelectOverlay({ target, selectionMode, onAction, 
     })();
   const viewport = { width: vw, height: vh };
   const placed = !anchor || !menuSize ? null
-    : hasText && selGeom
+    : showCard && selGeom
       ? placeMenuAvoidingHandles({
         anchor, menu: menuSize, viewport, edge, keyboardHeight,
         ...handleZones({ lines: selGeom.lines, textTop: selGeom.textTop, clip: { top: anchor.y, bottom: anchor.y + anchor.height } }),
@@ -156,6 +169,24 @@ export default function MessageSelectOverlay({ target, selectionMode, onAction, 
   const traits = selectInputTraits(Platform.OS);
 
   const act = (key: SelectMenuKey) => {
+    if (phase === 'menu') {
+      const step = selectOverlayStep('menu', key, plain, sel);
+      if (step.kind === 'enterSelect') {
+        // 「选择文本」:同一个浮层就地切到划选,整条选中起步;卡片 / 菜单重新量。
+        openedAt.current = Date.now();
+        setSel(fullSelection(plain.length));
+        setArmed(Platform.OS !== 'web');
+        // 菜单尺寸不清:两段的项数相同时 onLayout 不会再来(web 实测停在 measuring),换段后靠 onLayout 的差值更新。
+        setCardBox(null);
+        setTextLines(null);
+        setScrollY(0);
+        setWebGeom(null);
+        setPhase('select');
+        return;
+      }
+      if (step.kind === 'emit') onAction(step.key, step.payload);
+      return;
+    }
     if (key === 'selectAll') { setSel(fullSelection(plain.length)); return; }
     // web:以 textarea 当下的真实选区为准。React 的 onSelect 有自己的「上次选区」缓存,程序设过的「全选」它看不见 ——
     // 全选后再拖回同一段,事件不来,状态就停在整条(实测)。原生端 ref 上没有选区,用 onSelectionChange 记的状态。
@@ -178,7 +209,7 @@ export default function MessageSelectOverlay({ target, selectionMode, onAction, 
     <Modal visible={!!target} transparent animationType="none" onRequestClose={onClose} statusBarTranslucent navigationBarTranslucent>
       <View style={styles.root} testID="msg-select-layer">
         <Pressable style={StyleSheet.absoluteFill} onPress={onClose} accessibilityLabel={t('chat.select.exit')} testID="msg-select-backdrop" />
-        {target && hasText && card ? (
+        {target && showCard && card ? (
           <View
             onLayout={onCardLayout}
             pointerEvents={armed ? 'auto' : 'none'}
@@ -237,7 +268,7 @@ export default function MessageSelectOverlay({ target, selectionMode, onAction, 
             pointerEvents={menuShown ? 'auto' : 'none'}
             style={[styles.menu, { maxWidth: vw - 16 }, placed ? { left: placed.left, top: placed.top } : styles.menuMeasuring, placed && !menuShown && styles.menuHidden]}
             // web:按菜单项的 mousedown 默认动作会把 textarea 的选区收掉(实测:拖成一段后点「复制」拿到的是整条)。
-            {...({ dataSet: { side: placed?.side ?? 'measuring', hidden: menuShown ? '0' : '1' }, ...(Platform.OS === 'web' ? { onMouseDown: (e: { preventDefault?: () => void }) => e.preventDefault?.() } : {}) } as object)}
+            {...({ dataSet: { side: placed?.side ?? 'measuring', hidden: menuShown ? '0' : '1', phase }, ...(Platform.OS === 'web' ? { onMouseDown: (e: { preventDefault?: () => void }) => e.preventDefault?.() } : {}) } as object)}
           >
             {rows.map((row, i) => (
               <View key={`row-${i}`} style={[styles.menuRow, i > 0 && styles.menuRowSep]}>

@@ -80,7 +80,7 @@ import { ackAgentUnread } from './agent-ack';
 import MarkdownMessage from './MarkdownMessage';
 import SelectTextSheet from './SelectTextSheet';
 import MessageSelectOverlay, { type MessageSelectTarget } from './MessageSelectOverlay';
-import type { SelectionPayload, SelectMenuKey } from './message-select-model';
+import { copyValueFor, type SelectionPayload, type SelectMenuKey } from './message-select-model';
 import ImageViewer from './ImageViewer';
 import { openGallery, viewerImageFor, type ViewerImage, type ViewerState } from './image-viewer-model';
 import { conversationGallery, imagePreviewSurface, imageWindowPayload } from './image-window-model';
@@ -1314,7 +1314,8 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
     const selection = target.selection;
     const part = payload.kind === 'part' ? payload.text : null;
     setSelectFor(null);
-    if (key === 'copy') { void (part !== null ? copyValue(part) : copyMessage(selection.text)); return; }
+    // #650:「复制」直接进剪贴板 + 底部「已复制」,浮层已在上面关掉 —— 不再经过任何选区卡片 / 全屏页。
+    if (key === 'copy') { void copyValue(copyValueFor(payload, selection.text, copyTextOf)); return; }
     if (key === 'forward') { void openForwardPicker(part !== null ? { ...selection, text: part } : selection); return; }
     if (key === 'quote') {
       setQuote({ author: selection.author, text: compactQuoteText(part ?? selection.text) });
@@ -1322,7 +1323,7 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
       return;
     }
     if (key === 'multiSelect') { setSelectionMode(true); setSelectedKeys([msgKey(selection.item)]); return; }
-    if (key === 'selectText') { setSelectTextFor(selection); return; }
+    // 'selectText' 由浮层自己就地切到划选(#650),不会传到这里;不再开全屏「选择文本」页。
     if (key === 'expand') { setExpandFor(selection); return; }
     if (key === 'delete') setMessages(prev => removeMessage(prev, selection.item));
   };
