@@ -1,0 +1,9 @@
+desktop v0.2.214 — 聊天输入框草稿 / 服务器概览「机器」水位条改为主题蓝
+
+A. 本版内容(0.2.213 发版提交 833ea4e 之后 main 上合入的 PR + 本 PR)
+  #723 聊天输入框草稿：没发出去的文字离开 / 切换会话 / 重启后都还在，会话列表显示红色「[草稿]」(agent-network board #632)。
+  #725 服务器概览「机器」水位条改为晴蓝主题色(正常=accent、轨道=tonalBg、告警色淡一档)。
+  本 PR(版本号):0.2.213 → 0.2.214,versionCode 2213 → 2214;release-desktop-auto-update.yml 加 What's new in 0.2.214;重新生成 src/changelog-bundled.ts(含 0.2.213 发布日期)。
+  本地:干净 origin/main(45c3ce1) bump 后 npm ci / npm test(343/343) / npm run typecheck 全部 rc=0;android-release-notes.mjs 0.2.214 rc=0。
+B. 验证边界(如实)
+  ck 单测 + 页内桩驱动(见 #723/#725 各自 PR)。真机:聊天输入框打字不发，退出会话 / 切到别的会话 / 重启 app 后回来文字仍在，会话列表该会话显示红色「[草稿]」；服务器概览「机器」区的 CPU / 内存 / 磁盘水位条为主题蓝。
