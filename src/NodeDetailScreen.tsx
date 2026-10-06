@@ -47,6 +47,8 @@
 
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import ModalKeyboardAvoider from './ModalKeyboardAvoider';
+import NodeAdoptionControls from './NodeAdoptionControls';
+import { isAdopted } from './node-adoption';
 import { layoutGeneration, releaseOnUnmount, takeHandoff } from './layout-handoff';
 import { takeNodeSectionRequest } from './node-section-request';
 import { ActivityIndicator, BackHandler, Keyboard, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StatusBar, StyleSheet, View, useWindowDimensions } from 'react-native';
@@ -624,7 +626,8 @@ export default function NodeDetailScreen({
       <View>
         <SectionTitle title="危险操作" hint="操作通过公开 CommHub/anet 契约执行。停止不会删除配置；有任务处理中时服务器会拒绝，不会自动强制。" />
         {!readOnly ? <View style={[localStyles.dangerZone, { borderColor: colors.failed }]}>
-          {node ? (
+          {node && <NodeAdoptionControls key={JSON.stringify([cfg.serverUrl, cfg.token, cfg.networkId, node.node_id])} cfg={cfg} node={node} online={online} onRefresh={() => { void load(); }} />}
+          {node && isAdopted(node) ? null : node ? (
             <View style={{ gap: spacing.md }}>
               {/* app#196 —— hub 明确说不可控时置灰。
                   🔴 undefined（旧 hub 没这个字段）按可控渲染：与升级前行为逐字相同，

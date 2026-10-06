@@ -9,4 +9,42 @@ Validation planned: ck-style model/API/source guards; Docker browser tests with
 in-page Hub stubs only, desktop 1200x800 and mobile 390x844 screenshots.
 No real Hub/node operations, no version change, no merge or release.
 
-Status: implementation and validation pending; this is not a passing report.
+Implementation: Hub .110 managed/adoption and adopt_capable reads; header user
+credentials, explicit network/target/request scope. Public request_adopt_node,
+stop_node and start_node tools only. No discovery (separate board #654).
+Missing managed/adoption fields: no new controls and no new queries, no error.
+Created nodes keep existing controls; adopted controls replace the old danger
+buttons and refuse restart locally. Stop/start require confirmation. Adoption
+explains no process restart and requires an explicitly chosen capable daemon
+and operator-supplied workspace. Hub/daemon remain authoritative for permission,
+same-machine identity and allowed roots. No hostname-based client authority.
+
+Request acceptance is pending, not success. Request-specific polling checks kind,
+request id and target node, bounds waits, maps failures including timeout to
+readable translated copy. Unknown error text is never rendered. Components are
+keyed by Hub/account/network/node; stale responses cannot write to a new target.
+
+Docker validation (no real Hub or production):
+- Dedicated tests/node-adoption/Dockerfile: model/API ck tests, legacy lifecycle
+  API and danger-action tests, drive registry, translation guard, tsc --noEmit.
+  Final counts: adoption ck 22/22, existing lifecycle API 6/6, danger actions
+  43/43, registry 12/12, updated translation guard 67/67. Typecheck exit 0.
+- First build failed because the TSX-only browser fixture lacked react-dom
+  declarations. Converted the fixture to JSX; no production type suppressions.
+- Browser fixture renders the actual NodeAdoptionControls component, not the
+  complete NodeDetailScreen. All API/MCP responses are page-local stubs.
+- 1200x800 and touch 390x844: 18/18 assertions, rc=0. Missing-field old Hub:
+  zero controls and reads. Restart disabled. Accepted request remains pending;
+  stop failure explains private tmux socket; start and adoption terminal success.
+  Switch node while write is delayed: late failure not shown on new target.
+- Buttons >=44px high, same-row y difference <1px, no horizontal overflow in
+  controls or adoption form. Four PNGs in docs/tests/board629, visually inspected.
+- Browser rerun mounts only fixture scripts and updated translation test read-only
+  into the isolated image; production component/API code comes from the image.
+  Dedicated build and browser commands recorded in tests/node-adoption/Dockerfile.
+  Container run uses --network none and a screenshot output mount.
+
+No full app suite or real-device/real-Hub acceptance claimed. Browser drive is
+explicitly registered manual because its self-contained container runner differs
+from the shared bundle runner. PR remains draft pending CI and review.
+One app branch push this round, then wait for CI before any further push.
