@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState } from 'react';
-import { Pressable, Text, TextInput, View } from 'react-native';
+import { Pressable, View } from 'react-native';
+import { Text, TextInput } from './ui-text';
 import { adoptKnownNode, fetchHostSupervisors, fetchNodeLifecycleRequest, runNodeLifecycleAction, type HostSupervisorDaemon, type HubConfig, type HubNode, type NodeLifecycleRequest } from './api';
 import { adoptionError, adoptionOutcome, adoptionSupported, isAdopted } from './node-adoption';
 import { useTranslation } from './i18n-react';
-import { colors } from './theme';
+import { colors, radius } from './theme';
 
 /** Parent keys this component by Hub/account/network/node, isolating late results. */
 export default function NodeAdoptionControls({ cfg, node, online, onRefresh }: { cfg: HubConfig; node: HubNode; online: boolean; onRefresh: () => void }) {
@@ -51,7 +52,7 @@ export default function NodeAdoptionControls({ cfg, node, online, onRefresh }: {
   if (!adoptionSupported(node) || node.managed === 'created' || !cfg.networkId) return null;
   const adopted = isAdopted(node), disabled = busy || !!pending;
   const down = !online || node.lifecycle_state === 'stopped';
-  const button = (id: string, label: string, press: () => void, off = false) => <Pressable testID={id} accessibilityRole="button" accessibilityState={{ disabled: off }} disabled={off} onPress={press} style={{ minHeight: 44, paddingHorizontal: 14, paddingVertical: 11, borderWidth: 1, borderColor: '#1b65db', borderRadius: 8, opacity: off ? 0.45 : 1 }}><Text style={{ color: colors.text, fontSize: 14 }}>{label}</Text></Pressable>;
+  const button = (id: string, label: string, press: () => void, off = false) => <Pressable testID={id} accessibilityRole="button" accessibilityState={{ disabled: off }} disabled={off} onPress={press} style={{ minHeight: 44, paddingHorizontal: 14, paddingVertical: 11, borderWidth: 1, borderColor: '#1b65db', borderRadius: radius.item, opacity: off ? 0.45 : 1 }}><Text style={{ color: colors.text, fontSize: 14 }}>{label}</Text></Pressable>;
   const submit = async () => {
     if (!dialog || lock.current || pending) return;
     lock.current = true; setBusy(true); setMessage('');
@@ -66,7 +67,7 @@ export default function NodeAdoptionControls({ cfg, node, online, onRefresh }: {
     } catch { if (alive.current) { setMessage(t('adopt.uncertain')); lock.current = false; } }
     finally { if (alive.current) setBusy(false); }
   };
-  return <View testID="node-adoption-controls" style={{ padding: 16, gap: 12, borderWidth: 1, borderColor: '#1b65db', borderRadius: 12, backgroundColor: colors.card }}>
+  return <View testID="node-adoption-controls" style={{ padding: 16, gap: 12, borderWidth: 1, borderColor: '#1b65db', borderRadius: radius.control, backgroundColor: colors.card }}>
     <Text style={{ color: colors.text, fontSize: 17, fontWeight: '600' }}>{t('adopt.title')}</Text>
     <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
       {adopted ? <>{button('adopt-start', t('adopt.start'), () => setDialog('start'), disabled || !down)}{button('adopt-stop', t('adopt.stop'), () => setDialog('stop'), disabled || down)}{button('adopt-restart', t('adopt.restart'), () => {}, true)}</> : button('adopt-open', t('adopt.entry'), () => setDialog('adopt'), disabled)}
@@ -76,7 +77,7 @@ export default function NodeAdoptionControls({ cfg, node, online, onRefresh }: {
       <Text style={{ color: colors.text }}>{t(dialog === 'adopt' ? 'adopt.explain' : dialog === 'stop' ? 'adopt.confirmStop' : 'adopt.confirmStart')}</Text>
       {dialog === 'adopt' && <>
         {daemons.length ? daemons.map(d => button(`adopt-daemon-${d.daemon_node_id}`, `${daemon === d.daemon_node_id ? '✓ ' : ''}${d.alias}`, () => setDaemon(d.daemon_node_id), busy)) : <Text style={{ color: colors.textMuted }}>{t('adopt.empty')}</Text>}
-        <TextInput testID="adopt-workdir" accessibilityLabel={t('adopt.path')} placeholder={t('adopt.path')} value={path} onChangeText={setPath} editable={!busy} style={{ color: colors.text, borderColor: colors.border, borderWidth: 1, borderRadius: 8, minHeight: 44, padding: 10 }} />
+        <TextInput testID="adopt-workdir" accessibilityLabel={t('adopt.path')} placeholder={t('adopt.path')} value={path} onChangeText={setPath} editable={!busy} style={{ color: colors.text, borderColor: colors.border, borderWidth: 1, borderRadius: radius.item, minHeight: 44, padding: 10 }} />
       </>}
       <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>{button('adopt-confirm', t(dialog === 'adopt' ? 'adopt.confirm' : `adopt.${dialog}`), () => void submit(), busy || (dialog === 'adopt' && (!daemon || !path.trim())))}{button('adopt-cancel', t('adopt.cancel'), () => setDialog(null), busy)}</View>
     </View>}

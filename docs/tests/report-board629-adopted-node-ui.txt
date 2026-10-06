@@ -44,7 +44,18 @@ Docker validation (no real Hub or production):
   Dedicated build and browser commands recorded in tests/node-adoption/Dockerfile.
   Container run uses --network none and a screenshot output mount.
 
-No full app suite or real-device/real-Hub acceptance claimed. Browser drive is
+Initial validation did not run the full app suite; see review follow-up below.
+No real-device/real-Hub acceptance claimed. Browser drive is
 explicitly registered manual because its self-contained container runner differs
 from the shared bundle runner. PR remains draft pending CI and review.
 One app branch push this round, then wait for CI before any further push.
+
+Review follow-up (after 71e1a9c): mechanical UI convention fixes only.
+NodeAdoptionControls now imports Text/TextInput from ui-text and uses theme
+radius.item / radius.control, preserving the existing 8/12 px radius values.
+Dedicated Dockerfile now runs the full npm test rather than selected files.
+Docker npm test: 349/349 test files passed, exit 0, including radius-tokens and
+ui-scale-wiring. npm run typecheck: exit 0. No test exclusions or floor changes.
+Browser rerun with corrected component and fixture mounted read-only: 18/18,
+exit 0 at 1200x800 / 390x844. Phone adoption screenshot SHA256 unchanged.
+No lifecycle logic change. PR to ready after pushing this follow-up once.
