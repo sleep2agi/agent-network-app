@@ -19,6 +19,8 @@ try{
   const open=mode=>page.goto(`http://127.0.0.1:${server.address().port}/?mode=${mode}`);
   await open('old');await page.waitForTimeout(200);
   ck('old Hub hides controls '+width,await page.getByTestId('node-adoption-controls').count()===0&&reads===0);
+  await open('starting');
+  ck('starting uses shared down state '+width,await page.getByTestId('adopt-stop').getAttribute('aria-disabled')==='true'&&await page.getByTestId('adopt-start').getAttribute('aria-disabled')!=='true');
   await open('active');
   ck('restart disabled '+width,await page.getByTestId('adopt-restart').getAttribute('aria-disabled')==='true');
   const boxes=await Promise.all(['adopt-start','adopt-stop','adopt-restart'].map(id=>page.getByTestId(id).boundingBox()));

@@ -48,7 +48,7 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import ModalKeyboardAvoider from './ModalKeyboardAvoider';
 import NodeAdoptionControls from './NodeAdoptionControls';
-import { isAdopted } from './node-adoption';
+import { adoptionError, isAdopted } from './node-adoption';
 import { layoutGeneration, releaseOnUnmount, takeHandoff } from './layout-handoff';
 import { takeNodeSectionRequest } from './node-section-request';
 import { ActivityIndicator, BackHandler, Keyboard, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StatusBar, StyleSheet, View, useWindowDimensions } from 'react-native';
@@ -408,6 +408,7 @@ export default function NodeDetailScreen({
     if (!result.ok) {
       setActionMessage(result.error === 'node_busy_in_flight'
         ? `节点仍有 ${result.in_flight_count ?? 1} 个处理中任务，未强制操作`
+        : ['adopted_restart_requires_daemon', 'lifecycle_identity_unavailable'].includes(result.error) ? adoptionError(result.error)
         : pendingAction === 'start_node' ? startErrorMessage(result.error) : result.error);
       return;
     }

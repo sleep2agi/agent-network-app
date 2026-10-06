@@ -59,3 +59,19 @@ ui-scale-wiring. npm run typecheck: exit 0. No test exclusions or floor changes.
 Browser rerun with corrected component and fixture mounted read-only: 18/18,
 exit 0 at 1200x800 / 390x844. Phone adoption screenshot SHA256 unchanged.
 No lifecycle logic change. PR to ready after pushing this follow-up once.
+
+N1-N5 review follow-up:
+N1 intentional scope: adopted nodes have NO Delete entry in this version.
+Delete is not silently redefined as unadopt. No process/directory/identity deletion
+and no unadopt tool call is introduced. A future explicit release-management
+action needs its own design; created-node legacy delete remains unchanged.
+N2 legacy pendingAction errors map adopted_restart_requires_daemon to translated
+Stop then Start guidance, rather than displaying the raw code.
+N3 ID-only restart callers fetch the current network node row before dispatch;
+adopted/active bindings refuse, unreadable/missing rows or lookup errors refuse.
+A real legacy row lacking the fields retains legacy restart behavior.
+N4 panel reuses nodeIsDown, including starting, matching node-danger-actions.
+N5 full npm test remains in the dedicated Dockerfile.
+Docker full npm test: 349/349 files, exit 0; adoption ck now 33/33; typecheck exit 0.
+Browser with branch src and fixture mounted read-only: 20/20, exit 0, including
+starting-state button behavior at both widths. No real Hub or nodes touched.

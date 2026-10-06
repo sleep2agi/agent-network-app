@@ -7,7 +7,7 @@ import { setThemeMode } from '../../src/theme';
 setLanguagePreference('zh');
 setThemeMode('light');
 const q=new URLSearchParams(location.search), mode=q.get('mode');
-const node={node_id:'fixture-node',alias:'演示节点',lifecycle_state:mode==='stopped'?'stopped':'active',...(mode==='old'?{}:{managed:mode==='manual'?'none':'adopted',adoption:null})};
+const node={node_id:'fixture-node',alias:'演示节点',lifecycle_state:mode==='stopped'?'stopped':mode==='starting'?'starting':'active',...(mode==='old'?{}:{managed:mode==='manual'?'none':'adopted',adoption:null})};
 function Fixture(){
  const [target,setTarget]=useState(node);
  window.switchFixtureNode=()=>setTarget({...node,node_id:'another-node'});
