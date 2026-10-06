@@ -6,6 +6,7 @@ import * as Clipboard from 'expo-clipboard';
 import { fetchHostSupervisors, fetchNodeStatus, fetchServerVersion, fetchStatus, HubConfig, Session, type HostSupervisorDaemon } from './api';
 import { hostLevels, HOSTS_COLLAPSED, type HostLevel, type LevelTone, type Meter } from './host-levels';
 import { pingHealth } from './server-ping';
+import { displayHubAddress, maskHubAddress } from './mask-hub-address';
 import { PANE_BACK_TEST_ID } from './pane-header';
 import {
   compactId,
@@ -83,6 +84,9 @@ export default function ServerScreen({
   const [width, setWidth] = useState(0);
   const [allGroups, setAllGroups] = useState(false);
   const [copied, setCopied] = useState<string | null>(null);
+  // #649:地址默认打码。只放在本屏的 state 里:离开这一屏(组件卸载)就回到打码;切服务器也收回。
+  const [revealHost, setRevealHost] = useState(false);
+  useEffect(() => { setRevealHost(false); }, [cfg.serverUrl]);
   const [profiles, setProfiles] = useState<HubProfile[]>([]);
   const [, setTick] = useState(0);
   // #618:全量 /api/status(带 host 遥测)。null = 还没读到 / 这个连接读不了(没有 network_id)。
@@ -169,7 +173,7 @@ export default function ServerScreen({
   const cards = statusCards(stats);
   const groups = groupHealth(sessions);
   const shownGroups = allGroups ? groups : groups.slice(0, GROUPS_COLLAPSED);
-  const host = cfg.serverUrl.replace(/^https?:\/\//, '').replace(/\/$/, '');
+  const host = displayHubAddress(cfg.serverUrl, revealHost);
   const wide = width >= WIDE_MIN;
   const hasData = sessions.length > 0;
   const toneColor = { good: colors.running, fair: colors.blocked, slow: colors.failed, unknown: colors.textMuted }[latencyTone(latency)];
@@ -319,7 +323,17 @@ export default function ServerScreen({
             </Pressable>
           </View>
         ) : null}
-        <InfoRow icon="globe-outline" label="地址" value={host} onCopy={() => copy('host', cfg.serverUrl)} copied={copied === 'host'} />
+        <InfoRow
+          icon="globe-outline"
+          label="地址"
+          value={host}
+          testID="server-address"
+          // 复制的永远是完整地址,和是否展开无关。
+          onCopy={() => copy('host', cfg.serverUrl)}
+          copied={copied === 'host'}
+          revealed={revealHost}
+          onToggleReveal={() => setRevealHost(v => !v)}
+        />
         <InfoRow icon="pricetag-outline" label="版本" value={version ? `v${version}` : '—'} />
         <InfoRow
           icon="git-network-outline"
@@ -393,7 +407,7 @@ export default function ServerScreen({
           >
             <Ionicons name="server-outline" size={16} color={colors.textSecondary} />
             <View style={{ flex: 1, minWidth: 0 }}>
-              <Text style={styles.profileHost} numberOfLines={1}>{p.displayName || p.serverUrl.replace(/^https?:\/\//, '')}</Text>
+              <Text style={styles.profileHost} numberOfLines={1}>{p.displayName || maskHubAddress(p.serverUrl.replace(/^https?:\/\//, '').replace(/\/$/, ''))}</Text>
               <Text style={styles.profileUser} numberOfLines={1}>{p.username}{p.requiresReauth ? ' · 需要重新登录' : ''}</Text>
             </View>
             <Ionicons name="swap-horizontal" size={16} color={colors.textMuted} />
@@ -432,7 +446,7 @@ export default function ServerScreen({
         ) : null}
         <View style={{ flex: 1, minWidth: 0 }}>
           <Text style={styles.title}>服务器</Text>
-          <Text style={styles.subtitle} numberOfLines={1}>{host}</Text>
+          <Text style={styles.subtitle} numberOfLines={1} testID="server-subtitle">{host}</Text>
         </View>
         <View style={[styles.pill, { backgroundColor: colors.subtleFill }]} testID="server-status-pill">
           <View style={[styles.dot, { backgroundColor: reachable ? colors.running : colors.failed }]} />
@@ -612,12 +626,15 @@ function HostRow({ host: h, wide, first, onPress }: { host: HostLevel; wide: boo
   );
 }
 
-function InfoRow({ icon, label, value, onCopy, copied, mono, valueColor, last, testID }: {
+function InfoRow({ icon, label, value, onCopy, copied, mono, valueColor, last, testID, revealed, onToggleReveal }: {
   icon: keyof typeof Ionicons.glyphMap;
   label: string;
   value: string;
   onCopy?: () => void;
   copied?: boolean;
+  /** #649:有它就在值后面放一个眼睛按钮(打码 ↔ 完整)。 */
+  revealed?: boolean;
+  onToggleReveal?: () => void;
   mono?: boolean;
   valueColor?: string;
   last?: boolean;
@@ -634,6 +651,19 @@ function InfoRow({ icon, label, value, onCopy, copied, mono, valueColor, last, t
       >
         {value}
       </Text>
+      {onToggleReveal ? (
+        <Pressable
+          testID={testID ? `${testID}-reveal` : undefined}
+          accessibilityRole="button"
+          accessibilityLabel={revealed ? `隐藏${label}` : `显示完整${label}`}
+          accessibilityState={{ selected: !!revealed }}
+          hitSlop={8}
+          onPress={onToggleReveal}
+          style={({ pressed }) => [styles.revealBtn, pressed && styles.pressed]}
+        >
+          <Ionicons name={revealed ? 'eye-off-outline' : 'eye-outline'} size={15} color={colors.accent} />
+        </Pressable>
+      ) : null}
       {onCopy ? (
         <Ionicons name={copied ? 'checkmark' : 'copy-outline'} size={14} color={copied ? colors.running : colors.textMuted} />
       ) : null}
@@ -759,6 +789,7 @@ const makeStyles = () =>
     rowBorder: { borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.border },
     rowLabel: { color: colors.textSecondary, fontSize: type.body, width: 52 },
     rowValue: { flex: 1, color: colors.text, fontSize: type.body, textAlign: 'right' },
+    revealBtn: { paddingHorizontal: 2, alignItems: 'center', justifyContent: 'center' },
     mono: { fontFamily: 'monospace', fontSize: type.small },
 
     failBox: {
