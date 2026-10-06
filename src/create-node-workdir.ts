@@ -33,11 +33,14 @@ export function randomHex6(rand: () => number = Math.random): string {
   return s;
 }
 
-/** 节点名 → ASCII 目录名。`fallback` 在名字转不出任何 [a-z0-9] 时使用(如 `node-1a2b3c`)。 */
+/** 节点名 → ASCII 目录名(结果满足 ^[a-z][a-z0-9-]{0,63}$)。`fallback` 在名字转不出任何 [a-z0-9] 时使用(如 `node-1a2b3c`)。 */
 export function workdirSlug(name: string, fallback: string, pinyin: (t: string) => string | null = toPinyin): string {
   let s = name.trim();
   if (/[^\x00-\x7f]/.test(s)) s = pinyin(s) ?? '';
-  const slug = s.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+/, '').slice(0, SLUG_MAX).replace(/-+$/, '');
+  let slug = s.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+/, '');
+  // #652 —— 文件夹名规则 ^[a-z][a-z0-9-]{0,63}$(与 Hub/daemon 的 NODE_FOLDER_RE 同):数字开头补 `node-`。
+  if (slug && !/^[a-z]/.test(slug)) slug = `node-${slug}`;
+  slug = slug.slice(0, SLUG_MAX).replace(/-+$/, '');
   return slug || fallback;
 }
 
