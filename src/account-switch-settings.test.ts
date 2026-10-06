@@ -37,7 +37,7 @@ ck('S7 wide/desktop: 切换账号 row sits before the 退出登录 row', wideSwi
 // ── the switcher ──
 ck('S8 phone gets the bottom sheet, wide/desktop gets the dialog (not a phone sheet)', settings.includes("variant={compact ? 'sheet' : 'dialog'}"));
 ck('S9 sheet slides from the bottom, dialog fades in the centre', switcher.includes("animationType={dialog ? 'fade' : 'slide'}") && switcher.includes("dialog ? styles.rootCenter : styles.rootBottom"));
-ck('S10 rows read 「账号 @ 服务器」', switcher.includes('`${p.username || p.displayName || \'?\'} @ ${accountHost(p.serverUrl)}`'));
+ck('S10 rows read 「账号 @ 服务器」', switcher.includes('`${p.username || p.displayName || \'?\'} @ ${maskedHubHost(p.serverUrl)}`'));
 ck('S11 tapping another account switches with its saved token (no password step)', settings.includes('onPick={pickProfile}') && /const pickProfile = [\s\S]*?onSwitchProfile\(profile\.profileId\)/.test(settings));
 ck('S12 「添加账号」 opens the login flow without signing out', settings.includes('onAdd={onAddAccount}') && /onCancelAdd=\{cfg && !reauthProfile \? \(\) => setScreen\(\{ name: 'settings' \}\) : undefined\}/.test(app));
 ck('S13 移除 in the switcher goes through the existing confirm (local only)', settings.includes('onRemove={profile => setRemoveTarget('));

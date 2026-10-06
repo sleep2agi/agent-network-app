@@ -80,8 +80,7 @@ const parseIndex = (raw: string | null): SessionIndex | null => {
 export const sameAccount = (a: { serverUrl: string; username?: string }, b: { serverUrl: string; username?: string }): boolean =>
   a.serverUrl.replace(/\/+$/, '').toLowerCase() === b.serverUrl.replace(/\/+$/, '').toLowerCase() && (a.username ?? '') === (b.username ?? '');
 
-/** 列表 / 切换面板上的「账号 @ 服务器」。 */
-export const accountHost = (serverUrl: string): string => serverUrl.replace(/^https?:\/\//i, '').replace(/\/+$/, '');
+// 「账号 @ 服务器」的主机显示改由 mask-hub-address.ts 的 maskedHubHost 出(#649,不再有未打码的版本)。
 
 const metaOf = (id: string, cfg: HubConfig, now: number, prev?: SessionMeta): SessionMeta => ({
   id,

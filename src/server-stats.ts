@@ -7,6 +7,7 @@
 // 不要在这个文件里另写一套 status 判断,也不要回到 `.length`。
 
 import type { Session } from './api';
+import { maskUrlsInText } from './mask-hub-address';
 import { buildSections, isOffline, isWorking, teamOf } from './agents-list';
 
 /** 一个会话在服务器页上的归类。互斥:每个会话只落进一个桶。 */
@@ -183,7 +184,7 @@ export function describeFailure(err: unknown): string {
     return `服务器拒绝了请求（HTTP ${code}）`;
   }
   if (name === 'AbortError' || /abort|timeout|timed out/i.test(msg)) return '请求超时（12 秒无响应）';
-  return msg ? `无法访问服务器：${msg}` : '无法访问服务器';
+  return msg ? `无法访问服务器：${maskUrlsInText(msg)}` : '无法访问服务器';
 }
 
 /**

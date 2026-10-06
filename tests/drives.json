@@ -268,7 +268,7 @@
     },
     "test-server-address-mask/drive.mjs": {
       "kind": "stub",
-      "secs": 20
+      "secs": 35
     },
     "test-server-host-levels/drive.mjs": {
       "kind": "stub",

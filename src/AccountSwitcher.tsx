@@ -6,7 +6,7 @@ import { Modal, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { Text } from './ui-text';
 import { Ionicons } from './icons';
 import type { HubProfile } from './storage';
-import { accountHost } from './session-registry';
+import { maskedHubHost } from './mask-hub-address';
 import { LOCAL_HUB_PROFILE_ID } from './local-hub';
 import { colors, onThemeChange, radius, spacing } from './theme';
 import { elevated } from './elevation';
@@ -20,7 +20,7 @@ import { useModalSafePadding } from './safe-area-runtime';
 type Profile = Pick<HubProfile, 'profileId' | 'serverUrl' | 'username' | 'displayName' | 'requiresReauth'>;
 
 export const accountLabel = (p: Pick<Profile, 'profileId' | 'serverUrl' | 'username' | 'displayName'>): string =>
-  p.profileId === LOCAL_HUB_PROFILE_ID ? t('accounts.local') : `${p.username || p.displayName || '?'} @ ${accountHost(p.serverUrl)}`;
+  p.profileId === LOCAL_HUB_PROFILE_ID ? t('accounts.local') : `${p.username || p.displayName || '?'} @ ${maskedHubHost(p.serverUrl)}`;
 
 // 头像:名字首字 + 按账号固定的底色(同一账号每次同色,两个账号一眼分得开)。
 const AVATAR_COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#8b5cf6', '#ef4444', '#0ea5e9', '#14b8a6', '#ec4899'];

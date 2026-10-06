@@ -55,3 +55,14 @@ export function displayHubAddress(serverUrl: string, revealed: boolean): string 
   const host = (serverUrl ?? '').replace(/^https?:\/\//, '').replace(/\/$/, '');
   return revealed ? host : maskHubAddress(host);
 }
+
+/** 屏幕上任何「这台 Hub 是谁」的地方用它:去协议 + 打码。 */
+export function maskedHubHost(serverUrl: string): string {
+  return displayHubAddress(serverUrl, false);
+}
+
+/** 错误 / 提示文案里夹着的 http(s) 地址(fetch 报错常把完整 URL 带出来)逐个打码。 */
+export function maskUrlsInText(text: string): string {
+  if (!text) return text;
+  return text.replace(/\bhttps?:\/\/[^\s'"<>()（）]+/gi, m => maskHubAddress(m.replace(/[.,;:!?。，；：]+$/, '')) + (m.match(/[.,;:!?。，；：]+$/)?.[0] ?? ''));
+}

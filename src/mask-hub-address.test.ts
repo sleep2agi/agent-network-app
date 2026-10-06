@@ -8,7 +8,8 @@
 
 import fs from 'node:fs';
 import path from 'node:path';
-import { displayHubAddress, maskHubAddress } from './mask-hub-address';
+import { displayHubAddress, maskedHubHost, maskHubAddress, maskUrlsInText } from './mask-hub-address';
+import { describeFailure } from './server-stats';
 
 let pass = 0, total = 0;
 const ck = (name: string, cond: boolean, extra = '') => {
@@ -52,6 +53,16 @@ eq('前后空白先去掉', maskHubAddress('  hub.example.com:9300 '), 'h.e****.
 // ── 6. displayHubAddress:屏幕文案 ──
 eq('默认(未展开)= 去协议 + 打码', displayHubAddress('https://hub.example.com:9300/', false), 'h.e****.com:9300');
 eq('展开 = 去协议去尾斜杠的完整值', displayHubAddress('https://hub.example.com:9300/', true), 'hub.example.com:9300');
+
+// ── 6b. 类级:其他上屏入口用的两个助手 ──
+eq('maskedHubHost = 去协议 + 打码', maskedHubHost('https://hub.example.com:9300/'), 'h.e****.com:9300');
+eq('错误文案里的 URL 打码,其余字不动', maskUrlsInText('error sending request for url (https://hub.example.com:9300/api/status)'), 'error sending request for url (https://h.e****.com:9300/****)');
+eq('句末标点留在原位', maskUrlsInText('无法连接 http://hub.example.com。'), '无法连接 http://h.e****.com。');
+eq('没有 URL 的文案原样', maskUrlsInText('请求超时'), '请求超时');
+{
+  const d = describeFailure(new Error('fetch failed: https://hub.example.com:9300/api/status'));
+  ck('服务器页断开原因不带完整主机', !d.includes('hub.example.com') && d.includes('h.e****.com:9300'), d);
+}
 
 // ── 7. 接线(源码契约) ──
 const read = (p: string) => fs.readFileSync(path.join(__dirname, '..', p), 'utf8');

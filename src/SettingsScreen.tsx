@@ -1,4 +1,5 @@
 import ModalKeyboardAvoider from './ModalKeyboardAvoider';
+import { maskedHubHost } from './mask-hub-address';
 import { t as tr } from './i18n';
 import './i18n-fatal';
 import { fatalSummary } from './fatal-report';
@@ -405,7 +406,7 @@ export default function SettingsScreen({
       current={isCurrent ? tr('accounts.currentPill') : undefined}
       badge={profile.profileId === LOCAL_HUB_PROFILE_ID ? tr('accounts.localPill') : undefined}
       large={isCurrent}
-      accessibilityLabel={tr('settings.copy.182', { v0: profile.displayName || profile.username || profile.serverUrl })}
+      accessibilityLabel={tr('settings.copy.182', { v0: profile.displayName || profile.username || maskedHubHost(profile.serverUrl) })}
       onPress={() => pickProfile(profile)}
       onMore={el => openProfileMore(profile, el)}
       moreLabel={tr('accounts.more', { name: accountName(profile) })}
@@ -426,7 +427,7 @@ export default function SettingsScreen({
             testID={`settings-row-${PHONE_SETTINGS_SERVER_ENTRY.key}`}
             icon="cloud-outline"
             label={tr('nav.server')}
-            value={cfg.serverUrl.replace(/^https?:\/\//, '').replace(/\/$/, '')}
+            value={maskedHubHost(cfg.serverUrl)}
             accessibilityLabel={tr('nav.server')}
             onPress={onOpenServer}
           />
@@ -782,7 +783,7 @@ export default function SettingsScreen({
                   </>
                 ) : (
                   <SettingsGroup>
-                    <SettingsRow label={tr('settings.copy.18')} value={cfg.serverUrl} />
+                    <SettingsRow label={tr('settings.copy.18')} value={maskedHubHost(cfg.serverUrl)} />
                     <SettingsRow label={tr('settings.copy.19')} value={me.username ?? cfg.username ?? '—'} />
                     {show('account', 'addAccount') ? <SettingsRow label={tr('settings.copy.93')} tone="accent" icon="add" onPress={onAddAccount} testID="settings-add-account-row" /> : null}
                   </SettingsGroup>
@@ -1151,7 +1152,7 @@ export default function SettingsScreen({
         <View style={[styles.modalBackdrop, withBasePadding(dialogSafe, spacing.xl)]}>
           <View style={styles.modalCard}>
             <Text style={styles.modalTitle}>{tr('settings.copy.79')}</Text>
-            <Text style={styles.modalBody}>{removeTarget ? `${removeTarget.serverUrl} · ${removeTarget.username}` : ''}{tr('settings.copy.80')}</Text>
+            <Text style={styles.modalBody}>{removeTarget ? `${maskedHubHost(removeTarget.serverUrl)} · ${removeTarget.username}` : ''}{tr('settings.copy.80')}</Text>
             <View style={styles.modalActions}>
               <Pressable style={styles.modalButton} onPress={() => setRemoveTarget(null)}><Text style={styles.rowValue}>{tr('settings.copy.7')}</Text></Pressable>
               <Pressable style={[styles.modalButton, styles.modalDanger]} onPress={() => {
@@ -1199,7 +1200,7 @@ export default function SettingsScreen({
         <View style={[styles.modalBackdrop, withBasePadding(dialogSafe, spacing.xl)]}>
           <View style={styles.modalCard}>
             <Text style={styles.modalTitle}>{tr('settings.copy.86')}</Text>
-            <Text style={styles.modalBody}>{`${cfg.serverUrl} · ${me.username ?? cfg.username ?? ''}`}{tr('settings.copy.87')}</Text>
+            <Text style={styles.modalBody}>{`${maskedHubHost(cfg.serverUrl)} · ${me.username ?? cfg.username ?? ''}`}{tr('settings.copy.87')}</Text>
             <View style={styles.modalActions}>
               <Pressable style={styles.modalButton} onPress={() => setLogoutConfirm(false)}><Text style={styles.rowValue}>{tr('settings.copy.7')}</Text></Pressable>
               <Pressable testID="settings-logout-confirm" style={[styles.modalButton, styles.modalDanger]} onPress={() => {
