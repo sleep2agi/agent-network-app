@@ -1,0 +1,8 @@
+desktop v0.2.215 — 服务器概览「机器」更清楚：机器名好认、离线机器折叠、只突出在线数、告警排最前
+
+A. 本版内容(0.2.214 发版提交 437c76e 之后 main 上合入的 PR + 本 PR)
+  #727 服务器概览「机器」整理：友好机器名 / 离线机器折叠 / 计数只突出在线数(死节点不计) / 告警排最前并加红点。
+  本 PR(版本号):0.2.214 → 0.2.215,versionCode 2214 → 2215;release-desktop-auto-update.yml 加 What's new in 0.2.215;重新生成 src/changelog-bundled.ts。
+  本地:干净 origin/main(874b268) bump 后 npm ci / npm test(344/344) / npm run typecheck 全部 rc=0;android-release-notes.mjs 0.2.215 rc=0。
+B. 验证边界(如实)
+  ck 单测 + 页内桩驱动(见 #727 PR)。真机:服务器概览「机器」区机器名为友好名、离线机器折叠收起、计数突出在线数、有告警的机器排在最前。
