@@ -5,6 +5,10 @@
 export const BUNDLED_RELEASE_BODY: string = [
   "Signed and notarized stable update for macOS (Apple Silicon) and Windows (x64).",
   "",
+  "What's new in 0.2.213:",
+  "- 新建节点向导重做：步骤条、居中卡片、没得选的步骤自动跳过",
+  "- 服务器概览新增「机器」：每台机器的 CPU / 内存 / 磁盘水位",
+  "",
   "What's new in 0.2.212:",
   "- 新建节点向导第 4 步只显示该运行时用得到的参数",
   "- 按住说话录音浮层改为主题蓝（晴蓝）",
@@ -924,6 +928,7 @@ export const BUNDLED_RELEASE_BODY: string = [
 
 /** Release date (published_at) per version, as far as it was known when this file was generated. */
 export const BUNDLED_RELEASE_DATES: Record<string, string> = {
+  "0.2.212": "2026-10-06T01:55:12Z",
   "0.2.211": "2026-10-05T18:46:37Z",
   "0.2.210": "2026-10-05T17:52:22Z",
   "0.2.209": "2026-10-04T14:11:36Z",
