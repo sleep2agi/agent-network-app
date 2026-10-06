@@ -1,0 +1,12 @@
+board #629 — adopted node controls (work in progress)
+
+Scope: app-only adoption entry, authoritative adopted lifecycle controls,
+disabled restart with Stop then Start guidance, readable pending/error states.
+Do not infer authority from hostname or node id. Verify current Hub protocol
+before exposing adoption. Existing created-node behavior must be preserved.
+
+Validation planned: ck-style model/API/source guards; Docker browser tests with
+in-page Hub stubs only, desktop 1200x800 and mobile 390x844 screenshots.
+No real Hub/node operations, no version change, no merge or release.
+
+Status: implementation and validation pending; this is not a passing report.
