@@ -12,10 +12,13 @@
 //       example.com              → e****.com
 //       localhost:9200           → l****:9200
 //   - IPv4:保留首尾两段,中间两段 `***`:203.0.113.177:9300 → 203.***.***.177:9300
-//   - IPv6:保留第一组:[2001:db8::1]:9300 → [2001:****]:9300
+//   - IPv6:保留第一组:[2001:db8::1]:9300 → [2001:****]:9300;首组为空([::1])→ [****]
+//   - 方括号里不是 IPv6 字面量([hub.example.com]、没有 ])→ 整段 `****`
 //   - 空串原样返回;控制字符去掉;以 `[` 开头却没有 `]` 的、端口不是数字的 → 整段 `****`。
 
 const MASK = '****';
+/** 十六进制组 + 冒号,可带 IPv4 尾巴(::ffff:192.0.2.1);必须至少一个冒号。 */
+const IPV6_LITERAL = /^(?=[^:]*:)[0-9A-Fa-f:]+(?:\d{1,3}(?:\.\d{1,3}){3})?$/;
 
 function maskDomain(host: string): string {
   const labels = host.split('.').filter(Boolean);
@@ -32,7 +35,10 @@ function maskHost(host: string): string {
     // IPv6 字面量 [..]。没有收尾的 `]` 就不是合法字面量 —— 整段打码,别把 `[` 之后的原文当「第一组」漏出去。
     const close = host.indexOf(']');
     if (close < 0) return MASK;
-    const first = host.slice(1, close).split(':')[0];
+    const inner = host.slice(1, close);
+    // 括号里不是 IPv6 字面量(主机名 `[hub.example.com]`、没有冒号、混了别的字)→ 整段打码,不留「第一组」。
+    if (!IPV6_LITERAL.test(inner)) return MASK;
+    const first = inner.split(':')[0];
     return first ? `[${first}:${MASK}]` : `[${MASK}]`;
   }
   const v4 = host.match(/^(\d{1,3})\.\d{1,3}\.\d{1,3}\.(\d{1,3})$/);
@@ -69,6 +75,6 @@ export function maskUrlsInText(text: string): string {
   return text
     .replace(/\bhttps?:\/\/[^\s'"<>()（）]+/gi, m => maskHubAddress(m.replace(/[.,;:!?。，；：]+$/, '')) + (m.match(/[.,;:!?。，；：]+$/)?.[0] ?? ''))
     // Node / Bun 的网络错误把裸 host[:port] 跟在错误码后面:getaddrinfo ENOTFOUND hub.example.com / connect ECONNREFUSED 1.2.3.4:9300
-    .replace(/\b(ENOTFOUND|ECONNREFUSED|ECONNRESET|ETIMEDOUT|EAI_AGAIN|EHOSTUNREACH|ENETUNREACH)(\s+)(\[[0-9A-Fa-f:]+\](?::\d+)?|[A-Za-z0-9.-]+(?::\d+)?)/g,
+    .replace(/\b(ENOTFOUND|ECONNREFUSED|ECONNRESET|ECONNABORTED|ETIMEDOUT|EAI_AGAIN|EHOSTUNREACH|ENETUNREACH|EPIPE)(\s+)(\[[^\]\s]*\](?::\d+)?|[A-Za-z0-9.-]+(?::\d+)?)/g,
       (_m, code, sp, hostPort) => `${code}${sp}${maskHubAddress(hostPort)}`);
 }

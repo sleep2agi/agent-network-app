@@ -40,9 +40,16 @@ export function safeServerUrl(value?: string | null): string | undefined {
   return safeServerLabel(trimmed);
 }
 
-/** URL 形态一律打码(本端 Hub 地址、或节点把 Hub 地址当 server 报上来);普通主机名标签原样。 */
-const serverFact = (label?: string): string | undefined =>
-  label === undefined ? undefined : label.includes('://') ? maskedHubHost(label) : label;
+/** URL 形态一律打码(本端 Hub 地址、或节点把 Hub 地址当 server 报上来);不带协议但就是本端 Hub 主机
+ *  (`hub.example.com` / `hub.example.com:9300`)也打码;其他普通主机名标签原样。 */
+const serverFact = (label: string | undefined, hubOrigin: string | undefined): string | undefined => {
+  if (label === undefined) return undefined;
+  if (label.includes('://')) return maskedHubHost(label);
+  const hubHostPort = hubOrigin?.replace(/^[a-z][a-z0-9+.-]*:\/\//i, '').toLowerCase();
+  const hubHostname = hubHostPort?.replace(/:\d+$/, '');
+  const l = label.toLowerCase();
+  return hubHostPort && (l === hubHostPort || l === hubHostname || l.replace(/:\d+$/, '') === hubHostname) ? maskedHubHost(label) : label;
+};
 
 /** Build the safe, read-only node facts shown from a chat header.
  * Deliberately allowlists public fields: tokens, config contents and arbitrary
@@ -53,7 +60,7 @@ export function nodeInfoFacts(session: Session, node: HubNode | null, serverUrl:
     { label: '节点名称', value: node?.node_name ?? session.alias },
     { label: '节点 ID', value: node?.node_id ?? session.node_id },
     // #649:URL 形态的「服务器」(节点报上来的是 Hub 地址,或兜底用本端 Hub 地址)只出打码值;普通主机名标签原样。
-    { label: '服务器', value: serverFact(safeServerLabel(node?.server ?? session.server)) ?? serverFact(hubOrigin) },
+    { label: '服务器', value: serverFact(safeServerLabel(node?.server ?? session.server), hubOrigin) ?? serverFact(hubOrigin, hubOrigin) },
     { label: 'Hostname', value: node?.hostname ?? session.hostname },
     { label: 'IP', value: session.ip },
     // Only explicit runtime-reported identities are accepted. In particular,

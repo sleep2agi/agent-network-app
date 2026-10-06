@@ -57,6 +57,12 @@ eq('B2:以 [ 开头没有 ] → 整段打码', maskHubAddress('[hub.example.com'
 ck('B2:结果里没有原主机名', !maskHubAddress('https://[hub.example.com:9300').includes('example'), maskHubAddress('https://[hub.example.com:9300'));
 eq('空主机 + 端口', maskHubAddress(':9300'), '****:9300');
 eq('控制字符去掉', maskHubAddress('\u0000hub.example.com'), 'h.e****.com');
+eq('B3:方括号里是主机名 → 整段打码', maskHubAddress('[hub.example.com]'), '****');
+eq('B3:方括号主机名带端口 → 主机整段打码,端口保留', maskHubAddress('[hub.example.com]:9300'), '****:9300');
+eq('B3:带协议的方括号主机名', maskHubAddress('https://[hub.example.com]:9300'), 'https://****:9300');
+eq('方括号里没有冒号(不是 IPv6)→ 整段打码', maskHubAddress('[abcd]'), '****');
+eq('IPv4 映射的 IPv6 仍按 IPv6', maskHubAddress('[::ffff:192.0.2.1]:9300'), '[****]:9300');
+eq('真 IPv6 不受影响', maskHubAddress('[2001:db8::1]:9300'), '[2001:****]:9300');
 
 // ── 5. 被隐藏的部分真的不在结果里 ──
 {
@@ -77,6 +83,10 @@ eq('没有 URL 的文案原样', maskUrlsInText('请求超时'), '请求超时')
 eq('N4:ENOTFOUND 后的裸主机打码', maskUrlsInText('getaddrinfo ENOTFOUND hub.example.com'), 'getaddrinfo ENOTFOUND h.e****.com');
 eq('N4:ECONNREFUSED host:port 打码', maskUrlsInText('connect ECONNREFUSED 203.0.113.9:9300'), 'connect ECONNREFUSED 203.***.***.9:9300');
 eq('N4:错误文本里的畸形括号 URL 不漏', maskUrlsInText('failed https://[hub.example.com done'), 'failed https://**** done');
+eq('B3:ECONNREFUSED 后的 [主机名]:端口', maskUrlsInText('connect ECONNREFUSED [hub.example.com]:9300'), 'connect ECONNREFUSED ****:9300');
+eq('ECONNREFUSED 后的 IPv6', maskUrlsInText('connect ECONNREFUSED [2001:db8::1]:9300'), 'connect ECONNREFUSED [2001:****]:9300');
+eq('N4b:EPIPE', maskUrlsInText('write EPIPE hub.example.com:9300'), 'write EPIPE h.e****.com:9300');
+eq('N4b:ECONNABORTED', maskUrlsInText('connect ECONNABORTED hub.example.com'), 'connect ECONNABORTED h.e****.com');
 {
   const d = describeFailure(new Error('fetch failed: https://hub.example.com:9300/api/status'));
   ck('服务器页断开原因不带完整主机', !d.includes('hub.example.com') && d.includes('h.e****.com:9300'), d);
