@@ -11,6 +11,7 @@ import './i18n-task-fields';
 import './i18n-accounts';
 import './i18n-users';
 import './i18n-sessions';
+import './i18n-password';
 import './i18n-changelog';
 import './i18n-fatal';
 
@@ -32,6 +33,7 @@ migrated.push('src/MemberEditor.tsx', 'src/MemberEditorKit.tsx', 'src/TaskAccess
 migrated.push('src/ChangelogScreen.tsx');
 migrated.push('src/FatalBoundary.tsx', 'src/LastCrashChip.tsx');
 migrated.push('src/ManageDepartment.tsx');
+migrated.push('src/ChangePasswordPanel.tsx', 'src/WeakPasswordBanner.tsx');
 function untranslated(file: string, raw: string): string[] {
   const source = raw.replace(/\r\n?/g, '\n');
   const tree = ts.createSourceFile(file, source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);

@@ -31,7 +31,7 @@ import ServerSidebar, { type ServerSection } from './src/ServerSidebar';
 import HostSupervisorPickerScreen from './src/HostSupervisorPickerScreen';
 import CreateNodeWizardScreen from './src/CreateNodeWizardScreen';
 import SettingsScreen from './src/SettingsScreen';
-import { rememberSettingsCategory } from './src/settings-model';
+import { rememberSettingsCategory, requestSettingsDetail, settingsDetailFromQuery } from './src/settings-model';
 import AgentsScreen from './src/AgentsScreen';
 import TasksScreen from './src/TasksScreen';
 import TaskFilterSidebar from './src/TaskFilterSidebar';
@@ -43,6 +43,8 @@ import type { ScheduleOpenRequest } from './src/node-schedules';
 import ConnectivityIndicator from './src/ConnectivityIndicator';
 import FatalBoundary, { FatalFixtureScreen, readFatalFixture } from './src/FatalBoundary';
 import LastCrashChip from './src/LastCrashChip';
+import WeakPasswordBanner from './src/WeakPasswordBanner';
+import { weakPasswordFlags } from './src/weak-password-flag';
 import type { HostSupervisorDaemon } from './src/api';
 import { clearConfig, listHubProfiles, loadConfig, loadHubProfile, loadLocalAvatars, loadOutbox, loadForwardOperations, saveForwardOperations, loadThemeMode, loadUiScalePrefs, markHubProfileRequiresReauth, onDesktopThemeStorageChange, persistProfileNetworkId, onDesktopUiScaleStorageChange, removeHubProfile, saveConfig, saveLocalAvatars, saveOutbox, sessionIdOf, switchHubProfile, type HubProfile } from './src/storage';
 import { clearProfileUnauthorized, onProfileUnauthorized, profileUnauthorizedReason } from './src/profile-auth-state';
@@ -79,7 +81,7 @@ import { readImageWindowRoute } from './src/image-window-model';
 import TaskWindow from './src/TaskWindow';
 import { readTaskWindowRoute } from './src/task-window-model';
 import { loadPinnedChats, requestedChatAlias, requestedChatProfileId, requestedWorkspaceProfileId, savePinnedChats } from './src/desktop-chat-menu';
-import { SETTINGS_CATEGORY_EVENT, SETTINGS_SESSION_EVENT, closeSettingsWindow, notifySessionChanged, openSettingsWindow, requestedSettingsCategory, requestedSettingsWindow, settingsCategoryFromQuery } from './src/desktop-settings-window';
+import { SETTINGS_CATEGORY_EVENT, SETTINGS_SESSION_EVENT, closeSettingsWindow, notifySessionChanged, openSettingsWindow, requestedSettingsCategory, requestedSettingsDetail, requestedSettingsWindow, settingsCategoryFromQuery } from './src/desktop-settings-window';
 import { loadChatPins, saveChatPins, togglePinned } from './src/chat-pins';
 import { ROW_MENU_EMPTY_HINT } from './src/agent-row-menu';
 import { bindUnreadProfile } from './src/unread-store';
@@ -99,6 +101,9 @@ import { comboFromEvent, shortcutAction, shortcutForCombo } from './src/shortcut
 import { isMacKeyboard, requestAgentSearchFocus, shortcutBindings, shortcutCaptureActive } from './src/shortcuts-store';
 import { contentWidthBesideRail, mobileRailWidth, navActiveKey, navChromeFor, phoneInPageLeaf, phoneSettingsBackTarget, railShowsBrand, screenForNavPress } from './src/nav-chrome';
 import { elevated, buttonStyle, buttonTextStyle } from './src/elevation';
+
+// #653 弱密码横幅在手机上出现的页面(各 tab 的首页)。
+const PHONE_BANNER_SCREENS: ReadonlySet<string> = new Set(['agents', 'tasks', 'messages', 'server', 'scheduled']);
 
 type Screen =
   | { name: 'login' }
@@ -458,6 +463,8 @@ function AppRoot() {
     settingsCategoryBooted.current = true;
     const category = requestedSettingsCategory();
     if (category) rememberSettingsCategory(category);
+    const detail = requestedSettingsDetail();
+    if (detail) requestSettingsDetail(detail);
   }
   const [settingsViewKey, setSettingsViewKey] = useState(0);
   // 0.2.76 系统栏托盘:只有主窗口接(分离聊天窗/工作区窗/设置窗不接,否则一个 app 多个托盘项)。
@@ -500,10 +507,12 @@ function AppRoot() {
     let dead = false;
     let unlisten: (() => void) | undefined;
     void import('@tauri-apps/api/event').then(async ({ listen }) => {
-      const stop = await listen<{ category?: string }>(SETTINGS_CATEGORY_EVENT, (event) => {
+      const stop = await listen<{ category?: string; detail?: string }>(SETTINGS_CATEGORY_EVENT, (event) => {
         const category = settingsCategoryFromQuery(event.payload?.category ?? null);
         if (!category) return;
         rememberSettingsCategory(category);
+        const detail = settingsDetailFromQuery(event.payload?.detail);
+        if (detail) requestSettingsDetail(detail);
         setSettingsViewKey(n => n + 1);
       });
       if (dead) stop();
@@ -876,6 +885,10 @@ function AppRoot() {
               />
             ) : null}
             <View style={[styles.navContent, railShown ? { paddingRight: insets.right } : { paddingLeft: insets.left, paddingRight: insets.right }, { paddingBottom: contentBottomInset }]}>
+              {/* #653 弱密码横幅:只在各 tab 的首页(会话 / 设置 / 聊天页不放:聊天的键盘避让按「聊天是内容区第一个子节点」算)。 */}
+              {PHONE_BANNER_SCREENS.has(screen.name) ? (
+                <WeakPasswordBanner cfg={cfg} onOpen={() => { requestSettingsDetail('changePassword'); setScreen({ name: 'settings' }); }} />
+              ) : null}
               {twoPaneSelection ? (
                 // Android wide (unfolded foldable / tablet): phone-sized list on the left,
                 // the same phone screens on the right. Navigation state is the same
@@ -1342,7 +1355,13 @@ function DesktopWorkspace({ cfg, screen, setScreen, onLogout, onLocalDataDeleted
           <AgentsScreen cfg={cfg} compact selectedAlias={screen.name === 'chat' || screen.name === 'nodeInfo' ? screen.alias : undefined} pinnedAliases={pinnedAliases} onTogglePin={togglePin} mutedAliases={mutedAliases} onToggleMute={toggleMute} onOpenChatWindow={alias => { void openRememberedChatWindow(alias, cfg.profileId, cfg.username || maskedHubHost(cfg.serverUrl)); }} onOpenChat={alias => setScreen({ name: 'chat', alias })} onOpenPerson={p => setScreen(dmScreenFor(p))} selectedPerson={screen.name === 'dm' ? screen.alias : undefined} onOpenGroup={g => setScreen(groupScreenFor(g))} selectedGroup={screen.name === 'group' ? screen.alias : undefined} onOpenPicker={() => setScreen({ name: 'picker' })} onOpenNodeDetail={alias => setScreen({ name: 'nodeDetail', alias })} />
         )}
       </View>
-      <View style={desktopStyles.content}>{content}<ShortcutToast text={shortcutToast} /></View>
+      <View style={desktopStyles.content}>
+        {/* #653 弱密码横幅:右侧内容栏顶上;点了打开设置窗口的「修改密码」(没有桌面壳时嵌在主窗口)。 */}
+        {screen.name !== 'settings' ? (
+          <WeakPasswordBanner cfg={cfg} desktop onOpen={() => { void openSettingsWindow('account', 'changePassword').then(opened => { if (!opened) { requestSettingsDetail('changePassword'); setScreen({ name: 'settings' }); } }); }} />
+        ) : null}
+        {content}<ShortcutToast text={shortcutToast} />
+      </View>
     </View>
   );
 }
@@ -1507,6 +1526,8 @@ export function LoginScreen({ onLogin, initialProfile, onCancelReauth, onCancelA
     setBusy(true);
     const result = await login(norm.url, username.trim(), password, clientLabel);
     if (result.ok) {
+      // #653:弱密码登录 → 记下来,顶部横幅提示去改;正常登录 → 清掉旧标记(在别处已经改过了)。
+      await weakPasswordFlags.recordLogin(result.cfg, result.mustChangePassword);
       try {
         await onLogin(result.cfg);
       } catch (saveError) {

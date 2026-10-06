@@ -29,6 +29,10 @@
       "kind": "stub",
       "secs": 60
     },
+    "test-change-password/drive.mjs": {
+      "kind": "stub",
+      "secs": 40
+    },
     "test-changelog/drive.mjs": {
       "kind": "stub",
       "secs": 90

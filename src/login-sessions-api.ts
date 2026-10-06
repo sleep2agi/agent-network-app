@@ -20,7 +20,7 @@ async function request(cfg: HubConfig, path: string, method: string): Promise<{ 
     if (res.status === 401) {
       let body: unknown = null;
       try { body = JSON.parse(text); } catch { /* 非 JSON 的 401 = 普通失效 */ }
-      reportProfileAuthResponse(401, authProfileId(cfg), isTokenExpiredBody(body) ? 'token_expired' : undefined);
+      reportProfileAuthResponse(401, authProfileId(cfg), isTokenExpiredBody(body) ? 'token_expired' : undefined, cfg.token);
     }
     return { status: res.status, text };
   } finally {
