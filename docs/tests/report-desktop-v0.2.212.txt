@@ -1,0 +1,9 @@
+desktop v0.2.212 — 新建节点向导第 4 步按运行时显示参数 / 按住说话浮层改为晴蓝
+
+A. 本版内容(0.2.211 发版提交 5000f31 之后 main 上合入的 PR + 本 PR)
+  #717 新建节点向导第 4 步只显示该运行时用得到的参数(agent-network board #591)。
+  #718 按住说话录音浮层改为主题蓝（晴蓝），不再用微信绿(agent-network board #609)。
+  本 PR(版本号):0.2.211 → 0.2.212,versionCode 2211 → 2212;release-desktop-auto-update.yml 加 What's new in 0.2.212;重新生成 src/changelog-bundled.ts(含 0.2.211 发布日期)。
+  本地:干净 origin/main(b992d0d) bump 后 npm ci / npm test(340/340) / npm run typecheck 全部 rc=0;android-release-notes.mjs 0.2.212 rc=0。
+B. 验证边界(如实)
+  ck 单测 + 页内桩驱动(见 #717/#718 各自 PR)。真机:新建节点第 4 步切换运行时，只出现该运行时会读的参数；手机按住说话时浮层为蓝色。
