@@ -53,7 +53,7 @@ export type AgentStatusFilter = 'online' | 'working' | 'error' | 'offline';
  * host / aliases(#618「机器」分区):点一台机器 → 只看这台机器上的节点。列表读的是 light 投影,
  * 行上**没有** hostname,所以服务器页把这台机器上的别名一起带过来;行上恰好有 hostname 时也按它认。
  */
-export type AgentListFilter = { status?: AgentStatusFilter; group?: string; host?: string; aliases?: string[] };
+export type AgentListFilter = { status?: AgentStatusFilter; group?: string; host?: string; aliases?: string[]; /** 筛选条上显示的机器名(daemon 别名 / 缩短的云主机名);缺省 = host。 */ hostLabel?: string };
 
 export const STATUS_FILTER_LABEL: Record<AgentStatusFilter, string> = {
   online: '在线',
@@ -88,7 +88,7 @@ export const isFilterActive = (f: AgentListFilter | null | undefined): f is Agen
 
 /** 列表顶部筛选条上的文字:「TM · 工作中」「机器 host-a · 离线」。 */
 export function filterLabel(f: AgentListFilter): string {
-  return [f.host ? `机器 ${f.host}` : undefined, f.group, f.status ? STATUS_FILTER_LABEL[f.status] : undefined].filter(Boolean).join(' · ');
+  return [f.host ? `机器 ${f.hostLabel || f.host}` : undefined, f.group, f.status ? STATUS_FILTER_LABEL[f.status] : undefined].filter(Boolean).join(' · ');
 }
 
 // ── 状态卡片 ──

@@ -17,6 +17,16 @@
 //   - 过期:最新心跳早于 5 分钟,或这台机器上的节点全部离线 ⇒ stale:条变灰、文案写「数据 N 分钟前」,
 //     而且不参与「红色排前」—— 过期的数不能当成现在的告警,也不能当成现在的正常。
 //   - 排序:有红条(未过期)的机器排最前;其余按在线节点数、再按节点总数降序;最后按名字。
+//
+// 整理(Vincent 2026-10-06「有没有感觉这个事是不是有点乱啊哥？」:云主机名 `iZ…Z`、17 台里一半没在线节点、
+// 「70/190」里大半是早就死掉的节点):
+//   - 显示名:这台机器上有 host_supervisor daemon(/api/host-supervisors,按 hostname 认)⇒ 用 daemon 别名去掉
+//     `daemon-` 前缀(`daemon-alpha` → `alpha`);否则云厂商生成的 `^iZ[a-z0-9]{15,}Z$` 只留前 8 个字符 + 「…」;
+//     其他名字原样。完整 hostname 一直留在 hostname 上(桌面悬停 / 手机点开看)。
+//   - 主列表只放「有在线节点且数据新鲜」的机器;节点全离线或数据过期的(= stale)折进底部「离线机器 N 台」。
+//   - 总数不算死节点:离线且最近心跳早于 7 天(HOST_DEAD_MS)的节点不进总数、不进别名、不提供遥测;
+//     一台机器上只剩死节点 ⇒ 整台不出现(只计入 deadHosts)。没有心跳时间的节点不算死(读不出 ≠ 死了)。
+//   - 告警:未过期且任一条 > 90% ⇒ alert,排最前、名字旁一个红点。
 
 import type { Session } from './api';
 import { isOffline } from './agents-list';
@@ -25,6 +35,15 @@ import { isOffline } from './agents-list';
 export const HOST_STALE_MS = 5 * 60_000;
 /** 默认显示的机器数;更多的折叠在「全部 N 台」后面(与分组同一做法)。 */
 export const HOSTS_COLLAPSED = 8;
+/** 离线且最近心跳早于这个时长的节点 = 死节点:不进总数。 */
+export const HOST_DEAD_MS = 7 * 24 * 3600_000;
+/** 云厂商自动生成的主机名(阿里云 `iZ` + 一串小写字母数字 + `Z`)。 */
+export const CLOUD_HOSTNAME_RE = /^iZ[a-z0-9]{15,}Z$/;
+/** 云主机名缩短后保留的字符数。 */
+export const CLOUD_HOSTNAME_KEEP = 8;
+
+/** /api/host-supervisors 里本模块用得到的那几格(与 api.ts 的 HostSupervisorDaemon 兼容)。 */
+export type HostDaemonRef = { alias: string; hostname?: string | null; online?: boolean };
 
 export type LevelTone = 'ok' | 'warn' | 'danger' | 'none';
 
@@ -53,11 +72,19 @@ export type HostTelemetry = {
 };
 
 export type HostLevel = {
+  /** Hub 上报的完整 hostname(分组键、筛选键、testID 都用它)。 */
   hostname: string;
+  /** 界面上显示的名字:daemon 别名(去 `daemon-`)/ 缩短的云主机名 / 原样。 */
+  displayName: string;
+  /** 显示名 ≠ hostname ⇒ 需要给出完整 hostname(桌面悬停、手机点开)。 */
+  renamed: boolean;
   ip: string | null;
   online: number;
+  /** 节点总数,不含死节点(离线且心跳早于 7 天)。 */
   total: number;
-  /** 这台机器上全部节点的别名(点进节点列表时按它筛 —— light 投影的行不带 hostname)。 */
+  /** 被排除的死节点数。 */
+  dead: number;
+  /** 这台机器上全部(非死)节点的别名(点进节点列表时按它筛 —— light 投影的行不带 hostname)。 */
   aliases: string[];
   /** 最新心跳的毫秒时间戳;读不出 = 0。 */
   heartbeatMs: number;
@@ -71,9 +98,46 @@ export type HostLevel = {
   disk: Meter;
   /** 三根条里最高的档位(过期 = 'none')。 */
   worst: LevelTone;
+  /** 未过期且有 > 90% 的条 ⇒ 排最前、名字旁红点。 */
+  alert: boolean;
 };
 
-export type HostLevelsResult = { hosts: HostLevel[]; unreported: number };
+export type HostLevelsResult = {
+  /** 全部机器(主列表在前、离线在后,各自按 compareHosts)。 */
+  hosts: HostLevel[];
+  /** 主列表:有在线节点且数据新鲜。 */
+  active: HostLevel[];
+  /** 折叠区「离线机器 N 台」:节点全离线或数据过期。 */
+  offline: HostLevel[];
+  /** 有节点但没报 hostname 的(非死)节点数。 */
+  unreported: number;
+  /** 只剩死节点、整台没显示的机器数。 */
+  deadHosts: number;
+};
+
+/** `daemon-alpha` → `alpha`;没有前缀的别名原样;去掉后为空则保留原别名。 */
+export function daemonDisplayName(alias: string): string {
+  const a = alias.trim();
+  const stripped = a.replace(/^daemon-/, '');
+  return stripped || a;
+}
+
+/** 云厂商生成的 `iZ…Z` 只留前 8 个字符 + 「…」;其他名字原样(不截断)。 */
+export function shortHostname(hostname: string): string {
+  return CLOUD_HOSTNAME_RE.test(hostname) ? `${hostname.slice(0, CLOUD_HOSTNAME_KEEP)}…` : hostname;
+}
+
+/**
+ * 一台机器的显示名:同 hostname(去空白、不分大小写)上有 daemon ⇒ daemon 别名去 `daemon-`;
+ * 多个 daemon 时在线的优先,再按别名排序取第一个(结果稳定,不随接口返回顺序跳)。否则 shortHostname。
+ */
+export function hostDisplayName(hostname: string, daemons: readonly HostDaemonRef[] = []): string {
+  const key = hostname.trim().toLowerCase();
+  const match = daemons
+    .filter(d => typeof d.alias === 'string' && d.alias.trim() && typeof d.hostname === 'string' && d.hostname.trim().toLowerCase() === key)
+    .sort((a, b) => (b.online ? 1 : 0) - (a.online ? 1 : 0) || a.alias.localeCompare(b.alias))[0];
+  return match ? daemonDisplayName(match.alias) : shortHostname(hostname);
+}
 
 const num = (v: unknown): number | null => (typeof v === 'number' && Number.isFinite(v) ? v : null);
 
@@ -175,26 +239,37 @@ export function isStale(ageMs: number | null, online: number): boolean {
 const RANK: Record<LevelTone, number> = { danger: 3, warn: 2, ok: 1, none: 0 };
 const worstOf = (...m: Meter[]): LevelTone => m.reduce<LevelTone>((w, x) => (RANK[x.tone] > RANK[w] ? x.tone : w), 'none');
 
-/** 红色(未过期)排最前;再按在线数、总数降序;最后按名字。 */
+/** 告警(未过期的红)排最前;再按在线数、总数降序;最后按显示名。 */
 export function compareHosts(a: HostLevel, b: HostLevel): number {
-  const ra = a.worst === 'danger' ? 1 : 0, rb = b.worst === 'danger' ? 1 : 0;
+  const ra = a.alert ? 1 : 0, rb = b.alert ? 1 : 0;
   if (ra !== rb) return rb - ra;
   if (a.online !== b.online) return b.online - a.online;
   if (a.total !== b.total) return b.total - a.total;
-  return a.hostname.localeCompare(b.hostname);
+  return (a.displayName || a.hostname).localeCompare(b.displayName || b.hostname) || a.hostname.localeCompare(b.hostname);
 }
 
-export function hostLevels(sessions: readonly Session[], now: number): HostLevelsResult {
-  type Acc = { newest: HostTelemetry; newestMs: number; online: number; total: number; aliases: string[] };
+/** 死节点:离线,且心跳读得出、早于 HOST_DEAD_MS。在线的节点、读不出心跳的节点都不算死。 */
+export function isDeadNode(s: Session, now: number): boolean {
+  if (!isOffline(s)) return false;
+  const ms = heartbeatMs(s.updated_at);
+  return ms > 0 && now - ms > HOST_DEAD_MS;
+}
+
+export function hostLevels(sessions: readonly Session[], now: number, daemons: readonly HostDaemonRef[] = []): HostLevelsResult {
+  type Acc = { newest: HostTelemetry | null; newestMs: number; online: number; total: number; dead: number; aliases: string[] };
   const by = new Map<string, Acc>();
   let unreported = 0;
   for (const s of sessions) {
     const t = telemetryOf(s);
-    if (!t) { unreported++; continue; }
+    const dead = isDeadNode(s, now);
+    if (!t) { if (!dead) unreported++; continue; }
+    let acc = by.get(t.hostname);
+    if (!acc) { acc = { newest: null, newestMs: 0, online: 0, total: 0, dead: 0, aliases: [] }; by.set(t.hostname, acc); }
+    // 死节点只记个数:不进总数、不进别名、它那份旧遥测也不参与「最新者胜」。
+    if (dead) { acc.dead++; continue; }
     const ms = heartbeatMs(s.updated_at);
-    const acc = by.get(t.hostname);
-    if (!acc) {
-      by.set(t.hostname, { newest: t, newestMs: ms, online: isOffline(s) ? 0 : 1, total: 1, aliases: [s.alias] });
+    if (!acc.newest) {
+      acc.newest = t; acc.newestMs = ms; acc.total = 1; acc.online = isOffline(s) ? 0 : 1; acc.aliases.push(s.alias);
       continue;
     }
     acc.total++;
@@ -203,9 +278,12 @@ export function hostLevels(sessions: readonly Session[], now: number): HostLevel
     // 最新者胜,整行取;同一时刻的两行保留先到的那行(Hub 按 updated_at DESC 返回)。
     if (ms > acc.newestMs) { acc.newest = t; acc.newestMs = ms; }
   }
-  const hosts: HostLevel[] = [];
+  const active: HostLevel[] = [];
+  const offline: HostLevel[] = [];
+  let deadHosts = 0;
   for (const [hostname, acc] of by) {
     const t = acc.newest;
+    if (!t) { deadHosts++; continue; }
     const ageMs = acc.newestMs > 0 ? Math.max(0, now - acc.newestMs) : null;
     const stale = isStale(ageMs, acc.online);
     const cpu = cpuMeter(t);
@@ -216,11 +294,16 @@ export function hostLevels(sessions: readonly Session[], now: number): HostLevel
       : ageMs != null && ageMs <= HOST_STALE_MS
         ? '节点均离线'
         : ageLabel(ageMs);
-    hosts.push({
+    const displayName = hostDisplayName(hostname, daemons);
+    const worst = stale ? 'none' : worstOf(cpu, mem, disk);
+    (stale ? offline : active).push({
       hostname,
+      displayName,
+      renamed: displayName !== hostname,
       ip: t.ip,
       online: acc.online,
       total: acc.total,
+      dead: acc.dead,
       aliases: acc.aliases,
       heartbeatMs: acc.newestMs,
       ageMs,
@@ -229,9 +312,11 @@ export function hostLevels(sessions: readonly Session[], now: number): HostLevel
       cpu,
       mem,
       disk,
-      worst: stale ? 'none' : worstOf(cpu, mem, disk),
+      worst,
+      alert: worst === 'danger',
     });
   }
-  hosts.sort(compareHosts);
-  return { hosts, unreported };
+  active.sort(compareHosts);
+  offline.sort(compareHosts);
+  return { hosts: [...active, ...offline], active, offline, unreported, deadHosts };
 }

@@ -3,7 +3,7 @@ import { ActivityIndicator, Pressable, RefreshControl, ScrollView, StyleSheet, V
 import { Text } from './ui-text';
 import { Ionicons } from './icons';
 import * as Clipboard from 'expo-clipboard';
-import { fetchNodeStatus, fetchServerVersion, fetchStatus, HubConfig, Session } from './api';
+import { fetchHostSupervisors, fetchNodeStatus, fetchServerVersion, fetchStatus, HubConfig, Session, type HostSupervisorDaemon } from './api';
 import { hostLevels, HOSTS_COLLAPSED, type HostLevel, type LevelTone, type Meter } from './host-levels';
 import { pingHealth } from './server-ping';
 import { PANE_BACK_TEST_ID } from './pane-header';
@@ -88,6 +88,10 @@ export default function ServerScreen({
   // #618:全量 /api/status(带 host 遥测)。null = 还没读到 / 这个连接读不了(没有 network_id)。
   const [hostRows, setHostRows] = useState<Session[] | null>(null);
   const [allHosts, setAllHosts] = useState(false);
+  // 「离线机器 N 台」折叠区默认收起。
+  const [showOfflineHosts, setShowOfflineHosts] = useState(false);
+  // host_supervisor daemon 列表:只用来给机器起显示名(daemon-alpha → alpha)。读不到 = 空,名字退回 hostname 规则。
+  const [daemons, setDaemons] = useState<HostSupervisorDaemon[]>([]);
 
   const load = useCallback(async () => {
     let ok = false;
@@ -124,6 +128,14 @@ export default function ServerScreen({
     } catch {}
   }, [cfg]);
   usePoll(loadHosts, 30000, [loadHosts]);
+  // daemon 很少增减,一分钟一次足够;读失败保留上一份。
+  const loadDaemons = useCallback(async () => {
+    try {
+      const r = await fetchHostSupervisors(cfg);
+      if (r.ok) setDaemons(r.daemons ?? []);
+    } catch {}
+  }, [cfg]);
+  usePoll(loadDaemons, 60000, [loadDaemons]);
 
   // 「已连接 N 分钟」每分钟走一格,不必等下一次轮询。
   useEffect(() => {
@@ -163,8 +175,9 @@ export default function ServerScreen({
   const toneColor = { good: colors.running, fair: colors.blocked, slow: colors.failed, unknown: colors.textMuted }[latencyTone(latency)];
   const otherProfiles = profiles.filter(p => p.profileId !== cfg.profileId);
   const retry = () => { setRetrying(true); void load(); };
-  const { hosts, unreported } = hostLevels(hostRows ?? [], Date.now());
-  const shownHosts = allHosts ? hosts : hosts.slice(0, HOSTS_COLLAPSED);
+  const { hosts, active: activeHosts, offline: offlineHosts, unreported } = hostLevels(hostRows ?? [], Date.now(), daemons);
+  const shownHosts = allHosts ? activeHosts : activeHosts.slice(0, HOSTS_COLLAPSED);
+  const openHost = (h: HostLevel) => onOpenAgents?.({ host: h.hostname, aliases: h.aliases, hostLabel: h.displayName });
 
   const overview = (
     <View style={styles.section} testID="server-overview">
@@ -200,23 +213,41 @@ export default function ServerScreen({
     <View style={styles.section}>
       <View style={styles.sectionHead}>
         <Text style={styles.sectionTitle}>机器</Text>
-        <Text style={styles.sectionMeta} numberOfLines={1}>
-          {`${hosts.length} 台${unreported ? ` · ${unreported} 个节点未上报` : ''} · 在线 / 节点数`}
+        <Text style={styles.sectionMeta} numberOfLines={1} testID="server-hosts-summary">
+          {`在线机器 ${activeHosts.length} 台 · 离线 ${offlineHosts.length} 台${unreported ? ` · ${unreported} 个节点未上报` : ''}`}
         </Text>
       </View>
       <View style={styles.panel} testID="server-hosts">
         {shownHosts.map((h, i) => (
-          <HostRow key={h.hostname} host={h} wide={wide} first={i === 0} onPress={onOpenAgents ? () => onOpenAgents?.({ host: h.hostname, aliases: h.aliases }) : undefined} />
+          <HostRow key={h.hostname} host={h} wide={wide} first={i === 0} onPress={onOpenAgents ? () => openHost(h) : undefined} />
         ))}
-        {hosts.length > HOSTS_COLLAPSED ? (
+        {activeHosts.length > HOSTS_COLLAPSED ? (
           <Pressable
             testID="server-hosts-toggle"
             onPress={() => setAllHosts(v => !v)}
             style={({ pressed }) => [styles.groupRow, styles.groupRowBorder, styles.groupMore, pressed && styles.pressedRow]}
           >
-            <Text style={styles.linkText}>{allHosts ? '收起' : `全部 ${hosts.length} 台`}</Text>
+            <Text style={styles.linkText}>{allHosts ? '收起' : `全部 ${activeHosts.length} 台`}</Text>
           </Pressable>
         ) : null}
+        {offlineHosts.length ? (
+          <Pressable
+            testID="server-hosts-offline-toggle"
+            accessibilityRole="button"
+            accessibilityState={{ expanded: showOfflineHosts }}
+            onPress={() => setShowOfflineHosts(v => !v)}
+            style={({ pressed }) => [styles.groupRow, activeHosts.length > 0 && styles.groupRowBorder, pressed && styles.pressedRow]}
+          >
+            <Ionicons name="moon-outline" size={14} color={colors.textMuted} />
+            <Text style={styles.offlineHostsLabel} numberOfLines={1}>{`离线机器 ${offlineHosts.length} 台`}</Text>
+            <Ionicons name={showOfflineHosts ? 'chevron-up' : 'chevron-down'} size={14} color={colors.textMuted} style={styles.offlineHostsChevron} />
+          </Pressable>
+        ) : null}
+        {showOfflineHosts
+          ? offlineHosts.map(h => (
+            <HostRow key={h.hostname} host={h} wide={wide} first={false} onPress={onOpenAgents ? () => openHost(h) : undefined} />
+          ))
+          : null}
       </View>
     </View>
   ) : null;
@@ -476,30 +507,78 @@ function MeterBar({ meter, stale, testID, grow }: { meter: Meter; stale: boolean
  */
 function HostRow({ host: h, wide, first, onPress }: { host: HostLevel; wide: boolean; first: boolean; onPress?: () => void }) {
   const pctColor = (m: Meter) => (h.stale ? colors.textMuted : m.tone === 'danger' ? colors.failed : colors.text);
-  const name = (
-    <View style={wide ? styles.hostNameCol : styles.hostHeadPhone}>
-      <Text style={[styles.hostName, h.stale && styles.hostNameStale]} numberOfLines={1} testID={`server-host-name-${h.hostname}`}>{h.hostname}</Text>
-      <Text style={styles.hostNodes} numberOfLines={1}>
-        <Text style={styles.groupOnline}>{h.online}</Text>
-        <Text>{`/${h.total} 节点`}</Text>
-      </Text>
-      {h.staleLabel ? (
-        <View style={styles.staleTag} testID={`server-host-stale-${h.hostname}`}>
-          <Ionicons name="time-outline" size={11} color={colors.textMuted} />
-          <Text style={styles.staleText} numberOfLines={1}>{h.staleLabel}</Text>
+  // 完整 hostname:桌面悬停出提示条;手机点名字展开第二行(灰字)。显示名 = hostname 时都不需要。
+  const [hovered, setHovered] = useState(false);
+  const [expanded, setExpanded] = useState(false);
+  const nameText = (
+    <Text style={[styles.hostName, h.stale && styles.hostNameStale]} numberOfLines={1} testID={`server-host-name-${h.hostname}`}>{h.displayName}</Text>
+  );
+  const nameLine = (
+    <View style={styles.hostNameLine}>
+      {h.alert ? <View style={styles.alertDot} testID={`server-host-alert-${h.hostname}`} accessibilityLabel="告警" /> : null}
+      {h.renamed ? (
+        <Pressable
+          testID={`server-host-namebtn-${h.hostname}`}
+          accessibilityRole="button"
+          accessibilityLabel={`完整主机名 ${h.hostname}`}
+          onPress={wide ? onPress : () => setExpanded(v => !v)}
+          onHoverIn={() => setHovered(true)}
+          onHoverOut={() => setHovered(false)}
+          hitSlop={4}
+          style={styles.hostNameBtn}
+        >
+          {nameText}
+          {!wide ? <Ionicons name={expanded ? 'chevron-up' : 'chevron-down'} size={12} color={colors.textMuted} /> : null}
+        </Pressable>
+      ) : nameText}
+      {wide && hovered && h.renamed ? (
+        <View style={styles.hostTip} pointerEvents="none" testID={`server-host-tip-${h.hostname}`}>
+          <Text style={styles.hostTipText} numberOfLines={1}>{h.hostname}</Text>
         </View>
       ) : null}
     </View>
   );
-  const a11y = `${h.hostname} ${h.online}/${h.total} 节点在线 · ${METERS.map(m => `${m.label} ${h[m.key].value}`).join(' · ')}${h.staleLabel ? ` · ${h.staleLabel}` : ''},查看节点`;
+  const counts = (
+    <Text style={styles.hostNodes} numberOfLines={1} testID={`server-host-count-${h.hostname}`}>
+      <Text style={styles.groupOnline}>{`${h.online} 在线`}</Text>
+      <Text>{` · 共 ${h.total}`}</Text>
+    </Text>
+  );
+  const staleTag = h.staleLabel ? (
+    <View style={styles.staleTag} testID={`server-host-stale-${h.hostname}`}>
+      <Ionicons name="time-outline" size={11} color={colors.textMuted} />
+      <Text style={styles.staleText} numberOfLines={1}>{h.staleLabel}</Text>
+    </View>
+  ) : null;
+  const name = wide ? (
+    <View style={styles.hostNameCol}>
+      {nameLine}
+      {counts}
+      {staleTag}
+    </View>
+  ) : (
+    <View style={styles.hostHeadPhoneWrap}>
+      <View style={styles.hostHeadPhone}>
+        {nameLine}
+        <View style={styles.hostHeadPhoneMeta}>
+          {staleTag}
+          {counts}
+        </View>
+      </View>
+      {expanded && h.renamed ? (
+        <Text style={styles.hostFullName} numberOfLines={1} selectable testID={`server-host-full-${h.hostname}`}>{h.hostname}</Text>
+      ) : null}
+    </View>
+  );
+  const a11y = `${h.displayName}${h.renamed ? `(${h.hostname})` : ''}${h.alert ? ' 告警' : ''} ${h.online} 在线 · 共 ${h.total} 节点 · ${METERS.map(m => `${m.label} ${h[m.key].value}`).join(' · ')}${h.staleLabel ? ` · ${h.staleLabel}` : ''},查看节点`;
   return (
     <Pressable
-      testID={`server-host-${h.hostname}`}
+      testID={`server-hostrow-${h.hostname}`}
       accessibilityRole="button"
       accessibilityLabel={a11y}
       disabled={!onPress}
       onPress={onPress}
-      style={({ pressed }) => [wide ? styles.hostRowWide : styles.hostRowPhone, !first && styles.groupRowBorder, pressed && styles.pressedRow]}
+      style={({ pressed }) => [wide ? styles.hostRowWide : styles.hostRowPhone, !first && styles.groupRowBorder, pressed && styles.pressedRow, hovered && styles.hostRowRaised]}
     >
       {name}
       {wide ? (
@@ -639,8 +718,20 @@ const makeStyles = () =>
     groupMore: { justifyContent: 'center' },
     hostRowWide: { flexDirection: 'row', alignItems: 'center', gap: spacing.lg, paddingHorizontal: spacing.md, paddingVertical: spacing.md },
     hostRowPhone: { paddingHorizontal: spacing.md, paddingVertical: spacing.md, gap: spacing.sm },
-    hostNameCol: { width: 128, gap: 2 },
+    hostNameCol: { width: 128, gap: 2, zIndex: 2 },
+    hostRowRaised: { zIndex: 5 },
+    hostNameLine: { flexDirection: 'row', alignItems: 'center', gap: 6, minWidth: 0, flexShrink: 1 },
+    hostNameBtn: { flexDirection: 'row', alignItems: 'center', gap: 2, minWidth: 0, flexShrink: 1 },
+    alertDot: { width: 7, height: 7, borderRadius: radius.pill, backgroundColor: colors.failed, flexShrink: 0 },
+    // 提示条落在名字下方(盖住「N 在线」那行),不出这一行的上下边界 —— 面板 overflow:hidden 会裁掉出界的部分。
+    hostTip: { position: 'absolute', top: '100%', left: 0, marginTop: 2, paddingHorizontal: 8, paddingVertical: 3, borderRadius: radius.item, backgroundColor: colors.railTooltipBg, zIndex: 40 },
+    hostTipText: { color: colors.railTooltipText, fontSize: 12, lineHeight: 16 },
+    hostHeadPhoneWrap: { gap: 2 },
     hostHeadPhone: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+    hostHeadPhoneMeta: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginLeft: 'auto', flexShrink: 0 },
+    hostFullName: { color: colors.textMuted, fontSize: type.caption, fontVariant: ['tabular-nums'] },
+    offlineHostsLabel: { color: colors.textSecondary, fontSize: type.small, flexShrink: 1 },
+    offlineHostsChevron: { marginLeft: 'auto' },
     hostName: { color: colors.text, fontSize: type.body, fontWeight: weight.medium, flexShrink: 1 },
     hostNameStale: { color: colors.textSecondary },
     hostNodes: { color: colors.textMuted, fontSize: type.small, fontVariant: ['tabular-nums'] },
