@@ -215,6 +215,13 @@ const onSel = chat.slice(chat.indexOf('const onSelectAction'), chat.indexOf('// 
 ck('#650 浮层动作里不再打开任何新的消息框(无 setSelectTextFor / 不重开 setSelectFor({…}))', onSel.length > 100 && !onSel.includes('setSelectTextFor(') && !/setSelectFor\(\{/.test(onSel), onSel.length + '');
 ck('#650 浮层打开从 menu 段开始,卡片只在 select 段渲染', overlay.includes("setPhase('menu');") && overlay.includes("const showCard = selecting && hasText;") && overlay.includes('{target && showCard && card ? ('));
 ck('#650 menu 段的键走 selectOverlayStep(复制不进划选)', overlay.includes("const step = selectOverlayStep('menu', key, plain, sel);") && overlay.includes("if (step.kind === 'emit') onAction(step.key, step.payload);"));
+{
+  const start = overlay.indexOf("if (step.kind === 'enterSelect')");
+  const end = overlay.indexOf("setPhase('select')", start);
+  const branch = start >= 0 && end > start ? overlay.slice(start, end) : '';
+  // 只改短 350ms 不够:进入时那次 pointerup 已经发完。分支里必须直接 setArmed(true),卡片才立刻接拖动。
+  ck('#650 N1:进入划选立刻 armed,马上拖不会被丢掉', branch.includes('setArmed(true)') && !/setArmed\(Platform\.OS/.test(branch) && overlay.includes('if (armed) {') && overlay.includes("pointerEvents={armed ? 'auto' : 'none'}"));
+}
 ck('转发复用 openForwardPicker', chat.includes("if (key === 'forward') { void openForwardPicker(part !== null ? { ...selection, text: part } : selection); return; }"));
 ck('引用复用 setQuote + compactQuoteText', chat.includes('setQuote({ author: selection.author, text: compactQuoteText(part ?? selection.text) })'));
 ck('卡片文字与气泡同一条管线(selectableTextOf)', overlay.includes("selectableTextOf(target?.raw ?? '')"));

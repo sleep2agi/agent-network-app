@@ -55,7 +55,6 @@ const AUDIT: Record<string, { count: number; kinds: Kind[]; input?: boolean; key
   'RequirementPeoplePicker.tsx': { count: 2, kinds: ['dialog', 'menu'], keyboard: 'avoider', input: true, note: '面板 85%,ScrollView 直接子节点;搜索框 ⇒ 键盘避让;桌面锚定下拉(审计 L12)= anchorSelectMenu 的 pos.maxHeight + ScrollView flexShrink,确定 / 取消在外,只在有鼠标的宽窗口(无软键盘)' },
   'ScheduledTasksScreen.tsx': { count: 3, kinds: ['dialog', 'sheet'], input: true, keyboard: 'followup: 表单对话框无键盘避让;iOS 上键盘可能盖住保存行', note: '对话框 min(720,h-48),表单是顶层 ScrollView,按钮在外 / pageSheet 保存在顶栏' },
   'MessageSelectOverlay.tsx': { count: 1, kinds: ['menu'], keyboard: 'n/a: 输入框只用来承载原生选区(安卓 showSoftInputOnFocus=false、iOS/web 只读),不弹键盘;打开时先 Keyboard.dismiss(),菜单位置按键盘高度避让(placeSelectMenu)', note: '#537 手机长按就地选区:菜单两行固定条目,placeSelectMenu 夹进可见区;选区卡片 maxHeight = 可见区底 - 卡片顶,超出在 TextInput 里滚' },
-  'SelectTextSheet.tsx': { count: 1, kinds: ['fullscreen'], keyboard: 'n/a: 只读的可选择文本(editable=false),不弹键盘', note: '正文 flex:1,复制行在外' },
   'SettingsScreen.tsx': { count: 4, kinds: ['dialog'], keyboard: 'avoider', input: true, note: '固定内容小确认框;本地删除有输入框 ⇒ 键盘避让(本次)' },
   'SideThreadDrawer.tsx': { count: 1, kinds: ['drawer'], keyboard: 'avoider', input: true, note: '86% / 100% 面板,FlatList 可收缩,自带 KAV(同一套 keyboardAvoidEnabled)' },
   'TaskActivity.tsx': { count: 2, kinds: ['menu', 'sheet'], keyboard: 'n/a: 筛选只有勾选 / chip,没有输入框', note: '桌面下拉 maxHeight = menuMaxHeight(锚点到窗口底),选项 ScrollView flexShrink:1;手机面板 85%,chip 组 ScrollView 可收缩,「重置 / 查看 N 条」是 ScrollView 后面的兄弟(#429)' },

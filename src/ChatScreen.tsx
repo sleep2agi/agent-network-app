@@ -78,7 +78,6 @@ import { conversationOpened } from './conversation-flags';
 import { dispatchUnread, hubHasAgentUnread, markAgentRepliesSeen, markAgentServerUnreadCleared, unackedIdsForAgent } from './unread-store';
 import { ackAgentUnread } from './agent-ack';
 import MarkdownMessage from './MarkdownMessage';
-import SelectTextSheet from './SelectTextSheet';
 import MessageSelectOverlay, { type MessageSelectTarget } from './MessageSelectOverlay';
 import { copyValueFor, type SelectionPayload, type SelectMenuKey } from './message-select-model';
 import ImageViewer from './ImageViewer';
@@ -911,9 +910,6 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
   const headerChrome = popoutHeaderChrome(windowChrome, spacing.lg);
   // 放大阅读:单条消息的全屏可选中视图(我们的代码块很长,气泡里读不完)。
   const [expandFor, setExpandFor] = useState<MessageSelection | null>(null);
-  // 选择文本(2026-09-26 Vincent 安卓折叠屏:「只能复制整个的消息…想划选部分段落或句子」):
-  // 全屏只读文本,系统选区手柄可跨段落。null = 未打开。
-  const [selectTextFor, setSelectTextFor] = useState<MessageSelection | null>(null);
   // #537 手机长按 = 就地选区 + 微信式浮动菜单(MessageSelectOverlay)。null = 没在选。
   const [selectFor, setSelectFor] = useState<(MessageSelectTarget & { selection: MessageSelection }) | null>(null);
   // 长按时要量气泡在窗口里的位置:每个气泡 View 按「消息键:sent|reply」登记。回调按键缓存,滚动重渲染不反复解绑。
@@ -1289,7 +1285,6 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
     if (!selection) return;
     if (key === 'copy') { setMenuFor(null); void copyMessage(selection.text); return; }
     if (key === 'copySelection') { setMenuFor(null); void copyValue(selection.selectedText ?? ''); return; }
-    if (key === 'selectText') { setMenuFor(null); setSelectTextFor(selection); return; }
     if (key === 'quote') {
       setQuote({ author: selection.author, text: compactQuoteText(selection.text) });
       setMenuFor(null);
@@ -2503,14 +2498,6 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
         selectionMode={selectionMode}
         onAction={onSelectAction}
         onClose={() => setSelectFor(null)}
-      />}
-
-      {/* 触摸端才有「选择文本」(message-menu-model.ts):鼠标直接在气泡里拖选,不需要全屏选区页。 */}
-      {pointer ? null : <SelectTextSheet
-        text={selectTextFor ? selectTextFor.text : null}
-        author={selectTextFor?.author}
-        onClose={() => setSelectTextFor(null)}
-        onCopyAll={(value) => { void copyValue(value); }}
       />}
 
       <Modal visible={!!forwardFor && forwardUiOwner === conversationKeyFor} transparent animationType="fade" onRequestClose={() => setForwardFor(null)}>

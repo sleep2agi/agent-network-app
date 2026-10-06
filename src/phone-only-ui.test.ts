@@ -138,18 +138,18 @@ export const judgeAll = (files: Map<string, string>) => [...judgeSites(files).fi
 // ── 1. 判据自检(已知阳性 / 阴性) ─────────────────────────────────────────────────────────────
 const one = (file: string, src: string) => new Map([[file, src]]);
 const LP = PHONE_ONLY_SITES.find(s => s.name.startsWith('onLongPress'))!;
-const SEL = PHONE_ONLY_SITES.find(s => s.name.startsWith('SelectTextSheet'))!;
+const SEL = PHONE_ONLY_SITES.find(s => s.name.startsWith('MessageSelectOverlay'))!;
 const lp = (src: string) => judgeSites(one('src/X.tsx', src), [{ ...LP, minSites: 0 }]).findings.filter(f => f.kind === 'site').length;
 ck('judge: ungated onLongPress is flagged', lp(`<Pressable onLongPress={() => open()} />`) === 1);
 ck('judge: onLongPress={pointer ? undefined : …} passes', lp(`<Pressable onLongPress={pointer ? undefined : () => open()} />`) === 0);
 ck('judge: onLongPress={touch ? … : undefined} passes', lp(`<Pressable onLongPress={touch ? () => open() : undefined} />`) === 0);
 ck('judge: a predicate elsewhere on the line does not gate it', lp(`<Pressable onLongPress={() => open(desktop)} />`) === 1);
 const sel = (src: string) => judgeSites(one('src/X.tsx', src), [{ ...SEL, minSites: 0 }]).findings.filter(f => f.kind === 'site').length;
-ck('judge: <SelectTextSheet …/> with no gate is flagged', sel(`<SelectTextSheet\n  text={t}\n/>`) === 1);
-ck('judge: {pointer ? null : <SelectTextSheet passes', sel(`{pointer ? null : <SelectTextSheet\n  text={t}\n/>}`) === 0);
-ck('judge: a prop that merely mentions desktop is not a gate', sel(`<SelectTextSheet\n  bottom={desktop ? 1 : 2}\n/>`) === 1);
-ck('judge: visible={!desktop && open} gates it', sel(`<SelectTextSheet\n  visible={!desktop && open}\n/>`) === 0);
-ck('judge: comments are ignored', sel(`// <SelectTextSheet text={t} />\n{/* <SelectTextSheet /> */}`) === 0);
+ck('judge: <MessageSelectOverlay …/> with no gate is flagged', sel(`<MessageSelectOverlay\n  text={t}\n/>`) === 1);
+ck('judge: {pointer ? null : <MessageSelectOverlay passes', sel(`{pointer ? null : <MessageSelectOverlay\n  text={t}\n/>}`) === 0);
+ck('judge: a prop that merely mentions desktop is not a gate', sel(`<MessageSelectOverlay\n  bottom={desktop ? 1 : 2}\n/>`) === 1);
+ck('judge: visible={!desktop && open} gates it', sel(`<MessageSelectOverlay\n  visible={!desktop && open}\n/>`) === 0);
+ck('judge: comments are ignored', sel(`// <MessageSelectOverlay text={t} />\n{/* <MessageSelectOverlay /> */}`) === 0);
 const copy = (src: string, ex: CopyException[] = []) => judgeCopy(one('src/X.tsx', src), ex).filter(f => f.kind === 'copy').length;
 ck('judge copy: 「下拉刷新」 with no predicate is flagged', copy(`<Text>修好再试，或下拉刷新。</Text>`) === 1);
 ck('judge copy: gated on the same line passes', copy("<Text>{`或${pointer ? '点「刷新」' : '下拉刷新'}`}</Text>") === 0);
@@ -162,7 +162,7 @@ ck('judge refresh: a poll next to it passes', !judgeRefreshAndSwipe(one('src/Y.t
 ck('judge swipe: an unregistered PanResponder file is flagged', judgeRefreshAndSwipe(one('src/NewSwipe.tsx', `PanResponder.create({})`)).some(f => f.kind === 'swipe' && f.file === 'src/NewSwipe.tsx'));
 ck('judge debt: a debt entry whose site got gated is reported RESOLVED (printed, not red)', judgeSites(one('src/ChatScreen.tsx', `{pointer ? null : <VoiceRecordingOverlay voice={v} />}`), PHONE_ONLY_SITES.filter(s => s.name.startsWith('VoiceRecordingOverlay'))).findings.every(f => f.kind === 'stale' && f.debt === 'RESOLVED'));
 // #463 的门:{voiceSurface(desktop) === 'phoneOverlay' ? <VoiceRecordingOverlay … /> : null}
-ck('judge: #463\'s voiceSurface(desktop) === \'phoneOverlay\' gate is recognised', sel(`{voiceSurface(desktop) === 'phoneOverlay' ? <SelectTextSheet text={t} /> : null}`) === 0 && judgeSites(one('src/ChatScreen.tsx', `{voiceSurface(desktop) === 'phoneOverlay' ? <VoiceRecordingOverlay voice={voice} bottom={88 + composerInset} /> : null}`), PHONE_ONLY_SITES.filter(s => s.name.startsWith('VoiceRecordingOverlay'))).findings.every(f => f.debt === 'RESOLVED'));
+ck('judge: #463\'s voiceSurface(desktop) === \'phoneOverlay\' gate is recognised', sel(`{voiceSurface(desktop) === 'phoneOverlay' ? <MessageSelectOverlay text={t} /> : null}`) === 0 && judgeSites(one('src/ChatScreen.tsx', `{voiceSurface(desktop) === 'phoneOverlay' ? <VoiceRecordingOverlay voice={voice} bottom={88 + composerInset} /> : null}`), PHONE_ONLY_SITES.filter(s => s.name.startsWith('VoiceRecordingOverlay'))).findings.every(f => f.debt === 'RESOLVED'));
 
 // ── 2. 取集自检(子目录、CRLF、分隔符) ──────────────────────────────────────────────────────────
 const tmp = mkdtempSync(join(tmpdir(), 'phone-only-'));

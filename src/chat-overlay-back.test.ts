@@ -79,7 +79,7 @@ for (const f of files) {
 }
 const total = [...tagsByFile.values()].reduce((n, t) => n + t.length, 0);
 check(total >= 15, `collect: found ${total} <Modal> tags (a scope regression would make this pass at 0)`);
-for (const f of ['ChatScreen.tsx', 'ImageViewer.tsx', 'SelectTextSheet.tsx', 'SideThreadDrawer.tsx', 'NodeRulesSection.tsx', 'ComposerRowParts.tsx']) {
+for (const f of ['ChatScreen.tsx', 'ImageViewer.tsx', 'MessageSelectOverlay.tsx', 'SideThreadDrawer.tsx', 'NodeRulesSection.tsx', 'ComposerRowParts.tsx']) {
   check(tagsByFile.has(f), `collect: chat overlay file ${f} is in the scanned set`);
 }
 
@@ -127,10 +127,10 @@ check(/<ImageViewer\b[^>]*onClose=\{\(\) => setViewer\(null\)\}/.test(chat), 'Ch
 check(!/<Modal visible=\{!!viewerUri\}/.test(chat), 'the old inline preview Modal is gone');
 check(/visible=\{visible\}/.test(viewerTags[0]) && /const visible = !!state && count > 0/.test(viewer), 'preview visibility follows the state ChatScreen clears');
 
-// 选择文本 sheet.
-const selectTags = modalTags(read('SelectTextSheet.tsx'));
-check(selectTags.length === 1 && closeHandler(selectTags[0]) === 'onClose', '选择文本 sheet: onRequestClose={onClose}');
-check(/<SelectTextSheet[\s\S]*?onClose=\{\(\) => setSelectTextFor\(null\)\}/.test(chat), 'ChatScreen: 选择文本 onClose clears selectTextFor');
+// 就地选区(全屏选择页已删)。返回键关掉浮层,并清掉选中的那条。
+const selectTags = modalTags(read('MessageSelectOverlay.tsx'));
+check(selectTags.length === 1 && closeHandler(selectTags[0]) === 'onClose', '就地选区: onRequestClose={onClose}');
+check(/<MessageSelectOverlay[\s\S]*?onClose=\{\(\) => setSelectFor\(null\)\}/.test(chat), 'ChatScreen: 选区层 onClose clears selectFor');
 
 // Side drawer (BTW).
 const drawer = read('SideThreadDrawer.tsx');
