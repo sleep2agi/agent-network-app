@@ -1733,7 +1733,7 @@ export const login = async (
   password: string,
   /** 这台设备在 hub「登录设备」里的名字(login-sessions.ts clientLabelForLogin);旧 hub 忽略。 */
   clientLabel?: string,
-): Promise<{ ok: true; cfg: HubConfig } | { ok: false; error: string; kind: LoginFailureKind }> => {
+): Promise<{ ok: true; cfg: HubConfig; mustChangePassword: boolean } | { ok: false; error: string; kind: LoginFailureKind }> => {
   try {
     const res = await withTimeout(signal =>
       appFetch(`${serverUrl}/api/auth/login`, {
@@ -1763,7 +1763,8 @@ export const login = async (
     const token = data.token ?? data.user_token ?? data.access_token;
     if (!token) return { ok: false, kind: 'server-error', error: 'login ok but no token in response' };
     const networkId = await fetchNetworkId({ serverUrl, token });
-    return { ok: true, cfg: { serverUrl, token, networkId, username } };
+    // #653:hub ≥ 0.9.0-preview.108 对弱密码登录回 must_change_password: true(只在为真时带这个字段)。
+    return { ok: true, cfg: { serverUrl, token, networkId, username }, mustChangePassword: data.must_change_password === true };
   } catch (e) {
     // fetch 抛了 = 压根没拿到 HTTP 响应(连接拒绝/DNS/超时)→ unreachable。
     return { ok: false, kind: classifyLoginFailure(true, null), error: e instanceof Error ? e.message : 'network error' };

@@ -42,6 +42,8 @@ export const SETTINGS_CATEGORIES: readonly SettingsCategory[] = [
       { key: 'addAccount', label: '添加 Hub / 账号', keywords: ['添加', '登录', 'add'] },
       // 登录设备(安全审计 2026-09-29):hub 上这个账号的登录会话,可退出某台 / 退出其他所有设备。旧 hub 没有接口时不出现。
       { key: 'devices', label: '登录设备', keywords: ['设备', '会话', '退出其他设备', '登出', '安全', 'devices', 'sessions', 'sign out', 'security'] },
+      // 修改密码(#653,Vincent「admin 自己登录在客户端里面，它自己有个 UI 去改」):POST /api/auth/password。本地工作区账号没有。
+      { key: 'changePassword', label: '修改密码', keywords: ['密码', '改密码', '修改密码', '弱密码', '安全', 'password', 'change password', 'security'] },
       { key: 'switchAccount', label: '切换账号', keywords: ['切换', '服务器', '多账号', 'switch', 'account', 'server'] },
       { key: 'logout', label: '移除当前账号', keywords: ['退出', '登出', 'logout'] },
     ],
@@ -248,6 +250,26 @@ export function rememberSettingsScroll(y: number): void {
 /** 测试用。 */
 export function resetSettingsViewMemory(): void {
   viewMemory = { category: 'account', scrollY: 0, page: null };
+  pendingDetail = null;
+}
+
+// 从设置外面直接打开某个三级页(#653 弱密码横幅 →「修改密码」):先记下来,SettingsScreen 挂载时读一次再清掉。
+// 分类 / 手机子页一起切到它的父页,所以手机上返回落在「账号」子页,桌面右栏返回落在「账号」。
+let pendingDetail: SettingsDetailKey | null = null;
+export function requestSettingsDetail(key: SettingsDetailKey): void {
+  rememberSettingsCategory(SETTINGS_DETAIL_PARENT[key]);
+  pendingDetail = key;
+}
+export function peekPendingSettingsDetail(): SettingsDetailKey | null {
+  return pendingDetail;
+}
+export function clearPendingSettingsDetail(): void {
+  pendingDetail = null;
+}
+/** 设置窗口 URL 里的 detail=…(桌面端设置是独立窗口,跨窗口只能经 URL / 事件带过去)。 */
+export function settingsDetailFromQuery(value: string | null | undefined): SettingsDetailKey | null {
+  const key = value?.trim();
+  return key && Object.prototype.hasOwnProperty.call(SETTINGS_DETAIL_PARENT, key) ? key as SettingsDetailKey : null;
 }
 
 // ── 手机窄屏的分组(Vincent 2026-09-27「手机设置照微信的设置做」)────────────────────────────
@@ -283,13 +305,14 @@ export function phoneSettingsGroups(available: readonly Pick<SettingsCategory, '
 // ── 手机子页里的三级页(Vincent 2026-09-27「设置界面有点体验太差」)───────────────────────────
 // 子页只放行(标签 · 值 · ›);要输入的东西(API Key、接口地址、免打扰时段)点进三级编辑页再改,
 // 和微信 设置 → 个人信息 → 名字 一样。返回键 / Esc 先退三级页,再退子页。
-export type SettingsDetailKey = 'voiceApiKey' | 'voiceAdvanced' | 'quietHours' | 'loginDevices' | 'userMember' | 'userGroup' | 'changelog';
+export type SettingsDetailKey = 'voiceApiKey' | 'voiceAdvanced' | 'quietHours' | 'loginDevices' | 'changePassword' | 'userMember' | 'userGroup' | 'changelog';
 
 export const SETTINGS_DETAIL_TITLE: Record<SettingsDetailKey, string> = {
   voiceApiKey: 'API Key',
   voiceAdvanced: '高级 / 旧版控制台',
   quietHours: '免打扰时段',
   loginDevices: '登录设备',
+  changePassword: '修改密码',
   userMember: '成员',
   userGroup: '分组',
   changelog: '更新日志',
@@ -312,6 +335,7 @@ export const SETTINGS_DETAIL_PARENT: Record<SettingsDetailKey, SettingsCategoryK
   voiceAdvanced: 'voice',
   quietHours: 'notifications',
   loginDevices: 'account',
+  changePassword: 'account',
   userMember: 'users',
   userGroup: 'users',
   changelog: 'about',

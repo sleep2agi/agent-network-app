@@ -12,7 +12,7 @@ import { ActivityIndicator, AppState, BackHandler, Linking, Modal, Platform, Pre
 import { Text, TextInput } from './ui-text';
 import { Ionicons } from './icons';
 import { HubConfig } from './api';
-import { DesktopStorageDiagnostics, HubProfile, getDesktopStorageDiagnostics, listHubProfiles, removeHubProfile, saveThemeMode, sessionIdOf } from './storage';
+import { DesktopStorageDiagnostics, HubProfile, getDesktopStorageDiagnostics, listHubProfiles, removeHubProfile, saveConfig, saveThemeMode, sessionIdOf } from './storage';
 import AccountSwitcher from './AccountSwitcher';
 import { ACCOUNT_TOAST_MS, AccountActionSheet, AccountEditDialog, AccountMoreMenu, AccountToast, accountName, copyAccountLine } from './AccountRowActions';
 import { accountMenuItems, accountRowActions, type AccountMenuItem, type AccountRowAction } from './account-row-actions';
@@ -41,7 +41,7 @@ import LanguageSettings from './LanguageSettings';
 import ShortcutsSettings from './ShortcutsSettings';
 import { ds } from './ui-scale';
 import { playChime } from './chime';
-import { SETTINGS_CATEGORIES, SETTINGS_DETAIL_TITLE, activeCategoryKey, closeSettingsPage, filterSettings, phoneRowLabel, phoneSettingsGroups, rememberSettingsCategory, rememberSettingsScroll, rememberedSettingsView, settingsBackTarget, settingsPlatform, visibleRowKeys, type SettingsCategoryKey, type SettingsDetailKey, type SettingsHeaderOverride, type SettingsPlatform } from './settings-model';
+import { SETTINGS_CATEGORIES, SETTINGS_DETAIL_TITLE, activeCategoryKey, clearPendingSettingsDetail, closeSettingsPage, peekPendingSettingsDetail, filterSettings, phoneRowLabel, phoneSettingsGroups, rememberSettingsCategory, rememberSettingsScroll, rememberedSettingsView, settingsBackTarget, settingsPlatform, visibleRowKeys, type SettingsCategoryKey, type SettingsDetailKey, type SettingsHeaderOverride, type SettingsPlatform } from './settings-model';
 import SettingsPhonePage, { accountSubtitle, type PhonePagesCtx } from './SettingsPhonePages';
 import { PHONE_SETTINGS_SERVER_ENTRY } from './nav-chrome';
 import { SETTINGS_ROW_PAD_X, settingsRowMinHeight, SettingsAccountRow, SettingsActionRow, SettingsButton, SettingsCardContent, SettingsControlRow, SettingsGroup, SettingsRow, SettingsSwitchRow, settingsPageContentStyle } from './settings-kit';
@@ -59,6 +59,10 @@ import { probeSavedSessions } from './saved-session-probe';
 import { fetchAuthMe } from './user-admin-api';
 import { pooledHttpEnabled, setPooledHttpEnabled } from './app-fetch';
 import { ChangelogPage } from './ChangelogScreen';
+import './i18n-password';
+import ChangePasswordPanel from './ChangePasswordPanel';
+import { useChangePassword } from './useChangePassword';
+import { useWeakPassword, weakPasswordFlags } from './weak-password-flag';
 
 /** 设置里居中确认框的遮罩色(有键盘避让的那个画在 ModalKeyboardAvoider 上)。 */
 const MODAL_SCRIM = 'rgba(0,0,0,0.55)';
@@ -187,12 +191,15 @@ export default function SettingsScreen({
   const [query, setQuery] = useState('');
   // 切主题会整棵重挂(App.tsx key={theme}),分类与滚动位置从模块级记忆恢复,不回到「账号」。
   const [category, setCategoryState] = useState<SettingsCategoryKey>(() => rememberedSettingsView().category);
-  const setCategory = (key: SettingsCategoryKey) => { rememberSettingsCategory(key); setWideChangelog(false); setCategoryState(key); setWideDevices(false); };
+  const setCategory = (key: SettingsCategoryKey) => { rememberSettingsCategory(key); setWideChangelog(false); setWidePassword(false); setCategoryState(key); setWideDevices(false); };
   // 手机:当前推入的子页(null = 在分组列表上)。同样走模块级记忆 —— 在「外观」子页里切主题整棵重挂后仍停在外观。
   const [page, setPage] = useState<SettingsCategoryKey | null>(() => rememberedSettingsView().page);
   const openPage = (key: SettingsCategoryKey) => { setCategory(key); setPage(key); };
+  // 从设置外面要求直接打开的三级页(#653 弱密码横幅 → 修改密码);挂载后清掉,只用一次。
+  const [initialDetail] = useState(() => peekPendingSettingsDetail());
+  useEffect(() => { clearPendingSettingsDetail(); }, []);
   // 手机三级页(API Key、高级 / 旧版控制台、免打扰时段、管理账号)。
-  const [detail, setDetail] = useState<SettingsDetailKey | null>(null);
+  const [detail, setDetail] = useState<SettingsDetailKey | null>(initialDetail);
   // 三级页接管的顶栏(成员页的「保存」、它推入的选择页)。onBack 放 ref:返回键的监听不因它重注册。
   const [headerOverride, setHeaderOverrideState] = useState<SettingsHeaderOverride | null>(null);
   const headerBackRef = useRef<(() => void) | undefined>(undefined);
@@ -226,6 +233,30 @@ export default function SettingsScreen({
   const [wideDevices, setWideDevices] = useState(false);
   // 宽屏「更新日志」:关于右栏里推进去的一页(手机是关于子页里的三级页 detail = changelog)。
   const [wideChangelog, setWideChangelog] = useState(false);
+  // 修改密码(#653):手机是账号子页里的三级页(detail = changePassword);宽屏是账号右栏里推进去的一页。
+  const [widePassword, setWidePassword] = useState(initialDetail === 'changePassword');
+  const weakPassword = useWeakPassword(cfg);
+  // hub 改密码成功会吊销这次请求用的令牌、另发一个新的(change-password-api.ts):先把新令牌存进这个账号,
+  // 再按存储重新载入(onProfileEdited:人留在设置里;桌面设置窗会通知主窗口重读)。其他设备上的登录被 hub 退掉了。
+  const onPasswordChanged = async (token: string | undefined) => {
+    await weakPasswordFlags.clear(cfg);
+    if (token && token !== cfg.token) {
+      await saveConfig({ ...cfg, token });
+      const id = sessionIdOf(cfg);
+      if (id) await Promise.resolve((onProfileEdited ?? onSwitchProfile)(id));
+    }
+    setWidePassword(false);
+    if (detail === 'changePassword') { setDetail(null); setHeaderOverride(null); }
+    setToast(tr('password.done'));
+  };
+  const password = useChangePassword(cfg, onPasswordChanged);
+  const openPassword = (wide: boolean) => {
+    password.reset();
+    if (wide) { setWidePassword(true); if (searching) setQuery(''); paneScrollRef.current?.scrollTo({ y: 0, animated: false }); }
+    else openDetail('changePassword');
+  };
+  // 本地工作区的账号是本机自动建的,没有给人记的密码 —— 不出现「修改密码」。
+  const canChangePassword = cfg.profileId !== LOCAL_HUB_PROFILE_ID;
   const paneScrollRef = useRef<ScrollView>(null);
   useEffect(() => {
     const { scrollY } = rememberedSettingsView();
@@ -312,6 +343,7 @@ export default function SettingsScreen({
   // 宽屏「登录设备」页:只在账号分类、不在搜索时推进来;搜索或换分类就回到账号。
   const showWideDevices = wideDevices && !compact && !searching && active === 'account' && sessions.available;
   const showWideChangelog = wideChangelog && !compact && !searching && active === 'about';
+  const showWidePassword = widePassword && !compact && !searching && active === 'account' && canChangePassword && !showWideDevices;
 
   const sidebar = (
     <View style={[styles.sidebar, compact && styles.sidebarCompact]} testID="settings-sidebar">
@@ -528,6 +560,10 @@ export default function SettingsScreen({
     pointer,
     onAddAccount,
     sessions,
+    password,
+    weakPassword,
+    canChangePassword,
+    openPassword: () => openPassword(false),
     localHub,
     localHubBusy,
     localBackupMessage,
@@ -728,6 +764,14 @@ export default function SettingsScreen({
             </Pressable>
             <Text style={styles.paneTitleText} numberOfLines={1}>{tr('sessions.title')}</Text>
           </View>
+        ) : showWidePassword ? (
+          <View style={styles.paneTitleRow} testID="settings-password-header">
+            <Pressable testID="settings-password-back" accessibilityRole="button" accessibilityLabel={tr('settings.copy.7')} onPress={() => setWidePassword(false)} hitSlop={8} style={({ pressed, hovered }: any) => [styles.paneBack, (pressed || hovered) && styles.categoryItemHover]}>
+              <Ionicons name="chevron-back" size={18} color={colors.textSecondary} />
+              <Text style={styles.paneBackText}>{settingsText(SETTINGS_CATEGORIES.find(c => c.key === 'account')?.label ?? '')}</Text>
+            </Pressable>
+            <Text style={styles.paneTitleText} numberOfLines={1}>{tr('password.title')}</Text>
+          </View>
         ) : showWideChangelog ? (
           <View style={styles.paneTitleRow} testID="settings-changelog-header">
             <Pressable testID="settings-changelog-back" accessibilityRole="button" accessibilityLabel={tr('settings.copy.7')} onPress={() => setWideChangelog(false)} hitSlop={8} style={({ pressed, hovered }: any) => [styles.paneBack, (pressed || hovered) && styles.categoryItemHover]}>
@@ -758,7 +802,8 @@ export default function SettingsScreen({
           ) : null}
 
           {showWideDevices ? renderWideDevices() : null}
-          {sectionsToRender.includes('account') && !showWideDevices ? (
+          {showWidePassword ? <ChangePasswordPanel pw={password} weak={weakPassword} onCancel={() => setWidePassword(false)} /> : null}
+          {sectionsToRender.includes('account') && !showWideDevices && !showWidePassword ? (
             // #427「设置页整体重新设计」:分组卡片 —— 当前账号(置顶、头像、主色细边)/ 其他账号(点一下切换,⋯ 收动作)/
             // 安全 / 本地数据 / 最后单独一组危险操作。行为不变:点行切换、⋯ 里是原来行尾那四个按钮(+ 切换)。
             <View style={sectionStyle} testID="settings-section-account">
@@ -791,8 +836,19 @@ export default function SettingsScreen({
               ) : show('account', 'addAccount') ? (
                 <SettingsGroup><SettingsRow label={tr('settings.copy.93')} tone="accent" icon="add" onPress={onAddAccount} testID="settings-add-account-row" /></SettingsGroup>
               ) : null}
-              {(show('account', 'devices') && sessions.available) || show('account', 'switchAccount') ? (
+              {(show('account', 'devices') && sessions.available) || show('account', 'switchAccount') || (show('account', 'changePassword') && canChangePassword) ? (
                 <SettingsGroup title={tr('accounts.groupSecurity')} testID="settings-account-security">
+                  {show('account', 'changePassword') && canChangePassword ? (
+                    <SettingsRow
+                      label={tr('password.title')}
+                      icon="key-outline"
+                      subtitle={weakPassword ? tr('password.weakRowHint') : tr('password.rowHint')}
+                      subtitleTone={weakPassword ? 'accent' : undefined}
+                      onPress={() => openPassword(true)}
+                      accessibilityLabel={tr('password.title')}
+                      testID="settings-change-password-row"
+                    />
+                  ) : null}
                   {show('account', 'devices') && sessions.available ? (
                     <SettingsRow
                       label={tr('sessions.title')}

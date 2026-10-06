@@ -72,7 +72,11 @@ const SUB_PAGE_FILES = ['SettingsPhonePages.tsx', 'SettingsEditPages.tsx'];
   ck('SettingsScreen:子页滚动区用 kit 的页面样式', settings.includes('contentContainerStyle={settingsPageContentStyle()}'));
   ck('SettingsScreen:没有残留的「子页 = 右栏白块」样式', !/contentPhone|phoneSection/.test(settings));
   const edit = read('SettingsEditPages.tsx');
-  ck('API Key / Access Token 都是 secureTextEntry', (code(edit).match(/secureTextEntry/g) ?? []).length === 2);
+  // #653 起同一文件还有修改密码页(三个密码框):语音那两个按语音部分数,密码页单独数。
+  const voicePart = code(edit.slice(0, edit.indexOf('export function ChangePasswordEditPage')));
+  const passwordPart = code(edit.slice(edit.indexOf('export function ChangePasswordEditPage')));
+  ck('API Key / Access Token 都是 secureTextEntry', (voicePart.match(/secureTextEntry/g) ?? []).length === 2);
+  ck('修改密码页:三个密码框都是 secureTextEntry', edit.includes('export function ChangePasswordEditPage') && (passwordPart.match(/secureTextEntry/g) ?? []).length === 3);
   ck('编辑页不回显密钥(不把 creds 渲染出来)', !/creds\??\.(accessToken|apiKey)/.test(edit) && !/value=\{v\.creds/.test(edit));
   ck('API Key 页:保存整宽主按钮 + 清除红字 + 只存本机一句', edit.includes('testID="voice-save"') && /variant="destructive" label=\{tr\('settings.copy.142'\)\}/.test(edit) && edit.includes("tr('settings.copy.198'"));
   ck('语音子页:API Key 行值 = 已配置 …xxxx / 未配置,点进三级页', pages.includes("localizedVoiceStatus(status).replace(' ✓', '')") && pages.includes("tr('settings.copy.129')") && pages.includes("ctx.openDetail('voiceApiKey')"));

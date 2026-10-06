@@ -14,6 +14,8 @@ import { voiceStorageLabel } from './VoiceSettingsSection';
 import { CONSOLE_LABELS } from './voice-credentials-model';
 import { STREAM_DEFAULT_RESOURCE_ID, STREAM_RESOURCE_IDS } from './doubao-stream-protocol';
 import { streamingSupported } from './voice-stream-policy';
+import './i18n-password';
+import { strengthHintText } from './useChangePassword';
 
 type VoiceState = ReturnType<typeof useVoiceSettings>;
 
@@ -133,6 +135,55 @@ export function QuietHoursEditPage({ ctx }: { ctx: PhonePagesCtx }) {
         testID="notify-quiet-done"
         onPress={() => { saveNotify({ ...notify, quiet: { ...notify.quiet, start: ctx.quietStart, end: ctx.quietEnd } }); ctx.closeDetail(); }}
       />
+    </>
+  );
+}
+
+/**
+ * 设置 → 账号 → 修改密码(#653)。手机画法照微信 设置 → 账号与安全 → 密码:一张卡三行(标签在左、输入在右),
+ * 卡片下面小字说新密码的规则 / 哪条不够;整宽主色按钮。桌面是另一套(ChangePasswordPanel.tsx)。
+ */
+export function ChangePasswordEditPage({ ctx }: { ctx: PhonePagesCtx }) {
+  useTranslation();
+  const pw = ctx.password;
+  const hintTone = pw.hint === 'ok' ? 'accent' : pw.hint === 'rule' ? undefined : 'danger';
+  const footer = pw.confirmMatches === false ? tr('password.hint.mismatch') : strengthHintText(pw.hint, pw.form.next);
+  return (
+    <>
+      {ctx.weakPassword ? <SettingsGroup testID="change-password-weak-notice" footer={tr('password.weakBanner')} footerTone="accent" /> : null}
+      <SettingsGroup testID="change-password-card" footer={footer} footerTone={pw.confirmMatches === false ? 'danger' : hintTone}>
+        <SettingsTextField
+          label={tr('password.current')}
+          testID="change-password-current"
+          value={pw.form.current}
+          onChangeText={v => pw.set('current', v)}
+          placeholder={tr('password.currentPlaceholder')}
+          secureTextEntry
+          textContentType="password"
+        />
+        <SettingsTextField
+          label={tr('password.new')}
+          testID="change-password-new"
+          value={pw.form.next}
+          onChangeText={v => pw.set('next', v)}
+          placeholder={tr('password.newPlaceholder')}
+          secureTextEntry
+          textContentType="newPassword"
+        />
+        <SettingsTextField
+          label={tr('password.confirm')}
+          testID="change-password-confirm"
+          value={pw.form.confirm}
+          onChangeText={v => pw.set('confirm', v)}
+          placeholder={tr('password.confirmPlaceholder')}
+          secureTextEntry
+          textContentType="newPassword"
+          onSubmitEditing={() => void pw.submit()}
+        />
+      </SettingsGroup>
+      {pw.error ? <SettingsGroup testID="change-password-error" footer={pw.error} footerTone="danger" /> : null}
+      <SettingsButton label={tr('password.submit')} busy={pw.busy} onPress={() => void pw.submit()} testID="change-password-submit" />
+      <SettingsGroup footer={tr('password.footer')} />
     </>
   );
 }

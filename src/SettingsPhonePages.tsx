@@ -23,7 +23,9 @@ import { copyLastFatal, useLastFatalReport } from './use-last-fatal';
 import { Platform } from 'react-native';
 import { LOCAL_HUB_PROFILE_ID } from './local-hub';
 import { SettingsAccountRow, SettingsButton, SettingsCardContent, SettingsChoiceRow, SettingsGroup, SettingsRow, SettingsSwitchRow, type SettingsTone } from './settings-kit';
-import { VoiceAdvancedEditPage, VoiceApiKeyEditPage, QuietHoursEditPage } from './SettingsEditPages';
+import { ChangePasswordEditPage, VoiceAdvancedEditPage, VoiceApiKeyEditPage, QuietHoursEditPage } from './SettingsEditPages';
+import type { ChangePasswordState } from './useChangePassword';
+import './i18n-password';
 import type { HubConfig } from './api';
 import type { DesktopStorageDiagnostics, HubProfile } from './storage';
 import { saveThemeMode } from './storage';
@@ -73,6 +75,11 @@ export type PhonePagesCtx = {
   onAddAccount: () => void;
   /** 登录设备(hub 的登录会话列表);旧 hub 没有接口时 available=false,入口不出现。 */
   sessions: LoginSessionsState;
+  /** 修改密码(#653):表单状态与提交(宽屏同一份)、hub 是否判了弱密码、本账号能不能改(本地工作区不能)。 */
+  password: ChangePasswordState;
+  weakPassword: boolean;
+  canChangePassword: boolean;
+  openPassword: () => void;
   // 本地 Hub
   localHub: LocalHubResult | null;
   localHubBusy: boolean;
@@ -114,7 +121,7 @@ export type PhonePagesCtx = {
 export default function SettingsPhonePage({ page, ctx }: { page: SettingsCategoryKey; ctx: PhonePagesCtx }) {
   useTranslation();
   switch (page) {
-    case 'account': return ctx.detail === 'loginDevices' ? <LoginDevicesPage ctx={ctx} /> : <AccountPage ctx={ctx} />;
+    case 'account': return ctx.detail === 'loginDevices' ? <LoginDevicesPage ctx={ctx} /> : ctx.detail === 'changePassword' ? <ChangePasswordEditPage ctx={ctx} /> : <AccountPage ctx={ctx} />;
     case 'users': return <>{ctx.renderUsers(ctx.detail === 'userMember' ? 'userMember' : ctx.detail === 'userGroup' ? 'userGroup' : null)}</>;
     case 'localHub': return <LocalHubPage ctx={ctx} />;
     case 'appearance': return <AppearancePage ctx={ctx} />;
@@ -138,6 +145,7 @@ function AccountPage({ ctx }: { ctx: PhonePagesCtx }) {
   useTranslation();
   const { cfg, profiles, show } = ctx;
   const devices = show('account', 'devices') && ctx.sessions.available;
+  const passwordRow = show('account', 'changePassword') && ctx.canChangePassword;
   const current = profiles.find(profile => profile.profileId === ctx.currentProfileId) ?? null;
   const others = profiles.filter(profile => profile.profileId !== ctx.currentProfileId);
   const row = (profile: HubProfile, isCurrent: boolean) => (
@@ -177,8 +185,18 @@ function AccountPage({ ctx }: { ctx: PhonePagesCtx }) {
           {show('account', 'addAccount') ? <SettingsRow label={tr('settings.copy.93')} tone="accent" icon="add" onPress={ctx.onAddAccount} testID="settings-add-account" /> : null}
         </SettingsGroup>
       )}
-      {devices ? (
-        <SettingsGroup title={tr('accounts.groupSecurity')}>
+      {devices || passwordRow ? (
+        <SettingsGroup title={tr('accounts.groupSecurity')} testID="settings-account-security">
+          {passwordRow ? (
+            <SettingsRow
+              label={tr('password.title')}
+              icon="key-outline"
+              subtitle={ctx.weakPassword ? tr('password.weakRowHint') : undefined}
+              subtitleTone={ctx.weakPassword ? 'accent' : undefined}
+              onPress={ctx.openPassword}
+              testID="settings-change-password"
+            />
+          ) : null}
           {devices ? (
             <SettingsRow
               label={tr('sessions.title')}
