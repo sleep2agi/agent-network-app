@@ -121,6 +121,11 @@ jobs:
           releaseBody: |-
             Signed and notarized stable update for macOS (Apple Silicon) and Windows (x64).
 
+            What's new in 0.2.218:
+            - 节点详情页新增「收编」：可以把手工起的节点交给 daemon 管理
+            - 已收编的节点可以在客户端停止、启动；重启需先停止再启动
+            - 收编相关的报错改为中文提示
+
             What's new in 0.2.217:
             - 设置 → 账号 → 安全 → 修改密码；弱密码登录后顶部提示改密码
             - 新建节点名字可以用中文和大写，文件夹自动用英文

@@ -1,0 +1,8 @@
+desktop v0.2.218 — 节点详情页「收编」：手工起的节点交给 daemon 管理；已收编节点可停止/启动
+
+A. 本版内容(0.2.217 发版提交 00f7dc9 之后 main 上合入的 PR + 本 PR)
+  #733(看板 #629) 节点详情页新增「收编」入口：只对 adopt_capable=true 的 daemon 提供，经 Hub 的 request_adopt_node 把手工起的节点交给 daemon 管理(不重启进程)。已收编节点可在客户端停止、启动(确认 + 按请求轮询结果，accepted/pending 不算成功)；重启禁用，提示先停止再启动。收编相关的失败原因改为中文/英文可读提示，未知原始错误不直接显示。旧 Hub(无 managed/adoption 字段)不显示收编控件、不发新请求、不报错。依赖 Hub #2447(生产需 .110)。
+  本 PR(版本号):0.2.217 → 0.2.218,versionCode 2217 → 2218;release-desktop-auto-update.yml 加 What's new in 0.2.218;重新生成 src/changelog-bundled.ts(含 0.2.217 发布日期)。
+  本地:干净 origin/main(a00fc91) bump 后 npm ci / npm test(349/349) / npm run typecheck 全部 rc=0;android-release-notes.mjs 0.2.218 rc=0。
+B. 验证边界(如实)
+  ck 单测 + 页内桩组件驱动(见 #733 PR:收编 ck、旧生命周期 API、危险操作测试、桌面 1200x800 / 手机 390x844 浏览器断言)。截图是组件桩，不是完整节点详情页或真机验收。真机:连 .110 及以上 Hub 的节点详情页出现「收编」，收编后停止/启动生效；连旧 Hub 不出现收编控件。
