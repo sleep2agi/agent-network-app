@@ -5,6 +5,11 @@
 export const BUNDLED_RELEASE_BODY: string = [
   "Signed and notarized stable update for macOS (Apple Silicon) and Windows (x64).",
   "",
+  "What's new in 0.2.217:",
+  "- 设置 → 账号 → 安全 → 修改密码；弱密码登录后顶部提示改密码",
+  "- 新建节点名字可以用中文和大写，文件夹自动用英文",
+  "- 错误提示里的服务器地址也打码；长按「选择文本」第一下拖动不再丢",
+  "",
   "What's new in 0.2.216:",
   "- 长按消息点「复制」直接复制并提示「已复制」，不再弹出新的消息框",
   "- 服务器地址默认打码显示，点眼睛图标可查看完整地址，截图、录屏不再泄露",
@@ -939,6 +944,7 @@ export const BUNDLED_RELEASE_BODY: string = [
 
 /** Release date (published_at) per version, as far as it was known when this file was generated. */
 export const BUNDLED_RELEASE_DATES: Record<string, string> = {
+  "0.2.216": "2026-10-06T11:02:05Z",
   "0.2.215": "2026-10-06T07:11:47Z",
   "0.2.214": "2026-10-06T06:40:49Z",
   "0.2.213": "2026-10-06T04:04:10Z",
