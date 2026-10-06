@@ -87,6 +87,13 @@ eq('B3:ECONNREFUSED 后的 [主机名]:端口', maskUrlsInText('connect ECONNREF
 eq('ECONNREFUSED 后的 IPv6', maskUrlsInText('connect ECONNREFUSED [2001:db8::1]:9300'), 'connect ECONNREFUSED [2001:****]:9300');
 eq('N4b:EPIPE', maskUrlsInText('write EPIPE hub.example.com:9300'), 'write EPIPE h.e****.com:9300');
 eq('N4b:ECONNABORTED', maskUrlsInText('connect ECONNABORTED hub.example.com'), 'connect ECONNABORTED h.e****.com');
+eq('N7:未闭合的 [host 整段打码', maskUrlsInText('connect ENOTFOUND [hub.example.com'), 'connect ENOTFOUND ****');
+eq('N7:未闭合的 [host:port/path 不漏主机', maskUrlsInText('connect ENOTFOUND [hub.example.com:9300/path'), 'connect ENOTFOUND ****:9300/****');
+eq('N7:[v6] 后紧跟的裸主机不漏', maskUrlsInText('connect ENOTFOUND [2001:db8::1]hub.example.com'), 'connect ENOTFOUND ****');
+{
+  const leaked = ['connect ENOTFOUND [hub.example.com', 'connect ENOTFOUND [hub.example.com:9300/path', 'connect ENOTFOUND [2001:db8::1]hub.example.com'];
+  ck('N7:成对括号规则会漏的三种形状,打码后都不剩 hub.example.com', leaked.every(s => !maskUrlsInText(s).includes('hub.example.com')));
+}
 {
   const d = describeFailure(new Error('fetch failed: https://hub.example.com:9300/api/status'));
   ck('服务器页断开原因不带完整主机', !d.includes('hub.example.com') && d.includes('h.e****.com:9300'), d);

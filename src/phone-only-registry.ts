@@ -66,15 +66,6 @@ export const PHONE_ONLY_SITES: readonly PhoneOnlySite[] = [
     why: '按住、滑到 ✕ / 文 是手指的手势;桌面是行内录音条(#463),窄桌面窗口也不画。',
   },
   {
-    name: 'SelectTextSheet(全屏「选择文本」)',
-    site: /<SelectTextSheet\b/,
-    window: 'tag',
-    gate: renderGate('SelectTextSheet'),
-    definedIn: 'src/SelectTextSheet.tsx',
-    minSites: 1,
-    why: '触摸端的原生选区跨不过 Markdown 块;鼠标直接在气泡里拖选,不需要整屏选区页。',
-  },
-  {
     name: 'MessageSelectOverlay(长按就地选区 + 微信式浮动菜单)',
     site: /<MessageSelectOverlay\b/,
     window: 'tag',

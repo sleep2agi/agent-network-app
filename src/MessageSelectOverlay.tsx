@@ -120,13 +120,17 @@ export default function MessageSelectOverlay({ target, selectionMode, onAction, 
         inputRef.current?.focus?.();
       }, 0);
     };
+    // 点「选择文本」的 pointerup 在这个监听挂上之前已经发完(enterSelect 里 setArmed(true))。
+    // 再等下一次 pointerup 或 350ms,会把用户立刻拖出的选区刷回整条,第一下拖动等于丢了。
+    if (armed) {
+      const id = setTimeout(() => inputRef.current?.focus?.(), 0);
+      return () => clearTimeout(id);
+    }
     const events = ['pointerup', 'mouseup', 'touchend', 'pointercancel', 'touchcancel'];
     events.forEach(ev => document.addEventListener(ev, arm, true));
-    // 手势在选区层出来之前就结束了:兜底按时间 arm。#650 起 select 段只能从菜单里点「选择文本」进,
-    // 那一下在切段前已经松手,等不到下一次 pointerup —— 只留够触摸端补发的兼容 click 落完的时间。
     const fallback = setTimeout(arm, 350);
     return () => { done = true; clearTimeout(fallback); events.forEach(ev => document.removeEventListener(ev, arm, true)); };
-  }, [target, selecting]);
+  }, [target, selecting, armed]);
 
   const items = useMemo(() => selectMenuItems({ hasText, selectionMode, phase }), [hasText, selectionMode, phase]);
   const rows = useMemo(() => chunkMenuRows(items), [items]);
@@ -173,9 +177,11 @@ export default function MessageSelectOverlay({ target, selectionMode, onAction, 
       const step = selectOverlayStep('menu', key, plain, sel);
       if (step.kind === 'enterSelect') {
         // 「选择文本」:同一个浮层就地切到划选,整条选中起步;卡片 / 菜单重新量。
+        // 这次点击的 pointerup 已经结束,卡片立刻接指针。web 上若仍设回未 armed,要等 350ms 兜底,
+        // 这段时间 pointerEvents 是 none,第一下拖动落在遮罩上。
         openedAt.current = Date.now();
         setSel(fullSelection(plain.length));
-        setArmed(Platform.OS !== 'web');
+        setArmed(true);
         // 菜单尺寸不清:两段的项数相同时 onLayout 不会再来(web 实测停在 measuring),换段后靠 onLayout 的差值更新。
         setCardBox(null);
         setTextLines(null);

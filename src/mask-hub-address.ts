@@ -75,6 +75,8 @@ export function maskUrlsInText(text: string): string {
   return text
     .replace(/\bhttps?:\/\/[^\s'"<>()（）]+/gi, m => maskHubAddress(m.replace(/[.,;:!?。，；：]+$/, '')) + (m.match(/[.,;:!?。，；：]+$/)?.[0] ?? ''))
     // Node / Bun 的网络错误把裸 host[:port] 跟在错误码后面:getaddrinfo ENOTFOUND hub.example.com / connect ECONNREFUSED 1.2.3.4:9300
-    .replace(/\b(ENOTFOUND|ECONNREFUSED|ECONNRESET|ECONNABORTED|ETIMEDOUT|EAI_AGAIN|EHOSTUNREACH|ENETUNREACH|EPIPE)(\s+)(\[[^\]\s]*\](?::\d+)?|[A-Za-z0-9.-]+(?::\d+)?)/g,
+    // 方括号候选不必成对:] 可以没有(未闭合的 [host),] 后面也可以紧跟裸 host([v6]hub.example.com)。
+    // 这两种以前整段进不了 maskHubAddress,主机原样留在屏幕上。
+    .replace(/\b(ENOTFOUND|ECONNREFUSED|ECONNRESET|ECONNABORTED|ETIMEDOUT|EAI_AGAIN|EHOSTUNREACH|ENETUNREACH|EPIPE)(\s+)(\[[^\]\s]*(?:\](?:[A-Za-z0-9.-]+(?::\d+)?)?|(?=\s|$))(?::\d+)?|[A-Za-z0-9.-]+(?::\d+)?)/g,
       (_m, code, sp, hostPort) => `${code}${sp}${maskHubAddress(hostPort)}`);
 }

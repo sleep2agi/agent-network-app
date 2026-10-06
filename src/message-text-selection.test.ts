@@ -39,10 +39,9 @@ ck('web 用只读 TextInput', selectTextSurface('web') === 'readonly-input');
 // ── 菜单:按平台 ────────────────────────────────────────────────────────
 const touchKeys = messageMenuKeys({ hasText: true, touch: true });
 const deskKeys = messageMenuKeys({ hasText: true, touch: false });
-ck('触摸端:第一组是 复制 → 选择文本 → 引用', JSON.stringify(messageMenuGroups({ hasText: true, touch: true })[0].map(i => i.key)) === JSON.stringify(['copy', 'selectText', 'quote']));
-ck('触摸端「选择文本」文案', messageMenuGroups({ hasText: true, touch: true })[0].some(i => i.key === 'selectText' && i.label === '选择文本'));
-ck('桌面端不给「选择文本」(鼠标本来就能拖选)', !deskKeys.includes('selectText') && deskKeys.includes('copy'));
-ck('无正文时不给「选择文本」', !messageMenuKeys({ hasText: false, touch: true }).includes('selectText'));
+ck('底部菜单第一组是 复制 → 引用(划选不在这里)', JSON.stringify(messageMenuGroups({ hasText: true, touch: true })[0].map(i => i.key)) === JSON.stringify(['copy', 'quote']));
+ck('底部菜单不给「选择文本」(全屏页已删,划选在长按浮层)', !touchKeys.includes('selectText') && !deskKeys.includes('selectText'));
+ck('无正文时也不给「选择文本」', !messageMenuKeys({ hasText: false, touch: true }).includes('selectText'));
 ck('桌面端有选区 → 第一项「复制选中内容」,仍保留「复制」', JSON.stringify(messageMenuKeys({ hasText: true, selectedText: '部分句子' }).slice(0, 2)) === JSON.stringify(['copySelection', 'copy']));
 ck('选区只有空白 → 不给「复制选中内容」', !messageMenuKeys({ hasText: true, selectedText: '  \n ' }).includes('copySelection'));
 ck('没选区 → 不给「复制选中内容」', !touchKeys.includes('copySelection') && !deskKeys.includes('copySelection'));
@@ -60,16 +59,9 @@ eq('没有气泡 → 空', selectedTextWithin(null, sel(inside, inside, 'x')), '
 
 // ── 接线(源码契约)────────────────────────────────────────────────────
 const chat = fs.readFileSync(path.join(__dirname, 'ChatScreen.tsx'), 'utf8');
-const sheet = fs.readFileSync(path.join(__dirname, 'SelectTextSheet.tsx'), 'utf8');
 ck('菜单按平台传 touch', chat.includes('touch: !pointer, selectedText: menuFor?.selectedText') && chat.includes('const pointer = pointerUi(desktop);'));
-ck('「选择文本」打开选择视图', chat.includes("if (key === 'selectText') { setMenuFor(null); setSelectTextFor(selection); return; }"));
 ck('「复制选中内容」原样复制选区(不过 copyTextOf)', chat.includes("if (key === 'copySelection') { setMenuFor(null); void copyValue(selection.selectedText ?? ''); return; }"));
 ck('右键时从气泡取选区', chat.includes("selectedTextWithin(bubble, (globalThis as any).getSelection?.())") && chat.includes('setMenuFor({ item, text, author, selectedText })'));
-ck('选择视图挂在 ChatScreen 上', chat.includes('<SelectTextSheet') && chat.includes('text={selectTextFor ? selectTextFor.text : null}'));
-ck('选择视图按平台选控件', sheet.includes('selectTextSurface(Platform.OS)') && sheet.includes("surface === 'selectable-text'"));
-ck('安卓分支:一个 <Text selectable> 承载全文', /<Text selectable[^>]*>\{value\}<\/Text>/.test(sheet));
-ck('iOS/web 分支:只读多行 TextInput,系统菜单不隐藏', sheet.includes('editable={false}') && sheet.includes('multiline') && sheet.includes('contextMenuHidden={false}'));
-ck('选择视图用 selectableTextOf(与气泡同一条去引用/去附件管线)', sheet.includes('selectableTextOf(text ?? \'\', mode)'));
-ck('安卓返回键关闭(onRequestClose)', sheet.includes('onRequestClose={onClose}'));
+ck('全屏选择页已删:不再挂 SelectTextSheet,也不再 setSelectTextFor', !chat.includes('SelectTextSheet') && !chat.includes('setSelectTextFor'));
 
 console.log(`\n${p}/${t} passed`); process.exit(p === t ? 0 : 1);
