@@ -81,6 +81,10 @@
       "kind": "stub",
       "secs": 15
     },
+    "test-create-node-wizard-layout/drive.mjs": {
+      "kind": "stub",
+      "secs": 60
+    },
     "test-create-node-workdir/drive.mjs": {
       "kind": "stub",
       "secs": 20
