@@ -5,8 +5,9 @@ import path from 'node:path';
 import {
   acceptSelectionEvent, chunkMenuRows, clampSelection, fullSelection, handleZones, HANDLE_REACH_ABOVE, HANDLE_REACH_BELOW, isWholeSelection,
   lineIndexAt, placeMenuAvoidingHandles, placeSelectCard, placeSelectMenu, selectedPart, selectInputTraits, selectionLinesFromLayout,
-  selectionPayload, selectMenuItems, zonesOverlap,
+  selectionPayload, selectMenuItems, selectOverlayStep, copyValueFor, zonesOverlap,
 } from './message-select-model';
+import { copyTextOf } from './chat-actions';
 import { selectableTextOf } from './message-plain-text';
 
 let p = 0, t = 0;
@@ -40,15 +41,33 @@ ck('打开 120ms 内的非空区间照收', acceptSelectionEvent({ start: 0, end
 ck('过了宽限期,收成光标照收(用户点了一下)', acceptSelectionEvent({ start: 3, end: 3 }, 900));
 
 // ── 菜单 ────────────────────────────────────────────────────────────────
+// #650:长按默认 'menu' 段 —— 没有选区,没有「全选」;「选择文本」= 就地进划选
 const keys = selectMenuItems({ hasText: true }).map(i => i.key);
-ck('有文字:复制 · 全选 · 转发 · 引用 打头(微信顺序)', js(keys.slice(0, 4)) === js(['copy', 'selectAll', 'forward', 'quote']), js(keys));
-ck('原长按菜单的动作一个不丢:多选 / 全屏选择 / 放大阅读 / 删除', ['multiSelect', 'selectText', 'expand', 'delete'].every(k => keys.includes(k as never)));
-ck('删除在最后且标红', keys.at(-1) === 'delete' && selectMenuItems({ hasText: true }).at(-1)!.danger === true);
+ck('默认 phase = menu:复制 · 转发 · 引用 打头,没有全选', js(keys.slice(0, 3)) === js(['copy', 'forward', 'quote']) && !keys.includes('selectAll'), js(keys));
+ck('menu 段:原长按菜单的动作一个不丢:多选 / 选择文本 / 放大阅读 / 删除', ['multiSelect', 'selectText', 'expand', 'delete'].every(k => keys.includes(k as never)));
+const selKeys = selectMenuItems({ hasText: true, phase: 'select' }).map(i => i.key);
+ck('select 段:复制 · 全选 · 转发 · 引用 打头(微信顺序)', js(selKeys.slice(0, 4)) === js(['copy', 'selectAll', 'forward', 'quote']), js(selKeys));
+ck('select 段不再给「选择文本」(不开全屏页)', !selKeys.includes('selectText'));
+ck('删除在最后且标红', keys.at(-1) === 'delete' && selectMenuItems({ hasText: true }).at(-1)!.danger === true && selKeys.at(-1) === 'delete');
 ck('纯附件:只有 多选 / 删除', js(selectMenuItems({ hasText: false }).map(i => i.key)) === js(['multiSelect', 'delete']));
 ck('多选模式里不再给多选', !selectMenuItems({ hasText: true, selectionMode: true }).some(i => i.key === 'multiSelect'));
 ck('没有转发名册时不给转发', !selectMenuItems({ hasText: true, canForward: false }).some(i => i.key === 'forward'));
 const rows = chunkMenuRows(selectMenuItems({ hasText: true }));
-ck('一行 5 个,8 项 → 5 + 3 两行', rows.length === 2 && rows[0].length === 5 && rows[1].length === 3);
+ck('一行 5 个,7 项 → 5 + 2 两行', rows.length === 2 && rows[0].length === 5 && rows[1].length === 2);
+
+// ── #650 菜单键 → 浮层动作 / 剪贴板内容 ─────────────────────────────────
+const msg = '「@示例节点: 旧话」\n创造型人才和哲学家，本质上就无法经营婚姻。';
+const msgPlain = selectableTextOf(msg);
+const copyStep = selectOverlayStep('menu', 'copy', msgPlain, fullSelection(msgPlain.length));
+ck('menu 段「复制」→ emit copy,整条(不进划选、不开卡片)', copyStep.kind === 'emit' && copyStep.key === 'copy' && copyStep.payload.kind === 'whole', js(copyStep));
+ck('menu 段「复制」即使选区状态是一段也按整条(menu 段没有选区)', (() => { const st = selectOverlayStep('menu', 'copy', msgPlain, { start: 2, end: 5 }); return st.kind === 'emit' && st.payload.kind === 'whole'; })());
+const copied = copyStep.kind === 'emit' ? copyValueFor(copyStep.payload, msg, copyTextOf) : null;
+ck('整条复制写进剪贴板的 = 完整正文(copyTextOf:去引用行)', copied === '创造型人才和哲学家，本质上就无法经营婚姻。', js(copied));
+ck('一段复制 = 原样那段', copyValueFor({ kind: 'part', text: '型人才' }, msg, copyTextOf) === '型人才');
+ck('menu 段「选择文本」→ enterSelect(就地划选,不 emit 给聊天页)', selectOverlayStep('menu', 'selectText', msgPlain, fullSelection(msgPlain.length)).kind === 'enterSelect');
+ck('select 段「全选」→ selectAll(不关)', selectOverlayStep('select', 'selectAll', msgPlain, { start: 1, end: 3 }).kind === 'selectAll');
+ck('select 段「复制」一段 → part', (() => { const st = selectOverlayStep('select', 'copy', plain, { start: 2, end: 18 }); return st.kind === 'emit' && st.payload.kind === 'part' && st.payload.text === '型人才和哲学家，本质上就无法经营'; })());
+ck('menu 段其余键(转发 / 引用 / 删除)→ emit 整条', (['forward', 'quote', 'delete', 'expand', 'multiSelect'] as const).every(k => { const st = selectOverlayStep('menu', k, msgPlain, fullSelection(msgPlain.length)); return st.kind === 'emit' && st.key === k && st.payload.kind === 'whole'; }));
 
 // ── 放置:上方 → 翻下方 → 压在气泡里;水平夹进屏幕 ────────────────────────
 const vp = { width: 390, height: 844 };
@@ -190,7 +209,12 @@ const chat = fs.readFileSync(path.join(__dirname, 'ChatScreen.tsx'), 'utf8');
 const overlay = fs.readFileSync(path.join(__dirname, 'MessageSelectOverlay.tsx'), 'utf8');
 ck('三处长按都进就地选区(且只在触摸端)', (chat.match(/onLongPress=\{pointer \? undefined : \(\) => openSelect\(/g) ?? []).length === 3);
 ck('选区层只在触摸端渲染', chat.includes('{pointer ? null : <MessageSelectOverlay'));
-ck('整条复制仍走 copyMessage(copyTextOf),一段走 copyValue 原样', chat.includes("if (key === 'copy') { void (part !== null ? copyValue(part) : copyMessage(selection.text)); return; }"));
+ck('#650 复制:先 setSelectFor(null) 关浮层,再 copyValue(copyValueFor(…, copyTextOf)) → 剪贴板 + 已复制', /const onSelectAction[\s\S]*?setSelectFor\(null\);[\s\S]*?if \(key === 'copy'\) \{ void copyValue\(copyValueFor\(payload, selection\.text, copyTextOf\)\); return; \}/.test(chat));
+ck('#650 copyValue 写剪贴板并亮「已复制」', /const copyValue = async[\s\S]*?Clipboard\.setStringAsync\(value\)[\s\S]*?setCopiedAt\(Date\.now\(\)\)/.test(chat));
+const onSel = chat.slice(chat.indexOf('const onSelectAction'), chat.indexOf('// ── 多选(0.2.78)'));
+ck('#650 浮层动作里不再打开任何新的消息框(无 setSelectTextFor / 不重开 setSelectFor({…}))', onSel.length > 100 && !onSel.includes('setSelectTextFor(') && !/setSelectFor\(\{/.test(onSel), onSel.length + '');
+ck('#650 浮层打开从 menu 段开始,卡片只在 select 段渲染', overlay.includes("setPhase('menu');") && overlay.includes("const showCard = selecting && hasText;") && overlay.includes('{target && showCard && card ? ('));
+ck('#650 menu 段的键走 selectOverlayStep(复制不进划选)', overlay.includes("const step = selectOverlayStep('menu', key, plain, sel);") && overlay.includes("if (step.kind === 'emit') onAction(step.key, step.payload);"));
 ck('转发复用 openForwardPicker', chat.includes("if (key === 'forward') { void openForwardPicker(part !== null ? { ...selection, text: part } : selection); return; }"));
 ck('引用复用 setQuote + compactQuoteText', chat.includes('setQuote({ author: selection.author, text: compactQuoteText(part ?? selection.text) })'));
 ck('卡片文字与气泡同一条管线(selectableTextOf)', overlay.includes("selectableTextOf(target?.raw ?? '')"));

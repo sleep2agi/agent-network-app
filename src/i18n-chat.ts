@@ -148,7 +148,7 @@ export const chatTranslations = {
   'chat.select.forward': ['转发', 'Forward'],
   'chat.select.quote': ['引用', 'Quote'],
   'chat.select.multiSelect': ['多选', 'Multi-select'],
-  'chat.select.selectText': ['全屏选择', 'Full screen'],
+  'chat.select.selectText': ['选择文本', 'Select text'],
   'chat.select.expand': ['放大阅读', 'Expand'],
   'chat.select.delete': ['删除', 'Delete'],
   'chat.select.exit': ['退出选择', 'Exit selection'],

@@ -65,6 +65,15 @@ export interface SelectMenuItem {
   readonly danger?: boolean;
 }
 
+/**
+ * #650(Vincent 2026-10-06 17:03「为什么他那个复制的时候会有一个新的消息框出来？用原来那个消息框复制不行吗？」):
+ * 长按分两段 ——
+ *   'menu'   长按刚松手:只有锚在**原气泡**上 / 下方的浮动菜单,不盖任何卡片、不出选区。「复制」直接拷整条 + 「已复制」。
+ *   'select' 用户在菜单里点了「选择文本」才进:与气泡同位同宽的选区卡片 + 系统手柄(划选一段)。
+ * 默认复制路径上不再出现那张卡片。
+ */
+export type SelectOverlayPhase = 'menu' | 'select';
+
 export interface SelectMenuContext {
   /** 有可选的正文。纯附件(只有图)的气泡没有 —— 只给多选 / 删除。 */
   readonly hasText: boolean;
@@ -72,24 +81,49 @@ export interface SelectMenuContext {
   readonly selectionMode?: boolean;
   /** 转发要有名册;默认给。 */
   readonly canForward?: boolean;
+  /** 默认 'menu'(长按刚松手)。 */
+  readonly phase?: SelectOverlayPhase;
 }
 
 /**
- * 浮动菜单的项,顺序照微信:复制 · 全选 · 转发 · 引用 —— 然后是我们原有长按菜单里的其余动作,一个不丢:
- * 多选 · 全屏选择(原「选择文本」整屏页,长消息超过一屏时还要它)· 放大阅读 · 删除(最后,红色)。
+ * 浮动菜单的项,顺序照微信:复制 · 转发 · 引用 —— 然后是我们原有长按菜单里的其余动作,一个不丢:
+ * 多选 · 选择文本(就地进入划选,#650 起不再开全屏页)· 放大阅读 · 删除(最后,红色)。
+ * 'select' 段:复制 · 全选 · 转发 · 引用 · 多选 · 放大阅读 · 删除(已经在选了,不再给「选择文本」)。
  * 微信的「收藏 / 搜一搜」我们没有对应功能,不放空按钮。
  */
 export const selectMenuItems = (ctx: SelectMenuContext): SelectMenuItem[] => {
   const canForward = ctx.canForward !== false && ctx.hasText;
+  const selecting = ctx.phase === 'select';
   return [
-    ...(ctx.hasText ? [{ key: 'copy' as const, icon: 'copy-outline' }, { key: 'selectAll' as const, icon: 'document-text-outline' }] : []),
+    ...(ctx.hasText ? [{ key: 'copy' as const, icon: 'copy-outline' }] : []),
+    ...(ctx.hasText && selecting ? [{ key: 'selectAll' as const, icon: 'document-text-outline' }] : []),
     ...(canForward ? [{ key: 'forward' as const, icon: 'arrow-redo-outline' }] : []),
     ...(ctx.hasText ? [{ key: 'quote' as const, icon: 'chatbox-ellipses-outline' }] : []),
     ...(ctx.selectionMode ? [] : [{ key: 'multiSelect' as const, icon: 'checkmark-circle-outline' }]),
-    ...(ctx.hasText ? [{ key: 'selectText' as const, icon: 'scan-outline' }, { key: 'expand' as const, icon: 'expand-outline' }] : []),
+    ...(ctx.hasText && !selecting ? [{ key: 'selectText' as const, icon: 'scan-outline' }] : []),
+    ...(ctx.hasText ? [{ key: 'expand' as const, icon: 'expand-outline' }] : []),
     { key: 'delete' as const, icon: 'trash-outline', danger: true },
   ];
 };
+
+/** 浮动菜单一个键按下去之后浮层自己该做什么。'emit' = 交给聊天页(复制 / 转发 / …),浮层随即关闭。 */
+export type SelectOverlayStep =
+  | { readonly kind: 'enterSelect' }
+  | { readonly kind: 'selectAll' }
+  | { readonly kind: 'emit'; readonly key: SelectMenuKey; readonly payload: SelectionPayload };
+export const selectOverlayStep = (phase: SelectOverlayPhase, key: SelectMenuKey, plain: string, sel: TextSelection): SelectOverlayStep => {
+  if (phase === 'menu') {
+    // 'menu' 段没有选区:一律按整条;「选择文本」= 就地进入划选。
+    if (key === 'selectText' || key === 'selectAll') return { kind: 'enterSelect' };
+    return { kind: 'emit', key, payload: { kind: 'whole' } };
+  }
+  if (key === 'selectAll') return { kind: 'selectAll' };
+  return { kind: 'emit', key, payload: selectionPayload(plain, sel) };
+};
+
+/** 聊天页拿到 'copy' 后实际写进剪贴板的串:一段 = 原样那段;整条 = copyTextOf(原文)(去引用行,与旧长按菜单同一条路)。 */
+export const copyValueFor = (payload: SelectionPayload, raw: string, copyTextOf: (raw: string) => string): string =>
+  payload.kind === 'part' ? payload.text : copyTextOf(raw);
 
 /** 微信一行 5 个。 */
 export const SELECT_MENU_PER_ROW = 5;

@@ -6,17 +6,22 @@
 //
 //   WEB_DIR=<expo export 目录> [OUT=<截图目录>] [PLAYWRIGHT_MODULE=<…/playwright/index.mjs>] node tests/test-message-select/drive.mjs
 //
+// #650(Vincent 2026-10-06 17:03):「为什么他那个复制的时候会有一个新的消息框出来？用原来那个消息框复制不行吗？」
+// 长按默认只出菜单(锚在原气泡上),不盖选区卡片;「复制」直接拷整条 +「已复制」;划选要先点「选择文本」。
+//
 // 手机(390×844,安卓 UA ⇒ 触摸端):
-//   P1 长按底部气泡 → 选区层 + 菜单;textarea 整条选中(0..len);菜单有 复制 / 全选 / 转发 / 引用
-//   P2 菜单在气泡上方(side=above),整块在视口内,与选区卡片不重叠,间隙 ≥ 4
-//   P3 「复制」整条 → 剪贴板 = 整条消息
+//   M1 长按底部气泡 → 只有菜单:没有选区卡片、没有 textarea;菜单有 复制 / 转发 / 引用 / 多选 / 选择文本 / 放大阅读 / 删除,没有「全选」
+//   M2 菜单在原气泡上方(side=above),整块在视口内,不盖气泡,间隙 ≥ 4
+//   M3 「复制」→ 剪贴板 = 整条消息;浮层关闭;底部出现「已复制」;全程没有卡片
+//   P1 长按 →「选择文本」→ 同一浮层就地切到划选:卡片与气泡同左、同宽、同顶;textarea 整条选中;菜单有 复制 / 全选 …,没有「选择文本」
+//   P2 菜单在卡片上方(side=above),整块在视口内,与选区卡片不重叠,间隙 ≥ 4
 //   P4 拖成一段(setSelectionRange,等价于拖手柄)→「复制」→ 剪贴板 = 那段子串
 //   P5 「全选」→ 选区回到整条,菜单不关
-//   P6 点空白 → 退出(选区层消失)
-//   P7 长按贴顶的气泡 → 菜单翻到下方(side=below),整块在视口内、不盖卡片
-//   P8 「引用」一段 → 输入框上方的引用条是那段
+//   P6 点空白 → 退出(浮层消失)
+//   P7 长按贴顶的气泡 → 菜单翻到下方(side=below),整块在视口内、不盖气泡
+//   P8 「选择文本」后「引用」一段 → 输入框上方的引用条是那段
 // 手机 · 比屏还高的消息(#551,Vincent iPhone 截图:菜单盖住起点手柄,拖不动):
-//   H1 长按 → 整条选中;菜单矩形与「起点手柄」「终点手柄」矩形都不相交(看得见的手柄才算)
+//   H1 长按 →「选择文本」→ 整条选中;菜单矩形与「起点手柄」「终点手柄」矩形都不相交(看得见的手柄才算)
 //   H2 把终点拖到屏幕中段(setSelectionRange)→ 停稳后菜单重新出现,仍与两只手柄都不相交
 //   H3 手指按在选区上 → 菜单隐藏(data-hidden=1、opacity 0、不接点击);松手 → 停稳后重新出现、不压手柄
 //   手柄矩形由本脚本自己量(镜像 div 取起点 / 终点字符的矩形,上伸 16、下挂 28、左右各 14),不读应用算出来的值。
@@ -87,6 +92,8 @@ const layerState = (page) => page.evaluate(() => {
     menu: box('[data-testid="msg-select-menu"]'),
     card: box('[data-testid="msg-select-card"]'),
     side: menu?.getAttribute('data-side') ?? null,
+    phase: menu?.getAttribute('data-phase') ?? null,
+    toast: [...document.querySelectorAll('div[dir="auto"], span')].some(e => e.getClientRects().length && e.textContent.trim() === '已复制'),
     opacity: menu ? Number(getComputedStyle(menu).opacity) : null,
     labels: menu ? [...menu.querySelectorAll('[role="menuitem"]')].map(e => e.getAttribute('aria-label')) : [],
     sel: ta ? { start: ta.selectionStart, end: ta.selectionEnd, len: ta.value.length, value: ta.value } : null,
@@ -104,14 +111,14 @@ const longPress = async (page, box) => {
 };
 
 /** 菜单几何断言 + 一行测量表。 */
-const geometry = (tag, label, s, expectSide) => {
-  const m = s.menu, c = s.card;
+const geometry = (tag, label, s, expectSide, anchor = null) => {
+  const m = s.menu, c = anchor ? { ...anchor, right: anchor.x + anchor.width, bottom: anchor.y + anchor.height } : s.card;
   const inside = !!m && m.x >= 0 && m.y >= 0 && m.right <= s.vw && m.bottom <= s.vh;
   const gap = !m || !c ? NaN : s.side === 'above' ? c.y - m.bottom : s.side === 'below' ? m.y - c.bottom : NaN;
   const overlap = !m || !c ? true : !(m.bottom <= c.y || m.y >= c.bottom || m.right <= c.x || m.x >= c.right);
   ck(tag, `${label}: 菜单 side=${expectSide}`, s.side === expectSide, `side=${s.side}`);
   ck(tag, `${label}: 菜单整块在视口内`, inside, m ? `menu x=${r1(m.x)} y=${r1(m.y)} right=${r1(m.right)} bottom=${r1(m.bottom)} vw=${s.vw} vh=${s.vh}` : 'no menu');
-  ck(tag, `${label}: 菜单不盖选区卡片,间隙 ≥ 4`, !overlap && gap >= 4, `gap=${r1(gap)}`);
+  ck(tag, `${label}: 菜单不盖${anchor ? '原气泡' : '选区卡片'},间隙 ≥ 4`, !overlap && gap >= 4, `gap=${r1(gap)}`);
   rows.push({ tag, label, side: s.side, menu: m ? `${r1(m.x)},${r1(m.y)} ${r1(m.width)}×${r1(m.height)}` : '-', card: c ? `${r1(c.x)},${r1(c.y)} ${r1(c.width)}×${r1(c.height)}` : '-', gap: r1(gap), inside: inside ? 'yes' : 'NO', overlap: overlap ? 'YES' : 'no', vp: `${s.vw}×${s.vh}` });
 };
 
@@ -121,6 +128,15 @@ const setPartial = (page, a, b) => page.evaluate(([a, b]) => {
 }, [a, b]);
 const clip = (page) => page.evaluate(() => window.__clip.slice());
 const click = (page, testId) => page.locator(`[data-testid="${testId}"]`).click();
+/** #650:菜单里点「选择文本」→ 同一浮层就地切到划选;等卡片出现、菜单按卡片放好。 */
+const enterSelect = async (page) => {
+  await click(page, 'msg-select-selectText');
+  await page.locator('[data-testid="msg-select-card"]').waitFor({ timeout: 4000 }).catch(() => {});
+  await page.waitForFunction(() => { const m = document.querySelector('[data-testid="msg-select-menu"]'); return m && m.getAttribute('data-phase') === 'select' && m.getAttribute('data-side') !== 'measuring' && getComputedStyle(m).opacity === '1'; }, null, { timeout: 4000 }).catch(() => {});
+  // 卡片接指针(armed:web 上那一下点按的兼容事件落完后才接,并把整条重新选中)之后再动选区,否则会被这次 arm 覆盖。
+  await page.waitForFunction(() => { const c = document.querySelector('[data-testid="msg-select-card"]'); return c && getComputedStyle(c).pointerEvents === 'auto'; }, null, { timeout: 4000 }).catch(() => {});
+  await page.waitForTimeout(150);
+};
 
 // ── 手机 ───────────────────────────────────────────────────────────────────
 {
@@ -136,31 +152,49 @@ const click = (page, testId) => page.locator(`[data-testid="${testId}"]`).click(
     await page.getByText(BOTTOM, { exact: true }).first().waitFor({ timeout: 15000 });
     await page.waitForTimeout(800);
 
-    // P1 / P2
+    // M1 / M2:长按 = 只有菜单
     let bb = await bubbleBox(page, BOTTOM);
     ck(tag, '找到底部气泡', !!bb, JSON.stringify(bb));
     await longPress(page, bb);
     let s = await layerState(page);
-    ck(tag, 'P1 长按 → 选区层打开', s.open && !!s.card && !!s.menu);
-    ck(tag, 'P1 默认整条选中', !!s.sel && s.sel.start === 0 && s.sel.end === s.sel.len && s.sel.len === BOTTOM.length, JSON.stringify(s.sel && { start: s.sel.start, end: s.sel.end, len: s.sel.len }));
-    ck(tag, 'P1 菜单有 复制 / 全选 / 转发 / 引用', ['复制', '全选', '转发', '引用'].every(l => s.labels.includes(l)), s.labels.join(' '));
-    ck(tag, 'P1 原长按菜单的动作仍在(多选 / 放大阅读 / 删除)', ['多选', '放大阅读', '删除'].every(l => s.labels.includes(l)), s.labels.join(' '));
-    ck(tag, 'P1 卡片盖在气泡上(同左、同宽、同顶)', !!s.card && Math.abs(s.card.x - bb.x) <= 1 && Math.abs(s.card.width - bb.width) <= 1 && Math.abs(s.card.y - bb.y) <= 1, `card=${JSON.stringify(s.card && { x: r1(s.card.x), y: r1(s.card.y), w: r1(s.card.width) })} bubble=${JSON.stringify({ x: r1(bb.x), y: r1(bb.y), w: r1(bb.width) })}`);
-    geometry(tag, 'P2 底部气泡', s, 'above');
-    if (OUT) { const f = `${OUT}/select-phone-bottom-above.png`; await page.screenshot({ path: f }); shots.push(f); }
+    ck(tag, 'M1 长按 → 浮层打开、只有菜单(phase=menu)', s.open && !!s.menu && s.phase === 'menu', `phase=${s.phase}`);
+    ck(tag, 'M1 没有新的消息框:无选区卡片、无 textarea', !s.card && !s.sel, JSON.stringify({ card: s.card, sel: s.sel }));
+    ck(tag, 'M1 菜单有 复制 / 转发 / 引用 / 多选 / 选择文本 / 放大阅读 / 删除', ['复制', '转发', '引用', '多选', '选择文本', '放大阅读', '删除'].every(l => s.labels.includes(l)), s.labels.join(' '));
+    ck(tag, 'M1 菜单里没有「全选」(没有选区可全选)', !s.labels.includes('全选'), s.labels.join(' '));
+    geometry(tag, 'M2 底部气泡 · 只有菜单', s, 'above', bb);
+    if (OUT) { const f = `${OUT}/select-phone-longpress-menu.png`; await page.screenshot({ path: f }); shots.push(f); }
 
-    // P3 复制整条
+    // M3 复制整条:直接进剪贴板,不出卡片
     await page.evaluate(() => { window.__clip = []; });
     await click(page, 'msg-select-copy');
-    await page.waitForTimeout(300);
+    await page.waitForTimeout(250);
     let c = await clip(page);
-    ck(tag, 'P3 复制整条 → 剪贴板 = 整条消息', c.length === 1 && c[0] === BOTTOM, JSON.stringify(c));
+    ck(tag, 'M3 复制 → 剪贴板 = 整条消息', c.length === 1 && c[0] === BOTTOM, JSON.stringify(c));
     s = await layerState(page);
-    ck(tag, 'P3 复制后退出选区', !s.open);
+    ck(tag, 'M3 复制后浮层关闭、没有卡片', !s.open && !s.card);
+    ck(tag, 'M3 底部出现「已复制」', s.toast);
+    if (OUT) { const f = `${OUT}/select-phone-copied-toast.png`; await page.screenshot({ path: f }); shots.push(f); }
+    await page.waitForTimeout(1500);
+
+    // P1 / P2:「选择文本」→ 就地划选
+    bb = await bubbleBox(page, BOTTOM);
+    await longPress(page, bb);
+    await enterSelect(page);
+    s = await layerState(page);
+    ck(tag, 'P1 选择文本 → 同一浮层切到划选(phase=select)、卡片出现', s.open && !!s.card && !!s.menu && s.phase === 'select', `phase=${s.phase}`);
+    ck(tag, 'P1 默认整条选中', !!s.sel && s.sel.start === 0 && s.sel.end === s.sel.len && s.sel.len === BOTTOM.length, JSON.stringify(s.sel && { start: s.sel.start, end: s.sel.end, len: s.sel.len }));
+    ck(tag, 'P1 菜单有 复制 / 全选 / 转发 / 引用', ['复制', '全选', '转发', '引用'].every(l => s.labels.includes(l)), s.labels.join(' '));
+    ck(tag, 'P1 划选时不再给「选择文本」(不开全屏页)', !s.labels.includes('选择文本') && !s.labels.includes('全屏选择'), s.labels.join(' '));
+    ck(tag, 'P1 卡片盖在气泡上(同左、同宽、同顶)', !!s.card && Math.abs(s.card.x - bb.x) <= 1 && Math.abs(s.card.width - bb.width) <= 1 && Math.abs(s.card.y - bb.y) <= 1, `card=${JSON.stringify(s.card && { x: r1(s.card.x), y: r1(s.card.y), w: r1(s.card.width) })} bubble=${JSON.stringify({ x: r1(bb.x), y: r1(bb.y), w: r1(bb.width) })}`);
+    geometry(tag, 'P2 底部气泡 · 划选', s, 'above');
+    if (OUT) { const f = `${OUT}/select-phone-bottom-above.png`; await page.screenshot({ path: f }); shots.push(f); }
+    await page.mouse.click(6, Math.round(s.vh * 0.45));
+    await page.waitForTimeout(300);
 
     // P4 一段
     bb = await bubbleBox(page, BOTTOM);
     await longPress(page, bb);
+    await enterSelect(page);
     const A = 2, B = 18; // 「型人才和哲学家，本质上就无法经营」
     await setPartial(page, A, B);
     await page.waitForTimeout(250);
@@ -208,10 +242,11 @@ const click = (page, testId) => page.locator(`[data-testid="${testId}"]`).click(
     ck(tag, 'P7 顶部气泡在屏幕上沿附近(上方放不下菜单)', !!tb && tb.y < 200, JSON.stringify(tb && { y: r1(tb.y) }));
     await longPress(page, tb);
     s = await layerState(page);
-    geometry(tag, 'P7 顶部气泡', s, 'below');
+    geometry(tag, 'P7 顶部气泡 · 只有菜单', s, 'below', tb);
     if (OUT) { const f = `${OUT}/select-phone-top-below.png`; await page.screenshot({ path: f }); shots.push(f); }
 
     // P8 引用一段
+    await enterSelect(page);
     await setPartial(page, 0, 6);
     await page.waitForTimeout(200);
     const quotePart = TOP.slice(0, 6);
@@ -300,8 +335,9 @@ const handleGeometry = (tag, label, s, h) => {
     ck(tag, '气泡比可见区高、顶在屏幕上部(截图同款)', !!tb && tb.y > 120 && tb.y < 320 && tb.y + tb.height > 844, JSON.stringify(tb && { y: r1(tb.y), h: r1(tb.height) }));
     // 长按看得见的那块的中间
     await longPress(page, { x: tb.x, y: tb.y, width: tb.width, height: Math.min(tb.height, 844 - tb.y - 120) });
+    await enterSelect(page);
     let s = await layerState(page);
-    ck(tag, 'H1 长按 → 选区层,整条选中', s.open && !!s.sel && s.sel.start === 0 && s.sel.end === s.sel.len, JSON.stringify(s.sel && { start: s.sel.start, end: s.sel.end, len: s.sel.len }));
+    ck(tag, 'H1 长按 → 选择文本 → 选区层,整条选中', s.open && !!s.sel && s.sel.start === 0 && s.sel.end === s.sel.len, JSON.stringify(s.sel && { start: s.sel.start, end: s.sel.end, len: s.sel.len }));
     ck(tag, 'H1 菜单可见', await menuShown(page));
     s = await layerState(page);
     let h = await handleRects(page);
@@ -393,6 +429,20 @@ const handleGeometry = (tag, label, s, h) => {
     await page.waitForTimeout(300);
     const c = await clip(page);
     ck(tag, 'D3 复制选中内容 → 剪贴板 = 拖选的那段', c.length === 1 && c[0] === selected, JSON.stringify(c));
+
+    // D4(#650)右键 →「复制」整条:剪贴板 = 整条,出「已复制」,不出任何选区浮层 / 卡片
+    await page.evaluate(() => window.getSelection()?.removeAllRanges());
+    const bb2 = await bubbleBox(page, BOTTOM);
+    await page.mouse.click(bb2.x + bb2.width / 2, bb2.y + bb2.height / 2, { button: 'right' });
+    await page.waitForTimeout(400);
+    await page.evaluate(() => { window.__clip = []; });
+    await page.getByLabel('复制', { exact: true }).first().click();
+    await page.waitForTimeout(250);
+    const c2 = await clip(page);
+    ck(tag, 'D4 右键「复制」→ 剪贴板 = 整条消息', c2.length === 1 && c2[0] === BOTTOM, JSON.stringify(c2));
+    s = await layerState(page);
+    ck(tag, 'D4 不出选区浮层 / 卡片,出「已复制」', !s.open && !s.card && s.toast, JSON.stringify({ open: s.open, toast: s.toast }));
+    if (OUT) { const f = `${OUT}/select-desktop-copied-toast.png`; await page.screenshot({ path: f }); shots.push(f); }
   } catch (err) {
     failures++; total++;
     console.log(`FAIL [${tag}] NOT RUN: ${String(err.message || err).split('\n')[0]}`);

@@ -109,12 +109,14 @@ const CASES = [
       await page.locator('[data-testid="agent-row-menu"]').waitFor({ timeout: 5000 });
     } },
   { name: 'modal:messageMenu', layouts: ['phone'], scope: 'modal', header: null, open: openMessageMenu },
-  { name: 'modal:selectText', layouts: ['phone', 'twoPane'], scope: 'modal', header: '[data-testid="screen-header"]',
+  { name: 'modal:selectText', layouts: ['phone', 'twoPane'], scope: 'modal', header: null,
     open: async (page) => {
       await openMessageMenu(page);
-      // #537: the full-screen select sheet is now 「全屏选择」 in the long-press floating menu (was 「选择文本」 in the bottom sheet).
+      // #650: 「选择文本」 in the long-press floating menu now switches the same layer to in-place selection
+      // (a card over the bubble + handles) instead of opening the full-screen select sheet.
       await page.locator('[data-testid="msg-select-selectText"]').click({ timeout: 5000 });
-      await page.getByText('拖动选区手柄选中任意段落，用系统菜单复制').waitFor({ timeout: 5000 });
+      await page.locator('[data-testid="msg-select-card"]').waitFor({ timeout: 5000 });
+      await page.waitForFunction(() => { const m = document.querySelector('[data-testid="msg-select-menu"]'); return m && m.getAttribute('data-phase') === 'select' && m.getAttribute('data-side') !== 'measuring'; }, null, { timeout: 5000 });
     } },
   { name: 'modal:nodeAction', layouts: ['phone', 'twoPane'], scope: 'modal', header: null,
     open: async (page) => {
