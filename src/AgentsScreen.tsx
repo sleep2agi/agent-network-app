@@ -940,6 +940,11 @@ export default function AgentsScreen({
               </Pressable>
             );
           })}
+          {activeFilter?.host ? (
+            <View testID="agent-filter-host" style={[rowStyles.filterChip, { backgroundColor: colors.railActiveBg }]}>
+              <Text style={[rowStyles.filterChipText, { color: colors.accent }]}>{`机器 ${activeFilter.host}`}</Text>
+            </View>
+          ) : null}
           {activeFilter?.group ? (
             <View style={[rowStyles.filterChip, { backgroundColor: colors.railActiveBg }]}>
               <Text style={[rowStyles.filterChipText, { color: colors.accent }]}>{`分组 ${activeFilter.group}`}</Text>

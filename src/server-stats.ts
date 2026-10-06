@@ -48,8 +48,12 @@ export function summarize(sessions: readonly Session[]): ServerStats {
 
 export type AgentStatusFilter = 'online' | 'working' | 'error' | 'offline';
 
-/** 从服务器页进入 Agent 列表时携带的筛选;两个字段都可缺省。 */
-export type AgentListFilter = { status?: AgentStatusFilter; group?: string };
+/**
+ * 从服务器页进入 Agent 列表时携带的筛选;字段都可缺省。
+ * host / aliases(#618「机器」分区):点一台机器 → 只看这台机器上的节点。列表读的是 light 投影,
+ * 行上**没有** hostname,所以服务器页把这台机器上的别名一起带过来;行上恰好有 hostname 时也按它认。
+ */
+export type AgentListFilter = { status?: AgentStatusFilter; group?: string; host?: string; aliases?: string[] };
 
 export const STATUS_FILTER_LABEL: Record<AgentStatusFilter, string> = {
   online: '在线',
@@ -70,19 +74,21 @@ export function matchesStatus(s: Session, f: AgentStatusFilter): boolean {
 
 /** 列表页真正用来筛行的函数:卡片上的数字必须等于它筛出来的行数(见测试)。 */
 export function applyAgentFilter(sessions: readonly Session[], filter: AgentListFilter | null | undefined): Session[] {
-  if (!filter || (!filter.status && !filter.group)) return sessions.slice();
+  if (!isFilterActive(filter)) return sessions.slice();
+  const onHost = filter.aliases ? new Set(filter.aliases) : null;
   return sessions.filter(s =>
     (!filter.status || matchesStatus(s, filter.status)) &&
-    (!filter.group || teamOf(s.alias) === filter.group),
+    (!filter.group || teamOf(s.alias) === filter.group) &&
+    (!filter.host || (s.hostname ? s.hostname.trim() === filter.host : !!onHost?.has(s.alias))),
   );
 }
 
 export const isFilterActive = (f: AgentListFilter | null | undefined): f is AgentListFilter =>
-  !!f && (!!f.status || !!f.group);
+  !!f && (!!f.status || !!f.group || !!f.host);
 
-/** 列表顶部筛选条上的文字:「TM · 工作中」。 */
+/** 列表顶部筛选条上的文字:「TM · 工作中」「机器 host-a · 离线」。 */
 export function filterLabel(f: AgentListFilter): string {
-  return [f.group, f.status ? STATUS_FILTER_LABEL[f.status] : undefined].filter(Boolean).join(' · ');
+  return [f.host ? `机器 ${f.host}` : undefined, f.group, f.status ? STATUS_FILTER_LABEL[f.status] : undefined].filter(Boolean).join(' · ');
 }
 
 // ── 状态卡片 ──

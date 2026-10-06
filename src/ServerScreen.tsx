@@ -3,7 +3,8 @@ import { ActivityIndicator, Pressable, RefreshControl, ScrollView, StyleSheet, V
 import { Text } from './ui-text';
 import { Ionicons } from './icons';
 import * as Clipboard from 'expo-clipboard';
-import { fetchServerVersion, fetchStatus, HubConfig, Session } from './api';
+import { fetchNodeStatus, fetchServerVersion, fetchStatus, HubConfig, Session } from './api';
+import { hostLevels, HOSTS_COLLAPSED, type HostLevel, type LevelTone, type Meter } from './host-levels';
 import { pingHealth } from './server-ping';
 import { PANE_BACK_TEST_ID } from './pane-header';
 import {
@@ -32,7 +33,9 @@ import { elevated, buttonStyle, buttonTextStyle } from './elevation';
 //   2. 各分组的在线比例(与 Agent 列表同一份分组,点一行进列表并筛到该组);
 //   3. 连接本身(地址、hub 版本、网络 id、实测延迟、已连接多久;断开时给原因和重试);
 //   4. 常用入口(节点管理 / 新建节点 / 定时任务 / 事件与日志),复用已有的屏。
-// 宽屏(≥ WIDE_MIN)分两栏:左 = 概况 + 分组,右 = 连接 + 操作;窄屏单栏。
+//   5. 「机器」(#618):节点所在每台机器的 CPU / 内存 / 磁盘水位(host-levels.ts 定规则,点一台进节点列表筛到它)。
+// 宽屏(≥ WIDE_MIN)分两栏:左 = 概况 + 机器 + 分组,右 = 连接 + 操作;窄屏单栏(概况之后紧跟机器)。
+// 机器放主栏:三根条要横向长度才读得出差别,右栏 ~440px 放三列条每列不到 100px。
 
 /** 两栏的最小内容宽度(dp)。按本屏自身宽度判断,不按窗口 —— 桌面端它旁边还有侧栏。 */
 export const WIDE_MIN = 760;
@@ -82,6 +85,9 @@ export default function ServerScreen({
   const [copied, setCopied] = useState<string | null>(null);
   const [profiles, setProfiles] = useState<HubProfile[]>([]);
   const [, setTick] = useState(0);
+  // #618:全量 /api/status(带 host 遥测)。null = 还没读到 / 这个连接读不了(没有 network_id)。
+  const [hostRows, setHostRows] = useState<Session[] | null>(null);
+  const [allHosts, setAllHosts] = useState(false);
 
   const load = useCallback(async () => {
     let ok = false;
@@ -106,6 +112,18 @@ export default function ServerScreen({
   }, [cfg]);
 
   usePoll(load, 10000, [load]);
+
+  // 机器水位走全量投影(light 没有 host 字段),比列表轮询慢一档:心跳本身也不是秒级的,
+  // 而全量正文在大网络上是 light 的 ~5 倍。读失败就保留上一份 —— 过期判定按心跳时间走,
+  // 旧数会自己变灰并写「数据 N 分钟前」,不会被当成现在。
+  const loadHosts = useCallback(async () => {
+    if (!cfg.networkId) return;
+    try {
+      const data = await fetchNodeStatus(cfg);
+      setHostRows(data.sessions ?? []);
+    } catch {}
+  }, [cfg]);
+  usePoll(loadHosts, 30000, [loadHosts]);
 
   // 「已连接 N 分钟」每分钟走一格,不必等下一次轮询。
   useEffect(() => {
@@ -145,6 +163,8 @@ export default function ServerScreen({
   const toneColor = { good: colors.running, fair: colors.blocked, slow: colors.failed, unknown: colors.textMuted }[latencyTone(latency)];
   const otherProfiles = profiles.filter(p => p.profileId !== cfg.profileId);
   const retry = () => { setRetrying(true); void load(); };
+  const { hosts, unreported } = hostLevels(hostRows ?? [], Date.now());
+  const shownHosts = allHosts ? hosts : hosts.slice(0, HOSTS_COLLAPSED);
 
   const overview = (
     <View style={styles.section} testID="server-overview">
@@ -175,6 +195,31 @@ export default function ServerScreen({
       </View>
     </View>
   );
+
+  const hostPanel = hosts.length ? (
+    <View style={styles.section}>
+      <View style={styles.sectionHead}>
+        <Text style={styles.sectionTitle}>机器</Text>
+        <Text style={styles.sectionMeta} numberOfLines={1}>
+          {`${hosts.length} 台${unreported ? ` · ${unreported} 个节点未上报` : ''} · 在线 / 节点数`}
+        </Text>
+      </View>
+      <View style={styles.panel} testID="server-hosts">
+        {shownHosts.map((h, i) => (
+          <HostRow key={h.hostname} host={h} wide={wide} first={i === 0} onPress={onOpenAgents ? () => onOpenAgents?.({ host: h.hostname, aliases: h.aliases }) : undefined} />
+        ))}
+        {hosts.length > HOSTS_COLLAPSED ? (
+          <Pressable
+            testID="server-hosts-toggle"
+            onPress={() => setAllHosts(v => !v)}
+            style={({ pressed }) => [styles.groupRow, styles.groupRowBorder, styles.groupMore, pressed && styles.pressedRow]}
+          >
+            <Text style={styles.linkText}>{allHosts ? '收起' : `全部 ${hosts.length} 台`}</Text>
+          </Pressable>
+        ) : null}
+      </View>
+    </View>
+  ) : null;
 
   const groupPanel = groups.length ? (
     <View style={styles.section}>
@@ -368,6 +413,7 @@ export default function ServerScreen({
         <View style={styles.columns} testID="server-two-column">
           <View style={styles.colMain}>
             {overview}
+            {hostPanel}
             {groupPanel}
           </View>
           <View style={styles.colSide}>
@@ -379,6 +425,7 @@ export default function ServerScreen({
       ) : (
         <View testID="server-one-column">
           {overview}
+          {hostPanel}
           {connection}
           {actionPanel}
           {switcher}
@@ -386,6 +433,92 @@ export default function ServerScreen({
         </View>
       )}
     </ScrollView>
+  );
+}
+
+const METERS = [
+  { key: 'cpu', label: 'CPU' },
+  { key: 'mem', label: '内存' },
+  { key: 'disk', label: '磁盘' },
+] as const;
+
+function toneColor(tone: LevelTone, stale: boolean): string | undefined {
+  if (stale) return colors.textMuted;
+  return { ok: colors.running, warn: colors.blocked, danger: colors.failed, none: undefined }[tone];
+}
+
+/** 一根水位条。缺数据 = 只有轨道(不画 0% 的条);过期 = 灰色。 */
+function MeterBar({ meter, stale, testID, grow }: { meter: Meter; stale: boolean; testID: string; grow?: boolean }) {
+  const fill = toneColor(meter.tone, stale);
+  return (
+    <View style={[styles.meterTrack, grow && styles.meterTrackGrow]} testID={testID}>
+      {meter.pct != null && fill ? (
+        <View style={[styles.meterFill, { width: `${Math.max(2, Math.round(meter.pct))}%`, backgroundColor: fill }, stale && styles.meterFillStale]} />
+      ) : null}
+    </View>
+  );
+}
+
+/**
+ * 一台机器。宽屏:左边固定宽的名字列,右边三列等宽(CPU / 内存 / 磁盘),每列「标签 … 百分比」/ 条 / 细节。
+ * 窄屏:名字一行,下面三行「标签 | 条 | 百分比 · 细节」,标签列定宽 —— 两种布局里条的左边缘逐行对齐。
+ */
+function HostRow({ host: h, wide, first, onPress }: { host: HostLevel; wide: boolean; first: boolean; onPress?: () => void }) {
+  const pctColor = (m: Meter) => (h.stale ? colors.textMuted : m.tone === 'danger' ? colors.failed : colors.text);
+  const name = (
+    <View style={wide ? styles.hostNameCol : styles.hostHeadPhone}>
+      <Text style={[styles.hostName, h.stale && styles.hostNameStale]} numberOfLines={1} testID={`server-host-name-${h.hostname}`}>{h.hostname}</Text>
+      <Text style={styles.hostNodes} numberOfLines={1}>
+        <Text style={styles.groupOnline}>{h.online}</Text>
+        <Text>{`/${h.total} 节点`}</Text>
+      </Text>
+      {h.staleLabel ? (
+        <View style={styles.staleTag} testID={`server-host-stale-${h.hostname}`}>
+          <Ionicons name="time-outline" size={11} color={colors.textMuted} />
+          <Text style={styles.staleText} numberOfLines={1}>{h.staleLabel}</Text>
+        </View>
+      ) : null}
+    </View>
+  );
+  const a11y = `${h.hostname} ${h.online}/${h.total} 节点在线 · ${METERS.map(m => `${m.label} ${h[m.key].value}`).join(' · ')}${h.staleLabel ? ` · ${h.staleLabel}` : ''},查看节点`;
+  return (
+    <Pressable
+      testID={`server-host-${h.hostname}`}
+      accessibilityRole="button"
+      accessibilityLabel={a11y}
+      disabled={!onPress}
+      onPress={onPress}
+      style={({ pressed }) => [wide ? styles.hostRowWide : styles.hostRowPhone, !first && styles.groupRowBorder, pressed && styles.pressedRow]}
+    >
+      {name}
+      {wide ? (
+        <View style={styles.hostMetersWide}>
+          {METERS.map(m => (
+            <View key={m.key} style={styles.meterColWide}>
+              <View style={styles.meterHead}>
+                <Text style={styles.meterLabel}>{m.label}</Text>
+                <Text style={[styles.meterPct, { color: pctColor(h[m.key]) }]}>{h[m.key].value}</Text>
+              </View>
+              <MeterBar meter={h[m.key]} stale={h.stale} testID={`server-host-bar-${m.key}-${h.hostname}`} />
+              <Text style={styles.meterDetail} numberOfLines={1}>{h[m.key].detail}</Text>
+            </View>
+          ))}
+        </View>
+      ) : (
+        <View style={styles.hostMetersPhone}>
+          {METERS.map(m => (
+            <View key={m.key} style={styles.meterLinePhone}>
+              <Text style={styles.meterLabelPhone}>{m.label}</Text>
+              <MeterBar meter={h[m.key]} stale={h.stale} grow testID={`server-host-bar-${m.key}-${h.hostname}`} />
+              <Text style={styles.meterValuePhone} numberOfLines={1}>
+                <Text style={[styles.meterPct, { color: pctColor(h[m.key]) }]}>{h[m.key].value}</Text>
+                {h[m.key].detail !== '—' ? <Text style={styles.meterDetailInline}>{`  ${h[m.key].detail}`}</Text> : null}
+              </Text>
+            </View>
+          ))}
+        </View>
+      )}
+    </Pressable>
   );
 }
 
@@ -493,6 +626,30 @@ const makeStyles = () =>
     groupCount: { color: colors.textMuted, fontSize: type.small, minWidth: 52, textAlign: 'right', fontVariant: ['tabular-nums'] },
     groupOnline: { color: colors.text, fontWeight: weight.medium },
     groupMore: { justifyContent: 'center' },
+    hostRowWide: { flexDirection: 'row', alignItems: 'center', gap: spacing.lg, paddingHorizontal: spacing.md, paddingVertical: spacing.md },
+    hostRowPhone: { paddingHorizontal: spacing.md, paddingVertical: spacing.md, gap: spacing.sm },
+    hostNameCol: { width: 128, gap: 2 },
+    hostHeadPhone: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+    hostName: { color: colors.text, fontSize: type.body, fontWeight: weight.medium, flexShrink: 1 },
+    hostNameStale: { color: colors.textSecondary },
+    hostNodes: { color: colors.textMuted, fontSize: type.small, fontVariant: ['tabular-nums'] },
+    staleTag: { flexDirection: 'row', alignItems: 'center', gap: 3, alignSelf: 'flex-start', paddingHorizontal: 6, height: 18, borderRadius: radius.pill, backgroundColor: colors.subtleFill },
+    staleText: { color: colors.textMuted, fontSize: type.caption },
+    hostMetersWide: { flex: 1, minWidth: 0, flexDirection: 'row', gap: spacing.lg },
+    meterColWide: { flex: 1, flexBasis: 0, minWidth: 0, gap: 4 },
+    meterHead: { flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between', gap: spacing.xs },
+    meterLabel: { color: colors.textSecondary, fontSize: type.small },
+    meterPct: { fontSize: type.small, fontWeight: weight.medium, fontVariant: ['tabular-nums'] },
+    meterDetail: { color: colors.textMuted, fontSize: type.caption, fontVariant: ['tabular-nums'] },
+    meterTrackGrow: { flex: 1, minWidth: 0 },
+    meterTrack: { height: 6, borderRadius: radius.pill, backgroundColor: colors.subtleFill, overflow: 'hidden' },
+    meterFill: { height: 6, borderRadius: radius.pill },
+    meterFillStale: { opacity: 0.55 },
+    hostMetersPhone: { gap: 6 },
+    meterLinePhone: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, minHeight: 20 },
+    meterLabelPhone: { color: colors.textSecondary, fontSize: type.small, width: 32 },
+    meterValuePhone: { width: 148, textAlign: 'right', fontVariant: ['tabular-nums'] },
+    meterDetailInline: { color: colors.textMuted, fontSize: type.caption, fontWeight: weight.regular },
     linkText: { color: colors.accent, fontSize: type.small, fontWeight: weight.medium },
 
     row: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, paddingHorizontal: spacing.md, minHeight: 44 },

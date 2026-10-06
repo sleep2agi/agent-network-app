@@ -254,6 +254,10 @@
       "kind": "stub",
       "secs": 150
     },
+    "test-server-host-levels/drive.mjs": {
+      "kind": "stub",
+      "secs": 15
+    },
     "test-settings-redesign/drive.mjs": {
       "kind": "stub",
       "secs": 27
