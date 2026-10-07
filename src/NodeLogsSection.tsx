@@ -52,7 +52,7 @@ export function NodeLogsSection({ cfg, alias, node, session, pointer }: NodeLogs
       </Card>
     );
   }
-  return <LogsViewer cfg={cfg} target={target} alias={s.alias} pointer={pointer} />;
+  return <LogsViewer cfg={cfg} target={target} alias={s.alias} pointer={pointer} session={session} />;
 }
 
 type Phase = 'loading' | 'ready' | 'error';
@@ -71,7 +71,7 @@ function useForeground(): boolean {
   return fg;
 }
 
-function LogsViewer({ cfg: cfgProp, target: targetProp, alias, pointer }: { cfg: HubConfig; target: RulesTarget; alias: string; pointer: boolean }) {
+function LogsViewer({ cfg: cfgProp, target: targetProp, alias, pointer, session }: { cfg: HubConfig; target: RulesTarget; alias: string; pointer: boolean; session: Session }) {
   // 节点页每 10 秒轮询一次,父组件每次都给出新的 target / cfg 对象。按内容固定下来 —— 否则 fetchTail 换身份,
   // 整页重读每 10 秒触发一次,跟随关掉了日志照样在刷(measure.mjs「stops when off」量出来的)。
   const targetKey = `${targetProp.node_id ?? ''}|${targetProp.alias}`;
@@ -100,6 +100,9 @@ function LogsViewer({ cfg: cfgProp, target: targetProp, alias, pointer }: { cfg:
   const searchRef = useRef<any>(null);
   const scrollRef = useRef<any>(null);
   useEffect(() => () => { cancelled.current = true; }, []);
+  // 失败文案要用节点上报的版本;放 ref 里,别让 session 每轮轮询换对象就重建 fetchTail(会触发整页重读)。
+  const sessionRef = useRef(session);
+  sessionRef.current = session;
 
   // 一次请求:发 → 等终态 → 解析。节点上一条还没答完(单飞)就先等它结束再发自己的。
   const fetchTail = useCallback(async (query: ReturnType<typeof logsQuery>): Promise<Fetched | null> => {
@@ -115,7 +118,7 @@ function LogsViewer({ cfg: cfgProp, target: targetProp, alias, pointer }: { cfg:
       const res = await waitForRulesFileResult(cfg, enq.request_id, { nextDelayMs: nextPollDelayMs, isTerminal, isCancelled: () => cancelled.current });
       if (cancelled.current) return null;
       if (!res.ok) return { ok: false, message: res.error };
-      if (res.status !== 'done') return { ok: false, message: logsStatusMessage(res.status, res.error) };
+      if (res.status !== 'done') return { ok: false, message: logsStatusMessage(res.status, res.error, sessionRef.current) };
       // 读后即删:同一个结果被读过(比如重复挂载)就再要一次,不给人看「内容已过期」。
       if (res.content_purged || typeof res.content !== 'string') continue;
       const tail = parseLogsTail(res.content);

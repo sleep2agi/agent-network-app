@@ -10,6 +10,7 @@
 
 import type { RulesTarget, Session } from './api';
 import { compareNodeVersion, isAgentNodeSession } from './node-rules';
+import { unknownOpMessage } from './node-op-unsupported';
 
 export type NodeFileType = 'dir' | 'file' | 'symlink' | 'other';
 export type HiddenReason = 'secret' | 'skipped';
@@ -280,7 +281,7 @@ export function fileNotice(f: NodeFileContent): string {
   }
 }
 
-export function filesStatusMessage(status: 'pending' | 'in_progress' | 'done' | 'failed' | 'timeout', error: string | null): string {
+export function filesStatusMessage(status: 'pending' | 'in_progress' | 'done' | 'failed' | 'timeout', error: string | null, session?: Pick<Session, 'agent' | 'version'> | null): string {
   switch (status) {
     case 'pending':
     case 'in_progress':
@@ -288,7 +289,7 @@ export function filesStatusMessage(status: 'pending' | 'in_progress' | 'done' | 
     case 'done':
       return '';
     case 'failed':
-      return `节点读取失败:${friendlyNodeError(error)}`;
+      return unknownOpMessage(error, session) ?? `节点读取失败:${friendlyNodeError(error)}`;
     case 'timeout':
       // 只对上报了 files_capable 的会话发请求,所以超时不是版本问题。
       return '节点 60 秒内没有取走这次请求:多半是节点和服务器之间的实时连接断了,或节点卡住了;重启这个节点通常能恢复';

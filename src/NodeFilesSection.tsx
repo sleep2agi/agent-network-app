@@ -52,7 +52,7 @@ export function NodeFilesSection({ cfg, alias, node, session, treeMode = 'none' 
       </Card>
     );
   }
-  return <FilesBrowser cfg={cfg} target={target} treeMode={treeMode} />;
+  return <FilesBrowser cfg={cfg} target={target} treeMode={treeMode} session={session} />;
 }
 
 type Phase = 'loading' | 'ready' | 'error';
@@ -62,7 +62,7 @@ type DirResult = { ok: true; listing: NodeFilesListing } | { ok: false; message:
 // 树的状态按节点存在模块里:离开分区再回来(组件重建)不重新列(node-files-tree.ts FilesTreeCache)。
 const treeCache = new FilesTreeCache();
 
-function FilesBrowser({ cfg, target, treeMode }: { cfg: HubConfig; target: RulesTarget; treeMode: FilesTreeMode }) {
+function FilesBrowser({ cfg, target, treeMode, session }: { cfg: HubConfig; target: RulesTarget; treeMode: FilesTreeMode; session: Session }) {
   const key = `${cfg.profileId ?? cfg.serverUrl}|${target.node_id ?? ''}|${target.alias}`;
   const [dir, setDir] = useState('');
   const [listing, setListing] = useState<NodeFilesListing | null>(null);
@@ -82,6 +82,9 @@ function FilesBrowser({ cfg, target, treeMode }: { cfg: HubConfig; target: Rules
   const chain = useRef<Promise<unknown>>(Promise.resolve());
   const inflight = useRef(new Map<string, Promise<DirResult | null>>());
   useEffect(() => () => { cancelled.current = true; }, []);
+  // 失败文案要用节点上报的版本;放 ref,不进 useCallback 依赖(session 每轮轮询都是新对象)。
+  const sessionRef = useRef(session);
+  sessionRef.current = session;
 
   const updateTree = useCallback((fn: (s: FilesTreeState) => FilesTreeState) => {
     const next = fn(treeRef.current);
@@ -123,7 +126,7 @@ function FilesBrowser({ cfg, target, treeMode }: { cfg: HubConfig; target: Rules
       const problem = resultProblem(res);
       if (problem !== null) out = { ok: false, message: problem };
       else if (!res.ok) out = { ok: false, message: res.error };
-      else if (res.status !== 'done') out = { ok: false, message: filesStatusMessage(res.status, res.error) };
+      else if (res.status !== 'done') out = { ok: false, message: filesStatusMessage(res.status, res.error, sessionRef.current) };
       else {
         const l = parseFilesListing(res.content);
         out = l ? { ok: true, listing: l } : { ok: false, message: '节点返回的目录内容无法解析' };
@@ -165,7 +168,7 @@ function FilesBrowser({ cfg, target, treeMode }: { cfg: HubConfig; target: Rules
     const problem = resultProblem(res);
     if (problem !== null) { setFilePhase('error'); setFileMsg(problem); return; }
     if (!res.ok) return;
-    if (res.status !== 'done') { setFilePhase('error'); setFileMsg(filesStatusMessage(res.status, res.error)); return; }
+    if (res.status !== 'done') { setFilePhase('error'); setFileMsg(filesStatusMessage(res.status, res.error, sessionRef.current)); return; }
     const f = parseFileContent(res.content);
     if (!f) { setFilePhase('error'); setFileMsg('节点返回的文件内容无法解析'); return; }
     setFile(f); setFilePhase('ready'); setFileMsg('');
