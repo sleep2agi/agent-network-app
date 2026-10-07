@@ -6,6 +6,7 @@ import { parseTaskOpenAlias } from './due-reminder-notify';
 import { createTrayPusher, trayModelFrom, type TrayModel } from './tray-menu-model';
 import { getUnreadSnapshot, subscribeUnread, type UnreadStoreSnapshot } from './unread-store';
 import { agentUnreadCounts } from './agent-unread-counts';
+import { subscribeNodeRoles } from './daemon-node';
 import { ackAgentUnread } from './agent-ack';
 import { ackAgentMessages, ackUserMessages, type HubConfig } from './api';
 import { markAgentServerUnreadCleared, unackedIdsForAgent } from './unread-store';
@@ -63,7 +64,10 @@ export function bindDesktopTray(
     if (stopped) return;
     void pushTrayModel(trayModelFrom(trayCountsFrom(getUnreadSnapshot()))).catch(error => console.warn('tray update failed', error));
   };
-  const unsubscribe = subscribeUnread(sync);
+  const unsubscribeUnread = subscribeUnread(sync);
+  // #692:守护节点名单(/api/nodes)到了 / 变了,托盘总数要重算(它们不计未读)。
+  const unsubscribeRoles = subscribeNodeRoles(sync);
+  const unsubscribe = () => { unsubscribeUnread(); unsubscribeRoles(); };
   sync();
   // 窗口重新获得焦点 / 页面重新可见时强制重推一次:任何一次推送失败或 Rust 侧状态丢失,
   // 都会在用户回到应用时被纠正,而不是一直挂着旧角标。

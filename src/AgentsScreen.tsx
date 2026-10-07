@@ -247,7 +247,7 @@ export default function AgentsScreen({
   useEffect(() => { bindConversationFlags(cfg); }, [cfg.profileId, cfg.serverUrl, cfg.username]);
   const convFlags = useSyncExternalStore(subscribeConversationFlags, getConversationFlags, getConversationFlags);
   // #692:谁是守护节点来自 App 轮询的 /api/nodes;变了要重画行(红点)。
-  useSyncExternalStore(subscribeNodeRoles, nodeRolesVersion, nodeRolesVersion);
+  const rolesVersion = useSyncExternalStore(subscribeNodeRoles, nodeRolesVersion, nodeRolesVersion);
   const [showHidden, setShowHidden] = useState(false);
   const [hoveredAlias, setHoveredAlias] = useState<string | null>(null);
   const [unreadSnap, setUnreadSnap] = useState(getUnreadSnapshot);
@@ -261,7 +261,8 @@ export default function AgentsScreen({
       ? { serverBody: preview.serverBody, ledger: preview.ledger, replyRows: [], replyUsername: '', replyWatermarks: {} }
       : unreadSnap;
     return { counts: agentUnreadCounts(src), lastAt: latestMessageAtByAgent(src) };
-  }, [preview, unreadSnap]);
+    // rolesVersion:守护节点不计未读(agent-unread-counts.ts),名单变了要重算「新消息」组。
+  }, [preview, unreadSnap, rolesVersion]);
   // Row right column + preview line (phone / two-pane rows): the same snapshot as the counts.
   const latestByAgent = useMemo(() => latestMessageByAgent(preview
     ? { serverBody: preview.serverBody, replyRows: [], replyUsername: '' }
