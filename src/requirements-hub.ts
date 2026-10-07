@@ -1,4 +1,5 @@
 // 需求池走 Hub。手机和电脑读同一份。Hub 还没有这个接口时不要退回本机列表。
+import { ACCEPT_COLUMNS_HEADERS } from './requirement-columns';
 import { editFieldsFromHub, readOnlyFromHub } from './task-access';
 import { appFetch } from './app-fetch';
 import { clearConditionalReads, conditionalHeaders, readConditionalText } from './conditional-get';
@@ -139,7 +140,7 @@ async function call(cfg: HubConfig, path: string, init?: RequestInit): Promise<u
       (async () => {
         const res = await appFetch(`${cfg.serverUrl}${path}`, {
           ...init,
-          headers: { Authorization: `Bearer ${cfg.token}`, 'Content-Type': 'application/json', ...(isRead ? conditionalHeaders(cfg, path) : {}) },
+          headers: { Authorization: `Bearer ${cfg.token}`, 'Content-Type': 'application/json', ...ACCEPT_COLUMNS_HEADERS, ...(isRead ? conditionalHeaders(cfg, path) : {}) },
           signal: ctrl.signal,
         });
         status = res.status;
@@ -354,7 +355,7 @@ export const PARENT_REJECTED = '不能挂到这个母任务下(会形成循环,�
 export async function updateRequirementOnHub(cfg: HubConfig, id: string, patch: EditPatch): Promise<Requirement> {
   const res = await appFetch(`${cfg.serverUrl}${scoped(cfg, `/api/requirements/${encodeURIComponent(id)}`)}`, {
     method: 'PATCH',
-    headers: { Authorization: `Bearer ${cfg.token}`, 'Content-Type': 'application/json' },
+    headers: { Authorization: `Bearer ${cfg.token}`, 'Content-Type': 'application/json', ...ACCEPT_COLUMNS_HEADERS },
     body: JSON.stringify(patch),
   });
   const data = await res.json().catch(() => null) as { requirement?: unknown; error?: string; message?: unknown } | null;
@@ -388,7 +389,7 @@ export async function updateRequirementOnHub(cfg: HubConfig, id: string, patch: 
 export async function setRequirementArchivedOnHub(cfg: HubConfig, id: string, archived: boolean): Promise<Requirement> {
   const res = await appFetch(`${cfg.serverUrl}${scoped(cfg, `/api/requirements/${encodeURIComponent(id)}`)}`, {
     method: 'PATCH',
-    headers: { Authorization: `Bearer ${cfg.token}`, 'Content-Type': 'application/json' },
+    headers: { Authorization: `Bearer ${cfg.token}`, 'Content-Type': 'application/json', ...ACCEPT_COLUMNS_HEADERS },
     body: JSON.stringify({ archived }),
   });
   const data = await res.json().catch(() => null) as { requirement?: unknown; message?: unknown } | null;
@@ -414,7 +415,7 @@ export async function probeAgentOwnerSupport(cfg: HubConfig): Promise<boolean> {
     return await withDeadline((async () => {
       const res = await appFetch(`${cfg.serverUrl}${scoped(cfg, '/api/requirements/__capability_probe__')}`, {
         method: 'PATCH',
-        headers: { Authorization: `Bearer ${cfg.token}`, 'Content-Type': 'application/json' },
+        headers: { Authorization: `Bearer ${cfg.token}`, 'Content-Type': 'application/json', ...ACCEPT_COLUMNS_HEADERS },
         body: JSON.stringify({ agent_owner: null }),
       });
       const data = await res.json().catch(() => null) as { error?: string } | null;
@@ -432,7 +433,7 @@ export async function probeAgentOwnerSupport(cfg: HubConfig): Promise<boolean> {
 export async function setChecklistItemOnHub(cfg: HubConfig, id: string, itemId: string, done: boolean): Promise<Requirement> {
   const res = await appFetch(`${cfg.serverUrl}${scoped(cfg, `/api/requirements/${encodeURIComponent(id)}/checklist/${encodeURIComponent(itemId)}`)}`, {
     method: 'PATCH',
-    headers: { Authorization: `Bearer ${cfg.token}`, 'Content-Type': 'application/json' },
+    headers: { Authorization: `Bearer ${cfg.token}`, 'Content-Type': 'application/json', ...ACCEPT_COLUMNS_HEADERS },
     body: JSON.stringify({ done }),
   });
   const data = await res.json().catch(() => null) as { requirement?: unknown; error?: string } | null;
@@ -529,7 +530,7 @@ async function projectCall(cfg: HubConfig, path: string, init?: RequestInit): Pr
   const got = await withDeadline((async () => {
     const res = await appFetch(`${cfg.serverUrl}${scoped(cfg, path)}`, {
       ...init,
-      headers: { Authorization: `Bearer ${cfg.token}`, 'Content-Type': 'application/json' },
+      headers: { Authorization: `Bearer ${cfg.token}`, 'Content-Type': 'application/json', ...ACCEPT_COLUMNS_HEADERS },
     });
     return { status: res.status, data: await res.json().catch(() => null) };
   })(), deadlineMs, () => null);

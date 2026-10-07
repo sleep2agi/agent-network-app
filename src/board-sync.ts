@@ -76,7 +76,8 @@ function hubOrder(a: Requirement, b: Requirement): number {
 export function recountChildren(items: readonly Requirement[]): Requirement[] {
   const counts = new Map<string, { total: number; done: number }>();
   for (const item of items) {
-    if (!item.parentId || item.archived) continue;
+    // 废弃的子卡不算进度(与 Hub #2490 同口径:total 里减掉)。
+    if (!item.parentId || item.archived || item.column === 'abandoned') continue;
     const c = counts.get(item.parentId) ?? { total: 0, done: 0 };
     c.total += 1;
     if (item.column === 'done') c.done += 1;

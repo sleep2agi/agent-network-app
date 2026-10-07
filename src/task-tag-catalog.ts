@@ -2,6 +2,7 @@
 // 标签本身只是卡片 tags 数组里的字符串;Hub 另存可选的颜色,并在 GET /api/requirements/tags 带回
 // counts(每个标签用了几张卡)/ colors / can_manage。旧 Hub 只回 tags:这里照样能读(做补全),
 // 但 ops = false,界面不给「管理标签」。
+import { ACCEPT_COLUMNS_HEADERS } from './requirement-columns';
 import type { HubConfig } from './api';
 import { appFetch } from './app-fetch';
 import { withDeadline } from './deadline';
@@ -53,7 +54,7 @@ const scopedPath = (cfg: HubConfig, path: string) => (cfg.networkId ? `${path}?n
 
 export async function fetchTagCatalog(cfg: HubConfig, deadlineMs = 15_000): Promise<TagCatalog | null> {
   const got = await withDeadline((async () => {
-    const res = await appFetch(`${cfg.serverUrl}${scopedPath(cfg, '/api/requirements/tags')}`, { headers: { Authorization: `Bearer ${cfg.token}` } });
+    const res = await appFetch(`${cfg.serverUrl}${scopedPath(cfg, '/api/requirements/tags')}`, { headers: { Authorization: `Bearer ${cfg.token}`, ...ACCEPT_COLUMNS_HEADERS } });
     if (!res.ok) return null;
     return catalogFromHub(await res.json().catch(() => null));
   })(), deadlineMs, () => null);
@@ -78,7 +79,7 @@ export async function runTagOp(cfg: HubConfig, op: TagOp, deadlineMs = 20_000): 
   const got = await withDeadline((async () => {
     const res = await appFetch(`${cfg.serverUrl}${scopedPath(cfg, '/api/requirements/tags/ops')}`, {
       method: 'POST',
-      headers: { Authorization: `Bearer ${cfg.token}`, 'Content-Type': 'application/json' },
+      headers: { Authorization: `Bearer ${cfg.token}`, 'Content-Type': 'application/json', ...ACCEPT_COLUMNS_HEADERS },
       body: JSON.stringify(op),
     });
     return { status: res.status, data: await res.json().catch(() => null) as any };

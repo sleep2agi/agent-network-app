@@ -60,6 +60,11 @@ export interface BoardFilter {
   statuses?: ReqColumn[];
   /** 快捷筛选「已逾期」(#493):只看逾期且未完成 / 未归档的卡(判据 due-marker.ts isOverdue,与红色胶囊同源)。 */
   overdue?: boolean;
+  /**
+   * 「废弃」(#724)默认不显示:状态筛选为空(=「全部」)时也不含废弃的卡,看板上那一列收起。
+   * true = 连废弃的一起显示;状态筛选里显式选了「废弃」也算。
+   */
+  showAbandoned?: boolean;
 }
 
 export const NO_PROJECT = '__none__';
@@ -68,8 +73,12 @@ export const EMPTY_FILTER: BoardFilter = { owners: [], priorities: [] };
 
 export const filterActive = (f: BoardFilter): boolean => f.owners.length > 0 || f.priorities.length > 0 || !!f.project || !!f.statuses?.length || !!f.tag || !!f.participant || !!f.overdue;
 
-/** 状态筛选里的「隐藏已完成」= 只选需求池 + 进行中。 */
-export const HIDE_DONE: readonly ReqColumn[] = REQ_COLUMNS.filter(c => c !== 'done');
+/** 状态筛选里的「隐藏已完成」= 只选需求池 + 进行中(废弃本来就默认不显示)。 */
+export const HIDE_DONE: readonly ReqColumn[] = REQ_COLUMNS.filter(c => c !== 'done' && c !== 'abandoned');
+
+/** 废弃的卡这次显不显示:显式打开开关,或状态筛选里选了「废弃」。 */
+export const abandonedShown = (f: Pick<BoardFilter, 'showAbandoned' | 'statuses'>): boolean =>
+  !!f.showAbandoned || !!f.statuses?.includes('abandoned');
 export const hidesDone = (statuses: readonly ReqColumn[] | undefined): boolean =>
   !!statuses && statuses.length === HIDE_DONE.length && HIDE_DONE.every(c => statuses.includes(c));
 /** 点「隐藏已完成」:已经是这个组合就清空(回到全部),否则换成它。 */
@@ -82,6 +91,7 @@ export function matchesFilter(item: Requirement, f: BoardFilter, at: DueAt = {})
   if (f.participant && !item.participants?.some(r => personKey(r) === f.participant)) return false;
   if (f.priorities.length && !f.priorities.includes(item.priority)) return false;
   if (f.statuses?.length && !f.statuses.includes(item.column)) return false;
+  if (item.column === 'abandoned' && !abandonedShown(f)) return false;
   if (f.project) {
     if (f.project === NO_PROJECT ? !!item.projectId : item.projectId !== f.project) return false;
   }
@@ -98,7 +108,7 @@ export const hasSubRequirements = (item: Pick<Requirement, 'parentId'>): boolean
 export const childrenOf = (items: readonly Requirement[], id: string): Requirement[] =>
   sortColumnByStatus(items.filter(i => i.parentId === id));
 
-const STATUS_RANK: Record<ReqColumn, number> = { doing: 0, pool: 1, done: 2 };
+const STATUS_RANK: Record<ReqColumn, number> = { doing: 0, pool: 1, done: 2, abandoned: 3 };
 const sortColumnByStatus = (list: Requirement[]): Requirement[] =>
   [...list].sort((a, b) => STATUS_RANK[a.column] - STATUS_RANK[b.column] || (a.createdAt < b.createdAt ? -1 : 1));
 
@@ -118,7 +128,8 @@ export function ancestorsOf(items: readonly Requirement[], item: Requirement): R
 /** 子需求进度:优先用 Hub 给的计数(含不在当前筛选里的子需求);没有就按当前列表数。 */
 export function subProgress(items: readonly Requirement[], item: Requirement): { done: number; total: number } {
   if (item.children) return item.children;
-  const kids = items.filter(i => i.parentId === item.id);
+  // 废弃的子需求不算进度(Hub #2490 同口径)。
+  const kids = items.filter(i => i.parentId === item.id && i.column !== 'abandoned');
   return { total: kids.length, done: kids.filter(k => k.column === 'done').length };
 }
 
@@ -191,7 +202,17 @@ export function toggleIn<T>(list: readonly T[], value: T): T[] {
 /** 看板三列:先筛再分组,列里的数就是筛过之后的数(与看到的卡片一致)。 */
 /** 看板的列 / 手机列表的分组:按状态筛了就只留选中的列(剩下的列平分宽度)。 */
 export const boardColumns = (items: readonly Requirement[], f: BoardFilter, at: DueAt = {}) =>
-  columnsOf(applyFilter(items, f, at)).filter(col => !f.statuses?.length || f.statuses.includes(col.column));
+  columnsOf(applyFilter(items, f, at)).filter(col => (!f.statuses?.length || f.statuses.includes(col.column)) && (col.column !== 'abandoned' || abandonedShown(f)));
+
+/**
+ * 当前筛选下被藏起来的废弃卡数(#724):看板收起的那一列、列表「显示废弃」开关上的数字。
+ * 与展开后看到的张数同源(同一个 applyFilter,只多一个 showAbandoned)。已经显示时为 0。
+ */
+export function hiddenAbandonedCount(items: readonly Requirement[], f: BoardFilter, at: DueAt = {}): number {
+  if (abandonedShown(f)) return 0;
+  if (f.statuses?.length) return 0; // 选了具体状态且没选废弃:用户要的就是那几列,不提示
+  return applyFilter(items, { ...f, showAbandoned: true }, at).filter(i => i.column === 'abandoned').length;
+}
 
 // ── 桌面左栏:全部 / 我负责的 / 我参与的 / 按节点 ─────────────────────────────
 
@@ -338,7 +359,7 @@ export interface SortSpec { key: SortKey; dir: 'asc' | 'desc' }
 export const DEFAULT_SORT: SortSpec = { key: 'status', dir: 'asc' };
 
 const PRIORITY_RANK: Record<ReqPriority, number> = { high: 0, normal: 1, low: 2, lowest: 3 };
-const COLUMN_RANK: Record<ReqColumn, number> = { pool: 0, doing: 1, done: 2 };
+const COLUMN_RANK: Record<ReqColumn, number> = { pool: 0, doing: 1, done: 2, abandoned: 3 };
 
 /** 点表头:同一列再点一次反向,换列从升序开始。 */
 export const nextSort = (cur: SortSpec, key: SortKey): SortSpec =>
@@ -505,9 +526,13 @@ export function dropIndex(target: readonly Requirement[], dragged: Requirement, 
 }
 
 /** 键盘换列:Shift+← / Shift+→(到头不动)。 */
+/** 键盘 Shift+←/→ 换列只在 需求池 / 进行中 / 完成 之间走;废弃要显式选(旧 Hub 上也不会误写它)。 */
+const FLOW: readonly ReqColumn[] = ['pool', 'doing', 'done'];
 export function neighbourColumn(column: ReqColumn, dir: -1 | 1): ReqColumn | null {
-  const i = REQ_COLUMNS.indexOf(column) + dir;
-  return i >= 0 && i < REQ_COLUMNS.length ? REQ_COLUMNS[i] : null;
+  const at = FLOW.indexOf(column);
+  if (at < 0) return null;
+  const i = at + dir;
+  return i >= 0 && i < FLOW.length ? FLOW[i] : null;
 }
 
 // ── 乐观移动 ─────────────────────────────────────────────────────────────

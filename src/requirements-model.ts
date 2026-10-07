@@ -2,11 +2,12 @@ import { dueInstant, dueValid } from './due-time';
 // 需求池。长期卡片，人新建，存在 Hub 上。不跟 Hub 里正在跑的那条消息混在一起。
 export const REQ_PRIORITIES = ['high', 'normal', 'low', 'lowest'] as const;
 export type ReqPriority = (typeof REQ_PRIORITIES)[number];
-export const REQ_COLUMNS = ['pool', 'doing', 'done'] as const;
+// abandoned = 废弃(#724,关闭态);只在 Hub capabilities 含 column_abandoned 时可选,见 requirement-columns.ts。
+export const REQ_COLUMNS = ['pool', 'doing', 'done', 'abandoned'] as const;
 export type ReqColumn = (typeof REQ_COLUMNS)[number];
 
 export const REQ_PRIORITY_LABEL: Record<ReqPriority, string> = { high: '高', normal: '普通', low: '低', lowest: '极低' };
-export const REQ_COLUMN_LABEL: Record<ReqColumn, string> = { pool: '需求池', doing: '进行中', done: '完成' };
+export const REQ_COLUMN_LABEL: Record<ReqColumn, string> = { pool: '需求池', doing: '进行中', done: '完成', abandoned: '废弃' };
 
 import type { RequirementPersonRef } from './requirement-people';
 

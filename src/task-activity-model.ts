@@ -212,7 +212,7 @@ export type Part =
   | { t: 'comment'; v: string }
   | { t: 'arrow' };
 
-const COLUMNS: readonly string[] = ['pool', 'doing', 'done'];
+const COLUMNS: readonly string[] = ['pool', 'doing', 'done', 'abandoned'];
 const PRIORITIES: readonly string[] = ['high', 'normal', 'low', 'lowest'];
 const str = (v: unknown): string => (typeof v === 'string' ? v : '');
 const refs = (v: unknown): RequirementPersonRef[] => (Array.isArray(v) ? v.map(ref).filter((r): r is RequirementPersonRef => !!r) : []);
@@ -251,7 +251,8 @@ export function describe(e: ActivityEvent): { lead: Part[]; detail: Part[]; done
       const from = COLUMNS.includes(str(o)) ? { t: 'status', v: str(o) as ReqColumn } as Part : null;
       const to = COLUMNS.includes(str(n)) ? { t: 'status', v: str(n) as ReqColumn } as Part : null;
       if (n === 'done') return { lead: [{ t: 'text', key: 'act.done' }], detail: change('column', from, to).detail, done: true };
-      if (o === 'done') return { lead: [{ t: 'text', key: 'act.reopened' }, ...(to ? [to] : [])], detail: change('column', from, to).detail };
+      if (n === 'abandoned') return { lead: [{ t: 'text', key: 'act.abandoned' }], detail: change('column', from, to).detail };
+      if (o === 'done' || o === 'abandoned') return { lead: [{ t: 'text', key: 'act.reopened' }, ...(to ? [to] : [])], detail: change('column', from, to).detail };
       return change('column', from, to);
     }
     case 'priority':

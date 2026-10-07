@@ -3,6 +3,7 @@
 // Owner 2026-09-30:「这里面再来个日历视图吧？就是任务里面再来个日历视图。」
 // 任务按预计完成(due)落在那一天:全天的就是那天;带时刻的按查看者本地时区换算成哪一天,格子里写出本地时刻。
 // 没有期限的不进日历,单独列在「未设期限」。周一开头(和期限选择器的月历 monthGrid 一致)。
+import { isClosedColumn } from './requirement-columns';
 import { addDays, dueToLocal, formatTime, monthGrid, shiftMonth, systemClock, type Clock } from './due-time';
 import type { ReqPriority, Requirement } from './requirements-model';
 import { dayDiff, shiftedDue } from './task-gantt-model';
@@ -31,7 +32,7 @@ const PRIORITY_ORDER: Record<ReqPriority, number> = { high: 0, normal: 1, low: 2
  * 这样格子放不下时,被收进「+N」的是最不急的。
  */
 export function byDayOrder(a: CalendarEntry, b: CalendarEntry): number {
-  const doneA = a.item.column === 'done' ? 1 : 0, doneB = b.item.column === 'done' ? 1 : 0;
+  const doneA = isClosedColumn(a.item.column) ? 1 : 0, doneB = isClosedColumn(b.item.column) ? 1 : 0;
   if (doneA !== doneB) return doneA - doneB;
   if ((a.time === null) !== (b.time === null)) return a.time === null ? -1 : 1;
   if (a.time && b.time && a.time !== b.time) return a.time < b.time ? -1 : 1;
@@ -97,7 +98,7 @@ export const monthAnchorOf = (date: string): string => `${date.slice(0, 7)}-01`;
 /** 手机月历格子下的小点:这天有没完成的任务 = 实心点;只有完成的 = 空心点;没有 = null。 */
 export function dayDot(entries: readonly CalendarEntry[] | undefined): 'open' | 'done' | null {
   if (!entries?.length) return null;
-  return entries.some(e => e.item.column !== 'done') ? 'open' : 'done';
+  return entries.some(e => !isClosedColumn(e.item.column)) ? 'open' : 'done';
 }
 
 /** 手机横滑翻月:横向位移超过阈值、且比竖向位移明显(不是在竖着滚列表)才算。返回 -1 / 1 / 0。 */
@@ -108,7 +109,7 @@ export function swipeDelta(dx: number, dy: number, threshold = 50): number {
 }
 
 /** 逾期:那天已经过了且没完成(时刻型的当天按天算,和甘特图一致)。 */
-export const entryOverdue = (e: CalendarEntry, today: string): boolean => e.date < today && e.item.column !== 'done';
+export const entryOverdue = (e: CalendarEntry, today: string): boolean => e.date < today && !isClosedColumn(e.item.column);
 
 // ── 拖到另一天改期限(桌面,STEP 2) ──
 

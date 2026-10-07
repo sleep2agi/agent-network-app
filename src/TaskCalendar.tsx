@@ -1,4 +1,5 @@
 import { t as tr } from './i18n';
+import { isClosedColumn } from './requirement-columns';
 import { useTranslation } from './i18n-react';
 import { ownerLabel } from './i18n-task-presentation';
 // 任务页的「日历」视图(只读,STEP 1)。逻辑在 task-calendar-model.ts。
@@ -132,7 +133,7 @@ function CalendarDesktop({ items, today, s, onOpen, selectedId, people, terms, o
       >
         <View style={[c.dot, { backgroundColor: priorityColor(e.item.priority) }, (e.item.priority === 'low' || e.item.priority === 'lowest') && { backgroundColor: 'transparent', borderWidth: 1.5, borderColor: priorityColor(e.item.priority) }]} />
         {e.time ? <Text style={c.time}>{e.time}</Text> : null}
-        <Text style={[c.itemText, overdue && { color: colors.failed }, e.item.column === 'done' && s.cardDone]} numberOfLines={1}>{highlight(e.item.name, terms)}</Text>
+        <Text style={[c.itemText, overdue && { color: colors.failed }, isClosedColumn(e.item.column) && s.cardDone]} numberOfLines={1}>{highlight(e.item.name, terms)}</Text>
       </Pressable>
     );
   };
@@ -209,7 +210,7 @@ function CalendarDesktop({ items, today, s, onOpen, selectedId, people, terms, o
           {popover.entries ? popover.entries.map(e => entryRow(e, true)) : (popover.undated ?? []).map(item => (
             <Pressable key={item.id} accessibilityRole="button" accessibilityLabel={item.name} onPress={() => open(item.id)} style={state => [c.popRow, ((state as { hovered?: boolean }).hovered || state.pressed) && { backgroundColor: colors.rowHover }]} testID={`cal-undated-${item.id}`}>
               <PriorityDot p={item.priority} s={s} />
-              <Text style={[c.itemText, item.column === 'done' && s.cardDone]} numberOfLines={1}>{highlight(item.name, terms)}</Text>
+              <Text style={[c.itemText, isClosedColumn(item.column) && s.cardDone]} numberOfLines={1}>{highlight(item.name, terms)}</Text>
               <Text style={[s.muted, { maxWidth: 120 }]} numberOfLines={1}>{ownerLabel(item, people)}</Text>
             </Pressable>
           ))}
@@ -308,7 +309,7 @@ function CalendarPhone({ items, projects, people, today, s, onOpen, terms }: Pro
               testID={`cal-row-${e.item.id}`}
             >
               {projects && e.item.projectId ? <ProjectChip project={projectById.get(e.item.projectId)} s={s} small /> : null}
-              <Text style={[s.cardTitle, e.item.column === 'done' && s.cardDone]} numberOfLines={2}>{highlight(e.item.name, terms)}</Text>
+              <Text style={[s.cardTitle, isClosedColumn(e.item.column) && s.cardDone]} numberOfLines={2}>{highlight(e.item.name, terms)}</Text>
               <View style={s.meta}>
                 <PriorityDot p={e.item.priority} s={s} />
                 <Text style={[s.metaText, entryOverdue(e, today) && { color: colors.failed }]} numberOfLines={1}>{whenText(e)}</Text>
@@ -327,7 +328,7 @@ function CalendarPhone({ items, projects, people, today, s, onOpen, terms }: Pro
           <View style={s.groupList}>
             {undated.map((item, i) => (
               <Pressable key={item.id} accessibilityRole="button" accessibilityLabel={item.name} onPress={() => onOpen(item.id)} style={state => [s.phoneRow, i === undated.length - 1 && { borderBottomWidth: 0 }, state.pressed && { backgroundColor: colors.rowHover }]} testID={`cal-undated-${item.id}`}>
-                <Text style={[s.cardTitle, item.column === 'done' && s.cardDone]} numberOfLines={2}>{highlight(item.name, terms)}</Text>
+                <Text style={[s.cardTitle, isClosedColumn(item.column) && s.cardDone]} numberOfLines={2}>{highlight(item.name, terms)}</Text>
                 <Text style={s.metaMuted} numberOfLines={1}>{ownerLabel(item, people)}</Text>
               </Pressable>
             ))}

@@ -1,4 +1,5 @@
 import { t as tr } from './i18n';
+import { isClosedColumn } from './requirement-columns';
 import { useTranslation } from './i18n-react';
 import { ownerLabel, personName } from './i18n-task-presentation';
 // 任务页的「甘特图」视图(只读,STEP 1)。逻辑在 task-gantt-model.ts。
@@ -211,7 +212,7 @@ function GanttChart({ items, projects, people, today, s, onOpen, selectedId, sta
           testID={`gantt-name-${l.bar.item.id}`}
         >
           <PriorityDot p={l.bar.item.priority} s={s} />
-          <Text style={[g.nameText, l.bar.item.column === 'done' && s.cardDone]} numberOfLines={1}>{highlight(l.bar.item.name, terms)}</Text>
+          <Text style={[g.nameText, isClosedColumn(l.bar.item.column) && s.cardDone]} numberOfLines={1}>{highlight(l.bar.item.name, terms)}</Text>
         </Pressable>
       )))}
     </View>
@@ -254,7 +255,7 @@ function GanttChart({ items, projects, people, today, s, onOpen, selectedId, sta
                 style={state => [
                   g.bar,
                   { left: geo.x + 1, width: w - 2, top: top + (ROW_H - BAR_H) / 2, backgroundColor: STATUS_TONE[bar.item.column]() },
-                  bar.item.column === 'done' && { opacity: 0.45 },
+                  isClosedColumn(bar.item.column) && { opacity: 0.45 },
                   overdue && g.barOverdue,
                   geo.clippedLeft && g.barClipped,
                   ((state as { hovered?: boolean }).hovered || state.pressed) && g.barHover,
@@ -343,7 +344,7 @@ function UndatedList({ items, projects, people, s, g, onOpen, selectedId, terms 
           testID={`gantt-undated-${item.id}`}
         >
           <PriorityDot p={item.priority} s={s} />
-          <Text style={[g.nameText, item.column === 'done' && s.cardDone]} numberOfLines={1}>{highlight(item.name, terms)}</Text>
+          <Text style={[g.nameText, isClosedColumn(item.column) && s.cardDone]} numberOfLines={1}>{highlight(item.name, terms)}</Text>
           {projects && item.projectId ? <ProjectChip project={projectById.get(item.projectId)} s={s} small /> : null}
           <Text style={[s.muted, { width: 180 }]} numberOfLines={1}>{ownerLabel(item, people)}</Text>
         </Pressable>
@@ -393,7 +394,7 @@ function GanttWeekList({ items, projects, people, today, s, onOpen, terms }: Pro
                   testID={`gantt-week-row-${bar.item.id}`}
                 >
                   {projects && bar.item.projectId ? <ProjectChip project={projectById.get(bar.item.projectId)} s={s} small /> : null}
-                  <Text style={[s.cardTitle, bar.item.column === 'done' && s.cardDone]} numberOfLines={2}>{highlight(bar.item.name, terms)}</Text>
+                  <Text style={[s.cardTitle, isClosedColumn(bar.item.column) && s.cardDone]} numberOfLines={2}>{highlight(bar.item.name, terms)}</Text>
                   <View style={s.meta}>
                     <PriorityDot p={bar.item.priority} s={s} />
                     <Text style={[s.metaText, overdue && { color: colors.failed }]} numberOfLines={1}>
@@ -403,7 +404,7 @@ function GanttWeekList({ items, projects, people, today, s, onOpen, terms }: Pro
                   </View>
                   <View style={g.strip} testID={`gantt-strip-${bar.item.id}`}>
                     {strip.map((on, d) => (
-                      <View key={d} style={[g.stripCell, on && { backgroundColor: STATUS_TONE[bar.item.column](), opacity: bar.item.column === 'done' ? 0.45 : 1 }, d === todayIdx && g.stripToday]} />
+                      <View key={d} style={[g.stripCell, on && { backgroundColor: STATUS_TONE[bar.item.column](), opacity: isClosedColumn(bar.item.column) ? 0.45 : 1 }, d === todayIdx && g.stripToday]} />
                     ))}
                   </View>
                 </Pressable>
@@ -428,7 +429,7 @@ function GanttWeekList({ items, projects, people, today, s, onOpen, terms }: Pro
                 style={state => [s.phoneRow, i === undated.length - 1 && { borderBottomWidth: 0 }, state.pressed && { backgroundColor: colors.rowHover }]}
                 testID={`gantt-undated-${item.id}`}
               >
-                <Text style={[s.cardTitle, item.column === 'done' && s.cardDone]} numberOfLines={2}>{highlight(item.name, terms)}</Text>
+                <Text style={[s.cardTitle, isClosedColumn(item.column) && s.cardDone]} numberOfLines={2}>{highlight(item.name, terms)}</Text>
                 <Text style={s.metaMuted} numberOfLines={1}>{ownerLabel(item, people)}</Text>
               </Pressable>
             ))}

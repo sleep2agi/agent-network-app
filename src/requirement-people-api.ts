@@ -1,4 +1,5 @@
 import { appFetch } from './app-fetch';
+import { ACCEPT_COLUMNS_HEADERS } from './requirement-columns';
 import type { HubConfig } from './api';
 import { uniquePeople, type RequirementPerson, type RequirementPersonRef } from './requirement-people';
 
@@ -27,7 +28,7 @@ export function assignmentsFromHub(value: unknown): RequirementAssignments {
 async function call(cfg: HubConfig, path: string, init?: RequestInit): Promise<any> {
   if (!cfg.networkId) throw new RequirementPeopleError('请先选择网络', 400);
   const response = await appFetch(`${cfg.serverUrl}${path}${path.includes('?') ? '&' : '?'}network_id=${encodeURIComponent(cfg.networkId)}`, {
-    ...init, headers: { Authorization: `Bearer ${cfg.token}`, 'Content-Type': 'application/json' },
+    ...init, headers: { Authorization: `Bearer ${cfg.token}`, 'Content-Type': 'application/json', ...ACCEPT_COLUMNS_HEADERS },
   });
   if (response.status === 404 || response.status === 501) throw new RequirementPeopleError('Hub 不支持此操作，或需求已不存在；请刷新并检查 Hub 版本', response.status);
   if (response.status === 403) throw new RequirementPeopleError('你没有修改人员绑定的权限', 403);

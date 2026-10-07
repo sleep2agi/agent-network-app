@@ -1,4 +1,6 @@
 import { t as tr } from './i18n';
+import { useTaskBoard } from './task-board-store';
+import { statusChoices, supportsAbandoned } from './requirement-columns';
 import { listenEscapeClose } from './escape-close';
 import { useTranslation } from './i18n-react';
 import { taskText } from './i18n-tasks';
@@ -24,7 +26,7 @@ import { projectOptions } from './TaskFieldPickers';
 import TaskDuePicker from './TaskDuePicker';
 import { anchorSelectMenu, filterSelectOptions, type SelectAnchor, type SelectOption } from './task-select-model';
 import { priorityChoices, priorityLabel } from './task-priority';
-import { REQ_COLUMNS, REQ_COLUMN_LABEL, type Requirement, type RequirementProject } from './requirements-model';
+import { REQ_COLUMN_LABEL, type Requirement, type RequirementProject } from './requirements-model';
 import { peopleInNetwork, personKey, type RequirementPerson, type RequirementPersonRef } from './requirement-people';
 import { addIssue, pickOwner, removeIssue, tagAddable, toggleParticipant, toggleTag, type CellEdit } from './task-list-edit-model';
 import { issueLabel } from './requirement-issues';
@@ -53,6 +55,7 @@ export function CellEditor({ item, field, anchor, ctx, onEdit, onClose }: {
 }) {
   useTranslation();
   const s = useTaskStyles();
+  const abandonedOk = useTaskBoard(st => supportsAbandoned(st.capabilities));
   const id = `list-edit-${field}`;
   switch (field) {
     case 'priority':
@@ -61,7 +64,7 @@ export function CellEditor({ item, field, anchor, ctx, onEdit, onClose }: {
         onPick={p => { if (p) onEdit({ field: 'priority', priority: p as Requirement['priority'] }); onClose(); }} />;
     case 'status':
       return <SelectMenu anchor={anchor} touch={false} title={tr('fields.status')} searchable={false} selected={item.column} testID={id} onClose={onClose}
-        options={REQ_COLUMNS.map(c => ({ id: c, label: taskText(REQ_COLUMN_LABEL[c]), color: STATUS_TONE[c]() }))}
+        options={statusChoices(abandonedOk).map(c => ({ id: c, label: taskText(REQ_COLUMN_LABEL[c]), color: STATUS_TONE[c]() }))}
         onPick={c => { if (c) onEdit({ field: 'status', column: c as Requirement['column'] }); onClose(); }} />;
     case 'project':
       return <SelectMenu anchor={anchor} touch={false} title={tr('tasks.copy.30')} searchable selected={item.projectId ?? null} testID={id} onClose={onClose}

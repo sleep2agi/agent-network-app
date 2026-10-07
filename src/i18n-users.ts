@@ -171,6 +171,7 @@ registerTranslations({
   'dept.col.pool': ['需求池', 'Backlog'],
   'dept.col.doing': ['进行中', 'In progress'],
   'dept.col.done': ['已完成', 'Done'],
+  'dept.col.abandoned': ['已废弃', 'Abandoned'],
   'dept.unassigned': ['未分配', 'Unassigned'],
   'dept.agents.empty': ['本部门成员还没有 Agent', 'People in this department have no Agents yet'],
   'dept.agents.note': ['只读：状态和健康。派活、对话按 Agent 授权。', 'Read-only: status and health. Messaging still follows Agent access.'],
