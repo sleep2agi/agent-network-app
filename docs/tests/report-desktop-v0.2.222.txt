@@ -1,0 +1,9 @@
+desktop v0.2.222 — 任务状态「废弃」;补 0.2.221 说明漏写的「参与人可选 Agent」
+
+A. 本版内容(0.2.221 发版提交 b1ca447 之后 main 上合入的 PR + 本 PR;git log desktop-v0.2.221..origin/main = 1 个提交)
+  #750(看板 #724,App 侧) 任务状态「废弃」abandoned:需求接口读写都带 X-Anet-Accept-Columns: abandoned;状态灰色、标题划线、不逾期,子任务进度不计废弃;看板废弃列默认收起(桌面右侧窄栏 / 手机分页末尾虚线胶囊);列表「全部」默认不含废弃,有「显示已废弃」开关;旧 Hub(列表 capabilities 无 column_abandoned)不出现「废弃」选项、折叠栏和开关。Hub 侧为 sleep2agi/agent-network#2490。
+  说明补漏:#748(参与人可选 Agent)在 0.2.221 版本号 PR 合入前已进 main、随 0.2.221 发出,但 0.2.221 的 What's new 漏写;本 PR 在 releaseBody 的 0.2.221 段补上这一行。
+  本 PR(版本号):0.2.221 → 0.2.222,versionCode 2221 → 2222;release-desktop-auto-update.yml 加 What's new in 0.2.222 并补 0.2.221 一行;node scripts/changelog-bundle.mjs 重新生成 src/changelog-bundled.ts(含 0.2.221 发布日期 2026-10-07T13:31:30Z)。
+  本地:android-release-notes.mjs <workflow> 0.2.222 输出含 What's new in 0.2.222;单测 / typecheck 由本 PR 的 CI 检查跑(本机不构建)。
+B. 验证边界(如实)
+  #750 的验证见该 PR:单测(src/task-abandoned.test.ts)+ Playwright 浏览器(桌面 1280×800 / 手机 390×844)。未在真机或真实桌面壳上看过折叠栏;「废弃」需要 Hub 带 #2490 的版本才出现,旧 Hub 上自动隐藏。
