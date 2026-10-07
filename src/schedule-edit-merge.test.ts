@@ -64,7 +64,8 @@ ck('missing latest ⇒ gone', planConflict(base, undefined, draftOf()).kind === 
 // 7. 表单接线:409 分支不再关表单 / 丢草稿;轮询不重置打开着的表单。
 {
   const { readFileSync } = await import('node:fs');
-  const src = readFileSync(new URL('./ScheduledTasksScreen.tsx', import.meta.url), 'utf8');
+  // 表单在 ScheduleEditor.tsx、保存的 409 分支在 schedule-editor-model.ts(定时任务页和节点页共用)。
+  const src = ['./ScheduledTasksScreen.tsx', './ScheduleEditor.tsx', './schedule-editor-model.ts'].map(f => readFileSync(new URL(f, import.meta.url), 'utf8')).join('\n');
   ck('no onConflict that closes the form', !/onConflict/.test(src));
   ck('409 path goes through planConflict', /planConflict\(row, latest, input\)/.test(src));
   const effect = src.match(/setError\(''\); setConflict\(null\); setBase\(editing\);[\s\S]*?\}, \[([^\]]*)\]\);/);
@@ -78,7 +79,7 @@ ck('missing latest ⇒ gone', planConflict(base, undefined, draftOf()).kind === 
   await import('./i18n-schedules');
   // The screen also renders skip-group rows (#521), whose strings register in schedule-run-groups.
   await import('./schedule-run-groups');
-  const src = readFileSync(new URL('./ScheduledTasksScreen.tsx', import.meta.url), 'utf8');
+  const src = ['./ScheduledTasksScreen.tsx', './ScheduleEditor.tsx', './schedule-editor-model.ts'].map(f => readFileSync(new URL(f, import.meta.url), 'utf8')).join('\n');
   const keys = [...src.matchAll(/\bt\('([\w.]+)'/g)].map(m => m[1]);
   const dynamic = ['name', 'target_node_id', 'task', 'priority', 'timezone', 'schedule', 'misfire_policy'].map(k => `schedules.field.${k}`)
     .concat(['high', 'normal', 'low'].map(k => `schedules.priority.${k}`));

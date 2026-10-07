@@ -72,7 +72,7 @@ const row = (over: Partial<HubScheduledTask> = {}): HubScheduledTask => ({
 // 6. 详情页真的把「复制」接到新建表单(源码层:按钮 + 用 scheduleCopyDraft 预填 + 保存走 createScheduledTask)。
 {
   const { readFileSync } = await import('node:fs');
-  const src = readFileSync(new URL('./ScheduledTasksScreen.tsx', import.meta.url), 'utf8');
+  const src = ['./ScheduledTasksScreen.tsx', './ScheduleEditor.tsx', './schedule-editor-model.ts'].map(f => readFileSync(new URL(f, import.meta.url), 'utf8')).join('\n');
   ck('detail renders the copy action', src.includes("availableActions.includes('copy')") && src.includes("t('schedules.copy.action')"));
   ck('form prefills via scheduleCopyDraft', src.includes('scheduleCopyDraft(copyFrom'));
   const { t: tr } = await import('./i18n');

@@ -84,7 +84,8 @@ await fetchScheduledRuns(cfg, row.schedule_id);
 ck('history is schedule and network scoped', calls.at(-1)!.url.includes('/sched_1/runs?limit=50&network_id=net_alpha'));
 await cancelScheduledTask(cfg, row.schedule_id);
 ck('cancel is soft-delete API verb', calls.at(-1)!.init.method === 'DELETE');
-const screen = readFileSync(new URL('./ScheduledTasksScreen.tsx', import.meta.url), 'utf8');
+// 表单 / 确认框在 ScheduleEditor.tsx,保存的 409 分支在 schedule-editor-model.ts(两个页面共用一个编辑器)。
+const screen = ['./ScheduledTasksScreen.tsx', './ScheduleEditor.tsx', './schedule-editor-model.ts'].map(f => readFileSync(new URL(f, import.meta.url), 'utf8')).join('\n');
 const viewModel = readFileSync(new URL('./scheduled-view-model.ts', import.meta.url), 'utf8');
 const editMerge = readFileSync(new URL('./schedule-edit-merge.ts', import.meta.url), 'utf8');
 ck('mobile detail shows the timezone and the form rejects empty weekly selection',
@@ -101,11 +102,11 @@ ck('mobile detail edits only active or paused schedules and prefill every mutabl
     .every(value => editMerge.includes(value)));
 // 2026-09-29 起:409 不再关表单、不再丢草稿(旧断言钉的「已刷新最新内容，请重新编辑」正是丢草稿那条路径)。
 ck('mobile edit uses full update API and resolves revision conflicts without dropping the draft',
-  screen.includes('await updateScheduledTask(cfg, row, input)') && screen.includes("e.code === 'revision_conflict'") &&
+  screen.includes('update: (row, input) => updateScheduledTask(cfg, row, input)') && screen.includes('await api.update(row, input)') && screen.includes("e.code === 'revision_conflict'") &&
   screen.includes('planConflict(row, latest, input)') && !screen.includes('已刷新最新内容，请重新编辑'));
 ck('cancellation uses an in-app modal and only confirms through the explicit destructive action',
   screen.includes('setCancelCandidate(row)') && screen.includes('<CancelScheduleModal') &&
-  screen.includes('transparent visible={!!value}') && screen.includes('if (row) void act(row, \'cancel\')') &&
+  screen.includes('<ScheduleConfirm visible={!!value} title="取消计划？"') && screen.includes('<Modal transparent visible={visible} animationType="fade" onRequestClose={onClose}>') && screen.includes('if (row) void act(row, \'cancel\')') &&
   screen.includes('onPress={onConfirm}') && screen.includes('取消计划'));
 
 // ── RFC-036 节点外部计划 ────────────────────────────────────────────────

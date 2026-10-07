@@ -89,7 +89,8 @@ const main = async () => {
 
   console.log('# 接线(源码)');
   {
-    const screen = src('./ScheduledTasksScreen.tsx');
+    // 表单(任务内容编辑器 + 保存)在 ScheduleEditor.tsx,409 合并在 schedule-editor-model.ts,详情页仍在 ScheduledTasksScreen.tsx。
+    const screen = ['./ScheduledTasksScreen.tsx', './ScheduleEditor.tsx', './schedule-editor-model.ts'].map(src).join('\n');
     const full = src('./ScheduleContentFullscreen.tsx');
     const api = src('./api.ts');
     const editor = src('./TaskDescriptionEditor.tsx');

@@ -1,7 +1,9 @@
 // 节点页「定时任务」分区:这个节点要执行的计划 —— Hub 计划 + 节点计划(RFC-036),按 node_id 认执行节点。
 // 取数与定时任务页同一套接口(scheduled-tasks / status 的 external_schedules / runs?limit=1),
 // 行怎么画、开关能不能按在 node-schedules.ts(纯函数,node-schedules.test.ts 测)。
-// 点一行 → 定时任务页落在那一条(详情 + 执行记录);「＋ 新建」在节点页的分区标题上,由 NodeDetailScreen 画。
+// 点一行 Hub 计划 → 就地打开定时任务编辑器(ScheduleEditor,与定时任务页同一个;改内容 / 频率 / 暂停 / 立即执行 /
+// 复制 / 取消计划 + 最近执行),不切页面;保存后列表就地刷新。节点计划(crontab 等)没有这些字段,仍去定时任务页。
+// 「＋ 新建」在节点页的分区标题上,由 NodeDetailScreen 画,经 createSeq 打开预填了这个节点的编辑器。
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Switch, View } from 'react-native';
 import { Text } from './ui-text';
@@ -22,8 +24,10 @@ import {
   type HubTask,
 } from './api';
 import { editIntentErrorText } from './ScheduledTasksScreen';
+import ScheduleEditor from './ScheduleEditor';
+import { afterEditorSaved, createEditorFor, editorPropsOf, nodeRowClick, type ScheduleEditorState } from './schedule-editor-model';
 import { runIsOpen } from './schedule-run-result';
-import { NODE_SCHEDULES_EMPTY, externalSchedulesForNode, hubSchedulesForNode, lastRunKey, nodeScheduleRows, type NodeScheduleRow } from './node-schedules';
+import { NODE_SCHEDULES_EMPTY, externalSchedulesForNode, hubSchedulesForNode, lastRunKey, nodeScheduleRows, type NodeScheduleRow, type ScheduleOpenRequest } from './node-schedules';
 import type { StatusTone } from './scheduled-view-model';
 import { colors, onThemeChange, radius, spacing, type as typeScale, weight } from './theme';
 import { usePoll } from './usePoll';
@@ -45,14 +49,16 @@ type Load =
 
 type LastRun = { key: string; run: HubScheduledRun | null; task?: HubTask | null };
 
-export default function NodeSchedulesSection({ cfg, nodeId, onOpen, onCreate }: {
+export default function NodeSchedulesSection({ cfg, nodeId, editable, createSeq = 0, onOpenNodePlan }: {
   cfg: HubConfig;
   /** 权威 node_id(nodes 行,没有再用会话上报的);null = 这个节点不能当执行节点。 */
   nodeId: string | null;
-  /** 点一行:去定时任务页并选中它。没有(独立聊天窗口)时行不可点。 */
-  onOpen?: (row: NodeScheduleRow) => void;
-  /** 空状态里的「新建」;没有时不画。 */
-  onCreate?: () => void;
+  /** 能就地编辑(点行开编辑器、画「新建」)。独立聊天窗口里为 false:行不可点。 */
+  editable: boolean;
+  /** 分区标题上的「＋ 新建」每按一次加一(> 0 才打开):打开预填了这个节点的新建编辑器。 */
+  createSeq?: number;
+  /** 点一行节点计划:去定时任务页的「节点计划」落在那一条(那里能改托管 cron)。 */
+  onOpenNodePlan?: (request: ScheduleOpenRequest) => void;
 }) {
   const [, setThemeTick] = useState(0);
   useEffect(() => onThemeChange(() => setThemeTick(t => t + 1)), []);
@@ -70,6 +76,8 @@ export default function NodeSchedulesSection({ cfg, nodeId, onOpen, onCreate }: 
   const [actionError, setActionError] = useState('');
   // 读成功过一次:之后失败保留上一份结果、只在旁边说错误(与节点页其余区块同一策略)。
   const loadedRef = useRef(false);
+  // 就地编辑器:开着的是哪一条(打开那一刻的行,不跟 10 秒轮询换)。
+  const [editor, setEditor] = useState<ScheduleEditorState | null>(null);
   const lastRunsRef = useRef(lastRuns);
   lastRunsRef.current = lastRuns;
 
@@ -121,7 +129,23 @@ export default function NodeSchedulesSection({ cfg, nodeId, onOpen, onCreate }: 
     }
   }, [cfg, nodeId, refreshLastRuns]);
 
-  useEffect(() => { loadedRef.current = false; setState({ kind: 'loading' }); setHub([]); setExternal([]); setLastRuns({}); }, [nodeId]);
+  useEffect(() => { loadedRef.current = false; setState({ kind: 'loading' }); setHub([]); setExternal([]); setLastRuns({}); setEditor(null); }, [nodeId]);
+  // 分区标题上的「＋ 新建」(NodeDetailScreen 画):执行节点预填为这个节点。
+  // 只认挂载之后的新按动:切走再切回来(分区重新挂载)不会把上一次的「新建」再打开一遍。
+  const seenCreateSeq = useRef(createSeq);
+  useEffect(() => {
+    if (createSeq === seenCreateSeq.current) return;
+    seenCreateSeq.current = createSeq;
+    if (nodeId && editable) setEditor(createEditorFor(nodeId));
+  }, [createSeq]); // eslint-disable-line react-hooks/exhaustive-deps
+  const openCreate = editable && nodeId ? () => setEditor(createEditorFor(nodeId)) : undefined;
+  const openRow = (row: NodeScheduleRow) => {
+    if (!nodeId) return;
+    const click = nodeRowClick(row, hub, nodeId, Date.now());
+    if (click.kind === 'editor') setEditor(click.state);
+    else if (click.kind === 'navigate') onOpenNodePlan?.(click.request);
+  };
+  const rowOpenable = (row: NodeScheduleRow) => editable && (row.source === 'hub' || !!onOpenNodePlan);
   usePoll(load, POLL_MS, [load]);
 
   const toggle = async (row: NodeScheduleRow) => {
@@ -146,6 +170,21 @@ export default function NodeSchedulesSection({ cfg, nodeId, onOpen, onCreate }: 
     }
   };
 
+  const editorView = editable ? (
+    <ScheduleEditor
+      cfg={cfg}
+      visible={!!editor}
+      {...editorPropsOf(editor)}
+      onClose={() => setEditor(null)}
+      onSaved={() => void afterEditorSaved(() => setEditor(null), load)}
+      manage={{
+        onCopy: row => setEditor({ kind: 'copy', row }),
+        onChanged: () => void load(),
+        onCancelled: () => void afterEditorSaved(() => setEditor(null), load),
+      }}
+    />
+  ) : null;
+
   if (!nodeId) {
     return (
       <View style={[s.card, s.padded]} testID="node-schedules-no-id">
@@ -158,6 +197,7 @@ export default function NodeSchedulesSection({ cfg, nodeId, onOpen, onCreate }: 
       <View style={[s.card, s.padded, s.inline]} testID="node-schedules-loading">
         <ActivityIndicator color={colors.textMuted} />
         <Text style={s.muted}>正在读取这个节点的定时任务…</Text>
+        {editorView}
       </View>
     );
   }
@@ -178,8 +218,8 @@ export default function NodeSchedulesSection({ cfg, nodeId, onOpen, onCreate }: 
       {failedFirstRead ? null : rows.length === 0 ? (
         <View style={[s.card, s.empty]} testID="node-schedules-empty">
           <Text style={s.emptyTitle}>{NODE_SCHEDULES_EMPTY}</Text>
-          {onCreate ? (
-            <Pressable onPress={onCreate} accessibilityRole="button" testID="node-schedules-empty-create" style={s.primary}>
+          {openCreate ? (
+            <Pressable onPress={openCreate} accessibilityRole="button" testID="node-schedules-empty-create" style={s.primary}>
               <Text style={s.primaryText}>新建</Text>
             </Pressable>
           ) : null}
@@ -192,12 +232,13 @@ export default function NodeSchedulesSection({ cfg, nodeId, onOpen, onCreate }: 
               row={row}
               last={i === rows.length - 1}
               busy={busyKey === row.key}
-              onOpen={onOpen ? () => onOpen(row) : undefined}
+              onOpen={rowOpenable(row) ? () => openRow(row) : undefined}
               onToggle={() => void toggle(row)}
             />
           ))}
         </View>
       )}
+      {editorView}
     </View>
   );
 }
@@ -231,7 +272,7 @@ function ScheduleRow({ row, last, busy, onOpen, onToggle }: {
         disabled={!onOpen}
         accessibilityRole={onOpen ? 'button' : undefined}
         accessibilityLabel={`${row.sourceLabel},${row.name},${row.frequency}${row.last ? `,上次${row.last.label}` : ''}`}
-        accessibilityHint={onOpen ? '在定时任务页查看详情和执行记录' : undefined}
+        accessibilityHint={onOpen ? (row.source === 'hub' ? '打开编辑器:改内容和频率、暂停、立即执行,看最近执行' : '在定时任务页查看这条节点计划') : undefined}
         testID={`node-schedule-open-${id}`}
         style={(state: { pressed: boolean; hovered?: boolean }) => [s.rowMain, onOpen && (state.hovered || state.pressed) && { backgroundColor: colors.rowHover }]}
       >

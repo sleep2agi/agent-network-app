@@ -53,7 +53,7 @@ const AUDIT: Record<string, { count: number; kinds: Kind[]; input?: boolean; key
   'NodeRulesSection.tsx': { count: 1, kinds: ['fullscreen'], keyboard: 'n/a: 全屏规则编辑,工具栏在顶,正文 flex:1', note: '工具栏在顶,正文 flex:1' },
   'RequirementBoard.tsx': { count: 1, kinds: ['menu'], keyboard: 'n/a: 输入框在看板上,不在筛选菜单这个 Modal 里', note: '筛选菜单 maxHeight = menuMaxHeight(锚点到窗口底)(本次)' },
   'RequirementPeoplePicker.tsx': { count: 2, kinds: ['dialog', 'menu'], keyboard: 'avoider', input: true, note: '面板 85%,ScrollView 直接子节点;搜索框 ⇒ 键盘避让;桌面锚定下拉(审计 L12)= anchorSelectMenu 的 pos.maxHeight + ScrollView flexShrink,确定 / 取消在外,只在有鼠标的宽窗口(无软键盘)' },
-  'ScheduledTasksScreen.tsx': { count: 3, kinds: ['dialog', 'sheet'], input: true, keyboard: 'followup: 表单对话框无键盘避让;iOS 上键盘可能盖住保存行', note: '对话框 min(720,h-48),表单是顶层 ScrollView,按钮在外 / pageSheet 保存在顶栏' },
+  'ScheduleEditor.tsx': { count: 4, kinds: ['dialog', 'sheet'], input: true, keyboard: 'followup: 表单对话框 / 手机底部 sheet 无键盘避让;iOS 上键盘可能盖住表单下半(保存在顶栏,不被盖)', note: '2026-10-07 从 ScheduledTasksScreen 搬来(两个页面共用):桌面对话框 min(720,h-48),表单是顶层 ScrollView,按钮在外;手机全高底部 sheet / pageSheet 保存在顶栏;放弃修改 / 取消计划确认是固定内容小卡片' },
   'MessageSelectOverlay.tsx': { count: 1, kinds: ['menu'], keyboard: 'n/a: 输入框只用来承载原生选区(安卓 showSoftInputOnFocus=false、iOS/web 只读),不弹键盘;打开时先 Keyboard.dismiss(),菜单位置按键盘高度避让(placeSelectMenu)', note: '#537 手机长按就地选区:菜单两行固定条目,placeSelectMenu 夹进可见区;选区卡片 maxHeight = 可见区底 - 卡片顶,超出在 TextInput 里滚' },
   'SettingsScreen.tsx': { count: 4, kinds: ['dialog'], keyboard: 'avoider', input: true, note: '固定内容小确认框;本地删除有输入框 ⇒ 键盘避让(本次)' },
   'SideThreadDrawer.tsx': { count: 1, kinds: ['drawer'], keyboard: 'avoider', input: true, note: '86% / 100% 面板,FlatList 可收缩,自带 KAV(同一套 keyboardAvoidEnabled)' },

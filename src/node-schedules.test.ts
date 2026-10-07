@@ -137,6 +137,7 @@ ck('collect: scans the src directory', posix(here).endsWith('/src'), posix(here)
 const section = read('NodeSchedulesSection.tsx');
 const page = read('NodeDetailScreen.tsx');
 const screen = read('ScheduledTasksScreen.tsx');
+const editor = read('ScheduleEditor.tsx');
 const app = read('../App.tsx');
 const has = (label: string, src: string, needle: string) => ck(`wiring: ${label}`, src.includes(needle), needle);
 has('section reuses the schedules list API', section, 'fetchScheduledTasks(cfg)');
@@ -153,8 +154,17 @@ ck('ui-text: section takes Text from the wrapper, not react-native',
 has('page renders the section', page, '<NodeSchedulesSection');
 has('page: executor id is the authoritative node_id', page, 'node?.node_id ?? s.node_id ?? null');
 has('page: 新建 in the section header', page, 'testID="node-schedules-create"');
-has('page: rows open the schedules screen at that row', page, "{ kind: 'hub', scheduleId: row.scheduleId, seq: Date.now() }");
-has('screen: create prefills the executor', screen, "setTarget(initialTarget ?? '')");
+// 2026-10-07:点一行 Hub 计划 / 「＋ 新建」就在节点页打开编辑器(ScheduleEditor),不再跳去定时任务页。
+ck('page: rows no longer navigate to the schedules screen for hub plans', !page.includes("{ kind: 'hub', scheduleId: row.scheduleId, seq: Date.now() }"));
+has('page: 新建 bumps the section\'s create request (no navigation)', page, 'const create = onOpenScheduled && scheduleNodeId ? () => setScheduleCreateSeq(n => n + 1) : undefined;');
+has('page: section is editable where the page can navigate (not in popout chat windows)', page, 'editable={!!onOpenScheduled}');
+has('page: node plans still open the schedules screen', page, 'onOpenNodePlan={onOpenScheduled}');
+has('section: row click goes through nodeRowClick', section, 'const click = nodeRowClick(row, hub, nodeId, Date.now());');
+has('section: editor opened in place', section, "if (click.kind === 'editor') setEditor(click.state);");
+has('section: renders the shared editor', section, '<ScheduleEditor');
+has('section: save ⇒ close + reload the list in place', section, 'onSaved={() => void afterEditorSaved(() => setEditor(null), load)}');
+has('editor: create prefills the executor', editor, "setTarget(initialTarget ?? '')");
+has('screen: global page uses the same editor', screen, '<ScheduleEditor');
 has('screen: hub focus switches the filter to the row\'s status', screen, 'if (row) { setFilter(row.status); setSelectedId(row.schedule_id); }');
 ck('app: every node page that can navigate wires onOpenScheduled',
   app.split("onOpenScheduled={open => setScreen({ name: 'scheduled', open, back: screen })}").length - 1 === 7);
