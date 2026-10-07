@@ -159,7 +159,8 @@ check(new RegExp(`lineHeight: ${COMPOSER_LINE_HEIGHT},`).test(chat.slice(chat.in
 
 // desktop untouched, entry flags kept
 {
-  const desktop = chat.slice(chat.indexOf('      {desktop ? (\n        <>'), chat.indexOf('      ) : (\n      <>'));
+  const desktop = chat.slice(chat.indexOf('      ) : desktop ? (\n        <>'), // #692: the desktop branch now follows the daemon-notice branch
+ chat.indexOf('      ) : (\n      <>'));
   check(desktop.length > 200 && !desktop.includes('ComposerRightSlot') && !desktop.includes('ComposerExpandButton'), 'desktop composer untouched (no right slot / ⤢)');
   check(desktop.includes('styles.desktopSend') && desktop.includes('<Ionicons name="add-circle-outline"'), 'desktop keeps its toolbar ＋ and 发送');
   check(mobileRow.includes('{SHOW_BOLT_ENTRY ? ('), '⚡ stays behind SHOW_BOLT_ENTRY');

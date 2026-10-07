@@ -61,6 +61,9 @@ import { chatInfoCaps, chatInfoGroups, chatInfoPresentation, isChatFindKey, type
 import ChatInfoPanel from './ChatInfoPanel';
 import { useDesktopWindowPin } from './DesktopWindowPin';
 import { nodeInfoSectionKey, requestNodeSection } from './node-section-request';
+import { chatComposerKind, daemonHostnameOf, isHostSupervisorAlias, managedAliasesOf, managedNodesFilter, nodeRolesVersion, subscribeNodeRoles } from './daemon-node';
+import DaemonComposerNotice from './DaemonComposerNotice';
+import type { AgentListFilter } from './server-stats';
 import { echoSupersededByFetched } from './chat-echo';
 import { messageMenuGroups, selectionBarActions, type MessageMenuKey } from './message-menu-model';
 import { agentStatusLabel, buildQuote, compactQuoteText, confirmedOutboxIds, copyTextOf, copiedToastVisible, COPIED_TOAST_MS, parseQuoted, quoteLabel, type QuoteRef, mergeMessagesNewestFirst, msgKey, removeMessage, shouldShowJumpPill, nextUnread, jumpPillLabel, canSend, shouldSendOnEnter, composerShortcutHint } from './chat-actions';
@@ -278,6 +281,8 @@ interface Props {
   windowChrome?: PopoutChrome;
   /** #499 负责 Agent 发的到期提醒:气泡下「查看任务 ›」打开那张任务(同顶部提示)。不传 = 不画(分离聊天窗没有任务页)。 */
   onOpenTask?: (requirementId: string, networkId: string | null) => void;
+  /** #692 守护节点会话页的「托管的节点」入口:打开按这些别名筛过的 Agent 列表。不传(分离聊天窗)= 不画这个入口。 */
+  onOpenAgents?: (filter: AgentListFilter) => void;
 }
 
 // Module level on purpose: the cache has to outlive a screen unmount, or
@@ -288,7 +293,7 @@ export const clearChatConversationCache = (profileId?: string, serverUrl = ''): 
   conversations.clearScope(conversationScope(profileId, serverUrl));
 };
 
-export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpenNodeSettings, pinned = false, onTogglePin, muted = false, onToggleMute, hideBack = false, onOpenVoiceSettings, focusTaskId, windowChrome = null, onOpenTask }: Props) {
+export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpenNodeSettings, pinned = false, onTogglePin, muted = false, onToggleMute, hideBack = false, onOpenVoiceSettings, focusTaskId, windowChrome = null, onOpenTask, onOpenAgents }: Props) {
   useTranslation();
   // Android edge-to-edge draws the composer under the gesture bar (same
   // class of bug as the tg 802 tab bar) — pad by the real bottom inset.
@@ -315,6 +320,10 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
   const { setDraft } = useComposerDraft(composerDraftKey, draft, setDraftState);
   // 设置 → 快捷键:Enter 发送(默认)还是 Ctrl/⌘+Enter 发送。
   const sendKey = useSyncExternalStore(subscribeShortcuts, sendKeyPref, sendKeyPref);
+  // #692 守护节点(host_supervisor):不能对话 —— 输入框换成说明条(DaemonComposerNotice),历史消息照常。
+  useSyncExternalStore(subscribeNodeRoles, nodeRolesVersion, nodeRolesVersion);
+  const composerKind = chatComposerKind(isHostSupervisorAlias(alias));
+  const managedAliases = managedAliasesOf(alias);
   // Fold/unfold remounts this screen (phone stack ⇄ two-pane); carry the unsent
   // draft across that remount only. Ordinary back/leave still drops it, as before.
   const draftHandoffKey = `chatDraft:${cfg.profileId ?? cfg.serverUrl}:${alias}`;
@@ -2356,7 +2365,7 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
         </Pressable>
       ) : null}
 
-      {attached.length ? (
+      {attached.length && composerKind === 'chat' ? (
         <View style={styles.draftStrip} testID="composer-draft-strip">
           <View style={styles.draftStripHeader}>
             <Text style={styles.draftCount} testID="composer-draft-count">{draftCountLabel(attached)}</Text>
@@ -2541,7 +2550,14 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
       />
 
 
-      {desktop ? (
+      {composerKind === 'daemon' ? (
+        <DaemonComposerNotice
+          managedCount={managedAliases.length}
+          onOpenManaged={onOpenAgents ? () => onOpenAgents(managedNodesFilter(alias, managedAliases, daemonHostnameOf(alias))) : undefined}
+          onOpenLogs={onOpenNodeSettings ? () => { requestNodeSection(nodeInfoSectionKey(cfg.profileId ?? cfg.serverUrl, alias), 'logs'); onOpenNodeSettings(); } : undefined}
+          bottomInset={desktop ? 0 : composerInset}
+        />
+      ) : desktop ? (
         <>
         <View
           {...composerPan.panHandlers}
