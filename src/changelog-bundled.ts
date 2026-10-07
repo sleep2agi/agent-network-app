@@ -5,11 +5,18 @@
 export const BUNDLED_RELEASE_BODY: string = [
   "Signed and notarized stable update for macOS (Apple Silicon) and Windows (x64).",
   "",
+  "What's new in 0.2.222:",
+  "- 任务状态新增「废弃」：灰色显示、标题划线，不算逾期；子任务进度不计入已废弃的任务",
+  "- 看板的「废弃」列默认收起（桌面为右侧窄栏，手机为分页末尾的「废弃 N」），点开即可查看",
+  "- 任务列表的「全部」默认不含已废弃任务，可用底部或状态筛选里的「显示已废弃」开关查看",
+  "- 连接的 Hub 还不支持「废弃」时，自动隐藏这个状态和相关开关",
+  "",
   "What's new in 0.2.221:",
   "- 任务详情改为应用内右侧抽屉：默认 560 宽、可拖动改宽；属性改完立即保存，标题和描述离开输入框即保存，不再需要「保存修改」按钮",
   "- 节点页「定时任务」点一行即可就地编辑，不再跳到定时任务页；「＋ 新建」会预填当前节点",
   "- 节点「概览」新增「节点操作」：可直接重启 / 停止；手动启动的节点按钮置灰并说明原因，可一键交给守护进程管理",
   "- 节点「技能」页为团队技能显示「团队」徽章",
+  "- 任务参与人可以选择 Agent：详情、看板卡片和新建任务的参与人选择分「人类 / Agent」两组，Agent 显示为「名字 · Agent」",
   "- 修复：在设置窗口保存或清除语音凭据后，主窗口输入框仍提示「未配置语音识别」",
   "- 修复：旧版本节点不再显示「unknown op …」，改为提示升级到哪个版本后可用",
   "",
@@ -967,6 +974,7 @@ export const BUNDLED_RELEASE_BODY: string = [
 
 /** Release date (published_at) per version, as far as it was known when this file was generated. */
 export const BUNDLED_RELEASE_DATES: Record<string, string> = {
+  "0.2.221": "2026-10-07T13:31:30Z",
   "0.2.220": "2026-10-07T09:50:46Z",
   "0.2.219": "2026-10-07T03:33:26Z",
   "0.2.218": "2026-10-06T15:33:53Z",
