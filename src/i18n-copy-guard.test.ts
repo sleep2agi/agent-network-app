@@ -15,6 +15,7 @@ import './i18n-password';
 import './i18n-changelog';
 import './i18n-fatal';
 import './node-adoption';
+import './node-control-access';
 
 let p = 0, t = 0;
 const ck = (name: string, ok: boolean) => { t++; if (ok) p++; console.log(`${ok ? 'PASS' : 'FAIL'}: ${name}`); };
@@ -36,6 +37,7 @@ migrated.push('src/FatalBoundary.tsx', 'src/LastCrashChip.tsx');
 migrated.push('src/ManageDepartment.tsx');
 migrated.push('src/ChangePasswordPanel.tsx', 'src/WeakPasswordBanner.tsx');
 migrated.push('src/NodeAdoptionControls.tsx');
+migrated.push('src/NodeControlCard.tsx');
 function untranslated(file: string, raw: string): string[] {
   const source = raw.replace(/\r\n?/g, '\n');
   const tree = ts.createSourceFile(file, source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
