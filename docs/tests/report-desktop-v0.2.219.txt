@@ -1,0 +1,8 @@
+desktop v0.2.219 — 手机聊天页时间完整显示(看板 #683)
+
+A. 本版内容(0.2.218 发版提交 945a9c9 之后 main 上合入的 PR + 本 PR)
+  #738(看板 #683) 聊天页时间永远完整显示:作者行把名字和时间拆开,名字 flexShrink 尾部省略、时间 flexShrink:0 并带按内容计算的宽度下限;居中时间胶囊改为 View 包 Text,原生端带宽度下限(timeTextFloor,余量 1.18),修复 iPhone 上「09:0」「09:…」被截。同类盘点 7 处时间列加 flexShrink:0 / 下限。下限只在原生生效,Web/桌面壳不变。
+  本 PR(版本号):0.2.218 → 0.2.219,versionCode 2218 → 2219;release-desktop-auto-update.yml 加 What's new in 0.2.219;重新生成 src/changelog-bundled.ts(含 0.2.218 发布日期)。
+  本地:干净 origin/main(a671b00) bump 后 npm ci / npm test(350/350) / npm run typecheck 全部 rc=0;android-release-notes.mjs 0.2.219 输出含 What's new in 0.2.219。
+B. 验证边界(如实)
+  #738 的验证见该 PR:单测 + Yoga 布局测试模拟胶囊,Web 上复现并修复作者行一半。原生端「设备测量偏短」的根因推测未在真机确认。真机:iPhone 聊天页时间胶囊与作者行时间不再缺位。
