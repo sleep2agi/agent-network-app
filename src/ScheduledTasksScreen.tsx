@@ -1,16 +1,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import type { ReactNode } from 'react';
 import { Ionicons } from './icons';
-import { ActivityIndicator, Alert, BackHandler, Modal, Pressable, RefreshControl, ScrollView, StyleSheet, Switch, View, useWindowDimensions } from 'react-native';
+import { ActivityIndicator, Alert, BackHandler, Pressable, RefreshControl, ScrollView, StyleSheet, Switch, View, useWindowDimensions } from 'react-native';
 import { Text, TextInput } from './ui-text';
 import {
   cancelScheduledTask,
   createExternalScheduleEdit,
-  createScheduledTask,
   fetchExternalScheduleEdits,
   fetchExternalSchedules,
   fetchHubNodes,
-  fetchStatus,
   fetchScheduledRuns,
   fetchTaskDetail,
   fetchScheduledTasks,
@@ -21,32 +18,19 @@ import {
   HubNodeExternalSchedules,
   HubScheduledRun,
   HubScheduledTask,
-  HubMisfirePolicy,
-  HubScheduleSpec,
-  Session,
   ScheduledTaskError,
   runScheduledTaskNow,
   selectOpenIntents,
   setScheduledTaskStatus,
-  updateScheduledTask,
 } from './api';
 import AliasAvatar from './AliasAvatar';
-import MacTitleStrip from './mac-title-strip';
-import WinTitleBar from './win-title-bar';
-import NodePickerSheet, { NodePickerField } from './NodePicker';
-import { pickerChoices } from './node-picker-model';
-import { useModalSafePadding } from './safe-area-runtime';
 import { pointerUi } from './pointer-ui';
-import { withBasePadding } from './modal-safe-area';
-import { loadChatPins } from './chat-pins';
-import { loadScheduleTargetRecents, rememberScheduleTarget } from './schedule-target-recents';
 import { colors, onThemeChange, radius, spacing, type as fontSize, weight } from './theme';
 import { scheduledTaskActions } from './scheduled-task-actions';
 import type { ScheduleOpenRequest } from './node-schedules';
 import ScheduleRunResult, { type RunTaskState } from './ScheduleRunResult';
 import ScheduleContentFullscreen, { type ScheduleContentDraft } from './ScheduleContentFullscreen';
-import TaskDescriptionEditor from './TaskDescriptionEditor';
-import { contentDirty, SCHEDULE_CONTENT_MAX } from './schedule-content-edit';
+import { contentDirty } from './schedule-content-edit';
 import { runDisplay, runDurationText, runFailureText, runIsOpen } from './schedule-run-result';
 import { groupScheduleRuns, skipGroupText, skipGroupTimes } from './schedule-run-groups';
 import { useTranslation } from './i18n-react';
@@ -69,21 +53,13 @@ import {
   scheduleStatusMeta,
   visibleSchedules,
 } from './scheduled-view-model';
-import type { ScheduleStatus, StatusTone } from './scheduled-view-model';
+import type { ScheduleStatus } from './scheduled-view-model';
 import { elevated } from './elevation';
-import { t } from './i18n';
 import './i18n-schedules';
-import { fieldsOf, mergeDraft, planConflict, type ScheduleEditFields, type ScheduleEditKey } from './schedule-edit-merge';
-import { scheduleCopyDraft } from './schedule-copy';
+// 编辑器(表单 + 外壳 + 确认框)与节点页共用:ScheduleEditor.tsx。
+import ScheduleEditor, { CancelScheduleModal, DEVICE_TIMEZONE, Label, ScheduleModal, StatusPill, fmt, scheduleStyleDefs } from './ScheduleEditor';
 
-const DAYS = ['日', '一', '二', '三', '四', '五', '六'];
-
-const fmt = (value?: string | null) => {
-  if (!value) return '—';
-  const d = new Date(value);
-  return Number.isFinite(d.getTime()) ? d.toLocaleString() : value;
-};
-
+export { scheduleDialogSize } from './ScheduleEditor';
 
 /** 与 Hub 端 parseManagedCronExpression 同一形状预检（五段、字符白名单），
  *  只为把明显敲错的输入挡在本地；权威校验仍在 Hub。 */
@@ -108,28 +84,6 @@ export const editIntentErrorText = (e: unknown): string => {
   return e instanceof Error ? e.message : String(e);
 };
 
-type IntervalUnit = 'seconds' | 'minutes' | 'hours' | 'days';
-
-const toLocalDateTimeInput = (value: string) => {
-  const date = new Date(value);
-  if (!Number.isFinite(date.getTime())) return '';
-  const pad = (part: number) => String(part).padStart(2, '0');
-  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
-};
-
-const intervalFormValue = (seconds: number): { every: string; unit: IntervalUnit } => {
-  if (seconds % 86400 === 0) return { every: String(seconds / 86400), unit: 'days' };
-  if (seconds % 3600 === 0) return { every: String(seconds / 3600), unit: 'hours' };
-  if (seconds % 60 === 0) return { every: String(seconds / 60), unit: 'minutes' };
-  return { every: String(seconds), unit: 'seconds' };
-};
-
-const DEVICE_TIMEZONE = (() => {
-  try { return Intl.DateTimeFormat().resolvedOptions().timeZone || undefined; } catch { return undefined; }
-})();
-
-const toneColor = (tone: StatusTone) =>
-  tone === 'running' ? colors.running : tone === 'blocked' ? colors.blocked : tone === 'failed' ? colors.failed : colors.textMuted;
 
 type ScheduleAction = 'toggle' | 'run' | 'cancel';
 
@@ -502,7 +456,7 @@ export default function ScheduledTasksScreen({ cfg, onOpenChat, open }: {
           )
         ) : hubBody}
       </>}
-      <ScheduleFormModal
+      <ScheduleEditor
         cfg={cfg}
         nodes={nodes}
         visible={showForm}
@@ -549,12 +503,6 @@ export default function ScheduledTasksScreen({ cfg, onOpenChat, open }: {
       ) : null}
     </View>
   );
-}
-
-function StatusPill({ label, tone, testID }: { label: string; tone: StatusTone; testID?: string }) {
-  const s = useMemo(makeStyles, [label, tone]);
-  const c = toneColor(tone);
-  return <Text style={[s.pill, { color: c, backgroundColor: `${c}1f` }]} testID={testID}>{label}</Text>;
 }
 
 /** 列表行:56–72dp。头像 = 执行节点;没有下次也没有上次时不画时间(不出「—」)。 */
@@ -812,302 +760,6 @@ function Fact({ label, value, hint, last }: { label: string; value: string; hint
   );
 }
 
-function ScheduleFormModal({ cfg, nodes, visible, editing, initialTarget, copyFrom, onClose, onSaved }: {
-  cfg: HubConfig;
-  nodes: HubNode[];
-  visible: boolean;
-  editing: HubScheduledTask | null;
-  /** 新建时预选的执行节点 node_id(节点页「＋ 新建」带过来)。 */
-  initialTarget?: string;
-  /** 「复制」的源计划:新建表单按它预填(schedule-copy.ts),源计划不动。 */
-  copyFrom?: HubScheduledTask | null;
-  onClose: () => void;
-  onSaved: () => void;
-}) {
-  const styles = useMemo(makeStyles, [visible]);
-  const [name, setName] = useState(''); const [task, setTask] = useState('');
-  const [target, setTarget] = useState(''); const [kind, setKind] = useState<HubScheduleSpec['type']>('once');
-  const [when, setWhen] = useState(''); const [every, setEvery] = useState('1'); const [unit, setUnit] = useState<IntervalUnit>('hours'); const [clock, setClock] = useState('09:00');
-  const [weekdays, setWeekdays] = useState([1]); const [busy, setBusy] = useState(false); const [error, setError] = useState('');
-  const [misfirePolicy, setMisfirePolicy] = useState<HubMisfirePolicy>('catch_up_once');
-  const [priority, setPriority] = useState<'high' | 'normal' | 'low'>('normal');
-  const detectedTimezone = useMemo(() => Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC', []);
-  const [timezone, setTimezone] = useState(detectedTimezone);
-  // 执行节点选择器(NodePicker.tsx):状态点来自会话表,置顶与节点列表同一份,最近使用按本设备 + Hub 账号。
-  const [pickerOpen, setPickerOpen] = useState(false);
-  const [sessions, setSessions] = useState<Session[]>([]);
-  const [pins, setPins] = useState<string[]>([]);
-  const [recents, setRecents] = useState<string[]>([]);
-  useEffect(() => {
-    if (!visible) { setPickerOpen(false); return; }
-    let live = true;
-    fetchStatus(cfg).then(d => { if (live) setSessions(d.sessions ?? []); }).catch(() => { /* 没有状态就全画成离线,仍可选 */ });
-    loadChatPins(cfg).then(p => { if (live) setPins(p); }).catch(() => {});
-    loadScheduleTargetRecents(cfg).then(r => { if (live) setRecents(r); }).catch(() => {});
-    return () => { live = false; };
-  }, [visible, cfg]);
-  const choices = useMemo(() => pickerChoices(nodes, sessions), [nodes, sessions]);
-  const chosen = choices.nodes.find(n => n.assignable && n.node_id === target) ?? null;
-  // 409 时不丢草稿(schedule-edit-merge.ts):base = 这份草稿是基于哪一版改的;冲突后换成重新读到的那版。
-  // 只在打开 / 换编辑对象时从 editing 同步 —— 列表 10 秒轮询换的是 items,不会碰到打开着的表单。
-  const [base, setBase] = useState<HubScheduledTask | null>(editing);
-  const [conflict, setConflict] = useState<{ latest: HubScheduledTask; keys: ScheduleEditKey[] } | null>(null);
-  // 单次计划复制时原时间已过、被顺延:记下原时间给提示用;用户一改时间就不再提。
-  const [adjustedFrom, setAdjustedFrom] = useState<string | null>(null);
-  const source = base ?? (editing ? null : copyFrom ?? null);
-  const fallbackAlias = source && source.target_node_id === target ? source.target_alias : null;
-
-  const fillForm = (f: ScheduleEditFields) => {
-    setName(f.name); setTask(f.task); setTarget(f.target_node_id);
-    setKind(f.schedule.type); setMisfirePolicy(f.misfire_policy || 'catch_up_once');
-    setPriority(f.priority); setTimezone(f.timezone);
-    if (f.schedule.type === 'once') setWhen(toLocalDateTimeInput(f.schedule.run_at));
-    if (f.schedule.type === 'interval') {
-      const value = intervalFormValue(f.schedule.every_seconds);
-      setEvery(value.every); setUnit(value.unit);
-    }
-    if (f.schedule.type === 'daily') setClock(f.schedule.time);
-    if (f.schedule.type === 'weekly') { setClock(f.schedule.time); setWeekdays(f.schedule.weekdays); }
-  };
-
-  useEffect(() => {
-    if (!visible) return;
-    setError(''); setConflict(null); setBase(editing); setAdjustedFrom(null);
-    if (!editing) {
-      setName(''); setTask(''); setTarget(initialTarget ?? ''); setKind('once'); setWhen(''); setEvery('1'); setUnit('hours');
-      setClock('09:00'); setWeekdays([1]); setMisfirePolicy('catch_up_once'); setPriority('normal'); setTimezone(detectedTimezone);
-      if (copyFrom) {
-        const copy = scheduleCopyDraft(copyFrom, Date.now(), t('schedules.copy.suffix'));
-        fillForm(copy.fields); setAdjustedFrom(copy.adjustedFrom);
-      }
-      return;
-    }
-    fillForm(fieldsOf(editing));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [visible, editing, detectedTimezone, initialTarget, copyFrom]);
-
-  const invalidSchedule = (kind === 'once' && !when) ||
-    (kind === 'interval' && (!Number.isInteger(Number(every)) || Number(every) < (unit === 'seconds' ? 60 : 1))) ||
-    (kind === 'weekly' && weekdays.length === 0);
-  const draftInput = (): ScheduleEditFields => {
-    let schedule: HubScheduleSpec;
-    if (kind === 'once') schedule = { type: 'once', run_at: new Date(when).toISOString() };
-    else if (kind === 'interval') {
-      const multiplier = unit === 'seconds' ? 1 : unit === 'minutes' ? 60 : unit === 'hours' ? 3600 : 86400;
-      schedule = { type: 'interval', every_seconds: Number(every) * multiplier };
-    }
-    else if (kind === 'daily') schedule = { type: 'daily', time: clock };
-    else schedule = { type: 'weekly', time: clock, weekdays };
-    return { name: name.trim(), target_node_id: target, task: task.trim(), priority, timezone: timezone.trim(), schedule, misfire_policy: misfirePolicy };
-  };
-  // 409 revision_conflict:重新读 → 没有同字段冲突就合并后自动重试一次;有就停在冲突视图。草稿任何分支都不丢。
-  const save = async (row: HubScheduledTask, input: ScheduleEditFields, retried: boolean): Promise<void> => {
-    try {
-      await updateScheduledTask(cfg, row, input);
-      onSaved();
-    } catch (e) {
-      if (!(e instanceof ScheduledTaskError && e.status === 409 && e.code === 'revision_conflict')) throw e;
-      let latest: HubScheduledTask | undefined;
-      try { latest = (await fetchScheduledTasks(cfg)).schedules?.find(x => x.schedule_id === row.schedule_id); }
-      catch (err) { setError(t('schedules.conflict.refetchFailed', { message: err instanceof Error ? err.message : String(err) })); return; }
-      const plan = planConflict(row, latest, input);
-      if (plan.kind === 'gone') { setError(t('schedules.conflict.gone')); return; }
-      if (plan.kind === 'conflict') { setConflict({ latest: plan.base, keys: plan.keys }); return; }
-      setBase(plan.base); fillForm(plan.input);
-      if (retried) { setError(t('schedules.conflict.retryAgain')); return; }
-      await save(plan.base, plan.input, true);
-    }
-  };
-  const submit = async () => {
-    setBusy(true); setError(''); setConflict(null);
-    try {
-      const input = draftInput();
-      if (base) await save(base, input, false);
-      else { await createScheduledTask(cfg, input); onSaved(); }
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
-    }
-    finally { setBusy(false); }
-  };
-  const resolveConflict = async (choice: 'mine' | 'theirs' | 'edit') => {
-    if (!conflict || !base) return;
-    const { latest } = conflict;
-    const draft = draftInput();
-    setConflict(null);
-    if (choice === 'edit') { setBase(latest); return; }
-    const merged = mergeDraft(base, latest, draft, choice);
-    setBase(latest); fillForm(merged);
-    if (choice === 'theirs') return;
-    setBusy(true); setError('');
-    try { await save(latest, merged, true); }
-    catch (e) { setError(e instanceof Error ? e.message : String(e)); }
-    finally { setBusy(false); }
-  };
-  const describeField = (key: ScheduleEditKey, f: ScheduleEditFields): string => {
-    if (key === 'schedule') return describeSchedule(f.schedule, f.timezone, DEVICE_TIMEZONE);
-    if (key === 'misfire_policy') return describeMisfire(f.misfire_policy).short;
-    if (key === 'priority') return t(`schedules.priority.${f.priority}`);
-    if (key === 'target_node_id') return nodes.find(n => n.node_id === f.target_node_id)?.alias ?? f.target_node_id;
-    return String(f[key]);
-  };
-  const whenMs = kind === 'once' && when ? new Date(when).getTime() : NaN;
-  const timeHint = kind !== 'once' ? null
-    : adjustedFrom && Number.isFinite(whenMs) ? t('schedules.copy.adjusted', { from: fmt(adjustedFrom), to: fmt(new Date(whenMs).toISOString()) })
-    : Number.isFinite(whenMs) && whenMs < Date.now() ? t('schedules.once.past') : null;
-  const cannotSave = busy || !name.trim() || !task.trim() || !target || !timezone.trim() || invalidSchedule;
-  return <ScheduleModal visible={visible} onClose={onClose} testID="schedule-form" title={editing ? '编辑定时任务' : '新建定时任务'} primary={{ label: '保存', disabled: cannotSave || !!conflict, onPress: submit }}>
-      <ScrollView contentContainerStyle={styles.form} keyboardShouldPersistTaps="handled">
-        {error ? <Text testID="schedule-form-error" style={styles.error}>{error}</Text> : null}
-        {conflict && base ? (() => {
-          const mine = draftInput(), theirs = fieldsOf(conflict.latest);
-          return <View testID="schedule-conflict" style={styles.conflict}>
-            <Text style={styles.conflictTitle}>{t('schedules.conflict.title')}</Text>
-            <Text style={styles.meta}>{t('schedules.conflict.body')}</Text>
-            {conflict.keys.map(key => <View key={key} testID={`schedule-conflict-${key}`} style={styles.conflictField}>
-              <Text style={styles.label}>{t(`schedules.field.${key}`)}</Text>
-              <Text style={styles.conflictSide}>{t('schedules.conflict.mine')}</Text>
-              <Text testID={`schedule-conflict-${key}-mine`} style={styles.conflictValue} selectable>{describeField(key, mine)}</Text>
-              <Text style={styles.conflictSide}>{t('schedules.conflict.theirs')}</Text>
-              <Text testID={`schedule-conflict-${key}-theirs`} style={styles.conflictValue} selectable>{describeField(key, theirs)}</Text>
-            </View>)}
-            <View style={styles.actions}>
-              <Pressable testID="schedule-conflict-mine" disabled={busy} style={styles.action} onPress={() => void resolveConflict('mine')}><Text style={styles.actionText}>{t('schedules.conflict.useMine')}</Text></Pressable>
-              <Pressable testID="schedule-conflict-theirs" disabled={busy} style={styles.action} onPress={() => void resolveConflict('theirs')}><Text style={styles.actionText}>{t('schedules.conflict.useTheirs')}</Text></Pressable>
-              <Pressable testID="schedule-conflict-edit" disabled={busy} style={styles.action} onPress={() => void resolveConflict('edit')}><Text style={styles.actionText}>{t('schedules.conflict.keepEditing')}</Text></Pressable>
-            </View>
-          </View>;
-        })() : null}
-        <Label text="名称"><TextInput style={styles.input} value={name} onChangeText={setName} placeholder="每日巡检" placeholderTextColor={colors.textMuted} /></Label>
-        <Label text="执行节点"><NodePickerField node={chosen} fallbackAlias={fallbackAlias} onPress={() => setPickerOpen(true)} /></Label>
-        {/* 任务内容:⤢ 全屏 + 🎤,和任务描述同一个编辑器(TaskDescriptionEditor);节点收到的是原文,不放图片、不走富文本。
-            表单一打开就是编辑框(原来就是输入框),桌面全屏从「左右」起。 */}
-        <View style={styles.field}>
-          <TaskDescriptionEditor
-            cfg={cfg}
-            value={task}
-            onChange={setTask}
-            pointer={pointerUi()}
-            title={name || t('schedules.field.task')}
-            dirty={base ? contentDirty(base, task) : !!task.trim()}
-            label={t('schedules.field.task')}
-            placeholder={t('schedules.content.placeholder')}
-            maxLength={SCHEDULE_CONTENT_MAX}
-            images={false}
-            richText={false}
-            initialMode="edit"
-            fullscreenA11y={t('schedules.content.fullscreenA11y')}
-            chrome={{ title: t('schedules.field.task'), unsavedText: t('schedules.content.unsavedForm') }}
-            testID="schedule-form-task"
-          />
-        </View>
-        <Label text="优先级"><View style={styles.segment}>{(['high','normal','low'] as const).map((value) => <Pressable key={value} onPress={() => setPriority(value)} style={[styles.segmentItem, priority === value && styles.segmentActive]}><Text style={priority === value ? styles.segmentTextActive : styles.segmentText}>{value === 'high' ? '高' : value === 'low' ? '低' : '普通'}</Text></Pressable>)}</View></Label>
-        <Label text="类型"><View style={styles.segment}>{(['once','interval','daily','weekly'] as const).map((x, i) => <Pressable key={x} onPress={() => setKind(x)} style={[styles.segmentItem, kind === x && styles.segmentActive]}><Text style={kind === x ? styles.segmentTextActive : styles.segmentText}>{['单次','间隔','每天','每周'][i]}</Text></Pressable>)}</View></Label>
-        <Label text="错过执行"><View style={styles.segment}>{(['catch_up_once','skip'] as const).map((policy) => <Pressable key={policy} onPress={() => setMisfirePolicy(policy)} style={[styles.segmentItem, misfirePolicy === policy && styles.segmentActive]}><Text style={misfirePolicy === policy ? styles.segmentTextActive : styles.segmentText}>{policy === 'catch_up_once' ? '补跑一次' : '跳过本次'}</Text></Pressable>)}</View><Text style={styles.meta}>{misfirePolicy === 'catch_up_once' ? '适合新闻抓取；恢复后最多补跑一次' : '错过后等待下一周期'}</Text></Label>
-        {kind === 'once' && <Label text="执行时间（ISO 或 YYYY-MM-DDTHH:mm）"><TextInput style={styles.input} autoCapitalize="none" value={when} onChangeText={v => { setWhen(v); setAdjustedFrom(null); }} placeholder="2026-08-10T09:00" placeholderTextColor={colors.textMuted} />{timeHint ? <Text testID="schedule-form-time-hint" style={styles.timeHint}>{timeHint}</Text> : null}</Label>}
-        <Label text="时区（IANA）"><TextInput style={styles.input} autoCapitalize="none" value={timezone} onChangeText={setTimezone} placeholder="Asia/Shanghai" placeholderTextColor={colors.textMuted} /></Label>
-        {kind === 'interval' && <Label text="固定间隔"><TextInput style={styles.input} keyboardType="number-pad" value={every} onChangeText={setEvery} /><View style={[styles.segment, { marginTop: spacing.sm }]}>{(['seconds','minutes','hours','days'] as const).map((value, index) => <Pressable key={value} onPress={() => setUnit(value)} style={[styles.segmentItem, unit === value && styles.segmentActive]}><Text style={unit === value ? styles.segmentTextActive : styles.segmentText}>{['秒','分钟','小时','天'][index]}</Text></Pressable>)}</View></Label>}
-        {(kind === 'daily' || kind === 'weekly') && <Label text="时间"><TextInput style={styles.input} value={clock} onChangeText={setClock} placeholder="09:00" placeholderTextColor={colors.textMuted} /></Label>}
-        {kind === 'weekly' && <View style={styles.weekdays}>{DAYS.map((d, i) => <Pressable key={d} onPress={() => setWeekdays(v => v.includes(i) ? v.filter(x => x !== i) : [...v, i].sort())} style={[styles.day, weekdays.includes(i) && styles.dayActive]}><Text style={weekdays.includes(i) ? styles.dayTextActive : styles.segmentText}>{d}</Text></Pressable>)}</View>}
-      </ScrollView>
-      <NodePickerSheet
-        visible={visible && pickerOpen}
-        nodes={choices.nodes}
-        hiddenOffline={choices.hiddenOffline}
-        selectedId={target}
-        recents={recents}
-        pinned={pins}
-        onClose={() => setPickerOpen(false)}
-        onSelect={n => { if (!n.assignable) return; setTarget(n.node_id); setRecents(rememberScheduleTarget(cfg, recents, n.node_id)); setPickerOpen(false); }}
-      />
-  </ScheduleModal>;
-}
-
-/**
- * 表单 / 改时间 / 意向记录的外壳。手机:整屏 pageSheet,顶栏「取消 · 标题 · 保存」(iOS 导航栏的形状)。
- * 桌面(pointer-ui.ts,Tauri 壳任何宽度):居中对话框 —— 标题左对齐 + ✕,底部右侧「取消」「保存」,
- * 列表页留在后面(淡遮罩),不再整窗滑上来盖住侧栏和标题栏(Owner 2026-09-27:桌面和安卓不该一样)。
- * testID 两边相同:`${testID}` 是面板,`-header` / `-title` / `-cancel` / `-save` 各是那一格。
- */
-function ScheduleModal({ visible, onClose, testID = 'schedule-modal', title, primary, cancelLabel = '取消', children }: {
-  visible: boolean;
-  onClose: () => void;
-  testID?: string;
-  title: string;
-  /** 右侧主按钮(保存 / 提交);没有 = 只读页,只给「关闭」。 */
-  primary?: { label: string; disabled: boolean; onPress: () => void };
-  cancelLabel?: string;
-  children: ReactNode;
-}) {
-  const s = useMemo(makeStyles, [visible]);
-  // Android edge-to-edge:Modal 画到状态栏 / 挖孔底下,根 View 按安全区垫(modal-safe-area.ts,#387 同一张表)。
-  const safe = useModalSafePadding('pageSheet');
-  const { width, height } = useWindowDimensions();
-  if (pointerUi()) {
-    const size = scheduleDialogSize(width, height);
-    return <Modal transparent visible={visible} animationType="fade" onRequestClose={onClose}>
-      <View style={[s.dialogOverlay, withBasePadding(safe, spacing.lg)]}>
-        <Pressable testID={`${testID}-backdrop`} accessibilityLabel="关闭" focusable={false} onPress={onClose} style={[StyleSheet.absoluteFill, s.dialogBackdrop]} />
-        <View testID={testID} style={[s.dialogPanel, size]}>
-          <View testID={`${testID}-header`} style={s.dialogHeader}>
-            <Text testID={`${testID}-title`} style={s.dialogTitle} numberOfLines={1}>{title}</Text>
-            <Pressable accessibilityRole="button" accessibilityLabel={`关闭${title}`} testID={`${testID}-close`} hitSlop={8} onPress={onClose} style={({ hovered }: any) => [s.dialogClose, hovered && s.dialogBtnHover]}>
-              <Ionicons name="close" size={18} color={colors.textMuted} />
-            </Pressable>
-          </View>
-          {children}
-          <View testID={`${testID}-footer`} style={s.dialogFooter}>
-            <Pressable accessibilityRole="button" testID={`${testID}-cancel`} onPress={onClose} style={({ hovered }: any) => [s.dialogBtn, hovered && s.dialogBtnHover]}>
-              <Text style={s.dialogBtnText}>{primary ? cancelLabel : '关闭'}</Text>
-            </Pressable>
-            {primary ? (
-              <Pressable accessibilityRole="button" testID={`${testID}-save`} disabled={primary.disabled} onPress={primary.onPress} style={[s.dialogBtn, s.dialogPrimary, primary.disabled && s.actionDisabled]}>
-                <Text style={s.dialogPrimaryText}>{primary.label}</Text>
-              </Pressable>
-            ) : null}
-          </View>
-        </View>
-      </View>
-    </Modal>;
-  }
-  return <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
-    <View testID={testID} style={[s.modalRoot, safe]}>
-      <MacTitleStrip />
-      <WinTitleBar />
-      <View testID={`${testID}-header`} style={s.modalHeader}><Pressable testID={`${testID}-cancel`} onPress={onClose} style={s.headerSide}><Text style={s.link}>{primary ? cancelLabel : '关闭'}</Text></Pressable><Text testID={`${testID}-title`} style={s.modalTitle} numberOfLines={1}>{title}</Text>{primary ? <Pressable testID={`${testID}-save`} disabled={primary.disabled} onPress={primary.onPress} style={[s.headerSide, s.headerSideEnd]}><Text style={[s.link, primary.disabled && s.linkDisabled]}>{primary.label}</Text></Pressable> : <View style={s.headerSide} />}</View>
-      {children}
-    </View>
-  </Modal>;
-}
-
-/** 桌面对话框:560 × 至多 720,窗口放不下时四周各留 24。 */
-export function scheduleDialogSize(windowWidth: number, windowHeight: number): { width: number; height: number } {
-  return { width: Math.max(0, Math.min(560, windowWidth - 48)), height: Math.max(0, Math.min(720, windowHeight - 48)) };
-}
-
-function Label({ text, children }: { text: string; children: ReactNode }) { const s = useMemo(makeStyles, []); return <View style={s.field}><Text style={s.label}>{text}</Text>{children}</View>; }
-
-function CancelScheduleModal({ value, busy, onClose, onConfirm }: {
-  value: HubScheduledTask | null;
-  busy: boolean;
-  onClose: () => void;
-  onConfirm: () => void;
-}) {
-  const s = useMemo(makeStyles, [value]);
-  const safe = useModalSafePadding('fullScreen');
-  return <Modal transparent visible={!!value} animationType="fade" onRequestClose={onClose}>
-    <View style={[s.confirmOverlay, withBasePadding(safe, spacing.xl)]}>
-      <View style={s.confirmCard}>
-        <Text style={s.confirmTitle}>取消计划？</Text>
-        <Text style={s.confirmMessage}>{value?.name}</Text>
-        <View style={s.confirmActions}>
-          <Pressable disabled={busy} style={[s.confirmButton, busy && s.actionDisabled]} onPress={onClose}><Text style={s.actionText}>返回</Text></Pressable>
-          <Pressable disabled={busy} style={[s.confirmButton, s.confirmDanger, busy && s.actionDisabled]} onPress={onConfirm}><Text style={s.dangerText}>取消计划</Text></Pressable>
-        </View>
-      </View>
-    </View>
-  </Modal>;
-}
-
 function CronEditModal({ value, busy, onClose, onSubmit }: {
   value: { node: HubNodeExternalSchedules; schedule: HubExternalSchedule } | null;
   busy: boolean;
@@ -1149,7 +801,9 @@ function IntentsModal({ value, onClose }: { value: { title: string; edits: HubEx
 }
 
 function makeStyles() { return StyleSheet.create({
-  root: { flex: 1, backgroundColor: colors.bg }, flex: { flex: 1 },
+  // 表单 / 对话框 / 确认框 / 分段控件等与编辑器共用的那一份在 ScheduleEditor.tsx(scheduleStyleDefs),这里只加列表和详情自己的。
+  ...scheduleStyleDefs(),
+  root: { flex: 1, backgroundColor: colors.bg },
   header: { paddingHorizontal: spacing.lg, paddingTop: spacing.md, paddingBottom: spacing.sm, flexDirection: 'row', alignItems: 'center', gap: spacing.md },
   title: { color: colors.text, fontSize: fontSize.heading, fontWeight: weight.strong },
   tabs: { flexDirection: 'row', backgroundColor: colors.subtleFill, borderRadius: radius.control, padding: 3 },
@@ -1157,7 +811,6 @@ function makeStyles() { return StyleSheet.create({
   tabActive: { backgroundColor: colors.card, borderWidth: StyleSheet.hairlineWidth, borderColor: colors.border },
   tabText: { color: colors.textMuted, fontSize: fontSize.small },
   tabTextActive: { color: colors.text, fontSize: fontSize.small, fontWeight: weight.strong },
-  primarySmall: { backgroundColor: colors.accent, borderRadius: radius.control, paddingHorizontal: 14, paddingVertical: 8, alignItems: 'center' }, primaryText: { color: colors.onAccent, fontWeight: weight.strong, fontSize: fontSize.body },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: spacing.xl }, list: { padding: spacing.lg, paddingTop: spacing.sm, paddingBottom: spacing.xl },
   hubBody: { flex: 1 },
   chipsScroll: { flexGrow: 0 },
@@ -1181,7 +834,6 @@ function makeStyles() { return StyleSheet.create({
   rowTarget: { flexShrink: 1, color: colors.textSecondary, fontSize: fontSize.small, maxWidth: 110 },
   scheduleChip: { flexShrink: 0, color: colors.textSecondary, fontSize: fontSize.caption, backgroundColor: colors.subtleFill, borderRadius: radius.pill, paddingHorizontal: 6, paddingVertical: 2, overflow: 'hidden' },
   rowWhen: { flexShrink: 1, color: colors.textMuted, fontSize: fontSize.caption },
-  pill: { flexShrink: 0, fontSize: fontSize.caption, fontWeight: weight.medium, overflow: 'hidden', paddingHorizontal: 8, paddingVertical: 2, borderRadius: radius.pill },
   detailBar: { minHeight: 48, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: spacing.sm, borderBottomWidth: 1, borderBottomColor: colors.border },
   backButton: { paddingHorizontal: spacing.sm, paddingVertical: spacing.sm },
   backText: { color: colors.accent, fontSize: fontSize.title },
@@ -1190,8 +842,6 @@ function makeStyles() { return StyleSheet.create({
   detailTarget: { color: colors.textSecondary, fontSize: fontSize.body },
   metaInline: { color: colors.textMuted, fontSize: fontSize.small },
   actionsRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm, marginTop: spacing.lg },
-  timeHint: { color: colors.blocked, fontSize: 11, marginTop: spacing.xs },
-  sectionLabel: { color: colors.textMuted, fontSize: fontSize.small, fontWeight: weight.medium, marginTop: spacing.xl, marginBottom: spacing.sm },
   // 「任务内容 · ⤢ 全屏」一行:标题的上下外边距挪到这一行上,按钮和标题同一条中线。
   sectionHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: spacing.xl, marginBottom: spacing.sm },
   sectionHeadLabel: { marginTop: 0, marginBottom: 0 },
@@ -1227,42 +877,10 @@ function makeStyles() { return StyleSheet.create({
   skipLink: { alignSelf: 'flex-start', minHeight: 32, justifyContent: 'center' },
   skipLinkText: { color: colors.accent, fontSize: fontSize.small },
   card: { backgroundColor: colors.card, borderRadius: radius.surface, padding: spacing.md, marginBottom: spacing.md, ...elevated('raised') }, cardTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }, cardTitle: { color: colors.text, fontWeight: '600', fontSize: 15, flex: 1 }, badge: { fontSize: 11, overflow: 'hidden', paddingHorizontal: 8, paddingVertical: 3, borderRadius: radius.pill }, badgeActive: { color: colors.running, backgroundColor: `${colors.running}20` }, badgeIdle: { color: colors.textMuted, backgroundColor: colors.bg },
-  meta: { color: colors.textMuted, fontSize: 11, marginTop: spacing.xs }, actions: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm, marginTop: spacing.md }, action: { borderWidth: 1, borderColor: colors.border, borderRadius: radius.control, paddingHorizontal: 14, paddingVertical: 8, alignItems: 'center' }, actionText: { color: colors.textSecondary, fontSize: fontSize.body }, danger: { borderColor: `${colors.failed}50` }, dangerText: { color: colors.failed, fontSize: fontSize.body },
-  error: { color: colors.failed, marginHorizontal: spacing.lg, marginBottom: spacing.md, fontSize: 13 },
-  conflict: { borderWidth: 1, borderColor: `${colors.blocked}80`, borderRadius: radius.control, padding: spacing.md, marginBottom: spacing.md, gap: spacing.xs },
-  conflictTitle: { color: colors.text, fontSize: fontSize.body, fontWeight: weight.strong },
-  conflictField: { marginTop: spacing.sm },
-  conflictSide: { color: colors.textMuted, fontSize: 11, marginTop: spacing.xs },
-  conflictValue: { color: colors.text, fontSize: 13 }, empty: { paddingVertical: 64, paddingHorizontal: spacing.xl, alignItems: 'center' }, emptyTitle: { color: colors.text, fontSize: fontSize.title, fontWeight: weight.strong, marginBottom: spacing.sm }, emptyBody: { color: colors.textMuted, fontSize: 13, textAlign: 'center', lineHeight: 19, maxWidth: 300 }, muted: { color: colors.textMuted, fontSize: 13 },
-  modalRoot: { flex: 1, backgroundColor: colors.bg }, modalHeader: { minHeight: 58, paddingHorizontal: spacing.lg, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderBottomWidth: 1, borderBottomColor: colors.border }, modalTitle: { flex: 1, textAlign: 'center', color: colors.text, fontWeight: '600', fontSize: 16 }, link: { color: colors.accent, fontSize: 15 }, headerSide: { minWidth: 56, minHeight: 44, justifyContent: 'center' }, headerSideEnd: { alignItems: 'flex-end' }, form: { padding: spacing.lg, paddingBottom: 60 }, field: { marginBottom: spacing.lg }, label: { color: colors.textMuted, fontSize: 12, marginBottom: spacing.sm }, input: { color: colors.text, backgroundColor: colors.card, borderColor: colors.border, borderWidth: 1, borderRadius: radius.control, paddingHorizontal: spacing.md, paddingVertical: 11 }, textarea: { minHeight: 100, textAlignVertical: 'top' },
-  segment: { flexDirection: 'row', borderWidth: 1, borderColor: colors.border, borderRadius: radius.control, overflow: 'hidden' }, segmentItem: { flex: 1, alignItems: 'center', paddingVertical: 10, backgroundColor: colors.card }, segmentActive: { backgroundColor: colors.accent }, segmentText: { color: colors.textMuted, fontSize: 12 }, segmentTextActive: { color: colors.onAccent, fontSize: 12, fontWeight: '600' }, weekdays: { flexDirection: 'row', justifyContent: 'space-between' }, day: { width: 38, height: 38, borderRadius: radius.pill, borderWidth: 1, borderColor: colors.border, alignItems: 'center', justifyContent: 'center' }, dayActive: { backgroundColor: colors.accent, borderColor: colors.accent }, dayTextActive: { color: colors.onAccent, fontWeight: '600' },
+  empty: { paddingVertical: 64, paddingHorizontal: spacing.xl, alignItems: 'center' }, emptyTitle: { color: colors.text, fontSize: fontSize.title, fontWeight: weight.strong, marginBottom: spacing.sm }, emptyBody: { color: colors.textMuted, fontSize: 13, textAlign: 'center', lineHeight: 19, maxWidth: 300 },
   run: { paddingVertical: spacing.md, borderBottomWidth: 1, borderBottomColor: colors.border, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   extRow: { borderTopWidth: 1, borderTopColor: colors.border, marginTop: spacing.md, paddingTop: spacing.md },
   extRowFocused: { backgroundColor: colors.rowActive, marginHorizontal: -spacing.md, paddingHorizontal: spacing.md, paddingBottom: spacing.md },
   extError: { color: colors.failed, fontSize: 11, marginTop: spacing.xs },
-  linkDisabled: { opacity: 0.4 },
   intentBadge: { color: colors.accent, fontSize: 11, marginTop: spacing.sm },
-  actionDisabled: { opacity: 0.4 },
-  // 桌面对话框(ScheduleModal):居中卡片,标题左对齐 + ✕,底部右对齐「取消」「保存」,按钮 32 高。
-  dialogOverlay: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-  dialogBackdrop: { backgroundColor: 'rgba(0,0,0,0.38)' },
-  // 按 size 的 height 定高:不叠 modalRoot(flex: 1)再用 flexBasis: 'auto' 撤回 —— 那招只在 RN-web 生效,
-  // 原生 Yoga 里 flex > 0 时 flexBasis: 'auto' 等于没写,基准取 0(flex-basis-auto-rule.test.ts)。
-  dialogPanel: { flexShrink: 1, backgroundColor: colors.bg, borderRadius: radius.surface, overflow: 'hidden', ...elevated('floating') } as any,
-  dialogHeader: { minHeight: 52, paddingLeft: spacing.lg, paddingRight: spacing.md, flexDirection: 'row', alignItems: 'center', gap: spacing.sm, borderBottomWidth: 1, borderBottomColor: colors.border },
-  dialogTitle: { flex: 1, color: colors.text, fontWeight: '600', fontSize: 15 },
-  dialogClose: { width: 28, height: 28, borderRadius: radius.item, alignItems: 'center', justifyContent: 'center' },
-  dialogFooter: { flexDirection: 'row', justifyContent: 'flex-end', alignItems: 'center', gap: spacing.sm, paddingHorizontal: spacing.lg, paddingVertical: spacing.md, borderTopWidth: 1, borderTopColor: colors.border },
-  dialogBtn: { height: 32, minWidth: 72, paddingHorizontal: spacing.md, borderRadius: radius.control, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: colors.border },
-  dialogBtnHover: { backgroundColor: colors.rowHover },
-  dialogBtnText: { color: colors.text, fontSize: 13 },
-  dialogPrimary: { backgroundColor: colors.accent, borderColor: colors.accent },
-  dialogPrimaryText: { color: colors.onAccent, fontSize: 13, fontWeight: '600' },
-  confirmOverlay: { flex: 1, backgroundColor: '#00000099', alignItems: 'center', justifyContent: 'center', padding: spacing.xl },
-  confirmCard: { width: '100%', maxWidth: 420, backgroundColor: colors.card, borderRadius: radius.surface, padding: spacing.xl, ...elevated('floating') },
-  confirmTitle: { color: colors.text, fontSize: 18, fontWeight: '600' },
-  confirmMessage: { color: colors.textSecondary, fontSize: 14, marginTop: spacing.md },
-  confirmActions: { flexDirection: 'row', justifyContent: 'flex-end', gap: spacing.sm, marginTop: spacing.xl },
-  confirmButton: { borderWidth: 1, borderColor: colors.border, borderRadius: radius.control, paddingHorizontal: 16, paddingVertical: 9 },
-  confirmDanger: { borderColor: `${colors.failed}70` },
 }); }

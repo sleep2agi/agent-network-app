@@ -159,7 +159,9 @@ const read = (f: string) => readFileSync(new URL(f, srcDir), 'utf8').replace(/\r
 const strip = (s: string) => s.replace(/\{\/\*[\s\S]*?\*\/\}/g, '').replace(/^\s*\/\/.*$/gm, '');
 const screen = strip(read('ScheduledTasksScreen.tsx'));
 const picker = strip(read('NodePicker.tsx'));
-const form = screen.slice(screen.indexOf('function ScheduleFormModal('), screen.indexOf('function Label('));
+// 2026-10-07:表单 + 外壳搬到 ScheduleEditor.tsx(定时任务页和节点页共用同一个编辑器)。
+const editor = strip(read('ScheduleEditor.tsx'));
+const form = editor.slice(editor.indexOf('export default function ScheduleEditor('), editor.indexOf('export function ScheduleModal('));
 ck('form: the chip wall is gone (no nodes.map in the form)', form.length > 0 && !/nodes\.map\(/.test(form) && !/nodeChoice/.test(screen));
 ck('form: 执行节点 is one NodePickerField row that opens the picker', /<Label text="执行节点"><NodePickerField node=\{chosen\} fallbackAlias=\{fallbackAlias\} onPress=\{\(\) => setPickerOpen\(true\)\} \/><\/Label>/.test(form));
 ck('form: picker gets the joined nodes, the selection, recents and pins', /<NodePickerSheet[\s\S]*?nodes=\{choices\.nodes\}[\s\S]*?hiddenOffline=\{choices\.hiddenOffline\}[\s\S]*?selectedId=\{target\}[\s\S]*?recents=\{recents\}[\s\S]*?pinned=\{pins\}/.test(form) && /const choices = useMemo\(\(\) => pickerChoices\(nodes, sessions\)/.test(form));
@@ -168,15 +170,18 @@ ck('form: the picker only shows while the form does', /visible=\{visible && pick
 ck('form: statuses + pins + recents are loaded when the form opens', /fetchStatus\(cfg\)/.test(form) && /loadChatPins\(cfg\)/.test(form) && /loadScheduleTargetRecents\(cfg\)/.test(form));
 // 2026-09-27:表单 / 改时间 / 意向记录共用 ScheduleModal —— 手机整屏 pageSheet(下面三条管它),
 // 桌面(pointer-ui.ts)居中对话框(再下面两条)。
-const shell = screen.slice(screen.indexOf('function ScheduleModal('), screen.indexOf('export function scheduleDialogSize('));
+const shell = editor.slice(editor.indexOf('export function ScheduleModal('), editor.indexOf('export function scheduleDialogSize('));
 const sheet = shell.slice(shell.indexOf('<Modal visible={visible} animationType="slide" presentationStyle="pageSheet"'));
-ck('form: rendered through ScheduleModal with testID schedule-form', /<ScheduleModal visible=\{visible\} onClose=\{onClose\} testID="schedule-form"/.test(form));
+ck('form: rendered through ScheduleModal with testID schedule-form (closing goes through the unsaved-changes guard; phone = bottom sheet)', /<ScheduleModal visible=\{visible\} onClose=\{requestClose\} sheet testID="schedule-form"/.test(form));
+const bottomSheet = shell.slice(shell.indexOf('if (sheet) {'), shell.indexOf('presentationStyle="pageSheet"'));
+ck('phone editor: full-height bottom sheet — transparent slide Modal, panel padded by useModalSafePadding, header inside the panel', /const sheetSafe = useModalSafePadding\('fullScreen'\)/.test(shell) && /<Modal transparent visible=\{visible\} animationType="slide" onRequestClose=\{onClose\}>/.test(bottomSheet) && /style=\{\[s\.sheetPanel, \{ marginTop: sheetSafe\.paddingTop/.test(bottomSheet) && bottomSheet.indexOf('{phoneHeader}') > bottomSheet.indexOf('s.sheetPanel'));
+ck('phone editor: sheet panel fills the height under the status bar (flex: 1, rounded top)', /sheetPanel: \{ flex: 1, backgroundColor: colors\.bg, borderTopLeftRadius: radius\.surface, borderTopRightRadius: radius\.surface/.test(editor));
 ck('form: root View carries the safe-area padding (#387 approach, via useModalSafePadding)', /const safe = useModalSafePadding\('pageSheet'\)/.test(shell) && /<View testID=\{testID\} style=\{\[s\.modalRoot, safe\]\}>/.test(sheet));
-ck('form: header lives inside the padded root', sheet.indexOf('style={[s.modalRoot, safe]}') > 0 && sheet.indexOf('style={[s.modalRoot, safe]}') < sheet.indexOf('testID={`${testID}-header`}'));
-ck('form: Tauri title strips re-mounted inside the Modal (it covers the window)', /<MacTitleStrip \/>\s*<WinTitleBar \/>\s*<View testID=\{`\$\{testID\}-header`\}/.test(sheet));
+ck('form: header lives inside the padded root', sheet.indexOf('style={[s.modalRoot, safe]}') > 0 && sheet.indexOf('style={[s.modalRoot, safe]}') < sheet.indexOf('{phoneHeader}') && /const phoneHeader = \(\s*<View testID=\{`\$\{testID\}-header`\}/.test(shell));
+ck('form: Tauri title strips re-mounted inside the Modal (it covers the window)', /<MacTitleStrip \/>\s*<WinTitleBar \/>\s*\{phoneHeader\}/.test(sheet));
 ck('desktop: ScheduleModal is a centred transparent dialog when pointerUi()', /if \(pointerUi\(\)\) \{/.test(shell) && /<Modal transparent visible=\{visible\} animationType="fade" onRequestClose=\{onClose\}>/.test(shell) && /style=\{\[s\.dialogPanel, size\]\}/.test(shell));
 ck('desktop: the dialog does not re-mount the title strips (the window keeps its own)', shell.split('<MacTitleStrip />').length === 2 && shell.indexOf('<MacTitleStrip />') > shell.indexOf('presentationStyle="pageSheet"'));
-ck('form: 取消 and 保存 get equal-width sides so the title is truly centred', /headerSide: \{ minWidth: 56/.test(screen) && /modalTitle: \{ flex: 1, textAlign: 'center'/.test(screen));
+ck('form: 取消 and 保存 get equal-width sides so the title is truly centred', /headerSide: \{ minWidth: 56/.test(editor) && /modalTitle: \{ flex: 1, textAlign: 'center'/.test(editor));
 for (const name of ['CronEditModal', 'IntentsModal']) {
   const start = screen.indexOf(`function ${name}(`);
   const body = screen.slice(start, screen.indexOf('\nfunction ', start + 10));
@@ -227,9 +232,9 @@ const walk = (dir: string): string[] => readdirSync(dir).flatMap((e: string) => 
 });
 const files = walk(srcPath.replace(/\/$/, '')).map(f => f.slice(srcPath.replace(/\/$/, '').length + 1));
 ck('collect: paths are POSIX', files.every(f => !f.includes('\\')));
-ck('collect: picker + schedule screen are in the scanned set', files.includes('NodePicker.tsx') && files.includes('ScheduledTasksScreen.tsx'));
-const scheduleTags = ['NodePicker.tsx', 'ScheduledTasksScreen.tsx'].flatMap(f => modalTags(read(f)).map(tag => ({ f, tag })));
-ck(`collect: ${scheduleTags.length} Modals in the schedule surfaces (ScheduleModal sheet + dialog, cancel, picker)`, scheduleTags.length === 4);
+ck('collect: picker + schedule screen + shared editor are in the scanned set', files.includes('NodePicker.tsx') && files.includes('ScheduledTasksScreen.tsx') && files.includes('ScheduleEditor.tsx'));
+const scheduleTags = ['NodePicker.tsx', 'ScheduledTasksScreen.tsx', 'ScheduleEditor.tsx'].flatMap(f => modalTags(read(f)).map(tag => ({ f, tag })));
+ck(`collect: ${scheduleTags.length} Modals in the schedule surfaces (ScheduleModal dialog + bottom sheet + pageSheet, confirm, picker)`, scheduleTags.length === 5);
 for (const { f, tag } of scheduleTags) {
   const h = closeHandler(tag);
   ck(`${f}: ${tag.slice(0, 60).replace(/\s+/g, ' ')}… has onRequestClose (Android back / Esc)`, !!h && !/^\(\)\s*=>\s*\{\s*\}$/.test(h));

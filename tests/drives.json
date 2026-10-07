@@ -274,6 +274,10 @@
       "kind": "stub",
       "secs": 24
     },
+    "test-node-schedule-editor/drive.mjs": {
+      "kind": "stub",
+      "secs": 70
+    },
     "test-select-menu-esc/drive.mjs": {
       "kind": "stub",
       "secs": 35

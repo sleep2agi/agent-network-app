@@ -207,6 +207,8 @@ export default function NodeDetailScreen({
   // board #585 —— 提交启动后等节点上线(只看页面本来就在轮询的节点 / 会话状态,不另起轮询)。
   const [startWatch, setStartWatch] = useState<{ deadline: number; sawStarting: boolean } | null>(null);
   const [activeSection, setActiveSection] = useState<NodeSectionKey>('overview');
+  // 「定时任务」分区标题上的「＋ 新建」:每按一次加一,NodeSchedulesSection 就地打开预填了这个节点的编辑器。
+  const [scheduleCreateSeq, setScheduleCreateSeq] = useState(0);
   // Fold/unfold remounts this screen; keep the selected tab (概览/规则文件/技能/…)
   // across that remount only (see layout-handoff.ts).
   const sectionHandoffKey = `nodeSection:${readOnly ? 'info' : 'detail'}:${cfg.profileId ?? cfg.serverUrl}:${alias}`;
@@ -574,12 +576,13 @@ export default function NodeDetailScreen({
     if (section === 'schedules') {
       // 执行节点按 node_id 认:nodes 行的权威 id 优先,没有再用会话上报的(节点计划的快照挂在会话上)。
       const scheduleNodeId = node?.node_id ?? s.node_id ?? null;
-      const create = onOpenScheduled && scheduleNodeId ? () => onOpenScheduled({ kind: 'create', nodeId: scheduleNodeId, seq: Date.now() }) : undefined;
+      // 「＋ 新建」/ 点一行 Hub 计划:就在这一页打开编辑器(NodeSchedulesSection 里的 ScheduleEditor),不切到定时任务页。
+      const create = onOpenScheduled && scheduleNodeId ? () => setScheduleCreateSeq(n => n + 1) : undefined;
       return (
         <View>
           <SectionTitle
             title="定时任务"
-            hint="这个节点要执行的计划:Hub 计划由 Hub 按时派发,节点计划是节点上报的本机计划。点一行看详情和执行记录。"
+            hint="这个节点要执行的计划:Hub 计划由 Hub 按时派发,节点计划是节点上报的本机计划。点一行 Hub 计划就地编辑、看最近执行。"
             action={create ? (
               <Pressable onPress={create} accessibilityRole="button" accessibilityLabel="新建定时任务" testID="node-schedules-create" hitSlop={6}
                 style={({ pressed }) => [localStyles.headerAction, { backgroundColor: colors.accent }, pressed && { opacity: 0.8 }]}>
@@ -593,10 +596,9 @@ export default function NodeDetailScreen({
             <NodeSchedulesSection
               cfg={cfg}
               nodeId={scheduleNodeId}
-              onCreate={create}
-              onOpen={onOpenScheduled ? row => onOpenScheduled(row.source === 'hub'
-                ? { kind: 'hub', scheduleId: row.scheduleId, seq: Date.now() }
-                : { kind: 'node', nodeId: scheduleNodeId!, scheduleId: row.scheduleId, seq: Date.now() }) : undefined}
+              editable={!!onOpenScheduled}
+              createSeq={scheduleCreateSeq}
+              onOpenNodePlan={onOpenScheduled}
             />
           )}
         </View>

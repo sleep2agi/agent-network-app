@@ -130,7 +130,8 @@ const srcDir = new URL('.', import.meta.url);
 const read = (f: string) => readFileSync(new URL(f, srcDir), 'utf8').replace(/\r\n?/g, '\n');
 const strip = (s: string) => s.replace(/\{\/\*[\s\S]*?\*\/\}/g, '').replace(/^\s*\/\/.*$/gm, '');
 const picker = strip(read('NodePicker.tsx'));
-const screen = strip(read('ScheduledTasksScreen.tsx'));
+// 表单在 ScheduleEditor.tsx(定时任务页和节点页共用)。
+const screen = strip(read('ScheduleEditor.tsx'));
 ck('picker: unassignable rows are disabled Pressables', /disabled=\{!assignable\}/.test(picker) && /accessibilityState=\{\{ selected, disabled: !assignable \}\}/.test(picker));
 ck('picker: ✓ only on assignable rows (empty node_id vs empty selection)', /const selected = assignable && item\.node_id === selectedId;/.test(picker));
 ck('picker: tap on an unassignable row is ignored', /const pick = useCallback\(\(n: PickerNode\) => \{ if \(n\.assignable\) onSelect\(n\); \}/.test(picker));
