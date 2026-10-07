@@ -15,6 +15,7 @@ import ConnectivityIndicator from './ConnectivityIndicator';
 import { railBadgeText, railIconFor } from './rail-nav';
 import { badgeOffsetCentered, clampBadge, pillBadgeWidth } from './badge-anchor';
 import { mobileRailItem, mobileRailWidth, railUnreadTotal } from './nav-chrome';
+import { nodeRolesVersion, subscribeNodeRoles } from './daemon-node';
 import { ds, listText, uiScale } from './ui-scale';
 import { alignedRailLayout, denserRowPitch, listFirstRowTop, onListFirstRowTopChange } from './list-rail-align';
 import { getUnreadSnapshot, subscribeUnread } from './unread-store';
@@ -44,7 +45,9 @@ interface Props {
 function useAgentsUnreadTotal(): number {
   const [snap, setSnap] = useState(getUnreadSnapshot);
   useEffect(() => subscribeUnread(() => setSnap(getUnreadSnapshot())), []);
-  return useMemo(() => railUnreadTotal(agentUnreadCounts(snap)), [snap]);
+  // #692:守护节点不计未读 —— 名单变了也要重算。
+  const roles = useSyncExternalStore(subscribeNodeRoles, nodeRolesVersion, nodeRolesVersion);
+  return useMemo(() => railUnreadTotal(agentUnreadCounts(snap)), [snap, roles]);
 }
 
 export default function MobileNavRail({ tabs, active, onSelect, insetLeft, insetBottom, showBrand }: Props) {
