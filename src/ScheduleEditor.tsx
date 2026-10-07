@@ -439,7 +439,7 @@ export default function ScheduleEditor({ cfg, nodes: nodesProp, visible, editing
 /**
  * 表单 / 改时间 / 意向记录的外壳。桌面(pointer-ui.ts,Tauri 壳任何宽度):居中对话框 —— 标题左对齐 + ✕,
  * 底部右侧「取消」「保存」,列表页留在后面(淡遮罩)(Owner 2026-09-27:桌面和安卓不该一样)。
- * 手机:sheet = 全高底部 sheet(圆角顶 + 把手,状态栏下留一截露出后面的页面);否则整屏 pageSheet。
+ * 手机:sheet = 全高底部 sheet(圆角顶 + 叠在顶栏上的把手,顶边离状态栏下沿只留 spacing.xs,顶栏位置同其它整屏弹窗);否则整屏 pageSheet。
  * 两种手机外壳的顶栏都是「取消 · 标题 · 保存」(iOS 导航栏的形状)。
  * testID 各形态相同:`${testID}` 是面板,`-header` / `-title` / `-cancel` / `-save` 各是那一格。
  */
@@ -495,9 +495,11 @@ export function ScheduleModal({ visible, onClose, testID = 'schedule-modal', tit
     return <Modal transparent visible={visible} animationType="slide" onRequestClose={onClose}>
       <View style={s.sheetOverlay}>
         <Pressable testID={`${testID}-backdrop`} accessibilityLabel="关闭" focusable={false} onPress={onClose} style={[StyleSheet.absoluteFill, s.dialogBackdrop]} />
-        <View testID={testID} style={[s.sheetPanel, { marginTop: sheetSafe.paddingTop + spacing.md, paddingBottom: sheetSafe.paddingBottom, paddingLeft: sheetSafe.paddingLeft, paddingRight: sheetSafe.paddingRight }]}>
-          <View style={s.sheetGrabber} />
+        {/* 面板顶边 = 状态栏下沿 + 一小截(spacing.xs,露出后面的页面、看得出是 sheet);顶栏离状态栏
+            ≤ 8(layout-sweep (b),和其它整屏弹窗一致)。把手叠在顶栏上方不占高度。 */}
+        <View testID={testID} style={[s.sheetPanel, { marginTop: sheetSafe.paddingTop + spacing.xs, paddingBottom: sheetSafe.paddingBottom, paddingLeft: sheetSafe.paddingLeft, paddingRight: sheetSafe.paddingRight }]}>
           {phoneHeader}
+          <View pointerEvents="none" style={s.sheetGrabber} />
           {children}
         </View>
       </View>
@@ -593,7 +595,7 @@ export function scheduleStyleDefs() { return {
   // 手机全高底部 sheet(ScheduleModal sheet):遮罩铺满,面板贴底、顶边圆角 + 把手。
   sheetOverlay: { flex: 1, justifyContent: 'flex-end' },
   sheetPanel: { flex: 1, backgroundColor: colors.bg, borderTopLeftRadius: radius.surface, borderTopRightRadius: radius.surface, overflow: 'hidden', ...elevated('floating', 'top') } as any,
-  sheetGrabber: { alignSelf: 'center', width: 36, height: 4, borderRadius: radius.pill, backgroundColor: colors.border, marginTop: spacing.sm },
+  sheetGrabber: { position: 'absolute', top: spacing.xs, left: '50%', marginLeft: -18, width: 36, height: 4, borderRadius: radius.pill, backgroundColor: colors.border },
   confirmOverlay: { flex: 1, backgroundColor: '#00000099', alignItems: 'center', justifyContent: 'center', padding: spacing.xl },
   confirmCard: { width: '100%', maxWidth: 420, backgroundColor: colors.card, borderRadius: radius.surface, padding: spacing.xl, ...elevated('floating') },
   confirmTitle: { color: colors.text, fontSize: 18, fontWeight: '600' },
