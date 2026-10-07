@@ -1,3 +1,6 @@
+import { nativeTitleBarTheme, syncNativeTitleBarTheme } from './native-title-bar-theme';
+import { onThemePreferenceChange, themeMode, themePreference, type ThemeMode } from './theme';
+import { isWindowsTauriShell } from './window-shell';
 import { SETTINGS_CATEGORIES, requestSettingsDetail, rememberSettingsCategory, settingsDetailFromQuery, type SettingsCategoryKey, type SettingsDetailKey } from './settings-model';
 
 export const SETTINGS_WINDOW_LABEL = 'settings';
@@ -35,6 +38,23 @@ export function requestedSettingsDetail(search = typeof location === 'undefined'
   return settingsDetailFromQuery(new URLSearchParams(search).get('detail'));
 }
 
+/** #743:建窗时就带上标题栏 theme(Windows 才给),第一帧就不是白条。null/undefined = 跟系统。 */
+export function settingsWindowTheme(windows = isWindowsTauriShell()): ThemeMode | undefined {
+  return windows ? nativeTitleBarTheme(themePreference(), themeMode()) ?? undefined : undefined;
+}
+
+/** #743:设置窗里调用 —— 主题切换时原生标题栏实时跟着变(Windows)。返回取消订阅。 */
+export function followThemeInSettingsTitleBar(): () => void {
+  if (!isWindowsTauriShell()) return () => {};
+  let stop = () => {};
+  let cancelled = false;
+  void import('@tauri-apps/api/webviewWindow').then(({ getCurrentWebviewWindow }) => {
+    if (cancelled) return;
+    stop = syncNativeTitleBarTheme(getCurrentWebviewWindow(), () => ({ pref: themePreference(), mode: themeMode() }), onThemePreferenceChange);
+  }).catch(() => {});
+  return () => { cancelled = true; stop(); };
+}
+
 const tauri = () => !!(globalThis as { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__;
 
 /** Mac / Windows：设置单独开一个窗口。没有桌面壳时返回 false，调用方留在主窗口。 */
@@ -62,6 +82,7 @@ export async function openSettingsWindow(category?: string | null, detail?: Sett
     minWidth: 720,
     minHeight: 520,
     focus: true,
+    theme: settingsWindowTheme(),
     // 原生标题栏(– □ × 是系统的),页面里不画 WinTitleBar —— 见 window-shell.ts windowDrawsOwnTitleBar
     decorations: true,
     titleBarStyle: 'overlay',

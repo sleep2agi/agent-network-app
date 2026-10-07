@@ -82,7 +82,7 @@ import { readImageWindowRoute } from './src/image-window-model';
 import TaskWindow from './src/TaskWindow';
 import { readTaskWindowRoute } from './src/task-window-model';
 import { loadPinnedChats, requestedChatAlias, requestedChatProfileId, requestedWorkspaceProfileId, savePinnedChats } from './src/desktop-chat-menu';
-import { SETTINGS_CATEGORY_EVENT, SETTINGS_SESSION_EVENT, closeSettingsWindow, notifySessionChanged, openSettingsWindow, requestedSettingsCategory, requestedSettingsDetail, requestedSettingsWindow, settingsCategoryFromQuery } from './src/desktop-settings-window';
+import { SETTINGS_CATEGORY_EVENT, SETTINGS_SESSION_EVENT, closeSettingsWindow, followThemeInSettingsTitleBar, notifySessionChanged, openSettingsWindow, requestedSettingsCategory, requestedSettingsDetail, requestedSettingsWindow, settingsCategoryFromQuery } from './src/desktop-settings-window';
 import { loadChatPins, saveChatPins, togglePinned } from './src/chat-pins';
 import { ROW_MENU_EMPTY_HINT } from './src/agent-row-menu';
 import { bindUnreadProfile } from './src/unread-store';
@@ -459,6 +459,8 @@ function AppRoot() {
   const dedicatedChatWindow = tauriDesktop && !!initialChat;
   // Mac / Windows：设置是单独的窗口，不嵌进主窗口的三栏。
   const settingsWindow = tauriDesktop && requestedSettingsWindow();
+  // #743:Windows 设置窗的原生标题栏跟 app 主题走(深色时不再是白条)。
+  useEffect(() => (settingsWindow ? followThemeInSettingsTitleBar() : undefined), [settingsWindow]);
   const settingsCategoryBooted = useRef(false);
   if (settingsWindow && !settingsCategoryBooted.current) {
     settingsCategoryBooted.current = true;
