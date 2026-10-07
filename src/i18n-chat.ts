@@ -184,5 +184,8 @@ export const chatTranslations = {
   'chat.imagesLostTitle': ['图片已丢失', 'Images lost'],
   'chat.imagesLostBody': ['这条消息里的图片没有保存下来，无法重新发送（不会只发文字）。请删掉这条，重新选择图片发送。', 'The images in this message were not saved, so it cannot be resent (text alone is never sent). Delete it and pick the images again.'],
   'chat.deleteUnsent': ['删除这条', 'Delete message'],
+  // #692 守护节点(host_supervisor)会话页:输入框换成这一行 + 入口。
+  'chat.daemon.notice': ['守护节点只执行创建 / 停止 / 重启 / 删除等结构化命令，不能对话', 'Daemon nodes only run structured commands such as create / stop / restart / delete. They cannot chat.'],
+  'chat.daemon.managed': ['托管的节点（{count}）', 'Managed nodes ({count})'],
 } satisfies Record<string, readonly [string, string]>;
 registerTranslations(chatTranslations);

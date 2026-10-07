@@ -51,12 +51,10 @@ try {
     ck(`${name} same card chips aligned`, pair.length === 2 && Math.abs(pair[0].y - pair[1].y) < 1 && pair[0].height === pair[1].height, pair);
     await page.screenshot({ path: `${out}/${name}-tags.png` });
     await page.getByText('Ship the onboarding improvements', { exact: true }).first().click();
-    // #510: tags live inside the detail's collapsed 「更多」; the collapsed row names them, then it expands.
-    const summary = (await page.getByTestId('req-more-summary').textContent()) || '';
-    await page.getByTestId('req-more-summary').scrollIntoViewIfNeeded();
-    const summaryBox = await paintedBox(page, 'req-more-summary');
-    ck(`${name} collapsed 更多 summary counts the tags`, /\b2 tags\b|2 个标签/.test(summary) && !!summaryBox?.painted, { summary, painted: summaryBox });
-    await page.getByTestId('req-more-toggle').click();
+    // #701: tags are a property now (right column / phone properties), always shown — no longer inside 「更多」.
+    await page.getByTestId('req-tag-input').scrollIntoViewIfNeeded();
+    const tagBox = await paintedBox(page, 'req-tag-input');
+    ck(`${name} tags shown with the properties, not hidden in 更多`, !!tagBox?.painted && (await page.getByTestId('req-more').count()) === 0, { painted: tagBox });
     await page.getByTestId('req-tag-input').fill('Release');
     await page.getByTestId('req-tag-input').press('Enter');
     await page.getByRole('button', { name: 'Remove tag Release', exact: true }).waitFor();

@@ -10,6 +10,7 @@
 
 import type { RulesTarget, Session } from './api';
 import { isAgentNodeSession } from './node-rules';
+import { unknownOpMessage } from './node-op-unsupported';
 
 export type LogLevel = 'debug' | 'info' | 'warn' | 'error';
 export type LogLevelFilter = 'all' | 'info' | 'warn' | 'error';
@@ -158,8 +159,8 @@ export function logsExportName(alias: string, now: Date = new Date()): string {
 }
 
 /** 终态 → 给人看的一句话(done 以外)。 */
-export function logsStatusMessage(status: string, error: string | null | undefined): string {
-  if (status === 'failed') return `节点读取日志失败：${error || '未知原因'}`;
+export function logsStatusMessage(status: string, error: string | null | undefined, session?: Pick<Session, 'agent' | 'version'> | null): string {
+  if (status === 'failed') return unknownOpMessage(error, session) ?? `节点读取日志失败：${error || '未知原因'}`;
   if (status === 'timeout') return '节点没有响应（可能离线）';
   if (status === 'pending' || status === 'in_progress') return '正在等节点回传日志…';
   return `服务器返回了认不出的状态「${status}」`;

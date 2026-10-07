@@ -43,7 +43,9 @@ import { recallBoard, rememberBoard } from './swr-cache';
 import { PRIORITY_CODE, priorityChoices, priorityLabel, supportsLowest } from './task-priority';
 import { BOARD_RADIUS, CONTROL_H, cardBg, CardActivityLine, CardMeta, ChecklistCompact, ChecklistProgress, Chip, QuickChip, ParticipantStack, ProjectChip, DueChip, OwnerBadge, PriorityDot, Segmented, STATUS_TONE, useTaskStyles, type TaskStyles, a11yState } from './TaskBoardParts';
 import TaskCreateDialog from './TaskCreateDialog';
-import TaskDetailPanel, { DRAWER_WIDTH } from './TaskDetailPanel';
+import TaskDetailPanel from './TaskDetailPanel';
+import TaskDrawer, { useDrawerWidth } from './TaskDrawer';
+import { detailMode } from './task-drawer-model';
 import TaskCardMenu, { type TaskMenuTarget } from './TaskCardMenu';
 import TaskSwipeRow from './TaskSwipeRow';
 import { quickMenuAccess, swipeActions, UNDO_MS, type QuickUndo, type SwipeAction } from './task-quick-status';
@@ -72,7 +74,6 @@ type BulkKind = 'project' | 'status' | 'agent' | 'owner';
 /** 别的设备改了也要看得到;有未完成的写入时跳过这一轮(不拿旧数据盖掉乐观更新)。 */
 const POLL_MS = 15_000;
 // 内容区窄于 NARROW(task-board-layout)时:看板改成横向一列一屏,详情改成推入页。
-const DRAWER_MIN = 860;
 
 /** 筛选键(user:… / node:…)对应的名字:没有卡片的人不在 ownerCounts 里,从成员表取。 */
 const keyName = (key: string, people: readonly { kind: string; id: string; name: string }[]) =>
@@ -134,7 +135,9 @@ function ScopedRequirementBoard({ cfg, desktop, dispatch, onOpenVoiceSettings, s
   const layout = boardLayout(measured, windowWidth, spacing.lg);
   const width = layout.width;
   const narrow = layout.mode === 'paged';
-  const drawer = width >= DRAWER_MIN;
+  // #701:桌面(有指针)点任务一律右侧抽屉(默认 560、左沿拖宽、本机记住);触屏宽屏抽屉、手机推入整页(task-drawer-model.ts)。
+  const drawer = detailMode({ pointer: pointer, boardWidth: width }) === 'drawer';
+  const [drawerWidth, setDrawerWidth] = useDrawerWidth(width);
   const pagerRef = useRef<ScrollView>(null);
   const [page, setPage] = useState(0);
   const pageWidth = layout.mode === 'paged' ? layout.pageWidth : 0;
@@ -1295,6 +1298,7 @@ function ScopedRequirementBoard({ cfg, desktop, dispatch, onOpenVoiceSettings, s
             const name = items.find(row => row.id === id)?.name ?? patch.name ?? '';
             void saveEdit(id, patch).then(failed => { if (failed) setBanner(`「${name}」${failed}`); });
           }}
+          networkId={cfg.networkId}
           onOpenWindow={tauriShell && pointer && !single ? () => openTaskWindow({ taskId: selected.id, profileId: cfg.profileId, serverUrl: cfg.serverUrl, networkId: cfg.networkId, title: selected.name, at: Date.now() }) : undefined}
           pointer={pointer}
           onOpenVoiceSettings={onOpenVoiceSettings}
@@ -1367,7 +1371,11 @@ function ScopedRequirementBoard({ cfg, desktop, dispatch, onOpenVoiceSettings, s
       {body}
       <Text style={{ position: 'absolute', width: 1, height: 1, opacity: 0 }} accessibilityLiveRegion="polite">{announce}</Text>
       {ghost}
-      {selected && section !== 'dispatch' ? detail(drawer ? 'drawer' : 'page') : null}
+      {selected && section !== 'dispatch' ? (drawer ? (
+        <TaskDrawer taskId={selected.id} top={headerBottom} width={drawerWidth} boardWidth={width} onWidth={setDrawerWidth}>
+          {detail('drawer')}
+        </TaskDrawer>
+      ) : detail('page')) : null}
       {createDialog}
       {projects ? (
         <TaskProjectManager
@@ -1428,7 +1436,7 @@ function ScopedRequirementBoard({ cfg, desktop, dispatch, onOpenVoiceSettings, s
           canAgent={twoRoles}
           canOwner={sel.ids.some(id => { const it = items.find(i => i.id === id); return !!it && assignAccess(it) !== 'hidden'; })}
           ownerEditable={bulkOwnerPlan(items, sel.ids).editable.length}
-          right={selected && drawer ? DRAWER_WIDTH : 0}
+          right={selected && drawer ? drawerWidth : 0}
           setRef={(kind, r) => { bulkRefs.current[kind] = r; }}
           onOpen={kind => { void openBulkMenu(kind); }}
           onRetry={() => { const last = lastBulk.current; if (last && bulk) void applyBulk(last.kind, last.value, bulk.failed.map(f => f.id)); }}

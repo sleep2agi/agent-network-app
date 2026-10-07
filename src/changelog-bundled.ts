@@ -5,6 +5,12 @@
 export const BUNDLED_RELEASE_BODY: string = [
   "Signed and notarized stable update for macOS (Apple Silicon) and Windows (x64).",
   "",
+  "What's new in 0.2.220:",
+  "- 守护节点的会话页不再显示输入框，改为一行说明，并提供「托管的节点」和「运行日志」两个入口",
+  "- 守护节点发来的回执不再计入未读数",
+  "- 设置 → 关于 中的「连接复用」开关收进隐藏的「诊断」组：连点「版本」行 5 下才会出现",
+  "- 定时任务页的状态筛选新增「全部 N」，一次查看所有计划",
+  "",
   "What's new in 0.2.219:",
   "- 手机聊天页的时间总能完整显示：不再出现「09:0」这样被截掉一位的时间",
   "- 名字太长时省略名字，时间保持完整",
@@ -953,6 +959,7 @@ export const BUNDLED_RELEASE_BODY: string = [
 
 /** Release date (published_at) per version, as far as it was known when this file was generated. */
 export const BUNDLED_RELEASE_DATES: Record<string, string> = {
+  "0.2.219": "2026-10-07T03:33:26Z",
   "0.2.218": "2026-10-06T15:33:53Z",
   "0.2.217": "2026-10-06T14:05:04Z",
   "0.2.216": "2026-10-06T11:02:05Z",

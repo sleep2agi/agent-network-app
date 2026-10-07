@@ -8,6 +8,7 @@
 // 🔴 桌面端只传技能名,不传路径;名字规则与 hub / 节点一致。
 
 import type { RulesTarget, Session } from './api';
+import { unknownOpMessage } from './node-op-unsupported';
 
 export type SkillScope = 'project' | 'user' | 'system';
 
@@ -146,7 +147,7 @@ export function stripFrontmatter(text: string): string {
 }
 
 /** hub 终态 → 给人看的一句话。 */
-export function skillsStatusMessage(status: 'pending' | 'in_progress' | 'done' | 'failed' | 'timeout', error: string | null, count?: number): string {
+export function skillsStatusMessage(status: 'pending' | 'in_progress' | 'done' | 'failed' | 'timeout', error: string | null, count?: number, session?: Pick<Session, 'agent' | 'version'> | null): string {
   switch (status) {
     case 'pending':
     case 'in_progress':
@@ -154,7 +155,7 @@ export function skillsStatusMessage(status: 'pending' | 'in_progress' | 'done' |
     case 'done':
       return count === 0 ? '这个节点的运行时目录下还没有技能' : '';
     case 'failed':
-      return `节点读取技能失败:${error ?? '未说明原因'}`;
+      return unknownOpMessage(error, session) ?? `节点读取技能失败:${error ?? '未说明原因'}`;
     case 'timeout':
       // 技能区只对上报了 skills_capable 的会话显示,所以超时不是版本问题,是连接/节点状态问题。
       return '节点 60 秒内没有取走这次请求:多半是节点和服务器之间的实时连接断了,或节点卡住了;重启这个节点通常能恢复';

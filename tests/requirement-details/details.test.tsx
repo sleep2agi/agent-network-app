@@ -179,6 +179,10 @@ const byId = (id: string) => renderer.root.findByProps({ testID: id });
 // The pressable host under a component that forwards the same testID (SelectField → Pressable).
 const pressable = (id: string) => renderer.root.findAll(n => n.props.testID === id && typeof n.props.onPress === 'function')[0];
 const texts = (id: string) => JSON.stringify(byId(id).findAllByType('Text').map(node => node.props.children));
+// #701:状态 / 优先级在详情头部的 pill 里,点开才有选项。
+const shown = (id: string) => renderer.root.findAll((n: any) => n.props.testID === id).length > 0;
+async function openStatus() { if (!shown('req-move-group')) await act(async () => byId('req-status-pill').props.onPress()); }
+async function openPriority() { if (!shown('req-priority-row')) await act(async () => byId('req-priority-pill').props.onPress()); }
 async function mount() {
   requests = []; creates = []; edits = []; editReply = null;
   cfg = { ...cfg, token: `test-${++seq}` };
@@ -332,13 +336,17 @@ test('opening and closing details never writes; explicit move waits for Hub, cou
   await act(async () => byId('req-card-r1').props.onPress());
   expect(requests).toHaveLength(0);
   expect(byId('req-detail')).toBeTruthy();
+  await openStatus();
   expect(byId('req-move-pool').props.disabled).toBe(true);
+  await openStatus();
   await act(async () => { byId('req-move-doing').props.onPress(); byId('req-move-doing').props.onPress(); });
   expect(requests).toEqual([{ network: 'a', id: 'r1', column: 'doing' }]);
+  await openStatus();
   expect(byId('req-move-done').props.disabled).toBe(true);
   expect(texts('req-count-doing')).toContain('1');
   expect(texts('req-count-pool')).toContain('1');
   await act(async () => reply({ ...card, column: 'doing' }));
+  await openStatus();
   expect(byId('req-move-doing').props.accessibilityState.selected).toBe(true);
   await act(async () => byId('req-detail-close').props.onPress());
   expect(renderer.root.findAllByProps({ testID: 'req-detail' })).toHaveLength(0);
@@ -348,11 +356,14 @@ test('opening and closing details never writes; explicit move waits for Hub, cou
 test('failed move reverts the card and allows a retry', async () => {
   await mount();
   await act(async () => byId('req-card-r1').props.onPress());
+  await openStatus();
   await act(async () => byId('req-move-done').props.onPress());
   await act(async () => reject(new HubError(403)));
+  await openStatus();
   expect(byId('req-move-pool').props.accessibilityState.selected).toBe(true);
   expect(texts('req-count-done')).toContain('0');
   expect(JSON.stringify(renderer.toJSON())).toContain('你没有修改这条需求的权限');
+  await openStatus();
   await act(async () => byId('req-move-doing').props.onPress());
   expect(requests).toHaveLength(2);
   await act(async () => reply({ ...card, column: 'doing' }));
@@ -393,6 +404,7 @@ test('phone swipe 完成 saves {column} at once; undo puts it back', async () =>
 test('switching network closes old details and ignores its late mutation response', async () => {
   await mount();
   await act(async () => byId('req-card-r1').props.onPress());
+  await openStatus();
   await act(async () => byId('req-move-done').props.onPress());
   await act(async () => renderer.update(<Board cfg={{ ...cfg, networkId: 'b' }} />));
   expect(renderer.root.findAllByProps({ testID: 'req-detail' })).toHaveLength(0);
@@ -400,22 +412,21 @@ test('switching network closes old details and ignores its late mutation respons
   expect(JSON.stringify(renderer.toJSON())).not.toContain('旧网络回复');
 });
 
-test('existing card: priority and due save at once (one field each, like status / owner); the title waits for 保存修改', async () => {
+test('existing card: priority and due save at once (one field each, like status / owner); the title saves on blur', async () => {
   await mount();
   await act(async () => byId('req-card-r1').props.onPress());
   expect(byId('req-edit-name').props.value).toBe('验证需求详情');
-  expect(byId('req-edit-save').props.disabled).toBe(true);
   await act(async () => byId('req-edit-name').props.onChangeText('改过的标题'));
   expect(edits).toHaveLength(0);
+  await openPriority();
   await act(async () => byId('req-edit-priority-high').props.onPress());
   await act(async () => byId('req-edit-due-tomorrow').props.onPress());
   expect(edits).toEqual([
     { id: 'r1', patch: { priority: 'high' } },
     { id: 'r1', patch: { due: addDays(localDateOf(Date.now()), 1) } },
   ]);
-  // the typed title is still a draft and is the only thing 保存修改 sends
-  expect(byId('req-edit-save').props.disabled).toBe(false);
-  await act(async () => byId('req-edit-save').props.onPress());
+  // #701: no 保存修改 — the typed title is sent (alone) when the field loses focus
+  await act(async () => byId('req-edit-name').props.onBlur());
   expect(edits[2]).toEqual({ id: 'r1', patch: { name: '改过的标题' } });
   expect(texts('req-card-r1')).toContain('改过的标题');
 });
@@ -443,11 +454,11 @@ test('switching to another card saves the first card\'s unsaved title (by its ow
   expect(edits).toHaveLength(1);
 });
 
-test('a title saved with 保存修改 and then closed is not sent a second time', async () => {
+test('a title saved on blur and then closed is not sent a second time', async () => {
   await mount();
   await act(async () => byId('req-card-r1').props.onPress());
   await act(async () => byId('req-edit-name').props.onChangeText('只发一次'));
-  await act(async () => byId('req-edit-save').props.onPress());
+  await act(async () => byId('req-edit-name').props.onBlur());
   await act(async () => byId('req-detail-close').props.onPress());
   expect(edits).toEqual([{ id: 'r1', patch: { name: '只发一次' } }]);
 });
@@ -468,7 +479,7 @@ test('an old Hub that cannot edit keeps the draft and says so', async () => {
   editReply = () => { throw new HubError(400, '这个 Hub 还不能修改已有需求的内容，升级 Hub 后再试'); };
   await act(async () => byId('req-card-r1').props.onPress());
   await act(async () => byId('req-edit-name').props.onChangeText('新标题'));
-  await act(async () => byId('req-edit-save').props.onPress());
+  await act(async () => byId('req-edit-name').props.onBlur());
   expect(JSON.stringify(renderer.toJSON())).toContain('这个 Hub 还不能修改已有需求的内容');
   expect(byId('req-edit-name').props.value).toBe('新标题');
   expect(texts('req-card-r1')).not.toContain('新标题');
@@ -476,7 +487,7 @@ test('an old Hub that cannot edit keeps the draft and says so', async () => {
   expect(byId('req-owner-unsupported')).toBeTruthy();
 });
 
-test('owner changed in details saves immediately as {kind,id} (like participants), no 保存修改, and shows on the card', async () => {
+test('owner changed in details saves immediately as {kind,id} (like participants), no save button, and shows on the card', async () => {
   typedCards = true;
   await mount();
   await act(async () => byId('req-card-r1').props.onPress());
@@ -484,9 +495,9 @@ test('owner changed in details saves immediately as {kind,id} (like participants
   await act(async () => byId('person-user:u').props.onPress());
   await act(async () => byId('people-confirm').props.onPress());
   expect(edits).toEqual([{ id: 'r1', patch: { owner: { kind: 'user', id: 'u' } } }]);
-  expect(texts('req-assign-status')).toContain('已保存');
-  // The draft never carries the owner: 保存修改 stays disabled, nothing is sent twice.
-  expect(byId('req-edit-save').props.disabled).toBe(true);
+  expect(byId('req-saved-toast')).toBeTruthy(); // #701: 成功 = 底部「已保存」小提示(不再常驻一行)
+  // The draft never carries the owner and there is no save button: nothing is sent twice.
+  expect(renderer.root.findAllByProps({ testID: 'req-edit-save' })).toHaveLength(0);
   await act(async () => byId('req-detail-close').props.onPress());
   expect(texts('req-card-r1')).toContain('成员');
 });
@@ -520,7 +531,7 @@ test('two-role hub: detail changes 负责 Agent alone, immediately', async () =>
   await act(async () => byId('person-node:n1').props.onPress());
   await act(async () => byId('people-confirm').props.onPress());
   expect(edits).toEqual([{ id: 'r1', patch: { agent_owner: { kind: 'node', id: 'n1' } } }]);
-  expect(byId('req-edit-save').props.disabled).toBe(true);
+  expect(renderer.root.findAllByProps({ testID: 'req-edit-save' })).toHaveLength(0);
 });
 
 test('owner save failure in details reverts the card and says why; title draft is untouched', async () => {
@@ -578,7 +589,7 @@ test('hub without agent_owner keeps the single 负责人 picker (humans and agen
   expect(byId('person-user:u')).toBeTruthy();
 });
 
-test('description and checklist: card progress, per-item toggle, add/delete replace the list, description saves with 保存修改', async () => {
+test('description and checklist: card progress, per-item toggle, add/delete replace the list, description saves on blur', async () => {
   detailCards = true;
   await mount();
   expect(texts('req-card-r1')).toContain('1');
@@ -598,10 +609,10 @@ test('description and checklist: card progress, per-item toggle, add/delete repl
   // 删一项(手机:删除按钮常驻)
   await act(async () => byId('req-checklist-delete-b').props.onPress());
   expect(edits[1].patch.checklist.map((i: any) => i.id)).not.toContain('b');
-  // 描述:编辑后跟「保存修改」一起发
+  // 描述:离开输入框时保存(#701)
   await act(async () => byId('req-description-mode-edit').props.onPress());
   await act(async () => byId('req-description-input').props.onChangeText('## 目标\n- 新的验收标准'));
-  await act(async () => byId('req-edit-save').props.onPress());
+  await act(async () => byId('req-description-input').props.onBlur());
   expect(edits[2].patch).toEqual({ description: '## 目标\n- 新的验收标准' });
 });
 
@@ -634,7 +645,6 @@ test('projects: create defaults to the selected project; detail moves a card to 
   await act(async () => pressable('req-edit-project').props.onPress());
   await act(async () => byId('req-edit-project-menu-opt-p2').props.onPress());
   expect(byId('req-edit-project-value').props.children).toBe('TMAI');
-  await act(async () => byId('req-edit-save').props.onPress());
   expect(edits).toEqual([{ id: 'r1', patch: { project_id: 'p2' } }]);
 });
 
@@ -716,7 +726,7 @@ test('description images: 🖼 uploads with network_id and inserts ![name](/api/
   expect(uploads).toEqual([{ name: '截图.png', networkId: 'a' }]);
   expect(byId('req-description-input').props.value).toBe('## 目标\n![截图.png](/api/files/f_1)');
   expect(JSON.stringify(renderer.toJSON())).toContain('超过 12MB 上限');
-  await act(async () => byId('req-edit-save').props.onPress());
+  await act(async () => byId('req-description-input').props.onBlur());
   expect(edits[0].patch).toEqual({ description: '## 目标\n![截图.png](/api/files/f_1)' });
 });
 
@@ -749,10 +759,10 @@ test('description full screen (phone): ⤢ opens a page with ‹, 编辑/预览 
   await act(async () => byId('req-description-page-mode-preview').props.onPress());
   expect(renderer.root.findAllByProps({ testID: 'voice-hold-bar' })).toHaveLength(0);
   expect(renderer.root.findAllByProps({ testID: 'req-description-page-image' })).toHaveLength(0);
-  // ‹ closes the page; the draft is kept and 保存修改 sends it.
+  // ‹ closes the page; the draft is kept and closing the detail sends it.
   await act(async () => byId('req-description-page-back').props.onPress());
   expect(renderer.root.findAllByProps({ testID: 'req-description-page' })).toHaveLength(0);
-  await act(async () => byId('req-edit-save').props.onPress());
+  await act(async () => byId('req-detail-close').props.onPress());
   expect(edits[0].patch).toEqual({ description: '## 新的目标' });
 });
 
@@ -773,9 +783,10 @@ test('详情渐进展开: 常显字段在前,其余收进「更多」(默认收�
   await act(async () => byId('req-card-r1').props.onPress());
   // 收起:母任务 / 子任务 看不到;优先级常显(owner 10-01:放在描述前面);摘要说「2 子任务」(r1 的 children.total = 2)
   expect(renderer.root.findAllByProps({ testID: 'req-more' })).toHaveLength(0);
-  expect(byId('req-edit-priority-high')).toBeTruthy();
-  expect(renderer.root.findAllByProps({ testID: 'req-subrequirements' })).toHaveLength(0);
-  expect(byId('req-more-summary').props.children).toBe('2 子任务');
+  expect(byId('req-priority-pill')).toBeTruthy();
+  // #701:子任务常显在左栏(不再收进「更多」),摘要里只剩母任务 / Issue —— 这里都没有,不画摘要。
+  expect(byId('req-subrequirements')).toBeTruthy();
+  expect(renderer.root.findAllByProps({ testID: 'req-more-summary' })).toHaveLength(0);
   expect(byId('req-edit-due')).toBeTruthy();
   await act(async () => byId('req-more-toggle').props.onPress());
   expect(byId('req-more')).toBeTruthy();
@@ -878,6 +889,7 @@ test('changing network discards unconfirmed people selection', async () => {
 test('late failure belongs to the original card, not newly opened details', async () => {
   await mount();
   await act(async () => byId('req-card-r1').props.onPress());
+  await openStatus();
   await act(async () => byId('req-move-doing').props.onPress());
   await act(async () => byId('req-detail-close').props.onPress());
   await act(async () => byId('req-card-r2').props.onPress());
@@ -928,4 +940,50 @@ test('detail ID chip (phone): tap copies #N, long-press copies the full id; old 
   expect(byId('req-detail-id-text').props.children).toBe('9b8c7d6e');
   await act(async () => { await pressable('req-detail-id-copy').props.onPress(); });
   expect(copied[2]).toBe('req_9b8c7d6e-2222');
+});
+
+// ── #701 任务详情抽屉 / 推入页:没有「保存修改」,属性自动保存 + 「已保存」,标题失焦保存、Esc 取消 ──────────────
+test('#701 title: Esc puts the card value back and sends nothing; blur sends only {name}', async () => {
+  await mount();
+  await act(async () => byId('req-card-r1').props.onPress());
+  expect(renderer.root.findAllByProps({ testID: 'req-edit-save' })).toHaveLength(0);
+  await act(async () => byId('req-edit-name').props.onChangeText('不要了'));
+  await act(async () => byId('req-edit-name').props.onKeyPress({ nativeEvent: { key: 'Escape' }, preventDefault() {} }));
+  expect(byId('req-edit-name').props.value).toBe('验证需求详情');
+  await act(async () => byId('req-edit-name').props.onBlur());
+  await act(async () => byId('req-detail-close').props.onPress());
+  expect(edits).toEqual([]);
+  await act(async () => byId('req-card-r1').props.onPress());
+  await act(async () => byId('req-edit-name').props.onChangeText('留下的标题'));
+  await act(async () => byId('req-edit-name').props.onBlur());
+  expect(edits).toEqual([{ id: 'r1', patch: { name: '留下的标题' } }]);
+  expect(byId('req-saved-toast')).toBeTruthy();
+  // blur twice / blur then close: still one write
+  await act(async () => byId('req-edit-name').props.onBlur());
+  await act(async () => byId('req-detail-close').props.onPress());
+  expect(edits).toHaveLength(1);
+});
+
+test('#701 header pills: status and priority open their choices; picking saves one field and shows 已保存', async () => {
+  await mount();
+  await act(async () => byId('req-card-r1').props.onPress());
+  expect(shown('req-move-group')).toBe(false);
+  expect(shown('req-priority-row')).toBe(false);
+  await act(async () => byId('req-priority-pill').props.onPress());
+  await act(async () => byId('req-edit-priority-low').props.onPress());
+  expect(edits).toEqual([{ id: 'r1', patch: { priority: 'low' } }]);
+  expect(shown('req-priority-row')).toBe(false);
+  expect(byId('req-saved-toast')).toBeTruthy();
+  await act(async () => byId('req-status-pill').props.onPress());
+  await act(async () => byId('req-move-doing').props.onPress());
+  expect(requests).toEqual([{ network: 'a', id: 'r1', column: 'doing' }]);
+  await act(async () => reply({ ...card, column: 'doing' }));
+});
+
+test('#701 copy link copies anet://task/<network>/<id>', async () => {
+  copied.length = 0;
+  await mount();
+  await act(async () => byId('req-card-r1').props.onPress());
+  await act(async () => { await byId('req-detail-copy-link').props.onPress(); });
+  expect(copied).toEqual(['anet://task/a/r1']);
 });

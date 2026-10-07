@@ -81,7 +81,7 @@ ck('仅相关任务 的标签逐字', t('users.tasks.scoped') === '仅相关任�
   ck('看板:改不了状态的卡不带 data-task-from(拖不动)+ 锁标签', board.includes("canEditTaskField(item, 'column') ? { taskCard: item.id, taskFrom: item.column } : { taskCard: item.id }") && board.includes('{item.readOnly ? <ReadOnlyTag editFields={item.editFields} /> : null}'));
   ck('看板:详情拿到 readOnly', board.includes('readOnly={!!selected.readOnly}'));
   const detail = read('./TaskDetailPanel.tsx');
-  ck('详情:只读时表单整块不响应、不给保存、顶上说明', detail.includes("pointerEvents={readOnly && !partial ? 'none' : 'auto'}") && detail.includes('{readOnly ? null : (') && detail.includes('req-detail-read-only'));
+  ck('详情:只读时表单整块不响应、不给保存、顶上说明', detail.includes("pointerEvents={readOnly && !partial ? 'none' : 'auto'}") && !detail.includes('req-edit-save') && detail.includes('req-detail-read-only'));
   ck('列表视图也标只读', read('./TaskListTable.tsx').includes('{item.readOnly ? <ReadOnlyTag'));
 }
 

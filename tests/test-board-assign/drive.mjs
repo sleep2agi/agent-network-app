@@ -230,16 +230,16 @@ for (const [name, V] of Object.entries(VIEWPORTS)) {
         await page.locator(tid('req-detail-read-only')).first().waitFor({ timeout: 5000 });
         await page.waitForTimeout(300);
         record(where, 'read-only avatars open detail', { detail: true, noPicker: (await page.locator(tid('people-confirm')).count()) === 0, noRequest: (await patches()).length === 2 });
-        // 参与人的卡(只可改状态和检查项):状态 → 检查项 → 优先级(只读值)→ 负责人 … → 描述。
-        const pStatus = await bb(page, tid('req-move-group')), pCheck = await bb(page, tid('req-checklist-wrap'));
-        const pPrio = await bb(page, tid('req-locked-row-priority')), pOwner = await bb(page, tid('req-locked-row-owner')), pDesc = await bb(page, tid('req-locked-row-description'));
-        measure(where, '参与人详情 优先级(只读)', pPrio); measure(where, '参与人详情 描述(只读)', pDesc);
-        record(where, 'partial detail order: 状态 → 检查项 → 优先级 → 负责人 → 描述', {
-          checklistUnderStatus: !!(pStatus && pCheck) && pCheck.y >= pStatus.y + pStatus.height,
-          priorityUnderChecklist: !!(pCheck && pPrio) && pPrio.y >= pCheck.y + pCheck.height - 0.5,
-          priorityAboveOwner: !!(pPrio && pOwner) && pPrio.y < pOwner.y,
-          priorityAboveDescription: !!(pPrio && pDesc) && pPrio.y < pDesc.y,
-          priorityFirstScreen: !!pPrio && pPrio.y + pPrio.height <= V.h,
+        // #701 参与人的卡(只可改状态和检查项):头部状态 / 优先级 pill(优先级只读)· 属性只画值 · 检查项可勾。
+        const pStatus = await bb(page, tid('req-status-pill')), pPrio = await bb(page, tid('req-priority-pill')), pCheck = await bb(page, tid('req-checklist-wrap'));
+        const pOwner = await bb(page, tid('req-locked-row-owner')), pDesc = await bb(page, tid('req-locked-row-description'));
+        measure(where, '参与人详情 优先级 pill', pPrio); measure(where, '参与人详情 描述(只读)', pDesc);
+        record(where, 'partial detail: status + priority pills in the header, locked values below, checklist reachable', {
+          pillsInHeader: !!(pStatus && pPrio) && Math.abs(pStatus.y - pPrio.y) <= 1 && !!pOwner && pStatus.y < pOwner.y,
+          priorityLocked: (await page.locator(tid('req-priority-pill')).first().getAttribute('aria-disabled')) === 'true',
+          checklistShown: !!pCheck,
+          descriptionLocked: !!pDesc,
+          firstScreen: !!pPrio && pPrio.y + pPrio.height <= V.h,
         });
         await shot('detail-partial');
         await closeDetail();
@@ -281,16 +281,16 @@ for (const [name, V] of Object.entries(VIEWPORTS)) {
         const partRow = await bb(page, tid('req-participants-row')), dueF = await bb(page, tid('req-edit-due')), moreT = await bb(page, tid('req-more-toggle'));
         measure(where, '详情 负责人', ownerF); measure(where, '详情 负责 Agent', agentF); measure(where, '详情 参与人行(挪出更多)', partRow); measure(where, '详情 预计完成', dueF); measure(where, '详情 更多', moreT);
         const moreOpen = (await page.locator(tid('req-more')).count()) > 0;
-        const prio = await bb(page, tid('req-priority-row')), desc = await bb(page, tid('req-description'));
-        const statusSeg = await bb(page, tid('req-move-group'));
-        measure(where, '详情 优先级', prio); measure(where, '详情 描述(40 行)', desc);
-        record(where, 'detail: 优先级 above the long 描述, first screen (owner 10-01)', {
+        // #701:优先级是头部的 pill(和状态 pill 同一行),永远在第一屏、在描述之上。
+        const prio = await bb(page, tid('req-priority-pill')), desc = await bb(page, tid('req-description'));
+        const statusSeg = await bb(page, tid('req-status-pill'));
+        measure(where, '详情 优先级 pill', prio); measure(where, '详情 描述(40 行)', desc);
+        record(where, 'detail: 优先级 pill next to the status pill, above the long 描述, first screen', {
           present: !!prio,
-          afterStatus: !!(prio && statusSeg) && prio.y >= statusSeg.y + statusSeg.height,
-          beforeOwner: !!(prio && ownerF) && prio.y + prio.height <= ownerF.y,
+          nextToStatus: !!(prio && statusSeg) && Math.abs(prio.y - statusSeg.y) <= 1 && prio.x > statusSeg.x,
           aboveDescription: !!(prio && desc) && prio.y < desc.y,
           firstScreen: !!prio && prio.y + prio.height <= V.h,
-          notInMore: (await page.locator(`${tid('req-more')} ${tid('req-priority-row')}`).count()) === 0,
+          notInMore: (await page.locator(`${tid('req-more')} ${tid('req-priority-pill')}`).count()) === 0,
         });
         record(where, 'detail: 参与人 under 负责人 / 负责 Agent', {
           present: !!partRow,
@@ -313,13 +313,13 @@ for (const [name, V] of Object.entries(VIEWPORTS)) {
         }
         await page.waitForTimeout(700);
         const detailBodies = (await patches()).slice(before);
-        const status = await bb(page, tid('req-assign-status'));
+        const status = await bb(page, tid('req-saved-toast'));
         measure(where, '详情 已保存', status);
         record(where, 'detail owner saves immediately', {
           body: detailBodies.length === 1 && detailBodies[0] === '{"owner":{"kind":"user","id":"u_b"}}',
-          saved: (await page.locator(tid('req-assign-status')).first().innerText().catch(() => '')).trim() === '已保存',
-          saveButtonIdle: (await page.locator(tid('req-edit-save')).first().getAttribute('aria-disabled')) === 'true',
-          statusUnderRoles: !!(status && agentF) && status.y >= agentF.y,
+          saved: (await page.locator(tid('req-saved-toast')).first().innerText().catch(() => '')).includes('已保存'),
+          noSaveButton: (await page.locator(tid('req-edit-save')).count()) === 0,
+          toastOnScreen: !!status && status.y + status.height <= V.h,
         }, { bodies: detailBodies.join(' | ') });
         await shot('detail-owner-saved');
         await closeDetail();

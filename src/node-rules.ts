@@ -9,6 +9,7 @@
 
 import type { HubNode, RulesTarget, Session } from './api';
 import { withDeadline } from './deadline';
+import { unknownOpMessage } from './node-op-unsupported';
 
 /**
  * app#225 follow-up —— 规则文件区块显示给谁、请求发给谁。
@@ -127,13 +128,14 @@ export type RulesReadOutcome =
 export function rulesReadOutcome(
   res: { ok: true; status: string; op?: string; file_name?: string | null; exists?: boolean | null; content?: string; content_purged?: boolean; error: string | null } | { ok: false; error: string },
   support?: RulesSupport,
+  session?: Pick<Session, 'agent' | 'version'> | null,
 ): RulesReadOutcome {
   const fileName = res.ok ? res.file_name ?? null : null;
   const problem = resultProblem(res);
   if (problem !== null) return { kind: 'problem', fileName, message: problem };
   if (!res.ok) return { kind: 'problem', fileName, message: rulesErrorMessage(res.error) };
   const r = { op: 'read' as const, status: res.status as RulesRequestStatus, error: res.error, exists: res.exists ?? null, file_name: fileName };
-  if (res.status !== 'done') return { kind: 'problem', fileName, message: rulesStatusMessage(r, support) };
+  if (res.status !== 'done') return { kind: 'problem', fileName, message: rulesStatusMessage(r, support, session) };
   return { kind: 'content', content: res.content as string, exists: res.exists ?? null, fileName, message: rulesStatusMessage(r, support) };
 }
 
@@ -192,7 +194,7 @@ export function nextPollDelayMs(elapsedMs: number): number {
 }
 
 /** 把 hub 的终态翻成给人看的一句话。空串表示「不用说什么」。 */
-export function rulesStatusMessage(r: Pick<RulesFileResult, 'op' | 'status' | 'error' | 'exists' | 'file_name'>, support?: RulesSupport): string {
+export function rulesStatusMessage(r: Pick<RulesFileResult, 'op' | 'status' | 'error' | 'exists' | 'file_name'>, support?: RulesSupport, session?: Pick<Session, 'agent' | 'version'> | null): string {
   const name = r.file_name ?? '规则文件';
   switch (r.status) {
     case 'pending':
@@ -202,7 +204,7 @@ export function rulesStatusMessage(r: Pick<RulesFileResult, 'op' | 'status' | 'e
       if (r.op === 'write') return `${name} 已保存到节点工作目录`;
       return r.exists === false ? `节点工作目录下还没有 ${name}，保存后会新建` : '';
     case 'failed':
-      return `节点${r.op === 'read' ? '读取' : '写入'}失败：${r.error ?? '未说明原因'}`;
+      return unknownOpMessage(r.error, session) ?? `节点${r.op === 'read' ? '读取' : '写入'}失败：${r.error ?? '未说明原因'}`;
     case 'timeout':
       return rulesTimeoutMessage(support);
     default:

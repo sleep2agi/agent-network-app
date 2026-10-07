@@ -5,7 +5,10 @@ import type { EditDraft } from './task-board-model';
 
 export type SummaryPart = { key: string; values?: Record<string, string | number> };
 
-/** 顺序同「更多」里面的顺序:开始 · 母任务 · 子任务 · 检查项 · Issue · 标签。没值的不说(优先级、参与人已常显,不在这里)。 */
+/**
+ * 顺序同「更多」里面的顺序:开始 · 母任务 · Issue。没值的不说。
+ * #701 起子任务、检查项(左栏「子任务」)和标签(右栏属性)常显,不再进摘要;优先级在头部 pill,参与人在属性里。
+ */
 export function moreSummary(item: Requirement, draft: Pick<EditDraft, 'parentId'> & { start?: string }, items: readonly Requirement[]): SummaryPart[] {
   const out: SummaryPart[] = [];
   const start = draft.start?.trim().slice(0, 10);
@@ -14,14 +17,8 @@ export function moreSummary(item: Requirement, draft: Pick<EditDraft, 'parentId'
     const parent = items.find(i => i.id === draft.parentId);
     out.push(parent ? { key: 'detail.sumParent', values: { name: parent.name } } : { key: 'detail.sumParentUnknown' });
   }
-  const kids = item.children?.total ?? items.filter(i => i.parentId === item.id).length;
-  if (kids) out.push({ key: 'detail.sumChildren', values: { n: kids } });
-  const list = item.checklist ?? [];
-  if (list.length) out.push({ key: 'detail.sumChecklist', values: { done: list.filter(c => c.done).length, n: list.length } });
   const issues = item.issues?.length ?? 0;
   if (issues) out.push({ key: 'detail.sumIssues', values: { n: issues } });
-  const tags = item.tags?.length ?? 0;
-  if (tags) out.push({ key: 'detail.sumTags', values: { n: tags } });
   return out;
 }
 

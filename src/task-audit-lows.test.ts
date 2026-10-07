@@ -61,7 +61,7 @@ console.log('# L12 人员选择器:桌面锚定下拉');
   ck('参与人字段:手指不量锚点', /if \(touch\) \{ setAnchor\(null\); setOpen\(true\); return; \}/.test(roles));
   const detail = read('TaskDetailPanel.tsx');
   // 窄窗口里的整页详情也是鼠标:同样锚定;手机靠 pointer=false + 窗口宽度门(PEOPLE_DROPDOWN_MIN_WIDTH)。
-  ck('详情的负责人 / 参与人都传 pointer', /idBase="req-edit-owner"\n\s+pointer=\{pointer\}/.test(detail) && /fields="participants" onSaved=\{onAssignmentsSaved\} pointer=\{pointer\}/.test(detail));
+  ck('详情的负责人 / 参与人都传 pointer', /idBase="req-edit-owner"\n\s+pointer=\{pointer\}/.test(detail) && /fields="participants" onSaved=\{[^\n]*?\} pointer=\{pointer\}/.test(detail));
   const vp = { width: 1280, height: 800 };
   const right = anchorSelectMenu({ x: 1180, y: 300, w: 90, h: 40 }, vp, { rows: 8, rowH: 40, search: true, maxWidth: 360 });
   ck('靠右边的字段:下拉夹回窗口里', right.left + right.width <= vp.width - 8 && right.left >= 8);
