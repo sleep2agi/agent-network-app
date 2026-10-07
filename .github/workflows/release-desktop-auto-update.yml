@@ -121,6 +121,10 @@ jobs:
           releaseBody: |-
             Signed and notarized stable update for macOS (Apple Silicon) and Windows (x64).
 
+            What's new in 0.2.219:
+            - 手机聊天页的时间总能完整显示：不再出现「09:0」这样被截掉一位的时间
+            - 名字太长时省略名字，时间保持完整
+
             What's new in 0.2.218:
             - 节点详情页新增「收编」：可以把手工起的节点交给 daemon 管理
             - 已收编的节点可以在客户端停止、启动；重启需先停止再启动

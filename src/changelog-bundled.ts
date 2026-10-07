@@ -5,6 +5,10 @@
 export const BUNDLED_RELEASE_BODY: string = [
   "Signed and notarized stable update for macOS (Apple Silicon) and Windows (x64).",
   "",
+  "What's new in 0.2.219:",
+  "- 手机聊天页的时间总能完整显示：不再出现「09:0」这样被截掉一位的时间",
+  "- 名字太长时省略名字，时间保持完整",
+  "",
   "What's new in 0.2.218:",
   "- 节点详情页新增「收编」：可以把手工起的节点交给 daemon 管理",
   "- 已收编的节点可以在客户端停止、启动；重启需先停止再启动",
@@ -949,6 +953,7 @@ export const BUNDLED_RELEASE_BODY: string = [
 
 /** Release date (published_at) per version, as far as it was known when this file was generated. */
 export const BUNDLED_RELEASE_DATES: Record<string, string> = {
+  "0.2.218": "2026-10-06T15:33:53Z",
   "0.2.217": "2026-10-06T14:05:04Z",
   "0.2.216": "2026-10-06T11:02:05Z",
   "0.2.215": "2026-10-06T07:11:47Z",
