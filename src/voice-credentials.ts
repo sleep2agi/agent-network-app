@@ -6,11 +6,13 @@
 //   纯网页:没有安全存储(expo-secure-store 无 web 实现,网页版登录本来就走不通),
 //           不支持语音输入 —— 不退回 localStorage 明文存密钥。
 //
-// 订阅:设置页保存/清除后,聊天页的麦克风立刻知道「配没配」(不用重进聊天)。
+// 订阅:设置页保存/清除后,聊天页的麦克风立刻知道「配没配」(不用重进聊天)——
+// 包括桌面上设置在**另一个窗口**的情况(voice-credentials-store.ts:跨窗口广播 + 焦点兜底)。
 
 import * as SecureStore from 'expo-secure-store';
 import { Platform } from 'react-native';
-import { needsScrub, parseVoiceCredentials, type VoiceCredentials } from './voice-credentials-model';
+import { needsScrub, type VoiceCredentials } from './voice-credentials-model';
+import { createVoiceCredentialsStore, type VoiceCredentialsBus } from './voice-credentials-store';
 
 const KEY = 'voice_asr_v1';
 
@@ -25,61 +27,77 @@ export function voiceStorageKind(): VoiceStorageKind {
   return 'unsupported';
 }
 
-let cache: VoiceCredentials | null | undefined;
-const listeners = new Set<() => void>();
-const emit = () => { for (const l of listeners) l(); };
+// 跨窗口广播的事件名(桌面:设置是单独窗口,见 voice-credentials-store.ts 顶部)。
+export const VOICE_CREDENTIALS_CHANGED_EVENT = 'anet-voice-credentials-changed';
 
-export function subscribeVoiceCredentials(listener: () => void): () => void {
-  listeners.add(listener);
-  return () => { listeners.delete(listener); };
-}
+const tauriBus: VoiceCredentialsBus = {
+  async post(origin) {
+    const { emit } = await import('@tauri-apps/api/event');
+    await emit(VOICE_CREDENTIALS_CHANGED_EVENT, { origin });
+  },
+  async listen(handler) {
+    const { listen } = await import('@tauri-apps/api/event');
+    await listen<{ origin?: string }>(VOICE_CREDENTIALS_CHANGED_EVENT, e => handler(String(e.payload?.origin ?? '')));
+  },
+};
 
-export async function loadVoiceCredentials(): Promise<VoiceCredentials | null> {
-  if (cache !== undefined) return cache;
-  let raw: string | null = null;
-  try {
+const windowFocus = (handler: () => void) => {
+  const w = globalThis as { addEventListener?: (type: string, fn: () => void) => void };
+  w.addEventListener?.('focus', handler);
+};
+
+const store = createVoiceCredentialsStore({
+  async readRaw() {
     const kind = voiceStorageKind();
     if (kind === 'keychain') {
       const { invoke } = await import('@tauri-apps/api/core');
-      raw = await invoke<string | null>('load_voice_credentials');
-    } else if (kind === 'secure-store') {
-      raw = await SecureStore.getItemAsync(KEY);
+      return invoke<string | null>('load_voice_credentials');
     }
-  } catch {
-    raw = null; // 读失败 = 当作未配置;不把异常(可能含路径)透给界面
-  }
-  cache = parseVoiceCredentials(raw);
+    if (kind === 'secure-store') return SecureStore.getItemAsync(KEY);
+    return null;
+  },
+  async writeRaw(json) {
+    const kind = voiceStorageKind();
+    if (kind === 'keychain') {
+      const { invoke } = await import('@tauri-apps/api/core');
+      await invoke('save_voice_credentials', { json });
+    } else if (kind === 'secure-store') {
+      await SecureStore.setItemAsync(KEY, json);
+    } else {
+      throw new Error('当前平台没有安全存储,不支持语音输入');
+    }
+  },
+  async deleteRaw() {
+    const kind = voiceStorageKind();
+    if (kind === 'keychain') {
+      const { invoke } = await import('@tauri-apps/api/core');
+      await invoke('clear_voice_credentials');
+    } else if (kind === 'secure-store') {
+      await SecureStore.deleteItemAsync(KEY);
+    }
+  },
   // 0.2.112 存过 Secret Key(两个接口都用不到):静默重写一次,把它从安全存储里去掉。
-  if (cache && needsScrub(raw)) void saveVoiceCredentials(cache).catch(() => { /* 下次再试 */ });
-  return cache;
+  afterLoad(creds, raw) { if (creds && needsScrub(raw)) void saveVoiceCredentials(creds).catch(() => { /* 下次再试 */ }); },
+  bus: isTauriDesktop() ? tauriBus : null,
+  onFocus: isTauriDesktop() ? windowFocus : null,
+});
+
+/** 订阅「配没配」的变化 —— 本窗口保存 / 清除,以及**别的窗口**(桌面设置窗口)保存 / 清除。 */
+export function subscribeVoiceCredentials(listener: () => void): () => void {
+  return store.subscribe(listener);
 }
 
-export async function saveVoiceCredentials(creds: VoiceCredentials): Promise<void> {
-  const json = JSON.stringify(creds);
-  const kind = voiceStorageKind();
-  if (kind === 'keychain') {
-    const { invoke } = await import('@tauri-apps/api/core');
-    await invoke('save_voice_credentials', { json });
-  } else if (kind === 'secure-store') {
-    await SecureStore.setItemAsync(KEY, json);
-  } else {
-    throw new Error('当前平台没有安全存储,不支持语音输入');
-  }
-  cache = creds;
-  emit();
+export function loadVoiceCredentials(): Promise<VoiceCredentials | null> {
+  return store.load();
 }
 
-export async function clearVoiceCredentials(): Promise<void> {
-  const kind = voiceStorageKind();
-  if (kind === 'keychain') {
-    const { invoke } = await import('@tauri-apps/api/core');
-    await invoke('clear_voice_credentials');
-  } else if (kind === 'secure-store') {
-    await SecureStore.deleteItemAsync(KEY);
-  }
-  cache = null;
-  emit();
+export function saveVoiceCredentials(creds: VoiceCredentials): Promise<void> {
+  return store.save(creds);
+}
+
+export function clearVoiceCredentials(): Promise<void> {
+  return store.clear();
 }
 
 /** 测试用。 */
-export function _resetVoiceCredentialsCache(): void { cache = undefined; }
+export function _resetVoiceCredentialsCache(): void { store.reset(); }
