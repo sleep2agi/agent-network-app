@@ -153,7 +153,8 @@ const shot = async (page, name) => {
 const patches = (page) => page.evaluate(() => window.__patches);
 const content = tid('req-description-rich-content');
 const source = 'textarea[data-testid="req-description-input"]';
-const saveEnabled = (page) => page.locator(tid('req-edit-save')).evaluate(el => el.getAttribute('aria-disabled') !== 'true');
+// #701:没有「保存修改」了 —— 有没有没存的改动看(读屏用的)保存状态行;保存 = 焦点离开描述(点一下标题)。
+const saveEnabled = (page) => page.locator(tid('req-save-status')).first().evaluate(el => (el.textContent || '').includes('有未保存的修改'));
 
 async function openCard(page, id) {
   await page.locator(tid(`req-card-${id}`)).first().click();
@@ -165,7 +166,7 @@ async function closeDetail(page) {
   await page.waitForTimeout(300);
 }
 async function save(page) {
-  await page.locator(tid('req-edit-save')).click({ force: true });
+  await page.locator(tid('req-edit-name')).first().click();
   await page.waitForTimeout(500);
 }
 // Caret at the end of the rich editor (or after a given text).
@@ -223,7 +224,8 @@ for (const v of [{ w: 1200, h: 800 }, { w: 1440, h: 900 }]) {
       sameWidth: !!frame && !!srcRect && Math.abs(frame.w - srcRect.w) <= 0.5,
       headerWidth: !!frame && !!header && Math.abs(frame.x - header.x) <= 0.5 && Math.abs(frame.r - header.r) <= 0.5,
       headerAligned: spread(cs) <= 1,
-      toolbarOneRow: !!tb && tb.h <= 36,
+      // #701:560 宽的抽屉是两栏,描述栏 ≈315 —— 工具条在这么窄时折成两行(不溢出);够宽(≥360)时仍要一行。
+      toolbarOneRow: !!tb && (tb.h <= 36 || (!!frame && frame.w < 360 && tb.h <= 72)),
     }, { toolbarH: tb && r1(tb.h),  frame: frame && [r1(frame.x), r1(frame.w)], source: srcRect && [r1(srcRect.x), r1(srcRect.w)], header: header && [r1(header.x), r1(header.w)], spread: r1(spread(cs)) });
     record(vp, 'no-edit: open + click + toggle 源码/富文本 twice + 保存 → no PATCH, bytes identical', {
       noPatch: ps.length === 0, saveDisabled: !enabled,
@@ -402,7 +404,7 @@ for (const v of [{ w: 1200, h: 800 }, { w: 1440, h: 900 }]) {
       fills: !!fr && fr.w > v.w * 0.8, toolbarLinesUpWithText: toolText !== null && !!body && Math.abs(toolText - body.x) <= 1, keptInline: inlineText.includes('全屏里加的一段') && painted(keptP),
     }, { tab, tabPainted: pw(tabP), keptPainted: pw(keptP), caret, fullText, inline: inlineText.replace(/\n+/g, '⏎').slice(0, 60), tools, fullW: fr && r1(fr.w), toolText: toolText && r1(toolText), bodyX: body && r1(body.x) });
     await closeDetail(page);
-    await page.locator(tid('req-edit-save')).count() && await closeDetail(page);
+    await page.locator(tid('req-detail')).count() && await closeDetail(page);
   }
 
   // ── unsafe: raw HTML stays in 编辑 / 预览 ──

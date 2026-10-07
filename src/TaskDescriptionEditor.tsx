@@ -144,7 +144,9 @@ function useVoiceShortcuts(active: boolean, actions: { voice: ReturnType<typeof 
   return kbd;
 }
 
-export default function TaskDescriptionEditor({ cfg, value, onChange, pointer, title, dirty = false, onOpenVoiceSettings, label, placeholder, maxLength = DESCRIPTION_MAX, images: imagesOn = true, richText = true, initialMode, fullscreenA11y, chrome, fullscreenOnly = false, onFullscreenClose, testID = 'req-description' }: {
+export default function TaskDescriptionEditor({ cfg, value, onChange, pointer, title, dirty = false, onOpenVoiceSettings, label, placeholder, maxLength = DESCRIPTION_MAX, images: imagesOn = true, richText = true, initialMode, fullscreenA11y, chrome, fullscreenOnly = false, onFullscreenClose, onInlineBlur, testID = 'req-description' }: {
+  /** 内联输入框失焦(#701:任务详情在原生端用它做「离开即保存」;web 上由外层看整块的焦点)。 */
+  onInlineBlur?: () => void;
   cfg: HubConfig;
   value: string;
   onChange: (v: string) => void;
@@ -503,6 +505,7 @@ export default function TaskDescriptionEditor({ cfg, value, onChange, pointer, t
             ref={setInlineInput}
             value={value}
             onChangeText={onChange}
+            onBlur={onInlineBlur}
             onSelectionChange={onSelectionChange}
             multiline
             maxLength={maxLength}
