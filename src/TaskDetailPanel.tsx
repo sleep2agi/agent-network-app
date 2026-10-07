@@ -1,4 +1,6 @@
 import { t as tr } from './i18n';
+import { useTaskBoard } from './task-board-store';
+import { statusChoices, supportsAbandoned } from './requirement-columns';
 import { validationText } from './i18n-task-presentation';
 import { useTranslation } from './i18n-react';
 import { taskText } from './i18n-tasks';
@@ -19,7 +21,7 @@ import RequirementAssignmentsEditor from './RequirementAssignmentsEditor';
 import { useModalSafePadding } from './safe-area-runtime';
 import { colors, radius, spacing, type as typeScale, weight } from './theme';
 import type { HubConfig } from './api';
-import { REQ_COLUMN_LABEL, REQ_COLUMNS, type ReqColumn, type Requirement, type RequirementProject } from './requirements-model';
+import { REQ_COLUMN_LABEL, type ReqColumn, type Requirement, type RequirementProject } from './requirements-model';
 import type { RequirementPerson } from './requirement-people';
 import type { RequirementAssignments } from './requirement-people-api';
 import { ownerChange, type AssignChange } from './task-assign';
@@ -524,6 +526,7 @@ export default function TaskDetailPanel({ cfg, item, readOnly = false, editField
     </Pressable>
   );
   const statusLabel = taskText(REQ_COLUMN_LABEL[item.column]);
+  const abandonedOk = useTaskBoard(st => supportsAbandoned(st.capabilities));
   const head = (
     <View style={[styles.head, { borderBottomColor: tokens.border }]}>
       <View style={styles.headRow}>
@@ -573,7 +576,7 @@ export default function TaskDetailPanel({ cfg, item, readOnly = false, editField
       </View>
       {menu === 'status' ? (
         <View pointerEvents={canColumn ? 'auto' : 'none'} style={[s.segment, { alignSelf: 'flex-start' }]} accessibilityRole="radiogroup" testID="req-move-group">
-          {REQ_COLUMNS.map(col => {
+          {statusChoices(abandonedOk).map(col => {
             const on = col === item.column;
             return (
               <Pressable

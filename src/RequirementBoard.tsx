@@ -36,7 +36,8 @@ import { elevated } from './elevation';
 import { pointerUi } from './pointer-ui';
 import { useModalSafePadding } from './safe-area-runtime';
 import { usePoll } from './usePoll';
-import { applyFilter, EMPTY_FILTER, applyMove, boardColumns, createInput, DEFAULT_SORT, DRAG_IDLE, dragReduce, dropIndex, emptyDraft, activeProjects, defaultProjectFor, NO_PROJECT, projectCounts, filterActive, hasRoles, ownerFilterSections, roleKinds, localToday, addChecklistItem, moveChecklistItem, removeChecklistItem, setChecklistDone, neighbourColumn, nextSort, revertMove, sortRows, toggleIn, hidesDone, toggleHideDone, UNASSIGNED, quickFilterOn, toggleQuickFilter, type QuickFilter, type CreateDraft, type DragEvent, type DragState, type EditPatch, type SortKey, type SortSpec } from './task-board-model';
+import { statusChoices, supportsAbandoned, isClosedColumn } from './requirement-columns';
+import { abandonedShown, hiddenAbandonedCount, applyFilter, EMPTY_FILTER, applyMove, boardColumns, createInput, DEFAULT_SORT, DRAG_IDLE, dragReduce, dropIndex, emptyDraft, activeProjects, defaultProjectFor, NO_PROJECT, projectCounts, filterActive, hasRoles, ownerFilterSections, roleKinds, localToday, addChecklistItem, moveChecklistItem, removeChecklistItem, setChecklistDone, neighbourColumn, nextSort, revertMove, sortRows, toggleIn, hidesDone, toggleHideDone, UNASSIGNED, quickFilterOn, toggleQuickFilter, type QuickFilter, type CreateDraft, type DragEvent, type DragState, type EditPatch, type SortKey, type SortSpec } from './task-board-model';
 import { applyChanges, checklistCounts, cursorAfterList, hasFullText, mergeListRows, needsFullText, planBoardRead, type BoardSyncState } from './board-sync';
 import { enterTaskScope, noteTagsUsed, patchTaskBoard, setManagingProjects, setManagingTags, setTaskFilter, setTaskSearch, setTaskSection, taskBoardState, taskScopeKey, updateTaskItems, useTaskBoard, type TaskSection } from './task-board-store';
 import { recallBoard, rememberBoard } from './swr-cache';
@@ -120,6 +121,9 @@ function ScopedRequirementBoard({ cfg, desktop, dispatch, onOpenVoiceSettings, s
   // 换网络时整块看板按 scope 重新挂载;第一帧 store 还是上一个网络的,别把它的搜索词带过来。
   const search = useTaskBoard(st => (st.scope === scope ? st.search : EMPTY_SEARCH));
   const archivedCapable = useTaskBoard(st => st.scope === scope && st.capabilities.includes('archived'));
+  // 「废弃」(#724):Hub capabilities 含 column_abandoned 才给选;旧 Hub 写它会 400,所以整个藏起来。
+  const abandonedOk = useTaskBoard(st => st.scope === scope && supportsAbandoned(st.capabilities));
+  const statusOptions = useMemo(() => statusChoices(abandonedOk), [abandonedOk]);
   const items = mine ? storeItems : [];
   /** 这块看板本次启动里从 Hub 读成功过(哪怕是空的)——连不上时照常显示那份,而不是整页报错。 */
   const hasCached = useTaskBoard(st => st.scope === scope && st.loaded);
@@ -735,6 +739,10 @@ function ScopedRequirementBoard({ cfg, desktop, dispatch, onOpenVoiceSettings, s
   const searched = useMemo(() => searchedTasks(items, archived, search, { people, projects }, extraHits), [items, archived, search, people, projects, extraHits]);
   const visible = useMemo(() => applyFilter(searched, filter), [searched, filter]);
   const columns = useMemo(() => boardColumns(searched, filter), [searched, filter]);
+  // 收起的「废弃」:看板上的折叠列 / 列表底部的「显示」开关都用这个数(与展开后看到的张数同源)。
+  const abandonedHidden = useMemo(() => hiddenAbandonedCount(searched, filter), [searched, filter]);
+  const showAbandoned = abandonedShown(filter);
+  const setShowAbandoned = (on: boolean) => setTaskFilter({ ...filter, showAbandoned: on, statuses: on ? filter.statuses : (filter.statuses ?? []).filter(c => c !== 'abandoned') });
   // 状态筛选把列变少了:手机分页别停在已经不存在的那一页上。
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => { const last = Math.max(0, columns.length - 1); if (page > last) { setPage(last); pagerRef.current?.scrollTo({ x: last * pageWidth, animated: false }); } }, [columns.length]);
@@ -1053,7 +1061,7 @@ function ScopedRequirementBoard({ cfg, desktop, dispatch, onOpenVoiceSettings, s
         {...({ dataSet: canEditTaskField(item, 'column') ? { taskCard: item.id, taskFrom: item.column } : { taskCard: item.id } } as object)}
       >
         {projects && item.projectId ? <ProjectChip project={projectById.get(item.projectId)} s={s} small /> : null}
-        <Text style={[s.cardTitle, item.column === 'done' && s.cardDone]} numberOfLines={2}>{highlight(titleText(item), terms)}</Text>
+        <Text style={[s.cardTitle, isClosedColumn(item.column) && s.cardDone]} numberOfLines={2}>{highlight(titleText(item), terms)}</Text>
         {item.archived ? <ArchivedTag /> : null}
         {item.readOnly ? <ReadOnlyTag editFields={item.editFields} /> : null}
         <ParentLine item={item} items={items} />
@@ -1083,6 +1091,18 @@ function ScopedRequirementBoard({ cfg, desktop, dispatch, onOpenVoiceSettings, s
             <View style={[s.columnDot, { backgroundColor: STATUS_TONE[col.column]() }]} />
             <Text style={s.columnName}>{taskText(REQ_COLUMN_LABEL[col.column])}</Text>
             <View style={s.countPill} testID={`req-count-${col.column}`}><Text style={s.countText}>{col.items.length}</Text></View>
+            {col.column === 'abandoned' && filter.showAbandoned && !statuses.includes('abandoned') ? (
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={tr('abandoned.collapse')}
+                onPress={() => setShowAbandoned(false)}
+                hitSlop={6}
+                style={state => [s.abandonedCollapse, ((state as { hovered?: boolean }).hovered || state.pressed) && { backgroundColor: colors.rowHover }]}
+                testID="req-abandoned-collapse"
+              >
+                <Ionicons name={layout.mode === 'paged' ? 'eye-off-outline' : 'chevron-forward'} size={14} color={colors.textMuted} />
+              </Pressable>
+            ) : null}
           </View>
           <ScrollView style={s.columnBody} contentContainerStyle={s.columnBodyContent}>
             {col.items.length === 0 && at < 0 ? (
@@ -1098,7 +1118,7 @@ function ScopedRequirementBoard({ cfg, desktop, dispatch, onOpenVoiceSettings, s
             ))}
             {at >= 0 && at >= col.items.length ? <View style={s.dropLine} testID="req-drop-indicator" /> : null}
           </ScrollView>
-          {quick ? (
+          {col.column === 'abandoned' ? null : quick ? (
             <TextInput
               autoFocus
               value={quick.name}
@@ -1150,6 +1170,13 @@ function ScopedRequirementBoard({ cfg, desktop, dispatch, onOpenVoiceSettings, s
                 </Pressable>
               );
             })}
+            {abandonedOk && abandonedHidden > 0 ? (
+              <Pressable accessibilityRole="button" accessibilityLabel={tr('abandoned.expandA11y', { n: abandonedHidden })} onPress={() => { setShowAbandoned(true); setTimeout(() => goTo(columns.length), 0); }} style={[s.pagerTab, s.abandonedTab]} testID="req-page-tab-abandoned-collapsed">
+                <View style={[s.columnDot, { backgroundColor: STATUS_TONE.abandoned() }]} />
+                <Text style={[s.pagerText, { color: colors.textMuted }]}>{taskText(REQ_COLUMN_LABEL.abandoned)}</Text>
+                <Text style={s.countText}>{abandonedHidden}</Text>
+              </Pressable>
+            ) : null}
           </View>
           {/* paged-board:start —— 这段里只用数值宽度(task-board-layout.test.ts 静态检查)。 */}
           <ScrollView
@@ -1177,8 +1204,40 @@ function ScopedRequirementBoard({ cfg, desktop, dispatch, onOpenVoiceSettings, s
         </View>
       );
     }
-    return <View style={s.board} testID="req-board">{columns.map(renderColumn)}</View>;
+    return (
+      <View style={s.board} testID="req-board">
+        {columns.map(renderColumn)}
+        {abandonedOk && abandonedHidden > 0 ? (
+          // 收起的「废弃」列(#724):默认收成一条窄栏,点开才铺成一整列。
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={tr('abandoned.expandA11y', { n: abandonedHidden })}
+            onPress={() => setShowAbandoned(true)}
+            style={state => [s.abandonedRail, ((state as { hovered?: boolean }).hovered || state.pressed) && { backgroundColor: colors.rowHover }]}
+            testID="req-col-abandoned-collapsed"
+          >
+            <Ionicons name="chevron-back" size={14} color={colors.textMuted} />
+            <View style={[s.columnDot, { backgroundColor: STATUS_TONE.abandoned() }]} />
+            <View style={s.countPill}><Text style={s.countText}>{abandonedHidden}</Text></View>
+            <Text style={s.abandonedRailText}>{taskText(REQ_COLUMN_LABEL.abandoned)}</Text>
+          </Pressable>
+        ) : null}
+      </View>
+    );
   };
+
+  // 列表底部:「全部」默认不含废弃,这里给一个显示 / 隐藏的开关(带被藏起来的张数)。
+  const abandonedToggle = () => (abandonedOk && (abandonedHidden > 0 || (filter.showAbandoned && !statuses.includes('abandoned'))) ? (
+    <Pressable
+      accessibilityRole="button"
+      onPress={() => setShowAbandoned(!filter.showAbandoned)}
+      style={state => [s.abandonedToggle, narrow && { paddingHorizontal: spacing.lg + spacing.xs }, ((state as { hovered?: boolean }).hovered || state.pressed) && { backgroundColor: colors.rowHover }]}
+      testID="req-abandoned-toggle"
+    >
+      <Ionicons name={filter.showAbandoned ? 'eye-off-outline' : 'trash-bin-outline'} size={14} color={colors.textMuted} />
+      <Text style={s.metaMuted}>{filter.showAbandoned ? tr('abandoned.hideList') : tr('abandoned.showList', { n: abandonedHidden })}</Text>
+    </Pressable>
+  ) : null);
 
   const list = () => {
     if (narrow) {
@@ -1205,7 +1264,7 @@ function ScopedRequirementBoard({ cfg, desktop, dispatch, onOpenVoiceSettings, s
                       style={state => [s.phoneRow, i === col.items.length - 1 && { borderBottomWidth: 0 }, state.pressed && { backgroundColor: colors.rowHover }]}
                     >
                       {projects && item.projectId ? <ProjectChip project={projectById.get(item.projectId)} s={s} small /> : null}
-                      <Text style={[s.cardTitle, item.column === 'done' && s.cardDone]} numberOfLines={2}>{highlight(titleText(item), terms)}</Text>
+                      <Text style={[s.cardTitle, isClosedColumn(item.column) && s.cardDone]} numberOfLines={2}>{highlight(titleText(item), terms)}</Text>
         {item.archived ? <ArchivedTag /> : null}
                       <ParentLine item={item} items={items} />
                       <CardMeta item={item} people={people} today={today} s={s} />
@@ -1217,14 +1276,15 @@ function ScopedRequirementBoard({ cfg, desktop, dispatch, onOpenVoiceSettings, s
               ) : <Text style={[s.muted, { paddingHorizontal: spacing.lg + spacing.xs }]}>{tr('tasks.copy.8')}</Text>}
             </View>
           ))}
+          {abandonedToggle()}
         </ScrollView>
       );
     }
     const rows = listRows;
-    return <TaskListTable rows={rows} terms={terms} people={people} projects={projects} sort={sort} setSort={setSort} s={s} today={today} selectedId={selectedId} onOpen={openDetail} touch={!pointer} onMenu={openMenuAt} filtered={filterActive(filter)} needsUpdateUpgrade={items.some(item => item.updatedAt === undefined)} items={items}
+    return <View style={{ flex: 1, minHeight: 0 }}><TaskListTable rows={rows} terms={terms} people={people} projects={projects} sort={sort} setSort={setSort} s={s} today={today} selectedId={selectedId} onOpen={openDetail} touch={!pointer} onMenu={openMenuAt} filtered={filterActive(filter)} needsUpdateUpgrade={items.some(item => item.updatedAt === undefined)} items={items}
       selection={pointer ? { ids: sel.ids, onToggle: id => setSel(cur => toggleSelected(cur, id)), onPress: (id, e) => onCardPress(id, e as { nativeEvent?: any }) } : undefined}
       onProject={(id, pid) => { void setProject(id, pid); }} seqCapable={seqCapable}
-      edit={{ onEdit: editCell, onLoadPeople: () => { void loadPeople(); }, ctx: { people, peopleLoading, projects, networkId: cfg.networkId || '', twoRoles, lowestPriority, allowTime: dueDatetime, tagChoices: tagCatalog?.tags ?? [...new Set(items.flatMap(it => it.tags ?? []))], tagColors: tagCatalog?.colors } }} />;
+      edit={{ onEdit: editCell, onLoadPeople: () => { void loadPeople(); }, ctx: { people, peopleLoading, projects, networkId: cfg.networkId || '', twoRoles, lowestPriority, allowTime: dueDatetime, tagChoices: tagCatalog?.tags ?? [...new Set(items.flatMap(it => it.tags ?? []))], tagColors: tagCatalog?.colors } }} />{abandonedToggle()}</View>;
   };
 
   // 搜索时结果上方:数量 + 被筛选挡住了几个(一键清掉)+ 服务端的「加载更多」。
@@ -1453,7 +1513,7 @@ function ScopedRequirementBoard({ cfg, desktop, dispatch, onOpenVoiceSettings, s
           : bulkMenu?.kind === 'agent' ? people.filter(p => p.kind === 'node').map(p => ({ id: p.id, label: p.name, lead: <AliasAvatar alias={p.name} size={18} /> }))
             // 负责人:分两个角色的 Hub 上只列人类(同详情 / 新建的 roleKinds);id 用 personKey(人类和 Agent 可能同名同 id)。
             : bulkMenu?.kind === 'owner' ? people.filter(p => roleKinds('owner', twoRoles).includes(p.kind) && !p.unavailable).map(p => ({ id: personKey(p), label: p.name, lead: <AliasAvatar alias={p.name} size={18} /> }))
-            : REQ_COLUMNS.map(col => ({ id: col, label: taskText(REQ_COLUMN_LABEL[col]), color: STATUS_TONE[col]() }))}
+            : statusOptions.map(col => ({ id: col, label: taskText(REQ_COLUMN_LABEL[col]), color: STATUS_TONE[col]() }))}
         noneLabel={bulkMenu?.kind === 'project' ? tr('tasks.copy.31') : bulkMenu?.kind === 'agent' ? tr('bulk.agentNone') : bulkMenu?.kind === 'owner' ? tr('bulk.ownerNone') : undefined}
         selected={null}
         searchable={bulkMenu?.kind === 'agent' || bulkMenu?.kind === 'owner'}
@@ -1482,7 +1542,7 @@ function ScopedRequirementBoard({ cfg, desktop, dispatch, onOpenVoiceSettings, s
         if (!quickPick || !it) return null;
         return quickPick.kind === 'status' ? (
           <SelectMenu anchor={quickPick.anchor} touch title={tr('fields.status')} searchable={false} selected={it.column} testID="quick-status" onClose={() => setQuickPick(null)}
-            options={REQ_COLUMNS.map(c => ({ id: c, label: taskText(REQ_COLUMN_LABEL[c]), color: STATUS_TONE[c]() }))}
+            options={statusOptions.map(c => ({ id: c, label: taskText(REQ_COLUMN_LABEL[c]), color: STATUS_TONE[c]() }))}
             onPick={c => { setQuickPick(null); if (c) quickStatus(it.id, c as ReqColumn); }} />
         ) : (
           <SelectMenu anchor={quickPick.anchor} touch title={tr('fields.priority')} searchable={false} selected={it.priority} testID="quick-priority" onClose={() => setQuickPick(null)}
@@ -1538,6 +1598,9 @@ function ScopedRequirementBoard({ cfg, desktop, dispatch, onOpenVoiceSettings, s
         selectedStatuses={statuses}
         onToggleStatus={c => setTaskFilter({ ...filter, statuses: toggleIn(statuses, c) })}
         onToggleHideDone={() => setTaskFilter({ ...filter, statuses: toggleHideDone(statuses) })}
+        statusOptions={statusOptions}
+        showAbandoned={abandonedOk ? showAbandoned : null}
+        onToggleShowAbandoned={() => setShowAbandoned(!showAbandoned)}
         onClear={kind => setTaskFilter(kind === 'owner' ? { ...filter, owners: [] } : kind === 'project' ? { ...filter, project: '' } : kind === 'status' ? { ...filter, statuses: [] } : { ...filter, priorities: [] })}
         projects={projects ?? []}
         projectCounts={counts}
@@ -1662,7 +1725,7 @@ function AvatarStack({ keys, owners }: { keys: readonly string[]; owners: Return
 type FilterKind = 'owner' | 'priority' | 'project' | 'status';
 
 /** 头部筛选的弹层:负责人(头像 + 名字 + 数目,多选)、优先级 / 状态(多选)或项目(单选)。 */
-function FilterMenu({ open, touch, owners, selectedOwners, priorities, selectedPriorities, selectedStatuses, meId, onToggleOwner, onTogglePriority, onToggleStatus, onToggleHideDone, onClear, onClose, projects, projectCounts, selectedProject, onPickProject }: {
+function FilterMenu({ open, touch, owners, selectedOwners, priorities, selectedPriorities, selectedStatuses, meId, onToggleOwner, onTogglePriority, onToggleStatus, onToggleHideDone, statusOptions, showAbandoned, onToggleShowAbandoned, onClear, onClose, projects, projectCounts, selectedProject, onPickProject }: {
   open: { kind: FilterKind; x: number; y: number } | null;
   touch: boolean;
   owners: ReturnType<typeof ownerCounts>;
@@ -1676,6 +1739,11 @@ function FilterMenu({ open, touch, owners, selectedOwners, priorities, selectedP
   selectedStatuses: readonly ReqColumn[];
   onToggleStatus: (c: ReqColumn) => void;
   onToggleHideDone: () => void;
+  /** 状态筛选里列出的状态(旧 Hub 没有「废弃」)。 */
+  statusOptions: readonly ReqColumn[];
+  /** 「显示已废弃」开关;null = 这个 Hub 没有废弃,不画。 */
+  showAbandoned: boolean | null;
+  onToggleShowAbandoned: () => void;
   onClear: (kind: FilterKind) => void;
   onClose: () => void;
   projects: readonly RequirementProject[];
@@ -1726,9 +1794,10 @@ function FilterMenu({ open, touch, owners, selectedOwners, priorities, selectedP
               ])
               : open.kind === 'status'
               ? [
-                ...REQ_COLUMNS.map(c => row(`status-${c}`, selectedStatuses.includes(c), () => onToggleStatus(c), <View style={[s.columnDot, { backgroundColor: STATUS_TONE[c]() }]} />, taskText(REQ_COLUMN_LABEL[c]))),
+                ...statusOptions.map(c => row(`status-${c}`, selectedStatuses.includes(c), () => onToggleStatus(c), <View style={[s.columnDot, { backgroundColor: STATUS_TONE[c]() }]} />, taskText(REQ_COLUMN_LABEL[c]))),
                 <View key="status-sep" style={{ height: 1, marginVertical: 4, backgroundColor: colors.border }} />,
                 row('status-hide-done', hidesDone(selectedStatuses), onToggleHideDone, <Ionicons name="eye-off-outline" size={14} color={colors.textMuted} />, tr('tasks.hideDone')),
+                ...(showAbandoned !== null ? [row('status-show-abandoned', showAbandoned || selectedStatuses.includes('abandoned'), onToggleShowAbandoned, <Ionicons name="trash-bin-outline" size={14} color={colors.textMuted} />, tr('abandoned.show'))] : []),
               ]
               : priorities.map(p => row(p, selectedPriorities.includes(p), () => onTogglePriority(p), <PriorityDot p={p} s={s} />, priorityLabel(p)))}
           </ScrollView>

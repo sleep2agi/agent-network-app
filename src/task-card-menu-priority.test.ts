@@ -14,7 +14,7 @@ console.log('# 桌面菜单列优先级');
 ck('菜单目标带当前档和可选档', /priority: ReqPriority; priorities: readonly ReqPriority\[\];/.test(menu));
 ck('桌面(!touch)在「移到」后面列各档,testID task-menu-priority-<档>', /\{!touch \? target\.priorities\.map\(p => item\(`priority-\$\{p\}`, priorityLabel\(p\)/.test(menu));
 ck('当前档 ✓ 且不可点;参与人(quick.priority=locked)全部灰掉', /disabled: target\.quick\.priority === 'locked' \|\| p === target\.priority, checked: p === target\.priority, icon: p === target\.priority \? 'checkmark' : 'flag-outline'/.test(menu));
-ck('菜单高度把优先级行算进去(翻边 / 夹进窗口不会算错)', /const count = 1 \+ assignRows \+ \(touch \? 2 : REQ_COLUMNS\.length\) \+ priorityRows \+ archiveRow;/.test(menu));
+ck('菜单高度把优先级行算进去(翻边 / 夹进窗口不会算错)', /const count = 1 \+ assignRows \+ \(touch \? 2 : columns\.length\) \+ priorityRows \+ archiveRow;/.test(menu));
 ck('手机不变:仍是「改状态…」「改优先级…」两个选择器', /\{touch \? \(\['status', 'priority'\] as const\)\.map/.test(menu));
 
 console.log('# 接线');

@@ -16,7 +16,7 @@ import { Ionicons } from './icons';
 import AliasAvatar from './AliasAvatar';
 import { colors, radius, spacing, type as typeScale, weight } from './theme';
 import { personKey } from './requirement-people';
-import { activeProjects, applyFilter, filterForScope, NO_PROJECT, projectCounts, scopeOf, splitByCount, type SidebarScope } from './task-board-model';
+import { abandonedShown, activeProjects, applyFilter, filterForScope, NO_PROJECT, projectCounts, scopeOf, splitByCount, type SidebarScope } from './task-board-model';
 import { setManagingProjects, setManagingTags, setTaskFilter, setTaskSection, useTaskBoard } from './task-board-store';
 import { canManageTags, localTagCounts } from './task-tag-catalog';
 import { readTagsCollapsed, writeTagsCollapsed } from './task-sidebar-prefs';
@@ -40,7 +40,8 @@ export default function TaskFilterSidebar({ onNavigate }: { onNavigate?: () => v
   const [tagsCollapsed, setTagsCollapsed] = useState(readTagsCollapsed);
   const active = section === 'dispatch' ? null : scopeOf(filter.owners, meId, filter.participant);
   // 人 / 节点的数字按当前项目算(选了 TMAI,「我负责的」就是我在 TMAI 里的)。
-  const inProject = applyFilter(items, { owners: [], priorities: [], project: filter.project });
+  // 废弃(#724)跟着看板 / 列表:收起时不计,展开时计 —— 左栏数字和右边看到的张数一致。
+  const inProject = applyFilter(items, { owners: [], priorities: [], project: filter.project, showAbandoned: abandonedShown(filter) });
   const counts = ownerCounts(inProject, people);
   const meKey = meId ? personKey({ kind: 'user', id: meId }) : '';
   const countOf = (key: string) => counts.find(c => c.key === key)?.count ?? 0;

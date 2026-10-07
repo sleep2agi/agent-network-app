@@ -97,6 +97,12 @@ export const makeTaskStyles = () => StyleSheet.create({
   columnOver: { borderColor: colors.accent, backgroundColor: colors.accent + '10' },
   columnHead: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, paddingHorizontal: spacing.md + 2, paddingTop: spacing.md, paddingBottom: spacing.sm },
   columnDot: { width: 8, height: 8, borderRadius: radius.pill },
+  // 「废弃」(#724):桌面收起时是右侧一条窄栏(竖排标签),展开后列头多一个收起按钮;手机是分页胶囊最后一格。
+  abandonedRail: { width: 48, flexShrink: 0, alignItems: 'center', gap: spacing.sm, paddingTop: spacing.md, borderRadius: BOARD_RADIUS.card, backgroundColor: columnBg() },
+  abandonedRailText: { width: 96, marginVertical: 38, textAlign: 'center', color: colors.textSecondary, fontSize: typeScale.small, fontWeight: weight.medium, transform: [{ rotate: '90deg' }] },
+  abandonedCollapse: { marginLeft: 'auto', width: 24, height: 20, borderRadius: radius.item, alignItems: 'center', justifyContent: 'center' },
+  abandonedTab: { borderWidth: 1, borderStyle: 'dashed', borderColor: colors.border },
+  abandonedToggle: { flexDirection: 'row', alignItems: 'center', gap: 6, alignSelf: 'flex-start', minHeight: 36, paddingHorizontal: spacing.xl, paddingVertical: spacing.sm, borderRadius: radius.control },
   columnName: { color: colors.text, fontSize: typeScale.body, fontWeight: weight.strong },
   countPill: { minWidth: 22, height: 20, paddingHorizontal: 7, borderRadius: BOARD_RADIUS.pill, backgroundColor: themeMode() === 'dark' ? colors.rowActive : colors.card, alignItems: 'center', justifyContent: 'center' },
   countText: { color: colors.textSecondary, fontSize: typeScale.caption, fontWeight: weight.strong },
@@ -441,4 +447,4 @@ export function PersonChips({ refs, people, s, testID }: { refs: readonly { kind
   );
 }
 
-export const STATUS_TONE = { pool: () => colors.rest, doing: () => colors.accent, done: () => colors.running } as const;
+export const STATUS_TONE = { pool: () => colors.rest, doing: () => colors.accent, done: () => colors.running, abandoned: () => colors.textMuted } as const;

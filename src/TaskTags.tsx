@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { ACCEPT_COLUMNS_HEADERS } from './requirement-columns';
 import { Pressable, ScrollView, View } from 'react-native';
 import { Text, TextInput } from './ui-text';
 import { colors, radius } from './theme';
@@ -87,7 +88,7 @@ export default function TaskTags({ cfg, item, onSave }: { cfg: HubConfig; item: 
     if (board || item.tags === undefined) return () => { live.current = false; };
     const ctrl = new AbortController();
     const timer = setTimeout(() => ctrl.abort(), 15000);
-    void appFetch(`${cfg.serverUrl}/api/requirements/tags${cfg.networkId ? `?network_id=${encodeURIComponent(cfg.networkId)}` : ''}`, { headers: { Authorization: `Bearer ${cfg.token}` }, signal: ctrl.signal })
+    void appFetch(`${cfg.serverUrl}/api/requirements/tags${cfg.networkId ? `?network_id=${encodeURIComponent(cfg.networkId)}` : ''}`, { headers: { Authorization: `Bearer ${cfg.token}`, ...ACCEPT_COLUMNS_HEADERS }, signal: ctrl.signal })
       .then(async res => { if (!res.ok) throw new Error(); const cat = catalogFromHub(await res.json()); if (live.current) setFetched(cat ? { tags: cat.tags, counts: cat.counts } : { tags: [], counts: {} }); })
       .catch(() => { if (live.current) setLoadFailed(true); }).finally(() => clearTimeout(timer));
     return () => { live.current = false; ctrl.abort(); clearTimeout(timer); };

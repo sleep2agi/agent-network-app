@@ -56,7 +56,7 @@ export function dueDayDiff(due: string, today: string, clock: Clock = systemCloc
 }
 
 /** 不算逾期 / 不提示的卡:已完成、已归档。 */
-export const dueSettled = (item: Pick<DueSubject, 'column' | 'archived'>): boolean => item.column === 'done' || item.archived === true;
+export const dueSettled = (item: Pick<DueSubject, 'column' | 'archived'>): boolean => item.column === 'done' || item.column === 'abandoned' || item.archived === true;
 
 export function dueMarker(item: DueSubject, at: DueAt = {}): DueMarker {
   const clock = at.clock ?? systemClock;

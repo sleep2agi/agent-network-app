@@ -1,4 +1,5 @@
 // 组织架构(board #419)—— Hub REST。旧 Hub 没有 /departments(404)→ fetchOrg 回 null:整块不出现,与升级前一样。
+import { ACCEPT_COLUMNS_HEADERS } from './requirement-columns';
 import { appFetch } from './app-fetch';
 import type { HubConfig } from './api';
 import type { Department, OrgData } from './org-model';
@@ -38,7 +39,8 @@ async function call<T>(cfg: HubConfig, path: string, init: { method?: string; bo
   try {
     const res = await appFetch(`${cfg.serverUrl}${path}`, {
       method: init.method ?? 'GET',
-      headers: { Authorization: `Bearer ${cfg.token}`, 'Content-Type': 'application/json' },
+      // 需求接口(本部门任务)声明认识「废弃」(#724),否则 Hub 把它投影成「完成」。
+      headers: { Authorization: `Bearer ${cfg.token}`, 'Content-Type': 'application/json', ...(path.startsWith('/api/requirements') ? ACCEPT_COLUMNS_HEADERS : {}) },
       ...(init.body !== undefined ? { body: JSON.stringify(init.body) } : {}),
       signal: ctrl.signal,
     });

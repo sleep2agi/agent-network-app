@@ -5,6 +5,7 @@
 // 电脑:居中大弹窗,左树右详情 + 「成员 / 任务 / Agent」页签。手机:全屏,先进本部门(负责几个就先列出来),
 // 部门页底部「本部门任务」「本部门 Agent」两个入口。任务 = GET /api/requirements?department_id=;
 // Agent = GET …/departments/:dept/nodes(只读状态和健康,派活 / 对话仍按 Agent 授权)。
+import { isClosedColumn } from './requirement-columns';
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { Pressable, ScrollView, View } from 'react-native';
 import { Text } from './ui-text';
@@ -74,7 +75,7 @@ export function DepartmentTasks({ cfg, networkId, deptId, people }: { cfg: HubCo
                     <Text style={{ color: colors.text, fontSize: typeScale.body }} numberOfLines={1}>{r.seq ? `#${r.seq} ` : ''}{r.name}</Text>
                     <Text style={{ color: colors.textMuted, fontSize: typeScale.small }} numberOfLines={1}>{owner || tr('dept.unassigned')}</Text>
                   </View>
-                  <Text style={{ color: r.column === 'done' ? colors.textMuted : r.column === 'doing' ? colors.accent : colors.textSecondary, fontSize: typeScale.small }} testID={`dept-task-col-${r.id}`}>{tr(`dept.col.${r.column}`)}</Text>
+                  <Text style={{ color: isClosedColumn(r.column) ? colors.textMuted : r.column === 'doing' ? colors.accent : colors.textSecondary, fontSize: typeScale.small }} testID={`dept-task-col-${r.id}`}>{tr(`dept.col.${r.column}`)}</Text>
                 </View>
               );
             })}

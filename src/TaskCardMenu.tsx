@@ -1,4 +1,6 @@
 import { t as tr } from './i18n';
+import { useTaskBoard } from './task-board-store';
+import { statusChoices, supportsAbandoned } from './requirement-columns';
 import { useTranslation } from './i18n-react';
 import { taskText } from './i18n-tasks';
 // 任务卡片的浮动菜单:桌面右键 / 键盘菜单键,手机长按。同一份项目:查看详情 · 指派负责人… · 设置参与人… ·
@@ -17,7 +19,7 @@ import { elevated } from './elevation';
 import { uiScale } from './ui-scale';
 import { useModalSafePadding } from './safe-area-runtime';
 import { anchorRowMenu, rowMenuHeight, rowMenuMetrics } from './agent-row-menu';
-import { REQ_COLUMN_LABEL, REQ_COLUMNS, type ReqColumn, type ReqPriority } from './requirements-model';
+import { REQ_COLUMN_LABEL, type ReqColumn, type ReqPriority } from './requirements-model';
 import { priorityLabel } from './task-priority';
 
 export interface TaskMenuTarget {
@@ -46,6 +48,8 @@ export default function TaskCardMenu({ target, touch, busy, onOpen, onAssign, on
   onClose: () => void;
 }) {
   useTranslation();
+  // 「废弃」只在认识它的 Hub 上给(旧 Hub 写它会 400)。
+  const columns = statusChoices(useTaskBoard(st => supportsAbandoned(st.capabilities)));
   const win = useWindowDimensions();
   const safe = useModalSafePadding('fullScreen');
   const [area, setArea] = useState<{ width: number; height: number } | null>(null);
@@ -53,7 +57,7 @@ export default function TaskCardMenu({ target, touch, busy, onOpen, onAssign, on
   const assignRows = target && target.assign !== 'hidden' ? 2 : 0;
   const priorityRows = target && !touch ? target.priorities.length : 0;
   const archiveRow = target?.archive === 'archive' && onArchive ? 1 : 0;
-  const count = 1 + assignRows + (touch ? 2 : REQ_COLUMNS.length) + priorityRows + archiveRow;
+  const count = 1 + assignRows + (touch ? 2 : columns.length) + priorityRows + archiveRow;
   const pos = target ? anchorRowMenu({
     x: target.x, y: target.y,
     menuWidth: m.width, menuHeight: rowMenuHeight(m, count) + 1 + (priorityRows ? 1 : 0),
@@ -115,7 +119,7 @@ export default function TaskCardMenu({ target, touch, busy, onOpen, onAssign, on
               tr(kind === 'status' ? 'quick.status' : 'quick.priority'),
               () => { onClose(); onQuick(target.id, kind, { x: target.x, y: target.y }); },
               { icon: kind === 'status' ? 'swap-horizontal-outline' : 'flag-outline', disabled: busy || target.quick[kind] === 'locked' },
-            )) : REQ_COLUMNS.map(col => item(`move-${col}`, col === target.column ? tr('tasks.copy.91', { v0: taskText(REQ_COLUMN_LABEL[col]) }) : tr('tasks.copy.92', { v0: taskText(REQ_COLUMN_LABEL[col]) }), () => { onClose(); onMove(target.id, col); }, {
+            )) : columns.map(col => item(`move-${col}`, col === target.column ? tr('tasks.copy.91', { v0: taskText(REQ_COLUMN_LABEL[col]) }) : tr('tasks.copy.92', { v0: taskText(REQ_COLUMN_LABEL[col]) }), () => { onClose(); onMove(target.id, col); }, {
               disabled: busy || col === target.column, checked: col === target.column, icon: col === target.column ? 'checkmark' : 'arrow-forward',
             }))}
             {!touch ? <View style={{ height: 1, backgroundColor: colors.border }} /> : null}

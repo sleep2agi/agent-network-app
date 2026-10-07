@@ -11,7 +11,7 @@ const cols = columnsOf([
   { ...a, id: 'b', name: '低', priority: 'low', due: '2026-09-01', column: 'pool', createdAt: '1' },
   { ...a, id: 'c', name: '在做', column: 'doing' },
 ]);
-ck('three columns always', cols.map(c => c.column).join() === 'pool,doing,done');
+ck('all columns always (abandoned last, #724)', cols.map(c => c.column).join() === 'pool,doing,done,abandoned');
 ck('pool sorts high first', cols[0].items.map(i => i.id).join() === 'a,b');
 ck('doing has the moved one', cols[1].items.map(i => i.id).join() === 'c');
 ck('parse keeps column', parseRequirements(JSON.stringify([a]))[0].column === 'pool');

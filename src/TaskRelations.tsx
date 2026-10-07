@@ -1,4 +1,5 @@
 import { t as tr } from './i18n';
+import { isClosedColumn } from './requirement-columns';
 import { useTranslation } from './i18n-react';
 import { taskText } from './i18n-tasks';
 // 任务详情里「这张卡和别的东西的关系」:
@@ -65,7 +66,7 @@ export function SubRequirements({ item, items, onOpen, onCreateChild, canAddLeve
           testID={`req-child-${k.id}`}
         >
           <View style={{ width: 8, height: 8, borderRadius: radius.pill, backgroundColor: STATUS_TONE[k.column]() }} />
-          <Text style={{ flex: 1, color: k.column === 'done' ? colors.textMuted : colors.text, fontSize: typeScale.body, textDecorationLine: k.column === 'done' ? 'line-through' : 'none' }} numberOfLines={1}>{k.name}</Text>
+          <Text style={{ flex: 1, color: isClosedColumn(k.column) ? colors.textMuted : colors.text, fontSize: typeScale.body, textDecorationLine: isClosedColumn(k.column) ? 'line-through' : 'none' }} numberOfLines={1}>{k.name}</Text>
           <Text style={s.metaMuted}>{taskText(REQ_COLUMN_LABEL[k.column])}</Text>
           <Ionicons name="chevron-forward" size={14} color={colors.textMuted} />
         </Pressable>

@@ -243,6 +243,7 @@ export const taskCopy = [
  ['标题最多 80 个字','Title must be 80 characters or fewer'],
  ['日期写成 2026-10-01,或留空','Use a date such as 2026-10-01, or leave blank'],
  ['极低','Lowest'],
+ ['废弃','Abandoned'],
 ] as const;
 export const taskTranslations = Object.fromEntries(taskCopy.map((pair,i)=>[`tasks.copy.${i}`, pair]));
 registerTranslations(taskTranslations);
@@ -722,4 +723,14 @@ registerTranslations({
   'archive.banner': ['已归档 · 不在看板和列表里', 'Archived · not on the board or in the list'],
   'archive.done': ['已归档「{name}」', 'Archived “{name}”'],
   'archive.restored': ['已恢复「{name}」', 'Restored “{name}”'],
+});
+
+// 任务状态「废弃」(#724):关闭态,默认不显示;看板收成一条窄栏,列表底部有显示 / 隐藏开关。
+registerTranslations({
+  'abandoned.show': ['显示已废弃', 'Show abandoned'],
+  'abandoned.showList': ['显示已废弃（{n}）', 'Show abandoned ({n})'],
+  'abandoned.hideList': ['隐藏已废弃', 'Hide abandoned'],
+  'abandoned.collapse': ['收起「废弃」', 'Collapse “Abandoned”'],
+  'abandoned.expandA11y': ['展开「废弃」，{n} 个任务', 'Expand “Abandoned”, {n} tasks'],
+  'act.abandoned': ['废弃了任务', 'abandoned the task'],
 });

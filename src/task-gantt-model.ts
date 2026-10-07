@@ -7,6 +7,7 @@
 // 否则(旧 Hub,或没设)退回创建时间(createdAt),界面上写明。
 //
 // 日期一律是查看者本地的 'YYYY-MM-DD';天数差用 UTC 日历算(不受夏令时影响)。
+import { isClosedColumn } from './requirement-columns';
 import { dueFromLocal, dueToLocal, localDateOf, normalizeDue, systemClock, type Clock } from './due-time';
 import type { Requirement, RequirementProject } from './requirements-model';
 import type { RequirementPersonRef } from './requirement-people';
@@ -236,7 +237,7 @@ export function firstCurrentWeek(weeks: readonly GanttWeek[]): number {
 }
 
 /** 逾期:期限那天已经过了,而且还没完成。 */
-export const barOverdue = (bar: GanttBar, today: string): boolean => bar.end < today && bar.item.column !== 'done';
+export const barOverdue = (bar: GanttBar, today: string): boolean => bar.end < today && !isClosedColumn(bar.item.column);
 
 // ── 拖动改期限(桌面) ──
 
