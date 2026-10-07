@@ -920,6 +920,32 @@ test('details only edit participants through the assignment editor (owner lives 
   expect(byId('edit-participants')).toBeTruthy();
 });
 
+test('detail 编辑参与人 lists Agents (grouped 人类 / Agent, Agent tag), saves {kind:node,id} merged with humans, chips 「名字 · Agent」', async () => {
+  // owner 10-07「是不是少了参与Agent 的选型」。
+  assignmentWrites.length = 0;
+  const saved: any[] = [];
+  await act(async () => { renderer = create(<AssignmentsEditor cfg={cfg} fields="participants" item={{ ...card, priority: 'normal', column: 'pool', owner: null, participants: [{ kind: 'user', id: 'u' }] }} onSaved={value => saved.push(value)} />); });
+  // 人类胶囊照旧「名字 人类」,还没有 Agent 胶囊。
+  expect(renderer.root.findAllByProps({ testID: 'person-chip-agent' })).toHaveLength(0);
+  await act(async () => byId('edit-participants').props.onPress());
+  expect(byId('people-group-h:user')).toBeTruthy();
+  expect(byId('people-group-h:node')).toBeTruthy();
+  expect(byId('person-node:n1')).toBeTruthy();
+  expect(byId('person-node:n1').findAllByProps({ testID: 'person-agent-tag' }).length).toBeGreaterThan(0);
+  expect(byId('person-user:u').findAllByProps({ testID: 'person-agent-tag' })).toHaveLength(0);
+  await act(async () => byId('person-node:n1').props.onPress());
+  await act(async () => byId('people-confirm').props.onPress());
+  expect(assignmentWrites).toEqual([{ id: 'r1', value: { participants: [{ kind: 'user', id: 'u' }, { kind: 'node', id: 'n1' }] } }]);
+  await act(async () => saveAssignment({ owner: null, participants: [{ kind: 'user', id: 'u' }, { kind: 'node', id: 'n1' }] }));
+  expect(saved).toHaveLength(1);
+  // 卡片回来带上 node 参与人:Agent 胶囊单独一种,写「· Agent」。
+  await act(async () => renderer.update(<AssignmentsEditor cfg={cfg} fields="participants" item={{ ...card, priority: 'normal', column: 'pool', owner: null, participants: [{ kind: 'user', id: 'u' }, { kind: 'node', id: 'n1' }] }} onSaved={() => {}} />));
+  const agentChip = byId('person-chip-agent');
+  expect(JSON.stringify(agentChip.findAllByType('Text').map(n => n.props.children))).toContain('执行节点');
+  expect(JSON.stringify(agentChip.findAllByType('Text').map(n => n.props.children))).toContain('· Agent');
+  expect(JSON.stringify(byId('person-chip').findAllByType('Text').map(n => n.props.children))).toContain('人类');
+});
+
 test('old Hub cards show unsupported instead of a working assignment editor', async () => {
   await act(async () => { renderer = create(<AssignmentsEditor cfg={cfg} item={{ ...card, priority: 'normal', column: 'pool' }} onSaved={() => { throw new Error('must not save'); }} />); });
   expect(byId('assignments-unsupported')).toBeTruthy();

@@ -1,4 +1,4 @@
-import { dueInfo, ownerLabel, participantStack, personDisplay, roleAvatars } from './i18n-task-presentation';
+import { dueInfo, ownerLabel, participantChip, participantStack, personDisplay, roleAvatars } from './i18n-task-presentation';
 import { t as tr } from './i18n';
 import { TaskIssueCount } from './TaskIssueBindings';
 import { TaskTagChips } from './TaskTags';
@@ -424,12 +424,16 @@ export function PersonChips({ refs, people, s, testID }: { refs: readonly { kind
   return (
     <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }} testID={testID}>
       {refs.map(r => {
-        const d = personDisplay(r, people);
+        // Agent 参与人:浅蓝底 +「名字 · Agent」(品牌蓝),和人类的灰底「名字 人类」一眼分开。
+        const d = participantChip(r, people);
+        const agent = d.agent;
         return (
-          <View key={`${r.kind}:${r.id}`} style={{ flexDirection: 'row', alignItems: 'center', gap: 6, height: 28, paddingLeft: 3, paddingRight: 10, borderRadius: radius.pill, backgroundColor: colors.subtleFill }} testID="person-chip">
+          <View key={`${r.kind}:${r.id}`} style={{ flexDirection: 'row', alignItems: 'center', gap: 6, height: 28, paddingLeft: 3, paddingRight: 10, borderRadius: radius.pill, backgroundColor: agent ? colors.tonalBg : colors.subtleFill }} testID={agent ? 'person-chip-agent' : 'person-chip'}>
             {d.known ? <AliasAvatar alias={d.name} size={22} /> : <View style={{ width: 22, height: 22, borderRadius: radius.pill, backgroundColor: colors.border, alignItems: 'center', justifyContent: 'center' }}><Ionicons name="help" size={13} color={colors.textMuted} /></View>}
-            <Text style={{ color: d.known ? colors.text : colors.textMuted, fontSize: 13 }} numberOfLines={1}>{d.name}</Text>
-            <Text style={s.metaMuted}>{r.kind === 'user' ? tr('tasks.copy.1') : 'Agent'}</Text>
+            <Text style={{ color: d.known ? colors.text : colors.textMuted, fontSize: 13, flexShrink: 1 }} numberOfLines={1}>{d.name}</Text>
+            {agent
+              ? <Text style={{ color: colors.accent, fontSize: 12, fontWeight: '600' }} testID="person-chip-kind">{d.kindLabel}</Text>
+              : <Text style={s.metaMuted} testID="person-chip-kind">{d.kindLabel}</Text>}
           </View>
         );
       })}

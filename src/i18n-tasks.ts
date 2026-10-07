@@ -302,6 +302,9 @@ registerTranslations({
  'tasks.peopleAddMeA11y': ['把我加为参与人', 'Add me as a participant'],
  'tasks.filterSectionPeople': ['人', 'People'],
  'tasks.filterSectionAgents': ['Agent', 'Agents'],
+ 'tasks.peopleGroupHumans': ['人类', 'Humans'],
+ 'tasks.peopleGroupAgents': ['Agent', 'Agents'],
+ 'tasks.peopleAgentTag': ['Agent', 'Agent'],
 });
 const keys = new Map<string,string>(taskCopy.map(([zh],i)=>[zh,`tasks.copy.${i}`]));
 /** Only call with known UI/model labels, never user content. */

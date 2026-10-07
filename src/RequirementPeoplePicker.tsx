@@ -10,7 +10,8 @@ import { colors, onThemeChange, radius, spacing } from './theme';
 import { useModalSafePadding } from './safe-area-runtime';
 import { withBasePadding } from './modal-safe-area';
 import AliasAvatar from './AliasAvatar';
-import { meFirst, peopleInNetwork, personKey, personSubtitle, togglePerson, uniquePeople, type RequirementPerson, type RequirementPersonRef } from './requirement-people';
+import { groupPeople, meFirst, peopleInNetwork, peopleOf, personKey, personSubtitle, togglePerson, uniquePeople, type PeopleEntry, type RequirementPerson, type RequirementPersonRef } from './requirement-people';
+import { teamOf } from './agents-list';
 import { useTaskBoard } from './task-board-store';
 import { elevated } from './elevation';
 import { anchorSelectMenu, type SelectAnchor } from './task-select-model';
@@ -66,7 +67,10 @@ function Picker({ networkId, mode, people: allPeople, selected, onConfirm, onClo
   const [themeVersion, setThemeVersion] = useState(0);
   useEffect(() => onThemeChange(() => setThemeVersion(n => n + 1)), []);
   const candidates = peopleInNetwork(people, networkId);
-  const rows = meFirst(peopleInNetwork(people, networkId, query), meId);
+  // 参与人可以是人类也可以是 Agent:分「人类 / Agent」两组,Agent 再按团队分(和节点列表同一个 teamOf)。
+  // 负责人 / 负责 Agent 只列一种,groupPeople 原样返回不分组。rows = 键盘 ↑↓ 走的顺序(跳过组标题)。
+  const entries = groupPeople(meFirst(peopleInNetwork(people, networkId, query), meId), teamOf);
+  const rows = peopleOf(entries);
   const isMe = (person: RequirementPersonRef) => !!meId && person.kind === 'user' && person.id === meId;
   // 「加我」:参与人模式、我在可选名单里、还没选上、不是已停用。
   const me = mode === 'participants' ? candidates.find(person => isMe(person) && !person.unavailable) : undefined;
@@ -74,7 +78,8 @@ function Picker({ networkId, mode, people: allPeople, selected, onConfirm, onClo
   const subtitle = (person: RequirementPerson) => {
     const sub = personSubtitle(person, query);
     return [
-      sub.role === 'agent' ? 'Agent' : sub.role === 'admin' ? tr('tasks.peopleRoleAdmin') : tr('tasks.peopleRoleMember'),
+      // Agent 行已有「Agent」标签(AgentTag),副标题不再重复写。
+      ...(sub.role === 'agent' ? [] : [sub.role === 'admin' ? tr('tasks.peopleRoleAdmin') : tr('tasks.peopleRoleMember')]),
       ...(sub.online === undefined ? [] : [sub.online ? tr('tasks.peopleOnline') : tr('tasks.peopleOffline')]),
       ...(sub.id ? [sub.id] : []),
     ].join(' · ') + (person.unavailable ? tr('tasks.copy.73') : '');
@@ -92,6 +97,8 @@ function Picker({ networkId, mode, people: allPeople, selected, onConfirm, onClo
     selected: { backgroundColor: colors.rowActive },
     name: { color: colors.text, fontSize: 14 },
     flex: { flex: 1 },
+    shrink: { flexShrink: 1 },
+    nameRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
     actions: { flexDirection: 'row', justifyContent: 'flex-end', gap: spacing.md },
     headRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
     addMe: { minHeight: 32, justifyContent: 'center', paddingHorizontal: spacing.md, borderRadius: radius.pill, borderWidth: 1, borderColor: colors.accent },
@@ -109,7 +116,7 @@ function Picker({ networkId, mode, people: allPeople, selected, onConfirm, onClo
     if (anchored && mode === 'owner') { onConfirm(next); return; }
     setDraft(next);
   };
-  if (anchored) return <PeopleDropdown anchor={anchor!} viewport={win} mode={mode} rows={rows} missing={missing} chosen={chosen} invalid={invalid}
+  if (anchored) return <PeopleDropdown anchor={anchor!} viewport={win} mode={mode} rows={rows} entries={entries} missing={missing} chosen={chosen} invalid={invalid}
     query={query} setQuery={setQuery} title={title || (mode === 'owner' ? tr('tasks.copy.65') : tr('tasks.copy.66'))}
     hint={(typeof hint === 'function' ? hint(draft.length) : hint) || (mode === 'owner' ? tr('tasks.copy.67') : tr('tasks.copy.68', { v0: draft.length }))}
     nameOf={person => isMe(person) ? tr('tasks.copy.62', { v0: person.name || person.id }) : person.name || person.id} subtitle={subtitle}
@@ -132,11 +139,11 @@ function Picker({ networkId, mode, people: allPeople, selected, onConfirm, onClo
           {missing.map(person => <Pressable key={personKey(person)} accessibilityRole="button" onPress={() => setDraft(prev => prev.filter(row => personKey(row) !== personKey(person)))} style={styles.row}>
             <Text style={styles.muted}>{tr('tasks.copy.71')}{personKey(person)} {tr('tasks.copy.72')}</Text>
           </Pressable>)}
-          {rows.map(person => <Pressable key={personKey(person)} testID={`person-${personKey(person)}`} accessibilityRole="checkbox" accessibilityState={{ checked: chosen.has(personKey(person)), disabled: !!person.unavailable && !chosen.has(personKey(person)) }} disabled={!!person.unavailable && !chosen.has(personKey(person))} onPress={() => setDraft(prev => togglePerson(prev, person, mode))} style={[styles.row, chosen.has(personKey(person)) && styles.selected]}>
+          {entries.map(entry => entry.type === 'header' ? <GroupHeader key={entry.key} entry={entry} /> : ((person: RequirementPerson) => <Pressable key={personKey(person)} testID={`person-${personKey(person)}`} accessibilityRole="checkbox" accessibilityState={{ checked: chosen.has(personKey(person)), disabled: !!person.unavailable && !chosen.has(personKey(person)) }} disabled={!!person.unavailable && !chosen.has(personKey(person))} onPress={() => setDraft(prev => togglePerson(prev, person, mode))} style={[styles.row, chosen.has(personKey(person)) && styles.selected]}>
             <AliasAvatar alias={person.name || person.id} size={36} />
-            <View style={styles.flex}><Text style={styles.name} testID={`person-name-${personKey(person)}`}>{isMe(person) ? tr('tasks.copy.62', { v0: person.name || person.id }) : person.name || person.id}</Text><Text style={styles.muted} testID={`person-sub-${personKey(person)}`}>{subtitle(person)}</Text></View>
+            <View style={styles.flex}><View style={styles.nameRow}><Text style={[styles.name, styles.shrink]} numberOfLines={1} testID={`person-name-${personKey(person)}`}>{isMe(person) ? tr('tasks.copy.62', { v0: person.name || person.id }) : person.name || person.id}</Text>{person.kind === 'node' ? <AgentTag /> : null}</View>{subtitle(person) ? <Text style={styles.muted} testID={`person-sub-${personKey(person)}`}>{subtitle(person)}</Text> : null}</View>
             <Text accessible={false} importantForAccessibility="no" style={[styles.action, !chosen.has(personKey(person)) && styles.checkOff]}>✓</Text>
-          </Pressable>)}
+          </Pressable>)(entry.person))}
           {!rows.length ? <Text style={styles.muted}>{query ? tr('tasks.copy.74') : kinds?.length === 1 ? (kinds[0] === 'node' ? tr('tasks.copy.75') : tr('tasks.copy.76')) : tr('tasks.copy.77')}</Text> : null}
         </ScrollView>
         {invalid ? <Text style={styles.muted} accessibilityRole="alert">{tr('tasks.copy.78')}</Text> : null}
@@ -151,9 +158,9 @@ function Picker({ networkId, mode, people: allPeople, selected, onConfirm, onClo
 }
 
 /** 桌面锚定下拉:位置用 TaskSelectMenu 同一个 anchorSelectMenu(下面放不下翻上去、夹进窗口)。没有遮罩变暗,点外面 = 取消。 */
-function PeopleDropdown({ anchor, viewport, mode, rows, missing, chosen, invalid, query, setQuery, title, hint, empty, nameOf, subtitle, onAddMe, onPick, onDropMissing, onConfirm, onClose }: {
+function PeopleDropdown({ anchor, viewport, mode, rows, entries, missing, chosen, invalid, query, setQuery, title, hint, empty, nameOf, subtitle, onAddMe, onPick, onDropMissing, onConfirm, onClose }: {
   anchor: SelectAnchor; viewport: { width: number; height: number }; mode: 'owner' | 'participants';
-  rows: RequirementPerson[]; missing: RequirementPersonRef[]; chosen: ReadonlySet<string>; invalid: boolean;
+  rows: RequirementPerson[]; entries: PeopleEntry[]; missing: RequirementPersonRef[]; chosen: ReadonlySet<string>; invalid: boolean;
   query: string; setQuery: (q: string) => void; title: string; hint: string; empty: string;
   nameOf: (person: RequirementPerson) => string; subtitle: (person: RequirementPerson) => string; onAddMe?: () => void;
   onPick: (person: RequirementPerson) => void; onDropMissing: (person: RequirementPersonRef) => void; onConfirm: () => void; onClose: () => void;
@@ -184,7 +191,7 @@ function PeopleDropdown({ anchor, viewport, mode, rows, missing, chosen, invalid
     return () => { doc.removeEventListener('keydown', onKey, true); offEsc(); };
   }, [mode]);
   const footer = mode === 'participants';
-  const pos = anchorSelectMenu(anchor, viewport, { rows: Math.max(1, rows.length + missing.length) + (footer ? 2 : 0), rowH: DROP_ROW_H, search: true, maxWidth: 360 });
+  const pos = anchorSelectMenu(anchor, viewport, { rows: Math.max(1, entries.length + missing.length) + (footer ? 2 : 0), rowH: DROP_ROW_H, search: true, maxWidth: 360 });
   const up = pos.top < anchor.y;
   return <Modal visible transparent animationType="none" onRequestClose={onClose}>
     <Pressable style={{ position: 'absolute', left: 0, top: 0, right: 0, bottom: 0 }} onPress={onClose} accessibilityLabel={tr('taskSel.close')} testID="people-scrim" />
@@ -202,7 +209,10 @@ function PeopleDropdown({ anchor, viewport, mode, rows, missing, chosen, invalid
         {missing.map(person => <Pressable key={personKey(person)} accessibilityRole="button" onPress={() => onDropMissing(person)} style={{ minHeight: DROP_ROW_H, justifyContent: 'center', paddingHorizontal: spacing.sm }}>
           <Text style={{ color: colors.textMuted, fontSize: 12 }} numberOfLines={1}>{tr('tasks.copy.71')}{personKey(person)} {tr('tasks.copy.72')}</Text>
         </Pressable>)}
-        {rows.map((person, i) => {
+        {entries.map(entry => {
+          if (entry.type === 'header') return <GroupHeader key={entry.key} entry={entry} dense />;
+          const person = entry.person;
+          const i = rows.indexOf(person);
           const on = chosen.has(personKey(person));
           const off = !!person.unavailable && !on;
           return <Pressable key={personKey(person)} ref={(el: any) => { if (el) rowEls.current.set(i, el); else rowEls.current.delete(i); }}
@@ -211,7 +221,8 @@ function PeopleDropdown({ anchor, viewport, mode, rows, missing, chosen, invalid
             style={state => ({ height: DROP_ROW_H, flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: spacing.sm, borderRadius: radius.item, opacity: off ? 0.45 : 1,
               backgroundColor: i === active || state.pressed ? colors.rowHover : on ? colors.rowActive : 'transparent' })}>
             <AliasAvatar alias={person.name || person.id} size={24} />
-            <Text style={{ flex: 1, minWidth: 0, color: colors.text, fontSize: 13 }} numberOfLines={1} testID={`person-name-${personKey(person)}`}>{nameOf(person)}<Text style={{ color: colors.textMuted, fontSize: 12 }} testID={`person-sub-${personKey(person)}`}>{'  '}{subtitle(person)}</Text></Text>
+            <Text style={{ flex: 1, minWidth: 0, color: colors.text, fontSize: 13 }} numberOfLines={1} testID={`person-name-${personKey(person)}`}>{nameOf(person)}<Text style={{ color: colors.textMuted, fontSize: 12 }} testID={`person-sub-${personKey(person)}`}>{subtitle(person) ? `  ${subtitle(person)}` : ''}</Text></Text>
+            {person.kind === 'node' ? <AgentTag /> : null}
             {on ? <Text accessible={false} style={{ color: colors.accent, fontSize: 14 }}>✓</Text> : null}
           </Pressable>;
         })}
@@ -225,4 +236,22 @@ function PeopleDropdown({ anchor, viewport, mode, rows, missing, chosen, invalid
       </View> : null}
     </View>
   </Modal>;
+}
+
+/** Agent 行的标签:品牌蓝字 + 浅蓝底的小胶囊,和人类行一眼分开(人类不加标签)。 */
+export function AgentTag() {
+  useTranslation();
+  return <View testID="person-agent-tag" style={{ height: 18, justifyContent: 'center', paddingHorizontal: 6, borderRadius: radius.pill, backgroundColor: colors.tonalBg }}>
+    <Text style={{ color: colors.accent, fontSize: 11, fontWeight: '600' }}>{tr('tasks.peopleAgentTag')}</Text>
+  </View>;
+}
+
+/** 组标题:「人类 · N」「Agent · N」;Agent 的团队小标题缩进一档、字更小。 */
+function GroupHeader({ entry, dense = false }: { entry: Extract<PeopleEntry, { type: 'header' }>; dense?: boolean }) {
+  useTranslation();
+  const label = entry.level === 1 ? tr(entry.group === 'user' ? 'tasks.peopleGroupHumans' : 'tasks.peopleGroupAgents') : entry.label;
+  return <View testID={`people-group-${entry.key}`} accessibilityRole="header"
+    style={{ minHeight: dense ? 26 : 30, justifyContent: 'flex-end', paddingHorizontal: spacing.sm, paddingLeft: entry.level === 2 ? spacing.sm + 8 : spacing.sm, paddingBottom: 2 }}>
+    <Text style={{ color: colors.textMuted, fontSize: entry.level === 1 ? 12 : 11, fontWeight: entry.level === 1 ? '600' : '400' }} numberOfLines={1}>{label} · {entry.count}</Text>
+  </View>;
 }

@@ -9,7 +9,7 @@ import type { HubConfig } from './api';
 import type { Requirement } from './requirements-model';
 import { listRequirementPeople, saveRequirementAssignments, type RequirementAssignments } from './requirement-people-api';
 import { hasRoles } from './task-board-model';
-import { personKey, type RequirementPerson, type RequirementPersonRef } from './requirement-people';
+import { mergeParticipants, personKey, type RequirementPerson, type RequirementPersonRef } from './requirement-people';
 import PeoplePicker, { measureAnchor } from './RequirementPeoplePicker';
 import type { SelectAnchor } from './task-select-model';
 import { colors, spacing } from './theme';
@@ -31,9 +31,15 @@ export default function RequirementAssignmentsEditor({ cfg, item, onSaved, field
   const [error, setError] = useState('');
   const [reload, setReload] = useState(0);
   const [mode, setMode] = useState<'owner' | 'participants' | null>(null);
+  // 打开选择器时的参与人(人类 + Agent):保存时只把这次的增减套到最新列表上(mergeParticipants)。
+  const opened = useRef<RequirementPersonRef[]>([]);
+  // 保存时读的「最新列表」:看板经 SSE 刷新 item,选择器开着时别人改的也在这里。
+  const latest = useRef(item);
+  latest.current = item;
   const [anchor, setAnchor] = useState<SelectAnchor | null>(null);
   const actionsRef = useRef<any>(null);
   const openPicker = (value: 'owner' | 'participants') => {
+    opened.current = [...(item.participants ?? [])];
     if (!pointer) { setAnchor(null); setMode(value); return; }
     measureAnchor(actionsRef.current, a => { setAnchor(a); setMode(value); });
   };
@@ -69,7 +75,8 @@ export default function RequirementAssignmentsEditor({ cfg, item, onSaved, field
     try {
       const saved = await saveRequirementAssignments(cfg, item.id, mode === 'owner'
         ? { owner: selected[0] ?? null }
-        : { participants: selected });
+        // Hub 的 participants 是整表替换:读-改-写,人类和 Agent({kind:'node',id})一起存。
+        : { participants: mergeParticipants(latest.current.participants ?? [], opened.current, selected) });
       // The board owns saved data and can outlive this detail editor.
       onSaved(saved);
     } catch (e) { if (alive.current) setError(e instanceof Error ? e.message : tr('tasks.copy.3')); }

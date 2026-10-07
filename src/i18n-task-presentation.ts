@@ -8,6 +8,12 @@ export function personDisplay(...args: Parameters<typeof model.personDisplay>) {
  const result = model.personDisplay(...args);
  return result.known ? result : { ...result, name: t('tasks.unknownMember', { id: model.shortId(args[0].id) }) };
 }
+/** 详情里一个参与人胶囊画什么:Agent =「名字 · Agent」(品牌蓝),人类 =「名字 人类」。 */
+export function participantChip(...[ref, people]: Parameters<typeof model.personDisplay>) {
+ const d = personDisplay(ref, people);
+ const agent = ref.kind === 'node';
+ return { ...d, agent, kindLabel: agent ? `· ${t('tasks.peopleAgentTag')}` : t('tasks.copy.1') };
+}
 export const personName = (...args: Parameters<typeof model.personName>) => personDisplay(...args).name;
 export function ownerLabel(...[item, people]: Parameters<typeof model.ownerLabel>) {
  if (item.owner === undefined) return item.assignee || t('tasks.unassigned');
