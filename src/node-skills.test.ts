@@ -1,7 +1,7 @@
 // 设置里看节点技能(只读)— run: bun src/node-skills.test.ts
 import { readFileSync } from 'node:fs';
 import { listNodeSkills, readNodeSkill, type HubConfig } from './api';
-import { isValidSkillName, parseSkillDetail, parseSkillsList, scopeLabel, skillsStatusMessage, skillsTarget, stripFrontmatter } from './node-skills';
+import { isValidSkillName, parseSkillDetail, parseSkillsList, parseSkillsPayload, scopeLabel, skillBadge, skillsInfoText, skillsStatusMessage, skillsTarget, stripFrontmatter } from './node-skills';
 
 let pass = 0, total = 0;
 const ck = (name: string, cond: boolean, extra = '') => {
@@ -43,6 +43,29 @@ ck('超过 64 字符被拒', !isValidSkillName('x'.repeat(65)) && isValidSkillNa
 }
 
 ck('scope 中文标签', scopeLabel('project') === '项目' && scopeLabel('user') === '用户' && scopeLabel('system') === '内置');
+{
+  const raw = JSON.stringify({
+    skills: [
+      { name: 'team-echo', scope: 'user', path_rel: '~/.claude/skills/team-echo/SKILL.md', description: 'echo', origin: 'team' },
+      { name: 'notes', scope: 'user', path_rel: '~/.claude/skills/notes/SKILL.md', description: 'n' },
+      { name: 'odd', scope: 'team', origin: 'nope' },
+    ],
+    roots: ['.claude/skills', '~/.claude/skills', '/home/demo/.claude/skills'],
+    warnings: ['团队技能 team-echo 被 .claude/skills/team-echo 挡住', '/home/demo/secret'],
+  });
+  const view = parseSkillsPayload(raw);
+  const team = view.skills[0]!;
+  ck('origin=team 保留,普通技能不带 origin', team.origin === 'team' && !('origin' in view.skills[1]!));
+  ck('scope=team 仍归到项目,乱写的 origin 丢掉', view.skills[2]!.scope === 'project' && !('origin' in view.skills[2]!));
+  ck('徽章只在 origin=team 时写团队', skillBadge(team) === '团队' && skillBadge(view.skills[1]!) === '用户' && skillBadge({ scope: 'project' }) === '项目');
+  ck('roots 丢掉绝对路径;没有 roots 字段则是 null', JSON.stringify(view.roots) === JSON.stringify(['.claude/skills', '~/.claude/skills']) && parseSkillsPayload(JSON.stringify({ skills: [] })).roots === null);
+  ck('warnings 丢掉绝对路径', JSON.stringify(view.warnings) === JSON.stringify(['团队技能 team-echo 被 .claude/skills/team-echo 挡住']));
+  const info = '这个节点实际能加载的技能(只读)。SKILL.md 所在目录由节点按自己的运行时决定,这里只能查看,不能修改。';
+  ck('没有 roots 时说明保持原句', skillsInfoText(null) === info && skillsInfoText([]) === info);
+  ck('有 roots 时说明列出目录且仍是只读', skillsInfoText(view.roots) === '这个节点实际能加载的技能(只读)。扫描目录：.claude/skills、~/.claude/skills。这里只能查看,不能修改。');
+  const detail = parseSkillDetail(JSON.stringify({ name: 'team-echo', scope: 'user', origin: 'team', content: 'x' }));
+  ck('详情保留 origin=team', detail?.origin === 'team' && detail.content === 'x');
+}
 ck('去掉 frontmatter', stripFrontmatter('---\nname: a\ndescription: b\n---\n\n# Body\ntext') === '# Body\ntext');
 ck('没有 frontmatter 原样返回', stripFrontmatter('# Title\n---\nx') === '# Title\n---\nx');
 ck('frontmatter 未闭合原样返回', stripFrontmatter('---\nname: a\n# Body') === '---\nname: a\n# Body');
@@ -86,6 +109,7 @@ try {
   ck('导出 NodeSkillsSection(命名 + 默认),props { cfg, alias, node, session, readOnly }', /export type NodeSkillsSectionProps = \{ cfg: HubConfig; alias\?: string; node\?: RulesTarget \| null; session: Session; readOnly\?: boolean \};/.test(comp) && /export function NodeSkillsSection\(/.test(comp) && /export default NodeSkillsSection;/.test(comp));
   ck('组件复用聊天的 MarkdownMessage 渲染', /import MarkdownMessage from '\.\/MarkdownMessage'/.test(comp) && /<MarkdownMessage>/.test(comp));
   ck('组件不显示时直接 return null(由 skillsTarget 决定)', /const target = skillsTarget\(\{ node: node \?\? null, session: \{ \.\.\.session, alias: session\.alias \|\| alias \|\| '' \} \}\);\s*if \(!target\) return null;/.test(comp));
+  ck('徽章用 skillBadge,说明用 skillsInfoText,不按 scope 画团队', /skillBadge\(sk\)/.test(comp) && /skillsInfoText\(phase === 'ready' \? roots : null\)/.test(comp) && !/scope === 'team'/.test(comp));
   const screen = readFileSync(new URL('./NodeDetailScreen.tsx', import.meta.url), 'utf8');
   ck('节点页「技能」分区挂载,带权威 node(rulesTarget)与 readOnly', /section === 'skills'[\s\S]{0,300}<NodeSkillsSection cfg=\{cfg\} alias=\{alias\} node=\{rulesTarget\} session=\{s\} readOnly=\{readOnly\} \/>/.test(screen));
   ck('只挂载一次', (screen.match(/<NodeSkillsSection /g) ?? []).length === 1);

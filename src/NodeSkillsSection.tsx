@@ -13,7 +13,7 @@ import { listNodeSkills, readNodeSkill, waitForRulesFileResult, type HubConfig, 
 import InfoTip from './InfoTip';
 import MarkdownMessage from './MarkdownMessage';
 import { isTerminal, nextPollDelayMs, requestIdToFollow, resultProblem } from './node-rules';
-import { parseSkillDetail, parseSkillsList, scopeLabel, skillsStatusMessage, skillsTarget, stripFrontmatter, type SkillDetail, type SkillSummary } from './node-skills';
+import { parseSkillDetail, parseSkillsPayload, skillBadge, skillsInfoText, skillsStatusMessage, skillsTarget, stripFrontmatter, type SkillDetail, type SkillSummary } from './node-skills';
 import { colors, radius, spacing, type, weight } from './theme';
 
 type Phase = 'loading' | 'ready' | 'unavailable';
@@ -32,6 +32,8 @@ export function NodeSkillsSection({ cfg, alias, node, session }: NodeSkillsSecti
 function SkillsCard({ cfg, target, session }: { cfg: HubConfig; target: RulesTarget; session: Session }) {
   const [phase, setPhase] = useState<Phase>('loading');
   const [skills, setSkills] = useState<SkillSummary[]>([]);
+  const [roots, setRoots] = useState<string[] | null>(null);
+  const [warnings, setWarnings] = useState<string[]>([]);
   const [message, setMessage] = useState('');
   const [open, setOpen] = useState<string | null>(null);
   const [detail, setDetail] = useState<SkillDetail | null>(null);
@@ -59,10 +61,12 @@ function SkillsCard({ cfg, target, session }: { cfg: HubConfig; target: RulesTar
     if (problem !== null) { setPhase('unavailable'); setMessage(problem); return; }
     if (!res.ok) return;
     if (res.status !== 'done') { setPhase('unavailable'); setMessage(skillsStatusMessage(res.status, res.error, undefined, sessionRef.current)); return; }
-    const list = parseSkillsList(res.content);
-    setSkills(list);
+    const view = parseSkillsPayload(res.content);
+    setSkills(view.skills);
+    setRoots(view.roots);
+    setWarnings(view.warnings);
     setPhase('ready');
-    setMessage(skillsStatusMessage('done', null, list.length));
+    setMessage(skillsStatusMessage('done', null, view.skills.length));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [cfg, key]);
 
@@ -97,12 +101,17 @@ function SkillsCard({ cfg, target, session }: { cfg: HubConfig; target: RulesTar
         {/* 一行头:数量 + ⓘ(原先分区说明 + 这里的说明两段合进 ⓘ)+ 刷新(原在底部)。09-25 紧凑化。 */}
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm, zIndex: 10 }}>
           <Text style={{ color: colors.textSecondary, fontSize: type.small }}>{phase === 'ready' ? `共 ${skills.length} 个技能` : '技能'}</Text>
-          <InfoTip label="技能说明" text="这个节点实际能加载的技能(只读)。SKILL.md 所在目录由节点按自己的运行时决定,这里只能查看,不能修改。" />
+          <InfoTip label="技能说明" text={skillsInfoText(phase === 'ready' ? roots : null)} />
           <View style={{ flex: 1 }} />
           <Pressable accessibilityRole="button" style={{ height: 30, justifyContent: 'center', paddingHorizontal: spacing.md, borderRadius: radius.item, borderWidth: 1, borderColor: colors.border, opacity: phase === 'loading' ? 0.4 : 1 }} disabled={phase === 'loading'} onPress={() => { setOpen(null); setDetail(null); void runList(); }}>
             <Text style={{ color: colors.textSecondary, fontSize: type.small }}>刷新</Text>
           </Pressable>
         </View>
+        {phase === 'ready' && warnings.length > 0 ? (
+          <View style={{ gap: 2 }}>
+            {warnings.map(w => <Text key={w} style={{ color: colors.textSecondary, fontSize: type.small, lineHeight: 18 }}>{w}</Text>)}
+          </View>
+        ) : null}
         {phase === 'loading' ? (
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm }}>
             <ActivityIndicator color={colors.accent} />
@@ -124,7 +133,7 @@ function SkillsCard({ cfg, target, session }: { cfg: HubConfig; target: RulesTar
                   <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm }}>
                     <Text style={{ color: colors.text, fontSize: type.body, fontWeight: weight.strong, fontFamily: mono, flexShrink: 1 }} numberOfLines={1}>{sk.name}</Text>
                     <View style={{ backgroundColor: colors.subtleFill, borderRadius: radius.pill, paddingHorizontal: 8, paddingVertical: 1 }}>
-                      <Text style={{ color: colors.textSecondary, fontSize: type.caption }}>{scopeLabel(sk.scope)}</Text>
+                      <Text style={{ color: colors.textSecondary, fontSize: type.caption }}>{skillBadge(sk)}</Text>
                     </View>
                     <View style={{ flex: 1 }} />
                     <Text style={{ color: colors.textMuted, fontSize: type.small }}>{open === sk.name ? '收起' : '查看'}</Text>
