@@ -78,6 +78,7 @@ import { conversationOpened } from './conversation-flags';
 import { dispatchUnread, hubHasAgentUnread, markAgentRepliesSeen, markAgentServerUnreadCleared, unackedIdsForAgent } from './unread-store';
 import { ackAgentUnread } from './agent-ack';
 import MarkdownMessage from './MarkdownMessage';
+import { ChatMetaLine, ChatTimePill } from './ChatTimeText';
 import MessageSelectOverlay, { type MessageSelectTarget } from './MessageSelectOverlay';
 import { copyValueFor, type SelectionPayload, type SelectMenuKey } from './message-select-model';
 import ImageViewer from './ImageViewer';
@@ -2112,7 +2113,7 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
 
                   <View style={{ flex: 1 }}>
 
-                    <Text style={styles.resultMeta} numberOfLines={1}>{h.sender ?? '—'}{h.createdAt ? ` · ${formatChatHeader(h.createdAt)}` : ''}</Text>
+                    <ChatMetaLine name={h.sender ?? '—'} time={h.createdAt ? formatChatHeader(h.createdAt) : ''} textStyle={styles.resultMeta} style={styles.resultMetaRow} />
 
                     <Text style={styles.resultSnippet} numberOfLines={2}>{h.snippet}</Text>
 
@@ -2184,7 +2185,7 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
             return (
               <View style={[styles.bubbleWrap, isHighlighted(msgKey(item), highlight, Date.now()) && styles.bubbleHighlight]} testID={`chat-item-${msgKey(item)}`}>
                 {showHeader && item.created_at ? (
-                  <Text style={styles.timeHeader}>{formatChatHeader(item.created_at)}</Text>
+                  <ChatTimePill time={formatChatHeader(item.created_at)} boxStyle={styles.timePill} textStyle={styles.timePillText} testID="chat-time-pill" />
                 ) : null}
                 <View style={selectionMode ? styles.selectRow : undefined}>
                 {selectionMode ? (
@@ -2198,9 +2199,7 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
                 {!item._proactive ? sender.isCurrentUser ? (
                 <View style={[styles.messageRow, styles.sentRow]}>
                   <View style={[styles.messageContent, styles.sentContent, bubbleCap]}>
-                    <Text style={[styles.messageAuthor, styles.sentAuthor]} numberOfLines={1}>
-                      {sender.alias}{item.created_at ? ` · ${formatChatHeader(item.created_at)}` : ''}
-                    </Text>
+                    <ChatMetaLine name={sender.alias} time={item.created_at ? formatChatHeader(item.created_at) : ''} textStyle={styles.messageAuthor} style={styles.authorRow} testID="chat-author-sent" />
                     <Pressable
                       {...(pointer ? ({ dataSet: { messageKey: msgKey(item), messagePart: 'sent' }, onMouseEnter: () => setHoverKey(`${msgKey(item)}:sent`), onMouseLeave: () => setHoverKey(null) } as any) : {})}
                       onLongPress={pointer ? undefined : () => openSelect(`${msgKey(item)}:sent`, { item, text: item.content ?? '', author: sender.alias }, 'sent')}
@@ -2231,9 +2230,7 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
                 <View style={[styles.messageRow, styles.foreignRow]}>
                   <AliasAvatar alias={sender.alias} size={36} />
                   <View style={[styles.messageContent, bubbleCap]}>
-                    <Text style={styles.messageAuthor} numberOfLines={1}>
-                      {`${sender.alias} → ${alias}`}{item.created_at ? ` · ${formatChatHeader(item.created_at)}` : ''}
-                    </Text>
+                    <ChatMetaLine name={`${sender.alias} → ${alias}`} time={item.created_at ? formatChatHeader(item.created_at) : ''} textStyle={styles.messageAuthor} style={styles.authorRow} testID="chat-author-foreign" />
                     <Pressable
                       {...(pointer ? ({ dataSet: { messageKey: msgKey(item), messagePart: 'sent' }, onMouseEnter: () => setHoverKey(`${msgKey(item)}:sent`), onMouseLeave: () => setHoverKey(null) } as any) : {})}
                       onLongPress={pointer ? undefined : () => openSelect(`${msgKey(item)}:sent`, { item, text: item.content ?? '', author: sender.alias }, 'reply')}
@@ -2261,7 +2258,7 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
                     <AliasAvatar alias={alias} size={36} />
                     <View style={[styles.messageContent, bubbleCap]}>
                       {/* 2026-09-16 Vincent:「每条消息都展示下时间吧」—— 回复用完成时刻,没有就用创建时刻 */}
-                      <Text style={styles.messageAuthor} numberOfLines={1}>{alias}{item._proactive ? t('chat.proactive') : ''}{(item.completed_at ?? item.created_at) ? ` · ${formatChatHeader(item.completed_at ?? item.created_at)}` : ''}</Text>
+                      <ChatMetaLine name={`${alias}${item._proactive ? t('chat.proactive') : ''}`} time={(item.completed_at ?? item.created_at) ? formatChatHeader(item.completed_at ?? item.created_at) : ''} textStyle={styles.messageAuthor} style={styles.authorRow} testID="chat-author-reply" />
                       <Pressable
                         {...(pointer ? ({ dataSet: { messageKey: msgKey(item), messagePart: 'reply' }, onMouseEnter: () => setHoverKey(`${msgKey(item)}:reply`), onMouseLeave: () => setHoverKey(null) } as any) : {})}
                         onLongPress={pointer ? undefined : () => openSelect(`${msgKey(item)}:reply`, { item, text: item.result ?? item.reply ?? '', author: alias }, 'reply')}
@@ -2852,7 +2849,8 @@ const makeStyles = (B = bubbleLayout()) =>
   searchResults: { maxHeight: 240 },
   resultRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, paddingHorizontal: spacing.md, paddingVertical: spacing.sm, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border },
   resultRowCurrent: { backgroundColor: colors.accent + '14' },
-  resultMeta: { color: colors.textMuted, fontSize: 11, marginBottom: 2 },
+  resultMeta: { color: colors.textMuted, fontSize: 11 },
+  resultMetaRow: { marginBottom: 2 },
   resultSnippet: { color: colors.text, fontSize: 13 },
   messageRow: B.messageRow,
   sentRow: B.sentRow,
@@ -2860,24 +2858,22 @@ const makeStyles = (B = bubbleLayout()) =>
   replyRow: B.replyRow,
   messageContent: B.messageContent,
   sentContent: B.sentContent,
-  messageAuthor: { color: colors.textMuted, fontSize: 11, lineHeight: 16, marginBottom: 3 },
-  sentAuthor: { textAlign: 'right' },
+  // #683: the author line is a row (ChatMetaLine) — name shrinks, time never does; the row carries the margin.
+  messageAuthor: { color: colors.textMuted, fontSize: 11, lineHeight: 16 },
+  authorRow: { marginBottom: 3 },
   bubblePressable: B.bubblePressable,
-  timeHeader: {
-    color: colors.textMuted,
-    fontSize: 11,
-    alignSelf: 'center',
-    flexShrink: 0, // Android 截图里被裁成「06:1」:居中文本不能被行内收缩
-    textAlign: 'center',
+  // 2026-09-29:日期 / 时间分隔做成一枚小胶囊,不再是一行裸字。
+  // #683(iOS「09:0」):胶囊是 View,时间 Text 在里面带按自身字符串算出的宽度下限(ChatTimePill)——
+  // 不再是「Text 自己的测量宽度 = 盒子宽度」,测量短几个点也裁不掉最后一位。
+  timePill: {
     marginTop: spacing.md,
     marginBottom: spacing.sm,
-    // 2026-09-29:日期 / 时间分隔做成一枚小胶囊,不再是一行裸字。
     backgroundColor: colors.subtleFill,
     borderRadius: radius.pill,
-    overflow: 'hidden',
     paddingHorizontal: spacing.sm,
     paddingVertical: 2,
   },
+  timePillText: { color: colors.textMuted, fontSize: 11 },
   // 极简:气泡不描边。我发出的用 bubbleMine(#545 晴蓝实底),回复用卡片色——靠底色区分,不靠边框。
   bubble: { ...B.bubble, backgroundColor: colors.bubbleMine, borderRadius: radius.bubble },
   replyBubble: { ...B.replyBubble, backgroundColor: colors.card },

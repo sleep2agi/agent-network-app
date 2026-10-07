@@ -172,7 +172,7 @@ const makePreviewStyles = () => { const g = agentRowGeometry(uiScale().listDense
   body: { flex: 1, minWidth: 0, gap: g.bodyGap },
   line: { flexDirection: 'row', alignItems: 'center', gap: ds(6), minHeight: g.lineMin },
   name: { flexShrink: 1, color: colors.text, ...listText('name'), fontWeight: '500' },
-  time: { marginLeft: 'auto', color: colors.textMuted, ...listText('meta') },
+  time: { marginLeft: 'auto', color: colors.textMuted, ...listText('meta'), flexShrink: 0 }, // #683: as the real list row
   preview: { flex: 1, minWidth: 0, color: colors.textMuted, ...listText('preview') },
   badge: { minWidth: 18, height: 18, paddingHorizontal: 5, borderRadius: radius.pill, backgroundColor: colors.failed, alignItems: 'center', justifyContent: 'center' },
   badgeText: { color: '#ffffff', fontSize: 10, fontWeight: '600', lineHeight: 12 },

@@ -41,6 +41,7 @@ import './i18n-chat';
 import './i18n-tasks';
 import './i18n-users';
 import { localizedChatHeader as formatChatHeader } from './i18n-chat-time';
+import { ChatMetaLine, ChatTimePill } from './ChatTimeText';
 import { shouldShowTimeHeader } from './time';
 import { canSend, shouldSendOnEnter } from './chat-actions';
 import { sendKeyPref, subscribeShortcuts } from './shortcuts-store';
@@ -494,13 +495,11 @@ export default function DmChatScreen({ cfg, networkId, peer: peerProp, group, on
             const from = isGroup && !out ? senderOf(item, groupPeople) : { username: peer.username, name };
             return (
               <View style={styles.bubbleWrap} testID={`dm-msg-${out ? 'out' : 'in'}`}>
-                {showHeader && item.created_at ? <Text style={styles.timeHeader}>{formatChatHeader(item.created_at)}</Text> : null}
+                {showHeader && item.created_at ? <ChatTimePill time={formatChatHeader(item.created_at)} boxStyle={styles.timePill} textStyle={styles.timePillText} testID="dm-time-pill" /> : null}
                 <View style={[styles.messageRow, out ? styles.sentRow : styles.replyRow]}>
                   {out ? null : <AliasAvatar alias={from.username} size={36} />}
                   <View style={[styles.messageContent, out && styles.sentContent, !out && bubbleCap]}>
-                    <Text style={[styles.messageAuthor, out && styles.sentAuthor]} numberOfLines={1}>
-                      {out ? me : from.name}{item.created_at ? ` · ${formatChatHeader(item.created_at)}` : ''}
-                    </Text>
+                    <ChatMetaLine name={out ? me : from.name} time={item.created_at ? formatChatHeader(item.created_at) : ''} textStyle={styles.messageAuthor} style={styles.authorRow} testID="dm-author" />
                     <View style={[styles.bubble, !out && styles.replyBubble, !out && desktop && styles.replyBubbleDesktop]} testID="dm-bubble">
                       <MineBubble value={out}>
                       {item.content ? <Text style={[styles.bubbleText, out && styles.bubbleTextMine]} selectable>{item.content}</Text> : null}
@@ -707,14 +706,17 @@ const makeStyles = (B = bubbleLayout()) => StyleSheet.create({
   headerTitleCol: { flex: 1, minWidth: 0 },
   beginning: { color: colors.textMuted, fontSize: 11, textAlign: 'center', marginVertical: spacing.md },
   bubbleWrap: { marginBottom: spacing.md, gap: spacing.xs },
-  timeHeader: { color: colors.textMuted, fontSize: 11, alignSelf: 'center', flexShrink: 0, textAlign: 'center', marginTop: spacing.md, marginBottom: spacing.sm, backgroundColor: colors.subtleFill, borderRadius: radius.pill, overflow: 'hidden', paddingHorizontal: spacing.sm, paddingVertical: 2 },
+  // #683: pill = View box + time Text with a width floor (ChatTimePill), as in ChatScreen.
+  timePill: { marginTop: spacing.md, marginBottom: spacing.sm, backgroundColor: colors.subtleFill, borderRadius: radius.pill, paddingHorizontal: spacing.sm, paddingVertical: 2 },
+  timePillText: { color: colors.textMuted, fontSize: 11 },
   messageRow: B.messageRow,
   sentRow: B.sentRow,
   replyRow: B.replyRow,
   messageContent: B.messageContent,
   sentContent: B.sentContent,
-  messageAuthor: { color: colors.textMuted, fontSize: 11, lineHeight: 16, marginBottom: 3 },
-  sentAuthor: { textAlign: 'right' },
+  // #683: author line = ChatMetaLine row (name shrinks, time never does); the row carries the margin.
+  messageAuthor: { color: colors.textMuted, fontSize: 11, lineHeight: 16 },
+  authorRow: { marginBottom: 3 },
   bubble: { ...B.bubble, backgroundColor: colors.bubbleMine, borderRadius: radius.bubble },
   replyBubble: { ...B.replyBubble, backgroundColor: colors.card },
   replyBubbleDesktop: B.replyBubbleDesktop,

@@ -185,7 +185,7 @@ const makeStyles = () =>
   typeDot: { width: 6, height: 6, borderRadius: radius.pill },
   route: { color: colors.textSecondary, fontSize: 12, fontWeight: '600', flex: 1 },
   high: { color: colors.failed, fontSize: 10, fontWeight: '600' },
-  time: { color: colors.textMuted, fontSize: 10 },
+  time: { color: colors.textMuted, fontSize: 10, flexShrink: 0 }, // #683: the route shrinks, not the time
   content: { color: colors.text, fontSize: 13, lineHeight: 19 },
 });
 

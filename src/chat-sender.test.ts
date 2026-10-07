@@ -80,7 +80,7 @@ const checks: Array<[string, boolean]> = [
   ['ChatScreen resolves a sender per message',
     /const sender = resolveSender\(item, currentUsername\)/.test(screen)],
   // 2026-09-16:作者行后面跟时刻(「· HH:mm」),别名仍是 resolveSender 的结果
-  ['the author line renders the resolved alias', /\{sender\.alias\}\{item\.created_at \? ` · \$\{formatChatHeader\(item\.created_at\)\}` : ''\}/.test(screen)],
+  ['the author line renders the resolved alias', /<ChatMetaLine name=\{sender\.alias\} time=\{item\.created_at \? formatChatHeader\(item\.created_at\) : ''\}/.test(screen)],
   ['the avatar renders the resolved alias', screen.includes('<AliasAvatar alias={sender.alias} size={36} />')],
   ['nothing in the screen still hardcodes the viewer as the sender',
     !screen.includes('alias={currentUsername}')],
