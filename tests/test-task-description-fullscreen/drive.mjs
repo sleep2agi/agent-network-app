@@ -338,11 +338,11 @@ for (const v of [{ w: 1200, h: 800 }, { w: 1000, h: 700 }]) {
     await page.waitForFunction(() => !document.querySelector('[data-testid="req-description-full-toolbar"]'), null, { timeout: 8000 });
     await page.waitForTimeout(400);
     const inlinePreview = !!(await rect(page, tid('req-description-rich-content')));
-    const detailOpen = !!(await rect(page, tid('req-edit-save')));
+    const detailOpen = !!(await rect(page, tid('req-detail')));
     record(vp, 'full screen 富文本: editable with 🖼 / 🎤; Esc closes only the full screen (details stay open) and shows 富文本', { read: readTools.read, img: readTools.img, mic: readTools.mic, inlinePreview, detailOpen });
 
-    // save: everything above lands on the hub
-    await page.locator(tid('req-edit-save')).click();
+    // save: #701 —— 焦点离开描述(点标题)即保存
+    await page.locator(tid('req-edit-name')).click();
     await page.waitForTimeout(800);
     const row = await hubRow(reqId);
     record(vp, '保存修改 writes the voice + image edits to the hub', { saved: row.description === afterDone.value });
@@ -441,7 +441,8 @@ for (const v of [{ w: 1200, h: 800 }, { w: 1000, h: 700 }]) {
   await shot(page, 'phone-page-preview');
   await page.locator(tid('req-description-page-back')).click();
   await page.waitForFunction(() => !document.querySelector('[data-testid="req-description-page"]'), null, { timeout: 8000 });
-  await page.locator(tid('req-edit-save')).click();
+  // #701:没有「保存修改」—— 关详情(‹)时把没存的描述存上。
+  await page.locator(tid('req-detail-close')).click();
   await page.waitForTimeout(800);
   const row = await hubRow(reqId);
   record(vp, '预览 hides the bar and 🖼; ‹ closes; 保存修改 writes it to the hub', { noBar: !pv.bar, noImg: !pv.img, saved: row.description === s2.value }, { hub: row.description });

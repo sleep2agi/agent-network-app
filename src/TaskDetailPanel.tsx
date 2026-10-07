@@ -2,15 +2,17 @@ import { t as tr } from './i18n';
 import { validationText } from './i18n-task-presentation';
 import { useTranslation } from './i18n-react';
 import { taskText } from './i18n-tasks';
-// 任务详情:宽屏是右侧抽屉(看板仍在左边可见),手机是推入的一整页(安卓返回键 / 左上 ‹ 关闭)。
-// 两种保存:
-//   · 人和状态 —— 状态、负责人、负责 Agent、参与人:选完立即保存(和看板上的拖动 / 卡片菜单「指派负责人… / 设置参与人…」
-//     是同一个动作、同一个 PATCH,只发那一个字段),旁边一行「正在保存人员绑定… / 已保存」。
-//   · 文字和日期 —— 标题、描述、优先级、预计完成、开始、项目、母任务:在草稿里改,点「保存修改」才写 Hub(只发改过的字段)。
-// 顺序:标题 → 状态 → 优先级 → 负责人 → 负责 Agent → 参与人 → 项目 → 预计完成 → 描述 → 更多(开始 / 母任务 / 子任务 / …)。
-// 参与人紧跟在负责人 / 负责 Agent 下面(不再藏进「更多」),参与人沿用 RequirementAssignmentsEditor。
+// 任务详情(#701 重做):桌面是右侧抽屉(TaskDrawer.tsx 外框,默认 560、可拖宽),手机是推入的一整页,两者同一套样子:
+//   头部:标题(就地编辑)· 状态 pill · 优先级 pill · #编号 · 复制链接 ·(抽屉)在新窗口打开 / 关闭。
+//   正文:抽屉够宽时两栏 —— 左:描述、子任务、动态;右:属性(负责人、负责 Agent、参与人、项目、预计完成、标签)+ 更多。
+//         窄抽屉 / 手机一栏(属性在前)。
+// 保存:没有「保存修改」按钮了。
+//   · 属性(状态、优先级、负责人、负责 Agent、参与人、项目、预计完成、标签、开始、母任务):改完立即保存,只发那一个字段,
+//     成功后底部一个小提示「已保存」。
+//   · 标题、描述(打字):离开输入框时保存(只发那一个字段),Esc 放弃这次改动、退回卡上的值。关详情 / 换卡时没存的照旧先存上。
+// 纯逻辑(失焦补丁、Esc、宽度、分栏、链接、主题色)在 task-drawer-model.ts。
 import { useEffect, useRef, useState, type ReactNode } from 'react';
-import { ActivityIndicator, Modal, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, Modal, Platform, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { Text, TextInput } from './ui-text';
 import { Ionicons } from './icons';
 import RequirementAssignmentsEditor from './RequirementAssignmentsEditor';
@@ -30,7 +32,9 @@ import TaskComments from './TaskComments';
 import { parseIssue } from './requirement-issues';
 import { ExternalLink, levelIn, ParentBreadcrumb, SubRequirements } from './TaskRelations';
 import TaskDescriptionEditor from './TaskDescriptionEditor';
-import { BOARD_RADIUS, cardBg, liftedShadow, STATUS_TONE, useTaskStyles, a11yState } from './TaskBoardParts';
+import { BOARD_RADIUS, PriorityDot, STATUS_TONE, useTaskStyles, a11yState } from './TaskBoardParts';
+import { blurPatch, drawerColumns, drawerTokens, escapeDraft, SAVED_TOAST_MS, taskLink, type TextField } from './task-drawer-model';
+import { priorityLabel } from './task-priority';
 import { DueField, fieldStyles, PriorityPicker, RoleFields } from './TaskCreateDialog';
 import { ParentSelect, ProjectSelect } from './TaskFieldPickers';
 import { moreSummary } from './task-detail-more';
@@ -41,9 +45,10 @@ import TaskIdChip from './TaskIdChip';
 import { readOnlyLabelKey, type TaskEditField } from './task-access';
 import { lockedMainRows, lockedMoreRows, lockedRestRows, type LockedRow } from './task-detail-locked';
 
-export const DRAWER_WIDTH = 420;
+/** 旧的固定抽屉宽度;#701 起抽屉宽度由 TaskDrawer(默认 560、可拖)决定,这个只剩给批量条留位的兜底。 */
+export { DRAWER_DEFAULT_WIDTH as DRAWER_WIDTH } from './task-drawer-model';
 
-export default function TaskDetailPanel({ cfg, item, readOnly = false, editFields, items, onOpenRequirement, onCreateChild, projects, dueDatetime, lowestPriority, mode, top, people, peopleLoading, onLoadPeople, moving, moveError, onMove, onSave, onAssignmentsSaved, onAssign, onClose, onArchive, onFlush, pointer, checklistError, onChecklistToggle, onChecklistAdd, onChecklistDelete, onChecklistMove, onOpenVoiceSettings, onOpenWindow }: {
+export default function TaskDetailPanel({ cfg, item, readOnly = false, editFields, items, onOpenRequirement, onCreateChild, projects, dueDatetime, lowestPriority, mode, top, people, peopleLoading, onLoadPeople, moving, moveError, onMove, onSave, onAssignmentsSaved, onAssign, onClose, onArchive, onFlush, pointer, checklistError, onChecklistToggle, onChecklistAdd, onChecklistDelete, onChecklistMove, onOpenVoiceSettings, onOpenWindow, networkId }: {
   cfg: HubConfig;
   item: Requirement;
   /** 只读(RFC-038 §9:hub 说这张卡我不能改)。表单整块不响应,底部不给「保存修改」,顶上一条说明。 */
@@ -92,6 +97,8 @@ export default function TaskDetailPanel({ cfg, item, readOnly = false, editField
   onOpenVoiceSettings?: () => void;
   /** 桌面(Tauri)抽屉:「⧉ 在新窗口打开」;true = 窗口开了。 */
   onOpenWindow?: () => Promise<boolean>;
+  /** 「复制链接」里的网络(anet://task/<网络>/<id>)。 */
+  networkId?: string | null;
 }) {
   useTranslation();
   const s = useTaskStyles();
@@ -111,12 +118,26 @@ export default function TaskDetailPanel({ cfg, item, readOnly = false, editField
   const onFlushRef = useRef(onFlush);
   onFlushRef.current = onFlush;
   const savedRef = useRef('');
+  // 失焦已经发出去的标题 / 描述(按 id + 字段 + 值):关详情 / 换卡 / 归档时不再发第二次。
+  const sent = useRef(new Set<string>());
+  const sentKey = (id: string, field: TextField, value: unknown) => `${id}\u0000${field}\u0000${JSON.stringify(value)}`;
+  // 底部「已保存」小提示(属性自动保存、标题 / 描述失焦保存成功后出现,一会儿自己消失)。
+  const [toast, setToast] = useState<number | null>(null);
+  useEffect(() => {
+    if (toast === null) return;
+    const timer = setTimeout(() => setToast(null), SAVED_TOAST_MS);
+    return () => clearTimeout(timer);
+  }, [toast]);
+  const showSaved = () => setToast(Date.now());
+  // 头部状态 / 优先级 pill 点开的选择行。
+  const [menu, setMenu] = useState<'status' | 'priority' | null>(null);
   const flushTyped = (forItem: Requirement) => {
     const all = editPatch(forItem, draftRef.current);
     if (!all || !onFlushRef.current) return;
     const typed: EditPatch = {};
     if (all.name !== undefined) typed.name = all.name;
     if (all.description !== undefined) typed.description = all.description;
+    for (const f of ['name', 'description'] as const) if (typed[f] !== undefined && sent.current.has(sentKey(forItem.id, f, typed[f]))) delete typed[f];
     if (!Object.keys(typed).length) return;
     const key = `${forItem.id}\u0000${JSON.stringify(typed)}`;
     if (key === savedRef.current || !checkDraft(draftRef.current).ok) return;
@@ -127,7 +148,7 @@ export default function TaskDetailPanel({ cfg, item, readOnly = false, editField
   useEffect(() => {
     const prev = shown.current;
     shown.current = item;
-    if (prev.id !== item.id) { flushTyped(prev); setDraft(editDraftOf(item)); setError(null); setSaved(false); setRoleSave(null); setFieldSave(null); return; }
+    if (prev.id !== item.id) { flushTyped(prev); setDraft(editDraftOf(item)); setError(null); setSaved(false); setRoleSave(null); setFieldSave(null); setMenu(null); setToast(null); sent.current.clear(); return; }
     setDraft(d => {
       const base = editDraftOf(prev);
       const next = editDraftOf(item);
@@ -144,7 +165,14 @@ export default function TaskDetailPanel({ cfg, item, readOnly = false, editField
       };
     });
   }, [item]);
-  const patch = editPatch(item, draft);
+  const rawPatch = editPatch(item, draft);
+  // 失焦时已经发出去、Hub 还没回新行的标题 / 描述不算「没存」(否则关详情会再发一次)。
+  const patch = (() => {
+    if (!rawPatch) return null;
+    const p: EditPatch = { ...rawPatch };
+    for (const f of ['name', 'description'] as const) if (p[f] !== undefined && sent.current.has(sentKey(item.id, f, p[f]))) delete p[f];
+    return Object.keys(p).length ? p : null;
+  })();
   const set = (p: Partial<EditDraft>) => { setDraft(d => ({ ...d, ...p })); setSaved(false); if (error) setError(null); };
   /** 返回 true = 没有要存的,或存上了。 */
   const save = async (): Promise<boolean> => {
@@ -195,7 +223,29 @@ export default function TaskDetailPanel({ cfg, item, readOnly = false, editField
       setDraft(d => ({ ...d, ...Object.fromEntries(Object.keys(p).map(k => [k, editDraftOf(shown.current)[k as keyof EditDraft]])) }));
       if (one.parent_id !== undefined && (failed === PARENT_TOO_DEEP || failed === PARENT_REJECTED)) setError({ field: 'parent', message: failed });
       setFieldSave({ state: 'error', message: failed });
-    } else setFieldSave({ state: 'saved' });
+    } else { setFieldSave({ state: 'saved' }); showSaved(); }
+  };
+  // 标题 / 描述:离开输入框时保存(只发这一个字段);Esc 放弃这次改动。
+  const saveText = async (field: TextField) => {
+    const one = blurPatch(item, draftRef.current, field);
+    if (!one) return;
+    if (field === 'name') {
+      const c = checkDraft(draftRef.current);
+      if (!c.ok && c.field === 'name') { setError({ field: 'name', message: validationText(c.message) }); return; }
+    }
+    const key = sentKey(item.id, field, one[field]);
+    if (sent.current.has(key)) return;
+    sent.current.add(key);
+    const id = item.id;
+    setFieldSave({ state: 'saving' });
+    const failed = await onSave(one);
+    if (shown.current.id !== id) return;
+    if (failed) { sent.current.delete(key); setError({ field: field === 'name' ? 'name' : 'submit', message: failed }); setFieldSave(null); }
+    else { setFieldSave({ state: 'saved' }); showSaved(); }
+  };
+  const cancelText = (field: TextField) => {
+    setDraft(d => escapeDraft(shown.current, d, field));
+    if (error?.field === 'name' && field === 'name') setError(null);
   };
   const assignRole = async (p: { owner?: RequirementPersonRef | null; agentOwner?: RequirementPersonRef | null }) => {
     let change: AssignChange | null = null;
@@ -207,6 +257,7 @@ export default function TaskDetailPanel({ cfg, item, readOnly = false, editField
     const failed = await onAssign(change);
     if (shown.current.id !== id) return;
     setRoleSave(failed ? { state: 'error', message: failed } : { state: 'saved' });
+    if (!failed) showSaved();
   };
   const legacy = item.owner === undefined;
   // 「更多」展开没有:本机记住(task-detail-prefs.ts);读到之前按收起。
@@ -221,18 +272,46 @@ export default function TaskDetailPanel({ cfg, item, readOnly = false, editField
     else if (!ok) setError({ field: 'submit', message: tr('taskWin.failed') });
   };
 
-  // 常显:标题 · 状态 · 优先级 · 负责人 / 负责 Agent · 参与人 · 项目 · 预计完成 · 描述;其余收进「更多」(owner 09-29:详情太长)。
-  // 常改的短字段一律在长描述上面(owner 10-01:优先级在描述后面要滚很远)。
-  // 更多收起时,里面有值的字段在「更多」那一行上用一行字说出来(task-detail-more.ts),不悄悄藏掉。
+  // 「更多」收起时,里面有值的字段在「更多」那一行上用一行字说出来(task-detail-more.ts),不悄悄藏掉。
   const summary = moreSummary(item, draft, items);
-  // 母任务被 Hub 拒绝、检查项没存上:错误在「更多」里,自动展开,不能藏着。
+  // 母任务被 Hub 拒绝、开始日期不对:错误在「更多」里,自动展开,不能藏着。
   // 参与人的卡:整块不再锁死,改成逐块锁 —— 状态、「更多」开关、检查项能点,别的照只读(看得见、点不动)。
   // RN 原生上父级 pointerEvents=none 会连子级一起吃掉,所以不能「父锁子开」,只能把锁的几块各包一层。
   const partial = readOnly && !!editFields?.length;
-  const moreShown = moreOpen || error?.field === 'parent' || error?.field === 'start' || (!partial && !!checklistError);
+  const moreShown = moreOpen || error?.field === 'parent' || error?.field === 'start';
   const canColumn = !readOnly || !!editFields?.includes('column');
   const canChecklist = !readOnly || !!editFields?.includes('checklist');
-  // 参与人能改的只有状态和检查项:检查项直接放在状态下面,不藏进收起的「更多」里。其余情况仍在「更多」里。
+  const tokens = drawerTokens();
+  // 抽屉 / 窗口够宽就两栏;手机推入页一栏。
+  const [panelWidth, setPanelWidth] = useState(0);
+  const twoColumns = mode !== 'page' && drawerColumns(panelWidth) === 2;
+  const [linkCopied, setLinkCopied] = useState(false);
+  useEffect(() => { setLinkCopied(false); }, [item.id]);
+  const copyLink = async () => {
+    // 第一次复制时才加载剪贴板模块(同 TaskIdChip:详情被只装了 react 的测试镜像渲染)。
+    try { const Clipboard = await import('expo-clipboard'); await Clipboard.setStringAsync(taskLink(item, networkId ?? cfg.networkId)); } catch { return; }
+    setLinkCopied(true);
+    setTimeout(() => setLinkCopied(false), SAVED_TOAST_MS);
+  };
+  // 描述是一整块编辑器(富文本 / 源码 / 全屏):web 上看焦点有没有离开这一块、块里按 Esc;原生上看内联输入框的失焦。
+  const descBox = useRef<any>(null);
+  const titleRef = useRef<any>(null);
+  const textHandlers = useRef({ saveText, cancelText });
+  textHandlers.current = { saveText, cancelText };
+  useEffect(() => {
+    const el = descBox.current;
+    if (Platform.OS !== 'web' || !el?.addEventListener) return;
+    const onFocusOut = (e: any) => { if (!e.relatedTarget || !el.contains?.(e.relatedTarget)) void textHandlers.current.saveText('description'); };
+    const onKey = (e: any) => {
+      if (e.key !== 'Escape' && e.key !== 'Esc') return;
+      textHandlers.current.cancelText('description');
+      e.target?.blur?.();
+    };
+    el.addEventListener('focusout', onFocusOut);
+    el.addEventListener('keydown', onKey);
+    return () => { el.removeEventListener('focusout', onFocusOut); el.removeEventListener('keydown', onKey); };
+  }, [item.id, hasDetails(item)]);
+
   const checklistBlock = hasDetails(item) ? (
             <View pointerEvents={canChecklist ? 'auto' : 'none'} testID="req-checklist-wrap">
               <TaskChecklist
@@ -247,74 +326,42 @@ export default function TaskDetailPanel({ cfg, item, readOnly = false, editField
               />
             </View>
   ) : null;
-  const body: ReactNode = (
-    <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: spacing.xl, gap: spacing.lg }} keyboardShouldPersistTaps="handled">
-      {readOnly ? (
-        <View style={[styles.readOnly, { backgroundColor: colors.subtleFill }]} testID="req-detail-read-only">
-          <Ionicons name="lock-closed-outline" size={14} color={colors.textSecondary} />
-          <Text style={[s.muted, { flex: 1 }]}>{partial ? tr('tasks.partialBanner', { what: tr(readOnlyLabelKey(editFields)) }) : tr('tasks.readOnlyBanner')}</Text>
+
+  // ── 左栏:描述 · 子任务 · 动态 ───────────────────────────────────────────────────────────
+  const description = (
+    <Locked on={readOnly} testID="req-locked-description" rows={readOnly ? lockedMainRows(item, people, projects).filter(r => r.key === 'description') : undefined}>
+      {hasDetails(item) ? (
+        <View ref={descBox} collapsable={false} testID="req-description-box">
+          <TaskDescriptionEditor cfg={cfg} value={draft.description} onChange={description => set({ description })} pointer={pointer} title={item.name} dirty={!!patch} onOpenVoiceSettings={onOpenVoiceSettings} onInlineBlur={Platform.OS === 'web' ? undefined : () => { void saveText('description'); }} />
         </View>
-      ) : null}
-      {item.archived ? (
-        // 归档的卡(搜索「包含已归档」打开的):说清楚它不在看板上,一键恢复(任务页审计 2026-10-02 H2)。
-        <View style={[styles.readOnly, { backgroundColor: colors.subtleFill }]} testID="req-archived-banner">
-          <Ionicons name="archive-outline" size={14} color={colors.textSecondary} />
-          <Text style={[s.muted, { flex: 1 }]}>{tr('archive.banner')}</Text>
-          {onArchive ? (
-            <Pressable accessibilityRole="button" onPress={() => onArchive(false)} hitSlop={8} style={{ minHeight: 32, justifyContent: 'center', paddingHorizontal: spacing.sm }} testID="req-restore">
-              <Text style={{ color: colors.accent, fontSize: typeScale.small, fontWeight: weight.medium }}>{tr('archive.restore')}</Text>
-            </Pressable>
-          ) : null}
-        </View>
-      ) : null}
-      <ParentBreadcrumb item={item} items={items} onOpen={onOpenRequirement} />
-      {/* 只读时下面的编辑控件整块不响应(看得见、点不动),而不是让人改完再被 hub 403 退回。 */}
-      <View pointerEvents={readOnly && !partial ? 'none' : 'auto'} style={{ gap: spacing.lg }} testID="req-detail-fields">
-      <Locked on={readOnly} testID="req-locked-title" title={item.name}>
-      <TextInput
-        value={draft.name}
-        onChangeText={name => set({ name })}
-        placeholder={tr('tasks.copy.118')}
-        placeholderTextColor={colors.textMuted}
-        multiline
-        style={[f.input, { fontSize: typeScale.heading - 2, fontWeight: weight.strong, minHeight: 48, backgroundColor: 'transparent', borderColor: error?.field === 'name' ? colors.failed : colors.border }]}
-        testID="req-edit-name"
-        accessibilityLabel={tr('tasks.copy.118')}
-      />
-      {error?.field === 'name' ? <Text style={s.err} accessibilityRole="alert">{error.message}</Text> : null}
+      ) : (
+        // 精简列表的卡:全文正在按 id 补读(RequirementBoard);旧 Hub 才是真的不支持。
+        item.summary
+          ? <Text style={s.muted} testID="req-details-loading">{tr('detail.loadingDetails')}</Text>
+          : <Text style={s.muted} testID="req-details-unsupported">{tr('tasks.copy.138')}</Text>
+      )}
+    </Locked>
+  );
+  const subtasks = (
+    // 检查项和子任务各自带小标题(TaskChecklist / SubRequirements),这里不再加一层。
+    <View style={{ gap: spacing.lg }} testID="req-section-subtasks">
+      {checklistBlock}
+      <Locked on={readOnly} testID="req-locked-children" rows={readOnly ? lockedMoreRows(item, items).filter(r => r.key === 'children') : undefined}>
+        <SubRequirements item={item} items={items} onOpen={onOpenRequirement} onCreateChild={onCreateChild} canAddLevel={levelIn(items, item) < 5} />
       </Locked>
-      <Field label={tr('tasks.copy.54')}>
-        <View pointerEvents={canColumn ? 'auto' : 'none'} style={[s.segment, { alignSelf: 'flex-start' }]} accessibilityRole="radiogroup" testID="req-move-group">
-          {REQ_COLUMNS.map(col => {
-            const on = col === item.column;
-            return (
-              <Pressable
-                key={col}
-                accessibilityRole="radio"
-                accessibilityLabel={on ? tr('tasks.copy.91', { v0: taskText(REQ_COLUMN_LABEL[col]) }) : tr('tasks.copy.135', { v0: taskText(REQ_COLUMN_LABEL[col]) })}
-                {...a11yState({ disabled: moving || on || !canColumn, selected: on, checked: on })}
-                disabled={moving || on || !canColumn}
-                onPress={() => onMove(col)}
-                style={[s.segmentItem, { flexDirection: 'row', gap: 6 }, on && s.segmentItemOn]}
-                testID={`req-move-${col}`}
-              >
-                <View style={[s.prioDot, { backgroundColor: STATUS_TONE[col]() }]} />
-                <Text style={[s.segmentText, on && s.segmentTextOn]}>{taskText(REQ_COLUMN_LABEL[col])}</Text>
-              </Pressable>
-            );
-          })}
-        </View>
-        {moving ? <Text style={s.muted} accessibilityLiveRegion="polite">{tr('tasks.copy.136')}</Text> : null}
-        {moveError ? <Text style={s.err} accessibilityRole="alert">{moveError}</Text> : null}
-      </Field>
-      {partial ? checklistBlock : null}
-      <Locked on={readOnly} testID="req-locked-main" rows={readOnly ? lockedMainRows(item, people, projects) : undefined}>
-      {/* 优先级在状态之后、描述之前(owner 10-01:「把优先级放前面去啊,放详细后面很难拖动」)—— 常改的短字段都在长描述上面。 */}
-      <Field label={tr('tasks.copy.32')}>
-        <View testID="req-priority-row">
-          <PriorityPicker value={draft.priority} onChange={priority => { void saveField({ priority }); }} testPrefix="req-edit-priority" choices={priorityChoices(lowestPriority, item.priority)} />
-        </View>
-      </Field>
+    </View>
+  );
+  // 评论 / 进展(#474):只读,Agent 经 MCP 发、人经 REST 发;旧 Hub / 没有评论时不画。
+  const activity = (
+    <Section title={tr('taskDrawer.activity')} testID="req-section-activity">
+      <TaskComments key={`comments:${item.id}`} cfg={cfg} requirementId={item.id} people={people ?? []} onLoadPeople={onLoadPeople} />
+    </Section>
+  );
+
+  // ── 右栏:属性(改完立即保存)+ 更多 ───────────────────────────────────────────────────────
+  const properties = (
+    <View style={{ gap: spacing.lg }} testID="req-properties">
+      <Locked on={readOnly} testID="req-locked-main" rows={readOnly ? lockedMainRows(item, people, projects).filter(r => r.key !== 'description' && r.key !== 'priority') : undefined}>
       <RoleFields
         twoRoles={hasRoles(item)}
         owner={draft.owner}
@@ -334,11 +381,11 @@ export default function TaskDetailPanel({ cfg, item, readOnly = false, editField
         ) : undefined}
       />
       {roleSave?.state === 'error' ? <Text style={s.err} accessibilityRole="alert" testID="req-assign-error">{roleSave.message}</Text>
-        : roleSave ? <Text style={s.muted} accessibilityLiveRegion="polite" testID="req-assign-status">{roleSave.state === 'saving' ? tr('tasks.copy.13') : tr('tasks.copy.141')}</Text> : null}
+        : roleSave?.state === 'saving' ? <Text style={s.muted} accessibilityLiveRegion="polite" testID="req-assign-status">{tr('tasks.copy.13')}</Text> : null}
       {!legacy ? (
         <View testID="req-participants-row">
           <Field label={tr('tasks.copy.53')}>
-            <RequirementAssignmentsEditor key={item.id} cfg={cfg} item={item} fields="participants" onSaved={onAssignmentsSaved} pointer={pointer} />
+            <RequirementAssignmentsEditor key={item.id} cfg={cfg} item={item} fields="participants" onSaved={a => { onAssignmentsSaved(a); showSaved(); }} pointer={pointer} />
           </Field>
         </View>
       ) : null}
@@ -346,17 +393,10 @@ export default function TaskDetailPanel({ cfg, item, readOnly = false, editField
       <Field label={tr('tasks.copy.119')}>
         <DueField value={draft.due} onChange={due => { void saveField({ due }); }} error={error?.field === 'due' ? error.message : undefined} idBase="req-edit-due" allowTime={dueDatetime} pointer={pointer} sheet={mode === 'page'} />
       </Field>
-      {hasDetails(item) ? (
-        <TaskDescriptionEditor cfg={cfg} value={draft.description} onChange={description => set({ description })} pointer={pointer} title={item.name} dirty={!!patch} onOpenVoiceSettings={onOpenVoiceSettings} />
-      ) : (
-        // 精简列表的卡:全文正在按 id 补读(RequirementBoard);旧 Hub 才是真的不支持。
-        item.summary
-          ? <Text style={s.muted} testID="req-details-loading">{tr('detail.loadingDetails')}</Text>
-          : <Text style={s.muted} testID="req-details-unsupported">{tr('tasks.copy.138')}</Text>
-      )}
       </Locked>
-      {/* 评论 / 进展(#474):只读,Agent 经 MCP 发、人经 REST 发;旧 Hub / 没有评论时不画。 */}
-      <TaskComments key={`comments:${item.id}`} cfg={cfg} requirementId={item.id} people={people ?? []} onLoadPeople={onLoadPeople} />
+      <Locked on={readOnly} testID="req-locked-tags" rows={readOnly ? lockedRestRows(item, people).filter(r => r.key === 'tags') : undefined}>
+        <TaskTags key={`tags:${item.id}`} cfg={cfg} item={item} onSave={async p => { const failed = await onSave(p); if (!failed) showSaved(); return failed; }} />
+      </Locked>
       <Pressable
         accessibilityRole="button"
         accessibilityLabel={moreShown ? tr('detail.lessA11y') : tr('detail.moreA11y')}
@@ -371,7 +411,7 @@ export default function TaskDetailPanel({ cfg, item, readOnly = false, editField
       </Pressable>
       {moreShown ? (
         <View style={{ gap: spacing.lg }} testID="req-more">
-          <Locked on={readOnly} testID="req-locked-more" rows={readOnly ? lockedMoreRows(item, items) : undefined}>
+          <Locked on={readOnly} testID="req-locked-more" rows={readOnly ? lockedMoreRows(item, items).filter(r => r.key !== 'children') : undefined}>
           {/* 开始(甘特图的条从这里画):只有带 start 字段的 Hub(capability start_date)才有;只到日。 */}
           {item.start !== undefined ? (
             <Field label={tr('detail.start')}>
@@ -379,12 +419,9 @@ export default function TaskDetailPanel({ cfg, item, readOnly = false, editField
             </Field>
           ) : null}
           <ParentSelect item={item} items={items} value={draft.parentId} onChange={parentId => { void saveField({ parentId }); }} touch={!pointer} idBase="req-edit-parent" error={error?.field === 'parent' ? error.message : undefined} />
-          <SubRequirements item={item} items={items} onOpen={onOpenRequirement} onCreateChild={onCreateChild} canAddLevel={levelIn(items, item) < 5} />
           </Locked>
-          {partial ? null : checklistBlock}
-          <Locked on={readOnly} testID="req-locked-rest" rows={readOnly ? lockedRestRows(item, people) : undefined}>
+          <Locked on={readOnly} testID="req-locked-rest" rows={readOnly ? lockedRestRows(item, people).filter(r => r.key !== 'tags') : undefined}>
           <TaskIssueBindings key={item.id} item={item} onSave={onSave} />
-          <TaskTags key={`tags:${item.id}`} cfg={cfg} item={item} onSave={onSave} />
           {!item.externalUrl || !parseIssue(item.externalUrl, false) ? <ExternalLink item={item} /> : null}
           {item.createdAt ? <Text style={s.muted}>{tr('tasks.copy.139')}{item.createdAt.slice(0, 10)}</Text> : null}
           {onArchive && !item.archived ? (
@@ -399,94 +436,208 @@ export default function TaskDetailPanel({ cfg, item, readOnly = false, editField
           {readOnly && (!item.externalUrl || !parseIssue(item.externalUrl, false)) ? <ExternalLink item={item} /> : null}
         </View>
       ) : null}
+    </View>
+  );
+
+  const banners = (
+    <>
+      {readOnly ? (
+        <View style={[styles.readOnly, { backgroundColor: colors.subtleFill }]} testID="req-detail-read-only">
+          <Ionicons name="lock-closed-outline" size={14} color={colors.textSecondary} />
+          <Text style={[s.muted, { flex: 1 }]}>{partial ? tr('tasks.partialBanner', { what: tr(readOnlyLabelKey(editFields)) }) : tr('tasks.readOnlyBanner')}</Text>
+        </View>
+      ) : null}
+      {item.archived ? (
+        // 归档的卡(搜索「包含已归档」打开的):说清楚它不在看板上,一键恢复(任务页审计 2026-10-02 H2)。
+        <View style={[styles.readOnly, { backgroundColor: colors.subtleFill }]} testID="req-archived-banner">
+          <Ionicons name="archive-outline" size={14} color={colors.textSecondary} />
+          <Text style={[s.muted, { flex: 1 }]}>{tr('archive.banner')}</Text>
+          {onArchive ? (
+            <Pressable accessibilityRole="button" onPress={() => onArchive(false)} hitSlop={8} style={{ minHeight: 32, justifyContent: 'center', paddingHorizontal: spacing.sm }} testID="req-restore">
+              <Text style={{ color: colors.accent, fontSize: typeScale.small, fontWeight: weight.medium }}>{tr('archive.restore')}</Text>
+            </Pressable>
+          ) : null}
+        </View>
+      ) : null}
+      <ParentBreadcrumb item={item} items={items} onOpen={onOpenRequirement} />
+    </>
+  );
+
+  const body: ReactNode = (
+    <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: twoColumns ? spacing.lg : spacing.xl, gap: spacing.lg }} keyboardShouldPersistTaps="handled">
+      {banners}
+      {/* 只读时下面的编辑控件整块不响应(看得见、点不动),而不是让人改完再被 hub 403 退回。 */}
+      <View pointerEvents={readOnly && !partial ? 'none' : 'auto'} testID="req-detail-fields" style={twoColumns ? styles.columns : { gap: spacing.xl }}>
+        {twoColumns ? (
+          <>
+            <View style={styles.left} testID="req-detail-left">{description}{subtasks}{activity}</View>
+            <View style={[styles.right, { borderLeftColor: tokens.border }]} testID="req-detail-right">{properties}</View>
+          </>
+        ) : (
+          <>{properties}{description}{subtasks}{activity}</>
+        )}
       </View>
     </ScrollView>
   );
 
-  const footer = (
-    <View style={[styles.footer, { borderTopColor: colors.border }, mode === 'page' && { paddingBottom: spacing.md + safe.paddingBottom }]}>
-      {error?.field === 'submit' ? <Text style={[s.err, { flex: 1 }]} accessibilityRole="alert" testID="req-edit-error">{error.message}</Text>
-        : fieldSave?.state === 'error' ? <Text style={[s.err, { flex: 1 }]} accessibilityRole="alert" testID="req-field-save-error">{fieldSave.message}</Text>
-        : <Text style={[s.muted, { flex: 1 }]} accessibilityLiveRegion="polite" testID="req-save-status">{saving || fieldSave?.state === 'saving' ? tr('tasks.copy.140') : patch ? tr('tasks.copy.142') : saved || fieldSave?.state === 'saved' ? tr('tasks.copy.141') : ''}</Text>}
-      {readOnly ? null : (
-        <Pressable
-          accessibilityRole="button"
-          {...a11yState({ disabled: !patch || saving })}
-          disabled={!patch || saving}
-          onPress={() => { void save(); }}
-          style={[s.primary, { height: 36, paddingHorizontal: spacing.lg }, (!patch || saving) && { opacity: 0.45 }]}
-          testID="req-edit-save"
-        >
-          <Text style={s.primaryText}>{tr('tasks.copy.143')}</Text>
-        </Pressable>
-      )}
+  // 底部:只在出错 / 保存中时说一句,成功是一个会自己消失的小提示(没有「保存修改」按钮了)。
+  const statusLine = error?.field === 'submit' ? <Text style={[s.err, styles.statusLine]} accessibilityRole="alert" testID="req-edit-error">{error.message}</Text>
+    : fieldSave?.state === 'error' ? <Text style={[s.err, styles.statusLine]} accessibilityRole="alert" testID="req-field-save-error">{fieldSave.message}</Text>
+    : null;
+  const toastView = toast !== null ? (
+    <View pointerEvents="none" style={[styles.toast, { backgroundColor: tokens.toastBg }, mode === 'page' && { bottom: spacing.xl + safe.paddingBottom }]} accessibilityLiveRegion="polite" testID="req-saved-toast">
+      <Ionicons name="checkmark-circle" size={14} color={tokens.toastText} />
+      <Text style={{ color: tokens.toastText, fontSize: typeScale.small, fontWeight: weight.medium }}>{tr('taskDrawer.saved')}</Text>
     </View>
+  ) : null;
+  // 给旧的读屏 / 测试:一行看不见的保存状态(保存中 / 已保存 / 有未保存的修改)。
+  const saveStatus = (
+    <Text style={styles.srOnly} accessibilityLiveRegion="polite" testID="req-save-status">{saving || fieldSave?.state === 'saving' ? tr('tasks.copy.140') : patch ? tr('tasks.copy.142') : saved || fieldSave?.state === 'saved' || toast !== null ? tr('tasks.copy.141') : ''}</Text>
   );
 
+  // ── 头部:标题 · 状态 / 优先级 pill · #编号 · 复制链接 · 新窗口 · 关闭 ───────────────────────
+  const iconButton = (testID: string, icon: string, label: string, onPress: () => void, color = colors.textSecondary) => (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      {...({ title: label } as object)}
+      onPress={onPress}
+      style={state => [s.iconButton, ((state as { hovered?: boolean }).hovered || state.pressed) && { backgroundColor: colors.rowHover }]}
+      testID={testID}
+    >
+      <Ionicons name={icon as any} size={17} color={color} />
+    </Pressable>
+  );
+  const pill = (testID: string, dot: ReactNode, label: string, a11y: string, open: boolean, disabled: boolean, onPress: () => void) => (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={a11y}
+      {...a11yState({ expanded: open, disabled })}
+      disabled={disabled}
+      onPress={onPress}
+      style={state => [styles.pill, { backgroundColor: open ? colors.tonalBg : tokens.pillBg }, ((state as { hovered?: boolean }).hovered || state.pressed) && !disabled && { backgroundColor: colors.tonalBg }]}
+      testID={testID}
+    >
+      {dot}
+      <Text style={{ color: open ? colors.accent : colors.text, fontSize: typeScale.small, fontWeight: weight.medium }} numberOfLines={1}>{label}</Text>
+      {disabled ? null : <Ionicons name={open ? 'chevron-up' : 'chevron-down'} size={12} color={colors.textMuted} />}
+    </Pressable>
+  );
+  const statusLabel = taskText(REQ_COLUMN_LABEL[item.column]);
   const head = (
-    <View style={[styles.head, { borderBottomColor: colors.border }]}>
-      {mode === 'page' ? (
-        <Pressable accessibilityRole="button" accessibilityLabel={tr('tasks.copy.144')} onPress={() => { void close(); }} style={[s.iconButton, { marginLeft: -spacing.sm }]} testID="req-detail-close">
-          <Ionicons name="chevron-back" size={22} color={colors.text} />
-        </Pressable>
-      ) : null}
-      <View style={{ flex: 1, minWidth: 0, flexDirection: 'row', alignItems: 'center', gap: spacing.sm }}>
-        <Text style={{ flexShrink: 1, color: colors.text, fontSize: typeScale.title, fontWeight: weight.strong }} numberOfLines={1}>{tr('tasks.copy.145')}</Text>
+    <View style={[styles.head, { borderBottomColor: tokens.border }]}>
+      <View style={styles.headRow}>
+        {mode === 'page' ? (
+          <Pressable accessibilityRole="button" accessibilityLabel={tr('tasks.copy.144')} onPress={() => { void close(); }} style={[s.iconButton, { marginLeft: -spacing.sm }]} testID="req-detail-close">
+            <Ionicons name="chevron-back" size={22} color={colors.text} />
+          </Pressable>
+        ) : null}
+        <View style={{ flex: 1, minWidth: 0 }}>
+          <Locked on={readOnly} testID="req-locked-title" title={item.name}>
+            <TextInput
+              ref={titleRef}
+              value={draft.name}
+              onChangeText={name => set({ name })}
+              onBlur={() => { void saveText('name'); }}
+              onKeyPress={e => {
+                const key = (e.nativeEvent as { key?: string }).key;
+                if (key === 'Escape' || key === 'Esc') { cancelText('name'); titleRef.current?.blur?.(); }
+                // 标题是一行字:回车 = 写完了(失焦即保存),不换行。
+                else if (key === 'Enter' && Platform.OS === 'web') { e.preventDefault?.(); titleRef.current?.blur?.(); }
+              }}
+              placeholder={tr('tasks.copy.118')}
+              placeholderTextColor={colors.textMuted}
+              // web 上多行输入框默认两行高,标题和 pill 之间空一大块;标题最多 80 字,web 用单行(回车 = 写完)。
+              multiline={Platform.OS !== 'web'}
+              style={[styles.title, { color: colors.text, borderColor: error?.field === 'name' ? colors.failed : 'transparent' }]}
+              testID="req-edit-name"
+              accessibilityLabel={tr('tasks.copy.118')}
+              accessibilityHint={tr('taskDrawer.textHint')}
+            />
+          </Locked>
+        </View>
+        {saving || moving || fieldSave?.state === 'saving' ? <ActivityIndicator size="small" color={colors.textMuted} /> : null}
+        {iconButton('req-detail-copy-link', linkCopied ? 'checkmark' : 'link-outline', linkCopied ? tr('taskDrawer.linkCopied') : tr('taskDrawer.copyLink'), () => { void copyLink(); }, linkCopied ? colors.accent : colors.textSecondary)}
+        {mode === 'drawer' && onOpenWindow ? iconButton('req-detail-open-window', 'open-outline', tr('taskWin.open'), () => { void openWindow(); }) : null}
+        {mode === 'drawer' ? iconButton('req-detail-close', 'close', tr('tasks.copy.146'), () => { void close(); }) : null}
+      </View>
+      {error?.field === 'name' ? <Text style={s.err} accessibilityRole="alert">{error.message}</Text> : null}
+      <View style={styles.pillRow}>
+        <View pointerEvents={canColumn ? 'auto' : 'none'}>
+          {pill('req-status-pill', <View style={[s.prioDot, { backgroundColor: STATUS_TONE[item.column]() }]} />, statusLabel, tr('taskDrawer.status', { v0: statusLabel }), menu === 'status', !canColumn || moving, () => setMenu(m => (m === 'status' ? null : 'status')))}
+        </View>
+        <View pointerEvents={readOnly ? 'none' : 'auto'}>
+          {pill('req-priority-pill', <PriorityDot p={draft.priority} s={s} />, priorityLabel(draft.priority), tr('taskDrawer.priority', { v0: priorityLabel(draft.priority) }), menu === 'priority', readOnly, () => setMenu(m => (m === 'priority' ? null : 'priority')))}
+        </View>
         <TaskIdChip item={item} pointer={pointer} />
       </View>
-      {saving || moving ? <ActivityIndicator size="small" color={colors.textMuted} /> : null}
-      {mode === 'drawer' && onOpenWindow ? (
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel={tr('taskWin.open')}
-          {...({ title: tr('taskWin.open') } as object)}
-          onPress={() => { void openWindow(); }}
-          style={state => [s.iconButton, ((state as { hovered?: boolean }).hovered || state.pressed) && { backgroundColor: colors.rowHover }]}
-          testID="req-detail-open-window"
-        >
-          <Ionicons name="open-outline" size={17} color={colors.textSecondary} />
-        </Pressable>
+      {menu === 'status' ? (
+        <View pointerEvents={canColumn ? 'auto' : 'none'} style={[s.segment, { alignSelf: 'flex-start' }]} accessibilityRole="radiogroup" testID="req-move-group">
+          {REQ_COLUMNS.map(col => {
+            const on = col === item.column;
+            return (
+              <Pressable
+                key={col}
+                accessibilityRole="radio"
+                accessibilityLabel={on ? tr('tasks.copy.91', { v0: taskText(REQ_COLUMN_LABEL[col]) }) : tr('tasks.copy.135', { v0: taskText(REQ_COLUMN_LABEL[col]) })}
+                {...a11yState({ disabled: moving || on || !canColumn, selected: on, checked: on })}
+                disabled={moving || on || !canColumn}
+                onPress={() => { onMove(col); setMenu(null); }}
+                style={[s.segmentItem, { flexDirection: 'row', gap: 6 }, on && s.segmentItemOn]}
+                testID={`req-move-${col}`}
+              >
+                <View style={[s.prioDot, { backgroundColor: STATUS_TONE[col]() }]} />
+                <Text style={[s.segmentText, on && s.segmentTextOn]}>{taskText(REQ_COLUMN_LABEL[col])}</Text>
+              </Pressable>
+            );
+          })}
+        </View>
       ) : null}
-      {mode === 'drawer' ? (
-        <Pressable accessibilityRole="button" accessibilityLabel={tr('tasks.copy.146')} onPress={() => { void close(); }} style={s.iconButton} testID="req-detail-close">
-          <Ionicons name="close" size={18} color={colors.textSecondary} />
-        </Pressable>
+      {menu === 'priority' ? (
+        <View testID="req-priority-row">
+          <PriorityPicker value={draft.priority} onChange={priority => { setMenu(null); void saveField({ priority }); }} testPrefix="req-edit-priority" choices={priorityChoices(lowestPriority, item.priority)} />
+        </View>
       ) : null}
+      {moving ? <Text style={s.muted} accessibilityLiveRegion="polite">{tr('tasks.copy.136')}</Text> : null}
+      {moveError ? <Text style={s.err} accessibilityRole="alert">{moveError}</Text> : null}
     </View>
   );
 
+  const content = (
+    <>
+      {head}
+      {body}
+      {statusLine}
+      {saveStatus}
+      {toastView}
+    </>
+  );
+  const onLayout = (e: { nativeEvent: { layout: { width: number } } }) => setPanelWidth(e.nativeEvent.layout.width);
 
-  if (mode === 'window') {
+  if (mode === 'window' || mode === 'drawer') {
+    // 抽屉的外框(位置、宽度、拖动)是 TaskDrawer;这里只铺满它给的地方。窗口模式铺满整窗。
     return (
-      <View style={{ flex: 1, backgroundColor: colors.bg }} testID="req-detail" accessibilityLabel={tr('tasks.copy.145')}>
-        {head}
-        {body}
-        {footer}
-      </View>
-    );
-  }
-  if (mode === 'drawer') {
-    return (
-      <View
-        style={[styles.drawer, { top, backgroundColor: cardBg(), borderLeftColor: colors.border }, liftedShadow()]}
-        accessibilityViewIsModal
-        accessibilityLabel={tr('tasks.copy.145')}
-        testID="req-detail"
-      >
-        {head}
-        {body}
-        {footer}
+      <View style={{ flex: 1, backgroundColor: tokens.bg }} onLayout={onLayout} testID="req-detail" accessibilityViewIsModal={mode === 'drawer'} accessibilityLabel={tr('tasks.copy.145')}>
+        {content}
       </View>
     );
   }
   return (
     <Modal visible animationType="slide" onRequestClose={() => { void close(); }} presentationStyle="fullScreen">
-      <View style={{ flex: 1, backgroundColor: colors.bg, paddingTop: safe.paddingTop }} testID="req-detail" accessibilityViewIsModal>
-        {head}
-        {body}
-        {footer}
+      <View style={{ flex: 1, backgroundColor: tokens.bg, paddingTop: safe.paddingTop }} onLayout={onLayout} testID="req-detail" accessibilityViewIsModal>
+        {content}
       </View>
     </Modal>
+  );
+}
+
+/** 正文里的一节(子任务 / 动态):小标题 + 内容。 */
+function Section({ title, children, testID }: { title: string; children: ReactNode; testID?: string }) {
+  return (
+    <View style={{ gap: spacing.sm }} testID={testID}>
+      <Text style={{ color: colors.textMuted, fontSize: typeScale.small, fontWeight: weight.medium }}>{title}</Text>
+      {children}
+    </View>
   );
 }
 
@@ -502,9 +653,18 @@ function Field({ label, children }: { label: string; children: ReactNode }) {
 }
 
 const makePanelStyles = () => StyleSheet.create({
-  drawer: { position: 'absolute', right: 0, bottom: 0, width: DRAWER_WIDTH, maxWidth: '100%', borderLeftWidth: StyleSheet.hairlineWidth, borderTopLeftRadius: BOARD_RADIUS.card, zIndex: 20, overflow: 'hidden' },
-  head: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, height: 56, paddingHorizontal: spacing.xl, borderBottomWidth: StyleSheet.hairlineWidth },
-  footer: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingHorizontal: spacing.xl, paddingVertical: spacing.md, borderTopWidth: StyleSheet.hairlineWidth },
+  head: { gap: spacing.sm, paddingHorizontal: spacing.xl, paddingTop: spacing.md, paddingBottom: spacing.md, borderBottomWidth: StyleSheet.hairlineWidth },
+  headRow: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.xs },
+  title: { fontSize: typeScale.heading - 2, fontWeight: weight.strong, lineHeight: 26, paddingVertical: 4, paddingHorizontal: 6, marginLeft: -6, borderWidth: 1, borderRadius: radius.item, backgroundColor: 'transparent' },
+  pillRow: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: spacing.sm },
+  pill: { flexDirection: 'row', alignItems: 'center', gap: 6, height: 28, paddingHorizontal: 10, borderRadius: radius.pill },
+  // 560 宽的抽屉:左栏要放得下描述编辑器一行工具栏(≈300),右栏固定宽。
+  columns: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.lg },
+  left: { flex: 1, minWidth: 0, gap: spacing.xl },
+  right: { width: 196, flexShrink: 0, gap: spacing.lg, paddingLeft: spacing.md, borderLeftWidth: StyleSheet.hairlineWidth },
+  statusLine: { paddingHorizontal: spacing.xl, paddingVertical: spacing.sm },
+  toast: { position: 'absolute', alignSelf: 'center', bottom: spacing.xl, flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: spacing.md, height: 30, borderRadius: radius.pill, opacity: 0.92 },
+  srOnly: { position: 'absolute', width: 1, height: 1, opacity: 0, overflow: 'hidden' },
   readOnly: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, paddingHorizontal: spacing.md, paddingVertical: spacing.sm, borderRadius: radius.item },
 });
 

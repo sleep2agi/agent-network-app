@@ -170,8 +170,8 @@ for (const [name, V] of Object.entries(VIEWPORTS)) {
       await press(page.locator(tid('req-card-r1')).first());
       await page.locator(tid('req-detail-read-only')).first().waitFor({ timeout: 5000 });
       await page.waitForTimeout(300);
-      const banner = await bb(page, tid('req-detail-read-only')), moveGroup = await bb(page, tid('req-move-group'));
-      measure(where, '详情 banner', banner); measure(where, '状态 segment', moveGroup);
+      const banner = await bb(page, tid('req-detail-read-only')), moveGroup = await bb(page, tid('req-status-pill')); // #701:状态是头部 pill
+      measure(where, '详情 banner', banner); measure(where, '状态 pill', moveGroup);
       await shot('detail-participant');
       // The checklist is one of the two things a participant can edit: it must be there without opening 更多.
       const ckFirst = await bb(page, tid('req-checklist-item-i1')), ckSection = await bb(page, tid('req-checklist-wrap')), mainBlock = await bb(page, tid('req-locked-main'));
@@ -181,7 +181,8 @@ for (const [name, V] of Object.entries(VIEWPORTS)) {
         visible: !!ckFirst && ckFirst.y + ckFirst.height <= V.h,
         moreStillCollapsed: !moreExpandedAtOpen,
         underStatus: !!(ckSection && moveGroup) && ckSection.y >= moveGroup.y + moveGroup.height,
-        aboveLockedFields: !!(ckSection && mainBlock) && ckSection.y + ckSection.height <= mainBlock.y + 0.5,
+        // #701:检查项在左栏「子任务」里(手机在描述下面),不在锁住的属性块里,也不进「更多」。
+        notLocked: !!ckSection && !!mainBlock && (await page.locator(`${tid('req-locked-main')} ${tid('req-checklist-wrap')}`).count()) === 0 && (await page.locator(`${tid('req-more')} ${tid('req-checklist-wrap')}`).count()) === 0,
       });
       const more = page.locator(tid('req-more-toggle')).first();
       // 更多 itself must still open (the locked start / priority / participants rows live there).
@@ -190,6 +191,8 @@ for (const [name, V] of Object.entries(VIEWPORTS)) {
       const ckWrap = await bb(page, tid('req-checklist-wrap'));
       measure(where, '检查项(滚到可见)', ckWrap);
       const bannerText = (await page.locator(tid('req-detail-read-only')).first().innerText()).trim();
+      await press(page.locator(tid('req-status-pill')).first());
+      await page.waitForTimeout(200);
       record(where, 'detail locks', {
         bannerSaysAllowed: bannerText.includes('仅可改状态和检查项'),
         fieldsOpen: (await pe(page, 'req-detail-fields')) === 'auto',
@@ -204,7 +207,7 @@ for (const [name, V] of Object.entries(VIEWPORTS)) {
         noSave: (await page.locator(tid('req-edit-save')).count()) === 0,
         titleIsText: (await page.locator(tid('req-edit-name')).count()) === 0 && (await page.locator(tid('req-locked-name')).first().innerText()).trim() === '示例任务一:我参与',
         valueRows: (await Promise.all(['owner', 'agent', 'due', 'description'].map(k => page.locator(tid(`req-locked-row-${k}`)).count()))).every(n => n === 1),
-        bannerInDrawer: !!banner && banner.y >= 0 && !!moveGroup && moveGroup.y > banner.y + banner.height,
+        bannerInDrawer: !!banner && banner.y >= 0 && !!moveGroup && moveGroup.y < banner.y, // #701:状态 pill 在头部,说明在正文顶上
       }, { bannerText });
       const junk = {};
       for (const id of ['req-locked-title', 'req-locked-main', 'req-locked-more', 'req-locked-rest']) junk[id] = await lockedJunk(page, id);
@@ -218,6 +221,7 @@ for (const [name, V] of Object.entries(VIEWPORTS)) {
       await page.locator(tid('req-checklist-input')).first().fill('回归');
       await press(page.locator(tid('req-checklist-add')).first());
       await page.waitForTimeout(400);
+      if (!(await page.locator(tid('req-move-group')).count())) { await press(page.locator(tid('req-status-pill')).first()); await page.waitForTimeout(200); }
       await press(page.locator(tid('req-move-doing')).first());
       await page.waitForTimeout(600);
       const sent = await patches();
@@ -242,7 +246,7 @@ for (const [name, V] of Object.entries(VIEWPORTS)) {
       record(where, 'old hub read-only', {
         bannerUnchanged: oldBanner.includes('没有编辑权限'),
         wholeFormLocked: (await pe(page, 'req-detail-fields')) === 'none',
-        statusDisabled: (await page.locator(tid('req-move-doing')).first().getAttribute('aria-disabled')) === 'true',
+        statusDisabled: (await page.locator(tid('req-status-pill')).first().getAttribute('aria-disabled')) === 'true',
         valueOnly: (await lockedJunk(page, 'req-locked-title')).length === 0 && (await lockedJunk(page, 'req-locked-main')).length === 0 && (await page.locator(tid('req-edit-name')).count()) === 0,
         ownerIsValue: (await page.locator(tid('req-locked-row-owner')).count()) === 1,
         noSave: (await page.locator(tid('req-edit-save')).count()) === 0,

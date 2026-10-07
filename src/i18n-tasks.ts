@@ -431,6 +431,15 @@ registerTranslations({
   'taskWin.open': ['在新窗口打开', 'Open in new window'],
   'taskWin.failed': ['没能打开新窗口,继续在这里编辑', 'Could not open a new window; keep editing here'],
   'taskWin.missing': ['这个任务已不存在,或不在当前网络', 'This task no longer exists or is not in this network'],
+  // #701 任务详情抽屉
+  'taskDrawer.resize': ['拖动调整详情宽度', 'Drag to resize the details'],
+  'taskDrawer.saved': ['已保存', 'Saved'],
+  'taskDrawer.copyLink': ['复制链接', 'Copy link'],
+  'taskDrawer.linkCopied': ['链接已复制', 'Link copied'],
+  'taskDrawer.status': ['状态：{v0}', 'Status: {v0}'],
+  'taskDrawer.priority': ['优先级：{v0}', 'Priority: {v0}'],
+  'taskDrawer.activity': ['动态', 'Activity'],
+  'taskDrawer.textHint': ['离开输入框时保存,Esc 取消', 'Saved when you leave the field; Esc cancels'],
   'taskWin.accountGone': ['账号已切换或已退出,无法打开这个任务', 'The account was switched or signed out; cannot open this task'],
   'taskWin.accountError': ['无法读取账号({error})', 'Could not read the account ({error})'],
 });

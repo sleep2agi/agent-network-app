@@ -130,9 +130,9 @@ const read = (f: string) => readFileSync(new URL(f, import.meta.url), 'utf8').re
   const toast = read('./DesktopMessageNotice.tsx');
   ck('详情:参与人逐块锁(标题 / 主体 / 更多 / 其余),状态和检查项不锁', ['req-locked-title', 'req-locked-main', 'req-locked-more', 'req-locked-rest'].every(id => detail.includes(`<Locked on={readOnly} testID="${id}"`)) && detail.includes("pointerEvents={canColumn ? 'auto' : 'none'}") && detail.includes("pointerEvents={canChecklist ? 'auto' : 'none'}"));
   ck('详情:Locked 在模块级(组件里现定义会把输入框每次重挂)', /\nfunction Locked\(/.test(detail) && !/const Locked = /.test(detail));
-  ck('详情:锁住的块只画值(标签 + 文字),不画编辑控件', /function Locked\([\s\S]*?if \(!on\) return <>\{children\}<\/>;[\s\S]*?rows \?\? \[\]\)\.map/.test(detail) && detail.includes('rows={readOnly ? lockedMainRows(item, people, projects) : undefined}'));
+  ck('详情:锁住的块只画值(标签 + 文字),不画编辑控件', /function Locked\([\s\S]*?if \(!on\) return <>\{children\}<\/>;[\s\S]*?rows \?\? \[\]\)\.map/.test(detail) && detail.includes('rows={readOnly ? lockedMainRows(item, people, projects).filter(')); // #701: 描述在左栏、优先级在头部 pill,主体按块拆开
   ck('顶部提示:不透明面(colors.card + elevated),标题单独一行', toast.includes('backgroundColor: colors.card,') && toast.includes("...elevated('floating'),") && !toast.includes("'#f4f6f8f2'") && toast.includes('testID="desktop-message-title"'));
-  ck('详情:参与人不给「保存修改」(其余字段本来就改不了)', detail.includes('{readOnly ? null : ('));
+  ck('详情:没有「保存修改」按钮(#701 属性自动保存、标题 / 描述失焦保存)', !detail.includes('req-edit-save') && !detail.includes("tr('tasks.copy.143')"));
   const board = read('./RequirementBoard.tsx');
   ck('看板:详情拿到 editFields', board.includes('editFields={selected.editFields}'));
   ck('看板:接「打开这张任务」条子(单卡窗口不接)', board.includes('takeOpenTaskRequest(cfg.networkId)') && board.includes('subscribeOpenTaskRequest(take)') && board.includes('if (single) return;'));

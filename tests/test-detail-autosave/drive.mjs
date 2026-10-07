@@ -77,18 +77,21 @@ for (const [name, V] of Object.entries(VIEWPORTS)) {
 
       await step('picker', async () => {
         await open('r1');
+        // #701:优先级在详情头部的 pill 里,点开再选;存上后底部一个「已保存」小提示(没有「保存修改」按钮)。
+        await press(page.locator(tid('req-priority-pill')).first());
         await press(page.locator(tid('req-edit-priority-high')).first());
-        await page.waitForTimeout(600);
+        await page.waitForTimeout(300);
         const sent = await patches();
-        const status = page.locator(tid('req-save-status')).first();
-        const statusText = (await status.count()) ? (await status.innerText()).trim() : '';
-        const sb = (await status.count()) ? await status.boundingBox() : null;
-        const footer = (await status.count()) ? await status.evaluate(el => { const r = el.parentElement.getBoundingClientRect(); return { x: r.x, y: r.y, width: r.width, height: r.height }; }) : null;
+        const toast = page.locator(tid('req-saved-toast')).first();
+        const statusText = (await toast.count()) ? (await toast.innerText()).trim() : '';
+        const sb = (await toast.count()) ? await toast.boundingBox() : null;
+        const detail = await page.locator(tid('req-detail')).first().boundingBox();
         await shot('1-priority-saved');
         record(where, 'picker field saves at once', {
           patchedAtOnce: sent.length === 1 && sent[0] === JSON.stringify({ priority: 'high' }),
-          saidSaved: statusText === '已保存',
-          statusInFooter: inside(sb, footer) && !!sb && sb.width > 0 && sb.y + sb.height <= V.h,
+          saidSaved: statusText.includes('已保存'),
+          toastInDetail: inside(sb, detail) && !!sb && sb.width > 0 && sb.y + sb.height <= V.h,
+          noSaveButton: (await page.locator(tid('req-edit-save')).count()) === 0,
         }, { sent: sent.join(' '), statusText });
         const close = page.locator(tid('req-detail-close')).first();
         await press(close);
