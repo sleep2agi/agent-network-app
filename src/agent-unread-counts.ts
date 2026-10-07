@@ -9,6 +9,7 @@ import { replyUnreadByAgent } from './reply-unread';
 import { unreadCountForAgentRow } from './unread-badge';
 import type { UnreadStoreSnapshot } from './unread-store';
 import { readServerUnreadByAgent } from './user-unread';
+import { isHostSupervisorAlias } from './daemon-node';
 
 /** 算未读需要的那几格快照字段(unread-store 的快照天然满足)。 */
 export type UnreadCountSource = Pick<
@@ -16,7 +17,7 @@ export type UnreadCountSource = Pick<
   'serverBody' | 'ledger' | 'replyRows' | 'replyUsername' | 'replyWatermarks'
 >;
 
-/** 每个 agent 的角标数(和列表行同一函数算),只挑 > 0 的。托盘和列表共用。 */
+/** 每个 agent 的角标数(和列表行同一函数算),只挑 > 0 的;守护节点不计。托盘和列表共用。 */
 export function agentUnreadCounts(snap: UnreadCountSource): Record<string, number> {
   const out: Record<string, number> = {};
   const authoritative = readServerUnreadByAgent(snap.serverBody);
@@ -28,6 +29,9 @@ export function agentUnreadCounts(snap: UnreadCountSource): Record<string, numbe
   ]);
   for (const alias of aliases) {
     if (!alias || alias === 'hub') continue;
+    // #692 守护节点(host_supervisor)的回执是程序化应答,不是对话:不计未读 —— 托盘 / 侧栏总数、
+    // 「新消息」组、「未读」页签都从这里取数,一处排除处处生效。角色未知(/api/nodes 还没到)按普通节点算。
+    if (isHostSupervisorAlias(alias)) continue;
     const n = unreadCountForAgentRow(snap.serverBody, snap.ledger, alias, reply);
     if (n > 0) out[alias] = n;
   }

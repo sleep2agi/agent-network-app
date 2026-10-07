@@ -192,7 +192,7 @@ for (const [w, h] of [[1000, 700], [1200, 800], [1432, 831]]) {
   const title = await rect(page, tid('req-edit-name'));
   const proj = await rect(page, tid('req-edit-project'));
   const par = await rect(page, tid('req-edit-parent'));
-  const status = await rect(page, tid('req-move-pool'));
+  const status = await rect(page, tid('req-status-pill'));
   const owner = await rect(page, tid('req-edit-owner'));
   await shot(page, 'detail-top');
   const dueF = await rect(page, tid('req-edit-due'));
@@ -219,7 +219,7 @@ for (const [w, h] of [[1000, 700], [1200, 800], [1432, 831]]) {
   await shot(page, 'detail-parent-menu');
   const parentRow = await hubRow('登录页支持扫码登录');
   await page.locator(tid(`req-edit-parent-menu-opt-${parentRow.id}`)).click();
-  await page.locator(tid('req-edit-save')).click();
+  // #701:项目 / 母任务选完即存,没有「保存修改」按钮。
   await page.waitForTimeout(900);
   const saved = await hubRow('整理项目的任务甲');
   record(vp, 'detail: pick TMAI + 母任务 → 保存修改 → hub has both; menu searchable, never offers itself', {
@@ -350,7 +350,8 @@ for (const [w, h] of [[1000, 700], [1200, 800], [1432, 831]]) {
   const ready = await wpage.evaluate(() => window.__emits.filter(e => e.event === 'task-window:ready'));
   const wDetail = await rect(wpage, tid('req-detail'));
   await wpage.locator(tid('req-edit-name')).fill('整理项目的任务甲(新窗口里改的)');
-  await wpage.locator(tid('req-edit-save')).click();
+  // #701:标题离开输入框即保存。
+  await wpage.locator(tid('req-edit-name')).press('Tab');
   await wpage.waitForTimeout(900);
   const changed = await wpage.evaluate(() => window.__emits.filter(e => e.event === 'task-window:changed'));
   await shot(wpage, 'task-window');

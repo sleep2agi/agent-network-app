@@ -11,7 +11,9 @@ export type ScheduleStatus = HubScheduledTask['status'];
 
 /** 状态筛选:顺序即 chip 顺序;第一个是默认。 */
 export const SCHEDULE_FILTERS: readonly ScheduleStatus[] = ['active', 'paused', 'completed', 'cancelled'];
-export const DEFAULT_SCHEDULE_FILTER: ScheduleStatus = 'active';
+/** 筛选:某一个状态,或「全部」(看板卡「定时任务筛选加『全部』」:第一个 chip,默认仍是「进行中」)。 */
+export type ScheduleFilter = ScheduleStatus | 'all';
+export const DEFAULT_SCHEDULE_FILTER: ScheduleFilter = 'active';
 
 export type StatusTone = 'running' | 'blocked' | 'rest' | 'failed';
 
@@ -78,8 +80,20 @@ export function sortSchedules<T extends Pick<HubScheduledTask, 'name' | 'next_ru
   });
 }
 
-export function visibleSchedules<T extends HubScheduledTask>(items: readonly T[], filter: ScheduleStatus): T[] {
-  return sortSchedules(items.filter(item => item.status === filter));
+/** 「全部」里状态组的先后:进行中 → 已暂停 → (已完成)→ 已取消;不认识的状态排最后。 */
+const statusRank = (status: string): number => {
+  const i = (SCHEDULE_FILTERS as readonly string[]).indexOf(status);
+  return i === -1 ? SCHEDULE_FILTERS.length : i;
+};
+
+export function visibleSchedules<T extends HubScheduledTask>(items: readonly T[], filter: ScheduleFilter): T[] {
+  if (filter !== 'all') return sortSchedules(items.filter(item => item.status === filter));
+  // 全部:按状态分组,组内沿用单个状态视图的顺序(sortSchedules)。每行仍画自己的状态 pill。
+  const sorted = sortSchedules(items);
+  return sorted
+    .map((item, index) => ({ item, index }))
+    .sort((a, b) => statusRank(a.item.status) - statusRank(b.item.status) || a.index - b.index)
+    .map(x => x.item);
 }
 
 // ── 节点计划(RFC-036)的中文 —— 定时任务页和节点页「定时任务」分区共用 ──────────
@@ -217,8 +231,8 @@ export const masterListWidth = (width: number) => Math.round(Math.max(340, Math.
 
 // ── 空状态 ──────────────────────────────────────────────────────────────
 
-export function emptyStateFor(filter: ScheduleStatus, total: number): { title: string; body: string; showCreate: boolean } {
-  if (total === 0) return { title: '还没有定时任务', body: '新建一个，由 Hub 按时发给节点；节点离线时自动排队。', showCreate: true };
+export function emptyStateFor(filter: ScheduleFilter, total: number): { title: string; body: string; showCreate: boolean } {
+  if (total === 0 || filter === 'all') return { title: '还没有定时任务', body: '新建一个，由 Hub 按时发给节点；节点离线时自动排队。', showCreate: true };
   if (filter === 'active') return { title: '没有进行中的计划', body: '暂停的计划可以在「已暂停」里恢复，或者新建一个。', showCreate: true };
   if (filter === 'paused') return { title: '没有暂停的计划', body: '进行中的计划可以随时暂停，暂停后不会再触发。', showCreate: false };
   if (filter === 'completed') return { title: '没有已完成的计划', body: '单次计划执行完会出现在这里。', showCreate: false };
@@ -226,11 +240,14 @@ export function emptyStateFor(filter: ScheduleStatus, total: number): { title: s
 }
 
 /**
- * 筛选 chip:进行中/已暂停/已取消 常驻(带计数);「已完成」只有单次计划跑完才会有,
+ * 筛选 chip:全部(第一个)/进行中/已暂停/已取消 常驻(带计数);「已完成」只有单次计划跑完才会有,
  * 计数为 0 且没选中时不占位。
  */
-export function filterChips(counts: Record<ScheduleStatus, number>, current: ScheduleStatus): { status: ScheduleStatus; label: string; count: number; selected: boolean }[] {
-  return SCHEDULE_FILTERS
+export function filterChips(counts: Record<ScheduleStatus, number>, current: ScheduleFilter): { status: ScheduleFilter; label: string; count: number; selected: boolean }[] {
+  const byStatus = SCHEDULE_FILTERS
     .filter(status => status !== 'completed' || counts.completed > 0 || current === 'completed')
-    .map(status => ({ status, label: STATUS_META[status].label, count: counts[status], selected: status === current }));
+    .map(status => ({ status: status as ScheduleFilter, label: STATUS_META[status].label, count: counts[status], selected: status === current }));
+  // 「全部 N」:N = 各状态之和(已完成为 0 时就是 进行中 + 已暂停 + 已取消)。
+  const all = SCHEDULE_FILTERS.reduce((sum, status) => sum + counts[status], 0);
+  return [{ status: 'all', label: '全部', count: all, selected: current === 'all' }, ...byStatus];
 }

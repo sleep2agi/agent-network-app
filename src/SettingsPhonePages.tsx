@@ -116,6 +116,11 @@ export type PhonePagesCtx = {
   // 关于
   updateView: { label: string; detail?: string; tone: string; busy: boolean; actionable: boolean };
   onCheckUpdate: () => void;
+  /** #695 连点「版本」5 下揭开「诊断」组;showPooledHttp = 已揭开且在桌面壳里(diagnostics-reveal.ts)。 */
+  onVersionTap: () => void;
+  showPooledHttp: boolean;
+  pooledHttp: boolean;
+  onPooledHttpChange: (value: boolean) => void;
 };
 
 export default function SettingsPhonePage({ page, ctx }: { page: SettingsCategoryKey; ctx: PhonePagesCtx }) {
@@ -543,8 +548,9 @@ function AboutPage({ ctx }: { ctx: PhonePagesCtx }) {
   const view = ctx.updateView;
   const tone: SettingsTone | undefined = view.tone === 'danger' ? 'danger' : view.tone === 'accent' ? 'accent' : undefined;
   return (
+    <>
     <SettingsGroup footer={view.detail} testID="settings-about">
-      {ctx.show('about', 'version') ? <SettingsRow label={tr('settings.copy.77')} value={`v${APP_VERSION}`} /> : null}
+      {ctx.show('about', 'version') ? <SettingsRow testID="settings-version-row" label={tr('settings.copy.77')} value={`v${APP_VERSION}`} onPress={ctx.onVersionTap} /> : null}
       {ctx.show('about', 'update') ? (
         <SettingsRow
           testID="settings-update-row"
@@ -564,5 +570,11 @@ function AboutPage({ ctx }: { ctx: PhonePagesCtx }) {
         <SettingsRow testID="settings-last-crash-row" label={tr('fatal.copyRow')} value={fatalSummary(lastFatal, 24)} onPress={() => { void copyLastFatal(lastFatal); }} />
       ) : null}
     </SettingsGroup>
+    {ctx.showPooledHttp ? (
+      <SettingsGroup title={tr('settings.copy.281')} testID="settings-diagnostics-group">
+        <SettingsSwitchRow testID="settings-pooled-http-row" label={tr('settings.copy.277')} subtitle={tr('settings.copy.278')} value={ctx.pooledHttp} onValueChange={ctx.onPooledHttpChange} />
+      </SettingsGroup>
+    ) : null}
+    </>
   );
 }

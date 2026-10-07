@@ -53,7 +53,7 @@ import {
   scheduleStatusMeta,
   visibleSchedules,
 } from './scheduled-view-model';
-import type { ScheduleStatus } from './scheduled-view-model';
+import type { ScheduleFilter } from './scheduled-view-model';
 import { elevated } from './elevation';
 import './i18n-schedules';
 // 编辑器(表单 + 外壳 + 确认框)与节点页共用:ScheduleEditor.tsx。
@@ -113,7 +113,7 @@ export default function ScheduledTasksScreen({ cfg, onOpenChat, open }: {
   const [contentDrafts, setContentDrafts] = useState<Record<string, ScheduleContentDraft>>({});
   const [contentOpen, setContentOpen] = useState<string | null>(null);
   const [tab, setTab] = useState<'hub' | 'node'>('hub');
-  const [filter, setFilter] = useState<ScheduleStatus>(DEFAULT_SCHEDULE_FILTER);
+  const [filter, setFilter] = useState<ScheduleFilter>(DEFAULT_SCHEDULE_FILTER);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [runs, setRuns] = useState<{ id: string; runs: HubScheduledRun[]; error: string } | null>(null);
   // 执行记录展开的那一行 + 每条执行绑定任务的读取结果(按 task_id;只读展开的和还没结束的)。

@@ -87,7 +87,8 @@ console.log('# 接线(源码)');
   const parts = src('./TaskBoardParts.tsx');
   ck('参与人头像可点(onPress),点的范围放大', /export function ParticipantStack[\s\S]*?onPress=\{onPress \? \(\) => onPress\(stackEl\.current\) : undefined\}[\s\S]*?hitSlop=/.test(parts));
   const detail = src('./TaskDetailPanel.tsx');
-  const body = detail.slice(detail.indexOf('const body: ReactNode = ('), detail.indexOf('const footer = ('));
+  // #701:属性(负责人 … 标签 + 更多)是右栏的一块 `const properties = (`,在 `const banners = (` 之前。
+  const body = detail.slice(detail.indexOf('const properties = ('), detail.indexOf('const banners = ('));
   const at = (s: string) => body.indexOf(s);
   ck('详情:参与人紧跟负责人 / 负责 Agent,在项目 / 预计完成 / 「更多」之前', at('<RoleFields') < at('testID="req-participants-row"') && at('testID="req-participants-row"') < at('<ProjectSelect') && at('testID="req-participants-row"') < at('testID="req-more"'));
   ck('详情:「更多」里不再有参与人', !body.slice(at('testID="req-more"')).includes("tr('tasks.copy.53')"));

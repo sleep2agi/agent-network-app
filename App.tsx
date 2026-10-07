@@ -21,6 +21,7 @@ import { reconcileNetworkId, validateNewUser } from './src/user-admin';
 import './src/i18n-users';
 import { LOGIN_FAILURE_COPY, normalizeServerUrl, type LoginFailureKind } from './src/login-flow';
 import { hydrateHubAvatars, initLocalAvatars } from './src/lib/avatars';
+import { hydrateNodeRoles } from './src/daemon-node';
 import { usePoll } from './src/usePoll'; // R1 avatar 30s hydrate poll (main's App.tsx no longer imports it)
 import ChatScreen, { clearChatConversationCache } from './src/ChatScreen';
 import MessagesScreen from './src/MessagesScreen';
@@ -649,11 +650,12 @@ function AppRoot() {
   useEffect(() => {
     if (!cfg) return;
     let alive = true;
-    fetchHubNodes(cfg).then(r => { if (alive) hydrateHubAvatars(r.nodes); }).catch(() => {});
+    // #692:同一份 /api/nodes 也告诉我们谁是守护节点(host_supervisor)—— 会话页换掉输入框、列表不画红点。
+    fetchHubNodes(cfg).then(r => { if (alive) { hydrateHubAvatars(r.nodes); hydrateNodeRoles(r.nodes); } }).catch(() => {});
     return () => { alive = false; };
   }, [cfg]);
   usePoll(() => {
-    if (cfg) fetchHubNodes(cfg).then(r => hydrateHubAvatars(r.nodes)).catch(() => {});
+    if (cfg) fetchHubNodes(cfg).then(r => { hydrateHubAvatars(r.nodes); hydrateNodeRoles(r.nodes); }).catch(() => {});
   }, 30000, [cfg]);
 
   // System back (button or fullscreen gesture) navigates within the app
@@ -923,6 +925,7 @@ function AppRoot() {
                         hideBack
                         onOpenNodeSettings={() => setScreen({ name: 'nodeInfo', alias: screen.alias })}
                         onOpenVoiceSettings={() => { rememberSettingsCategory('voice'); setScreen({ name: 'settings' }); }}
+                        onOpenAgents={filter => setScreen(agentListScreen(filter, 'mobile') as Screen)}
                         onOpenTask={(id, net) => openTaskRef(id, net, cfg, setScreen)}
                         focusTaskId={screen.focusTaskId}
                         pinned={mobilePins.includes(screen.alias)}
@@ -956,6 +959,7 @@ function AppRoot() {
                   onBack={() => setScreen({ name: 'agents' })}
                   onOpenNodeSettings={() => setScreen({ name: 'nodeInfo', alias: screen.alias })}
                   onOpenVoiceSettings={() => { rememberSettingsCategory('voice'); setScreen({ name: 'settings' }); }}
+                  onOpenAgents={filter => setScreen(agentListScreen(filter, 'mobile') as Screen)}
                   onOpenTask={(id, net) => openTaskRef(id, net, cfg, setScreen)}
                   focusTaskId={screen.focusTaskId}
                   pinned={mobilePins.includes(screen.alias)}
@@ -1246,6 +1250,7 @@ function DesktopWorkspace({ cfg, screen, setScreen, onLogout, onLocalDataDeleted
       alias={screen.alias}
       onBack={() => setScreen({ name: 'agents' })}
       onOpenNodeSettings={() => setScreen({ name: 'nodeInfo', alias: screen.alias })}
+      onOpenAgents={filter => setScreen(agentListScreen(filter, 'desktop') as Screen)}
       onOpenVoiceSettings={() => { rememberSettingsCategory('voice'); void openSettingsWindow('voice').then(opened => { if (!opened) setScreen({ name: 'settings' }); }); }}
       onOpenTask={(id, net) => openTaskRef(id, net, cfg, setScreen)}
       focusTaskId={screen.focusTaskId}

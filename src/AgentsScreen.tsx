@@ -82,6 +82,7 @@ import {
   type AgentRowMenuKey,
 } from './agent-row-menu';
 import { bindConversationFlags, getConversationFlags, subscribeConversationFlags, updateConversationFlags } from './conversation-flags';
+import { agentRowBadge, isHostSupervisorAlias, nodeRolesVersion, subscribeNodeRoles } from './daemon-node';
 import { applyAgentFilter, filterLabel, isFilterActive, STATUS_FILTER_LABEL, type AgentListFilter, type AgentStatusFilter } from './server-stats';
 import { pointerUi } from './pointer-ui';
 import { conversationDraftKey, draftPreview, draftTextFor, useDraftsVersion, type DraftConversation } from './composer-drafts';
@@ -245,6 +246,8 @@ export default function AgentsScreen({
   // 本机的「不显示该对话」「标为未读」(conversation-flags.ts),按账号分。
   useEffect(() => { bindConversationFlags(cfg); }, [cfg.profileId, cfg.serverUrl, cfg.username]);
   const convFlags = useSyncExternalStore(subscribeConversationFlags, getConversationFlags, getConversationFlags);
+  // #692:谁是守护节点来自 App 轮询的 /api/nodes;变了要重画行(红点)。
+  const rolesVersion = useSyncExternalStore(subscribeNodeRoles, nodeRolesVersion, nodeRolesVersion);
   const [showHidden, setShowHidden] = useState(false);
   const [hoveredAlias, setHoveredAlias] = useState<string | null>(null);
   const [unreadSnap, setUnreadSnap] = useState(getUnreadSnapshot);
@@ -258,7 +261,8 @@ export default function AgentsScreen({
       ? { serverBody: preview.serverBody, ledger: preview.ledger, replyRows: [], replyUsername: '', replyWatermarks: {} }
       : unreadSnap;
     return { counts: agentUnreadCounts(src), lastAt: latestMessageAtByAgent(src) };
-  }, [preview, unreadSnap]);
+    // rolesVersion:守护节点不计未读(agent-unread-counts.ts),名单变了要重算「新消息」组。
+  }, [preview, unreadSnap, rolesVersion]);
   // Row right column + preview line (phone / two-pane rows): the same snapshot as the counts.
   const latestByAgent = useMemo(() => latestMessageByAgent(preview
     ? { serverBody: preview.serverBody, replyRows: [], replyUsername: '' }
@@ -552,7 +556,8 @@ export default function AgentsScreen({
     preview ? undefined : replyUnreadCounts(unreadSnap),
   );
   // 手动「标为未读」且没有真实未读时:一个不带数字的红点(微信同款),打开会话即消失。
-  const rowBadge = (alias: string) => rowBadgeWithManual(formatUnreadBadge(rowUnreadCount(alias)), convFlags.manualUnread.includes(alias));
+  // #692 守护节点(host_supervisor)没有对话可读:它的行不画红点(daemon-node.ts agentRowBadge)。
+  const rowBadge = (alias: string) => agentRowBadge(rowBadgeWithManual(formatUnreadBadge(rowUnreadCount(alias)), convFlags.manualUnread.includes(alias)), isHostSupervisorAlias(alias));
 
   const menuItems = menuFor ? agentRowMenuItems({
     unread: rowIsUnread(rowUnreadCount(menuFor.alias), convFlags.manualUnread.includes(menuFor.alias)),

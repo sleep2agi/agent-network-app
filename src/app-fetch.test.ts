@@ -50,15 +50,17 @@ ck('pooled client uses the plugin\'s reqwest line and features', /version = "0\.
 
 const settingsModel = readFileSync(new URL('./settings-model.ts', import.meta.url), 'utf8');
 const settingsScreen = readFileSync(new URL('./SettingsScreen.tsx', import.meta.url), 'utf8');
-ck('kill switch is a desktop-only row in 设置 → 关于', /\{ key: 'pooledHttp', label: '连接复用',[^\n]*platforms: \['desktop'\] \}/.test(settingsModel));
+// #695: the switch is no longer a searchable row in 设置 → 关于; it lives in the hidden 「诊断」 group
+// (tap 版本 5 times, diagnostics-reveal.ts / diagnostics-reveal.test.ts). Storage is unchanged.
+ck('kill switch is no longer a 关于 row', !/key: 'pooledHttp'/.test(settingsModel));
 {
   // The screen may only use copy keys (i18n-copy-guard); a row inserted into the copy table
   // above ours shifts every index, so pin that the keys this row uses still name its own text.
   const { settingsTranslations } = await import('./i18n-settings');
-  const keysUsed = [...settingsScreen.slice(settingsScreen.indexOf("show('about', 'pooledHttp')")).matchAll(/tr\('(settings\.copy\.\d+)'\)/g)].slice(0, 2).map(m => m[1]);
+  const keysUsed = [...settingsScreen.slice(settingsScreen.indexOf('testID="settings-diagnostics-group"')).matchAll(/tr\('(settings\.copy\.\d+)'\)/g)].slice(0, 2).map(m => m[1]);
   ck('kill switch row shows its own label and hint (copy indices not shifted)', settingsTranslations[keysUsed[0]]?.[0] === '连接复用' && settingsTranslations[keysUsed[1]]?.[0]?.startsWith('复用到 Hub 的连接'));
 }
-ck('kill switch row toggles the stored flag', /show\('about', 'pooledHttp'\)[\s\S]{0,900}onValueChange=\{value => \{ setPooledHttpEnabled\(value\); setPooledHttp\(value\); \}\}/.test(settingsScreen));
+ck('kill switch row toggles the stored flag', /const onPooledHttpChange = \(value: boolean\) => \{ setPooledHttpEnabled\(value\); setPooledHttp\(value\); \};/.test(settingsScreen) && /<SettingsSwitchRow[^\n]*onValueChange=\{onPooledHttpChange\}[^\n]*settings-pooled-http-row/.test(settingsScreen));
 
 const frame = (meta: object, body: string | Uint8Array) => {
   const m = new TextEncoder().encode(JSON.stringify(meta));

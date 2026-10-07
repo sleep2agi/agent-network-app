@@ -77,9 +77,28 @@ eq('default view hides cancelled and sorts by next run', visibleSchedules(items,
 eq('cancelled filter shows only cancelled', visibleSchedules(items, 'cancelled').map(r => r.schedule_id), ['c1', 'c2']);
 eq('paused filter', visibleSchedules(items, 'paused').map(r => r.schedule_id), ['p1']);
 const chips = filterChips(countByStatus(items), 'active');
-eq('chips: completed hidden at 0; order and counts', chips.map(c => `${c.label}${c.count}${c.selected ? '*' : ''}`), ['进行中2*', '已暂停1', '已取消2']);
-eq('chips: completed shown when it has rows', filterChips({ active: 0, paused: 0, completed: 1, cancelled: 0 }, 'active').map(c => c.status), ['active', 'paused', 'completed', 'cancelled']);
-eq('chips: completed kept while selected even at 0', filterChips({ active: 0, paused: 0, completed: 0, cancelled: 0 }, 'completed').map(c => c.status), ['active', 'paused', 'completed', 'cancelled']);
+eq('chips: 全部 first, completed hidden at 0; order and counts', chips.map(c => `${c.label}${c.count}${c.selected ? '*' : ''}`), ['全部5', '进行中2*', '已暂停1', '已取消2']);
+eq('chips: completed shown when it has rows', filterChips({ active: 0, paused: 0, completed: 1, cancelled: 0 }, 'active').map(c => c.status), ['all', 'active', 'paused', 'completed', 'cancelled']);
+eq('chips: completed kept while selected even at 0', filterChips({ active: 0, paused: 0, completed: 0, cancelled: 0 }, 'completed').map(c => c.status), ['all', 'active', 'paused', 'completed', 'cancelled']);
+
+// ── 「全部」(看板卡「定时任务筛选加『全部』」)──────────────────────────────────
+{
+  const c = countByStatus(items);
+  const all = filterChips(c, DEFAULT_SCHEDULE_FILTER)[0];
+  eq('全部 count = 进行中 + 已暂停 + 已取消', all.count, c.active + c.paused + c.cancelled);
+  eq('全部 count = sum of the status chips (incl. 已完成 when present)', filterChips({ active: 3, paused: 2, completed: 4, cancelled: 1 }, 'active')[0].count, 10);
+  ck('default selection stays 进行中, not 全部', !all.selected && filterChips(c, DEFAULT_SCHEDULE_FILTER).find(x => x.selected)?.status === 'active');
+  ck('selecting 全部 marks only 全部', filterChips(c, 'all').filter(x => x.selected).map(x => x.status).join() === 'all');
+  // 全部:进行中 → 已暂停 → 已取消,各组内与单状态视图同序
+  const allIds = visibleSchedules(items, 'all').map(r => r.schedule_id);
+  eq('全部 order: 进行中, then 已暂停, then 已取消', allIds, ['a2', 'a1', 'p1', 'c1', 'c2']);
+  ck('全部 keeps each status group in its single-filter order', ['active', 'paused', 'cancelled'].every(st =>
+    JSON.stringify(visibleSchedules(items, 'all').filter(r => r.status === st).map(r => r.schedule_id)) === JSON.stringify(visibleSchedules(items, st as any).map(r => r.schedule_id))));
+  const withDone = [...items, mk({ schedule_id: 'd1', name: '单次', status: 'completed', last_run_at: at(-5) })];
+  eq('全部 puts 已完成 between 已暂停 and 已取消', visibleSchedules(withDone, 'all').map(r => r.status), ['active', 'active', 'paused', 'completed', 'cancelled', 'cancelled']);
+  ck('全部 rows keep their own status pill label', visibleSchedules(items, 'all').map(r => scheduleStatusMeta(r.status).label).join() === '进行中,进行中,已暂停,已取消,已取消');
+  ck('全部 does not mutate the input', items.map(r => r.schedule_id).join() === 'c1,a1,p1,a2,c2');
+}
 
 // ── sorting ────────────────────────────────────────────────────────────
 const unsorted = [
@@ -181,7 +200,7 @@ eq('no schedules at all → onboarding copy regardless of filter', emptyStateFor
 // ── wiring (source) ────────────────────────────────────────────────────
 const screen = readFileSync(new URL('./ScheduledTasksScreen.tsx', import.meta.url), 'utf8');
 const has = (label: string, needle: string) => ck(`wiring: ${label}`, screen.includes(needle), needle);
-has('filter state starts at the default', 'useState<ScheduleStatus>(DEFAULT_SCHEDULE_FILTER)');
+has('filter state starts at the default', 'useState<ScheduleFilter>(DEFAULT_SCHEDULE_FILTER)');
 has('list = filtered + sorted', 'visibleSchedules(items, filter)');
 has('chips come from counts', 'filterChips(counts, filter)');
 has('counts from all items', 'countByStatus(items)');

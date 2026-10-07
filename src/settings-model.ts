@@ -141,10 +141,10 @@ export const SETTINGS_CATEGORIES: readonly SettingsCategory[] = [
       { key: 'update', label: '软件更新', keywords: ['升级', '检查更新', 'update', 'upgrade'] },
       // 更新日志(owner 2026-09-30):每个版本的说明,可按 小红书 / 公众号 / 纯文本 复制(ChangelogScreen.tsx)。
       { key: 'changelog', label: '更新日志', keywords: ['更新日志', '更新说明', '更新内容', '版本历史', '发布说明', '小红书', '公众号', '复制', 'changelog', 'release notes', "what's new", 'history'] },
-      // 桌面端请求走共享连接池(app-fetch.ts pooled_fetch)。开关是出问题时不用发版就能退回插件的后路。
       // 上次 JS 致命错误 / 渲染兜底留下的诊断(fatal-runtime.ts);盘上有记录才显示。
       { key: 'lastCrash', label: '复制上次崩溃信息', keywords: ['崩溃', '闪退', '异常退出', '诊断', '错误', 'crash', 'diagnostics', 'error'] },
-      { key: 'pooledHttp', label: '连接复用', keywords: ['网络', '连接', '速度', '慢', 'keep-alive', 'network', 'connection', 'speed', 'slow'], platforms: ['desktop'] },
+      // 「连接复用」(桌面 pooled_fetch 的后路)#695 起不再是可搜到的行:连点「版本」5 下才出现在「诊断」组里
+      // (diagnostics-reveal.ts)。存储没动 —— 以前关掉的人仍是关。
     ],
   },
 ];

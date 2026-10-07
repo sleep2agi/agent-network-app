@@ -158,7 +158,8 @@ for (const [name, V] of Object.entries(VIEWPORTS)) {
         const checks = {
           dropdown: !!drop,
           noCentredPanel: !panel,
-          leftAligned: !!(drop && field) && Math.abs(drop.x - field.x) <= 1,
+          // #701:负责人在抽屉右栏(靠窗口右边):下拉比字段宽时向左夹回窗口里 —— 那时它要整个盖住字段的横向范围。
+          leftAligned: !!(drop && field) && (Math.abs(drop.x - field.x) <= 1 || (drop.x < field.x && drop.x + drop.width >= field.x + field.width - 1 && drop.x + drop.width <= V.w + 0.5)),
           belowOrAbove: !!(drop && field) && (drop.y >= field.y + field.height - 0.5 || drop.y + drop.height <= field.y + 0.5),
           inView: inView(drop, V),
           searchFocused: focused === 'people-search',

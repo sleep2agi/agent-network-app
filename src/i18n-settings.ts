@@ -284,6 +284,8 @@ const copy = [
   ['更新日志', 'Changelog'],
   // #653 —— 追加在末尾:settings.copy.N 按位置编号,插在中间会让后面所有键错位。
   ['修改密码', 'Change password'],
+  // #695 —— 追加在末尾(理由同上):连点「版本」5 下才出现的那一组。
+  ['诊断', 'Diagnostics'],
 ] as const;
 export const settingsTranslations = Object.fromEntries(copy.map((pair, index) => [`settings.copy.${index}`, pair]));
 registerTranslations(settingsTranslations);

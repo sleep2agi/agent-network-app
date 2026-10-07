@@ -277,6 +277,8 @@ async function checkCreate(s, expectLowest) {
 async function checkDetail(s, expectLowest) {
   const hub = hubs[s.vp.includes('old') ? 'old' : 'new'].hub;
   await s.page.locator('[data-testid^="req-card-"]', { hasText: '最高优先级的卡' }).first().click();
+  // #701:优先级在详情头部的 pill 里,点开才有选项。
+  await s.page.locator(tid('req-priority-pill')).first().click();
   await s.page.locator(tid('req-edit-priority-high')).first().waitFor({ timeout: 10000 });
   await s.page.waitForTimeout(300);
   const opts = await s.page.evaluate(() => ['high', 'normal', 'low', 'lowest'].map(p => { const e = [...document.querySelectorAll(`[data-testid="req-edit-priority-${p}"]`)].find(x => x.getBoundingClientRect().width > 0); if (!e) return null; const t = e.querySelector('div:last-child'); return { text: e.textContent, clipped: t ? t.scrollWidth > t.clientWidth + 0.5 : true, right: e.getBoundingClientRect().right }; }));
