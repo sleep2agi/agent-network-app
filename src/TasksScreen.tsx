@@ -319,7 +319,7 @@ const makeStyles = () =>
     statusDot: { width: 8, height: 8, borderRadius: radius.pill },
     status: { color: colors.textSecondary, fontSize: 12, fontWeight: '600', flex: 1 },
     high: { color: colors.failed, fontSize: 10, fontWeight: '600' },
-    time: { color: colors.textMuted, fontSize: 10 },
+    time: { color: colors.textMuted, fontSize: 10, flexShrink: 0 }, // #683: the status shrinks, not the time
     aliasRow: {
       flexDirection: 'row',
       alignItems: 'center',

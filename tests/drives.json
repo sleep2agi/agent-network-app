@@ -49,6 +49,10 @@
       "kind": "stub",
       "secs": 101
     },
+    "test-chat-time-visible/drive.mjs": {
+      "kind": "stub",
+      "secs": 30
+    },
     "test-composer-drafts/drive.mjs": {
       "kind": "stub",
       "secs": 45

@@ -1231,7 +1231,9 @@ const makeRowStyles = () => ({
   // listText(): 16 / 14 / 12 at 紧凑·标准·宽松; 14 / 12 / 10 at 更紧凑 (time + group = the rail label).
   name: { flexShrink: 1, ...listText('name'), fontWeight: weight.medium },
   pin: { marginLeft: -2 },
-  time: { marginLeft: 'auto', ...listText('meta'), paddingLeft: spacing.sm },
+  // #683: the time never shrinks — the name (flexShrink 1) is the part that gives way. RN-web Text is a CSS flex item
+  // with flex-shrink 1 unless told otherwise, so this has to be explicit for the desktop shell too.
+  time: { marginLeft: 'auto', ...listText('meta'), paddingLeft: spacing.sm, flexShrink: 0 },
   label: { ...listText('meta'), fontWeight: weight.medium },
   preview: { flex: 1, minWidth: 0, ...listText('preview') },
   // 更紧凑: the hairline overlaps the row above (negative margin) so the row pitch is exactly the

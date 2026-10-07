@@ -10,6 +10,8 @@ import { useTranslation } from './i18n-react';
 import { useCallback, useMemo, useRef, useState, type ReactNode } from 'react';
 import { Modal, Pressable, ScrollView, StyleSheet, View, useWindowDimensions } from 'react-native';
 import { Text } from './ui-text';
+import { timeTextFloor } from './chat-time-layout';
+import { uiScale } from './ui-scale';
 import { Ionicons } from './icons';
 import AliasAvatar from './AliasAvatar';
 import type { HubConfig } from './api';
@@ -563,8 +565,10 @@ const makeStyles = () => StyleSheet.create({
   ruleText: { color: colors.textMuted, fontSize: typeScale.small },
   row: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.md, paddingVertical: spacing.sm + 2, paddingHorizontal: spacing.sm, borderRadius: radius.control },
   rowHover: { backgroundColor: colors.rowHover },
-  timeCol: { width: 48, alignItems: 'flex-end', paddingTop: 2 },
-  time: { color: colors.textMuted, fontSize: typeScale.small, fontVariant: ['tabular-nums'] },
+  // #683: a fixed 48 cut 「HH:MM」 at the larger font settings (×1.5 needs ~53) — the column is as wide as the
+  // time drawn at the current font size needs (timeTextFloor), never narrower than the old 48.
+  timeCol: { width: Math.max(48, timeTextFloor('00:00', typeScale.small * uiScale().fontMultiplier)), alignItems: 'flex-end', paddingTop: 2 },
+  time: { color: colors.textMuted, fontSize: typeScale.small, fontVariant: ['tabular-nums'], flexShrink: 0 }, // #683: phone row: the sentence shrinks, not the time
   times: { color: colors.textMuted, fontSize: typeScale.caption },
   main: { flex: 1, minWidth: 0, gap: 4 },
   openBtn: { alignSelf: 'center', paddingHorizontal: spacing.sm },
@@ -590,7 +594,8 @@ const makeStyles = () => StyleSheet.create({
   dot: { width: 7, height: 7, borderRadius: radius.pill },
   details: { marginTop: 4, paddingLeft: spacing.md, borderLeftWidth: 2, borderLeftColor: colors.border, gap: 6 },
   detailRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
-  detailTime: { color: colors.textMuted, fontSize: typeScale.caption, width: 36, fontVariant: ['tabular-nums'] },
+  // #683: was a fixed 36 — 「HH:MM」 at 字体 大 / 特大 is wider than that. Floor from the string at the drawn size.
+  detailTime: { color: colors.textMuted, fontSize: typeScale.caption, width: Math.max(36, timeTextFloor('00:00', typeScale.caption * uiScale().fontMultiplier)), fontVariant: ['tabular-nums'], flexShrink: 0 },
   // 桌面下拉
   popover: { position: 'absolute', padding: 6, borderRadius: radius.control, backgroundColor: colors.card, ...elevated('floating') },
   popTitle: { color: colors.textMuted, fontSize: typeScale.small, paddingHorizontal: spacing.md, paddingVertical: 6 },
