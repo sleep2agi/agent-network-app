@@ -208,7 +208,7 @@ for (const theme of ['light', 'dark']) {
         const ls = cards.map(c => c[0]), rs = cards.map(c => c[1]);
         table.push({ where: `${where} ${label}`, cards: cards.length, cardL: rng(ls), cardR: rng(rs) });
         ck(`${where} ${label}: 内容在卡片里、和账号页卡片同一列 ±1`, cards.length >= 1 && !!acc && [...ls, ...acc.cardL].every(v => Math.abs(v - acc.cardL[0]) <= 1) && [...rs, ...acc.cardR].every(v => Math.abs(v - acc.cardR[0]) <= 1), `${cards.length} cards ${rng(ls)} / ${rng(rs)}`);
-        const MIN = { '本地 Hub': 7, '外观': 4, '通知': 4, '语音输入': 3, '关于': 4 };
+        const MIN = { '本地 Hub': 7, '外观': 4, '通知': 4, '语音输入': 3, '关于': 3 } // #695：连接复用移进隐藏的诊断组，关于页可见行 4→3;
         if (MIN[label]) checkKitRows(`${where} ${label}`, (await win.evaluate(measureKitRows, '[data-testid="settings-scroll"]')) ?? [], MIN[label]);
         if (label === '通知') {
           // 「把下面的信息复制给维护者」要在诊断卡片上面(caption),不能在卡片下面指空。
