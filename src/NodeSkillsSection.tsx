@@ -26,10 +26,10 @@ export function NodeSkillsSection({ cfg, alias, node, session }: NodeSkillsSecti
   // 没有时退到 alias(claude-code 会话)。
   const target = skillsTarget({ node: node ?? null, session: { ...session, alias: session.alias || alias || '' } });
   if (!target) return null;
-  return <SkillsCard cfg={cfg} target={target} />;
+  return <SkillsCard cfg={cfg} target={target} session={session} />;
 }
 
-function SkillsCard({ cfg, target }: { cfg: HubConfig; target: RulesTarget }) {
+function SkillsCard({ cfg, target, session }: { cfg: HubConfig; target: RulesTarget; session: Session }) {
   const [phase, setPhase] = useState<Phase>('loading');
   const [skills, setSkills] = useState<SkillSummary[]>([]);
   const [message, setMessage] = useState('');
@@ -38,6 +38,9 @@ function SkillsCard({ cfg, target }: { cfg: HubConfig; target: RulesTarget }) {
   const [detailMsg, setDetailMsg] = useState('');
   const cancelled = useRef(false);
   useEffect(() => () => { cancelled.current = true; }, []);
+  // 失败文案要用节点上报的版本;放 ref,不进 useCallback 依赖(session 每轮轮询都是新对象)。
+  const sessionRef = useRef(session);
+  sessionRef.current = session;
   const key = `${target.node_id ?? ''}|${target.alias}`;
 
   const wait = (id: string) => waitForRulesFileResult(cfg, id, { nextDelayMs: nextPollDelayMs, isTerminal, isCancelled: () => cancelled.current });
@@ -55,7 +58,7 @@ function SkillsCard({ cfg, target }: { cfg: HubConfig; target: RulesTarget }) {
     const problem = resultProblem(res);
     if (problem !== null) { setPhase('unavailable'); setMessage(problem); return; }
     if (!res.ok) return;
-    if (res.status !== 'done') { setPhase('unavailable'); setMessage(skillsStatusMessage(res.status, res.error)); return; }
+    if (res.status !== 'done') { setPhase('unavailable'); setMessage(skillsStatusMessage(res.status, res.error, undefined, sessionRef.current)); return; }
     const list = parseSkillsList(res.content);
     setSkills(list);
     setPhase('ready');
@@ -81,7 +84,7 @@ function SkillsCard({ cfg, target }: { cfg: HubConfig; target: RulesTarget }) {
     const problem = resultProblem(res);
     if (problem !== null) { setDetailMsg(problem); return; }
     if (!res.ok) return;
-    if (res.status !== 'done') { setDetailMsg(skillsStatusMessage(res.status, res.error)); return; }
+    if (res.status !== 'done') { setDetailMsg(skillsStatusMessage(res.status, res.error, undefined, sessionRef.current)); return; }
     const d = parseSkillDetail(res.content);
     if (!d) { setDetailMsg('节点返回的技能内容无法解析'); return; }
     setDetail(d); setDetailMsg('');

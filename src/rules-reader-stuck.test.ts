@@ -132,7 +132,7 @@ const base = { nextDelayMs: () => 700, isTerminal };
   const skills = readFileSync(new URL('./NodeSkillsSection.tsx', import.meta.url), 'utf8');
   const files = readFileSync(new URL('./NodeFilesSection.tsx', import.meta.url), 'utf8');
   const code = (s: string) => s.split('\n').filter(l => !/^\s*\/\//.test(l)).join('\n');
-  ck('读取走 rulesReadOutcome(purged 不进编辑器)', /rulesReadOutcome\(res, support\)/.test(sec));
+  ck('读取走 rulesReadOutcome(purged 不进编辑器)', /rulesReadOutcome\(res, support(?:, session)?\)/.test(sec));
   ck('读取路径不再有 `res.content ?? \'\'`', !/res\.content \?\? ''/.test(code(sec)));
   ck('区块有独立于 await 链的兜底计时器', /setTimeout\([\s\S]{0,300}RULES_MAX_WAIT_MS\)/.test(sec) && /rulesMaxWaitMessage\(\)/.test(sec));
   ck('读取有代数守卫(晚到的结果不改界面)', /const gen = \+\+readGen\.current/.test(sec) && /gen !== readGen\.current/.test(sec));

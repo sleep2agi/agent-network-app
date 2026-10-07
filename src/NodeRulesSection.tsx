@@ -127,7 +127,7 @@ export default function NodeRulesSection({ cfg, node, session, onDirtyChange }: 
       if (!follow) { setPhase('unavailable'); say(enq.ok ? 'Hub 返回空响应' : enq.error, 'error'); return; }
       const res = await waitForRulesFileResult(cfg, follow, { nextDelayMs: nextPollDelayMs, isTerminal, isCancelled: stale });
       if (stale()) return;
-      const out = rulesReadOutcome(res, support);
+      const out = rulesReadOutcome(res, support, session);
       if (out.fileName) setFileName(out.fileName);
       // 过期(content_purged)、找不到、认不出的状态、失败、超时:退出加载态、说原因,绝不当成空文件放进编辑器。
       if (out.kind === 'problem') { setPhase('unavailable'); say(out.message || '读取没有完成，请点「重新读取」', 'error'); return; }
@@ -170,7 +170,7 @@ export default function NodeRulesSection({ cfg, node, session, onDirtyChange }: 
       setPhase('ready');
       if (!res.ok) { say(rulesErrorMessage(res.error), 'error'); return; }
       if (res.file_name) setFileName(res.file_name);
-      if (res.status !== 'done') { say(rulesStatusMessage(res, support), 'error'); return; }
+      if (res.status !== 'done') { say(rulesStatusMessage(res, support, session), 'error'); return; }
       setOnNode(editor);
       say(rulesStatusMessage(res, support), 'ok');
     } catch (e) {
