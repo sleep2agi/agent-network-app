@@ -1,7 +1,7 @@
 // 从看板直接指派(task-assign.ts):卡片菜单「指派负责人… / 设置参与人…」、点卡片上的参与人头像、批量「指派负责人…」、
 // 详情里负责人立即保存 + 参与人挪出「更多」。ck 风格自执行(scripts/run-tests.mjs 逐个跑),不是 bun:test。
 import { readFileSync } from 'node:fs';
-import { assignAccess, bulkOwnerPlan, canAssignPeople, humanParticipants, ownerChange, participantsChange, revertAssign } from './task-assign';
+import { assignAccess, bulkOwnerPlan, canAssignPeople, openedParticipants, ownerChange, participantsChange, revertAssign } from './task-assign';
 import { saveRequirementAssignments } from './requirement-people-api';
 import { updateRequirementOnHub } from './requirements-hub';
 import { lockedMainRows, lockedRestRows } from './task-detail-locked';
@@ -31,11 +31,15 @@ console.log('# 只发改了的');
   ck('负责人没变 = 不发', ownerChange(R('a', { owner: AMY }), [AMY]) === null && ownerChange(R('a'), []) === null);
   ck('换负责人 = { owner }(只带 kind,id)', JSON.stringify(ownerChange(R('a', { owner: AMY }), [{ ...BEN, name: '显示名' } as never])) === JSON.stringify({ owner: BEN }));
   ck('清空负责人 = { owner: null }', JSON.stringify(ownerChange(R('a', { owner: AMY }), [])) === '{"owner":null}');
-  ck('参与人选择器只带入人类', JSON.stringify(humanParticipants(R('a', { participants: [AMY, BOT, AMY] }))) === JSON.stringify([AMY]));
-  ck('参与人同一组人(顺序不同)= 不发', participantsChange(R('a', { participants: [AMY, BEN] }), [BEN, AMY]) === null);
-  const keep = participantsChange(R('a', { participants: [AMY, BOT] }), [BEN]);
-  ck('改人类参与人时,原有的 Agent 参与人保留(选择器里看不到它,不能悄悄删掉)', JSON.stringify(keep) === JSON.stringify({ participants: [BEN, BOT] }), JSON.stringify(keep));
-  ck('选择器塞进来的 Agent 不收', JSON.stringify(participantsChange(R('a'), [AMY, BOT])) === JSON.stringify({ participants: [AMY] }));
+  // owner 10-07:看板「设置参与人」也能选 Agent(和详情 / 新建一样),读-改-写。
+  ck('参与人选择器带入现有全部参与人(人类 + Agent,去重)', JSON.stringify(openedParticipants(R('a', { participants: [AMY, BOT, AMY] }))) === JSON.stringify([AMY, BOT]));
+  ck('参与人同一组人(顺序不同)= 不发', participantsChange(R('a', { participants: [AMY, BEN] }), [AMY, BEN], [BEN, AMY]) === null);
+  const keep = participantsChange(R('a', { participants: [AMY, BOT] }), [AMY, BOT], [BEN, BOT]);
+  ck('换人类、Agent 留着', JSON.stringify(keep) === JSON.stringify({ participants: [BOT, BEN] }), JSON.stringify(keep));
+  ck('看板选 Agent:收,存 {kind:node,id}', JSON.stringify(participantsChange(R('a', { participants: [AMY] }), [AMY], [AMY, BOT])) === JSON.stringify({ participants: [AMY, BOT] }));
+  ck('去掉 Agent:只去它', JSON.stringify(participantsChange(R('a', { participants: [AMY, BOT] }), [AMY, BOT], [AMY])) === JSON.stringify({ participants: [AMY] }));
+  const raced = participantsChange(R('a', { participants: [AMY, BEN] }), [AMY], [AMY, BOT]);
+  ck('读-改-写:选择器开着时别人加的 BEN 不被冲掉', JSON.stringify(raced) === JSON.stringify({ participants: [AMY, BEN, BOT] }), JSON.stringify(raced));
   const prev = R('a', { owner: AMY, participants: [AMY], agentOwner: BOT });
   const back = revertAssign({ ...prev, owner: BEN, name: '别处改的标题' }, prev, { owner: BEN });
   ck('失败只退回改的那个字段', back.owner === AMY && back.name === '别处改的标题' && back.participants === prev.participants);
@@ -63,8 +67,8 @@ console.log('# 请求体(真函数 + 假 fetch)');
   try {
     await updateRequirementOnHub(cfg as never, 'r1', { owner: BEN });
     ck('指派负责人 = PATCH /api/requirements/r1,体正好是 {"owner":{kind,id}}', sent[0]?.method === 'PATCH' && /\/api\/requirements\/r1\?/.test(sent[0].url) && JSON.stringify(sent[0].body) === JSON.stringify({ owner: BEN }), JSON.stringify(sent[0]));
-    await saveRequirementAssignments(cfg as never, 'r1', participantsChange(R('r1', { participants: [AMY, BOT] }), [BEN])!);
-    ck('设置参与人 = PATCH,体正好是 {"participants":[…]}(没有 owner)', sent[1]?.method === 'PATCH' && JSON.stringify(sent[1].body) === JSON.stringify({ participants: [BEN, BOT] }), JSON.stringify(sent[1]));
+    await saveRequirementAssignments(cfg as never, 'r1', participantsChange(R('r1', { participants: [AMY] }), [AMY], [BEN, BOT])!);
+    ck('设置参与人 = PATCH,体正好是 {"participants":[…]}(人类 + {kind:node,id},没有 owner)', sent[1]?.method === 'PATCH' && JSON.stringify(sent[1].body) === JSON.stringify({ participants: [BEN, BOT] }), JSON.stringify(sent[1]));
   } finally { globalThis.fetch = orig; }
 }
 
@@ -79,7 +83,8 @@ console.log('# 接线(源码)');
   // 右键 / 长按 / 列表行 ⋯ 都经 menuTarget(审计 M2 合成一个),它带 assign 权限。
   ck('右键 / 长按的目标都带 assign 权限', /const menuTarget = \(item: Requirement, x: number, y: number\): TaskMenuTarget => \(\{[\s\S]*?assign: assignAccess\(item\)/.test(board) && (board.match(/setMenu\(menuTarget\(item, x, y\)\)/g) ?? []).length === 2);
   ck('卡片菜单打开的是同一个 RequirementPeoplePicker(新建 / 详情用的那个)', board.includes('<RequirementPeoplePicker') && board.includes("onAssign={(id, mode) => { void openAssign(id, mode); }}"));
-  ck('负责人选择器:分两个角色的 Hub 上只列人类(roleKinds);参与人只列人类', board.includes("kinds={assignFor.mode === 'owner' ? roleKinds('owner', hasRoles(assignItem)) : ['user']}"));
+  ck('负责人选择器:分两个角色的 Hub 上只列人类(roleKinds);参与人人类 + Agent(不限种类)', board.includes("kinds={assignFor.mode === 'owner' ? roleKinds('owner', hasRoles(assignItem)) : undefined}"));
+  ck('看板参与人:打开时记下 opened,确认时 participantsChange(item, target.opened, picked)', board.includes('const opened = openedParticipants(item);') && board.includes('participantsChange(item, target.opened, picked)') && board.includes(': assignFor.opened}'));
   ck('参与人头像:能改 = 设置参与人,不能改 = 打开详情', board.includes("canAssignPeople(item) ? (stack?: any) => { void openAssign(item.id, 'participants', stack); } : () => openDetail(item.id)"));
   ck('看板和手机列表的卡片底部都接上', (board.match(/onParticipants=\{onParticipants\(item\)\}/g) ?? []).length === 2);
   ck('写入前先挡只读(兜底)', /const assign = async[\s\S]*?const blocked = readOnlyBlock\(id\);\s*if \(blocked\) return blocked;/.test(board));

@@ -552,22 +552,55 @@ test('owner save failure in details reverts the card and says why; title draft i
 test('board card menu: 指派负责人… / 设置参与人… save immediately with only that field', async () => {
   participantCards = true;
   await mount();
-  // 参与人:只列人类;Agent 参与人原样保留,体里只有 participants。
+  // 参与人(owner 10-07):人类 + Agent 两组,和详情 / 新建同一个选择器;体里只有 participants(读-改-写)。
   await act(async () => byId('req-card-r1').props.onLongPress({ nativeEvent: { pageX: 10, pageY: 10 } }));
   expect(byId('task-menu-assign-participants').props.disabled).toBeFalsy();
   await act(async () => byId('task-menu-assign-participants').props.onPress());
-  expect(renderer.root.findAllByProps({ testID: 'person-node:n1' })).toHaveLength(0);
+  expect(byId('people-group-h:node')).toBeTruthy();
+  expect(byId('person-node:n1').props.accessibilityState.checked).toBe(true);
+  expect(byId('person-node:n1').findAllByProps({ testID: 'person-agent-tag' }).length).toBeGreaterThan(0);
   await act(async () => byId('person-user:u').props.onPress());
-  // 已离开网络的成员挡住保存,点那一行移除(选择器原有行为)。
-  const gone = renderer.root.findAll(n => n.props.accessibilityRole === 'button' && typeof n.props.onPress === 'function' && JSON.stringify(n.findAllByType('Text').map(t => t.props.children)).includes('u_a4944afaa30b'))[0];
-  await act(async () => gone.props.onPress());
+  // 已离开网络的成员 / 看不见的节点挡住保存,点那一行移除(选择器原有行为)。
+  for (const raw of ['u_a4944afaa30b', 'n_e06d936d']) {
+    const gone = renderer.root.findAll(n => n.props.accessibilityRole === 'button' && typeof n.props.onPress === 'function' && JSON.stringify(n.findAllByType('Text').map(t => t.props.children)).includes(raw))[0];
+    await act(async () => gone.props.onPress());
+  }
   await act(async () => byId('people-confirm').props.onPress());
-  expect(assignmentWrites.at(-1)).toEqual({ id: 'r1', value: { participants: [{ kind: 'node', id: 'n1' }, { kind: 'node', id: 'n_e06d936d' }] } });
+  expect(assignmentWrites.at(-1)).toEqual({ id: 'r1', value: { participants: [{ kind: 'node', id: 'n1' }] } });
   await act(async () => byId('req-card-r1').props.onLongPress({ nativeEvent: { pageX: 10, pageY: 10 } }));
   await act(async () => byId('task-menu-assign-owner').props.onPress());
   await act(async () => byId('person-user:u').props.onPress()); // unselect the current owner
   await act(async () => byId('people-confirm').props.onPress());
   expect(edits).toEqual([{ id: 'r1', patch: { owner: null } }]);
+});
+
+test('board: 设置参与人 adds an Agent as {kind:node,id} together with a human', async () => {
+  roleCards = true; // r2:owner / participants 字段齐全、没有参与人 → 卡片菜单进「设置参与人」
+  await mount();
+  await act(async () => byId('req-card-r2').props.onLongPress({ nativeEvent: { pageX: 10, pageY: 10 } }));
+  await act(async () => byId('task-menu-assign-participants').props.onPress());
+  expect(byId('people-group-h:node')).toBeTruthy();
+  await act(async () => byId('person-user:u').props.onPress());
+  await act(async () => byId('person-node:n1').props.onPress());
+  await act(async () => byId('people-confirm').props.onPress());
+  expect(assignmentWrites.at(-1)).toEqual({ id: 'r2', value: { participants: [{ kind: 'user', id: 'u' }, { kind: 'node', id: 'n1' }] } });
+});
+
+test('new task: 参与人 field lists Agents and POSTs {kind:node,id} with the humans; chip says · Agent', async () => {
+  participantCards = true;
+  await mount();
+  await act(async () => byId('req-new').props.onPress());
+  await act(async () => byId('req-name').props.onChangeText('新需求'));
+  const add = renderer.root.findAllByProps({ testID: 'req-participants-add' }).filter(n => typeof n.props.onPress === 'function')[0] ?? renderer.root.findAllByProps({ testID: 'req-participants' }).filter(n => typeof n.props.onPress === 'function')[0];
+  await act(async () => { await add.props.onPress(); });
+  expect(byId('people-group-h:user')).toBeTruthy();
+  expect(byId('people-group-h:node')).toBeTruthy();
+  await act(async () => byId('person-user:u').props.onPress());
+  await act(async () => byId('person-node:n1').props.onPress());
+  await act(async () => byId('people-confirm').props.onPress());
+  expect(JSON.stringify(byId('req-participants-chip-agent-n1').props.children)).toContain('Agent');
+  await act(async () => byId('req-add').props.onPress());
+  expect(creates[0].participants).toEqual([{ kind: 'user', id: 'u' }, { kind: 'node', id: 'n1' }]);
 });
 
 test('board: tapping the participant avatars opens 设置参与人', async () => {

@@ -11,7 +11,7 @@
 //               inside the menu and the viewport; on a participant's card (viewer_can.edit=false) both are aria-disabled
 //   owner       指派负责人… → the same people picker as create/detail, humans only on a two-role hub → PATCH body
 //               exactly {"owner":{kind,id}}, card shows the new owner without opening the detail
-//   avatars     tapping the participant avatars on an editable card opens 设置参与人 (humans only; desktop = the anchored
+//   avatars     tapping the participant avatars on an editable card opens 设置参与人 (humans + Agents in two groups; desktop = the anchored
 //               dropdown under the avatars, #646; phone = the centred panel) → PATCH body
 //               exactly {"participants":[…]} with the existing Agent participant kept; on a read-only card it opens
 //               the detail instead and sends nothing
@@ -211,6 +211,7 @@ for (const [name, V] of Object.entries(VIEWPORTS)) {
         // phone: the centred panel. Both are the same RequirementPeoplePicker.
         const partSurface = (await page.locator(tid('people-dropdown')).count()) ? 'dropdown' : (await page.locator(tid('people-panel')).count()) ? 'panel' : 'none';
         const partRows = await pickerRows();
+        const agentGroup = await page.locator(tid('people-group-h:node')).count();
         await shot('picker-participants');
         await press(page.locator(tid('person-user:u_b')).first());
         await press(page.locator(tid('people-confirm')).first());
@@ -219,8 +220,9 @@ for (const [name, V] of Object.entries(VIEWPORTS)) {
         record(where, 'participants from avatar tap', {
           stackInsideCard: inside(stackBox, await bb(page, tid('req-card-r1'))),
           surface: partSurface === (V.ua ? 'panel' : 'dropdown'),
-          humansOnly: partRows.length > 0 && partRows.every(r => r.startsWith('person-user:')),
-          body: afterPart.length === 2 && afterPart[1] === '{"participants":[{"kind":"user","id":"u_a"},{"kind":"user","id":"u_b"},{"kind":"node","id":"n_demo"}]}',
+          // owner 10-07:参与人选择器人类 + Agent 两组(同详情 / 新建);保存 = 读-改-写,新加的接在后面。
+          listsAgents: partRows.includes('person-user:u_b') && partRows.includes('person-node:n_demo') && agentGroup > 0,
+          body: afterPart.length === 2 && afterPart[1] === '{"participants":[{"kind":"user","id":"u_a"},{"kind":"node","id":"n_demo"},{"kind":"user","id":"u_b"}]}',
           noDetailOpened: (await page.locator(tid('req-detail')).count()) === 0,
         }, { surface: partSurface, bodies: afterPart.join(' | '), rows: partRows.join(',') });
 

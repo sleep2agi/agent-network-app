@@ -292,7 +292,7 @@ registerTranslations({
  'tasks.participantMe': ['我', 'me'],
  'tasks.projectNotEditable': ['{v0}（不可编辑）', '{v0} (not editable)'],
  'tasks.projectNoneEditable': ['你没有可编辑的项目，新任务只能放在「无项目」', 'You can’t edit any project; new tasks go under “No project”'],
- 'tasks.participantsPickHint': ['已选 {v0} 人；参与人只能是人类', '{v0} selected; participants are humans'],
+ 'tasks.participantsPickHint': ['已选 {v0} 人；可同时选择人类和 Agent', '{v0} selected; humans and Agents can participate together'],
  'tasks.removeParticipant': ['移除参与人 {name}', 'Remove participant {name}'],
  'tasks.peopleRoleMember': ['成员', 'Member'],
  'tasks.peopleRoleAdmin': ['管理员', 'Admin'],

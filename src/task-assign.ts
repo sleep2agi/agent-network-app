@@ -1,7 +1,7 @@
 // 从看板直接指派:卡片菜单「指派负责人… / 设置参与人…」、点卡片上的参与人头像、批量条「指派负责人…」。
 // 纯逻辑,不 import react-native。写入只带改了的那一个字段(owner / participants),和详情里同一个 PATCH。
 import type { Requirement } from './requirements-model';
-import { personKey, uniquePeople, type RequirementPersonRef } from './requirement-people';
+import { mergeParticipants, personKey, uniquePeople, type RequirementPersonRef } from './requirement-people';
 
 /** 一次指派改的字段(Requirement 上的名字)。只会带一个键。 */
 export type AssignChange = { owner?: RequirementPersonRef | null; agentOwner?: RequirementPersonRef | null; participants?: RequirementPersonRef[] };
@@ -24,17 +24,18 @@ export function ownerChange(item: Pick<Requirement, 'owner'>, picked: readonly R
   return before === (next ? personKey(next) : '') ? null : { owner: next };
 }
 
-/** 参与人选择器只列人类(同新建对话框):打开时只带入人类那几位。 */
-export const humanParticipants = (item: Pick<Requirement, 'participants'>): RequirementPersonRef[] =>
-  uniquePeople((item.participants ?? []).filter(p => p.kind === 'user'));
+/** 参与人选择器(人类 + Agent 两组,同详情 / 新建):打开时带入现有的全部参与人。 */
+export const openedParticipants = (item: Pick<Requirement, 'participants'>): RequirementPersonRef[] =>
+  uniquePeople(item.participants ?? []);
 
 /**
- * 选完参与人:人类按选的来,原来就有的 Agent 参与人原样留着(选择器里看不到它们,不能被悄悄删掉)。
+ * 选完参与人(人类和 Agent 一起,Agent 存 {kind:'node',id}):Hub 整表替换,所以读-改-写 ——
+ * 打开时那份(opened)和选的(picked)算出增减,套到**确认时最新的** item.participants 上(mergeParticipants)。
  * 和现在是同一组人 = null(不发请求)。
  */
-export function participantsChange(item: Pick<Requirement, 'participants'>, pickedHumans: readonly RequirementPersonRef[]): AssignChange | null {
+export function participantsChange(item: Pick<Requirement, 'participants'>, opened: readonly RequirementPersonRef[], picked: readonly RequirementPersonRef[]): AssignChange | null {
   const cur = uniquePeople(item.participants ?? []);
-  const next = uniquePeople([...pickedHumans.filter(p => p.kind === 'user'), ...cur.filter(p => p.kind !== 'user')]);
+  const next = mergeParticipants(cur, opened, picked);
   const same = next.length === cur.length && next.every(p => cur.some(c => personKey(c) === personKey(p)));
   return same ? null : { participants: next };
 }

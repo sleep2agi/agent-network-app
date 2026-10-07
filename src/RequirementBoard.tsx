@@ -28,9 +28,9 @@ import { readRequirements, requirementsKey, writeRequirements } from './requirem
 import { createProject, createRequirementOnHub, fetchMyUserId, getRequirementOnHub, listArchivedRequirements, listProjects, listRequirementChanges, listRequirementsFull, searchRequirementsOnHub, setChecklistItemOnHub, updateProject, migrateLocalRequirements, moveRequirementOnHub, probeAgentOwnerSupport, RequirementsHubError, setRequirementArchivedOnHub, updateRequirementOnHub } from './requirements-hub';
 import { listRequirementPeople, saveRequirementAssignments } from './requirement-people-api';
 import { applyCellEdit, cellRequest, rollbackCellEdit, type CellEdit } from './task-list-edit-model';
-import { personKey, type RequirementPerson } from './requirement-people';
+import { personKey, type RequirementPerson, type RequirementPersonRef } from './requirement-people';
 import RequirementPeoplePicker, { measureAnchor } from './RequirementPeoplePicker';
-import { assignAccess, bulkOwnerPlan, canAssignPeople, humanParticipants, ownerChange, participantsChange, revertAssign, type AssignChange } from './task-assign';
+import { assignAccess, bulkOwnerPlan, canAssignPeople, openedParticipants, ownerChange, participantsChange, revertAssign, type AssignChange } from './task-assign';
 import { colors, radius, spacing } from './theme';
 import { elevated } from './elevation';
 import { pointerUi } from './pointer-ui';
@@ -179,7 +179,8 @@ function ScopedRequirementBoard({ cfg, desktop, dispatch, onOpenVoiceSettings, s
   const lastBulk = useRef<{ kind: BulkKind; value: string | null } | null>(null);
   // 从看板直接指派(卡片菜单 / 卡片上的参与人头像):开着哪张卡的哪个选择器。
   // anchor:从卡片头像组点开(桌面)时锚在头像组下面的下拉;卡片菜单 / 手机 = null = 居中面板。
-  const [assignFor, setAssignFor] = useState<{ id: string; mode: 'owner' | 'participants'; anchor: SelectAnchor | null } | null>(null);
+  // opened:打开参与人选择器时的参与人(读-改-写的基准,participantsChange)。
+  const [assignFor, setAssignFor] = useState<{ id: string; mode: 'owner' | 'participants'; anchor: SelectAnchor | null; opened: RequirementPersonRef[] } | null>(null);
   const bulkRefs = useRef<Record<string, any>>({});
   const pendingMoves = useRef(new Set<string>());
   const mutations = useRef(0);
@@ -539,8 +540,9 @@ function ScopedRequirementBoard({ cfg, desktop, dispatch, onOpenVoiceSettings, s
     if (!(await loadPeople()) && !people.length) return;
     // 桌面(指针)从卡片头像组点开:和详情 / 新建里的字段一样,锚在头像组下面的下拉(右沿对齐头像组,不伸进隔壁列)。
     // 手机、或量不到(元素没了):居中面板。窗口够不够宽由选择器自己判(PEOPLE_DROPDOWN_MIN_WIDTH)。
-    if (!pointer || !anchorEl) { setAssignFor({ id, mode, anchor: null }); return; }
-    measureAnchor(anchorEl, a => setAssignFor({ id, mode, anchor: a ? anchorRightAligned(a) : null }));
+    const opened = openedParticipants(item);
+    if (!pointer || !anchorEl) { setAssignFor({ id, mode, anchor: null, opened }); return; }
+    measureAnchor(anchorEl, a => setAssignFor({ id, mode, anchor: a ? anchorRightAligned(a) : null, opened }));
   };
   const assignItem = assignFor ? items.find(row => row.id === assignFor.id) ?? null : null;
   const confirmAssign = (picked: { kind: 'user' | 'node'; id: string }[]) => {
@@ -548,7 +550,7 @@ function ScopedRequirementBoard({ cfg, desktop, dispatch, onOpenVoiceSettings, s
     setAssignFor(null);
     const item = target && items.find(row => row.id === target.id);
     if (!target || !item) return;
-    const change = target.mode === 'owner' ? ownerChange(item, picked) : participantsChange(item, picked);
+    const change = target.mode === 'owner' ? ownerChange(item, picked) : participantsChange(item, target.opened, picked);
     if (!change) return;
     void assign(item.id, change).then(failed => { if (failed) setBanner(`「${item.name}」${failed}`); });
   };
@@ -1511,13 +1513,13 @@ function ScopedRequirementBoard({ cfg, desktop, dispatch, onOpenVoiceSettings, s
         <RequirementPeoplePicker
           networkId={cfg.networkId || ''}
           mode={assignFor.mode}
-          // 负责人:分两个角色的 Hub 上只能是人类;参与人:只列人类(同新建对话框),原有的 Agent 参与人保留(task-assign.ts)。
-          kinds={assignFor.mode === 'owner' ? roleKinds('owner', hasRoles(assignItem)) : ['user']}
+          // 负责人:分两个角色的 Hub 上只能是人类;参与人:人类 + Agent 两组(同详情 / 新建),不传 kinds。
+          kinds={assignFor.mode === 'owner' ? roleKinds('owner', hasRoles(assignItem)) : undefined}
           meId={meId}
           title={assignFor.mode === 'owner' ? tr('tasks.copy.65') : tr('tasks.copy.66')}
           hint={assignFor.mode === 'owner' ? (hasRoles(assignItem) ? tr('tasks.copy.109') : undefined) : (n: number) => tr('tasks.participantsPickHint', { v0: n })}
           people={people}
-          selected={assignFor.mode === 'owner' ? (assignItem.owner ? [assignItem.owner] : []) : humanParticipants(assignItem)}
+          selected={assignFor.mode === 'owner' ? (assignItem.owner ? [assignItem.owner] : []) : assignFor.opened}
           anchor={assignFor.anchor}
           onClose={() => setAssignFor(null)}
           onConfirm={confirmAssign}

@@ -5,7 +5,7 @@ Task page audit (566c74c): the create dialog had no 参与人 field (POST sent o
 
 What changed:
 
-- Create dialog: 参与人 (humans only) under 负责人 / 负责 Agent, using the same `RequirementPeoplePicker`
+- Create dialog: 参与人 (humans + Agents, grouped) under 负责人 / 负责 Agent, using the same `RequirementPeoplePicker`
   (`mode="participants"`) as the task detail. Desktop = one input row; phone sheet = removable chips + 「添加参与人」.
   Sent in the POST body as `participants: [{kind,id}]` — the hub's create runs the same `assignments()` as PATCH
   (since hub #2065). Shown only when the hub knows participants (two-role hub, or rows carry `participants`).
