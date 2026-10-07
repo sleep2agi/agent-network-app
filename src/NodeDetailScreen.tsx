@@ -48,6 +48,10 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import ModalKeyboardAvoider from './ModalKeyboardAvoider';
 import NodeAdoptionControls from './NodeAdoptionControls';
+import NodeControlCard from './NodeControlCard';
+import { nodeControlView } from './node-control-access';
+import { t } from './i18n';
+import { useTranslation } from './i18n-react';
 import { adoptionError, isAdopted } from './node-adoption';
 import { layoutGeneration, releaseOnUnmount, takeHandoff } from './layout-handoff';
 import { takeNodeSectionRequest } from './node-section-request';
@@ -60,7 +64,7 @@ import DegradedBadge from './DegradedBadge';
 import { nodeDegraded } from './node-degraded';
 import AvatarEditSection from './AvatarEditSection';
 import { teamOf } from './agents-list';
-import { fetchHubNodes, fetchNodeConfig, fetchNodeStatus, runNodeLifecycleAction, type HubConfig, type HubNode, type NodeLifecycleAction, type Session } from './api';
+import { fetchHostSupervisors, fetchHubNodes, fetchNodeConfig, fetchNodeStatus, runNodeLifecycleAction, type HostSupervisorDaemon, type HubConfig, type HubNode, type NodeLifecycleAction, type Session } from './api';
 import { styles } from './app-styles';
 import { colors, onThemeChange, radius, spacing, statusColor, type as typeScale, weight } from './theme';
 import { popoutHeaderChrome, type PopoutChrome } from './window-shell';
@@ -92,6 +96,8 @@ import { PANE_BACK_TEST_ID, paneShowsBack } from './pane-header';
 import { elevated } from './elevation';
 import { actionMessageTone, dangerActions, START_OUTCOME_MESSAGE, START_SUBMITTED_MESSAGE, START_WAIT_MS, startErrorMessage, startWatchOutcome } from './node-danger-actions';
 
+// board #694 —— 只读页(节点信息)唯一放开的两个变更:概览卡片里的重启 / 停止。删除 / 启动仍只在节点详情。
+const OVERVIEW_ACTIONS: readonly NodeLifecycleAction[] = ['restart_node', 'stop_node'];
 const POLL_MS = 10_000; // same cadence as AgentsScreen — hub-friendly, felt-live
 
 function NodeActionButton({
@@ -260,6 +266,8 @@ export default function NodeDetailScreen({
   // (see app-styles.ts header) but child style props are captured at
   // render — a manual bump is how the sibling screens do it too.
   const [, setThemeTick] = useState(0);
+  // board #694 —— 节点操作卡片 / 指路那一行走 i18n:切语言时这一页也要重画。
+  useTranslation();
   useEffect(() => onThemeChange(() => setThemeTick(t => t + 1)), []);
 
   const load = useCallback(async () => {
@@ -296,7 +304,8 @@ export default function NodeDetailScreen({
   // undefined = 读取中,null = Hub 没这个接口或读失败(按不支持说)。
   const [configUpdateCapable, setConfigUpdateCapable] = useState<boolean | null | undefined>(undefined);
   const handStartedNodeId = node?.lifecycle_controllable === false ? node.node_id : null;
-  const onDangerTab = activeSection === 'danger';
+  // board #694 —— 「概览」里也画重启 / 停止(节点操作卡片),同样要知道能不能自己重启。
+  const onDangerTab = activeSection === 'danger' || activeSection === 'overview';
   useEffect(() => {
     setConfigUpdateCapable(undefined);
     if (!handStartedNodeId || !onDangerTab) return;
@@ -306,6 +315,21 @@ export default function NodeDetailScreen({
       .catch(() => { if (live) setConfigUpdateCapable(null); });
     return () => { live = false; };
   }, [cfg, handStartedNodeId, onDangerTab]);
+
+  // board #694 —— 手动启动的节点:这台机器上有没有能收编它的 daemon(决定「交给守护进程管理」还是「还没有守护进程」)。
+  // undefined = 读取中 / 读失败 ⇒ 卡片不下结论。只在概览、且节点是手动启动时读一次。
+  const [hostDaemons, setHostDaemons] = useState<HostSupervisorDaemon[] | undefined>(undefined);
+  const [adoptOpen, setAdoptOpen] = useState(false);
+  const onOverviewTab = activeSection === 'overview';
+  useEffect(() => {
+    setHostDaemons(undefined);
+    if (!handStartedNodeId || !onOverviewTab) return;
+    let live = true;
+    fetchHostSupervisors(cfg)
+      .then(r => { if (live) setHostDaemons(r.ok ? r.daemons : undefined); })
+      .catch(() => { if (live) setHostDaemons(undefined); });
+    return () => { live = false; };
+  }, [cfg, handStartedNodeId, onOverviewTab]);
 
   // board #585 —— 启动请求提交后:节点上线 / daemon 报失败 / 2 分钟没动静,各说一句。
   const watchOnline = state.kind === 'ready' && state.session.status !== 'offline';
@@ -397,6 +421,7 @@ export default function NodeDetailScreen({
   const rulesTarget = rulesFileTarget({ readOnly, node, session: s });
   const online = s.status !== 'offline';
   const danger = dangerActions({ lifecycleControllable: node?.lifecycle_controllable, online, configUpdateCapable, lifecycleState: node?.lifecycle_state, alias });
+  const control = node ? nodeControlView({ node, danger, online, hostname: node.hostname ?? s.hostname, daemons: hostDaemons, networkId: cfg.networkId }) : null;
   const chipColor = statusColor(s.status, online);
   const team = teamOf(s.alias);
   const executeLifecycle = async () => {
@@ -524,6 +549,25 @@ export default function NodeDetailScreen({
             </View>
           ) : null}
         </View>
+        {/* board #694 —— 重启 / 停止放在主人看的地方:概览。置灰也画出来,底下一句原因 + 下一步(收编 / 没有 daemon)。
+            只读页(聊天里的「节点信息」)也在:重启 / 停止是主人在这里要的;删除 / 启动仍只在节点详情的「危险操作」里。 */}
+        {control ? (
+          <View>
+            <SectionTitle title={t('nodeControl.title')} />
+            <NodeControlCard
+              view={control}
+              compact={compact}
+              onRestart={() => setPendingAction('restart_node')}
+              onStop={() => setPendingAction('stop_node')}
+              onAdopt={() => setAdoptOpen(true)}
+              adoptOpen={adoptOpen && control.mode !== 'managed'}
+              adoptSlot={node ? <NodeAdoptionControls key={JSON.stringify(['overview', cfg.serverUrl, cfg.token, cfg.networkId, node.node_id])} cfg={cfg} node={node} online={online} initialDialog="adopt" onRefresh={() => { void load(); }} /> : null}
+              message={actionMessage && section === 'overview' ? (
+                <Text testID="node-control-action-message" style={{ color: { ok: colors.running, warn: colors.blocked, error: colors.failed }[actionMessageTone(actionMessage)], fontSize: typeScale.small, lineHeight: 18 }}>{actionMessage}</Text>
+              ) : null}
+            />
+          </View>
+        ) : null}
         <View>
           <SectionTitle title={taskSectionTitle(s.status)} />
           <View style={[card, { paddingVertical: spacing.md }]}>
@@ -544,6 +588,13 @@ export default function NodeDetailScreen({
         <View style={[card, { flexDirection: 'row', flexWrap: 'wrap' }]}>
           {runtimeFacts.map(fact => <FactCell key={fact.label} fact={fact} columns={factColumns} />)}
         </View>
+        {/* board #694 —— 节点操作自然会在这里找:一句指路,点了回概览。 */}
+        {control ? (
+          <Pressable testID="node-model-control-pointer" accessibilityRole="link" onPress={() => setActiveSection('overview')} hitSlop={8} style={{ marginTop: spacing.sm, paddingVertical: spacing.xs, flexDirection: 'row', flexWrap: 'wrap', gap: spacing.xs }}>
+            <Text style={{ color: colors.textMuted, fontSize: typeScale.small }}>{t('nodeControl.pointer')}</Text>
+            <Text style={{ color: colors.accent, fontSize: typeScale.small, fontWeight: weight.strong }}>{t('nodeControl.pointerOpen')} ›</Text>
+          </Pressable>
+        ) : null}
         {/* RFC-024 —— 不经 LLM 直接改模型;需要权威 node_id。 */}
         {!readOnly && node ? <NodeModelSection cfg={cfg} node={node} /> : null}
       </View>
@@ -734,7 +785,7 @@ export default function NodeDetailScreen({
         </View>
       </Modal>
 
-      <Modal transparent visible={!readOnly && !!pendingAction} onRequestClose={() => setPendingAction(null)} animationType="fade">
+      <Modal transparent visible={!!pendingAction && (!readOnly || OVERVIEW_ACTIONS.includes(pendingAction))} onRequestClose={() => setPendingAction(null)} animationType="fade">
         <ModalKeyboardAvoider scrim="rgba(0,0,0,0.55)">
         <View style={[{ flex: 1, alignItems: 'center', justifyContent: 'center' }, withBasePadding(dialogSafe, spacing.xl)]}>
           <View style={{ width: '100%', maxWidth: 420, borderRadius: radius.surface, backgroundColor: colors.card, padding: spacing.xl, gap: spacing.md, ...elevated('floating') }}>

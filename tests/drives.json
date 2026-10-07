@@ -205,6 +205,10 @@
       "kind": "stub",
       "secs": 75
     },
+    "test-node-control-card/drive.mjs": {
+      "kind": "stub",
+      "secs": 90
+    },
     "test-node-danger-start/drive.mjs": {
       "kind": "stub",
       "secs": 90

@@ -68,7 +68,7 @@ check('Android hardware Back restores the same chat', app.includes("if (screen.n
 // Since 聊天信息 the header's 「设置」 is gone: node settings are the panel's avatar row + section rows.
 check('聊天信息 rows open node settings (with the section they name)', chat.includes('canOpenNode: !!onOpenNodeSettings') && /requestNodeSection\(nodeInfoSectionKey\(cfg\.profileId \?\? cfg\.serverUrl, alias\), row\.section\);\s*onOpenNodeSettings\?\.\(\);/.test(chat));
 check('node info page honours the requested section (read-only page only)', detail.includes('const requested = readOnly ? takeNodeSectionRequest(sectionHandoffKey) : undefined;'));
-check('read-only details hide all existing mutation surfaces', detail.includes('!readOnly ? <AvatarEditSection') && detail.includes('visible={!readOnly && !!pendingAction}') && detail.includes("{readOnly ? '节点信息' : '节点详情'}"));
+check('read-only details hide mutation surfaces except overview restart/stop (board #694)', detail.includes('!readOnly ? <AvatarEditSection') && detail.includes('visible={!!pendingAction && (!readOnly || OVERVIEW_ACTIONS.includes(pendingAction))}') && detail.includes("{readOnly ? '节点信息' : '节点详情'}"));
 check('details use network-scoped full status rather than the list projection', detail.includes('fetchNodeStatus(cfg, alias)'));
 
 console.log(`node info: ${passed}/${passed} checks passed`);

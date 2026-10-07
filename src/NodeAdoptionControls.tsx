@@ -8,9 +8,10 @@ import { colors, radius } from './theme';
 import { nodeIsDown } from './node-danger-actions';
 
 /** Parent keys this component by Hub/account/network/node, isolating late results. */
-export default function NodeAdoptionControls({ cfg, node, online, onRefresh }: { cfg: HubConfig; node: HubNode; online: boolean; onRefresh: () => void }) {
+/** initialDialog:从「概览 → 交给守护进程管理」进来时直接打开收编对话框(board #694),不用再点一次入口。 */
+export default function NodeAdoptionControls({ cfg, node, online, onRefresh, initialDialog }: { cfg: HubConfig; node: HubNode; online: boolean; onRefresh: () => void; initialDialog?: 'adopt' }) {
   const { t } = useTranslation();
-  const [dialog, setDialog] = useState<'adopt' | 'start' | 'stop' | null>(null);
+  const [dialog, setDialog] = useState<'adopt' | 'start' | 'stop' | null>(initialDialog ?? null);
   const [daemons, setDaemons] = useState<HostSupervisorDaemon[]>([]);
   const [daemon, setDaemon] = useState(''), [path, setPath] = useState('');
   const [message, setMessage] = useState('');
