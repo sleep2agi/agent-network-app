@@ -145,7 +145,8 @@ for (const [name, V] of Object.entries(VIEWPORTS)) {
       await page.locator('[data-testid="people-confirm"]').first().waitFor({ timeout: 5000 });
       const nodeRow = await page.locator('[data-testid="person-node:n_sweep_a"]').count();
       const humanRow = await page.locator('[data-testid="person-user:u_a"]').count();
-      record(where, 'picker', { humansOnly: nodeRow === 0 && humanRow === 1 });
+      // owner 10-07:参与人可以是 Agent —— 人类 / Agent 两组都在。
+      record(where, 'picker', { listsAgents: nodeRow === 1 && humanRow === 1 && (await page.locator('[data-testid="people-group-h:node"]').count()) === 1 });
       if (OUT) await page.screenshot({ path: `${OUT}/${name}-${theme}-picker.png` });
       await press(page.locator('[data-testid="person-user:u_a"]').first());
       await press(page.locator('[data-testid="people-confirm"]').first());

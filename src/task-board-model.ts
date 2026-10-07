@@ -576,8 +576,8 @@ export function createInput(d: CreateDraft, twoRoles = false): { name: string; p
   // 分两个角色的 Hub 上,种类不对的一侧不发(Hub 会 400);旧 Hub 没有负责 Agent。
   const owner = d.owner && (!twoRoles || d.owner.kind === 'user') ? d.owner : null;
   const agent = twoRoles && d.agentOwner && d.agentOwner.kind === 'node' ? d.agentOwner : null;
-  // 参与人只收人类,按 personKey 去重,只带 {kind,id}。
-  const participants = [...new Map((d.participants ?? []).filter(r => r.kind === 'user' && r.id).map(r => [personKey(r), { kind: r.kind, id: r.id }] as const)).values()];
+  // 参与人:人类和 Agent({kind:'node',id})都收,按 personKey 去重,只带 {kind,id}。
+  const participants = [...new Map((d.participants ?? []).filter(r => (r.kind === 'user' || r.kind === 'node') && r.id).map(r => [personKey(r), { kind: r.kind, id: r.id }] as const)).values()];
   return {
     name: c.name,
     priority: REQ_PRIORITIES.includes(d.priority) ? d.priority : 'normal',

@@ -4,7 +4,7 @@ import { validationText } from './i18n-task-presentation';
 import { useTranslation } from './i18n-react';
 import { taskText } from './i18n-tasks';
 // 新建任务:桌面是居中的小对话框,手机是从底部升起的面板。字段:标题(自动聚焦)、负责人(头像选择器,
-// 复用 RequirementPeoplePicker —— 只存稳定身份 {kind,id})、参与人(同一个选择器多选,只列人类)、优先级、预计完成。
+// 复用 RequirementPeoplePicker —— 只存稳定身份 {kind,id})、参与人(同一个选择器多选,人类 + Agent)、优先级、预计完成。
 import { useRef, useState, type ReactNode } from 'react';
 import { Modal, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import ModalKeyboardAvoider from './ModalKeyboardAvoider';
@@ -152,7 +152,7 @@ export function RoleFields({ twoRoles, owner, agentOwner, people, peopleLoading,
 }
 
 /**
- * 参与人(多选,只列人类)。选择器和任务详情「编辑参与人」是同一个 RequirementPeoplePicker(mode=participants)。
+ * 参与人(多选,人类 + Agent 两组;Agent 存 {kind:'node',id})。选择器和任务详情「编辑参与人」是同一个 RequirementPeoplePicker(mode=participants)。
  * 桌面:一格输入框,里面是已选的人(头像 + 名字),点开选择器增删。
  * 手机:每人一枚可点掉的胶囊(≥36 高)+ 一枚「添加参与人」按钮(44 高)—— 手指在面板里直接删,不必再开一层。
  */
@@ -175,14 +175,13 @@ export function ParticipantsField({ value, people, networkId, loading, onLoadPeo
     <RequirementPeoplePicker
       networkId={networkId}
       mode="participants"
-      kinds={['user']}
       title={tr('tasks.copy.66')}
       hint={n => tr('tasks.participantsPickHint', { v0: n })}
       people={people}
       selected={value}
       anchor={anchor}
       onClose={() => setOpen(false)}
-      onConfirm={sel => { onChange(sel.filter(r => r.kind === 'user')); setOpen(false); }}
+      onConfirm={sel => { onChange(sel); setOpen(false); }}
     />
   ) : null;
   if (touch) {
@@ -190,9 +189,10 @@ export function ParticipantsField({ value, people, networkId, loading, onLoadPeo
       <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm }} testID={idBase}>
         {value.map((r, i) => (
           <Pressable key={personKey(r)} accessibilityRole="button" accessibilityLabel={tr('tasks.removeParticipant', { name: names[i] })} onPress={() => onChange(value.filter(x => personKey(x) !== personKey(r)))}
-            style={{ minHeight: 36, flexDirection: 'row', alignItems: 'center', gap: 6, paddingLeft: 4, paddingRight: 12, borderRadius: radius.pill, backgroundColor: colors.subtleFill, maxWidth: '100%' }} testID={`${idBase}-chip-${r.id}`}>
+            style={{ minHeight: 36, flexDirection: 'row', alignItems: 'center', gap: 6, paddingLeft: 4, paddingRight: 12, borderRadius: radius.pill, backgroundColor: r.kind === 'node' ? colors.tonalBg : colors.subtleFill, maxWidth: '100%' }} testID={`${idBase}-chip-${r.id}`}>
             <AliasAvatar alias={names[i]} size={26} />
             <Text style={{ color: colors.text, fontSize: typeScale.body, flexShrink: 1 }} numberOfLines={1}>{names[i]}</Text>
+            {r.kind === 'node' ? <Text style={{ color: colors.accent, fontSize: typeScale.small, fontWeight: '600' }} testID={`${idBase}-chip-agent-${r.id}`}>· {tr('tasks.peopleAgentTag')}</Text> : null}
             <Ionicons name="close" size={14} color={colors.textMuted} />
           </Pressable>
         ))}
@@ -212,9 +212,10 @@ export function ParticipantsField({ value, people, networkId, loading, onLoadPeo
         style={state => [f.input, f.row, { flexWrap: 'wrap' }, (state as { hovered?: boolean }).hovered && { borderColor: colors.textMuted }]}>
         {value.length ? value.map((r, i) => (
           // 22 高:输入框 minHeight 40 = 22 + 上下 padding 8 + 边框 1 —— 选了人这一格也不长高(和负责人一样高)。
-          <View key={personKey(r)} style={{ flexDirection: 'row', alignItems: 'center', gap: 4, height: 22, paddingLeft: 2, paddingRight: 8, borderRadius: radius.pill, backgroundColor: colors.subtleFill, maxWidth: 160 }} testID={`${idBase}-chip-${r.id}`}>
+          <View key={personKey(r)} style={{ flexDirection: 'row', alignItems: 'center', gap: 4, height: 22, paddingLeft: 2, paddingRight: 8, borderRadius: radius.pill, backgroundColor: r.kind === 'node' ? colors.tonalBg : colors.subtleFill, maxWidth: 200 }} testID={`${idBase}-chip-${r.id}`}>
             <AliasAvatar alias={names[i]} size={18} />
             <Text style={{ color: colors.text, fontSize: typeScale.small, flexShrink: 1 }} numberOfLines={1}>{names[i]}</Text>
+            {r.kind === 'node' ? <Text style={{ color: colors.accent, fontSize: typeScale.small, fontWeight: '600' }} testID={`${idBase}-chip-agent-${r.id}`}>· {tr('tasks.peopleAgentTag')}</Text> : null}
           </View>
         )) : <Ionicons name="people-outline" size={16} color={colors.textMuted} />}
         <Text style={{ flex: 1, color: colors.textMuted, fontSize: typeScale.body }} numberOfLines={1}>{loading ? tr('tasks.copy.101') : value.length ? '' : tr('tasks.participantsPlaceholder')}</Text>
