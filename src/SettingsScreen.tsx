@@ -58,6 +58,7 @@ import { groupSubtitle, groupTestKey, memberSubtitle, sessionSubtitle, visibleSe
 import { probeSavedSessions } from './saved-session-probe';
 import { fetchAuthMe } from './user-admin-api';
 import { pooledHttpEnabled, setPooledHttpEnabled } from './app-fetch';
+import { showPooledHttpDiagnostics, tapVersion, VERSION_TAPS_INITIAL } from './diagnostics-reveal';
 import { ChangelogPage } from './ChangelogScreen';
 import './i18n-password';
 import ChangePasswordPanel from './ChangePasswordPanel';
@@ -124,6 +125,10 @@ export default function SettingsScreen({
   const { language } = useTranslation();
   const [me, setMe] = useState<Me>({});
   const [pooledHttp, setPooledHttp] = useState(pooledHttpEnabled);
+  // #695 连点「版本」5 下揭开「诊断」组(本次打开有效,不落盘)。
+  const [versionTaps, setVersionTaps] = useState(VERSION_TAPS_INITIAL);
+  const onVersionTap = () => setVersionTaps(prev => tapVersion(prev, Date.now()));
+  const onPooledHttpChange = (value: boolean) => { setPooledHttpEnabled(value); setPooledHttp(value); };
   const lastFatal = useLastFatalReport();
   // 多用户:auth/me 原样留一份,判断「用户管理」该不该出现(Hub 管理员 / 当前网络 owner、admin)。
   const [authMe, setAuthMe] = useState<AuthMe | null>(null);
@@ -614,6 +619,10 @@ export default function SettingsScreen({
     updateView: isIOS ? IOS_UPDATE_ROW : isAndroid
       ? describeAndroidUpdateRow(androidUpdate, { currentVersion: APP_VERSION, lastCheckedAt: androidUpdateLastCheckedAt(), now: Date.now() })
       : describeUpdateRow(update, { currentVersion: APP_VERSION, lastCheckedAt: desktopUpdateLastCheckedAt(), now: Date.now() }),
+    onVersionTap,
+    showPooledHttp: showPooledHttpDiagnostics(versionTaps.revealed, platform),
+    pooledHttp,
+    onPooledHttpChange,
     onCheckUpdate: () => {
       if (isIOS) void openTestFlight(Linking);
       else if (isAndroid) void checkAndroidUpdate(APP_VERSION);
@@ -1160,7 +1169,7 @@ export default function SettingsScreen({
             <View style={sectionStyle}>
               {heading('about')}
               <SettingsGroup>
-                {show('about', 'version') ? <SettingsRow label={tr('settings.copy.77')} value={`v${APP_VERSION}`} testID="settings-version-row" /> : null}
+                {show('about', 'version') ? <SettingsRow label={tr('settings.copy.77')} value={`v${APP_VERSION}`} onPress={onVersionTap} testID="settings-version-row" /> : null}
                 {show('about', 'update') ? (() => {
                   // 「点击更新好像没用」:每次手动检查都要落到一句看得见、和上一次不同的话上
                   // (版本号 + 刚刚检查 / 失败原因),而不是闪一下转圈又回到同一句。
@@ -1192,13 +1201,15 @@ export default function SettingsScreen({
                 {show('about', 'changelog') ? (
                   <SettingsRow label={tr('changelog.title')} subtitle={tr('changelog.rowHint')} onPress={() => { setWideChangelog(true); paneScrollRef.current?.scrollTo({ y: 0, animated: false }); }} testID="settings-changelog-row" />
                 ) : null}
-                {show('about', 'pooledHttp') ? (
-                  <SettingsSwitchRow label={tr('settings.copy.277')} subtitle={tr('settings.copy.278')} value={pooledHttp} onValueChange={value => { setPooledHttpEnabled(value); setPooledHttp(value); }} testID="settings-pooled-http-row" />
-                ) : null}
                 {lastFatal && show('about', 'lastCrash') ? (
                   <SettingsActionRow label={tr('fatal.copyRow')} subtitle={fatalSummary(lastFatal)} onPress={() => { void copyLastFatal(lastFatal); }} testID="settings-last-crash-row" />
                 ) : null}
               </SettingsGroup>
+              {showPooledHttpDiagnostics(versionTaps.revealed, platform) && !searching ? (
+                <SettingsGroup title={tr('settings.copy.281')} testID="settings-diagnostics-group">
+                  <SettingsSwitchRow label={tr('settings.copy.277')} subtitle={tr('settings.copy.278')} value={pooledHttp} onValueChange={onPooledHttpChange} testID="settings-pooled-http-row" />
+                </SettingsGroup>
+              ) : null}
             </View>
           ) : null}
         </ScrollView>
