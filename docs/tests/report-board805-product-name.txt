@@ -50,6 +50,15 @@ the old physical .app directory is retained as in tauri-plugin-updater 2.10.1.
 Docker bash syntax / non-macOS-CI refusal checks rc=0 (--cpus=2, network none).
 The native macOS job remains pending; syntax success is not native acceptance.
 
+2026-10-09 03:07 CST: run 37826731044 macOS native-account step had remained
+running since 02:54:26 without a result. Cancel requested to retrieve logs;
+this is not a passing acceptance or evidence of a specific product defect.
+Add stage markers, bounded downloads and 180-second old/new smoke timeouts;
+retain a failed disposable-runner screenshot for possible system dialogs.
+Docker syntax / non-CI refusal checks rc=0. No product behavior changed.
+Current-head Windows job 113481647703 passed all four MSI/NSIS upgrade cases
+at 02:55. macOS remains unverified, so no merge or release yet.
+
 Recovery: tauri.conf.json and the versioned installer templates remain the
 authoritative build inputs. No daemon, ports, proxy, secrets or data migration
 changes. Reverting this display-only change preserves the pinned installation
