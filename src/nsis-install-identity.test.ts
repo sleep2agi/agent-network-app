@@ -26,7 +26,7 @@ for (const display of ['Agent Network', 'ANet']) {
   ck(`${display}: display name remains independent`, d.PRODUCTNAME === display);
 }
 ck('Tauri selects the adapted template', config.bundle.windows.nsis.template === './windows/vendor/installer.tauri-2.11.2.nsi');
-ck('this prerequisite does not rename the product yet', config.productName === 'Agent Network');
+ck('renamed product uses the stable installer identity', config.productName === 'ANet' && identity(script, config.productName).INSTALLIDENTITY === 'Agent Network');
 const defaults = [...script.matchAll(/StrCpy \$INSTDIR "\$(?:PROGRAMFILES64|PROGRAMFILES|LOCALAPPDATA)\\([^\"]+)"/g)].map(m => m[1]);
 ck('all default installation paths keep original identity', defaults.length === 5 && defaults.every(s => s === '${INSTALLIDENTITY}'));
 ck('multiuser default keeps original identity', script.includes('!define MULTIUSER_INSTALLMODE_INSTDIR "${INSTALLIDENTITY}"'));

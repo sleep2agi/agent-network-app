@@ -1,0 +1,36 @@
+Board #805 / parent #778 / issue sleep2agi/agent-network-app#772
+Base: main 30756967d54b29ad23cced9fecbd71e0b8bf2db0
+
+Change / next-release note:
+Desktop product display name becomes ANet. Existing installation identity,
+bundle identifier, executable name, account storage and update endpoints stay
+unchanged. Legacy Windows installation directories intentionally retain their
+old names. No version bump, production installation or release in this PR.
+
+Reused prerequisite evidence (not rerun merely for bookkeeping):
+MSI #807 / app#775 head 439443237c986f811b23c93b8d7936b8b2c441e3:
+run 37822843097, native Windows job 113468251301 succeeded. Published .224
+default/custom directory upgrades to the ANet test candidate both passed at
+2026-10-08T18:25:01Z / 18:25:06Z: same directory, one uninstall registration,
+shortcut migration and fixture data retained. Merge gate rc=0; merged as base.
+NSIS app#771: complete-template Docker/Wine operations passed, but this does
+not substitute for published-client upgrade on a native Windows runner.
+macOS app#774 main native build succeeded before the final name switch;
+it is not evidence of a renamed app replacing an installed previous version.
+
+Remaining acceptance boundary:
+Published-client native NSIS/macOS upgrade and real account continuity are
+still pending. Keep draft until the stated scope is verified; do not describe
+this candidate as published. No Linux path simulation is native acceptance.
+Local focused validation (Docker --cpus=2 --network none): build rc=0;
+node src/app-display-name.test.ts: 29/29
+node src/nsis-install-identity.test.ts: 15/15
+node src/wix-install-identity.test.ts: PASS
+node src/macos-bundle-path.test.ts: 9/9 (includes 3 rejected path mutations)
+Combined command rc=0. macOS path tests validate build script inputs, not
+native application upgrade. No unrelated full suite repeated locally.
+
+Recovery: tauri.conf.json and the versioned installer templates remain the
+authoritative build inputs. No daemon, ports, proxy, secrets or data migration
+changes. Reverting this display-only change preserves the pinned installation
+identity; user data must still come from its normal backups, not Git.
