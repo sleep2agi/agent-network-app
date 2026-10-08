@@ -1,0 +1,14 @@
+Release 0.2.224 / board #772
+Base: b6a887ed9c54810e7ed003b4e2476f0afb94da87 (main).
+Includes merged app PR #758 (Agent-scoped chat network) and #756 (sidebar rename).
+Only version metadata and release notes changed; Cargo.lock changes only the root package.
+
+Docker: Node 22, Bun 1.3.14, --cpus=2.
+Typecheck: rc=0.
+Full unit run: 364/365, rc=1; sole failure was missing openssl in the slim test image.
+Installed openssl in an isolated container and reran only ios-signing-cert-policy.test.ts:
+22/22 assertions, rc=0. No product change was required; full suite not repeated.
+git diff --check: rc=0.
+
+This report verifies release metadata, not published or installed artifacts.
+Signed builds and delivery must use the merged main SHA and the existing release SOP.

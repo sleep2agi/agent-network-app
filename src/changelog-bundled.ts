@@ -5,6 +5,10 @@
 export const BUNDLED_RELEASE_BODY: string = [
   "Signed and notarized stable update for macOS (Apple Silicon) and Windows (x64).",
   "",
+  "What's new in 0.2.224:",
+  "- 修复：加入多个网络的账号，打开 Agent 会话后可以正确读取历史和发送消息。",
+  "- 任务侧栏的项目和标签支持右键或长按改名。",
+  "",
   "What's new in 0.2.223:",
   "- 长对话改为从最新消息开始、每次加载 30 条，往上滚动再分批加载更早的消息；加载时显示消息占位，不再出现空白",
   "- 「交给 daemon 管理」被拒绝时，显示具体原因和修复方法（覆盖 62 种情况），不再只提示「操作未完成」",
@@ -980,6 +984,7 @@ export const BUNDLED_RELEASE_BODY: string = [
 
 /** Release date (published_at) per version, as far as it was known when this file was generated. */
 export const BUNDLED_RELEASE_DATES: Record<string, string> = {
+  "0.2.223": "2026-10-08T01:56:40Z",
   "0.2.222": "2026-10-07T17:08:34Z",
   "0.2.221": "2026-10-07T13:31:30Z",
   "0.2.220": "2026-10-07T09:50:46Z",
