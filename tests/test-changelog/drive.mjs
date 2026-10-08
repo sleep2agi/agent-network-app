@@ -223,25 +223,30 @@ async function run({ phone }) {
   for (const v of [APP_VERSION, PREV, PREV2]) {
     const card = await box(page, tid(`changelog-card-${v}`));
     const ver = await box(page, tid(`changelog-version-${v}`));
-    const date = await box(page, tid(`changelog-date-${v}`));
+    // A preceding desktop release may still be unpublished. Unknown dates are
+    // omitted on phone and empty on desktop; never wait for or invent a date.
+    const dateText = await paintedText(page, tid(`changelog-date-${v}`));
+    const date = painted(dateText) ? await box(page, tid(`changelog-date-${v}`)) : null;
     const copy = await box(page, tid(`changelog-copy-${v}`));
     const check = phone ? null : await box(page, tid(`changelog-check-${v}`));
     heads.push({ v, card, ver, date, copy, check });
-    console.log(`| ${v} | ${check ? `${check.x},${check.y} ${check.w}×${check.h}` : '—'} | ${ver.x},${ver.y} ${ver.w}×${ver.h} | ${date.x},${date.y} ${date.w}×${date.h} | ${copy.x},${copy.y} ${copy.w}×${copy.h} | ${card.x} |`);
+    console.log(`| ${v} | ${check ? `${check.x},${check.y} ${check.w}×${check.h}` : '—'} | ${ver.x},${ver.y} ${ver.w}×${ver.h} | ${date ? `${date.x},${date.y} ${date.w}×${date.h}` : 'unknown'} | ${copy.x},${copy.y} ${copy.w}×${copy.h} | ${card.x} |`);
   }
   ck(`${vp}: 复制 right edges line up`, heads.every(h => Math.abs((h.copy.x + h.copy.w) - (heads[0].copy.x + heads[0].copy.w)) <= 0.5));
   ck(`${vp}: card left edges line up`, heads.every(h => Math.abs(h.card.x - heads[0].card.x) <= 0.5));
   ck(`${vp}: 复制 inside the card with ≥ 12px to its right edge`, heads.every(h => h.card.x + h.card.w - (h.copy.x + h.copy.w) >= 12));
   if (phone) {
     // Phone: version + date stack on the left; 复制 is centred on that stack; card gutters 16 (settings-kit).
-    ck(`${vp}: 复制 centred on the title stack`, heads.every(h => Math.abs(cy(h.copy) - (h.ver.y + (h.date.y + h.date.h - h.ver.y) / 2)) <= 1), heads.map(h => (cy(h.copy) - (h.ver.y + (h.date.y + h.date.h - h.ver.y) / 2)).toFixed(1)).join('/'));
+    const stackCenter = h => (h.ver.y + (h.date ? h.date.y + h.date.h : h.ver.y + h.ver.h)) / 2;
+    ck(`${vp}: 复制 centred on the title stack`, heads.every(h => Math.abs(cy(h.copy) - stackCenter(h)) <= 1), heads.map(h => (cy(h.copy) - stackCenter(h)).toFixed(1)).join('/'));
     ck(`${vp}: 16px gutters both sides`, heads.every(h => Math.abs(h.card.x - 16) <= 0.5 && Math.abs(390 - (h.card.x + h.card.w) - 16) <= 0.5), `${heads[0].card.x} / ${390 - heads[0].card.x - heads[0].card.w}`);
     ck(`${vp}: 复制 touch target ≥ 36 high`, heads.every(h => h.copy.h >= 36), heads.map(h => h.copy.h).join('/'));
   } else {
-    ck(`${vp}: check · version · date · 复制 centred on one line`, heads.every(h => [h.check, h.ver, h.date].every(b => Math.abs(cy(b) - cy(h.copy)) <= 1)), heads.map(h => [h.check, h.ver, h.date].map(b => (cy(b) - cy(h.copy)).toFixed(1)).join(',')).join(' / '));
+    ck(`${vp}: check · version · date · 复制 centred on one line`, heads.every(h => [h.check, h.ver, h.date].filter(Boolean).every(b => Math.abs(cy(b) - cy(h.copy)) <= 1)), heads.map(h => [h.check, h.ver, h.date].filter(Boolean).map(b => (cy(b) - cy(h.copy)).toFixed(1)).join(',')).join(' / '));
     // The running version carries a 当前版本 badge between version and date; compare the other cards with each other.
     const gap = (h) => h.date.x - h.ver.x - h.ver.w;
-    ck(`${vp}: date right after the version (same gap each card)`, heads.slice(1).every(h => Math.abs(gap(h) - gap(heads[1])) <= 0.5) && gap(heads[1]) > 0 && gap(heads[0]) > gap(heads[1]), heads.map(h => gap(h).toFixed(1)).join('/'));
+    const dated = heads.slice(1).filter(h => h.date);
+    ck(`${vp}: date right after the version (same gap each dated card)`, dated.length > 0 && dated.every(h => Math.abs(gap(h) - gap(dated[0])) <= 0.5) && gap(dated[0]) > 0 && gap(heads[0]) > gap(dated[0]), heads.filter(h => h.date).map(h => gap(h).toFixed(1)).join('/'));
   }
 
   // 4 single-version preview in each format

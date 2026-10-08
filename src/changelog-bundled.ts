@@ -5,6 +5,10 @@
 export const BUNDLED_RELEASE_BODY: string = [
   "Signed and notarized stable update for macOS (Apple Silicon) and Windows (x64).",
   "",
+  "What's new in 0.2.226:",
+  "- 聊天首屏先显示已返回的消息，不再等待另一条较慢的消息请求；后到的消息继续合并。",
+  "- 设置中的「Agent 组织」入口向网络成员开放，按现有权限查看团队；管理操作仍受权限限制。",
+  "",
   "What's new in 0.2.225:",
   "- 客户端界面、通知和手机应用名称统一为 ANet。账号和数据不变；桌面安装包名称将在后续兼容迁移中调整。",
   "- 设置 → 用户管理新增「Agent 组织」：管理 Agent 团队层级和成员，与人类部门独立。需要 Hub 0.9.0-preview.116 或更新版本。",

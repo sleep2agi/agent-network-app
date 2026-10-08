@@ -1,0 +1,31 @@
+App 0.2.226 release preparation (board #783)
+
+Base: fa5f2b281d2b6d734fac165de925b70b4fd05cc7, origin/main.
+Includes only the two features merged since 0.2.225:
+- #764: Agent organization entry visible to members, existing permissions retained.
+- #766: chat sources paint independently instead of waiting for the slower request.
+This PR changes version metadata and release notes only; no new feature code.
+
+Focused Docker checks, --cpus=2 --network none, source mounted read-only:
+- version-consistency: 14 checks PASS.
+- changelog-bundled: 7/7 PASS.
+- release-notes: 35/35 PASS.
+- release-notes-hygiene: 8 checks PASS.
+Combined rc=0; git diff --check rc=0.
+Used the existing app test image; no duplicate local full-suite or browser rerun.
+Feature behavior evidence remains in the already-merged feature PR reports.
+Changelog generated from releaseBody with scripts/changelog-bundle.mjs --no-dates.
+Cargo.lock changes only the root desktop package version; no dependency updates.
+
+This is preparation, not publication or real-device acceptance. Formal artifacts
+must be built from the exact merged main SHA. Android and desktop status are
+tracked separately; desktop 0.2.225 signing approval does not mean 0.2.226 shipped.
+No production Hub or live node changed.
+
+CI follow-up: changelog drive waited for the previous version's date on phone.
+The preceding desktop release was still a draft, so its bundled date was
+unknown and the phone correctly omitted it. The drive now measures the title
+alone for undated entries and retains date alignment checks for dated entries.
+No release date is invented and no product code changed.
+Re-exported this source and ran only test-changelog in the existing Docker image
+with --cpus=2 --network none: 71 PASS, ALL PASS, rc=0 (desktop and phone).
