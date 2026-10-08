@@ -19,6 +19,12 @@ const gate = workflow.slice(workflow.indexOf('- name: Require exact merged commi
 ck('gate precedes artifact download and upload', gate.includes('REQUESTED_COMMIT: ${{ inputs.commit }}'));
 const script = gate.split('run: |\n')[1]?.split('\n').map(line => line.replace(/^          /, '')).join('\n');
 if (!script) throw new Error('missing executable gate');
+// Publication runs on Ubuntu. Windows unit CI checks the workflow contract;
+// execute its POSIX shell acceptance on Linux/Docker, not a Windows WSL setup.
+if (process.platform === 'win32') {
+  console.log(`${passed}/${total} passed (shell behavior is Linux/Docker-only)`);
+  process.exit(passed === total ? 0 : 1);
+}
 
 // Execute the workflow's actual shell gate against disposable repositories.
 const root = mkdtempSync(join(tmpdir(), 'android-publish-source-'));

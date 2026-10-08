@@ -22,4 +22,6 @@ Executes the actual workflow shell gate in temporary Git repositories:
   the rejection assertion detects that mutation.
 Source-contract assertions cover required input, run-SHA comparison, pinned
 checkout/full history and gate ordering before artifact download.
+Windows unit CI runs those source contracts only; the actual POSIX shell gate
+is exercised on Linux/Docker, matching the Ubuntu-only publishing job.
 No unrelated local suite, production mutation, APK rebuild or publication.
