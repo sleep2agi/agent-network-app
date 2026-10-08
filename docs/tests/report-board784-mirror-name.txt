@@ -1,0 +1,20 @@
+Board #784, first compatibility slice under installer rename #778.
+Base: main 300ecd02e13216c2aa0c5cfc45ca70f798406080.
+
+Only the mirror alias mapping changes. Agent.Network and ANet versioned
+installers map to the same existing fixed download link. Versioned filenames,
+asset bytes, hashes and updater signatures are preserved. Duplicate inputs for
+one alias are rejected rather than silently choosing an installer.
+No productName, installer identity, data path, version or runtime change.
+
+Existing test image, Docker --cpus=2 --network none, source read-only:
+  bun src/modelscope-mirror.test.ts
+Before product change: rc=1 at the new ANet fixed-link assertion.
+After product change: 60 passed, rc=0. git diff --check rc=0.
+Coverage includes old and new names, wrong version/unrelated files, same asset
+and hash for the fixed link, versioned manifest URL/signature preservation,
+historical-release latest protection and duplicate aliases.
+
+No network write, mirror publication or production operation was performed by
+this test. Windows/macOS installer migration is intentionally not claimed.
+Existing CI still applies; no redundant local full-suite/browser run.
