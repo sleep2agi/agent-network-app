@@ -1,0 +1,29 @@
+Hub #804 (parent #778), Issue sleep2agi/agent-network-app#772
+2026-10-09, base c4df1d31a2a5e841b65d267d426f2902a6f6bd62
+
+Scope: derive input .app name from tauri.conf.json productName in two workflows.
+Product name, output/download filenames, signing/notarization commands and exact-main
+release gate are unchanged. No publishing or production changes.
+
+Docker: node:22.23.0-bookworm, pinned SHA in tests/macos-bundle-path/Dockerfile.
+Non-root, --cpus=2. Reproduce: bash tests/macos-bundle-path/run.sh
+Build rc=0; node src/macos-bundle-path.test.ts rc=0; 9/9 checks passed.
+
+Executed each actual workflow shell body against a temporary filesystem containing
+only the configured app directory, for both "Agent Network" (space) and "ANet":
+- desktop-tauri / Stage artifacts: PASS both; unchanged ZIP name asserted.
+- release-macos / Verify signed and notarized app: PASS both; all four macOS
+  command calls received the exact configured app path as one argument.
+- release-macos / Stage release assets: PASS both; unchanged DMG/ZIP/SHA names.
+
+Three independent mutations restore the literal Agent Network.app input, each
+executed with an ANet-only fixture. Actual bash exits are 41, 1, 41 respectively.
+The same success assertion (exit code must equal zero) would reject each mutant.
+These are missing-input failures, not dependency/import/environment failures.
+Test is discovered by the existing src/**/*.test.ts unit runner on POSIX;
+Windows skips this POSIX-only workflow execution explicitly.
+
+Boundary: macOS-only tools are inert argv/file-checking doubles. This is shell
+path validation, NOT native macOS signing, notarization, or published-client
+upgrade/account-retention evidence. Those remain parent #778 acceptance work.
+No full local suite repeated for this six-line workflow change; normal PR CI runs.

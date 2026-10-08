@@ -106,7 +106,8 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          app="src-tauri/target/release/bundle/macos/Agent Network.app"
+          product_name="$(node -p "require('./src-tauri/tauri.conf.json').productName")"
+          app="src-tauri/target/release/bundle/macos/${product_name}.app"
           dmg="$(find src-tauri/target/release/bundle/dmg -maxdepth 1 -name '*.dmg' -print -quit)"
           test -d "$app"
           test -f "$dmg"
@@ -122,13 +123,14 @@ jobs:
         run: |
           set -euo pipefail
           version="$(node -p "require('./src-tauri/tauri.conf.json').version")"
+          product_name="$(node -p "require('./src-tauri/tauri.conf.json').productName")"
           short="$(git rev-parse --short=7 HEAD)"
           tag="desktop-v${version}-signed-${short}"
           mkdir -p out
           dmg="$(find src-tauri/target/release/bundle/dmg -maxdepth 1 -name '*.dmg' -print -quit)"
           cp "$dmg" "out/Agent.Network_${version}_aarch64.dmg"
           ditto -c -k --keepParent \
-            "src-tauri/target/release/bundle/macos/Agent Network.app" \
+            "src-tauri/target/release/bundle/macos/${product_name}.app" \
             "out/AgentNetwork_${version}_aarch64_${short}.app.zip"
           shasum -a 256 out/* | tee out/SHA256SUMS.txt
           echo "tag=$tag" >> "$GITHUB_OUTPUT"
