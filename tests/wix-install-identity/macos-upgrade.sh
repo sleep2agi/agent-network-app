@@ -15,6 +15,35 @@ tar -xzf "$root/old.tar.gz" -C "$root/Applications"
 installed="$root/Applications/Agent Network.app"
 test -d "$installed"
 test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$installed/Contents/Info.plist")" = top.vansin.agentnetwork.desktop
+# Explicit test authorization: the candidate is ad-hoc signed, unlike .224.
+# Only this disposable runner's dedicated keychain is changed, never login ACLs.
+echo 'STAGE authorize test binaries in isolated keychain'
+previous_keychain="$(security default-keychain -d user)"
+previous_keychain="${previous_keychain#*\"}"
+previous_keychain="${previous_keychain%\"*}"
+test_keychain="$root/rename-test.keychain-db"
+security create-keychain -p 'isolated-ci-fixture-only' "$test_keychain"
+cleanup_keychain() {
+  security default-keychain -d user -s "$previous_keychain"
+  security delete-keychain "$test_keychain"
+}
+trap cleanup_keychain EXIT
+security default-keychain -d user -s "$test_keychain"
+security unlock-keychain -p 'isolated-ci-fixture-only' "$test_keychain"
+security set-keychain-settings -lut 1800 "$test_keychain"
+# Pre-authorize before the old app writes generated test credentials. keyring
+# updates these existing entries in place, retaining their exact-app ACLs.
+for account in local-hub-bootstrap-password hub-profile-local-workspace; do
+  security add-generic-password -a "$account" -s top.vansin.agentnetwork.desktop \
+    -w 'replaced-by-published-smoke' -T "$installed/Contents/MacOS/agent-network-desktop" \
+    -T "$candidate/Contents/MacOS/agent-network-desktop" -T /usr/bin/security "$test_keychain"
+done
+credential_fingerprint() {
+  for account in local-hub-bootstrap-password hub-profile-local-workspace; do
+    security find-generic-password -a "$account" -s top.vansin.agentnetwork.desktop \
+      -w "$test_keychain" | shasum -a 256
+  done
+}
 export ANET_PACKAGED_SMOKE=1
 export ANET_PACKAGED_SMOKE_ROOT="$root/account-data"
 run_smoke() {
@@ -28,6 +57,7 @@ run_smoke() {
 }
 # Reuse the shipped native credential/local-Hub smoke, no production account.
 run_smoke published
+credentials_before="$(credential_fingerprint)"
 database="$ANET_PACKAGED_SMOKE_ROOT/local-hub/data/commhub.db"
 test -s "$database"
 users_before="$(sqlite3 "$database" 'SELECT user_id FROM users ORDER BY user_id;')"
@@ -43,7 +73,8 @@ test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$installed/Conte
 test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleName' "$installed/Contents/Info.plist")" = ANet
 test "$(find "$root/Applications" -maxdepth 1 -name '*.app' | wc -l | tr -d ' ')" = 1
 run_smoke candidate
+test "$(credential_fingerprint)" = "$credentials_before"
 test "$(sqlite3 "$database" 'SELECT user_id FROM users ORDER BY user_id;')" = "$users_before"
 test -s "$ANET_PACKAGED_SMOKE_ROOT/profiles/index.json"
-echo 'PASS published macOS .224 -> ANet: native bundle replaced, identity retained, local account usable, existing users retained'
+echo 'PASS published macOS .224 -> ANet: native bundle replaced, identity retained, local account usable, credentials and existing users retained (explicit test keychain authorization)'
 # All bundles/data are under the unique runner temp path; retained for diagnosis.

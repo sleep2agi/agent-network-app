@@ -63,3 +63,16 @@ Recovery: tauri.conf.json and the versioned installer templates remain the
 authoritative build inputs. No daemon, ports, proxy, secrets or data migration
 changes. Reverting this display-only change preserves the pinned installation
 identity; user data must still come from its normal backups, not Git.
+
+2026-10-09 03:27 CST: run 37829808574 / macOS job 113491912450 confirmed
+published .224 local-account smoke succeeds in 2 seconds; the ad-hoc candidate
+times out after 180 seconds. Failure screenshot shows a Keychain access
+authorization dialog for top.vansin.agentnetwork.desktop. This is not evidence
+of lost data. Windows job 113492150827 passed on the same e3e9cdf8 head.
+The fixture now uses a dedicated disposable keychain, pre-authorizing only
+the published/candidate executables and security for non-printing credential
+fingerprints. No allow-all ACL, login-keychain ACL change, production account
+or signing secret. Restore the prior default and delete this test keychain on
+exit. Compare both credential fingerprints and user IDs across replacement.
+This explicitly authorized ad-hoc test does NOT prove prompt-free production
+signing continuity; the formal main-SHA release still needs its signing gate.
