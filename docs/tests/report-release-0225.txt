@@ -1,0 +1,22 @@
+App 0.2.225 release preparation (board #779)
+
+Base: 2c9cce09b5dc1d71c655f5e599f9e2ffeee05af2 (origin/main).
+Included merged features: #762 ANet display names; #757 Agent teams.
+This PR changes version metadata and release notes only. No new feature code.
+Agent teams requires Hub 0.9.0-preview.116 or newer. Desktop installer
+product identity remains unchanged pending the separate migration (#778).
+
+Focused verification in a disposable Docker container, --cpus=2,
+--network=none, source mounted read-only, using the existing app release
+test image with its installed dependencies:
+  bun src/version-consistency.test.ts: 14 checks PASS
+  bun src/changelog-bundled.test.ts: 7/7 PASS
+  bun src/release-notes.test.ts: 35/35 PASS
+  bun src/release-notes-hygiene.test.ts: 8 PASS
+Combined exit code: 0. git diff --check: 0.
+Changelog regenerated with node scripts/changelog-bundle.mjs.
+Cargo.lock changes only the root desktop package version.
+
+This is preparation evidence, not a publication or real-device acceptance
+claim. Release workflows must build the merged exact main SHA; no branch
+artifact may be published. No production Hub or live node was modified.
