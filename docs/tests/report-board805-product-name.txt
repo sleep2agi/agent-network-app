@@ -30,6 +30,16 @@ node src/macos-bundle-path.test.ts: 9/9 (includes 3 rejected path mutations)
 Combined command rc=0. macOS path tests validate build script inputs, not
 native application upgrade. No unrelated full suite repeated locally.
 
+Native NSIS acceptance added to the existing Windows MSI workflow, sharing
+one compilation. Published .224 EXE digest pinned to GitHub asset SHA256
+4afe1a6242234da67755ee584497c88db5931df02ab91c4a29135c34eba3b9c4.
+The test covers default/custom paths, one registration, exact old shortcuts,
+installed binary, fixture-data retention and uninstall cleanup. No real
+credentials or production installations; no application /R auto-launch.
+Docker PowerShell parser and non-CI refusal check rc=0, --cpus=2 --network none;
+image mcr.microsoft.com/powershell@sha256:206a748b34deec1b64553fcfa92294fc871c2df5855e9f340df172756bef201f.
+Actual native NSIS installation result is pending CI, not inferred from syntax.
+
 Recovery: tauri.conf.json and the versioned installer templates remain the
 authoritative build inputs. No daemon, ports, proxy, secrets or data migration
 changes. Reverting this display-only change preserves the pinned installation
