@@ -40,3 +40,26 @@ live node, global npm package, release tag, or public artifact was changed.
 Formal artifacts must be rebuilt from the exact merged main SHA, through
 the signing/release gates in docs/desktop-release-sop.md. Existing installation
 identifiers and download compatibility must remain in that release.
+
+CI follow-up, head c9b782630444b60321fd94359a8ffb5bd91cacc5:
+Run 37836283931, shard 4, failed only the desktop changelog date-gap check.
+The artifact screenshot and geometry table show that BOTH preceding releases
+(0.2.226 and 0.2.225) had no bundled dates. The reported 72px was the current
+version's badge-inclusive gap, not a broken previous-version layout. The
+assertion had no dated older card to compare because preparation used --no-dates.
+Both older versions are actually published. Re-ran the existing generator
+with GitHub refresh; the only generated changes are their real published_at:
+  0.2.226: 2026-10-08T12:58:35Z
+  0.2.225: 2026-10-08T12:27:54Z
+No layout code or browser assertion changed. No date added for unreleased 0.2.227.
+Added tests/test-changelog/Dockerfile to reproduce the affected drive using
+a fresh export of this source and Playwright 1.58.2, not an edited CI artifact.
+
+Follow-up acceptance, Docker only:
+  sg docker -c 'docker build -f tests/test-changelog/Dockerfile -t anet-release227-changelog:test .'
+  sg docker -c 'docker run --rm --cpus=2 --network none --shm-size=256m anet-release227-changelog:test'
+Build rc=0; browser drive ALL PASS, rc=0 (desktop and phone).
+Desktop date gaps: current badge-inclusive 72px; both older cards 8px.
+Phone title-stack/copy centering: 0px delta for all three cards.
+Bundled changelog consistency rechecked in oven/bun:1.3.14, --cpus=2,
+--network none, source read-only: 7/7 PASS, rc=0.
