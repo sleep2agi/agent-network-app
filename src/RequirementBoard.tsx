@@ -18,7 +18,7 @@ import { taskText } from './i18n-tasks';
 //   · 换状态:桌面拖动(落点指示线)/ 右键菜单 / Shift+←→;手机长按菜单或详情里的状态,没有拖动
 // 数据仍是 Hub 的 requirements(GET / POST / PATCH),负责人只存稳定身份 {kind,id}(#484),assignee 永远空。
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { ActivityIndicator, Modal, Platform, Pressable, ScrollView, View, useWindowDimensions } from 'react-native';
+import { ActivityIndicator, Modal, Platform, Pressable, ScrollView, View, useWindowDimensions, type GestureResponderEvent } from 'react-native';
 import { Text, TextInput } from './ui-text';
 import { Ionicons } from './icons';
 import AliasAvatar from './AliasAvatar';
@@ -39,7 +39,7 @@ import { usePoll } from './usePoll';
 import { statusChoices, supportsAbandoned, isClosedColumn } from './requirement-columns';
 import { abandonedShown, hiddenAbandonedCount, applyFilter, EMPTY_FILTER, applyMove, boardColumns, createInput, DEFAULT_SORT, DRAG_IDLE, dragReduce, dropIndex, emptyDraft, activeProjects, defaultProjectFor, NO_PROJECT, projectCounts, filterActive, hasRoles, ownerFilterSections, roleKinds, localToday, addChecklistItem, moveChecklistItem, removeChecklistItem, setChecklistDone, neighbourColumn, nextSort, revertMove, sortRows, toggleIn, hidesDone, toggleHideDone, UNASSIGNED, quickFilterOn, toggleQuickFilter, type QuickFilter, type CreateDraft, type DragEvent, type DragState, type EditPatch, type SortKey, type SortSpec } from './task-board-model';
 import { applyChanges, checklistCounts, cursorAfterList, hasFullText, mergeListRows, needsFullText, planBoardRead, type BoardSyncState } from './board-sync';
-import { enterTaskScope, noteTagsUsed, patchTaskBoard, setManagingProjects, setManagingTags, setTaskFilter, setTaskSearch, setTaskSection, taskBoardState, taskScopeKey, updateTaskItems, useTaskBoard, type TaskSection } from './task-board-store';
+import { enterTaskScope, noteTagsUsed, patchTaskBoard, setManagingProjects, setManagingTags, setSideMenu, type ManagerOps, setTaskFilter, setTaskSearch, setTaskSection, taskBoardState, taskScopeKey, updateTaskItems, useTaskBoard, type TaskSection } from './task-board-store';
 import { recallBoard, rememberBoard } from './swr-cache';
 import { PRIORITY_CODE, priorityChoices, priorityLabel, supportsLowest } from './task-priority';
 import { BOARD_RADIUS, CONTROL_H, cardBg, CardActivityLine, CardMeta, ChecklistCompact, ChecklistProgress, Chip, QuickChip, ParticipantStack, ProjectChip, DueChip, OwnerBadge, PriorityDot, Segmented, STATUS_TONE, useTaskStyles, type TaskStyles, a11yState } from './TaskBoardParts';
@@ -52,7 +52,9 @@ import TaskSwipeRow from './TaskSwipeRow';
 import { quickMenuAccess, swipeActions, UNDO_MS, type QuickUndo, type SwipeAction } from './task-quick-status';
 import TaskProjectManager from './TaskProjectManager';
 import TaskTagManager from './TaskTagManager';
-import { applyTagOp, applyTagOpToCatalog, canManageTags, fetchTagCatalog, TagOpError, runTagOp } from './task-tag-catalog';
+import { applyTagOp, applyTagOpToCatalog, canManageTags, fetchTagCatalog, TagOpError, runTagOp, type TagOp } from './task-tag-catalog';
+import TaskSideItemMenu from './TaskSideItemMenu';
+import { canEditProject } from './task-side-menu';
 import { setDraggingCursor, useTaskCardDom } from './task-board-dom';
 import { boardLayout, pageAt } from './task-board-layout';
 import { ParentLine, ProjectSelect, projectOptions } from './TaskFieldPickers';
@@ -105,6 +107,13 @@ function ScopedRequirementBoard({ cfg, desktop, dispatch, onOpenVoiceSettings, s
   const projects = useTaskBoard(st => (st.scope === scope ? st.projects : null));
   const managingProjects = useTaskBoard(st => st.managingProjects);
   const managingTags = useTaskBoard(st => st.managingTags);
+  const managerFocus = useTaskBoard(st => st.managerFocus);
+  const managerOpsRef = useRef<ManagerOps | null>(null);
+  useEffect(() => {
+    if (single) return;
+    patchTaskBoard(scope, { managerOps: { updateProject: (id, patch) => managerOpsRef.current!.updateProject(id, patch), tagOp: op => managerOpsRef.current!.tagOp(op) } });
+    return () => patchTaskBoard(scope, { managerOps: null, sideMenu: null });
+  }, [scope, !!single]);
   const tagsCapable = useTaskBoard(st => st.scope === scope && st.capabilities.includes('tags'));
   const tagCatalog = useTaskBoard(st => (st.scope === scope ? st.tagCatalog : null));
   const tagOpsAllowed = useTaskBoard(st => st.scope === scope && canManageTags(st.capabilities, st.tagCatalog));
@@ -1408,6 +1417,37 @@ function ScopedRequirementBoard({ cfg, desktop, dispatch, onOpenVoiceSettings, s
       />
   );
 
+  // 「管理项目 / 管理标签」写 Hub 的那两个处理函数;左栏右键菜单(#760)经 store 走同一对(registerManagerOps)。
+  const updateProjectOp = async (id: string, patch: { name?: string; color?: string; archived?: boolean }): Promise<string | null> => {
+    try {
+      const updated = await updateProject(cfg, id, patch);
+      const st = taskBoardState();
+      patchTaskBoard(scope, { projects: (st.projects ?? []).map(p => (p.id === id ? updated : p)) });
+      // 归档了正在筛的项目:退回「全部项目」
+      if (updated.archived && st.filter.project === id) setTaskFilter({ ...st.filter, project: '' });
+      return null;
+    } catch (e) { return e instanceof Error ? e.message : tr('tasks.copy.59'); }
+  };
+  const tagOp = async (op: TagOp): Promise<string | null> => {
+    try {
+      await runTagOp(cfg, op);
+      // Hub 已经整网改好了:本地卡片和目录按同一条规则先改,下一轮轮询再对齐。
+      mutations.current++;
+      updateTaskItems(scope, list => list.map(it => { const next = it.tags ? applyTagOp(it.tags, op) : null; return next ? { ...it, tags: next } : it; }));
+      const st = taskBoardState();
+      if (st.tagCatalog) patchTaskBoard(scope, { tagCatalog: applyTagOpToCatalog(st.tagCatalog, op) });
+      // 正在筛的标签被改名 / 合并 / 删掉:筛选跟过去(删了就回到全部)。
+      const cur = st.filter.tag;
+      if (cur && op.op !== 'color' && (op.op === 'rename' ? op.from === cur : op.op === 'merge' ? op.from.includes(cur) : op.tag === cur)) setTaskFilter({ ...st.filter, tag: op.op === 'delete' ? '' : op.to });
+      void fetchTagCatalog(cfg).then(cat => { if (cat) patchTaskBoard(scope, { tagCatalog: cat }); }).catch(() => {});
+      return null;
+    } catch (e) {
+      if (e instanceof TagOpError && e.status === 404) void fetchTagCatalog(cfg).then(cat => { if (cat) patchTaskBoard(scope, { tagCatalog: cat }); }).catch(() => {});
+      return e instanceof TagOpError ? e.key : 'tags.opFailed';
+    }
+  };
+  managerOpsRef.current = { updateProject: updateProjectOp, tagOp };
+
   if (single) {
     return (
       <View style={{ flex: 1 }} testID="requirement-board-single" onLayout={e => setMeasured(e.nativeEvent.layout.width)}>
@@ -1452,41 +1492,20 @@ function ScopedRequirementBoard({ cfg, desktop, dispatch, onOpenVoiceSettings, s
               return null;
             } catch (e) { return e instanceof Error ? e.message : tr('tasks.copy.59'); }
           }}
-          onUpdate={async (id, patch) => {
-            try {
-              const updated = await updateProject(cfg, id, patch);
-              patchTaskBoard(scope, { projects: (projects ?? []).map(p => (p.id === id ? updated : p)) });
-              // 归档了正在筛的项目:退回「全部项目」
-              if (updated.archived && filter.project === id) setTaskFilter({ ...filter, project: '' });
-              return null;
-            } catch (e) { return e instanceof Error ? e.message : tr('tasks.copy.59'); }
-          }}
+          onUpdate={updateProjectOp}
+          focus={managerFocus}
           onClose={() => setManagingProjects(false)}
         />
       ) : null}
+      {/* 手机没有左栏:长按筛选里的项目 / 标签出同一份菜单(#760);桌面的菜单挂在左栏。 */}
+      {!desktop ? <TaskSideItemMenu /> : null}
       {tagCatalog && tagOpsAllowed ? (
         <TaskTagManager
           open={managingTags}
           sheet={!pointer && narrow}
           catalog={tagCatalog}
-          onOp={async op => {
-            try {
-              await runTagOp(cfg, op);
-              // Hub 已经整网改好了:本地卡片和目录按同一条规则先改,下一轮轮询再对齐。
-              mutations.current++;
-              updateTaskItems(scope, list => list.map(it => { const next = it.tags ? applyTagOp(it.tags, op) : null; return next ? { ...it, tags: next } : it; }));
-              const st = taskBoardState();
-              if (st.tagCatalog) patchTaskBoard(scope, { tagCatalog: applyTagOpToCatalog(st.tagCatalog, op) });
-              // 正在筛的标签被改名 / 合并 / 删掉:筛选跟过去(删了就回到全部)。
-              const cur = st.filter.tag;
-              if (cur && op.op !== 'color' && (op.op === 'rename' ? op.from === cur : op.op === 'merge' ? op.from.includes(cur) : op.tag === cur)) setTaskFilter({ ...st.filter, tag: op.op === 'delete' ? '' : op.to });
-              void fetchTagCatalog(cfg).then(cat => { if (cat) patchTaskBoard(scope, { tagCatalog: cat }); }).catch(() => {});
-              return null;
-            } catch (e) {
-              if (e instanceof TagOpError && e.status === 404) void fetchTagCatalog(cfg).then(cat => { if (cat) patchTaskBoard(scope, { tagCatalog: cat }); }).catch(() => {});
-              return e instanceof TagOpError ? e.key : 'tags.opFailed';
-            }
-          }}
+          onOp={tagOp}
+          focus={managerFocus}
           onClose={() => setManagingTags(false)}
         />
       ) : null}
@@ -1758,8 +1777,8 @@ function FilterMenu({ open, touch, owners, selectedOwners, priorities, selectedP
   const viewport = useWindowDimensions();
   const menuWidth = Math.min(260, viewport.width - safe.paddingLeft - safe.paddingRight - 16);
   const rowH = touch ? 44 : 36;
-  const row = (key: string, on: boolean, onPress: () => void, lead: ReactNode, label: string, count?: number) => (
-    <Pressable key={key} testID={`task-filter-opt-${key}`} accessibilityRole="checkbox" {...a11yState({ checked: on })} onPress={onPress}
+  const row = (key: string, on: boolean, onPress: () => void, lead: ReactNode, label: string, count?: number, onLongPress?: (e: GestureResponderEvent) => void) => (
+    <Pressable key={key} testID={`task-filter-opt-${key}`} accessibilityRole="checkbox" {...a11yState({ checked: on })} onPress={onPress} onLongPress={touch ? onLongPress : undefined}
       style={state => ({ height: rowH, flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: spacing.md, borderRadius: radius.item, backgroundColor: (state as { hovered?: boolean }).hovered || state.pressed ? colors.rowHover : 'transparent' })}>
       {lead}
       <Text style={{ flex: 1, color: colors.text, fontSize: 13 }} numberOfLines={1}>{label}</Text>
@@ -1779,6 +1798,8 @@ function FilterMenu({ open, touch, owners, selectedOwners, priorities, selectedP
                 p.id, selectedProject === p.id, () => { onPickProject(selectedProject === p.id ? '' : p.id); onClose(); },
                 p.color ? <View style={{ width: 10, height: 10, borderRadius: radius.pill, backgroundColor: p.color }} /> : <Ionicons name="remove-circle-outline" size={14} color={colors.textMuted} />,
                 p.name, projectCounts.get(p.id) ?? 0,
+                // 手机长按项目 → 项目菜单(#760);有没有菜单项由菜单自己按权限定。
+                touch && canEditProject(projects.find(x => x.id === p.id)) ? e => { onClose(); setSideMenu({ kind: 'project', key: p.id, x: e.nativeEvent.pageX, y: e.nativeEvent.pageY, touch: true }); } : undefined,
               ))
               : open.kind === 'owner'
               // 分段:「人」(我第一)/「Agent」/ 未分配(任务页审计 M8:人和节点混排、「我」沉底)。

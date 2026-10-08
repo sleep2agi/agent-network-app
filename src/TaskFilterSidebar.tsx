@@ -9,15 +9,17 @@ import './i18n-task-tags';
 // 最下面是「派发记录」(Hub 派给节点的任务)。按 Agent / 按节点只列有任务的,其余收进「更多节点」(可搜)——
 // owner 0.2.141 截图里这一栏是 ~300 个 0。
 // 左栏的每一项只是头部「负责人」筛选的快捷方式 —— 同一份状态(task-board-store),两边永远一致。
-import { useState, type ReactNode } from 'react';
-import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { Fragment, useEffect, useRef, useState, type ReactNode } from 'react';
+import { Platform, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { Text, TextInput } from './ui-text';
 import { Ionicons } from './icons';
 import AliasAvatar from './AliasAvatar';
 import { colors, radius, spacing, type as typeScale, weight } from './theme';
 import { personKey } from './requirement-people';
 import { abandonedShown, activeProjects, applyFilter, filterForScope, NO_PROJECT, projectCounts, scopeOf, splitByCount, type SidebarScope } from './task-board-model';
-import { setManagingProjects, setManagingTags, setTaskFilter, setTaskSection, useTaskBoard } from './task-board-store';
+import { setManagingProjects, setManagingTags, setSideMenu, setTaskFilter, setTaskSection, taskBoardState, useTaskBoard } from './task-board-store';
+import { commitSideRename, renameKey } from './task-side-menu';
+import TaskSideItemMenu from './TaskSideItemMenu';
 import { canManageTags, localTagCounts } from './task-tag-catalog';
 import { readTagsCollapsed, writeTagsCollapsed } from './task-sidebar-prefs';
 import { CONTROL_H, a11yState } from './TaskBoardParts';
@@ -38,6 +40,48 @@ export default function TaskFilterSidebar({ onNavigate }: { onNavigate?: () => v
   const tagCatalog = useTaskBoard(s => s.tagCatalog);
   const manageTags = useTaskBoard(s => canManageTags(s.capabilities, s.tagCatalog));
   const [tagsCollapsed, setTagsCollapsed] = useState(readTagsCollapsed);
+  // #760:右键项目 / 标签行 → 菜单(TaskSideItemMenu);「改名」把那一行变成输入框:回车存、Esc / 失焦取消。
+  const [editing, setEditing] = useState<{ kind: 'project' | 'tag'; key: string; draft: string; error: string; busy: boolean } | null>(null);
+  useEffect(() => {
+    const doc = (globalThis as any).document;
+    if (Platform.OS !== 'web' || !doc?.addEventListener) return;
+    // 捕获阶段拦(同会话行):WKWebView 在冒泡到 RN 之前就会弹自己的「重新载入」菜单。
+    const onContext = (e: any) => {
+      const v: string | null | undefined = e.target?.closest?.('[data-side-item]')?.getAttribute?.('data-side-item');
+      if (!v) return;
+      e.preventDefault?.();
+      e.stopPropagation?.();
+      setSideMenu({ kind: v[0] === 'p' ? 'project' : 'tag', key: v.slice(2), x: e.clientX ?? 0, y: e.clientY ?? 0, touch: false });
+    };
+    doc.addEventListener('contextmenu', onContext, true);
+    return () => doc.removeEventListener('contextmenu', onContext, true);
+  }, []);
+  const saving = useRef(false); // 存的时候失焦不算取消
+  // 不用 autoFocus:菜单(Modal)卸载时把焦点还给打开前的元素(passive effect),会先抢走焦点 = 失焦 = 取消。
+  // passive effect 里再聚焦,排在 Modal 的还焦点之后。
+  const renameInput = useRef<{ focus?: () => void } | null>(null);
+  useEffect(() => { if (editing) renameInput.current?.focus?.(); }, [editing?.kind, editing?.key]); // eslint-disable-line react-hooks/exhaustive-deps
+  const saveRename = async () => {
+    const ops = taskBoardState().managerOps;
+    if (!editing || saving.current || !ops) return;
+    saving.current = true;
+    setEditing({ ...editing, busy: true, error: '' });
+    const failed = await commitSideRename(editing.kind, editing.key, editing.draft, ops, projects ?? []);
+    saving.current = false;
+    setEditing(failed ? { ...editing, busy: false, error: failed.i18n ? tr(failed.error) : failed.error } : null);
+  };
+  /** 改名中:标签文字换成输入框(同一行、同一字号,左缘对齐原文字)。 */
+  const labelOrInput = (kind: 'project' | 'tag', key: string, label: ReactNode) => (editing?.kind === kind && editing.key === key ? (
+    <TextInput ref={renameInput as never} selectTextOnFocus blurOnSubmit={false} value={editing.draft} maxLength={kind === 'tag' ? 20 : 40} editable={!editing.busy}
+      onChangeText={draft => setEditing({ ...editing, draft, error: '' })}
+      onSubmitEditing={() => { void saveRename(); }}
+      onKeyPress={e => { if (renameKey(e.nativeEvent.key) === 'cancel') setEditing(null); }}
+      onBlur={() => { if (!saving.current) setEditing(null); }}
+      style={[styles.itemText, styles.rename, { color: colors.text, borderColor: editing.error ? colors.failed : colors.accent, backgroundColor: colors.inputBg }, { outlineStyle: 'none' } as object]}
+      testID={`task-side-rename-${key}`} accessibilityLabel={tr('tags.rename')} />
+  ) : label);
+  const renameError = (kind: 'project' | 'tag', key: string) => (editing?.kind === kind && editing.key === key && editing.error
+    ? <Text style={[styles.section, { color: colors.failed, paddingTop: 0 }]} accessibilityRole="alert" testID="task-side-rename-error">{editing.error}</Text> : null);
   const active = section === 'dispatch' ? null : scopeOf(filter.owners, meId, filter.participant);
   // 人 / 节点的数字按当前项目算(选了 TMAI,「我负责的」就是我在 TMAI 里的)。
   // 废弃(#724)跟着看板 / 列表:收起时不计,展开时计 —— 左栏数字和右边看到的张数一致。
@@ -63,11 +107,11 @@ export default function TaskFilterSidebar({ onNavigate }: { onNavigate?: () => v
     setTaskFilter({ ...filter, project: id });
     onNavigate?.();
   };
-  const projectRow = (id: string, label: string, lead: ReactNode, count: number) => {
+  const projectRow = (id: string, label: string, lead: ReactNode, count: number, menu = false) => {
     const on = section !== 'dispatch' && (filter.project || '') === id;
     return (
-      <Pressable
-        key={`p:${id || 'all'}`}
+      <Fragment key={`p:${id || 'all'}`}><Pressable
+        {...(menu ? { dataSet: { sideItem: `p:${id}` } } as object : {})}
         testID={`task-side-project-${id || 'all'}`}
         accessibilityRole="tab"
         accessibilityLabel={tr('tasks.copy.86', { v0: label })}
@@ -76,9 +120,10 @@ export default function TaskFilterSidebar({ onNavigate }: { onNavigate?: () => v
         style={state => [styles.item, ((state as { hovered?: boolean }).hovered || state.pressed) && { backgroundColor: colors.rowHover }, on && { backgroundColor: colors.rowActive }]}
       >
         <View style={styles.icon}>{lead}</View>
-        <Text style={[styles.itemText, { color: on ? colors.text : colors.textSecondary }, on && { fontWeight: weight.strong }]} numberOfLines={1}>{label}</Text>
+        {labelOrInput('project', id, <Text style={[styles.itemText, { color: on ? colors.text : colors.textSecondary }, on && { fontWeight: weight.strong }]} numberOfLines={1}>{label}</Text>)}
         <Text style={[styles.count, { color: colors.textMuted }]}>{count}</Text>
       </Pressable>
+      {menu ? renameError('project', id) : null}</Fragment>
     );
   };
   const dot = (color: string) => <View style={{ width: 10, height: 10, borderRadius: radius.pill, backgroundColor: color }} />;
@@ -92,8 +137,8 @@ export default function TaskFilterSidebar({ onNavigate }: { onNavigate?: () => v
   const tagRow = (tag: string, label: string, lead: ReactNode, count: number | null) => {
     const on = section !== 'dispatch' && (filter.tag || '') === tag;
     return (
-      <Pressable
-        key={`tag:${tag || 'all'}`}
+      <Fragment key={`tag:${tag || 'all'}`}><Pressable
+        {...(tag && manageTags ? { dataSet: { sideItem: `t:${tag}` } } as object : {})}
         testID={`task-filter-tag-${tag || 'all'}`}
         accessibilityRole="tab"
         accessibilityLabel={label}
@@ -102,9 +147,10 @@ export default function TaskFilterSidebar({ onNavigate }: { onNavigate?: () => v
         style={state => [styles.item, ((state as { hovered?: boolean }).hovered || state.pressed) && { backgroundColor: colors.rowHover }, on && { backgroundColor: colors.rowActive }]}
       >
         <View style={styles.icon}>{lead}</View>
-        <Text style={[styles.itemText, { color: on ? colors.text : colors.textSecondary }, on && { fontWeight: weight.strong }]} numberOfLines={1}>{label}</Text>
+        {labelOrInput('tag', tag, <Text style={[styles.itemText, { color: on ? colors.text : colors.textSecondary }, on && { fontWeight: weight.strong }]} numberOfLines={1}>{label}</Text>)}
         {count !== null ? <Text style={[styles.count, { color: colors.textMuted }]}>{count}</Text> : null}
       </Pressable>
+      {tag ? renameError('tag', tag) : null}</Fragment>
     );
   };
   const pick = (scope: SidebarScope) => {
@@ -161,7 +207,7 @@ export default function TaskFilterSidebar({ onNavigate }: { onNavigate?: () => v
             <View style={[styles.divider, { backgroundColor: colors.border }]} />
             <SectionHeader label={tr('tasks.copy.30')} testID="task-side-projects-header" />
             {projectRow('', tr('tasks.copy.191'), icon('folder-open-outline'), Array.from(pCounts.values()).reduce((a, b) => a + b, 0))}
-            {activeProjects(projects).map(p => projectRow(p.id, p.name, dot(p.color), pCounts.get(p.id) ?? 0))}
+            {activeProjects(projects).map(p => projectRow(p.id, p.name, dot(p.color), pCounts.get(p.id) ?? 0, p.canEdit !== false))}
             {(pCounts.get(NO_PROJECT) ?? 0) > 0 && activeProjects(projects).length ? projectRow(NO_PROJECT, tr('tasks.copy.31'), icon('remove-circle-outline'), pCounts.get(NO_PROJECT) ?? 0) : null}
             <Pressable accessibilityRole="button" onPress={() => setManagingProjects(true)} style={state => [styles.item, ((state as { hovered?: boolean }).hovered || state.pressed) && { backgroundColor: colors.rowHover }]} testID="task-side-manage-projects">
               <View style={styles.icon}>{icon('settings-outline')}</View>
@@ -197,6 +243,7 @@ export default function TaskFilterSidebar({ onNavigate }: { onNavigate?: () => v
         <View style={[styles.divider, { backgroundColor: colors.border }]} />
         {row('dispatch', tr('tasks.copy.28'), icon('paper-plane-outline'), null)}
       </ScrollView>
+      <TaskSideItemMenu onInlineRename={(kind, key) => setEditing({ kind, key, draft: kind === 'project' ? projects?.find(p => p.id === key)?.name ?? '' : key, error: '', busy: false })} />
     </View>
   );
 }
@@ -225,6 +272,8 @@ const makeSidebarStyles = () => StyleSheet.create({
   item: { height: 38, borderRadius: radius.item, paddingHorizontal: spacing.sm + 2, flexDirection: 'row', alignItems: 'center', gap: spacing.sm + 2 },
   icon: { width: 22, alignItems: 'center' },
   itemText: { flex: 1, fontSize: 13 },
+  // 改名框:去掉内边距 / 行高差,文字左缘、基线与原来的标签文字重合(drive 量 ±1)。
+  rename: { minWidth: 0, height: 26, paddingHorizontal: 0, paddingVertical: 0, borderWidth: 0, borderBottomWidth: 1 },
   count: { fontSize: typeScale.caption },
   section: { fontSize: typeScale.caption, paddingHorizontal: spacing.sm + 2, paddingTop: spacing.lg, paddingBottom: spacing.xs },
   // 组头:标签 / 项目同一个高度与内边距;第一组上边距更小(紧贴「视图」标题下)。

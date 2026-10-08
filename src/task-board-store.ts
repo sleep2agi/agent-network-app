@@ -2,13 +2,19 @@
 // 筛选、当前视图、看板读到的卡片要是同一份。按账号 + 网络分开:换网络就回到「全部」。
 import { useSyncExternalStore } from 'react';
 import type { Requirement, RequirementProject } from './requirements-model';
-import type { TagCatalog } from './task-tag-catalog';
+import type { TagCatalog, TagOp } from './task-tag-catalog';
 import type { RequirementPerson } from './requirement-people';
 import { EMPTY_FILTER, type BoardFilter } from './task-board-model';
 import { EMPTY_SEARCH, type TaskSearch } from './task-search';
 
 /** 列表 / 看板是需求池的两种看法;派发记录是 Hub 上派给节点的任务(原来的「列表」)。 */
 export type TaskSection = 'list' | 'board' | 'gantt' | 'calendar' | 'dashboard' | 'activity' | 'dispatch';
+
+export interface ManagerOps {
+  updateProject: (id: string, patch: { name?: string; color?: string; archived?: boolean }) => Promise<string | null>;
+  tagOp: (op: TagOp) => Promise<string | null>;
+}
+export interface SideMenuTarget { kind: 'project' | 'tag'; key: string; x: number; y: number; touch: boolean }
 
 export interface TaskBoardState {
   scope: string;
@@ -31,13 +37,19 @@ export interface TaskBoardState {
   managingTags: boolean;
   /** GET /api/requirements/tags 的结果(用量、颜色、能不能管);null = 还没读到或读失败。 */
   tagCatalog: TagCatalog | null;
+  /** 「管理项目 / 管理标签」用的那两个写 Hub 的处理函数(看板登记);左栏右键菜单走同一条路(#760)。 */
+  managerOps: ManagerOps | null;
+  /** 左栏 / 筛选行上打开的项目或标签菜单(#760)。 */
+  sideMenu: SideMenuTarget | null;
+  /** 从菜单「改名」打开管理对话框时,直接进那一项的改名(手机)。 */
+  managerFocus: string | null;
   loaded: boolean;
   /** Hub 给的列表不是整张表(有更老的没读回来):搜索要问服务端(capability search)。 */
   truncated: boolean;
 }
 
 const fresh = (scope: string, section: TaskSection = 'board'): TaskBoardState => ({
-  scope, section, filter: EMPTY_FILTER, search: EMPTY_SEARCH, items: [], people: [], meId: null, twoRoles: null, projects: null, capabilities: [], managingProjects: false, managingTags: false, tagCatalog: null, loaded: false, truncated: false,
+  scope, section, filter: EMPTY_FILTER, search: EMPTY_SEARCH, items: [], people: [], meId: null, twoRoles: null, projects: null, capabilities: [], managingProjects: false, managingTags: false, tagCatalog: null, managerOps: null, sideMenu: null, managerFocus: null, loaded: false, truncated: false,
 });
 
 let state: TaskBoardState = fresh('');
@@ -73,8 +85,9 @@ export function updateTaskItems(scope: string, fn: (items: Requirement[]) => Req
 }
 
 export const setTaskSection = (section: TaskSection) => { if (state.section !== section) { state = { ...state, section }; emit(); } };
-export const setManagingProjects = (on: boolean) => { if (state.managingProjects !== on) { state = { ...state, managingProjects: on }; emit(); } };
-export const setManagingTags = (on: boolean) => { if (state.managingTags !== on) { state = { ...state, managingTags: on }; emit(); } };
+export const setManagingProjects = (on: boolean, focus: string | null = null) => { if (state.managingProjects !== on || state.managerFocus !== focus) { state = { ...state, managingProjects: on, managerFocus: focus }; emit(); } };
+export const setManagingTags = (on: boolean, focus: string | null = null) => { if (state.managingTags !== on || state.managerFocus !== focus) { state = { ...state, managingTags: on, managerFocus: focus }; emit(); } };
+export const setSideMenu = (sideMenu: SideMenuTarget | null) => { if (state.sideMenu !== sideMenu) { state = { ...state, sideMenu }; emit(); } };
 /** 刚存上的标签记进目录(补全马上能选到;用量等下次读目录再对齐)。 */
 export const noteTagsUsed = (tags: readonly string[]) => {
   const cat = state.tagCatalog;
