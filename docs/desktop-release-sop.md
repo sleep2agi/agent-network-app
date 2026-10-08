@@ -511,10 +511,15 @@ should get with:
 
 ```bash
 gh workflow run modelscope-android-publish.yml --repo sleep2agi/agent-network-app \
-  --ref main -f run_id=<successful android-build run id on main>
+  --ref main -f run_id=<successful android-build run id on main> \
+  -f commit=<40-character release SHA>
 ```
 
-It refuses a run that is not `android-build`, not on `main` or not successful,
+It refuses a run that is not `android-build`, not on `main` or not successful.
+The required full `commit` must match that run's SHA; publication checks out
+that exact commit with full history and verifies HEAD and membership in main
+before downloading or uploading artifacts. Main may advance after the build;
+the release SHA remains fixed. It then
 checks the APK's `versionName`/`versionCode`/package with `aapt2`, refuses to move
 `android/latest/VERSION` backwards or to replace an existing `agent-network-<ver>.apk`
 with different bytes, uploads the APK (skipped when ModelScope already holds the

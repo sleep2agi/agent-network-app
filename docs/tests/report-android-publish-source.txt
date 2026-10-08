@@ -1,0 +1,25 @@
+Hub #810 / app Issue #778: Android publication exact-source checkout
+
+Base: 88e161e1c22af23285a826ed99652a380b8cfa06 (main, app 0.2.227).
+Finding: modelscope-android-publish checked source-run type/branch/success,
+but its publishing scripts and app metadata came from floating main checkout.
+The repository release policy requires an exact merged SHA.
+
+Change: require full commit input, compare it with source-run SHA before
+checkout, checkout that SHA with full history, verify HEAD and main ancestry
+before downloading or uploading. Keep APK, version, signing and upload logic
+unchanged. The source APK need not be rebuilt. SOP invocation updated.
+
+Docker acceptance (2026-10-09, CST):
+  sg docker -c 'docker build -f tests/android-publish-source/Dockerfile -t anet-android-publish810:test .'
+  sg docker -c 'docker run --rm --cpus=2 --network none anet-android-publish810:test'
+Build rc=0; focused assertions 10/10 PASS, rc=0.
+Executes the actual workflow shell gate in temporary Git repositories:
+- exact current main accepted;
+- exact older release ancestor accepted after main advances;
+- short SHA, mismatched checkout and unmerged commit rejected;
+- removing the ancestry command admits the unmerged fixture, demonstrating
+  the rejection assertion detects that mutation.
+Source-contract assertions cover required input, run-SHA comparison, pinned
+checkout/full history and gate ordering before artifact download.
+No unrelated local suite, production mutation, APK rebuild or publication.

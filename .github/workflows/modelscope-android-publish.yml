@@ -10,7 +10,7 @@
 # now reads android/latest/VERSION as well (src/android-update-core.ts header has the layout), and this
 # workflow is the only thing that should write it.
 #
-#   gh workflow run modelscope-android-publish.yml --repo sleep2agi/agent-network-app --ref main -f run_id=<android-build run id>
+#   gh workflow run modelscope-android-publish.yml --repo sleep2agi/agent-network-app --ref main -f run_id=<android-build run id> -f commit=<40-character release SHA>
 #
 # Layout, verification and the release step are in docs/desktop-release-sop.md section 10.
 name: modelscope android publish
@@ -18,6 +18,10 @@ name: modelscope android publish
 on:
   workflow_dispatch:
     inputs:
+      commit:
+        description: 'Exact 40-character main commit used by the source build'
+        required: true
+        type: string
       run_id:
         description: 'android-build run id whose APK artifact to publish (must be a successful run on main)'
         required: true
@@ -47,14 +51,14 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
-      - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4.3.0
-
       - name: Check the source run (android-build, success, main)
         env:
           GH_TOKEN: ${{ github.token }}
           RUN_ID: ${{ inputs.run_id }}
+          REQUESTED_COMMIT: ${{ inputs.commit }}
         run: |
           set -euo pipefail
+          if ! [[ "$REQUESTED_COMMIT" =~ ^[0-9a-f]{40}$ ]]; then echo "::error::commit must be a full 40-character SHA"; exit 1; fi
           if ! [[ "$RUN_ID" =~ ^[0-9]+$ ]]; then echo "::error::run_id must be numeric"; exit 1; fi
           run=$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$RUN_ID")
           path=$(jq -r .path <<<"$run"); branch=$(jq -r .head_branch <<<"$run"); conclusion=$(jq -r .conclusion <<<"$run"); sha=$(jq -r .head_sha <<<"$run")
@@ -62,7 +66,23 @@ jobs:
           if [ "$path" != ".github/workflows/android-build.yml" ]; then echo "::error::run $RUN_ID is not an android-build run ($path)"; exit 1; fi
           if [ "$branch" != "main" ]; then echo "::error::run $RUN_ID was built from '$branch', only main may be published"; exit 1; fi
           if [ "$conclusion" != "success" ]; then echo "::error::run $RUN_ID concluded '$conclusion'"; exit 1; fi
+          if [ "$sha" != "$REQUESTED_COMMIT" ]; then echo "::error::source run SHA does not match requested commit"; exit 1; fi
           echo "SOURCE_SHA=$sha" >> "$GITHUB_ENV"
+
+      - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4.3.0
+        with:
+          ref: ${{ inputs.commit }}
+          fetch-depth: 0
+
+      - name: Require exact merged commit
+        env:
+          REQUESTED_COMMIT: ${{ inputs.commit }}
+        run: |
+          set -euo pipefail
+          resolved="$(git rev-parse HEAD)"
+          [[ "$REQUESTED_COMMIT" =~ ^[0-9a-f]{40}$ && "$resolved" == "$REQUESTED_COMMIT" ]]
+          git fetch origin main
+          git merge-base --is-ancestor "$resolved" origin/main
 
       - name: Download the APK artifact
         env:
@@ -101,7 +121,6 @@ jobs:
         run: |
           set -euo pipefail
           if ! [[ "$SOURCE_SHA" =~ ^[0-9a-f]{40}$ ]]; then echo "::error::bad source sha '$SOURCE_SHA'"; exit 1; fi
-          git fetch --no-tags --depth=1 origin "$SOURCE_SHA"
           git show "$SOURCE_SHA:.github/workflows/release-desktop-auto-update.yml" > "$RUNNER_TEMP/release-workflow.yml"
           node scripts/android-release-notes.mjs "$RUNNER_TEMP/release-workflow.yml" "$VERSION" > "$RUNNER_TEMP/notes.md"
           echo "NOTES=$RUNNER_TEMP/notes.md" >> "$GITHUB_ENV"
