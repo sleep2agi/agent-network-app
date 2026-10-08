@@ -21,3 +21,11 @@ This is preparation, not publication or real-device acceptance. Formal artifacts
 must be built from the exact merged main SHA. Android and desktop status are
 tracked separately; desktop 0.2.225 signing approval does not mean 0.2.226 shipped.
 No production Hub or live node changed.
+
+CI follow-up: changelog drive waited for the previous version's date on phone.
+The preceding desktop release was still a draft, so its bundled date was
+unknown and the phone correctly omitted it. The drive now measures the title
+alone for undated entries and retains date alignment checks for dated entries.
+No release date is invented and no product code changed.
+Re-exported this source and ran only test-changelog in the existing Docker image
+with --cpus=2 --network none: 71 PASS, ALL PASS, rc=0 (desktop and phone).
