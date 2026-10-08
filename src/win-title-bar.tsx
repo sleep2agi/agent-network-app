@@ -147,7 +147,7 @@ export default function WinTitleBar() {
         {...({ dataSet: { tauriDragRegion: '' } } as any)}
         style={{ flex: 1, paddingLeft: 12, color: colors.textSecondary, fontSize: 12 }}
       >
-        Agent Network
+        ANet
       </Text>
       <WindowControls />
     </View>

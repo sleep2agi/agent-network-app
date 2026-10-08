@@ -49,9 +49,9 @@ console.log('desktop chat menu: 15 checks passed');
   assert.notEqual(workspaceWindowLabel('p-1'), chatWindowLabel('p-1'));
   // 标题:账号 · Hub 主机 · Agent Network;displayName 优先,其次 username;serverUrl 不是 URL 时原样。
   // #649:标题里的主机打码(标题出现在 Dock / 任务栏 / 录屏)。
-  assert.equal(workspaceWindowTitle({ displayName: 'Vincent', username: 'admin', serverUrl: 'http://hub.example.com:9300' }), 'Vincent · h.e****.com:9300 · Agent Network');
-  assert.equal(workspaceWindowTitle({ username: 'local-admin', serverUrl: 'http://127.0.0.1:9201' }), 'local-admin · 127.***.***.1:9201 · Agent Network');
-  assert.equal(workspaceWindowTitle({ serverUrl: 'not a url' }), 'Hub 账号 · n**** · Agent Network');
+  assert.equal(workspaceWindowTitle({ displayName: 'Vincent', username: 'admin', serverUrl: 'http://hub.example.com:9300' }), 'Vincent · h.e****.com:9300 · ANet');
+  assert.equal(workspaceWindowTitle({ username: 'local-admin', serverUrl: 'http://127.0.0.1:9201' }), 'local-admin · 127.***.***.1:9201 · ANet');
+  assert.equal(workspaceWindowTitle({ serverUrl: 'not a url' }), 'Hub 账号 · n**** · ANet');
   // 非 Tauri 环境是 no-op,不能抛。
   await openWorkspaceWindow({ profileId: 'p-1', serverUrl: 'http://x' });
   console.log('desktop chat menu: workspace window checks passed');

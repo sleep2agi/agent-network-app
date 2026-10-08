@@ -176,17 +176,17 @@ const openChangelog = async (page, phone) => {
 // 小红书 shape for one version: title, hashtags at the end, no `- ` lines, at least one item line, and every item on
 // its own line with the emoji of ITS kind (not 「a ✨ line somewhere」).
 const ITEM_LINE = /^(✨|⚡️|🔧) /mu;
-const xhsShapeOk = (t, kinds) => t.startsWith(`Agent Network ${APP_VERSION} 更新了什么\n`) && /\n#\S+( #\S+){2,4}$/.test(t)
+const xhsShapeOk = (t, kinds) => t.startsWith(`ANet ${APP_VERSION} 更新了什么\n`) && /\n#\S+( #\S+){2,4}$/.test(t)
   && !/^- /m.test(t) && ITEM_LINE.test(t)
   && kinds.every(k => t.split('\n').includes(`${KIND_ITEMS[k].emoji} ${KIND_ITEMS[k].text}`))
   && Object.keys(KIND_ITEMS).filter(k => !kinds.includes(k)).every(k => !t.includes(KIND_ITEMS[k].text));
 // The assertion this replaces (kept only to witness it red on a speed-only release).
-const xhsOldAssertion = t => t.startsWith(`Agent Network ${APP_VERSION} 更新了什么\n`) && /\n#\S+( #\S+){2,4}$/.test(t) && !/^- /m.test(t) && /^✨ /m.test(t);
+const xhsOldAssertion = t => t.startsWith(`ANet ${APP_VERSION} 更新了什么\n`) && /\n#\S+( #\S+){2,4}$/.test(t) && !/^- /m.test(t) && /^✨ /m.test(t);
 
 const FORMATS = [
   ['xhs', t => xhsShapeOk(t, KIND_CASES.mixed)],
-  ['wechat', t => t.startsWith(`Agent Network ${APP_VERSION} 更新说明\n`) && /^1\. /m.test(t) && t.includes('共带来')],
-  ['plain', t => t.startsWith(`Agent Network v${APP_VERSION}（`) && /^- /m.test(t) && !/#AI工具/.test(t)],
+  ['wechat', t => t.startsWith(`ANet ${APP_VERSION} 更新说明\n`) && /^1\. /m.test(t) && t.includes('共带来')],
+  ['plain', t => t.startsWith(`ANet v${APP_VERSION}（`) && /^- /m.test(t) && !/#AI工具/.test(t)],
 ];
 
 async function run({ phone }) {
@@ -300,7 +300,7 @@ async function run({ phone }) {
   await page.locator(tid('changelog-preview')).waitFor({ timeout: 5000 });
   await page.waitForTimeout(400);
   const multi = await page.locator(tid('changelog-preview-text')).innerText();
-  ck(`${vp}: multi preview covers both, newest first`, multi.startsWith(`Agent Network ${PREV2}–${PREV} 更新了什么`) && multi.indexOf(`📦 v${PREV}`) < multi.indexOf(`📦 v${PREV2}`) && multi.indexOf(`📦 v${PREV2}`) > 0, JSON.stringify(multi.slice(0, 80)));
+  ck(`${vp}: multi preview covers both, newest first`, multi.startsWith(`ANet ${PREV2}–${PREV} 更新了什么`) && multi.indexOf(`📦 v${PREV}`) < multi.indexOf(`📦 v${PREV2}`) && multi.indexOf(`📦 v${PREV2}`) > 0, JSON.stringify(multi.slice(0, 80)));
   if (OUT) await page.screenshot({ path: `${OUT}/${tag}-preview-multi.png` });
   await ctx.close();
 

@@ -155,7 +155,7 @@ export interface CopyException {
  */
 export const COPY_EXCEPTIONS: readonly CopyException[] = [
   { file: 'src/agent-row-menu.ts', text: "ROW_MENU_EMPTY_HINT = '长按列表里的 agent", why: '只在安卓双栏的空白右栏显示(App.tsx twoPaneSelection 分支);桌面空白页有自己的文案' },
-  { file: 'src/xiaomi-guide.ts', text: '长按 Agent Network 的卡片', why: '小米 / HyperOS 后台指引:设置里只在 android 平台出现(settings-model platforms)' },
+  { file: 'src/xiaomi-guide.ts', text: '长按 ANet 的卡片', why: '小米 / HyperOS 后台指引:设置里只在 android 平台出现(settings-model platforms)' },
   { file: 'src/voice-input-model.ts', text: "default: return '按住 说话';", why: '「按住 说话」大条只在手机 / 双栏的语音模式输入行(VoiceHoldBar)' },
   { file: 'src/i18n-chat.ts', text: "'voice.switchVoice':", why: 'Translated ComposerModeToggle, only in phone/two-pane composer' },
   { file: 'src/i18n-chat.ts', text: "'voice.holdInsertHint':", why: 'Translated VoiceHoldBar accessibility hint, only in phone/two-pane composer' },

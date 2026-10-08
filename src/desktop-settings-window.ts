@@ -84,7 +84,7 @@ export async function openSettingsWindow(category?: string | null, detail?: Sett
   }
   new WebviewWindow(SETTINGS_WINDOW_LABEL, {
     url: settingsWindowUrl(known, detail),
-    title: '设置 · Agent Network',
+    title: '设置 · ANet',
     width: 960,
     height: 720,
     minWidth: 720,

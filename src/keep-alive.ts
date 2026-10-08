@@ -50,7 +50,7 @@ export function startKeepAlive(): string | null {
   if (!keepAliveAvailable()) { lastError = '当前安装包不支持(需要 0.2.107 或更新的安卓版)'; emit(); return lastError; }
   if (keepAliveRunning()) return null;
   let error: string | null = null;
-  try { error = AnetKeepAlive!.start('Agent Network', KEEPALIVE_NOTIFICATION_TEXT); } catch (e) { error = String(e); }
+  try { error = AnetKeepAlive!.start('ANet', KEEPALIVE_NOTIFICATION_TEXT); } catch (e) { error = String(e); }
   lastError = error;
   emit();
   return error;

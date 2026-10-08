@@ -90,7 +90,7 @@ const one = [entries[0]];
 {
   const x = formatChangelog(one, 'xhs', CST);
   const lines = x.split('\n');
-  ck('xhs: title line', lines[0] === 'Agent Network 0.2.165 更新了什么', lines[0]);
+  ck('xhs: title line', lines[0] === 'ANet 0.2.165 更新了什么', lines[0]);
   ck('xhs: emoji bullets', lines.includes('✨ 任务仪表盘：任务页新增「仪表盘」') && lines.includes('🔧 在设置窗口里改了快捷键或发送键，主窗口马上生效，不用重启。'), x);
   ck('xhs: 「；」 split into short lines', lines.includes('· 「最近完成」时间线列出刚完成的任务。'));
   ck('xhs: mid-item 「。」 splits too', formatChangelog([{ version: '0.2.1', sections: [{ kind: 'new', title: '新功能', items: [{ kind: 'new', text: '甲。乙（丙）。' }] }] }], 'xhs').includes('✨ 甲。\n· 乙（丙）。'));
@@ -99,28 +99,28 @@ const one = [entries[0]];
   ck('xhs: 3–5 hashtags on the last line', tags.length >= 3 && tags.length <= 5 && tags.every(s => s.startsWith('#')) && tags.includes('#AI工具') && tags.includes('#效率'), lines[lines.length - 1]);
   ck('xhs: no markdown dashes', !/^- /m.test(x));
   const multi = formatChangelog([entries[2], entries[0]], 'xhs', CST);
-  ck('xhs multi: range title, newest first regardless of pick order', multi.startsWith('Agent Network 0.2.162–0.2.165 更新了什么'));
+  ck('xhs multi: range title, newest first regardless of pick order', multi.startsWith('ANet 0.2.162–0.2.165 更新了什么'));
   ck('xhs multi: per-version header with date', multi.indexOf('📦 v0.2.165（2026-09-30）') > 0 && multi.indexOf('📦 v0.2.165') < multi.indexOf('📦 v0.2.162'));
   ck('xhs: tags constant is 3–5', XHS_TAGS.length >= 3 && XHS_TAGS.length <= 5);
 }
 {
   const w = formatChangelog(one, 'wechat', CST);
   const lines = w.split('\n');
-  ck('wechat: title', lines[0] === 'Agent Network 0.2.165 更新说明', lines[0]);
-  ck('wechat: intro paragraph with counts + date', lines[2] === 'Agent Network v0.2.165（2026-09-30 发布）共带来 2 项更新：新功能 1 项、修复 1 项。', lines[2]);
+  ck('wechat: title', lines[0] === 'ANet 0.2.165 更新说明', lines[0]);
+  ck('wechat: intro paragraph with counts + date', lines[2] === 'ANet v0.2.165（2026-09-30 发布）共带来 2 项更新：新功能 1 项、修复 1 项。', lines[2]);
   ck('wechat: numbered list per section', lines.includes('新功能') && lines.includes('1. 任务仪表盘：任务页新增「仪表盘」；「最近完成」时间线列出刚完成的任务。') && lines.includes('修复'));
   ck('wechat: closing paragraph', lines[lines.length - 1].startsWith('欢迎升级'));
   const m = formatChangelog(entries, 'wechat', CST).split('\n');
   ck('wechat multi: 一、二、三 per version', m.includes('一、v0.2.165（2026-09-30）') && m.includes('二、v0.2.164（2026-09-30）') && m.includes('三、v0.2.162（2026-09-30）'));
   ck('wechat multi: numbering restarts per section', m.filter(l => l.startsWith('1. ')).length === 5, String(m.filter(l => l.startsWith('1. ')).length));
-  ck('wechat multi: intro says 3 versions', m[2].startsWith('Agent Network 最近 3 个版本共带来 5 项更新'), m[2]);
+  ck('wechat multi: intro says 3 versions', m[2].startsWith('ANet 最近 3 个版本共带来 5 项更新'), m[2]);
 }
 {
   const s = formatChangelog(one, 'plain', CST);
-  ck('plain: exact text', s === 'Agent Network v0.2.165（2026-09-30）\n新功能：\n- 任务仪表盘：任务页新增「仪表盘」；「最近完成」时间线列出刚完成的任务。\n修复：\n- 在设置窗口里改了快捷键或发送键，主窗口马上生效，不用重启。', JSON.stringify(s));
+  ck('plain: exact text', s === 'ANet v0.2.165（2026-09-30）\n新功能：\n- 任务仪表盘：任务页新增「仪表盘」；「最近完成」时间线列出刚完成的任务。\n修复：\n- 在设置窗口里改了快捷键或发送键，主窗口马上生效，不用重启。', JSON.stringify(s));
   ck('plain: no emoji, no hashtags', !/[✨🔧🆕#]/u.test(formatChangelog(entries, 'plain', CST)));
   const noDate = formatChangelog([{ ...entries[0], date: undefined }], 'plain', CST);
-  ck('plain: no date → no empty brackets', noDate.startsWith('Agent Network v0.2.165\n'), noDate.split('\n')[0]);
+  ck('plain: no date → no empty brackets', noDate.startsWith('ANet v0.2.165\n'), noDate.split('\n')[0]);
 }
 ck('format: nothing selected → empty', formatChangelog([], 'xhs') === '' && formatChangelog([{ version: '0.2.1', sections: [] }], 'plain') === '');
 

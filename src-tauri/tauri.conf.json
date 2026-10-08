@@ -9,7 +9,7 @@
   "app": {
     "windows": [
       {
-        "title": "Agent Network",
+        "title": "ANet",
         "width": 1200,
         "height": 800,
         "minWidth": 420,

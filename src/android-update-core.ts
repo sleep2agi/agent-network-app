@@ -353,7 +353,7 @@ export function downloadErrorReason(message: string | null | undefined): string 
 
 /** 装不上时的说明:放进弹窗里,用户读得懂、知道点哪里。 */
 export const INSTALL_PERMISSION_HINT =
-  '如果系统提示「禁止安装未知来源的应用」:点下面的「去设置允许安装」,把 Agent Network 的「允许来自此来源的应用」打开,返回后点「重新安装」。\n' +
+  '如果系统提示「禁止安装未知来源的应用」:点下面的「去设置允许安装」,把 ANet 的「允许来自此来源的应用」打开,返回后点「重新安装」。\n' +
   '小米 / 红米(MIUI、HyperOS)还可能弹出「安全守护」或「纯净模式」拦截:选择「继续安装」,或在 设置 → 应用设置 → 纯净模式 里暂时关闭。';
 
 /** `package:<id>` —— MANAGE_UNKNOWN_APP_SOURCES 直达本应用那一页。 */

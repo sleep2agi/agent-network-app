@@ -4,7 +4,7 @@ const app = fs.readFileSync(new URL('../App.tsx', import.meta.url), 'utf8');
 
 const checks: Array<[string, boolean]> = [
   ['first run and login share one entry surface, without decorative glows (Vincent 2026-09-14: 简洁)', (app.match(/makeEntryStyles/g) || []).length >= 3 && !app.includes('entryStyles.glow')],
-  ['first run is one logo + one title + one line of copy, no benefits block or eyebrow', app.includes('<Text style={entryStyles.title}>Agent Network</Text>') && !app.includes('开箱即用') && !app.includes('YOUR AI WORKSPACE')],
+  ['first run is one logo + one title + one line of copy, no benefits block or eyebrow', app.includes('<Text style={entryStyles.title}>ANet</Text>') && !app.includes('开箱即用') && !app.includes('YOUR AI WORKSPACE')],
   ['remote login remains a distinct secondary action', app.includes('使用已有服务器登录') && app.includes('globe-outline')],
   ['login uses visible labels instead of placeholder-only fields', app.includes('<Text style={loginStyles.label}>服务器地址</Text>') && app.includes('<Text style={loginStyles.label}>用户名</Text>') && app.includes('<Text style={loginStyles.label}>密码</Text>')],
   ['password visibility control is accessible', app.includes("accessibilityLabel={passwordVisible ? '隐藏密码' : '显示密码'}") && app.includes('secureTextEntry={!passwordVisible}')],

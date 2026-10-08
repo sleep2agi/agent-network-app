@@ -40,8 +40,8 @@ class AnetKeepAliveService : HeadlessJsTaskService() {
   }
 
   override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-    val title = intent?.getStringExtra(EXTRA_TITLE) ?: "Agent Network"
-    val text = intent?.getStringExtra(EXTRA_TEXT) ?: "Agent Network 正在保持连接"
+    val title = intent?.getStringExtra(EXTRA_TITLE) ?: "ANet"
+    val text = intent?.getStringExtra(EXTRA_TEXT) ?: "ANet 正在保持连接"
     createChannel()
     val type = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
       ServiceInfo.FOREGROUND_SERVICE_TYPE_REMOTE_MESSAGING

@@ -55,7 +55,7 @@ pub fn title_arg(total: u32) -> Option<String> {
 }
 
 pub fn tooltip_for(total: u32) -> String {
-    if total == 0 { "Agent Network".to_string() } else { format!("Agent Network · {total} 条未读") }
+    if total == 0 { "ANet".to_string() } else { format!("ANet · {total} 条未读") }
 }
 
 /// 按未读数降序、忽略 0。前端已经排好序,这里再守一次。
@@ -149,7 +149,7 @@ fn build_menu<R: Runtime>(app: &AppHandle<R>, items: &[TrayItem]) -> tauri::Resu
         }
     }
     menu.append(&PredefinedMenuItem::separator(app)?)?;
-    menu.append(&MenuItem::with_id(app, MENU_OPEN, "打开 Agent Network", true, None::<&str>)?)?;
+    menu.append(&MenuItem::with_id(app, MENU_OPEN, "打开 ANet", true, None::<&str>)?)?;
     menu.append(&MenuItem::with_id(app, MENU_QUIT, "退出", true, None::<&str>)?)?;
     Ok(menu)
 }
@@ -173,7 +173,7 @@ fn panel_window<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<tauri::WebviewW
         PANEL_LABEL,
         tauri::WebviewUrl::App("index.html?tray=1".into()),
     )
-    .title("Agent Network")
+    .title("ANet")
     .inner_size(PANEL_W, PANEL_H)
     .resizable(false)
     .decorations(false)
@@ -348,8 +348,8 @@ mod tests {
         assert_eq!(item_label(&TrayItem { alias: "通信龙".into(), count: 3 }), "3  通信龙");
         assert_eq!(title_for(0), "");
         assert_eq!(title_for(40), "40");
-        assert_eq!(tooltip_for(0), "Agent Network");
-        assert_eq!(tooltip_for(2), "Agent Network · 2 条未读");
+        assert_eq!(tooltip_for(0), "ANet");
+        assert_eq!(tooltip_for(2), "ANet · 2 条未读");
     }
 
     #[test]

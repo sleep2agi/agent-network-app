@@ -63,7 +63,7 @@ export async function openChatWindow(alias: string, profileId?: string, context?
   }
   new WebviewWindow(label, {
     url: chatWindowUrl(alias, profileId),
-    title: `${alias}${context ? ` · ${context}` : ''} · Agent Network`,
+    title: `${alias}${context ? ` · ${context}` : ''} · ANet`,
     width: 760,
     height: 720,
     minWidth: 480,
@@ -102,12 +102,12 @@ export function requestedWorkspaceProfileId(search = typeof location === 'undefi
   return profileId || null;
 }
 
-/** 窗口标题:「账号 · Hub 主机 · Agent Network」,让两个窗口在 Dock / 任务栏里一眼分得开。 */
+/** 窗口标题:「账号 · Hub 主机 · ANet」,让两个窗口在 Dock / 任务栏里一眼分得开。 */
 export function workspaceWindowTitle(profile: { displayName?: string; username?: string; serverUrl: string }): string {
   const who = profile.displayName?.trim() || profile.username?.trim() || 'Hub 账号';
   // #649:窗口标题会出现在 Dock / 任务栏 / 录屏里,主机打码。
   const host = maskedHubHost(profile.serverUrl);
-  return `${who} · ${host} · Agent Network`;
+  return `${who} · ${host} · ANet`;
 }
 
 export async function openWorkspaceWindow(profile: { profileId: string; displayName?: string; username?: string; serverUrl: string }): Promise<void> {
