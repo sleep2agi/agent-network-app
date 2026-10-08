@@ -75,9 +75,10 @@ jobs:
 
       - name: Stage artifacts
         run: |
+          product_name="$(node -p "require('./src-tauri/tauri.conf.json').productName")"
           mkdir -p out
           cp src-tauri/target/release/bundle/dmg/*.dmg out/ || true
-          ditto -c -k --keepParent "src-tauri/target/release/bundle/macos/Agent Network.app" out/AgentNetwork-tauri-arm64-mac.zip
+          ditto -c -k --keepParent "src-tauri/target/release/bundle/macos/${product_name}.app" out/AgentNetwork-tauri-arm64-mac.zip
           oversized="$(find out -type f -size +55M -print)"
           if [ -n "$oversized" ]; then
             echo "::error::Desktop artifact exceeds the 55 MiB distribution ceiling"
