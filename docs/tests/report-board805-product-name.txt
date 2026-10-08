@@ -18,7 +18,7 @@ not substitute for published-client upgrade on a native Windows runner.
 macOS app#774 main native build succeeded before the final name switch;
 it is not evidence of a renamed app replacing an installed previous version.
 
-Remaining acceptance boundary:
+Initial acceptance boundary (before the native runs recorded below):
 Published-client native NSIS/macOS upgrade and real account continuity are
 still pending. Keep draft until the stated scope is verified; do not describe
 this candidate as published. No Linux path simulation is native acceptance.
@@ -76,3 +76,18 @@ or signing secret. Restore the prior default and delete this test keychain on
 exit. Compare both credential fingerprints and user IDs across replacement.
 This explicitly authorized ad-hoc test does NOT prove prompt-free production
 signing continuity; the formal main-SHA release still needs its signing gate.
+
+Native result on tested source head 543eb2a03653759cdcadb06f7205d785e87f3282:
+run 37832134091, macOS job 113499874896 completed success. Published .224
+local-account smoke passed 2026-10-08T19:34:43Z-19:34:45Z; candidate smoke
+passed 19:34:45Z-19:34:47Z. Native bundle/name/identity assertions, local
+authentication/API/restart, exact existing users and both credential
+fingerprints all passed. Test authorization boundary above still applies.
+Docker Bash syntax and non-CI refusal checks for this fixture also returned 0.
+The same run's native Windows job 113500367662 completed success: published
+.224 MSI default/custom-path upgrades passed 19:39:36Z-19:39:50Z, followed by
+NSIS default/custom-path upgrades at 19:39:50Z-19:40:13Z. All four retain the
+installation directory, one uninstall registration, migrated shortcuts and
+fixture data. This is installation/data acceptance, not Windows account-login
+acceptance. The final follow-up changes only this report; tested application,
+installer templates, fixtures and workflow bytes remain unchanged.
