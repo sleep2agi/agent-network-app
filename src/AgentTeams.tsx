@@ -2,7 +2,8 @@
 // 桌面:左边团队树(最后一行「未分组」),右边选中团队的 Agent(负责的 Agent 标「负责」)、负责人、子团队;按钮在详情里,选择都是居中弹窗。
 // 手机:全屏逐层点进(团队 → 子团队 / Agent),点 Agent 或「更多」弹底部面板,选择推整页 —— 和桌面是两套交互。
 // 只画看的人能做的事(teamPerms);Hub 拒了照 agent-teams.ts 的一句人话说。旧 Hub 不走到这里(UserManagementPanel 只放一行提示)。
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useTranslation } from './i18n-react';
 import { Modal, Platform, Pressable, ScrollView, View } from 'react-native';
 import { Text, TextInput } from './ui-text';
 import { Ionicons } from './icons';
@@ -26,12 +27,26 @@ type Props = { cfg: HubConfig; networkId: string; me: AuthMe | null | undefined;
 export function useAgentTeams(cfg: HubConfig, networkId: string) {
   const [teams, setTeams] = useState<AgentTeam[] | null | undefined>(undefined);
   const [nodes, setNodes] = useState<TeamNode[]>([]);
+  const [loadError, setLoadError] = useState(false);
+  const request = useRef(0);
   const reload = useCallback(() => {
-    void fetchAgentTeams(cfg, networkId).then(setTeams, () => setTeams(t => t ?? []));
-    void fetchHubNodes({ ...cfg, networkId }).then(r => setNodes((r?.nodes ?? []).map(n => ({ node_id: n.node_id, alias: n.alias, display_name: n.node_name ?? null }))), () => {});
+    const generation = ++request.current;
+    setTeams(undefined); setNodes([]); setLoadError(false);
+    void (async () => {
+      try {
+        const next = await fetchAgentTeams(cfg, networkId);
+        const rows = next === null ? [] : (await fetchHubNodes({ ...cfg, networkId })).nodes ?? [];
+        if (generation !== request.current) return;
+        setNodes(rows.map(n => ({ node_id: n.node_id, alias: n.alias, display_name: n.node_name ?? null })));
+        setTeams(next);
+      } catch {
+        if (generation !== request.current) return;
+        setLoadError(true);
+      }
+    })();
   }, [cfg, networkId]);
-  useEffect(reload, [reload]);
-  return { teams, nodes, reload };
+  useEffect(() => { reload(); return () => { request.current++; }; }, [reload]);
+  return { teams, nodes, reload, loadError };
 }
 
 // 弹窗(桌面)/ 推入页(手机)共用的几步
@@ -314,8 +329,14 @@ export function AgentTeamsPhone(p: Props & { onClose: () => void }) {
 
 /** 设置 → 用户管理里的一组:旧 Hub 只有一行提示;桌面就地画左树右详情,手机一行点进全屏页。 */
 export function AgentTeamsSection({ cfg, networkId, me, people, phone }: Omit<Props, 'teams' | 'nodes' | 'reload'> & { phone: boolean }) {
-  const { teams, nodes, reload } = useAgentTeams(cfg, networkId);
+  // Remount editors too: an open dialog must not submit the old team's ID to a new scope.
+  return <AgentTeamsScoped key={JSON.stringify([cfg.serverUrl, cfg.token, networkId])} cfg={cfg} networkId={networkId} me={me} people={people} phone={phone} />;
+}
+function AgentTeamsScoped({ cfg, networkId, me, people, phone }: Omit<Props, 'teams' | 'nodes' | 'reload'> & { phone: boolean }) {
+  const { t } = useTranslation();
+  const { teams, nodes, reload, loadError } = useAgentTeams(cfg, networkId);
   const [open, setOpen] = useState(false);
+  if (loadError) return <SettingsGroup title={t('teams.title')} testID="team-load-error"><SettingsRow label={t('teams.loadFailed')} value={t('teams.retry')} onPress={reload} testID="team-load-retry" /></SettingsGroup>;
   if (teams === undefined) return null;
   return (
     <SettingsGroup title="Agent 组织" footer={teams ? 'Agent 自己的组织树,和人的部门互不影响;一个 Agent 最多归一个团队。' : undefined} separators={false} testID="team-group">

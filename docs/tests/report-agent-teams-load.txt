@@ -1,0 +1,18 @@
+Board #774: Agent organisation read lifecycle
+Base: app PR #757, 627ce3c38625016caa459512669adebb062eda5f.
+Scope: late reads, scoped editor lifetime, explicit read failure and retry.
+No Hub, permissions, team write API, release version or production changes.
+
+Before: actual hook harness reproduced a late A response replacing B teams;
+initial HTTP 403 became an empty array. Diagnostic reproduction rc=0.
+After: src/agent-teams-load.test.ts 9/9, rc=0.
+Mutation: remove both generation checks in a disposable container:
+6/9, rc=1; stale network, stale failure and post-unmount assertions failed.
+TypeScript: npm run typecheck rc=0.
+All checks ran in Docker, --cpus=2, --network=none, source mounted read-only.
+Existing isolated Node 22 app image provided dependencies; changed files copied
+only inside disposable containers. No shared node_modules modified.
+
+These are deterministic hook-harness and source-wiring checks, not a browser
+E2E. Full unit suite not repeated locally. Browser UI acceptance remains before
+ready/merge. Public error copy uses translations and excludes raw server errors.
