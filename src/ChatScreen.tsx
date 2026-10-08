@@ -113,6 +113,7 @@ import { ComposerExpandButton, ComposerFullscreenEditor, ComposerRightSlot } fro
 import { loadComposerInputMode, saveComposerInputMode } from './voice-prefs';
 import { elevated } from './elevation';
 import { CHAT_PAGE, mergeNewestPage, mergeOlderPage, newestPageParams, olderPageHasMore, olderPageParams } from './chat-history-pages';
+import { cfgForAgent } from './agent-network';
 
 // Chat with one agent. Open with the newest PAGE messages; scrolling toward
 // older history fetches the next older PAGE by cursor (chat-history-pages.ts, #745).
@@ -284,6 +285,8 @@ interface Props {
   onOpenTask?: (requirementId: string, networkId: string | null) => void;
   /** #692 守护节点会话页的「托管的节点」入口:打开按这些别名筛过的 Agent 列表。不传(分离聊天窗)= 不画这个入口。 */
   onOpenAgents?: (filter: AgentListFilter) => void;
+  /** #769: 点开这个会话的那一行所在网络。发送 / 历史 / 已读 / 附件都打到它,不是账号当前网络。 */
+  networkId?: string;
 }
 
 // Module level on purpose: the cache has to outlive a screen unmount, or
@@ -294,8 +297,10 @@ export const clearChatConversationCache = (profileId?: string, serverUrl = ''): 
   conversations.clearScope(conversationScope(profileId, serverUrl));
 };
 
-export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpenNodeSettings, pinned = false, onTogglePin, muted = false, onToggleMute, hideBack = false, onOpenVoiceSettings, focusTaskId, windowChrome = null, onOpenTask, onOpenAgents }: Props) {
+export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, desktop = false, onOpenNodeSettings, pinned = false, onTogglePin, muted = false, onToggleMute, hideBack = false, onOpenVoiceSettings, focusTaskId, windowChrome = null, onOpenTask, onOpenAgents }: Props) {
   useTranslation();
+  // #769: everything below is agent-scoped — use THIS agent's network, not the account's current one.
+  const cfg = useMemo(() => cfgForAgent(accountCfg, alias, networkId), [accountCfg, alias, networkId]);
   // Android edge-to-edge draws the composer under the gesture bar (same
   // class of bug as the tg 802 tab bar) — pad by the real bottom inset.
   const insets = useSafeAreaInsets();

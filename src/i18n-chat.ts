@@ -39,7 +39,7 @@ export const chatTranslations = {
   'chat.proactive': [' · 主动汇报', ' · Proactive update'],
   'chat.sending': ['发送中…', 'Sending…'],
   'chat.notDelivered': ['未送达 · 点击重试', 'Not delivered · Tap to retry'],
-  'chat.failReason.aliasNotFound': ['没有找到这个 Agent（网络可能已变更）', 'Agent not found (your network may have changed)'],
+  'chat.failReason.aliasNotFound': ['没有找到这个 Agent（可能已删除、改名，或你已不在它所在的网络）', 'Agent not found (it may have been deleted or renamed, or you are no longer in its network)'],
   'chat.failReason.notGranted': ['没有给这个 Agent 发消息的权限', 'You are not allowed to message this Agent'],
   'chat.failReason.network': ['账号所在的网络已变更，请重试或重新登录', 'Your network has changed. Retry or sign in again'],
   'chat.failReason.attachment': ['附件无权访问，请移除后重发', 'Attachment not accessible. Remove it and resend'],

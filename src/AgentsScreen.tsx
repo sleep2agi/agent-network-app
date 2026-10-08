@@ -86,6 +86,7 @@ import { agentRowBadge, isHostSupervisorAlias, nodeRolesVersion, subscribeNodeRo
 import { applyAgentFilter, filterLabel, isFilterActive, STATUS_FILTER_LABEL, type AgentListFilter, type AgentStatusFilter } from './server-stats';
 import { pointerUi } from './pointer-ui';
 import { conversationDraftKey, draftPreview, draftTextFor, useDraftsVersion, type DraftConversation } from './composer-drafts';
+import { rememberAgentNetworks } from './agent-network';
 
 // 受限成员的空态文案比「还没有 agent」长,窄屏会折行:居中并留出与列表同宽的边距。
 const restrictedEmptyCopy = () => ({ textAlign: 'center' as const, paddingHorizontal: spacing.xl });
@@ -110,7 +111,8 @@ export default function AgentsScreen({
   filter,
 }: {
   cfg: HubConfig;
-  onOpenChat: (alias: string) => void;
+  /** #769: networkId = 点的那一行所在网络(会话要打到它,不是当前网络)。 */
+  onOpenChat: (alias: string, networkId?: string) => void;
   /** #338 — top-right `+` opens the host_supervisor picker modal. */
   onOpenPicker: () => void;
   /** 会话行菜单里的「节点详情」(2026-09-26 起长按改成弹菜单,以前长按直接进这里)。
@@ -374,6 +376,7 @@ export default function AgentsScreen({
       const data = await statusRead;
       const next = data.sessions ?? [];
       setSessions(next);
+      rememberAgentNetworks(cfg, next);
       setFailed(false);
       // Persist for the next cold start's stale-while-revalidate paint.
       saveSessionsCache(next, cfg.profileId);
@@ -600,9 +603,9 @@ export default function AgentsScreen({
     }
   };
   // 点开一条隐藏的会话 = 把它找回来(和微信从搜索里点开隐藏会话一样)。
-  const openChat = (alias: string) => {
+  const openChat = (alias: string, networkId?: string | null) => {
     if (alias in convFlags.hidden) updateConversationFlags(f => restoreConversation(f, alias));
-    onOpenChat(alias);
+    onOpenChat(alias, networkId ?? undefined);
   };
 
   // Desktop (Tauri) sidebar row — unchanged by the 0.2.106 phone / two-pane redesign.
@@ -632,7 +635,7 @@ export default function AgentsScreen({
         item.status === 'offline' && styles.cardOffline,
         pressed && { opacity: 0.7 },
       ]}
-      onPress={() => openChat(item.alias)}
+      onPress={() => openChat(item.alias, item.network_id)}
       onLongPress={pointer ? undefined : () => onOpenNodeDetail(item.alias)}
       delayLongPress={400}
     >
@@ -837,7 +840,7 @@ export default function AgentsScreen({
           // 菜单开着时,被按住的那一行保持按下态的底色(微信同款:看得出菜单是对哪一行的)。
           { backgroundColor: selected ? colors.rowActive : pressed || menuFor?.alias === item.alias ? colors.rowHover : colors.bg },
         ]}
-        onPress={() => openChat(item.alias)}
+        onPress={() => openChat(item.alias, item.network_id)}
         onLongPress={pointer ? undefined : rowMenu ? e => openRowMenu(item.alias, e.nativeEvent.pageX, e.nativeEvent.pageY) : () => onOpenNodeDetail(item.alias)}
         delayLongPress={400}
       >

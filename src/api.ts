@@ -17,6 +17,8 @@ export interface Session {
   task?: string;
   server?: string;
   updated_at?: string;
+  /** Hub light/full `/api/status`: the network this row lives in (#769). Older hubs omit it. */
+  network_id?: string | null;
   node_id?: string | null;
   hostname?: string | null;
   ip?: string | null;
