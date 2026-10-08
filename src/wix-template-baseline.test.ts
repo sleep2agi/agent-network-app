@@ -1,4 +1,4 @@
-// #806: provenance only; does not claim installer upgrade behavior.
+// #806 provenance / #807 reviewed adaptation; not an upgrade-behavior test.
 import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 const root = new URL('../', import.meta.url);
@@ -14,11 +14,11 @@ function ck(label: string, ok: boolean) {
   if (ok) passed++;
   console.log(`${ok ? 'PASS' : 'FAIL'} ${label}`);
 }
-ck('WiX template bytes match upstream SHA256', sha256(template) === source.sha256);
-ck('WiX Git blob matches upstream content', createHash('sha1').update(`blob ${template.length}\0`).update(template).digest('hex') === source.gitBlob);
+ck('WiX template bytes match reviewed SHA256', sha256(template) === (source.localSha256 ?? source.sha256));
+ck('WiX Git blob matches reviewed content', createHash('sha1').update(`blob ${template.length}\0`).update(template).digest('hex') === (source.localGitBlob ?? source.gitBlob));
 ck('WiX MIT license is preserved', sha256(readFileSync(new URL(source.licensePath, dir))) === source.licenseSha256);
 ck('WiX baseline matches locked bundler', lock.packages['node_modules/@tauri-apps/cli'].version === source.cliVersion);
 ck('WiX source uses an immutable commit', source.commit === '499df79be65ef8c0670abc0207cd9e37b55d8491');
-ck('Tauri selects the unmodified WiX baseline', config.bundle.windows.wix.template === `./windows/vendor/${source.localPath}`);
+ck('Tauri selects the reviewed WiX template', config.bundle.windows.wix.template === `./windows/vendor/${source.localPath}`);
 console.log(`${passed}/${total} passed`);
 process.exit(passed === total ? 0 : 1);
