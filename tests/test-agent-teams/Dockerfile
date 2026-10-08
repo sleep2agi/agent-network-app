@@ -8,4 +8,4 @@ RUN npm install --prefix /qa-tools --no-save --no-audit --no-fund playwright@1.5
 COPY . .
 RUN npx expo export -p web --output-dir web-export --max-workers 2
 ENV WEB_DIR=/app/web-export PLAYWRIGHT_MODULE=/qa-tools/node_modules/playwright/index.mjs OUT=/output CHROMIUM_EXECUTABLE_PATH=/usr/bin/chromium
-CMD ["sh", "-c", "bun src/settings-model.test.ts && bun src/settings-phone-list.test.ts && bun src/settings-subpages.test.ts && bun src/agent-teams.test.ts && bun src/agent-teams-load.test.ts && bun src/i18n-copy-guard.test.ts && npm run typecheck && node tests/test-agent-teams/drive.mjs"]
+CMD ["sh", "-c", "bun src/settings-model.test.ts && bun src/settings-phone-list.test.ts && bun src/settings-subpages.test.ts && bun src/settings-redesign.test.ts && bun src/agent-teams.test.ts && bun src/agent-teams-load.test.ts && bun src/i18n-copy-guard.test.ts && npm run typecheck && node tests/test-agent-teams/drive.mjs"]

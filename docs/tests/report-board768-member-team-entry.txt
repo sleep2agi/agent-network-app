@@ -43,3 +43,8 @@ current drive read-only; the Dockerfile includes both for subsequent runs.
 This is a page-local API fixture, not a live-Hub authorization test. Hub is
 still authoritative for writes. Production not touched; no live tmux/nodes.
 Repository-wide regression gates are left to CI (not redundantly rerun here).
+
+CI follow-up: settings-redesign's static card guard did not recognize the new
+adapter. Added the adapter to its component list and explicitly checked the
+render chain AgentTeamsEntry -> AgentTeamsSection -> SettingsGroup. No product
+changes. Docker targeted settings-redesign: 39/39, rc=0. Added to suite command.
