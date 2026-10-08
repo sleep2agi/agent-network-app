@@ -1,0 +1,33 @@
+Board #788: NSIS installation identity compatibility (local preliminary)
+
+Scope: distinguish legacy INSTALLIDENTITY from displayed PRODUCTNAME.
+Keep old uninstall/manufacturer registry keys and default/custom directories.
+Accept the previous MSI display name during the existing MSI detection flow.
+Rename legacy shortcuts only when their target is this installed executable
+and the new shortcut path does not already exist. Do not move account data.
+ProductName remains Agent Network in this PR; the final rename is separate.
+
+Base: #789 unchanged-template commit a347812f4d2bb9f9cbd2b57660020f17a98abc04.
+Original upstream provenance stays in source.json; local hashes now explicitly
+describe the adaptation rather than claiming unchanged upstream bytes.
+
+Docker checks, 2026-10-08:
+sg docker -c 'docker build -t anet-nsis-identity788:local -f tests/nsis-install-identity/Dockerfile .'
+  rc=0
+sg docker -c 'docker run --rm --cpus=2 --network none anet-nsis-identity788:local'
+  rc=0, provenance 5/5, source/config contracts 15/15.
+sg docker -c 'docker run --rm --cpus=2 --network none anet-nsis-identity788:local node tests/nsis-install-identity/mutation.mjs'
+  harness rc=0; mutant child rc=1 with named ANet uninstall/custom-directory
+  identity assertion failures. No missing dependency/environment error.
+
+Coverage limitation: defines are projected by the unit test, not executed as
+an NSIS installer. Real Windows installer compilation and old-version upgrade
+(default and custom directory, retained accounts, shortcuts/uninstall) remain
+unverified. This report does NOT establish E2E success or merge readiness.
+No production install, release, version bump, global package or node change.
+Existing npm test CI discovers both unit files; the mutation is Docker-only.
+
+Rollback before display-name switch: revert the nsis.template config entry
+to use the unchanged Tauri built-in template. Once a rename is released, do
+not assume that rollback restores registry/shortcut presentation; validate
+the upgrade/downgrade path separately. No credentials are stored in this patch.

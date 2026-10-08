@@ -42,6 +42,9 @@
       "entitlements": "./Entitlements.plist"
     },
     "windows": {
+      "nsis": {
+        "template": "./windows/vendor/installer.tauri-2.11.2.nsi"
+      },
       "wix": {
         "upgradeCode": "4777ee3d-8db8-576a-a7ad-361f79904d32"
       }

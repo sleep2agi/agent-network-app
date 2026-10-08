@@ -33,6 +33,8 @@ ${StrLoc}
 
 !define MANUFACTURER "{{manufacturer}}"
 !define PRODUCTNAME "{{product_name}}"
+; ANet #788: display names may change; existing install/registry identity must not.
+!define INSTALLIDENTITY "Agent Network"
 !define VERSION "{{version}}"
 !define VERSIONWITHBUILD "{{version_with_build}}"
 !define HOMEPAGE "{{homepage}}"
@@ -57,9 +59,9 @@ ${StrLoc}
 !define WEBVIEW2BOOTSTRAPPERPATH "{{webview2_bootstrapper_path}}"
 !define WEBVIEW2INSTALLERPATH "{{webview2_installer_path}}"
 !define MINIMUMWEBVIEW2VERSION "{{minimum_webview2_version}}"
-!define UNINSTKEY "Software\Microsoft\Windows\CurrentVersion\Uninstall\${PRODUCTNAME}"
+!define UNINSTKEY "Software\Microsoft\Windows\CurrentVersion\Uninstall\${INSTALLIDENTITY}"
 !define MANUKEY "Software\${MANUFACTURER}"
-!define MANUPRODUCTKEY "${MANUKEY}\${PRODUCTNAME}"
+!define MANUPRODUCTKEY "${MANUKEY}\${INSTALLIDENTITY}"
 !define UNINSTALLERSIGNCOMMAND "{{uninstaller_sign_cmd}}"
 !define ESTIMATEDSIZE "{{estimated_size}}"
 !define STARTMENUFOLDER "{{start_menu_folder}}"
@@ -77,7 +79,7 @@ OutFile "${OUTFILE}"
 ; We don't actually use this value as default install path,
 ; it's just for nsis to append the product name folder in the directory selector
 ; https://nsis.sourceforge.io/Reference/InstallDir
-!define PLACEHOLDER_INSTALL_DIR "placeholder\${PRODUCTNAME}"
+!define PLACEHOLDER_INSTALL_DIR "placeholder\${INSTALLIDENTITY}"
 InstallDir "${PLACEHOLDER_INSTALL_DIR}"
 
 VIProductVersion "${VERSIONWITHBUILD}"
@@ -106,7 +108,7 @@ VIAddVersionKey "ProductVersion" "${VERSION}"
 
 !if "${INSTALLMODE}" == "both"
   !define MULTIUSER_MUI
-  !define MULTIUSER_INSTALLMODE_INSTDIR "${PRODUCTNAME}"
+  !define MULTIUSER_INSTALLMODE_INSTDIR "${INSTALLIDENTITY}"
   !define MULTIUSER_INSTALLMODE_COMMANDLINE
   !if "${ARCH}" == "x64"
     !define MULTIUSER_USE_PROGRAMFILES64
@@ -198,7 +200,10 @@ Function PageReinstall
     IntOp $0 $0 + 1
     ReadRegStr $R0 HKLM "SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\$1" "DisplayName"
     ReadRegStr $R1 HKLM "SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\$1" "Publisher"
-    StrCmp "$R0$R1" "${PRODUCTNAME}${MANUFACTURER}" 0 wix_loop
+    ${If} "$R0$R1" != "${PRODUCTNAME}${MANUFACTURER}"
+    ${AndIf} "$R0$R1" != "${INSTALLIDENTITY}${MANUFACTURER}"
+      Goto wix_loop
+    ${EndIf}
     ReadRegStr $R0 HKLM "SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\$1" "UninstallString"
     ${StrCase} $R1 $R0 "L"
     ${StrLoc} $R0 $R1 "msiexec" ">"
@@ -495,17 +500,17 @@ Function .onInit
     !if "${INSTALLMODE}" == "perMachine"
       ${If} ${RunningX64}
         !if "${ARCH}" == "x64"
-          StrCpy $INSTDIR "$PROGRAMFILES64\${PRODUCTNAME}"
+          StrCpy $INSTDIR "$PROGRAMFILES64\${INSTALLIDENTITY}"
         !else if "${ARCH}" == "arm64"
-          StrCpy $INSTDIR "$PROGRAMFILES64\${PRODUCTNAME}"
+          StrCpy $INSTDIR "$PROGRAMFILES64\${INSTALLIDENTITY}"
         !else
-          StrCpy $INSTDIR "$PROGRAMFILES\${PRODUCTNAME}"
+          StrCpy $INSTDIR "$PROGRAMFILES\${INSTALLIDENTITY}"
         !endif
       ${Else}
-        StrCpy $INSTDIR "$PROGRAMFILES\${PRODUCTNAME}"
+        StrCpy $INSTDIR "$PROGRAMFILES\${INSTALLIDENTITY}"
       ${EndIf}
     !else if "${INSTALLMODE}" == "currentUser"
-      StrCpy $INSTDIR "$LOCALAPPDATA\${PRODUCTNAME}"
+      StrCpy $INSTDIR "$LOCALAPPDATA\${INSTALLIDENTITY}"
     !endif
 
     Call RestorePreviousInstallLocation
@@ -857,6 +862,7 @@ Section Uninstall
   ; We do this when not updating (to preserve the registry value on updates)
   ${If} $UpdateMode <> 1
     DeleteRegValue HKCU "Software\Microsoft\Windows\CurrentVersion\Run" "${PRODUCTNAME}"
+    DeleteRegValue HKCU "Software\Microsoft\Windows\CurrentVersion\Run" "${INSTALLIDENTITY}"
   ${EndIf}
 
   ; Delete app data if the checkbox is selected
@@ -905,7 +911,23 @@ Function un.SkipIfPassive
   ${IfThen} $PassiveMode = 1  ${|} Abort ${|}
 FunctionEnd
 
+; Only rename a legacy shortcut that targets this exact installed executable.
+; Leave unrelated links and an existing destination untouched.
+!macro ANET_MIGRATE_SHORTCUT DIRECTORY
+  !if "${PRODUCTNAME}" != "${INSTALLIDENTITY}"
+    ${IfNot} ${FileExists} "${DIRECTORY}\${PRODUCTNAME}.lnk"
+      !insertmacro IsShortcutTarget "${DIRECTORY}\${INSTALLIDENTITY}.lnk" "$INSTDIR\${MAINBINARYNAME}.exe"
+      Pop $0
+      ${If} $0 = 1
+        Rename "${DIRECTORY}\${INSTALLIDENTITY}.lnk" "${DIRECTORY}\${PRODUCTNAME}.lnk"
+      ${EndIf}
+    ${EndIf}
+  !endif
+!macroend
+
 Function CreateOrUpdateStartMenuShortcut
+  !insertmacro ANET_MIGRATE_SHORTCUT "$SMPROGRAMS\$AppStartMenuFolder"
+  !insertmacro ANET_MIGRATE_SHORTCUT "$SMPROGRAMS"
   ; We used to use product name as MAINBINARYNAME
   ; migrate old shortcuts to target the new MAINBINARYNAME
   StrCpy $R0 0
@@ -948,6 +970,7 @@ Function CreateOrUpdateStartMenuShortcut
 FunctionEnd
 
 Function CreateOrUpdateDesktopShortcut
+  !insertmacro ANET_MIGRATE_SHORTCUT "$DESKTOP"
   ; We used to use product name as MAINBINARYNAME
   ; migrate old shortcuts to target the new MAINBINARYNAME
   !insertmacro IsShortcutTarget "$DESKTOP\${PRODUCTNAME}.lnk" "$INSTDIR\$OldMainBinaryName"
