@@ -179,7 +179,7 @@ ck('web matchMedia 抛错 → null', readScheme({ os: 'web', matchMedia: () => {
 
 // ── 9. 接线(源码层;真跑在截图 harness 里) ──
 const app = readFileSync(new URL('../App.tsx', import.meta.url), 'utf8');
-const iInstall = app.indexOf('installSystemThemeFollower();');
+const iInstall = app.indexOf('installSystemThemeFollower(');
 const iEarly = app.indexOf('const early = loadDesktopThemeMode();');
 ck('App 首帧前装系统配色跟随,且在读偏好之前', iInstall > 0 && iEarly > iInstall);
 ck('App 的冷启动/跨窗口路径都认 system(经 parseStoredThemePreference)',

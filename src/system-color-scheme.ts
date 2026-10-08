@@ -19,10 +19,12 @@ let installed = false;
  * 幂等:主窗口、托盘面板、分离聊天窗各自一个 JS 上下文,各装一次;同一上下文重复调用无副作用。
  * 订阅跟 app 同寿命,不退订。
  */
-export function installSystemThemeFollower(): void {
+export function installSystemThemeFollower(opts: { subscribe?: boolean } = {}): void {
   if (installed) return;
   installed = true;
   const e = env();
   setSystemColorScheme(readScheme(e));
-  subscribeScheme(e, s => setSystemColorScheme(s));
+  // #743:Windows 设置窗会钉住窗口 theme,matchMedia 随之失真;那里的变化改由主窗的 theme 事件喂
+  // (desktop-settings-window.ts followThemeInSettingsTitleBar),这里不再订阅。
+  if (opts.subscribe !== false) subscribeScheme(e, s => setSystemColorScheme(s));
 }

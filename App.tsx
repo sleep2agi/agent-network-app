@@ -13,7 +13,7 @@ import { purgeLegacyAttachmentCache } from './src/AuthedThumb';
 import { prefetchStatus, login, fetchHubNodes, fetchNetworkId, setNetworkIdPersister, HubConfig } from './src/api';
 import { fetchAuthMe, registerHubAccount } from './src/user-admin-api';
 import { clientLabelForLogin } from './src/login-sessions';
-import { popoutChatChrome, tauriShellPlatform } from './src/window-shell';
+import { isWindowsTauriShell, popoutChatChrome, tauriShellPlatform } from './src/window-shell';
 import DmChatScreen, { type GroupChatRef } from './src/DmChatScreen';
 import { groupNameFor, rememberGroupName } from './src/group-chat-bus';
 import type { Human } from './src/human-dm';
@@ -82,7 +82,7 @@ import { readImageWindowRoute } from './src/image-window-model';
 import TaskWindow from './src/TaskWindow';
 import { readTaskWindowRoute } from './src/task-window-model';
 import { loadPinnedChats, requestedChatAlias, requestedChatProfileId, requestedWorkspaceProfileId, savePinnedChats } from './src/desktop-chat-menu';
-import { SETTINGS_CATEGORY_EVENT, SETTINGS_SESSION_EVENT, closeSettingsWindow, notifySessionChanged, openSettingsWindow, requestedSettingsCategory, requestedSettingsDetail, requestedSettingsWindow, settingsCategoryFromQuery } from './src/desktop-settings-window';
+import { SETTINGS_CATEGORY_EVENT, SETTINGS_SESSION_EVENT, closeSettingsWindow, followThemeInSettingsTitleBar, notifySessionChanged, openSettingsWindow, requestedSettingsCategory, requestedSettingsDetail, requestedSettingsWindow, settingsCategoryFromQuery } from './src/desktop-settings-window';
 import { loadChatPins, saveChatPins, togglePinned } from './src/chat-pins';
 import { ROW_MENU_EMPTY_HINT } from './src/agent-row-menu';
 import { bindUnreadProfile } from './src/unread-store';
@@ -177,7 +177,7 @@ export default function App() {
   // 0.2.101「跟随系统」:先同步读系统配色并订阅它的变化(幂等,每个窗口的 JS 上下文装一次),
   // 再同步读用户偏好。存储里没有值(新装)= 跟随系统;旧版存的 light/dark 原样沿用。
   // undefined = 不是桌面壳(移动端),偏好等下面异步的 loadThemeMode() 再定。
-  installSystemThemeFollower();
+  installSystemThemeFollower({ subscribe: !(requestedSettingsWindow() && isWindowsTauriShell()) });
   {
     const early = loadDesktopThemeMode();
     if (early !== undefined) setThemePreference(parseStoredThemePreference(early));
@@ -459,6 +459,8 @@ function AppRoot() {
   const dedicatedChatWindow = tauriDesktop && !!initialChat;
   // Mac / Windows：设置是单独的窗口，不嵌进主窗口的三栏。
   const settingsWindow = tauriDesktop && requestedSettingsWindow();
+  // #743:Windows 设置窗的原生标题栏跟 app 主题走(深色时不再是白条)。
+  useEffect(() => (settingsWindow ? followThemeInSettingsTitleBar() : undefined), [settingsWindow]);
   const settingsCategoryBooted = useRef(false);
   if (settingsWindow && !settingsCategoryBooted.current) {
     settingsCategoryBooted.current = true;
