@@ -1,0 +1,42 @@
+ANet 0.2.227 release preparation (Hub board #808, parent #778)
+
+Base main: 19a35e96c5edaedac6c1ea17ab49aab4b32fae86.
+Authoritative issue: https://github.com/sleep2agi/agent-network-app/issues/772
+
+Only version metadata and release notes change in this PR. Since 0.2.226,
+main contains desktop display-name migration and its compatibility work:
+#768 old download aliases; #769 fixed MSI upgrade identity;
+#770 unchanged NSIS template; #771 preserved NSIS installation identity;
+#773 macOS bundle path; #774 unchanged WiX template;
+#775 preserved Windows installation directory; #776 ANet product name.
+Template-only changes are not described as user-facing features.
+
+Version locations now agree on 0.2.227; Android versionCode is 2227.
+Cargo.lock changes only agent-network-desktop's version, not dependencies.
+Bundled notes generated using scripts/changelog-bundle.mjs --no-dates in
+Docker; existing publication dates are retained, no date invented for 0.2.227.
+
+Focused Docker acceptance, 2026-10-09 04:00 CST (+08:00):
+Image: oven/bun:1.3.14
+Digest: sha256:e10577f0db68676a7024391c6e5cb4b879ebd17188ab750cf10024a6d700e5c4
+Source read-only; --cpus=2 --network none --user 1000:1000.
+Executed sequentially, stop on first failure:
+  bun src/version-consistency.test.ts
+  bun src/changelog-bundled.test.ts
+  bun src/release-notes.test.ts
+  bun src/release-notes-hygiene.test.ts
+All four passed; combined rc=0. git diff --check rc=0.
+No duplicate local full-suite or native upgrade rerun.
+
+Existing native upgrade evidence: docs/tests/report-board805-product-name.txt
+and PR #776, run 37833750901. Windows MSI/NSIS default/custom paths and macOS
+local-account/auth/API/restart passed. The macOS fixture authorizes the ad-hoc
+test application in an isolated test keychain; this does not establish a
+prompt-free formally signed real-client update. Formal release acceptance
+remains separate.
+
+This is release preparation, not publication. No production Hub, daemon,
+live node, global npm package, release tag, or public artifact was changed.
+Formal artifacts must be rebuilt from the exact merged main SHA, through
+the signing/release gates in docs/desktop-release-sop.md. Existing installation
+identifiers and download compatibility must remain in that release.
