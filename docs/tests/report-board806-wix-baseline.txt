@@ -33,3 +33,13 @@ This import deliberately does NOT fix that behavior; #807 is separate.
 No native upgrade/account-retention claim. No release, deployment, version,
 secret, backup, storage key, executable or service topology change. Reverting
 the new wix.template configuration field restores the upstream default.
+
+Windows CI follow-up (2026-10-09): job 113437058911 failed 1/374 files,
+wix-template-baseline.test.ts, only its SHA256/Git-blob assertions. The .wxs
+file lacked the existing .nsi/-text checkout policy; Windows autocrlf changed
+its bytes. Added the matching vendor/*.wxs -text rule, without normalizing or
+weakening the provenance assertions. Docker rebuild/test rc=0 (same 55 checks).
+Additional real Git clone with core.autocrlf=true preserves exact bytes.
+Removing only the .wxs attribute makes that same checkout contain CRLF and
+fail byte equality. This reproduces the CI failure mechanism in isolation.
+No installer logic or unrelated code changed in this follow-up.
