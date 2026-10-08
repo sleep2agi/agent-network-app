@@ -10,7 +10,7 @@
   "license": "MIT",
   "licensePath": "LICENSE-MIT",
   "licenseSha256": "9dd42ea92cff2ede5cd477cbfcce051b2d0115c0ac7f368ee88cb545055dff1d",
-  "localSha256": "ec66a063add3d9a62ca3fc48c44ce6c33ff228b0eb382e73034d202d28427356",
-  "localGitBlob": "a3ce703ff4521118ccc4db4298578a85965e35eb",
+  "localSha256": "ccf44234b9224ed268e9ad4ca1c1dca237e8a22244f973ad033bd214c99fbbe9",
+  "localGitBlob": "a74f113ef147ea468c681244847e86be74f633c1",
   "purpose": "Upstream provenance retained; #807 fixes installation identity and cleans fixed legacy MSI shortcut names on major upgrade."
 }

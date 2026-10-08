@@ -52,3 +52,17 @@ any install/upgrade step. Non-verbose Tauri output omitted the WiX diagnostic.
 The follow-up enables verbose bundler output and retains generated WiX sources
 as test artifacts. Cache compiled Rust on failure to avoid unnecessary cold
 recompilation. No product changes made based on an unverified error guess.
+
+Verbose attempt 37820406239 / job 113459974192 identified ICE03 invalid
+registry paths in all seven changed Registry/RegLocator keys. The generated
+WXS confirms a doubled separator before $(var.InstallIdentity). Handlebars
+consumed the original escape before {{product_name}}, but does not consume
+that escape before a WiX variable. Fixed those separators (single literal
+backslash); retained the escape before {{manufacturer}}. Added a real
+Handlebars render check for the seven resulting keys and a doubled-separator
+mutation. No ICE validation disabled. Native upgrade remains pending.
+
+2026-10-09 02:13 CST: fixed-template Docker build rc=0, run rc=0.
+Provenance 6/6 and display identity 29/29 pass; all seven rendered registry
+keys match the published MSI identity. Both legacy-lookup and doubled-path
+mutations are rejected (mutation harness rc=0). No full unrelated suite run.

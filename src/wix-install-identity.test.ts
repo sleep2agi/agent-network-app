@@ -9,7 +9,7 @@ for (const id of ['PrevInstallDirNoName', 'PrevInstallDirWithName']) {
   assert(!search.includes('{{product_name}}'), `${id} must not depend on display name`);
 }
 assert(source.includes('Name="InstallDir" Type="string" Value="[INSTALLDIR]"'));
-assert(source.includes('<RegistryKey Root="HKCU" Key="Software\\\\{{manufacturer}}\\\\$(var.InstallIdentity)">'));
+assert(source.includes('<RegistryKey Root="HKCU" Key="Software\\\\{{manufacturer}}\\$(var.InstallIdentity)">'));
 for (const id of ['INSTALLDIR', 'ApplicationProgramsFolder']) {
   assert(source.includes(`<Directory Id="${id}" Name="$(var.InstallIdentity)"/>`));
 }
