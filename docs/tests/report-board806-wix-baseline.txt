@@ -1,0 +1,35 @@
+Hub #806 (parent #778), Issue sleep2agi/agent-network-app#772
+2026-10-09; base a2ceeb75c7469778d72a9f7d0fef0f817e7e737a.
+
+Pure baseline import; no installer behavior change or product rename.
+One Tauri configuration field selects the exact existing upstream default.
+The 381-line template is an unmodified copy, not new business logic.
+Follow-up #807 handles legacy installation paths; #805 handles the final name.
+
+Source: https://github.com/tauri-apps/tauri/blob/499df79be65ef8c0670abc0207cd9e37b55d8491/crates/tauri-bundler/src/bundle/windows/msi/main.wxs
+CLI 2.11.2, same as package-lock.json.
+Upstream Git blob (GitHub API): dec39dadb4bc9160d108d19094987ada2a6eb996
+Local Git blob:                 dec39dadb4bc9160d108d19094987ada2a6eb996
+SHA256: e371a01628a06730828f9bd24111feacb8bec53c250ccec4b46df756fe0a0198
+Bytes: 18783. License: existing vendor/LICENSE-MIT from the same upstream.
+Metadata: src-tauri/windows/vendor/wix-source.json.
+
+Docker (--cpus=2, --network none): bash tests/wix-template-baseline/run.sh
+Build rc=0; tests rc=0:
+- WiX source/config baseline 6/6.
+- Existing display/upgrade identity 29/29.
+- Existing NSIS source/config baseline 5/5.
+- Existing NSIS installation identity 15/15.
+- Appending a comment to the container template exits 1 at
+  "FAIL WiX template bytes match upstream SHA256". Mutation harness rc=0.
+No unrelated local full-suite rerun; existing PR CI discovers the new unit test.
+
+Reason for this prerequisite: upstream PrevInstallDirNoName,
+PrevInstallDirWithName, RegistryEntries and INSTALLDIR still derive registry
+keys/default directory from product_name. Fixed UpgradeCode alone does not
+preserve lookup of the old user-selected directory when the product is renamed.
+This import deliberately does NOT fix that behavior; #807 is separate.
+
+No native upgrade/account-retention claim. No release, deployment, version,
+secret, backup, storage key, executable or service topology change. Reverting
+the new wix.template configuration field restores the upstream default.
