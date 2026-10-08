@@ -38,3 +38,41 @@ export function syncNativeTitleBarTheme(
   push();
   return subscribe(push);
 }
+
+// ── 系统配色的读数从哪来(#743 复审)─────────────────────────────────────────────────────────
+// 钉住设置窗的 theme 之后,WebView2 的 SetPreferredColorScheme 是**整个 profile** 的,设置窗(以及
+// 主窗)的 matchMedia 读到的是被钉住的值,不是系统真实外观。theme.ts 的 systemScheme 一旦被它喂歪,
+// 从「深色」切回「跟随系统」那一刻会先按钉住的值算,「跟随系统(当前:…)」也跟着错。
+// 真实系统外观的来源:**主窗**的 Tauri 窗口 theme —— 主窗从不 setTheme,tao 按系统设置算它,系统
+// 一翻就发 ThemeChanged。设置窗自己的 theme() 不能用:那正是被钉住的值。
+
+export interface OsThemeSource {
+  theme: () => Promise<ThemeMode | null>;
+  onThemeChanged: (h: (e: { payload: ThemeMode }) => void) => Promise<() => void>;
+}
+
+/** 系统外观来源窗口:主窗(window-shell.ts CUSTOM_TITLE_BAR_WINDOW_LABEL)。 */
+export const OS_THEME_SOURCE_LABEL = 'main';
+
+/**
+ * 设置窗的整套接线:系统读数从主窗喂进 theme.ts,标题栏跟 app 主题走。依赖注入,测试用假窗口。
+ * 返回取消函数。
+ */
+export async function wireSettingsWindowTheme(deps: {
+  current: ThemeableWindow;
+  byLabel: (label: string) => Promise<OsThemeSource | null>;
+  feedSystem: (s: ThemeMode | null) => void;
+  read: () => { pref: ThemePreference; mode: ThemeMode };
+  subscribe: (l: () => void) => () => void;
+}): Promise<() => void> {
+  let unlistenOs = () => {};
+  try {
+    const os = await deps.byLabel(OS_THEME_SOURCE_LABEL);
+    if (os) {
+      deps.feedSystem(await os.theme());
+      unlistenOs = await os.onThemeChanged(e => deps.feedSystem(e.payload));
+    }
+  } catch { /* 拿不到就保留 matchMedia 首读,不影响标题栏 */ }
+  const stop = syncNativeTitleBarTheme(deps.current, deps.read, deps.subscribe);
+  return () => { unlistenOs(); stop(); };
+}

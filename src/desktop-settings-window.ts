@@ -1,5 +1,5 @@
-import { nativeTitleBarTheme, syncNativeTitleBarTheme } from './native-title-bar-theme';
-import { onThemePreferenceChange, themeMode, themePreference, type ThemeMode } from './theme';
+import { nativeTitleBarTheme, wireSettingsWindowTheme } from './native-title-bar-theme';
+import { onThemePreferenceChange, setSystemColorScheme, themeMode, themePreference, type ThemeMode } from './theme';
 import { isWindowsTauriShell } from './window-shell';
 import { SETTINGS_CATEGORIES, requestSettingsDetail, rememberSettingsCategory, settingsDetailFromQuery, type SettingsCategoryKey, type SettingsDetailKey } from './settings-model';
 
@@ -43,14 +43,22 @@ export function settingsWindowTheme(windows = isWindowsTauriShell()): ThemeMode 
   return windows ? nativeTitleBarTheme(themePreference(), themeMode()) ?? undefined : undefined;
 }
 
-/** #743:设置窗里调用 —— 主题切换时原生标题栏实时跟着变(Windows)。返回取消订阅。 */
+/** #743:设置窗里调用 —— 主题切换时原生标题栏实时跟着变(Windows);系统读数改从主窗取。返回取消订阅。 */
 export function followThemeInSettingsTitleBar(): () => void {
   if (!isWindowsTauriShell()) return () => {};
   let stop = () => {};
   let cancelled = false;
-  void import('@tauri-apps/api/webviewWindow').then(({ getCurrentWebviewWindow }) => {
+  void Promise.all([import('@tauri-apps/api/webviewWindow'), import('@tauri-apps/api/window')]).then(async ([{ getCurrentWebviewWindow }, { Window }]) => {
     if (cancelled) return;
-    stop = syncNativeTitleBarTheme(getCurrentWebviewWindow(), () => ({ pref: themePreference(), mode: themeMode() }), onThemePreferenceChange);
+    const off = await wireSettingsWindowTheme({
+      current: getCurrentWebviewWindow(),
+      // 系统读数只认主窗(没被钉住);设置窗自己的 theme()/matchMedia 是钉住后的值。
+      byLabel: label => Window.getByLabel(label),
+      feedSystem: setSystemColorScheme,
+      read: () => ({ pref: themePreference(), mode: themeMode() }),
+      subscribe: onThemePreferenceChange,
+    });
+    if (cancelled) off(); else stop = off;
   }).catch(() => {});
   return () => { cancelled = true; stop(); };
 }

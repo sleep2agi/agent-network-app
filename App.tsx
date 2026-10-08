@@ -13,7 +13,7 @@ import { purgeLegacyAttachmentCache } from './src/AuthedThumb';
 import { prefetchStatus, login, fetchHubNodes, fetchNetworkId, setNetworkIdPersister, HubConfig } from './src/api';
 import { fetchAuthMe, registerHubAccount } from './src/user-admin-api';
 import { clientLabelForLogin } from './src/login-sessions';
-import { popoutChatChrome, tauriShellPlatform } from './src/window-shell';
+import { isWindowsTauriShell, popoutChatChrome, tauriShellPlatform } from './src/window-shell';
 import DmChatScreen, { type GroupChatRef } from './src/DmChatScreen';
 import { groupNameFor, rememberGroupName } from './src/group-chat-bus';
 import type { Human } from './src/human-dm';
@@ -177,7 +177,7 @@ export default function App() {
   // 0.2.101「跟随系统」:先同步读系统配色并订阅它的变化(幂等,每个窗口的 JS 上下文装一次),
   // 再同步读用户偏好。存储里没有值(新装)= 跟随系统;旧版存的 light/dark 原样沿用。
   // undefined = 不是桌面壳(移动端),偏好等下面异步的 loadThemeMode() 再定。
-  installSystemThemeFollower();
+  installSystemThemeFollower({ subscribe: !(requestedSettingsWindow() && isWindowsTauriShell()) });
   {
     const early = loadDesktopThemeMode();
     if (early !== undefined) setThemePreference(parseStoredThemePreference(early));
