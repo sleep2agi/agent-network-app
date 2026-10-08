@@ -19,7 +19,8 @@ process.env.TZ = 'Asia/Shanghai';
 import fs from 'node:fs';
 import path from 'node:path';
 import { __resetOutboxForTest, initOutbox, outboxAdd, outboxForAlias, outboxRemove } from './outbox';
-import { confirmedOutboxIds, mergeMessagesNewestFirst } from './chat-actions';
+import { confirmedOutboxIds } from './chat-actions';
+import { mergeChatSource } from './chat-source-load';
 import { echoSupersededByFetched } from './chat-echo';
 import { createDashboardRequestId } from './api';
 
@@ -50,7 +51,8 @@ const restore = (): Item[] => outboxForAlias(ALIAS).map(e => ({
 const load = (prev: Item[], fetched: Item[]): Item[] => {
   const confirmed = new Set(confirmedOutboxIds(outboxForAlias(ALIAS), fetched));
   confirmed.forEach(outboxRemove);
-  return mergeMessagesNewestFirst(prev.filter(t => t._localId && !confirmed.has(t._localId) && !echoSupersededByFetched(t, fetched)), fetched);
+  const kept = prev.filter(t => !t._localId || (!confirmed.has(t._localId) && !echoSupersededByFetched(t, fetched)));
+  return mergeChatSource(kept, fetched, 'tasks');
 };
 
 const bubbles = (list: Item[], content: string) => list.filter(i => i.content === content);
@@ -117,7 +119,10 @@ ck('delivered echo, no task id: hub UTC time "YYYY-MM-DD HH:MM:SS" is read as UT
 // ── 4. the simulation above is the code ChatScreen runs ──
 const chat = fs.readFileSync(path.join(__dirname, 'ChatScreen.tsx'), 'utf8').replace(/\r\n/g, '\n');
 ck('ChatScreen load() confirms outbox entries with confirmedOutboxIds(outboxForAlias(alias), fetched)', chat.includes('const confirmed = new Set(confirmedOutboxIds(outboxForAlias(alias), fetched));'));
-ck('ChatScreen load() keeps only echoes not confirmed and not superseded', chat.includes('prev.filter(t => t._localId && !confirmed.has(t._localId) && !echoSupersededByFetched(t, fetched))'));
+// #781 paints sources independently: filter confirmed echoes before replacing only task rows.
+ck('ChatScreen load() keeps only echoes not confirmed and not superseded',
+  chat.includes('const kept = prev.filter(t => !t._localId || (!confirmed.has(t._localId) && !echoSupersededByFetched(t, fetched)));')
+  && chat.includes('mergeChatSource(kept, rows, source)') && chat.includes("paint('tasks', rows, fetched, confirmed)"));
 ck('ChatScreen sends the echo id as the hub request id', chat.includes('sendTask(cfg, alias, outgoing, attachments, priority, dashboardRequestIdForLocalId(localId))'));
 ck('ChatScreen restores outbox entries with their pending state', chat.includes("_pending: e.state === 'pending',"));
 
