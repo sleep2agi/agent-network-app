@@ -1,5 +1,6 @@
 import type { HubNode, NodeLifecycleRequest } from './api';
 import { registerTranslations, t } from './i18n';
+import { ADOPT_REFUSAL_COPY } from './adopt-refusal-copy';
 registerTranslations({
   'adopt.title': ['daemon 管理', 'Daemon management'],
   'adopt.entry': ['交给 daemon 管理', 'Manage with a daemon'],
@@ -17,6 +18,7 @@ registerTranslations({
   'adopt.uncertain': ['暂时无法确认结果。请刷新节点状态，勿重复提交。', 'Result is not confirmed. Refresh node status before retrying.'],
   'adopt.empty': ['没有报告支持收编的 daemon。', 'No daemon reports adoption support.'],
   'adopt.failed': ['操作未完成，请检查 daemon 状态或联系管理员。', 'Operation did not complete. Check the daemon or contact an administrator.'],
+  'adopt.failedCode': ['操作未完成（{code}），请检查 daemon 状态或联系管理员。', 'Operation did not complete ({code}). Check the daemon or contact an administrator.'],
   'adopt.socket': ['需要验证过的私有 tmux socket；默认 socket 不允许远程启动。', 'A verified private tmux socket is required; the default socket cannot be started remotely.'],
   'adopt.evidence': ['缺少可靠的进程或启动证据，已拒绝操作。请在节点机器上检查。', 'Process or launch evidence is missing. Operation refused; check the node machine.'],
   'adopt.binding': ['收编绑定缺失或已撤销，请重新收编。', 'Adoption binding is missing or revoked. Adopt the node again.'],
@@ -31,11 +33,15 @@ export function adoptionOutcome(kind: NodeLifecycleRequest['kind'], status: stri
   return status === ({ adopt: 'active', start: 'started', stop: 'stopped' }[kind]) ? 'success' : 'failed';
 }
 export function adoptionError(error: unknown): string {
+  // Hub refusal codes (board #747): a specific problem + fix, never the generic text.
+  if (typeof error === 'string' && Object.prototype.hasOwnProperty.call(ADOPT_REFUSAL_COPY, error)) return t(`adopt.code.${error}`);
   const key = error === 'adopt_explicit_private_socket_required' ? 'socket'
     : ['adopt_start_evidence_missing', 'adopt_stop_evidence_missing', 'adopt_process_generation_changed'].includes(String(error)) ? 'evidence'
     : ['adopt_active_binding_required', 'adopt_binding_revoked_during_start', 'adopt_binding_unavailable'].includes(String(error)) ? 'binding'
     : ['adopt_forbidden', 'user_token_required'].includes(String(error)) ? 'denied'
     : ['invalid_workdir', 'adopt_workdir_outside_roots', 'adopt_roots_not_configured'].includes(String(error)) ? 'pathError'
     : error === 'adopted_restart_requires_daemon' ? 'restartHint' : 'failed';
+  // Unknown code: show it so the owner can report it; free text (may hold paths) stays hidden.
+  if (key === 'failed' && typeof error === 'string' && /^[a-z][a-z0-9_]{0,63}$/.test(error)) return t('adopt.failedCode', { code: error });
   return t(`adopt.${key}`);
 }
