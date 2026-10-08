@@ -1,4 +1,4 @@
-Board #788: NSIS installation identity compatibility (local preliminary)
+Board #788: NSIS installation identity compatibility
 
 Scope: distinguish legacy INSTALLIDENTITY from displayed PRODUCTNAME.
 Keep old uninstall/manufacturer registry keys and default/custom directories.
@@ -20,10 +20,29 @@ sg docker -c 'docker run --rm --cpus=2 --network none anet-nsis-identity788:loca
   harness rc=0; mutant child rc=1 with named ANet uninstall/custom-directory
   identity assertion failures. No missing dependency/environment error.
 
-Coverage limitation: defines are projected by the unit test, not executed as
-an NSIS installer. Real Windows installer compilation and old-version upgrade
-(default and custom directory, retained accounts, shortcuts/uninstall) remain
-unverified. This report does NOT establish E2E success or merge readiness.
+Full-template installer check, 2026-10-09 (UTC+8):
+sg docker -c 'docker build -t anet-nsis-upgrade788:local -f tests/nsis-install-identity/Dockerfile.upgrade .'
+sg docker -c 'docker run --rm --init --cpus=2 --network none -v /dev/shm/anet-app-board788-nsis/tests/nsis-install-identity/upgrade.cjs:/fixture/upgrade.cjs:ro anet-nsis-upgrade788:local'
+  rc=0. Complete pinned upstream and adapted templates compiled by makensis.
+  Wine executed an Agent Network -> ANet upgrade in both the default directory
+  and C:\Chosen ANet Directory (including spaces). Both retained the exact
+  installation path, a single legacy uninstall key, and a fixture data sentinel;
+  DisplayName/version updated and the desktop shortcut migrated.
+  No NSIS registry, directory, or shortcut operation was mocked.
+  Docker --init is needed for Xvfb readiness; desktop symlinks are isolated
+  between Wine prefixes so two fixtures do not share their Unix desktop.
+  NSIS /D= must be unquoted and last; the Wine fixture uses cmd /c for this.
+sg docker -c 'docker run --rm --init --cpus=2 --network none -v /dev/shm/anet-app-board788-nsis/tests/nsis-install-identity/upgrade.cjs:/fixture/upgrade.cjs:ro anet-nsis-upgrade788:local xvfb-run -a node upgrade.cjs --mutate-identity'
+  Expected rc=1: AssertionError "existing uninstall identity must be updated".
+  Both installers compiled and executed; this is an assertion failure, not an
+  environment/compiler failure. Mutant changes INSTALLIDENTITY to product_name.
+
+Coverage boundary: the executable payload is inert, not the published app.
+Wine is not native Windows; the data sentinel is not an account-login test.
+Published-installer/native Windows upgrade and actual account retention remain
+release acceptance work for parent #778 before changing productName. This PR
+still leaves productName unchanged. Source contracts alone were not treated as
+installer proof; the scoped full-template Docker check above adds execution.
 No production install, release, version bump, global package or node change.
 Existing npm test CI discovers both unit files; the mutation is Docker-only.
 
