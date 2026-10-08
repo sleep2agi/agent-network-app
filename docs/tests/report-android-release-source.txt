@@ -1,0 +1,6 @@
+Board #773: Android build source pin
+Base b6a887ed9c54810e7ed003b4e2476f0afb94da87.
+The workflow now requires a full main SHA, checks out that SHA and checks its ancestry before dependencies/builds.
+Release SOP includes the new commit argument. APK build/signing/publish behavior is unchanged.
+Docker --cpus=2 --network none: src/android-release-source.test.ts 6/6, rc=0.
+These are workflow wiring checks, not an APK build. Existing CI runs the broader gates.

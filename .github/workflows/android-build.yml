@@ -8,6 +8,11 @@ name: android-build
 
 on:
   workflow_dispatch:
+    inputs:
+      commit:
+        description: Exact 40-character main commit to build
+        required: true
+        type: string
 
 permissions:
   contents: read
@@ -17,6 +22,20 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.commit }}
+          fetch-depth: 0
+
+      - name: Require exact merged commit
+        shell: bash
+        env:
+          REQUESTED_COMMIT: ${{ inputs.commit }}
+        run: |
+          set -euo pipefail
+          resolved="$(git rev-parse HEAD)"
+          [[ "$REQUESTED_COMMIT" =~ ^[0-9a-f]{40}$ && "$resolved" == "$REQUESTED_COMMIT" ]]
+          git fetch origin main
+          git merge-base --is-ancestor "$resolved" origin/main
 
       - uses: actions/setup-node@v4
         with:
