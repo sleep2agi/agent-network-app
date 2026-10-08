@@ -1,0 +1,68 @@
+Board #807 (parent #778), MSI path compatibility before display-name switch
+
+Scope: WiX installation directory searches, persisted registry identity,
+default install/start-menu directories use the stable Agent Network identity.
+Product/shortcut labels still use product_name. No productName, version,
+UpgradeCode, executable name, account storage, endpoint or release change.
+Upstream provenance remains in wix-source.json alongside adapted byte hashes.
+
+Published .224 evidence (read-only Docker/msitools, earlier #787/#807 audit):
+MSI SHA256 6441607e12cf22de08205eb4224723109522a4d0ea242fca88777b4f0a8c7cac
+RegLocator PrevInstallDirNoName and PrevInstallDirWithName use
+HKCU Software\vansin\Agent Network; the latter reads InstallDir.
+Directory INSTALLDIR defaults to Agent Network. UpgradeCode is unchanged.
+
+The old MSI suppresses RemoveShortcuts during a major upgrade. When the
+candidate display name differs and FindRelatedProducts detects the old MSI,
+the new MSI removes only its three fixed legacy .lnk names before creating
+the newly named shortcuts. No wildcard/recursive deletion or shell hook.
+The start-menu folder remains Agent Network (stable installation identity).
+NSIS path discovery still precedes the MSI-specific InstallDir lookup.
+This does not claim cross-installer NSIS-to-MSI uninstallation support.
+
+Local verification, disposable Docker --cpus=2 --network none:
+  docker build -f tests/wix-install-identity/Dockerfile -t anet-wix-path807:test .
+  docker run --rm --cpus=2 --network none anet-wix-path807:test
+Build rc=0; template contract, provenance 6/6, display identity 29/29 pass.
+Mutation puts product_name back into the registry searches: contract rc=1
+at "must search the legacy install key"; harness verifies it and exits 0.
+No unrelated full local suite repeated.
+
+Native acceptance is a separate required boundary, not inferred from hashes:
+.github/workflows/wix-install-identity.yml builds a test-only renamed MSI on
+an ephemeral Windows runner, installs hash-pinned published .224, and upgrades
+both default/custom paths. It checks one uninstall registration, binary path,
+legacy shortcut migration and fixture account-data retention. Logs are retained
+as CI artifacts; candidate is unsigned and never published or fed to updater.
+Status at initial commit: Windows job pending; do not claim native acceptance.
+Fixture sentinel is not a real account login; final branded release acceptance
+remains under #805/#778. No production install or secret access.
+
+Recovery: installer entry point/config/template remain versioned under
+src-tauri; CI inputs under tests/wix-install-identity. No service topology,
+ports, proxies, environment/secret sources or data-backup changes. Rollback is
+reverting this commit while productName is still Agent Network. Once renamed
+releases exist, retain installation identity rather than reverting it blindly.
+
+Reference: https://learn.microsoft.com/en-us/windows/win32/msi/removefile-table
+
+First native attempt, run 37817953877 / job 113451537085:
+Rust client compilation succeeded; WiX candle succeeded; light failed before
+any install/upgrade step. Non-verbose Tauri output omitted the WiX diagnostic.
+The follow-up enables verbose bundler output and retains generated WiX sources
+as test artifacts. Cache compiled Rust on failure to avoid unnecessary cold
+recompilation. No product changes made based on an unverified error guess.
+
+Verbose attempt 37820406239 / job 113459974192 identified ICE03 invalid
+registry paths in all seven changed Registry/RegLocator keys. The generated
+WXS confirms a doubled separator before $(var.InstallIdentity). Handlebars
+consumed the original escape before {{product_name}}, but does not consume
+that escape before a WiX variable. Fixed those separators (single literal
+backslash); retained the escape before {{manufacturer}}. Added a real
+Handlebars render check for the seven resulting keys and a doubled-separator
+mutation. No ICE validation disabled. Native upgrade remains pending.
+
+2026-10-09 02:13 CST: fixed-template Docker build rc=0, run rc=0.
+Provenance 6/6 and display identity 29/29 pass; all seven rendered registry
+keys match the published MSI identity. Both legacy-lookup and doubled-path
+mutations are rejected (mutation harness rc=0). No full unrelated suite run.

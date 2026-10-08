@@ -11,6 +11,8 @@
     <?error Unsupported value of sys.BUILDARCH=$(sys.BUILDARCH)?>
 <?endif?>
 
+<!-- #807: installation identity is stable even when the displayed product changes. -->
+<?define InstallIdentity = "Agent Network" ?>
 <Wix xmlns="http://schemas.microsoft.com/wix/2006/wi">
     <Product
             Id="*"
@@ -76,10 +78,10 @@
              search second so that the MSI-specific path takes priority when both keys exist. -->
         <Property Id="INSTALLDIR">
           <!-- First attempt: Search for the default key value (this is how the nsis installer stores the path) -->
-          <RegistrySearch Id="PrevInstallDirNoName" Root="HKCU" Key="Software\\{{manufacturer}}\\{{product_name}}" Type="raw" />
+          <RegistrySearch Id="PrevInstallDirNoName" Root="HKCU" Key="Software\\{{manufacturer}}\$(var.InstallIdentity)" Type="raw" />
 
           <!-- Second attempt: Search for "InstallDir" which takes priority if found (this is how the msi installer stores the path) -->
-          <RegistrySearch Id="PrevInstallDirWithName" Root="HKCU" Key="Software\\{{manufacturer}}\\{{product_name}}" Name="InstallDir" Type="raw" />
+          <RegistrySearch Id="PrevInstallDirWithName" Root="HKCU" Key="Software\\{{manufacturer}}\$(var.InstallIdentity)" Name="InstallDir" Type="raw" />
         </Property>
 
         <!-- launch app checkbox -->
@@ -115,20 +117,31 @@
                 <Component Id="ApplicationShortcutDesktop" Guid="*">
                     <Shortcut Id="ApplicationDesktopShortcut" Name="{{product_name}}" Description="Runs {{product_name}}" Target="[!Path]" WorkingDirectory="INSTALLDIR" />
                     <RemoveFolder Id="DesktopFolder" On="uninstall" />
-                    <RegistryValue Root="HKCU" Key="Software\\{{manufacturer}}\\{{product_name}}" Name="Desktop Shortcut" Type="integer" Value="1" KeyPath="yes" />
+                    <RegistryValue Root="HKCU" Key="Software\\{{manufacturer}}\$(var.InstallIdentity)" Name="Desktop Shortcut" Type="integer" Value="1" KeyPath="yes" />
                 </Component>
             </Directory>
             <Directory Id="$(var.PlatformProgramFilesFolder)" Name="PFiles">
-                <Directory Id="INSTALLDIR" Name="{{product_name}}"/>
+                <Directory Id="INSTALLDIR" Name="$(var.InstallIdentity)"/>
             </Directory>
             <Directory Id="ProgramMenuFolder">
-                <Directory Id="ApplicationProgramsFolder" Name="{{product_name}}"/>
+                <Directory Id="ApplicationProgramsFolder" Name="$(var.InstallIdentity)"/>
             </Directory>
         </Directory>
 
         <DirectoryRef Id="INSTALLDIR">
+            <?if "{{product_name}}" != "Agent Network"?>
+            <!-- Old MSI suppresses RemoveShortcuts during major upgrade. Remove only
+                 its fixed names, only when FindRelatedProducts found that MSI. -->
+            <Component Id="LegacyNamedShortcuts" Guid="*">
+                <Condition>WIX_UPGRADE_DETECTED</Condition>
+                <RemoveFile Id="LegacyDesktopShortcut" Directory="DesktopFolder" Name="Agent Network.lnk" On="install" />
+                <RemoveFile Id="LegacyMenuShortcut" Directory="ApplicationProgramsFolder" Name="Agent Network.lnk" On="install" />
+                <RemoveFile Id="LegacyUninstallShortcut" Name="Uninstall Agent Network.lnk" On="install" />
+                <RegistryValue Root="HKCU" Key="Software\\{{manufacturer}}\$(var.InstallIdentity)" Name="LegacyShortcutMigration" Type="integer" Value="1" KeyPath="yes" />
+            </Component>
+            <?endif?>
             <Component Id="RegistryEntries" Guid="*">
-                <RegistryKey Root="HKCU" Key="Software\\{{manufacturer}}\\{{product_name}}">
+                <RegistryKey Root="HKCU" Key="Software\\{{manufacturer}}\$(var.InstallIdentity)">
                     <RegistryValue Name="InstallDir" Type="string" Value="[INSTALLDIR]" KeyPath="yes" />
                 </RegistryKey>
                 <!-- Change the Root to HKCU for perUser installations -->
@@ -186,7 +199,7 @@
 							  On="uninstall" />
 
 				<RegistryValue Root="HKCU"
-							   Key="Software\\{{manufacturer}}\\{{product_name}}"
+                               Key="Software\\{{manufacturer}}\$(var.InstallIdentity)"
 							   Name="Uninstaller Shortcut"
 							   Type="integer"
 							   Value="1"
@@ -205,7 +218,7 @@
                     <ShortcutProperty Key="System.AppUserModel.ID" Value="{{bundle_id}}"/>
                 </Shortcut>
                 <RemoveFolder Id="ApplicationProgramsFolder" On="uninstall"/>
-                <RegistryValue Root="HKCU" Key="Software\\{{manufacturer}}\\{{product_name}}" Name="Start Menu Shortcut" Type="integer" Value="1" KeyPath="yes"/>
+                <RegistryValue Root="HKCU" Key="Software\\{{manufacturer}}\$(var.InstallIdentity)" Name="Start Menu Shortcut" Type="integer" Value="1" KeyPath="yes"/>
            </Component>
         </DirectoryRef>
 
@@ -230,6 +243,9 @@
                 Absent="disallow">
 
             <ComponentRef Id="RegistryEntries"/>
+            <?if "{{product_name}}" != "Agent Network"?>
+            <ComponentRef Id="LegacyNamedShortcuts"/>
+            <?endif?>
 
             {{#each resource_file_ids as |resource_file_id| ~}}
                 <ComponentRef Id="{{ resource_file_id }}"/>

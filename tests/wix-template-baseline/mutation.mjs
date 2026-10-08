@@ -8,6 +8,6 @@ try {
   writeFileSync(path, Buffer.concat([original, Buffer.from('\n<!-- drift -->\n')]));
   const red = spawnSync(process.execPath, ['src/wix-template-baseline.test.ts'], { encoding: 'utf8' });
   assert.equal(red.status, 1, red.stderr);
-  assert.match(red.stdout, /FAIL WiX template bytes match upstream SHA256/);
+  assert.match(red.stdout, /FAIL WiX template bytes match reviewed SHA256/);
   console.log('MUTATION_RED: template drift fails the byte-equality assertion (rc=1)');
 } finally { writeFileSync(path, original); }

@@ -1,0 +1,58 @@
+name: MSI installation identity
+on:
+  pull_request:
+    paths:
+      - 'src-tauri/windows/vendor/**'
+      - 'src-tauri/tauri.conf.json'
+      - 'tests/wix-install-identity/**'
+      - '.github/workflows/wix-install-identity.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  contract:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: docker build -f tests/wix-install-identity/Dockerfile -t wix-path .
+      - run: docker run --rm --cpus=2 --network none wix-path
+  upgrade:
+    needs: contract
+    runs-on: windows-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - uses: oven-sh/setup-bun@735343b667d3e6f658f44d0eca948eb6282f2b76
+        with:
+          bun-version: '1.3.14'
+      - run: npm ci
+      - run: npx expo export -p web
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+          cache-on-failure: true
+      - run: npm ci --prefix local-hub-sidecar --ignore-scripts
+      - run: npm run build:local-hub-sidecar
+      - run: npx tauri icon assets/icon.png
+      # Unsigned test-only override; never a Release or updater input.
+      - run: npx tauri build --verbose --bundles msi --config tests/wix-install-identity/renamed.test.json
+      - name: Published MSI upgrade (default and custom directory)
+        shell: pwsh
+        run: |
+          $msi = @(Get-ChildItem src-tauri/target/release/bundle/msi/*.msi)
+          if ($msi.Count -ne 1) { throw 'Expected exactly one candidate MSI' }
+          ./tests/wix-install-identity/upgrade.ps1 -Candidate $msi[0].FullName
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: msi-upgrade-test-logs
+          path: |
+            ${{ runner.temp }}/wix807-evidence/*.log
+            src-tauri/target/release/wix/**/*.wxs
+            src-tauri/target/release/wix/**/*.wixobj
+          retention-days: 7

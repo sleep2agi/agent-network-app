@@ -1,0 +1,5 @@
+{
+  "productName": "ANet",
+  "version": "0.2.227",
+  "bundle": { "createUpdaterArtifacts": false }
+}
