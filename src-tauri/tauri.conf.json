@@ -46,6 +46,7 @@
         "template": "./windows/vendor/installer.tauri-2.11.2.nsi"
       },
       "wix": {
+        "template": "./windows/vendor/main.tauri-2.11.2.wxs",
         "upgradeCode": "4777ee3d-8db8-576a-a7ad-361f79904d32"
       }
     },

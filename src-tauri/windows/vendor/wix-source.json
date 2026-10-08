@@ -1,0 +1,14 @@
+{
+  "repository": "https://github.com/tauri-apps/tauri",
+  "commit": "499df79be65ef8c0670abc0207cd9e37b55d8491",
+  "tag": "tauri-cli-v2.11.2",
+  "cliVersion": "2.11.2",
+  "path": "crates/tauri-bundler/src/bundle/windows/msi/main.wxs",
+  "localPath": "main.tauri-2.11.2.wxs",
+  "gitBlob": "dec39dadb4bc9160d108d19094987ada2a6eb996",
+  "sha256": "e371a01628a06730828f9bd24111feacb8bec53c250ccec4b46df756fe0a0198",
+  "license": "MIT",
+  "licensePath": "LICENSE-MIT",
+  "licenseSha256": "9dd42ea92cff2ede5cd477cbfcce051b2d0115c0ac7f368ee88cb545055dff1d",
+  "purpose": "Unmodified upstream baseline. Installation-path compatibility changes belong to a separate PR."
+}
