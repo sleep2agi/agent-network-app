@@ -16,3 +16,8 @@ only inside disposable containers. No shared node_modules modified.
 These are deterministic hook-harness and source-wiring checks, not a browser
 E2E. Full unit suite not repeated locally. Browser UI acceptance remains before
 ready/merge. Public error copy uses translations and excludes raw server errors.
+
+CI caught a phone navigation regression: clearing teams on same-scope refresh
+unmounted the phone drill-down and returned to root after removing an Agent.
+Keep data during same-scope refresh; the scope-key remount still isolates account
+and network changes. Added a regression assertion; existing phone drive unchanged.

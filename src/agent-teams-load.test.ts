@@ -38,6 +38,7 @@ function harness() {
   h.reads[0].resolve([{ id: 'A' }]); await flush();
   ck('late previous-network response ignored', h.render().teams?.[0]?.id === 'B');
   h.render().reload(); const older = h.reads[2];
+  ck('same-scope refresh keeps the current team page mounted', h.render().teams?.[0]?.id === 'B');
   h.render().reload(); h.reads[3].resolve([{ id: 'new' }]); await flush();
   older.reject(Error('late error')); await flush();
   ck('late failure cannot replace newer reload', !h.render().loadError && h.render().teams[0].id === 'new');

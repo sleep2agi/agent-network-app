@@ -31,7 +31,9 @@ export function useAgentTeams(cfg: HubConfig, networkId: string) {
   const request = useRef(0);
   const reload = useCallback(() => {
     const generation = ++request.current;
-    setTeams(undefined); setNodes([]); setLoadError(false);
+    // Same-scope refresh must keep the phone's current team page mounted.
+    // Scope changes remount AgentTeamsScoped, which starts with no old data.
+    setLoadError(false);
     void (async () => {
       try {
         const next = await fetchAgentTeams(cfg, networkId);
