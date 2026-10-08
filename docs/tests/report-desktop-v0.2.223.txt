@@ -1,0 +1,10 @@
+desktop v0.2.223 — 长对话分批加载 / 收编被拒显示原因 / Windows 设置窗标题栏跟随主题
+
+A. 本版内容(0.2.222 发版提交 689ddfa 之后 main 上合入的 PR + 本 PR;git log desktop-v0.2.222..origin/main = 3 个提交)
+  #753(看板 #745) 长对话从最新开始、每批 30 条按游标(before + before_task_id)往前加载;首屏读取时显示 5 个消息占位而不是空白;修复超过 200 条之前的历史读不到(旧做法整窗重拉,被 hub 200 条上限截断后误判为历史开头)。仅改 app,hub 自 #459 起已支持游标。
+  #754(看板 #747 ①) 「交给 daemon 管理」被拒时,按 Hub publicLifecycleErrors 的 62 个错误码显示具体原因和修法(中英);未知错误码显示通用文案并附 code;自由文本仍不回显。
+  #752(看板 #743) Windows 设置窗口(原生标题栏)创建时带 app 主题,并随主题切换实时 setTheme;「跟随系统」不固定主题。仅 Windows。
+  本 PR(版本号):0.2.222 → 0.2.223,versionCode 2222 → 2223;release-desktop-auto-update.yml 加 What's new in 0.2.223;node scripts/changelog-bundle.mjs 重新生成 src/changelog-bundled.ts(含 0.2.222 发布日期 2026-10-07T17:08:34Z)。
+  本地:android-release-notes.mjs <workflow> 0.2.223 输出含 What's new in 0.2.223;单测 / typecheck 由本 PR 的 CI 检查跑(本机不构建)。
+B. 验证边界(如实)
+  各功能的验证见对应 PR(#753 单测 34 项 + Playwright 驱动;#754 单测 138 项;#752 单测 16 项)。#752 未在真实 Windows 机器上看过标题栏(CI 只构建不截图),需在真机确认。
