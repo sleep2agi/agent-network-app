@@ -25,6 +25,8 @@ const norm = (f: string) => readFileSync(new URL(f, import.meta.url), 'utf-8').r
   ck('空查询 = 全部分类', all.length === SETTINGS_CATEGORIES.length);
   const noLocal = filterSettings('', {});
   ck('本地 Hub 未装 → 该类不出现', !noLocal.some((c) => c.key === 'localHub'));
+  ck('普通成员有独立 Agent 组织入口但没有用户管理', noLocal.some(c => c.key === 'agentTeams') && !noLocal.some(c => c.key === 'users'));
+  ck('团队入口支持英文搜索', filterSettings('organization', {}).some(c => c.key === 'agentTeams'));
 
   const r = filterSettings('提示音', { localHub: true });
   ck('搜「提示音」只剩通知类', r.length === 1 && r[0].key === 'notifications');
@@ -60,6 +62,11 @@ const norm = (f: string) => readFileSync(new URL(f, import.meta.url), 'utf-8').r
   ck('左栏(分类列表)', src.includes('testID="settings-sidebar"'));
   ck('右栏(内容面板)', src.includes('testID="settings-pane"'));
   ck('搜索框', src.includes("accessibilityLabel={tr('settings.copy.3')}"));
+  ck('桌面独立挂载组织入口', src.includes("sectionsToRender.includes('agentTeams')") && src.includes('<AgentTeamsEntry cfg={cfg} me={authMe} networkId={me.networkId} phone={false} />'));
+  ck('手机独立挂载组织入口', src.includes('renderAgentTeams: () => <AgentTeamsEntry') && norm('./SettingsPhonePages.tsx').includes("case 'agentTeams': return <>{ctx.renderAgentTeams()}</>"));
+  const entry = norm('./AgentTeamsEntry.tsx');
+  ck('成员入口不调用管理员成员接口', entry.includes('listRequirementPeople') && !entry.includes('fetchNetworkMembers') && !entry.includes('UserManagementPanel'));
+  ck('入口换账号和网络时清理旧候选', entry.includes('key={JSON.stringify([p.cfg.serverUrl, p.cfg.token, p.networkId])}') && entry.includes('live = false'));
   ck('关闭按钮(仅传了 onClose 时)', src.includes("accessibilityLabel={tr('settings.copy.2')}"));
   ck('分类按钮按模型渲染并翻译', src.includes("accessibilityLabel={tr('settings.copy.178', { v0: settingsText(cat.label) })}"));
   ck('右栏标题 = 当前分类名', src.includes('<Text style={styles.paneTitle}>'));

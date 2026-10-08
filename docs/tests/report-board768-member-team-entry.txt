@@ -1,0 +1,45 @@
+Board #768 — member-accessible Agent organization entry
+Base: 5df33dafecad6803c439b030188e8cb62cb0c23b (app 0.2.225)
+
+Scope: one Settings entry, shared desktop/phone team UI. No Hub permission,
+version, deployment, human-department or lifecycle changes. The old admin
+User management entry remains unchanged.
+
+Docker runtime checks (--cpus=2):
+settings-model 53/53, settings-phone-list 52/52, settings-subpages 57/57,
+agent-teams 40/40, agent-teams-load 10/10, i18n-copy-guard 68/68: rc=0.
+TypeScript build typecheck: rc=0.
+The focused source checks used the existing isolated Node 22 dependency image,
+with the candidate src copied into the disposable container; no host modules.
+Mutation in another disposable container: make agentTeams conditional again.
+settings-model becomes 50/53, rc=1, specifically failing the ordinary-member
+entry assertion (not an import/environment failure).
+
+Browser: fresh Expo export of candidate code; Chromium + Playwright 1.58.2,
+Chinese fonts, Docker --cpus=2. Existing admin light/dark and old-Hub cases
+remain in tests/test-agent-teams/drive.mjs. Added member/viewer/team-owner
+navigation on desktop 1200x800 and Android-touch 390x844.
+All 41 browser result rows passed, rc=0:
+- Real Settings navigation reaches teams without an admin menu.
+- Member/viewer have no editing controls; opening causes no writes.
+- Team owner creates a child under the exact owned parent; the other desktop
+  subtree remains read-only.
+- Non-admin entry makes zero administrator-only network-members reads.
+- Desktop Agent rows: x=625, right=1047, both rows identical.
+- Phone Agent rows: x=0, right=390, both rows identical.
+- No horizontal overflow at either viewport.
+
+Screenshots (synthetic data only, visually inspected):
+board768/desktop-1200x800-team-owner.png
+board768/phone-390x844-team-owner.png
+board768/phone-390x844-read-only.png
+
+Reproduce with the suite's independent Dockerfile:
+  docker build -f tests/test-agent-teams/Dockerfile -t team-entry-test .
+  docker run --rm --cpus=2 -v <output-dir>:/output team-entry-test
+Local browser run installed fonts in the disposable container and mounted the
+current drive read-only; the Dockerfile includes both for subsequent runs.
+
+This is a page-local API fixture, not a live-Hub authorization test. Hub is
+still authoritative for writes. Production not touched; no live tmux/nodes.
+Repository-wide regression gates are left to CI (not redundantly rerun here).
