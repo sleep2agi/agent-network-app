@@ -127,7 +127,7 @@ export async function setupAndroidChannels(api: {
 }
 /** 前台服务那条常驻通知的渠道 —— 在原生 Service 里建(见 modules/anet-keepalive)。 */
 export const KEEPALIVE_CHANNEL_ID = 'anet-keepalive';
-export const KEEPALIVE_NOTIFICATION_TEXT = 'Agent Network 正在保持连接';
+export const KEEPALIVE_NOTIFICATION_TEXT = 'ANet 正在保持连接';
 
 export const NOTIFICATION_KIND = 'anet-agent-message';
 

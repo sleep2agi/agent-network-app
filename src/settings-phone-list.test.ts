@@ -32,7 +32,7 @@ const norm = (f: string) => readFileSync(new URL(f, import.meta.url), 'utf-8').r
   ck('组标题 = 账号块(无标题) / 通用 / 功能 / 帮助与关于',
     JSON.stringify(PHONE_SETTINGS_GROUPS.map((g) => g.title)) === JSON.stringify([null, '通用', '功能', '帮助与关于']));
   ck('账号块在最上面', PHONE_SETTINGS_GROUPS[0].keys.length === 1 && PHONE_SETTINGS_GROUPS[0].keys[0] === 'account');
-  ck('关于行叫「关于 Agent Network」', phoneRowLabel({ key: 'about', label: '关于' }) === '关于 Agent Network');
+  ck('关于行叫「关于 ANet」', phoneRowLabel({ key: 'about', label: '关于' }) === '关于 ANet');
   ck('其它行用分类名', phoneRowLabel({ key: 'notifications', label: '通知' }) === '通知');
 }
 

@@ -63,7 +63,7 @@ pub fn show_chat_notification<R: Runtime>(app: AppHandle<R>, alias: String, titl
     }
     std::thread::spawn(move || {
         let mut notification = new_notification(&app);
-        notification.summary(&title).body(&body).appname("Agent Network");
+        notification.summary(&title).body(&body).appname("ANet");
         // Linux: 不登记 default,点正文不会回报。Windows 点正文是 Default,这个按钮也是同一条路。
         notification.action("default", "打开");
         #[cfg(windows)]

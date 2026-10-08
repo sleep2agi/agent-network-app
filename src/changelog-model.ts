@@ -93,10 +93,10 @@ export function entrySummary(e: ChangelogEntry): string {
 
 // ── 复制格式 ────────────────────────────────────────────────────────────────────────────────
 
-const APP_NAME = 'Agent Network';
+const APP_NAME = 'ANet';
 const XHS_EMOJI: Record<NoteKind, string> = { new: '✨', speed: '⚡️', fix: '🔧' };
 const XHS_SECTION_EMOJI: Record<NoteKind, string> = { new: '🆕', speed: '🚀', fix: '🛠' };
-export const XHS_TAGS = ['#AgentNetwork', '#AI工具', '#效率', '#AIAgent', '#更新日志'];
+export const XHS_TAGS = ['#ANet', '#AI工具', '#效率', '#AIAgent', '#更新日志'];
 const CN_NUM = ['一', '二', '三', '四', '五', '六', '七', '八', '九', '十'];
 
 /** 选中的条目按新→旧排好;标题里的版本范围「0.2.163–0.2.165」。 */

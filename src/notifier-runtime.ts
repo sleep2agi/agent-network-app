@@ -574,7 +574,7 @@ async function sendTestNotificationInner(): Promise<void> {
   await ensureNotificationSetup();
   await postNotification({
     identifier: 'anet-test',
-    title: 'Agent Network',
+    title: 'ANet',
     body: '测试通知:agent 给你发消息时,会像这样提醒你。',
     channelId: MESSAGE_CHANNEL_ID,
     alert: true,

@@ -285,7 +285,7 @@ export const PHONE_SETTINGS_GROUPS: readonly PhoneSettingsGroup[] = [
 ];
 
 /** 列表行与子页标题用的名字;没写就用分类名。 */
-export const PHONE_ROW_LABEL: Partial<Record<SettingsCategoryKey, string>> = { about: '关于 Agent Network' };
+export const PHONE_ROW_LABEL: Partial<Record<SettingsCategoryKey, string>> = { about: '关于 ANet' };
 export const phoneRowLabel = (cat: Pick<SettingsCategory, 'key' | 'label'>): string => PHONE_ROW_LABEL[cat.key] ?? cat.label;
 
 /**

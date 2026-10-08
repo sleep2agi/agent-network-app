@@ -1,0 +1,27 @@
+Board #777 (parent #776): ANet display name
+
+Scope
+- Expo mobile application name, current app UI, window titles, tray,
+  notifications, about text and generated share copy use ANet.
+- No version bump, icon replacement, account migration, production change,
+  release overwrite, package/bundle ID change or update URL change.
+- Historical release notes and signing/profile identifiers are untouched.
+- Desktop productName deliberately remains Agent Network. Tauri 2.11.2
+  derives its default MSI upgrade code from productName. Installer renaming
+  requires the separate #778 compatibility migration, including NSIS/macOS
+  paths and existing mirror download aliases. This is not a completed
+  desktop installer rebrand.
+- More than three files are needed because existing display literals live
+  across screens and platform notification shells. All changes serve the
+  same naming request; no runtime logic or unrelated refactor is included.
+
+Local validation
+- Disposable Docker, --cpus=2 --network=none, source mounted read-only.
+- Seven focused ck suites passed (exit 0): app-display-name (28/28),
+  entry-ui (9/9), desktop-chat-menu, task-window-model (9/9),
+  settings-phone-list, notification-channels (33/33), changelog-model (55/55).
+- Name checks pin the existing mobile/desktop identifiers and update URLs.
+- TypeScript typecheck exit 0; i18n-copy-guard 68/68, exit 0 (same isolated Docker setup).
+- Existing browser changelog expectations updated to ANet; not locally rerun.
+- Native installers and installed-device updates have not been tested here;
+  no claim of release availability or completed installer migration.

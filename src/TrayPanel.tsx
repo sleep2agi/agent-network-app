@@ -121,7 +121,7 @@ export default function TrayPanel() {
   return (
     <View style={panelStyles.root} testID="tray-panel">
       <View style={panelStyles.header}>
-        <Text style={panelStyles.brand} numberOfLines={1}>Agent Network</Text>
+        <Text style={panelStyles.brand} numberOfLines={1}>ANet</Text>
         {model.empty ? null : (
           <Pressable
             accessibilityRole="button"

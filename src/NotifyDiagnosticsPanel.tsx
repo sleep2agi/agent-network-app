@@ -43,7 +43,7 @@ export default function NotifyDiagnosticsPanel() {
           onPress={() => {
             void (async () => {
               await refreshNotifyDiagnostics().catch(() => {});
-              const text = formatDiagnostics(getNotifyDiagnostics(), `Agent Network v${APP_VERSION} 通知诊断(${Platform.OS})`);
+              const text = formatDiagnostics(getNotifyDiagnostics(), `ANet v${APP_VERSION} 通知诊断(${Platform.OS})`);
               try { await Clipboard.setStringAsync(text); setCopied('已复制,可以直接粘贴发给维护者。'); }
               catch (e) { setCopied(`复制失败:${String((e as Error)?.message ?? e)}`); }
             })();

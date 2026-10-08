@@ -76,7 +76,7 @@ export function shareModel(data: DashData, period: DashPeriod, people: readonly 
       agent: agentDone, user: userDone,
       top: data.leaders.slice(0, 3).map(l => ({ name: shareName(l, people) ?? '', sub: `${tr('card.topItem', { n: l.n })} · ${l.kind === 'node' ? tr('dash.agent') : tr('dash.member')}` })),
     } : null,
-    brand: 'Agent Network',
+    brand: 'ANet',
     brandSub: tr('card.brandSub'),
     footer: tr('card.footer', { h: humans, a: agents }),
     link: 'github.com/sleep2agi/agent-network',

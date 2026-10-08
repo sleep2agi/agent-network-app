@@ -113,6 +113,6 @@ ck('前台服务渠道 IMPORTANCE_LOW(不响)', /NotificationChannel\(CHANNEL_ID
 ck('前台服务不引用消息渠道', !service.includes('agent-messages'));
 
 // ── 6. 小米指引:勿扰模式 ──
-ck('小米指引有勿扰模式一条,说明去「例外应用」加', XIAOMI_GUIDE_STEPS.some(s => s.detail === XIAOMI_GUIDE_DND_LINE) && XIAOMI_GUIDE_DND_LINE.includes('勿扰模式 → 例外应用') && XIAOMI_GUIDE_DND_LINE.includes('Agent Network'));
+ck('小米指引有勿扰模式一条,说明去「例外应用」加', XIAOMI_GUIDE_STEPS.some(s => s.detail === XIAOMI_GUIDE_DND_LINE) && XIAOMI_GUIDE_DND_LINE.includes('勿扰模式 → 例外应用') && XIAOMI_GUIDE_DND_LINE.includes('ANet'));
 
 console.log(`\n${p}/${t} passed`); process.exit(p === t ? 0 : 1);

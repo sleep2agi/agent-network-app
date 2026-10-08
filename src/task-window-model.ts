@@ -52,7 +52,7 @@ export function parseTaskWindowPayload(raw: unknown): TaskWindowPayload | null {
   };
 }
 
-export const taskWindowTitle = (name: string): string => `${name.trim() || '任务'} · Agent Network`;
+export const taskWindowTitle = (name: string): string => `${name.trim() || '任务'} · ANet`;
 
 export type TaskChanged = { profileId?: string; serverUrl: string; networkId?: string; from: string };
 

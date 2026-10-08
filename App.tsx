@@ -736,7 +736,7 @@ function AppRoot() {
     return (
       <SafeAreaView style={[styles.root, rootInset, styles.center, bootStyles.root]}>
         <Image source={require('./assets/splash-icon.png')} style={bootStyles.logo} resizeMode="contain" />
-        <Text style={bootStyles.title}>Agent Network</Text>
+        <Text style={bootStyles.title}>ANet</Text>
         <ActivityIndicator color={colors.accent} />
       </SafeAreaView>
     );
@@ -1109,7 +1109,7 @@ export function FirstRunScreen({ busy, stage, error, onStartLocal, onRemote }: {
       <ScrollView style={loginStylesShared.scrollView} contentContainerStyle={loginStylesShared.scrollContent} showsVerticalScrollIndicator={false}>
       <View style={[entryStyles.card, compact && entryStyles.cardCompact]}>
         <Image source={require('./assets/splash-icon.png')} style={entryStyles.logo} resizeMode="contain" />
-        <Text style={entryStyles.title}>Agent Network</Text>
+        <Text style={entryStyles.title}>ANet</Text>
         <Text style={entryStyles.copy}>在这台电脑创建本地工作区，数据留在本机；也可以登录已有服务器。</Text>
         {error ? <View style={entryStyles.errorBox}><Ionicons name="alert-circle-outline" size={17} color={colors.failed} /><Text style={entryStyles.error}>{maskUrlsInText(error)}</Text></View> : null}
         <Pressable
