@@ -21,6 +21,10 @@
       "kind": "hub",
       "why": "needs a throwaway hub (HUB_URL / HUB_TOKEN) with a seeded node row"
     },
+    "test-agent-teams/drive.mjs": {
+      "kind": "stub",
+      "secs": 70
+    },
     "test-board-assign/drive.mjs": {
       "kind": "stub",
       "secs": 90

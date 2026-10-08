@@ -4,6 +4,9 @@ export type Language = 'zh' | 'en';
 export type TranslationTable = Record<string, readonly [string, string]>;
 export const LANGUAGE_STORAGE_KEY = 'anet.language.v1';
 const tables: TranslationTable = {
+  'teams.title': ['Agent 组织', 'Agent teams'],
+  'teams.loadFailed': ['无法读取团队，请重试', 'Could not load teams. Please retry.'],
+  'teams.retry': ['重试', 'Retry'],
   'language.label': ['语言', 'Language'],
   'language.system': ['跟随系统', 'Follow system'],
   'nav.agents': ['Agent', 'Agents'],

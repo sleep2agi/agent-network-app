@@ -8,6 +8,7 @@
 import { fetchOrg } from './org-api';
 import type { OrgData } from './org-model';
 import { OrgDesktopPanel, OrgPhoneModal } from './OrgChart';
+import { AgentTeamsSection } from './AgentTeams';
 import { useCallback, useEffect, useMemo, useState, type ComponentProps, type ReactNode } from 'react';
 import { ActivityIndicator, Platform, Pressable, ScrollView, StyleSheet, Switch, View } from 'react-native';
 import { Text, TextInput } from './ui-text';
@@ -148,6 +149,8 @@ export default function UserManagementPanel({ cfg, me, networkId, phone }: { cfg
           </SettingsGroup>
         )
       ) : null}
+      {/* Agent 组织(#766):Agent 自己的团队树,紧跟人的组织架构;旧 Hub 只一行版本提示。 */}
+      {members ? <AgentTeamsSection cfg={cfg} networkId={networkId} me={me} people={members} phone={!!phone} /> : null}
       {orgOpen && org && members ? (
         <OrgPhoneModal cfg={cfg} networkId={networkId} networkName={networkName} org={org} people={members} onChanged={reloadOrg} onClose={() => setOrgOpen(false)} />
       ) : null}
