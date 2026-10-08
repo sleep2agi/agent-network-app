@@ -5,7 +5,7 @@ import { useTranslation } from './i18n-react';
 import { taskText } from './i18n-tasks';
 // 管理项目:新建、改名、换颜色、归档 / 恢复。桌面是居中对话框,手机是底部面板。
 // 军团项目 / TMAI 由 owner 在这里建(Hub 不预置任何项目)。每个动作立即写 Hub,失败留在原处提示。
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Modal, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { Text, TextInput } from './ui-text';
 import { Ionicons } from './icons';
@@ -17,7 +17,7 @@ import { activeProjects, checkProjectName, nextProjectColor, PROJECT_COLORS } fr
 import { liftedShadow, useTaskStyles } from './TaskBoardParts';
 import { fieldStyles } from './TaskCreateDialog';
 
-export default function TaskProjectManager({ open, sheet, projects, counts, onCreate, onUpdate, onClose }: {
+export default function TaskProjectManager({ open, sheet, projects, counts, onCreate, onUpdate, onClose, focus }: {
   open: boolean;
   sheet: boolean;
   projects: readonly RequirementProject[];
@@ -26,6 +26,8 @@ export default function TaskProjectManager({ open, sheet, projects, counts, onCr
   onCreate: (name: string, color: string) => Promise<string | null>;
   onUpdate: (id: string, patch: { name?: string; color?: string; archived?: boolean }) => Promise<string | null>;
   onClose: () => void;
+  /** 从项目菜单「改名」打开(#760):直接进这个项目的改名。 */
+  focus?: string | null;
 }) {
   useTranslation();
   const s = useTaskStyles();
@@ -37,6 +39,10 @@ export default function TaskProjectManager({ open, sheet, projects, counts, onCr
   const [editing, setEditing] = useState<{ id: string; name: string } | null>(null);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
+  useEffect(() => {
+    const p = open && focus ? projects.find(x => x.id === focus) : undefined;
+    if (p) setEditing({ id: p.id, name: p.name });
+  }, [open, focus]); // eslint-disable-line react-hooks/exhaustive-deps
   if (!open) return null;
   const active = activeProjects(projects);
   const archived = projects.filter(p => p.archived);

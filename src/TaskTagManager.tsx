@@ -3,7 +3,7 @@
 // 手机 = 微信式:底部面板里一条条整行列表,点一行弹出操作面板(改名 / 颜色 / 删除 / 取消),
 //        「选择」进入多选,底部「合并」;改名、颜色、删除确认、合并都是同一个面板里的下一页。
 // 每个动作立即写 Hub(POST /api/requirements/tags/ops),失败留在原处提示;Hub 没有 tag_ops 时根本不渲染入口。
-import { useState, type ReactNode } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { Modal, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import ModalKeyboardAvoider from './ModalKeyboardAvoider';
 import { Text, TextInput } from './ui-text';
@@ -26,7 +26,7 @@ type Page =
   | { kind: 'delete'; tag: string }
   | { kind: 'merge' };
 
-export default function TaskTagManager({ open, sheet, catalog, onOp, onClose }: {
+export default function TaskTagManager({ open, sheet, catalog, onOp, onClose, focus }: {
   open: boolean;
   /** true = 手机底部面板(微信式);false = 桌面居中对话框。 */
   sheet: boolean;
@@ -34,6 +34,8 @@ export default function TaskTagManager({ open, sheet, catalog, onOp, onClose }: 
   /** 执行一个操作;返回 null = 成功,否则是错误文案的 key。 */
   onOp: (op: TagOp) => Promise<string | null>;
   onClose: () => void;
+  /** 从标签菜单「改名」打开(#760):手机直接进改名页,桌面那一行直接是输入框。 */
+  focus?: string | null;
 }) {
   useTranslation();
   const s = useTaskStyles();
@@ -48,6 +50,11 @@ export default function TaskTagManager({ open, sheet, catalog, onOp, onClose }: 
   const [editing, setEditing] = useState<string | null>(null);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
+  useEffect(() => {
+    if (!open || !focus) return;
+    setDraft(focus);
+    if (sheet) setPage({ kind: 'rename', tag: focus }); else setEditing(focus);
+  }, [open, focus, sheet]);
   if (!open) return null;
   const tags = [...catalog.tags].sort((a, b) => (catalog.counts[b] ?? 0) - (catalog.counts[a] ?? 0) || a.localeCompare(b));
   const count = (tag: string) => catalog.counts[tag] ?? 0;

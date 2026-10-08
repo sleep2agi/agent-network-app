@@ -327,6 +327,10 @@
       "kind": "stub",
       "secs": 70
     },
+    "test-side-rename/drive.mjs": {
+      "kind": "stub",
+      "secs": 40
+    },
     "test-tag-manager/drive.mjs": {
       "kind": "stub",
       "secs": 31
