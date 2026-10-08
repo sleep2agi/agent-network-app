@@ -414,6 +414,14 @@ Nothing has to be triggered by hand in a normal release.
 | `android/<ver>/notes.md` | this version's release notes: the `releaseBody` of `release-desktop-auto-update.yml` at the APK's commit (= the GitHub release body) |
 | `android/latest/VERSION` | the version the Android channel currently holds; only moves forward |
 
+The desktop mirror accepts both `Agent.Network_<ver>_<suffix>` and
+`ANet_<ver>_<suffix>` installer names. Both keep the existing
+`desktop/latest/Agent.Network_<suffix>` download-page link. Versioned files keep
+their published names and bytes; updater signatures remain unchanged. A release
+must not contain both names for the same installer suffix (ambiguous alias).
+This compatibility does not itself rename installers or migrate installation
+identity; that remains a separate release change.
+
 Anonymous download URL:
 `https://modelscope.cn/datasets/SmartFlowAI/agent-network-releases/resolve/master/<path>`.
 

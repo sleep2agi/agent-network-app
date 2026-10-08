@@ -93,6 +93,13 @@ check('SHA256SUMS is sha256sum format, sorted, basenames only',
 check('installer alias drops the version', latestAliasName('Agent.Network_1.2.3_aarch64.dmg', '1.2.3') === 'Agent.Network_aarch64.dmg');
 check('updater bundles get no alias', latestAliasName('Agent.Network_1.2.3_aarch64.app.tar.gz', '1.2.3') === null);
 check('another version\'s file gets no alias', latestAliasName('Agent.Network_1.2.2_aarch64.dmg', '1.2.3') === null);
+for (const suffix of ['aarch64.dmg', 'x64-setup.exe', 'x64_en-US.msi', 'android-universal.apk']) {
+  check(`ANet ${suffix} preserves the old fixed download link`, latestAliasName(`ANet_1.2.3_${suffix}`, '1.2.3') === `Agent.Network_${suffix}`);
+}
+check('ANet updater bundles and signatures get no installer alias',
+  ['aarch64.app.tar.gz', 'x64-setup.exe.sig'].every(s => latestAliasName(`ANet_1.2.3_${s}`, '1.2.3') === null));
+check('ANet wrong version and unrelated prefix get no alias',
+  latestAliasName('ANet_1.2.2_aarch64.dmg', '1.2.3') === null && latestAliasName('Other_1.2.3_aarch64.dmg', '1.2.3') === null);
 
 // --- plan -------------------------------------------------------------------------------
 const planNewest = planMirror({ release, manifest, isNewest: true, baseUrl: base });
@@ -107,6 +114,25 @@ check('re-syncing an older release never touches desktop/latest/',
   [...planOld.keys()].every((p) => !p.startsWith('desktop/latest/')));
 check('latest alias has the same bytes (sha) as the versioned installer',
   planNewest.get('desktop/latest/Agent.Network_x64-setup.exe').sha256 === planNewest.get('desktop/1.2.3/Agent.Network_1.2.3_x64-setup.exe').sha256);
+const renamedRelease = { ...release, assets: release.assets.map(a => ({ ...a,
+  name: a.name.replace('Agent.Network_', 'ANet_'),
+  browser_download_url: a.browser_download_url.replace('Agent.Network_', 'ANet_'),
+})) };
+const renamedManifest = { ...manifest, platforms: Object.fromEntries(Object.entries(manifest.platforms).map(([k, v]) =>
+  [k, { ...v, url: v.url.replace('Agent.Network_', 'ANet_') }])) };
+const renamedPlan = planMirror({ release: renamedRelease, manifest: renamedManifest, isNewest: true, baseUrl: base });
+check('renamed installer old alias uses the exact same asset and digest',
+  renamedPlan.get('desktop/latest/Agent.Network_x64-setup.exe').source.asset === renamedRelease.assets[3]
+  && renamedPlan.get('desktop/latest/Agent.Network_x64-setup.exe').sha256 === renamedPlan.get('desktop/1.2.3/ANet_1.2.3_x64-setup.exe').sha256);
+const renamedUpdate = JSON.parse(renamedPlan.get('desktop/latest/latest.json').source.bytes.toString());
+check('ANet manifest keeps signatures and uses original versioned ANet filenames',
+  Object.entries(manifest.platforms).every(([k, v]) => renamedUpdate.platforms[k].signature === v.signature
+    && renamedUpdate.platforms[k].url.startsWith(`${base}/desktop/1.2.3/ANet_1.2.3_`)));
+check('renamed historical release cannot move latest', [...planMirror({ release: renamedRelease,
+  manifest: renamedManifest, isNewest: false, baseUrl: base }).keys()].every(p => !p.startsWith('desktop/latest/')));
+check('old and new names cannot silently overwrite the same installer alias', throws(() => planMirror({
+  release: { ...release, assets: [...release.assets, renamedRelease.assets[3]] }, manifest, isNewest: true, baseUrl: base,
+}), /duplicate installer alias/));
 check('draft is refused', throws(() => planMirror({ release: { ...release, draft: true }, manifest, isNewest: false, baseUrl: base }), /draft/));
 check('asset still uploading is refused', throws(() => planMirror({
   release: { ...release, assets: [...release.assets.slice(0, 8), asset(10, 'x', { state: 'starter' })] }, manifest, isNewest: false, baseUrl: base }), /uploading/));

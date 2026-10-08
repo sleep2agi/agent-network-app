@@ -88,7 +88,10 @@ export const selectNewestDesktopRelease = (releases) => releases
 
 export const latestAliasName = (assetName, version) => {
   for (const suffix of LATEST_ALIAS_SUFFIXES) {
-    if (assetName === `Agent.Network_${version}_${suffix}`) return `Agent.Network_${suffix}`;
+    // Keep existing download-page URLs when future installers adopt ANet.
+    if (assetName === `Agent.Network_${version}_${suffix}` || assetName === `ANet_${version}_${suffix}`) {
+      return `Agent.Network_${suffix}`;
+    }
   }
   return null;
 };
@@ -167,6 +170,7 @@ export const planMirror = ({ release, manifest, isNewest, baseUrl }) => {
     for (const asset of release.assets) {
       const alias = latestAliasName(asset.name, version);
       if (!alias) continue;
+      if (plan.has(`desktop/latest/${alias}`)) throw new Error(`duplicate installer alias ${alias}`);
       const sha256 = assetSha256(asset);
       plan.set(`desktop/latest/${alias}`, { sha256, size: asset.size, source: { asset } });
       latestSums.push([alias, sha256]);
