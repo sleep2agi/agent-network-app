@@ -5,6 +5,11 @@
 export const BUNDLED_RELEASE_BODY: string = [
   "Signed and notarized stable update for macOS (Apple Silicon) and Windows (x64).",
   "",
+  "What's new in 0.2.225:",
+  "- 客户端界面、通知和手机应用名称统一为 ANet。账号和数据不变；桌面安装包名称将在后续兼容迁移中调整。",
+  "- 设置 → 用户管理新增「Agent 组织」：管理 Agent 团队层级和成员，与人类部门独立。需要 Hub 0.9.0-preview.116 或更新版本。",
+  "- 修复：切换账号或网络后，旧的组织加载结果不会覆盖当前页面；加载失败可重试。",
+  "",
   "What's new in 0.2.224:",
   "- 修复：加入多个网络的账号，打开 Agent 会话后可以正确读取历史和发送消息。",
   "- 任务侧栏的项目和标签支持右键或长按改名。",
@@ -984,6 +989,7 @@ export const BUNDLED_RELEASE_BODY: string = [
 
 /** Release date (published_at) per version, as far as it was known when this file was generated. */
 export const BUNDLED_RELEASE_DATES: Record<string, string> = {
+  "0.2.224": "2026-10-08T09:30:30Z",
   "0.2.223": "2026-10-08T01:56:40Z",
   "0.2.222": "2026-10-07T17:08:34Z",
   "0.2.221": "2026-10-07T13:31:30Z",
