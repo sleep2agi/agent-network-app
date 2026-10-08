@@ -68,12 +68,12 @@ const checks: Array<[string, boolean]> = [
     secondWindow.close(secondB);
     return !secondWindow.isCurrent(secondB) && secondWindow.current() === null;
   })()],
-  ['a stale answer is cached by its own key before screen writes are refused',
-    // app#160 起缓存的是任务行 + 主动消息(同一份合并输入),仍然是「先按自己的 key 缓存、再拒绝写屏」。
-    /conversations\.put\(token\.key, \[\.\.\.fetched, \.\.\.proactive\]\);\n\s*return;/.test(screen)],
+  ['a stale partial answer cannot overwrite even its old conversation cache',
+    // #781: two independent sources must not replace a newer A snapshot after A→B→A.
+    /setMessages\(prev => \{\s*if \(!isCurrent\(\)\) return prev;/.test(screen) && screen.includes('conversations.put(token.key, merged)')],
   ['the screen checks request ownership before its first state write', (() => {
-    const afterFetch = screen.slice(screen.indexOf('await fetchTasks('));
-    const gate = afterFetch.indexOf('requestGate.isCurrent(token)');
+    const afterFetch = screen.slice(screen.indexOf('const load = useCallback('));
+    const gate = afterFetch.indexOf('if (!isCurrent()) return;');
     const write = afterFetch.indexOf('setMessages(');
     return gate > 0 && write > gate;
   })()],

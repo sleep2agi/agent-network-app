@@ -114,6 +114,7 @@ import { loadComposerInputMode, saveComposerInputMode } from './voice-prefs';
 import { elevated } from './elevation';
 import { CHAT_PAGE, mergeNewestPage, mergeOlderPage, newestPageParams, olderPageHasMore, olderPageParams } from './chat-history-pages';
 import { cfgForAgent } from './agent-network';
+import { loadChatSources, mergeChatSource, type ChatSource } from './chat-source-load';
 
 // Chat with one agent. Open with the newest PAGE messages; scrolling toward
 // older history fetches the next older PAGE by cursor (chat-history-pages.ts, #745).
@@ -450,6 +451,7 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
   const limitRef = useRef(PAGE);
   // #745:当前会话已拉到的 hub 行(newest-first)。轮询刷新最新一页、往上翻按游标接更早的一页,都只改它。
   const hubRowsRef = useRef<HubTask[]>([]);
+  const loadSequenceRef = useRef(0);
 
   // app#166 —— 微信式「聊天记录搜索」:范围永远是当前会话;结果只认开始搜索时的会话 key。
   const SEARCH_MAX_OLDER_PAGES = 5;
@@ -489,45 +491,42 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
     async (limit: number) => {
       const token = requestGate.current();
       if (!token) return;
-      try {
-        // app#160:同一次轮询顺带取 Agent 主动发给用户的消息(user_inbox),与任务并行;它失败不影响任务行。
-        const userMessagesPromise = fetchChatUserMessages(cfg).catch(() => ({ messages: [] as any[] }));
-        const params = newestPageParams(alias, limit);
-        const data = await fetchTasks(cfg, params);
-        const userMessages = await userMessagesPromise;
-        // The await is where the conversation can change underneath us. Every
-        // line below writes to screen state, so nothing may run for an answer
-        // that is no longer the one being waited for — that is the whole bug.
-        const fetched = data.tasks ?? [];
-        const proactive = proactiveItemsForAgent(userMessages.messages as any, alias, cfg.username);
-        if (!requestGate.isCurrent(token) || !mountedRef.current) {
-          conversations.put(token.key, [...fetched, ...proactive]);
-          return;
-        }
-        if (fetched.length < params.limit) setHasOlder(false);
-        // #745:这页刷新最新区间;往上翻拉到的更早的行留着(轮询不把历史缩回去)。
-        const hubRows = hubRowsRef.current = mergeNewestPage(hubRowsRef.current, fetched, params.limit);
-        // Hub returns newest-first, which matches inverted-list order. Reconcile
-        // accepted retries before merging local echoes into that same timeline.
-        const confirmed = new Set(confirmedOutboxIds(outboxForAlias(alias), fetched));
-        confirmed.forEach(outboxRemove);
+      const sequence = ++loadSequenceRef.current;
+      const isCurrent = () => requestGate.isCurrent(token) && mountedRef.current && sequence === loadSequenceRef.current;
+      const params = newestPageParams(alias, limit);
+      const paint = (source: ChatSource, rows: ChatItem[], fetched: HubTask[] = [], confirmed = new Set<string>()) => {
+        if (!isCurrent()) return;
         setMessages(prev => {
-          const merged = settleEchoes<ChatItem>(mergeMessagesNewestFirst(
-            prev.filter(t => t._localId && !confirmed.has(t._localId) && !echoSupersededByFetched(t, fetched)),
-            [...hubRows, ...proactive],
-          ) as ChatItem[], outboxEntry);
+          if (!isCurrent()) return prev;
+          const kept = prev.filter(t => !t._localId || (!confirmed.has(t._localId) && !echoSupersededByFetched(t, fetched)));
+          const merged = settleEchoes<ChatItem>(mergeChatSource(kept, rows, source), outboxEntry);
           conversations.put(token.key, merged);
+          // Only server rows enter the bounded disk cache; never echoes or local attachments.
+          rememberConversation(cfg.profileId, token.key, merged.filter(t => !t._localId) as unknown as Record<string, unknown>[]);
           return merged;
         });
-        // 磁盘上的最近会话(swr-cache.ts):只存 hub 行(本地回显 / 未送达 / 附件预览不进),下次冷启动先画它。
-        rememberConversation(cfg.profileId, token.key, mergeMessagesNewestFirst([], [...fetched, ...proactive]) as unknown as Record<string, unknown>[]);
-        setConversationReady(true);
-      } catch {
-        /* poll retries — the conversation keeps whatever it already had */
-      } finally {
-        if (requestGate.isCurrent(token) && mountedRef.current) setLoaded(true);
-        void retryUnreadPersistFromPoll();
+        setLoaded(true);
+      };
+      const results = await loadChatSources({
+        tasks: () => fetchTasks(cfg, params),
+        proactive: () => fetchChatUserMessages(cfg),
+        isCurrent,
+        onTasks: data => {
+          const fetched = data.tasks ?? [];
+          if (fetched.length < params.limit) setHasOlder(false);
+          const rows = hubRowsRef.current = mergeNewestPage(hubRowsRef.current, fetched, params.limit);
+          const confirmed = new Set(confirmedOutboxIds(outboxForAlias(alias), fetched));
+          confirmed.forEach(outboxRemove);
+          paint('tasks', rows, fetched, confirmed);
+        },
+        onProactive: data => paint('proactive', proactiveItemsForAgent(data.messages as any, alias, cfg.username)),
+      });
+      if (isCurrent()) {
+        // First paint needn't wait, but unread acknowledgements still wait for both reads.
+        if (results.every(Boolean)) setConversationReady(true);
+        setLoaded(true);
       }
+      void retryUnreadPersistFromPoll();
     },
     [cfg, alias],
   );

@@ -1,0 +1,54 @@
+Board #781 (parent #780), app issue #765: independently paint chat sources
+Date: 2026-10-08
+Base: ee7cda0b82e17ef21c655ab04bd01f2c36e5daab
+
+Scope
+Only ChatScreen loading: tasks and proactive messages publish independently.
+Successful reads replace their own source and keep the other source and local echoes.
+Failed reads are not empty results. Existing pagination/echo reconciliation stays in use.
+On a cold load, both successful reads are required before unread acknowledgement readiness.
+Existing warm-cache readiness behavior is unchanged.
+Stale window/generation/overlapping refresh answers cannot update screen or cache.
+No Hub/API/schema/permission/startup/version change. No live node or production operation.
+
+Evidence: Docker only, --cpus=2; exported production ChatScreen + in-page placeholder HTTP.
+Browser baseline (pre-fix bundle): rc=1, 3/4 checks passed.
+  Task response completed in ~160ms; proactive response held 4000ms.
+  Already received task content was still not visible at 1835ms, while the slow read was pending.
+  Both sources eventually appeared. This establishes a client-side waiting dependency,
+  not proof that it is the user's only real-world bottleneck.
+
+Fixed browser: rc=0, 16/16 checks.
+  Desktop 1200x800: first fast message visible in 382ms (slow proactive), 404ms (slow tasks).
+  Android-UA/touch 390x844: 274ms (slow proactive), 249ms (slow tasks).
+  Every first-paint assertion confirms the slow 4000ms request is still pending.
+  Both sources are eventually retained once; partial failures keep visible rows;
+  switching conversation with an in-flight read does not show the previous agent's messages.
+  Screenshots inspected: docs/tests/board781/{desktop,phone}-loaded.png.
+  These are isolated fixture timings, not production measurements or native-device certification.
+
+Focused ck tests (self-executing, no bun:test): all rc=0.
+  chat-source-load: 17/17; conversation-store: 26/26; proactive-messages: 14/14;
+  chat-history-pages: 34/34; user-messages-window: 12/12;
+  drive-registry: 12/12; swr-cache: 20/20; chat-actions: 73/73.
+  npm run typecheck: rc=0.
+  Source-wiring assertions in four existing test files were adjusted to the independent publishing
+  shape; behavioral merge/paging/cache tests retained. Stale callbacks now do not write even
+  their old cache, protecting a newer snapshot on an A -> B -> A switch.
+
+Mutation (Docker, restored in finally): rc=0 harness / mutated test rc=1.
+  Reintroducing a joint Promise.allSettled barrier before publishing causes both named
+  fast-source assertions to fail. Syntax/setup errors are not accepted as witnessed red.
+
+Reproduce
+  docker build -f tests/test-chat-first-paint/Dockerfile -t anet-chat-first-paint .
+  docker run --rm --cpus=2 --network=none anet-chat-first-paint
+  Browser drive also registered as stub in tests/drives.json for normal CI shards.
+  Local development used an existing dependency image for focused ck/type runs and
+  the new exported image for browser runs, with the latest test drive mounted read-only.
+  Full npm test and full browser matrix left to CI; not claimed as locally rerun.
+
+Remaining on parent issue
+Measure the reported device/version's actual network and rendering times; this PR fixes
+the demonstrated joint wait only. It does not redesign first-load error UI or promise
+instant loading when both responses are slow/unavailable. No release or production fix claimed.

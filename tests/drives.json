@@ -54,6 +54,7 @@
       "secs": 101
     },
     "test-chat-older-batches/drive.mjs": { "kind": "stub", "secs": 70 },
+    "test-chat-first-paint/drive.mjs": { "kind": "stub", "secs": 75 },
     "test-chat-time-visible/drive.mjs": {
       "kind": "stub",
       "secs": 30

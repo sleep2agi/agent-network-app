@@ -117,8 +117,8 @@ console.log('接线:ChatScreen / api');
 {
   const chat = read('ChatScreen.tsx');
   const api = read('api.ts');
-  ck('首屏 / 轮询走 newestPageParams', chat.includes('const params = newestPageParams(alias, limit);') && chat.includes('await fetchTasks(cfg, params)'));
-  ck('轮询结果用 mergeNewestPage 并入(不把翻过的历史缩回去)', chat.includes('const hubRows = hubRowsRef.current = mergeNewestPage(hubRowsRef.current, fetched, params.limit);') && chat.includes('[...hubRows, ...proactive],'));
+  ck('首屏 / 轮询走 newestPageParams', chat.includes('const params = newestPageParams(alias, limit);') && chat.includes('tasks: () => fetchTasks(cfg, params)'));
+  ck('轮询结果用 mergeNewestPage 并入(不把翻过的历史缩回去)', chat.includes('const rows = hubRowsRef.current = mergeNewestPage(hubRowsRef.current, fetched, params.limit);') && chat.includes("paint('tasks', rows, fetched, confirmed)"));
   ck('往上翻按游标拉一页(不再 limit += PAGE 整窗重拉)', chat.includes('olderPageParams(alias, hubRowsRef.current)') && !chat.includes('limitRef.current += PAGE'));
   ck('往上翻的结果去重并入、到起点停', chat.includes('mergeOlderPage(hubRowsRef.current, page)') && chat.includes('if (!olderPageHasMore(page.length, added)) setHasOlder(false);'));
   ck('切会话清空已拉的 hub 行', chat.includes('hubRowsRef.current = [];'));

@@ -53,7 +53,7 @@ ck('chat paints the disk copy only when nothing (memory or live) is there yet',
   /recallConversation<ChatItem>\(cfg\.profileId, conversationKeyFor\)\.then\(cached => \{\s*if \(!cached \|\| !requestGate\.isCurrent\(token\) \|\| !mountedRef\.current \|\| conversations\.peek\(conversationKeyFor\)\) return;/.test(chat));
 const recallBlock = chat.slice(chat.indexOf('void recallConversation<ChatItem>'), chat.indexOf('void recallConversation<ChatItem>') + 400);
 ck('a disk copy never marks the conversation ready (acks wait for live data)', !recallBlock.includes('setConversationReady(true)'));
-ck('chat remembers every live read (hub rows, newest first)', /rememberConversation\(cfg\.profileId, token\.key, mergeMessagesNewestFirst\(\[\], \[\.\.\.fetched, \.\.\.proactive\]\)/.test(chat));
+ck('chat remembers each successful source merge, excluding local echoes', chat.includes('rememberConversation(cfg.profileId, token.key, merged.filter(t => !t._localId)'));
 const storage = readFileSync(new URL('./storage.ts', import.meta.url), 'utf8');
 ck('removing an account deletes its board and history caches too', /\[SESSIONS_CACHE, BOARD_CACHE, HISTORY_CACHE, AVATAR_LOCAL, OUTBOX_FILE, FORWARD_FILE\]/.test(storage));
 ck('caches live in the evictable cache directory', /BOARD_CACHE = `\$\{FileSystem\.cacheDirectory\}/.test(storage) && /HISTORY_CACHE = `\$\{FileSystem\.cacheDirectory\}/.test(storage));
