@@ -5,6 +5,12 @@
 export const BUNDLED_RELEASE_BODY: string = [
   "Signed and notarized stable update for macOS (Apple Silicon) and Windows (x64).",
   "",
+  "What's new in 0.2.223:",
+  "- 长对话改为从最新消息开始、每次加载 30 条，往上滚动再分批加载更早的消息；加载时显示消息占位，不再出现空白",
+  "- 「交给 daemon 管理」被拒绝时，显示具体原因和修复方法（覆盖 62 种情况），不再只提示「操作未完成」",
+  "- 修复：Windows 上设置窗口的标题栏不跟随 app 主题（深色 app 下出现白色标题栏）",
+  "- 修复：长对话里超过 200 条之前的历史消息无法加载",
+  "",
   "What's new in 0.2.222:",
   "- 任务状态新增「废弃」：灰色显示、标题划线，不算逾期；子任务进度不计入已废弃的任务",
   "- 看板的「废弃」列默认收起（桌面为右侧窄栏，手机为分页末尾的「废弃 N」），点开即可查看",
@@ -974,6 +980,7 @@ export const BUNDLED_RELEASE_BODY: string = [
 
 /** Release date (published_at) per version, as far as it was known when this file was generated. */
 export const BUNDLED_RELEASE_DATES: Record<string, string> = {
+  "0.2.222": "2026-10-07T17:08:34Z",
   "0.2.221": "2026-10-07T13:31:30Z",
   "0.2.220": "2026-10-07T09:50:46Z",
   "0.2.219": "2026-10-07T03:33:26Z",
