@@ -36,3 +36,9 @@ or old-version account-data migration is complete. Those remain under #778.
 No release, deployment, secret, service topology or backup changes.
 Rollback is reverting the explicit field while productName stays unchanged;
 do not remove it once a later PR changes the product name.
+
+CI follow-up: the new run.mjs initially lacked a drives.json entry.
+Docker reproduced drive-registry.test.ts at 11/12, rc=1. Registered the
+non-browser mutation harness as manual with its Docker invocation and
+existing unit-CI coverage explained; no exclusion or baseline change.
+After registration, the same focused Docker check is 12/12, rc=0.
