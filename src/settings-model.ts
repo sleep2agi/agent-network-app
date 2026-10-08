@@ -7,7 +7,7 @@
 // 纯逻辑,不 import react-native。
 
 import { settingsPair } from './i18n-settings';
-export type SettingsCategoryKey = 'account' | 'users' | 'localHub' | 'appearance' | 'notifications' | 'voice' | 'shortcuts' | 'about';
+export type SettingsCategoryKey = 'account' | 'users' | 'agentTeams' | 'localHub' | 'appearance' | 'notifications' | 'voice' | 'shortcuts' | 'about';
 
 export type SettingsRow = {
   readonly key: string;
@@ -58,6 +58,12 @@ export const SETTINGS_CATEGORIES: readonly SettingsCategory[] = [
       { key: 'members', label: '成员与可访问的 Agent', keywords: ['用户', '成员', '权限', '授权', '分配', 'agent', 'user', 'member', 'permission', 'access', 'grant'] },
       { key: 'newUser', label: '新建用户', keywords: ['添加用户', '创建用户', '注册', 'create user', 'new user', 'add user'] },
     ],
+  },
+  {
+    key: 'agentTeams',
+    label: 'Agent 组织',
+    icon: 'git-network-outline',
+    rows: [{ key: 'teams', label: 'Agent 团队', keywords: ['agent', 'team', 'organization', '负责人'] }],
   },
   {
     key: 'localHub',
@@ -279,7 +285,7 @@ export type PhoneSettingsGroup = { readonly title: string | null; readonly keys:
 
 export const PHONE_SETTINGS_GROUPS: readonly PhoneSettingsGroup[] = [
   { title: null, keys: ['account'] },
-  { title: '通用', keys: ['users', 'notifications', 'appearance', 'localHub'] },
+  { title: '通用', keys: ['users', 'agentTeams', 'notifications', 'appearance', 'localHub'] },
   { title: '功能', keys: ['voice', 'shortcuts'] },
   { title: '帮助与关于', keys: ['about'] },
 ];

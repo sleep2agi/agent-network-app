@@ -53,6 +53,7 @@ export type PhonePagesCtx = {
   cfg: HubConfig;
   /** 用户管理子页(宽屏右栏同一个组件)。memberOpen = 三级页「成员」开着(点了某个成员)。 */
   renderUsers: (detail: 'userMember' | 'userGroup' | null) => ReactNode;
+  renderAgentTeams: () => ReactNode;
   show: (cat: SettingsCategoryKey, row: string) => boolean;
   detail: SettingsDetailKey | null;
   openDetail: (key: SettingsDetailKey) => void;
@@ -128,6 +129,7 @@ export default function SettingsPhonePage({ page, ctx }: { page: SettingsCategor
   switch (page) {
     case 'account': return ctx.detail === 'loginDevices' ? <LoginDevicesPage ctx={ctx} /> : ctx.detail === 'changePassword' && ctx.canChangePassword ? <ChangePasswordEditPage ctx={ctx} /> : <AccountPage ctx={ctx} />;
     case 'users': return <>{ctx.renderUsers(ctx.detail === 'userMember' ? 'userMember' : ctx.detail === 'userGroup' ? 'userGroup' : null)}</>;
+    case 'agentTeams': return <>{ctx.renderAgentTeams()}</>;
     case 'localHub': return <LocalHubPage ctx={ctx} />;
     case 'appearance': return <AppearancePage ctx={ctx} />;
     case 'notifications': return ctx.detail === 'quietHours' ? <QuietHoursEditPage ctx={ctx} /> : <NotificationsPage ctx={ctx} />;

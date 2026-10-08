@@ -286,6 +286,8 @@ const copy = [
   ['修改密码', 'Change password'],
   // #695 —— 追加在末尾(理由同上):连点「版本」5 下才出现的那一组。
   ['诊断', 'Diagnostics'],
+  ['Agent 组织', 'Agent organization'],
+  ['Agent 团队', 'Agent teams'],
 ] as const;
 export const settingsTranslations = Object.fromEntries(copy.map((pair, index) => [`settings.copy.${index}`, pair]));
 registerTranslations(settingsTranslations);

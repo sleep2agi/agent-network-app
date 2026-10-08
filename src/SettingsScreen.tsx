@@ -50,6 +50,7 @@ import { useModalSafePadding } from './safe-area-runtime';
 import { withBasePadding } from './modal-safe-area';
 import { elevated, buttonStyle, buttonTextStyle } from './elevation';
 import UserManagementPanel from './UserManagementPanel';
+import AgentTeamsEntry from './AgentTeamsEntry';
 import { ManageDepartmentPhone } from './ManageDepartment';
 import { managedDepartmentIds } from './org-model';
 import { canManageUsers, type AuthMe } from './user-admin';
@@ -615,6 +616,7 @@ export default function SettingsScreen({
     setQuietStart,
     setQuietEnd,
     renderUsers: detail => <UserManagementPanel cfg={cfg} me={authMe} networkId={me.networkId} phone={{ memberOpen: detail === 'userMember', groupOpen: detail === 'userGroup', openMember: () => openDetail('userMember'), openGroup: () => openDetail('userGroup'), closeMember: closeDetail, setHeader: setHeaderOverride, scrollTop: scrollPaneTop }} />,
+    renderAgentTeams: () => <AgentTeamsEntry cfg={cfg} me={authMe} networkId={me.networkId} phone />,
     renderShortcuts: () => <ShortcutsSettings s={styles} showNav={show('shortcuts', 'nav')} showChat={show('shortcuts', 'chat')} showSend={show('shortcuts', 'send')} />,
     updateView: isIOS ? IOS_UPDATE_ROW : isAndroid
       ? describeAndroidUpdateRow(androidUpdate, { currentVersion: APP_VERSION, lastCheckedAt: androidUpdateLastCheckedAt(), now: Date.now() })
@@ -896,6 +898,13 @@ export default function SettingsScreen({
                   <SettingsGroup footer={tr('settings.copy.23')} />
                 </View>
               ) : null}
+            </View>
+          ) : null}
+
+          {sectionsToRender.includes('agentTeams') ? (
+            <View style={sectionStyle} testID="settings-section-agent-teams">
+              {heading('agentTeams')}
+              <AgentTeamsEntry cfg={cfg} me={authMe} networkId={me.networkId} phone={false} />
             </View>
           ) : null}
 
