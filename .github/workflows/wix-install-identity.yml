@@ -35,11 +35,12 @@ jobs:
       - uses: swatinem/rust-cache@v2
         with:
           workspaces: src-tauri
+          cache-on-failure: true
       - run: npm ci --prefix local-hub-sidecar --ignore-scripts
       - run: npm run build:local-hub-sidecar
       - run: npx tauri icon assets/icon.png
       # Unsigned test-only override; never a Release or updater input.
-      - run: npx tauri build --bundles msi --config tests/wix-install-identity/renamed.test.json
+      - run: npx tauri build --verbose --bundles msi --config tests/wix-install-identity/renamed.test.json
       - name: Published MSI upgrade (default and custom directory)
         shell: pwsh
         run: |
@@ -50,5 +51,8 @@ jobs:
         if: always()
         with:
           name: msi-upgrade-test-logs
-          path: ${{ runner.temp }}/wix807-evidence/*.log
+          path: |
+            ${{ runner.temp }}/wix807-evidence/*.log
+            src-tauri/target/release/wix/**/*.wxs
+            src-tauri/target/release/wix/**/*.wixobj
           retention-days: 7

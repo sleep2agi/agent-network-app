@@ -45,3 +45,10 @@ reverting this commit while productName is still Agent Network. Once renamed
 releases exist, retain installation identity rather than reverting it blindly.
 
 Reference: https://learn.microsoft.com/en-us/windows/win32/msi/removefile-table
+
+First native attempt, run 37817953877 / job 113451537085:
+Rust client compilation succeeded; WiX candle succeeded; light failed before
+any install/upgrade step. Non-verbose Tauri output omitted the WiX diagnostic.
+The follow-up enables verbose bundler output and retains generated WiX sources
+as test artifacts. Cache compiled Rust on failure to avoid unnecessary cold
+recompilation. No product changes made based on an unverified error guess.
