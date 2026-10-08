@@ -1,1 +1,3 @@
 tests/test-btw-side-thread-ui/fixtures/*.json text eol=lf
+src-tauri/windows/vendor/*.nsi -text
+src-tauri/windows/vendor/LICENSE-MIT -text
