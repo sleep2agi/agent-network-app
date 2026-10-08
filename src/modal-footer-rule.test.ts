@@ -42,6 +42,7 @@ const AUDIT: Record<string, { count: number; kinds: Kind[]; input?: boolean; key
   'AgentRowMenu.tsx': { count: 1, kinds: ['menu'], note: 'anchorRowMenu 算好高度,固定条目' },
   'AndroidUpdatePrompt.tsx': { count: 1, kinds: ['fullscreen'], note: '全屏页(2026-09-30):ScrollView flex:1 装头部 + 完整说明,主按钮 / 进度条在 footer 里、在外' },
   'ChatInfoPanel.tsx': { count: 1, kinds: ['fullscreen'], note: '页面 flex:1 + ScrollView flex:1' },
+  'AgentTeams.tsx': { count: 1, kinds: ['fullscreen'], keyboard: 'avoider', input: true, note: '#766 手机 Agent 组织:全屏页 flex:1,正文 ScrollView flex:1,底部「管理团队 / 新建团队」在 ScrollView 外;名称输入包 ModalKeyboardAvoider;桌面弹窗走 DialogFrame' },
   'OrgChart.tsx': { count: 1, kinds: ['fullscreen'], keyboard: 'avoider', input: true, note: '全屏页 flex:1,正文 ScrollView flex:1,底部按钮条 / 完成按钮在 ScrollView 外;桌面弹窗走 DialogFrame' },
   'ChatScreen.tsx': { count: 3, kinds: ['menu', 'sheet', 'dialog'], keyboard: 'avoider', input: true, note: '长按菜单 85% + 可滚(本次);放大阅读 86%;转发 maxHeight 100% + 键盘避让(本次)' },
   'ComposerRowParts.tsx': { count: 1, kinds: ['fullscreen'], keyboard: 'n/a: 全屏编辑器,输入框 flex:1、发送在顶栏,键盘只盖正文下沿', note: '全屏编辑,发送在顶栏' },
