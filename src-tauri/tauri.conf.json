@@ -41,6 +41,11 @@
       "signingIdentity": "-",
       "entitlements": "./Entitlements.plist"
     },
+    "windows": {
+      "wix": {
+        "upgradeCode": "4777ee3d-8db8-576a-a7ad-361f79904d32"
+      }
+    },
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",

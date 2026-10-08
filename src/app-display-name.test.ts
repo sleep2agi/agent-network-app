@@ -17,6 +17,10 @@ ck('Expo slug unchanged', expo.slug === 'agent-network-app');
 ck('desktop installed identity unchanged', desktop.identifier === 'top.vansin.agentnetwork.desktop');
 // Installer renaming is a separate migration: changing productName changes the default MSI upgrade code.
 ck('desktop installer identity waits for migration', desktop.productName === 'Agent Network');
+// #787: extracted from both published .224 and .226 MSI Property tables.
+// Pin the value, not its derivation from the product name that will later change.
+ck('MSI upgrade identity matches published installers',
+  desktop.bundle.windows?.wix?.upgradeCode?.toLowerCase() === '4777ee3d-8db8-576a-a7ad-361f79904d32');
 ck('desktop executable identity unchanged', read('src-tauri/Cargo.toml').includes('name = "agent-network-desktop"'));
 ck('update endpoints unchanged', JSON.stringify(desktop.plugins.updater.endpoints) === JSON.stringify([
   'https://anet.sh/desktop/update/latest.json',

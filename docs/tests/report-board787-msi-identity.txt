@@ -1,0 +1,44 @@
+Board #787 (parent #778): pin the existing Windows MSI upgrade identity
+
+Only product change: bundle.windows.wix.upgradeCode is explicitly set to
+4777ee3d-8db8-576a-a7ad-361f79904d32. No productName, identifier, executable,
+NSIS path, macOS path, updater URL, version or account-data change.
+
+Evidence from official release assets, extracted read-only inside Docker
+with msitools (msiinfo export <asset> Property), --cpus=2:
+- desktop-v0.2.224 / Agent.Network_0.2.224_x64_en-US.msi
+  SHA256 6441607e12cf22de08205eb4224723109522a4d0ea242fca88777b4f0a8c7cac
+- desktop-v0.2.226 / Agent.Network_0.2.226_x64_en-US.msi
+  SHA256 673e5e9d362e3072c793c99cd7005726fe9d6e6aaf40490920fa33be8ecb786b
+Both Property tables contain:
+  UpgradeCode {4777EE3D-8DB8-576A-A7AD-361F79904D32}
+  ProductName Agent Network
+Their ProductVersion values are 0.2.224 and 0.2.226 respectively.
+Extraction rc=0. No installer was executed on the host.
+
+The locked @tauri-apps/cli 2.11.2 schema supports this UUID field.
+Tauri reference: https://v2.tauri.app/reference/config/#wixconfig
+An explicit upgradeCode avoids the product-name-derived default changing
+when installer naming is handled in a later PR.
+
+Focused verification (no unrelated full-suite rerun):
+  sg docker -c 'docker build -f tests/msi-upgrade-identity/Dockerfile -t anet-app-msi787:local .'
+  sg docker -c 'docker run --rm --cpus=2 --network none anet-app-msi787:local'
+Build rc=0; existing display/identity suite 29/29 passed, rc=0.
+Mutation deletes only the explicit upgradeCode in the container copy:
+the suite exits 1 at "MSI upgrade identity matches published installers".
+The mutation harness verifies that assertion, restores its container file,
+and exits 0. The regression assertion is covered by existing npm test CI.
+
+Limit: no new Windows installer or installed-machine upgrade was exercised.
+This prepares identity compatibility; it does not claim installer renaming
+or old-version account-data migration is complete. Those remain under #778.
+No release, deployment, secret, service topology or backup changes.
+Rollback is reverting the explicit field while productName stays unchanged;
+do not remove it once a later PR changes the product name.
+
+CI follow-up: the new run.mjs initially lacked a drives.json entry.
+Docker reproduced drive-registry.test.ts at 11/12, rc=1. Registered the
+non-browser mutation harness as manual with its Docker invocation and
+existing unit-CI coverage explained; no exclusion or baseline change.
+After registration, the same focused Docker check is 12/12, rc=0.
