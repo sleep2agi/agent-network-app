@@ -453,6 +453,10 @@
       "kind": "hub",
       "why": "needs a throwaway hub (HUB_URL / HUB_TOKEN / ALIAS)"
     },
+    "test-two-network-chat/drive.mjs": {
+      "kind": "stub",
+      "secs": 30
+    },
     "test-voice-shortcuts/drive.mjs": {
       "kind": "stub",
       "secs": 27

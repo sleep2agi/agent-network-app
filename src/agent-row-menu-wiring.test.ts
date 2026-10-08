@@ -71,7 +71,7 @@ ck('menu exists only on chat lists (the ones that can pin)', agents.includes('co
 const phoneRow = agents.slice(agents.indexOf('const renderPhoneRow = (item: Session) => {'), agents.indexOf('  return (\n    <View style={{ flex: 1'));
 // 鼠标 + 键盘(pointer-ui.ts:Tauri 壳任何宽度)不挂长按 —— 右键 / 菜单键开同一份菜单。
 ck('phone row: long-press (touch only) opens the menu at the press point', phoneRow.includes('onLongPress={pointer ? undefined : rowMenu ? e => openRowMenu(item.alias, e.nativeEvent.pageX, e.nativeEvent.pageY) : () => onOpenNodeDetail(item.alias)}') && agents.includes('const pointer = pointerUi();'));
-ck('phone row: tap still opens the chat', phoneRow.includes('onPress={() => openChat(item.alias)}'));
+ck('phone row: tap still opens the chat', phoneRow.includes('onPress={() => openChat(item.alias, item.network_id)}'));
 ck('phone row: web right-click target (data-agent-alias) only when there is a menu', phoneRow.includes('{...(rowMenu ? ({ dataSet: { agentAlias: item.alias } } as any) : {})}'));
 ck('phone row: the pressed row keeps its pressed tint while its menu is open', phoneRow.includes('pressed || menuFor?.alias === item.alias ? colors.rowHover : colors.bg'));
 const deskRow = agents.slice(agents.indexOf('const renderCompactRow = (item: Session) => {'), agents.indexOf('const renderPhoneRow'));
@@ -109,7 +109,7 @@ const footerStart = agents.indexOf('ListFooterComponent={');
 const footer = agents.slice(agents.indexOf("{hiddenSessions.length && effectiveTab === 'all' ? (", footerStart), agents.indexOf(') : null}</>}\n      />'));
 ck('「已隐藏的对话」 footer: only when something is hidden, toggles, shows the count', footer.includes('testID="agent-hidden-toggle"') && footer.includes('onPress={() => setShowHidden(v => !v)}') && footer.includes('已隐藏的对话') && footer.includes('{hiddenSessions.length}'));
 ck('footer renders the hidden rows with the normal row renderers (so long-press → 恢复显示 works there)', footer.includes('hiddenSessions.map(item => (') && footer.includes('compact ? renderCompactRow(item) : renderPhoneRow(item)'));
-ck('opening a hidden chat restores it', /const openChat = \(alias: string\) => \{\s*if \(alias in convFlags\.hidden\) updateConversationFlags\(f => restoreConversation\(f, alias\)\);\s*onOpenChat\(alias\);/.test(agents));
+ck('opening a hidden chat restores it', /const openChat = \(alias: string, networkId\?: string \| null\) => \{\s*if \(alias in convFlags\.hidden\) updateConversationFlags\(f => restoreConversation\(f, alias\)\);\s*onOpenChat\(alias, networkId \?\? undefined\);/.test(agents));
 ck('row badge shows the manual-unread dot when there is no real unread', agents.includes('rowBadgeWithManual(formatUnreadBadge(rowUnreadCount(alias)), convFlags.manualUnread.includes(alias))'));
 ck('AgentUnreadBadge: the dot has no number', badge.includes('{badge.dot ? null : <Text style={styles.unreadBadgeText}>{badge.text}</Text>}') && badge.includes('badge.dot ? styles.unreadDot : null'));
 

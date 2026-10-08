@@ -180,7 +180,7 @@ try {
       && !isNetworkScopedSendFailure(e(403, 'agent_not_granted')) && !isNetworkScopedSendFailure(e(404, 'not_found'))
       && !isNetworkScopedSendFailure(new Error('alias_not_found')));
     setLanguagePreference('zh');
-    ck('reason copy: zh aliasNotFound', translate('chat.failReason.aliasNotFound') === '没有找到这个 Agent（网络可能已变更）');
+    ck('reason copy: zh aliasNotFound', translate('chat.failReason.aliasNotFound') === '没有找到这个 Agent（可能已删除、改名，或你已不在它所在的网络）');
     ck('reason copy: zh notGranted', translate('chat.failReason.notGranted') === '没有给这个 Agent 发消息的权限');
     const chat = readFileSync(new URL('./ChatScreen.tsx', import.meta.url), 'utf8');
     ck('ChatScreen renders the reason under 未送达 via t()', /t\('chat\.notDelivered'\)\}<\/Text>\s*\{item\._failReason \? <Text[^>]*>\{t\(`chat\.failReason\.\$\{item\._failReason\}`\)\}/.test(chat));

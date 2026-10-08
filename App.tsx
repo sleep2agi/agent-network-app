@@ -116,7 +116,7 @@ type Screen =
   | { name: 'serverNodes'; filter?: AgentListFilter }
   | { name: 'serverNodeDetail'; alias: string }
   | { name: 'settings' }
-  | { name: 'chat'; alias: string; focusTaskId?: string }  // focusTaskId: 定时任务「去会话」要定位的那条任务
+  | { name: 'chat'; alias: string; focusTaskId?: string; networkId?: string }  // focusTaskId: 定时任务「去会话」要定位的那条任务;networkId: #769 点的那行所在网络
   | { name: 'dm'; alias: string; userId: string; displayName?: string | null }  // 人与人私信(hub#2086);alias = 对方用户名
   | { name: 'group'; alias: string; groupName?: string }  // 群聊(RFC-042,Hub ≥ .93);alias = group_id
   | { name: 'nodeInfo'; alias: string }
@@ -904,7 +904,7 @@ function AppRoot() {
                       cfg={cfg}
                       filter={screen.name === 'agents' ? screen.filter : undefined}
                       selectedAlias={twoPaneSelection.selectedAlias}
-                      onOpenChat={alias => setScreen({ name: 'chat', alias })}
+                      onOpenChat={(alias, networkId) => setScreen({ name: 'chat', alias, networkId })}
                       onOpenPerson={p => setScreen(dmScreenFor(p))}
                       selectedPerson={screen.name === 'dm' ? screen.alias : undefined}
                       onOpenGroup={g => setScreen(groupScreenFor(g))}
@@ -923,6 +923,7 @@ function AppRoot() {
                         key={`chat:${screen.alias}`}
                         cfg={cfg}
                         alias={screen.alias}
+                        networkId={screen.networkId}
                         onBack={() => setScreen({ name: 'agents' })}
                         hideBack
                         onOpenNodeSettings={() => setScreen({ name: 'nodeInfo', alias: screen.alias })}
@@ -958,6 +959,7 @@ function AppRoot() {
                 <ChatScreen
                   cfg={cfg}
                   alias={screen.alias}
+                  networkId={screen.networkId}
                   onBack={() => setScreen({ name: 'agents' })}
                   onOpenNodeSettings={() => setScreen({ name: 'nodeInfo', alias: screen.alias })}
                   onOpenVoiceSettings={() => { rememberSettingsCategory('voice'); setScreen({ name: 'settings' }); }}
@@ -1065,7 +1067,7 @@ function AppRoot() {
                     <AgentsScreen
                       cfg={cfg}
                       filter={screen.name === 'agents' ? screen.filter : undefined}
-                      onOpenChat={alias => setScreen({ name: 'chat', alias })}
+                      onOpenChat={(alias, networkId) => setScreen({ name: 'chat', alias, networkId })}
                       onOpenPerson={p => setScreen(dmScreenFor(p))}
                       onOpenGroup={g => setScreen(groupScreenFor(g))}
                       onOpenPicker={() => setScreen({ name: 'picker' })}
@@ -1250,6 +1252,7 @@ function DesktopWorkspace({ cfg, screen, setScreen, onLogout, onLocalDataDeleted
     <ChatScreen
       cfg={cfg}
       alias={screen.alias}
+      networkId={screen.networkId}
       onBack={() => setScreen({ name: 'agents' })}
       onOpenNodeSettings={() => setScreen({ name: 'nodeInfo', alias: screen.alias })}
       onOpenAgents={filter => setScreen(agentListScreen(filter, 'desktop') as Screen)}
@@ -1359,7 +1362,7 @@ function DesktopWorkspace({ cfg, screen, setScreen, onLogout, onLocalDataDeleted
             else setScreen({ name: 'logs' });
           }} />
         ) : (
-          <AgentsScreen cfg={cfg} compact selectedAlias={screen.name === 'chat' || screen.name === 'nodeInfo' ? screen.alias : undefined} pinnedAliases={pinnedAliases} onTogglePin={togglePin} mutedAliases={mutedAliases} onToggleMute={toggleMute} onOpenChatWindow={alias => { void openRememberedChatWindow(alias, cfg.profileId, cfg.username || maskedHubHost(cfg.serverUrl)); }} onOpenChat={alias => setScreen({ name: 'chat', alias })} onOpenPerson={p => setScreen(dmScreenFor(p))} selectedPerson={screen.name === 'dm' ? screen.alias : undefined} onOpenGroup={g => setScreen(groupScreenFor(g))} selectedGroup={screen.name === 'group' ? screen.alias : undefined} onOpenPicker={() => setScreen({ name: 'picker' })} onOpenNodeDetail={alias => setScreen({ name: 'nodeDetail', alias })} />
+          <AgentsScreen cfg={cfg} compact selectedAlias={screen.name === 'chat' || screen.name === 'nodeInfo' ? screen.alias : undefined} pinnedAliases={pinnedAliases} onTogglePin={togglePin} mutedAliases={mutedAliases} onToggleMute={toggleMute} onOpenChatWindow={alias => { void openRememberedChatWindow(alias, cfg.profileId, cfg.username || maskedHubHost(cfg.serverUrl)); }} onOpenChat={(alias, networkId) => setScreen({ name: 'chat', alias, networkId })} onOpenPerson={p => setScreen(dmScreenFor(p))} selectedPerson={screen.name === 'dm' ? screen.alias : undefined} onOpenGroup={g => setScreen(groupScreenFor(g))} selectedGroup={screen.name === 'group' ? screen.alias : undefined} onOpenPicker={() => setScreen({ name: 'picker' })} onOpenNodeDetail={alias => setScreen({ name: 'nodeDetail', alias })} />
         )}
       </View>
       <View style={desktopStyles.content}>
