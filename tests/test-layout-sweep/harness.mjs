@@ -187,7 +187,14 @@ export const initScript = ({ theme }) => {
       const to = u.searchParams.get('to_name');
       const limit = Math.min(Number(u.searchParams.get('limit')) || 50, 200); // the hub caps at 200 too
       (window.__tasksLimits ||= []).push(limit);
-      const rows = chatTasks.filter(t => !to || t.to_name === to).slice().sort((a, b) => String(b.created_at).localeCompare(String(a.created_at)));
+      // before / before_task_id: the hub's cursor (#459) — rows strictly older than (created_at, task_id), same order.
+      // Every read is recorded in window.__tasksReads ({ limit, before, before_task_id }) (tests/test-chat-older-batches).
+      const before = u.searchParams.get('before'), beforeId = u.searchParams.get('before_task_id');
+      (window.__tasksReads ||= []).push({ limit, before, before_task_id: beforeId });
+      const key = (t) => [String(t.created_at), String(t.task_id)];
+      const older = (t) => { const [c, id] = key(t); return c < before || (c === before && !!beforeId && id < beforeId); };
+      const rows = chatTasks.filter(t => (!to || t.to_name === to) && (!before || older(t))).slice()
+        .sort((a, b) => key(b)[0].localeCompare(key(a)[0]) || key(b)[1].localeCompare(key(a)[1]));
       return { ok: true, tasks: rows.slice(0, limit) };
     }
     if (p === '/api/tasks') return { ok: true, tasks: chatTasks.filter(t => !u.searchParams.get('to') || t.to_name === u.searchParams.get('to')) };
@@ -228,6 +235,8 @@ export const initScript = ({ theme }) => {
           // window.__stubDelayMs answers each one that much later (tests/test-connectivity-indicator).
           if (window.__stubFail) throw new Error('stub: network unreachable');
           if (window.__stubDelayMs) await new Promise(r => setTimeout(r, window.__stubDelayMs));
+          // window.__olderDelayMs: only a chat "older page" read (before= cursor) answers that much later.
+          if (window.__olderDelayMs && /[?&]before=/.test(c.url)) await new Promise(r => setTimeout(r, window.__olderDelayMs));
           const body = route(c.url, c.data ? new TextDecoder().decode(new Uint8Array(c.data)) : '', c.method || 'GET');
           const text = body === null ? '{"ok":false}' : JSON.stringify(body);
           const buf = new TextEncoder().encode(text);

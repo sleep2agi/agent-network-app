@@ -114,6 +114,7 @@ export const chatTranslations = {
   'voice.releaseKeys': ['松开 {keys} 完成 · Esc 取消', 'Release {keys} to finish · Esc to cancel'],
   'voice.pressKeys': ['再按 {keys} 完成 · Esc 取消', 'Press {keys} again to finish · Esc to cancel'],
   'chat.historyStart': ['— 聊天记录起点 —', '— beginning of history —'],
+  'chat.loadingHistory': ['正在加载聊天记录', 'Loading chat history'],
   'chat.focusNotFound': ['没找到那条消息(可能太早或已删除),已停在最新', 'Couldn\'t find that message (too old or deleted); showing the latest'],
   'chat.noMatchesCount': ['0 条', '0 matches'],
   'chat.collapsePlus': ['收起更多发送方式', 'Close attachment panel'],
