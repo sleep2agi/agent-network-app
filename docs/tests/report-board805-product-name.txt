@@ -40,6 +40,16 @@ Docker PowerShell parser and non-CI refusal check rc=0, --cpus=2 --network none;
 image mcr.microsoft.com/powershell@sha256:206a748b34deec1b64553fcfa92294fc871c2df5855e9f340df172756bef201f.
 Actual native NSIS installation result is pending CI, not inferred from syntax.
 
+macOS acceptance reuses the released binary's --smoke-local-hub flow before
+and after replacing the bundle in a unique runner temporary directory. It
+checks the same local users survive and the local account remains usable,
+alongside CFBundleIdentifier/name and one installed app. The .224 archive is
+hash-pinned. No production account or signed public release is used. Native
+bundle replacement is covered, not the updater download/signature UI itself;
+the old physical .app directory is retained as in tauri-plugin-updater 2.10.1.
+Docker bash syntax / non-macOS-CI refusal checks rc=0 (--cpus=2, network none).
+The native macOS job remains pending; syntax success is not native acceptance.
+
 Recovery: tauri.conf.json and the versioned installer templates remain the
 authoritative build inputs. No daemon, ports, proxy, secrets or data migration
 changes. Reverting this display-only change preserves the pinned installation

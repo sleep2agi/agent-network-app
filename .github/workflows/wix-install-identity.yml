@@ -63,3 +63,29 @@ jobs:
             src-tauri/target/release/wix/**/*.wxs
             src-tauri/target/release/wix/**/*.wixobj
           retention-days: 7
+  mac-rename:
+    runs-on: macos-14
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - uses: oven-sh/setup-bun@735343b667d3e6f658f44d0eca948eb6282f2b76
+        with:
+          bun-version: '1.3.14'
+      - run: npm ci
+      - run: npx expo export -p web
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+          cache-on-failure: true
+      - run: npm ci --prefix local-hub-sidecar --ignore-scripts
+      - run: npm run build:local-hub-sidecar
+      - run: npx tauri icon assets/icon.png
+      # Ad-hoc signed test candidate; no Release, signing secret or updater feed.
+      - run: npx tauri build --bundles app --config tests/wix-install-identity/renamed.test.json
+      - name: Published macOS bundle replacement and local account retention
+        run: bash tests/wix-install-identity/macos-upgrade.sh
