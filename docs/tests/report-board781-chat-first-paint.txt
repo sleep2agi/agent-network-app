@@ -52,3 +52,12 @@ Remaining on parent issue
 Measure the reported device/version's actual network and rendering times; this PR fixes
 the demonstrated joint wait only. It does not redesign first-load error UI or promise
 instant loading when both responses are slow/unavailable. No release or production fix claimed.
+
+CI follow-up (2026-10-08)
+  Linux and Windows unit jobs failed only the send-echo-remount source-wiring assertion:
+  it still expected the old combined-source filter expression. Its behavioral cases passed.
+  The replay now uses mergeChatSource, exactly as ChatScreen does, retaining all existing
+  pending/failed/remount/request-id cases. The wiring check pins the new echo filter,
+  source merge and task callback; it was not removed or made unconditional.
+  Docker --cpus=2 --network=none: send-echo-remount 18/18, chat-source-load 17/17, rc=0.
+  No product code changed in this follow-up; full cross-platform suites remain CI's job.
