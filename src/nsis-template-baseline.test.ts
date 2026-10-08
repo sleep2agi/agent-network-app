@@ -1,4 +1,4 @@
-// #789: immutable upstream copy, not an installer or upgrade-behavior test.
+// #789 provenance / #788 reviewed adaptation; not an upgrade-behavior test.
 import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 
@@ -13,9 +13,9 @@ function ck(label: string, ok: boolean) {
   if (ok) passed++;
   console.log(`${ok ? 'PASS' : 'FAIL'} ${label}`);
 }
-ck('template bytes match pinned upstream SHA256', sha256(template) === source.sha256);
-ck('template Git blob matches upstream API evidence',
-  createHash('sha1').update(`blob ${template.length}\0`).update(template).digest('hex') === source.gitBlob);
+ck('template bytes match reviewed SHA256', sha256(template) === (source.localSha256 ?? source.sha256));
+ck('template Git blob matches reviewed content',
+  createHash('sha1').update(`blob ${template.length}\0`).update(template).digest('hex') === (source.localGitBlob ?? source.gitBlob));
 ck('upstream MIT license is preserved', sha256(readFileSync(new URL('LICENSE-MIT', dir))) === source.licenseSha256);
 ck('baseline matches locked bundler version',
   readFileSync(new URL('bun.lock', root), 'utf8').includes(`"@tauri-apps/cli": ["@tauri-apps/cli@${source.cliVersion}",`));

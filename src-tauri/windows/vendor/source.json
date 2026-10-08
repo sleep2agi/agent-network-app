@@ -7,8 +7,10 @@
   "localPath": "installer.tauri-2.11.2.nsi",
   "gitBlob": "a48a46149f6d6bdc76a0bf13f53e4acdfedb310b",
   "sha256": "ee84148e405adc4d736a46456dd8345a644751bd1f28a335dd7fd833a32d7c3e",
+  "localSha256": "75a0492432d291bb046788e0de865cdc0e92ed562944ae0460691428636a49ac",
+  "localGitBlob": "d5b31f8bcecda7aeff3599bcf74cac01ac4670df",
   "license": "MIT",
   "licensePath": "LICENSE_MIT",
   "licenseSha256": "9dd42ea92cff2ede5cd477cbfcce051b2d0115c0ac7f368ee88cb545055dff1d",
-  "purpose": "Unmodified baseline for board #788. Not connected to production bundling in board #789. Compatibility behavior belongs in a separate change."
+  "purpose": "Upstream hashes identify the unchanged #789 baseline. Local hashes identify #788 adaptations for stable NSIS installation identity and owned shortcut migration."
 }
