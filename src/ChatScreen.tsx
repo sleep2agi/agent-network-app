@@ -112,14 +112,15 @@ import { COMPOSER_INPUT_BORDER, COMPOSER_LINE_HEIGHT, composerControlSize, compo
 import { ComposerExpandButton, ComposerFullscreenEditor, ComposerRightSlot } from './ComposerRowParts';
 import { loadComposerInputMode, saveComposerInputMode } from './voice-prefs';
 import { elevated } from './elevation';
+import { CHAT_PAGE, mergeNewestPage, mergeOlderPage, newestPageParams, olderPageHasMore, olderPageParams } from './chat-history-pages';
 
-// Chat with one agent. Mirrors dashboard M4: open with the newest PAGE
-// messages, grow the window when the user scrolls toward older history.
+// Chat with one agent. Open with the newest PAGE messages; scrolling toward
+// older history fetches the next older PAGE by cursor (chat-history-pages.ts, #745).
 // The FlatList is `inverted`, so index 0 renders at the BOTTOM (newest) —
 // the native chat pattern; onEndReached then fires at the visual TOP,
 // which is exactly the load-older trigger.
 
-const PAGE = 20;
+const PAGE = CHAT_PAGE;
 /** 定位滚动大约多久停下(动画 + 未量到布局时的补滚):高亮从这时起计时。 */
 const LOCATE_SETTLE_MS = 600;
 
@@ -442,6 +443,8 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
   const bubbleCap = desktopBubbleCap(desktop, paneWidth);
   const sending = false; // optimistic echo frees the input immediately
   const limitRef = useRef(PAGE);
+  // #745:当前会话已拉到的 hub 行(newest-first)。轮询刷新最新一页、往上翻按游标接更早的一页,都只改它。
+  const hubRowsRef = useRef<HubTask[]>([]);
 
   // app#166 —— 微信式「聊天记录搜索」:范围永远是当前会话;结果只认开始搜索时的会话 key。
   const SEARCH_MAX_OLDER_PAGES = 5;
@@ -484,7 +487,8 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
       try {
         // app#160:同一次轮询顺带取 Agent 主动发给用户的消息(user_inbox),与任务并行;它失败不影响任务行。
         const userMessagesPromise = fetchChatUserMessages(cfg).catch(() => ({ messages: [] as any[] }));
-        const data = await fetchTasks(cfg, { to_name: alias, limit });
+        const params = newestPageParams(alias, limit);
+        const data = await fetchTasks(cfg, params);
         const userMessages = await userMessagesPromise;
         // The await is where the conversation can change underneath us. Every
         // line below writes to screen state, so nothing may run for an answer
@@ -495,7 +499,9 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
           conversations.put(token.key, [...fetched, ...proactive]);
           return;
         }
-        if (fetched.length < limit) setHasOlder(false);
+        if (fetched.length < params.limit) setHasOlder(false);
+        // #745:这页刷新最新区间;往上翻拉到的更早的行留着(轮询不把历史缩回去)。
+        const hubRows = hubRowsRef.current = mergeNewestPage(hubRowsRef.current, fetched, params.limit);
         // Hub returns newest-first, which matches inverted-list order. Reconcile
         // accepted retries before merging local echoes into that same timeline.
         const confirmed = new Set(confirmedOutboxIds(outboxForAlias(alias), fetched));
@@ -503,7 +509,7 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
         setMessages(prev => {
           const merged = settleEchoes<ChatItem>(mergeMessagesNewestFirst(
             prev.filter(t => t._localId && !confirmed.has(t._localId) && !echoSupersededByFetched(t, fetched)),
-            [...fetched, ...proactive],
+            [...hubRows, ...proactive],
           ) as ChatItem[], outboxEntry);
           conversations.put(token.key, merged);
           return merged;
@@ -529,6 +535,7 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
   // 否则重试只会发出「[附件] x.png」这行字。
   useEffect(() => {
     limitRef.current = PAGE;
+    hubRowsRef.current = [];
     // #518: a 'pending' entry nobody in this process is sending (the app was killed mid-send, or the
     // instance that started it let go) would otherwise paint 「发送中…」 forever. It becomes 「未送达」;
     // the load below still retires it if the hub has its client_request_id.
@@ -620,12 +627,30 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
     return () => { alive = false; if (timer) clearTimeout(timer); };
   }, [cfg.serverUrl, cfg.token]);
 
+  // #745:往上翻只拉「比已加载最老一条更早的一页」,接在末尾(inverted 列表的视觉顶部 ⇒ 当前可视区不跳)。
   const loadOlder = async () => {
     if (loadingOlder || !hasOlder || !loaded) return;
+    const params = olderPageParams(alias, hubRowsRef.current);
+    const token = requestGate.current();
+    if (!params || !token) return;
     setLoadingOlder(true);
-    limitRef.current += PAGE;
-    await load(limitRef.current);
-    setLoadingOlder(false);
+    try {
+      const page = (await fetchTasks(cfg, params)).tasks ?? [];
+      if (!requestGate.isCurrent(token) || !mountedRef.current) return;
+      const { rows, added } = mergeOlderPage(hubRowsRef.current, page);
+      hubRowsRef.current = rows;
+      // 轮询照旧刷新整个已加载窗口(hub 上限 200 由 newestPageParams 截),更早的行由 mergeNewestPage 留着。
+      limitRef.current = Math.max(limitRef.current, rows.length);
+      if (!olderPageHasMore(page.length, added)) setHasOlder(false);
+      setMessages(prev => {
+        const shown = new Set(prev.map(msgKey));
+        const merged = mergeMessagesNewestFirst<ChatItem>([], [...prev, ...rows.slice(rows.length - added).filter(r => !shown.has(msgKey(r)))]);
+        conversations.put(token.key, merged);
+        return merged;
+      });
+    } finally {
+      if (mountedRef.current) setLoadingOlder(false);
+    }
   };
 
   const [attached, setAttached] = useState<PickedImage[]>([]);
@@ -2148,8 +2173,11 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
 
 
       {!loaded ? (
-        <View style={styles.center}>
-          <ActivityIndicator color={colors.accent} />
+        // #745:首屏还没到 —— 画几条气泡轮廓,不留一整块空白。
+        <View style={styles.historySkeleton} testID="chat-history-skeleton" accessibilityLabel={t('chat.loadingHistory')}>
+          {[0.62, 0.44, 0.7, 0.36, 0.55].map((w, i) => (
+            <View key={i} style={[styles.skeletonBubble, { width: bubbleCap ? Math.round(w * bubbleCap.maxWidth) : `${Math.round(w * 100)}%`, alignSelf: i % 2 ? 'flex-end' : 'flex-start' }]} />
+          ))}
         </View>
       ) : (
         <FlatList
@@ -2171,7 +2199,7 @@ export default function ChatScreen({ cfg, alias, onBack, desktop = false, onOpen
           onEndReachedThreshold={0.2}
           ListFooterComponent={
             loadingOlder ? (
-              <ActivityIndicator color={colors.textMuted} style={{ marginVertical: spacing.md }} />
+              <ActivityIndicator color={colors.textMuted} style={{ marginVertical: spacing.md, alignSelf: 'center' }} testID="chat-loading-older" />
             ) : !hasOlder && messages.length > 0 ? (
               <Text style={styles.beginning}>{t('chat.historyStart')}</Text>
             ) : null
@@ -2827,6 +2855,8 @@ const makeStyles = (B = bubbleLayout()) =>
   StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.bg },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
+  historySkeleton: { flex: 1, justifyContent: 'flex-end', padding: spacing.lg, gap: spacing.md },
+  skeletonBubble: { height: 36, borderRadius: radius.surface, backgroundColor: colors.subtleFill },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
