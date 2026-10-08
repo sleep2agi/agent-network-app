@@ -1,0 +1,93 @@
+Board #805 / parent #778 / issue sleep2agi/agent-network-app#772
+Base: main 30756967d54b29ad23cced9fecbd71e0b8bf2db0
+
+Change / next-release note:
+Desktop product display name becomes ANet. Existing installation identity,
+bundle identifier, executable name, account storage and update endpoints stay
+unchanged. Legacy Windows installation directories intentionally retain their
+old names. No version bump, production installation or release in this PR.
+
+Reused prerequisite evidence (not rerun merely for bookkeeping):
+MSI #807 / app#775 head 439443237c986f811b23c93b8d7936b8b2c441e3:
+run 37822843097, native Windows job 113468251301 succeeded. Published .224
+default/custom directory upgrades to the ANet test candidate both passed at
+2026-10-08T18:25:01Z / 18:25:06Z: same directory, one uninstall registration,
+shortcut migration and fixture data retained. Merge gate rc=0; merged as base.
+NSIS app#771: complete-template Docker/Wine operations passed, but this does
+not substitute for published-client upgrade on a native Windows runner.
+macOS app#774 main native build succeeded before the final name switch;
+it is not evidence of a renamed app replacing an installed previous version.
+
+Initial acceptance boundary (before the native runs recorded below):
+Published-client native NSIS/macOS upgrade and real account continuity are
+still pending. Keep draft until the stated scope is verified; do not describe
+this candidate as published. No Linux path simulation is native acceptance.
+Local focused validation (Docker --cpus=2 --network none): build rc=0;
+node src/app-display-name.test.ts: 29/29
+node src/nsis-install-identity.test.ts: 15/15
+node src/wix-install-identity.test.ts: PASS
+node src/macos-bundle-path.test.ts: 9/9 (includes 3 rejected path mutations)
+Combined command rc=0. macOS path tests validate build script inputs, not
+native application upgrade. No unrelated full suite repeated locally.
+
+Native NSIS acceptance added to the existing Windows MSI workflow, sharing
+one compilation. Published .224 EXE digest pinned to GitHub asset SHA256
+4afe1a6242234da67755ee584497c88db5931df02ab91c4a29135c34eba3b9c4.
+The test covers default/custom paths, one registration, exact old shortcuts,
+installed binary, fixture-data retention and uninstall cleanup. No real
+credentials or production installations; no application /R auto-launch.
+Docker PowerShell parser and non-CI refusal check rc=0, --cpus=2 --network none;
+image mcr.microsoft.com/powershell@sha256:206a748b34deec1b64553fcfa92294fc871c2df5855e9f340df172756bef201f.
+Actual native NSIS installation result is pending CI, not inferred from syntax.
+
+macOS acceptance reuses the released binary's --smoke-local-hub flow before
+and after replacing the bundle in a unique runner temporary directory. It
+checks the same local users survive and the local account remains usable,
+alongside CFBundleIdentifier/name and one installed app. The .224 archive is
+hash-pinned. No production account or signed public release is used. Native
+bundle replacement is covered, not the updater download/signature UI itself;
+the old physical .app directory is retained as in tauri-plugin-updater 2.10.1.
+Docker bash syntax / non-macOS-CI refusal checks rc=0 (--cpus=2, network none).
+The native macOS job remains pending; syntax success is not native acceptance.
+
+2026-10-09 03:07 CST: run 37826731044 macOS native-account step had remained
+running since 02:54:26 without a result. Cancel requested to retrieve logs;
+this is not a passing acceptance or evidence of a specific product defect.
+Add stage markers, bounded downloads and 180-second old/new smoke timeouts;
+retain a failed disposable-runner screenshot for possible system dialogs.
+Docker syntax / non-CI refusal checks rc=0. No product behavior changed.
+Current-head Windows job 113481647703 passed all four MSI/NSIS upgrade cases
+at 02:55. macOS remains unverified, so no merge or release yet.
+
+Recovery: tauri.conf.json and the versioned installer templates remain the
+authoritative build inputs. No daemon, ports, proxy, secrets or data migration
+changes. Reverting this display-only change preserves the pinned installation
+identity; user data must still come from its normal backups, not Git.
+
+2026-10-09 03:27 CST: run 37829808574 / macOS job 113491912450 confirmed
+published .224 local-account smoke succeeds in 2 seconds; the ad-hoc candidate
+times out after 180 seconds. Failure screenshot shows a Keychain access
+authorization dialog for top.vansin.agentnetwork.desktop. This is not evidence
+of lost data. Windows job 113492150827 passed on the same e3e9cdf8 head.
+The fixture now uses a dedicated disposable keychain, pre-authorizing only
+the published/candidate executables and security for non-printing credential
+fingerprints. No allow-all ACL, login-keychain ACL change, production account
+or signing secret. Restore the prior default and delete this test keychain on
+exit. Compare both credential fingerprints and user IDs across replacement.
+This explicitly authorized ad-hoc test does NOT prove prompt-free production
+signing continuity; the formal main-SHA release still needs its signing gate.
+
+Native result on tested source head 543eb2a03653759cdcadb06f7205d785e87f3282:
+run 37832134091, macOS job 113499874896 completed success. Published .224
+local-account smoke passed 2026-10-08T19:34:43Z-19:34:45Z; candidate smoke
+passed 19:34:45Z-19:34:47Z. Native bundle/name/identity assertions, local
+authentication/API/restart, exact existing users and both credential
+fingerprints all passed. Test authorization boundary above still applies.
+Docker Bash syntax and non-CI refusal checks for this fixture also returned 0.
+The same run's native Windows job 113500367662 completed success: published
+.224 MSI default/custom-path upgrades passed 19:39:36Z-19:39:50Z, followed by
+NSIS default/custom-path upgrades at 19:39:50Z-19:40:13Z. All four retain the
+installation directory, one uninstall registration, migrated shortcuts and
+fixture data. This is installation/data acceptance, not Windows account-login
+acceptance. The final follow-up changes only this report; tested application,
+installer templates, fixtures and workflow bytes remain unchanged.

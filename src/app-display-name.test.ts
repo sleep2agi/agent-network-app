@@ -15,8 +15,8 @@ ck('iOS installed identity unchanged', expo.ios.bundleIdentifier === 'top.vansin
 ck('Android installed identity unchanged', expo.android.package === 'com.anonymous.agentnetworkapp');
 ck('Expo slug unchanged', expo.slug === 'agent-network-app');
 ck('desktop installed identity unchanged', desktop.identifier === 'top.vansin.agentnetwork.desktop');
-// Installer renaming is a separate migration: changing productName changes the default MSI upgrade code.
-ck('desktop installer identity waits for migration', desktop.productName === 'Agent Network');
+// #805: display name changes after installer identities were pinned separately.
+ck('desktop product display name', desktop.productName === 'ANet');
 // #787: extracted from both published .224 and .226 MSI Property tables.
 // Pin the value, not its derivation from the product name that will later change.
 ck('MSI upgrade identity matches published installers',
