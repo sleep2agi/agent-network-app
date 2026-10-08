@@ -1,0 +1,31 @@
+Board #789 / prerequisite for #788: upstream NSIS template baseline
+
+Scope: original third-party template and MIT license, unchanged bytes.
+No tauri.conf.json change, installer execution, release or production change.
+The 971-line template is separated from the later compatibility behavior PR.
+
+Upstream: tauri-apps/tauri, tag tauri-cli-v2.11.2
+Commit: 499df79be65ef8c0670abc0207cd9e37b55d8491
+Source: crates/tauri-bundler/src/bundle/windows/nsis/installer.nsi
+Git blob from GitHub API and local git hash-object both:
+a48a46149f6d6bdc76a0bf13f53e4acdfedb310b
+SHA256: ee84148e405adc4d736a46456dd8345a644751bd1f28a335dd7fd833a32d7c3e
+MIT license upstream and local Git blob both:
+b08530d59433b3060f4fad8751ac2610c0b0aff3
+Exact provenance is also stored in src-tauri/windows/vendor/source.json.
+Git attributes preserve raw upstream bytes on Windows checkouts.
+
+Docker verification (2026-10-08, no host test execution):
+sg docker -c 'docker build -t anet-nsis-baseline789:local -f tests/nsis-template-baseline/Dockerfile .'
+  rc=0
+sg docker -c 'docker run --rm --cpus=2 --network none anet-nsis-baseline789:local'
+  rc=0, 5/5 passed: template SHA256, upstream Git blob, license hash,
+  locked CLI version, immutable source commit.
+An initial Docker build command used unsupported --cpus and exited 125;
+corrected build succeeded. The test container has --cpus=2.
+
+CI coverage: existing npm test discovers src/nsis-template-baseline.test.ts.
+The Dockerfile runs that same unit file directly; no new browser drive.
+No unrelated local full-suite rerun. No Windows upgrade claim: this is an
+unwired source baseline, not a renamed installer or a data-retention test.
+Rollback: remove these unwired baseline files; runtime/config remain unchanged.
