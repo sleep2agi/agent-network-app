@@ -1,0 +1,76 @@
+// Board #747 ①: the Hub's public adopt/lifecycle refusal codes, each with a message
+// that names the problem and the fix. Source of the list: the `publicLifecycleErrors`
+// allowlist in sleep2agi/agent-network server/src/node-lifecycle-read.ts — the Hub
+// replaces every other daemon error with `lifecycle_error`, so these are all the
+// codes a reader can see on a lifecycle request or adoption binding.
+import { registerTranslations } from './i18n';
+
+const fix = '请在该节点机器上检查后重试。', fixEn = 'Check the node machine, then retry.';
+const readopt = '请在节点机器上确认后重新收编。', readoptEn = 'Verify on the node machine, then adopt it again.';
+
+export const ADOPT_REFUSAL_COPY: Record<string, [string, string]> = {
+  adopt_path_writable_by_others: ['工作目录或节点配置对其他用户可写，daemon 出于安全拒绝接管。在该机器上对工作目录、.anet、.anet/nodes、节点目录和 config.json 执行 chmod go-w 后重试。', 'The workspace or node config is writable by other users, so the daemon refused for safety. On that machine run chmod go-w on the workspace, .anet, .anet/nodes, the node directory and config.json, then retry.'],
+  adopt_path_owner_mismatch: ['工作目录或节点配置的属主不是运行 daemon 的用户。请用 chown 改为 daemon 用户，或改用该用户的 daemon 收编。', 'The workspace or node config is not owned by the daemon user. chown it to that user, or adopt with a daemon running as its owner.'],
+  adopt_path_not_regular: ['工作目录、.anet 或 config.json 是符号链接或类型不对。请改用真实目录和普通文件后重试。', 'The workspace, .anet or config.json is a symlink or the wrong file type. Use real directories and a regular file, then retry.'],
+  adopt_workdir_outside_roots: ['工作目录不在 daemon 允许收编的根目录下。请把节点放到允许范围内，或在 daemon 配置中加入该目录后重试。', 'The workspace is outside the daemon adoption roots. Move the node under an allowed root, or add the directory to the daemon config, then retry.'],
+  adopt_roots_not_configured: ['daemon 没有配置允许收编的根目录。请先在 daemon 配置中设置收编根目录。', 'The daemon has no adoption roots configured. Set adoption roots in the daemon config first.'],
+  adopt_workdir_not_absolute: ['工作目录不是绝对路径。请填写以 / 开头的完整路径。', 'The workspace is not an absolute path. Enter a full path starting with /.'],
+  adopt_alias_invalid: ['节点名称包含不允许的字符，无法收编。请先修正节点名称。', 'The node alias contains characters that are not allowed. Fix the alias first.'],
+  adopt_alias_mismatch: ['节点配置里的名称与当前节点不一致。请确认工作目录是否填对。', 'The alias in the node config does not match this node. Check that the workspace is correct.'],
+  adopt_config_invalid: ['节点的 config.json 无法解析。请修复该文件后重试。', 'The node config.json cannot be parsed. Repair it, then retry.'],
+  adopt_config_network_mismatch: ['节点配置属于另一个网络。请确认工作目录和当前网络是否对应。', 'The node config belongs to another network. Check the workspace and the current network.'],
+  adopt_network_mismatch: ['所选 daemon 不在该节点所在的网络。请选择同一网络的 daemon。', 'The selected daemon is not in this node\'s network. Choose a daemon in the same network.'],
+  adopt_hub_missing: ['节点配置里没有 Hub 地址。请在 config.json 中补上 hub 后重试。', 'The node config has no Hub address. Add hub to config.json, then retry.'],
+  adopt_hub_invalid: ['节点配置里的 Hub 地址无效。请改为不带账号和参数的 http(s) 地址。', 'The Hub address in the node config is invalid. Use a plain http(s) URL without credentials or query.'],
+  adopt_hub_mismatch: ['节点连接的 Hub 与 daemon 不同。请让节点和 daemon 使用同一个 Hub。', 'The node points to a different Hub than the daemon. Make both use the same Hub.'],
+  adopt_identity_not_found: ['在该工作目录下没有找到这个节点。请确认填写的是节点自己的工作目录。', 'This node was not found under that workspace. Enter the node\'s own workspace.'],
+  adopt_identity_ambiguous: ['该工作目录下有多个同名节点配置，无法确定是哪一个。请清理重复配置后重试。', 'Several node configs match in that workspace. Remove the duplicates, then retry.'],
+  adopt_identity_changed: ['收编过程中节点配置发生了变化。请等节点稳定后重新收编。', 'The node config changed during adoption. Wait for it to settle, then adopt again.'],
+  adopt_process_identity_mismatch: ['正在运行的节点进程不属于 daemon 用户，或不在该工作目录中启动。' + fix, 'The running node process is not owned by the daemon user or not started in that workspace. ' + fixEn],
+  adopt_process_argv_mismatch: ['正在运行的进程不是 agent-node。请确认节点是用 agent-node 启动的。', 'The running process is not agent-node. Make sure the node was started with agent-node.'],
+  adopt_process_home_mismatch: ['节点进程的 HOME 与 daemon 不同。请用同一用户、同一 HOME 启动节点后重试。', 'The node process HOME differs from the daemon\'s. Start the node with the same user and HOME, then retry.'],
+  adopt_process_changed: ['收编过程中节点进程发生了变化（可能已重启）。请等进程稳定后重新收编。', 'The node process changed during adoption (it may have restarted). Wait, then adopt again.'],
+  adopt_process_generation_changed: ['节点进程已不是收编时的那一个。' + readopt, 'The node process is no longer the one that was adopted. ' + readoptEn],
+  adopt_tmux_socket_mismatch: ['节点所在的 tmux socket 与 daemon 预期的不同。请用 daemon 认可的 tmux socket 运行节点。', 'The node runs on a different tmux socket than the daemon expects. Run it on the daemon\'s tmux socket.'],
+  adopt_explicit_private_socket_required: ['需要验证过的私有 tmux socket；默认 socket 不允许远程启动。请用 tmux -S 私有 socket 运行节点后重新收编。', 'A verified private tmux socket is required; the default socket cannot be started remotely. Run the node with tmux -S on a private socket, then adopt again.'],
+  adopt_socket_unsafe: ['tmux socket 不安全（属主或类型不对）。请使用 daemon 用户自己的私有 socket。', 'The tmux socket is unsafe (wrong owner or type). Use a private socket owned by the daemon user.'],
+  adopt_socket_directory_unsafe: ['tmux socket 所在目录不安全（属主或权限不对）。请把目录权限改为 700 且属于 daemon 用户。', 'The tmux socket directory is unsafe. Make it owned by the daemon user with mode 700.'],
+  adopt_pane_invalid: ['无法识别节点所在的 tmux 窗格。' + fix, 'The node\'s tmux pane cannot be identified. ' + fixEn],
+  adopt_pane_unverified: ['无法确认节点所在的 tmux 窗格。请确认节点仍在 tmux 中运行后重试。', 'The node\'s tmux pane could not be verified. Make sure it is still running in tmux, then retry.'],
+  adopt_pane_process_mismatch: ['tmux 窗格里运行的不是该节点进程。' + fix, 'The tmux pane is not running this node process. ' + fixEn],
+  adopt_pid_invalid: ['节点的进程号无效。请确认节点正在运行后重试。', 'The node PID is invalid. Make sure the node is running, then retry.'],
+  adopt_pid_changed: ['检查期间节点进程号变了（进程可能已重启）。请稍后重试。', 'The node PID changed during the check (it may have restarted). Retry shortly.'],
+  adopt_pidfile_unsafe: ['节点的 pid 文件不安全（属主或权限不对）。请对它执行 chmod go-w 并确认属于 daemon 用户。', 'The node pid file is unsafe. chmod go-w it and make sure the daemon user owns it.'],
+  adopt_proc_invalid: ['读取到的节点进程信息异常。' + fix, 'The node process information is malformed. ' + fixEn],
+  adopt_proc_unreadable: ['daemon 无法读取节点进程信息，通常是用户不同。请用同一用户运行 daemon 和节点。', 'The daemon cannot read the node process, usually because the users differ. Run both as the same user.'],
+  adopt_platform_unsupported: ['该机器的系统不支持收编（目前仅 Linux）。', 'Adoption is not supported on this machine\'s OS (Linux only for now).'],
+  adopt_registry_unsafe: ['daemon 的收编登记文件或目录对其他用户可写。请对它执行 chmod go-w 并确认属于 daemon 用户。', 'The daemon adoption registry is writable by others. chmod go-w it and make sure the daemon user owns it.'],
+  adopt_registry_invalid: ['daemon 的收编登记文件已损坏。请修复或联系管理员。', 'The daemon adoption registry is corrupt. Repair it or contact an administrator.'],
+  adopt_registry_entry_invalid: ['daemon 里该节点的收编记录无效。请重新收编。', 'This node\'s entry in the daemon registry is invalid. Adopt it again.'],
+  adopt_registry_conflict: ['daemon 里已有同名节点的记录。请先处理同名节点后再收编。', 'The daemon already has a node with this name. Resolve the duplicate, then adopt.'],
+  adopt_registry_identity_mismatch: ['daemon 登记的节点目录与当前不一致。' + readopt, 'The node directory differs from the daemon registry. ' + readoptEn],
+  adopt_config_env_invalid: ['节点配置里的 env 字段格式不对。请修复 config.json 中的 env 后重试。', 'The env field in the node config is malformed. Fix env in config.json, then retry.'],
+  adopt_env_file_invalid: ['节点的环境变量文件格式有误。请修复后重试。', 'The node env file has errors. Fix it, then retry.'],
+  adopt_env_file_unsafe: ['节点的环境变量文件权限过宽或属主不对。请执行 chmod 600 并确认属于 daemon 用户。', 'The node env file is too permissive or has the wrong owner. chmod 600 it and make sure the daemon user owns it.'],
+  adopt_request_mismatch: ['daemon 收到的请求与 Hub 记录不一致，已拒绝。请重新提交收编。', 'The daemon request did not match the Hub record and was refused. Submit adoption again.'],
+  adopt_ack_rejected: ['daemon 的确认被 Hub 拒绝。请检查 daemon 与 Hub 的连接后重新收编。', 'The Hub rejected the daemon\'s acknowledgement. Check the daemon\'s Hub connection, then adopt again.'],
+  adopt_local_verification_failed: ['daemon 在本机校验节点时失败。请查看 daemon 日志后重试。', 'The daemon failed to verify the node locally. Check the daemon log, then retry.'],
+  adopt_lifecycle_verification_failed: ['daemon 校验节点状态失败，操作未执行。请查看 daemon 日志后重试。', 'The daemon could not verify the node state; nothing was done. Check the daemon log, then retry.'],
+  adopt_active_binding_required: ['节点尚未完成收编，不能启停。请先收编。', 'The node is not adopted yet, so it cannot be started or stopped. Adopt it first.'],
+  adopt_binding_unavailable: ['daemon 暂时读不到收编记录。请确认 daemon 在线后重试。', 'The daemon cannot read its adoption records right now. Make sure it is online, then retry.'],
+  adopt_binding_revoked_during_start: ['启动过程中收编被撤销。请重新收编后再启动。', 'Adoption was revoked during start. Adopt the node again, then start it.'],
+  adopt_start_evidence_missing: ['缺少可靠的启动记录（或配置已变），daemon 拒绝启动。请在节点机器上手动启动一次后重新收编。', 'Launch evidence is missing or the config changed, so the daemon refused to start. Start it once on the node machine, then adopt again.'],
+  adopt_stop_evidence_missing: ['缺少可靠的启动记录，daemon 拒绝停止。请在节点机器上处理后重新收编。', 'Launch evidence is missing, so the daemon refused to stop. Handle it on the node machine, then adopt again.'],
+  adopt_launch_mode_mismatch: ['节点的启动方式（bare/tmux）与收编时不同。' + readopt, 'The node launch mode (bare/tmux) differs from when it was adopted. ' + readoptEn],
+  adopt_process_still_running: ['停止后节点进程仍在运行。请在节点机器上检查并结束该进程。', 'The node process is still running after stop. Check and end it on the node machine.'],
+  adopt_process_stop_timeout: ['停止节点超时。请稍后刷新状态，必要时在节点机器上结束进程。', 'Stopping the node timed out. Refresh later, or end the process on the node machine.'],
+  adopt_process_tree_unstable: ['节点进程树在停止时不断变化，已中止。请稍后重试。', 'The node process tree kept changing during stop, so it was aborted. Retry shortly.'],
+  adopt_self_process_refused: ['目标进程就是 daemon 自己，已拒绝停止。请确认选择的节点是否正确。', 'The target process is the daemon itself, so stop was refused. Check the selected node.'],
+  adopt_start_timeout: ['启动节点超时。请刷新状态，勿重复提交；必要时查看节点日志。', 'Starting the node timed out. Refresh status before retrying; check the node log if needed.'],
+  adopt_tmux_session_still_exists: ['原 tmux 会话仍然存在，无法重新启动。请先关闭该会话后再启动。', 'The original tmux session still exists, so the node cannot be started. Close that session, then start.'],
+  adopt_stop_receipt_changed: ['停止过程中节点状态被其他操作改变。请刷新状态后重试。', 'The node state changed during stop. Refresh, then retry.'],
+  adopt_codex_readopt_required: ['节点机器重启过或 codex 会话已变，原收编失效。请重新收编。', 'The node machine rebooted or the codex session changed, so the adoption is stale. Adopt it again.'],
+  adopted_node_delete_unsupported: ['收编的节点不支持在这里删除。请先停止，再到节点机器上处理。', 'Adopted nodes cannot be deleted here. Stop it, then remove it on the node machine.'],
+};
+
+registerTranslations(Object.fromEntries(Object.entries(ADOPT_REFUSAL_COPY).map(([code, copy]) => [`adopt.code.${code}`, copy])));
