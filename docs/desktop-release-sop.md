@@ -129,6 +129,17 @@ not cancel it. Do not re-trigger because a run looks stalled.
 
 ### Build order: Android and desktop first, iOS last
 
+Start Android on `main` with the same exact merged release SHA as desktop:
+
+```bash
+gh workflow run android-build.yml --repo sleep2agi/agent-network-app --ref main \
+  -f commit=<40-character release SHA>
+```
+
+Before installing dependencies, the workflow checks that the input is a full
+SHA, matches the checkout and belongs to `origin/main`. The dispatch branch
+alone is not a release source pin.
+
 Owner, 2026-09-30: 「iOS 的构建是优先级最低的」. Dispatch `ios-build.yml` only
 **after** both of these are done:
 
