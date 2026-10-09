@@ -6,6 +6,7 @@ on:
       - 'src-tauri/src/local_hub.rs'
       - 'tests/bundled-hub-v2-contract/**'
       - 'tests/bundled-hub-provenance/**'
+      - 'tests/opencode-launch-window/**'
       - '.github/workflows/bundled-hub-v2-contract.yml'
   workflow_dispatch:
 permissions:
@@ -29,3 +30,12 @@ jobs:
           persist-credentials: false
       - run: docker build -t anet-hub-provenance:test -f tests/bundled-hub-provenance/Dockerfile .
       - run: docker run --rm --network none anet-hub-provenance:test
+  launch-window:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - run: docker build -t anet-launch-window:test -f tests/opencode-launch-window/Dockerfile .
+      - run: docker run --rm --network none --cap-drop ALL --security-opt no-new-privileges anet-launch-window:test
