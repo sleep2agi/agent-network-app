@@ -42,6 +42,8 @@ try {
   await page.getByTestId('user-avatar-message').filter({hasText:'已保存到 Hub'}).waitFor();
   check(`${width}: pool persisted`,saved.a==='/avatars/avatar-03.webp');
   const image=await imageValue(page,'user-avatar-preview');
+  const expected=await imageValue(page,process.env.TEST_AVATAR_WRONG_IMAGE_EXPECTATION==='1'?'user-avatar-pick-4':'user-avatar-pick-3');
+  check(`${width}: selected pool image actually rendered`,image===expected);
   await page.reload();await page.getByTestId('user-avatar-pick-3').waitFor();
   check(`${width}: reload reads Hub avatar`,image===await imageValue(page,'user-avatar-preview'));
   await page.screenshot({path:`/output/avatar-${width}.png`,fullPage:true});
