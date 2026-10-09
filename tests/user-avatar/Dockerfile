@@ -8,5 +8,6 @@ RUN npm install --prefix /qa-tools --no-save --no-audit --no-fund esbuild@0.25.5
 COPY . .
 RUN bun src/radius-tokens.test.ts && bun src/human-avatar.test.ts && bun src/user-avatar-api.test.ts && bun src/auth-me-shared.test.ts && bun src/settings-model.test.ts && bun src/drive-registry.test.ts && npm run typecheck
 RUN NODE_PATH=/qa-tools/node_modules node tests/user-avatar/build.cjs
+RUN npx --no-install expo export --platform web --output-dir /web-settings
 ENV PLAYWRIGHT_MODULE=/qa-tools/node_modules/playwright/index.mjs
-CMD ["node", "tests/user-avatar/drive.mjs"]
+CMD ["sh", "-c", "node tests/user-avatar/drive.mjs && WEB_DIR=/web-settings node tests/test-settings-redesign/drive.mjs"]

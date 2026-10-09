@@ -824,7 +824,6 @@ export default function SettingsScreen({
             // 安全 / 本地数据 / 最后单独一组危险操作。行为不变:点行切换、⋯ 里是原来行尾那四个按钮(+ 切换)。
             <View style={sectionStyle} testID="settings-section-account">
               {heading('account')}
-              {show('account', 'avatar') ? <UserAvatarEditor cfg={cfg} /> : null}
               {show('account', 'profiles') ? (
                 profiles.length ? (
                   <>
@@ -853,6 +852,7 @@ export default function SettingsScreen({
               ) : show('account', 'addAccount') ? (
                 <SettingsGroup><SettingsRow label={tr('settings.copy.93')} tone="accent" icon="add" onPress={onAddAccount} testID="settings-add-account-row" /></SettingsGroup>
               ) : null}
+              {show('account', 'avatar') ? <UserAvatarEditor cfg={cfg} /> : null}
               {(show('account', 'devices') && sessions.available) || show('account', 'switchAccount') || (show('account', 'changePassword') && canChangePassword) ? (
                 <SettingsGroup title={tr('accounts.groupSecurity')} testID="settings-account-security">
                   {show('account', 'changePassword') && canChangePassword ? (
