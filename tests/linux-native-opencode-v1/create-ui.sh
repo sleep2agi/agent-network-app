@@ -1,11 +1,12 @@
 #!/bin/bash
 # TEST ONLY: safe-default V1 native creation; no API writes or model dispatch.
 set -euo pipefail
+observer=${TEST_V1_OBSERVER:-/fixture/v1-verify.py}
 python3 /fixture/v1-reachability.py >/evidence/v1-reachability-process.log 2>&1 &
 reachability_pid=$!
 cleanup() {
   import -window "${window:-root}" /evidence/v1-final.png 2>/dev/null || true
-  python3 /fixture/v1-verify.py evidence || true
+  python3 "$observer" evidence || true
   if [ -n "${app_pid:-}" ]; then
     kill "$app_pid" 2>/dev/null || true
     wait "$app_pid" 2>/dev/null || true
@@ -25,7 +26,7 @@ test -e /evidence/v1-reachability-ready
 export HTTPS_PROXY=http://127.0.0.1:18829 NO_PROXY=127.0.0.1,localhost
 source /fixture/daemon-ui.sh
 trap cleanup EXIT
-python3 /fixture/v1-verify.py before
+python3 "$observer" before
 xdotool mousemove --window "$window" 785 766 click 1
 sleep 1
 xdotool type --clearmodifiers --delay 80 'v1-native'
@@ -53,6 +54,6 @@ if [ "${TEST_CREATE_MISS_CLICK:-0}" = 1 ]; then
 else
   xdotool mousemove --window "$window" 1060 632 click 1
 fi
-python3 /fixture/v1-verify.py after
+python3 "$observer" after
 import -window "$window" /evidence/v1-complete.png
-echo 'PASS: V1 native creation/startup only; model reply NOT tested'
+echo 'PASS: V1 native creation observer completed; see explicit observer scope; model reply NOT tested'
