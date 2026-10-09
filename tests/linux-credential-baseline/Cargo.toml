@@ -1,0 +1,11 @@
+[package]
+name = "anet-linux-credential-baseline"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[dependencies]
+# Match the Linux-resolved backend at app main fcd13d339eedb323e98e8c1617c4852f15409f59.
+# This is a historical defect reproducer, NOT the intended production configuration.
+keyring = { version = "=3.6.3", default-features = false }
+
