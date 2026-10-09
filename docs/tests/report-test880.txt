@@ -102,3 +102,23 @@ Limits: browser harness renders the editor and HumanAvatar, not full directory
 navigation/refresh or real-Hub integration. Polling scope race behavior is not
 changed or newly certified. Chat/group/member picker/account-row displays and
 photo upload remain separate work; no native package or release claim.
+
+Follow-up, 2026-10-09 22:24 CST — preserve complete account-page layout
+CI head 5071f1f6636f472ab5e32b1208ef31552b28c009 failed drives shard 5:
+test-settings-redesign/drive.mjs rejected the desktop light/dark first-card
+invariant. The avatar editor had been inserted before the current account.
+This was a real product layout regression, not a reason to loosen the test.
+Move the editor after the profile groups, keeping current account first and
+danger actions last. Add the full Web export/settings-redesign drive after the
+component drive in the avatar Docker suite so both must pass sequentially.
+
+Exact tested source: 3addedbef22b55300bd5b8b72ed87fb9eba2e473
+sg docker -c 'docker build -f tests/user-avatar/Dockerfile -t anet-avatar:account-order . && docker run --name anet-avatar-account-order --network none anet-avatar:account-order'
+Image index: sha256:dd3ecaf6ff5a1fafa2a4af5703f2142153295371b40b0b614bf3268a25654aa0
+Build: targeted assertions 137/137, production typecheck and Web export PASS.
+Runtime: avatar component 26/26 then full settings layout 124/124 PASS, exit 0.
+Settings checks include desktop 1440x900 / phone 390x844, light/dark, account
+ordering, spacing, menus, danger placement and other setting categories.
+The settings drive uses stub Hub/profile responses: it proves the exported
+layout, not real Hub avatar write/read integration or a native package.
+Updated exact-head full CI remains required before merge. No release made.
