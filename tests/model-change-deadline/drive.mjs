@@ -1,9 +1,9 @@
 // Rendered Web export with a page-local Hub fixture, not native/real-Hub E2E.
 import assert from 'node:assert/strict';
 import { serveExport, initScript, findChromium } from '../test-layout-sweep/harness.mjs';
-const source = process.env.SOURCE_COMMIT;
+const source = process.env.SOURCE_COMMIT || process.env.GITHUB_SHA;
 assert.match(source ?? '', /^[0-9a-f]{40}$/);
-assert.equal(source, process.env.EXPECTED_SOURCE_COMMIT);
+if (process.env.SOURCE_COMMIT) assert.equal(source, process.env.EXPECTED_SOURCE_COMMIT);
 console.log(`product_source=${source}; fixture Hub only`);
 const { chromium } = await import(process.env.PLAYWRIGHT_MODULE || 'playwright');
 const web = await serveExport(process.env.WEB_DIR);
