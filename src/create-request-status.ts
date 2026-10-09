@@ -53,12 +53,12 @@ export function createRequestVerdict(row: CreateRequestRow | null | undefined, n
 /** Success requires evidence for this request, not an alias collision. */
 export function creationConfirmed(
   row: CreateRequestRow | null | undefined,
-  expected: { requestId: string; name: string; runtime: string },
+  expected: { requestId: string; name: string; runtime: string; requireLaunchVerification?: boolean },
   sessions: ReadonlyArray<{ alias: string; node_id?: string | null; status: string }>,
 ): boolean {
   if (!row || row.request_id !== expected.requestId || row.child_name !== expected.name
     || row.runtime !== expected.runtime || row.status !== 'succeeded' || !row.child_node_id) return false;
-  if (expected.runtime === 'opencode-cli'
+  if (expected.requireLaunchVerification
     && !(typeof row.launch_verified_at === 'number' && Number.isFinite(row.launch_verified_at) && row.launch_verified_at > 0)) return false;
   return sessions.some(s => s.node_id === row.child_node_id && s.alias === expected.name
     && (s.status === 'idle' || s.status === 'busy'));

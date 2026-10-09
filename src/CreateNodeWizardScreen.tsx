@@ -21,7 +21,7 @@ import { readinessFor, readinessSelectable } from './runtime-readiness';
 // On submit POST /mcp create_node, then poll fetchStatus until the
 // child alias shows up in the session list. A `ok:true` from the RPC
 // means "hub accepted the call", not "the child is running". Success needs
-// the exact request/node identity; OpenCode additionally needs daemon launch proof.
+// the exact request/node identity; V2 additionally needs daemon launch proof.
 //
 // React rules of hooks compliance: ALL useState/useEffect/useRef
 // declared BEFORE any conditional early return — guards against the
@@ -127,6 +127,7 @@ export default function CreateNodeWizardScreen({ cfg, daemon, onBack, onExit, de
   // and showing an "unconfirmed" message — matches dashboard wizard.
   const [childUp, setChildUp] = useState(false);
   const [requestId, setRequestId] = useState<string | null>(null);
+  const submittedSpec = useRef<CreateNodeRequest['node_spec'] | null>(null);
   const pollAlive = useRef(true);
 
   // Stop polling on unmount + on screen exit
@@ -172,7 +173,12 @@ export default function CreateNodeWizardScreen({ cfg, daemon, onBack, onExit, de
             setMsg(`创建失败:${lastVerdict.text}`);
             return;
           }
-          if (creationConfirmed(latest, { requestId, name: want, runtime: runtimeId }, list)) {
+          if (creationConfirmed(latest, {
+            requestId, name: want, runtime: runtimeId,
+            // Use the submitted request, not current UI selection or a field
+            // an older Hub might silently omit. V1 has no V2 launch proof.
+            requireLaunchVerification: submittedSpec.current?.flags?.opencodeGeneration === 'v2',
+          }, list)) {
             setChildUp(true);
             setPhase('done');
             return;
@@ -332,6 +338,7 @@ export default function CreateNodeWizardScreen({ cfg, daemon, onBack, onExit, de
       permissionMode, maxTurns, budget,
       workdirField: workdirForRequest(workdirRoot, workdir),
     });
+    submittedSpec.current = node_spec;
     const res = await createNode(cfg, {
       daemon_node_id: daemon.daemon_node_id,
       node_spec,
