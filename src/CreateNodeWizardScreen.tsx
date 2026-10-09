@@ -547,6 +547,7 @@ export default function CreateNodeWizardScreen({ cfg, daemon, onBack, onExit, de
                 {(['v1', 'v2'] as const).map(g => (
                   <Pressable key={g} testID={`opencode-generation-${g}`} accessibilityRole="radio"
                     accessibilityState={{ checked: opencodeGeneration === g }}
+                    aria-checked={opencodeGeneration === g}
                     onPress={() => { setOpenCodeGeneration(g); setOpenCodeUnsafeTools(false); }}
                     style={[styles.choiceRow, opencodeGeneration === g && styles.choiceRowSelected]}>
                     <Text style={styles.choiceText}>{g === 'v1' ? 'V1（兼容默认）' : 'V2（实验性 TUI 共存）'}</Text>
@@ -558,6 +559,7 @@ export default function CreateNodeWizardScreen({ cfg, daemon, onBack, onExit, de
                     <Text style={styles.hint}>runtime 可用性标记不代表 V2 就绪；目标 daemon 仍会校验准确版本、授权和启动结果。</Text>
                     <Pressable testID="opencode-v2-consent" accessibilityRole="checkbox"
                       accessibilityState={{ checked: opencodeUnsafeTools }}
+                      aria-checked={opencodeUnsafeTools}
                       onPress={() => setOpenCodeUnsafeTools(v => !v)} style={styles.choiceRow}>
                       <Ionicons name={opencodeUnsafeTools ? 'checkbox' : 'square-outline'} size={20} color={colors.accent} />
                       <Text style={[styles.choiceText, { flex: 1 }]}>我了解风险，仅用于可信任务，允许所有本地工具</Text>
