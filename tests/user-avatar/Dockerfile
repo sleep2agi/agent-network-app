@@ -10,4 +10,4 @@ RUN bun src/radius-tokens.test.ts && bun src/human-avatar.test.ts && bun src/use
 RUN NODE_PATH=/qa-tools/node_modules node tests/user-avatar/build.cjs
 RUN npx --no-install expo export --platform web --output-dir /web-settings
 ENV PLAYWRIGHT_MODULE=/qa-tools/node_modules/playwright/index.mjs
-CMD ["sh", "-c", "node tests/user-avatar/drive.mjs && WEB_DIR=/web-settings node tests/test-settings-redesign/drive.mjs"]
+CMD ["sh", "-c", "node tests/user-avatar/drive.mjs && WEB_DIR=/web-settings node tests/test-settings-redesign/drive.mjs && WEB_DIR=/web-settings node tests/user-avatar/dm-drive.mjs"]
