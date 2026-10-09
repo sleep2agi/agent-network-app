@@ -1,0 +1,42 @@
+Creation confirmation elapsed-time deadline — 2026-10-09 CST
+Hub #539 / #829; app PR #785; backend dependency #2551.
+Tested source: e19a4154a3b0c77620e84c7f440a457dca412efd
+
+Finding: 30 polls with 1.5-second gaps do not bound total elapsed time to
+45 seconds. Serial HTTP reads add latency; request-status response bodies
+are read after the existing headers-only timeout. The form could keep
+showing its advertised 45-second wait much longer.
+Fix: an independent 45-second observation timer ends waiting as unconfirmed
+and invalidates in-flight callbacks. Effect cleanup clears both timers.
+No accepted server-side creation is cancelled, and no automatic resubmission.
+Existing identity, startup-proof and late-failure checks are unchanged.
+
+Witnessed red (Docker only):
+anet-app-deadline-old-red used old product image anet-app-v2:working-bad
+sha256:ab3eb6d9786c005ed7ecb2d0d34576243f808c9d27f1c7f44754260dc327f33d
+source bad71b4f06027bc452c865b65a9d538f89a406be, with only new drive.mjs
+read-only mounted. Existing initial cases passed; new slow-response case
+failed at locator.waitFor Timeout 48000ms waiting for unconfirmed UI.
+Container exit=1. This is a test-overlay negative, not a clean source build.
+
+Green exact-source build, all commands through sg docker:
+docker build --build-arg DEPENDENCY_IMAGE=anet-app-v2:working-bad --build-arg SOURCE_COMMIT=e19a4154a3b0c77620e84c7f440a457dca412efd -f tests/opencode-v2-create/Dockerfile -t anet-app-v2:deadline-e19 .
+Dependency lock compared; source copied; TypeScript and Expo web export PASS.
+Image sha256:116f2015fadc051acf97ab3c4e05ec98c0e0b647ab78b0d52a6703663147c583
+
+anet-app-deadline-unit: network none, no source mounts, npm test,
+SOURCE_COMMIT checked against EXPECTED_SOURCE_COMMIT; 377/377 files, exit=0.
+anet-app-deadline-rendered: same image, network none, expected SHA checked,
+4/4 desktop/phone x light/dark cases PASS; exit=0; elapsed about 94 seconds.
+Slow-response case: fixture delays each response by 2 seconds, no startup
+proof; UI must finish observation within test's 48-second bound. Then remove
+delay and supply proof, wait 5 seconds: no false success and exactly one
+create request. Existing V1 completion, V2 consent/model/payload, identity,
+missing proof, late failure, old-Hub refusal and Codex payload remain green.
+Raw logs retained in named containers; rendered artifacts in /artifacts.
+
+Scope: browser-rendered production export with page-local Hub/Tauri fixture,
+not native WebView or real backend lifecycle reacceptance at this app SHA.
+Prior combined native evidence uses an older app SHA; do not relabel it.
+Full CI required on final report head. No release/global package/production
+change. Main exact-SHA builds remain required for upgrade and rollback.
