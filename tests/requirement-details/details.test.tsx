@@ -157,12 +157,13 @@ mock.module('./src/requirements-hub', () => ({
   },
 }));
 let saveAssignment: (result: any) => void;
+let rejectAssignment: (error: Error) => void;
 const assignmentWrites: any[] = [];
 mock.module('./src/requirement-people-api', () => ({
   listRequirementPeople: async () => [{ kind: 'user', id: 'u', name: '成员', networkId: 'a' }, { kind: 'node', id: 'n1', name: '执行节点', networkId: 'a' }],
   saveRequirementAssignments: (_cfg: unknown, id: string, value: unknown) => {
     assignmentWrites.push({ id, value });
-    return new Promise(resolve => { saveAssignment = resolve; });
+    return new Promise((resolve, reject) => { saveAssignment = resolve; rejectAssignment = reject; });
   },
 }));
 const { default: Board } = await import('./src/RequirementBoard');
@@ -974,6 +975,23 @@ test('assignment editor only reports saved bindings after Hub acknowledgement', 
   expect(byId('edit-participants').props.disabled).toBe(true);
   await act(async () => saveAssignment({ owner: { kind: 'user', id: 'u' }, participants: [] }));
   expect(saved).toHaveLength(1);
+});
+
+test('shared participants directory retry recovers after a save failure without replaying the write', async () => {
+  let reloads = 0;
+  assignmentWrites.length = 0;
+  const directory = { people: [{ kind: 'user' as const, id: 'u', name: '成员', networkId: 'a' }], loading: false, reload: async () => { reloads++; return true; } };
+  await act(async () => { renderer = create(<AssignmentsEditor cfg={cfg} fields="participants" directory={directory} item={{ ...card, priority: 'normal', column: 'pool', owner: null, participants: [] }} onSaved={() => { throw new Error('failed save must not succeed'); }} />); });
+  await act(async () => byId('edit-participants').props.onPress());
+  await act(async () => byId('person-user:u').props.onPress());
+  await act(async () => byId('people-confirm').props.onPress());
+  await act(async () => rejectAssignment(new Error('fixture save failed')));
+  expect(renderer.root.findAllByProps({ accessibilityRole: 'alert' })).toHaveLength(1);
+  const retry = renderer.root.findAllByType('Pressable').find(n => n.findAllByType('Text').some(t => t.props.children === '重新读取成员'))!;
+  await act(async () => retry.props.onPress());
+  expect(reloads).toBe(2);
+  expect(assignmentWrites).toHaveLength(1);
+  expect(renderer.root.findAllByProps({ accessibilityRole: 'alert' })).toHaveLength(0);
 });
 
 test('details only edit participants through the assignment editor (owner lives in the draft)', async () => {

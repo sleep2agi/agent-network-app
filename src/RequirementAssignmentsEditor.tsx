@@ -101,7 +101,11 @@ export default function RequirementAssignmentsEditor({ cfg, item, onSaved, field
       : <PersonChips refs={item.participants!} people={people} s={taskStyles} testID="participants-chips" />}
     {!sharedDirectory && loading && !people.length ? <Text style={{ color: colors.textMuted, fontSize: 12 }} testID="participants-loading">{tr('tasks.copy.9')}</Text> : null}
     {error ? <Text accessibilityRole="alert" style={{ color: colors.failed }}>{error}</Text> : null}
-    {error ? <Pressable accessibilityRole="button" disabled={saving} onPress={() => setReload(n => n + 1)}><Text style={{ color: colors.accent }}>{tr('tasks.copy.10')}</Text></Pressable> : null}
+    {error ? <Pressable accessibilityRole="button" disabled={saving} onPress={() => {
+      setError('');
+      if (directory) void directory.reload();
+      else setReload(n => n + 1);
+    }}><Text style={{ color: colors.accent }}>{tr('tasks.copy.10')}</Text></Pressable> : null}
     <View ref={actionsRef} collapsable={false} style={{ flexDirection: 'row', gap: spacing.md }}>
       {(fields === 'both' ? ['owner', 'participants'] as const : ['participants'] as const).map(value => <Pressable key={value} testID={`edit-${value}`} accessibilityRole="button" disabled={saving || (!people.length && (loading || !!error))} onPress={() => { void openPicker(value); }} style={{ minHeight: 44, justifyContent: 'center' }}><Text style={{ color: colors.accent }}>{value === 'owner' ? tr('tasks.copy.11') : tr('tasks.copy.12')}</Text></Pressable>)}
     </View>
