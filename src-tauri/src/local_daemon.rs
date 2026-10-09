@@ -260,6 +260,32 @@ fn node_id_from_profile(name: &str) -> Option<String> {
     json.get("node_id")?.as_str().map(str::to_string)
 }
 
+// Child launch deliberately uses a fixed PATH, not the installer's login-shell
+// PATH. Explicitly opt the validated private pair into the existing daemon
+// configuration contract; never copy arbitrary environment PATH entries.
+fn profile_with_private_bin(raw: &str, bin: &Path, node_id: &str) -> Result<Vec<u8>, String> {
+    let bin = bin.to_str().ok_or("private package bin is not UTF-8")?;
+    let valid = |s: &str| s.starts_with('/') && s.trim() == s
+        && !s.chars().any(|c| matches!(c, ':' | '\0' | '\r' | '\n'));
+    if !valid(bin) {
+        return Err("private package bin must be one absolute Unix PATH entry".into());
+    }
+    let mut profile: serde_json::Value = serde_json::from_str(raw).map_err(|e| e.to_string())?;
+    let object = profile.as_object_mut().ok_or("daemon profile must be an object")?;
+    if object.get("node_id").and_then(|v| v.as_str()) != Some(node_id) {
+        return Err("initialized daemon profile node_id mismatch".into());
+    }
+    let paths = object.entry("daemonExtraPath").or_insert_with(|| serde_json::json!([]))
+        .as_array_mut().ok_or("daemonExtraPath must be an array")?;
+    if !paths.iter().all(|v| v.as_str().is_some_and(valid)) {
+        return Err("daemonExtraPath contains an invalid absolute path".into());
+    }
+    if !paths.iter().any(|v| v.as_str().unwrap().trim_end_matches('/') == bin.trim_end_matches('/')) {
+        paths.push(serde_json::Value::String(bin.into()));
+    }
+    serde_json::to_vec_pretty(&profile).map_err(|e| e.to_string())
+}
+
 /// npm 报错里像注册表/网络问题的信号(与 docs-site/public/install.sh 同一份清单)。
 pub fn looks_like_registry_failure(text: &str) -> bool {
     let lower = text.to_ascii_lowercase();
@@ -671,6 +697,20 @@ pub fn install(session: &LocalHubSession) -> Result<DaemonInstallReport, String>
         return fail(steps, "daemon 初始化成功但没拿到 node_id".into());
     };
 
+    // Persist before any stop/start: the child-process allowlist does not inherit
+    // with_path(). Failure must not launch a daemon with an unusable private pair.
+    let configure_child_path = || -> Result<(), String> {
+        let path = daemon_profile_path(LOCAL_DAEMON_NAME)?;
+        let raw = fs::read_to_string(&path).map_err(|e| e.to_string())?;
+        let bytes = profile_with_private_bin(&raw, &anet_prefix.join("bin"), &node_id)?;
+        write_private_atomic(&path, &bytes)
+    };
+    if let Err(error) = configure_child_path() {
+        return fail(steps, format!("无法配置 daemon 子节点私有 PATH: {error}"));
+    }
+    steps.push(StepReport { name: "配置 daemon 子节点私有 PATH".into(), ok: true,
+        output: format!("daemonExtraPath: {}", anet_prefix.join("bin").display()) });
+
     // 3b. 先停掉旧的 daemon 进程:anet 对同 alias「已经在跑的节点不起第二个」(#1130),旧进程(可能还是旧
     //     agent-node)不停,新的永远起不来。停不掉不算错(可能本来就没在跑)。
     let stop = run_shell(
@@ -859,6 +899,45 @@ mod tests {
         let output = "[anet daemon] ✓ created host_supervisor daemon \"local-daemon\"\n              config:     .anet/nodes/local-daemon/config.json\n              node_id:    node_daemon_0a1b2c3d4e5f\n";
         assert_eq!(parse_daemon_node_id(output).as_deref(), Some("node_daemon_0a1b2c3d4e5f"));
         assert_eq!(parse_daemon_node_id("nothing here"), None);
+    }
+
+    #[test]
+    fn private_child_path_preserves_profile_and_is_idempotent() {
+        let original = serde_json::json!({"node_id":"daemon_test", "token":"fixture-only",
+            "network_id":"net_test", "role":"host_supervisor", "custom":{"keep":true},
+            "daemonExtraPath":["/opt/tools/bin"]});
+        let bin = Path::new("/home/test/.anet/app/local-daemon/anet/bin");
+        let once = profile_with_private_bin(&original.to_string(), bin, "daemon_test").unwrap();
+        let text = std::str::from_utf8(&once).unwrap();
+        assert_eq!(profile_with_private_bin(text, bin, "daemon_test").unwrap(), once);
+        let mut actual: serde_json::Value = serde_json::from_slice(&once).unwrap();
+        assert_eq!(actual["daemonExtraPath"], serde_json::json!(["/opt/tools/bin",bin.to_str().unwrap()]));
+        actual["daemonExtraPath"] = original["daemonExtraPath"].clone();
+        assert_eq!(actual, original);
+    }
+
+    #[test]
+    fn private_child_path_creates_missing_list_and_deduplicates_trailing_slash() {
+        for raw in [r#"{"node_id":"d"}"#, r#"{"node_id":"d","daemonExtraPath":["/private/bin/"]}"#] {
+            let out = profile_with_private_bin(raw, Path::new("/private/bin"), "d").unwrap();
+            let value: serde_json::Value = serde_json::from_slice(&out).unwrap();
+            assert_eq!(value["daemonExtraPath"].as_array().unwrap().len(), 1);
+        }
+    }
+
+    #[test]
+    fn private_child_path_rejects_corrupt_identity_or_path_without_overwrite() {
+        for raw in ["broken", "[]", r#"{"node_id":"other"}"#,
+            r#"{"node_id":"d","daemonExtraPath":null}"#,
+            r#"{"node_id":"d","daemonExtraPath":"/bin"}"#,
+            r#"{"node_id":"d","daemonExtraPath":[42]}"#,
+            r#"{"node_id":"d","daemonExtraPath":["relative"]}"#,
+            r#"{"node_id":"d","daemonExtraPath":["/one:/two"]}"#] {
+            assert!(profile_with_private_bin(raw, Path::new("/private/bin"), "d").is_err());
+        }
+        for bin in ["relative", "/one:/two", "/bad\npath", "/bad\0path", " /space"] {
+            assert!(profile_with_private_bin(r#"{"node_id":"d"}"#, Path::new(bin), "d").is_err());
+        }
     }
 
     #[test]

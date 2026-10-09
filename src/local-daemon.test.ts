@@ -85,6 +85,12 @@ check(wf.includes('--smoke-local-daemon-install') && wf.includes('if [ "$RUNNER_
     'both existing packages are checked before either install or Hub credential write');
   check(rust.includes('match check_cli()') && rust.includes('match checked_private_agent_node(&node_bin_dir.join("node"))'),
     'freshly installed packages are checked too');
+  const childPath = rust.indexOf('if let Err(error) = configure_child_path()');
+  check(childPath > rust.indexOf('let Some(node_id) = node_id else') &&
+    childPath < rust.indexOf('let stop = run_shell(') &&
+    rust.includes('profile_with_private_bin(&raw, &anet_prefix.join("bin"), &node_id)?') &&
+    rust.includes('write_private_atomic(&path, &bytes)'),
+    'validated private pair PATH is persisted atomically after init and before stopping/starting daemon');
   const v4 = hubDaemonView({ ...base, sessions: [{ alias: 'local-daemon', status: 'idle' }], nodes: [{ node_id: 'node_daemon_6f85', config_snapshot: { role: 'host_supervisor' } }], supervisors: [] });
   check(!v4.ok && v4.verdict.includes('token'), 'role ok but unlisted → token verdict');
   const v5 = hubDaemonView({ ...base, sessions: [{ alias: 'local-daemon', status: 'idle' }], nodes: [{ node_id: 'node_daemon_6f85', config_snapshot: { role: 'host_supervisor' } }], supervisors: [{ daemon_node_id: 'node_daemon_6f85', online: true }] });

@@ -11,6 +11,7 @@ on:
       - 'tests/linux-hub-migration/**'
       - 'tests/linux-native-daemon/**'
       - 'tests/linux-native-daemon-ui/**'
+      - 'tests/linux-native-opencode/**'
       - 'tests/local-daemon-packages/**'
       - 'scripts/seed-previous-local-hub.mjs'
       - 'scripts/with-linux-test-keyring.sh'
@@ -185,6 +186,29 @@ jobs:
             mkdir -p out/native-daemon-ui-evidence
             docker cp native-daemon-ui-proof:/evidence/. out/native-daemon-ui-evidence/
             docker rm native-daemon-ui-proof
+          fi
+      - name: Build pinned V2 runtime prerequisite
+        run: |
+          deb_sha=$(sha256sum out/*.deb | awk '{print $1}')
+          docker build --build-arg NATIVE_IMAGE=anet-native-daemon-ui:test --build-arg SOURCE_COMMIT="$(git rev-parse HEAD)" --build-arg DEB_SHA256="$deb_sha" -t anet-native-opencode:test -f tests/linux-native-opencode/Dockerfile .
+      - name: Real V2 authentication and model transport prerequisite
+        run: docker run --name native-opencode-atomic --network none --cap-drop ALL --security-opt no-new-privileges anet-native-opencode:test
+      - name: Wrong model must fail exact runtime oracle
+        shell: bash
+        run: |
+          set +e
+          docker run --rm --network none --cap-drop ALL --security-opt no-new-privileges -e TEST_WRONG_MODEL=1 anet-native-opencode:test >out/native-opencode-wrong-model.log 2>&1
+          result=$?
+          set -e
+          test "$result" -ne 0
+          grep -F 'AssertionError: provider model mismatch' out/native-opencode-wrong-model.log
+      - name: Preserve V2 prerequisite evidence
+        if: always()
+        run: |
+          if docker container inspect native-opencode-atomic >/dev/null 2>&1; then
+            mkdir -p out/native-opencode-atomic
+            docker cp native-opencode-atomic:/evidence/. out/native-opencode-atomic/
+            docker rm native-opencode-atomic
           fi
       - uses: actions/upload-artifact@v4
         if: always()

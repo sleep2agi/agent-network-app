@@ -44,10 +44,14 @@ elif sys.argv[1] == 'after':
                         and daemon.get('online') is True
                         and daemon.get('can_create_nodes') is True):
                     assert profile.get('node_id'), 'missing daemon identity'
+                    private_bin = str(root / 'local-daemon/anet/bin')
+                    assert private_bin in profile.get('daemonExtraPath', []), 'private pair absent from daemon child PATH'
+                    assert profile_path.stat().st_mode & 0o777 == 0o600, 'daemon profile is not owner-only'
                     Path('/evidence/daemon-registration.json').write_text(json.dumps({
                         'node_id': profile['node_id'], 'online': True, 'can_create_nodes': True,
                         'source': os.environ['TEST_DEB_SOURCE_COMMIT'],
                         'deb_sha256': os.environ['TEST_DEB_SHA256'],
+                        'private_pair_child_path': private_bin,
                     }, indent=2))
                     print('PASS: UI-created daemon profile matches authenticated online Hub supervisor')
                     sys.exit(0)

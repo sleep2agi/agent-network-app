@@ -488,3 +488,79 @@ parse/prerequisite ordering/always-preserve-evidence checks passed. All dedicate
 diagnostic/positive/negative containers removed after saving screenshots; docker
 ps -a --filter name=anet894-native-ui returns empty. App trap is not claimed to
 stop every descendant; container removal remains final cleanup boundary.
+
+2026-10-10 02:30 Asia/Shanghai — actual V2 creation exposes private child PATH gap:
+Original PR795 only; no new implementation ticket, merge or release. Diagnostic
+package remains50723a6 / tested merge433823aed20a09b6159b3f30e137daf6265bd685 /
+deb f39631f06fbd99527de10a39e38e98423ee9aedc3686ed27aa95968814cb8dd1.
+This is not a package built from the new source changes below.
+
+New independent tests/linux-native-opencode Docker suite uses real integrity-
+locked @opencode/cli2.0.22, copied from normal npm ci, plus a loopback model fixture.
+Runtime fixture image manifest77847996ca8e9ce9134bba0eb35c8d825776e5e638f86d31bb056bd7e1983d96.
+In fresh UID10001 containers with --network none --cap-drop ALL and
+--security-opt no-new-privileges:
+  positive exit0: real /api/info; unauthenticated401; real session returned
+  ANSWER_NATIVE_ATOMIC894 (not present in prompt), became idle; provider journal
+  recorded actual model stub-model.
+  TEST_WRONG_MODEL=1 exit1: exact AssertionError: provider model mismatch,
+  after healthy/auth prerequisite. Not a generic runtime crash.
+Both containers removed after evidence copy. Rebuild/run inputs and evidence
+retention are in the suite README and linux-deb-package workflow.
+
+Then used the actual native window, native IPC and actual private installer:
+  UI local workspace → new node → scan → install → matching online supervisor
+  → name v2-native / workdir /home/smoke/v2-native → OpenCode V2
+  → explicit unsafe-tools consent → model stub/stub-model → confirm → create.
+Provider was seeded only in node-scoped opencode.json using prepare.py; no node
+identity or create request was injected. Provider implements no requested tool
+execution; all processes stay in the isolated container. The UI correctly showed
+failure, not online. copresence-bridge.log reported exact trusted agent-node
+2.5.0-preview.128 absent on PATH and automatic npx disabled. Read-only inspection:
+  private package version =2.5.0-preview.128; private dist/cli.js exists=true;
+  initialized daemon config daemonExtraPath=null.
+Backend create-node-daemon.ts uses fixed child PATH + daemonExtraPath, not the
+installer login-shell PATH. Therefore parent install/register success was not
+proof of usable child launch.
+
+Failure screenshot create-result.png SHA256
+6a21533f3b89cc43433de26236dafbfbc427d14b6b4981a75a97577e228fce60;
+bridge log SHA256
+f68610b4d3e783eb2eaa06c90003188e9e7b74238e9c3412b7c630a5c9e7c00e.
+Diagnostic evidence copied to /tmp/anet894-runtime-evidence.uU9ByX, not a required
+rebuild input or durable artifact promise. No credential/config DB was archived.
+The updated native verification was executed on this old package: auth accepted,
+wrong token401, then exact AssertionError: private pair absent from daemon child
+PATH. This is the regression negative, not a post-fix positive. Diagnostic
+container anet894-runtime-ui-diagnostic was stopped/removed; unrelated containers
+were untouched. Container removal is final process/credential cleanup.
+
+Narrow product fix: after successful init and node-id verification, before any
+stop/start, atomically persist only the validated private pair bin into the
+existing daemonExtraPath contract. Preserve other fields/extra paths, deduplicate
+trailing slash, reject malformed JSON/array/path or node-id mismatch. Do not copy
+ambient PATH, change exact versions, loosen trusted package checks or enable npx.
+Added three actual Rust helper tests and native profile/path/0600 acceptance;
+the workflow runs native installer gates before the V2 runtime prerequisite.
+Updated local workspace recovery/verification/rollback documentation in same change.
+
+Docker validation so far:32 client contract assertions; Python syntax; YAML parse
+and prerequisite/negative/always-preserve evidence ordering. Initial attempt used
+node --experimental-strip-types, which cannot resolve the existing extensionless
+TS import; corrected to the established Bun runner. Rust test compilation used
+the cached full build image with current src-tauri source overlaid inside the
+container (not host), Cargo.toml/lock unchanged from image base. Rust result and
+new exact-head packaged acceptance are recorded separately below; no success
+inference from old package/previous CI. Full native create/model/stop/restart,
+V1 compatibility and formal main-SHA release remain open.
+
+Post-change Docker Rust result: cargo test --locked local_daemon -- --nocapture
+compiled actual product code and passed22/22 (including3 new private child-path
+tests and6 unchanged exact-pair policy tests);38 unrelated tests filtered out.
+No package was rebuilt by this unit run. Reproduce against the full Linux build
+image from tests/linux-deb-package/Dockerfile (current workflow source is authority),
+overlay current src-tauri/src/*.rs and src/local-daemon.test.ts inside /app,
+run bun src/local-daemon.test.ts then the cargo command above. Local execution
+used anet-linux-deb:8fb42f1 with read-only /source mount and --network none;
+source Cargo.toml/lock had no diff from that image's source. Container removed
+after completion. Do not attribute these source tests to the older507 deb.
