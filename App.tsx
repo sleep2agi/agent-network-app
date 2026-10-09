@@ -117,7 +117,7 @@ type Screen =
   | { name: 'serverNodeDetail'; alias: string }
   | { name: 'settings' }
   | { name: 'chat'; alias: string; focusTaskId?: string; networkId?: string }  // focusTaskId: 定时任务「去会话」要定位的那条任务;networkId: #769 点的那行所在网络
-  | { name: 'dm'; alias: string; userId: string; displayName?: string | null }  // 人与人私信(hub#2086);alias = 对方用户名
+  | { name: 'dm'; alias: string; userId: string; displayName?: string | null; avatarUrl?: string | null }  // 人与人私信(hub#2086);alias = 对方用户名
   | { name: 'group'; alias: string; groupName?: string }  // 群聊(RFC-042,Hub ≥ .93);alias = group_id
   | { name: 'nodeInfo'; alias: string }
   | { name: 'taskDetail'; taskId: string }   // full-screen (no tab bar) — hardware back returns to /tasks list
@@ -1474,8 +1474,8 @@ function openTaskRef(requirementId: string, networkId: string | null, cfg: HubCo
 }
 
 // 人员行 → 私信页;私信页 → DmChatScreen 要的对方。
-const dmScreenFor = (p: Human) => ({ name: 'dm' as const, alias: p.username, userId: p.user_id, displayName: p.display_name ?? null });
-const dmPeerOf = (s: { alias: string; userId: string; displayName?: string | null }): Human => ({ user_id: s.userId, username: s.alias, display_name: s.displayName ?? null });
+const dmScreenFor = (p: Human) => ({ name: 'dm' as const, alias: p.username, userId: p.user_id, displayName: p.display_name ?? null, avatarUrl: p.avatar_url ?? null });
+const dmPeerOf = (s: { alias: string; userId: string; displayName?: string | null; avatarUrl?: string | null }): Human => ({ user_id: s.userId, username: s.alias, display_name: s.displayName ?? null, avatar_url: s.avatarUrl ?? null });
 // 群行 → 群聊页(alias = group_id,和私信一样走「详情」那一套导航:双栏右侧 / 手机推入 / 桌面右面板)。
 const groupScreenFor = (g: { group_id: string; name: string }) => { rememberGroupName(g.group_id, g.name); return { name: 'group' as const, alias: g.group_id, groupName: g.name }; };
 const groupRefOf = (s: { alias: string; groupName?: string }): GroupChatRef => ({ group_id: s.alias, name: s.groupName || groupNameFor(s.alias) || s.alias });
