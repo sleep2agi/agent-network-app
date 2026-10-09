@@ -65,3 +65,40 @@ Network-disabled Docker full unit suite: 379/379 test files PASS, exit 0.
 Both named containers retained for logs/screenshots; no production access.
 Updated PR-head CI still required; this Linux container result is not Windows
 native validation. All earlier UI/native/upload/display-sync limits remain.
+
+Follow-up, 2026-10-09 22:03 CST — human directory rendering and oracle correction
+Exact source: 2feaf571c5eb1b1cf284e1a4b979d6c712e15065
+Human records now carry avatar_url; both compact and phone person rows use
+HumanAvatar with explicit Hub URL/user ID/value. Agent rows remain unchanged.
+No node alias/local override is consulted. Invalid/old-Hub values default by
+user ID; remote image failure leaves initials, identity/value changes remount
+image error state. No new shared human cache or changes to polling transport.
+
+EVIDENCE CORRECTION: the previous harness read src on RN Web Image's outer div.
+It was null, so reload/failure/late-account image equality checks could pass
+without proving the rendered image. Earlier API/receipt assertions remain
+valid, but those old visual equality checks are withdrawn as evidence.
+The first new directory test intentionally exposed this as a timeout while
+waiting for the wrapper src to change (container anet-avatar-human-display,
+exit 1). DOM inspection confirmed a nested CSS background-image. New helpers
+require its nonempty url(...) value, and compare selection to the actual pool
+choice. A wrong-image expectation is now an explicit negative oracle.
+
+sg docker -c 'docker build -t anet-avatar-ui:oracle -f tests/user-avatar/Dockerfile . && docker run --name anet-avatar-oracle --network none anet-avatar-ui:oracle'
+sg docker -c 'docker run --name anet-avatar-oracle-negative --network none -e TEST_AVATAR_WRONG_IMAGE_EXPECTATION=1 anet-avatar-ui:oracle'
+Image index: sha256:136cce5c7e77e9027aa61d497c23f4a62f41f6736247e2d76670bb9de8da674b
+Image config: sha256:47728f72626c9ea856cec41f4a40f982db7b84761187de0bcfd9994f82425d43
+Build: human avatar 15/15 + previous targeted 122/122; typecheck PASS.
+Browser: 26/26 PASS, exit 0, 390px and 1280px. Includes actual selected image,
+reload, failed save, late account reply, node override isolation, Hub/value
+switch, failed image fallback and recovery. Negative: exit 1 specifically at
+"390: selected pool image actually rendered" (expected pool 4 instead of 3).
+All runtime containers network-disabled; no production tokens/data involved.
+Full suite on the same image:
+sg docker -c 'docker run --name anet-avatar-oracle-full --network none anet-avatar-ui:oracle npm test'
+380/380 test files PASS, exit 0 (one new human-avatar.test.ts).
+
+Limits: browser harness renders the editor and HumanAvatar, not full directory
+navigation/refresh or real-Hub integration. Polling scope race behavior is not
+changed or newly certified. Chat/group/member picker/account-row displays and
+photo upload remain separate work; no native package or release claim.
