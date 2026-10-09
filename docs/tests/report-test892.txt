@@ -1,0 +1,55 @@
+Hub #892 — clean Linux install and ordinary-user native window (TEST ONLY)
+Observed: 2026-10-09 23:42–23:44 CST
+
+Product SHA: 8fb42f173ab52737153d58750d3753da9e16dcfe
+Fixture code SHA: 1d1ef92fe73c1c49b59fa5d88a124b5769f00d0b
+Upstream complete-build image:
+sha256:e6be76163b8405d7bde1426f6699e32f4131ddbb613c0239fed116f8b0a6fff5
+Deb SHA256: b7986d30619148081c864d5c4ef9aaec6e6883eaeca1329c7dee866693e3f677
+Runtime test image:
+sha256:fa3ca2d7530b9f7f05060179b75afafb02ca3ae4f7e03ed10f5022ce90113405
+The fixture files were committed after building; no fixture code changed between
+build and that commit. Source-binding/CI follow-up:
+503f41c56992eba5a9486e2f55f9ca5394585396
+Bound runtime image:
+sha256:709a8b9c6ece94d5b7d0fd88ee5402790b0676e1403a00b1d9a17e122b638317
+Both runtime images have identical config/layer contents; the follow-up adds a
+build-stage assertion that the input image source matches SOURCE_COMMIT.
+Final-head GitHub CI is still required; local runs do not certify that workflow.
+
+All validation ran inside Docker using sg docker. No local app installation,
+production changes, live credentials, home/display mounts or public distribution.
+
+1. PASS: deb hash verification in digest-pinned clean Ubuntu 24.04.
+2. PASS: apt --no-install-recommends /tmp/anet.deb; package a-net installed.
+3. PASS: installed main executable ldd has no missing libraries BEFORE display
+   fixture tools are installed. Compiler image libraries cannot satisfy this gate.
+4. PASS: private DBus/Xvfb, UID 10001, network none, default container security;
+   real 1200x800 ANet native window and PNG captured; container exit 0.
+5. PASS manual visual review: screenshot displays ANet welcome card, local
+   workspace creation button and existing-server login button. Not a blank page.
+6. PASS negative: TEST_DESKTOP_EXECUTABLE=/bin/false produces exit 1 at exactly
+   FAIL: desktop process exited before window acceptance.
+7. PASS: source-bound fixture rebuild and repeated offline window probe exit 0.
+8. PASS negative: requesting forty zeroes as SOURCE_COMMIT is rejected at
+   FAIL: package image source SHA does not match requested source (build exit 1).
+9. PASS Docker static checks: bash -n; workflow YAML parse, contents:read and
+   eleven-step structure.
+
+Screenshot SHA256:
+fa2b7a6ce142149c1d26b38093584c7bf4815f43de62b522c6ae0ca2dd0b8242
+Evidence directory: docs/tests/linux-deb-install-892/
+Native log warnings retained: missing AT-SPI accessibility bus and Xvfb DRI3
+acceleration unavailable. Welcome page still rendered. Neither warning is hidden.
+An attempted docker exec for log reading after the successful container exited
+returned 'container is not running'; evidence was read using docker cp instead.
+
+Commands:
+sg docker -c 'docker build --build-arg DEB_IMAGE=anet-linux-deb:8fb42f1 --build-arg SOURCE_COMMIT=8fb42f173ab52737153d58750d3753da9e16dcfe --build-arg DEB_SHA256=b7986d30619148081c864d5c4ef9aaec6e6883eaeca1329c7dee866693e3f677 -t anet-linux-install:probe -f tests/linux-deb-install/Dockerfile .'
+sg docker -c 'docker run --name anet-linux-install-892-first --network none anet-linux-install:probe'
+sg docker -c 'docker run --name anet-linux-install-892-negative --network none -e TEST_DESKTOP_EXECUTABLE=/bin/false anet-linux-install:probe'
+
+Open gates: final-head CI, actual interactions, login/Hub connectivity, native
+IPC/V2 lifecycle, credential unlock, upgrade, cross-distribution/ARM and release.
+CI automatically checks window presence, NOT screenshot semantics; review the
+saved image separately. Recovery and production boundaries: suite README.
