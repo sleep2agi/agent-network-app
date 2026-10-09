@@ -3,9 +3,10 @@
 import assert from 'node:assert/strict';
 import { mkdirSync } from 'node:fs';
 import { serveExport, initScript, findChromium, TEST_LOCALE, ANDROID_UA } from '../test-layout-sweep/harness.mjs';
-assert.match(process.env.SOURCE_COMMIT ?? '', /^[0-9a-f]{40}$/);
-assert.equal(process.env.SOURCE_COMMIT, process.env.EXPECTED_SOURCE_COMMIT);
-console.log(`source=${process.env.SOURCE_COMMIT}`);
+const source = process.env.SOURCE_COMMIT || process.env.GITHUB_SHA;
+assert.match(source ?? '', /^[0-9a-f]{40}$/);
+if (process.env.SOURCE_COMMIT) assert.equal(source, process.env.EXPECTED_SOURCE_COMMIT);
+console.log(`source=${source}`);
 const { chromium } = await import(process.env.PLAYWRIGHT_MODULE || 'playwright');
 const web = await serveExport(process.env.WEB_DIR);
 const browser = await chromium.launch({ headless: true, executablePath: findChromium() });
