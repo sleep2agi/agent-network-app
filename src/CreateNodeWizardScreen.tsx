@@ -143,15 +143,23 @@ export default function CreateNodeWizardScreen({ cfg, daemon, onBack, onExit, de
   // previous tick's row after a transient read failure.
   useEffect(() => {
     if (phase !== 'awaiting_register' || childUp) return;
-    let tries = 0;
     let active = true;
     let timer: ReturnType<typeof setTimeout>;
     const alive = () => active && pollAlive.current;
     const want = normalizeNodeName(name);
     let lastVerdict: CreateRequestVerdict = { kind: 'unknown' };
+    // Bound elapsed waiting independently of slow reads (including response
+    // bodies). Expiry invalidates in-flight results; it does not cancel the
+    // accepted server-side creation or automatically submit another request.
+    const deadlineTimer = setTimeout(() => {
+      if (!alive()) return;
+      active = false;
+      clearTimeout(timer);
+      setPhase('done');
+      setMsg(timeoutMessage(lastVerdict));
+    }, 45_000);
     const tick = async () => {
       if (!alive()) return;
-      tries += 1;
       if (requestId) {
         try {
           const row = await fetchCreateRequestStatus(cfg, requestId);
@@ -191,17 +199,12 @@ export default function CreateNodeWizardScreen({ cfg, daemon, onBack, onExit, de
           if (lastVerdict.kind === 'waiting') setMsg(lastVerdict.text);
         } catch { /* Transient: do not infer success from the roster alone. */ }
       }
-      if (alive() && tries < 30) {
+      if (alive()) {
         timer = setTimeout(tick, 1500);
-      } else if (alive()) {
-        // Timeout — don't flip to error (hub may have accepted the dispatch
-        // but the child is slow to bootstrap). Honest message.
-        setPhase('done');
-        setMsg(timeoutMessage(lastVerdict));
       }
     };
     timer = setTimeout(tick, 1200);
-    return () => { active = false; clearTimeout(timer); };
+    return () => { active = false; clearTimeout(timer); clearTimeout(deadlineTimer); };
   }, [phase, childUp, cfg, name, requestId, runtimeId]);
 
   // Derived: runtime details + nav gates

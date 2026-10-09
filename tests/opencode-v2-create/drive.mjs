@@ -109,6 +109,19 @@ try {
     await page.evaluate(() => { window.__proof = Date.now(); });
     await page.getByText('✓ v2-fixture 已上线', { exact: true }).waitFor({ timeout: 7000 });
     console.log(`PASS ${tag}: explicit proof + matching registered live identity succeeds`);
+    if (!mobile && theme === 'light') {
+      await open(page); await confirmV2(page); await submit(page);
+      // Slow successful reads must not multiply the advertised 45s window
+      // by the poll count. Keep proof absent until after the UI deadline.
+      await page.evaluate(() => { window.__stubDelayMs = 2000; });
+      await page.getByText(/45s 内未确认本次启动检查/).waitFor({ timeout: 48000 });
+      assert.equal(await page.getByText(/正在确认 v2-fixture 启动/).count(), 0);
+      await page.evaluate(() => { window.__stubDelayMs = 0; window.__proof = Date.now(); });
+      await page.waitForTimeout(5000);
+      assert.equal(await page.getByText('✓ v2-fixture 已上线', { exact: true }).count(), 0);
+      assert.equal(await page.evaluate(() => window.__createCalls.length), 1);
+      console.log(`PASS ${tag}: wall-clock deadline stops slow polls; late proof cannot revive UI or resubmit`);
+    }
     await open(page); await confirmV2(page);
     await page.evaluate(() => { window.__oldHub = true; }); await submit(page);
     await page.getByText(/不会自动改为 V1/).first().waitFor();
