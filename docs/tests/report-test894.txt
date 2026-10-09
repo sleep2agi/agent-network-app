@@ -298,3 +298,64 @@ not a product result. Corrected run above printed 380/380. All owned containers
 used --rm and exited/were stopped; unrelated containers were not touched.
 This incremental test repair still needs new-head Ubuntu/Windows CI. Native
 daemon installer integration and complete V2 lifecycle remain outstanding.
+
+2026-10-10 01:46 Asia/Shanghai — real packaged daemon installer increment:
+New head25737e6121952515b1bc05f92d5f34e08246f91c four unit jobs now SUCCESS
+(Ubuntu/Windows, push/PR); Rust and private-pair Docker also SUCCESS. Its own
+linux-deb and stub gates remain pending at this observation; not all-green.
+
+Previous head50723a6336dee211c835c8a0435423987765203d linux-deb CI completed
+successfully: run37966243636/job113941196708, tested merge
+433823aed20a09b6159b3f30e137daf6265bd685. Artifact11633813373 name
+TEST-ONLY-linux-deb-433823aed20a09b6159b3f30e137daf6265bd685, digest
+sha256:6b44c4b620f05dac899a728c47d95cd99d55ac5d2de624e8f3b0649cb83abc2a.
+Downloaded ANet_0.2.227_amd64.deb SHA256
+f39631f06fbd99527de10a39e38e98423ee9aedc3686ed27aa95968814cb8dd1
+matches its SHA256SUMS. The artifact source note names the tested merge above.
+These are old-head package results, not new25737 evidence; product Rust source
+is unchanged between50723 and25737 (git diff only test/report), but sources and
+CI results remain explicitly separated. No new manual screenshot claim made.
+
+Added tests/linux-native-daemon independent Dockerfile + run/verify scripts.
+Diagnostic image anet-native-daemon:507 ID
+sha256:03e1cdfd5230892dcd26d20aeee471c794663007c71ff002d4ffc1cdb485d57e
+imports that exact accepted deb using Dockerfile.artifact, checks source note
+and sha256 before dpkg -i. The base fixture was built from native-workspace:893
+with current isolated keyring helper plus real Node/npm/cache/exact pair from
+anet-daemon-prefix:894. This import overlays an existing test install; it is NOT
+a clean-install result. The authoritative clean-install evidence remains the
+original CI job. No older binary was used to claim new installer acceptance.
+
+Layered actual executions, UID10001, --network none, --cap-drop ALL and
+--security-opt no-new-privileges, no production data or credentials:
+1. Empty prefix: packaged --smoke-local-daemon-install exit0, real npm offline
+   installation, exact versions, actual Hub supervisor registration and matching
+   node_id/profile rescan (asserted by native smoke), PASS.
+2. Existing exact prefix: initial fixture failed strict fingerprint check.
+   Diagnostic per-path hashes/modes established only prefix root mode changed
+   from16877 (directory0755) to16832 (directory0700); no package content/link
+   difference. ensure_private_dir intentionally tightens permissions. Corrected
+   seeded fixture to product-created0700; rerun retained strict full fingerprint
+   and PASSED with real daemon registration. No assertion was removed/masked.
+3. Partial agent-node entry: remove only dist/cli.js inside fresh container,
+   require native exit1 and exact pairing refusal (not arbitrary timeout), PASS.
+   Entire corrupted prefix remains unchanged; entry not replaced, no daemon
+   private Hub config, no daemon profile, no start.log. This is deliberate
+   corruption, NOT a real old-package compatibility result.
+
+Empty ran image default command. Exact/partial final checks used readonly mounts
+of the current run.sh/verify.mjs into the same bound diagnostic image, invoking
+sh /fixture/keyring.sh bash /fixture/native-daemon.sh exact (then partial).
+Only test scripts were mounted; application binary and packages stayed real.
+All containers used --rm. Native smoke attempts Hub/daemon stop; removal is the
+final cleanup boundary even for failures. Downloaded TEST ONLY evidence stays
+available for review, not a production backup.
+
+Workflow now gates policy/pair, native empty, exact, then partial in order after
+existing startup/auth/UI/migration checks; each failure prevents later steps.
+Docker YAML parse + explicit prerequisite/positive/negative step-order check
+passed; bash/node syntax validated in fixture build/runtime. git diff --check
+passed. New-head packaged CI must still execute this wiring; no merge/release.
+Remaining: real old CLI/node and other broken/timeout installer cases, V1
+compatibility and full native V2 create/model/start/stop lifecycle. #894/#829
+remain in progress; these three installer checks alone do not close them.

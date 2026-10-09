@@ -9,6 +9,8 @@ on:
       - 'tests/linux-deb-install/**'
       - 'tests/linux-native-workspace/**'
       - 'tests/linux-hub-migration/**'
+      - 'tests/linux-native-daemon/**'
+      - 'tests/local-daemon-packages/**'
       - 'scripts/seed-previous-local-hub.mjs'
       - 'scripts/with-linux-test-keyring.sh'
       - '.github/workflows/linux-deb-package.yml'
@@ -127,6 +129,25 @@ jobs:
       - name: Failed upgrade restores exact old database and metadata
         shell: bash
         run: docker run --rm --network none anet-hub-migration:test sh /fixture/keyring.sh bash /fixture/migration.sh rollback 2>&1 | tee out/migration-rollback.log
+      - name: Validate daemon package policy before native installer
+        run: |
+          docker build --target policy -t anet-daemon-policy:test -f tests/local-daemon-packages/Dockerfile .
+          docker run --rm --network none --cap-drop ALL --security-opt no-new-privileges anet-daemon-policy:test
+          docker build --target private-prefix -t anet-daemon-prefix:test -f tests/local-daemon-packages/Dockerfile .
+          docker run --rm --network none --cap-drop ALL --security-opt no-new-privileges anet-daemon-prefix:test
+      - name: Build packaged native daemon fixture
+        run: |
+          deb_sha=$(sha256sum out/*.deb | awk '{print $1}')
+          docker build --build-arg NATIVE_IMAGE=anet-native-workspace:test --build-arg PAIR_IMAGE=anet-daemon-prefix:test --build-arg SOURCE_COMMIT="$(git rev-parse HEAD)" --build-arg DEB_SHA256="$deb_sha" -t anet-native-daemon:test -f tests/linux-native-daemon/Dockerfile .
+      - name: Native daemon empty-prefix installation and registration
+        shell: bash
+        run: docker run --rm --network none --cap-drop ALL --security-opt no-new-privileges anet-native-daemon:test 2>&1 | tee out/native-daemon-empty.log
+      - name: Native daemon existing exact pair preserves package contents
+        shell: bash
+        run: docker run --rm --network none --cap-drop ALL --security-opt no-new-privileges anet-native-daemon:test sh /fixture/keyring.sh bash /fixture/native-daemon.sh exact 2>&1 | tee out/native-daemon-exact.log
+      - name: Native daemon partial package refuses before credentials and start
+        shell: bash
+        run: docker run --rm --network none --cap-drop ALL --security-opt no-new-privileges anet-native-daemon:test sh /fixture/keyring.sh bash /fixture/native-daemon.sh partial 2>&1 | tee out/native-daemon-partial.log
       - uses: actions/upload-artifact@v4
         if: always()
         with:
