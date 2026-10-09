@@ -679,3 +679,88 @@ disposable container; exit0. Bash/Python syntax passed in the overlay build.
 Product source unchanged; this test-only follow-up still needs its own CI.
 No full V1/V2 lifecycle/model-switch/stop/restart, public release, or global chat
 loading fix is claimed. #894 remains doing1/3, parent#829 doing2/3.
+
+2026-10-10 03:03–03:09 CST: native V2 lifecycle follow-up, exploratory evidence
+No product source changed; exact85040c7 product, tested merge and deb SHA remain
+as above. PR795 test head86897fbf384a1147ba5f5c3964ec746742b9c337 at03:06:
+17SUCCESS/1SKIPPED/9IN_PROGRESS (linux-deb and8stub); not all green yet.
+CommHub changes since19:02:11Z contained only our#894/#829 comments; no new
+ANet task to migrate or duplicate. Preserve original owners and checklists.
+
+Fresh network-none non-root exploratory container anet894-v2-lifecycle-explore
+reused the exact accepted creation prerequisite, then real X11 clicks entered
+node details and changed model to stub/stub-model-next. Authenticated API and
+read-only database showed applied revision1, persisted new model, new runtime
+generation, previous bridge/serve/attach identities gone; subsequent REST proof
+task returned ANSWER_NATIVE_MODEL894 using actual provider model stub-model-next.
+Manually reviewed green model-applied screenshot and updated header/model values.
+First observer incorrectly expected the pre-normalization patch without flags;
+the Hub stores {model:...,flags:{}}. Corrected to that exact shape, not a relaxed
+substring or skipped assertion. This exploratory retry is not a fresh-suite pass.
+
+Native Overview Stop + actual confirmation changed lifecycle_state to stopped,
+all exact old runtime processes no longer live, child identity/token and model
+retained. Screenshot eventually offline with Stop/Restart disabled. Native
+Danger-section Start + confirmation brought the same node back on a new live
+generation, retained the new model and returned ANSWER_NATIVE_START894; final
+screenshot showed green idle and "节点已上线". Native Restart then replaced the
+generation again and returned ANSWER_NATIVE_RESTART894 on the same model.
+Initial restart observer hit a transient missing opencode-launch-health.json
+after Hub acknowledgment. Bounded waiting now requires actual health/attach
+files, matching generation and live PID/start-ticks, never acknowledgment alone.
+Final exploratory restart screenshot reviewed (green idle, request submitted).
+The confirmation button text is visually blue-on-blue in the tested package;
+recorded as a remaining UI readability issue, not silently accepted as polished.
+
+Exploratory evidence copied only from /evidence to
+/tmp/anet894-lifecycle850.FVljfy/exploratory; exact container stopped/removed.
+No host/global package or production state modified. New reusable
+lifecycle-ui.sh/verify-lifecycle.py are now under fresh positive/negative test.
+Diagnostic overlay built with same source/hash and base850-create, manifest
+c60748d08857e3f6f42643fd0a4aef9a8a85ae856ae842ee897849e9093b76ea.
+Docker bash/Python syntax checks passed. Full fresh-suite outcome remains pending
+until recorded below; no V1 or formal-release claim.
+
+03:11 fresh automated lifecycle acceptance (not the exploratory replay):
+Image anet-native-opencode:850-lifecycle, manifest c60748d... as above;
+anet894-v2-lifecycle-positive exited0 after all atomic native creation checks,
+model change, stop, start and restart. All mutations were real native mouse
+actions, no synthetic lifecycle/config API call. Subsequent proof tasks were
+REST and returned ANSWER_NATIVE_MODEL894, ANSWER_NATIVE_START894 and
+ANSWER_NATIVE_RESTART894, all on actual provider stub-model-next.
+Node identity remained node_b09e9e0c-f42e-48cf-a9b9-659542e2df72,
+network net_ebf8ffab2e2e. Model/revision/generation sequence:
+baseline stub/stub-model revision0 ses_edded8941ffev0g5hoT6x4nvTl;
+model stub/stub-model-next revision1 ses_edded4080ffeP9wUdbzB51dU29;
+stop: old process identities gone, same config/model and active child token;
+start stub/stub-model-next revision1 ses_eddec9252ffeKLKxnFLuoj39J6;
+restart stub/stub-model-next revision2 ses_eddec3c63ffehNhCrSx7HZn1eD.
+Each new generation required live bridge/serve/attach PID+start-ticks and the
+previous processes no longer live. No acceptance from Hub acknowledgment alone.
+Manually reviewed model-applied/stopped/started/restarted native screenshots:
+new model green confirmation; stopped offline/disabled controls; started green
+idle with "节点已上线"; restarted green idle with retained model.
+SHA256s in that order:
+6f35f2d29c9eddf500749dbeefbb2de1dd418ba7aa71ee7f1d47e7b8b0c65a94
+07fdb7f357bbae9765958619604dade209a1d30dcecfb74907062e4d1aa85808
+dcbe6b413fef0a6f524b898be450de83cb3e2af66831fc871488b1c28e628966
+d6002101511b65038afb6a94a9ad590f6b6ad8a1e95973ea9fb44cedb063fb8c
+
+Separate fresh negative anet894-v2-lifecycle-missed exited1 as required:
+PASS: missed model submit left revision/model/generation unchanged
+AssertionError: native model switch did not apply
+No config-update row was created, exact before/after snapshot unchanged. Native
+screenshot reviewed: original model remains current, no success message.
+Negative screenshot SHA f0a4f039f49a47d847997249417ff0461d6f5abf611ae85bdd6cb3c283ec5602.
+Positive and negative /evidence saved under /tmp/anet894-lifecycle850.FVljfy,
+then both exact stopped containers removed. Exploratory container also removed.
+Disposable Docker Python YAML parse and CI positive/negative/default-success/
+always-evidence ordering assertions passed. New CI gates preserve logs/images
+without publishing anything; this later test commit must earn its own CI result.
+
+New narrow UI defect tracked as Hub#895 under parent#829, ANet project and
+ANet/知识库 tags, pool1/3: primary retryBtn background paired with explicit
+colors.accent confirm text in NodeDetailScreen.tsx instead of primary text.
+Product styles unchanged this iteration. Full ANet tag and project inventories
+both388, no mismatches:253done/81doing/49pool/5abandoned. V1 regression and final
+review remain open; do not mark#894 or#829 complete or declare a public release.

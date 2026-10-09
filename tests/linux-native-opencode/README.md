@@ -63,6 +63,35 @@ the atomic runtime gates and preserves their evidence even on failure. The
 new CI execution must pass on its own head; the earlier package result is not
 inherited as a green result for later test commits.
 
+## Native V2 model and lifecycle follow-up
+
+`lifecycle-ui.sh` first runs the accepted native creation prerequisites in a fresh
+container, then uses the real node details UI to change to `stub/stub-model-next`,
+stop, start and restart. `verify-lifecycle.py` observes the authenticated Hub and
+read-only SQLite plus the exact runtime process identities. Every transition
+requires the same node/network identity, the requested persisted model, a new
+live generation after start/restart, disappearance of the previous live process
+identities, and an actual response using the expected provider model. Stop must
+retain the configuration and active child token. The observer sends proof tasks
+via REST; it never invokes a config/lifecycle mutation API.
+
+```sh
+sg docker -c 'docker run --name native-opencode-lifecycle --network none --cap-drop ALL --security-opt no-new-privileges --shm-size 256m anet-native-opencode:test sh /fixture/keyring.sh xvfb-run -a -s "-screen 0 1280x900x24 -nolisten tcp" bash /fixture/opencode-lifecycle-ui.sh'
+```
+
+The companion fresh-container negative sets `TEST_MODEL_MISS_CLICK=1`. It must
+fail with `native model switch did not apply` after proving zero config updates
+and unchanged model/revision/generation/process identities. A generic startup
+failure does not count. The real node page polls every ten seconds, so the
+driver allows fifteen seconds before screenshots and subsequent UI actions.
+Hub acknowledgment can precede runtime health-file creation; missing startup
+files remain pending within the bounded wait, never an accepted success.
+This suite does not prove V1 compatibility, native UI task dispatch or release.
+After the fresh packaged positive/negative recorded in report-test894 passed,
+CI enables this follow-up after the creation gates, with separate always-run
+evidence preservation and cleanup. Do not inherit the earlier package's result
+as acceptance of a later CI candidate.
+
 For local diagnostic reuse of a CI artifact, `overlay.Dockerfile` accepts
 `--build-context candidate=<downloaded-artifact-directory>` plus explicit
 `FIXTURE_IMAGE`, `DEB_FILE`, `SOURCE_COMMIT` and `DEB_SHA256` arguments. Use an

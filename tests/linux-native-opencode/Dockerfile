@@ -17,6 +17,10 @@ COPY tests/linux-native-opencode/atomic.py /fixture/opencode-atomic.py
 COPY tests/linux-native-opencode/prepare.py /fixture/opencode-prepare.py
 COPY tests/linux-native-opencode/create-ui.sh /fixture/opencode-create-ui.sh
 COPY tests/linux-native-opencode/verify-create.py /fixture/opencode-verify-create.py
+COPY tests/linux-native-opencode/lifecycle-ui.sh /fixture/opencode-lifecycle-ui.sh
+COPY tests/linux-native-opencode/verify-lifecycle.py /fixture/opencode-verify-lifecycle.py
+RUN bash -n /fixture/opencode-lifecycle-ui.sh && \
+    python3 -c 'import ast,pathlib; ast.parse(pathlib.Path("/fixture/opencode-verify-lifecycle.py").read_text())'
 RUN bash -n /fixture/opencode-create-ui.sh && \
     python3 -c 'import ast,pathlib; ast.parse(pathlib.Path("/fixture/opencode-verify-create.py").read_text())'
 RUN ln -s /opt/opencode-fixture/node_modules/.bin/opencode /usr/local/bin/opencode && \
