@@ -41,7 +41,9 @@ check('wizard keeps request_id from createNode', wiz.includes('setRequestId(res.
 check('wizard polls the create request and stops on a daemon-declared failure', wiz.includes('fetchCreateRequestStatus(cfg, requestId)') && wiz.includes("lastVerdict.kind === 'failed'") && wiz.includes("setPhase('error');"));
 check('timeout message comes from the last verdict', wiz.includes('setMsg(timeoutMessage(lastVerdict));'));
 check('no alias-only success shortcut remains', !wiz.includes('list.some(s => s?.alias === want)') && wiz.includes('creationConfirmed(latest,'));
-check('request checked before roster and rechecked after', wiz.indexOf('const row = await fetchCreateRequestStatus') < wiz.indexOf('const data = await fetchStatus') && wiz.indexOf('const latest = await fetchCreateRequestStatus') > wiz.indexOf('const data = await fetchStatus'));
+check('request checked before identity-bearing roster and rechecked after', wiz.indexOf('const row = await fetchCreateRequestStatus') < wiz.indexOf('const data = await fetchNodeStatus') && wiz.indexOf('const latest = await fetchCreateRequestStatus') > wiz.indexOf('const data = await fetchNodeStatus'));
+check('creation uses scoped details, not light status without node_id', wiz.includes('fetchNodeStatus(cfg, want)') && !wiz.includes('fetchStatus(cfg)'));
+check('light row without identity cannot confirm', !creationConfirmed(row, expected, [{ alias: '测试牛', status: 'idle' }]));
 check('cleanup invalidates inflight requests and recursive timers', wiz.includes('active = false; clearTimeout(timer);') && wiz.includes('if (!alive()) return;'));
 check('V2 proof requirement comes from the submitted flags', wiz.includes("requireLaunchVerification: submittedSpec.current?.flags?.opencodeGeneration === 'v2'") && wiz.includes('submittedSpec.current = node_spec;'));
 const api = readFileSync(new URL('./api.ts', import.meta.url), 'utf8');

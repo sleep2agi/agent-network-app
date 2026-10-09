@@ -32,7 +32,10 @@ const fixture = () => {
     }
     if (u.pathname === '/api/status') {
       const spec = window.__createCalls.at(-1)?.node_spec;
-      return { sessions: spec ? [{ alias: spec.name, node_id: 'node_fixture', status: 'idle', runtime: spec.runtime, network_id: 'net-sweep' }] : [] };
+      // Match Hub's real contract: unfiltered light rows omit node_id.
+      return { sessions: spec ? [{ alias: spec.name,
+        ...(u.searchParams.get('light') === '1' ? {} : { node_id: 'node_fixture' }),
+        status: 'idle', runtime: spec.runtime, network_id: 'net-sweep' }] : [] };
     }
   };
 };

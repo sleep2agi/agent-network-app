@@ -2,7 +2,7 @@ import { Fragment, useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { Text, TextInput } from './ui-text';
 import { Ionicons } from './icons';
-import { createNode, CreateNodeRequest, fetchStatus, HostSupervisorDaemon, HubConfig, Session, fetchCreateRequestStatus } from './api';
+import { createNode, CreateNodeRequest, fetchNodeStatus, HostSupervisorDaemon, HubConfig, Session, fetchCreateRequestStatus } from './api';
 import { creationConfirmed, createRequestVerdict, timeoutMessage, type CreateRequestVerdict } from './create-request-status';
 import { colors, onThemeChange, spacing, radius, type as typeScale } from './theme';
 import { advancedExpanded, advancedRuntimesOf, primaryRuntimes, runtimeDisplayLabel, showsAdvancedToggle, type WizardRuntime } from './wizard-runtime-groups';
@@ -19,7 +19,7 @@ import { describeOpenCodeCreateError, opencodeCreateError, OPENCODE_V2_WARNING, 
 // Up to 5 post-picker steps: ① name ② runtime ③ model ④ flags ⑤ confirm.
 // #614: a step with nothing to choose (model / flags for the co-presence runtimes) is not shown —
 // its info is one line on the confirm page. The step table lives in create-node-steps.ts.
-// On submit POST /mcp create_node, then poll fetchStatus until the
+// On submit POST /mcp create_node, then poll identity-bearing node status until the
 // child alias shows up in the session list. A `ok:true` from the RPC
 // means "hub accepted the call", not "the child is running". Success needs
 // the exact request/node identity; V2 additionally needs daemon launch proof.
@@ -163,7 +163,9 @@ export default function CreateNodeWizardScreen({ cfg, daemon, onBack, onExit, de
             return;
           }
           if (lastVerdict.kind === 'waiting') setMsg(lastVerdict.text);
-          const data = await fetchStatus(cfg);
+          // Unfiltered light status intentionally omits node_id. Use the
+          // existing scoped details read, then still verify exact child ID.
+          const data = await fetchNodeStatus(cfg, want);
           if (!alive()) return;
           const list: Session[] = Array.isArray(data?.sessions) ? data.sessions : [];
           // Re-read after the roster fetch: a late daemon failure during that
