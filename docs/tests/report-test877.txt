@@ -1,0 +1,58 @@
+Test 877 — Linux real Secret Service credential persistence
+Date: 2026-10-09, Asia/Shanghai
+Product source: fddb49decf3a108fc0563aae23684f0fc4a78282
+Scope: dependency-level Docker acceptance, NOT native desktop/package acceptance.
+
+Inputs
+- keyring 3.6.3: sync-secret-service + crypto-rust; existing macOS/Windows selections unchanged.
+- Product Cargo.lock SHA256: 26db9f66af479d0d7caf44e9b722c0573dfa6a4df1f9cd777e3644f80819c1a3
+- Probe Cargo.lock SHA256: 80b680485e4f8297592c573407d511e8fdcf4ac9b49e884c121963d887bdd10a
+- Rust base: rust:1.85.1-slim-bookworm@sha256:9f841bbe9e7d8e37ceb96ed907265a3a0df7f44e3737d0b100e7907a679acb36
+- Resolved packages: dbus 1.14.10-1~deb12u1; gnome-keyring 42.1-1+b2; libdbus-1-dev 1.14.10-1~deb12u1.
+- Apt repositories are not snapshot-pinned; no byte-identical rebuild claim.
+- check-inputs.py verified backend feature equality and every probe registry dependency version/checksum against product lock.
+
+Commands (repository root; all tests Docker)
+sg docker -c 'docker build --target probe -t anet-linux-credential:candidate -f tests/linux-credential-store/Dockerfile . && docker run --name anet-linux-credential-candidate --network none --cap-drop ALL --security-opt no-new-privileges anet-linux-credential:candidate'
+
+Final image index: sha256:3cd9f26fde6c1318c6e72f0ef0244605c22ff89cbfb9669f487c55fc3d9d9617
+Final image config: sha256:44adc3cd5b10f964715665272facc6a92e13a9318192f389e5d24dc327efcb86
+Container: anet-linux-credential-candidate; exit 0, 2026-10-09 13:21:37 UTC.
+No host home, real credentials, production database, or desktop DBus mounted.
+Runtime UID 10001, no network, capabilities dropped, no-new-privileges.
+
+Results (ordered atomic gates)
+PASS missing session bus: both read/write return storage access/platform errors.
+PASS fresh unlocked service: missing credential returns NoEntry.
+PASS write; same Entry and fresh Entry read the same dummy value; mock backend rejected.
+PASS separate process reads the value.
+PASS fresh DBus/service session reads persisted value.
+PASS explicitly locked login collection: both operations return storage errors.
+     Headless Gtk prompt warnings are expected; a timeout is NOT counted as success.
+PASS third fresh unlocked session reads the unchanged value.
+PASS delete and subsequent NoEntry.
+PASS real Secret Service cross-Entry / cross-process / session restart / delete / missing-bus / locked-store.
+
+Additional fixture checks
+sg docker -c 'docker run --rm --network none --entrypoint sh anet-linux-credential:candidate /probe/with-linux-test-keyring.sh true'
+Expected exit 2: Refusing to unlock a keyring outside an explicitly isolated test session.
+sg docker -c 'docker run --rm --network none --cap-drop ALL --security-opt no-new-privileges -e ANET_ISOLATED_KEYRING_TEST=1 --entrypoint sh anet-linux-credential:candidate /probe/with-linux-test-keyring.sh /probe/target/release/anet-linux-credential-store write'
+Exit 0: PASS write (including fresh Entry read).
+Workflow YAML parsed inside Docker: PASS, two jobs and container-backed full Rust job.
+
+Retained failed fixture experiments
+- real-v2 and real-v3 containers exited 101: trying gnome-keyring-daemon --unlock
+  against the already locked live daemon did not unlock that service; next read
+  returned NoStorageAccess(Prompt). Explicit control-directory alone did not fix it.
+- Corrected fixture uses a third fresh unlocked session, not a claim that hot-unlock
+  works. real-v4 then passed; final candidate reran the complete suite and passed.
+- Users must use their desktop/OS keyring unlock flow. The dummy-password helper
+  is isolated-test-only, never a production launcher.
+
+Pending / exclusions
+- Full Tauri cargo check/test --locked and exact PR-head CI remain required.
+- macOS/Windows regressions, native Linux UI/install/restart/multi-Hub workflows,
+  distro/package dependency matrix, deb/AppImage, signed/public release and anet.sh
+  download verification are NOT certified by this dependency probe.
+- No production rollout, global npm change or public artifact publication occurred.
+- Recovery and rollback contract: tests/linux-credential-store/README.md.
