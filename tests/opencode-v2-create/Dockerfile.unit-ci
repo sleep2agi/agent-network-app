@@ -1,0 +1,10 @@
+# Full ck-style suite using the previously lock-checked dependency fixture.
+ARG DEPENDENCY_IMAGE=anet-app-v2-options:ui-1ef
+FROM ${DEPENDENCY_IMAGE}
+WORKDIR /app
+RUN cp package-lock.json /tmp/dependency-lock.json && rm -rf /app/src /app/tests /app/scripts /app/.github
+COPY . .
+RUN cmp package-lock.json /tmp/dependency-lock.json
+ARG SOURCE_COMMIT
+ENV SOURCE_COMMIT=$SOURCE_COMMIT
+ENTRYPOINT ["sh", "-c", "test ${#SOURCE_COMMIT} = 40 && test \"$SOURCE_COMMIT\" = \"${EXPECTED_SOURCE_COMMIT:?}\" && npm test"]
