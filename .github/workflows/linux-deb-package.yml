@@ -1,0 +1,51 @@
+name: Linux deb package (TEST ONLY)
+on:
+  pull_request:
+    paths:
+      - 'src-tauri/**'
+      - 'local-hub-sidecar/**'
+      - 'scripts/build-local-hub-sidecar.mjs'
+      - 'tests/linux-deb-package/**'
+      - '.github/workflows/linux-deb-package.yml'
+      - 'package.json'
+      - 'package-lock.json'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  linux-deb:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Full source build in Ubuntu Docker (not a release)
+        run: |
+          source_sha=$(git rev-parse HEAD)
+          docker build --build-arg SOURCE_COMMIT="$source_sha" -t anet-linux-deb:test -f tests/linux-deb-package/Dockerfile .
+      - name: Inspect complete package offline
+        run: docker run --rm --network none anet-linux-deb:test
+      - name: Wrong-architecture negative control
+        shell: bash
+        run: |
+          set +e
+          docker run --rm --network none -e TEST_DEB_EXPECT_ARCH=arm64 anet-linux-deb:test >negative.log 2>&1
+          result=$?
+          set -e
+          test "$result" -ne 0
+          grep -F 'deb architecture matches expected' negative.log
+      - name: Stage TEST ONLY artifact, without publication or updater metadata
+        run: |
+          docker create --name linux-deb-artifacts anet-linux-deb:test
+          mkdir -p out
+          docker cp linux-deb-artifacts:/app/src-tauri/target/release/bundle/deb/. out/
+          docker rm linux-deb-artifacts
+          printf 'TEST ONLY. Not approved for installation on production or distribution.\nSource: %s\nGUI, native IPC and upgrade not yet accepted.\n' "$(git rev-parse HEAD)" >out/TEST-ONLY.txt
+          sha256sum out/*.deb >out/SHA256SUMS
+      - uses: actions/upload-artifact@v4
+        with:
+          name: TEST-ONLY-linux-deb-${{ github.sha }}
+          path: out/
+          retention-days: 7
+          if-no-files-found: error
