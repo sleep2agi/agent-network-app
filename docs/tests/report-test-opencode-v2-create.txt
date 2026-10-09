@@ -3,7 +3,7 @@ Hub #539 / #829; app PR #785; Hub/daemon dependency agent-network#2551.
 This is a branch candidate, not a release or native-app acceptance.
 
 Candidate source: 1ef7f77ee620a758290e75dbb449a58b6aa1fd2c
-Final local result at 2026-10-09 16:17 CST: PASS. Exact source above was built
+Final local result at 2026-10-09 16:16 CST: PASS. Exact source above was built
 without runtime source mounts and verified against EXPECTED_SOURCE_COMMIT.
 - Unit container anet-app-v2-options-unit-1ef: exit 0; 157 existing checks
   (45 status, 27 request, 85 navigation) plus the new V2 assertion suite pass.
