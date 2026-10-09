@@ -6,7 +6,7 @@ COPY package.json package-lock.json ./
 RUN npm ci --ignore-scripts --no-audit --no-fund
 RUN npm install --prefix /qa-tools --no-save --no-audit --no-fund esbuild@0.25.5 playwright@1.58.2
 COPY . .
-RUN bun src/user-avatar-api.test.ts && bun src/auth-me-shared.test.ts && bun src/settings-model.test.ts && bun src/drive-registry.test.ts && npm run typecheck
+RUN bun src/radius-tokens.test.ts && bun src/user-avatar-api.test.ts && bun src/auth-me-shared.test.ts && bun src/settings-model.test.ts && bun src/drive-registry.test.ts && npm run typecheck
 RUN NODE_PATH=/qa-tools/node_modules node tests/user-avatar/build.cjs
 ENV PLAYWRIGHT_MODULE=/qa-tools/node_modules/playwright/index.mjs
 CMD ["node", "tests/user-avatar/drive.mjs"]

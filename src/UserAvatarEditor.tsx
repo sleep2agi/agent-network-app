@@ -6,7 +6,7 @@ import { fetchAuthMe, forgetAuthMeFor, HubRequestError, putUserAvatar } from './
 import { POOL_FILENAMES, poolFileNameForAlias, validateCustomAvatarUrl } from './lib/avatar-resolve';
 import { sourceForFile } from './lib/avatars';
 import { SettingsButton, SettingsCardContent, SettingsGroup } from './settings-kit';
-import { colors, avatarRadius } from './theme';
+import { colors, avatarRadius, radius } from './theme';
 import { useTranslation } from './i18n-react';
 import { t } from './i18n';
 import './i18n-user-avatar';
@@ -69,7 +69,7 @@ function Editor({ cfg }: { cfg: HubConfig }) {
           </Pressable>)}
         </View>
         <Text style={{ color: colors.textMuted, marginVertical: 12 }}>{t('userAvatar.remote')}</Text>
-        <TextInput testID="user-avatar-url" accessibilityLabel={t('userAvatar.url')} placeholder={t('userAvatar.url')} value={url} onChangeText={setUrl} editable={!busy && !loading} autoCapitalize="none" style={{ color: colors.text, padding: 12, borderWidth: 1, borderColor: colors.textMuted, borderRadius: 8 }} />
+        <TextInput testID="user-avatar-url" accessibilityLabel={t('userAvatar.url')} placeholder={t('userAvatar.url')} value={url} onChangeText={setUrl} editable={!busy && !loading} autoCapitalize="none" style={{ color: colors.text, padding: 12, borderWidth: 1, borderColor: colors.textMuted, borderRadius: radius.control }} />
         <SettingsButton testID="user-avatar-save" label={t('userAvatar.save')} disabled={busy || loading || !url.trim()} onPress={() => {
           const v = validateCustomAvatarUrl(url);
           if (!v.ok) setMessage('userAvatar.invalid'); else void apply(v.url);
