@@ -8,6 +8,8 @@ on:
       - 'tests/linux-deb-package/**'
       - 'tests/linux-deb-install/**'
       - 'tests/linux-native-workspace/**'
+      - 'tests/linux-hub-migration/**'
+      - 'scripts/seed-previous-local-hub.mjs'
       - 'scripts/with-linux-test-keyring.sh'
       - '.github/workflows/linux-deb-package.yml'
       - 'package.json'
@@ -105,6 +107,16 @@ jobs:
             docker cp native-workspace-proof:/evidence/. out/native-workspace-evidence/
             docker rm native-workspace-proof
           fi
+      - name: Build pinned previous-Hub migration fixture
+        run: |
+          deb_sha=$(sha256sum out/*.deb | awk '{print $1}')
+          docker build --build-arg NATIVE_IMAGE=anet-native-workspace:test --build-arg SOURCE_COMMIT="$(git rev-parse HEAD)" --build-arg DEB_SHA256="$deb_sha" -t anet-hub-migration:test -f tests/linux-hub-migration/Dockerfile .
+      - name: Previous .66 database upgrade to bundled .120
+        shell: bash
+        run: docker run --rm --network none anet-hub-migration:test 2>&1 | tee out/migration-upgrade.log
+      - name: Failed upgrade restores exact old database and metadata
+        shell: bash
+        run: docker run --rm --network none anet-hub-migration:test sh /fixture/keyring.sh bash /fixture/migration.sh rollback 2>&1 | tee out/migration-rollback.log
       - uses: actions/upload-artifact@v4
         if: always()
         with:

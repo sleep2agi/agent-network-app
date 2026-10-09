@@ -88,3 +88,30 @@ Prepared product-side pin .66 -> .120, Rust expected-version change and lockfile
 regenerated inside Docker. Full packaged bootstrap/migration/rollback remain
 pending. Daemon installer is NOT changed to a floating preview or silently
 upgraded. Candidate protocol success is not end-to-end/native V2 completion.
+
+Increment, 2026-10-10 00:32-00:36 Asia/Shanghai:
+Fresh CI at head 504b582944ec3b128aa25cd63da30d9c86da530e passed typecheck,
+but Ubuntu unit run 37959634606 job 113918867610 had 379/380 test files pass.
+The sole failure was src/local-hub-sidecar.test.ts retaining old exact .66
+expectation. Updated that explicit expectation to .120 (not a dynamic or range
+comparison); its 14 checks now pass in offline Docker with current source.
+
+Added tests/linux-hub-migration Docker fixture and CI upgrade/rollback stages.
+Old seed inputs: package and full transitive lock from main a48e697c92bf8a647a62f48890f2b59da7da9590,
+SHA256 608a3156ce8a955717645d19a903dc734ec201e7ebbec270c67e225af4a0d149
+and 8c83d15f740b9d6b2231026f5393e5243deee734dbbede7020d47056e58c23ac.
+Seed-only image anet-migration-seed:894 built and ran offline/non-root, exit 0;
+old .66 APIs generated identity, node and task before clean shutdown.
+
+Wrapper negative controls used the known old .66 native package, source
+8fb42f173ab52737153d58750d3753da9e16dcfe, deb SHA256
+b7986d30619148081c864d5c4ef9aaec6e6883eaeca1329c7dee866693e3f677.
+Both reached the native same-version path and were then correctly rejected:
+upgrade exit 1: FAIL: resulting Hub version mismatch
+rollback exit 1: FAIL: cross-version .66-to-.120 snapshot missing
+Thus same-version startup cannot stand in for cross-version migration here.
+
+Positive .66-to-.120 migration/byte-exact rollback remain UNVERIFIED until the
+new full package is available and the newly wired CI steps pass. Containers
+were --rm, with private test keyrings and no production data/host credentials.
+Only sanitized console logs, not seeded DB/keyring/passwords, are CI artifacts.
