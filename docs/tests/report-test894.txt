@@ -68,6 +68,22 @@ confirmed the CLI contract is a valueless boolean switch. Replaced this with
 a stricter full-argv equality assertion and reran successfully; no product
 assertion was weakened or removed.
 
+CI correction, 2026-10-10 00:30 Asia/Shanghai:
+PR795 head faf4c12a8a95d2585bd7090a4d3d4612c66c8e38 failed app typecheck.
+Run 37958992815 jobs 113916698778 (avatar), 113916698738 (people loading),
+113916698793 (Ubuntu unit) all show TS2591 node:fs/node:crypto and TS2307
+container-only /candidate/src/create-node-validate.ts. The new Bun probe was
+incorrectly included in Expo's application compilation, not a failed avatar
+or people-loading behavior assertion. Added only its exact fixture directory
+to tsconfig.build.json exclusions; its independent Docker gate remains intact.
+
+Docker regression: npm run typecheck exited 0 in anet-linux-deb:8fb42f1,
+with only the changed config and current probe directory mounted read-only.
+This reuses the recorded base app/dependency image, not a new full-package build.
+Rebuilt independent candidate image and ran offline/non-root: all 15 contract
+assertions still passed. Fresh full branch CI remains required; no migration,
+rollback or updated-package native bootstrap is claimed by these checks.
+
 Prepared product-side pin .66 -> .120, Rust expected-version change and lockfile
 regenerated inside Docker. Full packaged bootstrap/migration/rollback remain
 pending. Daemon installer is NOT changed to a floating preview or silently

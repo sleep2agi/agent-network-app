@@ -4,6 +4,7 @@
     "**/*.test.ts",
     "**/*.test.tsx",
     "tests/requirement-details/**",
+    "tests/bundled-hub-v2-contract/**",
     "node_modules",
     "src-tauri/target",
     "src/test-support/**"

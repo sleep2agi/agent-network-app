@@ -2,6 +2,10 @@
 
 TEST ONLY, isolated Docker; no production changes or registry publication.
 
+This Bun-only probe imports a container-absolute candidate path and is excluded
+from the Expo app's TypeScript build. It remains executed by its own Docker CI
+gate; app type checking and the probe assertions must both pass independently.
+
 ```sh
 sg docker -c 'docker build -t anet-bundled-hub-contract:test -f tests/bundled-hub-v2-contract/Dockerfile .'
 sg docker -c 'docker run --rm --network none anet-bundled-hub-contract:test'
