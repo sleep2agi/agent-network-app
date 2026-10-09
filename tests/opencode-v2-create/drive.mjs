@@ -14,7 +14,7 @@ mkdirSync(process.env.OUT || '/artifacts', { recursive: true });
 const daemon = { daemon_node_id: 'd_fixture', alias: 'daemon-fixture', hostname: 'host-fixture', online: true,
   runtimes_supported: ['opencode-cli', 'codex-app-server'], can_create_nodes: true };
 const fixture = () => {
-  window.__createCalls = []; window.__proof = null; window.__failure = false; window.__oldHub = false;
+  window.__createCalls = []; window.__proof = null; window.__failure = false; window.__oldHub = false; window.__childStatus = 'idle';
   window.__routeOverride = (u, bodyText) => {
     if (u.pathname === '/mcp') {
       const params = JSON.parse(bodyText || '{}')?.params;
@@ -35,13 +35,13 @@ const fixture = () => {
       // Match Hub's real contract: unfiltered light rows omit node_id.
       return { sessions: spec ? [{ alias: spec.name,
         ...(u.searchParams.get('light') === '1' ? {} : { node_id: 'node_fixture' }),
-        status: 'idle', runtime: spec.runtime, network_id: 'net-sweep' }] : [] };
+        status: window.__childStatus, runtime: spec.runtime, network_id: 'net-sweep' }] : [] };
     }
   };
 };
 const next = page => page.getByTestId('create-node-next').click();
 async function open(page) {
-  await page.evaluate(() => { window.__createCalls = []; window.__proof = null; window.__failure = false; window.__oldHub = false; });
+  await page.evaluate(() => { window.__createCalls = []; window.__proof = null; window.__failure = false; window.__oldHub = false; window.__childStatus = 'idle'; });
   await page.evaluate(() => window.__anetLayoutSweep.setScreen({ name: 'agents' }));
   await page.evaluate(d => window.__anetLayoutSweep.setScreen({ name: 'wizard', daemon: d }), daemon);
   await page.getByTestId('create-name-input').fill('v2-fixture'); await next(page);
@@ -91,6 +91,9 @@ try {
     assert.equal(await page.getByTestId('create-node-next').isDisabled(), true);
     await page.getByTestId('opencode-v2-model').fill('stub/model'); await next(page);
     await page.getByTestId('opencode-v2-confirm-warning').waitFor();
+    // Hub returns working verbatim when a new node immediately starts a task.
+    // Cover both states across the rendered matrix; proof remains required.
+    await page.evaluate(status => { window.__childStatus = status; }, mobile ? 'working' : 'idle');
     const spec = await submit(page);
     assert.deepEqual(spec.flags, { opencodeGeneration: 'v2', opencodeUnsafeTools: true });
     assert.equal(spec.model, 'stub/model'); assert.equal(spec.runtime, 'opencode-cli');

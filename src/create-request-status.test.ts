@@ -20,6 +20,11 @@ const row = { request_id: 'cr_test', child_name: '测试牛', child_node_id: 'no
 const sessions = [{ node_id: 'node_test', alias: '测试牛', status: 'idle' }];
 check('exact registered and verified live child confirms', creationConfirmed(row, expected, sessions));
 check('busy child also confirms', creationConfirmed(row, expected, [{ ...sessions[0], status: 'busy' }]));
+const working = [{ ...sessions[0], status: 'working' }];
+check('Hub working child also confirms', creationConfirmed(row, expected, working));
+check('working cannot bypass daemon launch proof', !creationConfirmed({ ...row, launch_verified_at: null }, expected, working));
+check('working cannot bypass exact child identity', !creationConfirmed(row, expected, [{ ...working[0], node_id: 'node_other' }]));
+check('late failure overrides working visibility', !creationConfirmed({ ...row, status: 'failed' }, expected, working));
 for (const status of ['failed', 'rejected', 'runtime_capability_check_failed', 'pending', 'delivered', 'started', 'unknown']) {
   check(`${status} never confirms despite a visible alias`, !creationConfirmed({ ...row, status }, expected, sessions));
 }

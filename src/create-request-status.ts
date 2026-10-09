@@ -64,7 +64,7 @@ export function creationConfirmed(
   if (expected.requireLaunchVerification
     && !(typeof row.launch_verified_at === 'number' && Number.isFinite(row.launch_verified_at) && row.launch_verified_at > 0)) return false;
   return sessions.some(s => s.node_id === row.child_node_id && s.alias === expected.name
-    && (s.status === 'idle' || s.status === 'busy'));
+    && (s.status === 'idle' || s.status === 'working' || s.status === 'busy'));
 }
 
 /** 45 秒观察窗结束不代表创建失败,也不代表已上线。 */
