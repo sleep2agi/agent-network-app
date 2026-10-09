@@ -27,6 +27,14 @@ on:
     branches: ['**']
 
 jobs:
+  people-loading:
+    name: task people loading (Docker)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - run: docker build -f tests/test-task-people-loading/Dockerfile -t people-loading .
+      - run: docker run --rm --network none people-loading
   requirement-details:
     name: requirement details (Docker)
     runs-on: ubuntu-latest

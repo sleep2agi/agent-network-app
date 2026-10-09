@@ -166,6 +166,7 @@ mock.module('./src/requirement-people-api', () => ({
   },
 }));
 const { default: Board } = await import('./src/RequirementBoard');
+const { RoleFields } = await import('./src/TaskCreateDialog');
 const { default: PeoplePicker } = await import('./src/RequirementPeoplePicker');
 const { default: AssignmentsEditor } = await import('./src/RequirementAssignmentsEditor');
 const { default: IssueBindings } = await import('./src/TaskIssueBindings');
@@ -190,6 +191,34 @@ async function mount() {
   await act(async () => { renderer = create(<Board cfg={cfg} />); });
 }
 afterEach(async () => { moreStored = true; moreSaves.length = 0; voiceAvailable = false; voiceInsert = null; voicePresses = 0; dueCaps = false; tagCaps = false; participantCards = false; subCards = false; opened = []; typedCards = false; roleCards = false; detailCards = false; itemWrites = []; projectsMock = null; if (renderer) await act(async () => renderer.unmount()); });
+
+test('people refresh preserves known names and cached picker remains usable', async () => {
+  const human = { kind: 'user' as const, id: 'u1', name: 'Alice', networkId: 'a' };
+  const props = { twoRoles: true, owner: human, agentOwner: null, people: [human], peopleLoading: true,
+    networkId: 'a', onLoadPeople: async () => false, onChange: () => {}, idBase: 'loading-owner' };
+  await act(async () => { renderer = create(<RoleFields {...props} />); });
+  expect(byId('loading-owner').findAllByType('Text').map(n => n.props.children).join('')).toContain('Alice');
+  expect(byId('loading-owner').props.disabled).toBe(false);
+  await act(async () => byId('loading-owner').props.onPress());
+  expect(byId('people-panel')).toBeTruthy();
+});
+
+test('people failure offers retry; late load cannot open picker in another network', async () => {
+  let finish!: (ok: boolean) => void;
+  let calls = 0;
+  const props = { twoRoles: true, owner: null, agentOwner: null, people: [], peopleLoading: false,
+    peopleError: 'fixture read failed', networkId: 'a', onLoadPeople: () => { calls++; return new Promise<boolean>(r => { finish = r; }); },
+    onChange: () => {}, idBase: 'loading-owner' };
+  await act(async () => { renderer = create(<RoleFields {...props} />); });
+  expect(byId('req-people-error')).toBeTruthy();
+  await act(async () => { byId('req-people-retry').props.onPress(); });
+  expect(calls).toBe(1);
+  await act(async () => { finish(false); });
+  await act(async () => { byId('loading-owner').props.onPress(); });
+  await act(async () => renderer.update(<RoleFields {...props} networkId="b" peopleError="" />));
+  await act(async () => { finish(true); });
+  expect(renderer.root.findAllByProps({ testID: 'people-panel' })).toHaveLength(0);
+});
 
 test('issue links: canonical PATCH only, duplicate click lock, rejection stays local, source read-only', async () => {
   const writes: any[]=[];

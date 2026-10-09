@@ -50,7 +50,7 @@ import { lockedMainRows, lockedMoreRows, lockedRestRows, type LockedRow } from '
 /** 旧的固定抽屉宽度;#701 起抽屉宽度由 TaskDrawer(默认 560、可拖)决定,这个只剩给批量条留位的兜底。 */
 export { DRAWER_DEFAULT_WIDTH as DRAWER_WIDTH } from './task-drawer-model';
 
-export default function TaskDetailPanel({ cfg, item, readOnly = false, editFields, items, onOpenRequirement, onCreateChild, projects, dueDatetime, lowestPriority, mode, top, people, peopleLoading, onLoadPeople, moving, moveError, onMove, onSave, onAssignmentsSaved, onAssign, onClose, onArchive, onFlush, pointer, checklistError, onChecklistToggle, onChecklistAdd, onChecklistDelete, onChecklistMove, onOpenVoiceSettings, onOpenWindow, networkId }: {
+export default function TaskDetailPanel({ cfg, item, readOnly = false, editFields, items, onOpenRequirement, onCreateChild, projects, dueDatetime, lowestPriority, mode, top, people, peopleLoading, peopleError, onLoadPeople, moving, moveError, onMove, onSave, onAssignmentsSaved, onAssign, onClose, onArchive, onFlush, pointer, checklistError, onChecklistToggle, onChecklistAdd, onChecklistDelete, onChecklistMove, onOpenVoiceSettings, onOpenWindow, networkId }: {
   cfg: HubConfig;
   item: Requirement;
   /** 只读(RFC-038 §9:hub 说这张卡我不能改)。表单整块不响应,底部不给「保存修改」,顶上一条说明。 */
@@ -72,6 +72,7 @@ export default function TaskDetailPanel({ cfg, item, readOnly = false, editField
   top: number;
   people: readonly RequirementPerson[];
   peopleLoading: boolean;
+  peopleError?: string;
   onLoadPeople: () => Promise<boolean>;
   moving: boolean;
   moveError: string;
@@ -370,6 +371,7 @@ export default function TaskDetailPanel({ cfg, item, readOnly = false, editField
         agentOwner={draft.agentOwner}
         people={people}
         peopleLoading={peopleLoading}
+        peopleError={peopleError}
         networkId={cfg.networkId || ''}
         onLoadPeople={onLoadPeople}
         onChange={p => { void assignRole(p); }}
@@ -387,7 +389,7 @@ export default function TaskDetailPanel({ cfg, item, readOnly = false, editField
       {!legacy ? (
         <View testID="req-participants-row">
           <Field label={tr('tasks.copy.53')}>
-            <RequirementAssignmentsEditor key={item.id} cfg={cfg} item={item} fields="participants" onSaved={a => { onAssignmentsSaved(a); showSaved(); }} pointer={pointer} />
+            <RequirementAssignmentsEditor key={item.id} cfg={cfg} item={item} fields="participants" onSaved={a => { onAssignmentsSaved(a); showSaved(); }} pointer={pointer} directory={{ people, loading: peopleLoading, reload: onLoadPeople }} />
           </Field>
         </View>
       ) : null}
