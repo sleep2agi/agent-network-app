@@ -45,3 +45,23 @@ normal encrypted database backups. A Git clone cannot restore that user data.
 Install only a reviewed exact-main release and verify save/reload on supported
 Hub; older Hubs show unsupported. Rolling back the frontend hides this editor
 but leaves Hub avatar values intact; no local migration/data deletion is needed.
+
+Follow-up, 2026-10-09 21:55 CST — deterministic full-suite failure repaired
+Exact source: dafef375b8d46325b5d732be082816cb02a0288d
+PR head 3875f38bd3357d1e0e98f4b902e92a86d925561b failed Ubuntu and
+Windows full unit CI: 378/379 files passed. Both logs identify the same sole
+failure, radius-tokens.test.ts: UserAvatarEditor.tsx had borderRadius: 8.
+Use the existing radius.control token; keep the global guard unchanged and add
+it to the dedicated avatar Docker build so this class fails before browser work.
+
+sg docker -c 'docker build -t anet-avatar-ui:radius -f tests/user-avatar/Dockerfile . && docker run --name anet-avatar-ui-radius --network none anet-avatar-ui:radius'
+sg docker -c 'docker run --name anet-avatar-ui-radius-full --network none anet-avatar-ui:radius npm test'
+
+Image index: sha256:111b2d400eae4dfb962db8280ad580ba900164255f9bb53c1bf1a74776d9af9e
+Image config: sha256:28d381b94b49cb1830316c310c86c239a7706e0543a62c1b70fb1dd0048e3688
+Radius guard 30/30, prior targeted 92/92, production typecheck PASS.
+Network-disabled Docker browser harness 16/16 PASS (both viewports).
+Network-disabled Docker full unit suite: 379/379 test files PASS, exit 0.
+Both named containers retained for logs/screenshots; no production access.
+Updated PR-head CI still required; this Linux container result is not Windows
+native validation. All earlier UI/native/upload/display-sync limits remain.
