@@ -4,6 +4,9 @@ on:
     paths:
       - 'src-tauri/**'
       - 'src/NodeDetailScreen.tsx'
+      - 'src/CreateNodeWizardScreen.tsx'
+      - 'src/opencode-create-options.ts'
+      - 'tests/opencode-v2-create/**'
       - 'tests/node-confirm-contrast/**'
       - 'local-hub-sidecar/**'
       - 'scripts/build-local-hub-sidecar.mjs'
