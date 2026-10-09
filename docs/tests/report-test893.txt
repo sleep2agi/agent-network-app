@@ -1,0 +1,41 @@
+Hub #893 — Linux native local-workspace bootstrap, TEST ONLY
+Observed 2026-10-10 00:06–00:09 Asia/Shanghai.
+
+Product source: 8fb42f173ab52737153d58750d3753da9e16dcfe
+deb sha256: b7986d30619148081c864d5c4ef9aaec6e6883eaeca1329c7dee866693e3f677
+Installed upstream image: sha256:709a8b9c6ece94d5b7d0fd88ee5402790b0676e1403a00b1d9a17e122b638317
+Fixture based on main: 003bcb04bc3b3972321cae2cdd1f74d205fec3d5
+Product was not rebuilt for this local probe; CI must rebuild current checkout.
+Earlier package/install/window gates passed (#890/#892); no release claim.
+
+Docker only, ordinary UID 10001, --network none, no host mounts or production.
+Private unlocked test Secret Service and fresh profile per container.
+
+1. Existing --smoke-local-hub: exit 0.
+   Auth me/status, node registration/report, task dispatch, native restart,
+   stable endpoint/profile/token and SQLite persistence assertions passed.
+2. Real UI click at welcome-button target (600,470), 1200x800 window:
+   fresh container, no CLI smoke seeded profile, no substituted Tauri IPC.
+   Native profile persisted; Secret Service token used only in memory.
+   /api/auth/me and /api/status: HTTP 200 and ok=true.
+   Deliberately invalid token: HTTP 401 exactly.
+   exit 0; before/after screenshots manually reviewed: welcome -> Agent list.
+3. Missed-click (30,30) in another fresh container: exit 1, exactly
+   FAIL: UI did not persist a local profile after click
+   This is the expected interaction negative, not a generic timeout acceptance.
+
+Fixture development failures retained as facts:
+- Docker FROM bare sha256:... was interpreted as a registry name; use the local
+  build handle with source/hash checks and record its resolved digest.
+- First UI verification used activeProfileId but Rust ProfileIndex serializes
+  active_profile_id. Corrected only the test to the existing schema and reran
+  in a fresh container. Product source unchanged; no assertion removed.
+
+AT-SPI session-bus and DRI3 software-display warnings retained in application.log;
+screenshots show content. No credentials, keyrings or database exported.
+Evidence: docs/tests/native-workspace-893/{before.png,after.png,geometry.txt,application.log}
+
+Pending: CI fresh-source package build, full checks and review/merge. Not proof
+of V2 creation/model/stop-start, LAN, upgrade, all Linux targets or distribution.
+Repository fixtures document startup, network, inputs, secrets, cleanup/version
+rollback and the distinction between generated test state and production backup.
