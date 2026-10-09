@@ -1,0 +1,98 @@
+Hub #834 / agent-network-app Issue #782 / PR #783
+Task detail people-loading recovery
+Date: 2026-10-09, Asia/Shanghai
+
+Source under test: 67b0373d75a658f6d8f72e8fafd5ead4219b8ced
+Base main: 41dc1251e45dd63731474748b81a90a1a45b6c45
+Status: candidate only, not merged or released. This report is a documentation-only follow-up.
+
+Finding
+- User screenshot shows task owner/Agent fields saying loading, not chat loading.
+- Source had an unbounded people GET/body read, loading replacing known names,
+  and the detail panel did not receive the directory error state.
+- Detail owner and participant editors had independent directory/error states.
+- A single read-only local Hub probe returned 200 in 77 ms with 286 people.
+  That node-authenticated local request does NOT explain the phone network stall.
+
+Change
+- 10 s deadline includes fetch and JSON body; abort plus Promise.race also settles
+  for an abort-ignoring transport. Failed/completed in-flight entries are evicted.
+- Concurrent requests coalesce only for the same server/token/network identity.
+- Known names remain visible. Cached choices open without waiting for refresh.
+- One directory/error/retry flow serves detail owner and participants.
+- A failed participant write is not replayed by the directory retry action.
+- Writes, authentication and server authorization are not relaxed.
+
+Isolation and reproduction
+All test execution used Docker via sg docker. No local npm installation,
+global package change, production write, service restart or release occurred.
+The browser fixture uses loopback inside a --network none container.
+
+From the source SHA above:
+sg docker -c 'docker build -f tests/test-task-people-loading/Dockerfile -t people-loading .'
+sg docker -c 'docker run --network none people-loading'
+sg docker -c 'docker run --network none people-loading npm test'
+sg docker -c 'docker build -f tests/requirement-details/Dockerfile -t people-components .'
+sg docker -c 'docker run --network none people-components'
+
+Result at source SHA
+- People API partial-write contract: PASS.
+- People timeout/concurrency tests: PASS (fetch/body hangs, abort ignored,
+  server/token/network isolation, late response, new retry, 403, foreign-network
+  payload rejection and valid empty response).
+- Test registry: 12/12 PASS.
+- TypeScript build typecheck: PASS.
+- Component suite: 59 tests PASS, 0 fail, 263 assertions.
+- Browser fault-injection: 19/19 PASS, container exit 0.
+- Full unit suite: 377/377 test files PASS, container exit 0.
+
+Image identities (manifest-list digest, then build config digest)
+Browser/unit: sha256:02fe3133919b954749182b992a1229c7b147e8b11feeb0e2b4c4f46cdef6763e
+  config: sha256:127f312a4144e8247e74db4d9102ae1e7ac109f4fa5c0ec1c648230746245811
+Components: sha256:00a8a9cad1bb7aa546689f5a23ab23ad16cb3a16bc24b1c6979c60c769c5b491
+  config: sha256:ce15f160e36c8ef814f91b365ee127924f33d82d04faf91f59e7ac36dc993fbb
+
+Browser assertions and limits
+- Actual RequirementBoard in React Native Web at 390 and 1280 pixels.
+- Inject stalled people response: finite failure, one shared error, no perpetual
+  loading label, concurrent reads coalesced, retry resolves names and participants.
+- Stall a later refresh: picker opens within 1.5 s and existing name remains.
+- Assert zero mutation requests throughout this read-only scenario.
+- Driver writes timeout/picker PNGs to /output; copy from a retained container
+  with docker cp to inspect. Candidate screenshots were inspected at both
+  viewport widths; final-source mobile picker screenshot also inspected.
+  The mobile picker snapshot catches the entrance fade, so it is not evidence
+  of settled visual opacity or a native-device visual acceptance result.
+- Fixture-backed browser E2E is not real-Hub, native iOS/Android, Tauri or
+  physical-device validation. Native transport/phone-path validation remains.
+- No claim that the phone transport root cause is solved or that users have
+  received the candidate. main merge, release gates and user verification remain.
+
+Recovery impact
+No persistent schema, data, process topology, ports, proxy/tunnel, environment
+variable or secret-source changes. Existing deployment/start/rollback procedures
+remain unchanged. Only client code and reproducible isolated test inputs change.
+An eventual release must rebuild from an exact merged main SHA; this branch's
+Docker images are test artifacts, never release artifacts. No backup was read,
+modified or restored and no disaster-recovery claim is made.
+
+2026-10-09 20:35 CST integration retest
+- Source under test: 2a59cc08d1bd709557d2ad6a87533157429a2e42.
+- Merged latest main dfc2bf97fa6d175d8e7756c6bccdd4c0fedf09a7 into
+  the candidate branch. The only conflict was tests/drives.json; retained all
+  three entries (people loading, V2 creation, model-change deadline).
+- Rebuilt both Dockerfiles above from this exact clean commit, not old images.
+- API/deadline/isolation tests, registry 12/12, TypeScript: PASS.
+- Rendered 390/1280 fault injection: 19/19 PASS, exit 0.
+- Component tests: 59/59 PASS, 263 assertions, exit 0.
+- Full unit suite: 378/378 test files PASS, exit 0.
+- Browser/unit image manifest-list:
+  sha256:7467807df3504692f181a5e3df1b5898a7a380a180929dff6ad057c0da5ab430
+  config: sha256:b6286868d03ac70e69fdd45ea2f331766501107a26d4019c0eb1e0c4b2007ae5
+- Component image manifest-list:
+  sha256:099c8a90790d84aba0b82653719874082ffb9d3beef80c31c6cf5dafec91e050
+  config: sha256:6d39ae68256582c25ccaa2c520c874db53bc3d2ad3cc1e73e92a8ed6134b525c
+- Retained containers: anet-people-loading-restack-834,
+  anet-people-unit-restack-834, anet-people-components-restack-834.
+- This is a report-only follow-up. Exact new head CI is independently required.
+  Not merged/released at report time; original native/phone limitations remain.

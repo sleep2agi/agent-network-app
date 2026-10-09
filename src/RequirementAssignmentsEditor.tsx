@@ -16,18 +16,23 @@ import { colors, spacing } from './theme';
 
 import { PersonChips, useTaskStyles } from './TaskBoardParts';
 
-export default function RequirementAssignmentsEditor({ cfg, item, onSaved, fields = 'both', pointer = false }: {
+export default function RequirementAssignmentsEditor({ cfg, item, onSaved, fields = 'both', pointer = false, directory }: {
   cfg: HubConfig; item: Requirement; onSaved: (assignments: RequirementAssignments) => void;
   /** 任务详情里负责人和标题 / 期限一起在草稿里改(「保存修改」),这里只管参与人。 */
   fields?: 'both' | 'participants';
   /** 桌面:选择器锚在「编辑参与人」下面的下拉,不居中盖住详情面板。 */
   pointer?: boolean;
+  /** Detail owner/participants share one directory and one error/retry UI. */
+  directory?: { people: readonly RequirementPerson[]; loading: boolean; reload: () => Promise<boolean> };
 }) {
   useTranslation();
   const supported = item.owner !== undefined && item.participants !== undefined;
   const taskStyles = useTaskStyles();
-  const [people, setPeople] = useState<RequirementPerson[]>([]);
-  const [loading, setLoading] = useState(false);
+  const [localPeople, setPeople] = useState<RequirementPerson[]>([]);
+  const [localLoading, setLoading] = useState(false);
+  const people = directory?.people ?? localPeople;
+  const loading = directory?.loading ?? localLoading;
+  const sharedDirectory = !!directory;
   const [error, setError] = useState('');
   const [reload, setReload] = useState(0);
   const [mode, setMode] = useState<'owner' | 'participants' | null>(null);
@@ -38,17 +43,22 @@ export default function RequirementAssignmentsEditor({ cfg, item, onSaved, field
   latest.current = item;
   const [anchor, setAnchor] = useState<SelectAnchor | null>(null);
   const actionsRef = useRef<any>(null);
-  const openPicker = (value: 'owner' | 'participants') => {
-    opened.current = [...(item.participants ?? [])];
+  const openPicker = async (value: 'owner' | 'participants') => {
+    if (directory) {
+      if (people.length) void directory.reload();
+      else if (!(await directory.reload())) return;
+    }
+    if (!alive.current) return;
+    opened.current = [...(latest.current.participants ?? [])];
     if (!pointer) { setAnchor(null); setMode(value); return; }
-    measureAnchor(actionsRef.current, a => { setAnchor(a); setMode(value); });
+    measureAnchor(actionsRef.current, a => { if (alive.current) { setAnchor(a); setMode(value); } });
   };
   const [saving, setSaving] = useState(false);
   const pending = useRef(false);
   const alive = useRef(true);
   useEffect(() => { alive.current = true; return () => { alive.current = false; }; }, []);
   useEffect(() => {
-    if (!supported) return;
+    if (!supported || sharedDirectory) return;
     let dead = false;
     setLoading(true);
     setError('');
@@ -56,7 +66,7 @@ export default function RequirementAssignmentsEditor({ cfg, item, onSaved, field
       if (!dead) setError(e instanceof Error ? e.message : tr('tasks.copy.0'));
     }).finally(() => { if (!dead) setLoading(false); });
     return () => { dead = true; };
-  }, [cfg.serverUrl, cfg.token, cfg.networkId, supported, reload]);
+  }, [cfg.serverUrl, cfg.token, cfg.networkId, supported, reload, sharedDirectory]);
 
   // 找不到的成员显示「未知成员（末 6 位）」,永远不把裸 id 当名字(owner 0.2.141 截图)。
   const label = (ref: RequirementPersonRef) => {
@@ -89,11 +99,15 @@ export default function RequirementAssignmentsEditor({ cfg, item, onSaved, field
       ? <Text style={{ color: colors.text }}>{tr('tasks.copy.7')}{item.participants!.length ? item.participants!.map(label).join('、') : tr('tasks.copy.8')}</Text>
       // 详情:头像 + 名字的胶囊;成员表还在读时胶囊后面跟一行小字,不再单独飘一个转圈(截图里转圈悬在参与人下面)。
       : <PersonChips refs={item.participants!} people={people} s={taskStyles} testID="participants-chips" />}
-    {loading ? <Text style={{ color: colors.textMuted, fontSize: 12 }} testID="participants-loading">{tr('tasks.copy.9')}</Text> : null}
+    {!sharedDirectory && loading && !people.length ? <Text style={{ color: colors.textMuted, fontSize: 12 }} testID="participants-loading">{tr('tasks.copy.9')}</Text> : null}
     {error ? <Text accessibilityRole="alert" style={{ color: colors.failed }}>{error}</Text> : null}
-    {error ? <Pressable accessibilityRole="button" disabled={saving} onPress={() => setReload(n => n + 1)}><Text style={{ color: colors.accent }}>{tr('tasks.copy.10')}</Text></Pressable> : null}
+    {error ? <Pressable accessibilityRole="button" disabled={saving} onPress={() => {
+      setError('');
+      if (directory) void directory.reload();
+      else setReload(n => n + 1);
+    }}><Text style={{ color: colors.accent }}>{tr('tasks.copy.10')}</Text></Pressable> : null}
     <View ref={actionsRef} collapsable={false} style={{ flexDirection: 'row', gap: spacing.md }}>
-      {(fields === 'both' ? ['owner', 'participants'] as const : ['participants'] as const).map(value => <Pressable key={value} testID={`edit-${value}`} accessibilityRole="button" disabled={loading || saving || !!error} onPress={() => openPicker(value)} style={{ minHeight: 44, justifyContent: 'center' }}><Text style={{ color: colors.accent }}>{value === 'owner' ? tr('tasks.copy.11') : tr('tasks.copy.12')}</Text></Pressable>)}
+      {(fields === 'both' ? ['owner', 'participants'] as const : ['participants'] as const).map(value => <Pressable key={value} testID={`edit-${value}`} accessibilityRole="button" disabled={saving || (!people.length && (loading || !!error))} onPress={() => { void openPicker(value); }} style={{ minHeight: 44, justifyContent: 'center' }}><Text style={{ color: colors.accent }}>{value === 'owner' ? tr('tasks.copy.11') : tr('tasks.copy.12')}</Text></Pressable>)}
     </View>
     {saving ? <Text accessibilityLiveRegion="polite" style={{ color: colors.textMuted }}>{tr('tasks.copy.13')}</Text> : null}
     {mode ? <PeoplePicker networkId={cfg.networkId || ''} mode={mode} people={people} selected={mode === 'owner' ? item.owner ? [item.owner] : [] : item.participants!} anchor={anchor} onClose={() => setMode(null)} onConfirm={selected => { void confirm(selected); }} /> : null}

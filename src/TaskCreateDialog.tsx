@@ -5,7 +5,7 @@ import { useTranslation } from './i18n-react';
 import { taskText } from './i18n-tasks';
 // 新建任务:桌面是居中的小对话框,手机是从底部升起的面板。字段:标题(自动聚焦)、负责人(头像选择器,
 // 复用 RequirementPeoplePicker —— 只存稳定身份 {kind,id})、参与人(同一个选择器多选,人类 + Agent)、优先级、预计完成。
-import { useRef, useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { Modal, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import ModalKeyboardAvoider from './ModalKeyboardAvoider';
 import { Text, TextInput } from './ui-text';
@@ -70,7 +70,7 @@ export function OwnerField({ value, people, onPress, disabled, loading, idBase, 
     <Pressable testID={testID} accessibilityRole="button" accessibilityLabel={value ? tr('tasks.copy.99', { v0: role === 'agent' ? tr('tasks.copy.82') : tr('tasks.copy.15'), v1: name }) : role === 'agent' ? tr('tasks.copy.100') : tr('tasks.copy.65')} disabled={disabled} onPress={onPress} style={[f.input, f.row]}>
       {value ? <AliasAvatar alias={name} size={22} /> : <Ionicons name={role === 'agent' ? 'hardware-chip-outline' : 'person-add-outline'} size={16} color={colors.textMuted} />}
       <Text style={{ flex: 1, color: value ? colors.text : colors.textMuted, fontSize: typeScale.body }} numberOfLines={1}>
-        {loading ? tr('tasks.copy.101') : value ? (role === 'any' ? `${name}（${value.kind === 'user' ? tr('tasks.copy.1') : 'Agent'}）` : name)
+        {value ? (role === 'any' ? `${name}（${value.kind === 'user' ? tr('tasks.copy.1') : 'Agent'}）` : name) : loading ? tr('tasks.copy.101')
           : role === 'human' ? tr('tasks.copy.102') : role === 'agent' ? tr('tasks.copy.103') : tr('tasks.copy.104')}
       </Text>
       <Ionicons name="chevron-down" size={14} color={colors.textMuted} />
@@ -112,27 +112,42 @@ export function RoleFields({ twoRoles, owner, agentOwner, people, peopleLoading,
   const [anchor, setAnchor] = useState<SelectAnchor | null>(null);
   const ownerRef = useRef<any>(null);
   const agentRef = useRef<any>(null);
+  const opening = useRef(0);
+  useEffect(() => () => { opening.current++; }, [networkId]);
   const open = async (role: 'owner' | 'agent') => {
-    if (!(await onLoadPeople())) return;
+    const attempt = ++opening.current;
+    // Open same-scope options now, refresh in the background for new members.
+    // Stale choices are not authorization: writes remain Hub-authorized.
+    if (people.length) void onLoadPeople();
+    else if (!(await onLoadPeople())) return;
+    if (attempt !== opening.current) return;
     if (!pointer) { setAnchor(null); setPicker(role); return; }
-    measureAnchor((role === 'agent' ? agentRef : ownerRef).current, a => { setAnchor(a); setPicker(role); });
+    measureAnchor((role === 'agent' ? agentRef : ownerRef).current, a => {
+      if (attempt !== opening.current) return;
+      setAnchor(a); setPicker(role);
+    });
   };
   const kinds = picker ? roleKinds(picker, twoRoles) : undefined;
   return (
     <>
       <View style={{ gap: spacing.sm }}>
         <Text style={f.label}>{tr('tasks.copy.15')}</Text>
-        {ownerLocked ?? <View ref={ownerRef} collapsable={false}><OwnerField value={owner} people={people} role={twoRoles ? 'human' : 'any'} onPress={() => { void open('owner'); }} loading={peopleLoading} disabled={peopleLoading} idBase={idBase} /></View>}
+        {ownerLocked ?? <View ref={ownerRef} collapsable={false}><OwnerField value={owner} people={people} role={twoRoles ? 'human' : 'any'} onPress={() => { void open('owner'); }} loading={peopleLoading && !people.length} disabled={peopleLoading && !people.length} idBase={idBase} /></View>}
         {twoRoles ? <Text style={s.muted}>{tr('tasks.copy.105')}</Text> : null}
       </View>
       {twoRoles ? (
         <View style={{ gap: spacing.sm }}>
           <Text style={f.label}>{tr('tasks.copy.82')}</Text>
-          <View ref={agentRef} collapsable={false}><OwnerField value={agentOwner} people={people} role="agent" onPress={() => { void open('agent'); }} loading={peopleLoading} disabled={peopleLoading} idBase={`${idBase}-agent`} /></View>
+          <View ref={agentRef} collapsable={false}><OwnerField value={agentOwner} people={people} role="agent" onPress={() => { void open('agent'); }} loading={peopleLoading && !people.length} disabled={peopleLoading && !people.length} idBase={`${idBase}-agent`} /></View>
           <Text style={s.muted}>{tr('tasks.copy.106')}</Text>
         </View>
       ) : null}
-      {peopleError ? <Text style={s.err} testID="req-people-error">{peopleError}{tr('tasks.copy.107')}</Text> : null}
+      {peopleError ? <View>
+        <Text style={s.err} accessibilityRole="alert" testID="req-people-error">{peopleError}</Text>
+        <Pressable testID="req-people-retry" accessibilityRole="button" disabled={peopleLoading} onPress={() => { void onLoadPeople(); }} style={{ minHeight: 44, justifyContent: 'center' }}>
+          <Text style={{ color: colors.accent }}>{tr('tasks.copy.10')}</Text>
+        </Pressable>
+      </View> : null}
       {picker ? (
         <RequirementPeoplePicker
           networkId={networkId}

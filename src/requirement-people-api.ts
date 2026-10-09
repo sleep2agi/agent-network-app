@@ -31,13 +31,39 @@ async function call(cfg: HubConfig, path: string, init?: RequestInit): Promise<a
     ...init, headers: { Authorization: `Bearer ${cfg.token}`, 'Content-Type': 'application/json', ...ACCEPT_COLUMNS_HEADERS },
   });
   if (response.status === 404 || response.status === 501) throw new RequirementPeopleError('Hub 不支持此操作，或需求已不存在；请刷新并检查 Hub 版本', response.status);
-  if (response.status === 403) throw new RequirementPeopleError('你没有修改人员绑定的权限', 403);
-  if (!response.ok) throw new RequirementPeopleError('人员信息未保存，请重试', response.status);
+  const reading = !init?.method || init.method === 'GET';
+  if (response.status === 403) throw new RequirementPeopleError(reading ? '你没有读取人员信息的权限' : '你没有修改人员绑定的权限', 403);
+  if (!response.ok) throw new RequirementPeopleError(reading ? '人员信息加载失败，请重试' : '人员信息未保存，请重试', response.status);
   return response.json();
 }
 
-export async function listRequirementPeople(cfg: HubConfig): Promise<RequirementPerson[]> {
-  const data = await call(cfg, '/api/requirements/people');
+export const PEOPLE_LOAD_TIMEOUT_MS = 10_000;
+// In-flight only: never reuse a directory across credentials or networks, and
+// evict errors/timeouts so the next click really retries. No persistent cache.
+const peopleReads = new Map<string, Promise<RequirementPerson[]>>();
+export function listRequirementPeople(cfg: HubConfig): Promise<RequirementPerson[]> {
+  const key = JSON.stringify([cfg.serverUrl, cfg.token, cfg.networkId]);
+  const pending = peopleReads.get(key);
+  if (pending) return pending;
+  const controller = new AbortController();
+  let timer: ReturnType<typeof setTimeout>;
+  const timeout = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => {
+      reject(new RequirementPeopleError('人员加载超时，请重试', 408));
+      controller.abort();
+    }, PEOPLE_LOAD_TIMEOUT_MS);
+  });
+  // Race includes response.json(), and settles even if native fetch ignores abort.
+  const request = Promise.race([readPeople(cfg, controller.signal), timeout]).finally(() => {
+    clearTimeout(timer);
+    if (peopleReads.get(key) === request) peopleReads.delete(key);
+  });
+  peopleReads.set(key, request);
+  return request;
+}
+
+async function readPeople(cfg: HubConfig, signal: AbortSignal): Promise<RequirementPerson[]> {
+  const data = await call(cfg, '/api/requirements/people', { signal });
   if (!data || !Array.isArray(data.people)) throw new RequirementPeopleError('Hub 未返回可选成员', 502);
   return data.people.map((value: unknown) => {
     const ref = reference(value);

@@ -1356,6 +1356,7 @@ function ScopedRequirementBoard({ cfg, desktop, dispatch, onOpenVoiceSettings, s
           top={headerBottom}
           people={people}
           peopleLoading={peopleLoading}
+          peopleError={peopleError}
           onLoadPeople={loadPeople}
           moving={movingIds.includes(selected.id)}
           moveError={moveErrors[selected.id] || ''}

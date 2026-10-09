@@ -157,15 +157,17 @@ mock.module('./src/requirements-hub', () => ({
   },
 }));
 let saveAssignment: (result: any) => void;
+let rejectAssignment: (error: Error) => void;
 const assignmentWrites: any[] = [];
 mock.module('./src/requirement-people-api', () => ({
   listRequirementPeople: async () => [{ kind: 'user', id: 'u', name: '成员', networkId: 'a' }, { kind: 'node', id: 'n1', name: '执行节点', networkId: 'a' }],
   saveRequirementAssignments: (_cfg: unknown, id: string, value: unknown) => {
     assignmentWrites.push({ id, value });
-    return new Promise(resolve => { saveAssignment = resolve; });
+    return new Promise((resolve, reject) => { saveAssignment = resolve; rejectAssignment = reject; });
   },
 }));
 const { default: Board } = await import('./src/RequirementBoard');
+const { RoleFields } = await import('./src/TaskCreateDialog');
 const { default: PeoplePicker } = await import('./src/RequirementPeoplePicker');
 const { default: AssignmentsEditor } = await import('./src/RequirementAssignmentsEditor');
 const { default: IssueBindings } = await import('./src/TaskIssueBindings');
@@ -190,6 +192,34 @@ async function mount() {
   await act(async () => { renderer = create(<Board cfg={cfg} />); });
 }
 afterEach(async () => { moreStored = true; moreSaves.length = 0; voiceAvailable = false; voiceInsert = null; voicePresses = 0; dueCaps = false; tagCaps = false; participantCards = false; subCards = false; opened = []; typedCards = false; roleCards = false; detailCards = false; itemWrites = []; projectsMock = null; if (renderer) await act(async () => renderer.unmount()); });
+
+test('people refresh preserves known names and cached picker remains usable', async () => {
+  const human = { kind: 'user' as const, id: 'u1', name: 'Alice', networkId: 'a' };
+  const props = { twoRoles: true, owner: human, agentOwner: null, people: [human], peopleLoading: true,
+    networkId: 'a', onLoadPeople: async () => false, onChange: () => {}, idBase: 'loading-owner' };
+  await act(async () => { renderer = create(<RoleFields {...props} />); });
+  expect(byId('loading-owner').findAllByType('Text').map(n => n.props.children).join('')).toContain('Alice');
+  expect(byId('loading-owner').props.disabled).toBe(false);
+  await act(async () => byId('loading-owner').props.onPress());
+  expect(byId('people-panel')).toBeTruthy();
+});
+
+test('people failure offers retry; late load cannot open picker in another network', async () => {
+  let finish!: (ok: boolean) => void;
+  let calls = 0;
+  const props = { twoRoles: true, owner: null, agentOwner: null, people: [], peopleLoading: false,
+    peopleError: 'fixture read failed', networkId: 'a', onLoadPeople: () => { calls++; return new Promise<boolean>(r => { finish = r; }); },
+    onChange: () => {}, idBase: 'loading-owner' };
+  await act(async () => { renderer = create(<RoleFields {...props} />); });
+  expect(byId('req-people-error')).toBeTruthy();
+  await act(async () => { byId('req-people-retry').props.onPress(); });
+  expect(calls).toBe(1);
+  await act(async () => { finish(false); });
+  await act(async () => { byId('loading-owner').props.onPress(); });
+  await act(async () => renderer.update(<RoleFields {...props} networkId="b" peopleError="" />));
+  await act(async () => { finish(true); });
+  expect(renderer.root.findAllByProps({ testID: 'people-panel' })).toHaveLength(0);
+});
 
 test('issue links: canonical PATCH only, duplicate click lock, rejection stays local, source read-only', async () => {
   const writes: any[]=[];
@@ -945,6 +975,23 @@ test('assignment editor only reports saved bindings after Hub acknowledgement', 
   expect(byId('edit-participants').props.disabled).toBe(true);
   await act(async () => saveAssignment({ owner: { kind: 'user', id: 'u' }, participants: [] }));
   expect(saved).toHaveLength(1);
+});
+
+test('shared participants directory retry recovers after a save failure without replaying the write', async () => {
+  let reloads = 0;
+  assignmentWrites.length = 0;
+  const directory = { people: [{ kind: 'user' as const, id: 'u', name: '成员', networkId: 'a' }], loading: false, reload: async () => { reloads++; return true; } };
+  await act(async () => { renderer = create(<AssignmentsEditor cfg={cfg} fields="participants" directory={directory} item={{ ...card, priority: 'normal', column: 'pool', owner: null, participants: [] }} onSaved={() => { throw new Error('failed save must not succeed'); }} />); });
+  await act(async () => byId('edit-participants').props.onPress());
+  await act(async () => byId('person-user:u').props.onPress());
+  await act(async () => byId('people-confirm').props.onPress());
+  await act(async () => rejectAssignment(new Error('fixture save failed')));
+  expect(renderer.root.findAllByProps({ accessibilityRole: 'alert' })).toHaveLength(1);
+  const retry = renderer.root.findAllByType('Pressable').find(n => n.findAllByType('Text').some(t => t.props.children === '重新读取成员'))!;
+  await act(async () => retry.props.onPress());
+  expect(reloads).toBe(2);
+  expect(assignmentWrites).toHaveLength(1);
+  expect(renderer.root.findAllByProps({ accessibilityRole: 'alert' })).toHaveLength(0);
 });
 
 test('details only edit participants through the assignment editor (owner lives in the draft)', async () => {
