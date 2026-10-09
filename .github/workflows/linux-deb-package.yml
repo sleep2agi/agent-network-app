@@ -88,6 +88,16 @@ jobs:
           docker build --build-arg INSTALL_IMAGE=anet-linux-install:test --build-arg SOURCE_COMMIT="$(git rev-parse HEAD)" --build-arg DEB_SHA256="$deb_sha" -t anet-native-workspace:test -f tests/linux-native-workspace/Dockerfile .
       - name: Native startup and authentication atomic gate (before UI)
         run: docker run --rm --network none anet-native-workspace:test
+      - name: Unavailable Secret Service fails before application workload
+        shell: bash
+        run: |
+          set +e
+          docker run --rm --network none anet-native-workspace:test sh -c 'mkdir /tmp/disabled-keyring; ln -s /bin/false /tmp/disabled-keyring/gnome-keyring-daemon; PATH=/tmp/disabled-keyring:$PATH sh /fixture/keyring.sh echo UNEXPECTED_WORKLOAD' >out/keyring-negative.log 2>&1
+          result=$?
+          set -e
+          test "$result" -ne 0
+          grep -F 'FAIL: isolated Secret Service did not acquire D-Bus name' out/keyring-negative.log
+          ! grep -F 'UNEXPECTED_WORKLOAD' out/keyring-negative.log
       - name: Real UI local workspace and native credential authentication
         run: docker run --name native-workspace-proof --network none anet-native-workspace:test sh /fixture/keyring.sh xvfb-run -a -s '-screen 0 1280x900x24 -nolisten tcp' bash /fixture/ui.sh
       - name: Missed-click negative control

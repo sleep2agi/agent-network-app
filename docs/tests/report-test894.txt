@@ -115,3 +115,38 @@ Positive .66-to-.120 migration/byte-exact rollback remain UNVERIFIED until the
 new full package is available and the newly wired CI steps pass. Containers
 were --rm, with private test keyrings and no production data/host credentials.
 Only sanitized console logs, not seeded DB/keyring/passwords, are CI artifacts.
+
+CI increment, 2026-10-10 00:50-00:53 Asia/Shanghai:
+Head e8cc425f32a7f35498927fb9113c77f7673617b9 ended 24 SUCCESS / 1 SKIPPED /
+1 FAILURE. linux-deb run37960195872/job113920783539 failed at the native
+startup/authentication atomic gate, BEFORE UI or migration. Build, clean install
+and window checks passed. UI, migration and rollback were SKIPPED, not passed.
+Packaged source (CI merge): ba234814a025806af34275109cf46ff0b63a73f0;
+deb SHA256 b5de6327c7db88dac9feab689b78011fbb9bea7daa305abfadba344e0f5d48f0.
+
+Failure: D-Bus auto-activated another org.freedesktop.secrets service immediately
+after the helper printed its control path; log then reported invalid/unrecognized
+login.keyring and Secret Service: no result found. This is consistent with a
+startup race; the original daemonizing --unlock had no ownership/readiness gate.
+Changed TEST helper only: keep the daemon foreground, bound D-Bus ownership wait,
+require real secret-tool write/read/delete before running the workload, and clean
+up its own daemon PID. Rust CI installs the newly required libsecret-tools.
+Added CI negative control: daemon shadowed by /bin/false must fail before workload.
+
+Docker local validation of the revised helper, private bus/no network/UID10001:
+- one existing native atomic smoke passed using the previously recorded .66
+  package (8fb42f1 / b7986d3...), not a new .120 package acceptance claim;
+- five independent empty-container readiness rounds passed write/read/delete;
+- disabled daemon exited 1 with exact diagnostic:
+  FAIL: isolated Secret Service did not acquire D-Bus name
+  and never emitted UNEXPECTED_WORKLOAD.
+The new full CI package/bootstrap/migration/rollback remains required. No retry
+of an application assertion, credential mock, or production change was added.
+
+Separate prior-head evidence reviewed at 00:46: head504b582, run37959644582,
+test merge d80ed15844e5bdd282fa8b15b8118aee99c40a30, artifact11629949870,
+deb SHA256 2342a6ae7c62cae150be6936d613b3450a5e14b723ad180ebc8dae411c59e5e3.
+Downloaded manifest confirms Hub .120. Native bootstrap, real UI and negative
+controls passed, and before/after screenshots were manually inspected (welcome
+to Agent list). That workflow had NO migration steps; its success cannot replace
+the newer head's failing/untested gates above.
