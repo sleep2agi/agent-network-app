@@ -21,6 +21,9 @@ sg docker -c 'docker run --rm --network none --cap-drop ALL --security-opt no-ne
 sg docker -c 'docker build --build-arg NATIVE_IMAGE=anet-native-daemon:test -t anet-native-daemon:legacy -f tests/linux-native-daemon/Dockerfile.legacy .'
 sg docker -c 'docker run --rm --network none --cap-drop ALL --security-opt no-new-privileges anet-native-daemon:legacy'
 sg docker -c 'docker run --rm --network none --cap-drop ALL --security-opt no-new-privileges anet-native-daemon:legacy sh /fixture/keyring.sh bash /fixture/native-daemon.sh old-node'
+# Probe process faults, only after current/historical package checks:
+sg docker -c 'docker run --rm --network none --cap-drop ALL --security-opt no-new-privileges anet-native-daemon:test sh /fixture/keyring.sh bash /fixture/native-daemon.sh failed-cli'
+sg docker -c 'docker run --rm --network none --cap-drop ALL --security-opt no-new-privileges anet-native-daemon:test sh /fixture/keyring.sh bash /fixture/native-daemon.sh timeout-cli'
 ```
 
 Both cases run as UID10001 in a fresh container, without host state mounts. Full
@@ -45,6 +48,16 @@ or success-printing CLI shim is used. Each runtime case confirms both manifest
 versions before/after, exact refusal text and exit1, unchanged prefix fingerprint,
 and no private credential/profile/start files. These verify refusal without
 replacement, **not** automatic migration or ability to run a V1 session.
+Two additional fault-injection cases replace only the fixture's bin symlink with
+a forwarding wrapper, leaving the real CLI package entry intact. The wrapper
+runs that real entry and requires its successful exact version output before
+injecting exit23 or a60-second hang. Other commands still call the real entry.
+The verifier requires the recorded real successful probe, exact native failure
+reason (nonzero vs timeout), unchanged injected-prefix fingerprint and no
+daemon private credential/profile/start files. Timeout must return native exit1
+within30–90 seconds, not outer-watchdog exit124; product's30-second limit is not
+shortened for tests. These are explicit fault injections, NOT real damaged npm
+releases. Container removal is the final cleanup boundary for any probe children.
 The native smoke requires supervisor registration and a matching profile/node
 ID on rescan, and attempts to stop daemon/Hub afterward. Container removal is
 the final process/state cleanup boundary. No user credentials are seeded.
@@ -63,5 +76,5 @@ and `local_hub.rs`; fixtures do not alter ports, reverse proxies or production
 configuration. All test data and credentials are disposable. No production
 backup is included or restored. Changing version means rebuilding from exact
 inputs; rollback means discarding this test container, not rewriting user data.
-Other broken-package/timeout paths, actual V1 session compatibility and complete V2
+Other malformed-package paths, actual V1 session compatibility and complete V2
 create/model/start/stop remain separate outstanding integration cases.

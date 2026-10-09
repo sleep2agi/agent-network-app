@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
-import { readFileSync, writeFileSync, readdirSync, lstatSync, readlinkSync, existsSync, unlinkSync } from 'node:fs';
+import { readFileSync, writeFileSync, readdirSync, lstatSync, readlinkSync, realpathSync, existsSync, unlinkSync } from 'node:fs';
 import { join } from 'node:path';
 
 const root = process.env.ANET_PACKAGED_SMOKE_ROOT;
@@ -8,7 +8,7 @@ assert.equal(root, '/home/smoke/native-daemon-test');
 const prefix = join(root, 'local-daemon/anet');
 const phase = process.argv[2];
 const scenario = phase.replace(/^before-/, '');
-assert.ok(['empty', 'exact', 'partial', 'old-cli', 'old-node'].includes(scenario));
+assert.ok(['empty', 'exact', 'partial', 'old-cli', 'old-node', 'failed-cli', 'timeout-cli'].includes(scenario));
 const policy = readFileSync('/fixture/daemon-policy.rs', 'utf8');
 const expected = name => {
   const match = policy.match(new RegExp(`pub const ${name}: &str = "([^"]+)";`));
@@ -43,6 +43,28 @@ if (phase === 'before-partial') {
   // Deliberate corruption only inside this fresh disposable test container.
   unlinkSync(agentEntry);
 }
+if (phase === 'before-failed-cli' || phase === 'before-timeout-cli') {
+  const bin = join(prefix, 'bin/anet');
+  assert.ok(lstatSync(bin).isSymbolicLink(), 'fault injection replaces only the private bin link');
+  const entry = realpathSync(bin);
+  assert.ok(entry.startsWith(join(prefix, 'lib/node_modules/@sleep2agi/agent-network/')));
+  // Keep the real package entry intact. The wrapper forwards real output and
+  // only then injects failure/hang for --version; other commands stay real.
+  unlinkSync(bin);
+  writeFileSync(bin, `#!/usr/local/bin/node
+const {spawnSync} = require('node:child_process');
+const {writeFileSync} = require('node:fs');
+const args = process.argv.slice(2);
+const result = spawnSync('/usr/local/bin/node', [${JSON.stringify(entry)}, ...args], {encoding:'utf8', timeout:10000});
+process.stdout.write(result.stdout || '');
+process.stderr.write(result.stderr || '');
+if (args[0] === '--version') {
+  if (result.status !== 0 || !(result.stdout || '').split(/\\r?\\n/).includes(${JSON.stringify(`anet v${expected('ANET_VERSION')}`)})) process.exit(88);
+  writeFileSync('/evidence/real-cli-probe.json', JSON.stringify({version:${JSON.stringify(expected('ANET_VERSION'))}, realExit:result.status, scenario:${JSON.stringify(scenario)}}));
+  ${scenario === 'failed-cli' ? 'process.exit(23);' : 'setTimeout(() => process.exit(24), 60000);'}
+} else process.exit(result.status ?? 89);
+`, { mode: 0o755 });
+}
 if (phase.startsWith('before-')) {
   writeFileSync('/evidence/private-prefix-before.json', JSON.stringify(fingerprint()));
 } else {
@@ -59,10 +81,14 @@ if (phase.startsWith('before-')) {
   if (phase === 'partial') {
     assert.ok(!existsSync(agentEntry), 'broken entry was not silently reinstalled');
   }
-  if (['partial', 'old-cli', 'old-node'].includes(phase)) {
+  if (['partial', 'old-cli', 'old-node', 'failed-cli', 'timeout-cli'].includes(phase)) {
     assert.ok(!existsSync(join(root, 'local-daemon/home/.anet/config.json')), 'no private Hub credentials written');
     assert.ok(!existsSync(join(root, 'local-daemon/.anet/nodes/local-daemon/config.json')), 'no daemon profile registered');
     assert.ok(!existsSync(join(root, 'local-daemon/start.log')), 'daemon launch not reached');
+  }
+  if (phase === 'failed-cli' || phase === 'timeout-cli') {
+    const probe = JSON.parse(readFileSync('/evidence/real-cli-probe.json', 'utf8'));
+    assert.deepEqual(probe, { version: expected('ANET_VERSION'), realExit: 0, scenario: phase }, 'real CLI succeeded and printed exact version BEFORE injection');
   }
   console.log(`PASS: ${phase} expected package versions; existing-prefix integrity when applicable`);
 }

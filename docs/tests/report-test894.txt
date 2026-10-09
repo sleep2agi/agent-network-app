@@ -402,3 +402,32 @@ linux-deb run37967596661 completedSUCCESS separately. No aggregate all-green,
 new native CI acceptance, merge or release inferred from either observation.
 Next required: current-head CI, failed/timed-out CLI native probes and full
 V1/V2 session lifecycle. Existing policy unit negatives are not native evidence.
+
+2026-10-10 01:59 Asia/Shanghai — native CLI process-fault boundary:
+Two new explicit fault injections ran against the same source/hash-bound507
+diagnostic deb, using current run.sh/verify.mjs mounted read-only. Each starts
+with the exact real pair, replaces ONLY the private bin symlink with a wrapper,
+and keeps the real CLI package entry intact. Wrapper executes that actual entry,
+forwards its stdout/stderr, requires exit0 and the exact real version banner,
+then injects exit23 or a60-second hang for --version only. Other commands forward
+to the real entry. This is labelled fault injection, not a historical release.
+
+failed-cli: native exit1 with exact exit=Some(23), timeout=false refusal; PASS.
+timeout-cli: native exit1 with exact exit=None, timeout=true refusal; returned
+in35s including surrounding native operations. Product30s timeout unchanged;
+outer240s watchdog did not fire (exit124 would fail). PASS.
+Both require a separate recorded successful real version probe before injection,
+strict unchanged post-injection prefix file/mode/link fingerprint, and no private
+Hub credential, daemon profile or start.log. Both verifier commands exited0,
+ordinary UID10001, --network none, --cap-drop ALL, no-new-privileges, --rm.
+Afterward docker ps filtered to the diagnostic image returned no containers.
+
+Commands: same readonly run/verify mounts as prior diagnostic, image
+anet-native-daemon:507, sh /fixture/keyring.sh bash /fixture/native-daemon.sh
+failed-cli, followed only after success by timeout-cli. No production state or
+credentials mounted. Container destruction remains final cleanup for possible
+orphan probe children; this is not a claim of process-group cleanup by run_shell.
+Docker YAML parse and ordered native fault gates passed. New CI appends these
+cases after current-pair and historical-package checks. Existing positives are
+not recounted as new work and policy unit tests are not substituted for native
+results. No product code changed. Complete V1/V2 native session flow still open.

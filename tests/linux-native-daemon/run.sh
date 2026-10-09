@@ -8,7 +8,7 @@ test ! -e "$ANET_PACKAGED_SMOKE_ROOT"
 scenario=${1:-empty}
 case "$scenario" in
   empty) ;;
-  exact|partial|old-cli|old-node)
+  exact|partial|old-cli|old-node|failed-cli|timeout-cli)
     mkdir -p "$ANET_PACKAGED_SMOKE_ROOT/local-daemon/anet"
     case "$scenario" in
       old-cli) seed=/fixture/old-cli-prefix ;;
@@ -25,13 +25,21 @@ esac
 printf 'TEST ONLY native daemon scenario=%s source=%s deb_sha256=%s\n' "$scenario" "$TEST_DEB_SOURCE_COMMIT" "$TEST_DEB_SHA256"
 # Actual packaged Rust installer, actual bundled Hub/credential store, actual
 # CLI/npm/agent-node. No substitute server, CLI stub or host mount.
-if [[ "$scenario" = partial || "$scenario" = old-cli || "$scenario" = old-node ]]; then
+if [[ "$scenario" = partial || "$scenario" = old-cli || "$scenario" = old-node || "$scenario" = failed-cli || "$scenario" = timeout-cli ]]; then
+  started=$SECONDS
   set +e
   timeout 240 /usr/bin/agent-network-desktop --smoke-local-daemon-install >/evidence/partial-refusal.log 2>&1
   result=$?
   set -e
   test "$result" = 1
-  if [ "$scenario" = old-cli ]; then
+  if [ "$scenario" = failed-cli ]; then
+    grep -F 'private package probe failed (exit=Some(23), timeout=false)' /evidence/partial-refusal.log
+  elif [ "$scenario" = timeout-cli ]; then
+    grep -F 'private package probe failed (exit=None, timeout=true)' /evidence/partial-refusal.log
+    elapsed=$((SECONDS - started))
+    test "$elapsed" -ge 30 && test "$elapsed" -le 90
+    echo "PASS: product probe timeout returned in ${elapsed}s (outer watchdog did not fire)"
+  elif [ "$scenario" = old-cli ]; then
     grep -F 'private anet must be exactly @sleep2agi/agent-network@2.3.0-preview.162' /evidence/partial-refusal.log
   else
     grep -F 'private agent-node must be an intact @sleep2agi/agent-node@2.5.0-preview.128' /evidence/partial-refusal.log

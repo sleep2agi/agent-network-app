@@ -156,6 +156,12 @@ jobs:
       - name: Native daemon old agent-node refuses without replacement
         shell: bash
         run: docker run --rm --network none --cap-drop ALL --security-opt no-new-privileges anet-native-daemon:legacy sh /fixture/keyring.sh bash /fixture/native-daemon.sh old-node 2>&1 | tee out/native-daemon-old-node.log
+      - name: Native daemon correct CLI banner cannot mask nonzero exit
+        shell: bash
+        run: docker run --rm --network none --cap-drop ALL --security-opt no-new-privileges anet-native-daemon:test sh /fixture/keyring.sh bash /fixture/native-daemon.sh failed-cli 2>&1 | tee out/native-daemon-failed-cli.log
+      - name: Native daemon correct CLI banner cannot mask probe timeout
+        shell: bash
+        run: docker run --rm --network none --cap-drop ALL --security-opt no-new-privileges anet-native-daemon:test sh /fixture/keyring.sh bash /fixture/native-daemon.sh timeout-cli 2>&1 | tee out/native-daemon-timeout-cli.log
       - uses: actions/upload-artifact@v4
         if: always()
         with:
