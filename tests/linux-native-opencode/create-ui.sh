@@ -18,7 +18,8 @@ trap cleanup EXIT
 python3 /fixture/opencode-verify-create.py before
 xdotool mousemove --window "$window" 785 766 click 1
 sleep 1
-xdotool type --clearmodifiers --delay 30 'v2-native'
+xdotool type --clearmodifiers --delay 80 'v2-native'
+sleep 1 # Finish native input delivery before advancing the wizard.
 xdotool mousemove --window "$window" 1060 441 click 1
 sleep 1
 xdotool mousemove --window "$window" 1050 685 click --repeat 9 --delay 100 5
@@ -33,7 +34,8 @@ xdotool mousemove --window "$window" 472 668 click 1
 xdotool mousemove --window "$window" 1059 741 click 1
 sleep 1
 xdotool mousemove --window "$window" 700 416 click 1 key ctrl+a
-xdotool type --clearmodifiers --delay 30 'stub/stub-model'
+xdotool type --clearmodifiers --delay 80 'stub/stub-model'
+sleep 1
 xdotool mousemove --window "$window" 1060 510 click 1
 sleep 1
 import -window "$window" /evidence/create-confirm.png

@@ -87,6 +87,24 @@ driver allows fifteen seconds before screenshots and subsequent UI actions.
 Hub acknowledgment can precede runtime health-file creation; missing startup
 files remain pending within the bounded wait, never an accepted success.
 This suite does not prove V1 compatibility, native UI task dispatch or release.
+Before each stop/start/restart confirmation, the driver now clicks Return and
+observes fifteen seconds of unchanged request history, lifecycle state, full
+configuration hash, revision, active credential and exact live process generation
+(or continued absence of the stopped processes). It then reopens the dialog and
+performs the original positive confirmation. Cancellation observation is read-only;
+no mutation API substitutes for the native mouse input. The isolated
+`TEST_CANCEL_SUBMIT=1` negative deliberately clicks Confirm instead of Return for
+Stop and must be caught as a lifecycle mutation, not counted as cancellation.
+This is separate from the missed-model-submit negative. A new driver tested with
+an older package only establishes behavior for that older package; #895 still
+requires screenshots/behavior from its own exact fixed native package.
+For local replay, prefer the image's copied scripts or copy scripts into a
+stopped disposable container before starting it. Do not edit a live bind-mounted
+shell script: the interpreter can resume at stale byte offsets. Such a run is
+invalidated, not a product failure or acceptance result. CI copies the scripts
+into the fixture image and never bind-mounts a mutable working tree.
+The cancellation-specific accepted runs, rejected exploratory attempts and
+exact old-package boundary are in `docs/tests/report-test895-native-cancel.txt`.
 After the fresh packaged positive/negative recorded in report-test894 passed,
 CI enables this follow-up after the creation gates, with separate always-run
 evidence preservation and cleanup. Do not inherit the earlier package's result

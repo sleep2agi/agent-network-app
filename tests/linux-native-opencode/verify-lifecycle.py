@@ -1,5 +1,6 @@
 """Read-only native lifecycle observer; only proof tasks are submitted via REST."""
 import json
+import hashlib
 import os
 from pathlib import Path
 import runpy
@@ -101,7 +102,48 @@ def old_processes_gone(before):
     return True
 
 
-if sys.argv[1] == 'baseline':
+def cancel_state():
+    state = db.execute('SELECT lifecycle_state FROM nodes WHERE node_id=? AND network_id=?', (node_id, network)).fetchone()
+    assert state is not None
+    view = api('/api/nodes/' + urllib.parse.quote(node_id) + '/config')
+    token = db.execute('SELECT t.revoked_at FROM node_create_requests r JOIN api_tokens t ON t.token_id=r.child_token_id WHERE r.child_node_id=?', (node_id,)).fetchone()
+    assert token is not None and token['revoked_at'] is None
+    def rows(sql):
+        return [dict(row) for row in db.execute(sql, (node_id,)).fetchall()]
+    result = {'node_id': node_id, 'network_id': network, 'lifecycle_state': state[0],
+              'revision': view['config_revision'], 'model': view['model'],
+              'config_sha256': hashlib.sha256((node_dir / 'config.json').read_bytes()).hexdigest(),
+              'stop_requests': rows('SELECT request_id,status,action FROM node_stop_requests WHERE child_node_id=? ORDER BY request_id'),
+              'config_updates': rows('SELECT update_id,status,new_revision FROM node_config_updates WHERE node_id=? ORDER BY update_id'),
+              'create_requests': rows('SELECT request_id,status FROM node_create_requests WHERE child_node_id=? ORDER BY request_id')}
+    if state[0] == 'active':
+        result['runtime'] = snapshot()
+    else:
+        assert state[0] == 'stopped'
+        assert old_processes_gone(json.loads((evidence / 'lifecycle-model.json').read_text()))
+    return result
+
+
+if sys.argv[1] in ['cancel-before', 'cancel-after']:
+    action = sys.argv[2]
+    assert action in ['stop', 'start', 'restart']
+    path = evidence / ('cancel-' + action + '.json')
+    if sys.argv[1] == 'cancel-before':
+        path.write_text(json.dumps(cancel_state(), indent=2))
+    else:
+        before = json.loads(path.read_text())
+        # Observe an entire polling interval, not a single premature read.
+        deadline = time.monotonic() + 15
+        while time.monotonic() < deadline:
+            # A submitted stop can change Hub state before its processes exit.
+            # Detect that transition directly; do not misclassify the expected
+            # negative as a process-cleanup prerequisite failure.
+            state = db.execute('SELECT lifecycle_state FROM nodes WHERE node_id=? AND network_id=?', (node_id, network)).fetchone()
+            assert state is not None and state[0] == before['lifecycle_state'], 'native cancellation mutated lifecycle state'
+            assert cancel_state() == before, 'native cancellation mutated lifecycle state'
+            time.sleep(0.5)
+        print('PASS: native ' + action + ' cancellation preserved requests/config/identity/process generation')
+elif sys.argv[1] == 'baseline':
     before = snapshot()
     assert before['model'] == 'stub/stub-model'
     assert db.execute('SELECT COUNT(*) FROM node_config_updates WHERE node_id=?', (node_id,)).fetchone()[0] == 0

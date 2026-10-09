@@ -246,10 +246,20 @@ jobs:
           test "$result" -ne 0
           grep -F 'PASS: missed model submit left revision/model/generation unchanged' out/native-opencode-missed-model.log
           grep -F 'AssertionError: native model switch did not apply' out/native-opencode-missed-model.log
+      - name: Native cancel oracle rejects an actual confirmation
+        shell: bash
+        run: |
+          set +e
+          docker run --name native-opencode-cancel-submitted --network none --cap-drop ALL --security-opt no-new-privileges --shm-size 256m -e TEST_CANCEL_SUBMIT=1 anet-native-opencode:test sh /fixture/keyring.sh xvfb-run -a -s "-screen 0 1280x900x24 -nolisten tcp" bash /fixture/opencode-lifecycle-ui.sh >out/native-opencode-cancel-submitted.log 2>&1
+          result=$?
+          set -e
+          test "$result" -eq 1
+          grep -F 'PASS: native model change applied new revision/generation and actual provider model' out/native-opencode-cancel-submitted.log
+          grep -F 'AssertionError: native cancellation mutated lifecycle state' out/native-opencode-cancel-submitted.log
       - name: Preserve native V2 lifecycle evidence
         if: always()
         run: |
-          for name in native-opencode-lifecycle native-opencode-missed-model; do
+          for name in native-opencode-lifecycle native-opencode-missed-model native-opencode-cancel-submitted; do
             if docker container inspect "$name" >/dev/null 2>&1; then
               mkdir -p "out/$name"
               docker cp "$name:/evidence/." "out/$name/"

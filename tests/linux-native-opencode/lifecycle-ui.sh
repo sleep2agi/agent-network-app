@@ -13,7 +13,9 @@ click 460 213 # Model/runtime section.
 sleep 2
 capture model-before
 click 817 637
-xdotool type --clearmodifiers --delay 20 'stub/stub-model-next'
+xdotool key --clearmodifiers ctrl+a
+xdotool type --clearmodifiers --delay 60 'stub/stub-model-next'
+sleep 1 # Let native key events reach the controlled input before Apply.
 if [ "${TEST_MODEL_MISS_CLICK:-0}" = 1 ]; then
   click 1100 770
 else
@@ -27,6 +29,16 @@ sleep 2
 click 760 505
 sleep 1
 capture stop-confirm
+python3 /fixture/opencode-verify-lifecycle.py cancel-before stop
+if [ "${TEST_CANCEL_SUBMIT:-0}" = 1 ]; then
+  click 755 441 # Deliberate wrong-button negative: this must be detected.
+else
+  click 660 441 # Return, not confirm.
+fi
+python3 /fixture/opencode-verify-lifecycle.py cancel-after stop
+capture stop-cancelled
+click 760 505
+sleep 1
 click 755 441
 python3 /fixture/opencode-verify-lifecycle.py stopped
 sleep 15
@@ -36,6 +48,12 @@ sleep 2
 click 660 273
 sleep 1
 capture start-confirm
+python3 /fixture/opencode-verify-lifecycle.py cancel-before start
+click 660 450
+python3 /fixture/opencode-verify-lifecycle.py cancel-after start
+capture start-cancelled
+click 660 273
+sleep 1
 click 755 450
 python3 /fixture/opencode-verify-lifecycle.py started
 sleep 15
@@ -43,6 +61,12 @@ capture started
 click 660 273 # Same position now holds Restart; Start is hidden while running.
 sleep 1
 capture restart-confirm
+python3 /fixture/opencode-verify-lifecycle.py cancel-before restart
+click 660 441
+python3 /fixture/opencode-verify-lifecycle.py cancel-after restart
+capture restart-cancelled
+click 660 273
+sleep 1
 click 755 441
 python3 /fixture/opencode-verify-lifecycle.py restarted
 sleep 15
