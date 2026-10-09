@@ -85,3 +85,22 @@ an accepted exact main SHA. Never publish these branch-built test images.
 Production Hub data still requires its existing backup process; a client
 checkout does not reconstruct server data. This iteration did not exercise
 production disaster recovery and makes no such claim.
+
+2026-10-09 16:30 CST follow-up: full client unit CI regression
+The Ubuntu/Windows CI unit step exposed a stale source assertion expecting
+exactly `const canSubmit = !workdirErr;`. The product now also checks V2 consent,
+node name and runtime availability. Keep the workdir gate and test the actual
+combined predicate: valid input passes, each invalid condition blocks; also
+assert Submit remains wired to that predicate. No product code changed here.
+Test fix: 7129592b5c4aadff76936a5f1d9e034649a27f11.
+Exact full-source Docker candidate: 709ff23b8273d2c654b755bd1028620c8350ab2a.
+Dockerfile: tests/opencode-v2-create/Dockerfile.unit-ci.
+Container: anet-app-v2-full-unit-709. Result: 377/377 test files PASS, exit 0.
+Image: sha256:f07e7ddaa0252d25a7e2d25c7ef21fd584a877f9cc9f815dffe1901b452c051f.
+Build SOURCE_COMMIT and run EXPECTED_SOURCE_COMMIT both equal the full SHA.
+Locked dependencies reused from anet-app-v2-options:ui-1ef; full candidate
+source copied after removing inherited source trees; no runtime source mounts.
+Raw full output retained by docker logs of the named container. This is local
+Linux Docker acceptance, not proof of Windows CI or native WebView acceptance.
+The exported product bundle remains the previously tested 1ef7f77 source;
+neither this test-only correction nor this report is a release.
