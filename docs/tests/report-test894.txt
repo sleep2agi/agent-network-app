@@ -45,3 +45,30 @@ rebuilds the complete image and locked dependency. Run this diagnostic with bun
 in that image. No pre-existing host credentials, databases, ports or services
 are required; no data backup is consumed. Version changes require new exact
 source/hash evidence. Containers are --rm; rollback affects only the test branch.
+
+Incremental candidate selection, 2026-10-10 00:21–00:25 Asia/Shanghai:
+Registry reads in Docker resolved Hub preview=0.9.0-preview.120,
+agent-node preview=2.5.0-preview.128 and CLI preview=2.3.0-preview.162.
+Stable tags still resolved agent-node .58 / CLI .76; do not infer V2 support
+from their tag names. No registry tag was changed.
+
+Hub .120 SHA512 is pinned in tests/bundled-hub-v2-contract/Dockerfile.
+Package metadata did not provide gitHead. GitHub main at observation was
+80c6ab5b883a2056784326e73a6b6ec09ac0ce2c; compare API confirms release preparation
+edc68a4ca87bbb7ca4944093e8ff113a17078624 is an ancestor (behind=0).
+Candidate create-node-validate.ts/db.ts/tools.ts/server.ts hashes each match that
+ancestor; the probe asserts those exact hashes. This is not whole-tarball
+provenance certification.
+
+Candidate .120 offline pure-contract gate passed: V1 accepted, missing V2 consent
+rejected with opencode_v2_requires_unsafe_opt_in, exact V2 argv generated,
+launch_verified_at source present in migration, ack handler and REST read.
+Initial test incorrectly expected '--opencode-unsafe-tools true'; inspection
+confirmed the CLI contract is a valueless boolean switch. Replaced this with
+a stricter full-argv equality assertion and reran successfully; no product
+assertion was weakened or removed.
+
+Prepared product-side pin .66 -> .120, Rust expected-version change and lockfile
+regenerated inside Docker. Full packaged bootstrap/migration/rollback remain
+pending. Daemon installer is NOT changed to a floating preview or silently
+upgraded. Candidate protocol success is not end-to-end/native V2 completion.
