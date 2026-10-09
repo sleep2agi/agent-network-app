@@ -1,0 +1,87 @@
+Test829: rendered remote model-change observation deadline
+Date: 2026-10-09, Asia/Shanghai (UTC+08)
+Scope: app issue #786, Hub #829 under #539, agent-network issue #2544.
+Result: Docker rendered regression PASS; not a native-app or real-Hub E2E.
+
+Inputs
+- app main: 9978eac5820c35d862c811390a9a9c34f3d6d4db
+- first probe commit: fe6c673e8ea76109c7a8ecf937264910884472d5
+- tested fix: 4500c233e38fbdc2db5932f5edbe92f4fdd1ab9c
+- old exported product: e19a4154a3b0c77620e84c7f440a457dca412efd
+- base image anet-app-v2:deadline-e19:
+  sha256:116f2015fadc051acf97ab3c4e05ec98c0e0b647ab78b0d52a6703663147c583
+- new image anet-model-ui:deadline-4500 manifest list:
+  sha256:871fcfd362c85d3b1d5061202e43a6c9ef7d661bdde57e7fd6dd13b501e7a57d
+- Docker cmp verified old image NodeModelSection.tsx, node-model-change.ts
+  and api.ts exactly match app main before the fix. This is a cached old
+  export negative control, not a fresh old-main build.
+
+Environment / boundaries
+All tests ran through sg docker. Network none, loopback browser Web server,
+page-local Hub/Tauri HTTP fixture and synthetic node/provider/model only.
+No live Hub write, daemon operation, production restart, credentials, global
+npm install, package version bump, or public artifact. Dependency lock was
+compared against the base image before fresh TypeScript check / Expo export.
+This Dockerfile depends on a local test dependency image; it is not a public
+release build recipe. The drive is also registered as a stub in drives.json
+so CI can run it against its own fresh export and Playwright installation.
+
+Layer 1: fixture setup
+First two containers anet-model-ui-negative-e19 and
+anet-model-ui-negative-e19-bounded failed before navigation: missing
+safeAreaSim query meant __anetLayoutSweep was not installed. The first run
+was stopped; the second had a 15s explicit guard. These are fixture failures,
+not model-change product failures. Fixed the URL and kept the bounded wait.
+
+Layer 2: existing behavior negative control
+Container anet-model-ui-negative-e19-routed (exit 1), 19:36:47–19:38:29 CST.
+- Fast change PASS: real rendered button, exact update_node_config arguments
+  (node_id, base_revision=0, patch.model, network_id), matching revision/model.
+- Slow successful reads: inject 2000ms delay after accepted submission.
+  After 95005ms, UI still said:
+  已下发,节点正在以新模型重启…(54s)
+  The required 90s timeout message did not appear. This is the intended red.
+
+Fix
+One independent 90s observation timer per accepted model change. Check the
+deadline again after reads, ignore in-flight results after expiry/cleanup,
+and clear poll/deadline timers. Do not cancel accepted server work or submit
+another mutation. Display completed check count instead of fake elapsed time.
+No change to model validation, revision matching, supported runtimes, Hub
+authentication, existing atok_ handling, or provider permission policy.
+
+Layer 3: build / atomic tests
+Fresh Docker build of tested fix: dependency lock cmp PASS, npm run typecheck
+PASS, Expo Web export PASS. No source mount in the resulting rendered test.
+Targeted node-model-change.test.ts: 39/39 PASS in isolated base container with
+the clean tested worktree read-only mounted (anet-model-ui-unit-4500).
+Full npm test in the new image: 377/377 test files PASS, exit 0.
+Container anet-model-ui-all-unit-4500: 19:40:04–19:41:00 CST.
+
+Layer 4: rendered regression
+Container anet-model-ui-positive-4500, exit 0, started 19:40:03 CST.
+- Fast path and exact payload / revision readback PASS.
+- Slow reads reach the 90s timeout within the 95s assertion window PASS.
+- After timeout, remove delay and provide matching model/revision, then wait
+  6s: no success revival and exactly one update mutation PASS.
+- No pageerror in either browser context.
+
+Reproduction (from a checkout of the tested fix)
+sg docker -c 'docker build -f tests/model-change-deadline/Dockerfile --build-arg SOURCE_COMMIT=4500c233e38fbdc2db5932f5edbe92f4fdd1ab9c -t anet-model-ui:deadline-4500 .'
+sg docker -c 'docker run --init --network none --cap-drop ALL --security-opt no-new-privileges -e EXPECTED_SOURCE_COMMIT=4500c233e38fbdc2db5932f5edbe92f4fdd1ab9c anet-model-ui:deadline-4500'
+sg docker -c 'docker run --init --network none --entrypoint npm anet-model-ui:deadline-4500 test'
+Retained named containers provide stdout through docker logs / exit metadata
+through docker inspect. New report-only commits do not change the tested code.
+
+Not covered / delivery / recovery
+- Native WebView and real client-to-daemon model changes with this new export
+  remain separate acceptance; previous native API probe is not transferred.
+- No real provider model-parameter assertion, multi-user or security claim.
+- Submission-body hangs and initial-read hangs are outside this narrow fix.
+- Hub #829 full-client checklist remains open; #539 is not complete.
+- No merge/publication/production claim. Formal packages must still originate
+  from a full 40-character main SHA after the applicable release gates.
+- UI-only change adds no service startup, proxy/port/tunnel, environment key,
+  secret source, migration or backup state. Existing deployment processes
+  remain authoritative; rollback is the previous main-built client artifact.
+  This test does not perform empty-machine disaster recovery.

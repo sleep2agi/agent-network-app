@@ -1,0 +1,47 @@
+Create confirmation: Hub working state, 2026-10-09 CST (UTC+08:00)
+Hub #539 / #829; app PR #785; dependent Hub/daemon PR agent-network#2551.
+Branch candidate only: NOT merged, released, or production/native acceptance.
+
+Tested source: bad71b4f06027bc452c865b65a9d538f89a406be
+Product change: exact matching child with status working is online, just as
+idle/busy. Hub full GET /api/status preserves session status; no API client
+normalization changes working to busy. Existing request identity, V2 startup
+proof and late-failure gates remain mandatory.
+
+Witnessed red: parent 72e824276176b1e8a0af1ca460b3a72022fe72a5 product plus
+four new behavior checks, in container anet-app-working-red-bun: 50/51, exit 1.
+Only "Hub working child also confirms" failed. Source overlay, not a clean
+parent-SHA build. An earlier npx/tsx attempt lacked installed tsx and was
+stopped; it is NOT product failure evidence.
+
+Green exact-source Docker build:
+  tests/opencode-v2-create/Dockerfile
+  DEPENDENCY_IMAGE=anet-app-v2-options:ui-1ef
+  dependency sha256:c6e538aefe5efdcb1058bfe6cf62cff1629ad75622f5067f8103776d583b29b9
+  SOURCE_COMMIT=bad71b4f06027bc452c865b65a9d538f89a406be
+  image anet-app-v2:working-bad
+  sha256:ab3eb6d9786c005ed7ecb2d0d34576243f808c9d27f1c7f44754260dc327f33d
+Build compared dependency lock, copied candidate source, passed TypeScript
+and production Expo web export. No host npm/global changes.
+
+Unit container anet-app-working-full-unit, --network none, no source mounts:
+  377/377 test files passed, exit 0.
+  Creation status 51/51 checks, including working positive, missing proof,
+  wrong child identity and late failure negatives.
+
+Rendered container anet-app-working-rendered-retry, --network none:
+  EXPECTED_SOURCE_COMMIT=bad71b4f06027bc452c865b65a9d538f89a406be
+  4/4 cases passed: desktop light/dark (idle), phone light/dark (working).
+  V1 default/completion, explicit V2 consent/reset, model gate, exact payload,
+  no early success without startup proof, late failure, old Hub rejection
+  without fallback/retry, Codex unchanged, all passed; exit 0.
+Initial rendered invocation omitted EXPECTED_SOURCE_COMMIT and exited 1
+at SHA assertion before browser scenarios. Corrected invocation reused the
+same exact image; no product gate was weakened.
+Raw logs are retained in named containers; rendered artifacts in /artifacts.
+
+Rendered tests use page-local Hub/Tauri fixtures, NOT a real Hub/daemon or
+native WebView. This fixes one creation-confirmation loading case, not all
+reported chat loading issues. Full CI and main acceptance remain pending.
+No service, port, credential, persistence or production deployment changes.
+Upgrade/rollback must use accepted main SHA builds, not these branch images.

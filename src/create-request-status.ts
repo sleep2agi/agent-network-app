@@ -1,9 +1,10 @@
 // 桌面向导:create_node 下发后,除了等「子节点注册」,还读 hub 的 GET /api/node-create-requests?request_id=
-// (commhub-server ≥ 含该接口的版本;老 hub 404 → 当作「不知道」,行为退回只等注册)。
+// 老 Hub 404/缺少身份或启动证据 → 尚未确认,不能用同名节点冒充本次创建成功。
 // 纯函数:把 daemon 回的 status/error 变成向导该显示的话。
 import { describeWorkdirError } from './create-node-workdir';
 import { describeCopresenceError } from './create-node-request';
 import { describeNodeNameRejection } from './node-name';
+import { describeOpenCodeCreateError } from './opencode-create-options';
 
 export type CreateRequestStatus = 'pending' | 'delivered' | 'started' | 'failed' | 'rejected' | 'runtime_capability_check_failed' | string;
 
@@ -13,6 +14,8 @@ export interface CreateRequestRow {
   error?: string | null;
   runtime?: string | null;
   child_name?: string | null;
+  child_node_id?: string | null;
+  launch_verified_at?: number | null;
 }
 
 export type CreateRequestVerdict =
@@ -28,6 +31,8 @@ export function createRequestVerdict(row: CreateRequestRow | null | undefined, n
   const status = String(row.status);
   if (FAILED.has(status)) {
     const why = (row.error ?? '').trim();
+    const opencode = describeOpenCodeCreateError({ error: why });
+    if (opencode) return { kind: 'failed', text: `${opencode}（${why}）` };
     // Codex 共存:老 Hub/daemon 不认 flags.copresence、或目标机缺 tmux/codex/codex 登录 → 说人话,原文附在后面。
     const co = describeCopresenceError({ error: why, status, runtime: row.runtime });
     if (co) return { kind: 'failed', text: co };
@@ -44,14 +49,32 @@ export function createRequestVerdict(row: CreateRequestRow | null | undefined, n
   }
   if (status === 'started') return { kind: 'waiting', text: 'daemon 已启动子进程,等待它向 Hub 注册…' };
   if (status === 'delivered') return { kind: 'waiting', text: 'daemon 已收到创建请求,正在启动…' };
+  if (status === 'succeeded') return { kind: 'waiting', text: '节点已注册,正在核对本次启动确认与在线状态…' };
   return { kind: 'waiting', text: '创建请求已下发,等待 daemon 领取…' };
 }
 
-/** 超时(24s 没注册)时的话:知道 daemon 已启动就说清楚,不知道就保持原来的诚实提示。 */
+/** Success requires evidence for this request, not an alias collision. */
+export function creationConfirmed(
+  row: CreateRequestRow | null | undefined,
+  expected: { requestId: string; name: string; runtime: string; requireLaunchVerification?: boolean },
+  sessions: ReadonlyArray<{ alias: string; node_id?: string | null; status: string }>,
+): boolean {
+  if (!row || row.request_id !== expected.requestId || row.child_name !== expected.name
+    || row.runtime !== expected.runtime || row.status !== 'succeeded' || !row.child_node_id) return false;
+  if (expected.requireLaunchVerification
+    && !(typeof row.launch_verified_at === 'number' && Number.isFinite(row.launch_verified_at) && row.launch_verified_at > 0)) return false;
+  return sessions.some(s => s.node_id === row.child_node_id && s.alias === expected.name
+    && (s.status === 'idle' || s.status === 'working' || s.status === 'busy'));
+}
+
+/** 45 秒观察窗结束不代表创建失败,也不代表已上线。 */
 export function timeoutMessage(last: CreateRequestVerdict): string {
-  if (last.kind === 'waiting' && last.text.startsWith('daemon 已启动')) {
-    return 'daemon 已启动子进程,但 24s 内还没向 Hub 注册。它可能还在拉起(TUI 共存 runtime 要等宿主登录态);稍后到 Agents 列表查看,长时间不出现就去 daemon 所在机器看该节点的日志。';
+  if (last.kind === 'waiting' && last.text.startsWith('节点已注册')) {
+    return '节点已注册,但 45s 内未确认本次启动检查与在线状态。旧 Hub/daemon 可能不提供确认信息;稍后查看 Agents 与节点日志,不要重复创建。';
   }
-  if (last.kind === 'waiting') return `${last.text} 24s 内没等到子节点注册——可能 daemon 离线或还没领取;稍后到 Agents 列表查看。`;
-  return '已下发，但 24s 内未看到子节点注册。可能仍在拉起中——稍后到 Agents 列表查看。';
+  if (last.kind === 'waiting' && last.text.startsWith('daemon 已启动')) {
+    return 'daemon 已启动子进程,但 45s 内还没确认向 Hub 注册。它可能还在拉起(TUI 共存 runtime 要等宿主登录态);稍后到 Agents 列表查看,长时间不出现就去 daemon 所在机器看该节点的日志。';
+  }
+  if (last.kind === 'waiting') return `${last.text} 45s 内未确认本次创建——可能 daemon 离线或还没领取;稍后到 Agents 列表查看。`;
+  return '已下发，但 45s 内未确认本次创建。可能仍在拉起或 Hub 未提供确认信息——稍后到 Agents 列表查看,不要重复创建。';
 }

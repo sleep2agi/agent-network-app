@@ -5,6 +5,14 @@
       "kind": "manual",
       "why": "Self-contained Docker/Chromium test (tests/test-task-people-loading/Dockerfile); runs in the dedicated people-loading job in unit-tests.yml, not the shared export runner."
     },
+    "model-change-deadline/drive.mjs": {
+      "kind": "stub",
+      "secs": 115
+    },
+    "opencode-v2-create/drive.mjs": {
+      "kind": "stub",
+      "secs": 90
+    },
     "msi-upgrade-identity/run.mjs": {
       "kind": "manual",
       "why": "isolated config mutation harness via tests/msi-upgrade-identity/Dockerfile, not a browser drive; its underlying src/app-display-name.test.ts regression runs in existing npm test CI."
