@@ -17,6 +17,10 @@ sg docker -c 'docker run --rm --network none --cap-drop ALL --security-opt no-ne
 sg docker -c 'docker run --rm --network none --cap-drop ALL --security-opt no-new-privileges anet-native-daemon:test sh /fixture/keyring.sh bash /fixture/native-daemon.sh exact'
 # Only after both positive cases succeed:
 sg docker -c 'docker run --rm --network none --cap-drop ALL --security-opt no-new-privileges anet-native-daemon:test sh /fixture/keyring.sh bash /fixture/native-daemon.sh partial'
+# Real historical npm packages, after the current-pair gates above:
+sg docker -c 'docker build --build-arg NATIVE_IMAGE=anet-native-daemon:test -t anet-native-daemon:legacy -f tests/linux-native-daemon/Dockerfile.legacy .'
+sg docker -c 'docker run --rm --network none --cap-drop ALL --security-opt no-new-privileges anet-native-daemon:legacy'
+sg docker -c 'docker run --rm --network none --cap-drop ALL --security-opt no-new-privileges anet-native-daemon:legacy sh /fixture/keyring.sh bash /fixture/native-daemon.sh old-node'
 ```
 
 Both cases run as UID10001 in a fresh container, without host state mounts. Full
@@ -33,6 +37,14 @@ and asserts no package rewrite, private Hub credentials, daemon profile or start
 log. It is a deliberately corrupted package, not proof of real old-version
 compatibility. This fingerprint is not proof
 of npm tarball provenance or by itself proof that no npm command was invoked.
+The additional legacy image installs actual historical CLI `2.3.0-preview.76`
+paired with current agent-node, and historical agent-node `2.5.0-preview.58`
+paired with current CLI, under separate prefixes. Normal npm install scripts
+and real version/help executables run during build; no edited version metadata
+or success-printing CLI shim is used. Each runtime case confirms both manifest
+versions before/after, exact refusal text and exit1, unchanged prefix fingerprint,
+and no private credential/profile/start files. These verify refusal without
+replacement, **not** automatic migration or ability to run a V1 session.
 The native smoke requires supervisor registration and a matching profile/node
 ID on rescan, and attempts to stop daemon/Hub afterward. Container removal is
 the final process/state cleanup boundary. No user credentials are seeded.
@@ -51,5 +63,5 @@ and `local_hub.rs`; fixtures do not alter ports, reverse proxies or production
 configuration. All test data and credentials are disposable. No production
 backup is included or restored. Changing version means rebuilding from exact
 inputs; rollback means discarding this test container, not rewriting user data.
-Old-version refusal, other broken-package/timeout paths, V1 compatibility and complete V2
+Other broken-package/timeout paths, actual V1 session compatibility and complete V2
 create/model/start/stop remain separate outstanding integration cases.

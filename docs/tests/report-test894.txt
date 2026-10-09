@@ -359,3 +359,46 @@ passed. New-head packaged CI must still execute this wiring; no merge/release.
 Remaining: real old CLI/node and other broken/timeout installer cases, V1
 compatibility and full native V2 create/model/start/stop lifecycle. #894/#829
 remain in progress; these three installer checks alone do not close them.
+
+2026-10-10 01:54 Asia/Shanghai — two real historical package refusal cases:
+Added Dockerfile.legacy, normal npm install scripts in a digest-pinned Node22
+builder, with two independent prefixes:
+  old-cli: actual CLI2.3.0-preview.76 + agent-node2.5.0-preview.128 (274 packages)
+  old-node: actual CLI2.3.0-preview.162 + agent-node2.5.0-preview.58 (273 packages)
+Both real CLI --version commands and actual old agent-node --help exited0.
+These are actual historical npm package installs, NOT modified manifest versions
+or CLI shims. Top-level pins still do not prove all transitive payload provenance.
+
+Diagnostic image anet-native-daemon:legacy-507 ID
+sha256:32ec0dcff7bc39c84ee986416c3643d2979cad5eb9ef2543ca77b965c5f3ff7b
+extends the already source/hash-bound507 package diagnostic described above;
+it does not claim to be a newly built96e6038 package. Both cases ran serially,
+only after the earlier actual empty/exact/partial installer gates had passed.
+
+sg docker -c 'docker build --build-arg NATIVE_IMAGE=anet-native-daemon:507 -t anet-native-daemon:legacy-507 -f tests/linux-native-daemon/Dockerfile.legacy .'
+sg docker -c 'docker run --rm --network none --cap-drop ALL --security-opt no-new-privileges anet-native-daemon:legacy-507'
+sg docker -c 'docker run --rm --network none --cap-drop ALL --security-opt no-new-privileges anet-native-daemon:legacy-507 sh /fixture/keyring.sh bash /fixture/native-daemon.sh old-node'
+
+Both commands exited0 for the verifier, requiring native installer exit1 and
+the precise expected CLI/agent-node pairing refusal plus the failed pairing
+step. Before/after manifests retain the actual expected versions, and full
+prefix file/mode/link fingerprints are unchanged. No private Hub credential
+file, daemon profile or start.log was created. Ordinary UID10001, offline
+runtime, real bundled Hub and Secret Service, no production state mounted.
+Containers used --rm; no old daemon was intentionally registered by either
+negative case. This tests safe refusal WITHOUT replacement, not automatic
+upgrade, preservation of an already running daemon, or V1 runtime compatibility.
+
+Native verifier/run script generalized their existing scenario dispatch to
+support these two cases; strict fingerprints and positive/partial assertions
+remain. Docker bash/node syntax passed. Docker YAML parse + explicit ordered
+positive gates before legacy build/refusal cases passed. No product source
+change. Workflow now records each historical refusal separately after the
+existing native positive/partial gates, and must pass anew on the eventual head.
+
+At01:54,96e603836a288f9308d2822982f7e1a956564ca5 had17SUCCESS/1SKIPPED/
+9running; its linux-deb still compiling at latest step read. Previous25737e6
+linux-deb run37967596661 completedSUCCESS separately. No aggregate all-green,
+new native CI acceptance, merge or release inferred from either observation.
+Next required: current-head CI, failed/timed-out CLI native probes and full
+V1/V2 session lifecycle. Existing policy unit negatives are not native evidence.

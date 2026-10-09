@@ -148,6 +148,14 @@ jobs:
       - name: Native daemon partial package refuses before credentials and start
         shell: bash
         run: docker run --rm --network none --cap-drop ALL --security-opt no-new-privileges anet-native-daemon:test sh /fixture/keyring.sh bash /fixture/native-daemon.sh partial 2>&1 | tee out/native-daemon-partial.log
+      - name: Build real historical daemon package fixtures
+        run: docker build --build-arg NATIVE_IMAGE=anet-native-daemon:test -t anet-native-daemon:legacy -f tests/linux-native-daemon/Dockerfile.legacy .
+      - name: Native daemon old CLI refuses without replacement
+        shell: bash
+        run: docker run --rm --network none --cap-drop ALL --security-opt no-new-privileges anet-native-daemon:legacy 2>&1 | tee out/native-daemon-old-cli.log
+      - name: Native daemon old agent-node refuses without replacement
+        shell: bash
+        run: docker run --rm --network none --cap-drop ALL --security-opt no-new-privileges anet-native-daemon:legacy sh /fixture/keyring.sh bash /fixture/native-daemon.sh old-node 2>&1 | tee out/native-daemon-old-node.log
       - uses: actions/upload-artifact@v4
         if: always()
         with:

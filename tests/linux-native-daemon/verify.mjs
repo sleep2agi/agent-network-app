@@ -6,6 +6,9 @@ import { join } from 'node:path';
 const root = process.env.ANET_PACKAGED_SMOKE_ROOT;
 assert.equal(root, '/home/smoke/native-daemon-test');
 const prefix = join(root, 'local-daemon/anet');
+const phase = process.argv[2];
+const scenario = phase.replace(/^before-/, '');
+assert.ok(['empty', 'exact', 'partial', 'old-cli', 'old-node'].includes(scenario));
 const policy = readFileSync('/fixture/daemon-policy.rs', 'utf8');
 const expected = name => {
   const match = policy.match(new RegExp(`pub const ${name}: &str = "([^"]+)";`));
@@ -15,7 +18,9 @@ const expected = name => {
 for (const [name, constant] of [['agent-network', 'ANET_VERSION'], ['agent-node', 'AGENT_NODE_VERSION']]) {
   const pkg = JSON.parse(readFileSync(join(prefix, 'lib/node_modules/@sleep2agi', name, 'package.json'), 'utf8'));
   assert.equal(pkg.name, `@sleep2agi/${name}`);
-  assert.equal(pkg.version, expected(constant));
+  const version = scenario === 'old-cli' && name === 'agent-network' ? '2.3.0-preview.76'
+    : scenario === 'old-node' && name === 'agent-node' ? '2.5.0-preview.58' : expected(constant);
+  assert.equal(pkg.version, version);
 }
 const fingerprint = () => {
   const hash = createHash('sha256');
@@ -33,31 +38,31 @@ const fingerprint = () => {
   walk('');
   return { hash: hash.digest('hex'), entries };
 };
-const phase = process.argv[2];
 const agentEntry = join(prefix, 'lib/node_modules/@sleep2agi/agent-node/dist/cli.js');
 if (phase === 'before-partial') {
   // Deliberate corruption only inside this fresh disposable test container.
   unlinkSync(agentEntry);
 }
-if (phase === 'before' || phase === 'before-partial') {
+if (phase.startsWith('before-')) {
   writeFileSync('/evidence/private-prefix-before.json', JSON.stringify(fingerprint()));
 } else {
-  assert.ok(['empty', 'exact', 'partial'].includes(phase));
   assert.ok(existsSync(join(root, 'local-hub/data/commhub.db')), 'real bundled Hub database');
   // Native smoke itself asserts successful Hub supervisor registration and
   // matching node_id/profile on rescan. Do not dump test auth configuration.
-  if (phase === 'exact' || phase === 'partial') {
+  if (phase !== 'empty') {
     const before = JSON.parse(readFileSync('/evidence/private-prefix-before.json', 'utf8'));
     const after = fingerprint();
     const changed = [...new Set([...Object.keys(before.entries), ...Object.keys(after.entries)])].filter(path => JSON.stringify(before.entries[path]) !== JSON.stringify(after.entries[path]));
     if (changed.length) console.error('Changed prefix entries (hashes/modes only):', changed.slice(0, 20).map(path => ({ path, before: before.entries[path], after: after.entries[path] })));
-    assert.equal(after.hash, before.hash, 'existing exact package contents/modes/links unchanged');
+    assert.equal(after.hash, before.hash, 'existing package contents/modes/links unchanged');
   }
   if (phase === 'partial') {
     assert.ok(!existsSync(agentEntry), 'broken entry was not silently reinstalled');
+  }
+  if (['partial', 'old-cli', 'old-node'].includes(phase)) {
     assert.ok(!existsSync(join(root, 'local-daemon/home/.anet/config.json')), 'no private Hub credentials written');
     assert.ok(!existsSync(join(root, 'local-daemon/.anet/nodes/local-daemon/config.json')), 'no daemon profile registered');
     assert.ok(!existsSync(join(root, 'local-daemon/start.log')), 'daemon launch not reached');
   }
-  console.log(`PASS: ${process.argv[2]} exact package versions; existing-prefix integrity when applicable`);
+  console.log(`PASS: ${phase} expected package versions; existing-prefix integrity when applicable`);
 }
