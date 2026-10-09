@@ -763,8 +763,10 @@ export default function CreateNodeWizardScreen({ cfg, daemon, onBack, onExit, de
           {nextStep !== null ? (
             <Pressable
               testID="create-node-next"
+              accessibilityRole="button"
+              aria-disabled={!canNext}
               disabled={!canNext}
-              onPress={() => setStep(nextStep)}
+              onPress={() => { if (canNext) setStep(nextStep); }}
               style={({ pressed }) => [
                 styles.primaryBtn,
               desktop && styles.btnWide,
@@ -779,6 +781,8 @@ export default function CreateNodeWizardScreen({ cfg, daemon, onBack, onExit, de
           ) : (
             <Pressable
               testID="create-node-submit"
+              accessibilityRole="button"
+              aria-disabled={!canSubmit}
               disabled={!canSubmit}
               onPress={handleSubmit}
               style={({ pressed }) => [
