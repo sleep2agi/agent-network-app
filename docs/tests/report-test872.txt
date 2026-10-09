@@ -1,0 +1,54 @@
+Linux credential baseline (#843 / #872) — 2026-10-09 21:07 CST
+
+RESULT: historical defect reproduced; NOT a Linux credential fix or release.
+App main inspected: fcd13d339eedb323e98e8c1617c4852f15409f59
+Probe source: b4b454770fdfedbdb0c462edaac594f8775d5155
+Scope: keyring dependency with the Linux feature selection from that app SHA.
+No Tauri compilation, native UI, package installation, actual token, production
+store, live Hub, or host session bus is involved.
+
+Inputs:
+- keyring 3.6.3 (default-features=false), log 0.4.34; Cargo.lock includes
+  Windows-only zeroize 1.9.0. cargo build --locked accepted the lock unchanged.
+- Cargo.lock SHA256:
+  905f17049efc7b517ab71ffe2066e13d4a288c12878f5c16d4b888db2e11504c
+- rust:1.85.1-slim-bookworm image digest:
+  sha256:9f841bbe9e7d8e37ceb96ed907265a3a0df7f44e3737d0b100e7907a679acb36
+- Probe image index:
+  sha256:4e9ebd4f01fefcb9862dde07223d2bc9dfabf33eb5fc22be6cffb4b3e12ad975
+- Probe image config:
+  sha256:bdfceb3abc1d305cbb8a9ad79f3f320a48f45d12cf03a7e1eb9037dd7a4b4580
+
+Commands, from repository root:
+sg docker -c 'docker build -t anet-linux-credential:baseline tests/linux-credential-baseline'
+sg docker -c 'docker run --name anet-linux-credential-baseline --network none --read-only --cap-drop ALL --security-opt no-new-privileges anet-linux-credential:baseline'
+sg docker -c 'docker run --name anet-linux-credential-negative --network none --read-only --cap-drop ALL --security-opt no-new-privileges anet-linux-credential:baseline --require-persistence'
+
+Build: exit 0, cargo build --locked --release; keyring/log/probe compiled.
+Positive diagnostic, 2026-10-09T13:07:50Z, exit 0:
+  same-entry round trip: PASS (not proof of native storage)
+  backend_is_mock=true; new_entry_missing=true; child_exit=Some(42)
+  BASELINE REPRODUCED: credentials are lost outside the original Entry
+
+Negative persistence acceptance, 2026-10-09T13:07:51Z, exit 101:
+  same-entry round trip: PASS (not proof of native storage)
+  backend_is_mock=true; new_entry_missing=true; child_exit=Some(42)
+  PERSISTENCE REQUIRED: mock / lost credentials
+This is the intended assertion failure, not a missing executable or build error.
+Both probes run non-root UID 10001, read-only, no network or capabilities, without
+mounted host files. The original Entry is deleted and NoEntry checked before
+the persistence assertion, using only fixed dummy data.
+
+Conclusion:
+The app has a keyring crate dependency; the earlier interpretation that the
+Linux crate itself was missing was incorrect. The missing part is an enabled
+Linux backend. The same-Entry round-trip assertion can pass with the mock store;
+it does not establish native persistence. Product call sites construct a fresh
+Entry for subsequent credential access, so this is a release-blocking gap for
+the intended Linux support, not grounds to announce a shipped Linux regression.
+
+Follow-up #877: actual persistent backend, lockfile, isolated Secret Service,
+cross-process positive tests, fail-closed service absence/locked-store tests,
+and existing-platform compatibility. Full Linux packaging, real desktop E2E,
+main-SHA release and anet.sh download verification remain separate outstanding
+acceptance criteria. See tests/linux-credential-baseline/README.md.
