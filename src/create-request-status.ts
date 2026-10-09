@@ -4,6 +4,7 @@
 import { describeWorkdirError } from './create-node-workdir';
 import { describeCopresenceError } from './create-node-request';
 import { describeNodeNameRejection } from './node-name';
+import { describeOpenCodeCreateError } from './opencode-create-options';
 
 export type CreateRequestStatus = 'pending' | 'delivered' | 'started' | 'failed' | 'rejected' | 'runtime_capability_check_failed' | string;
 
@@ -30,6 +31,8 @@ export function createRequestVerdict(row: CreateRequestRow | null | undefined, n
   const status = String(row.status);
   if (FAILED.has(status)) {
     const why = (row.error ?? '').trim();
+    const opencode = describeOpenCodeCreateError({ error: why });
+    if (opencode) return { kind: 'failed', text: `${opencode}（${why}）` };
     // Codex 共存:老 Hub/daemon 不认 flags.copresence、或目标机缺 tmux/codex/codex 登录 → 说人话,原文附在后面。
     const co = describeCopresenceError({ error: why, status, runtime: row.runtime });
     if (co) return { kind: 'failed', text: co };

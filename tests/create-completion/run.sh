@@ -7,4 +7,5 @@ echo "source=$SOURCE_COMMIT; pure creation-status and request-contract tests onl
 bun src/create-request-status.test.ts
 bun src/create-node-request.test.ts
 bun src/create-node-steps.test.ts
+bun src/opencode-create-options.test.ts
 echo 'PASS: not a rendered-client or native OpenCode E2E acceptance'

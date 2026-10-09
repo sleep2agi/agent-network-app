@@ -8,6 +8,7 @@
 // 而不是静默丢掉字段、照样建一个无头节点。
 
 import { normalizeNodeName } from './node-name';
+import { opencodeCreateFlags, type OpenCodeGeneration } from './opencode-create-options';
 
 /** 只有这些 runtime 发 flags.copresence:true。Hub 对其它 runtime 会回 flag_not_applicable_to_runtime。 */
 export const COPRESENCE_FLAG_RUNTIMES: readonly string[] = ['codex-app-server'];
@@ -70,6 +71,8 @@ export interface CreateNodeSpecInput {
   budget: string;
   /** workdirForRequest(...) 的结果:{} 或 { workdir }。 */
   workdirField: { workdir?: string };
+  opencodeGeneration?: OpenCodeGeneration;
+  opencodeUnsafeTools?: boolean;
 }
 
 export interface CreateNodeSpec {
@@ -91,6 +94,7 @@ export function buildCreateNodeSpec(i: CreateNodeSpecInput): CreateNodeSpec {
     ...(params.includes('maxTurns') && numOrUndef(i.maxTurns) !== undefined ? { maxTurns: numOrUndef(i.maxTurns) } : {}),
     ...(params.includes('budget') && numOrUndef(i.budget) !== undefined ? { budget: numOrUndef(i.budget) } : {}),
     ...copresenceFlags(i.runtimeId),
+    ...opencodeCreateFlags({ ...i, model: model ?? '' }),
   };
   return {
     // #652 —— Hub 存的是 trim + NFC 后的名字(normalizeNodeName,与 Hub/daemon 同一个函数)。

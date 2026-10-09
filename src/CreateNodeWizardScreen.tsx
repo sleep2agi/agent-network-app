@@ -13,6 +13,7 @@ import { defaultWorkdir, describeWorkdirError, randomHex6, workdirError, workdir
 import { checkNodeName, describeNodeNameRejection, folderError, normalizeNodeName, NODE_NAME_HINT } from './node-name';
 import { buttonStyle, buttonTextStyle, elevated } from './elevation';
 import { readinessFor, readinessSelectable } from './runtime-readiness';
+import { describeOpenCodeCreateError, opencodeCreateError, OPENCODE_V2_WARNING, type OpenCodeGeneration } from './opencode-create-options';
 
 // #338 RFC-026 §3.1 — mobile create-node wizard rest (Plan B).
 // Up to 5 post-picker steps: ① name ② runtime ③ model ④ flags ⑤ confirm.
@@ -111,6 +112,8 @@ export default function CreateNodeWizardScreen({ cfg, daemon, onBack, onExit, de
   const [permissionMode, setPermissionMode] = useState('default');
   const [maxTurns, setMaxTurns] = useState('');
   const [budget, setBudget] = useState('');
+  const [opencodeGeneration, setOpenCodeGeneration] = useState<OpenCodeGeneration>('v1');
+  const [opencodeUnsafeTools, setOpenCodeUnsafeTools] = useState(false);
   // 工作目录:null = 没改过,跟着名字走(<root>/<name>);改过之后固定为用户填的值。
   const [workdirEdited, setWorkdirEdited] = useState<string | null>(null);
   const [workdirOpen, setWorkdirOpen] = useState(false);
@@ -242,18 +245,19 @@ export default function CreateNodeWizardScreen({ cfg, daemon, onBack, onExit, de
   // #652 —— 文件夹(工作目录最后一段):默认 = 名字的 ASCII slug(中文转拼音);在第 1 步可改,规则 ^[a-z][a-z0-9-]{0,63}$。
   const folder = folderEdited ?? workdirSlug(name, workdirFallback);
   const folderErr = workdirRoot && folderEdited !== null ? folderError(folderEdited) : null;
+  const openCodeError = opencodeCreateError({ runtimeId, opencodeGeneration, opencodeUnsafeTools, model });
   const canNext =
     hasUsableRuntime &&
     (
       (cur === 'name' && nameValid && !folderErr) ||
-      (cur === 'runtime' && isRuntimeAllowed(runtimeId)) ||
-      cur === 'model' || cur === 'params'
+      (cur === 'runtime' && isRuntimeAllowed(runtimeId) && (runtimeId !== 'opencode-cli' || opencodeGeneration !== 'v2' || opencodeUnsafeTools)) ||
+      (cur === 'model' && !openCodeError) || cur === 'params'
     );
   const busy = phase === 'creating' || phase === 'awaiting_register';
   // 确认页上显式改过完整路径(workdirEdited)优先;否则 <root>/<文件夹>。
   const workdir = workdirEdited ?? (workdirRoot ? defaultWorkdir(workdirRoot, folder) : '');
   const workdirErr = workdirRoot ? workdirError(workdir, workdirRoot) : null;
-  const canSubmit = !workdirErr;
+  const canSubmit = !workdirErr && !openCodeError && nameValid && isRuntimeAllowed(runtimeId);
 
   // ── handlers (no hooks below this line) ────────────────────────────
   // One runtime choice row. `nested` = it lives inside a 「高级」 disclosure:
@@ -278,6 +282,8 @@ export default function CreateNodeWizardScreen({ cfg, daemon, onBack, onExit, de
           onPress={() => {
             if (allowed) {
               setRuntimeId(r.id);
+              setOpenCodeGeneration('v1');
+              setOpenCodeUnsafeTools(false);
               // Reset model to the FIRST of the new runtime
               // (never ''). Same reasoning as initial state
               // — hub schema requires non-empty model.
@@ -330,12 +336,14 @@ export default function CreateNodeWizardScreen({ cfg, daemon, onBack, onExit, de
     );
   };
   const handleSubmit = async () => {
+    if (!canSubmit || busy) return;
     setPhase('creating');
     setMsg('');
     // flags.copresence:true 只给「Codex（TUI 共存）」(codex-app-server),见 create-node-request.ts。
     const node_spec: CreateNodeRequest['node_spec'] = buildCreateNodeSpec({
       name, runtimeId, model, runtimeModels: runtime.models,
       permissionMode, maxTurns, budget,
+      opencodeGeneration, opencodeUnsafeTools,
       workdirField: workdirForRequest(workdirRoot, workdir),
     });
     submittedSpec.current = node_spec;
@@ -353,7 +361,7 @@ export default function CreateNodeWizardScreen({ cfg, daemon, onBack, onExit, de
       setMsg(`服务器未就绪：${res.error}`);
     } else {
       setPhase('error');
-      setMsg(`创建失败：${describeNodeNameRejection(res.error, name, 'hub') ?? describeCopresenceError({ error: res.error, field: res.field, runtime: runtimeId }) ?? describeWorkdirError(res.error) ?? res.error}`);
+      setMsg(`创建失败：${describeOpenCodeCreateError(res) ?? describeNodeNameRejection(res.error, name, 'hub') ?? describeCopresenceError({ error: res.error, field: res.field, runtime: runtimeId }) ?? describeWorkdirError(res.error) ?? res.error}`);
     }
   };
 
@@ -439,7 +447,7 @@ export default function CreateNodeWizardScreen({ cfg, daemon, onBack, onExit, de
           {phase === 'creating'
             ? '正在下发创建请求…'
             : phase === 'awaiting_register'
-              ? `正在监测 ${normalizeNodeName(name)} 注册…（最长 24s）`
+              ? `正在确认 ${normalizeNodeName(name)} 启动…（约 45s）${msg ? `\n${msg}` : ''}`
               : phase === 'done' && childUp
                 ? `✓ ${normalizeNodeName(name)} 已上线`
                 : msg}
@@ -533,6 +541,31 @@ export default function CreateNodeWizardScreen({ cfg, daemon, onBack, onExit, de
                 </Fragment>
               );
             })}
+            {runtimeId === 'opencode-cli' ? (
+              <View testID="opencode-generation-options" style={styles.section}>
+                <Text style={styles.label}>OpenCode 代际</Text>
+                {(['v1', 'v2'] as const).map(g => (
+                  <Pressable key={g} testID={`opencode-generation-${g}`} accessibilityRole="radio"
+                    accessibilityState={{ checked: opencodeGeneration === g }}
+                    onPress={() => { setOpenCodeGeneration(g); setOpenCodeUnsafeTools(false); }}
+                    style={[styles.choiceRow, opencodeGeneration === g && styles.choiceRowSelected]}>
+                    <Text style={styles.choiceText}>{g === 'v1' ? 'V1（兼容默认）' : 'V2（实验性 TUI 共存）'}</Text>
+                  </Pressable>
+                ))}
+                {opencodeGeneration === 'v2' ? (
+                  <>
+                    <Text testID="opencode-v2-warning" style={styles.hint}>{OPENCODE_V2_WARNING}</Text>
+                    <Text style={styles.hint}>runtime 可用性标记不代表 V2 就绪；目标 daemon 仍会校验准确版本、授权和启动结果。</Text>
+                    <Pressable testID="opencode-v2-consent" accessibilityRole="checkbox"
+                      accessibilityState={{ checked: opencodeUnsafeTools }}
+                      onPress={() => setOpenCodeUnsafeTools(v => !v)} style={styles.choiceRow}>
+                      <Ionicons name={opencodeUnsafeTools ? 'checkbox' : 'square-outline'} size={20} color={colors.accent} />
+                      <Text style={[styles.choiceText, { flex: 1 }]}>我了解风险，仅用于可信任务，允许所有本地工具</Text>
+                    </Pressable>
+                  </>
+                ) : null}
+              </View>
+            ) : null}
           </View>
         )}
 
@@ -557,6 +590,16 @@ export default function CreateNodeWizardScreen({ cfg, daemon, onBack, onExit, de
                 </Pressable>
               ))}
             </View>
+            {runtimeId === 'opencode-cli' && opencodeGeneration === 'v2' ? (
+              <View style={styles.section}>
+                <Text style={styles.label}>目标机器已配置的 provider/model</Text>
+                <TextInput testID="opencode-v2-model" value={model} onChangeText={setModel}
+                  autoCapitalize="none" autoCorrect={false} placeholder="provider/model" style={styles.input} />
+                <Text testID="opencode-v2-model-hint" style={[styles.hint, !!openCodeError && styles.hintErr]}>
+                  {openCodeError ?? '上方是建议值，不保证可用；模型与登录凭据以目标机器配置为准。这里不收集密钥。'}
+                </Text>
+              </View>
+            ) : null}
           </View>
         )}
 
@@ -639,6 +682,9 @@ export default function CreateNodeWizardScreen({ cfg, daemon, onBack, onExit, de
               <SummaryRow k="名字" v={normalizeNodeName(name) || '—'} />
               <Divider />
               <SummaryRow k="Runtime" v={runtimeDisplayLabel(RUNTIMES, runtime)} />
+              {runtimeId === 'opencode-cli' ? (
+                <><Divider /><SummaryRow k="代际" v={opencodeGeneration === 'v2' ? 'V2 · 实验性 TUI 共存' : 'V1 · 兼容默认'} /></>
+              ) : null}
               <Divider />
               <SummaryRow k="模型" v={model || runtime.models[0] || '跟随宿主登录'} />
               {params.includes('permissionMode') ? (
@@ -694,6 +740,9 @@ export default function CreateNodeWizardScreen({ cfg, daemon, onBack, onExit, de
                 </>
               ) : null}
             </View>
+            {runtimeId === 'opencode-cli' && opencodeGeneration === 'v2' ? (
+              <Text testID="opencode-v2-confirm-warning" style={styles.hint}>{OPENCODE_V2_WARNING} 已显式允许所有本地工具。</Text>
+            ) : null}
           </View>
         )}
       </>
