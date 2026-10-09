@@ -76,8 +76,13 @@ try {
     await page.goto(`${web.url}?safeAreaSim=0,0,0,0`);
     await page.waitForFunction(() => !!window.__anetLayoutSweep);
     await open(page);
+    assert.equal((await page.getByTestId('runtime-row-opencode-cli').innerText()).includes('TUI 共存'), false,
+      'shared OpenCode runtime label must not promise TUI copresence for V1');
+    assert.equal(await page.getByTestId('opencode-generation-v1').innerText(), 'V1（兼容默认 · headless）');
+    assert.match(await page.getByTestId('opencode-v1-mode-note').innerText(), /不请求 TUI 共存/);
     assert.equal(await page.getByTestId('opencode-generation-v1').getAttribute('aria-checked'), 'true');
     await chooseV2(page);
+    assert.equal(await page.getByTestId('opencode-v1-mode-note').count(), 0);
     await page.getByTestId('opencode-generation-v1').click(); await chooseV2(page);
     await page.getByTestId('runtime-row-codex-app-server').click();
     await page.getByTestId('runtime-row-opencode-cli').click();
@@ -127,13 +132,17 @@ try {
     await page.getByText(/不会自动改为 V1/).first().waitFor();
     assert.equal(await page.evaluate(() => window.__createCalls.length), 1);
     console.log(`PASS ${tag}: old Hub rejection displayed, no automatic downgrade/retry`);
-    await open(page); await next(page); await next(page); const v1 = await submit(page);
+    await open(page); await next(page); await next(page);
+    await page.getByText('V1（兼容默认 · headless）', { exact: true }).waitFor();
+    assert.equal(await page.getByText('OpenCode（TUI 共存）', { exact: true }).count(), 0);
+    await page.screenshot({ path: `${process.env.OUT}/${tag}-v1-mode-confirm.png` });
+    const v1 = await submit(page);
     assert.equal(v1.flags?.opencodeGeneration, undefined); assert.equal(v1.flags?.opencodeUnsafeTools, undefined);
     await page.getByText('✓ v2-fixture 已上线', { exact: true }).waitFor({ timeout: 7000 });
     await open(page); await chooseV2(page);
     await page.getByTestId('runtime-row-codex-app-server').click(); await next(page);
     const codex = await submit(page); assert.deepEqual(codex.flags, { copresence: true });
-    console.log(`PASS ${tag}: V1 completion and Codex payload unchanged; consent does not leak`);
+    console.log(`PASS ${tag}: V1 headless labels and completion, Codex payload unchanged; consent does not leak`);
     assert.deepEqual(errors, []); await ctx.close();
   }
   console.log('PASS rendered V2 creation UI; fixture Hub only, no native app or production acceptance');
