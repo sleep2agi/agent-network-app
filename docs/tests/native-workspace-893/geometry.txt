@@ -1,0 +1,3 @@
+Window 2097155
+  Position: 0,0 (screen: 0)
+  Geometry: 1200x800
