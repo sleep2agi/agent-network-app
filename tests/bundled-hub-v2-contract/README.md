@@ -18,6 +18,8 @@ V1 argv, precise missing-consent refusal, exact V2 argv (unsafe opt-in is a
 Four source files match main ancestor edc68a4ca87bbb7ca4944093e8ff113a17078624;
 their SHA256 values are asserted. npm metadata did not expose gitHead: do not
 represent this limited file comparison as full release provenance verification.
+The separate `tests/bundled-hub-provenance` suite compares every shipped file;
+neither suite claims publisher attestation or substitutes for runtime acceptance.
 
 This gate is necessary, not sufficient: it does not execute migration, HTTP
 acknowledgments, a daemon, or native UI. The package pin and Rust expected Hub
