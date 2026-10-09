@@ -3,7 +3,7 @@ import { ActivityIndicator, KeyboardAvoidingView, Platform, Pressable, ScrollVie
 import { Text, TextInput } from './ui-text';
 import { Ionicons } from './icons';
 import { createNode, CreateNodeRequest, fetchStatus, HostSupervisorDaemon, HubConfig, Session, fetchCreateRequestStatus } from './api';
-import { createRequestVerdict, timeoutMessage, type CreateRequestVerdict } from './create-request-status';
+import { creationConfirmed, createRequestVerdict, timeoutMessage, type CreateRequestVerdict } from './create-request-status';
 import { colors, onThemeChange, spacing, radius, type as typeScale } from './theme';
 import { advancedExpanded, advancedRuntimesOf, primaryRuntimes, runtimeDisplayLabel, showsAdvancedToggle, type WizardRuntime } from './wizard-runtime-groups';
 import { PANE_BACK_TEST_ID, paneShowsBack } from './pane-header';
@@ -20,9 +20,8 @@ import { readinessFor, readinessSelectable } from './runtime-readiness';
 // its info is one line on the confirm page. The step table lives in create-node-steps.ts.
 // On submit POST /mcp create_node, then poll fetchStatus until the
 // child alias shows up in the session list. A `ok:true` from the RPC
-// means "hub accepted the call", not "the child is running" — we
-// don't flip to "✓ 已上线" until fetchStatus confirms the alias
-// actually registered.
+// means "hub accepted the call", not "the child is running". Success needs
+// the exact request/node identity; OpenCode additionally needs daemon launch proof.
 //
 // React rules of hooks compliance: ALL useState/useEffect/useRef
 // declared BEFORE any conditional early return — guards against the
@@ -123,8 +122,8 @@ export default function CreateNodeWizardScreen({ cfg, daemon, onBack, onExit, de
   const [phase, setPhase] = useState<Phase>('form');
   const [msg, setMsg] = useState('');
 
-  // childUp = the child alias has appeared in fetchStatus → success
-  // confirmed (claim=reality). We poll up to ~24s before giving up
+  // childUp = this request's node and completion evidence are confirmed.
+  // We poll up to ~45s before giving up
   // and showing an "unconfirmed" message — matches dashboard wizard.
   const [childUp, setChildUp] = useState(false);
   const [requestId, setRequestId] = useState<string | null>(null);
@@ -136,50 +135,63 @@ export default function CreateNodeWizardScreen({ cfg, daemon, onBack, onExit, de
     return () => { pollAlive.current = false; };
   }, []);
 
-  // Post-dispatch poll: every 1.5s look at fetchStatus.sessions for the
-  // child's alias. Stop after 16 tries (~24s) or when found.
+  // Request failure takes precedence over roster visibility. Never reuse a
+  // previous tick's row after a transient read failure.
   useEffect(() => {
     if (phase !== 'awaiting_register' || childUp) return;
     let tries = 0;
+    let active = true;
+    let timer: ReturnType<typeof setTimeout>;
+    const alive = () => active && pollAlive.current;
     const want = normalizeNodeName(name);
     let lastVerdict: CreateRequestVerdict = { kind: 'unknown' };
     const tick = async () => {
-      if (!pollAlive.current) return;
+      if (!alive()) return;
       tries += 1;
-      try {
-        const data = await fetchStatus(cfg);
-        const list: Session[] = Array.isArray(data?.sessions) ? data.sessions : [];
-        if (pollAlive.current && list.some(s => s?.alias === want)) {
-          setChildUp(true);
-          setPhase('done');
-          return;
-        }
-      } catch { /* transient — keep polling */ }
-      // 同一轮顺带问 hub:daemon 对这次 create 说了什么。它明确说失败就别再等了,把原因摆出来
-      // (Vincent 2026-09-07:Mac 上 opencode 共存起不来,向导只会说「24s 没注册」)。老 hub 404 → unknown。
       if (requestId) {
         try {
-          lastVerdict = createRequestVerdict(await fetchCreateRequestStatus(cfg, requestId), want);
-          if (pollAlive.current && lastVerdict.kind === 'failed') {
+          const row = await fetchCreateRequestStatus(cfg, requestId);
+          if (!alive()) return;
+          lastVerdict = createRequestVerdict(row, want);
+          if (lastVerdict.kind === 'failed') {
             setPhase('error');
             setMsg(`创建失败:${lastVerdict.text}`);
             return;
           }
-          if (pollAlive.current && lastVerdict.kind === 'waiting') setMsg(lastVerdict.text);
-        } catch { /* 读不到就按原来的方式等 */ }
+          if (lastVerdict.kind === 'waiting') setMsg(lastVerdict.text);
+          const data = await fetchStatus(cfg);
+          if (!alive()) return;
+          const list: Session[] = Array.isArray(data?.sessions) ? data.sessions : [];
+          // Re-read after the roster fetch: a late daemon failure during that
+          // await must override early registration in the same tick.
+          const latest = await fetchCreateRequestStatus(cfg, requestId);
+          if (!alive()) return;
+          lastVerdict = createRequestVerdict(latest, want);
+          if (lastVerdict.kind === 'failed') {
+            setPhase('error');
+            setMsg(`创建失败:${lastVerdict.text}`);
+            return;
+          }
+          if (creationConfirmed(latest, { requestId, name: want, runtime: runtimeId }, list)) {
+            setChildUp(true);
+            setPhase('done');
+            return;
+          }
+          if (lastVerdict.kind === 'waiting') setMsg(lastVerdict.text);
+        } catch { /* Transient: do not infer success from the roster alone. */ }
       }
-      if (pollAlive.current && tries < 16) {
-        setTimeout(tick, 1500);
-      } else if (pollAlive.current) {
+      if (alive() && tries < 30) {
+        timer = setTimeout(tick, 1500);
+      } else if (alive()) {
         // Timeout — don't flip to error (hub may have accepted the dispatch
         // but the child is slow to bootstrap). Honest message.
         setPhase('done');
         setMsg(timeoutMessage(lastVerdict));
       }
     };
-    const t = setTimeout(tick, 1200);
-    return () => { clearTimeout(t); };
-  }, [phase, childUp, cfg, name, requestId]);
+    timer = setTimeout(tick, 1200);
+    return () => { active = false; clearTimeout(timer); };
+  }, [phase, childUp, cfg, name, requestId, runtimeId]);
 
   // Derived: runtime details + nav gates
   const runtime = RUNTIMES.find(r => r.id === runtimeId) || RUNTIMES[0];
