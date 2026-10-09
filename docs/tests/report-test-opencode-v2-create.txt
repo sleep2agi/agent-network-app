@@ -104,3 +104,24 @@ Raw full output retained by docker logs of the named container. This is local
 Linux Docker acceptance, not proof of Windows CI or native WebView acceptance.
 The exported product bundle remains the previously tested 1ef7f77 source;
 neither this test-only correction nor this report is a release.
+
+2026-10-09 16:37 CST: real-client confirmation fix and repeat gates
+Product/test source 19595b59095ac822f32f673494e7bb77ed898d17.
+Real Hub integration exposed that unfiltered /api/status?light=1 omits node_id.
+The wizard's exact-identity check therefore never succeeded, even with real
+daemon launch proof. Use existing network/alias-scoped full node details;
+still compare exact request/child identity, retain late-failure precedence.
+The rendered fixture now reproduces the actual light/full projection difference.
+Container anet-app-v2-full-unit-195: 377/377 files PASS, exit 0.
+Image sha256:ac8e30e43bd1bbd60b78e9cf488065cec057f93f44ccd5ab8830e9d5ab7d4eb8.
+Container anet-app-v2-ui-195: typecheck/export and all four desktop/phone,
+light/dark rendered V2 consent/confirmation/refusal/legacy cases PASS, exit 0.
+Image sha256:151d5865c5396a696bcfe88b4f4a5218d63c6aefaca009ccafd8f4557060309a.
+Both builds/run SHA checks use the exact 19595b5 full SHA above; no source mounts.
+Real-client integration also PASS with runtime/Hub/CLI test branch
+94190f52cc6cae184a46cac33aa55e6c72b75b42, container anet-test829-client-941.
+Actual authenticated Hub/daemon/V2, rendered client creation confirmed, task
+receipt/TUI, actual API stop/restart/new task all passed, container exit 0.
+Details in agent-network docs/tests/report-test829-real-client.txt. Tauri IPC
+adapted in Chromium, Linux root container and loopback model stub; not native
+WebView/platform/provider or formal release acceptance. No production changes.
