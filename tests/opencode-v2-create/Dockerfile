@@ -3,7 +3,7 @@
 ARG DEPENDENCY_IMAGE=anet-people-loading:review2
 FROM ${DEPENDENCY_IMAGE}
 WORKDIR /app
-RUN cp package-lock.json /tmp/dependency-lock.json
+RUN cp package-lock.json /tmp/dependency-lock.json && rm -rf /app/src /app/tests /app/scripts /app/.github
 COPY . .
 RUN cmp package-lock.json /tmp/dependency-lock.json
 ARG SOURCE_COMMIT
