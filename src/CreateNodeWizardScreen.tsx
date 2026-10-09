@@ -2,8 +2,8 @@ import { Fragment, useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { Text, TextInput } from './ui-text';
 import { Ionicons } from './icons';
-import { createNode, CreateNodeRequest, fetchStatus, HostSupervisorDaemon, HubConfig, Session, fetchCreateRequestStatus } from './api';
-import { createRequestVerdict, timeoutMessage, type CreateRequestVerdict } from './create-request-status';
+import { createNode, CreateNodeRequest, fetchNodeStatus, HostSupervisorDaemon, HubConfig, Session, fetchCreateRequestStatus } from './api';
+import { creationConfirmed, createRequestVerdict, timeoutMessage, type CreateRequestVerdict } from './create-request-status';
 import { colors, onThemeChange, spacing, radius, type as typeScale } from './theme';
 import { advancedExpanded, advancedRuntimesOf, primaryRuntimes, runtimeDisplayLabel, showsAdvancedToggle, type WizardRuntime } from './wizard-runtime-groups';
 import { PANE_BACK_TEST_ID, paneShowsBack } from './pane-header';
@@ -13,16 +13,16 @@ import { defaultWorkdir, describeWorkdirError, randomHex6, workdirError, workdir
 import { checkNodeName, describeNodeNameRejection, folderError, normalizeNodeName, NODE_NAME_HINT } from './node-name';
 import { buttonStyle, buttonTextStyle, elevated } from './elevation';
 import { readinessFor, readinessSelectable } from './runtime-readiness';
+import { describeOpenCodeCreateError, opencodeCreateError, OPENCODE_V2_WARNING, type OpenCodeGeneration } from './opencode-create-options';
 
 // #338 RFC-026 §3.1 — mobile create-node wizard rest (Plan B).
 // Up to 5 post-picker steps: ① name ② runtime ③ model ④ flags ⑤ confirm.
 // #614: a step with nothing to choose (model / flags for the co-presence runtimes) is not shown —
 // its info is one line on the confirm page. The step table lives in create-node-steps.ts.
-// On submit POST /mcp create_node, then poll fetchStatus until the
+// On submit POST /mcp create_node, then poll identity-bearing node status until the
 // child alias shows up in the session list. A `ok:true` from the RPC
-// means "hub accepted the call", not "the child is running" — we
-// don't flip to "✓ 已上线" until fetchStatus confirms the alias
-// actually registered.
+// means "hub accepted the call", not "the child is running". Success needs
+// the exact request/node identity; V2 additionally needs daemon launch proof.
 //
 // React rules of hooks compliance: ALL useState/useEffect/useRef
 // declared BEFORE any conditional early return — guards against the
@@ -112,6 +112,8 @@ export default function CreateNodeWizardScreen({ cfg, daemon, onBack, onExit, de
   const [permissionMode, setPermissionMode] = useState('default');
   const [maxTurns, setMaxTurns] = useState('');
   const [budget, setBudget] = useState('');
+  const [opencodeGeneration, setOpenCodeGeneration] = useState<OpenCodeGeneration>('v1');
+  const [opencodeUnsafeTools, setOpenCodeUnsafeTools] = useState(false);
   // 工作目录:null = 没改过,跟着名字走(<root>/<name>);改过之后固定为用户填的值。
   const [workdirEdited, setWorkdirEdited] = useState<string | null>(null);
   const [workdirOpen, setWorkdirOpen] = useState(false);
@@ -123,11 +125,12 @@ export default function CreateNodeWizardScreen({ cfg, daemon, onBack, onExit, de
   const [phase, setPhase] = useState<Phase>('form');
   const [msg, setMsg] = useState('');
 
-  // childUp = the child alias has appeared in fetchStatus → success
-  // confirmed (claim=reality). We poll up to ~24s before giving up
+  // childUp = this request's node and completion evidence are confirmed.
+  // We poll up to ~45s before giving up
   // and showing an "unconfirmed" message — matches dashboard wizard.
   const [childUp, setChildUp] = useState(false);
   const [requestId, setRequestId] = useState<string | null>(null);
+  const submittedSpec = useRef<CreateNodeRequest['node_spec'] | null>(null);
   const pollAlive = useRef(true);
 
   // Stop polling on unmount + on screen exit
@@ -136,50 +139,73 @@ export default function CreateNodeWizardScreen({ cfg, daemon, onBack, onExit, de
     return () => { pollAlive.current = false; };
   }, []);
 
-  // Post-dispatch poll: every 1.5s look at fetchStatus.sessions for the
-  // child's alias. Stop after 16 tries (~24s) or when found.
+  // Request failure takes precedence over roster visibility. Never reuse a
+  // previous tick's row after a transient read failure.
   useEffect(() => {
     if (phase !== 'awaiting_register' || childUp) return;
-    let tries = 0;
+    let active = true;
+    let timer: ReturnType<typeof setTimeout>;
+    const alive = () => active && pollAlive.current;
     const want = normalizeNodeName(name);
     let lastVerdict: CreateRequestVerdict = { kind: 'unknown' };
+    // Bound elapsed waiting independently of slow reads (including response
+    // bodies). Expiry invalidates in-flight results; it does not cancel the
+    // accepted server-side creation or automatically submit another request.
+    const deadlineTimer = setTimeout(() => {
+      if (!alive()) return;
+      active = false;
+      clearTimeout(timer);
+      setPhase('done');
+      setMsg(timeoutMessage(lastVerdict));
+    }, 45_000);
     const tick = async () => {
-      if (!pollAlive.current) return;
-      tries += 1;
-      try {
-        const data = await fetchStatus(cfg);
-        const list: Session[] = Array.isArray(data?.sessions) ? data.sessions : [];
-        if (pollAlive.current && list.some(s => s?.alias === want)) {
-          setChildUp(true);
-          setPhase('done');
-          return;
-        }
-      } catch { /* transient — keep polling */ }
-      // 同一轮顺带问 hub:daemon 对这次 create 说了什么。它明确说失败就别再等了,把原因摆出来
-      // (Vincent 2026-09-07:Mac 上 opencode 共存起不来,向导只会说「24s 没注册」)。老 hub 404 → unknown。
+      if (!alive()) return;
       if (requestId) {
         try {
-          lastVerdict = createRequestVerdict(await fetchCreateRequestStatus(cfg, requestId), want);
-          if (pollAlive.current && lastVerdict.kind === 'failed') {
+          const row = await fetchCreateRequestStatus(cfg, requestId);
+          if (!alive()) return;
+          lastVerdict = createRequestVerdict(row, want);
+          if (lastVerdict.kind === 'failed') {
             setPhase('error');
             setMsg(`创建失败:${lastVerdict.text}`);
             return;
           }
-          if (pollAlive.current && lastVerdict.kind === 'waiting') setMsg(lastVerdict.text);
-        } catch { /* 读不到就按原来的方式等 */ }
+          if (lastVerdict.kind === 'waiting') setMsg(lastVerdict.text);
+          // Unfiltered light status intentionally omits node_id. Use the
+          // existing scoped details read, then still verify exact child ID.
+          const data = await fetchNodeStatus(cfg, want);
+          if (!alive()) return;
+          const list: Session[] = Array.isArray(data?.sessions) ? data.sessions : [];
+          // Re-read after the roster fetch: a late daemon failure during that
+          // await must override early registration in the same tick.
+          const latest = await fetchCreateRequestStatus(cfg, requestId);
+          if (!alive()) return;
+          lastVerdict = createRequestVerdict(latest, want);
+          if (lastVerdict.kind === 'failed') {
+            setPhase('error');
+            setMsg(`创建失败:${lastVerdict.text}`);
+            return;
+          }
+          if (creationConfirmed(latest, {
+            requestId, name: want, runtime: runtimeId,
+            // Use the submitted request, not current UI selection or a field
+            // an older Hub might silently omit. V1 has no V2 launch proof.
+            requireLaunchVerification: submittedSpec.current?.flags?.opencodeGeneration === 'v2',
+          }, list)) {
+            setChildUp(true);
+            setPhase('done');
+            return;
+          }
+          if (lastVerdict.kind === 'waiting') setMsg(lastVerdict.text);
+        } catch { /* Transient: do not infer success from the roster alone. */ }
       }
-      if (pollAlive.current && tries < 16) {
-        setTimeout(tick, 1500);
-      } else if (pollAlive.current) {
-        // Timeout — don't flip to error (hub may have accepted the dispatch
-        // but the child is slow to bootstrap). Honest message.
-        setPhase('done');
-        setMsg(timeoutMessage(lastVerdict));
+      if (alive()) {
+        timer = setTimeout(tick, 1500);
       }
     };
-    const t = setTimeout(tick, 1200);
-    return () => { clearTimeout(t); };
-  }, [phase, childUp, cfg, name, requestId]);
+    timer = setTimeout(tick, 1200);
+    return () => { active = false; clearTimeout(timer); clearTimeout(deadlineTimer); };
+  }, [phase, childUp, cfg, name, requestId, runtimeId]);
 
   // Derived: runtime details + nav gates
   const runtime = RUNTIMES.find(r => r.id === runtimeId) || RUNTIMES[0];
@@ -224,18 +250,19 @@ export default function CreateNodeWizardScreen({ cfg, daemon, onBack, onExit, de
   // #652 —— 文件夹(工作目录最后一段):默认 = 名字的 ASCII slug(中文转拼音);在第 1 步可改,规则 ^[a-z][a-z0-9-]{0,63}$。
   const folder = folderEdited ?? workdirSlug(name, workdirFallback);
   const folderErr = workdirRoot && folderEdited !== null ? folderError(folderEdited) : null;
+  const openCodeError = opencodeCreateError({ runtimeId, opencodeGeneration, opencodeUnsafeTools, model });
   const canNext =
     hasUsableRuntime &&
     (
       (cur === 'name' && nameValid && !folderErr) ||
-      (cur === 'runtime' && isRuntimeAllowed(runtimeId)) ||
-      cur === 'model' || cur === 'params'
+      (cur === 'runtime' && isRuntimeAllowed(runtimeId) && (runtimeId !== 'opencode-cli' || opencodeGeneration !== 'v2' || opencodeUnsafeTools)) ||
+      (cur === 'model' && !openCodeError) || cur === 'params'
     );
   const busy = phase === 'creating' || phase === 'awaiting_register';
   // 确认页上显式改过完整路径(workdirEdited)优先;否则 <root>/<文件夹>。
   const workdir = workdirEdited ?? (workdirRoot ? defaultWorkdir(workdirRoot, folder) : '');
   const workdirErr = workdirRoot ? workdirError(workdir, workdirRoot) : null;
-  const canSubmit = !workdirErr;
+  const canSubmit = !workdirErr && !openCodeError && nameValid && isRuntimeAllowed(runtimeId);
 
   // ── handlers (no hooks below this line) ────────────────────────────
   // One runtime choice row. `nested` = it lives inside a 「高级」 disclosure:
@@ -260,6 +287,8 @@ export default function CreateNodeWizardScreen({ cfg, daemon, onBack, onExit, de
           onPress={() => {
             if (allowed) {
               setRuntimeId(r.id);
+              setOpenCodeGeneration('v1');
+              setOpenCodeUnsafeTools(false);
               // Reset model to the FIRST of the new runtime
               // (never ''). Same reasoning as initial state
               // — hub schema requires non-empty model.
@@ -312,14 +341,17 @@ export default function CreateNodeWizardScreen({ cfg, daemon, onBack, onExit, de
     );
   };
   const handleSubmit = async () => {
+    if (!canSubmit || busy) return;
     setPhase('creating');
     setMsg('');
     // flags.copresence:true 只给「Codex（TUI 共存）」(codex-app-server),见 create-node-request.ts。
     const node_spec: CreateNodeRequest['node_spec'] = buildCreateNodeSpec({
       name, runtimeId, model, runtimeModels: runtime.models,
       permissionMode, maxTurns, budget,
+      opencodeGeneration, opencodeUnsafeTools,
       workdirField: workdirForRequest(workdirRoot, workdir),
     });
+    submittedSpec.current = node_spec;
     const res = await createNode(cfg, {
       daemon_node_id: daemon.daemon_node_id,
       node_spec,
@@ -334,7 +366,7 @@ export default function CreateNodeWizardScreen({ cfg, daemon, onBack, onExit, de
       setMsg(`服务器未就绪：${res.error}`);
     } else {
       setPhase('error');
-      setMsg(`创建失败：${describeNodeNameRejection(res.error, name, 'hub') ?? describeCopresenceError({ error: res.error, field: res.field, runtime: runtimeId }) ?? describeWorkdirError(res.error) ?? res.error}`);
+      setMsg(`创建失败：${describeOpenCodeCreateError(res) ?? describeNodeNameRejection(res.error, name, 'hub') ?? describeCopresenceError({ error: res.error, field: res.field, runtime: runtimeId }) ?? describeWorkdirError(res.error) ?? res.error}`);
     }
   };
 
@@ -420,7 +452,7 @@ export default function CreateNodeWizardScreen({ cfg, daemon, onBack, onExit, de
           {phase === 'creating'
             ? '正在下发创建请求…'
             : phase === 'awaiting_register'
-              ? `正在监测 ${normalizeNodeName(name)} 注册…（最长 24s）`
+              ? `正在确认 ${normalizeNodeName(name)} 启动…（约 45s）${msg ? `\n${msg}` : ''}`
               : phase === 'done' && childUp
                 ? `✓ ${normalizeNodeName(name)} 已上线`
                 : msg}
@@ -514,6 +546,33 @@ export default function CreateNodeWizardScreen({ cfg, daemon, onBack, onExit, de
                 </Fragment>
               );
             })}
+            {runtimeId === 'opencode-cli' ? (
+              <View testID="opencode-generation-options" style={styles.section}>
+                <Text style={styles.label}>OpenCode 代际</Text>
+                {(['v1', 'v2'] as const).map(g => (
+                  <Pressable key={g} testID={`opencode-generation-${g}`} accessibilityRole="radio"
+                    accessibilityState={{ checked: opencodeGeneration === g }}
+                    aria-checked={opencodeGeneration === g}
+                    onPress={() => { setOpenCodeGeneration(g); setOpenCodeUnsafeTools(false); }}
+                    style={[styles.choiceRow, opencodeGeneration === g && styles.choiceRowSelected]}>
+                    <Text style={styles.choiceText}>{g === 'v1' ? 'V1（兼容默认）' : 'V2（实验性 TUI 共存）'}</Text>
+                  </Pressable>
+                ))}
+                {opencodeGeneration === 'v2' ? (
+                  <>
+                    <Text testID="opencode-v2-warning" style={styles.hint}>{OPENCODE_V2_WARNING}</Text>
+                    <Text style={styles.hint}>runtime 可用性标记不代表 V2 就绪；目标 daemon 仍会校验准确版本、授权和启动结果。</Text>
+                    <Pressable testID="opencode-v2-consent" accessibilityRole="checkbox"
+                      accessibilityState={{ checked: opencodeUnsafeTools }}
+                      aria-checked={opencodeUnsafeTools}
+                      onPress={() => setOpenCodeUnsafeTools(v => !v)} style={styles.choiceRow}>
+                      <Ionicons name={opencodeUnsafeTools ? 'checkbox' : 'square-outline'} size={20} color={colors.accent} />
+                      <Text style={[styles.choiceText, { flex: 1 }]}>我了解风险，仅用于可信任务，允许所有本地工具</Text>
+                    </Pressable>
+                  </>
+                ) : null}
+              </View>
+            ) : null}
           </View>
         )}
 
@@ -538,6 +597,16 @@ export default function CreateNodeWizardScreen({ cfg, daemon, onBack, onExit, de
                 </Pressable>
               ))}
             </View>
+            {runtimeId === 'opencode-cli' && opencodeGeneration === 'v2' ? (
+              <View style={styles.section}>
+                <Text style={styles.label}>目标机器已配置的 provider/model</Text>
+                <TextInput testID="opencode-v2-model" value={model} onChangeText={setModel}
+                  autoCapitalize="none" autoCorrect={false} placeholder="provider/model" style={styles.input} />
+                <Text testID="opencode-v2-model-hint" style={[styles.hint, !!openCodeError && styles.hintErr]}>
+                  {openCodeError ?? '上方是建议值，不保证可用；模型与登录凭据以目标机器配置为准。这里不收集密钥。'}
+                </Text>
+              </View>
+            ) : null}
           </View>
         )}
 
@@ -620,6 +689,9 @@ export default function CreateNodeWizardScreen({ cfg, daemon, onBack, onExit, de
               <SummaryRow k="名字" v={normalizeNodeName(name) || '—'} />
               <Divider />
               <SummaryRow k="Runtime" v={runtimeDisplayLabel(RUNTIMES, runtime)} />
+              {runtimeId === 'opencode-cli' ? (
+                <><Divider /><SummaryRow k="代际" v={opencodeGeneration === 'v2' ? 'V2 · 实验性 TUI 共存' : 'V1 · 兼容默认'} /></>
+              ) : null}
               <Divider />
               <SummaryRow k="模型" v={model || runtime.models[0] || '跟随宿主登录'} />
               {params.includes('permissionMode') ? (
@@ -675,6 +747,9 @@ export default function CreateNodeWizardScreen({ cfg, daemon, onBack, onExit, de
                 </>
               ) : null}
             </View>
+            {runtimeId === 'opencode-cli' && opencodeGeneration === 'v2' ? (
+              <Text testID="opencode-v2-confirm-warning" style={styles.hint}>{OPENCODE_V2_WARNING} 已显式允许所有本地工具。</Text>
+            ) : null}
           </View>
         )}
       </>
@@ -693,8 +768,10 @@ export default function CreateNodeWizardScreen({ cfg, daemon, onBack, onExit, de
           {nextStep !== null ? (
             <Pressable
               testID="create-node-next"
+              accessibilityRole="button"
+              aria-disabled={!canNext}
               disabled={!canNext}
-              onPress={() => setStep(nextStep)}
+              onPress={() => { if (canNext) setStep(nextStep); }}
               style={({ pressed }) => [
                 styles.primaryBtn,
               desktop && styles.btnWide,
@@ -709,6 +786,8 @@ export default function CreateNodeWizardScreen({ cfg, daemon, onBack, onExit, de
           ) : (
             <Pressable
               testID="create-node-submit"
+              accessibilityRole="button"
+              aria-disabled={!canSubmit}
               disabled={!canSubmit}
               onPress={handleSubmit}
               style={({ pressed }) => [

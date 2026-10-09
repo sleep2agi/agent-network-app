@@ -1,0 +1,127 @@
+OpenCode V2 creation UI candidate — 2026-10-09, UTC+08:00
+Hub #539 / #829; app PR #785; Hub/daemon dependency agent-network#2551.
+This is a branch candidate, not a release or native-app acceptance.
+
+Candidate source: 1ef7f77ee620a758290e75dbb449a58b6aa1fd2c
+Final local result at 2026-10-09 16:16 CST: PASS. Exact source above was built
+without runtime source mounts and verified against EXPECTED_SOURCE_COMMIT.
+- Unit container anet-app-v2-options-unit-1ef: exit 0; 157 existing checks
+  (45 status, 27 request, 85 navigation) plus the new V2 assertion suite pass.
+- UI build: TypeScript and full Expo web export pass (1168 modules).
+- Registry container anet-app-v2-registry-1ef: exit 0, 12/12 checks pass.
+- Browser container anet-app-v2-options-ui-1ef: exit 0; all four viewport/theme
+  combinations pass consent reset, model gate, exact payload, no early success,
+  late failure, explicit proof success, old-Hub refusal, V1 and Codex regression.
+- Existing readiness container anet-app-v2-readiness-1ef: exit 0, no failures
+  across the same four viewport/theme combinations.
+UI image: sha256:c6e538aefe5efdcb1058bfe6cf62cff1629ad75622f5067f8103776d583b29b9
+Unit image: sha256:b94821b5898d5b0e3f6109f9ba900c3fbc6bd603cc62c5f5f77ead62918eb186
+Raw stdout is retained in these named Docker containers; UI screenshots are
+in /artifacts/<desktop|phone>-<light|dark>-consent.png inside the UI container.
+Desktop-light and phone-light screenshots were visually inspected: risk text,
+consent and navigation remain visible at the scrolled consent position, with
+no horizontal overflow. These local artifacts are evidence, not release files.
+
+Behavior
+- V1 remains default and omits new flags for legacy Hub compatibility.
+- V2 requires explicit unsafe-tools consent; selecting either generation or
+  another runtime clears consent. Only V2 sends opencodeGeneration and
+  opencodeUnsafeTools inside strict flags. Other runtimes never inherit them.
+- The form warns that V2 permits local tools and is not a security sandbox;
+  only Linux has prior native candidate evidence, not other platforms.
+- V2 provider/model input is validated; suggested models are not guaranteed
+  available. Credentials remain on the target host; this form collects none.
+- Old Hub/daemon flag rejection is visible; no automatic downgrade or retry.
+- V2 success still requires the submitted request identity, live matching
+  child node, and explicit daemon launch proof. Late failure dominates early
+  registration. V1 does not require V2-only proof.
+
+Reproduction and boundaries
+Use sg docker -c for every Docker command. Build from candidate git source:
+  docker build -f tests/create-completion/Dockerfile \
+    --build-arg SOURCE_COMMIT=<full40> -t candidate-unit .
+  docker run --network none -e EXPECTED_SOURCE_COMMIT=<full40> candidate-unit
+  docker build -f tests/opencode-v2-create/Dockerfile \
+    --build-arg SOURCE_COMMIT=<full40> -t candidate-ui .
+  docker run --network none --entrypoint bun candidate-ui src/drive-registry.test.ts
+  docker run --network none -e EXPECTED_SOURCE_COMMIT=<full40> candidate-ui
+
+The local UI Dockerfile uses the dependency-only test fixture image
+anet-people-loading:review2, not a public distribution input. Observed image ID:
+sha256:644e2a6d82719291e19906164bef08c0020ad5976195c19a981a8de903358556
+Candidate and dependency-image package-lock.json SHA256 both:
+045d81461c96bc6e2759ed7edd2327ad502c9db5bb6d5b12fc7ec24126db7ec2
+The Dockerfile checks their equality and removes inherited src/tests/scripts/
+.github before copying candidate source. No host npm install/global changes.
+Portable CI execution is registered as stub in tests/drives.json and uses the
+existing .github/workflows/drives.yml dependency setup and shard runner. That
+workflow's result must be checked separately; this report is not CI acceptance.
+
+The browser drive renders the real Expo web export in Chromium at desktop
+1200x850 and phone 390x844, light/dark. Hub and Tauri are page-local fixtures;
+network is disabled. No real daemon or native WebView is involved here.
+Earlier native Hub/daemon/TUI evidence is a separate test829 report; combining
+two separate passing suites does not prove a real client-to-daemon E2E.
+
+Failures caught during this iteration
+1. e4d695143264434daef3b24f5d84deb419adeaec: radio accessibilityState alone
+   did not expose aria-checked in RN Web; fixed explicit aria-checked for
+   generation and consent instead of removing the assertion.
+2. fe2c9d948f5d8bece53ef7958a2d7bc998255bbc: dependency image retained an
+   unrelated test-task-people-loading suite. Registry correctly failed 11/12;
+   removed inherited source directories. No product defect inferred from it.
+3. 081fe25c6a4f56dd25ef45f997bcd73bd335e21b: Next lacked button semantics
+   for browser disabled-state recognition. Added button role, explicit
+   aria-disabled and a guarded Next handler; Submit gets the same semantics.
+   The existing runtime-readiness drive passed on this earlier SHA, but that
+   result must not be transferred to a changed candidate.
+
+Operations/recovery scope
+No new service or production launcher; no proxy/tunnel/port mapping changes;
+no new secret source or environment configuration; no database migration or
+new local persistence. Hub remains authoritative for creation status.
+Client upgrade/rollback uses the repository's normal release workflow from
+an accepted exact main SHA. Never publish these branch-built test images.
+Production Hub data still requires its existing backup process; a client
+checkout does not reconstruct server data. This iteration did not exercise
+production disaster recovery and makes no such claim.
+
+2026-10-09 16:30 CST follow-up: full client unit CI regression
+The Ubuntu/Windows CI unit step exposed a stale source assertion expecting
+exactly `const canSubmit = !workdirErr;`. The product now also checks V2 consent,
+node name and runtime availability. Keep the workdir gate and test the actual
+combined predicate: valid input passes, each invalid condition blocks; also
+assert Submit remains wired to that predicate. No product code changed here.
+Test fix: 7129592b5c4aadff76936a5f1d9e034649a27f11.
+Exact full-source Docker candidate: 709ff23b8273d2c654b755bd1028620c8350ab2a.
+Dockerfile: tests/opencode-v2-create/Dockerfile.unit-ci.
+Container: anet-app-v2-full-unit-709. Result: 377/377 test files PASS, exit 0.
+Image: sha256:f07e7ddaa0252d25a7e2d25c7ef21fd584a877f9cc9f815dffe1901b452c051f.
+Build SOURCE_COMMIT and run EXPECTED_SOURCE_COMMIT both equal the full SHA.
+Locked dependencies reused from anet-app-v2-options:ui-1ef; full candidate
+source copied after removing inherited source trees; no runtime source mounts.
+Raw full output retained by docker logs of the named container. This is local
+Linux Docker acceptance, not proof of Windows CI or native WebView acceptance.
+The exported product bundle remains the previously tested 1ef7f77 source;
+neither this test-only correction nor this report is a release.
+
+2026-10-09 16:37 CST: real-client confirmation fix and repeat gates
+Product/test source 19595b59095ac822f32f673494e7bb77ed898d17.
+Real Hub integration exposed that unfiltered /api/status?light=1 omits node_id.
+The wizard's exact-identity check therefore never succeeded, even with real
+daemon launch proof. Use existing network/alias-scoped full node details;
+still compare exact request/child identity, retain late-failure precedence.
+The rendered fixture now reproduces the actual light/full projection difference.
+Container anet-app-v2-full-unit-195: 377/377 files PASS, exit 0.
+Image sha256:ac8e30e43bd1bbd60b78e9cf488065cec057f93f44ccd5ab8830e9d5ab7d4eb8.
+Container anet-app-v2-ui-195: typecheck/export and all four desktop/phone,
+light/dark rendered V2 consent/confirmation/refusal/legacy cases PASS, exit 0.
+Image sha256:151d5865c5396a696bcfe88b4f4a5218d63c6aefaca009ccafd8f4557060309a.
+Both builds/run SHA checks use the exact 19595b5 full SHA above; no source mounts.
+Real-client integration also PASS with runtime/Hub/CLI test branch
+94190f52cc6cae184a46cac33aa55e6c72b75b42, container anet-test829-client-941.
+Actual authenticated Hub/daemon/V2, rendered client creation confirmed, task
+receipt/TUI, actual API stop/restart/new task all passed, container exit 0.
+Details in agent-network docs/tests/report-test829-real-client.txt. Tauri IPC
+adapted in Chromium, Linux root container and loopback model stub; not native
+WebView/platform/provider or formal release acceptance. No production changes.

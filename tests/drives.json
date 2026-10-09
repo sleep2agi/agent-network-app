@@ -1,6 +1,10 @@
 {
   "//": "Every tests/*/drive.mjs and tests/*/run.mjs, and how CI runs it. stub = needs only the web export + Chromium (run by .github/workflows/drives.yml in shards; secs = measured runtime, used to balance shards); docker = builds its own bundle with its Dockerfile (nightly job); hub / manual = not in CI, with the reason. src/drive-registry.test.ts fails when a drive is missing here.",
   "drives": {
+    "opencode-v2-create/drive.mjs": {
+      "kind": "stub",
+      "secs": 90
+    },
     "msi-upgrade-identity/run.mjs": {
       "kind": "manual",
       "why": "isolated config mutation harness via tests/msi-upgrade-identity/Dockerfile, not a browser drive; its underlying src/app-display-name.test.ts regression runs in existing npm test CI."
