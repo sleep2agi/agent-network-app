@@ -7,6 +7,8 @@ on:
       - 'scripts/build-local-hub-sidecar.mjs'
       - 'tests/linux-deb-package/**'
       - 'tests/linux-deb-install/**'
+      - 'tests/linux-native-workspace/**'
+      - 'scripts/with-linux-test-keyring.sh'
       - '.github/workflows/linux-deb-package.yml'
       - 'package.json'
       - 'package-lock.json'
@@ -78,6 +80,31 @@ jobs:
           set -e
           test "$result" -ne 0
           grep -F 'FAIL: desktop process exited before window acceptance' out/window-negative.log
+      - name: Build isolated native workspace fixture
+        run: |
+          deb_sha=$(sha256sum out/*.deb | awk '{print $1}')
+          docker build --build-arg INSTALL_IMAGE=anet-linux-install:test --build-arg SOURCE_COMMIT="$(git rev-parse HEAD)" --build-arg DEB_SHA256="$deb_sha" -t anet-native-workspace:test -f tests/linux-native-workspace/Dockerfile .
+      - name: Native startup and authentication atomic gate (before UI)
+        run: docker run --rm --network none anet-native-workspace:test
+      - name: Real UI local workspace and native credential authentication
+        run: docker run --name native-workspace-proof --network none anet-native-workspace:test sh /fixture/keyring.sh xvfb-run -a -s '-screen 0 1280x900x24 -nolisten tcp' bash /fixture/ui.sh
+      - name: Missed-click negative control
+        shell: bash
+        run: |
+          set +e
+          docker run --rm --network none -e TEST_UI_MISS_CLICK=1 anet-native-workspace:test sh /fixture/keyring.sh xvfb-run -a -s '-screen 0 1280x900x24 -nolisten tcp' bash /fixture/ui.sh >out/native-click-negative.log 2>&1
+          result=$?
+          set -e
+          test "$result" -ne 0
+          grep -F 'FAIL: UI did not persist a local profile after click' out/native-click-negative.log
+      - name: Preserve native UI evidence
+        if: always()
+        run: |
+          if docker container inspect native-workspace-proof >/dev/null 2>&1; then
+            mkdir -p out/native-workspace-evidence
+            docker cp native-workspace-proof:/evidence/. out/native-workspace-evidence/
+            docker rm native-workspace-proof
+          fi
       - uses: actions/upload-artifact@v4
         if: always()
         with:
