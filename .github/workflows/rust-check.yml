@@ -40,7 +40,7 @@ jobs:
     timeout-minutes: 30
     steps:
       - name: Prepare isolated build container
-        run: apt-get update && apt-get install -y --no-install-recommends git curl ca-certificates sudo
+        run: apt-get update && apt-get install -y --no-install-recommends git curl ca-certificates sudo unzip
       - uses: actions/checkout@v4
 
       # Tauri 在 Linux 上编译要 webkit2gtk/gtk/appindicator 这一套。仓里没有先例

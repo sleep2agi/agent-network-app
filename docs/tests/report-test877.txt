@@ -56,3 +56,12 @@ Pending / exclusions
   download verification are NOT certified by this dependency probe.
 - No production rollout, global npm change or public artifact publication occurred.
 - Recovery and rollback contract: tests/linux-credential-store/README.md.
+
+CI follow-up (2026-10-09 21:31 CST)
+- PR #789 at f52d4b3802ffb22c1f612ea38b47cb20b78f90f8: full Rust job
+  113840781020 stopped in setup-bun because the Ubuntu job container lacked
+  unzip. It did NOT reach cargo compilation; this is not a Rust-test failure.
+- Added unzip to container bootstrap before setup-bun. Docker YAML inspection
+  confirms this dependency is declared before tool installation. The updated
+  exact-head CI must verify installation and the complete Rust path; static
+  inspection does not replace that run.
