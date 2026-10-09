@@ -6,6 +6,7 @@ on:
       - 'local-hub-sidecar/**'
       - 'scripts/build-local-hub-sidecar.mjs'
       - 'tests/linux-deb-package/**'
+      - 'tests/linux-deb-install/**'
       - '.github/workflows/linux-deb-package.yml'
       - 'package.json'
       - 'package-lock.json'
@@ -43,7 +44,42 @@ jobs:
           docker rm linux-deb-artifacts
           printf 'TEST ONLY. Not approved for installation on production or distribution.\nSource: %s\nGUI, native IPC and upgrade not yet accepted.\n' "$(git rev-parse HEAD)" >out/TEST-ONLY.txt
           sha256sum out/*.deb >out/SHA256SUMS
+      - name: Install on clean Ubuntu runtime (not the compiler image)
+        run: |
+          deb_sha=$(sha256sum out/*.deb | awk '{print $1}')
+          source_sha=$(git rev-parse HEAD)
+          docker build --build-arg DEB_IMAGE=anet-linux-deb:test --build-arg SOURCE_COMMIT="$source_sha" --build-arg DEB_SHA256="$deb_sha" -t anet-linux-install:test -f tests/linux-deb-install/Dockerfile .
+      - name: Ordinary-user native window probe offline (screenshot requires review)
+        run: docker run --name linux-install-proof --network none anet-linux-install:test
+      - name: Wrong-source binding negative control
+        shell: bash
+        run: |
+          deb_sha=$(sha256sum out/*.deb | awk '{print $1}')
+          set +e
+          docker build --build-arg DEB_IMAGE=anet-linux-deb:test --build-arg SOURCE_COMMIT=0000000000000000000000000000000000000000 --build-arg DEB_SHA256="$deb_sha" -t anet-linux-install:wrong-source -f tests/linux-deb-install/Dockerfile . >out/source-negative.log 2>&1
+          result=$?
+          set -e
+          test "$result" -ne 0
+          grep -F 'FAIL: package image source SHA does not match requested source' out/source-negative.log
+      - name: Preserve window evidence even on probe failure
+        if: always()
+        run: |
+          if docker container inspect linux-install-proof >/dev/null 2>&1; then
+            mkdir -p out/window-evidence
+            docker cp linux-install-proof:/evidence/. out/window-evidence/
+            docker rm linux-install-proof
+          fi
+      - name: Early process-exit negative control
+        shell: bash
+        run: |
+          set +e
+          docker run --rm --network none -e TEST_DESKTOP_EXECUTABLE=/bin/false anet-linux-install:test >out/window-negative.log 2>&1
+          result=$?
+          set -e
+          test "$result" -ne 0
+          grep -F 'FAIL: desktop process exited before window acceptance' out/window-negative.log
       - uses: actions/upload-artifact@v4
+        if: always()
         with:
           name: TEST-ONLY-linux-deb-${{ github.sha }}
           path: out/
