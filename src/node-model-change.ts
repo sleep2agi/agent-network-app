@@ -26,6 +26,7 @@ export type ModelChangePhase =
 /** 3 s × 30 = 90 s:共存节点重启(serve + attach + 注册)实测 5–45 s。 */
 export const RESTART_POLL_MS = 3000;
 export const RESTART_MAX_POLLS = 30;
+export const RESTART_TIMEOUT_MS = RESTART_POLL_MS * RESTART_MAX_POLLS;
 
 /** 和向导同一条校验(非空、无空白);opencode 是 provider/model 形态,不再限字符集。 */
 export function validateModelId(raw: string): { ok: true; model: string } | { ok: false; reason: string } {
@@ -74,7 +75,7 @@ export function phaseText(phase: ModelChangePhase): string {
   switch (phase.kind) {
     case 'idle': return '';
     case 'submitting': return `正在提交模型 ${phase.requested}…`;
-    case 'restarting': return `已下发,节点正在以新模型重启…(${phase.polls * RESTART_POLL_MS / 1000}s)`;
+    case 'restarting': return `已下发,节点正在以新模型重启…(已检查 ${phase.polls} 次)`;
     case 'applied': return `已切换到 ${phase.model}`;
     case 'timeout': return `已下发 ${phase.requested},但 ${RESTART_MAX_POLLS * RESTART_POLL_MS / 1000}s 内节点没有以新模型回来。请到它所在机器看日志(anet node logs)。`;
     case 'conflict': return '配置在别处被改过了,已重新加载,请再选一次。';

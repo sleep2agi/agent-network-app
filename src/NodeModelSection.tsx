@@ -4,7 +4,7 @@
 //
 // 样式约定同 NodeDetailScreen:`styles` 用 live binding、不解构;卡片
 // colors.card / 12 圆角 / spacing.lg;按钮沿用 retryBtn。
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, Pressable, View } from 'react-native';
 import { Text, TextInput } from './ui-text';
 
@@ -19,6 +19,7 @@ import {
   phaseIsBusy,
   phaseText,
   RESTART_POLL_MS,
+  RESTART_TIMEOUT_MS,
   validateModelId,
   type ModelChangePhase,
 } from './node-model-change';
@@ -32,8 +33,6 @@ export default function NodeModelSection({ cfg, node }: { cfg: HubConfig; node: 
   const [picked, setPicked] = useState<string>('');
   const [custom, setCustom] = useState('');
   const [phase, setPhase] = useState<ModelChangePhase>({ kind: 'idle' });
-  const phaseRef = useRef(phase);
-  phaseRef.current = phase;
 
   const reload = useCallback(async () => {
     try {
@@ -49,17 +48,47 @@ export default function NodeModelSection({ cfg, node }: { cfg: HubConfig; node: 
 
   useEffect(() => { void reload(); }, [reload]);
 
-  // 重启期间轮询;每次读回交给 afterPoll 判 applied / timeout。
+  const requested = phase.kind === 'restarting' ? phase.requested : null;
+  const baseRevision = phase.kind === 'restarting' ? phase.baseRevision : null;
+  // One observation window per accepted change, independent of read latency.
+  // Expiry/cleanup invalidates in-flight reads; it never cancels or resubmits
+  // the server-side change. Poll counts must not reset the deadline.
   useEffect(() => {
-    if (phase.kind !== 'restarting') return;
-    const timer = setTimeout(async () => {
-      const v = await reload();
-      const current = phaseRef.current;
-      if (current.kind !== 'restarting') return;
-      setPhase(afterPoll(current, v ? { config_revision: v.config_revision, model: v.model, config_update_capable: v.config_update_capable } : null));
-    }, RESTART_POLL_MS);
-    return () => clearTimeout(timer);
-  }, [phase, reload]);
+    if (requested === null || baseRevision === null) return;
+    let active = true;
+    let current: Extract<ModelChangePhase, { kind: 'restarting' }> = { kind: 'restarting', requested, baseRevision, polls: 0 };
+    let timer: ReturnType<typeof setTimeout>;
+    const deadline = Date.now() + RESTART_TIMEOUT_MS;
+    const expire = () => {
+      if (!active) return;
+      active = false;
+      clearTimeout(timer);
+      setPhase({ kind: 'timeout', requested });
+    };
+    const deadlineTimer = setTimeout(expire, RESTART_TIMEOUT_MS);
+    const tick = async () => {
+      if (!active) return;
+      if (Date.now() >= deadline) { expire(); return; }
+      let v: NodeConfigRead | null = null;
+      let failed = false;
+      try { v = await fetchNodeConfig(cfg, node.node_id); } catch { failed = true; }
+      if (!active) return;
+      if (Date.now() >= deadline) { expire(); return; }
+      if (!failed) setView(v);
+      setReadFailed(failed);
+      const next = afterPoll(current, v);
+      setPhase(next);
+      if (next.kind === 'restarting') {
+        current = next;
+        timer = setTimeout(tick, RESTART_POLL_MS);
+      } else {
+        active = false;
+        clearTimeout(deadlineTimer);
+      }
+    };
+    timer = setTimeout(tick, RESTART_POLL_MS);
+    return () => { active = false; clearTimeout(timer); clearTimeout(deadlineTimer); };
+  }, [requested, baseRevision, cfg, node.node_id]);
 
   const availability = modelControlAvailability(view === undefined ? null : view);
   const busy = phaseIsBusy(phase);
