@@ -75,3 +75,24 @@ remain unchanged. Only client code and reproducible isolated test inputs change.
 An eventual release must rebuild from an exact merged main SHA; this branch's
 Docker images are test artifacts, never release artifacts. No backup was read,
 modified or restored and no disaster-recovery claim is made.
+
+2026-10-09 20:35 CST integration retest
+- Source under test: 2a59cc08d1bd709557d2ad6a87533157429a2e42.
+- Merged latest main dfc2bf97fa6d175d8e7756c6bccdd4c0fedf09a7 into
+  the candidate branch. The only conflict was tests/drives.json; retained all
+  three entries (people loading, V2 creation, model-change deadline).
+- Rebuilt both Dockerfiles above from this exact clean commit, not old images.
+- API/deadline/isolation tests, registry 12/12, TypeScript: PASS.
+- Rendered 390/1280 fault injection: 19/19 PASS, exit 0.
+- Component tests: 59/59 PASS, 263 assertions, exit 0.
+- Full unit suite: 378/378 test files PASS, exit 0.
+- Browser/unit image manifest-list:
+  sha256:7467807df3504692f181a5e3df1b5898a7a380a180929dff6ad057c0da5ab430
+  config: sha256:b6286868d03ac70e69fdd45ea2f331766501107a26d4019c0eb1e0c4b2007ae5
+- Component image manifest-list:
+  sha256:099c8a90790d84aba0b82653719874082ffb9d3beef80c31c6cf5dafec91e050
+  config: sha256:6d39ae68256582c25ccaa2c520c874db53bc3d2ad3cc1e73e92a8ed6134b525c
+- Retained containers: anet-people-loading-restack-834,
+  anet-people-unit-restack-834, anet-people-components-restack-834.
+- This is a report-only follow-up. Exact new head CI is independently required.
+  Not merged/released at report time; original native/phone limitations remain.
