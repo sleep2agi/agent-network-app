@@ -1,0 +1,9 @@
+[package]
+name = "anet-linux-credential-store"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[dependencies]
+keyring = { version = "=3.6.3", features = ["sync-secret-service", "crypto-rust"] }
+

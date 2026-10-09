@@ -26,6 +26,8 @@ on:
       - 'src-tauri/**'
       # 门自己被改时也要跑 —— 否则「把这道门改坏」永远不会被这道门发现。
       - '.github/workflows/rust-check.yml'
+      - 'scripts/with-linux-test-keyring.sh'
+      - 'tests/linux-credential-store/**'
 
 permissions:
   contents: read
@@ -34,8 +36,11 @@ jobs:
   rust-check:
     name: rust-check (ubuntu-latest)
     runs-on: ubuntu-latest
+    container: ubuntu:24.04@sha256:534baea6a22c03a63003dbc8dbe78fe34bc0d7e595d9a9dc9834884ff530eb55
     timeout-minutes: 30
     steps:
+      - name: Prepare isolated build container
+        run: apt-get update && apt-get install -y --no-install-recommends git curl ca-certificates sudo
       - uses: actions/checkout@v4
 
       # Tauri 在 Linux 上编译要 webkit2gtk/gtk/appindicator 这一套。仓里没有先例
@@ -54,7 +59,9 @@ jobs:
             libgtk-3-dev \
             libayatana-appindicator3-dev \
             librsvg2-dev \
-            libxdo-dev
+            libxdo-dev \
+            dbus \
+            gnome-keyring
 
       # toolchain 显式写出来:下面的 SHA 是 stable 分支的 commit,action.yml 的
       # 默认值也确实是 stable,但钉 SHA 之后「这条 ref 叫什么」不再有意义,
@@ -101,7 +108,20 @@ jobs:
       #    看不见它 —— 真正挡住 #351 复发的是下面这步。两步都留着:check 对
       #    非测试代码报错更快,test 才是那道门的全部。
       - name: cargo check
-        run: cargo check --manifest-path src-tauri/Cargo.toml
+        run: cargo check --locked --manifest-path src-tauri/Cargo.toml
 
       - name: cargo test
-        run: cargo test --manifest-path src-tauri/Cargo.toml
+        env:
+          ANET_ISOLATED_KEYRING_TEST: '1'
+        run: sh scripts/with-linux-test-keyring.sh cargo test --locked --manifest-path src-tauri/Cargo.toml
+
+  linux-credential-store:
+    name: Linux credential persistence (Docker)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build locked dependency probe
+        run: docker build --target probe -t anet-linux-credential:test -f tests/linux-credential-store/Dockerfile .
+      - name: Real Secret Service persistence and failure modes
+        run: docker run --rm --network none --cap-drop ALL --security-opt no-new-privileges anet-linux-credential:test

@@ -39,6 +39,11 @@ tauri-plugin-clipboard-manager = "2" # 2026-09-27: 图片预览窗口 Ctrl/⌘+C
 [target.'cfg(target_os = "macos")'.dependencies]
 keyring = { version = "3", features = ["apple-native"] }
 
+[target.'cfg(target_os = "linux")'.dependencies]
+# A session Secret Service provides persistence; the default keyring backend is
+# mock memory when no Linux feature is selected. Encrypt secrets on the bus.
+keyring = { version = "3", features = ["sync-secret-service", "crypto-rust"] }
+
 [target.'cfg(unix)'.dependencies]
 libc = "0.2"
 

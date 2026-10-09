@@ -871,14 +871,17 @@ mod tests {
         assert_eq!(dedupe_download_path(dir, "README", &noext), PathBuf::from("/d/README (2)"));
     }
 
-    // This deliberately exercises the platform credential store, rather than
-    // a mock. It catches builds where keyring compiles but no macOS/Windows
-    // backend feature was enabled (the regression shipped in 0.2.10).
+    // Same-Entry round trips also pass with keyring's mock backend. Reject it
+    // explicitly and reopen the identity before claiming native persistence.
     #[test]
     fn desktop_session_round_trip_uses_native_store() {
         let account = format!("ci-session-{}", std::process::id());
         let entry = keyring::Entry::new(SESSION_SERVICE, &account)
             .expect("native credential-store backend must be installed");
+        assert!(
+            entry.get_credential().downcast_ref::<keyring::mock::MockCredential>().is_none(),
+            "a native credential backend must be enabled for this platform"
+        );
         let value = r#"{"serverUrl":"https://example.invalid","token":"test-token"}"#;
 
         entry
@@ -888,9 +891,16 @@ mod tests {
             entry.get_password().expect("read native credential store"),
             value
         );
+        let reopened = keyring::Entry::new(SESSION_SERVICE, &account)
+            .expect("reopen native credential-store entry");
+        assert_eq!(
+            reopened.get_password().expect("read a separately created entry"),
+            value
+        );
         entry
             .delete_credential()
             .expect("delete native credential store fixture");
+        assert!(matches!(reopened.get_password(), Err(keyring::Error::NoEntry)));
     }
 
     #[test]
