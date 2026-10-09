@@ -1,0 +1,41 @@
+Create confirmation candidate, 2026-10-09 15:57 CST (UTC+08:00)
+Hub #539 / #829; app PR #785, dependent Hub/daemon PR agent-network#2551.
+NOT merged, rendered-client E2E accepted, or released.
+
+Source 78958f25530c28112d54a14b9597b6a55ef17700
+Dockerfile tests/create-completion/Dockerfile
+Build SOURCE_COMMIT and run EXPECTED_SOURCE_COMMIT both equal source above.
+Container anet-app-create-proof-7895, exit 0.
+Image anet-app-create-proof:7895
+sha256:8e93d94e58c0cbfe28fb131df6c6246af116790b3b74d95bed065fc8aff598fe
+157 checks: creation-status 45; request builder 27; steps 85.
+These are pure behavior and source-wiring tests, NOT rendered UI tests.
+
+Cases: request failure dominates a visible roster entry; unknown, pending and
+delivered never confirm; different request/runtime/name/node ID never confirm;
+offline/unknown/stopped/starting is not online; V2 null/malformed proof remains
+unconfirmed. V1/other runtimes do not require V2-only proof. Missing child ID on
+older Hubs is explicitly unconfirmed (no alias fallback).
+Wizard reads request before roster and again before success; effect cleanup
+invalidates in-flight callbacks and recursive timers. Observation ~45 seconds
+plus request time. Submitted flags determine V2 proof requirement.
+
+Docker TypeScript PASS: anet-app-create-proof-types-7895, exit 0.
+Read-only source copied to /tmp/candidate inside anet-people-loading:review2;
+node_modules from /app, node tsc --noEmit -p tsconfig.build.json.
+Dependency image sha256:644e2a6d82719291e19906164bef08c0020ad5976195c19a981a8de903358556
+Both source and image package-lock.json SHA256:
+045d81461c96bc6e2759ed7edd2327ad502c9db5bb6d5b12fc7ec24126db7ec2
+Expo dependency is 56.0.9. No local package install/global npm changes.
+Raw results available via docker logs for the named containers.
+
+Countercheck during review: requiring proof for all opencode-cli nodes would
+leave old V1 nodes permanently unconfirmed. The final source instead captures
+the actual submitted spec and requires proof only for opencodeGeneration=v2.
+
+The current wizard still builds V1/default requests; V2 selector/explicit
+unsafe-tools consent/model setting UI are a separate next slice. This helper
+prepares the completion gate, it does not itself deliver the V2 entry point.
+No new service, port, credentials, persistence or deployment change in app;
+Hub request history is authoritative. Upgrade/rollback uses accepted main SHA
+per repository policy, never these branch artifacts.
