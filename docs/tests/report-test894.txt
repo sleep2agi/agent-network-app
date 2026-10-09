@@ -1,0 +1,47 @@
+Hub #894: bundled local Hub V2 contract gap (diagnostic, NOT a passing V2 gate)
+Observed: 2026-10-10 00:15–00:16 Asia/Shanghai.
+App main inspected: 003bcb04bc3b3972321cae2cdd1f74d205fec3d5.
+Test package source: 8fb42f173ab52737153d58750d3753da9e16dcfe.
+Complete build image: anet-linux-deb:8fb42f1
+Previously recorded image ID: sha256:e6be76163b8405d7bde1426f6699e32f4131ddbb613c0239fed116f8b0a6fff5
+Deb SHA256: b7986d30619148081c864d5c4ef9aaec6e6883eaeca1329c7dee866693e3f677.
+
+Source facts:
+- local-hub-sidecar/package.json pins @sleep2agi/commhub-server 0.9.0-preview.66.
+- src-tauri/src/local_hub.rs EXPECTED_HUB_VERSION uses the same version.
+- src-tauri/src/local_daemon.rs installs CLI and agent-node from @latest.
+  This is an observed floating input, not evidence of current npm contents.
+- Packaged dependency src/create-node-validate.ts:49 FLAG_KEYS contains only
+  permissionMode, dangerouslySkipPermissions, maxTurns, budget, timeout.
+  Lines 280 onward reject unlisted keys with flag_key_unknown.
+- No opencodeGeneration/opencodeUnsafeTools/launch_verified_at occurrences were
+  found in that installed dependency's src tree. Current backend source at
+  2d964c3533e81c2e8005f6525b69be80b754722e contains V2 validation and launch proof.
+
+Docker-only direct contract reproduction, --network none, no mounts:
+  import {buildAnetArgs} from
+    '/app/local-hub-sidecar/node_modules/@sleep2agi/commhub-server/src/create-node-validate.ts';
+  const spec = {name:'test894', runtime:'opencode-cli', model:'stub/stub-model'};
+  buildAnetArgs(spec); // V1 baseline accepted
+  buildAnetArgs({...spec, flags:{opencodeGeneration:'v2', opencodeUnsafeTools:true}});
+  // must throw flag_key_unknown for the current bundled version
+
+Observed stdout (probe exit 0 means diagnosis reproduced, NOT V2 support):
+PASS: bundled V1 baseline
+CONFIRMED GAP: bundled preview.66 rejects V2 with flag_key_unknown
+
+This is the packaged dependency's validation function, not an HTTP/UI create
+test. The real native UI bootstrap gate #893 is independent and remains valid
+within its narrower scope. It cannot close native V2 create/model/stop-start.
+
+Next: determine an exact main-derived compatible Hub/daemon input. Keep release
+gates separate from TEST ONLY source builds; do not silently replace the sidecar,
+remove opt-in checks, update global npm, or move public distribution tags.
+Test V1 compatibility, explicit unsafe opt-in refusal/acceptance and launch proof
+before running dependent native runtime UI layers. No production was modified.
+
+Rebuild: repository tests/linux-deb-package/README.md at the recorded source
+rebuilds the complete image and locked dependency. Run this diagnostic with bun
+in that image. No pre-existing host credentials, databases, ports or services
+are required; no data backup is consumed. Version changes require new exact
+source/hash evidence. Containers are --rm; rollback affects only the test branch.
