@@ -564,3 +564,118 @@ run bun src/local-daemon.test.ts then the cargo command above. Local execution
 used anet-linux-deb:8fb42f1 with read-only /source mount and --network none;
 source Cargo.toml/lock had no diff from that image's source. Container removed
 after completion. Do not attribute these source tests to the older507 deb.
+
+2026-10-10 02:45 Asia/Shanghai — native create driver prepared, not yet accepted:
+Fresh product head85040c75b1dae2dc2e021fa3addece234e7673e2 linux-deb
+run37973976646/job113967433333 remains in full source build; no downloadable
+artifact yet at02:42. Ubuntu/Windows unit tests, Rust and private package pair
+checks have succeeded. No failure was observed, but a running build is not a
+passed package gate. No unchanged prior sample was rerun as new progress.
+
+Added tests/linux-native-opencode/create-ui.sh and verify-create.py for the next
+dependent layer. Native UI actions reproduce the reviewed1200x800 wizard route;
+the only preseed is node-scoped loopback provider configuration. Read-only SQLite
+and authenticated API observations require one request, exact node/network,
+V2/copresence/consent/model, positive launch_verified_at, active token and live
+bridge/serve/attach generations. A subsequent REST test task must return a
+provider-only marker with exact actual model. This does NOT claim native UI task
+dispatch, model-switch, stop/restart or V1. Separate missed-submit negative must
+leave zero request and no node identity, failing with the exact launch assertion.
+
+Docker bash -n and Python AST parsing passed. Actual packaged positive/negative
+and screenshot review are PENDING the85040c7 package prerequisite; do not run
+past a failing prerequisite or report these prepared drivers as E2E passes.
+They are explicit opt-in fixtures, not newly enabled full-lifecycle CI gates.
+This is a test-only follow-up: product source unchanged from85040c7. Keep its
+package/tested-merge identity separate from this later test commit when running.
+All execution stays in disposable Docker; no production or global npm changes.
+
+The new optional overlay.Dockerfile was exercised as a packaging-input gate,
+not native acceptance: accepted507 artifact/source/hash produced an overlay image
+(manifest c8e03e9e50dfa3fefda4a0f92a6569ce7ec3d02234c4f05c73b7dcaaa91ea812);
+the same artifact with a40-zero source was refused before dpkg with the exact
+"FAIL: candidate source does not match requested SHA". Bash/Python syntax also
+passed inside that build. No old507 runtime/UI positives are recounted here.
+
+02:52–02:54 fresh package evidence:
+PR795 product85040c75b1dae2dc2e021fa3addece234e7673e2 rollup26SUCCESS/1SKIPPED.
+linux-deb run37973976646/job113967433333 SUCCESS, tested merge
+b12bc1995d2d95f7b9c5a91876f61f8c3348d7db.
+Artifact11638677040, TEST-ONLY-linux-deb-b12bc1995d2d95f7b9c5a91876f61f8c3348d7db,
+GitHub-reported artifact digest
+7f5cd14091043c6f4366bcf52a2322c998d281e9f7ccf329d0f0fce6c80cb617.
+Downloaded to /dev/shm/anet-ci795-850-evidence.hykrvn; local deb SHA verified
+against SHA256SUMS:
+c9e3ccbc24e298724468561cfd61c6512ca4e271de207c16d139c5e4e1c573d6.
+TEST-ONLY.txt source matches the actual tested merge (not PR head).
+
+All native startup/auth, UI, migration/rollback and7 installer cases passed;
+real UI installer now checks persisted private_pair_child_path and0600 mode.
+CI daemon-registration.json confirms matching online/can_create daemon, correct
+tested-source/deb hash and /home/smoke/native-daemon-test/local-daemon/anet/bin.
+Manually inspected registered.png: green local-daemon, Next enabled, unavailable
+runtime badges correctly red in the no-runtime install image; zero user nodes
+at this stage, not an invented child. Screenshot SHA
+4315007c0f3549296e88ea719b417e9600689726cb0a8224a88c4ec7dd487720.
+Pinned V2 runtime prerequisite positive and wrong-model negative also passed CI.
+
+New-package diagnostic overlay built with overlay.Dockerfile against downloaded
+candidate context; SOURCE_COMMIT=b12bc1995d2d95f7b9c5a91876f61f8c3348d7db,
+DEB_SHA256=c9e3ccbc24e298724468561cfd61c6512ca4e271de207c16d139c5e4e1c573d6,
+DEB_FILE=ANet_0.2.227_amd64.deb, FIXTURE_IMAGE=anet-native-opencode:507.
+Initial image anet-native-opencode:850-create manifest
+4a2b99c4365e8bcc5e08d5bb786c3c0cf3a1a3d3473a0f459b2e36e975046c7f.
+This reuses only fixture/runtime/npm cache, replaces the candidate app/Hub,
+verifies metadata/hash/linkage and supplies current native verifier/driver.
+Not a second clean-install claim; clean installation is the CI result above.
+
+First native create driver got confirmed launch, but observer then raised
+KeyError: network_id. Inspection of the real child config's keys and the backend
+REST contract confirmed child config has no network_id: its token is network-
+bound. Corrected observer requires the authoritative REST request network_id,
+read-only DB request network_id and native profile network to agree, plus exact
+runtime/model/child_name. No network check removed or product behavior changed.
+Initial screenshot was still the confirming-start UI at the moment of observer
+failure; not counted as completed UI acceptance. Saved only /evidence and
+removed the initial container before a fresh corrected run. Corrected driver
+image manifest fea7e1fb0669daa7c067f997df42798b6289ef2ae66cf94f3293086ac6ce4df9.
+
+2026-10-10 02:57–03:01 CST: native creation follow-up execution accepted
+Fresh corrected positive, container anet894-v2-create-positive-850, exit0:
+PASS: native UI created exact V2 config with daemon launch proof/live process identities
+PASS: native-created V2 node returned provider-only response via real runtime
+PASS: real native V2 creation and actual runtime task; screenshots require review
+The exact85040c7 product package/tested merge/deb hash above are unchanged.
+Node node_202a889f-5d49-4e54-bd30-9cabc80c931b; request
+cr_202a889f-5d49-4e54-bd30-9cabc80c931b; network net_16d475f5769d;
+generation ses_eddf8efc7ffexqRmU7ABfgbiwp. Persisted stub/stub-model matches
+the actual provider journal model stub-model. Terminal task response was
+[v2-native] ANSWER_NATIVE_CREATED894. Creation was native UI/IPC; the subsequent
+test task was deliberately REST, not a native task-dispatch claim.
+Manually reviewed final native screenshot: green "v2-native 已上线" and enabled
+"完成", no remaining creation spinner. Screenshot SHA256:
+d9814e369757464674b54688eb4c979e47d053b6dca358590fb23be61deae930.
+create-proof.json SHA256:
+b88a5d45959d4d8f74b3b41058c3816846f4d576e1aefeb3a3c8e015b3f8f6b6.
+
+Fresh TEST_CREATE_MISS_CLICK=1, container anet894-v2-create-missed-850, exit1
+as required, after the same native authentication/installer prerequisites:
+PASS: missed submit left no request or node identity
+AssertionError: native V2 create did not produce confirmed launch
+Manually reviewed negative create-final.png: confirmation form remains visible,
+with the Create button still enabled; no success screen. Screenshot SHA256:
+dd38db8d04239150ba8cc8192617b7cb71673267c1e5f024d3482f4a26a92376.
+Saved only /evidence under /tmp/anet894-create850.5kiHe0/{positive,negative};
+both exact test containers removed, providing the final descendant cleanup.
+These temporary paths are diagnostic copies, not durable recovery inputs;
+the committed fixture/workflow reproduces the tests and preserves CI artifacts.
+
+CI now orders native-create positive, missed-submit exact negative, and always
+evidence/cleanup after the atomic runtime prerequisites. Docker Python YAML
+parse and ordering/default-success/always-evidence assertions passed. The first
+parser invocation could not find a previously cached image; no test ran there.
+Retried in the available runtime image with python3-yaml installed only in the
+disposable container; exit0. Bash/Python syntax passed in the overlay build.
+Product source unchanged; this test-only follow-up still needs its own CI.
+No full V1/V2 lifecycle/model-switch/stop/restart, public release, or global chat
+loading fix is claimed. #894 remains doing1/3, parent#829 doing2/3.

@@ -210,6 +210,28 @@ jobs:
             docker cp native-opencode-atomic:/evidence/. out/native-opencode-atomic/
             docker rm native-opencode-atomic
           fi
+      - name: Native UI creates real V2 node and receives actual model response
+        run: docker run --name native-opencode-create --network none --cap-drop ALL --security-opt no-new-privileges --shm-size 256m anet-native-opencode:test sh /fixture/keyring.sh xvfb-run -a -s "-screen 0 1280x900x24 -nolisten tcp" bash /fixture/opencode-create-ui.sh
+      - name: Missed native V2 submit cannot create a node
+        shell: bash
+        run: |
+          set +e
+          docker run --name native-opencode-missed-create --network none --cap-drop ALL --security-opt no-new-privileges --shm-size 256m -e TEST_CREATE_MISS_CLICK=1 anet-native-opencode:test sh /fixture/keyring.sh xvfb-run -a -s "-screen 0 1280x900x24 -nolisten tcp" bash /fixture/opencode-create-ui.sh >out/native-opencode-missed-create.log 2>&1
+          result=$?
+          set -e
+          test "$result" -ne 0
+          grep -F 'PASS: missed submit left no request or node identity' out/native-opencode-missed-create.log
+          grep -F 'AssertionError: native V2 create did not produce confirmed launch' out/native-opencode-missed-create.log
+      - name: Preserve native V2 creation evidence
+        if: always()
+        run: |
+          for name in native-opencode-create native-opencode-missed-create; do
+            if docker container inspect "$name" >/dev/null 2>&1; then
+              mkdir -p "out/$name"
+              docker cp "$name:/evidence/." "out/$name/"
+              docker rm "$name"
+            fi
+          done
       - uses: actions/upload-artifact@v4
         if: always()
         with:

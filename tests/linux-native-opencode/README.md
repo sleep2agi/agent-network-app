@@ -24,7 +24,7 @@ Do not preserve the temporary runtime HOME or native credential store. The
 Python runner stops process groups; container removal is the final cleanup
 boundary. Failed prerequisite gates block dependent tests.
 
-This suite **does not prove native UI creation or V1/V2 lifecycle**. For isolated
+The default atomic command **does not prove native UI creation or V1/V2 lifecycle**. For isolated
 creation diagnosis only, `prepare.py` seeds a node-scoped provider config before
 the native wizard creates `v2-native` in `/home/smoke/v2-native`. It never writes
 a node identity/profile. Start the fixture provider on loopback18827, use real
@@ -33,6 +33,44 @@ warning, enter `stub/stub-model`, and submit. No fixture tool calls should be
 requested. Keep launch failure distinct from successful daemon registration.
 The initial accepted507 package failed here because its daemon profile omitted
 the private pair from `daemonExtraPath`; see `docs/tests/report-test894.txt`.
+
+## Native creation follow-up (separate from the atomic prerequisite)
+
+`create-ui.sh` automates that real mouse sequence and delegates read-only launch
+observation to `verify-create.py`. It reuses native authentication and private
+installer checks before submitting anything. Run only after the exact candidate
+package passes those prerequisites and the atomic runtime checks above:
+
+```sh
+sg docker -c 'docker run --name native-opencode-create --network none --cap-drop ALL --security-opt no-new-privileges --shm-size 256m anet-native-opencode:test sh /fixture/keyring.sh xvfb-run -a -s "-screen 0 1280x900x24 -nolisten tcp" bash /fixture/opencode-create-ui.sh'
+```
+
+The creation request must come from native UI/IPC. The verifier reads only the
+isolated database and authenticated launch-proof API, requires exact persisted
+V2/consent/model/node/network, checks live process generations and non-revoked
+child credentials, then sends one test task via **REST** and verifies the actual
+model response. It does not claim UI task dispatch, model-switch, restart or V1
+coverage. `TEST_CREATE_MISS_CLICK=1` is a separate negative requiring no request
+or node identity and the precise missing-launch assertion. Screenshot review is
+still required. Syntax checks alone do not establish either execution outcome;
+consult the exact-source test report before reusing any claimed result.
+
+Copy only `/evidence` before removing the container, including failed runs.
+Container removal remains the final cleanup for all daemon/runtime descendants.
+No production state may be mounted. After exercising the exact85040c7 package's
+positive and missed-submit negative (see the report), CI now runs both after
+the atomic runtime gates and preserves their evidence even on failure. The
+new CI execution must pass on its own head; the earlier package result is not
+inherited as a green result for later test commits.
+
+For local diagnostic reuse of a CI artifact, `overlay.Dockerfile` accepts
+`--build-context candidate=<downloaded-artifact-directory>` plus explicit
+`FIXTURE_IMAGE`, `DEB_FILE`, `SOURCE_COMMIT` and `DEB_SHA256` arguments. Use an
+already validated runtime fixture image, inspect the workflow/run/head and
+artifact identity, and pass the **tested merge SHA** from `TEST-ONLY.txt`, not
+the PR head. The build binds that source record and the deb checksum before
+installing. This overlay is never a clean-machine-install claim, never a public
+release, and must not replace the original CI clean-install prerequisite.
 
 The Docker build downloads dependencies; executions are network-isolated. The
 lockfile comes from backend `tests/test883-v2-portable-client/tools` at

@@ -15,6 +15,10 @@ COPY --from=runtime /opt/opencode-fixture /opt/opencode-fixture
 COPY tests/linux-native-opencode/stub-model.py /fixture/stub-model.py
 COPY tests/linux-native-opencode/atomic.py /fixture/opencode-atomic.py
 COPY tests/linux-native-opencode/prepare.py /fixture/opencode-prepare.py
+COPY tests/linux-native-opencode/create-ui.sh /fixture/opencode-create-ui.sh
+COPY tests/linux-native-opencode/verify-create.py /fixture/opencode-verify-create.py
+RUN bash -n /fixture/opencode-create-ui.sh && \
+    python3 -c 'import ast,pathlib; ast.parse(pathlib.Path("/fixture/opencode-verify-create.py").read_text())'
 RUN ln -s /opt/opencode-fixture/node_modules/.bin/opencode /usr/local/bin/opencode && \
     mkdir -p /run/user/10001 && chown 10001:10001 /run/user/10001 && chmod 700 /run/user/10001
 USER smoke
