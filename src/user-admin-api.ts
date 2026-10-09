@@ -56,6 +56,20 @@ export const forgetAuthMe = (): void => { authMeCache.clear(); };
 /** #552 —— 只丢这一个 hub + 令牌的「我是谁」(发送回 404/400/403 网络类错误后要重新判网络,不能读 60 s 内的旧答案)。 */
 export const forgetAuthMeFor = (cfg: Pick<HubConfig, 'serverUrl' | 'token'>): void => { authMeCache.delete(`${cfg.serverUrl}\u0000${cfg.token}`); };
 
+/** Human profile only: never use the node/alias avatar store. Verify the receipt
+ * before displaying success, including old Hubs that answer unrelated routes. */
+export async function putUserAvatar(cfg: HubConfig, userId: string, avatarUrl: string | null): Promise<string | null> {
+  if (!userId) throw new HubRequestError('avatar_identity_missing', 0);
+  const value = avatarUrl?.trim() || null;
+  const d = await call<{ ok?: boolean; user_id?: string; avatar_url?: string | null }>(
+    cfg.serverUrl, cfg.token, '/api/auth/me/avatar', { method: 'PUT', body: { avatar_url: value } });
+  if (d?.ok !== true || d.user_id !== userId || d.avatar_url !== value) {
+    throw new HubRequestError('avatar_receipt_mismatch', 0);
+  }
+  forgetAuthMeFor(cfg);
+  return d.avatar_url;
+}
+
 export const fetchNetworkMembers = (cfg: HubConfig, networkId: string) =>
   call<{ members: NetworkMember[] }>(cfg.serverUrl, cfg.token, `/api/networks/${net(networkId)}/members`).then(d => d.members ?? []);
 

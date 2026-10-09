@@ -27,6 +27,14 @@ on:
     branches: ['**']
 
 jobs:
+  user-avatar:
+    name: user avatar editor (Docker)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - run: docker build -f tests/user-avatar/Dockerfile -t user-avatar .
+      - run: docker run --rm --network none user-avatar
   people-loading:
     name: task people loading (Docker)
     runs-on: ubuntu-latest

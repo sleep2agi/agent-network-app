@@ -39,6 +39,7 @@ export const SETTINGS_CATEGORIES: readonly SettingsCategory[] = [
     icon: 'person-circle-outline',
     rows: [
       { key: 'profiles', label: '账号与 Hub', keywords: ['登录', '服务器', 'profile', 'hub', 'account'] },
+      { key: 'avatar', label: '我的头像', keywords: ['头像', 'avatar', 'profile photo'] },
       { key: 'addAccount', label: '添加 Hub / 账号', keywords: ['添加', '登录', 'add'] },
       // 登录设备(安全审计 2026-09-29):hub 上这个账号的登录会话,可退出某台 / 退出其他所有设备。旧 hub 没有接口时不出现。
       { key: 'devices', label: '登录设备', keywords: ['设备', '会话', '退出其他设备', '登出', '安全', 'devices', 'sessions', 'sign out', 'security'] },
