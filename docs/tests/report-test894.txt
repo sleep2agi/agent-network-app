@@ -272,3 +272,29 @@ Earlier locally pending evidence above is consolidated with this installer
 candidate; the old 2f0dbf4 CI result remains bound to its old source/artifact.
 The new candidate still requires its own full CI/package and native installer
 integration gates; it is not approved for merge or release by these checks.
+
+2026-10-10 01:37 Asia/Shanghai — exact-pair source contract regression:
+Head 50723a6336dee211c835c8a0435423987765203d had four failed unit jobs
+(push + pull_request, Ubuntu + Windows). Read PR run37966240584 logs for
+jobs113941186022 and113941186118: both fail the same local-daemon.test.ts
+assertion requiring the obsolete floating @sleep2agi/agent-node@latest string.
+The replacement asserts the exact .162/.128 product constants, private-prefix
+installation of both constants, both-existing-package preflight before either
+installation or Hub credential write, and revalidation after fresh installation.
+Existing scan/old-daemon-stop assertions are retained. No product gate weakened.
+
+Docker targeted test: 31 checks passed. Full suite: 380/380 test files passed.
+Both used the existing anet-linux-deb:8fb42f1 image (image ID recorded above),
+network disabled, current worktree mounted read-only. Full run copied current
+source inside the disposable container to /app, retaining image dependencies;
+a separate offline cmp verified current package-lock.json equals image lock.
+Commands from repository root:
+sg docker -c 'docker run --rm --network none -v /dev/shm/anet-app-bundled-v2-contract:/candidate:ro --workdir /candidate --entrypoint /usr/local/bin/bun anet-linux-deb:8fb42f1 src/local-daemon.test.ts'
+sg docker -c 'docker run --rm --network none -v /dev/shm/anet-app-bundled-v2-contract/package-lock.json:/candidate-lock.json:ro --entrypoint cmp anet-linux-deb:8fb42f1 /candidate-lock.json /app/package-lock.json'
+sg docker -c 'docker run --rm --network none -v /dev/shm/anet-app-bundled-v2-contract:/candidate:ro --workdir /app --entrypoint sh anet-linux-deb:8fb42f1 -c "cp -a /candidate/. /app/ && node scripts/run-tests.mjs"'
+First full-suite invocation ran from /candidate without dependencies and was
+stopped after module-not-found errors; it is an invalid environment attempt,
+not a product result. Corrected run above printed 380/380. All owned containers
+used --rm and exited/were stopped; unrelated containers were not touched.
+This incremental test repair still needs new-head Ubuntu/Windows CI. Native
+daemon installer integration and complete V2 lifecycle remain outstanding.

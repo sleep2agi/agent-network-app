@@ -71,7 +71,20 @@ check(wf.includes('--smoke-local-daemon-install') && wf.includes('if [ "$RUNNER_
   const oldOnPath = daemonChecklist({ ...base, node: { path: '/n', version: '22.14.0' }, npm: { path: '/m' }, agentNodeOnPath: '/Users/v/.nvm/versions/node/v20.12.2/bin/agent-node' });
   check(oldOnPath[3].state === 'missing' && oldOnPath[3].detail.includes('v20.12.2') && oldOnPath[3].detail.includes('旧版'), 'agent-node row warns about the PATH copy');
   const rust = readFileSync(new URL('../src-tauri/src/local_daemon.rs', import.meta.url), 'utf8');
-  check(rust.includes('@sleep2agi/agent-node@latest') && rust.includes('probe_private_agent_node()') && rust.includes('node stop {}') , 'installer installs a private agent-node beside anet and stops the old daemon before starting');
+  const packages = readFileSync(new URL('../src-tauri/src/local_daemon_packages.rs', import.meta.url), 'utf8');
+  check(packages.includes('"@sleep2agi/agent-network@2.3.0-preview.162"') && packages.includes('"@sleep2agi/agent-node@2.5.0-preview.128"') &&
+    !rust.includes('@latest') && !packages.includes('@latest'), 'private CLI and agent-node use the exact reviewed package pair, never latest');
+  check(rust.includes('install -g --prefix {} {ANET_PACKAGE}') && rust.includes('install -g --prefix {} {AGENT_NODE_PACKAGE}') &&
+    rust.includes('probe_private_agent_node()') && rust.includes('node stop {}'), 'installer installs both pinned packages privately and retains scan and old-daemon stop wiring');
+  const preflight = rust.indexOf('let (existing_cli, existing_agent_node) = match preflight()');
+  const cliInstall = rust.indexOf('install -g --prefix {} {ANET_PACKAGE}');
+  const agentInstall = rust.indexOf('install -g --prefix {} {AGENT_NODE_PACKAGE}');
+  const credentials = rust.indexOf('write_private_atomic(&anet_dir.join("config.json")');
+  check(preflight >= 0 && cliInstall > preflight && agentInstall > preflight && credentials > agentInstall &&
+    rust.includes('Some(check_cli()?)') && rust.includes('Some(checked_private_agent_node(&node_bin_dir.join("node"))?)'),
+    'both existing packages are checked before either install or Hub credential write');
+  check(rust.includes('match check_cli()') && rust.includes('match checked_private_agent_node(&node_bin_dir.join("node"))'),
+    'freshly installed packages are checked too');
   const v4 = hubDaemonView({ ...base, sessions: [{ alias: 'local-daemon', status: 'idle' }], nodes: [{ node_id: 'node_daemon_6f85', config_snapshot: { role: 'host_supervisor' } }], supervisors: [] });
   check(!v4.ok && v4.verdict.includes('token'), 'role ok but unlisted → token verdict');
   const v5 = hubDaemonView({ ...base, sessions: [{ alias: 'local-daemon', status: 'idle' }], nodes: [{ node_id: 'node_daemon_6f85', config_snapshot: { role: 'host_supervisor' } }], supervisors: [{ daemon_node_id: 'node_daemon_6f85', online: true }] });
