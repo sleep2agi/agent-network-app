@@ -10,7 +10,7 @@ export const HUMAN_DM_KIND = 'human_dm';
 
 /** GET /api/networks/:id/humans 的一项。online / last_seen_at 是 hub 较新版本才给的在线状态(只给用户令牌);
  *  旧 hub 没有这两个字段 → 什么都不画(不画成假的灰点)。 */
-export type Human = { user_id: string; username: string; display_name?: string | null; online?: boolean; last_seen_at?: string | null };
+export type Human = { user_id: string; username: string; display_name?: string | null; avatar_url?: string | null; online?: boolean; last_seen_at?: string | null };
 /** GET /api/dm/threads 的一项。 */
 export type DmThread = { other_user_id: string; last_at?: string | null; unread?: number | null };
 /** GET /api/dm 的一条(新的在前)。 */

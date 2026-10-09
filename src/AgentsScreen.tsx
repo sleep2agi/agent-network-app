@@ -13,6 +13,7 @@ import { ActivityIndicator, Platform, Pressable, RefreshControl, SectionList, St
 import { Text, TextInput } from './ui-text';
 import { Ionicons } from './icons';
 import AliasAvatar from './AliasAvatar';
+import HumanAvatar from './HumanAvatar';
 import { consumeAgentSearchFocus, subscribeAgentSearchFocus } from './shortcuts-store';
 import { useTranslation } from './i18n-react';
 import './i18n-chat';
@@ -702,7 +703,7 @@ export default function AgentsScreen({
           ]}
         >
           <View style={styles.avatarWrap}>
-            <AliasAvatar alias={p.username} size={34} />
+            <HumanAvatar hubUrl={cfg.serverUrl} person={p} size={34} />
             {presence ? (
               <View
                 testID={`person-dot-${p.username}`}
@@ -728,7 +729,7 @@ export default function AgentsScreen({
         style={({ pressed }) => [rowStyles.row, { backgroundColor: selected ? colors.rowActive : pressed ? colors.rowHover : colors.bg }]}
       >
         <View style={rowStyles.avatar}>
-          <AliasAvatar alias={p.username} size={rowGeom().avatar} fixedSize />
+          <HumanAvatar hubUrl={cfg.serverUrl} person={p} size={rowGeom().avatar} fixedSize />
           {presence ? (
             <View
               testID={`person-dot-${p.username}`}
