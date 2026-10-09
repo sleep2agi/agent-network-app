@@ -18,6 +18,8 @@ try {
     await context.route('http://avatar-fixture.invalid/**', route => route.fulfill({ contentType: 'image/png', body: png }));
     await context.addInitScript(initScript, { theme: 'light' });
     await context.addInitScript(({ humanUrl, nodeUrl }) => {
+      // The real people list requires an authenticated user ID, not just a username.
+      window.__tasksFixture = { meId: 'u-self' };
       const person = { user_id: 'u-peer', username: '示例-A', display_name: 'Avatar peer', avatar_url: humanUrl };
       window.__routeOverride = (u) => {
         if (u.pathname.endsWith('/humans')) return { ok: true, humans: [person] };
