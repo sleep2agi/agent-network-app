@@ -431,3 +431,60 @@ Docker YAML parse and ordered native fault gates passed. New CI appends these
 cases after current-pair and historical-package checks. Existing positives are
 not recounted as new work and policy unit tests are not substituted for native
 results. No product code changed. Complete V1/V2 native session flow still open.
+
+2026-10-10 02:10 Asia/Shanghai — native UI to daemon handoff:
+Added independent tests/linux-native-daemon-ui suite. Real installed Tauri app,
+X11 mouse input, native IPC, Secret Service, bundled Hub and offline npm; no web
+export/HTTP/Tauri replacement and no --smoke-local-daemon-install invocation.
+Accepted package remains50723a6 product / tested merge
+433823aed20a09b6159b3f30e137daf6265bd685, deb SHA
+f39631f06fbd99527de10a39e38e98423ee9aedc3686ed27aa95968814cb8dd1.
+Diagnostic fixture overlays that accepted artifact, not a claim of new clean
+installation or a package built from this new test commit.
+
+First automation stopped BEFORE install because verifier omitted required
+network_id and received HTTP400. Fixed verifier to use native profile.networkId
+for every supervisor query and require daemon profile.network_id to match it.
+No product change or swallowed HTTP error. Corrected positive exited0:
+ - UI creates local workspace and native session; wrong token gets401.
+ - new-node navigation and scan leave daemon profile/private credentials absent
+   and network-scoped Hub supervisor list empty.
+ - real install click creates profile with node_daemon_fab9e3da76e2, matching
+   authenticated Hub supervisor online=true/can_create_nodes=true.
+ - manually reviewed registered.png: green local-daemon,1/1online, next enabled,
+   no installer spinner; runtime badges correctly unavailable in this image.
+Screenshot SHA256 c04fe8e340d10bd0e320f0ab39fd2ba110b1364126881c444c6dfe246c712d57
+Sanitized registration JSON SHA256
+e5f11907fa44135cac9814de79b9a84255e8dbee953ef87938f6dd51023b8181
+Positive ran image manifest
+6346b391be6904bd75dc27ff278b73b666aa8ba73ff8a3af97f27cdd6c49198c;
+later fixture adds failure screenshot capture and strengthens missed-click
+absence assertions without changing positive acceptance or product source.
+
+Build command:
+sg docker -c 'docker build --build-arg NATIVE_IMAGE=anet-native-daemon:507 --build-arg SOURCE_COMMIT=433823aed20a09b6159b3f30e137daf6265bd685 --build-arg DEB_SHA256=f39631f06fbd99527de10a39e38e98423ee9aedc3686ed27aa95968814cb8dd1 -t anet-native-daemon-ui:507 -f tests/linux-native-daemon-ui/Dockerfile .'
+Run command: sg docker -c 'docker run --name anet894-native-ui-positive --network none --cap-drop ALL --security-opt no-new-privileges --shm-size 256m anet-native-daemon-ui:507'
+Screens/evidence copied before removing stopped container, retained in diagnostic
+/tmp/anet894-ui-evidence.pRdKDx/positive, not required rebuild inputs.
+Suite scripts and CI artifact preservation are authoritative in Git; CI stores
+only /evidence, not credential files/databases. No production state mounted.
+
+Prior exact96e603836a288f9308d2822982f7e1a956564ca5 linux-deb
+run37968531279/job113948915916 nowSUCCESS, including all three native installer
+steps. Current7479a9029ebbf2d162aab956da8c2e1cd3f300c6 observed17SUCCESS/
+1SKIPPED/9running (linux-deb +8UI shards), no failures, not all-green.
+Complete V1/V2 needs real pinned runtime/provider fixture, creation/launch proof,
+model changes and stop/restart. This UI-to-daemon result does not close it.
+
+Final missed-click run uses image manifest
+625c781ab8c733c7b3a68623baf1876c5057c4b3a28a5ad69b3a7cf0d04543a3,
+same command options plus -e TEST_DAEMON_UI_MISS_CLICK=1, independent container.
+Exit1, exact "AssertionError: UI install click did not register matching online
+daemon" after successful auth/scan preconditions. Explicitly confirmed no daemon
+credentials/profile/Hub roster change. PASS expected negative (not a suite crash).
+Earlier negative had the same expected refusal; strengthened absence assertions
+were then executed rather than assumed. Bash/Python syntax in Docker and YAML
+parse/prerequisite ordering/always-preserve-evidence checks passed. All dedicated
+diagnostic/positive/negative containers removed after saving screenshots; docker
+ps -a --filter name=anet894-native-ui returns empty. App trap is not claimed to
+stop every descendant; container removal remains final cleanup boundary.

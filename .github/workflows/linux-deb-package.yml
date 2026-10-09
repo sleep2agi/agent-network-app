@@ -10,6 +10,7 @@ on:
       - 'tests/linux-native-workspace/**'
       - 'tests/linux-hub-migration/**'
       - 'tests/linux-native-daemon/**'
+      - 'tests/linux-native-daemon-ui/**'
       - 'tests/local-daemon-packages/**'
       - 'scripts/seed-previous-local-hub.mjs'
       - 'scripts/with-linux-test-keyring.sh'
@@ -162,6 +163,29 @@ jobs:
       - name: Native daemon correct CLI banner cannot mask probe timeout
         shell: bash
         run: docker run --rm --network none --cap-drop ALL --security-opt no-new-privileges anet-native-daemon:test sh /fixture/keyring.sh bash /fixture/native-daemon.sh timeout-cli 2>&1 | tee out/native-daemon-timeout-cli.log
+      - name: Build real native daemon UI fixture
+        run: |
+          deb_sha=$(sha256sum out/*.deb | awk '{print $1}')
+          docker build --build-arg NATIVE_IMAGE=anet-native-daemon:test --build-arg SOURCE_COMMIT="$(git rev-parse HEAD)" --build-arg DEB_SHA256="$deb_sha" -t anet-native-daemon-ui:test -f tests/linux-native-daemon-ui/Dockerfile .
+      - name: Real UI scan and install registers online daemon
+        run: docker run --name native-daemon-ui-proof --network none --cap-drop ALL --security-opt no-new-privileges --shm-size 256m anet-native-daemon-ui:test
+      - name: Missed daemon install click cannot pass registration
+        shell: bash
+        run: |
+          set +e
+          docker run --rm --network none --cap-drop ALL --security-opt no-new-privileges --shm-size 256m -e TEST_DAEMON_UI_MISS_CLICK=1 anet-native-daemon-ui:test >out/native-daemon-ui-negative.log 2>&1
+          result=$?
+          set -e
+          test "$result" -ne 0
+          grep -F 'AssertionError: UI install click did not register matching online daemon' out/native-daemon-ui-negative.log
+      - name: Preserve native daemon UI evidence
+        if: always()
+        run: |
+          if docker container inspect native-daemon-ui-proof >/dev/null 2>&1; then
+            mkdir -p out/native-daemon-ui-evidence
+            docker cp native-daemon-ui-proof:/evidence/. out/native-daemon-ui-evidence/
+            docker rm native-daemon-ui-proof
+          fi
       - uses: actions/upload-artifact@v4
         if: always()
         with:
