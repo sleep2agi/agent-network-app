@@ -288,6 +288,7 @@ const copy = [
   ['诊断', 'Diagnostics'],
   ['Agent 组织', 'Agent organization'],
   ['Agent 团队', 'Agent teams'],
+  ['我的头像', 'My avatar'],
 ] as const;
 export const settingsTranslations = Object.fromEntries(copy.map((pair, index) => [`settings.copy.${index}`, pair]));
 registerTranslations(settingsTranslations);

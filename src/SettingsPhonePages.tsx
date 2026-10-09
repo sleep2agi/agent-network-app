@@ -16,6 +16,7 @@ import { localizedThemeSummary, localizedScaleSummary } from './i18n-settings-pr
 //    不许从 react-native 拿 Switch —— 一律经 settings-kit。
 import type { ReactNode } from 'react';
 import LanguageSettings from './LanguageSettings';
+import UserAvatarEditor from './UserAvatarEditor';
 import './i18n-changelog';
 import './i18n-fatal';
 import { fatalSummary } from './fatal-report';
@@ -192,6 +193,7 @@ function AccountPage({ ctx }: { ctx: PhonePagesCtx }) {
           {show('account', 'addAccount') ? <SettingsRow label={tr('settings.copy.93')} tone="accent" icon="add" onPress={ctx.onAddAccount} testID="settings-add-account" /> : null}
         </SettingsGroup>
       )}
+      {show('account', 'avatar') ? <UserAvatarEditor cfg={cfg} /> : null}
       {devices || passwordRow ? (
         <SettingsGroup title={tr('accounts.groupSecurity')} testID="settings-account-security">
           {passwordRow ? (

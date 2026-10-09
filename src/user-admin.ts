@@ -9,7 +9,7 @@ export type AgentAccess = 'all' | 'granted';
 
 /** GET /api/auth/me 里我们用到的部分。 */
 export type AuthMe = {
-  user?: { user_id?: string; username?: string; role?: string } | null;
+  user?: { user_id?: string; username?: string; role?: string; avatar_url?: string | null } | null;
   current_network?: string | { network_id?: string } | null;
   networks?: Array<{ network_id?: string; network_name?: string; member_role?: MemberRole; agent_access?: AgentAccess }> | null;
 };

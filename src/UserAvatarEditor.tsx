@@ -1,0 +1,83 @@
+import { useEffect, useRef, useState } from 'react';
+import { Image, Pressable, View } from 'react-native';
+import { Text, TextInput } from './ui-text';
+import type { HubConfig } from './api';
+import { fetchAuthMe, forgetAuthMeFor, HubRequestError, putUserAvatar } from './user-admin-api';
+import { POOL_FILENAMES, poolFileNameForAlias, validateCustomAvatarUrl } from './lib/avatar-resolve';
+import { sourceForFile } from './lib/avatars';
+import { SettingsButton, SettingsCardContent, SettingsGroup } from './settings-kit';
+import { colors, avatarRadius, radius } from './theme';
+import { useTranslation } from './i18n-react';
+import { t } from './i18n';
+import './i18n-user-avatar';
+
+// Remount on account/Hub/token change. An old request can finish for its original
+// account, but its disposed editor must never update the new account's UI.
+export default function UserAvatarEditor({ cfg }: { cfg: HubConfig }) {
+  return <Editor key={JSON.stringify([cfg.serverUrl, cfg.profileId, cfg.token])} cfg={cfg} />;
+}
+
+function Editor({ cfg }: { cfg: HubConfig }) {
+  useTranslation();
+  const live = useRef(true);
+  const busyRef = useRef(false);
+  const [user, setUser] = useState<{ id: string; avatar: string | null } | null>(null);
+  const [url, setUrl] = useState('');
+  const [loading, setLoading] = useState(true);
+  const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState('');
+  const [imageError, setImageError] = useState(false);
+  const load = async () => {
+    setLoading(true); setMessage('');
+    try {
+      forgetAuthMeFor(cfg);
+      const me = await fetchAuthMe(cfg);
+      if (!live.current) return;
+      if (!me.user?.user_id || !Object.hasOwn(me.user, 'avatar_url')) {
+        setMessage('userAvatar.unsupported'); return;
+      }
+      setUser({ id: me.user.user_id, avatar: me.user.avatar_url ?? null });
+    } catch { if (live.current) setMessage('userAvatar.failed'); }
+    finally { if (live.current) setLoading(false); }
+  };
+  useEffect(() => { live.current = true; void load(); return () => { live.current = false; }; }, []);
+  useEffect(() => { setImageError(false); }, [user?.avatar]);
+  const apply = async (value: string | null) => {
+    if (!user || busyRef.current) return;
+    busyRef.current = true; setBusy(true); setMessage('');
+    try {
+      const avatar = await putUserAvatar(cfg, user.id, value);
+      if (live.current) { setUser({ ...user, avatar }); setMessage('userAvatar.saved'); }
+    } catch (e) {
+      if (live.current) setMessage(e instanceof HubRequestError && [404, 405].includes(e.status) ? 'userAvatar.unsupported' : 'userAvatar.failed');
+    } finally { busyRef.current = false; if (live.current) setBusy(false); }
+  };
+  const avatar = user?.avatar;
+  // Only bundled files or validated http(s). Never consult node alias maps.
+  const source = avatar?.startsWith('/avatars/') ? sourceForFile(avatar.slice(9))
+    : avatar && validateCustomAvatarUrl(avatar).ok ? { uri: avatar }
+    : user ? sourceForFile(poolFileNameForAlias(user.id)) : null;
+  return <SettingsGroup title={t('userAvatar.title')} testID="user-avatar-editor">
+    <SettingsCardContent>
+      <Text>{t('userAvatar.hint')}</Text>
+      {source && !imageError ? <Image testID="user-avatar-preview" source={source} onError={() => setImageError(true)} style={{ width: 56, height: 56, borderRadius: avatarRadius(56), marginVertical: 12 }} /> : <Text testID="user-avatar-fallback">{cfg.username || '·'}</Text>}
+      {loading ? <Text>{t('userAvatar.loading')}</Text> : null}
+      {user ? <>
+        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
+          {POOL_FILENAMES.map((file, i) => <Pressable key={file} accessibilityRole="button" accessibilityLabel={t('userAvatar.pick', { n: i + 1 })} testID={`user-avatar-pick-${i + 1}`} disabled={busy || loading} onPress={() => void apply(`/avatars/${file}`)} style={{ padding: 6, opacity: busy ? 0.5 : 1 }}>
+            <Image source={sourceForFile(file)!} style={{ width: 36, height: 36, borderRadius: avatarRadius(36) }} />
+          </Pressable>)}
+        </View>
+        <Text style={{ color: colors.textMuted, marginVertical: 12 }}>{t('userAvatar.remote')}</Text>
+        <TextInput testID="user-avatar-url" accessibilityLabel={t('userAvatar.url')} placeholder={t('userAvatar.url')} value={url} onChangeText={setUrl} editable={!busy && !loading} autoCapitalize="none" style={{ color: colors.text, padding: 12, borderWidth: 1, borderColor: colors.textMuted, borderRadius: radius.control }} />
+        <SettingsButton testID="user-avatar-save" label={t('userAvatar.save')} disabled={busy || loading || !url.trim()} onPress={() => {
+          const v = validateCustomAvatarUrl(url);
+          if (!v.ok) setMessage('userAvatar.invalid'); else void apply(v.url);
+        }} />
+        <SettingsButton testID="user-avatar-reset" label={t('userAvatar.reset')} disabled={busy || loading} onPress={() => void apply(null)} />
+      </> : !loading ? <SettingsButton label={t('userAvatar.retry')} testID="user-avatar-retry" onPress={() => void load()} /> : null}
+      {busy ? <Text>{t('userAvatar.busy')}</Text> : null}
+      {message ? <Text testID="user-avatar-message" accessibilityLiveRegion="polite">{t(message)}</Text> : null}
+    </SettingsCardContent>
+  </SettingsGroup>;
+}
