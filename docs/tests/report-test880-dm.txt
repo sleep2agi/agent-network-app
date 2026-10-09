@@ -1,0 +1,48 @@
+#880 DM peer-avatar slice — 2026-10-09 (CST)
+
+Base main: 66e691643567c5e5cdb40f7af2854eb602e1f423 (PR790 merged)
+Tested source: 9c9f1ddeb84b1d78711dae20a030ef98d6a783a8
+Docker image: sha256:46ca6019f2bfa9775f0c5a191722acb18885d90a5fa3fbd347b6634bbc0e78ab
+
+Scope: carry avatar_url through App's DM navigation projection, and render
+HumanAvatar for the peer header and incoming direct-message bubbles. Preserve
+user ID and Hub identity; no Agent alias lookup for those two surfaces.
+Group senders and outgoing/self bubbles are unchanged and remain follow-up work.
+
+Commands (inside isolated Docker; no production credentials or host mounts):
+sg docker -c 'docker build -f tests/user-avatar/Dockerfile -t anet-avatar:dm-peer-v3 . && docker run --name anet-avatar-dm-peer-v3 --network none anet-avatar:dm-peer-v3'
+sg docker -c 'docker run --name anet-avatar-dm-unit --network none --entrypoint sh anet-avatar:dm-peer-v3 -c "TEST_RUNNER=bun npm test"'
+sg docker -c 'docker run --name anet-avatar-dm-negative --network none -e WEB_DIR=/web-settings -e TEST_DM_WRONG_AVATAR_EXPECTATION=1 --entrypoint node anet-avatar:dm-peer-v3 tests/user-avatar/dm-drive.mjs'
+
+Results:
+- Build: 137 targeted checks, TypeScript and actual Expo Web export PASS.
+- Existing avatar component: 26/26; full settings desktop/phone light/dark:
+  124/124; then actual DM navigation at widths 390 and 1320: 12/12. Exit 0.
+- Full unit runner: 380/380 test files PASS; exit 0.
+- Negative: person-list precondition passes, then wrong expected Agent image
+  fails exactly at "390: dm-peer-avatar-image uses user avatar, not same-name
+  Agent". Exit 1, not a timeout. Browser and static server close in finally.
+- Same-name synthetic human/Agent have different image URLs. Assertions inspect
+  a nonempty CSS background-image, verify the expected human URL, image decode,
+  and no horizontal overflow. The test does not count an avatar container as proof.
+
+Failures retained, not represented as passing:
+1. 031504fd33f6b33ec388e0b1f91274f2d24ff7c3 fixture omitted auth/me user_id.
+   Actual people-list identity gate correctly withheld the row; timeout exit 1.
+2. af4a0b801e1ceecdd0e6733eb410a19bb6641828 fixed that fixture; person-list
+   assertion passed, but header-image assertion failed. Real navigation mapping
+   discarded avatar_url. Final source fixes that mapping without relaxing tests.
+   These two stopped containers retain their original logs.
+
+The existing user-avatar Dockerfile now invokes dm-drive.mjs after component and
+full settings gates, so the unit-tests workflow also runs it. Product and test
+source are in Git; the suite rebuilds from its pinned bases and repository locks.
+Build uses a clean tracked worktree, not an externally published artifact. Exact
+PR-head CI remains a separate merge gate. No release or native IPC claim.
+
+Recovery/production boundary: no service launcher, port mapping, proxy, secrets,
+schema or production data change. Test HTTP/images are synthetic and container
+local. Rollback of this UI slice is a source revert followed by normal main-SHA
+build/release gates; no data migration or backup restore needed for this slice.
+Real Hub, live refresh while a DM stays open, native packages, self/group avatars
+and photo uploads remain outside this acceptance.
