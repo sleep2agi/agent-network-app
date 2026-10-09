@@ -150,3 +150,125 @@ Downloaded manifest confirms Hub .120. Native bootstrap, real UI and negative
 controls passed, and before/after screenshots were manually inspected (welcome
 to Agent list). That workflow had NO migration steps; its success cannot replace
 the newer head's failing/untested gates above.
+
+Private-prefix diagnostic, 2026-10-10 01:04 Asia/Shanghai:
+Disposable Docker based on tests/linux-deb-package/Dockerfile image
+anet-linux-deb:8fb42f1; image ID
+sha256:e6be76163b8405d7bde1426f6699e32f4131ddbb613c0239fed116f8b0a6fff5.
+Inside the container only, installed with npm -g --prefix <mktemp directory>
+--ignore-scripts --no-audit --no-fund:
+  @sleep2agi/agent-network@2.3.0-preview.162
+  @sleep2agi/agent-node@2.5.0-preview.128
+Exit 0, 276 packages. Package JSON confirms the two exact versions under
+<prefix>/lib/node_modules/@sleep2agi/. The anet symlink resolves to
+agent-network/dist/bin/anet.cjs; direct agent-node/dist/cli.js --help exits 0
+and advertises opencode-cli. This corrects the earlier local-prefix layout
+experiment, not a claim that the native installer or V2 lifecycle passes.
+
+Limits: root container, temporary /tmp prefix, scripts disabled, no Hub
+registration, no daemon or OpenCode launch, no package integrity/provenance
+assertion in this diagnostic. The prefix/bin directory was NOT added to PATH;
+therefore anet --version's "agent-node not installed" output does not prove
+failure of the actual installer (which does add it). Help text alone does not
+prove V2 support. The trusted entrypoint resolver checks ancestor ownership
+and modes, so the temporary /tmp layout is not a trusted-path positive test.
+Container was --rm; no host global npm packages or production data changed.
+
+Source audit: app local_daemon.rs still pins both packages to floating latest;
+its existing-CLI path marks the probe step successful without checking the
+probe exit code/timed_out, and its existing-agent-node path accepts a package
+JSON version without exact pair validation. Backend opencode-agent-node-pair.ts
+requires exact CLI .162 / agent-node .128 and trusted package ancestry. This is
+a remaining installer validation/upgrade gap, not fixed by the Hub .120 pin.
+
+New-head CI acceptance, 2026-10-10 01:07-01:09 Asia/Shanghai:
+PR795 head 2f0dbf47f735cbac688b2fc6b5c5c110bdb60085: 25 SUCCESS / 1 conditional
+SKIPPED, no pending/failure. linux-deb run37962304739/job113927925866 SUCCESS.
+Test merge source: 1fb4848f9caae929ffa9b9ddc8b4741871f8ebdc.
+Artifact11632313194: TEST-ONLY-linux-deb-1fb4848f9caae929ffa9b9ddc8b4741871f8ebdc.
+ANet_0.2.227_amd64.deb SHA256:
+7c9e0d3a32c6e3fee4bff866b3f26a04ba66dc2873bc0bdd427a88566c2c46d0.
+Downloaded artifact and verified the deb checksum. Initial sha256sum -c lookup
+failed because the manifest retains CI's out/ prefix while gh download flattens
+the artifact root; stripping only that filename prefix yields OK, with the
+original expected hash unchanged. This was a path lookup, not a hash mismatch.
+Bundled manifest confirms Hub .120 / API v3 / Linux x86_64, same sourceIntegrity
+as recorded above. preBundleSha256 is
+0a4a7ab870745c8753630d1468233d50ea670b79bc5ff85dfa1671ff9a9fbf8f;
+preBundleSize 96229504. Do not infer byte-identical rebuilds across CI runs.
+
+Native startup/auth, missing Secret Service negative, real UI credential flow,
+and missed-click negative all passed. Manually reviewed downloaded before/after
+screenshots: welcome/Create local workspace -> Agent list with 0 agents, not a
+loading spinner. Negative logs retain exact missing-Service and missed-click
+failures; CI asserts these expected failures rather than treating them as passes.
+
+New .66-to-.120 migration and failed-migration rollback steps both passed in
+offline disposable containers. Upgrade verifies old identity/node/task retained
+and .120 metadata plus cross-version snapshot. Wrong-credential rollback verifies
+byte-exact previous database, previous endpoint/port/version, no stale supervisor
+lock and retained cross-version snapshot; wrapper independently requires .66
+metadata afterward. These are NEW .120 package positives, unlike earlier .66
+same-version negative checks. No production state or credentials were used.
+
+Remaining: daemon exact input/old-install compatibility and complete native V2
+create/model/start/stop flow. PR remains draft; this evidence does not mark #894
+or #829/#539 complete, authorize merging, or turn a TEST ONLY artifact into a
+formal package. This report increment is local pending the next scoped commit.
+
+Cleanup review (read-only, no test rerun): CI job completed successfully at
+2026-10-09T17:07:16Z. Atomic/keyring-negative/missed-click/migration containers use
+--rm; the named window/UI evidence containers are removed by their successful
+always() evidence-preservation steps after copying /evidence only. UI helper
+traps its own app PID (kill/wait), keyring helper traps its own daemon PID, and
+native migration smokes stop the local Hub and delete their test credential.
+The local prefix diagnostic container was --rm; a subsequent docker ps filtered
+to its image returned no running container. Downloaded TEST ONLY package/logs/
+screenshots are intentionally retained for review; GitHub retention is seven
+days, not a durable production backup. No broad host cleanup was performed.
+
+Installer policy candidate, 2026-10-10 01:19 Asia/Shanghai:
+Exact pair source was freshly read from backend main
+80c6ab5b883a2056784326e73a6b6ec09ac0ce2c,
+agent-network/src/opencode-agent-node-pair.ts (.162 CLI / .128 agent-node).
+The candidate pins these two new-install inputs and preflights BOTH existing
+private packages before npm install, Hub credential write or daemon start.
+CLI requires successful/non-timeout probe plus exactly one exact version banner;
+agent-node requires matching manifest identity/version/entrypoint and successful
+real help execution. Old, newer-but-unpaired, broken or partial installs fail
+without replacement. A dangling CLI symlink or a package directory missing its
+CLI bin is an existing broken installation, not permission to reinstall over it.
+No V2 unsafe flag or V1 config is changed; no automatic upgrade is implemented.
+
+Independent tests/local-daemon-packages/Dockerfile compiles the actual policy
+module with digest-pinned Rust, runs offline as UID65534: 6/6 tests passed.
+Tests include failed/timed-out processes printing a correct banner, ambiguous
+versions, old/newer versions, wrong package identity and missing/wrong entrypoint.
+Full actual Rust module compile/tests started in a disposable existing Linux
+build image, with the current src-tauri source mounted read-only and copied
+inside the container. Full compile is pending at this checkpoint; no result is
+inferred from the dependency-free policy test. Native installer path-level
+integration and new-head package gates remain required.
+
+The added private-prefix Docker stage also passed: ordinary user node (not root),
+/home/node/.anet/app/local-daemon/anet, matching prefix/bin on PATH, normal npm
+install scripts (not --ignore-scripts), 274 installed packages. Offline probe
+checked package versions against the product constants, both exact bin symlink
+targets, successful real CLI version and agent-node help, and no Hub auth file
+or daemon registration. This is a package atomic gate, NOT a call of the native
+installer and NOT a V2 lifecycle test. It supersedes the earlier root/tmp
+diagnostic for this limited directory/layout question only. Top-level pins still
+do not lock transitive resolution or establish complete npm payload provenance.
+
+Full Rust candidate validation completed in the disposable Linux build container:
+`cargo test --release --locked --manifest-path /app/src-tauri/Cargo.toml --lib local_daemon -- --nocapture`
+compiled the actual current app module successfully (7m21s), then 19/19 filtered
+tests passed (38 unrelated tests not run). This includes the six policy tests,
+not six additional tests to double-count, plus partial-directory/dangling-link
+checks and existing real shell timeout/detached-launch regressions. These tests
+use temporary test state, not a registered real daemon or production credentials.
+Both Docker commands exited 0 and used --rm. git diff --check passed.
+Earlier locally pending evidence above is consolidated with this installer
+candidate; the old 2f0dbf4 CI result remains bound to its old source/artifact.
+The new candidate still requires its own full CI/package and native installer
+integration gates; it is not approved for merge or release by these checks.

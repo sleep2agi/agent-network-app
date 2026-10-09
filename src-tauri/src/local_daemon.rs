@@ -28,11 +28,12 @@ use serde::Serialize;
 use sha2::{Digest, Sha256};
 
 use super::{app_root, ensure_private_dir, write_private_atomic};
+use super::local_daemon_packages::{
+    ANET_PACKAGE, AGENT_NODE_PACKAGE, require_success, validate_cli_probe,
+    validate_agent_node_manifest,
+};
 
 pub const LOCAL_DAEMON_NAME: &str = "local-daemon";
-const ANET_PACKAGE: &str = "@sleep2agi/agent-network@latest";
-/// 与 anet@latest 配对的 agent-node 通道;装进同一个私有 prefix,成为 anet 的 sibling(#1813 sibling-first)。
-const AGENT_NODE_PACKAGE: &str = "@sleep2agi/agent-node@latest";
 const NPM_MIRROR: &str = "https://registry.npmmirror.com";
 /// 私有 Node 运行时:缺 Node 或版本太低时从 nodejs.org 下 v22 最新 LTS 到 ~/.anet/app/local-daemon/node,
 /// 不动系统、不动 nvm、不要 sudo(Vincent 2026-09-06「node 也自动安装一下?」)。
@@ -297,6 +298,30 @@ fn probe_private_agent_node() -> Option<ToolInfo> {
     Some(ToolInfo { path: pkg.parent()?.display().to_string(), version: Some(version) })
 }
 
+// Distinguish missing packages from broken symlinks or inaccessible installs:
+// only truly absent paths may trigger an npm install.
+fn private_path_present(path: &Path) -> Result<bool, String> {
+    match fs::symlink_metadata(path) {
+        Ok(_) => Ok(true),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(false),
+        Err(error) => Err(format!("cannot inspect private package {}: {error}", path.display())),
+    }
+}
+
+fn checked_private_agent_node(node: &Path) -> Result<ToolInfo, String> {
+    let root = private_agent_node_package()?;
+    let raw = fs::read_to_string(root.join("package.json")).map_err(|e| format!("cannot read private agent-node: {e}"))?;
+    let pkg: serde_json::Value = serde_json::from_str(&raw).map_err(|e| format!("invalid private agent-node package.json: {e}"))?;
+    let entry = root.join("dist/cli.js");
+    validate_agent_node_manifest(pkg["name"].as_str(), pkg["version"].as_str(), pkg["bin"]["agent-node"].as_str(), entry.is_file())?;
+    let probe = run_shell(&format!("{} {} --help", shell_quote(&node.display().to_string()), shell_quote(&entry.display().to_string())), None, &[], Duration::from_secs(30))?;
+    require_success(probe.code, probe.timed_out)?;
+    if !probe.output.contains("opencode-cli") {
+        return Err("private agent-node does not advertise opencode-cli; existing installation was not replaced".into());
+    }
+    Ok(ToolInfo { path: root.display().to_string(), version: pkg["version"].as_str().map(str::to_string) })
+}
+
 fn probe_private_node() -> Option<ToolInfo> {
     let node = private_node_dir().ok()?.join("bin").join("node");
     if !node.is_file() { return None; }
@@ -522,11 +547,34 @@ pub fn install(session: &LocalHubSession) -> Result<DaemonInstallReport, String>
     let anet_bin = anet_prefix.join("bin").join("anet");
     let path_prefix = format!("{}:{}", node_bin_dir.display(), anet_prefix.join("bin").display());
     let with_path = |cmd: &str| format!("export PATH={}:\"$PATH\"; {cmd}", shell_quote(&path_prefix));
-    let anet = if anet_bin.is_file() {
+    let check_cli = || -> Result<ToolInfo, String> {
         let probe = run_shell(&with_path(&format!("{} --version", shell_quote(&anet_bin.display().to_string()))), None, &[], Duration::from_secs(30))?;
-        let version = strip_ansi(&probe.output).lines().map(str::trim).find(|l| !l.is_empty()).unwrap_or("?").to_string();
-        steps.push(StepReport { name: "anet CLI".into(), ok: true, output: format!("已在私有目录:{} ({version})", anet_bin.display()) });
-        ToolInfo { path: anet_bin.display().to_string(), version: Some(version) }
+        let version = validate_cli_probe(probe.code, probe.timed_out, &strip_ansi(&probe.output))?;
+        Ok(ToolInfo { path: anet_bin.display().to_string(), version: Some(version) })
+    };
+    // Validate BOTH existing components before installing either missing one,
+    // writing Hub credentials or starting the daemon. Never overwrite an old
+    // or partial private install as a side effect of the install button.
+    let preflight = || -> Result<(Option<ToolInfo>, Option<ToolInfo>), String> {
+        let cli_package = anet_prefix.join("lib/node_modules/@sleep2agi/agent-network");
+        let cli = if private_path_present(&anet_bin)? || private_path_present(&cli_package)? {
+            Some(check_cli()?)
+        } else { None };
+        let agent = if private_path_present(&private_agent_node_package()?)? {
+            Some(checked_private_agent_node(&node_bin_dir.join("node"))?)
+        } else { None };
+        Ok((cli, agent))
+    };
+    let (existing_cli, existing_agent_node) = match preflight() {
+        Ok(pair) => pair,
+        Err(error) => {
+            steps.push(StepReport { name: "私有组件配对检查".into(), ok: false, output: error.clone() });
+            return fail(steps, format!("{error}。请先修复私有组件为 {ANET_PACKAGE} 与 {AGENT_NODE_PACKAGE} 后重试；本次未覆盖已有组件或启动 daemon。"));
+        }
+    };
+    let anet = if let Some(info) = existing_cli {
+        steps.push(StepReport { name: "anet CLI".into(), ok: true, output: format!("已验证私有组件:{} ({})", info.path, info.version.as_deref().unwrap_or("?")) });
+        info
     } else {
         let install_cmd = |registry: Option<&str>| with_path(&format!(
             "{} install -g --prefix {} {ANET_PACKAGE}{}",
@@ -550,13 +598,16 @@ pub fn install(session: &LocalHubSession) -> Result<DaemonInstallReport, String>
         if !anet_bin.is_file() {
             return fail(steps, format!("npm 装完了但 {} 不存在", anet_bin.display()));
         }
-        ToolInfo { path: anet_bin.display().to_string(), version: None }
+        match check_cli() {
+            Ok(info) => info,
+            Err(error) => return fail(steps, error),
+        }
     };
 
     // 2b. agent-node 也装进同一个私有 prefix(anet 的 sibling,#1813 sibling-first)。
     //    Vincent 2026-09-07 的日志:私有 anet 起 daemon 时从 PATH 捡到了 nvm v20 里的旧 agent-node,
     //    以普通节点身份注册,快照没有 role → 永远进不了 host_supervisor 列表。
-    let agent_node = match probe_private_agent_node() {
+    let agent_node = match existing_agent_node {
         Some(info) => {
             steps.push(StepReport { name: "agent-node(私有,与 anet 同目录)".into(), ok: true, output: format!("已安装 {} ({})", info.version.as_deref().unwrap_or("?"), info.path) });
             info
@@ -581,9 +632,9 @@ pub fn install(session: &LocalHubSession) -> Result<DaemonInstallReport, String>
             if !ok {
                 return fail(steps, if primary.timed_out { "agent-node 安装超时(10 分钟)。".into() } else { "agent-node 安装失败,见上面的输出。".into() });
             }
-            match probe_private_agent_node() {
-                Some(info) => info,
-                None => return fail(steps, "npm 装完了但私有目录里没有 agent-node 包".into()),
+            match checked_private_agent_node(&node_bin_dir.join("node")) {
+                Ok(info) => info,
+                Err(error) => return fail(steps, error),
             }
         }
     };
@@ -752,6 +803,26 @@ fn shell_quote(value: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn partial_private_install_is_present_not_a_fresh_install() {
+        let dir = tempfile::tempdir().unwrap();
+        let package = dir.path().join("agent-network");
+        assert!(!private_path_present(&package).unwrap());
+        fs::create_dir(&package).unwrap();
+        assert!(private_path_present(&package).unwrap());
+        assert!(!package.join("dist/bin/anet.cjs").exists());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn dangling_private_bin_is_present_not_a_fresh_install() {
+        let dir = tempfile::tempdir().unwrap();
+        let bin = dir.path().join("anet");
+        std::os::unix::fs::symlink(dir.path().join("missing"), &bin).unwrap();
+        assert!(!bin.is_file());
+        assert!(private_path_present(&bin).unwrap());
+    }
 
     #[test]
     fn probe_skips_nvm_noise_and_ansi() {

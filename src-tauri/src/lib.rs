@@ -8,6 +8,7 @@ mod hub_http;
 mod tray;
 mod local_credentials;
 mod local_daemon;
+mod local_daemon_packages;
 mod local_hub;
 
 #[cfg(windows)]

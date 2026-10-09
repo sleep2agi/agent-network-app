@@ -28,11 +28,23 @@ on:
       - '.github/workflows/rust-check.yml'
       - 'scripts/with-linux-test-keyring.sh'
       - 'tests/linux-credential-store/**'
+      - 'tests/local-daemon-packages/**'
 
 permissions:
   contents: read
 
 jobs:
+  local-daemon-packages:
+    name: Private daemon package pair (Docker)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - run: docker build --target policy -t anet-daemon-packages:test -f tests/local-daemon-packages/Dockerfile .
+      - run: docker run --rm --network none --cap-drop ALL --security-opt no-new-privileges anet-daemon-packages:test
+      - run: docker build --target private-prefix -t anet-daemon-prefix:test -f tests/local-daemon-packages/Dockerfile .
+      - run: docker run --rm --network none --cap-drop ALL --security-opt no-new-privileges anet-daemon-prefix:test
+
   rust-check:
     name: rust-check (ubuntu-latest)
     runs-on: ubuntu-latest
